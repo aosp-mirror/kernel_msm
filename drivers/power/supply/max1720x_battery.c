@@ -203,15 +203,16 @@ enum max1720x_command_bits {
 	MAX1720X_READ_HISTORY_CMD_BASE = 0xE226,
 };
 
-/** NV RAM is never manipulated directly but rather shadow RAM.
- * We use NVRAM in this driver also code is reading/writing from/to shadow RAM.
- * max1720x_copy_nv_block will copy shadow RAM content to NV RAM.
- */
+/** Nonvolatile Register Memory Map */
 enum max1720x_nvram {
 	MAX1720X_NVRAM_START = 0x80,
 	MAX1720X_NUSER18C = 0x8C,
 	MAX1720X_NUSER18D = 0x8D,
+	MAX1720X_NODSCTH = 0x8E,
+	MAX1720X_NODSCCFG = 0x8F,
 	MAX1720X_NLEARNCFG = 0x9F,
+	MAX1720X_NMISCCFG = 0xB2,
+	MAX1720X_NHIBCFG = 0xB4,
 	MAX1720X_NCONVGCFG = 0xB7,
 	MAX1720X_NNVCFG0 = 0xB8,
 	MAX1720X_NUSER1C4 = 0xC4,
@@ -242,6 +243,22 @@ enum max1720x_nvram {
 	MAX1720X_NVRAM_REMAINING_UPDATES = 0xED,
 	MAX1720X_NVRAM_HISTORY_END = 0xEF,
 };
+
+#define BUCKET_COUNT 10
+
+const unsigned int max1720x_cycle_counter_addr[BUCKET_COUNT] = {
+	MAX1720X_NODSCTH,
+	MAX1720X_NODSCCFG,
+	MAX1720X_NMISCCFG,
+	MAX1720X_NHIBCFG,
+	MAX1720X_NMANFCTRNAME1,
+	MAX1720X_NMANFCTRNAME2,
+	MAX1720X_NFIRSTUSED,
+	MAX1720X_NDEVICENAME4,
+	MAX1720X_NUSER1C4,
+	MAX1720X_NUSER1C5,
+};
+
 #define NVRAM_U16_INDEX(reg) (reg - MAX1720X_NVRAM_START)
 #define NVRAM_BYTE_INDEX(reg) (NVRAM_U16_INDEX(reg) * sizeof(u16))
 #define NVRAM_BYTE_INDEX_FROM(reg, base) ((reg - base) * sizeof(u16))
@@ -258,16 +275,24 @@ enum max1720x_nvram {
 		MAX1720X_NVRAM_END + 1)
 #define MAX1720X_N_OF_QRTABLES 4
 
+struct max1720x_cyc_ctr_data {
+	u16 count[BUCKET_COUNT];
+	struct mutex lock;
+	int prev_soc;
+};
+
 struct max1720x_chip {
 	struct device *dev;
 	struct regmap *regmap;
 	struct power_supply *psy;
 	struct delayed_work init_work;
+	struct work_struct cycle_count_work;
 	struct i2c_client *primary;
 	struct i2c_client *secondary;
 	struct regmap *regmap_nvram;
 	struct device_node *batt_node;
 	struct iio_channel *iio_ch;
+	struct max1720x_cyc_ctr_data cyc_ctr;
 	u16 RSense;
 	u16 RConfig;
 	bool init_complete;
@@ -652,6 +677,122 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 };
 
+static void max1720x_cycle_count_work(struct work_struct *work)
+{
+	int bucket, cnt, batt_soc;
+	u16 data;
+	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
+						  cycle_count_work);
+
+	REGMAP_READ(chip->regmap, MAX1720X_REPSOC, data);
+	batt_soc = reg_to_percentage(data);
+
+	mutex_lock(&chip->cyc_ctr.lock);
+
+	if (chip->cyc_ctr.prev_soc != -1 &&
+	    batt_soc >= 0 && batt_soc <= 100 &&
+	    batt_soc > chip->cyc_ctr.prev_soc) {
+		for (cnt = batt_soc ; cnt > chip->cyc_ctr.prev_soc ; cnt--) {
+			bucket = cnt * BUCKET_COUNT / 100;
+			if (bucket >= BUCKET_COUNT)
+				bucket = BUCKET_COUNT - 1;
+			chip->cyc_ctr.count[bucket]++;
+			REGMAP_WRITE(chip->regmap_nvram,
+				     max1720x_cycle_counter_addr[bucket],
+				     chip->cyc_ctr.count[bucket]);
+			pr_debug("Stored count: prev_soc=%d, soc=%d bucket=%d count=%d\n",
+				 chip->cyc_ctr.prev_soc, cnt, bucket,
+				 chip->cyc_ctr.count[bucket]);
+		}
+	}
+	chip->cyc_ctr.prev_soc = batt_soc;
+
+	mutex_unlock(&chip->cyc_ctr.lock);
+}
+
+static void max1720x_restore_cycle_counter(struct max1720x_chip *chip)
+{
+	int i;
+	u16 data = 0;
+
+	mutex_lock(&chip->cyc_ctr.lock);
+
+	for (i = 0; i < BUCKET_COUNT; i++) {
+		REGMAP_READ(chip->regmap_nvram, max1720x_cycle_counter_addr[i],
+			    data);
+		chip->cyc_ctr.count[i] = data;
+		pr_debug("max1720x_cycle_counter[%d], addr=0x%02X, count=%d\n",
+			 i, max1720x_cycle_counter_addr[i],
+			 chip->cyc_ctr.count[i]);
+	}
+	chip->cyc_ctr.prev_soc = -1;
+
+	mutex_unlock(&chip->cyc_ctr.lock);
+}
+
+static ssize_t max1720x_get_cycle_counts_bins(struct device *dev,
+					      struct device_attribute *attr,
+					      char *buf)
+{
+	struct power_supply *psy;
+	struct max1720x_chip *chip;
+	int len = 0, i;
+
+	psy = container_of(dev, struct power_supply, dev);
+	chip = power_supply_get_drvdata(psy);
+
+	mutex_lock(&chip->cyc_ctr.lock);
+
+	for (i = 0; i < BUCKET_COUNT; i++) {
+
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%d",
+				 chip->cyc_ctr.count[i]);
+
+		if (i == BUCKET_COUNT-1)
+			len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+		else
+			len += scnprintf(buf + len, PAGE_SIZE - len, " ");
+	}
+
+	mutex_unlock(&chip->cyc_ctr.lock);
+
+	return len;
+}
+
+static ssize_t max1720x_set_cycle_counts_bins(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t count)
+{
+	struct power_supply *psy;
+	struct max1720x_chip *chip;
+	int val[BUCKET_COUNT], i;
+
+	psy = container_of(dev, struct power_supply, dev);
+	chip = power_supply_get_drvdata(psy);
+
+	if (sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
+		   &val[0], &val[1], &val[2], &val[3], &val[4],
+		   &val[5], &val[6], &val[7], &val[8], &val[9]) != BUCKET_COUNT)
+		return -EINVAL;
+
+	mutex_lock(&chip->cyc_ctr.lock);
+	for (i = 0; i < BUCKET_COUNT; i++) {
+		if (val[i] >= 0 && val[i] < U16_MAX) {
+			chip->cyc_ctr.count[i] = val[i];
+			REGMAP_WRITE(chip->regmap_nvram,
+				     max1720x_cycle_counter_addr[i],
+				     chip->cyc_ctr.count[i]);
+		}
+	}
+	mutex_unlock(&chip->cyc_ctr.lock);
+
+	return count;
+}
+
+static DEVICE_ATTR(cycle_counts_bins, 0660,
+		   max1720x_get_cycle_counts_bins,
+		   max1720x_set_cycle_counts_bins);
+
 static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 {
 	u16 data;
@@ -1000,6 +1141,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	if (fg_status & MAX1720X_STATUS_DSOCI) {
 		fg_status &= ~MAX1720X_STATUS_DSOCI;
 		pr_debug("DSOCI is set\n");
+		schedule_work(&chip->cycle_count_work);
 	}
 	if (fg_status & MAX1720X_STATUS_VMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
@@ -1478,6 +1620,12 @@ static void max1720x_init_work(struct work_struct *work)
 		return;
 	}
 
+	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
+	if (ret) {
+		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
+		return;
+	}
+
 	max1720x_set_serial_number(chip);
 	max1720x_complete_init(chip);
 }
@@ -1517,6 +1665,9 @@ static int max1720x_probe(struct i2c_client *client,
 		goto i2c_unregister;
 	}
 
+	mutex_init(&chip->cyc_ctr.lock);
+	max1720x_restore_cycle_counter(chip);
+	INIT_WORK(&chip->cycle_count_work, max1720x_cycle_count_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
 	schedule_delayed_work(&chip->init_work,
 			      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
