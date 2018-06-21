@@ -835,11 +835,11 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 static int max1720x_get_battery_status(struct max1720x_chip *chip)
 {
 	u16 data;
-	int current_now, ichgterm, fullsocthr;
+	int current_avg, ichgterm, fullsocthr;
 	int status = POWER_SUPPLY_STATUS_UNKNOWN;
 
-	REGMAP_READ(chip->regmap, MAX1720X_CURRENT, data);
-	current_now = -reg_to_micro_amp(data, chip->RSense);
+	REGMAP_READ(chip->regmap, MAX1720X_AVGCURRENT, data);
+	current_avg = -reg_to_micro_amp(data, chip->RSense);
 
 	REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, data);
 	ichgterm = reg_to_micro_amp(data, chip->RSense);
@@ -847,12 +847,12 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 	REGMAP_READ(chip->regmap, MAX1720X_FULLSOCTHR, data);
 	fullsocthr = reg_to_percentage(data);
 
-	if (current_now < -ichgterm) {
+	if (current_avg < -ichgterm) {
 		status = POWER_SUPPLY_STATUS_CHARGING;
 		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_DISCHARGING)
 			max1720x_prime_battery_qh_capacity(chip, status);
 		chip->prev_charge_state = POWER_SUPPLY_STATUS_CHARGING;
-	} else if (current_now <= 0 &&
+	} else if (current_avg <= 0 &&
 		 max1720x_get_battery_soc(chip) >= fullsocthr) {
 		status = POWER_SUPPLY_STATUS_FULL;
 		if (chip->prev_charge_state != POWER_SUPPLY_STATUS_FULL)
