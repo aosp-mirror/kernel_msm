@@ -23,6 +23,7 @@
 #include "darter-dsi-panel-auo-qvga-cmd.dtsi"
 #include "darter-dsi-panel-auo-cx-qvga-cmd.dtsi"
 #include "darter-dsi-panel-390p-auo-cmd.dtsi"
+#include "darter-dsi-panel-auo-400p-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
