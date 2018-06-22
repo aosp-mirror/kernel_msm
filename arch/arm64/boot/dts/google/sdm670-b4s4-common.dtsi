@@ -231,14 +231,6 @@
 	qcom,platform-reset-gpio = <&tlmm 75 0>;
 };
 
-&dsi_sofef00_sdc_1080p_cmd_display {
-	qcom,dsi-display-active;
-};
-
-&dsi_s6e3fa7_samsung_cmd_display {
-	qcom,dsi-display-active;
-};
-
 &pm660l_wled {
 	status = "disabled";
 };

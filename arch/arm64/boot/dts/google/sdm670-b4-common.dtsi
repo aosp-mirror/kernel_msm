@@ -1,1 +1,5 @@
 #include "sdm670-b4s4-common.dtsi"
+
+&dsi_sofef00_sdc_1080p_cmd_display {
+	qcom,dsi-display-active;
+};
