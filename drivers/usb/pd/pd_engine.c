@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/pmic-voter.h>
 #include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
@@ -44,6 +45,9 @@
 #define EXT_VBUS_OVERLAP_MS       5
 
 #define CHARING_TEST_BOOT_MODE "chargingtest"
+
+#define OTG_ICL_VOTER "OTG_ICL_VOTER"
+#define OTG_DISABLE_APSD_VOTER "OTG_DISABLE_APSD_VOTER"
 
 static char boot_mode_string[64];
 
@@ -103,6 +107,8 @@ struct usbpd {
 	/* Ext vbus management */
 	struct delayed_work ext_vbus_work;
 	struct notifier_block ext_vbus_nb;
+	struct votable *usb_icl_votable;
+	struct votable *apsd_disable_votable;
 
 	/* Acutual regulator status */
 	bool smb2_vbus_reg;
@@ -1070,20 +1076,75 @@ static int tcpm_set_vbus(struct tcpc_dev *dev, bool on, bool charge)
 {
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
-	bool work_flushed;
+	int usb_icl;
+	bool work_flushed, apsd_disabled;
 
 	work_flushed = flush_delayed_work(&pd->ext_vbus_work);
 	pd_engine_log(pd, "Flushed ext vbus delayed work: %s", work_flushed ?
 		      "yes" : "no");
 	mutex_lock(&pd->lock);
 
+	if (on) {
+		/* disable charging */
+		ret = vote(pd->usb_icl_votable, OTG_ICL_VOTER, true, 0);
+		if (ret < 0) {
+			pd_engine_log(pd, "vote usb_icl 0 fail, ret %d", ret);
+			goto unlock;
+		}
+		/* disable APSD */
+		ret = vote(pd->apsd_disable_votable,
+			   OTG_DISABLE_APSD_VOTER, true, 0);
+		if (ret < 0) {
+			pd_engine_log(pd, "vote apsd_disable fail, ret %d",
+				      ret);
+			goto vote_icl_default;
+		}
+	} else {
+		/* enable APSD */
+		ret = vote(pd->apsd_disable_votable,
+			   OTG_DISABLE_APSD_VOTER, false, 0);
+		if (ret < 0) {
+			pd_engine_log(pd, "unvote apsd_disable fail, ret %d",
+				      ret);
+			goto vote_icl_default;
+		}
+		/* enable charging */
+		ret = vote(pd->usb_icl_votable, OTG_ICL_VOTER, false, 0);
+		if (ret < 0) {
+			pd_engine_log(pd, "unvote usb_icl fail, ret %d", ret);
+			goto unlock;
+		}
+	}
+
+	apsd_disabled = get_effective_result(pd->apsd_disable_votable);
+	usb_icl = get_effective_result(pd->usb_icl_votable);
+	if (on && !apsd_disabled) {
+		pd_engine_log(pd, "apsd not disabled, icl = %d", usb_icl);
+		goto vote_apsd_default;
+	}
+
 	ret = update_vbus_locked(pd, on);
 
 	if (ret)
-		goto unlock;
+		goto vote_apsd_default;
 
-	pd_engine_log(pd, "set vbus: %s", on ? "on" : "off");
+	pd_engine_log(pd, "set vbus: %s, apsd: %s, icl: %d",
+		      on ? "on" : "off",
+		      apsd_disabled ? "disabled" : "enabled",
+		      usb_icl);
+	goto unlock;
 
+vote_apsd_default:
+	/* enable APSD by default */
+	ret = vote(pd->apsd_disable_votable,
+		   OTG_DISABLE_APSD_VOTER, false, 0);
+	if (ret < 0)
+		pd_engine_log(pd, "unvote apsd_disable fail, ret %d", ret);
+vote_icl_default:
+	/* enable charging by default */
+	ret = vote(pd->usb_icl_votable, OTG_ICL_VOTER, false, 0);
+	if (ret < 0)
+		pd_engine_log(pd, "unvote usb_icl fail, ret %d", ret);
 unlock:
 	mutex_unlock(&pd->lock);
 	return ret;
@@ -1980,6 +2041,26 @@ struct usbpd *usbpd_create(struct device *parent)
 		ret = -EPROBE_DEFER;
 		goto put_psy_usb;
 	}
+
+	pd->usb_icl_votable = find_votable("USB_ICL");
+	if (pd->usb_icl_votable == NULL) {
+		pd_engine_log(pd,
+			      "Couldn't find USB_ICL votable, deferring probe");
+		ret = -EPROBE_DEFER;
+		goto put_psy_wireless;
+	}
+
+	pd->apsd_disable_votable = find_votable("APSD_DISABLE");
+	if (pd->apsd_disable_votable == NULL) {
+		pd_engine_log(pd,
+			      "Couldn't find APSD_DISABLE votable, deferring probe");
+		ret = -EPROBE_DEFER;
+		goto put_psy_wireless;
+	}
+
+	/* initialize votable */
+	vote(pd->usb_icl_votable, OTG_ICL_VOTER, false, 0);
+	vote(pd->apsd_disable_votable, OTG_DISABLE_APSD_VOTER, false, 0);
 
 	pd->ext_vbus_nb.notifier_call = update_ext_vbus;
 	ext_vbus_register_notify(&pd->ext_vbus_nb);
