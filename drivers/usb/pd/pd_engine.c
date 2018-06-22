@@ -670,6 +670,7 @@ static void psy_changed_handler(struct work_struct *work)
 	union power_supply_propval val;
 	int ret = 0;
 
+	pm_wakeup_event(&pd->dev, PD_ACTIVITY_TIMEOUT_MS);
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_MODE, &val);
 	if (ret < 0) {
