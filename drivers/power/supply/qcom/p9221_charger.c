@@ -477,12 +477,49 @@ static int p9221_reg_write_cooked(struct p9221_charger_data *charger, u16 reg,
 		return p9221_reg_write_cooked_rx(charger, reg, val);
 }
 
-static void p9221_write_fod(struct p9221_charger_data *charger)
+static bool p9221_is_epp(struct p9221_charger_data *charger)
 {
 	int ret;
-	u16 fod_reg = P9221_FOD_REG;
+	u16 vout_reg = P9221_VOUT_ADC_REG;
+	u32 vout_uv;
+
+	if (p9221_is_r5(charger)) {
+		uint8_t reg;
+		ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
+		if (ret == 0)
+			return (reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) > 0;
+
+		dev_err(&charger->client->dev, "Could not read mode: %d\n",
+			ret);
+
+		vout_reg = P9221R5_VOUT_ADC_REG;
+	}
+
+	/* Check based on power supply voltage */
+
+	ret = p9221_reg_read_cooked(charger, vout_reg, &vout_uv);
+	if (ret) {
+		dev_err(&charger->client->dev, "Could read VOUT_ADC, %d\n",
+			ret);
+		goto out;
+	}
+
+	dev_info(&charger->client->dev, "Voltage is %duV\n", vout_uv);
+	if (vout_uv > P9221_EPP_THRESHOLD_UV)
+		return true;
+
+out:
+	/* Default to BPP otherwise */
+	return false;
+}
+
+static void p9221_write_fod(struct p9221_charger_data *charger)
+{
+	bool epp = false;
 	u8 *fod = NULL;
 	int fod_count = charger->pdata->fod_num;
+	u16 fod_reg = p9221_is_r5(charger) ? P9221R5_FOD_REG : P9221_FOD_REG;
+	int ret;
 
 	if (!charger->pdata->fod_num && !charger->pdata->fod_epp_num)
 		goto no_fod;
@@ -491,28 +528,17 @@ static void p9221_write_fod(struct p9221_charger_data *charger)
 	if (charger->pdata->fod_num)
 		fod = charger->pdata->fod;
 
-	if (p9221_is_r5(charger)) {
-		u8 reg;
-
-		fod_reg = P9221R5_FOD_REG;
-		ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
-		if (ret) {
-			dev_err(&charger->client->dev,
-				"Could not read mode: %d\n", ret);
-		} else {
-			if ((reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) &&
-			    charger->pdata->fod_epp_num) {
-				dev_info(&charger->client->dev,
-					 "Using epp fod\n");
-				fod = charger->pdata->fod_epp;
-				fod_count = charger->pdata->fod_epp_num;
-			}
-		}
+	if (p9221_is_epp(charger) && charger->pdata->fod_epp_num) {
+		fod = charger->pdata->fod_epp;
+		fod_count = charger->pdata->fod_epp_num;
+		epp = true;
 	}
 
 	if (!fod)
 		goto no_fod;
 
+	dev_info(&charger->client->dev, "Writing %s FOD (n=%d r=%d)\n",
+		 epp ? "EPP" : "BPP", fod_count, fod_reg);
 	ret = p9221_reg_write_n(charger, fod_reg, fod, fod_count);
 	if (ret)
 		dev_err(&charger->client->dev,
@@ -1000,7 +1026,6 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 {
 	int icl;
 	int ret;
-	union power_supply_propval val;
 
 	if (!charger->dc_icl_votable) {
 		charger->dc_icl_votable = find_votable("DC_ICL");
@@ -1011,23 +1036,14 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 		}
 	}
 
-	ret = p9221_get_property_reg(charger, POWER_SUPPLY_PROP_VOLTAGE_NOW,
-				     &val);
-	if (ret) {
-		dev_err(&charger->client->dev,
-			"Could read VOLTAGE_NOW, %d\n", ret);
-		return -ENODEV;
-	}
-
 	/* Default to 1000mA ICL */
 	icl = P9221_DC_ICL_BPP_UA;
 
-	/* For 9V operation, use 1100mA ICL */
-	if (val.intval > P9221_DC_ICL_EPP_THRESHOLD_UV)
+	/* For EPP operation, use 1100mA ICL */
+	if (p9221_is_epp(charger))
 		icl = P9221_DC_ICL_EPP_UA;
 
-	dev_info(&charger->client->dev, "Voltage is %duV, setting icl %duV\n",
-		 val.intval, icl);
+	dev_info(&charger->client->dev, "Setting ICL %duA\n", icl);
 	ret = vote(charger->dc_icl_votable, P9221_WLC_VOTER, true, icl);
 	if (ret)
 		dev_err(&charger->client->dev,
@@ -2098,6 +2114,9 @@ static int p9221_charger_probe(struct i2c_client *client,
 		    (unsigned long)charger);
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
+
+	/* Default to R5+ */
+	charger->cust_id = 5;
 
 	psy_cfg.drv_data = charger;
 	psy_cfg.of_node = charger->dev->of_node;
