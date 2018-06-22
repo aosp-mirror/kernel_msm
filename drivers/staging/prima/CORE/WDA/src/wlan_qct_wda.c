@@ -8768,7 +8768,7 @@ VOS_STATUS WDA_ProcessUpdateProbeRspTemplate(tWDA_CbContext *pWDA,
 
    vos_mem_copy(
            wdiSendProbeRspParam->wdiProbeRspTemplateInfo.pProbeRespTemplate,
-           pSendProbeRspParams->pProbeRespTemplate,
+           pSendProbeRspParams->probeRespTemplate,
            pSendProbeRspParams->probeRespTemplateLen);
    
    wdiSendProbeRspParam->wdiReqStatusCB = NULL ;

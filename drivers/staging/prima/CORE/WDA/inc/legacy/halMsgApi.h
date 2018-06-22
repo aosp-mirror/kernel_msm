@@ -736,7 +736,7 @@ typedef struct sBeaconGenParams {
 
 typedef struct {
     tSirMacAddr bssId;
-    tANI_U8 *beacon;     // Beacon data.
+    tANI_U8 beacon[WDI_BEACON_TEMPLATE_SIZE];     // Beacon data.
     tANI_U32 beaconLength; //length of the template.
     tANI_U32 timIeOffset; //TIM IE offset from the beginning of the template.
     tANI_U16 p2pIeOffset; //P2P IE offset from the begining of the template
@@ -744,7 +744,7 @@ typedef struct {
 
 typedef struct sSendProbeRespParams {
     tSirMacAddr bssId;
-    tANI_U8      *pProbeRespTemplate; 
+    tANI_U8      probeRespTemplate[SCH_MAX_PROBE_RESP_SIZE];
     tANI_U32     probeRespTemplateLen;
     tANI_U32     ucProxyProbeReqValidIEBmap[8];
 } tSendProbeRespParams, * tpSendProbeRespParams;
