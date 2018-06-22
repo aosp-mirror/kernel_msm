@@ -22,6 +22,7 @@
 #include "sdm670-b4s4-audio.dtsi"
 #include "sdm670-b4s4-memory.dtsi"
 #include "sdm670-b4s4-fingerprint.dtsi"
+#include "sdm670-b4s4-haptics.dtsi"
 #include "sdm670-b4s4-touch.dtsi"
 #include "sdm670-b4s4-nfc.dtsi"
 
