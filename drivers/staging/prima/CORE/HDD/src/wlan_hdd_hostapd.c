@@ -1801,7 +1801,7 @@ int hdd_softap_unpackIE(
                             pRsnIe,
                             RSNIeLen,
                             &dot11RSNIE);
-        if (DOT11F_FAILED(status))
+        if (!DOT11F_SUCCEEDED(status))
         {
              hddLog(LOGE,
                         FL("unpack failed for RSN IE status:(0x%08x)"),

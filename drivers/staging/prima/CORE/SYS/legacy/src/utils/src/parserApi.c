@@ -1407,7 +1407,7 @@ PopulateDot11fRSN(tpAniSirGlobal  pMac,
                                     pRsnIe->rsnIEdata + idx + 2, //EID, length
                                     pRsnIe->rsnIEdata[ idx + 1 ],
                                     pDot11f );
-        if ( DOT11F_FAILED( status ) )
+        if (!DOT11F_SUCCEEDED(status))
         {
             dot11fLog( pMac, LOGE, FL("Parse failure in PopulateDot11fRS"
                                    "N (0x%08x)."),

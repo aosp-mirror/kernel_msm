@@ -4773,8 +4773,10 @@ tANI_U8 csrRetrieveRsnIe( tHalHandle hHal, tANI_U32 sessionId, tCsrRoamProfile *
         }
         else 
 #endif
-        if(pProfile->nRSNReqIELength && pProfile->pRSNReqIE)
+        if(pProfile->force_rsne_override &&
+           pProfile->nRSNReqIELength && pProfile->pRSNReqIE)
         {
+            smsLog(pMac, LOGW, "force_rsne_override, copy RSN IE provided by user");
             // If you have one started away, re-use it. 
             if(SIR_MAC_WPA_IE_MAX_LENGTH >= pProfile->nRSNReqIELength)
             {
@@ -4783,7 +4785,9 @@ tANI_U8 csrRetrieveRsnIe( tHalHandle hHal, tANI_U32 sessionId, tCsrRoamProfile *
             }
             else
             {
-                smsLog(pMac, LOGW, "  csrRetrieveRsnIe detect invalid RSN IE length (%d) ", pProfile->nRSNReqIELength);
+                smsLog(pMac, LOGW, "csrRetrieveRsnIe detect invalid RSN IE length (%d)",
+                       pProfile->nRSNReqIELength);
+                break;
             }
         }
         else

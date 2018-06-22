@@ -6661,6 +6661,7 @@ eHalStatus csrRoamCopyProfile(tpAniSirGlobal pMac, tCsrRoamProfile *pDstProfile,
         pDstProfile->ieee80211d        = pSrcProfile->ieee80211d;
         pDstProfile->force_24ghz_in_ht20 =
                        pSrcProfile->force_24ghz_in_ht20;
+        pDstProfile->force_rsne_override = pSrcProfile->force_rsne_override;
         vos_mem_copy(&pDstProfile->Keys, &pSrcProfile->Keys,
                      sizeof(pDstProfile->Keys));
 #ifdef WLAN_FEATURE_VOWIFI_11R
@@ -13563,6 +13564,8 @@ eHalStatus csrSendJoinReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirBssDe
             // Insert the RSN IE into the join request
             ieLen = csrRetrieveRsnIe( pMac, sessionId, pProfile, pBssDescription, pIes,
                     (tCsrRSNIe *)( wpaRsnIE ) );
+            pMsg->force_rsne_override =
+                            pProfile->force_rsne_override;
         }
 #ifdef FEATURE_WLAN_WAPI
         else if( csrIsProfileWapi( pProfile ) )

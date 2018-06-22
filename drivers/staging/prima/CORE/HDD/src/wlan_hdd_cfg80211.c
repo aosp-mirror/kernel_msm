@@ -7819,7 +7819,8 @@ static int wlan_hdd_cfg80211_get_link_properties(struct wiphy *wiphy,
 #define PARAM_GUARD_TIME QCA_WLAN_VENDOR_ATTR_CONFIG_GUARD_TIME
 #define PARAM_BCNMISS_PENALTY_PARAM_COUNT \
         QCA_WLAN_VENDOR_ATTR_CONFIG_PENALIZE_AFTER_NCONS_BEACON_MISS
-
+#define PARAM_FORCE_RSN_IE \
+        QCA_WLAN_VENDOR_ATTR_CONFIG_RSN_IE
 /*
  * hdd_set_qpower() - Process the qpower command and invoke the SME api
  * @hdd_ctx: hdd context
@@ -7876,6 +7877,7 @@ static int __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
                                              { .type = NLA_U32},
                         [BEACON_MISS_THRESH_2_4] = { .type = NLA_U8 },
                         [BEACON_MISS_THRESH_5_0] = { .type = NLA_U8 },
+                        [PARAM_FORCE_RSN_IE] = {.type = NLA_U8 },
     };
 
     ENTER();
@@ -8055,6 +8057,21 @@ static int __wlan_hdd_cfg80211_wifi_configuration_set(struct wiphy *wiphy,
        /* FW is expacting qpower as 1 for Disable and 2 for enable */
        qpower++;
        hdd_set_qpower(pHddCtx, qpower);
+    }
+
+    if (tb[QCA_WLAN_VENDOR_ATTR_CONFIG_RSN_IE] &&
+        pHddCtx->cfg_ini->force_rsne_override) {
+        uint8_t force_rsne_override;
+
+        force_rsne_override =
+            nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_CONFIG_RSN_IE]);
+        if (force_rsne_override > 1) {
+            hddLog(LOGE, "Invalid test_mode %d", force_rsne_override);
+            ret_val = -EINVAL;
+        }
+        pHddCtx->force_rsne_override = force_rsne_override;
+        hddLog(LOG1, "force_rsne_override - %d",
+                             pHddCtx->force_rsne_override);
     }
 
     EXIT();

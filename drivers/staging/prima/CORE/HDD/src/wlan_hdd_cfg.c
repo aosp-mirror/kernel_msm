@@ -4028,6 +4028,13 @@ REG_VARIABLE( CFG_EXTSCAN_ENABLE, WLAN_PARAM_Integer,
                 CFG_BTC_2M_DYN_LONG_NUM_BT_EXT_MIN,
                 CFG_BTC_2M_DYN_LONG_NUM_BT_EXT_MAX),
 
+  REG_VARIABLE(CFG_FORCE_RSNE_OVERRIDE_NAME, WLAN_PARAM_Integer,
+                hdd_config_t, force_rsne_override,
+                VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+                CFG_FORCE_RSNE_OVERRIDE_DEFAULT,
+                CFG_FORCE_RSNE_OVERRIDE_MIN,
+                CFG_FORCE_RSNE_OVERRIDE_MAX),
+
 };
 
 /*
@@ -4741,6 +4748,11 @@ static void print_hdd_cfg(hdd_context_t *pHddCtx)
             "Name = [%s] Value = [%u] ",
             CFG_ENABLE_POWERSAVE_OFFLOAD_NAME,
             pHddCtx->cfg_ini->enable_power_save_offload);
+
+    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_HIGH,
+            "Name = [%s] Value = [%u] ",
+            CFG_FORCE_RSNE_OVERRIDE_NAME,
+            pHddCtx->cfg_ini->force_rsne_override);
 }
 
 

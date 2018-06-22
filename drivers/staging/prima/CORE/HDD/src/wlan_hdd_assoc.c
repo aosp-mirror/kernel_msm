@@ -4638,14 +4638,11 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
         RSNIeLen = gen_ie_len - (2 + 4);
         // Unpack the WPA IE
         status = dot11fUnpackIeWPA((tpAniSirGlobal) halHandle,
-                            pRsnIe,
-                            RSNIeLen,
-                            &dot11WPAIE);
-        if (DOT11F_FAILED(status))
+                               pRsnIe, RSNIeLen, &dot11WPAIE);
+        if (!DOT11F_SUCCEEDED(status))
         {
             hddLog(LOGE,
-                   FL("Parse failure in hdd_ProcessGENIE (0x%08x)"),
-                   status);
+                   FL("Invalid RSN IE: parse status %d"), status);
             return -EINVAL;
         }
 
@@ -4669,12 +4666,44 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
     }
     return 0;
 }
+
+/**
+ * hdd_set_def_rsne_override() - set default encryption type and auth type
+ * in profile.
+ * @roam_profile: pointer to adapter
+ * @auth_type: pointer to auth type
+ *
+ * Set default value of encryption type and auth type in profile to
+ * search the AP using filter, as in force_rsne_override the RSNIE can be
+ * currupt and we might not get the proper encryption type and auth type
+ * while parsing the RSNIE.
+ *
+ * Return: void
+ */
+static void hdd_set_def_rsne_override(
+                tCsrRoamProfile *roam_profile, eCsrAuthType *auth_type)
+{
+       hddLog( LOG1, FL("Set def values in roam profile"));
+       roam_profile->MFPCapable = roam_profile->MFPEnabled;
+       roam_profile->EncryptionType.numEntries = 2;
+       roam_profile->mcEncryptionType.numEntries = 2;
+       /* Use the cipher type in the RSN IE */
+       roam_profile->EncryptionType.encryptionType[0] = eCSR_ENCRYPT_TYPE_AES;
+       roam_profile->EncryptionType.encryptionType[1] = eCSR_ENCRYPT_TYPE_TKIP;
+       roam_profile->mcEncryptionType.encryptionType[0] =
+              eCSR_ENCRYPT_TYPE_AES;
+       roam_profile->mcEncryptionType.encryptionType[1] =
+              eCSR_ENCRYPT_TYPE_TKIP;
+       *auth_type = eCSR_AUTH_TYPE_RSN_PSK;
+}
+
 int hdd_SetGENIEToCsr( hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
 {
     hdd_wext_state_t *pWextState = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
     v_U32_t status = 0;
     eCsrEncryptionType RSNEncryptType;
     eCsrEncryptionType mcRSNEncryptType;
+    hdd_context_t *hdd_ctx;
 #ifdef WLAN_FEATURE_11W
     u_int8_t RSNMfpRequired = 0;
     u_int8_t RSNMfpCapable = 0;
@@ -4693,6 +4722,7 @@ int hdd_SetGENIEToCsr( hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
     {
         return 0;
     }
+
     // The actual processing may eventually be more extensive than this.
     // Right now, just consume any PMKIDs that are  sent in by the app.
     status = hdd_ProcessGENIE(pAdapter,
@@ -4706,6 +4736,7 @@ int hdd_SetGENIEToCsr( hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
 #endif
             pWextState->WPARSNIE[1]+2,
             pWextState->WPARSNIE);
+
     if (status == 0)
     {
         // Now copy over all the security attributes you have parsed out
@@ -4738,6 +4769,35 @@ int hdd_SetGENIEToCsr( hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
         hddLog( LOG1,
           FL("CSR AuthType = %d, EncryptionType = %d mcEncryptionType = %d"),
           *RSNAuthType, RSNEncryptType, mcRSNEncryptType);
+    }
+
+    hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
+    if (hdd_ctx->force_rsne_override &&
+        (pWextState->WPARSNIE[0] == DOT11F_EID_RSN)) {
+            hddLog(LOG1,
+              FL("Test mode enabled set def Auth and enc type. RSN IE passed in connect req:"));
+            vos_trace_hex_dump(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN,
+                               pWextState->roamProfile.pRSNReqIE,
+                               pWextState->roamProfile.nRSNReqIELength);
+
+            pWextState->roamProfile.force_rsne_override = true;
+            hddLog(LOG1,
+                   FL("MFPEnabled %d"), pWextState->roamProfile.MFPEnabled);
+            /*
+             * Reset MFPEnabled if testmode RSNE passed doesnt have MFPR
+             * or MFPC bit set
+             */
+            if (pWextState->roamProfile.MFPEnabled &&
+                !(pWextState->roamProfile.MFPRequired ||
+                  pWextState->roamProfile.MFPCapable)) {
+                    hddLog( LOG1,FL("Reset MFPEnabled"));
+                    pWextState->roamProfile.MFPEnabled = 0;
+            }
+
+            /* If parsing failed set the def value for the roam profile */
+            if (status)
+                hdd_set_def_rsne_override(&pWextState->roamProfile,
+                                          RSNAuthType);
     }
     return 0;
 }

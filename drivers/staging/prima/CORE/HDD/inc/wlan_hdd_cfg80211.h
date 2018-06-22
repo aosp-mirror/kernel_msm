@@ -1427,6 +1427,19 @@ enum qca_wlan_vendor_config {
     QCA_WLAN_VENDOR_ATTR_CONFIG_BEACON_MISS_THRESHOLD_24 = 37,
     /* 8-bit unsigned value to set the beacon miss threshold in 5 GHz */
     QCA_WLAN_VENDOR_ATTR_CONFIG_BEACON_MISS_THRESHOLD_5 = 38,
+
+    /*8-bit unsigned value indicating the driver to use the RSNE as-is from
+     * the connect interface. Exclusively used for the scenarios where the
+     * device is used as a test bed device with special functionality and
+     * not recommended for production. This helps driver to not validate the
+     * RSNE passed from user space and thus allow arbitrary IE data to be
+     * used for testing purposes.
+     * 1-enable, 0-disable.
+     * Applications set/reset this configuration. If not reset, this
+     * parameter remains in use until the driver is unloaded.
+     */
+    QCA_WLAN_VENDOR_ATTR_CONFIG_RSN_IE = 39,
+
     /* keep last */
     QCA_WLAN_VENDOR_ATTR_CONFIG_LAST,
     QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =

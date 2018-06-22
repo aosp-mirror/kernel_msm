@@ -1861,6 +1861,7 @@ struct hdd_context_s
 
     struct hdd_cache_channels *original_channels;
     struct mutex cache_channel_lock;
+    bool force_rsne_override;
 };
 
 /* Use to notify the TDLS or BTCOEX is mode enable */

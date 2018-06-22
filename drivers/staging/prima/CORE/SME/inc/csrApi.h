@@ -963,6 +963,7 @@ typedef struct tagCsrRoamProfile
     tVOS_CON_MODE csrPersona;
     bool force_24ghz_in_ht20;
     tCsrBssid bssid_hint;
+    bool force_rsne_override;
 }tCsrRoamProfile;
 
 
