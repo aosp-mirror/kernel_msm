@@ -745,6 +745,7 @@ static int p9221_set_property_reg(struct p9221_charger_data *charger,
 static void p9221_abort_transfers(struct p9221_charger_data *charger)
 {
 	/* Abort all transfers */
+	cancel_delayed_work(&charger->tx_work);
 	charger->tx_busy = false;
 	charger->tx_done = true;
 	charger->rx_done = true;
@@ -763,8 +764,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->online = false;
 
 	p9221_abort_transfers(charger);
-	del_timer(&charger->tx_timer);
-	del_timer(&charger->dcin_timer);
+	cancel_delayed_work(&charger->dcin_work);
 	del_timer(&charger->vrect_timer);
 
 	/* Put the default ICL back to BPP */
@@ -777,9 +777,10 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	}
 }
 
-static void p9221_tx_timer_handler(unsigned long data)
+static void p9221_tx_work(struct work_struct *work)
 {
-	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, tx_work.work);
 
 	dev_info(&charger->client->dev, "timeout waiting for tx complete\n");
 
@@ -798,9 +799,10 @@ static void p9221_vrect_timer_handler(unsigned long data)
 	pm_relax(charger->dev);
 }
 
-static void p9221_dcin_timer_handler(unsigned long data)
+static void p9221_dcin_work(struct work_struct *work)
 {
-	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, dcin_work.work);
 
 	dev_info(&charger->client->dev,
 		 "timeout waiting for dc-in, online=%d\n", charger->online);
@@ -1096,7 +1098,7 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	 * We now have confirmation from DC_IN, kill the timer, charger->online
 	 * will be set by this function.
 	 */
-	del_timer(&charger->dcin_timer);
+	cancel_delayed_work(&charger->dcin_work);
 	del_timer(&charger->vrect_timer);
 
 	/*
@@ -1133,8 +1135,9 @@ bool p9221_notifier_check_det(struct p9221_charger_data *charger)
 
 	/* Give the dc-in 2 seconds to come up. */
 	dev_info(&charger->client->dev, "start dc-in timer\n");
-	mod_timer(&charger->dcin_timer,
-		  jiffies + msecs_to_jiffies(P9221_DCIN_TIMEOUT_MS));
+	cancel_delayed_work_sync(&charger->dcin_work);
+	schedule_delayed_work(&charger->dcin_work,
+			      msecs_to_jiffies(P9221_DCIN_TIMEOUT_MS));
 	relax = false;
 
 done:
@@ -1627,6 +1630,8 @@ static ssize_t p9221_store_txlen(struct device *dev,
 	if (ret > P9221R5_COM_CHAN_SEND_SIZE_REG)
 		return -EINVAL;
 
+	cancel_delayed_work_sync(&charger->tx_work);
+
 	charger->tx_len = len;
 	charger->tx_done = false;
 	ret = p9221_send_data(charger);
@@ -1635,8 +1640,8 @@ static ssize_t p9221_store_txlen(struct device *dev,
 		return ret;
 	}
 
-	mod_timer(&charger->tx_timer,
-		  jiffies + msecs_to_jiffies(P9221_TX_TIMEOUT_MS));
+	schedule_delayed_work(&charger->tx_work,
+			      msecs_to_jiffies(P9221_TX_TIMEOUT_MS));
 
 	return count;
 }
@@ -1843,7 +1848,7 @@ static void p9221r5_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 	if (irq_src & P9221R5_STAT_CCSENDBUSY) {
 		charger->tx_busy = false;
 		charger->tx_done = true;
-		del_timer(&charger->tx_timer);
+		cancel_delayed_work(&charger->tx_work);
 		sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
 		sysfs_notify(&charger->dev->kobj, NULL, "txdone");
 	}
@@ -2089,12 +2094,10 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->resume_complete = true;
 	mutex_init(&charger->io_lock);
 	mutex_init(&charger->cmd_lock);
-	setup_timer(&charger->dcin_timer, p9221_dcin_timer_handler,
-		    (unsigned long)charger);
 	setup_timer(&charger->vrect_timer, p9221_vrect_timer_handler,
 		    (unsigned long)charger);
-	setup_timer(&charger->tx_timer, p9221_tx_timer_handler,
-		    (unsigned long)charger);
+	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
+	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
 
 	psy_cfg.drv_data = charger;
 	psy_cfg.of_node = charger->dev->of_node;
@@ -2172,8 +2175,8 @@ static int p9221_charger_remove(struct i2c_client *client)
 {
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 
-	del_timer_sync(&charger->dcin_timer);
-	del_timer_sync(&charger->tx_timer);
+	cancel_delayed_work_sync(&charger->dcin_work);
+	cancel_delayed_work_sync(&charger->tx_work);
 	del_timer_sync(&charger->vrect_timer);
 	device_init_wakeup(charger->dev, false);
 	cancel_delayed_work_sync(&charger->notifier_work);
