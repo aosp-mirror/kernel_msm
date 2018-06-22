@@ -60,7 +60,7 @@
 			qcom,fastchg-ma = <250>;
 			qcom,soft-temp-vfloat-comp-mv = <80>;
 			qcom,soft-temp-current-comp-ma = <250>;
-			cei,max-ac-current-ma = <900>;
+			cei,max-ac-current-ma = <500>;
 			cei,prechg-current-ma = <20>;
 			cei,chg-en-active = <0>;
 			cei,sys-voltage = <2>;
