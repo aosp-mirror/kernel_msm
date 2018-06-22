@@ -198,9 +198,9 @@
 		vci-supply = <&pm660l_l6>; /* 3008mV */
 	};
 
-	dsi_s6e3fa7_samsung_cmd_display: qcom,dsi-display@51 {
+	dsi_s6e3fa7_sdc_cmd_display: qcom,dsi-display@51 {
 		compatible = "qcom,dsi-display";
-		label = "dsi_s6e3fa7_samsung_cmd_display";
+		label = "dsi_s6e3fa7_sdc_cmd_display";
 		qcom,display-type = "primary";
 
 		qcom,dsi-ctrl = <&mdss_dsi0>;
@@ -214,7 +214,7 @@
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
 		qcom,platform-te-gpio = <&tlmm 10 0>;
 
-		qcom,dsi-panel = <&dsi_s6e3fa7_samsung_cmd>;
+		qcom,dsi-panel = <&dsi_s6e3fa7_sdc_cmd>;
 		vddi-supply = <&rt9055_gg_vout2>;
 		vci-supply = <&pm660l_l6>; /* 3008mV */
 	};
@@ -280,7 +280,7 @@
 	};
 };
 
-&dsi_s6e3fa7_samsung_cmd {
+&dsi_s6e3fa7_sdc_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3fa7>;
 	qcom,mdss-dsi-t-clk-post = <0x09>;
 	qcom,mdss-dsi-t-clk-pre = <0x1A>;
