@@ -103,8 +103,11 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 /* PCIe */
 #define MNH_PCIE_CHAN_0 0
 
-/* Allow partial active mode where PCIe link is up, but Easel is not booted */
-#define ALLOW_PARTIAL_ACTIVE 1
+/*
+ * ALLOW_PARTIAL_ACTIVE: set to 1 to allow partial active mode where
+ * PCIe link is up, but Easel is not fully booted.
+ */
+#define ALLOW_PARTIAL_ACTIVE 0
 
 /* Firmware update mask, defines userspace updatable slots */
 #define FW_SLOT_UPDATE_MASK ((1 << MNH_FW_SLOT_RAMDISK) |\
@@ -1951,7 +1954,7 @@ static void mnh_sm_enable_ready_irq(bool enable)
  * this would be done from Easel kernel, but if the Easel kernel fails for some
  * reason, we can disable a lot of clocks on Easel to reduce power.
  */
-static void mnh_sm_enter_low_power_mode(void)
+__maybe_unused static void mnh_sm_enter_low_power_mode(void)
 {
 	/* disable clocks for unused system components */
 	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 0);
