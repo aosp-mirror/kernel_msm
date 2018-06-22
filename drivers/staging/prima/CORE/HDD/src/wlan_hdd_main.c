@@ -10512,14 +10512,14 @@ VOS_STATUS hdd_stop_adapter( hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
          {
             VOS_STATUS status;
             hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
+            hdd_hostapd_state_t *pHostapdState =
+                                    WLAN_HDD_GET_HOSTAP_STATE_PTR(pAdapter);
 
+            vos_event_reset(&pHostapdState->vosEvent);
             //Stop Bss.
             status = WLANSAP_StopBss(pHddCtx->pvosContext);
             if (VOS_IS_STATUS_SUCCESS(status))
             {
-               hdd_hostapd_state_t *pHostapdState = 
-                  WLAN_HDD_GET_HOSTAP_STATE_PTR(pAdapter);
-
                status = vos_wait_single_event(&pHostapdState->vosEvent, 10000);
    
                if (!VOS_IS_STATUS_SUCCESS(status))
@@ -10636,6 +10636,7 @@ static void wlan_hdd_restart_sap(hdd_adapter_t *ap_adapter)
             goto end;
         }
 
+        vos_event_reset(&pHostapdState->vosEvent);
         if (WLANSAP_StartBss(pHddCtx->pvosContext, hdd_hostapd_SAPEventCB,
             pConfig, (v_PVOID_t)ap_adapter->dev) != VOS_STATUS_SUCCESS) {
             hddLog(LOGE, FL("SAP Start Bss fail"));

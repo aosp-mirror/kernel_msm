@@ -11505,8 +11505,9 @@ static int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
     pConfig->acsBandSwitchThreshold = iniConfig->acsBandSwitchThreshold;
 
     set_bit(SOFTAP_INIT_DONE, &pHostapdAdapter->event_flags);
-
     pSapEventCallback = hdd_hostapd_SAPEventCB;
+
+    vos_event_reset(&pHostapdState->vosEvent);
     if(WLANSAP_StartBss(pVosContext, pSapEventCallback, pConfig,
                  (v_PVOID_t)pHostapdAdapter->dev) != VOS_STATUS_SUCCESS)
     {
@@ -11914,12 +11915,15 @@ static int __wlan_hdd_cfg80211_stop_ap (struct wiphy *wiphy,
         mutex_lock(&pHddCtx->sap_lock);
         if(test_bit(SOFTAP_BSS_STARTED, &pAdapter->event_flags))
         {
+            hdd_hostapd_state_t *pHostapdState =
+                                    WLAN_HDD_GET_HOSTAP_STATE_PTR(pAdapter);
+
             vos_flush_delayed_work(&pHddCtx->ecsa_chan_change_work);
             hdd_wait_for_ecsa_complete(pHddCtx);
+            vos_event_reset(&pHostapdState->vosEvent);
+
             if ( VOS_STATUS_SUCCESS == (status = WLANSAP_StopBss(pHddCtx->pvosContext) ) )
             {
-                hdd_hostapd_state_t *pHostapdState = WLAN_HDD_GET_HOSTAP_STATE_PTR(pAdapter);
-
                 status = vos_wait_single_event(&pHostapdState->vosEvent, 10000);
 
                 if (!VOS_IS_STATUS_SUCCESS(status))

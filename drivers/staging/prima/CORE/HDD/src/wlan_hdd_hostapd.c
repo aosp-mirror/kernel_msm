@@ -4600,10 +4600,12 @@ static int __iw_softap_stopbss(struct net_device *dev,
 
     if(test_bit(SOFTAP_BSS_STARTED, &pHostapdAdapter->event_flags))
     {
+        hdd_hostapd_state_t *pHostapdState =
+                              WLAN_HDD_GET_HOSTAP_STATE_PTR(pHostapdAdapter);
+
+        vos_event_reset(&pHostapdState->vosEvent);
         if ( VOS_STATUS_SUCCESS == (status = WLANSAP_StopBss((WLAN_HDD_GET_CTX(pHostapdAdapter))->pvosContext) ) )
         {
-            hdd_hostapd_state_t *pHostapdState = WLAN_HDD_GET_HOSTAP_STATE_PTR(pHostapdAdapter);
-
             status = vos_wait_single_event(&pHostapdState->vosEvent, 10000);
 
             if (!VOS_IS_STATUS_SUCCESS(status))
