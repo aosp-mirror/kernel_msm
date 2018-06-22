@@ -167,6 +167,7 @@
 
 &qupv3_se7_spi {
 	status = "ok";
+	qcom,disable-autosuspend;
 };
 
 &qupv3_se3_i2c {
