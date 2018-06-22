@@ -261,9 +261,9 @@ struct p9221_charger_data {
 	struct mutex			cmd_lock;
 	struct device			*dev;
 	struct delayed_work		notifier_work;
+	struct delayed_work		dcin_work;
+	struct delayed_work		tx_work;
 	struct timer_list		vrect_timer;
-	struct timer_list		dcin_timer;
-	struct timer_list		tx_timer;
 	struct bin_attribute		bin;
 	int				online;
 	int				next_online;
