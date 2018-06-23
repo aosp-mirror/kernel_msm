@@ -2324,8 +2324,10 @@ int f2fs_sanity_check_ckpt(struct f2fs_sb_info *sbi)
 
 	total = le32_to_cpu(raw_super->segment_count);
 	fsmeta = le32_to_cpu(raw_super->segment_count_ckpt);
-	fsmeta += le32_to_cpu(raw_super->segment_count_sit);
-	fsmeta += le32_to_cpu(raw_super->segment_count_nat);
+	sit_segs = le32_to_cpu(raw_super->segment_count_sit);
+	fsmeta += sit_segs;
+	nat_segs = le32_to_cpu(raw_super->segment_count_nat);
+	fsmeta += nat_segs;
 	fsmeta += le32_to_cpu(ckpt->rsvd_segment_count);
 	fsmeta += le32_to_cpu(raw_super->segment_count_ssa);
 
