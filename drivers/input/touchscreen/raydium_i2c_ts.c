@@ -100,6 +100,7 @@ struct raydium_ts_data {
     unsigned int is_suspend;
     unsigned int key_flag;
     unsigned int is_sleep;
+    unsigned int is_close;
     #ifdef GESTURE_EN
     unsigned int is_palm;
     #endif
@@ -116,7 +117,7 @@ struct raydium_ts_data {
 
     #if defined(CONFIG_FB)
     struct notifier_block fb_notif;
-    int blank;
+    volatile int blank;
     #elif defined(CONFIG_HAS_EARLYSUSPEND)
     struct early_suspend early_suspend;
     #endif //end of CONFIG_FB
@@ -367,7 +368,7 @@ static int raydium_i2c_pda_set_address(struct raydium_ts_data *data,
         if (retval != RAYDIUM_I2C_PDA_ADDRESS_LENGTH)
         {
             dev_err(&i2c->dev,"[touch]%s: I2C retry %d\n",__func__, retry + 1);
-            msleep(20);
+            msleep(1);
         } else
         {
             break;
@@ -426,7 +427,7 @@ static int raydium_i2c_pda_read(struct i2c_client *client,
             break;
         }
         dev_err(&data->client->dev,"%s: I2C retry %d\n",__func__, retry + 1);
-        msleep(20);
+        msleep(1);
     }
 
     if (retry == SYN_I2C_RETRY_TIMES)
@@ -489,7 +490,7 @@ static int raydium_i2c_pda_write(struct i2c_client *client,
             break;
         }
         dev_err(&data->client->dev,"[touch]%s: I2C retry %d\n",__func__, retry + 1);
-        msleep(20);
+        msleep(1);
     }
 
     if (retry == SYN_I2C_RETRY_TIMES)
@@ -527,7 +528,7 @@ static int raydium_i2c_pda2_set_page(struct i2c_client *client, unsigned char pa
             retval = RAYDIUM_I2C_PDA2_PAGE_LENGTH;
             break;
         }
-        msleep(20);
+        msleep(1);
     }
 
     if (retry == SYN_I2C_RETRY_TIMES)
@@ -568,7 +569,7 @@ static int raydium_i2c_pda2_read(struct i2c_client *client,
             retval = length;
             break;
         }
-        msleep(20);
+        msleep(1);
     }
 
     if (retry == SYN_I2C_RETRY_TIMES)
@@ -613,7 +614,7 @@ static int raydium_i2c_pda2_write(struct i2c_client *client,
             retval = length;
             break;
         }
-        msleep(20);
+        msleep(1);
     }
 
     if (retry == SYN_I2C_RETRY_TIMES)
@@ -635,23 +636,32 @@ static void raydium_irq_control(struct raydium_ts_data *ts, bool enable)
         }
 
         /* Clear interrupts first */
-        mutex_lock(&ts->lock);
-        if (raydium_i2c_pda2_set_page(ts->client, RAYDIUM_PDA2_PAGE_0) < 0)
+        if (ts->blank != FB_BLANK_POWERDOWN)
         {
-            dev_err(&ts->client->dev, "[touch]failed to set page %s\n", __func__);
+            mutex_lock(&ts->lock);
+            if (raydium_i2c_pda2_set_page(ts->client, RAYDIUM_PDA2_PAGE_0) < 0)
+            {
+                dev_err(&ts->client->dev, "[touch]failed to set page %s\n", __func__);
+            }
+            mutex_unlock(&ts->lock);
+            mdelay(1);
         }
-        mutex_unlock(&ts->lock);
-        mdelay(1);
-        enable_irq(ts->irq);
-        ts->irq_enabled = true;
-        printk(KERN_INFO "[touch]irq enable\n");
+        while (ts->irq_desc->depth > 0)
+        {
+            ts->irq_enabled = true;
+            enable_irq(ts->irq);
+            printk(KERN_INFO "[touch]irq enable\n");
+        }
     } else
     {
         if (ts->irq_enabled)
         {
-            disable_irq(ts->irq);
-            ts->irq_enabled = false;
-            printk(KERN_INFO "[touch]irq disable\n");
+            if (ts->irq_desc->depth == 0)
+            {
+                disable_irq(ts->irq);
+                ts->irq_enabled = false;
+                printk(KERN_INFO "[touch]irq disable\n");
+            }
         }
     }
 }
@@ -847,14 +857,28 @@ static int raydium_i2c_mode_control(struct i2c_client *client, unsigned char mod
 
     switch (mode)
     {
+        case 0:    /* Disable INT flag */
+            printk(KERN_INFO "[touch]Raydium INT flag : %d\n", ts->irq_enabled);
+            disable_irq(ts->irq);
+            ts->irq_enabled = false;
+            printk(KERN_INFO "[touch]Raydium irq disable\n");
+            break;
+        case 1:    /* Enable INT flag */
+            printk(KERN_INFO "[touch]Raydium INT flag : %d\n", ts->irq_enabled);
+            enable_irq(ts->irq);
+            ts->irq_enabled = true;
+            printk(KERN_INFO "[touch]Raydium irq enable\n");
+            break;
         case 2: /* Disable INT */
             raydium_irq_control(ts, DISABLE);
-            printk("Raydium disable INT\n");
+            printk(KERN_INFO "[touch]Raydium disable INT\n");
             break;
         case 3: /* Enable INT */
             raydium_irq_control(ts, ENABLE);
-            printk("Raydium enable INT\n");
+            printk(KERN_INFO "[touch]Raydium enable INT\n");
             break;
+        case 4:
+            printk(KERN_INFO "[touch]Raydium INT depth : %d\n", ts->irq_desc->depth);
     }
     return 0;
 }
@@ -3424,6 +3448,19 @@ exit_i2c_error:
     return ret;
 }
 
+static ssize_t raydium_check_driver_version_show(struct device *dev,
+                struct device_attribute *attr,
+                char *buf)
+{
+    int buf_len = 0;
+    int ret = -1;
+
+    sprintf(buf, "Raydium Driver Version : 0x%X\n", RAYDIUM_VER);
+    buf_len = strlen(buf);
+    ret = buf_len + 1;
+    return ret;
+}
+
 static ssize_t raydium_check_fw_version_show(struct device *dev,
                 struct device_attribute *attr,
                 char *buf)
@@ -3901,6 +3938,10 @@ static DEVICE_ATTR(raydium_check_fw_version, S_IRUGO|S_IWUSR,
         raydium_check_fw_version_show,
         NULL);
 
+static DEVICE_ATTR(raydium_check_driver_version, S_IRUGO | S_IWUSR,
+        raydium_check_driver_version_show,
+        NULL);
+
 static DEVICE_ATTR(fw_check, S_IRUGO, fw_check_show, NULL);
 /* show the panel version (R)
  *  example:cat raydium_panel_version
@@ -3949,6 +3990,7 @@ static struct attribute *raydium_attributes[] = {
     &dev_attr_raydium_palm_area.attr,
     &dev_attr_fw_check.attr,
     &dev_attr_raydium_i2c_test.attr,
+    &dev_attr_raydium_check_driver_version.attr,
     NULL
 };
 
@@ -4001,7 +4043,7 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
         input_report_abs(data->input_dev, ABS_MT_POSITION_X, 100);
         input_report_abs(data->input_dev, ABS_MT_POSITION_Y, 100);
         input_sync(data->input_dev);
-        mdelay(10);
+        mdelay(1);
         input_mt_slot(data->input_dev, 0);
         input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, 0);
         input_mt_report_pointer_emulation(data->input_dev, false);
@@ -4036,6 +4078,7 @@ static int raydium_read_touchdata(struct raydium_ts_data *data)
         u8_points_amount = tp_status[POS_PT_AMOUNT];
         if (u8_points_amount > MAX_TOUCH_NUM)
         {
+            mutex_unlock(&data->lock);
             return 0;
         }
 
@@ -4282,13 +4325,24 @@ static irqreturn_t raydium_ts_interrupt(int irq, void *dev_id)
                     mutex_lock(&raydium_ts->lock);
                     if (raydium_i2c_pda2_set_page(raydium_ts->client, RAYDIUM_PDA2_PAGE_0) < 0)
                     {
-                        dev_err(&raydium_ts->client->dev, "[touch]%s: failed to set page for reading gesture report\n",__func__);
+                        disable_irq_nosync(raydium_ts->irq);
+                        raydium_ts->irq_enabled = false;
+                        dev_err(&raydium_ts->client->dev, "[touch]%s: failed to set page\n",__func__);
                     }
                     mutex_unlock(&raydium_ts->lock);
                 }
             }
         } else //work pending
         {
+            /* Clear interrupts*/
+            mutex_lock(&raydium_ts->lock);
+            if (raydium_i2c_pda2_set_page(raydium_ts->client, RAYDIUM_PDA2_PAGE_0) < 0)
+            {
+                disable_irq_nosync(raydium_ts->irq);
+                raydium_ts->irq_enabled = false;
+                dev_err(&raydium_ts->client->dev, "[touch]%s: failed to set page in work_pending\n", __func__);
+            }
+            mutex_unlock(&raydium_ts->lock);
             printk(KERN_INFO "[touch]work_pending\n");
         }
     }
@@ -4414,16 +4468,21 @@ exit_error:
 static void raydium_ts_do_suspend(struct raydium_ts_data *ts)
 {
     int i = 0;
-    printk(KERN_INFO "[touch]%s, %d.\n", __func__, ts->is_suspend);
+
     if (ts->is_suspend == 1)
     {
         printk(KERN_INFO "[touch]Already in suspend state\n");
         return;
     }
 
-    #ifndef GESTURE_EN
     raydium_irq_control(ts, DISABLE);
-    #endif
+
+    //clear workqueue
+    if (cancel_work_sync(&ts->work))
+    {
+        printk(KERN_INFO "[touch]workqueue is not empty!\n");
+    }
+
     /* release all touches */
     for (i = 0; i < ts->pdata->num_max_touches; i++)
     {
@@ -4452,14 +4511,22 @@ static void raydium_ts_do_suspend(struct raydium_ts_data *ts)
 }
 static void raydium_ts_do_resume(struct raydium_ts_data *ts)
 {
-    printk(KERN_INFO "[touch]%s, %d.\n", __func__, ts->is_suspend);
     if (ts->is_suspend == 0)
     {
         printk(KERN_INFO "[touch]Already in resume state\n");
         return;
     }
 
-    raydium_irq_control(ts, ENABLE);
+    //clear workqueue
+    if (cancel_work_sync(&ts->work))
+    {
+        printk(KERN_INFO "[touch]workqueue is not empty!\n");
+    }
+    if (ts->is_close != 1)
+    {
+        printk(KERN_INFO "[touch]Already in open state\n");
+        raydium_irq_control(ts, ENABLE);
+    }
 
     #ifdef GESTURE_EN
     if (device_may_wakeup(&ts->client->dev))
@@ -4510,6 +4577,8 @@ static int raydium_ts_open(struct input_dev *input_dev)
     ts = input_get_drvdata(input_dev);
 
     printk(KERN_INFO "[touch]ts->blank:%x\n",ts->blank);
+
+    ts->is_close = 0;
     if (ts->is_sleep == 1)
     {
         //turn on i2c pull-up power
@@ -4518,12 +4587,11 @@ static int raydium_ts_open(struct input_dev *input_dev)
         {
             dev_err(&ts->client->dev, "[touch]%s:power on failed",__func__);
         }
+        udelay(RAYDIUM_POWERON_DELAY_USEC);//500us
 
         mutex_lock(&ts->lock);
         if (gpio_is_valid(ts->rst))
         {
-            udelay(RAYDIUM_POWERON_DELAY_USEC);//500us
-
             ret = gpio_request(ts->rst, "raydium_reset_gpio");
             if (ret < 0)
             {
@@ -4552,6 +4620,7 @@ static void raydium_ts_close(struct input_dev *input_dev)
     int ret = 0;
     int i = 0;
     unsigned char wbuffer[1];
+    unsigned char buf[4];
 
     printk(KERN_INFO "[touch]%s()+\n", __func__);
     ts = input_get_drvdata(input_dev);
@@ -4562,6 +4631,7 @@ static void raydium_ts_close(struct input_dev *input_dev)
         return;
     }
 
+    ts->is_close = 1;
     raydium_irq_control(ts, DISABLE);
 
     /* release all touches */
@@ -4589,6 +4659,15 @@ static void raydium_ts_close(struct input_dev *input_dev)
         goto exit_i2c_error;
     }
 
+    mdelay(750);
+    memset(buf, 0, sizeof(buf));
+    ret = raydium_i2c_pda_write(ts->client, 0x5000000C, buf, 4);
+    if (ret < 0)
+    {
+        printk(KERN_ERR "[touch]Disable M0 NG ret:%d\n",ret);
+        goto exit_i2c_error;
+    }
+
     //turn off i2c pull-up power
     ret = raydium_power_on(ts, false);
     if (ret)
@@ -4603,6 +4682,7 @@ static void raydium_ts_close(struct input_dev *input_dev)
 
 exit_i2c_error:
     mutex_unlock(&ts->lock);
+    ts->is_close = 0;
     raydium_irq_control(ts, ENABLE);
     return;
 }
@@ -4624,10 +4704,7 @@ static int fb_notifier_callback(struct notifier_block *self,unsigned long event,
 {
     struct fb_event *evdata = data;
     int *blank;
-    #ifdef GESTURE_EN
-    int ret = 0;
-    unsigned char wbuffer[1];
-    #endif
+
     struct raydium_ts_data *raydium_ts =
         container_of(self, struct raydium_ts_data, fb_notif);
 
@@ -4645,22 +4722,6 @@ static int fb_notifier_callback(struct notifier_block *self,unsigned long event,
                 /* clear palm status */
                 g_uc_pre_palm_status = 0;
                 raydium_ts->is_palm = 0;
-                /* notify fw enter active mode */
-                mutex_lock(&raydium_ts->lock);
-                ret = raydium_i2c_pda2_set_page(raydium_ts->client, RAYDIUM_PDA2_PAGE_0);
-                if (ret < 0)
-                {
-                    mutex_unlock(&raydium_ts->lock);
-                    goto exit_error;
-                }
-                wbuffer[0] = ACTIVE_MODE;
-                ret = raydium_i2c_pda2_write(raydium_ts->client, RAYDIUM_PDA2_DISPLAY_MODE_ADDR, wbuffer, 1);
-                if (ret < 0)
-                {
-                    mutex_unlock(&raydium_ts->lock);
-                    goto exit_error;
-                }
-                mutex_unlock(&raydium_ts->lock);
                 #endif
                 raydium_ts_resume(&raydium_ts->client->dev);
                 break;
@@ -4671,47 +4732,16 @@ static int fb_notifier_callback(struct notifier_block *self,unsigned long event,
                 /* clear palm status */
                 g_uc_pre_palm_status = 0;
                 raydium_ts->is_palm = 0;
-                /* notify fw enter sleep mode */
-                mutex_lock(&raydium_ts->lock);
-                ret = raydium_i2c_pda2_set_page(raydium_ts->client, RAYDIUM_PDA2_PAGE_0);
-                if (ret < 0)
-                {
-                    mutex_unlock(&raydium_ts->lock);
-                    goto exit_error;
-                }
-                wbuffer[0] = SLEEP_MODE;
-                ret = raydium_i2c_pda2_write(raydium_ts->client, RAYDIUM_PDA2_DISPLAY_MODE_ADDR, wbuffer, 1);
-                if (ret < 0)
-                {
-                    mutex_unlock(&raydium_ts->lock);
-                    goto exit_error;
-                }
-                mutex_unlock(&raydium_ts->lock);
                 #endif
                 raydium_ts_suspend(&raydium_ts->client->dev);
                 break;
+
             case FB_BLANK_VSYNC_SUSPEND://ambient mode
                 printk(KERN_INFO "[touch]FB_BLANK_VSYNC_SUSPEND\n");
                 #ifdef GESTURE_EN
                 /* clear palm status */
                 g_uc_pre_palm_status = 0;
                 raydium_ts->is_palm = 0;
-                /* notify fw enter ambient mode */
-                mutex_lock(&raydium_ts->lock);
-                ret = raydium_i2c_pda2_set_page(raydium_ts->client, RAYDIUM_PDA2_PAGE_0);
-                if (ret < 0)
-                {
-                    mutex_unlock(&raydium_ts->lock);
-                    goto exit_error;
-                }
-                wbuffer[0] = AMBIENT_MODE;
-                ret = raydium_i2c_pda2_write(raydium_ts->client, RAYDIUM_PDA2_DISPLAY_MODE_ADDR, wbuffer, 1);
-                if (ret < 0)
-                {
-                    mutex_unlock(&raydium_ts->lock);
-                    goto exit_error;
-                }
-                mutex_unlock(&raydium_ts->lock);
                 #endif
                 raydium_ts_suspend(&raydium_ts->client->dev);
                 break;
@@ -4720,9 +4750,7 @@ static int fb_notifier_callback(struct notifier_block *self,unsigned long event,
                 break;
         }
     }
-#ifdef GESTURE_EN
-exit_error:
-#endif
+
     return 0;
 }
 
@@ -4962,6 +4990,7 @@ static int raydium_ts_probe(struct i2c_client *client,
     raydium_ts->y_max = pdata->y_max - 1;
     raydium_ts->is_suspend = 0;
     raydium_ts->is_sleep = 0;
+    raydium_ts->is_close = 0;
     #ifdef GESTURE_EN
     raydium_ts->is_palm = 0;
     #endif

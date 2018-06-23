@@ -7,7 +7,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x000E
+#define RAYDIUM_VER     0x000F
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
 /* IC timing control arguments */
@@ -23,7 +23,7 @@
 /* I2C R/W configuration literal */
 #define RAYDIUM_I2C_WRITE       I2C_SMBUS_WRITE
 #define RAYDIUM_I2C_READ        I2C_SMBUS_READ
-#define SYN_I2C_RETRY_TIMES     10
+#define SYN_I2C_RETRY_TIMES     2
 #define MAX_WRITE_PACKET_SIZE   64
 #define MAX_READ_PACKET_SIZE    64
 
