@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,7 @@
 #include "peripheral-loader.h"
 #include "../../misc/qseecom_kernel.h"
 #include "pil_bg_intf.h"
+#include "bgcom_interface.h"
 
 #define INVALID_GPIO	-1
 #define NUM_GPIOS	4
@@ -37,7 +38,7 @@
 #define desc_to_data(d)	container_of(d, struct pil_bg_data, desc)
 #define subsys_to_data(d) container_of(d, struct pil_bg_data, subsys_desc)
 #define BG_RAMDUMP_SZ	0x00102000
-#define BG_CRASH_IN_TWM	2
+#define BG_CRASH_IN_TWM	-2
 /**
  * struct pil_bg_data
  * @qseecom_handle: handle of TZ app
@@ -90,9 +91,14 @@ static irqreturn_t bg_status_change(int irq, void *dev_id);
 static void bg_app_shutdown_notify(const struct subsys_desc *subsys)
 {
 	struct pil_bg_data *bg_data = subsys_to_data(subsys);
+
+	/* Disable irq if already BG is up */
+	if (bg_data->is_ready) {
+		disable_irq(bg_data->status_irq);
+		disable_irq(bg_data->errfatal_irq);
+		bg_data->is_ready = false;
+	}
 	/* Toggle AP2BG err fatal gpio here to inform apps err fatal event */
-	disable_irq(bg_data->status_irq);
-	disable_irq(bg_data->errfatal_irq);
 	if (gpio_is_valid(bg_data->gpios[2])) {
 		pr_debug("Sending Apps shutdown signal\n");
 		gpio_set_value(bg_data->gpios[2], 1);
@@ -111,8 +117,12 @@ static int bg_app_reboot_notify(struct notifier_block *nb,
 	struct pil_bg_data *bg_data = container_of(nb,
 					struct pil_bg_data, reboot_blk);
 
-	disable_irq(bg_data->status_irq);
-	disable_irq(bg_data->errfatal_irq);
+	/* Disable irq if already BG is up */
+	if (bg_data->is_ready) {
+		disable_irq(bg_data->status_irq);
+		disable_irq(bg_data->errfatal_irq);
+		bg_data->is_ready = false;
+	}
 	/* Toggle AP2BG err fatal gpio here to inform apps err fatal event */
 	if (gpio_is_valid(bg_data->gpios[2])) {
 		pr_debug("Sending reboot signal\n");
@@ -275,7 +285,6 @@ static int bg_powerup(const struct subsys_desc *subsys)
 		return ret;
 	}
 	enable_irq(bg_data->status_irq);
-	enable_irq(bg_data->errfatal_irq);
 	ret = wait_for_err_ready(bg_data);
 	if (ret) {
 		dev_err(bg_data->desc.dev,
@@ -298,10 +307,12 @@ static int bg_shutdown(const struct subsys_desc *subsys, bool force_stop)
 {
 	struct pil_bg_data *bg_data = subsys_to_data(subsys);
 
-	disable_irq(bg_data->status_irq);
-	devm_free_irq(bg_data->desc.dev, bg_data->status_irq, bg_data);
-	disable_irq(bg_data->errfatal_irq);
-	bg_data->is_ready = false;
+	if (bg_data->is_ready) {
+		disable_irq(bg_data->status_irq);
+		devm_free_irq(bg_data->desc.dev, bg_data->status_irq, bg_data);
+		disable_irq(bg_data->errfatal_irq);
+		bg_data->is_ready = false;
+	}
 	return 0;
 }
 
@@ -400,7 +411,9 @@ static int bg_auth_and_xfer(struct pil_desc *pil)
 	ret = bgpil_tzapp_comm(bg_data, &bg_tz_req);
 	if (bg_data->cmd_status == BG_CRASH_IN_TWM) {
 		/* Do ramdump and resend boot cmd */
-		bg_data->subsys_desc.ramdump(true, &bg_data->subsys_desc);
+		if (is_twm_exit())
+			bg_data->subsys_desc.ramdump(true,
+				&bg_data->subsys_desc);
 		bg_tz_req.tzapp_bg_cmd = BGPIL_DLOAD_CONT;
 		ret = bgpil_tzapp_comm(bg_data, &bg_tz_req);
 	}
@@ -528,7 +541,6 @@ static irqreturn_t bg_status_change(int irq, void *dev_id)
 	} else if (value == false && drvdata->is_ready) {
 		dev_err(drvdata->desc.dev,
 			"BG got unexpected reset: irq state changed 1->0\n");
-			drvdata->is_ready = false;
 		queue_work(drvdata->bg_queue, &drvdata->restart_work);
 	} else {
 		dev_err(drvdata->desc.dev,
@@ -590,7 +602,6 @@ static int setup_bg_gpio_irq(struct platform_device *pdev,
 		goto err;
 	}
 	drvdata->errfatal_irq = irq;
-	enable_irq(drvdata->errfatal_irq);
 	/* Configure outgoing GPIO's */
 	if (gpio_request(drvdata->gpios[2], "AP2BG_ERRFATAL")) {
 		dev_err(&pdev->dev,
