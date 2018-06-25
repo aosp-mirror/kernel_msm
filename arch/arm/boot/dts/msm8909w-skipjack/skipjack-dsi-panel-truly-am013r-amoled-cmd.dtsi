@@ -21,7 +21,7 @@
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-destination = "display_1";
-		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-panel-framerate = <45>;
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-panel-width = <360>;
@@ -48,6 +48,8 @@
 			15 01 00 00 00 00 02 05 03
 			15 01 00 00 00 00 02 FE 0A
 			15 01 00 00 00 00 02 29 10
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 27 92
 			15 01 00 00 00 00 02 FE 00
 			15 01 00 00 00 00 02 35 00
 			15 01 00 00 00 00 02 36 C0
@@ -78,12 +80,13 @@
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-tear-check-frame-rate = <4500>;
+		qcom,mdss-dsi-panel-clockrate = <456698880>;
 		qcom,mdss-dsi-te-pin-select = <1>;
-		qcom,mdss-dsi-te-v-sync-rd-ptr-irq-line = <0x2c>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-te-check-enable;
-		qcom,mdss-dsi-panel-timings = [54 0E 0A 00 2E 32 0E 12 0A 03 04 00];
+		qcom,mdss-dsi-panel-timings = [87 1C 12 00 42 44 18 20 17 03 04 00];
 		qcom,mdss-dsi-t-clk-post = <0x05>;
 		qcom,mdss-dsi-t-clk-pre = <0x13>;
 		qcom,mdss-dsi-bl-min-level = <1>;
