@@ -15,63 +15,6 @@
 #include "dsi-panel-s6e3fa7-1080p-cmd.dtsi"
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 
-&tlmm {
-	rt9055_en_active: rt9055_en_active {
-		mux {
-			pins = "gpio50";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio50";
-			drive-strength = <2>;
-			bias-disable;
-			output-high;
-		};
-	};
-
-	rt9055_en_suspend: rt9055_en_suspend {
-		mux {
-			pins = "gpio50";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio50";
-			drive-strength = <2>;
-			bias-disable;
-			output-low;
-		};
-	};
-};
-
-&soc {
-	rt9055 {
-		compatible = "richtek,rt9055";
-		pinctrl-names = "default", "sleep";
-		pinctrl-0 = <&rt9055_en_active>;
-		pinctrl-1 = <&rt9055_en_suspend>;
-
-		regulators {
-			rt9055_gg_vout1: rt9055_gg_vout1 {
-				regulator-name = "pp1800_tp";
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1800000>;
-				/* richtek,en-gpio = */
-				/* <&pm660_gpios 13 GPIO_ACTIVE_HIGH>; */
-				richtek,en-gpio = <&tlmm 50 0>; /* TBD */
-			};
-
-			rt9055_gg_vout2: rt9055_gg_vout2 {
-				regulator-name = "pp1800_panel";
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1800000>;
-				richtek,en-gpio = <&tlmm 50 0>;
-			};
-		};
-	};
-};
-
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
 		#address-cells = <1>;
@@ -111,18 +54,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		/* TBD: rt9055 fail */
-		/* qcom,panel-supply-entry@0 { */
-			/* reg = <0>; */
-			/* qcom,supply-name = "vddi"; */
-			/* qcom,supply-min-voltage = <1800000>; */
-			/* qcom,supply-max-voltage = <1800000>; */
-			/* qcom,supply-enable-load = <62000>; */
-			/* qcom,supply-disable-load = <80>; */
-			/* qcom,supply-post-on-sleep = <10>; */
-		/* }; */
-
-		qcom,panel-supply-entry@0 { /* change to 1 */
+		qcom,panel-supply-entry@0 {
 			reg = <0>;
 			qcom,supply-name = "vci";
 			qcom,supply-min-voltage = <3000000>;
@@ -133,22 +65,11 @@
 		};
 	};
 
-		dsi_panel_pwr_supply_s6e3fa7: dsi_panel_pwr_supply_s6e3fa7 {
+	dsi_panel_pwr_supply_s6e3fa7: dsi_panel_pwr_supply_s6e3fa7 {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		/* TBD: rt9055 fail */
-		/* qcom,panel-supply-entry@0 { */
-			/* reg = <0>; */
-			/* qcom,supply-name = "vddi"; */
-			/* qcom,supply-min-voltage = <1800000>; */
-			/* qcom,supply-max-voltage = <1800000>; */
-			/* qcom,supply-enable-load = <62000>; */
-			/* qcom,supply-disable-load = <80>; */
-			/* qcom,supply-post-on-sleep = <10>; */
-		/* }; */
-
-		qcom,panel-supply-entry@0 { /* change to 1 */
+		qcom,panel-supply-entry@0 {
 			reg = <0>;
 			qcom,supply-name = "vci";
 			qcom,supply-min-voltage = <3000000>;
@@ -194,7 +115,6 @@
 		qcom,platform-te-gpio = <&tlmm 10 0>;
 
 		qcom,dsi-panel = <&dsi_sofef00_sdc_1080p_cmd>;
-		vddi-supply = <&rt9055_gg_vout2>;
 		vci-supply = <&pm660l_l6>; /* 3008mV */
 	};
 
@@ -215,7 +135,6 @@
 		qcom,platform-te-gpio = <&tlmm 10 0>;
 
 		qcom,dsi-panel = <&dsi_s6e3fa7_sdc_cmd>;
-		vddi-supply = <&rt9055_gg_vout2>;
 		vci-supply = <&pm660l_l6>; /* 3008mV */
 	};
 
