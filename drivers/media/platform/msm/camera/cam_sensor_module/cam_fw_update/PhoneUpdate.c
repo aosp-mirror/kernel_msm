@@ -302,9 +302,93 @@ void F40_FlashSectorRead( UINT_32 UlAddress, UINT_8 *PucData )
 	}
 }
 
-//********************************************************************************
+//*****************************************************************************
+// Function Name 	: F40_FlashSectorErase
+//*****************************************************************************
+UINT_8 F40_FlashSectorErase(UINT_32 SetAddress)
+{
+	UINT_32	UlReadVal, UlCnt;
+	UINT_8 ans = 0;
+
+	if ((SetAddress & 0x000100FF) > 0x0001007F)
+		return 9;
+
+	if (USER_AREA_START > (SetAddress & 0xFFFFFFC0))
+		return 9;
+
+	ans = F40_UnlockCodeSet();
+	if (ans != 0)
+		return ans;
+
+	F40_IOWrite32A(FLASHROM_F40_ADR, SetAddress & 0xFFFFFFC0);
+	F40_IOWrite32A(FLASHROM_F40_CMD, 4);
+
+	WitTim(5);
+	UlCnt = 0;
+	do {
+		if (UlCnt++ > 100) {
+			ans = 2;
+			break;
+		}
+
+		F40_IORead32A(FLASHROM_F40_INT, &UlReadVal);
+	} while ((UlReadVal & 0x00000080) != 0);
+
+	ans = F40_UnlockCodeClear();
+
+	return ans;
+}
+
+//*****************************************************************************
+// Function Name 	: F40_FlashSectorWrite
+//*****************************************************************************
+UINT_8 F40_FlashSectorWrite(UINT_32 UlAddress, UINT_8 *PucData)
+{
+	UINT_8 UcNum, UcStatus = 0, UcSize = 0;
+	UnDwdVal UnWriteDat;
+
+	if ((UlAddress & 0x000100FF) >  0x0001007F)
+		return 9;
+
+	if (USER_AREA_START > (UlAddress & 0xFFFFFFC0))
+		return 9;
+
+	UcStatus = F40_FlashSectorErase(UlAddress & 0xFFFFFFC0);
+	if (UcStatus != 0) {
+		return UcStatus;
+	}
+
+	UcStatus = F40_UnlockCodeSet();
+	if (UcStatus != 0) {
+		return UcStatus;
+	}
+
+	do {
+		F40_IOWrite32A(FLASHROM_F40_ACSCNT, (FLASH_ACCESS_SIZE - 1));
+		F40_IOWrite32A(FLASHROM_F40_ADR, UlAddress + UcSize);
+		F40_IOWrite32A(FLASHROM_F40_CMD, 2);
+
+		for (UcNum = 0; UcNum < FLASH_ACCESS_SIZE; UcNum++) {
+			UnWriteDat.StCdwVal.UcRamVa0 = *PucData++;
+			F40_IOWrite32A(FLASHROM_F40_WDATH, UnWriteDat.UlDwdVal);
+
+			UnWriteDat.StCdwVal.UcRamVa3 = *PucData++;
+			UnWriteDat.StCdwVal.UcRamVa2 = *PucData++;
+			UnWriteDat.StCdwVal.UcRamVa1 = *PucData++;
+			UnWriteDat.StCdwVal.UcRamVa0 = *PucData++;
+			F40_IOWrite32A(FLASHROM_F40_WDATL, UnWriteDat.UlDwdVal);
+			UcSize++;
+		}
+	} while (UcSize < 64);
+
+	UcStatus = F40_UnlockCodeClear();
+
+	return UcStatus;
+}
+
+//*****************************************************************************
 // Function Name 	: F40_FlashInt32Read
-//********************************************************************************
+//*****************************************************************************
 UINT_8	F40_FlashInt32Read( UINT_32 UlAddress, UINT_32 *PuiData )
 {
 	UINT_8	UcResult = 0 ;

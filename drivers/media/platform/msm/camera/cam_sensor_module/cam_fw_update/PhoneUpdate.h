@@ -65,6 +65,21 @@ typedef struct STRECALIB {
 	INT_16	SsDiffY;
 }	stReCalib;
 
+typedef union DWDVAL{
+	UINT_32	UlDwdVal;
+	UINT_16	UsDwdVal[2];
+	struct {
+		UINT_16	UsLowVal;
+		UINT_16	UsHigVal;
+	} StDwdVal;
+	struct {
+		UINT_8 UcRamVa0;
+		UINT_8 UcRamVa1;
+		UINT_8 UcRamVa2;
+		UINT_8 UcRamVa3;
+	} StCdwVal;
+} UnDwdVal;
+
 #define	WPB_OFF			0x01
 #define WPB_ON			0x00
 
@@ -111,6 +126,7 @@ extern UINT_8	F40_FlashUpdate( UINT_8, DOWNLOAD_TBL* ) ;
 extern UINT_8	F40_FlashBlockErase( UINT_32 ) ;
 extern UINT_8	F40_FlashBurstWrite( const UINT_8 *, UINT_32, UINT_32) ;
 extern void		F40_FlashSectorRead( UINT_32, UINT_8 * ) ;
+extern UINT_8	F40_FlashSectorWrite( UINT_32, UINT_8 * );
 extern UINT_8	F40_FlashInt32Read( UINT_32, UINT_32 * ) ;
 extern void		F40_CalcChecksum( const UINT_8 *, UINT_32, UINT_32 *, UINT_32 * ) ;
 extern void		F40_CalcBlockChksum( UINT_8, UINT_32 *, UINT_32 * ) ;

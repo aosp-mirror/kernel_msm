@@ -23,6 +23,7 @@ int DownloadRearVCMFW(struct camera_io_master *io_info,
 int ValidateRearVCMFW(struct camera_io_master *io_info,
 	struct cam_sensor_i2c_reg_array *fwtable,
 	UINT_32 tbsize);
+int BackupRearVCMData(struct camera_io_master *io_info);
 int checkFrontVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl);
 int DownloadFrontVCMFW(struct camera_io_master *io_info,
 	struct cam_sensor_i2c_reg_array *fwtable,

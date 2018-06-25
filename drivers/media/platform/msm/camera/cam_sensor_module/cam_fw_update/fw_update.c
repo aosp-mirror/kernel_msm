@@ -12,8 +12,10 @@
 #define VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N 0x18
 #define MK_SHARP   0x04170000
 #define MK_LGIT    0x09170000
+#define AF_EEPROM_DATA 0x80
 #define RETRY_MAX 3
-#define LUT_MAX 3
+#define LUT_MAX 66
+#define SECTOR_SIZE 320
 
 #define VCM_AK7375_EEPROM_WRITE_MODE_ADDR    0xAE
 #define VCM_AK7375_EEPROM_WRITE_MODE_DATA    0x3B
@@ -329,6 +331,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	UINT_32 size = 0;
 	UINT_32 UlReadVal;
 	UINT_32 VCM_rev = 0;
+	UINT_32 MTM_rev = 0;
 	UINT_32 regdata = 0;
 	bool needupdate = false;
 	unsigned short cci_client_sid_backup;
@@ -345,33 +348,29 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	s_ctrl->io_master_info.cci_client->sid =
 		OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
 
-	g_io_master_info = &(s_ctrl->io_master_info);
-
 	RamWrite32A(0xF01B, 0x1A02);
 	RamRead32A(0xF01B, &UlReadVal);
 	VCM_rev = (UlReadVal & 0xFF000000) >> 24;
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: 0x1A02 = 0x%08x, ACM rev = 0x%x",
-		__func__, UlReadVal, VCM_rev);
 
-	switch (VCM_rev) {
-	case 0:
-	case 1:
-	case 2:
-		CAM_INFO(CAM_SENSOR,
-			"[VCMFW]%s: No need to update", __func__);
-		break;
-	case 3:
-		fwtable = VCM_LC898219_EVT_2_1;
-		size = sizeof(VCM_LC898219_EVT_2_1) /
+	/* 2. Check MTM revision from AF EEPROM 0x6E */
+	s_ctrl->io_master_info.cci_client->sid =
+		VCM_EEPROM_I2C_ADDR_WRITE >> 1;
+
+	rc = RamRead8A(&(s_ctrl->io_master_info), 0x1F, &MTM_rev);
+	CAM_INFO(CAM_SENSOR,
+		"[VCMFW]%s: 0x1A02 = 0x%08x, VCM rev = 0x%x, MTM rev = 0x%x",
+		__func__, UlReadVal, VCM_rev, MTM_rev);
+
+	/* 3. Whether to update or not */
+	if (VCM_rev == 0x5 && MTM_rev == 0xC4) {
+		fwtable = VCM_LC898219_DVT_1_0;
+		size = sizeof(VCM_LC898219_DVT_1_0) /
 			sizeof(struct cam_sensor_i2c_reg_array);
-		break;
-	default:
+	} else {
 		CAM_INFO(CAM_SENSOR,
 			"[VCMFW]%s: Unsupported rev", __func__);
-		break;
 	}
 
-	/* 2. Whether to update or not */
 	if (fwtable != NULL) {
 		s_ctrl->io_master_info.cci_client->sid =
 			VCM_EEPROM_I2C_ADDR_WRITE >> 1;
@@ -386,13 +385,22 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 			}
 		}
 	}
+
 	if(needupdate == false) {
 		CAM_INFO(CAM_SENSOR,
 			"[VCMFW]%s: By pass fw update", __func__);
 		goto dump_fw;
 	}
 
-	/* 3. Replace slave address with 0xE4, do AF firmware update */
+	/* 4. Start upgrade process. Bake up origianl FW data first */
+	rc = BackupRearVCMData(&(s_ctrl->io_master_info));
+	if (rc < 0) {
+		CAM_INFO(CAM_SENSOR,
+			"[VCMFW]backup data failed, skip FW update");
+		goto dump_fw;
+	}
+
+	/* 5. Replace slave address with 0xE4, do AF firmware update */
 	s_ctrl->io_master_info.cci_client->sid =
 		VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
 	WitTim(8);
@@ -418,7 +426,7 @@ int checkRearVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 				continue;
 			}
 
-			/* 4. Validate EEPROM data*/
+			/* 6. Validate EEPROM data*/
 			rc = ValidateRearVCMFW(&(s_ctrl->io_master_info),
 				fwtable, size);
 			if (rc < 0) {
@@ -440,13 +448,13 @@ dump_fw:
 	s_ctrl->io_master_info.cci_client->sid =
 		VCM_EEPROM_I2C_ADDR_WRITE >> 1;
 
-	for (i = 0x00; i <= 0x7F; i++) {
+	for (i = 0x00; i < AF_EEPROM_DATA; i++) {
 		rc = RamRead8A(&(s_ctrl->io_master_info), i, &regdata);
 		CAM_INFO(CAM_SENSOR, "[VCMFW]%s; addr:0x%x, data:0x%x, rc:%d",
 			__func__, i, regdata, rc);
 	}
 
-	/* 5. Restore the I2C slave address */
+	/* 7. Restore the I2C slave address */
 	s_ctrl->io_master_info.cci_client->sid =
 		cci_client_sid_backup;
 	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: restore sid = %d", __func__,
@@ -547,6 +555,75 @@ int ValidateRearVCMFW(struct camera_io_master *io_info,
 		}
 	}
 	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: complete.", __func__);
+
+	return rc;
+}
+
+int BackupRearVCMData(struct camera_io_master *io_info)
+{
+	int rc;
+	UINT_8	UcIndex, UcBlockNum;
+	UINT_8	SectorData[SECTOR_SIZE];
+	UINT_8	*pData;
+	UINT_8  *NcDatVal;
+	UINT_32 i, regdata, UlSumH, UlSumL;
+	/* Define start address of section 14 (0x1DC0 ~ 0x1DFF) */
+	UINT_32	UlSecAddress = 0x00001DC0;
+
+	/* Read section 14 from sensor EEPROM */
+	io_info->cci_client->sid = OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
+	F40_FlashSectorRead( UlSecAddress, SectorData );
+
+	io_info->cci_client->sid = VCM_EEPROM_I2C_ADDR_WRITE >> 1;
+	/* Overwrite 0x1DE0 ~ 0x1DFF with AF firmware data*/
+	pData = &SectorData[160];
+	for (i = 0x00; i < AF_EEPROM_DATA; i++) {
+		rc = RamRead8A(io_info, i, &regdata);
+		if (rc < 0) {
+			return -EINVAL;
+		}
+
+		if (i % 4 == 0)
+			*pData++ = 0xFF;
+		*pData++ = (UINT_8)regdata;
+	}
+
+	/* Write the backup data to sensor EEPROM */
+	io_info->cci_client->sid = OIS_COMPONENT_I2C_ADDR_WRITE >> 1;
+	rc = F40_FlashSectorWrite(UlSecAddress, SectorData);
+	if (rc != 0) {
+		CAM_ERR(CAM_SENSOR, "[VCMFW]%s: backup failed", __func__);
+		/* Write default data for error handling */
+		for (i = 0; i < SECTOR_SIZE; i++) {
+			SectorData[i] = 0xFF;
+		}
+		F40_FlashSectorWrite(UlSecAddress, SectorData);
+		return -EFAULT;
+	}
+
+	/* Update checksum in NVR1 block 0x24~0x25 */
+	UcBlockNum = (UlSecAddress >> 9) & 0x0F;
+	F40_CalcBlockChksum(UcBlockNum, &UlSumH, &UlSumL);
+	F40_FlashSectorRead(0x00010000, SectorData);
+
+	UcIndex = 0x24 * 5 + 1;
+	NcDatVal = (UINT_8 *)&UlSumH;
+	SectorData[UcIndex+3] = *NcDatVal++;
+	SectorData[UcIndex+2] = *NcDatVal++;
+	SectorData[UcIndex+1] = *NcDatVal++;
+	SectorData[UcIndex+0] = *NcDatVal++;
+	UcIndex += 5;
+	NcDatVal = (UINT_8 *)&UlSumL;
+	SectorData[UcIndex+3] = *NcDatVal++;
+	SectorData[UcIndex+2] = *NcDatVal++;
+	SectorData[UcIndex+1] = *NcDatVal++;
+	SectorData[UcIndex+0] = *NcDatVal++;
+
+	rc = F40_FlashSectorWrite(0x00010000, SectorData);
+	if (rc != 0) {
+		CAM_ERR(CAM_SENSOR, "[VCMFW]%s: NVR NG", __func__);
+		return -EFAULT;
+	}
 
 	return rc;
 }
