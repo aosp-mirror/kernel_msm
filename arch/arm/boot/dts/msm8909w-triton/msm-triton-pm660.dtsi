@@ -460,7 +460,7 @@
 			qcom,fg-esr-timer-awake = <96 96>;
 			qcom,fg-esr-timer-asleep = <256 256>;
 			qcom,fg-esr-timer-charging = <0 96>;
-			qcom,fg-jeita-thresholds = <2 16 44 58>;
+			qcom,fg-jeita-thresholds = <1 16 44 58>;
 			qcom,fg-jeita-hyst-temp = <2>;
 			qcom,fg-jeita-en = <1>;
 			qcom,fg-jeita-dynamic-model = <1>;
