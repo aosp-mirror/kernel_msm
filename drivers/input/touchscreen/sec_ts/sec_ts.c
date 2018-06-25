@@ -812,7 +812,8 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 				ts->coord[t_id].action = p_event_coord->tchsta;
 				ts->coord[t_id].x = (p_event_coord->x_11_4 << 4) | (p_event_coord->x_3_0);
 				ts->coord[t_id].y = (p_event_coord->y_11_4 << 4) | (p_event_coord->y_3_0);
-				ts->coord[t_id].z = p_event_coord->z & 0x3F;
+				ts->coord[t_id].z = p_event_coord->z &
+							SEC_TS_PRESSURE_MAX;
 				ts->coord[t_id].ttype = p_event_coord->ttype_3_2 << 2 | p_event_coord->ttype_1_0 << 0;
 				ts->coord[t_id].major = p_event_coord->major;
 				ts->coord[t_id].minor = p_event_coord->minor;
@@ -1473,9 +1474,7 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 	pdata->support_sidegesture = of_property_read_bool(np, "sec,support_sidegesture");
 	pdata->support_dex = of_property_read_bool(np, "support_dex_mode");
 
-#ifdef CONFIG_SEC_FACTORY
 	pdata->support_mt_pressure = true;
-#endif
 
 #ifdef PAT_CONTROL
 	input_err(true, &client->dev, "%s: i2c buffer limit: %d, lcd_id:%06X, bringup:%d, FW:%s(%d), id:%d,%d, pat_function:%d mis_cal:%d dex:%d, gesture:%d\n",
@@ -1669,7 +1668,8 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 	input_set_abs_params(dev, ABS_MT_TOUCH_MINOR, 0, 255, 0, 0);
 	input_set_abs_params(dev, ABS_MT_CUSTOM, 0, 0xFFFF, 0, 0);
 	if (ts->plat_data->support_mt_pressure)
-		input_set_abs_params(dev, ABS_MT_PRESSURE, 0, 255, 0, 0);
+		input_set_abs_params(dev, ABS_MT_PRESSURE, 0,
+				     SEC_TS_PRESSURE_MAX, 0, 0);
 
 	if (propbit == INPUT_PROP_POINTER)
 		input_mt_init_slots(dev, MAX_SUPPORT_TOUCH_COUNT, INPUT_MT_POINTER);
