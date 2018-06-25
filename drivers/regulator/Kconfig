@@ -1088,10 +1088,5 @@ config REGULATOR_STUB
 	  Clients can use the real regulator device names with proper
 	  constraint checking while the real driver is being developed.
 
-config REGULATOR_RT9055
-	tristate "Richtek RT9055 Dual LDO Regulator"
-	help
-	  This driver provides support for dual LDO outputs.
-
 endif
 
