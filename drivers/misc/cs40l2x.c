@@ -3098,13 +3098,19 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int val;
-	int shutdown_timeout = CS40L2X_BASIC_TIMEOUT_COUNT;
-	int ret;
+	int ret, i;
 
-	ret = regmap_read(regmap, CS40L2X_BASIC_AMP_STATUS, &val);
-	if (ret) {
-		dev_err(dev, "Failed to read basic-mode status\n");
-		return ret;
+	for (i = 0; i < CS40L2X_BASIC_TIMEOUT_COUNT; i++) {
+		ret = regmap_read(regmap, CS40L2X_BASIC_AMP_STATUS, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read basic-mode status\n");
+			return ret;
+		}
+
+		if (val != CS40L2X_BASIC_NO_STATUS)
+			break;
+
+		usleep_range(10000, 10100);
 	}
 
 	if (val != CS40L2X_BASIC_BOOT_DONE) {
@@ -3118,7 +3124,7 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 		return ret;
 	}
 
-	while (shutdown_timeout > 0) {
+	for (i = 0; i < CS40L2X_BASIC_TIMEOUT_COUNT; i++) {
 		usleep_range(10000, 10100);
 
 		ret = regmap_read(regmap, CS40L2X_BASIC_SHUTDOWNREQUEST, &val);
@@ -3129,11 +3135,9 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 
 		if (!val)
 			break;
-
-		shutdown_timeout--;
 	}
 
-	if (shutdown_timeout == 0) {
+	if (i == CS40L2X_BASIC_TIMEOUT_COUNT) {
 		dev_err(dev, "Timed out waiting for basic-mode shutdown\n");
 		return -ETIME;
 	}
