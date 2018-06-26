@@ -27,6 +27,7 @@
 #include <linux/firmware.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
+#include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/hrtimer.h>
 #include <linux/of_device.h>
@@ -76,6 +77,7 @@ struct cs40l2x_private {
 	int pbq_remain;
 	struct cs40l2x_wseq_pair wseq_table[CS40L2X_WSEQ_LENGTH_MAX];
 	unsigned int wseq_length;
+	unsigned int event_control;
 	struct led_classdev led_dev;
 };
 
@@ -89,6 +91,28 @@ static const char * const cs40l2x_part_nums[] = {
 	"CS40L25",
 	"CS40L25A",
 	"CS40L25B",
+};
+
+static const char * const cs40l2x_event_regs[] = {
+	"GPIO1EVENT",
+	"GPIO2EVENT",
+	"GPIO3EVENT",
+	"GPIO4EVENT",
+	"GPIOPLAYBACKEVENT",
+	"TRIGGERPLAYBACKEVENT",
+	"RXREADYEVENT",
+	"HARDWAREEVENT",
+};
+
+static const unsigned int cs40l2x_event_masks[] = {
+	CS40L2X_EVENT_GPIO1_ENABLED,
+	CS40L2X_EVENT_GPIO2_ENABLED,
+	CS40L2X_EVENT_GPIO3_ENABLED,
+	CS40L2X_EVENT_GPIO4_ENABLED,
+	CS40L2X_EVENT_START_ENABLED | CS40L2X_EVENT_END_ENABLED,
+	CS40L2X_EVENT_START_ENABLED | CS40L2X_EVENT_END_ENABLED,
+	CS40L2X_EVENT_READY_ENABLED,
+	CS40L2X_EVENT_HARDWARE_ENABLED,
 };
 
 static struct cs40l2x_private *cs40l2x_get_private(struct device *dev)
@@ -2091,6 +2115,15 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 			dev_err(dev, "Failed to initialize write sequencer\n");
 			return;
 		}
+
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->event_control);
+		if (ret) {
+			dev_err(dev, "Failed to configure event controls\n");
+			return;
+		}
 		/* intentionally fall through */
 
 	default:
@@ -3333,6 +3366,69 @@ err_revid:
 	return -ENODEV;
 }
 
+static irqreturn_t cs40l2x_irq(int irq, void *data)
+{
+	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)data;
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	unsigned int val;
+	int event_count = 0;
+	int ret, i;
+
+	for (i = 0; i < ARRAY_SIZE(cs40l2x_event_regs); i++) {
+		/* skip disabled event notifiers */
+		if (!(cs40l2x->event_control & cs40l2x_event_masks[i]))
+			continue;
+
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x,
+						cs40l2x_event_regs[i],
+						CS40L2X_XM_UNPACKED_TYPE),
+				&val);
+		if (ret) {
+			dev_err(dev, "Failed to read %s\n",
+					cs40l2x_event_regs[i]);
+			continue;
+		}
+
+		/* any event handling goes here */
+		switch (val) {
+		case CS40L2X_EVENT_CTRL_NONE:
+			continue;
+		case CS40L2X_EVENT_CTRL_GPIO1_FALL
+			... CS40L2X_EVENT_CTRL_HARDWARE:
+			dev_dbg(dev, "Found notifier %d in %s\n",
+					val, cs40l2x_event_regs[i]);
+			break;
+		default:
+			dev_err(dev, "Unrecognized notifier %d in %s\n",
+					val, cs40l2x_event_regs[i]);
+		}
+
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x,
+						cs40l2x_event_regs[i],
+						CS40L2X_XM_UNPACKED_TYPE),
+				CS40L2X_EVENT_CTRL_NONE);
+		if (ret) {
+			dev_err(dev, "Failed to acknowledge %s\n",
+					cs40l2x_event_regs[i]);
+			return IRQ_NONE;
+		}
+
+		ret = regmap_write(regmap, CS40L2X_MBOX_POWERCONTROL,
+				CS40L2X_POWERCONTROL_WAKEUP);
+		if (ret) {
+			dev_err(dev, "Failed to free /ALERT output\n");
+			return IRQ_NONE;
+		}
+
+		event_count++;
+	}
+
+	return event_count ? IRQ_HANDLED : IRQ_NONE;
+}
+
 static struct regmap_config cs40l2x_regmap = {
 	.reg_bits = 32,
 	.val_bits = 32,
@@ -3423,6 +3519,29 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	ret = cs40l2x_part_num_resolve(cs40l2x);
 	if (ret)
 		goto err;
+
+	/* interrupts are supported by revision B1 firmware only */
+	if (cs40l2x->revid == CS40L2X_REVID_B1) {
+		if (i2c_client->irq) {
+			ret = devm_request_threaded_irq(dev, i2c_client->irq,
+					NULL, cs40l2x_irq,
+					IRQF_ONESHOT | IRQF_TRIGGER_LOW
+						| IRQF_SHARED,
+					i2c_client->name, cs40l2x);
+			if (ret) {
+				dev_err(dev,
+					"Failed to request IRQ: %d\n", ret);
+				goto err;
+			}
+
+			cs40l2x->event_control = CS40L2X_EVENT_GPIO1_ENABLED;
+			if (cs40l2x->devid == CS40L2X_DEVID_L25B)
+				cs40l2x->event_control |=
+						CS40L2X_EVENT_GPIO2_ENABLED;
+		} else {
+			cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
+		}
+	}
 
 	ret = cs40l2x_init(cs40l2x);
 	if (ret)
