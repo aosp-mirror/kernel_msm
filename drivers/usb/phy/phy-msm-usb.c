@@ -1926,6 +1926,14 @@ static void msm_otg_perf_vote_work(struct work_struct *w)
 			msecs_to_jiffies(1000 * PM_QOS_SAMPLE_SEC));
 }
 
+static void msm_fake_online_work(struct work_struct *w)
+{
+	struct msm_otg *motg = container_of(w, struct msm_otg, fake_online_work.work);
+
+	motg->fake_online = 0;
+	power_supply_changed(&motg->usb_psy);
+}
+
 static void msm_otg_start_host(struct usb_otg *otg, int on)
 {
 	struct msm_otg *motg = container_of(otg->phy, struct msm_otg, phy);
@@ -3531,7 +3539,7 @@ static int otg_power_get_property_usb(struct power_supply *psy,
 		break;
 	/* Reflect USB enumeration */
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = motg->online;
+		val->intval = motg->fake_online;
 		break;
 	case POWER_SUPPLY_PROP_REAL_TYPE:
 		val->intval = motg->usb_supply_type;
@@ -3578,7 +3586,13 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 		break;
 	/* The ONLINE property reflects if usb has enumerated */
 	case POWER_SUPPLY_PROP_ONLINE:
-		motg->online = val->intval;
+		if (motg->online != val->intval) {
+			cancel_delayed_work_sync(&motg->fake_online_work);
+			motg->fake_online = 1;
+			motg->online = val->intval;
+			if (!val->intval)
+				schedule_delayed_work(&motg->fake_online_work, msecs_to_jiffies(2500));
+		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		motg->voltage_max = val->intval;
@@ -4761,12 +4775,14 @@ static int msm_otg_probe(struct platform_device *pdev)
 	mb();
 
 	motg->id_state = USB_ID_FLOAT;
+	motg->fake_online = 0;
 	set_bit(ID, &motg->inputs);
 	wake_lock_init(&motg->wlock, WAKE_LOCK_SUSPEND, "msm_otg");
 	INIT_WORK(&motg->sm_work, msm_otg_sm_work);
 	INIT_DELAYED_WORK(&motg->chg_work, msm_chg_detect_work);
 	INIT_DELAYED_WORK(&motg->id_status_work, msm_id_status_w);
 	INIT_DELAYED_WORK(&motg->perf_vote_work, msm_otg_perf_vote_work);
+	INIT_DELAYED_WORK(&motg->fake_online_work, msm_fake_online_work);
 	setup_timer(&motg->chg_check_timer, msm_otg_chg_check_timer_func,
 				(unsigned long) motg);
 	motg->otg_wq = alloc_ordered_workqueue("k_otg", 0);
