@@ -559,6 +559,10 @@ struct msm_otg {
 	int pm_qos_latency;
 	struct pm_qos_request pm_qos_req_dma;
 	struct delayed_work perf_vote_work;
+
+	// Extend prop
+	struct delayed_work fake_online_work;
+	bool fake_online;
 };
 
 struct ci13xxx_platform_data {
