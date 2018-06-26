@@ -33,6 +33,7 @@
 #define MAX1720X_I2C_DRIVER_NAME "max1720x_fg_irq"
 #define MAX1720X_N_OF_HISTORY_PAGES 203
 #define MAX1720X_DELAY_INIT_MS 500
+#define FULLCAPNOM_STABILIZE_CYCLES 5
 
 enum max1720x_register {
 	/* ModelGauge m5 Register */
@@ -978,7 +979,16 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		REGMAP_READ(map, MAX1720X_FULLCAPNOM, data);
+		/*
+		 * Snap charge_full to DESIGNCAP during early charge cycles to
+		 * prevent large fluctuations in FULLCAPNOM. MAX1720X_CYCLES LSB
+		 * is 16%
+		 */
+		REGMAP_READ(map, MAX1720X_CYCLES, data);
+		if (reg_to_cycles(data) <= FULLCAPNOM_STABILIZE_CYCLES)
+			REGMAP_READ(map, MAX1720X_DESIGNCAP, data);
+		else
+			REGMAP_READ(map, MAX1720X_FULLCAPNOM, data);
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
