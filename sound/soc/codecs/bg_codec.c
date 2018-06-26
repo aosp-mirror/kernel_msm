@@ -41,6 +41,7 @@
 #include "wcdcal-hwdep.h"
 
 #define SAMPLE_RATE_48KHZ 48000
+#define SAMPLE_RATE_16KHZ 16000
 
 #define BG_RATES_MAX (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
 			    SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |\
@@ -369,8 +370,7 @@ static int _bg_codec_hw_params(struct bg_cdc_priv *bg_cdc)
 	struct pktzr_cmd_rsp rsp;
 	int ret = 0;
 
-	if (delayed_work_pending(&bg_cdc->bg_cdc_cal_init_work))
-		cancel_delayed_work_sync(&bg_cdc->bg_cdc_cal_init_work);
+	cancel_delayed_work_sync(&bg_cdc->bg_cdc_cal_init_work);
 	mutex_lock(&bg_cdc->bg_cdc_lock);
 	if (!bg_cdc->bg_dev_up) {
 		pr_err("%s: Bg ssr in progress\n", __func__);
@@ -612,7 +612,7 @@ static int bg_put_hwd_state(struct snd_kcontrol *kcontrol,
 
 	if (ucontrol->value.integer.value[0] && (!bg_cdc->hwd_started)) {
 		/* enable bg hwd */
-		bg_cdc->hw_params.tx_sample_rate = SAMPLE_RATE_48KHZ;
+		bg_cdc->hw_params.tx_sample_rate = SAMPLE_RATE_16KHZ;
 		bg_cdc->hw_params.tx_bit_width = 16;
 		bg_cdc->hw_params.tx_num_channels = 1;
 		active_session_id = get_active_session_id(dai_id);
@@ -772,10 +772,11 @@ static int bg_cdc_prepare(struct snd_pcm_substream *substream,
 	/* check if RX, TX sampling freq is same if not return error. */
 	if (test_bit(PLAYBACK, &bg_cdc->status_mask) &&
 	    test_bit(CAPTURE, &bg_cdc->status_mask)) {
-		if ((bg_cdc->hw_params.rx_sample_rate !=
+		if (((bg_cdc->hw_params.rx_sample_rate !=
 		    bg_cdc->hw_params.tx_sample_rate) ||
 		    (bg_cdc->hw_params.rx_bit_width !=
-		    bg_cdc->hw_params.rx_bit_width)) {
+		    bg_cdc->hw_params.tx_bit_width)) &&
+			!bg_cdc->hwd_started) {
 			pr_err("%s diff rx and tx configuration %d:%d:%d:%d\n",
 				__func__, bg_cdc->hw_params.rx_sample_rate,
 				bg_cdc->hw_params.tx_sample_rate,
@@ -1081,6 +1082,49 @@ static int adsp_state_callback(struct notifier_block *nb, unsigned long value,
 	}
 	return NOTIFY_OK;
 }
+
+static int bg_cdc_pm_suspend(struct bg_cdc_priv *bg_cdc)
+{
+	/* Do not remove the regulator vote if a session is active */
+	if (bg_cdc->num_sessions > 0) {
+		pr_debug("audio session in progress don't devote\n");
+		return 0;
+	}
+	cancel_delayed_work_sync(&bg_cdc->bg_cdc_pktzr_init_work);
+	cancel_delayed_work_sync(&bg_cdc->bg_cdc_cal_init_work);
+	mutex_lock(&bg_cdc->bg_cdc_lock);
+	if (bg_cdc->bg_cal_updated) {
+		bg_cdc_enable_regulator(bg_cdc->spkr_vreg, false);
+		bg_cdc->bg_cal_updated = false;
+	}
+	mutex_unlock(&bg_cdc->bg_cdc_lock);
+	return 0;
+}
+
+static int bg_cdc_pm_resume(struct bg_cdc_priv *bg_cdc)
+{
+	schedule_delayed_work(&bg_cdc->bg_cdc_cal_init_work,
+				msecs_to_jiffies(bg_cdc->bg_cal_init_delay));
+	return 0;
+}
+
+static int bg_pm_event(struct notifier_block *nb,
+			unsigned long event, void *ptr)
+{
+	struct bg_cdc_priv *bg_cdc =
+			container_of(nb, struct bg_cdc_priv, bg_pm_nb);
+	switch (event) {
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		return bg_cdc_pm_resume(bg_cdc);
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		return bg_cdc_pm_suspend(bg_cdc);
+	default:
+		return NOTIFY_DONE;
+	}
+}
+
 static int bg_cdc_codec_probe(struct snd_soc_codec *codec)
 {
 	struct bg_cdc_priv *bg_cdc = dev_get_drvdata(codec->dev);
@@ -1127,6 +1171,8 @@ static int bg_cdc_codec_probe(struct snd_soc_codec *codec)
 	if (!bg_state_notifier)
 		dev_err(codec->dev, "Failed to register bg notifier\n");
 
+	bg_cdc->bg_pm_nb.notifier_call = bg_pm_event;
+	register_pm_notifier(&bg_cdc->bg_pm_nb);
 	bg_cdc->codec = codec;
 	return 0;
 }
@@ -1137,63 +1183,17 @@ static int bg_cdc_codec_remove(struct snd_soc_codec *codec)
 	pr_debug("In func %s\n", __func__);
 	pktzr_deinit();
 
-	if (delayed_work_pending(&bg_cdc->bg_cdc_pktzr_init_work))
-		cancel_delayed_work_sync(&bg_cdc->bg_cdc_pktzr_init_work);
-	if (delayed_work_pending(&bg_cdc->bg_cdc_cal_init_work))
-		cancel_delayed_work_sync(&bg_cdc->bg_cdc_cal_init_work);
+	cancel_delayed_work_sync(&bg_cdc->bg_cdc_pktzr_init_work);
+	cancel_delayed_work_sync(&bg_cdc->bg_cdc_cal_init_work);
 	if (adsp_state_notifier)
 		subsys_notif_unregister_notifier(adsp_state_notifier,
 						 &bg_cdc->bg_adsp_nb);
 	if (bg_state_notifier)
 		subsys_notif_unregister_notifier(bg_state_notifier,
 						 &bg_cdc->bg_ssr_nb);
+	unregister_pm_notifier(&bg_cdc->bg_pm_nb);
 	kfree(bg_cdc->fw_data);
 	return 0;
-}
-
-static int bg_cdc_pm_suspend(struct bg_cdc_priv *bg_cdc)
-{
-
-	/* Do not remove the regulator vote if a session is active */
-	if (bg_cdc->num_sessions > 0) {
-		pr_debug("audio session in progress don't devote\n");
-		return 0;
-	}
-	if (delayed_work_pending(&bg_cdc->bg_cdc_pktzr_init_work))
-		cancel_delayed_work_sync(&bg_cdc->bg_cdc_pktzr_init_work);
-	if (delayed_work_pending(&bg_cdc->bg_cdc_cal_init_work))
-		cancel_delayed_work_sync(&bg_cdc->bg_cdc_cal_init_work);
-	mutex_lock(&bg_cdc->bg_cdc_lock);
-	if (bg_cdc->bg_cal_updated) {
-		bg_cdc_enable_regulator(bg_cdc->spkr_vreg, false);
-		bg_cdc->bg_cal_updated = false;
-	}
-	mutex_unlock(&bg_cdc->bg_cdc_lock);
-	return 0;
-}
-
-static int bg_cdc_pm_resume(struct bg_cdc_priv *bg_cdc)
-{
-	schedule_delayed_work(&bg_cdc->bg_cdc_cal_init_work,
-			msecs_to_jiffies(bg_cdc->bg_cal_init_delay));
-	return 0;
-}
-
-static int bg_pm_event(struct notifier_block *nb,
-				unsigned long event, void *ptr)
-{
-	struct bg_cdc_priv *bg_cdc =
-			container_of(nb, struct bg_cdc_priv, bg_pm_nb);
-	switch (event) {
-	case PM_POST_HIBERNATION:
-	case PM_POST_SUSPEND:
-		return bg_cdc_pm_resume(bg_cdc);
-	case PM_HIBERNATION_PREPARE:
-	case PM_SUSPEND_PREPARE:
-		return bg_cdc_pm_suspend(bg_cdc);
-	default:
-		return NOTIFY_DONE;
-	}
 }
 
 static struct snd_soc_codec_driver soc_codec_dev_bg_cdc = {
@@ -1307,8 +1307,6 @@ static int bg_cdc_probe(struct platform_device *pdev)
 		  bg_cdc_cal_init);
 	schedule_work(&bg_cdc->bg_cdc_add_child_devices_work);
 	mutex_init(&bg_cdc->bg_cdc_lock);
-	bg_cdc->bg_pm_nb.notifier_call = bg_pm_event;
-	register_pm_notifier(&bg_cdc->bg_pm_nb);
 
 	dev_dbg(&pdev->dev, "%s: BG driver probe done\n", __func__);
 	return ret;
@@ -1327,7 +1325,6 @@ static int bg_cdc_remove(struct platform_device *pdev)
 
 	snd_soc_unregister_codec(&pdev->dev);
 	mutex_destroy(&bg_cdc->bg_cdc_lock);
-	unregister_pm_notifier(&bg_cdc->bg_pm_nb);
 	regulator_put(bg_cdc->spkr_vreg);
 	kfree(bg_cdc);
 	return 0;

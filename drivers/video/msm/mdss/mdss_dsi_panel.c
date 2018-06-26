@@ -260,6 +260,7 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	if (ctrl->idle == enable)
 		return;
 
+	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
@@ -310,6 +311,7 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			rc);
 		goto rst_gpio_err;
 	}
+
 	if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
 		rc = gpio_request(ctrl_pdata->bklt_en_gpio,
 						"bklt_enable");
@@ -422,6 +424,8 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 						__func__);
 					goto exit;
 				}
+				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+				usleep_range(100, 110);
 			}
 
 			if (pdata->panel_info.rst_seq_len) {
@@ -480,6 +484,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		}
 		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
+			usleep_range(100, 110);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
