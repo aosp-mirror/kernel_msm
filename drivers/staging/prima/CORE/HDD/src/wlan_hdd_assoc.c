@@ -4531,8 +4531,8 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
 {
     tHalHandle halHandle = WLAN_HDD_GET_HAL_CTX(pAdapter);
     eHalStatus result;
-    tDot11fIERSN dot11RSNIE;
-    tDot11fIEWPA dot11WPAIE;
+    tDot11fIERSN dot11RSNIE = {0};
+    tDot11fIEWPA dot11WPAIE = {0};
     tANI_U32 i;
     tANI_U32 status;
     tANI_U8 *pRsnIe;
@@ -4560,10 +4560,10 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
         pRsnIe = gen_ie + 2;
         RSNIeLen = gen_ie_len - 2;
         // Unpack the RSN IE
-        status = dot11fUnpackIeRSN((tpAniSirGlobal) halHandle,
-                            pRsnIe,
-                            RSNIeLen,
-                            &dot11RSNIE);
+        status = sme_unpack_rsn_ie(halHandle,
+                                   pRsnIe,
+                                   RSNIeLen,
+                                   &dot11RSNIE);
         if (DOT11F_FAILED(status))
         {
             hddLog(LOGE,
@@ -4571,16 +4571,19 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
                        status);
             return -EINVAL;
         }
+        hddLog(LOG1, FL("%s: gp_cipher_suite_present: %d"),
+                __func__, dot11RSNIE.gp_cipher_suite_present);
+
         // Copy out the encryption and authentication types
         hddLog(LOG1, FL("%s: pairwise cipher suite count: %d"),
                 __func__, dot11RSNIE.pwise_cipher_suite_count );
         hddLog(LOG1, FL("%s: authentication suite count: %d"),
-                __func__, dot11RSNIE.akm_suite_count);
+                __func__, dot11RSNIE.akm_suite_cnt);
         /*Here we have followed the apple base code,
           but probably I suspect we can do something different*/
         //dot11RSNIE.akm_suite_count
         // Just translate the FIRST one
-        *pAuthType =  hdd_TranslateRSNToCsrAuthType(dot11RSNIE.akm_suites[0]);
+        *pAuthType =  hdd_TranslateRSNToCsrAuthType(dot11RSNIE.akm_suite[0]);
         //dot11RSNIE.pwise_cipher_suite_count
         *pEncryptType = hdd_TranslateRSNToCsrEncryptionType(dot11RSNIE.pwise_cipher_suites[0]);
         //dot11RSNIE.gp_cipher_suite_count
@@ -4769,6 +4772,7 @@ int hdd_SetGENIEToCsr( hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
         hddLog( LOG1,
           FL("CSR AuthType = %d, EncryptionType = %d mcEncryptionType = %d"),
           *RSNAuthType, RSNEncryptType, mcRSNEncryptType);
+        return 0;
     }
 
     hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
@@ -4799,7 +4803,7 @@ int hdd_SetGENIEToCsr( hdd_adapter_t *pAdapter, eCsrAuthType *RSNAuthType)
                 hdd_set_def_rsne_override(&pWextState->roamProfile,
                                           RSNAuthType);
     }
-    return 0;
+    return status;
 }
 int hdd_set_csr_auth_type ( hdd_adapter_t  *pAdapter, eCsrAuthType RSNAuthType)
 {

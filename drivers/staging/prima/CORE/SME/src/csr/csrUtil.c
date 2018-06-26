@@ -3710,11 +3710,11 @@ tANI_BOOLEAN csrGetRSNInformation( tHalHandle hHal, tCsrAuthList *pAuthType, eCs
             cMulticastCyphers++;
             vos_mem_copy(MulticastCyphers, pRSNIe->gp_cipher_suite, CSR_RSN_OUI_SIZE);
             cUnicastCyphers = (tANI_U8)(pRSNIe->pwise_cipher_suite_count);
-            cAuthSuites = (tANI_U8)(pRSNIe->akm_suite_count);
+            cAuthSuites = (tANI_U8)(pRSNIe->akm_suite_cnt);
             for(i = 0; i < cAuthSuites && i < CSR_RSN_MAX_AUTH_SUITES; i++)
             {
                 vos_mem_copy((void *)&AuthSuites[i],
-                             (void *)&pRSNIe->akm_suites[i],
+                             (void *)&pRSNIe->akm_suite[i],
                              CSR_RSN_OUI_SIZE);
             }
 

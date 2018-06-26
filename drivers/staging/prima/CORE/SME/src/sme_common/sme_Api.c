@@ -15372,3 +15372,12 @@ VOS_STATUS sme_process_msg_callback(tHalHandle hal, vos_msg_t *msg)
 
    return status;
 }
+
+uint32_t sme_unpack_rsn_ie(tHalHandle hal, uint8_t *buf,
+                           uint8_t buf_len,
+                           tDot11fIERSN *rsn_ie)
+{
+         tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+
+         return dot11fUnpackIeRSN(mac_ctx, buf, buf_len, rsn_ie);
+}
