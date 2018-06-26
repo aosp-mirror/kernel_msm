@@ -415,22 +415,22 @@ static struct stc311x_platform_data stc3117_data = {
 	/* nominal VM cnf , coming from battery characterisation*/
 	.VM_cnf = 197,
 	/* nominal internal impedance*/
-	.Rint = 457,
+	.Rint = 493,
 	/* nominal capacity in mAh, coming from battery characterisation*/
-	.Cnom = 415,
+	.Cnom = 400,
 	.Rsense = 10, /* sense resistor mOhms*/
 	.RelaxCurrent = 20, /* current for relaxation in mA (< C/20) */
 	.Adaptive = 1, /* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 
 	/* Elentec Co Ltd Battery pack - 80 means 8% */
 	/* capacity derating in 0.1%, for temp = -20°C */
-	.CapDerating[6] = 212,
+	.CapDerating[6] = 200,
 	/* capacity derating in 0.1%, for temp = -10°C */
-	.CapDerating[5] = 71,
+	.CapDerating[5] = 62,
 	/* capacity derating in 0.1%, for temp = 0°C */
-	.CapDerating[4] = 35,
+	.CapDerating[4] = 25,
 	/* capacity derating in 0.1%, for temp = 10°C */
-	.CapDerating[3] = 35,
+	.CapDerating[3] = 25,
 	/* capacity derating in 0.1%, for temp = 25°C */
 	.CapDerating[2] = 0,
 	/* capacity derating in 0.1%, for temp = 40°C */
@@ -439,21 +439,21 @@ static struct stc311x_platform_data stc3117_data = {
 	.CapDerating[0] = 0,
 
 	/*OCV curve example for a 4.4V li-ion battery*/
-	.OCVValue[15] = 4374,             /* OCV curve value */
-	.OCVValue[14] = 4257,             /* OCV curve value */
-	.OCVValue[13] = 4142,             /* OCV curve value */
-	.OCVValue[12] = 4043,             /* OCV curve value */
-	.OCVValue[11] = 3985,             /* OCV curve value */
-	.OCVValue[10] = 3937,             /* OCV curve value */
-	.OCVValue[9] = 3855,              /* OCV curve value */
-	.OCVValue[8] = 3811,              /* OCV curve value */
-	.OCVValue[7] = 3776,              /* OCV curve value */
+	.OCVValue[15] = 4321,             /* OCV curve value */
+	.OCVValue[14] = 4205,             /* OCV curve value */
+	.OCVValue[13] = 4101,             /* OCV curve value */
+	.OCVValue[12] = 3994,             /* OCV curve value */
+	.OCVValue[11] = 3960,             /* OCV curve value */
+	.OCVValue[10] = 3907,             /* OCV curve value */
+	.OCVValue[9] = 3842,              /* OCV curve value */
+	.OCVValue[8] = 3804,              /* OCV curve value */
+	.OCVValue[7] = 3775,              /* OCV curve value */
 	.OCVValue[6] = 3755,              /* OCV curve value */
-	.OCVValue[5] = 3737,              /* OCV curve value */
-	.OCVValue[4] = 3710,              /* OCV curve value */
-	.OCVValue[3] = 3686,              /* OCV curve value */
-	.OCVValue[2] = 3680,              /* OCV curve value */
-	.OCVValue[1] = 3573,              /* OCV curve value */
+	.OCVValue[5] = 3740,              /* OCV curve value */
+	.OCVValue[4] = 3712,              /* OCV curve value */
+	.OCVValue[3] = 3690,              /* OCV curve value */
+	.OCVValue[2] = 3685,              /* OCV curve value */
+	.OCVValue[1] = 3594,              /* OCV curve value */
 	.OCVValue[0] = 3300,              /* OCV curve value */
 
 	/* SOC_TAB data */
