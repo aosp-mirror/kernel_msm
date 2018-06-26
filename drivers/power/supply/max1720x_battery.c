@@ -308,6 +308,7 @@ struct max1720x_chip {
 	int current_capacity;
 	int prev_charge_state;
 	char serial_number[25];
+	bool offmode_charger;
 };
 
 #define REGMAP_READ(regmap, what, dst)				\
@@ -798,9 +799,37 @@ static DEVICE_ATTR(cycle_counts_bins, 0660,
 		   max1720x_get_cycle_counts_bins,
 		   max1720x_set_cycle_counts_bins);
 
+static ssize_t max1720x_get_offmode_charger(struct device *dev,
+					    struct device_attribute *attr,
+					    char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct max1720x_chip *chip = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%hhd\n", chip->offmode_charger);
+}
+
+static ssize_t max1720x_set_offmode_charger(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct max1720x_chip *chip = power_supply_get_drvdata(psy);
+
+	if (kstrtobool(buf, &chip->offmode_charger))
+		return -EINVAL;
+
+	return count;
+}
+
+static DEVICE_ATTR(offmode_charger, 0660,
+		   max1720x_get_offmode_charger,
+		   max1720x_set_offmode_charger);
+
 static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 {
 	u16 data;
+	int capacity;
 
 	if (chip->fake_capacity >= 0 && chip->fake_capacity <= 100)
 		return chip->fake_capacity;
@@ -810,7 +839,12 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 		return 0;
 	}
 	REGMAP_READ(chip->regmap, MAX1720X_REPSOC, data);
-	return reg_to_percentage(data);
+	capacity = reg_to_percentage(data);
+
+	if (capacity == 100 && chip->offmode_charger)
+		chip->fake_capacity = 100;
+
+	return capacity;
 }
 
 static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
@@ -1641,6 +1675,12 @@ static void max1720x_init_work(struct work_struct *work)
 	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
 	if (ret) {
 		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
+		return;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_offmode_charger);
+	if (ret) {
+		dev_err(dev, "Failed to create offmode_charger attribute\n");
 		return;
 	}
 
