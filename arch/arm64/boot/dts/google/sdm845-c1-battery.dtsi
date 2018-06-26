@@ -65,7 +65,7 @@
 	maxim,n_regval =  /bits/ 16 <
 	    0x9C 0x0380 /* nIChgTerm = 280.0 mA */
 	    0xB7 0x33C1 /* nConvgCfg: RepLow=6% VoltLowOff=140mV MinSlopeX=8/16 RepL_per_stage=1% */
-	    0x9F 0x2602 /* nLearnCfg */
+	    0x9F 0x2606 /* nLearnCfg: Filt Empty */
 	    0xB0 0x7217 /* nConfig: SS TS VS Ten Aen dSOCen TAlrtEn */
 	    0xC0 0xFF00 /* nVAlrtTh: disabled */
 	    0xC1 0x7F80 /* nTAlrtTh: disabled */
@@ -75,7 +75,7 @@
 	    0xD5 0x307D /* nRFastVShdn: rFast=93mohm VShdn=2.5V */
 	    0xB8 0xCDF0 /* nNVCfg0: enOCV enX enCfg enFCfg enLCfg enICT enCG enVE enDC */
 	    0xB9 0xB00E /* nNVCfg1: enTGO enFTh enRFVSH enAT enCRV enCTE */
-	    0xBA 0xFE0A /* nNVCfg2: enT enSOC enMMT enMMV enMMC enVT enFC CYCLESpSAVE=5.0 */
+	    0xBA 0xFF0A /* nNVCfg2: enT enSOC enMMT enMMV enMMC enVT enFC enIAvg CYCLESpSAVE=5.0 */
 	>;
 };
 
