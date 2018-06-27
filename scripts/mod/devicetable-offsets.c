@@ -207,5 +207,9 @@ int main(void)
 	DEVID_FIELD(fsl_mc_device_id, vendor);
 	DEVID_FIELD(fsl_mc_device_id, obj_type);
 
+	DEVID(typec_device_id);
+	DEVID_FIELD(typec_device_id, svid);
+	DEVID_FIELD(typec_device_id, mode);
+
 	return 0;
 }
