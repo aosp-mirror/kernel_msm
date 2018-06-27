@@ -92,9 +92,10 @@ void crm_timer_exit(struct cam_req_mgr_timer **crm_timer)
 	CAM_DBG(CAM_CRM, "destroy timer %pK @ %pK", *crm_timer, crm_timer);
 	if (*crm_timer) {
 		del_timer_sync(&(*crm_timer)->sys_timer);
-		if (g_cam_req_mgr_timer_cachep)
+		if (g_cam_req_mgr_timer_cachep) {
 			kmem_cache_free(g_cam_req_mgr_timer_cachep, *crm_timer);
-		*crm_timer = NULL;
+			*crm_timer = NULL;
+		}
 	}
 }
 

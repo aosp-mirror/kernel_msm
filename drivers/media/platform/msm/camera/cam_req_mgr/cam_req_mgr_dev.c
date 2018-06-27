@@ -583,6 +583,8 @@ EXPORT_SYMBOL(cam_unregister_subdev);
 
 static int cam_req_mgr_remove(struct platform_device *pdev)
 {
+	kmem_cache_destroy(g_cam_req_mgr_timer_cachep);
+	g_cam_req_mgr_timer_cachep = NULL;
 	cam_req_mgr_core_device_deinit();
 	cam_mem_mgr_deinit();
 	cam_req_mgr_util_deinit();
@@ -639,9 +641,8 @@ static int cam_req_mgr_probe(struct platform_device *pdev)
 
 	if (g_cam_req_mgr_timer_cachep == NULL) {
 		g_cam_req_mgr_timer_cachep = kmem_cache_create("crm_timer",
-			sizeof(struct cam_req_mgr_timer), 64,
-			SLAB_CONSISTENCY_CHECKS | SLAB_RED_ZONE |
-			SLAB_POISON | SLAB_STORE_USER, NULL);
+			sizeof(struct cam_req_mgr_timer), 0,
+			SLAB_HWCACHE_ALIGN, NULL);
 		if (!g_cam_req_mgr_timer_cachep)
 			CAM_ERR(CAM_CRM,
 				"Failed to create kmem_cache for crm_timer");
