@@ -1755,6 +1755,13 @@ limMlmAddBss (
     pAddBssParams->cfParamSet.cfpDurRemaining   = pMlmStartReq->cfParamSet.cfpDurRemaining;
 
     pAddBssParams->rateSet.numRates = pMlmStartReq->rateSet.numRates;
+    if (pAddBssParams->rateSet.numRates > SIR_MAC_RATESET_EID_MAX) {
+            limLog(pMac, LOGW,
+                   FL("num of sup rates %d exceeding the limit %d, resetting"),
+                   pAddBssParams->rateSet.numRates,
+                   SIR_MAC_RATESET_EID_MAX);
+            pAddBssParams->rateSet.numRates = SIR_MAC_RATESET_EID_MAX;
+    }
     vos_mem_copy(pAddBssParams->rateSet.rate,
                  pMlmStartReq->rateSet.rate, pMlmStartReq->rateSet.numRates);
 
@@ -1780,10 +1787,19 @@ limMlmAddBss (
     pAddBssParams->sessionId            = pMlmStartReq->sessionId; 
 
     //Send the SSID to HAL to enable SSID matching for IBSS
-    vos_mem_copy(&(pAddBssParams->ssId.ssId),
+    pAddBssParams->ssId.length = pMlmStartReq->ssId.length;
+    if (pAddBssParams->ssId.length > SIR_MAC_MAX_SSID_LENGTH) {
+            limLog(pMac, LOGE,
+                   FL("Invalid ssid length %d, max length allowed %d"),
+                   pAddBssParams->ssId.length,
+                   SIR_MAC_MAX_SSID_LENGTH);
+            vos_mem_free(pAddBssParams);
+            return eSIR_SME_INVALID_PARAMETERS;
+    }
+    vos_mem_copy(pAddBssParams->ssId.ssId,
                  pMlmStartReq->ssId.ssId,
                  pMlmStartReq->ssId.length);
-    pAddBssParams->ssId.length = pMlmStartReq->ssId.length;
+
     pAddBssParams->bHiddenSSIDEn = pMlmStartReq->ssidHidden;
     limLog( pMac, LOGE, FL( "TRYING TO HIDE SSID %d" ),pAddBssParams->bHiddenSSIDEn);
     // CR309183. Disable Proxy Probe Rsp.  Host handles Probe Requests.  Until FW fixed. 
