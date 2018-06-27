@@ -600,7 +600,6 @@ static int p9221_set_cmd_reg(struct p9221_charger_data *charger, u8 cmd)
 	int retry;
 	int ret;
 
-	mutex_lock(&charger->cmd_lock);
 	for (retry = 0; retry < P9221_COM_CHAN_RETRIES; retry++) {
 		ret = p9221_reg_read_8(charger, P9221_COM_REG, &cur_cmd);
 		if (ret == 0 && cur_cmd == 0)
@@ -611,8 +610,7 @@ static int p9221_set_cmd_reg(struct p9221_charger_data *charger, u8 cmd)
 	if (retry >= P9221_COM_CHAN_RETRIES) {
 		dev_err(&charger->client->dev,
 			"Failed to wait for cmd free %02x\n", cur_cmd);
-		ret = -EBUSY;
-		goto out;
+		return -EBUSY;
 	}
 
 	ret = p9221_reg_write_8(charger, P9221_COM_REG, cmd);
@@ -620,8 +618,6 @@ static int p9221_set_cmd_reg(struct p9221_charger_data *charger, u8 cmd)
 		dev_err(&charger->client->dev,
 			"Failed to set cmd reg %02x: %d\n", cmd, ret);
 
-out:
-	mutex_unlock(&charger->cmd_lock);
 	return ret;
 }
 
@@ -640,6 +636,8 @@ static int p9221_send_data(struct p9221_charger_data *charger)
 
 	charger->tx_busy = true;
 
+	mutex_lock(&charger->cmd_lock);
+
 	ret = p9221_reg_write_n(charger, P9221R5_DATA_SEND_BUF_START,
 				charger->tx_buf, charger->tx_len);
 	if (ret) {
@@ -657,8 +655,11 @@ static int p9221_send_data(struct p9221_charger_data *charger)
 	ret = p9221_set_cmd_reg(charger, P9221R5_COM_CCACTIVATE);
 	if (ret)
 		goto error;
+
+	mutex_unlock(&charger->cmd_lock);
 	return ret;
 error:
+	mutex_unlock(&charger->cmd_lock);
 	charger->tx_busy = false;
 	return ret;
 }
@@ -670,6 +671,8 @@ static int p9221_send_csp(struct p9221_charger_data *charger, u8 stat)
 
 	dev_info(&charger->client->dev, "Send CSP status=%d\n", stat);
 
+	mutex_lock(&charger->cmd_lock);
+
 	if (p9221_is_r5(charger)) {
 		ret = p9221_reg_write_8(charger, P9221R5_CHARGE_STAT_REG, stat);
 		cmd = P9221R5_COM_SENDCSP;
@@ -677,10 +680,11 @@ static int p9221_send_csp(struct p9221_charger_data *charger, u8 stat)
 		ret = p9221_reg_write_8(charger, P9221_CHARGE_STAT_REG, stat);
 		cmd = P9221_COM_SEND_CHG_STAT_MASK;
 	}
-	if (ret)
-		return ret;
+	if (ret == 0)
+		ret = p9221_set_cmd_reg(charger, cmd);
 
-	return p9221_set_cmd_reg(charger, cmd);
+	mutex_unlock(&charger->cmd_lock);
+	return ret;
 }
 
 static int p9221_send_eop(struct p9221_charger_data *charger, u8 reason)
@@ -690,6 +694,8 @@ static int p9221_send_eop(struct p9221_charger_data *charger, u8 reason)
 
 	dev_info(&charger->client->dev, "Send EOP reason=%d\n", reason);
 
+	mutex_lock(&charger->cmd_lock);
+
 	if (p9221_is_r5(charger)) {
 		ret = p9221_reg_write_8(charger, P9221R5_EPT_REG, reason);
 		cmd = P9221R5_COM_SENDEPT;
@@ -697,10 +703,11 @@ static int p9221_send_eop(struct p9221_charger_data *charger, u8 reason)
 		ret = p9221_reg_write_8(charger, P9221_EPT_REG, reason);
 		cmd = P9221_COM_SEND_EOP_MASK;
 	}
-	if (ret)
-		return ret;
+	if (ret == 0)
+		ret = p9221_set_cmd_reg(charger, cmd);
 
-	return p9221_set_cmd_reg(charger, cmd);
+	mutex_unlock(&charger->cmd_lock);
+	return ret;
 }
 
 static int p9221_send_ccreset(struct p9221_charger_data *charger)
@@ -712,12 +719,15 @@ static int p9221_send_ccreset(struct p9221_charger_data *charger)
 
 	dev_info(&charger->client->dev, "Send CC reset\n");
 
+	mutex_lock(&charger->cmd_lock);
+
 	ret = p9221_reg_write_8(charger, P9221R5_COM_CHAN_RESET_REG,
 				P9221R5_COM_CHAN_CCRESET);
-	if (ret)
-		return ret;
+	if (ret == 0)
+		ret = p9221_set_cmd_reg(charger, P9221R5_COM_CCACTIVATE);
 
-	return p9221_set_cmd_reg(charger, P9221R5_COM_CCACTIVATE);
+	mutex_unlock(&charger->cmd_lock);
+	return ret;
 }
 
 struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
@@ -1020,11 +1030,14 @@ static int p9221_clear_interrupts(struct p9221_charger_data *charger, u16 mask)
 
 	reg = p9221_is_r5(charger) ? P9221R5_INT_CLEAR_REG :
 				     P9221_INT_CLEAR_REG;
+
+	mutex_lock(&charger->cmd_lock);
+
 	ret = p9221_reg_write_16(charger, reg, mask);
 	if (ret) {
 		dev_err(&charger->client->dev,
 			"Failed to clear INT reg: %d\n", ret);
-		return ret;
+		goto out;
 	}
 
 	ret = p9221_set_cmd_reg(charger, P9221_COM_CLEAR_INT_MASK);
@@ -1032,7 +1045,8 @@ static int p9221_clear_interrupts(struct p9221_charger_data *charger, u16 mask)
 		dev_err(&charger->client->dev,
 			"Failed to reset INT: %d\n", ret);
 	}
-
+out:
+	mutex_unlock(&charger->cmd_lock);
 	return ret;
 }
 
