@@ -48,6 +48,7 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/pm_wakeup.h>
 #include <linux/input.h>
 #include <linux/string.h>
 #include <linux/miscdevice.h>
@@ -356,6 +357,7 @@ static int ap314aq_ps_enable(struct ap314aq_data *ps_data,int enable)
     if(enable) {
 	ret = mod_timer(&ps_data->pl_timer, jiffies + msecs_to_jiffies(PL_TIMER_DELAY));
 	enable_irq(ps_data->client->irq);
+	enable_irq_wake(ps_data->client->irq);
     }
 
     return ret;
@@ -545,7 +547,7 @@ static int ap314aq_power_ctl(struct ap314aq_data *data, bool on)
 				"Regulator vdd enable failed ret=%d\n", ret);
 			return ret;
 		}
-
+		msleep(15);
 		ret = regulator_enable(data->vio);
 		if (ret)
 		{
@@ -1116,12 +1118,16 @@ static void psensor_work_handler(struct work_struct *w)
 
     struct ap314aq_data *data =
 	container_of(w, struct ap314aq_data, psensor_work);
+    struct timespec hw_time = ktime_to_timespec(ktime_get_boottime());
     int distance,pxvalue;
 
     distance = ap314aq_get_object(data->client);
     pxvalue = ap314aq_get_px_value(data->client); //test
+    pm_wakeup_event(&data->psensor_input_dev->dev, 200);
 
     printk("distance=%d pxvalue=%d\n",distance,pxvalue);
+    input_event(data->psensor_input_dev, EV_SYN, SYN_TIME_SEC, hw_time.tv_sec);
+    input_event(data->psensor_input_dev, EV_SYN, SYN_TIME_NSEC, hw_time.tv_nsec);
     input_report_abs(data->psensor_input_dev, ABS_DISTANCE, distance);
     input_sync(data->psensor_input_dev);
 #ifdef AP314AQ_DEBUG_MORE
@@ -1137,6 +1143,7 @@ static void ap314aq_work_handler(struct work_struct *w)
     u8 int_stat;
     int pxvalue;
     int distance;
+    struct timespec hw_time = ktime_to_timespec(ktime_get_boottime());
     int_stat = ap314aq_get_intstat(data->client);
 #ifdef AP314AQ_DEBUG_MORE
     LDBG("%s start ..(int_stat=0x%x)\n", __func__,int_stat);
@@ -1146,16 +1153,19 @@ static void ap314aq_work_handler(struct work_struct *w)
     {
 	distance = ap314aq_get_object(data->client);
 	pxvalue = ap314aq_get_px_value(data->client); //test
+	pm_wakeup_event(&data->psensor_input_dev->dev, 200);
 
 	printk("distance=%d pxvalue=%d\n",distance,pxvalue);
 	input_report_abs(data->psensor_input_dev, ABS_DISTANCE, distance);
+	input_event(data->psensor_input_dev, EV_SYN, SYN_TIME_SEC, hw_time.tv_sec);
+	input_event(data->psensor_input_dev, EV_SYN, SYN_TIME_NSEC, hw_time.tv_nsec);
 	input_sync(data->psensor_input_dev);
 #ifdef AP314AQ_DEBUG_MORE
     LDBG("%s ps_opened : distance=%d pxvalue=%d\n", __func__,distance,pxvalue);
 #endif
     }
-
     enable_irq(data->client->irq);
+    enable_irq_wake(data->client->irq);
 }
 
 static irqreturn_t ap314aq_irq(int irq, void *data_)
@@ -1253,6 +1263,10 @@ static int ap314aq_probe(struct i2c_client *client,
 	goto err_power_ctl;
 
     /* initialize the AP314AQ chip */
+    msleep(100);
+    err = ap314aq_init_client(client);
+    if (err)
+	goto exit_kfree;
 
     if(ap314aq_check_id(data) !=0 )
     {
@@ -1267,10 +1281,6 @@ static int ap314aq_probe(struct i2c_client *client,
 	goto exit_free_ps_device;
     }
 
-    err = ap314aq_init_client(client);
-    if (err)
-	goto exit_kfree;
-
     err = gpio_request(data->int_pin,"ap314aq-int");
     if(err < 0)
     {
@@ -1283,6 +1293,9 @@ static int ap314aq_probe(struct i2c_client *client,
         printk(KERN_ERR "%s: gpio_direction_input, err=%d", __func__, err);
         return err;
     }
+
+    /* device wakeup initialization */
+    device_init_wakeup(&client->dev, 1);
 
     err = request_threaded_irq(gpio_to_irq(data->int_pin), NULL, ap314aq_irq,
 	    IRQF_TRIGGER_LOW  | IRQF_ONESHOT,
@@ -1353,6 +1366,8 @@ err_power_ctl:
 
 exit_kfree:
     kfree(data);
+    device_init_wakeup(&client->dev, 0);
+
 #ifdef CONFIG_OF
 exit_parse_dt_fail:
 
@@ -1384,6 +1399,7 @@ static int ap314aq_remove(struct i2c_client *client)
 
     ap314aq_power_init(data, false);
 
+    device_init_wakeup(&client->dev, 0);
 
     ap314aq_set_mode(client, 0);
     kfree(i2c_get_clientdata(client));
