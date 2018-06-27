@@ -74,4 +74,6 @@ endif # TYPEC_TCPM
 
 source "drivers/usb/typec/ucsi/Kconfig"
 
+source "drivers/usb/typec/altmodes/Kconfig"
+
 endif # TYPEC
