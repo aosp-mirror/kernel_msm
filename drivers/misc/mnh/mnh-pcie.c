@@ -824,10 +824,9 @@ static int scatterlist_to_mnh_sg(struct scatterlist *sc_list, int count,
 	}
 
 	if (size_rem) {
-		dev_err(&mnh_dev->pdev->dev,
-			"%s: transfer oob: off %u, size %u, sc list size %u\n",
-			__func__, off, size, sc_end);
-		return -EINVAL;
+		dev_dbg(&mnh_dev->pdev->dev,
+			"%s: transfer oob: off %u, size %u, sc list size %u, size_rem %u\n",
+			__func__, off, size, sc_end, size_rem);
 	}
 
 	/* Zero out the list terminator entry.
