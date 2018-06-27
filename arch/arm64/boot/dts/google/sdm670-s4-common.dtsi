@@ -1,6 +1,6 @@
 #include "sdm670-b4s4-common.dtsi"
 #include "sdm670-s4-usb.dtsi"
 
-&dsi_s6e3fa7_sdc_cmd_display {
+&dsi_s6e3fa7_sdc_1080p_cmd_display {
 	qcom,dsi-display-active;
 };
