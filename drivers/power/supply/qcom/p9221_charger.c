@@ -46,6 +46,24 @@ static bool p9221_is_r5(struct p9221_charger_data *charger)
 		(charger->cust_id == P9221R7_CUSTOMER_ID_VAL);
 }
 
+static size_t p9221_hex_str(u8 *data, size_t len, char *buf, size_t max_buf,
+			    bool msbfirst)
+{
+	int i;
+	int blen = 0;
+	u8 val;
+
+	for (i = 0; i < len; i++) {
+		if (msbfirst)
+			val = data[len - 1 - i];
+		else
+			val = data[i];
+		blen += scnprintf(buf + (i * 3), max_buf - (i * 3),
+				  "%02x ", val);
+	}
+	return blen;
+}
+
 static int p9221_reg_read_n(struct p9221_charger_data *charger, u16 reg,
 			    void *buf, size_t n)
 {
@@ -520,6 +538,7 @@ static void p9221_write_fod(struct p9221_charger_data *charger)
 	int fod_count = charger->pdata->fod_num;
 	u16 fod_reg = p9221_is_r5(charger) ? P9221R5_FOD_REG : P9221_FOD_REG;
 	int ret;
+	int retries = 3;
 
 	if (!charger->pdata->fod_num && !charger->pdata->fod_epp_num)
 		goto no_fod;
@@ -537,17 +556,42 @@ static void p9221_write_fod(struct p9221_charger_data *charger)
 	if (!fod)
 		goto no_fod;
 
-	dev_info(&charger->client->dev, "Writing %s FOD (n=%d r=%d)\n",
-		 epp ? "EPP" : "BPP", fod_count, fod_reg);
-	ret = p9221_reg_write_n(charger, fod_reg, fod, fod_count);
-	if (ret)
+	while (retries) {
+		char s[fod_count * 3 + 1];
+		u8 fod_read[fod_count];
+
+		dev_info(&charger->client->dev, "Writing %s FOD (n=%d reg=%02x try=%d)\n",
+			 epp ? "EPP" : "BPP", fod_count, fod_reg, retries);
+
+		ret = p9221_reg_write_n(charger, fod_reg, fod, fod_count);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Could not write FOD: %d\n", ret);
+			return;
+		}
+
+		/* Verify the FOD has been written properly */
+		ret = p9221_reg_read_n(charger, fod_reg, fod_read, fod_count);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Could not read back FOD: %d\n", ret);
+			return;
+		}
+
+		if (memcmp(fod, fod_read, fod_count) == 0)
+			return;
+
+		p9221_hex_str(fod_read, fod_count, s, sizeof(s), 0);
 		dev_err(&charger->client->dev,
-			"Could not write FOD: %d\n", ret);
-	return;
+			"FOD verify error, read: %s\n", s);
+
+		retries--;
+		msleep(100);
+	}
 
 no_fod:
-	dev_warn(&charger->client->dev, "No FOD set! bpp:%d epp:%d\n",
-		 charger->pdata->fod_num, charger->pdata->fod_epp_num);
+	dev_warn(&charger->client->dev, "FOD not set! bpp:%d epp:%d r:%d\n",
+		 charger->pdata->fod_num, charger->pdata->fod_epp_num, retries);
 }
 
 static int p9221_set_cmd_reg(struct p9221_charger_data *charger, u8 cmd)
@@ -1086,8 +1130,8 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 		dev_err(&charger->client->dev,
 			"Could not enable interrupts: %d\n", ret);
 
-	p9221_write_fod(charger);
 	p9221_set_dc_icl(charger);
+	p9221_write_fod(charger);
 }
 
 static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
@@ -1118,10 +1162,12 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	del_timer(&charger->vrect_timer);
 
 	/*
-	 * Always check dc_icl
+	 * Always write FOD and check dc_icl
 	 */
-	if (prop.intval)
+	if (prop.intval) {
 		p9221_set_dc_icl(charger);
+		p9221_write_fod(charger);
+	}
 
 	/* We may have already gone online during check_det */
 	if (charger->online == prop.intval)
@@ -1179,24 +1225,6 @@ static void p9221_notifier_work(struct work_struct *work)
 
 	if (relax)
 		pm_relax(charger->dev);
-}
-
-static size_t p9221_hex_str(u8 *data, size_t len, char *buf, size_t max_buf,
-			    bool msbfirst)
-{
-	int i;
-	int blen = 0;
-	u8 val;
-
-	for (i = 0; i < len; i++) {
-		if (msbfirst)
-			val = data[len - 1 - i];
-		else
-			val = data[i];
-		blen += scnprintf(buf + (i * 3), max_buf - (i * 3),
-				  "%02x ", val);
-	}
-	return blen;
 }
 
 static ssize_t p9221_add_reg_buffer(struct p9221_charger_data *charger,
@@ -1263,14 +1291,18 @@ static ssize_t p9221_show_version(struct device *dev,
 	for (i = 0; i < P9221_OTP_FW_DATE_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_OTP_FW_DATE_REG + i, &val8);
-		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
+		if (val8)
+			count += scnprintf(buf + count, PAGE_SIZE - count,
+					   "%c", val8);
 	}
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\notp fw time: ");
 	for (i = 0; i < P9221_OTP_FW_TIME_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_OTP_FW_TIME_REG + i, &val8);
-		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
+		if (val8)
+			count += scnprintf(buf + count, PAGE_SIZE - count,
+					   "%c", val8);
 	}
 
 	count += p9221_add_reg_buffer(charger, buf, count,
@@ -1284,14 +1316,18 @@ static ssize_t p9221_show_version(struct device *dev,
 	for (i = 0; i < P9221_SRAM_FW_DATE_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_SRAM_FW_DATE_REG + i, &val8);
-		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
+		if (val8)
+			count += scnprintf(buf + count, PAGE_SIZE - count,
+					   "%c", val8);
 	}
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\nram fw time: ");
 	for (i = 0; i < P9221_SRAM_FW_TIME_SIZE; i++) {
 		ret = p9221_reg_read_8(charger,
 				       P9221_SRAM_FW_TIME_REG + i, &val8);
-		count += scnprintf(buf + count, PAGE_SIZE - count, "%c", val8);
+		if (val8)
+			count += scnprintf(buf + count, PAGE_SIZE - count,
+					   "%c", val8);
 	}
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
