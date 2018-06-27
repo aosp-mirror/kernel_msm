@@ -54,6 +54,13 @@ config KASAN_INLINE
 	  make kernel's .text size much bigger.
 	  This requires a gcc version of 5.0 or later.
 
+config KASAN_PANIC_ON_WARN
+	bool "Cause a Kernel Panic When KASan bug is detected"
+	help
+	  Select this option to upgrade warnings for potentially memory
+	  corruption detected form KASan to panics, for easier detection
+	  and debug.
+
 endchoice
 
 config TEST_KASAN
