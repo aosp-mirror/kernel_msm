@@ -76,4 +76,6 @@ source "drivers/usb/typec/ucsi/Kconfig"
 
 source "drivers/usb/typec/altmodes/Kconfig"
 
+source "drivers/usb/typec/altmodes/Kconfig"
+
 endif # TYPEC
