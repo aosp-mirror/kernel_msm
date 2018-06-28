@@ -50,6 +50,7 @@
 			15 01 00 00 00 00 02 29 10
 			15 01 00 00 00 00 02 FE 01
 			15 01 00 00 00 00 02 27 92
+			15 01 00 00 00 00 02 2A 03
 			15 01 00 00 00 00 02 FE 00
 			15 01 00 00 00 00 02 35 00
 			15 01 00 00 00 00 02 36 C0
@@ -65,11 +66,11 @@
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-idle-on-command = [
 			15 01 00 00 00 00 02 FE 00
-			15 01 00 00 FF 00 02 39 00 /* Idle-Mode In */
+			15 01 00 00 00 00 02 39 00 /* Idle-Mode In */
 			];
 		qcom,mdss-dsi-idle-off-command = [
 			15 01 00 00 00 00 02 FE 00
-			15 01 00 00 FF 00 02 38 00 /* Idle-Mode Out  */
+			15 01 00 00 00 00 02 38 00 /* Idle-Mode Out  */
 			];
 		qcom,mdss-dsi-idle-on-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-idle-off-command-state = "dsi_hs_mode";
