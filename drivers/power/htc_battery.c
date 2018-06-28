@@ -628,7 +628,9 @@ static void batt_worker(struct work_struct *work)
 			set_batt_psy_property(
 					     POWER_SUPPLY_PROP_INPUT_SUSPEND,
 					     !pwrsrc_enabled);
-		} else if (charging_enabled != gs_prev_charging_enabled) {
+		}
+
+		if (charging_enabled != gs_prev_charging_enabled) {
 			BATT_EMBEDDED("set charging_enable(%d)",
 				      charging_enabled);
 			set_batt_psy_property(
