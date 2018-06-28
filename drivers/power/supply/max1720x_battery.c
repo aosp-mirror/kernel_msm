@@ -1172,8 +1172,8 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	}
 	pm_runtime_put_sync(chip->dev);
 	REGMAP_READ(chip->regmap, MAX1720X_STATUS, fg_status);
-	if (fg_status == -1)
-		return IRQ_NONE;
+	if (fg_status == -1 || fg_status == 0)
+		return IRQ_HANDLED;
 
 	chip->status |= fg_status;
 	if (fg_status & MAX1720X_STATUS_POR) {
