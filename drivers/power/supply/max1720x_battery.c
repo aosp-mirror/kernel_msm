@@ -309,6 +309,12 @@ struct max1720x_chip {
 	int prev_charge_state;
 	char serial_number[25];
 	bool offmode_charger;
+	u32 convgcfg_hysteresis;
+	int nb_convgcfg;
+	int curr_convgcfg_idx;
+	s16 *temp_convgcfg;
+	u16 *convgcfg_values;
+	struct mutex convgcfg_lock;
 };
 
 static inline int max1720x_regmap_read(struct regmap *map,
@@ -1000,6 +1006,42 @@ static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
 		 chip->previous_qh);
 }
 
+static void max1720x_handle_update_nconvgcfg(struct max1720x_chip *chip,
+					     int temp)
+{
+	int idx = -1;
+
+	if (chip->temp_convgcfg == NULL)
+		return;
+
+	if (temp <= chip->temp_convgcfg[0]) {
+		idx = 0;
+	} else if (temp > chip->temp_convgcfg[chip->nb_convgcfg - 1]) {
+		idx = chip->nb_convgcfg - 1;
+	} else {
+		for (idx = 1 ; idx < chip->nb_convgcfg; idx++) {
+			if (temp > chip->temp_convgcfg[idx - 1] &&
+			    temp <= chip->temp_convgcfg[idx])
+				break;
+		}
+	}
+	mutex_lock(&chip->convgcfg_lock);
+	/* We want to switch to higher slot only if above temp + hysteresis
+	 * but when temperature drops, we want to change at the level
+	 */
+	if ((idx != chip->curr_convgcfg_idx) &&
+	    (chip->curr_convgcfg_idx == -1 || idx < chip->curr_convgcfg_idx ||
+	     temp >= chip->temp_convgcfg[chip->curr_convgcfg_idx] +
+	     chip->convgcfg_hysteresis)) {
+		REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NCONVGCFG,
+			     chip->convgcfg_values[idx]);
+		chip->curr_convgcfg_idx = idx;
+		dev_info(chip->dev, "updating nConvgcfg to 0x%04x as temp is %d (idx:%d)\n",
+			 chip->convgcfg_values[idx], temp, idx);
+	}
+	mutex_unlock(&chip->convgcfg_lock);
+}
+
 static int max1720x_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
@@ -1087,6 +1129,7 @@ static int max1720x_get_property(struct power_supply *psy,
 			err = REGMAP_READ(map, MAX1720X_TEMP, &data);
 			val->intval = reg_to_deci_deg_cel(data);
 		}
+		max1720x_handle_update_nconvgcfg(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
 		err = REGMAP_READ(map, MAX1720X_TTE, &data);
@@ -1517,6 +1560,85 @@ static int max1720x_handle_dt_register_config(struct max1720x_chip *chip)
 	return ret;
 }
 
+static int max1720x_handle_dt_nconvgcfg(struct max1720x_chip *chip)
+{
+	int ret = 0, i;
+	struct device_node *node = chip->dev->of_node;
+
+	chip->curr_convgcfg_idx = -1;
+	mutex_init(&chip->convgcfg_lock);
+	chip->nb_convgcfg =
+	    of_property_count_elems_of_size(node, "maxim,nconvgcfg-temp-limits",
+					    sizeof(s16));
+	if (!chip->nb_convgcfg)
+		return 0;
+
+	ret = of_property_read_u32(node, "maxim,nconvgcfg-temp-hysteresis",
+				   &chip->convgcfg_hysteresis);
+	if (ret < 0)
+		chip->convgcfg_hysteresis = 10;
+
+	if (chip->nb_convgcfg != of_property_count_elems_of_size(node,
+						  "maxim,nconvgcfg-values",
+						  sizeof(u16))) {
+		dev_warn(chip->dev, "%s maxim,nconvgcfg-values and maxim,nconvgcfg-temp-limits are missmatching number of elements\n",
+			 node->name);
+		return -EINVAL;
+	}
+	chip->temp_convgcfg = devm_kmalloc_array(chip->dev, chip->nb_convgcfg,
+						 sizeof(s16), GFP_KERNEL);
+	if (!chip->temp_convgcfg)
+		return -ENOMEM;
+
+	chip->convgcfg_values = devm_kmalloc_array(chip->dev, chip->nb_convgcfg,
+						   sizeof(u16), GFP_KERNEL);
+	if (!chip->convgcfg_values) {
+		devm_kfree(chip->dev, chip->temp_convgcfg);
+		chip->temp_convgcfg = NULL;
+		return -ENOMEM;
+	}
+
+	ret = of_property_read_u16_array(node, "maxim,nconvgcfg-temp-limits",
+					 (u16 *) chip->temp_convgcfg,
+					 chip->nb_convgcfg);
+	if (ret) {
+		dev_warn(chip->dev, "failed to read maxim,nconvgcfg-temp-limits: %d\n",
+			 ret);
+		goto error;
+	}
+
+	ret = of_property_read_u16_array(node, "maxim,nconvgcfg-values",
+					 chip->convgcfg_values,
+					 chip->nb_convgcfg);
+	if (ret) {
+		dev_warn(chip->dev, "failed to read maxim,nconvgcfg-values: %d\n",
+			 ret);
+		goto error;
+	}
+	for (i = 1; i < chip->nb_convgcfg; i++) {
+		if (chip->temp_convgcfg[i] < chip->temp_convgcfg[i-1]) {
+			dev_warn(chip->dev, "nconvgcfg-temp-limits idx:%d < idx:%d\n",
+				 i, i-1);
+			goto error;
+		}
+		if ((chip->temp_convgcfg[i] - chip->temp_convgcfg[i-1])
+		    <= chip->convgcfg_hysteresis) {
+			dev_warn(chip->dev, "nconvgcfg-temp-hysteresis smaller than idx:%d, idx:%d\n",
+				 i, i-1);
+			goto error;
+		}
+	}
+
+error:
+	if (ret) {
+		devm_kfree(chip->dev, chip->temp_convgcfg);
+		devm_kfree(chip->dev, chip->convgcfg_values);
+		chip->temp_convgcfg = NULL;
+	}
+
+	return ret;
+}
+
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
 	u16 data = 0;
@@ -1529,6 +1651,8 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	ret = max1720x_handle_dt_register_config(chip);
 	if (ret == -EPROBE_DEFER)
 		return ret;
+
+	(void) max1720x_handle_dt_nconvgcfg(chip);
 
 	chip->fake_capacity = -EINVAL;
 	chip->fake_temperature = -EINVAL;
