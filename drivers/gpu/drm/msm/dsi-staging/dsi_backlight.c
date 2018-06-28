@@ -153,6 +153,15 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 		goto done;
 
 	if (dsi_panel_initialized(panel) && bl->update_bl) {
+		/* VR brightness is set as part of the VR entry sequence.
+		 * This safeguard is to protect against userspace reducing
+		 * brightness below safe limits during VR mode. Normal
+		 * brightness range is restored when exiting VR mode by
+		 * reevaluating requested user brightness.
+		 */
+		if (panel->vr_mode && (bl_lvl < bl->bl_vr_min_safe_level))
+			bl_lvl = bl->bl_vr_min_safe_level;
+
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
 
@@ -991,6 +1000,16 @@ int dsi_panel_bl_parse_config(struct device *parent,
 			panel->name, rc);
 	pr_debug("[%s] bl-hbm-lut %sused\n", panel->name,
 		bl->bl_hbm_params.lut ? "" : "un");
+
+	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-vr-min-safe-level",
+		&val);
+	if (rc) {
+		bl->bl_vr_min_safe_level = 0;
+	} else {
+		pr_debug("[%s] bl-vr-min-safe-level is %d\n",
+			 panel->name, val);
+		bl->bl_vr_min_safe_level = val;
+	}
 
 	bl->en_gpio = of_get_named_gpio(of_node,
 					      "qcom,platform-bklight-en-gpio",

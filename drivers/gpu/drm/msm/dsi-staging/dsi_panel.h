@@ -103,6 +103,8 @@ struct dsi_backlight_config {
 	bool bl_hbm_supported;
 	struct dsi_backlight_calc_params bl_hbm_params;
 
+	/* Minimum safe brightness level during VR mode */
+	u32 bl_vr_min_safe_level;
 
 	/* The active backlight parameters, depending on HBM state */
 	struct dsi_backlight_calc_params *bl_active_params;
