@@ -426,6 +426,7 @@ static void chg_work(struct work_struct *work)
 	} else if (ibatt > 0) {
 		/* discharging: reset chg_drv state() and check again soon */
 		pr_info("MSC_DISCHARGE ibatt=%d\n", ibatt);
+		reset_chg_drv_state(chg_drv);
 		update_interval = profile->cv_update_interval;
 		rerun_work = true;
 		goto handle_rerun;
