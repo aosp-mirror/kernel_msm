@@ -38,6 +38,8 @@
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
 
+static int g_init_once = 0;
+
 /* Master structure to hold all the information about the DSI/panel */
 static struct mdss_dsi_data *mdss_dsi_res;
 
@@ -296,13 +298,6 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
 
-	ret = msm_dss_enable_vreg(
-		ctrl_pdata->panel_power_data.vreg_config,
-		ctrl_pdata->panel_power_data.num_vreg, 0);
-	if (ret)
-		pr_err("%s: failed to disable vregs for %s\n",
-			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-
 end:
 	return ret;
 }
@@ -319,13 +314,18 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	ret = msm_dss_enable_vreg(
-		ctrl_pdata->panel_power_data.vreg_config,
-		ctrl_pdata->panel_power_data.num_vreg, 1);
-	if (ret) {
-		pr_err("%s: failed to enable vregs for %s\n",
-			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-		return ret;
+	if(!g_init_once)
+	{
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->panel_power_data.vreg_config,
+			ctrl_pdata->panel_power_data.num_vreg, 1);
+		if (ret) {
+			pr_err("%s: failed to enable vregs for %s\n",
+				__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+			return ret;
+		}
+
+		g_init_once = 1;
 	}
 
 	/*
@@ -1636,11 +1636,6 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 		}
 	}
 
-	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
-		mipi->vsync_enable && mipi->hw_vsync_mode) {
-		mdss_dsi_set_tear_on(ctrl_pdata);
-	}
-
 	ctrl_pdata->ctrl_state |= CTRL_STATE_PANEL_INIT;
 
 error:
@@ -1702,13 +1697,7 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 			ctrl_pdata->switch_mode(pdata, SWITCH_TO_VIDEO_MODE);
 		} else if (pdata->panel_info.type == MIPI_VIDEO_PANEL) {
 			ctrl_pdata->switch_mode(pdata, SWITCH_TO_CMD_MODE);
-			mdss_dsi_set_tear_off(ctrl_pdata);
 		}
-	}
-
-	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
-		mipi->vsync_enable && mipi->hw_vsync_mode) {
-		mdss_dsi_set_tear_off(ctrl_pdata);
 	}
 
 	if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT) {
@@ -4123,6 +4112,13 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 			 "qcom,platform-reset-gpio", 0);
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
+						__func__, __LINE__);
+
+	ctrl_pdata->tp_rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,platform-tsresout-gpio", 0);
+
+	if (!gpio_is_valid(ctrl_pdata->tp_rst_gpio))
+		pr_err("%s:%d, TP reset gpio not specified\n",
 						__func__, __LINE__);
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
