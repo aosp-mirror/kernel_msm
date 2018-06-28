@@ -726,7 +726,7 @@ struct sec_ts_data {
 	struct delayed_work reset_work;
 	volatile bool reset_is_on_going;
 #endif
-	struct delayed_work work_fw_update;
+	struct work_struct work_fw_update;
 	struct work_struct suspend_work;
 	struct work_struct resume_work;
 	struct completion resume_done;
