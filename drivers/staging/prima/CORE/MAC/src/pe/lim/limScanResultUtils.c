@@ -736,8 +736,8 @@ limLookupNaddHashEntry(tpAniSirGlobal pMac,
              // matching band to update new channel info
             (vos_chan_to_band(pBssDescr->bssDescription.channelId) ==
                       vos_chan_to_band(ptemp->bssDescription.channelId)) &&
-            (((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1) ==
-              ((tANI_U8 *) &ptemp->bssDescription.ieFields + 1)) &&
+            (*((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1) ==
+              *((tANI_U8 *) &ptemp->bssDescription.ieFields + 1)) &&
             vos_mem_compare( ((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1),
                            ((tANI_U8 *) &ptemp->bssDescription.ieFields + 1),
                            (tANI_U8) (ssidLen + 1)) &&
@@ -992,8 +992,8 @@ limLookupNaddLfrHashEntry(tpAniSirGlobal pMac,
                       sizeof(tSirMacAddr))) &&   //matching BSSID
             (pBssDescr->bssDescription.channelId ==
                                       ptemp->bssDescription.channelId) &&
-            (((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1) ==
-              ((tANI_U8 *) &ptemp->bssDescription.ieFields + 1)) &&
+            (*((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1) ==
+              *((tANI_U8 *) &ptemp->bssDescription.ieFields + 1)) &&
             vos_mem_compare( ((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1),
                            ((tANI_U8 *) &ptemp->bssDescription.ieFields + 1),
                            (tANI_U8) (ssidLen + 1)) &&
