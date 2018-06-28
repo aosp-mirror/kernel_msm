@@ -1798,7 +1798,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 	int dsp_timeout = CS40L2X_DSP_TIMEOUT_COUNT;
 
 	if (cs40l2x->pdata.gpio1_mode != CS40L2X_GPIO1_MODE_DEF_ON) {
-		ret = regmap_write(cs40l2x->regmap,
+		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 						CS40L2X_XM_UNPACKED_TYPE),
 				CS40L2X_GPIO1_DISABLED);
@@ -2536,7 +2536,7 @@ static int cs40l2x_otp_unpack(struct cs40l2x_private *cs40l2x)
 	if (!otp_mem)
 		return -ENOMEM;
 
-	ret = regmap_read(cs40l2x->regmap, CS40L2X_OTPID, &val);
+	ret = regmap_read(regmap, CS40L2X_OTPID, &val);
 	if (ret) {
 		dev_err(dev, "Failed to read OTP ID\n");
 		goto err_otp_unpack;
