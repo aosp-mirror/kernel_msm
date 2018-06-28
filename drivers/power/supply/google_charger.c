@@ -178,10 +178,13 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->disable_charging = 0;
 	chg_drv->disable_pwrsrc = 0;
 	chg_drv->lowerdb_reached = true;
+	chg_drv->stop_charging = true;
 	PSY_SET_PROP(chg_drv->chg_psy,
 		     POWER_SUPPLY_PROP_TAPER_CONTROL,
 		     POWER_SUPPLY_TAPER_CONTROL_OFF);
+	PSY_SET_PROP(chg_drv->chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 1);
 }
+
 static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
 			   struct power_supply *wlc_psy,
@@ -326,6 +329,17 @@ static void chg_work(struct work_struct *work)
 	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
 
+
+	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
+	if (wlc_psy)
+		wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
+
+	/* If no power source, disable charging and exit */
+	if (!usb_present && !wlc_online) {
+		reset_chg_drv_state(chg_drv);
+		goto exit_chg_work;
+	}
+
 	/* debug option  */
 	if (chg_drv->chg_mode)
 		bat_psy = chg_psy;
@@ -337,10 +351,6 @@ static void chg_work(struct work_struct *work)
 	vchrg = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	chg_type = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
 
-	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
-	if (wlc_psy)
-		wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
-
 	if (temp == -EINVAL || ibatt == -EINVAL || vbatt == -EINVAL ||
 	    usb_present == -EINVAL || wlc_online == -EINVAL)
 		goto error_rerun;
@@ -350,16 +360,10 @@ static void chg_work(struct work_struct *work)
 		       chg_type, chg_drv->fv_uv,
 		       soc, usb_present, wlc_online);
 
-	if (!usb_present && !wlc_online)
-		goto check_rerun;
-
 	if (temp < profile->temp_limits[0] ||
 	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
 		if (!chg_drv->stop_charging) {
 			pr_info("batt. temp. off limits, disabling charging\n");
-			PSY_SET_PROP(chg_psy,
-				     POWER_SUPPLY_PROP_CHARGE_DISABLE, 1);
-			chg_drv->stop_charging = true;
 			reset_chg_drv_state(chg_drv);
 		}
 		/* status will be discharging when disabled but we want to keep
@@ -420,9 +424,11 @@ static void chg_work(struct work_struct *work)
 		if (chg_drv->checked_tier_switch_cnt == 0)
 			chg_drv->checked_cv_cnt = profile->cv_debounce_cnt;
 	} else if (ibatt > 0) {
-		/* discharging: check_rerun will reset chg_drv state() */
+		/* discharging: reset chg_drv state() and check again soon */
 		pr_info("MSC_DISCHARGE ibatt=%d\n", ibatt);
-		goto check_rerun;
+		update_interval = profile->cv_update_interval;
+		rerun_work = true;
+		goto handle_rerun;
 	} else if (chg_drv->vbatt_idx == profile->volt_nb_limits - 1) {
 		/* will not adjust changer voltage only in the configured
 		 * last tier.
@@ -495,10 +501,15 @@ static void chg_work(struct work_struct *work)
 				vtier, vbatt, vchrg, chg_drv->fv_uv, fv_uv);
 
 		} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
-		/* TODO: UNKNOWN, NONE or TRICKLE should reset checked? */
+		/* Not fast or taper, we are debouncing (-ibatt > cc_next_max)
+		 * as we cannot tell if current low is an ESR or actually low
+		 * force switch tier here given b/110731824 b/110812377
+		 * Vfloat ~= Vbatt, current low => end of charge so type
+		 * is not fast or taper
+		 */
 			pr_info("MSC_TYPE chg_type=%d vbatt=%d vtier=%d fv_uv=%d\n",
 				chg_type, vbatt, vtier, fv_uv);
-			goto check_rerun;
+			switch_tier_now = true;
 		} else if (chg_drv->checked_cv_cnt + chg_drv->checked_ov_cnt) {
 		/* TAPER_COUNTDOWN: countdown to raise fv_uv and/or check
 		 * for tier switch, will keep steady...
@@ -603,7 +614,6 @@ static void chg_work(struct work_struct *work)
 		chg_drv->fv_uv = fv_uv;
 	}
 
-check_rerun:
 	batt_status = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
 
 	switch (batt_status) {
