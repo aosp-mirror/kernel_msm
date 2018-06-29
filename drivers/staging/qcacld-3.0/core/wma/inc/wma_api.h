@@ -535,4 +535,13 @@ QDF_STATUS wma_wow_set_wake_time(WMA_HANDLE wma_handle, uint8_t vdev_id,
  */
 void wma_wmi_stop(void);
 
+/**
+ * wma_cleanup_vdev_resp_and_hold_req() - cleaunup the vdev resp and hold req
+ * queue
+ * @priv : WMA handle
+ *
+ * Return: None
+ */
+void wma_cleanup_vdev_resp_and_hold_req(void *priv);
+
 #endif

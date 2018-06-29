@@ -717,6 +717,8 @@ unsigned long cpufreq_scale_max_freq_capacity(int cpu);
 
 void acct_update_power(struct task_struct *p, cputime_t cputime);
 void cpufreq_task_stats_init(struct task_struct *p);
+void cpufreq_task_stats_alloc(struct task_struct *p);
+void cpufreq_task_stats_free(struct task_struct *p);
 void cpufreq_task_stats_remove_uids(uid_t uid_start, uid_t uid_end);
 int  proc_time_in_state_show(struct seq_file *m, struct pid_namespace *ns,
 	struct pid *pid, struct task_struct *p);
@@ -729,6 +731,8 @@ int single_uid_time_in_state_open(struct inode *inode, struct file *file);
 static inline void acct_update_power(struct task_struct *p,
 	cputime_t cputime) {}
 static inline void cpufreq_task_stats_init(struct task_struct *p) {}
+static inline void cpufreq_task_stats_alloc(struct task_struct *p) {}
+static inline void cpufreq_task_stats_free(struct task_struct *p) {}
 static inline void cpufreq_task_stats_exit(struct task_struct *p) {}
 static inline void cpufreq_task_stats_remove_uids(uid_t uid_start,
 	uid_t uid_end) {}

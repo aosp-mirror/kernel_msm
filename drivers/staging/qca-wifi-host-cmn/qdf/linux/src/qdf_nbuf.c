@@ -295,8 +295,15 @@ struct sk_buff *__qdf_nbuf_alloc(qdf_device_t osdev, size_t size, int reserve,
 	if (align)
 		size += (align - 1);
 
-	if (in_interrupt() || irqs_disabled() || in_atomic())
-		flags = GFP_ATOMIC;
+	if (in_interrupt() || irqs_disabled() || in_atomic()) {
+		/*
+		 * Observed that kcompactd burns out CPU to make order-3 page.
+		 *__netdev_alloc_skb has 4k page fallback option just in case of
+		 * failing high order page allocation so we don't need to be
+		 * hard. Make kcompactd rest in piece.
+		 */
+		flags = GFP_ATOMIC & ~__GFP_KSWAPD_RECLAIM;
+	}
 
 	skb = __netdev_alloc_skb(NULL, size, flags);
 

@@ -366,6 +366,7 @@ static const struct file_operations ufsdbg_err_inj_scenario_ops = {
 	.open		= ufsdbg_err_inj_scenario_open,
 	.read		= seq_read,
 	.write		= ufsdbg_err_inj_scenario_write,
+	.release        = single_release,
 };
 
 static int ufsdbg_err_inj_stats_read(struct seq_file *file, void *data)
@@ -407,6 +408,7 @@ static const struct file_operations ufsdbg_err_inj_stats_ops = {
 	.open		= ufsdbg_err_inj_stats_open,
 	.read		= seq_read,
 	.write		= ufsdbg_err_inj_stats_write,
+	.release        = single_release,
 };
 
 static void ufsdbg_setup_fault_injection(struct ufs_hba *hba)
@@ -593,6 +595,7 @@ static const struct file_operations ufsdbg_tag_stats_fops = {
 	.open		= ufsdbg_tag_stats_open,
 	.read		= seq_read,
 	.write		= ufsdbg_tag_stats_write,
+	.release        = single_release,
 };
 
 static int ufsdbg_query_stats_show(struct seq_file *file, void *data)
@@ -664,6 +667,7 @@ static const struct file_operations ufsdbg_query_stats_fops = {
 	.open		= ufsdbg_query_stats_open,
 	.read		= seq_read,
 	.write		= ufsdbg_query_stats_write,
+	.release        = single_release,
 };
 
 static int ufsdbg_err_stats_show(struct seq_file *file, void *data)
@@ -768,6 +772,7 @@ static const struct file_operations ufsdbg_err_stats_fops = {
 	.open		= ufsdbg_err_stats_open,
 	.read		= seq_read,
 	.write		= ufsdbg_err_stats_write,
+	.release        = single_release,
 };
 
 static int ufshcd_init_statistics(struct ufs_hba *hba)
@@ -847,6 +852,7 @@ static int ufsdbg_host_regs_open(struct inode *inode, struct file *file)
 static const struct file_operations ufsdbg_host_regs_fops = {
 	.open		= ufsdbg_host_regs_open,
 	.read		= seq_read,
+	.release        = single_release,
 };
 
 static int ufsdbg_health_desc_show(struct seq_file *file, void *data)
@@ -1015,6 +1021,7 @@ static int ufsdbg_show_hba_open(struct inode *inode, struct file *file)
 static const struct file_operations ufsdbg_show_hba_fops = {
 	.open		= ufsdbg_show_hba_open,
 	.read		= seq_read,
+	.release	= single_release,
 };
 
 static int ufsdbg_dump_device_desc_open(struct inode *inode, struct file *file)
@@ -1026,6 +1033,7 @@ static int ufsdbg_dump_device_desc_open(struct inode *inode, struct file *file)
 static const struct file_operations ufsdbg_dump_device_desc = {
 	.open		= ufsdbg_dump_device_desc_open,
 	.read		= seq_read,
+	.release	= single_release,
 };
 
 static int ufsdbg_power_mode_show(struct seq_file *file, void *data)
@@ -1264,6 +1272,7 @@ static const struct file_operations ufsdbg_power_mode_desc = {
 	.open		= ufsdbg_power_mode_open,
 	.read		= seq_read,
 	.write		= ufsdbg_power_mode_write,
+	.release	= single_release,
 };
 
 static int ufsdbg_dme_read(void *data, u64 *attr_val, bool peer)
@@ -1444,6 +1453,7 @@ static const struct file_operations ufsdbg_req_stats_desc = {
 	.open		= ufsdbg_req_stats_open,
 	.read		= seq_read,
 	.write		= ufsdbg_req_stats_write,
+	.release        = single_release,
 };
 
 static ssize_t ufsdbg_io_stats_write(struct file *filp,
@@ -1512,6 +1522,7 @@ static const struct file_operations ufsdbg_io_stats_desc = {
 	.open		= ufsdbg_io_stats_open,
 	.read		= seq_read,
 	.write		= ufsdbg_io_stats_write,
+	.release        = single_release,
 };
 
 static int ufsdbg_reset_controller_show(struct seq_file *file, void *data)
@@ -1559,6 +1570,7 @@ static const struct file_operations ufsdbg_reset_controller = {
 	.open		= ufsdbg_reset_controller_open,
 	.read		= seq_read,
 	.write		= ufsdbg_reset_controller_write,
+	.release        = single_release,
 };
 
 static int ufsdbg_clear_err_state(void *data, u64 val)
