@@ -220,10 +220,13 @@ dtbo.img: $(boot)/dts/dtboimg.cfg dtbs
 endif
 
 
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 PHONY += apply_dtbo
 dtboapply := -f $(if $(KBUILD_SRC),$(srctree)/)scripts/Makefile.dtboapply obj
 apply_dtbo: Image.lz4-dtb dtbo.img
 	$(Q)$(MAKE) $(dtboapply)=$(boot) KERNEL_DTB=Image.lz4-dtb DTBO=dtbo.img
+endif
+
 PHONY += vdso_install
 vdso_install:
 	$(Q)$(MAKE) $(build)=arch/arm64/kernel/vdso $@
