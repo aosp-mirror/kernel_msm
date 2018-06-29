@@ -2918,8 +2918,8 @@ limProcessMlmDisassocReqNtf(tpAniSirGlobal pMac, eHalStatus suspendStatus, tANI_
     tpPESession              psessionEntry;
     extern tANI_BOOLEAN     sendDisassocFrame;
     tSirSmeDisassocRsp      *pSirSmeDisassocRsp;
-    tANI_U32                *pMsg;
     tANI_U8                 *pBuf;
+    vos_msg_t               msg = {0};
 
     if(eHAL_STATUS_SUCCESS != suspendStatus)
     {
@@ -3043,10 +3043,14 @@ limProcessMlmDisassocReqNtf(tpAniSirGlobal pMac, eHalStatus suspendStatus, tANI_
          pBuf  = (tANI_U8 *) pSirSmeDisassocRsp->peerMacAddr;
          vos_mem_copy( pBuf, pMlmDisassocReq->peerMacAddr, sizeof(tSirMacAddr));
 
-         pMsg = (tANI_U32*) pSirSmeDisassocRsp;
+         msg.type = eWNI_SME_DISASSOC_RSP;
+         msg.bodyptr = pSirSmeDisassocRsp;
 
-         limSendSmeDisassocDeauthNtf( pMac, eHAL_STATUS_SUCCESS,
-                                                (tANI_U32*) pMsg );
+         if (pMac->lim.sme_msg_callback)
+             pMac->lim.sme_msg_callback(pMac, &msg);
+         else
+             limLog(pMac, LOGE, FL("Sme msg callback is NULL"));
+
          return;
 
     }
@@ -3250,8 +3254,7 @@ limProcessMlmDeauthReqNtf(tpAniSirGlobal pMac, eHalStatus suspendStatus, tANI_U3
     tpPESession             psessionEntry;
     tSirSmeDeauthRsp        *pSirSmeDeauthRsp;
     tANI_U8                 *pBuf;
-    tANI_U32                *pMsg;
-
+    vos_msg_t               msg = {0};
 
     if(eHAL_STATUS_SUCCESS != suspendStatus)
     {
@@ -3457,10 +3460,13 @@ limProcessMlmDeauthReqNtf(tpAniSirGlobal pMac, eHalStatus suspendStatus, tANI_U3
         pBuf  = (tANI_U8 *) pSirSmeDeauthRsp->peerMacAddr;
         vos_mem_copy( pBuf, pMlmDeauthReq->peerMacAddr, sizeof(tSirMacAddr));
 
-        pMsg = (tANI_U32*)pSirSmeDeauthRsp;
+        msg.type = eWNI_SME_DEAUTH_RSP;
+        msg.bodyptr = pSirSmeDeauthRsp;
 
-        limSendSmeDisassocDeauthNtf( pMac, eHAL_STATUS_SUCCESS,
-                                            (tANI_U32*) pMsg );
+        if (pMac->lim.sme_msg_callback)
+            pMac->lim.sme_msg_callback(pMac, &msg);
+        else
+            limLog(pMac, LOGE, FL("Sme msg callback is NULL"));
 
         return;
 

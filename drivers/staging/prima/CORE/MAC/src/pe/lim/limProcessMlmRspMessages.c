@@ -1323,6 +1323,8 @@ limProcessMlmAssocInd(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 
     if (pMac->lim.sme_msg_callback)
         pMac->lim.sme_msg_callback(pMac, &msg);
+    else
+        limLog(pMac, LOGE, FL("Sme msg callback is NULL"));
 // Enable this Compile flag to test the BT-AMP -AP assoc sequence
 #ifdef TEST_BTAMP_AP
 //tANI_U32 *pMsgBuf;
