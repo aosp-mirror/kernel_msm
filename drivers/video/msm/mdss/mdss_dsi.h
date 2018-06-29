@@ -476,6 +476,11 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds status_cmds;
 	struct dsi_panel_cmds idle_on_cmds; /* for lp mode */
 	struct dsi_panel_cmds idle_off_cmds;
+
+	struct dsi_panel_cmds hbm0_on_cmds;
+	struct dsi_panel_cmds hbm1_on_cmds;
+	struct dsi_panel_cmds hbm_off_cmds;
+
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
 	u32 *status_value;
@@ -676,6 +681,11 @@ void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
 	u32 mask, u32 val);
 int mdss_dsi_phy_pll_reset_status(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata, int power_state);
+
+void mdss_dsi_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+		struct dsi_panel_cmds *pcmds, u32 flags);
+int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char page,
+		char addr, void (*fxn)(int), char *rbuf, int len);
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {
