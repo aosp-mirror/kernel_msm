@@ -301,6 +301,15 @@ cmd_dt_S_dtb=						\
 $(obj)/%.dtb.S: $(obj)/%.dtb
 	$(call cmd,dt_S_dtb)
 
+BUILD_DTC_PATH = $(subst $\",,$(CONFIG_BUILD_ARM64_DTC))
+ifeq ($(BUILD_DTC_PATH),)
+ifneq ($(DTC_EXT),)
+DTC = $(DTC_EXT)
+else
+DTC = $(objtree)/scripts/dtc/dtc
+endif
+endif
+
 quiet_cmd_dtc = DTC     $@
 cmd_dtc = mkdir -p $(dir ${dtc-tmp}) ; \
 	$(CPP) $(dtc_cpp_flags) -x assembler-with-cpp -o $(dtc-tmp) $< ; \
