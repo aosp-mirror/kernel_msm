@@ -72,15 +72,3 @@
 		power-source = <0>;
 	};
 };
-
-&pmi8998_gpios {
-	poled_err_fg {
-		poled_err_fg_default: poled_err_fg_default {
-			pins = "gpio14";
-			function = "normal";
-			input-enable;
-			bias-no-pull;
-			power-source = <0>;
-		};
-	};
-};
