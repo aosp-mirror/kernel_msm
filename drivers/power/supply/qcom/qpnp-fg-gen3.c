@@ -923,23 +923,6 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		return -ENXIO;
 	}
 
-#ifdef CONFIG_FG_DC_BATT_ID
-	rc = of_property_read_u32(batt_node, "goog,dc-batt-id",
-				  &chip->dc_batt_id);
-	if (rc < 0) {
-		dev_info(chip->dev, "dc_batt_id is missing.\n");
-		chip->dc_batt_id = 0;
-	}
-	chip->dc_batt_id *= 1000;
-
-	rc = of_property_read_u32(batt_node, "qcom,batt-id-range-pct",
-				  &chip->id_range_pct);
-	if (rc < 0) {
-		dev_info(chip->dev, "id_range_pct is missing.\n");
-		chip->id_range_pct = 5;  /* default: 5% */
-	}
-#endif
-
 	profile_node = of_batterydata_get_best_profile(batt_node,
 				(chip->batt_id_ohms + 500) / 1000, NULL);
 	if (IS_ERR(profile_node))
@@ -1150,12 +1133,39 @@ static void fg_notify_charger_fake_battery(struct fg_chip *chip)
 
 static int is_dc_batt_id(struct fg_chip *chip)
 {
-	u32 delta, limit;
+	struct device_node *node = chip->dev->of_node;
+	struct device_node *batt_node;
+	int rc;
+	u32 dc_batt_id, id_range_pct, delta, limit;
 
-	delta = abs(chip->batt_id_ohms - chip->dc_batt_id);
-	limit = (chip->dc_batt_id * chip->id_range_pct) / 100;
+	batt_node = of_find_node_by_name(node, "qcom,battery-data");
+	if (!batt_node) {
+		pr_err("Batterydata not available\n");
+		return false;
+	}
 
-	return (delta < limit);
+	rc = of_property_read_u32(batt_node, "goog,dc-batt-id", &dc_batt_id);
+	if (rc < 0) {
+		dev_info(chip->dev, "dc_batt_id is missing.\n");
+		return false;
+	}
+	dc_batt_id *= 1000;
+
+	rc = of_property_read_u32(batt_node, "qcom,batt-id-range-pct",
+				  &id_range_pct);
+	if (rc < 0 || id_range_pct > 50) {
+		dev_info(chip->dev, "id_range_pct is missing or invalid.\n");
+		id_range_pct = 5;  /* default: 5% */
+	}
+
+	if (chip->batt_id_ohms > dc_batt_id)
+		delta = chip->batt_id_ohms - dc_batt_id;
+	else
+		delta = dc_batt_id - chip->batt_id_ohms;
+	limit = (dc_batt_id * id_range_pct) / 100;
+
+	chip->fake_dc_battery = (delta < limit);
+	return chip->fake_dc_battery;
 }
 #endif
 
@@ -3497,6 +3507,10 @@ static int fg_psy_get_property(struct power_supply *psy,
 		pval->intval = chip->cl.learned_cc_uah;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		if (chip->fake_dc_battery) {
+			pval->intval = 1000000;
+			break;
+		}
 		rc = fg_get_charge_counter(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
