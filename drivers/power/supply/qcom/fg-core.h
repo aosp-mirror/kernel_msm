@@ -442,8 +442,7 @@ struct fg_chip {
 	struct delayed_work	ttf_work;
 	struct delayed_work	sram_dump_work;
 #ifdef CONFIG_FG_DC_BATT_ID
-	u32    dc_batt_id;
-	u32    id_range_pct;
+	bool			fake_dc_battery;
 #endif
 };
 
