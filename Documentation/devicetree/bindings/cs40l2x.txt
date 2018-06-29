@@ -1,4 +1,4 @@
-CS40L20 Boosted Haptics Driver
+CS40L20/CS40L25/CS40L25A/CS40L25B Boosted Haptics Driver
 
 Required properties:
 
@@ -24,6 +24,13 @@ Required properties:
 Optional properties:
 
   - reset-gpios : GPIO used for resetting the device.
+
+  - interrupt-parent : Single phandle representing the interrupt controller to
+    which the /ALERT pin is connected (silicon revision B1 only).
+
+  - interrupts : interrupt specifiers for the device (silicon revision B1 only).
+    See the following:
+    Documentation/devicetree/bindings/interrupt-controller/interrupts.txt
 
   - cirrus,refclk-gpio2 : Boolean for configuring the device to expect its
     32.768-kHz reference clock on the REFCLK/GPIO2 pin. If this property is
@@ -110,7 +117,7 @@ Optional properties:
     device remains in standby and automatic entry into hibernation mode is
     effectively disabled.
 
-Example:
+Examples:
 
   cs40l20: cs40l20@43 {
     compatible = "cirrus,cs40l20";
@@ -122,4 +129,17 @@ Example:
     cirrus,boost-cap-microfarad = <4>;
     cirrus,boost-ipk-milliamp = <4500>;
     cirrus,refclk-gpio2;
+  };
+
+  cs40l25a: cs40l25a@43 {
+    compatible = "cirrus,cs40l25a";
+    reg = <0x43>;
+    reset-gpios = <&gpio0 54 0>;
+    interrupt-parent = <&gpio0>;
+    interrupts = <55 8>;
+    VA-supply = <&dummy_vreg>;
+    VP-supply = <&dummy_vreg>;
+    cirrus,boost-ind-nanohenry = <1000>;
+    cirrus,boost-cap-microfarad = <4>;
+    cirrus,boost-ipk-milliamp = <4500>;
   };
