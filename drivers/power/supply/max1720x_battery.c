@@ -1553,7 +1553,15 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 static void max1720x_set_serial_number(struct max1720x_chip *chip)
 {
 	u16 data0, data1, data2;
-	int date, count = 0;
+	int date, count = 0, shift;
+
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME0, data0);
+	if (data0 == 0x5357) /* "SW": SWD */
+		shift = 0;
+	else if (data0 == 0x4257) /* "BW": DSY */
+		shift = 8;
+	else
+		return;
 
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER0, data0);
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER1, data1);
@@ -1561,7 +1569,7 @@ static void max1720x_set_serial_number(struct max1720x_chip *chip)
 	count += scnprintf(chip->serial_number + count,
 			   sizeof(chip->serial_number) - count,
 			   "%02X%02X%02X",
-			   data0 >> 8, data1 >> 8, data2 >> 8);
+			   data0 >> shift, data1 >> shift, data2 >> shift);
 
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRDATE, data0);
 	date = (((((data0 >> 9) & 0x3f) + 1980) * 10000) +
@@ -1581,7 +1589,7 @@ static void max1720x_set_serial_number(struct max1720x_chip *chip)
 	count += scnprintf(chip->serial_number + count,
 			   sizeof(chip->serial_number) - count,
 			   "%c%c%c",
-			   data0 >> 8, data1 >> 8, data2 >> 8);
+			   data0 >> shift, data1 >> shift, data2 >> shift);
 
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME3, data0);
 	if (data0 >> 8 == 0)
@@ -1598,15 +1606,24 @@ static void max1720x_set_serial_number(struct max1720x_chip *chip)
 		 "%c", data0 >> 8);
 
 	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D0, data0);
-	if (data0 >> 8 == 0xb1) {
-		count += scnprintf(chip->serial_number + count,
-				   sizeof(chip->serial_number) - count, "B1");
-	} else if (data0 >> 8 == 0xc1) {
-		count += scnprintf(chip->serial_number + count,
-				   sizeof(chip->serial_number) - count, "C1");
+	if (shift == 8) {
+		if (data0 >> 8 == 0xb1) {
+			count += scnprintf(chip->serial_number + count,
+					   sizeof(chip->serial_number) - count,
+					   "B1");
+		} else if (data0 >> 8 == 0xc1) {
+			count += scnprintf(chip->serial_number + count,
+					   sizeof(chip->serial_number) - count,
+					   "C1");
+		} else {
+			count += scnprintf(chip->serial_number + count,
+					   sizeof(chip->serial_number) - count,
+					   "??");
+		}
 	} else {
 		count += scnprintf(chip->serial_number + count,
-				   sizeof(chip->serial_number) - count, "??");
+				   sizeof(chip->serial_number) - count,
+				   "%c%c", data0 >> 8, data0 & 0xFF);
 	}
 }
 
