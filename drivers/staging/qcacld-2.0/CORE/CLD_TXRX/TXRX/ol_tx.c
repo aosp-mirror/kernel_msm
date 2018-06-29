@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014, 2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2016-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -282,6 +282,9 @@ ol_tx_ll_queue(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
 
     if (msdu_list == NULL)
         return NULL;
+
+    if (vos_is_logp_in_progress(VOS_MODULE_ID_TXRX, NULL))
+        return msdu_list;
 
     paused_reason = vdev->ll_pause.paused_reason;
     if (paused_reason) {
