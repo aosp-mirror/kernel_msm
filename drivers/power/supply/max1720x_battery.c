@@ -1555,7 +1555,7 @@ static void max1720x_set_serial_number(struct max1720x_chip *chip)
 	u16 data0, data1, data2;
 	int date, count = 0, shift;
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME0, data0);
+	REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, data0);
 	if (data0 == 0x5357) /* "SW": SWD */
 		shift = 0;
 	else if (data0 == 0x4257) /* "BW": DSY */
