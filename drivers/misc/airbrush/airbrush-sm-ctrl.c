@@ -23,6 +23,7 @@
 
 #include "airbrush-sm-ctrl.h"
 #include "airbrush-spi.h"
+#include "airbrush-clk.h"
 #include "airbrush-pmu.h"
 
 static struct ab_state_context *ab_sm_ctx;
@@ -109,7 +110,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	int error;
-
+	struct device_node *child = NULL;
 	/* allocate device memory */
 	ab_sm_ctx = devm_kzalloc(dev, sizeof(struct ab_state_context),
 							GFP_KERNEL);
@@ -177,6 +178,35 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	debugfs_create_file("pcie_pwr_state", 0444, ab_sm_ctx->d_entry, NULL,
 			&ab_pcie_pwr_state_fops);
 #endif
+
+        /* [TBD] Need DDR_SR, DDR_TRAIN, CKE_IN, CKE_IN_SENSE GPIOs for  */
+
+        /* Registering CMUs to ccf framework */
+        /* Parse through the airbrush device node and scan for cmu nodes.
+         * once found, register the same with the common clock framework
+         */
+        for_each_child_of_node (pdev->dev.of_node, child) {
+                if (of_device_is_compatible(child,
+                                        "diablo,abc-clock-aon")) {
+                        abc_clk_aon_init(child);
+                } else if (of_device_is_compatible(child,
+                                        "diablo,abc-clock-core")) {
+                        abc_clk_core_init(child);
+                } else if (of_device_is_compatible(child,
+                                        "diablo,abc-clock-fsys")) {
+                        abc_clk_fsys_init(child);
+                } else if (of_device_is_compatible(child,
+                                        "diablo,abc-clock-mif")) {
+                        abc_clk_mif_init(child);
+                } else if (of_device_is_compatible(child,
+                                        "diablo,abc-clock-ipu")) {
+                        abc_clk_ipu_init(child);
+                } else if (of_device_is_compatible(child,
+                                        "diablo,abc-clock-tpu")) {
+                        abc_clk_tpu_init(child);
+                }
+        }
+
 	return ab_sm_ctx;
 
 fail_fw_patch_en:
