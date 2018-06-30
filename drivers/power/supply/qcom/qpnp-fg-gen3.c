@@ -3507,10 +3507,12 @@ static int fg_psy_get_property(struct power_supply *psy,
 		pval->intval = chip->cl.learned_cc_uah;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+#ifdef CONFIG_FG_DC_BATT_ID
 		if (chip->fake_dc_battery) {
 			pval->intval = 1000000;
 			break;
 		}
+#endif
 		rc = fg_get_charge_counter(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
