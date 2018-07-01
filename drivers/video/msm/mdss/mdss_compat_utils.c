@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  * Copyright (C) 1994 Martin Schaller
  *
  * 2001 - Documented with DocBook
@@ -2848,26 +2848,28 @@ static int __pp_compat_alloc(struct msmfb_mdp_pp32 __user *pp32,
 			*pp = compat_alloc_user_space(alloc_size);
 			if (NULL == *pp)
 				return -ENOMEM;
-			memset(*pp, 0, alloc_size);
-
-			(*pp)->data.lut_cfg_data.data.pgc_lut_data.r_data =
-					(struct mdp_ar_gc_lut_data *)
-					((unsigned long) *pp +
-					sizeof(struct msmfb_mdp_pp));
-			(*pp)->data.lut_cfg_data.data.pgc_lut_data.g_data =
-					(struct mdp_ar_gc_lut_data *)
-					((unsigned long) *pp +
-					sizeof(struct msmfb_mdp_pp) +
-					pgc_size);
-			(*pp)->data.lut_cfg_data.data.pgc_lut_data.b_data =
-					(struct mdp_ar_gc_lut_data *)
+			if (clear_user(*pp, alloc_size))
+				return -EFAULT;
+			if (put_user((struct mdp_ar_gc_lut_data *)
+				((unsigned long) *pp +
+				sizeof(struct msmfb_mdp_pp)),
+			&(*pp)->data.lut_cfg_data.data.pgc_lut_data.r_data) ||
+				put_user((struct mdp_ar_gc_lut_data *)
 					((unsigned long) *pp +
 					sizeof(struct msmfb_mdp_pp) +
-					(2 * pgc_size));
-			(*pp)->data.lut_cfg_data.data.pgc_lut_data.cfg_payload
-					 = (void *)((unsigned long) *pp +
+					pgc_size),
+			&(*pp)->data.lut_cfg_data.data.pgc_lut_data.g_data) ||
+				put_user((struct mdp_ar_gc_lut_data *)
+					((unsigned long) *pp +
 					sizeof(struct msmfb_mdp_pp) +
-					(3 * pgc_size));
+					(2 * pgc_size)),
+			&(*pp)->data.lut_cfg_data.data.pgc_lut_data.b_data) ||
+				put_user((void *)((unsigned long) *pp +
+					sizeof(struct msmfb_mdp_pp) +
+					(3 * pgc_size)),
+					&(*pp)->data.lut_cfg_data.data.
+						pgc_lut_data.cfg_payload))
+				return -EFAULT;
 			break;
 		case mdp_lut_igc:
 			alloc_size += __pp_compat_size_igc();
@@ -2877,10 +2879,13 @@ static int __pp_compat_alloc(struct msmfb_mdp_pp32 __user *pp32,
 					alloc_size);
 				return -ENOMEM;
 			}
-			memset(*pp, 0, alloc_size);
-			(*pp)->data.lut_cfg_data.data.igc_lut_data.cfg_payload
-					= (void *)((unsigned long)(*pp) +
-					   sizeof(struct msmfb_mdp_pp));
+			if (clear_user(*pp, alloc_size))
+				return -EFAULT;
+			if (put_user((void *)((unsigned long)(*pp) +
+					sizeof(struct msmfb_mdp_pp)),
+					&(*pp)->data.lut_cfg_data.data.
+						igc_lut_data.cfg_payload))
+				return -EFAULT;
 			break;
 		case mdp_lut_hist:
 			alloc_size += __pp_compat_size_hist_lut();
@@ -2890,10 +2895,13 @@ static int __pp_compat_alloc(struct msmfb_mdp_pp32 __user *pp32,
 					alloc_size);
 				return -ENOMEM;
 			}
-			memset(*pp, 0, alloc_size);
-			(*pp)->data.lut_cfg_data.data.hist_lut_data.cfg_payload
-					= (void *)((unsigned long)(*pp) +
-					   sizeof(struct msmfb_mdp_pp));
+			if (clear_user(*pp, alloc_size))
+				return -EFAULT;
+			if (put_user((void *)((unsigned long)(*pp) +
+					sizeof(struct msmfb_mdp_pp)),
+					&(*pp)->data.lut_cfg_data.data.
+						hist_lut_data.cfg_payload))
+				return -EFAULT;
 			break;
 		default:
 			*pp = compat_alloc_user_space(alloc_size);
@@ -2902,7 +2910,8 @@ static int __pp_compat_alloc(struct msmfb_mdp_pp32 __user *pp32,
 					alloc_size, lut_type);
 				return -ENOMEM;
 			}
-			memset(*pp, 0, alloc_size);
+			if (clear_user(*pp, alloc_size))
+				return -EFAULT;
 			break;
 		}
 		break;
@@ -2914,10 +2923,12 @@ static int __pp_compat_alloc(struct msmfb_mdp_pp32 __user *pp32,
 				alloc_size);
 			return -ENOMEM;
 		}
-		memset(*pp, 0, alloc_size);
-		(*pp)->data.pcc_cfg_data.cfg_payload =
-				(void *)((unsigned long)(*pp) +
-				 sizeof(struct msmfb_mdp_pp));
+		if (clear_user(*pp, alloc_size))
+			return -EFAULT;
+		if (put_user((void *)((unsigned long)(*pp) +
+				sizeof(struct msmfb_mdp_pp)),
+			&(*pp)->data.pcc_cfg_data.cfg_payload))
+			return -EFAULT;
 		break;
 	case mdp_op_gamut_cfg:
 		alloc_size += __pp_compat_size_gamut();
@@ -2927,10 +2938,12 @@ static int __pp_compat_alloc(struct msmfb_mdp_pp32 __user *pp32,
 				alloc_size);
 			return -ENOMEM;
 		}
-		memset(*pp, 0, alloc_size);
-		(*pp)->data.gamut_cfg_data.cfg_payload =
-				(void *)((unsigned long)(*pp) +
-				 sizeof(struct msmfb_mdp_pp));
+		if (clear_user(*pp, alloc_size))
+			return -EFAULT;
+		if (put_user((void *)((unsigned long)(*pp) +
+				sizeof(struct msmfb_mdp_pp)),
+			&(*pp)->data.gamut_cfg_data.cfg_payload))
+			return -EFAULT;
 		break;
 	case mdp_op_pa_v2_cfg:
 		alloc_size += __pp_compat_size_pa();
@@ -2940,16 +2953,19 @@ static int __pp_compat_alloc(struct msmfb_mdp_pp32 __user *pp32,
 				alloc_size);
 			return -ENOMEM;
 		}
-		memset(*pp, 0, alloc_size);
-		(*pp)->data.pa_v2_cfg_data.cfg_payload =
-				(void *)((unsigned long)(*pp) +
-				sizeof(struct msmfb_mdp_pp));
+		if (clear_user(*pp, alloc_size))
+			return -EFAULT;
+		if (put_user((void *)((unsigned long)(*pp) +
+				sizeof(struct msmfb_mdp_pp)),
+			&(*pp)->data.pa_v2_cfg_data.cfg_payload))
+			return -EFAULT;
 		break;
 	default:
 		*pp = compat_alloc_user_space(alloc_size);
 		if (NULL == *pp)
 			return -ENOMEM;
-		memset(*pp, 0, alloc_size);
+		if (clear_user(*pp, alloc_size))
+			return -EFAULT;
 		break;
 	}
 	return 0;
@@ -3367,7 +3383,9 @@ static int mdss_histo_compat_ioctl(struct fb_info *info, unsigned int cmd,
 				 sizeof(struct mdp_histogram_start_req));
 			return -EINVAL;
 		}
-		memset(hist_req, 0, sizeof(struct mdp_histogram_start_req));
+		if (clear_user(hist_req,
+				 sizeof(struct mdp_histogram_start_req)))
+			return -EFAULT;
 		ret = __from_user_hist_start_req(hist_req32, hist_req);
 		if (ret)
 			goto histo_compat_err;
@@ -3387,7 +3405,8 @@ static int mdss_histo_compat_ioctl(struct fb_info *info, unsigned int cmd,
 				 sizeof(struct mdp_histogram_data));
 			return -EINVAL;
 		}
-		memset(hist, 0, sizeof(struct mdp_histogram_data));
+		if (clear_user(hist, sizeof(struct mdp_histogram_data)))
+			return -EFAULT;
 		ret = __from_user_hist_data(hist32, hist);
 		if (ret)
 			goto histo_compat_err;
@@ -3886,7 +3905,7 @@ static int __to_user_mdp_overlay(struct mdp_overlay32 __user *ov32,
 }
 
 
-static int __from_user_mdp_overlay(struct mdp_overlay *ov,
+static int __from_user_mdp_overlay(struct mdp_overlay __user *ov,
 				   struct mdp_overlay32 __user *ov32)
 {
 	__u32 data;
@@ -3945,12 +3964,12 @@ static int __from_user_mdp_overlay(struct mdp_overlay *ov,
 	return 0;
 }
 
-static int __from_user_mdp_overlaylist(struct mdp_overlay_list *ovlist,
-				   struct mdp_overlay_list32 *ovlist32,
+static int __from_user_mdp_overlaylist(struct mdp_overlay_list __user *ovlist,
+				   struct mdp_overlay_list32 __user *ovlist32,
 				   struct mdp_overlay **to_list_head)
 {
 	__u32 i, ret;
-	unsigned long data, from_list_head;
+	unsigned long data, from_list_head, num_overlays;
 	struct mdp_overlay32 *iter;
 
 	if (!to_list_head || !ovlist32 || !ovlist) {
@@ -3971,11 +3990,13 @@ static int __from_user_mdp_overlaylist(struct mdp_overlay_list *ovlist,
 			 sizeof(ovlist32->processed_overlays)))
 		return -EFAULT;
 
-	if (get_user(data, &ovlist32->overlay_list)) {
+	if (get_user(data, &ovlist32->overlay_list) ||
+		get_user(num_overlays, &ovlist32->num_overlays)) {
 		ret = -EFAULT;
 		goto validate_exit;
 	}
-	for (i = 0; i < ovlist32->num_overlays; i++) {
+
+	for (i = 0; i < num_overlays; i++) {
 		if (get_user(from_list_head, (__u32 *)data + i)) {
 			ret = -EFAULT;
 			goto validate_exit;
@@ -3988,7 +4009,8 @@ static int __from_user_mdp_overlaylist(struct mdp_overlay_list *ovlist,
 			goto validate_exit;
 		}
 	}
-	ovlist->overlay_list = to_list_head;
+	if (put_user(to_list_head, &ovlist->overlay_list))
+		return -EFAULT;
 
 	return 0;
 
@@ -3997,8 +4019,8 @@ validate_exit:
 	return -EFAULT;
 }
 
-static int __to_user_mdp_overlaylist(struct mdp_overlay_list32 *ovlist32,
-				   struct mdp_overlay_list *ovlist,
+static int __to_user_mdp_overlaylist(struct mdp_overlay_list32 __user *ovlist32,
+				   struct mdp_overlay_list __user *ovlist,
 				   struct mdp_overlay **l_ptr)
 {
 	__u32 i, ret;
@@ -4071,31 +4093,33 @@ static u32 __pp_sspp_size(void)
 	return size;
 }
 
-static int __pp_sspp_set_offsets(struct mdp_overlay *ov)
+static int __pp_sspp_set_offsets(struct mdp_overlay __user *ov)
 {
 	if (!ov) {
 		pr_err("invalid overlay pointer\n");
 		return -EFAULT;
 	}
-	ov->overlay_pp_cfg.igc_cfg.cfg_payload = (void *)((unsigned long)ov +
-				sizeof(struct mdp_overlay));
-	ov->overlay_pp_cfg.pa_v2_cfg_data.cfg_payload =
-		ov->overlay_pp_cfg.igc_cfg.cfg_payload +
-		sizeof(struct mdp_igc_lut_data_v1_7);
-	ov->overlay_pp_cfg.pcc_cfg_data.cfg_payload =
-		ov->overlay_pp_cfg.pa_v2_cfg_data.cfg_payload +
-		sizeof(struct mdp_pa_data_v1_7);
-	ov->overlay_pp_cfg.hist_lut_cfg.cfg_payload =
-		ov->overlay_pp_cfg.pcc_cfg_data.cfg_payload +
-		sizeof(struct mdp_pcc_data_v1_7);
+	if (put_user((void *)((unsigned long)ov + sizeof(struct mdp_overlay)),
+			 &(ov->overlay_pp_cfg.igc_cfg.cfg_payload)) ||
+		put_user(ov->overlay_pp_cfg.igc_cfg.cfg_payload +
+			sizeof(struct mdp_igc_lut_data_v1_7),
+			&(ov->overlay_pp_cfg.pa_v2_cfg_data.cfg_payload)) ||
+		put_user(ov->overlay_pp_cfg.pa_v2_cfg_data.cfg_payload +
+			 sizeof(struct mdp_pa_data_v1_7),
+			&(ov->overlay_pp_cfg.pcc_cfg_data.cfg_payload)) ||
+		put_user(ov->overlay_pp_cfg.pcc_cfg_data.cfg_payload +
+			sizeof(struct mdp_pcc_data_v1_7),
+			&(ov->overlay_pp_cfg.hist_lut_cfg.cfg_payload)))
+		return -EFAULT;
 	return 0;
 }
 
 int mdss_compat_overlay_ioctl(struct fb_info *info, unsigned int cmd,
 			 unsigned long arg, struct file *file)
 {
-	struct mdp_overlay *ov, **layers_head;
-	struct mdp_overlay32 *ov32;
+	struct mdp_overlay **layers_head;
+	struct mdp_overlay __user *ov;
+	struct mdp_overlay32 __user *ov32;
 	struct mdp_overlay_list __user *ovlist;
 	struct mdp_overlay_list32 __user *ovlist32;
 	size_t layers_refs_sz, layers_sz, prepare_sz;
