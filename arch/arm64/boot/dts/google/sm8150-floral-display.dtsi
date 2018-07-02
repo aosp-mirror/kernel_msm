@@ -63,6 +63,14 @@
 	};
 };
 
+&sde_dp {
+	status = "disabled";
+};
+
+&mdss_mdp {
+	connectors = <&sde_rscc &sde_wb &sde_dsi>;
+};
+
 &soc {
 	dsi_panel_pwr_supply_s6e3ha8: dsi_panel_pwr_supply_s6e3ha8 {
 		#address-cells = <1>;
