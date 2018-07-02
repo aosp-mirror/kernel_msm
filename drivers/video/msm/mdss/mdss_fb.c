@@ -1867,6 +1867,10 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		req_power_state = MDSS_PANEL_POWER_LP1;
 		pr_debug(" power mode requested\n");
 
+		if (!lcd_loadswitch_flag)
+			if (gpio_direction_output(75, 1))
+				pr_err("%s:gpio75 set error\n", __func__);
+
 		/*
 		 * If low power mode is requested when panel is already off,
 		 * then first unblank the panel before entering low power mode

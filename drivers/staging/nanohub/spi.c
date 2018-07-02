@@ -456,7 +456,9 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (event == FB_EARLY_EVENT_BLANK && *blank == FB_BLANK_POWERDOWN)
 		ret = __nanohub_send_AP_cmd(&spi_data->data, GPIO_CMD_AMBIENT);
 
-	if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
+	if (event == FB_EVENT_BLANK &&
+		(*blank == FB_BLANK_UNBLANK
+		|| *blank == FB_BLANK_VSYNC_SUSPEND))
 		ret = __nanohub_send_AP_cmd(&spi_data->data, GPIO_CMD_NORMAL);
 
 	return ret;
