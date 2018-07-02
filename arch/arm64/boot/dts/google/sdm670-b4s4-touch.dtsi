@@ -103,5 +103,8 @@
 		synaptics,reset-delay-ms = <20>;
 		synaptics,reset-on-state = <0>;
 		synaptics,reset-active-ms = <1>;
+		synaptics,tp-pin-mask = <0x6>;
+		synaptics,tp-src-id = <0x0 0x2>;
+		synaptics,tp-src-img = "synaptics_0.img", "synaptics_2.img";
 	};
 };
