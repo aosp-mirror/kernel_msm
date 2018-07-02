@@ -440,6 +440,7 @@ struct synaptics_rmi4_data {
 	unsigned short f54_ns_offset;
 	unsigned short f54_cidim_offset;
 	unsigned short f54_freq_offset;
+	unsigned short tp_vendor;
 #ifdef F51_DISCRETE_FORCE
 	unsigned short f51_query_base_addr;
 #endif

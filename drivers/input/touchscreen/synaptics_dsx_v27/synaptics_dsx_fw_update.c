@@ -44,9 +44,8 @@
 
 #define FW_IHEX_NAME "synaptics/startup_fw_update.bin"
 #define FW_IMAGE_NAME "synaptics/startup_fw_update.img"
-/*
+
 #define DO_STARTUP_FW_UPDATE
-*/
 /*
 #ifdef DO_STARTUP_FW_UPDATE
 #ifdef CONFIG_FB
@@ -2712,6 +2711,49 @@ static int fwu_get_device_config_id(void)
 	return 0;
 }
 
+static int fwu_get_tp_vendor_v7(void)
+{
+	int retval;
+	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	unsigned char base;
+	unsigned char data[10], mask_data[2];
+	unsigned short tp_pin_mask = rmi4_data->hw_if->board_data->tp_pin_mask;
+
+	base = fwu->f34_fd.data_base_addr;
+
+	memcpy(&mask_data, &tp_pin_mask, sizeof(tp_pin_mask));
+	memset(data, 0x00, sizeof(data));
+	data[0] = BOOTLOADER_PARTITION;
+	data[5] = (unsigned char)CMD_V7_SENSOR_ID;
+	data[6] = data[8] = mask_data[0];
+	data[7] = data[9] = mask_data[1];
+
+	retval = synaptics_rmi4_reg_write(rmi4_data,
+			base + fwu->off.partition_id,
+			data,
+			sizeof(data));
+	if (retval < 0) {
+		pr_err("%s: Failed to write tw vendor pin\n", __func__);
+		return -EINVAL;
+	}
+
+	retval = fwu_wait_for_idle(ENABLE_WAIT_MS, false);
+	if (retval < 0)
+		return retval;
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			base + fwu->off.payload,
+			data,
+			6);
+	if (retval < 0) {
+		pr_err("%s: Failed to read tw vendor pin\n", __func__);
+		return -EINVAL;
+	}
+	rmi4_data->tp_vendor = (data[5] << 8) | data[4];
+
+	return 0;
+}
+
 static enum flash_area fwu_go_nogo(void)
 {
 	int retval;
@@ -2749,14 +2791,8 @@ static enum flash_area fwu_go_nogo(void)
 			"%s: Image firmware ID = %d\n",
 			__func__, image_fw_id);
 
-	if (image_fw_id > device_fw_id) {
+	if (image_fw_id != device_fw_id) {
 		flash_area = UI_FIRMWARE;
-		goto exit;
-	} else if (image_fw_id < device_fw_id) {
-		dev_info(rmi4_data->pdev->dev.parent,
-				"%s: Image firmware ID older than device firmware ID\n",
-				__func__);
-		flash_area = NONE;
 		goto exit;
 	}
 
@@ -2776,11 +2812,8 @@ static enum flash_area fwu_go_nogo(void)
 		config_id_size = V5V6_CONFIG_ID_SIZE;
 
 	for (ii = 0; ii < config_id_size; ii++) {
-		if (fwu->img.ui_config.data[ii] > fwu->config_id[ii]) {
+		if (fwu->img.ui_config.data[ii] != fwu->config_id[ii]) {
 			flash_area = UI_CONFIG;
-			goto exit;
-		} else if (fwu->img.ui_config.data[ii] < fwu->config_id[ii]) {
-			flash_area = NONE;
 			goto exit;
 		}
 	}
@@ -4342,6 +4375,38 @@ exit:
 	return retval;
 }
 
+static const char *fwu_get_tp_img(struct synaptics_rmi4_data *rmi4_data)
+{
+	uint32_t i;
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
+
+	if (fwu_enter_flash_prog() < 0)
+		goto err_get_img_name;
+
+	if (fwu_get_tp_vendor_v7() < 0)
+		goto err_get_img_name;
+
+	for (i = 0; i < bdata->tp_src_num; i++) {
+		if (rmi4_data->tp_vendor == bdata->tp_src_id[i]) {
+			pr_info("FW: %s, id %#x\n", bdata->tp_src[i],
+					rmi4_data->tp_vendor);
+			rmi4_data->reset_device(rmi4_data, false);
+			return bdata->tp_src[i];
+		}
+	}
+
+	pr_err("No matching FW for id %#x\n", rmi4_data->tp_vendor);
+	for (i = 0; i < bdata->tp_src_num; i++) {
+		pr_err("id: %#x, src: %s:\n", bdata->tp_src_id[i],
+				bdata->tp_src[i]);
+	}
+
+err_get_img_name:
+	rmi4_data->reset_device(rmi4_data, false);
+	return NULL;
+}
+
 static int fwu_start_reflash(void)
 {
 	int retval = 0;
@@ -4349,6 +4414,9 @@ static int fwu_start_reflash(void)
 	bool do_rebuild = false;
 	const struct firmware *fw_entry = NULL;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
+	const char *fw_image_name = NULL;
 
 	if (rmi4_data->sensor_sleep) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -4364,9 +4432,21 @@ static int fwu_start_reflash(void)
 	pr_notice("%s: Start of reflash process\n", __func__);
 
 	if (fwu->image == NULL) {
-		retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
-				FW_IMAGE_NAME, sizeof(FW_IMAGE_NAME),
-				sizeof(FW_IMAGE_NAME));
+		if (bdata->tp_pin_mask)
+			fw_image_name = fwu_get_tp_img(rmi4_data);
+
+		if (fw_image_name) {
+			retval = secure_memcpy(fwu->image_name,
+					MAX_IMAGE_NAME_LEN, fw_image_name,
+					strlen(fw_image_name),
+					strlen(fw_image_name));
+		} else {
+			retval = secure_memcpy(fwu->image_name,
+					MAX_IMAGE_NAME_LEN, FW_IMAGE_NAME,
+					sizeof(FW_IMAGE_NAME),
+					sizeof(FW_IMAGE_NAME));
+		}
+
 		if (retval < 0) {
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to copy image file name\n",

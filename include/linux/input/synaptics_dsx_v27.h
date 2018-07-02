@@ -96,6 +96,7 @@ struct synaptics_dsx_board_data {
 	unsigned short i2c_addr;
 	unsigned short ub_i2c_addr;
 	unsigned short device_descriptor_addr;
+	unsigned short tp_pin_mask;
 	unsigned int panel_x;
 	unsigned int panel_y;
 	unsigned int power_delay_ms;
@@ -106,8 +107,11 @@ struct synaptics_dsx_board_data {
 	unsigned int addr_delay_us;
 	unsigned int display_width;
 	unsigned int display_height;
+	unsigned int *tp_src_id;
+	unsigned char tp_src_num;
 	const char *pwr_reg_name;
 	const char *bus_reg_name;
+	const char **tp_src;
 	struct synaptics_dsx_button_map *cap_button_map;
 	struct synaptics_dsx_button_map *vir_button_map;
 };

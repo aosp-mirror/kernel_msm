@@ -61,7 +61,7 @@ static struct platform_device *synaptics_dsx_i2c_device;
 #ifdef CONFIG_OF
 static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 {
-	int retval;
+	int retval, i;
 	u32 value;
 	const char *name;
 	unsigned int coords[2];
@@ -265,6 +265,62 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 					__func__, prop->length / sizeof(u32));
 	}
 
+	retval = of_property_read_u32(np, "synaptics,tp-pin-mask", &value);
+	if (retval < 0) {
+		bdata->tp_pin_mask = 0;
+		goto skip_fwupdate_feautre;
+	} else {
+		bdata->tp_pin_mask = value;
+	}
+
+	prop = of_find_property(np, "synaptics,tp-src-id", NULL);
+	if (prop && prop->length) {
+		bdata->tp_src_num = prop->length / sizeof(u32);
+		bdata->tp_src_id = devm_kzalloc(dev, prop->length,
+				GFP_KERNEL);
+		retval = of_property_read_u32_array(np,
+				"synaptics,tp-src-id",
+				bdata->tp_src_id,
+				bdata->tp_src_num);
+		if (retval < 0) {
+			dev_err(dev, "%s: Unable to read synaptics,tp-src-id property\n",
+					__func__);
+			return retval;
+		}
+	} else {
+		bdata->tp_src_num = 0;
+		bdata->tp_src_id = NULL;
+		dev_err(dev, "%s: Unable to find synaptics,tp-src-id property\n",
+				__func__);
+		goto skip_fwupdate_feautre;
+	}
+
+	prop = of_find_property(np, "synaptics,tp-src-img", NULL);
+	if (prop && prop->length &&
+			bdata->tp_src_num == of_property_count_strings(
+			np, "synaptics,tp-src-img")) {
+		bdata->tp_src = devm_kzalloc(dev, prop->length, GFP_KERNEL);
+
+		for (i = 0; i < bdata->tp_src_num; i++) {
+			retval = of_property_read_string_index(np,
+					"synaptics,tp-src-img", i, &name);
+			if (retval < 0) {
+				dev_err(dev, "%s: Unable to read synaptics,tp-src-img property\n",
+						__func__);
+				return retval;
+			} else {
+				bdata->tp_src[i] = name;
+			}
+		}
+	} else {
+		bdata->tp_src_num = 0;
+		bdata->tp_src_id = NULL;
+		bdata->tp_src = NULL;
+		dev_err(dev, "%s: Incorrect synaptics,tp-src-img property\n",
+				__func__);
+	}
+
+skip_fwupdate_feautre:
 	return 0;
 }
 #endif
