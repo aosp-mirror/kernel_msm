@@ -1828,5 +1828,20 @@ config MFD_VEXPRESS_SYSREG
 	  System Registers are the platform configuration block
 	  on the ARM Ltd. Versatile Express board.
 
+config  MFD_ABC_PCIE
+	bool "ABC_PCIE API Function Driver"
+	default n
+	select MFD_CORE
+	select MFD_SYSCON
+	help
+	 ABC_PCIe API Function driver.Registers other functions
+	 as MFD devices.
+
+config MULTIPLE_BAR_MAP_FOR_ABC_SFR
+	bool "Specific to Lassen PCIe platform"
+	depends on MFD_ABC_PCIE
+	help
+	 Needed for LASSEN PCIe host setup.
+
 endmenu
 endif
