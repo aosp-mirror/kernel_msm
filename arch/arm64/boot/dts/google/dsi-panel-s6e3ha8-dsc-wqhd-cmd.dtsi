@@ -41,11 +41,6 @@
 		qcom,mdss-dsi-panel-peak-brightness = <5530000>;
 		qcom,mdss-dsi-panel-blackness-level = <40>;
 
-		/* High brightness mode */
-		qcom,mdss-dsi-bl-hbm-enable;
-		qcom,mdss-dsi-bl-hbm-min-level = <0x3ff>;
-		qcom,mdss-dsi-bl-hbm-max-level = <0x3ff>;
-
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-wr-mem-start = <0x2c>;
@@ -133,11 +128,6 @@
 					15 01 00 00 00 00 02 53 20
 				];
 
-				qcom,mdss-dsi-hbm-command = [
-					/* Enable high brightness */
-					15 01 00 00 00 00 02 53 E0
-				];
-
 				qcom,mdss-dsi-nohbm-command = [
 					/* Disable high brightness */
 					15 01 00 00 00 00 02 53 20
@@ -196,6 +186,41 @@
 					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+		};
+
+		google,hbm-ranges {
+			hbm-range@0 {
+				google,dsi-hbm-brightness-threshold = <1>;
+
+				google,dsi-bl-hbm-min-level = <0x5>;
+				google,dsi-bl-hbm-max-level = <0x3ff>;
+				google,dsi-hbm-range-entry-command = [
+					/* Disable high brightness */
+					15 01 00 00 00 00 02 53 20
+				];
+				google,dsi-hbm-commands-state = "dsi_lp_mode";
+			};
+
+			hbm-range@1 {
+				/* Normal brightness mode covers ~2 to 400
+				 * nits, using panel brightness values up to
+				 * 0x3ff. HBM extends the range to 600 nits,
+				 * and remaps user brightness 1-255 to cover
+				 * this extended range. In this extended range,
+				 * 400 nits / 0x3ff corresponds to user
+				 * brightness 170. Panel brightness is not
+				 * adjustable in the 400-600 nit segment.
+				 */
+				google,dsi-hbm-brightness-threshold = <170>;
+
+				google,dsi-bl-hbm-min-level = <0x3ff>;
+				google,dsi-bl-hbm-max-level = <0x3ff>;
+				google,dsi-hbm-range-entry-command = [
+					/* Enable high brightness */
+					15 01 00 00 00 00 02 53 E0
+				];
+				google,dsi-hbm-commands-state = "dsi_lp_mode";
 			};
 		};
 	};

@@ -60,10 +60,6 @@
 		qcom,mdss-dsi-panel-peak-brightness = <6200000>;
 		qcom,mdss-dsi-panel-blackness-level = <42>;
 
-		/* High brightness mode */
-		qcom,mdss-dsi-bl-hbm-enable;
-		qcom,mdss-dsi-bl-hbm-max-level = <0x3ff>;
-
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
@@ -204,6 +200,15 @@
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+		};
+
+		google,hbm-ranges {
+			hbm-range@0 {
+				google,dsi-hbm-brightness-threshold = <1>;
+
+				google,dsi-bl-hbm-min-level = <0x8>;
+				google,dsi-bl-hbm-max-level = <0x3ff>;
 			};
 		};
 	};
