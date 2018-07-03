@@ -584,6 +584,10 @@ static ssize_t cs40l2x_hiber_timeout_show(struct device *dev,
 	int ret;
 	unsigned int val;
 
+	/* hibernation is supported by revision B1 firmware only */
+	if (cs40l2x->revid < CS40L2X_REVID_B1)
+		return -EPERM;
+
 	mutex_lock(&cs40l2x->lock);
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
@@ -605,6 +609,10 @@ static ssize_t cs40l2x_hiber_timeout_store(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
 	unsigned int val;
+
+	/* hibernation is supported by revision B1 firmware only */
+	if (cs40l2x->revid < CS40L2X_REVID_B1)
+		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
