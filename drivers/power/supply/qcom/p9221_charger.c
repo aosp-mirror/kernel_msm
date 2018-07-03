@@ -900,6 +900,9 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 	int ret;
 	uint32_t tx_id = 0;
 
+	if (!charger->online)
+		return NULL;
+
 	if (p9221_is_r5(charger)) {
 		pm_runtime_get_sync(charger->dev);
 		if (!charger->resume_complete) {
