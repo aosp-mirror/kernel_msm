@@ -507,5 +507,6 @@ extern int fts_ts_start(struct device *dev);
 /*******************************************************************************
 * Static function prototypes
 *******************************************************************************/
+int fts_ts_resume(struct device *dev);
 
 #endif
