@@ -1185,14 +1185,16 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 
 	/* We may have already gone online during check_det */
 	if (charger->online == prop.intval)
-		return;
+		goto out;
 
 	if (prop.intval)
 		p9221_set_online(charger);
 	else
 		p9221_set_offline(charger);
 
-	dev_info(&charger->client->dev, "trigger wc changed\n");
+out:
+	dev_info(&charger->client->dev, "trigger wc changed on:%d in:%d\n",
+		 charger->online, prop.intval);
 	power_supply_changed(charger->wc_psy);
 }
 
