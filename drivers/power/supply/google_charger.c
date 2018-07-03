@@ -329,13 +329,13 @@ static void chg_work(struct work_struct *work)
 	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
 
-
 	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
 	if (wlc_psy)
 		wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
 
 	/* If no power source, disable charging and exit */
 	if (!usb_present && !wlc_online) {
+		pr_info("no power source detected, disabling charging\n");
 		reset_chg_drv_state(chg_drv);
 		goto exit_chg_work;
 	}
@@ -412,24 +412,44 @@ static void chg_work(struct work_struct *work)
 		|| chg_drv->vbatt_idx == -1) {
 		/* seed voltage only when really needed */
 		if (chg_drv->vbatt_idx == -1) {
+			/* headroom (fv_uv - vbatt) must allow to send to the
+			 * battery max FCC current for the selected tier but we
+			 * can settle for next tier max FCC current.
+			 * NOTE: MUST be able to send to battery current well
+			 * over charge termination current.
+			 */
 			vbatt_idx = msc_voltage_idx(chg_drv, vbatt);
+			if (vbatt_idx != profile->volt_nb_limits - 1) {
+				const int vt = profile->volt_limits[vbatt_idx];
+				const int headr = profile->cv_hw_resolution * 3;
+
+				if ((vt - vbatt) < headr)
+					vbatt_idx += 1;
+			}
+
 			fv_uv = profile->volt_limits[vbatt_idx];
 		}
 
-		pr_info("MSC_SEED temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d\n",
-			chg_drv->temp_idx, temp_idx, chg_drv->vbatt_idx,
-			vbatt_idx, chg_drv->fv_uv, fv_uv);
+		pr_info("MSC_SEED temp=%d vbatt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d\n",
+			temp, vbatt, chg_drv->temp_idx, temp_idx,
+			chg_drv->vbatt_idx, vbatt_idx,
+			chg_drv->fv_uv, fv_uv);
 
 		/* Debounce tier switch only when not already switching */
 		if (chg_drv->checked_tier_switch_cnt == 0)
 			chg_drv->checked_cv_cnt = profile->cv_debounce_cnt;
 	} else if (ibatt > 0) {
-		/* discharging: reset chg_drv state() and check again soon */
-		pr_info("MSC_DISCHARGE ibatt=%d\n", ibatt);
-		reset_chg_drv_state(chg_drv);
+		/* will reset chg_drv state() when POWER_SUPPLY_PROP_STATUS is
+		 * POWER_SUPPLY_STATUS_DISCHARGING and stop charging work or
+		 * check again soon when/if discharging is due to system load,
+		 * low ILIM or lack of headroom
+		 */
 		update_interval = profile->cv_update_interval;
-		rerun_work = true;
-		goto handle_rerun;
+
+		pr_info("MSC_DISCHARGE vbatt=%d ibatt=%d fv_uv=%d cv_cnt=%d ov_cnt=%d\n",
+			vbatt, ibatt, fv_uv,
+			chg_drv->checked_cv_cnt,
+			chg_drv->checked_ov_cnt);
 	} else if (chg_drv->vbatt_idx == profile->volt_nb_limits - 1) {
 		/* will not adjust changer voltage only in the configured
 		 * last tier.
@@ -452,12 +472,19 @@ static void chg_work(struct work_struct *work)
 			const int cc_max =
 				CCCM_LIMITS(profile, temp_idx, vbatt_idx);
 
-			/* pullback, fast poll, penalty on TAPER_RAISE and
-			 * no cv debounce (so will consider switching voltage
-			 * tiers if the current is right)
+			/* pullback when over tier voltage, fast poll, penalty
+			 * on TAPER_RAISE and no cv debounce (so will consider
+			 * switching voltage tiers if the current is right).
+			 * NOTE: lowering voltage might cause current to drop
+			 * under next tier yet this is a small drop in voltage
+			 * and the drop in current should be small enough.
 			 */
+
 			fv_uv = msc_round_fv_uv(profile, vtier,
 				fv_uv - profile->cv_hw_resolution);
+			if (fv_uv < vtier)
+				fv_uv = vtier;
+
 			update_interval = profile->cv_update_interval;
 			chg_drv->checked_ov_cnt = profile->cv_tier_ov_cnt;
 			chg_drv->checked_cv_cnt = 0;
@@ -465,6 +492,7 @@ static void chg_work(struct work_struct *work)
 			if (-ibatt == cc_max) {
 			/* double penalty if at full current (add margin?) */
 				chg_drv->checked_ov_cnt *= 2;
+
 				pr_info("MSC_VOVER vbatt=%d ibatt=%d vtier=%d fv_uv=%d\n",
 					vbatt, ibatt, vtier, chg_drv->fv_uv);
 			} else if (chg_drv->checked_tier_switch_cnt > 0) {
@@ -502,15 +530,14 @@ static void chg_work(struct work_struct *work)
 				vtier, vbatt, vchrg, chg_drv->fv_uv, fv_uv);
 
 		} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
-		/* Not fast or taper, we are debouncing (-ibatt > cc_next_max)
-		 * as we cannot tell if current low is an ESR or actually low
-		 * force switch tier here given b/110731824 b/110812377
-		 * Vfloat ~= Vbatt, current low => end of charge so type
-		 * is not fast or taper
+		/* Not fast or taper: set checked_cv_cnt=9 to make sure we test
+		 * for current and avoid early termination in case of lack of
+		 * headroom (Vfloat ~= Vbatt)
+		 * NOTE: not sure this can cause early switch
 		 */
 			pr_info("MSC_TYPE chg_type=%d vbatt=%d vtier=%d fv_uv=%d\n",
 				chg_type, vbatt, vtier, fv_uv);
-			switch_tier_now = true;
+			chg_drv->checked_cv_cnt = 0;
 		} else if (chg_drv->checked_cv_cnt + chg_drv->checked_ov_cnt) {
 		/* TAPER_COUNTDOWN: countdown to raise fv_uv and/or check
 		 * for tier switch, will keep steady...
@@ -615,6 +642,7 @@ static void chg_work(struct work_struct *work)
 		chg_drv->fv_uv = fv_uv;
 	}
 
+	/* DISCHARGING only when not connected */
 	batt_status = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
 
 	switch (batt_status) {
