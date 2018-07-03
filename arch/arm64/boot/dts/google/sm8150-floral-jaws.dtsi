@@ -26,6 +26,7 @@
 #include "sm8150-floral-qup.dtsi"
 #include "sm8150-floral-regulator.dtsi"
 #include "sm8150-floral-thermal.dtsi"
+#include "sm8150-floral-touch-jaws.dtsi"
 #include "sm8150-floral-vadc.dtsi"
 
 &vendor {

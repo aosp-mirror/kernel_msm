@@ -17,30 +17,6 @@
 	status = "ok";
 };
 
-&qupv3_se0_i2c { // touch controller on AP QUP 0
-	status = "ok";
-	qcom,clk-freq-out = <400000>;
-	touchscreen@48 {
-		status = "ok";
-		compatible = "sec,sec_ts";
-		reg = <0x48>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <122 0x2008>;
-		vdd-supply = <&pm8150_l14>;
-		avdd-supply = <&pm8150_l17>;
-		pinctrl-names = "on_state", "off_state";
-		pinctrl-0 = <&ts_active &ts_reset_active>;
-		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		sec,irq_gpio = <&tlmm 122 0>;
-		sec,max_coords = <1440 2960>;
-		sec,firmware_name = "s6sy761.fw";
-		sec,regulator_dvdd = "pm8150_l14"; // maybe pm8150_lxx
-		sec,project_name = "test", "test2";
-		sec,regulator_avdd = "pm8150_l17"; // maybe pm8150_lxx
-		// reset is GPIO 127
-	};
-};
-
 // reserved for haptics/batt/etc i2c
 &qupv3_se15_i2c {
 	status = "ok";
