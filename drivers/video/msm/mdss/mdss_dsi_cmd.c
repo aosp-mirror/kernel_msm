@@ -843,7 +843,6 @@ void mdss_dsi_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
     mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
-
 static char _dcs_cmd[2] = {0x00, 0x00};
 static struct dsi_cmd_desc _dcs_read_cmd = {
 	{DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(_dcs_cmd)}, _dcs_cmd};
@@ -851,7 +850,6 @@ static struct dsi_cmd_desc _dcs_read_cmd = {
 int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char page,
 		char addr, void (*fxn)(int), char *rbuf, int len)
 {
-
     struct dcs_cmd_req cmdreq;
     struct mdss_panel_info *pinfo;
 
@@ -879,6 +877,7 @@ int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char page,
     return mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
+static char read_back_param[] = {0x00};
 void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
 {
     struct dsi_panel_cmds *hbm_on_cmds;
@@ -893,6 +892,9 @@ void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
 
         return;
     }
+
+    mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL, read_back_param, 1);
+    pr_info("%s: read_back_param[0] = 0x%02x\n", __func__, read_back_param[0]);
 
     mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL, rx_buf, 1);
     pr_info("%s: rx_buf[0] = 0x%02x\n", __func__, rx_buf[0]);
@@ -928,7 +930,6 @@ void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
         pr_info("%s: boost on!\n", __func__);
     }
 
-
     kfree(rx_buf);
 
     return;
@@ -938,24 +939,11 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 {
     struct dsi_panel_cmds *hbm_off_cmds;
 
-    char *rx_buf;
-
-    rx_buf = kzalloc(1, GFP_KERNEL);
-    if(!rx_buf)
-    {
-        pr_err("kzalloc fail\n");
-        kfree(rx_buf);
-
-        return;
-    }
-
-    mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL, rx_buf, 1);
-    pr_info("%s: rx_buf[0] = 0x%02x\n", __func__, rx_buf[0]);
+    pr_info("%s: read_back_param[0] = 0x%02x\n", __func__, read_back_param[0]);
 
     //write back to HBM off command flow
     hbm_off_cmds = &ctrl->hbm_off_cmds;
-    hbm_off_cmds->cmds[12].payload[1] = rx_buf[0];
-
+    hbm_off_cmds->cmds[12].payload[1] = read_back_param[0];
 
     if(hbm_off_cmds->cmd_cnt)
     {
@@ -963,9 +951,6 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 
         pr_info("%s: boost off!\n", __func__);
     }
-
-
-    kfree(rx_buf);
 
     return;
 }
