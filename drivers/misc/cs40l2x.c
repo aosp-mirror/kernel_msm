@@ -3434,7 +3434,7 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 		event_count++;
 	}
 
-	return event_count ? IRQ_HANDLED : IRQ_NONE;
+	return (event_count > 0) ? IRQ_HANDLED : IRQ_NONE;
 }
 
 static struct regmap_config cs40l2x_regmap = {
@@ -3533,8 +3533,7 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 		if (i2c_client->irq) {
 			ret = devm_request_threaded_irq(dev, i2c_client->irq,
 					NULL, cs40l2x_irq,
-					IRQF_ONESHOT | IRQF_TRIGGER_LOW
-						| IRQF_SHARED,
+					IRQF_ONESHOT | IRQF_TRIGGER_LOW,
 					i2c_client->name, cs40l2x);
 			if (ret) {
 				dev_err(dev,
