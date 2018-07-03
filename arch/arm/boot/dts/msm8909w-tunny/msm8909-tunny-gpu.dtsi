@@ -74,6 +74,9 @@
 				"mem_iface_clk", "alt_mem_iface_clk",
 				"gtcu_iface_clk";
 
+		/* To disable GPU wake up on touch event */
+		qcom,disable-wake-on-touch;
+
 		/* Bus Scale Settings */
 		qcom,gpubw-dev = <&gpubw>;
 		qcom,msm-bus,name = "grp3d";
