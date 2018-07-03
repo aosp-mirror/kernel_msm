@@ -28,7 +28,17 @@
 #include "sdm670-b4s4-usb-common.dtsi"
 
 / {
-       qcom,msm-id = <0x150 0x0>;
+	qcom,msm-id = <0x150 0x0>;
+
+	firmware: firmware {
+		android {
+			fstab {
+				vendor {
+					dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/vendor";
+				};
+			};
+		};
+	};
 };
 
 &qupv3_se10_i2c {
