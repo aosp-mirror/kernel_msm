@@ -26,7 +26,6 @@
 #include <linux/cpu.h>
 #include <linux/cpu_pm.h>
 #include <linux/platform_device.h>
-#include <linux/nmi.h>
 #include <linux/wait.h>
 #include <soc/qcom/scm.h>
 #include <soc/qcom/memory_dump.h>
@@ -90,7 +89,6 @@ struct msm_watchdog_data {
 
 	struct task_struct *watchdog_task;
 	struct timer_list pet_timer;
-	struct timer_list pet_observer;
 	wait_queue_head_t pet_complete;
 
 	bool timer_expired;
@@ -219,7 +217,6 @@ static void wdog_disable(struct msm_watchdog_data *wdog_dd)
 	smp_mb();
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 						&wdog_dd->panic_blk);
-	del_timer_sync(&wdog_dd->pet_observer);
 	del_timer_sync(&wdog_dd->pet_timer);
 	/* may be suspended after the first write above */
 	__raw_writel(0, wdog_dd->base + WDT0_EN);
@@ -403,45 +400,6 @@ static void ping_other_cpus(struct msm_watchdog_data *wdog_dd)
 	}
 }
 
-#define PET_THRESHOLD_SECS (12)
-
-static void show_blocked_states(void)
-{
-	struct task_struct *g, *p;
-	rcu_read_lock();
-	for_each_process_thread(g, p) {
-		/*
-		 * reset the NMI-timeout, listing all files on a slow
-		 * console might take a lot of time:
-		 */
-		touch_nmi_watchdog();
-		if (p->state & TASK_UNINTERRUPTIBLE)
-			sched_show_task(p);
-	}
-	rcu_read_unlock();
-}
-
-static void pet_observer_fn(unsigned long data)
-{
-	struct msm_watchdog_data *wdog_dd =
-		(struct msm_watchdog_data *)data;
-	int pet_timeout = (sched_clock() - wdog_dd->last_pet) / NSEC_PER_SEC;
-
-	if (pet_timeout < PET_THRESHOLD_SECS)
-		mod_timer(&wdog_dd->pet_observer, jiffies + msecs_to_jiffies(
-				(PET_THRESHOLD_SECS - pet_timeout) * 1000));
-	else {
-		pr_warn("MSM watchdog blocked for %d seconds\n", pet_timeout);
-		pr_warn("  Dump all CPU backtrace:\n");
-		trigger_all_cpu_backtrace();
-		pr_warn("  Show Blocked State:\n");
-		show_blocked_states();
-
-		mod_timer(&wdog_dd->pet_observer,
-				jiffies + msecs_to_jiffies(1 * 1000));
-	}
-}
-
 static void pet_task_wakeup(unsigned long data)
 {
 	struct msm_watchdog_data *wdog_dd =
@@ -528,7 +486,6 @@ static int msm_watchdog_remove(struct platform_device *pdev)
 	if (wdog_dd->irq_ppi)
 		free_percpu(wdog_dd->wdog_cpu_dd);
 	dev_info(wdog_dd->dev, "MSM Watchdog Exit - Deactivated\n");
-	del_timer_sync(&wdog_dd->pet_observer);
 	del_timer_sync(&wdog_dd->pet_timer);
 	kthread_stop(wdog_dd->watchdog_task);
 	kfree(wdog_dd);
@@ -803,13 +760,6 @@ static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 	if (!ipi_en)
 		cpu_pm_register_notifier(&wdog_cpu_pm_nb);
 	dev_info(wdog_dd->dev, "MSM Watchdog Initialized\n");
-
-	init_timer(&wdog_dd->pet_observer);
-	wdog_dd->pet_observer.data = (unsigned long)wdog_dd;
-	wdog_dd->pet_observer.function = pet_observer_fn;
-	wdog_dd->pet_observer.expires =
-		msecs_to_jiffies(PET_THRESHOLD_SECS * 1000);
-	add_timer(&wdog_dd->pet_observer);
 }
 
 static const struct of_device_id msm_wdog_match_table[] = {
