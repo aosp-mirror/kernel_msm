@@ -146,6 +146,7 @@
 #define DEFAULT_COLD_CC 100
 #define DEFAULT_HOT_FV 4305
 #define DEFAULT_HOT_CC 100
+#define DEFAULT_TWM_SOC_VALUE 3
 
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
@@ -555,6 +556,12 @@ static int fg_get_sram_prop(struct fg_chip *chip, enum fg_sram_param_id id,
 	return 0;
 }
 
+static int fg_get_twm_soc(struct fg_chip *chip, int *val)
+{
+	*val = chip->twm_soc_value;
+	return 0;
+}
+
 #define CC_SOC_30BIT	GENMASK(29, 0)
 static int fg_get_charge_raw(struct fg_chip *chip, int *val)
 {
@@ -795,17 +802,48 @@ static int fg_get_msoc_raw(struct fg_chip *chip, int *val)
 	return 0;
 }
 
+static int fg_get_usb_online(struct fg_chip *chip, bool *usb_online)
+{
+	ssize_t ret = 0;
+	struct power_supply *psy = power_supply_get_by_name("usb");
+	union power_supply_propval value;
+
+	value.intval = 0;
+	ret = psy->get_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
+	if (ret < 0) {
+		pr_err("driver failed to report USB property\n");
+	}
+	*usb_online = value.intval;
+
+	return ret;
+}
+
 #define FULL_CAPACITY	100
 #define FULL_SOC_RAW	255
 static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 {
 	int rc;
+	bool usb_online;
+	int twm_ibat;
 
 	rc = fg_get_msoc_raw(chip, msoc);
 	if (rc < 0)
 		return rc;
 
 	*msoc = DIV_ROUND_CLOSEST(*msoc * FULL_CAPACITY, FULL_SOC_RAW);
+
+	chip->last_soc = *msoc;
+	if (chip->last_soc <= chip->twm_soc_value) {
+		fg_get_usb_online(chip, &usb_online);
+		fg_get_battery_current(chip, &twm_ibat);
+		if(usb_online || twm_ibat<0 )
+			*msoc = 1;
+		else
+			*msoc = 0;
+	}
+	else
+		*msoc = DIV_ROUND_CLOSEST((*msoc - chip->twm_soc_value) * FULL_CAPACITY, (FULL_CAPACITY-chip->twm_soc_value));
+
 	return 0;
 }
 
@@ -1932,6 +1970,17 @@ static int fg_set_constant_chg_voltage(struct fg_chip *chip, int volt_uv)
 		return rc;
 	}
 
+	return 0;
+}
+
+static int fg_set_twm_soc(struct fg_chip *chip, int twm_soc)
+{
+	if (twm_soc <= 0 || twm_soc > chip->last_soc) {
+		pr_err("Invalid twm soc %d\n", twm_soc);
+		return -EINVAL;
+	}
+
+	chip->twm_soc_value = twm_soc;
 	return 0;
 }
 
@@ -3218,6 +3267,9 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_get_sram_prop(chip, FG_SRAM_VBATT_FULL, &pval->intval);
 		break;
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
+		rc = fg_get_twm_soc(chip, &pval->intval);
+		break;
 	default:
 		pr_err("unsupported property %d\n", psp);
 		rc = -EINVAL;
@@ -3250,6 +3302,9 @@ static int fg_psy_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_set_constant_chg_voltage(chip, pval->intval);
 		break;
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
+		rc = fg_set_twm_soc(chip, pval->intval);
+		break;
 	default:
 		break;
 	}
@@ -3263,6 +3318,7 @@ static int fg_property_is_writeable(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		return 1;
 	default:
 		break;
@@ -3323,6 +3379,7 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_SOC_REPORTING_READY,
 	POWER_SUPPLY_PROP_DEBUG_BATTERY,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
+	POWER_SUPPLY_PROP_CAPACITY_RAW,
 };
 
 /* INIT FUNCTIONS STAY HERE */
@@ -4758,6 +4815,8 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 			rc);
 		goto exit;
 	}
+
+	chip->twm_soc_value = DEFAULT_TWM_SOC_VALUE;
 
 	rc = fg_get_battery_voltage(chip, &volt_uv);
 	if (!rc)

@@ -409,6 +409,7 @@ struct fg_chip {
 	int			charge_done;
 	int			charge_type;
 	int			last_soc;
+	int			twm_soc_value;
 	int			last_batt_temp;
 	int			health;
 	int			maint_soc;
