@@ -3242,6 +3242,25 @@ static bool kswapd_shrink_node(pg_data_t *pgdat,
 	struct zone *zone;
 	int z;
 
+	if (sc->order) {
+		int ret;
+
+		for (z = 0; z <= sc->reclaim_idx; z++) {
+			zone = pgdat->node_zones + z;
+			if (!managed_zone(zone))
+				continue;
+			ret = compaction_suitable(zone, sc->order, 0,
+						sc->reclaim_idx);
+			if (ret != COMPACT_SUCCESS && ret != COMPACT_CONTINUE)
+				goto reclaim;
+		}
+
+		sc->order = 0;
+		sc->nr_reclaimed = SWAP_CLUSTER_MAX;
+		return true;
+	}
+
+reclaim:
 	/* Reclaim a number of pages proportional to the number of zones */
 	sc->nr_to_reclaim = 0;
 	for (z = 0; z <= sc->reclaim_idx; z++) {
