@@ -768,9 +768,10 @@ static struct p9221_prop_reg_map_entry *p9221_get_map_entry(
 
 
 	for (i = 0; i < map_size; i++) {
-		if (((set && p->set) || (!set && p->get)) &&
-		    (p->prop == prop) && p->reg)
-			return p;
+		if (p->prop == prop) {
+			if ((set && p->set) || (!set && p->get))
+				return p;
+		}
 		p++;
 	}
 	return NULL;
