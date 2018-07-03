@@ -565,6 +565,15 @@ config CITADEL
 	  To compile this driver as a module, choose M here: the
 	  module will be called citadel-spi.
 
+config CS40L2X_HAPTIC
+	tristate "Cirrus Logic CS40L2X haptics support"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y to enable support for the CS CS40L2X haptics driver.
+
+	  To compile this driver as a module, choose M here.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
