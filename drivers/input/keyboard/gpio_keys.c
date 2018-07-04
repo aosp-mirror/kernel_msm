@@ -33,6 +33,14 @@
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
 
+enum {
+	DEBOUNCE_WAIT_IRQ,		/* Stable irq state */
+	DEBOUNCE_UNSTABLE_IRQ,		/* Got irq while debouncing */
+	DEBOUNCE_UNKNOWN_STATE,
+	DEBOUNCE_CHECKING_STATE,
+	DEBOUNCE_DONE,
+};
+
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -48,6 +56,8 @@ struct gpio_button_data {
 	spinlock_t lock;
 	bool disabled;
 	bool key_pressed;
+	unsigned char bouncing_flag;
+	bool prev_gpio_level;
 };
 
 struct gpio_keys_drvdata {
@@ -370,9 +380,16 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	}
 
 	if (type == EV_ABS) {
-		if (state)
+		if (state) {
+			pr_debug("%s: key %x-%x, (%d) changed to %d\n",
+				 __func__, type, button->code,
+				 button->gpio, button->value);
 			input_event(input, type, button->code, button->value);
+		}
 	} else {
+		pr_info("%s: key %x-%x, (%d) changed to %d\n",
+			__func__, type, button->code,
+			button->gpio, state);
 		input_event(input, type, button->code, state);
 	}
 	input_sync(input);
@@ -382,25 +399,91 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 {
 	struct gpio_button_data *bdata =
 		container_of(work, struct gpio_button_data, work.work);
+	const struct gpio_keys_button *button = bdata->button;
+	unsigned int type = button->type ?: EV_KEY;
+	unsigned long irqflags;
+	bool temp_gpio_level;
 
-	gpio_keys_gpio_report_event(bdata);
+	spin_lock_irqsave(&bdata->lock, irqflags);
+	if (button->debounce_interval) {
+		temp_gpio_level = gpiod_get_value_cansleep(bdata->gpiod);
 
-	if (bdata->button->wakeup)
-		pm_relax(bdata->input->dev.parent);
+		switch (bdata->bouncing_flag) {
+		case DEBOUNCE_UNSTABLE_IRQ:
+		case DEBOUNCE_UNKNOWN_STATE:
+			bdata->bouncing_flag = DEBOUNCE_CHECKING_STATE;
+			bdata->prev_gpio_level = temp_gpio_level;
+			pr_debug("%s: key %x-%x, (%d) debounce from beginning %d.\n",
+				 __func__, type, button->code,
+				 button->gpio, bdata->prev_gpio_level);
+			break;
+		case DEBOUNCE_CHECKING_STATE:
+			if (bdata->prev_gpio_level == temp_gpio_level) {
+				bdata->bouncing_flag = DEBOUNCE_DONE;
+				pr_debug("%s: key %x-%x, (%d) debounce done %d.\n",
+					 __func__, type, button->code,
+					 button->gpio, temp_gpio_level);
+			} else {
+				bdata->prev_gpio_level = temp_gpio_level;
+				pr_debug("%s: key %x-%x, (%d) debounce checking %d.\n",
+					 __func__, type, button->code,
+					 button->gpio, temp_gpio_level);
+			}
+			break;
+		default:
+			bdata->bouncing_flag = DEBOUNCE_UNKNOWN_STATE;
+			pr_err("%s: key %x-%x, (%d) default debounce mode.\n",
+			       __func__, type, button->code, button->gpio);
+			break;
+		}
+	}
+
+	if ((button->debounce_interval) &&
+	    (bdata->bouncing_flag != DEBOUNCE_DONE)) {
+		mod_delayed_work(system_wq,
+				 &bdata->work,
+				 msecs_to_jiffies(bdata->software_debounce));
+	} else {
+		bdata->bouncing_flag = DEBOUNCE_WAIT_IRQ;
+		gpio_keys_gpio_report_event(bdata);
+		if (bdata->button->wakeup)
+			pm_relax(bdata->input->dev.parent);
+	}
+	spin_unlock_irqrestore(&bdata->lock, irqflags);
 }
 
 static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 {
 	struct gpio_button_data *bdata = dev_id;
+	unsigned long irqflags;
+	unsigned int type = bdata->button->type ?: EV_KEY;
+	int state = gpiod_get_value_cansleep(bdata->gpiod);
+	pr_debug("%s, irq=%d, gpio=%d, state=%d\n",
+		 __func__, irq, bdata->button->gpio, state);
 
 	BUG_ON(irq != bdata->irq);
 
 	if (bdata->button->wakeup)
 		pm_stay_awake(bdata->input->dev.parent);
 
-	mod_delayed_work(system_wq,
-			 &bdata->work,
-			 msecs_to_jiffies(bdata->software_debounce));
+	spin_lock_irqsave(&bdata->lock, irqflags);
+	if (bdata->bouncing_flag == DEBOUNCE_WAIT_IRQ) {
+		bdata->bouncing_flag = DEBOUNCE_UNKNOWN_STATE;
+		mod_delayed_work(system_wq,
+				 &bdata->work,
+				 msecs_to_jiffies(bdata->software_debounce));
+
+		pr_debug("%s: key %x-%x, (%d) start debounce\n",
+			 __func__, type, bdata->button->code,
+			 bdata->button->gpio);
+	} else {
+		bdata->bouncing_flag = DEBOUNCE_UNSTABLE_IRQ;
+		pr_info("%s: key %x-%x, (%d) update debounce mode\n",
+			__func__, type, bdata->button->code,
+			bdata->button->gpio);
+	}
+
+	spin_unlock_irqrestore(&bdata->lock, irqflags);
 
 	return IRQ_HANDLED;
 }
@@ -409,13 +492,25 @@ static void gpio_keys_irq_timer(unsigned long _data)
 {
 	struct gpio_button_data *bdata = (struct gpio_button_data *)_data;
 	struct input_dev *input = bdata->input;
+	const struct gpio_keys_button *button = bdata->button;
 	unsigned long flags;
+	int state = 1;
 
 	spin_lock_irqsave(&bdata->lock, flags);
 	if (bdata->key_pressed) {
-		input_event(input, EV_KEY, bdata->button->code, 0);
-		input_sync(input);
-		bdata->key_pressed = false;
+		pr_debug("%s: key %x-%x, (%d) changed to %d\n",
+			 __func__, EV_KEY, button->code, button->gpio, 0);
+
+		if (bdata->gpiod)
+			state = gpiod_get_value_cansleep(bdata->gpiod);
+		if (state == 0) {
+			mod_timer(&bdata->release_timer, jiffies +
+				  msecs_to_jiffies(bdata->release_delay));
+		} else {
+			input_event(input, EV_KEY, bdata->button->code, 0);
+			input_sync(input);
+			bdata->key_pressed = false;
+		}
 	}
 	spin_unlock_irqrestore(&bdata->lock, flags);
 }
@@ -427,6 +522,7 @@ static irqreturn_t gpio_keys_irq_isr(int irq, void *dev_id)
 	struct input_dev *input = bdata->input;
 	unsigned long flags;
 
+	pr_debug("%s, irq=%d, gpio=%d\n", __func__, irq, button->gpio);
 	BUG_ON(irq != bdata->irq);
 
 	spin_lock_irqsave(&bdata->lock, flags);
@@ -435,10 +531,15 @@ static irqreturn_t gpio_keys_irq_isr(int irq, void *dev_id)
 		if (bdata->button->wakeup)
 			pm_wakeup_event(bdata->input->dev.parent, 0);
 
+		pr_debug("%s: key %x-%x, (%d) changed to %d\n",
+			 __func__, EV_KEY, button->code, button->gpio, 1);
 		input_event(input, EV_KEY, button->code, 1);
 		input_sync(input);
 
 		if (!bdata->release_delay) {
+			pr_debug("%s: key %x-%x, (%d) changed to %d\n",
+				 __func__, EV_KEY, button->code, button->gpio,
+				 0);
 			input_event(input, EV_KEY, button->code, 0);
 			input_sync(input);
 			goto out;
@@ -510,6 +611,9 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 			if (error < 0)
 				bdata->software_debounce =
 						button->debounce_interval;
+			pr_info("%s, error=%d, debounce(%d, %d)\n",
+				__func__, error, bdata->software_debounce,
+				button->debounce_interval);
 		}
 
 		if (button->irq) {
@@ -551,6 +655,8 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 		irqflags = 0;
 	}
 
+	bdata->bouncing_flag = DEBOUNCE_WAIT_IRQ;
+
 	input_set_capability(input, button->type ?: EV_KEY, button->code);
 
 	/*
@@ -579,6 +685,9 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 			bdata->irq, error);
 		return error;
 	}
+
+	pr_info("keycode = %d, gpio = %d, irq = %d",
+		bdata->button->code, bdata->button->gpio, bdata->irq);
 
 	return 0;
 }
