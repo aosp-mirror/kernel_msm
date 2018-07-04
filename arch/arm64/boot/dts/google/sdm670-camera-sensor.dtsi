@@ -72,7 +72,7 @@
 		switch-source = <&pm660l_switch1>;
 		status = "ok";
 	};
-#endif // TODO: Flash, VCM, OIS, EEPROM not ready
+#endif // TODO: Flash, OIS, EEPROM not ready
 
 	actuator_regulator: gpio-regulator@0 {
 		compatible = "regulator-fixed";
@@ -143,7 +143,7 @@
 		pinctrl-0 = <&cam_sensor_rear_vana>;
 		vin-supply = <&pm660l_bob>;
 	};
-#endif // TODO: Flash, VCM, OIS, EEPROM not ready
+#endif // TODO: Flash, OIS, EEPROM not ready
 
 };
 
@@ -152,7 +152,7 @@
 		compatible = "qcom,cam-res-mgr";
 		status = "ok";
 	};
-#if 0
+
 	actuator_rear: qcom,actuator@0 {
 		cell-index = <0>;
 		reg = <0x0>;
@@ -161,37 +161,11 @@
 		cam_vaf-supply = <&actuator_regulator>;
 		regulator-names = "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <2800000>;
-		rgltr-max-voltage = <2800000>;
+		rgltr-min-voltage = <2850000>;
+		rgltr-max-voltage = <2850000>;
 		rgltr-load-current = <0>;
 	};
-
-	actuator_rear_aux: qcom,actuator@1 {
-		cell-index = <1>;
-		reg = <0x1>;
-		compatible = "qcom,actuator";
-		cci-master = <1>;
-		cam_vaf-supply = <&actuator_regulator>;
-		regulator-names = "cam_vaf";
-		rgltr-cntrl-support;
-		rgltr-min-voltage = <2800000>;
-		rgltr-max-voltage = <2800000>;
-		rgltr-load-current = <0>;
-	};
-
-	actuator_front: qcom,actuator@2 {
-		cell-index = <2>;
-		reg = <0x2>;
-		compatible = "qcom,actuator";
-		cci-master = <1>;
-		cam_vaf-supply = <&actuator_regulator>;
-		regulator-names = "cam_vaf";
-		rgltr-cntrl-support;
-		rgltr-min-voltage = <2800000>;
-		rgltr-max-voltage = <2800000>;
-		rgltr-load-current = <0>;
-	};
-
+#if 0
 	ois_rear: qcom,ois@0 {
 		cell-index = <0>;
 		reg = <0x0>;
@@ -203,24 +177,23 @@
 		rgltr-min-voltage = <2800000>;
 		rgltr-max-voltage = <2800000>;
 		rgltr-load-current = <0>;
-		status = "disabled";
 	};
-
+#endif // TODO: Flash, OIS, EEPROM not ready
 	eeprom_rear: qcom,eeprom@0 {
 		cell-index = <0>;
 		reg = <0>;
 		compatible = "qcom,eeprom";
-		cam_vio-supply = <&camera_vio_ldo>;
-		cam_vana-supply = <&camera_vana_ldo>;
-		cam_vdig-supply = <&camera_rear_ldo>;
+		cam_vio-supply = <&pm660l_l2>;
+		cam_vana-supply = <&camera_ldo>;
+		cam_vdig-supply = <&camera_ldo>;
 		cam_clk-supply = <&titan_top_gdsc>;
 		cam_vaf-supply = <&actuator_regulator>;
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
 			"cam_clk", "cam_vaf";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2850000 1352000 0 2800000>;
-		rgltr-max-voltage = <1800000 2850000 1352000 0 2800000>;
-		rgltr-load-current = <0 80000 105000 0 0>;
+		rgltr-min-voltage = <1800000 0 0 0 0>;
+		rgltr-max-voltage = <1800000 0 0 0 0>;
+		rgltr-load-current = <0 0 0 0 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
@@ -228,12 +201,15 @@
 		pinctrl-1 = <&cam_sensor_mclk0_suspend
 				&cam_sensor_rear_suspend>;
 		gpios = <&tlmm 13 0>,
-			<&tlmm 30 0>;
+			<&tlmm 127 0>,
+			<&tlmm 8 0>;
 		gpio-reset = <1>;
-		gpio-req-tbl-num = <0 1>;
-		gpio-req-tbl-flags = <1 0>;
+		gpio-custom1 = <2>;
+		gpio-req-tbl-num = <0 1 2>;
+		gpio-req-tbl-flags = <1 0 0>;
 		gpio-req-tbl-label = "CAMIF_MCLK0",
-					"CAM_RESET0";
+			"CAM_RESET0",
+			"CUSTOM_GPIO1";
 		sensor-mode = <0>;
 		cci-master = <0>;
 		status = "ok";
@@ -242,7 +218,7 @@
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
 	};
-
+#if 0
 	eeprom_rear_aux: qcom,eeprom@1 {
 		cell-index = <1>;
 		reg = <0x1>;
@@ -316,7 +292,7 @@
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
 	};
-#endif // TODO: Flash, VCM, OIS, EEPROM not ready
+#endif // TODO: Flash, OIS, EEPROM not ready
 
 	qcom,cam-sensor@0 {
 		cell-index = <0>;
@@ -327,10 +303,10 @@
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		led-flash-src = <&led_flash_rear>;
-		//actuator-src = <&actuator_rear>;
+		actuator-src = <&actuator_rear>;
 		//ois-src = <&ois_rear>;
+		// TODO: Flash, OIS, EEPROM not ready
 		//eeprom-src = <&eeprom_rear>;
-		// TODO: Flash, VCM, OIS, EEPROM not ready
 		cam_vio-supply = <&pm660l_l2>;
 		cam_vana-supply = <&camera_ldo>;
 		cam_vdig-supply = <&camera_ldo>;
@@ -379,7 +355,7 @@
 		//actuator-src = <&actuator_rear>;
 		//ois-src = <&ois_rear>;
 		//eeprom-src = <&eeprom_rear>;
-		// TODO: Flash, VCM, OIS, EEPROM not ready
+		// TODO: Flash, OIS, EEPROM not ready
 		cam_vio-supply = <&pm660l_l2>;
 		cam_vana-supply = <&camera_rear_ldo>;
 		cam_vdig-supply = <&camera_rear_ldo>;
