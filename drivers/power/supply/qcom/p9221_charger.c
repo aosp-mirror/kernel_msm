@@ -971,10 +971,12 @@ static int p9221_set_property(struct power_supply *psy,
 		if (charger->last_capacity == val->intval)
 			break;
 		charger->last_capacity = val->intval;
-		ret = p9221_send_csp(charger, charger->last_capacity);
-		if (ret)
-			dev_err(&charger->client->dev,
-				"Could send csp: %d\n", ret);
+		if (charger->online) {
+			ret = p9221_send_csp(charger, charger->last_capacity);
+			if (ret)
+				dev_err(&charger->client->dev,
+					"Could send csp: %d\n", ret);
+		}
 		break;
 
 	default:
@@ -1180,11 +1182,13 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	del_timer(&charger->vrect_timer);
 
 	/*
-	 * Always write FOD and check dc_icl
+	 * Always write FOD, check dc_icl, send CSP
 	 */
 	if (prop.intval) {
 		p9221_set_dc_icl(charger);
 		p9221_write_fod(charger);
+		if (charger->last_capacity > 0)
+			p9221_send_csp(charger, charger->last_capacity);
 	}
 
 	/* We may have already gone online during check_det */
