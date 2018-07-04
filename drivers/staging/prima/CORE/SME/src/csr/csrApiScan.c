@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2900,6 +2900,37 @@ eHalStatus csrScanFlushSelectiveResult(tpAniSirGlobal pMac, v_BOOL_t flushP2P)
         pBssDesc = GET_BASE_ADDR( pEntry, tCsrScanResult, Link );
         if( flushP2P == vos_mem_compare( pBssDesc->Result.ssId.ssId, 
                                          "DIRECT-", 7) )
+        {
+            pFreeElem = pEntry;
+            pEntry = csrLLNext(pList, pEntry, LL_ACCESS_NOLOCK);
+            csrLLRemoveEntry(pList, pFreeElem, LL_ACCESS_NOLOCK);
+            csrFreeScanResultEntry( pMac, pBssDesc );
+            continue;
+        }
+        pEntry = csrLLNext(pList, pEntry, LL_ACCESS_NOLOCK);
+    }
+
+    csrLLUnlock(pList);
+
+    return (status);
+}
+
+eHalStatus csrScanFlushSelectiveSsid(tpAniSirGlobal pMac, tANI_U8 *ssId,
+                                     tANI_U8 ssIdLen)
+{
+    eHalStatus status = eHAL_STATUS_SUCCESS;
+    tListElem *pEntry,*pFreeElem;
+    tCsrScanResult *pBssDesc;
+    tDblLinkList *pList = &pMac->scan.scanResultList;
+
+    csrLLLock(pList);
+
+    pEntry = csrLLPeekHead( pList, LL_ACCESS_NOLOCK );
+    while( pEntry != NULL)
+    {
+        pBssDesc = GET_BASE_ADDR( pEntry, tCsrScanResult, Link );
+        if(vos_mem_compare(pBssDesc->Result.ssId.ssId,
+                            ssId, ssIdLen) )
         {
             pFreeElem = pEntry;
             pEntry = csrLLNext(pList, pEntry, LL_ACCESS_NOLOCK);
