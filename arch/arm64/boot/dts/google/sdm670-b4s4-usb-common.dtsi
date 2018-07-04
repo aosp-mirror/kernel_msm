@@ -9,7 +9,32 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 #include <dt-bindings/usb/typec.h>
+
+&pm660_gpios {
+	usb2_ext_5v_boost {
+		usb2_ext_5v_boost_default: usb2_ext_5v_boost_default {
+			pins = "gpio6";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-low;
+			power-source = <0>;
+		};
+	};
+};
+
+&vendor {
+	ext_5v_boost: ext_5v_boost {
+		compatible = "regulator-fixed";
+		regulator-name = "ext_5v_boost";
+		gpio = <&pm660_gpios 6 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		regulator-enable-ramp-delay = <1600>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_ext_5v_boost_default>;
+	};
+};
 
 &qusb_phy0 {
 	/delete-property/ qcom,efuse-bit-pos;
@@ -45,4 +70,6 @@
 	goog,port-type = <TYPEC_PORT_DRP>;
 	goog,default-role = <TYPEC_SINK>;
 	goog,try-role-hw;
+
+	ext-vbus-supply = <&ext_5v_boost>;
 };
