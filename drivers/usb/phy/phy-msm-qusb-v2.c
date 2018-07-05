@@ -105,9 +105,7 @@ enum qusb_phy_reg {
 	INTR_CTRL,
 	PLL_CORE_INPUT_OVERRIDE,
 	TEST1,
-#ifdef CONFIG_ARCH_SDM845
 	BIAS_CTRL_1,
-#endif
 	BIAS_CTRL_2,
 	SQ_CTRL1,
 	SQ_CTRL2,
@@ -666,14 +664,14 @@ static int qusb_phy_init(struct usb_phy *phy)
 				qphy->base + qphy->phy_reg[PORT_TUNE1] +
 							(4 * p_index));
 	}
-#ifdef CONFIG_ARCH_SDM845
+
 	for (p_index = 0; p_index < 2; p_index++) {
 		if (qphy->bias_ctrl[p_index])
 			writel_relaxed(qphy->bias_ctrl[p_index],
 				qphy->base + qphy->phy_reg[BIAS_CTRL_1] +
 				(4 * p_index));
 	}
-#endif
+
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
 
@@ -1026,10 +1024,8 @@ PHY_REG_SET(tune, 2);
 PHY_REG_SET(tune, 3);
 PHY_REG_SET(tune, 4);
 PHY_REG_SET(tune, 5);
-#ifdef CONFIG_ARCH_SDM845
 PHY_REG_SET(bias_ctrl, 1);
 PHY_REG_SET(bias_ctrl, 2);
-#endif
 
 #define PHY_REG_GET(reg, index, offset)					\
 static int phy_##reg##_##index##_get(void *data, u64 *val)		\
@@ -1047,10 +1043,8 @@ PHY_REG_GET(tune, 2, PORT_TUNE1);
 PHY_REG_GET(tune, 3, PORT_TUNE1);
 PHY_REG_GET(tune, 4, PORT_TUNE1);
 PHY_REG_GET(tune, 5, PORT_TUNE1);
-#ifdef CONFIG_ARCH_SDM845
 PHY_REG_GET(bias_ctrl, 1, BIAS_CTRL_1);
 PHY_REG_GET(bias_ctrl, 2, BIAS_CTRL_1);
-#endif
 
 DEFINE_SIMPLE_ATTRIBUTE(tune_1_fops, phy_tune_1_get, phy_tune_1_set,
 			"0x%llx\n");
@@ -1062,12 +1056,10 @@ DEFINE_SIMPLE_ATTRIBUTE(tune_4_fops, phy_tune_4_get, phy_tune_4_set,
 			"0x%llx\n");
 DEFINE_SIMPLE_ATTRIBUTE(tune_5_fops, phy_tune_5_get, phy_tune_5_set,
 			"0x%llx\n");
-#ifdef CONFIG_ARCH_SDM845
 DEFINE_SIMPLE_ATTRIBUTE(bias_ctrl_1_fops, phy_bias_ctrl_1_get,
 			phy_bias_ctrl_1_set, "0x%llx\n");
 DEFINE_SIMPLE_ATTRIBUTE(bias_ctrl_2_fops, phy_bias_ctrl_2_get,
 			phy_bias_ctrl_2_set, "0x%llx\n");
-#endif
 
 static struct reg_node {
 	char *name;
@@ -1078,10 +1070,8 @@ static struct reg_node {
 	{ .name = "tune3",		.fops = &tune_3_fops},
 	{ .name = "tune4",		.fops = &tune_4_fops},
 	{ .name = "tune5",		.fops = &tune_5_fops},
-#ifdef CONFIG_ARCH_SDM845
 	{ .name = "bias_ctrl_1",	.fops = &bias_ctrl_1_fops},
 	{ .name = "bias_ctrl_2",	.fops = &bias_ctrl_2_fops},
-#endif
 };
 
 static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
