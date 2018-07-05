@@ -336,7 +336,7 @@
 	};
 	qrd_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <60>;
-		#include "darter-fg-gen3-batterydata-apack-340mah.dtsi"
+		#include "darter-fg-gen3-batterydata-apack-355mah.dtsi"
 	};
 };
 
