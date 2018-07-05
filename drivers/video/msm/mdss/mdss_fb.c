@@ -54,6 +54,7 @@
 #include "mdss_debug.h"
 #include "mdss_smmu.h"
 #include "mdss_mdp.h"
+#include "mdss_dsi.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -78,6 +79,7 @@
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
 static int lcd_loadswitch_flag;
+static int panel_reg_addr = 0x0a;
 
 static u32 mdss_fb_pseudo_palette[16] = {
 	0x00000000, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -771,8 +773,69 @@ static ssize_t msm_fb_lcd_loadswitch_off(struct device *dev,
 	return len;
 }
 
+static ssize_t msm_fb_panel_set_addr(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	int rc = 0;
+
+	pr_debug("%s %d: buf = %s\n", __func__, __LINE__, buf);
+	rc = kstrtoint(buf, 0, &panel_reg_addr);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d, buf = %s\n", rc, buf);
+		return rc;
+	}
+	pr_debug("set panel_reg_addr to %d\n", panel_reg_addr);
+	return len;
+}
+
+static ssize_t msm_fb_panel_get_addr(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int rc = 0;
+
+	pr_debug("panel_reg_addr 0x%x\n", panel_reg_addr);
+	rc = scnprintf(buf, PAGE_SIZE, "0x%02x\n", panel_reg_addr);
+	return rc;
+}
+
+static ssize_t msm_fb_panel_read_reg(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_panel_data *pdata;
+	struct mdss_panel_info *pinfo;
+	int ret;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	char *rx_buf = NULL;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected!\n");
+		return -EINVAL;
+	}
+	pinfo = &pdata->panel_info;
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	rx_buf = kzalloc(2, GFP_KERNEL);
+	if (!rx_buf)
+		return -ENOMEM;
+
+	pr_debug("panel_reg_addr = 0x%x\n",  panel_reg_addr);
+	mdss_dsi_panel_cmd_read(ctrl_pdata, panel_reg_addr, 0x00, NULL,
+			rx_buf, 1);
+	ret = scnprintf(buf, PAGE_SIZE, "0x%02x\n", rx_buf[0]);
+	kfree(rx_buf);
+	return ret;
+}
+
 static DEVICE_ATTR(msm_fb_lcd_loadswitch, S_IRUGO | S_IWUSR, NULL,
 					msm_fb_lcd_loadswitch_off);
+static DEVICE_ATTR(msm_fb_panel_addr, S_IRUGO | S_IWUSR, msm_fb_panel_get_addr,
+					msm_fb_panel_set_addr);
+static DEVICE_ATTR(msm_fb_panel_reg, S_IRUGO , msm_fb_panel_read_reg,
+					NULL);
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -791,6 +854,8 @@ static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_dfps_mode, mdss_fb_change_dfps_mode);
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_lcd_loadswitch.attr,
+	&dev_attr_msm_fb_panel_addr.attr,
+	&dev_attr_msm_fb_panel_reg.attr,
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
 	&dev_attr_show_blank_event.attr,
