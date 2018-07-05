@@ -292,7 +292,7 @@ static void msm_restart_prepare(const char *cmd)
 	}
 
 	/* WARM-RESET is needed for keeping PSTORE content in DDR */
-	need_warm_reset = true;
+//	need_warm_reset = true;
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
 	if (need_warm_reset) {
