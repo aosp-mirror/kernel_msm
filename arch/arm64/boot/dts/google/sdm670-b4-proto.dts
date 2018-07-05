@@ -24,3 +24,7 @@
 	compatible = "qcom,sdm670-mtp", "qcom,sdm670", "qcom,mtp";
 	qcom,board-id = <0x00030305 0>;
 };
+
+&int_codec {
+	qcom,model = "sdm670-b4-snd-card";
+};
