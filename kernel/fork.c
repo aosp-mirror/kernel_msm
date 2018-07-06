@@ -1369,6 +1369,10 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	if (!p)
 		goto fork_out;
 
+#ifdef CONFIG_CPU_FREQ_STAT
+	cpufreq_task_stats_init(p);
+#endif
+
 	ftrace_graph_init_task(p);
 
 	rt_mutex_init_task(p);
