@@ -493,6 +493,110 @@ static int cs40l2x_wseq_replace(struct cs40l2x_private *cs40l2x,
 	return 0;
 }
 
+static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
+			unsigned int user_ctrl_cmd, unsigned int user_ctrl_data,
+			unsigned int *user_ctrl_resp)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	unsigned int val;
+	int ret, i;
+
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	ret = regmap_write(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "USER_CONTROL_IPDATA",
+					CS40L2X_XM_UNPACKED_TYPE),
+			user_ctrl_data);
+	if (ret) {
+		dev_err(dev, "Failed to write user-control data\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L2X_MBOX_USER_CONTROL, user_ctrl_cmd);
+	if (ret) {
+		dev_err(dev, "Failed to write user-control command\n");
+		return ret;
+	}
+
+	for (i = 0; i < CS40L2X_UCTRL_TIMEOUT_COUNT; i++) {
+		ret = regmap_read(regmap, CS40L2X_MBOX_USER_CONTROL, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read user-control command\n");
+			return ret;
+		}
+
+		if (val != user_ctrl_cmd)
+			break;
+
+		usleep_range(1000, 1100);
+	}
+
+	if (i == CS40L2X_UCTRL_TIMEOUT_COUNT) {
+		dev_err(dev, "Timed out waiting for user-control response\n");
+		return -ETIME;
+	}
+
+	switch (val) {
+	case CS40L2X_USER_CTRL_SUCCESS:
+		break;
+	case CS40L2X_USER_CTRL_UNKNOWN:
+		dev_err(dev, "Unrecognized user-control command\n");
+		return -EINVAL;
+	case CS40L2X_USER_CTRL_INVALID:
+		dev_err(dev, "Invalid user-control operation\n");
+		return -EINVAL;
+	case CS40L2X_USER_CTRL_ERROR:
+		dev_err(dev, "User-control output error\n");
+		return -EIO;
+	default:
+		dev_err(dev, "Unrecognized user-control response: %d\n", val);
+		return -EINVAL;
+	}
+
+	ret = regmap_read(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "USER_CONTROL_RESPONSE",
+					CS40L2X_XM_UNPACKED_TYPE),
+			&val);
+	if (ret) {
+		dev_err(dev, "Failed to read user-control response\n");
+		return ret;
+	}
+
+	*user_ctrl_resp = val;
+
+	return 0;
+}
+
+static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	/* duration reporting is supported by revision B1 firmware only */
+	if (cs40l2x->revid < CS40L2X_REVID_B1)
+		return -EPERM;
+
+	if (cs40l2x->cp_trigger_index < CS40L2X_INDEX_CLICK_MIN)
+		return -EINVAL;
+
+	if (cs40l2x->cp_trigger_index > CS40L2X_INDEX_CLICK_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = cs40l2x_user_ctrl_exec(cs40l2x, CS40L2X_USER_CTRL_DURATION,
+			cs40l2x->cp_trigger_index, &val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret)
+		return ret;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
 static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 			unsigned int hiber_cmd)
 {
@@ -1402,6 +1506,8 @@ static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
 		cs40l2x_cp_trigger_queue_store);
+static DEVICE_ATTR(cp_trigger_duration, 0660, cs40l2x_cp_trigger_duration_show,
+		NULL);
 static DEVICE_ATTR(hiber_cmd, 0660, NULL, cs40l2x_hiber_cmd_store);
 static DEVICE_ATTR(hiber_timeout, 0660, cs40l2x_hiber_timeout_show,
 		cs40l2x_hiber_timeout_store);
@@ -1436,6 +1542,7 @@ static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
 	&dev_attr_cp_trigger_queue.attr,
+	&dev_attr_cp_trigger_duration.attr,
 	&dev_attr_hiber_cmd.attr,
 	&dev_attr_hiber_timeout.attr,
 	&dev_attr_gpio1_enable.attr,
