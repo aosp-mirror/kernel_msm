@@ -25,7 +25,6 @@
 #include <linux/delay.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
-#include <linux/wakelock.h>
 #include <linux/regulator/consumer.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
@@ -123,7 +122,7 @@ struct bgrsb_priv {
 
 	struct device *ldev;
 
-	struct wake_lock wake_lock;
+	struct wakeup_source bgrsb_ws;
 
 	wait_queue_head_t link_state_wait;
 
@@ -465,7 +464,7 @@ static int bgrsb_tx_msg(struct bgrsb_priv *dev, void  *msg, size_t len)
 	if (!dev->chnl_state)
 		return -ENODEV;
 
-	wake_lock(&dev->wake_lock);
+	__pm_stay_awake(&dev->bgrsb_ws);
 	mutex_lock(&dev->glink_mutex);
 	init_completion(&dev->tx_done);
 	init_completion(&dev->bg_resp_cmplt);
@@ -511,7 +510,7 @@ static int bgrsb_tx_msg(struct bgrsb_priv *dev, void  *msg, size_t len)
 
 err_ret:
 	mutex_unlock(&dev->glink_mutex);
-	wake_unlock(&dev->wake_lock);
+	__pm_relax(&dev->bgrsb_ws);
 	return rc;
 }
 
@@ -909,9 +908,8 @@ static int bg_rsb_probe(struct platform_device *pdev)
 	if (!dev)
 		return -ENOMEM;
 
-	/* Add wake_lock for PM suspend */
-	wake_lock_init(&dev->wake_lock, WAKE_LOCK_SUSPEND,
-			dev_name(&pdev->dev));
+	/* Add wake lock for PM suspend */
+	wakeup_source_init(&dev->bgrsb_ws, "BGRSB_wake_lock");
 
 	dev->bgrsb_current_state = BGRSB_STATE_UNKNOWN;
 	rc = bgrsb_init(dev);
@@ -973,7 +971,7 @@ static int bg_rsb_remove(struct platform_device *pdev)
 	destroy_workqueue(dev->bgrsb_event_wq);
 	destroy_workqueue(dev->bgrsb_wq);
 	input_free_device(dev->input);
-	wake_lock_destroy(&dev->wake_lock);
+	wakeup_source_trash(&dev->bgrsb_ws);
 
 	return 0;
 }
