@@ -34,3 +34,6 @@ int ValidateFrontVCMFW(struct camera_io_master *io_info,
 int GyroReCalib(struct camera_io_master *io_master_info,
 	stReCalib *cal_result);
 int WrGyroOffsetData(void);
+int checkRearVCMFWUpdate_temp(struct cam_sensor_ctrl_t *s_ctrl);
+int checkRearVCMLTC(struct camera_io_master *io_info);
+void clearRearVCMInitDownload(struct camera_io_master *io_info);

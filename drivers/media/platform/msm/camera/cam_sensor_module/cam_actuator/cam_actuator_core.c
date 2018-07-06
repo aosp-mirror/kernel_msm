@@ -17,6 +17,12 @@
 #include "cam_trace.h"
 #include "cam_res_mgr_api.h"
 
+
+/* Implemented in fw_update.c */
+extern int checkRearVCMLTC(struct camera_io_master *io_info);
+extern void clearRearVCMInitDownload(struct camera_io_master *io_info);
+
+
 int32_t cam_actuator_construct_default_power_setting(
 	struct cam_sensor_power_ctrl_t *power_info)
 {
@@ -146,6 +152,7 @@ static int32_t cam_actuator_power_down(struct cam_actuator_ctrl_t *a_ctrl)
 	}
 
 	camera_io_release(&a_ctrl->io_master_info);
+	clearRearVCMInitDownload(&(a_ctrl->io_master_info));
 
 	return rc;
 }
@@ -449,6 +456,9 @@ int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 	struct cam_cmd_buf_desc   *cmd_desc = NULL;
 	struct cam_actuator_soc_private *soc_private = NULL;
 	struct cam_sensor_power_ctrl_t  *power_info = NULL;
+	struct i2c_settings_list *i2c_list = NULL, *i2c_next = NULL;
+	struct cam_sensor_i2c_reg_array *reg_sets;
+	uint32_t size;
 
 	if (!a_ctrl || !arg) {
 		CAM_ERR(CAM_ACTUATOR, "Invalid Args");
@@ -567,6 +577,31 @@ int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 				return rc;
 			}
 			a_ctrl->cam_act_state = CAM_ACTUATOR_CONFIG;
+		}
+
+		rc = checkRearVCMLTC(&(a_ctrl->io_master_info));
+		if (rc == 0) {
+			/* Remove the first 2 items in initial settings */
+			/* It is already done in func checkRearVCMLTC() */
+			list_for_each_entry_safe(i2c_list, i2c_next,
+				&(a_ctrl->i2c_data.init_settings.list_head),
+				list) {
+				size = i2c_list->i2c_settings.size;
+				for (i = 0; i < size; i++) {
+					reg_sets = &i2c_list->i2c_settings
+						.reg_setting[i];
+					if ((((reg_sets->reg_addr == 0xE0) &&
+						(reg_sets->reg_data == 0x01)) ||
+						((reg_sets->reg_addr == 0xB3) &&
+						(reg_sets->reg_data == 0x00)))
+						&& size == 1) {
+						kfree(i2c_list->i2c_settings
+							.reg_setting);
+						list_del(&(i2c_list->list));
+						kfree(i2c_list);
+					}
+				}
+			}
 		}
 
 		rc = cam_actuator_apply_settings(a_ctrl,
