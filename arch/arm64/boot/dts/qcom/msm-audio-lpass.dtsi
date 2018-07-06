@@ -451,7 +451,7 @@
 		};
 	};
 
-	qcom,msm-dai-tdm-sec-tx {
+	msm_dai_tdm_sec_tx: qcom,msm-dai-tdm-sec-tx {
 		compatible = "qcom,msm-dai-tdm";
 		qcom,msm-cpudai-tdm-group-id = <37137>;
 		qcom,msm-cpudai-tdm-group-num-ports = <1>;

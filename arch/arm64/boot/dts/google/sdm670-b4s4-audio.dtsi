@@ -386,6 +386,12 @@
 	qcom,msm-cpudai-tdm-invert-sync = <0>;
 };
 
+&msm_dai_tdm_sec_tx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <0>;
+};
+
 &dai_sec_tdm_rx_0 {
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&sec_tdm_active &sec_tdm_din_active
