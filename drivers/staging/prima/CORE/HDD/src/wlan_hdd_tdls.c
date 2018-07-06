@@ -3098,6 +3098,21 @@ int wlan_hdd_tdls_scan_callback (hdd_adapter_t *pAdapter,
     else
         mutex_unlock(&pHddCtx->tdls_lock);
 
+    /* if fEnableTDLSScan flag is 1 ; driverwill allow scan even if
+     * peer station is not buffer STA capable
+     *
+     *  RX: If there is any RX activity, device will lose RX packets,
+     *  as peer will not be aware that device is off channel.
+     *  TX: TX is stopped whenever device initiate scan.
+     */
+
+    if (pHddCtx->cfg_ini->fEnableTDLSScan == 1)
+    {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
+                   FL("Allow SCAN in all TDLS cases"));
+        return 1;
+    }
+
     /* tdls teardown is ongoing */
     if (eTDLS_SUPPORT_DISABLED == pHddCtx->tdls_mode)
     {
@@ -3124,21 +3139,6 @@ int wlan_hdd_tdls_scan_callback (hdd_adapter_t *pAdapter,
                 __func__, connectedTdlsPeers, pHddCtx->scan_ctxt.attempt);
         return 1;
     }
-
-    /* if fEnableTDLSScan flag is 1 ; driverwill allow scan even if
-     * peer station is not buffer STA capable
-     *
-     *  RX: If there is any RX activity, device will lose RX packets,
-     *  as peer will not be aware that device is off channel.
-     *  TX: TX is stopped whenever device initiate scan.
-     */
-    if (pHddCtx->cfg_ini->fEnableTDLSScan == 1)
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-                   FL("Allow SCAN in all TDLS cases"));
-        return 1;
-    }
-
     /* while tdls is up, first time scan */
     else if (eTDLS_SUPPORT_ENABLED == pHddCtx->tdls_mode ||
         eTDLS_SUPPORT_EXPLICIT_TRIGGER_ONLY == pHddCtx->tdls_mode)

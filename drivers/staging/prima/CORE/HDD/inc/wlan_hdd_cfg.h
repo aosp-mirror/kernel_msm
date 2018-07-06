@@ -2227,7 +2227,7 @@ static __inline tANI_U32 defHddRateToDefCfgRate( tANI_U32 defRateIndex )
 #define CFG_TDLS_SCAN_ENABLE            "gEnableTDLSScan"
 #define CFG_TDLS_SCAN_ENABLE_MIN        (0)
 #define CFG_TDLS_SCAN_ENABLE_MAX        (2)
-#define CFG_TDLS_SCAN_ENABLE_DEFAULT    (0)
+#define CFG_TDLS_SCAN_ENABLE_DEFAULT    (1)
 
 #define CFG_TDLS_ENABLE_DEFER_TIMER           "gTDLSEnableDeferTime"
 #define CFG_TDLS_ENABLE_DEFER_TIMER_MIN       (2000)
