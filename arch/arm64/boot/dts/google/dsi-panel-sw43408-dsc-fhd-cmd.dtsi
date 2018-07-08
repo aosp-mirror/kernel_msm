@@ -245,10 +245,10 @@
 
 		google,hbm-ranges {
 			hbm-range@0 {
-				google,dsi-hbm-brightness-threshold = <1>;
+				google,dsi-hbm-range-brightness-threshold = <1>;
 
-				google,dsi-bl-hbm-min-level = <0x8>;
-				google,dsi-bl-hbm-max-level = <0x3ff>;
+				google,dsi-hbm-range-bl-min-level = <0x8>;
+				google,dsi-hbm-range-bl-max-level = <0x3ff>;
 			};
 		};
 	};

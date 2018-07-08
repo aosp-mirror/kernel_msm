@@ -197,16 +197,6 @@ Optional properties:
 - qcom,mdss-dsi-bl-vr-min-safe-level:		Specify a minimum safe panel brightness
 					level during VR mode. This limit comes into effect only when
 					attempting to change brightness level while VR mode is active.
-- qcom,mdss-dsi-hbm-command: An optional byte stream to enable HBM.
-- qcom,mdss-dsi-hbm-command-state:	The control state for sending
-					qcom,mdss-dsi-hbm-command.
-					"dsi_lp_mode" = DSI low power mode (default)
-					"dsi_hs_mode" = DSI high speed mode
-- qcom,mdss-dsi-nohbm-command: An optional byte stream to disable HBM.
-- qcom,mdss-dsi-nohbm-command-state:	The control state for sending
-					qcom,mdss-dsi-nohbm-command.
-					"dsi_lp_mode" = DSI low power mode (default)
-					"dsi_hs_mode" = DSI high speed mode
 - qcom,mdss-dsi-interleave-mode:	Specifies interleave mode.
 					0 = default value.
 - qcom,mdss-dsi-panel-type:		Specifies the panel operating mode.

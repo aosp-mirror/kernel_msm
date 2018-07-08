@@ -98,6 +98,8 @@ struct hbm_range {
 };
 
 struct hbm_data {
+	struct dsi_panel_cmd_set dsi_hbm_exit_cmd;
+
 	struct hbm_range ranges[HBM_RANGE_MAX];
 	u32 num_ranges;
 	u32 cur_range;

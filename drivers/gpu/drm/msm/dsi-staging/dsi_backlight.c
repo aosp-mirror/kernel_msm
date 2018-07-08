@@ -888,10 +888,10 @@ static int dsi_panel_bl_parse_hbm_node(struct device *parent,
 	int rc;
 	u32 val = 0;
 
-	rc = of_property_read_u32(np, "google,dsi-hbm-brightness-threshold",
-		&val);
+	rc = of_property_read_u32(np,
+		"google,dsi-hbm-range-brightness-threshold", &val);
 	if (rc) {
-		pr_err("Unable to parse dsi-hbm-brightness-threshold\n");
+		pr_err("Unable to parse dsi-hbm-range-brightness-threshold");
 		return rc;
 	}
 	if (val > bl->brightness_max_level) {
@@ -900,18 +900,18 @@ static int dsi_panel_bl_parse_hbm_node(struct device *parent,
 	}
 	range->user_bri_start = val;
 
-	rc = of_property_read_u32(np, "google,dsi-bl-hbm-min-level",
+	rc = of_property_read_u32(np, "google,dsi-hbm-range-bl-min-level",
 		&val);
 	if (rc) {
-		pr_err("dsi-bl-hbm-min-level unspecified\n");
+		pr_err("dsi-hbm-range-bl-min-level unspecified\n");
 		return rc;
 	}
 	range->panel_bri_start = val;
 
-	rc = of_property_read_u32(np, "google,dsi-bl-hbm-max-level",
+	rc = of_property_read_u32(np, "google,dsi-hbm-range-bl-max-level",
 		&val);
 	if (rc) {
-		pr_err("bl-hbm-max-level unspecified\n");
+		pr_err("dsi-hbm-range-bl-max-level unspecified\n");
 		return rc;
 	}
 	if (val < range->panel_bri_start) {
@@ -922,7 +922,7 @@ static int dsi_panel_bl_parse_hbm_node(struct device *parent,
 
 	rc = dsi_panel_parse_dt_cmd_set(np,
 		"google,dsi-hbm-range-entry-command",
-		"google,dsi-hbm-commands-state", &range->dsi_cmd);
+		"google,dsi-hbm-range-commands-state", &range->dsi_cmd);
 	if (rc)
 		pr_info("Unable to parse optional dsi-hbm-range-entry-command\n");
 
@@ -1103,6 +1103,8 @@ static void dsi_panel_bl_hbm_free(struct device *dev,
 	if (!hbm_data || !(*hbm_data))
 		return;
 
+	dsi_panel_destroy_cmd_packets(&(*hbm_data)->dsi_hbm_exit_cmd);
+
 	for (i = 0; i < (*hbm_data)->num_ranges; i++)
 		dsi_panel_destroy_cmd_packets(&(*hbm_data)->ranges[i].dsi_cmd);
 
@@ -1144,6 +1146,12 @@ static int dsi_panel_bl_parse_hbm(struct device *parent,
 		pr_err("Failed to allocate memory for HBM data\n");
 		return -ENOMEM;
 	}
+
+	rc = dsi_panel_parse_dt_cmd_set(hbm_ranges_np,
+		"google,dsi-hbm-exit-command",
+		"google,dsi-hbm-commands-state", &bl->hbm->dsi_hbm_exit_cmd);
+	if (rc)
+		pr_info("Unable to parse optional dsi-hbm-exit-command\n");
 
 	bl->hbm->num_ranges = num_ranges;
 
