@@ -70,42 +70,52 @@ updated if needed.
 
 Note that there is currently no support for backlight LUTs during HBM mode.
 
-Required properties:
+HBM uses the following properties. Each property is required, unless specified
+as optional:
 - google,hbm-ranges:	Parent list of HBM ranges.
 - hbm-range@n:		An HBM range, starting at n=0.
+- dsi-hbm-exit-command: Optional command sequence to exit HBM.
+- dsi-hbm-commands-state: Optional command state used for HBM commands.
 
 Each hbm-range@n contains the following properties. Each property is required,
 unless specified as optional:
-- dsi-lp-brightness-threshold: Starting user brightness for this HBM range.
-- dsi-hbm-range-entry-command: Optional command sequence to enter this mode.
-- dsi-hbm-commands-state: Command state used in this mode.
-- dsi-bl-hbm-min-level: Start of panel brightness range (inclusive).
-- dsi-bl-hbm-max-level: End of panel brightness range (inclusive).
+- dsi-hbm-range-brightness-threshold: Starting user brightness for this HBM
+    range.
+- dsi-hbm-range-entry-command: Optional command sequence to enter this range.
+- dsi-hbm-range-commands-state: Optional command state used in this range.
+- google,dsi-hbm-range-bl-min-level: Start of panel brightness range
+    (inclusive).
+- google,dsi-hbm-range-bl-max-level: End of panel brightness range (inclusive).
 
 Example:
 
 / {
 	...
 	google,hbm-ranges {
-		hbm-range@0 {
-			google,dsi-hbm-brightness-threshold = <1>;
+		google,dsi-hbm-exit-command = [
+			15 01 00 00 00 00 02 53 20
+		];
+		google,dsi-hbm-commands-state = "dsi_lp_mode";
 
-			google,dsi-bl-hbm-min-level = <0x5>;
-			google,dsi-bl-hbm-max-level = <0x3ff>;
+		hbm-range@0 {
+			google,dsi-hbm-range-brightness-threshold = <1>;
+
+			google,dsi-hbm-range-bl-min-level = <0x5>;
+			google,dsi-hbm-range-bl-max-level = <0x3ff>;
 			google,dsi-hbm-range-entry-command = [
 				15 01 00 00 00 00 02 53 20
 			];
-			google,dsi-hbm-commands-state = "dsi_lp_mode";
+			google,dsi-hbm-range-commands-state = "dsi_lp_mode";
 		};
 
 		hbm-range@1 {
-			google,dsi-hbm-brightness-threshold = <170>;
+			google,dsi-hbm-range-brightness-threshold = <170>;
 
-			google,dsi-bl-hbm-min-level = <0x3ff>;
-			google,dsi-bl-hbm-max-level = <0x3ff>;
+			google,dsi-hbm-range-bl-min-level = <0x3ff>;
+			google,dsi-hbm-range-bl-max-level = <0x3ff>;
 			google,dsi-hbm-range-entry-command = [
 				15 01 00 00 00 00 02 53 E0
 			];
-			google,dsi-hbm-commands-state = "dsi_lp_mode";
+			google,dsi-hbm-range-commands-state = "dsi_lp_mode";
 		};
 	};

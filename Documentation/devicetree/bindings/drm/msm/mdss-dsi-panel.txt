@@ -194,16 +194,6 @@ Optional properties:
 					If unspecified, this LUT is unused and unallocated. Instead, userspace
 					brightness gets mapped linearly, during runtime, to the range defined by
 					qcom,mdss-dsi-bl-min-level and qcom,mdss-dsi-bl-max-level.
-- qcom,mdss-dsi-hbm-command: An optional byte stream to enable HBM.
-- qcom,mdss-dsi-hbm-command-state:	The control state for sending
-					qcom,mdss-dsi-hbm-command.
-					"dsi_lp_mode" = DSI low power mode (default)
-					"dsi_hs_mode" = DSI high speed mode
-- qcom,mdss-dsi-nohbm-command: An optional byte stream to disable HBM.
-- qcom,mdss-dsi-nohbm-command-state:	The control state for sending
-					qcom,mdss-dsi-nohbm-command.
-					"dsi_lp_mode" = DSI low power mode (default)
-					"dsi_hs_mode" = DSI high speed mode
 - qcom,mdss-dsi-interleave-mode:	Specifies interleave mode.
 					0 = default value.
 - qcom,mdss-dsi-panel-type:		Specifies the panel operating mode.
