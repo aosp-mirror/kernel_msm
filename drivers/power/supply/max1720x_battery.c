@@ -1822,6 +1822,8 @@ static int max1720x_pm_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct max1720x_chip *chip = i2c_get_clientdata(client);
 
+	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
+
 	pm_runtime_get_sync(chip->dev);
 	chip->resume_complete = false;
 	pm_runtime_put_sync(chip->dev);
