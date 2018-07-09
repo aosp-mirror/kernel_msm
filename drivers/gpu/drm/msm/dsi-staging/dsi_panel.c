@@ -4003,6 +4003,7 @@ static int dsi_panel_update_hbm_locked(struct dsi_panel *panel,
 	}
 
 	panel->hbm_mode = enable;
+	bl->hbm->cur_range = HBM_RANGE_MAX;
 
 	return 0;
 }

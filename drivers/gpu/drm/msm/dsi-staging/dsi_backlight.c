@@ -1101,7 +1101,7 @@ static int dsi_panel_bl_parse_hbm(struct device *parent,
 	}
 
 	bl->hbm->ranges[i].user_bri_end = bl->brightness_max_level;
-	bl->hbm->cur_range = 0;
+	bl->hbm->cur_range = HBM_RANGE_MAX;
 
 	return 0;
 
