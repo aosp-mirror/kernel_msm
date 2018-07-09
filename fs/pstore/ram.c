@@ -116,7 +116,7 @@ struct ramoops_context {
 	struct pstore_info pstore;
 	bool use_alt;
 	bool need_update;
-	bool decrypted;
+	int decrypt_state;
 	int aes_key_len;
 	unsigned char aes_key[AES_KEY_MAX_LEN];
 	unsigned char aes_key_iv[AES_KEY_IV_LEN];
@@ -560,17 +560,27 @@ static ssize_t use_alt_store(struct device *dev, struct device_attribute *attr,
 
 	if (kstrtoint(buf, 10, &use_alt) < 0)
 		return -EINVAL;
-	if (!cxt->use_alt && use_alt && !cxt->decrypted) {
+	if (!cxt->use_alt && use_alt && !cxt->decrypt_state) {
 		int ret = ramoops_decrypt_alt(cxt);
-		if (ret < 0)
+		if (ret < 0) {
+			cxt->decrypt_state = ret;
 			return ret;
-		cxt->decrypted = 1;
+		}
+		cxt->decrypt_state = 1;
 	}
 	cxt->use_alt = use_alt;
 	cxt->need_update = 1;
 	return count;
 }
 static DEVICE_ATTR_RW(use_alt);
+
+static ssize_t decrypt_state_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct ramoops_context *cxt = &oops_cxt;
+	return snprintf(buf, PAGE_SIZE, "%d\n", cxt->decrypt_state);
+}
+static DEVICE_ATTR_RO(decrypt_state);
 
 static ssize_t aes_key_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t count)
@@ -615,6 +625,7 @@ static DEVICE_ATTR_WO(aes_key_tag);
 
 static struct attribute *ramoops_attrs[] = {
 	&dev_attr_use_alt.attr,
+	&dev_attr_decrypt_state.attr,
 	&dev_attr_aes_key.attr,
 	&dev_attr_aes_key_iv.attr,
 	&dev_attr_aes_key_tag.attr,
