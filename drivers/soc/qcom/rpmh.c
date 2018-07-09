@@ -207,7 +207,8 @@ static inline void wait_for_tx_done(struct rpmh_client *rc,
 			dev_err(rc->dev,
 				"RPMH waiting for interrupt from AOSS\n");
 			mbox_chan_debug(rc->chan);
-			BUG();
+			WARN(1, "RPMH waiting timeout (%d) addr=0x%x,data=0x%x\n",
+				count, addr, data);
 		} else {
 			dev_err(rc->dev,
 			"RPMH response timeout (%d) addr=0x%x,data=0x%x\n",
