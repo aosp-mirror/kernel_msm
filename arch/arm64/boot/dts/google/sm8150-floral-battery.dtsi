@@ -1,0 +1,39 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pm8150b_fg {
+	qcom,hold-soc-while-full;
+	qcom,linearize-soc;
+};
+
+&pm8150b_charger {
+	io-channels = <&pm8150b_vadc ADC_USB_IN_V_16>,
+		      <&pm8150b_vadc ADC_USB_IN_I>,
+		      <&pm8150b_vadc ADC_CHG_TEMP>;
+	io-channel-names = "usb_in_voltage",
+			   "usb_in_current",
+			   "chg_temp";
+	qcom,fg-chg-term-current = <171>;
+	qcom,fg-sys-term-current = <(-214)>;
+	qcom,auto-recharge-soc = <98>;
+	qcom,battery-data = <&floral_batterydata>;
+};
+
+&vendor {
+	floral_batterydata: qcom,batterydata {
+		qcom,batt-id-range-pct = <15>;
+		#include "batterydata-qcom-c1-10k.dtsi"
+		#include "batterydata-qcom-c1-47k.dtsi"
+		#include "batterydata-qcom-c1-68k.dtsi"
+		#include "batterydata-qcom-c1-180k.dtsi"
+	};
+};
