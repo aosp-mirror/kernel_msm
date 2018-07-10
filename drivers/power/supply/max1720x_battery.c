@@ -28,8 +28,13 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#endif
+
 #define MAX1720X_TRECALL_MS 5
 #define MAX1720X_TPOR_MS 150
+#define MAX1720X_TICLR_MS 500
 #define MAX1720X_I2C_DRIVER_NAME "max1720x_fg_irq"
 #define MAX1720X_N_OF_HISTORY_PAGES 203
 #define MAX1720X_DELAY_INIT_MS 1000
@@ -301,7 +306,7 @@ struct max1720x_chip {
 	u16 *history;
 	int history_count;
 	int history_index;
-	u16 status;
+	u16 health_status;
 	int fake_capacity;
 	int fake_temperature;
 	int previous_qh;
@@ -315,6 +320,7 @@ struct max1720x_chip {
 	s16 *temp_convgcfg;
 	u16 *convgcfg_values;
 	struct mutex convgcfg_lock;
+	unsigned int debug_irq_none_cnt;
 };
 
 static inline int max1720x_regmap_read(struct regmap *map,
@@ -926,18 +932,18 @@ static int max1720x_get_battery_health(struct max1720x_chip *chip)
 {
 	/* For health report what ever was recently alerted and clear it */
 
-	if (chip->status & MAX1720X_STATUS_VMX) {
-		chip->status &= ~MAX1720X_STATUS_VMX;
+	if (chip->health_status & MAX1720X_STATUS_VMX) {
+		chip->health_status &= ~MAX1720X_STATUS_VMX;
 		return POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 	}
 
-	if (chip->status & MAX1720X_STATUS_TMN) {
-		chip->status &= ~MAX1720X_STATUS_TMN;
+	if (chip->health_status & MAX1720X_STATUS_TMN) {
+		chip->health_status &= ~MAX1720X_STATUS_TMN;
 		return POWER_SUPPLY_HEALTH_COLD;
 	}
 
-	if (chip->status & MAX1720X_STATUS_TMX) {
-		chip->status &= ~MAX1720X_STATUS_TMX;
+	if (chip->health_status & MAX1720X_STATUS_TMX) {
+		chip->health_status &= ~MAX1720X_STATUS_TMX;
 		return POWER_SUPPLY_HEALTH_OVERHEAT;
 	}
 
@@ -1232,7 +1238,7 @@ static void max1720x_fg_reset(struct max1720x_chip *chip)
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 {
 	struct max1720x_chip *chip = obj;
-	u16 fg_status;
+	u16 fg_status, fg_status_clr;
 	int err = 0;
 
 	if (!chip || irq != chip->primary->irq) {
@@ -1249,12 +1255,33 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	err = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &fg_status);
 	if (err)
 		return IRQ_NONE;
-	if (fg_status == 0)
+	if (fg_status == 0) {
+		chip->debug_irq_none_cnt++;
+		pr_debug("spurius: fg_status=0 cnt=%d\n",
+			chip->debug_irq_none_cnt);
+		/* rate limit spurius interrupts */
+		msleep(MAX1720X_TICLR_MS);
 		return IRQ_HANDLED;
+	}
 
-	chip->status |= fg_status;
+	/* only used to report health */
+	chip->health_status |= fg_status;
+	/* write 0 to clear will loose interrupts when we don't write 1 to the
+	 * bits that are not set. Just inverting fg_status cause an interrupt
+	 * storm, only setting the bits marked as "host must clear" in the DS
+	 * seems to work eg:
+	 *
+	 * fg_status_clr = fg_status
+	 * fg_status_clr |= MAX1720X_STATUS_POR | MAX1720X_STATUS_DSOCI
+	 *                | MAX1720X_STATUS_BI;
+	 *
+	 * If the above logic is sound, we probably need to set also the bits
+	 * that config mark as "host must clear". Maxim to confirm.
+	 */
+	fg_status_clr = fg_status;
+
 	if (fg_status & MAX1720X_STATUS_POR) {
-		fg_status &= ~MAX1720X_STATUS_POR;
+		fg_status_clr &= ~MAX1720X_STATUS_POR;
 		pr_debug("POR is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_IMN)
@@ -1267,23 +1294,23 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		pr_debug("IMX is set\n");
 
 	if (fg_status & MAX1720X_STATUS_DSOCI) {
-		fg_status &= ~MAX1720X_STATUS_DSOCI;
+		fg_status_clr &= ~MAX1720X_STATUS_DSOCI;
 		pr_debug("DSOCI is set\n");
 		schedule_work(&chip->cycle_count_work);
 	}
 	if (fg_status & MAX1720X_STATUS_VMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
-			fg_status &= ~MAX1720X_STATUS_VMN;
+			fg_status_clr &= ~MAX1720X_STATUS_VMN;
 		pr_debug("VMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_TMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_TS)
-			fg_status &= ~MAX1720X_STATUS_TMN;
+			fg_status_clr &= ~MAX1720X_STATUS_TMN;
 		pr_debug("TMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_SMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_SS)
-			fg_status &= ~MAX1720X_STATUS_SMN;
+			fg_status_clr &= ~MAX1720X_STATUS_SMN;
 		pr_debug("SMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_BI)
@@ -1291,26 +1318,32 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 
 	if (fg_status & MAX1720X_STATUS_VMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
-			fg_status &= ~MAX1720X_STATUS_VMX;
+			fg_status_clr &= ~MAX1720X_STATUS_VMX;
 		pr_debug("VMX is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_TMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_TS)
-			fg_status &= ~MAX1720X_STATUS_TMX;
+			fg_status_clr &= ~MAX1720X_STATUS_TMX;
 		pr_debug("TMX is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_SMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_SS)
-			fg_status &= ~MAX1720X_STATUS_SMX;
+			fg_status_clr &= ~MAX1720X_STATUS_SMX;
 		pr_debug("SMX is set\n");
 	}
 
 	if (fg_status & MAX1720X_STATUS_BR)
 		pr_debug("BR is set\n");
 
-	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status);
+	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status_clr);
+
 	if (chip->psy)
 		power_supply_changed(chip->psy);
+
+	/* oneshot w/o filter will unmask on return but gauge will take up
+	 * to 351 ms to clear ALRM1.
+	 */
+	msleep(MAX1720X_TICLR_MS);
 
 	return IRQ_HANDLED;
 }
@@ -1639,6 +1672,41 @@ error:
 	return ret;
 }
 
+#ifdef CONFIG_DEBUG_FS
+static int get_irq_none_cnt(void *data, u64 *val)
+{
+	struct max1720x_chip *chip = (struct max1720x_chip *)data;
+
+	*val = chip->debug_irq_none_cnt;
+	return 0;
+}
+
+static int set_irq_none_cnt(void *data, u64 val)
+{
+	struct max1720x_chip *chip = (struct max1720x_chip *)data;
+
+	if (val == 0)
+		chip->debug_irq_none_cnt = 0;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(irq_none_cnt_fops, get_irq_none_cnt,
+	set_irq_none_cnt, "%llu\n");
+#endif
+
+static int init_debugfs(struct max1720x_chip *chip)
+{
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *de;
+
+	de = debugfs_create_dir("max1720x", 0);
+	if (de)
+		debugfs_create_file("irq_none_cnt", 0644, de,
+				   chip, &irq_none_cnt_fops);
+#endif
+	return 0;
+}
+
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
 	u16 data = 0;
@@ -1699,6 +1767,8 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 		max1720x_restore_battery_qh_capacity(chip);
 
 	chip->prev_charge_state = POWER_SUPPLY_STATUS_UNKNOWN;
+
+	init_debugfs(chip);
 
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
@@ -1851,7 +1921,7 @@ static int max1720x_probe(struct i2c_client *client,
 	if (chip->primary->irq) {
 		ret = request_threaded_irq(chip->primary->irq, NULL,
 					   max1720x_fg_irq_thread_fn,
-					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 					   MAX1720X_I2C_DRIVER_NAME, chip);
 		if (ret != 0) {
 			dev_err(chip->dev, "Unable to register IRQ handler\n");
@@ -1948,8 +2018,6 @@ static int max1720x_pm_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct max1720x_chip *chip = i2c_get_clientdata(client);
 
-	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
-
 	pm_runtime_get_sync(chip->dev);
 	chip->resume_complete = false;
 	pm_runtime_put_sync(chip->dev);
@@ -1965,8 +2033,6 @@ static int max1720x_pm_resume(struct device *dev)
 	pm_runtime_get_sync(chip->dev);
 	chip->resume_complete = true;
 	pm_runtime_put_sync(chip->dev);
-
-	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
 
 	return 0;
 }
