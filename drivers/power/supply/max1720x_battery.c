@@ -1515,6 +1515,7 @@ static int max1720x_handle_dt_register_config(struct max1720x_chip *chip)
 
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
+	u16 data = 0;
 	int ret;
 
 	ret = max1720x_handle_dt_shadow_config(chip);
@@ -1525,31 +1526,23 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	if (ret)
 		return ret;
 
-	return 0;
-}
-
-static void max1720x_complete_init(struct max1720x_chip *chip)
-{
-	u16 data = 0;
-	int err;
-
 	chip->fake_capacity = -EINVAL;
 	chip->fake_temperature = -EINVAL;
 	chip->init_complete = true;
 	chip->resume_complete = true;
 
-	err = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
-	if (err == 0 && data & MAX1720X_STATUS_BR) {
+	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
+	if (!ret && data & MAX1720X_STATUS_BR) {
 		dev_info(chip->dev, "Clearing Battery Removal bit\n");
 		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_BR, 0x0);
 	}
-	if (err == 0 && data & MAX1720X_STATUS_BI) {
+	if (!ret && data & MAX1720X_STATUS_BI) {
 		dev_info(chip->dev, "Clearing Battery Insertion bit\n");
 		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_BI, 0x0);
 	}
-	if (err == 0 && data & MAX1720X_STATUS_POR) {
+	if (!ret && data & MAX1720X_STATUS_POR) {
 		dev_info(chip->dev, "Clearing Power-On Reset bit\n");
 		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_POR, 0x0);
@@ -1570,8 +1563,8 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 	 * Capacity data is stored as complement so it will not be zero. Using
 	 * zero case to detect new un-primed pack
 	 */
-	err = REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, &data);
-	if (!err && data == 0)
+	ret = REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, &data);
+	if (!ret && data == 0)
 		max1720x_prime_battery_qh_capacity(chip,
 						   POWER_SUPPLY_STATUS_UNKNOWN);
 	else
@@ -1581,8 +1574,9 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
-}
 
+	return 0;
+}
 
 static void max1720x_set_serial_number(struct max1720x_chip *chip)
 {
@@ -1677,68 +1671,13 @@ static void max1720x_init_work(struct work_struct *work)
 {
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
 						  init_work.work);
-	struct device *dev = chip->dev;
-	struct power_supply_config psy_cfg = { };
-	int ret;
+	int ret = max1720x_init_chip(chip);
 
-	ret = max1720x_init_chip(chip);
 	if (ret == -EPROBE_DEFER) {
 		schedule_delayed_work(&chip->init_work,
 				      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
 		return;
 	}
-
-	if (chip->primary->irq) {
-		ret = request_threaded_irq(chip->primary->irq, NULL,
-					   max1720x_fg_irq_thread_fn,
-					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					   MAX1720X_I2C_DRIVER_NAME, chip);
-		if (ret != 0) {
-			dev_err(chip->dev, "Unable to register IRQ handler\n");
-			return;
-		}
-		enable_irq_wake(chip->primary->irq);
-	}
-
-	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
-		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
-
-	psy_cfg.drv_data = chip;
-	chip->psy = devm_power_supply_register(dev,
-					       &max1720x_psy_desc, &psy_cfg);
-	if (IS_ERR(chip->psy)) {
-		dev_err(dev, "Couldn't register as power supply\n");
-		ret = PTR_ERR(chip->psy);
-		return;
-	}
-
-	chip->history_index = 0;
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
-	if (ret) {
-		dev_err(dev, "Failed to create history_count attribute\n");
-		return;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
-	if (ret) {
-		dev_err(dev, "Failed to create history attribute\n");
-		return;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
-	if (ret) {
-		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
-		return;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_offmode_charger);
-	if (ret) {
-		dev_err(dev, "Failed to create offmode_charger attribute\n");
-		return;
-	}
-
-	max1720x_set_serial_number(chip);
-	max1720x_complete_init(chip);
 }
 
 static int max1720x_probe(struct i2c_client *client,
@@ -1746,6 +1685,8 @@ static int max1720x_probe(struct i2c_client *client,
 {
 	struct max1720x_chip *chip;
 	struct device *dev = &client->dev;
+	struct power_supply_config psy_cfg = { };
+
 	int ret = 0;
 
 	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
@@ -1778,6 +1719,58 @@ static int max1720x_probe(struct i2c_client *client,
 
 	mutex_init(&chip->cyc_ctr.lock);
 	max1720x_restore_cycle_counter(chip);
+
+	if (chip->primary->irq) {
+		ret = request_threaded_irq(chip->primary->irq, NULL,
+					   max1720x_fg_irq_thread_fn,
+					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					   MAX1720X_I2C_DRIVER_NAME, chip);
+		if (ret != 0) {
+			dev_err(chip->dev, "Unable to register IRQ handler\n");
+			goto i2c_unregister;
+		}
+		enable_irq_wake(chip->primary->irq);
+	}
+
+	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
+		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
+
+	psy_cfg.drv_data = chip;
+	chip->psy = devm_power_supply_register(dev,
+					       &max1720x_psy_desc, &psy_cfg);
+	if (IS_ERR(chip->psy)) {
+		dev_err(dev, "Couldn't register as power supply\n");
+		ret = PTR_ERR(chip->psy);
+		goto irq_unregister;
+	}
+
+	chip->history_index = 0;
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
+	if (ret) {
+		dev_err(dev, "Failed to create history_count attribute\n");
+		goto psy_unregister;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
+	if (ret) {
+		dev_err(dev, "Failed to create history attribute\n");
+		goto psy_unregister;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
+	if (ret) {
+		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
+		goto psy_unregister;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_offmode_charger);
+	if (ret) {
+		dev_err(dev, "Failed to create offmode_charger attribute\n");
+		goto psy_unregister;
+	}
+
+	max1720x_set_serial_number(chip);
+
 	INIT_WORK(&chip->cycle_count_work, max1720x_cycle_count_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
 	schedule_delayed_work(&chip->init_work,
@@ -1785,8 +1778,13 @@ static int max1720x_probe(struct i2c_client *client,
 
 	return 0;
 
+psy_unregister:
+	power_supply_unregister(chip->psy);
+irq_unregister:
+	free_irq(chip->primary->irq, chip);
 i2c_unregister:
 	i2c_unregister_device(chip->secondary);
+
 	return ret;
 }
 
@@ -1844,17 +1842,17 @@ static int max1720x_pm_resume(struct device *dev)
 
 	return 0;
 }
-static SIMPLE_DEV_PM_OPS(max1720x_pm_ops,
-			max1720x_pm_suspend, max1720x_pm_resume);
-#else
-#define max1720x_pm_ops NULL
 #endif
+static const struct dev_pm_ops max1720x_pm_ops = {
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(max1720x_pm_suspend, max1720x_pm_resume)
+};
 
 static struct i2c_driver max1720x_i2c_driver = {
 	.driver = {
 		   .name = "max1720x",
 		   .of_match_table = max1720x_of_match,
 		   .pm = &max1720x_pm_ops,
+		   .probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		   },
 	.id_table = max1720x_id,
 	.probe = max1720x_probe,
