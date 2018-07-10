@@ -638,7 +638,7 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
-uint32_t abc_irq_init(struct pci_dev *pdev)
+uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
 {
 	int err, vector, i;
 	struct abc_pcie_devdata *abc = dev_get_drvdata(&pdev->dev);
@@ -653,8 +653,10 @@ uint32_t abc_irq_init(struct pci_dev *pdev)
 
 	/* MSI IRQs Request for system IP's */
 	for (i = ABC_MSI_0_TMU_AON; i < ABC_MSI_RD_DMA_0; i++) {
-		/* ABC_MSI_3_IPU_IRQ1 is registered by paintbox driver*/
-		if (i == ABC_MSI_3_IPU_IRQ1)
+		/* ABC_MSI_2_IPU_IRQ0 and ABC_MSI_3_IPU_IRQ1 are registered by
+		 * the paintbox IPU driver
+		 */
+		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1)
 			continue;
 		err = request_irq(pdev->irq + i,
 				abc_pcie_irq_handler, 0,
@@ -705,7 +707,26 @@ free_irq:
 
 }
 
+static void abc_pcie_irq_free(struct pci_dev *pdev)
+{
+	unsigned int i;
+
+	for (i = ABC_MSI_0_TMU_AON; i <= ABC_MSI_AON_INTNC; i++) {
+		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1)
+			continue;
+		free_irq(pdev->irq + i, pdev);
+	}
+
+	pci_free_irq_vectors(pdev);
+}
+
 static const struct resource ipu_resources[] = {
+	{
+		.name = DRV_NAME_ABC_PCIE_IPU,
+		.start = ABC_MSI_2_IPU_IRQ0,
+		.end = ABC_MSI_2_IPU_IRQ0,
+		.flags = IORESOURCE_IRQ,
+	},
 	{
 		.name = DRV_NAME_ABC_PCIE_IPU,
 		.start = ABC_MSI_3_IPU_IRQ1,
@@ -757,6 +778,31 @@ static const struct pci_device_id abc_pcie_ids[] = {
 	{ PCI_DEVICE(0x1ae0, 0xabcd) },
 	{ 0, }
 };
+
+static int abc_pcie_init_child_devices(struct pci_dev *pdev)
+{
+	int err;
+
+	err = mfd_add_devices(&pdev->dev, -1, abc_pcie_bar0,
+			ARRAY_SIZE(abc_pcie_bar0), &pdev->resource[0],
+			pdev->irq, NULL);
+	if (err < 0) {
+		dev_err(&pdev->dev, "mfd_add_devices[0] failed: %d\n", err);
+		return err;
+	}
+
+#ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
+	err = mfd_add_devices(&pdev->dev, -1, abc_pcie_bar2,
+			ARRAY_SIZE(abc_pcie_bar2), &pdev->resource[2], 0, NULL);
+	if (err < 0) {
+		mfd_remove_devices(&pdev->dev);
+		dev_err(&pdev->dev, "mfd_add_devices[2] failed: %d\n", err);
+		return err;
+	}
+#endif
+
+	return 0;
+}
 
 static int abc_pcie_probe(struct pci_dev *pdev,
 				   const struct pci_device_id *ent)
@@ -820,22 +866,13 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 		}
 		abc->bar[bar] = base;
 		res = &pdev->resource[bar];
+
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 		if (bar == 0) {
 			/* In current setup BAR0 Mapped for IPU & TPU */
 			abc_dev->tpu_config = base;
 			/* IPU is located at 2MB from TPU block */
 			abc_dev->ipu_config = base + (2 * 1024 * 1024);
-
-			err = mfd_add_devices(&pdev->dev, -1,
-						   abc_pcie_bar0,
-					ARRAY_SIZE(abc_pcie_bar0),
-						   res, pdev->irq, NULL);
-			if (err) {
-				dev_err(&pdev->dev,
-					"mfd_add_devices[%d] failed: %d\n",
-					i, err);
-			}
 		}
 		if (bar == 2) {
 			/* In current setup BAR2 Mapped for FSYS & DBI */
@@ -848,15 +885,6 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 				 */
 				abc_pcie_bar2[i].platform_data = abc_dev;
 				abc_pcie_bar2[i].pdata_size = sizeof(*abc_dev);
-			}
-			err = mfd_add_devices(&pdev->dev, -1,
-						   abc_pcie_bar2,
-					ARRAY_SIZE(abc_pcie_bar2),
-						   res, 0, NULL);
-			if (err) {
-				dev_err(&pdev->dev,
-					"mfd_add_devices[%d] failed: %d\n",
-					i, err);
 			}
 		}
 		if (bar == 4) {
@@ -881,16 +909,6 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 				abc_pcie_bar0[i].platform_data = abc_dev;
 				abc_pcie_bar0[i].pdata_size = sizeof(*abc_dev);
 			}
-			err = mfd_add_devices(&pdev->dev, -1,
-						   abc_pcie_bar0,
-					ARRAY_SIZE(abc_pcie_bar0),
-						   res, pdev->irq, NULL);
-			if (err) {
-				dev_err(&pdev->dev,
-					"mfd_add_devices[%d] failed: %d\n",
-					i, err);
-			}
-
 		}
 		if (bar == 2)
 			abc_dev->bar2_base = base;
@@ -904,9 +922,9 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	}
 
 exit_loop:
-/* IRQ handling */
+	/* IRQ handling */
 #if CONFIG_PCI_MSI
-	err = abc_irq_init(pdev);
+	err = abc_pcie_irq_init(pdev);
 	if (err) {
 		dev_err(&pdev->dev, "abc_irq_init failed\n");
 		goto err4;
@@ -915,7 +933,13 @@ exit_loop:
 
 	pci_set_drvdata(pdev, abc);
 
+	err = abc_pcie_init_child_devices(pdev);
+	if (err < 0)
+		goto err5;
+
 	return 0;
+err5:
+	abc_pcie_irq_free(pdev);
 err4:
 	pci_release_regions(pdev);
 err3:
@@ -930,7 +954,6 @@ err1:
 
 static void abc_pcie_remove(struct pci_dev *pdev)
 {
-	int i;
 	enum pci_barno bar;
 	struct abc_pcie_devdata *abc = pci_get_drvdata(pdev);
 
@@ -941,13 +964,7 @@ static void abc_pcie_remove(struct pci_dev *pdev)
 			iounmap(abc->bar[bar]);
 	}
 
-	for (i = ABC_MSI_0_TMU_AON; i <= ABC_MSI_AON_INTNC; i++) {
-		if (i == ABC_MSI_3_IPU_IRQ1)
-			continue;
-		free_irq(pdev->irq + i, pdev);
-	}
-	pci_free_irq_vectors(pdev);
-
+	abc_pcie_irq_free(pdev);
 	pci_set_drvdata(pdev, NULL);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
