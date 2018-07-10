@@ -30,8 +30,8 @@
 };
 
 &pm8150_gpios {
-    citadel {
-        ap_ctdl_irq: ap_ctdl_irq {
+	citadel {
+		ap_ctdl_irq: ap_ctdl_irq {
 			mux {
 				pins = "gpio1";
 				function = "gpio";
@@ -44,7 +44,7 @@
 				output-high;
 			};
 		};
-    };
+	 };
 };
 
 &qupv3_se6_spi {
@@ -56,7 +56,8 @@
 		interrupt-parent = <&tlmm>;
 		interrupts = <119 0x0>;
 		citadel,ctdl_ap_irq = <&tlmm 119 0x0>;
-		citadel,ctdl_rst = <&pm8150b_gpios 4 0x0>;  /* Reset is NC on Jaws. */
+		/* FIXME: On proto, pm8150b gpio10 is for USBC_EXTBST_EN. */
+		citadel,ctdl_rst = <&pm8150b_gpios 10 0x0>;
 		pinctrl-names = "ap_ctdl_irq";
 		pinctrl-0 = <&ap_ctdl_irq>;
 		reg = <0>;
