@@ -42,8 +42,7 @@ static const u32 p9221_ov_set_lut[] = {
 
 static bool p9221_is_r5(struct p9221_charger_data *charger)
 {
-	return (charger->cust_id == P9221R5_CUSTOMER_ID_VAL) ||
-		(charger->cust_id == P9221R7_CUSTOMER_ID_VAL);
+	return (charger->cust_id == P9221R5_CUSTOMER_ID_VAL);
 }
 
 static size_t p9221_hex_str(u8 *data, size_t len, char *buf, size_t max_buf,
@@ -970,8 +969,8 @@ static int p9221_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		if (charger->last_capacity == val->intval)
 			break;
-		charger->last_capacity = val->intval;
 		if (charger->online) {
+			charger->last_capacity = val->intval;
 			ret = p9221_send_csp(charger, charger->last_capacity);
 			if (ret)
 				dev_err(&charger->client->dev,
@@ -1128,7 +1127,7 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 static void p9221_set_online(struct p9221_charger_data *charger)
 {
 	int ret;
-	u8 cid = 0;
+	u8 cid = 5;
 
 	dev_info(&charger->client->dev, "Set online\n");
 
@@ -1136,6 +1135,7 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	charger->tx_busy = false;
 	charger->tx_done = true;
 	charger->rx_done = false;
+	charger->last_capacity = -1;
 
 	ret = p9221_reg_read_8(charger, P9221_CUSTOMER_ID_REG, &cid);
 	if (ret)
