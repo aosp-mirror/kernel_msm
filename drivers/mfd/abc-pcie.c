@@ -688,6 +688,61 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
+/* TODO(basso):  This is temporary code to enable power and clocks to the IPU
+ * and TPU.  This should be replaced with proper regulator and clock control
+ * interfaces.
+ */
+#define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x00041800
+#define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x00241800
+#define REG_PCIe_INIT 0x00B30388
+#define PMU_CONTROL 0x00BA0004
+#define PMU_CONTROL_PHY_RET_OFF (1 << 8)
+#define PMU_CONTROL_BLK_TPU_UP_REQ (1 << 1)
+#define PMU_CONTROL_BLK_IPU_UP_REQ (1 << 0)
+#define TIMEOUT_POWERSWITCH_HANDSHAKE_IPU 0x00BA3530
+#define TIMEOUT_POWERSWITCH_HANDSHAKE_TPU 0x00BA3534
+
+static int abc_pcie_ipu_tpu_enable(void)
+{
+	int err;
+
+	err = pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_IPU, 4,
+			0x00000001);
+	if (WARN_ON(err < 0))
+		return err;
+
+	err = pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_TPU, 4,
+			0x00000001);
+	if (WARN_ON(err < 0))
+		return err;
+
+	err = pcie_config_write(REG_PCIe_INIT, 4, 0x00000001);
+	if (WARN_ON(err < 0))
+		return err;
+
+	err = pcie_config_write(PMU_CONTROL, 4, PMU_CONTROL_PHY_RET_OFF |
+			PMU_CONTROL_BLK_TPU_UP_REQ |
+			PMU_CONTROL_BLK_IPU_UP_REQ);
+	if (WARN_ON(err < 0))
+		return err;
+
+	/* TODO(basso):  Determine the proper timeout here. */
+	msleep(1);
+
+	err = pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_IPU, 4, 0x00000003);
+	if (WARN_ON(err < 0))
+		return err;
+
+	err = pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_TPU, 4, 0x00000003);
+	if (WARN_ON(err < 0))
+		return err;
+
+	/* TODO(basso):  Determine the proper timeout here. */
+	msleep(1);
+
+	return 0;
+}
+
 uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
 {
 	int err, vector, i;
@@ -986,6 +1041,10 @@ exit_loop:
 #if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
 	setup_smmu(pdev);
 #endif
+
+	err = abc_pcie_ipu_tpu_enable();
+	if (err < 0)
+		goto err5;
 
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
