@@ -1,0 +1,106 @@
+#
+# Paintbox Programmable IPU
+#
+
+menu "Paintbox Programmable IPU"
+
+config PAINTBOX
+	tristate "Paintbox programmable ISP"
+	help
+	  Say Y here if you want to support the Paintbox programmable ISP
+
+config PAINTBOX_DEBUG
+	bool  "Paintbox Debug Support"
+	depends on PAINTBOX && DEBUG_FS
+	default n
+	---help---
+	This option enables support for Paintbox debug support.
+	If you are unsure, say N.
+
+config PAINTBOX_FPGA_SUPPORT
+	bool  "Paintbox FPGA Support"
+	depends on PAINTBOX
+	default n
+	---help---
+	This option enables support for the Paintbox FPGA hardware.
+	If you are unsure, say N.
+
+config PAINTBOX_FPGA_SOFT_RESET
+	bool  "Paintbox FPGA Soft Reset Support"
+	depends on PAINTBOX_FPGA_SUPPORT
+	default n
+	---help---
+	This option enables support for the FPGA soft reset register.
+	If you are unsure, say N.
+
+config PAINTBOX_SIMULATOR_SUPPORT
+	bool  "Paintbox Simulator Support"
+	depends on PAINTBOX
+	default n
+	---help---
+	This option enables support for the Paintbox Simulator.
+	If you are unsure, say N.
+
+config PAINTBOX_TEST_SUPPORT
+	bool  "Paintbox Test Support"
+	depends on PAINTBOX
+	default n
+	---help---
+	This option enables support for Paintbox test only ioctls and debugging.
+	If you are unsure, say N.
+
+config PAINTBOX_IOMMU_ENABLED
+	bool  "Set the default state for the Painbox to on"
+	depends on PAINTBOX
+	depends on PAINTBOX_IOMMU
+	default y
+	---help---
+	This option sets the default state for Paintbox IOMMU to on.
+
+config PAINTBOX_PLATFORM_BUS
+	bool  "Paintbox Platform Bus Support"
+	depends on PAINTBOX
+	default n
+	---help---
+	This option enables support for IPU hardware on an AXI bus.
+	If you are unsure, say N.
+
+config PAINTBOX_AIRBRUSH_MFD
+	bool  "Paintbox Airbrush Multi-function Device Support"
+	depends on PAINTBOX
+	depends on MFD_ABC_PCIE
+	default n
+	---help---
+	This option enables support for IPU hardware on the Airbrush companion
+	chip.  If you are unsure, say N.
+
+choice
+	prompt "Paintbox Version"
+	depends on PAINTBOX
+	default PAINTBOX_V0
+
+config PAINTBOX_V0
+	bool  "Paintbox V0 functionality and errata"
+	---help---
+	This option enables Paintbox V0 specific functionality and errata.
+
+config PAINTBOX_V1
+	bool  "Paintbox V1 functionality and errata"
+	---help---
+	This option enables Paintbox V1 specific functionality and errata.
+
+config PAINTBOX_V2
+	bool  "Paintbox V2 functionality and errata"
+	---help---
+	This option enables Paintbox V2 specific functionality and errata.
+
+endchoice
+
+config PAINTBOX_VERSION_MAJOR
+	int
+	depends on PAINTBOX
+	default 2 if PAINTBOX_V2
+	default 1 if PAINTBOX_V1
+	default 0
+
+endmenu
