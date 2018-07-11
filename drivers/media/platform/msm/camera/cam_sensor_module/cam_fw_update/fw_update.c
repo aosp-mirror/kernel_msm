@@ -10,11 +10,13 @@
 #define VCM_COMPONENT_I2C_ADDR_WRITE 0xE4
 #define VCM_EEPROM_I2C_ADDR_WRITE 0xE6
 #define VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N 0x18
+#define VCM_EEPROM_I2C_ADDR_WRITE_FRONT_N 0xA0
 #define MK_SHARP   0x04170000
 #define MK_LGIT    0x09170000
 #define AF_EEPROM_DATA 0x80
 #define RETRY_MAX 3
 #define LUT_MAX 66
+#define LUT_MAX_FRONT 22
 #define SECTOR_SIZE 320
 
 #define VCM_AK7375_EEPROM_WRITE_MODE_ADDR    0xAE
@@ -25,6 +27,9 @@
 #define VCM_AK7375_EEPROM_STORE_MEM1_DATA    0x01
 #define VCM_AK7375_EEPROM_STORE_MEM2_DATA    0x02
 #define VCM_AK7375_EEPROM_STORE_MEM3_DATA    0x04
+
+#define VCM_AK7375_EEPROM_VERSION_ADDR       0x000A
+#define VCM_AK7375_EEPROM_VERSION_R13        0x0D
 
 static struct camera_io_master *g_io_master_info;
 bool g_first = true;
@@ -642,36 +647,51 @@ int checkFrontVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	/* Bcakup the I2C slave address */
 	cci_client_sid_backup = s_ctrl->io_master_info.cci_client->sid;
 
-	/* Replace the I2C slave address with VCM component */
+	/* Replace the I2C slave address with VCM eeprom */
 	s_ctrl->io_master_info.cci_client->sid =
-		VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N >> 1;
+		VCM_EEPROM_I2C_ADDR_WRITE_FRONT_N >> 1;
 
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: change sid to 0x%02x",
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: change sid to 0x%02x for EEPROM",
 		 __func__, io_master_info->cci_client->sid);
 
-	fwtable = VCM_AK7375_DVT_R08;
-	size = ARRAY_SIZE(VCM_AK7375_DVT_R08);
+	/* Read Version */
+	rc = camera_io_dev_read(io_master_info,
+				VCM_AK7375_EEPROM_VERSION_ADDR,
+				&ReadData,
+				CAMERA_SENSOR_I2C_TYPE_WORD,
+				CAMERA_SENSOR_I2C_TYPE_BYTE);
 
-	/* Check Version:
-	 * There is no one register data for version, so compares
-	 * the first few entries defined as LUT_MAX instead.
-	 */
-	for (i = 0; i < LUT_MAX; i++) {
-		rc = RamRead8A(io_master_info,
-			       fwtable[i].reg_addr,
-			       &ReadData);
-		if (rc < 0 || ReadData != fwtable[i].reg_data) {
-			CAM_INFO(CAM_SENSOR,
-				 "[VCMFW]%s: Need to run FW update",
-				 __func__);
-			update_retry_cnt = RETRY_MAX;
-			break;
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: Version 0x%02x",
+		 __func__, ReadData);
+
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR,
+			"[VCMFW]%s: Fail to read version",
+			__func__);
+	} else if (ReadData == VCM_AK7375_EEPROM_VERSION_R13) {
+		/* Replace the I2C slave address with VCM component */
+		s_ctrl->io_master_info.cci_client->sid =
+			VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N >> 1;
+
+		CAM_INFO(CAM_SENSOR, "[VCMFW]%s: change sid to 0x%02x",
+			 __func__, io_master_info->cci_client->sid);
+
+		fwtable = VCM_AK7375_DVT_R16;
+		size = ARRAY_SIZE(VCM_AK7375_DVT_R16);
+
+		for (i = 0; i < LUT_MAX_FRONT; i++) {
+			rc = RamRead8A(io_master_info,
+				       fwtable[i].reg_addr,
+				       &ReadData);
+			if (rc < 0 || ReadData != fwtable[i].reg_data) {
+				CAM_INFO(CAM_SENSOR,
+					 "[VCMFW]%s: Need to run FW update to R16",
+					 __func__);
+				update_retry_cnt = RETRY_MAX;
+				break;
+			}
 		}
 	}
-
-	/* b/78207248: Force it off and force rc = 0 until R14 FW validated */
-	update_retry_cnt = 0;
-	rc = 0;
 
 	if (!update_retry_cnt) {
 		s_ctrl->io_master_info.cci_client->sid = cci_client_sid_backup;
@@ -806,6 +826,12 @@ int ValidateFrontVCMFW(struct camera_io_master *io_info,
 				"[VCMFW]%s: poll addr 0x%02x failed",
 				__func__, fwtable[i].reg_addr);
 			break;
+		} else {
+			CAM_INFO(CAM_SENSOR,
+				 "[VCMFW]%s: poll addr 0x%02x 0x%02x[%d] ok",
+				 __func__, fwtable[i].reg_addr,
+				 fwtable[i].reg_data,
+				 fwtable[i].reg_data);
 		}
 	}
 
