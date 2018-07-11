@@ -245,7 +245,6 @@ void paintbox_pm_disable_dma_channel(struct paintbox_data *pb,
 
 void paintbox_enable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 {
-#ifndef CONFIG_PAINTBOX_FPGA_SUPPORT
 	unsigned long irq_flags;
 
 	spin_lock_irqsave(&pb->power.power_lock, irq_flags);
@@ -256,21 +255,23 @@ void paintbox_enable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 	if (pb->power.bif_mmu_clock_idle_disable_ref_count == 0) {
 		uint32_t val;
 
+		/* TODO(ahampson):  Determine if controlling the SSP idle is
+		 * necessary.
+		 */
 		val = paintbox_readl(pb->dev, IPU_CSR_AON_OFFSET +
 				CLK_GATE_CONTROL);
 		val &= ~(CLK_GATE_CONTROL_MMU_IDLE_GATE_DIS_MASK |
-				CLK_GATE_CONTROL_BIF_IDLE_GATE_DIS_MASK);
+				CLK_GATE_CONTROL_BIF_IDLE_GATE_DIS_MASK |
+				CLK_GATE_CONTROL_SSP_IDLE_GATE_DIS_MASK);
 		paintbox_writel(pb->dev, val, IPU_CSR_AON_OFFSET +
 				CLK_GATE_CONTROL);
 	}
 
 	spin_unlock_irqrestore(&pb->power.power_lock, irq_flags);
-#endif
 }
 
 void paintbox_disable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 {
-#ifndef CONFIG_PAINTBOX_FPGA_SUPPORT
 	unsigned long irq_flags;
 
 	spin_lock_irqsave(&pb->power.power_lock, irq_flags);
@@ -278,10 +279,14 @@ void paintbox_disable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 	if (pb->power.bif_mmu_clock_idle_disable_ref_count == 0) {
 		uint32_t val;
 
+		/* TODO(ahampson):  Determine if controlling the SSP idle is
+		 * necessary.
+		 */
 		val = paintbox_readl(pb->dev, IPU_CSR_AON_OFFSET +
 				CLK_GATE_CONTROL);
 		val |= CLK_GATE_CONTROL_MMU_IDLE_GATE_DIS_MASK |
-			CLK_GATE_CONTROL_BIF_IDLE_GATE_DIS_MASK;
+			CLK_GATE_CONTROL_BIF_IDLE_GATE_DIS_MASK |
+			CLK_GATE_CONTROL_SSP_IDLE_GATE_DIS_MASK;
 		paintbox_writel(pb->dev, val, IPU_CSR_AON_OFFSET +
 				CLK_GATE_CONTROL);
 	}
@@ -289,7 +294,6 @@ void paintbox_disable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 	pb->power.bif_mmu_clock_idle_disable_ref_count++;
 
 	spin_unlock_irqrestore(&pb->power.power_lock, irq_flags);
-#endif
 }
 
 /* The caller to this function must hold pb->lock */
@@ -298,6 +302,7 @@ static void paintbox_core_power_enable(struct paintbox_data *pb,
 {
 	uint32_t max_core_mask, active_core_mask;
 	unsigned int active_cores;
+	uint32_t reg;
 
 	/* If the active core count is already at our requested core count then
 	 * there is nothing to do.
@@ -326,9 +331,14 @@ static void paintbox_core_power_enable(struct paintbox_data *pb,
 			active_cores < requested_cores; active_cores += 2) {
 		uint32_t new_core_mask_n = (max_core_mask <<
 				(active_cores + 1)) & max_core_mask;
-		uint32_t new_core_pairs = (active_cores + 2) / 2;
+		uint32_t new_core_pairs = (active_cores + 1) / 2;
 
-		/* Power on the odd core first */
+		/* Power on the odd core first.  The first write clear the PRE
+		 * bits for the cores to be powered.  The second write clears
+		 * the MAIN bits for the cores
+		 */
+		paintbox_writel(pb->dev, new_core_mask_n,
+				IPU_CSR_AON_OFFSET + CORE_POWER_ON_N + 4);
 		paintbox_writel(pb->dev, new_core_mask_n,
 				IPU_CSR_AON_OFFSET + CORE_POWER_ON_N);
 
@@ -337,9 +347,15 @@ static void paintbox_core_power_enable(struct paintbox_data *pb,
 		new_core_mask_n = (max_core_mask << (active_cores + 2)) &
 				max_core_mask;
 
-		/* Power on the even core next */
+		/* Power on the even core next.  The first write clear the PRE
+		 * bits for the cores to be powered.  The second write clears
+		 * the MAIN bits for the cores
+		 */
+		paintbox_writel(pb->dev, new_core_mask_n,
+				IPU_CSR_AON_OFFSET + CORE_POWER_ON_N + 4);
 		paintbox_writel(pb->dev, new_core_mask_n,
 				IPU_CSR_AON_OFFSET + CORE_POWER_ON_N);
+
 		udelay(CORE_POWER_RAMP_TIME);
 
 		/* We need to run the clock to the core pair that's being
@@ -375,6 +391,20 @@ static void paintbox_core_power_enable(struct paintbox_data *pb,
 
 	paintbox_enable_mmu_bif_idle_clock_gating(pb);
 
+	/* Enable STP idle clock gating */
+	reg = paintbox_readl(pb->dev, IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS);
+	reg &= ~active_core_mask;
+	paintbox_writel(pb->dev, reg, IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS);
+
+	/* Enable LBP idle clock gating */
+	reg = paintbox_readl(pb->dev, IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS);
+	reg &= ~((active_core_mask << 1) | 0x1);
+	paintbox_writel(pb->dev, reg, IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS);
+
 	pb->power.active_core_count = requested_cores;
 }
 
@@ -383,7 +413,6 @@ static void paintbox_core_power_disable(struct paintbox_data *pb,
 		unsigned int requested_cores)
 {
 	uint32_t max_core_mask;
-	unsigned int active_cores;
 
 	/* If the active core count is already at our requested core count then
 	 * there is nothing to do.
@@ -396,11 +425,11 @@ static void paintbox_core_power_disable(struct paintbox_data *pb,
 
 	paintbox_disable_mmu_bif_idle_clock_gating(pb);
 
-	for (active_cores = pb->power.active_core_count;
-			active_cores > requested_cores; active_cores -= 2) {
-		uint32_t new_core_mask_n = (max_core_mask <<
-				(active_cores - 2)) & max_core_mask;
-		uint32_t new_core_pairs = (active_cores - 2) / 2;
+	do {
+		int new_active_cores = pb->power.active_core_count - 2;
+		uint32_t new_core_mask_n = (max_core_mask << new_active_cores) &
+				max_core_mask;
+		uint32_t new_core_pairs = (new_active_cores + 1) / 2;
 
 		/* Enable core isolation for the disabled cores */
 		paintbox_writel(pb->dev, new_core_mask_n,
@@ -430,13 +459,13 @@ static void paintbox_core_power_disable(struct paintbox_data *pb,
 		/* Turn off the core pair */
 		paintbox_writel(pb->dev, new_core_mask_n,
 				IPU_CSR_AON_OFFSET + CORE_POWER_ON_N);
-	}
+
+		pb->power.active_core_count = new_active_cores;
+	} while (pb->power.active_core_count > requested_cores);
 
 	udelay(CORE_SYSTEM_STABLIZE_TIME);
 
 	paintbox_enable_mmu_bif_idle_clock_gating(pb);
-
-	pb->power.active_core_count = requested_cores;
 }
 
 /* The caller to this function must hold pb->lock */
@@ -458,9 +487,11 @@ void paintbox_pm_lbp_enable(struct paintbox_data *pb, struct paintbox_lbp *lbp)
 	/* IPU cores are power controlled in pairs so round up the requested
 	 * cores if it is an odd numbered core.
 	 *
-	 * LBP0 is part of the IO block and is controlled separately.
+	 * LBP0 and LBP15 are part of the IO block and are controlled
+	 * separately.
 	 */
-	paintbox_core_power_enable(pb, (lbp->pool_id + 1) & ~1);
+	if (lbp->pool_id > 0 && lbp->pool_id < 15)
+		paintbox_core_power_enable(pb, (lbp->pool_id + 1) & ~1);
 }
 
 /* The caller to this function must hold pb->lock */
@@ -510,9 +541,11 @@ void paintbox_pm_lbp_disable(struct paintbox_data *pb, struct paintbox_lbp *lbp)
 		return;
 #endif
 
-	/* LBP0 is part of the IO block and is controlled separately. */
-
-	paintbox_core_power_down_walk(pb);
+	/* LBP0 and LBP15 are part of the IO block and are controlled
+	 * separately.
+	 */
+	if (lbp->pool_id > 0 && lbp->pool_id < 15)
+		paintbox_core_power_down_walk(pb);
 }
 
 #ifdef CONFIG_PAINTBOX_DEBUG
