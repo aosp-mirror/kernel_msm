@@ -1559,18 +1559,10 @@ static void cs40l2x_vibe_brightness_set(struct led_classdev *led_cdev,
 		return;
 	}
 
-	if (brightness == LED_OFF) {
-		/* If for any reasons the stop_work is too slow, the driver must
-		 * wait till the previous stop_work has finished here or else
-		 * the LRA might not stop potentially
-		 */
-		while (!queue_work(cs40l2x->vibe_workqueue,
-				   &cs40l2x->vibe_stop_work))
-			udelay(1000);
-
-	} else {
+	if (brightness == LED_OFF)
+		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_stop_work);
+	else
 		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_start_work);
-	}
 }
 
 static void cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
