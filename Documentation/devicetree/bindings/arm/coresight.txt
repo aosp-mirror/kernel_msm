@@ -121,7 +121,9 @@ its hardware characteristcs.
 * Optional property for TMC:
 
 	* arm,buffer-size: size of contiguous buffer space for TMC ETR
-	 (embedded trace router)
+	  (embedded trace router). This property is obsolete. The buffer size
+	  can be configured dynamically via buffer_size property in sysfs.
+
 	* arm,default-sink: represents the default compile time CoreSight sink
 
 	* coresight-ctis: represents flush and reset CTIs for TMC buffer
