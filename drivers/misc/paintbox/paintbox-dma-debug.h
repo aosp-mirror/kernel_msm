@@ -44,15 +44,15 @@ do { } while (0)
 void paintbox_log_dma_dram_to_lbp_transfer(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel,
 		struct paintbox_dma_transfer *transfer,
-		struct dma_transfer_config *config);
+		struct dma_transfer_config_v2 *config);
 void paintbox_log_dma_lbp_to_dram_transfer(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel,
 		struct paintbox_dma_transfer *transfer,
-		struct dma_transfer_config *config);
+		struct dma_transfer_config_v2 *config);
 void paintbox_log_dma_dram_to_stp_transfer(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel,
 		struct paintbox_dma_transfer *transfer,
-		struct dma_transfer_config *config);
+		struct dma_transfer_config_v2 *config);
 
 #define LOG_DMA_DRAM_TO_LBP_TRANSFER(pb, channel, transfer, config)	\
 	paintbox_log_dma_dram_to_lbp_transfer(pb, channel, transfer, config)

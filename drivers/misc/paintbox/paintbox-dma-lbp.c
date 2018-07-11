@@ -50,22 +50,22 @@ static int set_dma_lbp_parameters(struct paintbox_data *pb,
 	struct paintbox_lb *lb;
 	int ret;
 
-	lb = get_lb(pb, session, config->lbp_id, config->lb_id, &ret);
+	lb = get_lb(pb, session, config->base.lbp_id, config->base.lb_id, &ret);
 	if (ret < 0)
 		return ret;
 
-	if (config->read_ptr_id >= lb->num_read_ptrs) {
-		dev_err(&pb->pdev->dev,
+	if (config->base.read_ptr_id >= lb->num_read_ptrs) {
+		dev_err(pb->dev,
 				"%s: dma channel%u invalid rptr id, %u, num read ptrs %u\n",
 				__func__, channel->channel_id,
-				config->read_ptr_id, lb->num_read_ptrs);
+				config->base.read_ptr_id, lb->num_read_ptrs);
 		return -EINVAL;
 	}
 
 	if (config->base.start_x_pixels < DMA_CHAN_IMG_POS_LB_START_MIN ||
 			config->base.start_x_pixels >
 			DMA_CHAN_IMG_POS_LB_START_MAX) {
-		dev_err(&pb->pdev->dev,
+		dev_err(pb->dev,
 				"%s: dma channel%u lb_start x out of bounds, %d min %d max %d\n",
 				__func__, channel->channel_id,
 				config->base.start_x_pixels,
@@ -77,7 +77,7 @@ static int set_dma_lbp_parameters(struct paintbox_data *pb,
 	if (config->base.start_y_pixels < DMA_CHAN_IMG_POS_LB_START_MIN ||
 			config->base.start_y_pixels >
 			DMA_CHAN_IMG_POS_LB_START_MAX) {
-		dev_err(&pb->pdev->dev,
+		dev_err(pb->dev,
 				"%s: dma channel%u lb_start y out of bounds, %d min %d max %d\n",
 				 __func__, channel->channel_id,
 				config->base.start_y_pixels,
@@ -121,7 +121,7 @@ int dma_setup_dram_to_lbp_transfer(struct paintbox_data *pb,
 	 */
 #ifdef DEBUG
 	if (config->src.dram.len_bytes > DMA_CHAN_VA_BDRY_LEN_MAX) {
-		dev_err(&pb->pdev->dev,
+		dev_err(pb->dev,
 				"%s: dma channel%u transfer too large, %llu max %llu bytes",
 				__func__, channel->channel_id,
 				config->dst.dram.len_bytes,
@@ -183,7 +183,7 @@ int dma_setup_lbp_to_dram_transfer(struct paintbox_data *pb,
 	 */
 #ifdef DEBUG
 	if (config->dst.dram.len_bytes > DMA_CHAN_VA_BDRY_LEN_MAX) {
-		dev_err(&pb->pdev->dev,
+		dev_err(pb->dev,
 				"%s: dma channel%u transfer too large, %llu max %llu bytes",
 				__func__, channel->channel_id,
 				config->dst.dram.len_bytes,

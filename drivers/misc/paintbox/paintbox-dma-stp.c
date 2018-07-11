@@ -35,99 +35,6 @@
 #include "paintbox-regs.h"
 #include "paintbox-stp.h"
 
-/* TODO:  Temporarily make stp dma configuration validation a debug
- * only operation.  b/62353362
- */
-#ifdef DEBUG
-/* DRAM to STP transfers must be aligned to 32 byte SRAM offset */
-#define DMA_STP_SRAM_ADDR_ALIGN_MASK 0x1F
-
-static int validate_stp_inst_sram_transfer(struct paintbox_data *pb,
-		struct paintbox_dma_channel *channel, struct paintbox_stp *stp,
-		struct dma_dram_config *dram_config,
-		struct dma_stp_config *stp_config)
-{
-	size_t sram_size_bytes = pb->stp.inst_mem_size_in_instructions *
-			STP_INST_SRAM_INSTRUCTION_WIDTH_BYTES;
-
-	if ((stp_config->sram_addr & DMA_STP_SRAM_ADDR_ALIGN_MASK) != 0) {
-		dev_err(pb->dev,
-				"%s: dma channel%u SRAM address 0x%04x is not aligned\n",
-				__func__, channel->channel_id,
-				stp_config->sram_addr);
-		return -EINVAL;
-	}
-
-	if (stp_config->sram_addr + dram_config->len_bytes > sram_size_bytes) {
-		dev_err(pb->dev,
-				"%s: dma channel%u not enough space in target SRAM, SRAM ADDR 0x%04x + %llu bytes > %lu bytes\n",
-				__func__, channel->channel_id,
-				stp_config->sram_addr,
-				dram_config->len_bytes, sram_size_bytes);
-		return -ERANGE;
-	}
-
-	return 0;
-}
-
-static int validate_stp_cnst_sram_transfer(struct paintbox_data *pb,
-		struct paintbox_dma_channel *channel, struct paintbox_stp *stp,
-		struct dma_dram_config *dram_config,
-		struct dma_stp_config *stp_config)
-{
-	size_t sram_size_bytes = pb->stp.const_mem_size_in_words *
-			STP_CONST_SRAM_WORD_WIDTH_BYTES;
-
-	if ((stp_config->sram_addr & DMA_STP_SRAM_ADDR_ALIGN_MASK) != 0) {
-		dev_err(pb->dev,
-				"%s: dma channel%u SRAM address 0x%04x is not aligned\n",
-				__func__, channel->channel_id,
-				stp_config->sram_addr);
-		return -EINVAL;
-	}
-
-	if (stp_config->sram_addr + dram_config->len_bytes >
-			sram_size_bytes) {
-		dev_err(pb->dev,
-				"%s: dma channel%u not enough space in target SRAM, SRAM ADDR 0x%04x + %llu bytes > %lu bytes\n",
-				__func__, channel->channel_id,
-				stp_config->sram_addr,
-				dram_config->len_bytes, sram_size_bytes);
-		return -ERANGE;
-	}
-
-	return 0;
-}
-
-static int validate_stp_scalar_sram_transfer(struct paintbox_data *pb,
-		struct paintbox_dma_channel *channel, struct paintbox_stp *stp,
-		struct dma_dram_config *dram_config,
-		struct dma_stp_config *stp_config)
-{
-	size_t sram_size_bytes = pb->stp.scalar_mem_size_in_words *
-			STP_SCALAR_SRAM_WORD_WIDTH_BYTES;
-
-	if ((stp_config->sram_addr & DMA_STP_SRAM_ADDR_ALIGN_MASK) != 0) {
-		dev_err(pb->dev,
-				"%s: dma channel%u SRAM address 0x%04x is not aligned\n",
-				__func__, channel->channel_id,
-				stp_config->sram_addr);
-		return -EINVAL;
-	}
-
-	if (stp_config->sram_addr + dram_config->len_bytes > sram_size_bytes) {
-		dev_err(pb->dev,
-				"%s: dma channel%u not enough space in target SRAM, SRAM ADDR 0x%04x + %llu bytes > %lu bytes\n",
-				__func__, channel->channel_id,
-				stp_config->sram_addr,
-				dram_config->len_bytes, sram_size_bytes);
-		return -ERANGE;
-	}
-
-	return 0;
-}
-#endif
-
 /* The caller to this function must hold pb->lock */
 static int set_dma_stp_parameters(struct paintbox_data *pb,
 		struct paintbox_session *session,
@@ -148,43 +55,16 @@ static int set_dma_stp_parameters(struct paintbox_data *pb,
 	 */
 	switch (stp_config->base.sram_target) {
 	case SRAM_TARGET_STP_INSTRUCTION_RAM:
-		/* TODO:  Temporarily make stp dma configuration
-		 * validation a debug only operation.  b/62353362
-		 */
-#ifdef DEBUG
-		ret = validate_stp_inst_sram_transfer(pb, channel, stp,
-				dram_config, &stp_config.base);
-		if (ret < 0)
-			return ret;
-#endif
 		paintbox_dma_set_lb_start(transfer,
 				(uint64_t)stp_config->base.sram_addr,
 				DMA_CHAN_LB_START_Y_STP_IRAM);
 		break;
 	case SRAM_TARGET_STP_CONSTANT_RAM:
-		/* TODO:  Temporarily make stp dma configuration
-		 * validation a debug only operation.  b/62353362
-		 */
-#ifdef DEBUG
-		ret = validate_stp_cnst_sram_transfer(pb, channel, stp,
-				dram_config, &stp_config.base);
-		if (ret < 0)
-			return ret;
-#endif
 		paintbox_dma_set_lb_start(transfer,
 				(uint64_t)stp_config->base.sram_addr,
 				DMA_CHAN_LB_START_Y_STP_CRAM);
 		break;
 	case SRAM_TARGET_STP_SCALAR_RAM:
-		/* TODO:  Temporarily make stp dma configuration
-		 * validation a debug only operation.  b/62353362
-		 */
-#ifdef DEBUG
-		ret = validate_stp_scalar_sram_transfer(pb, channel, stp,
-				dram_config, &stp_config.base);
-		if (ret < 0)
-			return ret;
-#endif
 		paintbox_dma_set_lb_start(transfer,
 				(uint64_t)stp_config->base.sram_addr,
 				DMA_CHAN_LB_START_Y_STP_DRAM);

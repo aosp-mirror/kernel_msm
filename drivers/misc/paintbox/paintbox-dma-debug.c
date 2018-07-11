@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <uapi/paintbox.h>
+#include <uapi/paintbox_v2.h>
 
 #include "paintbox-debug.h"
 #include "paintbox-dma.h"
@@ -96,7 +97,7 @@ static const char *dma_grp_reg_names[DMA_GRP_NUM_REGS] = {
 };
 
 static void paintbox_log_dma_common_transfer(struct paintbox_data *pb,
-		struct dma_transfer_config *config)
+		struct dma_transfer_config_v2 *config)
 {
 	dev_info(pb->dev,
 			"\twidth %upx height %upx planes %u components %u bit depth %u bits\n",
@@ -128,7 +129,7 @@ static void paintbox_log_dma_common_transfer(struct paintbox_data *pb,
 void paintbox_log_dma_dram_to_lbp_transfer(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel,
 		struct paintbox_dma_transfer *transfer,
-		struct dma_transfer_config *config)
+		struct dma_transfer_config_v2 *config)
 {
 	dev_info(pb->dev, "dma channel%u setup transfer %p\n",
 			channel->channel_id, transfer);
@@ -137,23 +138,25 @@ void paintbox_log_dma_dram_to_lbp_transfer(struct paintbox_data *pb,
 				"\tva %p dma addr %pad %llu bytes -> lbp%u lb%u rptr id %u\n",
 				config->src.dram.host_vaddr,
 				&transfer->dma_addr, config->src.dram.len_bytes,
-				config->dst.lbp.lbp_id, config->dst.lbp.lb_id,
-				config->dst.lbp.read_ptr_id);
+				config->dst.lbp.base.lbp_id,
+				config->dst.lbp.base.lb_id,
+				config->dst.lbp.base.read_ptr_id);
 	} else {
 		dev_info(pb->dev,
 				"\tdma buf fd %d offset %zu bytes dma_addr %pad %llu bytes -> lbp%u lb%u rptr id %u\n",
 				config->src.dram.dma_buf.fd,
 				config->src.dram.dma_buf.offset_bytes,
 				&transfer->dma_addr, config->src.dram.len_bytes,
-				config->dst.lbp.lbp_id, config->dst.lbp.lb_id,
-				config->dst.lbp.read_ptr_id);
+				config->dst.lbp.base.lbp_id,
+				config->dst.lbp.base.lb_id,
+				config->dst.lbp.base.read_ptr_id);
 	}
 
 	dev_info(pb->dev,
 				"\tlb start X %dpx lb start Y %dpx gather %d\n",
-				config->dst.lbp.start_x_pixels,
-				config->dst.lbp.start_y_pixels,
-				config->dst.lbp.gather);
+				config->dst.lbp.base.start_x_pixels,
+				config->dst.lbp.base.start_y_pixels,
+				config->dst.lbp.base.gather);
 
 	paintbox_log_dma_common_transfer(pb, config);
 }
@@ -162,24 +165,25 @@ void paintbox_log_dma_dram_to_lbp_transfer(struct paintbox_data *pb,
 void paintbox_log_dma_lbp_to_dram_transfer(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel,
 		struct paintbox_dma_transfer *transfer,
-		struct dma_transfer_config *config)
+		struct dma_transfer_config_v2 *config)
 {
 	dev_info(pb->dev, "dma channel%u setup transfer %p\n",
 			channel->channel_id, transfer);
 	if (config->dst.dram.buffer_type == DMA_DRAM_BUFFER_USER) {
 		dev_info(pb->dev,
 				"\tlbp%u lb%u rptr id %u -> va %p dma addr %pad %llu bytes\n",
-				config->src.lbp.lbp_id,
-				config->src.lbp.lb_id,
-				config->src.lbp.read_ptr_id,
+				config->src.lbp.base.lbp_id,
+				config->src.lbp.base.lb_id,
+				config->src.lbp.base.read_ptr_id,
 				config->dst.dram.host_vaddr,
 				&transfer->dma_addr,
 				config->dst.dram.len_bytes);
 	} else {
 		dev_info(pb->dev,
 				"\tlbp%u lb%u rptr id %u -> dma buf fd %d offset %zu bytes dma_addr %pad %llu bytes\n",
-				config->src.lbp.lbp_id, config->src.lbp.lb_id,
-				config->src.lbp.read_ptr_id,
+				config->src.lbp.base.lbp_id,
+				config->src.lbp.base.lb_id,
+				config->src.lbp.base.read_ptr_id,
 				config->dst.dram.dma_buf.fd,
 				config->dst.dram.dma_buf.offset_bytes,
 				&transfer->dma_addr,
@@ -188,9 +192,9 @@ void paintbox_log_dma_lbp_to_dram_transfer(struct paintbox_data *pb,
 
 	dev_info(pb->dev,
 				"\tlb start X %dpx lb start Y %dpx gather %d\n",
-				config->src.lbp.start_x_pixels,
-				config->src.lbp.start_y_pixels,
-				config->src.lbp.gather);
+				config->src.lbp.base.start_x_pixels,
+				config->src.lbp.base.start_y_pixels,
+				config->src.lbp.base.gather);
 
 	paintbox_log_dma_common_transfer(pb, config);
 }
@@ -199,7 +203,7 @@ void paintbox_log_dma_lbp_to_dram_transfer(struct paintbox_data *pb,
 void paintbox_log_dma_dram_to_stp_transfer(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel,
 		struct paintbox_dma_transfer *transfer,
-		struct dma_transfer_config *config)
+		struct dma_transfer_config_v2 *config)
 {
 	dev_info(pb->dev, "dma channel%u setup transfer %p\n",
 			channel->channel_id, transfer);
@@ -209,16 +213,16 @@ void paintbox_log_dma_dram_to_stp_transfer(struct paintbox_data *pb,
 				"\tva %p dma addr %pad %llu bytes -> stp%u sram addr 0x%08x\n",
 				config->src.dram.host_vaddr,
 				&transfer->dma_addr, config->src.dram.len_bytes,
-				config->dst.stp.stp_id,
-				config->dst.stp.sram_addr);
+				config->dst.stp.base.stp_id,
+				config->dst.stp.base.sram_addr);
 	} else {
 		dev_info(pb->dev,
 				"\tdma buf fd %d offset %zu bytes dma_addr %pad %llu bytes -> stp%u sram addr 0x%08x\n",
 				config->src.dram.dma_buf.fd,
 				config->src.dram.dma_buf.offset_bytes,
 				&transfer->dma_addr, config->src.dram.len_bytes,
-				config->dst.stp.stp_id,
-				config->dst.stp.sram_addr);
+				config->dst.stp.base.stp_id,
+				config->dst.stp.base.sram_addr);
 	}
 
 	paintbox_log_dma_common_transfer(pb, config);
