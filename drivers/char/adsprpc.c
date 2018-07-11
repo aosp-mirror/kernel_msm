@@ -2278,7 +2278,7 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
 	if (fl) {
 		if (fl->debugfs_file != NULL)
 			debugfs_remove(fl->debugfs_file);
-		mutex_destroy(&fl->map_mutex);
+
 		fastrpc_file_free(fl);
 		file->private_data = 0;
 	}
