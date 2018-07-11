@@ -960,7 +960,7 @@ static int max1720x_set_battery_temp(struct max1720x_chip *chip,
 	return 0;
 }
 
-static int max1720x_get_battery_qh_based_capacity(struct max1720x_chip *chip)
+static int max1720x_update_battery_qh_based_capacity(struct max1720x_chip *chip)
 {
 	u16 data;
 	int current_qh, err = 0;
@@ -974,7 +974,7 @@ static int max1720x_get_battery_qh_based_capacity(struct max1720x_chip *chip)
 	chip->current_capacity -= (chip->previous_qh - current_qh);
 	chip->previous_qh = current_qh;
 
-	return chip->current_capacity;
+	return 0;
 }
 
 static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
@@ -1031,10 +1031,11 @@ static int max1720x_get_property(struct power_supply *psy,
 			return val->intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		data = max1720x_get_battery_qh_based_capacity(chip);
-		if (data < 0)
-			return data;
-		val->intval = reg_to_micro_amp_h(data, chip->RSense);
+		err = max1720x_update_battery_qh_based_capacity(chip);
+		if (err < 0)
+			return err;
+		val->intval = reg_to_micro_amp_h(chip->current_capacity,
+						 chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		/*
