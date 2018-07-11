@@ -70,6 +70,7 @@ struct qti_can {
 	bool can_fw_cmd_timeout_req;
 	u32 rem_all_buffering_timeout_ms;
 	u32 can_fw_cmd_timeout_ms;
+	s64 time_diff;
 };
 
 struct qti_can_netdev_privdata {
@@ -118,6 +119,8 @@ struct spi_miso { /* TLV for MISO line */
 #define CMD_BEGIN_BOOT_ROM_UPGRADE	0x99
 #define CMD_BOOT_ROM_UPGRADE_DATA	0x9A
 #define CMD_END_BOOT_ROM_UPGRADE	0x9B
+#define CMD_END_FW_UPDATE_FILE		0x9C
+#define CMD_UPDATE_TIME_INFO		0x9D
 
 #define IOCTL_RELEASE_CAN_BUFFER	(SIOCDEVPRIVATE + 0)
 #define IOCTL_ENABLE_BUFFERING		(SIOCDEVPRIVATE + 1)
@@ -132,6 +135,7 @@ struct spi_miso { /* TLV for MISO line */
 #define IOCTL_BEGIN_BOOT_ROM_UPGRADE	(SIOCDEVPRIVATE + 11)
 #define IOCTL_BOOT_ROM_UPGRADE_DATA	(SIOCDEVPRIVATE + 12)
 #define IOCTL_END_BOOT_ROM_UPGRADE	(SIOCDEVPRIVATE + 13)
+#define IOCTL_END_FW_UPDATE_FILE    (SIOCDEVPRIVATE + 14)
 
 #define IFR_DATA_OFFSET		0x100
 struct can_fw_resp {
@@ -163,7 +167,7 @@ struct can_add_filter_resp {
 
 struct can_receive_frame {
 	u8 can_if;
-	u32 ts;
+	u64 ts;
 	u32 mid;
 	u8 dlc;
 	u8 data[8];
@@ -176,6 +180,10 @@ struct can_config_bit_timing {
 	u32 phase_seg2;
 	u32 sjw;
 	u32 brp;
+} __packed;
+
+struct can_time_info {
+	u64 time;
 } __packed;
 
 static struct can_bittiming_const rh850_bittiming_const = {
@@ -291,7 +299,7 @@ static void qti_can_receive_frame(struct qti_can *priv_data,
 		return;
 	}
 
-	LOGDI("rcv frame %d %d %x %d %x %x %x %x %x %x %x %x\n",
+	LOGDI("rcv frame %d %llu %x %d %x %x %x %x %x %x %x %x\n",
 	      frame->can_if, frame->ts, frame->mid, frame->dlc,
 	      frame->data[0], frame->data[1], frame->data[2], frame->data[3],
 	      frame->data[4], frame->data[5], frame->data[6], frame->data[7]);
@@ -301,7 +309,8 @@ static void qti_can_receive_frame(struct qti_can *priv_data,
 	for (i = 0; i < cf->can_dlc; i++)
 		cf->data[i] = frame->data[i];
 
-	nsec = ms_to_ktime(le32_to_cpu(frame->ts));
+	nsec = ms_to_ktime(le64_to_cpu(frame->ts) + priv_data->time_diff);
+
 	skt = skb_hwtstamps(skb);
 	skt->hwtstamp = nsec;
 	LOGDI("  hwtstamp %lld\n", ktime_to_ms(skt->hwtstamp));
@@ -354,6 +363,8 @@ static int qti_can_process_response(struct qti_can *priv_data,
 				    struct spi_miso *resp, int length)
 {
 	int ret = 0;
+	u64 mstime;
+	ktime_t ktime_now;
 
 	LOGDI("<%x %2d [%d]\n", resp->cmd, resp->len, resp->seq);
 	if (resp->cmd == CMD_CAN_RECEIVE_FRAME) {
@@ -402,6 +413,12 @@ static int qti_can_process_response(struct qti_can *priv_data,
 		ret |= (fw_resp->br_min & 0xFF) << 16;
 		ret |= (fw_resp->maj & 0xF) << 8;
 		ret |= (fw_resp->min & 0xFF);
+	} else if (resp->cmd == CMD_UPDATE_TIME_INFO) {
+		struct can_time_info *time_data =
+		     (struct can_time_info *)resp->data;
+		ktime_now = ktime_get_boottime();
+		mstime = ktime_to_ms(ktime_now);
+		priv_data->time_diff = mstime - (le64_to_cpu(time_data->time));
 	}
 
 	if (resp->cmd == priv_data->wait_cmd) {
@@ -983,6 +1000,8 @@ static int qti_can_convert_ioctl_cmd_to_spi_cmd(int ioctl_cmd)
 		return CMD_BOOT_ROM_UPGRADE_DATA;
 	case IOCTL_END_BOOT_ROM_UPGRADE:
 		return CMD_END_BOOT_ROM_UPGRADE;
+	case IOCTL_END_FW_UPDATE_FILE:
+		return CMD_END_FW_UPDATE_FILE;
 	}
 	return -EINVAL;
 }
@@ -1119,6 +1138,7 @@ static int qti_can_netdev_do_ioctl(struct net_device *netdev,
 	case IOCTL_BEGIN_BOOT_ROM_UPGRADE:
 	case IOCTL_BOOT_ROM_UPGRADE_DATA:
 	case IOCTL_END_BOOT_ROM_UPGRADE:
+	case IOCTL_END_FW_UPDATE_FILE:
 		ret = qti_can_do_blocking_ioctl(netdev, ifr, cmd);
 		break;
 	}

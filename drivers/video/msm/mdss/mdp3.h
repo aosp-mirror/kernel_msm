@@ -31,6 +31,7 @@
 #define MDP_CORE_CLK_RATE_SVS	160000000
 #define MDP_CORE_CLK_RATE_SUPER_SVS	200000000
 #define MDP_CORE_CLK_RATE_MAX	307200000
+#define SEC_DEVICE_MDP3         1
 
 #define CLK_FUDGE_NUM		12
 #define CLK_FUDGE_DEN		10
@@ -94,6 +95,12 @@ enum {
 	DI_PARTITION_NUM = 0,
 	DI_DOMAIN_NUM = 1,
 	DI_MAX,
+};
+
+enum mdp3_sd_transition {
+	NO_TRANSITION,
+	NONSECURE_TO_SECURE,
+	SECURE_TO_NONSECURE,
 };
 
 struct mdp3_bus_handle_map {
@@ -242,6 +249,20 @@ struct mdp3_img_data {
 
 extern struct mdp3_hw_resource *mdp3_res;
 
+/*
+ * mdp3_is_idle_pc: - checks if a panel is idle
+ */
+static inline bool mdp3_is_idle_pc(void)
+{
+	bool ret = 0;
+
+	mutex_lock(&mdp3_res->fs_idle_pc_lock);
+	ret = mdp3_res->idle_pc;
+	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
+
+	return ret;
+}
+
 struct mdp3_dma *mdp3_get_dma_pipe(int capability);
 struct mdp3_intf *mdp3_get_display_intf(int type);
 void mdp3_irq_enable(int type);
@@ -257,6 +278,7 @@ int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota);
 int mdp3_put_img(struct mdp3_img_data *data, int client);
 int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data,
 		int client);
+int mdp3_map_layer(struct mdp3_img_data *data, int client);
 int mdp3_iommu_enable(int client);
 int mdp3_iommu_disable(int client);
 int mdp3_iommu_is_attached(void);
