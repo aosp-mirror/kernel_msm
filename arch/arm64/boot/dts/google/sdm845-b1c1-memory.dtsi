@@ -25,27 +25,27 @@
  */
 
 &pil_modem_mem {
-	reg = <0 0x8e000000 0 0xa600000>;
+	reg = <0 0x8e000000 0 0x9800000>;
 };
 
 &pil_video_mem {
-	reg = <0 0x98600000 0 0x500000>;
+	reg = <0 0x97800000 0 0x500000>;
 };
 
 &pil_cdsp_mem {
-	reg = <0 0x98B00000 0 0x800000>;
+	reg = <0 0x97D00000 0 0x800000>;
 };
 
 &pil_mba_mem {
-	reg = <0 0x99300000 0 0x200000>;
+	reg = <0 0x98500000 0 0x200000>;
 };
 
 &pil_slpi_mem {
-		reg = <0 0x99500000 0 0x1400000>;
+	reg = <0 0x98700000 0 0x1400000>;
 };
 
 &pil_spss_mem {
-	reg = <0 0x9A900000 0 0x100000>;
+	reg = <0 0x99B00000 0 0x100000>;
 };
 
 &reserved_memory {
