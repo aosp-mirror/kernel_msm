@@ -163,12 +163,6 @@ static int cam_tasklet_dequeue_cmd(
 
 	*tasklet_cmd = NULL;
 
-	if (!atomic_read(&tasklet->tasklet_active)) {
-		CAM_INFO(CAM_ISP, "Tasklet is not active!");
-		rc = -EPIPE;
-		return rc;
-	}
-
 	CAM_DBG(CAM_ISP, "Dequeue before lock.");
 	spin_lock_irqsave(&tasklet->tasklet_lock, flags);
 	if (list_empty(&tasklet->used_cmd_list)) {
@@ -199,7 +193,7 @@ void cam_tasklet_enqueue_cmd(
 	struct cam_tasklet_info       *tasklet = bottom_half;
 
 	if (!bottom_half) {
-		CAM_ERR(CAM_ISP, "NULL bottom half");
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "NULL bottom half");
 		return;
 	}
 
@@ -268,13 +262,9 @@ void cam_tasklet_deinit(void    **tasklet_info)
 	*tasklet_info = NULL;
 }
 
-static void cam_tasklet_flush(void  *tasklet_info)
+static inline void cam_tasklet_flush(void  *tasklet_info)
 {
-	unsigned long data;
-	struct cam_tasklet_info *tasklet = tasklet_info;
-
-	data = (unsigned long)tasklet;
-	cam_tasklet_action(data);
+	cam_tasklet_action((unsigned long)tasklet_info);
 }
 
 int cam_tasklet_start(void  *tasklet_info)
@@ -306,8 +296,8 @@ void cam_tasklet_stop(void  *tasklet_info)
 {
 	struct cam_tasklet_info  *tasklet = tasklet_info;
 
-	cam_tasklet_flush(tasklet);
 	atomic_set(&tasklet->tasklet_active, 0);
+	cam_tasklet_flush(tasklet);
 	tasklet_disable(&tasklet->tasklet);
 }
 
