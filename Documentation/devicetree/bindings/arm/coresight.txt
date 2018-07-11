@@ -131,6 +131,9 @@ its hardware characteristcs.
 	* arm,sg-enable : indicates whether scatter gather feature is enabled
 	  by default for TMC ETR configuration.
 
+	* arm,scatter-gather: boolean. Indicates that the TMC-ETR can safely
+	  use the SG mode on this system.
+
 * Required property for TPDAs:
 
 	* qcom,tpda-atid: must be present. Specifies the ATID for TPDA.
