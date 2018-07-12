@@ -4369,7 +4369,8 @@ static int wma_passpoint_match_event_handler(void *handle,
 	struct wifi_passpoint_match  *dest_match;
 	tSirWifiScanResult      *dest_ap;
 	uint8_t *buf_ptr;
-
+	uint32_t buf_len = 0;
+	bool excess_data = false;
 	tpAniSirGlobal pMac = (tpAniSirGlobal )vos_get_context(
 					VOS_MODULE_ID_PE, wma->vos_context);
 	if (!pMac) {
@@ -4388,14 +4389,28 @@ static int wma_passpoint_match_event_handler(void *handle,
 	event = param_buf->fixed_param;
 	buf_ptr = (uint8_t *)param_buf->fixed_param;
 
-	/*
-	 * All the below lengths are UINT32 and summing up and checking
-	 * against a constant should not be an issue.
-	 */
-	if ((sizeof(*event) + event->ie_length + event->anqp_length) >
-			WMA_SVC_MSG_MAX_SIZE) {
-		WMA_LOGE("IE Length: %d or ANQP Length: %d is huge",
-				event->ie_length, event->anqp_length);
+	do {
+		if (event->ie_length > (WMA_SVC_MSG_MAX_SIZE)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len = event->ie_length;
+		}
+
+		if (event->anqp_length > (WMA_SVC_MSG_MAX_SIZE)) {
+			excess_data = true;
+			break;
+		} else {
+			buf_len += event->anqp_length;
+		}
+	} while (0);
+
+	if (excess_data || buf_len > (WMA_SVC_MSG_MAX_SIZE - sizeof(*event)) ||
+	    buf_len > (WMA_SVC_MSG_MAX_SIZE - sizeof(*dest_match)) ||
+	    (event->ie_length + event->anqp_length) > param_buf->num_bufp) {
+		WMA_LOGE("IE Length: %d or ANQP Length: %d is huge, num_bufp %d",
+			 event->ie_length, event->anqp_length,
+			 param_buf->num_bufp);
 		return -EINVAL;
 	}
 	if (event->ssid.ssid_len > SIR_MAC_MAX_SSID_LENGTH) {
@@ -4403,8 +4418,7 @@ static int wma_passpoint_match_event_handler(void *handle,
 			__func__, event->ssid.ssid_len);
 		event->ssid.ssid_len = SIR_MAC_MAX_SSID_LENGTH;
 	}
-	dest_match = vos_mem_malloc(sizeof(*dest_match) +
-				event->ie_length + event->anqp_length);
+	dest_match = vos_mem_malloc(sizeof(*dest_match) + buf_len);
 	if (!dest_match) {
 		WMA_LOGE("%s: vos_mem_malloc failed", __func__);
 		return -EINVAL;

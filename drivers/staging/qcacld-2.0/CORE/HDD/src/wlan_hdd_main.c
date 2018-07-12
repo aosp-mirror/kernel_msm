@@ -11161,9 +11161,9 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
    return pAdapter;
 
 err_free_netdev:
-   free_netdev(pAdapter->dev);
    wlan_hdd_release_intf_addr( pHddCtx,
-                               pAdapter->macAddressCurrent.bytes );
+                               pAdapter->macAddressCurrent.bytes);
+   free_netdev(pAdapter->dev);
 
 resume_bmps:
    //If bmps disabled enable it

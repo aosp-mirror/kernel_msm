@@ -1187,6 +1187,13 @@ ol_rx_in_order_indication_handler(
     int status;
     adf_nbuf_t head_msdu, tail_msdu = NULL;
 
+    if (tid >= OL_TXRX_NUM_EXT_TIDS) {
+        TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+                   "%s: invalid tid, %u\n", __FUNCTION__, tid);
+        WARN_ON(1);
+        return;
+    }
+
     if (pdev) {
         peer = ol_txrx_peer_find_by_id(pdev, peer_id);
         if (VOS_MONITOR_MODE == vos_get_conparam())
