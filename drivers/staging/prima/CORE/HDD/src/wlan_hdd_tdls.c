@@ -239,8 +239,6 @@ void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx)
             continue;
         }
 
-        wlan_hdd_tdls_reset_peer(adapter, curr_peer->peerMac);
-
         hddLog(LOG1, FL("indicate TDLS teardown (staId %d)"),
                          curr_peer->staId);
 
@@ -251,6 +249,8 @@ void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx)
                 eSIR_MAC_TDLS_TEARDOWN_UNSPEC_REASON);
         hdd_send_wlan_tdls_teardown_event(eTDLS_TEARDOWN_CONCURRENCY,
                                             curr_peer->peerMac);
+        wlan_hdd_tdls_reset_peer(adapter, curr_peer->peerMac);
+
         mutex_unlock(&hddctx->tdls_lock);
 
         /* Del Sta happened already as part of sme_DeleteAllTDLSPeers
@@ -269,7 +269,7 @@ void wlan_hdd_tdls_disable_offchan_and_teardown_links(hdd_context_t *hddctx)
 
 done:
     wlan_hdd_tdls_set_mode(hddctx, eTDLS_SUPPORT_DISABLED, FALSE,
-                           HDD_SET_TDLS_MODE_SOURCE_P2P);
+                           HDD_SET_TDLS_MODE_SOURCE_CONCURRENCY);
     hddLog(LOG1, FL("TDLS Support Disabled"));
 }
 
@@ -3596,7 +3596,8 @@ void wlan_hdd_tdls_reenable(hdd_context_t *pHddCtx)
              */
              hddLog(LOG1, FL("TDLS mode set to %d"), pHddCtx->tdls_mode_last);
              wlan_hdd_tdls_set_mode(pHddCtx, pHddCtx->tdls_mode_last,
-                                    FALSE, HDD_SET_TDLS_MODE_SOURCE_P2P);
+                                    FALSE,
+                                    HDD_SET_TDLS_MODE_SOURCE_CONCURRENCY);
     }
 }
 

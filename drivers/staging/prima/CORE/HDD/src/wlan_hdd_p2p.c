@@ -2385,8 +2385,8 @@ __wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
 #endif
     }
 
-    if ((type == NL80211_IFTYPE_P2P_CLIENT) ||
-          (type == NL80211_IFTYPE_P2P_GO))
+    if (type == NL80211_IFTYPE_P2P_CLIENT || type == NL80211_IFTYPE_P2P_GO ||
+        type == NL80211_IFTYPE_AP)
     {
         /* Below function Notifies Mode change and
          * If p2p session is detected then invokes functionality to

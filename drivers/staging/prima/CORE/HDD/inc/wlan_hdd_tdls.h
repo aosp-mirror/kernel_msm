@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -78,7 +78,7 @@ enum tdls_disable_source {
     HDD_SET_TDLS_MODE_SOURCE_SCAN = 2,
     HDD_SET_TDLS_MODE_SOURCE_OFFCHANNEL = 4,
     HDD_SET_TDLS_MODE_SOURCE_BTC = 8,
-    HDD_SET_TDLS_MODE_SOURCE_P2P = 16
+    HDD_SET_TDLS_MODE_SOURCE_CONCURRENCY = 16
 };
 
 typedef struct

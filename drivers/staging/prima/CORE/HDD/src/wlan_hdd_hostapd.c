@@ -1331,13 +1331,6 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
 
             pHddApCtx->operatingChannel = 0; //Invalidate the channel info.
 
-            if (pHostapdAdapter->device_mode == WLAN_HDD_P2P_GO)
-            {
-                hddLog(LOG1,
-                       FL("P2P Go is getting removed and we are trying to re-enable TDLS"));
-                wlan_hdd_tdls_reenable(pHddCtx);
-            }
-
             goto stopbss;
         case eSAP_STA_SET_KEY_EVENT:
             //TODO: forward the message to hostapd once implementtation is done for now just print
@@ -1753,6 +1746,14 @@ stopbss :
         wireless_send_event(dev, we_event, &wrqu, (char *)we_custom_event_generic);
         hdd_dump_concurrency_info(pHddCtx);
     }
+        if (pHostapdAdapter->device_mode == WLAN_HDD_P2P_GO ||
+            pHostapdAdapter->device_mode == WLAN_HDD_SOFTAP)
+        {
+            hddLog(LOG1,
+                   FL("SAP or Go is getting removed and we are trying to re-enable TDLS"));
+            wlan_hdd_tdls_reenable(pHddCtx);
+        }
+
     return VOS_STATUS_SUCCESS;
 }
 
