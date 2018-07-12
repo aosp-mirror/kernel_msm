@@ -152,6 +152,39 @@ static int validate_sram_transfer(struct paintbox_data *pb,
 {
 	size_t sram_len_bytes;
 
+	/* If this is the first STP SRAM transfer then read the STP_CAP
+	 * register for the target STP.
+	 */
+	if (!pb->stp.caps_inited) {
+		unsigned long irq_flags;
+		uint64_t caps;
+
+		pb->stp.caps_inited = true;
+
+		spin_lock_irqsave(&pb->stp.lock, irq_flags);
+
+		paintbox_stp_select(pb, stp->stp_id);
+
+		caps = paintbox_readq(pb->dev, IPU_CSR_STP_OFFSET + STP_CAP);
+
+		spin_unlock_irqrestore(&pb->stp.lock, irq_flags);
+
+		pb->stp.inst_mem_size_in_instructions = (unsigned int)(caps &
+				STP_CAP_INST_MEM_MASK);
+		pb->stp.scalar_mem_size_in_words = (unsigned int)((caps &
+				STP_CAP_SCALAR_MEM_MASK) >>
+				STP_CAP_SCALAR_MEM_SHIFT);
+		pb->stp.const_mem_size_in_words = (unsigned int)((caps &
+				STP_CAP_CONST_MEM_MASK) >>
+				STP_CAP_CONST_MEM_SHIFT);
+		pb->stp.vector_mem_size_in_words = (unsigned int)((caps &
+				STP_CAP_VECTOR_MEM_MASK) >>
+				STP_CAP_VECTOR_MEM_SHIFT);
+		pb->stp.halo_mem_size_in_words = (unsigned int)((caps &
+				STP_CAP_HALO_MEM_MASK) >>
+				STP_CAP_HALO_MEM_SHIFT);
+	}
+
 	switch (sram_target) {
 	case SRAM_TARGET_STP_INSTRUCTION_RAM:
 		sram_len_bytes = pb->stp.inst_mem_size_in_instructions *
