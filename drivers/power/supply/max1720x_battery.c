@@ -1301,14 +1301,17 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 	if (PTR_ERR(chip->iio_ch) == -EPROBE_DEFER) {
 		dev_warn(chip->dev, "iio_channel_get %s not ready\n",
 			 iio_ch_name);
+		devm_kfree(chip->dev, (void *) iio_ch_name);
 		return -EPROBE_DEFER;
 	} else if (IS_ERR(chip->iio_ch)) {
 		dev_warn(chip->dev, "iio_channel_get %s error: %ld\n",
 			 iio_ch_name, PTR_ERR(chip->iio_ch));
 		/* Don't fail probe on that, just ignore error */
+		devm_kfree(chip->dev, (void *) iio_ch_name);
 		return 0;
 	}
 
+	devm_kfree(chip->dev, (void *) iio_ch_name);
 	ret = iio_read_channel_processed(chip->iio_ch, &batt_id);
 	if (ret < 0) {
 		dev_warn(chip->dev, "Failed to read battery id: %d\n", ret);
@@ -1520,11 +1523,11 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	int ret;
 
 	ret = max1720x_handle_dt_shadow_config(chip);
-	if (ret)
+	if (ret == -EPROBE_DEFER)
 		return ret;
 
 	ret = max1720x_handle_dt_register_config(chip);
-	if (ret)
+	if (ret == -EPROBE_DEFER)
 		return ret;
 
 	chip->fake_capacity = -EINVAL;
