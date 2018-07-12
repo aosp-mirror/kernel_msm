@@ -157,3 +157,9 @@ void __new_context(struct mm_struct *mm)
 	set_mm_context(mm, asid);
 	raw_spin_unlock(&cpu_asid_lock);
 }
+
+/* Errata workaround post TTBRx_EL1 update. */
+asmlinkage void post_ttbr_update_workaround(void)
+{
+	arm64_apply_bp_hardening();
+}

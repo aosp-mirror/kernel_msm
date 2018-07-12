@@ -16,4 +16,27 @@
 
 int psci_init(void);
 
+struct psci_power_state {
+	u16	id;
+	u8	type;
+	u8	affinity_level;
+};
+
+struct psci_operations {
+	int (*get_version)(void);
+	int (*cpu_suspend)(struct psci_power_state state,
+			   unsigned long entry_point);
+	int (*cpu_off)(struct psci_power_state state);
+	int (*cpu_on)(unsigned long cpuid, unsigned long entry_point);
+	int (*migrate)(unsigned long cpuid);
+	int (*affinity_info)(unsigned long target_affinity,
+			unsigned long lowest_affinity_level);
+	int (*migrate_info_type)(void);
+};
+
+extern struct psci_operations psci_ops;
+#ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
+int psci_apply_bp_hardening(void);
+#endif /* CONFIG_HARDEN_BRANCH_PREDICTOR */
+
 #endif /* __ASM_PSCI_H */
