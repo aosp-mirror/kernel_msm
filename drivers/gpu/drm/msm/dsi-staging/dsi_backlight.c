@@ -654,6 +654,7 @@ int dsi_backlight_get_dpms(struct dsi_backlight_config *bl)
 }
 
 #define MAX_BINNED_BL_MODES 10
+#define DCS_BRIGHTNESS_COMPENSATION 0xC7
 
 struct binned_lp_node {
 	struct list_head head;
@@ -666,7 +667,47 @@ struct binned_lp_data {
 	struct list_head mode_list;
 	struct binned_lp_node *last_lp_mode;
 	struct binned_lp_node priv_pool[MAX_BINNED_BL_MODES];
+
+	struct {
+		u8 orig;
+		u8 adder;
+	} lp_brightness_comp;
 };
+
+static void dsi_panel_lp_compensate(struct dsi_backlight_config *bl,
+				   struct binned_lp_node *target_node)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct binned_lp_data *lp_data = bl->priv;
+	u8 buf[16];
+
+	/* zero adder means nothing to do */
+	if (!lp_data->lp_brightness_comp.adder)
+		return;
+
+	if (!lp_data->lp_brightness_comp.orig) {
+		ssize_t read_size = mipi_dsi_dcs_read(&panel->mipi_device,
+					DCS_BRIGHTNESS_COMPENSATION, buf, 1);
+		if (unlikely(read_size <= 0)) {
+			pr_warn("unable to read brightness comp");
+			return;
+		}
+
+		lp_data->lp_brightness_comp.orig = buf[0];
+		pr_debug("Read LP brightness comp: %02X\n", buf[0]);
+	}
+
+	buf[0] = DCS_BRIGHTNESS_COMPENSATION;
+	buf[1] = lp_data->lp_brightness_comp.orig;
+
+	/* add compensation in LP mode, otherwise restore original value */
+	if (target_node && target_node->bl_threshold > 0)
+		buf[1] += lp_data->lp_brightness_comp.adder;
+
+	pr_debug("LP brightness compensation: %02X\n", buf[1]);
+
+	mipi_dsi_dcs_write_buffer(&panel->mipi_device, buf, 2);
+}
 
 static int dsi_panel_binned_bl_update(struct dsi_backlight_config *bl,
 				      u32 bl_lvl)
@@ -690,6 +731,8 @@ static int dsi_panel_binned_bl_update(struct dsi_backlight_config *bl,
 	}
 
 	if (node != lp_data->last_lp_mode) {
+		dsi_panel_lp_compensate(bl, node);
+
 		lp_data->last_lp_mode = node;
 		if (node) {
 			pr_debug("switching display lp mode: %s (%d)\n",
@@ -750,6 +793,7 @@ static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 	struct binned_lp_data *lp_data;
 	struct device_node *lp_modes_np, *child_np;
 	struct binned_lp_node *lp_node;
+	u32 val;
 	int num_modes;
 	int rc = -ENOTSUPP;
 
@@ -788,6 +832,16 @@ static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 		}
 	}
 	list_sort(NULL, &lp_data->mode_list, _dsi_panel_binned_bl_cmp);
+
+	if (!of_property_read_u32(panel->panel_of_node,
+				  "google,mdss-dsi-lp-brightness-compensation",
+				  &val)) {
+		pr_debug("LP brightness compensation: %d\n", val);
+		lp_data->lp_brightness_comp.adder = (u8)val;
+	} else {
+		lp_data->lp_brightness_comp.adder = 0;
+	}
+	lp_data->lp_brightness_comp.orig = 0;
 
 	bl->update_bl = dsi_panel_binned_bl_update;
 	bl->unregister = dsi_panel_bl_free_unregister;
