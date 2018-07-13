@@ -71,6 +71,7 @@ void easelcomm_handle_cmd_dma_sg(
 		easelcomm_msgid_prefix(msg_metadata), sg_header->message_id,
 		sg_header->scatterlist_size);
 
+	mutex_lock(&service->lock);
 	if (WARN_ON(msg_metadata->dma_xfer.sg_remote))
 		goto out;
 
@@ -93,6 +94,7 @@ void easelcomm_handle_cmd_dma_sg(
 	complete(&msg_metadata->dma_xfer.sg_remote_ready);
 
 out:
+	mutex_unlock(&service->lock);
 	easelcomm_drop_reference(service, msg_metadata, false);
 }
 EXPORT_SYMBOL(easelcomm_handle_cmd_dma_sg);
@@ -579,6 +581,7 @@ int easelcomm_receive_dma(
 		return -EINVAL;
 	}
 
+	mutex_lock(&service->lock);
 	if (buf_desc->buf_size &&
 	    buf_desc->buf_size != msg_metadata->msg->desc.dma_buf_size) {
 		dev_err(easelcomm_miscdev.this_device,
@@ -609,8 +612,11 @@ int easelcomm_receive_dma(
 	 * If the DMA transfer is not being discarded locally then generate
 	 * the local DMA scatter-gather list.
 	 */
-	msg_metadata->dma_xfer.sg_local_size = 0;
-	msg_metadata->dma_xfer.sg_local_localdata = NULL;
+
+	if (msg_metadata->dma_xfer.sg_local) {
+		ret = -EBUSY;
+		goto out;
+	}
 
 	if (buf_desc->buf_size) {
 		msg_metadata->dma_xfer.sg_local =
@@ -625,6 +631,7 @@ int easelcomm_receive_dma(
 			goto out;
 		}
 	}
+	mutex_unlock(&service->lock);
 
 	if (easelcomm_is_client())
 		ret = easelcomm_client_handle_dma_request(
@@ -633,12 +640,16 @@ int easelcomm_receive_dma(
 		ret = easelcomm_server_handle_dma_request(
 			service, msg_metadata, dma_dir);
 
+	mutex_lock(&service->lock);
 	/* Free contents of struct mnh_sg_list */
-	if (msg_metadata->dma_xfer.sg_local_localdata)
+	if (msg_metadata->dma_xfer.sg_local_localdata) {
 		easelcomm_hw_destroy_scatterlist(
 			msg_metadata->dma_xfer.sg_local_localdata);
+		msg_metadata->dma_xfer.sg_local_localdata = NULL;
+	}
 
 out:
+	mutex_unlock(&service->lock);
 	/* If no reply needed then done with the remote message. */
 	easelcomm_drop_reference(service, msg_metadata,
 				!msg_metadata->msg->desc.need_reply);
@@ -669,6 +680,7 @@ int easelcomm_send_dma(
 		return -EINVAL;
 	}
 
+	mutex_lock(&service->lock);
 	if (buf_desc->buf_size &&
 		buf_desc->buf_size != msg_metadata->msg->desc.dma_buf_size) {
 		dev_err(easelcomm_miscdev.this_device,
@@ -695,8 +707,12 @@ int easelcomm_send_dma(
 	 * If the DMA transfer is not being discarded locally then generate
 	 * the local DMA scatter-gather list.
 	 */
-	msg_metadata->dma_xfer.sg_local_size = 0;
-	msg_metadata->dma_xfer.sg_local_localdata = NULL;
+
+	if (msg_metadata->dma_xfer.sg_local) {
+		ret = -EBUSY;
+		goto out;
+	}
+
 	if (buf_desc->buf_size) {
 		msg_metadata->dma_xfer.sg_local =
 			easelcomm_create_dma_scatterlist(
@@ -709,6 +725,7 @@ int easelcomm_send_dma(
 			goto out;
 		}
 	}
+	mutex_unlock(&service->lock);
 
 	if (msg_metadata->msg->desc.dma_buf_size) {
 		if (easelcomm_is_client())
@@ -719,12 +736,16 @@ int easelcomm_send_dma(
 				service, msg_metadata, dma_dir);
 	}
 
+	mutex_lock(&service->lock);
 	/* Free contents of struct mnh_sg_list */
-	if (msg_metadata->dma_xfer.sg_local_localdata)
+	if (msg_metadata->dma_xfer.sg_local_localdata) {
 		easelcomm_hw_destroy_scatterlist(
 			msg_metadata->dma_xfer.sg_local_localdata);
+		msg_metadata->dma_xfer.sg_local_localdata = NULL;
+	}
 
 out:
+	mutex_unlock(&service->lock);
 	/* If no reply needed then done with local message. */
 	easelcomm_drop_reference(service, msg_metadata,
 		!msg_metadata->msg->desc.need_reply);
