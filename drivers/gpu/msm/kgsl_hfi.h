@@ -14,7 +14,6 @@
 #define __KGSL_HFI_H
 
 #include <linux/types.h>
-#include "kgsl_gmu_core.h"
 
 #define HFI_QUEUE_SIZE			SZ_4K		/* bytes */
 #define MAX_RCVD_PAYLOAD_SIZE		16		/* dwords */
@@ -38,6 +37,9 @@
 #define HFI_DBG_IDX 2
 #define HFI_DSP_IDX_BASE 3
 #define HFI_DSP_IDX_0 3
+
+#define HFI_QUEUE_STATUS_DISABLED 0
+#define HFI_QUEUE_STATUS_ENABLED  1
 
 /* HTOF queue priority, 1 is highest priority */
 #define HFI_CMD_PRI 10
@@ -129,7 +131,7 @@ struct hfi_queue_table_header {
 
 /**
  * struct hfi_queue_header - HFI queue header structure
- * @enabled: active: 1; inactive: 0
+ * @status: active: 1; inactive: 0
  * @start_addr: starting address of the queue in GMU VA space
  * @type: queue type encoded the priority, ID and send/recevie types
  * @queue_size: size of the queue
@@ -144,7 +146,7 @@ struct hfi_queue_table_header {
  * @write_index: write index of the queue
  */
 struct hfi_queue_header {
-	uint32_t enabled;
+	uint32_t status;
 	uint32_t start_addr;
 	uint32_t type;
 	uint32_t queue_size;
@@ -591,6 +593,7 @@ struct pending_cmd {
 
 /**
  * struct kgsl_hfi - HFI control structure
+ * @kgsldev: Point to the kgsl device
  * @hfi_interrupt_num: number of GMU asserted HFI interrupt
  * @msglock: spinlock to protect access to outstanding command message list
  * @cmdq_mutex: mutex to protect command queue access from multiple senders
@@ -602,6 +605,7 @@ struct pending_cmd {
  *	value of the counter is used as sequence number for HFI message
  */
 struct kgsl_hfi {
+	struct kgsl_device *kgsldev;
 	int hfi_interrupt_num;
 	spinlock_t msglock;
 	struct mutex cmdq_mutex;

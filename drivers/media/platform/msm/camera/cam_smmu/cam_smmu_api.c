@@ -3307,6 +3307,7 @@ static int cam_populate_smmu_context_banks(struct device *dev,
 
 	if (cb->is_secure) {
 		/* increment count to next bank */
+		cb->dev = dev;
 		iommu_cb_set.cb_init_count++;
 		return 0;
 	}
@@ -3355,6 +3356,7 @@ static int cam_smmu_probe(struct platform_device *pdev)
 		rc = cam_populate_smmu_context_banks(dev, CAM_ARM_SMMU);
 		if (rc < 0) {
 			CAM_ERR(CAM_SMMU, "Error: populating context banks");
+			cam_smmu_release_cb(pdev);
 			return -ENOMEM;
 		}
 		return rc;

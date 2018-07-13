@@ -618,9 +618,10 @@ static int gmu_dcvs_set(struct kgsl_device *device,
 	if (bus_level < gmu->num_bwlevels && bus_level > 0)
 		req.bw = bus_level;
 
+	/* GMU will vote for slumber levels through the sleep sequence */
 	if ((req.freq == INVALID_DCVS_IDX) &&
 		(req.bw == INVALID_DCVS_IDX))
-		return -EINVAL;
+		return 0;
 
 	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_HFI_USE_REG)) {
 		int ret = gmu_dev_ops->rpmh_gpu_pwrctrl(adreno_dev,
@@ -637,6 +638,9 @@ static int gmu_dcvs_set(struct kgsl_device *device,
 
 		return ret;
 	}
+
+	if (!test_bit(GMU_HFI_ON, &gmu->flags))
+		return 0;
 
 	return hfi_send_req(gmu, H2F_MSG_GX_BW_PERF_VOTE, &req);
 }
@@ -1412,9 +1416,10 @@ static int gmu_probe(struct kgsl_device *device,
 	disable_irq(gmu->gmu_interrupt_num);
 	disable_irq(hfi->hfi_interrupt_num);
 
-	tasklet_init(&hfi->tasklet, hfi_receiver, (unsigned long)gmu);
+	tasklet_init(&hfi->tasklet, hfi_receiver, (unsigned long)device);
 	INIT_LIST_HEAD(&hfi->msglist);
 	spin_lock_init(&hfi->msglock);
+	hfi->kgsldev = device;
 
 	/* Retrieves GMU/GPU power level configurations*/
 	ret = gmu_pwrlevel_probe(gmu, node);
@@ -1580,9 +1585,8 @@ static int gmu_suspend(struct kgsl_device *device)
 		return 0;
 
 	/* Pending message in all queues are abandoned */
-	hfi_stop(gmu);
-	clear_bit(GMU_HFI_ON, &gmu->flags);
 	gmu_irq_disable(device);
+	hfi_stop(gmu);
 
 	if (gmu_dev_ops->rpmh_gpu_pwrctrl(adreno_dev, GMU_SUSPEND, 0, 0))
 		return -EINVAL;
@@ -1779,9 +1783,8 @@ static void gmu_stop(struct kgsl_device *device)
 		goto error;
 
 	/* Pending message in all queues are abandoned */
-	hfi_stop(gmu);
-	clear_bit(GMU_HFI_ON, &gmu->flags);
 	gmu_irq_disable(device);
+	hfi_stop(gmu);
 
 	gmu_dev_ops->rpmh_gpu_pwrctrl(adreno_dev, GMU_FW_STOP, 0, 0);
 	gmu_disable_clks(gmu);
@@ -1975,4 +1978,5 @@ struct gmu_core_ops gmu_ops = {
 	.dcvs_set = gmu_dcvs_set,
 	.snapshot = gmu_snapshot,
 	.regulator_isenabled = gmu_regulator_isenabled,
+	.suspend = gmu_suspend,
 };

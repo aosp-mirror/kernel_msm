@@ -24,7 +24,6 @@
 #include <linux/msm-bus.h>
 
 #include "kgsl.h"
-#include "kgsl_gmu.h"
 #include "kgsl_gmu_core.h"
 #include "kgsl_pwrscale.h"
 #include "kgsl_sharedmem.h"
@@ -1842,7 +1841,7 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	if (gmu_dev_ops->hfi_start_msg) {
 		status = gmu_dev_ops->hfi_start_msg(adreno_dev);
 		if (status)
-			goto error_mmu_off;
+			goto error_oob_clear;
 	}
 
 	/* Enable 64 bit gpu addr if feature is set */
@@ -3400,7 +3399,6 @@ static void adreno_power_stats(struct kgsl_device *device,
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
-	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	struct adreno_busy_data *busy = &adreno_dev->busy_data;
 	uint64_t adj = 0;
@@ -3471,15 +3469,14 @@ static void adreno_power_stats(struct kgsl_device *device,
 		stats->ram_wait = starved_ram;
 	}
 
-	if (adreno_dev->perfctr_ifpc_lo != 0
-			&& gmu->idle_level >= GPU_HW_IFPC) {
+	if (adreno_dev->perfctr_ifpc_lo != 0) {
 		uint32_t num_ifpc;
 
 		num_ifpc = counter_delta(device, adreno_dev->perfctr_ifpc_lo,
 				&busy->num_ifpc);
-		gmu->ifpc_count += num_ifpc;
+		adreno_dev->ifpc_count += num_ifpc;
 		if (num_ifpc > 0)
-			trace_adreno_ifpc_count(gmu->ifpc_count);
+			trace_adreno_ifpc_count(adreno_dev->ifpc_count);
 	}
 
 	if (adreno_dev->lm_threshold_count &&

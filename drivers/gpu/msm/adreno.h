@@ -213,6 +213,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A615 = 615,
 	ADRENO_REV_A630 = 630,
 	ADRENO_REV_A640 = 640,
+	ADRENO_REV_A680 = 680,
 };
 
 #define ADRENO_START_WARM 0
@@ -461,6 +462,7 @@ enum gpu_coresight_sources {
  * @lm_limit: limiting value for LM
  * @lm_threshold_count: register value for counter for lm threshold breakin
  * @lm_threshold_cross: number of current peaks exceeding threshold
+ * @ifpc_count: Number of times the GPU went into IFPC
  * @speed_bin: Indicate which power level set to use
  * @csdev: Pointer to a coresight device (if applicable)
  * @gpmu_throttle_counters - counteers for number of throttled clocks
@@ -530,6 +532,7 @@ struct adreno_device {
 	uint32_t lm_limit;
 	uint32_t lm_threshold_count;
 	uint32_t lm_threshold_cross;
+	uint32_t ifpc_count;
 
 	unsigned int speed_bin;
 	unsigned int quirks;
@@ -1254,6 +1257,7 @@ static inline int adreno_is_a6xx(struct adreno_device *adreno_dev)
 ADRENO_TARGET(a615, ADRENO_REV_A615)
 ADRENO_TARGET(a630, ADRENO_REV_A630)
 ADRENO_TARGET(a640, ADRENO_REV_A640)
+ADRENO_TARGET(a680, ADRENO_REV_A680)
 
 static inline int adreno_is_a630v1(struct adreno_device *adreno_dev)
 {
@@ -1894,10 +1898,10 @@ static inline bool adreno_has_sptprac_gdsc(struct adreno_device *adreno_dev)
 
 static inline bool adreno_has_gbif(struct adreno_device *adreno_dev)
 {
-	if (adreno_is_a615(adreno_dev) || adreno_is_a640(adreno_dev))
-		return true;
-	else
+	if (!adreno_is_a6xx(adreno_dev) || adreno_is_a630(adreno_dev))
 		return false;
+	else
+		return true;
 }
 
 /**

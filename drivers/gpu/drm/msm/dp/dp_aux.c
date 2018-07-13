@@ -417,7 +417,6 @@ static void dp_aux_transfer_helper(struct dp_aux_private *aux,
 	dp_aux_cmd_fifo_tx(aux, &helper_msg);
 end:
 	aux->offset += message_size;
-
 	if (aux->offset == 0x80 || aux->offset == 0x100)
 		aux->segment = 0x0; /* reset segment at end of block */
 }
@@ -485,8 +484,19 @@ static ssize_t dp_aux_transfer_debug(struct drm_dp_aux *drm_aux,
 
 	aux->aux_error_num = DP_AUX_ERR_NONE;
 
+	if (!aux->dpcd || !aux->edid) {
+		pr_err("invalid aux/dpcd structure\n");
+		goto end;
+	}
+
+	if ((msg->address + msg->size) > SZ_16K) {
+		pr_err("invalid dpcd access: addr=0x%x, size=0x%x\n",
+				msg->address + msg->size);
+		goto address_error;
+	}
+
 	if (aux->native) {
-		if (aux->read && ((msg->address + msg->size) < SZ_1K)) {
+		if (aux->read) {
 			aux->dp_aux.reg = msg->address;
 
 			reinit_completion(&aux->comp);
@@ -525,6 +535,10 @@ static ssize_t dp_aux_transfer_debug(struct drm_dp_aux *drm_aux,
 			DP_AUX_NATIVE_REPLY_DEFER : DP_AUX_I2C_REPLY_DEFER;
 	}
 
+	return msg->size;
+
+address_error:
+	memset(msg->buffer, 0, msg->size);
 	ret = msg->size;
 end:
 	return ret;
@@ -555,7 +569,7 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *drm_aux,
 	}
 
 	ret = dp_aux_cmd_fifo_tx(aux, msg);
-	if ((ret < 0) && aux->native && !atomic_read(&aux->aborted)) {
+	if ((ret < 0) && !atomic_read(&aux->aborted)) {
 		aux->retry_cnt++;
 		if (!(aux->retry_cnt % retry_count))
 			aux->catalog->update_aux_cfg(aux->catalog,

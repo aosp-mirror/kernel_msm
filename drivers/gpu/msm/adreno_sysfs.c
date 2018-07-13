@@ -14,7 +14,6 @@
 #include <linux/device.h>
 
 #include "kgsl_device.h"
-#include "kgsl_gmu.h"
 #include "adreno.h"
 
 struct adreno_sysfs_attribute {
@@ -303,10 +302,7 @@ static unsigned int _ifpc_show(struct adreno_device *adreno_dev)
 
 static unsigned int _ifpc_count_show(struct adreno_device *adreno_dev)
 {
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
-
-	return gmu->ifpc_count;
+	return adreno_dev->ifpc_count;
 }
 
 static unsigned int _preempt_count_show(struct adreno_device *adreno_dev)

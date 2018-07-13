@@ -602,8 +602,9 @@ bool icnss_is_fw_down(void)
 {
 	if (!penv)
 		return false;
-	else
-		return test_bit(ICNSS_FW_DOWN, &penv->state);
+
+	return test_bit(ICNSS_FW_DOWN, &penv->state) ||
+		test_bit(ICNSS_PD_RESTART, &penv->state);
 }
 EXPORT_SYMBOL(icnss_is_fw_down);
 
@@ -1237,7 +1238,11 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 	event_data->crashed = notif->crashed;
 
 	fw_down_data.crashed = !!notif->crashed;
-	icnss_call_driver_uevent(priv, ICNSS_UEVENT_FW_DOWN, &fw_down_data);
+	if (test_bit(ICNSS_FW_READY, &priv->state) &&
+	    !test_bit(ICNSS_DRIVER_UNLOADING, &priv->state))
+		icnss_call_driver_uevent(priv,
+					 ICNSS_UEVENT_FW_DOWN,
+					 &fw_down_data);
 
 	icnss_driver_event_post(ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);

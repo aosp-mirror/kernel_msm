@@ -58,6 +58,9 @@ static int hfi_queue_read(struct gmu_device *gmu, uint32_t queue_idx,
 	uint32_t size;
 	int result = 0;
 
+	if (hdr->status == HFI_QUEUE_STATUS_DISABLED)
+		return -EINVAL;
+
 	if (hdr->read_index == hdr->write_index) {
 		hdr->rx_req = 1;
 		return -ENODATA;
@@ -105,7 +108,6 @@ static int hfi_queue_read(struct gmu_device *gmu, uint32_t queue_idx,
 static int hfi_queue_write(struct gmu_device *gmu, uint32_t queue_idx,
 		uint32_t *msg)
 {
-	struct kgsl_device *device = kgsl_get_device(KGSL_DEVICE_3D0);
 	struct hfi_queue_table *tbl = gmu->hfi_mem->hostptr;
 	struct hfi_queue_header *hdr = &tbl->qhdr[queue_idx];
 	uint32_t *queue;
@@ -114,7 +116,7 @@ static int hfi_queue_write(struct gmu_device *gmu, uint32_t queue_idx,
 	uint32_t size = MSG_HDR_GET_SIZE(*msg);
 	uint32_t id = MSG_HDR_GET_ID(*msg);
 
-	if (hdr->enabled == 0)
+	if (hdr->status == HFI_QUEUE_STATUS_DISABLED)
 		return -EINVAL;
 
 	if (size > HFI_MAX_MSG_SIZE) {
@@ -168,7 +170,7 @@ static int hfi_queue_write(struct gmu_device *gmu, uint32_t queue_idx,
 	wmb();
 
 	/* Send interrupt to GMU to receive the message */
-	adreno_write_gmureg(ADRENO_DEVICE(device),
+	adreno_write_gmureg(ADRENO_DEVICE(hfi->kgsldev),
 		ADRENO_REG_GMU_HOST2GMU_INTR_SET, 0x1);
 
 	return 0;
@@ -189,11 +191,12 @@ void hfi_init(struct kgsl_hfi *hfi, struct gmu_memdesc *mem_addr,
 	struct {
 		unsigned int idx;
 		unsigned int pri;
+		unsigned int status;
 	} queue[HFI_QUEUE_MAX] = {
-		{ HFI_CMD_ID, HFI_CMD_PRI },
-		{ HFI_MSG_ID, HFI_MSG_PRI },
-		{ HFI_DBG_ID, HFI_DBG_PRI },
-		{ HFI_DSP_ID_0, HFI_DSP_PRI_0 },
+		{ HFI_CMD_IDX, HFI_CMD_PRI, HFI_QUEUE_STATUS_ENABLED },
+		{ HFI_MSG_IDX, HFI_MSG_PRI, HFI_QUEUE_STATUS_ENABLED },
+		{ HFI_DBG_IDX, HFI_DBG_PRI, HFI_QUEUE_STATUS_ENABLED },
+		{ HFI_DSP_IDX_0, HFI_DSP_PRI_0, HFI_QUEUE_STATUS_DISABLED },
 	};
 
 	/* Fill Table Header */
@@ -210,7 +213,7 @@ void hfi_init(struct kgsl_hfi *hfi, struct gmu_memdesc *mem_addr,
 		hdr = &tbl->qhdr[i];
 		hdr->start_addr = GMU_QUEUE_START_ADDR(mem_addr, i);
 		hdr->type = QUEUE_HDR_TYPE(queue[i].idx, queue[i].pri, 0,  0);
-		hdr->enabled = 0x1;
+		hdr->status = queue[i].status;
 		hdr->queue_size = queue_sz_bytes >> 2; /* convert to dwords */
 		hdr->msg_size = 0;
 		hdr->drop_cnt = 0;
@@ -228,13 +231,15 @@ void hfi_init(struct kgsl_hfi *hfi, struct gmu_memdesc *mem_addr,
 #define HDR_CMP_SEQNUM(out_hdr, in_hdr) \
 	(MSG_HDR_GET_SEQNUM(out_hdr) == MSG_HDR_GET_SEQNUM(in_hdr))
 
-static void receive_ack_cmd(struct gmu_device *gmu, void *rcvd)
+static void receive_ack_cmd(struct kgsl_device *device,
+		struct gmu_device *gmu, void *rcvd)
 {
 	uint32_t *ack = rcvd;
 	uint32_t hdr = ack[0];
 	uint32_t req_hdr = ack[1];
 	struct kgsl_hfi *hfi = &gmu->hfi;
 	struct pending_cmd *cmd = NULL;
+	uint32_t waiters[64], i = 0, j;
 
 	trace_kgsl_hfi_receive(MSG_HDR_GET_ID(req_hdr),
 		MSG_HDR_GET_SIZE(req_hdr),
@@ -248,11 +253,21 @@ static void receive_ack_cmd(struct gmu_device *gmu, void *rcvd)
 			spin_unlock_bh(&hfi->msglock);
 			return;
 		}
+		if (i < 64)
+			waiters[i++] = cmd->sent_hdr;
 	}
 	spin_unlock_bh(&hfi->msglock);
 
-	dev_err(&gmu->pdev->dev,
-			"HFI ACK(0x%x) Cannot find sender\n", req_hdr);
+	dev_err_ratelimited(&gmu->pdev->dev,
+			"HFI ACK: Cannot find sender for 0x%8.8X\n", req_hdr);
+	/* Didn't find the sender, list all the waiters */
+	for (j = 0; j < i && j < 64; j++) {
+		dev_err_ratelimited(&gmu->pdev->dev,
+				"HFI ACK: Waiters: 0x%8.8X\n", waiters[j]);
+	}
+
+	adreno_set_gpu_fault(ADRENO_DEVICE(device), ADRENO_GMU_FAULT);
+	adreno_dispatcher_schedule(device);
 }
 
 #define MSG_HDR_SET_SEQNUM(hdr, num) \
@@ -481,11 +496,12 @@ static void receive_debug_req(struct gmu_device *gmu, void *rcvd)
 			cmd->type, cmd->timestamp, cmd->data);
 }
 
-static void hfi_v1_receiver(struct gmu_device *gmu, uint32_t *rcvd)
+static void hfi_v1_receiver(struct kgsl_device *device,
+		struct gmu_device *gmu, uint32_t *rcvd)
 {
 	/* V1 ACK Handler */
 	if (MSG_HDR_GET_TYPE(rcvd[0]) == HFI_V1_MSG_ACK) {
-		receive_ack_cmd(gmu, rcvd);
+		receive_ack_cmd(device, gmu, rcvd);
 		return;
 	}
 
@@ -507,6 +523,7 @@ static void hfi_v1_receiver(struct gmu_device *gmu, uint32_t *rcvd)
 
 void hfi_receiver(unsigned long data)
 {
+	struct kgsl_device *device;
 	struct gmu_device *gmu;
 	uint32_t rcvd[MAX_RCVD_SIZE];
 	int read_queue[] = {
@@ -518,7 +535,8 @@ void hfi_receiver(unsigned long data)
 	if (!data)
 		return;
 
-	gmu = (struct gmu_device *)data;
+	device = (struct kgsl_device *)data;
+	gmu = KGSL_GMU_DEVICE(device);
 
 	/* While we are here, check all of the queues for messages */
 	for (q = 0; q < ARRAY_SIZE(read_queue); q++) {
@@ -526,13 +544,13 @@ void hfi_receiver(unsigned long data)
 				rcvd, sizeof(rcvd)) > 0) {
 			/* Special case if we're v1 */
 			if (HFI_VER_MAJOR(&gmu->hfi) < 2) {
-				hfi_v1_receiver(gmu, rcvd);
+				hfi_v1_receiver(device, gmu, rcvd);
 				continue;
 			}
 
 			/* V2 ACK Handler */
 			if (MSG_HDR_GET_TYPE(rcvd[0]) == HFI_MSG_ACK) {
-				receive_ack_cmd(gmu, rcvd);
+				receive_ack_cmd(device, gmu, rcvd);
 				continue;
 			}
 
@@ -605,12 +623,29 @@ int hfi_start(struct kgsl_device *device,
 		struct gmu_device *gmu, uint32_t boot_state)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	int result;
+	struct gmu_memdesc *mem_addr = gmu->hfi_mem;
+	struct hfi_queue_table *tbl = mem_addr->hostptr;
+	struct hfi_queue_header *hdr;
+	int result, i;
 
 	if (test_bit(GMU_HFI_ON, &gmu->flags))
 		return 0;
 
-	if (!adreno_is_a640(adreno_dev)) {
+	/* Force read_index to the write_index no matter what */
+	for (i = 0; i < HFI_QUEUE_MAX; i++) {
+		hdr = &tbl->qhdr[i];
+		if (hdr->status == HFI_QUEUE_STATUS_DISABLED)
+			continue;
+
+		if (hdr->read_index != hdr->write_index) {
+			dev_err(&gmu->pdev->dev,
+				"HFI Q[%d] Index Error: read:0x%X write:0x%X\n",
+				i, hdr->read_index, hdr->write_index);
+			hdr->read_index = hdr->write_index;
+		}
+	}
+
+	if (!adreno_is_a640(adreno_dev) && !adreno_is_a680(adreno_dev)) {
 		result = hfi_send_gmu_init(gmu, boot_state);
 		if (result)
 			return result;
@@ -629,10 +664,12 @@ int hfi_start(struct kgsl_device *device,
 		return result;
 
 	/*
-	 * Send H2F_MSG_CORE_FW_START and features for A640 devices,
-	 * otherwise send H2F_MSG_TEST if quirk is enabled.
+	 * If quirk is enabled send H2F_MSG_TEST and tell the GMU
+	 * we are sending no more HFIs until the next boot otherwise
+	 * send H2F_MSG_CORE_FW_START and features for A640 devices
 	 */
-	if (adreno_is_a640(adreno_dev)) {
+
+	if (HFI_VER_MAJOR(&gmu->hfi) >= 2) {
 		result = hfi_send_feature_ctrls(gmu);
 		if (result)
 			return result;
@@ -641,17 +678,12 @@ int hfi_start(struct kgsl_device *device,
 		if (result)
 			return result;
 	} else {
-		/*
-		 * Tell the GMU we are sending no more HFIs
-		 * until the next boot
-		 */
 		if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_HFI_USE_REG)) {
 			result = hfi_send_test(gmu);
 			if (result)
 				return result;
 		}
 	}
-
 	set_bit(GMU_HFI_ON, &gmu->flags);
 	return 0;
 }
@@ -670,14 +702,13 @@ void hfi_stop(struct gmu_device *gmu)
 	/* Flush HFI queues */
 	for (i = 0; i < HFI_QUEUE_MAX; i++) {
 		hdr = &tbl->qhdr[i];
+		if (hdr->status == HFI_QUEUE_STATUS_DISABLED)
+			continue;
 
 		if (hdr->read_index != hdr->write_index)
 			dev_err(&gmu->pdev->dev,
 			"HFI queue[%d] is not empty before close: rd=%d,wt=%d",
 				i, hdr->read_index, hdr->write_index);
-
-		hdr->read_index = 0x0;
-		hdr->write_index = 0x0;
 	}
 
 	clear_bit(GMU_HFI_ON, &gmu->flags);

@@ -52,6 +52,18 @@ Charger specific properties:
 		addition battery properties will be faked such that the device
 		assumes normal operation.
 
+- qcom,charger-temp-max
+  Usage:      optional
+  Value type: <u32>
+  Definition: Specifies the charger temp REG_H_THRESHOLD for PM8150B in deciDegC.
+		If the value is not present, use the setting read from the device.
+
+- qcom,smb-temp-max
+  Usage:      optional
+  Value type: <u32>
+  Definition: Specifies the charger temp REG_H_THRESHOLD for SMB1355 in deciDegC.
+		If the value is not present, use the setting read from the device.
+
 - qcom,fcc-max-ua
   Usage:      optional
   Value type: <u32>
@@ -123,6 +135,27 @@ Charger specific properties:
 		from Vfloat at charger insertion. If this is not specified
 		then charge inhibit will be disabled by default.
 		Allowed values are: 50, 100, 200, 300.
+
+- qcom,chg-term-src
+  Usage:      optional
+  Value type: <u32>
+  Definition: Specify either the ADC or analog comparators to be used in order
+		to set threshold values for charge termination current.
+		0 - Unspecified
+		1 - Select ADC comparator
+		2 - Select ANALOG comparator
+
+- qcom,chg-term-current-ma
+  Usage:      optional
+  Value type: <u32>
+  Definition: When ADC comparator is selected as qcom,chg-term-src, this
+		parameter should be set to the desired upper threshold.
+
+- qcom,chg-term-base-current-ma
+  Usage:      optional
+  Value type: <u32>
+  Definition: When ADC comparator is selected as qcom,chg-term-src, this
+		parameter should be set to the desired lower threshold.
 
 - qcom,auto-recharge-soc
   Usage:      optional
