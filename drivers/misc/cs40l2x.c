@@ -1502,6 +1502,106 @@ static ssize_t cs40l2x_num_waves_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->num_waves);
 }
 
+static ssize_t cs40l2x_vpk_measured_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VPK_MEASURED",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read peak voltage\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l2x_vpk_measured_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val > CS40L2X_VPK_MEASURED_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VPK_MEASURED",
+					CS40L2X_XM_UNPACKED_TYPE), val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to write peak voltage\n");
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t cs40l2x_ipk_measured_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "IPK_MEASURED",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read peak current\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l2x_ipk_measured_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val > CS40L2X_IPK_MEASURED_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "IPK_MEASURED",
+					CS40L2X_XM_UNPACKED_TYPE), val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to write peak current\n");
+		return ret;
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
@@ -1538,6 +1638,10 @@ static DEVICE_ATTR(cp_dig_scale, 0660, cs40l2x_cp_dig_scale_show,
 		cs40l2x_cp_dig_scale_store);
 static DEVICE_ATTR(heartbeat, 0660, cs40l2x_heartbeat_show, NULL);
 static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
+static DEVICE_ATTR(vpk_measured, 0660, cs40l2x_vpk_measured_show,
+		cs40l2x_vpk_measured_store);
+static DEVICE_ATTR(ipk_measured, 0660, cs40l2x_ipk_measured_show,
+		cs40l2x_ipk_measured_store);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -1561,6 +1665,8 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_dig_scale.attr,
 	&dev_attr_heartbeat.attr,
 	&dev_attr_num_waves.attr,
+	&dev_attr_vpk_measured.attr,
+	&dev_attr_ipk_measured.attr,
 	NULL,
 };
 

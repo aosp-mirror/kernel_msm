@@ -845,6 +845,9 @@
 #define CS40L2X_ENDPLAYBACK_REQ		1
 #define CS40L2X_ENDPLAYBACK_ACK		0
 
+#define CS40L2X_VPK_MEASURED_MAX	0x100000
+#define CS40L2X_IPK_MEASURED_MAX	CS40L2X_VPK_MEASURED_MAX
+
 #define CS40L2X_Q_INDEX_MAX 		18
 
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
