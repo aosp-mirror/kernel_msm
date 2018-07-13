@@ -23,3 +23,10 @@
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
 	qcom,board-id = <0x00010B05 0>;
 };
+
+&nq {
+	ese {
+		loader_scripts_path =
+				"/vendor/etc/ese/loaderservice_updater_eng_";
+	};
+};

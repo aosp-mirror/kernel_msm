@@ -28,3 +28,10 @@
 &p9221 {
 	idt,gpio_slct = <0>;
 };
+
+&nq {
+	ese {
+		loader_scripts_path =
+				"/vendor/etc/ese/loaderservice_updater_eng_";
+	};
+};
