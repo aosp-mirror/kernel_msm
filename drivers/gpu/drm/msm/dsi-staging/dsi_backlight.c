@@ -655,6 +655,11 @@ int dsi_backlight_get_dpms(struct dsi_backlight_config *bl)
 
 #define MAX_BINNED_BL_MODES 10
 #define DCS_BRIGHTNESS_COMPENSATION 0xC7
+enum dcs_brightness_comp_reg {
+	DCS_LPB_COMP_VALUE = 0,
+	DCS_LPB_BGR_TRIM = 2,
+	DCS_LPB_COMP_SIZE,
+};
 
 struct binned_lp_node {
 	struct list_head head;
@@ -669,7 +674,8 @@ struct binned_lp_data {
 	struct binned_lp_node priv_pool[MAX_BINNED_BL_MODES];
 
 	struct {
-		u8 orig;
+		bool initialized;
+		u8 buf[DCS_LPB_COMP_SIZE];
 		u8 adder;
 	} lp_brightness_comp;
 };
@@ -685,28 +691,31 @@ static void dsi_panel_lp_compensate(struct dsi_backlight_config *bl,
 	if (!lp_data->lp_brightness_comp.adder)
 		return;
 
-	if (!lp_data->lp_brightness_comp.orig) {
+	if (!lp_data->lp_brightness_comp.initialized) {
 		ssize_t read_size = mipi_dsi_dcs_read(&panel->mipi_device,
-					DCS_BRIGHTNESS_COMPENSATION, buf, 1);
-		if (unlikely(read_size <= 0)) {
+					DCS_BRIGHTNESS_COMPENSATION, buf,
+					DCS_LPB_COMP_SIZE);
+		if (unlikely(read_size != DCS_LPB_COMP_SIZE)) {
 			pr_warn("unable to read brightness comp");
 			return;
 		}
-
-		lp_data->lp_brightness_comp.orig = buf[0];
+		memcpy(lp_data->lp_brightness_comp.buf, buf, read_size);
+		lp_data->lp_brightness_comp.initialized = true;
 		pr_debug("Read LP brightness comp: %02X\n", buf[0]);
+	} else {
+		memcpy(buf, lp_data->lp_brightness_comp.buf, DCS_LPB_COMP_SIZE);
 	}
 
-	buf[0] = DCS_BRIGHTNESS_COMPENSATION;
-	buf[1] = lp_data->lp_brightness_comp.orig;
-
 	/* add compensation in LP mode, otherwise restore original value */
-	if (target_node && target_node->bl_threshold > 0)
-		buf[1] += lp_data->lp_brightness_comp.adder;
+	if (target_node && target_node->bl_threshold > 0) {
+		buf[DCS_LPB_COMP_VALUE] += lp_data->lp_brightness_comp.adder;
+		buf[DCS_LPB_BGR_TRIM] = 0x00; /* lowest bgr trim current */
+	}
 
-	pr_debug("LP brightness compensation: %02X\n", buf[1]);
+	pr_debug("LP brightness compensation: %02X\n", buf[0]);
 
-	mipi_dsi_dcs_write_buffer(&panel->mipi_device, buf, 2);
+	mipi_dsi_dcs_write(&panel->mipi_device, DCS_BRIGHTNESS_COMPENSATION,
+			   buf, DCS_LPB_COMP_SIZE);
 }
 
 static int dsi_panel_binned_bl_update(struct dsi_backlight_config *bl,
@@ -841,7 +850,7 @@ static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 	} else {
 		lp_data->lp_brightness_comp.adder = 0;
 	}
-	lp_data->lp_brightness_comp.orig = 0;
+	lp_data->lp_brightness_comp.initialized = false;
 
 	bl->update_bl = dsi_panel_binned_bl_update;
 	bl->unregister = dsi_panel_bl_free_unregister;
