@@ -5264,8 +5264,10 @@ dhd_bus_init(dhd_pub_t *dhdp, bool enforce_mutex)
 	if (enforce_mutex)
 		dhd_os_sdlock(bus->dhd);
 
-	if (bus->sih->chip == BCM43362_CHIP_ID) {
-		printf("%s: delay 100ms for BCM43362\n", __FUNCTION__);
+	if (bus->sih->chip == BCM43362_CHIP_ID ||
+	    bus->sih->chip == BCM43430_CHIP_ID) {
+		printf("%s: delay 100ms for BCM43362/BCM43430\n",
+		       __FUNCTION__);
 		OSL_DELAY(100000); // terence 20131209: delay for 43362
 	}
 
