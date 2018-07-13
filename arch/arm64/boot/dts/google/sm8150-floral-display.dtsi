@@ -14,20 +14,23 @@
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 
 &sde_dsi {
-	vdd-supply = <&display_panel_avdd_eldo>;
 	vddio-supply = <&pm8150_l14>;
 	vci-supply = <&pm8150l_l9>;
+	qcom,platform-te-gpio = <&tlmm 8 0>;
 
-	qcom,platform-reset-gpio = <&tlmm 67 0>;
-	qcom,platform-mode-gpio = <>;
-	qcom,panel-mode-gpio = <>;
+	/delete-property/ vdd-supply;
+	/delete-property/ lab-supply;
+	/delete-property/ ibb-supply;
 
-	qcom,dsi-display-list = <&dsi_s6e3ha8_cmd_display>;
+	qcom,dsi-display-list =
+		<&dsi_s6e3ha8_cmd_display
+		&dsi_sim_vid_display>;
 };
 
 // Disable control of incorrect gpio pin 130
 &display_panel_avdd_eldo {
 	gpio = <>;
+	status = "disabled";
 };
 
 // Without the line below, display corruption occurs.
@@ -49,14 +52,18 @@
 	};
 };
 
+&dsi_sim_vid {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_jaws>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,platform-reset-gpio = <&tlmm 67 0>;
+};
+
 &dsi_s6e3ha8_dsc_wqhd_cmd {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,platform-te-gpio = <&tlmm 8 0>;
 	qcom,platform-reset-gpio = <&tlmm 67 0>;
-	qcom,panel-mode-gpio = <>;
 
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3ha8>;
-
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_jaws>;
 
 	qcom,mdss-dsi-t-clk-post = <0x17>;
 	qcom,mdss-dsi-t-clk-pre = <0X19>;
@@ -77,7 +84,7 @@
 };
 
 &soc {
-	dsi_panel_pwr_supply_s6e3ha8: dsi_panel_pwr_supply_s6e3ha8 {
+	dsi_panel_pwr_supply_jaws: dsi_panel_pwr_supply_jaws {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
