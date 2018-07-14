@@ -14,6 +14,7 @@
 #include "cam_req_mgr_dev.h"
 #include "cam_sensor_soc.h"
 #include "cam_sensor_core.h"
+#include "cam_sensor_util_fatp.h"
 
 static long cam_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
@@ -224,6 +225,7 @@ static int cam_sensor_platform_remove(struct platform_device *pdev)
 
 	kfree(s_ctrl->i2c_data.per_frame);
 	devm_kfree(&pdev->dev, s_ctrl);
+	remove_file(ATTR_SENSOR_PROBE_STATUS, pdev->dev.kobj.parent);
 
 	return 0;
 }
@@ -254,6 +256,7 @@ static const struct of_device_id cam_sensor_driver_dt_match[] = {
 	{}
 };
 
+static bool attr_created;
 static int32_t cam_sensor_driver_platform_probe(
 	struct platform_device *pdev)
 {
@@ -322,6 +325,10 @@ static int32_t cam_sensor_driver_platform_probe(
 	v4l2_set_subdevdata(&(s_ctrl->v4l2_dev_str.sd), s_ctrl);
 
 	s_ctrl->sensor_state = CAM_SENSOR_INIT;
+	if (attr_created == false) {
+		attr_created = true;
+		create_file(ATTR_SENSOR_PROBE_STATUS, pdev->dev.kobj.parent);
+	}
 
 	return rc;
 unreg_subdev:

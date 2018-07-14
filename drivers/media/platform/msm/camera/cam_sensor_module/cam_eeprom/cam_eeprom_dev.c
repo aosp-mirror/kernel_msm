@@ -15,6 +15,7 @@
 #include "cam_eeprom_soc.h"
 #include "cam_eeprom_core.h"
 #include "cam_debug_util.h"
+#include "cam_sensor_util_fatp.h"
 
 static long cam_eeprom_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
@@ -397,6 +398,7 @@ static int cam_eeprom_spi_driver_remove(struct spi_device *sdev)
 	return 0;
 }
 
+static bool attr_created;
 static int32_t cam_eeprom_platform_driver_probe(
 	struct platform_device *pdev)
 {
@@ -460,6 +462,11 @@ static int32_t cam_eeprom_platform_driver_probe(
 
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_INIT;
 
+	if (attr_created == false) {
+		attr_created = true;
+		create_file(ATTR_EEPROM_DATA, pdev->dev.kobj.parent);
+	}
+
 	return rc;
 free_soc:
 	kfree(soc_private);
@@ -490,6 +497,7 @@ static int cam_eeprom_platform_driver_remove(struct platform_device *pdev)
 	kfree(soc_info->soc_private);
 	kfree(e_ctrl->io_master_info.cci_client);
 	kfree(e_ctrl);
+	remove_file(ATTR_EEPROM_DATA, pdev->dev.kobj.parent);
 	return 0;
 }
 

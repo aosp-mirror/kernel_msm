@@ -17,6 +17,7 @@
 #include "cam_eeprom_core.h"
 #include "cam_eeprom_soc.h"
 #include "cam_debug_util.h"
+#include "cam_sensor_util_fatp.h"
 
 /**
  * cam_eeprom_read_memory() - read map data into buffer
@@ -138,6 +139,8 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 			}
 		}
 	}
+	if (emap != NULL && block->mapdata != NULL)
+		export_eeprom_data(emap[0].saddr, block->mapdata);
 	return rc;
 }
 

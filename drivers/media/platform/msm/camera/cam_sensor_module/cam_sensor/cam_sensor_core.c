@@ -22,6 +22,7 @@
 
 int cam_sensor_config_easel(struct cam_sensor_ctrl_t *s_ctrl);
 #endif
+#include "cam_sensor_util_fatp.h"
 
 #ifdef CONFIG_CAMERA_FW_UPDATE
 #include "../cam_fw_update/fw_update.h"
@@ -741,6 +742,8 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		 */
 		s_ctrl->is_probe_succeed = 1;
 		s_ctrl->sensor_state = CAM_SENSOR_INIT;
+
+		set_cam_sensor_probe(s_ctrl->sensordata->slave_info.sensor_id);
 	}
 		break;
 	case CAM_ACQUIRE_DEV: {

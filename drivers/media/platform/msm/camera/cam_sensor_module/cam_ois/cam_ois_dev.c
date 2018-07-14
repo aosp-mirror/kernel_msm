@@ -15,6 +15,7 @@
 #include "cam_ois_soc.h"
 #include "cam_ois_core.h"
 #include "cam_debug_util.h"
+#include "cam_sensor_util_fatp.h"
 
 static long cam_ois_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
@@ -246,6 +247,7 @@ static int cam_ois_i2c_driver_remove(struct i2c_client *client)
 	return 0;
 }
 
+static bool attr_created;
 static int32_t cam_ois_platform_driver_probe(
 	struct platform_device *pdev)
 {
@@ -304,6 +306,12 @@ static int32_t cam_ois_platform_driver_probe(
 	v4l2_set_subdevdata(&o_ctrl->v4l2_dev_str.sd, o_ctrl);
 
 	o_ctrl->cam_ois_state = CAM_OIS_INIT;
+	set_cam_ois_probe();
+
+	if (attr_created == false) {
+		attr_created = true;
+		create_file(ATTR_OIS_PROBE_STATUS, pdev->dev.kobj.parent);
+	}
 
 	return rc;
 unreg_subdev:
@@ -344,6 +352,7 @@ static int cam_ois_platform_driver_remove(struct platform_device *pdev)
 	kfree(o_ctrl->soc_info.soc_private);
 	kfree(o_ctrl->io_master_info.cci_client);
 	kfree(o_ctrl);
+	remove_file(ATTR_OIS_PROBE_STATUS, pdev->dev.kobj.parent);
 	return 0;
 }
 

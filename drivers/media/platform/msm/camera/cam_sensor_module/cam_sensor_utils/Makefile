@@ -5,4 +5,4 @@ ccflags-y += -Idrivers/media/platform/msm/camera/cam_sensor_module/cam_cci
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_sensor_module/cam_res_mgr
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_smmu/
 
-obj-$(CONFIG_SPECTRA_CAMERA) +=  cam_sensor_util.o
+obj-$(CONFIG_SPECTRA_CAMERA) +=  cam_sensor_util.o cam_sensor_util_fatp.o
