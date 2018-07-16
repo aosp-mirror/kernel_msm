@@ -63,6 +63,7 @@ void paintbox_set_device_ops(struct device *dev,
 
 struct iommu_group *paintbox_get_device_group(struct device *dev);
 struct device *paintbox_bus_get_iommu_device(struct device *dev);
+struct device *paintbox_get_dma_device(struct device *dev);
 struct dentry *paintbox_bus_get_debug_root(struct device *dev);
 
 #endif /* __PAINTBOX_BUS_H__ */

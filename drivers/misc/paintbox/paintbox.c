@@ -798,6 +798,8 @@ static int paintbox_ipu_probe(struct device *dev)
 
 	paintbox_debug_init(pb);
 
+	pb->dma_dev = paintbox_get_dma_device(pb->dev);
+
 	ret = paintbox_get_capabilities(pb);
 	if (ret < 0)
 		return ret;

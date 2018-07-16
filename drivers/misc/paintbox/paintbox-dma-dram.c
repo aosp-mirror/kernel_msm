@@ -36,7 +36,7 @@ static int ipu_copy_user_to_dma_buffer(struct paintbox_data *pb,
 		start_time = ktime_get_boottime();
 #endif
 
-	transfer->buf_vaddr = dma_alloc_coherent(pb->dev,
+	transfer->buf_vaddr = dma_alloc_coherent(pb->dma_dev,
 			config->len_bytes, &transfer->dma_addr, GFP_KERNEL);
 	if (!transfer->buf_vaddr) {
 		dev_err(pb->dev, "%s: allocation failure\n", __func__);
@@ -50,7 +50,7 @@ static int ipu_copy_user_to_dma_buffer(struct paintbox_data *pb,
 	 */
 	if (copy_from_user(transfer->buf_vaddr, config->host_vaddr,
 			config->len_bytes)) {
-		dma_free_coherent(pb->dev, config->len_bytes,
+		dma_free_coherent(pb->dma_dev, config->len_bytes,
 				transfer->buf_vaddr, transfer->dma_addr);
 		return -EFAULT;
 	}
@@ -72,7 +72,7 @@ static void ipu_release_kernel_dma_buffer(struct paintbox_data *pb,
 	dev_dbg(pb->dev, "\tva %p dma addr %pad\n", transfer->buf_vaddr,
 			&transfer->dma_addr);
 
-	dma_free_coherent(pb->dev, transfer->len_bytes,
+	dma_free_coherent(pb->dma_dev, transfer->len_bytes,
 			transfer->buf_vaddr, transfer->dma_addr);
 }
 
@@ -90,7 +90,7 @@ static int ipu_import_dma_buf(struct paintbox_data *pb,
 	if (IS_ERR(transfer->dma_buf))
 		return PTR_ERR(transfer->dma_buf);
 
-	transfer->attach = dma_buf_attach(transfer->dma_buf, pb->dev);
+	transfer->attach = dma_buf_attach(transfer->dma_buf, pb->dma_dev);
 	if (IS_ERR(transfer->attach)) {
 		ret = PTR_ERR(transfer->attach);
 		dev_err(pb->dev, "%s: failed to attach dma_buf, err %d\n",
@@ -149,6 +149,10 @@ static int ipu_import_dma_buf(struct paintbox_data *pb,
 	 */
 	transfer->dma_addr = sg_dma_address(transfer->sg_table->sgl) +
 			config->dma_buf.offset_bytes;
+
+	dev_dbg(pb->dev, "%s: len %lu\n", __func__, transfer->len_bytes);
+	dev_dbg(pb->dev, "\tva %p dma addr %pad\n", transfer->buf_vaddr,
+			&transfer->dma_addr);
 
 	return 0;
 

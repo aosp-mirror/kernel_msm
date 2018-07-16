@@ -66,6 +66,7 @@ struct paintbox_bus_ops {
 			struct paintbox_shared_buffer *shared_buffer,
 			uint32_t offset, size_t size,
 			enum dma_data_direction direction);
+	struct device *(*get_dma_device)(struct device *dev);
 };
 
 irqreturn_t paintbox_bus_dispatch_irq(struct paintbox_bus *bus,

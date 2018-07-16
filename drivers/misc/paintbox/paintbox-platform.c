@@ -156,6 +156,14 @@ void paintbox_platform_bus_sync(struct device *dev,
 	 */
 }
 
+static struct device *paintbox_platform_bus_get_dma_device(struct device *dev)
+{
+	/* The IOMMU is not enabled on the QEMU kernel so the DMA device to use
+	 * is the paintbox platform bus device.
+	 */
+	return dev;
+}
+
 static irqreturn_t paintbox_platform_bus_interrupt(int irq, void *arg)
 {
 	struct paintbox_platform_bus_data *dev_data =
@@ -234,6 +242,7 @@ static void paintbox_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->alloc = &paintbox_platform_bus_alloc;
 	ops->free = &paintbox_platform_bus_free;
 	ops->sync = &paintbox_platform_bus_sync;
+	ops->get_dma_device = &paintbox_platform_bus_get_dma_device;
 }
 
 static int paintbox_platform_bus_probe(struct platform_device *pdev)

@@ -542,6 +542,13 @@ struct paintbox_data {
 
 	struct miscdevice misc_device;
 	struct device *dev;
+
+	/* Depending on the IOMMU configuration the board, the IPU driver may
+	 * need to use a different device object for mapping into the IOMMU IOVA
+	 * space.  This is the case on Airbrush when operating on a QCOM CPU.
+	 */
+	struct device *dma_dev;
+
 	struct paintbox_lbp_common lbp;
 	struct paintbox_stp_common stp;
 	struct paintbox_power power;

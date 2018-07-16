@@ -12,7 +12,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
 #include <linux/kernel.h>
 #include <linux/mfd/abc-pcie.h>
 #include <linux/module.h>
@@ -29,6 +28,13 @@
 struct paintbox_airbrush_mfd_data {
 	struct paintbox_bus *bus;
 	struct device *dev;
+
+	/* Depending on the IOMMU configuration the board the IPU may need
+	 * to use MFD parent's device for mapping DMA buffers.  Otherwise, the
+	 * dma device can be set to our own device and use SWIOTLB to map
+	 * buffers.
+	 */
+	struct device *dma_dev;
 
 	/* TODO(ahampson, rogerwolff) This should be replaced with
 	 * interactions with the Airbrush DRAM manager.  For now, this
@@ -148,7 +154,7 @@ static int paintbox_airbrush_mfd_alloc(struct device *dev, size_t size,
 {
 	struct paintbox_airbrush_mfd_data *dev_data = dev_get_drvdata(dev);
 
-	shared_buffer->host_vaddr = dma_alloc_coherent(dev, size,
+	shared_buffer->host_vaddr = dma_alloc_coherent(dev_data->dma_dev, size,
 			&shared_buffer->host_dma_addr, GFP_KERNEL);
 
 	if (!shared_buffer->host_vaddr)
@@ -166,7 +172,10 @@ static int paintbox_airbrush_mfd_alloc(struct device *dev, size_t size,
 void paintbox_airbrush_mfd_free(struct device *dev,
 		struct paintbox_shared_buffer *shared_buffer)
 {
-	dma_free_coherent(dev, shared_buffer->size, shared_buffer->host_vaddr,
+	struct paintbox_airbrush_mfd_data *dev_data = dev_get_drvdata(dev);
+
+	dma_free_coherent(dev_data->dma_dev, shared_buffer->size,
+			shared_buffer->host_vaddr,
 			shared_buffer->host_dma_addr);
 }
 
@@ -199,6 +208,12 @@ void paintbox_airbrush_mfd_sync(struct device *dev,
 	(void)dma_sblk_start(0, direction, &desc);
 }
 
+static struct device *paintbox_airbrush_mfd_get_dma_device(struct device *dev)
+{
+	struct paintbox_airbrush_mfd_data *dev_data = dev_get_drvdata(dev);
+
+	return dev_data->dma_dev;
+}
 
 static irqreturn_t paintbox_airbrush_mfd_interrupt(int irq, void *arg)
 {
@@ -263,14 +278,13 @@ static void paintbox_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->alloc = &paintbox_airbrush_mfd_alloc;
 	ops->free = &paintbox_airbrush_mfd_free;
 	ops->sync = &paintbox_airbrush_mfd_sync;
+	ops->get_dma_device = &paintbox_airbrush_mfd_get_dma_device;
 }
 
 static int paintbox_airbrush_mfd_probe(struct platform_device *pdev)
 {
 	struct paintbox_airbrush_mfd_data *dev_data;
 	int ret, irq_index;
-
-	arch_setup_dma_ops(&pdev->dev, 0, 0, NULL, false /* coherent */);
 
 	dev_data = devm_kzalloc(&pdev->dev, sizeof(*dev_data), GFP_KERNEL);
 	if (dev_data == NULL)
@@ -298,6 +312,14 @@ static int paintbox_airbrush_mfd_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "failed to request irq\n");
 			return ret;
 		}
+	}
+
+	if (iommu_present(pdev->dev.parent->bus)) {
+		dev_data->dma_dev = pdev->dev.parent;
+	} else {
+		arch_setup_dma_ops(&pdev->dev, 0, 0, NULL,
+				false /* coherent */);
+		dev_data->dma_dev = &pdev->dev;
 	}
 
 	ret = paintbox_bus_initialize(&pdev->dev, &dev_data->ops,

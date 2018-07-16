@@ -64,6 +64,14 @@ struct device *paintbox_bus_get_iommu_device(struct device *dev)
 	return &bus->devices[PAINTBOX_DEVICE_TYPE_IOMMU]->dev;
 }
 
+struct device *paintbox_get_dma_device(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	return bus->ops->get_dma_device(bus->parent_dev);
+}
+
 struct dentry *paintbox_bus_get_debug_root(struct device *dev)
 {
 #ifdef CONFIG_PAINTBOX_DEBUG
