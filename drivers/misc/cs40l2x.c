@@ -3367,6 +3367,21 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 		usleep_range(10000, 10100);
 	}
 
+	if (val & CS40L2X_BASIC_OTP_ERROR)
+		dev_err(dev, "Basic-mode OTP error\n");
+
+	if (val & CS40L2X_BASIC_AMP_ERROR)
+		dev_err(dev, "Basic-mode amplifier short error\n");
+
+	if (val & CS40L2X_BASIC_TEMP_RISE_WARN)
+		dev_err(dev, "Basic-mode temperature-rise error\n");
+
+	if (val & CS40L2X_BASIC_TEMP_ERROR)
+		dev_err(dev, "Basic-mode over-temperature error\n");
+
+	if (val & CS40L2X_BASIC_SA_ERROR)
+		dev_err(dev, "Basic-mode stream arbiter error\n");
+
 	if (val != CS40L2X_BASIC_BOOT_DONE) {
 		dev_err(dev, "Unexpected basic-mode status: %02X\n", val);
 		return -EIO;
