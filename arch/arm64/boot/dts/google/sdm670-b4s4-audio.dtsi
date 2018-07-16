@@ -274,23 +274,23 @@
 		compatible = "cirrus,msm-cirrus-playback";
 		usecase-names = "Playback";
 
-		/* the resistance is 7.9999 ohm */
-		cirrus,top-speaker-impedance = <11189>;
+		/* the resistance is 7.7996 ohm */
+		cirrus,top-speaker-impedance = <10909>;
 
-		/* the percentage of tolerance is 10 */
-		cirrus,top-speaker-tolerance = <10>;
+		/* the percentage of tolerance is 20 */
+		cirrus,top-speaker-tolerance = <20>;
 
-		/* the resistance is 7.6796 ohm */
-		cirrus,top-speaker-mean = <10741>;
+		/* the resistance is 7.7996 ohm */
+		cirrus,top-speaker-mean = <10909>;
 
 		/* the resistance is 6.7994 ohm */
 		cirrus,bottom-speaker-impedance = <9510>;
 
-		/* the percentage of tolerance is 10 */
-		cirrus,bottom-speaker-tolerance = <10>;
+		/* the percentage of tolerance is 20 */
+		cirrus,bottom-speaker-tolerance = <20>;
 
-		/* the resistance is 6.6593 ohm */
-		cirrus,bottom-speaker-mean = <9314>;
+		/* the resistance is 6.7994 ohm */
+		cirrus,bottom-speaker-mean = <9510>;
 	};
 };
 
