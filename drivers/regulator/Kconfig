@@ -1066,5 +1066,10 @@ config REGULATOR_STUB
 	  Clients can use the real regulator device names with proper
 	  constraint checking while the real driver is being developed.
 
+config REGULATOR_MAX77826
+	tristate "Maxim MAX77826 PMIC support"
+	help
+	  If you say yes here you get support for Maxim MAX77826 PMIC.
+
 endif
 
