@@ -1,0 +1,24 @@
+/* Copyright (c) 2018 Google, Inc.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+/dts-v1/;
+
+#include "sdm845-c1-common.dtsi"
+#include "sdm845-patherm.dtsi"
+#include "sdm845-usbctherm.dtsi"
+
+/ {
+	model = "Google Inc. MSM sdm845 C1 DVT1.1";
+	compatible = "google,b1c1-sdm845", "qcom,sdm845";
+	qcom,board-id = <0x00011505 0>;
+};
