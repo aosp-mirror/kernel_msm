@@ -2988,6 +2988,14 @@ done:
 	batt_psy_initialized(chip);
 	fg_notify_charger(chip);
 	chip->profile_loaded = true;
+
+	if (chip->dt.jeita_en) {
+		//wait fcc applied, then set jeita
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_CC]);
+		chip->dt.jeita_dynamic_model = MODEL_COLD;
+	}
+	
 	fg_dbg(chip, FG_STATUS, "profile loaded successfully");
 out:
 	chip->soc_reporting_ready = true;
@@ -3794,13 +3802,6 @@ static int fg_hw_init(struct fg_chip *chip)
 	if (rc < 0)
 		pr_err("Error in writing CHGR_JEITA_EN_CFG \n");
 
-	if (chip->dt.jeita_dynamic_model == MODEL_COLD) {
-		fg_set_fv_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_FV]);
-		fg_set_cc_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_CC]);
-	} else if (chip->dt.jeita_dynamic_model == MODEL_HOT) {
-		fg_set_fv_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_FV]);
-		fg_set_cc_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_CC]);
-	}
 
 	if (chip->pmic_rev_id->pmic_subtype == PMI8998_SUBTYPE) {
 		chip->esr_timer_charging_default[TIMER_RETRY] =
@@ -4841,12 +4842,6 @@ static int fg_parse_dt(struct fg_chip *chip)
 	else
 		chip->dt.jeita_en = temp;
 
-	rc = of_property_read_u32(node, "qcom,fg-jeita-dynamic-model", &temp);
-	if (rc < 0)
-		chip->dt.jeita_dynamic_model = MODEL_DISABLE;
-	else
-		chip->dt.jeita_dynamic_model = temp;
-
 	chip->dt.jeita_soft_hot_fv_cc[JEITA_FV] = DEFAULT_HOT_FV;
 	chip->dt.jeita_soft_hot_fv_cc[JEITA_CC] = DEFAULT_HOT_CC;
 	chip->dt.jeita_soft_cold_fv_cc[JEITA_FV] = DEFAULT_COLD_FV;
@@ -5170,6 +5165,7 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 	device_init_wakeup(chip->dev, true);
 
 	schedule_delayed_work(&chip->profile_load_work, 0);
+	chip->dt.jeita_dynamic_model = MODEL_DISABLE;
 
 	pr_debug("FG GEN3 driver probed successfully\n");
 	return 0;
