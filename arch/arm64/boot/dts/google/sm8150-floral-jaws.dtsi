@@ -21,6 +21,7 @@
 #include "sm8150-floral-battery.dtsi"
 #include "sm8150-floral-citadel.dtsi"
 #include "sm8150-floral-display.dtsi"
+#include "sm8150-floral-pcie.dtsi"
 #include "sm8150-floral-pinctrl.dtsi"
 #include "sm8150-floral-qup.dtsi"
 #include "sm8150-floral-regulator.dtsi"
