@@ -38,12 +38,12 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&drv2624_rst>;
 		ti,reset-gpio = <&tlmm 24 0>;
-		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
+		ti,smart-loop = <1>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
 		ti,rated-voltage = <75>;
 		ti,odclamp-voltage = <106>; /* 2.1 Vrms */
 		ti,lra-frequency = <172>; /* f0 = 172Hz */
-		ti,ol-lra-frequency = <172>; /* off-f0 in OL */
+		ti,ol-lra-frequency = <170>; /* off-f0 in OL */
 		ti,bemf-factor = <150>;
 		ti,bemf-gain = <0>;
 		ti,voltage-comp = <18>;
