@@ -1700,13 +1700,25 @@ static void pd_phy_shutdown(struct usbpd *pd)
 {
 	int rc = 0;
 
+	flush_delayed_work(&pd->ext_vbus_work);
 	mutex_lock(&pd->lock);
 	if (regulator_is_enabled(pd->vbus)) {
 		rc = regulator_disable(pd->vbus);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("unable to disable vbus\n");
-		else
+		} else {
 			pd->vbus_output = false;
+			pd->smb2_vbus_reg = false;
+		}
+	}
+	if (pd->ext_vbus_reg) {
+		rc = regulator_disable(pd->ext_vbus);
+		if (rc < 0) {
+			pr_err("unable to disable vbus\n");
+		} else {
+			pd->vbus_output = false;
+			pd->ext_vbus_reg = false;
+		}
 	}
 	if (regulator_is_enabled(pd->vconn)) {
 		rc = regulator_disable(pd->vconn);
