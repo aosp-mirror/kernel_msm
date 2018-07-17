@@ -595,7 +595,7 @@ static int cam_ois_start_shift_reader(struct cam_ois_ctrl_t *o_ctrl)
 
 		// set worker function and work queue
 		INIT_WORK(&ois_timer.g_work, cam_ois_read_work);
-		ois_timer.ois_wq = create_workqueue("ois_wq");
+		ois_timer.ois_wq = alloc_workqueue("ois_wq", WQ_HIGHPRI, 1);
 		if (!ois_timer.ois_wq) {
 			CAM_ERR(CAM_OIS, "ois_wq create failed.");
 			return -EFAULT;
