@@ -178,7 +178,23 @@ enum node_stat_item {
 	NR_VMSCAN_IMMEDIATE,	/* Prioritise for reclaim when writeback ends */
 	NR_DIRTIED,		/* page dirtyings since bootup */
 	NR_WRITTEN,		/* page writings since bootup */
+	/*
+	 * Currently, NR_INDIRECTLY_RECLAIMABLE_BYTES covers only memory in ion
+	 * system heap pool(If user free memory allocated from system heap via
+	 * pool, it could stay this ION heap pool until memory pressure happens
+	 * or reallocated so that it consumes the memory) so we could regard it
+	 * as the amount of ION heap system heap pool.
+	 * Upstream is going to change it with new stuff so don't bother to
+	 * follow it at this moment. https://lkml.org/lkml/2018/7/18/505
+	 */
 	NR_INDIRECTLY_RECLAIMABLE_BYTES, /* measured in bytes */
+	/*
+	 * NR_ION_HEAP covers every allocation from ION heap system heap.
+	 * It means it already includes NR_INDIRECTLY_RECLAIMABLE_BYTES.
+	 * Therefore, the amount of ION heap application using at this moment
+	 * is NR_ION_HEAP - (NR_INDIRECTLY_RECLAIMABLE_BYTES / PAGE_SIZE).
+	 */
+	NR_ION_HEAP,
 	NR_VM_NODE_STAT_ITEMS
 };
 
