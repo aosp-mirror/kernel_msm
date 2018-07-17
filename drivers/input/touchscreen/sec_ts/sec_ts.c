@@ -2068,6 +2068,7 @@ static int sec_ts_probe(struct i2c_client *client,
 err_register_drm_client:
 	free_irq(client->irq, ts);
 err_irq:
+	pm_qos_remove_request(&ts->pm_qos_req);
 	if (ts->plat_data->support_dex) {
 		input_unregister_device(ts->input_dev_pad);
 		ts->input_dev_pad = NULL;
@@ -2508,8 +2509,6 @@ static int sec_ts_remove(struct i2c_client *client)
 
 	msm_drm_unregister_client(&ts->notifier);
 
-	pm_qos_remove_request(&ts->pm_qos_req);
-
 	cancel_work_sync(&ts->suspend_work);
 	cancel_work_sync(&ts->resume_work);
 
@@ -2523,6 +2522,8 @@ static int sec_ts_remove(struct i2c_client *client)
 	disable_irq_nosync(ts->client->irq);
 	free_irq(ts->client->irq, ts);
 	input_info(true, &ts->client->dev, "%s: irq disabled\n", __func__);
+
+	pm_qos_remove_request(&ts->pm_qos_req);
 
 #ifdef USE_POWER_RESET_WORK
 	cancel_delayed_work_sync(&ts->reset_work);

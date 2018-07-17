@@ -4004,6 +4004,15 @@ static int fts_probe(struct spi_device *client)
 	info->resume_bit = 1;
 	info->notifier = fts_noti_block;
 
+	/*
+	 * This *must* be done before request_threaded_irq is called.
+	 * Otherwise, if an interrupt is received before request is added,
+	 * but after the interrupt has been subscribed to, pm_qos_req
+	 * may be accessed before initialization in the interrupt handler.
+	 */
+	pm_qos_add_request(&info->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+			PM_QOS_DEFAULT_VALUE);
+
 	pr_info("Init Core Lib:\n");
 	initCore(info);
 	/* init hardware device */
@@ -4055,9 +4064,6 @@ static int fts_probe(struct spi_device *client)
 			   msecs_to_jiffies(EXP_FN_WORK_DELAY_MS));
 #endif
 
-	pm_qos_add_request(&info->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
-			PM_QOS_DEFAULT_VALUE);
-
 	pr_info("Probe Finished!\n");
 
 	return OK;
@@ -4069,6 +4075,7 @@ ProbeErrorExit_7:
 #endif
 
 ProbeErrorExit_6:
+	pm_qos_remove_request(&info->pm_qos_req);
 	input_unregister_device(info->input_dev);
 
 ProbeErrorExit_5_1:
@@ -4116,8 +4123,6 @@ static int fts_remove(struct spi_device *client)
 
 	pr_info("%s\n", __func__);
 
-	pm_qos_remove_request(&info->pm_qos_req);
-
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	tbn_cleanup(info->tbn);
 #endif
@@ -4129,6 +4134,8 @@ static int fts_remove(struct spi_device *client)
 
 	/* remove interrupt and event handlers */
 	fts_interrupt_uninstall(info);
+
+	pm_qos_remove_request(&info->pm_qos_req);
 
 	msm_drm_unregister_client(&info->notifier);
 
