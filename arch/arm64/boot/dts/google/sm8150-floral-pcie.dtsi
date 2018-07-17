@@ -22,3 +22,16 @@
 	/* Remove pcie1_wake_default from pin muxing */
 	pinctrl-0 = <&pcie1_clkreq_default &pcie1_perst_default>;
 };
+
+&pcie1_perst_default {
+	mux {
+		pins = "pm8150l_gpio2";
+		function = "gpio";
+	};
+
+	config {
+		pins = "pm8150l_gpio2";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+};
