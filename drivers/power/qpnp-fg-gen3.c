@@ -4277,7 +4277,7 @@ static struct fg_irq_info fg_irqs[FG_IRQ_MAX] = {
 	[MSOC_DELTA_IRQ] = {
 		.name		= "msoc-delta",
 		.handler	= fg_delta_msoc_irq_handler,
-		.wakeable	= true,
+		.wakeable	= false,
 		.flags		= IRQ_TYPE_EDGE_RISING,
 	},
 	[BSOC_DELTA_IRQ] = {
