@@ -1019,6 +1019,12 @@ static void iaxxx_dev_init_work(struct kthread_work *work)
 	struct iaxxx_priv *priv = iaxxx_ptr2priv(work, dev_init_work);
 	struct device *dev = priv->dev;
 	int rc;
+
+	/* Todo: remove this workaround */
+	/* delay 3s because SPI driver is not ready yet */
+	pr_warn("%s: delay 3s to wait SPI ready.\n", __func__);
+	msleep(3000);
+
 	rc = iaxxx_do_fw_update(priv);
 	if (rc == E_IAXXX_REGMAP_ERROR) {
 		goto err_chip_reset;
