@@ -25,6 +25,11 @@
 	qcom,dsi-display-list = <&dsi_s6e3ha8_cmd_display>;
 };
 
+// Disable control of incorrect gpio pin 130
+&display_panel_avdd_eldo {
+	gpio = <>;
+};
+
 // Without the line below, display corruption occurs.
 &mdss_dsi0 {
 	qcom,null-insertion-enabled;
