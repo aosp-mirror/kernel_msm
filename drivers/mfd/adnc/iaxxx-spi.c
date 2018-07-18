@@ -19,6 +19,7 @@
 #include <linux/spi/spi.h>
 #include "iaxxx.h"
 #include <linux/of.h>
+#include <linux/clk.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #define IAXXX_SYNC_RETRY	15
 
@@ -52,8 +53,18 @@ static inline struct iaxxx_spi_priv *to_spi_priv(struct iaxxx_priv *priv)
 static int iaxxx_spi_read(struct spi_device *spi, void *buf, int len)
 {
 	int rc;
+	void *dmabuf;
 
-	rc = spi_read(spi, buf, len);
+	/* TODO: don't have so many kmallocs on each spi transaction. */
+	dmabuf = kmalloc(len, GFP_DMA | GFP_KERNEL);
+	if (!dmabuf) {
+		pr_err("%s: allocate DMA buffer failed\n", __func__);
+		return -ENOMEM;
+	}
+
+	rc = spi_read(spi, dmabuf, len);
+	memcpy(buf, dmabuf, len);
+	kfree(dmabuf);
 	if (rc < 0) {
 		dev_err(&spi->dev, "spi_read() failed, rc = %d\n", rc);
 		return rc;
@@ -65,8 +76,18 @@ static int iaxxx_spi_read(struct spi_device *spi, void *buf, int len)
 static int iaxxx_spi_write(struct spi_device *spi, const void *buf, int len)
 {
 	int rc;
+	void *dmabuf;
 
-	rc = spi_write(spi, buf, len);
+	/* TODO: don't have so many kmallocs on each spi transaction. */
+	dmabuf = kmalloc(len, GFP_DMA | GFP_KERNEL);
+	if (!dmabuf) {
+		pr_err("%s: allocate DMA buffer failed\n", __func__);
+		return -ENOMEM;
+	}
+
+	memcpy(dmabuf, buf, len);
+	rc = spi_write(spi, dmabuf, len);
+	kfree(dmabuf);
 	if (rc < 0) {
 		dev_err(&spi->dev, "spi_write() failed, rc = %d\n", rc);
 		return rc;
@@ -151,7 +172,7 @@ static int iaxxx_regmap_spi_gather_raw_write(void *context,
 	pr_debug("%s() Register address %x\n", __func__, reg_addr);
 
 	val_len = iaxxx_spi_write_endian(dev, tmp, val_len);
-	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_KERNEL);
+	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
 	if (padding == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		return -ENOMEM;
@@ -207,7 +228,7 @@ static int iaxxx_regmap_spi_gather_write(void *context,
 	pr_debug("%s() Register address %x\n", __func__, reg_addr);
 	reg_addr = cpu_to_be32(reg_addr >> 1);
 
-	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_KERNEL);
+	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
 	if (padding == NULL)
 		return -ENOMEM;
 
@@ -292,6 +313,7 @@ static int iaxxx_regmap_spi_read(void *context,
 	uint32_t words = val_len / sizeof(uint32_t);
 	uint32_t reg2[4] = { };
 	uint8_t *padding;
+	uint8_t *preg2;
 	int i = 0, rc = 0;
 
 	/* For reads, most significant bit is set after address shifted */
@@ -301,19 +323,28 @@ static int iaxxx_regmap_spi_read(void *context,
 	if (atomic_read(&priv->power_state) == IAXXX_SUSPEND)
 		return -ENXIO;
 
-	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_KERNEL);
-	if (padding == NULL)
+	preg2 = kzalloc(sizeof(reg2), GFP_DMA | GFP_KERNEL);
+	if (preg2 == NULL) {
+		pr_err("%s() failed to allocate memory\n", __func__);
 		return -ENOMEM;
-	memset(padding, 0, IAXXX_REG_LEN_WITH_PADDING + val_len);
+	}
+
+	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
+	if (padding == NULL) {
+		pr_err("%s() failed to allocate memory\n", __func__);
+		rc = -ENOMEM;
+		goto mem_alloc_fail;
+	}
 
 	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
 	reg2[0] = reg_addr;
+	memcpy(preg2, reg2, sizeof(reg2));
 
 	spi_message_init(&m);
 
 	/* Register address */
 	t[0].len = IAXXX_REG_LEN_WITH_PADDING + val_len;
-	t[0].tx_buf = reg2;
+	t[0].tx_buf = preg2;
 	t[0].rx_buf = padding;
 	spi_message_add_tail(&t[0], &m);
 
@@ -330,8 +361,9 @@ static int iaxxx_regmap_spi_read(void *context,
 	}
 
 reg_read_err:
-	if (padding != NULL)
-		kfree(padding);
+	kfree(padding);
+mem_alloc_fail:
+	kfree(preg2);
 
 	return rc;
 }
@@ -374,23 +406,32 @@ static int iaxxx_spi_bus_read(struct device *dev,
 	uint32_t pad[4] = {0};
 	struct spi_transfer t[1] = { };
 	uint8_t *padding;
+	uint8_t *ppad;
 
 	/* For reads, most significant bit is set after address shifted */
 	uint32_t reg_addr = reg;
 
-	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
-	pad[0] = reg_addr;
-	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_KERNEL);
-	if (padding == NULL) {
+	ppad = kzalloc(sizeof(pad), GFP_DMA | GFP_KERNEL);
+	if (ppad == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
-	memset(padding, 0, IAXXX_REG_LEN_WITH_PADDING + val_len);
+
+	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
+	pad[0] = reg_addr;
+	memcpy(ppad, pad, sizeof(pad));
+
+	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
+	if (padding == NULL) {
+		pr_err("%s() failed to allocate memory\n", __func__);
+		rc = -ENOMEM;
+		goto mem_alloc_fail;
+	}
 	spi_message_init(&m);
 
 	/* Register address */
 	t[0].len = IAXXX_REG_LEN_WITH_PADDING + val_len;
-	t[0].tx_buf = pad;
+	t[0].tx_buf = ppad;
 	t[0].rx_buf = padding;
 	spi_message_add_tail(&t[0], &m);
 
@@ -401,8 +442,9 @@ static int iaxxx_spi_bus_read(struct device *dev,
 	memcpy(val, padding + IAXXX_REG_LEN_WITH_PADDING, val_len);
 
 bus_read_err:
-	if (padding != NULL)
-		kfree(padding);
+	kfree(padding);
+mem_alloc_fail:
+	kfree(ppad);
 
 	return rc;
 }
@@ -412,12 +454,12 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	struct device *dev = priv->dev;
 	struct spi_device *spi = to_spi_device(dev);
 	struct spi_transfer t[1] = {};
-	uint8_t reg_addr[IAXXX_REG_LEN_WITH_PADDING];
 	struct spi_message m;
 	uint8_t *cbuf = (uint8_t *)buf;
 	int rc;
 	uint8_t *val;
 	uint32_t val_len;
+	uint8_t *preg_addr;
 
 	if (len <= IAXXX_REG_LEN_WITH_PADDING) {
 		pr_err("%s() len parameter invalid\n", __func__);
@@ -425,19 +467,27 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	}
 
 	spi_message_init(&m);
-	/* Create buffer to store read data */
-	val_len = len - IAXXX_REG_LEN_WITH_PADDING;
-	val = kzalloc(len, GFP_KERNEL);
-	if (val == NULL) {
+
+	preg_addr = kzalloc(IAXXX_REG_LEN_WITH_PADDING, GFP_DMA | GFP_KERNEL);
+	if (preg_addr == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
+
+	/* Create buffer to store read data */
+	val_len = len - IAXXX_REG_LEN_WITH_PADDING;
+	val = kzalloc(len, GFP_DMA | GFP_KERNEL);
+	if (val == NULL) {
+		pr_err("%s() failed to allocate memory\n", __func__);
+		rc = -ENOMEM;
+		goto mem_alloc_fail;
+	}
 	/* Fetch the Register address with padding */
-	memcpy(reg_addr, cbuf, IAXXX_REG_LEN_WITH_PADDING);
+	memcpy(preg_addr, cbuf, IAXXX_REG_LEN_WITH_PADDING);
 
 	/* Add Register address write message */
 	t[0].len = len;
-	t[0].tx_buf = (void *)reg_addr;
+	t[0].tx_buf = (void *)preg_addr;
 	t[0].rx_buf = (void *)val;
 	spi_message_add_tail(&t[0], &m);
 
@@ -450,6 +500,8 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 			val + IAXXX_REG_LEN_WITH_PADDING, val_len);
 err:
 	kfree(val);
+mem_alloc_fail:
+	kfree(preg_addr);
 	return rc;
 }
 
@@ -684,6 +736,7 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	struct iaxxx_spi_priv *spi_priv;
 	struct device *dev = &spi->dev;
 	struct device_node *node = dev->of_node;
+	struct clk *iaxxx_clk;
 	u32 tmp = 0;
 
 	dev_dbg(dev, "%s:%d\n", __func__, __LINE__);
@@ -707,12 +760,24 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 		goto crash_mem_failed;
 	}
 
+	iaxxx_clk = devm_clk_get(dev, "iaxxx_clk");
+
+	if (!IS_ERR(iaxxx_clk)) {
+		dev_info(dev, "iaxxx_clk set rate to 19200000\n");
+		clk_set_rate(iaxxx_clk, 19200000);
+	} else {
+		rc = PTR_ERR(iaxxx_clk);
+		dev_err(dev, "cannot get iaxxx_clk, errno=%d\n", rc);
+		goto probe_failed;
+	}
+
 	spi_priv->spi = spi;
 	spi_priv->priv.dev = dev;
 	spi_priv->priv.regmap_init_bus = iaxxx_spi_regmap_init;
 	spi_priv->priv.bulk_read = iaxxx_spi_bulk_read;
 	spi_priv->priv.raw_write = iaxxx_spi_raw_write;
 	spi_priv->priv.bus = IAXXX_SPI;
+	spi_priv->priv.ext_clk = iaxxx_clk;
 
 	spi_set_drvdata(spi, spi_priv);
 
@@ -756,6 +821,11 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 
 	if (spi_priv) {
 		iaxxx_device_exit(&spi_priv->priv);
+		if (spi_priv->priv.ext_clk) {
+			clk_disable_unprepare(spi_priv->priv.ext_clk);
+			devm_clk_put(spi_priv->priv.dev, spi_priv->priv.ext_clk);
+		}
+
 		devm_kfree(&spi->dev, spi_priv->priv.iaxxx_state);
 		kfree(spi_priv->priv.crashlog->log_buffer);
 		devm_kfree(&spi->dev, spi_priv->priv.crashlog);
