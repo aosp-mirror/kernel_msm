@@ -612,7 +612,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 
 	dsi = &panel->mipi_device;
 
-	mutex_lock(&panel->panel_lock);
 	num_params = panel->bl_config.bl_max_level > 0xFF ? 2 : 1;
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl, num_params);
 	if (rc < 0)
