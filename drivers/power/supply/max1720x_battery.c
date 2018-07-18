@@ -308,7 +308,6 @@ struct max1720x_chip {
 	int history_index;
 	u16 health_status;
 	int fake_capacity;
-	int fake_temperature;
 	int previous_qh;
 	int current_capacity;
 	int prev_charge_state;
@@ -961,17 +960,6 @@ static int max1720x_set_battery_soc(struct max1720x_chip *chip,
 	return 0;
 }
 
-static int max1720x_set_battery_temp(struct max1720x_chip *chip,
-				     const union power_supply_propval *val)
-{
-	chip->fake_temperature = val->intval;
-
-	if (chip->psy)
-		power_supply_changed(chip->psy);
-
-	return 0;
-}
-
 static int max1720x_update_battery_qh_based_capacity(struct max1720x_chip *chip)
 {
 	u16 data;
@@ -1129,12 +1117,8 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		if (chip->fake_temperature != -EINVAL)
-			val->intval = chip->fake_temperature;
-		else {
-			err = REGMAP_READ(map, MAX1720X_TEMP, &data);
-			val->intval = reg_to_deci_deg_cel(data);
-		}
+		REGMAP_READ(map, MAX1720X_TEMP, data);
+		val->intval = reg_to_deci_deg_cel(data);
 		max1720x_handle_update_nconvgcfg(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
@@ -1199,9 +1183,6 @@ static int max1720x_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		rc = max1720x_set_battery_soc(chip, val);
 		break;
-	case POWER_SUPPLY_PROP_TEMP:
-		rc = max1720x_set_battery_temp(chip, val);
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -1214,7 +1195,6 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
-	case POWER_SUPPLY_PROP_TEMP:
 		return 1;
 	default:
 		break;
@@ -1723,7 +1703,6 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	(void) max1720x_handle_dt_nconvgcfg(chip);
 
 	chip->fake_capacity = -EINVAL;
-	chip->fake_temperature = -EINVAL;
 	chip->init_complete = true;
 	chip->resume_complete = true;
 
