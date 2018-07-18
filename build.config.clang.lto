@@ -1,6 +1,7 @@
 function update_clang_config() {
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
     -d ARM64_ERRATUM_843419 \
+    -d UNMAP_KERNEL_AT_EL0 \
     -e CLANG_LTO
   (cd ${OUT_DIR} && \
     make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
