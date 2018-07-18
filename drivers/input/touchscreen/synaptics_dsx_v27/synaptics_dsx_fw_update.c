@@ -2689,7 +2689,7 @@ static int fwu_get_image_firmware_id(unsigned int *fw_id)
 
 static int fwu_get_device_config_id(void)
 {
-	int retval;
+	int retval, ii;
 	unsigned char config_id_size;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
 
@@ -2704,6 +2704,10 @@ static int fwu_get_device_config_id(void)
 				config_id_size);
 	if (retval < 0)
 		return retval;
+
+	for (ii = 0; ii < config_id_size; ii++)
+		snprintf(rmi4_data->config_id + 2 * ii, 3,
+				"%02x", fwu->config_id[ii]);
 
 	return 0;
 }

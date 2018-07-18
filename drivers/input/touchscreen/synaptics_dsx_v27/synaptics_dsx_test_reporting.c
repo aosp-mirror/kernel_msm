@@ -1417,6 +1417,8 @@ show_prototype(force_tx_mapping)
 show_prototype(force_rx_mapping)
 show_prototype(report_size)
 show_prototype(status)
+show_prototype(fw_ver)
+show_prototype(config_ver)
 store_prototype(do_preparation)
 store_prototype(force_cal)
 store_prototype(get_report)
@@ -1438,6 +1440,8 @@ static struct attribute *attrs[] = {
 	attrify(force_rx_mapping),
 	attrify(report_size),
 	attrify(status),
+	attrify(fw_ver),
+	attrify(config_ver),
 	attrify(do_preparation),
 	attrify(force_cal),
 	attrify(get_report),
@@ -2907,6 +2911,23 @@ exit:
 	return retval;
 }
 
+static ssize_t test_sysfs_fw_ver_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
+
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+			rmi4_data->firmware_id);
+}
+
+static ssize_t test_sysfs_config_ver_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
+
+	return snprintf(buf, PAGE_SIZE, "%s\n", rmi4_data->config_id);
+}
+
 static ssize_t test_sysfs_data_read(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
 		char *buf, loff_t pos, size_t count)
@@ -3048,8 +3069,7 @@ static int test_set_sysfs(void)
 	int retval;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 
-	f54->sysfs_dir = kobject_create_and_add(SYSFS_FOLDER_NAME,
-			&rmi4_data->input_dev->dev.kobj);
+	f54->sysfs_dir = kobject_create_and_add("android_touch", NULL);
 	if (!f54->sysfs_dir) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to create sysfs directory\n",

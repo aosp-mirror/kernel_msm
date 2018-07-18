@@ -386,6 +386,7 @@ struct synaptics_rmi4_data {
 	unsigned char valid_button_count;
 	unsigned char report_enable;
 	unsigned char no_sleep_setting;
+	unsigned char config_id[65];
 	unsigned char gesture_detection[F12_GESTURE_DETECTION_LEN];
 	unsigned char intr_mask[MAX_INTR_REGISTERS];
 	unsigned char *button_txrx_mapping;
