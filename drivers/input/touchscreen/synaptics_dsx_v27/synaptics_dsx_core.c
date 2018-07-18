@@ -127,6 +127,11 @@ static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 		bool rebuild);
 
+#ifdef CONFIG_DRM
+static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
+		unsigned long event, void *data);
+#endif
+
 #ifdef CONFIG_FB
 static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		unsigned long event, void *data);
@@ -4229,6 +4234,17 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 		goto err_set_input_dev;
 	}
 
+#ifdef CONFIG_DRM
+	rmi4_data->drm_notifier.notifier_call =
+			synaptics_rmi4_dsi_panel_notifier_cb;
+	retval = msm_drm_register_client(&rmi4_data->drm_notifier);
+	if (retval < 0) {
+		dev_err(&pdev->dev,
+				"%s: Failed to register drm notifier client\n",
+				__func__);
+	}
+#endif
+
 #ifdef CONFIG_FB
 	rmi4_data->fb_notifier.notifier_call = synaptics_rmi4_fb_notifier_cb;
 	retval = fb_register_client(&rmi4_data->fb_notifier);
@@ -4336,6 +4352,9 @@ err_virtual_buttons:
 	synaptics_rmi4_irq_enable(rmi4_data, false, false);
 
 err_enable_irq:
+#ifdef CONFIG_DRM
+	msm_drm_unregister_client(&rmi4_data->fb_notifier);
+#endif
 #ifdef CONFIG_FB
 	fb_unregister_client(&rmi4_data->fb_notifier);
 #endif
@@ -4408,6 +4427,10 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 
 	synaptics_rmi4_irq_enable(rmi4_data, false, false);
 
+#ifdef CONFIG_DRM
+	msm_drm_unregister_client(&rmi4_data->fb_notifier);
+#endif
+
 #ifdef CONFIG_FB
 	fb_unregister_client(&rmi4_data->fb_notifier);
 #endif
@@ -4439,6 +4462,38 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 
 	return 0;
 }
+
+#ifdef CONFIG_DRM
+static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	int transition;
+	struct msm_drm_notifier *evdata = data;
+	struct synaptics_rmi4_data *rmi4_data =
+			container_of(self, struct synaptics_rmi4_data,
+			drm_notifier);
+
+	if (!evdata || (evdata->id != 0))
+		return 0;
+
+	if (evdata && evdata->data && rmi4_data) {
+		if (event == MSM_DRM_EVENT_BLANK) {
+			transition = *(int *)evdata->data;
+			pr_info("%s: DRM blank %d, event %ld\n",
+					__func__, transition, event);
+			if (transition == MSM_DRM_BLANK_POWERDOWN) {
+				synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
+				rmi4_data->fb_ready = false;
+			} else if (transition == MSM_DRM_BLANK_UNBLANK) {
+				synaptics_rmi4_resume(&rmi4_data->pdev->dev);
+				rmi4_data->fb_ready = true;
+			}
+		}
+	}
+
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_FB
 static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
