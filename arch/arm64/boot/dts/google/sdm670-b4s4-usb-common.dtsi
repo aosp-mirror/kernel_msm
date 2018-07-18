@@ -12,6 +12,24 @@
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 #include <dt-bindings/usb/typec.h>
 
+&tlmm {
+	cc_sbu_ovp_intr {
+		cc_sbu_ovp_intr_default: cc_sbu_ovp_intr_default {
+			mux {
+				pins = "gpio21";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio21";
+				drive-strength = <2>;
+				bias-pull-up;
+				input-enable;
+			};
+		};
+	};
+};
+
 &pm660_gpios {
 	usb2_ext_5v_boost {
 		usb2_ext_5v_boost_default: usb2_ext_5v_boost_default {
@@ -72,4 +90,7 @@
 	goog,try-role-hw;
 
 	ext-vbus-supply = <&ext_5v_boost>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&cc_sbu_ovp_intr_default>;
 };
