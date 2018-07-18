@@ -25,7 +25,7 @@
 #define IAXXX_CHUNK_SIZE 32768
 
 /* Firmware and hardware configuration files */
-static const char *iaxxx_fw_filename = "audience/iaxxx/RomeApp.bin";
+static const char *iaxxx_fw_filename = "RomeApp.bin";
 
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes)
 {
