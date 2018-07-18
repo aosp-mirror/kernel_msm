@@ -1117,7 +1117,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		REGMAP_READ(map, MAX1720X_TEMP, data);
+		REGMAP_READ(map, MAX1720X_TEMP, &data);
 		val->intval = reg_to_deci_deg_cel(data);
 		max1720x_handle_update_nconvgcfg(chip, val->intval);
 		break;
