@@ -57,13 +57,17 @@
 #include "iaxxx-cdev.h"
 #include "iaxxx-build-info.h"
 #include <linux/circ_buf.h>
+#include <linux/clk.h>
 
 #define IAXXX_RESET_RETRIES		5		/* retry attempts */
 #define IAXXX_RESET_HOLD_TIME		(20*1000)	/* 20 ms */
 #define IAXXX_RESET_READY_DELAY		(20*1000)	/* 20 ms */
 #define IAXXX_RESET_RANGE_INTERVAL	100		/* 100 us */
 
-#define IAXXX_FW_RETRY_COUNT		0		/* 0 retry if failed */
+#define IAXXX_RESET_PWR_VLD_DELAY		(3*1000)
+#define IAXXX_RESET_PWR_VLD_RANGE_INTERVAL	100
+
+#define IAXXX_FW_RETRY_COUNT		5		/* 0 retry if failed */
 #define IAXXX_FW_DOWNLOAD_TIMEOUT	10000		/* 10 secs */
 #define IAXXX_VER_STR_SIZE		60
 #define IAXXX_BYTES_IN_A_WORD		4
@@ -211,6 +215,14 @@ static int iaxxx_populate_dt_gpios(struct iaxxx_priv *priv)
 	}
 	priv->event_gpio = rc;
 
+	rc = get_named_gpio(dev, "adnc,pwr-vld-gpio");
+	if (rc < 0) {
+		priv->pwr_vld_gpio = -EINVAL;
+		dev_err(dev, "Failed to read pwr-vld-gpio gpio, rc = %d\n", rc);
+		return rc;
+	}
+	priv->pwr_vld_gpio = rc;
+
 	return 0;
 }
 
@@ -261,8 +273,15 @@ static int iaxxx_gpio_init(struct iaxxx_priv *priv)
 	if (rc < 0)
 		goto err_missing_reset_gpio;
 
-	return 0;
+	/* GPIO: pwr_vld (output used for chip reset) */
+	rc = devm_gpio_request_one(dev, priv->pwr_vld_gpio,
+						GPIOF_OUT_INIT_HIGH, "RESET");
+	if (rc < 0)
+		goto err_missing_pwr_vld_gpio;
 
+	return 0;
+err_missing_pwr_vld_gpio:
+	iaxxx_gpio_free(dev, priv->reset_gpio);
 err_missing_reset_gpio:
 	iaxxx_gpio_free(dev, priv->event_gpio);
 err_missing_event_gpio:
@@ -327,12 +346,28 @@ static int iaxxx_reset(struct iaxxx_priv *priv)
 						__func__, priv->reset_gpio);
 		return -EIO;
 	}
+	if (!gpio_is_valid(priv->pwr_vld_gpio)) {
+		dev_err(dev, "%s(): pwr_vld_gpio(%d) is an invalid gpio.\n",
+						__func__, priv->pwr_vld_gpio);
+		return -EIO;
+	}
+
+	gpio_set_value(priv->pwr_vld_gpio, 0);
 
 	gpio_set_value(priv->reset_gpio, 0);
+	if (priv->ext_clk) {
+		dev_info(dev, "%s(): enable clk\n", __func__);
+		clk_prepare_enable(priv->ext_clk);
+		usleep_range(10000, 12000);
+	}
 	usleep_range(IAXXX_RESET_HOLD_TIME,
 		IAXXX_RESET_HOLD_TIME + IAXXX_RESET_RANGE_INTERVAL);
 
 	gpio_set_value(priv->reset_gpio, 1);
+	usleep_range(IAXXX_RESET_PWR_VLD_DELAY, IAXXX_RESET_PWR_VLD_DELAY +
+		     IAXXX_RESET_PWR_VLD_RANGE_INTERVAL);
+
+	gpio_set_value(priv->pwr_vld_gpio, 1);
 	usleep_range(IAXXX_RESET_READY_DELAY, IAXXX_RESET_READY_DELAY +
 		IAXXX_RESET_RANGE_INTERVAL);
 
@@ -984,7 +1019,6 @@ static void iaxxx_dev_init_work(struct kthread_work *work)
 	struct iaxxx_priv *priv = iaxxx_ptr2priv(work, dev_init_work);
 	struct device *dev = priv->dev;
 	int rc;
-
 	rc = iaxxx_do_fw_update(priv);
 	if (rc == E_IAXXX_REGMAP_ERROR) {
 		goto err_chip_reset;

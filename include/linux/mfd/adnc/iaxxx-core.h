@@ -154,6 +154,7 @@ struct iaxxx_priv {
 	/* GPIOs */
 	int reset_gpio;
 	int event_gpio;
+	int pwr_vld_gpio;
 	u32 spi_app_speed;
 
 	/* Regulators */
