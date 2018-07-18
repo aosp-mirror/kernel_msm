@@ -171,6 +171,18 @@
 	};
 };
 
+&qupv3_se4_spi_active {
+	config {
+		drive-strength = <16>;
+	};
+};
+
+&qupv3_se4_spi_sleep {
+	config {
+		drive-strength = <16>;
+	};
+};
+
 /* knowles clock source */
 &clock_audio_lnbb {
 	clocks = <&clock_rpmh RPMH_LN_BB_CLK3>;
