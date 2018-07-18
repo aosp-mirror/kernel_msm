@@ -50,7 +50,7 @@
 					 * (MOSI and MISO share same line) */
 #define SPI_DELAY_CS			10	/* /< time in usec to wait
 						 * before rising the CS */
-#define SPI_CLOCK_FREQ			7000000	/* /< clock frequency in Hz of
+#define SPI_CLOCK_FREQ			1920000	/* /< clock frequency in Hz of
 						 * the SPI bus */
 #endif
 
