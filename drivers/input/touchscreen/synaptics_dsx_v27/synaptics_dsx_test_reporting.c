@@ -1588,8 +1588,10 @@ static void test_set_report_size(void)
 	case F54_ABS_DELTA_CAP:
 	case F54_ABS_HYBRID_DELTA_CAP:
 	case F54_ABS_HYBRID_RAW_CAP:
-		tx += f21->tx_assigned;
-		rx += f21->rx_assigned;
+		if (f21) {
+			tx += f21->tx_assigned;
+			rx += f21->rx_assigned;
+		}
 		f54->report_size = 4 * (tx + rx);
 		break;
 	default:
@@ -2725,8 +2727,10 @@ static ssize_t test_sysfs_read_report_show(struct device *dev,
 		break;
 	case F54_ABS_RAW_CAP:
 	case F54_ABS_HYBRID_RAW_CAP:
-		tx_num += f21->tx_assigned;
-		rx_num += f21->rx_assigned;
+		if (f21) {
+			tx_num += f21->tx_assigned;
+			rx_num += f21->rx_assigned;
+		}
 		report_data_u32 = (unsigned int *)f54->report_data;
 		cnt = snprintf(buf, PAGE_SIZE - count, "rx ");
 		buf += cnt;
@@ -2782,8 +2786,10 @@ static ssize_t test_sysfs_read_report_show(struct device *dev,
 		break;
 	case F54_ABS_DELTA_CAP:
 	case F54_ABS_HYBRID_DELTA_CAP:
-		tx_num += f21->tx_assigned;
-		rx_num += f21->rx_assigned;
+		if (f21) {
+			tx_num += f21->tx_assigned;
+			rx_num += f21->rx_assigned;
+		}
 		report_data_32 = (int *)f54->report_data;
 		cnt = snprintf(buf, PAGE_SIZE - count, "rx ");
 		buf += cnt;

@@ -145,7 +145,7 @@ static struct device_attribute attrs[] = {
 	__ATTR(intr_mask, 0664,
 			rmidev_sysfs_intr_mask_show,
 			rmidev_sysfs_intr_mask_store),
-	__ATTR(concurrent, 0664),
+	__ATTR(concurrent, 0664,
 			rmidev_sysfs_concurrent_show,
 			rmidev_sysfs_concurrent_store),
 };
