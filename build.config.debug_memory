@@ -31,8 +31,6 @@ function update_debug_config() {
          -e CONFIG_QCOM_RTB \
          -e CONFIG_QCOM_RTB_SEPARATE_CPUS \
          -e CONFIG_PANIC_ON_DATA_CORRUPTION \
-         -e CONFIG_QCOM_RTB \
-         -e CONFIG_QCOM_RTB_SEPARATE_CPUS \
          -d LTO \
          -d LTO_CLANG \
          -d CFI \
