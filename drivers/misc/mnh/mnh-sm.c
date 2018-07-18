@@ -1939,16 +1939,23 @@ static void mnh_sm_print_boot_trace(struct device (*dev))
 	int err;
 	uint32_t val;
 
-	err = mnh_config_read(MNH_BOOT_TRACE, sizeof(val), &val);
+	err = mnh_config_read(MNH_BOOT_STAT, sizeof(val), &val);
+	if (err) {
+		dev_err(dev,
+			"%s: failed reading MNH_BOOT_STAT (%d)\n",
+			__func__, err);
+	} else {
+		dev_info(dev, "MNH_BOOT_STAT = 0x%x\n", val);
+	}
 
+	err = mnh_config_read(MNH_BOOT_TRACE, sizeof(val), &val);
 	if (err) {
 		dev_err(dev,
 			"%s: failed reading MNH_BOOT_TRACE (%d)\n",
 			__func__, err);
-		return;
+	} else {
+		dev_info(dev, "MNH_BOOT_TRACE = 0x%x\n", val);
 	}
-
-	dev_info(dev, "%s: MNH_BOOT_TRACE = 0x%x\n", __func__, val);
 }
 
 static void mnh_sm_enable_ready_irq(bool enable)
