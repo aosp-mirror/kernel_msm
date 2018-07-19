@@ -202,6 +202,10 @@ void cam_tasklet_enqueue_cmd(
 		return;
 	}
 
+	if (!atomic_read(&tasklet->tasklet_active)) {
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "Tasklet is not active\n");
+		return;
+	}
 	if (tasklet_cmd) {
 		CAM_DBG(CAM_ISP, "Enqueue tasklet cmd");
 		tasklet_cmd->bottom_half_handler = bottom_half_handler;
@@ -245,7 +249,7 @@ int cam_tasklet_init(
 	}
 	tasklet_init(&tasklet->tasklet, cam_tasklet_action,
 		(unsigned long)tasklet);
-	cam_tasklet_stop(tasklet);
+	tasklet_disable(&tasklet->tasklet);
 
 	*tasklet_info = tasklet;
 
@@ -256,13 +260,16 @@ void cam_tasklet_deinit(void    **tasklet_info)
 {
 	struct cam_tasklet_info *tasklet = *tasklet_info;
 
-	atomic_set(&tasklet->tasklet_active, 0);
-	tasklet_kill(&tasklet->tasklet);
+	if (atomic_read(&tasklet->tasklet_active)) {
+		atomic_set(&tasklet->tasklet_active, 0);
+		tasklet_kill(&tasklet->tasklet);
+		tasklet_disable(&tasklet->tasklet);
+	}
 	kfree(tasklet);
 	*tasklet_info = NULL;
 }
 
-static inline void cam_tasklet_flush(void  *tasklet_info)
+static inline void cam_tasklet_flush(struct cam_tasklet_info *tasklet_info)
 {
 	cam_tasklet_action((unsigned long)tasklet_info);
 }
@@ -270,22 +277,22 @@ static inline void cam_tasklet_flush(void  *tasklet_info)
 int cam_tasklet_start(void  *tasklet_info)
 {
 	struct cam_tasklet_info       *tasklet = tasklet_info;
-	struct cam_tasklet_queue_cmd  *tasklet_cmd;
-	struct cam_tasklet_queue_cmd  *tasklet_cmd_temp;
+	int i;
 
 	if (atomic_read(&tasklet->tasklet_active)) {
 		CAM_ERR(CAM_ISP, "Tasklet already active. idx = %d",
 			tasklet->index);
 		return -EBUSY;
 	}
-	atomic_set(&tasklet->tasklet_active, 1);
 
-	/* flush the command queue first */
-	list_for_each_entry_safe(tasklet_cmd, tasklet_cmd_temp,
-		&tasklet->used_cmd_list, list) {
-		list_del_init(&tasklet_cmd->list);
-		list_add_tail(&tasklet_cmd->list, &tasklet->free_cmd_list);
+	/* clean up the command queue first */
+	for (i = 0; i < CAM_TASKLETQ_SIZE; i++) {
+		list_del_init(&tasklet->cmd_queue[i].list);
+		list_add_tail(&tasklet->cmd_queue[i].list,
+			&tasklet->free_cmd_list);
 	}
+
+	atomic_set(&tasklet->tasklet_active, 1);
 
 	tasklet_enable(&tasklet->tasklet);
 
@@ -297,8 +304,9 @@ void cam_tasklet_stop(void  *tasklet_info)
 	struct cam_tasklet_info  *tasklet = tasklet_info;
 
 	atomic_set(&tasklet->tasklet_active, 0);
-	cam_tasklet_flush(tasklet);
+	tasklet_kill(&tasklet->tasklet);
 	tasklet_disable(&tasklet->tasklet);
+	cam_tasklet_flush(tasklet);
 }
 
 /*
