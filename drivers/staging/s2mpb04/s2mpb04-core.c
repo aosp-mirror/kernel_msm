@@ -568,8 +568,8 @@ static int s2mpb04_core_fixup(struct s2mpb04_core *ddata)
 
 	s2mpb04_config_ints(ddata);
 
-	/* set SMPS1 output voltage to 0.95V */
-	s2mpb04_write_byte(ddata, S2MPB04_REG_BUCK1_OUT, 0x68);
+	/* set SMPS1 output voltage to 0.9125V */
+	s2mpb04_write_byte(ddata, S2MPB04_REG_BUCK1_OUT, 0x62);
 
 	/* set SMPS2 output voltage to 1.15V */
 	s2mpb04_write_byte(ddata, S2MPB04_REG_BUCK2_OUT, 0x88);
