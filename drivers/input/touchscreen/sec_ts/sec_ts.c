@@ -449,25 +449,35 @@ void sec_ts_delay(unsigned int ms)
 
 int sec_ts_wait_for_ready(struct sec_ts_data *ts, unsigned int ack)
 {
+	return sec_ts_wait_for_ready_with_count(ts, ack,
+						SEC_TS_WAIT_RETRY_CNT);
+}
+
+int sec_ts_wait_for_ready_with_count(struct sec_ts_data *ts, unsigned int ack,
+				     unsigned int count)
+{
 	int rc = -1;
 	int retry = 0;
 	u8 tBuff[SEC_TS_EVENT_BUFF_SIZE] = {0,};
 
-	while (sec_ts_i2c_read(ts, SEC_TS_READ_ONE_EVENT, tBuff, SEC_TS_EVENT_BUFF_SIZE)) {
+	while (sec_ts_i2c_read(ts, SEC_TS_READ_ONE_EVENT, tBuff,
+				SEC_TS_EVENT_BUFF_SIZE)) {
 		if (((tBuff[0] >> 2) & 0xF) == TYPE_STATUS_EVENT_INFO) {
 			if (tBuff[1] == ack) {
 				rc = 0;
 				break;
 			}
-		} else if (((tBuff[0] >> 2) & 0xF) == TYPE_STATUS_EVENT_VENDOR_INFO) {
+		} else if (((tBuff[0] >> 2) & 0xF)
+				== TYPE_STATUS_EVENT_VENDOR_INFO) {
 			if (tBuff[1] == ack) {
 				rc = 0;
 				break;
 			}
 		}
 
-		if (retry++ > SEC_TS_WAIT_RETRY_CNT) {
-			input_err(true, &ts->client->dev, "%s: Time Over\n", __func__);
+		if (retry++ > count) {
+			input_err(true, &ts->client->dev, "%s: Time Over\n",
+				__func__);
 			break;
 		}
 		sec_ts_delay(20);
@@ -1486,6 +1496,22 @@ static int sec_ts_parse_dt(struct i2c_client *client)
 			  __func__);
 	}
 
+	pdata->reset_gpio = of_get_named_gpio(np, "sec,reset_gpio", 0);
+	if (gpio_is_valid(pdata->reset_gpio)) {
+		ret = gpio_request_one(pdata->reset_gpio,
+					GPIOF_OUT_INIT_HIGH,
+					"sec,touch_reset_gpio");
+		if (ret) {
+			input_err(true, dev,
+				  "%s: Failed to request gpio %d, ret %d\n",
+				  __func__, pdata->reset_gpio, ret);
+			pdata->reset_gpio = -1;
+		}
+
+	} else
+		input_err(true, dev, "%s: Failed to get reset_gpio\n",
+			__func__);
+
 	count = of_property_count_strings(np, "sec,firmware_name");
 	if (count <= 0) {
 		pdata->firmware_name = NULL;
@@ -2231,6 +2257,8 @@ error_allocate_mem:
 		gpio_free(pdata->tsp_icid);
 	if (gpio_is_valid(pdata->switch_gpio))
 		gpio_free(pdata->switch_gpio);
+	if (gpio_is_valid(pdata->reset_gpio))
+		gpio_free(pdata->reset_gpio);
 
 error_allocate_pdata:
 	if (ret == -ECONNREFUSED)
@@ -2698,6 +2726,8 @@ static int sec_ts_remove(struct i2c_client *client)
 		gpio_free(ts->plat_data->irq_gpio);
 	if (gpio_is_valid(ts->plat_data->switch_gpio))
 		gpio_free(ts->plat_data->switch_gpio);
+	if (gpio_is_valid(ts->plat_data->reset_gpio))
+		gpio_free(ts->plat_data->reset_gpio);
 
 	sec_ts_raw_device_exit(ts);
 #ifndef CONFIG_SEC_SYSFS
@@ -2966,10 +2996,10 @@ static void sec_ts_resume_work(struct work_struct *work)
 
 	ts->power_status = SEC_TS_STATE_POWER_ON;
 
-	ret = sec_ts_sw_reset(ts);
+	ret = sec_ts_system_reset(ts);
 	if (ret < 0)
 		input_err(true, &ts->client->dev,
-			  "%s: software reset failed!\n", __func__);
+			"%s: reset failed! ret %d\n", __func__, ret);
 
 	if (ts->plat_data->enable_sync)
 		ts->plat_data->enable_sync(true);

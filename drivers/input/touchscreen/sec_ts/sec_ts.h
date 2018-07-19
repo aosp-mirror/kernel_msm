@@ -891,6 +891,7 @@ struct sec_ts_plat_data {
 	int tsp_id;
 	int tsp_vsync;
 	int switch_gpio;
+	int reset_gpio;
 
 	bool regulator_boot_on;
 	bool support_mt_pressure;
@@ -900,13 +901,17 @@ struct sec_ts_plat_data {
 
 int sec_ts_stop_device(struct sec_ts_data *ts);
 int sec_ts_start_device(struct sec_ts_data *ts);
+int sec_ts_hw_reset(struct sec_ts_data *ts);
 int sec_ts_sw_reset(struct sec_ts_data *ts);
+int sec_ts_system_reset(struct sec_ts_data *ts);
 int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode);
 int sec_ts_firmware_update_on_probe(struct sec_ts_data *ts, bool force_update);
 int sec_ts_firmware_update_on_hidden_menu(struct sec_ts_data *ts, int update_type);
 int sec_ts_glove_mode_enables(struct sec_ts_data *ts, int mode);
 int sec_ts_set_cover_type(struct sec_ts_data *ts, bool enable);
 int sec_ts_wait_for_ready(struct sec_ts_data *ts, unsigned int ack);
+int sec_ts_wait_for_ready_with_count(struct sec_ts_data *ts, unsigned int ack,
+				     unsigned int count);
 int sec_ts_try_wake(struct sec_ts_data *ts, bool wake_setting);
 int sec_ts_set_bus_ref(struct sec_ts_data *ts, u16 ref, bool enable);
 

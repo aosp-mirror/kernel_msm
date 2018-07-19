@@ -97,6 +97,23 @@ static int sec_ts_enter_fw_mode(struct sec_ts_data *ts)
 	return 1;
 }
 
+int sec_ts_hw_reset(struct sec_ts_data *ts)
+{
+	int reset_gpio = ts->plat_data->reset_gpio;
+
+	if (!gpio_is_valid(reset_gpio)) {
+		input_err(true, &ts->client->dev, "%s: invalid gpio %d\n",
+			__func__, reset_gpio);
+		return -EINVAL;
+	}
+
+	gpio_set_value(reset_gpio, 0);
+	sec_ts_delay(10);
+	gpio_set_value(reset_gpio, 1);
+
+	return 0;
+}
+
 int sec_ts_sw_reset(struct sec_ts_data *ts)
 {
 	int ret;
@@ -125,6 +142,70 @@ int sec_ts_sw_reset(struct sec_ts_data *ts)
 	}
 
 	return ret;
+}
+
+int sec_ts_system_reset(struct sec_ts_data *ts)
+{
+	int ret = -1;
+
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SW_RESET, NULL, 0);
+	if (ret < 0)
+		input_err(true, &ts->client->dev, "%s: write fail, sw_reset\n",
+			__func__);
+	else {
+		sec_ts_delay(100);
+		/* Normally it should not happen with any retry.
+		 * But, if happened, retry less time to wait ack
+		 */
+		ret = sec_ts_wait_for_ready_with_count(ts,
+						SEC_TS_ACK_BOOT_COMPLETE, 10);
+		if (ret < 0)
+			input_err(true, &ts->client->dev,
+				"%s: sw_reset time out!\n", __func__);
+		else
+			input_info(true,
+				&ts->client->dev, "%s: sw_reset done\n",
+				__func__);
+	}
+
+	if (ret < 0) {
+		if (!gpio_is_valid(ts->plat_data->reset_gpio)) {
+			input_err(true, &ts->client->dev,
+				"%s: reset gpio is unavailable!\n", __func__);
+			return ret;
+		}
+
+		input_err(true, &ts->client->dev,
+			"%s: sw_reset failed or time out, try hw_reset to recover!\n",
+			__func__);
+		ret = sec_ts_hw_reset(ts);
+		if (ret) {
+			input_err(true, &ts->client->dev,
+				"%s: hw_reset failed\n", __func__);
+			return ret;
+		}
+
+		ret = sec_ts_wait_for_ready_with_count(ts,
+						SEC_TS_ACK_BOOT_COMPLETE, 10);
+		if (ret < 0) {
+			input_err(true,
+				  &ts->client->dev, "%s: hw_reset time out\n",
+				  __func__);
+			return ret;
+		}
+		input_info(true, &ts->client->dev, "%s: hw_reset done\n",
+			__func__);
+	}
+
+	/* Sense_on */
+	ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SENSE_ON, NULL, 0);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev, "%s: write fail, Sense_on\n",
+			__func__);
+		return ret;
+	}
+
+	return 0;
 }
 
 static void sec_ts_save_version_of_bin(struct sec_ts_data *ts, const fw_header *fw_hd)
