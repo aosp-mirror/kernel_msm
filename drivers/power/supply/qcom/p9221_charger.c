@@ -843,6 +843,9 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 
 	charger->online = false;
 
+	/* Reset PP buf so we can get a new serial number next time around */
+	charger->pp_buf_valid = false;
+
 	p9221_abort_transfers(charger);
 	cancel_delayed_work(&charger->dcin_work);
 	del_timer(&charger->vrect_timer);
@@ -911,11 +914,25 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 		}
 		pm_runtime_put_sync(charger->dev);
 
-		ret = p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG, &tx_id,
+		if (p9221_is_epp(charger)) {
+			ret = p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG,
+					       &tx_id, sizeof(tx_id));
+			if (ret)
+				dev_err(&charger->client->dev,
+					"Failed to read txid %d\n", ret);
+		} else {
+			/*
+			 * If pp_buf_valid is true, we have received a serial
+			 * number from the Tx, copy it to tx_id. (pp_buf_valid
+			 * is left true here until we go offline as we may
+			 * read this multiple times.)
+			 */
+			if (charger->pp_buf_valid &&
+			    sizeof(tx_id) <= P9221R5_MAX_PP_BUF_SIZE)
+				memcpy(&tx_id, &charger->pp_buf[1],
 				       sizeof(tx_id));
-		if (ret)
-			dev_err(&charger->client->dev,
-				"Failed to read txid %d\n", ret);
+		}
+
 	}
 	scnprintf(charger->tx_id_str, sizeof(charger->tx_id_str),
 		  "%08x", tx_id);
@@ -1427,7 +1444,8 @@ static ssize_t p9221_show_status(struct device *dev,
 		p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG, &tx_id,
 				 sizeof(tx_id));
 		count += scnprintf(buf + count, PAGE_SIZE - count,
-				   "tx_id       : %08x\n", tx_id);
+				   "tx_id       : %08x (%s)\n", tx_id,
+				   p9221_get_tx_id_str(charger));
 
 		count += p9221_add_reg_buffer(charger, buf, count,
 					      P9221R5_ALIGN_X_ADC_REG, 8, 1,
@@ -1481,6 +1499,11 @@ static ssize_t p9221_show_status(struct device *dev,
 			   charger->pdata->fod_epp_num);
 	count += p9221_hex_str(charger->pdata->fod_epp,
 			       charger->pdata->fod_epp_num,
+			       buf + count, PAGE_SIZE - count, false);
+
+	count += scnprintf(buf + count, PAGE_SIZE - count,
+			   "\npp buf      : (v=%d) ", charger->pp_buf_valid);
+	count += p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
 			       buf + count, PAGE_SIZE - count, false);
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
@@ -1927,6 +1950,27 @@ static void p9221r5_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 		cancel_delayed_work(&charger->tx_work);
 		sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
 		sysfs_notify(&charger->dev->kobj, NULL, "txdone");
+	}
+
+	/* Proprietary packet */
+	if (irq_src & P9221R5_STAT_PPRCVD) {
+		const size_t maxsz = sizeof(charger->pp_buf) * 3 + 1;
+		char s[maxsz];
+
+		res = p9221_reg_read_n(charger,
+				       P9221R5_DATA_RECV_BUF_START,
+				       charger->pp_buf,
+				       sizeof(charger->pp_buf));
+		if (res)
+			dev_err(&charger->client->dev,
+				"Failed to read PP len: %d\n", res);
+
+		/* We only care about PP which come with 0x4F header */
+		charger->pp_buf_valid = (charger->pp_buf[0] == 0x4F);
+
+		p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
+			      s, maxsz, false);
+		dev_info(&charger->client->dev, "Received PP: %s\n", s);
 	}
 
 	/* CC Reset complete */

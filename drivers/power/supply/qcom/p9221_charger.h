@@ -153,6 +153,7 @@
 #define P9221R5_DATA_SEND_BUF_SIZE		0x80
 #define P9221R5_DATA_RECV_BUF_START		0x180
 #define P9221R5_DATA_RECV_BUF_SIZE		0x80
+#define P9221R5_MAX_PP_BUF_SIZE			16
 #define P9221R5_LAST_REG			0x1FF
 
 /*
@@ -269,6 +270,8 @@ struct p9221_charger_data {
 	u16				addr;
 	u8				count;
 	u8				cust_id;
+	u8				pp_buf[P9221R5_MAX_PP_BUF_SIZE];
+	bool				pp_buf_valid;
 	u8				rx_buf[P9221R5_DATA_RECV_BUF_SIZE];
 	u16				rx_len;
 	bool				rx_done;
