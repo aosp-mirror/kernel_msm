@@ -14,24 +14,22 @@
 	status = "disabled";
 };
 
+&pm8150l_gpios {
+	pcie1_pm8150l_perst_default: pcie1_pm8150l_perst_default {
+		mux {
+			pins = "gpio2";
+			function = "normal";
+			bias-pull-down;
+			qcom,pull-down-strength = <2>;
+		};
+	};
+};
+
 &pcie1 {
 	/* WAKE# optional sideband signal not connected */
 	wake-gpio = <>;
 	perst-gpio = <&pm8150l_gpios 2 GPIO_ACTIVE_LOW>;
 
-	/* Remove pcie1_wake_default from pin muxing */
-	pinctrl-0 = <&pcie1_clkreq_default &pcie1_perst_default>;
-};
-
-&pcie1_perst_default {
-	mux {
-		pins = "pm8150l_gpio2";
-		function = "gpio";
-	};
-
-	config {
-		pins = "pm8150l_gpio2";
-		drive-strength = <2>;
-		bias-pull-down;
-	};
+	/* Remove pcie1_wake_default from pin muxing. */
+	pinctrl-0 = <&pcie1_clkreq_default &pcie1_pm8150l_perst_default>;
 };
