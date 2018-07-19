@@ -76,6 +76,7 @@ static long airbrush_pll_round_rate(struct clk_hw *hw,
 #define PLLF081XX_PDIV_SHIFT		(8)
 #define PLLF081XX_SDIV_SHIFT		(0)
 #define PLLF081XX_LOCK_STAT_SHIFT	(29)
+#define PLLF081XX_ENABLE_SHIFT		(31)
 
 static unsigned long airbrush_pllf081xx_recalc_rate(struct clk_hw *hw,
 				unsigned long parent_rate)
@@ -161,10 +162,43 @@ static int airbrush_pllf081xx_set_rate(struct clk_hw *hw, unsigned long drate,
 	return 0;
 }
 
+static int airbrush_pllf081xx_enable(struct clk_hw *hw)
+{
+	struct airbrush_clk_pll *pll = to_clk_pll(hw);
+	u32 tmp;
+
+	airbrush_clk_readl(pll->con_reg, &tmp);
+	tmp |= BIT(PLLF081XX_ENABLE_SHIFT);
+	airbrush_clk_writel(tmp, pll->con_reg);
+
+	/* wait_lock_time */
+	do {
+		cpu_relax();
+		if (airbrush_clk_readl(pll->con_reg, &tmp))
+			return -ENODEV;
+	} while (!(tmp & (PLLF081XX_LOCK_STAT_MASK
+				<< PLLF081XX_LOCK_STAT_SHIFT)));
+
+	return 0;
+}
+
+static void airbrush_pllf081xx_disable(struct clk_hw *hw)
+{
+	struct airbrush_clk_pll *pll = to_clk_pll(hw);
+	u32 tmp;
+
+	airbrush_clk_readl(pll->con_reg, &tmp);
+	tmp &= ~BIT(PLLF081XX_ENABLE_SHIFT);
+	airbrush_clk_writel(tmp, pll->con_reg);
+}
+
+
 static const struct clk_ops airbrush_pllf081xx_clk_ops = {
 	.recalc_rate = airbrush_pllf081xx_recalc_rate,
 	.round_rate = airbrush_pll_round_rate,
 	.set_rate = airbrush_pllf081xx_set_rate,
+	.enable = airbrush_pllf081xx_enable,
+	.disable = airbrush_pllf081xx_disable,
 };
 
 static const struct clk_ops airbrush_pllf081xx_clk_min_ops = {
