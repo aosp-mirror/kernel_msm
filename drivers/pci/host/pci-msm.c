@@ -3813,13 +3813,19 @@ static void msm_pcie_setup_gen3(struct msm_pcie_dev_t *dev)
 	PCIE_DBG(dev, "PCIe: RC%d: Setting up Gen3\n", dev->rc_idx);
 
 	msm_pcie_write_reg_field(dev->dm_core,
-		PCIE_GEN3_GEN2_CTRL, 0x1f00, 1);
+		PCIE_GEN3_GEN2_CTRL, 0x1f00, 2);
 
-	msm_pcie_write_mask(dev->dm_core,
-		PCIE_GEN3_EQ_CONTROL, 0x20);
+	msm_pcie_write_reg_field(dev->dm_core,
+		PCIE_GEN3_EQ_CONTROL, 0x20, 1);
 
 	msm_pcie_write_mask(dev->dm_core +
 		PCIE_GEN3_RELATED, BIT(0), 0);
+
+	/* Disable equalization for airbrush gen3 */
+#if IS_ENABLED(CONFIG_MFD_ABC_PCIE)
+	msm_pcie_write_reg_field(dev->dm_core,
+		PCIE_GEN3_RELATED, BIT(16), 1);
+#endif
 
 	/* configure PCIe preset */
 	msm_pcie_write_reg_field(dev->dm_core,
