@@ -555,6 +555,9 @@ static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
 		return -EINVAL;
 	}
 
+	if (!user_ctrl_resp)
+		return 0;
+
 	ret = regmap_read(regmap,
 			cs40l2x_dsp_reg(cs40l2x, "USER_CONTROL_RESPONSE",
 					CS40L2X_XM_UNPACKED_TYPE),
