@@ -78,6 +78,9 @@ struct cs40l2x_private {
 	struct cs40l2x_wseq_pair wseq_table[CS40L2X_WSEQ_LENGTH_MAX];
 	unsigned int wseq_length;
 	unsigned int event_control;
+	unsigned int peak_gpio1_enable;
+	int vpp_measured;
+	int ipp_measured;
 	struct led_classdev led_dev;
 };
 
@@ -141,6 +144,7 @@ static ssize_t cs40l2x_cp_trigger_index_store(struct device *dev,
 		return -EINVAL;
 
 	if ((index & CS40L2X_INDEX_MASK) >= cs40l2x->num_waves
+				&& index != CS40L2X_INDEX_PEAK
 				&& index != CS40L2X_INDEX_PBQ
 				&& index != CS40L2X_INDEX_DIAG)
 		return -EINVAL;
@@ -1505,104 +1509,26 @@ static ssize_t cs40l2x_num_waves_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->num_waves);
 }
 
-static ssize_t cs40l2x_vpk_measured_show(struct device *dev,
+static ssize_t cs40l2x_vpp_measured_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
-	unsigned int val;
 
-	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "VPK_MEASURED",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
+	if (cs40l2x->vpp_measured < 0)
+		return -ENODATA;
 
-	if (ret) {
-		pr_err("Failed to read peak voltage\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->vpp_measured);
 }
 
-static ssize_t cs40l2x_vpk_measured_store(struct device *dev,
-			struct device_attribute *attr,
-			const char *buf, size_t count)
-{
-	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
-	unsigned int val;
-
-	ret = kstrtou32(buf, 10, &val);
-	if (ret)
-		return -EINVAL;
-
-	if (val > CS40L2X_VPK_MEASURED_MAX)
-		return -EINVAL;
-
-	mutex_lock(&cs40l2x->lock);
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "VPK_MEASURED",
-					CS40L2X_XM_UNPACKED_TYPE), val);
-	mutex_unlock(&cs40l2x->lock);
-
-	if (ret) {
-		pr_err("Failed to write peak voltage\n");
-		return ret;
-	}
-
-	return count;
-}
-
-static ssize_t cs40l2x_ipk_measured_show(struct device *dev,
+static ssize_t cs40l2x_ipp_measured_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
-	unsigned int val;
 
-	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "IPK_MEASURED",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
+	if (cs40l2x->ipp_measured < 0)
+		return -ENODATA;
 
-	if (ret) {
-		pr_err("Failed to read peak current\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
-}
-
-static ssize_t cs40l2x_ipk_measured_store(struct device *dev,
-			struct device_attribute *attr,
-			const char *buf, size_t count)
-{
-	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
-	unsigned int val;
-
-	ret = kstrtou32(buf, 10, &val);
-	if (ret)
-		return -EINVAL;
-
-	if (val > CS40L2X_IPK_MEASURED_MAX)
-		return -EINVAL;
-
-	mutex_lock(&cs40l2x->lock);
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "IPK_MEASURED",
-					CS40L2X_XM_UNPACKED_TYPE), val);
-	mutex_unlock(&cs40l2x->lock);
-
-	if (ret) {
-		pr_err("Failed to write peak current\n");
-		return ret;
-	}
-
-	return count;
+	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->ipp_measured);
 }
 
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
@@ -1641,10 +1567,8 @@ static DEVICE_ATTR(cp_dig_scale, 0660, cs40l2x_cp_dig_scale_show,
 		cs40l2x_cp_dig_scale_store);
 static DEVICE_ATTR(heartbeat, 0660, cs40l2x_heartbeat_show, NULL);
 static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
-static DEVICE_ATTR(vpk_measured, 0660, cs40l2x_vpk_measured_show,
-		cs40l2x_vpk_measured_store);
-static DEVICE_ATTR(ipk_measured, 0660, cs40l2x_ipk_measured_show,
-		cs40l2x_ipk_measured_store);
+static DEVICE_ATTR(vpp_measured, 0660, cs40l2x_vpp_measured_show, NULL);
+static DEVICE_ATTR(ipp_measured, 0660, cs40l2x_ipp_measured_show, NULL);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -1668,8 +1592,8 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_dig_scale.attr,
 	&dev_attr_heartbeat.attr,
 	&dev_attr_num_waves.attr,
-	&dev_attr_vpk_measured.attr,
-	&dev_attr_ipk_measured.attr,
+	&dev_attr_vpp_measured.attr,
+	&dev_attr_ipp_measured.attr,
 	NULL,
 };
 
@@ -1898,6 +1822,51 @@ static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
+static int cs40l2x_peak_capture(struct cs40l2x_private *cs40l2x)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	int vmon_max, vmon_min, imon_max, imon_min;
+	int ret;
+
+	if (!mutex_is_locked(&cs40l2x->lock))
+		return -EACCES;
+
+	/* VMON min and max are returned as 24-bit two's-complement values */
+	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
+			CS40L2X_XM_UNPACKED_TYPE), &vmon_max);
+	if (ret)
+		return ret;
+	if (vmon_max > CS40L2X_VMON_POSFS)
+		vmon_max = ((vmon_max ^ CS40L2X_VMON_MASK) + 1) * -1;
+
+	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMIN",
+			CS40L2X_XM_UNPACKED_TYPE), &vmon_min);
+	if (ret)
+		return ret;
+	if (vmon_min > CS40L2X_VMON_POSFS)
+		vmon_min = ((vmon_min ^ CS40L2X_VMON_MASK) + 1) * -1;
+
+	/* IMON min and max are returned as 24-bit two's-complement values */
+	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMAX",
+			CS40L2X_XM_UNPACKED_TYPE), &imon_max);
+	if (ret)
+		return ret;
+	if (imon_max > CS40L2X_IMON_POSFS)
+		imon_max = ((imon_max ^ CS40L2X_IMON_MASK) + 1) * -1;
+
+	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMIN",
+			CS40L2X_XM_UNPACKED_TYPE), &imon_min);
+	if (ret)
+		return ret;
+	if (imon_min > CS40L2X_IMON_POSFS)
+		imon_min = ((imon_min ^ CS40L2X_IMON_MASK) + 1) * -1;
+
+	cs40l2x->vpp_measured = vmon_max - vmon_min;
+	cs40l2x->ipp_measured = imon_max - imon_min;
+
+	return 0;
+}
+
 static void cs40l2x_vibe_start_worker(struct work_struct *work)
 {
 	struct cs40l2x_private *cs40l2x =
@@ -1910,6 +1879,9 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 	/* handle interruption of special cases */
 	switch (cs40l2x->cp_trailer_index) {
+	case CS40L2X_INDEX_PEAK:
+		goto err_mutex;
+
 	case CS40L2X_INDEX_PBQ:
 		ret = cs40l2x_pbq_cancel(cs40l2x);
 		if (ret)
@@ -1926,11 +1898,68 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 	switch (cs40l2x->cp_trailer_index) {
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
+	case CS40L2X_INDEX_PEAK:
 	case CS40L2X_INDEX_DIAG:
 		pm_stay_awake(dev);
 	}
 
 	switch (cs40l2x->cp_trailer_index) {
+	case CS40L2X_INDEX_PEAK:
+		cs40l2x->vpp_measured = -1;
+		cs40l2x->ipp_measured = -1;
+
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				&cs40l2x->peak_gpio1_enable);
+		if (ret) {
+			dev_err(dev, "Failed to read GPIO1 configuration\n");
+			goto err_mutex;
+		}
+
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				CS40L2X_GPIO1_DISABLED);
+		if (ret) {
+			dev_err(dev, "Failed to disable GPIO1\n");
+			goto err_mutex;
+		}
+
+		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
+				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_VMON_NEGFS);
+		if (ret) {
+			dev_err(dev, "Failed to reset maximum VMON\n");
+			goto err_mutex;
+		}
+
+		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMIN",
+				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_VMON_POSFS);
+		if (ret) {
+			dev_err(dev, "Failed to reset minimum VMON\n");
+			goto err_mutex;
+		}
+
+		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMAX",
+				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_IMON_NEGFS);
+		if (ret) {
+			dev_err(dev, "Failed to reset maximum IMON\n");
+			goto err_mutex;
+		}
+
+		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMIN",
+				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_IMON_POSFS);
+		if (ret) {
+			dev_err(dev, "Failed to reset minimum IMON\n");
+			goto err_mutex;
+		}
+
+		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGER_MS,
+				CS40L2X_INDEX_VIBE);
+		if (ret)
+			dev_err(dev, "Failed to start playback\n");
+		break;
+
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
 		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGER_MS,
@@ -2032,6 +2061,19 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 	mutex_lock(&cs40l2x->lock);
 
 	switch (cs40l2x->cp_trailer_index) {
+	case CS40L2X_INDEX_PEAK:
+		ret = cs40l2x_peak_capture(cs40l2x);
+		if (ret)
+			dev_err(dev, "Failed to capture peak-to-peak values\n");
+
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->peak_gpio1_enable);
+		if (ret)
+			dev_err(dev, "Failed to restore GPIO1 configuration\n");
+		/* intentionally fall through */
+
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
 		ret = cs40l2x_stop_playback(cs40l2x);
@@ -2125,6 +2167,9 @@ static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
 {
 	struct hrtimer *pbq_timer = &cs40l2x->pbq_timer;
 	int ret;
+
+	cs40l2x->vpp_measured = -1;
+	cs40l2x->ipp_measured = -1;
 
 	cs40l2x->vibe_workqueue =
 		alloc_ordered_workqueue("vibe_workqueue", WQ_HIGHPRI);
