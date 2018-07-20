@@ -114,3 +114,9 @@ config WLAN_FEATURE_RX_WAKELOCK
 	help
 	Enable WLAN_FEATURE_HOLD_RX_WAKELOCK which is required to take rx
 	wakelock when driver receives packets from fw.
+
+config WLAN_FEATURE_SARV1_TO_SARV2
+	bool "Enable conversion of SAR v1 to v2 feature"
+	help
+	Enable conversion to SAR V2 requests if BDF is configured for SAR V2.
+
