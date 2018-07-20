@@ -23,6 +23,7 @@
 #include "sdm670-b4s4-memory.dtsi"
 #include "sdm670-b4s4-fingerprint.dtsi"
 #include "sdm670-b4s4-haptics.dtsi"
+#include "sdm670-b4s4-key.dtsi"
 #include "sdm670-b4s4-touch.dtsi"
 #include "sdm670-b4s4-nfc.dtsi"
 #include "sdm670-b4s4-usb-common.dtsi"
@@ -229,46 +230,6 @@
 };
 
 &soc {
-	gpio_keys {
-		compatible = "gpio-keys";
-		label = "gpio-keys";
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&key_cam_snapshot_default
-			     &key_cam_focus_default
-			     &key_vol_up_default>;
-
-		cam_snapshot {
-			label = "cam_snapshot";
-			gpios = <&tlmm 91 0>;
-			linux,input-type = <1>;
-			linux,code = <766>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-			linux,can-disable;
-		};
-
-		cam_focus {
-			label = "cam_focus";
-			gpios = <&tlmm 92 0>;
-			linux,input-type = <1>;
-			linux,code = <528>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-			linux,can-disable;
-		};
-
-		vol_up {
-			label = "volume_up";
-			gpios = <&pm660l_gpios 7 GPIO_ACTIVE_LOW>;
-			linux,input-type = <1>;
-			linux,code = <115>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-			linux,can-disable;
-		};
-	};
-
 	modemsmem {
 		compatible = "modemsmem";
 	};

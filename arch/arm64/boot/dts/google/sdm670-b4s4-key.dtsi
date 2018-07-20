@@ -1,0 +1,68 @@
+&tlmm {
+	gpio_key {
+		gpio_key_default: gpio_key_default {
+			mux {
+				pins = "gpio49", "gpio115";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio49", "gpio115";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+};
+
+&pm660l_gpios {
+	key_vol_up {
+		key_vol_up_default: key_vol_up_default {
+			pins = "gpio7";
+			function = "normal";
+			qcom,drive-strength = <2>;
+			power-source = <1>;
+			bias-disable;
+		};
+	};
+};
+
+&pm660_pon {
+	qcom,report-key = <0>;
+};
+
+&soc {
+	gpio_keys {
+		compatible = "gpio-keys";
+		label = "gpio-keys";
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_key_default &key_vol_up_default>;
+
+		power_key {
+			label = "power_key";
+			gpios = <&tlmm 49 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <116>;
+			gpio-key,wakeup;
+			debounce-interval = <20>;
+		};
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm660l_gpios 7 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <20>;
+		};
+
+		vol_down {
+			label = "volume_down";
+			gpios = <&tlmm 115 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <114>;
+			gpio-key,wakeup;
+			debounce-interval = <20>;
+		};
+	};
+};
