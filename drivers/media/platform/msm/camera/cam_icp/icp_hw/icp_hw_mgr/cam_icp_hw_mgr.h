@@ -210,6 +210,8 @@ struct cam_icp_hw_ctx_data {
 	struct cam_ctx_clk_info clk_info;
 	struct cam_req_mgr_timer *watch_dog;
 	uint32_t watch_dog_reset_counter;
+	struct hfi_cmd_ipebps_async *abort_cmd;
+	struct hfi_cmd_ipebps_async *destroy_cmd;
 };
 
 /**

@@ -2381,28 +2381,15 @@ static int cam_icp_mgr_abort_handle(
 {
 	int rc = 0;
 	unsigned long rem_jiffies;
-	size_t packet_size;
 	int timeout = 100;
 	struct hfi_cmd_work_data *task_data;
-	struct hfi_cmd_ipebps_async *abort_cmd;
+	struct hfi_cmd_ipebps_async *abort_cmd = ctx_data->abort_cmd;
 	struct crm_workq_task *task;
 
 	task = cam_req_mgr_workq_get_task(icp_hw_mgr.cmd_work);
 	if (!task)
 		return -ENOMEM;
 
-	packet_size =
-		sizeof(struct hfi_cmd_ipebps_async) +
-		sizeof(struct hfi_cmd_abort) -
-		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
-	abort_cmd = kzalloc(packet_size, GFP_KERNEL);
-	CAM_DBG(CAM_ICP, "abort pkt size = %d", (int) packet_size);
-	if (!abort_cmd) {
-		rc = -ENOMEM;
-		return rc;
-	}
-
-	abort_cmd->size = packet_size;
 	abort_cmd->pkt_type = HFI_CMD_IPEBPS_ASYNC_COMMAND_DIRECT;
 	if (ctx_data->icp_dev_acquire_info->dev_type == CAM_ICP_RES_TYPE_BPS)
 		abort_cmd->opcode = HFI_IPEBPS_CMD_OPCODE_BPS_ABORT;
@@ -2423,7 +2410,6 @@ static int cam_icp_mgr_abort_handle(
 	rc = cam_req_mgr_workq_enqueue_task(task, &icp_hw_mgr,
 		CRM_TASK_PRIORITY_0);
 	if (rc) {
-		kfree(abort_cmd);
 		return rc;
 	}
 	CAM_DBG(CAM_ICP, "fw_handle = %x ctx_data = %pK",
@@ -2444,26 +2430,14 @@ static int cam_icp_mgr_destroy_handle(
 	int rc = 0;
 	int timeout = 100;
 	unsigned long rem_jiffies;
-	size_t packet_size;
 	struct hfi_cmd_work_data *task_data;
-	struct hfi_cmd_ipebps_async *destroy_cmd;
+	struct hfi_cmd_ipebps_async *destroy_cmd = ctx_data->destroy_cmd;
 	struct crm_workq_task *task;
 
 	task = cam_req_mgr_workq_get_task(icp_hw_mgr.cmd_work);
 	if (!task)
 		return -ENOMEM;
 
-	packet_size =
-		sizeof(struct hfi_cmd_ipebps_async) +
-		sizeof(struct hfi_cmd_abort_destroy) -
-		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
-	destroy_cmd = kzalloc(packet_size, GFP_KERNEL);
-	if (!destroy_cmd) {
-		rc = -ENOMEM;
-		return rc;
-	}
-
-	destroy_cmd->size = packet_size;
 	destroy_cmd->pkt_type = HFI_CMD_IPEBPS_ASYNC_COMMAND_DIRECT;
 	if (ctx_data->icp_dev_acquire_info->dev_type == CAM_ICP_RES_TYPE_BPS)
 		destroy_cmd->opcode = HFI_IPEBPS_CMD_OPCODE_BPS_DESTROY;
@@ -2486,7 +2460,6 @@ static int cam_icp_mgr_destroy_handle(
 	rc = cam_req_mgr_workq_enqueue_task(task, &icp_hw_mgr,
 		CRM_TASK_PRIORITY_0);
 	if (rc) {
-		kfree(destroy_cmd);
 		return rc;
 	}
 	CAM_DBG(CAM_ICP, "fw_handle = %x ctx_data = %pK",
@@ -3722,6 +3695,10 @@ static int cam_icp_mgr_release_hw(void *hw_mgr_priv, void *release_hw_args)
 	if ((!hw_mgr->bps_ctxt_cnt || !hw_mgr->ipe_ctxt_cnt))
 		cam_icp_device_timer_stop(hw_mgr);
 
+	kfree(ctx_data->abort_cmd);
+	ctx_data->abort_cmd = NULL;
+	kfree(ctx_data->destroy_cmd);
+	ctx_data->destroy_cmd = NULL;
 	CAM_DBG(CAM_ICP, "Exit");
 	return rc;
 }
@@ -3950,6 +3927,7 @@ static int cam_icp_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	uint32_t ctx_id = 0;
 	uint64_t io_buf_addr;
 	size_t io_buf_size;
+	size_t packet_size;
 	struct cam_icp_hw_mgr *hw_mgr = hw_mgr_priv;
 	struct cam_icp_hw_ctx_data *ctx_data = NULL;
 	struct cam_hw_acquire_args *args = acquire_hw_args;
@@ -3977,6 +3955,30 @@ static int cam_icp_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	}
 	ctx_data = &hw_mgr->ctx_data[ctx_id];
 	ctx_data->ctx_id = ctx_id;
+
+	packet_size =
+		sizeof(struct hfi_cmd_ipebps_async) +
+		sizeof(struct hfi_cmd_abort) -
+		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
+	ctx_data->abort_cmd = kzalloc(packet_size, GFP_KERNEL);
+	CAM_DBG(CAM_ICP, "abort pkt size = %d", (int) packet_size);
+	if (!ctx_data->abort_cmd) {
+		return -ENOMEM;
+	}
+	ctx_data->abort_cmd->size = packet_size;
+
+	packet_size =
+		sizeof(struct hfi_cmd_ipebps_async) +
+		sizeof(struct hfi_cmd_abort_destroy) -
+		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
+	ctx_data->destroy_cmd = kzalloc(packet_size, GFP_KERNEL);
+	CAM_DBG(CAM_ICP, "destroy pkt size = %d", (int) packet_size);
+	if (!ctx_data->destroy_cmd) {
+		kfree(ctx_data->abort_cmd);
+		ctx_data->abort_cmd = NULL;
+		return -ENOMEM;
+	}
+	ctx_data->destroy_cmd->size = packet_size;
 
 	mutex_lock(&ctx_data->ctx_mutex);
 	rc = cam_icp_get_acquire_info(hw_mgr, args, ctx_data);
