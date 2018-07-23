@@ -153,6 +153,11 @@ struct test_initcall {
 	void (*exit)(struct test_initcall *this);
 };
 
+struct test_post_condition {
+	struct list_head node;
+	void (*validate)(struct test_post_condition *condition);
+};
+
 /**
  * struct test - represents a running instance of a test.
  * @priv: for user to store arbitrary data. Commonly used to pass data created
@@ -167,6 +172,7 @@ struct test {
 	void *priv;
 	/* private: internal use only. */
 	struct list_head resources;
+	struct list_head post_conditions;
 	const char *name;
 	bool death_test;
 	bool success;

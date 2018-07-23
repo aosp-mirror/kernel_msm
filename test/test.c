@@ -84,6 +84,7 @@ static void __noreturn test_abort(struct test *test)
 int test_init_test(struct test *test, const char *name)
 {
 	INIT_LIST_HEAD(&test->resources);
+	INIT_LIST_HEAD(&test->post_conditions);
 	test->name = name;
 	test->vprintk = test_vprintk;
 	test->fail = test_fail;
@@ -142,6 +143,16 @@ static void test_run_case_cleanup(struct test *test,
 				  struct test_module *module,
 				  struct test_case *test_case)
 {
+	struct test_post_condition *condition, *condition_safe;
+
+	list_for_each_entry_safe(condition,
+				 condition_safe,
+				 &test->post_conditions,
+				 node) {
+		condition->validate(condition);
+		list_del(&condition->node);
+	}
+
 	if (module->exit)
 		module->exit(test);
 
