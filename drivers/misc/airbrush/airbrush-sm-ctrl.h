@@ -31,6 +31,8 @@
 
 #define NUM_BLOCKS 6
 
+#define CONFIG_DEBUGFS_AIRBRUSH
+
 enum block_names{
 	BLK_IPU,
 	BLK_TPU,
@@ -214,6 +216,10 @@ struct ab_state_context {
 
 	ab_sm_callback_t cb_event;	/* Event callback registered by the SM */
 	void *cb_cookie;		/* Private data sent by SM while registering event callback */
+
+#ifdef CONFIG_DEBUGFS_AIRBRUSH
+	struct dentry *d_entry;
+#endif
 };
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
@@ -226,5 +232,9 @@ void abc_clk_register(struct ab_state_context *ab_ctx);
 int ab_ddr_init(struct ab_state_context *sc);
 int ab_ddr_suspend(struct ab_state_context *sc);
 int ab_ddr_resume(struct ab_state_context *sc);
+
+#ifdef CONFIG_DEBUGFS_AIRBRUSH
+void ab_sm_create_debugfs(struct ab_state_context *sc);
+#endif
 
 #endif /* _AIRBRUSH_SM_CTRL_H */
