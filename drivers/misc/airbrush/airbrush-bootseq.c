@@ -34,7 +34,6 @@
 #include "airbrush-sm-ctrl.h"
 #include "airbrush-spi.h"
 
-
 #define REG_SRAM_ADDR	0x10b30374
 #define REG_DDR_INIT	0x10b30378
 #define REG_UPL_CMPL	0x10b30384

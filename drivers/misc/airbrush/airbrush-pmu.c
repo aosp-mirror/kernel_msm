@@ -239,6 +239,7 @@ static int ab_tpu_gating_off(void)
 	return 0;
 }
 
+#if 0 //unused
 static int ab_tpu_gating_on(void)
 {
 	uint32_t val;
@@ -322,6 +323,7 @@ static int ab_tpu_gating_on(void)
 
 	return 0;
 }
+#endif
 
 static int ab_ipu_gating_off(void)
 {
@@ -499,6 +501,7 @@ static int ab_ipu_gating_off(void)
 	return 0;
 }
 
+#if 0 //unused
 static int ab_ipu_gating_on(void)
 {
 #ifdef DEBUG
@@ -642,6 +645,7 @@ static int ab_ipu_gating_on(void)
 
 	return 0;
 }
+#endif
 
 static int ab_power_on(ab_blocks_t block)
 {
@@ -730,6 +734,8 @@ static int ab_power_on(ab_blocks_t block)
 	}
 	return ret;
 }
+
+#if 0 //unused
 static int ab_power_off(ab_blocks_t block)
 {
 	int ret = 0;
@@ -740,11 +746,11 @@ static int ab_power_off(ab_blocks_t block)
 #endif
 	switch (block) {
 	case AB_BLK_IPU:
-		/* check for TPU status */
+		/* check for IPU status */
 		if (ab_block_status(AB_BLK_IPU) == BLOCK_OFF)
-			return ERROR_TPU_BLOCK_OFF;
+			return ERROR_IPU_BLOCK_OFF;
 
-		ret = ab_tpu_gating_on();
+		ret = ab_ipu_gating_on();
 		 /* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
 		aon_config_read(PMU_CONTROL_OFFSET, 0, &val);
 		val &= ~(1 << 0);
@@ -793,276 +799,8 @@ static int ab_power_off(ab_blocks_t block)
 	}
 	return 0;
 }
-
-static int ab_set_dram_state(uint32_t current_state, uint32_t set_state)
-{
-	int status = 0;
-#ifdef DEBUG
-	pr_debug("%s s_state %d\n", __func__, set_state);
 #endif
-	if (current_state == set_state)
-		return 0;
 
-	switch (set_state) {
-	case AB_SM_S0:
-	case AB_SM_S1:
-	case AB_SM_S2:
-	case AB_SM_S3:
-		break;
-	case AB_SM_S4:
-		break;
-	case AB_SM_S5:
-		break;
-	default:
-		break;
-
-	}
-	return status;
-}
-
-static int ab_set_pcie_state(uint32_t current_state, uint32_t set_state)
-{
-	int status = 0;
-	struct abc_pcie_pm_ctrl pmctrl;
-
-#ifdef DEBUG
-	pr_debug("%s s_state %d\n", __func__, set_state);
-#endif
-	if (current_state == set_state)
-		return 0;
-
-	switch (set_state) {
-	case AB_SM_S0:
-	case AB_SM_S1:
-	case AB_SM_S2:
-	case AB_SM_S3:
-		pmctrl.pme_en = 0;
-		pmctrl.l1_en = 0;
-		pmctrl.l0s_en = 1;
-		pmctrl.aspm_L11 = 0;
-		pmctrl.aspm_L12 = 0;
-		status = 0;
-		break;
-	case AB_SM_S4:
-		pmctrl.pme_en = 1;
-		pmctrl.l1_en = 1;
-		pmctrl.l0s_en = 0;
-		pmctrl.aspm_L11 = 1;
-		pmctrl.aspm_L12 = 1;
-		status = 0;
-		break;
-	case AB_SM_S5:
-		break;
-	default:
-		break;
-
-	}
-
-	abc_set_pcie_pm_ctrl(&pmctrl);
-
-	return status;
-}
-
-static int ab_set_ipu_state(uint32_t current_state, uint32_t set_state)
-{
-	int ret = 0;
-	uint32_t val;
-#ifdef DEBUG
-	pr_debug("%s s_state %d\n", __func__, set_state);
-#endif
-	if (current_state == set_state)
-		return 0;
-
-	switch (set_state) {
-	case AB_SM_S0:
-	case AB_SM_S1:
-	case AB_SM_S2:
-	case AB_SM_S3:
-		if (current_state == AB_SM_S5) {
-			if (ab_power_on(AB_BLK_IPU))
-				goto exit;
-		} else {
-			/*disable power gating*/
-			if (ab_ipu_gating_off())
-				goto exit;
-		}
-		break;
-
-	case AB_SM_S4:
-		/*
-		 * TODO: Is this state transition is valid (S5-->S4)
-		 * in S5 --> TPU and IPU are in Deep-Sleep
-		 * When IPU set state is called for S4 state, power on
-		 * IPU and then enable power gating, durng this we check
-		 * TPU status, which is in Deep-sleep state, hence we
-		 * also put IPU in Deep-Sleep state.and hence neither
-		 * IPU nor TPU  will switch to  S4 state.
-		 * so will skip the deep sleep check in the
-		 * "if" condition.
-		 */
-		if (current_state == AB_SM_S5) {
-			if (ab_power_on(AB_BLK_IPU))
-				goto exit;
-
-			if (ab_ipu_gating_on())
-				goto exit;
-		} else {
-			if (ab_ipu_gating_on())
-				goto exit;
-
-			aon_config_read(PMU_STATUS_OFFSET, 0x0, &val);
-			/*
-			 * Check tpu state, and if tpu is in sleep state then
-			 * enable deep-sleep state
-			 */
-			if (!(val & 0x2))
-				ab_power_off(AB_BLK_IPU);
-		}
-		break;
-
-	case AB_SM_S5:
-		if (ab_power_off(AB_BLK_IPU))
-			goto exit;
-		break;
-	default:
-		break;
-	}
-	return ret;
-exit:
-	pr_debug("Error while switching states...forcing S5 state\n");
-	return ret;
-}
-
-static int ab_set_tpu_state(uint32_t current_state, uint32_t set_state)
-{
-	int ret = 0;
-	uint32_t val;
-#ifdef DEBUG
-	pr_debug("%s s_state %d\n", __func__, set_state);
-#endif
-	if (current_state == set_state)
-		return 0;
-
-	switch (set_state) {
-	case AB_SM_S0:
-	case AB_SM_S1:
-	case AB_SM_S2:
-	case AB_SM_S3:
-		if (current_state == AB_SM_S5) {
-			if (ab_power_on(AB_BLK_TPU))
-				goto exit;
-		} else {
-			/*disable power gating*/
-			if (ab_tpu_gating_off())
-				goto exit;
-		}
-		break;
-
-	case AB_SM_S4:
-		/* TODO: Is this state transition is valid (S5-->S4)
-		 * in S5 --> TPU and IPU are in Deep-Sleep. When TPU set state
-		 * is called for S4 state, power on TPU and then enable power
-		 * gating, durng this we check IPU status, which is in
-		 * Deep-sleep state, hence we also put TPU in Deep-Sleep state.
-		 * Hence neither TPU nor IPU  will switch to S4 state.
-		 * So will skip the deep sleep check in the "if" condition.
-		 */
-		if (current_state == AB_SM_S5) {
-			if (ab_power_on(AB_BLK_TPU))
-				goto exit;
-
-			if (ab_tpu_gating_on())
-				goto exit;
-		} else {
-			if (ab_tpu_gating_on())
-				goto exit;
-
-			aon_config_read(PMU_STATUS_OFFSET, 0x0, &val);
-			/* Check ipu state, and if ipu is in sleep state then
-			 * enable deep-sleep state
-			 */
-			if (!(val & 0x1))
-				ab_power_off(AB_BLK_TPU);
-		}
-		break;
-
-	case AB_SM_S5:
-		ret = ab_power_off(AB_BLK_TPU);
-		if (ret)
-			goto exit;
-		break;
-	default:
-		break;
-	}
-	return ret;
-exit:
-	pr_debug("Error while switching states...forcing S5 state\n");
-	return ret;
-}
-
-int ab_set_pm_state(struct ab_state_context *sc,
-			uint32_t set_state, uint32_t device)
-{
-#ifdef DEBUG
-	pr_debug("%s s_state %d\n", __func__, set_state);
-#endif
-	/* S0-S3 are active states */
-	if (set_state > AB_SM_S0 && set_state < AB_SM_S4)
-		set_state = AB_SM_S0;
-
-	switch (device) {
-	case AB_DEV_SOC:
-		if (ab_set_pcie_state(sc->cur_state.pcie_state, set_state))
-			return ERROR_PCIE_SET_STATE;
-		sc->cur_state.pcie_state = set_state;
-
-		if (ab_set_dram_state(sc->cur_state.dram_state, set_state))
-			return ERROR_DRAM_SET_STATE;
-		sc->cur_state.dram_state = set_state;
-		break;
-	case AB_DEV_IPU:
-		if (ab_set_ipu_state(sc->cur_state.ipu_state, set_state))
-			return ERROR_IPU_SET_STATE;
-		sc->cur_state.ipu_state = set_state;
-		break;
-	case AB_DEV_TPU:
-		if (ab_set_tpu_state(sc->cur_state.tpu_state, set_state))
-			return ERROR_TPU_SET_STATE;
-		sc->cur_state.tpu_state = set_state;
-		break;
-	case AB_DEV_PCIE:
-		if (ab_set_pcie_state(sc->cur_state.pcie_state, set_state))
-			return ERROR_PCIE_SET_STATE;
-		sc->cur_state.pcie_state = set_state;
-		break;
-	case AB_DEV_DRAM:
-		if (ab_set_dram_state(sc->cur_state.dram_state, set_state))
-			return ERROR_DRAM_SET_STATE;
-		sc->cur_state.dram_state = set_state;
-		break;
-	case AB_DEV_ALL:
-		if (ab_set_pcie_state(sc->cur_state.pcie_state, set_state))
-			return ERROR_PCIE_SET_STATE;
-
-		if (ab_set_dram_state(sc->cur_state.dram_state, set_state))
-			return ERROR_DRAM_SET_STATE;
-
-		if (ab_set_ipu_state(sc->cur_state.ipu_state, set_state))
-			return ERROR_IPU_SET_STATE;
-
-		if (ab_set_tpu_state(sc->cur_state.tpu_state, set_state))
-			return ERROR_TPU_SET_STATE;
-		sc->cur_state.pcie_state = set_state;
-		sc->cur_state.dram_state = set_state;
-		sc->cur_state.ipu_state = set_state;
-		sc->cur_state.tpu_state = set_state;
-		break;
-	}
-
-	/* return success */
-	return 0;
-}
-EXPORT_SYMBOL(ab_set_pm_state);
 void init_pmu(void)
 {
 	ab_power_on(AB_BLK_IPU);

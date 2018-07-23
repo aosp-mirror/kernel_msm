@@ -1,7 +1,9 @@
 /*
  * Copyright (C) 2018 Samsung Electronics Co., Ltd.
  *
- * Authors: Shaik Ameer Basha <shaik.ameer@samsung.com>
+ * Authors:
+ *	Raman Kumar Banka <raman.k2@samsung.com>
+ *	Shaik Ameer Basha <shaik.ameer@samsung.com>
  *
  * Airbrush State Manager Control driver.
  *
@@ -22,17 +24,143 @@
 #include <linux/regmap.h>
 #include <linux/types.h>
 
-#define __DEBUG_FS	/* Comment this if debugfs entry is not needed */
-#define __GPIO_ENABLE	0x1
-#define __GPIO_DISABLE	0x0
+#include "airbrush-clk.h"
 
-enum ab_sm_state {
-	AB_SM_S0 = 0,	/* active high perf */
-	AB_SM_S1 = 1,	/* active medium perf */
-	AB_SM_S2 = 2,	/* active low perf */
-	AB_SM_S3 = 3,	/* active background perf */
-	AB_SM_S4 = 4,	/* suspend */
-	AB_SM_S5 = 5,	/* off */
+#define __GPIO_ENABLE   0x1
+#define __GPIO_DISABLE   0x0
+
+#define NUM_BLOCKS 6
+
+enum block_names{
+	BLK_IPU,
+	BLK_TPU,
+	DRAM,
+	BLK_MIF,
+	BLK_FSYS,
+	BLK_AON,
+};
+
+enum states{
+	off = 0,
+	on = 1,
+};
+
+typedef enum __logic_voltage {
+	VOLTAGE_0_0,
+	VOLTAGE_0_60,
+	VOLTAGE_0_75,
+	VOLTAGE_0_85,
+} logic_voltage_t;
+
+typedef enum __chip_state {
+	CHIP_STATE_0_0,
+	CHIP_STATE_0_1,
+	CHIP_STATE_0_2,
+	CHIP_STATE_0_3,
+	CHIP_STATE_0_4,
+	CHIP_STATE_0_5,
+	CHIP_STATE_0_6,
+	CHIP_STATE_0_7,
+	CHIP_STATE_0_8,
+	CHIP_STATE_0_9,
+	CHIP_STATE_1_0,
+	CHIP_STATE_1_1,
+	CHIP_STATE_1_2,
+	CHIP_STATE_1_3,
+	CHIP_STATE_1_4,
+	CHIP_STATE_1_5,
+	CHIP_STATE_1_6,
+	CHIP_STATE_2_0,
+	CHIP_STATE_2_1,
+	CHIP_STATE_2_2,
+	CHIP_STATE_2_3,
+	CHIP_STATE_2_4,
+	CHIP_STATE_2_5,
+	CHIP_STATE_2_6,
+	CHIP_STATE_3_0,
+	CHIP_STATE_4_0,
+	CHIP_STATE_5_0,
+	CHIP_STATE_6_0,
+} chip_state_t;
+
+typedef enum __block_state {
+	BLOCK_STATE_0_0,
+	BLOCK_STATE_0_1,
+	BLOCK_STATE_0_2,
+	BLOCK_STATE_0_3,
+	BLOCK_STATE_0_4,
+	BLOCK_STATE_0_5,
+	BLOCK_STATE_0_6,
+	BLOCK_STATE_1_0,
+	BLOCK_STATE_1_1,
+	BLOCK_STATE_1_2,
+	BLOCK_STATE_2_0,
+	BLOCK_STATE_3_0,
+} block_state_t;
+
+#define bit(x) (1<<x)
+#define IPU_POWER_CONTROL	bit(0)
+#define TPU_POWER_CONTROL	bit(1)
+#define DRAM_POWER_CONTROL	bit(2)
+#define MIF_POWER_CONTROL	bit(3)
+#define FSYS_POWER_CONTROL	bit(4)
+#define AON_POWER_CONTROL	bit(5)
+
+/**
+ * struct block_property - stores the information of a soc block's operating state.
+ *
+ * @id: The block state id of the SOC block.
+ * @state_name: the name of the corresponing block state
+ * @substate_name: the name of the corresponding substate.
+ * @voltage_rate_status: status of the voltage rail, (on/off)
+ * @logic_voltage: the voltage provoded to the block in volts(multiplied by 100).
+ * @clock_status: status of the clock tree which provides the clock
+ * @clk_frequency: frequency of the clock in Hz
+ * @num_powered_cores: number of cores that are powered up.
+ * @num_computing_cores: Number of cores that are used for computation.
+ * @num_powered_tiles: Number of powered tiles.
+ * @data_rate: Rate of data transfer.
+ */
+struct block_property {
+	block_state_t id;
+	char *state_name;
+	char *substate_name;
+	enum states voltage_rail_status;
+	logic_voltage_t logic_voltage;
+	enum states clk_status;
+	u64 clk_frequency;
+	u32 num_powered_cores;
+	u32 num_computing_cores;
+	u32 num_powered_tiles;
+	u32 data_rate;
+};
+
+/**
+ * struct block - stores the information about a SOC block
+ *
+ * @name: name of the block
+ * @current_id: id of current state of the block
+ * @current_state_category: category of the current state belongs.
+ * @block_property_table: table containing details of all the states of the
+ * @nr_block_states: number of possible states for this block
+ */
+struct block {
+	char *name;
+	//block_state_t current_id;
+	struct block_property *current_state;
+	struct block_property *block_property_table;
+	u32 nr_block_states;
+};
+
+struct chip_to_block_map {
+	chip_state_t chip_substate_id;
+	block_state_t ipu_block_state_id;
+	block_state_t tpu_block_state_id;
+	block_state_t dram_block_state_id;
+	block_state_t mif_block_state_id;
+	block_state_t fsys_block_state_id;
+	block_state_t aon_block_state_id;
+	u32 flags;
 };
 
 enum ab_sm_event {
@@ -44,30 +172,34 @@ enum ab_sm_event {
 
 typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 
-#define AB_DEV_SOC	0x0
-#define AB_DEV_IPU	0x1
-#define AB_DEV_TPU	0x2
-#define AB_DEV_DRAM	0x4
-#define AB_DEV_PCIE	0x8
-#define AB_DEV_ALL	0xff
-
-/* Airbrush current power state */
-struct airbrush_state {
-	unsigned int ipu_state;
-	unsigned int tpu_state;
-	unsigned int dram_state;
-	unsigned int pcie_state;
-};
-
+/**
+ * struct ab_state_context - stores the context of airbrush soc
+ *
+ * @pdev: pointer to the platform device managing this context
+ * @dev: pointer to the device managing this context
+ * @sw_state_id: id of the current software state
+ * @sw_state_name: name of the current software state
+ * @chip_substate_id: id of the current chip substate
+ * @chip_substate_name: name of the current chip substate
+ * @chip_state_table: Table which contains information about all chip states
+ * @nr_chip_states: Number of possible chip states
+ * @d_entry: debugfs entry directory
+ */
 struct ab_state_context {
 	struct platform_device *pdev;
 	struct device *dev;
-	int state;
+	struct block blocks[NUM_BLOCKS];
+	enum {S0, S1, S2, S3, S4, S5, S6} sw_state_id;
+	char *sw_state_name;
+	chip_state_t chip_substate_id;
+	char *chip_substate_name;
+	struct chip_to_block_map *chip_state_table;
+	u32 nr_chip_states;
 
-	/* mutex for synchronization */
+	/* mutex for synchronization (if needed) */
 	struct mutex lock;
 
-	/* pins used in bootsequence and state transitions */
+	/* pins used in bootsequence */
 	struct gpio_desc *soc_pwrgood;	/* output */
 	struct gpio_desc *fw_patch_en;	/* output */
 	struct gpio_desc *ab_ready;	/* input  */
@@ -76,30 +208,23 @@ struct ab_state_context {
 	struct gpio_desc *cke_in;	/* output */
 	struct gpio_desc *cke_in_sense;	/* output */
 
-	unsigned int ab_ready_irq; /* ab_ready_gpio irq */
+	unsigned int ab_ready_irq;	/* ab_ready_gpio irq */
 
-	int otp_fw_patch_dis;	/* OTP info from Airbrush (DT property) */
+	int otp_fw_patch_dis;		/* OTP info from Airbrush (DT property) */
 
-	ab_sm_callback_t cb_event;	/* Event callback registered by the SM
-					 */
-	void		*cb_cookie;	/* Private data sent by SM while
-					 *  registering event callback
-					 */
-	struct airbrush_state cur_state;	/* current state of Airbrush
-						 * devices
-						 */
-#ifdef __DEBUG_FS
-	struct dentry *d_entry;
-#endif
+	ab_sm_callback_t cb_event;	/* Event callback registered by the SM */
+	void *cb_cookie;		/* Private data sent by SM while registering event callback */
 };
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
-int ab_sm_set_state(struct ab_state_context *sc,
-			uint32_t device, enum ab_sm_state s);
-enum ab_sm_state ab_sm_get_state(struct ab_state_context *sc, uint32_t device);
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie);
+int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
+		    		u32 to_chip_substate_id);
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw);
-int ab_interrupt_M0(int tar_dev);
+void abc_clk_register(struct ab_state_context *ab_ctx);
+int ab_ddr_init(struct ab_state_context *sc);
+int ab_ddr_suspend(struct ab_state_context *sc);
+int ab_ddr_resume(struct ab_state_context *sc);
 
 #endif /* _AIRBRUSH_SM_CTRL_H */
