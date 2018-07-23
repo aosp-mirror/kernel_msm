@@ -626,14 +626,14 @@ PNAME(mout_aonclk_pllclk1_p) = { "dout_aon_shared_div_aon_pll", "dout_ipu_ipu_pl
 
 /* PLL MUX Clocks*/
 static const struct airbrush_mux_clock ipu_mux_clks[] = {
-	MUX(0, "mout_ipu_aonclk_pllclk1", mout_aonclk_pllclk1_p, CLK_CON_MUX_MOUT_AONCLK_PLLCLK1, 0, 1),
-	MUX(0, "mout_ipu_pll_ipu", mout_ipu_ipu_pll_p, PLL_CON0_PLL_IPU, 4, 1),
+	MUX(MOUT_IPU_AONCLK_PLLCLK1, "mout_ipu_aonclk_pllclk1", mout_aonclk_pllclk1_p, CLK_CON_MUX_MOUT_AONCLK_PLLCLK1, 0, 1),
+	MUX(MOUT_IPU_PLL_IPU, "mout_ipu_pll_ipu", mout_ipu_ipu_pll_p, PLL_CON0_PLL_IPU, 4, 1),
 };
 
 /* DIV Clocks */
 static const struct airbrush_div_clock ipu_div_clks[] = {
 	DIV(0, "dout_ipu_div4_pllclk_ipu", "dout_aon_pll_aon_clk", CLK_CON_DIV_DIV4_PLLCLK_IPU, 0, 4),
-	DIV(0, "dout_ipu_ipu_pll_clk_div_1", "mout_ipu_pll_ipu", CLK_CON_DIV_IPU_PLL_CLK_DIV_1, 0, 4),
+	DIV(DOUT_IPU_IPU_PLL_CLK_DIV_1, "dout_ipu_ipu_pll_clk_div_1", "mout_ipu_pll_ipu", CLK_CON_DIV_IPU_PLL_CLK_DIV_1, 0, 4),
 };
 
 /* GATE Clocks */
@@ -919,14 +919,14 @@ PNAME(mout_tpu_aonclk_pllclk_p) = { "dout_aon_shared_div_aon_pll", "dout_tpu_tpu
 
 /* MUX Clocks*/
 static const struct airbrush_mux_clock tpu_mux_clks[] = {
-	MUX(0, "mout_tpu_aonclk_pllclk", mout_tpu_aonclk_pllclk_p, CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK, 0, 1),
-	MUX(0, "mout_tpu_pll_tpu", mout_tpu_tpu_pll_p, PLL_CON0_PLL_TPU, 4, 1),
+	MUX(MOUT_TPU_AONCLK_PLLCLK, "mout_tpu_aonclk_pllclk", mout_tpu_aonclk_pllclk_p, CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK, 0, 1),
+	MUX(MOUT_TPU_PLL_TPU, "mout_tpu_pll_tpu", mout_tpu_tpu_pll_p, PLL_CON0_PLL_TPU, 4, 1),
 };
 
 /* DIV Clocks*/
 static const struct airbrush_div_clock tpu_div_clks[] = {
 	DIV(0, "dout_tpu_div4_pllclk_tpu", "dout_aon_pll_aon_clk", CLK_CON_DIV_DIV4_PLLCLK_TPU, 0, 4),
-	DIV(0, "dout_tpu_tpu_pll_div_clk_1", "mout_tpu_pll_tpu", CLK_CON_DIV_TPU_PLL_DIV_CLK_1, 0, 4),
+	DIV(DOUT_TPU_TPU_PLL_DIV_CLK_1, "dout_tpu_tpu_pll_div_clk_1", "mout_tpu_pll_tpu", CLK_CON_DIV_TPU_PLL_DIV_CLK_1, 0, 4),
 };
 
 /* GATE Clocks*/

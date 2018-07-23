@@ -21,4 +21,6 @@ void abc_clk_mif_init(struct device_node *np);
 void abc_clk_ipu_init(struct device_node *np);
 void abc_clk_tpu_init(struct device_node *np);
 
+unsigned long ipu_set_rate(struct device *dev, unsigned long rate);
+unsigned long tpu_set_rate(struct device *dev, unsigned long rate);
 #endif
