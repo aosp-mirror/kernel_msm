@@ -124,6 +124,13 @@
 				qcom,mdss-dsi-vr-command = [
 					05 01 00 00 64 00 01 28
 					/* display off; wait 100ms */
+					15 01 00 00 00 00 02 B0 AC
+					/* MCS Access */
+					39 01 00 00 00 00 08 E5 00 3E 00 3E 00
+						0E 30
+					/* VR mode: enable EM inversion */
+					15 01 00 00 00 00 02 B0 CA
+					/* Don't MCS Access */
 					39 01 00 00 00 00 07 55 04 70 DB 04 70 DB
 					/* Write ACL - turn off edge rounding */
 					39 01 00 00 00 00 03 51 01 A0
@@ -137,6 +144,13 @@
 				qcom,mdss-dsi-novr-command = [
 					05 01 00 00 64 00 01 28
 					/* display off; wait 100ms */
+					15 01 00 00 00 00 02 B0 AC
+					/* MCS Access */
+					39 01 00 00 00 00 08 E5 00 3E 00 3E 00
+						0E 10
+					/* Normal mode: disable EM inversion */
+					15 01 00 00 00 00 02 B0 CA
+					/* Don't MCS Access */
 					39 01 00 00 00 00 03 53 0C 30
 					/* vr mode disable */
 					39 01 00 00 00 00 07 55 04 61 DB 04 70 DB
