@@ -2059,8 +2059,10 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 		 * prevent this touch from being dropped, set to smallest
 		 * pressure value instead
 		 */
-		pr_err("%s: Pressure is %i, but pointer is not leaving\n",
+#ifndef SKIP_PRESSURE
+		pr_dbg("%s: Pressure is %i, but pointer is not leaving\n",
 		       __func__, z);
+#endif
 		z = 1; /* smallest non-zero pressure value */
 	}
 	major = (int)(((event[0] & 0x0C) << 2) | ((event[6] & 0xF0) >> 4));
@@ -2127,7 +2129,9 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 	input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
 	input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR, major);
 	input_report_abs(info->input_dev, ABS_MT_TOUCH_MINOR, minor);
+#ifndef SKIP_PRESSURE
 	input_report_abs(info->input_dev, ABS_MT_PRESSURE, z);
+#endif
 
 #ifndef SKIP_DISTANCE
 	input_report_abs(info->input_dev, ABS_MT_DISTANCE, distance);
@@ -3920,8 +3924,10 @@ static int fts_probe(struct spi_device *client)
 			     AREA_MAX, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MINOR, AREA_MIN,
 			     AREA_MAX, 0, 0);
+#ifndef SKIP_PRESSURE
 	input_set_abs_params(info->input_dev, ABS_MT_PRESSURE, PRESSURE_MIN,
 		PRESSURE_MAX, 0, 0);
+#endif
 #ifndef SKIP_DISTANCE
 	input_set_abs_params(info->input_dev, ABS_MT_DISTANCE, DISTANCE_MIN,
 			     DISTANCE_MAX, 0, 0);
