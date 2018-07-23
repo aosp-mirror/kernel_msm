@@ -53,6 +53,7 @@ static long abc_pcie_dma_compat_ioctl(struct file *file, unsigned int cmd,
 
 struct abc_pcie_dma {
 	struct platform_device *pdev;
+	struct device *dma_dev;
 };
 
 struct abc_pcie_dma abc_dma;
@@ -182,7 +183,7 @@ static int abc_pcie_sg_import_dma_buf(int fd, struct abc_pcie_sg_list *sgl)
 	}
 
 	sgl->attach = dma_buf_attach(sgl->dma_buf,
-				     &abc_dma.pdev->dev);
+				     abc_dma.dma_dev);
 	if (IS_ERR(sgl->attach)) {
 		ret = PTR_ERR(sgl->attach);
 		dev_err(&abc_dma.pdev->dev,
@@ -372,7 +373,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 				    size - (PAGE_SIZE - fp_offset)
 				    - ((n_num-2)*PAGE_SIZE), 0);
 		}
-		count = dma_map_sg(&abc_dma.pdev->dev,
+		count = dma_map_sg(abc_dma.dma_dev,
 				   sgl->sc_list, n_num, sgl->dir);
 		if (count <= 0) {
 			dev_err(&abc_dma.pdev->dev,
@@ -395,7 +396,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 	return 0;
 
 unmap_sg:
-	dma_unmap_sg(&abc_dma.pdev->dev,
+	dma_unmap_sg(abc_dma.dma_dev,
 		sgl->sc_list, n_num, sgl->dir);
 release_page:
 	for (i = 0; i < sgl->n_num; i++)
@@ -424,7 +425,7 @@ int abc_pcie_user_buf_sg_destroy(struct abc_pcie_sg_list *sgl)
 	int i;
 	struct page *page;
 
-	dma_unmap_sg(&abc_dma.pdev->dev, sgl->sc_list,
+	dma_unmap_sg(abc_dma.dma_dev, sgl->sc_list,
 			sgl->n_num, sgl->dir);
 	for (i = 0; i < sgl->n_num; i++) {
 		page = *(sgl->mypage + i);
@@ -1034,9 +1035,19 @@ static int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 {
 	int err;
 
-	/* MFD doesn't seem to configure DMA ops for client devices */
-	arch_setup_dma_ops(&pdev->dev, 0, 0, NULL, false /*coherent*/);
-	abc_dma.pdev = pdev;
+	/* Depending on the IOMMU configuration the board the IPU may need
+	 * to use MFD parent's device for mapping DMA buffers.  Otherwise, the
+	 * dma device can be set to our own device and use SWIOTLB to map
+	 * buffers.
+	 */
+	if (iommu_present(pdev->dev.parent->bus)) {
+		abc_dma.dma_dev = pdev->dev.parent;
+	} else {
+		/* MFD doesn't seem to configure DMA ops for client devices */
+		arch_setup_dma_ops(&pdev->dev, 0, 0, NULL,
+				false /* coherent */);
+		abc_dma.dma_dev = &pdev->dev;
+	}
 
 	err = misc_register(&abc_pcie_dma_miscdev);
 	if (err) {
