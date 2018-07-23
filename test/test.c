@@ -11,6 +11,19 @@
 #include <os.h>
 #include <test/test.h>
 
+struct test_global_context {
+	struct list_head initcalls;
+};
+
+static struct test_global_context test_global_context = {
+	.initcalls = LIST_HEAD_INIT(test_global_context.initcalls),
+};
+
+void test_install_initcall(struct test_initcall *initcall)
+{
+	list_add_tail(&initcall->node, &test_global_context.initcalls);
+}
+
 static int test_vprintk_emit(const struct test *test,
 			     int level,
 			     const char *fmt,
@@ -86,7 +99,17 @@ static void test_run_case_internal(struct test *test,
 				   struct test_module *module,
 				   struct test_case *test_case)
 {
+	struct test_initcall *initcall;
 	int ret;
+
+	list_for_each_entry(initcall, &test_global_context.initcalls, node) {
+		ret = initcall->init(initcall, test);
+		if (ret) {
+			test_err(test, "failed to initialize: %d", ret);
+			test->success = false;
+			return;
+		}
+	}
 
 	if (module->init) {
 		ret = module->init(test);
@@ -102,6 +125,12 @@ static void test_run_case_internal(struct test *test,
 
 static void test_case_internal_cleanup(struct test *test)
 {
+	struct test_initcall *initcall;
+
+	list_for_each_entry(initcall, &test_global_context.initcalls, node) {
+		initcall->exit(initcall);
+	}
+
 	test_cleanup(test);
 }
 

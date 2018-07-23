@@ -147,6 +147,12 @@ struct test_module {
 	struct test_case *test_cases;
 };
 
+struct test_initcall {
+	struct list_head node;
+	int (*init)(struct test_initcall *this, struct test *test);
+	void (*exit)(struct test_initcall *this);
+};
+
 /**
  * struct test - represents a running instance of a test.
  * @priv: for user to store arbitrary data. Commonly used to pass data created
@@ -174,6 +180,19 @@ struct test {
 int test_init_test(struct test *test, const char *name);
 
 int test_run_tests(struct test_module *module);
+
+void test_install_initcall(struct test_initcall *initcall);
+
+#define test_pure_initcall(fn) postcore_initcall(fn)
+
+#define test_register_initcall(initcall) \
+		static int register_test_initcall_##initcall(void) \
+		{ \
+			test_install_initcall(&initcall); \
+			\
+			return 0; \
+		} \
+		test_pure_initcall(register_test_initcall_##initcall)
 
 /**
  * module_test() - used to register a &struct test_module with KUnit.
