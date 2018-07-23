@@ -49,12 +49,32 @@ static void test_fail(struct test *test, struct test_stream *stream)
 	stream->commit(stream);
 }
 
+static void __noreturn test_abort(struct test *test)
+{
+	test->death_test = true;
+	if (current->thread.fault_catcher && current->thread.is_running_test)
+		UML_LONGJMP(current->thread.fault_catcher, 1);
+
+	/*
+	 * Attempted to abort from a not properly initialized test context.
+	 */
+	test_err(test,
+		 "Attempted to abort from a not properly initialized test context!");
+	if (!current->thread.fault_catcher)
+		test_err(test, "No fault_catcher present!");
+	if (!current->thread.is_running_test)
+		test_err(test, "is_running_test not set!");
+	show_stack(NULL, NULL);
+	BUG();
+}
+
 int test_init_test(struct test *test, const char *name)
 {
 	INIT_LIST_HEAD(&test->resources);
 	test->name = name;
 	test->vprintk = test_vprintk;
 	test->fail = test_fail;
+	test->abort = test_abort;
 
 	return 0;
 }
@@ -100,16 +120,89 @@ static void test_run_case_cleanup(struct test *test,
 }
 
 /*
- * Performs all logic to run a test case.
+ * Handles an unexpected crash in a test case.
  */
-static bool test_run_case(struct test *test,
-			  struct test_module *module,
-			  struct test_case *test_case)
+static void test_handle_test_crash(struct test *test,
+				   struct test_module *module,
+				   struct test_case *test_case)
 {
-	test->success = true;
+	test_err(test, "%s crashed", test_case->name);
+	/*
+	 * TODO(brendanhiggins@google.com): This prints the stack trace up
+	 * through this frame, not up to the frame that caused the crash.
+	 */
+	show_stack(NULL, NULL);
 
-	test_run_case_internal(test, module, test_case);
-	test_run_case_cleanup(test, module, test_case);
+	test_case_internal_cleanup(test);
+}
+
+/*
+ * Performs all logic to run a test case. It also catches most errors that
+ * occurs in a test case and reports them as failures.
+ *
+ * XXX: THIS DOES NOT FOLLOW NORMAL CONTROL FLOW. READ CAREFULLY!!!
+ */
+static bool test_run_case_catch_errors(struct test *test,
+				       struct test_module *module,
+				       struct test_case *test_case)
+{
+	jmp_buf fault_catcher;
+	int faulted;
+
+	test->success = true;
+	test->death_test = false;
+
+	/*
+	 * Tell the trap subsystem that we want to catch any segfaults that
+	 * occur.
+	 */
+	current->thread.is_running_test = true;
+	current->thread.fault_catcher = &fault_catcher;
+
+	/*
+	 * ENTER HANDLER: If a failure occurs, we enter here.
+	 */
+	faulted = UML_SETJMP(&fault_catcher);
+	if (faulted == 0) {
+		/*
+		 * NORMAL CASE: we have not run test_run_case_internal yet.
+		 *
+		 * test_run_case_internal may encounter a fatal error; if it
+		 * does, we will jump to ENTER_HANDLER above instead of
+		 * continuing normal control flow.
+		 */
+		test_run_case_internal(test, module, test_case);
+		/*
+		 * This line may never be reached.
+		 */
+		test_run_case_cleanup(test, module, test_case);
+	} else if (test->death_test) {
+		/*
+		 * EXPECTED DEATH: test_run_case_internal encountered
+		 * anticipated fatal error. Everything should be in a safe
+		 * state.
+		 */
+		test_run_case_cleanup(test, module, test_case);
+	} else {
+		/*
+		 * UNEXPECTED DEATH: test_run_case_internal encountered an
+		 * unanticipated fatal error. We have no idea what the state of
+		 * the test case is in.
+		 */
+		test_handle_test_crash(test, module, test_case);
+		test->success = false;
+	}
+	/*
+	 * EXIT HANDLER: test case has been run and all possible errors have
+	 * been handled.
+	 */
+
+	/*
+	 * Tell the trap subsystem that we no longer want to catch any
+	 * segfaults.
+	 */
+	current->thread.fault_catcher = NULL;
+	current->thread.is_running_test = false;
 
 	return test->success;
 }
@@ -126,7 +219,7 @@ int test_run_tests(struct test_module *module)
 		return ret;
 
 	for (test_case = module->test_cases; test_case->run_case; test_case++) {
-		success = test_run_case(&test, module, test_case);
+		success = test_run_case_catch_errors(&test, module, test_case);
 		if (!success)
 			all_passed = false;
 

@@ -19,7 +19,7 @@ static void string_stream_test_get_string(struct test *test)
 	stream->add(stream, " %s", "bar");
 
 	output = stream->get_string(stream);
-	EXPECT_STREQ(test, output, "Foo bar");
+	ASSERT_STREQ(test, output, "Foo bar");
 	kfree(output);
 	destroy_string_stream(stream);
 }
@@ -34,16 +34,16 @@ static void string_stream_test_add_and_clear(struct test *test)
 		stream->add(stream, "A");
 
 	output = stream->get_string(stream);
-	EXPECT_STREQ(test, output, "AAAAAAAAAA");
-	EXPECT_EQ(test, stream->length, 10);
-	EXPECT_FALSE(test, stream->is_empty(stream));
+	ASSERT_STREQ(test, output, "AAAAAAAAAA");
+	ASSERT_EQ(test, stream->length, 10);
+	ASSERT_FALSE(test, stream->is_empty(stream));
 	kfree(output);
 
 	stream->clear(stream);
 
 	output = stream->get_string(stream);
-	EXPECT_STREQ(test, output, "");
-	EXPECT_TRUE(test, stream->is_empty(stream));
+	ASSERT_STREQ(test, output, "");
+	ASSERT_TRUE(test, stream->is_empty(stream));
 	destroy_string_stream(stream);
 }
 

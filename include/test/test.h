@@ -80,9 +80,10 @@ struct test;
  * @name: the name of the test case.
  *
  * A test case is a function with the signature, ``void (*)(struct test *)``
- * that makes expectations (see EXPECT_TRUE()) about code under test. Each test
- * case is associated with a &struct test_module and will be run after the
- * module's init function and followed by the module's exit function.
+ * that makes expectations and assertions (see EXPECT_TRUE() and ASSERT_TRUE())
+ * about code under test. Each test case is associated with a
+ * &struct test_module and will be run after the module's init function and
+ * followed by the module's exit function.
  *
  * A test case should be static and should only be created with the TEST_CASE()
  * macro; additionally, every array of test cases should be terminated with an
@@ -161,11 +162,13 @@ struct test {
 	/* private: internal use only. */
 	struct list_head resources;
 	const char *name;
+	bool death_test;
 	bool success;
 	void (*vprintk)(const struct test *test,
 			const char *level,
 			struct va_format *vaf);
 	void (*fail)(struct test *test, struct test_stream *stream);
+	void (*abort)(struct test *test);
 };
 
 int test_init_test(struct test *test, const char *name);
@@ -515,6 +518,261 @@ static inline void test_expect_binary(struct test *test,
 			      PTR_ERR(__ptr));				       \
 									       \
 	EXPECT_END(test, !IS_ERR_OR_NULL(__ptr), __stream);		       \
+} while (0)
+
+static inline struct test_stream *test_assert_start(struct test *test,
+						    const char *file,
+						    const char *line)
+{
+	struct test_stream *stream = test_new_stream(test);
+
+	stream->add(stream, "ASSERTION FAILED at %s:%s\n\t", file, line);
+
+	return stream;
+}
+
+static inline void test_assert_end(struct test *test,
+				   bool success,
+				   struct test_stream *stream)
+{
+	if (!success) {
+		test->fail(test, stream);
+		test->abort(test);
+	} else {
+		stream->clear(stream);
+	}
+}
+
+#define ASSERT_START(test) \
+		test_assert_start(test, __FILE__, __stringify(__LINE__))
+
+#define ASSERT_END(test, success, stream) test_assert_end(test, success, stream)
+
+#define ASSERT(test, success, message) do {				       \
+	struct test_stream *__stream = ASSERT_START(test);		       \
+									       \
+	__stream->add(__stream, message);				       \
+	ASSERT_END(test, success, __stream);				       \
+} while (0)
+
+#define ASSERT_FAILURE(test, message) ASSERT(test, false, message)
+
+/**
+ * ASSERT_TRUE() - Causes an assertion failure when the expression is not true.
+ * @test: The test context object.
+ * @condition: an arbitrary boolean expression. The test fails and aborts when
+ * this does not evaluate to true.
+ *
+ * This and assertions of the form `ASSERT_*` will cause the test case to fail
+ * *and immediately abort* when the specified condition is not met. Unlike an
+ * expectation failure, it will prevent the test case from continuing to run;
+ * this is otherwise known as an *assertion failure*.
+ */
+#define ASSERT_TRUE(test, condition)					       \
+		ASSERT(test, (condition),				       \
+		       "Asserted " #condition " is true, but is false.")
+
+/**
+ * ASSERT_FALSE() - Sets an assertion that @condition is false.
+ * @test: The test context object.
+ * @condition: an arbitrary boolean expression.
+ *
+ * Sets an assertion that the value that @condition evaluates to is false.  This
+ * is the same as EXPECT_FALSE(), except it causes an assertion failure (see
+ * ASSERT_TRUE()) when the assertion is not met.
+ */
+#define ASSERT_FALSE(test, condition)					       \
+		ASSERT(test, !(condition),				       \
+		       "Asserted " #condition " is false, but is true.")
+
+static inline void test_assert_binary(struct test *test,
+				      long long left, const char *left_name,
+				      long long right, const char *right_name,
+				      bool compare_result,
+				      const char *compare_name,
+				      const char *file,
+				      const char *line)
+{
+	struct test_stream *stream = test_assert_start(test, file, line);
+
+	stream->add(stream,
+		    "Asserted %s %s %s, but\n",
+		    left_name, compare_name, right_name);
+	stream->add(stream, "\t\t%s == %lld\n", left_name, left);
+	stream->add(stream, "\t\t%s == %lld", right_name, right);
+
+	test_assert_end(test, compare_result, stream);
+}
+
+/*
+ * A factory macro for defining the expectations for the basic comparisons
+ * defined for the built in types.
+ *
+ * Unfortunately, there is no common type that all types can be promoted to for
+ * which all the binary operators behave the same way as for the actual types
+ * (for example, there is no type that long long and unsigned long long can
+ * both be cast to where the comparison result is preserved for all values). So
+ * the best we can do is do the comparison in the original types and then coerce
+ * everything to long long for printing; this way, the comparison behaves
+ * correctly and the printed out value usually makes sense without
+ * interpretation, but can always be interpretted to figure out the actual
+ * value.
+ */
+#define ASSERT_BINARY(test, left, condition, right) do {		       \
+	typeof(left) __left = (left);					       \
+	typeof(right) __right = (right);				       \
+	test_assert_binary(test,					       \
+			   (long long) __left, #left,			       \
+			   (long long) __right, #right,			       \
+			   __left condition __right, #condition,	       \
+			   __FILE__, __stringify(__LINE__));		       \
+} while (0)
+
+/**
+ * ASSERT_EQ() - Sets an assertion that @left and @right are equal.
+ * @test: The test context object.
+ * @left: an arbitrary expression that evaluates to a primitive C type.
+ * @right: an arbitrary expression that evaluates to a primitive C type.
+ *
+ * Sets an assertion that the values that @left and @right evaluate to are
+ * equal. This is the same as EXPECT_EQ(), except it causes an assertion failure
+ * (see ASSERT_TRUE()) when the assertion is not met.
+ */
+#define ASSERT_EQ(test, left, right) ASSERT_BINARY(test, left, ==, right)
+
+/**
+ * ASSERT_NE() - An assertion that @left and @right are not equal.
+ * @test: The test context object.
+ * @left: an arbitrary expression that evaluates to a primitive C type.
+ * @right: an arbitrary expression that evaluates to a primitive C type.
+ *
+ * Sets an assertion that the values that @left and @right evaluate to are not
+ * equal. This is the same as EXPECT_NE(), except it causes an assertion failure
+ * (see ASSERT_TRUE()) when the assertion is not met.
+ */
+#define ASSERT_NE(test, left, right) ASSERT_BINARY(test, left, !=, right)
+
+/**
+ * ASSERT_LT() - An assertion that @left is less than @right.
+ * @test: The test context object.
+ * @left: an arbitrary expression that evaluates to a primitive C type.
+ * @right: an arbitrary expression that evaluates to a primitive C type.
+ *
+ * Sets an assertion that the value that @left evaluates to is less than the
+ * value that @right evaluates to.  This is the same as EXPECT_LT(), except it
+ * causes an assertion failure (see ASSERT_TRUE()) when the assertion is not
+ * met.
+ */
+#define ASSERT_LT(test, left, right) ASSERT_BINARY(test, left, <, right)
+
+/**
+ * ASSERT_LE() - An assertion that @left is less than or equal to @right.
+ * @test: The test context object.
+ * @left: an arbitrary expression that evaluates to a primitive C type.
+ * @right: an arbitrary expression that evaluates to a primitive C type.
+ *
+ * Sets an assertion that the value that @left evaluates to is less than or
+ * equal to the value that @right evaluates to.  This is the same as
+ * EXPECT_LE(), except it causes an assertion failure (see ASSERT_TRUE()) when
+ * the assertion is not met.
+ */
+#define ASSERT_LE(test, left, right) ASSERT_BINARY(test, left, <=, right)
+
+/**
+ * ASSERT_GT() - An assertion that @left is greater than @right.
+ * @test: The test context object.
+ * @left: an arbitrary expression that evaluates to a primitive C type.
+ * @right: an arbitrary expression that evaluates to a primitive C type.
+ *
+ * Sets an assertion that the value that @left evaluates to is greater than the
+ * value that @right evaluates to.  This is the same as EXPECT_GT(), except it
+ * causes an assertion failure (see ASSERT_TRUE()) when the assertion is not
+ * met.
+ */
+#define ASSERT_GT(test, left, right) ASSERT_BINARY(test, left, >, right)
+
+/**
+ * ASSERT_GE() - An assertion that @left is greater than or equal to @right.
+ * @test: The test context object.
+ * @left: an arbitrary expression that evaluates to a primitive C type.
+ * @right: an arbitrary expression that evaluates to a primitive C type.
+ *
+ * Sets an assertion that the value that @left evaluates to is greater than the
+ * value that @right evaluates to.  This is the same as EXPECT_GE(), except it
+ * causes an assertion failure (see ASSERT_TRUE()) when the assertion is not
+ * met.
+ */
+#define ASSERT_GE(test, left, right) ASSERT_BINARY(test, left, >=, right)
+
+/**
+ * ASSERT_STREQ() - An assertion that strings @left and @right are equal.
+ * @test: The test context object.
+ * @left: an arbitrary expression that evaluates to a null terminated string.
+ * @right: an arbitrary expression that evaluates to a null terminated string.
+ *
+ * Sets an assertion that the values that @left and @right evaluate to are
+ * equal.  This is the same as EXPECT_STREQ(), except it causes an assertion
+ * failure (see ASSERT_TRUE()) when the assertion is not met.
+ */
+#define ASSERT_STREQ(test, left, right) do {				       \
+	struct test_stream *__stream = ASSERT_START(test);		       \
+	typeof(left) __left = (left);					       \
+	typeof(right) __right = (right);				       \
+									       \
+	__stream->add(__stream, "Asserted " #left " == " #right ", but\n");    \
+	__stream->add(__stream, "\t\t%s == %s\n", #left, __left);	       \
+	__stream->add(__stream, "\t\t%s == %s\n", #right, __right);	       \
+									       \
+	ASSERT_END(test, !strcmp(left, right), __stream);		       \
+} while (0)
+
+/**
+ * ASSERT_NOT_ERR_OR_NULL() - An assertion that @ptr is not null and not err.
+ * @test: The test context object.
+ * @ptr: an arbitrary pointer.
+ *
+ * Sets an assertion that the value that @ptr evaluates to is not null and not
+ * an errno stored in a pointer.  This is the same as EXPECT_NOT_ERR_OR_NULL(),
+ * except it causes an assertion failure (see ASSERT_TRUE()) when the assertion
+ * is not met.
+ */
+#define ASSERT_NOT_ERR_OR_NULL(test, ptr) do {				       \
+	struct test_stream *__stream = ASSERT_START(test);		       \
+	typeof(ptr) __ptr = (ptr);					       \
+									       \
+	if (!__ptr)							       \
+		__stream->add(__stream,					       \
+			      "Asserted " #ptr " is not null, but is.");       \
+	if (IS_ERR(__ptr))						       \
+		__stream->add(__stream,					       \
+			      "Asserted " #ptr " is not error, but is: %ld",   \
+			      PTR_ERR(__ptr));				       \
+									       \
+	ASSERT_END(test, !IS_ERR_OR_NULL(__ptr), __stream);		       \
+} while (0)
+
+/**
+ * ASSERT_SIGSEGV() - An assertion that @expr will cause a segfault.
+ * @test: The test context object.
+ * @expr: an arbitrary block of code.
+ *
+ * Sets an assertion that @expr, when evaluated, will cause a segfault.
+ * Currently this assertion is only really useful for testing the KUnit
+ * framework, as a segmentation fault in normal kernel code is always incorrect.
+ * However, the plan is to replace this assertion with an arbitrary death
+ * assertion similar to
+ * https://github.com/google/googletest/blob/master/googletest/docs/advanced.md#death-tests
+ * which will probably be massaged to make sense in the context of the kernel
+ * (maybe assert that a panic occurred, or that BUG() was called).
+ *
+ * NOTE: no code after this assertion will ever be executed.
+ */
+#define ASSERT_SIGSEGV(test, expr) do {					       \
+	test->death_test = true;					       \
+	expr;								       \
+	test->death_test = false;					       \
+	ASSERT_FAILURE(test,						       \
+		       "Asserted that " #expr " would cause death, but did not.");\
 } while (0)
 
 #endif /* _TEST_TEST_H */
