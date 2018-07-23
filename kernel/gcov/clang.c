@@ -76,6 +76,7 @@ struct gcov_fn_info {
 
 	u32 num_counters;
 	u64 *counters;
+	const char *function_name;
 };
 
 static struct gcov_info *current_info;
@@ -121,7 +122,7 @@ void llvm_gcda_emit_function(u32 ident, const char *function_name,
 	struct gcov_fn_info *info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info) {
 		pr_warn_ratelimited("failed to allocate gcov function info for %s\n",
-				function_name);
+				function_name ?: "UNKNOWN");
 		return;
 	}
 
@@ -130,6 +131,8 @@ void llvm_gcda_emit_function(u32 ident, const char *function_name,
 	info->checksum = func_checksum;
 	info->use_extra_checksum = use_extra_checksum;
 	info->cfg_checksum = cfg_checksum;
+	if (function_name)
+		info->function_name = kstrdup(function_name, GFP_KERNEL);
 
 	list_add_tail(&info->head, &current_info->functions);
 }
@@ -188,6 +191,26 @@ struct gcov_info *gcov_info_next(struct gcov_info *info)
 	if (list_is_last(&info->head, &clang_gcov_list))
 		return NULL;
 	return list_next_entry(info, head);
+}
+
+/**
+ * gcov_info_link - link/add profiling data set to the list
+ * @info: profiling data set
+ */
+void gcov_info_link(struct gcov_info *info)
+{
+	list_add_tail(&info->head, &clang_gcov_list);
+}
+
+/**
+ * gcov_info_unlink - unlink/remove profiling data set from the list
+ * @prev: previous profiling data set
+ * @info: profiling data set
+ */
+void gcov_info_unlink(struct gcov_info *prev, struct gcov_info *info)
+{
+	if (prev)
+		list_del(&prev->head);
 }
 
 /* Symbolic links to be created for each profiling data file. */
@@ -252,8 +275,8 @@ static struct gcov_fn_info *gcov_fn_info_dup(struct gcov_fn_info *fn)
 		return NULL;
 	INIT_LIST_HEAD(&fn_dup->head);
 
-	fn_dup->name = kstrdup(fn->name, GFP_KERNEL);
-	if (!fn_dup->name)
+	fn_dup->function_name = kstrdup(fn->function_name, GFP_KERNEL);
+	if (!fn_dup->function_name)
 		goto err_name;
 
 	fn_dup->counters = kmemdup(fn->counters,
@@ -265,7 +288,7 @@ static struct gcov_fn_info *gcov_fn_info_dup(struct gcov_fn_info *fn)
 	return fn_dup;
 
 err_counters:
-	kfree(fn_dup->name);
+	kfree(fn_dup->function_name);
 err_name:
 	kfree(fn_dup);
 	return NULL;
@@ -312,7 +335,7 @@ void gcov_info_free(struct gcov_info *info)
 	struct gcov_fn_info *fn, *tmp;
 
 	list_for_each_entry_safe(fn, tmp, &info->functions, head) {
-		kfree(fn->name);
+		kfree(fn->function_name);
 		kfree(fn->counters);
 		list_del(&fn->head);
 		kfree(fn);
