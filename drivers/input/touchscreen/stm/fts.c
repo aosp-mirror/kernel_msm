@@ -2923,6 +2923,13 @@ out:
 			pr_err("%s: Cannot initialize the chip ERROR %08X\n",
 				__func__, error);
 		}
+
+		/* Reset after initialization */
+		ret = fts_system_reset();
+		if (ret < OK) {
+			pr_err("%s: Reset failed, ERROR %08X\n", __func__,
+			       ret);
+		}
 	}
 
 	error = fts_init_sensing(info);
@@ -3187,7 +3194,7 @@ static int fts_init_sensing(struct fts_ts_info *info)
 	error |= fts_interrupt_install(info);	/* register event handler */
 	error |= fts_mode_handler(info, 0);	/* enable the features and
 						 * sensing */
-	/* error |= fts_enableInterrupt(); */	/* enable the interrupt */
+	error |= fts_enableInterrupt();		/* enable the interrupt */
 	error |= fts_resetDisableIrqCount();
 
 	if (error < OK)
