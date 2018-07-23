@@ -12,7 +12,154 @@
 
 #include "../qcom/sm8150-audio-overlay.dtsi"
 
+&tlmm {
+	cs35l36_pins {
+		cs35l36_reset_top: cs35l36_reset_top {
+			mux {
+				pins = "gpio128";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio128";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		cs35l36_irq_top: cs35l36_irq_top {
+			mux {
+				pins = "gpio125";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio125";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+		cs35l36_reset_bottom: cs35l36_reset_bottom {
+			mux {
+				pins = "gpio148";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio148";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		cs35l36_irq_bottom: cs35l36_irq_bottom {
+			mux {
+				pins = "gpio132";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio132";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+};
+
+&qupv3_se15_i2c {
+	status = "ok";
+	cs35l36_codec_bottom: cs35l36@40 {
+		/* bottom speaker - portrait right */
+		compatible = "cirrus,cs35l36";
+		reg = <0x40>;
+		reset-gpios = <&tlmm 148 0>;
+		irq-gpio = <&tlmm 132 0>;
+		//VA-supply = <&pm8150_s4>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <132 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cs35l36_reset_bottom &cs35l36_irq_bottom>;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-ctl-select = <0x01>;
+		cirrus,boost-ctl-millivolt = <10000>;
+		cirrus,boost-peak-milliamp = <4500>;
+		cirrus,amp-gain-zc;
+		cirrus,ldm-mode-select = <0x01>;
+		cirrus,pdm-ldm-exit;
+		cirrus,pdm-ldm-enter;
+		cirrus,weak-fet-delay = <0x04>;
+		cirrus,weak-fet-thld = <0x01>;
+		cirrus,temp-warn-threshold = <0x01>;
+		cirrus,multi-amp-mode;
+
+		cirrus,irq-config {
+			cirrus,irq-drive-select = <0x00>;
+			cirrus,irq-polarity = <0x00>;
+			cirrus,irq-gpio-select = <0x00>;
+			cirrus,irq-output-enable = <0x01>;
+			cirrus,irq-src-select = <0x01>;
+		};
+	};
+
+	cs35l36_codec_top: cs35l36@41 {
+		/* top speaker - portrait left */
+		compatible = "cirrus,cs35l36";
+		reg = <0x41>;
+		reset-gpios = <&tlmm 128 0>;
+		irq-gpio = <&tlmm 125 0>;
+		//VA-supply = <&pm8150_s4>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cs35l36_reset_top &cs35l36_irq_top>;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-ctl-select = <0x01>;
+		cirrus,boost-ctl-millivolt = <10000>;
+		cirrus,boost-peak-milliamp = <4500>;
+		cirrus,amp-gain-zc;
+		cirrus,ldm-mode-select = <0x01>;
+		cirrus,pdm-ldm-exit;
+		cirrus,pdm-ldm-enter;
+		cirrus,weak-fet-delay = <0x04>;
+		cirrus,weak-fet-thld = <0x01>;
+		cirrus,temp-warn-threshold = <0x01>;
+		cirrus,multi-amp-mode;
+
+		cirrus,irq-config {
+			cirrus,irq-drive-select = <0x00>;
+			cirrus,irq-polarity = <0x00>;
+			cirrus,irq-gpio-select = <0x00>;
+			cirrus,irq-output-enable = <0x01>;
+			cirrus,irq-src-select = <0x01>;
+		};
+	};
+};
+
+&dai_tert_tdm_rx_0 {
+	qcom,msm-cpudai-tdm-header-start-offset = <0>;
+	qcom,msm-cpudai-tdm-header-width = <2>;
+	qcom,msm-cpudai-tdm-header-num-frame-repeat = <8>;
+};
+
 &soc {
+	qcom,msm-dai-tdm-tert-rx {
+		qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+		qcom,msm-cpudai-tdm-sync-mode = <0>;
+		qcom,msm-cpudai-tdm-invert-sync = <0>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&tert_mi2s_active &tert_mi2s_sd0_active
+				&tert_mi2s_sd1_active>;
+		pinctrl-1 = <&tert_mi2s_sleep &tert_mi2s_sd0_sleep
+				&tert_mi2s_sd1_sleep>;
+	};
+
+	qcom,msm-dai-tdm-tert-tx {
+		qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+		qcom,msm-cpudai-tdm-sync-mode = <0>;
+		qcom,msm-cpudai-tdm-invert-sync = <0>;
+	};
+
 	iaxxx-mic {
 		compatible = "knowles,iaxxx-msm";
 		model = "msm-oq-iaxxx";
@@ -153,9 +300,11 @@
 				"msm-dai-q6-tdm.36928", "msm-dai-q6-tdm.36929";
 
 		asoc-codec = <&iaxxxspi1>, <&stub_codec>,
-				<&ext_disp_audio_codec>;
+				<&ext_disp_audio_codec>,
+				<&cs35l36_codec_bottom> , <&cs35l36_codec_top>;
 		asoc-codec-names = "iaxxx-codec", "msm-stub-codec.1",
-				"msm-ext-disp-audio-codec-rx";
+				"msm-ext-disp-audio-codec-rx",
+				"cs35l36_codec_bottom", "cs35l36_codec_top";
 
 		pinctrl-names = "quat_mi2s_enable", "quat_mi2s_disable",
 				"quat_tdm_enable", "quat_tdm_disable";
