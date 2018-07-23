@@ -1,0 +1,8 @@
+This directory contains the DS thin driver framework and the drivers
+that use it.
+
+Current leaf drivers are Apex and Knoll.
+
+Files are prefixed based on their driver:
+	-ds_* files are DS framework files.
+	-dw_* files are DWN driver files.

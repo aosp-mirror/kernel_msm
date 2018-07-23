@@ -67,3 +67,4 @@ ifdef CONFIG_COMPAT
 endif
 obj-$(CONFIG_MSM_FASTCVPD)	+= fastcvpd.o
 obj-$(CONFIG_MSM_RDBG)		+= rdbg.o
+obj-y				+= oscar/

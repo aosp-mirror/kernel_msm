@@ -614,4 +614,4 @@ config MSM_RDBG
 	  stub running on peripheral subsystems such as the ADSP, MODEM etc.
 
 endmenu
-
+source "drivers/char/oscar/Kconfig"
