@@ -22,6 +22,7 @@
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 #include "mdss_mdp_pp_cache_config.h"
+#include "mdss_debug.h"
 
 struct mdp_csc_cfg mdp_csc_8bit_convert[MDSS_MDP_MAX_CSC] = {
 	[MDSS_MDP_CSC_YUV2RGB_601L] = {
@@ -2702,12 +2703,80 @@ error:
 	return ret;
 }
 
+int mdss_mdp_pp_commit_notify(struct mdss_mdp_ctl *ctl, bool early)
+{
+	struct mdss_data_type *mdata;
+	u32 flags, pa_v2_flags;
+	u32 disp_num;
+	int ret = 0;
+
+	if ((!ctl) || (!ctl->mfd) || (!mdss_pp_res) || (!ctl->mdata))
+		return -EINVAL;
+
+	mdata = ctl->mdata;
+	if (!mdata->pp_reg_bus_clt)
+		return 0;
+
+	ATRACE_BEGIN(__func__);
+	disp_num = ctl->mfd->index;
+
+	mutex_lock(&mdss_pp_mutex);
+
+	/*
+	 * if there's no early wake up this could end up being called before
+	 * ctl_restore. In such cases we'll still need to go through resume
+	 * anyway so set the flag now
+	 */
+	if (mdata->idle_pc)
+		mdss_pp_res->pp_disp_flags[disp_num] |= PP_FLAGS_RESUME_COMMIT;
+
+	flags = mdss_pp_res->pp_disp_flags[disp_num];
+	if (pp_ops[PA].pp_set_config)
+		pa_v2_flags = mdss_pp_res->pa_v2_disp_cfg[disp_num].flags;
+	else
+		pa_v2_flags =
+			mdss_pp_res->pa_v2_disp_cfg[disp_num].pa_v2_data.flags;
+
+	if (IS_PP_RESUME_COMMIT(flags)) {
+		if (!early) {
+			pr_debug("disable reg vote\n");
+			/* remove vote late in commit */
+			ret = mdss_update_reg_bus_vote(mdata->pp_reg_bus_clt,
+						       VOTE_INDEX_DISABLE);
+			mdss_pp_res->pp_disp_flags[disp_num] &=
+					~PP_FLAGS_RESUME_COMMIT;
+		} else if (mdata->idle_pc || IS_PP_LUT_DIRTY(flags) ||
+			   IS_SIX_ZONE_DIRTY(flags, pa_v2_flags)) {
+			/*
+			 * place high vote if coming out of idle pc or heavy
+			 * programming of LUTs is needed
+			 */
+			pr_debug("placing high reg vote (0x%x 0x%x)\n",
+				 flags, pa_v2_flags);
+			ret = mdss_update_reg_bus_vote(mdata->pp_reg_bus_clt,
+						       VOTE_INDEX_HIGH);
+		} else {
+			/*
+			 * no high vote required, clear flag to avoid the need
+			 * to come in here at end of commit
+			 */
+			pr_debug("split high reg vote (0x%x 0x%x)\n",
+				 flags, pa_v2_flags);
+			mdss_pp_res->pp_disp_flags[disp_num] &=
+					~PP_FLAGS_RESUME_COMMIT;
+		}
+	}
+	mutex_unlock(&mdss_pp_mutex);
+
+	ATRACE_END(__func__);
+
+	return ret;
+}
+
 int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 {
 	struct mdss_data_type *mdata;
 	int ret = 0, i;
-	u32 flags, pa_v2_flags;
-	u32 max_bw_needed;
 	u32 mixer_cnt;
 	u32 mixer_id[MDSS_MDP_INTF_MAX_LAYERMIXER];
 	u32 disp_num;
@@ -2715,6 +2784,8 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 	bool valid_ad_panel = true;
 	if ((!ctl) || (!ctl->mfd) || (!mdss_pp_res) || (!ctl->mdata))
 		return -EINVAL;
+
+	ATRACE_BEGIN(__func__);
 
 	mdata = ctl->mdata;
 	/* treat fb_num the same as block logical id*/
@@ -2748,27 +2819,6 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 
 	mutex_lock(&mdss_pp_mutex);
 
-	flags = mdss_pp_res->pp_disp_flags[disp_num];
-	if (pp_ops[PA].pp_set_config)
-		pa_v2_flags = mdss_pp_res->pa_v2_disp_cfg[disp_num].flags;
-	else
-		pa_v2_flags =
-			mdss_pp_res->pa_v2_disp_cfg[disp_num].pa_v2_data.flags;
-	/*
-	 * If a LUT based PP feature needs to be reprogrammed during resume,
-	 * increase the register bus bandwidth to maximum frequency
-	 * in order to speed up the register reprogramming.
-	 */
-	max_bw_needed = (IS_PP_RESUME_COMMIT(flags) &&
-				(IS_PP_LUT_DIRTY(flags) ||
-				IS_SIX_ZONE_DIRTY(flags, pa_v2_flags)));
-	if (mdata->pp_reg_bus_clt && max_bw_needed) {
-		ret = mdss_update_reg_bus_vote(mdata->pp_reg_bus_clt,
-				VOTE_INDEX_HIGH);
-		if (ret)
-			pr_err("Updated reg_bus_scale failed, ret = %d", ret);
-	}
-
 	if (ctl->mixer_left) {
 		pp_mixer_setup(ctl->mixer_left);
 		pp_dspp_setup(disp_num, ctl->mixer_left);
@@ -2789,22 +2839,15 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 
 	/* clear dirty flag */
 	if (disp_num < MDSS_BLOCK_DISP_NUM) {
-		mdss_pp_res->pp_disp_flags[disp_num] = 0;
+		/* clear everything but resume commit bit */
+		mdss_pp_res->pp_disp_flags[disp_num] &= PP_FLAGS_RESUME_COMMIT;
 		if (disp_num < mdata->nad_cfgs)
 			mdata->ad_cfgs[disp_num].reg_sts = 0;
 	}
 
-	if (mdata->pp_reg_bus_clt && max_bw_needed) {
-		ret = mdss_update_reg_bus_vote(mdata->pp_reg_bus_clt,
-				VOTE_INDEX_DISABLE);
-		if (ret)
-			pr_err("Updated reg_bus_scale failed, ret = %d", ret);
-	}
-	if (IS_PP_RESUME_COMMIT(flags))
-		mdss_pp_res->pp_disp_flags[disp_num] &=
-			~PP_FLAGS_RESUME_COMMIT;
 	mutex_unlock(&mdss_pp_mutex);
 exit:
+	ATRACE_END(__func__);
 	return ret;
 }
 

@@ -449,6 +449,7 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_BOOST_CURRENT,
 	POWER_SUPPLY_PROP_PE_START,
 	POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT,
+	POWER_SUPPLY_PROP_VBUS_OUTPUT_STATUS,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
 	POWER_SUPPLY_PROP_HW_CURRENT_MAX,
@@ -543,6 +544,9 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_USE_EXTERNAL_VBUS_OUTPUT:
 		rc = smblib_get_prop_use_external_vbus_output(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_VBUS_OUTPUT_STATUS:
+		rc = smblib_get_prop_vbus_output_status(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		rc = smblib_get_prop_usb_port_temp(chg, val);

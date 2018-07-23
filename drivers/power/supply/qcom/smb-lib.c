@@ -2581,6 +2581,42 @@ int smblib_get_prop_use_external_vbus_output(struct smb_charger *chg,
 	return 0;
 }
 
+int smblib_get_prop_vbus_output_status(struct smb_charger *chg,
+				       union power_supply_propval *val)
+{
+	int internal_rc = 0;
+	int external_rc = 0;
+	u8 status = 0;
+
+	mutex_lock(&chg->vbus_output_lock);
+	mutex_lock(&chg->otg_oc_lock);
+
+	internal_rc = smblib_otg_is_enabled_locked(chg);
+	if (internal_rc < 0) {
+		val->intval = internal_rc;
+		goto unlock;
+	}
+	status |= (internal_rc == 1) ? INTERNAL_OTG_BIT : 0;
+
+	if (!chg->external_vbus_reg) {
+		val->intval = status;
+		goto unlock;
+	}
+
+	external_rc = regulator_is_enabled(chg->external_vbus_reg);
+	if (external_rc < 0) {
+		val->intval = external_rc;
+		goto unlock;
+	}
+	status |= (external_rc == 1) ? EXTERNAL_OTG_BIT : 0;
+	val->intval = status;
+
+unlock:
+	mutex_unlock(&chg->otg_oc_lock);
+	mutex_unlock(&chg->vbus_output_lock);
+	return 0;
+}
+
 int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
 				  union power_supply_propval *val)
 {
@@ -5362,6 +5398,24 @@ static void smblib_iio_deinit(struct smb_charger *chg)
 		iio_channel_release(chg->iio.batt_i_chan);
 }
 
+static void smblib_set_low_batt_threshold(struct smb_charger *chg)
+{
+	u32 val;
+	int rc;
+
+	if (!of_property_read_u32(chg->dev->of_node,
+				  "qcom,low-batt-threshold", &val)) {
+		if (val > 0xf)
+			smblib_err(chg, "invalid qcom,low-batt-threshold value\n");
+		else {
+			rc = smblib_write(chg, LOW_BATT_THRESHOLD_CFG_REG, val);
+			if (rc < 0)
+				smblib_err(chg, "Couldn't write 0x%02x to LOW_BATT_THRESHOLD_CFG_REG rc=%d\n",
+					   val, rc);
+		}
+	}
+}
+
 int smblib_init(struct smb_charger *chg)
 {
 	int rc = 0;
@@ -5434,6 +5488,8 @@ int smblib_init(struct smb_charger *chg)
 			return rc;
 
 		smblib_init_port_overheat_mitigation(chg);
+
+		smblib_set_low_batt_threshold(chg);
 
 		chg->bms_psy = power_supply_get_by_name("bms");
 		chg->pl.psy = power_supply_get_by_name("parallel");

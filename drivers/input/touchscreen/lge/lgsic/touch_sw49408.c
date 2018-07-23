@@ -2791,7 +2791,7 @@ void sw49408_irq_runtime_engine_debug(struct device *dev)
 {
 	struct sw49408_data *d = to_sw49408_data(dev);
 
-	u8 ocd_debug[OCD_SIZE];
+	u8 ocd_debug[sizeof(d->info.debug)];
 	int a = 0;
 	int b = 0;
 	int start_point = 0;

@@ -133,6 +133,11 @@ enum smb_irq_index {
 	SMB_IRQ_MAX,
 };
 
+enum {
+	INTERNAL_OTG_BIT = BIT(0),
+	EXTERNAL_OTG_BIT = BIT(1),
+};
+
 struct smb_irq_info {
 	const char			*name;
 	const irq_handler_t		handler;
@@ -530,6 +535,8 @@ int smblib_get_prop_pd_in_hard_reset(struct smb_charger *chg,
 int smblib_get_pe_start(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_get_prop_use_external_vbus_output(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_get_prop_vbus_output_status(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
 				union power_supply_propval *val);

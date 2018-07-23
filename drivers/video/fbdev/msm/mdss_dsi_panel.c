@@ -1018,7 +1018,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		mdss_dba_utils_video_on(pinfo->dba_data, pinfo);
 
 	/* Ensure low persistence mode is set as before */
-	mdss_dsi_panel_apply_display_setting(pdata, pinfo->persist_mode);
+	if (pinfo->persist_mode != MDSS_PANEL_LOW_PERSIST_MODE_OFF)
+		mdss_dsi_panel_apply_display_setting(pdata,
+						     pinfo->persist_mode);
 end:
 	pr_debug("%s:-\n", __func__);
 	return ret;

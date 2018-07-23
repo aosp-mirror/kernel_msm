@@ -3022,9 +3022,10 @@ bool mdss_dsi_ack_err_status(struct mdss_dsi_ctrl_pdata *ctrl)
 		 * later which is another false alarm. Here the
 		 * warning message is ignored.
 		 */
-		if (ctrl->panel_data.panel_info.esd_check_enabled &&
-			(ctrl->status_mode == ESD_BTA) && (status & 0x1008000))
-			return false;
+		if (((ctrl->panel_data.panel_info.err_detect_enabled) ||
+		     (ctrl->panel_data.panel_info.esd_check_enabled &&
+		      (ctrl->status_mode == ESD_BTA))) && (status & 0x1008000))
+		    return false;
 
 		pr_err("%s: status=%x\n", __func__, status);
 		ret = true;

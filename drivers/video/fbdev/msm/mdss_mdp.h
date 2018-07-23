@@ -1801,6 +1801,7 @@ int mdss_mdp_pp_overlay_init(struct msm_fb_data_type *mfd);
 int mdss_mdp_pp_resume(struct msm_fb_data_type *mfd);
 void mdss_mdp_pp_dest_scaler_resume(struct mdss_mdp_ctl *ctl);
 
+int mdss_mdp_pp_commit_notify(struct mdss_mdp_ctl *ctl, bool early);
 int mdss_mdp_pp_setup(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_pipe_pp_setup(struct mdss_mdp_pipe *pipe, u32 *op);

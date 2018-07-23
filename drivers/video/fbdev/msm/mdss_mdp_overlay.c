@@ -2501,12 +2501,15 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 		return ret;
 	}
 
+	mdss_mdp_pp_commit_notify(ctl, true);
+
 	ret = mdss_iommu_ctrl(1);
 	if (IS_ERR_VALUE(ret)) {
 		pr_err("iommu attach failed rc=%d\n", ret);
 		mutex_unlock(&mdp5_data->ov_lock);
 		if (ctl->shared_lock)
 			mutex_unlock(ctl->shared_lock);
+		mdss_mdp_pp_commit_notify(ctl, false);
 		return ret;
 	}
 
@@ -2588,6 +2591,8 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 
 	if (!mdp5_data->kickoff_released)
 		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_CTX_DONE);
+
+	mdss_mdp_pp_commit_notify(ctl, false);
 
 	if (IS_ERR_VALUE(ret))
 		goto commit_fail;
