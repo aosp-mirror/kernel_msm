@@ -2847,6 +2847,13 @@ out:
 			pr_err("%s: Cannot initialize the chip ERROR %08X\n",
 				__func__, ret);
 		}
+
+		/* Reset after initialization */
+		ret = fts_system_reset();
+		if (ret < OK) {
+			pr_err("%s: Reset failed, ERROR %08X\n", __func__,
+			       ret);
+		}
 	}
 
 	ret = fts_init_sensing(info);
