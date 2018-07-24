@@ -235,6 +235,10 @@
 			linux,can-disable;
 		};
 	};
+
+	modemsmem {
+		compatible = "modemsmem";
+	};
 };
 
 &dsi_sim_vid {
