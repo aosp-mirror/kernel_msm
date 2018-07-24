@@ -237,6 +237,7 @@ struct qpnp_pon {
 	ktime_t			kpdpwr_last_release_time;
 	struct notifier_block   pon_nb;
 	bool			legacy_hard_reset_offset;
+	bool			report_key;
 };
 
 static int pon_ship_mode_en;
@@ -976,17 +977,19 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 			pon->kpdpwr_last_release_time = ktime_get();
 	}
 
-	/*
-	 * simulate press event in case release event occurred
-	 * without a press event
-	 */
-	if (!cfg->old_state && !key_status) {
-		input_report_key(pon->pon_input, cfg->key_code, 1);
+	if (pon->report_key) {
+		/*
+		 * simulate press event in case release event occurred
+		 * without a press event
+		 */
+		if (!cfg->old_state && !key_status) {
+			input_report_key(pon->pon_input, cfg->key_code, 1);
+			input_sync(pon->pon_input);
+		}
+
+		input_report_key(pon->pon_input, cfg->key_code, key_status);
 		input_sync(pon->pon_input);
 	}
-
-	input_report_key(pon->pon_input, cfg->key_code, key_status);
-	input_sync(pon->pon_input);
 
 	cfg->old_state = !!key_status;
 
@@ -1124,9 +1127,11 @@ static void bark_work_func(struct work_struct *work)
 	}
 
 	if (!(pon_rt_sts & QPNP_PON_RESIN_BARK_N_SET)) {
-		/* report the key event and enable the bark IRQ */
-		input_report_key(pon->pon_input, cfg->key_code, 0);
-		input_sync(pon->pon_input);
+		if (pon->report_key) {
+			/* report the key event and enable the bark IRQ */
+			input_report_key(pon->pon_input, cfg->key_code, 0);
+			input_sync(pon->pon_input);
+		}
 		enable_irq(cfg->bark_irq);
 	} else {
 		/* disable reset */
@@ -1168,9 +1173,11 @@ static irqreturn_t qpnp_resin_bark_irq(int irq, void *_pon)
 		goto err_exit;
 	}
 
-	/* report the key event */
-	input_report_key(pon->pon_input, cfg->key_code, 1);
-	input_sync(pon->pon_input);
+	if (pon->report_key) {
+		/* report the key event */
+		input_report_key(pon->pon_input, cfg->key_code, 1);
+		input_sync(pon->pon_input);
+	}
 	/* schedule work to check the bark status for key-release */
 	schedule_delayed_work(&pon->bark_work, QPNP_KEY_STATUS_DELAY);
 err_exit:
@@ -2596,6 +2603,15 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 
 	pon->legacy_hard_reset_offset = of_property_read_bool(pdev->dev.of_node,
 					"qcom,use-legacy-hard-reset-offset");
+	/* config whether to report key events */
+	rc = of_property_read_u32(pdev->dev.of_node, "qcom,report-key", &temp);
+	if (rc)
+		pon->report_key = false;
+	else
+		pon->report_key = !!temp;
+
+	dev_info(&pdev->dev, "qcom,report-key:%s\n",
+		 pon->report_key ? "true" : "false");
 
 	qpnp_pon_debugfs_init(pdev);
 	return 0;
