@@ -1138,6 +1138,89 @@ struct mock_param_matcher *struct_cmp(
 		const char *struct_name,
 		struct mock_struct_matcher_entry *entries);
 
+/**
+ * struct mock_param_capturer - used to capture parameter when matching
+ *
+ * Use the associated helper macros to access relevant fields.
+ * Example:
+ *
+ * .. code-block::c
+ *
+ *	static int some_test(struct test *test)
+ *	{
+ *		// imagine a mocked function: int add(int a, int b)
+ *		struct mock_param_capturer *capturer =
+ *			mock_int_capturer_create(test, any(test));
+ *		EXPECT_CALL(add(any(test), capturer_to_matcher(capturer)));
+ *		ASSERT_PARAM_CAPTURED(test, capturer);
+ *
+ *		int captured_value = mock_capturer_get(capturer, int);
+ *	}
+ */
+struct mock_param_capturer {
+	/* private: internal use only. */
+	struct mock_param_matcher matcher;
+	struct mock_param_matcher *child_matcher;
+	void *(*capture_param)(struct test *test, const void *param);
+	void *captured_param;
+};
+
+struct mock_param_capturer *mock_param_capturer_create(
+		struct test *test,
+		struct mock_param_matcher *child_matcher,
+		void *(*capture_param)(struct test *, const void *));
+
+/**
+ * mock_int_capturer_create() - creates a int parameter capturer
+ * @test: associated test
+ * @child_matcher: matcher used to match the integer
+ *
+ * The capturer will capture the value if the matcher is satisfied.
+ */
+struct mock_param_capturer *mock_int_capturer_create(
+		struct test *test, struct mock_param_matcher *child_matcher);
+
+/**
+ * mock_int_capturer_create() - creates a generic pointer parameter capturer
+ * @test: associated test
+ * @child_matcher: matcher used to match the pointer
+ *
+ * The capturer will capture the value if the matcher is satisfied
+ */
+struct mock_param_capturer *mock_ptr_capturer_create(
+		struct test *test, struct mock_param_matcher *child_matcher);
+
+/**
+ * capturer_to_matcher()
+ * @capturer: the param capturer
+ *
+ * Use this function when passing a capturer into an EXPECT_CALL() where a
+ * matcher would be expected. See the example for &struct mock_param_capturer.
+ */
+#define capturer_to_matcher(capturer) (&(capturer)->matcher)
+
+/**
+ * ASSERT_PARAM_CAPTURED(): Asserts that the capturer has captured a parameter.
+ * @test: the associated test
+ * @capturer: the param capturer
+ *
+ * See &struct mock_param_capturer for an example.
+ */
+#define ASSERT_PARAM_CAPTURED(test, capturer)				       \
+		ASSERT(test,						       \
+		       !IS_ERR_OR_NULL((capturer)->captured_param),	       \
+		       "Asserted " #capturer " captured param, but did not.")
+
+/**
+ * mock_capturer_get(): Returns the value captured by ``capturer``
+ * @capturer: the param capturer
+ * @type: the type of the value
+ *
+ * See &struct mock_param_capturer for an example.
+ */
+#define mock_capturer_get(capturer, type) \
+		CONVERT_TO_ACTUAL_TYPE(type, (capturer)->captured_param)
+
 struct mock_action *invoke(struct test *test,
 			   void *(*invokable)(struct test *,
 					      const void *params[],
