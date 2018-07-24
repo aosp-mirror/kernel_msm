@@ -1926,6 +1926,15 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 			goto err_mutex;
 		}
 
+		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGER_MS,
+				CS40L2X_INDEX_VIBE);
+		if (ret) {
+			dev_err(dev, "Failed to start playback\n");
+			goto err_mutex;
+		}
+
+		msleep(CS40L2X_PEAK_DELAY_MS);
+
 		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
 				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_VMON_NEGFS);
 		if (ret) {
@@ -1949,15 +1958,8 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMIN",
 				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_IMON_POSFS);
-		if (ret) {
-			dev_err(dev, "Failed to reset minimum IMON\n");
-			goto err_mutex;
-		}
-
-		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGER_MS,
-				CS40L2X_INDEX_VIBE);
 		if (ret)
-			dev_err(dev, "Failed to start playback\n");
+			dev_err(dev, "Failed to reset minimum IMON\n");
 		break;
 
 	case CS40L2X_INDEX_VIBE:
