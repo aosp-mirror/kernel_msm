@@ -34,6 +34,7 @@
 #include <linux/sched/rt.h>
 #include <linux/time.h>
 #include <linux/platform_data/nanohub.h>
+#include <linux/reboot.h>
 
 #include "main.h"
 #include "comms.h"
@@ -849,6 +850,13 @@ static ssize_t nanohub_sensorhal_status_get(struct device *dev,
 		"%d\n", atomic_read(&data->sensor_hal_alive));
 }
 
+static ssize_t nanohub_get_cmdline(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE,
+		"%s\n", saved_command_line);
+}
+
 static ssize_t fuelgauge_wakelock_time_get(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -1202,6 +1210,7 @@ static struct device_attribute attributes[] = {
 		nanohub_sensorhal_status_set),
 	__ATTR(fuelgauge_wakelock_time, 0440, fuelgauge_wakelock_time_get,
 		NULL),
+	__ATTR(cmdline, 0440, nanohub_get_cmdline, NULL),
 };
 
 static inline int nanohub_create_sensor(struct nanohub_data *data)
