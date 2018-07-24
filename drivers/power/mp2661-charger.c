@@ -415,6 +415,7 @@ static enum power_supply_property mp2661_battery_properties[] = {
     POWER_SUPPLY_PROP_BATTERY_ID,
     POWER_SUPPLY_PROP_RETAIL_MODE,
     POWER_SUPPLY_PROP_NOTIFY_USER_PARIED,
+    POWER_SUPPLY_PROP_VBUS_ONLINE_STATUS,
 };
 
 static int mp2661_get_prop_current_now(struct mp2661_chg *chip);
@@ -1497,6 +1498,9 @@ static int mp2661_battery_get_property(struct power_supply *psy,
         case POWER_SUPPLY_PROP_NOTIFY_USER_PARIED:
             val->intval = chip->notify_user_paired;
             break;
+        case POWER_SUPPLY_PROP_VBUS_ONLINE_STATUS:
+            val->intval = mp2661_is_chg_plugged_in(chip);
+			break;
         default:
             return -EINVAL;
     }
