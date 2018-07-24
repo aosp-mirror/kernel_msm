@@ -130,6 +130,8 @@ static int modem_smem_probe(struct platform_device *pdev)
 	struct device_node *np = NULL;
 	struct device *dev = NULL;
 	struct modem_smem_type *modem_smem;
+	struct device_node *dtnp = NULL;
+	u32 value = 0;
 
 	pr_debug("[SMEM] %s: Enter probe\n", __func__);
 
