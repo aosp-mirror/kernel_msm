@@ -94,10 +94,17 @@ struct mock_method {
 	struct list_head expectations;
 };
 
+enum mock_type {
+	MOCK_TYPE_NICE,
+	MOCK_TYPE_NAGGY,
+	MOCK_TYPE_STRICT
+};
+
 struct mock {
 	struct test_post_condition parent;
 	struct test *test;
 	struct list_head methods;
+	enum mock_type type;
 	const void *(*do_expect)(struct mock *mock,
 				 const char *method_name,
 				 const void *method_ptr,
@@ -105,6 +112,8 @@ struct mock {
 				 const void **params,
 				 int len);
 };
+
+#define DEFAULT_MOCK_TYPE MOCK_TYPE_NAGGY
 
 void mock_init_ctrl(struct test *test, struct mock *mock);
 
@@ -134,6 +143,60 @@ void mock_register_formatter(struct mock_param_formatter *formatter);
 void mock_unregister_formatter(struct mock_param_formatter *formatter);
 
 #define MOCK(name) name##_mock
+
+/**
+ * STRICT_MOCK() - sets the mock to be strict and returns the mock
+ * @mock: the mock
+ *
+ * For an example, see ``The Nice, the Strict, and the Naggy`` under
+ * ``Using KUnit``.
+ */
+#define STRICT_MOCK(mock) \
+({ \
+	mock_get_ctrl(mock)->type = MOCK_TYPE_STRICT; \
+	mock; \
+})
+
+static inline bool is_strict_mock(struct mock *mock)
+{
+	return mock->type == MOCK_TYPE_STRICT;
+}
+
+/**
+ * NICE_MOCK() - sets the mock to be nice and returns the mock
+ * @mock: the mock
+ *
+ * For an example, see ``The Nice, the Strict, and the Naggy`` under
+ * ``Using KUnit``.
+ */
+#define NICE_MOCK(mock) \
+({ \
+	mock_get_ctrl(mock)->type = MOCK_TYPE_NICE; \
+	mock; \
+})
+
+static inline bool is_nice_mock(struct mock *mock)
+{
+	return mock->type == MOCK_TYPE_NICE;
+}
+
+/**
+ * NAGGY_MOCK() - sets the mock to be naggy and returns the mock
+ * @mock: the mock
+ *
+ * For an example, see ``The Nice, the Strict, and the Naggy`` under
+ * ``Using KUnit``.
+ */
+#define NAGGY_MOCK(mock) \
+({ \
+	mock_get_ctrl(mock)->type = MOCK_TYPE_NAGGY; \
+	mock; \
+})
+
+static inline bool is_naggy_mock(struct mock *mock)
+{
+	return mock->type == MOCK_TYPE_NAGGY;
+}
 
 /**
  * EXPECT_CALL() - Declares a *call expectation* on a mock method or function.

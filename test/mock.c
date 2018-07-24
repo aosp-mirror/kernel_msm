@@ -79,6 +79,7 @@ void mock_init_ctrl(struct test *test, struct mock *mock)
 	mock->test = test;
 	INIT_LIST_HEAD(&mock->methods);
 	mock->do_expect = mock_do_expect;
+	mock->type = DEFAULT_MOCK_TYPE;
 	mock->parent.validate = mock_validate_wrapper;
 	list_add_tail(&mock->parent.node, &test->post_conditions);
 }
@@ -316,7 +317,12 @@ static struct mock_expectation *mock_apply_expectations(
 		mock_add_method_expectation_error(test, stream,
 			"Method was called with no expectations declared: ",
 			mock, method, type_names, params, len);
-		stream->commit(stream);
+		if (is_strict_mock(mock))
+			test->fail(test, stream);
+		else if (is_naggy_mock(mock))
+			stream->commit(stream);
+		else
+			stream->clear(stream);
 		return NULL;
 	}
 
@@ -346,7 +352,7 @@ static struct mock_expectation *mock_apply_expectations(
 		}
 	}
 
-	if (expectations_all_saturated) {
+	if (expectations_all_saturated && !is_nice_mock(mock)) {
 		mock_add_method_expectation_error(test, stream,
 			"Method was called with fully saturated expectations: ",
 			mock, method, type_names, params, len);
