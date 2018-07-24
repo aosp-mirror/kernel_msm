@@ -126,6 +126,7 @@ static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 		bool rebuild);
+static int synaptics_rmi4_hw_reset(struct synaptics_rmi4_data *rmi4_data);
 
 #ifdef CONFIG_DRM
 static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
@@ -184,6 +185,18 @@ static ssize_t synaptics_rmi4_wake_gesture_store(struct device *dev,
 static ssize_t synaptics_rmi4_synad_pid_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 #endif
+
+static ssize_t synaptics_rmi4_hw_reset_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count);
+
+static ssize_t synaptics_rmi4_config_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t synaptics_rmi4_irq_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t synaptics_rmi4_irq_status_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count);
 
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf);
@@ -716,6 +729,15 @@ static struct device_attribute attrs[] = {
 			synaptics_rmi4_show_error,
 			synaptics_rmi4_synad_pid_store),
 #endif
+	__ATTR(hw_reset, 0220,
+			synaptics_rmi4_show_error,
+			synaptics_rmi4_hw_reset_store),
+	__ATTR(config, 0444,
+			synaptics_rmi4_config_show,
+			synaptics_rmi4_store_error),
+	__ATTR(irq_status, 0644,
+			synaptics_rmi4_irq_status_show,
+			synaptics_rmi4_irq_status_store),
 };
 
 static struct kobj_attribute virtual_key_map_attr = {
@@ -918,6 +940,81 @@ static ssize_t synaptics_rmi4_synad_pid_store(struct device *dev,
 	return count;
 }
 #endif
+
+static ssize_t synaptics_rmi4_hw_reset_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	unsigned int input;
+	int retval = 0;
+
+	if (sscanf(buf, "%u", &input) != 1)
+		return -EINVAL;
+
+	if (input == 1) {
+		retval = synaptics_rmi4_hw_reset(rmi4_data);
+		if (retval < 0) {
+			pr_err("%s: HW reset failed, error = %d\n",
+					__func__, retval);
+		}
+	} else if (input == 2) {
+		retval = synaptics_rmi4_reset_device(rmi4_data, false);
+		if (retval < 0) {
+			pr_err("%s: SW reset failed, error = %d\n",
+					__func__, retval);
+		}
+	} else
+		return -EINVAL;
+
+	return count;
+}
+
+static ssize_t synaptics_rmi4_config_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+
+	return snprintf(buf, PAGE_SIZE, "%s\n", rmi4_data->config_id);
+}
+
+static ssize_t synaptics_rmi4_irq_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	size_t count = 0;
+
+	count = snprintf(buf, PAGE_SIZE, "%d\n", rmi4_data->irq_enabled);
+
+	return count;
+}
+
+static ssize_t synaptics_rmi4_irq_status_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	unsigned int input;
+
+	if (sscanf(buf, "%u", &input) != 1)
+		return -EINVAL;
+
+	mutex_lock(&(rmi4_data->rmi4_irq_enable_mutex));
+
+	if (input == 0) {
+		disable_irq(rmi4_data->irq);
+		rmi4_data->irq_enabled = false;
+	} else if (input == 1) {
+		enable_irq(rmi4_data->irq);
+		rmi4_data->irq_enabled = true;
+	} else
+		return -EINVAL;
+
+	pr_info("%s: interrupt %s\n", __func__,
+			(rmi4_data->irq_enabled) ? "enable" : "disable");
+
+		mutex_unlock(&(rmi4_data->rmi4_irq_enable_mutex));
+
+	return count;
+}
 
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
@@ -3750,6 +3847,39 @@ static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data)
 	rmi4_data->fingers_on_2d = false;
 
 	return 0;
+}
+
+static int synaptics_rmi4_hw_reset(struct synaptics_rmi4_data *rmi4_data)
+{
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
+	int retval = 0;
+
+	pr_info("%s", __func__);
+
+	mutex_lock(&(rmi4_data->rmi4_reset_mutex));
+	if (bdata->reset_gpio >= 0) {
+		gpio_set_value(bdata->reset_gpio, bdata->reset_on_state);
+		msleep(bdata->reset_active_ms);
+		gpio_set_value(bdata->reset_gpio, !bdata->reset_on_state);
+	} else {
+		pr_err("%s: Not support HW reset\n", __func__);
+		retval = -ENODEV;
+		goto unlock;
+	}
+
+	if (rmi4_data->hw_if->ui_hw_init) {
+		retval = rmi4_data->hw_if->ui_hw_init(rmi4_data);
+		if (retval < 0) {
+			pr_err("%s: Failed to initialize hardware interface\n",
+					__func__);
+			goto unlock;
+		}
+	}
+
+unlock:
+	mutex_unlock(&(rmi4_data->rmi4_reset_mutex));
+	return retval;
 }
 
 static int synaptics_rmi4_sw_reset(struct synaptics_rmi4_data *rmi4_data)
