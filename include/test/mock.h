@@ -121,6 +121,18 @@ struct mock_expectation *mock_add_matcher(struct mock *mock,
 					  struct mock_param_matcher *matchers[],
 					  int len);
 
+struct mock_param_formatter {
+	struct list_head node;
+	const char *type_name;
+	void (*format)(struct mock_param_formatter *formatter,
+		       struct test_stream *stream,
+		       const void *param);
+};
+
+void mock_register_formatter(struct mock_param_formatter *formatter);
+
+void mock_unregister_formatter(struct mock_param_formatter *formatter);
+
 #define MOCK(name) name##_mock
 
 /**
@@ -799,5 +811,42 @@ struct mock_param_matcher *struct_cmp(
 		struct test *test,
 		const char *struct_name,
 		struct mock_struct_matcher_entry *entries);
+
+struct mock_struct_formatter_entry {
+	size_t member_offset;
+	struct mock_param_formatter *formatter;
+};
+
+static inline void init_mock_struct_formatter_entry_internal(
+		struct mock_struct_formatter_entry *entry,
+		size_t offset,
+		struct mock_param_formatter *formatter)
+{
+	entry->member_offset = offset;
+	entry->formatter = formatter;
+}
+
+#define INIT_MOCK_STRUCT_FORMATTER_ENTRY(entry, type, member, formatter)       \
+		init_mock_struct_formatter_entry_internal(entry,	       \
+							  offsetof(type,       \
+								   member),    \
+								   formatter)
+
+static inline void INIT_MOCK_STRUCT_FORMATTER_ENTRY_LAST(
+		struct mock_struct_formatter_entry *entry)
+{
+	entry->formatter = NULL;
+}
+
+struct mock_param_formatter *mock_struct_formatter(
+		struct test *test,
+		const char *struct_name,
+		struct mock_struct_formatter_entry *entries);
+
+struct mock_param_formatter *mock_find_formatter(const char *type_name);
+
+#define FORMATTER_FROM_TYPE(type) mock_find_formatter(#type)
+
+extern struct mock_param_formatter unknown_formatter[];
 
 #endif /* _TEST_MOCK_H */

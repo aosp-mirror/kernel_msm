@@ -186,15 +186,53 @@ int mock_set_default_action(struct mock *mock,
 	return 0;
 }
 
+struct mock_param_formatter_repo {
+	struct list_head formatters;
+};
+
+static struct mock_param_formatter_repo mock_param_formatter_repo = {
+	.formatters = LIST_HEAD_INIT(mock_param_formatter_repo.formatters),
+};
+
+void mock_register_formatter(struct mock_param_formatter *formatter)
+{
+	list_add_tail(&formatter->node, &mock_param_formatter_repo.formatters);
+}
+
+void mock_unregister_formatter(struct mock_param_formatter *formatter)
+{
+	list_del(&formatter->node);
+}
+
+struct mock_param_formatter *mock_find_formatter(const char *type_name)
+{
+	struct mock_param_formatter *formatter;
+
+	list_for_each_entry(formatter,
+			    &mock_param_formatter_repo.formatters,
+			    node) {
+		if (!strcmp(type_name, formatter->type_name))
+			return formatter;
+	}
+
+	return NULL;
+}
+
 static void mock_format_param(struct test_stream *stream,
 			      const char *type_name,
 			      const void *param)
 {
-	/*
-	 * Cannot find formatter, so just print the pointer of the
-	 * symbol.
-	 */
-	stream->add(stream, "<%pS>", param);
+	struct mock_param_formatter *formatter;
+
+	formatter = mock_find_formatter(type_name);
+	if (formatter)
+		formatter->format(formatter, stream, param);
+	else
+		/*
+		 * Cannot find formatter, so just print the pointer of the
+		 * symbol.
+		 */
+		stream->add(stream, "<%pS>", param);
 }
 
 static void mock_add_method_declaration_to_stream(

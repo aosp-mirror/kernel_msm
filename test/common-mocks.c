@@ -383,3 +383,135 @@ DEFINE_RETURN_ACTION_WITH_TYPENAME(longlong, long long);
 DEFINE_RETURN_ACTION_WITH_TYPENAME(ulonglong, unsigned long long);
 DEFINE_RETURN_ACTION_WITH_TYPENAME(ptr, void *);
 
+struct mock_param_integer_formatter {
+	struct mock_param_formatter formatter;
+	const char *fmt_str;
+};
+
+static void mock_format_integer(struct mock_param_formatter *pformatter,
+				struct test_stream *stream,
+				const void *pparam)
+{
+	struct mock_param_integer_formatter *formatter =
+			container_of(pformatter,
+				     struct mock_param_integer_formatter,
+				     formatter);
+	long long param = CONVERT_TO_ACTUAL_TYPE(long long, pparam);
+
+	stream->add(stream, formatter->fmt_str, param);
+}
+
+#define INTEGER_FORMATTER_INIT(type, fmt) { \
+	.formatter = { \
+		.type_name = #type, \
+		.format = mock_format_integer, \
+	}, \
+	.fmt_str = fmt, \
+}
+
+static struct mock_param_integer_formatter integer_formatters[] = {
+	INTEGER_FORMATTER_INIT(u8, "%hhu"),
+	INTEGER_FORMATTER_INIT(u16, "%hu"),
+	INTEGER_FORMATTER_INIT(u32, "%u"),
+	INTEGER_FORMATTER_INIT(u64, "%llu"),
+	INTEGER_FORMATTER_INIT(char, "%c"),
+	INTEGER_FORMATTER_INIT(unsigned char, "%hhu"),
+	INTEGER_FORMATTER_INIT(signed char, "%hhd"),
+	INTEGER_FORMATTER_INIT(short, "%hd"),
+	INTEGER_FORMATTER_INIT(unsigned short, "%hu"),
+	INTEGER_FORMATTER_INIT(int, "%d"),
+	INTEGER_FORMATTER_INIT(unsigned int, "%u"),
+	INTEGER_FORMATTER_INIT(long, "%ld"),
+	INTEGER_FORMATTER_INIT(unsigned long, "%lu"),
+	INTEGER_FORMATTER_INIT(long long, "%lld"),
+	INTEGER_FORMATTER_INIT(unsigned long long, "%llu"),
+	INTEGER_FORMATTER_INIT(void *, "%px"),
+};
+
+static void mock_format_string(struct mock_param_formatter *formatter,
+			       struct test_stream *stream,
+			       const void *pparam)
+{
+	const char *param = CONVERT_TO_ACTUAL_TYPE(const char *, pparam);
+
+	stream->add(stream, "%s", param);
+}
+
+static struct mock_param_formatter string_formatter = {
+	.type_name = "const char *",
+	.format = mock_format_string,
+};
+
+static void mock_format_unknown(struct mock_param_formatter *formatter,
+				struct test_stream *stream,
+				const void *param)
+{
+	stream->add(stream, "%pS", param);
+}
+
+struct mock_param_formatter unknown_formatter[] = {
+	{
+		.type_name = "<unknown>",
+		.format = mock_format_unknown,
+	},
+	{},
+};
+
+static int mock_register_all_formatters(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(integer_formatters); i++)
+		mock_register_formatter(&integer_formatters[i].formatter);
+
+	mock_register_formatter(&string_formatter);
+
+	return 0;
+}
+test_pure_initcall(mock_register_all_formatters);
+
+struct mock_struct_formatter {
+	struct mock_param_formatter formatter;
+	const char *type_name;
+	struct mock_struct_formatter_entry *entries;
+};
+
+static void mock_format_struct(struct mock_param_formatter *pformatter,
+			       struct test_stream *stream,
+			       const void *pparam)
+{
+	struct mock_struct_formatter *formatter =
+			container_of(pformatter,
+				     struct mock_struct_formatter,
+				     formatter);
+	struct mock_struct_formatter_entry *entry;
+	const char *param = CONVERT_TO_ACTUAL_TYPE(const char *, pparam);
+	const char *member_ptr;
+
+	stream->add(stream, "%s {", formatter->type_name);
+	for (entry = formatter->entries; entry->formatter; entry++) {
+		member_ptr = param + entry->member_offset;
+		entry->formatter->format(entry->formatter, stream, member_ptr);
+		stream->add(stream, ", ");
+	}
+	stream->add(stream, "}");
+}
+
+struct mock_param_formatter *mock_struct_formatter(
+		struct test *test,
+		const char *type_name,
+		struct mock_struct_formatter_entry *entries)
+{
+	struct mock_struct_formatter *formatter;
+
+	formatter = test_kzalloc(test, sizeof(*formatter), GFP_KERNEL);
+	if (!formatter)
+		return NULL;
+
+	formatter->formatter.type_name = type_name;
+	formatter->formatter.format = mock_format_struct;
+	formatter->type_name = type_name;
+	formatter->entries = entries;
+
+	return &formatter->formatter;
+}
