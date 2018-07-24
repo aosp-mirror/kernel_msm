@@ -30,6 +30,11 @@ module_param_named(
 	fake_port_temp, fake_port_temp, int, 0600
 );
 
+static bool enable = true;
+module_param_named(
+	enable, enable, bool, 0600
+);
+
 struct overheat_info {
 	struct device              *dev;
 	struct power_supply        *usb_psy;
@@ -237,7 +242,7 @@ static inline int get_usb_port_temp(struct overheat_info *ovh_info)
 		temp = fake_port_temp;
 
 	if (ovh_info->overheat_mitigation || temp >= ovh_info->begin_temp)
-		dev_info(ovh_info->dev, "USB port temp is currently %d\n",
+		dev_info(ovh_info->dev, "Overheat triggered: USB port temp is %d\n",
 			 temp);
 	return temp;
 }
@@ -274,23 +279,26 @@ static void port_overheat_work(struct work_struct *work)
 		__pm_stay_awake(&ovh_info->overheat_ws);
 	ovh_info->overheat_work_running = true;
 
-	temp = get_usb_port_temp(ovh_info);
-	if (temp < 0)
-		goto rerun;
-
-	// Check USB connection status if it's safe to do so
-	if (!ovh_info->overheat_mitigation || temp < ovh_info->clear_temp) {
-		ret = update_usb_status(ovh_info);
-		if (ret < 0)
+	if (enable) {
+		temp = get_usb_port_temp(ovh_info);
+		if (temp < 0)
 			goto rerun;
+
+		// Check USB connection status if it's safe to do so
+		if (!ovh_info->overheat_mitigation ||
+		    temp < ovh_info->clear_temp) {
+			ret = update_usb_status(ovh_info);
+			if (ret < 0)
+				goto rerun;
+		}
 	}
 
-	if (ovh_info->overheat_mitigation &&
-	    temp < ovh_info->clear_temp && ovh_info->usb_replug) {
+	if (ovh_info->overheat_mitigation && (!enable ||
+	    (temp < ovh_info->clear_temp && ovh_info->usb_replug))) {
 		dev_err(ovh_info->dev, "Port overheat mitigated\n");
 		resume_usb(ovh_info);
 	} else if (!ovh_info->overheat_mitigation &&
-		 temp > ovh_info->begin_temp) {
+		 enable && temp > ovh_info->begin_temp) {
 		dev_err(ovh_info->dev, "Port overheat triggered\n");
 		suspend_usb(ovh_info);
 		goto rerun;
