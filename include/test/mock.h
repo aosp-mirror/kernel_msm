@@ -379,6 +379,24 @@ static inline bool is_naggy_mock(struct mock *mock)
 		struct MOCK(struct_name) *MOCK_INIT_ID(struct_name)(	       \
 				struct test *test)
 
+#define DECLARE_VOID_CLASS_MOCK_HANDLE_INDEX_INTERNAL(name,		       \
+						      handle_index,	       \
+						      return_type,	       \
+						      param_types...)	       \
+		DECLARE_MOCK_COMMON(name,				       \
+				    handle_index,			       \
+				    return_type,			       \
+				    param_types)
+
+#define DECLARE_VOID_CLASS_MOCK_HANDLE_INDEX(name,			       \
+					     handle_index,		       \
+					     return_type,		       \
+					     param_types...)		       \
+		DECLARE_VOID_CLASS_MOCK_HANDLE_INDEX_INTERNAL(name,	       \
+							      handle_index,    \
+							      return_type,     \
+							      param_types)
+
 /**
  * CONSTRUCT_MOCK()
  * @struct_name: name of the class
@@ -628,6 +646,41 @@ static inline bool is_naggy_mock(struct mock *mock)
 									       \
 			return mock_obj;				       \
 		}
+
+struct MOCK(void) {
+	struct mock	ctrl;
+	void		*trgt;
+};
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+static inline struct mock *from_void_ptr_to_mock(const void *ptr)
+{
+	struct MOCK(void) *mock_void_ptr = ptr;
+
+	return mock_get_ctrl(mock_void_ptr);
+}
+#pragma GCC diagnostic pop
+
+#define DEFINE_VOID_CLASS_MOCK_HANDLE_INDEX_INTERNAL(name,		       \
+						     handle_index,	       \
+						     return_type,	       \
+						     param_types...)	       \
+		DEFINE_MOCK_COMMON(name,				       \
+				   handle_index,			       \
+				   from_void_ptr_to_mock,		       \
+				   return_type,				       \
+				   param_types)
+#define DEFINE_VOID_CLASS_MOCK_HANDLE_INDEX(name,			       \
+					    handle_index,		       \
+					    return_type,		       \
+					    param_types...)		       \
+		DEFINE_VOID_CLASS_MOCK_HANDLE_INDEX_INTERNAL(name,	       \
+							     handle_index,     \
+							     return_type,      \
+							     param_types)
+
+DECLARE_STRUCT_CLASS_MOCK_INIT(void);
 
 #define CONVERT_TO_ACTUAL_TYPE(type, ptr) (*((type *) ptr))
 

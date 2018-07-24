@@ -47,8 +47,19 @@ static int test_struct_init(struct MOCK(test_struct) *mock_test_struct)
 
 DEFINE_STRUCT_CLASS_MOCK_INIT(test_struct, test_struct_init);
 
+DECLARE_VOID_CLASS_MOCK_HANDLE_INDEX(METHOD(test_void_ptr_func),
+				     HANDLE_INDEX(0),
+				     RETURNS(int),
+				     PARAMS(void*, int));
+
+DEFINE_VOID_CLASS_MOCK_HANDLE_INDEX(METHOD(test_void_ptr_func),
+				    HANDLE_INDEX(0),
+				    RETURNS(int),
+				    PARAMS(void*, int));
+
 struct mock_macro_context {
 	struct MOCK(test_struct) *mock_test_struct;
+	struct MOCK(void) *mock_void_ptr;
 };
 
 #define TO_STR_INTERNAL(...) #__VA_ARGS__
@@ -184,6 +195,19 @@ static void mock_macro_test_generated_method_code_works(struct test *test)
 	test_struct->non_first_slot_param(5, test_struct);
 }
 
+static void mock_macro_test_generated_method_void_code_works(struct test *test)
+{
+	struct mock_macro_context *ctx = test->priv;
+	struct MOCK(void) *mock_void_ptr = ctx->mock_void_ptr;
+	struct mock_expectation *handle;
+
+	handle = EXPECT_CALL(test_void_ptr_func(mock_get_ctrl(mock_void_ptr),
+						int_eq(test, 3)));
+	handle->action = int_return(test, 0);
+
+	test_void_ptr_func(mock_void_ptr, 3);
+}
+
 static int mock_macro_test_init(struct test *test)
 {
 	struct mock_macro_context *ctx;
@@ -195,6 +219,10 @@ static int mock_macro_test_init(struct test *test)
 
 	ctx->mock_test_struct = CONSTRUCT_MOCK(test_struct, test);
 	if (!ctx->mock_test_struct)
+		return -EINVAL;
+
+	ctx->mock_void_ptr = CONSTRUCT_MOCK(void, test);
+	if (!ctx->mock_void_ptr)
 		return -EINVAL;
 
 	return 0;
@@ -209,6 +237,7 @@ static struct test_case mock_macro_test_cases[] = {
 	TEST_CASE(mock_macro_param_list_from_types_basic),
 	TEST_CASE(mock_macro_arg_names_from_types),
 	TEST_CASE(mock_macro_test_generated_method_code_works),
+	TEST_CASE(mock_macro_test_generated_method_void_code_works),
 	{},
 };
 

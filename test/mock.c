@@ -8,6 +8,15 @@
 
 #include <test/mock.h>
 
+static int mock_void_ptr_init(struct MOCK(void) *mock_void_ptr)
+{
+	mock_void_ptr->trgt = mock_void_ptr;
+
+	return 0;
+}
+
+DEFINE_STRUCT_CLASS_MOCK_INIT(void, mock_void_ptr_init);
+
 static bool mock_match_params(struct mock_matcher *matcher,
 		       struct test_stream *stream,
 		       const void **params,
