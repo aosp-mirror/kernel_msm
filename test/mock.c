@@ -93,6 +93,47 @@ void mock_init_ctrl(struct test *test, struct mock *mock)
 	list_add_tail(&mock->parent.node, &test->post_conditions);
 }
 
+struct global_mock {
+	struct mock ctrl;
+	bool is_initialized;
+};
+
+static struct global_mock global_mock = {
+	.is_initialized = false,
+};
+
+static int mock_init_global_mock(struct test_initcall *initcall,
+				 struct test *test)
+{
+	BUG_ON(global_mock.is_initialized);
+
+	mock_init_ctrl(test, &global_mock.ctrl);
+	global_mock.is_initialized = true;
+
+	return 0;
+}
+
+static void mock_exit_global_mock(struct test_initcall *initcall)
+{
+	BUG_ON(!global_mock.is_initialized);
+
+	global_mock.ctrl.test = NULL;
+	global_mock.is_initialized = false;
+}
+
+static struct test_initcall global_mock_initcall = {
+	.init = mock_init_global_mock,
+	.exit = mock_exit_global_mock,
+};
+test_register_initcall(global_mock_initcall);
+
+struct mock *mock_get_global_mock(void)
+{
+	BUG_ON(!global_mock.is_initialized);
+
+	return &global_mock.ctrl;
+}
+
 static struct mock_method *mock_lookup_method(struct mock *mock,
 					      const void *method_ptr)
 {

@@ -142,6 +142,8 @@ void mock_register_formatter(struct mock_param_formatter *formatter);
 
 void mock_unregister_formatter(struct mock_param_formatter *formatter);
 
+struct mock *mock_get_global_mock(void);
+
 #define MOCK(name) name##_mock
 
 /**
@@ -280,6 +282,12 @@ static inline bool is_naggy_mock(struct mock *mock)
 		DECLARE_MOCK_CLIENT(name, return_type, param_types);	       \
 		DECLARE_MOCK_MASTER(name, handle_index, param_types)
 
+#define DECLARE_MOCK_FUNC_CLIENT(name, return_type, param_types...) \
+		DECLARE_MOCK_CLIENT(name, return_type, param_types)
+
+#define DECLARE_MOCK_FUNC_MASTER(name, param_types...) \
+		DECLARE_MOCK_MASTER(name, MOCK_MAX_PARAMS, param_types)
+
 #define DECLARE_STRUCT_CLASS_MOCK_STRUCT(struct_name)			       \
 		struct MOCK(struct_name) {				       \
 			struct mock		ctrl;			       \
@@ -409,6 +417,16 @@ static inline bool is_naggy_mock(struct mock *mock)
  */
 #define CONSTRUCT_MOCK(struct_name, test) MOCK_INIT_ID(struct_name)(test)
 
+#define DECLARE_FUNCTION_MOCK_INTERNAL(name, return_type, param_types...)      \
+		DECLARE_MOCK_FUNC_CLIENT(name, return_type, param_types);      \
+		DECLARE_MOCK_FUNC_MASTER(name, param_types);
+
+#define DECLARE_FUNCTION_MOCK(name, return_type, param_types...) \
+		DECLARE_FUNCTION_MOCK_INTERNAL(name, return_type, param_types)
+
+#define DECLARE_FUNCTION_MOCK_VOID_RETURN(name, param_types...) \
+		DECLARE_FUNCTION_MOCK(name, void, param_types)
+
 #define DEFINE_MOCK_CLIENT_COMMON(name,					       \
 				  handle_index,				       \
 				  MOCK_SOURCE,				       \
@@ -486,6 +504,31 @@ static inline bool is_naggy_mock(struct mock *mock)
 						 NO_RETURN,		       \
 						 param_types)
 
+#define FUNC_MOCK_SOURCE(ctx, handle_index) mock_get_global_mock()
+#define DEFINE_MOCK_FUNC_CLIENT_COMMON(name,				       \
+				       return_type,			       \
+				       RETURN,				       \
+				       param_types...)			       \
+		DEFINE_MOCK_CLIENT_COMMON(name,				       \
+					  MOCK_MAX_PARAMS,		       \
+					  FUNC_MOCK_SOURCE,		       \
+					  name,				       \
+					  return_type,			       \
+					  RETURN,			       \
+					  param_types)
+
+#define DEFINE_MOCK_FUNC_CLIENT(name, return_type, param_types...)	       \
+		DEFINE_MOCK_FUNC_CLIENT_COMMON(name,			       \
+					       return_type,		       \
+					       CAST_AND_RETURN,		       \
+					       param_types)
+
+#define DEFINE_MOCK_FUNC_CLIENT_VOID_RETURN(name, param_types...)	       \
+		DEFINE_MOCK_FUNC_CLIENT_COMMON(name,			       \
+					       void,			       \
+					       NO_RETURN,		       \
+					       param_types)
+
 #define DEFINE_MOCK_MASTER_COMMON_INTERNAL(name,			       \
 					   ctrl_index,			       \
 					   MOCK_SOURCE,			       \
@@ -518,6 +561,13 @@ static inline bool is_naggy_mock(struct mock *mock)
 		DEFINE_MOCK_MASTER_COMMON(name,				       \
 					  ctrl_index,			       \
 					  CLASS_MOCK_MASTER_SOURCE,	       \
+					  param_types)
+
+#define FUNC_MOCK_CLIENT_SOURCE(ctrl_index) mock_get_global_mock()
+#define DEFINE_MOCK_FUNC_MASTER(name, param_types...)			       \
+		DEFINE_MOCK_MASTER_COMMON(name,				       \
+					  MOCK_MAX_PARAMS,		       \
+					  FUNC_MOCK_CLIENT_SOURCE,	       \
 					  param_types)
 
 #define DEFINE_MOCK_COMMON(name,					       \
@@ -681,6 +731,63 @@ static inline struct mock *from_void_ptr_to_mock(const void *ptr)
 							     param_types)
 
 DECLARE_STRUCT_CLASS_MOCK_INIT(void);
+
+#define DEFINE_FUNCTION_MOCK_INTERNAL(name, return_type, param_types...)       \
+		DEFINE_MOCK_FUNC_CLIENT(name, return_type, param_types);       \
+		DEFINE_MOCK_FUNC_MASTER(name, param_types)
+
+/**
+ * DEFINE_FUNCTION_MOCK()
+ * @name: name of the function
+ * @return_type: return type of the function
+ * @...: parameter types of the function
+ *
+ * Same as DEFINE_STRUCT_CLASS_MOCK() except can be used to mock any function
+ * declared %__mockable or DEFINE_REDIRECT_MOCKABLE()
+ */
+#define DEFINE_FUNCTION_MOCK(name, return_type, param_types...) \
+		DEFINE_FUNCTION_MOCK_INTERNAL(name, return_type, param_types)
+
+#define DEFINE_FUNCTION_MOCK_VOID_RETURN_INTERNAL(name, param_types...)	       \
+		DEFINE_MOCK_FUNC_CLIENT_VOID_RETURN(name, param_types);	       \
+		DEFINE_MOCK_FUNC_MASTER(name, param_types)
+
+/**
+ * DEFINE_FUNCTION_MOCK_VOID_RETURN()
+ * @name: name of the function
+ * @...: parameter types of the function
+ *
+ * Same as DEFINE_FUNCTION_MOCK() except the method has a ``void`` return
+ * type.
+ */
+#define DEFINE_FUNCTION_MOCK_VOID_RETURN(name, param_types...) \
+		DEFINE_FUNCTION_MOCK_VOID_RETURN_INTERNAL(name, param_types)
+
+#if IS_ENABLED(CONFIG_TEST)
+
+/**
+ * __mockable - A function decorator that allows the function to be mocked.
+ *
+ * Example:
+ *
+ * .. code-block:: c
+ *
+ *	int __mockable example(int arg) { ... }
+ */
+#define __mockable __weak
+
+/**
+ * __visible_for_testing - Makes a static function visible when testing.
+ *
+ * A macro that replaces the `static` specifier on functions and global
+ * variables that is static when compiled normally and visible when compiled for
+ * tests.
+ */
+#define __visible_for_testing
+#else
+#define __mockable
+#define __visible_for_testing static
+#endif
 
 #define CONVERT_TO_ACTUAL_TYPE(type, ptr) (*((type *) ptr))
 

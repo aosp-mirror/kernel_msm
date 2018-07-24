@@ -57,6 +57,8 @@ DEFINE_VOID_CLASS_MOCK_HANDLE_INDEX(METHOD(test_void_ptr_func),
 				    RETURNS(int),
 				    PARAMS(void*, int));
 
+DEFINE_FUNCTION_MOCK(add, RETURNS(int), PARAMS(int, int));
+
 struct mock_macro_context {
 	struct MOCK(test_struct) *mock_test_struct;
 	struct MOCK(void) *mock_void_ptr;
@@ -208,6 +210,16 @@ static void mock_macro_test_generated_method_void_code_works(struct test *test)
 	test_void_ptr_func(mock_void_ptr, 3);
 }
 
+static void mock_macro_test_generated_function_code_works(struct test *test)
+{
+	struct mock_expectation *handle;
+
+	handle = EXPECT_CALL(add(int_eq(test, 4), int_eq(test, 3)));
+	handle->action = int_return(test, 7);
+
+	EXPECT_EQ(test, 7, add(4, 3));
+}
+
 static int mock_macro_test_init(struct test *test)
 {
 	struct mock_macro_context *ctx;
@@ -238,6 +250,7 @@ static struct test_case mock_macro_test_cases[] = {
 	TEST_CASE(mock_macro_arg_names_from_types),
 	TEST_CASE(mock_macro_test_generated_method_code_works),
 	TEST_CASE(mock_macro_test_generated_method_void_code_works),
+	TEST_CASE(mock_macro_test_generated_function_code_works),
 	{},
 };
 
