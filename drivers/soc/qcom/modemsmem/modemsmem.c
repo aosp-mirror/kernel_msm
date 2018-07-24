@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Google Inc.
  *
- *     @file   kernel/drivers/modemsmem/modemsmem.c
+ *     @file   kernel/drivers/soc/qcom/modemsmem/modemsmem.c
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,10 @@
 #define FACTORY_STR			"factory"
 #define FFBM00_STR			"ffbm-00"
 #define FFBM01_STR			"ffbm-01"
+#define DEVICE_TREE_CDT_CDB2_PATH	"/chosen/cdt/cdb2"
+#define FTM_ON				"ftm_on"
+#define FTM_OFF				"ftm_off"
+
 
 static char bootmode[BOOTMODE_LENGTH];
 
@@ -54,22 +58,62 @@ static ssize_t modem_smem_show(struct device *d,
 	if (modem_smem) {
 		return snprintf(buf, PAGE_SIZE,
 				"version:0x%x\n"
+				"modem_flag:0x%x\n"
 				"major_id:0x%x\n"
 				"minor_id:0x%x\n"
 				"subtype:0x%x\n"
 				"platform:0x%x\n"
-				"ftm:0x%x\n",
+				"efs_magic:0x%x\n"
+				"ftm_magic:0x%x\n",
 				modem_smem->version,
+				modem_smem->modem_flag,
 				modem_smem->major_id,
 				modem_smem->minor_id,
 				modem_smem->subtype,
 				modem_smem->platform,
+				modem_smem->efs_magic,
 				modem_smem->ftm_magic);
 	} else
 		return snprintf(buf, PAGE_SIZE, "The modem smem is null\n");
 }
 
-static DEVICE_ATTR(modem_smem, 0664, modem_smem_show, NULL);
+static ssize_t modem_smem_store(struct device *d,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	struct modem_smem_type *modem_smem;
+
+	modem_smem = smem_alloc(SMEM_ID_VENDOR0,
+				sizeof(struct modem_smem_type),
+				0, SMEM_ANY_HOST_FLAG);
+
+	if (modem_smem == NULL) {
+		dev_err(d, "smem alloc fail\n");
+		return count;
+	}
+
+	if (strncmp(bootmode, FACTORY_STR, sizeof(FACTORY_STR)) &&
+	strncmp(bootmode, FFBM00_STR, sizeof(FFBM00_STR)) &&
+	strncmp(bootmode, FFBM01_STR, sizeof(FFBM01_STR))) {
+		dev_err(d, "The action not allowed in normal bootmode\n");
+		return count;
+	}
+
+	if (!strncmp(buf, FTM_ON, sizeof(FTM_ON) - 1))
+		modem_smem_set_u32(modem_smem, ftm_magic, MODEM_FTM_MAGIC);
+	else if (!strncmp(buf, FTM_OFF, sizeof(FTM_OFF) - 1))
+		modem_smem_set_u32(modem_smem, ftm_magic, 0);
+	else {
+		dev_err(d, "Unsupport action %s\n", buf);
+		return count;
+	}
+	dev_info(d, "Set %s mode via sysfs\n", buf);
+
+	return count;
+}
+
+static DEVICE_ATTR(modem_smem, 0664, modem_smem_show, modem_smem_store);
 static struct attribute *modem_smem_attributes[] = {
 	&dev_attr_modem_smem.attr,
 	NULL
@@ -136,6 +180,10 @@ static int modem_smem_probe(struct platform_device *pdev)
 	modem_smem_set_u32(modem_smem, platform, socinfo_get_platform_type());
 
 	modem_smem_set_u32(modem_smem, subtype, socinfo_get_platform_subtype());
+
+	dtnp = of_find_node_by_path(DEVICE_TREE_CDT_CDB2_PATH);
+	if (dtnp && !of_property_read_u32(dtnp, "modem_flag", &value))
+		modem_smem_set_u32(modem_smem, modem_flag, value);
 
 	if ((!strncmp(bootmode, FACTORY_STR, sizeof(FACTORY_STR))) ||
 	(!strncmp(bootmode, FFBM00_STR, sizeof(FFBM00_STR))) ||
