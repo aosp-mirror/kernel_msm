@@ -282,6 +282,13 @@ static inline bool is_naggy_mock(struct mock *mock)
 		DECLARE_MOCK_CLIENT(name, return_type, param_types);	       \
 		DECLARE_MOCK_MASTER(name, handle_index, param_types)
 
+#define DECLARE_REDIRECT_MOCKABLE(name, return_type, param_types...)	       \
+		return_type REAL_ID(name)(param_types);			       \
+		return_type name(param_types);				       \
+		void *INVOKE_ID(name)(struct test *test,		       \
+				      const void *params[],		       \
+				      int len)
+
 #define DECLARE_MOCK_FUNC_CLIENT(name, return_type, param_types...) \
 		DECLARE_MOCK_CLIENT(name, return_type, param_types)
 
@@ -462,6 +469,100 @@ static inline bool is_naggy_mock(struct mock *mock)
 			}						       \
 			RETURN(return_type, retval);			       \
 		}
+
+#if IS_ENABLED(CONFIG_TEST)
+#define DEFINE_INVOKABLE(name, return_type, RETURN_ASSIGN, param_types...)     \
+		void *INVOKE_ID(name)(struct test *test,		       \
+				      const void *params[],		       \
+				      int len) {			       \
+			return_type *retval;				       \
+									       \
+			ASSERT_EQ(test, NUM_VA_ARGS(param_types), len);	       \
+			retval = test_kzalloc(test,			       \
+					      sizeof(*retval),		       \
+					      GFP_KERNEL);		       \
+			ASSERT_NOT_ERR_OR_NULL(test, retval);		       \
+			RETURN_ASSIGN() REAL_ID(name)(			       \
+					ARRAY_ACCESSORS_FROM_TYPES(	       \
+							param_types));	       \
+			return retval;					       \
+		}
+#else
+#define DEFINE_INVOKABLE(name, return_type, RETURN_ASSIGN, param_types...)
+#endif
+
+#define DEFINE_REDIRECT_MOCKABLE_COMMON(name,				       \
+					return_type,			       \
+					RETURN_ASSIGN,			       \
+					param_types...)			       \
+		return_type REAL_ID(name)(param_types);			       \
+		return_type name(param_types) __mockable_alias(REAL_ID(name)); \
+		DEFINE_INVOKABLE(name, return_type, RETURN_ASSIGN, param_types);
+
+#define ASSIGN() *retval =
+
+/**
+ * DEFINE_REDIRECT_MOCKABLE()
+ * @name: name of the function
+ * @return_type: return type of the function
+ * @param_types: parameter types of the function
+ *
+ * Used to define a function which is *redirect-mockable*, which allows the
+ * function to be mocked and refer to the original definition via
+ * INVOKE_REAL().
+ *
+ * Example:
+ *
+ * .. code-block:: c
+ *
+ *	DEFINE_REDIRECT_MOCKABLE(i2c_add_adapter,
+ *				 RETURNS(int), PARAMS(struct i2c_adapter *));
+ *	int REAL_ID(i2c_add_adapter)(struct i2c_adapter *adapter)
+ *	{
+ *		...
+ *	}
+ *
+ *	static int aspeed_i2c_test_init(struct test *test)
+ *	{
+ *		struct mock_param_capturer *adap_capturer;
+ *		struct mock_expectation *handle;
+ *		struct aspeed_i2c_test *ctx;
+ *		int ret;
+ *
+ *		ctx = test_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+ *		if (!ctx)
+ *			return -ENOMEM;
+ *		test->priv = ctx;
+ *
+ *		handle = EXPECT_CALL(
+ *				i2c_add_adapter(capturer_to_matcher(
+ *						adap_capturer)));
+ *		handle->action = INVOKE_REAL(test, i2c_add_adapter);
+ *		ret = of_fake_probe_platform_by_name(test,
+ *						     "aspeed-i2c-bus",
+ *						     "test-i2c-bus");
+ *		if (ret < 0)
+ *			return ret;
+ *
+ *		ASSERT_PARAM_CAPTURED(test, adap_capturer);
+ *		ctx->adap = mock_capturer_get(adap_capturer,
+ *					      struct i2c_adapter *);
+ *
+ *		return 0;
+ *	}
+ */
+#define DEFINE_REDIRECT_MOCKABLE(name, return_type, param_types...)	       \
+		DEFINE_REDIRECT_MOCKABLE_COMMON(name,			       \
+						return_type,		       \
+						ASSIGN,			       \
+						param_types)
+
+#define NO_ASSIGN()
+#define DEFINE_REDIRECT_MOCKABLE_VOID_RETURN(name, param_types)		       \
+		DEFINE_REDIRECT_MOCKABLE_COMMON(name,			       \
+						void,			       \
+						NO_ASSIGN,		       \
+						param_types)
 
 #define CLASS_MOCK_CLIENT_SOURCE(ctx, handle_index) ctx(arg##handle_index)
 #define DEFINE_MOCK_METHOD_CLIENT_COMMON(name,				       \
@@ -775,6 +876,7 @@ DECLARE_STRUCT_CLASS_MOCK_INIT(void);
  *	int __mockable example(int arg) { ... }
  */
 #define __mockable __weak
+#define __mockable_alias(id) __weak __alias(id)
 
 /**
  * __visible_for_testing - Makes a static function visible when testing.
@@ -786,6 +888,7 @@ DECLARE_STRUCT_CLASS_MOCK_INIT(void);
 #define __visible_for_testing
 #else
 #define __mockable
+#define __mockable_alias(id) __alias(id)
 #define __visible_for_testing static
 #endif
 
@@ -1034,6 +1137,24 @@ struct mock_param_matcher *struct_cmp(
 		struct test *test,
 		const char *struct_name,
 		struct mock_struct_matcher_entry *entries);
+
+struct mock_action *invoke(struct test *test,
+			   void *(*invokable)(struct test *,
+					      const void *params[],
+					      int len));
+
+/**
+ * INVOKE_REAL()
+ * @test: associated test
+ * @func_name: name of the function
+ *
+ * See DEFINE_REDIRECT_MOCKABLE() for an example.
+ *
+ * Return: &struct mock_action that makes the associated mock method or function
+ *         call the original function definition of a redirect-mockable
+ *         function.
+ */
+#define INVOKE_REAL(test, func_name) invoke(test, INVOKE_ID(func_name))
 
 struct mock_struct_formatter_entry {
 	size_t member_offset;

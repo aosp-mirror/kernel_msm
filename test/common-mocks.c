@@ -383,6 +383,42 @@ DEFINE_RETURN_ACTION_WITH_TYPENAME(longlong, long long);
 DEFINE_RETURN_ACTION_WITH_TYPENAME(ulonglong, unsigned long long);
 DEFINE_RETURN_ACTION_WITH_TYPENAME(ptr, void *);
 
+struct mock_invoke_action {
+	struct mock_action action;
+	struct test *test;
+	void *(*invokable)(struct test *test, const void *params[], int len);
+};
+
+static void *do_invoke(struct mock_action *paction,
+		       const void *params[],
+		       int len)
+{
+	struct mock_invoke_action *action =
+			container_of(paction,
+				     struct mock_invoke_action,
+				     action);
+
+	return action->invokable(action->test, params, len);
+}
+
+struct mock_action *invoke(struct test *test,
+			   void *(*invokable)(struct test *,
+					      const void *params[],
+					      int len))
+{
+	struct mock_invoke_action *action;
+
+	action = test_kmalloc(test, sizeof(*action), GFP_KERNEL);
+	if (!action)
+		return NULL;
+
+	action->action.do_action = do_invoke;
+	action->test = test;
+	action->invokable = invokable;
+
+	return &action->action;
+}
+
 struct mock_param_integer_formatter {
 	struct mock_param_formatter formatter;
 	const char *fmt_str;
