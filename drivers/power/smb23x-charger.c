@@ -142,6 +142,7 @@ struct smb23x_chip {
 	struct delayed_work		delaywork_boot_up;
 	struct delayed_work		delaywork_charging_disable;
 	struct wake_lock 		reginit_wlock;
+	int need_update;
 };
 
 static struct smb23x_chip *g_chip;
@@ -1283,6 +1284,10 @@ static int check_charger_thermal_state_sw(
 		target_temp_zone = idx;
 	}
 
+	if (current_temp_zone == target_temp_zone &&
+		chip->need_update == 0)
+		return 0;
+
 	/* tracking hysteresis */
 	if (current_temp_zone != ZONE_UNKNOWN) {
 		int tracking;
@@ -1336,6 +1341,7 @@ static int check_charger_thermal_state_sw(
 		smb23x_charging_enable(chip, 0);
 		smb23x_charging_enable(chip, 1);
 	}
+	chip->need_update = 0;
 	chip->current_temp_zone = target_temp_zone;
 	smb23x_print_register(chip);
 	pr_info("switch to temp_zone:%d\n", target_temp_zone);
@@ -1517,6 +1523,7 @@ static int smb23x_hw_init(struct smb23x_chip *chip)
 	}
 
 	/* float voltage and fastchg current compensation for soft JEITA */
+	chip->need_update = 1;
 	check_charger_thermal(chip);
 
 	/* disable APSD */
@@ -2247,7 +2254,6 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
-	POWER_SUPPLY_PROP_RESISTANCE,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
@@ -2474,19 +2480,24 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 		}
 	}
 
-	//Stop charging if SOC is 100 and 0 < batt_A <= 20 mA; start charging if batt_V < 4250 mV
+	/* Stop charging if SOC is 100 and 0 < batt_A <= 20 mA;
+	start charging if batt_V < (system_voltage - DELTA_VOLTAGE) mV */
+	#define DELTA_VOLTAGE	50		/* 50 mV */
 	if ((smb23x_get_prop_batt_capacity(chip) == 100)) {
 		int max_chg_voltage;
+		int system_voltage = chip->cfg_vfloat_mv;
+
 		charge_current = smb23x_get_prop_batt_current(chip);
 
 		if (chip->cfg_jeita_check_enabled) {
 			max_chg_voltage =
 			chip->temp_zone[chip->current_temp_zone].float_voltage;
 			max_chg_voltage =
-				(max_chg_voltage == 4400)?((4400-50)*1000) :
+				(max_chg_voltage == system_voltage) ?
+				((system_voltage - DELTA_VOLTAGE)*1000) :
 				max_chg_voltage*1000;
 		} else {
-			max_chg_voltage = (4400-50)*1000;
+			max_chg_voltage = (system_voltage - DELTA_VOLTAGE)*1000;
 		}
 		/* pr_info("max_chg_voltage:%d\n", max_chg_voltage); */
 		if ((charge_current > 0) && 
@@ -2770,8 +2781,6 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 {
 	struct smb23x_chip *chip = container_of(psy,
 			struct smb23x_chip, batt_psy);
-	int rc;
-	u8 reg = 0;
 
 	switch (prop) {
 #ifdef QTI_SMB231
@@ -2817,14 +2826,6 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		val->intval = smb23x_get_prop_charge_type(chip);
-		break;
-	case POWER_SUPPLY_PROP_RESISTANCE:
-		rc = smb23x_read(chip, CFG_REG_0, &reg);
-		if (rc)
-			val->intval = 0x00;
-		else
-			val->intval = reg;
-		pr_err("RESISTANCE 0x00=0x%02x\n", reg);
 		break;
 #endif
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
@@ -3407,6 +3408,7 @@ static int smb23x_probe(struct i2c_client *client,
 	chip->usb_psy = usb_psy;
 	chip->fake_battery_soc = -EINVAL;
 	chip->current_temp_zone = ZONE_UNKNOWN;
+	chip->need_update = 1;
 	i2c_set_clientdata(client, chip);
 
 	wake_lock_init(&chip->reginit_wlock, WAKE_LOCK_SUSPEND, "smb23x");
