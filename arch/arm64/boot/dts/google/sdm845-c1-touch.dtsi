@@ -31,6 +31,21 @@
 	qcom,supported-modes = <RPMH_REGULATOR_MODE_HPM>;
 };
 
+&tlmm {
+	sec_ts_reset_active: sec_ts_reset_active {
+		mux {
+				pins = "gpio99";
+				function = "gpio";
+		};
+		config {
+				pins = "gpio99";
+				drive-strength = <2>;
+				bias-disable;
+				output-high;
+		};
+	};
+};
+
 /* AP Touch I2C SDA is gpio27, SCL is gpio28. (QUP2)
  * Reset gpio99, int gpio125.
  */
@@ -44,11 +59,12 @@
 		compatible = "sec,sec_ts";
 		reg = <0x48>;
 		pinctrl-names = "on_state", "off_state";
-		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-0 = <&ts_int_active &sec_ts_reset_active>;
 		pinctrl-1 = <&ts_int_suspend>;
 
 		sec,irq_gpio = <&tlmm 125 0>;	/* required */
 		sec,switch_gpio = <&tlmm 136 0>;
+		sec,reset_gpio = <&tlmm 99 0>;
 		//sec,irq_type = ?;		/* optional - IRQF flags - default is IRQF_TRIGGER_LOW | IRQF_ONESHOT */
 		sec,max_coords = <1440 2960>;
 		sec,firmware_name = "s6sy761.fw";
