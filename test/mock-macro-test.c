@@ -7,7 +7,49 @@
  */
 
 #include <test/test.h>
-#include <test/params.h>
+#include <test/mock.h>
+
+struct test_struct {
+	int (*one_param)(struct test_struct *test_struct);
+	int (*two_param)(struct test_struct *test_struct, int num);
+	int (*non_first_slot_param)(int num, struct test_struct *test_struct);
+	void *(*void_ptr_return)(struct test_struct *test_struct);
+};
+
+DECLARE_STRUCT_CLASS_MOCK_PREREQS(test_struct);
+
+DEFINE_STRUCT_CLASS_MOCK(METHOD(one_param), CLASS(test_struct),
+			 RETURNS(int),
+			 PARAMS(struct test_struct *));
+
+DEFINE_STRUCT_CLASS_MOCK(METHOD(two_param), CLASS(test_struct),
+			 RETURNS(int),
+			 PARAMS(struct test_struct *, int));
+
+DEFINE_STRUCT_CLASS_MOCK_HANDLE_INDEX(METHOD(non_first_slot_param),
+			 CLASS(test_struct), HANDLE_INDEX(1),
+			 RETURNS(int),
+			 PARAMS(int, struct test_struct *));
+
+DEFINE_STRUCT_CLASS_MOCK(METHOD(void_ptr_return), CLASS(test_struct),
+			 RETURNS(void *),
+			 PARAMS(struct test_struct *));
+
+static int test_struct_init(struct MOCK(test_struct) *mock_test_struct)
+{
+	struct test_struct *test_struct = mock_get_trgt(mock_test_struct);
+
+	test_struct->one_param = one_param;
+	test_struct->two_param = two_param;
+	test_struct->non_first_slot_param = non_first_slot_param;
+	return 0;
+}
+
+DEFINE_STRUCT_CLASS_MOCK_INIT(test_struct, test_struct_init);
+
+struct mock_macro_context {
+	struct MOCK(test_struct) *mock_test_struct;
+};
 
 #define TO_STR_INTERNAL(...) #__VA_ARGS__
 #define TO_STR(...) TO_STR_INTERNAL(__VA_ARGS__)
@@ -121,6 +163,43 @@ static void mock_macro_arg_names_from_types(struct test *test)
 						  type15)));
 }
 
+static void mock_macro_test_generated_method_code_works(struct test *test)
+{
+	struct mock_macro_context *ctx = test->priv;
+	struct MOCK(test_struct) *mock_test_struct = ctx->mock_test_struct;
+	struct test_struct *test_struct = mock_get_trgt(mock_test_struct);
+	struct mock_expectation *handle;
+
+	handle = EXPECT_CALL(one_param(mock_get_ctrl(mock_test_struct)));
+	handle->action = int_return(test, 0);
+	handle = EXPECT_CALL(two_param(mock_get_ctrl(mock_test_struct),
+				       int_eq(test, 5)));
+	handle->action = int_return(test, 1);
+	handle = EXPECT_CALL(non_first_slot_param(
+			int_eq(test, 5), mock_get_ctrl(mock_test_struct)));
+	handle->action = int_return(test, 1);
+
+	test_struct->one_param(test_struct);
+	test_struct->two_param(test_struct, 5);
+	test_struct->non_first_slot_param(5, test_struct);
+}
+
+static int mock_macro_test_init(struct test *test)
+{
+	struct mock_macro_context *ctx;
+
+	ctx = test_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+	test->priv = ctx;
+
+	ctx->mock_test_struct = CONSTRUCT_MOCK(test_struct, test);
+	if (!ctx->mock_test_struct)
+		return -EINVAL;
+
+	return 0;
+}
+
 static struct test_case mock_macro_test_cases[] = {
 	TEST_CASE(mock_macro_is_equal),
 	TEST_CASE(mock_macro_if),
@@ -129,11 +208,13 @@ static struct test_case mock_macro_test_cases[] = {
 	TEST_CASE(mock_macro_for_each_param),
 	TEST_CASE(mock_macro_param_list_from_types_basic),
 	TEST_CASE(mock_macro_arg_names_from_types),
+	TEST_CASE(mock_macro_test_generated_method_code_works),
 	{},
 };
 
 static struct test_module mock_macro_test_module = {
 	.name = "mock-macro-test",
+	.init = mock_macro_test_init,
 	.test_cases = mock_macro_test_cases,
 };
 module_test(mock_macro_test_module);
