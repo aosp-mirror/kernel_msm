@@ -184,6 +184,42 @@ static void mock_test_do_expect_default_return(struct test *test)
 	EXPECT_EQ(test, 0, expectation->times_called);
 }
 
+/*
+ * Method called on naggy mock with no expectations will not fail, but will show
+ * a warning message
+ */
+static void mock_test_naggy_no_expectations_no_fail(struct test *test)
+{
+	struct mock_test_context *ctx = test->priv;
+	struct MOCK(test) *mock_test = ctx->mock_test;
+	struct test *trgt = mock_get_trgt(mock_test);
+	struct mock *mock = ctx->mock;
+	int param0 = 5, param1 = -5;
+	static const char * const two_param_types[] = {"int", "int"};
+	const void *two_params[] = {&param0, &param1};
+	struct mock_expectation *expectation;
+
+	mock_set_default_action(mock, "test_printk", test_printk,
+		int_return(trgt, -4));
+
+	expectation = EXPECT_CALL(fail(mock_get_ctrl(mock_test), any(test)));
+	expectation->min_calls_expected = 0;
+	expectation->max_calls_expected = 0;
+
+	EXPECT_CALL(mock_vprintk(mock_get_ctrl(mock_test), any(test),
+		va_format_cmp(test, str_contains(test,
+			"Method was called with no expectations declared"),
+		any(test))));
+
+	mock->do_expect(mock,
+			"test_printk",
+			test_printk,
+			two_param_types,
+			two_params,
+			ARRAY_SIZE(two_params));
+	mock_validate_expectations(mock);
+}
+
 static void mock_test_mock_validate_expectations(struct test *test)
 {
 	struct mock_test_context *ctx = test->priv;
@@ -261,6 +297,7 @@ static struct test_case mock_test_cases[] = {
 	TEST_CASE(mock_test_failed_expect_call_fails_test),
 	TEST_CASE(mock_test_do_expect_default_return),
 	TEST_CASE(mock_test_mock_validate_expectations),
+	TEST_CASE(mock_test_naggy_no_expectations_no_fail),
 	{},
 };
 

@@ -728,6 +728,13 @@ struct mock_param_matcher *memeq(struct test *test,
 				 size_t size);
 struct mock_param_matcher *streq(struct test *test, const char *str);
 
+struct mock_param_matcher *str_contains(struct test *test, const char *needle);
+
+/* Matches var-arg arguments. */
+struct mock_param_matcher *va_format_cmp(struct test *test,
+					 struct mock_param_matcher *fmt_matcher,
+					 struct mock_param_matcher *va_matcher);
+
 struct mock_action *u8_return(struct test *test, u8 ret);
 struct mock_action *u16_return(struct test *test, u16 ret);
 struct mock_action *u32_return(struct test *test, u32 ret);
@@ -744,5 +751,53 @@ struct mock_action *ulong_return(struct test *test, unsigned long ret);
 struct mock_action *longlong_return(struct test *test, long long ret);
 struct mock_action *ulonglong_return(struct test *test, unsigned long long ret);
 struct mock_action *ptr_return(struct test *test, void *ret);
+
+/**
+ * struct mock_struct_matcher_entry - composed with other &struct
+ *                                    mock_struct_matcher_entry to make a
+ *                                    &struct struct_matcher
+ * @member_offset: offset of this member
+ * @matcher: matcher for this particular member
+ *
+ * This is used for struct_cmp() matchers.
+ */
+struct mock_struct_matcher_entry {
+	size_t member_offset;
+	struct mock_param_matcher *matcher;
+};
+
+static inline void init_mock_struct_matcher_entry_internal(
+		struct mock_struct_matcher_entry *entry,
+		size_t offset,
+		struct mock_param_matcher *matcher)
+{
+	entry->member_offset = offset;
+	entry->matcher = matcher;
+}
+
+/**
+ * INIT_MOCK_STRUCT_MATCHER_ENTRY()
+ * @entry: the &struct mock_struct_matcher_entry to initialize
+ * @type: the struct being matched
+ * @member: the member of the struct being matched, used to calculate the offset
+ * @matcher: matcher to match that member
+ *
+ * Initializes ``entry`` to match ``type->member`` with ``matcher``.
+ */
+#define INIT_MOCK_STRUCT_MATCHER_ENTRY(entry, type, member, matcher)	       \
+		init_mock_struct_matcher_entry_internal(entry,		       \
+							offsetof(type, member),\
+							matcher)
+
+static inline void INIT_MOCK_STRUCT_MATCHER_ENTRY_LAST(
+		struct mock_struct_matcher_entry *entry)
+{
+	entry->matcher = NULL;
+}
+
+struct mock_param_matcher *struct_cmp(
+		struct test *test,
+		const char *struct_name,
+		struct mock_struct_matcher_entry *entries);
 
 #endif /* _TEST_MOCK_H */
