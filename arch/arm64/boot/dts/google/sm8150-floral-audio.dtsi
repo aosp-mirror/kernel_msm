@@ -200,6 +200,11 @@
 		spi-max-frequency = <4800000>;
 		spi-cpha;
 
+		/* Regulator LDO_9A, 1.2V, max load 385mA */
+		adnc,vdd-core-supply = <&pm8150_l9>;
+		adnc,vdd-core-voltage-uV = <1200000 1200000>;
+		adnc,vdd-core-maxload-uA = <385000>;
+
 		clock-names = "iaxxx_clk";
 		clocks = <&clock_audio_lnbb 0>;
 
