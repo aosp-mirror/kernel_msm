@@ -894,7 +894,7 @@ static ssize_t mdss_fb_get_boost_mode(struct device *dev,
 {
     int ret;
 
-    ret = scnprintf(buf, PAGE_SIZE, "boost = %d\n", g_boost_mode);
+    ret = scnprintf(buf, PAGE_SIZE, "%d\n", g_boost_mode);
 
     return ret;
 }
