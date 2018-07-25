@@ -39,9 +39,6 @@
 #include "../virt-dma.h"
 #include "msm_gpi_mmio.h"
 
- // Bit mask of gpi ids, currently set to enable logging for gpii 4
-#define GPII_LOG_MASK 0x10
-
 /* global logging macros */
 #define GPI_LOG(gpi_dev, fmt, ...) do { \
 	if (gpi_dev->klog_lvl != LOG_LVL_MASK_ALL) \
@@ -60,12 +57,10 @@
 
 /* gpii specific logging macros */
 #define GPII_INFO(gpii, ch, fmt, ...) do { \
-	if ((BIT(gpii->gpii_id) & GPII_LOG_MASK) && \
-			gpii->klog_lvl >= LOG_LVL_INFO) \
+	if (gpii->klog_lvl >= LOG_LVL_INFO) \
 		pr_info("%s:%u:%s: " fmt, gpii->label, ch, \
 			__func__, ##__VA_ARGS__); \
-	if ((BIT(gpii->gpii_id) & GPII_LOG_MASK) && \
-			gpii->ilctxt && gpii->ipc_log_lvl >= LOG_LVL_INFO) \
+	if (gpii->ilctxt && gpii->ipc_log_lvl >= LOG_LVL_INFO) \
 		ipc_log_string(gpii->ilctxt, \
 			       "ch:%u %s: " fmt, ch, \
 			       __func__, ##__VA_ARGS__); \
@@ -105,11 +100,6 @@ enum EV_PRIORITY {
 
 #define GPI_DMA_DRV_NAME "gpi_dma"
 #define DEFAULT_KLOG_LVL (LOG_LVL_CRITICAL)
-
-#ifndef CONFIG_QCOM_GPI_DMA_DEBUG
-#define CONFIG_QCOM_GPI_DMA_DEBUG
-#endif
-
 #ifdef CONFIG_QCOM_GPI_DMA_DEBUG
 #define DEFAULT_IPC_LOG_LVL (LOG_LVL_VERBOSE)
 #define IPC_LOG_PAGES (40)
@@ -119,19 +109,16 @@ enum EV_PRIORITY {
 	if (gpii->klog_lvl >= LOG_LVL_REG_ACCESS) \
 		pr_info("%s:%u:%s: " fmt, gpii->label, \
 			ch, __func__, ##__VA_ARGS__); \
-	if ((BIT(gpii->gpii_id) & GPII_LOG_MASK) && gpii->ilctxt && \
-			gpii->ipc_log_lvl >= LOG_LVL_REG_ACCESS) \
+	if (gpii->ilctxt && gpii->ipc_log_lvl >= LOG_LVL_REG_ACCESS) \
 		ipc_log_string(gpii->ilctxt, \
 			       "ch:%u %s: " fmt, ch, \
 			       __func__, ##__VA_ARGS__); \
 	} while (0)
 #define GPII_VERB(gpii, ch, fmt, ...) do { \
-	if ((BIT(gpii->gpii_id) & GPII_LOG_MASK) && \
-			gpii->klog_lvl >= LOG_LVL_VERBOSE) \
+	if (gpii->klog_lvl >= LOG_LVL_VERBOSE) \
 		pr_info("%s:%u:%s: " fmt, gpii->label, \
 			ch, __func__, ##__VA_ARGS__); \
-	if ((BIT(gpii->gpii_id) & GPII_LOG_MASK) && gpii->ilctxt && \
-			gpii->ipc_log_lvl >= LOG_LVL_VERBOSE) \
+	if (gpii->ilctxt && gpii->ipc_log_lvl >= LOG_LVL_VERBOSE) \
 		ipc_log_string(gpii->ilctxt, \
 			       "ch:%u %s: " fmt, ch, \
 			       __func__, ##__VA_ARGS__); \
