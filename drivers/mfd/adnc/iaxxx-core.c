@@ -34,6 +34,7 @@
 #include <linux/interrupt.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
+#include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/version.h>
 #include <linux/mfd/adnc/iaxxx-evnt-mgr.h>
@@ -226,6 +227,114 @@ static int iaxxx_populate_dt_gpios(struct iaxxx_priv *priv)
 	return 0;
 }
 
+/**
+ * iaxxx_populate_dt_regulator - populates regulator data from device tree
+ *
+ * Returns 0 on success, <0 on failure.
+ */
+static int iaxxx_populate_dt_regulator(struct iaxxx_priv *priv,
+		struct regulator **vreg, const char *reg_name)
+{
+	int rc;
+	struct device *dev = priv->dev;
+	struct device_node *np = dev->of_node;
+	struct regulator *reg;
+	char prop_name[32];
+	u32 volt_uV[2], load_uA;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	if (!reg_name)
+		return -EINVAL;
+
+	/* check if the regulator consumer node exists */
+	snprintf(prop_name, sizeof(prop_name), "%s-supply", reg_name);
+	if (!of_parse_phandle(np, prop_name, 0)) {
+		dev_info(dev, "%s() property %s-supply not found.\n",
+			__func__, reg_name);
+		return 0;
+	}
+
+	/* get regulator */
+	reg = devm_regulator_get(dev, reg_name);
+	if (IS_ERR(reg)) {
+		rc = PTR_ERR(reg);
+		dev_err(dev, "%s: Failed to get regulator %s. rc=%d\n",
+			__func__, reg_name, rc);
+		goto err;
+	}
+
+	/* Read and set min/max regulator voltage */
+	snprintf(prop_name, sizeof(prop_name), "%s-voltage-uV", reg_name);
+	if (!of_property_read_u32_array(np, prop_name, volt_uV, 2)) {
+		rc = regulator_set_voltage(reg, volt_uV[0], volt_uV[1]);
+		if (rc < 0) {
+			dev_err(dev, "%s: Failed to set voltage %s. rc=%d\n",
+				__func__, reg_name, rc);
+			goto err_put;
+		}
+	}
+
+	/* Read and set max current load for this consumer */
+	snprintf(prop_name, sizeof(prop_name), "%s-maxload-uA", reg_name);
+	if (!of_property_read_u32(np, prop_name, &load_uA)) {
+		rc = regulator_set_load(reg, load_uA);
+		if (rc < 0) {
+			dev_err(dev, "%s: Failed to set load %s. rc=%d\n",
+				__func__, reg_name, rc);
+			goto err_put;
+		}
+	}
+
+	rc = regulator_enable(reg);
+	if (rc < 0) {
+		dev_err(dev,
+			"Failed to enable regulator %s: %d\n", reg_name, rc);
+		goto err_put;
+	}
+
+	dev_dbg(dev, "%s: regulator %s ready\n",
+		__func__, reg_name);
+
+	*vreg = reg;
+	return 0;
+
+err_put:
+	devm_regulator_put(reg);
+err:
+	*vreg = NULL;
+	return rc;
+}
+
+static int iaxxx_config_regulators(struct iaxxx_priv *priv)
+{
+	int rc;
+	struct device *dev = priv->dev;
+
+	/* check and config vdd-io */
+	rc = iaxxx_populate_dt_regulator(
+			priv, &priv->vdd_io, "adnc,vdd-io");
+	if (rc) {
+		dev_err(dev,
+			"Failed to configure regulator vdd_io, rc %d\n", rc);
+		return rc;
+	}
+
+	/* Sleep for vdd_io to be stable before enabling vdd_core */
+	if (priv->vdd_io)
+		usleep_range(1000, 2000);
+
+	/* check and config vdd-core */
+	rc = iaxxx_populate_dt_regulator(
+			priv, &priv->vdd_core, "adnc,vdd-core");
+	if (rc) {
+		dev_err(dev,
+			"Failed to configure regulator vdd_core, rc %d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
 /**
  * iaxxx_populate_dt_pdata - populate platform data from device tree
  */
@@ -1953,6 +2062,13 @@ static int iaxxx_device_power_init(struct iaxxx_priv *priv)
 		goto err_populate_pdata;
 	}
 
+	rc = iaxxx_config_regulators(priv);
+	if (rc) {
+		dev_err(dev,
+			"Failed to configure regulators %d\n", rc);
+		goto err_enable_regulator;
+	}
+
 	/* Initialize the GPIOs */
 	rc = iaxxx_gpio_init(priv);
 	if (rc) {
@@ -1975,6 +2091,7 @@ static int iaxxx_device_power_init(struct iaxxx_priv *priv)
 
 err_irq_init:
 err_gpio_init:
+err_enable_regulator:
 err_populate_pdata:
 	return rc;
 }
@@ -2121,6 +2238,16 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	pm_runtime_disable(priv->dev);
 	if (test_and_clear_bit(IAXXX_FLG_STARTUP, &priv->flags))
 		mfd_remove_devices(priv->dev);
+
+	if (priv->vdd_io) {
+		regulator_disable(priv->vdd_io);
+		devm_regulator_put(priv->vdd_io);
+	}
+
+	if (priv->vdd_core) {
+		regulator_disable(priv->vdd_core);
+		devm_regulator_put(priv->vdd_core);
+	}
 
 	/* Delete the work queue */
 	flush_work(&priv->event_work_struct);
