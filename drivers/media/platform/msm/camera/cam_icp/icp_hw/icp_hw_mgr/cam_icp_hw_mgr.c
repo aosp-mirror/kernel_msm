@@ -3582,6 +3582,7 @@ static int cam_icp_mgr_hw_flush(void *hw_priv, void *hw_flush_args)
 	struct cam_hw_flush_args *flush_args = hw_flush_args;
 	struct cam_icp_hw_ctx_data *ctx_data;
 	struct cam_icp_hw_mgr *hw_mgr = hw_priv;
+	bool need_abort = false;
 
 	if ((!hw_priv) || (!hw_flush_args)) {
 		CAM_ERR(CAM_ICP, "Input params are Null:");
@@ -3604,13 +3605,10 @@ static int cam_icp_mgr_hw_flush(void *hw_priv, void *hw_flush_args)
 	switch (flush_args->flush_type) {
 	case CAM_FLUSH_TYPE_ALL:
 		mutex_lock(&hw_mgr->hw_mgr_mutex);
-		if (!hw_mgr->recovery) {
-			if (flush_args->num_req_active) {
-				mutex_unlock(&hw_mgr->hw_mgr_mutex);
-				cam_icp_mgr_abort_handle(ctx_data);
-			}
-		} else {
-			mutex_unlock(&hw_mgr->hw_mgr_mutex);
+		need_abort = !hw_mgr->recovery && flush_args->num_req_active;
+		mutex_unlock(&hw_mgr->hw_mgr_mutex);
+		if (need_abort) {
+			cam_icp_mgr_abort_handle(ctx_data);
 		}
 		mutex_lock(&ctx_data->ctx_mutex);
 		cam_icp_mgr_flush_all(ctx_data, flush_args);
