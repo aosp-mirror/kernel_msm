@@ -78,6 +78,16 @@
 	status = "ok";
 };
 
+&soc {
+	rpmh-regulator-ldoa9 {
+		qcom,supported-modes =
+			<RPMH_REGULATOR_MODE_HPM>;
+		L9A: pm8150_l9: regulator-pm8150-l9 {
+			qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+};
+
 &ufshc_mem {
 	vdd-hba-supply = <&ufs_phy_gdsc>;
 	vdd-hba-fixed-regulator;
