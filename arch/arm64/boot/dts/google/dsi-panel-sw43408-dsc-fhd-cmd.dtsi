@@ -59,7 +59,7 @@
 			17000 15500 30000 8000 3000>;
 		qcom,mdss-dsi-panel-peak-brightness = <6200000>;
 		qcom,mdss-dsi-panel-blackness-level = <42>;
-		google,mdss-dsi-lp-brightness-compensation = <7>;
+		google,mdss-dsi-lp-brightness-compensation = <0>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
@@ -108,13 +108,11 @@
 					39 01 00 00 00 00 07 55 04 61 DB 04 78 DB
 					39 01 00 00 00 00 0D B4 2A 40 25 22 41 41 41 0A 10 50 11 03
 					39 01 00 00 3C 00 06 CB 80 5C 07 09 28
-					15 01 00 00 00 00 02 C0 01
 				];
 
 				qcom,mdss-dsi-nolp-command = [
 					05 01 00 00 00 00 01 22
 					15 01 00 00 00 00 02 B0 AC
-					15 01 00 00 00 00 02 C0 02
 					39 01 00 00 00 00 0D B4 2A 02 25 22 41 41 41 0A 10 50 11 00
 					39 01 00 00 00 00 06 CB 80 5C 07 03 28
 					39 01 00 00 00 00 03 51 00 00
