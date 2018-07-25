@@ -162,7 +162,7 @@
 			lp-mode@1 {
 				label = "low";
 
-				google,dsi-lp-brightness-threshold = <70>;
+				google,dsi-lp-brightness-threshold = <10>;
 				google,dsi-lp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
 					15 01 00 00 00 00 02 B0 05
