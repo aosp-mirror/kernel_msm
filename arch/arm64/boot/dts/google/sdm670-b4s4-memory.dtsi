@@ -59,3 +59,12 @@
 	reg = <0 0x98415000 0 0x2000>;
 };
 
+&reserved_memory {
+	ramoops@a3800000 {
+		compatible = "ramoops";
+		reg = <0 0xa3800000 0 0x200000>;
+		record-size = <0x20000>;
+		console-size = <0x100000>;
+		pmsg-size = <0x80000>;
+	};
+};
