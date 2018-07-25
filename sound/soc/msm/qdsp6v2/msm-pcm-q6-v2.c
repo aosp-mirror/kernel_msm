@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -368,7 +368,7 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 	struct msm_plat_data *pdata;
 	struct snd_pcm_hw_params *params;
 	struct msm_pcm_routing_evt event;
-	int ret = 0;
+	int ret = 0, avs_ver = -EINVAL;
 	int i = 0;
 	uint16_t bits_per_sample = 16;
 
@@ -410,9 +410,13 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 			return -ENOMEM;
 		}
 
-		ret = q6asm_send_cal(prtd->audio_client);
-		if (ret < 0)
-			pr_debug("%s : Send cal failed : %d", __func__, ret);
+		avs_ver = q6core_get_avs_version();
+		if (avs_ver == Q6_SUBSYS_AVS2_6) {
+			ret = q6asm_send_cal(prtd->audio_client);
+			if (ret < 0)
+				pr_debug("%s : Send cal failed : %d",
+						__func__, ret);
+		}
 
 		pr_debug("%s: session ID %d\n",
 				__func__, prtd->audio_client->session);
