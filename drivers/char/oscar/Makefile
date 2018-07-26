@@ -4,8 +4,8 @@
 #  of hand crafting, since things like kernel path, HASH and sign keys aren't
 #  set automatically.
 
-obj-y += ds.o
-obj-y += dwn.o
+obj-$(CONFIG_DS_FRAMEWORK) += ds.o
+obj-$(CONFIG_DWN_DRIVER) += dwn.o
 
 PWD := $(shell pwd)
 
