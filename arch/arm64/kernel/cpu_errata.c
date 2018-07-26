@@ -37,8 +37,6 @@ DEFINE_PER_CPU_READ_MOSTLY(struct bp_hardening_data, bp_hardening_data);
 
 #ifdef CONFIG_KVM
 extern char __psci_hyp_bp_inval_start[], __psci_hyp_bp_inval_end[];
-extern char __qcom_hyp_sanitize_link_stack_start[];
-extern char __qcom_hyp_sanitize_link_stack_end[];
 
 static void __copy_hyp_vect_bpi(int slot, const char *hyp_vecs_start,
 				const char *hyp_vecs_end)
@@ -81,10 +79,8 @@ static void __install_bp_hardening_cb(bp_hardening_cb_t fn,
 	spin_unlock(&bp_lock);
 }
 #else
-#define __psci_hyp_bp_inval_start		NULL
-#define __psci_hyp_bp_inval_end			NULL
-#define __qcom_hyp_sanitize_link_stack_start	NULL
-#define __qcom_hyp_sanitize_link_stack_end	NULL
+#define __psci_hyp_bp_inval_start	NULL
+#define __psci_hyp_bp_inval_end		NULL
 
 static void __maybe_unused __install_bp_hardening_cb(bp_hardening_cb_t fn,
 				      const char *hyp_vecs_start,
@@ -123,29 +119,6 @@ static int enable_psci_bp_hardening(void *data)
 				       (bp_hardening_cb_t)psci_ops.get_version,
 				       __psci_hyp_bp_inval_start,
 				       __psci_hyp_bp_inval_end);
-
-	return 0;
-}
-
-static void __maybe_unused qcom_link_stack_sanitization(void)
-{
-	u64 tmp;
-
-	asm volatile("mov	%0, x30		\n"
-		     ".rept	16		\n"
-		     "bl	. + 4		\n"
-		     ".endr			\n"
-		     "mov	x30, %0		\n"
-		     : "=&r" (tmp));
-}
-
-static int __maybe_unused qcom_enable_link_stack_sanitization(void *data)
-{
-	const struct arm64_cpu_capabilities *entry = data;
-
-	install_bp_hardening_cb(entry, qcom_link_stack_sanitization,
-				__qcom_hyp_sanitize_link_stack_start,
-				__qcom_hyp_sanitize_link_stack_end);
 
 	return 0;
 }
