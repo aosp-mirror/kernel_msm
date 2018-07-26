@@ -189,6 +189,7 @@
 		type = "ext4";
 		mnt_flags = "nosuid,nodev,noatime,barrier=1";
 		fsmgr_flags = "wait";
+		mnt_point = "/mnt/vendor/persist";
 	};
 	product {
 		compatible = "android,product";

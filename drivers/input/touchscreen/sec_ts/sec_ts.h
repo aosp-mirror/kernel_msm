@@ -33,6 +33,7 @@
 #include <linux/notifier.h>
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
+#include <linux/pm_qos.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/time.h>
@@ -721,12 +722,14 @@ struct sec_ts_data {
 
 	struct notifier_block notifier;
 
+	struct pm_qos_request pm_qos_req;
+
 	struct delayed_work work_read_info;
 #ifdef USE_POWER_RESET_WORK
 	struct delayed_work reset_work;
 	volatile bool reset_is_on_going;
 #endif
-	struct delayed_work work_fw_update;
+	struct work_struct work_fw_update;
 	struct work_struct suspend_work;
 	struct work_struct resume_work;
 	struct completion resume_done;
@@ -916,6 +919,7 @@ int sec_ts_read_raw_data(struct sec_ts_data *ts,
 #if (1)//!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 int sec_ts_raw_device_init(struct sec_ts_data *ts);
 #endif
+void sec_ts_raw_device_exit(struct sec_ts_data *ts);
 
 extern struct class *sec_class;
 

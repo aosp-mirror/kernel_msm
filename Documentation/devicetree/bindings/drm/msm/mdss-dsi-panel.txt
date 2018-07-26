@@ -194,18 +194,9 @@ Optional properties:
 					If unspecified, this LUT is unused and unallocated. Instead, userspace
 					brightness gets mapped linearly, during runtime, to the range defined by
 					qcom,mdss-dsi-bl-min-level and qcom,mdss-dsi-bl-max-level.
-- qcom,mdss-dsi-bl-hbm-enable:	Indicates this panel supports high brightness
-					mode (HBM). If present, the qcom,mdss-dsi-bl-hbm-*
-					properties that followed will get parsed.
-- qcom,mdss-dsi-bl-hbm-min-level:		Similarly to qcom,mdss-dsi-bl-min-level,
-					but used during HBM.
-					Defaults to qcom,mdss-dsi-bl-min-level.
-- qcom,mdss-dsi-bl-hbm-max-level:		Similarly to qcom,mdss-dsi-bl-max-level,
-					but used during HBM.
-					Defaults to qcom,mdss-dsi-bl-max-level.
-- qcom,mdss-dsi-bl-hbm-lut:			Backlight LUT to be used during HBM.
-					Initialized similarly to qcom,mdss-dsi-bl-lut, using the corresponding
-					panel min/max properties.
+- qcom,mdss-dsi-bl-vr-min-safe-level:		Specify a minimum safe panel brightness
+					level during VR mode. This limit comes into effect only when
+					attempting to change brightness level while VR mode is active.
 - qcom,mdss-dsi-hbm-command: An optional byte stream to enable HBM.
 - qcom,mdss-dsi-hbm-command-state:	The control state for sending
 					qcom,mdss-dsi-hbm-command.

@@ -28,3 +28,10 @@
 &vd6281 {
 	hw-version = <20>; /* cut2.0 */
 };
+
+&nq {
+	ese {
+		loader_scripts_path =
+				"/vendor/etc/ese/loaderservice_updater_eng_";
+	};
+};

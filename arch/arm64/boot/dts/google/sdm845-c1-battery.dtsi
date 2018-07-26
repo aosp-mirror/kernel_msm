@@ -76,6 +76,7 @@
 	    0xB8 0xCDF0 /* nNVCfg0: enOCV enX enCfg enFCfg enLCfg enICT enCG enVE enDC */
 	    0xB9 0xB00E /* nNVCfg1: enTGO enFTh enRFVSH enAT enCRV enCTE */
 	    0xBA 0xFF0A /* nNVCfg2: enT enSOC enMMT enMMV enMMC enVT enFC enIAvg CYCLESpSAVE=5.0 */
+	    0xB3 0x0D80 /* nDesignCap: 3456 mAh */
 	>;
 };
 

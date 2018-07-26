@@ -10,11 +10,13 @@
 #define VCM_COMPONENT_I2C_ADDR_WRITE 0xE4
 #define VCM_EEPROM_I2C_ADDR_WRITE 0xE6
 #define VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N 0x18
+#define VCM_EEPROM_I2C_ADDR_WRITE_FRONT_N 0xA0
 #define MK_SHARP   0x04170000
 #define MK_LGIT    0x09170000
 #define AF_EEPROM_DATA 0x80
 #define RETRY_MAX 3
 #define LUT_MAX 66
+#define LUT_MAX_FRONT 22
 #define SECTOR_SIZE 320
 
 #define VCM_AK7375_EEPROM_WRITE_MODE_ADDR    0xAE
@@ -26,8 +28,16 @@
 #define VCM_AK7375_EEPROM_STORE_MEM2_DATA    0x02
 #define VCM_AK7375_EEPROM_STORE_MEM3_DATA    0x04
 
+#define VCM_AK7375_EEPROM_VERSION_ADDR       0x000A
+#define VCM_AK7375_EEPROM_VERSION_R13        0x0D
+
 static struct camera_io_master *g_io_master_info;
 bool g_first = true;
+static bool force_disable_LTC;
+static bool isRearVCMInitDownload;
+
+/* Implemented in cam_actuator_core.c */
+extern bool check_act_ltc_disable(void);
 
 void RamWrite32A( UINT_16 RamAddr, UINT_32 RamData )
 {
@@ -60,6 +70,46 @@ void RamRead32A( UINT_16 RamAddr, UINT_32 *ReadData )
 		CAMERA_SENSOR_I2C_TYPE_DWORD);
 	if (rc < 0)
 		CAM_ERR(CAM_SENSOR, "[OISFW]:%s read i2c failed", __func__);
+}
+
+int RamWrite16A( struct camera_io_master *io_info,
+	UINT_32 RamAddr, UINT_32 RamData )
+{
+	int rc = 0;
+	struct cam_sensor_i2c_reg_setting i2c_reg_settings;
+	struct cam_sensor_i2c_reg_array i2c_reg_array;
+
+	i2c_reg_settings.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_settings.data_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+	i2c_reg_settings.size = 1;
+	i2c_reg_settings.delay = 0;
+	i2c_reg_array.reg_addr = RamAddr;
+	i2c_reg_array.reg_data = RamData;
+	i2c_reg_array.delay = 0;
+	i2c_reg_settings.reg_setting = &i2c_reg_array;
+
+	rc = camera_io_dev_write(io_info, &i2c_reg_settings);
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR,
+			"%s: write 0x%x failed", __func__, RamAddr);
+	}
+
+	return rc;
+}
+
+int RamRead16A( struct camera_io_master *io_info,
+	UINT_32 RamAddr, UINT_32 *ReadData )
+{
+	int rc = 0;
+
+	rc = camera_io_dev_read(io_info, RamAddr,
+		ReadData, CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_WORD);
+	if (rc < 0)
+		CAM_ERR(CAM_SENSOR,
+			"%s: read 0x%x failed", __func__, RamAddr);
+
+	return rc;
 }
 
 int RamWrite8A( struct camera_io_master *io_info,
@@ -465,6 +515,250 @@ dump_fw:
 	return rc;
 }
 
+int checkRearVCMFWUpdate_temp(struct cam_sensor_ctrl_t *s_ctrl)
+{
+	int rc = 0;
+	UINT_32 retry = 0;
+	UINT_32 size = 0;
+	UINT_32 regdata = 0;
+	unsigned short cci_client_sid_backup;
+	uint32_t paramver = -1;
+	struct cam_sensor_i2c_reg_array *fwtable = NULL;
+	struct device_node *src_node = NULL;
+	struct device_node *of_node = s_ctrl->of_node;
+
+	force_disable_LTC = true;
+	src_node = of_parse_phandle(of_node, "actuator-src", 0);
+	if (!src_node) {
+		return 0;
+	} else {
+		rc = of_property_read_u32(src_node,
+			"param-index", &paramver);
+		CAM_INFO(CAM_SENSOR, "[VCMFW] paramver=%d, rc=%d",
+			paramver, rc);
+		of_node_put(src_node);
+		src_node = NULL;
+	}
+
+	if (paramver == 5) {
+		force_disable_LTC = false;
+		fwtable = VCM_LC898219_Temp_Params_verE;
+		size = sizeof(VCM_LC898219_Temp_Params_verE) /
+			sizeof(struct cam_sensor_i2c_reg_array);
+	} else if (paramver == 8) {
+		force_disable_LTC = false;
+		fwtable = VCM_LC898219_Temp_Params_verH;
+		size = sizeof(VCM_LC898219_Temp_Params_verH) /
+			sizeof(struct cam_sensor_i2c_reg_array);
+	} else {
+		CAM_INFO(CAM_SENSOR, "[VCMFW] Not to update LTC param");
+		return 0;
+	}
+
+	cci_client_sid_backup = s_ctrl->io_master_info.cci_client->sid;
+
+	/* Check if need to update EEPROM data */
+	rc = ValidateRearVCMFW(&(s_ctrl->io_master_info),
+		fwtable, size);
+	if (rc == 0) {
+		CAM_INFO(CAM_SENSOR,
+			"[VCMFW]No need to update firmware");
+		goto temp_restore_data;
+	}
+
+	/* 1. Replace slave address with 0xE4, do AF firmware update */
+	s_ctrl->io_master_info.cci_client->sid =
+		VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
+	WitTim(8);
+
+	for (retry = 0; retry < RETRY_MAX; retry++) {
+		rc = RamRead8A(&(s_ctrl->io_master_info),
+			0xF0, &regdata);
+		if (regdata == 0xA5) {
+			WitTim(1);
+			rc = camera_io_dev_poll(
+				&(s_ctrl->io_master_info), 0xE0, 0x00, 0,
+				CAMERA_SENSOR_I2C_TYPE_BYTE,
+				CAMERA_SENSOR_I2C_TYPE_BYTE, 100);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"[VCMFW]i2c poll 0xE0 failed");
+				continue;
+			}
+
+			/* Update EEPROM data*/
+			rc = DownloadRearVCMFW(&(s_ctrl->io_master_info),
+				fwtable, size);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"[VCMFW]Download firmware failed");
+				continue;
+			}
+
+			/* Validate EEPROM data*/
+			rc = ValidateRearVCMFW(&(s_ctrl->io_master_info),
+				fwtable, size);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"[VCMFW]Validate firmware failed");
+				continue;
+			}
+			CAM_INFO(CAM_SENSOR,
+				"[VCMFW]%s: FW update success", __func__);
+			break;
+		} else {
+			CAM_ERR(CAM_SENSOR,
+				"[VCMFW]%s: NG module !\n", __func__);
+			break;
+		}
+	}
+
+temp_restore_data:
+	/* 2. Restore the I2C slave address */
+	s_ctrl->io_master_info.cci_client->sid =
+		cci_client_sid_backup;
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: restore sid = %d\n",
+		__func__, s_ctrl->io_master_info.cci_client->sid);
+
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s; rc = %d\n", __func__, rc);
+
+	return rc;
+}
+
+int is_force_disable_LTC(void)
+{
+	return force_disable_LTC;
+}
+
+int checkRearVCMLTC(struct camera_io_master *io_info)
+{
+	int rc = -1;
+	UINT_32 retry = 0;
+	UINT_32 regdata = 0;
+	unsigned short cci_client_sid_backup;
+	UINT_32 EEPROM_3Fh = 0;
+	UINT_32 UlReadVal;
+	UINT_16 init_temp;
+	UINT_16 init_temp_A;
+	UINT_16 init_temp_B;
+
+	if (io_info->cci_client->sid != (VCM_COMPONENT_I2C_ADDR_WRITE >> 1)) {
+		return rc;
+	}
+
+	if(is_force_disable_LTC() == true) {
+		CAM_INFO(CAM_SENSOR, "[LTC] force disable LTC by project");
+		return rc;
+	}
+
+	if(check_act_ltc_disable() == true) {
+		CAM_INFO(CAM_SENSOR, "[LTC] dynamic disable LTC by user");
+		return rc;
+	}
+
+	CAM_INFO(CAM_SENSOR, "[LTC] isRearVCMInitDownload=%d",
+		isRearVCMInitDownload);
+	if (isRearVCMInitDownload == true)
+		return rc;
+
+	/* 0. Backup the I2C slave address */
+	cci_client_sid_backup = io_info->cci_client->sid;
+
+	/* Read EEPROM 3Fh first */
+	io_info->cci_client->sid = VCM_EEPROM_I2C_ADDR_WRITE >> 1;
+	RamRead8A(io_info, 0x3F, &EEPROM_3Fh);
+
+	/* 1. Replace slave address with 0xE4 */
+	io_info->cci_client->sid = VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
+
+	/* Communication Check */
+	RamRead8A(io_info, 0xF0, &regdata);
+	if (regdata == 0xA5) {
+		CAM_INFO(CAM_SENSOR,
+			"[LTC] check communication success");
+	} else {
+		CAM_ERR(CAM_SENSOR,
+			"[LTC] check communication error");
+		goto ltc_restore_data;
+	}
+	usleep_range(1000, 1010);
+
+	/* Enable Temperature Acquisition */
+	RamWrite8A(io_info, 0x8E, 0x15);
+	RamWrite8A(io_info, 0x8D, 0x20);
+
+	/* Standby Release */
+	RamWrite8A(io_info, 0x81, 0x80);
+	usleep_range(1000, 1010);
+
+	/* Read Initial Temperature Data */
+	RamRead16A(io_info, 0x0058, &UlReadVal);
+	init_temp = (UINT_16)UlReadVal;
+	CAM_INFO(CAM_SENSOR, "[LTC] init_temp = 0x%x",
+		init_temp);
+
+	/* Calculate Shift-Up Gain */
+	if ( ((EEPROM_3Fh & 0x38) >> 3) == 2)
+		init_temp_A = init_temp << 2;
+	else if ( ((EEPROM_3Fh & 0x38) >> 3) == 1)
+		init_temp_A = init_temp << 1;
+	else
+		init_temp_A = init_temp;
+
+	if ( (EEPROM_3Fh & 0x07) == 2)
+		init_temp_B = init_temp << 2;
+	else if ( (EEPROM_3Fh & 0x07) == 1)
+		init_temp_B = init_temp << 1;
+	else
+		init_temp_B = init_temp;
+
+	/* Initial Data Download */
+	RamWrite8A(io_info, 0xE0, 0x01);
+	msleep(8); /* wait 8 ms */
+
+	/* LSI wake up check */
+	for (retry = 0; retry < 10; retry++) {
+		RamRead8A(io_info, 0xB3, &UlReadVal);
+		if ( (UlReadVal & 0XE0) == 0 ) {
+			break;
+		} else {
+			if (retry >= 9) {
+				CAM_ERR(CAM_SENSOR,
+					"[LTC] LSI wake up check failed");
+				goto ltc_restore_data;
+			}
+		}
+		usleep_range(1000, 1010);
+	}
+
+	/* Write Init Temperature Data */
+	RamWrite16A(io_info, 0x30, init_temp_A);
+	RamWrite16A(io_info, 0x32, init_temp_A);
+	RamWrite16A(io_info, 0x76, init_temp_B);
+	RamWrite16A(io_info, 0x78, init_temp_B);
+
+	/* Enable Lens Temp Correction Function */
+	RamWrite8A(io_info, 0x8C, 0xE9);
+	CAM_INFO(CAM_SENSOR, "[LTC] Enable LTC Function");
+
+	isRearVCMInitDownload = true;
+	rc = 0;
+
+ltc_restore_data:
+	/* 2. Restore the I2C slave address */
+	io_info->cci_client->sid = cci_client_sid_backup;
+
+	return rc;
+}
+
+void clearRearVCMInitDownload(struct camera_io_master *io_info)
+{
+	if (io_info->cci_client->sid == (VCM_COMPONENT_I2C_ADDR_WRITE >> 1)) {
+		isRearVCMInitDownload = false;
+		CAM_INFO(CAM_SENSOR, "[LTC] clear isRearVCMInitDownload");
+	}
+}
+
 int DownloadRearVCMFW(struct camera_io_master *io_info,
 	struct cam_sensor_i2c_reg_array *fwtable, UINT_32 tbsize)
 {
@@ -642,36 +936,51 @@ int checkFrontVCMFWUpdate(struct cam_sensor_ctrl_t *s_ctrl)
 	/* Bcakup the I2C slave address */
 	cci_client_sid_backup = s_ctrl->io_master_info.cci_client->sid;
 
-	/* Replace the I2C slave address with VCM component */
+	/* Replace the I2C slave address with VCM eeprom */
 	s_ctrl->io_master_info.cci_client->sid =
-		VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N >> 1;
+		VCM_EEPROM_I2C_ADDR_WRITE_FRONT_N >> 1;
 
-	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: change sid to 0x%02x",
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: change sid to 0x%02x for EEPROM",
 		 __func__, io_master_info->cci_client->sid);
 
-	fwtable = VCM_AK7375_DVT_R08;
-	size = ARRAY_SIZE(VCM_AK7375_DVT_R08);
+	/* Read Version */
+	rc = camera_io_dev_read(io_master_info,
+				VCM_AK7375_EEPROM_VERSION_ADDR,
+				&ReadData,
+				CAMERA_SENSOR_I2C_TYPE_WORD,
+				CAMERA_SENSOR_I2C_TYPE_BYTE);
 
-	/* Check Version:
-	 * There is no one register data for version, so compares
-	 * the first few entries defined as LUT_MAX instead.
-	 */
-	for (i = 0; i < LUT_MAX; i++) {
-		rc = RamRead8A(io_master_info,
-			       fwtable[i].reg_addr,
-			       &ReadData);
-		if (rc < 0 || ReadData != fwtable[i].reg_data) {
-			CAM_INFO(CAM_SENSOR,
-				 "[VCMFW]%s: Need to run FW update",
-				 __func__);
-			update_retry_cnt = RETRY_MAX;
-			break;
+	CAM_INFO(CAM_SENSOR, "[VCMFW]%s: Version 0x%02x",
+		 __func__, ReadData);
+
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR,
+			"[VCMFW]%s: Fail to read version",
+			__func__);
+	} else if (ReadData == VCM_AK7375_EEPROM_VERSION_R13) {
+		/* Replace the I2C slave address with VCM component */
+		s_ctrl->io_master_info.cci_client->sid =
+			VCM_COMPONENT_I2C_ADDR_WRITE_FRONT_N >> 1;
+
+		CAM_INFO(CAM_SENSOR, "[VCMFW]%s: change sid to 0x%02x",
+			 __func__, io_master_info->cci_client->sid);
+
+		fwtable = VCM_AK7375_DVT_R16;
+		size = ARRAY_SIZE(VCM_AK7375_DVT_R16);
+
+		for (i = 0; i < LUT_MAX_FRONT; i++) {
+			rc = RamRead8A(io_master_info,
+				       fwtable[i].reg_addr,
+				       &ReadData);
+			if (rc < 0 || ReadData != fwtable[i].reg_data) {
+				CAM_INFO(CAM_SENSOR,
+					 "[VCMFW]%s: Need to run FW update to R16",
+					 __func__);
+				update_retry_cnt = RETRY_MAX;
+				break;
+			}
 		}
 	}
-
-	/* b/78207248: Force it off and force rc = 0 until R14 FW validated */
-	update_retry_cnt = 0;
-	rc = 0;
 
 	if (!update_retry_cnt) {
 		s_ctrl->io_master_info.cci_client->sid = cci_client_sid_backup;
@@ -806,6 +1115,12 @@ int ValidateFrontVCMFW(struct camera_io_master *io_info,
 				"[VCMFW]%s: poll addr 0x%02x failed",
 				__func__, fwtable[i].reg_addr);
 			break;
+		} else {
+			CAM_INFO(CAM_SENSOR,
+				 "[VCMFW]%s: poll addr 0x%02x 0x%02x[%d] ok",
+				 __func__, fwtable[i].reg_addr,
+				 fwtable[i].reg_data,
+				 fwtable[i].reg_data);
 		}
 	}
 

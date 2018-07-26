@@ -2896,12 +2896,6 @@ int smblib_get_pe_start(struct smb_charger *chg,
 		= !get_client_vote_locked(chg->pd_disallowed_votable_indirect,
 			HVDCP_TIMEOUT_VOTER);
 
-	/* if hvdcp is disabled, the cc detached voter is the last one */
-	if (chg->hvdcp_disable) {
-		val->intval =
-		    !get_client_vote_locked(chg->pd_disallowed_votable_indirect,
-					CC_DETACHED_VOTER);
-	}
 	return 0;
 }
 
@@ -4143,9 +4137,15 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 				false, 0);
 		break;
 	case DCP_CHARGER_BIT:
-		if (chg->wa_flags & QC_CHARGER_DETECTION_WA_BIT)
+		if ((chg->wa_flags & QC_CHARGER_DETECTION_WA_BIT) &&
+		    !chg->hvdcp_disable)
 			schedule_delayed_work(&chg->hvdcp_detect_work,
 					      msecs_to_jiffies(HVDCP_DET_MS));
+		/* If HVDCP is disabled, enable PD. */
+		if (chg->hvdcp_disable) {
+			vote(chg->pd_disallowed_votable_indirect,
+			     HVDCP_TIMEOUT_VOTER, false, 0);
+		}
 		break;
 	default:
 		break;
@@ -4457,9 +4457,6 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 	vote(chg->pd_allowed_votable, PD_VOTER, false, 0);
 	vote(chg->pd_disallowed_votable_indirect, CC_DETACHED_VOTER, true, 0);
 	vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER, true, 0);
-	if (chg->hvdcp_disable)
-		vote(chg->pd_disallowed_votable_indirect, HVDCP_TIMEOUT_VOTER,
-					false, 0);
 
 	/* reset usb irq voters */
 	vote(chg->usb_irq_enable_votable, PD_VOTER, false, 0);

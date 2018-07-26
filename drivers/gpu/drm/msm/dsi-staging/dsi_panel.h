@@ -35,6 +35,7 @@
 #define DSI_CMD_PPS_SIZE 135
 
 #define DSI_MODE_MAX 5
+#define HBM_RANGE_MAX 4
 
 enum dsi_panel_rotation {
 	DSI_PANEL_ROTATE_NONE = 0,
@@ -83,29 +84,41 @@ struct dsi_panel_phy_props {
 	enum dsi_panel_rotation rotation;
 };
 
-struct dsi_backlight_calc_params {
-	u32 min_level;
-	u32 max_level;
-	u16 *lut;
+struct hbm_range {
+	/* Userspace brightness range (inclusive) for this HBM range */
+	u32 user_bri_start;
+	u32 user_bri_end;
+
+	/* Panel brightness range (inclusive) for this HBM range */
+	u32 panel_bri_start;
+	u32 panel_bri_end;
+
+	/* Command to be sent to the panel when entering this HBM range */
+	struct dsi_panel_cmd_set dsi_cmd;
+};
+
+struct hbm_data {
+	struct hbm_range ranges[HBM_RANGE_MAX];
+	u32 num_ranges;
+	u32 cur_range;
 };
 
 struct dsi_backlight_config {
 	enum dsi_backlight_type type;
 
+	u32 bl_min_level;
+	u32 bl_max_level;
 	u32 brightness_max_level;
 	u32 bl_scale;
 	u32 bl_scale_ad;
 	u32 bl_actual;
+	u16 *lut;
 	unsigned int last_state;
-	struct dsi_backlight_calc_params bl_normal_params;
 
-	/* High brightness mode parameters */
-	bool bl_hbm_supported;
-	struct dsi_backlight_calc_params bl_hbm_params;
+	/* Minimum safe brightness level during VR mode */
+	u32 bl_vr_min_safe_level;
 
-
-	/* The active backlight parameters, depending on HBM state */
-	struct dsi_backlight_calc_params *bl_active_params;
+	struct hbm_data *hbm;
 
 	int en_gpio;
 
@@ -366,6 +379,7 @@ int dsi_panel_parse_dt_cmd_set(struct device_node *of_node,
 			       const char *cmd_str,
 			       const char *cmd_state_str,
 			       struct dsi_panel_cmd_set *cmd);
+void dsi_panel_destroy_cmd_packets(struct dsi_panel_cmd_set *set);
 
 int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_state);
 int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_state);

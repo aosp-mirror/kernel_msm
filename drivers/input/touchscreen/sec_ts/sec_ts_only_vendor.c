@@ -289,3 +289,14 @@ err_sysfs:
 	input_err(true, &ts->client->dev, "%s: fail\n", __func__);
 	return ret;
 }
+
+void sec_ts_raw_device_exit(struct sec_ts_data *ts)
+{
+	sysfs_remove_group(&ts->dev->kobj, &cmd_attr_group);
+#ifdef CONFIG_SEC_SYSFS
+	sec_device_destroy(ts->dev->devt)
+#else
+	device_destroy(sec_class, 0);
+#endif
+}
+

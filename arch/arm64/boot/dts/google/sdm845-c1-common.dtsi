@@ -52,6 +52,10 @@
 };
 
 &p9221 {
-	fod = [a4 2a 86 36 84 3d 9a 14 9d 0b 88 6f];
+	fod = [a4 2a 86 36 84 3d 9a 14 9d 0b 85 6f];
 	fod_epp = [b0 24 90 42 88 52 88 53 91 36 9c f0];
+};
+
+&actuator_rear {
+	param-index = <8>;
 };

@@ -264,25 +264,38 @@ static int is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 
 
 /* 1. charge profile idx based on the battery temperature */
-static int msc_temp_idx(struct chg_drv *chg_drv, int temp)
+static int msc_temp_idx(struct chg_profile *profile, int temp)
 {
 	int temp_idx = 0;
 
-	while (temp_idx < chg_drv->chg_profile.temp_nb_limits - 1 &&
-	       temp >= chg_drv->chg_profile.temp_limits[temp_idx + 1])
+	while (temp_idx < profile->temp_nb_limits - 1 &&
+	       temp >= profile->temp_limits[temp_idx + 1])
 		temp_idx++;
 
 	return temp_idx;
 }
 
-/* 2. compute the step index given the battery voltage  */
-static int msc_voltage_idx(struct chg_drv *chg_drv, int vbatt)
+/* 2. compute the step index given the battery voltage
+ * When selecting an index need to make sure that headroom for the tier voltage
+ * will allow to send to the battery _at least_ next tier max FCC current and
+ * well over charge termination current.
+ */
+static int msc_voltage_idx(struct chg_profile *profile, int vbatt)
 {
 	int vbatt_idx = 0;
 
-	while (vbatt_idx < chg_drv->chg_profile.volt_nb_limits - 1 &&
-	       vbatt > chg_drv->chg_profile.volt_limits[vbatt_idx])
+	while (vbatt_idx < profile->volt_nb_limits - 1 &&
+	       vbatt > profile->volt_limits[vbatt_idx])
 		vbatt_idx++;
+
+	/* assumes that 3 times the hardware resolution is ok */
+	if (vbatt_idx != profile->volt_nb_limits - 1) {
+		const int vt = profile->volt_limits[vbatt_idx];
+		const int headr = profile->cv_hw_resolution * 3;
+
+		if ((vt - vbatt) < headr)
+			vbatt_idx += 1;
+	}
 
 	return vbatt_idx;
 }
@@ -329,13 +342,13 @@ static void chg_work(struct work_struct *work)
 	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
 
-
 	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
 	if (wlc_psy)
 		wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
 
 	/* If no power source, disable charging and exit */
 	if (!usb_present && !wlc_online) {
+		pr_info("no power source detected, disabling charging\n");
 		reset_chg_drv_state(chg_drv);
 		goto exit_chg_work;
 	}
@@ -405,45 +418,51 @@ static void chg_work(struct work_struct *work)
 
 	/* Multi Step Chargings with compensation of IRDROP
 	 * vbatt_idx = chg_drv->vbatt_idx, fv_uv = chg_drv->fv_uv
-	 * assert(chg_drv->vbatt_idx != -1 && chg_drv->fv_uv != -1)
 	 */
-	temp_idx = msc_temp_idx(chg_drv, temp);
+	temp_idx = msc_temp_idx(profile, temp);
 	if (temp_idx != chg_drv->temp_idx || chg_drv->fv_uv == -1
 		|| chg_drv->vbatt_idx == -1) {
 		/* seed voltage only when really needed */
-		if (chg_drv->vbatt_idx == -1) {
-			vbatt_idx = msc_voltage_idx(chg_drv, vbatt);
-			fv_uv = profile->volt_limits[vbatt_idx];
-		}
+		if (chg_drv->vbatt_idx == -1)
+			vbatt_idx = msc_voltage_idx(profile, vbatt);
 
-		pr_info("MSC_SEED temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d\n",
-			chg_drv->temp_idx, temp_idx, chg_drv->vbatt_idx,
-			vbatt_idx, chg_drv->fv_uv, fv_uv);
+		pr_info("MSC_SEED temp=%d vbatt=%d temp_idx:%d->%d, vbatt_idx:%d->%d\n",
+			temp, vbatt, chg_drv->temp_idx, temp_idx,
+			chg_drv->vbatt_idx, vbatt_idx);
 
 		/* Debounce tier switch only when not already switching */
 		if (chg_drv->checked_tier_switch_cnt == 0)
 			chg_drv->checked_cv_cnt = profile->cv_debounce_cnt;
 	} else if (ibatt > 0) {
-		/* discharging: reset chg_drv state() and check again soon */
-		pr_info("MSC_DISCHARGE ibatt=%d\n", ibatt);
-		reset_chg_drv_state(chg_drv);
+		/* Track battery voltage if discharging is due to system load,
+		 * low ILIM or lack of headroom; stop charging work and reset
+		 * chg_drv state() when discharging is due to disconnect.
+		 * NOTE: POWER_SUPPLY_PROP_STATUS return *_DISCHARGING only on
+		 * disconnect.
+		 * NOTE: same vbat_idx will not change fv_uv
+		 */
+		vbatt_idx = msc_voltage_idx(profile, vbatt);
 		update_interval = profile->cv_update_interval;
-		rerun_work = true;
-		goto handle_rerun;
+
+		pr_info("MSC_DSG vbatt_idx:%d->%d vbatt=%d ibatt=%d fv_uv=%d cv_cnt=%d ov_cnt=%d\n",
+			chg_drv->vbatt_idx, vbatt_idx,
+			vbatt, ibatt, fv_uv,
+			chg_drv->checked_cv_cnt,
+			chg_drv->checked_ov_cnt);
 	} else if (chg_drv->vbatt_idx == profile->volt_nb_limits - 1) {
-		/* will not adjust changer voltage only in the configured
+		/* will not adjust charger voltage only in the configured
 		 * last tier.
 		 * NOTE: might not be the "real" last tier since can I have
 		 * tiers with max charge current == 0.
 		 * NOTE: should I use a voltage limit instead?
 		 */
-		pr_info("MSC_LAST vbatt=%d fv_uv=%d\n", vbatt, fv_uv);
+		pr_info("MSC_LAST vbatt=%d ibatt=%d fv_uv=%d\n",
+			vbatt, ibatt, fv_uv);
 	} else {
-		bool switch_tier_now = false;
 		const int vtier = profile->volt_limits[vbatt_idx];
 		const int utv_margin = profile->cv_range_accuracy;
 		const int otv_margin = profile->cv_otv_margin;
-		const int tier_switch_cnt = profile->cv_tier_switch_cnt;
+		const int switch_cnt = profile->cv_tier_switch_cnt;
 		const int cc_next_max = CCCM_LIMITS(profile, temp_idx,
 						    vbatt_idx + 1);
 
@@ -452,30 +471,37 @@ static void chg_work(struct work_struct *work)
 			const int cc_max =
 				CCCM_LIMITS(profile, temp_idx, vbatt_idx);
 
-			/* pullback, fast poll, penalty on TAPER_RAISE and
-			 * no cv debounce (so will consider switching voltage
-			 * tiers if the current is right)
+			/* pullback when over tier voltage, fast poll, penalty
+			 * on TAPER_RAISE and no cv debounce (so will consider
+			 * switching voltage tiers if the current is right).
+			 * NOTE: lowering voltage might cause a small drop in
+			 * current (we should remain  under next tier)
 			 */
 			fv_uv = msc_round_fv_uv(profile, vtier,
 				fv_uv - profile->cv_hw_resolution);
+			if (fv_uv < vtier)
+				fv_uv = vtier;
+
 			update_interval = profile->cv_update_interval;
 			chg_drv->checked_ov_cnt = profile->cv_tier_ov_cnt;
 			chg_drv->checked_cv_cnt = 0;
 
-			if (-ibatt == cc_max) {
-			/* double penalty if at full current (add margin?) */
-				chg_drv->checked_ov_cnt *= 2;
-				pr_info("MSC_VOVER vbatt=%d ibatt=%d vtier=%d fv_uv=%d\n",
-					vbatt, ibatt, vtier, chg_drv->fv_uv);
-			} else if (chg_drv->checked_tier_switch_cnt > 0) {
-			/* switch to next tier if already counting */
-				switch_tier_now = true;
+			if (chg_drv->checked_tier_switch_cnt > 0) {
+			/* no pullback, next tier if already counting */
+				vbatt_idx = chg_drv->vbatt_idx + 1;
 
-				pr_info("MSC_VSWITCH vbatt=%d ibatt=%d vtier=%d fv_uv=%d\n",
-					vbatt, ibatt, vtier, chg_drv->fv_uv);
+				pr_info("MSC_VSWITCH vt=%d vb=%d ibatt=%d\n",
+					vtier, vbatt, ibatt);
+			} else if (-ibatt == cc_max) {
+			/* pullback, double penalty if at full current */
+				chg_drv->checked_ov_cnt *= 2;
+
+				pr_info("MSC_VOVER vt=%d  vb=%d ibatt=%d fv_uv=%d->%d\n",
+					vtier, vbatt, ibatt,
+					chg_drv->fv_uv, fv_uv);
 			} else {
-				pr_info("MSC_PULLBACK vbatt=%d ibatt=%d vtier=%d fv_uv=%d->%d\n",
-					vbatt, ibatt, vtier,
+				pr_info("MSC_PULLBACK vt=%d vb=%d ibatt=%d fv_uv=%d->%d\n",
+					vtier, vbatt, ibatt,
 					chg_drv->fv_uv, fv_uv);
 			}
 
@@ -489,6 +515,7 @@ static void chg_work(struct work_struct *work)
 		/* FAST: usual compensation (vchrg is vqcom)
 		 * NOTE: there is a race in reading from charger and data here
 		 * might not be consistent (b/110318684)
+		 * NOTE: could add PID loop for management of thermals
 		 */
 			if (vchrg > vbatt) {
 				fv_uv = msc_round_fv_uv(profile, vtier,
@@ -498,25 +525,32 @@ static void chg_work(struct work_struct *work)
 				fv_uv = vtier;
 			}
 
-			pr_info("MSC_FAST vtier=%d vbatt=%d vchrg=%d fv_uv=%d->%d\n",
-				vtier, vbatt, vchrg, chg_drv->fv_uv, fv_uv);
+			/* no tier switch during fast charge */
+			if (chg_drv->checked_cv_cnt == 0)
+				chg_drv->checked_cv_cnt = 1;
+
+			pr_info("MSC_FAST vt=%d vb=%d fv_uv=%d->%d vchrg=%d cv_cnt=%d \n",
+				vtier, vbatt, chg_drv->fv_uv, fv_uv,
+				vchrg, chg_drv->checked_cv_cnt);
 
 		} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
-		/* Not fast or taper, we are debouncing (-ibatt > cc_next_max)
-		 * as we cannot tell if current low is an ESR or actually low
-		 * force switch tier here given b/110731824 b/110812377
-		 * Vfloat ~= Vbatt, current low => end of charge so type
-		 * is not fast or taper
+		/* Not fast or taper: set checked_cv_cnt=0 to make sure we test
+		 * for current and avoid early termination in case of lack of
+		 * headroom (Vfloat ~= Vbatt)
+		 * NOTE: this can cause early switch on low ilim
 		 */
-			pr_info("MSC_TYPE chg_type=%d vbatt=%d vtier=%d fv_uv=%d\n",
-				chg_type, vbatt, vtier, fv_uv);
-			switch_tier_now = true;
+			update_interval = profile->cv_update_interval;
+			chg_drv->checked_cv_cnt = 0;
+
+			pr_info("MSC_TYPE vt=%d vb=%d fv_uv=%d chg_type=%d\n",
+				vtier, vbatt, fv_uv, chg_type);
+
 		} else if (chg_drv->checked_cv_cnt + chg_drv->checked_ov_cnt) {
 		/* TAPER_COUNTDOWN: countdown to raise fv_uv and/or check
 		 * for tier switch, will keep steady...
 		 */
-			pr_info("MSC_DLY vb=%d vt=%d margin=%d fv_uv=%d cv_cnt=%d, ov_cnt=%d\n",
-				vbatt, vtier, profile->cv_range_accuracy, fv_uv,
+			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d\n",
+				vtier, vbatt, fv_uv, profile->cv_range_accuracy,
 				chg_drv->checked_cv_cnt,
 				chg_drv->checked_ov_cnt);
 
@@ -529,9 +563,10 @@ static void chg_work(struct work_struct *work)
 		} else if ((vtier - vbatt) < utv_margin) {
 		/* TAPER_STEADY: close enough to tier, don't need to adjust */
 			update_interval = profile->cv_update_interval;
-			pr_info("MSC_STEADY vb=%d vt=%d margin=%d fv_uv=%d\n",
-				vbatt, vtier, profile->cv_range_accuracy,
-				fv_uv);
+
+			pr_info("MSC_STEADY vt=%d vb=%d fv_uv=%d margin=%d\n",
+				vtier, vbatt, fv_uv,
+				profile->cv_range_accuracy);
 		} else {
 		/* TAPER_RAISE: under tier vlim, raise one click & debounce
 		 * taper (see above handling of "close enough")
@@ -543,44 +578,38 @@ static void chg_work(struct work_struct *work)
 			/* debounce next taper voltage adjustment */
 			chg_drv->checked_cv_cnt = profile->cv_debounce_cnt;
 
-			pr_info("MSC_RAISE vbatt=%d vtier=%d fv_uv=%d->%d\n",
-				vbatt, vtier, chg_drv->fv_uv, fv_uv);
+			pr_info("MSC_RAISE vt=%d vb=%d fv_uv=%d->%d\n",
+				vtier, vbatt, chg_drv->fv_uv, fv_uv);
 		}
 
-		if (switch_tier_now) {
-		/* it says it */
-		} else if (chg_drv->checked_cv_cnt > 0) {
-			pr_info("MSC_WAIT vbatt=%d vtier=%d fv_uv=%d ibatt=%d cv_cnt=%d ov_cnt=%d\n",
-				vbatt, vtier, chg_drv->fv_uv, ibatt,
+		if (chg_drv->checked_cv_cnt > 0) {
+		/* debounce period on tier switch */
+			pr_info("MSC_WAIT vt=%d vb=%d fv_uv=%d ibatt=%d cv_cnt=%d ov_cnt=%d\n",
+				vtier, vbatt, fv_uv, ibatt,
 				chg_drv->checked_cv_cnt,
 				chg_drv->checked_ov_cnt);
 		} else if (-ibatt > cc_next_max) {
 		/* current over next tier, reset tier switch count */
 			chg_drv->checked_tier_switch_cnt = 0;
 
-			pr_info("MSC_NYET ibatt=%d cc_next_max=%d t_cnt=%d\n",
-				ibatt, cc_next_max,
+			pr_info("MSC_RSTC vt=%d vb=%d fv_uv=%d ibatt=%d cc_next_max=%d t_cnt=%d\n",
+				vtier, vbatt, fv_uv, ibatt, cc_next_max,
 				chg_drv->checked_tier_switch_cnt);
+		} else if (chg_drv->checked_tier_switch_cnt >= switch_cnt) {
+		/* next tier, fv_uv detemined at MSC_SET */
+			vbatt_idx = chg_drv->vbatt_idx + 1;
+
+			pr_info("MSC_NEXT tier vb=%d ibatt=%d vbatt_idx=%d->%d\n",
+				vbatt, ibatt, chg_drv->vbatt_idx, vbatt_idx);
 		} else {
 		/* current under next tier, increase tier switch count */
 			chg_drv->checked_tier_switch_cnt++;
 
-			pr_info("MSC_SWITCHC ibatt=%d cc_next_max=%d t_cnt=%d\n",
+			pr_info("MSC_NYET ibatt=%d cc_next_max=%d t_cnt=%d\n",
 				ibatt, cc_next_max,
 				chg_drv->checked_tier_switch_cnt);
 		}
 
-		if (chg_drv->checked_tier_switch_cnt >= tier_switch_cnt
-			|| switch_tier_now) {
-			vbatt_idx = chg_drv->vbatt_idx + 1;
-			fv_uv = profile->volt_limits[vbatt_idx];
-			chg_drv->checked_tier_switch_cnt = 0;
-			chg_drv->checked_ov_cnt = 0;
-
-			pr_info("MSC_NEXT tier vbatt=%d vbatt_idx=%d->%d fv_uv=%d->%d\n",
-				vbatt, chg_drv->vbatt_idx, vbatt_idx,
-				chg_drv->fv_uv, fv_uv);
-		}
 	}
 
 	/* update fv or cc will change in last tier... */
@@ -588,6 +617,18 @@ static void chg_work(struct work_struct *work)
 		|| (fv_uv != chg_drv->fv_uv)) {
 		const int cc_max = CCCM_LIMITS(profile, temp_idx, vbatt_idx);
 		int rc;
+
+		/* need a new fv_uv only on a new voltage tier */
+		if (vbatt_idx != chg_drv->vbatt_idx) {
+			fv_uv = profile->volt_limits[vbatt_idx];
+			chg_drv->checked_tier_switch_cnt = 0;
+			chg_drv->checked_ov_cnt = 0;
+		}
+
+		pr_info("MSC_SET cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
+			chg_drv->checked_cv_cnt, chg_drv->checked_ov_cnt,
+			chg_drv->temp_idx, temp_idx, chg_drv->vbatt_idx,
+			vbatt_idx, chg_drv->fv_uv, fv_uv, cc_max);
 
 		/* taper control on last tier with nonzero charge current */
 		if (vbatt_idx == (profile->volt_nb_limits - 1) ||
@@ -603,18 +644,17 @@ static void chg_work(struct work_struct *work)
 			rc = PSY_SET_PROP(chg_psy,
 					POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv);
 
-		pr_info("MSC_SET cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d, rc=%d\n",
-			chg_drv->checked_cv_cnt, chg_drv->checked_ov_cnt,
-			chg_drv->temp_idx, temp_idx, chg_drv->vbatt_idx,
-			vbatt_idx, chg_drv->fv_uv, fv_uv, cc_max, rc);
-		if (rc != 0)
+		if (rc != 0) {
+			pr_err("MSC_SET: error rc=%d\n", rc);
 			goto error_rerun;
+		}
 
 		chg_drv->vbatt_idx = vbatt_idx;
 		chg_drv->temp_idx = temp_idx;
 		chg_drv->fv_uv = fv_uv;
 	}
 
+	/* DISCHARGING only when not connected */
 	batt_status = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
 
 	switch (batt_status) {

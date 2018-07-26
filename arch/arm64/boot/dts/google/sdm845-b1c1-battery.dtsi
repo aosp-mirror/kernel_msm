@@ -75,6 +75,14 @@
 		io-channels = <&pmi8998_rradc 0>;
 		io-channel-names = "rradc_batt_id";
 		maxim,batt-id-range-pct = <15>;
+
+		maxim,nconvgcfg-temp-hysteresis = <10>;
+		maxim,nconvgcfg-temp-limits = /bits/ 16
+		    <(-70) (-45) (-20) (-3) 14 30 55 80
+		     96 113 130 155 180 230>;
+		maxim,nconvgcfg-values = /bits/ 16
+		    <0xe7c0 0xd7c0 0xc7c0 0xb7c0 0xa740 0x9740 0x86c0 0x7640
+		     0x65c0 0x54c0 0x4440 0x3340 0x2240 0x1140>;
 	};
 };
 

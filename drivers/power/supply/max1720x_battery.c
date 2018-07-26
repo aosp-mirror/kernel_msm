@@ -28,8 +28,13 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#endif
+
 #define MAX1720X_TRECALL_MS 5
 #define MAX1720X_TPOR_MS 150
+#define MAX1720X_TICLR_MS 500
 #define MAX1720X_I2C_DRIVER_NAME "max1720x_fg_irq"
 #define MAX1720X_N_OF_HISTORY_PAGES 203
 #define MAX1720X_DELAY_INIT_MS 1000
@@ -301,27 +306,40 @@ struct max1720x_chip {
 	u16 *history;
 	int history_count;
 	int history_index;
-	u16 status;
+	u16 health_status;
 	int fake_capacity;
-	int fake_temperature;
 	int previous_qh;
 	int current_capacity;
 	int prev_charge_state;
 	char serial_number[25];
 	bool offmode_charger;
+	u32 convgcfg_hysteresis;
+	int nb_convgcfg;
+	int curr_convgcfg_idx;
+	s16 *temp_convgcfg;
+	u16 *convgcfg_values;
+	struct mutex convgcfg_lock;
+	unsigned int debug_irq_none_cnt;
 };
 
-#define REGMAP_READ(regmap, what, dst)				\
-	do {							\
-		unsigned int reg;				\
-		int rtn;					\
-		rtn = regmap_read(regmap, what, &reg);		\
-		if (rtn) {					\
-			pr_err("Failed to read %s\n", #what);	\
-			dst = -1;				\
-		} else						\
-			dst = reg;				\
-	} while (0)
+static inline int max1720x_regmap_read(struct regmap *map,
+				       unsigned int reg,
+				       u16 *val,
+				       const char *name)
+{
+	unsigned int tmp;
+	int rtn = regmap_read(map, reg, &tmp);
+
+	if (rtn)
+		pr_err("Failed to read %s\n", name);
+	else
+		*val = tmp;
+
+	return rtn;
+
+}
+#define REGMAP_READ(regmap, what, dst) \
+	max1720x_regmap_read(regmap, what, dst, #what)
 
 #define REGMAP_WRITE(regmap, what, data)			\
 	do {							\
@@ -436,23 +454,23 @@ static void max1720x_read_log_write_status(struct max1720x_chip *chip,
 					   u16 *buffer)
 {
 	int i;
-	u32 data;
+	u16 data = 0;
 
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_WRITE_0);
 	msleep(MAX1720X_TRECALL_MS);
 	for (i = MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START;
 	     i <= MAX1720X_NVRAM_HISTORY_END; i++) {
-		REGMAP_READ(chip->regmap_nvram, i, data);
-		*buffer++ = (u16) data;
+		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
+		*buffer++ = data;
 	}
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_WRITE_1);
 	msleep(MAX1720X_TRECALL_MS);
 	for (i = MAX1720X_NVRAM_END;
 	     i <= MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END; i++) {
-		REGMAP_READ(chip->regmap_nvram, i, data);
-		*buffer++ = (u16) data;
+		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
+		*buffer++ = data;
 	}
 }
 
@@ -460,30 +478,30 @@ static void max1720x_read_log_valid_status(struct max1720x_chip *chip,
 					   u16 *buffer)
 {
 	int i;
-	u32 data;
+	u16 data = 0;
 
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_0);
 	msleep(MAX1720X_TRECALL_MS);
 	for (i = MAX1720X_NVRAM_HISTORY_VALID_STATUS_START;
 	     i <= MAX1720X_NVRAM_HISTORY_END; i++) {
-		REGMAP_READ(chip->regmap_nvram, i, data);
-		*buffer++ = (u16) data;
+		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
+		*buffer++ = data;
 	}
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_1);
 	msleep(MAX1720X_TRECALL_MS);
 	for (i = MAX1720X_NVRAM_END; i <= MAX1720X_NVRAM_HISTORY_END; i++) {
-		REGMAP_READ(chip->regmap_nvram, i, data);
-		*buffer++ = (u16) data;
+		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
+		*buffer++ = data;
 	}
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_2);
 	msleep(MAX1720X_TRECALL_MS);
 	for (i = MAX1720X_NVRAM_END;
 	     i <= MAX1720X_NVRAM_HISTORY_VALID_STATUS_END; i++) {
-		REGMAP_READ(chip->regmap_nvram, i, data);
-		*buffer++ = (u16) data;
+		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
+		*buffer++ = data;
 	}
 }
 
@@ -531,7 +549,7 @@ static void get_battery_history(struct max1720x_chip *chip,
 				bool *page_status, u16 *history)
 {
 	int i, j, index = 0;
-	u32 data;
+	u16 data = 0;
 
 	for (i = 0; i < MAX1720X_N_OF_HISTORY_PAGES; i++) {
 		if (!page_status[i])
@@ -540,8 +558,9 @@ static void get_battery_history(struct max1720x_chip *chip,
 			     MAX1720X_READ_HISTORY_CMD_BASE + i);
 		msleep(MAX1720X_TRECALL_MS);
 		for (j = 0; j < MAX1720X_HISTORY_PAGE_SIZE; j++) {
-			REGMAP_READ(chip->regmap_nvram, MAX1720X_NVRAM_END + j,
-				    data);
+			(void) REGMAP_READ(chip->regmap_nvram,
+					   MAX1720X_NVRAM_END + j,
+					   &data);
 			history[index * MAX1720X_HISTORY_PAGE_SIZE + j] = data;
 		}
 		index++;
@@ -690,7 +709,8 @@ static void max1720x_cycle_count_work(struct work_struct *work)
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
 						  cycle_count_work);
 
-	REGMAP_READ(chip->regmap, MAX1720X_REPSOC, data);
+	if (REGMAP_READ(chip->regmap, MAX1720X_REPSOC, &data))
+		return;
 	batt_soc = reg_to_percentage(data);
 
 	mutex_lock(&chip->cyc_ctr.lock);
@@ -724,12 +744,14 @@ static void max1720x_restore_cycle_counter(struct max1720x_chip *chip)
 	mutex_lock(&chip->cyc_ctr.lock);
 
 	for (i = 0; i < BUCKET_COUNT; i++) {
-		REGMAP_READ(chip->regmap_nvram, max1720x_cycle_counter_addr[i],
-			    data);
-		chip->cyc_ctr.count[i] = data;
-		pr_debug("max1720x_cycle_counter[%d], addr=0x%02X, count=%d\n",
-			 i, max1720x_cycle_counter_addr[i],
-			 chip->cyc_ctr.count[i]);
+		if (!REGMAP_READ(chip->regmap_nvram,
+				 max1720x_cycle_counter_addr[i],
+				 &data)) {
+			chip->cyc_ctr.count[i] = data;
+			pr_debug("max1720x_cycle_counter[%d], addr=0x%02X, count=%d\n",
+				 i, max1720x_cycle_counter_addr[i],
+				 chip->cyc_ctr.count[i]);
+		}
 	}
 	chip->cyc_ctr.prev_soc = -1;
 
@@ -829,16 +851,14 @@ static DEVICE_ATTR(offmode_charger, 0660,
 static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 {
 	u16 data;
-	int capacity;
+	int capacity, err;
 
 	if (chip->fake_capacity >= 0 && chip->fake_capacity <= 100)
 		return chip->fake_capacity;
 
-	if (chip->status & MAX1720X_STATUS_VMN) {
-		dev_info(chip->dev, "minimal voltage has been breached");
-		return 0;
-	}
-	REGMAP_READ(chip->regmap, MAX1720X_REPSOC, data);
+	err = REGMAP_READ(chip->regmap, MAX1720X_REPSOC, &data);
+	if (err)
+		return err;
 	capacity = reg_to_percentage(data);
 
 	if (capacity == 100 && chip->offmode_charger)
@@ -850,16 +870,16 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 					       int status)
 {
-	u16 data;
+	u16 data = 0;
 
-	REGMAP_READ(chip->regmap, MAX1720X_MIXCAP, data);
+	(void) REGMAP_READ(chip->regmap, MAX1720X_MIXCAP, &data);
 	chip->current_capacity = data;
 
 	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18C, ~data);
 	dev_info(chip->dev, "Capacity primed to %d on %s\n",
 		 data, psy_status_str[status]);
 
-	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
+	(void) REGMAP_READ(chip->regmap, MAX1720X_QH, &data);
 	chip->previous_qh = reg_to_twos_comp_int(data);
 
 	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18D, data);
@@ -869,17 +889,23 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 
 static int max1720x_get_battery_status(struct max1720x_chip *chip)
 {
-	u16 data;
+	u16 data = 0;
 	int current_avg, ichgterm, fullsocthr;
-	int status = POWER_SUPPLY_STATUS_UNKNOWN;
+	int status = POWER_SUPPLY_STATUS_UNKNOWN, err;
 
-	REGMAP_READ(chip->regmap, MAX1720X_AVGCURRENT, data);
+	err = REGMAP_READ(chip->regmap, MAX1720X_AVGCURRENT, &data);
+	if (err)
+		return err;
 	current_avg = -reg_to_micro_amp(data, chip->RSense);
 
-	REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, data);
+	err = REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, &data);
+	if (err)
+		return err;
 	ichgterm = reg_to_micro_amp(data, chip->RSense);
 
-	REGMAP_READ(chip->regmap, MAX1720X_FULLSOCTHR, data);
+	err = REGMAP_READ(chip->regmap, MAX1720X_FULLSOCTHR, &data);
+	if (err)
+		return err;
 	fullsocthr = reg_to_percentage(data);
 
 	if (current_avg < -ichgterm) {
@@ -905,18 +931,18 @@ static int max1720x_get_battery_health(struct max1720x_chip *chip)
 {
 	/* For health report what ever was recently alerted and clear it */
 
-	if (chip->status & MAX1720X_STATUS_VMX) {
-		chip->status &= ~MAX1720X_STATUS_VMX;
+	if (chip->health_status & MAX1720X_STATUS_VMX) {
+		chip->health_status &= ~MAX1720X_STATUS_VMX;
 		return POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 	}
 
-	if (chip->status & MAX1720X_STATUS_TMN) {
-		chip->status &= ~MAX1720X_STATUS_TMN;
+	if (chip->health_status & MAX1720X_STATUS_TMN) {
+		chip->health_status &= ~MAX1720X_STATUS_TMN;
 		return POWER_SUPPLY_HEALTH_COLD;
 	}
 
-	if (chip->status & MAX1720X_STATUS_TMX) {
-		chip->status &= ~MAX1720X_STATUS_TMX;
+	if (chip->health_status & MAX1720X_STATUS_TMX) {
+		chip->health_status &= ~MAX1720X_STATUS_TMX;
 		return POWER_SUPPLY_HEALTH_OVERHEAT;
 	}
 
@@ -934,44 +960,35 @@ static int max1720x_set_battery_soc(struct max1720x_chip *chip,
 	return 0;
 }
 
-static int max1720x_set_battery_temp(struct max1720x_chip *chip,
-				     const union power_supply_propval *val)
-{
-	chip->fake_temperature = val->intval;
-
-	if (chip->psy)
-		power_supply_changed(chip->psy);
-
-	return 0;
-}
-
-static int max1720x_get_battery_qh_based_capacity(struct max1720x_chip *chip)
+static int max1720x_update_battery_qh_based_capacity(struct max1720x_chip *chip)
 {
 	u16 data;
-	int current_qh;
+	int current_qh, err = 0;
 
-	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
+	err = REGMAP_READ(chip->regmap, MAX1720X_QH, &data);
+	if (err)
+		return err;
 	current_qh = reg_to_twos_comp_int(data);
 
 	/* QH value accumulates as battery charges */
 	chip->current_capacity -= (chip->previous_qh - current_qh);
 	chip->previous_qh = current_qh;
 
-	return chip->current_capacity;
+	return 0;
 }
 
 static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
 {
-	u16 data, nvram_capacity;
+	u16 data = 0, nvram_capacity;
 	int current_qh, nvram_qh;
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, data);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, &data);
 	nvram_capacity = ~data;
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18D, data);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18D, &data);
 	nvram_qh = reg_to_twos_comp_int(data);
 
-	REGMAP_READ(chip->regmap, MAX1720X_QH, data);
+	(void) REGMAP_READ(chip->regmap, MAX1720X_QH, &data);
 	current_qh = reg_to_twos_comp_int(data);
 
 	/* QH value accumulates as battery discharges */
@@ -983,13 +1000,50 @@ static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
 		 chip->previous_qh);
 }
 
+static void max1720x_handle_update_nconvgcfg(struct max1720x_chip *chip,
+					     int temp)
+{
+	int idx = -1;
+
+	if (chip->temp_convgcfg == NULL)
+		return;
+
+	if (temp <= chip->temp_convgcfg[0]) {
+		idx = 0;
+	} else if (temp > chip->temp_convgcfg[chip->nb_convgcfg - 1]) {
+		idx = chip->nb_convgcfg - 1;
+	} else {
+		for (idx = 1 ; idx < chip->nb_convgcfg; idx++) {
+			if (temp > chip->temp_convgcfg[idx - 1] &&
+			    temp <= chip->temp_convgcfg[idx])
+				break;
+		}
+	}
+	mutex_lock(&chip->convgcfg_lock);
+	/* We want to switch to higher slot only if above temp + hysteresis
+	 * but when temperature drops, we want to change at the level
+	 */
+	if ((idx != chip->curr_convgcfg_idx) &&
+	    (chip->curr_convgcfg_idx == -1 || idx < chip->curr_convgcfg_idx ||
+	     temp >= chip->temp_convgcfg[chip->curr_convgcfg_idx] +
+	     chip->convgcfg_hysteresis)) {
+		REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NCONVGCFG,
+			     chip->convgcfg_values[idx]);
+		chip->curr_convgcfg_idx = idx;
+		dev_info(chip->dev, "updating nConvgcfg to 0x%04x as temp is %d (idx:%d)\n",
+			 chip->convgcfg_values[idx], temp, idx);
+	}
+	mutex_unlock(&chip->convgcfg_lock);
+}
+
 static int max1720x_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
 {
 	struct max1720x_chip *chip = power_supply_get_drvdata(psy);
 	struct regmap *map = chip->regmap;
-	u16 data;
+	u16 data = 0;
+	int err = 0;
 
 	pm_runtime_get_sync(chip->dev);
 	if (!chip->init_complete || !chip->resume_complete) {
@@ -1001,16 +1055,23 @@ static int max1720x_get_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
 		val->intval = max1720x_get_battery_status(chip);
+		if (val->intval < 0)
+			return val->intval;
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = max1720x_get_battery_health(chip);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = max1720x_get_battery_soc(chip);
+		if (val->intval < 0)
+			return val->intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		data = max1720x_get_battery_qh_based_capacity(chip);
-		val->intval = reg_to_micro_amp_h(data, chip->RSense);
+		err = max1720x_update_battery_qh_based_capacity(chip);
+		if (err < 0)
+			return err;
+		val->intval = reg_to_micro_amp_h(chip->current_capacity,
+						 chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		/*
@@ -1018,75 +1079,76 @@ static int max1720x_get_property(struct power_supply *psy,
 		 * prevent large fluctuations in FULLCAPNOM. MAX1720X_CYCLES LSB
 		 * is 16%
 		 */
-		REGMAP_READ(map, MAX1720X_CYCLES, data);
-		if (reg_to_cycles(data) <= FULLCAPNOM_STABILIZE_CYCLES)
-			REGMAP_READ(map, MAX1720X_DESIGNCAP, data);
-		else
-			REGMAP_READ(map, MAX1720X_FULLCAPNOM, data);
-		val->intval = reg_to_micro_amp_h(data, chip->RSense);
+		err = REGMAP_READ(map, MAX1720X_CYCLES, &data);
+		if (!err) {
+			if (reg_to_cycles(data) <= FULLCAPNOM_STABILIZE_CYCLES)
+				err = REGMAP_READ(map, MAX1720X_DESIGNCAP,
+						  &data);
+			else
+				err = REGMAP_READ(map, MAX1720X_FULLCAPNOM,
+						  &data);
+			val->intval = reg_to_micro_amp_h(data, chip->RSense);
+		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		REGMAP_READ(map, MAX1720X_DESIGNCAP, data);
+		err = REGMAP_READ(map, MAX1720X_DESIGNCAP, &data);
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
-		REGMAP_READ(map, MAX1720X_AVGCURRENT, data);
+		err = REGMAP_READ(map, MAX1720X_AVGCURRENT, &data);
 		/* current is positive value when flowing to device */
 		val->intval = -reg_to_micro_amp(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		REGMAP_READ(map, MAX1720X_CURRENT, data);
+		err = REGMAP_READ(map, MAX1720X_CURRENT, &data);
 		/* current is positive value when flowing to device */
 		val->intval = -reg_to_micro_amp(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		REGMAP_READ(map, MAX1720X_CYCLES, data);
+		err = REGMAP_READ(map, MAX1720X_CYCLES, &data);
 		val->intval = reg_to_cycles(data);
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
-		REGMAP_READ(map, MAX1720X_STATUS, data);
+		err = REGMAP_READ(map, MAX1720X_STATUS, &data);
 		val->intval = (((u16) data) & MAX1720X_STATUS_BST) ? 0 : 1;
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
-		REGMAP_READ(map, MAX1720X_RCELL, data);
+		err = REGMAP_READ(map, MAX1720X_RCELL, &data);
 		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		if (chip->fake_temperature != -EINVAL)
-			val->intval = chip->fake_temperature;
-		else {
-			REGMAP_READ(map, MAX1720X_TEMP, data);
-			val->intval = reg_to_deci_deg_cel(data);
-		}
+		REGMAP_READ(map, MAX1720X_TEMP, &data);
+		val->intval = reg_to_deci_deg_cel(data);
+		max1720x_handle_update_nconvgcfg(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
-		REGMAP_READ(map, MAX1720X_TTE, data);
+		err = REGMAP_READ(map, MAX1720X_TTE, &data);
 		val->intval = reg_to_seconds(data);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
-		REGMAP_READ(map, MAX1720X_TTF, data);
+		err = REGMAP_READ(map, MAX1720X_TTF, &data);
 		val->intval = reg_to_seconds(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_AVG:
-		REGMAP_READ(map, MAX1720X_AVGVCELL, data);
+		err = REGMAP_READ(map, MAX1720X_AVGVCELL, &data);
 		val->intval = reg_to_micro_volt(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
-		REGMAP_READ(map, MAX1720X_MAXMINVOLT, data);
+		err = REGMAP_READ(map, MAX1720X_MAXMINVOLT, &data);
 		/* LSB: 20mV */
 		val->intval = ((data >> 8) & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
-		REGMAP_READ(map, MAX1720X_MAXMINVOLT, data);
+		err = REGMAP_READ(map, MAX1720X_MAXMINVOLT, &data);
 		/* LSB: 20mV */
 		val->intval = (data & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		REGMAP_READ(map, MAX1720X_VCELL, data);
+		err = REGMAP_READ(map, MAX1720X_VCELL, &data);
 		val->intval = reg_to_micro_volt(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
-		REGMAP_READ(map, MAX1720X_VFOCV, data);
+		err = REGMAP_READ(map, MAX1720X_VFOCV, &data);
 		val->intval = reg_to_micro_volt(data);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
@@ -1098,6 +1160,8 @@ static int max1720x_get_property(struct power_supply *psy,
 	default:
 		return -EINVAL;
 	}
+	if (err < 0)
+		return err;
 	return 0;
 }
 
@@ -1119,9 +1183,6 @@ static int max1720x_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		rc = max1720x_set_battery_soc(chip, val);
 		break;
-	case POWER_SUPPLY_PROP_TEMP:
-		rc = max1720x_set_battery_temp(chip, val);
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -1134,7 +1195,6 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
-	case POWER_SUPPLY_PROP_TEMP:
 		return 1;
 	default:
 		break;
@@ -1158,7 +1218,8 @@ static void max1720x_fg_reset(struct max1720x_chip *chip)
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 {
 	struct max1720x_chip *chip = obj;
-	u16 fg_status;
+	u16 fg_status, fg_status_clr;
+	int err = 0;
 
 	if (!chip || irq != chip->primary->irq) {
 		WARN_ON_ONCE(1);
@@ -1171,13 +1232,36 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		return -EAGAIN;
 	}
 	pm_runtime_put_sync(chip->dev);
-	REGMAP_READ(chip->regmap, MAX1720X_STATUS, fg_status);
-	if (fg_status == -1 || fg_status == 0)
+	err = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &fg_status);
+	if (err)
+		return IRQ_NONE;
+	if (fg_status == 0) {
+		chip->debug_irq_none_cnt++;
+		pr_debug("spurius: fg_status=0 cnt=%d\n",
+			chip->debug_irq_none_cnt);
+		/* rate limit spurius interrupts */
+		msleep(MAX1720X_TICLR_MS);
 		return IRQ_HANDLED;
+	}
 
-	chip->status |= fg_status;
+	/* only used to report health */
+	chip->health_status |= fg_status;
+	/* write 0 to clear will loose interrupts when we don't write 1 to the
+	 * bits that are not set. Just inverting fg_status cause an interrupt
+	 * storm, only setting the bits marked as "host must clear" in the DS
+	 * seems to work eg:
+	 *
+	 * fg_status_clr = fg_status
+	 * fg_status_clr |= MAX1720X_STATUS_POR | MAX1720X_STATUS_DSOCI
+	 *                | MAX1720X_STATUS_BI;
+	 *
+	 * If the above logic is sound, we probably need to set also the bits
+	 * that config mark as "host must clear". Maxim to confirm.
+	 */
+	fg_status_clr = fg_status;
+
 	if (fg_status & MAX1720X_STATUS_POR) {
-		fg_status &= ~MAX1720X_STATUS_POR;
+		fg_status_clr &= ~MAX1720X_STATUS_POR;
 		pr_debug("POR is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_IMN)
@@ -1190,23 +1274,23 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		pr_debug("IMX is set\n");
 
 	if (fg_status & MAX1720X_STATUS_DSOCI) {
-		fg_status &= ~MAX1720X_STATUS_DSOCI;
+		fg_status_clr &= ~MAX1720X_STATUS_DSOCI;
 		pr_debug("DSOCI is set\n");
 		schedule_work(&chip->cycle_count_work);
 	}
 	if (fg_status & MAX1720X_STATUS_VMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
-			fg_status &= ~MAX1720X_STATUS_VMN;
+			fg_status_clr &= ~MAX1720X_STATUS_VMN;
 		pr_debug("VMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_TMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_TS)
-			fg_status &= ~MAX1720X_STATUS_TMN;
+			fg_status_clr &= ~MAX1720X_STATUS_TMN;
 		pr_debug("TMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_SMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_SS)
-			fg_status &= ~MAX1720X_STATUS_SMN;
+			fg_status_clr &= ~MAX1720X_STATUS_SMN;
 		pr_debug("SMN is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_BI)
@@ -1214,26 +1298,32 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 
 	if (fg_status & MAX1720X_STATUS_VMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
-			fg_status &= ~MAX1720X_STATUS_VMX;
+			fg_status_clr &= ~MAX1720X_STATUS_VMX;
 		pr_debug("VMX is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_TMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_TS)
-			fg_status &= ~MAX1720X_STATUS_TMX;
+			fg_status_clr &= ~MAX1720X_STATUS_TMX;
 		pr_debug("TMX is set\n");
 	}
 	if (fg_status & MAX1720X_STATUS_SMX) {
 		if (chip->RConfig & MAX1720X_CONFIG_SS)
-			fg_status &= ~MAX1720X_STATUS_SMX;
+			fg_status_clr &= ~MAX1720X_STATUS_SMX;
 		pr_debug("SMX is set\n");
 	}
 
 	if (fg_status & MAX1720X_STATUS_BR)
 		pr_debug("BR is set\n");
 
-	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status);
+	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status_clr);
+
 	if (chip->psy)
 		power_supply_changed(chip->psy);
+
+	/* oneshot w/o filter will unmask on return but gauge will take up
+	 * to 351 ms to clear ALRM1.
+	 */
+	msleep(MAX1720X_TICLR_MS);
 
 	return IRQ_HANDLED;
 }
@@ -1267,14 +1357,17 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 	if (PTR_ERR(chip->iio_ch) == -EPROBE_DEFER) {
 		dev_warn(chip->dev, "iio_channel_get %s not ready\n",
 			 iio_ch_name);
+		devm_kfree(chip->dev, (void *) iio_ch_name);
 		return -EPROBE_DEFER;
 	} else if (IS_ERR(chip->iio_ch)) {
 		dev_warn(chip->dev, "iio_channel_get %s error: %ld\n",
 			 iio_ch_name, PTR_ERR(chip->iio_ch));
 		/* Don't fail probe on that, just ignore error */
+		devm_kfree(chip->dev, (void *) iio_ch_name);
 		return 0;
 	}
 
+	devm_kfree(chip->dev, (void *) iio_ch_name);
 	ret = iio_read_channel_processed(chip->iio_ch, &batt_id);
 	if (ret < 0) {
 		dev_warn(chip->dev, "Failed to read battery id: %d\n", ret);
@@ -1427,7 +1520,7 @@ error_out:
 static int max1720x_apply_regval_register(struct max1720x_chip *chip,
 					struct device_node *node)
 {
-	int cnt, ret = 0, idx;
+	int cnt, ret = 0, idx, err;
 	u16 *regs, data;
 
 	cnt =  of_property_count_elems_of_size(node, "maxim,r_regval",
@@ -1454,8 +1547,8 @@ static int max1720x_apply_regval_register(struct max1720x_chip *chip,
 
 	for (idx = 0; idx < cnt; idx += 2) {
 		if (max1720x_is_reg(chip->dev, regs[idx])) {
-			REGMAP_READ(chip->regmap, regs[idx], data);
-			if (data != regs[idx + 1])
+			err = REGMAP_READ(chip->regmap, regs[idx], &data);
+			if (!err && data != regs[idx + 1])
 				REGMAP_WRITE(chip->regmap, regs[idx],
 					     regs[idx + 1]);
 		}
@@ -1480,55 +1573,164 @@ static int max1720x_handle_dt_register_config(struct max1720x_chip *chip)
 	return ret;
 }
 
-static int max1720x_init_chip(struct max1720x_chip *chip)
+static int max1720x_handle_dt_nconvgcfg(struct max1720x_chip *chip)
 {
-	int ret;
+	int ret = 0, i;
+	struct device_node *node = chip->dev->of_node;
 
-	ret = max1720x_handle_dt_shadow_config(chip);
-	if (ret)
-		return ret;
+	chip->curr_convgcfg_idx = -1;
+	mutex_init(&chip->convgcfg_lock);
+	chip->nb_convgcfg =
+	    of_property_count_elems_of_size(node, "maxim,nconvgcfg-temp-limits",
+					    sizeof(s16));
+	if (!chip->nb_convgcfg)
+		return 0;
 
-	ret = max1720x_handle_dt_register_config(chip);
-	if (ret)
-		return ret;
+	ret = of_property_read_u32(node, "maxim,nconvgcfg-temp-hysteresis",
+				   &chip->convgcfg_hysteresis);
+	if (ret < 0)
+		chip->convgcfg_hysteresis = 10;
 
+	if (chip->nb_convgcfg != of_property_count_elems_of_size(node,
+						  "maxim,nconvgcfg-values",
+						  sizeof(u16))) {
+		dev_warn(chip->dev, "%s maxim,nconvgcfg-values and maxim,nconvgcfg-temp-limits are missmatching number of elements\n",
+			 node->name);
+		return -EINVAL;
+	}
+	chip->temp_convgcfg = devm_kmalloc_array(chip->dev, chip->nb_convgcfg,
+						 sizeof(s16), GFP_KERNEL);
+	if (!chip->temp_convgcfg)
+		return -ENOMEM;
+
+	chip->convgcfg_values = devm_kmalloc_array(chip->dev, chip->nb_convgcfg,
+						   sizeof(u16), GFP_KERNEL);
+	if (!chip->convgcfg_values) {
+		devm_kfree(chip->dev, chip->temp_convgcfg);
+		chip->temp_convgcfg = NULL;
+		return -ENOMEM;
+	}
+
+	ret = of_property_read_u16_array(node, "maxim,nconvgcfg-temp-limits",
+					 (u16 *) chip->temp_convgcfg,
+					 chip->nb_convgcfg);
+	if (ret) {
+		dev_warn(chip->dev, "failed to read maxim,nconvgcfg-temp-limits: %d\n",
+			 ret);
+		goto error;
+	}
+
+	ret = of_property_read_u16_array(node, "maxim,nconvgcfg-values",
+					 chip->convgcfg_values,
+					 chip->nb_convgcfg);
+	if (ret) {
+		dev_warn(chip->dev, "failed to read maxim,nconvgcfg-values: %d\n",
+			 ret);
+		goto error;
+	}
+	for (i = 1; i < chip->nb_convgcfg; i++) {
+		if (chip->temp_convgcfg[i] < chip->temp_convgcfg[i-1]) {
+			dev_warn(chip->dev, "nconvgcfg-temp-limits idx:%d < idx:%d\n",
+				 i, i-1);
+			goto error;
+		}
+		if ((chip->temp_convgcfg[i] - chip->temp_convgcfg[i-1])
+		    <= chip->convgcfg_hysteresis) {
+			dev_warn(chip->dev, "nconvgcfg-temp-hysteresis smaller than idx:%d, idx:%d\n",
+				 i, i-1);
+			goto error;
+		}
+	}
+
+error:
+	if (ret) {
+		devm_kfree(chip->dev, chip->temp_convgcfg);
+		devm_kfree(chip->dev, chip->convgcfg_values);
+		chip->temp_convgcfg = NULL;
+	}
+
+	return ret;
+}
+
+#ifdef CONFIG_DEBUG_FS
+static int get_irq_none_cnt(void *data, u64 *val)
+{
+	struct max1720x_chip *chip = (struct max1720x_chip *)data;
+
+	*val = chip->debug_irq_none_cnt;
 	return 0;
 }
 
-static void max1720x_complete_init(struct max1720x_chip *chip)
+static int set_irq_none_cnt(void *data, u64 val)
 {
-	u16 data;
+	struct max1720x_chip *chip = (struct max1720x_chip *)data;
+
+	if (val == 0)
+		chip->debug_irq_none_cnt = 0;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(irq_none_cnt_fops, get_irq_none_cnt,
+	set_irq_none_cnt, "%llu\n");
+#endif
+
+static int init_debugfs(struct max1720x_chip *chip)
+{
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *de;
+
+	de = debugfs_create_dir("max1720x", 0);
+	if (de)
+		debugfs_create_file("irq_none_cnt", 0644, de,
+				   chip, &irq_none_cnt_fops);
+#endif
+	return 0;
+}
+
+static int max1720x_init_chip(struct max1720x_chip *chip)
+{
+	u16 data = 0;
+	int ret;
+
+	ret = max1720x_handle_dt_shadow_config(chip);
+	if (ret == -EPROBE_DEFER)
+		return ret;
+
+	ret = max1720x_handle_dt_register_config(chip);
+	if (ret == -EPROBE_DEFER)
+		return ret;
+
+	(void) max1720x_handle_dt_nconvgcfg(chip);
 
 	chip->fake_capacity = -EINVAL;
-	chip->fake_temperature = -EINVAL;
 	chip->init_complete = true;
 	chip->resume_complete = true;
 
-	REGMAP_READ(chip->regmap, MAX1720X_STATUS, data);
-	if (data & MAX1720X_STATUS_BR) {
+	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
+	if (!ret && data & MAX1720X_STATUS_BR) {
 		dev_info(chip->dev, "Clearing Battery Removal bit\n");
 		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_BR, 0x0);
 	}
-	if (data & MAX1720X_STATUS_BI) {
+	if (!ret && data & MAX1720X_STATUS_BI) {
 		dev_info(chip->dev, "Clearing Battery Insertion bit\n");
 		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_BI, 0x0);
 	}
-	if (data & MAX1720X_STATUS_POR) {
+	if (!ret && data & MAX1720X_STATUS_POR) {
 		dev_info(chip->dev, "Clearing Power-On Reset bit\n");
 		regmap_update_bits(chip->regmap, MAX1720X_STATUS,
 				   MAX1720X_STATUS_POR, 0x0);
 	}
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NRSENSE, chip->RSense);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NRSENSE, &chip->RSense);
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
-	REGMAP_READ(chip->regmap, MAX1720X_CONFIG, chip->RConfig);
+	(void) REGMAP_READ(chip->regmap, MAX1720X_CONFIG, &chip->RConfig);
 	dev_info(chip->dev, "Config: 0x%04x\n", chip->RConfig);
-	REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, data);
+	(void) REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, &data);
 	dev_info(chip->dev, "IChgTerm: %d\n",
 		 reg_to_micro_amp(data, chip->RSense));
-	REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, data);
+	(void) REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, &data);
 	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
 		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
 
@@ -1536,8 +1738,8 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 	 * Capacity data is stored as complement so it will not be zero. Using
 	 * zero case to detect new un-primed pack
 	 */
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, data);
-	if (data == 0)
+	ret = REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, &data);
+	if (!ret && data == 0)
 		max1720x_prime_battery_qh_capacity(chip,
 						   POWER_SUPPLY_STATUS_UNKNOWN);
 	else
@@ -1545,45 +1747,56 @@ static void max1720x_complete_init(struct max1720x_chip *chip)
 
 	chip->prev_charge_state = POWER_SUPPLY_STATUS_UNKNOWN;
 
+	init_debugfs(chip);
+
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
-}
 
+	return 0;
+}
 
 static void max1720x_set_serial_number(struct max1720x_chip *chip)
 {
-	u16 data0, data1, data2;
-	int date, count = 0;
+	u16 data0 = 0, data1 = 0, data2 = 0;
+	int date, count = 0, shift, err = 0;
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER0, data0);
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER1, data1);
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER2, data2);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, &data0);
+	if (data0 == 0x5357) /* "SW": SWD */
+		shift = 0;
+	else if (data0 == 0x4257) /* "BW": DSY */
+		shift = 8;
+	else
+		return;
+
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER0, &data0);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER1, &data1);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER2, &data2);
 	count += scnprintf(chip->serial_number + count,
 			   sizeof(chip->serial_number) - count,
 			   "%02X%02X%02X",
-			   data0 >> 8, data1 >> 8, data2 >> 8);
+			   data0 >> shift, data1 >> shift, data2 >> shift);
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRDATE, data0);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRDATE, &data0);
 	date = (((((data0 >> 9) & 0x3f) + 1980) * 10000) +
 		((data0 >> 5) & 0xf) * 100 + (data0 & 0x1F));
 	count += scnprintf(chip->serial_number + count,
 		 sizeof(chip->serial_number) - count,
 		 "%d", date);
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, data0);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, &data0);
 	count += scnprintf(chip->serial_number + count,
 		 sizeof(chip->serial_number) - count,
 		 "%c%c", data0 >> 8, data0 & 0xFF);
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME0, data0);
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME1, data1);
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME2, data2);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME0, &data0);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME1, &data1);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME2, &data2);
 	count += scnprintf(chip->serial_number + count,
 			   sizeof(chip->serial_number) - count,
 			   "%c%c%c",
-			   data0 >> 8, data1 >> 8, data2 >> 8);
+			   data0 >> shift, data1 >> shift, data2 >> shift);
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME3, data0);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME3, &data0);
 	if (data0 >> 8 == 0)
 		data0 = ('?' << 8) | (data0 & 0xFF);
 	if ((data0 & 0xFF) == 0)
@@ -1592,22 +1805,33 @@ static void max1720x_set_serial_number(struct max1720x_chip *chip)
 		 sizeof(chip->serial_number) - count,
 		 "%c%c", data0 >> 8, data0 & 0xFF);
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D1, data0);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D1, &data0);
 	count += scnprintf(chip->serial_number + count,
 		 sizeof(chip->serial_number) - count,
 		 "%c", data0 >> 8);
 
-	REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D0, data0);
-	if (data0 >> 8 == 0xb1) {
-		count += scnprintf(chip->serial_number + count,
-				   sizeof(chip->serial_number) - count, "B1");
-	} else if (data0 >> 8 == 0xc1) {
-		count += scnprintf(chip->serial_number + count,
-				   sizeof(chip->serial_number) - count, "C1");
+	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D0, &data0);
+	if (shift == 8) {
+		if (data0 >> 8 == 0xb1) {
+			count += scnprintf(chip->serial_number + count,
+					   sizeof(chip->serial_number) - count,
+					   "B1");
+		} else if (data0 >> 8 == 0xc1) {
+			count += scnprintf(chip->serial_number + count,
+					   sizeof(chip->serial_number) - count,
+					   "C1");
+		} else {
+			count += scnprintf(chip->serial_number + count,
+					   sizeof(chip->serial_number) - count,
+					   "??");
+		}
 	} else {
 		count += scnprintf(chip->serial_number + count,
-				   sizeof(chip->serial_number) - count, "??");
+				   sizeof(chip->serial_number) - count,
+				   "%c%c", data0 >> 8, data0 & 0xFF);
 	}
+	if (err)
+		chip->serial_number[0] = '\0';
 }
 
 static struct power_supply_desc max1720x_psy_desc = {
@@ -1624,68 +1848,13 @@ static void max1720x_init_work(struct work_struct *work)
 {
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
 						  init_work.work);
-	struct device *dev = chip->dev;
-	struct power_supply_config psy_cfg = { };
-	int ret;
+	int ret = max1720x_init_chip(chip);
 
-	ret = max1720x_init_chip(chip);
 	if (ret == -EPROBE_DEFER) {
 		schedule_delayed_work(&chip->init_work,
 				      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
 		return;
 	}
-
-	if (chip->primary->irq) {
-		ret = request_threaded_irq(chip->primary->irq, NULL,
-					   max1720x_fg_irq_thread_fn,
-					   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-					   MAX1720X_I2C_DRIVER_NAME, chip);
-		if (ret != 0) {
-			dev_err(chip->dev, "Unable to register IRQ handler\n");
-			return;
-		}
-		enable_irq_wake(chip->primary->irq);
-	}
-
-	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
-		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
-
-	psy_cfg.drv_data = chip;
-	chip->psy = devm_power_supply_register(dev,
-					       &max1720x_psy_desc, &psy_cfg);
-	if (IS_ERR(chip->psy)) {
-		dev_err(dev, "Couldn't register as power supply\n");
-		ret = PTR_ERR(chip->psy);
-		return;
-	}
-
-	chip->history_index = 0;
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
-	if (ret) {
-		dev_err(dev, "Failed to create history_count attribute\n");
-		return;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
-	if (ret) {
-		dev_err(dev, "Failed to create history attribute\n");
-		return;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
-	if (ret) {
-		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
-		return;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_offmode_charger);
-	if (ret) {
-		dev_err(dev, "Failed to create offmode_charger attribute\n");
-		return;
-	}
-
-	max1720x_set_serial_number(chip);
-	max1720x_complete_init(chip);
 }
 
 static int max1720x_probe(struct i2c_client *client,
@@ -1693,6 +1862,8 @@ static int max1720x_probe(struct i2c_client *client,
 {
 	struct max1720x_chip *chip;
 	struct device *dev = &client->dev;
+	struct power_supply_config psy_cfg = { };
+
 	int ret = 0;
 
 	chip = devm_kzalloc(dev, sizeof(*chip), GFP_KERNEL);
@@ -1725,6 +1896,58 @@ static int max1720x_probe(struct i2c_client *client,
 
 	mutex_init(&chip->cyc_ctr.lock);
 	max1720x_restore_cycle_counter(chip);
+
+	if (chip->primary->irq) {
+		ret = request_threaded_irq(chip->primary->irq, NULL,
+					   max1720x_fg_irq_thread_fn,
+					   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					   MAX1720X_I2C_DRIVER_NAME, chip);
+		if (ret != 0) {
+			dev_err(chip->dev, "Unable to register IRQ handler\n");
+			goto i2c_unregister;
+		}
+		enable_irq_wake(chip->primary->irq);
+	}
+
+	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
+		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
+
+	psy_cfg.drv_data = chip;
+	chip->psy = devm_power_supply_register(dev,
+					       &max1720x_psy_desc, &psy_cfg);
+	if (IS_ERR(chip->psy)) {
+		dev_err(dev, "Couldn't register as power supply\n");
+		ret = PTR_ERR(chip->psy);
+		goto irq_unregister;
+	}
+
+	chip->history_index = 0;
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
+	if (ret) {
+		dev_err(dev, "Failed to create history_count attribute\n");
+		goto psy_unregister;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
+	if (ret) {
+		dev_err(dev, "Failed to create history attribute\n");
+		goto psy_unregister;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
+	if (ret) {
+		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
+		goto psy_unregister;
+	}
+
+	ret = device_create_file(&chip->psy->dev, &dev_attr_offmode_charger);
+	if (ret) {
+		dev_err(dev, "Failed to create offmode_charger attribute\n");
+		goto psy_unregister;
+	}
+
+	max1720x_set_serial_number(chip);
+
 	INIT_WORK(&chip->cycle_count_work, max1720x_cycle_count_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
 	schedule_delayed_work(&chip->init_work,
@@ -1732,8 +1955,13 @@ static int max1720x_probe(struct i2c_client *client,
 
 	return 0;
 
+psy_unregister:
+	power_supply_unregister(chip->psy);
+irq_unregister:
+	free_irq(chip->primary->irq, chip);
 i2c_unregister:
 	i2c_unregister_device(chip->secondary);
+
 	return ret;
 }
 
@@ -1787,17 +2015,17 @@ static int max1720x_pm_resume(struct device *dev)
 
 	return 0;
 }
-static SIMPLE_DEV_PM_OPS(max1720x_pm_ops,
-			max1720x_pm_suspend, max1720x_pm_resume);
-#else
-#define max1720x_pm_ops NULL
 #endif
+static const struct dev_pm_ops max1720x_pm_ops = {
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(max1720x_pm_suspend, max1720x_pm_resume)
+};
 
 static struct i2c_driver max1720x_i2c_driver = {
 	.driver = {
 		   .name = "max1720x",
 		   .of_match_table = max1720x_of_match,
 		   .pm = &max1720x_pm_ops,
+		   .probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		   },
 	.id_table = max1720x_id,
 	.probe = max1720x_probe,

@@ -25,27 +25,27 @@
  */
 
 &pil_modem_mem {
-	reg = <0 0x8e000000 0 0xa600000>;
+	reg = <0 0x8e000000 0 0x9800000>;
 };
 
 &pil_video_mem {
-	reg = <0 0x98600000 0 0x500000>;
+	reg = <0 0x97800000 0 0x500000>;
 };
 
 &pil_cdsp_mem {
-	reg = <0 0x98B00000 0 0x800000>;
+	reg = <0 0x97D00000 0 0x800000>;
 };
 
 &pil_mba_mem {
-	reg = <0 0x99300000 0 0x200000>;
+	reg = <0 0x98500000 0 0x200000>;
 };
 
 &pil_slpi_mem {
-		reg = <0 0x99500000 0 0x1400000>;
+	reg = <0 0x98700000 0 0x1400000>;
 };
 
 &pil_spss_mem {
-	reg = <0 0x9A900000 0 0x100000>;
+	reg = <0 0x99B00000 0 0x100000>;
 };
 
 &reserved_memory {
@@ -61,22 +61,22 @@
 		reg = <0 0xa1800000 0 0x00010000>;
 	};
 
-	ramoops_mem: ramoops_region@a3800000 {
+	ramoops_mem: ramoops_region@a1810000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xa3800000 0 0x200000>;
+		reg = <0 0xa1810000 0 0x200000>;
 	};
 
-	alt_ramoops_mem: alt_ramoops_region@a3a00000 {
+	alt_ramoops_mem: alt_ramoops_region@a1a10000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xa3a00000 0 0x200000>;
+		reg = <0 0xa1a10000 0 0x200000>;
 	};
 
-	ramoops_meta_mem: ramoops_meta_region@a3c00000 {
+	ramoops_meta_mem: ramoops_meta_region@a1c10000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xa3c00000 0 0x1000>;
+		reg = <0 0xa1c10000 0 0x1000>;
 	};
 
 };

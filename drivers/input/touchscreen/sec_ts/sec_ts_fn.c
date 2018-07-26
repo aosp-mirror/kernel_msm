@@ -6596,7 +6596,7 @@ void sec_ts_fn_remove(struct sec_ts_data *ts)
 {
 	input_err(true, &ts->client->dev, "%s\n", __func__);
 
-	sysfs_delete_link(&ts->sec.fac_dev->kobj, &ts->input_dev->dev.kobj, "input");
+	sysfs_remove_link(&ts->sec.fac_dev->kobj, "input");
 
 	sysfs_remove_group(&ts->sec.fac_dev->kobj,
 			   &cmd_attr_group);

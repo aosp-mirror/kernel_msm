@@ -757,6 +757,7 @@ static void psy_changed_handler(struct work_struct *work)
 	union power_supply_propval val;
 	int ret = 0;
 
+	pm_wakeup_event(&pd->dev, PD_ACTIVITY_TIMEOUT_MS);
 	ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_MODE, &val);
 	if (ret < 0) {
@@ -1699,13 +1700,25 @@ static void pd_phy_shutdown(struct usbpd *pd)
 {
 	int rc = 0;
 
+	flush_delayed_work(&pd->ext_vbus_work);
 	mutex_lock(&pd->lock);
 	if (regulator_is_enabled(pd->vbus)) {
 		rc = regulator_disable(pd->vbus);
-		if (rc < 0)
+		if (rc < 0) {
 			pr_err("unable to disable vbus\n");
-		else
+		} else {
 			pd->vbus_output = false;
+			pd->smb2_vbus_reg = false;
+		}
+	}
+	if (pd->ext_vbus_reg) {
+		rc = regulator_disable(pd->ext_vbus);
+		if (rc < 0) {
+			pr_err("unable to disable vbus\n");
+		} else {
+			pd->vbus_output = false;
+			pd->ext_vbus_reg = false;
+		}
 	}
 	if (regulator_is_enabled(pd->vconn)) {
 		rc = regulator_disable(pd->vconn);

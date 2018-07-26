@@ -35,6 +35,9 @@ struct dsi_backlight_pwm_config {
 	int pwm_gpio;
 };
 
+static void dsi_panel_bl_hbm_free(struct device *dev,
+	struct hbm_data **hbm_data);
+
 static inline bool is_standby_mode(unsigned long state)
 {
 	return (state & BL_STATE_STANDBY) != 0;
@@ -81,7 +84,7 @@ static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 
 	dsi = &panel->mipi_device;
 
-	num_params = bl->bl_active_params->max_level > 0xFF ? 2 : 1;
+	num_params = bl->bl_max_level > 0xFF ? 2 : 1;
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl, num_params);
 	if (rc < 0)
 		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
@@ -89,9 +92,125 @@ static int dsi_backlight_update_dcs(struct dsi_backlight_config *bl, u32 bl_lvl)
 	return rc;
 }
 
+/* Linearly interpolate value x from range [x1, x2] to determine the
+ * corresponding value in range [y1, y2].
+ */
+static int dsi_backlight_lerp(u16 x1, u16 x2, u16 y1, u16 y2, u16 x, u32 *y)
+{
+	if ((x2 < x1) || (y2 < y1))
+		return -EINVAL;
+
+	if (((x2 - x1) == 0) || (x <= x1))
+		*y = y1;
+	else if (x >= x2)
+		*y = y2;
+	else
+		*y = DIV_ROUND_CLOSEST((x - x1) * (y2 - y1), x2 - x1) + y1;
+
+	return 0;
+}
+
+static u32 dsi_backlight_calculate_normal(struct dsi_backlight_config *bl,
+		int brightness)
+{
+	u32 bl_lvl = 0;
+	int rc = 0;
+
+	if (bl->lut) {
+		/*
+		 * look up panel brightness; the first entry in the LUT
+		 corresponds to userspace brightness level 1
+		 */
+		if (WARN_ON(brightness > bl->brightness_max_level))
+			bl_lvl = bl->lut[bl->brightness_max_level];
+		else
+			bl_lvl = bl->lut[brightness];
+	} else {
+		/* map UI brightness into driver backlight level rounding it */
+		rc = dsi_backlight_lerp(
+			1, bl->brightness_max_level,
+			bl->bl_min_level ? : 1, bl->bl_max_level,
+			brightness, &bl_lvl);
+		if (unlikely(rc))
+			pr_err("failed to linearly interpolate, brightness unmodified\n");
+	}
+
+	pr_debug("normal bl: bl_lut %sused\n", bl->lut ? "" : "un");
+
+	return bl_lvl;
+}
+
+int dsi_backlight_hbm_find_range(struct dsi_backlight_config *bl,
+		int brightness, u32 *range)
+{
+	u32 i;
+
+	if (!bl || !bl->hbm || !range)
+		return -EINVAL;
+
+	for (i = 0; i < bl->hbm->num_ranges; i++) {
+		if (brightness <= bl->hbm->ranges[i].user_bri_end) {
+			*range = i;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static u32 dsi_backlight_calculate_hbm(struct dsi_backlight_config *bl,
+		int brightness)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct hbm_data *hbm = bl->hbm;
+	struct hbm_range *range = NULL;
+	u32 bl_lvl = 0;
+	int rc = 0;
+	/* It's unlikely that a brightness value of 0 will make it to this
+	 * function, but if it does use the dimmest HBM range.
+	 */
+	u32 target_range = 0;
+
+	if (likely(brightness)) {
+		rc = dsi_backlight_hbm_find_range(bl, brightness,
+			&target_range);
+		if (rc) {
+			pr_err("Did not find a matching HBM range for brightness %d\n",
+				brightness);
+			return bl->bl_actual;
+		}
+	}
+
+	range = hbm->ranges + target_range;
+	if (hbm->cur_range != target_range) {
+		rc = dsi_panel_cmd_set_transfer(panel, &range->dsi_cmd);
+		if (rc) {
+			pr_err("Failed to send command for range %d\n",
+				target_range);
+			return bl->bl_actual;
+		}
+		pr_info("hbm: range %d -> %d\n", hbm->cur_range, target_range);
+		hbm->cur_range = target_range;
+	}
+
+	rc = dsi_backlight_lerp(
+		range->user_bri_start, range->user_bri_end,
+		range->panel_bri_start, range->panel_bri_end,
+		brightness, &bl_lvl);
+	if (unlikely(rc))
+		pr_err("hbm: failed to linearly interpolate, brightness unmodified\n");
+
+	pr_debug("hbm: user %d-%d, panel %d-%d\n",
+		range->user_bri_start, range->user_bri_end,
+		range->panel_bri_start, range->panel_bri_end);
+
+	return bl_lvl;
+}
+
 static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 				   int brightness)
 {
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
 	u32 bl_lvl = 0;
 	u32 bl_temp;
 
@@ -105,32 +224,14 @@ static u32 dsi_backlight_calculate(struct dsi_backlight_config *bl,
 	bl_temp = mult_frac(bl_temp, bl->bl_scale_ad,
 			MAX_AD_BL_SCALE_LEVEL);
 
-	if (bl->bl_active_params->lut) {
-		/*
-		 * look up panel brightness; the first entry in the LUT
-		 corresponds to userspace brightness level 1
-		 */
-		if (WARN_ON(bl_temp > bl->brightness_max_level))
-			bl_lvl = bl->bl_active_params->
-				lut[bl->brightness_max_level];
-		else
-			bl_lvl = bl->bl_active_params->lut[bl_temp];
-	} else {
-		/* map UI brightness into driver backlight level rounding it */
-		const u32 bl_min = bl->bl_active_params->min_level ? : 1;
-		const u32 bl_range = bl->bl_active_params->max_level - bl_min;
+	if (panel->hbm_mode)
+		bl_lvl = dsi_backlight_calculate_hbm(bl, bl_temp);
+	else
+		bl_lvl = dsi_backlight_calculate_normal(bl, bl_temp);
 
-		if (bl_temp > 1)
-			bl_lvl =
-				DIV_ROUND_CLOSEST((bl_temp - 1) * bl_range,
-					bl->brightness_max_level - 1);
-		bl_lvl += bl_min;
-	}
-
-	pr_debug("brightness=%d, bl_scale=%d, ad=%d, bl_lvl=%d, bl_lut %sused\n",
-			brightness, bl->bl_scale,
-			bl->bl_scale_ad, bl_lvl,
-			bl->bl_active_params->lut ? "" : "un");
+	pr_debug("brightness=%d, bl_scale=%d, ad=%d, bl_lvl=%d, hbm = %d\n",
+			brightness, bl->bl_scale, bl->bl_scale_ad, bl_lvl,
+			panel->hbm_mode);
 
 	return bl_lvl;
 }
@@ -153,6 +254,15 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 		goto done;
 
 	if (dsi_panel_initialized(panel) && bl->update_bl) {
+		/* VR brightness is set as part of the VR entry sequence.
+		 * This safeguard is to protect against userspace reducing
+		 * brightness below safe limits during VR mode. Normal
+		 * brightness range is restored when exiting VR mode by
+		 * reevaluating requested user brightness.
+		 */
+		if (panel->vr_mode && (bl_lvl < bl->bl_vr_min_safe_level))
+			bl_lvl = bl->bl_vr_min_safe_level;
+
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
 
@@ -295,7 +405,7 @@ static ssize_t hbm_mode_store(struct device *dev,
 	bd = to_backlight_device(dev);
 	bl = bl_get_data(bd);
 
-	if (!bl->bl_hbm_supported)
+	if (!bl->hbm)
 		return -ENOTSUPP;
 
 	rc = kstrtobool(buf, &hbm_mode);
@@ -322,7 +432,7 @@ static ssize_t hbm_mode_show(struct device *dev,
 	bd = to_backlight_device(dev);
 	bl = bl_get_data(bd);
 
-	if (!bl->bl_hbm_supported)
+	if (!bl->hbm)
 		return snprintf(buf, PAGE_SIZE, "unsupported\n");
 
 	panel = container_of(bl, struct dsi_panel, bl_config);
@@ -544,6 +654,12 @@ int dsi_backlight_get_dpms(struct dsi_backlight_config *bl)
 }
 
 #define MAX_BINNED_BL_MODES 10
+#define DCS_BRIGHTNESS_COMPENSATION 0xC7
+enum dcs_brightness_comp_reg {
+	DCS_LPB_COMP_VALUE = 0,
+	DCS_LPB_BGR_TRIM = 2,
+	DCS_LPB_COMP_SIZE,
+};
 
 struct binned_lp_node {
 	struct list_head head;
@@ -556,7 +672,51 @@ struct binned_lp_data {
 	struct list_head mode_list;
 	struct binned_lp_node *last_lp_mode;
 	struct binned_lp_node priv_pool[MAX_BINNED_BL_MODES];
+
+	struct {
+		bool initialized;
+		u8 buf[DCS_LPB_COMP_SIZE];
+		u8 adder;
+	} lp_brightness_comp;
 };
+
+static void dsi_panel_lp_compensate(struct dsi_backlight_config *bl,
+				   struct binned_lp_node *target_node)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct binned_lp_data *lp_data = bl->priv;
+	u8 buf[16];
+
+	/* zero adder means nothing to do */
+	if (!lp_data->lp_brightness_comp.adder)
+		return;
+
+	if (!lp_data->lp_brightness_comp.initialized) {
+		ssize_t read_size = mipi_dsi_dcs_read(&panel->mipi_device,
+					DCS_BRIGHTNESS_COMPENSATION, buf,
+					DCS_LPB_COMP_SIZE);
+		if (unlikely(read_size != DCS_LPB_COMP_SIZE)) {
+			pr_warn("unable to read brightness comp");
+			return;
+		}
+		memcpy(lp_data->lp_brightness_comp.buf, buf, read_size);
+		lp_data->lp_brightness_comp.initialized = true;
+		pr_debug("Read LP brightness comp: %02X\n", buf[0]);
+	} else {
+		memcpy(buf, lp_data->lp_brightness_comp.buf, DCS_LPB_COMP_SIZE);
+	}
+
+	/* add compensation in LP mode, otherwise restore original value */
+	if (target_node && target_node->bl_threshold > 0) {
+		buf[DCS_LPB_COMP_VALUE] += lp_data->lp_brightness_comp.adder;
+		buf[DCS_LPB_BGR_TRIM] = 0x00; /* lowest bgr trim current */
+	}
+
+	pr_debug("LP brightness compensation: %02X\n", buf[0]);
+
+	mipi_dsi_dcs_write(&panel->mipi_device, DCS_BRIGHTNESS_COMPENSATION,
+			   buf, DCS_LPB_COMP_SIZE);
+}
 
 static int dsi_panel_binned_bl_update(struct dsi_backlight_config *bl,
 				      u32 bl_lvl)
@@ -580,6 +740,8 @@ static int dsi_panel_binned_bl_update(struct dsi_backlight_config *bl,
 	}
 
 	if (node != lp_data->last_lp_mode) {
+		dsi_panel_lp_compensate(bl, node);
+
 		lp_data->last_lp_mode = node;
 		if (node) {
 			pr_debug("switching display lp mode: %s (%d)\n",
@@ -640,6 +802,7 @@ static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 	struct binned_lp_data *lp_data;
 	struct device_node *lp_modes_np, *child_np;
 	struct binned_lp_node *lp_node;
+	u32 val;
 	int num_modes;
 	int rc = -ENOTSUPP;
 
@@ -679,6 +842,16 @@ static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 	}
 	list_sort(NULL, &lp_data->mode_list, _dsi_panel_binned_bl_cmp);
 
+	if (!of_property_read_u32(panel->panel_of_node,
+				  "google,mdss-dsi-lp-brightness-compensation",
+				  &val)) {
+		pr_debug("LP brightness compensation: %d\n", val);
+		lp_data->lp_brightness_comp.adder = (u8)val;
+	} else {
+		lp_data->lp_brightness_comp.adder = 0;
+	}
+	lp_data->lp_brightness_comp.initialized = false;
+
 	bl->update_bl = dsi_panel_binned_bl_update;
 	bl->unregister = dsi_panel_bl_free_unregister;
 	bl->priv = lp_data;
@@ -698,6 +871,54 @@ static const struct of_device_id dsi_backlight_dt_match[] = {
 	},
 	{}
 };
+
+static int dsi_panel_bl_parse_hbm_node(struct device *parent,
+	struct dsi_backlight_config *bl, struct device_node *np,
+	struct hbm_range *range)
+{
+	int rc;
+	u32 val = 0;
+
+	rc = of_property_read_u32(np, "google,dsi-hbm-brightness-threshold",
+		&val);
+	if (rc) {
+		pr_err("Unable to parse dsi-hbm-brightness-threshold\n");
+		return rc;
+	}
+	if (val > bl->brightness_max_level) {
+		pr_err("hbm-brightness-threshold exceeds max userspace brightness\n");
+		return rc;
+	}
+	range->user_bri_start = val;
+
+	rc = of_property_read_u32(np, "google,dsi-bl-hbm-min-level",
+		&val);
+	if (rc) {
+		pr_err("dsi-bl-hbm-min-level unspecified\n");
+		return rc;
+	}
+	range->panel_bri_start = val;
+
+	rc = of_property_read_u32(np, "google,dsi-bl-hbm-max-level",
+		&val);
+	if (rc) {
+		pr_err("bl-hbm-max-level unspecified\n");
+		return rc;
+	}
+	if (val < range->panel_bri_start) {
+		pr_err("Invalid HBM panel brightness range: bl-hbm-max-level < bl-hbm-min-level\n");
+		return rc;
+	}
+	range->panel_bri_end = val;
+
+	rc = dsi_panel_parse_dt_cmd_set(np,
+		"google,dsi-hbm-range-entry-command",
+		"google,dsi-hbm-commands-state", &range->dsi_cmd);
+	if (rc)
+		pr_info("Unable to parse optional dsi-hbm-range-entry-command\n");
+
+	return 0;
+}
 
 int dsi_panel_bl_register(struct dsi_panel *panel)
 {
@@ -748,6 +969,8 @@ int dsi_panel_bl_unregister(struct dsi_panel *panel)
 
 	if (bl->bl_device)
 		sysfs_remove_groups(&bl->bl_device->dev.kobj, bl_device_groups);
+
+	dsi_panel_bl_hbm_free(panel->parent, &bl->hbm);
 
 	return 0;
 }
@@ -815,7 +1038,7 @@ static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
 
 static int dsi_panel_bl_parse_lut(struct device *parent,
 	struct device_node *of_node, const char *bl_lut_prop_name,
-	u32 brightness_max_level, struct dsi_backlight_calc_params *bl_params)
+	u32 brightness_max_level, u16 **lut)
 {
 	u32 len = 0;
 	u32 i = 0;
@@ -825,14 +1048,14 @@ static int dsi_panel_bl_parse_lut(struct device *parent,
 	u32 lut_length = brightness_max_level + 1;
 	u16 *bl_lut_tmp = NULL;
 
-	if (!of_node || !bl_lut_prop_name || !bl_params)
+	if (!of_node || !bl_lut_prop_name || !lut)
 		return -EINVAL;
 
-	if (bl_params->lut) {
+	if (*lut) {
 		pr_warn("LUT for %s already exists, freeing before reparsing\n",
 			bl_lut_prop_name);
-		devm_kfree(parent, bl_params->lut);
-		bl_params->lut = NULL;
+		devm_kfree(parent, *lut);
+		*lut = NULL;
 	}
 
 	prop = of_find_property(of_node, bl_lut_prop_name, &len);
@@ -857,63 +1080,96 @@ static int dsi_panel_bl_parse_lut(struct device *parent,
 	for (i = 0; i < len; i++)
 		bl_lut_tmp[i] = (u16)(be32_to_cpup(val++) & 0xffff);
 
-	bl_params->lut = bl_lut_tmp;
+	*lut = bl_lut_tmp;
 
 done:
 	return rc;
 }
 
-/*
- * Helper function to parse high brightness mode (HBM) data. HBM entry/exit
- * commands are parsed separately, along with other panel timing commands.
- */
+static void dsi_panel_bl_hbm_free(struct device *dev,
+	struct hbm_data **hbm_data)
+{
+	u32 i = 0;
+
+	if (!hbm_data || !(*hbm_data))
+		return;
+
+	for (i = 0; i < (*hbm_data)->num_ranges; i++)
+		dsi_panel_destroy_cmd_packets(&(*hbm_data)->ranges[i].dsi_cmd);
+
+	devm_kfree(dev, *hbm_data);
+	*hbm_data = NULL;
+}
+
 static int dsi_panel_bl_parse_hbm(struct device *parent,
 		struct dsi_backlight_config *bl, struct device_node *of_node)
 {
-	u32 rc = 0;
-	u32 val = 0;
+	struct device_node *hbm_ranges_np;
+	struct device_node *child_np;
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	u32 rc = 0;
+	u32 i = 0;
+	u32 num_ranges = 0;
 
 	panel->hbm_mode = false;
-	bl->bl_hbm_supported = false;
 
-	if (!of_property_read_bool(of_node, "qcom,mdss-dsi-bl-hbm-enable"))
-		goto done;
-
-	pr_debug("found hbm enable\n");
-
-	/* default to non-HBM parameters*/
-	bl->bl_hbm_params.min_level = bl->bl_normal_params.min_level;
-	bl->bl_hbm_params.max_level = bl->bl_normal_params.max_level;
-
-	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-hbm-min-level",
-		&val);
-	if (rc)
-		pr_debug("[%s] bl-hbm-min-level unspecified, defaulting to non-HBM setting\n",
-			panel->name);
-	else
-		bl->bl_hbm_params.min_level = val;
-
-
-	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-hbm-max-level",
-		&val);
-	if (rc)
-		pr_debug("[%s] bl-hbm-max-level unspecified, defaulting to non-HBM setting\n",
-			 panel->name);
-	else
-		bl->bl_hbm_params.max_level = val;
-
-	rc = dsi_panel_bl_parse_lut(parent, of_node, "qcom,mdss-dsi-bl-hbm-lut",
-		bl->brightness_max_level, &bl->bl_hbm_params);
-	if (rc) {
-		pr_err("[%s] failed to create HBM backlight LUT, rc=%d\n",
-			panel->name, rc);
-		goto done;
+	if (bl->hbm) {
+		pr_warn("HBM data already parsed, freeing before reparsing\n");
+		dsi_panel_bl_hbm_free(parent, &bl->hbm);
 	}
 
-	bl->bl_hbm_supported = true;
+	hbm_ranges_np = of_get_child_by_name(of_node, "google,hbm-ranges");
+	if (!hbm_ranges_np) {
+		pr_info("HBM modes list not found\n");
+		return 0;
+	}
 
-done:
+	num_ranges = of_get_child_count(hbm_ranges_np);
+	if (!num_ranges || (num_ranges > HBM_RANGE_MAX)) {
+		pr_err("Invalid number of HBM modes: %d\n", num_ranges);
+		return -EINVAL;
+	}
+
+	bl->hbm = devm_kmalloc(parent, sizeof(struct hbm_data), GFP_KERNEL);
+	if (bl->hbm == NULL) {
+		pr_err("Failed to allocate memory for HBM data\n");
+		return -ENOMEM;
+	}
+
+	bl->hbm->num_ranges = num_ranges;
+
+	for_each_child_of_node(hbm_ranges_np, child_np) {
+		rc = dsi_panel_bl_parse_hbm_node(parent, bl,
+			child_np, bl->hbm->ranges + i);
+		if (rc) {
+			pr_err("Failed to parse HBM range %d of %d\n",
+				i + 1, num_ranges);
+			goto exit_free;
+		}
+		i++;
+	}
+
+	for (i = 0; i < num_ranges - 1; i++) {
+		/* Make sure ranges are sorted and not overlapping */
+		if (bl->hbm->ranges[i].user_bri_start >=
+				bl->hbm->ranges[i + 1].user_bri_start) {
+			pr_err("HBM ranges must be sorted by hbm-brightness-threshold\n");
+			rc = -EINVAL;
+			goto exit_free;
+		}
+
+		/* Fill in user_bri_end for each range */
+		bl->hbm->ranges[i].user_bri_end =
+			bl->hbm->ranges[i + 1].user_bri_start - 1;
+	}
+
+	bl->hbm->ranges[i].user_bri_end = bl->brightness_max_level;
+	bl->hbm->cur_range = HBM_RANGE_MAX;
+
+	return 0;
+
+exit_free:
+	dsi_panel_bl_hbm_free(parent, &bl->hbm);
 	return rc;
 }
 
@@ -924,8 +1180,6 @@ int dsi_panel_bl_parse_config(struct device *parent,
 	int rc = 0;
 	const char *bl_type;
 	u32 val = 0;
-
-	bl->bl_active_params = &bl->bl_normal_params;
 
 	bl_type = of_get_property(of_node,
 				  "qcom,mdss-dsi-bl-pmic-control-type",
@@ -951,18 +1205,18 @@ int dsi_panel_bl_parse_config(struct device *parent,
 	if (rc) {
 		pr_debug("[%s] bl-min-level unspecified, defaulting to zero\n",
 			 panel->name);
-		bl->bl_normal_params.min_level = 0;
+		bl->bl_min_level = 0;
 	} else {
-		bl->bl_normal_params.min_level = val;
+		bl->bl_min_level = val;
 	}
 
 	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-max-level", &val);
 	if (rc) {
 		pr_debug("[%s] bl-max-level unspecified, defaulting to max level\n",
 			 panel->name);
-		bl->bl_normal_params.max_level = MAX_BL_LEVEL;
+		bl->bl_max_level = MAX_BL_LEVEL;
 	} else {
-		bl->bl_normal_params.max_level = val;
+		bl->bl_max_level = val;
 	}
 
 	rc = of_property_read_u32(of_node, "qcom,mdss-brightness-max-level",
@@ -976,21 +1230,28 @@ int dsi_panel_bl_parse_config(struct device *parent,
 	}
 
 	rc = dsi_panel_bl_parse_lut(parent, of_node, "qcom,mdss-dsi-bl-lut",
-		bl->brightness_max_level, &bl->bl_normal_params);
+		bl->brightness_max_level, &bl->lut);
 	if (rc) {
 		pr_err("[%s] failed to create backlight LUT, rc=%d\n",
 			panel->name, rc);
 		goto error;
 	}
-	pr_debug("[%s] bl-lut %sused\n", panel->name,
-		bl->bl_normal_params.lut ? "" : "un");
+	pr_debug("[%s] bl-lut %sused\n", panel->name, bl->lut ? "" : "un");
 
 	rc = dsi_panel_bl_parse_hbm(parent, bl, of_node);
 	if (rc)
 		pr_err("[%s] error while parsing high brightness mode (hbm) details, rc=%d\n",
 			panel->name, rc);
-	pr_debug("[%s] bl-hbm-lut %sused\n", panel->name,
-		bl->bl_hbm_params.lut ? "" : "un");
+
+	rc = of_property_read_u32(of_node, "qcom,mdss-dsi-bl-vr-min-safe-level",
+		&val);
+	if (rc) {
+		bl->bl_vr_min_safe_level = 0;
+	} else {
+		pr_debug("[%s] bl-vr-min-safe-level is %d\n",
+			 panel->name, val);
+		bl->bl_vr_min_safe_level = val;
+	}
 
 	bl->en_gpio = of_get_named_gpio(of_node,
 					      "qcom,platform-bklight-en-gpio",

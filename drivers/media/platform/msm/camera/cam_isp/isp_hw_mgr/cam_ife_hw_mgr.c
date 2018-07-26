@@ -1811,7 +1811,6 @@ static int cam_ife_mgr_stop_hw(void *hw_mgr_priv, void *stop_hw_args)
 	if (cam_cdm_stream_off(ctx->cdm_handle))
 		CAM_ERR(CAM_ISP, "CDM stream off failed %d",
 			ctx->cdm_handle);
-	cam_tasklet_stop(ctx->common.tasklet_info);
 
 	CAM_DBG(CAM_ISP, "Going to stop IFE Mux");
 
@@ -1823,6 +1822,7 @@ static int cam_ife_mgr_stop_hw(void *hw_mgr_priv, void *stop_hw_args)
 	CAM_DBG(CAM_ISP, "Going to stop IFE Out");
 
 	/* IFE out resources */
+	/* This will stop the IFE so that there will be no BH call. */
 	for (i = 0; i < CAM_IFE_HW_OUT_RES_MAX; i++)
 		cam_ife_hw_mgr_stop_hw_res(&ctx->res_list_ife_out[i]);
 	/* get master base index first */
@@ -1832,7 +1832,9 @@ static int cam_ife_mgr_stop_hw(void *hw_mgr_priv, void *stop_hw_args)
 			break;
 		}
 	}
-
+	/* After this, there will be no BH call so that we can call
+	cam_tasklet_stop here */
+	cam_tasklet_stop(ctx->common.tasklet_info);
 	/*
 	 * If Context does not have PIX resources and has only RDI resource
 	 * then take the first base index.

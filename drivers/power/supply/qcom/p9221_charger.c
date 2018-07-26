@@ -42,8 +42,7 @@ static const u32 p9221_ov_set_lut[] = {
 
 static bool p9221_is_r5(struct p9221_charger_data *charger)
 {
-	return (charger->cust_id == P9221R5_CUSTOMER_ID_VAL) ||
-		(charger->cust_id == P9221R7_CUSTOMER_ID_VAL);
+	return (charger->cust_id == P9221R5_CUSTOMER_ID_VAL);
 }
 
 static size_t p9221_hex_str(u8 *data, size_t len, char *buf, size_t max_buf,
@@ -768,9 +767,10 @@ static struct p9221_prop_reg_map_entry *p9221_get_map_entry(
 
 
 	for (i = 0; i < map_size; i++) {
-		if (((set && p->set) || (!set && p->get)) &&
-		    (p->prop == prop) && p->reg)
-			return p;
+		if (p->prop == prop) {
+			if ((set && p->set) || (!set && p->get))
+				return p;
+		}
 		p++;
 	}
 	return NULL;
@@ -843,6 +843,9 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 
 	charger->online = false;
 
+	/* Reset PP buf so we can get a new serial number next time around */
+	charger->pp_buf_valid = false;
+
 	p9221_abort_transfers(charger);
 	cancel_delayed_work(&charger->dcin_work);
 	del_timer(&charger->vrect_timer);
@@ -900,6 +903,9 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 	int ret;
 	uint32_t tx_id = 0;
 
+	if (!charger->online)
+		return NULL;
+
 	if (p9221_is_r5(charger)) {
 		pm_runtime_get_sync(charger->dev);
 		if (!charger->resume_complete) {
@@ -908,11 +914,25 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 		}
 		pm_runtime_put_sync(charger->dev);
 
-		ret = p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG, &tx_id,
+		if (p9221_is_epp(charger)) {
+			ret = p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG,
+					       &tx_id, sizeof(tx_id));
+			if (ret)
+				dev_err(&charger->client->dev,
+					"Failed to read txid %d\n", ret);
+		} else {
+			/*
+			 * If pp_buf_valid is true, we have received a serial
+			 * number from the Tx, copy it to tx_id. (pp_buf_valid
+			 * is left true here until we go offline as we may
+			 * read this multiple times.)
+			 */
+			if (charger->pp_buf_valid &&
+			    sizeof(tx_id) <= P9221R5_MAX_PP_BUF_SIZE)
+				memcpy(&tx_id, &charger->pp_buf[1],
 				       sizeof(tx_id));
-		if (ret)
-			dev_err(&charger->client->dev,
-				"Failed to read txid %d\n", ret);
+		}
+
 	}
 	scnprintf(charger->tx_id_str, sizeof(charger->tx_id_str),
 		  "%08x", tx_id);
@@ -966,11 +986,13 @@ static int p9221_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		if (charger->last_capacity == val->intval)
 			break;
-		charger->last_capacity = val->intval;
-		ret = p9221_send_csp(charger, charger->last_capacity);
-		if (ret)
-			dev_err(&charger->client->dev,
-				"Could send csp: %d\n", ret);
+		if (charger->online) {
+			charger->last_capacity = val->intval;
+			ret = p9221_send_csp(charger, charger->last_capacity);
+			if (ret)
+				dev_err(&charger->client->dev,
+					"Could send csp: %d\n", ret);
+		}
 		break;
 
 	default:
@@ -1122,7 +1144,7 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 static void p9221_set_online(struct p9221_charger_data *charger)
 {
 	int ret;
-	u8 cid = 0;
+	u8 cid = 5;
 
 	dev_info(&charger->client->dev, "Set online\n");
 
@@ -1130,6 +1152,7 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	charger->tx_busy = false;
 	charger->tx_done = true;
 	charger->rx_done = false;
+	charger->last_capacity = -1;
 
 	ret = p9221_reg_read_8(charger, P9221_CUSTOMER_ID_REG, &cid);
 	if (ret)
@@ -1176,23 +1199,27 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	del_timer(&charger->vrect_timer);
 
 	/*
-	 * Always write FOD and check dc_icl
+	 * Always write FOD, check dc_icl, send CSP
 	 */
 	if (prop.intval) {
 		p9221_set_dc_icl(charger);
 		p9221_write_fod(charger);
+		if (charger->last_capacity > 0)
+			p9221_send_csp(charger, charger->last_capacity);
 	}
 
 	/* We may have already gone online during check_det */
 	if (charger->online == prop.intval)
-		return;
+		goto out;
 
 	if (prop.intval)
 		p9221_set_online(charger);
 	else
 		p9221_set_offline(charger);
 
-	dev_info(&charger->client->dev, "trigger wc changed\n");
+out:
+	dev_info(&charger->client->dev, "trigger wc changed on:%d in:%d\n",
+		 charger->online, prop.intval);
 	power_supply_changed(charger->wc_psy);
 }
 
@@ -1417,7 +1444,8 @@ static ssize_t p9221_show_status(struct device *dev,
 		p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG, &tx_id,
 				 sizeof(tx_id));
 		count += scnprintf(buf + count, PAGE_SIZE - count,
-				   "tx_id       : %08x\n", tx_id);
+				   "tx_id       : %08x (%s)\n", tx_id,
+				   p9221_get_tx_id_str(charger));
 
 		count += p9221_add_reg_buffer(charger, buf, count,
 					      P9221R5_ALIGN_X_ADC_REG, 8, 1,
@@ -1471,6 +1499,11 @@ static ssize_t p9221_show_status(struct device *dev,
 			   charger->pdata->fod_epp_num);
 	count += p9221_hex_str(charger->pdata->fod_epp,
 			       charger->pdata->fod_epp_num,
+			       buf + count, PAGE_SIZE - count, false);
+
+	count += scnprintf(buf + count, PAGE_SIZE - count,
+			   "\npp buf      : (v=%d) ", charger->pp_buf_valid);
+	count += p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
 			       buf + count, PAGE_SIZE - count, false);
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
@@ -1917,6 +1950,27 @@ static void p9221r5_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 		cancel_delayed_work(&charger->tx_work);
 		sysfs_notify(&charger->dev->kobj, NULL, "txbusy");
 		sysfs_notify(&charger->dev->kobj, NULL, "txdone");
+	}
+
+	/* Proprietary packet */
+	if (irq_src & P9221R5_STAT_PPRCVD) {
+		const size_t maxsz = sizeof(charger->pp_buf) * 3 + 1;
+		char s[maxsz];
+
+		res = p9221_reg_read_n(charger,
+				       P9221R5_DATA_RECV_BUF_START,
+				       charger->pp_buf,
+				       sizeof(charger->pp_buf));
+		if (res)
+			dev_err(&charger->client->dev,
+				"Failed to read PP len: %d\n", res);
+
+		/* We only care about PP which come with 0x4F header */
+		charger->pp_buf_valid = (charger->pp_buf[0] == 0x4F);
+
+		p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
+			      s, maxsz, false);
+		dev_info(&charger->client->dev, "Received PP: %s\n", s);
 	}
 
 	/* CC Reset complete */

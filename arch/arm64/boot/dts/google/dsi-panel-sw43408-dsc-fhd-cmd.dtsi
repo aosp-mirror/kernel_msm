@@ -53,28 +53,13 @@
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <0x8>; /* 2.74 nits */
-		qcom,mdss-dsi-bl-max-level = <0x3b7>; /* 420.12 nits */
+		qcom,mdss-dsi-bl-max-level = <0x384>; /* 399.81 nits */
 		qcom,mdss-dsi-panel-hdr-enabled;
 		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
 			17000 15500 30000 8000 3000>;
 		qcom,mdss-dsi-panel-peak-brightness = <6200000>;
 		qcom,mdss-dsi-panel-blackness-level = <42>;
-
-		/* High brightness mode */
-		qcom,mdss-dsi-bl-hbm-enable;
-		qcom,mdss-dsi-bl-hbm-max-level = <0x3ff>;
-
-		qcom,esd-check-enabled;
-		/* select one from te_signal_check, reg_read, and irq_check */
-		qcom,mdss-dsi-panel-status-check-mode = "irq_check";
-		/* reg_read setting */
-		qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
-		qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
-		qcom,mdss-dsi-panel-status-value = <0x9c>;
-		qcom,mdss-dsi-panel-on-check-value = <0x9c>;
-		qcom,mdss-dsi-panel-status-read-length = <1>;
-		/* irq_check setting */
-		google,dsi-esd-irq = <&dsi_esd_irq_sw43408>;
+		google,mdss-dsi-lp-brightness-compensation = <7>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
@@ -105,8 +90,6 @@
 					39 01 00 00 00 00 13 CD 00 00 00 19 19 19
 						19 19 19 19 19 19 19 19 19 19 16 16
 					39 01 00 00 00 00 06 CB 80 5C 07 03 28
-					/* ERR_FG TH settings */
-					39 01 00 00 00 00 04 C5 99 09 00
 					39 01 00 00 00 00 04 C0 02 02 0F
 					39 01 00 00 00 00 07 55 04 61 DB 04 70 DB
 					15 01 00 00 00 00 02 B0 CA
@@ -125,20 +108,29 @@
 					39 01 00 00 00 00 07 55 04 61 DB 04 78 DB
 					39 01 00 00 00 00 0D B4 2A 40 25 22 41 41 41 0A 10 50 11 03
 					39 01 00 00 3C 00 06 CB 80 5C 07 09 28
-					05 01 00 00 00 00 01 12
+					15 01 00 00 00 00 02 C0 01
 				];
 
 				qcom,mdss-dsi-nolp-command = [
 					05 01 00 00 00 00 01 22
 					15 01 00 00 00 00 02 B0 AC
+					15 01 00 00 00 00 02 C0 02
 					39 01 00 00 00 00 0D B4 2A 02 25 22 41 41 41 0A 10 50 11 00
 					39 01 00 00 00 00 06 CB 80 5C 07 03 28
+					39 01 00 00 00 00 03 51 00 00
 					05 01 00 00 3C 00 01 13
 				];
 
 				qcom,mdss-dsi-vr-command = [
 					05 01 00 00 64 00 01 28
 					/* display off; wait 100ms */
+					15 01 00 00 00 00 02 B0 AC
+					/* MCS Access */
+					39 01 00 00 00 00 08 E5 00 3E 00 3E 00
+						0E 30
+					/* VR mode: enable EM inversion */
+					15 01 00 00 00 00 02 B0 CA
+					/* Don't MCS Access */
 					39 01 00 00 00 00 07 55 04 70 DB 04 70 DB
 					/* Write ACL - turn off edge rounding */
 					39 01 00 00 00 00 03 51 01 A0
@@ -152,6 +144,13 @@
 				qcom,mdss-dsi-novr-command = [
 					05 01 00 00 64 00 01 28
 					/* display off; wait 100ms */
+					15 01 00 00 00 00 02 B0 AC
+					/* MCS Access */
+					39 01 00 00 00 00 08 E5 00 3E 00 3E 00
+						0E 10
+					/* Normal mode: disable EM inversion */
+					15 01 00 00 00 00 02 B0 CA
+					/* Don't MCS Access */
 					39 01 00 00 00 00 03 53 0C 30
 					/* vr mode disable */
 					39 01 00 00 00 00 07 55 04 61 DB 04 70 DB
@@ -214,10 +213,19 @@
 
 				google,dsi-lp-brightness-threshold = <255>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 01 FF
+					39 01 00 00 00 00 03 51 03 FF
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+		};
+
+		google,hbm-ranges {
+			hbm-range@0 {
+				google,dsi-hbm-brightness-threshold = <1>;
+
+				google,dsi-bl-hbm-min-level = <0x8>;
+				google,dsi-bl-hbm-max-level = <0x3ff>;
 			};
 		};
 	};

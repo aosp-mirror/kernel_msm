@@ -1500,6 +1500,8 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 	case PD_CTRL_PS_RDY:
 		switch (port->state) {
 		case SNK_TRANSITION_SINK:
+			tcpm_log(port, "in PR_SWAP := false");
+			port->tcpc->set_in_pr_swap(port->tcpc, false);
 			if (port->vbus_present) {
 				tcpm_set_current_limit(port,
 						       port->current_limit,
@@ -2772,12 +2774,13 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, SNK_HARD_RESET_SINK_OFF, 0);
 		break;
 	case SRC_HARD_RESET_VBUS_OFF:
-		tcpm_set_vconn(port, true);
+		tcpm_set_vconn(port, false);
 		tcpm_set_vbus(port, false);
 		tcpm_set_roles(port, false, TYPEC_SOURCE, TYPEC_HOST);
 		tcpm_set_state(port, SRC_HARD_RESET_VBUS_ON, PD_T_SRC_RECOVER);
 		break;
 	case SRC_HARD_RESET_VBUS_ON:
+		tcpm_set_vconn(port, true);
 		tcpm_set_vbus(port, true);
 		port->tcpc->set_pd_rx(port->tcpc, true);
 		tcpm_set_attached_state(port, true);
@@ -2932,8 +2935,6 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state_cond(port, SNK_UNATTACHED, PD_T_PS_SOURCE_ON);
 		break;
 	case PR_SWAP_SRC_SNK_SINK_ON:
-		tcpm_log(port, "in PR_SWAP := false");
-		port->tcpc->set_in_pr_swap(port->tcpc, false);
 		tcpm_set_state(port, SNK_STARTUP, 0);
 		break;
 	case PR_SWAP_SNK_SRC_SINK_OFF:
@@ -3326,7 +3327,9 @@ static void _tcpm_pd_vbus_off(struct tcpm_port *port)
 		tcpm_set_state(port, SNK_HARD_RESET_WAIT_VBUS, 0);
 		break;
 	case SRC_HARD_RESET_VBUS_OFF:
-		tcpm_set_state(port, SRC_HARD_RESET_VBUS_ON, 0);
+		/*
+		 * Mandatory tSrcRecovery time. So do nothing.
+		 */
 		break;
 	case HARD_RESET_SEND:
 		break;
@@ -3776,6 +3779,8 @@ int tcpm_update_sink_capabilities(struct tcpm_port *port, const u32 *pdo,
 	case SNK_READY:
 	case SNK_TRANSITION_SINK:
 	case SNK_TRANSITION_SINK_VBUS:
+		tcpm_log(port, "in PR_SWAP := false");
+		port->tcpc->set_in_pr_swap(port->tcpc, false);
 		tcpm_set_state(port, SNK_NEGOTIATE_CAPABILITIES, 0);
 		break;
 	default:

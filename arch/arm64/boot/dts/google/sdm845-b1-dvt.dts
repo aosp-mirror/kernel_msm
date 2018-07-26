@@ -16,10 +16,17 @@
 #include "sdm845-b1-common-v2.1.dtsi"
 #include "sdm845-patherm.dtsi"
 #include "sdm845-usbctherm.dtsi"
-#include "sdm845-b1c1-usb-v2.dtsi"
+#include "sdm845-b1-usb-v3.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 B1 DVT";
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
 	qcom,board-id = <0x00021405 0>;
+};
+
+&nq {
+	ese {
+		loader_scripts_path =
+				"/vendor/etc/ese/loaderservice_updater_dvt_";
+	};
 };

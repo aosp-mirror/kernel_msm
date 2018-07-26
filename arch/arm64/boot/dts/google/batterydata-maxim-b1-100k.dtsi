@@ -27,7 +27,6 @@ maxim,n_regval = /bits/ 16 <
 	0x9B 0xCCB4	/* nOCVTable11                              */
 	0x9E 0xA561	/* nVEmpty: VE=3300 VR=3880                 */
 	0xB1 0x0204	/* nRippleCfg                               */
-	0xB3 0x0B94	/* nDesignCap: 2964 mAh                     */
 	0xB5 0x9C01	/* nPackCfg                                 */
 	0xB6 0x0000	/* nRelaxCfg                                */
 	0xB9 0xA00E	/* nNVCfg1                                  */

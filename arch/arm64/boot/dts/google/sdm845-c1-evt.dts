@@ -14,6 +14,7 @@
 /dts-v1/;
 
 #include "sdm845-c1-common.dtsi"
+#include "sdm845-c1-proto-panel.dtsi"
 #include "sdm845-b1c1-audio-cal.dtsi"
 #include "sdm845-patherm.dtsi"
 #include "sdm845-b1c1-thermal-v2.dtsi"
@@ -30,4 +31,11 @@
 	idt,irq_det_gpio = <0>;
 	idt,gpio_qien = <0>;
 	idt,gpio_slct = <0>;
+};
+
+&nq {
+	ese {
+		loader_scripts_path =
+				"/vendor/etc/ese/loaderservice_updater_eng_";
+	};
 };

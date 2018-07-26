@@ -16,7 +16,7 @@
 #define __P9221_CHARGER_H__
 
 #define P9221_WLC_VOTER				"WLC_VOTER"
-#define P9221_DC_ICL_BPP_UA			1000000
+#define P9221_DC_ICL_BPP_UA			700000
 #define P9221_DC_ICL_EPP_UA			1100000
 #define P9221_EPP_THRESHOLD_UV			7000000
 
@@ -28,7 +28,6 @@
 #define P9221_CHIP_REVISION_REG			0x02
 #define P9221_CUSTOMER_ID_REG			0x03
 #define P9221R5_CUSTOMER_ID_VAL			0x05
-#define P9221R7_CUSTOMER_ID_VAL			0x07
 #define P9221_OTP_FW_MAJOR_REV_REG		0x04
 #define P9221_OTP_FW_MINOR_REV_REG		0x06
 #define P9221_OTP_FW_DATE_REG			0x08
@@ -154,6 +153,7 @@
 #define P9221R5_DATA_SEND_BUF_SIZE		0x80
 #define P9221R5_DATA_RECV_BUF_START		0x180
 #define P9221R5_DATA_RECV_BUF_SIZE		0x80
+#define P9221R5_MAX_PP_BUF_SIZE			16
 #define P9221R5_LAST_REG			0x1FF
 
 /*
@@ -270,6 +270,8 @@ struct p9221_charger_data {
 	u16				addr;
 	u8				count;
 	u8				cust_id;
+	u8				pp_buf[P9221R5_MAX_PP_BUF_SIZE];
+	bool				pp_buf_valid;
 	u8				rx_buf[P9221R5_DATA_RECV_BUF_SIZE];
 	u16				rx_len;
 	bool				rx_done;

@@ -107,8 +107,6 @@
 		vddi-supply = <&pm8998_l14>;
 		vpnl-supply = <&pm8998_l28>;
 		lab-supply = <&lab_regulator>;
-
-		qcom,platform-te-gpio = <&tlmm 12 0>;
 	};
 
 	dsi_s6e3ha8_cmd_display: qcom,dsi-display@52 {
@@ -131,8 +129,6 @@
 		vddi-supply = <&pm8998_l14>;
 		vci-supply = <&pm8998_l28>;
 		lab-supply = <&lab_regulator>;
-
-		qcom,platform-te-gpio = <&tlmm 12 0>;
 	};
 
 	sde_wb: qcom,wb-display@0 {
@@ -328,23 +324,5 @@
 			qcom,supply-disable-load = <100>;
 			qcom,supply-post-on-sleep = <0>;
 		};
-	};
-};
-
-&mdss_mdp {
-	dsi_esd_irq_s6e3ha8: dsi_esd_irq_s6e3ha8 {
-		interrupt-parent = <&spmi_bus>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&poled_err_fg_default>;
-		google,esd-irq-gpio = <&pmi8998_gpios 14 GPIO_ACTIVE_HIGH>;
-		google,esd-irq-mode = "trigger_high";
-	};
-
-	dsi_esd_irq_sw43408: dsi_esd_irq_sw43408 {
-		interrupt-parent = <&spmi_bus>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&poled_err_fg_default>;
-		google,esd-irq-gpio = <&pmi8998_gpios 14 GPIO_ACTIVE_HIGH>;
-		google,esd-irq-mode = "trigger_high";
 	};
 };

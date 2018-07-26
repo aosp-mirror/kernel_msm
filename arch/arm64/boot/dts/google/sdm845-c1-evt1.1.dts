@@ -14,6 +14,7 @@
 /dts-v1/;
 
 #include "sdm845-c1-common.dtsi"
+#include "sdm845-c1-proto-panel.dtsi"
 #include "sdm845-patherm.dtsi"
 #include "sdm845-usbctherm.dtsi"
 
@@ -21,4 +22,11 @@
 	model = "Google Inc. MSM sdm845 C1 EVT v1.1";
 	compatible = "google,b1c1-sdm845", "qcom,sdm845";
 	qcom,board-id = <0x00010B05 0>;
+};
+
+&nq {
+	ese {
+		loader_scripts_path =
+				"/vendor/etc/ese/loaderservice_updater_eng_";
+	};
 };

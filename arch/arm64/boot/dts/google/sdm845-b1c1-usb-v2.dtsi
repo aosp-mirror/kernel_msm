@@ -1,4 +1,4 @@
-/* Overrides phy tuning parameters for B1 EVT2, B1 EVT2.1, B1 DVT */
+/* Overrides phy tuning parameters for B1 EVT2, B1 EVT2.1 */
 
 &qusb_phy0 {
 	qcom,qusb-phy-init-seq =

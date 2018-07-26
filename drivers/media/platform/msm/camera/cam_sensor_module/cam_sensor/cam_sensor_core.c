@@ -720,6 +720,8 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		if (s_ctrl->fw_update_flag & (1 << 1)) {
 			CAM_INFO(CAM_SENSOR, "[VCMFW]Check rear actuator FW");
 			rc = checkRearVCMFWUpdate(s_ctrl);
+			CAM_INFO(CAM_SENSOR, "[VCMFW]Check temperature params");
+			rc = checkRearVCMFWUpdate_temp(s_ctrl);
 		}
 
 		if (s_ctrl->fw_update_flag & (1 << 2))

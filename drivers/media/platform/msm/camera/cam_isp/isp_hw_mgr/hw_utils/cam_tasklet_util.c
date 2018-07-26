@@ -70,25 +70,27 @@ struct cam_tasklet_info {
 	void                              *ctx_priv;
 };
 
-/**
- * cam_tasklet_get_cmd()
- *
- * @brief:              Get free cmd from tasklet
- *
- * @tasklet:            Tasklet Info structure to get cmd from
- * @tasklet_cmd:        Return tasklet_cmd pointer if successful
- *
- * @return:             0: Success
- *                      Negative: Failure
- */
-static int cam_tasklet_get_cmd(
-	struct cam_tasklet_info        *tasklet,
-	struct cam_tasklet_queue_cmd  **tasklet_cmd)
+struct cam_irq_bh_api tasklet_bh_api = {
+	.bottom_half_enqueue_func = cam_tasklet_enqueue_cmd,
+	.get_bh_payload_func = cam_tasklet_get_cmd,
+	.put_bh_payload_func = cam_tasklet_put_cmd,
+};
+
+int cam_tasklet_get_cmd(
+	void                         *bottom_half,
+	void                        **bh_cmd)
 {
 	int           rc = 0;
 	unsigned long flags;
+	struct cam_tasklet_info        *tasklet = bottom_half;
+	struct cam_tasklet_queue_cmd   *tasklet_cmd = NULL;
 
-	*tasklet_cmd = NULL;
+	*bh_cmd = NULL;
+
+	if (tasklet == NULL) {
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "tasklet is NULL");
+		return -EINVAL;
+	}
 
 	if (!atomic_read(&tasklet->tasklet_active)) {
 		CAM_ERR_RATE_LIMIT(CAM_ISP, "Tasklet is not active!\n");
@@ -102,9 +104,10 @@ static int cam_tasklet_get_cmd(
 		rc = -ENODEV;
 		goto spin_unlock;
 	} else {
-		*tasklet_cmd = list_first_entry(&tasklet->free_cmd_list,
+		tasklet_cmd = list_first_entry(&tasklet->free_cmd_list,
 			struct cam_tasklet_queue_cmd, list);
-		list_del_init(&(*tasklet_cmd)->list);
+		list_del_init(&(tasklet_cmd)->list);
+		*bh_cmd = tasklet_cmd;
 	}
 
 spin_unlock:
@@ -112,25 +115,28 @@ spin_unlock:
 	return rc;
 }
 
-/**
- * cam_tasklet_put_cmd()
- *
- * @brief:              Put back cmd to free list
- *
- * @tasklet:            Tasklet Info structure to put cmd into
- * @tasklet_cmd:        tasklet_cmd pointer that needs to be put back
- *
- * @return:             Void
- */
-static void cam_tasklet_put_cmd(
-	struct cam_tasklet_info        *tasklet,
-	struct cam_tasklet_queue_cmd  **tasklet_cmd)
+void cam_tasklet_put_cmd(
+	void                         *bottom_half,
+	void                        **bh_cmd)
 {
 	unsigned long flags;
+	struct cam_tasklet_info        *tasklet = bottom_half;
+	struct cam_tasklet_queue_cmd   *tasklet_cmd = *bh_cmd;
+
+	if (tasklet == NULL) {
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "tasklet is NULL");
+		return;
+	}
+
+	if (tasklet_cmd == NULL) {
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "Invalid tasklet_cmd");
+		return;
+	}
 
 	spin_lock_irqsave(&tasklet->tasklet_lock, flags);
-	list_add_tail(&(*tasklet_cmd)->list,
-		&tasklet->free_cmd_list);
+	list_del_init(&tasklet_cmd->list);
+	list_add_tail(&tasklet_cmd->list, &tasklet->free_cmd_list);
+	*bh_cmd = NULL;
 	spin_unlock_irqrestore(&tasklet->tasklet_lock, flags);
 }
 
@@ -157,12 +163,6 @@ static int cam_tasklet_dequeue_cmd(
 
 	*tasklet_cmd = NULL;
 
-	if (!atomic_read(&tasklet->tasklet_active)) {
-		CAM_INFO(CAM_ISP, "Tasklet is not active!");
-		rc = -EPIPE;
-		return rc;
-	}
-
 	CAM_DBG(CAM_ISP, "Dequeue before lock.");
 	spin_lock_irqsave(&tasklet->tasklet_lock, flags);
 	if (list_empty(&tasklet->used_cmd_list)) {
@@ -181,24 +181,31 @@ spin_unlock:
 	return rc;
 }
 
-int cam_tasklet_enqueue_cmd(
+void cam_tasklet_enqueue_cmd(
 	void                              *bottom_half,
+	void                              *bh_cmd,
 	void                              *handler_priv,
 	void                              *evt_payload_priv,
 	CAM_IRQ_HANDLER_BOTTOM_HALF        bottom_half_handler)
 {
-	struct cam_tasklet_info       *tasklet = bottom_half;
-	struct cam_tasklet_queue_cmd  *tasklet_cmd = NULL;
 	unsigned long                  flags;
-	int                            rc;
+	struct cam_tasklet_queue_cmd  *tasklet_cmd = bh_cmd;
+	struct cam_tasklet_info       *tasklet = bottom_half;
 
 	if (!bottom_half) {
-		CAM_ERR(CAM_ISP, "NULL bottom half");
-		return -EINVAL;
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "NULL bottom half");
+		return;
 	}
 
-	rc = cam_tasklet_get_cmd(tasklet, &tasklet_cmd);
+	if (!bh_cmd) {
+		CAM_ERR(CAM_ISP, "NULL bh cmd");
+		return;
+	}
 
+	if (!atomic_read(&tasklet->tasklet_active)) {
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "Tasklet is not active\n");
+		return;
+	}
 	if (tasklet_cmd) {
 		CAM_DBG(CAM_ISP, "Enqueue tasklet cmd");
 		tasklet_cmd->bottom_half_handler = bottom_half_handler;
@@ -211,8 +218,6 @@ int cam_tasklet_enqueue_cmd(
 	} else {
 		CAM_ERR(CAM_ISP, "tasklet cmd is NULL!");
 	}
-
-	return rc;
 }
 
 int cam_tasklet_init(
@@ -244,7 +249,7 @@ int cam_tasklet_init(
 	}
 	tasklet_init(&tasklet->tasklet, cam_tasklet_action,
 		(unsigned long)tasklet);
-	cam_tasklet_stop(tasklet);
+	tasklet_disable(&tasklet->tasklet);
 
 	*tasklet_info = tasklet;
 
@@ -255,40 +260,39 @@ void cam_tasklet_deinit(void    **tasklet_info)
 {
 	struct cam_tasklet_info *tasklet = *tasklet_info;
 
-	atomic_set(&tasklet->tasklet_active, 0);
-	tasklet_kill(&tasklet->tasklet);
+	if (atomic_read(&tasklet->tasklet_active)) {
+		atomic_set(&tasklet->tasklet_active, 0);
+		tasklet_kill(&tasklet->tasklet);
+		tasklet_disable(&tasklet->tasklet);
+	}
 	kfree(tasklet);
 	*tasklet_info = NULL;
 }
 
-static void cam_tasklet_flush(void  *tasklet_info)
+static inline void cam_tasklet_flush(struct cam_tasklet_info *tasklet_info)
 {
-	unsigned long data;
-	struct cam_tasklet_info *tasklet = tasklet_info;
-
-	data = (unsigned long)tasklet;
-	cam_tasklet_action(data);
+	cam_tasklet_action((unsigned long)tasklet_info);
 }
 
 int cam_tasklet_start(void  *tasklet_info)
 {
 	struct cam_tasklet_info       *tasklet = tasklet_info;
-	struct cam_tasklet_queue_cmd  *tasklet_cmd;
-	struct cam_tasklet_queue_cmd  *tasklet_cmd_temp;
+	int i;
 
 	if (atomic_read(&tasklet->tasklet_active)) {
 		CAM_ERR(CAM_ISP, "Tasklet already active. idx = %d",
 			tasklet->index);
 		return -EBUSY;
 	}
-	atomic_set(&tasklet->tasklet_active, 1);
 
-	/* flush the command queue first */
-	list_for_each_entry_safe(tasklet_cmd, tasklet_cmd_temp,
-		&tasklet->used_cmd_list, list) {
-		list_del_init(&tasklet_cmd->list);
-		list_add_tail(&tasklet_cmd->list, &tasklet->free_cmd_list);
+	/* clean up the command queue first */
+	for (i = 0; i < CAM_TASKLETQ_SIZE; i++) {
+		list_del_init(&tasklet->cmd_queue[i].list);
+		list_add_tail(&tasklet->cmd_queue[i].list,
+			&tasklet->free_cmd_list);
 	}
+
+	atomic_set(&tasklet->tasklet_active, 1);
 
 	tasklet_enable(&tasklet->tasklet);
 
@@ -299,9 +303,10 @@ void cam_tasklet_stop(void  *tasklet_info)
 {
 	struct cam_tasklet_info  *tasklet = tasklet_info;
 
-	cam_tasklet_flush(tasklet);
 	atomic_set(&tasklet->tasklet_active, 0);
+	tasklet_kill(&tasklet->tasklet);
 	tasklet_disable(&tasklet->tasklet);
+	cam_tasklet_flush(tasklet);
 }
 
 /*
@@ -324,7 +329,7 @@ static void cam_tasklet_action(unsigned long data)
 	while (!cam_tasklet_dequeue_cmd(tasklet_info, &tasklet_cmd)) {
 		tasklet_cmd->bottom_half_handler(tasklet_info->ctx_priv,
 			tasklet_cmd->payload);
-		cam_tasklet_put_cmd(tasklet_info, &tasklet_cmd);
+		cam_tasklet_put_cmd(tasklet_info, (void **)(&tasklet_cmd));
 	}
 }
 

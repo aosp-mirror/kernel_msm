@@ -1032,11 +1032,18 @@ static irqreturn_t sec_ts_irq_thread(int irq, void *ptr)
 			   __func__);
 		return IRQ_HANDLED;
 	}
+
+	/* prevent CPU from entering deep sleep */
+	pm_qos_update_request(&ts->pm_qos_req, 100);
+
 	mutex_lock(&ts->eventlock);
 
 	sec_ts_read_event(ts);
 
 	mutex_unlock(&ts->eventlock);
+
+	pm_qos_update_request(&ts->pm_qos_req, PM_QOS_DEFAULT_VALUE);
+
 	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_IRQ, false);
 
 	return IRQ_HANDLED;
@@ -1893,7 +1900,7 @@ static int sec_ts_probe(struct i2c_client *client,
 	complete_all(&ts->bus_resumed);
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
-	INIT_DELAYED_WORK(&ts->work_fw_update, sec_ts_fw_update_work);
+	INIT_WORK(&ts->work_fw_update, sec_ts_fw_update_work);
 #else
 	input_info(true, &ts->client->dev, "%s: fw update on probe disabled!\n",
 		   __func__);
@@ -2000,6 +2007,9 @@ static int sec_ts_probe(struct i2c_client *client,
 
 	input_info(true, &ts->client->dev, "%s: request_irq = %d\n", __func__, client->irq);
 
+	pm_qos_add_request(&ts->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+		PM_QOS_DEFAULT_VALUE);
+
 	ret = request_threaded_irq(client->irq, NULL, sec_ts_irq_thread,
 			ts->plat_data->irq_type, SEC_TS_I2C_NAME, ts);
 	if (ret < 0) {
@@ -2022,15 +2032,19 @@ static int sec_ts_probe(struct i2c_client *client,
 
 	device_init_wakeup(&client->dev, true);
 
-	if (ts->is_fw_corrupted == false) {
+	if (ts->is_fw_corrupted == false)
 		sec_ts_device_init(ts);
-		schedule_delayed_work(&ts->work_read_info,
-				      msecs_to_jiffies(5000));
-	}
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
-	schedule_delayed_work(&ts->work_fw_update, msecs_to_jiffies(10000));
+	schedule_work(&ts->work_fw_update);
+
+	/* Do not finish probe without checking and flashing the firmware */
+	flush_work(&ts->work_fw_update);
 #endif
+
+	if (ts->is_fw_corrupted == false)
+		schedule_delayed_work(&ts->work_read_info,
+				      msecs_to_jiffies(5000));
 
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
 	dump_callbacks.inform_dump = dump_tsp_log;
@@ -2054,6 +2068,7 @@ static int sec_ts_probe(struct i2c_client *client,
 err_register_drm_client:
 	free_irq(client->irq, ts);
 err_irq:
+	pm_qos_remove_request(&ts->pm_qos_req);
 	if (ts->plat_data->support_dex) {
 		input_unregister_device(ts->input_dev_pad);
 		ts->input_dev_pad = NULL;
@@ -2090,6 +2105,8 @@ error_allocate_mem:
 		gpio_free(pdata->tsp_id);
 	if (gpio_is_valid(pdata->tsp_icid))
 		gpio_free(pdata->tsp_icid);
+	if (gpio_is_valid(pdata->switch_gpio))
+		gpio_free(pdata->switch_gpio);
 
 error_allocate_pdata:
 	if (ret == -ECONNREFUSED)
@@ -2325,7 +2342,7 @@ static void sec_ts_read_info_work(struct work_struct *work)
 static void sec_ts_fw_update_work(struct work_struct *work)
 {
 	struct sec_ts_data *ts = container_of(work, struct sec_ts_data,
-					      work_fw_update.work);
+					      work_fw_update);
 	int ret;
 
 	input_info(true, &ts->client->dev,
@@ -2460,8 +2477,8 @@ static void sec_ts_input_close(struct input_dev *dev)
 
 	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_INPUT_DEV, true);
 
-	cancel_work(&ts->suspend_work);
-	cancel_work(&ts->resume_work);
+	cancel_work_sync(&ts->suspend_work);
+	cancel_work_sync(&ts->resume_work);
 
 #ifdef USE_POWER_RESET_WORK
 	cancel_delayed_work(&ts->reset_work);
@@ -2492,14 +2509,11 @@ static int sec_ts_remove(struct i2c_client *client)
 
 	msm_drm_unregister_client(&ts->notifier);
 
-	cancel_work(&ts->suspend_work);
-	flush_work(&ts->suspend_work);
-	cancel_work(&ts->resume_work);
-	flush_work(&ts->resume_work);
+	cancel_work_sync(&ts->suspend_work);
+	cancel_work_sync(&ts->resume_work);
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
-	cancel_delayed_work_sync(&ts->work_fw_update);
-	flush_delayed_work(&ts->work_fw_update);
+	cancel_work_sync(&ts->work_fw_update);
 #endif
 
 	cancel_delayed_work_sync(&ts->work_read_info);
@@ -2508,6 +2522,8 @@ static int sec_ts_remove(struct i2c_client *client)
 	disable_irq_nosync(ts->client->irq);
 	free_irq(ts->client->irq, ts);
 	input_info(true, &ts->client->dev, "%s: irq disabled\n", __func__);
+
+	pm_qos_remove_request(&ts->pm_qos_req);
 
 #ifdef USE_POWER_RESET_WORK
 	cancel_delayed_work_sync(&ts->reset_work);
@@ -2540,12 +2556,28 @@ static int sec_ts_remove(struct i2c_client *client)
 	ts->input_dev = NULL;
 	ts->input_dev_touch = NULL;
 	ts_dup = NULL;
+
+	/* need to do software reset for next sec_ts_probe() without error */
+	ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SW_RESET, NULL, 0);
+
 	ts->plat_data->power(ts, false);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
 	tbn_cleanup(ts->tbn);
 #endif
 
+	if (gpio_is_valid(ts->plat_data->irq_gpio))
+		gpio_free(ts->plat_data->irq_gpio);
+	if (gpio_is_valid(ts->plat_data->switch_gpio))
+		gpio_free(ts->plat_data->switch_gpio);
+
+	sec_ts_raw_device_exit(ts);
+#ifndef CONFIG_SEC_SYSFS
+	class_destroy(sec_class);
+#endif
+
+	kfree(ts->gainTable);
+	kfree(ts->pFrame);
 	kfree(ts);
 	return 0;
 }
