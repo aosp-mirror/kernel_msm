@@ -211,7 +211,7 @@ void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 	return;
 
 err_out:
-	pr_err("Some error occured, couldn't create debugfs entry for airbrush block: %s\n", blk->name);
+	pr_err("Some error occured, couldn't create debugfs entry for airbrush blocks\n");
 }
 
 void ab_sm_create_debugfs(struct ab_state_context *sc)

@@ -1,8 +1,9 @@
 /*
  * Copyright (C) 2018 Samsung Electronics Co., Ltd.
  *
- * Authors: Shaik Ameer Basha <shaik.ameer@samsung.com>
- * Author: Raman Kumar Banka (raman.k2@samsung.com)
+ * Authors:
+ *	Shaik Ameer Basha <shaik.ameer@samsung.com>
+ *	Raman Kumar Banka <raman.k2@samsung.com>
  *
  * Airbrush State Manager Control driver..
  *
@@ -97,9 +98,9 @@ static struct chip_to_block_map chip_state_map[] = {
 	{CHIP_STATE_0_3, BLOCK_STATE_0_3, BLOCK_STATE_0_3, BLOCK_STATE_0_4, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_0_4, BLOCK_STATE_0_4, BLOCK_STATE_0_4, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_0_5, BLOCK_STATE_0_5, BLOCK_STATE_0_2, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_6, BLOCK_STATE_0_5, BLOCK_STATE_0_2, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_7, BLOCK_STATE_0_2, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_8, BLOCK_STATE_0_2, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
+	{CHIP_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
+	{CHIP_STATE_0_7, BLOCK_STATE_0_5, BLOCK_STATE_0_3, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
+	{CHIP_STATE_0_8, BLOCK_STATE_0_3, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_0_9, BLOCK_STATE_0_5, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_1_0, BLOCK_STATE_0_0, BLOCK_STATE_1_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_1_1, BLOCK_STATE_0_1, BLOCK_STATE_1_0, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
@@ -121,128 +122,69 @@ static struct chip_to_block_map chip_state_map[] = {
 	{CHIP_STATE_6_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, IPU_POWER_CONTROL},
 };
 
-int ipu_set_state(struct device *dev, struct block *blk_ipu,
+struct block_property* get_desired_state(struct block *blk,
+					 u32 to_block_state_id)
+{
+	int i;
+	for (i = 0; i < (blk->nr_block_states); i++) {
+		if (blk->block_property_table[i].id == to_block_state_id)
+			return &(blk->block_property_table[i]);
+	}
+	return NULL;
+}
+
+void change_power(void)
+{
+	//TODO
+}
+
+void ab_sm_register_blk_callback(block_name_t name,
+				int (*set_state)(const struct block_property *, void *),
+				void* data)
+{
+	ab_sm_ctx->blocks[name].set_state = set_state;
+	ab_sm_ctx->blocks[name].data = data;
+}
+
+int clk_set_frequency(struct device *dev, struct block *blk,
+			 u64 frequency)
+{
+	if (blk->name == BLK_IPU)
+		ipu_set_rate(dev, frequency);
+	else if (blk->name == BLK_TPU)
+		tpu_set_rate(dev, frequency);
+	else
+		return -EINVAL;
+	return 0;
+}
+
+int blk_set_state(struct device *dev, struct block *blk,
 		  u32 to_block_state_id, bool power_control)
 {
-	struct block_property *desired_state;
-	int i;
-
-	desired_state = NULL;
-	for (i = 0; i < (blk_ipu->nr_block_states); i++) {
-		if (blk_ipu->block_property_table[i].id == to_block_state_id)
-			desired_state = &(blk_ipu->block_property_table[i]);
-	}
-
+	bool power_increasing;
+	struct block_property *desired_state =
+		get_desired_state(blk, to_block_state_id);
 	if (!desired_state)
 		return -EINVAL;
 
-	/* clock related demo code */
-	ipu_set_rate(dev, desired_state->clk_frequency);
-	blk_ipu->current_state = desired_state;
+	if(blk->current_state->id == desired_state->id)
+		return 0;
 
-	//TODO: change the properties from current_state to desired_state
-	return 0;
-}
+	power_increasing = (blk->current_state->logic_voltage
+				< desired_state->logic_voltage);
 
-int tpu_set_state(struct device *dev, struct block *blk_tpu,
-		  u32 to_block_state_id, bool power_control)
-{
-	struct block_property *desired_state;
-	int i;
+	if(power_increasing)
+		change_power();
 
-	desired_state = NULL;
-	for (i = 0; i < (blk_tpu->nr_block_states); i++) {
-		if (blk_tpu->block_property_table[i].id == to_block_state_id)
-			desired_state = &(blk_tpu->block_property_table[i]);
-	}
+	clk_set_frequency(dev, blk, desired_state->clk_frequency);
+	if(blk->set_state)
+		blk->set_state(desired_state, blk->data);
 
-	if (!desired_state)
-		return -EINVAL;
+	if(!power_increasing)
+		change_power();
 
-	/* clock related demo code */
-	tpu_set_rate(dev, desired_state->clk_frequency);
-	blk_tpu->current_state = desired_state;
-#if 0
-	if (current_state->id == desired_state->id)
-		//no change needed
-#endif
-	//TODO: change the properties from current_state to desired_state
-	return 0;
-}
+	blk->current_state = desired_state;
 
-int dram_set_state(struct device *dev, struct block *blk_dram,
-		   u32 to_block_state_id, bool power_control)
-{
-	struct block_property *desired_state;
-	int i;
-
-	desired_state = NULL;
-	for (i = 0; i < (blk_dram->nr_block_states); i++) {
-		if (blk_dram->block_property_table[i].id == to_block_state_id)
-			desired_state = &(blk_dram->block_property_table[i]);
-	}
-
-	if (!desired_state)
-		return -EINVAL;
-
-	//TODO: change the properties from current_state to desired_state
-	return 0;
-}
-
-int mif_set_state(struct device *dev, struct block *blk_mif,
-		  u32 to_block_state_id, bool power_control)
-{
-	struct block_property *desired_state;
-	int i;
-
-	desired_state = NULL;
-	for (i = 0; i < (blk_mif->nr_block_states); i++) {
-		if (blk_mif->block_property_table[i].id == to_block_state_id)
-			desired_state = &(blk_mif->block_property_table[i]);
-	}
-
-	if (!desired_state)
-		return -EINVAL;
-
-	//TODO: change the properties from current_state to desired_state
-	return 0;
-}
-
-int fsys_set_state(struct device *dev, struct block *blk_fsys,
-		   u32 to_block_state_id, bool power_control)
-{
-	struct block_property *desired_state;
-	int i;
-
-	desired_state = NULL;
-	for (i = 0; i < (blk_fsys->nr_block_states); i++) {
-		if (blk_fsys->block_property_table[i].id == to_block_state_id)
-			desired_state = &(blk_fsys->block_property_table[i]);
-	}
-
-	if (!desired_state)
-		return -EINVAL;
-
-	//TODO: change the properties from current_state to desired_state
-	return 0;
-}
-
-int aon_set_state(struct device *dev, struct block *blk_aon,
-		  u32 to_block_state_id, bool power_control)
-{
-	struct block_property *desired_state;
-	int i;
-
-	desired_state = NULL;
-	for (i = 0; i < (blk_aon->nr_block_states); i++) {
-		if (blk_aon->block_property_table[i].id == to_block_state_id)
-			desired_state = &(blk_aon->block_property_table[i]);
-	}
-
-	if (!desired_state)
-		return -EINVAL;
-
-	//TODO: change the properties from current_state to desired_state
 	return 0;
 }
 
@@ -262,27 +204,27 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
 	if (!map)
 		return -EINVAL;
 
-	if (ipu_set_state(sc->dev, &(sc->blocks[BLK_IPU]),
+	if (blk_set_state(sc->dev, &(sc->blocks[BLK_IPU]),
 		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL)))
 		return -EINVAL;
 
-	if (tpu_set_state(sc->dev, &(sc->blocks[BLK_TPU]),
+	if (blk_set_state(sc->dev, &(sc->blocks[BLK_TPU]),
 		      map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL)))
 		return -EINVAL;
 
-	if (dram_set_state(sc->dev, &(sc->blocks[DRAM]),
+	if (blk_set_state(sc->dev, &(sc->blocks[DRAM]),
 		      map->dram_block_state_id, (map->flags & DRAM_POWER_CONTROL)))
 		return -EINVAL;
 
-	if (mif_set_state(sc->dev, &(sc->blocks[BLK_MIF]),
+	if (blk_set_state(sc->dev, &(sc->blocks[BLK_MIF]),
 		      map->dram_block_state_id, (map->flags & MIF_POWER_CONTROL)))
 		return -EINVAL;
 
-	if (fsys_set_state(sc->dev, &(sc->blocks[BLK_FSYS]),
+	if (blk_set_state(sc->dev, &(sc->blocks[BLK_FSYS]),
 		      map->fsys_block_state_id, (map->flags & FSYS_POWER_CONTROL)))
 		return -EINVAL;
 
-	if (aon_set_state(sc->dev, &(sc->blocks[BLK_AON]),
+	if (blk_set_state(sc->dev, &(sc->blocks[BLK_AON]),
 		      map->aon_block_state_id,(map->flags & AON_POWER_CONTROL)))
 		return -EINVAL;
 
@@ -368,24 +310,24 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	}
 
 	/* Intialize the default state of each block for state manager */
-	ab_sm_ctx->blocks[BLK_IPU] = (struct block){"BLK_IPU",
+	ab_sm_ctx->blocks[BLK_IPU] = (struct block){BLK_IPU,
 			&ipu_property_table[8], ipu_property_table,
-			ARRAY_SIZE(ipu_property_table)};
-	ab_sm_ctx->blocks[BLK_TPU] = (struct block){"BLK_TPU",
+			ARRAY_SIZE(ipu_property_table), NULL, NULL};
+	ab_sm_ctx->blocks[BLK_TPU] = (struct block){BLK_TPU,
 			&tpu_property_table[8], tpu_property_table,
-			ARRAY_SIZE(tpu_property_table)};
-	ab_sm_ctx->blocks[DRAM] = (struct block){"DRAM",
+			ARRAY_SIZE(tpu_property_table), NULL, NULL};
+	ab_sm_ctx->blocks[DRAM] = (struct block){DRAM,
 			&dram_property_table[10], dram_property_table,
-			ARRAY_SIZE(dram_property_table)};
-	ab_sm_ctx->blocks[BLK_MIF] = (struct block){"BLK_MIF",
+			ARRAY_SIZE(dram_property_table), NULL, NULL};
+	ab_sm_ctx->blocks[BLK_MIF] = (struct block){BLK_MIF,
 			&mif_property_table[7], mif_property_table,
-			ARRAY_SIZE(mif_property_table)};
-	ab_sm_ctx->blocks[BLK_FSYS] = (struct block){"BLK_FSYS",
+			ARRAY_SIZE(mif_property_table), NULL, NULL};
+	ab_sm_ctx->blocks[BLK_FSYS] = (struct block){BLK_FSYS,
 			&fsys_property_table[8], fsys_property_table,
-			ARRAY_SIZE(fsys_property_table)};
-	ab_sm_ctx->blocks[BLK_AON] = (struct block){"BLK_AON",
+			ARRAY_SIZE(fsys_property_table), NULL, NULL};
+	ab_sm_ctx->blocks[BLK_AON] = (struct block){BLK_AON,
 			&aon_property_table[3], aon_property_table,
-			ARRAY_SIZE(aon_property_table)};
+			ARRAY_SIZE(aon_property_table), NULL, NULL};
 
 	/* intitialize the default chip state */
 	ab_sm_ctx->chip_state_table = chip_state_map;

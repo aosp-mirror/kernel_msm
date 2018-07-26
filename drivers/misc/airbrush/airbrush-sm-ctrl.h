@@ -33,20 +33,22 @@
 
 #define CONFIG_DEBUGFS_AIRBRUSH
 
-enum block_names{
+typedef enum __block_names{
 	BLK_IPU,
 	BLK_TPU,
 	DRAM,
 	BLK_MIF,
 	BLK_FSYS,
 	BLK_AON,
-};
+} block_name_t;
 
 enum states{
 	off = 0,
 	on = 1,
 };
 
+
+/*Should be in ascending order (for comparisons)*/
 typedef enum __logic_voltage {
 	VOLTAGE_0_0,
 	VOLTAGE_0_60,
@@ -55,7 +57,7 @@ typedef enum __logic_voltage {
 } logic_voltage_t;
 
 typedef enum __chip_state {
-	CHIP_STATE_0_0,
+	CHIP_STATE_0_0 = 0,
 	CHIP_STATE_0_1,
 	CHIP_STATE_0_2,
 	CHIP_STATE_0_3,
@@ -65,39 +67,39 @@ typedef enum __chip_state {
 	CHIP_STATE_0_7,
 	CHIP_STATE_0_8,
 	CHIP_STATE_0_9,
-	CHIP_STATE_1_0,
+	CHIP_STATE_1_0 = 10,
 	CHIP_STATE_1_1,
 	CHIP_STATE_1_2,
 	CHIP_STATE_1_3,
 	CHIP_STATE_1_4,
 	CHIP_STATE_1_5,
 	CHIP_STATE_1_6,
-	CHIP_STATE_2_0,
+	CHIP_STATE_2_0 = 20,
 	CHIP_STATE_2_1,
 	CHIP_STATE_2_2,
 	CHIP_STATE_2_3,
 	CHIP_STATE_2_4,
 	CHIP_STATE_2_5,
 	CHIP_STATE_2_6,
-	CHIP_STATE_3_0,
-	CHIP_STATE_4_0,
-	CHIP_STATE_5_0,
-	CHIP_STATE_6_0,
+	CHIP_STATE_3_0 = 30,
+	CHIP_STATE_4_0 = 40,
+	CHIP_STATE_5_0 = 50,
+	CHIP_STATE_6_0 = 60,
 } chip_state_t;
 
 typedef enum __block_state {
-	BLOCK_STATE_0_0,
+	BLOCK_STATE_0_0 = 0,
 	BLOCK_STATE_0_1,
 	BLOCK_STATE_0_2,
 	BLOCK_STATE_0_3,
 	BLOCK_STATE_0_4,
 	BLOCK_STATE_0_5,
 	BLOCK_STATE_0_6,
-	BLOCK_STATE_1_0,
+	BLOCK_STATE_1_0 = 10,
 	BLOCK_STATE_1_1,
 	BLOCK_STATE_1_2,
-	BLOCK_STATE_2_0,
-	BLOCK_STATE_3_0,
+	BLOCK_STATE_2_0 = 20,
+	BLOCK_STATE_3_0 = 30,
 } block_state_t;
 
 #define bit(x) (1<<x)
@@ -137,6 +139,7 @@ struct block_property {
 	u32 data_rate;
 };
 
+
 /**
  * struct block - stores the information about a SOC block
  *
@@ -147,11 +150,12 @@ struct block_property {
  * @nr_block_states: number of possible states for this block
  */
 struct block {
-	char *name;
-	//block_state_t current_id;
+	block_name_t name;
 	struct block_property *current_state;
 	struct block_property *block_property_table;
 	u32 nr_block_states;
+	int (*set_state)(const struct block_property *, void *);
+	void *data; /*IP specific data*/
 };
 
 struct chip_to_block_map {
@@ -221,12 +225,14 @@ struct ab_state_context {
 	struct dentry *d_entry;
 #endif
 };
-
+void ab_sm_register_blk_callback(block_name_t name,
+				int (*set_state)(const struct block_property *, void *),
+				void* data);
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie);
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
-		    		u32 to_chip_substate_id);
+			u32 to_chip_substate_id);
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw);
 void abc_clk_register(struct ab_state_context *ab_ctx);
 int ab_ddr_init(struct ab_state_context *sc);
