@@ -26,6 +26,4 @@ static inline bool cpu_have_feature(unsigned int num)
 	return elf_hwcap & (1UL << num);
 }
 
-void __init setup_cpu_features(void);
-
 #endif
