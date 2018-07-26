@@ -32,7 +32,7 @@
 #define RPMH_MAX_MBOXES			2
 #define RPMH_MAX_FAST_RES		32
 #define RPMH_MAX_REQ_IN_BATCH		10
-#define RPMH_TIMEOUT			msecs_to_jiffies(10000)
+#define RPMH_TIMEOUT			msecs_to_jiffies(20000)
 
 #define DEFINE_RPMH_MSG_ONSTACK(rc, s, q, c, name)	\
 	struct rpmh_msg name = {			\
@@ -207,8 +207,7 @@ static inline void wait_for_tx_done(struct rpmh_client *rc,
 			dev_err(rc->dev,
 				"RPMH waiting for interrupt from AOSS\n");
 			mbox_chan_debug(rc->chan);
-			WARN(1, "RPMH waiting timeout (%d) addr=0x%x,data=0x%x\n",
-				count, addr, data);
+			BUG();
 		} else {
 			dev_err(rc->dev,
 			"RPMH response timeout (%d) addr=0x%x,data=0x%x\n",
