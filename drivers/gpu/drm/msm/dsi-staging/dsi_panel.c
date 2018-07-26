@@ -610,6 +610,10 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 		return -EINVAL;
 	}
 
+	/* FIXME: Backlight adjustment appears flaky on Floral.
+	 * Temporarily force a fixed backlight brightness. */
+	bl_lvl = 250;
+
 	dsi = &panel->mipi_device;
 
 	num_params = panel->bl_config.bl_max_level > 0xFF ? 2 : 1;
