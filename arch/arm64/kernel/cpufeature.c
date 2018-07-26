@@ -872,8 +872,7 @@ void __init enable_cpu_capabilities(const struct arm64_cpu_capabilities *caps)
 			 * uses an IPI, giving us a PSTATE that disappears when
 			 * we return.
 			 */
-			stop_machine(caps[i].enable, (void *)&caps[i],
-							cpu_online_mask);
+			stop_machine(caps[i].enable, NULL, cpu_online_mask);
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -988,7 +987,7 @@ void verify_local_cpu_capabilities(void)
 		if (!feature_matches(__raw_read_system_reg(caps[i].sys_reg), &caps[i]))
 			fail_incapable_cpu("arm64_features", &caps[i]);
 		if (caps[i].enable)
-			caps[i].enable((void *)&caps[i]);
+			caps[i].enable(NULL);
 	}
 
 	for (i = 0, caps = arm64_hwcaps; caps[i].matches; i++) {
