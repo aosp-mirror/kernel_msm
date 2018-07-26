@@ -245,7 +245,14 @@ static void enable_trigger_defer_cycle(void)
  * Instead, this initcall makes sure that deferred probing is delayed until
  * all the registered initcall functions at a particular level are completed.
  * This function is invoked at every *_initcall_sync level.
+ *
+ * TODO(brendanhiggins@google.com): we disable this for KUnit because this
+ * repeated probing behavior is broken in UML. The exact reason is unknown, but
+ * the regession was introduced by b8d15269411d1944bd8f3c189147c01840710355 --
+ * "dd: Invoke one probe retry cycle after every initcall level". This should
+ * probably be fixed in the Code Aurora codebase.
  */
+#if !IS_ENABLED(CONFIG_TEST)
 static int deferred_probe_initcall(void)
 {
 	enable_trigger_defer_cycle();
@@ -256,6 +263,7 @@ arch_initcall_sync(deferred_probe_initcall);
 subsys_initcall_sync(deferred_probe_initcall);
 fs_initcall_sync(deferred_probe_initcall);
 device_initcall_sync(deferred_probe_initcall);
+#endif
 
 static int deferred_probe_enable_fn(void)
 {
