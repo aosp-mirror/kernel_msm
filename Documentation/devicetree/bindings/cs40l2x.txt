@@ -117,6 +117,12 @@ Optional properties:
     device remains in standby and automatic entry into hibernation mode is
     effectively disabled.
 
+  - cirrus,asp-bclk-freq : Specifies the frequency of the ASP_BCLK/REFCLK pin
+    (CS40L25A only). See the description for the PLL_REFCLK_FREQ field in the
+    CS40L25A data sheet for acceptable values.
+
+  - cirrus,asp-width : ASP sample width, specified in bits (12 through 24).
+
 Examples:
 
   cs40l20: cs40l20@43 {
