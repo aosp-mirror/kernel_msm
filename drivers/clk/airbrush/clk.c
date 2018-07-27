@@ -58,7 +58,7 @@ struct airbrush_clk_reg_dump *airbrush_clk_alloc_reg_dump(
 }
 
 /* setup the essentials required to support clock lookup using ccf */
-struct airbrush_clk_provider *__init airbrush_clk_init(struct device_node *np,
+struct airbrush_clk_provider * airbrush_clk_init(struct device_node *np,
 			void __iomem *base, unsigned long nr_clks)
 {
 	struct airbrush_clk_provider *ctx;
@@ -84,7 +84,7 @@ struct airbrush_clk_provider *__init airbrush_clk_init(struct device_node *np,
 	return ctx;
 }
 
-void __init airbrush_clk_of_add_provider(struct device_node *np,
+void airbrush_clk_of_add_provider(struct device_node *np,
 				struct airbrush_clk_provider *ctx)
 {
 	if (np) {
@@ -103,7 +103,7 @@ void airbrush_clk_add_lookup(struct airbrush_clk_provider *ctx, struct clk *clk,
 }
 
 /* register a list of fixed clocks */
-void __init __airbrush_clk_register_fixed_rate(struct airbrush_clk_provider *ctx,
+void __airbrush_clk_register_fixed_rate(struct airbrush_clk_provider *ctx,
 		const struct airbrush_fixed_rate_clock *list,
 		unsigned int nr_clk)
 {
@@ -133,7 +133,7 @@ void __init __airbrush_clk_register_fixed_rate(struct airbrush_clk_provider *ctx
 }
 
 /* register a list of fixed factor clocks */
-void __init __airbrush_clk_register_fixed_factor(struct airbrush_clk_provider *ctx,
+void __airbrush_clk_register_fixed_factor(struct airbrush_clk_provider *ctx,
 		const struct airbrush_fixed_factor_clock *list, unsigned int nr_clk)
 {
 	struct clk *clk;
@@ -153,7 +153,7 @@ void __init __airbrush_clk_register_fixed_factor(struct airbrush_clk_provider *c
 }
 
 /* register a list of mux clocks */
-void __init __airbrush_clk_register_mux(struct airbrush_clk_provider *ctx,
+void __airbrush_clk_register_mux(struct airbrush_clk_provider *ctx,
 				const struct airbrush_mux_clock *list,
 				unsigned int nr_clk)
 {
@@ -185,7 +185,7 @@ void __init __airbrush_clk_register_mux(struct airbrush_clk_provider *ctx,
 }
 
 /* register a list of div clocks */
-void __init __airbrush_clk_register_div(struct airbrush_clk_provider *ctx,
+void __airbrush_clk_register_div(struct airbrush_clk_provider *ctx,
 				const struct airbrush_div_clock *list,
 				unsigned int nr_clk)
 {
@@ -224,7 +224,7 @@ void __init __airbrush_clk_register_div(struct airbrush_clk_provider *ctx,
 }
 
 /* register a list of gate clocks */
-void __init __airbrush_clk_register_gate(struct airbrush_clk_provider *ctx,
+void __airbrush_clk_register_gate(struct airbrush_clk_provider *ctx,
 				const struct airbrush_gate_clock *list,
 				unsigned int nr_clk)
 {
@@ -258,7 +258,7 @@ void __init __airbrush_clk_register_gate(struct airbrush_clk_provider *ctx,
  * obtain the clock speed of all external fixed clock sources from device
  * tree and register it
  */
-void __init airbrush_clk_of_register_fixed_ext(struct airbrush_clk_provider *ctx,
+void airbrush_clk_of_register_fixed_ext(struct airbrush_clk_provider *ctx,
 			struct airbrush_fixed_rate_clock *fixed_rate_clk,
 			unsigned int nr_fixed_rate_clk,
 			const struct of_device_id *clk_matches)

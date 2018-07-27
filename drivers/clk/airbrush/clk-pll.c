@@ -205,7 +205,7 @@ static const struct clk_ops airbrush_pllf081xx_clk_min_ops = {
 	.recalc_rate = airbrush_pllf081xx_recalc_rate,
 };
 
-static void __init _airbrush_clk_register_pll(struct airbrush_clk_provider *ctx,
+static void _airbrush_clk_register_pll(struct airbrush_clk_provider *ctx,
 				const struct airbrush_pll_clock *pll_clk,
 				void __iomem *base)
 {
@@ -279,7 +279,7 @@ static void __init _airbrush_clk_register_pll(struct airbrush_clk_provider *ctx,
 			__func__, pll_clk->name, ret);
 }
 
-void __init airbrush_clk_register_pll(struct airbrush_clk_provider *ctx,
+void airbrush_clk_register_pll(struct airbrush_clk_provider *ctx,
 			const struct airbrush_pll_clock *pll_list,
 			unsigned int nr_pll, void __iomem *base)
 {

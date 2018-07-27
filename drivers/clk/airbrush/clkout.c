@@ -54,7 +54,7 @@ static struct syscore_ops exynos_clkout_syscore_ops = {
 	.resume = exynos_clkout_resume,
 };
 
-static void __init exynos_clkout_init(struct device_node *node, u32 mux_mask)
+static void exynos_clkout_init(struct device_node *node, u32 mux_mask)
 {
 	const char *parent_names[EXYNOS_CLKOUT_PARENTS];
 	struct clk *parents[EXYNOS_CLKOUT_PARENTS];
@@ -132,7 +132,7 @@ free_clkout:
 	pr_err("%s: failed to register clkout clock\n", __func__);
 }
 
-static void __init exynos4_clkout_init(struct device_node *node)
+static void exynos4_clkout_init(struct device_node *node)
 {
 	exynos_clkout_init(node, EXYNOS4_CLKOUT_MUX_MASK);
 }
@@ -145,7 +145,7 @@ CLK_OF_DECLARE(exynos4412_clkout, "samsung,exynos4412-pmu",
 CLK_OF_DECLARE(exynos3250_clkout, "samsung,exynos3250-pmu",
 		exynos4_clkout_init);
 
-static void __init exynos5_clkout_init(struct device_node *node)
+static void exynos5_clkout_init(struct device_node *node)
 {
 	exynos_clkout_init(node, EXYNOS5_CLKOUT_MUX_MASK);
 }

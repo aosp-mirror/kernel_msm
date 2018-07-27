@@ -337,9 +337,6 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->chip_substate_id = 0;
 	ab_sm_ctx->chip_substate_name = "Ready";
 
-	/* Registering CMUs to Common Clock Framework */
-	abc_clk_register(ab_sm_ctx);
-
 #ifdef CONFIG_DEBUGFS_AIRBRUSH
 	ab_sm_create_debugfs(ab_sm_ctx);
 #endif

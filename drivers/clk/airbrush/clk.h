@@ -243,7 +243,7 @@ struct airbrush_gate_clock {
 #define GATE_DA(_id, dname, cname, pname, o, b, f, gf, a)	\
 	__GATE(_id, dname, cname, pname, o, b, f, gf, a)
 
-#define PNAME(x) static const char *x[] __initdata
+#define PNAME(x) static const char *x[]
 
 /**
  * struct airbrush_clk_reg_dump: register dump of clock controller registers.
@@ -337,12 +337,12 @@ struct airbrush_cmu_info {
 	unsigned int nr_clk_regs;
 };
 
-extern struct airbrush_clk_provider *__init airbrush_clk_init(
+extern struct airbrush_clk_provider *airbrush_clk_init(
 			struct device_node *np, void __iomem *base,
 			unsigned long nr_clks);
-extern void __init airbrush_clk_of_add_provider(struct device_node *np,
+extern void airbrush_clk_of_add_provider(struct device_node *np,
 			struct airbrush_clk_provider *ctx);
-extern void __init airbrush_clk_of_register_fixed_ext(
+extern void airbrush_clk_of_register_fixed_ext(
 			struct airbrush_clk_provider *ctx,
 			struct airbrush_fixed_rate_clock *fixed_rate_clk,
 			unsigned int nr_fixed_rate_clk,
@@ -351,11 +351,11 @@ extern void __init airbrush_clk_of_register_fixed_ext(
 extern void airbrush_clk_add_lookup(struct airbrush_clk_provider *ctx,
 			struct clk *clk, unsigned int id);
 
-extern void __init airbrush_clk_register_fixed_rate(
+extern void airbrush_clk_register_fixed_rate(
 			struct airbrush_clk_provider *ctx,
 			const struct airbrush_fixed_rate_clock *clk_list,
 			unsigned int nr_clk);
-extern void __init airbrush_clk_register_fixed_factor(
+extern void airbrush_clk_register_fixed_factor(
 			struct airbrush_clk_provider *ctx,
 			const struct airbrush_fixed_factor_clock *list,
 			unsigned int nr_clk);
@@ -382,11 +382,11 @@ extern struct clk *airbrush_clk_register_mux(struct device *dev, const char *nam
 		void __iomem *reg, u8 shift, u8 width,
 		u8 clk_mux_flags, spinlock_t *lock);
 
-extern void __init airbrush_clk_register_pll(struct airbrush_clk_provider *ctx,
+extern void airbrush_clk_register_pll(struct airbrush_clk_provider *ctx,
 			const struct airbrush_pll_clock *pll_list,
 			unsigned int nr_clk, void __iomem *base);
 
-extern struct airbrush_clk_provider __init *airbrush_cmu_register_one(
+extern struct airbrush_clk_provider *airbrush_cmu_register_one(
 			struct device_node *,
 			const struct airbrush_cmu_info *);
 
