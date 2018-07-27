@@ -54,7 +54,7 @@
 	vdda-phy-max-microamp = <62900>;
 	vdda-pll-max-microamp = <18300>;
 
-	status = "ok";
+	status = "disabled";
 };
 
 &ufshc_mem {
@@ -69,7 +69,15 @@
 	qcom,vddp-ref-clk-supply = <&pm660_l1>;
 	qcom,vddp-ref-clk-max-microamp = <100>;
 
-	status = "ok";
+	status = "disabled";
+};
+
+&ufs_ice {
+	status = "disabled";
+};
+
+&ufs_phy_gdsc {
+	status = "disabled";
 };
 
 &pm660l_switch1 {
@@ -131,7 +139,7 @@
 
 	cd-gpios = <&tlmm 96 0x1>;
 
-	status = "ok";
+	status = "disabled";
 };
 
 &vendor {
