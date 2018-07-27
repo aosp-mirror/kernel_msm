@@ -406,7 +406,8 @@ static void setup_smmu(struct pci_dev *pdev)
 			"arm_iommu_attach_device failed (%d)\n", ret);
 		return;
 	}
-
+	/* mahdih: investigate why this was not needed in binder */
+	dma_set_mask(&pdev->dev, DMA_BIT_MASK(64));
 	dev_info(&pdev->dev, "attached to IOMMU\n");
 }
 #endif
