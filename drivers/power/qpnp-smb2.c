@@ -1346,6 +1346,9 @@ static int smb2_init_hw(struct smb2 *chip)
 		}
 	}
 
+	/* Disable USBIN AICL */
+	smblib_write(chg, 0x1380, 0x40);
+
 	return rc;
 }
 

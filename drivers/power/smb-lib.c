@@ -880,6 +880,9 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 	int rc = 0;
 	bool override;
 
+	//TODO:Remove the debug info after charge function is ok
+	smblib_err(chg, "icl_ua=%d, charger_type=%d \n", icl_ua, chg->real_charger_type);
+
 	/* suspend and return if 25mA or less is requested */
 	if (icl_ua < USBIN_25MA)
 		return smblib_set_usb_suspend(chg, true);
@@ -896,7 +899,7 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 			goto enable_icl_changed_interrupt;
 		}
 	} else {
-		set_sdp_current(chg, 100000);
+		set_sdp_current(chg, icl_ua);
 		rc = smblib_set_charge_param(chg, &chg->param.usb_icl, icl_ua);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
@@ -1542,6 +1545,19 @@ int smblib_get_prop_batt_present(struct smb_charger *chg,
 	return rc;
 }
 
+//TODO:Remove the debug info after charge function is ok
+int smblib_debug_info(struct smb_charger *chg)
+{
+	int rc = -EINVAL;
+	u8 data1, data2, data3;
+
+	rc = smblib_read(chg, 0x00001061, &data1);
+	rc = smblib_read(chg, 0x00001370, &data2);
+	rc = smblib_read(chg, 0x00001607, &data3);
+	smblib_err(chg, "fast charge current=%d mA, USB current limit=%d , MISC ICL=%d mA \n", data1*25, data2*25, data3*25);
+	return rc;
+}
+
 int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 				  union power_supply_propval *val)
 {
@@ -1555,6 +1571,9 @@ int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 	if (chg->bms_psy)
 		rc = power_supply_get_property(chg->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, val);
+
+	smblib_debug_info(chg);
+
 	return rc;
 }
 
@@ -3274,10 +3293,13 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	}
 
 	vbus_rising = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
+	pr_info("[smblib] smblib_usb_plugin_locked, IRQ status: 0x%x, vbus_rising: %d \n", stat, vbus_rising);
+
 	smblib_set_opt_freq_buck(chg, vbus_rising ? chg->chg_freq.freq_5V :
 						chg->chg_freq.freq_removal);
 
 	if (vbus_rising) {
+		power_supply_set_present(chg->usb_psy, true);
 		/* vote to the USB stack to float DP_DM before APSD */
 		power_supply_set_dp_dm(chg->usb_psy,
 					POWER_SUPPLY_DP_DM_DPF_DMF);
@@ -3286,6 +3308,7 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 		schedule_delayed_work(&chg->pl_enable_work,
 					msecs_to_jiffies(PL_DELAY_MS));
 	} else {
+		power_supply_set_present(chg->usb_psy, false);
 		if (chg->wa_flags & BOOST_BACK_WA) {
 			data = chg->irq_info[SWITCH_POWER_OK_IRQ].irq_data;
 			if (data) {
