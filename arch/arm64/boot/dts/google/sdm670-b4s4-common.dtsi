@@ -26,6 +26,7 @@
 #include "sdm670-b4s4-touch.dtsi"
 #include "sdm670-b4s4-nfc.dtsi"
 #include "sdm670-b4s4-usb-common.dtsi"
+#include "sdm670-b4s4-thermal.dtsi"
 
 / {
 	qcom,msm-id = <0x150 0x0>;
