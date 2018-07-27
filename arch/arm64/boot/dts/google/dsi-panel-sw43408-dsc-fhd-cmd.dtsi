@@ -190,7 +190,7 @@
 
 				google,dsi-lp-brightness-threshold = <5>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 01 20
+					39 01 00 00 00 00 03 51 00 6B
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
@@ -200,7 +200,7 @@
 
 				google,dsi-lp-brightness-threshold = <10>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 01 64
+					39 01 00 00 00 00 03 51 00 E0
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
@@ -211,7 +211,7 @@
 
 				google,dsi-lp-brightness-threshold = <255>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 03 FF
+					39 01 00 00 00 00 03 51 03 87
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
