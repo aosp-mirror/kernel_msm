@@ -39,7 +39,6 @@
 
 #include <asm/atomic.h>
 #include <asm/cacheflush.h>
-#include <asm/cpufeature.h>
 #include <asm/cputype.h>
 #include <asm/cpu_ops.h>
 #include <asm/mmu_context.h>
@@ -161,11 +160,6 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 
 	if (cpu_ops[cpu]->cpu_postboot)
 		cpu_ops[cpu]->cpu_postboot();
-
-#ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
-	if (sys_psci_bp_hardening_initialised)
-		enable_psci_bp_hardening(NULL);
-#endif
 
 	/*
 	* Log the CPU info before it is marked online and might get read.
@@ -327,7 +321,6 @@ void __ref cpu_die(void)
 void __init smp_cpus_done(unsigned int max_cpus)
 {
 	pr_info("SMP: Total of %d processors activated.\n", num_online_cpus());
-	setup_cpu_features();
 }
 
 void __init smp_prepare_boot_cpu(void)
