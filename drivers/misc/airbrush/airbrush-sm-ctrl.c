@@ -149,12 +149,26 @@ void ab_sm_register_blk_callback(block_name_t name,
 int clk_set_frequency(struct device *dev, struct block *blk,
 			 u64 frequency)
 {
-	if (blk->name == BLK_IPU)
+	switch(blk->name) {
+	case BLK_IPU:
+		if(blk->current_state->clk_frequency == 0)
+			ipu_pll_enable(dev);
 		ipu_set_rate(dev, frequency);
-	else if (blk->name == BLK_TPU)
+		if(frequency==0)
+			ipu_pll_disable(dev);
+	case BLK_TPU:
+		if(blk->current_state->clk_frequency == 0)
+			tpu_pll_enable(dev);
 		tpu_set_rate(dev, frequency);
-	else
+		if(frequency==0)
+			tpu_pll_disable(dev);
+	case BLK_MIF:
+	case BLK_FSYS:
+	case BLK_AON:
+	case DRAM:
+	default:
 		return -EINVAL;
+	}
 	return 0;
 }
 

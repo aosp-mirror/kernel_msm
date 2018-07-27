@@ -15,8 +15,6 @@
 
 #define OSC_RATE 19200000
 
-static int ipu_pll_enabled=0;
-static int tpu_pll_enabled=0;
 /**
  *  ipu_set_rate - changes the IPU clocks' rate.
  *
@@ -25,6 +23,23 @@ static int tpu_pll_enabled=0;
  *
  *  Returns the rate actually set
  */
+
+void ipu_pll_enable(struct device *dev)
+{
+	struct clk* ipu_pll;
+	ipu_pll = clk_get(dev, "ipu_pll");
+	clk_prepare(ipu_pll);
+	clk_enable(ipu_pll);
+}
+
+void ipu_pll_disable(struct device *dev)
+{
+	struct clk* ipu_pll;
+	ipu_pll = clk_get(dev, "ipu_pll");
+	clk_disable(ipu_pll);
+	clk_unprepare(ipu_pll);
+}
+
 unsigned long ipu_set_rate(struct device *dev, unsigned long rate)
 {
 	struct clk* ipu_pll_mux;
@@ -47,29 +62,32 @@ unsigned long ipu_set_rate(struct device *dev, unsigned long rate)
 	if (rate == OSC_RATE) {
 		clk_set_parent(ipu_pll_mux, osc_clk);
 		clk_set_parent(ipu_switch_mux, ipu_pll_div);
-		if(ipu_pll_enabled)
-		{
-			clk_disable(ipu_pll);
-			clk_unprepare(ipu_pll);
-			ipu_pll_enabled=0;
-		}
 		return clk_get_rate(ipu_switch_mux);
 	}
 
 	clk_set_parent(ipu_pll_mux, ipu_pll);
 	clk_set_parent(ipu_switch_mux, shared_div_aon_pll);
-	if(!ipu_pll_enabled)
-	{
-		clk_prepare(ipu_pll);
-		clk_enable(ipu_pll);
-		ipu_pll_enabled=1;
-	}
 	clk_set_rate(ipu_pll, rate);
 	clk_set_parent(ipu_switch_mux, ipu_pll_div);
 
 	return clk_get_rate(ipu_switch_mux);
 }
 
+void tpu_pll_enable(struct device *dev)
+{
+	struct clk* tpu_pll;
+	tpu_pll = clk_get(dev, "tpu_pll");
+	clk_prepare(tpu_pll);
+	clk_enable(tpu_pll);
+}
+
+void tpu_pll_disable(struct device *dev)
+{
+	struct clk* tpu_pll;
+	tpu_pll = clk_get(dev, "tpu_pll");
+	clk_disable(tpu_pll);
+	clk_unprepare(tpu_pll);
+}
 
 /**
  *  tpu_set_rate - changes the TPU clocks' rate.
@@ -101,23 +119,11 @@ unsigned long tpu_set_rate(struct device *dev, unsigned long rate)
 	if (rate == OSC_RATE) {
 		clk_set_parent(tpu_pll_mux, osc_clk);
 		clk_set_parent( tpu_switch_mux, tpu_pll_div);
-		if(tpu_pll_enabled)
-		{
-			clk_disable(tpu_pll);
-			clk_unprepare(tpu_pll);
-			tpu_pll_enabled=0;
-		}
 		return clk_get_rate(tpu_switch_mux);
 	}
 
 	clk_set_parent(tpu_pll_mux, tpu_pll);
 	clk_set_parent( tpu_switch_mux, shared_div_aon_pll);
-	if(!tpu_pll_enabled)
-	{
-		clk_prepare(tpu_pll);
-		clk_enable(tpu_pll);
-		tpu_pll_enabled=1;
-	}
 	clk_set_rate(tpu_pll, rate);
 	clk_set_parent( tpu_switch_mux, tpu_pll_div);
 
