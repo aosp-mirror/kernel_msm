@@ -1333,15 +1333,17 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 			  const struct mipi_dsi_msg *msg,
 			  u32 flags)
 {
-	int rc = 0;
+	int rc = 0, i = 0;
 	u32 rd_pkt_size, total_read_len, hw_read_cnt;
 	u32 current_read_len = 0, total_bytes_read = 0;
 	bool short_resp = false;
 	bool read_done = false;
 	u32 dlen, diff, rlen;
-	unsigned char *buff;
+	unsigned char *buff = NULL;
 	char cmd;
 	struct dsi_cmd_desc *of_cmd;
+	u32 buffer_sz = 0, header_offset = 0;
+	u8 *head = NULL;
 
 	if (!msg) {
 		pr_err("Invalid msg\n");
@@ -1356,6 +1358,13 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		short_resp = true;
 		rd_pkt_size = msg->rx_len;
 		total_read_len = 4;
+
+		/*
+		 * buffer size: header + data
+		 * No 32 bits alignment issue, thus offset is 0
+		 */
+		buffer_sz = 4;
+
 	} else {
 		short_resp = false;
 		current_read_len = 10;
@@ -1365,8 +1374,30 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 			rd_pkt_size = current_read_len;
 
 		total_read_len = current_read_len + 6;
+		/*
+		 * buffer size: header + data + footer, rounded up to 4 bytes
+		 * Out of bound can occurs is rx_len is not aligned to size 4.
+		 * We are reading 32 bits registers, and converting
+		 * the data to CPU endianness, thus inserting garbage data
+		 * at the beginning of buffer.
+		 */
+		buffer_sz = ALIGN(4 + msg->rx_len + 2, 4);
+		if (buffer_sz < 16)
+			buffer_sz = 16;
 	}
-	buff = msg->rx_buf;
+
+	pr_debug("short_resp %d, msg->rx_len %zd, rd_pkt_size %u\n",
+			short_resp, msg->rx_len, rd_pkt_size);
+
+	pr_debug("total_read_len %u, buffer_sz %u\n",
+			total_read_len, buffer_sz);
+
+	buff = kzalloc(buffer_sz, GFP_KERNEL);
+	if (!buff) {
+		rc = -ENOMEM;
+		goto error;
+	}
+	head = buff;
 
 	while (!read_done) {
 		rc = dsi_set_max_return_size(dsi_ctrl, msg, rd_pkt_size);
@@ -1423,13 +1454,22 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		}
 	}
 
+	buff = head;
+	for (i = 0; i < buffer_sz; i += 4)
+		pr_debug("buffer[%d-%d] = %08x\n",
+			 i, i + 3, *((u32 *)&buff[i]));
+
 	if (hw_read_cnt < 16 && !short_resp)
-		buff = msg->rx_buf + (16 - hw_read_cnt);
+		header_offset = (16 - hw_read_cnt);
 	else
-		buff = msg->rx_buf;
+		header_offset = 0;
+
+	pr_debug("hw_read_cnt %d, header_offset %d\n",
+			hw_read_cnt, header_offset);
 
 	/* parse the data read from panel */
-	cmd = buff[0];
+	cmd = buff[header_offset];
+	pr_debug("response type %d\n", cmd);
 	switch (cmd) {
 	case MIPI_DSI_RX_ACKNOWLEDGE_AND_ERROR_REPORT:
 		pr_err("Rx ACK_ERROR\n");
@@ -1437,15 +1477,15 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		break;
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_1BYTE:
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_1BYTE:
-		rc = dsi_parse_short_read1_resp(msg, buff);
+		rc = dsi_parse_short_read1_resp(msg, &buff[header_offset]);
 		break;
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_2BYTE:
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_2BYTE:
-		rc = dsi_parse_short_read2_resp(msg, buff);
+		rc = dsi_parse_short_read2_resp(msg, &buff[header_offset]);
 		break;
 	case MIPI_DSI_RX_GENERIC_LONG_READ_RESPONSE:
 	case MIPI_DSI_RX_DCS_LONG_READ_RESPONSE:
-		rc = dsi_parse_long_read_resp(msg, buff);
+		rc = dsi_parse_long_read_resp(msg, &buff[header_offset]);
 		break;
 	default:
 		pr_warn("Invalid response\n");
@@ -1453,6 +1493,7 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 	}
 
 error:
+	kfree(buff);
 	return rc;
 }
 
