@@ -1,0 +1,31 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&vendor {
+	s4_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "batterydata-qcom-s4-10k.dtsi"
+		#include "batterydata-qcom-s4-22k.dtsi"
+		#include "batterydata-qcom-s4-33k.dtsi"
+		#include "batterydata-qcom-s4-47k.dtsi"
+	};
+};
+
+&pm660_fg {
+	qcom,battery-data = <&s4_batterydata>;
+	qcom,fg-chg-term-current = <145>;
+	qcom,fg-sys-term-current = <(-181)>;
+};
+
+&pm660_charger {
+	qcom,battery-data = <&s4_batterydata>;
+};

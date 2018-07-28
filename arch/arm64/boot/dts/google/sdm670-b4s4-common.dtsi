@@ -38,6 +38,7 @@
 #include "sdm670-b4s4-nfc.dtsi"
 #include "sdm670-b4s4-usb-common.dtsi"
 #include "sdm670-b4s4-thermal.dtsi"
+#include "sdm670-b4s4-battery.dtsi"
 
 / {
 	qcom,msm-id = <336 0x0>;
@@ -154,23 +155,6 @@
 	cd-gpios = <&tlmm 96 0x1>;
 
 	status = "disabled";
-};
-
-&vendor {
-	mtp_batterydata: qcom,battery-data {
-		qcom,batt-id-range-pct = <15>;
-		#include "../qcom/fg-gen3-batterydata-itech-3000mah.dtsi"
-		#include "../qcom/fg-gen3-batterydata-ascent-3450mah.dtsi"
-		#include "../qcom/fg-gen3-batterydata-demo-6000mah.dtsi"
-	};
-};
-
-&pm660_fg {
-	qcom,battery-data = <&mtp_batterydata>;
-};
-
-&pm660_charger {
-	qcom,battery-data = <&mtp_batterydata>;
 };
 
 /* Remove pm660 gpio6 from disallowed list for ext_5v_boost. */

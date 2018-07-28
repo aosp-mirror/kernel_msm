@@ -1,0 +1,3 @@
+&pm660_fg {
+	qcom,fg-force-load-profile;
+};

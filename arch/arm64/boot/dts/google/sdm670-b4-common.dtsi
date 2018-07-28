@@ -1,5 +1,6 @@
 #include "sdm670-b4s4-common.dtsi"
 #include "sdm670-b4-usb.dtsi"
+#include "sdm670-b4-battery.dtsi"
 
 &dsi_sofef00_sdc_1080p_cmd_display {
 	qcom,dsi-display-active;
