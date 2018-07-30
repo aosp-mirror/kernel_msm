@@ -518,6 +518,8 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
 
 	kfree(power_info->power_setting);
 	kfree(power_info->power_down_setting);
+	power_info->power_setting = NULL;
+	power_info->power_down_setting = NULL;
 
 	s_ctrl->streamon_count = 0;
 	s_ctrl->streamoff_count = 0;
@@ -584,24 +586,6 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				"Already Sensor Probed in the slot");
 			break;
 		}
-		/* Allocate memory for power up setting */
-		pu = kzalloc(sizeof(struct cam_sensor_power_setting) *
-			MAX_POWER_CONFIG, GFP_KERNEL);
-		if (!pu) {
-			rc = -ENOMEM;
-			goto release_mutex;
-		}
-
-		pd = kzalloc(sizeof(struct cam_sensor_power_setting) *
-			MAX_POWER_CONFIG, GFP_KERNEL);
-		if (!pd) {
-			kfree(pu);
-			rc = -ENOMEM;
-			goto release_mutex;
-		}
-
-		power_info->power_setting = pu;
-		power_info->power_down_setting = pd;
 
 		if (cmd->handle_type ==
 			CAM_HANDLE_MEM_HANDLE) {
@@ -617,6 +601,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				 cmd->handle_type);
 			return -EINVAL;
 		}
+
+		pu = power_info->power_setting;
+		pd = power_info->power_down_setting;
 
 		/* Parse and fill vreg params for powerup settings */
 		rc = msm_camera_fill_vreg_params(
@@ -1164,6 +1151,11 @@ int32_t cam_sensor_flush_request(struct cam_req_mgr_flush_request *flush_req)
 		cam_get_device_priv(flush_req->dev_hdl);
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "Device data is NULL");
+		return -EINVAL;
+	}
+
+	if (s_ctrl->i2c_data.per_frame == NULL) {
+		CAM_ERR(CAM_SENSOR, "i2c frame data is NULL");
 		return -EINVAL;
 	}
 

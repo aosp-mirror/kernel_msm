@@ -1126,6 +1126,9 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 	if (user_len > sizeof(u32))
 		return -EINVAL;
 
+	if (!user_len || !user_buf)
+		return -EINVAL;
+
 	buf = kzalloc(user_len, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
@@ -3138,9 +3141,6 @@ int dsi_post_clkon_cb(void *priv,
 				__func__, rc);
 			goto error;
 		}
-
-		/* enable dsi to serve irqs */
-		dsi_display_ctrl_irq_update(display, true);
 	}
 
 	if ((clk & DSI_LINK_CLK) && (l_type & DSI_LINK_HS_CLK)) {
@@ -3162,6 +3162,11 @@ int dsi_post_clkon_cb(void *priv,
 			}
 		}
 	}
+
+	/* enable dsi to serve irqs */
+	if (clk & DSI_CORE_CLK)
+		dsi_display_ctrl_irq_update(display, true);
+
 error:
 	return rc;
 }
