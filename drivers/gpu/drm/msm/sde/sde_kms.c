@@ -2151,8 +2151,8 @@ int sde_kms_mmu_attach(struct sde_kms *sde_kms, bool secure_only)
 		aspace->mmu->funcs->attach(mmu, (const char **)iommu_ports,
 			ARRAY_SIZE(iommu_ports));
 
-		msm_gem_aspace_domain_attach_detach_update(aspace, false);
 		aspace->domain_attached = true;
+		msm_gem_aspace_domain_attach_detach_update(aspace, false);
 	}
 
 	return 0;
@@ -3196,7 +3196,7 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 		sde_kms->mmio = NULL;
 		goto error;
 	}
-	DRM_INFO("mapped mdp address space @%p\n", sde_kms->mmio);
+	DRM_INFO("mapped mdp address space @%pK\n", sde_kms->mmio);
 	sde_kms->mmio_len = msm_iomap_size(dev->platformdev, "mdp_phys");
 
 	rc = sde_dbg_reg_register_base(SDE_DBG_NAME, sde_kms->mmio,
