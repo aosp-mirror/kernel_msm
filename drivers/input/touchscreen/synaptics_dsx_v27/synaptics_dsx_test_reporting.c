@@ -3105,6 +3105,7 @@ static void test_free_control_mem(void)
 static void test_set_data(void)
 {
 	unsigned short reg_addr;
+	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 
 	reg_addr = f54->data_base_addr + REPORT_DATA_OFFSET + 1;
 
@@ -3115,8 +3116,10 @@ static void test_set_data(void)
 	/* data 5 reserved */
 
 	/* data 6 */
-	if (f54->query.has_interference_metric)
+	if (f54->query.has_interference_metric) {
+		rmi4_data->f54_im_offset = reg_addr;
 		reg_addr += 2;
+	}
 
 	/* data 7 */
 	if (f54->query.has_one_byte_report_rate |
@@ -3135,8 +3138,10 @@ static void test_set_data(void)
 
 	/* data 10 */
 	if (f54->query.has_multi_metric_state_machine |
-			f54->query.has_noise_state)
+			f54->query.has_noise_state) {
+		rmi4_data->f54_ns_offset = reg_addr;
 		reg_addr++;
+	}
 
 	/* data 11 */
 	if (f54->query.has_status)
@@ -3151,8 +3156,10 @@ static void test_set_data(void)
 		reg_addr += 2;
 
 	/* data 14 */
-	if (f54->query_13.has_cidim)
+	if (f54->query_13.has_cidim) {
+		rmi4_data->f54_cidim_offset = reg_addr;
 		reg_addr++;
+	}
 
 	/* data 15 */
 	if (f54->query_13.has_rail_im)
@@ -3163,8 +3170,10 @@ static void test_set_data(void)
 		reg_addr++;
 
 	/* data 17 */
-	if (f54->query_16.has_data17)
+	if (f54->query_16.has_data17) {
+		rmi4_data->f54_freq_offset = reg_addr;
 		reg_addr++;
+	}
 
 	/* data 18 */
 	if (f54->query_21.has_query24_data18)
@@ -4345,6 +4354,11 @@ static void test_f54_set_regs(struct synaptics_rmi4_data *rmi4_data,
 	f54->control_base_addr = fd->ctrl_base_addr | (page << 8);
 	f54->data_base_addr = fd->data_base_addr | (page << 8);
 	f54->command_base_addr = fd->cmd_base_addr | (page << 8);
+
+	f54->rmi4_data->f54_query_base_addr = f54->query_base_addr;
+	f54->rmi4_data->f54_ctrl_base_addr = f54->control_base_addr;
+	f54->rmi4_data->f54_data_base_addr = f54->data_base_addr;
+	f54->rmi4_data->f54_cmd_base_addr = f54->command_base_addr;
 
 	f54->intr_reg_num = (intr_count + 7) / 8;
 	if (f54->intr_reg_num != 0)

@@ -64,6 +64,12 @@
 #else
 #define sstrtoul(...) strict_strtoul(__VA_ARGS__)
 #endif
+
+#ifdef pr_fmt
+#undef pr_fmt
+#define pr_fmt(fmt) "[TP] " fmt
+#endif
+
 /*
 #define F51_DISCRETE_FORCE
 #ifdef F51_DISCRETE_FORCE
@@ -126,6 +132,17 @@
 #define MASK_3BIT 0x07
 #define MASK_2BIT 0x03
 #define MASK_1BIT 0x01
+
+#define SHOW_INT_I2C_BUF		BIT(2)
+//Priority: Bit(3) > Bit(4) > Bit(5)
+//Print Down/Up logs
+#define TOUCH_DOWN_UP_LOG		BIT(3)
+//Print Down/Move/Up with interrupt received time and input_sync time
+#define TOUCH_KPI_LOG			BIT(4)
+//Print Down/Move/Up with total handling time and bus time
+#define TOUCH_BREAKDOWN_TIME		BIT(5)
+//Print logs while enter or leave critical functions.
+#define TOUCH_BREAKDOWN_LOG		BIT(6)
 
 enum exp_fn {
 	RMI_DEV = 0,
@@ -284,6 +301,26 @@ struct synaptics_rmi4_device_info {
 	struct list_head support_fn_list;
 };
 
+struct synaptics_rmi4_report_points {
+	unsigned char state;
+	int finger_ind;
+	int dnup;
+	int x;
+	int y;
+	int wx;
+	int wy;
+	int z;
+};
+
+struct synaptics_rmi4_noise_state {
+	uint16_t im;
+	uint16_t im_m;
+	uint16_t cidim;
+	uint16_t cidim_m;
+	uint8_t freq;
+	uint8_t ns;
+};
+
 /*
  * struct synaptics_rmi4_data - RMI4 device instance data
  * @pdev: pointer to platform device
@@ -395,10 +432,29 @@ struct synaptics_rmi4_data {
 	unsigned short f01_cmd_base_addr;
 	unsigned short f01_ctrl_base_addr;
 	unsigned short f01_data_base_addr;
+	unsigned short f54_query_base_addr;
+	unsigned short f54_cmd_base_addr;
+	unsigned short f54_ctrl_base_addr;
+	unsigned short f54_data_base_addr;
+	unsigned short f54_im_offset;
+	unsigned short f54_ns_offset;
+	unsigned short f54_cidim_offset;
+	unsigned short f54_freq_offset;
 #ifdef F51_DISCRETE_FORCE
 	unsigned short f51_query_base_addr;
 #endif
 	unsigned int firmware_id;
+	unsigned int debug_mask;
+	struct timespec tp_handler_time;
+	struct timespec tp_read_start_time;
+	struct timespec tp_read_done_time;
+	struct timespec tp_report_read_start_time;
+	struct timespec tp_report_read_done_time;
+	struct timespec tp_sync_time;
+	struct synaptics_rmi4_report_points rp[10];
+	struct synaptics_rmi4_noise_state noise_state;
+	int factor_width;
+	int factor_height;
 	int irq;
 	int sensor_max_x;
 	int sensor_max_y;

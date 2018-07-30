@@ -64,6 +64,7 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	int retval;
 	u32 value;
 	const char *name;
+	unsigned int coords[2];
 	struct property *prop;
 	struct device_node *np = dev->of_node;
 
@@ -243,6 +244,25 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 	} else {
 		bdata->vir_button_map->nbuttons = 0;
 		bdata->vir_button_map->map = NULL;
+	}
+
+	prop = of_find_property(np, "synaptics,display-coords", NULL);
+	if (prop && prop->length) {
+		if ((prop->length / sizeof(u32)) == 2) {
+			retval = of_property_read_u32_array(np,
+					"synaptics,display-coords",
+					coords, prop->length / sizeof(u32));
+
+			if (retval < 0) {
+				bdata->display_width  = 0;
+				bdata->display_height = 0;
+			} else {
+				bdata->display_width  = coords[0];
+				bdata->display_height = coords[1];
+			}
+		} else
+			dev_err(dev, "%s: Invalid display coords size %ld",
+					__func__, prop->length / sizeof(u32));
 	}
 
 	return 0;

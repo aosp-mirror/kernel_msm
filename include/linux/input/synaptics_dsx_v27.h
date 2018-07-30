@@ -104,6 +104,8 @@ struct synaptics_dsx_board_data {
 	unsigned int byte_delay_us;
 	unsigned int block_delay_us;
 	unsigned int addr_delay_us;
+	unsigned int display_width;
+	unsigned int display_height;
 	const char *pwr_reg_name;
 	const char *bus_reg_name;
 	struct synaptics_dsx_button_map *cap_button_map;

@@ -120,6 +120,22 @@
 #define F12_WAKEUP_GESTURE_MODE 0x02
 #define F12_UDG_DETECT 0x0f
 
+#define RESOL_SHIFT_BITS (10)
+#define FREQ_MASK 0x7F
+
+enum finger_dnup {
+	REPORT_FINGER_UP = 0,
+	REPORT_FINGER_DOWN,
+	REPORT_FINGER_MOVE,
+};
+
+enum report_time_enum {
+	START_HANDLE = 0,
+	END_SYNC,
+	HANDLE_TIME,
+	BUS_TIME,
+};
+
 static int synaptics_rmi4_check_status(struct synaptics_rmi4_data *rmi4_data,
 		bool *was_in_bl_mode);
 static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data);
@@ -196,6 +212,12 @@ static ssize_t synaptics_rmi4_irq_status_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
 static ssize_t synaptics_rmi4_irq_status_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count);
+
+static ssize_t synaptics_rmi4_debug_level_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t synaptics_rmi4_debug_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
@@ -738,6 +760,9 @@ static struct device_attribute attrs[] = {
 	__ATTR(irq_status, 0644,
 			synaptics_rmi4_irq_status_show,
 			synaptics_rmi4_irq_status_store),
+	__ATTR(debug_level, 0644,
+			synaptics_rmi4_debug_level_show,
+			synaptics_rmi4_debug_level_store),
 };
 
 static struct kobj_attribute virtual_key_map_attr = {
@@ -1016,6 +1041,34 @@ static ssize_t synaptics_rmi4_irq_status_store(struct device *dev,
 	return count;
 }
 
+static ssize_t synaptics_rmi4_debug_level_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+	return snprintf(buf, PAGE_SIZE, "%08X\n", rmi4_data->debug_mask);
+}
+
+static ssize_t synaptics_rmi4_debug_level_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+
+	if (sscanf(buf, "%ux", &rmi4_data->debug_mask) != 1)
+		return -EINVAL;
+
+	if (!(rmi4_data->factor_width && rmi4_data->factor_height)) {
+		if (rmi4_data->debug_mask & (SHOW_INT_I2C_BUF |
+				TOUCH_DOWN_UP_LOG | TOUCH_KPI_LOG |
+				TOUCH_BREAKDOWN_TIME)) {
+			rmi4_data->debug_mask = 0;
+			pr_err("%s Set debug_level fail, debug_level = %u",
+					__func__, rmi4_data->debug_mask);
+		}
+	}
+
+	return count;
+}
+
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
@@ -1142,6 +1195,133 @@ static void synaptics_rmi4_wakeup_gesture(struct synaptics_rmi4_data *rmi4_data,
 		synaptics_rmi4_f12_wg(rmi4_data, enable);
 
 	return;
+}
+
+static int synaptics_rmi4_get_noise_state(struct synaptics_rmi4_data *rmi4_data)
+{
+	int retval;
+	uint8_t data[2] = {0};
+	struct synaptics_rmi4_noise_state noise_state;
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr +
+			rmi4_data->f54_im_offset,
+			data, sizeof(data));
+	if (retval < 0)
+		return retval;
+
+	noise_state.im = (data[1] << 8) | data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr +
+			rmi4_data->f54_ns_offset,
+			data, sizeof(data[0]));
+	if (retval < 0)
+		return retval;
+
+	noise_state.ns = data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr +
+			rmi4_data->f54_cidim_offset,
+			data, sizeof(data));
+	if (retval < 0)
+		return retval;
+
+	noise_state.cidim = (data[1] << 8) | data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_data_base_addr +
+			rmi4_data->f54_freq_offset,
+			data, sizeof(data[0]));
+	if (retval < 0)
+		return retval;
+
+	noise_state.freq = (data[0] & FREQ_MASK);
+
+	noise_state.im_m = (noise_state.im > rmi4_data->noise_state.im_m) ?
+			noise_state.im : rmi4_data->noise_state.im_m;
+	noise_state.cidim_m =
+			(noise_state.cidim > rmi4_data->noise_state.cidim_m) ?
+			noise_state.cidim : rmi4_data->noise_state.cidim_m;
+
+	if ((noise_state.freq != rmi4_data->noise_state.freq) ||
+			(noise_state.ns != rmi4_data->noise_state.ns)) {
+		pr_info("[NS]: IM:%d(M-%d), CIDIM:%d(M-%d), Freq:%d, NS:%d\n",
+				noise_state.im,
+				noise_state.im_m,
+				noise_state.cidim,
+				noise_state.cidim_m,
+				noise_state.freq,
+				noise_state.ns);
+
+		noise_state.im_m = 0;
+		noise_state.cidim_m = 0;
+	}
+
+	memcpy(&rmi4_data->noise_state, &noise_state, sizeof(noise_state));
+
+	return 0;
+}
+
+const char *finger_dnup_state(struct synaptics_rmi4_data *rmi4_data,
+		unsigned char finger)
+{
+	switch (rmi4_data->rp[finger].dnup) {
+	case REPORT_FINGER_UP:
+		return "Up  ";
+		break;
+	case REPORT_FINGER_DOWN:
+		return "Down";
+		break;
+	case REPORT_FINGER_MOVE:
+		return "Move";
+		break;
+	}
+	return "Unsupport state";
+}
+
+const char *report_time(struct synaptics_rmi4_data *rmi4_data,
+		enum report_time_enum choice)
+{
+	static char time_buf[10] = "";
+
+	switch (choice) {
+	case START_HANDLE:
+		snprintf(time_buf, sizeof("%ld.%06ld"), "%ld.%06ld",
+				rmi4_data->tp_handler_time.tv_sec % 1000,
+				rmi4_data->tp_handler_time.tv_nsec / 1000);
+		break;
+	case END_SYNC:
+		snprintf(time_buf, sizeof("%ld.%06ld"), "%ld.%06ld",
+				rmi4_data->tp_sync_time.tv_sec % 1000,
+				rmi4_data->tp_sync_time.tv_nsec / 1000);
+	case HANDLE_TIME:
+		snprintf(time_buf, sizeof("%4ld"), "%4ld",
+				((rmi4_data->tp_sync_time.tv_sec * 1000000000 +
+				rmi4_data->tp_sync_time.tv_nsec) -
+				(rmi4_data->tp_handler_time.tv_sec *
+				1000000000 +
+				rmi4_data->tp_handler_time.tv_nsec)) / 1000);
+		break;
+	case BUS_TIME:
+		snprintf(time_buf, sizeof("%4ld"), "%4ld",
+				((rmi4_data->tp_read_done_time.tv_sec *
+				1000000000 +
+				rmi4_data->tp_read_done_time.tv_nsec) -
+				(rmi4_data->tp_read_start_time.tv_sec *
+				1000000000 +
+				rmi4_data->tp_read_start_time.tv_nsec) +
+				(rmi4_data->tp_report_read_done_time.tv_sec *
+				1000000000 +
+				rmi4_data->tp_report_read_done_time.tv_nsec) -
+				(rmi4_data->tp_report_read_start_time.tv_sec *
+				1000000000 +
+				rmi4_data->tp_report_read_start_time.tv_nsec))
+				/ 1000);
+		break;
+	}
+	return time_buf;
 }
 
 static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
@@ -1342,10 +1522,18 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	static unsigned char objects_already_present;
 #endif
 
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: ++\n", __func__);
+
 	fingers_to_process = fhandler->num_of_data_points;
 	data_addr = fhandler->full_addr.data_base;
 	extra_data = (struct synaptics_rmi4_f12_extra_data *)fhandler->extra;
 	size_of_2d_data = sizeof(struct synaptics_rmi4_f12_finger_data);
+
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_TIME)
+		getnstimeofday(&rmi4_data->tp_report_read_start_time);
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: REPORT_I2C_READ START\n", __func__);
 
 	if (rmi4_data->suspend && rmi4_data->enable_wakeup_gesture) {
 		retval = synaptics_rmi4_reg_read(rmi4_data,
@@ -1431,9 +1619,17 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	}
 #endif
 
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_TIME)
+		getnstimeofday(&rmi4_data->tp_report_read_done_time);
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: REPORT_I2C_READ DONE\n", __func__);
+
 	mutex_lock(&(rmi4_data->rmi4_report_mutex));
 
 	for (finger = 0; finger < fingers_to_process; finger++) {
+		if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
+				TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME))
+			rmi4_data->rp[finger].finger_ind = 0;
 		finger_data = data + finger;
 		finger_status = finger_data->object_type_and_status;
 
@@ -1534,11 +1730,55 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_mt_sync(rmi4_data->input_dev);
 #endif
 
-			dev_dbg(rmi4_data->pdev->dev.parent,
-					"%s: Finger %d: status = 0x%02x, x = %d, y = %d, wx = %d, wy = %d\n",
-					__func__, finger,
-					finger_status,
-					x, y, wx, wy);
+			if (rmi4_data->debug_mask & SHOW_INT_I2C_BUF) {
+				pr_info("%s: Finger %d: status = %#02x, x = %d, y = %d, wx = %d, wy = %d\n",
+						__func__, finger,
+						finger_status,
+						x, y, wx, wy);
+			}
+
+			if (rmi4_data->debug_mask & TOUCH_DOWN_UP_LOG) {
+				rmi4_data->rp[finger].x =
+						(x * rmi4_data->factor_width)
+						>> RESOL_SHIFT_BITS;
+				rmi4_data->rp[finger].y =
+						(y * rmi4_data->factor_height)
+						>> RESOL_SHIFT_BITS;
+				if (rmi4_data->rp[finger].state != 1) {
+					rmi4_data->rp[finger].finger_ind =
+							finger + 1;
+					rmi4_data->rp[finger].dnup =
+							REPORT_FINGER_DOWN;
+					rmi4_data->rp[finger].wx = wx;
+					rmi4_data->rp[finger].wy = wy;
+					rmi4_data->rp[finger].state = 1;
+				}
+			} else if (rmi4_data->debug_mask & (TOUCH_KPI_LOG |
+					TOUCH_BREAKDOWN_TIME)) {
+				rmi4_data->rp[finger].x =
+						(x * rmi4_data->factor_width)
+						>> RESOL_SHIFT_BITS;
+				rmi4_data->rp[finger].y =
+						(y * rmi4_data->factor_height)
+						>> RESOL_SHIFT_BITS;
+
+				if (rmi4_data->rp[finger].state != 1) {
+					rmi4_data->rp[finger].finger_ind =
+							finger + 1;
+					rmi4_data->rp[finger].dnup =
+							REPORT_FINGER_DOWN;
+					rmi4_data->rp[finger].wx = wx;
+					rmi4_data->rp[finger].wy = wy;
+					rmi4_data->rp[finger].state = 1;
+				} else {
+					rmi4_data->rp[finger].finger_ind =
+							finger + 1;
+					rmi4_data->rp[finger].dnup =
+							REPORT_FINGER_MOVE;
+					rmi4_data->rp[finger].wx = wx;
+					rmi4_data->rp[finger].wy = wy;
+				}
+			}
 
 			finger_presence = 1;
 			touch_count++;
@@ -1588,6 +1828,21 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_mt_report_slot_state(rmi4_data->input_dev,
 					MT_TOOL_FINGER, 0);
 #endif
+
+			if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
+					TOUCH_KPI_LOG |
+					TOUCH_BREAKDOWN_TIME)) {
+				if (rmi4_data->rp[finger].state != 0) {
+					rmi4_data->rp[finger].finger_ind =
+							finger + 1;
+					rmi4_data->rp[finger].dnup =
+							REPORT_FINGER_UP;
+					rmi4_data->rp[finger].wx = wx;
+					rmi4_data->rp[finger].wy = wy;
+					rmi4_data->rp[finger].state = 0;
+				}
+			}
+
 			break;
 		}
 	}
@@ -1617,9 +1872,77 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			}
 			input_sync(rmi4_data->stylus_dev);
 		}
+
+		if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
+				TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME)) {
+			for (finger = 0; finger < fingers_to_process;
+					finger++) {
+				if (rmi4_data->rp[finger].state != 0) {
+					rmi4_data->rp[finger].finger_ind =
+							finger + 1;
+					rmi4_data->rp[finger].dnup =
+							REPORT_FINGER_UP;
+					rmi4_data->rp[finger].wx = wx;
+					rmi4_data->rp[finger].wy = wy;
+					rmi4_data->rp[finger].state = 0;
+				}
+			}
+		}
 	}
 
 	input_sync(rmi4_data->input_dev);
+
+	if (rmi4_data->debug_mask & (TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME))
+		getnstimeofday(&rmi4_data->tp_sync_time);
+
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: input_sync done\n", __func__);
+
+	synaptics_rmi4_get_noise_state(rmi4_data);
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: get_noise_state done\n", __func__);
+
+	if (rmi4_data->debug_mask & TOUCH_DOWN_UP_LOG) {
+		for (finger = 0; finger < fingers_to_process; finger++) {
+			if (rmi4_data->rp[finger].finger_ind != 0) {
+				pr_info("Screen:F[%02d]:%s, X=%d, Y=%d, Wx=%d, Wy=%d\n",
+				rmi4_data->rp[finger].finger_ind,
+				(rmi4_data->rp[finger].dnup) ? "Down" : "Up",
+				rmi4_data->rp[finger].x,
+				rmi4_data->rp[finger].y,
+				rmi4_data->rp[finger].wx,
+				rmi4_data->rp[finger].wy);
+			}
+		}
+	} else if (rmi4_data->debug_mask & TOUCH_KPI_LOG) {
+		for (finger = 0; finger < fingers_to_process; finger++) {
+			if (rmi4_data->rp[finger].finger_ind != 0) {
+				pr_info("Screen:F[%02d]:%s, X=%4d, Y=%4d, Wx=%2d, Wy=%2d, time:  %s  to  %s\n",
+					rmi4_data->rp[finger].finger_ind,
+					finger_dnup_state(rmi4_data, finger),
+					rmi4_data->rp[finger].x,
+					rmi4_data->rp[finger].y,
+					rmi4_data->rp[finger].wx,
+					rmi4_data->rp[finger].wy,
+					report_time(rmi4_data, START_HANDLE),
+					report_time(rmi4_data, END_SYNC));
+			}
+		}
+	} else if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_TIME) {
+		for (finger = 0; finger < fingers_to_process; finger++) {
+			if (rmi4_data->rp[finger].finger_ind != 0) {
+				pr_info("Screen:F[%02d]:%s, X=%4d, Y=%4d, Wx=%2d, Wy=%2d, time:  %s  BUS:  %s\n",
+					rmi4_data->rp[finger].finger_ind,
+					finger_dnup_state(rmi4_data, finger),
+					rmi4_data->rp[finger].x,
+					rmi4_data->rp[finger].y,
+					rmi4_data->rp[finger].wx,
+					rmi4_data->rp[finger].wy,
+					report_time(rmi4_data, HANDLE_TIME),
+					report_time(rmi4_data, BUS_TIME));
+			}
+		}
+	}
 
 	mutex_unlock(&(rmi4_data->rmi4_report_mutex));
 
@@ -1735,6 +2058,10 @@ static void synaptics_rmi4_report_touch(struct synaptics_rmi4_data *rmi4_data,
 {
 	unsigned char touch_count_2d;
 
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: Function %02x reporting\n",
+				__func__, fhandler->fn_number);
+
 	dev_dbg(rmi4_data->pdev->dev.parent,
 			"%s: Function %02x reporting\n",
 			__func__, fhandler->fn_number);
@@ -1792,6 +2119,12 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data,
 	 * Get interrupt status information from F01 Data1 register to
 	 * determine the source(s) that are flagging the interrupt.
 	 */
+
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_TIME)
+		getnstimeofday(&rmi4_data->tp_read_start_time);
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: INT_I2C_READ START\n", __func__);
+
 	retval = synaptics_rmi4_reg_read(rmi4_data,
 			rmi4_data->f01_data_base_addr,
 			data,
@@ -1824,6 +2157,12 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data,
 			return;
 		}
 	}
+
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_TIME)
+		getnstimeofday(&rmi4_data->tp_read_done_time);
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: INT_I2C_READ DONE\n", __func__);
+
 	if (status.unconfigured && !status.flash_prog) {
 		pr_notice("%s: spontaneous reset detected\n", __func__);
 		retval = synaptics_rmi4_reinit_device(rmi4_data);
@@ -1875,6 +2214,11 @@ static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 
 	if (gpio_get_value(bdata->irq_gpio) != bdata->irq_on_state)
 		goto exit;
+
+	if (rmi4_data->debug_mask & (TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME))
+		getnstimeofday(&rmi4_data->tp_handler_time);
+	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
+		pr_info("[TP][KPI] %s: ++\n", __func__);
 
 	synaptics_rmi4_sensor_report(rmi4_data, true);
 
@@ -2742,6 +3086,15 @@ static int synaptics_rmi4_f12_init(struct synaptics_rmi4_data *rmi4_data,
 				((unsigned int)ctrl_31->max_y_coord_msb << 8);
 
 		rmi4_data->max_touch_width = MAX_F12_TOUCH_WIDTH;
+	}
+
+	if (bdata->display_width && bdata->display_height) {
+		rmi4_data->factor_width =
+				(bdata->display_width << RESOL_SHIFT_BITS) /
+				rmi4_data->sensor_max_x;
+		rmi4_data->factor_height =
+				(bdata->display_height << RESOL_SHIFT_BITS) /
+				rmi4_data->sensor_max_y;
 	}
 
 	dev_dbg(rmi4_data->pdev->dev.parent,
@@ -3819,6 +4172,9 @@ static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data)
 		input_mt_slot(rmi4_data->input_dev, ii);
 		input_mt_report_slot_state(rmi4_data->input_dev,
 				MT_TOOL_FINGER, 0);
+		if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
+				TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME))
+			rmi4_data->rp[ii].state = 0;
 	}
 #endif
 	input_report_key(rmi4_data->input_dev,
@@ -4027,6 +4383,8 @@ static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data)
 	mutex_lock(&(rmi4_data->rmi4_reset_mutex));
 
 	synaptics_rmi4_free_fingers(rmi4_data);
+
+	memset(&rmi4_data->noise_state, 0, sizeof(rmi4_data->noise_state));
 
 	if (!list_empty(&rmi->support_fn_list)) {
 		list_for_each_entry(fhandler, &rmi->support_fn_list, link) {
@@ -4311,6 +4669,9 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
 	rmi4_data->sleep_enable = synaptics_rmi4_sleep_enable;
 	rmi4_data->report_touch = synaptics_rmi4_report_touch;
+
+	rmi4_data->debug_mask = 0;
+	memset(&rmi4_data->noise_state, 0, sizeof(rmi4_data->noise_state));
 
 	mutex_init(&(rmi4_data->rmi4_reset_mutex));
 	mutex_init(&(rmi4_data->rmi4_report_mutex));
@@ -4842,6 +5203,8 @@ static int synaptics_rmi4_resume(struct device *dev)
 	}
 
 	rmi4_data->current_page = MASK_8BIT;
+	rmi4_data->noise_state.im_m = 0;
+	rmi4_data->noise_state.cidim_m = 0;
 
 	synaptics_rmi4_sleep_enable(rmi4_data, false);
 	synaptics_rmi4_irq_enable(rmi4_data, true, false);
