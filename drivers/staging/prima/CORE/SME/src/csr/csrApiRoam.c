@@ -11458,6 +11458,11 @@ eHalStatus csrRoamLostLink( tpAniSirGlobal pMac, tANI_U32 sessionId, tANI_U32 ty
         status = csrSendMBDeauthCnfMsg(pMac, pDeauthIndMsg);
     }
 
+    if(CSR_IS_INFRASTRUCTURE(&pSession->connectedProfile))
+    {
+        csrScanStartIdleScan(pMac);
+    }
+
     return (status);
 }
 
