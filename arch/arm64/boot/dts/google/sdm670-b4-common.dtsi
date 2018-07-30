@@ -4,3 +4,7 @@
 &dsi_sofef00_sdc_1080p_cmd_display {
 	qcom,dsi-display-active;
 };
+
+&dsi_nt37700f_tianma_1080p_cmd_display {
+	qcom,dsi-display-active;
+};
