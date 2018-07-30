@@ -733,7 +733,15 @@ static void fts_gesture_check(struct fts_ts_data *data)
 	u8 ret;
 	u8 reg_addr = FTS_GESTURE_OUTPUT_ADRESS;
 
+	if (!wake_lock_active(&data->wlock)) {
+		wake_lock(&data->wlock);
+	}
+
 	ret = fts_i2c_read(data->client, &reg_addr, 1, &reg_value, 1);
+
+	if (wake_lock_active(&data->wlock)) {
+		wake_unlock(&data->wlock);
+	}
 
 	if (ret<0) {
 		printk(KERN_ERR "[fts]TP get tp_gesture_id fail \n");
@@ -2399,6 +2407,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	data->early_suspend.resume = fts_ts_late_resume;
 	register_early_suspend(&data->early_suspend);
 #endif
+	wake_lock_init(&data->wlock, WAKE_LOCK_SUSPEND, "fts");
 
 	enable_irq(client->irq);
 
@@ -2540,6 +2549,8 @@ static int fts_ts_remove(struct i2c_client *client)
 		fts_power_init(data, false);
 
 	input_unregister_device(data->input_dev);
+
+	wake_lock_destroy(&data->wlock);
 
 	return 0;
 }

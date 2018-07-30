@@ -52,6 +52,7 @@
 #include <linux/netdevice.h>
 #include <linux/unistd.h>
 #include <linux/ioctl.h>
+#include <linux/wakelock.h>
 #include "ft_gesture_lib.h"
 
 
@@ -316,6 +317,7 @@ struct fts_ts_data {
 	struct pinctrl_state *pinctrl_state_suspend;
 	struct pinctrl_state *pinctrl_state_release;
 #endif
+	struct wake_lock wlock;
 //	int shipping_fw_version;		//dean add for FTM
 };
 
