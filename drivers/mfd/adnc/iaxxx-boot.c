@@ -15,7 +15,6 @@
 
 #include <linux/delay.h>
 #include <linux/regmap.h>
-#include <linux/firmware.h>
 #include <linux/mfd/adnc/iaxxx-evnt-mgr.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
@@ -24,8 +23,6 @@
 
 #define IAXXX_CHUNK_SIZE 32768
 
-/* Firmware and hardware configuration files */
-static const char *iaxxx_fw_filename = "RomeApp.bin";
 
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes)
 {
@@ -130,7 +127,7 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 	/* File header */
 	if (sizeof(header) > fw->size) {
 		dev_err(dev, "Bad Firmware image file (too small)\n");
-		goto out;
+		return -EINVAL;
 	}
 	iaxxx_copy_le32_to_cpu(&header, fw->data, sizeof(header));
 	data = fw->data + sizeof(header);
@@ -139,7 +136,7 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 	rc = iaxxx_verify_fw_header(dev, &header);
 	if (rc) {
 		dev_err(dev, "Bad firmware image file\n");
-		goto out;
+		return rc;
 	}
 
 	/* Include file header fields as part of the checksum */
@@ -167,7 +164,7 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 
 			if (rc) {
 				dev_err(dev, "Failed to load firmware section\n");
-				goto out;
+				return rc;
 			}
 
 			/* Include checksum for this section */
@@ -176,7 +173,7 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 					file_section.length, &sum1, &sum2);
 			if (rc) {
 				dev_err(dev, "Checksum request error\n");
-				goto out;
+				return rc;
 			}
 
 			/* Next section */
@@ -195,11 +192,11 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 			rc = -EINVAL;
 			dev_err(dev, "%s(): Checksum mismatch 0x%.08X != 0x%.08X\n",
 				__func__, checksum, file_section.start_address);
+			return rc;
 		}
 	}
 
-out:
-	return rc;
+	return 0;
 }
 
 /**
@@ -321,28 +318,20 @@ static int iaxxx_wait_apps_ready(struct iaxxx_priv *priv)
  *
  * Downloads any necessary hardware configuration and RAM patches.
  */
-int iaxxx_bootup(struct iaxxx_priv *priv)
+int iaxxx_bootup(struct iaxxx_priv *priv, const struct firmware *fw)
 {
 	int rc;
 	uint8_t mode;
 	uint32_t status;
 	uint32_t reg;
-	const struct firmware *fw;
 	struct device *dev = priv->dev;
 	const struct firmware_file_header *fw_header;
 
-	/* Request the firmware image */
-	rc = request_firmware(&fw, iaxxx_fw_filename, dev);
-	if (rc) {
-		dev_err(dev, "Firmware file %s not found rc = %d\n",
-						iaxxx_fw_filename, rc);
-		return rc;
-	}
 	/* Download the firmware to device memory */
 	rc = iaxxx_download_firmware(priv, fw);
 	if (rc) {
 		dev_err(dev, "Firmware download failed, rc = %d\n", rc);
-		goto out;
+		return rc;
 	}
 
 	fw_header = (const struct firmware_file_header *)fw->data;
@@ -365,36 +354,34 @@ int iaxxx_bootup(struct iaxxx_priv *priv)
 	rc = iaxxx_jump_to_request(priv, le32_to_cpu(fw_header->entry_point));
 	if (rc) {
 		dev_err(dev, "Failed to boot firmware, rc = %d\n", rc);
-		goto out;
+		return rc;
 	}
 
 	/* Wait for the application mode to be up and running */
 	rc = iaxxx_wait_apps_ready(priv);
 	if (rc) {
 		dev_err(dev, "Timed out waiting for apps mode, rc = %d\n", rc);
-		goto out;
+		return rc;
 	}
 
 	/* Read SYSTEM_STATUS to ensure that device is in Application Mode */
 	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_STATUS_ADDR, &status);
 	if (rc) {
 		dev_err(dev, "Failed to read SYSTEM_STATUS, rc = %d\n", rc);
-		goto out;
+		return rc;
 	}
 
 	mode = status & IAXXX_SRB_SYS_STATUS_MODE_MASK;
 	if (mode != SYSTEM_STATUS_MODE_APPS) {
 		dev_err(dev, "Not in application mode, mode = %d\n", mode);
 		rc = -ENXIO;
-		goto out;
+		return rc;
 	}
 	/*
 	 * device running in application mode
 	 */
 
 	dev_dbg(dev, "Firmware running in application mode\n");
+	return 0;
 
-out:
-	release_firmware(fw);
-	return rc;
 }
