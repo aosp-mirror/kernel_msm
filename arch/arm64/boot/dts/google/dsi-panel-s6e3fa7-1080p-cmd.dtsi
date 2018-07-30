@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,7 +11,7 @@
  */
 
 &mdss_mdp {
-	dsi_s6e3fa7_sdc_1080p_cmd: qcom,mdss_dsi_s6e3fa7_1080p_cmd_sdc {
+	dsi_s6e3fa7_sdc_1080p_cmd: qcom,mdss_dsi_s6e3fa7_sdc_1080p_cmd {
 		qcom,mdss-dsi-panel-name = "s6e3fa7 cmd mode dsi sdc panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
@@ -37,18 +37,13 @@
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-lp11-init;
 		qcom,mdss-dsi-tx-eot-append;
-		qcom,mdss-dsi-force-clock-lane-hs; /* TBD: needed ? */
 
 		qcom,mdss-pan-physical-width-dimension = <62>;
 		qcom,mdss-pan-physical-height-dimension = <127>;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <1>;
-		qcom,mdss-dsi-bl-max-level = <4095>; /* 12 bit */
-		qcom,mdss-dsi-panel-peak-brightness = <4200000>;
-		/* TBD (qcom panel, unit nits) */
-		qcom,mdss-dsi-panel-blackness-level = <3230>;
-		/* TBD (qcom panel, unit nits) */
+		qcom,mdss-dsi-bl-max-level = <1023>; /* 10 bit */
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
@@ -69,7 +64,7 @@
 				qcom,mdss-dsi-on-command = [
 					05 01 00 00 14 00 01 11
 					15 01 00 00 00 00 02 35 00
-					/* TBD ERR_FG on*/
+					/* TBD ERR_FG on */
 					/* TBD AVC on
 					 *15 01 00 00 00 00 03 F0 5A 5A
 					 *39 01 00 00 00 00 0F F4 BB 23 19 3A 9F
@@ -77,7 +72,6 @@
 					 *15 01 00 00 00 00 03 F0 A5 A5
 					 */
 					15 01 00 00 7C 00 02 53 20
-					/* 2Ch and 3Ch ? */
 					05 01 00 00 00 00 01 29
 				];
 				qcom,mdss-dsi-off-command = [

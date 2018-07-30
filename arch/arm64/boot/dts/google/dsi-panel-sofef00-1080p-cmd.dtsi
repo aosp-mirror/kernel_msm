@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,7 +11,7 @@
  */
 
 &mdss_mdp {
-	dsi_sofef00_sdc_1080p_cmd: qcom,mdss_dsi_sofef00_1080p_cmd_sdc {
+	dsi_sofef00_sdc_1080p_cmd: qcom,mdss_dsi_sofef00_sdc_1080p_cmd {
 		qcom,mdss-dsi-panel-name = "sofef00 cmd mode dsi sdc panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
@@ -37,16 +37,13 @@
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-lp11-init;
 		qcom,mdss-dsi-tx-eot-append;
-		qcom,mdss-dsi-force-clock-lane-hs; /* TBD: needed ? */
 
 		qcom,mdss-pan-physical-width-dimension = <69>;
 		qcom,mdss-pan-physical-height-dimension = <137>;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <1>;
-		qcom,mdss-dsi-bl-max-level = <4095>; /* 12 bit */
-		qcom,mdss-dsi-panel-peak-brightness = <4200000>; /* TBD */
-		qcom,mdss-dsi-panel-blackness-level = <3230>; /* TBD */
+		qcom,mdss-dsi-bl-max-level = <1023>; /* 10 bit */
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
