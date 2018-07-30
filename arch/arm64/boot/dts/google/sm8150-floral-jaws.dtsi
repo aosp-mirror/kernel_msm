@@ -19,6 +19,7 @@
 #include "../qcom/sm8150-thermal-overlay.dtsi"
 
 #include "sm8150-floral-battery.dtsi"
+#include "sm8150-floral-camera-pmic.dtsi"
 #include "sm8150-floral-citadel.dtsi"
 #include "sm8150-floral-display.dtsi"
 #include "sm8150-floral-nfc.dtsi"
