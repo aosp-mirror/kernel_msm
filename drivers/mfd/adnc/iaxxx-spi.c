@@ -765,6 +765,7 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	if (!IS_ERR(iaxxx_clk)) {
 		dev_info(dev, "iaxxx_clk set rate to 19200000\n");
 		clk_set_rate(iaxxx_clk, 19200000);
+		clk_prepare_enable(iaxxx_clk);
 	} else {
 		rc = PTR_ERR(iaxxx_clk);
 		dev_err(dev, "cannot get iaxxx_clk, errno=%d\n", rc);

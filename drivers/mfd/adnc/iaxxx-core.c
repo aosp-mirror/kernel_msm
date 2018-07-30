@@ -464,11 +464,6 @@ static int iaxxx_reset(struct iaxxx_priv *priv)
 	gpio_set_value(priv->pwr_vld_gpio, 0);
 
 	gpio_set_value(priv->reset_gpio, 0);
-	if (priv->ext_clk) {
-		dev_info(dev, "%s(): enable clk\n", __func__);
-		clk_prepare_enable(priv->ext_clk);
-		usleep_range(10000, 12000);
-	}
 	usleep_range(IAXXX_RESET_HOLD_TIME,
 		IAXXX_RESET_HOLD_TIME + IAXXX_RESET_RANGE_INTERVAL);
 
