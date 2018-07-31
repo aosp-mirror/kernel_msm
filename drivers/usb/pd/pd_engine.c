@@ -157,6 +157,10 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args,
 		goto abort;
 	}
 
+	if ((pd->logbuffer_head == pd->logbuffer_tail) ||
+	    (pd->logbuffer_head == LOG_BUFFER_ENTRIES - 1))
+		__pd_engine_log(pd, tmpbuffer, true);
+
 	if (pd->suspend_since_last_logged) {
 		__pd_engine_log(pd, tmpbuffer, true);
 		pd->suspend_since_last_logged = false;
