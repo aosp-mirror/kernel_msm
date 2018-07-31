@@ -97,7 +97,38 @@ Optional properties:
     falling edge is ignored. If this value is omitted or exceeds the maximum
     timeout (8388607) then a default of 240000 is assumed (corresponding to
     240000 / 48000 = 5 seconds). If this value is specified as zero, the timeout
-    is effectively disabled.
+    is effectively disabled. In the case of the CS40L25B, the timeout specified
+    for GPIO1 applies to GPIO2, GPIO3 and GPIO4.
+
+  - cirrus,gpio2-rise-index : Specifies the wavetable index mapped to GPIO2
+    rising edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO2 rising edges are mapped to
+    index 1. Available for CS40L25B only.
+
+  - cirrus,gpio2-fall-index : Specifies the wavetable index mapped to GPIO2
+    falling edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO2 falling edges are mapped to
+    index 2. Available for CS40L25B only.
+
+  - cirrus,gpio3-rise-index : Specifies the wavetable index mapped to GPIO3
+    rising edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO3 rising edges are mapped to
+    index 1. Available for CS40L25B only.
+
+  - cirrus,gpio3-fall-index : Specifies the wavetable index mapped to GPIO3
+    falling edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO3 falling edges are mapped to
+    index 2. Available for CS40L25B only.
+
+  - cirrus,gpio4-rise-index : Specifies the wavetable index mapped to GPIO4
+    rising edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO4 rising edges are mapped to
+    index 1. Available for CS40L25B only.
+
+  - cirrus,gpio4-fall-index : Specifies the wavetable index mapped to GPIO4
+    falling edges. If this value is omitted, specified as zero or exceeds the
+    maximum available index in the wavetable, GPIO4 falling edges are mapped to
+    index 2. Available for CS40L25B only.
 
   - cirrus,gpio1-mode : Specifies the operating mode of the GPIO1 pin, equal to
     one of the following.
@@ -109,7 +140,9 @@ Optional properties:
 
     If this value is omitted or given an invalid value, mode 0 (enabled by
     default) is assumed. Regardless of mode, the GPIO1 pin can be enabled or
-    disabled at will from user space using the gpio1_enable sysfs control.
+    disabled at will from user space using the gpio1_enable sysfs control. In
+    the case of the CS40L25B, the behavior of GPIO2, GPIO3 and GPIO4 follow that
+    which is specified for GPIO1.
 
   - cirrus,hiber-enable : Boolean for instructing the device to enter and exit
     hibernation mode upon suspend and resume, respectively. Hibernation mode is
