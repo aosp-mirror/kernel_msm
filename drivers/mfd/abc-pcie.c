@@ -693,6 +693,7 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
  * and TPU.  This should be replaced with proper regulator and clock control
  * interfaces.
  */
+#define CLK_CON_DIV_PLL_AON_CLK 0x00B1180C
 #define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x00041800
 #define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x00241800
 #define REG_PCIe_INIT 0x00B30388
@@ -730,11 +731,21 @@ static int abc_pcie_ipu_tpu_enable(void)
 	/* TODO(basso):  Determine the proper timeout here. */
 	msleep(1);
 
+	/* Reduce AON clk to 233MHz to safely make IPU/TPU APB clk changes */
+	err = pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0x00000003);
+	if (WARN_ON(err < 0))
+		return err;
+
 	err = pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_IPU, 4, 0x00000003);
 	if (WARN_ON(err < 0))
 		return err;
 
 	err = pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_TPU, 4, 0x00000003);
+	if (WARN_ON(err < 0))
+		return err;
+
+	/* Restore AON clk to 933MHz */
+	err = pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0);
 	if (WARN_ON(err < 0))
 		return err;
 
