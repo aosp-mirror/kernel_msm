@@ -436,7 +436,7 @@
 };
 
 &qupv3_se2_spi {
-	status = "disabled";
+	status = "ok";
 	mnh-spi@0 {
 		compatible = "realtek,rt5514-spi";
 		reg = <0>;
