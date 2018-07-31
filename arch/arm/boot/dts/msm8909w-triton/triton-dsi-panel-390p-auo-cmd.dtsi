@@ -82,6 +82,7 @@
 		qcom,mdss-dsi-te-pin-select = <1>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-tear-check-frame-rate = <4500>;
+		qcom,mdss-dsi-idle-fps = <10>;
 		/* clk = totlaH * totalV * bpp* 60fps */
 		qcom,mdss-dsi-panel-clockrate = <229213440>;
 		qcom,mdss-dsi-te-using-te-pin;
