@@ -370,6 +370,11 @@ int smblib_set_charge_param(struct smb_charger *chg,
 	int rc = 0;
 	u8 val_raw;
 
+	if (!strcmp(param->name,"usb input current limit")) {
+		pr_info("smblib_set_charge_param: set usb input current to 500mA \n");
+		val_u = 500000;
+	}
+
 	if (param->set_proc) {
 		rc = param->set_proc(param, val_u, &val_raw);
 		if (rc < 0)
