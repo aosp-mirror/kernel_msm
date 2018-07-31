@@ -1,0 +1,102 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&pcie1 {
+	/* QCOM's GICM implementation is not compatible with Airbrush */
+	qcom,msi-gicm-addr = <>;
+	qcom,msi-gicm-base = <>;
+
+	/* reduce endpoint reset latency */
+	qcom,ep-latency = <1>;
+};
+
+&tlmm {
+	s2mpb04_pins {
+		s2mpb04_pon_default: s2mpb04_pon_default {
+			mux {
+				pins = "gpio29";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio29";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		s2mpb04_intb_default: s2mpb04_intb_default {
+			mux {
+				pins = "gpio41";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio41";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+};
+
+&qupv3_se18_i2c {
+	status = "okay";
+	airbrush_pmic: s2mpb04@66 {
+		compatible = "samsung,s2mpb04";
+		reg = <0x66>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <41 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "s2mpb04_intb";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&s2mpb04_pon_default &s2mpb04_intb_default>;
+
+		samsung,pon-gpio = <&tlmm 29 0x00>;
+		samsung,intb-gpio = <&tlmm 41 0x00>;
+		samsung,resetb-gpio = <&pm8150l_gpios 11 GPIO_ACTIVE_LOW>;
+
+		s2mpb04_regulator: regulator {
+			compatible = "samsung,s2mpb04-regulator";
+		};
+
+		s2mpb04_gpio: gpio {
+			compatible = "samsung,s2mpb04-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		s2mpb04_thermal: sensor {
+			compatible = "samsung,s2mpb04-thermal";
+			#thermal-sensor-cells = <0>;
+		};
+	};
+};
+
+&qupv3_se10_spi {
+	status = "okay";
+	airbrush-spi@0 {
+		status = "disabled";
+		compatible = "abc,airbrush-spi";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+	};
+	airbrush-spidev@0 {
+		status = "okay";
+		compatible = "abc,airbrush-spidev";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+	};
+};
