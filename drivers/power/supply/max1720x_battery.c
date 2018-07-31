@@ -40,6 +40,9 @@
 #define MAX1720X_DELAY_INIT_MS 1000
 #define FULLCAPNOM_STABILIZE_CYCLES 5
 
+/* workaround for b/111835845 */
+#define MAXFG_HISTORY_PAGE_ENT_COUNT (PAGE_SIZE / (16*5 + 1))
+
 enum max1720x_register {
 	/* ModelGauge m5 Register */
 	MAX1720X_STATUS = 0x00,
@@ -303,9 +306,6 @@ struct max1720x_chip {
 	u16 RConfig;
 	bool init_complete;
 	bool resume_complete;
-	u16 *history;
-	int history_count;
-	int history_index;
 	u16 health_status;
 	int fake_capacity;
 	int previous_qh;
@@ -505,6 +505,7 @@ static void max1720x_read_log_valid_status(struct max1720x_chip *chip,
 	}
 }
 
+/* @return the number of pages or negative for error */
 static int get_battery_history_status(struct max1720x_chip *chip,
 				      bool *page_status)
 {
@@ -539,10 +540,18 @@ static int get_battery_history_status(struct max1720x_chip *chip,
 		if (page_status[i])
 			valid_history_entry_count++;
 	}
-	chip->history_count = valid_history_entry_count;
+
 	kfree(write_status);
 	kfree(valid_status);
-	return 0;
+
+	/* workaround for b/111835845 */
+	if (valid_history_entry_count > MAXFG_HISTORY_PAGE_ENT_COUNT) {
+		dev_info(chip->dev, " support only one page (%d available)\n",
+			valid_history_entry_count);
+		valid_history_entry_count = MAXFG_HISTORY_PAGE_ENT_COUNT;
+	}
+
+	return valid_history_entry_count;
 }
 
 static void get_battery_history(struct max1720x_chip *chip,
@@ -586,12 +595,12 @@ static ssize_t max1720x_history_count_show(struct device *dev,
 		return -ENOMEM;
 
 	ret = get_battery_history_status(chip, page_status);
-	if (ret) {
+	if (ret < 0) {
 		kfree(page_status);
 		return ret;
 	}
 
-	length = scnprintf(buf, PAGE_SIZE, "%i\n", chip->history_count);
+	length = scnprintf(buf, PAGE_SIZE, "%i\n", ret);
 	kfree(page_status);
 	return length;
 }
@@ -604,9 +613,11 @@ static ssize_t max1720x_history_show(struct device *dev,
 {
 	struct power_supply *psy;
 	struct max1720x_chip *chip;
-	int i, ret;
+	int i;
 	int length = 0;
 	bool *page_status = NULL;
+	int history_index, history_count;
+	u16 *history;
 
 	psy = container_of(dev, struct power_supply, dev);
 	chip = power_supply_get_drvdata(psy);
@@ -614,40 +625,31 @@ static ssize_t max1720x_history_show(struct device *dev,
 	/*
 	 * Total history size can be up to 6.7KB, which is greater than
 	 * PAGE_SIZE, which is 4K. Complete history may need to be queried
-	 * in two calls.
-	 * If chip->histry is NULL, the history needs to be recalled from
-	 * fuel gauge. Otherwise, no recall is needed. Simply return the
-	 * rest of the history.
+	 * in two calls (only one supported now)
 	 */
-	if (chip->history == NULL) {
-		chip->history_index = 0;
-		page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
-				      sizeof(bool), GFP_KERNEL);
-		if (!page_status)
-			return -ENOMEM;
+	page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
+				sizeof(bool), GFP_KERNEL);
+	if (!page_status)
+		return -ENOMEM;
 
-		ret = get_battery_history_status(chip, page_status);
-		if (ret) {
-			kfree(page_status);
-			return ret;
-		}
-
-		if (chip->history_count == 0) {
+	history_count = get_battery_history_status(chip, page_status);
+	if (history_count <= 0) {
+		kfree(page_status);
+		if (!history_count)
 			dev_info(chip->dev,
-				 "No battery history has been recorded\n");
-			kfree(page_status);
-			return 0;
-		}
-		chip->history = kmalloc_array(chip->history_count *
-					      MAX1720X_HISTORY_PAGE_SIZE,
-					      sizeof(u16), GFP_KERNEL);
-		if (!chip->history) {
-			kfree(page_status);
-			return -ENOMEM;
-		}
-
-		get_battery_history(chip, page_status, chip->history);
+				"No battery history has been recorded\n");
+		return history_count;
 	}
+
+	history = kmalloc_array(MAX1720X_N_OF_HISTORY_PAGES *
+				MAX1720X_HISTORY_PAGE_SIZE,
+				sizeof(u16), GFP_KERNEL);
+	if (!history) {
+		kfree(page_status);
+		return -ENOMEM;
+	}
+
+	get_battery_history(chip, page_status, history);
 
 	/*
 	 * The 81 in the next line is arrived with 16*5: one history log
@@ -655,23 +657,19 @@ static ssize_t max1720x_history_show(struct device *dev,
 	 * between the hex data in the buffer. And lastly we need a new line
 	 * for every history log. (16x4 + 16x1 + 1) = 81.
 	 */
-	for (; (chip->history_index < chip->history_count)
-	     && (length < (PAGE_SIZE - 81)); chip->history_index++) {
+	for (history_index = 0; (history_index < history_count)
+	     && (length < (PAGE_SIZE - 81)); history_index++) {
 		for (i = 0; i < MAX1720X_HISTORY_PAGE_SIZE; i++) {
 			length += scnprintf(buf + length,
 				PAGE_SIZE - length, "%04x ",
-				chip->history[chip->history_index *
-					      MAX1720X_HISTORY_PAGE_SIZE + i]);
+				history[history_index *
+					MAX1720X_HISTORY_PAGE_SIZE + i]);
 		}
 		length += scnprintf(buf + length, PAGE_SIZE - length, "\n");
 	}
-	if (chip->history_index >= chip->history_count) {
-		kfree(chip->history);
-		kfree(page_status);
-		chip->history = NULL;
-		chip->history_index = 0;
-		chip->history_count = 0;
-	}
+
+	kfree(history);
+	kfree(page_status);
 
 	return length;
 }
@@ -1921,7 +1919,6 @@ static int max1720x_probe(struct i2c_client *client,
 		goto irq_unregister;
 	}
 
-	chip->history_index = 0;
 	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
 	if (ret) {
 		dev_err(dev, "Failed to create history_count attribute\n");
