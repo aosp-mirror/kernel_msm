@@ -132,6 +132,7 @@
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-tear-check-frame-rate = <4500>;
+		qcom,mdss-dsi-idle-fps = <10>;
 		qcom,mdss-dsi-panel-clockrate = <229213440>;
 		qcom,mdss-dsi-te-pin-select = <1>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
