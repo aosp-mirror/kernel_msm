@@ -592,6 +592,12 @@ config PAC193X
 	  This driver can also be built as a module.  If so, the module
 	  will be called pac193x.
 
+config AIRBRUSH_DRAM
+	bool "Airbrush DRAM Manager"
+	default "n"
+	---help---
+	  This option enables the Airbrush DRAM manager
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
