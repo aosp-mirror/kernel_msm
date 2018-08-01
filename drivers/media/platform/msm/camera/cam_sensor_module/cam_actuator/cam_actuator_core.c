@@ -431,7 +431,7 @@ int32_t cam_actuator_publish_dev_info(struct cam_req_mgr_device_info *info)
 
 	info->dev_id = CAM_REQ_MGR_DEVICE_ACTUATOR;
 	strlcpy(info->name, CAM_ACTUATOR_NAME, sizeof(info->name));
-	info->p_delay = 1;
+	info->p_delay = 0;
 	info->trigger = CAM_TRIGGER_POINT_SOF;
 
 	return 0;
