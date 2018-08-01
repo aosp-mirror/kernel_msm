@@ -2403,31 +2403,27 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 	struct power_supply *charger_psy = power_supply_get_by_name((char *)charger_name);
 
 	if (!charger_psy) {
-			pr_err("%s not registered \n", charger_name);
+			pr_err("%s not registered\n", charger_name);
 			return;
-	}
-	else {
+	} else {
 		//get charging status
 		ret.intval = 0;
 		rc = charger_psy->get_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 		if (rc) {
-			pr_err("stc311x can't get smb23x register data \n");	
+			pr_err("stc311x can't get smb23x register data\n");
 			return;
 		} else {
 			g_last_status = chip->status;
 			chip->status = ret.intval;
-			/*
 			if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING)
 				return;
-			*/
 		}
 
-		/*
 		ret.intval = 0;
 		rc = charger_psy->get_property(charger_psy,
 					POWER_SUPPLY_PROP_RESISTANCE, &ret);
 		if (rc) {
-			pr_err("stc311x can't get smb23x register data \n");	
+			pr_err("stc311x can't get smb23x register data\n");
 			return;
 		}
 
@@ -2439,7 +2435,6 @@ void stc311x_check_charger_state(struct stc311x_chip *chip)
 				charger_psy->set_property(charger_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 			}
 		}
-		*/
 	}
 }
 

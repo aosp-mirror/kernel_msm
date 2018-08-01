@@ -2254,6 +2254,7 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
+	POWER_SUPPLY_PROP_RESISTANCE,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
@@ -2781,6 +2782,8 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 {
 	struct smb23x_chip *chip = container_of(psy,
 			struct smb23x_chip, batt_psy);
+	int rc;
+	u8 reg = 0;
 
 	switch (prop) {
 #ifdef QTI_SMB231
@@ -2826,6 +2829,14 @@ static int smb23x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		val->intval = smb23x_get_prop_charge_type(chip);
+		break;
+	case POWER_SUPPLY_PROP_RESISTANCE:
+		rc = smb23x_read(chip, CFG_REG_0, &reg);
+		if (rc)
+			val->intval = 0x00;
+		else
+			val->intval = reg;
+		pr_err("RESISTANCE 0x00=0x%02x\n", reg);
 		break;
 #endif
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
