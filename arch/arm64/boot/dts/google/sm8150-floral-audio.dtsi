@@ -92,6 +92,7 @@
 		cirrus,weak-fet-thld = <0x01>;
 		cirrus,temp-warn-threshold = <0x01>;
 		cirrus,multi-amp-mode;
+		cirrus,name = "cs35l36_r";
 
 		cirrus,irq-config {
 			cirrus,irq-drive-select = <0x00>;
@@ -125,6 +126,7 @@
 		cirrus,weak-fet-thld = <0x01>;
 		cirrus,temp-warn-threshold = <0x01>;
 		cirrus,multi-amp-mode;
+		cirrus,name = "cs35l36_l";
 
 		cirrus,irq-config {
 			cirrus,irq-drive-select = <0x00>;
