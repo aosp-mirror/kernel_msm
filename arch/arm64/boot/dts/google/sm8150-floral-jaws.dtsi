@@ -71,6 +71,10 @@
 			linux,can-disable;
 		};
 	};
+
+	modemsmem {
+		compatible = "modemsmem";
+	};
 };
 
 &ufsphy_mem {
