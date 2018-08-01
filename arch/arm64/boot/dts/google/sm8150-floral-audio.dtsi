@@ -162,6 +162,35 @@
 		qcom,msm-cpudai-tdm-invert-sync = <0>;
 	};
 
+	msm_cirrus_playback {
+		compatible = "cirrus,msm-cirrus-playback";
+		usecase-names = "Playback";
+
+		/*
+		 * Mapping formula from audio hw
+		 *  ohm = imp / Qfactor * Amp_Constant
+		 *  ohm = imp / 8192 * 5.85714
+		 */
+
+		/* the resistance is 6.2 ohm */
+		cirrus,top-speaker-impedance = <8671>;
+
+		/* the percentage of tolerance is 10 */
+		cirrus,top-speaker-tolerance = <10>;
+
+		/* the resistance is 6.2 ohm */
+		cirrus,top-speaker-mean = <8671>;
+
+		/* the resistance is 6.2 ohm */
+		cirrus,bottom-speaker-impedance = <8671>;
+
+		/* the percentage of tolerance is 10 */
+		cirrus,bottom-speaker-tolerance = <10>;
+
+		/* the resistance is 6.2 ohm */
+		cirrus,bottom-speaker-mean = <8671>;
+	};
+
 	iaxxx-mic {
 		compatible = "knowles,iaxxx-msm";
 		model = "msm-oq-iaxxx";
