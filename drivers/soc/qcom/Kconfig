@@ -777,4 +777,11 @@ config QCOM_CDSP_RM
 	  improving CDSP performance. Using this driver, CDSP can set appropriate
 	  CPU L3 clock for improving IO-Coherent throughput and opt for QoS mode
 	  to improve RPC latency.
+
+config MODEMSMEM
+	bool "Modem SMEM driver"
+	default N
+	---help---
+	Enable to pass device information and other data to shared memory for
+	the modem subsystem
 endmenu
