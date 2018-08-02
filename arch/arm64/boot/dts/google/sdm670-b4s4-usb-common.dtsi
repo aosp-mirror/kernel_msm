@@ -77,6 +77,13 @@
 		 0x27c>; /* QUSB2PHY_DEBUG_CTRL1 */
 };
 
+&usb0 {
+	dwc3@a600000 {
+		maximum-speed = "high-speed";
+		usb-phy = <&qusb_phy0>, <&usb_nop_phy>;
+	};
+};
+
 &pm660_pdphy {
 	goog,src-pdo = <PDO_TYPE_FIXED 5000 900 0>;     /* 5V @ 0.9A */
 	goog,snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,    /* 5V @ 3A */
@@ -93,4 +100,8 @@
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&cc_sbu_ovp_intr_default>;
+};
+
+&usb_qmp_dp_phy {
+	status = "disabled";
 };
