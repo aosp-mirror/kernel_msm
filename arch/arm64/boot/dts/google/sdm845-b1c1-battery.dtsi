@@ -18,7 +18,7 @@
 
 &pmi8998_charger {
 	google,boost_to_5_1V;
-	qcom,dc-icl-ua = <1200000>;
+	qcom,dc-icl-ua = <1100000>;
 	google,batt_psy_is_bms;
 	google,usb-port-tz-name = "usbc-therm-adc";
 	google,wlc-thermal-mitigation = <1100000 500000 250000 110000>;
