@@ -32,7 +32,7 @@
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
 #define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
 #define P9221_VRECT_TIMEOUT_MS		(2 * 1000)
-#define P9221_NOTIFIER_DELAY_MS		50
+#define P9221_NOTIFIER_DELAY_MS		80
 #define P9221R5_ILIM_MAX_UA		(1600 * 1000)
 #define P9221R5_OVER_CHECK_NUM		3
 
@@ -502,6 +502,7 @@ static bool p9221_is_epp(struct p9221_charger_data *charger)
 
 	if (p9221_is_r5(charger)) {
 		uint8_t reg;
+
 		ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
 		if (ret == 0)
 			return (reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) > 0;
@@ -1167,10 +1168,11 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 		dev_err(&charger->client->dev,
 			"Could not enable interrupts: %d\n", ret);
 
-	p9221_set_dc_icl(charger);
+	/* NOTE: depends on _is_epp() which is not valid until DC_IN */
 	p9221_write_fod(charger);
 }
 
+/* 2 * P9221_NOTIFIER_DELAY_MS from VRECTON */
 static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 {
 	int ret;
@@ -1223,6 +1225,7 @@ out:
 	power_supply_changed(charger->wc_psy);
 }
 
+/* P9221_NOTIFIER_DELAY_MS from VRECTON */
 bool p9221_notifier_check_det(struct p9221_charger_data *charger)
 {
 	bool relax = true;
@@ -1233,6 +1236,7 @@ bool p9221_notifier_check_det(struct p9221_charger_data *charger)
 		goto done;
 
 	dev_info(&charger->client->dev, "detected wlc, trigger wc changed\n");
+	/* send out a FOD but is_epp() is still invalid */
 	p9221_set_online(charger);
 	power_supply_changed(charger->wc_psy);
 
@@ -2015,6 +2019,7 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 		if (!charger->online) {
 			charger->check_det = true;
 			pm_stay_awake(charger->dev);
+
 			if (!schedule_delayed_work(&charger->notifier_work,
 				msecs_to_jiffies(P9221_NOTIFIER_DELAY_MS))) {
 				pm_relax(charger->dev);
@@ -2177,7 +2182,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	struct p9221_charger_platform_data *pdata = client->dev.platform_data;
 	struct power_supply_config psy_cfg = {};
 	int ret = 0;
-	u16 chip_id;
+	u16 chip_id = 0;
 
 	ret = i2c_check_functionality(client->adapter,
 				      I2C_FUNC_SMBUS_BYTE_DATA |
@@ -2236,7 +2241,22 @@ static int p9221_charger_probe(struct i2c_client *client,
 	ret = p9221_reg_read_16(charger, P9221_CHIP_ID_REG, &chip_id);
 	if (ret == 0 && chip_id == P9221_CHIP_ID) {
 		dev_info(&client->dev, "Charger online id:%04x\n", chip_id);
+		/* set charger->online=true, will ignore first VRECTON IRQ */
 		p9221_set_online(charger);
+	} else {
+		/* disconnected, vote for BPP */
+		charger->dc_icl_votable = find_votable("DC_ICL");
+		if (!charger->dc_icl_votable) {
+			ret = -ENODEV;
+		} else {
+			ret = vote(charger->dc_icl_votable,
+				P9221_WLC_VOTER, true,
+				P9221_DC_ICL_BPP_UA);
+		}
+		if (ret)
+			dev_err(&charger->client->dev,
+				"Could not vote for default DC_ICL votable=%d %d\n",
+					charger->dc_icl_votable != 0, ret);
 	}
 
 	ret = devm_request_threaded_irq(
@@ -2248,6 +2268,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return ret;
 	}
 	device_init_wakeup(charger->dev, true);
+	/* NOTE: will get a VRECTON when booting on a pad */
 	enable_irq_wake(charger->pdata->irq_int);
 
 	if (gpio_is_valid(charger->pdata->irq_det_gpio)) {
@@ -2290,6 +2311,12 @@ static int p9221_charger_probe(struct i2c_client *client,
 	}
 
 	dev_info(&client->dev, "P9221 Charger Driver Loaded\n");
+
+	if (chip_id == P9221_CHIP_ID) {
+		charger->dc_psy = power_supply_get_by_name("dc");
+		if (charger->dc_psy)
+			power_supply_changed(charger->dc_psy);
+	}
 
 	return 0;
 }
