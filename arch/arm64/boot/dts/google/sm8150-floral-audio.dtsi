@@ -371,6 +371,10 @@
 	};
 };
 
+&routing {
+	qcom,msm-pcm-config = "jaws";
+};
+
 &snd_9360 {
 	status = "disabled";
 };

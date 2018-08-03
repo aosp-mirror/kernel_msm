@@ -14,3 +14,7 @@
 &snd_8150 {
 	qcom,model = "sm8150-iaxxx-flame-snd-card";
 };
+
+&routing {
+	qcom,msm-pcm-config = "flame";
+};
