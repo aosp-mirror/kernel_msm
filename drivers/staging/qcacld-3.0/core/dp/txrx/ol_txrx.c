@@ -1955,7 +1955,7 @@ void ol_txrx_pdev_pre_detach(ol_txrx_pdev_handle pdev, int force)
  */
 void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev)
 {
-	struct ol_txrx_stats_req_internal *req;
+	struct ol_txrx_stats_req_internal *req, *temp_req;
 	int i = 0;
 
 	/*checking to ensure txrx pdev structure is not NULL */
@@ -1971,7 +1971,7 @@ void ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev)
 			"Warning: the txrx req list is not empty, depth=%d\n",
 			pdev->req_list_depth
 			);
-	TAILQ_FOREACH(req, &pdev->req_list, req_list_elem) {
+	TAILQ_FOREACH_SAFE(req, &pdev->req_list, req_list_elem, temp_req) {
 		TAILQ_REMOVE(&pdev->req_list, req, req_list_elem);
 		pdev->req_list_depth--;
 		ol_txrx_err(
@@ -2538,7 +2538,7 @@ ol_txrx_peer_attach(ol_txrx_vdev_handle vdev, uint8_t *peer_mac_addr)
 			sizeof(union ol_txrx_align_mac_addr_t));
 	if (wait_on_deletion) {
 		/* wait for peer deletion */
-		rc = qdf_wait_single_event(&vdev->wait_delete_comp,
+		rc = qdf_wait_for_event_completion(&vdev->wait_delete_comp,
 					   PEER_DELETION_TIMEOUT);
 		if (QDF_STATUS_SUCCESS != rc) {
 			ol_txrx_err(
