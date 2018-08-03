@@ -40,8 +40,8 @@
 		regulators {
 			max77826_ldo1: max77826_ldo1 {
 				regulator-name = "max77826_ldo1";
-				regulator-min-microvolt = <1262500>;
-				regulator-max-microvolt = <1262500>;
+				regulator-min-microvolt = <1100000>;
+				regulator-max-microvolt = <1100000>;
 			};
 
 			max77826_ldo2: max77826_ldo2 {
