@@ -1,0 +1,64 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&tlmm {
+	cs40l20_rst:cs40l20_rst {
+		mux {
+			pins = "gpio108";
+			function = "gpio";
+		};
+		config {
+			drive-strength = <2>;
+			output-low;
+		};
+	};
+};
+
+&pm8150_gpios {
+	clk_out {
+		clk_out_default: clk_out_default {
+			pins = "gpio3"; /* GPIO 3 */
+			function = "func1"; /* Special Function 1 */
+			bias-disable; /* No Pull */
+			power-source = <0>; /* VIN0 */
+			output-low; /* digital output, no invert */
+			input-disable; /* prevent GPIO from being set to DIO */
+		};
+	};
+};
+
+&qupv3_se15_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <1000000>;
+	cs40l20@43 {
+		compatible = "cirrus,cs40l20";
+		pinctrl-names = "default";
+		pinctrl-0 = <&cs40l20_rst &clk_out_default>;
+		reset-gpios = <&tlmm 108 0>;
+		reg = <0x43>;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-cap-microfarad = <32>;
+		cirrus,boost-ipk-milliamp = <4500>;
+		cirrus,f0-default = <2514000>; /* 153 Hz */
+		cirrus,f0-min = <2424832>; /* 148 Hz */
+		cirrus,f0-max = <2703360>; /* 165 Hz */
+		cirrus,redc-default = <327728>; /* 15 Ohm */
+		cirrus,redc-min = <302112>; /* 13.5 Ohm */
+		cirrus,redc-max = <369248>; /* 16.5 Ohm */
+		cirrus,gpio1-rise-index = <5>; /* 100% HEAVY_CLICK */
+		cirrus,gpio1-fall-index = <4>; /* 75% HEAVY_CLICK */
+		cirrus,gpio1-fall-timeout = <47278>; /* 985 ms */
+		cirrus,gpio1-mode = <2>; /* enabled only in suspend mode */
+		cirrus,refclk-gpio2 = <1>; /* set GPIO2 as REFCLK  */
+		status = "ok";
+	};
+};
