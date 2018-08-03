@@ -47,6 +47,7 @@ struct cs40l2x_private {
 	struct work_struct vibe_start_work;
 	struct work_struct vibe_pbq_work;
 	struct work_struct vibe_stop_work;
+	struct work_struct vibe_mode_work;
 	struct workqueue_struct *vibe_workqueue;
 	struct mutex lock;
 	unsigned int cp_trigger_index;
@@ -59,6 +60,7 @@ struct cs40l2x_private {
 	unsigned int wt_limit_xm;
 	unsigned int wt_limit_ym;
 	bool vibe_init_success;
+	bool vibe_mode;
 	struct gpio_desc *reset_gpio;
 	struct cs40l2x_platform_data pdata;
 	struct list_head coeff_desc_head;
@@ -81,6 +83,8 @@ struct cs40l2x_private {
 	unsigned int peak_gpio1_enable;
 	int vpp_measured;
 	int ipp_measured;
+	bool asp_enable;
+	struct hrtimer asp_timer;
 	struct led_classdev led_dev;
 };
 
@@ -1920,7 +1924,7 @@ static ssize_t cs40l2x_ipp_measured_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->ipp_measured);
 }
 
-static int cs40l2x_refclk_freq_switch(struct cs40l2x_private *cs40l2x,
+static int cs40l2x_refclk_switch(struct cs40l2x_private *cs40l2x,
 			unsigned int refclk_freq)
 {
 	unsigned int refclk_sel, pll_config;
@@ -1989,19 +1993,11 @@ static ssize_t cs40l2x_asp_enable_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
-	unsigned int val;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
 		return -EPERM;
 
-	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "I2S_ENABLED",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
-
-	return ret ? ret : snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->asp_enable);
 }
 
 static ssize_t cs40l2x_asp_enable_store(struct device *dev,
@@ -2025,30 +2021,54 @@ static ssize_t cs40l2x_asp_enable_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	mutex_lock(&cs40l2x->lock);
+	if (val > 0)
+		cs40l2x->asp_enable = CS40L2X_ASP_ENABLED;
+	else
+		cs40l2x->asp_enable = CS40L2X_ASP_DISABLED;
 
-	if (val > 0) {
-		/* audio mode */
-		ret = cs40l2x_refclk_freq_switch(cs40l2x,
-				cs40l2x->pdata.asp_bclk_freq);
-		if (ret)
-			goto err_mutex;
+	queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_mode_work);
 
-		ret = cs40l2x_asp_switch(cs40l2x, CS40L2X_ASP_ENABLED);
-	} else {
-		/* haptics mode */
-		ret = cs40l2x_asp_switch(cs40l2x, CS40L2X_ASP_DISABLED);
-		if (ret)
-			goto err_mutex;
+	return count;
+}
 
-		ret = cs40l2x_refclk_freq_switch(cs40l2x,
-				CS40L2X_PLL_REFCLK_FREQ_32K);
-	}
+static ssize_t cs40l2x_asp_timeout_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 
-err_mutex:
-	mutex_unlock(&cs40l2x->lock);
+	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
+		return -EPERM;
 
-	return ret ? ret : count;
+	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->pdata.asp_timeout);
+}
+
+static ssize_t cs40l2x_asp_timeout_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
+		return -EPERM;
+
+	if (!cs40l2x->pdata.asp_bclk_freq)
+		return -EPERM;
+
+	if (!cs40l2x->pdata.asp_width)
+		return -EPERM;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val > CS40L2X_ASP_TIMEOUT_MAX)
+		return -EINVAL;
+
+	cs40l2x->pdata.asp_timeout = val;
+
+	return count;
 }
 
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
@@ -2103,6 +2123,8 @@ static DEVICE_ATTR(vpp_measured, 0660, cs40l2x_vpp_measured_show, NULL);
 static DEVICE_ATTR(ipp_measured, 0660, cs40l2x_ipp_measured_show, NULL);
 static DEVICE_ATTR(asp_enable, 0660, cs40l2x_asp_enable_show,
 		cs40l2x_asp_enable_store);
+static DEVICE_ATTR(asp_timeout, 0660, cs40l2x_asp_timeout_show,
+		cs40l2x_asp_timeout_store);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -2135,12 +2157,106 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_vpp_measured.attr,
 	&dev_attr_ipp_measured.attr,
 	&dev_attr_asp_enable.attr,
+	&dev_attr_asp_timeout.attr,
 	NULL,
 };
 
 static struct attribute_group cs40l2x_dev_attr_group = {
 	.attrs = cs40l2x_dev_attrs,
 };
+
+static void cs40l2x_vibe_mode_worker(struct work_struct *work)
+{
+	struct cs40l2x_private *cs40l2x =
+		container_of(work, struct cs40l2x_private, vibe_mode_work);
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	unsigned int val;
+	int ret;
+
+	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
+		return;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "STATUS",
+			CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret) {
+		dev_err(dev, "Failed to capture playback status\n");
+		goto err_mutex;
+	}
+
+	if (val != CS40L2X_STATUS_IDLE)
+		goto err_mutex;
+
+	if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_HAPTIC
+			&& cs40l2x->asp_enable == CS40L2X_ASP_ENABLED) {
+		/* switch to audio mode */
+		ret = cs40l2x_refclk_switch(cs40l2x,
+				cs40l2x->pdata.asp_bclk_freq);
+		if (ret) {
+			dev_err(dev, "Failed to switch to audio-rate REFCLK\n");
+			goto err_mutex;
+		}
+
+		ret = cs40l2x_asp_switch(cs40l2x, CS40L2X_ASP_ENABLED);
+		if (ret) {
+			dev_err(dev, "Failed to enable ASP\n");
+			goto err_mutex;
+		}
+
+		cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_AUDIO;
+	} else if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO
+			&& cs40l2x->asp_enable == CS40L2X_ASP_ENABLED) {
+		/* resume audio mode */
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "I2S_ENABLED",
+						CS40L2X_XM_UNPACKED_TYPE),
+				&val);
+		if (ret) {
+			dev_err(dev, "Failed to capture pause status\n");
+			goto err_mutex;
+		}
+
+		if (val == CS40L2X_I2S_ENABLED)
+			goto err_mutex;
+
+		ret = cs40l2x_user_ctrl_exec(cs40l2x, CS40L2X_USER_CTRL_PLAY,
+				0, NULL);
+		if (ret)
+			dev_err(dev, "Failed to resume playback\n");
+	} else if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO
+			&& cs40l2x->asp_enable == CS40L2X_ASP_DISABLED) {
+		/* switch to haptic mode */
+		ret = cs40l2x_asp_switch(cs40l2x, CS40L2X_ASP_DISABLED);
+		if (ret) {
+			dev_err(dev, "Failed to disable ASP\n");
+			goto err_mutex;
+		}
+
+		ret = cs40l2x_refclk_switch(cs40l2x,
+				CS40L2X_PLL_REFCLK_FREQ_32K);
+		if (ret) {
+			dev_err(dev, "Failed to switch to 32.768-kHz REFCLK\n");
+			goto err_mutex;
+		}
+
+		cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_HAPTIC;
+	}
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+}
+
+static enum hrtimer_restart cs40l2x_asp_timer(struct hrtimer *timer)
+{
+	struct cs40l2x_private *cs40l2x =
+		container_of(timer, struct cs40l2x_private, asp_timer);
+
+	queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_mode_work);
+
+	return HRTIMER_NORESTART;
+}
 
 static int cs40l2x_stop_playback(struct cs40l2x_private *cs40l2x)
 {
@@ -2709,6 +2825,7 @@ static void cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
 static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
 {
 	struct hrtimer *pbq_timer = &cs40l2x->pbq_timer;
+	struct hrtimer *asp_timer = &cs40l2x->asp_timer;
 	int ret;
 
 	cs40l2x->vpp_measured = -1;
@@ -2724,9 +2841,13 @@ static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
 	INIT_WORK(&cs40l2x->vibe_start_work, cs40l2x_vibe_start_worker);
 	INIT_WORK(&cs40l2x->vibe_pbq_work, cs40l2x_vibe_pbq_worker);
 	INIT_WORK(&cs40l2x->vibe_stop_work, cs40l2x_vibe_stop_worker);
+	INIT_WORK(&cs40l2x->vibe_mode_work, cs40l2x_vibe_mode_worker);
 
 	hrtimer_init(pbq_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	pbq_timer->function = cs40l2x_pbq_timer;
+
+	hrtimer_init(asp_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	asp_timer->function = cs40l2x_asp_timer;
 
 	ret = device_init_wakeup(cs40l2x->dev, true);
 	if (ret) {
@@ -4178,6 +4299,14 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	if (!ret)
 		pdata->asp_width = out_val;
 
+	ret = of_property_read_u32(np, "cirrus,asp-timeout", &out_val);
+	if (!ret) {
+		if (out_val > CS40L2X_ASP_TIMEOUT_MAX)
+			dev_warn(dev, "Ignored default ASP timeout\n");
+		else
+			pdata->asp_timeout = out_val;
+	}
+
 	return 0;
 }
 
@@ -4441,6 +4570,7 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)data;
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
+	unsigned int asp_timeout = cs40l2x->pdata.asp_timeout;
 	unsigned int val;
 	int event_count = 0;
 	int ret, i;
@@ -4465,8 +4595,22 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 		switch (val) {
 		case CS40L2X_EVENT_CTRL_NONE:
 			continue;
+		case CS40L2X_EVENT_CTRL_TRIG_STOP:
+		case CS40L2X_EVENT_CTRL_GPIO_STOP:
+			if (asp_timeout > 0)
+				hrtimer_start(&cs40l2x->asp_timer,
+						ktime_set(asp_timeout / 1000,
+							(asp_timeout % 1000)
+								* 1000000),
+						HRTIMER_MODE_REL);
+			else
+				queue_work(cs40l2x->vibe_workqueue,
+						&cs40l2x->vibe_mode_work);
+			/* intentionally fall through */
 		case CS40L2X_EVENT_CTRL_GPIO1_FALL
-			... CS40L2X_EVENT_CTRL_HARDWARE:
+			... CS40L2X_EVENT_CTRL_GPIO_START:
+		case CS40L2X_EVENT_CTRL_READY:
+		case CS40L2X_EVENT_CTRL_HARDWARE:
 			dev_dbg(dev, "Found notifier %d in %s\n",
 					val, cs40l2x_event_regs[i]);
 			break;
@@ -4603,12 +4747,12 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 				goto err;
 			}
 
-			cs40l2x->event_control = CS40L2X_EVENT_GPIO1_ENABLED;
-			if (cs40l2x->devid == CS40L2X_DEVID_L25B)
-				cs40l2x->event_control |=
-						(CS40L2X_EVENT_GPIO2_ENABLED
-						| CS40L2X_EVENT_GPIO3_ENABLED
-						| CS40L2X_EVENT_GPIO4_ENABLED);
+			if (pdata->asp_bclk_freq && pdata->asp_width
+					&& cs40l2x->devid == CS40L2X_DEVID_L25A)
+				cs40l2x->event_control =
+						CS40L2X_EVENT_END_ENABLED;
+			else
+				cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
 		} else {
 			cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
 		}
@@ -4644,10 +4788,12 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 				&cs40l2x_dev_attr_group);
 
 		hrtimer_cancel(&cs40l2x->pbq_timer);
+		hrtimer_cancel(&cs40l2x->asp_timer);
 
 		cancel_work_sync(&cs40l2x->vibe_start_work);
 		cancel_work_sync(&cs40l2x->vibe_pbq_work);
 		cancel_work_sync(&cs40l2x->vibe_stop_work);
+		cancel_work_sync(&cs40l2x->vibe_mode_work);
 
 		destroy_workqueue(cs40l2x->vibe_workqueue);
 

@@ -39,6 +39,7 @@ struct cs40l2x_platform_data {
 	bool hiber_enable;
 	unsigned int asp_bclk_freq;
 	unsigned int asp_width;
+	unsigned int asp_timeout;
 };
 
 #endif /* __CS40L2X_H */
