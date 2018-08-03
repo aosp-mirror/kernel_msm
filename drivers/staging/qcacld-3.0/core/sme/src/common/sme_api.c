@@ -18883,3 +18883,37 @@ QDF_STATUS sme_fast_reassoc(tHalHandle hal, tCsrRoamProfile *profile,
 
 	return status;
 }
+
+bool sme_validate_channel_list(tHalHandle hal,
+				      uint8_t *chan_list,
+				      uint8_t num_channels)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	uint8_t i = 0;
+	uint8_t j;
+	bool found;
+	tCsrChannel *ch_lst_info = &mac_ctx->scan.base_channels;
+
+	if (!chan_list || !num_channels) {
+		sme_err("Chan list empty %pK or num_channels is 0", chan_list);
+		return false;
+	}
+
+	while (i < num_channels) {
+		found = false;
+		for (j = 0; j < ch_lst_info->numChannels; j++) {
+			if (ch_lst_info->channelList[j] == chan_list[i]) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			sme_debug("Invalid channel %d", chan_list[i]);
+			return false;
+		}
+
+		i++;
+	}
+	return true;
+}

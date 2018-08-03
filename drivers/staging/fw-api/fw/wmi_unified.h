@@ -2757,6 +2757,9 @@ typedef struct {
     #define WMI_RSRC_CFG_FLAG_TIM_V2_SUPPORT_ENABLE_S 13
     #define WMI_RSRC_CFG_FLAG_TIM_V2_SUPPORT_ENABLE_M 0x2000
 
+    #define WMI_RSRC_CFG_FLAG_EAPOL_REKEY_MINRATE_SUPPORT_ENABLE_S 14
+    #define WMI_RSRC_CFG_FLAG_EAPOL_REKEY_MINRATE_SUPPORT_ENABLE_M 0x4000
+
     A_UINT32 flag1;
 
     /** @brief smart_ant_cap - Smart Antenna capabilities information
@@ -2953,6 +2956,11 @@ typedef struct {
     WMI_RSRC_CFG_FLAG_SET((word32), TIM_V2_SUPPORT_ENABLE, (value))
 #define WMI_RSRC_CFG_FLAG_TIM_V2_SUPPORT_ENABLE_GET(word32) \
     WMI_RSRC_CFG_FLAG_GET((word32), TIM_V2_SUPPORT_ENABLE)
+
+#define WMI_RSRC_CFG_FLAG_EAPOL_REKEY_MINRATE_SUPPORT_ENABLE_SET(word32, value) \
+    WMI_RSRC_CFG_FLAG_SET((word32), EAPOL_REKEY_MINRATE_SUPPORT_ENABLE, (value))
+#define WMI_RSRC_CFG_FLAG_EAPOL_REKEY_MINRATE_SUPPORT_ENABLE_GET(word32) \
+    WMI_RSRC_CFG_FLAG_GET((word32), EAPOL_REKEY_MINRATE_SUPPORT_ENABLE)
 
 typedef struct {
     A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_init_cmd_fixed_param */
@@ -5621,18 +5629,19 @@ typedef struct {
 } wmi_pdev_set_wmm_params_cmd_fixed_param;
 
 typedef enum {
-    WMI_REQUEST_PEER_STAT      = 0x01,
-    WMI_REQUEST_AP_STAT        = 0x02,
-    WMI_REQUEST_PDEV_STAT      = 0x04,
-    WMI_REQUEST_VDEV_STAT      = 0x08,
-    WMI_REQUEST_BCNFLT_STAT    = 0x10,
-    WMI_REQUEST_VDEV_RATE_STAT = 0x20,
-    WMI_REQUEST_INST_STAT      = 0x40,
-    WMI_REQUEST_MIB_STAT       = 0x80,
-    WMI_REQUEST_RSSI_PER_CHAIN_STAT = 0x100,
-    WMI_REQUEST_CONGESTION_STAT = 0x200,
-    WMI_REQUEST_PEER_EXTD_STAT = 0x400,
-    WMI_REQUEST_BCN_STAT       = 0x800,
+    WMI_REQUEST_PEER_STAT           = 0x0001,
+    WMI_REQUEST_AP_STAT             = 0x0002,
+    WMI_REQUEST_PDEV_STAT           = 0x0004,
+    WMI_REQUEST_VDEV_STAT           = 0x0008,
+    WMI_REQUEST_BCNFLT_STAT         = 0x0010,
+    WMI_REQUEST_VDEV_RATE_STAT      = 0x0020,
+    WMI_REQUEST_INST_STAT           = 0x0040,
+    WMI_REQUEST_MIB_STAT            = 0x0080,
+    WMI_REQUEST_RSSI_PER_CHAIN_STAT = 0x0100,
+    WMI_REQUEST_CONGESTION_STAT     = 0x0200,
+    WMI_REQUEST_PEER_EXTD_STAT      = 0x0400,
+    WMI_REQUEST_BCN_STAT            = 0x0800,
+    WMI_REQUEST_BCN_STAT_RESET      = 0x1000,
 } wmi_stats_id;
 
 /*
@@ -8474,6 +8483,18 @@ typedef enum {
      * 1 means enable internal optimzation.
      */
     WMI_VDEV_PARAM_AMSDU_AGGREGATION_SIZE_OPTIMIZATION,    /* 0x83 */
+
+    /**
+     * In RAW mode, FW will not know whether the encryption is enabled
+     * on this vdev or not.
+     * Because of this, FW will not program the right info into the
+     * RawNwifi TLV resulting in the connection failure in RAW mode.
+     * So to program the right info, FW should know whether the security
+     * is enabled on this VDEV.
+     * Host will send this VDEV param command (With Value = 1) in case of
+     * RAW secure mode.
+     */
+    WMI_VDEV_PARAM_RAW_IS_ENCRYPTED,                       /* 0x84 */
 
 
     /*=== ADD NEW VDEV PARAM TYPES ABOVE THIS LINE ===
@@ -15747,6 +15768,28 @@ typedef enum {
     WMI_NDP_FORCE_CHANNEL_SETUP = 2/* NDP must start on the provided channel */
 } wmi_ndp_channel_cfg_PROTOTYPE;
 
+/*
+ * The WMI_NDP_IPV6_INTF_ADDR_LEN macro cannot be changed without breaking
+ * WMI compatibility.
+ */
+#define WMI_NDP_IPV6_INTF_ADDR_LEN    16
+
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_ndp_transport_ip_param */
+    /* Presence of ipv6_intf_addr */
+    A_UINT32 ipv6_addr_present;
+    /* Presence of transport Port */
+    A_UINT32 trans_port_present;
+    /* Presence of  transport Protocol */
+    A_UINT32 trans_proto_present;
+    /* ipv6 Interface address */
+    A_UINT8  ipv6_intf_addr[WMI_NDP_IPV6_INTF_ADDR_LEN];
+    /* Transport Port */
+    A_UINT32 transport_port;
+    /* Transport Protocol */
+    A_UINT32 transport_protocol;
+} wmi_ndp_transport_ip_param;
+
 #define wmi_ndp_channel_cfg wmi_ndp_channel_cfg_PROTOTYPE
 
 /**
@@ -15786,6 +15829,7 @@ typedef struct {
      * A_UINT8 ndp_pmk[];
      * A_INT8 ndp_passphrase[];
      * A_INT8 nan_servicename[];
+     * wmi_ndp_transport_ip_param ndp_transport_ip_param;
      */
 } wmi_ndp_initiator_req_fixed_param_PROTOTYPE;
 
@@ -15829,6 +15873,7 @@ typedef struct {
      * A_UINT8 ndp_pmk[];
      * A_INT8 ndp_passphrase[];
      * A_INT8 nan_servicename[];
+     * wmi_ndp_transport_ip_param ndp_transport_ip_param;
      */
 } wmi_ndp_responder_req_fixed_param_PROTOTYPE;
 
@@ -16078,6 +16123,7 @@ typedef struct {
      * A_UINT8 ndp_cfg[];
      * A_UINT8 ndp_app_info[];
      * A_UINT8 nan_scid[];
+     * wmi_ndp_transport_ip_param ndp_transport_ip_param;
      */
 } wmi_ndp_indication_event_fixed_param_PROTOTYPE;
 
@@ -16119,6 +16165,7 @@ typedef struct {
      * wmi_channel ndp_channel_list[];
      * A_UINT32 nss_list[]; // Nss indexing should match with channel indexing,
      *                      // since Nss is associated with the channel
+     * wmi_ndp_transport_ip_param ndp_transport_ip_param;
      */
 } wmi_ndp_confirm_event_fixed_param_PROTOTYPE;
 
@@ -19154,6 +19201,11 @@ typedef struct {
     A_UINT32 queue_ptr_hi; /* upper 32 bits of queue desc adddress */
     A_UINT32 queue_no; /* 16-bit number assigned by host for queue,
                           stored in bits 15:0 of queue_no field */
+    A_UINT32 ba_window_size_valid; /* Is ba_window_size valid?
+                                    * 0 = Invalid, 1 = Valid */
+    A_UINT32 ba_window_size; /* Valid values: 0 to 256
+                              * Host sends the message when BA session is
+                              * established or terminated for the TID. */
 } wmi_peer_reorder_queue_setup_cmd_fixed_param;
 
 /**
@@ -22316,9 +22368,6 @@ typedef struct {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_enable_cmd_fixed_param  */
     /** pdev_id for identifying the MAC.  See macros starting with WMI_PDEV_ID_ for values. In non-DBDC case host should set it to 0
-     * The host should never set this pdev_id to WMI_PDEV_ID_SOC,
-     * because the configuration parameters herein will be different
-     * for each MAC instance.
      */
     A_UINT32 pdev_id;
     A_UINT32 sta_cong_timer_ms;     /* STA TWT congestion timer TO value in terms of ms */
@@ -22413,11 +22462,8 @@ typedef enum _WMI_TWT_COMMAND_T {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_add_dialog_cmd_fixed_param  */
     A_UINT32 vdev_id;       /* VDEV identifier */
-    wmi_mac_addr peer_macaddr;      /* peer MAC address when vdev is AP VDEV */
-    /* diaglog_id (TWT dialog ID)
-     * This dialog ID must be unique within its vdev.
-     */
-    A_UINT32 dialog_id;
+    wmi_mac_addr peer_macaddr;      /* peer MAC address */
+    A_UINT32 dialog_id; /* TWT dialog_id is per peer */
 
     /* 1. wake_intvl_mantis must be <= 0xFFFF
      * 2. wake_intvl_us must be divided evenly by wake_intvl_mantis,
@@ -22452,6 +22498,7 @@ typedef enum _WMI_ADD_TWT_STATUS_T {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_add_dialog_complete_event_fixed_param */
     A_UINT32 vdev_id;       /* VDEV identifier */
+    wmi_mac_addr peer_macaddr; /* peer MAC address */
     A_UINT32 dialog_id;     /* TWT dialog ID */
     A_UINT32 status;        /* refer to WMI_ADD_TWT_STATUS_T */
 } wmi_twt_add_dialog_complete_event_fixed_param;
@@ -22459,6 +22506,7 @@ typedef struct {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_del_dialog_cmd_fixed_param  */
     A_UINT32 vdev_id;       /* VDEV identifier */
+    wmi_mac_addr peer_macaddr; /* peer MAC address */
     A_UINT32 dialog_id;     /* TWT dialog ID */
 } wmi_twt_del_dialog_cmd_fixed_param;
 
@@ -22476,6 +22524,7 @@ typedef enum _WMI_DEL_TWT_STATUS_T {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_del_dialog_complete_event_fixed_param */
     A_UINT32 vdev_id;       /* VDEV identifier */
+    wmi_mac_addr peer_macaddr; /* peer MAC address */
     A_UINT32 dialog_id;     /* TWT dialog ID */
     A_UINT32 status;        /* refer to WMI_DEL_TWT_STATUS_T */
 } wmi_twt_del_dialog_complete_event_fixed_param;
@@ -22483,6 +22532,7 @@ typedef struct {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_pause_dialog_cmd_fixed_param  */
     A_UINT32 vdev_id;       /* VDEV identifier */
+    wmi_mac_addr peer_macaddr; /* peer MAC address */
     A_UINT32 dialog_id;     /* TWT dialog ID */
 } wmi_twt_pause_dialog_cmd_fixed_param;
 
@@ -22500,6 +22550,7 @@ typedef enum _WMI_PAUSE_TWT_STATUS_T {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_pause_dialog_complete_event_fixed_param */
     A_UINT32 vdev_id;       /* VDEV identifier */
+    wmi_mac_addr peer_macaddr; /* peer MAC address */
     A_UINT32 dialog_id;     /* TWT dialog ID */
     A_UINT32 status;        /* refer to WMI_PAUSE_TWT_STATUS_T */
 } wmi_twt_pause_dialog_complete_event_fixed_param;
@@ -22507,6 +22558,7 @@ typedef struct {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_resume_dialog_cmd_fixed_param  */
     A_UINT32 vdev_id;       /* VDEV identifier */
+    wmi_mac_addr peer_macaddr; /* peer MAC address */
     A_UINT32 dialog_id;     /* TWT dialog ID */
     A_UINT32 sp_offset_us;  /* this long time after TWT resumed the 1st SP will start */
     A_UINT32 next_twt_size; /* Next TWT subfield Size, refer to IEEE 802.11ax sectin "9.4.1.60 TWT Information field" */
@@ -22527,6 +22579,7 @@ typedef enum _WMI_RESUME_TWT_STATUS_T {
 typedef struct {
     A_UINT32 tlv_header;    /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_twt_resume_dialog_complete_event_fixed_param */
     A_UINT32 vdev_id;       /* VDEV identifier */
+    wmi_mac_addr peer_macaddr; /* peer MAC address */
     A_UINT32 dialog_id;     /* TWT dialog ID */
     A_UINT32 status;        /* refer to WMI_RESUME_TWT_STATUS_T */
 } wmi_twt_resume_dialog_complete_event_fixed_param;
