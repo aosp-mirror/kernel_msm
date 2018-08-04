@@ -52,12 +52,13 @@ struct led_laser_ctrl_t {
 	struct cam_hw_soc_info soc_info;
 	struct mutex cam_sensor_mutex;
 	struct camera_io_master io_master_info;
-	struct cam_subdev v4l2_dev_str;
 	bool is_power_up;
 	bool is_cci_init;
 	struct regulator *vio;
 	dev_t dev;
 	enum LASER_TYPE type;
+	uint32_t read_addr;
+	uint32_t read_data;
 };
 
 static int lm36011_read_data(
@@ -66,14 +67,12 @@ static int lm36011_read_data(
 	uint32_t *data)
 {
 	int rc = 0;
-	mutex_lock(&ctrl->cam_sensor_mutex);
 	rc = camera_io_dev_read(
 		&ctrl->io_master_info,
 		addr,
 		data,
 		CAMERA_SENSOR_I2C_TYPE_BYTE,
 		CAMERA_SENSOR_I2C_TYPE_BYTE);
-	mutex_unlock(&ctrl->cam_sensor_mutex);
 
 	if (rc != 0) {
 		pr_err("%s failed rc = %d", __func__, rc);
@@ -87,7 +86,7 @@ static int lm36011_read_data(
 	return rc;
 }
 
-__attribute__((unused)) static int lm36011_write_data(
+static int lm36011_write_data(
 	struct led_laser_ctrl_t *ctrl,
 	uint32_t addr,
 	uint32_t data)
@@ -104,9 +103,7 @@ __attribute__((unused)) static int lm36011_write_data(
 	write_setting.size = 1;
 	write_setting.delay = 0;
 
-	mutex_lock(&ctrl->cam_sensor_mutex);
 	rc = camera_io_dev_write(&ctrl->io_master_info, &write_setting);
-	mutex_unlock(&ctrl->cam_sensor_mutex);
 
 	if (rc != 0) {
 		pr_err("%s failed rc = %d", __func__, rc);
@@ -181,9 +178,6 @@ static int lm36011_parse_dt(struct device *dev)
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 	int rc = 0, value = 0;
 
-	/* Initialize mutex */
-	mutex_init(&ctrl->cam_sensor_mutex);
-
 	ctrl->vio = devm_regulator_get(dev, "vio");
 	if (IS_ERR(ctrl->vio)) {
 		ctrl->vio = NULL;
@@ -229,6 +223,159 @@ static int32_t lm36011_update_i2c_info(struct device *dev)
 	return rc;
 }
 
+static ssize_t led_laser_enable_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	bool is_enabled = false;
+	int rc = 0;
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	is_enabled = (ctrl->is_power_up == true && ctrl->is_cci_init == true);
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", is_enabled);
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
+static ssize_t led_laser_enable_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	int rc = 0;
+	bool value;
+
+	rc = kstrtobool(buf, &value);
+	if (rc != 0) {
+		return rc;
+	}
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	if (value == true) {
+		rc = lm36011_power_up(ctrl);
+		if (rc != 0) {
+			mutex_unlock(&ctrl->cam_sensor_mutex);
+			return rc;
+		}
+		rc = lm36011_write_data(ctrl,
+			ENABLE_REG, IR_ENABLE_MODE);
+	} else {
+		rc = lm36011_power_down(ctrl);
+	}
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+
+	return rc < 0 ? rc : count;
+}
+
+static ssize_t led_laser_read_byte_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	int rc = 0;
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	rc = scnprintf(buf, PAGE_SIZE, "%x\n", ctrl->read_data);
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
+static ssize_t led_laser_read_byte_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	uint32_t addr = 0;
+	uint32_t read_data = 0;
+	int rc = 0;
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	if (!ctrl->is_cci_init || !ctrl->is_power_up) {
+		rc = -EINVAL;
+		goto error_out;
+	}
+
+	rc = kstrtouint(buf, 0, &addr);
+	if (rc) {
+		goto error_out;
+	}
+
+	addr &= 0xFF;
+
+	rc = lm36011_read_data(ctrl, addr, &read_data);
+	if (rc < 0) {
+		dev_err(dev, "i2c read failed, rc = %d", rc);
+		goto error_out;
+	} else {
+		ctrl->read_addr = addr;
+		ctrl->read_data = read_data;
+	}
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+
+	return count;
+
+error_out:
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
+static ssize_t led_laser_write_byte_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	uint32_t value = 0;
+	uint32_t addr = 0;
+	uint32_t data = 0;
+	int rc = 0;
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	if (!ctrl->is_cci_init || !ctrl->is_power_up) {
+		rc = -EINVAL;
+		goto error_out;
+	}
+
+	rc = kstrtouint(buf, 0, &value);
+
+	if (rc) {
+		goto error_out;
+	}
+
+	addr = (value >> 8) & 0xFF;
+	data = value & 0xFF;
+
+	rc = lm36011_write_data(ctrl, addr, data);
+	if (rc < 0) {
+		dev_err(dev, "%s i2c write failed: %d.", __func__, rc);
+		goto error_out;
+	} else {
+		if (addr == ctrl->read_addr) {
+			ctrl->read_data = data;
+		}
+	}
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+
+	return count;
+
+error_out:
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
+static DEVICE_ATTR_RW(led_laser_enable);
+static DEVICE_ATTR_RW(led_laser_read_byte);
+static DEVICE_ATTR_WO(led_laser_write_byte);
+
+static struct attribute *led_laser_dev_attrs[] = {
+	&dev_attr_led_laser_enable.attr,
+	&dev_attr_led_laser_read_byte.attr,
+	&dev_attr_led_laser_write_byte.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(led_laser_dev);
+
 static int32_t lm36011_platform_remove(struct platform_device *pdev)
 {
 	struct led_laser_ctrl_t  *ctrl;
@@ -240,7 +387,9 @@ static int32_t lm36011_platform_remove(struct platform_device *pdev)
 		return 0;
 	}
 
+	sysfs_remove_groups(&pdev->dev.kobj, led_laser_dev_groups);
 	mutex_destroy(&ctrl->cam_sensor_mutex);
+	lm36011_power_down(ctrl);
 	kfree(ctrl->io_master_info.cci_client);
 	ctrl->io_master_info.cci_client = NULL;
 	devm_kfree(&pdev->dev, ctrl);
@@ -257,7 +406,7 @@ static int32_t lm36011_driver_platform_probe(
 
 	if (cam_cci_get_subdev(CCI_DEVICE_0) == NULL ||
 		cam_cci_get_subdev(CCI_DEVICE_1) == NULL) {
-		dev_err(&pdev->dev, "wait cci driver probe");
+		dev_warn(&pdev->dev, "wait for cci driver probe");
 		return -EPROBE_DEFER;
 	}
 
@@ -270,7 +419,6 @@ static int32_t lm36011_driver_platform_probe(
 	}
 
 	/*fill in platform device*/
-	ctrl->v4l2_dev_str.pdev = pdev;
 	ctrl->soc_info.pdev = pdev;
 	ctrl->soc_info.dev = &pdev->dev;
 	ctrl->soc_info.dev_name = pdev->name;
@@ -287,7 +435,6 @@ static int32_t lm36011_driver_platform_probe(
 	}
 
 	platform_set_drvdata(pdev, ctrl);
-	v4l2_set_subdevdata(&ctrl->v4l2_dev_str.sd, ctrl);
 	dev_set_drvdata(&pdev->dev, ctrl);
 
 	rc = lm36011_parse_dt(&(pdev->dev));
@@ -332,15 +479,20 @@ static int32_t lm36011_driver_platform_probe(
 			" expected 0x%x rc = %d", device_id, DEVICE_ID, rc);
 	}
 
-	return rc;
+	mutex_init(&ctrl->cam_sensor_mutex);
 
-error_free_ctrl:
-	devm_kfree(&pdev->dev, ctrl);
+	rc = sysfs_create_groups(&pdev->dev.kobj, led_laser_dev_groups);
+	if (rc != 0) {
+		dev_err(&pdev->dev, "failed to create sysfs files");
+		mutex_destroy(&ctrl->cam_sensor_mutex);
+		goto error_free_all;
+	}
+
 	return rc;
 
 error_free_all:
 	kfree(ctrl->io_master_info.cci_client);
-	mutex_destroy(&ctrl->cam_sensor_mutex);
+error_free_ctrl:
 	devm_kfree(&pdev->dev, ctrl);
 	return rc;
 }
