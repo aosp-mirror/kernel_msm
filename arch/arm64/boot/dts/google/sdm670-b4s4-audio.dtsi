@@ -1,4 +1,3 @@
-#include "../qcom/sdm670-lpi.dtsi"
 #include "../qcom/sdm670-audio-overlay.dtsi"
 
 &tlmm {
