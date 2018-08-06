@@ -2678,7 +2678,7 @@ int do_swap_page(struct fault_env *fe, pte_t orig_pte)
 unlock:
 	pte_unmap_unlock(fe->pte, fe->ptl);
 out:
-	return ret;
+	return ret | VM_FAULT_SWAP;
 out_nomap:
 	mem_cgroup_cancel_charge(page, memcg, false);
 	pte_unmap_unlock(fe->pte, fe->ptl);
@@ -2690,7 +2690,7 @@ out_release:
 		unlock_page(swapcache);
 		put_page(swapcache);
 	}
-	return ret;
+	return ret | VM_FAULT_SWAP;
 }
 
 /*
