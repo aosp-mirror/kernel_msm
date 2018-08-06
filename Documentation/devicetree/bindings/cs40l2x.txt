@@ -26,7 +26,9 @@ Optional properties:
   - reset-gpios : GPIO used for resetting the device.
 
   - interrupt-parent : Single phandle representing the interrupt controller to
-    which the /ALERT pin is connected (silicon revision B1 only).
+    which the /ALERT pin is connected (silicon revision B1 only). Auxiliary
+    Serial Port (ASP) support (CS40L25A only) requires the /ALERT pin to be
+    used.
 
   - interrupts : interrupt specifiers for the device (silicon revision B1 only).
     See the following:
@@ -152,9 +154,16 @@ Optional properties:
 
   - cirrus,asp-bclk-freq : Specifies the frequency of the ASP_BCLK/REFCLK pin
     (CS40L25A only). See the description for the PLL_REFCLK_FREQ field in the
-    CS40L25A data sheet for acceptable values.
+    CS40L25A data sheet for acceptable values. If this value is omitted, ASP
+    support is disabled.
 
-  - cirrus,asp-width : ASP sample width, specified in bits (12 through 24).
+  - cirrus,asp-width : ASP sample width (CS40L25A only), specified in bits (12
+    through 24). If this value is omitted, ASP support is disabled.
+
+  - cirrus,asp-timeout : Specifies the minimum number of milliseconds to pause
+    ASP playback following haptic playback interruption (CS40L25A only). If this
+    value is omitted or exceeds the maximum permitted delay (10 seconds), the
+    timeout is effectively disabled.
 
 Examples:
 
