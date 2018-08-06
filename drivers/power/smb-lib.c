@@ -3589,7 +3589,7 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		 * limit ICL to 100mA, the USB driver will enumerate to check
 		 * if this is a SDP and appropriately set the current
 		 */
-		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 100000);
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 500000);
 		break;
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
