@@ -13,15 +13,14 @@
 
 /dts-v1/;
 
-#include "../qcom/sdm670.dtsi"
 #include "sdm670-b4-common.dtsi"
 
 /* TODO: Add dev board display and touch includes here */
 /* TODO: Fix model/compatible/board-id */
 
 / {
-	model = "Qualcomm Technologies, Inc. SDM670 PM660 + PM660L MTP";
-	compatible = "qcom,sdm670-mtp", "qcom,sdm670", "qcom,mtp";
+	model = "Google Inc. MSM sdm670 B4 Proto v1.0";
+	compatible = "google,b4s4-sdm670", "qcom,sdm670";
 	qcom,board-id = <0x00030305 0>;
 };
 

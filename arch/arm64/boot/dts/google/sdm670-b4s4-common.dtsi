@@ -13,7 +13,17 @@
 /* Common BONITO, SARGO includes go here (i.e. not display) */
 /* TODO: Split this file into bluetooth/keys/display/memory/power/thermal */
 
+/plugin/;
+
+#include <dt-bindings/clock/qcom,gcc-sdm845.h>
+#include <dt-bindings/clock/qcom,camcc-sdm845.h>
+#include <dt-bindings/clock/qcom,dispcc-sdm845.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 #include <dt-bindings/gpio/gpio.h>
+
 #include "../qcom/sdm670-pmic-overlay.dtsi"
 #include "sdm670-b4s4-display.dtsi"
 #include "sdm670-camera-sensor.dtsi"
@@ -30,23 +40,19 @@
 #include "sdm670-b4s4-thermal.dtsi"
 
 / {
-	qcom,msm-id = <0x150 0x0>;
+	qcom,msm-id = <336 0x0>;
+};
 
-	firmware: firmware {
-		android {
-			fstab {
-				product {
-					compatible = "android,product";
-					dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/product";
-					type = "ext4";
-					mnt_flags = "ro";
-					fsmgr_flags = "wait,slotselect,avb";
-				};
-				vendor {
-					dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/vendor";
-				};
-			};
-		};
+&android_fstab {
+	product {
+		compatible = "android,product";
+		dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/product";
+		type = "ext4";
+		mnt_flags = "ro";
+		fsmgr_flags = "wait,slotselect,avb";
+	};
+	vendor {
+		dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/vendor";
 	};
 };
 
