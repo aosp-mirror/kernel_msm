@@ -4,3 +4,7 @@
 &dsi_s6e3fa7_sdc_1080p_cmd_display {
 	qcom,dsi-display-active;
 };
+
+&routing {
+	qcom,msm-pcm-config = "s4";
+};

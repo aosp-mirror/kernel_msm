@@ -8,3 +8,7 @@
 &dsi_nt37700f_tianma_1080p_cmd_display {
 	qcom,dsi-display-active;
 };
+
+&routing {
+	qcom,msm-pcm-config = "b4";
+};
