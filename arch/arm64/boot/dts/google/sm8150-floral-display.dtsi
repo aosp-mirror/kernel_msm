@@ -70,7 +70,7 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 1E 08 07 24 22 08 08 05 03 04 19 17 00];
+				[00 1E 08 07 24 22 08 08 05 02 04 00 19 17];
 		};
 	};
 };
