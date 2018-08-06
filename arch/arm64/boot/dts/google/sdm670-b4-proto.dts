@@ -26,5 +26,5 @@
 };
 
 &int_codec {
-	qcom,model = "sdm670-b4-snd-card";
+	qcom,model = "sdm670-intcodec-b4-snd-card";
 };
