@@ -49,6 +49,12 @@ void mm_event_end(enum mm_event_type event, ktime_t start)
 	record_stat();
 }
 
+void mm_event_count(enum mm_event_type event, int count)
+{
+	current->mm_event[event].count += count;
+	record_stat();
+}
+
 static struct dentry *mm_event_root;
 
 static int period_ms_set(void *data, u64 val)
