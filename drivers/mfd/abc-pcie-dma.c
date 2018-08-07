@@ -89,16 +89,16 @@ static int dma_callback(uint8_t chan, enum dma_data_direction dir,
 		/ 1024 / 1024;
 	rate_zero = (ll_dma_size[chan] * NSEC_PER_SEC)
 		/ dma_time_zero_ns / 1024 / 1024;
-	dev_info(&abc_dma.pdev->dev,
+	dev_info(abc_dma.dma_dev,
 		 "%s DMA_PERF: ch:%d, dir:%s, time: %llu, size: %llu, rate(MB/s) %llu\n",
 		 __func__, chan, (dir == DMA_TO_DEVICE)?"RD(AP2EP)":"WR(EP2AP)",
 		 dma_time_ns, ll_dma_size[chan], rate);
-	dev_info(&abc_dma.pdev->dev,
+	dev_info(abc_dma.dma_dev,
 		 "%s DMA_PERF_zero: ch:%d, dir:%s, time: %llu, size: %llu, rate(MB/s) %llu\n",
 		 __func__, chan, (dir == DMA_TO_DEVICE)?"RD(AP2EP)":"WR(EP2AP)",
 		 dma_time_zero_ns, ll_dma_size[chan], rate_zero);
 #else
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: DMA callback DIR(%d), status(%d)\n",
 		__func__, (int)dir, (int)chan);
 #endif
@@ -127,13 +127,13 @@ static int scatterlist_to_abc_sg(struct scatterlist *sc_list, int count,
 	for_each_sg(sc_list, in_sg, count, i) {
 		/* Last entry is reserved for the NULL terminator */
 		if (u >= (maxsg - 1)) {
-			dev_err(&abc_dma.pdev->dev,
+			dev_err(abc_dma.dma_dev,
 				"maxsg exceeded\n");
 			return -EINVAL;
 		}
 		sg[u].paddr = sg_dma_address(in_sg);
 		sg[u].size = sg_dma_len(in_sg);
-		dev_dbg(&abc_dma.pdev->dev,
+		dev_dbg(abc_dma.dma_dev,
 			"sg[%d] : Address %pa , length %zu\n",
 			u, &sg[u].paddr, sg[u].size);
 #ifdef COMBINE_SG
@@ -156,7 +156,7 @@ static int scatterlist_to_abc_sg(struct scatterlist *sc_list, int count,
 	memset(&sg[u], 0, sizeof(sg[0]));
 	u++; /* Count of entries includes list terminator entry */
 
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"SGL with %d/%d entries\n", u, i);
 
 	return u;
@@ -176,7 +176,7 @@ static int abc_pcie_sg_import_dma_buf(int fd, struct abc_pcie_sg_list *sgl)
 	sgl->dma_buf = dma_buf_get(fd);
 	if (IS_ERR(sgl->dma_buf)) {
 		ret = PTR_ERR(sgl->dma_buf);
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 				"%s: failed to get dma_buf, err %d\n",
 				__func__, ret);
 		return ret;
@@ -186,7 +186,7 @@ static int abc_pcie_sg_import_dma_buf(int fd, struct abc_pcie_sg_list *sgl)
 				     abc_dma.dma_dev);
 	if (IS_ERR(sgl->attach)) {
 		ret = PTR_ERR(sgl->attach);
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 				"%s: failed to attach dma_buf, err %d\n",
 				__func__, ret);
 		goto err_put;
@@ -195,7 +195,7 @@ static int abc_pcie_sg_import_dma_buf(int fd, struct abc_pcie_sg_list *sgl)
 	sgl->sg_table = dma_buf_map_attachment(sgl->attach, sgl->dir);
 	if (IS_ERR(sgl->sg_table)) {
 		ret = PTR_ERR(sgl->sg_table);
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 				"%s: failed to map dma_buf, err %d\n",
 				__func__, ret);
 		goto err_detach;
@@ -246,7 +246,7 @@ int abc_pcie_sg_retrieve_from_dma_buf(int fd, struct abc_pcie_sg_entry **sg,
 		return -ENOMEM;
 	}
 
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"Enter %s: n_num:%d maxsg:%zu\n", __func__, sgl->n_num, maxsg);
 
 	/* Convert sc_list to a Synopsys compatible linked-list */
@@ -317,7 +317,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 	fp_offset = (unsigned long) dmadest & ~PAGE_MASK;
 	p_num = last_page - first_page + 1;
 
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s:p_num:%d, maxsg:%zu\n",
 		__func__, p_num, maxsg);
 
@@ -352,7 +352,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 
 	up_read(&current->mm->mmap_sem);
 	if (n_num < 0) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: fail to get user_pages\n", __func__);
 		goto free_mem;
 	}
@@ -376,7 +376,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 		count = dma_map_sg(abc_dma.dma_dev,
 				   sgl->sc_list, n_num, sgl->dir);
 		if (count <= 0) {
-			dev_err(&abc_dma.pdev->dev,
+			dev_err(abc_dma.dma_dev,
 				"%s: failed to map scatterlist region (%d) n_num(%d)\n",
 			       __func__, count, n_num);
 			goto free_mem;
@@ -386,7 +386,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 		if (u < 0)
 			goto unmap_sg;
 	} else {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: maxsg exceeded\n", __func__);
 		goto release_page;
 	}
@@ -451,29 +451,29 @@ int abc_pcie_sg_verify(struct abc_pcie_sg_entry *sg, size_t size,
 
 	/* At least one entry plus null terminator required */
 	if (len < 2) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"Invalid SG list length %zu\n", len);
 		return -EINVAL;
 	}
 	if (sg == NULL) {
-		dev_err(&abc_dma.pdev->dev, "No SG list\n");
+		dev_err(abc_dma.dma_dev, "No SG list\n");
 		return -EINVAL;
 	}
 	for (i = 0; i < len - 1; i++) {
 		if (sg[i].paddr == 0) {
-			dev_err(&abc_dma.pdev->dev,
+			dev_err(abc_dma.dma_dev,
 				"Early list end\n");
 			return -EINVAL;
 		}
 		if (sg[i].size == 0) {
-			dev_err(&abc_dma.pdev->dev,
+			dev_err(abc_dma.dma_dev,
 				"Invalid entry size\n");
 			return -EINVAL;
 		}
 	}
 	/* Verify terminator */
 	if (sg[i].paddr != 0) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"Missing list terminator\n");
 		return -EINVAL;
 	}
@@ -512,10 +512,10 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 	dma_addr_t dma;
 	int i, s, u;
 
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 			"dst_sg[%d] : Address %pa , length %zu\n",
 			0, &dst_sg[0].paddr, dst_sg[0].size);
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 			"src_sg[%d] : Address %pa , length %zu\n",
 			0, &src_sg[0].paddr, src_sg[0].size);
 
@@ -526,7 +526,7 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 	ll->ll_element[0] = ll_element;
 	ll->dma[0] = dma;
 	if (!ll_element) {
-		dev_err(&abc_dma.pdev->dev, "LL alloc failed\n");
+		dev_err(abc_dma.dma_dev, "LL alloc failed\n");
 		return -EINVAL;
 	}
 	i = 0; /* source buffer scatterlist index */
@@ -535,7 +535,7 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 	sg_src = src_sg[i];
 	sg_dst = dst_sg[s];
 	if ((sg_src.paddr == 0x0) || (sg_dst.paddr == 0x0)) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"Input lists invalid\n");
 		return -EINVAL;
 	}
@@ -576,7 +576,7 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 		}
 		u++;
 		if (u == DMA_LL_LENGTH - 1) {
-			dev_dbg(&abc_dma.pdev->dev,
+			dev_dbg(abc_dma.dma_dev,
 				"%s: reached DMA_LL_LENGTH u=%d\n",
 				__func__, u);
 			ll_element[u].header = LL_LINK_ELEMENT;
@@ -590,7 +590,7 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 				return 0;
 			}
 			if (ll->size >= (MAX_LL_ELEMENT-1)) {
-				dev_err(&abc_dma.pdev->dev,
+				dev_err(abc_dma.dma_dev,
 					"Out of dma elements\n");
 				ll_element[u-1].header = LL_IRQ_DATA_ELEMENT;
 				ll_element[u].header = LL_LAST_LINK_ELEMENT;
@@ -606,7 +606,7 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 				* sizeof(struct abc_pcie_dma_ll_element),
 				&dma);
 			if (!tmp_element) {
-				dev_err(&abc_dma.pdev->dev,
+				dev_err(abc_dma.dma_dev,
 					"Element allcation failed\n");
 				ll_element[u-1].header = LL_IRQ_DATA_ELEMENT;
 				ll_element[u].header = LL_LAST_LINK_ELEMENT;
@@ -628,7 +628,7 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 			ll->dma[ll->size] = dma;
 		}
 	}
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: Created %d linked lists, last list size %d\n",
 		__func__, ll->size+1, u);
 	ll_element[u-1].header = LL_IRQ_DATA_ELEMENT;
@@ -654,7 +654,7 @@ int abc_pcie_remote_sg(__u64 remote_buf, size_t size,
 	maxsg = 1 + 1;
 	local_sg = vmalloc(maxsg * sizeof(struct abc_pcie_sg_entry));
 	if (!sg) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: failed to allocate remote buffer\n", __func__);
 		return -ENOMEM;
 	}
@@ -693,7 +693,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 #ifdef BENCHMARK_ENABLE
 	ll_dma_start_time_zero = ktime_to_ns(ktime_get());
 #endif
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: buf_type=%d, local_buf=%p, local_buf_size=%u\n",
 		__func__, dma_desc->buf_type, dma_desc->local_buf,
 		dma_desc->local_buf_size);
@@ -724,7 +724,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 			local_sg_list);
 		break;
 	default:
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: Unknown DMA buffer type %d\n",
 		       __func__, dma_desc->buf_type);
 		err = -EINVAL;
@@ -757,14 +757,14 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	}
 	/* check the size of the scatterlist */
 	remote_sg_size = remote_sg_list->length;
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: Scatterlists with (%d/%d) local/remote entries\n",
 		__func__, local_sg_size, remote_sg_size);
 
 	/* Based on the scatterlists determine if sblk or mblk transfer */
 	/* Single block transfer */
 	if (remote_sg_size <= 2 && local_sg_size <= 2) {
-		dev_dbg(&abc_dma.pdev->dev,
+		dev_dbg(abc_dma.dma_dev,
 			"%s: SBLK transfer: ->local (%pa/%zu) \
 			->remote (%pa/%zu)\n", __func__,
 			&local_sg_entries[0].paddr, local_sg_entries[0].size,
@@ -789,7 +789,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 			UPPER((uint64_t)local_sg_entries[0].paddr);
 		dma_blk.len = local_sg_entries[0].size; /* TODO: fix this */
 
-		dev_dbg(&abc_dma.pdev->dev,
+		dev_dbg(abc_dma.dma_dev,
 			"DMA - SRC(L:0x%x U:0x%x) to DST(L:0x%x U:0x%x), size(%d)\n",
 			dma_blk.src_addr, dma_blk.src_u_addr,
 			dma_blk.dst_addr, dma_blk.dst_u_addr,
@@ -803,7 +803,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		dma_sblk_start(dma_chan, dma_desc->dir, &dma_blk);
 		err = wait_for_completion_interruptible(&dma_done);
 		if (err) {
-			dev_dbg(&abc_dma.pdev->dev,
+			dev_dbg(abc_dma.dma_dev,
 				"%s: DMA aborted (%d)\n",
 				__func__, err);
 		}
@@ -813,7 +813,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 
 	/* Multi block transfer */
 	} else {
-		dev_dbg(&abc_dma.pdev->dev,
+		dev_dbg(abc_dma.dma_dev,
 			"%s: Using multi block transfer (dir=%s)\n",
 			__func__,
 			(dma_desc->dir == DMA_TO_DEVICE) ? "AP2EP" : "EP2AP");
@@ -836,7 +836,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		err = abc_pcie_sg_release_from_dma_buf(local_sg_list);
 		break;
 	default:
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: Unknown DMA buffer type %d\n",
 		       __func__, dma_desc->buf_type);
 		err = -EINVAL;
@@ -872,7 +872,7 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 	/* Allocate contiguous memory for linked list */
 	abc_pcie_ll = kmalloc(sizeof(struct abc_pcie_dma_ll), GFP_KERNEL);
 	if (!abc_pcie_ll) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: failed to kmalloc linked list buffer\n",
 			__func__);
 		return -ENOMEM;
@@ -900,7 +900,7 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 	dma_blk.len = sizeof(struct abc_pcie_dma_ll);
 
 	dma_chan = dma_desc->chan;
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: Uploading linked list via sblk transfer on DMA ch%d\n",
 		__func__, dma_chan);
 
@@ -914,7 +914,7 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 	err = abc_reg_dma_irq_callback(NULL, dma_chan);
 	mutex_unlock(&dma_mutex);
 #else
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: Using linked list from local (AP) memory\n",
 		__func__);
 	ll_paddr = (uint64_t)abc_pcie_ll->dma[0];
@@ -924,7 +924,7 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 	/* Register DMA callback */
 	err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
 
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: Starting mblk transfer on DMA ch%d\n",
 		__func__, dma_chan);
 #ifdef BENCHMARK_ENABLE
@@ -940,7 +940,7 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 	/* unregister callback */
 	err = abc_reg_dma_irq_callback(NULL, dma_chan);
 	mutex_unlock(&dma_mutex);
-	dev_dbg(&abc_dma.pdev->dev,
+	dev_dbg(abc_dma.dma_dev,
 		"%s: mblk transfer finished on DMA ch%d\n",
 		__func__, dma_chan);
 
@@ -972,7 +972,7 @@ static long abc_pcie_dma_ioctl(struct file *file, unsigned int cmd,
 		err =  !access_ok(VERIFY_READ, (void __user *)arg,
 				  _IOC_SIZE(cmd));
 	if (err) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: access error!\n", __func__);
 		return -EFAULT;
 	}
@@ -982,26 +982,26 @@ static long abc_pcie_dma_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case ABC_PCIE_DMA_IOC_POST_DMA_XFER:
-		dev_dbg(&abc_dma.pdev->dev,
+		dev_dbg(abc_dma.dma_dev,
 			"%s: Received IOCTL for DMA request\n", __func__);
 		err = copy_from_user(&dma_desc, (void __user *)arg,
 				     sizeof(dma_desc));
 		if (err) {
-			dev_err(&abc_dma.pdev->dev,
+			dev_err(abc_dma.dma_dev,
 				"%s: failed to copy from userspace (%d)\n",
 				__func__, err);
 			return err;
 		}
 		err = abc_pcie_issue_dma_xfer(&dma_desc);
 		if (err) {
-			dev_err(&abc_dma.pdev->dev,
+			dev_err(abc_dma.dma_dev,
 				"%s: failed to perform DMA (%d)\n",
 				__func__, err);
 			return err;
 		}
 		break;
 	default:
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"%s: unknown ioctl %c, dir=%d, #%d (0x%08x)\n",
 			__func__, _IOC_TYPE(cmd), _IOC_DIR(cmd), _IOC_NR(cmd),
 			cmd);
@@ -1051,7 +1051,7 @@ static int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 
 	err = misc_register(&abc_pcie_dma_miscdev);
 	if (err) {
-		dev_err(&abc_dma.pdev->dev,
+		dev_err(abc_dma.dma_dev,
 			"misc_register failed\n");
 		return err;
 	}
