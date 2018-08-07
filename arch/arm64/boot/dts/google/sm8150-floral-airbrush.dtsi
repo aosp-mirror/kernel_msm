@@ -88,15 +88,50 @@
 &qupv3_se10_spi {
 	status = "okay";
 	airbrush-spi@0 {
-		status = "disabled";
+		status = "ok";
 		compatible = "abc,airbrush-spi";
 		reg = <0>;
 		spi-max-frequency = <1000000>;
 	};
 	airbrush-spidev@0 {
-		status = "okay";
+		status = "disabled";
 		compatible = "abc,airbrush-spidev";
 		reg = <0>;
 		spi-max-frequency = <1000000>;
 	};
 };
+
+&pm8150l_gpios {
+	abc_pins {
+		ab_ready_default: ab_ready_default {
+			mux {
+				pins = "gpio10";
+				function = "normal";
+				bias-disable;
+				input-enable;
+			};
+		};
+		ab_fw_patch_en_default: ab_fw_patch_en_default {
+			mux {
+				pins = "gpio1";
+				function = "normal";
+				bias-pull-down;
+				qcom,pull-down-strength = <2>;
+			};
+		};
+	};
+};
+
+&soc {
+	abc-sm {
+		compatible = "abc,airbrush-sm";
+
+		ab-ready-gpio = <&pm8150l_gpios 10 GPIO_ACTIVE_HIGH>;
+		fw-patch-en-gpio = <&pm8150l_gpios 1 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&ab_ready_default &ab_fw_patch_en_default>;
+		otp-fw-patch-dis = <0>;
+	};
+};
+
