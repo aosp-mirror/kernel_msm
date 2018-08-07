@@ -495,6 +495,7 @@ static void cam_ois_read_work(struct work_struct *work)
 	uint8_t buf[8] = { 0 };
 	int32_t rc = 0;
 	int16_t shift_x, shift_y;
+	uint16_t raw_x, raw_y, raw_z;
 	struct timespec ts;
 	int64_t time_readout;
 	struct cam_ois_timer_t *ois_timer_in;
@@ -522,6 +523,38 @@ static void cam_ois_read_work(struct work_struct *work)
 			shift_y, &ois_timer_in->o_ctrl->buf);
 		if (rc != 0)
 			CAM_ERR(CAM_OIS, "OIS shift data enqueue failed");
+	}
+
+	if (ois_timer.ois_factory_read & (1 << 0)) {
+		rc = camera_io_dev_read_seq(
+			&ois_timer_in->o_ctrl->io_master_info, 0xE003,
+			&buf[0], CAMERA_SENSOR_I2C_TYPE_WORD, 8);
+		if (rc != 0)
+			CAM_ERR(CAM_OIS, "0xE003, read seq fail.");
+		else {
+			raw_x =	(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
+			raw_y =	(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
+			raw_z =	(((uint16_t)buf[4] << 8) + (uint16_t)buf[5]);
+			CAM_INFO(CAM_OIS,
+				"Readout 0xE003 [x:0x%04X, y:0x%04X, z:0x%04X]",
+				raw_x, raw_y, raw_z);
+		}
+	}
+
+	if (ois_timer.ois_factory_read & (1 << 1)) {
+		rc = camera_io_dev_read_seq(
+			&ois_timer_in->o_ctrl->io_master_info, 0xE005,
+			&buf[0], CAMERA_SENSOR_I2C_TYPE_WORD, 8);
+		if (rc != 0)
+			CAM_ERR(CAM_OIS, "0xE005, read seq fail.");
+		else {
+			raw_x =	(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
+			raw_y =	(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
+			raw_z =	(((uint16_t)buf[4] << 8) + (uint16_t)buf[5]);
+			CAM_INFO(CAM_OIS,
+				"Readout 0xE005 [x:0x%04X, y:0x%04X, z:0x%04X]",
+				raw_x, raw_y, raw_z);
+		}
 	}
 }
 
@@ -935,6 +968,22 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 				"Fail deleting Mode data: rc: %d", rc);
 		break;
 	case CAM_OIS_PACKET_OPCODE_SHIFT_READER_START:
+		offset = (uint32_t *)&csl_packet->payload;
+		offset += (csl_packet->cmd_buf_offset / sizeof(uint32_t));
+		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
+		rc = cam_mem_get_cpu_buf(cmd_desc[0].mem_handle,
+			(uint64_t *)&generic_ptr, &len_of_buff);
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS, "Failed to get cpu buf");
+			return rc;
+		}
+		cmd_buf = (uint32_t *)generic_ptr;
+		if (!cmd_buf) {
+			CAM_ERR(CAM_OIS, "invalid cmd buf");
+			return -EINVAL;
+		}
+		cmd_buf += cmd_desc->offset / sizeof(uint32_t);
+		ois_timer.ois_factory_read = *(uint8_t *)cmd_buf;
 		rc = cam_ois_start_shift_reader(o_ctrl);
 		break;
 	case CAM_OIS_PACKET_OPCODE_SHIFT_READER_STOP:
