@@ -703,7 +703,6 @@ int32_t cam_sensor_update_power_settings(void *cmd_buf,
 	}
 
 	power_info->power_setting_size = 0;
-	kfree(power_info->power_setting);
 	power_info->power_setting =
 		(struct cam_sensor_power_setting *)
 		kzalloc(sizeof(struct cam_sensor_power_setting) *
@@ -712,7 +711,6 @@ int32_t cam_sensor_update_power_settings(void *cmd_buf,
 		return -ENOMEM;
 
 	power_info->power_down_setting_size = 0;
-	kfree(power_info->power_down_setting);
 	power_info->power_down_setting =
 		(struct cam_sensor_power_setting *)
 		kzalloc(sizeof(struct cam_sensor_power_setting) *
@@ -878,10 +876,8 @@ int32_t cam_sensor_update_power_settings(void *cmd_buf,
 	return rc;
 free_power_down_settings:
 	kfree(power_info->power_down_setting);
-	power_info->power_down_setting = NULL;
 free_power_settings:
 	kfree(power_info->power_setting);
-	power_info->power_setting = NULL;
 	return rc;
 }
 
@@ -910,9 +906,6 @@ int cam_get_dt_power_setting_data(struct device_node *of_node,
 	ps = kcalloc(count, sizeof(*ps), GFP_KERNEL);
 	if (!ps)
 		return -ENOMEM;
-
-	kfree(power_info->power_setting);
-
 	power_info->power_setting = ps;
 
 	for (i = 0; i < count; i++) {
@@ -970,7 +963,6 @@ int cam_get_dt_power_setting_data(struct device_node *of_node,
 	}
 	kfree(array);
 
-	kfree(power_info->power_down_setting);
 	power_info->power_down_setting =
 		kzalloc(sizeof(*ps) * count, GFP_KERNEL);
 
