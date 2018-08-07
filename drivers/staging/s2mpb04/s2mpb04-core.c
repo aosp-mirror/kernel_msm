@@ -30,7 +30,7 @@
 #define DRIVER_NAME "s2mpb04"
 
 /* defines the number of tries to repeat an I2C transaction */
-#define S2MPB04_I2C_RETRY_COUNT 10
+#define S2MPB04_I2C_RETRY_COUNT 2
 
 /* defines the delay in ms for reset completion */
 #define S2MPB04_PON_RESET_DELAY 2
@@ -39,10 +39,10 @@
 #define S2MPB04_PON_RESET_TIMEOUT msecs_to_jiffies(15)
 
 /* defines the number of retries for powering on */
-#define S2MPB04_PON_RETRY_CNT 4
+#define S2MPB04_PON_RETRY_CNT 1
 
 /* defines the timeout in jiffies for reset completion after shutdown */
-#define S2MPB04_SHUTDOWN_RESET_TIMEOUT msecs_to_jiffies(10000)
+#define S2MPB04_SHUTDOWN_RESET_TIMEOUT msecs_to_jiffies(1000)
 
 /* defines the timeout in jiffies for ADC conversion completion */
 #define S2MPB04_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
@@ -301,7 +301,7 @@ EXPORT_SYMBOL_GPL(s2mpb04_read_adc_chan);
 #define NOTIFY(id, event) s2mpb04_regulator_notify(id, event)
 
 /* print the device id */
-static void s2mpb04_print_id(struct s2mpb04_core *ddata)
+static int s2mpb04_print_id(struct s2mpb04_core *ddata)
 {
 	struct device *dev = ddata->dev;
 	u8 reg_data;
@@ -314,7 +314,9 @@ static void s2mpb04_print_id(struct s2mpb04_core *ddata)
 	} else {
 		dev_err(dev, "%s: Could not read PMIC ID (%d)\n", __func__,
 			ret);
+		return ret;
 	}
+	return 0;
 }
 
 /* print the status register */
@@ -557,7 +559,6 @@ static void s2mpb04_config_ints(struct s2mpb04_core *ddata)
 /* initialize the chip */
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata)
 {
-	s2mpb04_print_id(ddata);
 	s2mpb04_print_status(ddata);
 
 	s2mpb04_config_ints(ddata);
@@ -666,6 +667,13 @@ static int s2mpb04_probe(struct i2c_client *client,
 	if (i == S2MPB04_PON_RETRY_CNT) {
 		ret = -ETIMEDOUT;
 		dev_err(dev, "%s: powering on failed\n", __func__);
+		goto error_reset;
+	}
+
+	if (s2mpb04_print_id(ddata)) {
+		ret = -ENODEV;
+		dev_err(dev, "%s: couldn't communicate over I2C, giving up",
+			__func__);
 		goto error_reset;
 	}
 
