@@ -31,6 +31,7 @@
 #include "sm8150-floral-pcie.dtsi"
 #include "sm8150-floral-pinctrl.dtsi"
 #include "sm8150-floral-qup.dtsi"
+#include "sm8150-floral-rainbow.dtsi"
 #include "sm8150-floral-regulator.dtsi"
 #include "sm8150-floral-thermal.dtsi"
 #include "sm8150-floral-touch-jaws.dtsi"
