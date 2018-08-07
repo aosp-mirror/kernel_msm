@@ -26,15 +26,18 @@
 #include "modemsmem.h"
 
 #define BOOTMODE_LENGTH			20
-#define FACTORY_STR			"factory"
-#define FFBM00_STR			"ffbm-00"
-#define FFBM01_STR			"ffbm-01"
 
 #define DEVICE_TREE_CDT_CDB2_PATH	"/chosen/cdt/cdb2"
 #define FTM_ON				"ftm_on"
 #define FTM_OFF				"ftm_off"
 
 static char bootmode[BOOTMODE_LENGTH];
+static const char * const factory_bootmodes[] = {
+	"factory",
+	"ffbm-00",
+	"ffbm-01"
+};
+
 static struct modem_smem_type *modem_smem;
 
 static int __init get_bootmode(char *str)
@@ -45,6 +48,14 @@ static int __init get_bootmode(char *str)
 	return 1;
 }
 __setup("androidboot.mode=", get_bootmode);
+
+static bool is_factory_bootmode(void)
+{
+	for (int i = 0; i < ARRAY_SIZE(factory_bootmodes); i++)
+		if (!strncmp(factory_bootmodes[i], bootmode, sizeof(bootmode)))
+			return true;
+	return false;
+}
 
 static ssize_t modem_smem_show(struct device *d,
 			struct device_attribute *attr,
@@ -84,9 +95,7 @@ static ssize_t modem_smem_store(struct device *d,
 		return count;
 	}
 
-	if (strncmp(bootmode, FACTORY_STR, sizeof(FACTORY_STR)) &&
-	strncmp(bootmode, FFBM00_STR, sizeof(FFBM00_STR)) &&
-	strncmp(bootmode, FFBM01_STR, sizeof(FFBM01_STR))) {
+	if (!is_factory_bootmode()) {
 		dev_err(d, "The action is not allowed in normal bootmode\n");
 		return count;
 	}
@@ -178,9 +187,7 @@ static int modem_smem_probe(struct platform_device *pdev)
 	if (dtnp && !of_property_read_u32(dtnp, "modem_flag", &value))
 		modem_smem_set_u32(modem_smem, modem_flag, value);
 
-	if ((!strncmp(bootmode, FACTORY_STR, sizeof(FACTORY_STR))) ||
-	(!strncmp(bootmode, FFBM00_STR, sizeof(FFBM00_STR))) ||
-	(!strncmp(bootmode, FFBM01_STR, sizeof(FFBM01_STR)))) {
+	if (is_factory_bootmode()) {
 		modem_smem_set_u32(modem_smem, ftm_magic, MODEM_FTM_MAGIC);
 		dev_info(dev, "Set FTM mode due to %s\n", bootmode);
 	}
