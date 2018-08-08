@@ -1595,8 +1595,10 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 
 	panel_info = mfd->panel_info;
 	mdp3_session = mfd->mdp.private1;
-	if (!mdp3_session || !mdp3_session->dma)
+	if (!mdp3_session || !mdp3_session->dma) {
+		pr_err("null session\n");
 		return -EINVAL;
+	}
 
 	frame_rate = mdss_panel_get_framerate(panel_info, FPS_RESOLUTION_HZ);
 	client = mdp3_get_ion_client(mfd);

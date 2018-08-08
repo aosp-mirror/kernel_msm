@@ -1201,8 +1201,9 @@ void mdp3_ppp_wait_for_fence(struct blit_req_list *req)
 		ret = sync_fence_wait(req->acq_fen[i],
 				WAIT_FENCE_FINAL_TIMEOUT);
 		if (ret < 0) {
-			pr_err("%s: sync_fence_wait failed! ret = %x\n",
-				__func__, ret);
+			pr_err("%s: sync_fence_wait failed for fence %s! ret = %x\n",
+				__func__, req->acq_fen[i]->name, ret);
+			MDSS_XLOG_TOUT_HANDLER("mdp", "panic");
 			break;
 		}
 		sync_fence_put(req->acq_fen[i]);
@@ -1215,6 +1216,7 @@ void mdp3_ppp_wait_for_fence(struct blit_req_list *req)
 		}
 	}
 	req->acq_fen_cnt = 0;
+	MDSS_XLOG(ppp_stat->timeline->value);
 }
 
 void mdp3_ppp_signal_timeline(struct blit_req_list *req)
@@ -1524,6 +1526,7 @@ static void mdp3_ppp_blit_handler(struct kthread_work *work)
 	mutex_lock(&ppp_stat->config_ppp_mutex);
 	req = mdp3_ppp_next_req(&ppp_stat->req_q);
 	if (!req) {
+		pr_err("no req\n");
 		mutex_unlock(&ppp_stat->config_ppp_mutex);
 		return;
 	}
