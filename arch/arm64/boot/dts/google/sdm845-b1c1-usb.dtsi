@@ -104,4 +104,6 @@
 	goog,port-type = <TYPEC_PORT_DRP>;
 	goog,default-role = <TYPEC_SINK>;
 	goog,try-role-hw;
+
+	goog,wlc-supported;
 };
