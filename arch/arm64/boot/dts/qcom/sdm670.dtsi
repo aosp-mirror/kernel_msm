@@ -453,7 +453,7 @@
 				parts = "vbmeta,boot,system,vendor,dtbo";
 			};
 
-			android_fstab: fstab {
+			fstab {
 				compatible = "android,fstab";
 				vendor {
 					compatible = "android,vendor";

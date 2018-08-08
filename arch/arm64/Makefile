@@ -183,7 +183,7 @@ ifneq ($(BUILD_DTC_FLAGS),)
 	DTC_FLAGS += $(BUILD_DTC_FLAGS)
 endif
 
-ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+ifeq ($(CONFIG_BUILD_ARM64_APPLY_DTBO),y)
 all:	$(KBUILD_IMAGE) $(KBUILD_DTBS) $(KBUILD_DTBO_IMG) $(KBUILD_APPLY_DTBO)
 else
 all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
@@ -215,13 +215,8 @@ Image-dtb Image.gz-dtb Image.lz4-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
-ifeq ($(CONFIG_BOARD_B1C1),y)
 dtbo.img: $(boot)/dts/dtboimg.cfg dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-else
-dtbo.img: $(boot)/dts/dtboimg-sdm670.cfg dtbs
-	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-endif
 endif
 
 
