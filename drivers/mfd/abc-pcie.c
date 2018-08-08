@@ -697,6 +697,8 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 #define CLK_CON_DIV_PLL_AON_CLK 0x00B1180C
 #define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x00041800
 #define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x00241800
+#define PLL_CON0_PLL_IPU 0x00240120
+#define CLK_CON_MUX_MOUT_AONCLK_PLLCLK1 0x00241000
 #define REG_PCIe_INIT 0x00B30388
 #define PMU_CONTROL 0x00BA0004
 #define PMU_CONTROL_PHY_RET_OFF (1 << 8)
@@ -742,6 +744,22 @@ static int abc_pcie_ipu_tpu_enable(void)
 		return err;
 
 	err = pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_TPU, 4, 0x00000003);
+	if (WARN_ON(err < 0))
+		return err;
+
+	/* Configure IPU PLL for 549 MHz */
+	err = pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0203);
+	if (WARN_ON(err < 0))
+		return err;
+
+	/* TODO(basso):  Determine the proper timeout here. */
+	msleep(1);
+
+	err = pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0213);
+	if (WARN_ON(err < 0))
+		return err;
+
+	err = pcie_config_write(CLK_CON_MUX_MOUT_AONCLK_PLLCLK1, 4, 0x1);
 	if (WARN_ON(err < 0))
 		return err;
 
