@@ -3278,8 +3278,9 @@ static void csrMoveTempScanResultsToMainList( tpAniSirGlobal pMac, tANI_U8 reaso
                 }
             }
         }
-        csrElectedCountryInfo(pMac);
-        csrLearnCountryInformation( pMac, NULL, NULL, eANI_BOOLEAN_TRUE );
+        if (csrElectedCountryInfo(pMac))
+            csrLearnCountryInformation(pMac, NULL, NULL,
+                eANI_BOOLEAN_TRUE);
     }
 
 end:
@@ -3790,6 +3791,15 @@ tANI_BOOLEAN csrElectedCountryInfo(tpAniSirGlobal pMac)
             fRet = TRUE;
         }
 
+    }
+    if (maxVotes < 3)
+    {
+        fRet = FALSE;
+        VOS_TRACE( VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
+            "filter Country is %c%c With count %d\n",
+                pMac->scan.votes11d[j].countryCode[0],
+                pMac->scan.votes11d[j].countryCode[1],
+                pMac->scan.votes11d[j].votes);
     }
     if (fRet)
     {
