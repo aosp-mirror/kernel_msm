@@ -126,6 +126,7 @@ struct nanohub_data {
 	atomic_t hub_mode_ap_pwr_down;
 	atomic_t hub_mode_ap_active;
 	atomic_t lcd_mutex;
+	atomic_t sensor_hal_alive;
 #if (NANOHUB_WAKEUP_TRACE_ENABLE)
 	atomic_t suspend_status;
 	atomic_t st_wakeup_trace;
@@ -134,13 +135,18 @@ struct nanohub_data {
 #endif
 	struct mutex hub_mode_set_lock;
 	struct mutex nanohub_write_lock;
-	uint16_t nanohub_hw_type;
 	uint32_t nanohub_variant_version;
+	uint16_t nanohub_hw_type;
 };
 
 enum {
 	LCD_MUTEX_OFF = 0,
 	LCD_MUTEX_ON,
+};
+
+enum {
+	SENSOR_HAL_DEAD = 0,
+	SENSOR_HAL_ALIVED,
 };
 
 enum NRESET_POLARITY {

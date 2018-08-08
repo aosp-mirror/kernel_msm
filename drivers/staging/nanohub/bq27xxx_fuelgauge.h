@@ -81,7 +81,6 @@ int bq27x00_powersupply_init(struct device *dev,
 			struct nanohub_data *hub_data);
 void bq27x00_powersupply_unregister(void);
 
-int enable_fuelgauge(struct nanohub_data *data, int on);
 int is_fuel_gauge_data(struct nanohub_buf *buf, int len);
 int handle_fuelgauge_data(struct nanohub_buf *buf, int len);
 

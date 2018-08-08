@@ -135,12 +135,13 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 	if (!(strnstr(saved_command_line, "androidboot.mode=keep_charging",
 		strlen(saved_command_line)))) {
 		if ((fg_info->cache.voltage > 4000)
-		&& (strnstr(saved_command_line, "androidboot.mode=charger",
-			strlen(saved_command_line)))) {
-			pr_err("fg_info->cache.voltage %d more than 4V reboot the system\n",
-			fg_info->cache.voltage);
-			machine_restart(NULL);
-	}
+			&& (strnstr(saved_command_line,
+						"androidboot.mode=charger",
+						strlen(saved_command_line)))) {
+				pr_err("fg_info->cache.voltage %d more than 4V reboot the system\n",
+				fg_info->cache.voltage);
+				machine_restart(NULL);
+		}
 	}
 	if (fg_info->last_capacity != fg_info->cache.capacity) {
 		if ((charger_online &&
@@ -336,54 +337,6 @@ int handle_fuelgauge_data(struct nanohub_buf *buf, int len)
 	store_fuelguage_cache(p_reg_cache);
 	return 0;
 }
-
-int enable_fuelgauge(struct nanohub_data *data, int on)
-{
-	int ret;
-
-	struct ConfigCmd mConfigCmd;
-	uint8_t *pConfigCmdBuffer = NULL;
-	size_t length = sizeof(mConfigCmd);
-	struct FuelGaugeCfgData fuelgaugeCfgData;
-
-	mConfigCmd.evtType = EVT_NO_SENSOR_CONFIG_EVENT;
-	mConfigCmd.rate = 0;
-	mConfigCmd.latency = 0;
-	mConfigCmd.cmd = CONFIG_CMD_CFG_DATA;
-	mConfigCmd.flags = 0;
-	mConfigCmd.sensorType = SENS_TYPE_FUELGAUGE;
-
-	length = sizeof(struct ConfigCmd) + sizeof(struct FuelGaugeCfgData);
-
-	fuelgaugeCfgData.interval = poll_interval;
-	fuelgaugeCfgData.on = on;
-
-	pConfigCmdBuffer = kzalloc(length, GFP_KERNEL);
-	if (!pConfigCmdBuffer)
-		return -ENOMEM;
-	memcpy(pConfigCmdBuffer, &mConfigCmd, sizeof(mConfigCmd));
-	memcpy(&pConfigCmdBuffer[sizeof(mConfigCmd)], &fuelgaugeCfgData,
-		sizeof(fuelgaugeCfgData));
-
-	ret = request_wakeup_timeout(data, WAKEUP_TIMEOUT_MS);
-	if (ret) {
-		pr_err("nanohub: [FG] failed to take wakeup lock. %d\n", ret);
-		if (NULL != pConfigCmdBuffer)
-			kfree(pConfigCmdBuffer);
-		return ret;
-	}
-	ret = nanohub_comms_write(data, pConfigCmdBuffer, length);
-	if (ret != length)
-		pr_err("nanohub: [FG]error for write config cmd buffer. %d != %d\n",
-			ret, length);
-
-	release_wakeup(data);
-
-	if (NULL != pConfigCmdBuffer)
-		kfree(pConfigCmdBuffer);
-	return ret;
-}
-
 
 static int request_fuel_gauge_data(struct nanohub_data *data)
 {
@@ -668,7 +621,7 @@ int bq27x00_powersupply_init(struct device *dev,
 		sizeof(struct bq27x00_reg_cache));
 	/*bq27x00_update(fg_info);*/
 	fg_info->last_update = jiffies;
-	/*enable_fuelgauge(fg_info->hub_data, 1);*/
+
 	request_fuel_gauge_data(fg_info->hub_data);
 	fg_info->requested = 1;
 

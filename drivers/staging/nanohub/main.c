@@ -42,11 +42,11 @@
 #include "bq27xxx_fuelgauge.h"
 #include "custom_app_event.h"
 
-#define READ_QUEUE_DEPTH	20
-#define APP_FROM_HOST_EVENTID	0x000000F8
-#define FIRST_SENSOR_EVENTID	0x00000200
-#define LAST_SENSOR_EVENTID	0x000002FF
-#define APP_TO_HOST_EVENTID	0x00000401
+#define READ_QUEUE_DEPTH        20
+#define APP_FROM_HOST_EVENTID   0x000000F8
+#define FIRST_SENSOR_EVENTID    0x00000200
+#define LAST_SENSOR_EVENTID     0x000002FF
+#define APP_TO_HOST_EVENTID     0x00000401
 
 enum APP_TO_HOST_EVENT_SUBID {
 	APP_TO_HOST_EVENT_SUBID_OTHERS = 0,
@@ -57,15 +57,16 @@ enum APP_TO_HOST_EVENT_SUBID {
 	APP_TO_HOST_EVENT_SUBID_SELFTEST,
 };
 
-#define OS_LOG_EVENTID		0x3B474F4C
-#define WAKEUP_INTERRUPT	1
-#define WAKEUP_TIMEOUT_MS	2000
-#define SUSPEND_TIMEOUT_MS	200
-#define KTHREAD_ERR_TIME_NS	(60LL * NSEC_PER_SEC)
-#define KTHREAD_ERR_CNT		70
-#define KTHREAD_WARN_CNT	10
-#define WAKEUP_ERR_TIME_NS	(60LL * NSEC_PER_SEC)
-#define WAKEUP_ERR_CNT		4
+#define OS_LOG_EVENTID          0x3B474F4C    /* ;LOG */
+#define OS_LOG_TO_HAL_EVENTID   0x474F4C41    /* ALOG */
+#define WAKEUP_INTERRUPT        1
+#define WAKEUP_TIMEOUT_MS       2000
+#define SUSPEND_TIMEOUT_MS      200
+#define KTHREAD_ERR_TIME_NS     (60LL * NSEC_PER_SEC)
+#define KTHREAD_ERR_CNT         70
+#define KTHREAD_WARN_CNT        10
+#define WAKEUP_ERR_TIME_NS      (60LL * NSEC_PER_SEC)
+#define WAKEUP_ERR_CNT          4
 
 /**
  * struct gpio_config - this is a binding between platform data and driver data
@@ -824,6 +825,29 @@ static ssize_t nanohub_lcd_mutex_status(struct device *dev,
 		"%d\n", atomic_read(&data->lcd_mutex));
 }
 
+static ssize_t nanohub_sensorhal_status_set(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+	int sensorhal_alive = 0;
+
+	if (sscanf(buf, "%d\n", &sensorhal_alive) > 0)
+		atomic_set(&data->sensor_hal_alive,
+			sensorhal_alive?SENSOR_HAL_ALIVED:SENSOR_HAL_DEAD);
+
+	return count;
+}
+
+static ssize_t nanohub_sensorhal_status_get(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+
+	return scnprintf(buf, PAGE_SIZE,
+		"%d\n", atomic_read(&data->sensor_hal_alive));
+}
+
 static ssize_t nanohub_erase_shared(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
@@ -1164,6 +1188,8 @@ static struct device_attribute attributes[] = {
 	__ATTR(mode, 0220, NULL, nanohub_mode_set),
 	__ATTR(download_bl_status, 0444, nanohub_download_bl_status, NULL),
 	__ATTR(lcd_mutex, 0660, nanohub_lcd_mutex_status, nanohub_lcd_mutex),
+	__ATTR(sensorhal_alive, 0660, nanohub_sensorhal_status_get,
+		nanohub_sensorhal_status_set),
 };
 
 static inline int nanohub_create_sensor(struct nanohub_data *data)
@@ -1317,7 +1343,6 @@ static unsigned int nanohub_poll(struct file *file, poll_table *wait)
 static int nanohub_release(struct inode *inode, struct file *file)
 {
 	file->private_data = NULL;
-
 	return 0;
 }
 
@@ -1386,10 +1411,15 @@ static irqreturn_t nanohub_irq3(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static bool nanohub_os_log(char *buffer, int len)
+static bool nanohub_os_log(struct nanohub_data *data, char *buffer, int len)
 {
-	if (le32_to_cpu((((uint32_t *)buffer)[0]) & 0x7FFFFFFF) ==
-	    OS_LOG_EVENTID) {
+	uint32_t event_id =
+		le32_to_cpu((((uint32_t *)buffer)[0]) & 0x7FFFFFFF);
+
+	if (event_id == OS_LOG_EVENTID ||
+		(event_id == OS_LOG_TO_HAL_EVENTID &&
+		SENSOR_HAL_DEAD ==
+		atomic_read(&data->sensor_hal_alive))) {
 		char *mtype, *mdata = &buffer[5];
 
 		buffer[len] = 0x00;
@@ -1613,7 +1643,7 @@ static void nanohub_process_buffer(struct nanohub_data *data,
 				&data->wakeup_trace, buf, ret);
 #endif
 
-	if (ret < 4 || nanohub_os_log((*buf)->buffer, ret)) {
+	if (ret < 4 || nanohub_os_log(data, (*buf)->buffer, ret)) {
 		release_wakeup(data);
 		return;
 	}
@@ -2178,6 +2208,7 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	atomic_set(&data->hub_mode_ap_active, GPIO_CMD_NORMAL);
 	atomic_set(&data->hub_mode_ap_pwr_down, GPIO_CMD_POWEROFF);
 	atomic_set(&data->lcd_mutex, LCD_MUTEX_OFF);
+	atomic_set(&data->sensor_hal_alive, SENSOR_HAL_DEAD);
 	init_waitqueue_head(&data->wakeup_wait);
 
 #if (NANOHUB_WAKEUP_TRACE_ENABLE)
