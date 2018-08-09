@@ -4173,6 +4173,7 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 		mutex_unlock(&panel->panel_lock);
 		return rc;
 	}
+	dsi_backlight_hbm_dimming_stop(&panel->bl_config);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
 	if (rc)
@@ -4221,6 +4222,7 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 		mutex_unlock(&panel->panel_lock);
 		return rc;
 	}
+	dsi_backlight_hbm_dimming_stop(&panel->bl_config);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP2);
 	if (rc)
@@ -4279,6 +4281,7 @@ static int dsi_panel_set_vr_locked(struct dsi_panel *panel)
 			panel->name);
 		return -EINVAL;
 	}
+	dsi_backlight_hbm_dimming_stop(&panel->bl_config);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_VR);
 
@@ -4363,12 +4366,12 @@ bool dsi_panel_get_vr_mode(struct dsi_panel *panel)
 	return vr_mode = panel->vr_mode;
 }
 
-static int dsi_panel_update_hbm_locked(struct dsi_panel *panel,
-	bool enable)
+static int dsi_panel_update_hbm_locked(struct dsi_panel *panel, bool enable)
 {
 	struct dsi_backlight_config *bl = &panel->bl_config;
+	struct hbm_data *hbm = bl->hbm;
 
-	if (panel->hbm_mode == enable)
+	if (!hbm || (panel->hbm_mode == enable))
 		return 0;
 
 	if ((dsi_backlight_get_dpms(bl) != SDE_MODE_DPMS_ON) ||
@@ -4382,17 +4385,19 @@ static int dsi_panel_update_hbm_locked(struct dsi_panel *panel,
 	 * immediately to avoid conflict with subsequent backlight ops.
 	 */
 	if (!enable) {
-		int rc = dsi_panel_cmd_set_transfer(panel,
-			&bl->hbm->dsi_hbm_exit_cmd);
-		if (rc) {
-			pr_err("[%s] failed to send HBM DSI cmd, rc=%d\n",
+		int rc = dsi_panel_cmd_set_transfer(panel, &hbm->exit_cmd);
+
+		if (rc)
+			pr_err("[%s] failed to send HBM exit cmd, rc=%d\n",
 				panel->name, rc);
-			return rc;
-		}
+
+		dsi_backlight_hbm_dimming_start(bl,
+			hbm->exit_num_dimming_frames,
+			&hbm->exit_dimming_stop_cmd);
 	}
 
 	panel->hbm_mode = enable;
-	bl->hbm->cur_range = HBM_RANGE_MAX;
+	hbm->cur_range = HBM_RANGE_MAX;
 
 	return 0;
 }
@@ -4770,6 +4775,7 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	if (rc)
 		pr_warn("[%s] couldn't disable HBM mode to unprepare display\n",
 			panel->name);
+	dsi_backlight_hbm_dimming_stop(&panel->bl_config);
 
 	/* Avoid sending panel off commands when ESD recovery is underway */
 	if (!atomic_read(&panel->esd_recovery_pending)) {
