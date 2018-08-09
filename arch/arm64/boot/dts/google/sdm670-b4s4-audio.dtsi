@@ -434,6 +434,7 @@
 		"Stereo2 DMIC Mux", "Mic2_3 REGULATOR";
 	qcom,wsa-disable;
 	qcom,wsa-max-devs = <0>;
+	qcom,msm-micbias1-ext-cap;
 };
 
 &msm_sdw_codec {
