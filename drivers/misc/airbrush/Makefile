@@ -1,8 +1,8 @@
-
 obj-$(CONFIG_AIRBRUSH_SM) := airbrush.o
 
 airbrush-y :=	\
+		airbrush-sm.o \
 		airbrush-sm-ctrl.o \
 		airbrush-bootseq.o \
 		airbrush-M0-interrupt.o \
-		airbrush-spi.o
+		airbrush-spi.o \
