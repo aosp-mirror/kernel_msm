@@ -563,6 +563,10 @@ struct mdss_dsi_ctrl_pdata {
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 
 	bool phy_power_off;
+
+	/* boost mode */
+	char read_back_param[1];
+	char id3_code[1]; //for Module/Driver ID
 };
 
 struct dsi_status_data {

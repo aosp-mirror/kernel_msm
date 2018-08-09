@@ -36,6 +36,8 @@
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
+static int g_pre_init = 0;
+
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -815,6 +817,17 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	}
 
 	mdss_dsi_post_panel_on_hdmi(pinfo);
+
+	if(!g_pre_init)
+	{
+		g_pre_init++;
+
+		mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL, ctrl->read_back_param, 1);
+		pr_info("%s: read_back_param[0] = 0x%02x\n", __func__, ctrl->read_back_param[0]);
+
+		mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL, ctrl->id3_code, 1);
+		pr_info("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
+	}
 
 end:
 	pr_debug("%s:-\n", __func__);
