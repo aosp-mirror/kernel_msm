@@ -55,15 +55,16 @@ struct cs40l2x_private {
 	unsigned int num_waves;
 	unsigned int fw_id_match;
 	unsigned int fw_rev_min;
-	unsigned int vibegen_id;
-	unsigned int vibegen_rev;
 	unsigned int wt_limit_xm;
 	unsigned int wt_limit_ym;
 	bool vibe_init_success;
 	bool vibe_mode;
 	struct gpio_desc *reset_gpio;
 	struct cs40l2x_platform_data pdata;
+	unsigned int num_algos;
+	struct cs40l2x_algo_info algo_info[CS40L2X_NUM_ALGOS_MAX + 1];
 	struct list_head coeff_desc_head;
+	unsigned int num_coeff_files;
 	unsigned char diag_state;
 	unsigned int diag_dig_scale;
 	unsigned int f0_measured;
@@ -98,6 +99,10 @@ static const char * const cs40l2x_part_nums[] = {
 	"CS40L25",
 	"CS40L25A",
 	"CS40L25B",
+};
+
+static const char * const cs40l2x_coeff_files[] = {
+	"cs40l20.bin",
 };
 
 static const char * const cs40l2x_event_regs[] = {
@@ -2856,90 +2861,83 @@ static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
 	}
 
 	cs40l2x->vibe_init_success = true;
+
+	dev_info(cs40l2x->dev, "Firmware revision %d.%d.%d\n",
+			(cs40l2x->algo_info[0].rev & 0xFF0000) >> 16,
+			(cs40l2x->algo_info[0].rev & 0xFF00) >> 8,
+			cs40l2x->algo_info[0].rev & 0xFF);
+
+	dev_info(cs40l2x->dev,
+			"Max. wavetable size: %d bytes (XM), %d bytes (YM)\n",
+			cs40l2x->wt_limit_xm / 4 * 3,
+			cs40l2x->wt_limit_ym / 4 * 3);
 }
 
 static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 {
-	int ret, i;
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	struct cs40l2x_coeff_desc *coeff_desc;
-	unsigned int val, num_algos, algo_id, algo_rev;
-	unsigned int xm_base, xm_size, ym_base, ym_size;
 	unsigned int reg = CS40L2X_XM_FW_ID;
+	unsigned int val;
+	int ret, i;
 
-	ret = regmap_read(regmap, CS40L2X_XM_NUM_ALGOS, &num_algos);
+	ret = regmap_read(regmap, CS40L2X_XM_NUM_ALGOS, &val);
 	if (ret) {
 		dev_err(dev, "Failed to read number of algorithms\n");
 		return ret;
 	}
 
-	if (num_algos > CS40L2X_NUM_ALGOS_MAX) {
+	if (val > CS40L2X_NUM_ALGOS_MAX) {
 		dev_err(dev, "Invalid number of algorithms\n");
 		return -EINVAL;
 	}
+	cs40l2x->num_algos = val + 1;
 
-	/* add one extra iteration to account for system algorithm */
-	for (i = 0; i < (num_algos + 1); i++) {
+	for (i = 0; i < cs40l2x->num_algos; i++) {
 		ret = regmap_read(regmap,
-				reg + CS40L2X_ALGO_ID_OFFSET, &algo_id);
+				reg + CS40L2X_ALGO_ID_OFFSET,
+				&cs40l2x->algo_info[i].id);
 		if (ret) {
 			dev_err(dev, "Failed to read algo. %d ID\n", i);
 			return ret;
 		}
 
-		/* discern firmware ID from system algorithm */
-		if (i == 0 && algo_id != cs40l2x->fw_id_match) {
-			dev_err(dev, "Invalid firmware ID: 0x%06X\n", algo_id);
-			return -EINVAL;
-		}
-
 		ret = regmap_read(regmap,
-				reg + CS40L2X_ALGO_REV_OFFSET, &algo_rev);
+				reg + CS40L2X_ALGO_REV_OFFSET,
+				&cs40l2x->algo_info[i].rev);
 		if (ret) {
 			dev_err(dev, "Failed to read algo. %d revision\n", i);
 			return ret;
 		}
 
-		/* discern firmware revision from system algorithm */
-		if (i == 0) {
-			if (algo_rev < cs40l2x->fw_rev_min) {
-				dev_err(dev,
-					"Invalid firmware revision: %d.%d.%d\n",
-					(algo_rev & 0xFF0000) >> 16,
-					(algo_rev & 0xFF00) >> 8,
-					algo_rev & 0xFF);
-				return -EINVAL;
-			}
-			dev_info(dev, "Firmware revision %d.%d.%d\n",
-					(algo_rev & 0xFF0000) >> 16,
-					(algo_rev & 0xFF00) >> 8,
-					algo_rev & 0xFF);
-		}
-
 		ret = regmap_read(regmap,
-				reg + CS40L2X_ALGO_XM_BASE_OFFSET, &xm_base);
+				reg + CS40L2X_ALGO_XM_BASE_OFFSET,
+				&cs40l2x->algo_info[i].xm_base);
 		if (ret) {
 			dev_err(dev, "Failed to read algo. %d XM_BASE\n", i);
 			return ret;
 		}
 
 		ret = regmap_read(regmap,
-				reg + CS40L2X_ALGO_XM_SIZE_OFFSET, &xm_size);
+				reg + CS40L2X_ALGO_XM_SIZE_OFFSET,
+				&cs40l2x->algo_info[i].xm_size);
 		if (ret) {
 			dev_err(dev, "Failed to read algo. %d XM_SIZE\n", i);
 			return ret;
 		}
 
 		ret = regmap_read(regmap,
-				reg + CS40L2X_ALGO_YM_BASE_OFFSET, &ym_base);
+				reg + CS40L2X_ALGO_YM_BASE_OFFSET,
+				&cs40l2x->algo_info[i].ym_base);
 		if (ret) {
 			dev_err(dev, "Failed to read algo. %d YM_BASE\n", i);
 			return ret;
 		}
 
 		ret = regmap_read(regmap,
-				reg + CS40L2X_ALGO_YM_SIZE_OFFSET, &ym_size);
+				reg + CS40L2X_ALGO_YM_SIZE_OFFSET,
+				&cs40l2x->algo_info[i].ym_size);
 		if (ret) {
 			dev_err(dev, "Failed to read algo. %d YM_SIZE\n", i);
 			return ret;
@@ -2948,27 +2946,26 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 		list_for_each_entry(coeff_desc,
 			&cs40l2x->coeff_desc_head, list) {
 
-			if (coeff_desc->parent_id != algo_id)
+			if (coeff_desc->parent_id != cs40l2x->algo_info[i].id)
 				continue;
 
 			switch (coeff_desc->block_type) {
 			case CS40L2X_XM_UNPACKED_TYPE:
 				coeff_desc->reg = CS40L2X_DSP1_XMEM_UNPACK24_0
-					+ xm_base * 4
+					+ cs40l2x->algo_info[i].xm_base * 4
 					+ coeff_desc->block_offset * 4;
-				if (!strcmp(coeff_desc->name, "WAVETABLE")) {
-					cs40l2x->wt_limit_xm = (xm_size
+				if (!strcmp(coeff_desc->name, "WAVETABLE"))
+					cs40l2x->wt_limit_xm =
+						(cs40l2x->algo_info[i].xm_size
 						- coeff_desc->block_offset) * 4;
-					cs40l2x->vibegen_id = algo_id;
-					cs40l2x->vibegen_rev = algo_rev;
-				}
 				break;
 			case CS40L2X_YM_UNPACKED_TYPE:
 				coeff_desc->reg = CS40L2X_DSP1_YMEM_UNPACK24_0
-					+ ym_base * 4
+					+ cs40l2x->algo_info[i].ym_base * 4
 					+ coeff_desc->block_offset * 4;
 				if (!strcmp(coeff_desc->name, "WAVETABLEYM"))
-					cs40l2x->wt_limit_ym = (ym_size
+					cs40l2x->wt_limit_ym =
+						(cs40l2x->algo_info[i].ym_size
 						- coeff_desc->block_offset) * 4;
 				break;
 			}
@@ -2995,9 +2992,19 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 		return -EINVAL;
 	}
 
-	dev_info(dev, "Maximum wavetable size: %d bytes (XM), %d bytes (YM)\n",
-			cs40l2x->wt_limit_xm / 4 * 3,
-			cs40l2x->wt_limit_ym / 4 * 3);
+	if (cs40l2x->algo_info[0].id != cs40l2x->fw_id_match) {
+		dev_err(dev, "Invalid firmware ID: 0x%06X\n",
+				cs40l2x->algo_info[0].id);
+		return -EINVAL;
+	}
+
+	if (cs40l2x->algo_info[0].rev < cs40l2x->fw_rev_min) {
+		dev_err(dev, "Invalid firmware revision: %d.%d.%d\n",
+				(cs40l2x->algo_info[0].rev & 0xFF0000) >> 16,
+				(cs40l2x->algo_info[0].rev & 0xFF00) >> 8,
+				cs40l2x->algo_info[0].rev & 0xFF);
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -3326,7 +3333,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		dev_warn(dev, "Ignored default gpio4_fall_index\n");
 	}
 
-	dev_info(dev, "Normal-mode haptics successfully started\n");
+	dev_dbg(dev, "Normal-mode haptics successfully started\n");
 
 	cs40l2x_vibe_init(cs40l2x);
 }
@@ -3347,26 +3354,29 @@ static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 	return ret;
 }
 
-static void cs40l2x_waveform_load(const struct firmware *fw, void *context)
+static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 {
-	int ret;
 	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
 	struct device *dev = cs40l2x->dev;
 	unsigned int pos = CS40L2X_WT_FILE_HEADER_SIZE;
-	unsigned int block_type, block_length;
-	unsigned int algo_id, algo_rev;
+	unsigned int block_offset, block_type, block_length;
+	unsigned int algo_id, algo_rev, reg;
+	unsigned int num_coeff_files = 0;
+	int ret = 0;
+	int i;
 
 	if (!fw)
-		goto skip_loading;
+		goto err_ret;
 
 	if (memcmp(fw->data, "WMDR", 4)) {
-		dev_err(dev, "Failed to recognize waveform file\n");
+		dev_err(dev, "Failed to recognize coefficient file\n");
+		ret = -EINVAL;
 		goto err_rls_fw;
 	}
 
 	while (pos < fw->size) {
-
-		/* block offset is not used here */
+		block_offset = fw->data[pos]
+				+ (fw->data[pos + 1] << 8);
 		pos += CS40L2X_WT_DBLK_OFFSET_SIZE;
 
 		block_type = fw->data[pos]
@@ -3396,34 +3406,43 @@ static void cs40l2x_waveform_load(const struct firmware *fw, void *context)
 
 		switch (block_type) {
 		case CS40L2X_XM_UNPACKED_TYPE:
-			if (algo_id != cs40l2x->vibegen_id) {
+			for (i = 0; i < cs40l2x->num_algos; i++)
+				if (algo_id == cs40l2x->algo_info[i].id)
+					break;
+			if (i == cs40l2x->num_algos) {
 				dev_err(dev, "Invalid algo. ID: 0x%06X\n",
 					algo_id);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
 			if (((algo_rev >> 8) & CS40L2X_ALGO_REV_MASK)
-					!= (cs40l2x->vibegen_rev
+					!= (cs40l2x->algo_info[i].rev
 						& CS40L2X_ALGO_REV_MASK)) {
 				dev_err(dev, "Invalid algo. rev.: %d.%d.%d\n",
 					(algo_rev & 0xFF000000) >> 24,
 					(algo_rev & 0xFF0000) >> 16,
 					(algo_rev & 0xFF00) >> 8);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
-			if (block_length > cs40l2x->wt_limit_xm) {
+			reg = CS40L2X_DSP1_XMEM_UNPACK24_0 + block_offset
+					+ cs40l2x->algo_info[i].xm_base * 4;
+
+			if (block_length > cs40l2x->wt_limit_xm
+					&& reg == cs40l2x_dsp_reg(cs40l2x,
+						"WAVETABLE",
+						CS40L2X_XM_UNPACKED_TYPE)) {
 				dev_err(dev,
 					"Wavetable too large: %d bytes (XM)\n",
 					block_length / 4 * 3);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
-			ret = cs40l2x_raw_write(cs40l2x,
-					cs40l2x_dsp_reg(cs40l2x, "WAVETABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
-					&fw->data[pos], block_length,
-					CS40L2X_MAX_WLEN);
+			ret = cs40l2x_raw_write(cs40l2x, reg, &fw->data[pos],
+					block_length, CS40L2X_MAX_WLEN);
 			if (ret) {
 				dev_err(dev,
 					"Failed to write XM_UNPACKED memory\n");
@@ -3431,34 +3450,43 @@ static void cs40l2x_waveform_load(const struct firmware *fw, void *context)
 			}
 			break;
 		case CS40L2X_YM_UNPACKED_TYPE:
-			if (algo_id != cs40l2x->vibegen_id) {
+			for (i = 0; i < cs40l2x->num_algos; i++)
+				if (algo_id == cs40l2x->algo_info[i].id)
+					break;
+			if (i == cs40l2x->num_algos) {
 				dev_err(dev, "Invalid algo. ID: 0x%06X\n",
 					algo_id);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
 			if (((algo_rev >> 8) & CS40L2X_ALGO_REV_MASK)
-					!= (cs40l2x->vibegen_rev
+					!= (cs40l2x->algo_info[i].rev
 						& CS40L2X_ALGO_REV_MASK)) {
 				dev_err(dev, "Invalid algo. rev.: %d.%d.%d\n",
 					(algo_rev & 0xFF000000) >> 24,
 					(algo_rev & 0xFF0000) >> 16,
 					(algo_rev & 0xFF00) >> 8);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
-			if (block_length > cs40l2x->wt_limit_ym) {
+			reg = CS40L2X_DSP1_YMEM_UNPACK24_0 + block_offset
+					+ cs40l2x->algo_info[i].ym_base * 4;
+
+			if (block_length > cs40l2x->wt_limit_ym
+					&& reg == cs40l2x_dsp_reg(cs40l2x,
+						"WAVETABLEYM",
+						CS40L2X_YM_UNPACKED_TYPE)) {
 				dev_err(dev,
 					"Wavetable too large: %d bytes (YM)\n",
 					block_length / 4 * 3);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
-			ret = cs40l2x_raw_write(cs40l2x,
-					cs40l2x_dsp_reg(cs40l2x, "WAVETABLEYM",
-						CS40L2X_YM_UNPACKED_TYPE),
-					&fw->data[pos], block_length,
-					CS40L2X_MAX_WLEN);
+			ret = cs40l2x_raw_write(cs40l2x, reg, &fw->data[pos],
+					block_length, CS40L2X_MAX_WLEN);
 			if (ret) {
 				dev_err(dev,
 					"Failed to write YM_UNPACKED memory\n");
@@ -3470,10 +3498,18 @@ static void cs40l2x_waveform_load(const struct firmware *fw, void *context)
 		pos += block_length;
 	}
 
-skip_loading:
-	cs40l2x_dsp_start(cs40l2x);
 err_rls_fw:
 	release_firmware(fw);
+
+err_ret:
+	if (!ret) {
+		mutex_lock(&cs40l2x->lock);
+		num_coeff_files = ++(cs40l2x->num_coeff_files);
+		mutex_unlock(&cs40l2x->lock);
+	}
+
+	if (num_coeff_files == ARRAY_SIZE(cs40l2x_coeff_files))
+		cs40l2x_dsp_start(cs40l2x);
 }
 
 static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
@@ -3546,12 +3582,12 @@ static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
 
 static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
 {
-	int ret;
 	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
 	struct device *dev = cs40l2x->dev;
 	unsigned int pos = CS40L2X_FW_FILE_HEADER_SIZE;
 	unsigned int block_offset, block_length;
 	unsigned char block_type;
+	int ret, i;
 
 	if (!fw) {
 		dev_err(dev, "Failed to request firmware file\n");
@@ -3633,8 +3669,11 @@ static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
 	if (ret)
 		goto err_rls_fw;
 
-	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, CS40L2X_WT_NAME,
-			dev, GFP_KERNEL, cs40l2x, cs40l2x_waveform_load);
+	for (i = 0; i < ARRAY_SIZE(cs40l2x_coeff_files); i++)
+		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+				cs40l2x_coeff_files[i], dev, GFP_KERNEL,
+				cs40l2x, cs40l2x_coeff_file_load);
+
 err_rls_fw:
 	release_firmware(fw);
 }
@@ -4385,7 +4424,7 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 		return -EBUSY;
 	}
 
-	dev_info(dev, "Basic-mode haptics successfully stopped\n");
+	dev_dbg(dev, "Basic-mode haptics successfully stopped\n");
 
 	return 0;
 }

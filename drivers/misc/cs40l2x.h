@@ -868,8 +868,6 @@
 #define CS40L2X_FW_ID_MATCH_B1		0x1400C3
 #define CS40L2X_FW_REV_MIN_B1		CS40L2X_FW_REV_MIN_A0
 
-#define CS40L2X_WT_NAME			"cs40l20.bin"
-
 #define CS40L2X_PDATA_PRESENT		0x80000000
 #define CS40L2X_PDATA_MASK		~CS40L2X_PDATA_PRESENT
 
@@ -925,6 +923,15 @@ struct cs40l2x_otp_desc {
 	unsigned char col_start;
 	unsigned int num_trims;
 	const struct cs40l2x_trim *trim_table;
+};
+
+struct cs40l2x_algo_info {
+	unsigned int id;
+	unsigned int rev;
+	unsigned int xm_base;
+	unsigned int xm_size;
+	unsigned int ym_base;
+	unsigned int ym_size;
 };
 
 struct cs40l2x_coeff_desc {
