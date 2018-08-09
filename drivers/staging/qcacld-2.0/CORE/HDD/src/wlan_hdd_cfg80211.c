@@ -3882,6 +3882,11 @@ static int hdd_extscan_start_fill_bucket_channel_spec(
 			total_channels++;
 		}
 
+		if (j != pReqMsg->buckets[bktIndex].numChannels) {
+			hddLog(LOG1, FL("Input parameters didn't match"));
+			return -EINVAL;
+		}
+
 		hdd_extscan_update_dwell_time_limits(
 					pReqMsg, bktIndex,
 					min_dwell_time_active_bucket,
