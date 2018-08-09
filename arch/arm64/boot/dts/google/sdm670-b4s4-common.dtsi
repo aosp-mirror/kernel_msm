@@ -34,7 +34,6 @@
 #include "sdm670-b4s4-fingerprint.dtsi"
 #include "sdm670-b4s4-haptics.dtsi"
 #include "sdm670-b4s4-key.dtsi"
-#include "sdm670-b4s4-touch.dtsi"
 #include "sdm670-b4s4-nfc.dtsi"
 #include "sdm670-b4s4-usb-common.dtsi"
 #include "sdm670-b4s4-thermal.dtsi"

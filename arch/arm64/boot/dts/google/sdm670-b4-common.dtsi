@@ -1,4 +1,5 @@
 #include "sdm670-b4s4-common.dtsi"
+#include "sdm670-b4-touch.dtsi"
 #include "sdm670-b4-usb.dtsi"
 #include "sdm670-b4-battery.dtsi"
 
