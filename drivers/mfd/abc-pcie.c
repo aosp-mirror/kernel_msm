@@ -332,7 +332,7 @@ int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 {
 	u32 aspm_l11_l12;
 	u32 l1_l0s_enable;
-	u32 pme_en;
+	u32 val;
 
 	if (pmctrl == NULL)
 		return -EINVAL;
@@ -340,22 +340,14 @@ int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	aspm_l11_l12 = readl(abc_dev->pcie_config
 				+ L1SUB_CONTROL1_REG);
 	aspm_l11_l12 &= ~(0xC);
-	aspm_l11_l12 |= (pmctrl->aspm_L11 << 2);
-	aspm_l11_l12 |= (pmctrl->aspm_L12 << 3);
-	/*todo. Need to validate the following configuration further */
-	aspm_l11_l12 |= 0xA00;
+	aspm_l11_l12 |= (pmctrl->aspm_L11 << 3);
+	aspm_l11_l12 |= (pmctrl->aspm_L12 << 2);
 
 	l1_l0s_enable = readl(abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
 	l1_l0s_enable &= ~(0x3);
 	l1_l0s_enable |= (pmctrl->l0s_en << 0);
 	l1_l0s_enable |= (pmctrl->l1_en << 1);
-	/*todo. Need to validate the following configuration further */
-	l1_l0s_enable |= 0x70120000;
-
-	pme_en = readl(abc_dev->pcie_config + PME_EN);
-	pme_en &= ~(0x100);
-	pme_en |= (pmctrl->pme_en << 8);
 
 	/* Enabling ASPM L11 & L12, PCI_PM L11 & L12 */
 	writel(aspm_l11_l12, abc_dev->pcie_config + L1SUB_CONTROL1_REG);
@@ -363,14 +355,20 @@ int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	/* Enabling L1 or L0s or both */
 	writel(l1_l0s_enable, abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
+	/* LTR Enable */
+	if (pmctrl->aspm_L12) {
+		val = readl(abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		val |= LTR_ENABLE;
+		writel(val, abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+	} else {
+		/* Clearing LTR Enable bit */
+		val = readl(abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		val &= ~(LTR_ENABLE);
+		writel(val, abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+	}
 
 	/* Clock Request Enable*/
 	writel(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
-
-	/* PME enable */
-	writel(pme_en, abc_dev->pcie_config + PME_EN);
-
-	pr_info("Inside ASPM\n");
 	return 0;
 }
 

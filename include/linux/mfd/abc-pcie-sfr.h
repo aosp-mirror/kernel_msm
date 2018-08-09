@@ -100,6 +100,7 @@
 
 #define L1SUB_CONTROL1_REG				0x168
 #define LINK_CONTROL_LINK_STATUS_REG			0x80
+#define PCIE_CAP_DEV_CTRL_STS2_REG			0x98
 #define PME_EN						0x44
 #define CLOCK_REQ_EN					0x80024
 
@@ -107,6 +108,7 @@
 #define ENABLE_ASPM					0x3
 #define CLEAR_L1_SUBSTATES				0xFFFFFFF3
 #define ENABLE_L1_SUBSTATES				0xC
+#define LTR_ENABLE					(0x1 << 10)
 
 #define MSI_CAP_OFF_10H_REG				0x60
 
