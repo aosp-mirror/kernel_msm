@@ -244,11 +244,34 @@
 		};
 
 		google,hbm-ranges {
+			google,dsi-hbm-exit-command = [
+				/* Enable brightness dimming */
+				39 01 00 00 00 00 03 53 4C 30
+			];
+			google,dsi-hbm-exit-num-dimming-frames = <32>;
+			google,dsi-hbm-exit-dimming-stop-command = [
+				/* Disable brightness dimming */
+				39 01 00 00 00 00 03 53 0C 30
+			];
+			google,dsi-hbm-commands-state = "dsi_lp_mode";
+
 			hbm-range@0 {
 				google,dsi-hbm-range-brightness-threshold = <1>;
 
 				google,dsi-hbm-range-bl-min-level = <0x8>;
 				google,dsi-hbm-range-bl-max-level = <0x3ff>;
+
+				google,dsi-hbm-range-entry-command = [
+					/* Enable brightness dimming */
+					39 01 00 00 00 00 03 53 4C 30
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Disable brightness dimming */
+					39 01 00 00 00 00 03 53 0C 30
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
 			};
 		};
 	};
