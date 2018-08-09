@@ -308,7 +308,7 @@ static int cam_ois_slaveInfo_pkt_parser(struct cam_ois_ctrl_t *o_ctrl,
 		o_ctrl->ois_fw_flag = ois_info->ois_fw_flag;
 		o_ctrl->is_ois_calib = ois_info->is_ois_calib;
 		memcpy(o_ctrl->ois_name, ois_info->ois_name, 32);
-		o_ctrl->io_master_info.cci_client->retries = 3;
+		o_ctrl->io_master_info.cci_client->retries = 1;
 		o_ctrl->io_master_info.cci_client->id_map = 0;
 		memcpy(&(o_ctrl->opcode), &(ois_info->opcode),
 			sizeof(struct cam_ois_opcode));
