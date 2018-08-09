@@ -103,6 +103,7 @@ static const char * const cs40l2x_part_nums[] = {
 
 static const char * const cs40l2x_coeff_files[] = {
 	"cs40l20.bin",
+	"cs40l25a_exc.bin",
 };
 
 static const char * const cs40l2x_event_regs[] = {
@@ -2076,6 +2077,60 @@ static ssize_t cs40l2x_asp_timeout_store(struct device *dev,
 	return count;
 }
 
+static ssize_t cs40l2x_exc_enable_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	if (cs40l2x->revid < CS40L2X_REVID_B1)
+		return -EPERM;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to read protection state\n");
+		return ret;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cs40l2x_exc_enable_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	if (cs40l2x->revid < CS40L2X_REVID_B1)
+		return -EPERM;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
+					CS40L2X_XM_UNPACKED_TYPE),
+			val ? CS40L2X_EXC_ENABLED : CS40L2X_EXC_DISABLED);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (ret) {
+		pr_err("Failed to write protection state\n");
+		return ret;
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
@@ -2130,6 +2185,8 @@ static DEVICE_ATTR(asp_enable, 0660, cs40l2x_asp_enable_show,
 		cs40l2x_asp_enable_store);
 static DEVICE_ATTR(asp_timeout, 0660, cs40l2x_asp_timeout_show,
 		cs40l2x_asp_timeout_store);
+static DEVICE_ATTR(exc_enable, 0660, cs40l2x_exc_enable_show,
+		cs40l2x_exc_enable_store);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -2163,6 +2220,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_ipp_measured.attr,
 	&dev_attr_asp_enable.attr,
 	&dev_attr_asp_timeout.attr,
+	&dev_attr_exc_enable.attr,
 	NULL,
 };
 
