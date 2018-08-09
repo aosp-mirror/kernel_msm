@@ -288,6 +288,148 @@ int memory_config_write(u32 offset, u32 len, u32 data){
 	return 0;
 }
 
+u32 abc_pcie_get_linkspeed(void)
+{
+	u32 link_status;
+	abc_pcie_config_read(ABC_PCIE_DBI_BASE + LINK_CONTROL_LINK_STATUS_REG,
+				0x0, &link_status);
+	return (link_status >> 16) & LINK_SPEED;
+}
+
+u32 abc_pcie_get_linkstate(void)
+{
+	u32 link_state;
+	u32 l1_substate;
+
+	abc_pcie_config_read(ABC_PCIE_DBI_BASE + LINK_CONTROL_LINK_STATUS_REG,
+			 0x0, &link_state);
+	abc_pcie_config_read(ABC_PCIE_DBI_BASE + L1SUB_CONTROL1_REG,
+			 0x0, &l1_substate);
+	if (link_state & ASPM_L1_ENABLE) {
+		if (l1_substate & ASPM_L1_1_ENABLE) {
+			return ASPM_L11;
+		}
+		if (l1_substate & ASPM_L1_2_ENABLE) {
+			return ASPM_L12;
+		}
+	}
+	if (link_state & ASPM_L0s_ENABLE) {
+		return ASPM_L0s;
+	}
+	/* If ASPM is disabled only L0 */
+	return NOASPM;
+}
+
+void abc_pcie_set_linkspeed(u32 target_linkspeed)
+{
+	u32 link_status2;
+	u32 val;
+	u32 current_linkspeed;
+
+	if (target_linkspeed == 0){
+		return ;
+	}
+
+	current_linkspeed = abc_pcie_get_linkspeed();
+	if (target_linkspeed == current_linkspeed) {
+		return ;
+	}
+
+	/* Changing the target link speed in link_control2_link_status2 */
+	abc_pcie_config_read(ABC_PCIE_DBI_BASE + LINK_CONTROL2_LINK_STATUS2_REG,
+			 0x0, &link_status2);
+	link_status2 &= ~(TARGET_LINK_SPEED);
+	link_status2 |= target_linkspeed;
+	abc_pcie_config_write(ABC_PCIE_DBI_BASE + LINK_CONTROL2_LINK_STATUS2_REG,
+			  0x0, link_status2);
+
+	/* Asserting the directed speed change */
+	abc_pcie_config_read(ABC_PCIE_DBI_BASE + PORT_LOGIC_GEN2_CTRL_OFF,
+			 0x0, &val);
+	val |= DIRECTED_SPEED_CHANGE;
+	abc_pcie_config_write(ABC_PCIE_DBI_BASE + PORT_LOGIC_GEN2_CTRL_OFF,
+			  0x0, val);
+}
+
+void abc_pcie_set_linkstate(u32 target_linkstate)
+{
+	struct abc_pcie_pm_ctrl smctrl;
+	u32 current_linkstate;
+
+	smctrl.l0s_en = 0;
+	smctrl.l1_en = 0;
+	smctrl.aspm_L11 = 0;
+	smctrl.aspm_L12 = 0;
+
+	current_linkstate = abc_pcie_get_linkstate();
+	if (target_linkstate == current_linkstate) {
+		return ;
+	}
+	if (target_linkstate == NOASPM) {
+		abc_set_pcie_pm_ctrl(&smctrl);
+		return;
+	}
+	/* Invalid Link State */
+	if (target_linkstate ==  PM_L2)
+		return;
+
+	if (target_linkstate == ASPM_L0s) {
+		smctrl.l0s_en = 1;
+	} else {
+		if (target_linkstate == ASPM_L11) {
+			smctrl.l1_en = 1;
+			smctrl.aspm_L11 = 1;
+		} else if (target_linkstate == ASPM_L12) {
+			smctrl.l1_en = 1;
+			smctrl.aspm_L12 = 1;
+		}
+	}
+	abc_set_pcie_pm_ctrl(&smctrl);
+}
+
+u32 string_to_integer(char *string)
+{
+	if (!strcmp(string, "L0s")){
+		return ASPM_L0s;
+	} else if (!strcmp(string, "L0")) {
+		return NOASPM;
+	} else if (!strcmp(string, "L1.1")) {
+		return ASPM_L11;
+	} else if (!strcmp(string, "L1.2")) {
+		return ASPM_L12;
+	} else if (!strcmp(string, "L3") || !strcmp(string, "L2")) {
+		return PM_L2;
+	} else {
+		return NOASPM;
+	}
+}
+
+int abc_pcie_state_manager(const struct block_property *property, void *data)
+{
+	u32 target_linkstate;
+	u32 current_linkstate;
+	u32 target_linkspeed;
+	u32 current_linkspeed;
+
+	if (!property)
+		return -1;
+	target_linkstate = string_to_integer(property->substate_name);
+	target_linkspeed = property->data_rate;
+
+	/* change to the requested speed and state */
+	abc_pcie_set_linkspeed(target_linkspeed);
+	abc_pcie_set_linkstate(target_linkstate);
+
+	current_linkspeed = abc_pcie_get_linkspeed();
+	current_linkstate = abc_pcie_get_linkstate();
+
+	if (current_linkspeed == target_linkspeed &&
+	    current_linkstate == target_linkstate) {
+		return -1;
+	}
+	return 0;
+}
+
 int abc_set_aspm_state(bool state)
 {
 	u32 aspm_sts;
@@ -1271,7 +1413,8 @@ exit_loop:
 		goto err4;
 	}
 #endif
-
+	/* Registering the callback to the ASM */
+	ab_sm_register_blk_callback((block_name_t)BLK_FSYS, abc_pcie_state_manager, (void*)pdev);
 	pci_set_drvdata(pdev, abc);
 
 #if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)

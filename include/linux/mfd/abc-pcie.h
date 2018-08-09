@@ -16,6 +16,7 @@
 #include <linux/dma-direction.h>
 #include <linux/notifier.h>
 #include <linux/pci.h>
+#include <linux/airbrush-sm-ctrl.h>
 
 #define DRV_NAME_ABC_PCIE	"abc-pcie"
 #define DRV_NAME_ABC_PCIE_BLK_FSYS "abc-pcie-fsys"

@@ -27,6 +27,9 @@
 #define DBI_OVERRIDE_DMA		0x7
 #define DBI_OVERRIDE_IATU		0x6
 
+#define ABC_PCIE_DBI_BASE		0x800000
+#define ABC_PCIE_SUB_CTRL_BASE		0x780000
+
 #define PF0_ATU_CAP_IATU_REGION_CTRL_1_OFF_OUTBOUND	0x0000
 #define PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_OUTBOUND	0x0004
 #define PF0_ATU_CAP_IATU_LWR_BASE_ADDR_OFF_OUTBOUND	0x0008
@@ -101,6 +104,8 @@
 #define L1SUB_CONTROL1_REG				0x168
 #define LINK_CONTROL_LINK_STATUS_REG			0x80
 #define PCIE_CAP_DEV_CTRL_STS2_REG			0x98
+#define LINK_CONTROL2_LINK_STATUS2_REG			0xA0
+#define PORT_LOGIC_GEN2_CTRL_OFF			0x80C
 #define PME_EN						0x44
 #define CLOCK_REQ_EN					0x80024
 
@@ -109,6 +114,18 @@
 #define CLEAR_L1_SUBSTATES				0xFFFFFFF3
 #define ENABLE_L1_SUBSTATES				0xC
 #define LTR_ENABLE					(0x1 << 10)
+#define ASPM_L0s_ENABLE					(0x1 << 0)
+#define ASPM_L1_ENABLE					(0x1 << 1)
+#define ASPM_L1_2_ENABLE				(0x1 << 2)
+#define ASPM_L1_1_ENABLE				(0x1 << 3)
+#define ASPM_L0s					0x0
+#define ASPM_L11					0x1
+#define ASPM_L12					0x2
+#define NOASPM						0x3
+#define PM_L2						0x4
+#define LINK_SPEED					0xF
+#define TARGET_LINK_SPEED				0xF
+#define DIRECTED_SPEED_CHANGE				(0x1 << 17)
 
 #define MSI_CAP_OFF_10H_REG				0x60
 
