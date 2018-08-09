@@ -187,6 +187,16 @@
 
 		google,hbm-ranges {
 			google,dsi-hbm-exit-command = [
+				/* Disable high brightness and enable
+				 * brightness dimming
+				 */
+				15 01 00 00 00 00 02 53 28
+			];
+			google,dsi-hbm-exit-num-dimming-frames = <32>;
+			google,dsi-hbm-exit-dimming-stop-command = [
+				/* Disable high brightness and disable
+				 * brightness dimming
+				 */
 				15 01 00 00 00 00 02 53 20
 			];
 			google,dsi-hbm-commands-state = "dsi_lp_mode";
@@ -197,7 +207,16 @@
 				google,dsi-hbm-range-bl-min-level = <0x5>;
 				google,dsi-hbm-range-bl-max-level = <0x3ff>;
 				google,dsi-hbm-range-entry-command = [
-					/* Disable high brightness */
+					/* Disable high brightness and enable
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 28
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Disable high brightness and disable
+					 * brightness dimming
+					 */
 					15 01 00 00 00 00 02 53 20
 				];
 				google,dsi-hbm-range-commands-state =
@@ -222,6 +241,13 @@
 
 				google,dsi-hbm-range-entry-command = [
 					/* Enable high brightness */
+					15 01 00 00 00 00 02 53 E8
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Enable high brightness and disable
+					 * brightness dimming
+					 */
 					15 01 00 00 00 00 02 53 E0
 				];
 
