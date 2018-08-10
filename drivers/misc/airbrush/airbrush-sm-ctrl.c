@@ -23,6 +23,7 @@
 
 #include "airbrush-sm-ctrl.h"
 #include "airbrush-spi.h"
+#include "airbrush-pmu.h"
 
 static struct ab_state_context *ab_sm_ctx;
 
@@ -43,6 +44,61 @@ static int ab_debugfs_boot(void *data, u64 val)
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(airbrush_sm_ctrl_fops, NULL, ab_debugfs_boot, "%lli\n");
+
+static int ab_debugfs_set_dram_power_state(void *data, u64 val)
+{
+	return ab_set_pm_state(ab_sm_ctx, val, AB_DEV_DRAM);
+}
+static int ab_debugfs_get_dram_power_state(void *data, u64 *val)
+{
+	*val = ab_sm_ctx->cur_state.dram_state;
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(ab_dram_pwr_state_fops, ab_debugfs_get_dram_power_state,
+		ab_debugfs_set_dram_power_state, "%lli\n");
+
+static int ab_debugfs_set_pcie_power_state(void *data, u64 val)
+{
+	return ab_set_pm_state(ab_sm_ctx, val, AB_DEV_PCIE);
+}
+static int ab_debugfs_get_pcie_power_state(void *data, u64 *val)
+{
+	*val = ab_sm_ctx->cur_state.pcie_state;
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(ab_pcie_pwr_state_fops, ab_debugfs_get_pcie_power_state,
+		ab_debugfs_set_pcie_power_state, "%lli\n");
+
+static int ab_debugfs_set_tpu_power_state(void *data, u64 val)
+{
+	return ab_set_pm_state(ab_sm_ctx, val, AB_DEV_TPU);
+}
+static int ab_debugfs_get_tpu_power_state(void *data, u64 *val)
+{
+	*val = ab_sm_ctx->cur_state.tpu_state;
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(ab_tpu_pwr_state_fops, ab_debugfs_get_tpu_power_state,
+		ab_debugfs_set_tpu_power_state, "%lli\n");
+
+static int ab_debugfs_set_ipu_power_state(void *data, u64 val)
+{
+	return ab_set_pm_state(ab_sm_ctx, val, AB_DEV_IPU);
+}
+static int ab_debugfs_get_ipu_power_state(void *data, u64 *val)
+{
+	*val = ab_sm_ctx->cur_state.ipu_state;
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(ab_ipu_pwr_state_fops, ab_debugfs_get_ipu_power_state,
+		ab_debugfs_set_ipu_power_state, "%lli\n");
+
+static int ab_debugfs_set_all_power_state(void *data, u64 val)
+{
+	return ab_set_pm_state(ab_sm_ctx, val, AB_DEV_ALL);
+}
+DEFINE_SIMPLE_ATTRIBUTE(ab_all_pwr_state_fops, NULL,
+		ab_debugfs_set_all_power_state, "%lli\n");
 #endif
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
@@ -93,6 +149,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 
 	/* [TBD] Need DDR_SR, DDR_TRAIN, CKE_IN, CKE_IN_SENSE GPIOs for  */
 
+	/*initialize the initial state for IPU and TPU*/
+	 ab_sm_ctx->cur_state.ipu_state = AB_SM_S5;
+	 ab_sm_ctx->cur_state.tpu_state = AB_SM_S5;
+
 #ifdef __DEBUG_FS
 
 	ab_sm_ctx->d_entry = debugfs_create_dir("airbrush", NULL);
@@ -103,6 +163,16 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	debugfs_create_file("ab_boot", 0444, ab_sm_ctx->d_entry, NULL,
 			&airbrush_sm_ctrl_fops);
 
+	debugfs_create_file("ab_pwr_state", 0444, ab_sm_ctx->d_entry, NULL,
+			&ab_all_pwr_state_fops);
+	debugfs_create_file("tpu_pwr_state", 0444, ab_sm_ctx->d_entry, NULL,
+			&ab_tpu_pwr_state_fops);
+	debugfs_create_file("ipu_pwr_state", 0444, ab_sm_ctx->d_entry, NULL,
+			&ab_ipu_pwr_state_fops);
+	debugfs_create_file("dram_pwr_state", 0444, ab_sm_ctx->d_entry, NULL,
+			&ab_dram_pwr_state_fops);
+	debugfs_create_file("pcie_pwr_state", 0444, ab_sm_ctx->d_entry, NULL,
+			&ab_pcie_pwr_state_fops);
 #endif
 	return ab_sm_ctx;
 
@@ -121,6 +191,16 @@ int ab_sm_set_state(struct ab_state_context *sc,
 	/* Look for the current state and depending on this try to move the
 	 * ABC device state to the requested state
 	 */
+	if ((s >= AB_SM_S0) && (s <= AB_SM_S3))
+		s = AB_SM_S0;
+
+	if (ab_set_pm_state(sc, s, device)) {
+		if (sc->cb_event) {
+			/* TODO: Report error to state manager */
+		}
+		ab_set_pm_state(sc, AB_SM_S5, AB_DEV_ALL);
+	}
+
 
 	/* Incase of power-on/resume requested state, follow the bootflow
 	 * diagram. Need to control AP/HOST PMIC/PMU settings to control the
@@ -134,6 +214,18 @@ EXPORT_SYMBOL(ab_sm_set_state);
 
 enum ab_sm_state ab_sm_get_state(struct ab_state_context *sc, uint32_t device)
 {
+	switch (device) {
+	case AB_DEV_SOC:
+		/* TODO: Need info */
+		break;
+	case AB_DEV_IPU:
+		return sc->cur_state.ipu_state;
+	case AB_DEV_TPU:
+		return sc->cur_state.tpu_state;
+	case AB_DEV_ALL:
+		/* TODO: Need info */
+		break;
+	};
 	return 0;
 }
 EXPORT_SYMBOL(ab_sm_get_state);

@@ -6,3 +6,4 @@ airbrush-y :=	\
 		airbrush-bootseq.o \
 		airbrush-M0-interrupt.o \
 		airbrush-spi.o \
+		airbrush-pmu.o \

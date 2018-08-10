@@ -39,8 +39,6 @@
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 static struct abc_device *abc_dev;
 
-static int tpu_config_read(u32 offset, u32 len, u32 *data);
-static int tpu_config_write(u32 offset, u32 len, u32 data);
 
 int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 {
@@ -178,7 +176,7 @@ int ipu_config_write(u32 offset, u32 len, u32 data)
 	return 0;
 }
 
-static int tpu_config_read(u32 offset, u32 len, u32 *data)
+int tpu_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
@@ -190,7 +188,7 @@ static int tpu_config_read(u32 offset, u32 len, u32 *data)
 	return 0;
 }
 
-static int tpu_config_write(u32 offset, u32 len, u32 data)
+int tpu_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 

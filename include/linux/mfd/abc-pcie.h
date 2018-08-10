@@ -250,6 +250,8 @@ int aon_config_read(u32 offset, u32 len, u32 *data);
 int aon_config_write(u32 offset, u32 len, u32 data);
 int ipu_config_read(u32 offset, u32 len, u32 *data);
 int ipu_config_write(u32 offset, u32 len, u32 data);
+int tpu_config_read(u32 offset, u32 len, u32 *data);
+int tpu_config_write(u32 offset, u32 len, u32 data);
 int ddr_config_read(u32 offset, u32 len, u32 *data);
 int ddr_config_write(u32 offset, u32 len, u32 data);
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan);

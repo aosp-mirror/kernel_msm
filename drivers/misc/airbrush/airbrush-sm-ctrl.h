@@ -47,7 +47,17 @@ typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 #define AB_DEV_SOC	0x0
 #define AB_DEV_IPU	0x1
 #define AB_DEV_TPU	0x2
+#define AB_DEV_DRAM	0x4
+#define AB_DEV_PCIE	0x8
 #define AB_DEV_ALL	0xff
+
+/* Airbrush current power state */
+struct airbrush_state {
+	unsigned int ipu_state;
+	unsigned int tpu_state;
+	unsigned int dram_state;
+	unsigned int pcie_state;
+};
 
 struct ab_state_context {
 	struct platform_device *pdev;
@@ -75,7 +85,9 @@ struct ab_state_context {
 	void		*cb_cookie;	/* Private data sent by SM while
 					 *  registering event callback
 					 */
-	enum ab_sm_state cur_state;	/* current state of airbrush device */
+	struct airbrush_state cur_state;	/* current state of Airbrush
+						 * devices
+						 */
 #ifdef __DEBUG_FS
 	struct dentry *d_entry;
 #endif
