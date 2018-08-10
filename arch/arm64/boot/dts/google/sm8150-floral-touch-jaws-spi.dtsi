@@ -57,8 +57,7 @@
 	touchscreen@0 {
 		status = "ok";
 		compatible = "st,fts";
-		// TODO: Increase max frequency to ~10-12MHz
-		spi-max-frequency = <640000>;
+		spi-max-frequency = <10000000>;
 
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
