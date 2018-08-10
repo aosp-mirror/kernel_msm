@@ -930,6 +930,7 @@ typedef struct tagCsrRoamSession {
 	csr_roam_completeCallback callback;
 	void *pContext;
 	eCsrConnectState connectState;
+	struct rsn_caps rsn_caps;
 	tCsrRoamConnectedProfile connectedProfile;
 	tCsrRoamConnectedInfo connectedInfo;
 	tCsrRoamProfile *pCurRoamProfile;
