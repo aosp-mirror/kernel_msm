@@ -221,14 +221,14 @@
 
 &dsi_sofef00_sdc_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_sofef00>;
-	qcom,mdss-dsi-t-clk-post = <0x09>;
-	qcom,mdss-dsi-t-clk-pre = <0x1A>;
+	qcom,mdss-dsi-t-clk-post = <0x0E>;
+	qcom,mdss-dsi-t-clk-pre = <0x36>;
 
 	qcom,platform-reset-gpio = <&tlmm 75 0>;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 0E 03 03 1E 1D 04 04 02 03 04 00];
+					[00 17 09 09 1A 18 09 09 06 03 04 00];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
@@ -237,14 +237,14 @@
 
 &dsi_s6e3fa7_sdc_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_s6e3fa7>;
-	qcom,mdss-dsi-t-clk-post = <0x09>;
-	qcom,mdss-dsi-t-clk-pre = <0x1A>;
+	qcom,mdss-dsi-t-clk-post = <0x0F>;
+	qcom,mdss-dsi-t-clk-pre = <0x36>;
 
 	qcom,platform-reset-gpio = <&tlmm 75 0>;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 0E 03 03 1E 1D 04 04 02 03 04 00];
+					[00 16 09 09 1A 18 09 09 06 03 04 00];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
@@ -253,14 +253,14 @@
 
 &dsi_nt37700f_tianma_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_nt37700f>;
-	qcom,mdss-dsi-t-clk-post = <0x09>;
-	qcom,mdss-dsi-t-clk-pre = <0x1A>;
+	qcom,mdss-dsi-t-clk-post = <0x0E>;
+	qcom,mdss-dsi-t-clk-pre = <0x36>;
 
 	qcom,platform-reset-gpio = <&tlmm 75 0>;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 0E 03 03 1E 1D 04 04 02 03 04 00];
+					[00 17 09 09 1A 18 09 09 06 03 04 00];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
