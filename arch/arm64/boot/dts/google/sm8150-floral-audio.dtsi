@@ -193,6 +193,7 @@
 /* knowles IA8508 SPI1 */
 &qupv3_se4_spi {
 	status = "ok";
+	pinctrl-1 = <&qupv3_se4_spi_active>;
 	iaxxxspi1: iaxxx@0 {
 		compatible = "knowles,iaxxx-spi";
 		reg = <0>;
