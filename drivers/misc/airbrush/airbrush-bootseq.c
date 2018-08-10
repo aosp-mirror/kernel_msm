@@ -49,18 +49,17 @@
 
 #define M0_FIRMWARE_PATH1 "ab.fw"
 
-int parse_fw(uint32_t *image_dw_buf, const unsigned char *image_buf,
+void parse_fw(uint32_t *image_dw_buf, const unsigned char *image_buf,
 		int image_size_dw)
 {
-	int i_dw, i_byte;
+	int dw, byte;
 
-	for (i_dw = 0; i_dw < image_size_dw; i_dw++) {
-		i_byte = i_dw * 4;
-		image_dw_buf[i_dw] = (image_buf[i_byte+3] << 24 |
-			image_buf[i_byte+2] << 16 | image_buf[i_byte+1] << 8 |
-			image_buf[i_byte]);
+	for (dw = 0; dw < image_size_dw; dw++) {
+		byte = dw * 4;
+		image_dw_buf[dw] = (image_buf[byte + 3] << 24 |
+			image_buf[byte + 2] << 16 | image_buf[byte + 1] << 8 |
+			image_buf[byte]);
 	}
-	return 0;
 }
 
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
@@ -85,19 +84,13 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	image_size_dw = fw_entry->size / 4;
 
 	image_dw_buf = vmalloc(image_size_dw * sizeof(uint32_t));
-	if (parse_fw(image_dw_buf, fw_entry->data, image_size_dw) != 0) {
-		pr_info("Airbrush Firmware Error: %d\n", __LINE__);
-		spi_packet.data = image_dw_buf;
-		release_firmware(fw_entry);
-		return -EIO;
-	}
+	parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
 	release_firmware(fw_entry);
 	/* [TBD] Get the current state of CLK_IN, DDR_SR GPIOs */
 
-#if 1 /* [TBD] until DDR is not integrated, use the hard-coded values */
+	/* [TBD] until DDR is not integrated, use the hard-coded values */
 	gpio_clk_in = 0;
 	gpio_ddr_sr = 0;
-#endif
 
 	state_off     = (gpio_clk_in == 0) && (gpio_ddr_sr == 0);
 	state_suspend = (gpio_clk_in == 0) && (gpio_ddr_sr == 1);
@@ -216,7 +209,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	}
 
 	/* [TBD] DDR Related code will be added later */
-					vfree(image_dw_buf);
+	vfree(image_dw_buf);
 	return 0;
 }
 EXPORT_SYMBOL(ab_bootsequence);
