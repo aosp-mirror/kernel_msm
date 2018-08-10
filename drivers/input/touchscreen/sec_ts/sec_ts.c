@@ -2986,7 +2986,7 @@ static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 
 	input_dbg(true, &ts->client->dev, "%s: enter.\n", __func__);
 
-	if (val != MSM_DRM_EVENT_BLANK)
+	if (val != MSM_DRM_EVENT_BLANK && val != MSM_DRM_EARLY_EVENT_BLANK)
 		return NOTIFY_DONE;
 
 	if (!ts || !evdata || !evdata->data) {
@@ -3000,14 +3000,18 @@ static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 	switch (blank) {
 	case MSM_DRM_BLANK_POWERDOWN:
 	case MSM_DRM_BLANK_LP:
-		input_dbg(true, &ts->client->dev,
-			  "%s: MSM_DRM_BLANK_POWERDOWN.\n", __func__);
-		sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, false);
+		if (val == MSM_DRM_EARLY_EVENT_BLANK) {
+			input_dbg(true, &ts->client->dev,
+				  "%s: MSM_DRM_BLANK_POWERDOWN.\n", __func__);
+			sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, false);
+		}
 		break;
 	case MSM_DRM_BLANK_UNBLANK:
-		input_dbg(true, &ts->client->dev,
-			  "%s: MSM_DRM_BLANK_UNBLANK.\n", __func__);
-		sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, true);
+		if (val == MSM_DRM_EVENT_BLANK) {
+			input_dbg(true, &ts->client->dev,
+				  "%s: MSM_DRM_BLANK_UNBLANK.\n", __func__);
+			sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, true);
+		}
 		break;
 	}
 
