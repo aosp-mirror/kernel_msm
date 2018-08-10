@@ -26,7 +26,7 @@
 #include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/mfd/abc-pcie.h>
-#include "airbrush-sm-ctrl.h"
+#include <linux/airbrush-sm-ctrl.h>
 
 /* IPU and TPU Status Timeout */
 #define IPU_TPU_STATUS_TIMEOUT			20

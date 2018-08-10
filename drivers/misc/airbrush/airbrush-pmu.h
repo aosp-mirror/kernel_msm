@@ -24,7 +24,7 @@
 #include <linux/regmap.h>
 #include <linux/types.h>
 
-#include "airbrush-sm-ctrl.h"
+#include <linux/airbrush-sm-ctrl.h>
 
 int ab_set_pm_state(struct ab_state_context *sc,
 			uint32_t set_state, uint32_t device);

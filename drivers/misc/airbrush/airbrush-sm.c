@@ -18,8 +18,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-
-#include "airbrush-sm-ctrl.h"
+#include <linux/airbrush-sm-ctrl.h>
 
 static int airbrush_sm_probe(struct platform_device *pdev)
 {

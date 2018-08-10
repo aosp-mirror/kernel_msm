@@ -25,7 +25,7 @@
 #include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/mfd/abc-pcie.h>
-#include "airbrush-sm-ctrl.h"
+#include <linux/airbrush-sm-ctrl.h>
 
 /* ABC AON config regisetr offsets */
 #define SYSREG_AON				0x30000

@@ -30,8 +30,9 @@
 #include <linux/uaccess.h>
 #include <asm/segment.h>
 #include <linux/firmware.h>
+#include <linux/pci.h>
+#include <linux/airbrush-sm-ctrl.h>
 
-#include "airbrush-sm-ctrl.h"
 #include "airbrush-spi.h"
 
 #define REG_SRAM_ADDR	0x10b30374

@@ -10,8 +10,7 @@
 
 #include <linux/clk.h>
 #include<linux/mfd/abc-pcie.h>
-#include "airbrush-sm-ctrl.h"
-#include "airbrush-clk.h"
+#include <linux/airbrush-sm-ctrl.h>
 
 #define OSC_RATE 19200000
 

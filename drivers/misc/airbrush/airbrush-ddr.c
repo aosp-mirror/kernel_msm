@@ -11,10 +11,10 @@
  */
 
 #include <linux/delay.h>
+#include <linux/airbrush-sm-ctrl.h>
 
 #include "airbrush-ddr.h"
 #include "airbrush-ddr-internal.h"
-#include "airbrush-sm-ctrl.h"
 
 unsigned long g_timer_end;
 unsigned long g_timer_running;

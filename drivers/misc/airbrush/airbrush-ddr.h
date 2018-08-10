@@ -13,7 +13,7 @@
 #ifndef _AIRBRUSH_DDR_H_
 #define _AIRBRUSH_DDR_H_
 
-#include "airbrush-sm-ctrl.h"
+#include <linux/airbrush-sm-ctrl.h>
 
 #define DDR_SUCCESS	( 0)
 #define DDR_FAIL	(-1)

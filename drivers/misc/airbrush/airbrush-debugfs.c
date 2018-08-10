@@ -14,7 +14,8 @@
 #include <linux/debugfs.h>
 #include <linux/gpio/consumer.h>
 
-#include "airbrush-sm-ctrl.h"
+#include <linux/airbrush-sm-ctrl.h>
+
 int ab_interrupt_M0(int tar_dev);
 
 #ifdef CONFIG_DEBUGFS_AIRBRUSH

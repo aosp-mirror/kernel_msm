@@ -16,8 +16,8 @@
 #include <linux/gpio/machine.h>
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
+#include <linux/airbrush-sm-ctrl.h>
 
-#include "airbrush-sm-ctrl.h"
 #include "airbrush-spi.h"
 #include "airbrush-pmu.h"
 
