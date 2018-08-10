@@ -879,7 +879,7 @@ int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char page,
 
 void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-    struct dsi_panel_cmds *hbm_on_cmds;
+    struct dsi_panel_cmds *hbm_on_cmds = NULL;
 
     char *rx_buf;
 
@@ -915,7 +915,20 @@ void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
         }
 
         default:
+        {
+            /*
+            * technically speaking, we won't get here since
+            * the value would be set anyway during boot phase
+            */
+            pr_info("%s: HBM err: default case (%d)\n", __func__,
+                    ctrl->id3_code[0]);
+
+            if(hbm_on_cmds == NULL)
+            {
+                hbm_on_cmds = &ctrl->hbm1_on_cmds;
+            }
             break;
+        }
     }
 
     if(hbm_on_cmds->cmd_cnt)
@@ -932,7 +945,7 @@ void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
 
 void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-    struct dsi_panel_cmds *hbm_off_cmds;
+    struct dsi_panel_cmds *hbm_off_cmds = NULL;
 
     pr_info("%s: read_back_param[0] = 0x%02x\n", __func__, ctrl->read_back_param[0]);
 

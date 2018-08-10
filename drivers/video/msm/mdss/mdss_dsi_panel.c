@@ -795,6 +795,7 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
 	struct dsi_panel_cmds *cmds;
+	int retry_cnt;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -822,11 +823,50 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	{
 		g_pre_init++;
 
-		mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL, ctrl->read_back_param, 1);
-		pr_info("%s: read_back_param[0] = 0x%02x\n", __func__, ctrl->read_back_param[0]);
+		for(retry_cnt = 2; retry_cnt >= 0; retry_cnt--)
+		{
+			mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL, ctrl->read_back_param, 1);
+			pr_info("%s: read_back_param[0] = 0x%02x\n", __func__, ctrl->read_back_param[0]);
 
-		mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL, ctrl->id3_code, 1);
-		pr_info("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
+			if(ctrl->read_back_param[0] != 0x00)
+			{
+				break;
+			}
+
+			if(!retry_cnt)
+			{
+				pr_err("%s: HBM err: apply default value if fail to retry!\n", __func__);
+				ctrl->read_back_param[0] = 0x22;
+			}
+			else
+			{
+				mdelay(10);
+			}
+		}
+
+		for(retry_cnt = 2; retry_cnt >= 0; retry_cnt--)
+		{
+			mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL, ctrl->id3_code, 1);
+			pr_info("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
+
+			if(ctrl->id3_code[0] != 0x00)
+			{
+				break;
+			}
+
+			if(!retry_cnt)
+			{
+				pr_err("%s: HBM err: apply default value if fail to retry!\n", __func__);
+				ctrl->id3_code[0] = 0x04;
+			}
+			else
+			{
+				mdelay(10);
+			}
+		}
+
+		//switch back to original page
+		mdss_dsi_switch_page(ctrl, 0x00);
 	}
 
 end:
