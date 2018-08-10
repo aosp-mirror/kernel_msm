@@ -3305,13 +3305,15 @@ QDF_STATUS sme_scan_request(tHalHandle hal, uint8_t session_id,
 	}
 
 	if (!mac_ctx->scan.fScanEnable) {
-		sme_err("fScanEnable false");
+		sme_err_rate_limited(SME_SCAN_REJECT_RATE_LIMIT,
+				     "fScanEnable false");
 		return status;
 	}
 
 	scan_count = csr_ll_count(&mac_ctx->sme.smeScanCmdActiveList);
 	if (scan_count >= mac_ctx->scan.max_scan_count) {
-		sme_err("Max scan reached");
+		sme_err_rate_limited(SME_SCAN_REJECT_RATE_LIMIT,
+				     "Max scan reached");
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -4415,6 +4417,18 @@ QDF_STATUS sme_roam_del_pmkid_from_cache(tHalHandle hHal, uint8_t sessionId,
 	return status;
 }
 
+void sme_get_pmk_info(tHalHandle hal, uint8_t session_id,
+			   tPmkidCacheInfo *pmk_cache)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	QDF_STATUS status = sme_acquire_global_lock(&mac_ctx->sme);
+
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		if (CSR_IS_SESSION_VALID(mac_ctx, session_id))
+			csr_get_pmk_info(mac_ctx, session_id, pmk_cache);
+		sme_release_global_lock(&mac_ctx->sme);
+	}
+}
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /**
  * sme_roam_set_psk_pmk() - A wrapper function to request CSR to save PSK/PMK

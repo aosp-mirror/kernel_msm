@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -92,5 +92,15 @@ typedef struct sAniSirCfg {
 	/* Message param list buffer (enough for largest possible response) */
 	uint32_t *gParamList;
 } tAniSirCfg, *tpAniSirCfg;
+
+/**
+ * enum size_of_len_field: IE length size
+ * @ONE_BYTE: one byte IE length
+ * @TWO_BYTE: two byte IE length
+ */
+enum size_of_len_field {
+	ONE_BYTE = 1,
+	TWO_BYTE = 2
+};
 
 #endif
