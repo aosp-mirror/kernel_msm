@@ -13,7 +13,25 @@
 #define CAM_SENSOR_PROBE_CMD   (CAM_COMMON_OPCODE_MAX + 1)
 #define CAM_FLASH_MAX_LED_TRIGGERS 3
 #define MAX_OIS_NAME_SIZE 32
+#define MAX_RAINBOW_CONFIG_SIZE 32
 #define CAM_CSIPHY_SECURE_MODE_ENABLED 1
+
+enum rainbow_op_type {
+	RAINBOW_SEQ_READ,
+	RAINBOW_RANDOM_READ,
+	RAINBOW_SEQ_WRITE,
+	RAINBOW_RANDOM_WRITE
+};
+
+struct rainbow_config {
+	enum rainbow_op_type operation;
+	uint32_t             size;
+	uint32_t             reg_addr[MAX_RAINBOW_CONFIG_SIZE];
+	uint32_t             reg_data[MAX_RAINBOW_CONFIG_SIZE];
+} __attribute__((packed));
+
+#define RAINBOW_CONFIG \
+	_IOWR('R', 1, struct rainbow_config)
 /**
  * struct cam_sensor_query_cap - capabilities info for sensor
  *
