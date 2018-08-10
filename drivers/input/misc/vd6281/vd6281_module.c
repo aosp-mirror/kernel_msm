@@ -220,7 +220,7 @@ int32_t vd6281_update_i2c_info(struct rainbow_ctrl_t *ctrl)
 	else
 		ctrl->io_master_info.cci_client->sid = 0x20;
 
-	ctrl->io_master_info.cci_client->retries = 3;
+	ctrl->io_master_info.cci_client->retries = 1;
 	ctrl->io_master_info.cci_client->id_map = 0;
 	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_PLUS_MODE;
 
