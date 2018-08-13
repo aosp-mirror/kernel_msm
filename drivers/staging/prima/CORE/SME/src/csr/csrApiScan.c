@@ -4327,6 +4327,15 @@ tANI_BOOLEAN csrElectedCountryInfo(tpAniSirGlobal pMac)
         }
 
     }
+    if (maxVotes < 3)
+    {
+        fRet = FALSE;
+        VOS_TRACE( VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
+            "filter Country is %c%c With count %d\n",
+            pMac->scan.votes11d[j].countryCode[0],
+            pMac->scan.votes11d[j].countryCode[1],
+            pMac->scan.votes11d[j].votes);
+    }
     if (fRet)
     {
         vos_mem_copy(pMac->scan.countryCodeElected,
