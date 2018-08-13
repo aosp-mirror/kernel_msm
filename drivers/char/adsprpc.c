@@ -58,7 +58,6 @@
 #define ADSP_MMAP_HEAP_ADDR 4
 #define FASTRPC_ENOSUCH 39
 #define VMID_SSC_Q6     5
-#define VMID_ADSP_Q6    6
 
 #define RPC_TIMEOUT	(5 * HZ)
 #define BALIGN		128
@@ -218,7 +217,6 @@ struct fastrpc_apps {
 	spinlock_t hlock;
 	struct ion_client *client;
 	struct device *dev;
-	struct device *modem_cma_dev;
 	bool glink;
 	spinlock_t ctxlock;
 	struct smq_invoke_ctx *ctxtable[FASTRPC_CTX_MAX];
@@ -272,6 +270,7 @@ static struct fastrpc_channel_ctx gcinfo[NUM_CHANNELS] = {
 		.subsys = "dsps",
 		.channel = SMD_APPS_DSPS,
 		.edge = "dsps",
+		.vmid = VMID_SSC_Q6,
 	},
 };
 
@@ -1145,9 +1144,18 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 		struct fastrpc_mmap *map = ctx->maps[i];
 		if (map && map->uncached)
 			continue;
-		if (rpra[i].buf.len && ctx->overps[oix]->mstart)
-			dmac_flush_range(uint64_to_ptr(rpra[i].buf.pv),
-			uint64_to_ptr(rpra[i].buf.pv + rpra[i].buf.len));
+		if (rpra[i].buf.len && ctx->overps[oix]->mstart) {
+			if (map && map->handle)
+				msm_ion_do_cache_op(ctx->fl->apps->client,
+					map->handle,
+					uint64_to_ptr(rpra[i].buf.pv),
+					rpra[i].buf.len,
+					ION_IOC_CLEAN_INV_CACHES);
+			else
+				dmac_flush_range(uint64_to_ptr(rpra[i].buf.pv),
+					uint64_to_ptr(rpra[i].buf.pv
+						+ rpra[i].buf.len));
+		}
 	}
 	inh = inbufs + outbufs;
 	for (i = 0; i < REMOTE_SCALARS_INHANDLES(sc); i++) {
@@ -1155,7 +1163,7 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 		rpra[inh + i].buf.len = ctx->lpra[inh + i].buf.len;
 		rpra[inh + i].h = ctx->lpra[inh + i].h;
 	}
-	dmac_flush_range((char *)rpra, (char *)rpra + ctx->used);
+
  bail:
 	return err;
 }
@@ -1194,27 +1202,49 @@ static int put_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	return err;
 }
 
-static void inv_args_pre(uint32_t sc, remote_arg64_t *rpra)
+static void inv_args_pre(struct smq_invoke_ctx *ctx)
 {
 	int i, inbufs, outbufs;
+	uint32_t sc = ctx->sc;
+	remote_arg64_t *rpra = ctx->rpra;
 	uintptr_t end;
 
 	inbufs = REMOTE_SCALARS_INBUFS(sc);
 	outbufs = REMOTE_SCALARS_OUTBUFS(sc);
 	for (i = inbufs; i < inbufs + outbufs; ++i) {
+		struct fastrpc_mmap *map = ctx->maps[i];
+
 		if (!rpra[i].buf.len)
 			continue;
 		if (buf_page_start(ptr_to_uint64((void *)rpra)) ==
 				buf_page_start(rpra[i].buf.pv))
 			continue;
-		if (!IS_CACHE_ALIGNED((uintptr_t)uint64_to_ptr(rpra[i].buf.pv)))
-			dmac_flush_range(uint64_to_ptr(rpra[i].buf.pv),
-				(char *)(uint64_to_ptr(rpra[i].buf.pv + 1)));
+		if (!IS_CACHE_ALIGNED((uintptr_t)
+				uint64_to_ptr(rpra[i].buf.pv))) {
+			if (map && map->handle)
+				msm_ion_do_cache_op(ctx->fl->apps->client,
+					map->handle,
+					uint64_to_ptr(rpra[i].buf.pv),
+					sizeof(uintptr_t),
+					ION_IOC_CLEAN_INV_CACHES);
+			else
+				dmac_flush_range(
+					uint64_to_ptr(rpra[i].buf.pv), (char *)
+					uint64_to_ptr(rpra[i].buf.pv + 1));
+		}
 		end = (uintptr_t)uint64_to_ptr(rpra[i].buf.pv +
 							rpra[i].buf.len);
-		if (!IS_CACHE_ALIGNED(end))
-			dmac_flush_range((char *)end,
-				(char *)end + 1);
+		if (!IS_CACHE_ALIGNED(end)) {
+			if (map && map->handle)
+				msm_ion_do_cache_op(ctx->fl->apps->client,
+						map->handle,
+						uint64_to_ptr(end),
+						sizeof(uintptr_t),
+						ION_IOC_CLEAN_INV_CACHES);
+			else
+				dmac_flush_range((char *)end,
+					(char *)end + 1);
+		}
 	}
 }
 
@@ -1223,7 +1253,6 @@ static void inv_args(struct smq_invoke_ctx *ctx)
 	int i, inbufs, outbufs;
 	uint32_t sc = ctx->sc;
 	remote_arg64_t *rpra = ctx->rpra;
-	int used = ctx->used;
 	int inv = 0;
 
 	inbufs = REMOTE_SCALARS_INBUFS(sc);
@@ -1241,7 +1270,7 @@ static void inv_args(struct smq_invoke_ctx *ctx)
 		}
 		if (map && map->handle)
 			msm_ion_do_cache_op(ctx->fl->apps->client, map->handle,
-				(char *)uint64_to_ptr(rpra[i].buf.pv),
+				uint64_to_ptr(rpra[i].buf.pv),
 				rpra[i].buf.len, ION_IOC_INV_CACHES);
 		else
 			dmac_inv_range((char *)uint64_to_ptr(rpra[i].buf.pv),
@@ -1249,8 +1278,6 @@ static void inv_args(struct smq_invoke_ctx *ctx)
 						 + rpra[i].buf.len));
 	}
 
-	if (inv || REMOTE_SCALARS_OUTHANDLES(sc))
-		dmac_inv_range(rpra, (char *)rpra + used);
 }
 
 static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
@@ -1392,7 +1419,7 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 			goto bail;
 	}
 
-	inv_args_pre(ctx->sc, ctx->rpra);
+	inv_args_pre(ctx);
 	if (FASTRPC_MODE_SERIAL == mode)
 		inv_args(ctx);
 	VERIFY(err, 0 == fastrpc_invoke_send(ctx, kernel, invoke->handle));
@@ -2268,7 +2295,6 @@ static struct of_device_id fastrpc_match_table[] = {
 	{ .compatible = "qcom,msm-fastrpc-compute-cb", },
 	{ .compatible = "qcom,msm-fastrpc-legacy-compute-cb", },
 	{ .compatible = "qcom,msm-adsprpc-mem-region", },
-	{ .compatible = "qcom,msm-mdsprpc-mem-region", },
 	{}
 };
 
@@ -2421,11 +2447,6 @@ static int fastrpc_probe(struct platform_device *pdev)
 	int err = 0;
 	struct fastrpc_apps *me = &gfa;
 	struct device *dev = &pdev->dev;
-	struct smq_phy_page range;
-	struct device_node *ion_node, *node;
-	struct platform_device *ion_pdev;
-	struct cma *cma;
-	uint32_t val;
 
 	if (of_device_is_compatible(dev->of_node,
 					"qcom,msm-fastrpc-compute-cb"))
@@ -2443,44 +2464,6 @@ static int fastrpc_probe(struct platform_device *pdev)
 		if (IS_ERR_OR_NULL(me->channel[0].remoteheap_ramdump_dev)) {
 			pr_err("ADSPRPC: Unable to create adsp-remoteheap ramdump device.\n");
 			me->channel[0].remoteheap_ramdump_dev = NULL;
-		}
-		return 0;
-	}
-
-	if (of_device_is_compatible(dev->of_node,
-					"qcom,msm-mdsprpc-mem-region")) {
-		me->modem_cma_dev = dev;
-		range.addr = 0;
-		ion_node = of_find_compatible_node(NULL, NULL, "qcom,msm-ion");
-		if (ion_node) {
-			for_each_available_child_of_node(ion_node, node) {
-				if (of_property_read_u32(node, "reg", &val))
-					continue;
-				if (val != ION_ADSP_HEAP_ID)
-					continue;
-				ion_pdev = of_find_device_by_node(node);
-				if (!ion_pdev)
-					break;
-				cma = dev_get_cma_area(&ion_pdev->dev);
-				if (cma) {
-					range.addr = cma_get_base(cma);
-					range.size = (size_t)cma_get_size(cma);
-				}
-				break;
-			}
-		}
-		if (range.addr) {
-			int srcVM[1] = {VMID_HLOS};
-			int destVM[3] = {VMID_HLOS, VMID_SSC_Q6,
-					VMID_ADSP_Q6};
-			int destVMperm[3] = {PERM_READ | PERM_WRITE | PERM_EXEC,
-					PERM_READ | PERM_WRITE | PERM_EXEC,
-					PERM_READ | PERM_WRITE | PERM_EXEC,
-					};
-			VERIFY(err, !hyp_assign_phys(range.addr, range.size,
-					srcVM, 1, destVM, destVMperm, 3));
-			if (err)
-				goto bail;
 		}
 		return 0;
 	}
