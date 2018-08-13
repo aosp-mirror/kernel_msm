@@ -227,12 +227,6 @@
 	};
 };
 
-&dsi_sim_vid {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
-	qcom,platform-reset-gpio = <&tlmm 75 0>;
-};
-
 &pm660l_wled {
 	status = "disabled";
 };
