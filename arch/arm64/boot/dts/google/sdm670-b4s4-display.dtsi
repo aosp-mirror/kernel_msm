@@ -228,7 +228,7 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 17 09 09 1A 18 09 09 06 03 04 00];
+					[00 23 09 09 26 24 09 09 06 03 04 00];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
@@ -244,7 +244,7 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 16 09 09 1A 18 09 09 06 03 04 00];
+					[00 24 09 09 26 24 09 09 06 03 04 00];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
@@ -260,7 +260,7 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-					[00 17 09 09 1A 18 09 09 06 03 04 00];
+					[00 23 09 09 26 24 09 09 06 03 04 00];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
 		};
