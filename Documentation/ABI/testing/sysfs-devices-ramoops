@@ -28,3 +28,8 @@ Description:	Writing a 1 to this file will cause the ramoops to pivot to
 		AES keys should have been given to the driver prior to writing
 		this node.)
 
+What:		/sys/devices/virtual/ramoops/pstore/decrypt_state
+Date:		July 9, 2018
+KernelVersion:	4.4
+Contact:	jonechou <jonechou@google.com>
+Description:	This file is used to query the decrypt state of console-ramoops-0

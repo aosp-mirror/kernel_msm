@@ -59,7 +59,7 @@
 			17000 15500 30000 8000 3000>;
 		qcom,mdss-dsi-panel-peak-brightness = <6200000>;
 		qcom,mdss-dsi-panel-blackness-level = <42>;
-		google,mdss-dsi-lp-brightness-compensation = <7>;
+		google,mdss-dsi-lp-brightness-compensation = <0>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
@@ -87,6 +87,13 @@
 					05 01 00 00 87 00 01 11
 					07 01 00 00 00 00 01 11
 					15 01 00 00 00 00 02 B0 AC
+					39 01 00 00 00 00 2A B5
+						75 60 2D 5D 80 00 0A 0B
+						00 05 0B 00 80 0D 0E 40
+						00 0C 00 16 00 B8 00 80
+						0D 0E 40 00 0C 00 16 00
+						B8 00 81 00 03 07 1F 02
+						02
 					39 01 00 00 00 00 13 CD 00 00 00 19 19 19
 						19 19 19 19 19 19 19 19 19 19 16 16
 					39 01 00 00 00 00 06 CB 80 5C 07 03 28
@@ -108,13 +115,11 @@
 					39 01 00 00 00 00 07 55 04 61 DB 04 78 DB
 					39 01 00 00 00 00 0D B4 2A 40 25 22 41 41 41 0A 10 50 11 03
 					39 01 00 00 3C 00 06 CB 80 5C 07 09 28
-					15 01 00 00 00 00 02 C0 01
 				];
 
 				qcom,mdss-dsi-nolp-command = [
 					05 01 00 00 00 00 01 22
 					15 01 00 00 00 00 02 B0 AC
-					15 01 00 00 00 00 02 C0 02
 					39 01 00 00 00 00 0D B4 2A 02 25 22 41 41 41 0A 10 50 11 00
 					39 01 00 00 00 00 06 CB 80 5C 07 03 28
 					39 01 00 00 00 00 03 51 00 00
@@ -126,8 +131,15 @@
 					/* display off; wait 100ms */
 					15 01 00 00 00 00 02 B0 AC
 					/* MCS Access */
-					39 01 00 00 00 00 08 E5 00 3E 00 3E 00
-						0E 30
+					39 01 00 00 00 00 2A B5
+						75 60 2D 5D 80 00 0A 0B
+						00 05 0B 00 80 0D 0E 40
+						00 0C 00 16 00 B8 00 80
+						0D 0E 40 00 0C 00 16 00
+						B8 00 81 00 03 1F 1F 02
+						02
+					39 01 00 00 00 00 08 E5
+						00 3E 00 3E 00 0E 30
 					/* VR mode: enable EM inversion */
 					15 01 00 00 00 00 02 B0 CA
 					/* Don't MCS Access */
@@ -146,8 +158,15 @@
 					/* display off; wait 100ms */
 					15 01 00 00 00 00 02 B0 AC
 					/* MCS Access */
-					39 01 00 00 00 00 08 E5 00 3E 00 3E 00
-						0E 10
+					39 01 00 00 00 00 2A B5
+						75 60 2D 5D 80 00 0A 0B
+						00 05 0B 00 80 0D 0E 40
+						00 0C 00 16 00 B8 00 80
+						0D 0E 40 00 0C 00 16 00
+						B8 00 81 00 03 07 1F 02
+						02
+					39 01 00 00 00 00 08 E5
+						00 3E 00 3E 00 0E 10
 					/* Normal mode: disable EM inversion */
 					15 01 00 00 00 00 02 B0 CA
 					/* Don't MCS Access */
@@ -192,7 +211,7 @@
 
 				google,dsi-lp-brightness-threshold = <5>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 01 20
+					39 01 00 00 00 00 03 51 00 6B
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
@@ -202,7 +221,7 @@
 
 				google,dsi-lp-brightness-threshold = <10>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 01 64
+					39 01 00 00 00 00 03 51 00 E0
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
@@ -213,7 +232,7 @@
 
 				google,dsi-lp-brightness-threshold = <255>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 03 FF
+					39 01 00 00 00 00 03 51 03 87
 					05 01 00 00 00 00 01 12
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";

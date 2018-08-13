@@ -668,13 +668,19 @@ struct binned_lp_node {
 	struct dsi_panel_cmd_set dsi_cmd;
 };
 
+enum lp_comp_state {
+	LP_COMP_DISABLED,
+	LP_COMP_UNINITIALIZED,
+	LP_COMP_INITIALIZED,
+};
+
 struct binned_lp_data {
 	struct list_head mode_list;
 	struct binned_lp_node *last_lp_mode;
 	struct binned_lp_node priv_pool[MAX_BINNED_BL_MODES];
 
 	struct {
-		bool initialized;
+		enum lp_comp_state state;
 		u8 buf[DCS_LPB_COMP_SIZE];
 		u8 adder;
 	} lp_brightness_comp;
@@ -685,14 +691,12 @@ static void dsi_panel_lp_compensate(struct dsi_backlight_config *bl,
 {
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
 	struct binned_lp_data *lp_data = bl->priv;
+	ssize_t read_size;
 	u8 buf[16];
 
-	/* zero adder means nothing to do */
-	if (!lp_data->lp_brightness_comp.adder)
-		return;
-
-	if (!lp_data->lp_brightness_comp.initialized) {
-		ssize_t read_size = mipi_dsi_dcs_read(&panel->mipi_device,
+	switch (lp_data->lp_brightness_comp.state) {
+	case LP_COMP_UNINITIALIZED:
+		read_size = mipi_dsi_dcs_read(&panel->mipi_device,
 					DCS_BRIGHTNESS_COMPENSATION, buf,
 					DCS_LPB_COMP_SIZE);
 		if (unlikely(read_size != DCS_LPB_COMP_SIZE)) {
@@ -700,10 +704,15 @@ static void dsi_panel_lp_compensate(struct dsi_backlight_config *bl,
 			return;
 		}
 		memcpy(lp_data->lp_brightness_comp.buf, buf, read_size);
-		lp_data->lp_brightness_comp.initialized = true;
+		lp_data->lp_brightness_comp.state = LP_COMP_INITIALIZED;
 		pr_debug("Read LP brightness comp: %02X\n", buf[0]);
-	} else {
+		break;
+	case LP_COMP_INITIALIZED:
 		memcpy(buf, lp_data->lp_brightness_comp.buf, DCS_LPB_COMP_SIZE);
+		break;
+	case LP_COMP_DISABLED:
+	default:
+		return;
 	}
 
 	/* add compensation in LP mode, otherwise restore original value */
@@ -847,10 +856,10 @@ static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 				  &val)) {
 		pr_debug("LP brightness compensation: %d\n", val);
 		lp_data->lp_brightness_comp.adder = (u8)val;
+		lp_data->lp_brightness_comp.state = LP_COMP_UNINITIALIZED;
 	} else {
-		lp_data->lp_brightness_comp.adder = 0;
+		lp_data->lp_brightness_comp.state = LP_COMP_DISABLED;
 	}
-	lp_data->lp_brightness_comp.initialized = false;
 
 	bl->update_bl = dsi_panel_binned_bl_update;
 	bl->unregister = dsi_panel_bl_free_unregister;

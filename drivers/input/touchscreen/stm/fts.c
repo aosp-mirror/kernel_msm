@@ -331,6 +331,64 @@ static ssize_t fts_fw_test_show(struct device *dev,
 	return 0;
 }
 
+static ssize_t fts_status_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_info *info = dev_get_drvdata(dev);
+	u8 *dump = NULL;
+	int dumpSize = ERROR_DUMP_ROW_SIZE * ERROR_DUMP_COL_SIZE;
+	u8 reg;
+	int written = 0;
+	int res;
+	int i;
+
+	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
+		res = ERROR_BUS_WR;
+		pr_err("%s: bus is not accessible.", __func__);
+		written += scnprintf(buf, PAGE_SIZE, "Bus is not accessible.");
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
+		return written;
+	}
+
+	written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "Mode: 0x%08X\n", info->mode);
+
+	res = fts_writeReadU8UX(FTS_CMD_HW_REG_R, ADDR_SIZE_HW_REG, ADDR_ICR,
+				&reg, 1, DUMMY_HW_REG);
+	if (res < 0)
+		pr_err("%s: failed to read ICR.\n", __func__);
+	else
+		written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "ICR: 0x%02X\n", reg);
+
+	dump = kzalloc(dumpSize, GFP_KERNEL);
+	if (!dump) {
+		written += strlcat(buf + written, "Buffer allocation failed!\n",
+				   PAGE_SIZE - written);
+		res = -ENOMEM;
+	} else {
+		res = dumpErrorInfo(dump,
+				    ERROR_DUMP_ROW_SIZE * ERROR_DUMP_COL_SIZE);
+	}
+	if (res >= 0) {
+		written += strlcat(buf + written, "Error dump:",
+				   PAGE_SIZE - written);
+		for (i = 0; i < dumpSize; i++) {
+			if (i % 8 == 0)
+				written += scnprintf(buf + written,
+						     PAGE_SIZE - written,
+						     "\n%02X: ", i);
+			written += scnprintf(buf + written,
+					     PAGE_SIZE - written,
+					     "%02X ", dump[i]);
+		}
+		written += strlcat(buf + written, "\n", PAGE_SIZE - written);
+	}
+	kfree(dump);
+
+	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
+	return written;
+}
 
 #if 0
 /**
@@ -1904,6 +1962,7 @@ static DEVICE_ATTR(fwupdate, 0664, fts_fwupdate_show,
 static DEVICE_ATTR(appid, 0444, fts_appid_show, NULL);
 static DEVICE_ATTR(mode_active, 0444, fts_mode_active_show, NULL);
 static DEVICE_ATTR(fw_file_test, 0444, fts_fw_test_show, NULL);
+static DEVICE_ATTR(status, 0444, fts_status_show, NULL);
 static DEVICE_ATTR(stm_fts_cmd, 0664, stm_fts_cmd_show,
 		   stm_fts_cmd_store);
 #ifdef USE_ONE_FILE_NODE
@@ -1952,6 +2011,7 @@ static struct attribute *fts_attr_group[] = {
 	&dev_attr_appid.attr,
 	&dev_attr_mode_active.attr,
 	&dev_attr_fw_file_test.attr,
+	&dev_attr_status.attr,
 	&dev_attr_stm_fts_cmd.attr,
 #ifdef USE_ONE_FILE_NODE
 	&dev_attr_feature_enable.attr,

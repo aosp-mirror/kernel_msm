@@ -30,6 +30,7 @@
 #define CHG_TEMP_NB_LIMITS_MAX 10
 #define CHG_VOLT_NB_LIMITS_MAX 5
 #define CHG_DELAY_INIT_MS 250
+#define CHG_DELAY_INIT_DETECT_MS 1000
 
 #define DEFAULT_CHARGE_STOP_LEVEL 100
 #define DEFAULT_CHARGE_START_LEVEL 0
@@ -1182,6 +1183,10 @@ static void google_charger_init_work(struct work_struct *work)
 
 	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
 	pr_info("google_charger_init_work done\n");
+
+	/* catch state changes that happened before registering the notifier */
+	schedule_delayed_work(&chg_drv->chg_work,
+		msecs_to_jiffies(CHG_DELAY_INIT_DETECT_MS));
 	return;
 
 retry_init_work:

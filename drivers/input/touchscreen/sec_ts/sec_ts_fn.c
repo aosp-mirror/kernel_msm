@@ -685,6 +685,55 @@ static ssize_t fw_version_show(struct device *dev,
 	return written;
 }
 
+static ssize_t status_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct sec_cmd_data *sec = dev_get_drvdata(dev);
+	struct sec_ts_data *ts = container_of(sec, struct sec_ts_data, sec);
+	int written = 0;
+	unsigned char data[4] = { 0 };
+	int ret;
+
+	data[0] = 0;
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS, data, 1);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+					"%s: failed to read boot status(%d)\n",
+					__func__, ret);
+		goto out;
+	}
+	written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "BOOT STATUS: 0x%02X\n", data[0]);
+
+	memset(data, 0x0, 4);
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_TS_STATUS, data, 4);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+					"%s: failed to touch status(%d)\n",
+					__func__, ret);
+		goto out;
+	}
+	written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "TOUCH STATUS: 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+			     data[0], data[1], data[2], data[3]);
+
+	memset(data, 0x0, 2);
+	ret = ts->sec_ts_i2c_read(ts, SEC_TS_CMD_SET_TOUCHFUNCTION, data, 2);
+	if (ret < 0) {
+		input_err(true, &ts->client->dev,
+					"%s: failed to read touch functions(%d)\n",
+					__func__, ret);
+		goto out;
+	}
+	written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "Functions: 0x%02X, 0x%02X\n", data[0], data[1]);
+
+out:
+
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SYSFS, false);
+	return written;
+}
+
 static DEVICE_ATTR(ito_check, S_IRUGO, read_ito_check_show, NULL);
 static DEVICE_ATTR(raw_check, S_IRUGO, read_raw_check_show, NULL);
 static DEVICE_ATTR(multi_count, S_IRUGO | S_IWUSR | S_IWGRP, read_multi_count_show, clear_multi_count_store);
@@ -700,6 +749,7 @@ static DEVICE_ATTR(pressure_enable, S_IRUGO | S_IWUSR | S_IWGRP, pressure_enable
 static DEVICE_ATTR(get_lp_dump, S_IRUGO, get_lp_dump, NULL);
 static DEVICE_ATTR(force_recal_count, S_IRUGO, get_force_recal_count, NULL);
 static DEVICE_ATTR(fw_version, 0444, fw_version_show, NULL);
+static DEVICE_ATTR(status, 0444, status_show, NULL);
 
 static struct attribute *cmd_attributes[] = {
 	&dev_attr_scrub_pos.attr,
@@ -718,6 +768,7 @@ static struct attribute *cmd_attributes[] = {
 	&dev_attr_get_lp_dump.attr,
 	&dev_attr_force_recal_count.attr,
 	&dev_attr_fw_version.attr,
+	&dev_attr_status.attr,
 	NULL,
 };
 
