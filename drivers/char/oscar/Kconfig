@@ -1,23 +1,23 @@
-menu "DS devices"
+menu "Gasket devices"
 
-config DS_FRAMEWORK
-  tristate "DS framework"
-  depends on PCI
-  help
-  This framework supports DS, such as Knoll and Apex. It is required
-  for either of those modules.
+config GASKET_FRAMEWORK
+	tristate "Gasket framework"
+	depends on PCI && (X86_64 || ARM64)
+	help
+	  This framework supports Gasket-compatible devices, such as Apex and
+	  Oscar.  It is required for any of the following module(s).
 
-  To compile this driver as a module, choose M here.  The module
-  will be called ds.
+	  To compile this driver as a module, choose M here.  The module
+	  will be called "gasket".
 
-config DWN_DRIVER
-  tristate "Dwn Driver"
-  depends on DS_FRAMEWORK
-  help
-  This driver supports the Dwn device.  Say Y if you want to
-  include this driver in the kernel.
+config OSCAR_DRIVER
+        tristate "Oscar Driver"
+        depends on GASKET_FRAMEWORK
+        help
+          This driver supports the Oscar device.  Say Y if you want to
+          include this driver in the kernel.
 
-  To compile this driver as a module, choose M here.  The module
-  will be called dwn.
+          To compile this driver as a module, choose M here.  The module
+          will be called "oscar".
 
 endmenu
