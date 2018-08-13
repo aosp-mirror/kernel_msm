@@ -1,58 +1,64 @@
-/* Driver for the Oscar chip.
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Driver for the Oscar chip.
  *
  * Copyright (C) 2017 Google, Inc.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/platform_device.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 
 #include "../../mfd/abc-pcie-private.h"
 #include "linux/mfd/abc-pcie.h"
-#include "dw_ioctl.h"
+#include "oscar.h"
 
-#include "ds_generic.h"
-#include "ds_interrupt.h"
-#include "ds_logging.h"
-#include "ds_page_table.h"
-#include "ds_sysfs.h"
+#include "gasket_core.h"
+#include "gasket_interrupt.h"
+#include "gasket_page_table.h"
+#include "gasket_sysfs.h"
 
-/* Constants */
-#define DW_DEVICE_NAME "Oscar"
-#define DW_DRIVER_VERSION "0.1"
+#define DRIVER_NAME "abc-pcie-tpu"
+#define DRIVER_VERSION "0.2"
 
-#define DW_PCI_VENDOR_ID 0x1556
-#define DW_PCI_DEVICE_ID 0x1111
-
-/* Oscar is on BAR 4 and 5. */
-#define DW_BAR_BYTES 0x100000
+#define OSCAR_BAR_SIZE 0x100000
 
 /* Number of bytes allocated for coherent memory. */
-#define DW_CH_MEM_BYTES (PAGE_SIZE * MAX_NUM_COHERENT_PAGES)
+#define OSCAR_CH_MEM_BYTES (PAGE_SIZE * MAX_NUM_COHERENT_PAGES)
 
-/* Oscar uses BAR 4/5. */
-#define DW_BAR_INDEX 0
+/*
+ * Access PCI memory via BAR 0 for the Gasket framework; the actual BAR mapping
+ * has been setup by the parent device.
+ */
+#define OSCAR_BAR_INDEX 0
 
 /* The number of user-mappable memory ranges in Oscar BAR. */
 #define NUM_BAR_RANGES 3
 
-/* Bar Offsets. */
-#define DW_BAR_OFFSET 0
-#define DW_CM_OFFSET 0x1000000
+#define OSCAR_BAR_OFFSET 0
+#define OSCAR_CM_OFFSET 0x1000000
+
+/* The number of nodes in an Oscar chip. */
+#define NUM_NODES 1
+
+/*
+ * The total number of entries in the page table. Should match the value read
+ * from the register OSCAR_BAR_REG_HIB_PAGE_TABLE_SIZE.
+ */
+#define OSCAR_PAGE_TABLE_TOTAL_ENTRIES 2048
+
+#define OSCAR_EXTENDED_SHIFT 63 /* Extended address bit position. */
+
+#define OSCAR_RESET_RETRY 120	/* check reset 120 times */
+#define OSCAR_RESET_DELAY 100	/* wait 100 ms between checks */
+				/* total 12 sec wait maximum */
 
 /* enum sysfs_attribute_type: enumeration of the supported sysfs entries. */
 enum sysfs_attribute_type {
@@ -62,470 +68,571 @@ enum sysfs_attribute_type {
 };
 
 /*
- * Register offsets into BAR 4/5 memory.
+ * Register offsets into BAR memory.
  * Only values necessary for driver implementation are defined.
  */
-enum dw_bar_regs {
-	DW_BAR_REG_HIB_PAGE_TABLE_SIZE = 0x6000,
-	DW_BAR_REG_KERNEL_HIB_EXTENDED_TABLE = 0x6008,
-	DW_BAR_REG_KERNEL_HIB_TRANSLATION_ENABLE = 0x6010,
-	DW_BAR_REG_KERNEL_HIB_DMA_PAUSE = 0x46050,
-	DW_BAR_REG_KERNEL_HIB_DMA_PAUSE_MASK = 0x6058,
-	DW_BAR_REG_HIB_PAGE_TABLE_INIT = 0x6078,
-	DW_BAR_REG_USER_HIB_DMA_PAUSE = 0x86D8,
-	DW_BAR_REG_USER_HIB_DMA_PAUSED = 0x86E0,
-	DW_BAR_REG_HIB_PAGE_TABLE = 0x10000,
+enum oscar_bar_regs {
+	OSCAR_BAR_REG_HIB_PAGE_TABLE_SIZE = 0x6000,
+	OSCAR_BAR_REG_KERNEL_HIB_EXTENDED_TABLE = 0x6008,
+	OSCAR_BAR_REG_KERNEL_HIB_TRANSLATION_ENABLE = 0x6010,
+	OSCAR_BAR_REG_KERNEL_HIB_DMA_PAUSE = 0x46050,
+	OSCAR_BAR_REG_KERNEL_HIB_DMA_PAUSE_MASK = 0x6058,
+	OSCAR_BAR_REG_HIB_PAGE_TABLE_INIT = 0x6078,
+	OSCAR_BAR_REG_USER_HIB_DMA_PAUSE = 0x86D8,
+	OSCAR_BAR_REG_USER_HIB_DMA_PAUSED = 0x86E0,
+	OSCAR_BAR_REG_HIB_PAGE_TABLE = 0x10000,
 
 	/* Top Level Registers. */
-	DW_BAR_REG_AON_RESET = 0x20000,
-	DW_BAR_REG_AON_CLOCK_ENABLE = 0x20008,
-	DW_BAR_REG_AON_LOGIC_SHUTDOWN_PRE = 0x00020010,
-	DW_BAR_REG_AON_LOGIC_SHUTDOWN_ALL = 0x00020018,
-	DW_BAR_REG_AON_MEM_SHUTDOWN = 0x00020020,
-	DW_BAR_REG_AON_MEM_POWERDOWN = 0x00020028,
-	DW_BAR_REG_AON_CLAMP_ENABLE = 0x00020038,
-	DW_BAR_REG_AON_FORCE_QUIESCE = 0x00020040,
-	DW_BAR_REG_AON_IDLE = 0x00020050,
+	OSCAR_BAR_REG_AON_RESET = 0x20000,
+	OSCAR_BAR_REG_AON_CLOCK_ENABLE = 0x20008,
+	OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE = 0x00020010,
+	OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL = 0x00020018,
+	OSCAR_BAR_REG_AON_MEM_SHUTDOWN = 0x00020020,
+	OSCAR_BAR_REG_AON_MEM_POWERDOWN = 0x00020028,
+	OSCAR_BAR_REG_AON_CLAMP_ENABLE = 0x00020038,
+	OSCAR_BAR_REG_AON_FORCE_QUIESCE = 0x00020040,
+	OSCAR_BAR_REG_AON_IDLE = 0x00020050,
 };
 
-/* For now map the entire BAR2 into user space. (This helps debugging when
+/* For now map the entire BAR into user space. (This helps debugging when
  * running test vectors from user land)
  * In production driver we want to exclude the kernel HIB.
  */
-static struct ds_page_table_offsets dw_page_table_offsets[] = {
-	{ DW_BAR_REG_HIB_PAGE_TABLE_SIZE, DW_BAR_REG_HIB_PAGE_TABLE,
-		DW_BAR_REG_KERNEL_HIB_EXTENDED_TABLE },
+
+/* Configuration for page table. */
+static struct gasket_page_table_config oscar_page_table_configs[NUM_NODES] = {
+	{
+		.id = 0,
+		.mode = GASKET_PAGE_TABLE_MODE_NORMAL,
+		.total_entries = OSCAR_PAGE_TABLE_TOTAL_ENTRIES,
+		.base_reg = OSCAR_BAR_REG_HIB_PAGE_TABLE,
+		.extended_reg = OSCAR_BAR_REG_KERNEL_HIB_EXTENDED_TABLE,
+		.extended_bit = OSCAR_EXTENDED_SHIFT,
+	},
 };
 
-/* Function declarations */
-
-static int __init dw_init(void);
-static void dw_exit(void);
-
-static int dw_add_dev_cb(struct ds_dev *ds_dev);
-static int dw_remove_dev_cb(struct ds_dev *ds_dev);
-
-static int dw_sysfs_setup_cb(struct ds_dev *ds_dev);
-
-static int dw_device_cleanup(struct ds_dev *ds_dev);
-
-static int dw_device_open_cb(struct ds_dev *ds_dev);
-
-static ssize_t sysfs_show(
-	struct device *device, struct device_attribute *attr, char *buf);
-
-static int dw_reset(struct ds_dev *ds_dev, uint type);
-
-static int dw_get_status(struct ds_dev *ds_dev);
-
-static uint dw_ioctl_check_permissions(struct file *file, uint cmd);
-
-static long dw_ioctl(struct file *file, uint cmd, ulong arg);
-
-static long dw_clock_gating(struct ds_dev *ds_dev, ulong arg);
-
-static int dw_enter_reset(struct ds_dev *ds_dev, uint type);
-static int dw_quit_reset(struct ds_dev *ds_dev, uint type);
-
-/* Data definitions */
-
-/* The data necessary to display this file's sysfs entries. */
-static struct ds_sysfs_attribute dw_sysfs_attrs[] = {
-	DS_SYSFS_RO(node_0_page_table_entries, sysfs_show,
-		ATTR_KERNEL_HIB_PAGE_TABLE_SIZE),
-	DS_SYSFS_RO(node_0_simple_page_table_entries, sysfs_show,
-		ATTR_KERNEL_HIB_SIMPLE_PAGE_TABLE_SIZE),
-	DS_SYSFS_RO(node_0_num_mapped_pages, sysfs_show,
-		ATTR_KERNEL_HIB_NUM_ACTIVE_PAGES),
-	DS_END_OF_ATTR_ARRAY
-};
-
-static const struct pci_device_id dw_pci_ids[] = {
-	{ PCI_DEVICE(DW_PCI_VENDOR_ID, DW_PCI_DEVICE_ID) },
-	{ 0 }
-};
-
-/* The regions in the BAR5 space that can be mapped into user space. */
-static const struct ds_mappable_region tn_mappable_regions[NUM_BAR_RANGES] = {
+/* The regions in the BAR0 space that can be mapped into user space. */
+static const struct gasket_mappable_region
+oscar_mappable_regions[NUM_BAR_RANGES] = {
 	{ 0x0000, 0x1000 },
 	{ 0x4000, 0x1000 },
 	{ 0x8000, 0x1000 },
 };
 
-static const struct ds_mappable_region cm_mappable_regions[1] = {
-	{ 0x00000, DW_CH_MEM_BYTES }
+static const struct gasket_mappable_region cm_mappable_regions[1] = {
+	{ 0x00000, OSCAR_CH_MEM_BYTES }
 };
 
-/* Interrupt descriptors for DW. */
-static struct ds_interrupt_desc dw_interrupts[] = {
-	{ABC_MSI_4_TPU_IRQ0, },
-	{ABC_MSI_5_TPU_IRQ1, },
-	{ABC_MSI_AON_INTNC, },
-};
-
-static struct ds_driver_desc dw_desc = {
-	.name = DRV_NAME_ABC_PCIE_TPU,
-	.driver_version = DW_DRIVER_VERSION,
-	.major = 120,
-	.minor = 0,
-	.module = THIS_MODULE,
-	.pci_id_table = NULL,
-
-	.num_page_tables = 1,
-	.page_table_bar_index = DW_BAR_INDEX,
-	.page_table_offsets = dw_page_table_offsets,
-	.page_table_extended_bit = DW_EXTENDED_SHIFT,
-
-	.bar_descriptions = {
-		{
-			DW_BAR_BYTES,
-			(VM_WRITE | VM_READ),
-			DW_BAR_OFFSET,
-			NUM_BAR_RANGES,
-			tn_mappable_regions,
-			PCI_BAR
-		},
-		DS_UNUSED_BAR,
-		DS_UNUSED_BAR,
-		DS_UNUSED_BAR,
-		DS_UNUSED_BAR,
-		DS_UNUSED_BAR,
+/* TODO: pass these as resources from mfd driver */
+static struct gasket_interrupt_desc oscar_interrupts[] = {
+	{
+		ABC_MSI_4_TPU_IRQ0, 0, 0,
 	},
-	.coherent_buffer_description = {
-		DW_CH_MEM_BYTES,
-		(VM_WRITE | VM_READ),
-		DW_CM_OFFSET,
+	{
+		ABC_MSI_5_TPU_IRQ1, 0, 0,
 	},
-	.interrupt_type = PLATFORM_WIRE,
-	.interrupt_bar_index = DW_BAR_INDEX,
-	.num_interrupts = 3,
-	.interrupts = dw_interrupts,
-
-	.add_dev_cb = dw_add_dev_cb,
-	.remove_dev_cb = dw_remove_dev_cb,
-
-	.enable_dev_cb = NULL,
-	.disable_dev_cb = NULL,
-
-	.sysfs_setup_cb = dw_sysfs_setup_cb,
-	.sysfs_cleanup_cb = NULL,
-
-	.device_open_cb = dw_device_open_cb,
-	.device_close_cb = dw_device_cleanup,
-
-	.ioctl_handler_cb = dw_ioctl,
-	.device_status_cb = dw_get_status,
-	.hardware_revision_cb = NULL,
-	.device_reset_cb = dw_reset,
+	{
+		INTNC_TPU_WIREINTERRUPT2, 0, 0,
+	},
 };
-
-/* Module registration boilerplate */
-MODULE_DESCRIPTION("Google Oscar driver");
-MODULE_VERSION(DW_DRIVER_VERSION);
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("John Joseph <jnjoseph@google.com>");
-MODULE_DEVICE_TABLE(pci, dw_pci_ids);
-module_init(dw_init);
-module_exit(dw_exit);
 
 /* Act as if only GCB is instantiated. */
 static int bypass_top_level;
-
 module_param(bypass_top_level, int, 0644);
 
-static int __init dw_init(void)
+static int oscar_device_open_cb(struct gasket_dev *gasket_dev)
 {
-	return ds_register_device(&dw_desc);
+	return gasket_reset_nolock(gasket_dev);
 }
 
-static void dw_exit(void)
+static int oscar_get_status(struct gasket_dev *gasket_dev)
 {
-	ds_unregister_device(&dw_desc);
+	/* Always returns ALIVE for now */
+	return GASKET_STATUS_ALIVE;
 }
 
-static int dw_add_dev_cb(struct ds_dev *ds_dev)
+/* Enters GCB reset state. */
+static int oscar_enter_reset(struct gasket_dev *gasket_dev)
 {
-	ulong page_table_ready, msix_table_ready;
-	int retries = 0;
+	if (bypass_top_level)
+		return 0;
 
-
-	dw_reset(ds_dev, 0);
-
-	while (retries < DW_RESET_RETRY) {
-		page_table_ready = ds_dev_read_64(
-			ds_dev, DW_BAR_INDEX, DW_BAR_REG_HIB_PAGE_TABLE_INIT);
-		/* TODO(jnjoseph): Update when interrupts are enabled. */
-		msix_table_ready = 1;
-		if (page_table_ready && msix_table_ready)
-			break;
-		schedule_timeout(msecs_to_jiffies(DW_RESET_DELAY));
-		retries++;
+	/* 1. Check whether we are already in reset to guard HIB access. */
+	if (gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			       OSCAR_BAR_REG_AON_RESET) == 0) {
+		/* 1a. Enable DMA Pause. */
+		gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
+				    OSCAR_BAR_REG_USER_HIB_DMA_PAUSE);
+		/* 1b. Wait for DMA Pause to complete. */
+		if (gasket_wait_with_reschedule(gasket_dev, OSCAR_BAR_INDEX,
+						OSCAR_BAR_REG_USER_HIB_DMA_PAUSED,
+						1, 1, OSCAR_RESET_RETRY,
+						OSCAR_RESET_DELAY)) {
+			dev_err(gasket_dev->dev,
+				"DMA pause failed after timeout (%d ms)\n",
+				OSCAR_RESET_RETRY * OSCAR_RESET_DELAY);
+			return -ETIMEDOUT;
+		}
 	}
 
-	if (retries == DW_RESET_RETRY) {
-		if (!page_table_ready)
-			ds_log_error(ds_dev, "Page table init timed out.");
-		if (!msix_table_ready)
-			ds_log_error(ds_dev, "MSI-X table init timed out.");
-		return -ETIMEDOUT;
-	}
+	/* 2. Enable Quiesce. */
+	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_FORCE_QUIESCE);
+
+	/* 3. Enable Reset. */
+	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_RESET);
+
+	/*
+	 *  4. Disable Clock Enable.
+	 *  - clock_enable = 0.
+	 *  - cb_idle_override = 1.
+	 */
+	gasket_dev_write_64(gasket_dev, 2, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/* 5. Enable Clamp. */
+	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLAMP_ENABLE);
+
+	/* 6. Enable Memory shutdown. */
+	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
+	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_MEM_POWERDOWN);
+
+	/* 7. Enable Logic shutdown. */
+	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL);
+	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE);
+	return 0;
+}
+
+/* Called on final close via device_close_cb. */
+static int oscar_device_cleanup(struct gasket_dev *gasket_dev)
+{
+	return oscar_enter_reset(gasket_dev);
+}
+
+/* Quits GCB reset state. */
+static int oscar_quit_reset(struct gasket_dev *gasket_dev)
+{
+	if (bypass_top_level)
+		return 0;
+
+	/* 1. Enable Logic shutdown. */
+	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE);
+	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL);
+
+	/*
+	 * 2. Enable Clock Enable, and set idle_override to force the clock on.
+	 * - clock_enable = 1.
+	 *  - cb_idle_override = 1.
+	 */
+	gasket_dev_write_64(gasket_dev, 3, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/*
+	 * 3. Disable Clock Enable.
+	 *  - clock_enable = 0.
+	 *  - cb_idle_override = 1.
+	 */
+	gasket_dev_write_64(gasket_dev, 2, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/* 4. Disable Memory shutdown. */
+	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
+	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_MEM_POWERDOWN);
+
+	/*
+	 * 5. Enable Clock Enable, with dynamic activity based clock gating.
+	 *  - clock_enable = 1.
+	 *  - cb_idle_override = 0.
+	 */
+	gasket_dev_write_64(gasket_dev, 3, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/* 6. Disable Clamp. */
+	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLAMP_ENABLE);
+
+	/* 7. Disable Reset. */
+	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_RESET);
+
+	/* 8. Disable Quiesce. */
+	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_FORCE_QUIESCE);
 
 	return 0;
 }
 
-static int dw_remove_dev_cb(struct ds_dev *ds_dev)
-{
-	return 0;
-}
-
-static int dw_sysfs_setup_cb(struct ds_dev *ds_dev)
-{
-	return ds_sysfs_create_entries(ds_dev->dev_info.device, dw_sysfs_attrs);
-}
-
-/* On device open, we want to perform a core reinit reset. */
-static int dw_device_open_cb(struct ds_dev *ds_dev)
-{
-	return ds_reset_nolock(ds_dev, DW_CHIP_REINIT_RESET);
-}
-
-/**
- * dw_get_status - Set device status.
- * @dev: Oscar device struct.
- *
- * Description: Check the device status registers and set the driver status
- *		to ALIVE or DEAD.
- *
- *		Returns 0 if status is ALIVE, a negative error number otherwise.
- */
-static int dw_get_status(struct ds_dev *ds_dev)
-{
-
-	/* Oscar, always returns ALIVE for now */
-	return DS_STATUS_ALIVE;
-}
-
-/**
- * dw_device_cleanup - Clean up Oscar HW after close.
- * @ds_dev: DS device pointer.
- *
- * Description: Resets the Oscar hardware. Called on final close via
- * device_close_cb.
- */
-static int dw_device_cleanup(struct ds_dev *ds_dev)
-{
-	return dw_enter_reset(ds_dev, DW_CHIP_REINIT_RESET);
-}
-
-/**
- * dw_reset - Quits reset.
- * @ds_dev: DS device pointer.
- *
- * Description: Resets the hardware, then quits reset.
- * Called on device open.
- *
- */
-static int dw_reset(struct ds_dev *ds_dev, uint type)
+static int oscar_reset(struct gasket_dev *gasket_dev)
 {
 	int ret = 0;
 
 	if (bypass_top_level)
 		return 0;
 
-	ds_log_error(ds_dev, "dw_reset.\n");
-
-	ret = dw_enter_reset(ds_dev, type);
+	ret = oscar_enter_reset(gasket_dev);
 	if (ret < 0)
 		return ret;
-	return dw_quit_reset(ds_dev, type);
+	return oscar_quit_reset(gasket_dev);
 }
 
-/*
- * Enters GCB reset state.
- */
-static int dw_enter_reset(struct ds_dev *ds_dev, uint type)
+/* Gate or un-gate Oscar clock. */
+static long oscar_clock_gating(struct gasket_dev *gasket_dev,
+			       struct oscar_gate_clock_ioctl __user *argp)
 {
+	struct oscar_gate_clock_ioctl ibuf;
+
 	if (bypass_top_level)
 		return 0;
 
-	ds_log_debug(ds_dev, "dw_enter_reset.");
+	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
+		return -EFAULT;
 
-	/* 1. Check whether we are already in reset to guard HIB access. */
-	if (ds_dev_read_64(ds_dev, DW_BAR_INDEX, DW_BAR_REG_AON_RESET) == 0) {
-		/* 1a. Enable DMA Pause. */
-		ds_dev_write_64(
-			ds_dev, 1, DW_BAR_INDEX, DW_BAR_REG_USER_HIB_DMA_PAUSE);
-		/* 1b. Wait for DMA Pause to complete. */
-		if (ds_wait_async(ds_dev, DW_BAR_INDEX,
-			    DW_BAR_REG_USER_HIB_DMA_PAUSED, 1, 1,
-			    DW_RESET_DELAY, DW_RESET_RETRY)) {
-			ds_log_error(ds_dev,
-				"DMA pause failed after timeout (%d ms)",
-				DW_RESET_RETRY * DW_RESET_DELAY);
-			return -EINVAL;
-		}
-	}
-
-	/* 2. Enable Quiesce. */
-	ds_dev_write_64(ds_dev, 1, DW_BAR_INDEX, DW_BAR_REG_AON_FORCE_QUIESCE);
-
-	/* 3. Enable Reset. */
-	ds_dev_write_64(ds_dev, 1, DW_BAR_INDEX, DW_BAR_REG_AON_RESET);
-
-	/* 4. Disable Clock Enable.
-	 *  - clock_enable = 0.
-	 *  - cb_idle_override = 1.
-	 */
-	ds_dev_write_64(ds_dev, 2, DW_BAR_INDEX, DW_BAR_REG_AON_CLOCK_ENABLE);
-
-	/* 5. Enable Clamp. */
-	ds_dev_write_64(
-		ds_dev, 0x1ffff, DW_BAR_INDEX, DW_BAR_REG_AON_CLAMP_ENABLE);
-
-	/* 6. Enable Memory shutdown. */
-	ds_dev_write_64(
-		ds_dev, 0x1ffff, DW_BAR_INDEX, DW_BAR_REG_AON_MEM_SHUTDOWN);
-	ds_dev_write_64(
-		ds_dev, 0x1ffff, DW_BAR_INDEX, DW_BAR_REG_AON_MEM_POWERDOWN);
-
-	/* 7. Enable Logic shutdown. */
-	ds_dev_write_64(ds_dev, 0x1ffff, DW_BAR_INDEX,
-		DW_BAR_REG_AON_LOGIC_SHUTDOWN_ALL);
-	ds_dev_write_64(ds_dev, 0x1ffff, DW_BAR_INDEX,
-		DW_BAR_REG_AON_LOGIC_SHUTDOWN_PRE);
+	dev_dbg(gasket_dev->dev, "%s %llu\n", __func__, ibuf.enable);
+	/* TODO: implement or remove this ioctl */
 	return 0;
 }
 
-/*
- * Quits GCB reset state.
- */
-static int dw_quit_reset(struct ds_dev *ds_dev, uint type)
+static uint oscar_ioctl_check_permissions(struct file *filp, uint cmd)
 {
-	if (bypass_top_level)
-		return 0;
-
-	ds_log_debug(ds_dev, "dw_quit_reset.");
-
-	/* 1. Enable Logic shutdown. */
-	ds_dev_write_64(
-		ds_dev, 0, DW_BAR_INDEX, DW_BAR_REG_AON_LOGIC_SHUTDOWN_PRE);
-	ds_dev_write_64(
-		ds_dev, 0, DW_BAR_INDEX, DW_BAR_REG_AON_LOGIC_SHUTDOWN_ALL);
-
-	/* 2. Enable Clock Enable, and set idle_override to force the clock on.
-	 * - clock_enable = 1.
-	 *  - cb_idle_override = 1.
-	 */
-	ds_dev_write_64(ds_dev, 3, DW_BAR_INDEX, DW_BAR_REG_AON_CLOCK_ENABLE);
-
-	/* 3. Disable Clock Enable.
-	 *  - clock_enable = 0.
-	 *  - cb_idle_override = 1.
-	 */
-	ds_dev_write_64(ds_dev, 2, DW_BAR_INDEX, DW_BAR_REG_AON_CLOCK_ENABLE);
-
-	/* 4. Disable Memory shutdown. */
-	ds_dev_write_64(ds_dev, 0, DW_BAR_INDEX, DW_BAR_REG_AON_MEM_SHUTDOWN);
-	ds_dev_write_64(ds_dev, 0, DW_BAR_INDEX, DW_BAR_REG_AON_MEM_POWERDOWN);
-
-	/* 5. Enable Clock Enable, with dynamic activity based clock gating.
-	 *  - clock_enable = 1.
-	 *  - cb_idle_override = 0.
-	 */
-	ds_dev_write_64(ds_dev, 3, DW_BAR_INDEX, DW_BAR_REG_AON_CLOCK_ENABLE);
-
-	/* 6. Disable Clamp. */
-	ds_dev_write_64(ds_dev, 0, DW_BAR_INDEX, DW_BAR_REG_AON_CLAMP_ENABLE);
-
-	/* 7. Disable Reset. */
-	ds_dev_write_64(ds_dev, 0, DW_BAR_INDEX, DW_BAR_REG_AON_RESET);
-
-	/* 8. Disable Quiesce. */
-	ds_dev_write_64(ds_dev, 0, DW_BAR_INDEX, DW_BAR_REG_AON_FORCE_QUIESCE);
-
-	return 0;
+	return !!(filp->f_mode & FMODE_WRITE);
 }
 
-/*
- * DW_ioctl_check_permissions: Check permissions for Oscar ioctls.
- * @file: File pointer from ioctl.
- * @cmd: ioctl command.
- *
- * Returns 1 if the current user may execute this ioctl, and 0 otherwise.
- */
-static uint dw_ioctl_check_permissions(struct file *filp, uint cmd)
+static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 {
-	struct ds_dev *ds_dev = filp->private_data;
-	int root = capable(CAP_SYS_ADMIN);
-	int is_owner = ds_dev->dev_info.ownership.is_owned &&
-		       current->tgid == ds_dev->dev_info.ownership.owner;
+	struct gasket_dev *gasket_dev = filp->private_data;
 
-	if (root || is_owner)
-		return 1;
-	return 0;
-}
-
-/*
- * dw_ioctl: Oscar-specific ioctl handler.
- */
-static long dw_ioctl(struct file *filp, uint cmd, ulong arg)
-{
-	struct ds_dev *ds_dev = filp->private_data;
-
-	if (!dw_ioctl_check_permissions(filp, cmd))
+	if (!oscar_ioctl_check_permissions(filp, cmd))
 		return -EPERM;
 
 	switch (cmd) {
-	case DW_IOCTL_GATE_CLOCK:
-		return dw_clock_gating(ds_dev, arg);
+	case OSCAR_IOCTL_GATE_CLOCK:
+		return oscar_clock_gating(gasket_dev, argp);
 	default:
 		return -ENOTTY; /* unknown command */
 	}
 }
 
-/*
- * dw_clock_gating: Gates or un-gates Oscar clock.
- * @ds_dev: DS device pointer.
- * @arg: User ioctl arg, in this case to a dw_gate_clock_ioctl struct.
- */
-static long dw_clock_gating(struct ds_dev *ds_dev, ulong arg)
+static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
+			  char *buf)
 {
+	int ret;
+	struct gasket_dev *gasket_dev;
+	struct gasket_sysfs_attribute *gasket_attr;
+	enum sysfs_attribute_type type;
+
+	gasket_dev = gasket_sysfs_get_device_data(device);
+	if (!gasket_dev) {
+		dev_err(device, "No Gasket device sysfs mapping found\n");
+		return -ENODEV;
+	}
+
+	gasket_attr = gasket_sysfs_get_attr(device, attr);
+	if (!gasket_attr) {
+		dev_err(device, "No Gasket device sysfs attr data found\n");
+		gasket_sysfs_put_device_data(device, gasket_dev);
+		return -ENODEV;
+	}
+
+	type = (enum sysfs_attribute_type)gasket_sysfs_get_attr(device, attr);
+	switch (type) {
+	case ATTR_KERNEL_HIB_PAGE_TABLE_SIZE:
+		ret = scnprintf(buf, PAGE_SIZE, "%u\n",
+				gasket_page_table_num_entries(
+					gasket_dev->page_table[0]));
+		break;
+	case ATTR_KERNEL_HIB_SIMPLE_PAGE_TABLE_SIZE:
+		ret = scnprintf(buf, PAGE_SIZE, "%u\n",
+				gasket_page_table_num_entries(
+					gasket_dev->page_table[0]));
+		break;
+	case ATTR_KERNEL_HIB_NUM_ACTIVE_PAGES:
+		ret = scnprintf(buf, PAGE_SIZE, "%u\n",
+				gasket_page_table_num_active_pages(
+					gasket_dev->page_table[0]));
+		break;
+	default:
+		dev_dbg(gasket_dev->dev, "Unknown attribute: %s\n",
+			attr->attr.name);
+		ret = 0;
+		break;
+	}
+
+	gasket_sysfs_put_attr(device, gasket_attr);
+	gasket_sysfs_put_device_data(device, gasket_dev);
+	return ret;
+}
+
+static struct gasket_sysfs_attribute oscar_sysfs_attrs[] = {
+	GASKET_SYSFS_RO(node_0_page_table_entries, sysfs_show,
+		ATTR_KERNEL_HIB_PAGE_TABLE_SIZE),
+	GASKET_SYSFS_RO(node_0_simple_page_table_entries, sysfs_show,
+		ATTR_KERNEL_HIB_SIMPLE_PAGE_TABLE_SIZE),
+	GASKET_SYSFS_RO(node_0_num_mapped_pages, sysfs_show,
+		ATTR_KERNEL_HIB_NUM_ACTIVE_PAGES),
+	GASKET_END_OF_ATTR_ARRAY
+};
+
+static struct gasket_driver_desc oscar_gasket_desc = {
+	.name = DRIVER_NAME,
+	.driver_version = DRIVER_VERSION,
+	.major = 120,
+	.minor = 0,
+	.module = THIS_MODULE,
+
+	.num_page_tables = NUM_NODES,
+	.page_table_bar_index = OSCAR_BAR_INDEX,
+	.page_table_configs = oscar_page_table_configs,
+	.page_table_extended_bit = OSCAR_EXTENDED_SHIFT,
+
+	.bar_descriptions = {
+		{
+			OSCAR_BAR_SIZE,
+			(VM_WRITE | VM_READ),
+			OSCAR_BAR_OFFSET,
+			NUM_BAR_RANGES,
+			oscar_mappable_regions,
+			PCI_BAR
+		},
+		GASKET_UNUSED_BAR,
+		GASKET_UNUSED_BAR,
+		GASKET_UNUSED_BAR,
+		GASKET_UNUSED_BAR,
+		GASKET_UNUSED_BAR,
+	},
+	.coherent_buffer_description = {
+		OSCAR_CH_MEM_BYTES,
+		(VM_WRITE | VM_READ),
+		OSCAR_CM_OFFSET,
+	},
+	.interrupt_type = DEVICE_MANAGED,
+	.num_interrupts = ARRAY_SIZE(oscar_interrupts),
+	.interrupts = oscar_interrupts,
+
+	.device_open_cb = oscar_device_open_cb,
+	.device_close_cb = oscar_device_cleanup,
+	.ioctl_handler_cb = oscar_ioctl,
+	.device_status_cb = oscar_get_status,
+	.hardware_revision_cb = NULL,
+	.device_reset_cb = oscar_reset,
+};
+
+static int oscar_interrupt_callback(uint32_t irq, void *payload)
+{
+	struct gasket_dev *gasket_dev = (struct gasket_dev *)payload;
+	struct gasket_interrupt_data *interrupt_data =
+		gasket_dev->interrupt_data;
+	int i;
+
+	for (i = 0; i < oscar_gasket_desc.num_interrupts; i++) {
+		if (irq == oscar_interrupts[i].index) {
+			gasket_handle_interrupt(interrupt_data, i);
+			return IRQ_HANDLED;
+		}
+	}
+
+	return IRQ_NONE;
+}
+
+static int oscar_register_interrupt_callbacks(struct gasket_dev *gasket_dev)
+{
+	int ret, i;
+
+	for (i = 0; i < oscar_gasket_desc.num_interrupts; i++) {
+		ret = abc_reg_irq_callback2(&oscar_interrupt_callback,
+					    oscar_interrupts[i].index,
+					    gasket_dev);
+		if (ret) {
+			dev_err(gasket_dev->dev,
+				"Cannot register IRQ callback for index %d: %d\n",
+				i, ret);
+			return ret;
+		}
+	}
 	return 0;
 }
 
-/*
- * sysfs_show: Display driver sysfs entries.
- * @device: Kernel device structure.
- * @attr: Attribute to display.
- * @buf: Buffer to which to write output.
- *
- * Description: Looks up the driver data and file-specific attribute data (the
- * type of the attribute), then fills "buf" accordingly.
- */
-static ssize_t sysfs_show(
-	struct device *device, struct device_attribute *attr, char *buf)
+static void oscar_interrupt_cleanup(struct gasket_dev *gasket_dev)
 {
-	struct ds_dev *ds_dev =
-		(struct ds_dev *)ds_sysfs_get_device_data(device);
-	enum sysfs_attribute_type type =
-		(enum sysfs_attribute_type)ds_sysfs_get_attr_data(device, attr);
-	if (ds_dev == NULL) {
-		ds_nodev_error("No DW device sysfs mapping found");
-		return 0;
-	}
+	int ret, i;
 
-	switch (type) {
-	case ATTR_KERNEL_HIB_PAGE_TABLE_SIZE:
-		return scnprintf(buf, PAGE_SIZE, "%u\n",
-			ds_page_table_num_entries(ds_dev->page_table[0]));
-	case ATTR_KERNEL_HIB_SIMPLE_PAGE_TABLE_SIZE:
-		return scnprintf(buf, PAGE_SIZE, "%u\n",
-			ds_page_table_num_entries(ds_dev->page_table[0]));
-	case ATTR_KERNEL_HIB_NUM_ACTIVE_PAGES:
-		return scnprintf(buf, PAGE_SIZE, "%u\n",
-			ds_page_table_num_active_pages(ds_dev->page_table[0]));
-	default:
-		ds_log_error(ds_dev, "Unknown attribute: %s", attr->attr.name);
-		return 0;
+	for (i = 0; i < oscar_gasket_desc.num_interrupts; i++) {
+		ret = abc_reg_irq_callback2(NULL, oscar_interrupts[i].index,
+					    NULL);
+		if (ret)
+			dev_warn(gasket_dev->dev,
+				"Unregister IRQ callback for index %d: %d\n",
+				i, ret);
 	}
 }
+
+static int oscar_setup_device(struct gasket_dev *gasket_dev)
+{
+	ulong page_table_ready;
+	int retries = 0;
+	int ret;
+
+	oscar_reset(gasket_dev);
+
+	while (retries < OSCAR_RESET_RETRY) {
+		page_table_ready =
+		    gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+				       OSCAR_BAR_REG_HIB_PAGE_TABLE_INIT);
+		if (page_table_ready)
+			break;
+		schedule_timeout(msecs_to_jiffies(OSCAR_RESET_DELAY));
+		retries++;
+	}
+
+	if (retries == OSCAR_RESET_RETRY) {
+		dev_err(gasket_dev->dev, "Page table init timed out\n");
+		return -ETIMEDOUT;
+	}
+
+	ret = oscar_register_interrupt_callbacks(gasket_dev);
+	return ret;
+}
+
+static int oscar_probe(struct platform_device *pdev)
+{
+	struct resource *r;
+
+	int ret;
+	struct gasket_dev *gasket_dev;
+	struct device *dev = &pdev->dev;
+	/* TODO: remove abc_dev after fixing memory resources */
+	struct abc_device *abc_dev = pdev->dev.platform_data;
+	const struct dma_map_ops *parent_dma_ops =
+		get_dma_ops(pdev->dev.parent);
+
+	if (parent_dma_ops)
+		set_dma_ops(dev, parent_dma_ops);
+	else
+		dev_warn(dev, "No dma_ops to inherit from parent mfd device\n");
+
+	ret = gasket_platform_add_device(pdev, &gasket_dev);
+	if (ret) {
+		dev_err(dev, "error adding gasket device\n");
+		return ret;
+	}
+
+	platform_set_drvdata(pdev, gasket_dev);
+
+	/*
+	 * Get the IO memory resource for this device, this corresponds
+	 * to the BAR that has been mapped by the parent mfd device.
+	 */
+	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (r == NULL) {
+		dev_err(dev, "cannot get mem resource\n");
+		ret = -ENODEV;
+		goto remove_device;
+	}
+
+	/* Map BARs */
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base = r->start;
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes = r->end - r->start;
+
+#if 0 /* TODO: fix addresses passed, restore this code */
+	if (!devm_request_mem_region(dev,
+				     gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base,
+				     gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes,
+				     gasket_dev->dev_info.name)) {
+		dev_err(dev, "cannot request BAR %d memory region\n",
+			OSCAR_BAR_INDEX);
+		ret = -EINVAL;
+		goto remove_device;
+	}
+#endif /* TODO */
+
+	/* TODO: pass this in mem resource */
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base = abc_dev->tpu_config;
+	if (!gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base) {
+		dev_err(dev, "BAR %d memory region not setup\n",
+			OSCAR_BAR_INDEX);
+		ret = -ENODEV;
+		goto remove_device;
+	}
+
+	ret = oscar_setup_device(gasket_dev);
+	if (ret) {
+		dev_err(dev, "Setup device failed\n");
+		goto remove_device;
+	}
+
+	ret = gasket_sysfs_create_entries(gasket_dev->dev_info.device,
+					  oscar_sysfs_attrs);
+	if (ret)
+		dev_err(dev, "error creating device sysfs entries\n");
+
+	ret = gasket_enable_device(gasket_dev);
+	if (ret) {
+		dev_err(dev, "error enabling gasket device\n");
+		goto remove_device;
+	}
+
+	/* Place device in low power mode until opened */
+	oscar_enter_reset(gasket_dev);
+	return 0;
+
+remove_device:
+	gasket_platform_remove_device(pdev);
+	return ret;
+}
+
+static int oscar_remove(struct platform_device *pdev)
+{
+	struct gasket_dev *gasket_dev = platform_get_drvdata(pdev);
+
+	gasket_disable_device(gasket_dev);
+	oscar_interrupt_cleanup(gasket_dev);
+	iounmap(gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base);
+#if 0 /* TODO: restore when proper addresses passed from mfd driver */
+	release_mem_region(gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base,
+			   gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes);
+#endif /* TODO */
+	gasket_platform_remove_device(pdev);
+	return 0;
+}
+
+static struct platform_driver oscar_platform_driver = {
+		.probe = oscar_probe,
+		.remove = oscar_remove,
+		.driver = {
+			.name = DRIVER_NAME,
+		}
+};
+
+static int __init oscar_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&oscar_platform_driver);
+	if (!ret)
+		ret = gasket_register_device(&oscar_gasket_desc);
+	if (ret)
+		platform_driver_unregister(&oscar_platform_driver);
+	return ret;
+}
+
+static void __exit oscar_exit(void)
+{
+	gasket_unregister_device(&oscar_gasket_desc);
+	platform_driver_unregister(&oscar_platform_driver);
+}
+
+MODULE_DESCRIPTION("Google Oscar driver");
+MODULE_VERSION(DRIVER_VERSION);
+MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("John Joseph <jnjoseph@google.com>");
+module_init(oscar_init);
+module_exit(oscar_exit);
