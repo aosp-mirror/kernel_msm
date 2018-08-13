@@ -166,6 +166,7 @@ static void fg_encode_current(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val_ma, u8 *buf);
 static void fg_encode_default(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val, u8 *buf);
+static int __fg_restart(struct fg_chip *chip);
 
 static struct fg_irq_info fg_irqs[FG_IRQ_MAX];
 
@@ -2508,13 +2509,23 @@ static int fg_config_esr_sw(struct fg_chip *chip)
 
 	return 0;
 }
+static void fg_restart_work(struct work_struct *work)
+{
+	struct fg_chip *chip = container_of(work, struct fg_chip,
+					    fg_restart_work.work);
 
+	chip->fg_can_restart_flag = 1;
+
+}
 static void status_change_work(struct work_struct *work)
 {
 	struct fg_chip *chip = container_of(work,
 			struct fg_chip, status_change_work);
 	union power_supply_propval prop = {0, };
 	int rc, batt_temp;
+	int msoc;
+	bool usb_online;
+	static bool fg_restart_once=0;
 
 	if (!batt_psy_initialized(chip)) {
 		fg_dbg(chip, FG_STATUS, "Charger not available?!\n");
@@ -2538,6 +2549,22 @@ static void status_change_work(struct work_struct *work)
 	}
 
 	chip->charge_status = prop.intval;
+	fg_get_prop_capacity(chip, &msoc);
+	fg_get_usb_online(chip, &usb_online);
+	if (!usb_online && fg_restart_once) {
+		fg_restart_once = 0;
+	}
+	if (chip->charge_status == POWER_SUPPLY_STATUS_FULL && msoc < 99 && !fg_restart_once) {
+		if(chip->fg_can_restart_flag)
+		{
+			fg_restart_once = 1;
+			chip->fg_can_restart_flag = 0;
+			schedule_delayed_work(&chip->fg_restart_work,
+				msecs_to_jiffies(3000));
+			__fg_restart(chip);
+		}
+	}
+
 	rc = power_supply_get_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_CHARGE_TYPE, &prop);
 	if (rc < 0) {
@@ -5019,6 +5046,7 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 	INIT_WORK(&chip->esr_sw_work, fg_esr_sw_work);
 	INIT_DELAYED_WORK(&chip->batt_avg_work, batt_avg_work);
 	INIT_DELAYED_WORK(&chip->sram_dump_work, sram_dump_work);
+	INIT_DELAYED_WORK(&chip->fg_restart_work, fg_restart_work);
 	dev_set_drvdata(&spmi->dev, chip);
 
 	rc = fg_memif_init(chip);
@@ -5104,6 +5132,7 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 	}
 
 	chip->twm_soc_value = DEFAULT_TWM_SOC_VALUE;
+	chip->fg_can_restart_flag =1;
 
 	rc = fg_get_battery_voltage(chip, &volt_uv);
 	if (!rc)
