@@ -59,6 +59,26 @@
 #define SME_GLOBAL_CLASSD_STATS   (1 << eCsrGlobalClassDStats)
 #define SME_PER_CHAIN_RSSI_STATS  (1 << csr_per_chain_rssi_stats)
 
+#define sme_log_rate_limited(rate, level, args...) \
+		QDF_TRACE_RATE_LIMITED(rate, QDF_MODULE_ID_SME, level, ## args)
+#define sme_log_rate_limited_fl(rate, level, format, args...) \
+			sme_log_rate_limited(rate, level, FL(format), ## args)
+#define sme_alert_rate_limited(rate, format, args...) \
+			sme_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_FATAL,\
+				format, ## args)
+#define sme_err_rate_limited(rate, format, args...) \
+			sme_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_ERROR,\
+				format, ## args)
+#define sme_warn_rate_limited(rate, format, args...) \
+			sme_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_WARN,\
+				format, ## args)
+#define sme_info_rate_limited(rate, format, args...) \
+			sme_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_INFO,\
+				format, ## args)
+#define sme_debug_rate_limited(rate, format, args...) \
+			sme_log_rate_limited_fl(rate, QDF_TRACE_LEVEL_DEBUG,\
+				format, ## args)
+
 #define sme_log(level, args...) QDF_TRACE(QDF_MODULE_ID_SME, level, ## args)
 #define sme_logfl(level, format, args...) sme_log(level, FL(format), ## args)
 
@@ -75,7 +95,7 @@
 
 #define SME_ENTER() sme_logfl(QDF_TRACE_LEVEL_DEBUG, "enter")
 #define SME_EXIT() sme_logfl(QDF_TRACE_LEVEL_DEBUG, "exit")
-
+#define SME_SCAN_REJECT_RATE_LIMIT  5
 #define SME_SESSION_ID_ANY        50
 
 #define SME_INVALID_COUNTRY_CODE "XX"
@@ -368,6 +388,18 @@ QDF_STATUS sme_roam_set_pmkid_cache(tHalHandle hHal, uint8_t sessionId,
 		tPmkidCacheInfo *pPMKIDCache,
 		uint32_t numItems,
 		bool update_entire_cache);
+
+/**
+ * sme_get_pmk_info(): A wrapper function to request CSR to save PMK
+ * @hal: Global structure
+ * @session_id: SME session_id
+ * @pmk_cache: pointer to a structure of pmk
+ *
+ * Return: none
+ */
+void sme_get_pmk_info(tHalHandle hal, uint8_t session_id,
+		      tPmkidCacheInfo *pmk_cache);
+
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 QDF_STATUS sme_roam_set_psk_pmk(tHalHandle hHal, uint8_t sessionId,
 		uint8_t *pPSK_PMK, size_t pmk_len);

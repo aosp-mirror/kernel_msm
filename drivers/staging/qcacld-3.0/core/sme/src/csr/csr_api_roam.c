@@ -106,6 +106,43 @@
 /* Static Type declarations */
 static tCsrRoamSession csr_roam_roam_session[CSR_ROAM_SESSION_MAX];
 
+/**
+ * csr_get_ielen_from_bss_description() - to get IE length
+ *             from tSirBssDescription structure
+ * @pBssDescr: pBssDescr
+ *
+ * This function is called in various places to get IE length
+ * from tSirBssDescription structure
+ *
+ * @Return: total IE length
+ */
+static inline uint16_t
+csr_get_ielen_from_bss_description(tpSirBssDescription pBssDescr)
+{
+	uint16_t ielen;
+
+	if (!pBssDescr)
+		return 0;
+
+	/*
+	 * Length of BSS desription is without length of
+	 * length itself and length of pointer
+	 * that holds ieFields
+	 *
+	 * <------------sizeof(tSirBssDescription)-------------------->
+	 * +--------+---------------------------------+---------------+
+	 * | length | other fields                    | pointer to IEs|
+	 * +--------+---------------------------------+---------------+
+	 *                                            ^
+	 *                                            ieFields
+	 */
+
+	ielen = (uint16_t)(pBssDescr->length + sizeof(pBssDescr->length) -
+			   GET_FIELD_OFFSET(tSirBssDescription, ieFields));
+
+	return ielen;
+}
+
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 int diag_auth_type_from_csr_type(eCsrAuthType authType)
 {
@@ -11473,6 +11510,8 @@ csr_roam_chk_lnk_swt_ch_ind(tpAniSirGlobal mac_ctx, tSirSmeRsp *msg_ptr)
 	QDF_STATUS status;
 	tpSirSmeSwitchChannelInd pSwitchChnInd;
 	tCsrRoamInfo roamInfo;
+	tSirMacDsParamSetIE *ds_params_ie;
+	tDot11fIEHTInfo *ht_info_ie;
 
 	/* in case of STA, the SWITCH_CHANNEL originates from its AP */
 	sme_debug("eWNI_SME_SWITCH_CHL_IND from SME");
@@ -11493,6 +11532,29 @@ csr_roam_chk_lnk_swt_ch_ind(tpAniSirGlobal mac_ctx, tSirSmeRsp *msg_ptr)
 		if (session->pConnectBssDesc) {
 			session->pConnectBssDesc->channelId =
 				(uint8_t) pSwitchChnInd->newChannelId;
+		}
+
+		ds_params_ie = (tSirMacDsParamSetIE *)wlan_cfg_get_ie_ptr(
+					(uint8_t *)session->pConnectBssDesc->
+						ieFields,
+					csr_get_ielen_from_bss_description(
+						session->pConnectBssDesc),
+					DOT11F_EID_DSPARAMS, ONE_BYTE);
+		if (ds_params_ie)
+			ds_params_ie->channelNumber =
+				(uint8_t)pSwitchChnInd->newChannelId;
+
+		ht_info_ie = (tDot11fIEHTInfo *)wlan_cfg_get_ie_ptr(
+					(uint8_t *)session->pConnectBssDesc->
+						ieFields,
+					csr_get_ielen_from_bss_description(
+						session->pConnectBssDesc),
+					DOT11F_EID_HTINFO, ONE_BYTE);
+		if (ht_info_ie) {
+			ht_info_ie->primaryChannel =
+				(uint8_t)pSwitchChnInd->newChannelId;
+			ht_info_ie->secondaryChannelOffset =
+				pSwitchChnInd->chan_params.sec_ch_offset;
 		}
 
 		qdf_mem_set(&roamInfo, sizeof(tCsrRoamInfo), 0);
@@ -14072,6 +14134,24 @@ static void csr_roam_update_connected_profile_from_new_bss(tpAniSirGlobal pMac,
 	}
 }
 
+void csr_get_pmk_info(tpAniSirGlobal mac_ctx, uint8_t session_id,
+			  tPmkidCacheInfo *pmk_cache)
+{
+	tCsrRoamSession *session = NULL;
+
+	if (!mac_ctx) {
+		sme_err("Mac_ctx is NULL");
+		return;
+	}
+	session = CSR_GET_SESSION(mac_ctx, session_id);
+	if (!session) {
+		sme_err("session %d not found", session_id);
+		return;
+	}
+	qdf_mem_copy(pmk_cache->pmk, session->psk_pmk,
+					sizeof(session->psk_pmk));
+	pmk_cache->pmk_len = session->pmk_len;
+}
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 QDF_STATUS csr_roam_set_psk_pmk(tpAniSirGlobal pMac, uint32_t sessionId,
 				uint8_t *pPSK_PMK, size_t pmk_len)
@@ -18477,6 +18557,8 @@ csr_create_roam_scan_offload_request(tpAniSirGlobal mac_ctx,
 	req_buf->ConnectedNetwork.mcencryption =
 		mac_ctx->roam.roamSession[session_id].
 		connectedProfile.mcEncryptionType;
+	/* Copy the RSN capabilities in roam offload request from session*/
+	req_buf->rsn_caps = session->rsn_caps;
 #ifdef WLAN_FEATURE_11W
 	req_buf->ConnectedNetwork.mfp_enabled =
 	    mac_ctx->roam.roamSession[session_id].connectedProfile.MFPEnabled;

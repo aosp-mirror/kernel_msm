@@ -2812,6 +2812,7 @@ cleanup_label:
 	return status;
 }
 
+#define RSN_CAPS_SHIFT               16
 /**
  * wma_roam_scan_fill_self_caps() - fill capabilities
  * @wma_handle: wma handle
@@ -2916,7 +2917,19 @@ QDF_STATUS wma_roam_scan_fill_self_caps(tp_wma_handle wma_handle,
 	selfCaps.immediateBA =
 		(uint16_t) ((val >> WNI_CFG_BLOCK_ACK_ENABLED_IMMEDIATE) & 1);
 	pCfgValue16 = (uint16_t *) &selfCaps;
-	roam_offload_params->capability = (*pCfgValue16) & 0xFFFF;
+
+	/*
+	 * RSN caps arent been sent to firmware, so in case of PMF required,
+	 * the firmware connects to a non PMF AP advertising PMF not required
+	 * in the re-assoc request which violates protocol.
+	 * So send this to firmware in the roam SCAN offload command to
+	 * let it configure the params in the re-assoc request too.
+	 * Instead of making another infra, send the RSN-CAPS in MSB of
+	 * beacon Caps.
+	 */
+	roam_offload_params->capability = *((uint32_t *)(&roam_req->rsn_caps));
+	roam_offload_params->capability <<= RSN_CAPS_SHIFT;
+	roam_offload_params->capability |= ((*pCfgValue16) & 0xFFFF);
 
 	if (wlan_cfg_get_int(pMac, WNI_CFG_HT_CAP_INFO, &nCfgValue) !=
 	    eSIR_SUCCESS) {
@@ -4778,7 +4791,7 @@ int wma_extscan_cached_results_event_handler(void *handle,
 	struct extscan_cached_scan_results empty_cachelist;
 	wmi_extscan_wlan_descriptor *src_hotlist;
 	wmi_extscan_rssi_info *src_rssi;
-	int i, moredata, scan_ids_cnt, buf_len;
+	int i, moredata, scan_ids_cnt, buf_len, status;
 	tpAniSirGlobal pMac = cds_get_context(QDF_MODULE_ID_PE);
 	uint32_t total_len;
 	bool excess_data = false;
@@ -4876,19 +4889,24 @@ int wma_extscan_cached_results_event_handler(void *handle,
 
 	dest_result = dest_cachelist->result;
 	wma_fill_num_results_per_scan_id(cmd_param_info, dest_result);
-	wma_group_num_bss_to_scan_id(cmd_param_info, dest_cachelist);
 
-	pMac->sme.pExtScanIndCb(pMac->hHdd,
+	status = wma_group_num_bss_to_scan_id(cmd_param_info, dest_cachelist);
+	if (!status)
+		pMac->sme.pExtScanIndCb(pMac->hHdd,
 				eSIR_EXTSCAN_CACHED_RESULTS_IND,
 				dest_cachelist);
+	else
+		WMA_LOGD("wma_group_num_bss_to_scan_id failed, not calling callback");
+
 	dest_result = dest_cachelist->result;
 	for (i = 0; i < dest_cachelist->num_scan_ids; i++) {
-		qdf_mem_free(dest_result->ap);
+		if (dest_result->ap)
+			qdf_mem_free(dest_result->ap);
 		dest_result++;
 	}
 	qdf_mem_free(dest_cachelist->result);
 	qdf_mem_free(dest_cachelist);
-	return 0;
+	return status;
 
 noresults:
 	empty_cachelist.request_id = event->request_id;
