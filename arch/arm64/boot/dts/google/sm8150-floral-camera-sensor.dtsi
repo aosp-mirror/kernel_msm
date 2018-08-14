@@ -29,6 +29,24 @@
 			qcom,drive-strength = <2>;
 		};
 	};
+
+	cam_sensor_rear_tele_active: cam_sensor_rear_tele_active {
+		mux {
+			pins = "gpio10";
+			function = "normal";
+			bias-disable;
+			qcom,drive-strength = <2>;
+		};
+	};
+
+	cam_sensor_rear_tele_suspend: cam_sensor_rear_tele_suspend {
+		mux {
+			pins = "gpio10";
+			function = "normal";
+			bias-pull-down;
+			qcom,drive-strength = <2>;
+		};
+	};
 };
 
 &cam_cci1 {
@@ -36,8 +54,8 @@
 	pinctrl-1 = <&cci2_suspend &cci3_suspend>;
 
 	qcom,cam-res-mgr {
-	compatible = "qcom,cam-res-mgr";
-	status = "ok";
+		compatible = "qcom,cam-res-mgr";
+		status = "ok";
 	};
 
 	qcom,cam-sensor@0 {
@@ -75,6 +93,47 @@
 		sensor-mode = <0>;
 		cci-device = <1>;
 		cci-master = <0>;
+		status = "ok";
+		clocks = <&clock_camcc 76>;
+		clock-names = "cam_clk";
+		clock-cntl-level = "turbo";
+		clock-rates = <24000000>;
+	};
+
+	sensor_rear_tele: qcom,cam-sensor@1 {
+		cell-index = <1>;
+		compatible = "qcom,cam-sensor";
+		reg = <0x1>;
+		csiphy-sd-index = <1>;
+		sensor-position-roll = <90>;
+		sensor-position-pitch = <0>;
+		sensor-position-yaw = <180>;
+		cam_vio-supply  = <&max77826_ldo13>;
+		cam_vana-supply = <&max77826_ldo5>;
+		cam_vdig-supply = <&max77826_ldo1>;
+		cam_clk-supply  = <&titan_top_gdsc>;
+		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
+			"cam_clk";
+		rgltr-cntrl-support;
+		rgltr-min-voltage  = <0 2900000 1100000 0>;
+		rgltr-max-voltage  = <0 2900000 1100000 0>;
+		rgltr-load-current = <0 80000 105000 0>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk2_active
+			&cam_sensor_rear_tele_active>;
+		pinctrl-1 = <&cam_sensor_mclk2_suspend
+			&cam_sensor_rear_tele_suspend>;
+		gpios = <&tlmm 15 0>,
+			<&pm8150_gpios 10 0>;
+		gpio-reset = <1>;
+		gpio-req-tbl-num = <0 1>;
+		gpio-req-tbl-flags = <1 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK1",
+			"CAM_RESET1";
+		sensor-mode = <0>;
+		cci-master = <1>;
+		cci-device = <1>;
 		status = "ok";
 		clocks = <&clock_camcc 76>;
 		clock-names = "cam_clk";
