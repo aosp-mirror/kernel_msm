@@ -438,6 +438,7 @@ struct fg_chip {
 	bool			profile_loaded;
 	bool			battery_missing;
 	bool			fg_restarting;
+	bool			fg_can_restart_flag;
 	bool			charge_full;
 	bool			recharge_soc_adjusted;
 	bool			ki_coeff_dischg_en;
@@ -455,6 +456,7 @@ struct fg_chip {
 	struct work_struct	esr_sw_work;
 	struct delayed_work	batt_avg_work;
 	struct delayed_work	sram_dump_work;
+	struct delayed_work	fg_restart_work;
 	struct fg_circ_buf	ibatt_circ_buf;
 	struct fg_circ_buf	vbatt_circ_buf;
 };
