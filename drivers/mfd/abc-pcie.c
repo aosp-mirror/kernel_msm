@@ -771,10 +771,13 @@ uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
 
 	/* MSI IRQs Request for system IP's */
 	for (i = ABC_MSI_0_TMU_AON; i < ABC_MSI_RD_DMA_0; i++) {
-		/* ABC_MSI_2_IPU_IRQ0 and ABC_MSI_3_IPU_IRQ1 are registered by
-		 * the paintbox IPU driver
+		/*
+		 * ABC_MSI_2_IPU_IRQ0 and ABC_MSI_3_IPU_IRQ1 are registered by
+		 * the paintbox IPU driver.  Similar for the 2 high prio
+		 * TPU interrupts.
 		 */
-		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1)
+		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1 ||
+		    i == ABC_MSI_4_TPU_IRQ0 || i == ABC_MSI_5_TPU_IRQ1)
 			continue;
 		err = request_irq(pdev->irq + i,
 				abc_pcie_irq_handler, 0,
@@ -814,8 +817,8 @@ uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
 
 free_irq:
 	for (--i; i >= ABC_MSI_0_TMU_AON; i--) {
-		/* ABC_MSI_3_IPU_IRQ1 is freed by paintbox driver*/
-		if (i == ABC_MSI_3_IPU_IRQ1)
+		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1 ||
+		    i == ABC_MSI_4_TPU_IRQ0 || i == ABC_MSI_5_TPU_IRQ1)
 			continue;
 		free_irq(pdev->irq + i, pdev);
 	}
@@ -830,7 +833,8 @@ static void abc_pcie_irq_free(struct pci_dev *pdev)
 	unsigned int i;
 
 	for (i = ABC_MSI_0_TMU_AON; i <= ABC_MSI_AON_INTNC; i++) {
-		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1)
+		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1 ||
+		    i == ABC_MSI_4_TPU_IRQ0 || i == ABC_MSI_5_TPU_IRQ1)
 			continue;
 		free_irq(pdev->irq + i, pdev);
 	}
@@ -858,7 +862,26 @@ static const struct resource tpu_resources[] = {
 		.start = 0,			/* TODO: determine */
 		.end = (2 * 1024 * 1024) - 1,	/* TODO: determine */
 		.flags = IORESOURCE_MEM,
-	}
+	},
+	{
+		.name = "tpu-scalar-core-0-irq",
+		.start = ABC_MSI_4_TPU_IRQ0,
+		.end = ABC_MSI_4_TPU_IRQ0,
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		.name = "tpu-instr-queue-irq",
+		.start = ABC_MSI_5_TPU_IRQ1,
+		.end = ABC_MSI_5_TPU_IRQ1,
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		/* INTNC_MSI_IRQ_3 mux'ed on MSI 31 ABC_MSI_AON_INTNC */
+		.name = "tpu-low-prio-int-idx",
+		.start = INTNC_TPU_WIREINTERRUPT2,
+		.end = INTNC_TPU_WIREINTERRUPT2,
+		.flags = 0,
+	},
 };
 static const struct resource fsys_resources[] = {
 };

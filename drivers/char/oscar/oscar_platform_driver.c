@@ -16,7 +16,6 @@
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 
-#include "../../mfd/abc-pcie-private.h"
 #include "linux/mfd/abc-pcie.h"
 #include "oscar.h"
 
@@ -47,6 +46,12 @@
 
 /* The number of nodes in an Oscar chip. */
 #define NUM_NODES 1
+
+/* Interrupts handled by this driver */
+#define OSCAR_SCALAR_CORE_0_INT	0
+#define OSCAR_INSTR_QUEUE_INT	1
+#define OSCAR_LOWPRIO_INT	2
+#define OSCAR_N_IRQS		3
 
 /*
  * The total number of entries in the page table. Should match the value read
@@ -123,18 +128,7 @@ static const struct gasket_mappable_region cm_mappable_regions[1] = {
 	{ 0x00000, OSCAR_CH_MEM_BYTES }
 };
 
-/* TODO: pass these as resources from mfd driver */
-static struct gasket_interrupt_desc oscar_interrupts[] = {
-	{
-		ABC_MSI_4_TPU_IRQ0, 0, 0,
-	},
-	{
-		ABC_MSI_5_TPU_IRQ1, 0, 0,
-	},
-	{
-		INTNC_TPU_WIREINTERRUPT2, 0, 0,
-	},
-};
+static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_IRQS];
 
 /* Act as if only GCB is instantiated. */
 static int bypass_top_level;
@@ -415,7 +409,7 @@ static struct gasket_driver_desc oscar_gasket_desc = {
 		OSCAR_CM_OFFSET,
 	},
 	.interrupt_type = DEVICE_MANAGED,
-	.num_interrupts = ARRAY_SIZE(oscar_interrupts),
+	.num_interrupts = OSCAR_N_IRQS,
 	.interrupts = oscar_interrupts,
 
 	.device_open_cb = oscar_device_open_cb,
@@ -426,14 +420,14 @@ static struct gasket_driver_desc oscar_gasket_desc = {
 	.device_reset_cb = oscar_reset,
 };
 
-static int oscar_interrupt_callback(uint32_t irq, void *payload)
+static irqreturn_t oscar_interrupt_handler(int irq, void *arg)
 {
-	struct gasket_dev *gasket_dev = (struct gasket_dev *)payload;
+	struct gasket_dev *gasket_dev = (struct gasket_dev *)arg;
 	struct gasket_interrupt_data *interrupt_data =
 		gasket_dev->interrupt_data;
 	int i;
 
-	for (i = 0; i < oscar_gasket_desc.num_interrupts; i++) {
+	for (i = 0; i < OSCAR_N_IRQS; i++) {
 		if (irq == oscar_interrupts[i].index) {
 			gasket_handle_interrupt(interrupt_data, i);
 			return IRQ_HANDLED;
@@ -443,43 +437,129 @@ static int oscar_interrupt_callback(uint32_t irq, void *payload)
 	return IRQ_NONE;
 }
 
-static int oscar_register_interrupt_callbacks(struct gasket_dev *gasket_dev)
+static int oscar_interrupt_callback(uint32_t irq, void *payload)
 {
-	int ret, i;
+	struct gasket_dev *gasket_dev = (struct gasket_dev *)payload;
+	struct gasket_interrupt_data *interrupt_data =
+		gasket_dev->interrupt_data;
+	int i;
 
-	for (i = 0; i < oscar_gasket_desc.num_interrupts; i++) {
-		ret = abc_reg_irq_callback2(&oscar_interrupt_callback,
-					    oscar_interrupts[i].index,
-					    gasket_dev);
-		if (ret) {
-			dev_err(gasket_dev->dev,
-				"Cannot register IRQ callback for index %d: %d\n",
-				i, ret);
-			return ret;
+	for (i = 0; i < OSCAR_N_IRQS; i++) {
+		if (irq == oscar_interrupts[i].index) {
+			gasket_handle_interrupt(interrupt_data, i);
+			return IRQ_HANDLED;
 		}
 	}
-	return 0;
+
+	return IRQ_NONE;
 }
 
 static void oscar_interrupt_cleanup(struct gasket_dev *gasket_dev)
 {
-	int ret, i;
+	int ret;
 
-	for (i = 0; i < oscar_gasket_desc.num_interrupts; i++) {
-		ret = abc_reg_irq_callback2(NULL, oscar_interrupts[i].index,
-					    NULL);
-		if (ret)
-			dev_warn(gasket_dev->dev,
-				"Unregister IRQ callback for index %d: %d\n",
-				i, ret);
-	}
+	ret = abc_reg_irq_callback2(NULL,
+				    oscar_interrupts[OSCAR_LOWPRIO_INT].index,
+				    NULL);
+	if (ret)
+		dev_warn(gasket_dev->dev,
+			 "Unregister ABC IRQ callback for index %d: %d\n",
+			 oscar_interrupts[OSCAR_LOWPRIO_INT].index, ret);
 }
 
-static int oscar_setup_device(struct gasket_dev *gasket_dev)
+static int oscar_setup_device(struct platform_device *pdev,
+			      struct gasket_dev *gasket_dev)
 {
+	struct resource *r;
+	int irq;
 	ulong page_table_ready;
 	int retries = 0;
+	struct device *dev = &pdev->dev;
+	/* TODO: remove abc_dev after fixing memory resources */
+	struct abc_device *abc_dev = pdev->dev.platform_data;
+	const struct dma_map_ops *parent_dma_ops =
+		get_dma_ops(pdev->dev.parent);
 	int ret;
+
+	if (parent_dma_ops)
+		set_dma_ops(dev, parent_dma_ops);
+	else
+		dev_warn(dev, "No dma_ops to inherit from parent mfd device\n");
+
+	/*
+	 * Get the IO memory resource for this device, this corresponds
+	 * to the BAR that has been mapped by the parent mfd device.
+	 */
+	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (r == NULL) {
+		dev_err(dev, "cannot get mem resource\n");
+		return -ENODEV;
+	}
+
+	/* Map BARs */
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base = r->start;
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes = r->end - r->start;
+
+#if 0 /* TODO: fix addresses passed, restore this code */
+	if (!devm_request_mem_region(dev,
+				     gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base,
+				     gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes,
+				     gasket_dev->dev_info.name)) {
+		dev_err(dev, "cannot request BAR %d memory region\n",
+			OSCAR_BAR_INDEX);
+		return -EINVAL;
+	}
+#endif /* TODO */
+
+	/* TODO: pass this in mem resource */
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base = abc_dev->tpu_config;
+	if (!gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base) {
+		dev_err(dev, "BAR %d memory region not setup\n",
+			OSCAR_BAR_INDEX);
+		return -ENODEV;
+	}
+
+	irq = platform_get_irq_byname(pdev, "tpu-scalar-core-0-irq");
+	if (irq < 0) {
+		dev_err(dev, "cannot get scalar core 0 irq\n");
+		return -ENODEV;
+	}
+	oscar_interrupts[OSCAR_SCALAR_CORE_0_INT].index = irq;
+	ret = devm_request_irq(dev, irq, oscar_interrupt_handler, IRQF_ONESHOT,
+			       dev_name(dev), gasket_dev);
+	if (ret) {
+		dev_err(dev, "failed to request irq %d\n", irq);
+		return ret;
+	}
+
+	irq = platform_get_irq_byname(pdev, "tpu-instr-queue-irq");
+	if (irq < 0) {
+		dev_err(dev, "cannot get instruction queue irq\n");
+		return -ENODEV;
+	}
+	oscar_interrupts[OSCAR_INSTR_QUEUE_INT].index = irq;
+	ret = devm_request_irq(dev, irq, oscar_interrupt_handler, IRQF_ONESHOT,
+			       dev_name(dev), gasket_dev);
+	if (ret) {
+		dev_err(dev, "failed to request irq %d\n", irq);
+		return -ENODEV;
+	}
+
+	r = platform_get_resource_byname(pdev, 0, "tpu-low-prio-int-idx");
+	if (!r) {
+		dev_err(dev, "failed to get low prio irq callback index\n");
+		return -ENODEV;
+	}
+
+	oscar_interrupts[OSCAR_LOWPRIO_INT].index = r->start;
+	ret = abc_reg_irq_callback2(&oscar_interrupt_callback, r->start,
+				    gasket_dev);
+	if (ret) {
+		dev_err(dev,
+			"Cannot register ABC IRQ callback for index %d: %d\n",
+			r->start, ret);
+		return ret;
+	}
 
 	oscar_reset(gasket_dev);
 
@@ -498,26 +578,14 @@ static int oscar_setup_device(struct gasket_dev *gasket_dev)
 		return -ETIMEDOUT;
 	}
 
-	ret = oscar_register_interrupt_callbacks(gasket_dev);
-	return ret;
+	return 0;
 }
 
 static int oscar_probe(struct platform_device *pdev)
 {
-	struct resource *r;
-
 	int ret;
 	struct gasket_dev *gasket_dev;
 	struct device *dev = &pdev->dev;
-	/* TODO: remove abc_dev after fixing memory resources */
-	struct abc_device *abc_dev = pdev->dev.platform_data;
-	const struct dma_map_ops *parent_dma_ops =
-		get_dma_ops(pdev->dev.parent);
-
-	if (parent_dma_ops)
-		set_dma_ops(dev, parent_dma_ops);
-	else
-		dev_warn(dev, "No dma_ops to inherit from parent mfd device\n");
 
 	ret = gasket_platform_add_device(pdev, &gasket_dev);
 	if (ret) {
@@ -527,43 +595,7 @@ static int oscar_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, gasket_dev);
 
-	/*
-	 * Get the IO memory resource for this device, this corresponds
-	 * to the BAR that has been mapped by the parent mfd device.
-	 */
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (r == NULL) {
-		dev_err(dev, "cannot get mem resource\n");
-		ret = -ENODEV;
-		goto remove_device;
-	}
-
-	/* Map BARs */
-	gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base = r->start;
-	gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes = r->end - r->start;
-
-#if 0 /* TODO: fix addresses passed, restore this code */
-	if (!devm_request_mem_region(dev,
-				     gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base,
-				     gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes,
-				     gasket_dev->dev_info.name)) {
-		dev_err(dev, "cannot request BAR %d memory region\n",
-			OSCAR_BAR_INDEX);
-		ret = -EINVAL;
-		goto remove_device;
-	}
-#endif /* TODO */
-
-	/* TODO: pass this in mem resource */
-	gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base = abc_dev->tpu_config;
-	if (!gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base) {
-		dev_err(dev, "BAR %d memory region not setup\n",
-			OSCAR_BAR_INDEX);
-		ret = -ENODEV;
-		goto remove_device;
-	}
-
-	ret = oscar_setup_device(gasket_dev);
+	ret = oscar_setup_device(pdev, gasket_dev);
 	if (ret) {
 		dev_err(dev, "Setup device failed\n");
 		goto remove_device;
