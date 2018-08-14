@@ -108,6 +108,7 @@
 	google_overheat_mitigation: google,overheat_mitigation {
 		compatible = "google,overheat_mitigation";
 		google,port-overheat-work-interval = <1000>;
+		google,accessory-monitoring-period = <150>;
 		/* Must maintain < 1/15 duty cycle */
 		google,polling-freq = <3>;
 	};
