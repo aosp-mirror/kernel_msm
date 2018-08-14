@@ -1381,6 +1381,7 @@ static void batt_worker(struct work_struct *work)
 	unsigned long cur_jiffies;
 	int cc_uah_now;
 	int current_max = 0;
+	int typec_sink = 0;
 	char chg_strbuf[20];
 	/* reference from power_supply.h power_supply_type */
 	char *chr_src[] = {"NONE", "BATTERY", "UPS", "MAINS", "USB",
@@ -1481,16 +1482,21 @@ static void batt_worker(struct work_struct *work)
 		} else {
 			/* WA: QCT  recorgnize D+/D- open charger won't set 500mA. */
 			if ((htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB)) {
-				user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
-				if (!get_connect2pc() && !g_rerun_apsd_done && !g_is_unknown_charger) {
-					user_set_chg_curr = SLOW_CHARGE_CURR;
-					if (delayed_work_pending(&htc_batt_info.chk_unknown_chg_work))
-						cancel_delayed_work(&htc_batt_info.chk_unknown_chg_work);
-					schedule_delayed_work(&htc_batt_info.chk_unknown_chg_work,
-							msecs_to_jiffies(CHG_UNKNOWN_CHG_PERIOD_MS));
+				typec_sink = get_property(htc_batt_info.batt_psy, POWER_SUPPLY_PROP_TYPEC_SINK_CURRENT);
+				if (typec_sink){
+					//Souce type is USB TYPE_C, Ignore WA.
 				} else {
-					if (user_set_chg_curr < SLOW_CHARGE_CURR)
+					user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
+					if (!get_connect2pc() && !g_rerun_apsd_done && !g_is_unknown_charger) {
 						user_set_chg_curr = SLOW_CHARGE_CURR;
+						if (delayed_work_pending(&htc_batt_info.chk_unknown_chg_work))
+							cancel_delayed_work(&htc_batt_info.chk_unknown_chg_work);
+						schedule_delayed_work(&htc_batt_info.chk_unknown_chg_work,
+								msecs_to_jiffies(CHG_UNKNOWN_CHG_PERIOD_MS));
+					} else {
+						if (user_set_chg_curr < SLOW_CHARGE_CURR)
+							user_set_chg_curr = SLOW_CHARGE_CURR;
+					}
 				}
 			} else if (htc_batt_info.rep.charging_source == POWER_SUPPLY_TYPE_USB_HVDCP){
 				user_set_chg_curr = get_property(htc_batt_info.usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
