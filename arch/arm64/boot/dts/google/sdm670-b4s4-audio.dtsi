@@ -431,7 +431,8 @@
 		"ADC3_IN", "ADC3_OUT",
 		"MIC BIAS Internal1", "Handset Mic",
 		"Stereo1 DMIC Mux", "MIC BIAS Internal1",
-		"Stereo2 DMIC Mux", "Mic2_3 REGULATOR";
+		"Stereo2 DMIC Mux", "Mic2_3 REGULATOR",
+		"DSP_IN", "MIC BIAS Internal1";
 	qcom,wsa-disable;
 	qcom,wsa-max-devs = <0>;
 	qcom,msm-micbias1-ext-cap;
@@ -444,7 +445,7 @@
 &qupv3_se2_spi {
 	status = "ok";
 	mnh-spi@0 {
-		compatible = "realtek,rt5514-spi";
+		compatible = "realtek,rt5514";
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <126 0>;
