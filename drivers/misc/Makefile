@@ -69,6 +69,7 @@ obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
 obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
 
 obj-$(CONFIG_CITADEL)		+= citadel-spi.o
+obj-$(CONFIG_PAC193X)           += pac193x.o
 
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_core.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_bugs.o

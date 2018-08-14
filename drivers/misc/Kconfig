@@ -582,6 +582,16 @@ config AIRBRUSH_SM
 	  This includes the support for CLK, LPDDR, UART, SPI and other IP
 	  configurations which can be controlled through the PCIe interface.
 
+config PAC193X
+	tristate " Microchip PAC193x Energy Monitor"
+	depends on I2C
+	help
+	  If you say yes here you get support for the Microchip PAC193x
+	  Energy Monitor.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called pac193x.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
