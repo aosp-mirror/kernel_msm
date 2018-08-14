@@ -738,7 +738,6 @@ static int p9221_send_ccreset(struct p9221_charger_data *charger)
 struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
 	/* property			register			g, s */
 	{POWER_SUPPLY_PROP_CURRENT_NOW,	P9221_RX_IOUT_REG,		1, 0},
-	{POWER_SUPPLY_PROP_CURRENT_MAX,	P9221_ILIM_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_VOLTAGE_NOW,	P9221_VOUT_ADC_REG,		1, 0},
 	{POWER_SUPPLY_PROP_VOLTAGE_MAX, P9221_VOUT_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_TEMP,	P9221_DIE_TEMP_ADC_REG,		1, 0},
@@ -748,7 +747,6 @@ struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
 struct p9221_prop_reg_map_entry p9221_prop_reg_map_r5[] = {
 	/* property			register			g, s */
 	{POWER_SUPPLY_PROP_CURRENT_NOW,	P9221R5_IOUT_REG,		1, 0},
-	{POWER_SUPPLY_PROP_CURRENT_MAX,	P9221R5_ILIM_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_VOLTAGE_NOW,	P9221R5_VOUT_REG,		1, 0},
 	{POWER_SUPPLY_PROP_VOLTAGE_MAX, P9221R5_VOUT_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_TEMP,	P9221R5_DIE_TEMP_ADC_REG,	1, 0},
@@ -983,6 +981,13 @@ static int p9221_get_property(struct power_supply *psy,
 		else
 			val->intval = 0;
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		ret = get_effective_result(charger->dc_icl_votable);
+		if (ret < 0)
+			break;
+
+		val->intval = ret;
+		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
 		break;
@@ -1013,7 +1018,14 @@ static int p9221_set_property(struct power_supply *psy,
 					"Could send csp: %d\n", ret);
 		}
 		break;
-
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (val->intval < 0) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = vote(charger->dc_icl_votable, P9221_USER_VOTER, true,
+			   val->intval);
+		break;
 	default:
 		ret = p9221_set_property_reg(charger, prop, val);
 		break;
