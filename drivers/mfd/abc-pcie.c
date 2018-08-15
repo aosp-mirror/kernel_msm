@@ -900,7 +900,7 @@ static int abc_pcie_init_child_devices(struct pci_dev *pdev)
 {
 	int err;
 
-	err = mfd_add_devices(&pdev->dev, -1, abc_pcie_bar0,
+	err = mfd_add_devices(&pdev->dev, PLATFORM_DEVID_NONE, abc_pcie_bar0,
 			ARRAY_SIZE(abc_pcie_bar0), &pdev->resource[0],
 			pdev->irq, NULL);
 	if (err < 0) {
@@ -909,7 +909,7 @@ static int abc_pcie_init_child_devices(struct pci_dev *pdev)
 	}
 
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
-	err = mfd_add_devices(&pdev->dev, -1, abc_pcie_bar2,
+	err = mfd_add_devices(&pdev->dev, PLATFORM_DEVID_NONE, abc_pcie_bar2,
 			ARRAY_SIZE(abc_pcie_bar2), &pdev->resource[2], 0, NULL);
 	if (err < 0) {
 		mfd_remove_devices(&pdev->dev);
