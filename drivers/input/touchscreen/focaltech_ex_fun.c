@@ -1627,7 +1627,7 @@ static ssize_t fts_tp_pwr_disabled_show(struct device *dev, struct device_attrib
 	printk(KERN_DEBUG "[fts]%s, Show TP Disable state\n", __func__);
 	return EPERM;
 }
-
+#ifdef FTS_RECORD_DATA
 static ssize_t show_tp_enable_record_tp_data_tag(struct device *dev,
 						 struct device_attribute *attr,
 						 char *buf)
@@ -1672,7 +1672,7 @@ static ssize_t show_tp_disable_record_tp_data_tag(struct device *dev,
 	return sprintf(buf, "TP record_tp_data_tag : %s\n",
 		       en_record_tp_data_func ? "ON" : "OFF");
 }
-
+#endif
 static DEVICE_ATTR(ftstppwrdisable, S_IRUGO|S_IWUSR|S_IWGRP, fts_tp_pwr_disabled_show, fts_tp_pwr_disabled_store);
 
 /****************************************/
@@ -1721,10 +1721,12 @@ static DEVICE_ATTR(disable_big_area_event, S_IRUGO, show_tp_disable_big_area_eve
 static DEVICE_ATTR(enable_tp_irq, S_IRUGO, tp_enable_irq_func, NULL);
 static DEVICE_ATTR(disable_tp_irq, S_IRUGO, tp_disable_irq_func, NULL);
 static DEVICE_ATTR(tp_debug_info, S_IRUGO, show_tp_debug_info, NULL);
+#ifdef FTS_RECORD_DATA
 static DEVICE_ATTR(enable_record_tp_data, S_IRUGO,
 		   show_tp_enable_record_tp_data_tag, NULL);
 static DEVICE_ATTR(disable_record_tp_data, S_IRUGO,
 		   show_tp_disable_record_tp_data_tag, NULL);
+#endif
 
 /*add your attr in here*/
 static struct attribute *fts_attributes[] = {
@@ -1750,8 +1752,10 @@ static struct attribute *fts_attributes[] = {
 	&dev_attr_enable_tp_irq.attr,
 	&dev_attr_disable_tp_irq.attr,
 	&dev_attr_tp_debug_info.attr,
+#ifdef FTS_RECORD_DATA
 	&dev_attr_enable_record_tp_data.attr,
 	&dev_attr_disable_record_tp_data.attr,
+#endif
 	NULL
 };
 

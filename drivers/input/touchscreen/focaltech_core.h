@@ -53,7 +53,7 @@
 #include <linux/unistd.h>
 #include <linux/ioctl.h>
 #include "ft_gesture_lib.h"
-
+#include <linux/wakelock.h>
 /*******************************************************************************
 * Private constant and macro definitions using #define
 *******************************************************************************/
@@ -185,7 +185,7 @@
 
 #define STATE_NORMAL	0x00
 #define STATE_GESTRUE	0x01
-
+/* #define FTS_RECORD_DATA */
 #define FTS_GESTRUE_EN
 
 #ifndef FTS_GESTRUE_EN
@@ -391,6 +391,7 @@ struct fts_ts_data {
 	u8 fw_vendor_id;
 #ifdef FTS_GESTRUE_EN
 	int tp_gesture_id;
+	struct wake_lock	wlock;
 #endif
 	int touchs;
 #if defined(CONFIG_FB)
