@@ -36,9 +36,10 @@
 #define FSYS_MINOR_NUMBER 2
 
 #define MAX_DMA_INT	16
-#define MAX_ABC_MSI	32
-/* 32 MSI interrupts (0-31) + 12 Mux interrupts on 31st MSI */
-#define MAX_INT		44
+#define ABC_MSI_COUNT	32
+/* 32 MSI interrupts + 12 mux'ed interrupts on MSI31 */
+#define ABC_MSI31_INT_COUNT	12
+#define ABC_INT_COUNT		(ABC_MSI_COUNT + ABC_MSI31_INT_COUNT) /* 44 */
 
 /* todo..add platform specific data */
 struct abc_pcie_devdata;
@@ -101,9 +102,9 @@ struct abc_device {
 	unsigned char *rd_buf;
 	dma_addr_t rd_buf_addr;
 	irq_dma_cb_t	dma_cb[MAX_DMA_INT];
-	irq_cb_t	sys_cb[MAX_INT];
-	irq_cb_t2	sys_cb2[MAX_INT];
-	void		*handler_payload[MAX_INT];
+	irq_cb_t	sys_cb[ABC_INT_COUNT];
+	irq_cb_t2	sys_cb2[ABC_INT_COUNT];
+	void		*handler_payload[ABC_INT_COUNT];
 	spinlock_t      lock;
 };
 

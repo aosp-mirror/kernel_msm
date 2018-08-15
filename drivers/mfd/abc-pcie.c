@@ -668,10 +668,11 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 		/* Check the sysreg status register and do the callback */
 		msi_status_31 = readl(abc_dev->fsys_config +
 				SYSREG_FSYS_INTERRUPT);
-		cb_pos = MAX_ABC_MSI;
+		cb_pos = ABC_MSI_COUNT;
 		pos = 0;
 		while ((pos = find_next_bit((unsigned long *) &msi_status_31,
-						32, pos)) != 32) {
+					    ABC_MSI31_INT_COUNT, pos)) !=
+		       ABC_MSI31_INT_COUNT) {
 			cb_pos += pos;
 			if (abc_dev->sys_cb2[cb_pos] &&
 				abc_dev->handler_payload[cb_pos])
