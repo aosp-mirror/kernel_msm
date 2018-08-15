@@ -140,7 +140,8 @@ static int g_ts_boot = 1;
 
 struct irq_desc *fts_irq_desc = NULL;
 
-/* dean record tp data */
+#ifdef FTS_RECORD_DATA
+/* record tp data */
 bool en_record_tp_data_func = false;
 char TPdata_buf[RECORD_SIZE] = { 0 };
 
@@ -148,6 +149,7 @@ int TPdata_buf_len = 0;
 char tmp_buf[128] = { 0 };
 
 int tmp_buf_len = 0;
+#endif
 
 u8 buf_touch_data[30 * POINT_READ_BUF] = { 0 };
 
@@ -530,7 +532,7 @@ static void fts_report_value(struct fts_ts_data *data)
 	event->gesture_id = buf[FTS_TOUCH_GESTURE_ID];
 
 	if (print_gesture) {
-		printk(KERN_INFO
+		pr_err(
 		       "[fts]%s, gesture_id : 0x%x, buf[FTS_TOUCH_GESTURE_ID]:0x%x, big_area_enabled_flag:0x%x\n",
 		       __func__, event->gesture_id, buf[FTS_TOUCH_GESTURE_ID],
 		       big_area_enabled_flag);
@@ -567,7 +569,7 @@ static void fts_report_value(struct fts_ts_data *data)
 
 	if ((big_area_enabled_flag) && (event->gesture_id == GESTURE_UNKNOWN)) {
 		/* release sleep key */
-		printk(KERN_INFO
+		pr_info(
 		       "[fts]%s, enter release sleep key for suspend mode gesture_id : 0x%x\n",
 		       __func__, event->gesture_id);
 
@@ -585,7 +587,7 @@ static void fts_report_value(struct fts_ts_data *data)
 
 	if (big_area_enabled_flag) {
 		if (print_gesture) {
-			printk(KERN_INFO
+			pr_info(
 			       "[fts]%s, waiting for release sleep key, suspend mode gesture_id : 0x%x\n",
 			       __func__, event->gesture_id);
 		}
@@ -654,7 +656,7 @@ static void fts_report_value(struct fts_ts_data *data)
 			       "[fts] finger id=%d x=%d y=%d release\n", i,
 			       event->au16_x[i], event->au16_y[i]);
 		}
-
+#ifdef FTS_RECORD_DATA
 		if (en_record_tp_data_func) {
 			memset(tmp_buf, 0, 128);
 			tmp_buf_len =
@@ -673,6 +675,7 @@ static void fts_report_value(struct fts_ts_data *data)
 				       tmp_buf, TPdata_buf_len);
 			}
 		}
+#endif
 	}
 	if (unlikely(data->touchs ^ touchs)) {
 		for (i = 0; i < FTS_MAX_POINTS; i++) {
@@ -702,6 +705,9 @@ static void fts_gesture_check(struct fts_ts_data *data)
 	u8 ret;
 	u8 reg_addr = FTS_GESTURE_OUTPUT_ADRESS;
 
+	if (!wake_lock_active(&data->wlock))
+		wake_lock(&data->wlock);
+
 	ret = fts_i2c_read(data->client, &reg_addr, 1, &reg_value, 1);
 
 	if (ret < 0) {
@@ -714,6 +720,9 @@ static void fts_gesture_check(struct fts_ts_data *data)
 			       reg_value);
 		}
 	}
+
+	if (wake_lock_active(&data->wlock))
+		wake_unlock(&data->wlock);
 
 	if (data->tp_gesture_id == GESTURE_SMALL_AREA) {
 		if (print_gesture) {
@@ -1185,36 +1194,45 @@ int fts_ts_stop(struct device *dev)
 
 #ifdef FTS_GESTRUE_EN
 	err = fts_write_reg(fts_i2c_client, FTS_GESTURE_SETTING_ADRESS, 0x01);	/* Entry Gesture mode */
-	err = fts_write_reg(fts_i2c_client, 0xd1, 0x20);	/* only listen small area */
+	if (err < 0)
+		pr_err("[fts]%s, set gesture mode setting fail\n",
+		       __func__);
 
+	/* only listen small area */
+	err = fts_write_reg(fts_i2c_client, 0xd1, 0x20);
 	if (err < 0) {
 		printk(KERN_ERR "[fts]%s, TP set into gesture mode Fail !!!\n",
 		       __func__);
 	} else {
 		err = fts_i2c_read(fts_i2c_client, &reg_addr, 1, &reg_value, 1);
 		printk(KERN_INFO
-		       "[fts]%s, FTS_GESTURE_SETTING_ADRESS,  ret val : %d\n",
+		       "[fts]%s, read GESTURE_SETTING_ADDRESS,  ret val : %d\n",
 		       __func__, reg_value);
 	}
 
 	txbuf[0] = FTS_REG_AUTO_ENTER_MONITOR;
 	txbuf[1] = 1;
 	err = fts_write_reg(fts_i2c_client, txbuf[0], txbuf[1]);
-	printk(KERN_INFO "[fts]%s,  FTS_REG_AUTO_ENTER_MONITOR, ret : %d\n",
+	if (err < 0)
+		pr_err("[fts]%s,set AUTO_ENTER_MONITOR fail, ret : %d\n",
 	       __func__, err);
 
+	/* Entry Monitor mode */
 	txbuf[0] = FTS_REG_PMODE;
 	txbuf[1] = FTS_PMODE_MONITOR;
-	err = fts_write_reg(fts_i2c_client, txbuf[0], txbuf[1]);	/* Entry Monitor mode */
-	printk(KERN_INFO "[fts]%s,  FTS_PMODE_MONITOR, ret : %d\n", __func__,
-	       err);
+
+	err = fts_write_reg(fts_i2c_client, txbuf[0], txbuf[1]);
+	if (err < 0)
+		pr_err("[fts]%s,set FTS_PMODE_MONITOR fail, ret : %d\n",
+			__func__, err);
 
 #else
 	txbuf[0] = FTS_REG_PMODE;
 	txbuf[1] = FTS_PMODE_HIBERNATE;
 	err = fts_write_reg(fts_i2c_client, txbuf[0], txbuf[1]);	/* Entry Hibernate mode */
-	printk(KERN_INFO "[fts]%s, FTS_PMODE_HIBERNATE, ret : %d\n", __func__,
-	       err);
+	if (err < 0)
+		pr_err("[fts]%s, FTS_PMODE_HIBERNATE fail, ret : %d\n",
+			__func__, err);
 
 #endif
 
@@ -2414,6 +2432,9 @@ static int fts_ts_probe(struct i2c_client *client,
 	register_early_suspend(&data->early_suspend);
 #endif
 
+#ifdef FTS_GESTRUE_EN
+	wake_lock_init(&data->wlock, WAKE_LOCK_SUSPEND, "fts");
+#endif
 	enable_irq(client->irq);
 
 	return 0;
@@ -2442,6 +2463,7 @@ irq_free:
 free_wake_irq:
 #ifdef FTS_GESTRUE_EN
 	irq_set_irq_wake(client->irq, 0);
+	wake_lock_destroy(&data->wlock);
 #endif
 
 free_gpio:
@@ -2525,6 +2547,10 @@ static int fts_ts_remove(struct i2c_client *client)
 
 #ifdef FTS_CTL_IIC
 	fts_rw_iic_drv_exit();
+#endif
+
+#ifdef FTS_GESTRUE_EN
+	wake_lock_destroy(&data->wlock);
 #endif
 
 #if defined(CONFIG_FB)

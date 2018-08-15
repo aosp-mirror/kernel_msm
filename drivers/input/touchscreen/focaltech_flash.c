@@ -104,7 +104,7 @@ static unsigned char CTPM_FW_TP_ID_T[] = {
 };
 
 static unsigned char CTPM_FW_TP_ID_S[] = {
-#include "FTS_FW/CEI_Sakura_FZW7_3267_0x99_V0x05_20180622_app.i"
+#include "FTS_FW/CEI_Sakura_FZW7_3267_0x99_V0x07_20180815_app.i"
 };
 
 static unsigned char CTPM_FW_TP_ID_S_TRULY[] = {
