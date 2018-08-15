@@ -221,10 +221,9 @@ static inline struct usb_request *midi_alloc_ep_req(struct usb_ep *ep,
 	return alloc_ep_req(ep, length, length);
 }
 
-static void midi_free_ep_req(struct usb_ep *ep, struct usb_request *req)
+static inline void midi_free_ep_req(struct usb_ep *ep, struct usb_request *req)
 {
-	kfree(req->buf);
-	usb_ep_free_request(ep, req);
+	free_ep_req(ep, req);
 }
 
 static const uint8_t f_midi_cin_length[] = {
