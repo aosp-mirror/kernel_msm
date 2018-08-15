@@ -15,10 +15,6 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- *
  */
 
 #include <linux/kernel.h>
@@ -583,7 +579,7 @@ static ssize_t shunt_value_show(struct device *dev,
 
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 		i = chip_info->shunts[cnt];
-		len += sprintf(buf + len, "%d ", i);
+		len += scnprintf(buf + len, PAGE_SIZE, "%d ", i);
 	}
 	buf[len - 1] = '\n';
 	return len;
@@ -598,7 +594,7 @@ static ssize_t shunt_value_store(struct device *dev,
 	int chan, sh_val;
 	char *blank, mybuff[8];
 
-	blank = strchr(buf, ' ');
+	blank = strnchr(buf, ' ', count);
 	if (!blank) {
 		dev_err(dev, "%s: Missing parameters\n", "shunt_value");
 		return -EINVAL;
