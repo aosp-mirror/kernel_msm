@@ -17,6 +17,7 @@
 #include "sdm670-b4s4-key-dev-proto.dtsi"
 #include "sdm670-b4s4-touch-dev-proto.dtsi"
 #include "sdm670-camera-sensor.dtsi"
+#include "sdm670-s4-usb-v2.dtsi"
 
 /* TODO: Add dev board display and touch includes here */
 /* TODO: Fix model/compatible/board-id */

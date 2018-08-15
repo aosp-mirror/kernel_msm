@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+/* Overrides phy tuning parameters for B4 DEV or later */
 &qusb_phy0 {
 	qcom,qusb-phy-init-seq =
 			/* <value reg_offset> */
