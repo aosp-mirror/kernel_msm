@@ -53,14 +53,6 @@
 };
 
 &qusb_phy0 {
-	/delete-property/ qcom,efuse-bit-pos;
-	/delete-property/ qcom,efuse-num-bits;
-
-	reg = <0x088e2000 0x400>,
-	      <0x088e7014 0x4>;
-	reg-names = "qusb_phy_base",
-		    "refgen_north_bg_reg_addr";
-
 	qcom,qusb-phy-reg-offset =
 		<0x240 /* QUSB2PHY_PORT_TUNE1 */
 		 0x1a0 /* QUSB2PHY_PLL_COMMON_STATUS_ONE */
