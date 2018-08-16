@@ -60,6 +60,12 @@
 };
 
 &reserved_memory {
+	debug_info: debug_info@a1800000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xa1800000 0 0x00010000>;
+	};
+
 	ramoops_mem: ramoops_region@a3800000 {
 		compatible = "removed-dma-pool";
 		no-map;
