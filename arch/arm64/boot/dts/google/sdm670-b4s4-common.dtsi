@@ -218,6 +218,14 @@
 	modemsmem {
 		compatible = "modemsmem";
 	};
+
+	bootloader_log {
+		compatible = "qcom,bldr_log";
+		reg = <0xA1800000 0x6000>, <0xA1806000 0x6000>;
+		reg-names = "bl_log", "bl_old_log";
+		memory-region = <&debug_info>;
+	};
+
 	ramoops {
 		compatible = "ramoops";
 		memory-region = <&ramoops_mem>;
