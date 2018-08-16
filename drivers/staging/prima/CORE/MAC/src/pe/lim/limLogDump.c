@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -57,6 +57,10 @@ Implements the dump commands specific to the lim module.
 #endif
 #include "smeInside.h"
 #include "wlan_qct_wda.h"
+#ifdef WLAN_FEATURE_RMC
+#include "wlan_qct_tl.h"
+#include "limRMC.h"
+#endif
 #include "wlan_qct_wdi_dts.h"
 
 void WDA_TimerTrafficStatsInd(tWDA_CbContext *pWDA);
@@ -1208,7 +1212,7 @@ dump_lim_send_SM_Power_Mode( tpAniSirGlobal pMac, tANI_U32 arg1, tANI_U32 arg2, 
         state = (tSirMacHTMIMOPowerSaveState) arg1;
 
     pMBMsg = vos_mem_malloc(WNI_CFG_MB_HDR_LEN + sizeof(tSirMacHTMIMOPowerSaveState));
-    if(NULL == pMBMsg)
+    if (NULL == pMBMsg)
     {
         p += log_sprintf( pMac,p, "pMBMsg is NULL\n");
         return p;
@@ -1516,6 +1520,8 @@ dump_lim_get_pe_statistics(tpAniSirGlobal pMac, tANI_U32 arg1, tANI_U32 arg2, tA
         case 5:
             statsMask = PE_PER_STA_STATS_INFO;
             break;
+        case 6:
+            statsMask = PE_PER_TX_PKT_STATS_INFO;
         default:
             return p;
     }
@@ -2136,7 +2142,7 @@ dump_lim_ft_event( tpAniSirGlobal pMac, tANI_U32 arg1, tANI_U32 arg2, tANI_U32 a
                    p += log_sprintf( pMac, p, "%s: Session %02x %02x %02x\n", __func__, 
                             psessionEntry->bssId[0],
                             psessionEntry->bssId[1], psessionEntry->bssId[2]);
-                   p += log_sprintf( pMac, p, "%s: Session %02x %02x %02x %p\n", __func__, 
+                   p += log_sprintf( pMac, p, "%s: Session %02x %02x %02x %pK\n", __func__, 
                             pftPreAuthReq->currbssId[0],
                             pftPreAuthReq->currbssId[1], 
                             pftPreAuthReq->currbssId[2], pftPreAuthReq);
@@ -2366,6 +2372,102 @@ dump_lim_get_pkts_rcvd_per_rssi_values( tpAniSirGlobal pMac, tANI_U32 arg1, tANI
 }
 #endif
 
+#ifdef WLAN_FEATURE_RMC
+
+static char *
+dump_lim_enable_rmc_data_path
+(
+    tpAniSirGlobal pMac,
+    tANI_U32 arg1,
+    tANI_U32 arg2,
+    tANI_U32 arg3,
+    tANI_U32 arg4,
+    char *p
+)
+{
+    v_MACADDR_t rmcTransmitterAddr;
+    v_VOID_t * pVosContext = vos_get_global_context(VOS_MODULE_ID_WDA, NULL);
+
+    rmcTransmitterAddr.bytes[0] = (tANI_U8)((arg1 & 0xFF000000) >> 24);
+    rmcTransmitterAddr.bytes[1] = (tANI_U8)((arg1 & 0x00FF0000) >> 16);
+    rmcTransmitterAddr.bytes[2] = (tANI_U8)((arg1 & 0x0000FF00) >>  8);
+    rmcTransmitterAddr.bytes[3] = (tANI_U8)((arg1 & 0x000000FF));
+    rmcTransmitterAddr.bytes[4] = (tANI_U8)((arg2 & 0xFF000000) >> 24);
+    rmcTransmitterAddr.bytes[5] = (tANI_U8)((arg2 & 0x00FF0000) >> 16);
+
+    limLog(pMac, LOGE,
+        FL("Enable RMC data path for MCAST transmitter:" MAC_ADDRESS_STR),
+        MAC_ADDR_ARRAY( rmcTransmitterAddr.bytes));
+
+    /*Input format is in MAC address fromat for example
+      iwpriv wlan0 dump 0xaabbccdd 0xeeff0000 translates into enable RMC for
+      MAC address 0xaa:0xbb:0xcc:0xdd:0xee:0xff*/
+
+    /*Enable TL data path*/
+    WLANTL_EnableRMC( pVosContext, &rmcTransmitterAddr );
+
+  return p;
+}
+
+static char *
+dump_lim_disable_rmc_data_path
+(
+    tpAniSirGlobal pMac,
+    tANI_U32 arg1,
+    tANI_U32 arg2,
+    tANI_U32 arg3,
+    tANI_U32 arg4,
+    char *p
+)
+{
+    v_MACADDR_t rmcTransmitterAddr;
+    v_VOID_t * pVosContext = vos_get_global_context(VOS_MODULE_ID_WDA, NULL);
+
+    rmcTransmitterAddr.bytes[0] = (tANI_U8)((arg1 & 0xFF000000) >> 24);
+    rmcTransmitterAddr.bytes[1] = (tANI_U8)((arg1 & 0x00FF0000) >> 16);
+    rmcTransmitterAddr.bytes[2] = (tANI_U8)((arg1 & 0x0000FF00) >>  8);
+    rmcTransmitterAddr.bytes[3] = (tANI_U8)((arg1 & 0x000000FF));
+    rmcTransmitterAddr.bytes[4] = (tANI_U8)((arg2 & 0xFF000000) >> 24);
+    rmcTransmitterAddr.bytes[5] = (tANI_U8)((arg2 & 0x00FF0000) >> 16);
+
+
+    limLog(pMac, LOGE,
+        FL("Disable RMC data path for MCAST transmitter:" MAC_ADDRESS_STR),
+        MAC_ADDR_ARRAY( rmcTransmitterAddr.bytes));
+
+    /*Input format is in MAC address fromat for example
+      iwpriv wlan0 dump 0xaabbccdd 0xeeff0000 translates into enable RMC for
+      MAC address 0xaa:0xbb:0xcc:0xdd:0xee:0xff*/
+
+    /*Disable TL data path*/
+    WLANTL_DisableRMC( pVosContext, &rmcTransmitterAddr );
+
+    return p;
+}
+
+static char *
+dump_lim_rmc_status(tpAniSirGlobal pMac, tANI_U32 arg1, tANI_U32 arg2,
+             tANI_U32 arg3, tANI_U32 arg4, char *p)
+{
+    limRmcDumpStatus(pMac);
+    return p;
+}
+
+static char *
+dump_set_mcast_dup_detect(tpAniSirGlobal pMac, tANI_U32 arg1, tANI_U32 arg2,
+             tANI_U32 arg3, tANI_U32 arg4, char *p)
+{
+    v_VOID_t * pVosContext = vos_get_global_context(VOS_MODULE_ID_WDA, NULL);
+    v_U8_t enable;
+
+    enable = (tANI_U8)arg1;
+
+    /* Enable or Disable Multicast Duplicate Detection */
+    WLANTL_SetMcastDuplicateDetection( pVosContext, enable);
+
+    return p;
+}
+#endif /* WLAN_FEATURE_RMC */
 
 static char *
 dump_set_max_probe_req(tpAniSirGlobal pMac, tANI_U32 arg1, tANI_U32 arg2,
@@ -2465,7 +2567,17 @@ static tDumpFuncEntry limMenuDumpTable[] = {
     {369,   "PE.LIM: pkts/rateIdx: iwpriv wlan0 dump 368 <staId> <boolean to flush counter>",    dump_lim_get_pkts_rcvd_per_rate_idx},
     {370,   "PE.LIM: pkts/rssi: : iwpriv wlan0 dump 369 <staId> <boolean to flush counter>",    dump_lim_get_pkts_rcvd_per_rssi_values},
 #endif
+#ifdef WLAN_FEATURE_RMC
+    {371,   "PE.LIM: Enable RMC data path in TL for input MCAST addr",
+        dump_lim_enable_rmc_data_path },
+    {372,   "PE.LIM: Disable RMC data path in TL for input MCAST addr",
+        dump_lim_disable_rmc_data_path },
+    {373,   "PE.LIM: Dump RMC transmitter and ruler status", dump_lim_rmc_status },
+#endif /* WLAN_FEATURE_RMC */
     {374,   "PE.LIM: MAS RX stats MAC eff <MAC eff in percentage>",  dump_limRateInfoBasedOnMacEff},
+#ifdef WLAN_FEATURE_RMC
+    {375,   "PE.LIM: Enable(1)/Disable(0) RMC duplicate detection", dump_set_mcast_dup_detect },
+#endif /* WLAN_FEATURE_RMC */
     {376,   "PE.LIM: max number of probe per scan", dump_set_max_probe_req },
 };
 

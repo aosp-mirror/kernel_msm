@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,7 @@
 #define DSIPHY_CMN_CTRL_1		0x0020
 
 #define DSIPHY_CMN_LDO_CNTRL		0x004c
+#define DSIPHY_CMN_GLBL_DIGTOP_SPARE2	0x005c
 
 #define DSIPHY_PLL_IE_TRIM		0x0400
 #define DSIPHY_PLL_IP_TRIM		0x0404
@@ -43,6 +44,8 @@
 #define DSIPHY_PLL_VREF_CFG1		0x045c
 
 #define DSIPHY_PLL_KVCO_CODE		0x0458
+#define DSIPHY_PLL_CORE_VCO_TUNE_STATUS	0x4D0
+#define DSIPHY_PLL_CORE_KVCO_CODE_STATUS	0x4D4
 
 #define DSIPHY_PLL_VCO_DIV_REF1		0x046c
 #define DSIPHY_PLL_VCO_DIV_REF2		0x0470
@@ -131,7 +134,7 @@ struct dsi_pll_input {
 
 	u32 pll_lpf_res1;	/* 3, reg: 0x0504, bit 0 - 3 */
 	u32 pll_lpf_cap1;	/* 11, reg: 0x0500, bit 0 - 3 */
-	u32 pll_lpf_cap2;	/* 14, reg: 0x0500, bit 4 - 7 */
+	u32 pll_lpf_cap2;	/* 1, reg: 0x0500, bit 4 - 7 */
 	u32 pll_c3ctrl;		/* 2, reg: 0x04c4 */
 	u32 pll_r3ctrl;		/* 1, reg: 0x04c4 */
 };

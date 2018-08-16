@@ -188,6 +188,16 @@ static void *eeh_dev_save_state(void *data, void *userdata)
 	if (!edev)
 		return NULL;
 
+	/*
+	 * We cannot access the config space on some adapters.
+	 * Otherwise, it will cause fenced PHB. We don't save
+	 * the content in their config space and will restore
+	 * from the initial config space saved when the EEH
+	 * device is created.
+	 */
+	if (edev->pe && (edev->pe->state & EEH_PE_CFG_RESTRICTED))
+		return NULL;
+
 	pdev = eeh_dev_to_pci_dev(edev);
 	if (!pdev)
 		return NULL;
@@ -326,6 +336,19 @@ static void *eeh_dev_restore_state(void *data, void *userdata)
 
 	if (!edev)
 		return NULL;
+
+	/*
+	 * The content in the config space isn't saved because
+	 * the blocked config space on some adapters. We have
+	 * to restore the initial saved config space when the
+	 * EEH device is created.
+	 */
+	if (edev->pe && (edev->pe->state & EEH_PE_CFG_RESTRICTED)) {
+		if (list_is_last(&edev->list, &edev->pe->edevs))
+			eeh_pe_restore_bars(edev->pe);
+
+		return NULL;
+	}
 
 	pdev = eeh_dev_to_pci_dev(edev);
 	if (!pdev)
@@ -524,9 +547,6 @@ int eeh_pe_reset_and_recover(struct eeh_pe *pe)
 	/* Save states */
 	eeh_pe_dev_traverse(pe, eeh_dev_save_state, NULL);
 
-	/* Report error */
-	eeh_pe_dev_traverse(pe, eeh_report_error, &result);
-
 	/* Issue reset */
 	eeh_pe_state_mark(pe, EEH_PE_CFG_BLOCKED);
 	ret = eeh_reset_pe(pe);
@@ -658,7 +678,7 @@ static int eeh_reset_device(struct eeh_pe *pe, struct pci_bus *bus)
  */
 #define MAX_WAIT_FOR_RECOVERY 300
 
-static void eeh_handle_normal_event(struct eeh_pe *pe)
+static bool eeh_handle_normal_event(struct eeh_pe *pe)
 {
 	struct pci_bus *frozen_bus;
 	int rc = 0;
@@ -668,7 +688,7 @@ static void eeh_handle_normal_event(struct eeh_pe *pe)
 	if (!frozen_bus) {
 		pr_err("%s: Cannot find PCI bus for PHB#%d-PE#%x\n",
 			__func__, pe->phb->global_number, pe->addr);
-		return;
+		return false;
 	}
 
 	eeh_pe_update_time_stamp(pe);
@@ -785,7 +805,7 @@ static void eeh_handle_normal_event(struct eeh_pe *pe)
 	pr_info("EEH: Notify device driver to resume\n");
 	eeh_pe_dev_traverse(pe, eeh_report_resume, NULL);
 
-	return;
+	return false;
 
 excess_failures:
 	/*
@@ -825,7 +845,11 @@ perm_error:
 		pci_lock_rescan_remove();
 		pcibios_remove_pci_devices(frozen_bus);
 		pci_unlock_rescan_remove();
+
+		/* The passed PE should no longer be used */
+		return true;
 	}
+	return false;
 }
 
 static void eeh_handle_special_event(void)
@@ -891,7 +915,14 @@ static void eeh_handle_special_event(void)
 		 */
 		if (rc == EEH_NEXT_ERR_FROZEN_PE ||
 		    rc == EEH_NEXT_ERR_FENCED_PHB) {
-			eeh_handle_normal_event(pe);
+			/*
+			 * eeh_handle_normal_event() can make the PE stale if it
+			 * determines that the PE cannot possibly be recovered.
+			 * Don't modify the PE state if that's the case.
+			 */
+			if (eeh_handle_normal_event(pe))
+				continue;
+
 			eeh_pe_state_clear(pe, EEH_PE_RECOVERING);
 		} else {
 			pci_lock_rescan_remove();

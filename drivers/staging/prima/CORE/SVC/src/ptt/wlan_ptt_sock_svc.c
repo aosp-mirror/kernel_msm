@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -73,7 +73,7 @@ static void ptt_sock_dump_buf(const unsigned char * pbuf, int cnt)
     int i;
     for (i = 0; i < cnt ; i++) {
         if ((i%16)==0)
-            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,"\n%p:", pbuf);
+            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,"\n%pK:", pbuf);
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO," %02X", *pbuf);
         pbuf++;
     }
@@ -153,7 +153,7 @@ static void ptt_sock_proc_reg_req(tAniHdr *wmsg, int radio)
    pAdapterHandle->ptt_pid = reg_req->pid;
    rspmsg.regReq.pid= reg_req->pid;
    rspmsg.wniHdr.type = cpu_to_be16(ANI_MSG_APP_REG_RSP);
-   rspmsg.wniHdr.length = cpu_to_be16(sizeof(rspmsg));
+   rspmsg.wniHdr.length = cpu_to_be16(sizeof(rspmsg.wniHdr));
    if (ptt_sock_send_msg_to_app((tAniHdr *)&rspmsg.wniHdr, radio,
       ANI_NL_MSG_PUMAC, reg_req->pid, MSG_DONTWAIT) < 0)
    {
@@ -290,6 +290,10 @@ static int ptt_sock_rx_nlink_msg (struct sk_buff * skb)
    tAniNlHdr *wnl;
    int radio;
    int type;
+
+   if (0 != wlan_hdd_validate_context(pAdapterHandle))
+       return -EINVAL;
+
    wnl = (tAniNlHdr *) skb->data;
    radio = wnl->radio;
    type = wnl->nlh.nlmsg_type;
@@ -320,4 +324,12 @@ int ptt_sock_activate_svc(void *pAdapter)
 #endif /* WLAN_KD_READY_NOTIFIER */
    return 0;
 }
+
+int ptt_sock_deactivate_svc(hdd_context_t *pHddCtx)
+{
+   nl_srv_unregister(ANI_NL_MSG_PUMAC, ptt_sock_rx_nlink_msg);
+   nl_srv_unregister(ANI_NL_MSG_PTT, ptt_sock_rx_nlink_msg);
+   return 0;
+}
+
 #endif //PTT_SOCK_SVC_ENABLE

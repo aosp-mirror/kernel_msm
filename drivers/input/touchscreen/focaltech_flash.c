@@ -98,24 +98,8 @@
 /*******************************************************************************
 * Static variables
 *******************************************************************************/
-static unsigned char CTPM_FW_BLACK_G_B[] = {
-	#include "FTS_FW/CEI_EFWA_3207_0x01_V0x07_20171120_app.i"
-};
-
-static unsigned char CTPM_FW_BLACK_G_A[] = {
-	#include "FTS_FW/CEI_EFWA_3207_0x02_V0x04_20170615_app.i"
-};
-
-static unsigned char CTPM_FW_BLACK_T_B[] = {
-	#include "FTS_FW/CEI_EFWA_3207_0x03_V0x01_20170425_app.i"
-};
-
-static unsigned char CTPM_FW_BLACK_T_A[] = {
-	#include "FTS_FW/CEI_EFWA_3207_0x04_V0x01_20170425_app.i"
-};
-
-static unsigned char CTPM_FW_BLACK_O_A[] = {
-	#include "FTS_FW/CEI_EFWA_3207_0x05_V0x01_20170918_app.i"
+static unsigned char CTPM_FW_FNW1_BLACK[] = {
+	#include "FTS_FW/CEI_EFWA_3207_0x01_V0x03_20170317_app.i"
 };
 
  struct fts_Upgrade_Info fts_updateinfo[] =
@@ -2796,7 +2780,7 @@ int fts_ctpm_fw_upgrade_with_app_file(struct i2c_client *client, char *firmware_
 	}
 	else if ((fts_updateinfo_curr.CHIP_ID==0x86))
 	{
-		dev_err(&client->dev, "%s:upgrade failed. err, chip is 3027 on EFWx\n",__func__);
+		dev_err(&client->dev, "%s:upgrade failed. err, chip is 3027 on FNW1\n",__func__);
 		return -EIO;
 		 /*call the upgrade function*/
 		//i_ret = fts_8606_writepram(client, aucFW_PRAM_BOOT, sizeof(aucFW_PRAM_BOOT));
@@ -3132,7 +3116,7 @@ int fts_ctpm_fw_upgrade_with_i_file(struct i2c_client *client)
 		/*FW upgrade*/
 		pbt_buf = CTPM_FW;
 
-		dev_err(&client->dev, "%s:upgrade failed. err, chip is 3027 on EFWx\n",__func__);
+		dev_err(&client->dev, "%s:upgrade failed. err, chip is 3027 on FNW1\n",__func__);
 		return -EIO;
 		 /*call the upgrade function*/
 		//i_ret = fts_8606_writepram(client, aucFW_PRAM_BOOT, sizeof(aucFW_PRAM_BOOT));
@@ -3234,38 +3218,14 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id, boo
 	u8 uc_tp_fm_ver;
 	int i_ret;
 
-	switch(tp_id) {
-		case TP_ID_BLACK_G_B:
-			CTPM_FW = CTPM_FW_BLACK_G_B;
-			fw_size = sizeof(CTPM_FW_BLACK_G_B);
-			break;
-		case TP_ID_BLACK_G_A:
-			CTPM_FW = CTPM_FW_BLACK_G_A;
-			fw_size = sizeof(CTPM_FW_BLACK_G_A);
-			break;
-		case TP_ID_BLACK_T_B:
-			CTPM_FW = CTPM_FW_BLACK_T_B;
-			fw_size = sizeof(CTPM_FW_BLACK_T_B);
-			break;
-		case TP_ID_BLACK_T_A:
-			CTPM_FW = CTPM_FW_BLACK_T_A;
-			fw_size = sizeof(CTPM_FW_BLACK_T_A);
-			break;
-		case TP_ID_BLACK_O_A:
-			CTPM_FW = CTPM_FW_BLACK_O_A;
-			fw_size = sizeof(CTPM_FW_BLACK_O_A);
-			break;
-		default:
-			pr_err("[fts]tp is not correct\n");
-			return -EIO;
-			break;
-	}
+	CTPM_FW = CTPM_FW_FNW1_BLACK;
+	fw_size = sizeof(CTPM_FW_FNW1_BLACK);
 
 	fts_read_reg(client, FTS_REG_FW_VER, &uc_tp_fm_ver);
 	uc_host_fm_ver = fts_ctpm_get_i_file_ver_for_cci();
 	FTS_DBG("[FTS] uc_tp_fm_ver = 0x%x, uc_host_fm_ver = 0x%x\n",uc_tp_fm_ver, uc_host_fm_ver);
 
-	if ( uc_tp_fm_ver < uc_host_fm_ver || force_upgrade)
+	if ( uc_tp_fm_ver != uc_host_fm_ver || force_upgrade)
 	{
 		msleep(100);
 		i_ret = fts_ctpm_fw_upgrade_with_i_file_for_cci_3207(client);
