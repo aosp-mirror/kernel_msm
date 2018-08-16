@@ -1254,18 +1254,10 @@
 		compatible = "qcom,clk-cpu-osm";
 		reg = <0x179c0000 0x4000>, <0x17916000 0x1000>,
 		      <0x17816000 0x1000>, <0x179d1000 0x1000>,
-		      <0x00784130 0x8>, <0x00784130 0x8>,
-		      <0x17914800 0x800>;
+		      <0x00784130 0x8>, <0x00784130 0x8>;
 		reg-names = "osm", "pwrcl_pll", "perfcl_pll",
 			    "apcs_common", "pwrcl_efuse",
-			    "perfcl_efuse", "pwrcl_acd";
-
-		qcom,acdtd-val = <0x0000a111 0x0000a111>;
-		qcom,acdcr-val = <0x002c5ffd 0x002c5ffd>;
-		qcom,acdsscr-val = <0x00000901 0x00000901>;
-		qcom,acdextint0-val = <0x2cf9ae8 0x2cf9ae8>;
-		qcom,acdextint1-val = <0x2cf9afe 0x2cf9afe>;
-		qcom,acdautoxfer-val = <0x00000015 0x00000015>;
+			    "perfcl_efuse";
 
 		vdd-pwrcl-supply = <&apc0_pwrcl_vreg>;
 		vdd-perfcl-supply = <&apc1_perfcl_vreg>;
@@ -1303,6 +1295,16 @@
 			<  1536000000 0x04040050 0x08400040 0x2 6 >,
 			<  1612800000 0x04040054 0x09430043 0x2 7 >;
 
+		qcom,pwrcl-speedbin4-v0 =
+			<   300000000 0x0004000f 0x01200020 0x1 1 >,
+			<   633600000 0x05040021 0x03200020 0x1 2 >,
+			<   902400000 0x0404002f 0x04260026 0x1 3 >,
+			<  1113600000 0x0404003a 0x052e002e 0x2 4 >,
+			<  1401600000 0x04040049 0x073a003a 0x2 5 >,
+			<  1536000000 0x04040050 0x08400040 0x2 6 >,
+			<  1747200000 0x0404005b 0x09480048 0x2 7 >,
+			<  1843200000 0x04040060 0x094c004c 0x3 8 >;
+
 		qcom,perfcl-speedbin0-v0 =
 			<   300000000 0x0004000f 0x01200020 0x1 1 >,
 			<  1113600000 0x0404003a 0x052e002e 0x1 2 >,
@@ -1328,9 +1330,15 @@
 			<  1747200000 0x0404005b 0x09480048 0x2 4 >,
 			<  1804800000 0x0404005e 0x094b004b 0x2 5 >;
 
+		qcom,perfcl-speedbin4-v0 =
+			<   300000000 0x0004000f 0x01200020 0x1 1 >,
+			<  1113600000 0x0404003a 0x052e002e 0x1 2 >,
+			<  1401600000 0x04040049 0x073a003a 0x2 3 >,
+			<  1747200000 0x0404005b 0x09480048 0x2 4 >,
+			<  1958400000 0x04040066 0x0a510051 0x2 5 >;
+
 		qcom,up-timer = <1000 1000>;
 		qcom,down-timer = <1000 1000>;
-		qcom,pc-override-index = <0 0>;
 		qcom,set-ret-inactive;
 		qcom,enable-llm-freq-vote;
 		qcom,llm-freq-up-timer = <327675 327675>;

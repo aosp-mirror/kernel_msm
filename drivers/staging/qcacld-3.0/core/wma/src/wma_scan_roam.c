@@ -407,6 +407,9 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 		case P2P_SCAN_TYPE_SEARCH:
 			WMA_LOGD("P2P_SCAN_TYPE_SEARCH");
 			cmd->scan_ctrl_flags |= WMI_SCAN_FILTER_PROBE_REQ;
+			if (!scan_req->numSsid)
+				cmd->scan_ctrl_flags |=
+					WMI_SCAN_ADD_BCAST_PROBE_REQ;
 			/* Default P2P burst duration of 120 ms will cover
 			 * 3 channels with default max dwell time 40 ms.
 			 * Cap limit will be set by
@@ -875,6 +878,8 @@ QDF_STATUS wma_roam_scan_offload_mode(tp_wma_handle wma_handle,
 		params->is_roam_req_valid = 1;
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 		params->roam_offload_enabled = roam_req->RoamOffloadEnabled;
+		params->roam_offload_params.ho_delay_for_rx =
+				roam_req->ho_delay_for_rx;
 		params->prefer_5ghz = roam_req->Prefer5GHz;
 		params->roam_rssi_cat_gap = roam_req->RoamRssiCatGap;
 		params->select_5ghz_margin = roam_req->Select5GHzMargin;
@@ -895,6 +900,10 @@ QDF_STATUS wma_roam_scan_offload_mode(tp_wma_handle wma_handle,
 		params->fw_okc = roam_req->pmkid_modes.fw_okc;
 		params->fw_pmksa_cache = roam_req->pmkid_modes.fw_pmksa_cache;
 #endif
+		params->min_delay_btw_roam_scans =
+				roam_req->min_delay_btw_roam_scans;
+		params->roam_trigger_reason_bitmask =
+				roam_req->roam_trigger_reason_bitmask;
 		params->is_ese_assoc = roam_req->IsESEAssoc;
 		params->mdid.mdie_present = roam_req->MDID.mdiePresent;
 		params->mdid.mobility_domain = roam_req->MDID.mobilityDomain;
@@ -905,10 +914,14 @@ QDF_STATUS wma_roam_scan_offload_mode(tp_wma_handle wma_handle,
 		wma_roam_scan_fill_fils_params(wma_handle, params, roam_req);
 	}
 
-	WMA_LOGD(FL("qos_caps: %d, qos_enabled: %d, roam_scan_mode: %d"),
+	WMA_LOGD(FL("qos_caps: %d, qos_enabled: %d, ho_delay_for_rx: %d, roam_scan_mode: %d"),
 		params->roam_offload_params.qos_caps,
 		params->roam_offload_params.qos_enabled,
-		params->mode);
+		params->roam_offload_params.ho_delay_for_rx, params->mode);
+
+	WMA_LOGD(FL("min_delay_btw_roam_scans: %d, roam_trigger_reason_bitmask: %d"),
+		params->min_delay_btw_roam_scans,
+		params->roam_trigger_reason_bitmask);
 
 	status = wmi_unified_roam_scan_offload_mode_cmd(wma_handle->wmi_handle,
 				scan_cmd_fp, params);
@@ -1972,7 +1985,8 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 			/* Don't use rssi triggered roam scans if external app
 			 * is in control of channel list.
 			 */
-			if (roam_req->ChannelCacheType != CHANNEL_LIST_STATIC)
+			if (roam_req->ChannelCacheType != CHANNEL_LIST_STATIC ||
+			    roam_req->roam_force_rssi_trigger)
 				mode |= WMI_ROAM_SCAN_MODE_RSSI_CHANGE;
 
 		} else {
@@ -2239,7 +2253,8 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 			/* Don't use rssi triggered roam scans if external app
 			 * is in control of channel list.
 			 */
-			if (roam_req->ChannelCacheType != CHANNEL_LIST_STATIC)
+			if (roam_req->ChannelCacheType != CHANNEL_LIST_STATIC ||
+			    roam_req->roam_force_rssi_trigger)
 				mode |= WMI_ROAM_SCAN_MODE_RSSI_CHANGE;
 
 		} else {
@@ -2557,7 +2572,6 @@ static void wma_roam_update_vdev(tp_wma_handle wma,
 	qdf_mem_copy(wma->interfaces[vdev_id].bssid,
 			roam_synch_ind_ptr->bssid.bytes, IEEE80211_ADDR_LEN);
 	qdf_mem_free(del_bss_params);
-	qdf_mem_free(del_sta_params);
 	qdf_mem_free(set_link_params);
 	qdf_mem_free(add_sta_params);
 }
@@ -2798,6 +2812,7 @@ cleanup_label:
 	return status;
 }
 
+#define RSN_CAPS_SHIFT               16
 /**
  * wma_roam_scan_fill_self_caps() - fill capabilities
  * @wma_handle: wma handle
@@ -2902,7 +2917,19 @@ QDF_STATUS wma_roam_scan_fill_self_caps(tp_wma_handle wma_handle,
 	selfCaps.immediateBA =
 		(uint16_t) ((val >> WNI_CFG_BLOCK_ACK_ENABLED_IMMEDIATE) & 1);
 	pCfgValue16 = (uint16_t *) &selfCaps;
-	roam_offload_params->capability = (*pCfgValue16) & 0xFFFF;
+
+	/*
+	 * RSN caps arent been sent to firmware, so in case of PMF required,
+	 * the firmware connects to a non PMF AP advertising PMF not required
+	 * in the re-assoc request which violates protocol.
+	 * So send this to firmware in the roam SCAN offload command to
+	 * let it configure the params in the re-assoc request too.
+	 * Instead of making another infra, send the RSN-CAPS in MSB of
+	 * beacon Caps.
+	 */
+	roam_offload_params->capability = *((uint32_t *)(&roam_req->rsn_caps));
+	roam_offload_params->capability <<= RSN_CAPS_SHIFT;
+	roam_offload_params->capability |= ((*pCfgValue16) & 0xFFFF);
 
 	if (wlan_cfg_get_int(pMac, WNI_CFG_HT_CAP_INFO, &nCfgValue) !=
 	    eSIR_SUCCESS) {
@@ -4764,7 +4791,7 @@ int wma_extscan_cached_results_event_handler(void *handle,
 	struct extscan_cached_scan_results empty_cachelist;
 	wmi_extscan_wlan_descriptor *src_hotlist;
 	wmi_extscan_rssi_info *src_rssi;
-	int i, moredata, scan_ids_cnt, buf_len;
+	int i, moredata, scan_ids_cnt, buf_len, status;
 	tpAniSirGlobal pMac = cds_get_context(QDF_MODULE_ID_PE);
 	uint32_t total_len;
 	bool excess_data = false;
@@ -4862,19 +4889,24 @@ int wma_extscan_cached_results_event_handler(void *handle,
 
 	dest_result = dest_cachelist->result;
 	wma_fill_num_results_per_scan_id(cmd_param_info, dest_result);
-	wma_group_num_bss_to_scan_id(cmd_param_info, dest_cachelist);
 
-	pMac->sme.pExtScanIndCb(pMac->hHdd,
+	status = wma_group_num_bss_to_scan_id(cmd_param_info, dest_cachelist);
+	if (!status)
+		pMac->sme.pExtScanIndCb(pMac->hHdd,
 				eSIR_EXTSCAN_CACHED_RESULTS_IND,
 				dest_cachelist);
+	else
+		WMA_LOGD("wma_group_num_bss_to_scan_id failed, not calling callback");
+
 	dest_result = dest_cachelist->result;
 	for (i = 0; i < dest_cachelist->num_scan_ids; i++) {
-		qdf_mem_free(dest_result->ap);
+		if (dest_result->ap)
+			qdf_mem_free(dest_result->ap);
 		dest_result++;
 	}
 	qdf_mem_free(dest_cachelist->result);
 	qdf_mem_free(dest_cachelist);
-	return 0;
+	return status;
 
 noresults:
 	empty_cachelist.request_id = event->request_id;
