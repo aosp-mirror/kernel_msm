@@ -638,10 +638,13 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
 	return 0;
 }
 
-/* Build abc_pcie_sg_entry structure for the remote buffer */
-/* Since buffers on ABC are contiguous the generated scatterlist */
-/* only has two entries, one with the starting address and one with */
-/* the terminator entry */
+/* Build abc_pcie_sg_entry structure for the remote buffer
+ * Since buffers on ABC are contiguous the generated scatterlist
+ * only has two entries, one with the starting address and one with
+ * the terminator entry
+ * TODO(alexperez):  Remove support for specifying an arbitrary
+ * physical address once bringup is done.
+ */
 int abc_pcie_remote_sg(__u64 remote_buf, size_t size,
 		       struct abc_pcie_sg_entry **sg,
 		       struct abc_pcie_sg_list *sgl)
@@ -693,9 +696,9 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 #ifdef BENCHMARK_ENABLE
 	ll_dma_start_time_zero = ktime_to_ns(ktime_get());
 #endif
-	dev_dbg(abc_dma.dma_dev,
-		"%s: buf_type=%d, local_buf=%p, local_buf_size=%u\n",
-		__func__, dma_desc->buf_type, dma_desc->local_buf,
+	dev_dbg(&abc_dma.pdev->dev,
+		"%s: local_buf_type=%d, local_buf=%p, local_buf_size=%u\n",
+		__func__, dma_desc->local_buf_type, dma_desc->local_buf,
 		dma_desc->local_buf_size);
 
 	/* consider validateing local buffer */
@@ -710,7 +713,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	local_sg_list->sg_table = NULL;
 	local_sg_list->dir = dma_desc->dir;
 
-	switch (dma_desc->buf_type) {
+	switch (dma_desc->local_buf_type) {
 	case DMA_BUFFER_USER:
 		err = abc_pcie_user_buf_sg_build(dma_desc->local_buf,
 						 dma_desc->local_buf_size,
@@ -724,9 +727,9 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 			local_sg_list);
 		break;
 	default:
-		dev_err(abc_dma.dma_dev,
-			"%s: Unknown DMA buffer type %d\n",
-		       __func__, dma_desc->buf_type);
+		dev_err(&abc_dma.pdev->dev,
+			"%s: Unknown local DMA buffer type %d\n",
+		       __func__, dma_desc->local_buf_type);
 		err = -EINVAL;
 		break;
 	}
@@ -748,9 +751,25 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	remote_sg_entries = NULL;
 
 	/* TODO: local_buf_size will not work for DMA buffers! */
-	err = abc_pcie_remote_sg(dma_desc->remote_buf,
-				 dma_desc->local_buf_size,
-				 &remote_sg_entries, remote_sg_list);
+	switch (dma_desc->remote_buf_type) {
+	case DMA_BUFFER_USER:
+		err = abc_pcie_remote_sg(dma_desc->remote_buf,
+				dma_desc->local_buf_size,
+				&remote_sg_entries, remote_sg_list);
+		break;
+	case DMA_BUFFER_DMA_BUF:
+		err = abc_pcie_sg_retrieve_from_dma_buf(
+				dma_desc->remote_dma_buf_fd,
+				&remote_sg_entries,
+				remote_sg_list);
+		break;
+	default:
+		dev_err(&abc_dma.pdev->dev,
+				"%s: Unknown remote DMA buffer type %d\n",
+				__func__, dma_desc->remote_buf_type);
+		err = -EINVAL;
+		break;
+	}
 	if (err < 0) {
 		kfree(remote_sg_list);
 		return err;
@@ -828,7 +847,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	}
 
 	/* Releasing buffers */
-	switch (dma_desc->buf_type) {
+	switch (dma_desc->local_buf_type) {
 	case DMA_BUFFER_USER:
 		err = abc_pcie_user_buf_sg_destroy(local_sg_list);
 		break;
@@ -836,9 +855,24 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		err = abc_pcie_sg_release_from_dma_buf(local_sg_list);
 		break;
 	default:
-		dev_err(abc_dma.dma_dev,
-			"%s: Unknown DMA buffer type %d\n",
-		       __func__, dma_desc->buf_type);
+		dev_err(&abc_dma.pdev->dev,
+			"%s: Unknown local DMA buffer type %d\n",
+		       __func__, dma_desc->local_buf_type);
+		err = -EINVAL;
+		break;
+	}
+
+	switch (dma_desc->remote_buf_type) {
+	case DMA_BUFFER_USER:
+		err = abc_pcie_user_buf_sg_destroy(remote_sg_list);
+		break;
+	case DMA_BUFFER_DMA_BUF:
+		err = abc_pcie_sg_release_from_dma_buf(remote_sg_list);
+		break;
+	default:
+		dev_err(&abc_dma.pdev->dev,
+			"%s: Unknown remote DMA buffer type %d\n",
+		       __func__, dma_desc->remote_buf_type);
 		err = -EINVAL;
 		break;
 	}
