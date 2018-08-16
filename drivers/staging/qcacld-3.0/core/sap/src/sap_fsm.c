@@ -2558,8 +2558,9 @@ QDF_STATUS sap_open_session(tHalHandle hHal, ptSapContext sapContext,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	status = qdf_wait_single_event(&sapContext->sap_session_opened_evt,
-					SME_CMD_TIMEOUT_VALUE);
+	status = qdf_wait_for_event_completion(
+			&sapContext->sap_session_opened_evt,
+			SME_CMD_TIMEOUT_VALUE);
 
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
@@ -2867,6 +2868,7 @@ QDF_STATUS sap_signal_hdd_event(ptSapContext sap_ctx,
 			  bss_complete->staId);
 
 		bss_complete->operatingChannel = (uint8_t) sap_ctx->channel;
+		bss_complete->ch_width = sap_ctx->ch_params.ch_width;
 		bss_complete->sessionId = sap_ctx->sessionId;
 		break;
 	case eSAP_DFS_CAC_START:

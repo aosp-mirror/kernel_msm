@@ -2935,6 +2935,11 @@ struct wma_target_req *wma_fill_hold_req(tp_wma_handle wma,
 	struct wma_target_req *req;
 	QDF_STATUS status;
 
+	if (!cds_is_target_ready()) {
+		WMA_LOGE("target not ready, drop the request");
+		return NULL;
+	}
+
 	req = qdf_mem_malloc(sizeof(*req));
 	if (!req) {
 		WMA_LOGE(FL("Failed to allocate memory for msg %d vdev %d"),
@@ -3162,15 +3167,25 @@ void wma_vdev_resp_timer(void *data)
 		params->status = QDF_STATUS_E_TIMEOUT;
 
 		WMA_LOGA("%s: WMA_DEL_STA_SELF_REQ timedout", __func__);
-		if (wma_crash_on_fw_timeout(wma->fw_timeout_crash) == true)
+		if (wma_crash_on_fw_timeout(wma->fw_timeout_crash) == true) {
 			QDF_BUG(0);
-		else
+		} else if (!cds_is_driver_unloading() &&
+			   (cds_is_fw_down() || cds_is_driver_recovering())) {
+			qdf_mem_free(iface->del_staself_req);
+			iface->del_staself_req = NULL;
+		} else {
 			wma_send_del_sta_self_resp(iface->del_staself_req);
+		}
 
-		if (iface->addBssStaContext)
+		if (iface->addBssStaContext) {
 			qdf_mem_free(iface->addBssStaContext);
-		if (iface->staKeyParams)
+			iface->addBssStaContext = NULL;
+		}
+
+		if (iface->staKeyParams) {
 			qdf_mem_free(iface->staKeyParams);
+			iface->staKeyParams = NULL;
+		}
 
 		wma_vdev_deinit(iface);
 		qdf_mem_zero(iface, sizeof(*iface));
@@ -3243,6 +3258,11 @@ struct wma_target_req *wma_fill_vdev_req(tp_wma_handle wma,
 {
 	struct wma_target_req *req;
 	QDF_STATUS status;
+
+	if (!cds_is_target_ready()) {
+		WMA_LOGE("target not ready, drop the request");
+		return NULL;
+	}
 
 	req = qdf_mem_malloc(sizeof(*req));
 	if (!req) {
@@ -3459,6 +3479,7 @@ static void wma_add_bss_ap_mode(tp_wma_handle wma, tpAddBssParams add_bss)
 	req.vdev_id = vdev_id;
 	req.chan = add_bss->currentOperChannel;
 	req.chan_width = add_bss->ch_width;
+	req.dot11_mode = add_bss->dot11_mode;
 
 	if (add_bss->ch_width == CH_WIDTH_10MHZ)
 		req.is_half_rate = 1;
@@ -4884,8 +4905,12 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 	switch (oper_mode) {
 	case BSS_OPERATIONAL_MODE_STA:
 		wma_delete_sta_req_sta_mode(wma, del_sta);
-		if (wma_is_roam_synch_in_progress(wma, smesession_id))
+		if (wma_is_roam_synch_in_progress(wma, smesession_id)) {
+			WMA_LOGD(FL("LFR3: Del STA on vdev_id %d"),
+				 del_sta->smesessionId);
+			qdf_mem_free(del_sta);
 			return;
+		}
 		if (!rsp_requested) {
 			WMA_LOGD(FL("vdev_id %d status %d"),
 				 del_sta->smesessionId, del_sta->status);
@@ -4914,6 +4939,9 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 	case BSS_OPERATIONAL_MODE_NDI:
 		wma_delete_sta_req_ndi_mode(wma, del_sta);
 		break;
+	default:
+		WMA_LOGE(FL("Incorrect oper mode %d"), oper_mode);
+		qdf_mem_free(del_sta);
 	}
 
 #ifdef QCA_IBSS_SUPPORT
@@ -5069,7 +5097,7 @@ static void wma_wait_tx_complete(tp_wma_handle wma,
 
 	while (ol_txrx_get_tx_pending(pdev) && max_wait_iterations) {
 		WMA_LOGW(FL("Waiting for outstanding packet to drain."));
-		qdf_wait_single_event(&wma->tx_queue_empty_event,
+		qdf_wait_for_event_completion(&wma->tx_queue_empty_event,
 				      WMA_TX_Q_RECHECK_TIMER_WAIT);
 		max_wait_iterations--;
 	}

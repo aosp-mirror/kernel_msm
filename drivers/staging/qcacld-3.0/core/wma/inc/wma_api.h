@@ -488,4 +488,14 @@ static inline void wma_spectral_scan_config(WMA_HANDLE wma_handle,
 {
 }
 #endif
+
+/**
+ * wma_cleanup_vdev_resp_and_hold_req() - cleaunup the vdev resp and hold req
+ * queue
+ * @priv : WMA handle
+ *
+ * Return: None
+ */
+void wma_cleanup_vdev_resp_and_hold_req(void *priv);
+
 #endif

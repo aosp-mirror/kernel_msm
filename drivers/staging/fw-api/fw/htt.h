@@ -165,9 +165,11 @@
  *      HTT_T2H_MSG_TYPE_PKTLOG
  * 3.49 Add HTT_T2H_MSG_TYPE_MONITOR_MAC_HEADER_IND def
  * 3.50 Add learning_frame flag to htt_tx_msdu_desc_ext2_t
+ * 3.51 Add SW peer ID and TID num to HTT TX WBM COMPLETION
+ * 3.52 Add HTT_T2H FLOW_POOL_RESIZE msg def
  */
 #define HTT_CURRENT_VERSION_MAJOR 3
-#define HTT_CURRENT_VERSION_MINOR 50
+#define HTT_CURRENT_VERSION_MINOR 52
 
 #define HTT_NUM_TX_FRAG_DESC  1024
 
@@ -2331,7 +2333,14 @@ PREPACK struct htt_tx_wbm_transmit_status {
                               * Units: dB w.r.t noise floor
                               */
    A_UINT32
-       reserved0:       32;
+       sw_peer_id:      16,
+       tid_num:          5,
+       valid:            1,  /* If this "valid" flag is set, the sw_peer_id
+                              * and tid_num fields contain valid data.
+                              * If this "valid" flag is not set, the
+                              * sw_peer_id and tid_num fields must be ignored.
+                              */
+       reserved0:       10;
    A_UINT32
        reserved1:       32;
 } POSTPACK;
@@ -2341,6 +2350,14 @@ PREPACK struct htt_tx_wbm_transmit_status {
 #define HTT_TX_WBM_COMPLETION_V2_SCH_CMD_ID_S          0
 #define HTT_TX_WBM_COMPLETION_V2_ACK_FRAME_RSSI_M      0xff000000
 #define HTT_TX_WBM_COMPLETION_V2_ACK_FRAME_RSSI_S      24
+
+/* DWORD 5 */
+#define HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID_M          0x0000ffff
+#define HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID_S          0
+#define HTT_TX_WBM_COMPLETION_V2_TID_NUM_M             0x001f0000
+#define HTT_TX_WBM_COMPLETION_V2_TID_NUM_S             16
+#define HTT_TX_WBM_COMPLETION_V2_VALID_M               0x00200000
+#define HTT_TX_WBM_COMPLETION_V2_VALID_S               21
 
 /* DWORD 4 */
 #define HTT_TX_WBM_COMPLETION_V2_SCH_CMD_ID_GET(_var) \
@@ -2361,6 +2378,37 @@ PREPACK struct htt_tx_wbm_transmit_status {
      do { \
          HTT_CHECK_SET_VAL(HTT_TX_WBM_COMPLETION_V2_ACK_FRAME_RSSI, _val); \
          ((_var) |= ((_val) << HTT_TX_WBM_COMPLETION_V2_ACK_FRAME_RSSI_S)); \
+     } while (0)
+
+/* DWORD 5 */
+#define HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID_GET(_var) \
+    (((_var) & HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID_M) >> \
+    HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID_S)
+
+#define HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID, _val); \
+         ((_var) |= ((_val) << HTT_TX_WBM_COMPLETION_V2_SW_PEER_ID_S)); \
+     } while (0)
+
+#define HTT_TX_WBM_COMPLETION_V2_TID_NUM_GET(_var) \
+    (((_var) & HTT_TX_WBM_COMPLETION_V2_TID_NUM_M) >> \
+    HTT_TX_WBM_COMPLETION_V2_TID_NUM_S)
+
+#define HTT_TX_WBM_COMPLETION_V2_TID_NUM_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_TX_WBM_COMPLETION_V2_TID_NUM, _val); \
+         ((_var) |= ((_val) << HTT_TX_WBM_COMPLETION_V2_TID_NUM_S)); \
+     } while (0)
+
+#define HTT_TX_WBM_COMPLETION_V2_VALID_GET(_var) \
+    (((_var) & HTT_TX_WBM_COMPLETION_V2_VALID_M) >> \
+    HTT_TX_WBM_COMPLETION_V2_VALID_S)
+
+#define HTT_TX_WBM_COMPLETION_V2_VALID_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_TX_WBM_COMPLETION_V2_VALID, _val); \
+         ((_var) |= ((_val) << HTT_TX_WBM_COMPLETION_V2_VALID_S)); \
      } while (0)
 
 /**
@@ -5517,6 +5565,7 @@ enum htt_t2h_msg_type {
     HTT_T2H_MSG_TYPE_PEER_MAP_V2              = 0x1e,
     HTT_T2H_MSG_TYPE_PEER_UNMAP_V2            = 0x1f,
     HTT_T2H_MSG_TYPE_MONITOR_MAC_HEADER_IND   = 0x20,
+    HTT_T2H_MSG_TYPE_FLOW_POOL_RESIZE         = 0x21,
 
     HTT_T2H_MSG_TYPE_TEST,
     /* keep this last */
@@ -10427,5 +10476,68 @@ typedef struct {
     (((word) & HTT_T2H_MONITOR_MAC_HEADER_NUM_MPDU_M) >> \
     HTT_T2H_MONITOR_MAC_HEADER_NUM_MPDU_S)
 
+/**
+ * @brief HTT_T2H_MSG_TYPE_FLOW_POOL_RESIZE Message
+ *
+ * @details
+ *  HTT_T2H_MSG_TYPE_FLOW_POOL_RESIZE message is sent by the target when
+ *  the flow pool associated with the specified ID is resized
+ *
+ *  The message would appear as follows:
+ *
+ *     |31            24|23            16|15             8|7              0|
+ *     |----------------+----------------+----------------+----------------|
+ *     |               flow Pool ID      |  reserved0     | Msg type       |
+ *     |-------------------------------------------------------------------|
+ *     |               reserved1         |      flow pool new size         |
+ *     |-------------------------------------------------------------------|
+ *
+ *  The message is interpreted as follows:
+ *  b'0:7   - msg_type: This will be set to
+ *            HTT_T2H_MSG_TYPE_FLOW_POOL_RESIZE
+ *
+ *  b'8:15  - flow pool ID: Existing flow pool ID
+ *
+ *  b'16:31 - flow pool new size: new pool size for exisiting flow pool ID
+ *
+ */
+
+PREPACK struct htt_flow_pool_resize_t {
+    A_UINT32 msg_type:8,
+             reserved0:8,
+             flow_pool_id:16;
+    A_UINT32 flow_pool_new_size:16,
+             reserved1:16;
+} POSTPACK;
+
+#define HTT_FLOW_POOL_RESIZE_SZ  (sizeof(struct htt_flow_pool_resize_t))
+
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID_M      0xffff0000
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID_S      16
+
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE_M    0x0000ffff
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE_S    0
+
+
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID_GET(_var)    \
+    (((_var) & HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID_M) >> \
+            HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID_S)
+
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID_SET(_var, _val)            \
+    do {                                                            \
+        HTT_CHECK_SET_VAL(HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID, _val);  \
+        ((_var) |= ((_val) << HTT_FLOW_POOL_RESIZE_FLOW_POOL_ID_S)); \
+    } while (0)
+
+
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE_GET(_var)    \
+        (((_var) & HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE_M) >> \
+                HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE_S)
+
+#define HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE_SET(_var, _val)            \
+    do {                                                            \
+        HTT_CHECK_SET_VAL(HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE, _val);  \
+        ((_var) |= ((_val) << HTT_FLOW_POOL_RESIZE_FLOW_POOL_NEW_SIZE_S)); \
+    } while (0)
 
 #endif

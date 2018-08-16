@@ -1892,8 +1892,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		if (pe_session->beacon && pe_session->bcnLen > ie_offset) {
 			bcn_ie = pe_session->beacon + ie_offset;
 			bcn_ie_len = pe_session->bcnLen - ie_offset;
-			p_ext_cap = lim_get_ie_ptr_new(mac_ctx,
-							bcn_ie,
+			p_ext_cap = wlan_cfg_get_ie_ptr(bcn_ie,
 							bcn_ie_len,
 							DOT11F_EID_EXTCAP,
 							ONE_BYTE);
@@ -1955,8 +1954,6 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		assoc_cnf.sessionId = pe_session->peSessionId;
 
 		assoc_cnf.resultCode = eSIR_SME_RESOURCES_UNAVAILABLE;
-
-		cds_packet_free((void *)packet);
 
 		lim_post_sme_message(mac_ctx, LIM_MLM_ASSOC_CNF,
 			(uint32_t *) &assoc_cnf);
