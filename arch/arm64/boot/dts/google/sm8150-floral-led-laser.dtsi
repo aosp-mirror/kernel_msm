@@ -15,6 +15,7 @@
 
 	lm36011_flood: qcom,cam-led-laser-flood@64 {
 		compatible = "qcom,cam-led-laser";
+		cci-deivce = <0>;
 		cci-master = <0>;
 		reg = <0x64>;
 		vio-supply = <&max77826_ldo13>;
@@ -25,6 +26,7 @@
 
 	lm36011_dot: qcom,cam-led-laser-dot@64 {
 		compatible = "qcom,cam-led-laser";
+		cci-deivce = <0>;
 		cci-master = <1>;
 		reg = <0x64>;
 		vio-supply = <&max77826_ldo13>;
