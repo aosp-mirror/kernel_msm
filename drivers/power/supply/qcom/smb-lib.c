@@ -3445,7 +3445,7 @@ int smblib_get_charge_current(struct smb_charger *chg,
 	bool non_compliant;
 	u8 stat5;
 
-	if (chg->pd_active) {
+	if (chg->in_explicit_contract) {
 		*total_current_ua =
 			get_client_vote_locked(chg->usb_icl_votable, PD_VOTER);
 		return rc;
