@@ -23,7 +23,7 @@
 #define MAX_LL_ELEMENT 64
 /* linked list headers */
 #define LL_DATA_ELEMENT         0x1
-#define LL_IRQ_DATA_ELEMENT     0x19
+#define LL_IRQ_DATA_ELEMENT     0x9
 #define LL_LINK_ELEMENT         0x5
 #define LL_LAST_LINK_ELEMENT    0x7
 
