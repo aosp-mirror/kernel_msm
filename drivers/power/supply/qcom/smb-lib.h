@@ -360,6 +360,7 @@ struct smb_charger {
 	bool			otg_present;
 	bool			is_audio_adapter;
 	bool			hvdcp_disable;
+	u8			in_explicit_contract;
 
 	/* workaround flag */
 	u32			wa_flags;
