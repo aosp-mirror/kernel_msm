@@ -31,20 +31,24 @@ static struct block_property ipu_property_table[] = {
 	{BLOCK_STATE_0_4,	"Normal",	"MidCompute",	on,	VOLTAGE_0_75,	on,	440000000,	14,	14,	0,	0},
 	{BLOCK_STATE_0_5,	"Normal",	"MaxCompute",	on,	VOLTAGE_0_75,	on,	550000000,	14,	14,	0,	0},
 	{BLOCK_STATE_0_6,	"Boost",	"MaxCompute",	on,	VOLTAGE_0_85,	on,	610000000,	14,	14,	0,	0},
-	{BLOCK_STATE_1_0,	"PowerDown",	"PowerGated",	on,	VOLTAGE_0_85,	off,	610000000,	0,	0,	0,	0},
-	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_1_0,	"Normal",	"PowerGated",	on,	VOLTAGE_0_75,	off,	550000000,	0,	0,	0,	0},
+	{BLOCK_STATE_1_1,	"Boost",	"PowerGated",	on,	VOLTAGE_0_85,	off,	610000000,	0,	0,	0,	0},
+	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	off,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
 };
 
 static struct block_property tpu_property_table[] = {
 	{BLOCK_STATE_0_0,	"Normal",	"Ready",	on,	VOLTAGE_0_75,	off,	766000000,	0,	0,	16,	0},
 	{BLOCK_STATE_0_1,	"Normal",	"AonCompute",	on,	VOLTAGE_0_75,	on,	50000000,	0,	0,	16,	0},
-	{BLOCK_STATE_0_2,	"Normal",	"MinCompute",	on,	VOLTAGE_0_75,	on,	306000000,	0,	0,	16,	0},
+	{BLOCK_STATE_0_2,	"Normal",	"MinCompute",	on,	VOLTAGE_0_75,	on,	307000000,	0,	0,	16,	0},
 	{BLOCK_STATE_0_3,	"Normal",	"LowCompute",	on,	VOLTAGE_0_75,	on,	460000000,	0,	0,	16,	0},
-	{BLOCK_STATE_0_4,	"Normal",	"MidCompute",	on,	VOLTAGE_0_75,	on,	612000000,	0,	0,	16,	0},
+	{BLOCK_STATE_0_4,	"Normal",	"MidCompute",	on,	VOLTAGE_0_75,	on,	613000000,	0,	0,	16,	0},
 	{BLOCK_STATE_0_5,	"Normal",	"MaxCompute",	on,	VOLTAGE_0_75,	on,	766000000,	0,	0,	16,	0},
 	{BLOCK_STATE_0_6,	"Boost",	"MaxCompute",	on,	VOLTAGE_0_85,	on,	962000000,	0,	0,	16,	0},
-	{BLOCK_STATE_1_0,	"PowerDown",	"PowerGated",	on,	VOLTAGE_0_85,	off,	962000000,	0,	0,	0,	0},
-	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_1_0,	"Normal",	"PowerGated",	on,	VOLTAGE_0_75,	off,	766000000,	0,	0,	0,	0},
+	{BLOCK_STATE_1_1,	"Boost",	"PowerGated",	on,	VOLTAGE_0_85,	off,	962000000,	0,	0,	0,	0},
+	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	off,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
 };
 
 static struct block_property dram_property_table[] = {
@@ -58,7 +62,8 @@ static struct block_property dram_property_table[] = {
 	{BLOCK_STATE_1_0,	"PowerDown",	"ClockOff",		on,	VOLTAGE_0_60,	off,	1867000000,	0,	0,	0,	3733},
 	{BLOCK_STATE_1_1,	"PowerDown",	"ClockOn",		on,	VOLTAGE_0_60,	on,	1867000000,	0,	0,	0,	3733},
 	{BLOCK_STATE_2_0,	"Retention",	"SelfRefresh",		on,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{BLOCK_STATE_DEFAULT,	"Bootup State",	"MaxTransact",		on,	VOLTAGE_0_60,	on,	1867000000,	0,	0,	0,	3733}
 };
 
 static struct block_property mif_property_table[] = {
@@ -69,7 +74,8 @@ static struct block_property mif_property_table[] = {
 	{BLOCK_STATE_0_4,	"Normal",	"LowTransact",		on,	VOLTAGE_0_85,	on,	300000000,	0,	0,	0,	0},
 	{BLOCK_STATE_0_5,	"Normal",	"MidTransact",		on,	VOLTAGE_0_85,	on,	400000000,	0,	0,	0,	0},
 	{BLOCK_STATE_0_6,	"Normal",	"MaxTransact",		on,	VOLTAGE_0_85,	on,	467000000,	0,	0,	0,	0},
-	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{BLOCK_STATE_DEFAULT,	"Bootup State",	"MaxTransact",		on,	VOLTAGE_0_85,	on,	467000000,	0,	0,	0,	0}
 };
 
 static struct block_property fsys_property_table[] = {
@@ -81,14 +87,16 @@ static struct block_property fsys_property_table[] = {
 	{BLOCK_STATE_1_1,	"ElectricalIdle",	"L1.1",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_1_2,	"ElectricalIdle",	"L1.2",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_2_0,	"Hibernate",		"L2",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_3_0,	"Disabled",		"L3",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_3_0,	"Disabled",		"L3",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{BLOCK_STATE_DEFAULT,	"Bootup State",		"L0",		on,	VOLTAGE_0_85,	on,	4000000000,	0,	0,	0,	3}/*GEN3L0*/
 };
 
 static struct block_property aon_property_table[] = {
 	{BLOCK_STATE_0_0,	"PowerUp",	"WFI",		on,	VOLTAGE_0_85,	off,	233000000,	0,	0,	0,	0},
 	{BLOCK_STATE_0_1,	"PowerUp",	"Boot",		on,	VOLTAGE_0_85,	on,	19200000,	0,	0,	0,	0},
 	{BLOCK_STATE_0_2,	"PowerUp",	"Compute",	on,	VOLTAGE_0_85,	on,	233000000,	0,	0,	0,	0},
-	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{BLOCK_STATE_DEFAULT,	"Bootup State",	"Compute",	on,	VOLTAGE_0_85,	on,	233000000,	0,	0,	0,	0}
 };
 
 static struct chip_to_block_map chip_state_map[] = {
@@ -108,14 +116,14 @@ static struct chip_to_block_map chip_state_map[] = {
 	{CHIP_STATE_1_3, BLOCK_STATE_0_2, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_1_4, BLOCK_STATE_0_4, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_1_5, BLOCK_STATE_0_5, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_6, BLOCK_STATE_0_6, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
+	{CHIP_STATE_1_6, BLOCK_STATE_0_6, BLOCK_STATE_1_1, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_2_0, BLOCK_STATE_1_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_2_1, BLOCK_STATE_1_0, BLOCK_STATE_0_1, BLOCK_STATE_0_6, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_2_2, BLOCK_STATE_1_0, BLOCK_STATE_0_2, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_2_3, BLOCK_STATE_1_0, BLOCK_STATE_0_3, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_2_4, BLOCK_STATE_1_0, BLOCK_STATE_0_4, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_2_5, BLOCK_STATE_1_0, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_2_6, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
+	{CHIP_STATE_2_6, BLOCK_STATE_1_1, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_3_0, BLOCK_STATE_1_0, BLOCK_STATE_1_0, BLOCK_STATE_2_0, BLOCK_STATE_0_0, BLOCK_STATE_1_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_4_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_0_0, BLOCK_STATE_1_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
 	{CHIP_STATE_5_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, IPU_POWER_CONTROL},
@@ -156,16 +164,22 @@ int clk_set_frequency(struct device *dev, struct block *blk,
 		ipu_set_rate(dev, frequency);
 		if(frequency==0)
 			ipu_pll_disable(dev);
+		break;
 	case BLK_TPU:
 		if(blk->current_state->clk_frequency == 0)
 			tpu_pll_enable(dev);
 		tpu_set_rate(dev, frequency);
 		if(frequency==0)
 			tpu_pll_disable(dev);
+		break;
 	case BLK_MIF:
+		break;
 	case BLK_FSYS:
+		break;
 	case BLK_AON:
+		break;
 	case DRAM:
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -231,7 +245,7 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
 		return -EINVAL;
 
 	if (blk_set_state(sc->dev, &(sc->blocks[BLK_MIF]),
-		      map->dram_block_state_id, (map->flags & MIF_POWER_CONTROL)))
+		      map->mif_block_state_id, (map->flags & MIF_POWER_CONTROL)))
 		return -EINVAL;
 
 	if (blk_set_state(sc->dev, &(sc->blocks[BLK_FSYS]),
@@ -263,6 +277,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	int error, host_gpio_ctrl;
+	u32 boot_time_block_state;
 
 	/* allocate device memory */
 	ab_sm_ctx = devm_kzalloc(dev, sizeof(struct ab_state_context),
@@ -324,23 +339,34 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	}
 
 	/* Intialize the default state of each block for state manager */
+	boot_time_block_state = ARRAY_SIZE(ipu_property_table)-1;
 	ab_sm_ctx->blocks[BLK_IPU] = (struct block){BLK_IPU,
-			&ipu_property_table[8], ipu_property_table,
+			&ipu_property_table[boot_time_block_state], ipu_property_table,
 			ARRAY_SIZE(ipu_property_table), NULL, NULL};
+
+	boot_time_block_state = ARRAY_SIZE(tpu_property_table)-1;
 	ab_sm_ctx->blocks[BLK_TPU] = (struct block){BLK_TPU,
-			&tpu_property_table[8], tpu_property_table,
+			&tpu_property_table[boot_time_block_state], tpu_property_table,
 			ARRAY_SIZE(tpu_property_table), NULL, NULL};
+
+	boot_time_block_state = ARRAY_SIZE(dram_property_table)-1;
 	ab_sm_ctx->blocks[DRAM] = (struct block){DRAM,
-			&dram_property_table[10], dram_property_table,
+			&dram_property_table[boot_time_block_state], dram_property_table,
 			ARRAY_SIZE(dram_property_table), NULL, NULL};
+
+	boot_time_block_state = ARRAY_SIZE(mif_property_table)-1;
 	ab_sm_ctx->blocks[BLK_MIF] = (struct block){BLK_MIF,
-			&mif_property_table[7], mif_property_table,
+			&mif_property_table[boot_time_block_state], mif_property_table,
 			ARRAY_SIZE(mif_property_table), NULL, NULL};
+
+	boot_time_block_state = ARRAY_SIZE(fsys_property_table)-1;
 	ab_sm_ctx->blocks[BLK_FSYS] = (struct block){BLK_FSYS,
-			&fsys_property_table[8], fsys_property_table,
+			&fsys_property_table[boot_time_block_state], fsys_property_table,
 			ARRAY_SIZE(fsys_property_table), NULL, NULL};
+
+	boot_time_block_state = ARRAY_SIZE(aon_property_table)-1;
 	ab_sm_ctx->blocks[BLK_AON] = (struct block){BLK_AON,
-			&aon_property_table[3], aon_property_table,
+			&aon_property_table[boot_time_block_state], aon_property_table,
 			ARRAY_SIZE(aon_property_table), NULL, NULL};
 
 	/* intitialize the default chip state */

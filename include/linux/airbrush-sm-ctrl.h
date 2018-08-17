@@ -101,6 +101,7 @@ typedef enum __block_state {
 	BLOCK_STATE_1_2,
 	BLOCK_STATE_2_0 = 20,
 	BLOCK_STATE_3_0 = 30,
+	BLOCK_STATE_DEFAULT,
 } block_state_t;
 
 #define bit(x) (1<<x)

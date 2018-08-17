@@ -23,10 +23,10 @@ void abc_clk_tpu_init(struct device_node *np);
 
 void ipu_pll_enable(struct device *dev);
 void ipu_pll_disable(struct device *dev);
-unsigned long ipu_set_rate(struct device *dev, unsigned long rate);
+u64 ipu_set_rate(struct device *dev, u64 rate);
 
 void tpu_pll_enable(struct device *dev);
 void tpu_pll_disable(struct device *dev);
-unsigned long tpu_set_rate(struct device *dev, unsigned long rate);
+u64 tpu_set_rate(struct device *dev, u64 rate);
 
 #endif //_AIRBRUSH_CLK_H_

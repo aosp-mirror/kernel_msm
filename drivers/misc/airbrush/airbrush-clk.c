@@ -39,7 +39,7 @@ void ipu_pll_disable(struct device *dev)
 	clk_unprepare(ipu_pll);
 }
 
-unsigned long ipu_set_rate(struct device *dev, unsigned long rate)
+u64 ipu_set_rate(struct device *dev, u64 rate)
 {
 	struct clk* ipu_pll_mux;
 	struct clk* ipu_pll;
@@ -60,6 +60,7 @@ unsigned long ipu_set_rate(struct device *dev, unsigned long rate)
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(ipu_pll_mux, osc_clk);
+		clk_set_rate(ipu_pll_div, OSC_RATE);
 		clk_set_parent(ipu_switch_mux, ipu_pll_div);
 		return clk_get_rate(ipu_switch_mux);
 	}
@@ -67,6 +68,7 @@ unsigned long ipu_set_rate(struct device *dev, unsigned long rate)
 	clk_set_parent(ipu_pll_mux, ipu_pll);
 	clk_set_parent(ipu_switch_mux, shared_div_aon_pll);
 	clk_set_rate(ipu_pll, rate);
+	clk_set_rate(ipu_pll_div, rate);
 	clk_set_parent(ipu_switch_mux, ipu_pll_div);
 
 	return clk_get_rate(ipu_switch_mux);
@@ -96,7 +98,7 @@ void tpu_pll_disable(struct device *dev)
  *
  *  Returns the rate actually set
  */
-unsigned long tpu_set_rate(struct device *dev, unsigned long rate)
+u64 tpu_set_rate(struct device *dev, u64 rate)
 {
 	struct clk* tpu_pll_mux;
 	struct clk* tpu_pll;
@@ -117,6 +119,7 @@ unsigned long tpu_set_rate(struct device *dev, unsigned long rate)
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(tpu_pll_mux, osc_clk);
+		clk_set_rate(tpu_pll_div, OSC_RATE);
 		clk_set_parent( tpu_switch_mux, tpu_pll_div);
 		return clk_get_rate(tpu_switch_mux);
 	}
@@ -124,6 +127,7 @@ unsigned long tpu_set_rate(struct device *dev, unsigned long rate)
 	clk_set_parent(tpu_pll_mux, tpu_pll);
 	clk_set_parent( tpu_switch_mux, shared_div_aon_pll);
 	clk_set_rate(tpu_pll, rate);
+	clk_set_rate(tpu_pll_div, rate);
 	clk_set_parent( tpu_switch_mux, tpu_pll_div);
 
 	return clk_get_rate(tpu_switch_mux);

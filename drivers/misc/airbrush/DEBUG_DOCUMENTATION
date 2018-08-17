@@ -35,7 +35,7 @@ information about the respective block:
 "clk_frequency"
 	current clock_frequency.
 	(This value is only superficial, for actual value maintained by software
-	see Clock Section)
+	see Clock Section below)
 
 "num_powered_cores"
 	current number of powered_cores (Applicable in case of IPU only)
