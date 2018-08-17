@@ -338,6 +338,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(enable_jeita_detection),
 	POWER_SUPPLY_ATTR(otg_fastroleswap),
 	POWER_SUPPLY_ATTR(charge_disable),
+	POWER_SUPPLY_ATTR(in_explicit_contract),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
 	/* Properties of type `const char *' */
