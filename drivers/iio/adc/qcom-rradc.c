@@ -62,7 +62,7 @@
 #define FG_ADC_RR_AUX_THERM_CTRL		0x80
 #define FG_ADC_RR_AUX_THERM_TRIGGER		0x81
 #define FG_ADC_RR_AUX_THERM_EVERY_CYCLE_MASK	0x80
-#define FG_ADC_RR_AUX_THERM_EVERY_CYCLE 	BIT(7)
+#define FG_ADC_RR_AUX_THERM_EVERY_CYCLE		BIT(7)
 #define FG_ADC_RR_AUX_THERM_STS			0x82
 #define FG_ADC_RR_AUX_THERM_CFG			0x83
 #define FG_ADC_RR_AUX_THERM_LSB			0x84
@@ -226,11 +226,6 @@ enum rradc_channel_id {
 	RR_ADC_MAX
 };
 
-struct rradc_cache {
-	u16 value;
-	struct timespec ts;
-};
-
 struct rradc_chip {
 	struct device			*dev;
 	struct mutex			lock;
@@ -243,7 +238,6 @@ struct rradc_chip {
 	struct pmic_revid_data		*pmic_fab_id;
 	int volt;
 	struct power_supply		*usb_trig;
-	struct rradc_cache              usbin_v;
 };
 
 struct rradc_channels {
@@ -903,31 +897,6 @@ static int rradc_do_batt_id_conversion(struct rradc_chip *chip,
 	return ret;
 }
 
-static void rradc_update_cache(struct rradc_cache *cache, u16 value)
-{
-	cache->value = value;
-	getboottime(&cache->ts);
-}
-
-static int rradc_check_cache(struct rradc_cache *cache, u16 *value)
-{
-	struct timespec ts, diff;
-	s64 delay;
-
-	if (cache->ts.tv_sec == 0 && cache->ts.tv_nsec == 0)
-		return -ENODATA;
-
-	getboottime(&ts);
-	diff = timespec_sub(ts, cache->ts);
-	delay = timespec_to_ns(&diff);
-	if (delay < NSEC_PER_SEC*2) {
-		*value = cache->value;
-		return 0;
-	}
-
-	return -ENODATA;
-}
-
 static int rradc_do_conversion(struct rradc_chip *chip,
 			struct rradc_chan_prop *prop, u16 *data)
 {
@@ -948,14 +917,11 @@ static int rradc_do_conversion(struct rradc_chip *chip,
 		break;
 	case RR_ADC_USBIN_V:
 		/* Don't waste time reporting V BUS on boot */
-		if (ktime_get_seconds() <= 3) {
+		if (ktime_get_seconds() <= 10) {
 			rc = -EAGAIN;
 			goto fail;
 		}
-		if (rradc_check_cache(&chip->usbin_v, data) == 0) {
-			rc = 0;
-			goto fail;
-		}
+
 		/* Force conversion every cycle */
 		rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
 				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK,
@@ -1052,10 +1018,6 @@ static int rradc_do_conversion(struct rradc_chip *chip,
 	} else {
 		*data = (buf[1] << 8) | buf[0];
 	}
-
-	if (prop->channel == RR_ADC_USBIN_V)
-		rradc_update_cache(&chip->usbin_v, *data);
-
 fail:
 	mutex_unlock(&chip->lock);
 
@@ -1227,9 +1189,6 @@ static int rradc_probe(struct platform_device *pdev)
 	indio_dev->info = &rradc_info;
 	indio_dev->channels = chip->iio_chans;
 	indio_dev->num_channels = chip->nchannels;
-
-	chip->usbin_v.ts.tv_sec = 0;
-	chip->usbin_v.ts.tv_nsec = 0;
 
 	chip->usb_trig = power_supply_get_by_name("usb");
 	if (!chip->usb_trig)
