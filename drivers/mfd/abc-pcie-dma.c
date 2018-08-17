@@ -30,7 +30,9 @@
 #include "abc-pcie-dma.h"
 #include "abc-pcie-private.h"
 
+#ifdef 0
 #define BENCHMARK_ENABLE    /* timing and throughput measurements */
+#endif
 
 #define UPPER(address) ((unsigned int)((address & 0xFFFFFFFF00000000) >> 32))
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
