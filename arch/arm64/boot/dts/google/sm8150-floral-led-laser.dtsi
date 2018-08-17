@@ -19,7 +19,8 @@
 		cci-master = <0>;
 		reg = <0x64>;
 		vio-supply = <&max77826_ldo13>;
-		regulator-names = "vio";
+		silego_vdd-supply = <&max77826_ldo6>;
+		regulator-names = "vio", "silego_vdd";
 		laser-type = <0>;
 		status = "ok";
 	};
@@ -30,7 +31,8 @@
 		cci-master = <1>;
 		reg = <0x64>;
 		vio-supply = <&max77826_ldo13>;
-		regulator-names = "vio";
+		silego_vdd-supply = <&max77826_ldo6>;
+		regulator-names = "vio", "silego_vdd";
 		laser-type = <1>;
 		status = "ok";
 	};
