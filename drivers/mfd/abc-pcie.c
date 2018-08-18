@@ -25,6 +25,7 @@
 #include <linux/of_device.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/resource.h>
 #include <linux/signal.h>
 #include <linux/types.h>
@@ -38,10 +39,6 @@
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 static struct abc_device *abc_dev;
 
-void __iomem *get_tpu_virt(void)
-{
-	return abc_dev->tpu_config;
-}
 int pcie_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
@@ -874,11 +871,20 @@ static const struct resource ipu_resources[] = {
 		.flags = IORESOURCE_IRQ,
 	}
 };
-static const struct resource tpu_resources[] = {
+
+#define TPU_MEM_MAPPING		0 /* index of tpu-mem-mapping property */
+
+static struct property_entry tpu_properties[] = {
+	/* filled in with VA of ioremap of tpu-mem */
+	PROPERTY_ENTRY_U64("tpu-mem-mapping", 0),
+	{ }
+};
+
+static struct resource tpu_resources[] = {
 	{
-		.name = DRV_NAME_ABC_PCIE_TPU,
-		.start = 0,			/* TODO: determine */
-		.end = (2 * 1024 * 1024) - 1,	/* TODO: determine */
+		.name = "tpu-mem",
+		.start = 0,
+		.end = (2 * 1024 * 1024) - 1,
 		.flags = IORESOURCE_MEM,
 	},
 	{
@@ -915,9 +921,12 @@ static const struct resource pcie_dma_resources[] = {
 
 #define DEV(_name, _r) \
 	{ .name = _name, .num_resources = ARRAY_SIZE(_r), .resources = _r, }
+#define DEVPROP(_name, _r, _p)						   \
+	{ .name = _name, .num_resources = ARRAY_SIZE(_r), .resources = _r,   \
+	      .properties = _p }
 
 static struct mfd_cell abc_pcie_bar0[] = {
-	DEV(DRV_NAME_ABC_PCIE_TPU, tpu_resources),
+	DEVPROP(DRV_NAME_ABC_PCIE_TPU, tpu_resources, tpu_properties),
 	DEV(DRV_NAME_ABC_PCIE_IPU, ipu_resources),
 #ifndef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 	DEV(DRV_NAME_ABC_PCIE_BLK_FSYS, fsys_resources),
@@ -1099,6 +1108,10 @@ exit_loop:
 	err = abc_pcie_ipu_tpu_enable();
 	if (err < 0)
 		goto err5;
+
+	/* fill in tpu-mem-mapping with VA of our mapping for tpu-mem */
+	tpu_properties[TPU_MEM_MAPPING].value.u64_data =
+	    (u64)abc_dev->tpu_config;
 
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)

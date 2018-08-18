@@ -8,11 +8,13 @@
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/ioport.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 
@@ -32,10 +34,7 @@
 /* Number of bytes allocated for coherent memory. */
 #define OSCAR_CH_MEM_BYTES (PAGE_SIZE * MAX_NUM_COHERENT_PAGES)
 
-/*
- * Access PCI memory via BAR 0 for the Gasket framework; the actual BAR mapping
- * has been setup by the parent device.
- */
+/* Access PCI memory via BAR 0 for the Gasket framework */
 #define OSCAR_BAR_INDEX 0
 
 /* The number of user-mappable memory ranges in Oscar BAR. */
@@ -127,6 +126,8 @@ oscar_mappable_regions[NUM_BAR_RANGES] = {
 static const struct gasket_mappable_region cm_mappable_regions[1] = {
 	{ 0x00000, OSCAR_CH_MEM_BYTES }
 };
+
+static bool oscar_parent_ioremap;
 
 static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_IRQS];
 
@@ -475,10 +476,12 @@ static int oscar_setup_device(struct platform_device *pdev,
 	ulong page_table_ready;
 	int retries = 0;
 	struct device *dev = &pdev->dev;
-	/* TODO: remove abc_dev after fixing memory resources */
-	struct abc_device *abc_dev = pdev->dev.platform_data;
 	const struct dma_map_ops *parent_dma_ops =
 		get_dma_ops(pdev->dev.parent);
+	phys_addr_t mem_phys;
+	resource_size_t mem_size;
+	void *mem_virt = NULL;
+	u64 u64prop;
 	int ret;
 
 	if (parent_dma_ops)
@@ -487,37 +490,42 @@ static int oscar_setup_device(struct platform_device *pdev,
 		dev_warn(dev, "No dma_ops to inherit from parent mfd device\n");
 
 	/*
-	 * Get the IO memory resource for this device, this corresponds
-	 * to the BAR that has been mapped by the parent mfd device.
+	 * The memory resource passes the physical address range of our
+	 * memory region in the associated BAR of the parent mfd device.
 	 */
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (r == NULL) {
 		dev_err(dev, "cannot get mem resource\n");
 		return -ENODEV;
 	}
+	mem_phys = r->start;
+	mem_size = resource_size(r);
 
-	/* Map BARs */
-	gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base = r->start;
-	gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes = r->end - r->start;
+	/*
+	 * If the parent device has already mapped our region (to handle
+	 * multi-function device-specific init actions) then it passes the
+	 * virtual address of the I/O remapping to us in property
+	 * "tpu-mem-mapping".
+	 */
 
-#if 0 /* TODO: fix addresses passed, restore this code */
-	if (!devm_request_mem_region(dev,
-				     gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base,
-				     gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes,
-				     gasket_dev->dev_info.name)) {
-		dev_err(dev, "cannot request BAR %d memory region\n",
-			OSCAR_BAR_INDEX);
-		return -EINVAL;
+	ret = device_property_read_u64(dev, "tpu-mem-mapping", &u64prop);
+	if (!ret)
+		mem_virt = (void *)u64prop;
+
+	if (mem_virt) {
+		oscar_parent_ioremap = true;
+	} else {
+		dev_info(dev, "no tpu-mem-mapping from parent, remapping\n");
+		mem_virt = ioremap_nocache(mem_phys, mem_size);
+		if (!mem_virt) {
+			dev_err(dev, "failed to map our memory region\n");
+			return -ENODEV;
+		}
 	}
-#endif /* TODO */
 
-	/* TODO: pass this in mem resource */
-	gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base = abc_dev->tpu_config;
-	if (!gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base) {
-		dev_err(dev, "BAR %d memory region not setup\n",
-			OSCAR_BAR_INDEX);
-		return -ENODEV;
-	}
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base = mem_phys;
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes = mem_size;
+	gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base = mem_virt;
 
 	irq = platform_get_irq_byname(pdev, "tpu-scalar-core-0-irq");
 	if (irq < 0) {
@@ -627,11 +635,8 @@ static int oscar_remove(struct platform_device *pdev)
 
 	gasket_disable_device(gasket_dev);
 	oscar_interrupt_cleanup(gasket_dev);
-	iounmap(gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base);
-#if 0 /* TODO: restore when proper addresses passed from mfd driver */
-	release_mem_region(gasket_dev->bar_data[OSCAR_BAR_INDEX].phys_base,
-			   gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes);
-#endif /* TODO */
+	if (!oscar_parent_ioremap)
+		iounmap(gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base);
 	gasket_platform_remove_device(pdev);
 	return 0;
 }
