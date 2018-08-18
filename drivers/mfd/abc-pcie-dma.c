@@ -30,7 +30,7 @@
 #include "abc-pcie-dma.h"
 #include "abc-pcie-private.h"
 
-#ifdef 0
+#if 0
 #define BENCHMARK_ENABLE    /* timing and throughput measurements */
 #endif
 
