@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/module.h>
 #include <linux/device.h>
 #include <linux/ipc_logging.h>
 #include <linux/regmap.h>
@@ -60,6 +61,11 @@ static void *smblib_ipc_log;
 				__func__, ##__VA_ARGS__);	\
 	} while (0)
 #define NUM_LOG_PAGES 10
+
+static bool enable_ovh = true;
+module_param_named(
+	enable_ovh, enable_ovh, bool, 0600
+);
 
 static bool is_secure(struct smb_charger *chg, int addr)
 {
@@ -3598,7 +3604,7 @@ static void smblib_port_overheat_handle_chg_state_change(
 						struct smb_charger *chg,
 						u8 stat)
 {
-	if (!chg->port_overheat_mitigation_enabled)
+	if (!chg->port_overheat_mitigation_enabled || !enable_ovh)
 		return;
 
 	cancel_delayed_work_sync(&chg->port_overheat_work);
@@ -4842,7 +4848,7 @@ static void port_overheat_work(struct work_struct *work)
 		smblib_err(chg, "USB port overheat detected, temp=%d\n", temp);
 
 	if (chg->port_overheat &&
-	    temp < chg->port_overheat_mitigation_end_temp) {
+	    (temp < chg->port_overheat_mitigation_end_temp || !enable_ovh)) {
 		/* check if the cable is still there */
 		mutex_lock(&chg->typec_pr_lock);
 		rc = port_overheat_probe_cc_status_locked(chg, &attached);
@@ -4853,7 +4859,7 @@ static void port_overheat_work(struct work_struct *work)
 			goto rerun;
 		}
 		/* temperature drops and cable unplugged */
-		if (!attached) {
+		if (!attached || !enable_ovh) {
 			smblib_err(chg, "Port overheat mitigation ends.\n");
 			rc = port_overheat_mitigation_end(chg);
 			if (rc < 0) {
@@ -4865,7 +4871,7 @@ static void port_overheat_work(struct work_struct *work)
 			}
 			chg->port_overheat = false;
 		}
-	} else if (!chg->port_overheat &&
+	} else if (!chg->port_overheat && enable_ovh &&
 		   temp > chg->port_overheat_mitigation_begin_temp) {
 		smblib_err(chg, "Port overheat mitigation begins.\n");
 		rc = port_overheat_mitigation_begin(chg);
