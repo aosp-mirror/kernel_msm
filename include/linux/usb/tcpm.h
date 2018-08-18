@@ -162,6 +162,8 @@ struct tcpc_mux_dev {
  *		detected.
  * @set_in_hard_reset:
  *		Optional; Called to notify that hard reset is in progress.
+ * @in_pd_contract:
+ *              Optional; Called to notify is when pd contract is established.
  * @mux:	Pointer to multiplexer data
  */
 struct tcpc_dev {
@@ -195,6 +197,7 @@ struct tcpc_dev {
 	void (*log_rtc)(struct tcpc_dev *dev);
 	int (*set_suspend_supported)(struct tcpc_dev *dev,
 				     bool suspend_supported);
+	int (*in_pd_contract)(struct tcpc_dev *dev, bool status);
 	struct tcpc_mux_dev *mux;
 };
 

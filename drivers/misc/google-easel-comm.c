@@ -1932,6 +1932,7 @@ static int easelcomm_ioctl_kbuf_desc(
 		kbuf_desc.buf = compat_ptr(compat_kbuf_desc.buf);
 		kbuf_desc.buf_size = compat_kbuf_desc.buf_size;
 		kbuf_desc.buf_type = compat_kbuf_desc.buf_type;
+		kbuf_desc.wait.timeout_ms = -1;
 		kbuf_desc.dma_buf_fd = compat_kbuf_desc.dma_buf_fd;
 		kbuf_desc.dma_buf_off = compat_kbuf_desc.dma_buf_off;
 		kbuf_desc.dma_buf_width = compat_kbuf_desc.dma_buf_width;
@@ -1971,6 +1972,7 @@ static int easelcomm_ioctl_kbuf_desc_legacy(
 		kbuf_desc.buf = compat_ptr(compat_kbuf_desc_legacy.buf);
 		kbuf_desc.buf_size = compat_kbuf_desc_legacy.buf_size;
 		kbuf_desc.buf_type = compat_kbuf_desc_legacy.buf_type;
+		kbuf_desc.wait.timeout_ms = -1;
 		kbuf_desc.dma_buf_fd = compat_kbuf_desc_legacy.dma_buf_fd;
 		kbuf_desc.dma_buf_width = compat_kbuf_desc_legacy.buf_size;
 		kbuf_desc.dma_buf_stride = compat_kbuf_desc_legacy.buf_size;
@@ -1988,6 +1990,7 @@ static int easelcomm_ioctl_kbuf_desc_legacy(
 		kbuf_desc.buf = kbuf_desc_legacy.buf;
 		kbuf_desc.buf_size = kbuf_desc_legacy.buf_size;
 		kbuf_desc.buf_type = kbuf_desc_legacy.buf_type;
+		kbuf_desc.wait.timeout_ms = kbuf_desc_legacy.wait.timeout_ms;
 		kbuf_desc.dma_buf_fd = kbuf_desc_legacy.dma_buf_fd;
 		kbuf_desc.dma_buf_width = kbuf_desc_legacy.buf_size;
 		kbuf_desc.dma_buf_stride = kbuf_desc_legacy.buf_size;

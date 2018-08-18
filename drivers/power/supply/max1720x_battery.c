@@ -28,6 +28,12 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 
+#include <linux/cdev.h>
+#include <linux/device.h>
+#include <linux/fs.h> /* register_chrdev, unregister_chrdev */
+#include <linux/module.h>
+#include <linux/seq_file.h> /* seq_read, seq_lseek, single_release */
+
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 #endif
@@ -40,8 +46,7 @@
 #define MAX1720X_DELAY_INIT_MS 1000
 #define FULLCAPNOM_STABILIZE_CYCLES 5
 
-/* workaround for b/111835845 */
-#define MAXFG_HISTORY_PAGE_ENT_COUNT (PAGE_SIZE / (16*5 + 1))
+#define HISTORY_DEVICENAME "maxfg_history"
 
 enum max1720x_register {
 	/* ModelGauge m5 Register */
@@ -290,6 +295,14 @@ struct max1720x_cyc_ctr_data {
 	int prev_soc;
 };
 
+
+struct max1720x_history {
+	loff_t history_index;
+	int history_count;
+	bool *page_status;
+	u16 *history;
+};
+
 struct max1720x_chip {
 	struct device *dev;
 	struct regmap *regmap;
@@ -302,6 +315,15 @@ struct max1720x_chip {
 	struct device_node *batt_node;
 	struct iio_channel *iio_ch;
 	struct max1720x_cyc_ctr_data cyc_ctr;
+
+	/* history */
+	struct mutex history_lock;
+	int hcmajor;
+	struct cdev hcdev;
+	struct class *hcclass;
+	bool history_available;
+	bool history_added;
+
 	u16 RSense;
 	u16 RConfig;
 	bool init_complete;
@@ -544,13 +566,6 @@ static int get_battery_history_status(struct max1720x_chip *chip,
 	kfree(write_status);
 	kfree(valid_status);
 
-	/* workaround for b/111835845 */
-	if (valid_history_entry_count > MAXFG_HISTORY_PAGE_ENT_COUNT) {
-		dev_info(chip->dev, " support only one page (%d available)\n",
-			valid_history_entry_count);
-		valid_history_entry_count = MAXFG_HISTORY_PAGE_ENT_COUNT;
-	}
-
 	return valid_history_entry_count;
 }
 
@@ -576,105 +591,68 @@ static void get_battery_history(struct max1720x_chip *chip,
 	}
 }
 
-static ssize_t max1720x_history_count_show(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
+static int format_battery_history_entry(char *temp, int size, u16 *line)
 {
+	int length = 0, i;
 
-	struct power_supply *psy;
-	struct max1720x_chip *chip;
-	int length, ret;
-	bool *page_status;
-
-	psy = container_of(dev, struct power_supply, dev);
-	chip = power_supply_get_drvdata(psy);
-
-	page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
-			      sizeof(bool), GFP_KERNEL);
-	if (!page_status)
-		return -ENOMEM;
-
-	ret = get_battery_history_status(chip, page_status);
-	if (ret < 0) {
-		kfree(page_status);
-		return ret;
+	for (i = 0; i < MAX1720X_HISTORY_PAGE_SIZE; i++) {
+		length += scnprintf(temp + length,
+			size - length, "%04x ",
+			line[i]);
 	}
 
-	length = scnprintf(buf, PAGE_SIZE, "%i\n", ret);
-	kfree(page_status);
+	if (length > 0)
+		temp[--length] = 0;
 	return length;
 }
 
-static const DEVICE_ATTR(history_count, 0444,
-			 max1720x_history_count_show, NULL);
-
-static ssize_t max1720x_history_show(struct device *dev,
-				     struct device_attribute *attr, char *buf)
+/* @return number of valid entries */
+static int max1720x_history_read(struct max1720x_chip *chip,
+				 struct max1720x_history *hi)
 {
-	struct power_supply *psy;
-	struct max1720x_chip *chip;
-	int i;
-	int length = 0;
-	bool *page_status = NULL;
-	int history_index, history_count;
-	u16 *history;
+	memset(hi, 0, sizeof(*hi));
 
-	psy = container_of(dev, struct power_supply, dev);
-	chip = power_supply_get_drvdata(psy);
-
-	/*
-	 * Total history size can be up to 6.7KB, which is greater than
-	 * PAGE_SIZE, which is 4K. Complete history may need to be queried
-	 * in two calls (only one supported now)
-	 */
-	page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
+	hi->page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
 				sizeof(bool), GFP_KERNEL);
-	if (!page_status)
+	if (!hi->page_status)
 		return -ENOMEM;
 
-	history_count = get_battery_history_status(chip, page_status);
-	if (history_count <= 0) {
-		kfree(page_status);
-		if (!history_count)
-			dev_info(chip->dev,
-				"No battery history has been recorded\n");
-		return history_count;
-	}
+	mutex_lock(&chip->history_lock);
 
-	history = kmalloc_array(MAX1720X_N_OF_HISTORY_PAGES *
-				MAX1720X_HISTORY_PAGE_SIZE,
-				sizeof(u16), GFP_KERNEL);
-	if (!history) {
-		kfree(page_status);
-		return -ENOMEM;
-	}
+	hi->history_count = get_battery_history_status(chip, hi->page_status);
+	if (hi->history_count < 0) {
+		goto error_exit;
+	} else if (hi->history_count != 0) {
+		const int size = hi->history_count * MAX1720X_HISTORY_PAGE_SIZE;
 
-	get_battery_history(chip, page_status, history);
-
-	/*
-	 * The 81 in the next line is arrived with 16*5: one history log
-	 * is 16 of u16. We print each u16 to 4 chars and we leave one space
-	 * between the hex data in the buffer. And lastly we need a new line
-	 * for every history log. (16x4 + 16x1 + 1) = 81.
-	 */
-	for (history_index = 0; (history_index < history_count)
-	     && (length < (PAGE_SIZE - 81)); history_index++) {
-		for (i = 0; i < MAX1720X_HISTORY_PAGE_SIZE; i++) {
-			length += scnprintf(buf + length,
-				PAGE_SIZE - length, "%04x ",
-				history[history_index *
-					MAX1720X_HISTORY_PAGE_SIZE + i]);
+		hi->history = kmalloc_array(size, sizeof(u16), GFP_KERNEL);
+		if (!hi->history) {
+			hi->history_count = -ENOMEM;
+			goto error_exit;
 		}
-		length += scnprintf(buf + length, PAGE_SIZE - length, "\n");
+
+		get_battery_history(chip, hi->page_status, hi->history);
 	}
 
-	kfree(history);
-	kfree(page_status);
+	mutex_unlock(&chip->history_lock);
+	return hi->history_count;
 
-	return length;
+error_exit:
+	mutex_unlock(&chip->history_lock);
+	kfree(hi->page_status);
+	hi->page_status = NULL;
+	return hi->history_count;
+
 }
 
-static const DEVICE_ATTR(history, 0444, max1720x_history_show, NULL);
+static void max1720x_history_free(struct max1720x_history *hi)
+{
+	kfree(hi->page_status);
+	kfree(hi->history);
+
+	hi->history = NULL;
+	hi->page_status = NULL;
+}
 
 static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
@@ -1842,6 +1820,146 @@ static struct power_supply_desc max1720x_psy_desc = {
 	.num_properties = ARRAY_SIZE(max1720x_battery_props),
 };
 
+
+static void *ct_seq_start(struct seq_file *s, loff_t *pos)
+{
+	struct max1720x_history *hi =
+		(struct max1720x_history *)s->private;
+
+	if (*pos >= hi->history_count)
+		return NULL;
+	hi->history_index = *pos;
+
+	return &hi->history_index;
+}
+
+static void *ct_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+	loff_t *spos = (loff_t *)v;
+	struct max1720x_history *hi =
+		(struct max1720x_history *)s->private;
+
+	*pos = ++*spos;
+	if (*pos >= hi->history_count)
+		return NULL;
+
+	return spos;
+}
+
+static void ct_seq_stop(struct seq_file *s, void *v)
+{
+	/* iterator in hi, no need to free */
+}
+
+static int ct_seq_show(struct seq_file *s, void *v)
+{
+	char temp[96];
+	loff_t *spos = (loff_t *)v;
+	struct max1720x_history *hi =
+		(struct max1720x_history *)s->private;
+	const size_t offset = *spos * MAX1720X_HISTORY_PAGE_SIZE;
+
+	format_battery_history_entry(temp, sizeof(temp), &hi->history[offset]);
+	seq_printf(s, "%s\n", temp);
+
+	return 0;
+}
+
+static const struct seq_operations ct_seq_ops = {
+	.start = ct_seq_start,
+	.next  = ct_seq_next,
+	.stop  = ct_seq_stop,
+	.show  = ct_seq_show
+};
+
+static int history_dev_open(struct inode *inode, struct file *file)
+{
+	struct max1720x_chip *chip =
+		container_of(inode->i_cdev, struct max1720x_chip, hcdev);
+	struct max1720x_history *hi;
+	int history_count;
+
+	hi = __seq_open_private(file, &ct_seq_ops, sizeof(*hi));
+	if (!hi)
+		return -ENOMEM;
+
+	history_count = max1720x_history_read(chip, hi);
+	if (history_count < 0) {
+		return history_count;
+	} else if (history_count == 0) {
+		dev_info(chip->dev,
+			"No battery history has been recorded\n");
+	}
+
+	return 0;
+}
+
+static int history_dev_release(struct inode *inode, struct file *file)
+{
+	struct max1720x_history *hi =
+		((struct seq_file *)file->private_data)->private;
+
+	if (hi) {
+		max1720x_history_free(hi);
+		seq_release_private(inode, file);
+	}
+
+	return 0;
+}
+
+static const struct file_operations hdev_fops = {
+	.open = history_dev_open,
+	.owner = THIS_MODULE,
+	.read = seq_read,
+	.release = history_dev_release,
+};
+
+static void max1720x_cleanup_history(struct max1720x_chip *chip)
+{
+	if (chip->history_added)
+		cdev_del(&chip->hcdev);
+	if (chip->history_available)
+		device_destroy(chip->hcclass, chip->hcmajor);
+	if (chip->hcclass)
+		class_destroy(chip->hcclass);
+	if (chip->hcmajor != -1)
+		unregister_chrdev_region(chip->hcmajor, 1);
+}
+
+static int max1720x_init_history(struct max1720x_chip *chip)
+{
+	struct device *hcdev;
+
+	mutex_init(&chip->history_lock);
+
+	chip->hcmajor = -1;
+
+	/* cat /proc/devices */
+	if (alloc_chrdev_region(&chip->hcmajor, 0, 1, HISTORY_DEVICENAME) < 0)
+		goto no_history;
+	/* ls /sys/class */
+	chip->hcclass = class_create(THIS_MODULE, HISTORY_DEVICENAME);
+	if (chip->hcclass == NULL)
+		goto no_history;
+	/* ls /dev/ */
+	hcdev = device_create(chip->hcclass, NULL, chip->hcmajor, NULL,
+		HISTORY_DEVICENAME);
+	if (hcdev == NULL)
+		goto no_history;
+
+	chip->history_available = true;
+	cdev_init(&chip->hcdev, &hdev_fops);
+	if (cdev_add(&chip->hcdev, chip->hcmajor, 1) == -1)
+		goto no_history;
+
+	chip->history_added = true;
+	return 0;
+
+no_history:
+	max1720x_cleanup_history(chip);
+	return -ENODEV;
+}
+
 static void max1720x_init_work(struct work_struct *work)
 {
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
@@ -1853,6 +1971,8 @@ static void max1720x_init_work(struct work_struct *work)
 				      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
 		return;
 	}
+
+	(void)max1720x_init_history(chip);
 }
 
 static int max1720x_probe(struct i2c_client *client,
@@ -1919,18 +2039,6 @@ static int max1720x_probe(struct i2c_client *client,
 		goto irq_unregister;
 	}
 
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history_count);
-	if (ret) {
-		dev_err(dev, "Failed to create history_count attribute\n");
-		goto psy_unregister;
-	}
-
-	ret = device_create_file(&chip->psy->dev, &dev_attr_history);
-	if (ret) {
-		dev_err(dev, "Failed to create history attribute\n");
-		goto psy_unregister;
-	}
-
 	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
 	if (ret) {
 		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
@@ -1966,6 +2074,7 @@ static int max1720x_remove(struct i2c_client *client)
 {
 	struct max1720x_chip *chip = i2c_get_clientdata(client);
 
+	max1720x_cleanup_history(chip);
 	cancel_delayed_work(&chip->init_work);
 	iio_channel_release(chip->iio_ch);
 	if (chip->primary->irq)

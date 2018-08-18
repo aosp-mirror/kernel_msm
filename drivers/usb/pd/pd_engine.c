@@ -116,6 +116,7 @@ struct usbpd {
 
 	bool apsd_done;
 	bool wireless_online;
+	bool in_explicit_contract;
 };
 
 /*
@@ -1444,6 +1445,37 @@ unlock:
 	return ret;
 }
 
+static int tcpm_in_pd_contract(struct tcpc_dev *dev,
+			       bool status)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	mutex_lock(&pd->lock);
+
+	if (status == pd->in_explicit_contract)
+		goto unlock;
+
+	/* Attempt once */
+	val.intval = status ? 1 : 0;
+	pd_engine_log(pd, "pd contract %d", status ? 1 : 0);
+	ret = power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_PD_IN_EXPLICIT_CONTRACT,
+				&val);
+	if (ret < 0) {
+		pd_engine_log(pd,
+			      "unable to set pd contract to %d, ret=%d",
+			      status ? 1 : 0, ret);
+	} else {
+		pd->in_explicit_contract = status;
+	}
+
+unlock:
+	mutex_unlock(&pd->lock);
+	return ret;
+}
+
 static int tcpm_set_suspend_supported(struct tcpc_dev *dev,
 				      bool suspend_supported)
 {
@@ -1996,6 +2028,7 @@ static int init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->set_in_hard_reset = set_in_hard_reset;
 	pd_tcpc_dev->log_rtc = log_rtc;
 	pd_tcpc_dev->set_suspend_supported = tcpm_set_suspend_supported;
+	pd_tcpc_dev->in_pd_contract = tcpm_in_pd_contract;
 	pd_tcpc_dev->mux = NULL;
 	return 0;
 }

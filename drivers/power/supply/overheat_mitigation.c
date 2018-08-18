@@ -45,6 +45,7 @@ struct overheat_info {
 	struct wakeup_source	   overheat_ws;
 
 	bool usb_connected;
+	bool accessory_connected;
 	bool usb_replug;
 	bool overheat_mitigation;
 	bool overheat_work_running;
@@ -53,6 +54,8 @@ struct overheat_info {
 	int clear_temp;
 	int overheat_work_delay_ms;
 	int polling_freq;
+	int monitor_accessory_s;
+	time_t accessory_connect_time;
 	int check_status;
 };
 
@@ -117,6 +120,15 @@ static inline int get_dts_vars(struct overheat_info *ovh_info)
 		return ret;
 	}
 
+	ret = of_property_read_u32(node, "google,accessory-monitoring-period",
+				   &ovh_info->monitor_accessory_s);
+	if (ret < 0) {
+		dev_err(ovh_info->dev,
+			"cannot read accessory-monitoring-period, ret=%d\n",
+			ret);
+		ovh_info->monitor_accessory_s = 5;
+	}
+
 	return 0;
 }
 
@@ -177,13 +189,25 @@ static int resume_usb(struct overheat_info *ovh_info)
 	return ret;
 }
 
+static inline time_t get_seconds_since_boot(void)
+{
+	struct timespec boot;
+
+	getboottime(&boot);
+	return get_seconds() - boot.tv_sec;
+}
+
 /*
- * Updated usb_connected and usb_replug status in overheat_info struct
+ * Update usb_connected, accessory_connected, and usb_replug status in
+ * overheat_info struct.
  */
 static int update_usb_status(struct overheat_info *ovh_info)
 {
 	int ret;
-	bool prev_state = ovh_info->usb_connected;
+	bool prev_state = ovh_info->usb_connected ||
+		ovh_info->accessory_connected;
+	bool prev_accessory_state = ovh_info->accessory_connected;
+	bool curr_state;
 	int *check_status = &ovh_info->check_status;
 
 	if (ovh_info->overheat_mitigation) {
@@ -208,6 +232,16 @@ static int update_usb_status(struct overheat_info *ovh_info)
 		return ret;
 	ovh_info->usb_connected = ret;
 
+	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_TYPEC_MODE);
+	if (ret < 0)
+		return ret;
+	ovh_info->accessory_connected = (ret == POWER_SUPPLY_TYPEC_SINK) ||
+			(ret == POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE);
+
+	if (!prev_accessory_state && ovh_info->accessory_connected)
+		ovh_info->accessory_connect_time = get_seconds_since_boot();
+	curr_state = ovh_info->usb_connected || ovh_info->accessory_connected;
+
 	if (ovh_info->overheat_mitigation) {
 		ret = vote(ovh_info->disable_power_role_switch,
 			   USB_OVERHEAT_MITIGATION_VOTER, true, 0);
@@ -219,14 +253,13 @@ static int update_usb_status(struct overheat_info *ovh_info)
 		}
 	}
 
-	if (ovh_info->usb_connected != prev_state)
+	if (curr_state != prev_state)
 		dev_info(ovh_info->dev,
 			 "USB is %sconnected",
-			 ovh_info->usb_connected ? "" : "dis");
+			 curr_state ? "" : "dis");
 
 	// USB should be disconnected for two cycles before replug is acked
-	if(ovh_info->overheat_mitigation && !ovh_info->usb_connected &&
-	   !prev_state)
+	if (ovh_info->overheat_mitigation && !curr_state && !prev_state)
 		ovh_info->usb_replug = true;
 
 	return 0;
@@ -267,6 +300,24 @@ static int psy_changed(struct notifier_block *nb, unsigned long action,
 	return NOTIFY_OK;
 }
 
+static bool should_check_accessory(struct overheat_info *ovh_info)
+{
+	time_t connected;
+	bool ret;
+
+	if (!ovh_info->accessory_connected)
+		return false;
+
+	connected =
+		get_seconds_since_boot() - ovh_info->accessory_connect_time;
+	ret = (connected < ovh_info->monitor_accessory_s);
+	if (!ret)
+		dev_info(ovh_info->dev,
+			 "Stop monitoring: %d sec since USB accessory connected",
+			 (int) connected);
+	return ret;
+}
+
 static void port_overheat_work(struct work_struct *work)
 {
 	struct overheat_info *ovh_info =
@@ -304,7 +355,8 @@ static void port_overheat_work(struct work_struct *work)
 		goto rerun;
 	}
 
-	if (ovh_info->overheat_mitigation || ovh_info->usb_connected)
+	if (ovh_info->overheat_mitigation || ovh_info->usb_connected ||
+	    should_check_accessory(ovh_info))
 		goto rerun;
 	// Do not run again, USB port isn't overheated or connected to something
 	ovh_info->overheat_work_running = false;
