@@ -1,18 +1,14 @@
-&tlmm {
-	gpio_key {
-		gpio_key_default: gpio_key_default {
-			mux {
-				pins = "gpio49", "gpio115";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio49", "gpio115";
-				drive-strength = <2>;
-				bias-disable;
-			};
-		};
-	};
-};
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
 
 &pm660l_gpios {
 	key_vol_up {
@@ -27,7 +23,9 @@
 };
 
 &pm660_pon {
-	qcom,report-key = <0>;
+	qcom,pon-dbc-delay = <15625>;
+	qcom,kpdpwr-sw-debounce;
+	qcom,report-key;
 };
 
 &soc {
@@ -36,31 +34,13 @@
 		label = "gpio-keys";
 		status = "okay";
 		pinctrl-names = "default";
-		pinctrl-0 = <&gpio_key_default &key_vol_up_default>;
-
-		power_key {
-			label = "power_key";
-			gpios = <&tlmm 49 GPIO_ACTIVE_LOW>;
-			linux,input-type = <1>;
-			linux,code = <116>;
-			gpio-key,wakeup;
-			debounce-interval = <20>;
-		};
+		pinctrl-0 = <&key_vol_up_default>;
 
 		vol_up {
 			label = "volume_up";
 			gpios = <&pm660l_gpios 7 GPIO_ACTIVE_LOW>;
 			linux,input-type = <1>;
 			linux,code = <115>;
-			gpio-key,wakeup;
-			debounce-interval = <20>;
-		};
-
-		vol_down {
-			label = "volume_down";
-			gpios = <&tlmm 115 GPIO_ACTIVE_LOW>;
-			linux,input-type = <1>;
-			linux,code = <114>;
 			gpio-key,wakeup;
 			debounce-interval = <20>;
 		};
