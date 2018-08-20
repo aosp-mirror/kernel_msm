@@ -133,7 +133,7 @@ static struct ab_dram_buffer *ab_dram_buffer_create(
 
 	if (session) {
 		if (session->allocation_count >= MAX_ALLOC_PER_SESSION)
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
@@ -335,6 +335,7 @@ struct dma_buf *ab_dram_alloc_dma_buf_kernel(size_t len)
 	if (!initialized)
 		return ERR_PTR(-ENOENT);
 
+	/* Session field set to NULL since kernel has no session */
 	return ab_dram_alloc_dma_buf(NULL, len);
 }
 EXPORT_SYMBOL(ab_dram_alloc_dma_buf_kernel);
@@ -430,7 +431,7 @@ static long ab_dram_ioctl(struct file *filp, unsigned int cmd,
 
 	switch (cmd) {
 	case AB_DRAM_ALLOCATE_MEMORY:
-		ret = ab_dram_allocate_memory_fd(session ,(size_t)arg);
+		ret = ab_dram_allocate_memory_fd(session, (size_t)arg);
 		break;
 	default:
 		pr_err("Invalid ioctl command.\n");
