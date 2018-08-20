@@ -215,6 +215,13 @@
 };
 
 &soc {
+	qcom,msm-imem@146bf000 {
+		restart_info@a94 {
+			compatible = "msm-imem-restart_info";
+			reg = <0xa94 100>;
+		};
+	};
+
 	modemsmem {
 		compatible = "modemsmem";
 	};
