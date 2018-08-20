@@ -65,6 +65,7 @@ enum pon_restart_reason {
 
 	/* 32 ~ 63 for OEMs/ODMs secific features */
 	PON_RESTART_REASON_OEM_MIN		= 0x20,
+	PON_RESTART_REASON_OEM_PACKOUT		= 0x21,
 	PON_RESTART_REASON_OEM_MAX		= 0x3f,
 };
 
