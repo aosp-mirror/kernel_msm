@@ -3067,13 +3067,11 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
-static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
+static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int gpio_btndetect = CS40L2X_GPIO_BTNDETECT_GPIO1;
-	unsigned int val;
-	int dsp_timeout = CS40L2X_DSP_TIMEOUT_COUNT;
 	int ret;
 
 	if (cs40l2x->devid == CS40L2X_DEVID_L25B)
@@ -3085,7 +3083,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 			CS40L2X_XM_UNPACKED_TYPE), gpio_btndetect);
 	if (ret) {
 		dev_err(dev, "Failed to enable GPIO detection\n");
-		return;
+		return ret;
 	}
 
 	if (cs40l2x->pdata.gpio1_mode != CS40L2X_GPIO1_MODE_DEF_ON) {
@@ -3095,9 +3093,37 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				CS40L2X_GPIO1_DISABLED);
 		if (ret) {
 			dev_err(dev, "Failed to pre-configure GPIO1\n");
-			return;
+			return ret;
 		}
 	}
+
+	if (cs40l2x->revid == CS40L2X_REVID_B1) {
+		ret = cs40l2x_wseq_init(cs40l2x);
+		if (ret) {
+			dev_err(dev, "Failed to initialize write sequencer\n");
+			return ret;
+		}
+
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->event_control);
+		if (ret) {
+			dev_err(dev, "Failed to configure event controls\n");
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	unsigned int val;
+	int dsp_timeout = CS40L2X_DSP_TIMEOUT_COUNT;
+	int ret;
 
 	switch (cs40l2x->revid) {
 	case CS40L2X_REVID_A0:
@@ -3106,7 +3132,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				1 << CS40L2X_GLOBAL_EN_SHIFT);
 		if (ret) {
 			dev_err(dev, "Failed to enable device\n");
-			return;
+			return ret;
 		}
 
 		ret = regmap_update_bits(regmap, CS40L2X_DSP1_CCM_CORE_CTRL,
@@ -3116,26 +3142,9 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				(1 << CS40L2X_DSP1_EN_SHIFT));
 		if (ret) {
 			dev_err(dev, "Failed to start DSP\n");
-			return;
+			return ret;
 		}
 		break;
-
-	case CS40L2X_REVID_B1:
-		ret = cs40l2x_wseq_init(cs40l2x);
-		if (ret) {
-			dev_err(dev, "Failed to initialize write sequencer\n");
-			return;
-		}
-
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
-						CS40L2X_XM_UNPACKED_TYPE),
-				cs40l2x->event_control);
-		if (ret) {
-			dev_err(dev, "Failed to configure event controls\n");
-			return;
-		}
-		/* intentionally fall through */
 
 	default:
 		ret = regmap_update_bits(regmap, CS40L2X_PWRMGT_CTL,
@@ -3143,7 +3152,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				1 << CS40L2X_MEM_RDY_SHIFT);
 		if (ret) {
 			dev_err(dev, "Failed to set memory ready flag\n");
-			return;
+			return ret;
 		}
 
 		ret = regmap_update_bits(regmap, CS40L2X_DSP1_CCM_CORE_CTRL,
@@ -3151,7 +3160,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				1 << CS40L2X_DSP1_RESET_SHIFT);
 		if (ret) {
 			dev_err(dev, "Failed to restart DSP\n");
-			return;
+			return ret;
 		}
 	}
 
@@ -3162,7 +3171,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				CS40L2X_XM_UNPACKED_TYPE), &val);
 		if (ret) {
 			dev_err(dev, "Failed to read DSP status\n");
-			return;
+			return ret;
 		}
 
 		if (val == CS40L2X_HALO_STATE_RUNNING)
@@ -3173,26 +3182,35 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 
 	if (dsp_timeout == 0) {
 		dev_err(dev, "Timed out with DSP status = %d\n", val);
-		return;
+		return -ETIME;
 	}
+
+	return 0;
+}
+
+static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	int ret;
 
 	ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "TIMEOUT_MS",
 			CS40L2X_XM_UNPACKED_TYPE), CS40L2X_TIMEOUT_MS_MAX);
 	if (ret) {
 		dev_err(dev, "Failed to extend playback timeout\n");
-		return;
+		return ret;
 	}
 
 	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "NUMBEROFWAVES",
 			CS40L2X_XM_UNPACKED_TYPE), &cs40l2x->num_waves);
 	if (ret) {
 		dev_err(dev, "Failed to count wavetable entries\n");
-		return;
+		return ret;
 	}
 
 	if (cs40l2x->num_waves == 0) {
 		dev_err(dev, "Wavetable is empty\n");
-		return;
+		return -EINVAL;
 	}
 
 	if (cs40l2x->pdata.f0_default) {
@@ -3202,7 +3220,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				cs40l2x->pdata.f0_default);
 		if (ret) {
 			dev_err(dev, "Failed to write default f0\n");
-			return;
+			return ret;
 		}
 	}
 
@@ -3213,7 +3231,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 				cs40l2x->pdata.redc_default);
 		if (ret) {
 			dev_err(dev, "Failed to write default ReDC\n");
-			return;
+			return ret;
 		}
 	}
 
@@ -3228,7 +3246,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio1_rise_index\n");
-			return;
+			return ret;
 		}
 	} else if (cs40l2x->pdata.gpio1_rise_index >= cs40l2x->num_waves) {
 		dev_warn(dev, "Ignored default gpio1_rise_index\n");
@@ -3245,7 +3263,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio1_fall_index\n");
-			return;
+			return ret;
 		}
 	} else if (cs40l2x->pdata.gpio1_fall_index >= cs40l2x->num_waves) {
 		dev_warn(dev, "Ignored default gpio1_fall_index\n");
@@ -3264,7 +3282,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio1_fall_timeout\n");
-			return;
+			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio1_fall_timeout
 			& CS40L2X_PDATA_MASK) > CS40L2X_PR_TIMEOUT_MAX) {
@@ -3282,7 +3300,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio2_rise_index\n");
-			return;
+			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio2_rise_index >= cs40l2x->num_waves
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
@@ -3302,7 +3320,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio2_fall_index\n");
-			return;
+			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio2_fall_index >= cs40l2x->num_waves
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
@@ -3322,7 +3340,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio3_rise_index\n");
-			return;
+			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio3_rise_index >= cs40l2x->num_waves
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
@@ -3342,7 +3360,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio3_fall_index\n");
-			return;
+			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio3_fall_index >= cs40l2x->num_waves
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
@@ -3362,7 +3380,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio4_rise_index\n");
-			return;
+			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio4_rise_index >= cs40l2x->num_waves
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
@@ -3382,7 +3400,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio4_fall_index\n");
-			return;
+			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio4_fall_index >= cs40l2x->num_waves
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
@@ -3391,9 +3409,7 @@ static void cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		dev_warn(dev, "Ignored default gpio4_fall_index\n");
 	}
 
-	dev_dbg(dev, "Normal-mode haptics successfully started\n");
-
-	cs40l2x_vibe_init(cs40l2x);
+	return 0;
 }
 
 static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
@@ -3412,23 +3428,18 @@ static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 	return ret;
 }
 
-static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
+static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
+			const struct firmware *fw)
 {
-	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
 	struct device *dev = cs40l2x->dev;
 	unsigned int pos = CS40L2X_WT_FILE_HEADER_SIZE;
 	unsigned int block_offset, block_type, block_length;
 	unsigned int algo_id, algo_rev, reg;
-	unsigned int num_coeff_files = 0;
-	int ret = 0;
+	int ret = -EINVAL;
 	int i;
-
-	if (!fw)
-		goto err_ret;
 
 	if (memcmp(fw->data, "WMDR", 4)) {
 		dev_err(dev, "Failed to recognize coefficient file\n");
-		ret = -EINVAL;
 		goto err_rls_fw;
 	}
 
@@ -3464,13 +3475,13 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 
 		switch (block_type) {
 		case CS40L2X_XM_UNPACKED_TYPE:
+			ret = -EINVAL;
 			for (i = 0; i < cs40l2x->num_algos; i++)
 				if (algo_id == cs40l2x->algo_info[i].id)
 					break;
 			if (i == cs40l2x->num_algos) {
 				dev_err(dev, "Invalid algo. ID: 0x%06X\n",
 					algo_id);
-				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
@@ -3481,7 +3492,6 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 					(algo_rev & 0xFF000000) >> 24,
 					(algo_rev & 0xFF0000) >> 16,
 					(algo_rev & 0xFF00) >> 8);
-				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
@@ -3495,7 +3505,6 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 				dev_err(dev,
 					"Wavetable too large: %d bytes (XM)\n",
 					block_length / 4 * 3);
-				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
@@ -3508,13 +3517,13 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 			}
 			break;
 		case CS40L2X_YM_UNPACKED_TYPE:
+			ret = -EINVAL;
 			for (i = 0; i < cs40l2x->num_algos; i++)
 				if (algo_id == cs40l2x->algo_info[i].id)
 					break;
 			if (i == cs40l2x->num_algos) {
 				dev_err(dev, "Invalid algo. ID: 0x%06X\n",
 					algo_id);
-				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
@@ -3525,7 +3534,6 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 					(algo_rev & 0xFF000000) >> 24,
 					(algo_rev & 0xFF0000) >> 16,
 					(algo_rev & 0xFF00) >> 8);
-				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
@@ -3539,7 +3547,6 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 				dev_err(dev,
 					"Wavetable too large: %d bytes (YM)\n",
 					block_length / 4 * 3);
-				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
@@ -3559,15 +3566,40 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 err_rls_fw:
 	release_firmware(fw);
 
-err_ret:
-	if (!ret) {
-		mutex_lock(&cs40l2x->lock);
-		num_coeff_files = ++(cs40l2x->num_coeff_files);
-		mutex_unlock(&cs40l2x->lock);
+	return ret;
+}
+
+static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
+{
+	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
+	unsigned int num_coeff_files;
+	int ret;
+
+	if (fw) {
+		ret = cs40l2x_coeff_file_parse(cs40l2x, fw);
+		if (ret)
+			return;
 	}
 
-	if (num_coeff_files == ARRAY_SIZE(cs40l2x_coeff_files))
-		cs40l2x_dsp_start(cs40l2x);
+	mutex_lock(&cs40l2x->lock);
+	num_coeff_files = ++(cs40l2x->num_coeff_files);
+	mutex_unlock(&cs40l2x->lock);
+
+	if (num_coeff_files == ARRAY_SIZE(cs40l2x_coeff_files)) {
+		ret = cs40l2x_dsp_pre_config(cs40l2x);
+		if (ret)
+			return;
+
+		ret = cs40l2x_dsp_start(cs40l2x);
+		if (ret)
+			return;
+
+		ret = cs40l2x_dsp_post_config(cs40l2x);
+		if (ret)
+			return;
+
+		cs40l2x_vibe_init(cs40l2x);
+	}
 }
 
 static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
@@ -3638,19 +3670,13 @@ static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
 	return 0;
 }
 
-static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
+static int cs40l2x_firmware_parse(struct cs40l2x_private *cs40l2x,
+			const struct firmware *fw)
 {
-	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
 	struct device *dev = cs40l2x->dev;
 	unsigned int pos = CS40L2X_FW_FILE_HEADER_SIZE;
-	unsigned int block_offset, block_length;
-	unsigned char block_type;
-	int ret, i;
-
-	if (!fw) {
-		dev_err(dev, "Failed to request firmware file\n");
-		return;
-	}
+	unsigned int block_offset, block_type, block_length;
+	int ret = -EINVAL;
 
 	if (memcmp(fw->data, "WMFW", 4)) {
 		dev_err(dev, "Failed to recognize firmware file\n");
@@ -3658,7 +3684,6 @@ static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
 	}
 
 	while (pos < fw->size) {
-
 		block_offset = fw->data[pos]
 				+ (fw->data[pos + 1] << 8)
 				+ (fw->data[pos + 2] << 16);
@@ -3724,16 +3749,32 @@ static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
 	}
 
 	ret = cs40l2x_coeff_init(cs40l2x);
+
+err_rls_fw:
+	release_firmware(fw);
+
+	return ret;
+}
+
+static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
+{
+	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
+	struct device *dev = cs40l2x->dev;
+	int ret, i;
+
+	if (!fw) {
+		dev_err(dev, "Failed to request firmware file\n");
+		return;
+	}
+
+	ret = cs40l2x_firmware_parse(cs40l2x, fw);
 	if (ret)
-		goto err_rls_fw;
+		return;
 
 	for (i = 0; i < ARRAY_SIZE(cs40l2x_coeff_files); i++)
 		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				cs40l2x_coeff_files[i], dev, GFP_KERNEL,
 				cs40l2x, cs40l2x_coeff_file_load);
-
-err_rls_fw:
-	release_firmware(fw);
 }
 
 static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x,
