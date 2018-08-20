@@ -1,0 +1,282 @@
+/*
+ * iaxxx-module-celldrv.c -- IAxxx module cell driver
+ *
+ * Copyright 2017 Knowles Corporation
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; version 2 of the License.
+ *
+ *  This program is distributed in the hope that it will be useful, but
+ *  WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *  General Public License for more details.
+ */
+#include <linux/regmap.h>
+#include <linux/cdev.h>
+#include <linux/device.h>
+#include <linux/err.h>
+#include <linux/kernel.h>
+#include <linux/platform_device.h>
+#include <linux/mfd/adnc/iaxxx-module.h>
+#include <linux/mfd/adnc/iaxxx-core.h>
+#include <linux/types.h>
+#include <linux/fs.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
+#include <linux/module.h>
+
+#include "iaxxx-module-celldrv.h"
+
+static struct module_cell_params module_cell_priv;
+
+
+
+static long module_dev_ioctl(struct file *file, unsigned int cmd,
+							unsigned long arg)
+{
+	struct module_device_priv *module_dev_priv = file->private_data;
+	struct iaxxx_priv *priv = to_iaxxx_priv(module_dev_priv->parent);
+	struct iaxxx_sensor_info sensor_info;
+	struct iaxxx_sensor_param param_info;
+	int ret = -EINVAL;
+
+	pr_debug("%s() cmd %d\n", __func__, cmd);
+
+	if (!priv)
+		return -EINVAL;
+
+	if (priv->iaxxx_state->fw_state != FW_APP_MODE) {
+		dev_err(priv->dev, "FW state not valid %d %s()\n",
+			priv->iaxxx_state->fw_state, __func__);
+		return -EIO;
+	}
+
+	switch (cmd) {
+	case MODULE_SENSOR_ENABLE:
+		if (copy_from_user(&sensor_info, (void __user *)arg,
+				   sizeof(sensor_info)))
+			return -EFAULT;
+		iaxxx_core_sensor_change_state(module_dev_priv->parent,
+				sensor_info.inst_id, 1, sensor_info.block_id);
+		break;
+	case MODULE_SENSOR_DISABLE:
+		if (copy_from_user(&sensor_info, (void __user *)arg,
+				   sizeof(sensor_info)))
+			return -EFAULT;
+		iaxxx_core_sensor_change_state(module_dev_priv->parent,
+				sensor_info.inst_id, 0, sensor_info.block_id);
+		break;
+	case MODULE_SENSOR_SET_PARAM:
+		if (copy_from_user(&param_info, (void __user *)arg,
+				   sizeof(param_info)))
+			return -EFAULT;
+		ret = iaxxx_core_sensor_set_param_by_inst(
+				module_dev_priv->parent,
+				param_info.inst_id, param_info.param_id,
+				param_info.param_val, param_info.block_id);
+		if (ret) {
+			pr_err("%s() Sensor set param fail\n", __func__);
+			pr_err("Param info inst 0x%x p_id 0x%x p_val 0x%x\n",
+					param_info.inst_id, param_info.param_id,
+					param_info.param_val);
+			return ret;
+		}
+		break;
+	case MODULE_SENSOR_GET_PARAM:
+		if (copy_from_user(&param_info, (void __user *)arg,
+				   sizeof(param_info)))
+			return -EFAULT;
+		ret = iaxxx_core_sensor_get_param_by_inst(
+				module_dev_priv->parent,
+				param_info.inst_id, param_info.param_id,
+				&param_info.param_val, param_info.block_id);
+		if (ret) {
+			pr_err("%s() Sensor get param fail\n", __func__);
+			pr_err("Param info inst 0x%x p_id 0x%x\n",
+				param_info.inst_id, param_info.param_id);
+			return ret;
+		}
+		/* After read copy back the data to user space */
+		if (copy_to_user((void __user *)arg, &param_info,
+				 sizeof(param_info)))
+			return -EFAULT;
+
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+#ifdef CONFIG_COMPAT
+static long module_dev_compat_ioctl(struct file *file, unsigned int cmd,
+							unsigned long arg)
+{
+	return module_dev_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
+}
+#endif
+
+static int module_dev_open(struct inode *inode, struct file *file)
+{
+	struct module_device_priv *module_dev_priv = container_of(
+		inode->i_cdev, struct module_device_priv, cdev);
+	file->private_data = module_dev_priv;
+
+	return 0;
+}
+
+static int module_dev_release(struct inode *inode, struct file *file)
+{
+	file->private_data = NULL;
+
+	return 0;
+}
+
+static const struct file_operations module_dev_fops = {
+	.open = module_dev_open,
+	.release = module_dev_release,
+	.unlocked_ioctl	= module_dev_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= module_dev_compat_ioctl,
+#endif
+};
+
+
+static int iaxxx_module_dev_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct module_device_priv *module_dev_priv;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev->parent);
+	int ret;
+
+	pr_debug("Enter :%s\n", __func__);
+	if (module_cell_priv.cdev_minor == MODULE_CDEV_MAX_DEVICES) {
+		pr_err("Minor nos exhausted. Increase CVQ_CDEV_MAX_DEVICES\n");
+		return -ENOBUFS;
+	}
+
+	module_dev_priv = devm_kzalloc(dev, sizeof(struct module_device_priv),
+				       GFP_KERNEL);
+	if (!module_dev_priv) {
+		ret = -ENOMEM;
+		goto out_err;
+	}
+
+	module_dev_priv->regmap = priv->regmap;
+	module_dev_priv->parent = dev->parent;
+	module_dev_priv->cdev.owner = THIS_MODULE;
+	module_dev_priv->dev_num = MKDEV(MAJOR(module_cell_priv.dev_num),
+					 module_cell_priv.cdev_minor);
+	cdev_init(&module_dev_priv->cdev, &module_dev_fops);
+
+	ret = cdev_add(&module_dev_priv->cdev, module_dev_priv->dev_num, 1);
+	if (ret) {
+		pr_err("failed to add cdev error: %d", ret);
+		goto free_module;
+	}
+
+	module_dev_priv->dev = device_create(module_cell_priv.cdev_class,
+					NULL, module_dev_priv->dev_num,
+					module_dev_priv, dev_name(dev));
+	if (IS_ERR(module_dev_priv->dev)) {
+		ret = PTR_ERR(dev);
+		pr_err("Failed (%d) to create cdev device\n", ret);
+		goto err_device_create;
+	}
+
+	dev_set_drvdata(dev, module_dev_priv);
+	pr_debug("MODULE device cdev initialized.\n");
+
+	return 0;
+
+err_device_create:
+	cdev_del(&module_dev_priv->cdev);
+free_module:
+	devm_kfree(dev, module_dev_priv);
+out_err:
+	pr_err("cdev setup failure: no cdevs available!\n");
+
+	return ret;
+
+}
+static int iaxxx_module_dev_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct module_device_priv *module_dev_priv = dev_get_drvdata(dev);
+
+	device_destroy(module_cell_priv.cdev_class, module_dev_priv->dev_num);
+	cdev_del(&module_dev_priv->cdev);
+
+	devm_kfree(dev, module_dev_priv);
+
+	return 0;
+}
+
+
+static const struct of_device_id iaxxx_module_dt_match[] = {
+	{.compatible = "knowles,iaxxx-module-celldrv"},
+	{}
+};
+
+static struct platform_driver iaxxx_module_driver = {
+	.probe  = iaxxx_module_dev_probe,
+	.remove = iaxxx_module_dev_remove,
+	.driver = {
+		.name = "iaxxx-module-celldrv",
+		.owner = THIS_MODULE,
+		.of_match_table = iaxxx_module_dt_match,
+	},
+};
+
+static int __init iaxxx_module_init(void)
+{
+	int ret;
+
+	module_cell_priv.cdev_minor  = 0;
+	module_cell_priv.cdev_class = class_create(THIS_MODULE,
+						"iaxxx-module-celldrv");
+	if (IS_ERR(module_cell_priv.cdev_class)) {
+		ret = PTR_ERR(module_cell_priv.cdev_class);
+		pr_err("Err (%d) creating iaxxx-module-celldrv class.\n", ret);
+		goto out_err;
+	}
+
+	ret = alloc_chrdev_region(&module_cell_priv.dev_num, 0,
+			MODULE_CDEV_MAX_DEVICES, "iaxxx-module-celldrv");
+	if (ret) {
+		pr_err("Failed to alloc chardev region (%d)", ret);
+		goto err_alloc_cdev;
+	}
+
+	pr_info("Allocated Major device number %d\n",
+				MAJOR(module_cell_priv.dev_num));
+
+	ret =  platform_driver_register(&iaxxx_module_driver);
+	if (ret)
+		goto err_plat_register;
+
+	return 0;
+
+err_plat_register:
+	unregister_chrdev_region(module_cell_priv.dev_num,
+				MODULE_CDEV_MAX_DEVICES);
+err_alloc_cdev:
+	class_destroy(module_cell_priv.cdev_class);
+out_err:
+	pr_err("MODULE Cell init failure (%d). No CVQ cdevs available!\n", ret);
+	return ret;
+}
+
+
+static void __exit iaxxx_module_exit(void)
+{
+
+	platform_driver_unregister(&iaxxx_module_driver);
+
+	unregister_chrdev_region(module_cell_priv.dev_num,
+						MODULE_CDEV_MAX_DEVICES);
+	class_destroy(module_cell_priv.cdev_class);
+}
+module_init(iaxxx_module_init);
+module_exit(iaxxx_module_exit);

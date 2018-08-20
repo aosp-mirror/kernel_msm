@@ -95,7 +95,15 @@ struct iaxxx_tunnel_data {
 	struct list_head src_list;
 	spinlock_t lock;
 
-	unsigned long flags;	/* Bit 0: Tunnel 0, ... Bit31: Tunnel 31 */
+	/* Bit 0: Tunnel 0, ... Bit31: Tunnel 31 */
+	unsigned long flags;
+
+	/* Bit 0: Tunnel 0, ... Bit31: Tunnel 31
+	 * Corresponding bits are enabled to indicate which
+	 * Tunnels are setup for Sync Mode
+	 */
+	unsigned long flags_sync_mode;
+
 	int client_no;
 	atomic_t src_enable_id[TNLMAX];
 	atomic_t event_occurred;
@@ -538,10 +546,13 @@ static int producer_thread(void *arg)
 		WARN_ONCE(size < 4, "No more buffer");
 
 		if (size >= 4) {
-			/* Get the data max size words */
+			/* Get the data max size words.
+			 * Sync mode reading is enabled if at least
+			 * one tunnel is configured in sync mode
+			 */
 			bytes = iaxxx_tunnel_read(priv,
 					buf, size >> 2,
-					tunnel_flags & (1<<TNL_CVQ),
+					t_intf_priv->flags_sync_mode,
 					&bytes_remaining) << 2;
 
 			pr_debug("%s: buf = %p sz = %d, bytes = %d, cnt = %d\n",
@@ -892,6 +903,9 @@ static int tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 			__func__, id,
 			atomic_read(&t_intf_priv->tunnel_ref_cnt[id]));
 		set_bit(id, &t_intf_priv->flags);
+		/* Set flag if this tunnel id is in sync mode */
+		if (mode == TNL_SYNC_MODE)
+			set_bit(id, &t_intf_priv->flags_sync_mode);
 		wake_up(&t_intf_priv->producer_wq);
 	}
 
@@ -920,8 +934,11 @@ static int tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 		!atomic_read(&t_intf_priv->tunnel_ref_cnt[id]))
 		return -EINVAL;
 
-	if (atomic_dec_return(&t_intf_priv->tunnel_ref_cnt[id]) == 0)
+	if (atomic_dec_return(&t_intf_priv->tunnel_ref_cnt[id]) == 0) {
 		clear_bit(id, &t_intf_priv->flags);
+		if (mode == TNL_SYNC_MODE)
+			clear_bit(id, &t_intf_priv->flags_sync_mode);
+	}
 
 	pr_debug("%s: tid: %x src: %x client flag: %lx global flag: %lx\n",
 		__func__, id, src, client->tid_flag, t_intf_priv->flags);

@@ -20,6 +20,7 @@
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pkg-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include "iaxxx.h"
 
 #define IAXXX_BITS_SWAP	32
@@ -59,19 +60,21 @@ struct pkg_mgmt_info {
 };
 
 /*****************************************************************************
- * iaxxx_core_create_plg()
- * @brief Set a param in a plugin instance
+ * iaxxx_core_create_plg_common()
+ * @brief Create plugin instance
  *
- * @id		Plugin Instance Id
- * @param_id	Param Id
- * @param_val	Param value
- * @block_id	Update block id
- *
+ * @id              Plugin Instance Id
+ * @param_id        Param Id
+ * @param_val       Param value
+ * @block_id        Update block id
+ * @static_package  True if the plugin is part of static package
  * @ret 0 on success, -EINVAL in case of error
  ****************************************************************************/
-int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
-			uint32_t priority, uint32_t pkg_id,
-			uint32_t plg_idx, uint8_t block_id)
+static int iaxxx_core_create_plg_common(
+		struct device *dev, uint32_t inst_id,
+		uint32_t priority, uint32_t pkg_id,
+		uint32_t plg_idx, uint8_t block_id,
+		bool     static_package)
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
@@ -84,18 +87,24 @@ int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
 	dev_dbg(dev, "%s()\n", __func__);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
-	/* Check Package is loaded */
-	package = pkg_id & IAXXX_PKG_ID_MASK;
+
 	inst_id &= IAXXX_PLGIN_ID_MASK;
-	if (!(priv->iaxxx_state->pkg[package].pkg_state)) {
-		dev_err(dev, "Package 0x%x is not created %s()\n",
+
+	/* Check Package is loaded. DO NOT check for
+	 * plugins part of statically loaded packages
+	 */
+	if (!static_package) {
+		package = pkg_id & IAXXX_PKG_ID_MASK;
+		if (!(priv->iaxxx_state->pkg[package].pkg_state)) {
+			dev_err(dev, "Package 0x%x is not created %s()\n",
 				pkg_id, __func__);
-		goto core_create_plugin_err;
+			goto core_create_plugin_err;
+		}
 	}
 	/* Check if Plugin exist */
 	if (priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
 		dev_err(dev, "Plugin instance 0x%x exist %s()\n",
-				inst_id, __func__);
+			inst_id, __func__);
 		ret = -EEXIST;
 		goto core_create_plugin_err;
 	}
@@ -132,8 +141,7 @@ int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
 	/* Update Plugin instance id in plg inst header */
 	ret = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id),
-		1 << inst_id,
-		1 << inst_id);
+		1 << inst_id, 1 << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_create_plugin_err;
@@ -145,13 +153,65 @@ int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
 	}
 
 	priv->iaxxx_state->plgin[inst_id].plugin_inst_state =
-							IAXXX_PLUGIN_LOADED;
+		IAXXX_PLUGIN_LOADED;
 	priv->iaxxx_state->plgin[inst_id].proc_id = pkg_id;
+
 core_create_plugin_err:
 	mutex_unlock(&priv->plugin_lock);
 	return ret;
 }
+
+
+/*****************************************************************************
+ * iaxxx_core_create_plg()
+ * @brief Create plugin instance
+ *
+ * @id		Plugin Instance Id
+ * @param_id	Param Id
+ * @param_val	Param value
+ * @block_id	Update block id
+ *
+ * @ret 0 on success, -EINVAL in case of error
+ ****************************************************************************/
+int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
+			uint32_t priority, uint32_t pkg_id,
+			uint32_t plg_idx, uint8_t block_id)
+{
+	return iaxxx_core_create_plg_common(dev, inst_id, priority,
+			pkg_id, plg_idx, block_id, false);
+}
 EXPORT_SYMBOL(iaxxx_core_create_plg);
+
+/*****************************************************************************
+ * iaxxx_core_create_plg_static_package()
+ * @brief Create plugin instance from statically loaded package
+ *
+ * @id      Plugin Instance Id
+ * @param_id    Param Id
+ * @param_val   Param value
+ * @block_id    Update block id
+ *
+ * @ret 0 on success, -EINVAL in case of error
+ ****************************************************************************/
+int iaxxx_core_create_plg_static_package(
+		struct device *dev, uint32_t inst_id,
+		uint32_t priority, uint32_t pkg_id,
+		uint32_t plg_idx, uint8_t block_id)
+{
+	/* Generate package id using package index and
+	 * block_id
+	 */
+	uint32_t proc_id = IAXXX_BLOCK_ID_TO_PROC_ID(block_id);
+
+	pkg_id = ((pkg_id & IAXXX_PKG_MGMT_PKG_PROC_ID_PACKAGE_ID_MASK) |
+		((proc_id << IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_POS) &
+		IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_MASK));
+
+	return iaxxx_core_create_plg_common(dev, inst_id, priority,
+			pkg_id, plg_idx, block_id, true);
+}
+EXPORT_SYMBOL(iaxxx_core_create_plg_static_package);
+
 
 /*****************************************************************************
  * iaxxx_core_change_plg_state()
@@ -646,20 +706,11 @@ static int iaxxx_get_slot_id(struct iaxxx_priv *priv, uint32_t id)
 	return slot_id;
 }
 
-/*****************************************************************************
- * iaxxx_core_set_param_blk()
- * @brief Set parameter block to plugin instance
- *
- * @inst_id	Plugin Instance Id
- * @blk_size	Block data size
- * @ptr_blk	Ptr to block value
- * @block_id	Update block id
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
-			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
-			uint32_t id)
+static int iaxxx_core_set_param_blk_common(struct device *dev,
+			uint32_t inst_id, uint32_t blk_size,
+			void *ptr_blk, uint32_t block_id,
+			uint32_t id,
+			bool  fixed_slot)
 {
 	int ret = -EINVAL;
 	uint32_t status = 0;
@@ -702,11 +753,12 @@ int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto set_param_blk_err;
 	}
+
 	/*
 	 * If id is greater than 0, means its KW load request.
 	 * Find the empty slot id for KW
 	 */
-	if (id) {
+	if (!fixed_slot && id) {
 		slot_id = iaxxx_get_slot_id(priv, id);
 		if (slot_id < 0) {
 			dev_err(dev, "%s invalid slot id %d\n", __func__,
@@ -727,8 +779,8 @@ int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
 
 	ret = iaxxx_send_update_block_request(dev, &status, block_id);
 	if (ret) {
-		dev_err(dev, "Update blk failed after slot-id config %s()\n",
-			__func__);
+		dev_err(dev, "Update blk failed after slot-id (%d) config %s()\n",
+				slot_id, __func__);
 		if (status) {
 			rc = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
@@ -795,7 +847,7 @@ int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
 			}
 	}
 	/* If its KW load request, update the slot and KW id mapping */
-	if (!ret && id > 0) {
+	if (!ret && !fixed_slot && id > 0) {
 		priv->iaxxx_state->kw_info.kw_id[slot_id] = id;
 		bitmap = priv->iaxxx_state->kw_info.kw_loaded_bitmap;
 		set_bit(slot_id, &bitmap);
@@ -805,7 +857,52 @@ set_param_blk_err:
 	mutex_unlock(&priv->plugin_lock);
 	return ret;
 }
+
+
+/*****************************************************************************
+ * iaxxx_core_set_param_blk()
+ * @brief Set parameter block to plugin instance. Actual slot id sent to
+ * fw will change based on KW models loaded.
+ *
+ * @inst_id	Plugin Instance Id
+ * @blk_size	Block data size
+ * @ptr_blk	Ptr to block value
+ * @block_id	Update block id
+ *
+ * @ret 0 on success, -EINVAL in case of error
+ ****************************************************************************/
+int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
+			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
+			uint32_t id)
+{
+	return iaxxx_core_set_param_blk_common(dev,
+			inst_id, blk_size, ptr_blk, block_id,
+			id, false);
+}
 EXPORT_SYMBOL(iaxxx_core_set_param_blk);
+
+/*****************************************************************************
+ * iaxxx_core_set_param_blk_fixed_slot()
+ * @brief Set parameter block to plugin instance, but keep the id to what is
+ * passed as parameter.
+ *
+ * @inst_id	Plugin Instance Id
+ * @blk_size	Block data size
+ * @ptr_blk	Ptr to block value
+ * @block_id	Update block id
+ *
+ * @ret 0 on success, -EINVAL in case of error
+ ****************************************************************************/
+int iaxxx_core_set_param_blk_fixed_slot(struct device *dev, uint32_t inst_id,
+			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
+			uint32_t id)
+{
+	return iaxxx_core_set_param_blk_common(dev,
+			inst_id, blk_size, ptr_blk, block_id,
+			id, true);
+}
+EXPORT_SYMBOL(iaxxx_core_set_param_blk_fixed_slot);
+
 
 /*****************************************************************************
  * iaxxx_core_set_event()
@@ -1354,3 +1451,136 @@ int iaxxx_get_kw_recognize_bitmap(struct device *dev, uint32_t *bitmap)
 	return 0;
 }
 EXPORT_SYMBOL(iaxxx_get_kw_recognize_bitmap);
+
+int iaxxx_core_get_param_blk(
+		struct device *dev,
+		uint32_t  inst_id,
+		uint32_t  block_id,
+		uint32_t  param_blk_id,
+		uint32_t *getparam_block_data,
+		uint32_t  getparam_block_size_in_words)
+{
+	int ret;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t write_val, read_val, getparam_block_size;
+	uint32_t status = 0;
+
+	if (!priv || !getparam_block_data || !getparam_block_size_in_words)
+		return -EINVAL;
+
+	dev_dbg(dev, "%s() inst_id=%u blk_size=%u blk_id=%u param_blk_id=%u\n",
+		__func__, inst_id, getparam_block_size_in_words, block_id,
+		param_blk_id);
+
+	inst_id &= IAXXX_PLGIN_ID_MASK;
+
+	/* protect this plugin operation */
+	mutex_lock(&priv->plugin_lock);
+
+	/* Check if plugin exists */
+	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
+				inst_id, __func__);
+		ret = -EEXIST;
+		goto iaxxx_core_get_param_error;
+	}
+
+	/* Write the PluginHdrParamBlkCtrl register
+	 * to request the parameter block.
+	 */
+	write_val = ((inst_id <<
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
+	write_val |= IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_GET_BLK_REQ_MASK;
+
+	ret = regmap_write(priv->regmap,
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
+		write_val);
+	if (ret) {
+		dev_err(dev, "getparamblk request failed %s()\n", __func__);
+		goto iaxxx_core_get_param_error;
+	}
+
+	ret = regmap_write(priv->regmap,
+		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id),
+		param_blk_id);
+	if (ret) {
+		dev_err(dev, "write failed %s()\n", __func__);
+		goto iaxxx_core_get_param_error;
+	}
+
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret) {
+		dev_err(dev, "Update blk failed(%x) after GET_BLK_REQ %s()\n",
+				status, __func__);
+		goto iaxxx_core_get_param_error;
+	}
+
+	/* Get block size of parameter block to read and validate it */
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
+			&read_val);
+	if (ret) {
+		dev_err(dev, "getparamblk blksize failed %s()\n", __func__);
+		goto iaxxx_core_get_param_error;
+	}
+
+	getparam_block_size = (read_val &
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK)
+		>> IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS;
+
+	if (!getparam_block_size ||
+		getparam_block_size > getparam_block_size_in_words) {
+		dev_err(dev, "invalid getparam blocksize %s()\n", __func__);
+		ret = -EINVAL;
+		goto iaxxx_core_get_param_error;
+	}
+
+	/* Get parameter block address to read */
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id),
+			&read_val);
+	if (ret) {
+		dev_err(dev, "getparamblk addr failed %s()\n", __func__);
+		goto iaxxx_core_get_param_error;
+	}
+
+	/* read the block from the address */
+	ret = priv->bulk_read(priv->dev,
+		read_val, getparam_block_data,
+		getparam_block_size_in_words);
+
+	if (ret != getparam_block_size_in_words) {
+		dev_err(dev, "getparamblk read failed %s()\n", __func__);
+		goto iaxxx_core_get_param_error;
+	}
+
+	/* Write the param block done */
+	write_val = ((inst_id <<
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
+	write_val |=
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_GET_BLK_DONE_MASK;
+
+	ret = regmap_write(priv->regmap,
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
+		write_val);
+	if (ret) {
+		dev_err(dev, "getparamblk done failed %s()\n", __func__);
+		goto iaxxx_core_get_param_error;
+	}
+
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret) {
+		dev_err(dev, "Update blk failed(%x) after GET_BLK_DONE %s()\n",
+				status, __func__);
+		goto iaxxx_core_get_param_error;
+	}
+	ret = 0;
+
+iaxxx_core_get_param_error:
+	mutex_unlock(&priv->plugin_lock);
+	return ret;
+
+}
+EXPORT_SYMBOL(iaxxx_core_get_param_blk);

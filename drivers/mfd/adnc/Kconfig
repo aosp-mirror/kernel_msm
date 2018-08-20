@@ -51,4 +51,6 @@ config MFD_IAXXX_ATHENS_FPGA
 config MFD_IAXXX_REGMAP_FPGA
         bool "Enable REGMAP FPGA changes"
 
+config MFD_IAXXX_CUSTOM_CONFIG_ALGO
+	bool "Custom configuration for plugins"
 endif

@@ -34,6 +34,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-ioctrl.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-ao.h>
 #include <linux/mfd/adnc/iaxxx-stream-registers.h>
+#include <linux/mfd/adnc/iaxxx-sensor-registers.h>
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-channel-registers.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
@@ -50,6 +51,7 @@
 #define PCM_PORT_I2S 1
 #define IAXXX_MAX_PORTS		6
 #define IAXXX_MAX_PDM_PORTS	7
+#define IAXXX_MAX_SENSOR	4
 
 static int iaxxx_calc_i2s_div(u32 bits_per_frame, u32 sampling_rate,
 			u32 *period, u32 *div_val, u32 *nr_val);
@@ -90,6 +92,7 @@ struct iaxxx_codec_priv {
 	bool port_pcm_setup[IAXXX_MAX_PORTS];
 	bool plugin_blk_en[32];
 	bool stream_en[32];
+	bool sensor_en[IAXXX_MAX_SENSOR];
 	u32 op_channels_active;
 	/* pdm mic enable flags*/
 	u32 portb_mic0_en;
@@ -670,6 +673,14 @@ enum {
 	STREAM14,
 	STREAM15,
 	STREAM_NONE,
+};
+
+enum {
+	SENSOR0 = 0,
+	SENSOR1,
+	SENSOR2,
+	SENSOR3,
+	SENSOR_NONE,
 };
 
 enum Encoding_s {
@@ -1288,6 +1299,13 @@ static const char * const strm_asrc_mode_texts[] = {
 	ENUM_NAME(ASRC_ENABLE), ENUM_NAME(ASRC_DISABLE), ENUM_NAME(REDBOX_2-1),
 	ENUM_NAME(REDBOX_1-2), };
 
+static const unsigned int strm_xfer_mode_value[] = {
+	0x0, 0x1, 0x2, 0x3, };
+
+static const char * const strm_xfer_mode_texts[] = {
+	ENUM_NAME(SSP), ENUM_NAME(DMA), ENUM_NAME(CPU),
+	ENUM_NAME(NOT_USED), };
+
   /* stream direction */
 #define IAXXXCORE_STREAM_ENUM(stream) \
 static SOC_VALUE_ENUM_SINGLE_DECL(stream##_asrc_mode_enum, \
@@ -1296,6 +1314,12 @@ static SOC_VALUE_ENUM_SINGLE_DECL(stream##_asrc_mode_enum, \
 			(IAXXX_STR_GRP_STR_CTRL_ASRC_MODE_MASK >> \
 			IAXXX_STR_GRP_STR_CTRL_ASRC_MODE_POS), \
 			strm_asrc_mode_texts, strm_asrc_mode_value); \
+static SOC_VALUE_ENUM_SINGLE_DECL(stream##_xfer_mode_enum, \
+			IAXXX_STR_GRP_STR_CTRL_REG(stream), \
+			IAXXX_STR_GRP_STR_CTRL_XFER_MODE_POS, \
+			(IAXXX_STR_GRP_STR_CTRL_XFER_MODE_MASK >> \
+			IAXXX_STR_GRP_STR_CTRL_XFER_MODE_POS), \
+			strm_xfer_mode_texts, strm_xfer_mode_value); \
 static SOC_VALUE_ENUM_SINGLE_DECL(stream##_port_enc_enum, \
 			IAXXX_STR_GRP_STR_PORT_REG(stream), \
 			IAXXX_STR_GRP_STR_PORT_PORT_ENCODING_POS, \
@@ -1412,6 +1436,7 @@ IAXXX_STREAM_EN_SET_GET(STREAM15)
 	SOC_ENUM(strm_name" Format Sr", stream##_sr_enum), \
 	SOC_ENUM(strm_name" Format FrLn", stream##_frm_len_enum), \
 	SOC_ENUM(strm_name" ASRC Mode", stream##_asrc_mode_enum), \
+	SOC_ENUM(strm_name" Xfer Mode", stream##_xfer_mode_enum), \
 	SOC_SINGLE(strm_name" droop comp en", \
 			IAXXX_STR_GRP_STR_CTRL_REG(stream), \
 			IAXXX_STR_GRP_STR_CTRL_DROOP_COMP_ENABLE_POS, 1, 0), \
@@ -1734,6 +1759,12 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_15_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_15_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_15_OUT_EP_15,
+
+	IAXXX_SYSID_SENSOR_OUTPUT_0,
+	IAXXX_SYSID_SENSOR_OUTPUT_1,
+	IAXXX_SYSID_SENSOR_OUTPUT_2,
+	IAXXX_SYSID_SENSOR_OUTPUT_3,
+
 };
 
 static const char * const ip_ep_texts[] = {
@@ -1875,6 +1906,9 @@ static const char * const ip_ep_texts[] = {
 	ENUM_NAME(plugin15Out10), ENUM_NAME(plugin15Out11),
 	ENUM_NAME(plugin15Out12), ENUM_NAME(plugin15Out13),
 	ENUM_NAME(plugin15Out14), ENUM_NAME(plugin15Out15),
+
+	ENUM_NAME(SensorOut0), ENUM_NAME(SensorOut1),
+	ENUM_NAME(SensorOut2), ENUM_NAME(SensorOut3),
 };
 
 #define IAXXXCORE_TX_CHMGR_ENUM(channel) \
@@ -2457,6 +2491,57 @@ IAXXX_PLUGIN_DAPM_CTLS(PLUGIN12, "Plgin12");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN13, "Plgin13");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN14, "Plgin14");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN15, "Plgin15");
+
+#define IAXXX_SENSOR_EN_SET_GET(sensor) \
+static int iaxxxcore_set_sensor##sensor##_en( \
+			struct snd_kcontrol *kcontrol, \
+			struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
+	struct iaxxx_priv *priv = to_iaxxx_priv(iaxxx->dev_parent); \
+	u32 status = 0; \
+	int ret = 0; \
+	pr_debug("enter %s connection\n", __func__); \
+	if (ucontrol->value.integer.value[0]) { \
+		snd_soc_update_bits(codec, \
+					IAXXX_SENSOR_HDR_SENSOR_ENABLE_ADDR, \
+					1 << sensor, 1 << sensor); \
+		iaxxx->sensor_en[sensor] = 1; \
+	} else { \
+		snd_soc_update_bits(codec, \
+					IAXXX_SENSOR_HDR_SENSOR_ENABLE_ADDR, \
+					1 << sensor, 0 << sensor); \
+		iaxxx->sensor_en[sensor] = 0; \
+	} \
+	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, \
+				 &status, IAXXX_BLOCK_0); \
+	if (ret) \
+		dev_err(priv->dev, "Update blk failed %s():%u\n", \
+					__func__, status); \
+	return ret; \
+} \
+static int iaxxxcore_get_sensor##sensor##_en( \
+			struct snd_kcontrol *kcontrol, \
+			struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
+	ucontrol->value.enumerated.item[0] = \
+				(iaxxx ? iaxxx->sensor_en[sensor] : 0); \
+	return 0; \
+}
+
+IAXXX_SENSOR_EN_SET_GET(SENSOR0)
+IAXXX_SENSOR_EN_SET_GET(SENSOR1)
+IAXXX_SENSOR_EN_SET_GET(SENSOR2)
+IAXXX_SENSOR_EN_SET_GET(SENSOR3)
+
+#define IAXXXCORE_SENSOR_KCTRL(sensor, sensor_name) \
+	SOC_SINGLE_BOOL_EXT(sensor_name" En", 0, \
+		       iaxxxcore_get_sensor##sensor##_en, \
+		       iaxxxcore_set_sensor##sensor##_en)
+
 /*
  * Each MIC can have a clock source from the port it is
  * conencted or its clock can be derived from other port.
@@ -2843,7 +2928,7 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 
 	snd_soc_write(codec, io_ctrl_clk_reg, io_ctrl_clk_val);
 
-#ifndef CONFIG_IAXXX_PDM_DMIC_MODE
+#ifdef CONFIG_IAXXX_PORT_CLOCK_FORWARD
 	if (port_clk != port) {
 		switch (port) {
 		case PDM_PORTC:
@@ -4344,6 +4429,10 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN14, "Plgin14"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN15, "Plgin15"),
 
+	IAXXXCORE_SENSOR_KCTRL(SENSOR0, "sensor0"),
+	IAXXXCORE_SENSOR_KCTRL(SENSOR1, "sensor1"),
+	IAXXXCORE_SENSOR_KCTRL(SENSOR2, "sensor2"),
+	IAXXXCORE_SENSOR_KCTRL(SENSOR3, "sensor3"),
 
 	SOC_SINGLE_BOOL_EXT("Update Block0 Req", 0,
 		iaxxx_get_update_block0, iaxxx_put_update_block0),
@@ -5136,18 +5225,18 @@ static int iaxxx_tdm3_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	/* BCLK IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_clk_addr[id],
 		IAXXX_IO_CTRL_PORTA_CLK_MUX_SEL_MASK |
-		IAXXX_IO_CTRL_PORTA_CLK_PCM0_BCLK_AND_SEL_MASK, porte_clk_val);
+		IAXXX_IO_CTRL_PORTA_CLK_PCM0_BCLK_AND_SEL_MASK, portd_clk_val);
 	snd_soc_update_bits(codec, port_clk_addr[id + 1],
 		IAXXX_IO_CTRL_PORTA_CLK_MUX_SEL_MASK |
-		IAXXX_IO_CTRL_PORTA_CLK_PCM0_BCLK_AND_SEL_MASK, portd_clk_val);
+		IAXXX_IO_CTRL_PORTA_CLK_PCM0_BCLK_AND_SEL_MASK, porte_clk_val);
 
 	/* FS IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_fs_addr[id],
 		IAXXX_IO_CTRL_PORTA_FS_MUX_SEL_MASK |
-		IAXXX_IO_CTRL_PORTA_FS_PCM0_FS_AND_SEL_MASK, porte_fs_val);
+		IAXXX_IO_CTRL_PORTA_FS_PCM0_FS_AND_SEL_MASK, portd_fs_val);
 	snd_soc_update_bits(codec, port_fs_addr[id + 1],
 		IAXXX_IO_CTRL_PORTA_FS_MUX_SEL_MASK |
-		IAXXX_IO_CTRL_PORTA_FS_PCM0_FS_AND_SEL_MASK, portd_fs_val);
+		IAXXX_IO_CTRL_PORTA_FS_PCM0_FS_AND_SEL_MASK, porte_fs_val);
 
 	/* Data IN IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_di_addr[id],

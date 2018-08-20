@@ -158,6 +158,9 @@ static struct mfd_cell iaxxx_devices[] = {
 	{
 		.name = "iaxxx-tunnel-celldrv",
 	},
+	{
+		.name = "iaxxx-module-celldrv",
+	},
 };
 
 /**

@@ -29,4 +29,9 @@ config IAXXX_PCM_DAI_FORMAT_DSP_A
 	This config sets default PCM DAI
 	Format to DSP_A instead of I2S.
 
+config IAXXX_PORT_CLOCK_FORWARD
+	bool "Enable Port clock forwarding"
+	---help---
+	This config enables Port Clock
+	forwarding for PDM Port clocks.
 endif

@@ -32,7 +32,6 @@
 /* Padding is required to give time FW ready for data */
 #define IAXXX_REG_PADDING	12
 #define IAXXX_REG_LEN_WITH_PADDING (IAXXX_REG_LEN + IAXXX_REG_PADDING)
-#define IAXXX_CFG_MAX_SIZE	8
 
 /**
  * Description of driver private data
@@ -133,10 +132,6 @@ static int iaxxx_spi_write_endian(struct device *dev,
 	int i;
 	uint32_t *buff = data_buff;
 	uint32_t align_len = len;
-
-	/* If buffer has configuration data, no need to change endian */
-	if (len <= IAXXX_CFG_MAX_SIZE)
-		return len;
 
 	if (len % 4) {
 		align_len = len + (len % 4);

@@ -40,15 +40,20 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_plugin_info plg_info;
 	struct iaxxx_plugin_param param_info;
 	struct iaxxx_plugin_param_blk param_blk_info;
+#ifdef CONFIG_MFD_IAXXX_CUSTOM_CONFIG_ALGO
+	struct iaxxx_plugin_custom_cfg custom_cfg_info;
+#endif
 	struct iaxxx_plugin_create_cfg cfg_info;
 	struct iaxxx_set_event set_event;
 	struct iaxxx_get_event get_event;
 	struct iaxxx_evt_info event_info;
 	struct iaxxx_pkg_mgmt_info pkg_info;
+	uint32_t *get_param_blk_buf = NULL;
 	void __user *blk_buff = NULL;
 	uint32_t id;
 	uint32_t bitmap;
 	int ret = -EINVAL;
+	unsigned long file_name_size = 0;
 
 	pr_debug("%s() cmd %d\n", __func__, cmd);
 
@@ -81,6 +86,23 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
+	case ODSP_PLG_CREATE_STATIC_PACKAGE:
+		if (copy_from_user(&plg_info, (void __user *)arg,
+				sizeof(plg_info)))
+			return -EFAULT;
+
+		ret = iaxxx_core_create_plg_static_package(
+				odsp_dev_priv->parent,
+				plg_info.inst_id,
+				plg_info.priority, plg_info.pkg_id,
+				plg_info.plg_idx, plg_info.block_id);
+		if (ret) {
+			pr_err("%s() Plugin create fail\n", __func__);
+			return ret;
+		}
+		break;
+
 	case ODSP_PLG_DESTROY:
 		if (copy_from_user(&plg_info, (void __user *)arg,
 						sizeof(plg_info)))
@@ -172,11 +194,69 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+	case ODSP_PLG_GET_PARAM_BLK:
+		if (copy_from_user(&param_blk_info, (void __user *)arg,
+				sizeof(struct iaxxx_plugin_param_blk)))
+			return -EFAULT;
+
+		get_param_blk_buf = kcalloc(param_blk_info.param_size,
+					    sizeof(uint32_t), GFP_KERNEL);
+
+		ret = iaxxx_core_get_param_blk(odsp_dev_priv->parent,
+			param_blk_info.inst_id, param_blk_info.block_id,
+			param_blk_info.id,
+			get_param_blk_buf,
+			param_blk_info.param_size);
+
+		if (copy_to_user((void __user *) param_blk_info.param_blk,
+				get_param_blk_buf,
+				param_blk_info.param_size*sizeof(uint32_t))) {
+			pr_err("%s() copy to user fail\n", __func__);
+			return -EFAULT;
+		}
+
+		kfree(get_param_blk_buf);
+		if (ret) {
+			pr_err("%s() Get param blk fail\n", __func__);
+			return ret;
+		}
+		break;
+	case ODSP_PLG_SET_CUSTOM_CFG:
+
+#ifdef CONFIG_MFD_IAXXX_CUSTOM_CONFIG_ALGO
+		if (copy_from_user(&custom_cfg_info, (void __user *)arg,
+				sizeof(custom_cfg_info)))
+			return -EFAULT;
+
+		file_name_size = sizeof(custom_cfg_info.file_name);
+		custom_cfg_info.file_name[file_name_size - 1] = '\0';
+
+		ret = iaxxx_core_set_custom_cfg(odsp_dev_priv->parent,
+				custom_cfg_info.inst_id,
+				custom_cfg_info.block_id,
+				custom_cfg_info.param_blk_id,
+				custom_cfg_info.custom_config_id,
+				custom_cfg_info.file_name);
+		if (ret) {
+			pr_err("%s() Plugin custom config setup failed\n",
+					__func__);
+			return ret;
+		}
+#else
+		pr_err("%s() Custom Config IOCTL not Supported!\n",
+			__func__);
+		ret = -EFAULT;
+#endif
+		break;
+
 	case ODSP_PLG_SET_CREATE_CFG:
 		if (copy_from_user(&cfg_info, (void __user *)arg,
 						sizeof(cfg_info)))
 			return -EFAULT;
-		cfg_info.file_name[sizeof(cfg_info.file_name) - 1] = '\0';
+
+		file_name_size = sizeof(cfg_info.file_name);
+		cfg_info.file_name[file_name_size - 1] = '\0';
+
 		ret = iaxxx_core_set_create_cfg(odsp_dev_priv->parent,
 				cfg_info.inst_id, cfg_info.cfg_size,
 				cfg_info.cfg_val, cfg_info.block_id,
@@ -247,6 +327,9 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&pkg_info, (void __user *)arg,
 						sizeof(pkg_info)))
 			return -EFAULT;
+
+		pkg_info.pkg_name[sizeof(pkg_info.pkg_name) - 1] = '\0';
+
 		ret = iaxxx_package_load(odsp_dev_priv->parent,
 			pkg_info.pkg_name, pkg_info.pkg_id,
 			&pkg_info.proc_id);
@@ -271,6 +354,9 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&pkg_info, (void __user *)arg,
 						sizeof(pkg_info)))
 			return -EFAULT;
+
+		pkg_info.pkg_name[sizeof(pkg_info.pkg_name) - 1] = '\0';
+
 		ret = iaxxx_package_unload(odsp_dev_priv->parent,
 			pkg_info.pkg_name, pkg_info.proc_id);
 		pr_info("%s()Pkg name %s id %d\n", __func__,

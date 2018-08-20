@@ -102,7 +102,11 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 	 * un-recognize state.
 	 */
 	if (evt->event_id == EVENT_ID_KW_ID
-			|| evt->event_id == EVENT_ID_TRUE_CONFIRMATAION) {
+		|| evt->event_id == EVENT_ID_TRUE_CONFIRMATAION) {
+
+		dev_err(dev, "%s: KW EVENT (id=%d, src_opq=%x)\n",
+			__func__, evt->event_id, evt->src_opaque);
+
 		bitmap = priv->iaxxx_state->kw_info.kw_recognize_bitmap;
 		if (evt->src_opaque >= IAXXX_MAX_MODELS) {
 			dev_err(dev, "Invalid src_opaque value %u",

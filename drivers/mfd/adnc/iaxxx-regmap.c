@@ -31,6 +31,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-pad-ctrl.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-gpio.h>
 #include <linux/mfd/adnc/iaxxx-channel-registers.h>
+#include <linux/mfd/adnc/iaxxx-sensor-registers.h>
 #include <linux/mfd/adnc/iaxxx-stream-registers.h>
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-tunnel-registers.h>
@@ -50,6 +51,7 @@
 #define IAXXX_PLUGIN_UPDATE_BLOCKS_MAX 3
 #define IAXXX_STRM_MAX 16
 #define IAXXX_TNL_MAX 32
+#define IAXXX_SENSOR_MAX  4
 
 #define IAXXX_SRB_ARB_N_SIZE(N)		(IAXXX_SRB_ARB_0_SIZE_ADDR+(N*8))
 #define IAXXX_SRB_ARB_N_BASE_ADDRESS(N)	(IAXXX_SRB_ARB_0_BASE_ADDR_ADDR+(N*8))
@@ -64,6 +66,7 @@
 #define IAXXX_BLOCK_PLUGIN						       5
 #define IAXXX_BLOCK_DBGLOG				10
 #define IAXXX_BLOCK_EVENT				0xf
+#define IAXXX_BLOCK_SENSOR				0xd
 
 #define IAXXX_VIRTUAL_ADDR_START				      0x01000000
 #define IAXXX_VIRTUAL_ADDR_END					      0x0FFFFFFF
@@ -110,6 +113,7 @@
 #define IAXXX_REG_TUNNEL_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_TUNNEL)
 #define IAXXX_REG_DBGLOG_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_DBGLOG)
 #define IAXXX_REG_EVENT_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_EVENT)
+#define IAXXX_REG_SENSOR_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_SENSOR)
 
 
 /* Returns true if register is in the supported physical address range */
@@ -288,6 +292,13 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 			return true;
 	}
 
+	/* Sensor group registers */
+	for (i = 0; i < IAXXX_SENSOR_MAX; i++) {
+		if (reg >= IAXXX_SENSOR_GRP_PARAM_ID_REG(i) &&
+			reg <= IAXXX_SENSOR_GRP_SENSOR_DROP_CNT_REG(i))
+			return true;
+	}
+
 	/* Plugin Header registers*/
 	for (i = 0; i < IAXXX_PLUGIN_UPDATE_BLOCKS_MAX; i++) {
 		if (reg >= IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(i) &&
@@ -376,6 +387,13 @@ static const struct regmap_range_cfg iaxxx_ranges[] = {
 	{
 		.name = "Event",
 		.range_min = IAXXX_REG_EVENT_BASE,
+		.selector_reg = SRB_BLOCK_SELECT_REG,
+		.selector_mask = SRB_BLOCK_SELECT_MASK,
+		.selector_shift = SRB_BLOCK_SELECT_SHIFT,
+	},
+	{
+		.name = "Sensor",
+		.range_min = IAXXX_REG_SENSOR_BASE,
 		.selector_reg = SRB_BLOCK_SELECT_REG,
 		.selector_mask = SRB_BLOCK_SELECT_MASK,
 		.selector_shift = SRB_BLOCK_SELECT_SHIFT,

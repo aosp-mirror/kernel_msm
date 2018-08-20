@@ -72,6 +72,14 @@ struct iaxxx_pkg_mgmt_info {
 	uint32_t proc_id;
 };
 
+struct iaxxx_plugin_custom_cfg {
+	char     file_name[256];
+	uint32_t inst_id;
+	uint8_t  block_id;
+	uint32_t param_blk_id;
+	uint32_t custom_config_id;
+};
+
 /* IOCTL Magic character */
 #define IAXXX_IOCTL_MAGIC 'I'
 
@@ -95,4 +103,7 @@ struct iaxxx_pkg_mgmt_info {
 #define ODSP_START_RECOGNITION _IO(IAXXX_IOCTL_MAGIC, 0x21)
 #define ODSP_STOP_RECOGNITION _IO(IAXXX_IOCTL_MAGIC, 0x22)
 #define ODSP_GET_KW_RECOGNIZE_BITMAP _IO(IAXXX_IOCTL_MAGIC, 0x23)
+#define ODSP_PLG_SET_CUSTOM_CFG _IO(IAXXX_IOCTL_MAGIC, 0x24)
+#define ODSP_PLG_GET_PARAM_BLK _IO(IAXXX_IOCTL_MAGIC, 0x25)
+#define ODSP_PLG_CREATE_STATIC_PACKAGE _IO(IAXXX_IOCTL_MAGIC, 0x26)
 #endif

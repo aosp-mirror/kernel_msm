@@ -1,6 +1,6 @@
 
 /*
- * iaxxx-core.h  --  Knowles ALSA SoC Audio PCM driver header
+ * iaxxx-core.h  --  Knowles iaxxx core header file
  *
  * Copyright 2017 Knowles Corporation.
  *
@@ -35,6 +35,7 @@ struct workqueue_struct;
 
 #define IAXXX_PKG_ID_MASK	0x000F
 #define IAXXX_PLGIN_ID_MASK	0x001F
+#define IAXXX_SENSR_ID_MASK	0x0003
 
 #define IAXXX_FLG_STARTUP		1
 
@@ -170,6 +171,9 @@ struct iaxxx_priv {
 	/* Register plugin locks */
 	struct mutex plugin_lock;
 
+	/* Register module locks */
+	struct mutex module_lock;
+
 	/* Event work queue */
 	struct mutex event_work_lock;
 	struct mutex event_queue_lock;
@@ -219,6 +223,7 @@ struct iaxxx_priv {
 	atomic_t power_state;
 	struct notifier_block notifier_fbp;
 	struct iaxxx_system_state *iaxxx_state;
+	bool sensor_en[IAXXX_SENSR_ID_MASK + 1];
 	uint32_t crash_count;
 	bool cm4_crashed;
 	bool route_status;
@@ -233,6 +238,14 @@ static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
 	return dev ? dev_get_drvdata(dev) : NULL;
 }
 
+int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
+			uint8_t is_enable, uint8_t block_id);
+int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
+				uint32_t param_id,
+				uint32_t *param_val, uint32_t block_id);
+int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
+				uint32_t param_id,
+				uint32_t param_val, uint32_t block_id);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 							int id);
 int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
@@ -244,6 +257,11 @@ int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
 int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
 				uint32_t priority, uint32_t pkg_id,
 				uint32_t plg_idx, uint8_t block_id);
+int iaxxx_core_create_plg_static_package(
+				struct device *dev, uint32_t inst_id,
+				uint32_t priority, uint32_t pkg_id,
+				uint32_t plg_idx, uint8_t block_id);
+
 int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
 				uint8_t is_enable, uint8_t block_id);
 int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
@@ -259,6 +277,19 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
 			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
 			uint32_t slot_id);
+int iaxxx_core_set_param_blk_fixed_slot(struct device *dev, uint32_t inst_id,
+			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
+			uint32_t slot_id);
+int iaxxx_core_get_param_blk(
+		struct device *dev,
+		uint32_t  inst_id,
+		uint32_t  block_id,
+		uint32_t  param_blk_id,
+		uint32_t *getparam_block_data,
+		uint32_t  getparam_block_size_in_words);
+int iaxxx_core_set_custom_cfg(struct device *dev, uint32_t inst_id,
+		uint32_t block_id, uint32_t param_blk_id,
+		uint32_t custom_config_id, char *file);
 int iaxxx_core_evt_subscribe(struct device *dev, uint16_t src_id,
 		uint16_t event_id, uint16_t dst_id, uint32_t dst_opaque);
 int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,

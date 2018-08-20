@@ -42,29 +42,6 @@ struct iaxxx_tnl_evt_info {
   uint32_t dst_opaque;
   uint32_t evt_threshold;
 } __packed;
-enum {
-  TNL_VQ_CONFIDENCE = 0,
-  TNL_CS_OUT1,
-  TNL_CS_OUT2,
-  TNL_DOA,
-  TNL_CVQ,
-  TNL_MIC1,
-  TNL_MIC2,
-  TNL_MIC3,
-  TNL_MIC4,
-  TNL_AEC_REF1,
-  TNL_AEC_REF2,
-  TNL_AEC_MIXER,
-  TNL_MIC1_Q15,
-  TNL_MIC2_Q15,
-  TNL_MIC3_Q15,
-  TNL_MIC4_Q15,
-  TNL_AEC_MIXER_Q15,
-  TNL_MBC,
-  TNL_PEQ,
-  TNL_VP_PARAM,
-  TNL_MAX,
-};
 #define TUNNEL_SETUP _IOWR('K', 0x011, struct tunlMsg)
 #define TUNNEL_TERMINATE _IOWR('K', 0x012, struct tunlMsg)
 #define TUNNEL_SUBSCRIBE_META _IO('K', 0x013)
