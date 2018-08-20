@@ -10,7 +10,31 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-/* For B4S4 dev and proto stage*/
+/* For B4S4 EVT or later stage*/
+&pm660_gpios {
+	camera_vio_en {
+		camera_vio_en_default: camera_vio_en_default {
+			pins = "gpio13";
+			function = "normal";
+			power-source = <0>;
+			output-high;
+		};
+	};
+};
+
+&vendor {
+	cam_vio_ldo: cam_vio_ldo {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_vio_ldo";
+		gpio = <&pm660_gpios 13 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		regulator-enable-ramp-delay = <1600>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&camera_vio_en_default>;
+	};
+};
+
 &tlmm {
 	cam_sensor_rear_active: cam_sensor_rear_active {
 		/* RESET */
@@ -133,7 +157,7 @@
 		cell-index = <0>;
 		reg = <0>;
 		compatible = "qcom,eeprom";
-		cam_vio-supply = <&pm660l_l2>;
+		cam_vio-supply = <&cam_vio_ldo>;
 		cam_vana-supply = <&camera_ldo>;
 		cam_vdig-supply = <&camera_ldo>;
 		cam_clk-supply = <&titan_top_gdsc>;
@@ -173,7 +197,7 @@
 		cell-index = <1>;
 		reg = <0x1>;
 		compatible = "qcom,eeprom";
-		cam_vio-supply = <&pm660l_l2>;
+		cam_vio-supply = <&cam_vio_ldo>;
 		cam_vana-supply = <&camera_rear_ldo>;
 		cam_vdig-supply = <&camera_rear_ldo>;
 		cam_clk-supply = <&titan_top_gdsc>;
@@ -217,7 +241,7 @@
 		actuator-src = <&actuator_rear>;
 		ois-src = <&ois_rear>;
 		eeprom-src = <&eeprom_rear>;
-		cam_vio-supply = <&pm660l_l2>;
+		cam_vio-supply = <&cam_vio_ldo>;
 		cam_vana-supply = <&camera_ldo>;
 		cam_vdig-supply = <&camera_ldo>;
 		cam_clk-supply = <&titan_top_gdsc>;
@@ -262,7 +286,7 @@
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
 		eeprom-src = <&eeprom_front>;
-		cam_vio-supply = <&pm660l_l2>;
+		cam_vio-supply = <&cam_vio_ldo>;
 		cam_vana-supply = <&camera_rear_ldo>;
 		cam_vdig-supply = <&camera_rear_ldo>;
 		cam_clk-supply = <&titan_top_gdsc>;

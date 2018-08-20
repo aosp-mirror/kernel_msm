@@ -26,7 +26,6 @@
 
 #include "../qcom/sdm670-pmic-overlay.dtsi"
 #include "sdm670-b4s4-display.dtsi"
-#include "sdm670-camera-sensor.dtsi"
 #include "sdm670-b4s4-pinctrl.dtsi"
 #include "sdm670-b4s4-citadel.dtsi"
 #include "sdm670-b4s4-audio.dtsi"
