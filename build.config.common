@@ -14,6 +14,7 @@ DTC_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/dtc
 LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
 FILES="
 arch/arm64/boot/dtbo.img
+arch/arm64/boot/Image.gz-dtb
 arch/arm64/boot/Image.lz4-dtb
 vmlinux
 System.map
