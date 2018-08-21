@@ -836,10 +836,12 @@ static const struct resource ipu_resources[] = {
 };
 
 #define TPU_MEM_MAPPING		0 /* index of tpu-mem-mapping property */
-
+#define TPU_INTNC_NOTIFIER	1 /* index of intnc-notifier-chain tpu prop */
 static struct property_entry tpu_properties[] = {
 	/* filled in with VA of ioremap of tpu-mem */
 	PROPERTY_ENTRY_U64("tpu-mem-mapping", 0),
+	/* filled in with notifier chain for mux'ed low-priority interrupts */
+	PROPERTY_ENTRY_U64("intnc-notifier-chain", 0),
 	{ }
 };
 
@@ -861,13 +863,6 @@ static struct resource tpu_resources[] = {
 		.start = ABC_MSI_5_TPU_IRQ1,
 		.end = ABC_MSI_5_TPU_IRQ1,
 		.flags = IORESOURCE_IRQ,
-	},
-	{
-		/* INTNC_MSI_IRQ_3 mux'ed on MSI 31 ABC_MSI_AON_INTNC */
-		.name = "tpu-low-prio-int-idx",
-		.start = INTNC_TPU_WIREINTERRUPT2,
-		.end = INTNC_TPU_WIREINTERRUPT2,
-		.flags = 0,
 	},
 };
 static const struct resource fsys_resources[] = {
@@ -913,6 +908,13 @@ static const struct pci_device_id abc_pcie_ids[] = {
 static int abc_pcie_init_child_devices(struct pci_dev *pdev)
 {
 	int err;
+
+	/* fill in tpu-mem-mapping with VA of our mapping for tpu-mem */
+	tpu_properties[TPU_MEM_MAPPING].value.u64_data =
+	    (u64)abc_dev->tpu_config;
+	/* fill in address of notifier block for the INTNC mux'ed IRQ */
+	tpu_properties[TPU_INTNC_NOTIFIER].value.u64_data =
+	    (u64)&abc_dev->intnc_notifier;
 
 	err = mfd_add_devices(&pdev->dev, PLATFORM_DEVID_NONE, abc_pcie_bar0,
 			ARRAY_SIZE(abc_pcie_bar0), &pdev->resource[0],
@@ -1073,10 +1075,6 @@ exit_loop:
 		goto err5;
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&abc_dev->intnc_notifier);
-	/* fill in tpu-mem-mapping with VA of our mapping for tpu-mem */
-	tpu_properties[TPU_MEM_MAPPING].value.u64_data =
-	    (u64)abc_dev->tpu_config;
-
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
 		goto err5;

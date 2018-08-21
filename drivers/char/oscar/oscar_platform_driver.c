@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/notifier.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/sched.h>
@@ -46,11 +47,13 @@
 /* The number of nodes in an Oscar chip. */
 #define NUM_NODES 1
 
-/* Interrupts handled by this driver */
-#define OSCAR_SCALAR_CORE_0_INT	0
-#define OSCAR_INSTR_QUEUE_INT	1
-#define OSCAR_LOWPRIO_INT	2
-#define OSCAR_N_IRQS		3
+/* TPU logical interrupts handled by this driver */
+#define OSCAR_SCALAR_CORE_0_INT	0 /* signalled via an MSI IRQ */
+#define OSCAR_INSTR_QUEUE_INT	1 /* signalled via an MSI IRQ */
+#define OSCAR_LOWPRIO_INT	2 /* AKA wireinterrupt_2, notified by parent */
+
+#define OSCAR_N_IRQS		2 /* logical interrupts 0 and 1 are IRQs */
+#define OSCAR_N_INTS		3 /* 3 logical interrupts including mux'ed */
 
 /*
  * The total number of entries in the page table. Should match the value read
@@ -127,9 +130,17 @@ static const struct gasket_mappable_region cm_mappable_regions[1] = {
 	{ 0x00000, OSCAR_CH_MEM_BYTES }
 };
 
-static bool oscar_parent_ioremap;
+/* Gasket interrupt data, not really used since we manage our own IRQs */
+static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_INTS];
 
-static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_IRQS];
+/* One of these per oscar device instance */
+struct oscar_dev {
+	struct gasket_dev *gasket_dev;
+	bool parent_ioremap;
+	int irqs[OSCAR_N_IRQS]; /* maps MSI IRQs to TPU logical ints */
+	struct notifier_block lowprio_irq_nb;
+	struct atomic_notifier_head *lowprio_irq_nh;
+};
 
 /* Act as if only GCB is instantiated. */
 static int bypass_top_level;
@@ -410,7 +421,7 @@ static struct gasket_driver_desc oscar_gasket_desc = {
 		OSCAR_CM_OFFSET,
 	},
 	.interrupt_type = DEVICE_MANAGED,
-	.num_interrupts = OSCAR_N_IRQS,
+	.num_interrupts = OSCAR_N_INTS,
 	.interrupts = oscar_interrupts,
 
 	.device_open_cb = oscar_device_open_cb,
@@ -423,13 +434,14 @@ static struct gasket_driver_desc oscar_gasket_desc = {
 
 static irqreturn_t oscar_interrupt_handler(int irq, void *arg)
 {
-	struct gasket_dev *gasket_dev = (struct gasket_dev *)arg;
+	struct oscar_dev *oscar_dev = (struct oscar_dev *)arg;
 	struct gasket_interrupt_data *interrupt_data =
-		gasket_dev->interrupt_data;
+		oscar_dev->gasket_dev->interrupt_data;
 	int i;
 
+	/* Map this IRQ to a TPU logical interrupt, send to gasket */
 	for (i = 0; i < OSCAR_N_IRQS; i++) {
-		if (irq == oscar_interrupts[i].index) {
+		if (irq == oscar_dev->irqs[i]) {
 			gasket_handle_interrupt(interrupt_data, i);
 			return IRQ_HANDLED;
 		}
@@ -438,37 +450,34 @@ static irqreturn_t oscar_interrupt_handler(int irq, void *arg)
 	return IRQ_NONE;
 }
 
-static int oscar_interrupt_callback(uint32_t irq, void *payload)
+static int oscar_lowprio_irq_notify(struct notifier_block *nb,
+				    unsigned long irq, void *data)
 {
-	struct gasket_dev *gasket_dev = (struct gasket_dev *)payload;
+	struct oscar_dev *oscar_dev =
+	    container_of(nb, struct oscar_dev, lowprio_irq_nb);
 	struct gasket_interrupt_data *interrupt_data =
-		gasket_dev->interrupt_data;
-	int i;
+		oscar_dev->gasket_dev->interrupt_data;
+	u32 intnc_val = (u32)data;
 
-	for (i = 0; i < OSCAR_N_IRQS; i++) {
-		if (irq == oscar_interrupts[i].index) {
-			gasket_handle_interrupt(interrupt_data, i);
-			return IRQ_HANDLED;
-		}
-	}
-
-	return IRQ_NONE;
+	if (irq == ABC_MSI_AON_INTNC &&
+	    (intnc_val & 1 << INTNC_TPU_WIREINTERRUPT2))
+		gasket_handle_interrupt(interrupt_data, OSCAR_LOWPRIO_INT);
+	return NOTIFY_OK;
 }
 
-static void oscar_interrupt_cleanup(struct gasket_dev *gasket_dev)
+static void oscar_interrupt_cleanup(struct oscar_dev *oscar_dev)
 {
 	int ret;
 
-	ret = abc_reg_irq_callback2(NULL,
-				    oscar_interrupts[OSCAR_LOWPRIO_INT].index,
-				    NULL);
+	ret = atomic_notifier_chain_unregister(oscar_dev->lowprio_irq_nh,
+					       &oscar_dev->lowprio_irq_nb);
 	if (ret)
-		dev_warn(gasket_dev->dev,
-			 "Unregister ABC IRQ callback for index %d: %d\n",
-			 oscar_interrupts[OSCAR_LOWPRIO_INT].index, ret);
+		dev_warn(oscar_dev->gasket_dev->dev,
+			 "Unregister lowprio irq notifier failed: %d\n", ret);
 }
 
 static int oscar_setup_device(struct platform_device *pdev,
+			      struct oscar_dev *oscar_dev,
 			      struct gasket_dev *gasket_dev)
 {
 	struct resource *r;
@@ -513,7 +522,7 @@ static int oscar_setup_device(struct platform_device *pdev,
 		mem_virt = (void *)u64prop;
 
 	if (mem_virt) {
-		oscar_parent_ioremap = true;
+		oscar_dev->parent_ioremap = true;
 	} else {
 		dev_info(dev, "no tpu-mem-mapping from parent, remapping\n");
 		mem_virt = ioremap_nocache(mem_phys, mem_size);
@@ -532,9 +541,9 @@ static int oscar_setup_device(struct platform_device *pdev,
 		dev_err(dev, "cannot get scalar core 0 irq\n");
 		return -ENODEV;
 	}
-	oscar_interrupts[OSCAR_SCALAR_CORE_0_INT].index = irq;
+	oscar_dev->irqs[OSCAR_SCALAR_CORE_0_INT] = irq;
 	ret = devm_request_irq(dev, irq, oscar_interrupt_handler, IRQF_ONESHOT,
-			       dev_name(dev), gasket_dev);
+			       dev_name(dev), oscar_dev);
 	if (ret) {
 		dev_err(dev, "failed to request irq %d\n", irq);
 		return ret;
@@ -545,28 +554,29 @@ static int oscar_setup_device(struct platform_device *pdev,
 		dev_err(dev, "cannot get instruction queue irq\n");
 		return -ENODEV;
 	}
-	oscar_interrupts[OSCAR_INSTR_QUEUE_INT].index = irq;
+	oscar_dev->irqs[OSCAR_INSTR_QUEUE_INT] = irq;
 	ret = devm_request_irq(dev, irq, oscar_interrupt_handler, IRQF_ONESHOT,
-			       dev_name(dev), gasket_dev);
+			       dev_name(dev), oscar_dev);
 	if (ret) {
 		dev_err(dev, "failed to request irq %d\n", irq);
 		return -ENODEV;
 	}
 
-	r = platform_get_resource_byname(pdev, 0, "tpu-low-prio-int-idx");
-	if (!r) {
-		dev_err(dev, "failed to get low prio irq callback index\n");
-		return -ENODEV;
-	}
-
-	oscar_interrupts[OSCAR_LOWPRIO_INT].index = r->start;
-	ret = abc_reg_irq_callback2(&oscar_interrupt_callback, r->start,
-				    gasket_dev);
-	if (ret) {
-		dev_err(dev,
-			"Cannot register ABC IRQ callback for index %d: %d\n",
-			r->start, ret);
-		return ret;
+	ret = device_property_read_u64(dev, "intnc-notifier-chain", &u64prop);
+	if (!ret)
+		oscar_dev->lowprio_irq_nh =
+		    (struct atomic_notifier_head *)u64prop;
+	if (oscar_dev->lowprio_irq_nh) {
+		oscar_dev->lowprio_irq_nb.notifier_call =
+		    oscar_lowprio_irq_notify;
+		ret = atomic_notifier_chain_register(oscar_dev->lowprio_irq_nh,
+						    &oscar_dev->lowprio_irq_nb);
+		if (ret)
+			dev_warn(dev,
+				 "Cannot register notifier for lowprio irq\n");
+	} else {
+		dev_warn(dev,
+			 "no intnc non-critical irq notifier supplied\n");
 	}
 
 	oscar_reset(gasket_dev);
@@ -592,6 +602,7 @@ static int oscar_setup_device(struct platform_device *pdev,
 static int oscar_probe(struct platform_device *pdev)
 {
 	int ret;
+	struct oscar_dev *oscar_dev;
 	struct gasket_dev *gasket_dev;
 	struct device *dev = &pdev->dev;
 
@@ -601,9 +612,16 @@ static int oscar_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	platform_set_drvdata(pdev, gasket_dev);
+	oscar_dev = kmalloc(sizeof(struct oscar_dev), GFP_KERNEL);
+	if (!oscar_dev) {
+		ret = -ENOMEM;
+		goto remove_device;
+	}
 
-	ret = oscar_setup_device(pdev, gasket_dev);
+	platform_set_drvdata(pdev, oscar_dev);
+	oscar_dev->gasket_dev = gasket_dev;
+
+	ret = oscar_setup_device(pdev, oscar_dev, gasket_dev);
 	if (ret) {
 		dev_err(dev, "Setup device failed\n");
 		goto remove_device;
@@ -626,18 +644,21 @@ static int oscar_probe(struct platform_device *pdev)
 
 remove_device:
 	gasket_platform_remove_device(pdev);
+	kfree(oscar_dev);
 	return ret;
 }
 
 static int oscar_remove(struct platform_device *pdev)
 {
-	struct gasket_dev *gasket_dev = platform_get_drvdata(pdev);
+	struct oscar_dev *oscar_dev = platform_get_drvdata(pdev);
+	struct gasket_dev *gasket_dev = oscar_dev->gasket_dev;
 
 	gasket_disable_device(gasket_dev);
-	oscar_interrupt_cleanup(gasket_dev);
-	if (!oscar_parent_ioremap)
+	oscar_interrupt_cleanup(oscar_dev);
+	if (!oscar_dev->parent_ioremap)
 		iounmap(gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base);
 	gasket_platform_remove_device(pdev);
+	kfree(oscar_dev);
 	return 0;
 }
 
