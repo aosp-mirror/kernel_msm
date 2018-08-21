@@ -41,6 +41,11 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
+struct reg_setting {
+	uint32_t addr;
+	uint32_t data;
+};
+
 enum LASER_TYPE {
 	LASER_FLOOD,
 	LASER_DOT,
@@ -55,12 +60,78 @@ struct led_laser_ctrl_t {
 	bool is_power_up;
 	bool is_cci_init;
 	bool is_probed;
+	bool is_silego_validated;
+	bool is_silego_power_up;
 	struct regulator *vio;
-	dev_t dev;
+	struct regulator *silego_vdd;
 	enum LASER_TYPE type;
 	uint32_t read_addr;
 	uint32_t read_data;
 };
+
+static const struct reg_setting silego_reg_settings[] = {
+	{0xc0, 0x09}, {0xc1, 0x5b}, {0xc2, 0x09}, {0xc3, 0x5b}, {0xcb, 0x93},
+	{0xcc, 0x81}, {0xcd, 0x93}, {0xce, 0x83}, {0x92, 0x00}, {0x93, 0x00}
+};
+
+static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
+{
+	uint32_t data;
+	int rc, io_release_rc;
+	size_t i, settings_size = ARRAY_SIZE(silego_reg_settings);
+	uint32_t old_sid, old_cci_master;
+
+	old_sid = ctrl->io_master_info.cci_client->sid;
+	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
+	ctrl->io_master_info.cci_client->sid = 0x08;
+	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
+
+	rc = camera_io_init(&(ctrl->io_master_info));
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"%s: cam io init for silego failed: rc: %d",
+			__func__, rc);
+		ctrl->io_master_info.cci_client->sid = old_sid;
+		ctrl->io_master_info.cci_client->cci_i2c_master =
+			old_cci_master;
+		return rc;
+	}
+
+	for (i = 0; i < settings_size; i++) {
+		rc = camera_io_dev_read(
+			&ctrl->io_master_info,
+			silego_reg_settings[i].addr,
+			&data,
+			CAMERA_SENSOR_I2C_TYPE_BYTE,
+			CAMERA_SENSOR_I2C_TYPE_BYTE);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev, "%s failed on read 0x%x",
+				__func__, silego_reg_settings[i].addr);
+			goto out;
+		}
+		if (data != silego_reg_settings[i].data) {
+			dev_err(ctrl->soc_info.dev,
+				"address 0x%x mismatch,"
+				" expected 0x%x but got 0x%x",
+				silego_reg_settings[i].addr,
+				silego_reg_settings[i].data,
+				data);
+			rc = -EINVAL;
+			goto out;
+		}
+	}
+out:
+	io_release_rc = camera_io_release(&(ctrl->io_master_info));
+	if (io_release_rc < 0) {
+		dev_err(ctrl->soc_info.dev, "%s: silego cci_release failed",
+			__func__);
+		if (!rc)
+			rc = io_release_rc;
+	}
+	ctrl->io_master_info.cci_client->sid = old_sid;
+	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
+	return rc;
+}
 
 static int lm36011_read_data(
 	struct led_laser_ctrl_t *ctrl,
@@ -118,7 +189,17 @@ static int lm36011_write_data(
 
 static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 {
-	int rc = 0;
+	int rc;
+
+	if (!ctrl->is_silego_power_up) {
+		rc = regulator_enable(ctrl->silego_vdd);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"silego regulator_enable failed: rc: %d", rc);
+			return rc;
+		}
+		ctrl->is_silego_power_up = true;
+	}
 
 	if (!ctrl->is_power_up) {
 		rc = regulator_enable(ctrl->vio);
@@ -129,6 +210,16 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		}
 		ctrl->is_power_up = true;
 	}
+
+	rc = silego_verify_settings(ctrl);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"verify silego reg setting failed: rc: %d",
+			rc);
+		ctrl->is_silego_validated = false;
+		return rc;
+	}
+	ctrl->is_silego_validated = true;
 
 	if (!ctrl->is_cci_init) {
 		rc = camera_io_init(&(ctrl->io_master_info));
@@ -145,24 +236,36 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 
 static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 {
-	int rc = 0;
+	int rc = 0, is_error;
 
 	if (ctrl->is_cci_init) {
-		rc = camera_io_release(&(ctrl->io_master_info));
-		if (rc < 0) {
+		is_error = camera_io_release(&(ctrl->io_master_info));
+		if (is_error < 0) {
+			rc = is_error;
 			dev_err(ctrl->soc_info.dev,
-				"cci_release failed: rc: %d", rc);
+				"laser cci_release failed: rc: %d", rc);
 		} else
 			ctrl->is_cci_init = false;
 	}
 
 	if (ctrl->is_power_up) {
-		rc = regulator_disable(ctrl->vio);
-		if (rc < 0) {
+		is_error = regulator_disable(ctrl->vio);
+		if (is_error < 0) {
+			rc = is_error;
 			dev_err(ctrl->soc_info.dev,
-				"regulator_disable failed: rc: %d", rc);
+				"laser regulator_disable failed: rc: %d", rc);
 		} else
 			ctrl->is_power_up = false;
+	}
+
+	if (ctrl->is_silego_power_up) {
+		is_error = regulator_disable(ctrl->silego_vdd);
+		if (is_error < 0) {
+			rc = is_error;
+			dev_err(ctrl->soc_info.dev,
+				"silego regulator_disable failed: rc: %d", rc);
+		} else
+			ctrl->is_silego_power_up = false;
 	}
 
 	return rc;
@@ -177,6 +280,13 @@ static int lm36011_parse_dt(struct device *dev)
 	if (IS_ERR(ctrl->vio)) {
 		ctrl->vio = NULL;
 		dev_err(dev, "unable to get vio");
+		return -ENOENT;
+	}
+
+	ctrl->silego_vdd = devm_regulator_get(dev, "silego_vdd");
+	if (IS_ERR(ctrl->silego_vdd)) {
+		ctrl->silego_vdd = NULL;
+		dev_err(dev, "unable to get silego vdd");
 		return -ENOENT;
 	}
 
@@ -214,7 +324,6 @@ static int32_t lm36011_update_i2c_info(struct device *dev)
 
 	}
 	ctrl->io_master_info.cci_client->cci_device = value;
-
 	ctrl->io_master_info.cci_client->retries = 3;
 	ctrl->io_master_info.cci_client->id_map = 0;
 	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_MODE;
@@ -357,14 +466,29 @@ error_out:
 	return rc;
 }
 
+static ssize_t is_silego_validated_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->is_silego_validated);
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
 static DEVICE_ATTR_WO(led_laser_write_byte);
+static DEVICE_ATTR_RO(is_silego_validated);
 
 static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_enable.attr,
 	&dev_attr_led_laser_read_byte.attr,
 	&dev_attr_led_laser_write_byte.attr,
+	&dev_attr_is_silego_validated.attr,
 	NULL
 };
 
@@ -418,6 +542,8 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->is_power_up = false;
 	ctrl->is_cci_init = false;
 	ctrl->is_probed = false;
+	ctrl->is_silego_power_up = false;
+	ctrl->is_silego_validated = false;
 
 	ctrl->io_master_info.cci_client = devm_kzalloc(&pdev->dev,
 		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
@@ -513,6 +639,7 @@ static void __exit lm36011_exit(void)
 
 MODULE_DESCRIPTION("Led laser driver");
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Speth Chang <spethchang@google.com>");
 
 module_init(lm36011_init);
 module_exit(lm36011_exit);
