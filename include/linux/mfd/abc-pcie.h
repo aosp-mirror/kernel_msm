@@ -14,6 +14,7 @@
 
 #include <linux/cdev.h>
 #include <linux/dma-direction.h>
+#include <linux/notifier.h>
 #include <linux/pci.h>
 
 #define DRV_NAME_ABC_PCIE	"abc-pcie"
@@ -35,11 +36,64 @@
 #define MAX_MINOR_COUNT  1
 #define FSYS_MINOR_NUMBER 2
 
+/* Interrupt (MSI) from ABC to AP */
+enum abc_msi_msg_t {
+	ABC_MSI_0_TMU_AON,
+	ABC_MSI_1_NOC_TIMEOUT,
+	ABC_MSI_2_IPU_IRQ0,
+	ABC_MSI_3_IPU_IRQ1,
+	ABC_MSI_4_TPU_IRQ0,
+	ABC_MSI_5_TPU_IRQ1,
+	ABC_MSI_6_PPC_MIF,
+	ABC_MSI_7_TRAINING_DONE,
+	ABC_MSI_8_SPI_INTR,
+	ABC_MSI_9_WDT0,
+	ABC_MSI_10_PMU,
+	ABC_MSI_11_RADM_CPL_TIMEOUT,
+	ABC_MSI_12_RADM_QOVERFLOW,
+	ABC_MSI_13_TRGT_CPL_TIMEOUT,
+	ABC_MSI_14_FLUSH_DONE,
+	ABC_MSI_RD_DMA_0,
+	ABC_MSI_RD_DMA_1,
+	ABC_MSI_RD_DMA_2,
+	ABC_MSI_RD_DMA_3,
+	ABC_MSI_RD_DMA_4,
+	ABC_MSI_RD_DMA_5,
+	ABC_MSI_RD_DMA_6,
+	ABC_MSI_RD_DMA_7,
+	ABC_MSI_WR_DMA_0,
+	ABC_MSI_WR_DMA_1,
+	ABC_MSI_WR_DMA_2,
+	ABC_MSI_WR_DMA_3,
+	ABC_MSI_WR_DMA_4,
+	ABC_MSI_WR_DMA_5,
+	ABC_MSI_WR_DMA_6,
+	ABC_MSI_WR_DMA_7,
+	ABC_MSI_AON_INTNC,
+	ABC_MSI_COUNT = 32
+};
+
+/*
+ * Non-critical interrupts mux'ed on MSI 31 ABC_MSI_AON_INTNC; these values
+ * correspond to the bits of SYSREG_FSYS_INTERRUPT.
+ */
+enum abc_intnc_ints {
+	INTNC_IPU_HPM_APBIF,
+	INTNC_IPU_ERR,
+	INTNC_TIED,
+	INTNC_TPU_WIREINTERRUPT2,
+	INTNC_TMU_AON,
+	INTNC_WDT1_WDTINT,
+	INTNC_AON_UART,
+	INTNC_OTP_AON,
+	INTNC_PPMU_IPU,
+	INTNC_PPMU_TPU,
+	INTNC_PPMU_FSYS_M,
+	INTNC_PPMU_FSYS_S,
+	ABC_INTNC_COUNT = 12
+};
+
 #define MAX_DMA_INT	16
-#define ABC_MSI_COUNT	32
-/* 32 MSI interrupts + 12 mux'ed interrupts on MSI31 */
-#define ABC_MSI31_INT_COUNT	12
-#define ABC_INT_COUNT		(ABC_MSI_COUNT + ABC_MSI31_INT_COUNT) /* 44 */
 
 /* todo..add platform specific data */
 struct abc_pcie_devdata;
@@ -78,7 +132,6 @@ enum abc_dma_trans_status {
 };
 
 typedef int (*irq_cb_t)(uint32_t irq);
-typedef int (*irq_cb_t2)(uint32_t irq, void *payload);
 typedef int (*irq_dma_cb_t)(uint8_t chan, enum dma_data_direction dir,
 				enum abc_dma_trans_status status);
 
@@ -102,9 +155,8 @@ struct abc_device {
 	unsigned char *rd_buf;
 	dma_addr_t rd_buf_addr;
 	irq_dma_cb_t	dma_cb[MAX_DMA_INT];
-	irq_cb_t	sys_cb[ABC_INT_COUNT];
-	irq_cb_t2	sys_cb2[ABC_INT_COUNT];
-	void		*handler_payload[ABC_INT_COUNT];
+	irq_cb_t	sys_cb[ABC_MSI_COUNT];
+	struct atomic_notifier_head intnc_notifier;
 	spinlock_t      lock;
 };
 
@@ -202,7 +254,6 @@ int ddr_config_read(u32 offset, u32 len, u32 *data);
 int ddr_config_write(u32 offset, u32 len, u32 data);
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan);
 int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no);
-int abc_reg_irq_callback2(irq_cb_t2 sys_cb, int irq_no, void *payload);
 void *abc_alloc_coherent(size_t size, dma_addr_t *dma_addr);
 void abc_free_coherent(size_t size, void *cpu_addr, dma_addr_t dma_addr);
 dma_addr_t abc_dma_map_page(struct page *page, size_t offset, size_t size,

@@ -535,8 +535,7 @@ int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no)
 {
 	unsigned long flags;
 
-	if ((irq_no >= ABC_MSI_0_TMU_AON && irq_no <= ABC_MSI_14_FLUSH_DONE)
-			|| (irq_no == ABC_MSI_AON_INTNC)) {
+	if (irq_no >= ABC_MSI_0_TMU_AON && irq_no <= ABC_MSI_14_FLUSH_DONE) {
 		spin_lock_irqsave(&abc_dev->lock, flags);
 		abc_dev->sys_cb[irq_no] = sys_cb;
 		spin_unlock_irqrestore(&abc_dev->lock, flags);
@@ -545,22 +544,6 @@ int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no)
 	return -EINVAL;
 }
 EXPORT_SYMBOL(abc_reg_irq_callback);
-
-int abc_reg_irq_callback2(irq_cb_t2 sys_cb, int irq_no, void *payload)
-{
-	unsigned long flags;
-
-	if ((irq_no >= ABC_MSI_0_TMU_AON && irq_no <= ABC_MSI_14_FLUSH_DONE) ||
-		(irq_no >= ABC_MSI_AON_INTNC && irq_no <= INTNC_PPMU_FSYS_S)) {
-		spin_lock_irqsave(&abc_dev->lock, flags);
-		abc_dev->sys_cb2[irq_no] = sys_cb;
-		abc_dev->handler_payload[irq_no] = payload;
-		spin_unlock_irqrestore(&abc_dev->lock, flags);
-		return 0;
-	}
-	return -EINVAL;
-}
-EXPORT_SYMBOL(abc_reg_irq_callback2);
 
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan)
 {
@@ -639,8 +622,7 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 {
 	struct pci_dev *pdev = ptr;
-	u32 msi_status_31;
-	int pos, cb_pos;
+	u32 intnc_val;
 	u32 msi_cap_val;
 
 	irq = irq - pdev->irq;
@@ -651,10 +633,6 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 		if (abc_dev->sys_cb[irq] != NULL) {
 			/* Callback respective handler */
 			abc_dev->sys_cb[irq](irq);
-		} else if (abc_dev->sys_cb2[irq] != NULL &&
-				abc_dev->handler_payload[irq] != NULL) {
-			abc_dev->sys_cb2[irq](irq,
-					abc_dev->handler_payload[irq]);
 		}
 	} else if (irq == ABC_MSI_AON_INTNC) {
 		/* Mask 31st MSI during Interrupt handling period */
@@ -663,25 +641,10 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 				abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
 
 		/* Check the sysreg status register and do the callback */
-		msi_status_31 = readl(abc_dev->fsys_config +
-				SYSREG_FSYS_INTERRUPT);
-		cb_pos = ABC_MSI_COUNT;
-		pos = 0;
-		while ((pos = find_next_bit((unsigned long *) &msi_status_31,
-					    ABC_MSI31_INT_COUNT, pos)) !=
-		       ABC_MSI31_INT_COUNT) {
-			cb_pos += pos;
-			if (abc_dev->sys_cb2[cb_pos] &&
-				abc_dev->handler_payload[cb_pos])
-				abc_dev->sys_cb2[cb_pos](cb_pos,
-					abc_dev->handler_payload[cb_pos]);
-			else
-				pr_err("Unregistered interrupt %d on \
-					MSI 31st line has been triggered \n", pos);
-			pos++;
-	}
+		intnc_val = readl(abc_dev->fsys_config + SYSREG_FSYS_INTERRUPT);
+		atomic_notifier_call_chain(&abc_dev->intnc_notifier,
+					   irq, (void *)(u64)intnc_val);
 		writel(msi_cap_val, abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
-
 	}
 	spin_unlock(&abc_dev->lock);
 	return IRQ_HANDLED;
@@ -1109,6 +1072,7 @@ exit_loop:
 	if (err < 0)
 		goto err5;
 
+	ATOMIC_INIT_NOTIFIER_HEAD(&abc_dev->intnc_notifier);
 	/* fill in tpu-mem-mapping with VA of our mapping for tpu-mem */
 	tpu_properties[TPU_MEM_MAPPING].value.u64_data =
 	    (u64)abc_dev->tpu_config;
