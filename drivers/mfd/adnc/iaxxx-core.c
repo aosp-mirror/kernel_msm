@@ -98,9 +98,6 @@
 #error kthread functions not defined
 #endif
 
-/* Firmware and hardware configuration files */
-static const char *iaxxx_fw_filename = "RomeApp.bin";
-
 static int iaxxx_fw_dl_complete_notify(struct device *dev);
 
 struct iaxxx_port_clk_settings clk;
@@ -672,15 +669,7 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	uint32_t reg, mode, status, mem_elec_ctrl_val;
 	struct device *dev = priv->dev;
 	int mode_retry = 5;
-	const struct firmware *fw;
 
-	/* Request the firmware image */
-	rc = request_firmware(&fw, iaxxx_fw_filename, dev);
-	if (rc) {
-		dev_err(dev, "Firmware file %s not found rc = %d\n",
-						iaxxx_fw_filename, rc);
-		return rc;
-	}
 	if (priv->reset_cb)
 		priv->reset_cb(dev);
 
@@ -690,8 +679,7 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 				&status);
 		if (rc) {
 			dev_err(dev, "regmap_read failed, rc = %d\n", rc);
-			rc =  E_IAXXX_REGMAP_ERROR;
-			goto fw_update_err;
+			return E_IAXXX_REGMAP_ERROR;
 		}
 
 		mode = status & IAXXX_SRB_SYS_STATUS_MODE_MASK;
@@ -702,16 +690,14 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	if (!mode && !mode_retry) {
 		WARN_ON(mode != SYSTEM_STATUS_MODE_SBL);
 		dev_err(dev, "SBL SYS MODE retry expired\n");
-		rc =  -ETIMEDOUT;
-		goto fw_update_err;
+		return -ETIMEDOUT;
 	}
 
 	/* Get and log the Device ID */
 	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_DEVICE_ID_ADDR, &reg);
 	if (rc) {
 		dev_err(dev, "regmap_read failed, rc = %d\n", rc);
-		rc = E_IAXXX_REGMAP_ERROR;
-		goto fw_update_err;
+		return E_IAXXX_REGMAP_ERROR;
 	}
 	dev_dbg(dev, "Device ID: 0x%.08X\n", reg);
 
@@ -719,8 +705,7 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_ROM_VER_NUM_ADDR, &reg);
 	if (rc) {
 		dev_err(dev, "regmap_read failed, rc = %d\n", rc);
-		rc = E_IAXXX_REGMAP_ERROR;
-		goto fw_update_err;
+		return E_IAXXX_REGMAP_ERROR;
 	}
 	dev_dbg(dev, "ROM Version: 0x%.08X\n", reg);
 
@@ -749,16 +734,14 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	if (rc) {
 		dev_err(dev, "Electrical control register failed, rc = %d\n",
 				rc);
-		rc = E_IAXXX_REGMAP_ERROR;
-		goto fw_update_err;
+		return E_IAXXX_REGMAP_ERROR;
 	}
 
 	/* Boot the device into application mode */
-	rc = iaxxx_bootup(priv, fw);
+	rc = iaxxx_bootup(priv);
 	if (rc) {
 		dev_err(dev, "bootup failed\n");
-		rc = E_IAXXX_BOOTUP_ERROR;
-		goto fw_update_err;
+		return E_IAXXX_BOOTUP_ERROR;
 	}
 	priv->iaxxx_state->fw_state = FW_APP_MODE;
 
@@ -766,9 +749,7 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	if (priv->spi_speed_setup)
 		priv->spi_speed_setup(dev, priv->spi_app_speed);
 
-fw_update_err:
-	release_firmware(fw);
-	return rc;
+	return 0;
 }
 
 static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)

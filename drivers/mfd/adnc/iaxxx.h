@@ -13,7 +13,6 @@
 #define __MFD_IAXXX_H__
 
 #include <linux/device.h>
-#include <linux/firmware.h>
 
 struct iaxxx_priv;
 struct regmap;
@@ -109,7 +108,7 @@ void iaxxx_device_exit(struct iaxxx_priv *priv);
 int iaxxx_get_device_status(struct iaxxx_priv *priv, bool *status);
 
 /* Boots the device into application mode */
-int iaxxx_bootup(struct iaxxx_priv *priv, const struct firmware *fw);
+int iaxxx_bootup(struct iaxxx_priv *priv);
 
 /* Register map */
 int iaxxx_regmap_init(struct iaxxx_priv *priv);
