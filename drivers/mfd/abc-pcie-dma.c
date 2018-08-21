@@ -704,14 +704,12 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	/* consider validateing local buffer */
 
 	/* Create scatterlist of local buffer */
-	local_sg_list = kmalloc(sizeof(struct abc_pcie_sg_list), GFP_KERNEL);
+	local_sg_list = kzalloc(sizeof(struct abc_pcie_sg_list), GFP_KERNEL);
 	if (!local_sg_list)
 		return -ENOMEM;
 
-	local_sg_list->dma_buf = NULL;
-	local_sg_list->attach = NULL;
-	local_sg_list->sg_table = NULL;
 	local_sg_list->dir = dma_desc->dir;
+	local_sg_entries = NULL;
 
 	switch (dma_desc->local_buf_type) {
 	case DMA_BUFFER_USER:
@@ -740,13 +738,10 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	local_sg_size = local_sg_list->length;
 
 	/* Create scatterlist of remote buffer */
-	remote_sg_list = kmalloc(sizeof(struct abc_pcie_sg_list), GFP_KERNEL);
+	remote_sg_list = kzalloc(sizeof(struct abc_pcie_sg_list), GFP_KERNEL);
 	if (!remote_sg_list)
 		return -ENOMEM;
 
-	remote_sg_list->dma_buf = NULL;
-	remote_sg_list->attach = NULL;
-	remote_sg_list->sg_table = NULL;
 	remote_sg_list->dir = dma_desc->dir;
 	remote_sg_entries = NULL;
 
@@ -1068,6 +1063,8 @@ static long abc_pcie_dma_compat_ioctl(struct file *file, unsigned int cmd,
 static int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 {
 	int err;
+
+	abc_dma.pdev = pdev;
 
 	/* Depending on the IOMMU configuration the board the IPU may need
 	 * to use MFD parent's device for mapping DMA buffers.  Otherwise, the
