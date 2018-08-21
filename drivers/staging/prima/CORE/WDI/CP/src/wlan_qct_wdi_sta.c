@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -206,7 +206,7 @@ WDI_STATableClose
  @brief WDI_STATableAddSta - Function to Add Station
 
  
- @param  pWDICtx:     pointer to the WLAN DAL context 
+ @param  pWDICtx:     pointer to the WLAN DAL context
          pwdiParam:   station parameters  
   
  @see
@@ -215,11 +215,12 @@ WDI_STATableClose
 WDI_Status
 WDI_STATableAddSta
 (
-    WDI_ControlBlockType*  pWDICtx,
+    void*  ctx,
     WDI_AddStaParams*      pwdiParam
 )
 {
     wpt_uint8        ucSTAIdx  = 0;
+    WDI_ControlBlockType*  pWDICtx = ctx;
     WDI_StaStruct*   pSTATable = (WDI_StaStruct*) pWDICtx->staTable;
     /*- - - -  - - - - - - - - - - - -  - - - - - - - - - - - -  - - - - - */
 
@@ -302,7 +303,7 @@ WDI_STATableAddSta
  @brief WDI_STATableDelSta - Function to Delete a Station
 
  
- @param  pWDICtx:         pointer to the WLAN DAL context 
+ @param  void:            pointer to the WLAN DAL context
          ucSTAIdx:        station to be deleted
   
  @see
@@ -311,10 +312,11 @@ WDI_STATableAddSta
 WDI_Status
 WDI_STATableDelSta
 (
-    WDI_ControlBlockType*  pWDICtx,
+    void*  ctx,
     wpt_uint8              ucSTAIdx
 )
 {
+    WDI_ControlBlockType*  pWDICtx = ctx;
     WDI_StaStruct*   pSTATable = (WDI_StaStruct*) pWDICtx->staTable;
     /*- - - -  - - - - - - - - - - - -  - - - - - - - - - - - -  - - - - - */
 
@@ -341,7 +343,7 @@ WDI_STATableDelSta
  @brief WDI_STATableBSSDelSta - Function to Delete Stations in this BSS
 
  
- @param  pWDICtx:         pointer to the WLAN DAL context 
+ @param  pWDICtx:         pointer to the WLAN DAL context
          ucBSSIdx:        BSS index 
   
  @see
@@ -584,12 +586,13 @@ WDI_CompareMacAddr
 WDI_Status
 WDI_STATableFindStaidByAddr
 (
-    WDI_ControlBlockType*  pWDICtx, 
+    void * context,
     wpt_macAddr            staAddr, 
     wpt_uint8*             pucStaId
 )
 {
     WDI_Status wdiStatus = WDI_STATUS_E_FAILURE;
+    WDI_ControlBlockType*  pWDICtx = context;
     wpt_uint8 i;
     WDI_StaStruct* pSTATable = (WDI_StaStruct*) pWDICtx->staTable;
 

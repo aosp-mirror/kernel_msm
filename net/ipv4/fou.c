@@ -25,6 +25,7 @@ struct fou {
 	u16 port;
 	struct udp_offload udp_offloads;
 	struct list_head list;
+	struct rcu_head rcu;
 };
 
 struct fou_cfg {
@@ -112,13 +113,21 @@ static struct sk_buff **fou_gro_receive(struct sk_buff **head,
 	u8 proto = NAPI_GRO_CB(skb)->proto;
 	const struct net_offload **offloads;
 
+	/* We can clear the encap_mark for FOU as we are essentially doing
+	 * one of two possible things.  We are either adding an L4 tunnel
+	 * header to the outer L3 tunnel header, or we are are simply
+	 * treating the GRE tunnel header as though it is a UDP protocol
+	 * specific header such as VXLAN or GENEVE.
+	 */
+	NAPI_GRO_CB(skb)->encap_mark = 0;
+
 	rcu_read_lock();
 	offloads = NAPI_GRO_CB(skb)->is_ipv6 ? inet6_offloads : inet_offloads;
 	ops = rcu_dereference(offloads[proto]);
 	if (!ops || !ops->callbacks.gro_receive)
 		goto out_unlock;
 
-	pp = ops->callbacks.gro_receive(head, skb);
+	pp = call_gro_receive(ops->callbacks.gro_receive, head, skb);
 
 out_unlock:
 	rcu_read_unlock();
@@ -216,10 +225,18 @@ static struct sk_buff **gue_gro_receive(struct sk_buff **head,
 
 	skb_gro_pull(skb, guehlen);
 
+	/* We can clear the encap_mark for GUE as we are essentially doing
+	 * one of two possible things.  We are either adding an L4 tunnel
+	 * header to the outer L3 tunnel header, or we are are simply
+	 * treating the GRE tunnel header as though it is a UDP protocol
+	 * specific header such as VXLAN or GENEVE.
+	 */
+	NAPI_GRO_CB(skb)->encap_mark = 0;
+
 	/* Adjusted NAPI_GRO_CB(skb)->csum after skb_gro_pull()*/
 	skb_gro_postpull_rcsum(skb, guehdr, guehlen);
 
-	pp = ops->callbacks.gro_receive(head, skb);
+	pp = call_gro_receive(ops->callbacks.gro_receive, head, skb);
 
 out_unlock:
 	rcu_read_unlock();
@@ -287,7 +304,7 @@ static void fou_release(struct fou *fou)
 
 	sock_release(sock);
 
-	kfree(fou);
+	kfree_rcu(fou, rcu);
 }
 
 static int fou_encap_init(struct sock *sk, struct fou *fou, struct fou_cfg *cfg)

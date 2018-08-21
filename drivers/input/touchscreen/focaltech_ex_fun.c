@@ -1440,17 +1440,9 @@ tp_id_err:
 int check_TP_ID(char *buf, ssize_t buf_len, u8 tp_id) {
 
 	switch(tp_id) {
-		case TP_ID_BLACK_ORIGIN:
-		case TP_ID_BLACK_G_A:
-		case TP_ID_BLACK_G_B:
-			buf_len += sprintf(buf + buf_len, "TP is EFWx GIS\n");
-			break;
-		case TP_ID_BLACK_T_A:
-		case TP_ID_BLACK_T_B:
-			buf_len += sprintf(buf + buf_len, "TP is EFWx Truly\n");
-			break;
-		case TP_ID_BLACK_O_A:
-			buf_len += sprintf(buf + buf_len, "TP is EFWx Ofilm\n");
+		case TP_ID_FNW1_BLACK_ORIGIN:
+		case TP_ID_FNW1_BLACK:
+			buf_len += sprintf(buf + buf_len, "TP is FNW1\n");
 			break;
 		default:
 			buf_len += sprintf(buf + buf_len, "TP isn't correct\n");

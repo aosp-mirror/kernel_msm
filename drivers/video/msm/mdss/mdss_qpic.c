@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -67,12 +67,26 @@ static struct platform_driver mdss_qpic_driver = {
 	},
 };
 
+static void mdss_qpic_clk_ctrl(bool enable)
+{
+	if (enable) {
+		if (qpic_res->qpic_clk)
+			clk_prepare_enable(qpic_res->qpic_clk);
+		if (qpic_res->qpic_a_clk)
+			clk_prepare_enable(qpic_res->qpic_a_clk);
+	} else {
+		if (qpic_res->qpic_a_clk)
+			clk_disable_unprepare(qpic_res->qpic_a_clk);
+		if (qpic_res->qpic_clk)
+			clk_disable_unprepare(qpic_res->qpic_clk);
+	}
+}
+
 int qpic_on(struct msm_fb_data_type *mfd)
 {
 	int ret;
 
-	if (qpic_res->qpic_a_clk)
-		clk_prepare_enable(qpic_res->qpic_a_clk);
+	mdss_qpic_clk_ctrl(true);
 
 	ret = mdss_qpic_panel_on(qpic_res->panel_data, &qpic_res->panel_io);
 	qpic_res->qpic_is_on = true;
@@ -86,9 +100,7 @@ int qpic_off(struct msm_fb_data_type *mfd)
 	if (use_irq)
 		qpic_interrupt_en(false);
 
-	if (qpic_res->qpic_a_clk)
-		clk_disable_unprepare(qpic_res->qpic_a_clk);
-
+	mdss_qpic_clk_ctrl(false);
 	qpic_res->qpic_is_on = false;
 
 	return ret;
@@ -217,6 +229,7 @@ int mdss_qpic_overlay_init(struct msm_fb_data_type *mfd)
 	qpic_interface->dma_fnc = mdss_qpic_pan_display;
 	qpic_interface->ioctl_handler = NULL;
 	qpic_interface->kickoff_fnc = NULL;
+	qpic_interface->is_twm_en = NULL;
 	return 0;
 }
 
@@ -759,6 +772,10 @@ static int mdss_qpic_probe(struct platform_device *pdev)
 	qpic_res->qpic_a_clk = clk_get(&pdev->dev, "core_a_clk");
 	if (IS_ERR(qpic_res->qpic_a_clk))
 		pr_err("%s: Can't find core_a_clk", __func__);
+
+	qpic_res->qpic_clk = clk_get(&pdev->dev, "core_clk");
+	if (IS_ERR(qpic_res->qpic_clk))
+		pr_err("%s: Can't find core_clk", __func__);
 
 	qpic_res->irq = res->start;
 	qpic_res->res_init = true;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include "ipa_i.h"
+#include <linux/msm_ipa.h>
 
 struct ipa_intf {
 	char name[IPA_RESOURCE_NAME_MAX];
@@ -274,7 +275,7 @@ int ipa_query_intf_tx_props(struct ipa_ioc_query_intf_tx_props *tx)
 		if (!strncmp(entry->name, tx->name, IPA_RESOURCE_NAME_MAX)) {
 			/* add the entry check */
 			if (entry->num_tx_props != tx->num_tx_props) {
-				IPAERR("invalid entry number(%u %u)\n",
+				IPAERR_RL("invalid entry number(%u %u)\n",
 					entry->num_tx_props,
 						tx->num_tx_props);
 				mutex_unlock(&ipa_ctx->lock);
@@ -315,7 +316,7 @@ int ipa_query_intf_rx_props(struct ipa_ioc_query_intf_rx_props *rx)
 		if (!strncmp(entry->name, rx->name, IPA_RESOURCE_NAME_MAX)) {
 			/* add the entry check */
 			if (entry->num_rx_props != rx->num_rx_props) {
-				IPAERR("invalid entry number(%u %u)\n",
+				IPAERR_RL("invalid entry number(%u %u)\n",
 					entry->num_rx_props,
 						rx->num_rx_props);
 				mutex_unlock(&ipa_ctx->lock);
@@ -356,7 +357,7 @@ int ipa_query_intf_ext_props(struct ipa_ioc_query_intf_ext_props *ext)
 		if (!strcmp(entry->name, ext->name)) {
 			/* add the entry check */
 			if (entry->num_ext_props != ext->num_ext_props) {
-				IPAERR("invalid entry number(%u %u)\n",
+				IPAERR_RL("invalid entry number(%u %u)\n",
 					entry->num_ext_props,
 						ext->num_ext_props);
 				mutex_unlock(&ipa_ctx->lock);
@@ -370,6 +371,113 @@ int ipa_query_intf_ext_props(struct ipa_ioc_query_intf_ext_props *ext)
 	}
 	mutex_unlock(&ipa_ctx->lock);
 	return result;
+}
+
+static void ipa2_send_msg_free(void *buff, u32 len, u32 type)
+{
+	kfree(buff);
+}
+
+static int wlan_msg_process(struct ipa_msg_meta *meta, void *buff)
+{
+	struct ipa_push_msg *msg_dup;
+	struct ipa_wlan_msg_ex *event_ex_cur_con = NULL;
+	struct ipa_wlan_msg_ex *event_ex_list = NULL;
+	struct ipa_wlan_msg *event_ex_cur_discon = NULL;
+	void *data_dup = NULL;
+	struct ipa_push_msg *entry;
+	struct ipa_push_msg *next;
+	int cnt = 0, total = 0, max = 0;
+	uint8_t mac[IPA_MAC_ADDR_SIZE];
+	uint8_t mac2[IPA_MAC_ADDR_SIZE];
+
+	if (meta->msg_type == WLAN_CLIENT_CONNECT_EX) {
+		/* debug print */
+		event_ex_cur_con = buff;
+		for (cnt = 0; cnt < event_ex_cur_con->num_of_attribs; cnt++) {
+			if (event_ex_cur_con->attribs[cnt].attrib_type ==
+				WLAN_HDR_ATTRIB_MAC_ADDR) {
+				IPADBG("%02x:%02x:%02x:%02x:%02x:%02x,(%d)\n",
+				event_ex_cur_con->attribs[cnt].u.mac_addr[0],
+				event_ex_cur_con->attribs[cnt].u.mac_addr[1],
+				event_ex_cur_con->attribs[cnt].u.mac_addr[2],
+				event_ex_cur_con->attribs[cnt].u.mac_addr[3],
+				event_ex_cur_con->attribs[cnt].u.mac_addr[4],
+				event_ex_cur_con->attribs[cnt].u.mac_addr[5],
+				meta->msg_type);
+			}
+		}
+
+		mutex_lock(&ipa_ctx->msg_wlan_client_lock);
+		msg_dup = kzalloc(sizeof(struct ipa_push_msg), GFP_KERNEL);
+		if (msg_dup == NULL) {
+			IPAERR("fail to alloc ipa_msg container\n");
+			return -ENOMEM;
+		}
+		msg_dup->meta = *meta;
+		if (meta->msg_len > 0 && buff) {
+			data_dup = kmalloc(meta->msg_len, GFP_KERNEL);
+			if (data_dup == NULL) {
+				IPAERR("fail to alloc data_dup container\n");
+				kfree(msg_dup);
+				return -ENOMEM;
+			}
+			memcpy(data_dup, buff, meta->msg_len);
+			msg_dup->buff = data_dup;
+			msg_dup->callback = ipa2_send_msg_free;
+		}
+		list_add_tail(&msg_dup->link, &ipa_ctx->msg_wlan_client_list);
+		mutex_unlock(&ipa_ctx->msg_wlan_client_lock);
+	}
+
+	/* remove the cache */
+	if (meta->msg_type == WLAN_CLIENT_DISCONNECT) {
+		/* debug print */
+		event_ex_cur_discon = buff;
+		IPADBG("Mac %02x:%02x:%02x:%02x:%02x:%02x,msg %d\n",
+		event_ex_cur_discon->mac_addr[0],
+		event_ex_cur_discon->mac_addr[1],
+		event_ex_cur_discon->mac_addr[2],
+		event_ex_cur_discon->mac_addr[3],
+		event_ex_cur_discon->mac_addr[4],
+		event_ex_cur_discon->mac_addr[5],
+		meta->msg_type);
+		memcpy(mac2,
+			event_ex_cur_discon->mac_addr,
+			sizeof(mac2));
+
+		mutex_lock(&ipa_ctx->msg_wlan_client_lock);
+		list_for_each_entry_safe(entry, next,
+				&ipa_ctx->msg_wlan_client_list,
+				link) {
+			event_ex_list = entry->buff;
+			max = event_ex_list->num_of_attribs;
+			for (cnt = 0; cnt < max; cnt++) {
+				memcpy(mac,
+					event_ex_list->attribs[cnt].u.mac_addr,
+					sizeof(mac));
+				if (event_ex_list->attribs[cnt].attrib_type ==
+					WLAN_HDR_ATTRIB_MAC_ADDR) {
+					pr_debug("%02x:%02x:%02x:%02x:%02x:%02x\n",
+					mac[0],	mac[1], mac[2],
+					mac[3],	mac[4],	mac[5]);
+
+					/* compare to delete one*/
+					if (memcmp(mac2,
+						mac,
+						sizeof(mac)) == 0) {
+						IPADBG("clean %d\n", total);
+						list_del(&entry->link);
+						kfree(entry);
+						break;
+					}
+				}
+			}
+			total++;
+		}
+		mutex_unlock(&ipa_ctx->msg_wlan_client_lock);
+	}
+	return 0;
 }
 
 /**
@@ -391,6 +499,7 @@ int ipa2_send_msg(struct ipa_msg_meta *meta, void *buff,
 		  ipa_msg_free_fn callback)
 {
 	struct ipa_push_msg *msg;
+	void *data = NULL;
 
 	if (unlikely(!ipa_ctx)) {
 		IPAERR("IPA driver was not initialized\n");
@@ -399,13 +508,13 @@ int ipa2_send_msg(struct ipa_msg_meta *meta, void *buff,
 
 	if (meta == NULL || (buff == NULL && callback != NULL) ||
 	    (buff != NULL && callback == NULL)) {
-		IPAERR("invalid param meta=%p buff=%p, callback=%p\n",
+		IPAERR_RL("invalid param meta=%p buff=%p, callback=%p\n",
 		       meta, buff, callback);
 		return -EINVAL;
 	}
 
 	if (meta->msg_type >= IPA_EVENT_MAX_NUM) {
-		IPAERR("unsupported message type %d\n", meta->msg_type);
+		IPAERR_RL("unsupported message type %d\n", meta->msg_type);
 		return -EINVAL;
 	}
 
@@ -416,16 +525,99 @@ int ipa2_send_msg(struct ipa_msg_meta *meta, void *buff,
 	}
 
 	msg->meta = *meta;
-	msg->buff = buff;
-	msg->callback = callback;
+	if (meta->msg_len > 0 && buff) {
+		data = kmalloc(meta->msg_len, GFP_KERNEL);
+		if (data == NULL) {
+			IPAERR("fail to alloc data container\n");
+			kfree(msg);
+			return -ENOMEM;
+		}
+		memcpy(data, buff, meta->msg_len);
+		msg->buff = data;
+		msg->callback = ipa2_send_msg_free;
+	}
 
 	mutex_lock(&ipa_ctx->msg_lock);
 	list_add_tail(&msg->link, &ipa_ctx->msg_list);
+	/* support for softap client event cache */
+	if (wlan_msg_process(meta, buff))
+		IPAERR("wlan_msg_process failed\n");
+
+	/* unlock only after process */
 	mutex_unlock(&ipa_ctx->msg_lock);
 	IPA_STATS_INC_CNT(ipa_ctx->stats.msg_w[meta->msg_type]);
 
 	wake_up(&ipa_ctx->msg_waitq);
+	if (buff)
+		callback(buff, meta->msg_len, meta->msg_type);
 
+	return 0;
+}
+
+/**
+ * ipa2_resend_wlan_msg() - Resend cached "message" to IPACM
+ *
+ * resend wlan client connect events to user-space
+ *
+ * Returns:	0 on success, negative on failure
+ *
+ * Note:	Should not be called from atomic context
+ */
+int ipa2_resend_wlan_msg(void)
+{
+	struct ipa_wlan_msg_ex *event_ex_list = NULL;
+	struct ipa_push_msg *entry;
+	struct ipa_push_msg *next;
+	int cnt = 0, total = 0;
+	struct ipa_push_msg *msg;
+	void *data = NULL;
+
+	IPADBG("\n");
+
+	mutex_lock(&ipa_ctx->msg_wlan_client_lock);
+	list_for_each_entry_safe(entry, next, &ipa_ctx->msg_wlan_client_list,
+			link) {
+
+		event_ex_list = entry->buff;
+		for (cnt = 0; cnt < event_ex_list->num_of_attribs; cnt++) {
+			if (event_ex_list->attribs[cnt].attrib_type ==
+				WLAN_HDR_ATTRIB_MAC_ADDR) {
+				IPADBG("%d-Mac %02x:%02x:%02x:%02x:%02x:%02x\n",
+				total,
+				event_ex_list->attribs[cnt].u.mac_addr[0],
+				event_ex_list->attribs[cnt].u.mac_addr[1],
+				event_ex_list->attribs[cnt].u.mac_addr[2],
+				event_ex_list->attribs[cnt].u.mac_addr[3],
+				event_ex_list->attribs[cnt].u.mac_addr[4],
+				event_ex_list->attribs[cnt].u.mac_addr[5]);
+			}
+		}
+
+		msg = kzalloc(sizeof(struct ipa_push_msg), GFP_KERNEL);
+		if (msg == NULL) {
+			IPAERR("fail to alloc ipa_msg container\n");
+			mutex_unlock(&ipa_ctx->msg_wlan_client_lock);
+			return -ENOMEM;
+		}
+		msg->meta = entry->meta;
+		data = kmalloc(entry->meta.msg_len, GFP_KERNEL);
+		if (data == NULL) {
+			IPAERR("fail to alloc data container\n");
+			kfree(msg);
+			mutex_unlock(&ipa_ctx->msg_wlan_client_lock);
+			return -ENOMEM;
+		}
+		memcpy(data, entry->buff, entry->meta.msg_len);
+		msg->buff = data;
+		msg->callback = ipa2_send_msg_free;
+		mutex_lock(&ipa_ctx->msg_lock);
+		list_add_tail(&msg->link, &ipa_ctx->msg_list);
+		mutex_unlock(&ipa_ctx->msg_lock);
+		wake_up(&ipa_ctx->msg_waitq);
+
+		total++;
+	}
+	mutex_unlock(&ipa_ctx->msg_wlan_client_lock);
 	return 0;
 }
 
@@ -524,14 +716,13 @@ ssize_t ipa_read(struct file *filp, char __user *buf, size_t count,
 	char __user *start;
 	struct ipa_push_msg *msg = NULL;
 	int ret;
-	DEFINE_WAIT(wait);
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	int locked;
 
 	start = buf;
 
+	add_wait_queue(&ipa_ctx->msg_waitq, &wait);
 	while (1) {
-		prepare_to_wait(&ipa_ctx->msg_waitq, &wait, TASK_INTERRUPTIBLE);
-
 		mutex_lock(&ipa_ctx->msg_lock);
 		locked = 1;
 		if (!list_empty(&ipa_ctx->msg_list)) {
@@ -540,9 +731,8 @@ ssize_t ipa_read(struct file *filp, char __user *buf, size_t count,
 			list_del(&msg->link);
 		}
 
-		IPADBG("msg=%p\n", msg);
-
 		if (msg) {
+			IPADBG("msg=%pK\n", msg);
 			locked = 0;
 			mutex_unlock(&ipa_ctx->msg_lock);
 			if (copy_to_user(buf, &msg->meta,
@@ -570,6 +760,7 @@ ssize_t ipa_read(struct file *filp, char __user *buf, size_t count,
 			IPA_STATS_INC_CNT(
 				ipa_ctx->stats.msg_r[msg->meta.msg_type]);
 			kfree(msg);
+			msg = NULL;
 		}
 
 		ret = -EAGAIN;
@@ -585,10 +776,10 @@ ssize_t ipa_read(struct file *filp, char __user *buf, size_t count,
 
 		locked = 0;
 		mutex_unlock(&ipa_ctx->msg_lock);
-		schedule();
+		wait_woken(&wait, TASK_INTERRUPTIBLE, MAX_SCHEDULE_TIMEOUT);
 	}
 
-	finish_wait(&ipa_ctx->msg_waitq, &wait);
+	remove_wait_queue(&ipa_ctx->msg_waitq, &wait);
 	if (start != buf && ret != -EFAULT)
 		ret = buf - start;
 
@@ -618,7 +809,7 @@ int ipa_pull_msg(struct ipa_msg_meta *meta, char *buff, size_t count)
 	int result = -EINVAL;
 
 	if (meta == NULL || buff == NULL || !count) {
-		IPAERR("invalid param name=%p buff=%p count=%zu\n",
+		IPAERR_RL("invalid param name=%p buff=%p count=%zu\n",
 				meta, buff, count);
 		return result;
 	}

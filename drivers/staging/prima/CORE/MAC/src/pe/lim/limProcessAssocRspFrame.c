@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -56,6 +56,10 @@
 #include "eseApi.h"
 #endif
 
+#ifdef WLAN_FEATURE_LFR_MBB
+#include "lim_mbb.h"
+#endif
+
 extern tSirRetStatus schBeaconEdcaProcess(tpAniSirGlobal pMac, tSirMacEdcaParamSetIE *edca, tpPESession psessionEntry);
 
 
@@ -85,6 +89,8 @@ void limUpdateAssocStaDatas(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpSirAsso
     //tpSirBoardCapabilities pBoardCaps;
     tANI_BOOLEAN    qosMode; 
     tANI_U16        rxHighestRate = 0;
+    uint32_t        shortgi_20mhz_support;
+    uint32_t        shortgi_40mhz_support;
 
     limGetPhyMode(pMac, &phyMode, psessionEntry);
 
@@ -131,8 +137,6 @@ void limUpdateAssocStaDatas(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpSirAsso
                    pStaDs->htMaxAmsduLength = ( tANI_U8 ) pAssocRsp->HTCaps.maximalAMSDUsize;
                    pStaDs->htAMpduDensity =             pAssocRsp->HTCaps.mpduDensity;
                    pStaDs->htDsssCckRate40MHzSupport = (tANI_U8)pAssocRsp->HTCaps.dsssCckMode40MHz;
-                   pStaDs->htShortGI20Mhz = (tANI_U8)pAssocRsp->HTCaps.shortGI20MHz;
-                   pStaDs->htShortGI40Mhz = (tANI_U8)pAssocRsp->HTCaps.shortGI40MHz;
                    pStaDs->htMaxRxAMpduFactor = pAssocRsp->HTCaps.maxRxAMPDUFactor;
                    limFillRxHighestSupportedRate(pMac, &rxHighestRate, pAssocRsp->HTCaps.supportedMCSSet);
                    pStaDs->supportedRates.rxHighestDataRate = rxHighestRate;
@@ -143,6 +147,41 @@ void limUpdateAssocStaDatas(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpSirAsso
                    // In the future, may need to check for "assoc.HTCaps.delayedBA"
                    // For now, it is IMMEDIATE BA only on ALL TID's
                    pStaDs->baPolicyFlag = 0xFF;
+
+                   /*
+                    * Check if we have support for gShortGI20Mhz and
+                    * gShortGI40Mhz from ini file.
+                    */
+                   if (HAL_STATUS_SUCCESS(ccmCfgGetInt(pMac,
+                                   WNI_CFG_SHORT_GI_20MHZ,
+                                   &shortgi_20mhz_support))) {
+                       if (VOS_TRUE == shortgi_20mhz_support)
+                           pStaDs->htShortGI20Mhz =
+                               (tANI_U8)pAssocRsp->HTCaps.shortGI20MHz;
+                       else
+                           pStaDs->htShortGI20Mhz = VOS_FALSE;
+                   } else {
+                       limLog(pMac, LOGE,
+                          FL("could not retrieve shortGI 20Mhz CFG,"
+                             "setting value to default"));
+                       pStaDs->htShortGI20Mhz = WNI_CFG_SHORT_GI_20MHZ_STADEF;
+                   }
+
+                   if (HAL_STATUS_SUCCESS(ccmCfgGetInt(pMac,
+                                   WNI_CFG_SHORT_GI_40MHZ,
+                                   &shortgi_40mhz_support))) {
+                       if (VOS_TRUE == shortgi_40mhz_support)
+                           pStaDs->htShortGI40Mhz =
+                               (tANI_U8)pAssocRsp->HTCaps.shortGI40MHz;
+                       else
+                           pStaDs->htShortGI40Mhz = VOS_FALSE;
+                   } else {
+                       limLog(pMac, LOGE,
+                               FL("could not retrieve shortGI 40Mhz CFG,"
+                                   "setting value to default"));
+                       pStaDs->htShortGI40Mhz = WNI_CFG_SHORT_GI_40MHZ_STADEF;
+                   }
+
            }
        }
 
@@ -469,10 +508,12 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
     }
     if(pAssocRsp->ExtCap.present)
     {
+        struct s_ext_cap *p_ext_cap = (struct s_ext_cap *)
+                                    pAssocRsp->ExtCap.bytes;
         limLog(pMac, LOG1,
             FL("Filling tdls prohibited in session entry"));
         psessionEntry->tdlsChanSwitProhibited =
-                       pAssocRsp->ExtCap.TDLSChanSwitProhibited ;
+                       p_ext_cap->TDLSChanSwitProhibited;
     }
     if(!pAssocRsp->suppRatesPresent)
     {
@@ -491,16 +532,18 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
         psessionEntry->assocRsp = NULL;
     }
 
-    psessionEntry->assocRsp = vos_mem_malloc(frameLen);
-    if (NULL == psessionEntry->assocRsp)
-    {
-        PELOGE(limLog(pMac, LOGE, FL("Unable to allocate memory to store assoc response, len = %d"), frameLen);)
-    }
-    else
-    {
-        //Store the Assoc response. This is sent to csr/hdd in join cnf response. 
-        vos_mem_copy(psessionEntry->assocRsp, pBody, frameLen);
-        psessionEntry->assocRspLen = frameLen;
+    if (frameLen) {
+        psessionEntry->assocRsp = vos_mem_malloc(frameLen);
+        if (NULL == psessionEntry->assocRsp)
+        {
+            PELOGE(limLog(pMac, LOGE, FL("Unable to allocate memory to store assoc response, len = %d"), frameLen);)
+        }
+        else
+        {
+            //Store the Assoc response. This is sent to csr/hdd in join cnf response.
+            vos_mem_copy(psessionEntry->assocRsp, pBody, frameLen);
+            psessionEntry->assocRspLen = frameLen;
+        }
     }
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
@@ -512,16 +555,19 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
     if(pAssocRsp->ricPresent)
     {
         psessionEntry->RICDataLen = pAssocRsp->num_RICData * sizeof(tDot11fIERICDataDesc);
-        psessionEntry->ricData = vos_mem_malloc(psessionEntry->RICDataLen);
-        if ( NULL == psessionEntry->ricData )
+        if (psessionEntry->RICDataLen)
         {
-            PELOGE(limLog(pMac, LOGE, FL("Unable to allocate memory to store assoc response"));)
-            psessionEntry->RICDataLen = 0; 
-        }
-        else
-        {
-            vos_mem_copy(psessionEntry->ricData,
-                         &pAssocRsp->RICData[0], psessionEntry->RICDataLen);
+            psessionEntry->ricData = vos_mem_malloc(psessionEntry->RICDataLen);
+            if ( NULL == psessionEntry->ricData )
+            {
+                PELOGE(limLog(pMac, LOGE, FL("Unable to allocate memory to store assoc response"));)
+                psessionEntry->RICDataLen = 0;
+            }
+            else
+            {
+                vos_mem_copy(psessionEntry->ricData,
+                             &pAssocRsp->RICData[0], psessionEntry->RICDataLen);
+            }
         }
     }
     else
@@ -599,6 +645,11 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
         limDeactivateAndChangeTimer(pMac, eLIM_ASSOC_FAIL_TIMER);
     else        // Stop Reassociation failure timer
     {
+#ifdef WLAN_FEATURE_LFR_MBB
+    if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb)
+        limDeactivateAndChangeTimer(pMac, eLIM_REASSOC_MBB_RSP_TIMER);
+#endif
+
 #if  defined (WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
         pMac->lim.reAssocRetryAttempt = 0;
         if ((NULL != pMac->lim.pSessionEntry) && (NULL != pMac->lim.pSessionEntry->pLimMlmReassocRetryReq))
@@ -607,7 +658,10 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
             pMac->lim.pSessionEntry->pLimMlmReassocRetryReq = NULL;
         }
 #endif
-        limDeactivateAndChangeTimer(pMac, eLIM_REASSOC_FAIL_TIMER);
+
+        /* Dactivate timer when it is not LFR MBB */
+        if (!pMac->ft.ftSmeContext.is_preauth_lfr_mbb)
+            limDeactivateAndChangeTimer(pMac, eLIM_REASSOC_FAIL_TIMER);
     }
 
     if (pAssocRsp->statusCode != eSIR_MAC_SUCCESS_STATUS)
@@ -630,6 +684,9 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
                           pAssocRsp->propIEinfo.alternateRadio.channelId;
         }else
             mlmAssocCnf.resultCode = eSIR_SME_ASSOC_REFUSED;
+
+        if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb)
+            goto assocReject;
 
         // Delete Pre-auth context for the associated BSS
         if (limSearchPreAuthList(pMac, pHdr->sa))
@@ -659,23 +716,31 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
      * assoc/reassoc response
      * NOTE: for BTAMP case, it is being handled in limProcessMlmAssocReq
      */
-    if (!((psessionEntry->bssType == eSIR_BTAMP_STA_MODE) ||
-          ((psessionEntry->bssType == eSIR_BTAMP_AP_MODE) &&
-          (psessionEntry->limSystemRole == eLIM_BT_AMP_STA_ROLE))))
-    {
-            if (limSetLinkState(pMac, eSIR_LINK_POSTASSOC_STATE, psessionEntry->bssId,
-                                psessionEntry->selfMacAddr, NULL, NULL) != eSIR_SUCCESS)
+    if (!pMac->ft.ftSmeContext.is_preauth_lfr_mbb) {
+       if (!((psessionEntry->bssType == eSIR_BTAMP_STA_MODE) ||
+              ((psessionEntry->bssType == eSIR_BTAMP_AP_MODE) &&
+              (psessionEntry->limSystemRole == eLIM_BT_AMP_STA_ROLE))))
+        {
+            if (limSetLinkState(pMac, eSIR_LINK_POSTASSOC_STATE,
+                                psessionEntry->bssId,
+                                psessionEntry->selfMacAddr,
+                                NULL, NULL) != eSIR_SUCCESS)
             {
                 PELOGE(limLog(pMac, LOGE, FL("Set link state to POSTASSOC failed"));)
                 vos_mem_free(pBeaconStruct);
                 vos_mem_free(pAssocRsp);
                 return;
             }
+        }
     }
     if (subType == LIM_REASSOC)
     {
         // Log success
         limLog(pMac, LOG1, FL("Successfully Reassociated with BSS"));
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+        limDiagEventReport(pMac, WLAN_PE_DIAG_ROAM_ASSOC_COMP_EVENT,
+            psessionEntry, eSIR_SUCCESS, eSIR_SUCCESS);
+#endif
 #ifdef FEATURE_WLAN_ESE
         {
             tANI_U8 cnt = 0;
@@ -734,6 +799,21 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
             
             goto assocReject;
         }
+
+#ifdef WLAN_FEATURE_LFR_MBB
+        if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb) {
+            limLog(pMac, LOG1, FL("Reassoc success for LFR MBB in state %d"),
+                   psessionEntry->limMlmState);
+            if (psessionEntry->limMlmState ==
+                             eLIM_MLM_WT_REASSOC_RSP_STATE) {
+                lim_handle_reassoc_mbb_success(pMac, psessionEntry,
+                                               pAssocRsp, pStaDs);
+                return;
+            }
+            goto assocReject;
+        }
+#endif
+
 
 #if defined(WLAN_FEATURE_VOWIFI_11R) || defined (FEATURE_WLAN_ESE) || defined(FEATURE_WLAN_LFR)
         if (psessionEntry->limMlmState == eLIM_MLM_WT_FT_REASSOC_RSP_STATE)
@@ -836,10 +916,22 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
     limUpdateAssocStaDatas(pMac, pStaDs, pAssocRsp,psessionEntry);
     // Extract the AP capabilities from the beacon that was received earlier
     // TODO - Watch out for an error response!
-    limExtractApCapabilities( pMac,
-                            (tANI_U8 *) psessionEntry->pLimJoinReq->bssDescription.ieFields,
-                            limGetIElenFromBssDescription( &psessionEntry->pLimJoinReq->bssDescription ),
-                            pBeaconStruct );
+    limExtractApCapabilities(pMac,
+      (tANI_U8 *) psessionEntry->pLimJoinReq->bssDescription.ieFields,
+      GET_IE_LEN_IN_BSS(psessionEntry->pLimJoinReq->bssDescription.length),
+      pBeaconStruct);
+
+    if (pBeaconStruct->VHTCaps.present)
+        pStaDs->parsed_ies.vht_caps = pBeaconStruct->VHTCaps;
+    if (pBeaconStruct->HTCaps.present)
+        pStaDs->parsed_ies.ht_caps = pBeaconStruct->HTCaps;
+    if (pBeaconStruct->hs20vendor_ie.present)
+        pStaDs->parsed_ies.hs20vendor_ie =
+            pBeaconStruct->hs20vendor_ie;
+    if (pBeaconStruct->HTInfo.present)
+        pStaDs->parsed_ies.ht_operation = pBeaconStruct->HTInfo;
+    if (pBeaconStruct->VHTOperation.present)
+        pStaDs->parsed_ies.vht_operation = pBeaconStruct->VHTOperation;
 
     if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
         limDecideStaProtectionOnAssoc(pMac, pBeaconStruct, psessionEntry);
@@ -850,9 +942,12 @@ limProcessAssocRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U8 sub
         else
             psessionEntry->beaconParams.fShortPreamble = true;
     }
-#ifdef FEATURE_WLAN_DIAG_SUPPORT_LIM //FEATURE_WLAN_DIAG_SUPPORT
-    limDiagEventReport(pMac, WLAN_PE_DIAG_CONNECTED, psessionEntry, 0, 0);
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+    limDiagEventReport(pMac, WLAN_PE_DIAG_CONNECTED, psessionEntry,
+                       eSIR_SUCCESS, eSIR_SUCCESS);
 #endif
+
     if(pAssocRsp->OBSSScanParameters.present)
     {
         limUpdateOBSSScanParams(psessionEntry , &pAssocRsp->OBSSScanParameters);
@@ -918,6 +1013,14 @@ assocReject:
         }
 #endif /* WLAN_FEATURE_VOWIFI_11R */
     } else {
+#ifdef WLAN_FEATURE_LFR_MBB
+        if (pMac->ft.ftSmeContext.is_preauth_lfr_mbb) {
+            lim_handle_reassoc_mbb_fail(pMac, psessionEntry);
+            vos_mem_free(pBeaconStruct);
+            vos_mem_free(pAssocRsp);
+            return;
+        }
+#endif
         limRestorePreReassocState( pMac, 
                   eSIR_SME_REASSOC_REFUSED, mlmAssocCnf.protStatusCode,psessionEntry); 
     }

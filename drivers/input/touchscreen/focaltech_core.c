@@ -1308,108 +1308,19 @@ pwr_off_fail:
 int fts_ts_disable(struct device *dev)
 {
 	struct fts_ts_data *data = dev_get_drvdata(dev);
-	u8 txbuf[2];
-	int i, err;
+
 	if (ts_pwr_disabled) {
 		dev_dbg(dev, "Touch vdd/vcc has been disabled\n");
 		return 0;
 	}
 
 	disable_irq(data->client->irq);
-
-	/* release all touches */
-	for (i = 0; i < data->pdata->num_max_touches; i++) {
-		input_mt_slot(data->input_dev, i);
-		input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, 0);
-	}
-	input_mt_report_pointer_emulation(data->input_dev, false);
-	input_sync(data->input_dev);
-
-	txbuf[0] = FTS_REG_PMODE;
-	txbuf[1] = FTS_PMODE_HIBERNATE;
-	err = fts_write_reg(fts_i2c_client, txbuf[0], txbuf[1]);		 //Entry Hibernate mode
-	printk(KERN_INFO "[fts]%s, FTS_PMODE_HIBERNATE, ret : %d\n", __func__, err);
-#ifdef FTS_POWER_CONTROL
-	if (data->pdata->power_on) {
-		err = data->pdata->power_on(false);
-		if (err) {
-			dev_err(dev, "power off failed");
-			goto pwr_off_fail;
-		}
-	} else {
-		err = fts_power_on(data, false);
-		if (err) {
-			dev_err(dev, "power off failed");
-			goto pwr_off_fail;
-		}
-	}
-
-#ifdef MSM_NEW_VER
-	if (data->ts_pinctrl) {
-		err = pinctrl_select_state(data->ts_pinctrl,
-			data->pinctrl_state_suspend);
-		if (err < 0)
-			dev_err(dev, "Cannot get suspend pinctrl state\n");
-	}
-#endif
-
-#endif
-
-#ifdef FTS_GPIO_CONTROL
-	err = fts_gpio_configure(data, false);
-	if (err < 0) {
-		dev_err(&data->client->dev,
-			"failed to put gpios in suspend state\n");
-		goto gpio_configure_fail;
-	}
-#endif
-
-	if (fts_irq_desc->depth > 0 && fts_wq_running == false) {
-		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__, fts_irq_desc->depth);
-			enable_irq(fts_wq_data->client->irq);
-		suspend_resume_recovery_count++;
-	}
+	fts_power_on(data, false);
 	ts_pwr_disabled = true;
+
 	data->suspended = true;
 
 	return 0;
-
-#ifdef FTS_GPIO_CONTROL
-gpio_configure_fail:
-#endif
-
-#ifdef FTS_POWER_CONTROL
-
-#ifdef MSM_NEW_VER
-	if (data->ts_pinctrl) {
-		err = pinctrl_select_state(data->ts_pinctrl,
-			data->pinctrl_state_active);
-		if (err < 0)
-			dev_err(dev, "Cannot get active pinctrl state\n");
-	}
-#endif
-
-	if (data->pdata->power_on) {
-		err = data->pdata->power_on(true);
-		if (err)
-			dev_err(dev, "power on failed");
-	} else {
-		err = fts_power_on(data, true);
-		if (err)
-			dev_err(dev, "power on failed");
-	}
-pwr_off_fail:
-	if (gpio_is_valid(data->pdata->reset_gpio)) {
-		gpio_set_value_cansleep(data->pdata->reset_gpio, 0);
-		msleep(data->pdata->hard_rst_dly);
-		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
-	}
-#endif
-
-
-	enable_irq(data->client->irq);
-
-	return err;
 
 }
 

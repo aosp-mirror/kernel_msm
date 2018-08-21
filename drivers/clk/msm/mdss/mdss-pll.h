@@ -42,11 +42,11 @@ enum {
 	MDSS_PLL_TARGET_8996,
 	MDSS_PLL_TARGET_8952,
 	MDSS_PLL_TARGET_8937,
-	MDSS_PLL_TARGET_TITANIUM,
+	MDSS_PLL_TARGET_8953,
 	MDSS_PLL_TARGET_8909,
 };
 
-#define DFPS_MAX_NUM_OF_FRAME_RATES 10
+#define DFPS_MAX_NUM_OF_FRAME_RATES 20
 
 struct dfps_panel_info {
 	uint32_t enabled;
@@ -135,8 +135,14 @@ struct mdss_pll_resources {
 
 	/*
 	 * caching the pll trim codes in the case of dynamic refresh
+	 * or cmd mode idle screen.
 	 */
 	int		cache_pll_trim_codes[2];
+
+	/*
+	 * caching the pll trim codes rate
+	 */
+	s64		cache_pll_trim_codes_rate;
 
 	/*
 	 * for maintaining the status of saving trim codes

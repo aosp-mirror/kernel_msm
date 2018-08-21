@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -312,7 +312,8 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 	return rc;
 
 disable_vreg:
-	regulator_set_optimum_mode(in_vreg[i].vreg, in_vreg[i].load[DSS_REG_MODE_DISABLE]);
+	regulator_set_optimum_mode(in_vreg[i].vreg,
+					in_vreg[i].load[DSS_REG_MODE_DISABLE]);
 
 vreg_set_opt_mode_fail:
 	for (i--; i >= 0; i--) {

@@ -32,6 +32,7 @@
 #include <asm/tlbflush.h>
 #include <asm/dma-iommu.h>
 #include <linux/io.h>
+#include <linux/dma-mapping-fast.h>
 
 #include "mm.h"
 
@@ -51,7 +52,7 @@ static pgprot_t __get_dma_pgprot(struct dma_attrs *attrs, pgprot_t prot,
 static struct gen_pool *atomic_pool;
 #define NO_KERNEL_MAPPING_DUMMY 0x2222
 #define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_256K
-static size_t atomic_pool_size = DEFAULT_DMA_COHERENT_POOL_SIZE;
+static size_t atomic_pool_size __initdata = DEFAULT_DMA_COHERENT_POOL_SIZE;
 
 static int __init early_coherent_pool(char *p)
 {
@@ -447,6 +448,7 @@ static void arm64_dma_unremap(struct device *dev, void *remapped_addr,
 {
 	struct vm_struct *area;
 
+	size = PAGE_ALIGN(size);
 	remapped_addr = (void *)((unsigned long)remapped_addr & PAGE_MASK);
 
 	area = find_vm_area(remapped_addr);
@@ -456,6 +458,8 @@ static void arm64_dma_unremap(struct device *dev, void *remapped_addr,
 		return;
 	}
 	vunmap(remapped_addr);
+	flush_tlb_kernel_range((unsigned long)remapped_addr,
+			(unsigned long)(remapped_addr + size));
 }
 
 const struct dma_map_ops noncoherent_swiotlb_dma_ops = {
@@ -681,8 +685,8 @@ static struct page **__iommu_alloc_buffer(struct device *dev, size_t size,
 					  gfp_t gfp, struct dma_attrs *attrs)
 {
 	struct page **pages;
-	int count = size >> PAGE_SHIFT;
-	int array_size = count * sizeof(struct page *);
+	size_t count = size >> PAGE_SHIFT;
+	size_t array_size = count * sizeof(struct page *);
 	int i = 0;
 
 	if (array_size <= PAGE_SIZE)
@@ -870,8 +874,8 @@ void *__iommu_alloc_atomic(struct device *dev, size_t size,
 			dma_addr_t *handle, gfp_t gfp, struct dma_attrs *attrs)
 {
 	struct page **pages;
-	int count = size >> PAGE_SHIFT;
-	int array_size = count * sizeof(struct page *);
+	size_t count = size >> PAGE_SHIFT;
+	size_t array_size = count * sizeof(struct page *);
 	void *addr;
 
 	if (array_size <= PAGE_SIZE)
@@ -1581,14 +1585,23 @@ int arm_iommu_attach_device(struct device *dev,
 			    struct dma_iommu_mapping *mapping)
 {
 	int err;
+	int s1_bypass = 0, is_fast = 0;
+
+	iommu_domain_get_attr(mapping->domain, DOMAIN_ATTR_FAST, &is_fast);
+	if (is_fast)
+		return fast_smmu_attach_device(dev, mapping);
 
 	err = iommu_attach_device(mapping->domain, dev);
 	if (err)
 		return err;
 
+	iommu_domain_get_attr(mapping->domain, DOMAIN_ATTR_S1_BYPASS,
+					&s1_bypass);
+
 	kref_get(&mapping->kref);
 	dev->archdata.mapping = mapping;
-	set_dma_ops(dev, &iommu_ops);
+	if (!s1_bypass)
+		set_dma_ops(dev, &iommu_ops);
 
 	pr_debug("Attached IOMMU controller to %s device.\n", dev_name(dev));
 	return 0;
@@ -1605,10 +1618,17 @@ EXPORT_SYMBOL(arm_iommu_attach_device);
 void arm_iommu_detach_device(struct device *dev)
 {
 	struct dma_iommu_mapping *mapping;
+	int is_fast;
 
 	mapping = to_dma_iommu_mapping(dev);
 	if (!mapping) {
 		dev_warn(dev, "Not attached\n");
+		return;
+	}
+
+	iommu_domain_get_attr(mapping->domain, DOMAIN_ATTR_FAST, &is_fast);
+	if (is_fast) {
+		fast_smmu_detach_device(dev, mapping);
 		return;
 	}
 
