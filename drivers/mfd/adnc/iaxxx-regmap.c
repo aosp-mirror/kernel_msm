@@ -273,6 +273,10 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	if (reg >= IAXXX_TNL_HDR_TNL_OUT_BUF_SIZE_ADDR &&
 			reg <= IAXXX_TNL_HDR_TNL_OUT_BUF_TAIL_ADDR)
 		return true;
+	/* Sensor header registers */
+	if (reg >= IAXXX_SENSOR_HDR_SENSOR_CNT_ADDR &&
+			reg <= IAXXX_SENSOR_HDR_GET_PARAM_REQ_ADDR)
+		return true;
 
 	/* Stream group registers */
 	for (i = 0; i < IAXXX_STRM_MAX; i++) {
