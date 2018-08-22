@@ -70,7 +70,7 @@
 		/* MCLK0 */
 		mux {
 			pins = "gpio13";
-			function = "cam_mclk";
+			function = "gpio";
 		};
 
 		config {
@@ -85,7 +85,7 @@
 		/* MCLK2 */
 		mux {
 			pins = "gpio15";
-			function = "cam_mclk";
+			function = "gpio";
 		};
 
 		config {
