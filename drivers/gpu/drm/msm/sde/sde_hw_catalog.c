@@ -3259,6 +3259,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->sui_block_xin_mask = 0x3F71;
 	} else if (IS_SDM670_TARGET(hw_rev)) {
 		/* update sdm670 target here */
+		sde_cfg->has_cwb_support = true;
 		sde_cfg->has_wb_ubwc = true;
 		sde_cfg->perf.min_prefill_lines = 24;
 		sde_cfg->vbif_qos_nlvl = 8;
