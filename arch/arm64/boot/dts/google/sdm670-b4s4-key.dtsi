@@ -11,14 +11,12 @@
  */
 
 &pm660l_gpios {
-	key_vol_up {
-		key_vol_up_default: key_vol_up_default {
-			pins = "gpio7";
-			function = "normal";
-			qcom,drive-strength = <2>;
-			power-source = <1>;
-			bias-disable;
-		};
+	key_vol_up_default: key_vol_up_default {
+		pins = "gpio7";
+		function = "normal";
+		qcom,drive-strength = <2>;
+		power-source = <1>;
+		bias-disable;
 	};
 };
 
