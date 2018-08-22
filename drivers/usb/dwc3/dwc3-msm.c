@@ -74,6 +74,8 @@ MODULE_PARM_DESC(cpu_to_affin, "affin usb irq to this cpu");
 
 /* XHCI registers */
 #define USB3_HCSPARAMS1		(0x4)
+#define USB3_HCCPARAMS2		(0x1c)
+#define HCC_CTC(p)		((p) & (1 << 3))
 #define USB3_PORTSC		(0x420)
 
 /**
@@ -254,8 +256,10 @@ struct dwc3_msm {
 	struct notifier_block	id_nb;
 	struct notifier_block	eud_event_nb;
 	struct notifier_block	host_restart_nb;
+	struct notifier_block	self_power_nb;
 
 	struct notifier_block	host_nb;
+	bool			xhci_ss_compliance_enable;
 
 	atomic_t                in_p3;
 	unsigned int		lpm_to_suspend_delay;
@@ -295,6 +299,8 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned int event,
 						unsigned int value);
 static int dwc3_restart_usb_host_mode(struct notifier_block *nb,
 					unsigned long event, void *ptr);
+static int dwc3_notify_pd_status(struct notifier_block *nb,
+				unsigned long event, void *ptr);
 
 /**
  *
@@ -3040,11 +3046,18 @@ static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc, int start_idx)
 	if (!IS_ERR(edev)) {
 		mdwc->extcon_vbus = edev;
 		mdwc->vbus_nb.notifier_call = dwc3_msm_vbus_notifier;
+		mdwc->self_power_nb.notifier_call = dwc3_notify_pd_status;
 		ret = extcon_register_notifier(edev, EXTCON_USB,
 				&mdwc->vbus_nb);
 		if (ret < 0) {
 			dev_err(mdwc->dev, "failed to register notifier for USB\n");
 			return ret;
+		}
+		ret = extcon_register_blocking_notifier(edev, EXTCON_USB,
+							&mdwc->self_power_nb);
+		if (ret < 0) {
+			dev_err(mdwc->dev, "failed to register blocking notifier\n");
+			goto err1;
 		}
 	}
 
@@ -3287,7 +3300,6 @@ static ssize_t usb_compliance_mode_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(usb_compliance_mode);
 
-
 static ssize_t auto_vbus_src_sel_threshold_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -3313,6 +3325,34 @@ static ssize_t auto_vbus_src_sel_threshold_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(auto_vbus_src_sel_threshold);
 
+static ssize_t xhci_link_compliance_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+
+	if (mdwc->xhci_ss_compliance_enable)
+		return snprintf(buf, PAGE_SIZE, "y\n");
+	else
+		return snprintf(buf, PAGE_SIZE, "n\n");
+}
+
+static ssize_t xhci_link_compliance_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	bool value;
+	int ret;
+
+	ret = strtobool(buf, &value);
+	if (!ret) {
+		mdwc->xhci_ss_compliance_enable = value;
+		return count;
+	}
+
+	return ret;
+}
+
+static DEVICE_ATTR_RW(xhci_link_compliance);
 
 static int dwc3_msm_probe(struct platform_device *pdev)
 {
@@ -3680,6 +3720,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	device_create_file(&pdev->dev, &dev_attr_speed);
 	device_create_file(&pdev->dev, &dev_attr_usb_compliance_mode);
 	device_create_file(&pdev->dev, &dev_attr_auto_vbus_src_sel_threshold);
+	device_create_file(&pdev->dev, &dev_attr_xhci_link_compliance);
 
 	host_mode = usb_get_dr_mode(&mdwc->dwc3->dev) == USB_DR_MODE_HOST;
 	if (!dwc->is_drd && host_mode) {
@@ -3721,7 +3762,7 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	device_remove_file(&pdev->dev, &dev_attr_speed);
 	device_remove_file(&pdev->dev, &dev_attr_usb_compliance_mode);
 	device_remove_file(&pdev->dev, &dev_attr_auto_vbus_src_sel_threshold);
-
+	device_remove_file(&pdev->dev, &dev_attr_xhci_link_compliance);
 	if (mdwc->usb_psy)
 		power_supply_put(mdwc->usb_psy);
 
@@ -4041,6 +4082,25 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		}
 
 		/*
+		 * If the Compliance Transition Capability(CTC) flag of
+		 * HCCPARAMS2 register is set and xhci_link_compliance sysfs
+		 * param has been enabled by the user for the SuperSpeed host
+		 * controller, then write 10 (Link in Compliance Mode State)
+		 * onto the Port Link State(PLS) field of the PORTSC register
+		 * for 3.0 host controller which is at an offset of USB3_PORTSC
+		 * + 0x10 from the DWC3 base address. Also, disable the runtime
+		 * PM of 3.0 root hub (root hub of shared_hcd of xhci device)
+		 */
+		if (HCC_CTC(dwc3_msm_read_reg(mdwc->base, USB3_HCCPARAMS2))
+				&& mdwc->xhci_ss_compliance_enable
+				&& dwc->maximum_speed == USB_SPEED_SUPER) {
+			dwc3_msm_write_reg(mdwc->base, USB3_PORTSC + 0x10,
+					0x10340);
+			pm_runtime_disable(&hcd_to_xhci(platform_get_drvdata(
+				dwc->xhci))->shared_hcd->self.root_hub->dev);
+		}
+
+		/*
 		 * In some cases it is observed that USB PHY is not going into
 		 * suspend with host mode suspend functionality. Hence disable
 		 * XHCI's runtime PM here if disable_host_mode_pm is set.
@@ -4188,6 +4248,28 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		atomic_read(&mdwc->dev->power.usage_count));
 
 	return 0;
+}
+
+static int dwc3_notify_pd_status(struct notifier_block *nb,
+				unsigned long event, void *ptr)
+{
+	struct dwc3_msm *mdwc;
+	struct dwc3 *dwc;
+	int ret = 0;
+	union extcon_property_value val;
+
+	mdwc = container_of(nb, struct dwc3_msm, self_power_nb);
+	dwc = platform_get_drvdata(mdwc->dwc3);
+
+	ret = extcon_get_property(mdwc->extcon_vbus, EXTCON_USB,
+					EXTCON_PROP_USB_PD_CONTRACT, &val);
+
+	if (!ret)
+		dwc->gadget.self_powered = val.intval;
+	else
+		dwc->gadget.self_powered = 0;
+
+	return ret;
 }
 
 /* speed: 0 - USB_SPEED_HIGH, 1 - USB_SPEED_SUPER */

@@ -1930,7 +1930,6 @@ static void sde_encoder_input_event_handler(struct input_handle *handle,
 				&sde_enc->input_event_work);
 }
 
-
 static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 		u32 sw_event)
 {
@@ -2701,12 +2700,14 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 	struct msm_compression_info *comp_info = NULL;
 	struct drm_display_mode *cur_mode = NULL;
 	struct msm_mode_info mode_info;
+	struct msm_display_info *disp_info;
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder\n");
 		return;
 	}
 	sde_enc = to_sde_encoder_virt(drm_enc);
+	disp_info = &sde_enc->disp_info;
 
 	if (!sde_kms_power_resource_is_enabled(drm_enc->dev)) {
 		SDE_ERROR("power resource is not enabled\n");
@@ -2834,6 +2835,7 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 		input_unregister_handler(sde_enc->input_handler);
 
 	kthread_cancel_work_sync(&sde_enc->input_event_work);
+
 	/*
 	 * For primary command mode encoders, execute the resource control
 	 * pre-stop operations before the physical encoders are disabled, to
