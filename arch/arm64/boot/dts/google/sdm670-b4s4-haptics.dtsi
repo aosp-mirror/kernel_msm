@@ -1,3 +1,30 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
+&tlmm {
+	drv2624_rst: drv2624_rst {
+		mux {
+			pins = "gpio24";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio24";
+			drive-strength = <2>;
+			bias-disable;
+			output-low;
+		};
+	};
+};
+
 &pm660_haptics {
 	status = "disabled";
 };
@@ -8,6 +35,8 @@
 	drv2624@5a {
 		compatible = "ti,drv2624";
 		reg = <0x5a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&drv2624_rst>;
 		ti,reset-gpio = <&tlmm 24 0>;
 		ti,smart-loop = <0>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
