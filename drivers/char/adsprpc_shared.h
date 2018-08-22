@@ -27,6 +27,7 @@
 #define FASTRPC_IOCTL_GETINFO	_IOWR('R', 8, uint32_t)
 #define FASTRPC_IOCTL_GETPERF	_IOWR('R', 9, struct fastrpc_ioctl_perf)
 #define FASTRPC_IOCTL_INIT_ATTRS _IOWR('R', 10, struct fastrpc_ioctl_init_attrs)
+#define FASTRPC_IOCTL_CONTROL	_IOWR('R', 12, struct fastrpc_ioctl_control)
 
 #define FASTRPC_GLINK_GUID "fastrpcglink-apps-dsp"
 #define FASTRPC_SMD_GUID "fastrpcsmd-apps-dsp"
@@ -184,6 +185,19 @@ struct fastrpc_ioctl_perf {			/* kernel performance data */
 	uint32_t numkeys;
 	uintptr_t keys;
 };
+
+#define FASTRPC_CONTROL_KALLOC (3)
+struct fastrpc_ctrl_kalloc {
+	uint32_t kalloc_support; /* Remote memory allocation from kernel */
+};
+
+struct fastrpc_ioctl_control {
+	uint32_t req;
+	union {
+		struct fastrpc_ctrl_kalloc kalloc;
+	};
+};
+
 
 struct smq_null_invoke {
 	uint64_t ctx;			/* invoke caller context */
