@@ -2796,6 +2796,8 @@ static void sec_ts_suspend_work(struct work_struct *work)
 
 	ts->power_status = SEC_TS_STATE_SUSPEND;
 
+	sec_ts_pinctrl_configure(ts, false);
+
 	sec_set_switch_gpio(ts, SEC_SWITCH_GPIO_VALUE_SLPI_MASTER);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
@@ -2822,6 +2824,8 @@ static void sec_ts_resume_work(struct work_struct *work)
 #endif
 
 	sec_set_switch_gpio(ts, SEC_SWITCH_GPIO_VALUE_AP_MASTER);
+
+	sec_ts_pinctrl_configure(ts, true);
 
 	if (ts->power_status == SEC_TS_STATE_POWER_ON) {
 		input_err(true, &ts->client->dev, "%s: already resumed.\n",
