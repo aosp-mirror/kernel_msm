@@ -1332,7 +1332,7 @@ static int pac193x_chip_configure(struct pac193x_chip_info *chip_info)
 		goto chip_configure_err;
 	}
 	/* send a REFRESH to the chip, so the new settings take place
-	 * as well as reseting the accumulators
+	 * as well as resetting the accumulators
 	 */
 	ret = pac193x_i2c_send_byte(chip_info->client, PAC193X_REFRESH_REG);
 	if (ret < 0) {
