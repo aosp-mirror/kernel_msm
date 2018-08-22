@@ -39,7 +39,10 @@
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 static struct abc_device *abc_dev;
 
-int pcie_config_read(u32 offset, u32 len, u32 *data)
+static int tpu_config_read(u32 offset, u32 len, u32 *data);
+static int tpu_config_write(u32 offset, u32 len, u32 data);
+
+int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
@@ -86,7 +89,7 @@ int pcie_config_read(u32 offset, u32 len, u32 *data)
 	return 0;
 }
 
-int pcie_config_write(u32 offset, u32 len, u32 data)
+int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
@@ -175,7 +178,7 @@ int ipu_config_write(u32 offset, u32 len, u32 data)
 	return 0;
 }
 
-int tpu_config_read(u32 offset, u32 len, u32 *data)
+static int tpu_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
@@ -187,7 +190,7 @@ int tpu_config_read(u32 offset, u32 len, u32 *data)
 	return 0;
 }
 
-int tpu_config_write(u32 offset, u32 len, u32 data)
+static int tpu_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 
@@ -671,21 +674,21 @@ static int abc_pcie_ipu_tpu_enable(void)
 {
 	int err;
 
-	err = pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_IPU, 4,
+	err = abc_pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_IPU, 4,
 			0x00000001);
 	if (WARN_ON(err < 0))
 		return err;
 
-	err = pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_TPU, 4,
+	err = abc_pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_TPU, 4,
 			0x00000001);
 	if (WARN_ON(err < 0))
 		return err;
 
-	err = pcie_config_write(REG_PCIe_INIT, 4, 0x00000001);
+	err = abc_pcie_config_write(REG_PCIe_INIT, 4, 0x00000001);
 	if (WARN_ON(err < 0))
 		return err;
 
-	err = pcie_config_write(PMU_CONTROL, 4, PMU_CONTROL_PHY_RET_OFF |
+	err = abc_pcie_config_write(PMU_CONTROL, 4, PMU_CONTROL_PHY_RET_OFF |
 			PMU_CONTROL_BLK_TPU_UP_REQ |
 			PMU_CONTROL_BLK_IPU_UP_REQ);
 	if (WARN_ON(err < 0))
@@ -695,36 +698,36 @@ static int abc_pcie_ipu_tpu_enable(void)
 	msleep(1);
 
 	/* Reduce AON clk to 233MHz to safely make IPU/TPU APB clk changes */
-	err = pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0x00000003);
+	err = abc_pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0x00000003);
 	if (WARN_ON(err < 0))
 		return err;
 
-	err = pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_IPU, 4, 0x00000003);
+	err = abc_pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_IPU, 4, 0x00000003);
 	if (WARN_ON(err < 0))
 		return err;
 
-	err = pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_TPU, 4, 0x00000003);
+	err = abc_pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_TPU, 4, 0x00000003);
 	if (WARN_ON(err < 0))
 		return err;
 
 	/* Configure IPU PLL for 549 MHz */
-	err = pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0203);
+	err = abc_pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0203);
 	if (WARN_ON(err < 0))
 		return err;
 
 	/* TODO(basso):  Determine the proper timeout here. */
 	msleep(1);
 
-	err = pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0213);
+	err = abc_pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0213);
 	if (WARN_ON(err < 0))
 		return err;
 
-	err = pcie_config_write(CLK_CON_MUX_MOUT_AONCLK_PLLCLK1, 4, 0x1);
+	err = abc_pcie_config_write(CLK_CON_MUX_MOUT_AONCLK_PLLCLK1, 4, 0x1);
 	if (WARN_ON(err < 0))
 		return err;
 
 	/* Restore AON clk to 933MHz */
-	err = pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0);
+	err = abc_pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0);
 	if (WARN_ON(err < 0))
 		return err;
 

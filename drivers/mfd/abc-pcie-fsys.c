@@ -85,7 +85,7 @@ static long abc_fsys_ioctl(struct file *fp, unsigned int cmd,
 			pr_err("Error in CR Copying\n");
 			return -1;
 		}
-		ret = pcie_config_read(cr.offset, cr.len, &data);
+		ret = abc_pcie_config_read(cr.offset, cr.len, &data);
 		if (copy_to_user((void __user *)cr.data, &data, sizeof(data))) {
 			pr_err("Error copying into CR data\n");
 			return -EFAULT;
@@ -96,7 +96,7 @@ static long abc_fsys_ioctl(struct file *fp, unsigned int cmd,
 			pr_err("Error in CW Copying\n");
 			return -1;
 		}
-		ret = pcie_config_write(cw.offset, cw.len, cw.data);
+		ret = abc_pcie_config_write(cw.offset, cw.len, cw.data);
 		break;
 	case ABC_PCIE_SET_IB_IATU:
 		if (copy_from_user(&ir, (void __user *) arg, sizeof(ir))) {

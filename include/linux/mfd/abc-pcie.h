@@ -242,14 +242,12 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 #define ABC_PCIE_SET_WR_DMA         _IOW('P', 0x7, struct abc_dma_desc)
 
 
-int pcie_config_read(u32 offset, u32 len, u32 *data);
-int pcie_config_write(u32 offset, u32 len, u32 data);
+int abc_pcie_config_read(u32 offset, u32 len, u32 *data);
+int abc_pcie_config_write(u32 offset, u32 len, u32 data);
 int aon_config_read(u32 offset, u32 len, u32 *data);
 int aon_config_write(u32 offset, u32 len, u32 data);
 int ipu_config_read(u32 offset, u32 len, u32 *data);
 int ipu_config_write(u32 offset, u32 len, u32 data);
-int tpu_config_read(u32 offset, u32 len, u32 *data);
-int tpu_config_write(u32 offset, u32 len, u32 data);
 int ddr_config_read(u32 offset, u32 len, u32 *data);
 int ddr_config_write(u32 offset, u32 len, u32 data);
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan);
