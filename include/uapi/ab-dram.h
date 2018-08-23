@@ -1,5 +1,5 @@
 /*
- * Driver interface for the Paintbox Image Processing Unit
+ * Driver interface for the Airbrush DRAM Manager
  *
  * Copyright (C) 2018 Google, Inc.
  *

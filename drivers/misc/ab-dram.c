@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
+#include <uapi/ab-dram.h>
 
 #define AIRBRUSH_DRAM_START_PADDR 0x20000000
 #define AIRBRUSH_DRAM_SIZE (512UL << 20)
@@ -55,9 +56,10 @@ struct ab_dram_dma_buf_attachment {
  * struct ab_dram_buffer - metadata for a particular buffer
  * @dev_data:		back pointer to the ab_dram_data
  * @size:		size of the buffer
- * @paddr:		physical address in Airbrush memory space
+ * @ab_paddr:		physical address in Airbrush memory space
  * @lock:		Lock used for buffer access synchronization
  * @sg_table:		the sg table for the buffer
+ * @attachments:	list of dma_buf attachments for the buffer
  */
 struct ab_dram_buffer {
 	struct ab_dram_data *dev_data;
@@ -254,7 +256,7 @@ static int ab_dram_dma_buf_attach(struct dma_buf *dmabuf, struct device *dev,
 	return 0;
 }
 
-static void ab_dram_dma_buf_detatch(struct dma_buf *dmabuf,
+static void ab_dram_dma_buf_detach(struct dma_buf *dmabuf,
 				struct dma_buf_attachment *attachment)
 {
 	struct ab_dram_dma_buf_attachment *abd_attach = attachment->priv;
@@ -288,7 +290,7 @@ static const struct dma_buf_ops dma_buf_ops = {
 	.unmap_dma_buf = ab_dram_unmap_dma_buf,
 	.release = ab_dram_dma_buf_release,
 	.attach = ab_dram_dma_buf_attach,
-	.detach = ab_dram_dma_buf_detatch,
+	.detach = ab_dram_dma_buf_detach,
 	.map = ab_dram_dma_buf_kmap,
 	.map_atomic = ab_dram_dma_buf_kmap,
 	.mmap = ab_dram_mmap,

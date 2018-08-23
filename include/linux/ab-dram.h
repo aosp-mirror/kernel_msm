@@ -17,7 +17,7 @@
 #define __AB_DRAM_H__
 
 #include <linux/dma-buf.h>
-#include <uapi/ab-dram.h>
+#include <linux/types.h>
 
 struct dma_buf *ab_dram_alloc_dma_buf_kernel(size_t len);
 void ab_dram_free_dma_buf_kernel(struct dma_buf *dmabuf);
