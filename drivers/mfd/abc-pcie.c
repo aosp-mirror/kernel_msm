@@ -437,9 +437,12 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 	current_linkspeed = abc_pcie_get_linkspeed();
 	current_linkstate = abc_pcie_get_linkstate();
 
-	if (current_linkspeed == target_linkspeed &&
-	    current_linkstate == target_linkstate) {
-		return -EINVAL;
+	/* TODO(alexperez) Add retry logic here.
+	 * State change may not happen immediately.
+	 */
+	if (current_linkspeed != target_linkspeed ||
+	    current_linkstate != target_linkstate) {
+		return -EAGAIN;
 	}
 	return 0;
 }
