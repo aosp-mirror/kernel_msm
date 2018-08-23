@@ -12,20 +12,24 @@
 
 &vendor {
 	s4_batterydata: qcom,battery-data {
-		qcom,batt-id-range-pct = <15>;
+		qcom,batt-id-range-pct = <10>;
+		/* NVT using ATL cell - 10k
+		 * Deasy using ATL cell - 22k
+		 * Deasy using COS cell - 47k
+		 */
 		#include "batterydata-qcom-s4-10k.dtsi"
 		#include "batterydata-qcom-s4-22k.dtsi"
-		#include "batterydata-qcom-s4-33k.dtsi"
 		#include "batterydata-qcom-s4-47k.dtsi"
 	};
 };
 
 &pm660_fg {
 	qcom,battery-data = <&s4_batterydata>;
-	qcom,fg-chg-term-current = <145>;
-	qcom,fg-sys-term-current = <(-181)>;
+	qcom,fg-chg-term-current = <150>;
+	qcom,fg-sys-term-current = <(-188)>;
+	qcom,fastchg-current-ma = <3000>;
 };
 
-&pm660_charger {
-	qcom,battery-data = <&s4_batterydata>;
+&google_charger {
+	google,chg-battery-capacity = <3000>;
 };

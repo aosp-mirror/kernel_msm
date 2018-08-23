@@ -4,7 +4,6 @@ qcom,b4-47k {
 	/* #3353414_Google_C1SWDATL_3480mAh_averaged_MasterSlave_Mar23rd2018*/
 	qcom,max-voltage-uv = <4400000>;
 	qcom,nom-batt-capacity-mah = <3480>;
-	qcom,fastchg-current-ma = <3700>; //tmp
 	qcom,batt-id-kohm = <47>;
 	qcom,battery-beta = <4360>;
 	qcom,fg-cc-cv-threshold-mv = <4390>;

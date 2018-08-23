@@ -1,3 +1,39 @@
+
+&pm660_charger {
+	google,boost_to_5_1V;
+	google,usb-port-tz-name = "usbc-therm-adc";
+	google,low-batt-threshold = <2>;
+	qcom,hvdcp-disable;
+};
+
 &pm660_fg {
+	qcom,battery-thermal-coefficients = [d8 50 ff];
+	qcom,cl-max-decrement = <5>;
+	qcom,hold-soc-while-full;
+	qcom,linearize-soc;
+	qcom,fg-cutoff-voltage = <3300>;
+	qcom,fg-empty-voltage = <2600>;
+	qcom,fg-jeita-hyst-temp = <1>;
+	qcom,fg-jeita-thresholds = <0 0 55 55>;
 	qcom,fg-force-load-profile;
+};
+
+&soc {
+	google_charger: google,charger {
+		compatible = "google,charger";
+		google,chg-power-supply = "battery";
+		google,bat-power-supply = "bms";
+		google,chg-update-interval = <30000>;
+		google,chg-cv-limits = <4200000 4300000 4400000>;
+		google,chg-temp-limits = <0 100 200 420 460 480 550>;
+		google,chg-cc-limits = <
+			 30  10   0
+			 50  30  30
+			100  70  50
+			 80  50  50
+			 50  50   0
+			 30   0   0
+		>;
+		google,chg-cc-tolerance = <25>;
+	};
 };
