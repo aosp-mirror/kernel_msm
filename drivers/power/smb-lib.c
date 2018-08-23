@@ -23,6 +23,8 @@
 #include "smb-reg.h"
 #include "battery.h"
 #include "storm-watch.h"
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
 
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
@@ -362,6 +364,34 @@ static int smblib_set_opt_freq_buck(struct smb_charger *chg, int fsw_khz)
 	}
 
 	return rc;
+}
+
+#define NORMAL_TEMP 420
+#define OVERHEAT_TEMP 450
+static int batt_temp = 0;
+static bool wpc_enabled = 1;
+static bool therm_work_ongoing = 0;
+static void smblib_vbatt_therm_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+							vbatt_therm_work.work);
+
+	if (batt_temp >= OVERHEAT_TEMP && wpc_enabled) {
+		if (gpio_is_valid(chg->wpc_en_gpio)) {
+			gpio_set_value(chg->wpc_en_gpio, 1);
+			wpc_enabled = 0;
+			pr_info("smblib_vbatt_therm_work: disable WPC \n");
+		}
+	} else if (batt_temp <= NORMAL_TEMP && !wpc_enabled) {
+		if (gpio_is_valid(chg->wpc_en_gpio)) {
+			gpio_set_value(chg->wpc_en_gpio, 0);
+			wpc_enabled = 1;
+			pr_info("smblib_vbatt_therm_work: enable WPC \n");
+			therm_work_ongoing = 0;
+			return;
+		}
+	}
+	schedule_delayed_work(&chg->vbatt_therm_work, msecs_to_jiffies(20000));
 }
 
 int smblib_set_charge_param(struct smb_charger *chg,
@@ -1828,6 +1858,11 @@ int smblib_get_prop_batt_temp(struct smb_charger *chg,
 
 	rc = power_supply_get_property(chg->bms_psy,
 				       POWER_SUPPLY_PROP_TEMP, val);
+	batt_temp = val->intval;
+	if (batt_temp > NORMAL_TEMP && !therm_work_ongoing) {
+		schedule_delayed_work(&chg->vbatt_therm_work, msecs_to_jiffies(1000));
+		therm_work_ongoing = 1;
+	}
 	return rc;
 }
 
@@ -4771,6 +4806,7 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+	INIT_DELAYED_WORK(&chg->vbatt_therm_work, smblib_vbatt_therm_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
 

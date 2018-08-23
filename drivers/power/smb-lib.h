@@ -286,6 +286,7 @@ struct smb_charger {
 	struct work_struct	legacy_detection_work;
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
+	struct delayed_work	vbatt_therm_work;
 
 	/* cached status */
 	int			voltage_min_uv;
@@ -321,6 +322,7 @@ struct smb_charger {
 	bool			skip_usb_notification;
 	u32			jeita_status;
 	u8			float_cfg;
+	int			wpc_en_gpio;
 
 	/* workaround flag */
 	u32			wa_flags;
