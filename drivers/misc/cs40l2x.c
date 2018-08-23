@@ -63,6 +63,7 @@ struct cs40l2x_private {
 	unsigned int diag_dig_scale;
 	unsigned int f0_measured;
 	unsigned int redc_measured;
+	unsigned int q_index;
 	struct cs40l2x_pbq_pair pbq_pairs[CS40L2X_PBQ_DEPTH_MAX];
 	struct hrtimer pbq_timer;
 	unsigned int pbq_depth;
@@ -765,6 +766,36 @@ static ssize_t cs40l2x_redc_stored_store(struct device *dev,
 	return count;
 }
 
+static ssize_t cs40l2x_q_index_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+
+	if (!cs40l2x->q_index)
+		return -ENODATA;
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", cs40l2x->q_index);
+}
+
+static ssize_t cs40l2x_q_index_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int q_index;
+
+	ret = kstrtou32(buf, 10, &q_index);
+	if (ret)
+		return -EINVAL;
+	if (q_index > CS40L2X_Q_INDEX_MAX)
+		return -EINVAL;
+
+	cs40l2x->q_index = q_index;
+
+	return count;
+}
+
 static ssize_t cs40l2x_comp_enable_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -1110,6 +1141,7 @@ static DEVICE_ATTR(f0_stored, 0660, cs40l2x_f0_stored_show,
 static DEVICE_ATTR(redc_measured, 0660, cs40l2x_redc_measured_show, NULL);
 static DEVICE_ATTR(redc_stored, 0660, cs40l2x_redc_stored_show,
 		cs40l2x_redc_stored_store);
+static DEVICE_ATTR(q_index, 0660, cs40l2x_q_index_show, cs40l2x_q_index_store);
 static DEVICE_ATTR(comp_enable, 0660, cs40l2x_comp_enable_show,
 		cs40l2x_comp_enable_store);
 static DEVICE_ATTR(dig_scale, 0660, cs40l2x_dig_scale_show,
@@ -1133,6 +1165,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_f0_stored.attr,
 	&dev_attr_redc_measured.attr,
 	&dev_attr_redc_stored.attr,
+	&dev_attr_q_index.attr,
 	&dev_attr_comp_enable.attr,
 	&dev_attr_dig_scale.attr,
 	&dev_attr_gpio1_dig_scale.attr,
@@ -2241,7 +2274,8 @@ err_rls_fw:
 }
 
 static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x,
-		int boost_ind, int boost_cap, int boost_ipk)
+		int boost_ind, int boost_cap, int boost_ipk,
+		int boost_lim_en, int boost_vol, int boost_ovp_vol)
 {
 	int ret;
 	unsigned char bst_lbst_val, bst_cbst_range, bst_ipk_scaled;
@@ -2334,6 +2368,30 @@ static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x,
 		return ret;
 	}
 
+	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL2,
+			CS40L2X_BST_CTL_LIM_EN_MASK,
+			boost_lim_en << CS40L2X_BST_CTL_LIM_EN_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to enables BST_CTL\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL1,
+			CS40L2X_BST_CTL_MASK,
+			boost_vol << CS40L2X_BST_CTL_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to limit VBST target voltage\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_OVERVOLT_CTRL,
+			CS40L2X_BST_OVP_THLD_MASK,
+			boost_ovp_vol << CS40L2X_BST_OVP_THLD_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to enable over-voltage protection\n");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -2418,7 +2476,9 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 	}
 
 	ret = cs40l2x_boost_config(cs40l2x, cs40l2x->pdata.boost_ind,
-			cs40l2x->pdata.boost_cap, cs40l2x->pdata.boost_ipk);
+			cs40l2x->pdata.boost_cap, cs40l2x->pdata.boost_ipk,
+			cs40l2x->pdata.boost_lim_en, cs40l2x->pdata.boost_vol,
+			cs40l2x->pdata.boost_ovp_vol);
 	if (ret)
 		return ret;
 
@@ -2617,6 +2677,27 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 		return -EINVAL;
 	}
 	pdata->boost_ipk = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,boost-ctl-lim-en", &out_val);
+	if (ret) {
+		dev_err(dev, "Boost converter target control not specified\n");
+		return -EINVAL;
+	}
+	pdata->boost_lim_en = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,boost-ctl-millivolt", &out_val);
+	if (ret) {
+		dev_err(dev, "Boost control maximum limit not specified\n");
+		return -EINVAL;
+	}
+	pdata->boost_vol = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,boost-ovp-millivolt", &out_val);
+	if (ret) {
+		dev_err(dev, "Boost overvoltage protection limit not specified\n");
+		return -EINVAL;
+	}
+	pdata->boost_ovp_vol = out_val;
 
 	pdata->refclk_gpio2 = of_property_read_bool(np, "cirrus,refclk-gpio2");
 

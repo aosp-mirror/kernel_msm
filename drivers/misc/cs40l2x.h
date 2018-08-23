@@ -614,6 +614,14 @@
 #define CS40L2X_BST_LBST_VAL_MASK	0x00000003
 #define CS40L2X_BST_LBST_VAL_SHIFT	0
 
+#define CS40L2X_BST_CTL_MASK		0x000000FF
+#define CS40L2X_BST_CTL_SHIFT		0
+#define CS40L2X_BST_CTL_LIM_EN_MASK	0x00000004
+#define CS40L2X_BST_CTL_LIM_EN_SHIFT	2
+
+#define CS40L2X_BST_OVP_THLD_MASK	0x0000003F
+#define CS40L2X_BST_OVP_THLD_SHIFT	0
+
 #define CS40L2X_AMP_VOL_PCM_MASK	0x00003FF8
 #define CS40L2X_AMP_VOL_PCM_SHIFT	3
 
@@ -760,6 +768,8 @@
 #define CS40L2X_ENDPLAYBACK_RETRIES	10
 #define CS40L2X_ENDPLAYBACK_REQ		1
 #define CS40L2X_ENDPLAYBACK_ACK		0
+
+#define CS40L2X_Q_INDEX_MAX 		18
 
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
