@@ -51,4 +51,9 @@ struct abc_pcie_devdata {
 	struct iatu_bar_mapping iatu_mappings;
 };
 
+/* DISABLE for 0, ENABLE for 1 */
+enum {
+	ABC_PCIE_PM_DISABLE,
+	ABC_PCIE_PM_ENABLE
+};
 #endif

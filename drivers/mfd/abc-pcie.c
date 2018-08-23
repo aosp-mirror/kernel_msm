@@ -368,33 +368,32 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 	struct abc_pcie_pm_ctrl smctrl;
 	u32 current_linkstate;
 
-	smctrl.l0s_en = 0;
-	smctrl.l1_en = 0;
-	smctrl.aspm_L11 = 0;
-	smctrl.aspm_L12 = 0;
+	smctrl.l0s_en = ABC_PCIE_PM_DISABLE;
+	smctrl.l1_en = ABC_PCIE_PM_DISABLE;
+	smctrl.aspm_L11 = ABC_PCIE_PM_DISABLE;
+	smctrl.aspm_L12 = ABC_PCIE_PM_DISABLE;
 
 	current_linkstate = abc_pcie_get_linkstate();
 	if (target_linkstate == current_linkstate)
 		return;
 
-	if (target_linkstate == NOASPM) {
-		abc_set_pcie_pm_ctrl(&smctrl);
+	switch (target_linkstate) {
+	case PM_L2:
 		return;
-	}
-	/* Invalid Link State */
-	if (target_linkstate ==  PM_L2)
-		return;
-
-	if (target_linkstate == ASPM_L0s) {
-		smctrl.l0s_en = 1;
-	} else {
-		if (target_linkstate == ASPM_L11) {
-			smctrl.l1_en = 1;
-			smctrl.aspm_L11 = 1;
-		} else if (target_linkstate == ASPM_L12) {
-			smctrl.l1_en = 1;
-			smctrl.aspm_L12 = 1;
-		}
+	case ASPM_L0s:
+		smctrl.l0s_en = ABC_PCIE_PM_ENABLE;
+		break;
+	case ASPM_L11:
+		smctrl.l1_en = ABC_PCIE_PM_ENABLE;
+		smctrl.aspm_L11 = ABC_PCIE_PM_ENABLE;
+		break;
+	case ASPM_L12:
+		smctrl.l1_en = ABC_PCIE_PM_ENABLE;
+		smctrl.aspm_L12 = ABC_PCIE_PM_ENABLE;
+		break;
+	case NOASPM:
+	default:
+		break;
 	}
 	abc_set_pcie_pm_ctrl(&smctrl);
 }
