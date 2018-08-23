@@ -20,6 +20,7 @@
 #define trace_gasket_ioctl_integer_data(x)
 #define trace_gasket_ioctl_eventfd_data(x, ...)
 #define trace_gasket_ioctl_page_table_data(x, ...)
+#define trace_gasket_ioctl_page_table_flags_data(x, ...)
 #define trace_gasket_ioctl_config_coherent_allocator(x, ...)
 #endif
 
@@ -130,29 +131,57 @@ static int gasket_partition_page_table(
 }
 
 /* Map a userspace buffer to a device virtual address. */
+static int gasket_map_buffers_common(struct gasket_dev *gasket_dev,
+				     struct gasket_page_table_ioctl_flags
+				     *pibuf)
+{
+	if (pibuf->base.page_table_index >= gasket_dev->num_page_tables)
+		return -EFAULT;
+
+	if (gasket_page_table_are_addrs_bad(gasket_dev->page_table[pibuf->base.page_table_index],
+					    pibuf->base.host_address,
+					    pibuf->base.device_address,
+					    pibuf->base.size))
+		return -EINVAL;
+
+	return gasket_page_table_map(gasket_dev->page_table[pibuf->base.page_table_index],
+				     pibuf->base.host_address,
+				     pibuf->base.device_address,
+				     pibuf->base.size / PAGE_SIZE,
+				     pibuf->flags, true);
+}
+
 static int gasket_map_buffers(struct gasket_dev *gasket_dev,
 			      struct gasket_page_table_ioctl __user *argp)
 {
-	struct gasket_page_table_ioctl ibuf;
+	struct gasket_page_table_ioctl_flags ibuf;
 
 	if (copy_from_user(&ibuf, argp, sizeof(struct gasket_page_table_ioctl)))
 		return -EFAULT;
 
-	trace_gasket_ioctl_page_table_data(ibuf.page_table_index, ibuf.size,
-					   ibuf.host_address,
-					   ibuf.device_address);
+	ibuf.flags = 0;
+	trace_gasket_ioctl_page_table_data(ibuf.base.page_table_index,
+					   ibuf.base.size,
+					   ibuf.base.host_address,
+					   ibuf.base.device_address);
 
-	if (ibuf.page_table_index >= gasket_dev->num_page_tables)
+	return gasket_map_buffers_common(gasket_dev, &ibuf);
+}
+
+static int gasket_map_buffers_flags(struct gasket_dev *gasket_dev,
+				    struct gasket_page_table_ioctl_flags __user *argp)
+{
+	struct gasket_page_table_ioctl_flags ibuf;
+
+	if (copy_from_user(&ibuf, argp, sizeof(struct gasket_page_table_ioctl_flags)))
 		return -EFAULT;
 
-	if (gasket_page_table_are_addrs_bad(gasket_dev->page_table[ibuf.page_table_index],
-					    ibuf.host_address,
-					    ibuf.device_address, ibuf.size))
-		return -EINVAL;
-
-	return gasket_page_table_map(gasket_dev->page_table[ibuf.page_table_index],
-				     ibuf.host_address, ibuf.device_address,
-				     ibuf.size / PAGE_SIZE, true);
+	trace_gasket_ioctl_page_table_flags_data(ibuf.base.page_table_index,
+						 ibuf.base.size,
+						 ibuf.base.host_address,
+						 ibuf.base.device_address,
+						 ibuf.flags);
+	return gasket_map_buffers_common(gasket_dev, &ibuf);
 }
 
 /* Unmap a userspace buffer from a device virtual address. */
@@ -252,6 +281,7 @@ static bool gasket_ioctl_check_permissions(struct file *filp, uint cmd)
 		return alive && write;
 
 	case GASKET_IOCTL_MAP_BUFFER:
+	case GASKET_IOCTL_MAP_BUFFER_FLAGS:
 	case GASKET_IOCTL_UNMAP_BUFFER:
 		return alive && write;
 
@@ -336,6 +366,9 @@ long gasket_handle_ioctl(struct file *filp, uint cmd, void __user *argp)
 	case GASKET_IOCTL_MAP_BUFFER:
 		retval = gasket_map_buffers(gasket_dev, argp);
 		break;
+	case GASKET_IOCTL_MAP_BUFFER_FLAGS:
+		retval = gasket_map_buffers_flags(gasket_dev, argp);
+		break;
 	case GASKET_IOCTL_CONFIG_COHERENT_ALLOCATOR:
 		retval = gasket_config_coherent_allocator(gasket_dev, argp);
 		break;
@@ -381,6 +414,7 @@ long gasket_is_supported_ioctl(uint cmd)
 	case GASKET_IOCTL_PAGE_TABLE_SIZE:
 	case GASKET_IOCTL_SIMPLE_PAGE_TABLE_SIZE:
 	case GASKET_IOCTL_MAP_BUFFER:
+	case GASKET_IOCTL_MAP_BUFFER_FLAGS:
 	case GASKET_IOCTL_UNMAP_BUFFER:
 	case GASKET_IOCTL_CLEAR_INTERRUPT_COUNTS:
 	case GASKET_IOCTL_CONFIG_COHERENT_ALLOCATOR:
