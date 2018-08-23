@@ -37,3 +37,18 @@
 		google,chg-cc-tolerance = <25>;
 	};
 };
+
+&tlmm {
+	vbus_ovp_int: vbus_ovp_int_default {
+		mux {
+			pins = "gpio5";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio5";
+			drive-strength = <2>;
+			bias-pull-down;
+			input-enable;
+		};
+	};
+};
