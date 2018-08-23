@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -38,6 +38,7 @@ struct mdss_dba_utils_data {
 	struct mdss_panel_info *pinfo;
 	void *dba_data;
 	void *edid_data;
+	void *timing_data;
 	void *cec_abst_data;
 	u8 *edid_buf;
 	u32 edid_buf_size;
@@ -46,6 +47,7 @@ struct mdss_dba_utils_data {
 	struct cec_cbs ccbs;
 	char disp_switch_name[MAX_SWITCH_NAME_SIZE];
 	u32 current_vic;
+	bool support_audio;
 };
 
 static struct mdss_dba_utils_data *mdss_dba_utils_get_data(
@@ -84,7 +86,7 @@ end:
 	return udata;
 }
 
-static void mdss_dba_utils_send_display_notification(
+static void mdss_dba_utils_notify_display(
 	struct mdss_dba_utils_data *udata, int val)
 {
 	int state = 0;
@@ -109,7 +111,7 @@ static void mdss_dba_utils_send_display_notification(
 		udata->sdev_display.state);
 }
 
-static void mdss_dba_utils_send_audio_notification(
+static void mdss_dba_utils_notify_audio(
 	struct mdss_dba_utils_data *udata, int val)
 {
 	int state = 0;
@@ -219,13 +221,37 @@ static ssize_t mdss_dba_utils_sysfs_wta_hpd(struct device *dev,
 	return count;
 }
 
+static ssize_t mdss_dba_utils_sysfs_rda_hpd(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct mdss_dba_utils_data *udata = NULL;
+
+	if (!dev) {
+		pr_debug("invalid device\n");
+		return -EINVAL;
+	}
+
+	udata = mdss_dba_utils_get_data(dev);
+
+	if (!udata) {
+		pr_debug("invalid input\n");
+		return -EINVAL;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", udata->hpd_state);
+	pr_debug("'%d'\n", udata->hpd_state);
+
+	return ret;
+}
+
 static DEVICE_ATTR(connected, S_IRUGO,
 		mdss_dba_utils_sysfs_rda_connected, NULL);
 
 static DEVICE_ATTR(video_mode, S_IRUGO,
 		mdss_dba_utils_sysfs_rda_video_mode, NULL);
 
-static DEVICE_ATTR(hpd, S_IRUGO | S_IWUSR, NULL,
+static DEVICE_ATTR(hpd, S_IRUGO | S_IWUSR, mdss_dba_utils_sysfs_rda_hpd,
 		mdss_dba_utils_sysfs_wta_hpd);
 
 static struct attribute *mdss_dba_utils_fs_attrs[] = {
@@ -267,6 +293,31 @@ static void mdss_dba_utils_sysfs_remove(struct kobject *kobj)
 	sysfs_remove_group(kobj, &mdss_dba_utils_fs_attrs_group);
 }
 
+static bool mdss_dba_check_audio_support(struct mdss_dba_utils_data *udata)
+{
+	bool dvi_mode = false;
+	int audio_blk_size = 0;
+	struct msm_hdmi_audio_edid_blk audio_blk;
+
+	if (!udata) {
+		pr_debug("%s: Invalid input\n", __func__);
+		return false;
+	}
+	memset(&audio_blk, 0, sizeof(audio_blk));
+
+	/* check if sink is in DVI mode */
+	dvi_mode = !hdmi_edid_get_sink_mode(udata->edid_data);
+
+	/* get the audio block size info from EDID */
+	hdmi_edid_get_audio_blk(udata->edid_data, &audio_blk);
+	audio_blk_size = audio_blk.audio_data_blk_size;
+
+	if (dvi_mode || !audio_blk_size)
+		return false;
+	else
+		return true;
+}
+
 static void mdss_dba_utils_dba_cb(void *data, enum msm_dba_callback_event event)
 {
 	int ret = -EINVAL;
@@ -276,6 +327,7 @@ static void mdss_dba_utils_dba_cb(void *data, enum msm_dba_callback_event event)
 	bool operands_present = false;
 	u32 no_of_operands, size, i;
 	u32 operands_offset = MAX_CEC_FRAME_SIZE - MAX_OPERAND_SIZE;
+	struct msm_hdmi_audio_edid_blk blk;
 
 	if (!udata) {
 		pr_err("Invalid data\n");
@@ -295,15 +347,28 @@ static void mdss_dba_utils_dba_cb(void *data, enum msm_dba_callback_event event)
 			ret = udata->ops.get_raw_edid(udata->dba_data,
 				udata->edid_buf_size, udata->edid_buf, 0);
 
-			if (!ret)
+			if (!ret) {
 				hdmi_edid_parser(udata->edid_data);
-			else
+				/* check whether audio is supported or not */
+				udata->support_audio =
+					mdss_dba_check_audio_support(udata);
+				if (udata->support_audio) {
+					hdmi_edid_get_audio_blk(
+						udata->edid_data, &blk);
+					if (udata->ops.set_audio_block)
+						udata->ops.set_audio_block(
+							udata->dba_data,
+							sizeof(blk), &blk);
+				}
+			} else {
 				pr_err("failed to get edid%d\n", ret);
+			}
 		}
 
 		if (pluggable) {
-			mdss_dba_utils_send_display_notification(udata, 1);
-			mdss_dba_utils_send_audio_notification(udata, 1);
+			mdss_dba_utils_notify_display(udata, 1);
+			if (udata->support_audio)
+				mdss_dba_utils_notify_audio(udata, 1);
 		} else {
 			mdss_dba_utils_video_on(udata, udata->pinfo);
 		}
@@ -315,8 +380,9 @@ static void mdss_dba_utils_dba_cb(void *data, enum msm_dba_callback_event event)
 		if (!udata->hpd_state)
 			break;
 		if (pluggable) {
-			mdss_dba_utils_send_audio_notification(udata, 0);
-			mdss_dba_utils_send_display_notification(udata, 0);
+			if (udata->support_audio)
+				mdss_dba_utils_notify_audio(udata, 0);
+			mdss_dba_utils_notify_display(udata, 0);
 		} else {
 			mdss_dba_utils_video_off(udata);
 		}
@@ -583,6 +649,72 @@ void mdss_dba_utils_hdcp_enable(void *data, bool enable)
 		ud->ops.hdcp_enable(ud->dba_data, enable, enable, 0);
 }
 
+void mdss_dba_update_lane_cfg(struct mdss_panel_info *pinfo)
+{
+	struct mdss_dba_utils_data *dba_data;
+	struct mdss_dba_timing_info *cfg_tbl;
+	int i = 0, lanes;
+
+	if (NULL == pinfo)
+		return;
+
+	/*
+	 * Restore to default value from DT
+	 * if resolution not found in
+	 * supported resolutions
+	 */
+	lanes = pinfo->mipi.default_lanes;
+
+	dba_data = (struct mdss_dba_utils_data *)(pinfo->dba_data);
+	if (NULL == dba_data)
+		goto lane_cfg;
+
+	/* get adv supported timing info */
+	cfg_tbl = (struct mdss_dba_timing_info *)(dba_data->timing_data);
+	if (NULL == cfg_tbl)
+		goto lane_cfg;
+
+	while (cfg_tbl[i].xres != 0xffff) {
+		if (cfg_tbl[i].xres == pinfo->xres &&
+			cfg_tbl[i].yres == pinfo->yres &&
+			cfg_tbl[i].bpp == pinfo->bpp &&
+			cfg_tbl[i].fps == pinfo->mipi.frame_rate) {
+			lanes = cfg_tbl[i].lanes;
+			break;
+		}
+		i++;
+	}
+
+lane_cfg:
+	switch (lanes) {
+	case 1:
+		pinfo->mipi.data_lane0 = 1;
+		pinfo->mipi.data_lane1 = 0;
+		pinfo->mipi.data_lane2 = 0;
+		pinfo->mipi.data_lane3 = 0;
+		break;
+	case 2:
+		pinfo->mipi.data_lane0 = 1;
+		pinfo->mipi.data_lane1 = 1;
+		pinfo->mipi.data_lane2 = 0;
+		pinfo->mipi.data_lane3 = 0;
+		break;
+	case 3:
+		pinfo->mipi.data_lane0 = 1;
+		pinfo->mipi.data_lane1 = 1;
+		pinfo->mipi.data_lane2 = 1;
+		pinfo->mipi.data_lane3 = 0;
+		break;
+	case 4:
+	default:
+		pinfo->mipi.data_lane0 = 1;
+		pinfo->mipi.data_lane1 = 1;
+		pinfo->mipi.data_lane2 = 1;
+		pinfo->mipi.data_lane3 = 1;
+		break;
+	}
+}
+
 /**
  * mdss_dba_utils_init() - Allow clients to register with DBA utils
  * @uid: Initialization data for registration.
@@ -694,6 +826,12 @@ void *mdss_dba_utils_init(struct mdss_dba_utils_init_data *uid)
 		ret = PTR_ERR(cec_abst_data);
 		goto error;
 	}
+
+	/* get the timing data for the adv chip */
+	if (udata->ops.get_supp_timing_info)
+		udata->timing_data = udata->ops.get_supp_timing_info();
+	else
+		udata->timing_data = NULL;
 
 	/* update cec data to retrieve it back in cec abstract module */
 	if (uid->pinfo) {

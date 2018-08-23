@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -188,6 +188,7 @@ void limSendSmeTsmIEInd( tpAniSirGlobal pMac, tpPESession psessionEntry,
                             tANI_U8 tid, tANI_U8 state, tANI_U16 measInterval);
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
 
+tANI_U16 __limGetSmeJoinReqSizeForAlloc(tANI_U8 *pBuf);
 
 #endif /* __LIM_ASSOC_UTILS_H */
 

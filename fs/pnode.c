@@ -198,9 +198,14 @@ static struct mount *next_group(struct mount *m, struct mount *origin)
 
 /* all accesses are serialized by namespace_sem */
 static struct user_namespace *user_ns;
-static struct mount *last_dest, *last_source, *dest_master;
+static struct mount *last_dest, *first_source, *last_source, *dest_master;
 static struct mountpoint *mp;
 static struct hlist_head *list;
+
+static inline bool peers(struct mount *m1, struct mount *m2)
+{
+	return m1->mnt_group_id == m2->mnt_group_id && m1->mnt_group_id;
+}
 
 static int propagate_one(struct mount *m)
 {
@@ -212,24 +217,26 @@ static int propagate_one(struct mount *m)
 	/* skip if mountpoint isn't covered by it */
 	if (!is_subdir(mp->m_dentry, m->mnt.mnt_root))
 		return 0;
-	if (m->mnt_group_id == last_dest->mnt_group_id) {
+	if (peers(m, last_dest)) {
 		type = CL_MAKE_SHARED;
 	} else {
 		struct mount *n, *p;
+		bool done;
 		for (n = m; ; n = p) {
 			p = n->mnt_master;
-			if (p == dest_master || IS_MNT_MARKED(p)) {
-				while (last_dest->mnt_master != p) {
-					last_source = last_source->mnt_master;
-					last_dest = last_source->mnt_parent;
-				}
-				if (n->mnt_group_id != last_dest->mnt_group_id) {
-					last_source = last_source->mnt_master;
-					last_dest = last_source->mnt_parent;
-				}
+			if (p == dest_master || IS_MNT_MARKED(p))
 				break;
-			}
 		}
+		do {
+			struct mount *parent = last_source->mnt_parent;
+			if (last_source == first_source)
+				break;
+			done = parent->mnt_master == p;
+			if (done && peers(n, parent))
+				break;
+			last_source = last_source->mnt_master;
+		} while (!done);
+
 		type = CL_SLAVE;
 		/* beginning of peer group among the slaves? */
 		if (IS_MNT_SHARED(m))
@@ -280,6 +287,7 @@ int propagate_mnt(struct mount *dest_mnt, struct mountpoint *dest_mp,
 	 */
 	user_ns = current->nsproxy->mnt_ns->user_ns;
 	last_dest = dest_mnt;
+	first_source = source_mnt;
 	last_source = source_mnt;
 	mp = dest_mp;
 	list = tree_list;
@@ -404,16 +412,36 @@ int propagate_umount(struct hlist_head *list)
 	return 0;
 }
 
-int propagate_remount(struct mount *mnt) {
-	struct mount *m;
+/*
+ *  Iterates over all slaves, and slaves of slaves.
+ */
+static struct mount *next_descendent(struct mount *root, struct mount *cur)
+{
+	if (!IS_MNT_NEW(cur) && !list_empty(&cur->mnt_slave_list))
+		return first_slave(cur);
+	do {
+		struct mount *master = cur->mnt_master;
+
+		if (!master || cur->mnt_slave.next != &master->mnt_slave_list) {
+			struct mount *next = next_slave(cur);
+
+			return (next == root) ? NULL : next;
+		}
+		cur = master;
+	} while (cur != root);
+	return NULL;
+}
+
+void propagate_remount(struct mount *mnt)
+{
+	struct mount *m = mnt;
 	struct super_block *sb = mnt->mnt.mnt_sb;
-	int ret = 0;
 
 	if (sb->s_op->copy_mnt_data) {
-		for (m = first_slave(mnt); m->mnt_slave.next != &mnt->mnt_slave_list; m = next_slave(m)) {
+		m = next_descendent(mnt, m);
+		while (m) {
 			sb->s_op->copy_mnt_data(m->mnt.data, mnt->mnt.data);
+			m = next_descendent(mnt, m);
 		}
 	}
-
-	return ret;
 }

@@ -19,7 +19,7 @@
 		#gpio-cells = <2>;
 		interrupt-controller;
 		#interrupt-cells = <2>;
-
+		
 		pinctrl-names = "default";
 		pinctrl-0 = <&pmx_hog_default>;
 
@@ -274,7 +274,7 @@
 				};
 			};
 		};
-
+		
 		pmx_nfc_int {
 			nfc_int_active: active {
 				mux {

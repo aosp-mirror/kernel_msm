@@ -72,15 +72,26 @@ Optional properties:
 - qcom,edge:		GLINK logical name of the remote subsystem
 - qcom,pil-force-shutdown: Boolean. If set, the SSR framework will not trigger graceful shutdown
                            on behalf of the subsystem driver.
+- qcom,pil-mss-memsetup: Boolean - True if TZ need to be informed of modem start address and size.
+- qcom,pas-id:	      pas_id of the subsystem.
 - qcom,qdsp6v56-1-8: Boolean- Present if the qdsp version is v56 1.8
 - qcom,qdsp6v56-1-8-inrush-current: Boolean- Present if the qdsp version is V56 1.8 and has in-rush
 				    current issue.
 - qcom,qdsp6v61-1-1: Boolean- Present if the qdsp version is v61 1.1
 - qcom,qdsp6v62-1-2: Boolean- Present if the qdsp version is v62 1.2
+- qcom,qdsp6v62-1-4: Boolean- Present if the qdsp version is v62 1.4
+- qcom,qdsp6v62-1-5: Boolean- Present if the qdsp version is v62 1.5
 - qcom,mx-spike-wa: Boolean- Present if we need to assert QDSP6 I/O clamp, memory
 		    wordline clamp, and compiler memory clamp during MSS restart.
 - qcom,qdsp6v56-1-10: Boolean- Present if the qdsp version is v56 1.10
 - qcom,override-acc-1: Override the default ACC settings with this value if present.
+
+One child node to represent the MBA image may be specified, when the MBA image
+needs to be loaded in a specifically carved out memory region.
+
+Required properties:
+- compatible: Must be "qcom,pil-mba-mem"
+- memory-region: A phandle that points to a reserved memory where the MBA image will be loaded.
 
 Example:
 	qcom,mss@fc880000 {
@@ -121,4 +132,9 @@ Example:
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
 		qcom,ssctl-instance-id = <12>;
 		qcom,sysmon-id = <0>;
+
+		qcom,mba-mem@0 {
+			compatible = "qcom,pil-mba-mem";
+			memory-region = <&peripheral_mem>;
+		};
 	};

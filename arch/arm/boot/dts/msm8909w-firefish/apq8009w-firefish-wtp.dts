@@ -28,9 +28,10 @@
 	qcom,board-id= <8 0x105>;
 };
 
+
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
-                /*
+	    /*
 		synaptics@20 {
 			synaptics,display-coords = <0 0 479 479>;
 			/delete-property/ synaptics,power-down;
@@ -62,7 +63,7 @@
 			ite,cfg-name = "it7260_cfg_62011E01.bin";
 			ite,avdd-lpm-cur = <3000>;
 		};
-                */
+		*/
 	};
 
 	qcom,msm-ssc-sensors {

@@ -70,7 +70,6 @@
 			vdd-supply = <&pm8916_l15>;
 		};
 	};
-
 };
 
 &audio_codec_mtp {
