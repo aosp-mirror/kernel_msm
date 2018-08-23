@@ -8005,9 +8005,10 @@ void pmi8996_set_dcp_default(void)
 	}
 
 	if (the_chip->utc.sink_current &&
-	    the_chip->utc.sink_current != utcc_default)
+	    the_chip->utc.sink_current != utcc_default) {
 		pr_smb(PR_STATUS, "No need for Type-C charger.\n");
 		return;
+	}
 
 	aicl_result = smbchg_get_aicl_level_ma(the_chip);
 
