@@ -8556,10 +8556,10 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx,
 	}
 
 	vos_mem_set((uint8_t *)&out[0], DOT11F_IE_EXTCAP_MAX_LEN, 0);
-	vos_mem_copy(&out[0], &buf[2], DOT11F_IE_EXTCAP_MAX_LEN);
+	vos_mem_copy(&out[0], &buf[2], buf[1]);
 
 	if (DOT11F_PARSE_SUCCESS != dot11fUnpackIeExtCap(mac_ctx, &out[0],
-					DOT11F_IE_EXTCAP_MAX_LEN, dst))
+                                        buf[1], dst))
 		limLog(mac_ctx, LOGE, FL("dot11fUnpackIeExtCap Parse Error "));
 }
 
@@ -8619,6 +8619,8 @@ void lim_merge_extcap_struct(tDot11fIEExtCap *dst,
 		tempdst++;
 		tempsrc++;
 	}
+	dst->present |= src->present;
+	dst->num_bytes = lim_compute_ext_cap_ie_length(dst);
 }
 
 /**
@@ -8653,24 +8655,23 @@ lim_get_80Mhz_center_channel(uint8_t primary_channel)
 }
 
 /**
- * lim_is_ext_cap_ie_present - checks if ext ie is present
+ * lim_compute_ext_cap_ie_length - compute the length of ext cap ie
+ * based on the bits set
  * @ext_cap: extended IEs structure
  *
- * Return: true if ext IEs are present else false
+ * Return: length of the ext cap ie, 0 means should not present
  */
-bool lim_is_ext_cap_ie_present (struct s_ext_cap *ext_cap)
-{
-	int i, size;
-	uint8_t *tmp_buf;
+tANI_U8 lim_compute_ext_cap_ie_length (tDot11fIEExtCap *ext_cap) {
+	tANI_U8 i = DOT11F_IE_EXTCAP_MAX_LEN;
 
-	tmp_buf = (uint8_t *) ext_cap;
-	size = sizeof(*ext_cap);
+	while (i) {
+		if (ext_cap->bytes[i-1]) {
+			break;
+		}
+		i --;
+	}
 
-	for (i = 0; i < size; i++)
-		if (tmp_buf[i])
-			return true;
-
-	return false;
+	return i;
 }
 
 /**
