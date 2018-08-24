@@ -341,6 +341,7 @@ struct smb_charger {
 	int			fake_batt_status;
 	bool			step_chg_enabled;
 	bool			sw_jeita_enabled;
+	int			taper_control;
 	bool			is_hdc;
 	bool			chg_done;
 	int			connector_type;
