@@ -15,7 +15,8 @@ Required properties:
     values include 1000, 1200, 1500 and 2200.
 
   - cirrus,boost-cap-microfarad : Total equivalent boost capacitance on the VBST
-    and VAMP pins, derated at 11 volts DC. The value must be rounded to the
+    and VAMP pins, derated at 11 volts DC (or the voltage specified by the
+    boost-ctl-millivolt property, if present). The value must be rounded to the
     nearest integer and expressed in uF.
 
   - cirrus,boost-ipk-milliamp : Boost inductor peak current, expressed in mA.
@@ -164,6 +165,16 @@ Optional properties:
     ASP playback following haptic playback interruption (CS40L25A only). If this
     value is omitted or exceeds the maximum permitted delay (10 seconds), the
     timeout is effectively disabled.
+
+  - cirrus,boost-ctl-millivolt : Maximum target voltage to which the class H
+    algorithm may increase the VBST supply, expressed in mV. Valid values range
+    from 2550 to 11000 (inclusive) in steps of 50. If this value is specified as
+    zero or VP rises above this value, VBST is bypassed to VP. If this value is
+    omitted, the maximum target voltage remains at 11 V.
+
+  - cirrus,boost-ovp-millivolt : Nominal VBST overvoltage protection threshold,
+    expressed in mV. Valid values range from 9000 to 12875 (inclusive) in steps
+    of 125. If this value is omitted, the threshold remains at 12 V.
 
 Examples:
 
