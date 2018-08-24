@@ -12,12 +12,13 @@
 #ifndef __ABC_PCIE_H
 #define __ABC_PCIE_H
 
+#include <linux/aer.h>
+#include <linux/airbrush-sm-ctrl.h>
+#include <linux/atomic.h>
 #include <linux/cdev.h>
 #include <linux/dma-direction.h>
 #include <linux/notifier.h>
 #include <linux/pci.h>
-#include <linux/airbrush-sm-ctrl.h>
-#include <linux/aer.h>
 
 #define DRV_NAME_ABC_PCIE	"abc-pcie"
 #define DRV_NAME_ABC_PCIE_BLK_FSYS "abc-pcie-fsys"
@@ -144,6 +145,7 @@ struct abc_device {
 	struct pci_dev	*pdev;
 	struct cdev c_dev;
 	u32 memory_map;
+	atomic_t link_state;
 	void __iomem	*pcie_config;
 	void __iomem	*ipu_config;
 	void __iomem	*tpu_config;

@@ -56,4 +56,10 @@ enum {
 	ABC_PCIE_PM_DISABLE,
 	ABC_PCIE_PM_ENABLE
 };
+
+/* enum for link_state */
+enum {
+	ABC_PCIE_LINK_NOT_ACTIVE,
+	ABC_PCIE_LINK_ACTIVE,
+};
 #endif

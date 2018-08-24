@@ -46,7 +46,8 @@ void __iomem *get_tpu_virt(void)
 
 bool abc_pcie_enumerated(void)
 {
-	if (!abc_dev || !abc_dev->pcie_config)
+	if (!abc_dev || !abc_dev->pcie_config ||
+			!atomic_read(&abc_dev->link_state))
 		return false;
 	return true;
 }
@@ -59,7 +60,8 @@ int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 	u32 region_offset;
 #endif
 
-	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config)
+	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config ||
+			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	if (((TPU_START) <= offset) && (offset < (IPU_START))) {
@@ -107,7 +109,8 @@ int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 	u32 region_offset;
 #endif
 
-	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config)
+	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config ||
+			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	if (((TPU_START) <= offset) && (offset < (IPU_START))) {
@@ -151,7 +154,8 @@ int aon_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev || !abc_dev->aon_config)
+	if (!abc_dev || !abc_dev->aon_config ||
+			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	base_offset = abc_dev->aon_config + offset;
@@ -164,7 +168,8 @@ int aon_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev || !abc_dev->aon_config)
+	if (!abc_dev || !abc_dev->aon_config ||
+			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	base_offset = abc_dev->aon_config + offset;
@@ -177,7 +182,7 @@ int ipu_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->ipu_config)
+	if (!abc_dev->ipu_config || !atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	base_offset = abc_dev->ipu_config + offset;
@@ -190,7 +195,7 @@ int ipu_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->ipu_config)
+	if (!abc_dev->ipu_config || !atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	base_offset = abc_dev->ipu_config + offset;
@@ -203,7 +208,7 @@ int tpu_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->tpu_config)
+	if (!abc_dev->tpu_config || !atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	base_offset = abc_dev->tpu_config + offset;
@@ -216,7 +221,7 @@ int tpu_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->tpu_config)
+	if (!abc_dev->tpu_config || !atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	base_offset = abc_dev->tpu_config + offset;
@@ -234,7 +239,8 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 	struct inb_region   ir;
 	u32 region_offset;
 
-	if (!abc_dev || !abc_dev->memory_config)
+	if(!abc_dev || !abc_dev->memory_config ||
+			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 	region_offset = offset & ~(ABC_MEMORY_REGION_MASK);
@@ -272,7 +278,8 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 	struct inb_region   ir;
 	u32 region_offset;
 
-	if (!abc_dev || !abc_dev->memory_config)
+	if(!abc_dev || !abc_dev->memory_config ||
+			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
 
@@ -1593,7 +1600,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	abc_dev->pdev = pdev;
 	abc_dev->dev  = dev;
 	abc->abc_dev = abc_dev;
-
+	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
 	/* Assigning abc_pcie_devdata as driver data to abc_pcie driver */
 	dev_set_drvdata(&pdev->dev, abc);
 
@@ -1727,6 +1734,7 @@ exit_loop:
 #endif
 	pci_set_drvdata(pdev, abc);
 
+	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
 #if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
 	setup_smmu(pdev);
 #endif
@@ -1790,6 +1798,8 @@ static pci_ers_result_t abc_error_detected(struct pci_dev *pdev,
 						pci_channel_state_t state)
 {
 	struct device *dev = &pdev->dev;
+
+	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
 
 	switch (state) {
 	case pci_channel_io_normal:
