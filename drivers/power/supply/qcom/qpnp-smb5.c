@@ -218,6 +218,7 @@ struct smb_dt_props {
 	int			term_current_thresh_hi_ma;
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
+	int			batt_psy_is_bms;
 };
 
 struct smb5 {
@@ -564,6 +565,9 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 
 	chip->dt.adc_based_aicl = of_property_read_bool(node,
 					"qcom,adc-based-aicl");
+
+	chip->dt.batt_psy_is_bms = of_property_read_bool(node,
+					"google,batt_psy_is_bms");
 
 	return 0;
 }
@@ -1821,7 +1825,7 @@ static int smb5_batt_prop_is_writeable(struct power_supply *psy,
 	return 0;
 }
 
-static const struct power_supply_desc batt_psy_desc = {
+static struct power_supply_desc batt_psy_desc = {
 	.name = "battery",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
 	.properties = smb5_batt_props,
@@ -1839,6 +1843,10 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 
 	batt_cfg.drv_data = chg;
 	batt_cfg.of_node = chg->dev->of_node;
+
+	if (chip->dt.batt_psy_is_bms)
+		batt_psy_desc.type = POWER_SUPPLY_TYPE_BMS;
+
 	chg->batt_psy = devm_power_supply_register(chg->dev,
 					   &batt_psy_desc,
 					   &batt_cfg);
