@@ -26,6 +26,8 @@
 #include "smb-lib.h"
 #include "storm-watch.h"
 #include <linux/pmic-voter.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
 
 #define SMB2_DEFAULT_WPWR_UW	8000000
 
@@ -307,6 +309,10 @@ static int smb2_parse_dt(struct smb2 *chip)
 					&chg->otg_delay_ms);
 	if (rc < 0)
 		chg->otg_delay_ms = OTG_DEFAULT_DEGLITCH_TIME_MS;
+
+	chg->wpc_en_gpio = of_get_named_gpio(node, "qcom,wpc-en-gpio", 0);
+	if (chg->wpc_en_gpio < 0)
+		pr_err("wpc_en_gpio not available\n");
 
 	return 0;
 }
@@ -1343,6 +1349,17 @@ static int smb2_init_hw(struct smb2 *chip)
 			dev_err(chg->dev, "Couldn't configure FG_UPDATE_CFG2_SEL_REG rc=%d\n",
 				rc);
 			return rc;
+		}
+	}
+
+	if (gpio_is_valid(chg->wpc_en_gpio)) {
+		rc = gpio_request(chg->wpc_en_gpio, "qcom,wpc-en-gpio");
+		if (rc < 0) {
+			pr_err("gpio req failed for wpc-en-gpio \n");
+			chg->wpc_en_gpio = 0;
+		} else {
+			gpio_direction_output(chg->wpc_en_gpio, 0);
+			pr_info("smb2_init_hw: wpc_en_gpio available \n");
 		}
 	}
 
