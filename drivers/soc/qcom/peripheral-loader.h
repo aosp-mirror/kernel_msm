@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015,2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,6 +36,7 @@ struct pil_priv;
  * @unmap_fw_mem: Custom function used to undo mapping by map_fw_mem.
  * This defaults to iounmap if not specified.
  * @shutdown_fail: Set if PIL op for shutting down subsystem fails.
+ * @modem_ssr: true if modem is restarting, false if booting for first time.
  * @subsys_vmid: memprot id for the subsystem.
  * @clear_fw_region: Clear fw region on failure in loading.
  */
@@ -43,6 +44,7 @@ struct pil_desc {
 	const char *name;
 	const char *fw_name;
 	struct device *dev;
+	struct subsys_device *subsys_dev;
 	const struct pil_reset_ops *ops;
 	struct module *owner;
 	unsigned long proxy_timeout;
@@ -55,6 +57,7 @@ struct pil_desc {
 	void (*unmap_fw_mem)(void *virt, size_t size, void *data);
 	void *map_data;
 	bool shutdown_fail;
+	bool modem_ssr;
 	u32 subsys_vmid;
 	bool clear_fw_region;
 };
@@ -85,7 +88,7 @@ struct pil_image_info {
  */
 struct pil_reset_ops {
 	int (*init_image)(struct pil_desc *pil, const u8 *metadata,
-			  size_t size);
+			  size_t size,  phys_addr_t addr, size_t sz);
 	int (*mem_setup)(struct pil_desc *pil, phys_addr_t addr, size_t size);
 	int (*verify_blob)(struct pil_desc *pil, phys_addr_t phy_addr,
 			   size_t size);
@@ -112,6 +115,7 @@ extern int pil_assign_mem_to_subsys_and_linux(struct pil_desc *desc,
 						phys_addr_t addr, size_t size);
 extern int pil_reclaim_mem(struct pil_desc *desc, phys_addr_t addr, size_t size,
 						int VMid);
+extern bool is_timeout_disabled(void);
 #else
 static inline int pil_desc_init(struct pil_desc *desc) { return 0; }
 static inline int pil_boot(struct pil_desc *desc) { return 0; }
@@ -146,6 +150,7 @@ static inline int pil_reclaim_mem(struct pil_desc *desc, phys_addr_t addr,
 {
 	return 0;
 }
+extern bool is_timeout_disabled(void) { return false; }
 #endif
 
 #endif

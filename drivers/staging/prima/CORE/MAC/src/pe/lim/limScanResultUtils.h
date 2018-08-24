@@ -43,8 +43,25 @@
 // Scan result hash related functions
 tANI_U8 limScanHashFunction(tSirMacAddr);
 void    limInitHashTable(tpAniSirGlobal);
-eHalStatus    
-   limLookupNaddHashEntry(tpAniSirGlobal, tLimScanResultNode *, tANI_U8, tANI_U8);
+
+/**
+ * limLookupNaddHashEntry() - store received BSS description into scan result
+ *                            hash table to be sent to CSR on scan complete.
+ * @pMac: Pointer to Global MAC structure
+ * @pBssDescr: Pointer to BSS description to be added to the scan result
+ *             hash table.
+ * @action: Indicates action to be performed when same BSS description is found.
+ *          This is dependent on whether unique scan result to be stored or not.
+ * @dontUpdateAll: do not update RSSI
+ * @ie_len: ie len to validate
+ * @chan_info_present: if channel info is present in beacon (DS param or HT ie)
+ *
+ * Return: status of operation
+ */
+eHalStatus limLookupNaddHashEntry(tpAniSirGlobal pMac,
+                                  tLimScanResultNode *pBssDescr, tANI_U8 action,
+                                  tANI_U8 dontUpdateAll, tANI_U32 ie_len,
+                                  bool chan_info_present);
 void    limDeleteHashEntry(tLimScanResultNode *);
 void    limDeleteCachedScanResults(tpAniSirGlobal);
 void    limRestorePreScanState(tpAniSirGlobal);
@@ -53,7 +70,8 @@ void    limReInitScanResults(tpAniSirGlobal);
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
 void    limInitLfrHashTable(tpAniSirGlobal);
 eHalStatus
-   limLookupNaddLfrHashEntry(tpAniSirGlobal, tLimScanResultNode *, tANI_U8, tANI_U8);
+   limLookupNaddLfrHashEntry(tpAniSirGlobal, tLimScanResultNode *,
+   tANI_U8, tANI_U8, tANI_U32);
 void    limDeleteLfrHashEntry(tLimScanResultNode *);
 void    limDeleteCachedLfrScanResults(tpAniSirGlobal);
 void    limReInitLfrScanResults(tpAniSirGlobal);
@@ -61,13 +79,13 @@ void    limReInitLfrScanResults(tpAniSirGlobal);
 tANI_U32 limDeactivateMinChannelTimerDuringScan(tpAniSirGlobal);
 void    limCheckAndAddBssDescription(tpAniSirGlobal, tpSirProbeRespBeacon, tANI_U8 *, tANI_BOOLEAN, tANI_U8);
 #if defined WLAN_FEATURE_VOWIFI
-eHalStatus    limCollectBssDescription(tpAniSirGlobal,
+void    limCollectBssDescription(tpAniSirGlobal,
                                  tSirBssDescription *,
                                  tpSirProbeRespBeacon,
                                  tANI_U8 *,
                                  tANI_U8);
 #else
-eHalStatus    limCollectBssDescription(tpAniSirGlobal,
+void    limCollectBssDescription(tpAniSirGlobal,
                                  tSirBssDescription *,
                                  tpSirProbeRespBeacon,
                                  tANI_U8 *);

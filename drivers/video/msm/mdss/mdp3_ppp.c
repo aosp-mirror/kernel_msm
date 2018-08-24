@@ -1,4 +1,5 @@
-/* Copyright (c) 2007, 2013-2014, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007, 2013-2014, 2016-2018, The Linux Foundation. All rights reserved.
+ *
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -30,6 +31,7 @@
 #include "mdp3_hwio.h"
 #include "mdp3.h"
 #include "mdss_debug.h"
+#include "mdp3_ctrl.h"
 
 #define MDP_IS_IMGTYPE_BAD(x) ((x) >= MDP_IMGTYPE_LIMIT)
 #define MDP_RELEASE_BW_TIMEOUT 50
@@ -42,9 +44,6 @@
 #define DISABLE_SOLID_FILL	0x0
 #define BLEND_LATENCY		3
 #define CSC_LATENCY		1
-
-#define CLK_FUDGE_NUM		12
-#define CLK_FUDGE_DEN		10
 
 #define YUV_BW_FUDGE_NUM	10
 #define YUV_BW_FUDGE_DEN	10
@@ -198,12 +197,20 @@ int mdp3_ppp_verify_res(struct mdp_blit_req *req)
 
 	if (((req->src_rect.x + req->src_rect.w) > req->src.width) ||
 	    ((req->src_rect.y + req->src_rect.h) > req->src.height)) {
+		pr_err("%s: src roi (x=%d,y=%d,w=%d, h=%d) WxH(%dx%d)\n",
+			 __func__, req->src_rect.x, req->src_rect.y,
+			req->src_rect.w, req->src_rect.h, req->src.width,
+			req->src.height);
 		pr_err("%s: src roi larger than boundary\n", __func__);
 		return -EINVAL;
 	}
 
 	if (((req->dst_rect.x + req->dst_rect.w) > req->dst.width) ||
 	    ((req->dst_rect.y + req->dst_rect.h) > req->dst.height)) {
+		pr_err("%s: dst roi (x=%d,y=%d,w=%d, h=%d) WxH(%dx%d)\n",
+			 __func__, req->dst_rect.x, req->dst_rect.y,
+			req->dst_rect.w, req->dst_rect.h, req->dst.width,
+			req->dst.height);
 		pr_err("%s: dst roi larger than boundary\n", __func__);
 		return -EINVAL;
 	}
@@ -536,6 +543,7 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,
 {
 	struct mdss_panel_info *panel_info = mfd->panel_info;
 	int i, lcount = 0;
+	int frame_rate = DEFAULT_FRAME_RATE;
 	struct mdp_blit_req *req;
 	struct bpp_info bpp;
 	u64 old_solid_fill_pixel = 0;
@@ -550,6 +558,7 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,
 
 	ATRACE_BEGIN(__func__);
 	lcount = lreq->count;
+	frame_rate = mdss_panel_get_framerate(panel_info, FPS_RESOLUTION_HZ);
 	if (lcount == 0) {
 		pr_err("Blit with request count 0, continue to recover!!!\n");
 		ATRACE_END(__func__);
@@ -577,11 +586,11 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,
 		is_blit_optimization_possible(lreq, i);
 		req = &(lreq->req_list[i]);
 
-		if (req->fps > 0 && req->fps <= panel_info->mipi.frame_rate) {
+		if (req->fps > 0 && req->fps <= frame_rate) {
 			if (fps == 0)
 				fps = req->fps;
 			else
-				fps = panel_info->mipi.frame_rate;
+				fps = frame_rate;
 		}
 
 		mdp3_get_bpp_info(req->src.format, &bpp);
@@ -639,7 +648,7 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,
 	}
 
 	if (fps == 0)
-		fps = panel_info->mipi.frame_rate;
+		fps = frame_rate;
 
 	if (lreq->req_list[0].flags & MDP_SOLID_FILL) {
 		honest_ppp_ab = ppp_res.solid_fill_byte * 4;
@@ -1460,6 +1469,18 @@ static bool is_blit_optimization_possible(struct blit_req_list *req, int indx)
 			(!(check_if_rgb(bg_req.src.format))) &&
 			(!(hw_woraround_active))) {
 			/*
+			 * Disable SMART blit for BG(YUV) layer when
+			 * Scaling on BG layer
+			 * Rotation on BG layer
+			 * UD flip on BG layer
+			 */
+			if ((is_scaling_needed(bg_req)) && (
+				bg_req.flags & MDP_ROT_90) &&
+				(bg_req.flags & MDP_FLIP_UD)) {
+				pr_debug("YUV layer with ROT+UD_FLIP+Scaling Not supported\n");
+				return false;
+			}
+			/*
 			 * swap blit requests at index 0 and 1. YUV layer at
 			 * index 0 is replaced with UI layer request present
 			 * at index 1. Since UI layer will be in  background
@@ -1495,7 +1516,7 @@ static bool is_blit_optimization_possible(struct blit_req_list *req, int indx)
 static void mdp3_ppp_blit_handler(struct kthread_work *work)
 {
 	struct msm_fb_data_type *mfd = ppp_stat->mfd;
-	struct blit_req_list *req;
+	struct blit_req_list *req = NULL;
 	int i, rc = 0;
 	bool smart_blit = false;
 	int smart_blit_fg_index = -1;
@@ -1515,7 +1536,20 @@ static void mdp3_ppp_blit_handler(struct kthread_work *work)
 			return;
 		}
 	}
+
 	while (req) {
+		for (i = 0; i < req->count; i++) {
+			rc = mdp3_map_layer(&req->src_data[i], MDP3_CLIENT_PPP);
+			if (rc < 0 || req->src_data[i].len == 0) {
+				pr_err("mdp_ppp: couldn't retrieve src img from mem\n");
+				goto map_err;
+			}
+			rc = mdp3_map_layer(&req->dst_data[i], MDP3_CLIENT_PPP);
+			if (rc < 0 || req->dst_data[i].len == 0) {
+				pr_err("mdp_ppp: couldn't retrieve dest img from mem\n");
+				goto map_err;
+			}
+		}
 		mdp3_ppp_wait_for_fence(req);
 		mdp3_calc_ppp_res(mfd, req);
 		if (ppp_res.clk_rate != ppp_stat->mdp_clk) {
@@ -1578,6 +1612,14 @@ static void mdp3_ppp_blit_handler(struct kthread_work *work)
 	mod_timer(&ppp_stat->free_bw_timer, jiffies +
 		msecs_to_jiffies(MDP_RELEASE_BW_TIMEOUT));
 	mutex_unlock(&ppp_stat->config_ppp_mutex);
+	return;
+
+map_err:
+	 for (i = 0; i < req->count; i++) {
+		mdp3_put_img(&req->src_data[i], MDP3_CLIENT_PPP);
+		mdp3_put_img(&req->dst_data[i], MDP3_CLIENT_PPP);
+	}
+	mutex_unlock(&ppp_stat->config_ppp_mutex);
 }
 
 int mdp3_ppp_parse_req(void __user *p,
@@ -1586,6 +1628,8 @@ int mdp3_ppp_parse_req(void __user *p,
 {
 	struct blit_req_list *req;
 	struct blit_req_queue *req_q = &ppp_stat->req_q;
+	struct msm_fb_data_type *mfd = ppp_stat->mfd;
+	struct mdp3_session_data *mdp3_session = mfd->mdp.private1;
 	struct sync_fence *fence = NULL;
 	int count, rc, idx, i;
 	count = req_list_header->count;
@@ -1626,15 +1670,14 @@ int mdp3_ppp_parse_req(void __user *p,
 	for (i = 0; i < count; i++) {
 		rc = mdp3_ppp_get_img(&req->req_list[i].src,
 				&req->req_list[i], &req->src_data[i]);
-		if (rc < 0 || req->src_data[i].len == 0) {
+		if (rc) {
 			pr_err("mdp_ppp: couldn't retrieve src img from mem\n");
 			goto parse_err_1;
 		}
 
 		rc = mdp3_ppp_get_img(&req->req_list[i].dst,
 				&req->req_list[i], &req->dst_data[i]);
-		if (rc < 0 || req->dst_data[i].len == 0) {
-			mdp3_put_img(&req->src_data[i], MDP3_CLIENT_PPP);
+		if (rc) {
 			pr_err("mdp_ppp: couldn't retrieve dest img from mem\n");
 			goto parse_err_1;
 		}
@@ -1656,6 +1699,31 @@ int mdp3_ppp_parse_req(void __user *p,
 		}
 	} else {
 		fence = req->cur_rel_fence;
+	}
+
+	/*
+	 * Whenever we get a blit request after a secure session, we need
+	 * to wait for the previous secure dma transfer to complete for command
+	 * mode panels. Since blit requests are always non-secure, add support
+	 * for transition from secure to non-secure after the secure dma is
+	 * completed.
+	 */
+
+	if (atomic_read(&mdp3_session->secure_display) &&
+			(mfd->panel.type == MDP3_DMA_OUTPUT_SEL_DSI_CMD)) {
+		rc = mdp3_session->dma->wait_for_dma(mdp3_session->dma,
+					mdp3_session->intf);
+		if (!rc) {
+			pr_err("secure dma done not completed\n");
+			rc = -ETIMEDOUT;
+			goto parse_err_2;
+		}
+		mdp3_session->transition_state = SECURE_TO_NONSECURE;
+		rc = config_secure_display(mdp3_session);
+		if (rc) {
+			pr_err("Configuring secure display failed\n");
+			goto parse_err_2;
+		}
 	}
 
 	mdp3_ppp_req_push(req_q, req);
@@ -1714,7 +1782,8 @@ int mdp3_ppp_res_init(struct msm_fb_data_type *mfd)
 
 	if (IS_ERR(ppp_stat->blit_thread)) {
 		rc = PTR_ERR(ppp_stat->blit_thread);
-		pr_err("ERROR: unable to start ppp blit thread, err = %d\n", rc);
+		pr_err("ERROR: unable to start ppp blit thread,err = %d\n",
+							rc);
 		ppp_stat->blit_thread = NULL;
 		return rc;
 	}

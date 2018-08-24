@@ -21,7 +21,6 @@
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
-#include <linux/sched/rt.h>
 #include "queue.h"
 
 #define MMC_QUEUE_BOUNCESZ	65536
@@ -128,14 +127,11 @@ static int mmc_cmdq_thread(void *d)
 
 		ret = mq->cmdq_issue_fn(mq, mq->cmdq_req_peeked);
 		/*
-		 * Don't requeue if issue_fn fails, just bug on.
-		 * We don't expect failure here and there is no recovery other
-		 * than fixing the actual issue if there is any.
+		 * Don't requeue if issue_fn fails.
+		 * Recovery will be come by completion softirq
 		 * Also we end the request if there is a partition switch error,
 		 * so we should not requeue the request here.
 		 */
-		if (ret)
-			BUG_ON(1);
 	} /* loop */
 
 	return 0;
@@ -146,11 +142,6 @@ static int mmc_queue_thread(void *d)
 	struct mmc_queue *mq = d;
 	struct request_queue *q = mq->queue;
 	struct mmc_card *card = mq->card;
-
-        struct sched_param scheduler_params = {0};
-        scheduler_params.sched_priority = 1;
-
-        sched_setscheduler(current, SCHED_FIFO, &scheduler_params);
 
 	current->flags |= PF_MEMALLOC;
 	if (card->host->wakeup_on_idle)
@@ -724,15 +715,13 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 		if (wait) {
 
 			/*
-			 * After blk_stop_queue is called, wait for all
+			 * After blk_cleanup_queue is called, wait for all
 			 * active_reqs to complete.
 			 * Then wait for cmdq thread to exit before calling
 			 * cmdq shutdown to avoid race between issuing
 			 * requests and shutdown of cmdq.
 			 */
-			spin_lock_irqsave(q->queue_lock, flags);
-			blk_stop_queue(q);
-			spin_unlock_irqrestore(q->queue_lock, flags);
+			blk_cleanup_queue(q);
 
 			if (host->cmdq_ctx.active_reqs)
 				wait_for_completion(
@@ -757,9 +746,15 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 	}
 
 	if (!(test_and_set_bit(MMC_QUEUE_SUSPENDED, &mq->flags))) {
-		spin_lock_irqsave(q->queue_lock, flags);
-		blk_stop_queue(q);
-		spin_unlock_irqrestore(q->queue_lock, flags);
+		if (!wait) {
+			/* suspend/stop the queue in case of suspend */
+			spin_lock_irqsave(q->queue_lock, flags);
+			blk_stop_queue(q);
+			spin_unlock_irqrestore(q->queue_lock, flags);
+		} else {
+			/* shutdown the queue in case of shutdown/reboot */
+			blk_cleanup_queue(q);
+		}
 
 		rc = down_trylock(&mq->thread_sem);
 		if (rc && !wait) {

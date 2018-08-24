@@ -44,6 +44,7 @@
 #include <vos_api.h>
 #include "wlan_qct_sys.h"
 #include "vos_sched.h"
+#include <linux/wcnss_wlan.h>
 
 /*-------------------------------------------------------------------------- 
   Preprocessor definitions and constants
@@ -120,7 +121,10 @@ static void vos_linux_timer_callback (unsigned long data)
    v_PVOID_t userData=NULL;
    int threadId;
    VOS_TIMER_TYPE type=VOS_TIMER_TYPE_SW;
-   
+   v_CONTEXT_t vos_context = NULL;
+   pVosContextType vos_global_context;
+   vos_wdthread_timer_work_t *wdthread_timer_work;
+
    VOS_ASSERT(timer);
 
    if (timer == NULL)
@@ -220,7 +224,28 @@ static void vos_linux_timer_callback (unsigned long data)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
                 "TIMER callback: running on wd thread");
-      callback(NULL);
+      vos_context = vos_get_global_context(VOS_MODULE_ID_HDD, NULL);
+      if(!vos_context)
+      {
+         VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_FATAL,
+                   "%s: Global VOS context is Null", __func__);
+         return;
+      }
+      vos_global_context = (pVosContextType)vos_context;
+      wdthread_timer_work = vos_mem_malloc(sizeof(*wdthread_timer_work));
+      if (NULL == wdthread_timer_work) {
+          VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+                    "%s: No memory available", __func__);
+          return;
+      }
+      wdthread_timer_work->callback = callback;
+      wdthread_timer_work->userData = userData;
+      spin_lock(&vos_global_context->wdthread_work_lock);
+      list_add(&wdthread_timer_work->node,
+                    &vos_global_context->wdthread_timer_work_list);
+      spin_unlock(&vos_global_context->wdthread_work_lock);
+
+      schedule_work(&vos_global_context->wdthread_work);
       return;
    }
 #endif
@@ -955,5 +980,112 @@ v_BOOL_t vos_timer_is_initialized(vos_timer_t *timer)
         return VOS_TRUE;
     else
         return VOS_FALSE;
+}
+
+/**
+ * vos_wdthread_init_timer_work() -  Initialize timer work
+ * @callbackptr: timer work callback
+ *
+ * Initialize watchdog thread timer work structure and linked
+ * list.
+ * return - void
+ */
+void vos_wdthread_init_timer_work(void *callbackptr)
+{
+   pVosContextType context;
+
+   context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+   if (!context) {
+       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_FATAL,
+                 "%s: Global VOS context is Null", __func__);
+       return;
+   }
+
+   spin_lock_init(&context->wdthread_work_lock);
+   INIT_LIST_HEAD(&context->wdthread_timer_work_list);
+#if defined (WLAN_OPEN_SOURCE)
+    INIT_WORK(&context->wdthread_work, callbackptr);
+#else
+    wcnss_init_work(&context->wdthread_work, callbackptr);
+#endif
+}
+
+/**
+ * vos_wdthread_flush_timer_work() -  Flush timer work
+ *
+ * Flush watchdog thread timer work structure.
+ * return - void
+ */
+void vos_wdthread_flush_timer_work()
+{
+   pVosContextType context;
+
+   context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+   if (!context) {
+       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_FATAL,
+                 "%s: Global VOS context is Null", __func__);
+       return;
+   }
+
+#if defined (WLAN_OPEN_SOURCE)
+   cancel_work_sync(&context->wdthread_work);
+#else
+   wcnss_flush_work(&context->wdthread_work);
+#endif
+}
+
+/**
+ * __vos_process_wd_timer() -  Handle wathdog thread timer work
+ *
+ * Process watchdog thread timer work.
+ * return - void
+ */
+static void __vos_process_wd_timer(void)
+{
+    v_CONTEXT_t vos_context = NULL;
+    pVosContextType vos_global_context;
+    vos_wdthread_timer_work_t *wdthread_timer_work;
+    struct list_head *pos, *next;
+
+    vos_context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
+
+    if(!vos_context)
+    {
+       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_FATAL,
+                 "%s: Global VOS context is Null", __func__);
+       return;
+    }
+
+    vos_global_context = (pVosContextType)vos_context;
+
+    spin_lock(&vos_global_context->wdthread_work_lock);
+    list_for_each_safe(pos, next,
+                     &vos_global_context->wdthread_timer_work_list) {
+        wdthread_timer_work = list_entry(pos,
+                                         vos_wdthread_timer_work_t,
+                                         node);
+        list_del(pos);
+        spin_unlock(&vos_global_context->wdthread_work_lock);
+        if (NULL != wdthread_timer_work->callback)
+            wdthread_timer_work->callback(wdthread_timer_work->userData);
+        vos_mem_free(wdthread_timer_work);
+        spin_lock(&vos_global_context->wdthread_work_lock);
+    }
+    spin_unlock(&vos_global_context->wdthread_work_lock);
+
+    return;
+}
+
+/**
+ * vos_process_wd_timer() -  Wrapper function to handle timer work
+ *
+ * Wrapper function to process timer work.
+ * return - void
+ */
+void vos_process_wd_timer(void)
+{
+    vos_ssr_protect(__func__);
+    __vos_process_wd_timer();
+    vos_ssr_unprotect(__func__);
 }
 

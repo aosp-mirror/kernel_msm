@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,6 +19,7 @@
 #include <linux/clk.h>
 #include <linux/platform_device.h>
 #include <linux/wakelock.h>
+
 #include "emac_phy.h"
 
 /* Device IDs */
@@ -44,6 +45,20 @@
 /* mdio/mdc gpios */
 #define EMAC_GPIO_CNT		2
 
+#define EMAC_ADPT_RESET_WAIT_TIME	20
+
+/**
+ * Requested EMAC votes for BUS bandwidth
+ *
+ * EMAC_NO_PERF_VOTE      BUS Vote for inactive EMAC session or disconnect
+ * EMAC_MAX_PERF_VOTE    Maximum BUS bandwidth vote
+ *
+ */
+enum emac_bus_vote {
+	EMAC_NO_PERF_VOTE = 0,
+	EMAC_MAX_PERF_VOTE
+};
+
 enum emac_vreg_id {
 	EMAC_VREG1,
 	EMAC_VREG2,
@@ -56,8 +71,8 @@ enum emac_vreg_id {
 enum emac_clk_id {
 	EMAC_CLK_AXI,
 	EMAC_CLK_CFG_AHB,
-	EMAC_CLK_125M,
-	EMAC_CLK_SYS_25M,
+	EMAC_CLK_HIGH_SPEED,
+	EMAC_CLK_MDIO,
 	EMAC_CLK_TX,
 	EMAC_CLK_RX,
 	EMAC_CLK_SYS,
@@ -106,12 +121,6 @@ enum emac_dma_order {
 	emac_dma_ord_in = 1,
 	emac_dma_ord_enh = 2,
 	emac_dma_ord_out = 4
-};
-
-enum emac_mac_speed {
-	emac_mac_speed_0 = 0,
-	emac_mac_speed_10_100 = 1,
-	emac_mac_speed_1000 = 2
 };
 
 enum emac_dma_req_block {
@@ -189,6 +198,8 @@ struct emac_hw_stats {
 	u64 tx_bcast_byte;      /* broadcast packets byte count (without FCS) */
 	u64 tx_mcast_byte;      /* multicast packets byte count (without FCS) */
 	u64 tx_col;             /* collisions */
+
+	spinlock_t lock;	/* prevent multiple simultaneous readers */
 };
 
 enum emac_hw_flags {
@@ -232,11 +243,6 @@ struct emac_hw {
 	enum emac_dma_req_block   dmar_block;
 	enum emac_dma_req_block   dmaw_block;
 	enum emac_dma_order       dma_order;
-
-	/* MAC parameter */
-	u8      mac_addr[ETH_ALEN];
-	u8      mac_perm_addr[ETH_ALEN];
-	u32     mtu;
 
 	/* RSS parameter */
 	u8      rss_hstype;
@@ -549,8 +555,8 @@ struct emac_clk {
 
 struct emac_regulator {
 	struct regulator *vreg;
-	bool			enabled;
-	bool			set_voltage;
+	int	voltage_uv;
+	bool	enabled;
 };
 
 /* emac_ring_header represents a single, contiguous block of DMA space
@@ -677,7 +683,13 @@ struct emac_tx_queue {
 
 /* driver private data structure */
 struct emac_adapter {
-	struct net_device *netdev;
+	struct net_device		*netdev;
+	struct mii_bus			*mii_bus;
+	struct phy_device		*phydev;
+	struct emac_phy			phy;
+	struct emac_hw			hw;
+	struct emac_hw_stats		hw_stats;
+	int irq_status;
 
 	struct emac_irq_per_dev		irq[EMAC_IRQ_CNT];
 	unsigned int			gpio[EMAC_GPIO_CNT];
@@ -703,10 +715,6 @@ struct emac_adapter {
 
 	u32 rxbuf_size;
 
-	struct emac_phy phy;
-	struct emac_hw hw;
-	struct emac_hw_stats hw_stats;
-
 	/* tx timestamping queue */
 	struct sk_buff_head         hwtxtstamp_pending_queue;
 	struct sk_buff_head         hwtxtstamp_ready_queue;
@@ -714,7 +722,7 @@ struct emac_adapter {
 	spinlock_t                  hwtxtstamp_lock; /* lock for hwtxtstamp */
 	struct emac_tx_tstamp_stats hwtxtstamp_stats;
 
-	struct work_struct emac_task;
+	struct work_struct work_thread;
 	struct timer_list  emac_timer;
 	unsigned long	link_jiffies;
 
@@ -723,11 +731,16 @@ struct emac_adapter {
 	u16             msg_enable;
 	unsigned long   flags;
 	struct pinctrl	*pinctrl;
-	struct pinctrl_state	*pins_active;
-	struct pinctrl_state	*pins_sleep;
-	int	(*gpio_on)(struct emac_adapter *adpt);
-	int	(*gpio_off)(struct emac_adapter *adpt);
+	struct pinctrl_state	*mdio_pins_active;
+	struct pinctrl_state	*mdio_pins_sleep;
+	struct pinctrl_state	*ephy_pins_active;
+	struct pinctrl_state	*ephy_pins_sleep;
+	int	(*gpio_on)(struct emac_adapter *adpt, bool mdio, bool ephy);
+	int	(*gpio_off)(struct emac_adapter *adpt, bool mdio, bool ephy);
 	struct wakeup_source link_wlock;
+
+	u32       bus_cl_hdl;
+	struct msm_bus_scale_pdata *bus_scale_table;
 };
 
 static inline struct emac_adapter *emac_hw_get_adap(struct emac_hw *hw)
@@ -748,21 +761,20 @@ struct emac_adapter *emac_irq_get_adpt(struct emac_irq_per_dev *irq)
 }
 
 /* default to trying for four seconds */
-#define EMAC_TRY_LINK_TIMEOUT     (4 * HZ)
+#define EMAC_TRY_LINK_TIMEOUT     (4 * 1000)
 
 #define EMAC_HW_CTRL_RESET_MAC         0x00000001
 
-extern char emac_drv_name[];
-extern const char emac_drv_version[];
 void emac_set_ethtool_ops(struct net_device *netdev);
-void emac_reinit_locked(struct emac_adapter *adpt);
+int emac_reinit_locked(struct emac_adapter *adpt);
 void emac_update_hw_stats(struct emac_adapter *adpt);
 int emac_resize_rings(struct net_device *netdev);
-int emac_up(struct emac_adapter *adpt);
-void emac_down(struct emac_adapter *adpt, u32 ctrl);
+int emac_mac_up(struct emac_adapter *adpt);
+void emac_mac_down(struct emac_adapter *adpt, u32 ctrl);
 int emac_clk_set_rate(struct emac_adapter *adpt, enum emac_clk_id id,
 		      enum emac_clk_rate rate);
 void emac_task_schedule(struct emac_adapter *adpt);
 void emac_check_lsc(struct emac_adapter *adpt);
+void emac_wol_gpio_irq(struct emac_adapter *adpt, bool enable);
 
 #endif /* _QCOM_EMAC_H_ */

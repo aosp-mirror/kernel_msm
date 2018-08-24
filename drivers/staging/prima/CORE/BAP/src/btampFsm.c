@@ -1636,9 +1636,9 @@ validAssocInd
         //DUMPLOG(10,  __func__, "pDot11RSN present", pDot11RSN, 64);
 
         //The 802.11 BT-AMP PAL only supports WPA2-PSK  
-        if (!vos_mem_compare(pRSNOui02, //  RSN-PSK
-                pDot11RSN->akm_suites[0], 
-                WLANBAP_RSN_OUI_SIZE)) 
+        if (!vos_mem_compare(pRSNOui02,//  RSN-PSK
+                pDot11RSN->akm_suite[0],
+                WLANBAP_RSN_OUI_SIZE))
             return VOS_FALSE;
 
         //The 802.11 BT-AMP PAL only supports AES-CCMP Unicast  

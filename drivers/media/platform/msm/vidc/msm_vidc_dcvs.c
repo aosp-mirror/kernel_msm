@@ -229,15 +229,14 @@ void msm_dcvs_init_load(struct msm_vidc_inst *inst)
 	table = res->dcvs_tbl;
 
 	if (!num_rows || !table) {
-		if (msm_vidc_dec_dcvs_mode && msm_vidc_enc_dcvs_mode)
-			dprintk(VIDC_ERR,
+		dprintk(VIDC_ERR,
 				"%s: Dcvs table entry not found.\n", __func__);
 		return;
 	}
 
 	fourcc = inst->session_type == MSM_VIDC_DECODER ?
-				inst->fmts[OUTPUT_PORT]->fourcc :
-				inst->fmts[CAPTURE_PORT]->fourcc;
+				inst->fmts[OUTPUT_PORT].fourcc :
+				inst->fmts[CAPTURE_PORT].fourcc;
 
 	for (i = 0; i < num_rows; i++) {
 		bool matches = msm_dcvs_check_codec_supported(
@@ -554,7 +553,7 @@ static bool msm_dcvs_enc_check(struct msm_vidc_inst *inst)
 
 	is_codec_supported =
 		msm_dcvs_check_codec_supported(
-				inst->fmts[CAPTURE_PORT]->fourcc,
+				inst->fmts[CAPTURE_PORT].fourcc,
 				inst->dcvs.supported_codecs,
 				inst->session_type);
 
@@ -596,8 +595,7 @@ static bool msm_dcvs_check_supported(struct msm_vidc_inst *inst)
 	res = &core->resources;
 
 	if (!res->dcvs_limit) {
-		if (msm_vidc_dec_dcvs_mode && msm_vidc_enc_dcvs_mode)
-			dprintk(VIDC_WARN,
+		dprintk(VIDC_WARN,
 				"%s: dcvs limit table not found\n", __func__);
 		return false;
 	}
@@ -615,13 +613,14 @@ static bool msm_dcvs_check_supported(struct msm_vidc_inst *inst)
 			res->dcvs_limit[inst->session_type].fps;
 		is_codec_supported =
 			msm_dcvs_check_codec_supported(
-					inst->fmts[OUTPUT_PORT]->fourcc,
+					inst->fmts[OUTPUT_PORT].fourcc,
 					inst->dcvs.supported_codecs,
 					inst->session_type);
 		if (!is_codec_supported ||
 			!IS_VALID_DCVS_SESSION(num_mbs_per_frame,
 				res->dcvs_limit[inst->session_type].min_mbpf) ||
-			!IS_VALID_DCVS_SESSION(instance_load, dcvs_limit))
+			!IS_VALID_DCVS_SESSION(instance_load, dcvs_limit) ||
+			inst->seqchanged_count > 1)
 			return false;
 
 		if (!output_buf_req) {

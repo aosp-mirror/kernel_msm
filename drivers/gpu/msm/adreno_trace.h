@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,9 @@
 #define TRACE_INCLUDE_FILE adreno_trace
 
 #include <linux/tracepoint.h>
+#include "adreno_a3xx.h"
+#include "adreno_a4xx.h"
+#include "adreno_a5xx.h"
 
 TRACE_EVENT(adreno_cmdbatch_queued,
 	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, unsigned int queued),
@@ -52,8 +55,8 @@ TRACE_EVENT(adreno_cmdbatch_queued,
 TRACE_EVENT(adreno_cmdbatch_submitted,
 	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, int inflight, uint64_t ticks,
 		unsigned long secs, unsigned long usecs,
-		struct adreno_ringbuffer *rb),
-	TP_ARGS(cmdbatch, inflight, ticks, secs, usecs, rb),
+		struct adreno_ringbuffer *rb, unsigned int rptr),
+	TP_ARGS(cmdbatch, inflight, ticks, secs, usecs, rb, rptr),
 	TP_STRUCT__entry(
 		__field(unsigned int, id)
 		__field(unsigned int, timestamp)
@@ -78,7 +81,7 @@ TRACE_EVENT(adreno_cmdbatch_submitted,
 		__entry->usecs = usecs;
 		__entry->prio = cmdbatch->context->priority;
 		__entry->rb_id = rb->id;
-		__entry->rptr = rb->rptr;
+		__entry->rptr = rptr;
 		__entry->wptr = rb->wptr;
 		__entry->q_inflight = rb->dispatch_q.inflight;
 	),
@@ -97,8 +100,8 @@ TRACE_EVENT(adreno_cmdbatch_submitted,
 TRACE_EVENT(adreno_cmdbatch_retired,
 	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, int inflight,
 		uint64_t start, uint64_t retire,
-		struct adreno_ringbuffer *rb),
-	TP_ARGS(cmdbatch, inflight, start, retire, rb),
+		struct adreno_ringbuffer *rb, unsigned int rptr),
+	TP_ARGS(cmdbatch, inflight, start, retire, rb, rptr),
 	TP_STRUCT__entry(
 		__field(unsigned int, id)
 		__field(unsigned int, timestamp)
@@ -123,7 +126,7 @@ TRACE_EVENT(adreno_cmdbatch_retired,
 		__entry->retire = retire;
 		__entry->prio = cmdbatch->context->priority;
 		__entry->rb_id = rb->id;
-		__entry->rptr = rb->rptr;
+		__entry->rptr = rptr;
 		__entry->wptr = rb->wptr;
 		__entry->q_inflight = rb->dispatch_q.inflight;
 	),
@@ -140,6 +143,29 @@ TRACE_EVENT(adreno_cmdbatch_retired,
 			__entry->retire,
 			__entry->rb_id, __entry->rptr, __entry->wptr,
 			__entry->q_inflight
+	)
+);
+
+TRACE_EVENT(adreno_cmdbatch_sync,
+	TP_PROTO(struct adreno_context *drawctxt,
+		uint64_t ticks),
+	TP_ARGS(drawctxt, ticks),
+	TP_STRUCT__entry(
+		__field(unsigned int, id)
+		__field(unsigned int, timestamp)
+		__field(uint64_t, ticks)
+		__field(int, prio)
+	),
+	TP_fast_assign(
+		__entry->id = drawctxt->base.id;
+		__entry->timestamp = drawctxt->timestamp;
+		__entry->ticks = ticks;
+		__entry->prio = drawctxt->base.priority;
+	),
+	TP_printk(
+		"ctx=%u ctx_prio=%d ts=%u ticks=%lld",
+			__entry->id, __entry->prio, __entry->timestamp,
+			__entry->ticks
 	)
 );
 
@@ -264,9 +290,8 @@ TRACE_EVENT(adreno_drawctxt_wait_done,
 
 TRACE_EVENT(adreno_drawctxt_switch,
 	TP_PROTO(struct adreno_ringbuffer *rb,
-		struct adreno_context *newctx,
-		unsigned int flags),
-	TP_ARGS(rb, newctx, flags),
+		struct adreno_context *newctx),
+	TP_ARGS(rb, newctx),
 	TP_STRUCT__entry(
 		__field(int, rb_level)
 		__field(unsigned int, oldctx)
@@ -280,8 +305,8 @@ TRACE_EVENT(adreno_drawctxt_switch,
 		__entry->newctx = newctx ? newctx->base.id : 0;
 	),
 	TP_printk(
-		"rb level=%d oldctx=%u newctx=%u flags=%X",
-		__entry->rb_level, __entry->oldctx, __entry->newctx, flags
+		"rb level=%d oldctx=%u newctx=%u",
+		__entry->rb_level, __entry->oldctx, __entry->newctx
 	)
 );
 
@@ -364,38 +389,7 @@ TRACE_EVENT(kgsl_a3xx_irq_status,
 		"d_name=%s status=%s",
 		__get_str(device_name),
 		__entry->status ? __print_flags(__entry->status, "|",
-			{ 1 << A3XX_INT_RBBM_GPU_IDLE, "RBBM_GPU_IDLE" },
-			{ 1 << A3XX_INT_RBBM_AHB_ERROR, "RBBM_AHB_ERR" },
-			{ 1 << A3XX_INT_RBBM_REG_TIMEOUT, "RBBM_REG_TIMEOUT" },
-			{ 1 << A3XX_INT_RBBM_ME_MS_TIMEOUT,
-				"RBBM_ME_MS_TIMEOUT" },
-			{ 1 << A3XX_INT_RBBM_PFP_MS_TIMEOUT,
-				"RBBM_PFP_MS_TIMEOUT" },
-			{ 1 << A3XX_INT_RBBM_ATB_BUS_OVERFLOW,
-				"RBBM_ATB_BUS_OVERFLOW" },
-			{ 1 << A3XX_INT_VFD_ERROR, "RBBM_VFD_ERROR" },
-			{ 1 << A3XX_INT_CP_SW_INT, "CP_SW" },
-			{ 1 << A3XX_INT_CP_T0_PACKET_IN_IB,
-				"CP_T0_PACKET_IN_IB" },
-			{ 1 << A3XX_INT_CP_OPCODE_ERROR, "CP_OPCODE_ERROR" },
-			{ 1 << A3XX_INT_CP_RESERVED_BIT_ERROR,
-				"CP_RESERVED_BIT_ERROR" },
-			{ 1 << A3XX_INT_CP_HW_FAULT, "CP_HW_FAULT" },
-			{ 1 << A3XX_INT_CP_DMA, "CP_DMA" },
-			{ 1 << A3XX_INT_CP_IB2_INT, "CP_IB2_INT" },
-			{ 1 << A3XX_INT_CP_IB1_INT, "CP_IB1_INT" },
-			{ 1 << A3XX_INT_CP_RB_INT, "CP_RB_INT" },
-			{ 1 << A3XX_INT_CP_REG_PROTECT_FAULT,
-				"CP_REG_PROTECT_FAULT" },
-			{ 1 << A3XX_INT_CP_RB_DONE_TS, "CP_RB_DONE_TS" },
-			{ 1 << A3XX_INT_CP_VS_DONE_TS, "CP_VS_DONE_TS" },
-			{ 1 << A3XX_INT_CP_PS_DONE_TS, "CP_PS_DONE_TS" },
-			{ 1 << A3XX_INT_CACHE_FLUSH_TS, "CACHE_FLUSH_TS" },
-			{ 1 << A3XX_INT_CP_AHB_ERROR_HALT,
-				"CP_AHB_ERROR_HALT" },
-			{ 1 << A3XX_INT_MISC_HANG_DETECT, "MISC_HANG_DETECT" },
-			{ 1 << A3XX_INT_UCHE_OOB_ACCESS, "UCHE_OOB_ACCESS" })
-		: "None"
+			A3XX_IRQ_FLAGS) : "None"
 	)
 );
 
@@ -422,182 +416,7 @@ TRACE_EVENT(kgsl_a4xx_irq_status,
 		"d_name=%s status=%s",
 		__get_str(device_name),
 		__entry->status ? __print_flags(__entry->status, "|",
-			{ 1 << A4XX_INT_RBBM_GPU_IDLE, "RBBM_GPU_IDLE" },
-			{ 1 << A4XX_INT_RBBM_AHB_ERROR, "RBBM_AHB_ERR" },
-			{ 1 << A4XX_INT_RBBM_REG_TIMEOUT, "RBBM_REG_TIMEOUT" },
-			{ 1 << A4XX_INT_RBBM_ME_MS_TIMEOUT,
-				"RBBM_ME_MS_TIMEOUT" },
-			{ 1 << A4XX_INT_RBBM_PFP_MS_TIMEOUT,
-				"RBBM_PFP_MS_TIMEOUT" },
-			{ 1 << A4XX_INT_RBBM_ETS_MS_TIMEOUT,
-				"RBBM_ETS_MS_TIMEOUT" },
-			{ 1 << A4XX_INT_RBBM_ASYNC_OVERFLOW,
-				"RBBM_ASYNC_OVERFLOW" },
-			{ 1 << A4XX_INT_RBBM_GPC_ERR,
-				"RBBM_GPC_ERR" },
-			{ 1 << A4XX_INT_CP_SW, "CP_SW" },
-			{ 1 << A4XX_INT_CP_OPCODE_ERROR, "CP_OPCODE_ERROR" },
-			{ 1 << A4XX_INT_CP_RESERVED_BIT_ERROR,
-				"CP_RESERVED_BIT_ERROR" },
-			{ 1 << A4XX_INT_CP_HW_FAULT, "CP_HW_FAULT" },
-			{ 1 << A4XX_INT_CP_DMA, "CP_DMA" },
-			{ 1 << A4XX_INT_CP_IB2_INT, "CP_IB2_INT" },
-			{ 1 << A4XX_INT_CP_IB1_INT, "CP_IB1_INT" },
-			{ 1 << A4XX_INT_CP_RB_INT, "CP_RB_INT" },
-			{ 1 << A4XX_INT_CP_REG_PROTECT_FAULT,
-				"CP_REG_PROTECT_FAULT" },
-			{ 1 << A4XX_INT_CP_RB_DONE_TS, "CP_RB_DONE_TS" },
-			{ 1 << A4XX_INT_CP_VS_DONE_TS, "CP_VS_DONE_TS" },
-			{ 1 << A4XX_INT_CP_PS_DONE_TS, "CP_PS_DONE_TS" },
-			{ 1 << A4XX_INT_CACHE_FLUSH_TS, "CACHE_FLUSH_TS" },
-			{ 1 << A4XX_INT_CP_AHB_ERROR_HALT,
-				"CP_AHB_ERROR_HALT" },
-			{ 1 << A4XX_INT_RBBM_ATB_BUS_OVERFLOW,
-				"RBBM_ATB_BUS_OVERFLOW" },
-			{ 1 << A4XX_INT_MISC_HANG_DETECT, "MISC_HANG_DETECT" },
-			{ 1 << A4XX_INT_UCHE_OOB_ACCESS, "UCHE_OOB_ACCESS" },
-			{ 1 << A4XX_INT_RBBM_DPM_CALC_ERR,
-				"RBBM_DPM_CALC_ERR" },
-			{ 1 << A4XX_INT_RBBM_DPM_EPOCH_ERR,
-				"RBBM_DPM_CALC_ERR" },
-			{ 1 << A4XX_INT_RBBM_DPM_THERMAL_YELLOW_ERR,
-				"RBBM_DPM_THERMAL_YELLOW_ERR" },
-			{ 1 << A4XX_INT_RBBM_DPM_THERMAL_RED_ERR,
-				"RBBM_DPM_THERMAL_RED_ERR" })
-		: "None"
-	)
-);
-
-DECLARE_EVENT_CLASS(adreno_hw_preempt_template,
-	TP_PROTO(struct adreno_ringbuffer *cur_rb,
-		struct adreno_ringbuffer *new_rb),
-	TP_ARGS(cur_rb, new_rb),
-	TP_STRUCT__entry(__field(int, cur_level)
-			__field(int, new_level)
-			__field(unsigned int, cur_rptr)
-			__field(unsigned int, new_rptr)
-			__field(unsigned int, cur_wptr)
-			__field(unsigned int, new_wptr)
-			__field(unsigned int, cur_rbbase)
-			__field(unsigned int, new_rbbase)
-	),
-	TP_fast_assign(__entry->cur_level = cur_rb->id;
-			__entry->new_level = new_rb->id;
-			__entry->cur_rptr = cur_rb->rptr;
-			__entry->new_rptr = new_rb->rptr;
-			__entry->cur_wptr = cur_rb->wptr;
-			__entry->new_wptr = new_rb->wptr;
-			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
-			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
-	),
-	TP_printk(
-	"cur_rb_lvl=%d rptr=%x wptr=%x rbbase=%x new_rb_lvl=%d rptr=%x wptr=%x rbbase=%x",
-		__entry->cur_level, __entry->cur_rptr,
-		__entry->cur_wptr, __entry->cur_rbbase,
-		__entry->new_level, __entry->new_rptr,
-		__entry->new_wptr, __entry->new_rbbase
-	)
-);
-
-DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_clear_to_trig,
-	TP_PROTO(struct adreno_ringbuffer *cur_rb,
-		struct adreno_ringbuffer *new_rb),
-	TP_ARGS(cur_rb, new_rb)
-);
-
-DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_trig_to_comp,
-	TP_PROTO(struct adreno_ringbuffer *cur_rb,
-		struct adreno_ringbuffer *new_rb),
-	TP_ARGS(cur_rb, new_rb)
-);
-
-DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_trig_to_comp_int,
-	TP_PROTO(struct adreno_ringbuffer *cur_rb,
-		struct adreno_ringbuffer *new_rb),
-	TP_ARGS(cur_rb, new_rb)
-);
-
-TRACE_EVENT(adreno_hw_preempt_comp_to_clear,
-	TP_PROTO(struct adreno_ringbuffer *cur_rb,
-		struct adreno_ringbuffer *new_rb),
-	TP_ARGS(cur_rb, new_rb),
-	TP_STRUCT__entry(__field(int, cur_level)
-			__field(int, new_level)
-			__field(unsigned int, cur_rptr)
-			__field(unsigned int, new_rptr)
-			__field(unsigned int, cur_wptr)
-			__field(unsigned int, new_wptr_end)
-			__field(unsigned int, new_wptr)
-			__field(unsigned int, cur_rbbase)
-			__field(unsigned int, new_rbbase)
-	),
-	TP_fast_assign(__entry->cur_level = cur_rb->id;
-			__entry->new_level = new_rb->id;
-			__entry->cur_rptr = cur_rb->rptr;
-			__entry->new_rptr = new_rb->rptr;
-			__entry->cur_wptr = cur_rb->wptr;
-			__entry->new_wptr_end = new_rb->wptr_preempt_end;
-			__entry->new_wptr = new_rb->wptr;
-			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
-			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
-	),
-	TP_printk(
-	"cur_rb_lvl=%d rptr=%x wptr=%x rbbase=%x prev_rb_lvl=%d rptr=%x wptr_preempt_end=%x wptr=%x rbbase=%x",
-		__entry->cur_level, __entry->cur_rptr,
-		__entry->cur_wptr, __entry->cur_rbbase,
-		__entry->new_level, __entry->new_rptr,
-		__entry->new_wptr_end, __entry->new_wptr, __entry->new_rbbase
-	)
-);
-
-TRACE_EVENT(adreno_hw_preempt_token_submit,
-	TP_PROTO(struct adreno_ringbuffer *cur_rb,
-		struct adreno_ringbuffer *new_rb),
-	TP_ARGS(cur_rb, new_rb),
-	TP_STRUCT__entry(__field(int, cur_level)
-		__field(int, new_level)
-		__field(unsigned int, cur_rptr)
-		__field(unsigned int, new_rptr)
-		__field(unsigned int, cur_wptr)
-		__field(unsigned int, cur_wptr_end)
-		__field(unsigned int, new_wptr)
-		__field(unsigned int, cur_rbbase)
-		__field(unsigned int, new_rbbase)
-	),
-	TP_fast_assign(__entry->cur_level = cur_rb->id;
-			__entry->new_level = new_rb->id;
-			__entry->cur_rptr = cur_rb->rptr;
-			__entry->new_rptr = new_rb->rptr;
-			__entry->cur_wptr = cur_rb->wptr;
-			__entry->cur_wptr_end = cur_rb->wptr_preempt_end;
-			__entry->new_wptr = new_rb->wptr;
-			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
-			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
-	),
-	TP_printk(
-		"cur_rb_lvl=%d rptr=%x wptr_preempt_end=%x wptr=%x rbbase=%x new_rb_lvl=%d rptr=%x wptr=%x rbbase=%x",
-		__entry->cur_level, __entry->cur_rptr,
-		__entry->cur_wptr_end, __entry->cur_wptr,
-		__entry->cur_rbbase,
-		__entry->new_level, __entry->new_rptr,
-		__entry->new_wptr, __entry->new_rbbase
-	)
-);
-
-TRACE_EVENT(adreno_rb_starve,
-	TP_PROTO(struct adreno_ringbuffer *rb),
-	TP_ARGS(rb),
-	TP_STRUCT__entry(__field(int, id)
-		__field(unsigned int, rptr)
-		__field(unsigned int, wptr)
-	),
-	TP_fast_assign(__entry->id = rb->id;
-		__entry->rptr = rb->rptr;
-		__entry->wptr = rb->wptr;
-	),
-	TP_printk(
-		"rb %d r/w %x/%x starved", __entry->id, __entry->rptr,
-		__entry->wptr
+			A4XX_IRQ_FLAGS) : "None"
 	)
 );
 
@@ -624,63 +443,163 @@ TRACE_EVENT(kgsl_a5xx_irq_status,
 		"d_name=%s status=%s",
 		__get_str(device_name),
 		__entry->status ? __print_flags(__entry->status, "|",
-			{ 1 << A5XX_INT_RBBM_GPU_IDLE, "RBBM_GPU_IDLE" },
-			{ 1 << A5XX_INT_RBBM_AHB_ERROR, "RBBM_AHB_ERR" },
-			{ 1 << A5XX_INT_RBBM_TRANSFER_TIMEOUT,
-				"RBBM_TRANSFER_TIMEOUT" },
-			{ 1 << A5XX_INT_RBBM_ME_MS_TIMEOUT,
-				"RBBM_ME_MS_TIMEOUT" },
-			{ 1 << A5XX_INT_RBBM_PFP_MS_TIMEOUT,
-				"RBBM_PFP_MS_TIMEOUT" },
-			{ 1 << A5XX_INT_RBBM_ETS_MS_TIMEOUT,
-				"RBBM_ETS_MS_TIMEOUT" },
-			{ 1 << A5XX_INT_RBBM_ATB_ASYNC_OVERFLOW,
-				"RBBM_ATB_ASYNC_OVERFLOW" },
-			{ 1 << A5XX_INT_RBBM_GPC_ERROR,
-				"RBBM_GPC_ERR" },
-			{ 1 << A5XX_INT_CP_SW, "CP_SW" },
-			{ 1 << A5XX_INT_CP_HW_ERROR, "CP_OPCODE_ERROR" },
-			{ 1 << A5XX_INT_CP_CCU_FLUSH_DEPTH_TS,
-				"CP_CCU_FLUSH_DEPTH_TS" },
-			{ 1 << A5XX_INT_CP_CCU_FLUSH_COLOR_TS,
-				"CP_CCU_FLUSH_COLOR_TS" },
-			{ 1 << A5XX_INT_CP_CCU_RESOLVE_TS,
-				"CP_CCU_RESOLVE_TS" },
-			{ 1 << A5XX_INT_CP_IB2, "CP_IB2_INT" },
-			{ 1 << A5XX_INT_CP_IB1, "CP_IB1_INT" },
-			{ 1 << A5XX_INT_CP_RB, "CP_RB_INT" },
-			{ 1 << A5XX_INT_CP_UNUSED_1, "CP_UNUSED_1" },
-			{ 1 << A5XX_INT_CP_RB_DONE_TS, "CP_RB_DONE_TS" },
-			{ 1 << A5XX_INT_CP_WT_DONE_TS, "CP_WT_DONE_TS" },
-			{ 1 << A5XX_INT_UNKNOWN_1, "UNKNOWN_1" },
-			{ 1 << A5XX_INT_CP_CACHE_FLUSH_TS,
-				"CP_CACHE_FLUSH_TS" },
-			{ 1 << A5XX_INT_UNUSED_2,
-				"UNUSED_2" },
-			{ 1 << A5XX_INT_RBBM_ATB_BUS_OVERFLOW,
-				"RBBM_ATB_BUS_OVERFLOW" },
-			{ 1 << A5XX_INT_MISC_HANG_DETECT,
-				"MISC_HANG_DETECT" },
-			{ 1 << A5XX_INT_UCHE_OOB_ACCESS,
-				"UCHE_OOB_ACCESS" },
-			{ 1 << A5XX_INT_UCHE_TRAP_INTR,
-				"UCHE_TRAP_INTR" },
-			{ 1 << A5XX_INT_DEBBUS_INTR_0,
-				"DEBBUS_INTR_0" },
-			{ 1 << A5XX_INT_DEBBUS_INTR_1,
-				"DEBBUS_INTR_1" },
-			{ 1 << A5XX_INT_GPMU_VOLTAGE_DROOP,
-				"GPMU_VOLTAGE_DROOP" },
-			{ 1 << A5XX_INT_GPMU_FIRMWARE,
-				"GPMU_FIRMWARE" },
-			{ 1 << A5XX_INT_ISDB_CPU_IRQ,
-				"ISDB_CPU_IRQ" },
-			{ 1 << A5XX_INT_ISDB_UNDER_DEBUG,
-				"ISDB_UNDER_DEBUG" })
-		: "None"
+			A5XX_IRQ_FLAGS) : "None"
 	)
 );
 
+DECLARE_EVENT_CLASS(adreno_hw_preempt_template,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb,
+		unsigned int cur_rptr, unsigned int new_rptr),
+	TP_ARGS(cur_rb, new_rb, cur_rptr, new_rptr),
+	TP_STRUCT__entry(__field(int, cur_level)
+			__field(int, new_level)
+			__field(unsigned int, cur_rptr)
+			__field(unsigned int, new_rptr)
+			__field(unsigned int, cur_wptr)
+			__field(unsigned int, new_wptr)
+			__field(unsigned int, cur_rbbase)
+			__field(unsigned int, new_rbbase)
+	),
+	TP_fast_assign(__entry->cur_level = cur_rb->id;
+			__entry->new_level = new_rb->id;
+			__entry->cur_rptr = cur_rptr;
+			__entry->new_rptr = new_rptr;
+			__entry->cur_wptr = cur_rb->wptr;
+			__entry->new_wptr = new_rb->wptr;
+			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
+			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
+	),
+	TP_printk(
+	"cur_rb_lvl=%d rptr=%x wptr=%x rbbase=%x new_rb_lvl=%d rptr=%x wptr=%x rbbase=%x",
+		__entry->cur_level, __entry->cur_rptr,
+		__entry->cur_wptr, __entry->cur_rbbase,
+		__entry->new_level, __entry->new_rptr,
+		__entry->new_wptr, __entry->new_rbbase
+	)
+);
+
+DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_clear_to_trig,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb,
+		unsigned int cur_rptr, unsigned int new_rptr),
+	TP_ARGS(cur_rb, new_rb, cur_rptr, new_rptr)
+);
+
+DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_trig_to_comp,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb,
+		unsigned int cur_rptr, unsigned int new_rptr),
+	TP_ARGS(cur_rb, new_rb, cur_rptr, new_rptr)
+);
+
+DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_trig_to_comp_int,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb,
+		unsigned int cur_rptr, unsigned int new_rptr),
+	TP_ARGS(cur_rb, new_rb, cur_rptr, new_rptr)
+);
+
+TRACE_EVENT(adreno_hw_preempt_comp_to_clear,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb,
+		unsigned int cur_rptr, unsigned int new_rptr),
+	TP_ARGS(cur_rb, new_rb, cur_rptr, new_rptr),
+	TP_STRUCT__entry(__field(int, cur_level)
+			__field(int, new_level)
+			__field(unsigned int, cur_rptr)
+			__field(unsigned int, new_rptr)
+			__field(unsigned int, cur_wptr)
+			__field(unsigned int, new_wptr_end)
+			__field(unsigned int, new_wptr)
+			__field(unsigned int, cur_rbbase)
+			__field(unsigned int, new_rbbase)
+	),
+	TP_fast_assign(__entry->cur_level = cur_rb->id;
+			__entry->new_level = new_rb->id;
+			__entry->cur_rptr = cur_rptr;
+			__entry->new_rptr = new_rptr;
+			__entry->cur_wptr = cur_rb->wptr;
+			__entry->new_wptr_end = new_rb->wptr_preempt_end;
+			__entry->new_wptr = new_rb->wptr;
+			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
+			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
+	),
+	TP_printk(
+	"cur_rb_lvl=%d rptr=%x wptr=%x rbbase=%x prev_rb_lvl=%d rptr=%x wptr_preempt_end=%x wptr=%x rbbase=%x",
+		__entry->cur_level, __entry->cur_rptr,
+		__entry->cur_wptr, __entry->cur_rbbase,
+		__entry->new_level, __entry->new_rptr,
+		__entry->new_wptr_end, __entry->new_wptr, __entry->new_rbbase
+	)
+);
+
+TRACE_EVENT(adreno_hw_preempt_token_submit,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb,
+		unsigned int cur_rptr, unsigned int new_rptr),
+	TP_ARGS(cur_rb, new_rb, cur_rptr, new_rptr),
+	TP_STRUCT__entry(__field(int, cur_level)
+		__field(int, new_level)
+		__field(unsigned int, cur_rptr)
+		__field(unsigned int, new_rptr)
+		__field(unsigned int, cur_wptr)
+		__field(unsigned int, cur_wptr_end)
+		__field(unsigned int, new_wptr)
+		__field(unsigned int, cur_rbbase)
+		__field(unsigned int, new_rbbase)
+	),
+	TP_fast_assign(__entry->cur_level = cur_rb->id;
+			__entry->new_level = new_rb->id;
+			__entry->cur_rptr = cur_rptr;
+			__entry->new_rptr = new_rptr;
+			__entry->cur_wptr = cur_rb->wptr;
+			__entry->cur_wptr_end = cur_rb->wptr_preempt_end;
+			__entry->new_wptr = new_rb->wptr;
+			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
+			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
+	),
+	TP_printk(
+		"cur_rb_lvl=%d rptr=%x wptr_preempt_end=%x wptr=%x rbbase=%x new_rb_lvl=%d rptr=%x wptr=%x rbbase=%x",
+		__entry->cur_level, __entry->cur_rptr,
+		__entry->cur_wptr_end, __entry->cur_wptr,
+		__entry->cur_rbbase,
+		__entry->new_level, __entry->new_rptr,
+		__entry->new_wptr, __entry->new_rbbase
+	)
+);
+
+TRACE_EVENT(adreno_preempt_trigger,
+	TP_PROTO(struct adreno_ringbuffer *cur, struct adreno_ringbuffer *next),
+	TP_ARGS(cur, next),
+	TP_STRUCT__entry(
+		__field(struct adreno_ringbuffer *, cur)
+		__field(struct adreno_ringbuffer *, next)
+	),
+	TP_fast_assign(
+		__entry->cur = cur;
+		__entry->next = next;
+	),
+	TP_printk("trigger from id=%d to id=%d",
+		__entry->cur->id, __entry->next->id
+	)
+);
+
+TRACE_EVENT(adreno_preempt_done,
+	TP_PROTO(struct adreno_ringbuffer *cur, struct adreno_ringbuffer *next),
+	TP_ARGS(cur, next),
+	TP_STRUCT__entry(
+		__field(struct adreno_ringbuffer *, cur)
+		__field(struct adreno_ringbuffer *, next)
+	),
+	TP_fast_assign(
+		__entry->cur = cur;
+		__entry->next = next;
+	),
+	TP_printk("done switch to id=%d from id=%d",
+		__entry->next->id, __entry->cur->id
+	)
+);
 #endif /* _ADRENO_TRACE_H */
 
 /* This part must be outside protection */

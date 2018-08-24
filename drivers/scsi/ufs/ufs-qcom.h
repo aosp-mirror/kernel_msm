@@ -323,6 +323,7 @@ struct ufs_qcom_host {
 	/* PM Quality-of-Service (QoS) data */
 	struct ufs_qcom_pm_qos pm_qos;
 
+	bool disable_lpm;
 	bool is_lane_clks_enabled;
 	bool sec_cfg_updated;
 	struct ufs_qcom_ice_data ice;
@@ -336,6 +337,9 @@ struct ufs_qcom_host {
 	/* Bitmask for enabling debug prints */
 	u32 dbg_print_en;
 	struct ufs_qcom_testbus testbus;
+
+	struct work_struct ice_cfg_work;
+	struct request *req_pending;
 };
 
 static inline u32

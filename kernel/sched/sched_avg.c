@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2015-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,9 +18,9 @@
 #include <linux/hrtimer.h>
 #include <linux/sched.h>
 #include <linux/math64.h>
-#include <trace/events/sched.h>
 
 #include "sched.h"
+#include <trace/events/sched.h>
 
 static DEFINE_PER_CPU(u64, nr_prod_sum);
 static DEFINE_PER_CPU(u64, last_time);
@@ -30,6 +30,8 @@ static DEFINE_PER_CPU(u64, nr);
 static DEFINE_PER_CPU(unsigned long, iowait_prod_sum);
 static DEFINE_PER_CPU(spinlock_t, nr_lock) = __SPIN_LOCK_UNLOCKED(nr_lock);
 static s64 last_get_time;
+
+static DEFINE_PER_CPU(atomic64_t, last_busy_time) = ATOMIC64_INIT(0);
 
 /**
  * sched_get_nr_running_avg
@@ -60,17 +62,17 @@ void sched_get_nr_running_avg(int *avg, int *iowait_avg, int *big_avg)
 
 		spin_lock_irqsave(&per_cpu(nr_lock, cpu), flags);
 		curr_time = sched_clock();
+		diff = curr_time - per_cpu(last_time, cpu);
+		BUG_ON((s64)diff < 0);
+
 		tmp_avg += per_cpu(nr_prod_sum, cpu);
-		tmp_avg += per_cpu(nr, cpu) *
-			(curr_time - per_cpu(last_time, cpu));
+		tmp_avg += per_cpu(nr, cpu) * diff;
 
 		tmp_big_avg += per_cpu(nr_big_prod_sum, cpu);
-		tmp_big_avg += nr_eligible_big_tasks(cpu) *
-			(curr_time - per_cpu(last_time, cpu));
+		tmp_big_avg += nr_eligible_big_tasks(cpu) * diff;
 
 		tmp_iowait += per_cpu(iowait_prod_sum, cpu);
-		tmp_iowait +=  nr_iowait_cpu(cpu) *
-			(curr_time - per_cpu(last_time, cpu));
+		tmp_iowait +=  nr_iowait_cpu(cpu) * diff;
 
 		per_cpu(last_time, cpu) = curr_time;
 
@@ -96,6 +98,41 @@ void sched_get_nr_running_avg(int *avg, int *iowait_avg, int *big_avg)
 }
 EXPORT_SYMBOL(sched_get_nr_running_avg);
 
+#define BUSY_NR_RUN		3
+#define BUSY_LOAD_FACTOR	10
+
+#ifdef CONFIG_SCHED_HMP
+static inline void update_last_busy_time(int cpu, bool dequeue,
+				unsigned long prev_nr_run, u64 curr_time)
+{
+	bool nr_run_trigger = false, load_trigger = false;
+
+	if (!hmp_capable() || is_min_capacity_cpu(cpu))
+		return;
+
+	if (prev_nr_run >= BUSY_NR_RUN && per_cpu(nr, cpu) < BUSY_NR_RUN)
+		nr_run_trigger = true;
+
+	if (dequeue) {
+		u64 load;
+
+		load = cpu_rq(cpu)->hmp_stats.cumulative_runnable_avg;
+		load = scale_load_to_cpu(load, cpu);
+
+		if (load * BUSY_LOAD_FACTOR > sched_ravg_window)
+			load_trigger = true;
+	}
+
+	if (nr_run_trigger || load_trigger)
+		atomic64_set(&per_cpu(last_busy_time, cpu), curr_time);
+}
+#else
+static inline void update_last_busy_time(int cpu, bool dequeue,
+				unsigned long prev_nr_run, u64 curr_time)
+{
+}
+#endif
+
 /**
  * sched_update_nr_prod
  * @cpu: The core id of the nr running driver.
@@ -107,18 +144,21 @@ EXPORT_SYMBOL(sched_get_nr_running_avg);
  */
 void sched_update_nr_prod(int cpu, long delta, bool inc)
 {
-	int diff;
-	s64 curr_time;
+	u64 diff;
+	u64 curr_time;
 	unsigned long flags, nr_running;
 
 	spin_lock_irqsave(&per_cpu(nr_lock, cpu), flags);
 	nr_running = per_cpu(nr, cpu);
 	curr_time = sched_clock();
 	diff = curr_time - per_cpu(last_time, cpu);
+	BUG_ON((s64)diff < 0);
 	per_cpu(last_time, cpu) = curr_time;
 	per_cpu(nr, cpu) = nr_running + (inc ? delta : -delta);
 
 	BUG_ON((s64)per_cpu(nr, cpu) < 0);
+
+	update_last_busy_time(cpu, !inc, nr_running, curr_time);
 
 	per_cpu(nr_prod_sum, cpu) += nr_running * diff;
 	per_cpu(nr_big_prod_sum, cpu) += nr_eligible_big_tasks(cpu) * diff;
@@ -126,3 +166,8 @@ void sched_update_nr_prod(int cpu, long delta, bool inc)
 	spin_unlock_irqrestore(&per_cpu(nr_lock, cpu), flags);
 }
 EXPORT_SYMBOL(sched_update_nr_prod);
+
+u64 sched_get_cpu_last_busy_time(int cpu)
+{
+	return atomic64_read(&per_cpu(last_busy_time, cpu));
+}

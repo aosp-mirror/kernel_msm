@@ -589,14 +589,12 @@ config TELCLOCK
 	  controlling the behavior of this hardware.
 
 config DEVPORT
-	bool
-	depends on !M68K
+	bool "/dev/port character device"
 	depends on ISA || PCI
 	default y
-
-config DCC_TTY
-	tristate "DCC tty driver"
-	depends on ARM
+	help
+	  Say Y here if you want to support the /dev/port device. The /dev/port
+	  device is similar to /dev/mem, but for I/O ports.
 
 source "drivers/s390/char/Kconfig"
 
@@ -629,6 +627,15 @@ config MSM_ADSPRPC
 	  make remote method invocations across processor boundary to
 	  applications DSP processor. Say M if you want to enable this
 	  module.
+
+config MSM_MDSP_TS
+	tristate "Qualcomm Technologies Inc MDSP TimeStamp driver"
+	depends on MSM_SMD
+	help
+	  Provides a high response mechanism that allows for AP to get
+	  timestamp from mDSP. It provides the device /dev/vsync_ts_diff
+	  for user to read the timestamp, and the timestamp is transferred
+	  through smd between mDSP and AP.
 
 config MSM_RDBG
 	tristate "Qualcomm Remote debug driver"

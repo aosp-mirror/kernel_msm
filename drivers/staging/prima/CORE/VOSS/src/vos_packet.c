@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -3107,6 +3107,35 @@ v_U8_t vos_pkt_get_proto_type
 
    /* Protocol type map */
    return pkt_proto_type;
+}
+
+bool vos_is_arp_pkt(void *pskb, bool is_translated)
+{
+   v_U16_t    ether_type;
+   struct sk_buff *skb = NULL;
+#define HEADER_OFFSET_802_11 20
+
+   if (NULL == pskb)
+   {
+      return FALSE;
+   }
+
+   skb = (struct sk_buff *)pskb;
+
+   if (is_translated)
+      ether_type = (v_U16_t)(*(v_U16_t *)(skb->data + VOS_PKT_PROT_ETH_TYPE_OFFSET + HEADER_OFFSET_802_11));
+   else
+      ether_type = (v_U16_t)(*(v_U16_t *)(skb->data + VOS_PKT_PROT_ETH_TYPE_OFFSET));
+
+   if (VOS_PKT_PROT_ARP_ETH_TYPE == VOS_SWAP_U16(ether_type))
+   {
+      return TRUE;
+   }
+   else
+   {
+      return FALSE;
+   }
+#undef HEADER_OFFSET_802_11
 }
 
 v_PVOID_t vos_get_pkt_head(vos_pkt_t *pPacket)

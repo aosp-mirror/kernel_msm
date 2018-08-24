@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -406,5 +406,21 @@ hdd_wlan_wmm_status_e hdd_wmm_checkts( hdd_adapter_t* pAdapter,
                    : other values if failure
   ===========================================================================*/
 VOS_STATUS hdd_wmm_adapter_clear( hdd_adapter_t *pAdapter );
+
+/**============================================================================
+  @brief hdd_log_ip_addr() - Function to log IP header src and dst address
+  @param pAdapter  : [in]  pointer to os packet
+
+  @return          : None
+  ===========================================================================*/
+void hdd_log_ip_addr(struct sk_buff *skb);
+
+/**============================================================================
+  @brief hdd_get_arp_src_ip() - Function to get ARP src IP addr
+  @param pAdapter  : [in]  pointer to os packet
+
+  @return          : IP address
+  ===========================================================================*/
+uint32_t hdd_get_arp_src_ip(struct sk_buff *skb);
 
 #endif /* #ifndef _WLAN_HDD_WMM_H */

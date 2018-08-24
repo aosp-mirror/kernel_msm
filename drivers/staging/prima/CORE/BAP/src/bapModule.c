@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -580,7 +580,7 @@ WLANBAP_ReleaseHndl
   if( btampContext->isBapSessionOpen == TRUE )
   {
     halStatus = sme_CloseSession(halHandle, 
-            btampContext->sessionId, VOS_TRUE, NULL, NULL);
+            btampContext->sessionId, FALSE, VOS_TRUE, NULL, NULL);
     if(eHAL_STATUS_SUCCESS == halStatus)
     {
       btampContext->isBapSessionOpen = FALSE;

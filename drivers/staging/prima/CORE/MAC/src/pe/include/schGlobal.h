@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -77,9 +77,9 @@
 //****************** MISC defs *********************************
 
 /// Maximum allowable size of a beacon frame
-#define SCH_MAX_BEACON_SIZE    512
+#define SCH_MAX_BEACON_SIZE    500
 
-#define SCH_MAX_PROBE_RESP_SIZE 512
+#define SCH_MAX_PROBE_RESP_SIZE 700
 
 struct schMisc {
 

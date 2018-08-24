@@ -435,6 +435,7 @@ static int usbvision_v4l2_close(struct file *file)
 	usbvision_scratch_free(usbvision);
 
 	usbvision->user--;
+	mutex_unlock(&usbvision->v4l2_lock);
 
 	if (power_on_at_open) {
 		/* power off in a little while
@@ -448,7 +449,6 @@ static int usbvision_v4l2_close(struct file *file)
 		usbvision_release(usbvision);
 		return 0;
 	}
-	mutex_unlock(&usbvision->v4l2_lock);
 
 	PDEBUG(DBG_IO, "success");
 	return 0;
@@ -1583,7 +1583,14 @@ static int usbvision_probe(struct usb_interface *intf,
 	}
 
 	for (i = 0; i < usbvision->num_alt; i++) {
-		u16 tmp = le16_to_cpu(uif->altsetting[i].endpoint[1].desc.
+		u16 tmp;
+
+		if (uif->altsetting[i].desc.bNumEndpoints < 2) {
+			usbvision_release(usbvision);
+			return -ENODEV;
+		}
+
+		tmp = le16_to_cpu(uif->altsetting[i].endpoint[1].desc.
 				      wMaxPacketSize);
 		usbvision->alt_max_pkt_size[i] =
 			(tmp & 0x07ff) * (((tmp & 0x1800) >> 11) + 1);

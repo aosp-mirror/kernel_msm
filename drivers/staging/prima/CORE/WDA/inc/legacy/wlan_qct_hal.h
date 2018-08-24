@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -230,7 +230,7 @@ typedef struct sUapsdInfo {
 
 /*------------ RSSI and SNR Information extraction -------------*/
 #define WLANHAL_RX_BD_GET_RSSI0( _pvBDHeader )  \
-    (((((tpHalRxBd)_pvBDHeader)->phyStats0) >> 24) & 0xff)
+    (((((tpHalRxBd)_pvBDHeader)->phyStats0) >> 24) & 0x7f)
 #define WLANHAL_RX_BD_GET_RSSI1( _pvBDHeader )  \
     (((((tpHalRxBd)_pvBDHeader)->phyStats0) >> 16) & 0xff)
 #define WLANHAL_RX_BD_GET_RSSI2( _pvBDHeader )  \
@@ -339,7 +339,9 @@ tANI_U8 WLANHAL_RxBD_GetFrameTypeSubType(v_PVOID_t _pvBDHeader, tANI_U16 usFrmCt
 #define HAL_TDLS_PEER_STA_MASK              0x80 //bit 7 set for TDLS peer station 
 #endif
 
-#define HAL_RELIABLE_MCAST_REQUESTED_MASK   0x100
+#ifdef WLAN_FEATURE_RMC
+#define HAL_RMC_REQUESTED_MASK   0x100
+#endif
 
 #define HAL_USE_BD_RATE_1_MASK              0x1000 // bit 12 for BD RATE 1
 #define HAL_USE_BD_RATE_2_MASK              0x2000 // bit 13 for BD RATE 1
