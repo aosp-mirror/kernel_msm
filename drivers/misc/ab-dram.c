@@ -93,7 +93,6 @@ static int ab_dram_alloc(struct ab_dram_data *dev_data,
 		pr_err("Fail to allocate genpool\n");
 		goto err;
 	}
-	sg_set_page(table->sgl, pfn_to_page(PFN_DOWN(paddr)), len, 0);
 	buffer->ab_paddr = paddr;
 	buffer->sg_table = table;
 
@@ -118,8 +117,8 @@ static void ab_dram_free(struct ab_dram_buffer *buffer)
 		return;
 
 	for_each_sg(table->sgl, sg, table->nents, i) {
-		gen_pool_free(dev_data->pool, page_to_phys(sg_page(sg)),
-			      sg->length);
+		gen_pool_free(dev_data->pool, sg_dma_address(sg),
+				sg_dma_len(sg));
 	}
 
 	sg_free_table(table);
