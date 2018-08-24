@@ -1,0 +1,45 @@
+Google binned low power mode panel
+
+This is an extension of QTI's mdss-dsi-panel to handle additional command
+sequences for low power modes.
+
+Required properties:
+- compatible:           "google,dsi_binned_lp"
+
+
+==============================================================
+
+Google low power display modes
+
+Required properties:
+- compatible:		"google,lp-modes"
+- label:			Name of the entry
+- dsi-lp-brightness-threshold:
+			Max brightness supported by the mode
+- dsi-lp-command:	Command sequence to enter this mode
+- dsi-lp-command-state:	Command state used in this mode
+
+Example:
+
+/ {
+	...
+	google,lp-modes {
+		lp-mode@0 {
+			label = "off";
+			google,dsi-lp-brightness-threshold = <0>;
+			google,dsi-lp-command = [
+				05 01 00 00 00 00 01 22
+			];
+			google,dsi-lp-command-state = "dsi_lp_mode";
+		};
+
+		lp-mode@1 {
+			label = "high";
+			google,dsi-lp-brightness-threshold = <255>;
+			google,dsi-lp-command = [
+				39 01 00 00 00 00 03 51 01 FF
+				05 01 00 00 00 00 01 12
+			];
+			google,dsi-lp-command-state = "dsi_lp_mode";
+		};
+};
