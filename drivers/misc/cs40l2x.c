@@ -3777,14 +3777,18 @@ static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
 				cs40l2x, cs40l2x_coeff_file_load);
 }
 
-static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x,
-		int boost_ind, int boost_cap, int boost_ipk,
-		int boost_lim_en, int boost_vol, int boost_ovp_vol)
+static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
 {
-	int ret;
-	unsigned char bst_lbst_val, bst_cbst_range, bst_ipk_scaled;
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
+	unsigned int boost_ind = cs40l2x->pdata.boost_ind;
+	unsigned int boost_cap = cs40l2x->pdata.boost_cap;
+	unsigned int boost_ipk = cs40l2x->pdata.boost_ipk;
+	unsigned int boost_ctl = cs40l2x->pdata.boost_ctl;
+	unsigned int boost_ovp = cs40l2x->pdata.boost_ovp;
+	unsigned int bst_lbst_val, bst_cbst_range;
+	unsigned int bst_ipk_scaled, bst_ctl_scaled, bst_ovp_scaled;
+	int ret;
 
 	switch (boost_ind) {
 	case 1000:	/* 1.0 uH */
@@ -3891,36 +3895,88 @@ static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x,
 		return ret;
 	}
 
-	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL2,
-			CS40L2X_BST_CTL_LIM_EN_MASK,
-			boost_lim_en << CS40L2X_BST_CTL_LIM_EN_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to enables BST_CTL\n");
-		return ret;
-	}
-
-	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL1,
-			CS40L2X_BST_CTL_MASK,
-			boost_vol << CS40L2X_BST_CTL_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to limit VBST target voltage\n");
-		return ret;
-	}
-
-	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_OVERVOLT_CTRL,
-			CS40L2X_BST_OVP_THLD_MASK,
-			boost_ovp_vol << CS40L2X_BST_OVP_THLD_SHIFT);
-	if (ret) {
-		dev_err(dev, "Failed to enable over-voltage protection\n");
-		return ret;
-	}
-
 	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_BSTCVRT_PEAK_CUR,
 			bst_ipk_scaled << CS40L2X_BST_IPK_SHIFT);
 	if (ret) {
 		dev_err(dev,
 			"Failed to sequence boost inductor peak current\n");
 		return ret;
+	}
+
+	if (boost_ctl) {
+		boost_ctl &= CS40L2X_PDATA_MASK;
+
+		switch (boost_ctl) {
+		case 0:
+			bst_ctl_scaled = boost_ctl;
+			break;
+		case 2550 ... 11000:
+			bst_ctl_scaled = ((boost_ctl - 2550) / 50) + 1;
+			break;
+		default:
+			dev_err(dev, "Invalid VBST limit: %d mV\n", boost_ctl);
+			return -EINVAL;
+		}
+
+		ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL1,
+				CS40L2X_BST_CTL_MASK,
+				bst_ctl_scaled << CS40L2X_BST_CTL_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to write VBST limit\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_BSTCVRT_VCTRL1,
+				bst_ctl_scaled << CS40L2X_BST_CTL_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to sequence VBST limit\n");
+			return ret;
+		}
+
+		ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL2,
+				CS40L2X_BST_CTL_LIM_EN_MASK,
+				1 << CS40L2X_BST_CTL_LIM_EN_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to configure VBST control\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_BSTCVRT_VCTRL2,
+				(1 << CS40L2X_BST_CTL_LIM_EN_SHIFT) |
+				(CS40L2X_BST_CTL_SEL_CLASSH
+					<< CS40L2X_BST_CTL_SEL_SHIFT));
+		if (ret) {
+			dev_err(dev, "Failed to sequence VBST control\n");
+			return ret;
+		}
+	}
+
+	switch (boost_ovp) {
+	case 0:
+		break;
+	case 9000 ... 12875:
+		bst_ovp_scaled = ((boost_ovp - 9000) / 125) * 2;
+
+		ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_OVERVOLT_CTRL,
+				CS40L2X_BST_OVP_THLD_MASK,
+				bst_ovp_scaled << CS40L2X_BST_OVP_THLD_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to write OVP threshold\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_reg(cs40l2x,
+				CS40L2X_BSTCVRT_OVERVOLT_CTRL,
+				(1 << CS40L2X_BST_OVP_EN_SHIFT) |
+				(bst_ovp_scaled << CS40L2X_BST_OVP_THLD_SHIFT));
+		if (ret) {
+			dev_err(dev, "Failed to sequence OVP threshold\n");
+			return ret;
+		}
+		break;
+	default:
+		dev_err(dev, "Invalid OVP threshold: %d mV\n", boost_ovp);
+		return -EINVAL;
 	}
 
 	return 0;
@@ -4100,10 +4156,7 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 		}
 	}
 
-	ret = cs40l2x_boost_config(cs40l2x, cs40l2x->pdata.boost_ind,
-			cs40l2x->pdata.boost_cap, cs40l2x->pdata.boost_ipk,
-			cs40l2x->pdata.boost_lim_en, cs40l2x->pdata.boost_vol,
-			cs40l2x->pdata.boost_ovp_vol);
+	ret = cs40l2x_boost_config(cs40l2x);
 	if (ret)
 		return ret;
 
@@ -4336,26 +4389,13 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	}
 	pdata->boost_ipk = out_val;
 
-	ret = of_property_read_u32(np, "cirrus,boost-ctl-lim-en", &out_val);
-	if (ret) {
-		dev_err(dev, "Boost converter target control not specified\n");
-		return -EINVAL;
-	}
-	pdata->boost_lim_en = out_val;
-
 	ret = of_property_read_u32(np, "cirrus,boost-ctl-millivolt", &out_val);
-	if (ret) {
-		dev_err(dev, "Boost control maximum limit not specified\n");
-		return -EINVAL;
-	}
-	pdata->boost_vol = out_val;
+	if (!ret)
+		pdata->boost_ctl = out_val | CS40L2X_PDATA_PRESENT;
 
 	ret = of_property_read_u32(np, "cirrus,boost-ovp-millivolt", &out_val);
-	if (ret) {
-		dev_err(dev, "Boost overvoltage protection limit not specified\n");
-		return -EINVAL;
-	}
-	pdata->boost_ovp_vol = out_val;
+	if (!ret)
+		pdata->boost_ovp = out_val;
 
 	pdata->refclk_gpio2 = of_property_read_bool(np, "cirrus,refclk-gpio2");
 
