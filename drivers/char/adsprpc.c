@@ -2982,18 +2982,20 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 						"smqcontext:", ictx,
 						"sc:", ictx->sc,
 						"tid:", ictx->pid,
-						"handle", ictx->rpra->h);
+						"handle",
+						ictx->rpra ? ictx->rpra->h : 0);
 		}
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
 					"\n%s\n",
 					"LIST OF INTERRUPTED SMQCONTEXTS:");
 		hlist_for_each_entry_safe(ictx, n, &fl->clst.interrupted, hn) {
-		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-					"%s %pK %s %u %s %u %s %u\n",
-					"smqcontext:", ictx,
-					"sc:", ictx->sc,
-					"tid:", ictx->pid,
-					"handle", ictx->rpra->h);
+			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
+						"%s %pK %s %u %s %u %s %u\n",
+						"smqcontext:", ictx,
+						"sc:", ictx->sc,
+						"tid:", ictx->pid,
+						"handle",
+						ictx->rpra ? ictx->rpra->h : 0);
 		}
 		spin_unlock(&fl->hlock);
 	}
