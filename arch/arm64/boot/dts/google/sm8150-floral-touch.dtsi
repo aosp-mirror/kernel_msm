@@ -10,50 +10,54 @@
  * GNU General Public License for more details.
  */
 
-// Configure 1.8v regulator from fingerprint
-&pm8150l_l1 {
-	regulator-min-microvolt = <1800000>;
-	regulator-max-microvolt = <1800000>;
-	qcom,init-voltage = <1800000>;
-	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
-	status = "okay";
-};
-
-// Disable floral's default SPI touch port
-&floral_spitouch {
-	status = "disabled";
-};
-
-/* AP Touch SPI CLK is gpio92, CS is gpio93, MISO is gpio94, MOSI is gpio95.
- * Reset gpio130, interrupt gpio118.
- * (???) bus master switch - gpio??
+/* AP Touch SPI CLK is gpio53, CS is gpio54, MISO is gpio51, MOSI is gpio52.
+ * Reset gpio127, interrupt gpio122.
+ * Bus master switch - gpio126.
+ * Display rate - gpio128.
  */
 
-&qupv3_se11_spi {
+// Keep interrupt pin active at all times
+&tlmm {
+	ts_mux {
+		ts_active_suspend: ts_active_suspend {
+			mux {
+				pins = "gpio122";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio122";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+	};
+};
+
+&qupv3_se4_spi {
 	status = "ok";
 	pinctrl-0 = <>;
 	pinctrl-1 = <>;
 
-	touchscreen@0 {
+	floral_spitouch: touchscreen@0 {
 		status = "ok";
 		compatible = "st,fts";
 		spi-max-frequency = <10000000>;
 
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <118 IRQ_TYPE_LEVEL_LOW>;
-		vdd-supply = <&pm8150l_l1>;		// Soli's 1.8v pin
-		avdd-supply = <&pm8150_l17>;		// Soli's 3.0v pin
+		interrupts = <122 IRQ_TYPE_LEVEL_LOW>;
+		vdd-supply = <&pm8150_l14>;
+		avdd-supply = <&pm8150_l17>;
 
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&qupv3_se11_spi_active &ts_active_suspend>;
 		pinctrl-1 = <&qupv3_se11_spi_active &ts_active_suspend>;
 
-		st,irq-gpio = <&tlmm 118 0>;
-		st,reset-gpio = <&tlmm 130 0>;
-		// TODO: configure switch
-		//st,switch_gpio = <&tlmm 136 0>;
-		st,max-coords = <1439 2959>;
+		st,irq-gpio = <&tlmm 122 0>;
+		st,reset-gpio = <&tlmm 127 0>;
+		st,switch_gpio = <&tlmm 126 0>;		// Low: AP, High: SLPI
+		st,disp-rate-gpio = <&tlmm 128 0>;
+		st,max-coords = <1439 3039>;
 		st,regulator_dvdd = "vdd";
 		st,regulator_avdd = "avdd";
 	};

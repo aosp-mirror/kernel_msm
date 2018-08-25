@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  */
 
+// Jaws has touch on I2C, not on SPI.
+&floral_spitouch {
+	status = "disabled";
+};
+
 &qupv3_se0_i2c { // touch controller on AP QUP 0
 	status = "ok";
 	qcom,clk-freq-out = <400000>;
