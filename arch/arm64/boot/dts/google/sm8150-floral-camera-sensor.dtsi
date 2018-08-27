@@ -187,6 +187,20 @@
 		status = "ok";
 	};
 
+	actuator_rear: qcom,actuator@0 {
+		cell-index = <0>;
+		reg = <0x0>;
+		compatible = "qcom,actuator";
+		cci-device = <1>;
+		cci-master = <0>;
+		cam_vaf-supply = <&max77826_ldo12>;
+		regulator-names = "cam_vaf";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <3000000>;
+		rgltr-max-voltage = <3000000>;
+		rgltr-load-current = <80000>;
+	};
+
 	ois_rear: qcom,ois@0 {
 		cell-index = <0>;
 		reg = <0x0>;
@@ -209,6 +223,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		actuator-src = <&actuator_rear>;
 		ois-src = <&ois_rear>;
 		cam_vio-supply = <&max77826_ldo13>;
 		cam_vana-supply = <&max77826_ldo4>;
