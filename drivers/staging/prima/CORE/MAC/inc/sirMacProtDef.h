@@ -179,7 +179,8 @@
 #define SIR_MAC_ACTION_FST            18
 #define SIR_MAC_ACTION_VHT            21
 
-
+#define SIR_MAC_ACTION_TX             1
+#define SIR_MAC_ACTION_RX             2
 // QoS management action codes
 
 #define SIR_MAC_QOS_ADD_TS_REQ      0
@@ -257,6 +258,8 @@
 #ifdef WLAN_FEATURE_AP_HT40_24G
 #define SIR_MAC_ACTION_2040_BSS_COEXISTENCE     0
 #endif
+#define SIR_MAC_ACTION_EXT_CHANNEL_SWITCH_ID    4
+
 
 
 #ifdef WLAN_FEATURE_11W
@@ -390,6 +393,10 @@
 #define SIR_MAC_RSN_EID                48
 #define SIR_MAC_RSN_EID_MIN                4
 #define SIR_MAC_RSN_EID_MAX                254
+
+#define SIR_MAC_EXT_CHNL_SWITCH_ANN_EID    60
+#define SIR_MAC_WIDER_BW_CHANNEL_SWITCH_ANN 194
+
 
 //using reserved EID for Qos Action IE for now,
 //need to check 11e spec for the actual EID
@@ -597,6 +604,7 @@
 #define SIR_MAC_MAX_NUM_OF_DEFAULT_KEYS      4
 #define SIR_MAC_KEY_LENGTH                   13   // WEP Maximum key length size
 #define SIR_MAC_AUTH_CHALLENGE_LENGTH        253
+#define SIR_MAC_SAP_AUTH_CHALLENGE_LENGTH    128
 #define SIR_MAC_WEP_IV_LENGTH                4
 #define SIR_MAC_WEP_ICV_LENGTH               4
 #define SIR_MAC_CHALLENGE_ID_LEN             2
@@ -2451,6 +2459,18 @@ typedef __ani_attr_pre_packed struct sSirMacVendorSpecificFrameHdr
 } __ani_attr_packed tSirMacVendorSpecificFrameHdr, *tpSirMacVendorSpecificFrameHdr;
 #endif
 
+#ifdef WLAN_FEATURE_RMC
+typedef __ani_attr_pre_packed struct sSirMacIbssExtNetworkFrameHdr
+{
+    tANI_U8    category;
+    tANI_U8    Oui[3];
+    tANI_U8    MagicCode[6];
+    tANI_U8    version;
+    tANI_U8    actionID;
+    tANI_U32   dialogToken;
+} __ani_attr_packed tSirMacIbssExtNetworkFrameHdr, *tpSirMacIbssExtNetworkFrameHdr;
+#endif /* WLAN_FEATURE_RMC */
+
 typedef __ani_attr_pre_packed struct sSirMacVendorSpecificPublicActionFrameHdr
 {
     tANI_U8    category;
@@ -2882,6 +2902,24 @@ typedef __ani_attr_pre_packed struct sSirPhy11aHdr
 
 #define SIR_MAC_MIN_IE_LEN 2 // Minimum IE length for IE validation
 
+#ifdef WLAN_FEATURE_RMC
+
+// RMC action codes
+#define SIR_MAC_RMC_ENABLE_REQ                  0
+#define SIR_MAC_RMC_DISABLE_REQ                 1
+#define SIR_MAC_RMC_RULER_INFORM_SELECTED      2
+#define SIR_MAC_RMC_RULER_INFORM_CANCELLED     3
+
+// RMC protocol version
+#define SIR_MAC_RMC_VER 0x01
+
+// Organization Identifier
+#define SIR_MAC_RMC_OUI             "\x00\x16\x32"
+#define SIR_MAC_RMC_OUI_SIZE        3
+
+#define SIR_MAC_RMC_MCAST_ADDRESS  "\x01\x00\x5E\x00\x02\x0A"
+
+#endif /* WLAN_FEATURE_RMC */
 
 #define SIR_MAC_TI_TYPE_REASSOC_DEADLINE        1
 #define SIR_MAC_TI_TYPE_KEY_LIFETIME            2

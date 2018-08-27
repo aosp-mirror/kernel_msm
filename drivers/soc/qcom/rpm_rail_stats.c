@@ -245,11 +245,11 @@ static const struct file_operations msm_rpm_rail_stats_fops = {
 static int msm_rpm_rail_stats_probe(struct platform_device *pdev)
 {
 	struct dentry *dent;
-	struct msm_rpm_rail_stats_platform_data *pdata;
+	struct msm_rpm_rail_stats_platform_data *pdata = NULL;
 	struct resource *res;
 	struct resource *offset;
 	struct device_node *node;
-	uint32_t offset_addr;
+	uint32_t offset_addr = 0;
 	void __iomem *phys_ptr;
 
 	if (!pdev)
@@ -267,8 +267,8 @@ static int msm_rpm_rail_stats_probe(struct platform_device *pdev)
 
 	phys_ptr = ioremap_nocache(offset->start, SZ_4);
 	if (!phys_ptr) {
-		pr_err("%s: Failed to ioremap address: %x\n",
-				__func__, offset_addr);
+		pr_err("%s: Failed to ioremap address: %pa\n",
+				__func__, &offset->start);
 		return -ENODEV;
 	}
 	offset_addr = readl_relaxed(phys_ptr);

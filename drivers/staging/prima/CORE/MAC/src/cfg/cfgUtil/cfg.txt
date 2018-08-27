@@ -1,5 +1,5 @@
  *
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -4601,7 +4601,18 @@ HAL
 *
 *
 
-* ATH Enable/Disable
+* RMC action period frequency (milli seconds)
+*
+WNI_CFG_RMC_ACTION_PERIOD_FREQUENCY    I    4    7
+V    RW    NP
+HAL
+100   1000    300
+V    RW    NP
+HAL
+100   1000    300
+*
+*
+
 *
 WNI_CFG_ATH_DISABLE	I    4    7
 V    RW    NP
@@ -4655,18 +4666,6 @@ HAL
 V    RW    NP
 HAL
 0    250000    30000
-*
-*
-
-* RMC action period frequency (milli seconds)
-*
-WNI_CFG_RMC_ACTION_PERIOD_FREQUENCY    I    4    7
-V    RW    NP
-HAL
-0   0xFFFFFFFF    300
-V    RW    NP
-HAL
-0   0xFFFFFFFF    300
 *
 *
 

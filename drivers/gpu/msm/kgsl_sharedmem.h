@@ -1,5 +1,4 @@
-/* Copyright (c) 2002,2007-2015,2017, The Linux Foundation. All rights
- * reserved.
+/* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,6 +69,9 @@ int kgsl_allocate_user(struct kgsl_device *device,
 		uint64_t size, uint64_t flags);
 
 void kgsl_get_memory_usage(char *str, size_t len, uint64_t memflags);
+
+int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
+				uint64_t size);
 
 #define MEMFLAGS(_flags, _mask, _shift) \
 	((unsigned int) (((_flags) & (_mask)) >> (_shift)))
@@ -259,16 +261,25 @@ kgsl_memdesc_footprint(const struct kgsl_memdesc *memdesc)
  */
 static inline int kgsl_allocate_global(struct kgsl_device *device,
 	struct kgsl_memdesc *memdesc, uint64_t size, uint64_t flags,
-	unsigned int priv)
+	unsigned int priv, const char *name)
 {
 	int ret;
 
 	memdesc->flags = flags;
 	memdesc->priv = priv;
 
-	ret = kgsl_sharedmem_alloc_contig(device, memdesc, (size_t) size);
+	if (((memdesc->priv & KGSL_MEMDESC_CONTIG) != 0) ||
+		(kgsl_mmu_get_mmutype(device) == KGSL_MMU_TYPE_NONE))
+		ret = kgsl_sharedmem_alloc_contig(device, memdesc,
+						(size_t) size);
+	else {
+		ret = kgsl_sharedmem_page_alloc_user(memdesc, (size_t) size);
+		if (ret == 0)
+			kgsl_memdesc_map(memdesc);
+	}
+
 	if (ret == 0)
-		kgsl_mmu_add_global(device, memdesc);
+		kgsl_mmu_add_global(device, memdesc, name);
 
 	return ret;
 }
@@ -335,5 +346,36 @@ static inline void kgsl_free_sgt(struct sg_table *sgt)
 		kfree(sgt);
 	}
 }
+
+#include "kgsl_pool.h"
+
+/**
+ * kgsl_get_page_size() - Get supported pagesize
+ * @size: Size of the page
+ * @align: Desired alignment of the size
+ *
+ * Return supported pagesize
+ */
+#ifndef CONFIG_ALLOC_BUFFERS_IN_4K_CHUNKS
+static inline int kgsl_get_page_size(size_t size, unsigned int align)
+{
+	if (align >= ilog2(SZ_1M) && size >= SZ_1M &&
+		kgsl_pool_avaialable(SZ_1M))
+		return SZ_1M;
+	else if (align >= ilog2(SZ_64K) && size >= SZ_64K &&
+		kgsl_pool_avaialable(SZ_64K))
+		return SZ_64K;
+	else if (align >= ilog2(SZ_8K) && size >= SZ_8K &&
+		kgsl_pool_avaialable(SZ_8K))
+		return SZ_8K;
+	else
+		return PAGE_SIZE;
+}
+#else
+static inline int kgsl_get_page_size(size_t size, unsigned int align)
+{
+	return PAGE_SIZE;
+}
+#endif
 
 #endif /* __KGSL_SHAREDMEM_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -454,7 +454,7 @@ static int rmnet_vnd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	default:
-		LOGH("Unkown IOCTL 0x%08X", cmd);
+		LOGM("Unknown IOCTL 0x%08X", cmd);
 		rc = -EINVAL;
 	}
 
@@ -501,6 +501,18 @@ static void rmnet_vnd_setup(struct net_device *dev)
 	/* Flow control */
 	rwlock_init(&dev_conf->flow_map_lock);
 	INIT_LIST_HEAD(&dev_conf->flow_head);
+}
+
+/**
+ * rmnet_vnd_setup() - net_device initialization helper function
+ * @dev:      Virtual network device
+ *
+ * Called during device initialization. Disables GRO.
+ */
+static void rmnet_vnd_disable_offload(struct net_device *dev)
+{
+	dev->wanted_features &= ~NETIF_F_GRO;
+	__netdev_update_features(dev);
 }
 
 /* ***************** Exposed API ******************************************** */
@@ -552,7 +564,7 @@ int rmnet_vnd_init(void)
  *      - RMNET_CONFIG_UNKNOWN_ERROR if register_netdevice() fails
  */
 int rmnet_vnd_create_dev(int id, struct net_device **new_device,
-			 const char *prefix)
+			 const char *prefix, int use_name)
 {
 	struct net_device *dev;
 	char dev_prefix[IFNAMSIZ];
@@ -568,10 +580,12 @@ int rmnet_vnd_create_dev(int id, struct net_device **new_device,
 		return RMNET_CONFIG_DEVICE_IN_USE;
 	}
 
-	if (!prefix)
+	if (!prefix && !use_name)
 		p = scnprintf(dev_prefix, IFNAMSIZ, "%s%%d",
 			  RMNET_DATA_DEV_NAME_STR);
-	else
+	else if (prefix && use_name)
+		p = scnprintf(dev_prefix, IFNAMSIZ, "%s", prefix);
+	else if (prefix && !use_name)
 		p = scnprintf(dev_prefix, IFNAMSIZ, "%s%%d",
 			  prefix);
 	if (p >= (IFNAMSIZ-1)) {
@@ -581,7 +595,7 @@ int rmnet_vnd_create_dev(int id, struct net_device **new_device,
 
 	dev = alloc_netdev(sizeof(struct rmnet_vnd_private_s),
 			   dev_prefix,
-			   NET_NAME_ENUM,
+			   use_name ? NET_NAME_UNKNOWN : NET_NAME_ENUM,
 			   rmnet_vnd_setup);
 	if (!dev) {
 		LOGE("Failed to to allocate netdev for id %d", id);
@@ -615,6 +629,8 @@ int rmnet_vnd_create_dev(int id, struct net_device **new_device,
 		rmnet_devices[id] = dev;
 		*new_device = dev;
 	}
+
+	rmnet_vnd_disable_offload(dev);
 
 	LOGM("Registered device %s", dev->name);
 	return rc;

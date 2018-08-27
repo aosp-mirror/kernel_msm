@@ -163,7 +163,7 @@
 		qcom,saw2-pmic-data4 = <0x00010080>;
 		qcom,saw2-pmic-data5 = <0x00010000>;
 		qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3>;
-		qcom,vctl-timeout-us = <50>;
+		qcom,vctl-timeout-us = <500>;
 		qcom,vctl-port = <0x0>;
 		qcom,phase-port = <0x1>;
 		qcom,pfm-port = <0x2>;
@@ -477,8 +477,11 @@
 		qcom,synced-clocks;
 	};
 
-	qcom,cpu-sleep-status {
+	qcom,cpu-sleep-status { /* @b088008{ FC remove */
 		compatible = "qcom,cpu-sleep-status";
+/*		reg = <0xb088008 0x100>;           FC remove */
+/*		qcom,cpu-alias-addr = <0x10000>;   FC remove */
+/*		qcom,sleep-status-mask= <0x80000>; FC remove */
 	};
 
 	qcom,rpm-log@29dc00 {
