@@ -14,6 +14,7 @@ Optional properties :
    not provided, defaults to 20%.
  - maxim,force-batt-id: force battery id (skip detection)
  - maxim,force-hard-reset: force fg hard reset during probe
+ - maxim,max1730x-compat: enable experimental support for max17301 fuel gauge
 
  - maxim,config: node in which children would have a "maxim,batt-id-kohm"
    property and a "maxim,regval" to allow applying configuration changes given a

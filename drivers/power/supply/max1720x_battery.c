@@ -48,6 +48,9 @@
 
 #define HISTORY_DEVICENAME "maxfg_history"
 
+#define MAX1720X_GAUGE_TYPE	0
+#define MAX1730X_GAUGE_TYPE	1
+
 enum max1720x_register {
 	/* ModelGauge m5 Register */
 	MAX1720X_STATUS = 0x00,
@@ -258,6 +261,36 @@ enum max1720x_nvram {
 	MAX1720X_NVRAM_HISTORY_END = 0xEF,
 };
 
+enum max1730x_register {
+	MAX1730X_MAXMINVOLT = 0x08,
+	MAX1730X_MAXMINTEMP = 0x09,
+	MAX1730X_MAXMINCURR = 0x0A,
+	MAX1730X_FULLCAPREP = 0x10,
+	MAX1730X_VCELL = 0x1A,
+	MAX1730X_TEMP = 0x1B,
+	MAX1730X_CURRENT = 0x1C,
+	MAX1730X_AVGCURRENT = 0x1D,
+	MAX1730X_FULLCAP = 0x35,
+	MAX1730X_MAXPEAKPWR = 0xA4,
+	MAX1730X_SUSPEAKPWR = 0xA5,
+	MAX1730X_PACKRESISTANCE = 0xA6,
+	MAX1730X_SYSRESISTANCE = 0xA7,
+	MAX1730X_MINSYSVOLTAGE = 0xA8,
+	MAX1730X_MPPCURRENT = 0xA9,
+	MAX1730X_SPPCURRENT = 0xAA,
+	MAX1730X_IALRTTH = 0xAC,
+	MAX1730X_MINVOLT = 0xAD,
+	MAX1730X_MINCURR = 0xAE,
+};
+
+
+enum max17xxx_register {
+	MAX17XXX_MAXMINVOLT	= MAX1720X_MAXMINVOLT,
+	MAX17XXX_VCELL		= MAX1720X_VCELL,
+	MAX17XXX_TEMP		= MAX1720X_TEMP,
+	MAX17XXX_CURRENT	= MAX1720X_CURRENT,
+	MAX17XXX_AVGCURRENT	= MAX1720X_AVGCURRENT,
+};
 #define BUCKET_COUNT 10
 
 const unsigned int max1720x_cycle_counter_addr[BUCKET_COUNT] = {
@@ -344,33 +377,83 @@ struct max1720x_chip {
 	unsigned int debug_irq_none_cnt;
 };
 
+static int max1730x_regmap_map(int reg)
+{
+	int out;
+
+	switch (reg) {
+	case MAX17XXX_MAXMINVOLT:
+		out = MAX1730X_MAXMINVOLT;
+		break;
+	case MAX17XXX_VCELL:
+		out = MAX1730X_VCELL;
+		break;
+	case MAX17XXX_TEMP:
+		out = MAX1730X_TEMP;
+		break;
+	case MAX17XXX_CURRENT:
+		out = MAX1730X_CURRENT;
+		break;
+	case MAX17XXX_AVGCURRENT:
+		out = MAX1730X_AVGCURRENT;
+		break;
+	default:
+		out = reg;
+		break;
+	}
+
+	return out;
+}
+
+/* when 1 use max17301 features */
+static int max17xxx_gauge_type = -1;
+
 static inline int max1720x_regmap_read(struct regmap *map,
 				       unsigned int reg,
 				       u16 *val,
 				       const char *name)
 {
+	int rtn;
 	unsigned int tmp;
-	int rtn = regmap_read(map, reg, &tmp);
 
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
+		reg = max1730x_regmap_map(reg);
+	else if (reg != MAX1720X_DEVNAME && max17xxx_gauge_type == -1)
+		pr_warn("using default MAX1720X regmap\n");
+
+	rtn = regmap_read(map, reg, &tmp);
 	if (rtn)
 		pr_err("Failed to read %s\n", name);
 	else
 		*val = tmp;
 
 	return rtn;
-
 }
+
 #define REGMAP_READ(regmap, what, dst) \
 	max1720x_regmap_read(regmap, what, dst, #what)
 
-#define REGMAP_WRITE(regmap, what, data)			\
-	do {							\
-		int rtn;					\
-		rtn = regmap_write(regmap, what, data);		\
-		if (rtn) {					\
-			pr_err("Failed to write %s\n", #what);	\
-		}						\
-	} while (0)
+static inline int max1720x_regmap_write(struct regmap *map,
+				       unsigned int reg,
+				       u16 data,
+				       const char *name)
+{
+	int rtn;
+
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
+		reg = max1730x_regmap_map(reg);
+	else if (reg != MAX1720X_DEVNAME && max17xxx_gauge_type == -1)
+		pr_warn("using default MAX1720X regmap\n");
+
+	rtn = regmap_write(map, reg, data);
+	if (rtn)
+		pr_err("Failed to write %s\n", name);
+
+	return rtn;
+}
+
+#define REGMAP_WRITE(regmap, what, value) \
+	max1720x_regmap_write(regmap, what, value, #what)
 
 static char *psy_status_str[] = {
 	"Unknown", "Charging", "Discharging", "NotCharging", "Full"
@@ -869,7 +952,7 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 	int current_avg, ichgterm, fullsocthr;
 	int status = POWER_SUPPLY_STATUS_UNKNOWN, err;
 
-	err = REGMAP_READ(chip->regmap, MAX1720X_AVGCURRENT, &data);
+	err = REGMAP_READ(chip->regmap, MAX17XXX_AVGCURRENT, &data);
 	if (err)
 		return err;
 	current_avg = -reg_to_micro_amp(data, chip->RSense);
@@ -1071,12 +1154,12 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_micro_amp_h(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
-		err = REGMAP_READ(map, MAX1720X_AVGCURRENT, &data);
+		err = REGMAP_READ(map, MAX17XXX_AVGCURRENT, &data);
 		/* current is positive value when flowing to device */
 		val->intval = -reg_to_micro_amp(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		err = REGMAP_READ(map, MAX1720X_CURRENT, &data);
+		err = REGMAP_READ(map, MAX17XXX_CURRENT, &data);
 		/* current is positive value when flowing to device */
 		val->intval = -reg_to_micro_amp(data, chip->RSense);
 		break;
@@ -1093,7 +1176,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		REGMAP_READ(map, MAX1720X_TEMP, &data);
+		REGMAP_READ(map, MAX17XXX_TEMP, &data);
 		val->intval = reg_to_deci_deg_cel(data);
 		max1720x_handle_update_nconvgcfg(chip, val->intval);
 		break;
@@ -1110,17 +1193,17 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_micro_volt(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
-		err = REGMAP_READ(map, MAX1720X_MAXMINVOLT, &data);
+		err = REGMAP_READ(map, MAX17XXX_MAXMINVOLT, &data);
 		/* LSB: 20mV */
 		val->intval = ((data >> 8) & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
-		err = REGMAP_READ(map, MAX1720X_MAXMINVOLT, &data);
+		err = REGMAP_READ(map, MAX17XXX_MAXMINVOLT, &data);
 		/* LSB: 20mV */
 		val->intval = (data & 0xFF) * 20000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		err = REGMAP_READ(map, MAX1720X_VCELL, &data);
+		err = REGMAP_READ(map, MAX17XXX_VCELL, &data);
 		val->intval = reg_to_micro_volt(data);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
@@ -1369,6 +1452,29 @@ static int max1720x_read_batt_id(struct max1720x_chip *chip, int *batt_id)
 
 	*batt_id = temp_id / 1000;
 	return 0;
+}
+
+/* TODO: fix detection of 17301 for non samples looking at FW version too */
+static int max1720x_read_gauge_type(struct max1720x_chip *chip)
+{
+	u16 devname;
+	int ret, gauge_type = MAX1720X_GAUGE_TYPE;
+
+	ret = REGMAP_READ(chip->regmap, MAX1720X_DEVNAME, &devname);
+	if (ret != 0) {
+		dev_err(chip->dev, "cannot read device name %d\n", ret);
+	} else {
+		switch (devname & 0x0f) {
+		case 0: /* max1730x sample */
+			gauge_type = MAX1730X_GAUGE_TYPE;
+			break;
+		default: /* default to max1720x */
+			break;
+		}
+
+	}
+
+	return gauge_type;
 }
 
 static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
@@ -2050,6 +2156,16 @@ static int max1720x_probe(struct i2c_client *client,
 	}
 
 	mutex_init(&chip->cyc_ctr.lock);
+
+	if (of_property_read_bool(dev->of_node, "maxim,max1730x-compat")) {
+		/* NOTE: NEED TO COME BEFORE REGISTER ACCESS */
+		max17xxx_gauge_type = max1720x_read_gauge_type(chip);
+		dev_warn(chip->dev, "device gauge_type: %d\n",
+			max17xxx_gauge_type);
+	} else {
+		max17xxx_gauge_type = MAX1720X_GAUGE_TYPE;
+	}
+
 	max1720x_restore_cycle_counter(chip);
 
 	if (chip->primary->irq) {
@@ -2160,6 +2276,7 @@ static int max1720x_pm_resume(struct device *dev)
 	return 0;
 }
 #endif
+
 static const struct dev_pm_ops max1720x_pm_ops = {
 	SET_LATE_SYSTEM_SLEEP_PM_OPS(max1720x_pm_suspend, max1720x_pm_resume)
 };
@@ -2178,5 +2295,6 @@ static struct i2c_driver max1720x_i2c_driver = {
 
 module_i2c_driver(max1720x_i2c_driver);
 MODULE_AUTHOR("Thierry Strudel <tstrudel@google.com>");
-MODULE_DESCRIPTION("MAX17201/MAX17205 Fuel Gauge");
+MODULE_AUTHOR("AleX Pelosi <apelosi@google.com>");
+MODULE_DESCRIPTION("MAX17x01/MAX17x05 Fuel Gauge");
 MODULE_LICENSE("GPL");

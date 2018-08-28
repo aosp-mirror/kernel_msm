@@ -336,15 +336,15 @@ config BATTERY_MAX1721X
 	  battery gas-gauge.
 
 config BATTERY_MAX1720X
-	tristate "Maxim MAX17201/MAX17205 Fuel Gauge"
+tristate "Maxim MAX17201/MAX17205/MAX17301/MAX17305 Fuel Gauge"
 	depends on I2C
 	help
 	  MAX17x01 is a family of fuel-gauge systems for lithium-ion (Li+)
 		batteries in handheld and portable equipment. MAX17x01 are
 		configured to operate with a single lithium cell, the MAX17x05
-		can operate with multiple cells.
-
-	  Say Y to include support for the MAX17x0x Fuel Gauges.
+		can operate with multiple cells. Support for the MAX1730x family
+		is experimental.
+	  Say Y to include support for the MAX17x01/MAX17x05 Fuel Gauges.
 
 config BATTERY_Z2
 	tristate "Z2 battery driver"
