@@ -32,7 +32,7 @@
 		};
 	};
 
-	cam_sensor_rear_tele_active: cam_sensor_rear_tele_active {
+	cam_sensor_rear_aux_active: cam_sensor_rear_aux_active {
 		mux {
 			pins = "gpio10";
 			function = "normal";
@@ -41,7 +41,7 @@
 		};
 	};
 
-	cam_sensor_rear_tele_suspend: cam_sensor_rear_tele_suspend {
+	cam_sensor_rear_aux_suspend: cam_sensor_rear_aux_suspend {
 		mux {
 			pins = "gpio10";
 			function = "normal";
@@ -255,6 +255,20 @@
 		clock-rates = <24000000>;
 	};
 
+	actuator_rear_aux: qcom,actuator@1 {
+		cell-index = <1>;
+		reg = <0x1>;
+		compatible = "qcom,actuator";
+		cci-device = <1>;
+		cci-master = <1>;
+		cam_vaf-supply = <&max77826_ldo12>;
+		regulator-names = "cam_vaf";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <3000000>;
+		rgltr-max-voltage = <3000000>;
+		rgltr-load-current = <80000>;
+	};
+
 	sensor_rear: qcom,cam-sensor@0 {
 		cell-index = <0>;
 		compatible = "qcom,cam-sensor";
@@ -301,7 +315,7 @@
 		clock-rates = <24000000>;
 	};
 
-	sensor_rear_tele: qcom,cam-sensor@1 {
+	sensor_rear_aux: qcom,cam-sensor@1 {
 		cell-index = <1>;
 		compatible = "qcom,cam-sensor";
 		reg = <0x1>;
@@ -309,22 +323,23 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		actuator-src = <&actuator_rear_aux>;
 		cam_vio-supply  = <&max77826_ldo13>;
 		cam_vana-supply = <&max77826_ldo5>;
 		cam_vdig-supply = <&max77826_ldo1>;
-		cam_clk-supply  = <&titan_top_gdsc>;
+		cam_clk-supply = <&titan_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
 			"cam_clk";
 		rgltr-cntrl-support;
-		rgltr-min-voltage  = <0 2900000 1100000 0>;
-		rgltr-max-voltage  = <0 2900000 1100000 0>;
+		rgltr-min-voltage = <0 2850000 1100000 0>;
+		rgltr-max-voltage = <0 2850000 1100000 0>;
 		rgltr-load-current = <0 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk2_active
-			&cam_sensor_rear_tele_active>;
+			&cam_sensor_rear_aux_active>;
 		pinctrl-1 = <&cam_sensor_mclk2_suspend
-			&cam_sensor_rear_tele_suspend>;
+			&cam_sensor_rear_aux_suspend>;
 		gpios = <&tlmm 15 0>,
 			<&pm8150_gpios 10 0>;
 		gpio-reset = <1>;
