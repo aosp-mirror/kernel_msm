@@ -195,16 +195,19 @@ static int is_bounding_fully_charged_level(void)
 		      /* Default 5% range, set 30% when 6 4000000 is set */
 		      (g_flag_force_ac_chg ? (upperbd-30) : (upperbd-5));
 
-	if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
-	    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
-		return 0;
+	/* return if upperbd/lowerbd is default value */
+	if (g_is_support_charge_stop_start_algorithm == true) {
+		if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
+		    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
+			return 0;
+	} else {
+		if (upperbd == DEFAULT_CHARGE_STOP_LEVEL)
+			return 0;
+	}
 
 	if ((upperbd > lowerbd) &&
 	    (upperbd <= DEFAULT_CHARGE_STOP_LEVEL) &&
 	    (lowerbd >= DEFAULT_CHARGE_START_LEVEL)) {
-		if (lowerbd < 0)
-			lowerbd = 0;
-
 		if (s_pingpong == 1 && upperbd <= current_level) {
 			BATT_LOG("%s: lowerbd=%d, upperbd=%d, current=%d,"
 					" pingpong:1->0 turn off\n", __func__, lowerbd, upperbd, current_level);
