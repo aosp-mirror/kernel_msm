@@ -316,6 +316,13 @@ struct bcm15602_chip {
 
 	/* completion used for signaling end of adc conversion */
 	struct completion adc_conv_complete;
+
+	/*
+	 * Toggle the behavior when resetb is asserted again.
+	 * If this value is true, resetb handler will call panic() after
+	 * resetb asserted high.
+	 */
+	bool should_panic_on_resetb;
 };
 
 /* platform data structure */

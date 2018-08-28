@@ -539,6 +539,37 @@ static ssize_t reg_write_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(reg_write);
 
+static ssize_t panic_on_resetb_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	int val = ddata->should_panic_on_resetb;
+
+	return snprintf(buf, PAGE_SIZE, "should_panic_on_resetb = %d\n", val);
+}
+
+static ssize_t panic_on_resetb_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t count)
+{
+	struct bcm15602_chip *ddata = dev_get_drvdata(dev);
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	ddata->should_panic_on_resetb = val ? 1 : 0;
+	dev_info(ddata->dev, "%s: setting should_panic_on_resetb to %d\n",
+		 __func__, ddata->should_panic_on_resetb);
+
+	return count;
+}
+static DEVICE_ATTR_RW(panic_on_resetb);
+
 static struct attribute *bcm15602_attrs[] = {
 	&dev_attr_asr_curr.attr,
 	&dev_attr_sdsr_curr.attr,
@@ -556,6 +587,7 @@ static struct attribute *bcm15602_attrs[] = {
 	&dev_attr_toggle_pon.attr,
 	&dev_attr_reg_read.attr,
 	&dev_attr_reg_write.attr,
+	&dev_attr_panic_on_resetb.attr,
 	NULL
 };
 
