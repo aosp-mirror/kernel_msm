@@ -1636,8 +1636,6 @@ static void fg_cap_learning_update(struct fg_chip *chip)
 		goto out;
 	}
 
-	if (chip->charge_status == chip->prev_charge_status)
-		goto out;
 
 	rc = fg_get_sram_prop(chip, FG_SRAM_BATT_SOC, &batt_soc);
 	if (rc < 0) {
@@ -1783,6 +1781,8 @@ static int fg_adjust_ki_coeff_full_soc(struct fg_chip *chip, int batt_temp)
 
 	if (batt_temp < 0)
 		ki_coeff_full_soc = 0;
+	else if (chip->charge_status == POWER_SUPPLY_STATUS_DISCHARGING)
+		ki_coeff_full_soc = chip->dt.ki_coeff_full_soc_dischg;
 	else
 		ki_coeff_full_soc = KI_COEFF_FULL_SOC_DEFAULT;
 
@@ -2371,8 +2371,6 @@ static int fg_esr_timer_config(struct fg_chip *chip, bool sleep)
 
 static void fg_batt_avg_update(struct fg_chip *chip)
 {
-	if (chip->charge_status == chip->prev_charge_status)
-		return;
 
 	cancel_delayed_work_sync(&chip->batt_avg_work);
 	fg_circ_buf_clr(&chip->ibatt_circ_buf);
@@ -2630,7 +2628,6 @@ static void status_change_work(struct work_struct *work)
 	}
 
 	fg_batt_avg_update(chip);
-	chip->prev_charge_status = chip->charge_status;
 out:
 	fg_dbg(chip, FG_STATUS, "charge_status:%d charge_type:%d charge_done:%d\n",
 		chip->charge_status, chip->charge_type, chip->charge_done);
@@ -4519,7 +4516,11 @@ static int fg_parse_slope_limit_coefficients(struct fg_chip *chip)
 static int fg_parse_ki_coefficients(struct fg_chip *chip)
 {
 	struct device_node *node = chip->dev->of_node;
-	int rc, i;
+	int rc, i, temp;
+
+	rc = of_property_read_u32(node, "qcom,ki-coeff-full-dischg", &temp);
+	if (!rc)
+		chip->dt.ki_coeff_full_soc_dischg = temp;
 
 	rc = fg_parse_dt_property_u32_array(node, "qcom,ki-coeff-soc-dischg",
 		chip->dt.ki_coeff_soc, KI_COEFF_SOC_LEVELS);
@@ -5071,7 +5072,6 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 	chip->debug_mask = &fg_gen3_debug_mask;
 	chip->irqs = fg_irqs;
 	chip->charge_status = -EINVAL;
-	chip->prev_charge_status = -EINVAL;
 	chip->ki_coeff_full_soc = -EINVAL;
 	chip->spmi = spmi;
 
