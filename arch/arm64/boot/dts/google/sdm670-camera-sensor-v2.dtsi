@@ -17,7 +17,7 @@
 			pins = "gpio13";
 			function = "normal";
 			power-source = <0>;
-			output-high;
+			output-low;
 		};
 	};
 };
@@ -28,8 +28,7 @@
 		regulator-name = "cam_vio_ldo";
 		gpio = <&pm660_gpios 13 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-
-		regulator-enable-ramp-delay = <1600>;
+		regulator-enable-ramp-delay = <233>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&camera_vio_en_default>;
 	};
