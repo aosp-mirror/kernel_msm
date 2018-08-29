@@ -414,6 +414,16 @@ static int bq27x00_battery_current(
 	return 0;
 }
 
+static int bq27x00_battery_temperature(
+		struct Nanohub_FuelGauge_Info *fg_info,
+		union power_supply_propval *val)
+{
+	int curr = fg_info->cache.temperature;
+
+	val->intval = (int)((s16)curr);
+
+	return 0;
+}
 
 static int bq27x00_simple_value(int value,
 	union power_supply_propval *val)
@@ -467,7 +477,7 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 		ret = bq27x00_battery_capacity_level(fg_info, val);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		ret = bq27x00_simple_value(fg_info->cache.temperature, val);
+		ret = bq27x00_battery_temperature(fg_info, val);
 		break;
 /*	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_NOW:
 		ret = bq27x00_simple_value(fg_info->cache.time_to_empty, val);
@@ -655,5 +665,3 @@ void bq27x00_powersupply_unregister(void)
 	kfree(fg_info->bat.name);
 	kfree(fg_info);
 }
-
-
