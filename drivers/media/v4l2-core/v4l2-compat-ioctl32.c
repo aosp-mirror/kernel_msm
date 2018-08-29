@@ -394,10 +394,7 @@ static int get_v4l2_plane32(struct v4l2_plane __user *up,
 	if (copy_in_user(up, up32, 2 * sizeof(__u32)) ||
 	    copy_in_user(&up->data_offset, &up32->data_offset,
 			 sizeof(up->data_offset)) ||
-	    copy_in_user(up->reserved, up32->reserved,
-			 sizeof(up->reserved)) ||
-	    copy_in_user(&up->length, &up32->length,
-			 sizeof(up->length)))
+	    copy_in_user(up->reserved, up32->reserved, sizeof(up->reserved)))
 		return -EFAULT;
 
 	switch (memory) {
@@ -428,10 +425,9 @@ static int put_v4l2_plane32(struct v4l2_plane __user *up,
 	unsigned long p;
 
 	if (copy_in_user(up32, up, 2 * sizeof(__u32)) ||
-	    copy_in_user(up32->reserved, up->reserved,
-			 sizeof(up32->reserved)) ||
 	    copy_in_user(&up32->data_offset, &up->data_offset,
-			 sizeof(up->data_offset)))
+			 sizeof(up->data_offset)) ||
+	    copy_in_user(up32->reserved, up->reserved, sizeof(up32->reserved)))
 		return -EFAULT;
 
 	switch (memory) {
@@ -1226,7 +1222,6 @@ static long do_video_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		break;
 
 	case VIDIOC_G_EDID:
-	case VIDIOC_S_EDID:
 		err = put_v4l2_edid32(up_native, up);
 		break;
 
