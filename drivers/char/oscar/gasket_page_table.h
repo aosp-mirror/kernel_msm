@@ -85,6 +85,7 @@ int gasket_page_table_partition(struct gasket_page_table *page_table,
  * @host_addr: Starting host virtual memory address of the pages.
  * @dev_addr: Starting device address of the pages.
  * @num_pages: Number of [4kB] pages to map.
+ * @is_user_addr: host_addr is in userspace, needs pin and dma map.
  *
  * Description: Maps the "num_pages" pages of host memory pointed to by
  *              host_addr to the address "dev_addr" in device memory.
@@ -95,7 +96,7 @@ int gasket_page_table_partition(struct gasket_page_table *page_table,
  *              If there is an error, no pages are mapped.
  */
 int gasket_page_table_map(struct gasket_page_table *page_table, ulong host_addr,
-			  ulong dev_addr, uint num_pages);
+			  ulong dev_addr, uint num_pages, bool is_user_addr);
 
 /*
  * Un-map host pages from device memory.

@@ -152,7 +152,7 @@ static int gasket_map_buffers(struct gasket_dev *gasket_dev,
 
 	return gasket_page_table_map(gasket_dev->page_table[ibuf.page_table_index],
 				     ibuf.host_address, ibuf.device_address,
-				     ibuf.size / PAGE_SIZE);
+				     ibuf.size / PAGE_SIZE, true);
 }
 
 /* Unmap a userspace buffer from a device virtual address. */

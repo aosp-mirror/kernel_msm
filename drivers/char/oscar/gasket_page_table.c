@@ -444,7 +444,8 @@ static int is_coherent(struct gasket_page_table *pg_tbl, ulong host_addr)
 static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 				  struct gasket_page_table_entry *ptes,
 				  u64 __iomem *slots, ulong host_addr,
-				  uint num_pages, int is_simple_mapping)
+				  uint num_pages, int is_simple_mapping,
+				  bool is_user_addr)
 {
 	int ret;
 	ulong offset;
@@ -457,14 +458,11 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 		page_addr = host_addr + i * PAGE_SIZE;
 		offset = page_addr & (PAGE_SIZE - 1);
 		dev_dbg(pg_tbl->device, "%s i %d\n", __func__, i);
-		if (is_coherent(pg_tbl, host_addr)) {
-			u64 off =
-				(u64)host_addr -
-				(u64)pg_tbl->coherent_pages[0].user_virt;
+		if (!is_user_addr) {
 			ptes[i].page = NULL;
 			ptes[i].offset = offset;
-			ptes[i].dma_addr = pg_tbl->coherent_pages[0].paddr +
-					   off + i * PAGE_SIZE;
+			ptes[i].dma_addr = page_addr - offset;
+
 		} else {
 			ret = get_user_pages_fast(page_addr - offset, 1, 1,
 						  &page);
@@ -836,7 +834,7 @@ static void gasket_page_table_unmap_nolock(struct gasket_page_table *pg_tbl,
  */
 static int gasket_map_simple_pages(struct gasket_page_table *pg_tbl,
 				   ulong host_addr, ulong dev_addr,
-				   uint num_pages)
+				   uint num_pages, bool is_user_addr)
 {
 	int ret;
 	uint slot_idx = gasket_simple_page_idx(pg_tbl, dev_addr);
@@ -851,7 +849,7 @@ static int gasket_map_simple_pages(struct gasket_page_table *pg_tbl,
 
 	ret = gasket_perform_mapping(pg_tbl, pg_tbl->entries + slot_idx,
 				     pg_tbl->base_slot + slot_idx, host_addr,
-				     num_pages, 1);
+				     num_pages, 1, is_user_addr);
 
 	if (ret) {
 		gasket_page_table_unmap_nolock(pg_tbl, dev_addr, num_pages);
@@ -966,7 +964,7 @@ static int gasket_alloc_extended_entries(struct gasket_page_table *pg_tbl,
  */
 static int gasket_map_extended_pages(struct gasket_page_table *pg_tbl,
 				     ulong host_addr, ulong dev_addr,
-				     uint num_pages)
+				     uint num_pages, bool is_user_addr)
 {
 	int ret;
 	ulong dev_addr_end;
@@ -1000,7 +998,7 @@ static int gasket_map_extended_pages(struct gasket_page_table *pg_tbl,
 			(u64 __iomem *)(page_address(pte->page) + pte->offset);
 		ret = gasket_perform_mapping(pg_tbl, pte->sublevel + slot_idx,
 					     slot_base + slot_idx, host_addr,
-					     len, 0);
+					     len, 0, is_user_addr);
 		if (ret) {
 			gasket_page_table_unmap_nolock(pg_tbl, dev_addr,
 						       num_pages);
@@ -1025,21 +1023,35 @@ static int gasket_map_extended_pages(struct gasket_page_table *pg_tbl,
  * The page table mutex is held for the entire operation.
  */
 int gasket_page_table_map(struct gasket_page_table *pg_tbl, ulong host_addr,
-			  ulong dev_addr, uint num_pages)
+			  ulong dev_addr, uint num_pages, bool is_user_addr)
 {
+	ulong host_map_addr = host_addr;
 	int ret;
 
 	if (!num_pages)
 		return 0;
 
+	/*
+	 * If the userspace address falls within the range devoted to
+	 * coherent memory then substitute the DMA address of the kernel-
+	 * alloc'ed coherent range and switch to non-userspace mapping.
+	 */
+	if (is_user_addr && is_coherent(pg_tbl, host_addr)) {
+		u64 off =
+			(u64)host_addr -
+			(u64)pg_tbl->coherent_pages[0].user_virt;
+		host_map_addr = pg_tbl->coherent_pages[0].paddr + off;
+		is_user_addr = false;
+	}
+
 	mutex_lock(&pg_tbl->mutex);
 
 	if (gasket_addr_is_simple(pg_tbl, dev_addr)) {
-		ret = gasket_map_simple_pages(pg_tbl, host_addr, dev_addr,
-					      num_pages);
+		ret = gasket_map_simple_pages(pg_tbl, host_map_addr, dev_addr,
+					      num_pages, is_user_addr);
 	} else {
-		ret = gasket_map_extended_pages(pg_tbl, host_addr, dev_addr,
-						num_pages);
+		ret = gasket_map_extended_pages(pg_tbl, host_map_addr, dev_addr,
+						num_pages, is_user_addr);
 	}
 
 	mutex_unlock(&pg_tbl->mutex);
