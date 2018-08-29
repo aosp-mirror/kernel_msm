@@ -4636,8 +4636,10 @@ exit:
 	if (fw_entry)
 		release_firmware(fw_entry);
 
-	if (do_rebuild)
+	if (do_rebuild) {
 		rmi4_data->reset_device(rmi4_data, true);
+		retval = fwu_get_device_config_id();
+	}
 
 	pr_notice("%s: End of reflash process\n", __func__);
 
