@@ -54,6 +54,7 @@
 			qcom,supply-enable-load = <857000>;
 			qcom,supply-disable-load = <0>;
 			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-pre-off-sleep = <10>;
 		};
 	};
 
@@ -69,6 +70,7 @@
 			qcom,supply-enable-load = <857000>;
 			qcom,supply-disable-load = <0>;
 			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-pre-off-sleep = <10>;
 		};
 	};
 
@@ -84,6 +86,7 @@
 			qcom,supply-enable-load = <857000>;
 			qcom,supply-disable-load = <0>;
 			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-pre-off-sleep = <10>;
 		};
 	};
 
