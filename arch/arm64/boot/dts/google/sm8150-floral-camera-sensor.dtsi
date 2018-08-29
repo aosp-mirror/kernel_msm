@@ -89,6 +89,28 @@
 	};
 };
 
+&soc {
+	led_flash_rear: qcom,camera-flash@0 {
+		cell-index = <0>;
+		reg = <0x00 0x00>;
+		compatible = "qcom,camera-flash";
+		flash-source = <&pm8150l_flash0 &pm8150l_flash1>;
+		torch-source = <&pm8150l_torch0 &pm8150l_torch1>;
+		switch-source = <&pm8150l_switch2>;
+		status = "ok";
+	};
+
+	led_flash_rear_aux: qcom,camera-flash@1 {
+		cell-index = <1>;
+		reg = <0x01 0x00>;
+		compatible = "qcom,camera-flash";
+		flash-source = <&pm8150l_flash0 &pm8150l_flash1>;
+		torch-source = <&pm8150l_torch0 &pm8150l_torch1>;
+		switch-source = <&pm8150l_switch2>;
+		status = "ok";
+	};
+};
+
 &cam_cci0 {
 	qcom,cam-res-mgr {
 		compatible = "qcom,cam-res-mgr";
@@ -333,6 +355,7 @@
 		actuator-src = <&actuator_rear>;
 		eeprom-src = <&eeprom_rear>;
 		ois-src = <&ois_rear>;
+		led-flash-src = <&led_flash_rear>;
 		cam_vio-supply = <&max77826_ldo13>;
 		cam_vana-supply = <&max77826_ldo4>;
 		cam_vdig-supply = <&max77826_ldo1>;
@@ -379,6 +402,7 @@
 		actuator-src = <&actuator_rear_aux>;
 		eeprom-src = <&eeprom_rear_aux>;
 		ois-src = <&ois_rear_aux>;
+		led-flash-src = <&led_flash_rear_aux>;
 		cam_vio-supply  = <&max77826_ldo13>;
 		cam_vana-supply = <&max77826_ldo5>;
 		cam_vdig-supply = <&max77826_ldo1>;
