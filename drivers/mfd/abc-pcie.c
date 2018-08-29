@@ -250,6 +250,7 @@ int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 
 int set_inbound_iatu(struct inb_region inb)
 {
+	unsigned long flags;
 	u32 val;
 	u32 set_val;
 	u32 config = inb.memmode;
@@ -261,7 +262,10 @@ int set_inbound_iatu(struct inb_region inb)
 		pr_err("Exceeding BAR number\n");
 		return -1;
 	}
+
 	size = abc_dev->bar_base[bar].end - abc_dev->bar_base[bar].start;
+
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for iATU access mode */
 	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
@@ -306,17 +310,22 @@ int set_inbound_iatu(struct inb_region inb)
 
 	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 	return 0;
 }
 
 int set_outbound_iatu(struct outb_region outb)
 {
+	unsigned long flags;
 	u32 val;
 	u32 set_val;
 
 	u32 iatu_offset = (outb.region * IATU_REGION_OFFSET);
 
 	u32 config = outb.memmode;
+
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for iATU access mode */
 	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
@@ -360,6 +369,9 @@ int set_outbound_iatu(struct outb_region outb)
 		PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_OUTBOUND));
 
 	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 	return 0;
 }
 
@@ -453,6 +465,12 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 	u32 set_val;
 	u32 list_addr_l = LOWER((uint64_t)start_addr);
 	u32 list_addr_u = UPPER((uint64_t)start_addr);
+	unsigned long flags;
+
+	if (!(dir == DMA_FROM_DEVICE || dir == DMA_TO_DEVICE))
+		return -EINVAL;
+
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for DMA access mode */
 	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
@@ -460,7 +478,7 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 	set_val |= DBI_OVERRIDE_DMA;
 	writel(set_val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 	if (dir == DMA_FROM_DEVICE) {
-		pr_info("DMA MBLK WRITE[EP2AP]: CH%d\n", chan);
+		pr_debug("DMA MBLK WRITE[EP2AP]: CH%d\n", chan);
 		dma_offset = chan * DMA_WRITE_OFFSET;
 		writel(DMA_ENABLE, abc_dev->pcie_config + DMA_WRITE_ENGINE);
 		writel(DMA_MASK, abc_dev->pcie_config +
@@ -472,8 +490,8 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 		writel(list_addr_u, abc_dev->pcie_config + dma_offset +
 						DMA_LLP_HIGH_OFF_WRCH);
 		writel(chan, abc_dev->pcie_config + DMA_WRITE_DOORBELL);
-	} else if (dir == DMA_TO_DEVICE) {
-		pr_info("DMA MBLK READ[AP2EP]: CH%d\n", chan);
+	} else {
+		pr_debug("DMA MBLK READ[AP2EP]: CH%d\n", chan);
 		dma_offset = chan * DMA_READ_OFFSET;
 		writel(DMA_ENABLE, abc_dev->pcie_config + DMA_READ_ENGINE);
 		writel(DMA_MASK, abc_dev->pcie_config +
@@ -485,10 +503,12 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 		writel(list_addr_u, abc_dev->pcie_config + dma_offset +
 						DMA_LLP_HIGH_OFF_RDCH);
 		writel(chan, abc_dev->pcie_config + DMA_READ_DOORBELL);
-	} else
-		return -EINVAL;
+	}
 
 	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 	return 0;
 }
 
@@ -498,6 +518,12 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 	u32 dma_offset;
 	u32 val;
 	u32 set_val;
+	unsigned long flags;
+
+	if (!(dir == DMA_FROM_DEVICE || dir == DMA_TO_DEVICE))
+		return -EINVAL;
+
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for DMA access mode */
 	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
@@ -552,6 +578,9 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 	}
 
 	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 	return 0;
 }
 
@@ -571,8 +600,15 @@ EXPORT_SYMBOL(abc_reg_irq_callback);
 
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&abc_dev->dma_callback_lock, flags);
+
 	if (dma_chan >= 0 && dma_chan <= 7)
 		abc_dev->dma_cb[dma_chan] = dma_cb;
+
+	spin_unlock_irqrestore(&abc_dev->dma_callback_lock, flags);
+
 	return 0;
 }
 
@@ -585,6 +621,8 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 	u32 dma_wr_stat;
 	int pos;
 
+	spin_lock(&abc_dev->fsys_reg_lock);
+
 	/* Set SYSREG_FSYS DBI_OVERRIDE for DMA access mode */
 	override_val = readl(abc_dev->fsys_config +
 					SYSREG_FSYS_DBI_OVERRIDE);
@@ -596,50 +634,63 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 	/* DMA Read Callback Implementation */
 	dma_rd_stat = readl(abc_dev->pcie_config + DMA_READ_INT_STATUS_OFF);
 	pos = 0;
-	pr_info("---dma_rd_stat = 0x%x--\n", dma_rd_stat);
+	pr_debug("---dma_rd_stat = 0x%x--\n", dma_rd_stat);
 	while ((pos = find_next_bit((unsigned long *) &dma_rd_stat, 32,
 					pos)) != 32) {
 		writel((0x1 << pos),
 				abc_dev->pcie_config + DMA_READ_INT_CLEAR_OFF);
 
+		spin_lock(&abc_dev->dma_callback_lock);
+
 		if (pos >= 0 && pos <= 7) {
 			dma_chan = pos;
 			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan, DMA_TO_DEVICE,
-						DMA_DONE);
+				abc_dev->dma_cb[dma_chan](dma_chan,
+						DMA_TO_DEVICE, DMA_DONE);
 		} else if (pos >= 16 && pos <= 23) {
 			dma_chan = pos - 16;
 			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan, DMA_TO_DEVICE,
-						DMA_ABORT);
+				abc_dev->dma_cb[dma_chan](dma_chan,
+						DMA_TO_DEVICE, DMA_ABORT);
 		}
+
+		spin_unlock(&abc_dev->dma_callback_lock);
+
 		pos++;
 	}
 
 	/* DMA Write Callback Implementation */
 	dma_wr_stat = readl(abc_dev->pcie_config + DMA_WRITE_INT_STATUS_OFF);
 	pos = 0;
-	pr_info("---dma_wr_stat = 0x%x--\n", dma_wr_stat);
+	pr_debug("---dma_wr_stat = 0x%x--\n", dma_wr_stat);
 	while ((pos = find_next_bit((unsigned long *) &dma_wr_stat, 32,
 					pos)) != 32) {
 		writel((0x1 << pos),
 				abc_dev->pcie_config + DMA_WRITE_INT_CLEAR_OFF);
 
+		spin_lock(&abc_dev->dma_callback_lock);
+
 		if (pos >= 0 && pos <= 7) {
 			dma_chan = pos;
 			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan, DMA_FROM_DEVICE,
-						DMA_DONE);
+				abc_dev->dma_cb[dma_chan](dma_chan,
+						DMA_FROM_DEVICE, DMA_DONE);
 		} else if (pos >= 16 && pos <= 23) {
 			dma_chan = pos - 16;
 			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan, DMA_FROM_DEVICE,
-						DMA_ABORT);
+				abc_dev->dma_cb[dma_chan](dma_chan,
+						DMA_FROM_DEVICE, DMA_ABORT);
 		}
+
+		spin_unlock(&abc_dev->dma_callback_lock);
+
 		pos++;
 	}
 
 	writel(override_val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	spin_unlock(&abc_dev->fsys_reg_lock);
+
 	return IRQ_HANDLED;
 }
 
@@ -1011,6 +1062,9 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	pci_set_master(pdev);
 
 	spin_lock_init(&abc_dev->lock);
+	spin_lock_init(&abc_dev->fsys_reg_lock);
+	spin_lock_init(&abc_dev->dma_callback_lock);
+
 	bar = 0;
 	/* Restricting till BAR4 mapping */
 	while (bar < 5) {

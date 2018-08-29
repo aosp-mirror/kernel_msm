@@ -157,7 +157,9 @@ struct abc_device {
 	irq_dma_cb_t	dma_cb[MAX_DMA_INT];
 	irq_cb_t	sys_cb[ABC_MSI_COUNT];
 	struct atomic_notifier_head intnc_notifier;
-	spinlock_t      lock;
+	spinlock_t lock;
+	spinlock_t fsys_reg_lock;
+	spinlock_t dma_callback_lock;
 };
 
 enum {
