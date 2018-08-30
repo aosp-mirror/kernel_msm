@@ -102,7 +102,7 @@ struct abc_pcie_dma_ll {
 
 /**
  * API to build Scatter Gather list to do Multi-block DMA transfer for a user
- * buffer
+ * local buffer
  * @param[in]  dmadest  Starting virtual addr of the DMA destination
  * @param[in]  size Totalsize of the transfer in bytes
  * @param[out] sg  Array of maxsg pointers to struct abc_pcie_sg_entry,
@@ -112,22 +112,23 @@ struct abc_pcie_dma_ll {
  * @return     The number of sg[] entries filled out by the routine, negative if
  *             overflow or sg[] not allocated.
  */
-int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
-			       struct abc_pcie_sg_entry **sg,
-			       struct abc_pcie_sg_list *sgl);
+int abc_pcie_user_local_buf_sg_build(void *dmadest, size_t size,
+				     struct abc_pcie_sg_entry **sg,
+				     struct abc_pcie_sg_list *sgl);
 
 /**
  * API to release scatter gather list for a user buffer
  * @param[in] *sgl pointer to the scatter gather list that was built during
- *            abc_pcie_user_buf_sg_build
+ *            abc_pcie_user_local_buf_sg_build
  * @return 0  for SUCCESS
  */
-int abc_pcie_user_buf_sg_destroy(struct abc_pcie_sg_list *sgl);
+int abc_pcie_user_local_buf_sg_destroy(struct abc_pcie_sg_entry **sg,
+				       struct abc_pcie_sg_list *sgl);
 
 /**
  * API to verify that a scatter gather list is valid
  * @param[in] *sg  pointer to the scatter gather list that was built during
- *		abc_pcie_user_buf_sg_build
+ *		abc_pcie_user_local_buf_sg_build
  * @param[in] size  size of the list in bytes
  * @param[in] sgl  pointer to the scatter gather local data, if any
  * @return 0 for SUCCESS

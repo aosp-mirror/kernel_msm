@@ -282,7 +282,7 @@ int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl)
 
 /**
  * API to build Scatter Gather list to do Multi-block DMA transfer for a user
- * buffer
+ * local buffer
  * @param[in] dmadest  Starting virtual addr of the DMA destination
  * @param[in] size Totalsize of the transfer in bytes
  * @param[out] sg  Array of maxsg pointers to struct abc_pcie_sg_entry,
@@ -292,9 +292,9 @@ int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl)
  * @return The number of sg[] entries filled out by the routine, negative if
  *		   overflow or sg[] not allocated.
  */
-int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
-			       struct abc_pcie_sg_entry **sg,
-			       struct abc_pcie_sg_list *sgl)
+int abc_pcie_user_local_buf_sg_build(void *dmadest, size_t size,
+				     struct abc_pcie_sg_entry **sg,
+				     struct abc_pcie_sg_list *sgl)
 {
 	int i, u, fp_offset, count;
 	int n_num, p_num;
@@ -354,7 +354,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 	if (n_num < p_num) {
 		dev_err(&abc_dma.pdev->dev,
 			"%s: fail to get user_pages\n", __func__);
-		goto free_mem;
+		goto release_page;
 	}
 	if (n_num < maxsg) {
 		sg_init_table(sgl->sc_list, n_num);
@@ -379,7 +379,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 			dev_err(&abc_dma.pdev->dev,
 				"%s: failed to map scatterlist region (%d) n_num(%d)\n",
 			       __func__, count, n_num);
-			goto free_mem;
+			goto release_page;
 		}
 
 		u = scatterlist_to_abc_sg(sgl->sc_list, count, *sg, maxsg);
@@ -399,9 +399,9 @@ unmap_sg:
 	dma_unmap_sg(abc_dma.dma_dev,
 		sgl->sc_list, n_num, sgl->dir);
 release_page:
-	for (i = 0; i < sgl->n_num; i++)
+	for (i = 0; i < n_num; i++)
 		put_page(*(sgl->mypage + i));
-free_mem:
+
 	vfree((*sg));
 	*sg = NULL;
 	kfree(sgl->mypage);
@@ -415,12 +415,15 @@ free_mem:
 }
 
 /**
- * API to release scatter gather list for a user buffer
+ * API to release scatter gather list for a user local buffer
+ * @param[in] **sg pointer to pointer to sg entry allocated during
+ *		abc_pcie_user_local_buf_sg_build
  * @param[in] *sgl pointer to the scatter gather list that was built during
- *		abc_pcie_user_buf_sg_build
+ *		abc_pcie_user_local_buf_sg_build
  * @return 0 for SUCCESS
  */
-int abc_pcie_user_buf_sg_destroy(struct abc_pcie_sg_list *sgl)
+int abc_pcie_user_local_buf_sg_destroy(struct abc_pcie_sg_entry **sg,
+				       struct abc_pcie_sg_list *sgl)
 {
 	int i;
 	struct page *page;
@@ -434,6 +437,8 @@ int abc_pcie_user_buf_sg_destroy(struct abc_pcie_sg_list *sgl)
 			SetPageDirty(page);
 		put_page(page);
 	}
+	vfree((*sg));
+	*sg = NULL;
 	kfree(sgl->mypage);
 	sgl->mypage = NULL;
 	kfree(sgl->sc_list);
@@ -645,9 +650,9 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
  * TODO(alexperez):  Remove support for specifying an arbitrary
  * physical address once bringup is done.
  */
-int abc_pcie_remote_sg(__u64 remote_buf, size_t size,
-		       struct abc_pcie_sg_entry **sg,
-		       struct abc_pcie_sg_list *sgl)
+int abc_pcie_user_remote_buf_sg_build(__u64 remote_buf, size_t size,
+				      struct abc_pcie_sg_entry **sg,
+				      struct abc_pcie_sg_list *sgl)
 {
 	size_t maxsg;
 	struct abc_pcie_sg_entry *local_sg;
@@ -672,6 +677,20 @@ int abc_pcie_remote_sg(__u64 remote_buf, size_t size,
 	*sg = local_sg;
 
 	sgl->length = 2;
+	return 0;
+}
+
+/**
+ * API to release scatter gather list for a user remote buffer
+ * @param[in] **sg pointer to pointer to sg entry allocated during
+ *		abc_pcie_user_remote_buf_sg_build
+ * @return 0 for SUCCESS
+ */
+int abc_pcie_user_remote_buf_sg_destroy(struct abc_pcie_sg_entry **sg)
+{
+	vfree((*sg));
+	*sg = NULL;
+
 	return 0;
 }
 
@@ -713,10 +732,10 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 
 	switch (dma_desc->local_buf_type) {
 	case DMA_BUFFER_USER:
-		err = abc_pcie_user_buf_sg_build(dma_desc->local_buf,
-						 dma_desc->local_buf_size,
-						 &local_sg_entries,
-						 local_sg_list);
+		err = abc_pcie_user_local_buf_sg_build(dma_desc->local_buf,
+						       dma_desc->local_buf_size,
+						       &local_sg_entries,
+						       local_sg_list);
 		break;
 	case DMA_BUFFER_DMA_BUF:
 		err = abc_pcie_sg_retrieve_from_dma_buf(
@@ -731,16 +750,17 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		err = -EINVAL;
 		break;
 	}
-	if (err < 0) {
-		kfree(local_sg_list);
-		return err;
-	}
+	if (err < 0)
+		goto release_local_sg_list;
+
 	local_sg_size = local_sg_list->length;
 
 	/* Create scatterlist of remote buffer */
 	remote_sg_list = kzalloc(sizeof(struct abc_pcie_sg_list), GFP_KERNEL);
-	if (!remote_sg_list)
-		return -ENOMEM;
+	if (!remote_sg_list) {
+		err = -ENOMEM;
+		goto release_local_buf;
+	}
 
 	remote_sg_list->dir = dma_desc->dir;
 	remote_sg_entries = NULL;
@@ -748,7 +768,8 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	/* TODO: local_buf_size will not work for DMA buffers! */
 	switch (dma_desc->remote_buf_type) {
 	case DMA_BUFFER_USER:
-		err = abc_pcie_remote_sg(dma_desc->remote_buf,
+		err = abc_pcie_user_remote_buf_sg_build(
+				dma_desc->remote_buf,
 				dma_desc->local_buf_size,
 				&remote_sg_entries, remote_sg_list);
 		break;
@@ -765,10 +786,9 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		err = -EINVAL;
 		break;
 	}
-	if (err < 0) {
-		kfree(remote_sg_list);
-		return err;
-	}
+	if (err < 0)
+		goto release_remote_sg_list;
+
 	/* check the size of the scatterlist */
 	remote_sg_size = remote_sg_list->length;
 	dev_dbg(&abc_dma.pdev->dev,
@@ -841,10 +861,29 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 						       dma_desc);
 	}
 
-	/* Releasing buffers */
+	switch (dma_desc->remote_buf_type) {
+	case DMA_BUFFER_USER:
+		err = abc_pcie_user_remote_buf_sg_destroy(&remote_sg_entries);
+		break;
+	case DMA_BUFFER_DMA_BUF:
+		err = abc_pcie_sg_release_from_dma_buf(remote_sg_list);
+		break;
+	default:
+		dev_err(&abc_dma.pdev->dev,
+			"%s: Unknown remote DMA buffer type %d\n",
+		       __func__, dma_desc->remote_buf_type);
+		err = -EINVAL;
+		break;
+	}
+
+release_remote_sg_list:
+	kfree(remote_sg_list);
+
+release_local_buf:
 	switch (dma_desc->local_buf_type) {
 	case DMA_BUFFER_USER:
-		err = abc_pcie_user_buf_sg_destroy(local_sg_list);
+		err = abc_pcie_user_local_buf_sg_destroy(&local_sg_entries,
+							 local_sg_list);
 		break;
 	case DMA_BUFFER_DMA_BUF:
 		err = abc_pcie_sg_release_from_dma_buf(local_sg_list);
@@ -857,20 +896,8 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		break;
 	}
 
-	switch (dma_desc->remote_buf_type) {
-	case DMA_BUFFER_USER:
-		err = abc_pcie_user_buf_sg_destroy(remote_sg_list);
-		break;
-	case DMA_BUFFER_DMA_BUF:
-		err = abc_pcie_sg_release_from_dma_buf(remote_sg_list);
-		break;
-	default:
-		dev_err(&abc_dma.pdev->dev,
-			"%s: Unknown remote DMA buffer type %d\n",
-		       __func__, dma_desc->remote_buf_type);
-		err = -EINVAL;
-		break;
-	}
+release_local_sg_list:
+	kfree(local_sg_list);
 
 	return err;
 }
