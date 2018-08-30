@@ -869,13 +869,9 @@
 
 #define CS40L2X_DEVICE_NAME		"vibrator"
 
-#define CS40L2X_FW_NAME_A0		"cs40l20.wmfw"
-#define CS40L2X_FW_ID_MATCH_A0		0x1400A7
-#define CS40L2X_FW_REV_MIN_A0		0x050102
-
-#define CS40L2X_FW_NAME_B1		"cs40l25a.wmfw"
-#define CS40L2X_FW_ID_MATCH_B1		0x1400C3
-#define CS40L2X_FW_REV_MIN_B1		0x060000
+#define CS40L2X_NUM_FW_FAMS		2
+#define CS40L2X_FW_ID_ORIG		0x1400A7
+#define CS40L2X_FW_ID_REMAP		0x1400C3
 
 #define CS40L2X_PDATA_PRESENT		0x80000000
 #define CS40L2X_PDATA_MASK		~CS40L2X_PDATA_PRESENT
@@ -967,6 +963,14 @@ struct cs40l2x_wseq_pair {
 	unsigned int val;
 };
 
+struct cs40l2x_fw_desc {
+	unsigned int id;
+	unsigned int min_rev;
+	unsigned int num_coeff_files;
+	const char * const *coeff_files;
+	const char *fw_file;
+};
+
 extern const unsigned char cs40l2x_bst_k1_table[4][5];
 extern const unsigned char cs40l2x_bst_k2_table[4][5];
 extern const unsigned char cs40l2x_bst_slope_table[4];
@@ -974,5 +978,7 @@ extern const unsigned char cs40l2x_bst_slope_table[4];
 extern const struct cs40l2x_otp_desc cs40l2x_otp_map[CS40L2X_NUM_OTP_MAPS];
 
 extern const unsigned int cs40l2x_pbq_dig_scale[CS40L2X_PBQ_SCALE_MAX + 1];
+
+extern const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS];
 
 #endif /*__CS40L2X_H__*/

@@ -957,3 +957,29 @@ const unsigned int cs40l2x_pbq_dig_scale[CS40L2X_PBQ_SCALE_MAX + 1] = {
 	1,
 	0,	/* 100% */
 };
+
+static const char * const cs40l2x_coeff_files_orig[] = {
+	"cs40l20.bin",
+};
+
+static const char * const cs40l2x_coeff_files_remap[] = {
+	"cs40l20.bin",
+	"cs40l25a_exc.bin",
+};
+
+const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
+	{
+		.id = CS40L2X_FW_ID_ORIG,
+		.min_rev = 0x050102,
+		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_orig),
+		.coeff_files = cs40l2x_coeff_files_orig,
+		.fw_file = "cs40l20.wmfw",
+	},
+	{
+		.id = CS40L2X_FW_ID_REMAP,
+		.min_rev = 0x060000,
+		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_remap),
+		.coeff_files = cs40l2x_coeff_files_remap,
+		.fw_file = "cs40l25a.wmfw",
+	},
+};
