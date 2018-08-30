@@ -16,7 +16,7 @@
 
 &sde_dsi {
 	vddio-supply = <&pm8150_l14>;
-	vci-supply = <&pm8150l_l9>;
+	vci-supply = <&pm8150l_l4>;
 	qcom,platform-te-gpio = <&tlmm 8 0>;
 
 	/delete-property/ vdd-supply;
@@ -69,8 +69,8 @@
 		qcom,panel-supply-entry@0 {
 			reg = <0>;
 			qcom,supply-name = "vddio";
-			qcom,supply-min-voltage = <1800000>;
-			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-min-voltage = <1840000>;
+			qcom,supply-max-voltage = <1840000>;
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
 			qcom,supply-post-on-sleep = <0>;
@@ -79,8 +79,8 @@
 		qcom,panel-supply-entry@1 {
 			reg = <1>;
 			qcom,supply-name = "vci";
-			qcom,supply-min-voltage = <2960000>;
-			qcom,supply-max-voltage = <2960000>;
+			qcom,supply-min-voltage = <3000000>;
+			qcom,supply-max-voltage = <3000000>;
 			qcom,supply-enable-load = <100000>;
 			qcom,supply-disable-load = <100>;
 			qcom,supply-post-on-sleep = <0>;

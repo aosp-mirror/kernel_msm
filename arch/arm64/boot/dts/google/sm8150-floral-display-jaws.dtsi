@@ -13,6 +13,8 @@
 #include "dsi-panel-s6e3ha8-dsc-wqhd-cmd.dtsi"
 
 &sde_dsi {
+	vci-supply = <&pm8150l_l9>;
+
 	qcom,dsi-display-list = <&dsi_s6e3ha8_cmd_display
 				 &dsi_sim_vid_display>;
 };
@@ -45,6 +47,17 @@
 			qcom,mdss-dsi-panel-phy-timings =
 				[00 1E 08 07 24 22 08 08 05 02 04 00 19 17];
 		};
+	};
+};
+
+&dsi_panel_pwr_supply_floral {
+	qcom,panel-supply-entry@0 {
+		qcom,supply-min-voltage = <1800000>;
+		qcom,supply-max-voltage = <1800000>;
+	};
+	qcom,panel-supply-entry@1 {
+		qcom,supply-min-voltage = <2960000>;
+		qcom,supply-max-voltage = <2960000>;
 	};
 };
 
