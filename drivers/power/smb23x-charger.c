@@ -2371,7 +2371,7 @@ static enum power_supply_property smb23x_battery_properties[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_CHARGE_ENABLED,
+	POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_RESTRICTED_CHARGING
 #endif
 };
@@ -2918,7 +2918,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		smb23x_write(chip, chip->reg_addr, val->intval);
 		break;
 
-    case POWER_SUPPLY_PROP_CHARGE_ENABLED:
+    case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
     {
         if(chip->charger_plugin == 0xFF)
         {

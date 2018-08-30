@@ -93,6 +93,11 @@ typedef enum
    WDTS_POWER_STATE_MAX
 } WDTS_PowerStateType;
 
+typedef enum
+{
+   WDTS_LOGGING_STATUS_SUCCESS,
+   WDTS_LOGGING_STATUS_ERROR
+} WDTS_LoggingSessionStatus;
 
 typedef wpt_status (*WDTS_TxCompleteCbType)(void *pContext, wpt_packet *pFrame, wpt_status status);
 typedef wpt_status (*WDTS_RxFrameReadyCbType) (void *pContext, wpt_packet *pFrame, WDTS_ChannelType channel);

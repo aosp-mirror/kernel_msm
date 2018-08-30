@@ -178,7 +178,7 @@
 				qcom,hw-settle-time = <0>;
 				qcom,fast-avg-setup = <0>;
 			};
-/* Chester+++ */
+
 			chan@12 {
 				label = "mpp3_adc";
 				reg = <0x12>;
@@ -189,7 +189,6 @@
 				qcom,hw-settle-time = <0>;
 				qcom,fast-avg-setup = <0>;
 			};
-/* Chester--- */
 		};
 
 		pm8916_tz: qcom,temp-alarm@2400 {
@@ -618,6 +617,7 @@
 						   "cdc-vdda-cp";
 
 			qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias";
+			qcom,subsys-name = "modem";
 		};
 
 		pm8916_tombak_analog: msm8x16_wcd_codec@f100{

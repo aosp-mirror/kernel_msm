@@ -20,6 +20,9 @@ struct dma_iommu_mapping {
 
 	spinlock_t		lock;
 	struct kref		kref;
+#ifdef CONFIG_IOMMU_IO_PGTABLE_FAST
+	struct dma_fast_smmu_mapping *fast;
+#endif
 };
 
 #ifdef CONFIG_ARM64_DMA_USE_IOMMU

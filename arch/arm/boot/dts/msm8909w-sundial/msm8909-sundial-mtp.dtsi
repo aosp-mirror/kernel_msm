@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -214,7 +214,6 @@
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,msm-micbias1-ext-cap;
 		qcom,split-a2dp;
-		qcom,msm-afe-clk-ver = <1>;
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
@@ -317,6 +316,11 @@
 
 &qcom_tzlog {
 	status = "okay";
+};
+
+
+&qnand_1 {
+	status = "ok";
 };
 
 &sdhc_1 {
@@ -479,7 +483,7 @@
 	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
 
 	qcom,platform-te-gpio = <&msm_gpio 24 0>;
-	
+
 	qcom,platform-avdden-gpio = <&msm_gpio 26 0>;
 };
 

@@ -446,7 +446,22 @@ void wpalLogPktSerialize
 ---------------------------------------------------------------------------*/
 void wpalFwLogPktSerialize
 (
-   wpt_packet *pFrame
+   wpt_packet *pFrame, wpt_uint32 pktType
+);
+
+/*---------------------------------------------------------------------------
+    wpalPerPktSerialize - Serialize perpkt data to logger thread
+
+    Param:
+
+
+    Return:
+        NONE
+
+---------------------------------------------------------------------------*/
+void wpalPerPktSerialize
+(
+   void *perPktStat
 );
 
 /*---------------------------------------------------------------------------

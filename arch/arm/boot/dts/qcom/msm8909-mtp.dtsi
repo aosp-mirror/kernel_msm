@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,6 +12,9 @@
 
 #include "msm8909.dtsi"
 #include "msm8909-pinctrl.dtsi"
+#include "msm8909-regulator.dtsi"
+#include "msm8909-camera-sensor-mtp.dtsi"
+
 
 &soc {
 	/*
@@ -134,6 +137,25 @@
 		};
 	};
 
+	i2c@78b6000 { /* BLSP1 QUP2 */
+		nq@28 {
+			compatible = "qcom,nq-nci";
+			reg = <0x28>;
+			qcom,nq-irq = <&msm_gpio 21 0x00>;
+			qcom,nq-ven = <&msm_gpio 20 0x00>;
+			qcom,nq-firm = <&msm_gpio 45 0x00>;
+			qcom,clk-src = "BBCLK2";
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <21 0>;
+			interrupt-names = "nfc_irq";
+			pinctrl-names = "nfc_active","nfc_suspend";
+			pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
+			pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
+			clocks = <&clock_rpm clk_bb_clk2_pin>;
+			clock-names = "ref_clk";
+		};
+	};
+
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
 		label = "synaptics_dsx";
@@ -198,7 +220,6 @@
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,msm-micbias1-ext-cap;
 		qcom,split-a2dp;
-		qcom,msm-afe-clk-ver = <1>;
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
@@ -301,6 +322,10 @@
 	status = "okay";
 };
 
+&qnand_1 {
+	status = "ok";
+};
+
 &sdhc_1 {
 	vdd-supply = <&pm8909_l8>;
 	qcom,vdd-voltage-level = <2900000 2900000>;
@@ -347,6 +372,57 @@
 	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
 
 	status = "ok";
+};
+
+&i2c_1 { /* BLSP1 QUP1 */
+	mpu6050@68 { /* Gyroscope and accelerometer sensor combo */
+		compatible = "invn,mpu6050";
+		reg = <0x68>;
+		pinctrl-names = "mpu_default","mpu_sleep";
+		pinctrl-0 = <&mpu6050_default>;
+		pinctrl-1 = <&mpu6050_sleep>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <96 0x1>;
+		vdd-supply = <&pm8909_l17>;
+		vlogic-supply = <&pm8909_l6>;
+		invn,gpio-int = <&msm_gpio 96 0x1>;
+		invn,place = "Portrait Down Back Side";
+	};
+
+	avago@39 { /* Ambient light and proximity sensor */
+		compatible = "avago,apds9900";
+		reg = <0x39>;
+		pinctrl-names = "default","sleep";
+		pinctrl-0 = <&apds99xx_default>;
+		pinctrl-1 = <&apds99xx_sleep>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <94 0x2002>;
+		vdd-supply = <&pm8909_l17>;
+		vio-supply = <&pm8909_l6>;
+		avago,irq-gpio = <&msm_gpio 94 0x2002>;
+		avago,ps-threshold = <600>;
+		avago,ps-hysteresis-threshold = <500>;
+		avago,ps-pulse = <8>;
+		avago,ps-pgain = <0>;
+		avago,als-B = <186>;
+		avago,als-C = <75>;
+		avago,als-D = <129>;
+		avago,ga-value = <256>;
+	};
+
+	akm@c { /* Magnetic field sensor */
+		compatible = "ak,ak8963";
+		reg = <0x0c>;
+		pinctrl-names = "ak8963_default", "ak8963_sleep";
+		pinctrl-0 = <&ak8963_default>;
+		pinctrl-1 = <&ak8963_sleep>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <65 0x2>;
+		vdd-supply = <&pm8909_l17>;
+		vio-supply = <&pm8909_l6>;
+		ak,layout = <0x6>;
+		ak,auto-report;
+	};
 };
 
 &mdss_mdp {
@@ -437,8 +513,79 @@
 			};
 		};
 	};
+	mpu6050_int_pin {
+		mpu6050_default: mpu6050_default {
+			mux {
+				pins = "gpio96";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio96";
+				drive-dtrength = <6>;
+				bias-pull-down;
+			};
+		};
+		mpu6050_sleep: mpu6050_sleep {
+			mux {
+				pins = "gpio96";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio96";
+				drive-dtrength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+	apds99xx_int_pin {
+		apds99xx_default: apds99xx_default {
+			mux {
+				pins = "gpio94";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio94";
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+		};
+		apds99xx_sleep: apds99xx_sleep {
+			mux {
+				pins = "gpio94";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio94";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+	ak8963_int_pin {
+		ak8963_default: ak8963_default {
+			mux {
+				pins = "gpio65";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio65";
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+		};
+		ak8963_sleep: ak8963_sleep {
+			mux {
+				pins = "gpio65";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio65";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
 };
-
 
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_hx8394d_720_vid>;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -49,6 +49,9 @@
 #include "limSendMessages.h"
 #include "limSession.h"
 #include "limIbssPeerMgmt.h"
+#ifdef WLAN_FEATURE_RMC
+#include "limRMC.h"
+#endif
 
 
 /**
@@ -820,6 +823,10 @@ void
 limIbssDelete(
     tpAniSirGlobal pMac,tpPESession psessionEntry)
 {
+#ifdef WLAN_FEATURE_RMC
+    limRmcIbssDelete(pMac);
+#endif /* WLAN_FEATURE_RMC */
+
     limIbssDeleteAllPeers(pMac,psessionEntry);
 
     ibss_coalesce_free(pMac);
@@ -1141,6 +1148,93 @@ limIbssStaAdd(
     return retCode;
 }
 
+static void
+__limIbssSearchAndDeletePeer(tpAniSirGlobal    pMac,
+                             tpPESession psessionEntry,
+                             tSirMacAddr macAddr)
+{
+   tLimIbssPeerNode *pTempNode, *pPrevNode;
+   tLimIbssPeerNode *pTempNextNode = NULL;
+   tpDphHashNode     pStaDs=NULL;
+   tANI_U16          peerIdx=0;
+   tANI_U16          staIndex=0;
+   tANI_U8           ucUcastSig;
+   tANI_U8           ucBcastSig;
+
+   pPrevNode = pTempNode  = pMac->lim.gLimIbssPeerList;
+
+   limLog(pMac, LOG1,
+       FL(" PEER ADDR :" MAC_ADDRESS_STR ),MAC_ADDR_ARRAY(macAddr));
+
+   /** Compare Peer */
+   while (NULL != pTempNode)
+   {
+      pTempNextNode = pTempNode->next;
+
+      /* Delete the STA with MAC address */
+      if (vos_mem_compare( (tANI_U8 *) macAddr,
+               (tANI_U8 *) &pTempNode->peerMacAddr,
+               sizeof(tSirMacAddr)) )
+      {
+         pStaDs = dphLookupHashEntry(pMac, macAddr,
+               &peerIdx, &psessionEntry->dph.dphHashTable);
+         if (pStaDs)
+         {
+            staIndex = pStaDs->staIndex;
+            ucUcastSig = pStaDs->ucUcastSig;
+            ucBcastSig = pStaDs->ucBcastSig;
+
+#ifdef WLAN_FEATURE_RMC
+            limRmcTransmitterDelete(pMac, pStaDs->staAddr);
+#endif /* WLAN_FEATURE_RMC */
+
+            /* Send DEL STA only if STA id is valid, mean ADD STA was
+             * success.
+             */
+            if(HAL_STA_INVALID_IDX != staIndex)
+               limDelSta(pMac, pStaDs, false /*asynchronous*/, psessionEntry);
+            limDeleteDphHashEntry(pMac,
+                                     pStaDs->staAddr, peerIdx, psessionEntry);
+            limReleasePeerIdx(pMac, peerIdx, psessionEntry);
+
+            /* Send indication to upper layers only if ADD STA was success
+             * i.e staid is Valid.
+             */
+            if(HAL_STA_INVALID_IDX != staIndex)
+                ibss_status_chg_notify(pMac, macAddr, staIndex,
+                                   ucUcastSig, ucBcastSig,
+                                   eWNI_SME_IBSS_PEER_DEPARTED_IND,
+                                   psessionEntry->smeSessionId );
+            if (pTempNode == pMac->lim.gLimIbssPeerList)
+            {
+               pMac->lim.gLimIbssPeerList = pTempNode->next;
+               pPrevNode = pMac->lim.gLimIbssPeerList;
+            }
+            else
+               pPrevNode->next = pTempNode->next;
+
+            vos_mem_free(pTempNode);
+            pMac->lim.gLimNumIbssPeers--;
+
+            pTempNode = pTempNextNode;
+            break;
+         }
+      }
+      pPrevNode = pTempNode;
+      pTempNode = pTempNextNode;
+   }
+   /*
+    * if it is the last peer walking out, we better
+    * we set IBSS state to inactive.
+    */
+   if (0 == pMac->lim.gLimNumIbssPeers)
+   {
+       VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
+            "Last STA from IBSS walked out");
+       psessionEntry->limIbssActive = false;
+   }
+}
+
 /* handle the response from HAL for an ADD STA request */
 tSirRetStatus
 limIbssAddStaRsp(
@@ -1158,19 +1252,25 @@ limIbssAddStaRsp(
         return eSIR_FAILURE;
     }
 
-    pStaDs = dphLookupHashEntry(pMac, pAddStaParams->staMac, &peerIdx, &psessionEntry->dph.dphHashTable);
+    pStaDs = dphLookupHashEntry(pMac,
+                pAddStaParams->staMac, &peerIdx,
+                  &psessionEntry->dph.dphHashTable);
     if (pStaDs == NULL)
     {
-        PELOGE(limLog(pMac, LOGE, FL("IBSS: ADD_STA_RSP for unknown MAC addr "));)
-        limPrintMacAddr(pMac, pAddStaParams->staMac, LOGE);
+        limLog(pMac, LOGE,
+           FL("IBSS: ADD_STA_RSP for unknown MAC addr: "MAC_ADDRESS_STR),
+           MAC_ADDR_ARRAY(pAddStaParams->staMac));
         vos_mem_free(pAddStaParams);
         return eSIR_FAILURE;
     }
 
     if (pAddStaParams->status != eHAL_STATUS_SUCCESS)
     {
-        PELOGE(limLog(pMac, LOGE, FL("IBSS: ADD_STA_RSP error (%x) "), pAddStaParams->status);)
-        limPrintMacAddr(pMac, pAddStaParams->staMac, LOGE);
+        limLog(pMac, LOGE,
+          FL("IBSS: ADD_STA_RSP error (%x) from MAC: " MAC_ADDRESS_STR),
+          pAddStaParams->status, MAC_ADDR_ARRAY(pAddStaParams->staMac));
+        __limIbssSearchAndDeletePeer(pMac,
+                      psessionEntry, pAddStaParams->staMac);
         vos_mem_free(pAddStaParams);
         return eSIR_FAILURE;
     }
@@ -1184,10 +1284,15 @@ limIbssAddStaRsp(
 
     PELOGW(limLog(pMac, LOGW, FL("IBSS: sending IBSS_NEW_PEER msg to SME!"));)
 
-    ibss_status_chg_notify(pMac, pAddStaParams->staMac, pStaDs->staIndex, 
+    ibss_status_chg_notify(pMac, pAddStaParams->staMac, pStaDs->staIndex,
                            pStaDs->ucUcastSig, pStaDs->ucBcastSig,
                            eWNI_SME_IBSS_NEW_PEER_IND,
                            psessionEntry->smeSessionId);
+
+#ifdef WLAN_FEATURE_RMC
+    limRmcTriggerRulerSelection(pMac, psessionEntry->selfMacAddr);
+#endif
+
     vos_mem_free(pAddStaParams);
 
     return eSIR_SUCCESS;
@@ -1265,8 +1370,6 @@ void limIbssAddBssRspWhenCoalescing(tpAniSirGlobal  pMac, void *msg, tpPESession
  end:
     ibss_coalesce_free(pMac);
 }
-
-
 
 void
 limIbssDelBssRsp(
@@ -1351,80 +1454,6 @@ limIbssDelBssRsp(
         peDeleteSession(pMac, psessionEntry);
         psessionEntry = NULL;
     }
-}
-
-static void
-__limIbssSearchAndDeletePeer(tpAniSirGlobal    pMac,
-                             tpPESession psessionEntry,
-                             tSirMacAddr macAddr)
-{
-   tLimIbssPeerNode *pTempNode, *pPrevNode;
-   tLimIbssPeerNode *pTempNextNode = NULL;
-   tpDphHashNode     pStaDs=NULL;
-   tANI_U16          peerIdx=0;
-   tANI_U16          staIndex=0;
-   tANI_U8           ucUcastSig;
-   tANI_U8           ucBcastSig;
-
-   pPrevNode = pTempNode  = pMac->lim.gLimIbssPeerList;
-
-   limLog(pMac, LOG1, FL(" PEER ADDR :" MAC_ADDRESS_STR ),MAC_ADDR_ARRAY(macAddr));
-
-   /** Compare Peer */
-   while (NULL != pTempNode)
-   {
-      pTempNextNode = pTempNode->next;
-
-      /* Delete the STA with MAC address */
-      if (vos_mem_compare( (tANI_U8 *) macAddr,
-               (tANI_U8 *) &pTempNode->peerMacAddr,
-               sizeof(tSirMacAddr)) )
-      {
-         pStaDs = dphLookupHashEntry(pMac, macAddr,
-               &peerIdx, &psessionEntry->dph.dphHashTable);
-         if (pStaDs)
-         {
-            staIndex = pStaDs->staIndex;
-            ucUcastSig = pStaDs->ucUcastSig;
-            ucBcastSig = pStaDs->ucBcastSig;
-
-            (void) limDelSta(pMac, pStaDs, false /*asynchronous*/, psessionEntry);
-            limDeleteDphHashEntry(pMac, pStaDs->staAddr, peerIdx, psessionEntry);
-            limReleasePeerIdx(pMac, peerIdx, psessionEntry);
-
-            /* Send indication to upper layers */
-            ibss_status_chg_notify(pMac, macAddr, staIndex,
-                                   ucUcastSig, ucBcastSig,
-                                   eWNI_SME_IBSS_PEER_DEPARTED_IND,
-                                   psessionEntry->smeSessionId );
-            if (pTempNode == pMac->lim.gLimIbssPeerList)
-            {
-               pMac->lim.gLimIbssPeerList = pTempNode->next;
-               pPrevNode = pMac->lim.gLimIbssPeerList;
-            }
-            else
-               pPrevNode->next = pTempNode->next;
-
-            vos_mem_free(pTempNode);
-            pMac->lim.gLimNumIbssPeers--;
-
-            pTempNode = pTempNextNode;
-            break;
-         }
-      }
-      pPrevNode = pTempNode;
-      pTempNode = pTempNextNode;
-   }
-   /*
-    * if it is the last peer walking out, we better
-    * we set IBSS state to inactive.
-    */
-   if (0 == pMac->lim.gLimNumIbssPeers)
-   {
-       VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO,
-            "Last STA from IBSS walked out");
-       psessionEntry->limIbssActive = false;
-   }
 }
 
 /**
@@ -1678,6 +1707,10 @@ void limIbssHeartBeatHandle(tpAniSirGlobal pMac,tpPESession psessionEntry)
                     staIndex = pStaDs->staIndex;
                     ucUcastSig = pStaDs->ucUcastSig;
                     ucBcastSig = pStaDs->ucBcastSig;
+
+#ifdef WLAN_FEATURE_RMC
+                    limRmcTransmitterDelete(pMac, pStaDs->staAddr);
+#endif /* WLAN_FEATURE_RMC */
 
                     (void) limDelSta(pMac, pStaDs, false /*asynchronous*/,psessionEntry);
                     limDeleteDphHashEntry(pMac, pStaDs->staAddr, peerIdx,psessionEntry);
