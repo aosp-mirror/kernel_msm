@@ -122,6 +122,9 @@ static const unsigned int cs40l2x_event_masks[] = {
 	CS40L2X_EVENT_HARDWARE_ENABLED,
 };
 
+static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
+			unsigned int fw_id);
+
 static const struct cs40l2x_fw_desc *cs40l2x_firmware_match(
 			struct cs40l2x_private *cs40l2x, unsigned int fw_id)
 {
@@ -145,8 +148,13 @@ static ssize_t cs40l2x_cp_trigger_index_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	unsigned int index;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->cp_trigger_index);
+	mutex_lock(&cs40l2x->lock);
+	index = cs40l2x->cp_trigger_index;
+	mutex_unlock(&cs40l2x->lock);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", index);
 }
 
 static ssize_t cs40l2x_cp_trigger_index_store(struct device *dev,
@@ -167,9 +175,25 @@ static ssize_t cs40l2x_cp_trigger_index_store(struct device *dev,
 				&& index != CS40L2X_INDEX_DIAG)
 		return -EINVAL;
 
-	cs40l2x->cp_trigger_index = index;
+	mutex_lock(&cs40l2x->lock);
 
-	return count;
+	if (index == CS40L2X_INDEX_DIAG
+			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP)
+		ret = cs40l2x_firmware_swap(cs40l2x, CS40L2X_FW_ID_CAL);
+	else if (index != CS40L2X_INDEX_DIAG
+			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL)
+		ret = cs40l2x_firmware_swap(cs40l2x, CS40L2X_FW_ID_REMAP);
+
+	if (ret)
+		goto err_mutex;
+
+	cs40l2x->cp_trigger_index = index;
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_cp_trigger_queue_show(struct device *dev,
@@ -2523,6 +2547,23 @@ static enum hrtimer_restart cs40l2x_pbq_timer(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static int cs40l2x_diag_enable(struct cs40l2x_private *cs40l2x,
+			unsigned int val)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+
+	switch (cs40l2x->fw_desc->id) {
+	case CS40L2X_FW_ID_ORIG:
+		return regmap_write(regmap, CS40L2X_MBOX_STIMULUS_MODE, val);
+	case CS40L2X_FW_ID_CAL:
+		return regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "F0_TRACKING_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE), val);
+	default:
+		return -EPERM;
+	}
+}
+
 static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
@@ -2752,9 +2793,9 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 			goto err_mutex;
 		}
 
-		ret = regmap_write(regmap, CS40L2X_MBOX_STIMULUS_MODE, 1);
+		ret = cs40l2x_diag_enable(cs40l2x, 1);
 		if (ret) {
-			dev_err(dev, "Failed to enable stimulus mode\n");
+			dev_err(dev, "Failed to enable diagnostics tone\n");
 			goto err_mutex;
 		}
 
@@ -2789,6 +2830,26 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 	int ret;
 
 	mutex_lock(&cs40l2x->lock);
+
+	/* handle effects that straddle a firmware swap */
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		switch (cs40l2x->cp_trailer_index) {
+		case CS40L2X_INDEX_VIBE:
+		case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
+		case CS40L2X_INDEX_PEAK:
+			pm_relax(dev);
+			/* intentionally fall through */
+
+		case CS40L2X_INDEX_PBQ:
+		case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
+			goto err_skip;
+		}
+	} else if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
+		if (cs40l2x->cp_trailer_index == CS40L2X_INDEX_DIAG) {
+			pm_relax(dev);
+			goto err_skip;
+		}
+	}
 
 	switch (cs40l2x->cp_trailer_index) {
 	case CS40L2X_INDEX_PEAK:
@@ -2829,9 +2890,9 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		if (ret)
 			dev_err(dev, "Failed to capture f0 and ReDC\n");
 
-		ret = regmap_write(regmap, CS40L2X_MBOX_STIMULUS_MODE, 0);
+		ret = cs40l2x_diag_enable(cs40l2x, 0);
 		if (ret)
-			dev_err(dev, "Failed to disable stimulus mode\n");
+			dev_err(dev, "Failed to disable diagnostics tone\n");
 
 		ret = cs40l2x_dig_scale_set(cs40l2x, cs40l2x->diag_dig_scale);
 		if (ret)
@@ -2843,6 +2904,7 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		dev_err(dev, "Invalid wavetable index\n");
 	}
 
+err_skip:
 	cs40l2x->cp_trailer_index = 0;
 	cs40l2x->led_dev.brightness = LED_OFF;
 
@@ -3075,12 +3137,27 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
+static void cs40l2x_coeff_free(struct cs40l2x_private *cs40l2x)
+{
+	struct cs40l2x_coeff_desc *coeff_desc;
+
+	while (!list_empty(&cs40l2x->coeff_desc_head)) {
+		coeff_desc = list_first_entry(&cs40l2x->coeff_desc_head,
+				struct cs40l2x_coeff_desc, list);
+		list_del(&coeff_desc->list);
+		kfree(coeff_desc);
+	}
+}
+
 static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int gpio_btndetect = CS40L2X_GPIO_BTNDETECT_GPIO1;
 	int ret;
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL)
+		return 0;
 
 	if (cs40l2x->devid == CS40L2X_DEVID_L25B)
 		gpio_btndetect |= (CS40L2X_GPIO_BTNDETECT_GPIO2
@@ -3142,16 +3219,6 @@ static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 			dev_err(dev, "Failed to enable device\n");
 			return ret;
 		}
-
-		ret = regmap_update_bits(regmap, CS40L2X_DSP1_CCM_CORE_CTRL,
-				CS40L2X_DSP1_RESET_MASK |
-				CS40L2X_DSP1_EN_MASK,
-				(1 << CS40L2X_DSP1_RESET_SHIFT) |
-				(1 << CS40L2X_DSP1_EN_SHIFT));
-		if (ret) {
-			dev_err(dev, "Failed to start DSP\n");
-			return ret;
-		}
 		break;
 
 	default:
@@ -3162,14 +3229,15 @@ static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 			dev_err(dev, "Failed to set memory ready flag\n");
 			return ret;
 		}
+	}
 
-		ret = regmap_update_bits(regmap, CS40L2X_DSP1_CCM_CORE_CTRL,
-				CS40L2X_DSP1_RESET_MASK,
-				1 << CS40L2X_DSP1_RESET_SHIFT);
-		if (ret) {
-			dev_err(dev, "Failed to restart DSP\n");
-			return ret;
-		}
+	ret = regmap_update_bits(regmap, CS40L2X_DSP1_CCM_CORE_CTRL,
+			CS40L2X_DSP1_RESET_MASK | CS40L2X_DSP1_EN_MASK,
+			(1 << CS40L2X_DSP1_RESET_SHIFT) |
+				(1 << CS40L2X_DSP1_EN_SHIFT));
+	if (ret) {
+		dev_err(dev, "Failed to start DSP\n");
+		return ret;
 	}
 
 	while (dsp_timeout > 0) {
@@ -3201,6 +3269,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	int ret;
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL)
+		return 0;
 
 	ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "TIMEOUT_MS",
 			CS40L2X_XM_UNPACKED_TYPE), CS40L2X_TIMEOUT_MS_MAX);
@@ -3682,8 +3753,7 @@ static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
 				+ (*(data + pos + 3) << 24);
 		pos += CS40L2X_COEFF_LENGTH_SIZE;
 
-		coeff_desc = devm_kzalloc(cs40l2x->dev, sizeof(*coeff_desc),
-				GFP_KERNEL);
+		coeff_desc = kzalloc(sizeof(*coeff_desc), GFP_KERNEL);
 		if (!coeff_desc)
 			return -ENOMEM;
 
@@ -3807,6 +3877,110 @@ static void cs40l2x_firmware_load(const struct firmware *fw, void *context)
 		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				cs40l2x->fw_desc->coeff_files[i], dev,
 				GFP_KERNEL, cs40l2x, cs40l2x_coeff_file_load);
+}
+
+static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
+			unsigned int fw_id)
+{
+	const struct firmware *fw;
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	int ret, i;
+
+	if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_HAPTIC)
+		return -EPERM;
+
+	switch (cs40l2x->fw_desc->id) {
+	case CS40L2X_FW_ID_ORIG:
+		return -EPERM;
+
+	case CS40L2X_FW_ID_REMAP:
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
+						CS40L2X_XM_UNPACKED_TYPE),
+				CS40L2X_EVENT_DISABLED);
+		if (ret) {
+			dev_err(dev, "Failed to disable event controls\n");
+			return ret;
+		}
+
+		ret = cs40l2x_stop_playback(cs40l2x);
+		if (ret) {
+			dev_err(dev, "Failed to stop playback\n");
+			return ret;
+		}
+
+		ret = cs40l2x_hiber_cmd_send(cs40l2x,
+				CS40L2X_POWERCONTROL_FRC_STDBY);
+		if (ret) {
+			dev_err(dev, "Failed to force standby\n");
+			return ret;
+		}
+		break;
+
+	case CS40L2X_FW_ID_CAL:
+		ret = cs40l2x_diag_enable(cs40l2x, 0);
+		if (ret) {
+			dev_err(dev, "Failed to disable diagnostics tone\n");
+			return ret;
+		}
+
+		ret = cs40l2x_ack_write(cs40l2x,
+				cs40l2x_dsp_reg(cs40l2x, "SHUTDOWNREQUEST",
+						CS40L2X_XM_UNPACKED_TYPE), 1);
+		if (ret) {
+			dev_err(dev, "Failed to administer shutdown request\n");
+			return ret;
+		}
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_DSP1_CCM_CORE_CTRL,
+			CS40L2X_DSP1_EN_MASK, (0 << CS40L2X_DSP1_EN_SHIFT));
+	if (ret) {
+		dev_err(dev, "Failed to stop DSP\n");
+		return ret;
+	}
+
+	cs40l2x_coeff_free(cs40l2x);
+
+	cs40l2x->fw_desc = cs40l2x_firmware_match(cs40l2x, fw_id);
+	if (!cs40l2x->fw_desc)
+		return -EINVAL;
+
+	ret = request_firmware(&fw, cs40l2x->fw_desc->fw_file, dev);
+	if (ret) {
+		dev_err(dev, "Failed to request firmware file\n");
+		return ret;
+	}
+
+	ret = cs40l2x_firmware_parse(cs40l2x, fw);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < cs40l2x->fw_desc->num_coeff_files; i++) {
+		ret = request_firmware(&fw, cs40l2x->fw_desc->coeff_files[i],
+				dev);
+		if (ret)
+			continue;
+
+		ret = cs40l2x_coeff_file_parse(cs40l2x, fw);
+		if (ret)
+			return ret;
+	}
+
+	ret = cs40l2x_dsp_pre_config(cs40l2x);
+	if (ret)
+		return ret;
+
+	ret = cs40l2x_dsp_start(cs40l2x);
+	if (ret)
+		return ret;
+
+	return cs40l2x_dsp_post_config(cs40l2x);
 }
 
 static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
@@ -4977,6 +5151,8 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 	gpiod_set_value_cansleep(cs40l2x->reset_gpio, 0);
 
 	regulator_bulk_disable(cs40l2x->num_supplies, cs40l2x->supplies);
+
+	cs40l2x_coeff_free(cs40l2x);
 
 	mutex_destroy(&cs40l2x->lock);
 
