@@ -62,6 +62,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&fg_int_default>;
 
+		/* enable experimental max17301 support */
+		maxim,max1730x-compat;
+
 		/* FIXME: force resistor ID with maxim,force-batt-or read it*/
 		maxim,force-hard-reset;
 
