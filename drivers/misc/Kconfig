@@ -588,6 +588,12 @@ config AIRBRUSH_DRAM
 	---help---
 	  This option enables the Airbrush DRAM manager
 
+config FACEAUTH
+	tristate "EL1 Driver for Google Face Authentication"
+	default y
+	help
+	  Say 'y' to enable EL1 face authentication support.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
