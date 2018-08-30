@@ -83,6 +83,8 @@ struct bgrsb_priv {
 	struct input_dev *input;
 	struct mutex glink_mutex;
 
+	struct mutex pwr_mutext;
+
 	enum bgrsb_state bgrsb_current_state;
 	enum glink_link_state link_state;
 
@@ -651,9 +653,10 @@ static void bgrsb_enable_rsb(struct work_struct *work)
 	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
 								rsb_up_work);
 
+	mutex_lock(&dev->pwr_mutext);
 	if (dev->bgrsb_current_state != BGRSB_STATE_RSB_CONFIGURED) {
 		pr_err("BG is not yet configured for RSB\n");
-		return;
+		goto unlock;
 	}
 
 	if (bgrsb_ldo_work(dev, BGRSB_ENABLE_LDO15) == 0) {
@@ -663,7 +666,7 @@ static void bgrsb_enable_rsb(struct work_struct *work)
 			pr_err("Failed to send enable command to BG\n");
 			bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15);
 			dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
-			return;
+			goto unlock;
 		}
 	}
 	dev->bgrsb_current_state = BGRSB_STATE_RSB_ENABLED;
@@ -673,6 +676,9 @@ static void bgrsb_enable_rsb(struct work_struct *work)
 		dev->calibration_needed = false;
 		queue_work(dev->bgrsb_wq, &dev->rsb_calibration_work);
 	}
+unlock:
+	mutex_unlock(&dev->pwr_mutext);
+
 }
 
 static void bgrsb_disable_rsb(struct work_struct *work)
@@ -681,20 +687,24 @@ static void bgrsb_disable_rsb(struct work_struct *work)
 	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
 								rsb_down_work);
 
+	mutex_lock(&dev->pwr_mutext);
 	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
 
 		rc = bgrsb_enable(dev, false);
 		if (rc != 0) {
 			pr_err("Failed to send disable command to BG\n");
-			return;
+			goto unlock;
 		}
 
 		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15) != 0)
-			return;
+			goto unlock;
 
 		dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
 		pr_debug("RSB Disabled\n");
 	}
+
+unlock:
+	mutex_unlock(&dev->pwr_mutext);
 }
 
 static void bgrsb_calibration(struct work_struct *work)
@@ -763,13 +773,13 @@ static int split_bg_work(struct bgrsb_priv *dev, char *str)
 
 	switch (val) {
 	case BGRSB_POWER_DISABLE:
-		if (dev->bgrsb_current_state == BGRSB_STATE_RSB_CONFIGURED)
-			return 0;
+		/** if (dev->bgrsb_current_state == BGRSB_STATE_RSB_CONFIGURED)
+		 *	return 0; */
 		queue_work(dev->bgrsb_wq, &dev->rsb_down_work);
 		break;
 	case BGRSB_POWER_ENABLE:
-		if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED)
-			return 0;
+		/** if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED)
+		 *	return 0; */
 		queue_work(dev->bgrsb_wq, &dev->rsb_up_work);
 		break;
 	case BGRSB_POWER_CALIBRATION:
@@ -857,6 +867,7 @@ static int bgrsb_init(struct bgrsb_priv *dev)
 	dev->chnl.chnl_edge = "bg";
 	dev->chnl.chnl_trnsprt = "bgcom";
 	mutex_init(&dev->glink_mutex);
+	mutex_init(&dev->pwr_mutext);
 	dev->link_state = GLINK_LINK_STATE_DOWN;
 
 	dev->ldo_action = BGRSB_NO_ACTION;
