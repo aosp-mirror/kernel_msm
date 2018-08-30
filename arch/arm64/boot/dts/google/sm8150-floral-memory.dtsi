@@ -1,0 +1,61 @@
+/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* floral memory includes go here */
+
+
+/*
+ Reverved memory carveout is defined in TZ project:
+ ssg/securemsm/trustzone/qsee/mink/oem/config/sdm855/oem_config.xml
+ */
+
+/*
+ the following carveout items are still defined in sm8150.dtsi:
+ region              address    size
+ ==========          ========== =========
+ hyp_region:         0x85700000 0x600000
+ xbl_aop_mem:        0x85e00000 0x140000
+ flex_sec_apps_mem:  0x85ffd000	0x3000
+ smem_region:        0x86000000	0x200000
+ removed_regions:    0x86200000	0x5500000
+ pil_camera_mem:     0x8b700000	0x500000
+ pil_wlan_fw_mem:    0x8bc00000	0x100000
+ pil_ipa_fw_mem:     0x8bd00000	0x10000
+ pil_ipa_gsi_mem:    0x8bd10000	0x5000
+ pil_gpu_mem:        0x8bd15000	0x2000
+ pil_npu_mem:        0x8bd80000	0x80000
+*/
+
+&pil_adsp_mem {
+	reg = <0x0 0x8be00000 0x0 0x1e00000>;
+};
+
+&pil_modem_mem {
+	reg = <0x0 0x8dc00000 0x0 0xb400000>;
+};
+
+&pil_video_mem {
+	reg = <0x0 0x99000000 0x0 0x500000>;
+};
+
+&pil_cdsp_mem {
+	reg = <0x0 0x99500000 0x0 0x800000>;
+};
+
+&pil_slpi_mem {
+	reg = <0x0 0x99d00000 0x0 0x1400000>;
+};
+
+&pil_spss_mem {
+	reg = <0x0 0x9b100000 0x0 0x100000>;
+};
+
