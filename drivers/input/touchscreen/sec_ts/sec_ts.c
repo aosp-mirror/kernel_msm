@@ -1988,9 +1988,25 @@ static int sec_ts_probe(struct i2c_client *client,
 	sec_ts_delay(10);
 	ret = sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
 	if (ret < 0) {
-		input_err(true, &ts->client->dev,
-			  "%s: failed to communicate with touch controller. Try to update FW to recover!\n",
-			  __func__);
+		u8 boot_status;
+		/* Read the boot status in case device is in bootloader mode */
+		ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS,
+					  &boot_status, 1);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev,
+				  "%s: could not read boot status. Assuming no device connected.\n",
+				  __func__);
+			goto err_init;
+		}
+
+		input_info(true, &ts->client->dev,
+			   "%s: Attempting to reflash the firmware. Boot status = 0x%02X\n",
+			   __func__, boot_status);
+		if (boot_status != SEC_TS_STATUS_BOOT_MODE)
+			input_err(true, &ts->client->dev,
+				  "%s: device is not in bootloader mode!\n",
+				  __func__);
+
 		ts->is_fw_corrupted = true;
 	}
 
