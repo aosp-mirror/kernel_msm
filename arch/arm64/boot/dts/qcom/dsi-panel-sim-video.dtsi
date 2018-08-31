@@ -40,8 +40,8 @@
 
 		qcom,mdss-dsi-display-timings {
 			timing@0{
-				qcom,mdss-dsi-panel-width = <1080>;
-				qcom,mdss-dsi-panel-height = <1920>;
+				qcom,mdss-dsi-panel-width = <640>;
+				qcom,mdss-dsi-panel-height = <480>;
 				qcom,mdss-dsi-h-front-porch = <8>;
 				qcom,mdss-dsi-h-back-porch = <8>;
 				qcom,mdss-dsi-h-pulse-width = <8>;
