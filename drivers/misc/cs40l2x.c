@@ -3413,7 +3413,7 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 }
 
 static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
-		const void *val, size_t val_len, size_t limit)
+			const void *val, size_t val_len, size_t limit)
 {
 	int ret = 0, i;
 
@@ -3426,6 +3426,30 @@ static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 	}
 
 	return ret;
+}
+
+static int cs40l2x_ack_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
+			unsigned int val)
+{
+	unsigned int ack_val;
+	int ret, i;
+
+	ret = regmap_write(cs40l2x->regmap, reg, val);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < CS40L2X_ACK_TIMEOUT_COUNT; i++) {
+		usleep_range(10000, 10100);
+
+		ret = regmap_read(cs40l2x->regmap, reg, &ack_val);
+		if (ret)
+			return ret;
+
+		if (!ack_val)
+			return 0;
+	}
+
+	return -ETIME;
 }
 
 static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
@@ -4528,28 +4552,10 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 		return -EIO;
 	}
 
-	ret = regmap_write(regmap, CS40L2X_BASIC_SHUTDOWNREQUEST, 1);
+	ret = cs40l2x_ack_write(cs40l2x, CS40L2X_BASIC_SHUTDOWNREQUEST, 1);
 	if (ret) {
-		dev_err(dev, "Failed to write shutdown request\n");
+		dev_err(dev, "Failed to administer shutdown request\n");
 		return ret;
-	}
-
-	for (i = 0; i < CS40L2X_BASIC_TIMEOUT_COUNT; i++) {
-		usleep_range(10000, 10100);
-
-		ret = regmap_read(regmap, CS40L2X_BASIC_SHUTDOWNREQUEST, &val);
-		if (ret) {
-			dev_err(dev, "Failed to read shutdown request\n");
-			return ret;
-		}
-
-		if (!val)
-			break;
-	}
-
-	if (i == CS40L2X_BASIC_TIMEOUT_COUNT) {
-		dev_err(dev, "Timed out waiting for basic-mode shutdown\n");
-		return -ETIME;
 	}
 
 	ret = regmap_read(regmap, CS40L2X_BASIC_STATEMACHINE, &val);
