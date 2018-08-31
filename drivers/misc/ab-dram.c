@@ -28,7 +28,7 @@
 #define AIRBRUSH_DRAM_SIZE (512UL << 20)
 
 #define MAX_ABD_SESSION 100
-#define MAX_ALLOC_PER_SESSION 1000
+#define MAX_ALLOC_REF_PER_SESSION 1000
 
 static bool initialized;
 
@@ -41,7 +41,8 @@ struct ab_dram_data {
 };
 
 struct ab_dram_session {
-	int allocation_count;
+	struct mutex lock;
+	int alloc_count;
 };
 
 static struct ab_dram_data *internal_data;
@@ -123,6 +124,47 @@ static void ab_dram_free(struct ab_dram_buffer *buffer)
 
 	sg_free_table(table);
 	kfree(table);
+	buffer->sg_table = NULL;
+}
+
+/* Increment session allocation count
+ * Returning 0 on success, -EACCES on failure
+ */
+static __must_check int ab_dram_session_get(struct ab_dram_session *session)
+{
+	int ret = 0;
+
+	/* NULL session means it is a kernel request */
+	if (session == NULL)
+		return 0;
+
+	mutex_lock(&session->lock);
+
+	if (session->alloc_count >= MAX_ALLOC_REF_PER_SESSION)
+		ret = -EACCES;
+	else
+		session->alloc_count++;
+
+	mutex_unlock(&session->lock);
+
+	return ret;
+}
+
+static void ab_dram_session_put(struct ab_dram_session *session)
+{
+	if (session == NULL)
+		return;
+
+	mutex_lock(&session->lock);
+	if (WARN_ON(--session->alloc_count < 0))
+		session->alloc_count = 0;
+
+	if (session->alloc_count == 0) {
+		mutex_unlock(&session->lock);
+		kfree(session);
+		return;
+	}
+	mutex_unlock(&session->lock);
 }
 
 static struct ab_dram_buffer *ab_dram_buffer_create(
@@ -131,11 +173,6 @@ static struct ab_dram_buffer *ab_dram_buffer_create(
 {
 	struct ab_dram_buffer *buffer;
 	int ret;
-
-	if (session) {
-		if (session->allocation_count >= MAX_ALLOC_PER_SESSION)
-			return ERR_PTR(-EACCES);
-	}
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
@@ -147,16 +184,25 @@ static struct ab_dram_buffer *ab_dram_buffer_create(
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
 
-	ret = ab_dram_alloc(dev_data, buffer, len);
-	if (ret) {
-		kfree(buffer);
-		return ERR_PTR(ret);
-	}
+	mutex_lock(&dev_data->lock);
 
-	if (session)
-		session->allocation_count++;
+	ret = ab_dram_alloc(dev_data, buffer, len);
+	if (ret)
+		goto err_exit;
+
+	ret = ab_dram_session_get(session);
+	if (ret < 0) {
+		ab_dram_free(buffer);
+		goto err_exit;
+	}
+	mutex_unlock(&dev_data->lock);
 
 	return buffer;
+
+err_exit:
+	mutex_unlock(&dev_data->lock);
+	kfree(buffer);
+	return ERR_PTR(ret);
 }
 
 static void ab_dram_buffer_destroy(struct ab_dram_buffer *buffer)
@@ -166,10 +212,7 @@ static void ab_dram_buffer_destroy(struct ab_dram_buffer *buffer)
 
 	mutex_lock(&internal_data->lock);
 	ab_dram_free(buffer);
-	if (buffer->session) {
-		if (WARN_ON(--buffer->session->allocation_count < 0))
-			buffer->session->allocation_count = 0;
-	}
+	ab_dram_session_put(buffer->session);
 	mutex_unlock(&internal_data->lock);
 	kfree(buffer);
 }
@@ -307,9 +350,7 @@ static struct dma_buf *ab_dram_alloc_dma_buf(struct ab_dram_session *session,
 	if (!len)
 		return ERR_PTR(-EINVAL);
 
-	mutex_lock(&abd_data->lock);
-	buffer = ab_dram_buffer_create(internal_data, session, len);
-	mutex_unlock(&abd_data->lock);
+	buffer = ab_dram_buffer_create(abd_data, session, len);
 
 	if (!buffer)
 		return ERR_PTR(-ENODEV);
@@ -382,31 +423,31 @@ static int ab_dram_allocate_memory_fd(struct ab_dram_session *session,
 static int ab_dram_open(struct inode *ip, struct file *fp)
 {
 	struct ab_dram_session *session;
-	int ret = 0;
-
-	mutex_lock(&internal_data->lock);
-	if (++internal_data->session_count > MAX_ABD_SESSION)
-		ret = -EACCES;
-	mutex_unlock(&internal_data->lock);
-	if (ret < 0)
-		goto err;
 
 	session = kzalloc(sizeof(struct ab_dram_session), GFP_KERNEL);
-	if (!session) {
-		ret = -ENOMEM;
-		goto err;
+	if (!session)
+		return -ENOMEM;
+
+	mutex_lock(&internal_data->lock);
+	if (internal_data->session_count >= MAX_ABD_SESSION) {
+		mutex_unlock(&internal_data->lock);
+		kfree(session);
+		return -EACCES;
 	}
+	internal_data->session_count++;
+	mutex_unlock(&internal_data->lock);
+
+	mutex_init(&session->lock);
+
+	/* session allocation count equals to 1 refcount from the
+	 * opened driver session plus the number of allocation on
+	 * the said session. Therefore initialize alloc_count to 1
+	 * for the opened driver session to start with.
+	 */
+	session->alloc_count = 1;
 
 	fp->private_data = session;
 	return 0;
-
-err:
-	mutex_lock(&internal_data->lock);
-	if (WARN_ON(--internal_data->session_count < 0))
-		internal_data->session_count = 0;
-	mutex_unlock(&internal_data->lock);
-
-	return ret;
 }
 
 static int ab_dram_release(struct inode *ip, struct file *fp)
@@ -414,13 +455,12 @@ static int ab_dram_release(struct inode *ip, struct file *fp)
 	struct ab_dram_session *session = fp->private_data;
 
 	mutex_lock(&internal_data->lock);
-
 	if (WARN_ON(--internal_data->session_count < 0))
 		internal_data->session_count = 0;
-
 	mutex_unlock(&internal_data->lock);
 
-	kfree(session);
+	ab_dram_session_put(session);
+	fp->private_data = NULL;
 	return 0;
 }
 
