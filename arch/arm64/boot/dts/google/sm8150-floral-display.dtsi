@@ -56,6 +56,12 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_jaws>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,platform-reset-gpio = <&tlmm 67 0>;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-width = <1080>;
+			qcom,mdss-dsi-panel-height = <1920>;
+		};
+	};
 };
 
 &dsi_s6e3ha8_dsc_wqhd_cmd {
