@@ -847,6 +847,12 @@ static void p9221_vote_defaults(struct p9221_charger_data *charger)
 {
 	int ret;
 
+	if (!charger->dc_icl_votable) {
+		dev_err(&charger->client->dev,
+			"Could not vote DC_ICL - no votable\n");
+		return;
+	}
+
 	ret = vote(charger->dc_icl_votable, P9221_WLC_VOTER, true,
 			P9221_DC_ICL_BPP_UA);
 	if (ret)
@@ -873,8 +879,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	cancel_delayed_work(&charger->dcin_work);
 	del_timer(&charger->vrect_timer);
 
-	if (charger->dc_icl_votable)
-		p9221_vote_defaults(charger);
+	p9221_vote_defaults(charger);
 }
 
 static void p9221_tx_work(struct work_struct *work)
@@ -982,6 +987,9 @@ static int p9221_get_property(struct power_supply *psy,
 			val->intval = 0;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (!charger->dc_icl_votable)
+			return -EAGAIN;
+
 		ret = get_effective_result(charger->dc_icl_votable);
 		if (ret < 0)
 			break;
@@ -1023,6 +1031,10 @@ static int p9221_set_property(struct power_supply *psy,
 			ret = -EINVAL;
 			break;
 		}
+
+		if (!charger->dc_icl_votable)
+			return -EAGAIN;
+
 		ret = vote(charger->dc_icl_votable, P9221_USER_VOTER, true,
 			   val->intval);
 		break;
@@ -2322,6 +2334,14 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return PTR_ERR(charger->wc_psy);
 	}
 
+	/*
+	 * Find the DC_ICL votable, we use this to limit the current that
+	 * is taken from the wireless charger.
+	 */
+	charger->dc_icl_votable = find_votable("DC_ICL");
+	if (!charger->dc_icl_votable)
+		dev_warn(&charger->client->dev, "Could not find DC_ICL votable\n");
+
 	/* Test to see if the charger is online */
 	ret = p9221_reg_read_16(charger, P9221_CHIP_ID_REG, &chip_id);
 	if (ret == 0 && chip_id == P9221_CHIP_ID) {
@@ -2330,13 +2350,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		p9221_set_online(charger);
 	} else {
 		/* disconnected, (likely err!=0) vote for BPP */
-		charger->dc_icl_votable = find_votable("DC_ICL");
-		if (!charger->dc_icl_votable)
-			dev_err(&charger->client->dev,
-				"Could not find DC_ICL votable=0 %d\n",
-				ret);
-		else
-			p9221_vote_defaults(charger);
+		p9221_vote_defaults(charger);
 	}
 
 	ret = devm_request_threaded_irq(
@@ -2348,7 +2362,11 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return ret;
 	}
 	device_init_wakeup(charger->dev, true);
-	/* NOTE: will get a VRECTON when booting on a pad */
+
+	/*
+	 * We will receive a VRECTON after enabling IRQ if the device is
+	 * if the device is already in-field when the driver is probed.
+	 */
 	enable_irq_wake(charger->pdata->irq_int);
 
 	if (gpio_is_valid(charger->pdata->irq_det_gpio)) {
