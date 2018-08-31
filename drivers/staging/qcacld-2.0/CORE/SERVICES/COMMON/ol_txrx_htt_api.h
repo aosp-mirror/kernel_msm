@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -643,7 +643,7 @@ ol_rx_pn_ind_handler(
 void
 ol_txrx_fw_stats_handler(
     ol_txrx_pdev_handle pdev,
-    u_int64_t cookie,
+    u_int8_t cookie,
     u_int8_t *stats_info_list);
 
 /**

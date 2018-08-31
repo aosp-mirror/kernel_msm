@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -373,6 +373,7 @@ ol_txrx_pdev_attach(
     }
 
     TXRX_STATS_INIT(pdev);
+    ol_txrx_fw_stats_desc_pool_init(pdev, FW_STATS_DESC_POOL_SIZE);
 
     TAILQ_INIT(&pdev->vdev_list);
     TAILQ_INIT(&pdev->req_list);
@@ -892,6 +893,7 @@ fail2:
     ol_txrx_peer_find_detach(pdev);
 
 fail1:
+    ol_txrx_fw_stats_desc_pool_deinit(pdev);
     adf_os_mem_free(pdev);
 
 fail0:
@@ -1022,6 +1024,7 @@ ol_txrx_pdev_detach(ol_txrx_pdev_handle pdev, int force)
     ol_tx_desc_dup_detect_deinit(pdev);
 
     ol_txrx_peer_find_detach(pdev);
+    ol_txrx_fw_stats_desc_pool_deinit(pdev);
 
     adf_os_spinlock_destroy(&pdev->tx_mutex);
     adf_os_spinlock_destroy(&pdev->peer_ref_mutex);
@@ -2078,7 +2081,7 @@ ol_txrx_fw_stats_cfg(
     u_int8_t cfg_stats_type,
     u_int32_t cfg_val)
 {
-    u_int64_t dummy_cookie = 0;
+    u_int8_t dummy_cookie = 0;
     htt_h2t_dbg_stats_get(
         vdev->pdev->htt_pdev,
         0 /* upload mask */,
@@ -2091,11 +2094,14 @@ ol_txrx_fw_stats_cfg(
 A_STATUS
 ol_txrx_fw_stats_get(
     ol_txrx_vdev_handle vdev,
-    struct ol_txrx_stats_req *req)
+    struct ol_txrx_stats_req *req,
+    bool response_expected)
 {
     struct ol_txrx_pdev_t *pdev = vdev->pdev;
-    u_int64_t cookie;
+    uint8_t cookie = FW_STATS_DESC_POOL_SIZE;
     struct ol_txrx_stats_req_internal *non_volatile_req;
+    struct ol_txrx_fw_stats_desc_t *desc = NULL;
+    struct ol_txrx_fw_stats_desc_elem_t *elem = NULL;
 
     if (!pdev ||
         req->stats_type_upload_mask >= 1 << HTT_DBG_NUM_STATS ||
@@ -2109,7 +2115,7 @@ ol_txrx_fw_stats_get(
      * (The one provided as an argument is likely allocated on the stack.)
      */
     non_volatile_req = adf_os_mem_alloc(pdev->osdev, sizeof(*non_volatile_req));
-    if (! non_volatile_req) {
+    if (!non_volatile_req) {
         return A_NO_MEMORY;
     }
     /* copy the caller's specifications */
@@ -2117,13 +2123,20 @@ ol_txrx_fw_stats_get(
     non_volatile_req->serviced = 0;
     non_volatile_req->offset = 0;
 
-    /* use the non-volatile request object's address as the cookie */
-    cookie = OL_TXRX_STATS_PTR_TO_U64(non_volatile_req);
-
-    adf_os_spin_lock_bh(&pdev->req_list_spinlock);
-    TAILQ_INSERT_TAIL(&pdev->req_list, non_volatile_req, req_list_elem);
-    pdev->req_list_depth++;
-    adf_os_spin_unlock_bh(&pdev->req_list_spinlock);
+    if (response_expected) {
+	desc = ol_txrx_fw_stats_desc_alloc(pdev);
+	if (!desc) {
+	    vos_mem_free(non_volatile_req);
+	    return A_ERROR;
+	}
+	/* use the desc id as the cookie */
+	cookie = desc->desc_id;
+	desc->req = non_volatile_req;
+        adf_os_spin_lock_bh(&pdev->req_list_spinlock);
+        TAILQ_INSERT_TAIL(&pdev->req_list, non_volatile_req, req_list_elem);
+        pdev->req_list_depth++;
+        adf_os_spin_unlock_bh(&pdev->req_list_spinlock);
+    }
 
     if (htt_h2t_dbg_stats_get(
             pdev->htt_pdev,
@@ -2132,22 +2145,197 @@ ol_txrx_fw_stats_get(
             HTT_H2T_STATS_REQ_CFG_STAT_TYPE_INVALID, 0,
             cookie))
     {
-        adf_os_spin_lock_bh(&pdev->req_list_spinlock);
-        TAILQ_REMOVE(&pdev->req_list, non_volatile_req, req_list_elem);
-        pdev->req_list_depth--;
-        adf_os_spin_unlock_bh(&pdev->req_list_spinlock);
+        if (response_expected) {
+            adf_os_spin_lock_bh(&pdev->req_list_spinlock);
+            TAILQ_REMOVE(&pdev->req_list, non_volatile_req,
+				 req_list_elem);
+            pdev->req_list_depth--;
+            adf_os_spin_unlock_bh(&pdev->req_list_spinlock);
+	    if (desc) {
+		adf_os_spin_lock_bh(&pdev->
+				 ol_txrx_fw_stats_desc_pool.
+				 pool_lock);
+		desc->req = NULL;
+		elem = container_of(desc,
+				    struct
+				    ol_txrx_fw_stats_desc_elem_t,
+				    desc);
+		elem->next =
+		    pdev->ol_txrx_fw_stats_desc_pool.
+		    freelist;
+		pdev->ol_txrx_fw_stats_desc_pool.
+		    freelist = elem;
+		adf_os_spin_unlock_bh(&pdev->
+				   ol_txrx_fw_stats_desc_pool.
+				   pool_lock);
+	    }
+        }
 
         adf_os_mem_free(non_volatile_req);
         return A_ERROR;
     }
 
+    if (response_expected == false)
+        adf_os_mem_free(non_volatile_req);
+
     return A_OK;
 }
 #endif
+/**
+ * ol_txrx_fw_stats_desc_pool_init() - Initialize the fw stats descriptor pool
+ * @pdev: handle to ol txrx pdev
+ * @pool_size: Size of fw stats descriptor pool
+ *
+ * Return: 0 for success, error code on failure.
+ */
+int ol_txrx_fw_stats_desc_pool_init(struct ol_txrx_pdev_t *pdev,
+				    uint8_t pool_size)
+{
+	int i;
+
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: pdev is NULL", __func__);
+		return -EINVAL;
+	}
+	pdev->ol_txrx_fw_stats_desc_pool.pool = vos_mem_malloc(pool_size *
+		sizeof(struct ol_txrx_fw_stats_desc_elem_t));
+	if (!pdev->ol_txrx_fw_stats_desc_pool.pool) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: failed to allocate desc pool", __func__);
+		return -ENOMEM;
+	}
+	pdev->ol_txrx_fw_stats_desc_pool.freelist =
+		&pdev->ol_txrx_fw_stats_desc_pool.pool[0];
+	pdev->ol_txrx_fw_stats_desc_pool.pool_size = pool_size;
+
+	for (i = 0; i < (pool_size - 1); i++) {
+		pdev->ol_txrx_fw_stats_desc_pool.pool[i].desc.desc_id = i;
+		pdev->ol_txrx_fw_stats_desc_pool.pool[i].desc.req = NULL;
+		pdev->ol_txrx_fw_stats_desc_pool.pool[i].next =
+			&pdev->ol_txrx_fw_stats_desc_pool.pool[i + 1];
+	}
+	pdev->ol_txrx_fw_stats_desc_pool.pool[i].desc.desc_id = i;
+	pdev->ol_txrx_fw_stats_desc_pool.pool[i].desc.req = NULL;
+	pdev->ol_txrx_fw_stats_desc_pool.pool[i].next = NULL;
+	adf_os_spinlock_init(&pdev->ol_txrx_fw_stats_desc_pool.pool_lock);
+	adf_os_atomic_init(&pdev->ol_txrx_fw_stats_desc_pool.initialized);
+	adf_os_atomic_set(&pdev->ol_txrx_fw_stats_desc_pool.initialized, 1);
+	return 0;
+}
+
+/**
+ * ol_txrx_fw_stats_desc_pool_deinit() - Deinitialize the
+ * fw stats descriptor pool
+ * @pdev: handle to ol txrx pdev
+ *
+ * Return: None
+ */
+void ol_txrx_fw_stats_desc_pool_deinit(struct ol_txrx_pdev_t *pdev)
+{
+	if (!pdev) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: pdev is NULL", __func__);
+		return;
+	}
+	if (!adf_os_atomic_read(&pdev->ol_txrx_fw_stats_desc_pool.initialized)) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: Pool is not initialized", __func__);
+		return;
+	}
+	if (!pdev->ol_txrx_fw_stats_desc_pool.pool) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: Pool is not allocated", __func__);
+		return;
+	}
+
+	adf_os_spin_lock_bh(&pdev->ol_txrx_fw_stats_desc_pool.pool_lock);
+	adf_os_atomic_set(&pdev->ol_txrx_fw_stats_desc_pool.initialized, 0);
+	vos_mem_free(pdev->ol_txrx_fw_stats_desc_pool.pool);
+	pdev->ol_txrx_fw_stats_desc_pool.pool = NULL;
+
+	pdev->ol_txrx_fw_stats_desc_pool.freelist = NULL;
+	pdev->ol_txrx_fw_stats_desc_pool.pool_size = 0;
+	adf_os_spin_unlock_bh(&pdev->ol_txrx_fw_stats_desc_pool.pool_lock);
+}
+
+/**
+ * ol_txrx_fw_stats_desc_alloc() - Get fw stats descriptor from fw stats
+ * free descriptor pool
+ * @pdev: handle to ol txrx pdev
+ *
+ * Return: pointer to fw stats descriptor, NULL on failure
+ */
+struct ol_txrx_fw_stats_desc_t
+	*ol_txrx_fw_stats_desc_alloc(struct ol_txrx_pdev_t *pdev)
+{
+	struct ol_txrx_fw_stats_desc_t *desc = NULL;
+
+	adf_os_spin_lock_bh(&pdev->ol_txrx_fw_stats_desc_pool.pool_lock);
+	if (!adf_os_atomic_read(&pdev->ol_txrx_fw_stats_desc_pool.initialized)) {
+		adf_os_spin_unlock_bh(&pdev->
+				   ol_txrx_fw_stats_desc_pool.pool_lock);
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: Pool deinitialized", __func__);
+		return NULL;
+	}
+	if (pdev->ol_txrx_fw_stats_desc_pool.freelist) {
+		desc = &pdev->ol_txrx_fw_stats_desc_pool.freelist->desc;
+		pdev->ol_txrx_fw_stats_desc_pool.freelist =
+			pdev->ol_txrx_fw_stats_desc_pool.freelist->next;
+	}
+	adf_os_spin_unlock_bh(&pdev->ol_txrx_fw_stats_desc_pool.pool_lock);
+
+	if (desc) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_INFO2,
+			   "%s: desc_id %d allocated",
+			    __func__, desc->desc_id);
+	}
+	else {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: fw stats descriptors are exhausted", __func__);
+	}
+	return desc;
+}
+
+/**
+ * ol_txrx_fw_stats_desc_get_req() - Put fw stats descriptor
+ * back into free pool
+ * @pdev: handle to ol txrx pdev
+ * @fw_stats_desc: fw_stats_desc_get descriptor
+ *
+ * Return: pointer to request
+ */
+struct ol_txrx_stats_req_internal
+	*ol_txrx_fw_stats_desc_get_req(struct ol_txrx_pdev_t *pdev,
+				       unsigned char desc_id)
+{
+	struct ol_txrx_fw_stats_desc_elem_t *desc_elem;
+	struct ol_txrx_stats_req_internal *req;
+
+	adf_os_spin_lock_bh(&pdev->ol_txrx_fw_stats_desc_pool.pool_lock);
+	if (!adf_os_atomic_read(&pdev->ol_txrx_fw_stats_desc_pool.initialized)) {
+		adf_os_spin_unlock_bh(&pdev->
+				   ol_txrx_fw_stats_desc_pool.pool_lock);
+		TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+			   "%s: Desc ID %u Pool deinitialized",
+			    __func__, desc_id);
+		return NULL;
+	}
+	desc_elem = &pdev->ol_txrx_fw_stats_desc_pool.pool[desc_id];
+	req = desc_elem->desc.req;
+	desc_elem->desc.req = NULL;
+	desc_elem->next =
+		pdev->ol_txrx_fw_stats_desc_pool.freelist;
+	pdev->ol_txrx_fw_stats_desc_pool.freelist = desc_elem;
+	adf_os_spin_unlock_bh(&pdev->ol_txrx_fw_stats_desc_pool.pool_lock);
+	return req;
+}
+
 void
 ol_txrx_fw_stats_handler(
     ol_txrx_pdev_handle pdev,
-    u_int64_t cookie,
+    u_int8_t cookie,
     u_int8_t *stats_info_list)
 {
     enum htt_dbg_stats_type type;
@@ -2158,7 +2346,18 @@ ol_txrx_fw_stats_handler(
     int more = 0;
     int found = 0;
 
-    req = OL_TXRX_U64_TO_STATS_PTR(cookie);
+    if (cookie >= FW_STATS_DESC_POOL_SIZE) {
+	TXRX_PRINT(TXRX_PRINT_LEVEL_ERR, "%s: Cookie is not valid",
+		   __func__);
+	return;
+    }
+    req = ol_txrx_fw_stats_desc_get_req(pdev, (uint8_t)cookie);
+    if (!req) {
+	TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+		   "%s: Request not retrieved for cookie %u", __func__,
+		    (uint8_t)cookie);
+	return;
+    }
 
     adf_os_spin_lock_bh(&pdev->req_list_spinlock);
     TAILQ_FOREACH(tmp, &pdev->req_list, req_list_elem) {

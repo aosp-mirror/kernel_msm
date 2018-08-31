@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -336,11 +336,10 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
 #if TXRX_STATS_LEVEL != TXRX_STATS_LEVEL_OFF
     case HTT_T2H_MSG_TYPE_STATS_CONF:
         {
-            u_int64_t cookie;
+            u_int8_t cookie;
             u_int8_t *stats_info_list;
 
             cookie = *(msg_word + 1);
-            cookie |= ((u_int64_t) (*(msg_word + 2))) << 32;
 
             stats_info_list = (u_int8_t *) (msg_word + 3);
             htc_pm_runtime_put(pdev->htc_pdev);

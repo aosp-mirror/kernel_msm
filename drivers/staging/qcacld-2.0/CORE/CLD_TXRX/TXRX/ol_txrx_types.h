@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -429,6 +429,16 @@ struct ol_tx_group_credit_stats_t {
 	u_int16_t wrap_around;
 };
 
+struct ol_txrx_fw_stats_desc_t {
+	struct ol_txrx_stats_req_internal *req;
+	unsigned char desc_id;
+};
+
+struct ol_txrx_fw_stats_desc_elem_t {
+	struct ol_txrx_fw_stats_desc_elem_t *next;
+	struct ol_txrx_fw_stats_desc_t desc;
+};
+
 /*
  * As depicted in the diagram below, the pdev contains an array of
  * NUM_EXT_TID ol_tx_active_queues_in_tid_t elements.
@@ -533,6 +543,14 @@ struct ol_txrx_pdev_t {
 	 */
 	adf_os_atomic_t target_tx_credit;
 	adf_os_atomic_t orig_target_tx_credit;
+
+	struct {
+		uint16_t pool_size;
+		struct ol_txrx_fw_stats_desc_elem_t *pool;
+		struct ol_txrx_fw_stats_desc_elem_t *freelist;
+		adf_os_spinlock_t pool_lock;
+		adf_os_atomic_t initialized;
+	} ol_txrx_fw_stats_desc_pool;
 
 	/* Peer mac address to staid mapping */
 	struct ol_mac_addr mac_to_staid[WLAN_MAX_STA_COUNT + 3];
