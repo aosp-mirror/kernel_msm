@@ -68,6 +68,8 @@
 };
 
 &usb0 {
+	google,switch-vbus = <250>;
+
 	dwc3@a600000 {
 		maximum-speed = "high-speed";
 		usb-phy = <&qusb_phy0>, <&usb_nop_phy>;
