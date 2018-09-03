@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +33,10 @@
 #define EVENT_SYNC_BIT 24
 #define ISAR_BIT 3
 #define SPM_EN_BIT 0
+#define PWR_STATE_IDX_BITS 20
+#define PWR_STATE_IDX_MASK 0x07
+#define WAKE_CONFIG_BITS 1
+#define WAKE_CONFIG_MASK 0x03
 
 struct msm_spm_power_modes {
 	uint32_t mode;
@@ -238,7 +242,7 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 {
 	uint32_t i;
 	int ret = -EINVAL;
-	uint32_t ctl;
+	uint32_t ctl = 0;
 
 	if (!dev) {
 		pr_err("dev is NULL\n");
@@ -543,6 +547,14 @@ int msm_spm_set_low_power_mode(unsigned int mode, bool notify_rpm)
 }
 EXPORT_SYMBOL(msm_spm_set_low_power_mode);
 
+void msm_spm_set_rpm_hs(bool allow_rpm_hs)
+{
+	struct msm_spm_device *dev = &__get_cpu_var(msm_cpu_spm_device);
+
+	dev->allow_rpm_hs = allow_rpm_hs;
+}
+EXPORT_SYMBOL(msm_spm_set_rpm_hs);
+
 int msm_spm_config_low_power_mode_addr(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm)
 {
@@ -786,11 +798,15 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	}
 
 	spm_data.vctl_port = -1;
+	spm_data.vctl_port_ub = -1;
 	spm_data.phase_port = -1;
 	spm_data.pfm_port = -1;
 
 	key = "qcom,vctl-port";
 	of_property_read_u32(node, key, &spm_data.vctl_port);
+
+	key = "qcom,vctl-port-ub";
+	of_property_read_u32(node, key, &spm_data.vctl_port_ub);
 
 	key = "qcom,phase-port";
 	of_property_read_u32(node, key, &spm_data.phase_port);
@@ -866,6 +882,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	for_each_child_of_node(node, n) {
 		const char *name;
 		bool bit_set;
+		u8 field_val;
 		int sync;
 
 		if (!n->name)
@@ -906,6 +923,16 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 
 		bit_set = of_property_read_bool(n, "qcom,spm_en");
 		modes[mode_count].ctl |= bit_set ? BIT(SPM_EN_BIT) : 0;
+
+		ret  = of_property_read_u8(n, "qcom,pwr-state-idx", &field_val);
+		if (!ret)
+			modes[mode_count].ctl |= (field_val &
+				PWR_STATE_IDX_MASK) << PWR_STATE_IDX_BITS;
+
+		ret = of_property_read_u8(n, "qcom,wake-config", &field_val);
+		if (!ret)
+			modes[mode_count].ctl |= (field_val & WAKE_CONFIG_MASK)
+				<< WAKE_CONFIG_BITS;
 
 		ret = of_property_read_u32(n, "qcom,event_sync", &sync);
 		if (!ret)

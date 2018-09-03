@@ -2,7 +2,7 @@
  * drivers/staging/android/ion/ion_priv.h
  *
  * Copyright (C) 2011 Google, Inc.
- * Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -200,8 +200,8 @@ struct ion_heap {
 	struct task_struct *task;
 
 	int (*debug_show)(struct ion_heap *heap, struct seq_file *, void *);
-	atomic_t total_allocated;
-	atomic_t total_handles;
+	atomic_long_t total_allocated;
+	atomic_long_t total_handles;
 };
 
 /**
@@ -268,6 +268,13 @@ int msm_ion_heap_sg_table_zero(struct sg_table *, size_t size);
 int msm_ion_heap_pages_zero(struct page **pages, int num_pages);
 int msm_ion_heap_alloc_pages_mem(struct pages_mem *pages_mem);
 void msm_ion_heap_free_pages_mem(struct pages_mem *pages_mem);
+
+/**
+ * Functions to help assign/unassign sg_table for System Secure Heap
+ */
+
+int ion_system_secure_heap_unassign_sg(struct sg_table *sgt, int source_vmid);
+int ion_system_secure_heap_assign_sg(struct sg_table *sgt, int dest_vmid);
 
 /**
  * ion_heap_init_shrinker
@@ -405,6 +412,8 @@ void ion_carveout_free(struct ion_heap *heap, ion_phys_addr_t addr,
  * struct ion_page_pool - pagepool struct
  * @high_count:		number of highmem items in the pool
  * @low_count:		number of lowmem items in the pool
+ * @nr_unreserved:	number of items in the pool which have not been reserved
+ *			by a prefetch allocation
  * @high_items:		list of highmem items
  * @low_items:		list of lowmem items
  * @mutex:		lock protecting this struct and especially the count
@@ -421,6 +430,7 @@ void ion_carveout_free(struct ion_heap *heap, ion_phys_addr_t addr,
 struct ion_page_pool {
 	int high_count;
 	int low_count;
+	int nr_unreserved;
 	struct list_head high_items;
 	struct list_head low_items;
 	struct mutex mutex;
@@ -432,8 +442,11 @@ struct ion_page_pool {
 struct ion_page_pool *ion_page_pool_create(gfp_t gfp_mask, unsigned int order);
 void ion_page_pool_destroy(struct ion_page_pool *);
 void *ion_page_pool_alloc(struct ion_page_pool *, bool *from_pool);
-void ion_page_pool_free(struct ion_page_pool *, struct page *);
+void *ion_page_pool_alloc_pool_only(struct ion_page_pool *);
+void ion_page_pool_free(struct ion_page_pool *, struct page *, bool prefetch);
 void ion_page_pool_free_immediate(struct ion_page_pool *, struct page *);
+int ion_page_pool_total(struct ion_page_pool *pool, bool high);
+void *ion_page_pool_prefetch(struct ion_page_pool *pool, bool *from_pool);
 
 #ifdef CONFIG_ION_POOL_CACHE_POLICY
 static inline void ion_page_pool_alloc_set_cache_policy

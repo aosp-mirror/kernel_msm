@@ -159,6 +159,18 @@ void crypto_remove_spawns(struct crypto_alg *alg, struct list_head *list,
 
 			spawn->alg = NULL;
 			spawns = &inst->alg.cra_users;
+
+			/*
+			 * We may encounter an unregistered instance here, since
+			 * an instance's spawns are set up prior to the instance
+			 * being registered.  An unregistered instance will have
+			 * NULL ->cra_users.next, since ->cra_users isn't
+			 * properly initialized until registration.  But an
+			 * unregistered instance cannot have any users, so treat
+			 * it the same as ->cra_users being empty.
+			 */
+			if (spawns->next == NULL)
+				break;
 		}
 	} while ((spawns = crypto_more_spawns(alg, &stack, &top,
 					      &secondary_spawns)));
@@ -337,7 +349,7 @@ static void crypto_wait_for_test(struct crypto_larval *larval)
 		crypto_alg_tested(larval->alg.cra_driver_name, 0);
 	}
 
-	err = wait_for_completion_interruptible(&larval->completion);
+	err = wait_for_completion_killable(&larval->completion);
 	WARN_ON(err);
 
 out:

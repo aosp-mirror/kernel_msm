@@ -1,4 +1,4 @@
-/*pq8009w-stargazer-wtp.dts*
+/*
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,6 +27,7 @@
 		      <301 0>;
 	qcom,board-id= <8 0x105>;
 };
+
 
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */

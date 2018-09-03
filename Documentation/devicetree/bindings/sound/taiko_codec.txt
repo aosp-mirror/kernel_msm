@@ -93,6 +93,14 @@ Optional properties:
 			   involving DMIC will use the rate defined by
 			   cdc-dmic-sample-rate.
 
+ - qcom,cdc-ecpp-dmic-rate: Specifies the sample rate of digital mic in HZ to be
+			   used by ECPP (Echo Cancellation Ping Pong) block
+			   on the codec. The valid set of values are same
+			   as that of cdc-dmic-sample-rate, but this rate will
+			   only be used by ECPP and all other audio use cases
+			   involving DMIC will use the rate defined by
+			   cdc-dmic-sample-rate.
+
  - qcom,cdc-dmic-clk-drv-strength: Specifies the drive strength for digital microphone
 				   clock in the codec. Accepted values are 2,4,8 and 16.
 				   The clock drive strentgh is in uA. Codec driver will
@@ -131,6 +139,10 @@ Optional properties:
 			 This is used when cfilt is not user configurable
 			 and micbias4 is directly controlled with a register
 			 write.
+
+ - qcom,cdc-mic-unmute-delay: based on dmic characteristics the initial pop
+			      time that is observed in TX path is varying.
+			      Configure PGA unmute delay based on DT value.
 
  - clock-names : clock name defined for external clock.
  - clocks : external clock defined for codec clock.
@@ -524,6 +536,10 @@ Tasha audio CODEC in I2C mode
 
  - qcom,cdc-dmic-sample-rate - Specifies dmic sample rate.
  - qcom,cdc-variant - Specifies codec variant.
+ - qcom,wcd9xxx-mic-tristate: For chipsets where I2S TX line is shared between
+			      the Codec and TDM mics, tristate the WCD mics to
+			      avoid PCM interference as the end product uses
+			      only TDM mics.
 
 Example:
 i2c_3: i2c@78B7000 { /* BLSP1 QUP3 */
@@ -567,15 +583,15 @@ i2c_3: i2c@78B7000 { /* BLSP1 QUP3 */
 		qcom,cdc-buck-sido-voltage = <1800000 1800000>;
 		qcom,cdc-buck-sido-current = <200000>;
 
-		cdc-vdd-tx-h-supply = <&pmdcalifornium_l6>;
+		cdc-vdd-tx-h-supply = <&pmd9650_l6>;
 		qcom,cdc-vdd-tx-h-voltage = <1800000 1800000>;
 		qcom,cdc-vdd-tx-h-current = <25000>;
 
-		cdc-vdd-rx-h-supply = <&pmdcalifornium_l6>;
+		cdc-vdd-rx-h-supply = <&pmd9650_l6>;
 		qcom,cdc-vdd-rx-h-voltage = <1800000 1800000>;
 		qcom,cdc-vdd-rx-h-current = <25000>;
 
-		cdc-vddpx-1-supply = <&pmdcalifornium_l6>;
+		cdc-vddpx-1-supply = <&pmd9650_l6>;
 		qcom,cdc-vddpx-1-voltage = <1800000 1800000>;
 		qcom,cdc-vddpx-1-current = <10000>;
 
@@ -602,12 +618,12 @@ i2c_3: i2c@78B7000 { /* BLSP1 QUP3 */
 				reg = <0x00 0x20170212>;
 				qcom,spkr-sd-n-gpio = <&tlmm_pinmux 80 0>;
 
-				cdc-vdd-d-supply = <&pmdcalifornium_l6>;
+				cdc-vdd-d-supply = <&pmd9650_l6>;
 				qcom,cdc-vdd-d-voltage = <1800000
 							  1800000>;
 				qcom,cdc-vdd-d-current = <2000>;
 
-				cdc-vdd-a-supply = <&pmdcalifornium_l6>;
+				cdc-vdd-a-supply = <&pmd9650_l6>;
 				qcom,cdc-vdd-a-voltage = <1800000
 							  1800000>;
 				qcom,cdc-vdd-a-current = <2000>;

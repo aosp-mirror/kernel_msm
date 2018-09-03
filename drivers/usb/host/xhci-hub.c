@@ -294,11 +294,20 @@ static int xhci_stop_device(struct xhci_hcd *xhci, int slot_id, int suspend)
 				return -ENOMEM;
 
 			}
-			xhci_queue_stop_endpoint(xhci, command, slot_id, i,
-						 suspend);
+
+			ret = xhci_queue_stop_endpoint(xhci, command, slot_id,
+					i, suspend);
+			if (ret) {
+				spin_unlock_irqrestore(&xhci->lock, flags);
+				goto err_cmd_queue;
+			}
 		}
 	}
-	xhci_queue_stop_endpoint(xhci, cmd, slot_id, 0, suspend);
+	ret = xhci_queue_stop_endpoint(xhci, cmd, slot_id, 0, suspend);
+	if (ret) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		goto err_cmd_queue;
+	}
 	xhci_ring_cmd_db(xhci);
 	spin_unlock_irqrestore(&xhci->lock, flags);
 
@@ -309,6 +318,8 @@ static int xhci_stop_device(struct xhci_hcd *xhci, int slot_id, int suspend)
 		xhci_warn(xhci, "Timeout while waiting for stop endpoint command\n");
 		ret = -ETIME;
 	}
+
+err_cmd_queue:
 	xhci_free_command(xhci, cmd);
 	return ret;
 }
@@ -1165,7 +1176,7 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				xhci_set_link_state(xhci, port_array, wIndex,
 							XDEV_RESUME);
 				spin_unlock_irqrestore(&xhci->lock, flags);
-				msleep(20);
+				usleep_range(21000, 21500);
 				spin_lock_irqsave(&xhci->lock, flags);
 				xhci_set_link_state(xhci, port_array, wIndex,
 							XDEV_U0);
@@ -1401,7 +1412,7 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 						port_index, XDEV_RESUME);
 
 				spin_unlock_irqrestore(&xhci->lock, flags);
-				msleep(20);
+				usleep_range(21000, 21500);
 				spin_lock_irqsave(&xhci->lock, flags);
 
 				xhci_set_link_state(xhci, port_array,

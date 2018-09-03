@@ -22,10 +22,14 @@ Required properties:
 
 Optional properties:
 - qcom,pon-dbc-delay		The debounce delay for the power-key interrupt
-				specified in us. The value ranges from 2 seconds
-				to 1/64 of a second. Possible values are -
-				- 2, 1, 1/2, 1/4, 1/8, 1/16, 1/32, 1/64
-				- Intermediate value is rounded down to the
+				specified in us.
+				Possible values for GEN1 PON are:
+				15625, 31250, 62500, 125000, 250000, 500000,
+				1000000 and 2000000.
+				Possible values for GEN2 PON are:
+				62, 123, 245, 489, 977, 1954, 3907, 7813,
+				15625, 31250, 62500, 125000 and 250000.
+				Intermediate value is rounded down to the
 				nearest valid value.
 - qcom,pon_1 ...pon_n		These represent the child nodes which describe
 				the properties (reset, key) for each of the pon
@@ -59,6 +63,8 @@ Optional properties:
 - qcom,store-hard-reset-reason	Boolean property which if set will store the hardware
 				reset reason to SOFT_RB_SPARE register of the core PMIC
 				PON peripheral.
+- qcom,pon-reset-off	Boolean property which if set will store the hardware
+				power off in the system shut-down state, instead of reset state.
 - qcom,warm-reset-poweroff-type		Poweroff type required to be configured on
 					PS_HOLD reset control register when the system
 					goes for warm reset. If this property is not
@@ -69,6 +75,12 @@ Optional properties:
 					but this applies for the system hard reset case.
 - qcom,shutdown-poweroff-type		Same description as qcom,warm-reset-poweroff-type
 					but this applies for the system shutdown case.
+- qcom,kpdpwr-sw-debounce	Boolean property to enable the debounce logic
+				on the KPDPWR_N rising edge.
+- qcom,support-twm-config	Boolean property to allow the PON module to be
+				configured to support TWM modes.
+- qcom,pbs-client		Phandle of the PBS client node. Should be
+				defined if 'qcom,support-twm-config' is present.
 
 
 All the below properties are in the sub-node section (properties of the child

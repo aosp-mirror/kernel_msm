@@ -120,6 +120,9 @@ EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
 unsigned int nf_conntrack_max __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_max);
 
+unsigned int nf_conntrack_pkt_threshold __read_mostly;
+EXPORT_SYMBOL(nf_conntrack_pkt_threshold);
+
 DEFINE_PER_CPU(struct nf_conn, nf_conntrack_untracked);
 EXPORT_PER_CPU_SYMBOL(nf_conntrack_untracked);
 
@@ -325,12 +328,14 @@ destroy_conntrack(struct nf_conntrack *nfct)
 	local_bh_disable();
 
 	pr_debug("freeing item in the SIP list\n");
-	list_for_each_safe(sip_node_list, sip_node_save_list,
-			   &ct->sip_segment_list) {
-		sip_node = list_entry(sip_node_list, struct sip_list, list);
-		list_del(&sip_node->list);
-		kfree(sip_node);
-	}
+	if (ct->sip_segment_list.next != NULL)
+		list_for_each_safe(sip_node_list, sip_node_save_list,
+				   &ct->sip_segment_list) {
+			sip_node = list_entry(sip_node_list,
+					      struct sip_list, list);
+			list_del(&sip_node->list);
+			kfree(sip_node);
+		}
 	/* Expectations will have been removed in clean_from_lists,
 	 * except TFTP can create an expectation on the first packet,
 	 * before connection is in the list, so we need to clean here,
@@ -720,6 +725,7 @@ nf_conntrack_tuple_taken(const struct nf_conntrack_tuple *tuple,
 	 * least once for the stats anyway.
 	 */
 	rcu_read_lock_bh();
+ begin:
 	hlist_nulls_for_each_entry_rcu(h, n, &net->ct.hash[hash], hnnode) {
 		ct = nf_ct_tuplehash_to_ctrack(h);
 		if (ct != ignored_conntrack &&
@@ -731,6 +737,12 @@ nf_conntrack_tuple_taken(const struct nf_conntrack_tuple *tuple,
 		}
 		NF_CT_STAT_INC(net, searched);
 	}
+
+	if (get_nulls_value(n) != hash) {
+		NF_CT_STAT_INC(net, search_restart);
+		goto begin;
+	}
+
 	rcu_read_unlock_bh();
 
 	return 0;
@@ -1243,6 +1255,9 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 			  unsigned long extra_jiffies,
 			  int do_acct)
 {
+	struct nf_conn_acct *acct;
+	u64 pkts;
+
 	NF_CT_ASSERT(ct->timeout.data == (unsigned long)ct);
 	NF_CT_ASSERT(skb);
 
@@ -1270,14 +1285,23 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 
 acct:
 	if (do_acct) {
-		struct nf_conn_acct *acct;
-
 		acct = nf_conn_acct_find(ct);
 		if (acct) {
 			struct nf_conn_counter *counter = acct->counter;
 
 			atomic64_inc(&counter[CTINFO2DIR(ctinfo)].packets);
 			atomic64_add(skb->len, &counter[CTINFO2DIR(ctinfo)].bytes);
+
+			pkts =
+			atomic64_read(&counter[CTINFO2DIR(ctinfo)].packets) +
+			atomic64_read(&counter[!CTINFO2DIR(ctinfo)].packets);
+			/* Report if the packet threshold is reached. */
+			if ((nf_conntrack_pkt_threshold > 0) &&
+			    (pkts == nf_conntrack_pkt_threshold)) {
+				nf_conntrack_event_cache(IPCT_COUNTER, ct);
+				nf_conntrack_event_cache(IPCT_PROTOINFO, ct);
+				nf_ct_deliver_cached_events(ct);
+			}
 		}
 	}
 }
@@ -1777,6 +1801,7 @@ void nf_conntrack_init_end(void)
 
 int nf_conntrack_init_net(struct net *net)
 {
+	static atomic64_t unique_id;
 	int ret = -ENOMEM;
 	int cpu;
 
@@ -1800,7 +1825,8 @@ int nf_conntrack_init_net(struct net *net)
 	if (!net->ct.stat)
 		goto err_pcpu_lists;
 
-	net->ct.slabname = kasprintf(GFP_KERNEL, "nf_conntrack_%pK", net);
+	net->ct.slabname = kasprintf(GFP_KERNEL, "nf_conntrack_%llu",
+				(u64)atomic64_inc_return(&unique_id));
 	if (!net->ct.slabname)
 		goto err_slabname;
 

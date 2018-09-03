@@ -2,7 +2,7 @@ ccflags-y += -I$(src)
 
 obj-$(CONFIG_FB_MSM_MDSS_MHL3) += mhl3/
 
-mdss-mdp3-objs = mdp3.o mdp3_dma.o mdp3_ctrl.o dsi_status_v2.o
+mdss-mdp3-objs = mdp3.o mdp3_layer.o mdp3_dma.o mdp3_ctrl.o dsi_status_v2.o
 mdss-mdp3-objs += mdp3_ppp.o mdp3_ppp_hwio.o mdp3_ppp_data.o
 obj-$(CONFIG_FB_MSM_MDSS_MDP3) += mdss-mdp3.o
 ifeq ($(CONFIG_FB_MSM_MDSS_MDP3), y)
@@ -13,7 +13,6 @@ mdss-mdp-objs += mdss_mdp_pp.o mdss_mdp_pp_debug.o mdss_mdp_pp_cache_config.o
 mdss-mdp-objs += mdss_mdp_intf_video.o
 mdss-mdp-objs += mdss_mdp_intf_cmd.o
 mdss-mdp-objs += mdss_mdp_intf_writeback.o
-mdss-mdp-objs += mdss_mdp_rotator.o
 mdss-mdp-objs += mdss_rotator.o
 mdss-mdp-objs += mdss_mdp_overlay.o
 mdss-mdp-objs += mdss_mdp_layer.o
@@ -24,16 +23,16 @@ mdss-mdp-objs += mdss_mdp_wfd.o
 obj-$(CONFIG_FB_MSM_MDSS) += mdss-mdp.o
 obj-$(CONFIG_FB_MSM_MDSS) += mdss_mdp_debug.o
 
-ifeq ($(CONFIG_ARCH_MSM8996),y)
 mdss-mdp-objs += mdss_mdp_pp_v1_7.o
-endif
-
-ifeq ($(CONFIG_ARCH_MSM8937),y)
-mdss-mdp-objs += mdss_mdp_pp_v1_7.o
-endif
+mdss-mdp-objs += mdss_mdp_pp_v3.o
+mdss-mdp-objs += mdss_mdp_pp_common.o
 
 ifeq ($(CONFIG_FB_MSM_MDSS),y)
 obj-$(CONFIG_DEBUG_FS) += mdss_debug.o mdss_debug_xlog.o
+endif
+
+ifeq ($(CONFIG_FB_MSM_MDSS_FRC_DEBUG),y)
+obj-$(CONFIG_DEBUG_FS) += mdss_debug_frc.o
 endif
 
 mdss-dsi-objs := mdss_dsi.o mdss_dsi_host.o mdss_dsi_cmd.o mdss_dsi_status.o
@@ -43,7 +42,11 @@ mdss-dsi-objs += mdss_dsi_phy.o
 mdss-dsi-objs += mdss_dsi_clk.o
 obj-$(CONFIG_FB_MSM_MDSS) += mdss-dsi.o
 obj-$(CONFIG_FB_MSM_MDSS) += mdss_panel.o
-obj-$(CONFIG_FB_MSM_MDSS) += mdss_io_util.o
+
+ifeq ($(CONFIG_SPI_QUP), y)
+obj-$(CONFIG_FB_MSM_MDSS_SPI_PANEL) += mdss_spi_client.o
+obj-$(CONFIG_FB_MSM_MDSS_SPI_PANEL) += mdss_spi_panel.o
+endif
 
 ifneq ($(CONFIG_FB_MSM_MDSS_MDP3), y)
 obj-$(CONFIG_FB_MSM_MDSS) += mdss_hdmi_util.o
@@ -54,9 +57,11 @@ obj-$(CONFIG_FB_MSM_MDSS_EDP_PANEL) += mdss_edp.o
 obj-$(CONFIG_FB_MSM_MDSS_EDP_PANEL) += mdss_edp_aux.o
 
 obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_tx.o
+obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_panel.o
 obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_hdcp.o
 obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_hdcp2p2.o
 obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_cec.o
+obj-$(CONFIG_FB_MSM_MDSS_HDMI_PANEL) += mdss_hdmi_audio.o
 obj-$(CONFIG_FB_MSM_MDSS_HDMI_MHL_SII8334) += mhl_sii8334.o mhl_msc.o
 ccflags-y += -DTARGET_HW_MDSS_HDMI
 endif

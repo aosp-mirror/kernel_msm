@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,10 +16,36 @@
 
 #include <linux/bitops.h>
 
+/*
+ * struct mdss_mdp_hwio_cfg - used to define a register bitfield
+ * @start: bitfield offset start from lsb
+ * @len: number of lsb bits that can be taken from field value
+ * @shift: number of lsb bits to truncate from field value
+ */
+struct mdss_mdp_hwio_cfg {
+	u32 start, len, shift;
+};
+
+static inline u32 mdss_mdp_hwio_mask(struct mdss_mdp_hwio_cfg *cfg, u32 val)
+{
+	u32 mask = (1 << cfg->len) - 1;
+
+	return ((val >> cfg->shift) & mask) << cfg->start;
+}
+
 #define IGC_LUT_ENTRIES	256
 #define GC_LUT_SEGMENTS	16
 #define ENHIST_LUT_ENTRIES 256
 #define HIST_V_SIZE	256
+
+/* QSEED3 LUT sizes */
+#define DIR_LUT_IDX		1
+#define DIR_LUT_COEFFS		200
+#define CIR_LUT_IDX		9
+#define CIR_LUT_COEFFS		60
+#define SEP_LUT_IDX		10
+#define SEP_LUT_COEFFS		60
+
 
 #define MDSS_MDP_FETCH_CONFIG_RESET_VALUE	0x00000087
 
@@ -34,6 +60,9 @@
 
 #define MDSS_MDP_REG_HW_VERSION				0x0
 #define MDSS_MDP_REG_DISP_INTF_SEL			0x00004
+#define MDSS_MDP_REG_INTR2_EN				0x00008
+#define MDSS_MDP_REG_INTR2_STATUS			0x0000C
+#define MDSS_MDP_REG_INTR2_CLEAR			0x0002C
 #define MDSS_MDP_REG_INTR_EN				0x00010
 #define MDSS_MDP_REG_INTR_STATUS			0x00014
 #define MDSS_MDP_REG_INTR_CLEAR				0x00018
@@ -89,6 +118,9 @@
 #define MDSS_MDP_INTR_INTF_3_UNDERRUN			BIT(30)
 #define MDSS_MDP_INTR_INTF_3_VSYNC			BIT(31)
 
+#define MDSS_MDP_INTR2_PING_PONG_2_CWB_OVERFLOW	        BIT(14)
+#define MDSS_MDP_INTR2_PING_PONG_3_CWB_OVERFLOW	        BIT(15)
+
 #define MDSS_MDP_HIST_INTR_VIG_0_DONE			BIT(0)
 #define MDSS_MDP_HIST_INTR_VIG_0_RESET_DONE		BIT(1)
 #define MDSS_MDP_HIST_INTR_VIG_1_DONE			BIT(4)
@@ -107,14 +139,21 @@
 #define MDSS_MDP_HIST_INTR_DSPP_3_RESET_DONE		BIT(23)
 
 enum mdss_mdp_intr_type {
-	MDSS_MDP_IRQ_WB_ROT_COMP = 0,
-	MDSS_MDP_IRQ_WB_WFD = 4,
-	MDSS_MDP_IRQ_PING_PONG_COMP = 8,
-	MDSS_MDP_IRQ_PING_PONG_RD_PTR = 12,
-	MDSS_MDP_IRQ_PING_PONG_WR_PTR = 16,
-	MDSS_MDP_IRQ_PING_PONG_AUTO_REF = 20,
-	MDSS_MDP_IRQ_INTF_UNDER_RUN = 24,
-	MDSS_MDP_IRQ_INTF_VSYNC = 25,
+	MDSS_MDP_IRQ_TYPE_WB_ROT_COMP,
+	MDSS_MDP_IRQ_TYPE_WB_WFD_COMP,
+	MDSS_MDP_IRQ_TYPE_PING_PONG_COMP,
+	MDSS_MDP_IRQ_TYPE_PING_PONG_RD_PTR,
+	MDSS_MDP_IRQ_TYPE_PING_PONG_WR_PTR,
+	MDSS_MDP_IRQ_TYPE_PING_PONG_AUTO_REF,
+	MDSS_MDP_IRQ_TYPE_INTF_UNDER_RUN,
+	MDSS_MDP_IRQ_TYPE_INTF_VSYNC,
+	MDSS_MDP_IRQ_TYPE_CWB_OVERFLOW,
+};
+
+#define MDSS_MDP_INTF_INTR_PROG_LINE		BIT(8)
+
+enum mdss_mdp_intf_intr_type {
+	MDSS_MDP_INTF_IRQ_PROG_LINE = 8,
 };
 
 #define MDSS_MDP_REG_IGC_VIG_BASE			0x200
@@ -132,16 +171,26 @@ enum mdss_mdp_ctl_index {
 	MDSS_MDP_MAX_CTL
 };
 
+
+#define MDSS_MDP_REG_CTL_LAYER_EXTN_OFFSET		0x40
+#define MDSS_MDP_REG_CTL_LAYER_EXTN2_OFFSET		0x70
+#define MDSS_MDP_CTL_X_LAYER_5				0x24
+
+/* mixer 5 has different offset than others */
 #define MDSS_MDP_REG_CTL_LAYER(lm)	\
-			((lm == 5) ? (0x024) : ((lm) * 0x004))
+	(((lm) == 5) ? MDSS_MDP_CTL_X_LAYER_5 : ((lm) * 0x004))
+
 #define MDSS_MDP_REG_CTL_LAYER_EXTN(lm)	\
-		((lm == 5) ? (0x54) : (MDSS_MDP_REG_CTL_LAYER(lm) + 0x40))
+	 (MDSS_MDP_REG_CTL_LAYER_EXTN_OFFSET + ((lm) * 0x004))
+
+#define MDSS_MDP_REG_CTL_LAYER_EXTN2(lm)	\
+	 (MDSS_MDP_REG_CTL_LAYER_EXTN2_OFFSET + ((lm) * 0x004))
+
 #define MDSS_MDP_REG_CTL_TOP				0x014
 #define MDSS_MDP_REG_CTL_FLUSH				0x018
 #define MDSS_MDP_REG_CTL_START				0x01C
 #define MDSS_MDP_REG_CTL_PACK_3D			0x020
 #define MDSS_MDP_REG_CTL_SW_RESET			0x030
-#define MDSS_MDP_REG_CTL_LAYER_EXTN_OFFSET		0x40
 
 #define MDSS_MDP_CTL_OP_VIDEO_MODE		(0 << 17)
 #define MDSS_MDP_CTL_OP_CMD_MODE		(1 << 17)
@@ -171,7 +220,9 @@ enum mdss_mdp_sspp_index {
 	MDSS_MDP_SSPP_RGB3,
 	MDSS_MDP_SSPP_CURSOR0,
 	MDSS_MDP_SSPP_CURSOR1,
-	MDSS_MDP_MAX_SSPP
+	MDSS_MDP_SSPP_DMA2,
+	MDSS_MDP_SSPP_DMA3,
+	MDSS_MDP_MAX_SSPP,
 };
 
 enum mdss_mdp_sspp_fetch_type {
@@ -201,6 +252,7 @@ enum mdss_mdp_sspp_chroma_samp_type {
 #define MDSS_MDP_REG_SSPP_STILE_FRAME_SIZE		0x02C
 #define MDSS_MDP_REG_SSPP_SRC_FORMAT			0x030
 #define MDSS_MDP_REG_SSPP_SRC_UNPACK_PATTERN		0x034
+#define MDSS_MDP_REG_SSPP_SRC_OP_MODE			0x038
 #define MDSS_MDP_REG_SSPP_SRC_CONSTANT_COLOR		0x03C
 #define MDSS_MDP_REG_SSPP_REQPRIO_FIFO_WM_0		0x050
 #define MDSS_MDP_REG_SSPP_REQPRIO_FIFO_WM_1		0x054
@@ -211,8 +263,20 @@ enum mdss_mdp_sspp_chroma_samp_type {
 #define MDSS_MDP_REG_SSPP_QOS_CTRL			0x06C
 #define MDSS_MDP_REG_SSPP_CDP_CTRL			0x134
 #define MDSS_MDP_REG_SSPP_UBWC_ERROR_STATUS		0x138
+#define MDSS_MDP_REG_SSPP_TRAFFIC_SHAPER		0x130
+#define MDSS_MDP_REG_SSPP_TRAFFIC_SHAPER_PREFILL	0x150
+#define MDSS_MDP_REG_SSPP_TRAFFIC_SHAPER_REC1_PREFILL	0x154
 
-#define MDSS_MDP_REG_SSPP_SRC_OP_MODE			0x038
+#define MDSS_MDP_REG_SSPP_MULTI_REC_OP_MODE		0x170
+#define MDSS_MDP_REG_SSPP_OUT_SIZE_REC1			0x160
+#define MDSS_MDP_REG_SSPP_OUT_XY_REC1			0x164
+#define MDSS_MDP_REG_SSPP_SRC_XY_REC1			0x168
+#define MDSS_MDP_REG_SSPP_SRC_SIZE_REC1			0x16C
+#define MDSS_MDP_REG_SSPP_SRC_FORMAT_REC1		0x174
+#define MDSS_MDP_REG_SSPP_SRC_UNPACK_PATTERN_REC1	0x178
+#define MDSS_MDP_REG_SSPP_SRC_OP_MODE_REC1		0x17C
+#define MDSS_MDP_REG_SSPP_SRC_CONSTANT_COLOR_REC1	0x180
+
 #define MDSS_MDP_OP_DEINTERLACE			BIT(22)
 #define MDSS_MDP_OP_DEINTERLACE_ODD		BIT(23)
 #define MDSS_MDP_OP_IGC_ROM_1			BIT(18)
@@ -253,6 +317,67 @@ enum mdss_mdp_sspp_chroma_samp_type {
 #define MDSS_MDP_REG_VIG_MEM_COL_BASE			0x288
 #define MDSS_MDP_REG_VIG_PA_BASE			0x310
 
+/* QSEED3 registers shared by VIG and Destination Scaler */
+#define MDSS_MDP_REG_SCALER_HW_VERSION			0x00
+#define MDSS_MDP_REG_SCALER_OP_MODE			0x04
+#define MDSS_MDP_REG_SCALER_RGB2Y_COEFF			0x08
+#define MDSS_MDP_REG_SCALER_PHASE_INIT			0x0C
+#define MDSS_MDP_REG_SCALER_PHASE_STEP_Y_H		0x10
+#define MDSS_MDP_REG_SCALER_PHASE_STEP_Y_V		0x14
+#define MDSS_MDP_REG_SCALER_PHASE_STEP_UV_H		0x18
+#define MDSS_MDP_REG_SCALER_PHASE_STEP_UV_V		0x1C
+#define MDSS_MDP_REG_SCALER_PRELOAD			0x20
+#define MDSS_MDP_REG_SCALER_DE_SHARPEN			0x24
+#define MDSS_MDP_REG_SCALER_DE_SHARPEN_CTL		0x28
+#define MDSS_MDP_REG_SCALER_DE_SHAPE_CTL		0x2C
+#define MDSS_MDP_REG_SCALER_DE_THRESHOLD		0x30
+#define MDSS_MDP_REG_SCALER_DE_ADJUST_DATA_0		0x34
+#define MDSS_MDP_REG_SCALER_DE_ADJUST_DATA_1		0x38
+#define MDSS_MDP_REG_SCALER_DE_ADJUST_DATA_2		0x3C
+#define MDSS_MDP_REG_SCALER_SRC_SIZE_Y_RGB_A		0x40
+#define MDSS_MDP_REG_SCALER_SRC_SIZE_UV			0x44
+#define MDSS_MDP_REG_SCALER_DST_SIZE			0x48
+#define MDSS_MDP_REG_SCALER_COEF_LUT_CTRL		0x4C
+#define MDSS_MDP_REG_SCALER_BUFFER_CTRL			0x50
+#define MDSS_MDP_REG_SCALER_CLK_CTRL0			0x54
+#define MDSS_MDP_REG_SCALER_CLK_CTRL1			0x58
+#define MDSS_MDP_REG_SCALER_CLK_STATUS			0x5C
+#define MDSS_MDP_REG_SCALER_MISR_CTRL			0x70
+#define MDSS_MDP_REG_SCALER_MISR_SIGNATURE_0		0x74
+#define MDSS_MDP_REG_SCALER_MISR_SIGNATURE_1		0x78
+
+#define SCALER_EN			BIT(0)
+#define SCALER_DIR_EN			BIT(4)
+#define SCALER_DE_EN			BIT(8)
+#define SCALER_ALPHA_EN			BIT(10)
+#define SCALER_COLOR_SPACE		12
+#define SCALER_BIT_WIDTH		14
+#define Y_FILTER_CFG			16
+#define UV_FILTER_CFG			24
+#define ALPHA_FILTER_CFG		30
+#define SCALER_BLEND_CFG		31
+
+#define PHASE_BITS			0x3F
+#define PHASE_STEP_BITS			0xFFFFFF
+#define PRELOAD_BITS			0x7F
+
+#define Y_PHASE_INIT_H			0
+#define Y_PHASE_INIT_V			8
+#define UV_PHASE_INIT_H			16
+#define UV_PHASE_INIT_V			24
+#define Y_PRELOAD_H			0
+#define Y_PRELOAD_V			8
+#define UV_PRELOAD_H			16
+#define UV_PRELOAD_V			24
+/* supported filters */
+#define EDGE_DIRECTED_2D		0x0
+#define CIRCULAR_2D			0x1
+#define SEPERABLE_1D			0x2
+#define BILINEAR			0x3
+#define ALPHA_DROP_REPEAT		0x0
+#define ALPHA_BILINEAR			0x1
+
+
 /* in mpq product */
 #define MDSS_MDP_REG_VIG_FLUSH_SEL			0x204
 
@@ -276,6 +401,9 @@ enum mdss_mdp_sspp_chroma_samp_type {
 
 #define MDSS_MDP_REG_VIG_CSC_1_BASE			0x320
 
+#define MDSS_MDP_REG_VIG_CSC_10_BASE			0x1A04
+#define MDSS_MDP_REG_VIG_CSC_10_OP_MODE			0x1A00
+
 #define MDSS_MDP_REG_VIG_HIST_CTL_BASE			0x2C4
 #define MDSS_MDP_REG_VIG_HIST_DATA_BASE			0x2E0
 #define MDSS_MDP_REG_VIG_HIST_LUT_BASE			0x2F0
@@ -287,10 +415,6 @@ enum mdss_mdp_sspp_chroma_samp_type {
 #define MDSS_MDP_SCALEY_EN			BIT(1)
 #define MDSS_MDP_SCALEX_EN			BIT(0)
 #define MDSS_MDP_FMT_SOLID_FILL			0x4037FF
-
-#define MDSS_MDP_NUM_REG_MIXERS 3
-#define MDSS_MDP_NUM_WB_MIXERS 2
-#define MDSS_MDP_CTL_X_LAYER_5 0x24
 
 #define MDSS_MDP_INTF_EDP_SEL	(BIT(3) | BIT(1))
 #define MDSS_MDP_INTF_HDMI_SEL	(BIT(25) | BIT(24))
@@ -554,6 +678,10 @@ enum mdss_mpd_intf_index {
 #define MDSS_MDP_REG_INTF_TPG_BLK_WHITE_PATTERN_FRAMES	0x118
 #define MDSS_MDP_REG_INTF_TPG_RGB_MAPPING		0x11C
 #define MDSS_MDP_REG_INTF_PROG_FETCH_START		0x170
+#define MDSS_MDP_REG_INTF_INTR_EN			0x1C0
+#define MDSS_MDP_REG_INTF_INTR_STATUS			0x1C4
+#define MDSS_MDP_REG_INTF_INTR_CLEAR			0x1C8
+#define MDSS_MDP_REG_INTF_PROG_LINE_INTR_CONF		0x250
 #define MDSS_MDP_REG_INTF_VBLANK_END_CONF		0x264
 
 #define MDSS_MDP_REG_INTF_FRAME_LINE_COUNT_EN		0x0A8
@@ -690,6 +818,7 @@ enum mdss_mdp_pingpong_index {
 #define MMSS_VBIF_CLKON			0x4
 #define MMSS_VBIF_RD_LIM_CONF			0x0B0
 #define MMSS_VBIF_WR_LIM_CONF			0x0C0
+#define MMSS_VBIF_OUT_RD_LIM_CONF0		0x0D0
 
 #define MMSS_VBIF_XIN_HALT_CTRL0	0x200
 #define MMSS_VBIF_XIN_HALT_CTRL1	0x204
@@ -700,6 +829,9 @@ enum mdss_mdp_pingpong_index {
 
 #define MDSS_VBIF_QOS_REMAP_BASE	0x020
 #define MDSS_VBIF_QOS_REMAP_ENTRIES	0x4
+
+#define MDSS_VBIF_QOS_RP_REMAP_BASE	0x550
+#define MDSS_VBIF_QOS_LVL_REMAP_BASE	0x570
 
 #define MDSS_VBIF_FIXED_SORT_EN	0x30
 #define MDSS_VBIF_FIXED_SORT_SEL0	0x34
