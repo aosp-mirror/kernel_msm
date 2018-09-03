@@ -2155,6 +2155,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	u8 s3_src_reg;
 	unsigned long flags;
 	uint temp = 0;
+	u8 reg_buff[12];
 
 	pon = devm_kzalloc(&pdev->dev, sizeof(struct qpnp_pon), GFP_KERNEL);
 	if (!pon)
@@ -2331,6 +2332,22 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		if (of_property_read_bool(pdev->dev.of_node,
 						"qcom,uvlo-panic"))
 			panic("An UVLO was occurred.");
+	}
+
+	/* Print PON registers */
+	rc = regmap_bulk_read(pon->regmap, QPNP_PON_REASON1(pon),
+			reg_buff, sizeof(reg_buff));
+	if (rc) {
+		dev_err(&pon->pdev->dev,
+			"Unable to read QPNP_PON_RESASON1 reg rc: %d\n", rc);
+	} else {
+		dev_info(&pon->pdev->dev,
+			"PMIC@SID%d: Reg dump: %04X: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n",
+			to_spmi_device(pon->pdev->dev.parent)->usid,
+			QPNP_PON_REASON1(pon),
+			reg_buff[0], reg_buff[1], reg_buff[2], reg_buff[3],
+			reg_buff[4], reg_buff[5], reg_buff[6], reg_buff[7],
+			reg_buff[8], reg_buff[9], reg_buff[10], reg_buff[11]);
 	}
 
 	/* program s3 debounce */
