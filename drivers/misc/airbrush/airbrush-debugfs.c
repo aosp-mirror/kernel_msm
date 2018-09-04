@@ -125,9 +125,20 @@ static int ab_debugfs_boot(void *data, u64 val)
     default:
         pr_info("Unsupported value\n");
     }
+
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(ab_bootsequence_fops, NULL, ab_debugfs_boot, "%lli\n");
+
+static int ab_assign_resources(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *) data;
+
+	ab_get_pmic_resources(sc);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(ab_assign_resources_fops, NULL, ab_assign_resources, "%lli\n");
 
 static int ab_debugfs_clk_register(void *data, u64 val)
 {
@@ -242,6 +253,11 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d_chip = debugfs_create_dir("airbrush_sm", sc->d_entry);
 	if (!d_chip)
+		goto err_out;
+
+	d = debugfs_create_file("ab_assign_resources", 0664, d_chip, sc,
+			&ab_assign_resources_fops);
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("chip_state", 0664, d_chip, sc,

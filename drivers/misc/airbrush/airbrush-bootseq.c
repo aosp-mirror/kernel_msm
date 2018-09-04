@@ -44,8 +44,8 @@
 
 #define SRAM_BL_ADDR	0x20000
 
-#define SOC_PWRGOOD_WAIT_TIMEOUT	msec_to_jiffies(5000) /* TBD */
-#define AB_READY_WAIT_TIMEOUT		msec_to_jiffies(5000) /* TBD */
+#define SOC_PWRGOOD_WAIT_TIMEOUT	msecs_to_jiffies(100) /* TBD */
+#define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100) /* TBD */
 
 #define M0_FIRMWARE_PATH1 "ab.fw"
 
@@ -77,6 +77,14 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	struct pci_bus *pbus = pci_find_bus(1, 0);
 	struct pci_dev *pdev = 0;
 	int ret;
+	struct platform_device *plat_dev = ab_ctx->pdev;
+	unsigned long timeout;
+
+	ret = ab_pmic_on(ab_ctx);
+	if (ret)
+		return ret;
+
+	ab_enable_pgood(ab_ctx);
 
 	if (pbus) {
 		pdev = pbus->self;
@@ -107,7 +115,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	state_sleep   = (gpio_clk_in == 1) && (gpio_ddr_sr == 1);
 
 	if (patch_fw)
-		gpiod_set_value(ab_ctx->fw_patch_en, __GPIO_ENABLE);
+		gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_ENABLE);
 
 	/* From sleep/suspend to active, perform DDR Pad Isolation
 	 * deassertion
@@ -118,6 +126,18 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 
 	if (state_suspend || state_off) {
 
+		timeout = jiffies + SOC_PWRGOOD_WAIT_TIMEOUT;
+		/* Wait till the soc_pwrgood is put to high by PMIC */
+		while (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood) &&
+				time_before(jiffies, timeout))
+			usleep_range(100, 105);
+
+		if (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood)) {
+			dev_err(&plat_dev->dev,
+			"ABC PWRGOOD is not enabled");
+			return -EIO;
+		}
+
 		/* If Airbrush OTP is read OTP_FW_PATCH_DIS=1, we should not
 		 * go for secondary boot.
 		 */
@@ -127,7 +147,16 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 			 * this ensures the SPI FSM is initialized to flash the
 			 * alternate bootcode to SRAM.
 			 */
-			//while (!gpiod_get_value(ab_ctx->ab_ready));
+			timeout = jiffies + AB_READY_WAIT_TIMEOUT;
+			while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
+					time_before(jiffies, timeout))
+				usleep_range(100, 105);
+
+			if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
+				dev_err(&plat_dev->dev,
+					"ab_ready is not High");
+				return -EIO;
+			}
 
 			/* Enable CRC via SPI-FSM */
 
@@ -212,29 +241,38 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		 * this ensures the SPI FSM is initialized to flash the
 		 * alternate bootcode to SRAM.
 		 */
-		//while (!gpiod_get_value(ab_ctx->ab_ready));
-		pr_info("New Airbrush Firmware is Loaded\n");
+		timeout = jiffies + AB_READY_WAIT_TIMEOUT;
+		while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
+				time_before(jiffies, timeout)) {
+			usleep_range(100, 105);
+		}
 
-		if (pbus && pdev) {
-			/* [TBD] PCIE Enumeration should be called here */
-			pci_lock_rescan_remove();
-			pci_stop_and_remove_bus_device(pdev);
-			pci_unlock_rescan_remove();
-			udelay(100);
-			pci_lock_rescan_remove();
-			ret = pci_rescan_bus(pbus);
-			pci_unlock_rescan_remove();
+		if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
+			dev_err(&plat_dev->dev,
+				"ab_ready is not High");
+			return -EIO;
+		}
 
-			if (!abc_pcie_enumerated()) {
-				printk("ABC PCIe Not Enumerated\n");
-				return -ENODEV;
-			}
+		/* [TBD] Keeping some delay to have ABC and HOST PCIe
+		 * linkup completed.
+		 */
+		msleep(5);
+		/* PCIE Enumeration should be called here */
+		pci_lock_rescan_remove();
+		pci_stop_and_remove_bus_device(pdev);
+		pci_unlock_rescan_remove();
+		udelay(100);
+		pci_lock_rescan_remove();
+		ret = pci_rescan_bus(pbus);
+		pci_unlock_rescan_remove();
+
+		if (!abc_pcie_enumerated()) {
+			dev_err(&plat_dev->dev, "ABC PCIe Not Enumerated\n");
+			return -ENODEV;
 		}
 
 	}
-
-	/* [TBD] DDR Related code will be added later */
-	vfree(image_dw_buf);
+    /* [TBD] DDR Related code will be added later */
 
 	return 0;
 }

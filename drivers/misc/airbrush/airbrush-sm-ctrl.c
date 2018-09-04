@@ -272,6 +272,182 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 }
 EXPORT_SYMBOL(ab_sm_register_callback);
 
+int ab_pmic_on(struct ab_state_context *ab_ctx)
+{
+	struct platform_device *plat_dev = ab_ctx->pdev;
+	int ret;
+
+	ret = regulator_enable(ab_ctx->smps2);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable smps2 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_smps2;
+	}
+
+	ret = regulator_enable(ab_ctx->ldo1);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable ldo1 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_ldo1;
+	}
+
+	ret = regulator_enable(ab_ctx->smps3);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable smps3 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_smps3;
+	}
+
+	ret = regulator_enable(ab_ctx->ldo4);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable ldo4 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_ldo4;
+	}
+
+	ret = regulator_enable(ab_ctx->ldo5);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable ldo5 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_ldo5;
+	}
+
+	ret = regulator_enable(ab_ctx->smps1);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable smps1 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_smps1;
+	}
+
+	ret = regulator_enable(ab_ctx->ldo3);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable ldo3 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_ldo3;
+	}
+
+	ret = regulator_enable(ab_ctx->ldo2);
+	if (ret) {
+		dev_err(&plat_dev->dev, "%s: failed to enable ldo2 (%d)\n",
+				__func__, ret);
+		goto fail_regulator_ldo2;
+	}
+
+	return 0;
+
+fail_regulator_ldo2:
+    regulator_disable(ab_ctx->ldo3);
+fail_regulator_ldo3:
+    regulator_disable(ab_ctx->smps1);
+fail_regulator_smps1:
+    regulator_disable(ab_ctx->ldo5);
+fail_regulator_ldo5:
+    regulator_disable(ab_ctx->ldo4);
+fail_regulator_ldo4:
+    regulator_disable(ab_ctx->smps3);
+fail_regulator_smps3:
+    regulator_disable(ab_ctx->ldo1);
+fail_regulator_ldo1:
+    regulator_disable(ab_ctx->smps2);
+fail_regulator_smps2:
+
+	dev_err(&plat_dev->dev,
+			"%s: PMIC power up failure (%d)\n", __func__, ret);
+
+	return -ENODEV;
+
+}
+
+void ab_enable_pgood(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->soc_pwrgood, __GPIO_ENABLE);
+}
+
+void ab_disable_pgood(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->soc_pwrgood, __GPIO_DISABLE);
+}
+
+
+int ab_get_pmic_resources(struct ab_state_context *ab_ctx)
+{
+	struct platform_device *plat_dev = ab_ctx->pdev;
+
+	ab_ctx->soc_pwrgood = devm_gpiod_get(&plat_dev->dev, "soc-pwrgood", GPIOD_OUT_LOW);
+	if (IS_ERR(ab_ctx->soc_pwrgood)) {
+		printk("%s: Could not get pmic_soc_pwrgood gpio (%ld)\n",
+				__func__, PTR_ERR(ab_ctx->soc_pwrgood));
+	}
+
+	ab_ctx->smps1 = devm_regulator_get(&plat_dev->dev, "s2mpb04_smps1");
+	if (IS_ERR(ab_ctx->smps1)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_smps1 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->smps1));
+		return -ENODEV;
+	}
+
+	ab_ctx->smps2 = devm_regulator_get(&plat_dev->dev, "s2mpb04_smps2");
+	if (IS_ERR(ab_ctx->smps2)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_smps2 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->smps2));
+		return -ENODEV;
+	}
+
+	ab_ctx->smps3 = devm_regulator_get(&plat_dev->dev, "s2mpb04_smps3");
+	if (IS_ERR(ab_ctx->smps3)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_smps3 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->smps3));
+		return -ENODEV;
+	}
+
+	ab_ctx->ldo1 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo1");
+	if (IS_ERR(ab_ctx->ldo1)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_ldo1 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->ldo1));
+		return -ENODEV;
+	}
+
+	ab_ctx->ldo2 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo2");
+	if (IS_ERR(ab_ctx->ldo2)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_ldo2 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->ldo2));
+		return -ENODEV;
+	}
+
+	ab_ctx->ldo3 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo3");
+	if (IS_ERR(ab_ctx->ldo3)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_ldo3 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->ldo3));
+		return -ENODEV;
+	}
+
+	ab_ctx->ldo4 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo4");
+	if (IS_ERR(ab_ctx->ldo4)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_ldo4 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->ldo4));
+		return -ENODEV;
+	}
+
+	ab_ctx->ldo5 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo5");
+	if (IS_ERR(ab_ctx->ldo5)) {
+		dev_err(&plat_dev->dev,
+			"%s: failed to get s2mpb04_ldo5 supply (%ld)\n",
+			__func__, PTR_ERR(ab_ctx->ldo5));
+		return -ENODEV;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(ab_get_pmic_resources);
+
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;

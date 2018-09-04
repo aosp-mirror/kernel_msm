@@ -24,6 +24,8 @@
 #include <linux/regmap.h>
 #include <linux/types.h>
 #include <linux/mfd/abc-pcie.h>
+#include <linux/regulator/consumer.h>
+#include <linux/of_gpio.h>
 
 #include "airbrush-clk.h"
 
@@ -33,6 +35,9 @@
 #define NUM_BLOCKS 6
 
 #define CONFIG_DEBUGFS_AIRBRUSH
+
+#define __GPIO_ENABLE	0x1
+#define __GPIO_DISABLE	0x0
 
 typedef enum __block_names{
 	BLK_IPU,
@@ -223,6 +228,16 @@ struct ab_state_context {
 	ab_sm_callback_t cb_event;	/* Event callback registered by the SM */
 	void *cb_cookie;		/* Private data sent by SM while registering event callback */
 
+	/* regulator descriptors */
+	struct regulator *smps1;
+	struct regulator *smps2;
+	struct regulator *smps3;
+	struct regulator *ldo1;
+	struct regulator *ldo2;
+	struct regulator *ldo3;
+	struct regulator *ldo4;
+	struct regulator *ldo5;
+
 #ifdef CONFIG_DEBUGFS_AIRBRUSH
 	struct dentry *d_entry;
 #endif
@@ -236,10 +251,15 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
 			u32 to_chip_substate_id);
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw);
+int ab_get_pmic_resources(struct ab_state_context *ab_ctx);
 void abc_clk_register(struct ab_state_context *ab_ctx);
 int ab_ddr_init(struct ab_state_context *sc);
 int ab_ddr_suspend(struct ab_state_context *sc);
 int ab_ddr_resume(struct ab_state_context *sc);
+
+int ab_pmic_on(struct ab_state_context *ab_ctx);
+void ab_enable_pgood(struct ab_state_context *ab_ctx);
+void ab_disable_pgood(struct ab_state_context *ab_ctx);
 
 #ifdef CONFIG_DEBUGFS_AIRBRUSH
 void ab_sm_create_debugfs(struct ab_state_context *sc);
