@@ -25,6 +25,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 
+
 #include "s2mpb04-core.h"
 
 #define DRIVER_NAME "s2mpb04"
@@ -140,7 +141,6 @@ int s2mpb04_read_byte(struct s2mpb04_core *ddata, u8 addr, u8 *data)
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -166,7 +166,6 @@ int s2mpb04_read_bytes(struct s2mpb04_core *ddata, u8 addr, u8 *data,
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -192,7 +191,6 @@ int s2mpb04_write_byte(struct s2mpb04_core *ddata, u8 addr, u8 data)
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -219,7 +217,6 @@ int s2mpb04_write_bytes(struct s2mpb04_core *ddata, u8 addr, u8 *data,
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -246,7 +243,6 @@ int s2mpb04_update_bits(struct s2mpb04_core *ddata, u8 addr,
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -332,129 +328,6 @@ static void s2mpb04_print_status(struct s2mpb04_core *ddata)
 			status[0], status[1], status[2]);
 }
 
-/* handle an interrupt flag */
-static int s2mpb04_handle_int(struct s2mpb04_core *ddata,
-			      unsigned int flag_num)
-{
-	struct device *dev = ddata->dev;
-
-	dev_dbg(dev, "%s: flag %d\n", __func__, flag_num);
-
-	switch (flag_num) {
-	case S2MPB04_INT_PONR:
-		dev_dbg(dev, "%s: Observed PON rising edge\n", __func__);
-		break;
-
-	case S2MPB04_INT_PONF:
-		dev_dbg(dev, "%s: Observed PON falling edge\n", __func__);
-		break;
-
-	case S2MPB04_INT_ADC_DONE:
-		dev_dbg(dev, "%s: completing adc conversion\n", __func__);
-		complete(&ddata->adc_conv_complete);
-		break;
-
-	case S2MPB04_INT_SMPS1_OI:
-		dev_err(dev, "Detected SMPS1 over-current event\n");
-		NOTIFY(S2MPB04_ID_SMPS1,
-		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
-		break;
-
-	case S2MPB04_INT_SMPS2_OI:
-		dev_err(dev, "Detected SMPS2 over-current event\n");
-		NOTIFY(S2MPB04_ID_SMPS2,
-		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
-		break;
-
-	case S2MPB04_INT_SMPS1_UV:
-		dev_err(dev, "Detected SMPS1 under-voltage event\n");
-		NOTIFY(S2MPB04_ID_SMPS1,
-		       REGULATOR_EVENT_UNDER_VOLTAGE | REGULATOR_EVENT_FAIL);
-		break;
-
-	case S2MPB04_INT_LDO1_OI:
-		dev_err(dev, "Detected LDO1 over-current event\n");
-		NOTIFY(S2MPB04_ID_LDO1,
-		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
-		break;
-
-	case S2MPB04_INT_LDO2_OI:
-		dev_err(dev, "Detected LDO2 over-current event\n");
-		NOTIFY(S2MPB04_ID_LDO2,
-		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
-		break;
-
-	case S2MPB04_INT_TH_TINT:
-		dev_err(dev, "%s: unhandled thermal warm interrupt\n",
-			__func__);
-		break;
-
-	case S2MPB04_INT_TH_TRIPF:
-		dev_err(dev, "%s: therm_trip has returned to normal\n",
-			__func__);
-		break;
-
-	case S2MPB04_INT_WATCHDOG:
-	case S2MPB04_INT_TH_TRIPR:
-	case S2MPB04_INT_TSD:
-		if (flag_num == S2MPB04_INT_WATCHDOG)
-			dev_err(dev, "%s: Watchdog timer expired\n", __func__);
-		else if (flag_num == S2MPB04_INT_TH_TRIPR)
-			dev_err(dev, "%s: therm_trip asserted\n", __func__);
-		else
-			dev_err(dev, "%s: thermal shutdown\n", __func__);
-
-		/* notify regulator clients of failures */
-		NOTIFY(S2MPB04_ID_SMPS1, REGULATOR_EVENT_FAIL);
-		NOTIFY(S2MPB04_ID_SMPS2, REGULATOR_EVENT_FAIL);
-		NOTIFY(S2MPB04_ID_LDO2, REGULATOR_EVENT_FAIL);
-		NOTIFY(S2MPB04_ID_LDO1, REGULATOR_EVENT_FAIL);
-		s2mpb04_print_status(ddata);
-		break;
-
-	default:
-		dev_dbg(dev, "%s: Reserved flag %d\n", __func__, flag_num);
-		break;
-	}
-
-	return 0;
-}
-
-/* find pending interrupt flags */
-static int s2mpb04_check_int_flags(struct s2mpb04_core *ddata)
-{
-	u8 flags[3], flag_mask;
-	unsigned int first_bit, flag_num;
-	int ret = 0;
-	int i;
-
-	/* read interrupt status flags */
-	ret = s2mpb04_read_bytes(ddata, S2MPB04_REG_INT1, flags, 3);
-	if (ret)
-		return ret;
-
-	dev_dbg(ddata->dev,
-		"%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x\n",
-		__func__, flags[0], flags[1], flags[2]);
-
-	/* iterate through each interrupt */
-	for (i = 0; i < 3; i++) {
-		while (flags[i]) {
-			/* find first set interrupt flag */
-			first_bit = ffs(flags[i]);
-			flag_mask = 1 << (first_bit - 1);
-			flag_num = (i * 8) + (first_bit - 1);
-
-			/* handle interrupt */
-			ret = s2mpb04_handle_int(ddata, flag_num);
-
-			flags[i] &= ~flag_mask;
-		}
-	}
-
-	return ret;
-}
-
 /* kernel thread for waiting for chip to come out of reset */
 static void s2mpb04_reset_work(struct work_struct *data)
 {
@@ -484,41 +357,6 @@ static void s2mpb04_reset_work(struct work_struct *data)
 		s2mpb04_chip_init(ddata);
 
 	complete(&ddata->init_complete);
-}
-
-/* irq handler for resetb pin */
-static irqreturn_t s2mpb04_resetb_irq_handler(int irq, void *cookie)
-{
-	struct s2mpb04_core *ddata = (struct s2mpb04_core *)cookie;
-
-	if (gpio_get_value(ddata->pdata->resetb_gpio)) {
-		dev_dbg(ddata->dev, "%s: completing reset\n", __func__);
-		complete(&ddata->reset_complete);
-	} else {
-		dev_err(ddata->dev, "%s: device reset\n", __func__);
-		reinit_completion(&ddata->init_complete);
-		reinit_completion(&ddata->reset_complete);
-		schedule_work(&ddata->reset_work);
-	}
-
-	return IRQ_HANDLED;
-}
-
-/* irq handler for intb pin */
-static irqreturn_t s2mpb04_intb_irq_handler(int irq, void *cookie)
-{
-	struct s2mpb04_core *ddata = (struct s2mpb04_core *)cookie;
-	int ret;
-
-	dev_dbg(ddata->dev, "%s: observed irq\n", __func__);
-
-	while (!gpio_get_value(ddata->pdata->intb_gpio)) {
-		ret = s2mpb04_check_int_flags(ddata);
-		if (ret)
-			return IRQ_RETVAL(ret);
-	}
-
-	return IRQ_HANDLED;
 }
 
 /* get platform data from the device tree */
@@ -559,6 +397,9 @@ static void s2mpb04_config_ints(struct s2mpb04_core *ddata)
 /* initialize the chip */
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata)
 {
+
+	s2mpb04_toggle_pon(ddata);
+
 	s2mpb04_print_status(ddata);
 
 	s2mpb04_config_ints(ddata);
@@ -624,18 +465,6 @@ static int s2mpb04_probe(struct i2c_client *client,
 			      "S2MPB04 RESETB");
 	devm_gpio_request_one(dev, pdata->intb_gpio, GPIOF_IN,
 			      "S2MPB04 INTB");
-	ret = devm_request_threaded_irq(dev, pdata->resetb_irq, NULL,
-					s2mpb04_resetb_irq_handler,
-					IRQF_TRIGGER_FALLING |
-					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-					"s2mpb04-resetb", ddata);
-	ret = devm_request_threaded_irq(dev, pdata->intb_irq, NULL,
-					s2mpb04_intb_irq_handler,
-					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					"s2mpb04-intb", ddata);
-
-	/* disable the irq while doing initial power on */
-	disable_irq(pdata->resetb_irq);
 
 	for (i = 0; i < S2MPB04_PON_RETRY_CNT; i++) {
 		dev_dbg(dev, "%s: powering on s2mpb04\n", __func__);
@@ -651,9 +480,7 @@ static int s2mpb04_probe(struct i2c_client *client,
 			usleep_range(100, 105);
 		}
 
-#if 0
 		if (gpio_get_value(pdata->resetb_gpio))
-#endif
 			break;
 
 		dev_err(dev, "%s: powering on timed out, try (%d/%d)\n",
@@ -722,13 +549,13 @@ static const struct dev_pm_ops s2mpb04_dev_pm_ops = {
 
 static const struct of_device_id s2mpb04_dt_ids[] = {
 	{ .compatible = "samsung,s2mpb04", },
-	{ }
+	{ },
 };
 MODULE_DEVICE_TABLE(of, s2mpb04_dt_ids);
 
 static const struct i2c_device_id s2mpb04_id_table[] = {
 	{ .name = DRIVER_NAME, .driver_data = 0 },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, s2mpb04_id_table);
 
