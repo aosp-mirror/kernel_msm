@@ -74,13 +74,16 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	uint32_t *image_dw_buf;
 	int image_size_dw;
 	int fw_status;
-	struct pci_bus *pbus = pci_find_bus(0, 1);
-	struct pci_dev *pdev = pbus->self;
+	struct pci_bus *pbus = pci_find_bus(1, 0);
+	struct pci_dev *pdev = 0;
 	int ret;
 
-	while (!pci_is_root_bus(pbus)) {
-		pdev= pbus->self;
-		pbus = pbus->self->bus;
+	if (pbus) {
+		pdev = pbus->self;
+		while (!pci_is_root_bus(pbus)) {
+			pdev = pbus->self;
+			pbus = pbus->self->bus;
+		}
 	}
 
 	fw_status = request_firmware(&fw_entry, M0_FIRMWARE_PATH1, ab_ctx->dev);
@@ -99,7 +102,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	gpio_clk_in = 0;
 	gpio_ddr_sr = 0;
 
-	state_off     = (gpio_clk_in == 0) && (gpio_ddr_sr == 0);
+	state_off	 = (gpio_clk_in == 0) && (gpio_ddr_sr == 0);
 	state_suspend = (gpio_clk_in == 0) && (gpio_ddr_sr == 1);
 	state_sleep   = (gpio_clk_in == 1) && (gpio_ddr_sr == 1);
 
@@ -129,7 +132,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 			/* Enable CRC via SPI-FSM */
 
 			while (num_attempts) {
-
 				/* [TBD] Reset CRC Register via SPI-FSM */
 
 				/* [TBD] Enable CRC */
@@ -212,18 +214,21 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		 */
 		//while (!gpiod_get_value(ab_ctx->ab_ready));
 		pr_info("New Airbrush Firmware is Loaded\n");
-		/* [TBD] PCIE Enumeration should be called here */
-		pci_lock_rescan_remove();
-		pci_stop_and_remove_bus_device(pdev);
-		pci_unlock_rescan_remove();
-		udelay(100);
-		pci_lock_rescan_remove();
-		ret = pci_rescan_bus(pbus);
-		pci_unlock_rescan_remove();
 
-		if (!abc_pcie_enumerated()) {
-			printk("ABC PCIe Not Enumerated\n");
-			return -ENODEV;
+		if (pbus && pdev) {
+			/* [TBD] PCIE Enumeration should be called here */
+			pci_lock_rescan_remove();
+			pci_stop_and_remove_bus_device(pdev);
+			pci_unlock_rescan_remove();
+			udelay(100);
+			pci_lock_rescan_remove();
+			ret = pci_rescan_bus(pbus);
+			pci_unlock_rescan_remove();
+
+			if (!abc_pcie_enumerated()) {
+				printk("ABC PCIe Not Enumerated\n");
+				return -ENODEV;
+			}
 		}
 
 	}
