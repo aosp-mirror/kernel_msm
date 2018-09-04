@@ -25,7 +25,7 @@ int pfk_f2fs_parse_inode(const struct bio *bio,
 		struct pfk_key_info *key_info,
 		enum ice_cryto_algo_mode *algo,
 		bool *is_pfe,
-		enum ice_crypto_data_unit *data_unit,
+		unsigned int *data_unit,
 		const char *storage_type);
 
 bool pfk_f2fs_allow_merge_bio(const struct bio *bio1,
