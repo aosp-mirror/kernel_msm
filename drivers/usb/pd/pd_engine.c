@@ -125,6 +125,12 @@ struct usbpd {
 
 	bool low_power_udev;
 	bool switch_based_on_maxpower;
+
+	bool in_explicit_contract;
+
+	/* alternate source capabilities */
+	struct work_struct update_pdo_work;
+	bool default_src_cap;
 };
 
 static u8 always_enable_data;
@@ -674,6 +680,9 @@ static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 		}
 	}
 	pd->vbus_output = vbus_output;
+
+	schedule_work(&pd->update_pdo_work);
+
 	/*
 	 * No interrupt will be trigerred for the vbus change.
 	 * Manually inform tcpm to check the vbus change.
@@ -723,6 +732,7 @@ void update_external_vbus(struct work_struct *work)
 
 exit:
 	pd->external_vbus = pd->external_vbus_update;
+	schedule_work(&pd->update_pdo_work);
 err:
 	pm_relax(&pd->dev);
 	mutex_unlock(&pd->lock);
@@ -759,6 +769,29 @@ static int update_wireless_locked(struct usbpd *pd, bool wireless_online)
 		      pd->vbus_output ? 'Y' : 'N',
 		      pd->external_vbus ? 'Y' : 'N',
 		      pd->low_power_udev ? 'Y' : 'N');
+
+	/*
+	 * When partner is pd capable update the source caps and force
+	 * disconnect when wireless turns online.
+	 * Wait for vbus off/disconnect and wireless offline
+	 * to fall back to default source caps.
+	 */
+	if (pd->pd_capable) {
+		/* Setting different src_cap depending on wireless status */
+		schedule_work(&pd->update_pdo_work);
+
+		if (pd->wireless_online && pd->vbus_output
+		    && !pd->external_vbus) {
+			/* Turn off internal vbus */
+			if (pd_regulator_update(pd, false, false))
+				return -EAGAIN;
+			pd->vbus_output = false;
+
+			/* Force disconnect */
+			tcpm_port_reset(pd->tcpm_port);
+		}
+		return ret;
+	}
 
 	/* Wireless charging enabled when high power usb device is connected */
 	if (pd->vbus_output && !pd->external_vbus
@@ -824,6 +857,31 @@ clear:
 
 	}
 	return ret;
+}
+
+#define PDO_FIXED_FLAGS \
+	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
+
+static void update_src_caps(struct work_struct *work)
+{
+	struct usbpd *pd = container_of(work, struct usbpd, update_pdo_work);
+	struct tcpc_config *config = pd->tcpc_dev.config;
+	u32 pdo[1];
+
+	if (pd->wireless_online && pd->default_src_cap) {
+		pd_engine_log(pd, "alternative src_cap");
+		pdo[0] = PDO_FIXED(5000, 500, PDO_FIXED_FLAGS);
+		tcpm_update_source_capabilities(pd->tcpm_port, pdo, 1);
+		pd->default_src_cap = false;
+	} else if (!pd->wireless_online &&
+		   !pd->vbus_output  &&
+		   !pd->default_src_cap) {
+		pd_engine_log(pd, "default src_cap");
+		tcpm_update_source_capabilities(pd->tcpm_port,
+						config->src_pdo,
+						config->nr_src_pdo);
+		pd->default_src_cap = true;
+	}
 }
 
 static void psy_changed_handler(struct work_struct *work)
@@ -918,6 +976,7 @@ static void psy_changed_handler(struct work_struct *work)
 		      wireless_online ? "Y" : "N");
 
 	mutex_lock(&pd->lock);
+
 	if (update_wireless_locked(pd, wireless_online))
 		goto unlock;
 
@@ -975,7 +1034,7 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 
 	pd = container_of(nb, struct usbpd, psy_nb);
 	if (ptr == pd->wireless_psy)
-		pd_engine_log(pd, "wireless supply changed\n");
+		pd_engine_log(pd, "wireless supply changed");
 
 	if (!((ptr == pd->usb_psy || ptr == pd->wireless_psy)
 	    && evt == PSY_EVENT_PROP_CHANGED))
@@ -1888,7 +1947,7 @@ static const struct tcpc_config pd_tcpc_config = {
 };
 
 static int init_tcpc_dev(struct usbpd *pd,
-			  struct device *parent)
+			 struct device *parent)
 {
 	struct tcpc_dev *pd_tcpc_dev = &pd->tcpc_dev;
 
@@ -2106,7 +2165,10 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto exit_debugfs;
 	}
 
+	pd->default_src_cap = true;
+
 	INIT_DELAYED_WORK(&pd->ext_vbus_work, update_external_vbus);
+	INIT_WORK(&pd->update_pdo_work, update_src_caps);
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
