@@ -118,6 +118,10 @@ struct usbpd {
 	bool wlc_supported;
 	bool wireless_online;
 	bool in_explicit_contract;
+
+	/* alternate source capabilities */
+	struct work_struct update_pdo_work;
+	bool default_src_cap;
 };
 
 /*
@@ -632,6 +636,8 @@ static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 		      , vbus_output ? 'Y' : 'N', pd->wireless_online ?
 		      'Y' : 'N');
 
+	schedule_work(&pd->update_pdo_work);
+
 	if (vbus_output) {
 		ret = pd_regulator_update(pd, pd->external_vbus, true);
 		if (ret)
@@ -718,6 +724,7 @@ void update_external_vbus(struct work_struct *work)
 		      "OFF");
 exit:
 	pd->external_vbus = pd->external_vbus_update;
+	schedule_work(&pd->update_pdo_work);
 err:
 	pm_relax(&pd->dev);
 	mutex_unlock(&pd->lock);
@@ -741,6 +748,31 @@ static void check_update_usb_data_role(struct usbpd *pd)
 		if (ret < 0)
 			return;
 		pd->pending_update_usb_data = false;
+	}
+}
+
+#define PDO_FIXED_FLAGS \
+	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
+
+static void update_src_caps(struct work_struct *work)
+{
+	struct usbpd *pd = container_of(work, struct usbpd, update_pdo_work);
+	struct tcpc_config *config = pd->tcpc_dev.config;
+	u32 pdo[1];
+
+	if (pd->wireless_online && pd->default_src_cap) {
+		pd_engine_log(pd, "alternative src_cap");
+		pdo[0] = PDO_FIXED(5000, 500, PDO_FIXED_FLAGS);
+		tcpm_update_source_capabilities(pd->tcpm_port, pdo, 1);
+		pd->default_src_cap = false;
+	} else if (!pd->wireless_online &&
+		   !pd->external_vbus &&
+		   !pd->default_src_cap) {
+		pd_engine_log(pd, "default src_cap");
+		tcpm_update_source_capabilities(pd->tcpm_port,
+						config->src_pdo,
+						config->nr_src_pdo);
+		pd->default_src_cap = true;
 	}
 }
 
@@ -845,28 +877,20 @@ static void psy_changed_handler(struct work_struct *work)
 		pd_engine_log(pd, "pd->vbus_output: %c pd->external_vbus: %c",
 			      pd->vbus_output ? 'Y' : 'N',
 			      pd->external_vbus ? 'Y' : 'N');
+
+		/* Setting different src_cap depending on wireless status */
+		schedule_work(&pd->update_pdo_work);
+
 		if (pd->vbus_output && !pd->external_vbus) {
 			/* Turn off internal vbus */
 			if (pd_regulator_update(pd, false, false))
 				goto unlock;
+			pd->vbus_output = false;
 
-			/* disable host mode */
-			pd->extcon_usb_host = false;
-			if (update_usb_data_role(pd))
-				goto unlock;
+			/* Force disconnect */
+			tcpm_port_reset(pd->tcpm_port);
 
-			/* Turn on external vbus */
-			if (pd_regulator_update(pd, true, true))
-				goto unlock;
-			pd->external_vbus = true;
-
-			/* enable host mode */
-			pd->extcon_usb_host = true;
-			if (update_usb_data_role(pd))
-				goto unlock;
-
-			pd_engine_log(pd,
-				      "psy_changed: swiched to external vbus");
+			goto unlock;
 		}
 	}
 
@@ -914,7 +938,7 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 
 	pd = container_of(nb, struct usbpd, psy_nb);
 	if (ptr == pd->wireless_psy)
-		pd_engine_log(pd, "wireless supply changed\n");
+		pd_engine_log(pd, "wireless supply changed");
 
 	if (!((ptr == pd->usb_psy || ptr == pd->wireless_psy)
 	    && evt == PSY_EVENT_PROP_CHANGED))
@@ -1881,9 +1905,6 @@ static const char * const pdo_prop_name[] = {
 	[SRC_PDO]	= "goog,src-pdo",
 };
 
-#define PDO_FIXED_FLAGS \
-	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
-
 static u32 *parse_pdo(struct usbpd *pd, enum pdo_role role,
 		      unsigned int *nr_pdo)
 {
@@ -2194,7 +2215,10 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto exit_debugfs;
 	}
 
+	pd->default_src_cap = true;
+
 	INIT_DELAYED_WORK(&pd->ext_vbus_work, update_external_vbus);
+	INIT_WORK(&pd->update_pdo_work, update_src_caps);
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
