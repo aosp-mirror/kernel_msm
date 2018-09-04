@@ -8,6 +8,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/ab-dram.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
@@ -716,7 +717,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	ll_dma_start_time_zero = ktime_to_ns(ktime_get());
 #endif
 	dev_dbg(&abc_dma.pdev->dev,
-		"%s: local_buf_type=%d, local_buf=%p, local_buf_size=%u\n",
+		"%s: local_buf_type=%d, local_buf=%pK, local_buf_size=%u\n",
 		__func__, dma_desc->local_buf_type, dma_desc->local_buf,
 		dma_desc->local_buf_size);
 
@@ -917,20 +918,23 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 /*			    enum dma_data_direction dir)*/
 {
 	struct abc_pcie_dma_ll *abc_pcie_ll = NULL;
-#ifdef ABC_PCIE_UPLOAD_LL
-	struct dma_element_t dma_blk; /* for backward compatibility */
-#endif
-	uint64_t ll_paddr;
+	struct dma_element_t dma_blk;
+	struct dma_buf *ll_dma_buf;
+	struct dma_buf_attachment *ll_dma_buf_attach;
+	struct sg_table *ll_sg_table;
+	size_t ll_len;
+	int i;
+	uint64_t ll_abaddr;
 	int dma_chan;
 	int err = 0;
 	enum dma_data_direction dir = dma_desc->dir;
 
-	/* Allocate contiguous memory for linked list */
+	dma_chan = dma_desc->chan;
 	abc_pcie_ll = kmalloc(sizeof(struct abc_pcie_dma_ll), GFP_KERNEL);
 	if (!abc_pcie_ll) {
 		dev_err(&abc_dma.pdev->dev,
-			"%s: failed to kmalloc linked list buffer\n",
-			__func__);
+			"%s: failed to kmalloc ch%d linked list buffer\n",
+			__func__, dma_chan);
 		return -ENOMEM;
 	}
 
@@ -941,67 +945,130 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 		return err;
 	}
 
-#ifdef ABC_PCIE_UPLOAD_LL
-	/*
-	 * WIP, this is currently just uploading one of the lists, I will have
-	 * to upload all of them, iterate over
-	 * abc_pcie_ll->dma[0..abc_pcie_ll->size]
-	 */
-	ll_paddr = HW_ABC_PCIE_LL_BASE;
-	/* upload linked list */
-	dma_blk.src_addr   = LOWER((uint64_t)abc_pcie_ll->dma[0]);
-	dma_blk.src_u_addr = UPPER((uint64_t)abc_pcie_ll->dma[0]);
-	dma_blk.dst_addr   = LOWER(ll_paddr); /* ABC memory */
-	dma_blk.dst_u_addr = UPPER(ll_paddr); /* ABC memory */
-	dma_blk.len = sizeof(struct abc_pcie_dma_ll);
+	/* Allocate AB-DRAM for the entire set of LLs */
+	ll_len = DMA_LL_LENGTH * sizeof(struct abc_pcie_dma_ll_element) *
+		(abc_pcie_ll->size + 1);
+	ll_dma_buf = ab_dram_alloc_dma_buf_kernel(ll_len);
+	if (IS_ERR(ll_dma_buf)) {
+		err = PTR_ERR(ll_dma_buf);
+		dev_err(&abc_dma.pdev->dev,
+			"%s: failed to alloc ch%d AB-DRAM LL buffer: %d\n",
+			__func__, dma_chan, err);
+		goto destroy_ll;
+	}
+	ll_dma_buf_attach = dma_buf_attach(ll_dma_buf, &abc_dma.pdev->dev);
+	if (IS_ERR(ll_dma_buf_attach)) {
+		err = PTR_ERR(ll_dma_buf_attach);
+		dev_err(&abc_dma.pdev->dev,
+			"%s: failed to attach to ch%d AB-DRAM LL buffer: %d\n",
+			__func__, dma_chan, err);
+		goto free_buf;
+	}
+	ll_sg_table = dma_buf_map_attachment(ll_dma_buf_attach, DMA_TO_DEVICE);
+	if (IS_ERR(ll_sg_table)) {
+		err = PTR_ERR(ll_sg_table);
+		dev_err(&abc_dma.pdev->dev,
+			"%s: failed to map ch%d AB-DRAM LL buffer: %d\n",
+			__func__, dma_chan, err);
+		goto detach_buf;
+	}
 
-	dma_chan = dma_desc->chan;
+	ll_abaddr = sg_dma_address(ll_sg_table->sgl);
 	dev_dbg(&abc_dma.pdev->dev,
-		"%s: Uploading linked list via sblk transfer on DMA ch%d\n",
-		__func__, dma_chan);
-
+		"Allocated ch%d AB-DRAM LL buffer @0x%llx size %zu for"
+		" %d lists\n",
+		dma_chan, ll_abaddr, ll_len, abc_pcie_ll->size + 1);
 	mutex_lock(&dma_mutex);
 	err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
-	reinit_completion(&dma_done);
-	err = dma_sblk_start(dma_chan, DMA_TO_DEVICE, &dma_blk);
-	/* add error check */
-	/* consider adding timeout: wait_for_completion_interruptible_timeout*/
-	err = wait_for_completion_interruptible(&dma_done);
-	err = abc_reg_dma_irq_callback(NULL, dma_chan);
-	mutex_unlock(&dma_mutex);
-#else
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s: Using linked list from local (AP) memory\n",
-		__func__);
-	ll_paddr = (uint64_t)abc_pcie_ll->dma[0];
+	if (err) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s: failed to register ch%d dma irq callback: %d\n",
+			__func__, dma_chan, err);
+		goto unlock_unmap_buf;
+	}
+
+	/* Upload each LL in the list of LLs to the AB-DRAM buffer */
+	for (i = 0; i <= abc_pcie_ll->size; i++) {
+		dma_blk.src_addr   = LOWER((uint64_t)abc_pcie_ll->dma[i]);
+		dma_blk.src_u_addr = UPPER((uint64_t)abc_pcie_ll->dma[i]);
+		dma_blk.dst_addr   = LOWER(ll_abaddr);
+		dma_blk.dst_u_addr = UPPER(ll_abaddr);
+		dma_blk.len = DMA_LL_LENGTH *
+			sizeof(struct abc_pcie_dma_ll_element);
+
+		dev_dbg(&abc_dma.pdev->dev,
+			"Uploading ch%d LL #%d from %pK -> AB-DRAM 0x%llx"
+			" len %u\n",
+			dma_chan, i, abc_pcie_ll->ll_element[i],
+			ll_abaddr, dma_blk.len);
+
+		reinit_completion(&dma_done);
+#ifdef BENCHMARK_ENABLE
+		ll_dma_size[dma_chan] = sizeof(struct abc_pcie_dma_ll);
+		ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
 #endif
+		err = dma_sblk_start(dma_chan, DMA_TO_DEVICE, &dma_blk);
+		if (err) {
+			dev_err(&abc_dma.pdev->dev,
+				"%s: ch%d LL upload sblk dma failed: %d\b",
+				__func__, dma_chan, err);
+			goto unregister_dma_callback;
+		}
+		/* TODO: use wait_for_completion_interruptible_timeout? */
+		err = wait_for_completion_interruptible(&dma_done);
+		if (err) {
+			dev_err(&abc_dma.pdev->dev,
+				"%s: Wait for ch%d LL upload failed: %d\b",
+				__func__, dma_chan, err);
+			goto unregister_dma_callback;
+		}
 
-	dma_chan = dma_desc->chan;
-	/* Register DMA callback */
-	err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
+		ll_abaddr += dma_blk.len;
+	}
 
+	ll_abaddr = sg_dma_address(ll_sg_table->sgl); /* back to start */
 	dev_dbg(&abc_dma.pdev->dev,
-		"%s: Starting mblk transfer on DMA ch%d\n",
+		"%s: Starting ch%d mblk transfer\n",
 		__func__, dma_chan);
 #ifdef BENCHMARK_ENABLE
 	ll_dma_size[dma_chan] = dma_desc->local_buf_size;
 	ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
 #endif
-	/* start multi-block transfer */
-	mutex_lock(&dma_mutex);
 	reinit_completion(&dma_done);
-	err = dma_mblk_start(dma_chan, dir, ll_paddr);
-	/* wait for DMA completion, register callback before use */
+	/* start multi-block transfer */
+	err = dma_mblk_start(dma_chan, dir, ll_abaddr);
+	if (err) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s: start ch%d mblk dma xfer failed: %d\b",
+			__func__, dma_chan, err);
+		goto unregister_dma_callback;
+	}
 	err = wait_for_completion_interruptible(&dma_done);
-	/* unregister callback */
-	err = abc_reg_dma_irq_callback(NULL, dma_chan);
-	mutex_unlock(&dma_mutex);
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s: mblk transfer finished on DMA ch%d\n",
-		__func__, dma_chan);
+	if (err) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s: Wait for ch%d LL upload failed: %d\b",
+			__func__, dma_chan, err);
+		goto unregister_dma_callback;
+	}
 
+	dev_dbg(&abc_dma.pdev->dev,
+		"%s: ch%d mblk transfer complete\n",
+		__func__, dma_chan);
+	err = 0;
+
+unregister_dma_callback:
+	abc_reg_dma_irq_callback(NULL, dma_chan);
+
+unlock_unmap_buf:
+	mutex_unlock(&dma_mutex);
+	dma_buf_unmap_attachment(ll_dma_buf_attach, ll_sg_table, DMA_TO_DEVICE);
+detach_buf:
+	dma_buf_detach(ll_dma_buf, ll_dma_buf_attach);
+free_buf:
+	ab_dram_free_dma_buf_kernel(ll_dma_buf);
+destroy_ll:
 	abc_pcie_ll_destroy(abc_pcie_ll);
-	return 0;
+	return err;
 }
 
 static int abc_pcie_dma_open(struct inode *inode, struct file *filp)
