@@ -1175,7 +1175,7 @@ static int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 
 	rc = smblib_masked_write(chg, TYPE_C_CFG_2_REG,
 				 EN_80UA_180UA_CUR_SOURCE_BIT,
-				 power_role == POWER_SUPPLY_TYPEC_PR_SOURCE_1_5
+				 val->intval == POWER_SUPPLY_TYPEC_PR_SOURCE_1_5
 				 ? EN_80UA_180UA_CUR_SOURCE_BIT : 0);
 
 	if (rc < 0)
