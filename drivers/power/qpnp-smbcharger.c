@@ -2075,7 +2075,9 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 #ifdef CONFIG_HTC_BATT
 	if(g_is_limit_IUSB && (current_ma >= USB_MA_1000) &&
 			(chip->usb_supply_type == POWER_SUPPLY_TYPE_USB_DCP) &&
-			!htc_battery_is_pd_detected()){
+			!htc_battery_is_pd_detected() &&
+			!(chip->utc.sink_current == utcc_1p5A ||
+			  chip->utc.sink_current == utcc_3p0A)) {
 		pr_smb(PR_STATUS, "Charger is bad, force limit current %d -> 1000 mA\n",current_ma);
 		current_ma = USB_MA_1000;
 		g_is_limit_IUSB = false;
@@ -7502,6 +7504,13 @@ static irqreturn_t power_ok_handler(int irq, void *_chip)
 	smbchg_read(chip, &reg, chip->misc_base + RT_STS, 1);
 
 #ifdef CONFIG_HTC_BATT
+	if (htc_battery_is_pd_detected() ||
+	    (chip->utc.sink_current &&
+	    (chip->utc.sink_current != utcc_default))) {
+		pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
+		return IRQ_HANDLED;
+	}
+
 	if (reg & POWER_OK_BIT)
 		power_ok = 1;
 	else
