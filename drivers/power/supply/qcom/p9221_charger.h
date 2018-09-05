@@ -21,6 +21,7 @@
 #define P9221_DC_ICL_BPP_UA			700000
 #define P9221_DC_ICL_EPP_UA			1100000
 #define P9221_EPP_THRESHOLD_UV			7000000
+#define P9221_MAX_VOUT_SET_MV_DEFAULT		9000
 
 /*
  * P9221 common registers
@@ -46,44 +47,8 @@
 #define P9221_INT_REG				0x36
 #define P9221_INT_MASK				0xF7
 #define P9221_INT_ENABLE_REG			0x38
-
-/*
- * P9221 Rx registers (x != 5)
- */
-#define P9221_CHARGE_STAT_REG			0x3A
-#define P9221_EPT_REG				0x3B
-#define P9221_VOUT_ADC_REG			0x3C
-#define P9221_VOUT_ADC_MASK			0x0FFF
-#define P9221_VOUT_SET_REG			0x3E
-#define P9221_MAX_VOUT_SET_MV_DEFAULT		9000
-#define P9221_VRECT_ADC_REG			0x40
-#define P9221_VRECT_ADC_MASK			0x0FFF
-#define P9221_OVSET_REG				0x42
-#define P9221_OVSET_MASK			0x70
-#define P9221_OVSET_SHIFT			4
-#define P9221_RX_IOUT_REG			0x44
-#define P9221_DIE_TEMP_ADC_REG			0x46
-#define P9221_DIE_TEMP_ADC_MASK			0x0FFF
-#define P9221_OP_FREQ_REG			0x48
-#define P9221_ILIM_SET_REG			0x4A
-#define P9221_ALIGN_X_ADC_REG			0x4B
-#define P9221_ALIGN_Y_ADC_REG			0x4C
-#define P9221_OP_MODE_REG			0x4D
 #define P9221_COM_REG				0x4E
-#define P9221_FW_SWITCH_KEY_REG			0x4F
-#define P9221_INT_CLEAR_REG			0x56
-#define P9221_RXID_REG				0x5C
-#define P9221_RXID_LEN				6
-#define P9221_MPREQ_REG				0x5C
-#define P9221_MPREQ_LEN				6
-#define P9221_FOD_REG				0x68
-#define P9221_NUM_FOD				16
-#define P9221_RX_RAWIOUT_REG			0x7A
-#define P9221_RX_RAWIOUT_MASK			0xFFF
-#define P9221_PMA_AD_REG			0x7C
-#define P9221_RX_PINGFREQ_REG			0xFC
-#define P9221_RX_PINGFREQ_MASK			0xFFF
-#define P9221_LAST_REG				0xFF
+
 
 /*
  * P9221R5 unique registers
@@ -246,8 +211,8 @@ struct p9221_charger_platform_data {
 	int				irq_det_gpio;
 	int				irq_det_int;
 	int				max_vout_mv;
-	u8				fod[P9221_NUM_FOD];
-	u8				fod_epp[P9221_NUM_FOD];
+	u8				fod[P9221R5_NUM_FOD];
+	u8				fod_epp[P9221R5_NUM_FOD];
 	int				fod_num;
 	int				fod_epp_num;
 };
