@@ -9,7 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#include "dsi-panel-s6e3ha8-dsc-wqhd-cmd.dtsi"
+
+#include "../qcom/sm8150-sde-display.dtsi"
 
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 
@@ -22,9 +23,7 @@
 	/delete-property/ lab-supply;
 	/delete-property/ ibb-supply;
 
-	qcom,dsi-display-list =
-		<&dsi_s6e3ha8_cmd_display
-		&dsi_sim_vid_display>;
+	qcom,dsi-display-list = <&dsi_sim_vid_display>;
 };
 
 &sde_dsi1 {
@@ -42,45 +41,14 @@
 	qcom,null-insertion-enabled;
 };
 
-&soc {
-	dsi_s6e3ha8_cmd_display: qcom,dsi-display@0 {
-		label = "dsi_s6e3ha8_cmd_display";
-		qcom,display-type = "primary";
-		qcom,dsi-display-active;
-
-		qcom,dsi-ctrl-num = <0>;
-		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
-
-		qcom,dsi-panel = <&dsi_s6e3ha8_dsc_wqhd_cmd>;
-	};
-};
-
 &dsi_sim_vid {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_jaws>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_floral>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,platform-reset-gpio = <&tlmm 67 0>;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-width = <1080>;
 			qcom,mdss-dsi-panel-height = <1920>;
-		};
-	};
-};
-
-&dsi_s6e3ha8_dsc_wqhd_cmd {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,platform-te-gpio = <&tlmm 8 0>;
-	qcom,platform-reset-gpio = <&tlmm 67 0>;
-
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_jaws>;
-
-	qcom,mdss-dsi-t-clk-post = <0x17>;
-	qcom,mdss-dsi-t-clk-pre = <0X19>;
-	qcom,mdss-dsi-display-timings {
-		timing@0 {
-			qcom,mdss-dsi-panel-phy-timings =
-				[00 1E 08 07 24 22 08 08 05 02 04 00 19 17];
 		};
 	};
 };
@@ -94,7 +62,7 @@
 };
 
 &soc {
-	dsi_panel_pwr_supply_jaws: dsi_panel_pwr_supply_jaws {
+	dsi_panel_pwr_supply_floral: dsi_panel_pwr_supply_floral {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
