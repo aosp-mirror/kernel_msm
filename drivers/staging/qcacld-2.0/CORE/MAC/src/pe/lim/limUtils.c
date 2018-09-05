@@ -8419,7 +8419,7 @@ eHalStatus lim_send_ext_cap_ie(tpAniSirGlobal mac_ctx,
 	if (merge && NULL != extra_extcap && extra_extcap->num_bytes > 0) {
 		if (extra_extcap->num_bytes > ext_cap_data.num_bytes)
 			num_bytes = extra_extcap->num_bytes;
-		lim_merge_extcap_struct(&ext_cap_data, extra_extcap);
+		lim_merge_extcap_struct(&ext_cap_data, extra_extcap, true);
 	}
 
 	/* Allocate memory for the WMI request, and copy the parameter */
@@ -8556,10 +8556,10 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx,
 	}
 
 	vos_mem_set((uint8_t *)&out[0], DOT11F_IE_EXTCAP_MAX_LEN, 0);
-	vos_mem_copy(&out[0], &buf[2], DOT11F_IE_EXTCAP_MAX_LEN);
+	vos_mem_copy(&out[0], &buf[2], buf[1]);
 
 	if (DOT11F_PARSE_SUCCESS != dot11fUnpackIeExtCap(mac_ctx, &out[0],
-					DOT11F_IE_EXTCAP_MAX_LEN, dst))
+                                        buf[1], dst))
 		limLog(mac_ctx, LOGE, FL("dot11fUnpackIeExtCap Parse Error "));
 }
 
@@ -8601,24 +8601,43 @@ tSirRetStatus lim_strip_extcap_update_struct(tpAniSirGlobal mac_ctx,
  * lim_merge_extcap_struct() - merge extended capabilities info
  * @dst: destination extended capabilities
  * @src: source extended capabilities
+ * @add: true if add the capabilites, false if strip the capabilites.
  *
- * This function is used to take @src info and merge it with @dst
- * extended capabilities info.
+ * This function is used to take @src info and add/strip it to/from
+ * @dst extended capabilities info.
  *
  * Return: None
  */
 void lim_merge_extcap_struct(tDot11fIEExtCap *dst,
-			     tDot11fIEExtCap *src)
+			     tDot11fIEExtCap *src,
+			     bool add)
 {
 	uint8_t *tempdst = (uint8_t *)dst->bytes;
 	uint8_t *tempsrc = (uint8_t *)src->bytes;
 	uint8_t structlen = member_size(tDot11fIEExtCap, bytes);
 
-	while(tempdst && tempsrc && structlen--) {
-		*tempdst |= *tempsrc;
+	/* Return if @src not present */
+	if (!src->present)
+		return;
+
+	/* Return if strip the capabilites from @dst which not present */
+	if (!dst->present && !add)
+		return;
+
+	/* Merge the capabilites info in other cases */
+	while (tempdst && tempsrc && structlen--) {
+		if (add)
+			*tempdst |= *tempsrc;
+		else
+			*tempdst &= *tempsrc;
 		tempdst++;
 		tempsrc++;
 	}
+	dst->num_bytes = lim_compute_ext_cap_ie_length(dst);
+        if (dst->num_bytes == 0)
+		dst->present = 0;
+	else
+		dst->present = 1;
 }
 
 /**
@@ -8653,24 +8672,23 @@ lim_get_80Mhz_center_channel(uint8_t primary_channel)
 }
 
 /**
- * lim_is_ext_cap_ie_present - checks if ext ie is present
+ * lim_compute_ext_cap_ie_length - compute the length of ext cap ie
+ * based on the bits set
  * @ext_cap: extended IEs structure
  *
- * Return: true if ext IEs are present else false
+ * Return: length of the ext cap ie, 0 means should not present
  */
-bool lim_is_ext_cap_ie_present (struct s_ext_cap *ext_cap)
-{
-	int i, size;
-	uint8_t *tmp_buf;
+tANI_U8 lim_compute_ext_cap_ie_length (tDot11fIEExtCap *ext_cap) {
+	tANI_U8 i = DOT11F_IE_EXTCAP_MAX_LEN;
 
-	tmp_buf = (uint8_t *) ext_cap;
-	size = sizeof(*ext_cap);
+	while (i) {
+		if (ext_cap->bytes[i-1]) {
+			break;
+		}
+		i --;
+	}
 
-	for (i = 0; i < size; i++)
-		if (tmp_buf[i])
-			return true;
-
-	return false;
+	return i;
 }
 
 /**
