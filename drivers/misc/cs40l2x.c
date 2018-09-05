@@ -169,13 +169,15 @@ static ssize_t cs40l2x_cp_trigger_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
+	mutex_lock(&cs40l2x->lock);
+
 	if ((index & CS40L2X_INDEX_MASK) >= cs40l2x->num_waves
 				&& index != CS40L2X_INDEX_PEAK
 				&& index != CS40L2X_INDEX_PBQ
-				&& index != CS40L2X_INDEX_DIAG)
-		return -EINVAL;
-
-	mutex_lock(&cs40l2x->lock);
+				&& index != CS40L2X_INDEX_DIAG) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
 
 	if (index == CS40L2X_INDEX_DIAG
 			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP)
@@ -517,11 +519,7 @@ static int cs40l2x_wseq_init(struct cs40l2x_private *cs40l2x)
 static int cs40l2x_wseq_replace(struct cs40l2x_private *cs40l2x,
 			unsigned int reg, unsigned int val)
 {
-	int ret, i;
-
-	/* write sequencer does not exist in A0/B0 firmware */
-	if (cs40l2x->revid < CS40L2X_REVID_B1)
-		return 0;
+	int i;
 
 	for (i = 0; i < cs40l2x->wseq_length; i++)
 		if (cs40l2x->wseq_table[i].reg == reg)
@@ -530,13 +528,12 @@ static int cs40l2x_wseq_replace(struct cs40l2x_private *cs40l2x,
 	if (i == cs40l2x->wseq_length)
 		return -EINVAL;
 
-	ret = cs40l2x_wseq_write(cs40l2x, i, reg, val);
-	if (ret)
-		return ret;
-
 	cs40l2x->wseq_table[i].val = val;
 
-	return 0;
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP)
+		return 0;
+
+	return cs40l2x_wseq_write(cs40l2x, i, reg, val);
 }
 
 static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
@@ -622,25 +619,34 @@ static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
 	int ret;
 	unsigned int val;
 
-	/* duration reporting is supported by revision B1 firmware only */
-	if (cs40l2x->revid < CS40L2X_REVID_B1)
-		return -EPERM;
-
-	if (cs40l2x->cp_trigger_index < CS40L2X_INDEX_CLICK_MIN)
-		return -EINVAL;
-
-	if (cs40l2x->cp_trigger_index > CS40L2X_INDEX_CLICK_MAX)
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->cp_trigger_index < CS40L2X_INDEX_CLICK_MIN) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->cp_trigger_index > CS40L2X_INDEX_CLICK_MAX) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = cs40l2x_user_ctrl_exec(cs40l2x, CS40L2X_USER_CTRL_DURATION,
 			cs40l2x->cp_trigger_index, &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret)
-		return ret;
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return ret;
 }
 
 static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
@@ -722,27 +728,27 @@ static ssize_t cs40l2x_hiber_cmd_store(struct device *dev,
 	int ret;
 	unsigned int hiber_cmd;
 
-	/*
-	 * hibernation is supported by revision B1 firmware only, and
-	 * entry/exit is exposed to user space only for test purposes
-	 */
-	if (cs40l2x->revid < CS40L2X_REVID_B1)
-		return -EPERM;
-
 	ret = kstrtou32(buf, 10, &hiber_cmd);
 	if (ret)
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = cs40l2x_hiber_cmd_send(cs40l2x, hiber_cmd);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to send hibernation command\n");
-		return ret;
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return count;
+	ret = cs40l2x_hiber_cmd_send(cs40l2x, hiber_cmd);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_hiber_timeout_show(struct device *dev,
@@ -752,22 +758,25 @@ static ssize_t cs40l2x_hiber_timeout_show(struct device *dev,
 	int ret;
 	unsigned int val;
 
-	/* hibernation is supported by revision B1 firmware only */
-	if (cs40l2x->revid < CS40L2X_REVID_B1)
-		return -EPERM;
-
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read hibernation timeout\n");
-		return ret;
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_hiber_timeout_store(struct device *dev,
@@ -777,10 +786,6 @@ static ssize_t cs40l2x_hiber_timeout_store(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
 	unsigned int val;
-
-	/* hibernation is supported by revision B1 firmware only */
-	if (cs40l2x->revid < CS40L2X_REVID_B1)
-		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -793,17 +798,24 @@ static ssize_t cs40l2x_hiber_timeout_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
-				CS40L2X_XM_UNPACKED_TYPE), val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write hibernation timeout\n");
-		return ret;
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return count;
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
+					CS40L2X_XM_UNPACKED_TYPE), val);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_enable_show(struct device *dev,
@@ -814,17 +826,24 @@ static ssize_t cs40l2x_gpio1_enable_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read GPIO1 configuration\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_enable_store(struct device *dev,
@@ -840,18 +859,25 @@ static ssize_t cs40l2x_gpio1_enable_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 					CS40L2X_XM_UNPACKED_TYPE),
 			val ? CS40L2X_GPIO1_ENABLED : CS40L2X_GPIO1_DISABLED);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write GPIO1 configuration\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_rise_index_show(struct device *dev,
@@ -862,19 +888,26 @@ static ssize_t cs40l2x_gpio1_rise_index_show(struct device *dev,
 	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS1,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_rise_index_store(struct device *dev,
@@ -889,23 +922,32 @@ static ssize_t cs40l2x_gpio1_rise_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS1,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_fall_index_show(struct device *dev,
@@ -916,19 +958,26 @@ static ssize_t cs40l2x_gpio1_fall_index_show(struct device *dev,
 	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE1,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_fall_index_store(struct device *dev,
@@ -943,23 +992,32 @@ static ssize_t cs40l2x_gpio1_fall_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE1,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_fall_timeout_show(struct device *dev,
@@ -970,17 +1028,24 @@ static ssize_t cs40l2x_gpio1_fall_timeout_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read GPIO1 falling-edge timeout\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_fall_timeout_store(struct device *dev,
@@ -999,17 +1064,24 @@ static ssize_t cs40l2x_gpio1_fall_timeout_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
-				CS40L2X_XM_UNPACKED_TYPE), val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write GPIO1 falling-edge timeout\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return count;
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
+					CS40L2X_XM_UNPACKED_TYPE), val);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio2_rise_index_show(struct device *dev,
@@ -1023,19 +1095,26 @@ static ssize_t cs40l2x_gpio2_rise_index_show(struct device *dev,
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS2,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio2_rise_index_store(struct device *dev,
@@ -1053,23 +1132,32 @@ static ssize_t cs40l2x_gpio2_rise_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS2,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio2_fall_index_show(struct device *dev,
@@ -1083,19 +1171,26 @@ static ssize_t cs40l2x_gpio2_fall_index_show(struct device *dev,
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE2,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio2_fall_index_store(struct device *dev,
@@ -1113,23 +1208,32 @@ static ssize_t cs40l2x_gpio2_fall_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE2,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio3_rise_index_show(struct device *dev,
@@ -1143,19 +1247,26 @@ static ssize_t cs40l2x_gpio3_rise_index_show(struct device *dev,
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS3,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio3_rise_index_store(struct device *dev,
@@ -1173,23 +1284,32 @@ static ssize_t cs40l2x_gpio3_rise_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS3,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio3_fall_index_show(struct device *dev,
@@ -1203,19 +1323,26 @@ static ssize_t cs40l2x_gpio3_fall_index_show(struct device *dev,
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE3,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio3_fall_index_store(struct device *dev,
@@ -1233,23 +1360,32 @@ static ssize_t cs40l2x_gpio3_fall_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE3,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio4_rise_index_show(struct device *dev,
@@ -1263,19 +1399,26 @@ static ssize_t cs40l2x_gpio4_rise_index_show(struct device *dev,
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS4,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio4_rise_index_store(struct device *dev,
@@ -1293,23 +1436,32 @@ static ssize_t cs40l2x_gpio4_rise_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONPRESS4,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio4_fall_index_show(struct device *dev,
@@ -1323,19 +1475,26 @@ static ssize_t cs40l2x_gpio4_fall_index_show(struct device *dev,
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE4,
 			&index);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read index\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", index);
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio4_fall_index_store(struct device *dev,
@@ -1353,23 +1512,32 @@ static ssize_t cs40l2x_gpio4_fall_index_store(struct device *dev,
 	if (ret)
 		return -EINVAL;
 
-	if (index > (cs40l2x->num_waves - 1))
-		return -EINVAL;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (index > (cs40l2x->num_waves - 1)) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 					CS40L2X_XM_UNPACKED_TYPE)
 						+ CS40L2X_INDEXBUTTONRELEASE4,
 			index);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write index\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_standby_timeout_show(struct device *dev,
@@ -1380,17 +1548,24 @@ static ssize_t cs40l2x_standby_timeout_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read standby timeout\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_standby_timeout_store(struct device *dev,
@@ -1409,17 +1584,24 @@ static ssize_t cs40l2x_standby_timeout_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
-				CS40L2X_XM_UNPACKED_TYPE), val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write standby timeout\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return count;
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
+					CS40L2X_XM_UNPACKED_TYPE), val);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_f0_measured_show(struct device *dev,
@@ -1450,17 +1632,24 @@ static ssize_t cs40l2x_f0_stored_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read stored f0\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_f0_stored_store(struct device *dev,
@@ -1482,17 +1671,24 @@ static ssize_t cs40l2x_f0_stored_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
-				CS40L2X_XM_UNPACKED_TYPE), val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to store f0\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return count;
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
+					CS40L2X_XM_UNPACKED_TYPE), val);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_redc_measured_show(struct device *dev,
@@ -1523,17 +1719,24 @@ static ssize_t cs40l2x_redc_stored_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read stored ReDC\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_redc_stored_store(struct device *dev,
@@ -1555,15 +1758,24 @@ static ssize_t cs40l2x_redc_stored_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
-				CS40L2X_XM_UNPACKED_TYPE), val);
-	mutex_unlock(&cs40l2x->lock);
-
+					CS40L2X_XM_UNPACKED_TYPE), val);
 	if (ret) {
 		pr_err("Failed to store ReDC\n");
-		return ret;
+		goto err_mutex;
 	}
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
 
 	return count;
 }
@@ -1606,17 +1818,24 @@ static ssize_t cs40l2x_comp_enable_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
 					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read compensation state\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return ret;
 }
 
 static ssize_t cs40l2x_comp_enable_store(struct device *dev,
@@ -1632,18 +1851,25 @@ static ssize_t cs40l2x_comp_enable_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
 					CS40L2X_XM_UNPACKED_TYPE),
 			val ? CS40L2X_COMP_ENABLED : CS40L2X_COMP_DISABLED);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write compensation state\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static int cs40l2x_dig_scale_get(struct cs40l2x_private *cs40l2x,
@@ -1694,14 +1920,13 @@ static ssize_t cs40l2x_dig_scale_show(struct device *dev,
 	int ret;
 	unsigned int dig_scale;
 
-	mutex_lock(&cs40l2x->lock);
+	/*
+	 * this operation is agnostic to the variable firmware ID and may
+	 * therefore be performed without mutex protection
+	 */
 	ret = cs40l2x_dig_scale_get(cs40l2x, &dig_scale);
-	mutex_unlock(&cs40l2x->lock);
-
-	if (ret) {
-		pr_err("Failed to read digital scale\n");
+	if (ret)
 		return ret;
-	}
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
 }
@@ -1722,15 +1947,20 @@ static ssize_t cs40l2x_dig_scale_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
+	/*
+	 * this operation calls cs40l2x_wseq_replace which checks the variable
+	 * firmware ID and must therefore be performed within mutex protection
+	 */
 	ret = cs40l2x_dig_scale_set(cs40l2x, dig_scale);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write digital scale\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static int cs40l2x_gpio1_dig_scale_get(struct cs40l2x_private *cs40l2x,
@@ -1772,15 +2002,22 @@ static ssize_t cs40l2x_gpio1_dig_scale_show(struct device *dev,
 	unsigned int dig_scale;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = cs40l2x_gpio1_dig_scale_get(cs40l2x, &dig_scale);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read digital scale\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
+	ret = cs40l2x_gpio1_dig_scale_get(cs40l2x, &dig_scale);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_gpio1_dig_scale_store(struct device *dev,
@@ -1799,15 +2036,22 @@ static ssize_t cs40l2x_gpio1_dig_scale_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = cs40l2x_gpio1_dig_scale_set(cs40l2x, dig_scale);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write digital scale\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return count;
+	ret = cs40l2x_gpio1_dig_scale_set(cs40l2x, dig_scale);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static int cs40l2x_cp_dig_scale_get(struct cs40l2x_private *cs40l2x,
@@ -1849,15 +2093,22 @@ static ssize_t cs40l2x_cp_dig_scale_show(struct device *dev,
 	unsigned int dig_scale;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = cs40l2x_cp_dig_scale_get(cs40l2x, &dig_scale);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read digital scale\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
+	ret = cs40l2x_cp_dig_scale_get(cs40l2x, &dig_scale);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_cp_dig_scale_store(struct device *dev,
@@ -1876,15 +2127,22 @@ static ssize_t cs40l2x_cp_dig_scale_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
-	ret = cs40l2x_cp_dig_scale_set(cs40l2x, dig_scale);
-	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write digital scale\n");
-		return ret;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+		ret = -EPERM;
+		goto err_mutex;
 	}
 
-	return count;
+	ret = cs40l2x_cp_dig_scale_set(cs40l2x, dig_scale);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
 }
 
 static ssize_t cs40l2x_heartbeat_show(struct device *dev,
@@ -1895,25 +2153,32 @@ static ssize_t cs40l2x_heartbeat_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "HALO_HEARTBEAT",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read heartbeat\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return ret;
 }
 
 static ssize_t cs40l2x_num_waves_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	unsigned int num_waves;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->num_waves);
+	mutex_lock(&cs40l2x->lock);
+	num_waves = cs40l2x->num_waves;
+	mutex_unlock(&cs40l2x->lock);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", num_waves);
 }
 
 static ssize_t cs40l2x_vpp_measured_show(struct device *dev,
@@ -2001,6 +2266,14 @@ static ssize_t cs40l2x_asp_enable_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	unsigned int fw_id;
+
+	mutex_lock(&cs40l2x->lock);
+	fw_id = cs40l2x->fw_desc->id;
+	mutex_unlock(&cs40l2x->lock);
+
+	if (fw_id != CS40L2X_FW_ID_REMAP)
+		return -EPERM;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
 		return -EPERM;
@@ -2014,7 +2287,14 @@ static ssize_t cs40l2x_asp_enable_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int val, fw_id;
+
+	mutex_lock(&cs40l2x->lock);
+	fw_id = cs40l2x->fw_desc->id;
+	mutex_unlock(&cs40l2x->lock);
+
+	if (fw_id != CS40L2X_FW_ID_REMAP)
+		return -EPERM;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
 		return -EPERM;
@@ -2043,6 +2323,14 @@ static ssize_t cs40l2x_asp_timeout_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	unsigned int fw_id;
+
+	mutex_lock(&cs40l2x->lock);
+	fw_id = cs40l2x->fw_desc->id;
+	mutex_unlock(&cs40l2x->lock);
+
+	if (fw_id != CS40L2X_FW_ID_REMAP)
+		return -EPERM;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
 		return -EPERM;
@@ -2056,7 +2344,14 @@ static ssize_t cs40l2x_asp_timeout_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int val, fw_id;
+
+	mutex_lock(&cs40l2x->lock);
+	fw_id = cs40l2x->fw_desc->id;
+	mutex_unlock(&cs40l2x->lock);
+
+	if (fw_id != CS40L2X_FW_ID_REMAP)
+		return -EPERM;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
 		return -EPERM;
@@ -2086,21 +2381,25 @@ static ssize_t cs40l2x_exc_enable_show(struct device *dev,
 	int ret;
 	unsigned int val;
 
-	if (cs40l2x->revid < CS40L2X_REVID_B1)
-		return -EPERM;
-
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
 					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to read protection state\n");
-		return ret;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return ret;
 }
 
 static ssize_t cs40l2x_exc_enable_store(struct device *dev,
@@ -2111,26 +2410,30 @@ static ssize_t cs40l2x_exc_enable_store(struct device *dev,
 	int ret;
 	unsigned int val;
 
-	if (cs40l2x->revid < CS40L2X_REVID_B1)
-		return -EPERM;
-
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
 		return -EINVAL;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
 	ret = regmap_write(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
 					CS40L2X_XM_UNPACKED_TYPE),
 			val ? CS40L2X_EXC_ENABLED : CS40L2X_EXC_DISABLED);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	if (ret) {
-		pr_err("Failed to write protection state\n");
-		return ret;
-	}
-
-	return count;
+	return ret;
 }
 
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
@@ -3134,7 +3437,7 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 		}
 	}
 
-	if (cs40l2x->revid == CS40L2X_REVID_B1) {
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
 		ret = cs40l2x_wseq_init(cs40l2x);
 		if (ret) {
 			dev_err(dev, "Failed to initialize write sequencer\n");
@@ -5118,7 +5421,8 @@ static int __maybe_unused cs40l2x_suspend(struct device *dev)
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO) {
+	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO
+			&& cs40l2x->fw_desc->id != CS40L2X_FW_ID_CAL) {
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 						CS40L2X_XM_UNPACKED_TYPE),
@@ -5129,7 +5433,8 @@ static int __maybe_unused cs40l2x_suspend(struct device *dev)
 		}
 	}
 
-	if (cs40l2x->pdata.hiber_enable && cs40l2x->revid == CS40L2X_REVID_B1) {
+	if (cs40l2x->pdata.hiber_enable
+			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
 		ret = cs40l2x_hiber_cmd_send(cs40l2x,
 				CS40L2X_POWERCONTROL_HIBERNATE);
 		if (ret)
@@ -5149,7 +5454,8 @@ static int __maybe_unused cs40l2x_resume(struct device *dev)
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO) {
+	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO
+			&& cs40l2x->fw_desc->id != CS40L2X_FW_ID_CAL) {
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 						CS40L2X_XM_UNPACKED_TYPE),
@@ -5160,7 +5466,8 @@ static int __maybe_unused cs40l2x_resume(struct device *dev)
 		}
 	}
 
-	if (cs40l2x->pdata.hiber_enable && cs40l2x->revid == CS40L2X_REVID_B1) {
+	if (cs40l2x->pdata.hiber_enable
+			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
 		ret = cs40l2x_hiber_cmd_send(cs40l2x,
 				CS40L2X_POWERCONTROL_WAKEUP);
 		if (ret)
