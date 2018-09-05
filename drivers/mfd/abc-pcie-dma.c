@@ -351,7 +351,7 @@ int abc_pcie_user_buf_sg_build(void *dmadest, size_t size,
 #endif
 
 	up_read(&current->mm->mmap_sem);
-	if (n_num < 0) {
+	if (n_num < p_num) {
 		dev_err(abc_dma.dma_dev,
 			"%s: fail to get user_pages\n", __func__);
 		goto free_mem;
