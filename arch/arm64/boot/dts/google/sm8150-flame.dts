@@ -13,7 +13,7 @@
 /dts-v1/;
 
 #include "../qcom/sm8150-v2.dtsi"
-#include "sm8150-floral-flame.dtsi"
+#include "sm8150-flame.dtsi"
 
 / {
 	model = "Google Inc. MSM sm8150 Flame proto";

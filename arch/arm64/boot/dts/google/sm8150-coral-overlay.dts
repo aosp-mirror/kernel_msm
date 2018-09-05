@@ -13,7 +13,7 @@
 /dts-v1/;
 /plugin/;
 
-#include "sm8150-floral-coral.dtsi"
+#include "sm8150-coral.dtsi"
 
 / {
 	model = "Google Inc. MSM sm8150 Coral proto";
