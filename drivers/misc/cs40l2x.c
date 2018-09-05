@@ -548,9 +548,6 @@ static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
 	unsigned int val;
 	int ret, i;
 
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	ret = regmap_write(regmap,
 			cs40l2x_dsp_reg(cs40l2x, "USER_CONTROL_IPDATA",
 					CS40L2X_XM_UNPACKED_TYPE),
@@ -651,9 +648,6 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 {
 	int ret, i;
 	unsigned int val;
-
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
 
 	switch (hiber_cmd) {
 	case CS40L2X_POWERCONTROL_NONE:
@@ -1658,9 +1652,6 @@ static int cs40l2x_dig_scale_get(struct cs40l2x_private *cs40l2x,
 	int ret;
 	unsigned int val;
 
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	ret = regmap_read(cs40l2x->regmap, CS40L2X_AMP_DIG_VOL_CTRL, &val);
 	if (ret)
 		return ret;
@@ -1676,9 +1667,6 @@ static int cs40l2x_dig_scale_set(struct cs40l2x_private *cs40l2x,
 {
 	int ret;
 	unsigned int val;
-
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
 
 	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
 		return -EINVAL;
@@ -1751,9 +1739,6 @@ static int cs40l2x_gpio1_dig_scale_get(struct cs40l2x_private *cs40l2x,
 	int ret;
 	unsigned int val;
 
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
 					CS40L2X_XM_UNPACKED_TYPE), &val);
@@ -1769,9 +1754,6 @@ static int cs40l2x_gpio1_dig_scale_get(struct cs40l2x_private *cs40l2x,
 static int cs40l2x_gpio1_dig_scale_set(struct cs40l2x_private *cs40l2x,
 			unsigned int dig_scale)
 {
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
 		return -EINVAL;
 
@@ -1834,9 +1816,6 @@ static int cs40l2x_cp_dig_scale_get(struct cs40l2x_private *cs40l2x,
 	int ret;
 	unsigned int val;
 
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
 					CS40L2X_XM_UNPACKED_TYPE), &val);
@@ -1852,9 +1831,6 @@ static int cs40l2x_cp_dig_scale_get(struct cs40l2x_private *cs40l2x,
 static int cs40l2x_cp_dig_scale_set(struct cs40l2x_private *cs40l2x,
 			unsigned int dig_scale)
 {
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
 		return -EINVAL;
 
@@ -1968,9 +1944,6 @@ static int cs40l2x_refclk_switch(struct cs40l2x_private *cs40l2x,
 	unsigned int refclk_sel, pll_config;
 	int ret;
 
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	refclk_sel = (refclk_freq == CS40L2X_PLL_REFCLK_FREQ_32K) ?
 			CS40L2X_PLL_REFCLK_SEL_MCLK :
 			CS40L2X_PLL_REFCLK_SEL_BCLK;
@@ -2002,9 +1975,6 @@ static int cs40l2x_asp_switch(struct cs40l2x_private *cs40l2x, bool enable)
 {
 	unsigned int val;
 	int ret;
-
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
 
 	ret = regmap_read(cs40l2x->regmap, CS40L2X_SP_ENABLES, &val);
 	if (ret)
@@ -2357,9 +2327,6 @@ static int cs40l2x_stop_playback(struct cs40l2x_private *cs40l2x)
 {
 	int ret, i;
 
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	for (i = 0; i < CS40L2X_ENDPLAYBACK_RETRIES; i++) {
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "ENDPLAYBACK",
@@ -2381,10 +2348,6 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
 
-	/* this function expects to be called from a locked worker function */
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	hrtimer_cancel(&cs40l2x->pbq_timer);
 
 	ret = cs40l2x_stop_playback(cs40l2x);
@@ -2404,10 +2367,6 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 {
 	unsigned int tag, mag, cp_dig_scale;
 	int ret, i;
-
-	/* this function expects to be called from a locked worker function */
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
 
 	do {
 		/* restart queue as necessary */
@@ -2569,10 +2528,6 @@ static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 	struct regmap *regmap = cs40l2x->regmap;
 	int ret;
 
-	/* this function expects to be called from a locked worker function */
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
-
 	if (cs40l2x->diag_state != CS40L2X_DIAG_STATE_RUN)
 		return -ENODATA;
 
@@ -2596,9 +2551,6 @@ static int cs40l2x_peak_capture(struct cs40l2x_private *cs40l2x)
 	struct regmap *regmap = cs40l2x->regmap;
 	int vmon_max, vmon_min, imon_max, imon_min;
 	int ret;
-
-	if (!mutex_is_locked(&cs40l2x->lock))
-		return -EACCES;
 
 	/* VMON min and max are returned as 24-bit two's-complement values */
 	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
