@@ -18,5 +18,6 @@
 / {
 	model = "Google Inc. MSM sm8150 Jaws";
 	compatible = "google,floral-sm8150", "qcom,sm8150";
+	qcom,msm-id = <339 0x10000>;
 	qcom,board-id = <0x050005 0>;
 };

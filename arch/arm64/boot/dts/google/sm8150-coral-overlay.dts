@@ -18,5 +18,6 @@
 / {
 	model = "Google Inc. MSM sm8150 Coral proto";
 	compatible = "google,floral-sm8150", "qcom,sm8150";
+	qcom,msm-id = <339 0x20000>;
 	qcom,board-id = <0x050105 0>;
 };
