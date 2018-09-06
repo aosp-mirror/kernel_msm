@@ -33,7 +33,6 @@
 #include "sm8150-floral-rainbow.dtsi"
 #include "sm8150-floral-regulator.dtsi"
 #include "sm8150-floral-thermal.dtsi"
-#include "sm8150-floral-touch.dtsi"
 #include "sm8150-floral-vadc.dtsi"
 
 &vendor {

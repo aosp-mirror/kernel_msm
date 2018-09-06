@@ -15,4 +15,5 @@
 #include "sm8150-floral-jaws-haptics.dtsi"
 #include "sm8150-floral-jaws-qup.dtsi"
 #include "sm8150-floral-display-jaws.dtsi"
+#include "sm8150-floral-jaws-touch.dtsi"
 
