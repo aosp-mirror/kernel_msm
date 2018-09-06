@@ -3117,7 +3117,7 @@ static void test_set_data(void)
 
 	/* data 6 */
 	if (f54->query.has_interference_metric) {
-		rmi4_data->f54_im_offset = reg_addr;
+		rmi4_data->f54_im_address = reg_addr;
 		reg_addr += 2;
 	}
 
@@ -3139,7 +3139,7 @@ static void test_set_data(void)
 	/* data 10 */
 	if (f54->query.has_multi_metric_state_machine |
 			f54->query.has_noise_state) {
-		rmi4_data->f54_ns_offset = reg_addr;
+		rmi4_data->f54_ns_address = reg_addr;
 		reg_addr++;
 	}
 
@@ -3157,7 +3157,7 @@ static void test_set_data(void)
 
 	/* data 14 */
 	if (f54->query_13.has_cidim) {
-		rmi4_data->f54_cidim_offset = reg_addr;
+		rmi4_data->f54_cidim_address = reg_addr;
 		reg_addr++;
 	}
 
@@ -3171,7 +3171,7 @@ static void test_set_data(void)
 
 	/* data 17 */
 	if (f54->query_16.has_data17) {
-		rmi4_data->f54_freq_offset = reg_addr;
+		rmi4_data->f54_freq_address = reg_addr;
 		reg_addr++;
 	}
 

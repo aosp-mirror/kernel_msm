@@ -1036,7 +1036,7 @@ static ssize_t synaptics_rmi4_irq_status_store(struct device *dev,
 	pr_info("%s: interrupt %s\n", __func__,
 			(rmi4_data->irq_enabled) ? "enable" : "disable");
 
-		mutex_unlock(&(rmi4_data->rmi4_irq_enable_mutex));
+	mutex_unlock(&(rmi4_data->rmi4_irq_enable_mutex));
 
 	return count;
 }
@@ -1204,8 +1204,7 @@ static int synaptics_rmi4_get_noise_state(struct synaptics_rmi4_data *rmi4_data)
 	struct synaptics_rmi4_noise_state noise_state;
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
-			rmi4_data->f54_data_base_addr +
-			rmi4_data->f54_im_offset,
+			rmi4_data->f54_im_address,
 			data, sizeof(data));
 	if (retval < 0)
 		return retval;
@@ -1213,8 +1212,7 @@ static int synaptics_rmi4_get_noise_state(struct synaptics_rmi4_data *rmi4_data)
 	noise_state.im = (data[1] << 8) | data[0];
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
-			rmi4_data->f54_data_base_addr +
-			rmi4_data->f54_ns_offset,
+			rmi4_data->f54_ns_address,
 			data, sizeof(data[0]));
 	if (retval < 0)
 		return retval;
@@ -1222,8 +1220,7 @@ static int synaptics_rmi4_get_noise_state(struct synaptics_rmi4_data *rmi4_data)
 	noise_state.ns = data[0];
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
-			rmi4_data->f54_data_base_addr +
-			rmi4_data->f54_cidim_offset,
+			rmi4_data->f54_cidim_address,
 			data, sizeof(data));
 	if (retval < 0)
 		return retval;
@@ -1231,8 +1228,7 @@ static int synaptics_rmi4_get_noise_state(struct synaptics_rmi4_data *rmi4_data)
 	noise_state.cidim = (data[1] << 8) | data[0];
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
-			rmi4_data->f54_data_base_addr +
-			rmi4_data->f54_freq_offset,
+			rmi4_data->f54_freq_address,
 			data, sizeof(data[0]));
 	if (retval < 0)
 		return retval;

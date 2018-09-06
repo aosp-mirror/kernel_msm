@@ -436,10 +436,10 @@ struct synaptics_rmi4_data {
 	unsigned short f54_cmd_base_addr;
 	unsigned short f54_ctrl_base_addr;
 	unsigned short f54_data_base_addr;
-	unsigned short f54_im_offset;
-	unsigned short f54_ns_offset;
-	unsigned short f54_cidim_offset;
-	unsigned short f54_freq_offset;
+	unsigned short f54_im_address;
+	unsigned short f54_ns_address;
+	unsigned short f54_cidim_address;
+	unsigned short f54_freq_address;
 	unsigned short tp_vendor;
 #ifdef F51_DISCRETE_FORCE
 	unsigned short f51_query_base_addr;
