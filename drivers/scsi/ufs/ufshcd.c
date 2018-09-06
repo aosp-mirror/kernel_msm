@@ -154,9 +154,6 @@ static void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
 	u64 **tag_stats = hba->ufs_stats.tag_stats;
 	int rq_type;
 
-	if (!hba->ufs_stats.enabled)
-		return;
-
 	tag_stats[tag][TS_TAG]++;
 	if (!rq || !(rq->cmd_type & REQ_TYPE_FS))
 		return;
