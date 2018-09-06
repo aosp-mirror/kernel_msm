@@ -73,7 +73,7 @@
 /* #define ENGINEERING_CODE */
 /* Initialization of CX memory allowed on the phone */
 /* #define COMPUTE_CX_ON_PHONE */
-/* #define PRE_SAVED_METHOD */
+#define PRE_SAVED_METHOD
 
 /*#define FW_H_FILE*/			/* include the FW data as header file */
 #ifdef FW_H_FILE
