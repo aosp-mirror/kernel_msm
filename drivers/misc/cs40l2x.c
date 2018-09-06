@@ -1691,6 +1691,73 @@ err_mutex:
 	return ret;
 }
 
+static ssize_t cs40l2x_f0_offset_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "F0_OFFSET",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_f0_offset_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val > CS40L2X_F0_OFFSET_POS_MAX && val < CS40L2X_F0_OFFSET_NEG_MIN)
+		return -EINVAL;
+
+	if (val > CS40L2X_F0_OFFSET_NEG_MAX)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "F0_OFFSET",
+					CS40L2X_XM_UNPACKED_TYPE), val);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
 static ssize_t cs40l2x_redc_measured_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -2470,6 +2537,8 @@ static DEVICE_ATTR(standby_timeout, 0660, cs40l2x_standby_timeout_show,
 static DEVICE_ATTR(f0_measured, 0660, cs40l2x_f0_measured_show, NULL);
 static DEVICE_ATTR(f0_stored, 0660, cs40l2x_f0_stored_show,
 		cs40l2x_f0_stored_store);
+static DEVICE_ATTR(f0_offset, 0660, cs40l2x_f0_offset_show,
+		cs40l2x_f0_offset_store);
 static DEVICE_ATTR(redc_measured, 0660, cs40l2x_redc_measured_show, NULL);
 static DEVICE_ATTR(redc_stored, 0660, cs40l2x_redc_stored_show,
 		cs40l2x_redc_stored_store);
@@ -2512,6 +2581,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_standby_timeout.attr,
 	&dev_attr_f0_measured.attr,
 	&dev_attr_f0_stored.attr,
+	&dev_attr_f0_offset.attr,
 	&dev_attr_redc_measured.attr,
 	&dev_attr_redc_stored.attr,
 	&dev_attr_q_index.attr,

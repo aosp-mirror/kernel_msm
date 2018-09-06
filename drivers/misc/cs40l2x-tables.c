@@ -981,14 +981,14 @@ const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
 	},
 	{
 		.id = CS40L2X_FW_ID_REMAP,
-		.min_rev = 0x060000,
+		.min_rev = 0x070000,
 		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_remap),
 		.coeff_files = cs40l2x_coeff_files_remap,
 		.fw_file = "cs40l25a.wmfw",
 	},
 	{
 		.id = CS40L2X_FW_ID_CAL,
-		.min_rev = 0x060000,
+		.min_rev = 0x070000,
 		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_cal),
 		.coeff_files = cs40l2x_coeff_files_cal,
 		.fw_file = "cs40l25a_cal.wmfw",

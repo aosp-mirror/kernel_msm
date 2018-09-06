@@ -915,6 +915,11 @@
 
 #define CS40L2X_PEAK_DELAY_MS		100
 
+#define CS40L2X_F0_OFFSET_POS_MIN	0x000000
+#define CS40L2X_F0_OFFSET_POS_MAX	0x190000  /* +100 Hz */
+#define CS40L2X_F0_OFFSET_NEG_MIN	0xE70000  /* -100 Hz */
+#define CS40L2X_F0_OFFSET_NEG_MAX	0xFFFFFF
+
 #define CS40L2X_Q_INDEX_MAX 		18
 
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
