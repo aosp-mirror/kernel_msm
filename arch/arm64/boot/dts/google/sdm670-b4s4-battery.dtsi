@@ -52,3 +52,7 @@
 		};
 	};
 };
+
+&bcl_sensor {
+	google,bat-power-supply = "bms";
+};
