@@ -135,6 +135,7 @@
 		qcom,nq-firm = <&msm_gpio 38 0x00>;
 		qcom,nq-esepwr = <&msm_gpio 51 0x00>;
 		qcom,nq-clkreq = <&pm660_gpios 4 0x00>;
+		vdd-mfi-supply = <&pm660_l17>;
 		qcom,clk-src = "BBCLK3";
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <50 0>;

@@ -279,9 +279,9 @@
 	rpm-regulator-ldoa17 {
 		status = "okay";
 		pm660_l17: regulator-l17 {
-			regulator-min-microvolt = <2700000>;
-			regulator-max-microvolt = <2700000>;
-			qcom,init-voltage = <2700000>;
+			regulator-min-microvolt = <2750000>;
+			regulator-max-microvolt = <2750000>;
+			qcom,init-voltage = <2750000>;
 			status = "okay";
 		};
 	};

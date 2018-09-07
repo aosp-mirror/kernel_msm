@@ -25,10 +25,11 @@
 #include <linux/uaccess.h>
 #include "nq-nci.h"
 #include <linux/clk.h>
+#include <linux/regulator/consumer.h>
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
 #endif
-
+extern char *saved_command_line;
 struct nqx_platform_data {
 	unsigned int irq_gpio;
 	unsigned int en_gpio;
@@ -76,6 +77,7 @@ struct nqx_dev {
 	/* read buffer*/
 	size_t kbuflen;
 	u8 *kbuf;
+	struct regulator *mfi_ldo;
 	struct nqx_platform_data *pdata;
 };
 
@@ -92,6 +94,8 @@ static struct notifier_block nfcc_notifier = {
 };
 
 unsigned int	disable_ctrl;
+/*PCB build phase ID*/
+int bp_id;
 
 static void nqx_init_stat(struct nqx_dev *nqx_dev)
 {
@@ -840,6 +844,21 @@ static inline int gpio_input_init(const struct device * const dev,
 	return r;
 }
 
+static int get_pcb_build_phase(struct device *dev)
+{
+	char * str_p;
+	int pcb_bp_id;
+
+	str_p =strnstr( saved_command_line, "BuildPhase=",
+                        strlen(saved_command_line));
+        if (str_p) {
+		int rt;
+		rt = sscanf(str_p, "BuildPhase=%d", &pcb_bp_id);
+		return pcb_bp_id;
+        }
+	return -EINVAL;
+}
+
 static int nqx_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -849,6 +868,7 @@ static int nqx_probe(struct i2c_client *client,
 	struct nqx_dev *nqx_dev;
 
 	dev_dbg(&client->dev, "%s: enter\n", __func__);
+
 	if (client->dev.of_node) {
 		platform_data = devm_kzalloc(&client->dev,
 			sizeof(struct nqx_platform_data), GFP_KERNEL);
@@ -881,6 +901,29 @@ static int nqx_probe(struct i2c_client *client,
 		r = -ENOMEM;
 		goto err_free_data;
 	}
+
+        bp_id = get_pcb_build_phase(&client->dev);
+        if (bp_id < 3)
+        {
+                nqx_dev->mfi_ldo = regulator_get(&client->dev, "vdd-mfi");
+                if (IS_ERR_OR_NULL(nqx_dev->mfi_ldo)) {
+                        pr_err("Unable to get regulator for mfi ldo\n");
+                        return PTR_ERR(nqx_dev->mfi_ldo);
+                }
+
+                r = regulator_set_voltage(nqx_dev->mfi_ldo, 2750000, 2750000);
+
+                if (r){
+                        pr_err("Failed to request mfi voltage.\n");
+                }
+
+                r = regulator_enable(nqx_dev->mfi_ldo);
+                if (r){
+                        pr_err("Failed to request mfi voltage.\n");
+                }
+        }
+
+
 	nqx_dev->client = client;
 	nqx_dev->kbuflen = MAX_BUFFER_SIZE;
 	nqx_dev->kbuf = kzalloc(MAX_BUFFER_SIZE, GFP_KERNEL);
@@ -1123,6 +1166,36 @@ err_platform_data:
 	return r;
 }
 
+static void nqx_shutdown(struct i2c_client *client)
+{
+        struct nqx_dev *nqx_dev;
+
+        nqx_dev = i2c_get_clientdata(client);
+        if (!nqx_dev) {
+                dev_err(&client->dev,
+                "%s: device doesn't exist anymore\n", __func__);
+        }
+
+        unregister_reboot_notifier(&nfcc_notifier);
+        free_irq(client->irq, nqx_dev);
+        misc_deregister(&nqx_dev->nqx_device);
+        mutex_destroy(&nqx_dev->read_mutex);
+        gpio_free(nqx_dev->clkreq_gpio);
+        /* optional gpio, not sure was configured in probe */
+        if (nqx_dev->ese_gpio > 0)
+                gpio_free(nqx_dev->ese_gpio);
+        gpio_free(nqx_dev->firm_gpio);
+        gpio_free(nqx_dev->irq_gpio);
+        gpio_free(nqx_dev->en_gpio);
+        if(bp_id < 3)
+                regulator_disable(nqx_dev->mfi_ldo);
+        kfree(nqx_dev->kbuf);
+        if (client->dev.of_node)
+                devm_kfree(&client->dev, nqx_dev->pdata);
+
+        kfree(nqx_dev);
+}
+
 static int nqx_remove(struct i2c_client *client)
 {
 	int ret = 0;
@@ -1147,6 +1220,8 @@ static int nqx_remove(struct i2c_client *client)
 	gpio_free(nqx_dev->firm_gpio);
 	gpio_free(nqx_dev->irq_gpio);
 	gpio_free(nqx_dev->en_gpio);
+	if(bp_id < 3)
+		regulator_disable(nqx_dev->mfi_ldo);
 	kfree(nqx_dev->kbuf);
 	if (client->dev.of_node)
 		devm_kfree(&client->dev, nqx_dev->pdata);
@@ -1193,6 +1268,7 @@ static struct i2c_driver nqx = {
 	.id_table = nqx_id,
 	.probe = nqx_probe,
 	.remove = nqx_remove,
+	.shutdown = nqx_shutdown,
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "nq-nci",
