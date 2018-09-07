@@ -38,6 +38,20 @@ struct packet_header {
 	uint16_t length;
 };
 
+/* Internal data structure mainly for buffer allocation */
+struct airbrush_spi_client {
+	struct spi_device *spi_device;
+
+	uint8_t *tx_buff_onetime;
+	uint8_t *rx_buff_onetime;
+
+	uint8_t *tx_buff_for_cmd;
+	uint8_t *rx_buff_for_cmd;
+
+	size_t buff_len_onetime;
+	size_t buff_len_for_cmd;
+};
+
 int airbrush_spi_command_code[] = {
 	[AB_SPI_CMD_FSM_READ_SINGLE]	= 0x02,
 	[AB_SPI_CMD_FSM_WRITE_SINGLE]	= 0x03,
@@ -170,19 +184,35 @@ static bool send_to_fsm(struct airbrush_spi_packet *pkt, char *tx_buff,
 	return true;
 }
 
+/*
+ * Send a byte with 0x00 and read one byte.
+ * Returns read value.
+ */
 static uint8_t send_dummy_byte(void)
 {
-	uint8_t tx_buff, rx_buff;
+	struct airbrush_spi_client *client;
+	uint8_t *tx_buff;
+	uint8_t *rx_buff;
 
-	tx_buff = 0x00;
-	airbrush_spi_send(&tx_buff, &rx_buff, 1);
-	return rx_buff;
+	client = spi_get_drvdata(abc_spi_dev);
+	tx_buff = client->tx_buff_onetime;
+	rx_buff = client->rx_buff_onetime;
+
+	*tx_buff = 0x00;
+	airbrush_spi_send(tx_buff, rx_buff, 1);
+	return *rx_buff;
 }
 
 int airbrush_spi_run_cmd(struct airbrush_spi_packet *pkt)
 {
-	uint8_t tx_buff[16], rx_buff[16];
+	struct airbrush_spi_client *client;
+	uint8_t *tx_buff;
+	uint8_t *rx_buff;
 	uint32_t *result = pkt->data;
+
+	client = spi_get_drvdata(abc_spi_dev);
+	tx_buff = client->tx_buff_for_cmd;
+	rx_buff = client->rx_buff_for_cmd;
 
 	/* validate packet */
 	if (!is_valid_packet(pkt))
@@ -231,9 +261,61 @@ static const struct of_device_id airbrush_spi_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, airbrush_spi_of_match);
 
+/*
+ * Allocate Resource-managed memory as SPI buffer.
+ *
+ * Returns 0 on success, -ENOMEM on failure.
+ */
+static int airbrush_spi_client_alloc_buf(struct airbrush_spi_client *client)
+{
+	client->buff_len_onetime = 1;  /* single read/write */
+	client->buff_len_for_cmd = 16; /* sufficient for a cmd */
+
+	/* Allocate for both tx and rx */
+	client->tx_buff_onetime = devm_kmalloc(
+					&client->spi_device->dev,
+					2 * client->buff_len_onetime,
+					GFP_KERNEL | GFP_DMA);
+	if (client->tx_buff_onetime == NULL)
+		return -ENOMEM;
+	client->rx_buff_onetime = client->tx_buff_onetime +
+					client->buff_len_onetime;
+
+
+	/* Allocate for both tx and rx */
+	client->tx_buff_for_cmd = devm_kmalloc(
+					&client->spi_device->dev,
+					2 * client->buff_len_for_cmd,
+					GFP_KERNEL | GFP_DMA);
+	if (client->tx_buff_for_cmd == NULL)
+		return -ENOMEM;
+	client->rx_buff_for_cmd = client->tx_buff_onetime +
+					client->buff_len_for_cmd;
+
+	return 0;
+}
+
 static int airbrush_spi_probe(struct spi_device *spi)
 {
+	struct airbrush_spi_client *client;
+	int ret;
+
 	abc_spi_dev = spi;
+
+	client = devm_kzalloc(&abc_spi_dev->dev,
+			      sizeof(struct airbrush_spi_client),
+			      GFP_KERNEL);
+	if (!client)
+		return -ENOMEM;
+
+	client->spi_device = spi;
+
+	ret = airbrush_spi_client_alloc_buf(client);
+	if (ret)
+		return ret;
+
+	spi_set_drvdata(spi, client);
+
 	return 0;
 }
 
