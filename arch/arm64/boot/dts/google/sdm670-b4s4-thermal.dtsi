@@ -169,4 +169,28 @@
 			};
 		};
 	};
+
+	pm660l_tz {
+		disable-thermal-zone;
+	};
+
+	aoss0-usr {
+		status = "disabled";
+	};
+
+	aoss1-usr {
+		status = "disabled";
+	};
+
+	gpu-virt-max-step {
+		status = "disabled";
+	};
+
+	hexa-silv-max-step {
+		status = "disabled";
+	};
+
+	dual-gold-max-step {
+		status = "disabled";
+	};
 };
