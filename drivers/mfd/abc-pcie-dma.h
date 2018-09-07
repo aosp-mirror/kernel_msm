@@ -20,7 +20,7 @@
 /* maximum number of elements per list */
 #define DMA_LL_LENGTH 256
 /* maximum supported number of lists */
-#define MAX_LL_ELEMENT 64
+#define MAX_LL_ELEMENT 128
 /* linked list headers */
 #define LL_DATA_ELEMENT         0x1
 #define LL_IRQ_DATA_ELEMENT     0x9
