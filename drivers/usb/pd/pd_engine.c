@@ -1317,9 +1317,6 @@ static const struct tcpc_config pd_tcpc_config = {
 	.nr_src_pdo = ARRAY_SIZE(src_pdo),
 	.snk_pdo = snk_pdo,
 	.nr_snk_pdo = ARRAY_SIZE(snk_pdo),
-	.max_snk_mv = 9000,
-	.max_snk_ma = 3000,
-	.max_snk_mw = 27000,
 	.operating_snk_mw = 7600,
 	.type = TYPEC_PORT_DRP,
 	.default_role = TYPEC_SINK,
@@ -1344,7 +1341,6 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
 	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
-	pd_tcpc_dev->mux = NULL;
 }
 
 static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
