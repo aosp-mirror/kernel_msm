@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-floral-common.dtsi"
-#include "sm8150-flame-audio.dtsi"
-
+/* sound card */
+&snd_8150 {
+	qcom,model = "sm8150-iaxxx-coral-snd-card";
+};

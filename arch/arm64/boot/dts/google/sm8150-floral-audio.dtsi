@@ -16,12 +16,12 @@
 	cs35l36_pins {
 		cs35l36_reset_top: cs35l36_reset_top {
 			mux {
-				pins = "gpio128";
+				pins = "gpio35";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio128";
+				pins = "gpio35";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -29,12 +29,12 @@
 
 		cs35l36_irq_top: cs35l36_irq_top {
 			mux {
-				pins = "gpio125";
+				pins = "gpio36";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio125";
+				pins = "gpio36";
 				drive-strength = <2>;
 				bias-pull-up;
 			};
@@ -173,13 +173,13 @@
 	};
 };
 
-&qupv3_se4_spi_active {
+&qupv3_se11_spi_active {
 	config {
 		drive-strength = <16>;
 	};
 };
 
-&qupv3_se4_spi_sleep {
+&qupv3_se11_spi_sleep {
 	config {
 		drive-strength = <16>;
 	};
@@ -191,9 +191,9 @@
 };
 
 /* knowles IA8508 SPI1 */
-&qupv3_se4_spi {
+&qupv3_se11_spi {
 	status = "ok";
-	pinctrl-1 = <&qupv3_se4_spi_active>;
+	pinctrl-1 = <&qupv3_se11_spi_active>;
 	iaxxxspi1: iaxxx@0 {
 		compatible = "knowles,iaxxx-spi";
 		reg = <0>;
@@ -244,10 +244,10 @@
 
 /* sound card */
 &audio_apr {
-	snd_8150 {
+	snd_8150: snd_8150 {
 		compatible = "qcom,sm8150-asoc-snd";
 
-		qcom,model = "sm8150-iaxxx-snd-card";
+		qcom,model = "sm8150-iaxxx-floral-snd-card";
 
 		qcom,audio-routing = "AIF4 VI", "MCLK";
 
@@ -348,10 +348,6 @@
 };
 
 &snd_934x {
-	status = "disabled";
-};
-
-&qupv3_se4_i2c {
 	status = "disabled";
 };
 

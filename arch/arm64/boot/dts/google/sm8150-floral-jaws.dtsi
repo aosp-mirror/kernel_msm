@@ -11,6 +11,7 @@
  */
 
 #include "sm8150-floral-common.dtsi"
+#include "sm8150-floral-jaws-audio.dtsi"
 #include "sm8150-floral-jaws-citadel.dtsi"
 #include "sm8150-floral-jaws-haptics.dtsi"
 #include "sm8150-floral-jaws-qup.dtsi"
