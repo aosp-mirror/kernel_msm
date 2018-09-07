@@ -1663,6 +1663,12 @@ static void msm_otg_notify_host_mode(struct msm_otg *motg, bool host_mode)
 
 static int msm_otg_notify_chg_type(struct msm_otg *motg)
 {
+	static const char * const chg_type_text[] = {
+		"Unknown", "Battery", "UPS", "Mains", "USB",
+		"USB_DCP", "USB_CDP", "USB_ACA",
+		"USB_HVDCP", "USB_HVDCP_3", "Wireless", "BMS", "USB_Parallel",
+		"Wipower", "TYPEC", "TYPEC_UFP", "TYPEC_DFP"
+	};
 	static int charger_type;
 
 	/*
@@ -1688,7 +1694,8 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 		return -EINVAL;
 	}
 
-	pr_debug("setting usb power supply type %d\n", charger_type);
+	dev_info(motg->phy.dev, "%s: setting usb power supply type %d(%s)\n",
+		__func__, charger_type, chg_type_text[charger_type]);
 	msm_otg_dbg_log_event(&motg->phy, "SET USB PWR SUPPLY TYPE",
 			motg->chg_type, charger_type);
 	power_supply_set_supply_type(psy, charger_type);
@@ -3496,7 +3503,7 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 			motg->chg_state = USB_CHG_STATE_DETECTED;
 		}
 
-		dev_dbg(motg->phy.dev, "%s: charger type = %s\n", __func__,
+		dev_info(motg->phy.dev, "%s: charger type = %s\n", __func__,
 			chg_to_string(motg->chg_type));
 		msm_otg_dbg_log_event(&motg->phy, "SET CHARGER TYPE ",
 				motg->chg_type, psy->type);
