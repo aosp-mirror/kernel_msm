@@ -1,0 +1,416 @@
+/*
+ * JQS management support for the Paintbox programmable IPU
+ *
+ * Copyright (C) 2018 Google, Inc.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <linux/delay.h>
+#include <linux/firmware.h>
+#include <linux/ipu-core.h>
+#include <linux/ipu-jqs-messages.h>
+#include <linux/types.h>
+
+#include "ipu-core-internal.h"
+#include "ipu-core-jqs.h"
+#include "ipu-core-jqs-msg-transport.h"
+#include "ipu-core-jqs-preamble.h"
+#include "ipu-regs.h"
+
+#define JQS_FIRMWARE_NAME "paintbox-jqs.fw"
+
+#define A0_IPU_DEFAULT_CLOCK_RATE 549000000 /* hz */
+
+/* Delay for I/O block to wake up */
+#define IO_POWER_RAMP_TIME 10 /* us */
+
+/* Delay to prevent in-rush current */
+#define CORE_POWER_RAMP_TIME 10 /* us */
+
+/* Delay for rams to wake up */
+#define RAM_POWER_RAIL_RAMP_TIME 1 /* us */
+
+/* Delay for system to stabilize before sending real traffic */
+#define CORE_SYSTEM_STABLIZE_TIME 100 /* us */
+
+static int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
+		uint32_t clock_rate_hz)
+{
+	struct jqs_message_clock_rate req;
+
+	dev_dbg(bus->parent_dev, "%s: clock rate %u\n", __func__,
+			clock_rate_hz);
+
+	INIT_JQS_MSG(req, JQS_MESSAGE_TYPE_CLOCK_RATE);
+
+	req.clock_rate = clock_rate_hz;
+
+	return ipu_core_jqs_msg_transport_kernel_write(bus,
+			(const struct jqs_message *)&req);
+}
+
+static int ipu_core_jqs_send_set_log_info(struct paintbox_bus *bus,
+		enum jqs_log_level log_level,
+		enum jqs_log_level interrupt_level,
+		uint32_t log_sinks, uint32_t uart_baud_rate)
+{
+	struct jqs_message_set_log_info req;
+
+	dev_dbg(bus->parent_dev,
+			"%s: log sinks 0x%08x log level %u log int level %u uart baud_rate %u\n",
+			__func__, log_sinks, log_level, interrupt_level,
+			uart_baud_rate);
+
+	INIT_JQS_MSG(req, JQS_MESSAGE_TYPE_SET_LOG_INFO);
+
+	req.log_level = log_level;
+	req.interrupt_level = interrupt_level;
+	req.log_sinks = log_sinks;
+	req.uart_baud_rate = uart_baud_rate;
+
+	return ipu_core_jqs_msg_transport_kernel_write(bus,
+			(const struct jqs_message *)&req);
+}
+
+static int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
+{
+	struct jqs_firmware_preamble preamble;
+	size_t fw_binary_len_bytes;
+	int ret;
+
+	memcpy(&preamble, bus->fw->data, min(sizeof(preamble), bus->fw->size));
+
+	if (preamble.magic != JQS_PREAMBLE_MAGIC_WORD) {
+		dev_err(bus->parent_dev,
+			"%s: invalid magic in JQS firmware preamble\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	dev_dbg(bus->parent_dev,
+			"%s: size %u fw_base_address 0x%08x FW and working set size %u prefill transport offset bytes %u\n",
+			__func__, preamble.size, preamble.fw_base_address,
+			preamble.fw_and_working_set_bytes,
+			preamble.prefill_transport_offset_bytes);
+
+	/* TODO(ahampson):  It would be good to have some sort of bounds
+	 * checking to make sure that the firmware could not allocate an
+	 * unreasonable amount of memory for its working set.
+	 *
+	 * TODO(ahampson):  The firmware is compiled for a specific address in
+	 * AB DRAM.  This will necessitate having a carveout region in AB DRAM
+	 * so we can guarantee the address.
+	 */
+	ret = bus->ops->alloc(bus->parent_dev,
+			preamble.fw_and_working_set_bytes,
+			&bus->fw_shared_buffer);
+	if (ret < 0)
+		return ret;
+
+	fw_binary_len_bytes = bus->fw->size -
+			sizeof(struct jqs_firmware_preamble);
+
+	memcpy(bus->fw_shared_buffer.host_vaddr, bus->fw->data +
+			sizeof(struct jqs_firmware_preamble),
+			fw_binary_len_bytes);
+
+	bus->ops->sync(bus->parent_dev, &bus->fw_shared_buffer, 0,
+			fw_binary_len_bytes, DMA_TO_DEVICE);
+
+	bus->fw_status = JQS_FW_STATUS_RAM_STAGED;
+
+	return 0;
+}
+
+static void ipu_core_jqs_start_firmware(struct paintbox_bus *bus,
+		dma_addr_t boot_ab_paddr, dma_addr_t smem_ab_paddr)
+{
+	/* The Airbrush IPU needs to be put in reset before turning on the
+	 * I/O block.
+	 */
+	ipu_core_writel(bus, SOFT_RESET_IPU_MASK, IPU_CSR_AON_OFFSET +
+			SOFT_RESET);
+
+	ipu_core_writel(bus, JQS_CACHE_ENABLE_I_CACHE_MASK |
+			JQS_CACHE_ENABLE_D_CACHE_MASK,
+			IPU_CSR_AON_OFFSET + JQS_CACHE_ENABLE);
+
+	ipu_core_writel(bus, (uint32_t)boot_ab_paddr, IPU_CSR_AON_OFFSET +
+			JQS_BOOT_ADDR);
+
+	/* Pre-power the I/O block and then enable power */
+	ipu_core_writeq(bus, IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
+			IO_POWER_ON_N);
+	ipu_core_writeq(bus, 0, IPU_CSR_AON_OFFSET + IO_POWER_ON_N);
+
+	udelay(IO_POWER_RAMP_TIME);
+
+	/* We need to run the clock to the I/O block while it is being powered
+	 * on briefly so that all the synchronizers clock through their data and
+	 * all the Xs (or random values in the real HW) clear. Then we need to
+	 * turn the clock back off so that we can meet timing on the RAM SD pin
+	 * -- the setup & hold on the RAM's SD pin is significantly longer than
+	 * 1 clock cycle.
+	 */
+	ipu_core_writel(bus, IPU_IO_SWITCHED_CLK_EN_VAL_MASK,
+			IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
+
+	/* Power on RAMs for I/O block */
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IO_RAM_ON_N);
+	udelay(RAM_POWER_RAIL_RAMP_TIME);
+
+	/* Turn on clocks to I/O block */
+	ipu_core_writel(bus, IPU_IO_SWITCHED_CLK_EN_VAL_MASK,
+			IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
+
+	/* Turn off isolation for I/O block */
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IO_ISO_ON);
+
+	/* Take the IPU out of reset. */
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + SOFT_RESET);
+
+	ipu_core_writel(bus, (uint32_t)smem_ab_paddr, IPU_CSR_JQS_OFFSET +
+			SYS_JQS_GPR_0);
+
+	/* Enable the JQS */
+	ipu_core_writel(bus, JQS_CONTROL_CORE_FETCH_EN_MASK,
+			IPU_CSR_AON_OFFSET + JQS_CONTROL);
+}
+
+static void ipu_core_jqs_start_rom_firmware(struct paintbox_bus *bus)
+{
+	dev_dbg(bus->parent_dev, "enabling ROM firmware\n");
+	ipu_core_jqs_start_firmware(bus, JQS_BOOT_ADDR_DEF, 0);
+	bus->fw_status = JQS_FW_STATUS_ROM_RUNNING;
+
+	/* Notify paintbox devices that the firmware is up */
+	ipu_core_notify_firmware_up(bus);
+}
+
+static int ipu_core_jqs_start_ram_firmware(struct paintbox_bus *bus)
+{
+	int ret;
+
+	dev_dbg(bus->parent_dev, "enabling RAM firmware\n");
+
+	ret = ipu_core_jqs_msg_transport_init(bus);
+	if (ret < 0)
+		return ret;
+
+	ipu_core_jqs_start_firmware(bus, bus->fw_shared_buffer.jqs_paddr,
+			bus->jqs_msg_transport->shared_buf.jqs_paddr);
+
+	ret = ipu_core_jqs_send_clock_rate(bus, A0_IPU_DEFAULT_CLOCK_RATE);
+	if (ret < 0)
+		return ret;
+
+	ret = ipu_core_jqs_send_set_log_info(bus, JQS_LOG_LEVEL_INFO,
+			JQS_LOG_LEVEL_INFO, JQS_LOG_SINK_UART, 115200);
+	if (ret < 0)
+		return ret;
+
+	bus->fw_status = JQS_FW_STATUS_RAM_RUNNING;
+
+	/* Notify paintbox devices that the firmware is up */
+	ipu_core_notify_firmware_up(bus);
+
+	return 0;
+}
+
+static void ipu_core_jqs_release_resources(struct paintbox_bus *bus)
+{
+	bus->ops->free(bus->parent_dev, &bus->fw_shared_buffer);
+	if (bus->fw) {
+		release_firmware(bus->fw);
+		bus->fw = NULL;
+	}
+}
+
+int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
+{
+	int ret;
+
+	/* Firmware status will be set to INIT at boot or if Airbursh has been
+	 * turned off while running the ROM based firmware.  RAM based firmware
+	 * only needs to be requested once at boot.
+	 */
+	if (bus->fw_status == JQS_FW_STATUS_INIT) {
+		dev_dbg(bus->parent_dev, "requesting firmware %s\n",
+				JQS_FIRMWARE_NAME);
+		ret = request_firmware(&bus->fw, JQS_FIRMWARE_NAME,
+				bus->parent_dev);
+		if (ret < 0) {
+			dev_warn(bus->parent_dev,
+					"unable to load %s, defaulting to ROM based firmware, ret %d\n",
+				JQS_FIRMWARE_NAME, ret);
+			goto reset_to_rom;
+		}
+
+		bus->fw_status = JQS_FW_STATUS_RAM_REQUESTED;
+	}
+
+	/* If the firmware is in the requested state then stage it to DRAM.
+	 * Firmware status will return this state whenever Airbrush transitions
+	 * to the OFF state.
+	 */
+	if (bus->fw_status == JQS_FW_STATUS_RAM_REQUESTED) {
+		ret = ipu_core_jqs_stage_firmware(bus);
+		if (ret < 0)
+			goto reset_to_rom;
+	}
+
+	/* If the firmware has been staged then enable the firmware.  Firmware
+	 * status will return to this state for all suspend and sleep states
+	 * with the exception of OFF.
+	 */
+	if (bus->fw_status == JQS_FW_STATUS_RAM_STAGED) {
+		ret = ipu_core_jqs_start_ram_firmware(bus);
+		if (ret < 0)
+			goto reset_to_rom;
+	}
+
+	return 0;
+
+reset_to_rom:
+	ipu_core_jqs_release_resources(bus);
+	ipu_core_jqs_start_rom_firmware(bus);
+	return 0;
+}
+
+void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
+{
+	/* Notify paintbox devices that the firmware is down */
+	ipu_core_notify_firmware_down(bus);
+
+	switch (bus->fw_status) {
+	case JQS_FW_STATUS_RAM_RUNNING:
+		dev_dbg(bus->parent_dev, "disabling RAM based firmware\n");
+		ipu_core_jqs_msg_transport_shutdown(bus);
+		bus->fw_status = JQS_FW_STATUS_RAM_STAGED;
+		break;
+	case JQS_FW_STATUS_ROM_RUNNING:
+		dev_dbg(bus->parent_dev, "disabling ROM based firmware\n");
+		bus->fw_status = JQS_FW_STATUS_INIT;
+		break;
+	default:
+		return;
+	};
+
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
+
+	/* Turn on isolation for I/O block */
+	ipu_core_writel(bus, IO_ISO_ON_VAL_MASK, IPU_CSR_AON_OFFSET +
+			IO_ISO_ON);
+
+	/* Turn off clocks to I/O block */
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
+
+	/* Power off RAMs for I/O block */
+	ipu_core_writel(bus, IO_RAM_ON_N_VAL_MASK, IPU_CSR_AON_OFFSET +
+			IO_RAM_ON_N);
+
+	/* Need to briefly turn on the clocks to the I/O block to propagate the
+	 * RAM SD pin change into the RAM, then need to turn the clocks off
+	 * again, since the I/O block is being turned off.
+	 */
+	ipu_core_writel(bus, IPU_IO_SWITCHED_CLK_EN_VAL_MASK,
+			IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET +
+			IPU_IO_SWITCHED_CLK_EN);
+
+	/* Power off I/O block */
+	ipu_core_writeq(bus, IO_POWER_ON_N_PRE_MASK |
+			IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
+			IO_POWER_ON_N);
+}
+
+void ipu_core_jqs_release(struct paintbox_bus *bus)
+{
+	ipu_core_jqs_disable_firmware(bus);
+
+	ipu_core_jqs_release_resources(bus);
+}
+
+enum paintbox_jqs_status ipu_bus_get_fw_status(struct paintbox_bus *bus)
+{
+	return bus->fw_status;
+}
+
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+static inline bool ipu_core_jqs_debug_is_running(struct paintbox_bus *bus)
+{
+	return bus->fw_status == JQS_FW_STATUS_RAM_RUNNING ||
+			bus->fw_status == JQS_FW_STATUS_ROM_RUNNING;
+}
+
+static int ipu_core_jqs_debug_enable_show(struct seq_file *s, void *p)
+{
+	struct paintbox_bus *bus = s->private;
+
+	seq_printf(s, "%d\n", ipu_core_jqs_debug_is_running(bus));
+	return 0;
+}
+
+static int ipu_core_jqs_debug_enable_open(struct inode *inode,
+		struct file *file)
+{
+	return single_open(file, ipu_core_jqs_debug_enable_show,
+			inode->i_private);
+}
+
+static ssize_t ipu_core_jqs_debug_enable_write(struct file *file,
+		const char __user *user_buf, size_t count, loff_t *ppos)
+{
+	struct seq_file *s = (struct seq_file *)file->private_data;
+	struct paintbox_bus *bus = s->private;
+	int ret, val;
+
+	ret = kstrtoint_from_user(user_buf, count, 0, &val);
+	if (ret == 0) {
+		if (ipu_core_jqs_debug_is_running(bus) && val == 0)
+			ipu_core_jqs_disable_firmware(bus);
+		else if (!ipu_core_jqs_debug_is_running(bus) && val == 1)
+			ipu_core_jqs_enable_firmware(bus);
+
+		return count;
+	}
+
+	dev_err(bus->parent_dev, "%s: invalid value, err = %d", __func__, ret);
+
+	return ret < 0 ? ret : count;
+}
+
+static const struct file_operations ipu_core_jqs_enable_fops = {
+	.open = ipu_core_jqs_debug_enable_open,
+	.write = ipu_core_jqs_debug_enable_write,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.owner = THIS_MODULE,
+};
+
+void ipu_core_jqs_debug_init(struct paintbox_bus *bus)
+{
+	bus->fw_enable_dentry = debugfs_create_file("fw_enable", 0640,
+			bus->debug_root, bus, &ipu_core_jqs_enable_fops);
+	if (IS_ERR(bus->fw_enable_dentry)) {
+		dev_err(bus->parent_dev, "%s: err = %ld", __func__,
+				PTR_ERR(bus->fw_enable_dentry));
+	}
+}
+
+void ipu_core_jqs_debug_remove(struct paintbox_bus *bus)
+{
+	debugfs_remove(bus->fw_enable_dentry);
+	debugfs_remove(bus->fw_enq_dentry);
+}
+#endif

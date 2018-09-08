@@ -1,0 +1,256 @@
+/*
+ * Core driver for the Paintbox command queue
+ *
+ * Copyright (C) 2018 Google, Inc.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <linux/anon_inodes.h>
+#include <linux/err.h>
+#include <linux/fs.h>
+#include <linux/ipu-core.h>
+#include <linux/ipu-jqs-messages.h>
+#include <linux/kernel.h>
+#include <linux/list.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
+
+#include "ipu-client.h"
+#include "ipu-queue.h"
+
+struct paintbox_cmd_queue {
+	struct list_head session_entry;
+	/* can be null for orphaned cmd_queues */
+	struct paintbox_session *session;
+	struct paintbox_data *pb;
+	int queue_id;
+};
+
+/* The caller to this function must hold pb->lock */
+static int ipu_queue_jqs_send_allocate(struct paintbox_data *pb,
+		struct paintbox_session *session, uint32_t queue_id)
+{
+	struct jqs_message_alloc_queue req;
+
+	dev_dbg(pb->dev, "%s: session_id %u queue_id %u\n", __func__,
+			session->session_id, queue_id);
+
+	INIT_JQS_MSG(req, JQS_MESSAGE_TYPE_ALLOC_QUEUE);
+
+	req.session_id = session->session_id;
+	req.q_id = queue_id;
+
+	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&req);
+}
+
+/* The caller to this function must hold pb->lock */
+static int ipu_queue_jqs_send_release(struct paintbox_data *pb,
+		struct paintbox_session *session, uint32_t queue_id)
+{
+	struct jqs_message_free_queue req;
+
+	dev_dbg(pb->dev, "%s: session_id %u queue_id %u\n", __func__,
+			session->session_id, queue_id);
+
+	INIT_JQS_MSG(req, JQS_MESSAGE_TYPE_FREE_QUEUE);
+
+	req.session_id = session->session_id;
+	req.q_id = queue_id;
+
+	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&req);
+}
+
+/* The caller to this function must hold pb->lock */
+static int ipu_queue_remove_from_session(struct paintbox_data *pb,
+		struct paintbox_session *session,
+		struct paintbox_cmd_queue *cmd_queue)
+{
+	int ret;
+
+	/* Check if the session has already been removed from the session */
+	if (session == NULL)
+		return 0;
+
+	if (WARN_ON(cmd_queue->session != session))
+		return -EACCES;
+
+	list_del(&cmd_queue->session_entry);
+	cmd_queue->session = NULL;
+
+	ret = ipu_queue_jqs_send_release(pb, session, cmd_queue->queue_id);
+
+	/* Call down to the transport layer to remove the queue.  If the
+	 * message to the JQS failed then we still want to free up the queue at
+	 * the transport layer.
+	 */
+	ipu_free_queue(pb->dev, cmd_queue->queue_id);
+
+	return ret;
+}
+
+/* The caller to this function must hold pb->lock */
+int ipu_queue_session_release(struct paintbox_data *pb,
+		struct paintbox_session *session)
+{
+	struct paintbox_cmd_queue *cmd_queue, *cmd_queue_next;
+	int err, ret = 0;
+
+	list_for_each_entry_safe(cmd_queue, cmd_queue_next,
+			&session->cmd_queue_list, session_entry) {
+		err = ipu_queue_remove_from_session(pb, session, cmd_queue);
+		if (err < 0)
+			ret = err;
+	}
+
+	return ret;
+}
+
+static int ipu_queue_flush(struct file *fp, fl_owner_t id)
+{
+	struct paintbox_cmd_queue *cmd_queue = fp->private_data;
+	struct paintbox_data *pb = cmd_queue->pb;
+	int ret;
+
+	mutex_lock(&pb->lock);
+
+	ret = ipu_queue_remove_from_session(pb, cmd_queue->session, cmd_queue);
+
+	mutex_unlock(&pb->lock);
+
+	/* TODO(ahampson): An error detaching the queue from the session should
+	 * not normally occur and would likely be the result of a catastrophic
+	 * error.
+	 */
+	return ret;
+}
+
+static int ipu_queue_release(struct inode *ip, struct file *fp)
+{
+	struct paintbox_cmd_queue *cmd_queue = fp->private_data;
+	struct paintbox_data *pb = cmd_queue->pb;
+
+	mutex_lock(&pb->lock);
+
+	/* The session should have been detached in the flush() hook. */
+	if (WARN_ON(cmd_queue->session)) {
+		mutex_unlock(&pb->lock);
+		return -EINVAL;
+	}
+
+	mutex_unlock(&pb->lock);
+
+	kfree(cmd_queue);
+	fput(fp);
+
+	return 0;
+}
+
+static ssize_t ipu_queue_read(struct file *fp, char __user *buf, size_t size,
+		loff_t *offset)
+{
+	struct paintbox_cmd_queue *cmd_queue = fp->private_data;
+	struct paintbox_data *pb = cmd_queue->pb;
+
+	mutex_lock(&pb->lock);
+
+	if (cmd_queue->session == NULL) {
+		mutex_unlock(&pb->lock);
+		return -EPIPE;
+	}
+
+	mutex_unlock(&pb->lock);
+
+	return ipu_user_read(pb->dev, cmd_queue->queue_id,
+			(char __user *)buf, size);
+}
+
+static ssize_t ipu_queue_write(struct file *fp, const char __user *buf,
+		size_t size, loff_t *offset)
+{
+	struct paintbox_cmd_queue *cmd_queue = fp->private_data;
+	struct paintbox_data *pb = cmd_queue->pb;
+
+	mutex_lock(&pb->lock);
+
+	if (cmd_queue->session == NULL) {
+		mutex_unlock(&pb->lock);
+		return -EPIPE;
+	}
+
+	mutex_unlock(&pb->lock);
+
+	return ipu_user_write(pb->dev, cmd_queue->queue_id, buf, size);
+}
+
+static const struct file_operations ipu_queue_fops = {
+	.read = ipu_queue_read,
+	.write = ipu_queue_write,
+	.release = ipu_queue_release,
+	.flush = ipu_queue_flush,
+};
+
+int ipu_queue_allocate_ioctl(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned long arg)
+{
+	struct paintbox_cmd_queue *cmd_queue;
+	int ret;
+
+	cmd_queue = kzalloc(sizeof(struct paintbox_cmd_queue), GFP_KERNEL);
+	if (!cmd_queue)
+		return -ENOMEM;
+
+	mutex_lock(&pb->lock);
+
+	/* call down the the transport layer to create the queue */
+	ret = ipu_alloc_queue(pb->dev);
+	if (ret < 0) {
+		dev_err(pb->dev, "%s: queue alloc failed, queue_id %d\n",
+				__func__, ret);
+		goto release_queue_memory;
+	}
+
+	cmd_queue->queue_id = ret;
+	cmd_queue->pb = pb;
+	cmd_queue->session = session;
+
+	/* inform jqs of new queue */
+	ret = ipu_queue_jqs_send_allocate(pb, session, cmd_queue->queue_id);
+	if (ret < 0)
+		goto release_queue;
+
+	/* send the file descriptor through the return status */
+	ret = anon_inode_getfd("paintbox_cmd_queue", &ipu_queue_fops, cmd_queue,
+			O_RDWR | O_CLOEXEC);
+	if (ret < 0) {
+		dev_err(pb->dev, "%s: get fd failed ret %d", __func__, ret);
+		goto send_jqs_release;
+	}
+
+	/* attach the cmd_queue to the session */
+	list_add_tail(&cmd_queue->session_entry, &session->cmd_queue_list);
+
+	mutex_unlock(&pb->lock);
+
+	return ret;
+
+send_jqs_release:
+	ipu_queue_jqs_send_release(pb, session,  cmd_queue->queue_id);
+release_queue:
+	ipu_free_queue(pb->dev, cmd_queue->queue_id);
+release_queue_memory:
+	mutex_unlock(&pb->lock);
+	kfree(cmd_queue);
+
+	return ret;
+}
