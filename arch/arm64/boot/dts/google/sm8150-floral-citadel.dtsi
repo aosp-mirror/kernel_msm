@@ -51,13 +51,12 @@
 	status = "okay";
 	pinctrl-0 = <>;
 	pinctrl-1 = <>;
-	citadel@0 {
+	floral_citadel: citadel@0 {
 		compatible = "google,citadel";
 		interrupt-parent = <&tlmm>;
 		interrupts = <119 0x0>;
 		citadel,ctdl_ap_irq = <&tlmm 119 0x0>;
-		/* FIXME: On proto, pm8150b gpio10 is for USBC_EXTBST_EN. */
-		citadel,ctdl_rst = <&pm8150b_gpios 10 0x0>;
+		citadel,ctdl_rst = <&tlmm 59 0x0>;
 		pinctrl-names = "ap_ctdl_irq";
 		pinctrl-0 = <&ap_ctdl_irq>;
 		reg = <0>;
