@@ -18,3 +18,30 @@
 	qcom,msm-name = "QCS403";
 	qcom,msm-id = <373 0x0>;
 };
+
+&soc {
+	/delete-node/ qcom,msm-cpufreq;
+
+	msm_cpufreq: qcom,msm-cpufreq {
+		compatible = "qcom,msm-cpufreq";
+		clock-names = "cpu0_clk";
+		clocks = <&clock_cpu APCS_MUX_CLK>;
+
+		qcom,cpufreq-table =
+			 < 1113600 >,
+			 < 1267200 >,
+			 < 1401600 >;
+	};
+
+	/delete-node/ qcom,cpu0-computemon;
+
+	cpu0_computemon: qcom,cpu0-computemon {
+		compatible = "qcom,arm-cpu-mon";
+		qcom,cpulist = <&CPU0 &CPU1>;
+		qcom,target-dev = <&cpu0_cpu_ddr_latfloor>;
+		qcom,core-dev-table =
+			< 1113600 MHZ_TO_MBPS( 297, 4) >,
+			< 1267200 MHZ_TO_MBPS( 597, 4) >,
+			< 1401600 MHZ_TO_MBPS( 710, 4) >;
+	};
+};

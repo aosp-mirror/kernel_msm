@@ -973,15 +973,13 @@ static int msm_disable_all_modes(
 
 	for (i = 0; i < TEARDOWN_DEADLOCK_RETRY_MAX; i++) {
 		ret = msm_disable_all_modes_commit(dev, state);
-		if (ret != -EDEADLK)
+		if (ret != -EDEADLK || ret != -ERESTARTSYS)
 			break;
 		drm_atomic_state_clear(state);
 		drm_modeset_backoff(ctx);
 	}
 
-	/* on successful atomic commit state ownership transfers to framework */
-	if (ret != 0)
-		drm_atomic_state_put(state);
+	drm_atomic_state_put(state);
 
 	return ret;
 }
@@ -1523,9 +1521,10 @@ static int msm_release(struct inode *inode, struct file *filp)
 	struct drm_minor *minor = file_priv->minor;
 	struct drm_device *dev = minor->dev;
 	struct msm_drm_private *priv = dev->dev_private;
-	struct msm_drm_event *node, *temp;
+	struct msm_drm_event *node, *temp, *tmp_node;
 	u32 count;
 	unsigned long flags;
+	LIST_HEAD(tmp_head);
 
 	spin_lock_irqsave(&dev->event_lock, flags);
 	list_for_each_entry_safe(node, temp, &priv->client_event_list,
@@ -1533,14 +1532,25 @@ static int msm_release(struct inode *inode, struct file *filp)
 		if (node->base.file_priv != file_priv)
 			continue;
 		list_del(&node->base.link);
-		spin_unlock_irqrestore(&dev->event_lock, flags);
-		count = msm_event_client_count(dev, &node->info, true);
+		list_add_tail(&node->base.link, &tmp_head);
+	}
+	spin_unlock_irqrestore(&dev->event_lock, flags);
+
+	list_for_each_entry_safe(node, temp, &tmp_head,
+			base.link) {
+		list_del(&node->base.link);
+		count = msm_event_client_count(dev, &node->info, false);
+
+		list_for_each_entry(tmp_node, &tmp_head, base.link) {
+			if (tmp_node->event.type == node->info.event &&
+				tmp_node->info.object_id ==
+					node->info.object_id)
+				count++;
+		}
 		if (!count)
 			msm_register_event(dev, &node->info, file_priv, false);
 		kfree(node);
-		spin_lock_irqsave(&dev->event_lock, flags);
 	}
-	spin_unlock_irqrestore(&dev->event_lock, flags);
 
 	return drm_release(inode, filp);
 }
@@ -2046,6 +2056,7 @@ static struct platform_driver msm_platform_driver = {
 		.name   = "msm_drm",
 		.of_match_table = dt_match,
 		.pm     = &msm_pm_ops,
+		.suppress_bind_attrs = true,
 	},
 };
 

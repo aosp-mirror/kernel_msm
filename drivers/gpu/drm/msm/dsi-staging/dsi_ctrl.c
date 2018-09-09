@@ -786,16 +786,51 @@ err:
 	return rc;
 }
 
+/* Function returns number of bits per pxl */
+static int dsi_ctrl_pixel_format_to_bpp(enum dsi_pixel_format dst_format)
+{
+	u32 bpp = 0;
+
+	switch (dst_format) {
+	case DSI_PIXEL_FORMAT_RGB111:
+		bpp = 3;
+		break;
+	case DSI_PIXEL_FORMAT_RGB332:
+		bpp = 8;
+		break;
+	case DSI_PIXEL_FORMAT_RGB444:
+		bpp = 12;
+		break;
+	case DSI_PIXEL_FORMAT_RGB565:
+		bpp = 16;
+		break;
+	case DSI_PIXEL_FORMAT_RGB666:
+	case DSI_PIXEL_FORMAT_RGB666_LOOSE:
+		bpp = 18;
+		break;
+	case DSI_PIXEL_FORMAT_RGB888:
+		bpp = 24;
+		break;
+	default:
+		bpp = 24;
+		break;
+	}
+	return bpp;
+}
+
 static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	struct dsi_host_config *config, void *clk_handle)
 {
 	int rc = 0;
 	u32 num_of_lanes = 0;
-	u32 bpp = 3;
+	u32 bpp;
 	u64 h_period, v_period, bit_rate, pclk_rate, bit_rate_per_lane,
 	    byte_clk_rate;
 	struct dsi_host_common_cfg *host_cfg = &config->common_config;
 	struct dsi_mode_info *timing = &config->video_timing;
+
+	/* Get bits per pxl in desitnation format */
+	bpp = dsi_ctrl_pixel_format_to_bpp(host_cfg->dst_format);
 
 	if (host_cfg->data_lanes & DSI_DATA_LANE_0)
 		num_of_lanes++;
@@ -809,7 +844,7 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	if (config->bit_clk_rate_hz == 0) {
 		h_period = DSI_H_TOTAL_DSC(timing);
 		v_period = DSI_V_TOTAL(timing);
-		bit_rate = h_period * v_period * timing->refresh_rate * bpp * 8;
+		bit_rate = h_period * v_period * timing->refresh_rate * bpp;
 	} else {
 		bit_rate = config->bit_clk_rate_hz * num_of_lanes;
 	}
@@ -817,7 +852,7 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	bit_rate_per_lane = bit_rate;
 	do_div(bit_rate_per_lane, num_of_lanes);
 	pclk_rate = bit_rate;
-	do_div(pclk_rate, (8 * bpp));
+	do_div(pclk_rate, bpp);
 	byte_clk_rate = bit_rate_per_lane;
 	do_div(byte_clk_rate, 8);
 	pr_debug("bit_clk_rate = %llu, bit_clk_rate_per_lane = %llu\n",
@@ -1232,7 +1267,7 @@ kickoff:
 			}
 		}
 
-		if (dsi_hw_ops.mask_error_intr)
+		if (dsi_hw_ops.mask_error_intr && !dsi_ctrl->esd_check_underway)
 			dsi_hw_ops.mask_error_intr(&dsi_ctrl->hw,
 					BIT(DSI_FIFO_OVERFLOW), false);
 		dsi_hw_ops.reset_cmd_fifo(&dsi_ctrl->hw);
@@ -1335,10 +1370,17 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 	u32 current_read_len = 0, total_bytes_read = 0;
 	bool short_resp = false;
 	bool read_done = false;
-	u32 dlen, diff, rlen = msg->rx_len;
+	u32 dlen, diff, rlen;
 	unsigned char *buff;
 	char cmd;
 
+	if (!msg) {
+		pr_err("Invalid msg\n");
+		rc = -EINVAL;
+		goto error;
+	}
+
+	rlen = msg->rx_len;
 	if (msg->rx_len <= 2) {
 		short_resp = true;
 		rd_pkt_size = msg->rx_len;
@@ -1371,6 +1413,13 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 			pr_err("Message transmission failed, rc=%d\n", rc);
 			goto error;
 		}
+		/*
+		 * wait before reading rdbk_data register, if any delay is
+		 * required after sending the read command.
+		 */
+		if (msg->wait_ms)
+			usleep_range(msg->wait_ms * 1000,
+				     ((msg->wait_ms * 1000) + 10));
 
 		dlen = dsi_ctrl->hw.ops.get_cmd_read_data(&dsi_ctrl->hw,
 					buff, total_bytes_read,
@@ -1442,8 +1491,7 @@ static int dsi_enable_ulps(struct dsi_ctrl *dsi_ctrl)
 	u32 lanes = 0;
 	u32 ulps_lanes;
 
-	if (dsi_ctrl->host_config.panel_mode == DSI_OP_CMD_MODE)
-		lanes = dsi_ctrl->host_config.common_config.data_lanes;
+	lanes = dsi_ctrl->host_config.common_config.data_lanes;
 
 	rc = dsi_ctrl->hw.ops.wait_for_lane_idle(&dsi_ctrl->hw, lanes);
 	if (rc) {
@@ -1484,9 +1532,7 @@ static int dsi_disable_ulps(struct dsi_ctrl *dsi_ctrl)
 		return 0;
 	}
 
-	if (dsi_ctrl->host_config.panel_mode == DSI_OP_CMD_MODE)
-		lanes = dsi_ctrl->host_config.common_config.data_lanes;
-
+	lanes = dsi_ctrl->host_config.common_config.data_lanes;
 	lanes |= DSI_CLOCK_LANE;
 
 	ulps_lanes = dsi_ctrl->hw.ops.ulps_ops.get_lanes_in_ulps(&dsi_ctrl->hw);
@@ -1776,6 +1822,7 @@ static struct platform_driver dsi_ctrl_driver = {
 	.driver = {
 		.name = "drm_dsi_ctrl",
 		.of_match_table = msm_dsi_of_match,
+		.suppress_bind_attrs = true,
 	},
 };
 
@@ -2128,11 +2175,14 @@ int dsi_ctrl_set_roi(struct dsi_ctrl *dsi_ctrl, struct dsi_rect *roi,
 	}
 
 	mutex_lock(&dsi_ctrl->ctrl_lock);
-	if (!dsi_rect_is_equal(&dsi_ctrl->roi, roi)) {
+	if ((!dsi_rect_is_equal(&dsi_ctrl->roi, roi)) ||
+			dsi_ctrl->modeupdated) {
 		*changed = true;
 		memcpy(&dsi_ctrl->roi, roi, sizeof(dsi_ctrl->roi));
+		dsi_ctrl->modeupdated = false;
 	} else
 		*changed = false;
+
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
 	return rc;
 }
@@ -2156,6 +2206,35 @@ int dsi_ctrl_phy_reset_config(struct dsi_ctrl *dsi_ctrl, bool enable)
 		dsi_ctrl->hw.ops.phy_reset_config(&dsi_ctrl->hw, enable);
 
 	return 0;
+}
+
+static bool dsi_ctrl_check_for_spurious_error_interrupts(
+					struct dsi_ctrl *dsi_ctrl)
+{
+	const unsigned long intr_check_interval = msecs_to_jiffies(1000);
+	const unsigned int interrupt_threshold = 15;
+	unsigned long jiffies_now = jiffies;
+
+	if (!dsi_ctrl) {
+		pr_err("Invalid DSI controller structure\n");
+		return false;
+	}
+
+	if (dsi_ctrl->jiffies_start == 0)
+		dsi_ctrl->jiffies_start = jiffies;
+
+	dsi_ctrl->error_interrupt_count++;
+
+	if ((jiffies_now - dsi_ctrl->jiffies_start) < intr_check_interval) {
+		if (dsi_ctrl->error_interrupt_count > interrupt_threshold) {
+			pr_warn("Detected spurious interrupts on dsi ctrl\n");
+			return true;
+		}
+	} else {
+		dsi_ctrl->jiffies_start = jiffies;
+		dsi_ctrl->error_interrupt_count = 1;
+	}
+	return false;
 }
 
 static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
@@ -2228,6 +2307,19 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	/* ACK error */
 	if (error & 0xF)
 		pr_err("ack error: 0x%lx\n", error);
+
+	/*
+	 * DSI Phy can go into bad state during ESD influence. This can
+	 * manifest as various types of spurious error interrupts on
+	 * DSI controller. This check will allow us to handle afore mentioned
+	 * case and prevent us from re enabling interrupts until a full ESD
+	 * recovery is completed.
+	 */
+	if (dsi_ctrl_check_for_spurious_error_interrupts(dsi_ctrl) &&
+				dsi_ctrl->esd_check_underway) {
+		dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
+		return;
+	}
 
 	/* enable back DSI interrupts */
 	if (dsi_ctrl->hw.ops.error_intr_ctrl)
@@ -2462,6 +2554,31 @@ int dsi_ctrl_host_timing_update(struct dsi_ctrl *dsi_ctrl)
 }
 
 /**
+ * dsi_ctrl_update_host_init_state() - Update the host initialization state.
+ * @dsi_ctrl:        DSI controller handle.
+ * @enable:        boolean signifying host state.
+ *
+ * Update the host initialization status only while exiting from ulps during
+ * suspend state.
+ *
+ * Return: error code.
+ */
+int dsi_ctrl_update_host_init_state(struct dsi_ctrl *dsi_ctrl, bool enable)
+{
+	int rc = 0;
+	u32 state = enable ? 0x1 : 0x0;
+
+	rc = dsi_ctrl_check_state(dsi_ctrl, DSI_CTRL_OP_HOST_INIT, state);
+	if (rc) {
+		pr_err("[DSI_%d] Controller state check failed, rc=%d\n",
+		       dsi_ctrl->cell_index, rc);
+		return rc;
+	}
+	dsi_ctrl_update_state(dsi_ctrl, DSI_CTRL_OP_HOST_INIT, state);
+	return rc;
+}
+
+/**
  * dsi_ctrl_host_init() - Initialize DSI host hardware.
  * @dsi_ctrl:        DSI controller handle.
  * @is_splash_enabled:        boolean signifying splash status.
@@ -2688,6 +2805,7 @@ int dsi_ctrl_update_host_config(struct dsi_ctrl *ctrl,
 	ctrl->mode_bounds.w = ctrl->host_config.video_timing.h_active;
 	ctrl->mode_bounds.h = ctrl->host_config.video_timing.v_active;
 	memcpy(&ctrl->roi, &ctrl->mode_bounds, sizeof(ctrl->mode_bounds));
+	ctrl->modeupdated = true;
 	ctrl->roi.x = 0;
 error:
 	mutex_unlock(&ctrl->ctrl_lock);
@@ -2835,7 +2953,8 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 						dsi_ctrl->cell_index);
 			}
 		}
-		if (dsi_ctrl->hw.ops.mask_error_intr)
+		if (dsi_ctrl->hw.ops.mask_error_intr &&
+				!dsi_ctrl->esd_check_underway)
 			dsi_ctrl->hw.ops.mask_error_intr(&dsi_ctrl->hw,
 					BIT(DSI_FIFO_OVERFLOW), false);
 
@@ -3330,7 +3449,8 @@ u32 dsi_ctrl_collect_misr(struct dsi_ctrl *dsi_ctrl)
 	return misr;
 }
 
-void dsi_ctrl_mask_error_status_interrupts(struct dsi_ctrl *dsi_ctrl)
+void dsi_ctrl_mask_error_status_interrupts(struct dsi_ctrl *dsi_ctrl, u32 idx,
+		bool mask_enable)
 {
 	if (!dsi_ctrl || !dsi_ctrl->hw.ops.error_intr_ctrl
 			|| !dsi_ctrl->hw.ops.clear_error_status) {
@@ -3343,9 +3463,23 @@ void dsi_ctrl_mask_error_status_interrupts(struct dsi_ctrl *dsi_ctrl)
 	 * register
 	 */
 	mutex_lock(&dsi_ctrl->ctrl_lock);
-	dsi_ctrl->hw.ops.error_intr_ctrl(&dsi_ctrl->hw, false);
-	dsi_ctrl->hw.ops.clear_error_status(&dsi_ctrl->hw,
+	if (idx & BIT(DSI_ERR_INTR_ALL)) {
+		/*
+		 * The behavior of mask_enable is different in ctrl register
+		 * and mask register and hence mask_enable is manipulated for
+		 * selective error interrupt masking vs total error interrupt
+		 * masking.
+		 */
+
+		dsi_ctrl->hw.ops.error_intr_ctrl(&dsi_ctrl->hw, !mask_enable);
+		dsi_ctrl->hw.ops.clear_error_status(&dsi_ctrl->hw,
 					DSI_ERROR_INTERRUPT_COUNT);
+	} else {
+		dsi_ctrl->hw.ops.mask_error_intr(&dsi_ctrl->hw, idx,
+								mask_enable);
+		dsi_ctrl->hw.ops.clear_error_status(&dsi_ctrl->hw,
+					DSI_ERROR_INTERRUPT_COUNT);
+	}
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
 }
 

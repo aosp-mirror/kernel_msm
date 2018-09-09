@@ -328,7 +328,13 @@ static int hfi_send_generic_req(struct gmu_device *gmu, uint32_t queue,
 	if (rc)
 		return rc;
 
-	return ret_cmd.results[2];
+	if (ret_cmd.results[2])
+		dev_err(&gmu->pdev->dev,
+				"HFI ACK failure: Req 0x%8.8X Error 0x%X\n",
+				ret_cmd.results[1],
+				ret_cmd.results[2]);
+
+	return ret_cmd.results[2] ? -EINVAL : 0;
 }
 
 static int hfi_send_gmu_init(struct gmu_device *gmu, uint32_t boot_state)
@@ -380,35 +386,80 @@ static int hfi_send_core_fw_start(struct gmu_device *gmu)
 	return hfi_send_generic_req(gmu, HFI_CMD_IDX, &cmd);
 }
 
-static struct hfi_feature {
-	uint32_t feature;
-	uint32_t enable;
-	uint32_t data;
-} hfi_features[] = {
-	{ HFI_FEATURE_ECP, 0, 0},
+static const char * const hfi_features[] = {
+	[HFI_FEATURE_ECP] = "ECP",
 };
 
-static int hfi_send_feature_ctrls(struct gmu_device *gmu)
+static const char *feature_to_string(uint32_t feature)
 {
-	struct hfi_feature_ctrl_cmd cmd;
-	int ret = 0, i;
+	if (feature < ARRAY_SIZE(hfi_features) && hfi_features[feature])
+		return hfi_features[feature];
 
-	for (i = 0; i < ARRAY_SIZE(hfi_features); i++) {
-		cmd.hdr = CMD_MSG_HDR(H2F_MSG_FEATURE_CTRL, sizeof(cmd));
-		cmd.feature = hfi_features[i].feature;
-		cmd.enable = hfi_features[i].enable;
-		cmd.data = hfi_features[i].data;
+	return "unknown";
+}
 
-		ret = hfi_send_generic_req(gmu, HFI_CMD_IDX, &cmd);
-		if (ret) {
-			pr_err("KGSL: setfeature fail:%d [%d:%d:0x%x]\n", ret,
-					hfi_features[i].feature,
-					hfi_features[i].enable,
-					hfi_features[i].data);
-			return ret;
-		}
+static int hfi_send_feature_ctrl(struct gmu_device *gmu,
+		uint32_t feature, uint32_t enable, uint32_t data)
+{
+	struct hfi_feature_ctrl_cmd cmd = {
+		.hdr = CMD_MSG_HDR(H2F_MSG_FEATURE_CTRL, sizeof(cmd)),
+		.feature = feature,
+		.enable = enable,
+		.data = data,
+	};
+	int ret;
+
+	ret = hfi_send_generic_req(gmu, HFI_CMD_IDX, &cmd);
+	if (ret)
+		dev_err(&gmu->pdev->dev,
+				"Unable to %s feature %s (%d)\n",
+				enable ? "enable" : "disable",
+				feature_to_string(feature),
+				feature);
+	return ret;
+}
+
+static int hfi_send_dcvstbl_v1(struct gmu_device *gmu)
+{
+	struct hfi_dcvstable_v1_cmd cmd = {
+		.hdr = CMD_MSG_HDR(H2F_MSG_PERF_TBL, sizeof(cmd)),
+		.gpu_level_num = gmu->num_gpupwrlevels,
+		.gmu_level_num = gmu->num_gmupwrlevels,
+	};
+	int i;
+
+	for (i = 0; i < gmu->num_gpupwrlevels; i++) {
+		cmd.gx_votes[i].vote = gmu->rpmh_votes.gx_votes[i];
+		/* Divide by 1000 to convert to kHz */
+		cmd.gx_votes[i].freq = gmu->gpu_freqs[i] / 1000;
 	}
 
+	for (i = 0; i < gmu->num_gmupwrlevels; i++) {
+		cmd.cx_votes[i].vote = gmu->rpmh_votes.cx_votes[i];
+		cmd.cx_votes[i].freq = gmu->gmu_freqs[i] / 1000;
+	}
+
+	return hfi_send_generic_req(gmu, HFI_CMD_IDX, &cmd);
+}
+
+static int hfi_send_get_value(struct gmu_device *gmu,
+		struct hfi_get_value_req *req)
+{
+	struct hfi_get_value_cmd *cmd = &req->cmd;
+	struct pending_cmd ret_cmd;
+	struct hfi_get_value_reply_cmd *reply =
+		(struct hfi_get_value_reply_cmd *)ret_cmd.results;
+	int rc;
+
+	cmd->hdr = CMD_MSG_HDR(H2F_MSG_GET_VALUE, sizeof(*cmd));
+
+	rc = hfi_send_cmd(gmu, HFI_CMD_IDX, cmd, &ret_cmd);
+	if (rc)
+		return rc;
+
+	memset(&req->data, 0, sizeof(req->data));
+	memcpy(&req->data, &reply->data,
+			(MSG_HDR_GET_SIZE(reply->hdr) - 2) << 2);
 	return 0;
 }
 
@@ -423,6 +474,11 @@ static int hfi_send_dcvstbl(struct gmu_device *gmu)
 
 	for (i = 0; i < gmu->num_gpupwrlevels; i++) {
 		cmd.gx_votes[i].vote = gmu->rpmh_votes.gx_votes[i];
+		/*
+		 * Set ACD threshold to the maximum value as a default.
+		 * At this level, ACD will never activate.
+		 */
+		cmd.gx_votes[i].acd = 0xFFFFFFFF;
 		/* Divide by 1000 to convert to kHz */
 		cmd.gx_votes[i].freq = gmu->gpu_freqs[i] / 1000;
 	}
@@ -655,7 +711,10 @@ int hfi_start(struct kgsl_device *device,
 	if (result)
 		return result;
 
-	result = hfi_send_dcvstbl(gmu);
+	if (HFI_VER_MAJOR(&gmu->hfi) < 2)
+		result = hfi_send_dcvstbl_v1(gmu);
+	else
+		result = hfi_send_dcvstbl(gmu);
 	if (result)
 		return result;
 
@@ -668,9 +727,8 @@ int hfi_start(struct kgsl_device *device,
 	 * we are sending no more HFIs until the next boot otherwise
 	 * send H2F_MSG_CORE_FW_START and features for A640 devices
 	 */
-
 	if (HFI_VER_MAJOR(&gmu->hfi) >= 2) {
-		result = hfi_send_feature_ctrls(gmu);
+		result = hfi_send_feature_ctrl(gmu, HFI_FEATURE_ECP, 0, 0);
 		if (result)
 			return result;
 
@@ -749,9 +807,49 @@ int hfi_send_req(struct gmu_device *gmu, unsigned int id, void *data)
 
 		return hfi_send_generic_req(gmu, HFI_CMD_IDX, cmd);
 	}
+	case H2F_MSG_GET_VALUE: {
+		return hfi_send_get_value(gmu, data);
+	}
+	case H2F_MSG_SET_VALUE: {
+		struct hfi_set_value_cmd *cmd = data;
+
+		cmd->hdr = CMD_MSG_HDR(id, sizeof(*cmd));
+
+		return hfi_send_generic_req(gmu, HFI_CMD_IDX, cmd);
+	}
 	default:
 		break;
 	}
 
 	return -EINVAL;
+}
+
+/* HFI interrupt handler */
+irqreturn_t hfi_irq_handler(int irq, void *data)
+{
+	struct kgsl_device *device = data;
+	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
+	struct kgsl_hfi *hfi = &gmu->hfi;
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	unsigned int status = 0;
+
+	adreno_read_gmureg(ADRENO_DEVICE(device),
+			ADRENO_REG_GMU_GMU2HOST_INTR_INFO, &status);
+	adreno_write_gmureg(ADRENO_DEVICE(device),
+			ADRENO_REG_GMU_GMU2HOST_INTR_CLR, status);
+
+	if (status & HFI_IRQ_MSGQ_MASK)
+		tasklet_hi_schedule(&hfi->tasklet);
+	if (status & HFI_IRQ_CM3_FAULT_MASK) {
+		dev_err_ratelimited(&gmu->pdev->dev,
+				"GMU CM3 fault interrupt received\n");
+		adreno_set_gpu_fault(adreno_dev, ADRENO_GMU_FAULT);
+		adreno_dispatcher_schedule(device);
+	}
+	if (status & ~HFI_IRQ_MASK)
+		dev_err_ratelimited(&gmu->pdev->dev,
+				"Unhandled HFI interrupts 0x%lx\n",
+				status & ~HFI_IRQ_MASK);
+
+	return IRQ_HANDLED;
 }

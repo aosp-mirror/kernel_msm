@@ -114,6 +114,9 @@
 #define HFI_H264_LEVEL_5					0x00004000
 #define HFI_H264_LEVEL_51					0x00008000
 #define HFI_H264_LEVEL_52					0x00010000
+#define HFI_H264_LEVEL_6					0x00020000
+#define HFI_H264_LEVEL_61					0x00040000
+#define HFI_H264_LEVEL_62					0x00080000
 
 #define HFI_MPEG2_PROFILE_SIMPLE			0x00000001
 #define HFI_MPEG2_PROFILE_MAIN				0x00000002
@@ -247,6 +250,8 @@ struct hfi_buffer_info {
 	(HFI_PROPERTY_CONFIG_COMMON_START + 0x001)
 #define HFI_PROPERTY_CONFIG_VIDEOCORES_USAGE				\
 	(HFI_PROPERTY_CONFIG_COMMON_START + 0x002)
+#define HFI_PROPERTY_CONFIG_OPERATING_RATE				\
+	(HFI_PROPERTY_CONFIG_COMMON_START + 0x003)
 
 #define HFI_PROPERTY_PARAM_VDEC_COMMON_START				\
 	(HFI_DOMAIN_BASE_VDEC + HFI_ARCH_COMMON_OFFSET + 0x3000)
@@ -477,6 +482,10 @@ struct hfi_h264_entropy_control {
 struct hfi_frame_rate {
 	u32 buffer_type;
 	u32 frame_rate;
+};
+
+struct hfi_operating_rate {
+	u32 operating_rate;
 };
 
 #define HFI_INTRA_REFRESH_NONE				(HFI_COMMON_BASE + 0x1)

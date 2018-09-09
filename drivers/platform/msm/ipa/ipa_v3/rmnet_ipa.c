@@ -40,17 +40,30 @@
 
 #include "ipa_trace.h"
 
+#define OUTSTANDING_HIGH_DEFAULT 256
+#define OUTSTANDING_HIGH_CTL_DEFAULT (OUTSTANDING_HIGH_DEFAULT + 32)
+#define OUTSTANDING_LOW_DEFAULT 128
+
+static unsigned int outstanding_high = OUTSTANDING_HIGH_DEFAULT;
+module_param(outstanding_high, uint, 0644);
+MODULE_PARM_DESC(outstanding_high, "Outstanding high");
+
+static unsigned int outstanding_high_ctl = OUTSTANDING_HIGH_CTL_DEFAULT;
+module_param(outstanding_high_ctl, uint, 0644);
+MODULE_PARM_DESC(outstanding_high_ctl, "Outstanding high control");
+
+static unsigned int outstanding_low = OUTSTANDING_LOW_DEFAULT;
+module_param(outstanding_low, uint, 0644);
+MODULE_PARM_DESC(outstanding_low, "Outstanding low");
+
 #define WWAN_METADATA_SHFT 24
 #define WWAN_METADATA_MASK 0xFF000000
-#define WWAN_DATA_LEN 2000
+#define WWAN_DATA_LEN 9216
 #define IPA_RM_INACTIVITY_TIMER 100 /* IPA_RM */
 #define HEADROOM_FOR_QMAP   8 /* for mux header */
 #define TAILROOM            0 /* for padding by mux layer */
 #define MAX_NUM_OF_MUX_CHANNEL  15 /* max mux channels */
 #define UL_FILTER_RULE_HANDLE_START 69
-#define DEFAULT_OUTSTANDING_HIGH 128
-#define DEFAULT_OUTSTANDING_HIGH_CTL (DEFAULT_OUTSTANDING_HIGH+32)
-#define DEFAULT_OUTSTANDING_LOW 64
 
 #define IPA_WWAN_DEV_NAME "rmnet_ipa%d"
 #define IPA_UPSTEAM_WLAN_IFACE_NAME "wlan0"
@@ -102,8 +115,6 @@ struct ipa3_rmnet_plat_drv_res {
  * @net: network interface struct implemented by this driver
  * @stats: iface statistics
  * @outstanding_pkts: number of packets sent to IPA without TX complete ACKed
- * @outstanding_high: number of outstanding packets allowed
- * @outstanding_low: number of outstanding packets which shall cause
  * @ch_id: channel id
  * @lock: spinlock for mutual exclusion
  * @device_status: holds device status
@@ -114,9 +125,6 @@ struct ipa3_wwan_private {
 	struct net_device *net;
 	struct net_device_stats stats;
 	atomic_t outstanding_pkts;
-	int outstanding_high_ctl;
-	int outstanding_high;
-	int outstanding_low;
 	uint32_t ch_id;
 	spinlock_t lock;
 	struct completion resource_granted_completion;
@@ -1085,7 +1093,7 @@ static int ipa3_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (netif_queue_stopped(dev)) {
 		if (qmap_check &&
 			atomic_read(&wwan_ptr->outstanding_pkts) <
-					wwan_ptr->outstanding_high_ctl) {
+					outstanding_high_ctl) {
 			pr_err("[%s]Queue stop, send ctrl pkts\n", dev->name);
 			goto send;
 		} else {
@@ -1096,11 +1104,11 @@ static int ipa3_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* checking High WM hit */
 	if (atomic_read(&wwan_ptr->outstanding_pkts) >=
-					wwan_ptr->outstanding_high) {
+					outstanding_high) {
 		if (!qmap_check) {
 			IPAWANDBG_LOW("pending(%d)/(%d)- stop(%d)\n",
 				atomic_read(&wwan_ptr->outstanding_pkts),
-				wwan_ptr->outstanding_high,
+				outstanding_high,
 				netif_queue_stopped(dev));
 			IPAWANDBG_LOW("qmap_chk(%d)\n", qmap_check);
 			netif_stop_queue(dev);
@@ -1203,10 +1211,9 @@ static void apps_ipa_tx_complete_notify(void *priv,
 	__netif_tx_lock_bh(netdev_get_tx_queue(dev, 0));
 	if (!atomic_read(&rmnet_ipa3_ctx->is_ssr) &&
 		netif_queue_stopped(wwan_ptr->net) &&
-		atomic_read(&wwan_ptr->outstanding_pkts) <
-					(wwan_ptr->outstanding_low)) {
+		atomic_read(&wwan_ptr->outstanding_pkts) < outstanding_low) {
 		IPAWANDBG_LOW("Outstanding low (%d) - waking up queue\n",
-				wwan_ptr->outstanding_low);
+				outstanding_low);
 		netif_wake_queue(wwan_ptr->net);
 	}
 
@@ -1282,8 +1289,16 @@ static int handle3_ingress_format(struct net_device *dev,
 {
 	int ret = 0;
 	struct ipa_sys_connect_params *ipa_wan_ep_cfg;
+	int ep_idx;
 
 	IPAWANDBG("Get RMNET_IOCTL_SET_INGRESS_DATA_FORMAT\n");
+
+	ep_idx = ipa3_get_ep_mapping(IPA_CLIENT_APPS_WAN_CONS);
+	if (ep_idx == IPA_EP_NOT_ALLOCATED) {
+		IPAWANDBG("Embedded datapath not supported\n");
+		return -EFAULT;
+	}
+
 	ipa_wan_ep_cfg = &rmnet_ipa3_ctx->ipa_to_apps_ep_cfg;
 	if ((in->u.data) & RMNET_IOCTL_INGRESS_FORMAT_CHECKSUM)
 		ipa_wan_ep_cfg->ipa_ep_cfg.cfg.cs_offload_en =
@@ -1474,6 +1489,7 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	uint32_t  mux_id;
 	int8_t *v_name;
 	struct mutex *mux_mutex_ptr;
+	int wan_cons_ep;
 
 	IPAWANDBG("rmnet_ipa got ioctl number 0x%08x", cmd);
 	switch (cmd) {
@@ -1599,10 +1615,17 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		/*  Endpoint pair  */
 		case RMNET_IOCTL_GET_EP_PAIR:
 			IPAWANDBG("get ioctl: RMNET_IOCTL_GET_EP_PAIR\n");
+			wan_cons_ep =
+				ipa3_get_ep_mapping(IPA_CLIENT_APPS_WAN_CONS);
+			if (wan_cons_ep == IPA_EP_NOT_ALLOCATED) {
+				IPAWANERR("Embedded datapath not supported\n");
+				rc = -EFAULT;
+				break;
+			}
 			ext_ioctl_data.u.ipa_ep_pair.consumer_pipe_num =
 			ipa3_get_ep_mapping(IPA_CLIENT_APPS_WAN_PROD);
 			ext_ioctl_data.u.ipa_ep_pair.producer_pipe_num =
-			ipa3_get_ep_mapping(IPA_CLIENT_APPS_WAN_CONS);
+			wan_cons_ep;
 			if (copy_to_user((u8 *)ifr->ifr_ifru.ifru_data,
 				&ext_ioctl_data,
 				sizeof(struct rmnet_ioctl_extended_s)))
@@ -1612,8 +1635,8 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				sizeof(struct rmnet_ioctl_extended_s))) {
 				IPAWANERR("copy extended ioctl data failed\n");
 				rc = -EFAULT;
-			break;
-		}
+				break;
+			}
 			IPAWANDBG("RMNET_IOCTL_GET_EP_PAIR c: %d p: %d\n",
 			ext_ioctl_data.u.ipa_ep_pair.consumer_pipe_num,
 			ext_ioctl_data.u.ipa_ep_pair.producer_pipe_num);
@@ -2291,6 +2314,7 @@ static int ipa3_wwan_probe(struct platform_device *pdev)
 {
 	int ret, i;
 	struct net_device *dev;
+	int wan_cons_ep = ipa3_get_ep_mapping(IPA_CLIENT_APPS_WAN_CONS);
 
 	pr_info("rmnet_ipa3 started initialization\n");
 
@@ -2343,12 +2367,14 @@ static int ipa3_wwan_probe(struct platform_device *pdev)
 		ipa3_qmi_service_init(QMI_IPA_PLATFORM_TYPE_LE_V01);
 
 	/* construct default WAN RT tbl for IPACM */
-	ret = ipa3_setup_a7_qmap_hdr();
-	if (ret)
-		goto setup_a7_qmap_hdr_err;
-	ret = ipa3_setup_dflt_wan_rt_tables();
-	if (ret)
-		goto setup_dflt_wan_rt_tables_err;
+	if (wan_cons_ep != IPA_EP_NOT_ALLOCATED) {
+		ret = ipa3_setup_a7_qmap_hdr();
+		if (ret)
+			goto setup_a7_qmap_hdr_err;
+		ret = ipa3_setup_dflt_wan_rt_tables();
+		if (ret)
+			goto setup_dflt_wan_rt_tables_err;
+	}
 
 	if (!atomic_read(&rmnet_ipa3_ctx->is_ssr)) {
 		/* Start transport-driver fd ioctl for ipacm for first init */
@@ -2375,8 +2401,6 @@ static int ipa3_wwan_probe(struct platform_device *pdev)
 		sizeof(*(rmnet_ipa3_ctx->wwan_priv)));
 	IPAWANDBG("wwan_ptr (private) = %pK", rmnet_ipa3_ctx->wwan_priv);
 	rmnet_ipa3_ctx->wwan_priv->net = dev;
-	rmnet_ipa3_ctx->wwan_priv->outstanding_high = DEFAULT_OUTSTANDING_HIGH;
-	rmnet_ipa3_ctx->wwan_priv->outstanding_low = DEFAULT_OUTSTANDING_LOW;
 	atomic_set(&rmnet_ipa3_ctx->wwan_priv->outstanding_pkts, 0);
 	spin_lock_init(&rmnet_ipa3_ctx->wwan_priv->lock);
 	init_completion(
@@ -2462,9 +2486,11 @@ q6_init_err:
 alloc_netdev_err:
 	ipa3_wan_ioctl_deinit();
 wan_ioctl_init_err:
-	ipa3_del_dflt_wan_rt_tables();
+	if (wan_cons_ep != IPA_EP_NOT_ALLOCATED)
+		ipa3_del_dflt_wan_rt_tables();
 setup_dflt_wan_rt_tables_err:
-	ipa3_del_a7_qmap_hdr();
+	if (wan_cons_ep != IPA_EP_NOT_ALLOCATED)
+		ipa3_del_a7_qmap_hdr();
 setup_a7_qmap_hdr_err:
 	ipa3_qmi_service_exit();
 	atomic_set(&rmnet_ipa3_ctx->is_ssr, 0);
@@ -2503,8 +2529,11 @@ static int ipa3_wwan_remove(struct platform_device *pdev)
 	/* No need to remove wwan_ioctl during SSR */
 	if (!atomic_read(&rmnet_ipa3_ctx->is_ssr))
 		ipa3_wan_ioctl_deinit();
-	ipa3_del_dflt_wan_rt_tables();
-	ipa3_del_a7_qmap_hdr();
+	if (ipa3_get_ep_mapping(IPA_CLIENT_APPS_WAN_CONS) !=
+		IPA_EP_NOT_ALLOCATED) {
+		ipa3_del_dflt_wan_rt_tables();
+		ipa3_del_a7_qmap_hdr();
+	}
 	ipa3_del_mux_qmap_hdrs();
 	if (ipa3_qmi_ctx->modem_cfg_emb_pipe_flt == false)
 		ipa3_wwan_del_ul_flt_rule_to_ipa();

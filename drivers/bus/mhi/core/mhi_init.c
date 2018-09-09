@@ -54,20 +54,18 @@ const char * const mhi_state_str[MHI_STATE_MAX] = {
 };
 
 static const char * const mhi_pm_state_str[] = {
-	"DISABLE",
-	"POR",
-	"M0",
-	"M1",
-	"M1->M2",
-	"M2",
-	"M?->M3",
-	"M3",
-	"M3->M0",
-	"FW DL Error",
-	"SYS_ERR Detect",
-	"SYS_ERR Process",
-	"SHUTDOWN Process",
-	"LD or Error Fatal Detect",
+	[MHI_PM_BIT_DISABLE] = "DISABLE",
+	[MHI_PM_BIT_POR] = "POR",
+	[MHI_PM_BIT_M0] = "M0",
+	[MHI_PM_BIT_M2] = "M2",
+	[MHI_PM_BIT_M3_ENTER] = "M?->M3",
+	[MHI_PM_BIT_M3] = "M3",
+	[MHI_PM_BIT_M3_EXIT] = "M3->M0",
+	[MHI_PM_BIT_FW_DL_ERR] = "FW DL Error",
+	[MHI_PM_BIT_SYS_ERR_DETECT] = "SYS_ERR Detect",
+	[MHI_PM_BIT_SYS_ERR_PROCESS] = "SYS_ERR Process",
+	[MHI_PM_BIT_SHUTDOWN_PROCESS] = "SHUTDOWN Process",
+	[MHI_PM_BIT_LD_ERR_FATAL_DETECT] = "LD or Error Fatal Detect",
 };
 
 struct mhi_bus mhi_bus;
@@ -333,7 +331,7 @@ int mhi_init_dev_ctxt(struct mhi_controller *mhi_cntrl)
 		er_ctxt->msivec = mhi_event->msi;
 		mhi_event->db_cfg.db_mode = true;
 
-		ring->el_size = sizeof(struct __packed mhi_tre);
+		ring->el_size = sizeof(struct mhi_tre);
 		ring->len = ring->el_size * ring->elements;
 		ret = mhi_alloc_aligned_ring(mhi_cntrl, ring, ring->len);
 		if (ret)
@@ -358,7 +356,7 @@ int mhi_init_dev_ctxt(struct mhi_controller *mhi_cntrl)
 	for (i = 0; i < NR_OF_CMD_RINGS; i++, mhi_cmd++, cmd_ctxt++) {
 		struct mhi_ring *ring = &mhi_cmd->ring;
 
-		ring->el_size = sizeof(struct __packed mhi_tre);
+		ring->el_size = sizeof(struct mhi_tre);
 		ring->elements = CMD_EL_PER_RING;
 		ring->len = ring->el_size * ring->elements;
 		ret = mhi_alloc_aligned_ring(mhi_cntrl, ring, ring->len);
@@ -643,7 +641,7 @@ int mhi_init_chan_ctxt(struct mhi_controller *mhi_cntrl,
 
 	buf_ring = &mhi_chan->buf_ring;
 	tre_ring = &mhi_chan->tre_ring;
-	tre_ring->el_size = sizeof(struct __packed mhi_tre);
+	tre_ring->el_size = sizeof(struct mhi_tre);
 	tre_ring->len = tre_ring->el_size * tre_ring->elements;
 	chan_ctxt = &mhi_cntrl->mhi_ctxt->chan_ctxt[mhi_chan->chan];
 	ret = mhi_alloc_aligned_ring(mhi_cntrl, tre_ring, tre_ring->len);
@@ -736,7 +734,6 @@ int mhi_device_configure(struct mhi_device *mhi_dev,
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static int of_parse_ev_cfg(struct mhi_controller *mhi_cntrl,
 			   struct device_node *of_node)
 {
@@ -1046,13 +1043,6 @@ error_ev_cfg:
 
 	return ret;
 }
-#else
-static int of_parse_dt(struct mhi_controller *mhi_cntrl,
-		       struct device_node *of_node)
-{
-	return -EINVAL;
-}
-#endif
 
 int of_register_mhi_controller(struct mhi_controller *mhi_cntrl)
 {
@@ -1095,7 +1085,6 @@ int of_register_mhi_controller(struct mhi_controller *mhi_cntrl)
 	spin_lock_init(&mhi_cntrl->wlock);
 	INIT_WORK(&mhi_cntrl->st_worker, mhi_pm_st_worker);
 	INIT_WORK(&mhi_cntrl->fw_worker, mhi_fw_load_worker);
-	INIT_WORK(&mhi_cntrl->m1_worker, mhi_pm_m1_worker);
 	INIT_WORK(&mhi_cntrl->syserr_worker, mhi_pm_sys_err_worker);
 	init_waitqueue_head(&mhi_cntrl->state_event);
 
@@ -1291,7 +1280,7 @@ static int mhi_match(struct device *dev, struct device_driver *drv)
 	if (mhi_dev->dev_type == MHI_CONTROLLER_TYPE)
 		return 0;
 
-	for (id = mhi_drv->id_table; id->chan; id++)
+	for (id = mhi_drv->id_table; id->chan[0]; id++)
 		if (!strcmp(mhi_dev->chan_name, id->chan)) {
 			mhi_dev->id = id;
 			return 1;

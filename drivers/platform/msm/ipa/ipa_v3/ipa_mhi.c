@@ -56,9 +56,9 @@
 
 
 #define IPA_MHI_FUNC_ENTRY() \
-	IPA_MHI_DBG_LOW("ENTRY\n")
+	IPA_MHI_DBG("ENTRY\n")
 #define IPA_MHI_FUNC_EXIT() \
-	IPA_MHI_DBG_LOW("EXIT\n")
+	IPA_MHI_DBG("EXIT\n")
 
 #define IPA_MHI_MAX_UL_CHANNELS 1
 #define IPA_MHI_MAX_DL_CHANNELS 1
@@ -283,6 +283,8 @@ static int ipa_mhi_start_gsi_channel(enum ipa_client_type client,
 	ch_props.use_db_eng = GSI_CHAN_DB_MODE;
 	ch_props.max_prefetch = GSI_ONE_PREFETCH_SEG;
 	ch_props.low_weight = 1;
+	ch_props.prefetch_mode = ep_cfg->prefetch_mode;
+	ch_props.empty_lvl_threshold = ep_cfg->prefetch_threshold;
 	ch_props.err_cb = params->ch_err_cb;
 	ch_props.chan_user_data = params->channel;
 	res = gsi_alloc_channel(&ch_props, ipa3_ctx->gsi_dev_hdl,
@@ -554,6 +556,7 @@ int ipa3_mhi_resume_channels_internal(enum ipa_client_type client,
 	int res;
 	int ipa_ep_idx;
 	struct ipa3_ep_context *ep;
+	union __packed gsi_channel_scratch gsi_ch_scratch;
 
 	IPA_MHI_FUNC_ENTRY();
 
@@ -565,11 +568,35 @@ int ipa3_mhi_resume_channels_internal(enum ipa_client_type client,
 	ep = &ipa3_ctx->ep[ipa_ep_idx];
 
 	if (brstmode_enabled && !LPTransitionRejected) {
+
+		res = gsi_read_channel_scratch(ep->gsi_chan_hdl,
+			&gsi_ch_scratch);
+		if (res) {
+			IPA_MHI_ERR("read ch scratch fail %d %d\n", res);
+			return res;
+		}
+
 		/*
 		 * set polling mode bit to DB mode before
 		 * resuming the channel
+		 *
+		 * For MHI-->IPA pipes:
+		 * when resuming due to transition to M0,
+		 * set the polling mode bit to 0.
+		 * In other cases, restore it's value form
+		 * when you stopped the channel.
+		 * Here, after successful resume client move to M0 state.
+		 * So, by default setting polling mode bit to 0.
+		 *
+		 * For IPA-->MHI pipe:
+		 * always restore the polling mode bit.
 		 */
-		ch_scratch.mhi.polling_mode = IPA_MHI_POLLING_MODE_DB_MODE;
+		if (IPA_CLIENT_IS_PROD(client))
+			ch_scratch.mhi.polling_mode =
+				IPA_MHI_POLLING_MODE_DB_MODE;
+		else
+			ch_scratch.mhi.polling_mode =
+				gsi_ch_scratch.mhi.polling_mode;
 
 		/* Use GSI update API to not affect non-SWI fields
 		 * inside the scratch while in suspend-resume operation

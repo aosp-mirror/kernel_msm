@@ -53,6 +53,7 @@
 #include <soc/qcom/secure_buffer.h>
 #include <linux/of_platform.h>
 #include <linux/msm-bus.h>
+#include <trace/events/iommu.h>
 #include <dt-bindings/msm/msm-bus-ids.h>
 
 #include <linux/amba/bus.h>
@@ -178,6 +179,7 @@ struct arm_smmu_cb {
 	u32				tcr[2];
 	u32				mair[2];
 	struct arm_smmu_cfg		*cfg;
+	u32				actlr;
 };
 
 struct arm_smmu_master_cfg {
@@ -512,6 +514,11 @@ static void arm_smmu_secure_domain_unlock(struct arm_smmu_domain *smmu_domain)
 {
 	if (arm_smmu_is_master_side_secure(smmu_domain))
 		mutex_unlock(&smmu_domain->assign_lock);
+}
+
+static bool arm_smmu_opt_hibernation(struct arm_smmu_device *smmu)
+{
+	return IS_ENABLED(CONFIG_HIBERNATION);
 }
 
 /*
@@ -981,6 +988,7 @@ static void __arm_smmu_tlb_sync(struct arm_smmu_device *smmu,
 		}
 		udelay(delay);
 	}
+	trace_tlbsync_timeout(smmu->dev, 0);
 	dev_err_ratelimited(smmu->dev,
 			    "TLB sync timed out -- SMMU may be deadlocked\n");
 }
@@ -1019,10 +1027,14 @@ static void arm_smmu_tlb_sync_vmid(void *cookie)
 static void arm_smmu_tlb_inv_context_s1(void *cookie)
 {
 	struct arm_smmu_domain *smmu_domain = cookie;
+	struct device *dev = smmu_domain->dev;
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	void __iomem *base = ARM_SMMU_CB(smmu_domain->smmu, cfg->cbndx);
 	bool use_tlbiall = smmu->options & ARM_SMMU_OPT_NO_ASID_RETENTION;
+	ktime_t cur = ktime_get();
+
+	trace_tlbi_start(dev, 0);
 
 	if (!use_tlbiall)
 		writel_relaxed(cfg->asid, base + ARM_SMMU_CB_S1_TLBIASID);
@@ -1030,6 +1042,7 @@ static void arm_smmu_tlb_inv_context_s1(void *cookie)
 		writel_relaxed(0, base + ARM_SMMU_CB_S1_TLBIALL);
 
 	arm_smmu_tlb_sync_context(cookie);
+	trace_tlbi_end(dev, ktime_us_delta(ktime_get(), cur));
 }
 
 static void arm_smmu_tlb_inv_context_s2(void *cookie)
@@ -1147,6 +1160,7 @@ static void arm_smmu_secure_pool_destroy(struct arm_smmu_domain *smmu_domain)
 	list_for_each_entry_safe(it, i, &smmu_domain->secure_pool_list, list) {
 		arm_smmu_unprepare_pgtable(smmu_domain, it->addr, it->size);
 		/* pages will be freed later (after being unassigned) */
+		list_del(&it->list);
 		kfree(it);
 	}
 }
@@ -1260,7 +1274,7 @@ static phys_addr_t arm_smmu_verify_fault(struct iommu_domain *domain,
 static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 {
 	int flags, ret, tmp;
-	u32 fsr, fsynr, resume;
+	u32 fsr, fsynr0, fsynr1, frsynra, resume;
 	unsigned long iova;
 	struct iommu_domain *domain = dev;
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
@@ -1270,7 +1284,7 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	void __iomem *gr1_base;
 	bool fatal_asf = smmu->options & ARM_SMMU_OPT_FATAL_ASF;
 	phys_addr_t phys_soft;
-	u32 frsynra;
+	uint64_t pte;
 	bool non_fatal_fault = !!(smmu_domain->attributes &
 					(1 << DOMAIN_ATTR_NON_FATAL_FAULTS));
 
@@ -1297,8 +1311,9 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 		BUG();
 	}
 
-	fsynr = readl_relaxed(cb_base + ARM_SMMU_CB_FSYNR0);
-	flags = fsynr & FSYNR0_WNR ? IOMMU_FAULT_WRITE : IOMMU_FAULT_READ;
+	fsynr0 = readl_relaxed(cb_base + ARM_SMMU_CB_FSYNR0);
+	fsynr1 = readl_relaxed(cb_base + ARM_SMMU_CB_FSYNR1);
+	flags = fsynr0 & FSYNR0_WNR ? IOMMU_FAULT_WRITE : IOMMU_FAULT_READ;
 	if (fsr & FSR_TF)
 		flags |= IOMMU_FAULT_TRANSLATION;
 	if (fsr & FSR_PF)
@@ -1315,8 +1330,8 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	tmp = report_iommu_fault(domain, smmu->dev, iova, flags);
 	if (!tmp || (tmp == -EBUSY)) {
 		dev_dbg(smmu->dev,
-			"Context fault handled by client: iova=0x%08lx, fsr=0x%x, fsynr=0x%x, cb=%d\n",
-			iova, fsr, fsynr, cfg->cbndx);
+			"Context fault handled by client: iova=0x%08lx, cb=%d, fsr=0x%x, fsynr0=0x%x, fsynr1=0x%x\n",
+			iova, cfg->cbndx, fsr, fsynr0, fsynr1);
 		dev_dbg(smmu->dev,
 			"soft iova-to-phys=%pa\n", &phys_soft);
 		ret = IRQ_HANDLED;
@@ -1326,20 +1341,23 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 							      fsr);
 		if (__ratelimit(&_rs)) {
 			dev_err(smmu->dev,
-				"Unhandled context fault: iova=0x%08lx, fsr=0x%x, fsynr=0x%x, cb=%d\n",
-				iova, fsr, fsynr, cfg->cbndx);
+				"Unhandled context fault: iova=0x%08lx, cb=%d, fsr=0x%x, fsynr0=0x%x, fsynr1=0x%x\n",
+				iova, cfg->cbndx, fsr, fsynr0, fsynr1);
 			dev_err(smmu->dev, "FAR    = %016lx\n",
 				(unsigned long)iova);
 			dev_err(smmu->dev,
-				"FSR    = %08x [%s%s%s%s%s%s%s%s%s]\n",
+				"FSR    = %08x [%s%s%s%s%s%s%s%s%s%s]\n",
 				fsr,
-				(fsr & 0x02) ? "TF " : "",
+				(fsr & 0x02) ?  (fsynr0 & 0x10 ?
+						"TF W " : "TF R ") : "",
 				(fsr & 0x04) ? "AFF " : "",
-				(fsr & 0x08) ? "PF " : "",
+				(fsr & 0x08) ? (fsynr0 & 0x10 ?
+						"PF W " : "PF R ") : "",
 				(fsr & 0x10) ? "EF " : "",
 				(fsr & 0x20) ? "TLBMCF " : "",
 				(fsr & 0x40) ? "TLBLKF " : "",
 				(fsr & 0x80) ? "MHF " : "",
+				(fsr & 0x100) ? "UUT " : "",
 				(fsr & 0x40000000) ? "SS " : "",
 				(fsr & 0x80000000) ? "MULTI " : "");
 			dev_err(smmu->dev,
@@ -1348,6 +1366,10 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 				dev_err(smmu->dev,
 					"SOFTWARE TABLE WALK FAILED! Looks like %s accessed an unmapped address!\n",
 					dev_name(smmu->dev));
+			else {
+				pte = arm_smmu_iova_to_pte(domain, iova);
+				dev_err(smmu->dev, "PTE = %016llx\n", pte);
+			}
 			if (phys_atos)
 				dev_err(smmu->dev, "hard iova-to-phys (ATOS)=%pa\n",
 					&phys_atos);
@@ -1586,6 +1608,9 @@ static void arm_smmu_write_context_bank(struct arm_smmu_device *smmu, int idx,
 		writel_relaxed(cb->mair[1], cb_base + ARM_SMMU_CB_S1_MAIR1);
 	}
 
+	/* ACTLR (implementation defined) */
+	writel_relaxed(cb->actlr, cb_base + ARM_SMMU_CB_ACTLR);
+
 	/* SCTLR */
 	reg = SCTLR_CFCFG | SCTLR_CFIE | SCTLR_CFRE | SCTLR_AFE | SCTLR_TRE;
 
@@ -1681,6 +1706,14 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		dev_err(smmu->dev, "dynamic domains not supported\n");
 		ret = -EPERM;
 
+		goto out_unlock;
+	}
+
+	if (arm_smmu_has_secure_vmid(smmu_domain) &&
+	    arm_smmu_opt_hibernation(smmu)) {
+		dev_err(smmu->dev,
+			"Secure usecases not supported with hibernation\n");
+		ret = -EPERM;
 		goto out_unlock;
 	}
 
@@ -1803,12 +1836,6 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		goto out_unlock;
 
 	cfg->cbndx = ret;
-	if (smmu->version < ARM_SMMU_V2) {
-		cfg->irptndx = atomic_inc_return(&smmu->irptndx);
-		cfg->irptndx %= smmu->num_context_irqs;
-	} else {
-		cfg->irptndx = cfg->cbndx;
-	}
 
 	if (arm_smmu_is_slave_side_secure(smmu_domain)) {
 		smmu_domain->pgtbl_cfg = (struct io_pgtable_cfg) {
@@ -1864,11 +1891,9 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		/* Initialise the context bank with our page table cfg */
 		arm_smmu_init_context_bank(smmu_domain,
 						&smmu_domain->pgtbl_cfg);
+		arm_smmu_arch_init_context_bank(smmu_domain, dev);
 		arm_smmu_write_context_bank(smmu, cfg->cbndx,
 						smmu_domain->attributes );
-
-		arm_smmu_arch_init_context_bank(smmu_domain, dev);
-
 		/* for slave side secure, we may have to force the pagetable
 		 * format to V8L.
 		 */
@@ -1877,6 +1902,12 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		if (ret)
 			goto out_clear_smmu;
 
+		if (smmu->version < ARM_SMMU_V2) {
+			cfg->irptndx = atomic_inc_return(&smmu->irptndx);
+			cfg->irptndx %= smmu->num_context_irqs;
+		} else {
+			cfg->irptndx = cfg->cbndx;
+		}
 
 		/*
 		 * Request context fault interrupt. Do this last to avoid the
@@ -2323,13 +2354,13 @@ static void arm_smmu_detach_dev(struct iommu_domain *domain,
 		return;
 	}
 
-	arm_smmu_domain_remove_master(smmu_domain, fwspec);
+	if (atomic_domain)
+		arm_smmu_power_on_atomic(smmu->pwr);
+	else
+		arm_smmu_power_on(smmu->pwr);
 
-	/* Remove additional vote for atomic power */
-	if (atomic_domain) {
-		WARN_ON(arm_smmu_power_on_atomic(smmu->pwr));
-		arm_smmu_power_off(smmu->pwr);
-	}
+	arm_smmu_domain_remove_master(smmu_domain, fwspec);
+	arm_smmu_power_off(smmu->pwr);
 }
 
 static int arm_smmu_assign_table(struct arm_smmu_domain *smmu_domain)
@@ -2601,10 +2632,6 @@ static size_t arm_smmu_map_sg(struct iommu_domain *domain, unsigned long iova,
 	if (arm_smmu_is_slave_side_secure(smmu_domain))
 		return msm_secure_smmu_map_sg(domain, iova, sg, nents, prot);
 
-	ret = arm_smmu_domain_power_on(domain, smmu_domain->smmu);
-	if (ret)
-		return ret;
-
 	__saved_iova_start = iova;
 	idx_start = idx_end = 0;
 	sg_start = sg_end = sg;
@@ -2642,7 +2669,6 @@ out:
 		arm_smmu_unmap(domain, __saved_iova_start, size_to_unmap);
 		iova = __saved_iova_start;
 	}
-	arm_smmu_domain_power_off(domain, smmu_domain->smmu);
 	return iova - __saved_iova_start;
 }
 
@@ -3620,18 +3646,17 @@ static void qsmmuv2_device_reset(struct arm_smmu_device *smmu)
 	int i;
 	u32 val;
 	struct arm_smmu_impl_def_reg *regs = smmu->impl_def_attach_registers;
-	void __iomem *cb_base;
-
 	/*
 	 * SCTLR.M must be disabled here per ARM SMMUv2 spec
 	 * to prevent table walks with an inconsistent state.
 	 */
 	for (i = 0; i < smmu->num_context_banks; ++i) {
-		cb_base = ARM_SMMU_CB(smmu, i);
+		struct arm_smmu_cb *cb = &smmu->cbs[i];
+
 		val = ACTLR_QCOM_ISH << ACTLR_QCOM_ISH_SHIFT |
 		ACTLR_QCOM_OSH << ACTLR_QCOM_OSH_SHIFT |
 		ACTLR_QCOM_NSH << ACTLR_QCOM_NSH_SHIFT;
-		writel_relaxed(val, cb_base + ARM_SMMU_CB_ACTLR);
+		cb->actlr = val;
 	}
 
 	/* Program implementation defined registers */
@@ -3720,7 +3745,7 @@ static void arm_smmu_context_bank_reset(struct arm_smmu_device *smmu)
 	for (i = 0; i < smmu->num_context_banks; ++i) {
 		cb_base = ARM_SMMU_CB(smmu, i);
 
-		writel_relaxed(0, cb_base + ARM_SMMU_CB_SCTLR);
+		arm_smmu_write_context_bank(smmu, i, 0);
 		writel_relaxed(FSR_FAULT, cb_base + ARM_SMMU_CB_FSR);
 		/*
 		 * Disable MMU-500's not-particularly-beneficial next-page
@@ -4258,6 +4283,12 @@ static int arm_smmu_device_cfg_probe(struct arm_smmu_device *smmu)
 				 sizeof(*smmu->cbs), GFP_KERNEL);
 	if (!smmu->cbs)
 		return -ENOMEM;
+	for (i = 0; i < smmu->num_context_banks; i++) {
+		void __iomem *cb_base;
+
+		cb_base = ARM_SMMU_CB(smmu, i);
+		smmu->cbs[i].actlr = readl_relaxed(cb_base + ARM_SMMU_CB_ACTLR);
+	}
 
 	/* ID2 */
 	id = readl_relaxed(gr0_base + ARM_SMMU_GR0_ID2);
@@ -4674,8 +4705,15 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
 {
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
+	int ret;
+
+	ret = arm_smmu_power_on(smmu->pwr);
+	if (ret)
+		return ret;
 
 	arm_smmu_device_reset(smmu);
+	arm_smmu_power_off(smmu->pwr);
+
 	return 0;
 }
 
@@ -4686,6 +4724,7 @@ static struct platform_driver arm_smmu_driver = {
 		.name		= "arm-smmu",
 		.of_match_table	= of_match_ptr(arm_smmu_of_match),
 		.pm		= &arm_smmu_pm_ops,
+		.suppress_bind_attrs = true,
 	},
 	.probe	= arm_smmu_device_dt_probe,
 	.remove	= arm_smmu_device_remove,
@@ -4696,10 +4735,12 @@ static int __init arm_smmu_init(void)
 {
 	static bool registered;
 	int ret = 0;
+	ktime_t cur;
 
 	if (registered)
 		return 0;
 
+	cur = ktime_get();
 	ret = platform_driver_register(&qsmmuv500_tbu_driver);
 	if (ret)
 		return ret;
@@ -4709,6 +4750,8 @@ static int __init arm_smmu_init(void)
 	ret = register_iommu_sec_ptbl();
 #endif
 	registered = !ret;
+	trace_smmu_init(ktime_us_delta(ktime_get(), cur));
+
 	return ret;
 }
 
@@ -5053,8 +5096,8 @@ redo:
 	val = readq_relaxed(tbu->base + DEBUG_PAR_REG);
 	fsr = readl_relaxed(cb_base + ARM_SMMU_CB_FSR);
 	if (fsr & FSR_FAULT) {
-		dev_err(tbu->dev, "ECATS generated a fault interrupt! FSR = %llx\n",
-				fsr);
+		dev_err(tbu->dev, "ECATS generated a fault interrupt! FSR = %llx, SID=0x%x\n",
+				fsr, sid);
 
 		/* Clear pending interrupts */
 		writel_relaxed(fsr, cb_base + ARM_SMMU_CB_FSR);
@@ -5180,19 +5223,14 @@ static void qsmmuv500_init_cb(struct arm_smmu_domain *smmu_domain,
 				struct device *dev)
 {
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	struct arm_smmu_cb *cb = &smmu->cbs[smmu_domain->cfg.cbndx];
 	struct qsmmuv500_group_iommudata *iommudata =
 		to_qsmmuv500_group_iommudata(dev->iommu_group);
-	void __iomem *cb_base;
-	const struct iommu_gather_ops *tlb;
 
 	if (!iommudata->has_actlr)
 		return;
 
-	tlb = smmu_domain->pgtbl_cfg.tlb;
-	cb_base = ARM_SMMU_CB(smmu, smmu_domain->cfg.cbndx);
-
-	writel_relaxed(iommudata->actlr, cb_base + ARM_SMMU_CB_ACTLR);
-
+	cb->actlr = iommudata->actlr;
 	/*
 	 * Prefetch only works properly if the start and end of all
 	 * buffers in the page table are aligned to ARM_SMMU_MIN_IOVA_ALIGN.
@@ -5200,12 +5238,6 @@ static void qsmmuv500_init_cb(struct arm_smmu_domain *smmu_domain,
 	if ((iommudata->actlr >> QSMMUV500_ACTLR_DEEP_PREFETCH_SHIFT) &
 			QSMMUV500_ACTLR_DEEP_PREFETCH_MASK)
 		smmu_domain->qsmmuv500_errata1_min_iova_align = true;
-
-	/*
-	 * Flush the context bank after modifying ACTLR to ensure there
-	 * are no cache entries with stale state
-	 */
-	tlb->tlb_flush_all(smmu_domain);
 }
 
 static int qsmmuv500_tbu_register(struct device *dev, void *cookie)

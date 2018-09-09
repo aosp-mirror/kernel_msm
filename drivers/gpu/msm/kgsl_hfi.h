@@ -252,10 +252,24 @@ struct hfi_bwbuf {
 	uint32_t arr[NUM_BW_LEVELS];
 };
 
-struct opp_desc {
+struct opp_gx_desc {
 	uint32_t vote;
 	uint32_t acd;
 	uint32_t freq;
+};
+
+struct opp_desc {
+	uint32_t vote;
+	uint32_t freq;
+};
+
+/* H2F */
+struct hfi_dcvstable_v1_cmd {
+	uint32_t hdr;
+	uint32_t gpu_level_num;
+	uint32_t gmu_level_num;
+	struct opp_desc gx_votes[MAX_GX_LEVELS];
+	struct opp_desc cx_votes[MAX_CX_LEVELS];
 };
 
 /* H2F */
@@ -263,7 +277,7 @@ struct hfi_dcvstable_cmd {
 	uint32_t hdr;
 	uint32_t gpu_level_num;
 	uint32_t gmu_level_num;
-	struct opp_desc gx_votes[MAX_GX_LEVELS];
+	struct opp_gx_desc gx_votes[MAX_GX_LEVELS];
 	struct opp_desc cx_votes[MAX_CX_LEVELS];
 };
 
@@ -409,7 +423,7 @@ struct hfi_prep_slumber_cmd {
 struct hfi_err_cmd {
 	uint32_t hdr;
 	uint32_t error_code;
-	uint32_t data[2];
+	uint32_t data[16];
 };
 
 /* F2H */
@@ -618,6 +632,7 @@ struct kgsl_hfi {
 struct gmu_device;
 struct gmu_memdesc;
 
+irqreturn_t hfi_irq_handler(int irq, void *data);
 int hfi_start(struct kgsl_device *device, struct gmu_device *gmu,
 		uint32_t boot_state);
 void hfi_stop(struct gmu_device *gmu);

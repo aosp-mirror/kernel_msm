@@ -220,47 +220,47 @@ extern struct bus_type mhi_bus_type;
 #define BHIE_RXVECSTATUS_STATUS_XFER_COMPL (0x02)
 #define BHIE_RXVECSTATUS_STATUS_ERROR (0x03)
 
-struct __packed mhi_event_ctxt {
+struct mhi_event_ctxt {
 	u32 reserved : 8;
 	u32 intmodc : 8;
 	u32 intmodt : 16;
 	u32 ertype;
 	u32 msivec;
-	u64 rbase;
-	u64 rlen;
-	u64 rp;
-	u64 wp;
+	u64 rbase __packed __aligned(4);
+	u64 rlen __packed __aligned(4);
+	u64 rp __packed __aligned(4);
+	u64 wp __packed __aligned(4);
 };
 
-struct __packed mhi_chan_ctxt {
+struct mhi_chan_ctxt {
 	u32 chstate : 8;
 	u32 brstmode : 2;
 	u32 pollcfg : 6;
 	u32 reserved : 16;
 	u32 chtype;
 	u32 erindex;
-	u64 rbase;
-	u64 rlen;
-	u64 rp;
-	u64 wp;
+	u64 rbase __packed __aligned(4);
+	u64 rlen __packed __aligned(4);
+	u64 rp __packed __aligned(4);
+	u64 wp __packed __aligned(4);
 };
 
-struct __packed mhi_cmd_ctxt {
+struct mhi_cmd_ctxt {
 	u32 reserved0;
 	u32 reserved1;
 	u32 reserved2;
-	u64 rbase;
-	u64 rlen;
-	u64 rp;
-	u64 wp;
+	u64 rbase __packed __aligned(4);
+	u64 rlen __packed __aligned(4);
+	u64 rp __packed __aligned(4);
+	u64 wp __packed __aligned(4);
 };
 
-struct __packed mhi_tre {
+struct mhi_tre {
 	u64 ptr;
 	u32 dword[2];
 };
 
-struct __packed bhi_vec_entry {
+struct bhi_vec_entry {
 	u64 dma_addr;
 	u64 size;
 };
@@ -425,33 +425,49 @@ extern const char * const mhi_state_str[MHI_STATE_MAX];
 				  !mhi_state_str[state]) ? \
 				"INVALID_STATE" : mhi_state_str[state])
 
+enum {
+	MHI_PM_BIT_DISABLE,
+	MHI_PM_BIT_POR,
+	MHI_PM_BIT_M0,
+	MHI_PM_BIT_M2,
+	MHI_PM_BIT_M3_ENTER,
+	MHI_PM_BIT_M3,
+	MHI_PM_BIT_M3_EXIT,
+	MHI_PM_BIT_FW_DL_ERR,
+	MHI_PM_BIT_SYS_ERR_DETECT,
+	MHI_PM_BIT_SYS_ERR_PROCESS,
+	MHI_PM_BIT_SHUTDOWN_PROCESS,
+	MHI_PM_BIT_LD_ERR_FATAL_DETECT,
+	MHI_PM_BIT_MAX
+};
+
 /* internal power states */
 enum MHI_PM_STATE {
-	MHI_PM_DISABLE = BIT(0), /* MHI is not enabled */
-	MHI_PM_POR = BIT(1), /* reset state */
-	MHI_PM_M0 = BIT(2),
-	MHI_PM_M1 = BIT(3),
-	MHI_PM_M1_M2_TRANSITION = BIT(4), /* register access not allowed */
-	MHI_PM_M2 = BIT(5),
-	MHI_PM_M3_ENTER = BIT(6),
-	MHI_PM_M3 = BIT(7),
-	MHI_PM_M3_EXIT = BIT(8),
-	MHI_PM_FW_DL_ERR = BIT(9), /* firmware download failure state */
-	MHI_PM_SYS_ERR_DETECT = BIT(10),
-	MHI_PM_SYS_ERR_PROCESS = BIT(11),
-	MHI_PM_SHUTDOWN_PROCESS = BIT(12),
-	MHI_PM_LD_ERR_FATAL_DETECT = BIT(13), /* link not accessible */
+	MHI_PM_DISABLE = BIT(MHI_PM_BIT_DISABLE), /* MHI is not enabled */
+	MHI_PM_POR = BIT(MHI_PM_BIT_POR), /* reset state */
+	MHI_PM_M0 = BIT(MHI_PM_BIT_M0),
+	MHI_PM_M2 = BIT(MHI_PM_BIT_M2),
+	MHI_PM_M3_ENTER = BIT(MHI_PM_BIT_M3_ENTER),
+	MHI_PM_M3 = BIT(MHI_PM_BIT_M3),
+	MHI_PM_M3_EXIT = BIT(MHI_PM_BIT_M3_EXIT),
+	/* firmware download failure state */
+	MHI_PM_FW_DL_ERR = BIT(MHI_PM_BIT_FW_DL_ERR),
+	MHI_PM_SYS_ERR_DETECT = BIT(MHI_PM_BIT_SYS_ERR_DETECT),
+	MHI_PM_SYS_ERR_PROCESS = BIT(MHI_PM_BIT_SYS_ERR_PROCESS),
+	MHI_PM_SHUTDOWN_PROCESS = BIT(MHI_PM_BIT_SHUTDOWN_PROCESS),
+	/* link not accessible */
+	MHI_PM_LD_ERR_FATAL_DETECT = BIT(MHI_PM_BIT_LD_ERR_FATAL_DETECT),
 };
 
 #define MHI_REG_ACCESS_VALID(pm_state) ((pm_state & (MHI_PM_POR | MHI_PM_M0 | \
-		MHI_PM_M1 | MHI_PM_M2 | MHI_PM_M3_ENTER | MHI_PM_M3_EXIT | \
+		MHI_PM_M2 | MHI_PM_M3_ENTER | MHI_PM_M3_EXIT | \
 		MHI_PM_SYS_ERR_DETECT | MHI_PM_SYS_ERR_PROCESS | \
 		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_FW_DL_ERR)))
 #define MHI_PM_IN_ERROR_STATE(pm_state) (pm_state >= MHI_PM_FW_DL_ERR)
 #define MHI_PM_IN_FATAL_STATE(pm_state) (pm_state == MHI_PM_LD_ERR_FATAL_DETECT)
-#define MHI_DB_ACCESS_VALID(pm_state) (pm_state & (MHI_PM_M0 | MHI_PM_M1))
+#define MHI_DB_ACCESS_VALID(pm_state) (pm_state & MHI_PM_M0)
 #define MHI_WAKE_DB_CLEAR_VALID(pm_state) (pm_state & (MHI_PM_M0 | \
-						       MHI_PM_M1 | MHI_PM_M2))
+						       MHI_PM_M2))
 #define MHI_WAKE_DB_SET_VALID(pm_state) (pm_state & MHI_PM_M2)
 #define MHI_WAKE_DB_FORCE_SET_VALID(pm_state) MHI_WAKE_DB_CLEAR_VALID(pm_state)
 #define MHI_EVENT_ACCESS_INVALID(pm_state) (pm_state == MHI_PM_DISABLE || \
@@ -471,7 +487,6 @@ enum MHI_XFER_TYPE {
 #define CMD_EL_PER_RING (128)
 #define PRIMARY_CMD_RING (0)
 #define MHI_DEV_WAKE_DB (127)
-#define MHI_M2_DEBOUNCE_TMR_US (10000)
 #define MHI_MAX_MTU (0xffff)
 
 enum MHI_ER_TYPE {
@@ -654,7 +669,6 @@ int mhi_queue_state_transition(struct mhi_controller *mhi_cntrl,
 			       enum MHI_ST_TRANSITION state);
 void mhi_pm_st_worker(struct work_struct *work);
 void mhi_fw_load_worker(struct work_struct *work);
-void mhi_pm_m1_worker(struct work_struct *work);
 void mhi_pm_sys_err_worker(struct work_struct *work);
 int mhi_ready_state_transition(struct mhi_controller *mhi_cntrl);
 void mhi_ctrl_ev_task(unsigned long data);

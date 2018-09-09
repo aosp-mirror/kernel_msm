@@ -111,6 +111,22 @@ out:
 	return rc;
 }
 
+int qg_read_raw_data(struct qpnp_qg *chip, int addr, u32 *data)
+{
+	int rc;
+	u8 reg[2] = {0};
+
+	rc = qg_read(chip, chip->qg_base + addr, &reg[0], 2);
+	if (rc < 0) {
+		pr_err("Failed to read QG addr %d rc=%d\n", addr, rc);
+		return rc;
+	}
+
+	*data = reg[0] | (reg[1] << 8);
+
+	return rc;
+}
+
 int get_fifo_length(struct qpnp_qg *chip, u32 *fifo_length, bool rt)
 {
 	int rc;
@@ -309,5 +325,40 @@ int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 	}
 	pr_debug("batt_temp = %d\n", *temp);
 
+	return rc;
+}
+
+int qg_get_battery_current(struct qpnp_qg *chip, int *ibat_ua)
+{
+	int rc = 0, last_ibat = 0;
+
+	if (chip->battery_missing) {
+		*ibat_ua = 0;
+		return 0;
+	}
+
+	/* hold data */
+	rc = qg_masked_write(chip, chip->qg_base + QG_DATA_CTL2_REG,
+				BURST_AVG_HOLD_FOR_READ_BIT,
+				BURST_AVG_HOLD_FOR_READ_BIT);
+	if (rc < 0) {
+		pr_err("Failed to hold burst-avg data rc=%d\n", rc);
+		goto release;
+	}
+
+	rc = qg_read(chip, chip->qg_base + QG_LAST_BURST_AVG_I_DATA0_REG,
+				(u8 *)&last_ibat, 2);
+	if (rc < 0) {
+		pr_err("Failed to read LAST_BURST_AVG_I reg, rc=%d\n", rc);
+		goto release;
+	}
+
+	last_ibat = sign_extend32(last_ibat, 15);
+	*ibat_ua = I_RAW_TO_UA(last_ibat);
+
+release:
+	/* release */
+	qg_masked_write(chip, chip->qg_base + QG_DATA_CTL2_REG,
+				BURST_AVG_HOLD_FOR_READ_BIT, 0);
 	return rc;
 }

@@ -498,7 +498,6 @@
 		reg-cam-base = <0x40000 0x42000>;
 		interrupt-names = "cpas_camnoc";
 		interrupts = <0 459 0>;
-		qcom,cpas-hw-ver = <0x175100>; /* Titan v175 v1.0.0 */
 		camnoc-axi-min-ib-bw = <3000000000>;
 		regulator-names = "camss-vdd";
 		camss-vdd-supply = <&titan_top_gdsc>;
@@ -999,6 +998,9 @@
 	cam_ipe0: qcom,ipe0 {
 		cell-index = <0>;
 		compatible = "qcom,cam-ipe";
+		reg = <0xac87000 0x3000>;
+		reg-names = "ipe0_top";
+		reg-cam-base = <0x87000>;
 		regulator-names = "ipe0-vdd";
 		ipe0-vdd-supply = <&ipe_0_gdsc>;
 		clock-names =
@@ -1028,6 +1030,9 @@
 	cam_ipe1: qcom,ipe1 {
 		cell-index = <1>;
 		compatible = "qcom,cam-ipe";
+		reg = <0xac91000 0x3000>;
+		reg-names = "ipe1_top";
+		reg-cam-base = <0x91000>;
 		regulator-names = "ipe1-vdd";
 		ipe1-vdd-supply = <&ipe_1_gdsc>;
 		clock-names =
@@ -1057,6 +1062,9 @@
 	cam_bps: qcom,bps {
 		cell-index = <0>;
 		compatible = "qcom,cam-bps";
+		reg = <0xac6f000 0x3000>;
+		reg-names = "bps_top";
+		reg-cam-base = <0x6f000>;
 		regulator-names = "bps-vdd";
 		bps-vdd-supply = <&bps_gdsc>;
 		clock-names =

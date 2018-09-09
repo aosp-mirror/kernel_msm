@@ -181,15 +181,10 @@ void clk_alpha_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 {
 	u32 val, mask;
 
-	if (config->l)
-		regmap_write(regmap, pll->offset + PLL_L_VAL,
-						config->l);
-	if (config->alpha)
-		regmap_write(regmap, pll->offset + PLL_ALPHA_VAL,
-						config->alpha);
-	if (config->alpha_u)
-		regmap_write(regmap, pll->offset + PLL_ALPHA_VAL_U,
-						config->alpha_u);
+	regmap_write(regmap, pll->offset + PLL_L_VAL, config->l);
+	regmap_write(regmap, pll->offset + PLL_ALPHA_VAL, config->alpha);
+	regmap_write(regmap, pll->offset + PLL_ALPHA_VAL_U, config->alpha_u);
+
 	if (config->config_ctl_val)
 		regmap_write(regmap, pll->offset + PLL_CONFIG_CTL,
 				config->config_ctl_val);
@@ -1487,6 +1482,8 @@ static int clk_alpha_pll_slew_update(struct clk_alpha_pll *pll)
 	return ret;
 }
 
+static int clk_alpha_pll_calibrate(struct clk_hw *hw);
+
 static int clk_alpha_pll_slew_set_rate(struct clk_hw *hw, unsigned long rate,
 			unsigned long parent_rate)
 {
@@ -1594,7 +1591,6 @@ static int clk_alpha_pll_calibrate(struct clk_hw *hw)
 	calibration_freq = (pll->vco_table[0].min_freq +
 					pll->vco_table[0].max_freq)/2;
 
-
 	freq_hz = alpha_pll_round_rate(pll, calibration_freq,
 				clk_hw_get_rate(parent), &l, &a);
 	if (freq_hz != calibration_freq) {
@@ -1627,8 +1623,9 @@ static int clk_alpha_pll_calibrate(struct clk_hw *hw)
 	 * PLL is already running at calibration frequency.
 	 * So slew pll to the previously set frequency.
 	 */
-	freq_hz = alpha_pll_round_rate(pll, clk_hw_get_rate(hw),
-				clk_hw_get_rate(parent), &l, &a);
+	freq_hz = alpha_pll_round_rate(pll, clk_hw_get_rate(hw) *
+					clk_alpha_div_table[i].div,
+					clk_hw_get_rate(parent), &l, &a);
 
 	pr_debug("pll %s: setting back to required rate %lu, freq_hz %ld\n",
 				hw->init->name, clk_hw_get_rate(hw), freq_hz);
@@ -1654,9 +1651,7 @@ static int clk_alpha_pll_slew_enable(struct clk_hw *hw)
 	if (rc)
 		return rc;
 
-	rc = clk_alpha_pll_enable(hw);
-
-	return rc;
+	return clk_alpha_pll_enable(hw);
 }
 
 const struct clk_ops clk_alpha_pll_slew_ops = {

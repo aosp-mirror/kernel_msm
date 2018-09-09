@@ -118,6 +118,7 @@ enum hal_extradata_id {
 
 enum hal_property {
 	HAL_CONFIG_FRAME_RATE = 0x04000001,
+	HAL_CONFIG_OPERATING_RATE,
 	HAL_PARAM_UNCOMPRESSED_FORMAT_SELECT,
 	HAL_PARAM_UNCOMPRESSED_PLANE_ACTUAL_CONSTRAINTS_INFO,
 	HAL_PARAM_UNCOMPRESSED_PLANE_ACTUAL_INFO,
@@ -314,6 +315,8 @@ enum hal_h264_level {
 	HAL_H264_LEVEL_51 = 0x00008000,
 	HAL_H264_LEVEL_52 = 0x00010000,
 	HAL_H264_LEVEL_6  = 0x00020000,
+	HAL_H264_LEVEL_61 = 0x00040000,
+	HAL_H264_LEVEL_62 = 0x00080000,
 };
 
 enum hal_hevc_profile {
@@ -406,6 +409,10 @@ enum hal_vp9_level {
 struct hal_frame_rate {
 	enum hal_buffer buffer_type;
 	u32 frame_rate;
+};
+
+struct hal_operating_rate {
+	u32 operating_rate;
 };
 
 enum hal_uncompressed_format {

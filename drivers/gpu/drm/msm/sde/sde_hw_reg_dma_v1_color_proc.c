@@ -1603,7 +1603,7 @@ int reg_dmav1_init_sspp_op_v4(int feature, enum sde_sspp idx)
 		rc = (is_supported) ? 0 : -ENOTSUPP;
 
 	if (!rc) {
-		for (i = SDE_SSPP_RECT_0; i < SDE_SSPP_RECT_MAX; i++) {
+		for (i = SDE_SSPP_RECT_SOLO; i < SDE_SSPP_RECT_MAX; i++) {
 			rc = reg_dma_buf_init(
 				&sspp_buf[i][sspp_feature_map[feature]][idx],
 				sspp_feature_reg_dma_sz[feature]);
@@ -1725,7 +1725,7 @@ void reg_dmav1_setup_vig_gamutv5(struct sde_hw_pipe *ctx, void *cfg)
 				hw_cfg->len, sizeof(struct drm_msm_3d_gamut));
 		return;
 	}
-	op_mode = SDE_REG_READ(&ctx->hw, gamut_base);
+	op_mode = SDE_REG_READ(&ctx->hw, ctx->cap->sblk->gamut_blk.base);
 	payload = hw_cfg->payload;
 	rc = sde_gamut_get_mode_info(SSPP, payload, &tbl_len, &tbl_off,
 			&op_mode, &scale_off);
@@ -1896,7 +1896,7 @@ void reg_dmav1_setup_vig_igcv5(struct sde_hw_pipe *ctx, void *cfg)
 	if (!data)
 		return;
 
-	reg = SDE_REG_READ(&ctx->hw, igc_base);
+	reg = SDE_REG_READ(&ctx->hw, ctx->cap->sblk->igc_blk[0].base);
 	lut_enable = (reg >> 8) & BIT(0);
 	lut_sel = (reg >> 9) & BIT(0);
 	/* select LUT table (0 or 1) when 1D LUT is in active mode */
@@ -2254,7 +2254,7 @@ int reg_dmav1_deinit_sspp_ops(enum sde_sspp idx)
 		return -EINVAL;
 	}
 
-	for (i = SDE_SSPP_RECT_0; i < SDE_SSPP_RECT_MAX; i++) {
+	for (i = SDE_SSPP_RECT_SOLO; i < SDE_SSPP_RECT_MAX; i++) {
 		for (j = 0; j < REG_DMA_FEATURES_MAX; j++) {
 			if (!sspp_buf[i][j][idx])
 				continue;
@@ -2527,7 +2527,7 @@ void reg_dmav1_setup_vig_qseed3(struct sde_hw_pipe *ctx,
 
 end:
 	if (sspp->layout.format) {
-		if (SDE_FORMAT_IS_DX(sspp->layout.format))
+		if (!SDE_FORMAT_IS_DX(sspp->layout.format))
 			op_mode |= BIT(14);
 		if (sspp->layout.format->alpha_enable) {
 			op_mode |= BIT(10);

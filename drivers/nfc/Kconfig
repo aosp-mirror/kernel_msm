@@ -73,3 +73,11 @@ config NFC_ST21NFC
         depends on I2C
         help
 	  ST Microelectronics ST21NFC Near Field Communication controller support.
+
+config NTAG_NQ
+	tristate "QTI NTAG Driver for NTAG communication"
+	depends on I2C
+	help
+          This enables NTAG driver for NTx based devices.
+          NTAG is NFC tags that combine passive NFC interface with contact i2c interface.
+          This is for i2c connected version.

@@ -318,6 +318,7 @@ config MSM_CAMCC_SDMSHRIKE
 
 config MDM_GCC_QCS405
 	tristate "QCS405 Global Clock Controller"
+	select QCOM_GDSC
 	depends on COMMON_CLK_QCOM
 	help
 	 Support for the global clock controller on Qualcomm Technologies, Inc
@@ -367,3 +368,11 @@ config MSM_VIDEOCC_SM6150
 	  SM6150 devices.
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
+
+config MSM_DEBUGCC_SM6150
+	tristate "SM6150 Debug Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc
+	  SM6150 devices.
+	  Say Y if you want to support the clock measurement functionality.

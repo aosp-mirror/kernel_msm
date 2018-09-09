@@ -15,8 +15,9 @@ obj-$(CONFIG_QCOM_PM)	+=	spm.o
 obj-$(CONFIG_QCOM_QMI_HELPERS)	+= qmi_helpers.o
 qmi_helpers-y += qmi_encdec.o
 qmi_helpers-y += qmi_interface.o
-obj-$(CONFIG_QCOM_QMI_DFC)	+= qmi_rmnet.o
+obj-$(CONFIG_QCOM_QMI_RMNET)	+= qmi_rmnet.o
 obj-$(CONFIG_QCOM_QMI_DFC)	+= dfc_qmi.o
+obj-$(CONFIG_QCOM_QMI_POWER_COLLAPSE) += wda_qmi.o
 obj-$(CONFIG_QCOM_SMD_RPM)	+= smd-rpm.o
 obj-$(CONFIG_QCOM_SMEM) +=	smem.o
 obj-$(CONFIG_MSM_SPM) += msm-spm.o spm_devices.o
@@ -64,6 +65,7 @@ ifdef CONFIG_MSM_SUBSYSTEM_RESTART
        obj-y += subsystem_notif.o
        obj-y += subsystem_restart.o
        obj-y += ramdump.o
+       obj-y += microdump_collector.o
 endif
 obj-$(CONFIG_QCOM_EUD) += eud.o
 obj-$(CONFIG_QSEE_IPC_IRQ) += qsee_ipc_irq.o
@@ -84,7 +86,6 @@ ifdef CONFIG_MSM_RPM_SMD
 endif
 obj-$(CONFIG_QMP_DEBUGFS_CLIENT) += qmp-debugfs-client.o
 obj-$(CONFIG_MSM_PERFORMANCE) += msm_performance.o
-obj-$(CONFIG_MSM_RPM_SMD)   +=  rpm-smd.o
 ifdef CONFIG_DEBUG_FS
 obj-$(CONFIG_MSM_RPM_SMD)   +=  rpm-smd-debug.o
 endif

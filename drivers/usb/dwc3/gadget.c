@@ -225,13 +225,14 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc, struct dwc3_ep *dep)
 	/* MDWIDTH is represented in bits, we need it in bytes */
 	mdwidth >>= 3;
 
-	if (dep->endpoint.ep_type == EP_TYPE_GSI || dep->endpoint.endless)
-		mult = 3;
-
 	if (((dep->endpoint.maxburst > 1) &&
 			usb_endpoint_xfer_bulk(dep->endpoint.desc))
 			|| usb_endpoint_xfer_isoc(dep->endpoint.desc))
 		mult = 3;
+
+	if ((dep->endpoint.maxburst > 2) &&
+			dep->endpoint.ep_type == EP_TYPE_GSI)
+		mult = 6;
 
 	tmp = ((max_packet + mdwidth) * mult) + mdwidth;
 	fifo_size = DIV_ROUND_UP(tmp, mdwidth);
@@ -1452,7 +1453,7 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 	struct dwc3		*dwc = dep->dwc;
 	int			ret = 0;
 
-	if (!dep->endpoint.desc) {
+	if (!dep->endpoint.desc || !dwc->pullups_connected) {
 		dev_err(dwc->dev, "%s: can't queue to disabled endpoint\n",
 				dep->name);
 		return -ESHUTDOWN;
@@ -2111,6 +2112,7 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 		dwc->pullups_connected = true;
 	} else {
 		dwc3_gadget_disable_irq(dwc);
+		dwc->pullups_connected = false;
 		__dwc3_gadget_ep_disable(dwc->eps[0]);
 		__dwc3_gadget_ep_disable(dwc->eps[1]);
 
@@ -2126,8 +2128,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 
 		if (dwc->has_hibernation && !suspend)
 			reg &= ~DWC3_DCTL_KEEP_CONNECT;
-
-		dwc->pullups_connected = false;
 	}
 
 	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
@@ -2188,7 +2188,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	 * Per databook, when we want to stop the gadget, if a control transfer
 	 * is still in process, complete it and get the core into setup phase.
 	 */
-	if (!is_on && dwc->ep0state != EP0_SETUP_PHASE) {
+	if (!is_on && (dwc->ep0state != EP0_SETUP_PHASE ||
+				dwc->ep0_next_event != DWC3_EP0_COMPLETE)) {
 		reinit_completion(&dwc->ep0_in_setup);
 
 		ret = wait_for_completion_timeout(&dwc->ep0_in_setup,
@@ -2896,11 +2897,12 @@ static void dwc3_endpoint_transfer_complete(struct dwc3 *dwc,
 	}
 
 	/*
-	 * Our endpoint might get disabled by another thread during
-	 * dwc3_gadget_giveback(). If that happens, we're just gonna return 1
-	 * early on so DWC3_EP_BUSY flag gets cleared
+	 * Our endpoint might get disabled by another thread or stop
+	 * active transfer is invoked with pull up disable during
+	 * dwc3_gadget_giveback(). If that happens, we're just gonna
+	 * return 1 early on so DWC3_EP_BUSY flag gets cleared.
 	 */
-	if (!dep->endpoint.desc)
+	if (!dep->endpoint.desc || !dwc->pullups_connected)
 		return;
 
 	if (!usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
@@ -3087,7 +3089,8 @@ void dwc3_stop_active_transfer(struct dwc3 *dwc, u32 epnum, bool force)
 	dep->flags &= ~DWC3_EP_BUSY;
 
 	if (dwc3_is_usb31(dwc) || dwc->revision < DWC3_REVISION_310A) {
-		dep->flags |= DWC3_EP_END_TRANSFER_PENDING;
+		if (dep->endpoint.ep_type != EP_TYPE_GSI)
+			dep->flags |= DWC3_EP_END_TRANSFER_PENDING;
 		udelay(100);
 	}
 }

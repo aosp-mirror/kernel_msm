@@ -413,6 +413,9 @@ static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 	int rc = 0;
 	struct pinctrl_state *state;
 
+	if (panel->host_config.ext_bridge_mode)
+		return 0;
+
 	if (enable)
 		state = panel->pinctrl.active;
 	else
@@ -547,6 +550,9 @@ static int dsi_panel_pinctrl_init(struct dsi_panel *panel)
 {
 	int rc = 0;
 
+	if (panel->host_config.ext_bridge_mode)
+		return 0;
+
 	/* TODO:  pinctrl is defined in dsi dt node */
 	panel->pinctrl.pinctrl = devm_pinctrl_get(panel->parent);
 	if (IS_ERR_OR_NULL(panel->pinctrl.pinctrl)) {
@@ -640,6 +646,9 @@ static int dsi_panel_bl_register(struct dsi_panel *panel)
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
+	if (panel->host_config.ext_bridge_mode)
+		return 0;
+
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = dsi_panel_wled_register(panel, bl);
@@ -660,6 +669,9 @@ static int dsi_panel_bl_unregister(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
+
+	if (panel->host_config.ext_bridge_mode)
+		return 0;
 
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
@@ -996,6 +1008,9 @@ static int dsi_panel_parse_misc_host_config(struct dsi_host_common_cfg *host,
 	host->append_tx_eot = utils->read_bool(utils->data,
 						"qcom,mdss-dsi-tx-eot-append");
 
+	host->ext_bridge_mode = utils->read_bool(utils->data,
+					"qcom,mdss-dsi-ext-bridge-mode");
+
 	return 0;
 }
 
@@ -1189,6 +1204,9 @@ static int dsi_panel_parse_video_host_config(struct dsi_video_engine_cfg *cfg,
 
 	cfg->bllp_lp11_en = utils->read_bool(utils->data,
 					"qcom,mdss-dsi-bllp-power-mode");
+
+	cfg->force_clk_lane_hs = of_property_read_bool(utils->data,
+					"qcom,mdss-dsi-force-clock-lane-hs");
 
 	traffic_mode = utils->get_property(utils->data,
 				       "qcom,mdss-dsi-traffic-mode",
@@ -1469,7 +1487,7 @@ static int dsi_panel_create_cmd_packets(const char *data,
 		cmd[i].msg.channel = data[2];
 		cmd[i].msg.flags |= (data[3] == 1 ? MIPI_DSI_MSG_REQ_ACK : 0);
 		cmd[i].msg.ctrl = 0;
-		cmd[i].post_wait_ms = data[4];
+		cmd[i].post_wait_ms = cmd[i].msg.wait_ms = data[4];
 		cmd[i].msg.tx_len = ((data[5] << 8) | (data[6]));
 
 		size = cmd[i].msg.tx_len * sizeof(u8);
@@ -1804,7 +1822,8 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 
 	panel->reset_config.reset_gpio = utils->get_named_gpio(utils->data,
 					      "qcom,platform-reset-gpio", 0);
-	if (!gpio_is_valid(panel->reset_config.reset_gpio)) {
+	if (!gpio_is_valid(panel->reset_config.reset_gpio) &&
+		!panel->host_config.ext_bridge_mode) {
 		pr_err("[%s] failed get reset gpio, rc=%d\n", panel->name, rc);
 		rc = -EINVAL;
 		goto error;
@@ -2027,9 +2046,8 @@ int dsi_dsc_populate_static_param(struct msm_display_dsc_info *dsc)
 	int final_value, final_scale;
 	int ratio_index;
 
-	dsc->version = 0x11;
-	dsc->scr_rev = 0;
 	dsc->rc_model_size = 8192;
+
 	if (dsc->version == 0x11 && dsc->scr_rev == 0x1)
 		dsc->first_line_bpg_offset = 15;
 	else
@@ -2191,7 +2209,7 @@ static int dsi_panel_parse_phy_timing(struct dsi_display_mode *mode,
 		priv_info->phy_timing_len = len;
 	};
 
-	mode->pixel_clk_khz = (mode->timing.h_active *
+	mode->pixel_clk_khz = (DSI_H_TOTAL(&mode->timing) *
 			DSI_V_TOTAL(&mode->timing) *
 			mode->timing.refresh_rate) / 1000;
 	return rc;
@@ -2220,6 +2238,36 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	if (!priv_info->dsc_enabled) {
 		pr_debug("dsc compression is not enabled for the mode");
 		return 0;
+	}
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-version", &data);
+	if (rc) {
+		priv_info->dsc.version = 0x11;
+		rc = 0;
+	} else {
+		priv_info->dsc.version = data & 0xff;
+		/* only support DSC 1.1 rev */
+		if (priv_info->dsc.version != 0x11) {
+			pr_err("%s: DSC version:%d not supported\n", __func__,
+					priv_info->dsc.version);
+			rc = -EINVAL;
+			goto error;
+		}
+	}
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-scr-version", &data);
+	if (rc) {
+		priv_info->dsc.scr_rev = 0x0;
+		rc = 0;
+	} else {
+		priv_info->dsc.scr_rev = data & 0xff;
+		/* only one scr rev supported */
+		if (priv_info->dsc.scr_rev > 0x1) {
+			pr_err("%s: DSC scr version:%d not supported\n",
+					__func__, priv_info->dsc.scr_rev);
+			rc = -EINVAL;
+			goto error;
+		}
 	}
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-slice-height", &data);
@@ -3180,21 +3228,23 @@ int dsi_panel_get_mode_count(struct dsi_panel *panel)
 
 	timings_np = utils->get_child_by_name(utils->data,
 			"qcom,mdss-dsi-display-timings");
-	if (!timings_np) {
+	if (!timings_np && !panel->host_config.ext_bridge_mode) {
 		pr_err("no display timing nodes defined\n");
 		rc = -EINVAL;
 		goto error;
 	}
 
 	count = utils->get_child_count(timings_np);
-	if (!count || count > DSI_MODE_MAX) {
+	if ((!count && !panel->host_config.ext_bridge_mode) ||
+		count > DSI_MODE_MAX) {
 		pr_err("invalid count of timing nodes: %d\n", count);
 		rc = -EINVAL;
 		goto error;
 	}
 
 	/* No multiresolution support is available for video mode panels */
-	if (panel->panel_mode != DSI_OP_CMD_MODE)
+	if (panel->panel_mode != DSI_OP_CMD_MODE &&
+		!panel->host_config.ext_bridge_mode)
 		count = SINGLE_MODE_SUPPORT;
 
 	panel->num_timing_nodes = count;
@@ -3590,6 +3640,7 @@ static int dsi_panel_roi_prepare_dcs_cmds(struct dsi_panel_cmd_set *set,
 	set->cmds[0].msg.tx_buf = caset;
 	set->cmds[0].msg.rx_len = 0;
 	set->cmds[0].msg.rx_buf = 0;
+	set->cmds[0].msg.wait_ms = 0;
 	set->cmds[0].last_command = 0;
 	set->cmds[0].post_wait_ms = 0;
 
@@ -3601,6 +3652,7 @@ static int dsi_panel_roi_prepare_dcs_cmds(struct dsi_panel_cmd_set *set,
 	set->cmds[1].msg.tx_buf = paset;
 	set->cmds[1].msg.rx_len = 0;
 	set->cmds[1].msg.rx_buf = 0;
+	set->cmds[1].msg.wait_ms = 0;
 	set->cmds[1].last_command = 1;
 	set->cmds[1].post_wait_ms = 0;
 
@@ -3814,11 +3866,14 @@ int dsi_panel_disable(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
-	if (rc) {
-		pr_err("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
-		       panel->name, rc);
-		goto error;
+	 /* Avoid sending panel off commands when ESD recovery is underway */
+	if (!panel->esd_recovery_pending) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
+		if (rc) {
+			pr_err("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
+					panel->name, rc);
+			goto error;
+		}
 	}
 	panel->panel_initialized = false;
 
