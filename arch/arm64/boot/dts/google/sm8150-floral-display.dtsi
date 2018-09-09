@@ -27,6 +27,10 @@
 		&dsi_sim_vid_display>;
 };
 
+&sde_dsi1 {
+    status = "disabled";
+};
+
 // Disable control of incorrect gpio pin 130
 &display_panel_avdd_eldo {
 	gpio = <>;
@@ -86,7 +90,7 @@
 };
 
 &mdss_mdp {
-	connectors = <&sde_rscc &sde_wb &sde_dsi>;
+	connectors = <&sde_wb &sde_dsi>;
 };
 
 &soc {
