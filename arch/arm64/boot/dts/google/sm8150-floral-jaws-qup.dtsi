@@ -10,7 +10,8 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-floral-common.dtsi"
-#include "sm8150-floral-jaws-haptics.dtsi"
-#include "sm8150-floral-jaws-qup.dtsi"
+// b/113529207 jaws can only support 400khz on qup 15.
+&qupv3_se15_i2c {
+	qcom,clk-freq-out = <400000>;
+};
 

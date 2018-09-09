@@ -12,7 +12,7 @@
 
 &qupv3_se15_i2c {
 	status = "ok";
-	qcom,clk-freq-out = <1000000>;
+	// see -qup.dtsi for clk-freq-out setting
 	pac193x@10 {
 		compatible = "microchip,pac1934";
 		reg = <0x10>;

@@ -9,8 +9,18 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+&cs40l20_rst {
+	mux {
+		pins = "gpio108";
+		function = "gpio";
+	};
+	config {
+		drive-strength = <2>;
+		output-low;
+	};
+};
 
-#include "sm8150-floral-common.dtsi"
-#include "sm8150-floral-jaws-haptics.dtsi"
-#include "sm8150-floral-jaws-qup.dtsi"
+&floral_cs40l20 {
+	reset-gpios = <&tlmm 108 0>;
+};
 

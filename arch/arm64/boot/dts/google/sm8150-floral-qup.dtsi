@@ -17,15 +17,8 @@
 	status = "ok";
 };
 
-// reserved for haptics/batt/etc i2c
+// Haptics/batt i2c
 &qupv3_se15_i2c {
-	status = "ok";
+	qcom,clk-freq-out = <1000000>;
 };
-
-//qupv4 - codec SPI
-//&qupv3_se4_spi {
-//	status = "ok";
-//};
-
-
 
