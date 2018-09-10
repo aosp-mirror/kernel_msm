@@ -48,9 +48,14 @@ Optional properties:
     compensation algorithm. It can be overwritten at a later time by writing
     to the f0_stored sysfs control.
 
-    If this value is omitted or specified as zero, the measurement recorded in
-    the f0_measured sysfs control is used. If LRA diagnostics has not been
-    administered and f0_measured is uninitialized, 2621440 (160 Hz) is used.
+    If this value is omitted or specified as zero in the presence of silicon
+    revisions A0 or B0, the measurement recorded in the f0_measured sysfs
+    control is used. In that case, if LRA diagnostics has not been administered
+    and f0_measured is uninitialized, 2621440 (160 Hz) is used.
+
+    If this value is omitted or specified as zero in the presence of silicon
+    revision B1, 2621440 (160 Hz) is used irrespective of the measurement
+    recorded in the f0_measured sysfs control.
 
   - cirrus,f0-min : Minimum LRA resonant frequency (f0) that may be written to
     the f0_stored sysfs control, expressed using the same numerical format as
@@ -68,9 +73,14 @@ Optional properties:
     It can be overwritten at a later time by writing to the redc_stored sysfs
     control.
 
-    If this value is omitted or specified as zero, the measurement recorded in
-    the redc_measured sysfs control is used. If LRA diagnostics has not been
-    administered and redc_measured is uninitialized, 340787 (15.2 ohms) is used.
+    If this value is omitted or specified as zero in the presence of silicon
+    revisions A0 or B0, the measurement recorded in the redc_measured sysfs
+    control is used. In that case, if LRA diagnostics has not been administered
+    and redc_measured is uninitialized, 340787 (15.2 ohms) is used.
+
+    If this value is omitted or specified as zero in the presence of silicon
+    revision B1, 340787 (15.2 ohms) is used irrespective of the measurement
+    recorded in the redc_measured sysfs control.
 
   - cirrus,redc-min : Minimum LRA series resistance (ReDC) that may be written
     to the redc_stored sysfs control, expressed using the same numerical format
@@ -81,6 +91,12 @@ Optional properties:
     to the redc_stored sysfs control, expressed using the same numerical format
     as cirrus,redc-default. If this value is omitted or specified as zero, no
     upper-bound validation is performed.
+
+  - cirrus,redc-comp-disable : Boolean for disabling ReDC-based click
+    compensation. If this property is omitted, ReDC-based click compensation
+    remains enabled. ReDC-based click compensation can be enabled or disabled
+    at a later time by writing 1 or 0 to the redc_enable sysfs control,
+    respectively. This property does not affect f0-based click compensation.
 
   - cirrus,gpio1-rise-index : Specifies the wavetable index mapped to GPIO1
     rising edges. If this value is omitted, specified as zero or exceeds the
