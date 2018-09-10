@@ -788,6 +788,47 @@ unlock:
 
 static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 {
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	if (max_ma > 0) {
+		val.intval = POWER_SUPPLY_PD_ACTIVE;
+		ret = power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+	} else if (max_ma == 0) {
+		val.intval = POWER_SUPPLY_PD_INACTIVE;
+		ret = power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+	}
+
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set pd active to %d, ret=%d",
+					  val.intval, ret);
+	}
+
+	val.intval = mv * 1000;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set max voltage to %d, ret=%d",
+					  mv, ret);
+		return ret;
+	}
+
+	val.intval = max_ma * 1000;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_CURRENT_MAX,
+					&val);
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to set pd current max to %d, ret=%d",
+				      max_ma, ret);
+		return ret;
+	}
+
+	pd_engine_log(pd, "max_ma=%d, mv=%d", max_ma, mv);
+
 	return 0;
 }
 
