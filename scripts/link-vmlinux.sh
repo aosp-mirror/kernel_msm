@@ -54,13 +54,6 @@ expand()
 	fi
 }
 
-recordmcount()
-{
-	if [ -n "${CONFIG_FTRACE_MCOUNT_RECORD}" ]; then
-		scripts/recordmcount ${RECORDMCOUNT_FLAGS} $*
-	fi
-}
-
 modversions()
 {
 	if [ -z "${CONFIG_CC_LTO}" ]; then
@@ -257,9 +250,6 @@ if [ -n "${CONFIG_CC_LTO}" ]; then
 	# Re-use vmlinux.o, so we can avoid slow LTO linking again
 	KBUILD_VMLINUX_INIT=
 	KBUILD_VMLINUX_MAIN=vmlinux.o
-
-	# Call recordmcount if needed
-	recordmcount vmlinux.o
 else
 	update_version
 fi

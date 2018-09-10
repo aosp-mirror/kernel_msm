@@ -440,10 +440,6 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 #define __visible
 #endif
 
-#ifndef __norecordmcount
-#define __norecordmcount
-#endif
-
 /*
  * Assume alignment of return value.
  */
