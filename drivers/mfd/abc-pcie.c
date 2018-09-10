@@ -507,27 +507,48 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 
 	if (dir ==  DMA_TO_DEVICE) {
 		dma_offset = chan * DMA_READ_OFFSET;
-		writel(DMA_ENABLE, abc_dev->pcie_config + DMA_READ_ENGINE);
-		writel(DMA_MASK,
-		       abc_dev->pcie_config + DMA_READ_INTERRUPT_MASK);
-		writel(0x04000008, abc_dev->pcie_config + dma_offset +  DMA_READ_CHANNEL_CONTROL_1);
-		writel(blk->len, abc_dev->pcie_config + dma_offset + DMA_READ_TRANSFER_SIZE);
-		writel(blk->src_addr, abc_dev->pcie_config + dma_offset + DMA_READ_SAR_LOW);
-		writel(blk->src_u_addr, abc_dev->pcie_config + dma_offset + DMA_READ_SAR_HIGH);
-		writel(blk->dst_addr, abc_dev->pcie_config + dma_offset + DMA_READ_DAR_LOW);
-		writel(blk->dst_u_addr, abc_dev->pcie_config + dma_offset + DMA_READ_DAR_HIGH);
-		writel(chan, abc_dev->pcie_config + DMA_READ_DOORBELL);
+
+		__iowmb();
+
+		writel_relaxed(DMA_ENABLE, abc_dev->pcie_config +
+				DMA_READ_ENGINE);
+		writel_relaxed(DMA_MASK, abc_dev->pcie_config +
+				DMA_READ_INTERRUPT_MASK);
+		writel_relaxed(0x04000008, abc_dev->pcie_config + dma_offset +
+				DMA_READ_CHANNEL_CONTROL_1);
+		writel_relaxed(blk->len, abc_dev->pcie_config + dma_offset +
+				DMA_READ_TRANSFER_SIZE);
+		writel_relaxed(blk->src_addr, abc_dev->pcie_config +
+				dma_offset + DMA_READ_SAR_LOW);
+		writel_relaxed(blk->src_u_addr, abc_dev->pcie_config +
+				dma_offset + DMA_READ_SAR_HIGH);
+		writel_relaxed(blk->dst_addr, abc_dev->pcie_config +
+				dma_offset + DMA_READ_DAR_LOW);
+		writel_relaxed(blk->dst_u_addr, abc_dev->pcie_config +
+				dma_offset + DMA_READ_DAR_HIGH);
+		writel_relaxed(chan, abc_dev->pcie_config + DMA_READ_DOORBELL);
 	} else {
 		dma_offset = chan * DMA_WRITE_OFFSET;
-		writel(DMA_ENABLE, abc_dev->pcie_config + DMA_WRITE_ENGINE);
-		writel(DMA_MASK, abc_dev->pcie_config + DMA_WRITE_INTERRUPT_MASK);
-		writel(0x04000008, abc_dev->pcie_config + dma_offset +  DMA_WRITE_CHANNEL_CONTROL_1);
-		writel(blk->len, abc_dev->pcie_config + dma_offset + DMA_WRITE_TRANSFER_SIZE);
-		writel(blk->src_addr, abc_dev->pcie_config + dma_offset + DMA_WRITE_SAR_LOW);
-		writel(blk->src_u_addr, abc_dev->pcie_config + dma_offset + DMA_WRITE_SAR_HIGH);
-		writel(blk->dst_addr, abc_dev->pcie_config + dma_offset + DMA_WRITE_DAR_LOW);
-		writel(blk->dst_u_addr, abc_dev->pcie_config + dma_offset + DMA_WRITE_DAR_HIGH);
-		writel(chan, abc_dev->pcie_config + DMA_WRITE_DOORBELL);
+
+		__iowmb();
+
+		writel_relaxed(DMA_ENABLE, abc_dev->pcie_config +
+				DMA_WRITE_ENGINE);
+		writel_relaxed(DMA_MASK, abc_dev->pcie_config +
+				DMA_WRITE_INTERRUPT_MASK);
+		writel_relaxed(0x04000008, abc_dev->pcie_config + dma_offset +
+				DMA_WRITE_CHANNEL_CONTROL_1);
+		writel_relaxed(blk->len, abc_dev->pcie_config + dma_offset +
+				DMA_WRITE_TRANSFER_SIZE);
+		writel_relaxed(blk->src_addr, abc_dev->pcie_config +
+				dma_offset + DMA_WRITE_SAR_LOW);
+		writel_relaxed(blk->src_u_addr, abc_dev->pcie_config +
+				dma_offset + DMA_WRITE_SAR_HIGH);
+		writel_relaxed(blk->dst_addr, abc_dev->pcie_config +
+				dma_offset + DMA_WRITE_DAR_LOW);
+		writel_relaxed(blk->dst_u_addr, abc_dev->pcie_config +
+				dma_offset + DMA_WRITE_DAR_HIGH);
+		writel_relaxed(chan, abc_dev->pcie_config + DMA_WRITE_DOORBELL);
 	}
 
 	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
