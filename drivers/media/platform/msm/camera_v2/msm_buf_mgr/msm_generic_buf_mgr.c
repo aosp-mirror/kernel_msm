@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -540,15 +540,13 @@ static long msm_buf_mngr_subdev_ioctl(struct v4l2_subdev *sd,
 		k_ioctl = *ptr;
 		switch (k_ioctl.id) {
 		case MSM_CAMERA_BUF_MNGR_IOCTL_ID_GET_BUF_BY_IDX: {
+			struct msm_buf_mngr_info buf_info, *tmp = NULL;
 
 			if (k_ioctl.size != sizeof(struct msm_buf_mngr_info))
 				return -EINVAL;
 			if (!k_ioctl.ioctl_ptr)
 				return -EINVAL;
-#ifndef CONFIG_COMPAT
-			{
-				struct msm_buf_mngr_info buf_info, *tmp = NULL;
-
+			if (!is_compat_task()) {
 				MSM_CAM_GET_IOCTL_ARG_PTR(&tmp,
 					&k_ioctl.ioctl_ptr, sizeof(tmp));
 				if (copy_from_user(&buf_info, tmp,
@@ -557,7 +555,7 @@ static long msm_buf_mngr_subdev_ioctl(struct v4l2_subdev *sd,
 				}
 				k_ioctl.ioctl_ptr = (uintptr_t)&buf_info;
 			}
-#endif
+
 			argp = &k_ioctl;
 			rc = msm_cam_buf_mgr_ops(cmd, argp);
 			}
