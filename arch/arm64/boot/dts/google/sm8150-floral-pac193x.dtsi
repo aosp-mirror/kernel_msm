@@ -16,34 +16,61 @@
 	pac193x@10 {
 		compatible = "microchip,pac1934";
 		reg = <0x10>;
-		samp-rate = <64>;
+		samp-rate = <8>;
 		status = "okay";
 
 		ch1: channel@0 {
-		     bi-dir;
-		     uohms-shunt-res = <1000>; /* shunt resistor is 1 milliohm */
+		     uohms-shunt-res = <10000>;
 		     rail-name = "CPU";
 		     channel_enabled;
 		};
 
 		ch2: channel@1 {
-		     /* uni-directional channel because of missing "bi-dir" property */
-		     uohms-shunt-res = <10000>; /* shunt resistor is 10 milliohm */
+		     uohms-shunt-res = <10000>;
 		     rail-name = "GPU";
 		     channel_enabled;
 		};
 
 		ch3: channel@2 {
 		     bi-dir;
-		     uohms-shunt-res = <100000>; /* shunt resistor is 100 milliohm */
+		     uohms-shunt-res = <100000>;
 		     rail-name = "MEM";
-		     /* channel disabled - no boolean property "channel_enabled" present */
 		};
 
 		ch4: channel@3 {
-		     bi-dir;
-		     uohms-shunt-res = <1000000>; /* shunt resistor is 1 ohm */
+		     uohms-shunt-res = <10000>;
 		     rail-name = "NET";
+		     channel_enabled;
+		};
+	};
+
+	pac193x@11 {
+		compatible = "microchip,pac1934";
+		reg = <0x11>;
+		samp-rate = <8>;
+		status = "okay";
+
+		ch5: channel@0 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "CPU2";
+		     channel_enabled;
+		};
+
+		ch6: channel@1 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "GPU2";
+		     channel_enabled;
+		};
+
+		ch7: channel@2 {
+		     bi-dir;
+		     uohms-shunt-res = <100000>;
+		     rail-name = "MEM2";
+		};
+
+		ch8: channel@3 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "NET2";
 		     channel_enabled;
 		};
 	};
