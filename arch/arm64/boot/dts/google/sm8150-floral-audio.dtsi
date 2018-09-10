@@ -251,7 +251,6 @@
 
 		qcom,audio-routing = "AIF4 VI", "MCLK";
 
-		qcom,ext-disp-audio-rx;
 		qcom,wcn-btfm;
 		qcom,mi2s-audio-intf;
 		qcom,auxpcm-audio-intf;
