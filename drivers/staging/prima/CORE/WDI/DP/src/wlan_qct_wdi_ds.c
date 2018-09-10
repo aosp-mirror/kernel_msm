@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -129,6 +129,7 @@ WDI_Status WDI_DS_TxPacket(void *pContext,
   wpt_uint8      ucUP;
   wpt_uint8      ucTypeSubtype;
   wpt_uint8      isEapol;
+  wpt_uint8      isArp;
   wpt_uint8      alignment;
   wpt_uint32     ucTxFlag;
   wpt_uint8      ucProtMgmtFrame;
@@ -160,6 +161,7 @@ WDI_Status WDI_DS_TxPacket(void *pContext,
   ucTypeSubtype = pTxMetadata->typeSubtype;
   ucUP = pTxMetadata->fUP;
   isEapol = pTxMetadata->isEapol;
+  isArp = pTxMetadata->isArp;
   ucTxFlag = pTxMetadata->txFlags;
   ucProtMgmtFrame = pTxMetadata->fProtMgmtFrame;
   pSTAMACAddress = &(pTxMetadata->fSTAMACAddress[0]);
@@ -211,9 +213,16 @@ WDI_Status WDI_DS_TxPacket(void *pContext,
     WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
               "Packet Length is %d\n", pTxMetadata->fPktlen);
   }
+
+  if (pTxMetadata->isArp)
+  {
+    WPAL_TRACE( eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
+                "%s :Transmitting ARP packet",__func__);
+  }
+
   wdiStatus = WDI_FillTxBd(pContext, ucTypeSubtype, pSTAMACAddress, pAddr2MACAddress,
-    &ucUP, 1, pvBDHeader, ucTxFlag /* No ACK */, ucProtMgmtFrame, 0, isEapol, &staId,
-    pTxMetadata->txBdToken);
+    &ucUP, 1, pvBDHeader, ucTxFlag /* No ACK */, ucProtMgmtFrame, 0, isEapol, isArp,
+    &staId, pTxMetadata->txBdToken);
 
   if(WDI_STATUS_SUCCESS != wdiStatus)
   {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -108,5 +108,38 @@ int wlan_hdd_ipv4_changed(struct notifier_block *nb,
 int wlan_hdd_ipv6_changed(struct notifier_block *nb,
                            unsigned long data, void *arg);
 
+eHalStatus hdd_set_mc_list_cfg_item(hdd_context_t* pHddCtx,
+                bool value);
+bool is_mc_list_cfg_disable_required(hdd_context_t* pHddCtx);
+void hdd_mc_addr_list_cfg_config(hdd_context_t* pHddCtx, bool action);
+
+/**
+ * enum suspend_resume_state - Suspend resume state
+ * @HDD_WLAN_EARLY_SUSPEND: Early suspend state.
+ * @HDD_WLAN_SUSPEND: Suspend state.
+ * @HDD_WLAN_EARLY_RESUME: Early resume state.
+ * @HDD_WLAN_RESUME: Resume state.
+ *
+ * Suspend state to indicate in diag event of suspend resume.
+ */
+
+enum suspend_resume_state {
+   HDD_WLAN_EARLY_SUSPEND,
+   HDD_WLAN_SUSPEND,
+   HDD_WLAN_EARLY_RESUME,
+   HDD_WLAN_RESUME
+};
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+void hdd_wlan_suspend_resume_event(uint8_t state);
+#else
+static inline
+void hdd_wlan_suspend_resume_event(uint8_t state)
+{
+    return;
+}
+#endif /* FEATURE_WLAN_DIAG_SUPPORT */
+
+void hdd_ReConfigSuspendDataClearedDuringRoaming(hdd_context_t* pHddCtx);
 
 #endif // if !defined __WLAN_QCT_DRIVER_H

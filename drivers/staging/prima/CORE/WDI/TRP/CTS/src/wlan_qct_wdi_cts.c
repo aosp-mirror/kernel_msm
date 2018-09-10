@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015,2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -108,6 +108,8 @@ static WCTS_HandleType gwctsHandle;
 /* time to wait for SMD channel to close (in msecs) */
 #define WCTS_SMD_CLOSE_TIMEOUT 5000
 
+/* Global Variable for WDI SMD stats */
+static struct WdiSmdStats gWdiSmdStats;
 /*----------------------------------------------------------------------------
  * Type Declarations
  * -------------------------------------------------------------------------*/
@@ -528,6 +530,7 @@ WCTS_NotifyCallback
            wpalDriverReInit();
            return;
       }
+      gWdiSmdStats.smd_event_open++;
       palMsg = &pWCTSCb->wctsOpenMsg;
       break;
 
@@ -543,6 +546,7 @@ WCTS_NotifyCallback
       WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
                  "%s: received SMD_EVENT_DATA from SMD", __func__);
       palMsg = &pWCTSCb->wctsDataMsg;
+      gWdiSmdStats.smd_event_data++;
       break;
 
    case SMD_EVENT_CLOSE:
@@ -560,11 +564,13 @@ WCTS_NotifyCallback
 
       /* subsystem restart: shutdown */
       wpalDriverShutdown();
+      gWdiSmdStats.smd_event_close++;
       return;
 
    case SMD_EVENT_STATUS:
       WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_INFO,
                  "%s: received SMD_EVENT_STATUS from SMD", __func__);
+      gWdiSmdStats.smd_event_status++;
       return;
 
    case SMD_EVENT_REOPEN_READY:
@@ -575,12 +581,14 @@ WCTS_NotifyCallback
          running, this one is received when the threads are closed and
          the rmmod thread is waiting.  so just unblock that thread */
       wpalEventSet(&pWCTSCb->wctsEvent);
+      gWdiSmdStats.smd_event_reopen_ready++;
       return;
 
    default:
       WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
                  "%s: Unexpected event %u received from SMD",
                  __func__, event);
+      gWdiSmdStats.smd_event_err++;
 
       return;
    }
@@ -977,3 +985,19 @@ WCTS_SendMessage
    return eWLAN_PAL_STATUS_SUCCESS;
 
 }/*WCTS_SendMessage*/
+
+void WCTS_Dump_Smd_status(void)
+{
+    WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+              "Smd Read Stats: %d", gWdiSmdStats.smd_event_data);
+    WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+              "Smd Open Stats: %d", gWdiSmdStats.smd_event_open);
+    WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+              "Smd Close Stats: %d", gWdiSmdStats.smd_event_close);
+    WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+              "Smd Status Stats: %d", gWdiSmdStats.smd_event_status);
+    WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+              "Smd Reopen Stats: %d", gWdiSmdStats.smd_event_reopen_ready);
+    WPAL_TRACE(eWLAN_MODULE_DAL_CTRL, eWLAN_PAL_TRACE_LEVEL_ERROR,
+              "Smd Error Stats: %d", gWdiSmdStats.smd_event_err);
+}

@@ -87,8 +87,17 @@
 #define MISC_LOGIC_RST_STB                 BIT(1)
 #define STROBED_RST_EN                     BIT(0)
 
+#define VFE_PIX_INTF_SEL_3D                      0x3
+#define PIX_OUTPUT_0_MISR_RST_STB                BIT(16)
+#define L_R_SOF_MISMATCH_ERR_IRQ                 BIT(16)
+#define L_R_EOF_MISMATCH_ERR_IRQ                 BIT(17)
+#define L_R_SOL_MISMATCH_ERR_IRQ                 BIT(18)
+
 #define ISPIF_RST_CMD_MASK              0xFE1C77FF
 #define ISPIF_RST_CMD_1_MASK            0xFFFFFFFF /* undefined */
+
+#define ISPIF_RST_CMD_MASK_RESTART      0x00001FF9
+#define ISPIF_RST_CMD_1_MASK_RESTART    0x00001FF9 /* undefined */
 
 /* irq_mask_0 */
 #define PIX_INTF_0_OVERFLOW_IRQ            BIT(12)
@@ -112,4 +121,10 @@
 #define ISPIF_IRQ_GLOBAL_CLEAR_CMD        0x000001
 
 #define ISPIF_STOP_INTF_IMMEDIATELY              0xAAAAAAAA
+
+/* ISPIF RDI pack mode not supported */
+static inline void msm_ispif_cfg_pack_mode(struct ispif_device *ispif,
+	uint8_t intftype, uint8_t vfe_intf, uint32_t *pack_cfg_mask)
+{
+}
 #endif /* __MSM_ISPIF_HWREG_V1_H__ */

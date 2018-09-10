@@ -37,7 +37,7 @@
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/platform_device.h>
-#include <linux/input/synaptics_dsx.h>
+#include <linux/input/synaptics_dsx_v2_6.h>
 #include "synaptics_dsx_core.h"
 
 #define SYSFS_FOLDER_NAME "video"
@@ -113,10 +113,10 @@ static struct dcs_command resume_sequence[] = {
 
 static struct device_attribute attrs[] = {
 	__ATTR(dcs_write, S_IWUGO,
-			synaptics_rmi4_show_error,
+			NULL,
 			video_sysfs_dcs_write_store),
 	__ATTR(param, S_IWUGO,
-			synaptics_rmi4_show_error,
+			NULL,
 			video_sysfs_param_store),
 };
 

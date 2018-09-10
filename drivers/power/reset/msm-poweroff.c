@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -47,7 +47,7 @@
 
 
 static int restart_mode;
-static void *restart_reason, *dload_type_addr;
+static void *restart_reason;
 static bool scm_pmic_arbiter_disable_supported;
 static bool scm_deassert_ps_hold_supported;
 /* Download mode master kill-switch */
@@ -55,12 +55,15 @@ static void __iomem *msm_ps_hold;
 static phys_addr_t tcsr_boot_misc_detect;
 static void scm_disable_sdi(void);
 
+#ifdef CONFIG_MSM_DLOAD_MODE
 /* Runtime could be only changed value once.
- * There is no API from TZ to re-enable the registers.
- * So the SDI cannot be re-enabled when it already by-passed.
+* There is no API from TZ to re-enable the registers.
+* So the SDI cannot be re-enabled when it already by-passed.
 */
 static int download_mode = 1;
-static struct kobject dload_kobj;
+#else
+static const int download_mode;
+#endif
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
@@ -71,6 +74,8 @@ static void *dload_mode_addr;
 static bool dload_mode_enabled;
 static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
+static struct kobject dload_kobj;
+static void *dload_type_addr;
 
 static int dload_set(const char *val, struct kernel_param *kp);
 /* interface for exporting attributes */
@@ -282,7 +287,8 @@ static void msm_restart_prepare(const char *cmd)
 			need_warm_reset = true;
 	} else {
 		need_warm_reset = (get_dload_mode() ||
-				(cmd != NULL && cmd[0] != '\0'));
+				((cmd != NULL && cmd[0] != '\0') &&
+				strcmp(cmd, "userrequested")));
 	}
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
@@ -403,6 +409,7 @@ static void do_msm_poweroff(void)
 	return;
 }
 
+#ifdef CONFIG_MSM_DLOAD_MODE
 static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {
@@ -480,6 +487,7 @@ static struct attribute *reset_attrs[] = {
 static struct attribute_group reset_attr_group = {
 	.attrs = reset_attrs,
 };
+#endif
 
 static int msm_restart_probe(struct platform_device *pdev)
 {

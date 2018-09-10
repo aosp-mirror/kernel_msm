@@ -223,11 +223,12 @@ static int ast_get_dram_info(struct drm_device *dev)
 	ast_write32(ast, 0x10000, 0xfc600309);
 
 	do {
-		;
+		if (pci_channel_offline(dev->pdev))
+			return -EIO;
 	} while (ast_read32(ast, 0x10000) != 0x01);
 	data = ast_read32(ast, 0x10004);
 
-	if (data & 0x400)
+	if (data & 0x40)
 		ast->dram_bus_width = 16;
 	else
 		ast->dram_bus_width = 32;
@@ -429,7 +430,9 @@ int ast_driver_load(struct drm_device *dev, unsigned long flags)
 	ast_detect_chip(dev, &need_post);
 
 	if (ast->chip != AST1180) {
-		ast_get_dram_info(dev);
+		ret = ast_get_dram_info(dev);
+		if (ret)
+			goto out_free;
 		ast->vram_size = ast_get_vram_info(dev);
 		DRM_INFO("dram %d %d %d %08x\n", ast->mclk, ast->dram_type, ast->dram_bus_width, ast->vram_size);
 	}
@@ -448,6 +451,7 @@ int ast_driver_load(struct drm_device *dev, unsigned long flags)
 	dev->mode_config.min_height = 0;
 	dev->mode_config.preferred_depth = 24;
 	dev->mode_config.prefer_shadow = 1;
+	dev->mode_config.fb_base = pci_resource_start(ast->dev->pdev, 0);
 
 	if (ast->chip == AST2100 ||
 	    ast->chip == AST2200 ||
@@ -571,24 +575,18 @@ ast_dumb_mmap_offset(struct drm_file *file,
 		     uint64_t *offset)
 {
 	struct drm_gem_object *obj;
-	int ret;
 	struct ast_bo *bo;
 
-	mutex_lock(&dev->struct_mutex);
 	obj = drm_gem_object_lookup(dev, file, handle);
-	if (obj == NULL) {
-		ret = -ENOENT;
-		goto out_unlock;
-	}
+	if (obj == NULL)
+		return -ENOENT;
 
 	bo = gem_to_ast_bo(obj);
 	*offset = ast_bo_mmap_offset(bo);
 
-	drm_gem_object_unreference(obj);
-	ret = 0;
-out_unlock:
-	mutex_unlock(&dev->struct_mutex);
-	return ret;
+	drm_gem_object_unreference_unlocked(obj);
+
+	return 0;
 
 }
 

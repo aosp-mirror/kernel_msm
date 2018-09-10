@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -132,6 +132,7 @@ enum eWniMsgTypes
     eWNI_SME_DEAUTH_REQ,
     eWNI_SME_DEAUTH_RSP,
     eWNI_SME_DEAUTH_IND,
+    eWNI_SME_DISCONNECT_DONE_IND,
     eWNI_SME_WM_STATUS_CHANGE_NTF,
     eWNI_SME_IBSS_NEW_PEER_IND,
     eWNI_SME_IBSS_PEER_DEPARTED_IND,
@@ -355,10 +356,17 @@ enum eWniMsgTypes
     eWNI_SME_CANDIDATE_FOUND_IND, /*ROAM candidate indication from FW*/
     eWNI_SME_HANDOFF_REQ,/*upper layer requested handoff to driver in STA mode*/
     eWNI_SME_ROAM_SCAN_OFFLOAD_RSP,/*Fwd the LFR scan offload rsp from FW to SME*/
+#ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
+    eWNI_SME_ROAM_SCAN_TRIGGER_RSP,
+#endif
 #ifdef FEATURE_WLAN_LPHB
     eWNI_SME_LPHB_IND,
 #endif /* FEATURE_WLAN_LPHB */
-
+#ifdef WLAN_FEATURE_RMC
+    eWNI_SME_ENABLE_RMC_REQ,
+    eWNI_SME_DISABLE_RMC_REQ,
+    eWNI_SME_IBSS_PEER_INFO_RSP,
+#endif /* WLAN_FEATURE_RMC */
     eWNI_SME_GET_TSM_STATS_REQ,
     eWNI_SME_GET_TSM_STATS_RSP,
     eWNI_SME_TSM_IE_IND,
@@ -379,6 +387,20 @@ enum eWniMsgTypes
     eWNI_SME_SET_TDLS_2040_BSSCOEX_REQ,
     eWNI_SME_DEL_ALL_TDLS_PEERS,
     eWNI_SME_REGISTER_MGMT_FRAME_CB,
+    eWNI_SME_CAP_TSF_REQ,
+    eWNI_SME_GET_TSF_REQ,
+
+#ifdef WLAN_FEATURE_LFR_MBB
+    eWNI_SME_MBB_PRE_AUTH_REASSOC_REQ,
+    eWNI_SME_MBB_PRE_AUTH_REASSOC_RSP,
+#endif
+
+    eWNI_SME_DEL_BA_SES_REQ,
+    eWNI_SME_SET_CHAN_SW_IE_REQ,
+    eWNI_SME_ECSA_IE_BEACON_COMP_IND,
+    eWNI_SME_ECSA_CHAN_CHANGE_REQ,
+    eWNI_SME_ECSA_CHAN_CHANGE_RSP,
+    eWNI_SME_STA_DEL_BA_REQ,
     eWNI_SME_MSG_TYPES_END
 };
 

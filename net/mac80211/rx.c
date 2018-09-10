@@ -1319,12 +1319,16 @@ ieee80211_rx_h_sta_process(struct ieee80211_rx_data *rx)
 	 */
 	if (!(sta->local->hw.flags & IEEE80211_HW_AP_LINK_PS) &&
 	    !ieee80211_has_morefrags(hdr->frame_control) &&
+	    !ieee80211_is_back_req(hdr->frame_control) &&
 	    !(status->rx_flags & IEEE80211_RX_DEFERRED_RELEASE) &&
 	    (rx->sdata->vif.type == NL80211_IFTYPE_AP ||
 	     rx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN) &&
-	    /* PM bit is only checked in frames where it isn't reserved,
+	    /*
+	     * PM bit is only checked in frames where it isn't reserved,
 	     * in AP mode it's reserved in non-bufferable management frames
 	     * (cf. IEEE 802.11-2012 8.2.4.1.7 Power Management field)
+	     * BAR frames should be ignored as specified in
+	     * IEEE 802.11-2012 10.2.1.2.
 	     */
 	    (!ieee80211_is_mgmt(hdr->frame_control) ||
 	     ieee80211_is_bufferable_mmpdu(hdr->frame_control))) {
@@ -2040,16 +2044,22 @@ ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx)
 	if (!(status->rx_flags & IEEE80211_RX_AMSDU))
 		return RX_CONTINUE;
 
-	if (ieee80211_has_a4(hdr->frame_control) &&
-	    rx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN &&
-	    !rx->sdata->u.vlan.sta)
-		return RX_DROP_UNUSABLE;
+	if (unlikely(ieee80211_has_a4(hdr->frame_control))) {
+		switch (rx->sdata->vif.type) {
+		case NL80211_IFTYPE_AP_VLAN:
+			if (!rx->sdata->u.vlan.sta)
+				return RX_DROP_UNUSABLE;
+			break;
+		case NL80211_IFTYPE_STATION:
+			if (!rx->sdata->u.mgd.use_4addr)
+				return RX_DROP_UNUSABLE;
+			break;
+		default:
+			return RX_DROP_UNUSABLE;
+		}
+	}
 
-	if (is_multicast_ether_addr(hdr->addr1) &&
-	    ((rx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN &&
-	      rx->sdata->u.vlan.sta) ||
-	     (rx->sdata->vif.type == NL80211_IFTYPE_STATION &&
-	      rx->sdata->u.mgd.use_4addr)))
+	if (is_multicast_ether_addr(hdr->addr1))
 		return RX_DROP_UNUSABLE;
 
 	skb->dev = dev;
@@ -2090,7 +2100,7 @@ ieee80211_rx_h_mesh_fwding(struct ieee80211_rx_data *rx)
 	struct ieee80211_sub_if_data *sdata = rx->sdata;
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
-	u16 q, hdrlen;
+	u16 ac, q, hdrlen;
 
 	hdr = (struct ieee80211_hdr *) skb->data;
 	hdrlen = ieee80211_hdrlen(hdr->frame_control);
@@ -2160,7 +2170,8 @@ ieee80211_rx_h_mesh_fwding(struct ieee80211_rx_data *rx)
 	    ether_addr_equal(sdata->vif.addr, hdr->addr3))
 		return RX_CONTINUE;
 
-	q = ieee80211_select_queue_80211(sdata, skb, hdr);
+	ac = ieee80211_select_queue_80211(sdata, skb, hdr);
+	q = sdata->vif.hw_queue[ac];
 	if (ieee80211_queue_stopped(&local->hw, q)) {
 		IEEE80211_IFSTA_MESH_CTR_INC(ifmsh, dropped_frames_congestion);
 		return RX_DROP_MONITOR;
@@ -3171,6 +3182,7 @@ static bool prepare_for_handlers(struct ieee80211_rx_data *rx,
 				return false;
 			/* ignore action frames to TDLS-peers */
 			if (ieee80211_is_action(hdr->frame_control) &&
+			    !is_broadcast_ether_addr(bssid) &&
 			    !ether_addr_equal(bssid, hdr->addr1))
 				return false;
 		}

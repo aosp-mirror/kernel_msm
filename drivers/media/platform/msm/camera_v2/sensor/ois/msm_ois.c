@@ -1,4 +1,4 @@
-/* Copyright (c) 2014 - 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,7 @@
 #define pr_fmt(fmt) "%s:%d " fmt, __func__, __LINE__
 
 #include <linux/module.h>
+#include <linux/firmware.h>
 #include "msm_sd.h"
 #include "msm_ois.h"
 #include "msm_cci.h"
@@ -31,6 +32,124 @@ static int32_t msm_ois_power_up(struct msm_ois_ctrl_t *o_ctrl);
 static int32_t msm_ois_power_down(struct msm_ois_ctrl_t *o_ctrl);
 
 static struct i2c_driver msm_ois_i2c_driver;
+
+static int32_t msm_ois_download(struct msm_ois_ctrl_t *o_ctrl)
+{
+	uint16_t bytes_in_tx = 0;
+	uint16_t total_bytes = 0;
+	uint8_t *ptr = NULL;
+	int32_t rc = 0;
+	const struct firmware *fw = NULL;
+	const char *fw_name_prog = NULL;
+	const char *fw_name_coeff = NULL;
+	char name_prog[MAX_SENSOR_NAME] = {0};
+	char name_coeff[MAX_SENSOR_NAME] = {0};
+	struct device *dev = &(o_ctrl->pdev->dev);
+	enum msm_camera_i2c_reg_addr_type save_addr_type;
+
+	CDBG("Enter\n");
+	save_addr_type = o_ctrl->i2c_client.addr_type;
+	o_ctrl->i2c_client.addr_type = MSM_CAMERA_I2C_BYTE_ADDR;
+
+	snprintf(name_coeff, MAX_SENSOR_NAME, "%s.coeff",
+		o_ctrl->oboard_info->ois_name);
+
+	snprintf(name_prog, MAX_SENSOR_NAME, "%s.prog",
+		o_ctrl->oboard_info->ois_name);
+
+	/* cast pointer as const pointer*/
+	fw_name_prog = name_prog;
+	fw_name_coeff = name_coeff;
+
+	/* Load FW */
+	rc = request_firmware(&fw, fw_name_prog, dev);
+	if (rc) {
+		dev_err(dev, "Failed to locate %s\n", fw_name_prog);
+		o_ctrl->i2c_client.addr_type = save_addr_type;
+		return rc;
+	}
+
+	total_bytes = fw->size;
+	for (ptr = (uint8_t *)fw->data; total_bytes;
+		total_bytes -= bytes_in_tx, ptr += bytes_in_tx) {
+		bytes_in_tx = (total_bytes > 10) ? 10 : total_bytes;
+		rc = o_ctrl->i2c_client.i2c_func_tbl->i2c_write_seq(
+			&o_ctrl->i2c_client, o_ctrl->oboard_info->opcode.prog,
+			 ptr, bytes_in_tx);
+		if (rc < 0) {
+			pr_err("Failed: remaining bytes to be downloaded: %d",
+				bytes_in_tx);
+			/* abort download fw and return error*/
+			goto release_firmware;
+		}
+	}
+	release_firmware(fw);
+
+	rc = request_firmware(&fw, fw_name_coeff, dev);
+	if (rc) {
+		dev_err(dev, "Failed to locate %s\n", fw_name_coeff);
+		o_ctrl->i2c_client.addr_type = save_addr_type;
+		return rc;
+	}
+	total_bytes = fw->size;
+	for (ptr = (uint8_t *)fw->data; total_bytes;
+		total_bytes -= bytes_in_tx, ptr += bytes_in_tx) {
+		bytes_in_tx = (total_bytes > 10) ? 10 : total_bytes;
+		rc = o_ctrl->i2c_client.i2c_func_tbl->i2c_write_seq(
+			&o_ctrl->i2c_client, o_ctrl->oboard_info->opcode.coeff,
+			ptr, bytes_in_tx);
+		if (rc < 0) {
+			pr_err("Failed: remaining bytes to be downloaded: %d",
+				total_bytes);
+			/* abort download fw*/
+			break;
+		}
+	}
+release_firmware:
+	release_firmware(fw);
+	o_ctrl->i2c_client.addr_type = save_addr_type;
+
+	return rc;
+}
+
+static int32_t msm_ois_data_config(struct msm_ois_ctrl_t *o_ctrl,
+	struct msm_ois_slave_info *slave_info)
+{
+	int rc = 0;
+	struct msm_camera_cci_client *cci_client = NULL;
+
+	CDBG("Enter\n");
+	if (!slave_info) {
+		pr_err("failed : invalid slave_info ");
+		return -EINVAL;
+	}
+	/* fill ois slave info*/
+	if (strlcpy(o_ctrl->oboard_info->ois_name, slave_info->ois_name,
+		sizeof(o_ctrl->oboard_info->ois_name)) < 0) {
+		pr_err("failed: copy_from_user");
+		return -EFAULT;
+	}
+	memcpy(&(o_ctrl->oboard_info->opcode), &(slave_info->opcode),
+		sizeof(struct msm_ois_opcode));
+	o_ctrl->oboard_info->i2c_slaveaddr = slave_info->i2c_addr;
+
+	/* config cci_client*/
+	if (o_ctrl->ois_device_type == MSM_CAMERA_PLATFORM_DEVICE) {
+		cci_client = o_ctrl->i2c_client.cci_client;
+		cci_client->sid =
+			o_ctrl->oboard_info->i2c_slaveaddr >> 1;
+		cci_client->retries = 3;
+		cci_client->id_map = 0;
+		cci_client->cci_i2c_master = o_ctrl->cci_master;
+	} else {
+		o_ctrl->i2c_client.client->addr =
+			o_ctrl->oboard_info->i2c_slaveaddr;
+	}
+	o_ctrl->i2c_client.addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+
+	CDBG("Exit\n");
+	return rc;
+}
 
 static int32_t msm_ois_write_settings(struct msm_ois_ctrl_t *o_ctrl,
 	uint16_t size, struct reg_settings_ois_t *settings)
@@ -153,6 +272,8 @@ static int32_t msm_ois_vreg_control(struct msm_ois_ctrl_t *o_ctrl,
 static int32_t msm_ois_power_down(struct msm_ois_ctrl_t *o_ctrl)
 {
 	int32_t rc = 0;
+	enum msm_sensor_power_seq_gpio_t gpio;
+
 	CDBG("Enter\n");
 	if (o_ctrl->ois_state != OIS_DISABLE_STATE) {
 
@@ -160,6 +281,39 @@ static int32_t msm_ois_power_down(struct msm_ois_ctrl_t *o_ctrl)
 		if (rc < 0) {
 			pr_err("%s failed %d\n", __func__, __LINE__);
 			return rc;
+		}
+
+		for (gpio = SENSOR_GPIO_AF_PWDM; gpio < SENSOR_GPIO_MAX;
+			gpio++) {
+			if (o_ctrl->gconf &&
+				o_ctrl->gconf->gpio_num_info &&
+				o_ctrl->gconf->
+					gpio_num_info->valid[gpio] == 1) {
+				gpio_set_value_cansleep(
+					o_ctrl->gconf->gpio_num_info
+						->gpio_num[gpio],
+					GPIOF_OUT_INIT_LOW);
+
+				if (o_ctrl->cam_pinctrl_status) {
+					rc = pinctrl_select_state(
+						o_ctrl->pinctrl_info.pinctrl,
+						o_ctrl->pinctrl_info.
+							gpio_state_suspend);
+					if (rc < 0)
+						pr_err("ERR:%s:%d cannot set pin to suspend state: %d",
+							__func__, __LINE__, rc);
+					devm_pinctrl_put(
+						o_ctrl->pinctrl_info.pinctrl);
+				}
+				o_ctrl->cam_pinctrl_status = 0;
+				rc = msm_camera_request_gpio_table(
+					o_ctrl->gconf->cam_gpio_req_tbl,
+					o_ctrl->gconf->cam_gpio_req_tbl_size,
+					0);
+				if (rc < 0)
+					pr_err("ERR:%s:Failed in selecting state in ois power down: %d\n",
+						__func__, rc);
+			}
 		}
 
 		o_ctrl->i2c_tbl_index = 0;
@@ -298,7 +452,8 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 			break;
 		}
 
-		if (!conf_array.size) {
+		if (!conf_array.size ||
+			conf_array.size > I2C_SEQ_REG_DATA_MAX) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -EFAULT;
 			break;
@@ -334,6 +489,40 @@ static int32_t msm_ois_config(struct msm_ois_ctrl_t *o_ctrl,
 	CDBG("Exit\n");
 	return rc;
 }
+
+static int32_t msm_ois_config_download(struct msm_ois_ctrl_t *o_ctrl,
+	void __user *argp)
+{
+	struct msm_ois_cfg_download_data *cdata =
+		(struct msm_ois_cfg_download_data *)argp;
+	int32_t rc = 0;
+
+	if (!o_ctrl || !cdata) {
+		pr_err("failed: Invalid data\n");
+		return -EINVAL;
+	}
+	mutex_lock(o_ctrl->ois_mutex);
+	CDBG("Enter\n");
+	CDBG("%s type %d\n", __func__, cdata->cfgtype);
+	switch (cdata->cfgtype) {
+	case CFG_OIS_DATA_CONFIG:
+		rc = msm_ois_data_config(o_ctrl, &cdata->slave_info);
+		if (rc < 0)
+			pr_err("Failed ois data config %d\n", rc);
+		break;
+	case CFG_OIS_DOWNLOAD:
+		rc = msm_ois_download(o_ctrl);
+		if (rc < 0)
+			pr_err("Failed ois download %d\n", rc);
+		break;
+	default:
+		break;
+	}
+	mutex_unlock(o_ctrl->ois_mutex);
+	CDBG("Exit\n");
+	return rc;
+}
+
 
 static int32_t msm_ois_get_subdev_id(struct msm_ois_ctrl_t *o_ctrl,
 	void *arg)
@@ -419,6 +608,8 @@ static long msm_ois_subdev_ioctl(struct v4l2_subdev *sd,
 		return msm_ois_get_subdev_id(o_ctrl, argp);
 	case VIDIOC_MSM_OIS_CFG:
 		return msm_ois_config(o_ctrl, argp);
+	case VIDIOC_MSM_OIS_CFG_DOWNLOAD:
+		return msm_ois_config_download(o_ctrl, argp);
 	case MSM_SD_SHUTDOWN:
 		if (!o_ctrl->i2c_client.i2c_func_tbl) {
 			pr_err("o_ctrl->i2c_client.i2c_func_tbl NULL\n");
@@ -440,12 +631,41 @@ static long msm_ois_subdev_ioctl(struct v4l2_subdev *sd,
 static int32_t msm_ois_power_up(struct msm_ois_ctrl_t *o_ctrl)
 {
 	int rc = 0;
+	enum msm_sensor_power_seq_gpio_t gpio;
+
 	CDBG("%s called\n", __func__);
 
 	rc = msm_ois_vreg_control(o_ctrl, 1);
 	if (rc < 0) {
 		pr_err("%s failed %d\n", __func__, __LINE__);
 		return rc;
+	}
+
+	for (gpio = SENSOR_GPIO_AF_PWDM;
+		gpio < SENSOR_GPIO_MAX; gpio++) {
+		if (o_ctrl->gconf && o_ctrl->gconf->gpio_num_info &&
+			o_ctrl->gconf->gpio_num_info->valid[gpio] == 1) {
+			rc = msm_camera_request_gpio_table(
+				o_ctrl->gconf->cam_gpio_req_tbl,
+				o_ctrl->gconf->cam_gpio_req_tbl_size, 1);
+			if (rc < 0) {
+				pr_err("ERR:%s:Failed in selecting state for ois: %d\n",
+					__func__, rc);
+				return rc;
+			}
+			if (o_ctrl->cam_pinctrl_status) {
+				rc = pinctrl_select_state(
+					o_ctrl->pinctrl_info.pinctrl,
+					o_ctrl->pinctrl_info.gpio_state_active);
+				if (rc < 0)
+					pr_err("ERR:%s:%d cannot set pin to active state: %d",
+						__func__, __LINE__, rc);
+			}
+
+			gpio_set_value_cansleep(
+				o_ctrl->gconf->gpio_num_info->gpio_num[gpio],
+				1);
+		}
 	}
 
 	o_ctrl->ois_state = OIS_ENABLE_STATE;
@@ -636,22 +856,28 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 		pr_err("%s:%d failed no memory\n", __func__, __LINE__);
 		return -ENOMEM;
 	}
+
+	msm_ois_t->oboard_info = kzalloc(sizeof(
+		struct msm_ois_board_info), GFP_KERNEL);
+	if (!msm_ois_t->oboard_info) {
+		kfree(msm_ois_t);
+		return -ENOMEM;
+	}
+
 	rc = of_property_read_u32((&pdev->dev)->of_node, "cell-index",
 		&pdev->id);
 	CDBG("cell-index %d, rc %d\n", pdev->id, rc);
 	if (rc < 0) {
-		kfree(msm_ois_t);
 		pr_err("failed rc %d\n", rc);
-		return rc;
+		goto release_memory;
 	}
 
 	rc = of_property_read_u32((&pdev->dev)->of_node, "qcom,cci-master",
 		&msm_ois_t->cci_master);
 	CDBG("qcom,cci-master %d, rc %d\n", msm_ois_t->cci_master, rc);
 	if (rc < 0 || msm_ois_t->cci_master >= MASTER_MAX) {
-		kfree(msm_ois_t);
 		pr_err("failed rc %d\n", rc);
-		return rc;
+		goto release_memory;
 	}
 
 	if (of_find_property((&pdev->dev)->of_node,
@@ -660,9 +886,24 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 		rc = msm_camera_get_dt_vreg_data((&pdev->dev)->of_node,
 			&vreg_cfg->cam_vreg, &vreg_cfg->num_vreg);
 		if (rc < 0) {
-			kfree(msm_ois_t);
 			pr_err("failed rc %d\n", rc);
-			return rc;
+			goto release_memory;
+		}
+	}
+
+	rc = msm_sensor_driver_get_gpio_data(&(msm_ois_t->gconf),
+		(&pdev->dev)->of_node);
+	if (-ENODEV == rc) {
+		pr_notice("No valid OIS GPIOs data\n");
+	} else if (rc < 0) {
+		pr_err("Error OIS GPIO\n");
+	} else {
+		msm_ois_t->cam_pinctrl_status = 1;
+		rc = msm_camera_pinctrl_init(
+			&(msm_ois_t->pinctrl_info), &(pdev->dev));
+		if (rc < 0) {
+			pr_err("ERR: Error in reading OIS pinctrl\n");
+			msm_ois_t->cam_pinctrl_status = 0;
 		}
 	}
 
@@ -678,9 +919,8 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 		struct msm_camera_cci_client), GFP_KERNEL);
 	if (!msm_ois_t->i2c_client.cci_client) {
 		kfree(msm_ois_t->vreg_cfg.cam_vreg);
-		kfree(msm_ois_t);
-		pr_err("failed no memory\n");
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto release_memory;
 	}
 
 	cci_client = msm_ois_t->i2c_client.cci_client;
@@ -708,6 +948,10 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 		&msm_ois_v4l2_subdev_fops;
 
 	CDBG("Exit\n");
+	return rc;
+release_memory:
+	kfree(msm_ois_t->oboard_info);
+	kfree(msm_ois_t);
 	return rc;
 }
 

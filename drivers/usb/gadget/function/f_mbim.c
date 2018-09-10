@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -132,7 +132,9 @@ struct f_mbim {
 
 	atomic_t		error;
 	unsigned int		cpkt_drop_cnt;
+
 	bool			remote_wakeup_enabled;
+	struct delayed_work	rwake_work;
 };
 
 struct mbim_ntb_input_size {
@@ -667,6 +669,29 @@ static void mbim_clear_queues(struct f_mbim *mbim)
 	spin_unlock(&mbim->lock);
 }
 
+static void mbim_remote_wakeup_work(struct work_struct *w)
+{
+	struct f_mbim	*mbim = container_of(w, struct f_mbim, rwake_work.work);
+	int		ret = 0;
+
+	if ((mbim->cdev->gadget->speed == USB_SPEED_SUPER) &&
+			!mbim->function.func_is_suspended){
+		pr_debug("%s: resume in progress\n", __func__);
+		return;
+	}
+
+	if ((mbim->cdev->gadget->speed == USB_SPEED_SUPER) &&
+			mbim->function.func_is_suspended)
+		ret = usb_func_wakeup(&mbim->function);
+	else
+		ret = usb_gadget_wakeup(mbim->cdev->gadget);
+
+	if (ret == -EBUSY || ret == -EAGAIN)
+		pr_debug("%s:RW delayed due to LPM exit %d\n",  __func__, ret);
+	else
+		pr_info("%s: remote wake-up failed: %d\n", __func__, ret);
+}
+
 /*
  * Context: mbim->lock held
  */
@@ -707,7 +732,9 @@ static void mbim_do_notify(struct f_mbim *mbim)
 				req, GFP_ATOMIC);
 		spin_lock(&mbim->lock);
 		if (status) {
-			atomic_dec(&mbim->not_port.notify_count);
+			/* ignore if request already queued before bus_resume */
+			if (status != -EBUSY)
+				atomic_dec(&mbim->not_port.notify_count);
 			pr_err("Queue notify request failed, err: %d\n",
 					status);
 		}
@@ -768,7 +795,6 @@ static void mbim_notify_complete(struct usb_ep *ep, struct usb_request *req)
 		break;
 	}
 
-	mbim_do_notify(mbim);
 	spin_unlock(&mbim->lock);
 
 	pr_debug("dev:%pK Exit\n", mbim);
@@ -878,6 +904,17 @@ fmbim_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 	return;
 }
 
+static void mbim_response_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	struct f_mbim *mbim = req->context;
+
+	pr_debug("%s: queue notify request if any new response available\n"
+			, __func__);
+	spin_lock(&mbim->lock);
+	mbim_do_notify(mbim);
+	spin_unlock(&mbim->lock);
+}
+
 static int
 mbim_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 {
@@ -957,6 +994,8 @@ mbim_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		pr_debug("copied encapsulated_response %d bytes\n",
 			value);
 
+		req->complete = mbim_response_complete;
+		req->context = mbim;
 		break;
 
 	case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8)
@@ -1271,6 +1310,8 @@ static void mbim_disable(struct usb_function *f)
 	struct usb_composite_dev *cdev = mbim->cdev;
 
 	pr_info("SET DEVICE OFFLINE\n");
+
+	cancel_delayed_work(&mbim->rwake_work);
 	atomic_set(&mbim->online, 0);
 	mbim->remote_wakeup_enabled = 0;
 
@@ -1348,6 +1389,13 @@ static void mbim_suspend(struct usb_function *f)
 
 	bam_data_suspend(&mbim->bam_port, mbim->port_num, USB_FUNC_MBIM,
 			 mbim->remote_wakeup_enabled);
+
+	if (mbim->remote_wakeup_enabled &&
+			atomic_read(&mbim->not_port.notify_count) > 0) {
+		pr_info("%s: pending notification, wakeup host\n", __func__);
+		schedule_delayed_work(&mbim->rwake_work,
+				      msecs_to_jiffies(2000));
+	}
 }
 
 static void mbim_resume(struct usb_function *f)
@@ -1366,6 +1414,8 @@ static void mbim_resume(struct usb_function *f)
 	if ((mbim->cdev->gadget->speed == USB_SPEED_SUPER) &&
 		f->func_is_suspended)
 		return;
+
+	cancel_delayed_work(&mbim->rwake_work);
 
 	/* resume control path by queuing notify req */
 	spin_lock(&mbim->lock);
@@ -1734,6 +1784,7 @@ int mbim_bind_config(struct usb_configuration *c, unsigned portno,
 
 	INIT_LIST_HEAD(&mbim->cpkt_req_q);
 	INIT_LIST_HEAD(&mbim->cpkt_resp_q);
+	INIT_DELAYED_WORK(&mbim->rwake_work, mbim_remote_wakeup_work);
 
 	status = usb_add_function(c, &mbim->function);
 
@@ -1896,9 +1947,12 @@ mbim_write(struct file *fp, const char __user *buf, size_t count, loff_t *pos)
 
 	ret = usb_func_ep_queue(&dev->function, dev->not_port.notify,
 			   req, GFP_ATOMIC);
-	if (ret == -ENOTSUPP || (ret < 0 && ret != -EAGAIN)) {
+	if (ret == -ENOTSUPP || (ret < 0 && ret != -EAGAIN && ret != -EBUSY)) {
 		spin_lock_irqsave(&dev->lock, flags);
-		/* check if device disconnected while we dropped lock */
+		/*
+		 * cpkt already freed if device disconnected while we
+		 * dropped lock. Nothing to be done in that case.
+		 */
 		if (atomic_read(&dev->online)) {
 			list_del(&cpkt->list);
 			atomic_dec(&dev->not_port.notify_count);

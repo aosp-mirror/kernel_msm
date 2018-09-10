@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -484,7 +484,7 @@ static VOS_STATUS WLANBAP_STAFetchPktCB
         return VosStatus;
     }
 
-    VOS_TRACE( VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO, "%s: pVosPkt(vos_pkt_t *)=%p", __func__,
+    VOS_TRACE( VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO, "%s: pVosPkt(vos_pkt_t *)=%pK", __func__,
                pVosPkt );
 
     VosStatus = WLANBAP_XlateTxDataPkt( pctx->bapHdl, pPhyCtx->PhyLinkHdl,
@@ -508,7 +508,7 @@ static VOS_STATUS WLANBAP_STAFetchPktCB
     // provide the meta-info BAP provided previously
     *tlMetaInfo = TlMetaInfo;
 
-    VOS_TRACE( VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO_HIGH, "%s: *vosDataBuff(vos_pkt_t *)=%p", __func__, *vosDataBuff );
+    VOS_TRACE( VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO_HIGH, "%s: *vosDataBuff(vos_pkt_t *)=%pK", __func__, *vosDataBuff );
 
     return(VOS_STATUS_SUCCESS);
 } // WLANBAP_STAFetchPktCB()
@@ -665,7 +665,7 @@ static VOS_STATUS WLANBAP_TxCompCB
     BslClientCtxType* ppctx;
     static int num_packets;
 
-    VOS_TRACE( VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO, "WLANBAP_TxCompCB. vosDataBuff(vos_pkt_t *)=%p", vosDataBuff );
+    VOS_TRACE( VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO, "WLANBAP_TxCompCB. vosDataBuff(vos_pkt_t *)=%pK", vosDataBuff );
 
     // be aware that pHddHdl can be NULL or can point to the per association
     // BSL context from the register data plane. In either case it does not
@@ -4128,7 +4128,7 @@ static int BSL_Write(struct sk_buff *skb)
     case HCI_ACLDATA_PKT:
         // Directly execute the data write
         VOS_TRACE(VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO_HIGH,
-                  "%s: HCI ACL data tx, skb=%p",
+                  "%s: HCI ACL data tx, skb=%pK",
                   __func__, skb);
         // ACL data
         hdev->stat.acl_tx++;
@@ -4168,7 +4168,7 @@ static int BSL_Write(struct sk_buff *skb)
                   bslWriteFinish);
 
         VOS_TRACE(VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO_HIGH,
-                  "%s: Scheduling work for skb %p, BT-AMP Client context %p, work %p",
+                  "%s: Scheduling work for skb %pK, BT-AMP Client context %pK, work %pK",
                   __func__, skb, pctx, pHciContext);
 
         status = schedule_work(&pHciContext->hciInterfaceProcessing);
@@ -4232,7 +4232,7 @@ static void bslWriteFinish(struct work_struct *work)
     v_SIZE_t written = 0;
 
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO_LOW,
-              "%s: Entered, context %p",
+              "%s: Entered, context %pK",
               __func__, pctx);
 
     // Sanity check inputs
@@ -4299,7 +4299,7 @@ static void bslWriteFinish(struct work_struct *work)
     };
 
     VOS_TRACE(VOS_MODULE_ID_BAP, VOS_TRACE_LEVEL_INFO_HIGH,
-              "%s: Freeing skb %p",
+              "%s: Freeing skb %pK",
               __func__, skb);
 
     consume_skb(skb);

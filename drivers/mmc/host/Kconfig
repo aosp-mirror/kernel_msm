@@ -48,17 +48,6 @@ config MMC_SDHCI
 
 	  If unsure, say N.
 
-config MMC_SDHCI_RING_BUFFER
-	bool "MMC_SDHCI_RING_BUFFER"
-	depends on MMC_SDHCI
-	default n
-	help
-	  This enables the ring buffer for sdhci driver to
-	  provide command history for
-	  debugging purposes.
-
-	  If unsure, say N.
-
 config MMC_SDHCI_IO_ACCESSORS
 	bool
 	depends on MMC_SDHCI

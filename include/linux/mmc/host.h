@@ -12,6 +12,7 @@
 
 #include <linux/leds.h>
 #include <linux/mutex.h>
+#include <linux/timer.h>
 #include <linux/sched.h>
 #include <linux/device.h>
 #include <linux/devfreq.h>
@@ -20,6 +21,7 @@
 #include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/pm.h>
+#include <linux/mmc/ring_buffer.h>
 
 #define MMC_AUTOSUSPEND_DELAY_MS	3000
 
@@ -89,6 +91,41 @@ enum mmc_load {
 	MMC_LOAD_LOW,
 };
 
+/* RED error flags to detect type of RED error */
+#define CQ_CMD_RED_ERR	(R1_BLOCK_LEN_ERROR | R1_ERASE_SEQ_ERROR | \
+		R1_ERASE_PARAM | R1_LOCK_UNLOCK_FAILED | R1_ILLEGAL_COMMAND | \
+		R1_CID_CSD_OVERWRITE | R1_SWITCH_ERROR)
+
+#define CQ_WP_RED	(R1_WP_VIOLATION | R1_WP_ERASE_SKIP)
+
+#define CQ_RED_RETRY	(R1_COM_CRC_ERROR | R1_CARD_ECC_FAILED | R1_CC_ERROR |\
+		R1_ERROR | R1_ERASE_RESET | R1_EXCEPTION_EVENT)
+
+#define CQ_ADDR_ERR	(R1_OUT_OF_RANGE | R1_ADDRESS_ERROR)
+
+#define CQ_RED	(CQ_WP_RED | CQ_CMD_RED_ERR | CQ_RED_RETRY | CQ_ADDR_ERR)
+
+struct mmc_cmdq_err_info {
+	bool remove_task;
+	bool fail_comp_task;
+	bool fail_dev_pend;
+	bool timedout;
+	unsigned long comp_status;
+	u32 cq_terri;
+	unsigned long dev_pend;
+	bool resp_err;
+	int tag;
+	int data_cmd;
+	int data_tag;
+	bool data_valid;
+	int cmd;
+	int cmd_tag;
+	bool cmd_valid;
+
+	int max_slot;
+	int dcmd_slot;
+};
+
 struct mmc_cmdq_host_ops {
 	int (*init)(struct mmc_host *host);
 	int (*enable)(struct mmc_host *host);
@@ -98,6 +135,10 @@ struct mmc_cmdq_host_ops {
 	int (*halt)(struct mmc_host *host, bool halt);
 	void (*reset)(struct mmc_host *host, bool soft);
 	void (*dumpstate)(struct mmc_host *host);
+	void (*err_info)(struct mmc_host *host,
+			struct mmc_cmdq_err_info *err_data,
+			struct mmc_request *mrq);
+	struct mmc_request *(*get_mrq_by_tag)(struct mmc_host *mmc, int tag);
 };
 
 struct mmc_host_ops {
@@ -200,10 +241,12 @@ struct mmc_cmdq_req {
 
 	unsigned int		resp_idx;
 	unsigned int		resp_arg;
-	unsigned int		dev_pend_tasks;
+	unsigned int		dev_pend;
 	bool			resp_err;
 	int			tag; /* used for command queuing */
 	u8			ctx_id;
+	u32			err_info;
+	unsigned long		cqtcn;
 };
 
 struct mmc_async_req {
@@ -477,9 +520,17 @@ struct mmc_host {
 #ifdef CONFIG_MMC_DEBUG
 	unsigned int		removed:1;	/* host is being removed */
 #endif
+	unsigned int		can_retune:1;	/* re-tuning can be used */
+	unsigned int		doing_retune:1;	/* re-tuning in progress */
+	unsigned int		retune_now:1;	/* do re-tuning at next req */
 
 	int			rescan_disable;	/* disable card detection */
 	int			rescan_entered;	/* used with nonremovable devices */
+
+	int			need_retune;	/* re-tuning is needed */
+	int			hold_retune;	/* hold off re-tuning */
+	unsigned int		retune_period;	/* re-tuning period in secs */
+	struct timer_list	retune_timer;	/* for periodic re-tuning */
 
 	bool			trigger_card_event; /* card_event necessary */
 
@@ -500,6 +551,7 @@ struct mmc_host {
 	unsigned int		bus_resume_flags;
 #define MMC_BUSRESUME_MANUAL_RESUME	(1 << 0)
 #define MMC_BUSRESUME_NEEDS_RESUME	(1 << 1)
+	bool ignore_bus_resume_flags;
 
 	unsigned int		sdio_irqs;
 	struct task_struct	*sdio_irq_thread;
@@ -516,6 +568,8 @@ struct mmc_host {
 	struct mmc_supply	supply;
 
 	struct dentry		*debugfs_root;
+
+	bool			err_occurred;
 
 	struct mmc_async_req	*areq;		/* active async req */
 	struct mmc_context_info	context_info;	/* async synchronization info */
@@ -557,6 +611,7 @@ struct mmc_host {
 	} perf;
 	bool perf_enable;
 #endif
+	struct mmc_trace_buffer trace_buf;
 	enum dev_state dev_status;
 	bool			wakeup_on_idle;
 	struct mmc_cmdq_context_info	cmdq_ctx;
@@ -571,6 +626,7 @@ struct mmc_host {
 	 */
 	void *cmdq_private;
 	struct mmc_request	*err_mrq;
+	bool sdr104_wa;
 	unsigned long		private[0] ____cacheline_aligned;
 };
 
@@ -776,6 +832,22 @@ static inline bool mmc_card_ddr52(struct mmc_card *card)
 static inline bool mmc_card_hs400(struct mmc_card *card)
 {
 	return card->host->ios.timing == MMC_TIMING_MMC_HS400;
+}
+
+void mmc_retune_enable(struct mmc_host *host);
+void mmc_retune_disable(struct mmc_host *host);
+void mmc_retune_timer_stop(struct mmc_host *host);
+
+static inline void mmc_retune_needed(struct mmc_host *host)
+{
+	if (host->can_retune)
+		host->need_retune = 1;
+}
+
+static inline void mmc_retune_recheck(struct mmc_host *host)
+{
+	if (host->hold_retune <= 1)
+		host->retune_now = 1;
 }
 
 #endif /* LINUX_MMC_HOST_H */

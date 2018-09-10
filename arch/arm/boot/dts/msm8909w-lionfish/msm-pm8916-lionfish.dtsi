@@ -180,14 +180,14 @@
 			};
 
 			chan@12 {
-				label = "mpp3_adc"; 
+				label = "mpp3_adc";
 				reg = <0x12>;
-				qcom,decimation = <0>; 
-				qcom,pre-div-channel-scaling = <0>; 
-				qcom,calibration-type = "ratiometric"; 
-				qcom,scale-function = <11>; 
-				qcom,hw-settle-time = <0>; 
-				qcom,fast-avg-setup = <0>; 
+				qcom,decimation = <0>;
+				qcom,pre-div-channel-scaling = <0>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <11>;
+				qcom,hw-settle-time = <0>;
+				qcom,fast-avg-setup = <0>;
 			};
 		};
 
@@ -617,6 +617,7 @@
 						   "cdc-vdda-cp";
 
 			qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias";
+			qcom,subsys-name = "modem";
 		};
 
 		pm8916_tombak_analog: msm8x16_wcd_codec@f100{

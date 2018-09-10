@@ -1,0 +1,34 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "mdm9650-ccard.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. MDM 9650 v1.1 CCARD (NAND)";
+	compatible = "qcom,mdm9650-mtp", "qcom,mdm9650",
+		     "qcom,mtp";
+	qcom,board-id = <0x10008 0x6>, <0x10008 0x106>;
+};
+
+&qnand_1 {
+	status = "ok";
+};
+
+&usb3 {
+	/* Disable pmic_id_irq due to HW glitch */
+	interrupt-map = <0x0 0 &intc 0 202 0
+			 0x0 1 &intc 0 203 0
+			 0x0 2 &intc 0 180 0>;
+	interrupt-names = "hs_phy_irq", "ss_phy_irq", "pwr_event_irq";
+};

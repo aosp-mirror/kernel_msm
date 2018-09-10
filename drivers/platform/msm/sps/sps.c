@@ -303,7 +303,8 @@ static ssize_t sps_set_bam_addr(struct file *file, const char __user *buf,
 	} else {
 		vir_addr = &bam->base;
 		num_pipes = bam->props.num_pipes;
-		bam->ipc_loglevel = log_level_sel;
+		if (log_level_sel <= SPS_IPC_MAX_LOGLEVEL)
+			bam->ipc_loglevel = log_level_sel;
 	}
 
 	switch (reg_dump_option) {
@@ -514,7 +515,7 @@ static void sps_debugfs_init(void)
 	debugfs_buf_size = 0;
 	debugfs_buf_used = 0;
 	wraparound = false;
-	log_level_sel = 0;
+	log_level_sel = SPS_IPC_MAX_LOGLEVEL + 1;
 
 	dent = debugfs_create_dir("sps", 0);
 	if (IS_ERR(dent)) {
@@ -930,7 +931,7 @@ static int sps_device_init(void)
 		goto exit_err;
 	}
 
-	SPS_DBG3(sps, "sps:bamdma_bam.phys=%pa.virt=0x%p.",
+	SPS_DBG3(sps, "sps:bamdma_bam.phys=%pa.virt=0x%pK.",
 		&bamdma_props.phys_addr,
 		bamdma_props.virt_addr);
 
@@ -945,7 +946,7 @@ static int sps_device_init(void)
 		goto exit_err;
 	}
 
-	SPS_DBG3(sps, "sps:bamdma_dma.phys=%pa.virt=0x%p.",
+	SPS_DBG3(sps, "sps:bamdma_dma.phys=%pa.virt=0x%pK.",
 		&bamdma_props.periph_phys_addr,
 		bamdma_props.periph_virt_addr);
 
@@ -1611,10 +1612,6 @@ int sps_transfer(struct sps_pipe *h, struct sps_transfer *transfer)
 	} else if (transfer->iovec_count == 0) {
 		SPS_ERR(sps, "sps:%s:iovec list is empty.\n", __func__);
 		return SPS_ERROR;
-	} else if (transfer->iovec_phys == 0) {
-		SPS_ERR(sps,
-			"sps:%s:iovec list address is invalid.\n", __func__);
-		return SPS_ERROR;
 	}
 
 	/* Verify content of IOVECs */
@@ -2223,6 +2220,8 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 
 	if (bam_props->ipc_loglevel)
 		bam->ipc_loglevel = bam_props->ipc_loglevel;
+	else
+		bam->ipc_loglevel = SPS_IPC_DEFAULT_LOGLEVEL;
 
 	ok = sps_bam_device_init(bam);
 	mutex_unlock(&bam->lock);
@@ -2319,8 +2318,11 @@ int sps_deregister_bam_device(unsigned long dev_handle)
 	mutex_lock(&bam->lock);
 	sps_bam_device_de_init(bam);
 	mutex_unlock(&bam->lock);
+	ipc_log_context_destroy(bam->ipc_log0);
 	ipc_log_context_destroy(bam->ipc_log1);
 	ipc_log_context_destroy(bam->ipc_log2);
+	ipc_log_context_destroy(bam->ipc_log3);
+	ipc_log_context_destroy(bam->ipc_log4);
 	if (bam->props.virt_size)
 		(void)iounmap(bam->props.virt_addr);
 

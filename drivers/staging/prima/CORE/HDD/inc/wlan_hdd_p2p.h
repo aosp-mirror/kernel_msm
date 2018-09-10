@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -172,24 +172,66 @@ int wlan_hdd_mgmt_tx( struct wiphy *wiphy, struct net_device *dev,
                      const u8 *buf, size_t len, u64 *cookie );
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+struct wireless_dev *wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
+                                               const char *name,
+                                               unsigned char name_assign_type,
+                                               enum nl80211_iftype type,
+                                               struct vif_params *params);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
-struct wireless_dev* wlan_hdd_add_virtual_intf(
-                  struct wiphy *wiphy, const char *name,
-                  enum nl80211_iftype type,
-                  u32 *flags, struct vif_params *params );
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)) || \
+	defined(WITH_BACKPORTS)
+/**
+ * wlan_hdd_add_virtual_intf() - Add virtual interface wrapper
+ * @wiphy: wiphy pointer
+ * @name: User-visible name of the interface
+ * @name_assign_type: the name of assign type of the netdev
+ * @nl80211_iftype: (virtual) interface types
+ * @flags: monitor mode configuration flags (not used)
+ * @vif_params: virtual interface parameters (not used)
+ *
+ * Return: the pointer of wireless dev, otherwise ERR_PTR.
+ */
+struct wireless_dev *wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
+                                               const char *name,
+                                               unsigned char name_assign_type,
+                                               enum nl80211_iftype type,
+                                               u32 *flags,
+                                               struct vif_params *params);
+
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
+/**
+ * wlan_hdd_add_virtual_intf() - Add virtual interface wrapper
+ * @wiphy: wiphy pointer
+ * @name: User-visible name of the interface
+ * @nl80211_iftype: (virtual) interface types
+ * @flags: monitor mode configuration flags (not used)
+ * @vif_params: virtual interface parameters (not used)
+ *
+ * Return: the pointer of wireless dev, otherwise ERR_PTR.
+ */
+struct wireless_dev *wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
+                                               const char *name,
+                                               enum nl80211_iftype type,
+                                               u32 *flags,
+                                               struct vif_params *params);
+
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
 struct wireless_dev* wlan_hdd_add_virtual_intf(
                   struct wiphy *wiphy, char *name, enum nl80211_iftype type,
                   u32 *flags, struct vif_params *params );
+
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38))
-struct net_device* wlan_hdd_add_virtual_intf(
-                  struct wiphy *wiphy, char *name, enum nl80211_iftype type,
-                  u32 *flags, struct vif_params *params );
+struct net_device* wlan_hdd_add_virtual_intf(struct wiphy *wiphy,
+                                             char *name,
+                                             enum nl80211_iftype type,
+                                             u32 *flags,
+                                             struct vif_params *params);
+
 #else
-int wlan_hdd_add_virtual_intf( struct wiphy *wiphy, char *name,
-                               enum nl80211_iftype type,
-                               u32 *flags, struct vif_params *params );
+int wlan_hdd_add_virtual_intf(struct wiphy *wiphy, char *name,
+                              enum nl80211_iftype type,
+                              u32 *flags, struct vif_params *params);
 #endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))

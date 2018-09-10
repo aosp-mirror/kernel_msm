@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -225,8 +225,18 @@ v_VOID_t * vos_mem_malloc_debug( v_SIZE_t size, char* fileName, v_U32_t lineNum)
       if (vos_timer_get_system_time() - time_before_kmalloc >=
                                     VOS_GET_MEMORY_TIME_THRESHOLD)
          VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-               "%s: kmalloc took %lu msec", __func__,
-               vos_timer_get_system_time() - time_before_kmalloc);
+               "%s: kmalloc took %lu msec for size %d called from %pS at line %d",
+               __func__,
+               vos_timer_get_system_time() - time_before_kmalloc,
+               size, (void *)_RET_IP_, lineNum);
+      if ((flags != GFP_ATOMIC) && (NULL == memPtr))
+      {
+         WARN_ON(1);
+         vos_fatal_event_logs_req(WLAN_LOG_TYPE_FATAL,
+                       WLAN_LOG_INDICATOR_HOST_ONLY,
+                       WLAN_LOG_REASON_MALLOC_FAIL,
+                       false, true);
+      }
       return memPtr;
    }
 
@@ -239,8 +249,10 @@ v_VOID_t * vos_mem_malloc_debug( v_SIZE_t size, char* fileName, v_U32_t lineNum)
    if (vos_timer_get_system_time() - time_before_kmalloc >=
                               VOS_GET_MEMORY_TIME_THRESHOLD)
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-          "%s: kmalloc took %lu msec", __func__,
-          vos_timer_get_system_time() - time_before_kmalloc);
+           "%s: kmalloc took %lu msec for size %d called from %pS at line %d",
+            __func__,
+            vos_timer_get_system_time() - time_before_kmalloc,
+            size, (void *)_RET_IP_, lineNum);
 
    if(memStruct != NULL)
    {
@@ -263,6 +275,14 @@ v_VOID_t * vos_mem_malloc_debug( v_SIZE_t size, char* fileName, v_U32_t lineNum)
       }
 
       memPtr = (v_VOID_t*)(memStruct + 1); 
+   }
+   if ((flags != GFP_ATOMIC) && (NULL == memStruct))
+   {
+      WARN_ON(1);
+      vos_fatal_event_logs_req(WLAN_LOG_TYPE_FATAL,
+                    WLAN_LOG_INDICATOR_HOST_ONLY,
+                    WLAN_LOG_REASON_MALLOC_FAIL,
+                    false, true);
    }
    return memPtr;
 }
@@ -350,12 +370,22 @@ v_VOID_t * vos_mem_malloc( v_SIZE_t size )
    if (vos_timer_get_system_time() - time_before_kmalloc >=
                               VOS_GET_MEMORY_TIME_THRESHOLD)
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-          "%s: kmalloc took %lu msec", __func__,
-          vos_timer_get_system_time() - time_before_kmalloc);
+          "%s: kmalloc took %lu msec for size %d from %pS",
+          __func__,
+          vos_timer_get_system_time() - time_before_kmalloc,
+          size, (void *)_RET_IP_);
 
+   if ((flags != GFP_ATOMIC) && (NULL == memPtr))
+   {
+       WARN_ON(1);
+       vos_fatal_event_logs_req(WLAN_LOG_TYPE_FATAL,
+                     WLAN_LOG_INDICATOR_HOST_ONLY,
+                     WLAN_LOG_REASON_MALLOC_FAIL,
+                     false, true);
+   }
    return memPtr;
 
-}
+}   
 
 v_VOID_t vos_mem_free( v_VOID_t *ptr )
 {
@@ -420,6 +450,20 @@ v_VOID_t vos_mem_set( v_VOID_t *ptr, v_SIZE_t numBytes, v_BYTE_t value )
    memset(ptr, value, numBytes);
 }
 
+void vos_buff_to_hl_buff (tANI_U8 *buffer, int size)
+{
+    int *val, i;
+    if (size % 4 != 0)
+        VOS_TRACE(VOS_MODULE_ID_PE,VOS_TRACE_LEVEL_ERROR,
+                  "%s: size should be multiple of 4, size %d",
+                  __func__, size);
+
+    val = (int *)buffer;
+
+    for (i=0; i<(size/4); i++)
+        *(val+i) = vos_htonl ((unsigned long)(*(val+i)));
+}
+
 v_VOID_t vos_mem_zero( v_VOID_t *ptr, v_SIZE_t numBytes )
 {
    if (0 == numBytes)
@@ -448,7 +492,7 @@ v_VOID_t vos_mem_copy( v_VOID_t *pDst, const v_VOID_t *pSrc, v_SIZE_t numBytes )
    if ((pDst == NULL) || (pSrc==NULL))
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s called with NULL parameter, source:%p destination:%p",
+                "%s called with NULL parameter, source:%pK destination:%pK",
                 __func__, pSrc, pDst);
       VOS_ASSERT(0);
       return;
@@ -467,7 +511,7 @@ v_VOID_t vos_mem_move( v_VOID_t *pDst, const v_VOID_t *pSrc, v_SIZE_t numBytes )
    if ((pDst == NULL) || (pSrc==NULL))
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s called with NULL parameter, source:%p destination:%p",
+                "%s called with NULL parameter, source:%pK destination:%pK",
                 __func__, pSrc, pDst);
       VOS_ASSERT(0);
       return;
@@ -497,7 +541,7 @@ v_BOOL_t vos_mem_compare(
    if ((pMemory1 == NULL) || (pMemory2==NULL))
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s called with NULL parameter, p1:%p p2:%p",
+                "%s called with NULL parameter, p1:%pK p2:%pK",
                 __func__, pMemory1, pMemory2);
       VOS_ASSERT(0);
       return VOS_FALSE;

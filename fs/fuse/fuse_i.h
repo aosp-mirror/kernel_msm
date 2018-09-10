@@ -160,7 +160,6 @@ struct fuse_file {
 
 	/* the read write file */
 	struct file *rw_lower_file;
-
 	bool shortcircuit_enabled;
 };
 
@@ -355,6 +354,9 @@ struct fuse_req {
 
 	/** Inode used in the request or NULL */
 	struct inode *inode;
+
+	/** Path used for completing d_canonical_path */
+	struct path *canonical_path;
 
 	/** AIO control block */
 	struct fuse_io_priv *io;
@@ -905,7 +907,7 @@ bool fuse_write_update_size(struct inode *inode, loff_t pos);
 int fuse_flush_times(struct inode *inode, struct fuse_file *ff);
 int fuse_write_inode(struct inode *inode, struct writeback_control *wbc);
 
-int fuse_do_setattr(struct inode *inode, struct iattr *attr,
+int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
 		    struct file *file);
 
 #endif /* _FS_FUSE_I_H */

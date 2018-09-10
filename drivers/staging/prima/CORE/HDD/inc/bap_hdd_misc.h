@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -27,6 +27,8 @@
 
 #if !defined( BAP_HDD_MISC_H )
 #define BAP_HDD_MISC_H
+
+#ifdef WLAN_BTAMP_FEATURE
 
 /**===========================================================================
   
@@ -136,4 +138,5 @@ VOS_STATUS WLANBAP_StopAmp(void);
               
   --------------------------------------------------------------------------*/
 v_BOOL_t WLANBAP_AmpSessionOn(void);
+#endif
 #endif    // end #if !defined( BAP_HDD_MISC_H )

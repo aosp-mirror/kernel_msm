@@ -188,6 +188,7 @@ struct sk_buff;
 #else
 #define MAX_SKB_FRAGS (65536/PAGE_SIZE + 1)
 #endif
+extern int sysctl_max_skb_frags;
 
 typedef struct skb_frag_struct skb_frag_t;
 
@@ -845,10 +846,10 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb,
 				     unsigned int headroom);
 struct sk_buff *skb_copy_expand(const struct sk_buff *skb, int newheadroom,
 				int newtailroom, gfp_t priority);
-int skb_to_sgvec_nomark(struct sk_buff *skb, struct scatterlist *sg,
-			int offset, int len);
-int skb_to_sgvec(struct sk_buff *skb, struct scatterlist *sg, int offset,
-		 int len);
+int __must_check skb_to_sgvec_nomark(struct sk_buff *skb, struct scatterlist *sg,
+				     int offset, int len);
+int __must_check skb_to_sgvec(struct sk_buff *skb, struct scatterlist *sg,
+			      int offset, int len);
 int skb_cow_data(struct sk_buff *skb, int tailbits, struct sk_buff **trailer);
 int skb_pad(struct sk_buff *skb, int pad);
 #define dev_kfree_skb(a)	consume_skb(a)
@@ -2550,6 +2551,9 @@ static inline void skb_postpull_rcsum(struct sk_buff *skb,
 {
 	if (skb->ip_summed == CHECKSUM_COMPLETE)
 		skb->csum = csum_sub(skb->csum, csum_partial(start, len, 0));
+	else if (skb->ip_summed == CHECKSUM_PARTIAL &&
+		 skb_checksum_start_offset(skb) < 0)
+		skb->ip_summed = CHECKSUM_NONE;
 }
 
 unsigned char *skb_pull_rcsum(struct sk_buff *skb, unsigned int len);
@@ -3111,6 +3115,13 @@ static inline void nf_reset_trace(struct sk_buff *skb)
 {
 #if IS_ENABLED(CONFIG_NETFILTER_XT_TARGET_TRACE) || defined(CONFIG_NF_TABLES)
 	skb->nf_trace = 0;
+#endif
+}
+
+static inline void ipvs_reset(struct sk_buff *skb)
+{
+#if IS_ENABLED(CONFIG_IP_VS)
+	skb->ipvs_property = 0;
 #endif
 }
 

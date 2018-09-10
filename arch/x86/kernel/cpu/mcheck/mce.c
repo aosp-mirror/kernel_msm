@@ -59,6 +59,9 @@ static DEFINE_MUTEX(mce_sysfs_mutex);
 			      rcu_read_lock_sched_held() || \
 			      lockdep_is_held(&mce_chrdev_read_mutex))
 
+/* sysfs synchronization */
+static DEFINE_MUTEX(mce_sysfs_mutex);
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/mce.h>
 

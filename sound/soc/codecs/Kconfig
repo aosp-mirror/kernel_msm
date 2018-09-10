@@ -620,15 +620,21 @@ config SND_SOC_UDA134X
 config SND_SOC_UDA1380
         tristate
 
+config SND_SOC_WCD9306
+        tristate
+
 config SND_SOC_WCD9320
         tristate
 
 config SND_SOC_WCD9330
         tristate
-	depends on WCD9330_CODEC
 
 config SND_SOC_WCD9335
         tristate
+
+config SND_SOC_BG_CODEC
+	tristate
+	default m if MSM_BG_GLINK=y
 
 config SND_SOC_WSA881X_SENSORS
 	tristate
@@ -646,9 +652,14 @@ config SND_SOC_WSA881X_ANALOG
 config SND_SOC_MSM8X16_WCD
 	tristate
 
+config SND_SOC_DIGITAL_CDC
+	tristate
+	select REGMAP_MMIO
+
 config SND_SOC_WCD9XXX
 	tristate
 	default y if SND_SOC_WCD9320=y || SND_SOC_WCD9330=y || SND_SOC_WCD9335=y
+	default y if SND_SOC_WCD9306=y
 
 config SND_SOC_WCD9XXX_V2
 	tristate
@@ -664,7 +675,7 @@ config AUDIO_EXT_CLK
 
 config SND_SOC_WCD_MBHC
 	tristate
-	default y if (SND_SOC_MSM8909_WCD=y || SND_SOC_MSM8X16_WCD!=y || SND_SOC_WCD9335=y) && SND_SOC_MDMCALIFORNIUM!=y
+	default y if (SND_SOC_MSM8909_WCD=y || SND_SOC_MSM8X16_WCD=y || SND_SOC_WCD9335=y) && SND_SOC_MDM9650!=y
 
 config SND_SOC_WL1273
 	tristate

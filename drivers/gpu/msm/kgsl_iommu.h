@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016,2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,12 +24,17 @@
  * are mapped into all pagetables.
  */
 #define KGSL_IOMMU_GLOBAL_MEM_SIZE	SZ_8M
-#define KGSL_IOMMU_GLOBAL_MEM_BASE	0xf8000000
+#define KGSL_IOMMU_GLOBAL_MEM_BASE32	0xf8000000
+#define KGSL_IOMMU_GLOBAL_MEM_BASE64	0xfc000000
+
+#define KGSL_IOMMU_GLOBAL_MEM_BASE(__mmu)	\
+	(MMU_FEATURE(__mmu, KGSL_MMU_64BIT) ? \
+		KGSL_IOMMU_GLOBAL_MEM_BASE64 : KGSL_IOMMU_GLOBAL_MEM_BASE32)
 
 #define KGSL_IOMMU_SECURE_SIZE SZ_256M
-#define KGSL_IOMMU_SECURE_END KGSL_IOMMU_GLOBAL_MEM_BASE
-#define KGSL_IOMMU_SECURE_BASE	\
-	(KGSL_IOMMU_GLOBAL_MEM_BASE - KGSL_IOMMU_SECURE_SIZE)
+#define KGSL_IOMMU_SECURE_END(_mmu) KGSL_IOMMU_GLOBAL_MEM_BASE(_mmu)
+#define KGSL_IOMMU_SECURE_BASE(_mmu)	\
+	(KGSL_IOMMU_GLOBAL_MEM_BASE(_mmu) - KGSL_IOMMU_SECURE_SIZE)
 
 #define KGSL_IOMMU_SVM_BASE32		0x300000
 #define KGSL_IOMMU_SVM_END32		(0xC0000000 - SZ_16M)
@@ -44,20 +49,6 @@
  */
 #define KGSL_IOMMU_SVM_BASE64		0x700000000ULL
 #define KGSL_IOMMU_SVM_END64		0x800000000ULL
-
-/* Pagetable virtual base */
-#define KGSL_IOMMU_CTX_OFFSET_V1	0x8000
-#define KGSL_IOMMU_CTX_OFFSET_V2	0x9000
-#define KGSL_IOMMU_CTX_OFFSET_V2_A530	0x8000
-#define KGSL_IOMMU_CTX_OFFSET_A405V2	0x8000
-#define KGSL_IOMMU_CTX_SHIFT		12
-
-/* FSYNR1 V0 fields */
-#define KGSL_IOMMU_FSYNR1_AWRITE_MASK		0x00000001
-#define KGSL_IOMMU_FSYNR1_AWRITE_SHIFT		8
-/* FSYNR0 V1 fields */
-#define KGSL_IOMMU_V1_FSYNR0_WNR_MASK		0x00000001
-#define KGSL_IOMMU_V1_FSYNR0_WNR_SHIFT		4
 
 /* TLBSTATUS register fields */
 #define KGSL_IOMMU_CTX_TLBSTATUS_SACTIVE BIT(0)
@@ -137,6 +128,8 @@ struct kgsl_iommu_context {
  * @micro_mmu_ctrl: GPU register offset of this glob al register
  * @smmu_info: smmu info used in a5xx preemption
  * @protect: register protection settings for the iommu.
+ * @pagefault_suppression_count: Total number of pagefaults
+ *				 suppressed since boot.
  */
 struct kgsl_iommu {
 	struct kgsl_iommu_context ctx[KGSL_IOMMU_CONTEXT_MAX];
@@ -150,6 +143,7 @@ struct kgsl_iommu {
 	struct kgsl_memdesc smmu_info;
 	unsigned int version;
 	struct kgsl_protected_registers protect;
+	u32 pagefault_suppression_count;
 };
 
 /*

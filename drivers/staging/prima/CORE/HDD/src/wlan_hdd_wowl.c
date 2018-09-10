@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -35,6 +35,7 @@
  * Include Files
  * -------------------------------------------------------------------------*/
 
+#include <net/cfg80211.h>
 #include <wlan_hdd_includes.h>
 #include <wlan_hdd_wowl.h>
 
@@ -42,9 +43,6 @@
  * Preprocessor Definitions and Constants
  * -------------------------------------------------------------------------*/
 
-#define WOWL_PTRN_MAX_SIZE          128
-#define WOWL_PTRN_MASK_MAX_SIZE      16
-#define WOWL_MAX_PTRNS_ALLOWED       16
 #define WOWL_INTER_PTRN_TOKENIZER   ';'
 #define WOWL_INTRA_PTRN_TOKENIZER   ':'
 
@@ -85,11 +83,64 @@ static void hdd_wowl_callback( void *pContext, eHalStatus halStatus )
 }
 
 #ifdef WLAN_WAKEUP_EVENTS
+#ifdef CONFIG_PM
+static void hdd_wowl_report_wakeup(hdd_adapter_t *adapter,
+				   tpSirWakeReasonInd wake_reason_ind)
+{
+	struct cfg80211_wowlan_wakeup wakeup_report = { 0 };
+	struct net_device *dev = adapter->dev;
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	enum hdd_wakeup_reason_type reason_type =
+			(enum hdd_wakeup_reason_type)wake_reason_ind->ulReason;
+
+	ENTER();
+
+	VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "reason_type:%u reason_arg:%u",
+		  reason_type, wake_reason_ind->ulReasonArg);
+
+	wakeup_report.pattern_idx = -1;
+
+	switch(reason_type) {
+		case WLAN_HDD_WAKE_REASON_MAGIC_PACKET:
+			wakeup_report.magic_pkt = TRUE;
+			break;
+		case WLAN_HDD_WAKE_REASON_PATTERN_MATCH:
+			wakeup_report.pattern_idx =
+				wake_reason_ind->ulReasonArg;
+			break;
+		case WLAN_HDD_WAKE_REASON_EAPID_PACKET:
+			wakeup_report.eap_identity_req = TRUE;
+			break;
+		case WLAN_HDD_WAKE_REASON_EAPOL4WAY_PACKET:
+			wakeup_report.four_way_handshake = TRUE;
+			break;
+		case WLAN_HDD_WAKE_REASON_GTK_REKEY_STATUS:
+			wakeup_report.gtk_rekey_failure = TRUE;
+			break;
+		case WLAN_HDD_WAKE_REASON_BSS_CONN_LOST:
+			wakeup_report.disconnect = TRUE;
+			break;
+		case WLAN_HDD_WAKE_REASON_NETSCAN_OFFL_MATCH:
+		case WLAN_HDD_WAKE_REASON_NONE:
+		default:
+			VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, "unsupported reason code");
+			break;
+	}
+
+	cfg80211_report_wowlan_wakeup(wdev, &wakeup_report, GFP_KERNEL);
+
+	EXIT();
+}
+#endif
+
 static void hdd_wowl_wakeIndication_callback( void *pContext,
     tpSirWakeReasonInd pWakeReasonInd )
 {
   VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "%s: Wake Reason %d",
       __func__, pWakeReasonInd->ulReason );
+#ifdef CONFIG_PM
+  hdd_wowl_report_wakeup((hdd_adapter_t *)pContext, pWakeReasonInd);
+#endif
   hdd_exit_wowl( (hdd_adapter_t *)pContext, eWOWL_EXIT_WAKEIND );
 }
 #endif

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2203,6 +2203,30 @@ static int get_prop_bms_current_now(struct qpnp_bms_chip *chip)
 	return chip->current_now;
 }
 
+static int get_current_cc(struct qpnp_bms_chip *chip)
+{
+	int soc, cc_full;
+	int64_t current_charge;
+
+	if (chip->batt_data == NULL)
+		return -EINVAL;
+
+	cc_full = chip->batt_data->fcc;
+	if (chip->dt.cfg_use_voltage_soc)
+		soc = chip->prev_voltage_based_soc;
+	else
+		soc = chip->last_soc;
+
+	/*
+	 * Full charge capacity is in mAh and soc is in %
+	 * current_charge capacity is defined in uAh
+	 * Hence conversion ((mAh * pct * 1000) / 100) => (mAh * pct * 10)
+	 */
+	current_charge = cc_full * soc * 10;
+
+	return current_charge;
+}
+
 static enum power_supply_property bms_power_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_STATUS,
@@ -2216,6 +2240,7 @@ static enum power_supply_property bms_power_props[] = {
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 };
 
 static int
@@ -2293,6 +2318,9 @@ static int qpnp_vm_bms_power_get_property(struct power_supply *psy,
 			val->intval = chip->charge_cycles;
 		else
 			val->intval = -EINVAL;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = get_current_cc(chip);
 		break;
 	default:
 		return -EINVAL;
@@ -3793,7 +3821,7 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 		pr_err("revid error rc = %ld\n", PTR_ERR(chip->revid_data));
 		return -EINVAL;
 	}
-	if ((chip->revid_data->pmic_subtype == PM8916_V2P0_SUBTYPE) &&
+	if ((chip->revid_data->pmic_subtype == PM8916_SUBTYPE) &&
 				chip->revid_data->rev4 == PM8916_V2P0_REV4)
 		chip->workaround_flag |= WRKARND_PON_OCV_COMP;
 

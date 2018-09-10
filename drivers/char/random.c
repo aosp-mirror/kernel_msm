@@ -704,7 +704,7 @@ retry:
 
 static void credit_entropy_bits_safe(struct entropy_store *r, int nbits)
 {
-	const int nbits_max = (int)(~0U >> (ENTROPY_SHIFT + 1));
+	const int nbits_max = r->poolinfo->poolwords * 32;
 
 	/* Cap the value to avoid overflows */
 	nbits = min(nbits,  nbits_max);
@@ -863,12 +863,16 @@ static void add_interrupt_bench(cycles_t start)
 static __u32 get_reg(struct fast_pool *f, struct pt_regs *regs)
 {
 	__u32 *ptr = (__u32 *) regs;
+	unsigned int idx;
 
 	if (regs == NULL)
 		return 0;
-	if (f->reg_idx >= sizeof(struct pt_regs) / sizeof(__u32))
-		f->reg_idx = 0;
-	return *(ptr + f->reg_idx++);
+	idx = READ_ONCE(f->reg_idx);
+	if (idx >= sizeof(struct pt_regs) / sizeof(__u32))
+		idx = 0;
+	ptr += idx++;
+	WRITE_ONCE(f->reg_idx, idx);
+	return *ptr;
 }
 
 void add_interrupt_randomness(int irq, int irq_flags)
@@ -1714,13 +1718,15 @@ int random_int_secret_init(void)
 	return 0;
 }
 
+static DEFINE_PER_CPU(__u32 [MD5_DIGEST_WORDS], get_random_int_hash)
+		__aligned(sizeof(unsigned long));
+
 /*
  * Get a random word for internal kernel use only. Similar to urandom but
  * with the goal of minimal entropy pool depletion. As a result, the random
  * value is not cryptographically secure but for several uses the cost of
  * depleting entropy is too high
  */
-static DEFINE_PER_CPU(__u32 [MD5_DIGEST_WORDS], get_random_int_hash);
 unsigned int get_random_int(void)
 {
 	__u32 *hash;

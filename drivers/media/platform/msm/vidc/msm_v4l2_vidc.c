@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/version.h>
+#include <linux/io.h>
 #include <media/msm_vidc.h>
 #include "msm_vidc_common.h"
 #include "msm_vidc_debug.h"
@@ -397,9 +398,47 @@ static ssize_t store_thermal_level(struct device *dev,
 static DEVICE_ATTR(thermal_level, S_IRUGO | S_IWUSR, show_thermal_level,
 		store_thermal_level);
 
+static ssize_t show_platform_version(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d",
+			vidc_driver->platform_version);
+}
+
+static ssize_t store_platform_version(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t count)
+{
+	dprintk(VIDC_WARN, "store platform version is not allowed\n");
+	return count;
+}
+
+static DEVICE_ATTR(platform_version, S_IRUGO, show_platform_version,
+		store_platform_version);
+
+static ssize_t show_capability_version(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d",
+			vidc_driver->capability_version);
+}
+
+static ssize_t store_capability_version(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t count)
+{
+	dprintk(VIDC_WARN, "store capability version is not allowed\n");
+	return count;
+}
+
+static DEVICE_ATTR(capability_version, S_IRUGO, show_capability_version,
+		store_capability_version);
+
 static struct attribute *msm_vidc_core_attrs[] = {
 		&dev_attr_pwr_collapse_delay.attr,
 		&dev_attr_thermal_level.attr,
+		&dev_attr_platform_version.attr,
+		&dev_attr_capability_version.attr,
 		NULL
 };
 
@@ -414,6 +453,35 @@ static const struct of_device_id msm_vidc_dt_match[] = {
 	{}
 };
 
+static u32 msm_vidc_read_efuse_version(struct platform_device *pdev,
+	struct version_table *table, const char *fuse_name)
+{
+	void __iomem *base;
+	struct resource *res;
+	u32 ret = 0;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, fuse_name);
+	if (!res) {
+		dprintk(VIDC_DBG, "Failed to get resource %s\n", fuse_name);
+		goto exit;
+	}
+	base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	if (!base) {
+		dprintk(VIDC_ERR,
+			"failed ioremap: res->start %#x, size %d\n",
+			(u32)res->start, (u32)resource_size(res));
+		goto exit;
+	} else {
+		ret = readl_relaxed(base);
+		ret = (ret & table->version_mask) >>
+			table->version_shift;
+
+		devm_iounmap(&pdev->dev, base);
+	}
+exit:
+	return ret;
+}
+
 static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -421,12 +489,16 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 	struct device *dev;
 	int nr = BASE_DEVICE_NUMBER;
 
+	if (!vidc_driver) {
+		dprintk(VIDC_ERR, "Invalid vidc driver\n");
+		return -EINVAL;
+	}
+
 	core = kzalloc(sizeof(*core), GFP_KERNEL);
-	if (!core || !vidc_driver) {
+	if (!core) {
 		dprintk(VIDC_ERR,
 			"Failed to allocate memory for device core\n");
-		rc = -ENOMEM;
-		goto err_no_mem;
+		return -ENOMEM;
 	}
 
 	dev_set_drvdata(&pdev->dev, core);
@@ -531,6 +603,14 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 	core->debugfs_root = msm_vidc_debugfs_init_core(
 		core, vidc_driver->debugfs_root);
 
+	vidc_driver->platform_version =
+		msm_vidc_read_efuse_version(pdev,
+			core->resources.pf_ver_tbl, "efuse");
+
+	vidc_driver->capability_version =
+		msm_vidc_read_efuse_version(
+			pdev, core->resources.pf_cap_tbl, "efuse2");
+
 	dprintk(VIDC_DBG, "populating sub devices\n");
 	/*
 	 * Trigger probe for each sub-device i.e. qcom,msm-vidc,context-bank.
@@ -566,7 +646,6 @@ err_v4l2_register:
 err_core_init:
 	dev_set_drvdata(&pdev->dev, NULL);
 	kfree(core);
-err_no_mem:
 	return rc;
 }
 

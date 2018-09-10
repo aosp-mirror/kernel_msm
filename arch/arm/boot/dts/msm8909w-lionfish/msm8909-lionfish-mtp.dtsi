@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -163,6 +163,7 @@
 		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
+
 /*
 		camera_focus {
 			label = "camera_focus";
@@ -212,7 +213,6 @@
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,msm-micbias1-ext-cap;
 		qcom,split-a2dp;
-		qcom,msm-afe-clk-ver = <1>;
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
@@ -239,7 +239,7 @@
 			"pri_i2s_act",
 			"us_eu_gpio_act",
 			"pri_i2s_us_eu_gpio_act",
-			"dmic_lines_sus", 
+			"dmic_lines_sus",
 			"dmic_lines_act";
 		pinctrl-0 = <&cdc_pdm_lines_sus &cross_conn_det_sus &dmic_clk_sus &dmic_data_sus>;
 		pinctrl-1 = <&cdc_pdm_lines_act &cross_conn_det_sus &dmic_clk_act &dmic_data_act>;
@@ -315,6 +315,11 @@
 
 &qcom_tzlog {
 	status = "okay";
+};
+
+
+&qnand_1 {
+	status = "ok";
 };
 
 &sdhc_1 {

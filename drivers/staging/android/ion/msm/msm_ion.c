@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -329,7 +329,7 @@ int ion_do_cache_op(struct ion_client *client, struct ion_handle *handle,
 	if (!ION_IS_CACHED(flags))
 		return 0;
 
-	if (flags & ION_FLAG_SECURE)
+	if (get_secure_vmid(flags) > 0)
 		return 0;
 
 	table = ion_sg_table(client, handle);
@@ -620,6 +620,18 @@ int ion_heap_allow_heap_secure(enum ion_heap_type type)
 	return false;
 }
 
+bool is_secure_vmid_valid(int vmid)
+{
+
+	return (vmid == VMID_CP_TOUCH ||
+		vmid == VMID_CP_BITSTREAM ||
+		vmid == VMID_CP_PIXEL ||
+		vmid == VMID_CP_NON_PIXEL ||
+		vmid == VMID_CP_CAMERA ||
+		vmid == VMID_CP_SEC_DISPLAY ||
+		vmid == VMID_CP_APP);
+}
+
 int get_secure_vmid(unsigned long flags)
 {
 	if (flags & ION_FLAG_CP_TOUCH)
@@ -701,11 +713,11 @@ long msm_ion_custom_ioctl(struct ion_client *client,
 
 		down_read(&mm->mmap_sem);
 
-		start = (unsigned long) data.flush_data.vaddr;
-		end = (unsigned long) data.flush_data.vaddr
-			+ data.flush_data.length;
+		start = (unsigned long)data.flush_data.vaddr +
+			data.flush_data.offset;
+		end = start + data.flush_data.length;
 
-		if (start && check_vaddr_bounds(start, end)) {
+		if (check_vaddr_bounds(start, end)) {
 			pr_err("%s: virtual address %pK is out of bounds\n",
 				__func__, data.flush_data.vaddr);
 			ret = -EINVAL;
@@ -731,7 +743,13 @@ long msm_ion_custom_ioctl(struct ion_client *client,
 			ION_HEAP_TYPE_SECURE_DMA,
 			(void *)data.prefetch_data.len,
 			ion_secure_cma_prefetch);
+		if (ret)
+			return ret;
 
+		ret = ion_walk_heaps(client, data.prefetch_data.heap_id,
+			ION_HEAP_TYPE_SYSTEM_SECURE,
+			(void *)&data.prefetch_data,
+			ion_system_secure_heap_prefetch);
 		if (ret)
 			return ret;
 		break;

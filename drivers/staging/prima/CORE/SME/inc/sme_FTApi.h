@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -72,6 +72,12 @@ typedef struct sFTSMEContext
     tCsrRoamSetKey    *pCsrFTKeyInfo;
 
     v_BOOL_t          addMDIE;
+
+    tANI_BOOLEAN is_preauth_lfr_mbb;
+
+#ifdef WLAN_FEATURE_LFR_MBB
+    vos_timer_t       pre_auth_reassoc_mbb_timer;
+#endif
 } tftSMEContext, *tpftSMEContext;
 
 /*--------------------------------------------------------------------------

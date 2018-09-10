@@ -45,6 +45,8 @@ Optional properties for only Non-PSCI targets
 	index to send the PMIC data to
 - qcom,vctl-port: The PVC (PMIC Virtual Channel) port used for changing
 	voltage
+- qcom,vctl-port-ub: The PVC (PMIC Virtual Channel) port used for changing
+	voltage
 - qcom,phase-port: The PVC port used for changing the number of phases
 - qcom,pfm-port: The PVC port used for enabling PWM/PFM modes
 - qcom,cpu-vctl-mask: Mask of cpus, whose voltage the spm device can control.
@@ -64,6 +66,8 @@ only on SAW2 v3.0 and above.
 - qcom,use-qchannel-for-wfi: This boolean property is used to indicate
 	that the SPM gets triggerd by the qchannel and not by means of
 	wfi. So a wfe could trigger a spm for clock gating as well.
+- qcom,pwr-state-dx: Indicates the power state idx of the core.
+- qcom,wake-config: Indicate SPM wake up signal configuration.
 - modes: Lists all the available low power modes for the device
 
 Second level properties for modes
@@ -104,6 +108,8 @@ Optional properties for only PSCI targets:
 - qcom,saw2-avs-dly: The AVS delay register is used to specify the delay values
 	between AVS controller requests
 - qcom,vctl-port: The PVC (PMIC Virtual Channel) port used for changing
+	voltage
+- qcom,vctl-port-ub: The PVC (PMIC Virtual Channel) port used for changing
 	voltage
 - qcom,phase-port: The PVC port used for changing the number of phases
 - qcom,pfm-port: The PVC port used for enabling PWM/PFM modes

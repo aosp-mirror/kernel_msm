@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -59,11 +59,15 @@
 #define DIAG_CTRL_MSG_F3_MASK	11
 #define CONTROL_CHAR	0x7E
 
-#define DIAG_CON_APSS (0x0001)	/* Bit mask for APSS */
-#define DIAG_CON_MPSS (0x0002)	/* Bit mask for MPSS */
-#define DIAG_CON_LPASS (0x0004)	/* Bit mask for LPASS */
-#define DIAG_CON_WCNSS (0x0008)	/* Bit mask for WCNSS */
-#define DIAG_CON_SENSORS (0x0010) /* Bit mask for Sensors */
+#define DIAG_CON_APSS		(0x0001)	/* Bit mask for APSS */
+#define DIAG_CON_MPSS		(0x0002)	/* Bit mask for MPSS */
+#define DIAG_CON_LPASS		(0x0004)	/* Bit mask for LPASS */
+#define DIAG_CON_WCNSS		(0x0008)	/* Bit mask for WCNSS */
+#define DIAG_CON_SENSORS	(0x0010)	/* Bit mask for Sensors */
+#define DIAG_CON_NONE		(0x0000)	/* Bit mask for No SS*/
+#define DIAG_CON_ALL		(DIAG_CON_APSS | DIAG_CON_MPSS \
+				| DIAG_CON_LPASS | DIAG_CON_WCNSS \
+				| DIAG_CON_SENSORS)
 
 #define DIAG_STM_MODEM	0x01
 #define DIAG_STM_LPASS	0x02
@@ -158,8 +162,7 @@
 #define FEATURE_MASK_LEN	2
 
 #define DIAG_MD_NONE			0
-#define DIAG_MD_NORMAL			1
-#define DIAG_MD_PERIPHERAL		2
+#define DIAG_MD_PERIPHERAL		1
 
 /*
  * The status bit masks when received in a signal handler are to be
@@ -399,6 +402,11 @@ struct diag_logging_mode_param_t {
 	uint8_t mode_param;
 } __packed;
 
+struct diag_con_all_param_t {
+	uint32_t diag_con_all;
+	uint32_t num_peripherals;
+};
+
 struct diag_md_session_t {
 	int pid;
 	int peripheral_mask;
@@ -460,6 +468,9 @@ struct diagchar_dev {
 	struct class *diagchar_class;
 	struct device *diag_dev;
 	int ref_count;
+	int mask_clear;
+	struct mutex diag_maskclear_mutex;
+	struct mutex diag_notifier_mutex;
 	struct mutex diagchar_mutex;
 	struct mutex diag_file_mutex;
 	wait_queue_head_t wait_q;
@@ -500,6 +511,7 @@ struct diagchar_dev {
 	struct list_head cmd_reg_list;
 	struct mutex cmd_reg_mutex;
 	uint32_t cmd_reg_count;
+	struct mutex diagfwd_channel_mutex[NUM_PERIPHERALS];
 	/* Sizes that reflect memory pool sizes */
 	unsigned int poolsize;
 	unsigned int poolsize_hdlc;
@@ -562,6 +574,7 @@ struct diagchar_dev {
 	uint32_t dci_pkt_length;
 	int in_busy_dcipktdata;
 	int logging_mode;
+	int logging_mask;
 	int mask_check;
 	uint32_t md_session_mask;
 	uint8_t md_session_mode;
@@ -591,6 +604,7 @@ struct diagchar_dev {
 #endif
 	int time_sync_enabled;
 	uint8_t uses_time_api;
+	struct platform_device *pdev;
 };
 
 extern struct diagchar_dev *driver;
@@ -620,6 +634,8 @@ void diag_cmd_remove_reg(struct diag_cmd_reg_entry_t *entry, uint8_t proc);
 void diag_cmd_remove_reg_by_pid(int pid);
 void diag_cmd_remove_reg_by_proc(int proc);
 int diag_cmd_chk_polling(struct diag_cmd_reg_entry_t *entry);
+int diag_mask_param(void);
+void diag_clear_masks(int pid);
 
 void diag_record_stats(int type, int flag);
 

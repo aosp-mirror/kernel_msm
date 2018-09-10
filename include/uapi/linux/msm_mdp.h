@@ -74,6 +74,8 @@
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
+/* Maximum number of formats supported by MDP*/
+#define MDP_IMGTYPE_END 0x100
 
 /* HW Revisions for different MDSS targets */
 #define MDSS_GET_MAJOR(rev)		((rev) >> 28)
@@ -108,8 +110,10 @@
 #define MDSS_MDP_HW_REV_200	MDSS_MDP_REV(2, 0, 0) /* 8092 v1.0 */
 #define MDSS_MDP_HW_REV_112	MDSS_MDP_REV(1, 12, 0) /* 8952 v1.0 */
 #define MDSS_MDP_HW_REV_114	MDSS_MDP_REV(1, 14, 0) /* 8937 v1.0 */
-#define MDSS_MDP_HW_REV_115	MDSS_MDP_REV(1, 15, 0) /* msmgold */
-#define MDSS_MDP_HW_REV_116	MDSS_MDP_REV(1, 16, 0) /* msmtitanium */
+#define MDSS_MDP_HW_REV_115	MDSS_MDP_REV(1, 15, 0) /* msm8917 */
+#define MDSS_MDP_HW_REV_116	MDSS_MDP_REV(1, 16, 0) /* msm8953 */
+#define MDSS_MDP_HW_REV_300	MDSS_MDP_REV(3, 0, 0)  /* msmcobalt */
+#define MDSS_MDP_HW_REV_301	MDSS_MDP_REV(3, 0, 1)  /* msmcobalt v1.0 */
 
 enum {
 	NOTIFY_UPDATE_INIT,
@@ -179,9 +183,39 @@ enum {
 	MDP_Y_CRCB_H2V2_VENUS,
 	MDP_IMGTYPE_LIMIT,
 	MDP_RGB_BORDERFILL,	/* border fill pipe */
+	MDP_XRGB_1555,
+	MDP_RGBX_5551,
+	MDP_XRGB_4444,
+	MDP_RGBX_4444,
+	MDP_ABGR_1555,
+	MDP_BGRA_5551,
+	MDP_XBGR_1555,
+	MDP_BGRX_5551,
+	MDP_ABGR_4444,
+	MDP_BGRA_4444,
+	MDP_XBGR_4444,
+	MDP_BGRX_4444,
+	MDP_ABGR_8888,
+	MDP_XBGR_8888,
+	MDP_RGBA_1010102,
+	MDP_ARGB_2101010,
+	MDP_RGBX_1010102,
+	MDP_XRGB_2101010,
+	MDP_BGRA_1010102,
+	MDP_ABGR_2101010,
+	MDP_BGRX_1010102,
+	MDP_XBGR_2101010,
+	MDP_RGBA_1010102_UBWC,
+	MDP_RGBX_1010102_UBWC,
+	MDP_Y_CBCR_H2V2_P010,
+	MDP_Y_CBCR_H2V2_TP10_UBWC,
+	MDP_CRYCBY_H2V1,  /* CrYCbY interleave */
+	MDP_IMGTYPE_LIMIT1 = MDP_IMGTYPE_END,
 	MDP_FB_FORMAT = MDP_IMGTYPE2_START,    /* framebuffer format */
 	MDP_IMGTYPE_LIMIT2 /* Non valid image type after this enum */
 };
+
+#define MDP_CRYCBY_H2V1 MDP_CRYCBY_H2V1
 
 enum {
 	PMEM_IMG,
@@ -913,6 +947,7 @@ struct mdp_ar_gc_lut_data {
 	uint32_t offset;
 };
 
+#define MDP_PP_PGC_ROUNDING_ENABLE 0x10
 struct mdp_pgc_lut_data {
 	uint32_t version;
 	uint32_t block;
@@ -1333,11 +1368,20 @@ enum {
 	MDP_WRITEBACK_MIRROR_RESUME,
 };
 
+/*
+ * The enum values are continued below as preprocessor macro definitions
+ */
 enum mdp_color_space {
 	MDP_CSC_ITU_R_601,
 	MDP_CSC_ITU_R_601_FR,
 	MDP_CSC_ITU_R_709,
 };
+
+/*
+ * These definitions are a continuation of the mdp_color_space enum above
+ */
+#define MDP_CSC_ITU_R_2020	(MDP_CSC_ITU_R_709 + 1)
+#define MDP_CSC_ITU_R_2020_FR	(MDP_CSC_ITU_R_2020 + 1)
 
 enum {
 	mdp_igc_v1_7 = 1,

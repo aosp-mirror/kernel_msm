@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #include <linux/dma-buf.h>
 #include <linux/of_platform.h>
 #include <linux/msm_dma_iommu_mapping.h>
+#include <linux/vmalloc.h>
 
 #include <linux/qcom_iommu.h>
 #include <asm/dma-iommu.h>
@@ -34,6 +35,9 @@
 #include "mdss.h"
 #include "mdss_mdp.h"
 #include "mdss_smmu.h"
+#include "mdss_debug.h"
+
+#define SZ_4G 0xF0000000
 
 static DEFINE_MUTEX(mdp_iommu_lock);
 
@@ -205,6 +209,7 @@ static int mdss_smmu_attach_v2(struct mdss_data_type *mdata)
 			return -ENODEV;
 		}
 	}
+
 	return 0;
 
 err:
@@ -216,6 +221,7 @@ err:
 			mdss_smmu->domain_attached = false;
 		}
 	}
+
 	return rc;
 }
 
@@ -238,6 +244,7 @@ static int mdss_smmu_detach_v2(struct mdss_data_type *mdata)
 		if (mdss_smmu && mdss_smmu->dev && !mdss_smmu->handoff_pending)
 			mdss_smmu_enable_power(mdss_smmu, false);
 	}
+
 	return 0;
 }
 
@@ -433,7 +440,34 @@ static void mdss_smmu_dsi_unmap_buffer_v2(dma_addr_t dma_addr, int domain,
 		dma_unmap_single(mdss_smmu->dev, dma_addr, size, dir);
 }
 
+int mdss_smmu_fault_handler(struct iommu_domain *domain, struct device *dev,
+	unsigned long iova, int flags, void *user_data)
+{
+	struct mdss_smmu_client *mdss_smmu =
+		(struct mdss_smmu_client *)user_data;
+	u32 fsynr1, mid, i;
 
+	if (!mdss_smmu || !mdss_smmu->mmu_base)
+		goto end;
+
+	fsynr1 = readl_relaxed(mdss_smmu->mmu_base + SMMU_CBN_FSYNR1);
+	mid = fsynr1 & 0xff;
+	pr_err("mdss_smmu: iova:0x%lx flags:0x%x fsynr1: 0x%x mid: 0x%x\n",
+		iova, flags, fsynr1, mid);
+
+	/* get domain id information */
+	for (i = 0; i < MDSS_IOMMU_MAX_DOMAIN; i++) {
+		if (mdss_smmu == mdss_smmu_get_cb(i))
+			break;
+	}
+
+	if (i == MDSS_IOMMU_MAX_DOMAIN)
+		goto end;
+
+	mdss_mdp_debug_mid(mid);
+end:
+	return -ENOSYS;
+}
 
 static void mdss_smmu_deinit_v2(struct mdss_data_type *mdata)
 {
@@ -445,6 +479,134 @@ static void mdss_smmu_deinit_v2(struct mdss_data_type *mdata)
 		if (mdss_smmu && mdss_smmu->dev)
 			arm_iommu_release_mapping(mdss_smmu->mmu_mapping);
 	}
+}
+
+/*
+ * sg_clone -	Duplicate an existing chained sgl
+ * @orig_sgl:	Original sg list to be duplicated
+ * @len:	Total length of sg while taking chaining into account
+ * @gfp_mask:	GFP allocation mask
+ * @padding:	specifies if padding is required
+ *
+ * Description:
+ *   Clone a chained sgl. This cloned copy may be modified in some ways while
+ *   keeping the original sgl in tact. Also allow the cloned copy to have
+ *   a smaller length than the original which may reduce the sgl total
+ *   sg entries and also allows cloned copy to have one extra sg  entry on
+ *   either sides of sgl.
+ *
+ * Returns:
+ *   Pointer to new vmalloced sg list, ERR_PTR() on error
+ *
+ */
+static struct scatterlist *sg_clone(struct scatterlist *orig_sgl, u64 len,
+				gfp_t gfp_mask, bool padding)
+{
+	int nents;
+	bool last_entry;
+	struct scatterlist *sgl, *head;
+
+	nents = sg_nents(orig_sgl);
+	if (nents < 0)
+		return ERR_PTR(-EINVAL);
+	if (padding)
+		nents += 2;
+
+	head = vmalloc(nents * sizeof(struct scatterlist));
+	if (!head)
+		return ERR_PTR(-ENOMEM);
+
+	sgl = head;
+
+	sg_init_table(sgl, nents);
+
+	if (padding) {
+		*sgl = *orig_sgl;
+		if (sg_is_chain(orig_sgl)) {
+			orig_sgl = sg_next(orig_sgl);
+			*sgl = *orig_sgl;
+		}
+		sgl->page_link &= (unsigned long)(~0x03);
+		sgl = sg_next(sgl);
+	}
+
+	for (; sgl; orig_sgl = sg_next(orig_sgl), sgl = sg_next(sgl)) {
+
+		last_entry = sg_is_last(sgl);
+
+		/*
+		 * * If page_link is pointing to a chained sgl then set
+		 * the sg entry in the cloned list to the next sg entry
+		 * in the original sg list as chaining is already taken
+		 * care.
+		 */
+
+		if (sg_is_chain(orig_sgl))
+			orig_sgl = sg_next(orig_sgl);
+
+		if (padding)
+			last_entry = sg_is_last(orig_sgl);
+
+		*sgl = *orig_sgl;
+		sgl->page_link &= (unsigned long)(~0x03);
+
+		if (last_entry) {
+			if (padding) {
+				len -= sg_dma_len(sgl);
+				sgl = sg_next(sgl);
+				*sgl = *orig_sgl;
+			}
+			sg_dma_len(sgl) = len ? len : SZ_4K;
+			/* Set bit 1 to indicate end of sgl */
+			sgl->page_link |= 0x02;
+		} else {
+			len -= sg_dma_len(sgl);
+		}
+	}
+
+	return head;
+}
+
+/*
+ * sg_table_clone - Duplicate an existing sg_table including chained sgl
+ * @orig_table:     Original sg_table to be duplicated
+ * @len:            Total length of sg while taking chaining into account
+ * @gfp_mask:       GFP allocation mask
+ * @padding:	    specifies if padding is required
+ *
+ * Description:
+ *   Clone a sg_table along with chained sgl. This cloned copy may be
+ *   modified in some ways while keeping the original table and sgl in tact.
+ *   Also allow the cloned sgl copy to have a smaller length than the original
+ *   which may reduce the sgl total sg entries.
+ *
+ * Returns:
+ *   Pointer to new kmalloced sg_table, ERR_PTR() on error
+ *
+ */
+static struct sg_table *sg_table_clone(struct sg_table *orig_table,
+				gfp_t gfp_mask, bool padding)
+{
+	struct sg_table *table;
+	struct scatterlist *sg = orig_table->sgl;
+	u64 len = 0;
+
+	for (len = 0; sg; sg = sg_next(sg))
+		len += sg->length;
+
+	table = kmalloc(sizeof(struct sg_table), gfp_mask);
+	if (!table)
+		return ERR_PTR(-ENOMEM);
+
+	table->sgl = sg_clone(orig_table->sgl, len, gfp_mask, padding);
+	if (IS_ERR(table->sgl)) {
+		kfree(table);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	table->nents = table->orig_nents = sg_nents(table->sgl);
+
+	return table;
 }
 
 static void mdss_smmu_ops_init(struct mdss_data_type *mdata)
@@ -468,6 +630,7 @@ static void mdss_smmu_ops_init(struct mdss_data_type *mdata)
 	mdata->smmu_ops.smmu_dsi_unmap_buffer =
 				mdss_smmu_dsi_unmap_buffer_v2;
 	mdata->smmu_ops.smmu_deinit = mdss_smmu_deinit_v2;
+	mdata->smmu_ops.smmu_sg_table_clone = sg_table_clone;
 }
 
 /*
@@ -482,6 +645,7 @@ static void mdss_smmu_ops_init(struct mdss_data_type *mdata)
 void mdss_smmu_device_create(struct device *dev)
 {
 	struct device_node *parent, *child;
+
 	parent = dev->of_node;
 	for_each_child_of_node(parent, child) {
 		if (is_mdss_smmu_compatible_device(child->name))
@@ -499,13 +663,13 @@ int mdss_smmu_init(struct mdss_data_type *mdata, struct device *dev)
 }
 
 static struct mdss_smmu_domain mdss_mdp_unsec = {
-	"mdp_0", MDSS_IOMMU_DOMAIN_UNSECURE, SZ_128K, (SZ_1G - SZ_128K)};
+	"mdp_0", MDSS_IOMMU_DOMAIN_UNSECURE, SZ_1M, (SZ_4G - SZ_1M)};
 static struct mdss_smmu_domain mdss_rot_unsec = {
-	NULL, MDSS_IOMMU_DOMAIN_ROT_UNSECURE, SZ_128K, (SZ_1G - SZ_128K)};
+	NULL, MDSS_IOMMU_DOMAIN_ROT_UNSECURE, SZ_1M, (SZ_4G - SZ_1M)};
 static struct mdss_smmu_domain mdss_mdp_sec = {
-	"mdp_1", MDSS_IOMMU_DOMAIN_SECURE, SZ_1G, SZ_2G};
+	"mdp_1", MDSS_IOMMU_DOMAIN_SECURE, SZ_1M, (SZ_4G - SZ_1M)};
 static struct mdss_smmu_domain mdss_rot_sec = {
-	NULL, MDSS_IOMMU_DOMAIN_ROT_SECURE, SZ_1G, SZ_2G};
+	NULL, MDSS_IOMMU_DOMAIN_ROT_SECURE, SZ_1M, (SZ_4G - SZ_1M)};
 
 static const struct of_device_id mdss_smmu_dt_match[] = {
 	{ .compatible = "qcom,smmu_mdp_unsec", .data = &mdss_mdp_unsec},
@@ -536,6 +700,7 @@ int mdss_smmu_probe(struct platform_device *pdev)
 	struct dss_module_power *mp;
 	int disable_htw = 1;
 	char name[MAX_CLIENT_NAME_LEN];
+	const __be32 *address = NULL, *size = NULL;
 
 	if (!mdata) {
 		pr_err("probe failed as mdata is not initialized\n");
@@ -604,7 +769,7 @@ int mdss_smmu_probe(struct platform_device *pdev)
 
 	snprintf(name, MAX_CLIENT_NAME_LEN, "smmu:%u", smmu_domain.domain);
 	mdss_smmu->reg_bus_clt = mdss_reg_bus_vote_client_create(name);
-	if (IS_ERR_OR_NULL(mdss_smmu->reg_bus_clt)) {
+	if (IS_ERR(mdss_smmu->reg_bus_clt)) {
 		pr_err("mdss bus client register failed\n");
 		msm_dss_config_vreg(&pdev->dev, mp->vreg_config, mp->num_vreg,
 			false);
@@ -651,6 +816,19 @@ int mdss_smmu_probe(struct platform_device *pdev)
 		mdss_smmu->handoff_pending = true;
 
 	mdss_smmu->dev = dev;
+
+	address = of_get_address_by_name(pdev->dev.of_node, "mmu_cb", 0, 0);
+	if (address) {
+		size = address + 1;
+		mdss_smmu->mmu_base = ioremap(be32_to_cpu(*address),
+			be32_to_cpu(*size));
+		if (mdss_smmu->mmu_base)
+			iommu_set_fault_handler(mdss_smmu->mmu_mapping->domain,
+				mdss_smmu_fault_handler, mdss_smmu);
+	} else {
+		pr_debug("unable to map context bank base\n");
+	}
+
 	pr_info("iommu v2 domain[%d] mapping and clk register successful!\n",
 			smmu_domain.domain);
 	return 0;

@@ -1,0 +1,153 @@
+/*
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "apq8017.dtsi"
+#include "apq8017-no-pmi-cdp.dtsi"
+#include "apq8017-rome.dtsi"
+#include "apq8017-audio.dtsi"
+#include "apq8017-io-expander-cdp.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. APQ8017 CDP no-PMI \
+					with WCD codec/Rome card";
+	compatible = "qcom,apq8017-cdp", "qcom,apq8017", "qcom,cdp";
+	qcom,board-id = <1 3>;
+	qcom,pmic-id = <0x10019 0x000000 0x0 0x0>;
+};
+
+&blsp1_uart1 {
+	status = "ok";
+};
+
+&soc {
+	gpio_keys {
+		/delete-node/ home;
+	};
+
+	usb_detect {
+		status = "ok";
+	};
+};
+
+&usb_otg {
+	vbus_otg-supply = <0>;
+};
+
+&i2c_4 {
+	usb2533@2c {
+		status = "ok";
+	};
+};
+
+&i2c_2 {
+	/* DSI_TO_HDMI I2C configuration */
+	adv7533@39 {
+		compatible = "adv7533";
+		reg = <0x39>;
+		instance_id = <0>;
+		adi,video-mode = <3>; /* 3 = 1080p */
+		adi,main-addr = <0x39>;
+		adi,cec-dsi-addr = <0x3C>;
+		adi,enable-audio;
+		adi,irq-gpio = <&tlmm 0x29 0x2002>;
+		adi,power-down-gpio = <&tlmm 0x7D 0x0>;
+		adi,switch-gpio = <&pm8937_gpios 0x8 0x1>;
+		pinctrl-names = "pmx_adv7533_active",
+					"pmx_adv7533_suspend";
+		pinctrl-0 = <&adv7533_int_active>;
+		pinctrl-1 = <&adv7533_int_suspend>;
+	};
+
+	pericom-type-c@1d {
+		status = "disabled";
+	};
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_adv7533_1080p>;
+	qcom,platform-intf-mux-gpio = <&tlmm 115 0>;
+	status = "ok";
+	qcom,bridge-index = <0>;
+	qcom,pluggable;
+};
+
+&dsi_adv7533_1080p {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&pm8937_mpps {
+	mpp@a100 {
+		status = "ok";
+		/* MPP2- Backlight PWM */
+		qcom,mode = <1>;	/* Digital output */
+		qcom,invert = <0>;	/* Disable invert */
+		qcom,src-sel = <8>;	/* DTEST1 */
+		qcom,vin-sel = <0>;	/* VPH_PWR */
+		qcom,master-en = <1>;	/* Enable MPP */
+	};
+};
+
+&soc {
+	clock_audio: audio_ext_clk {
+		compatible = "qcom,audio-ref-clk";
+		status = "okay";
+		qcom,lpass-clock = <1>;
+		qcom,lpass-mclk-id = "sec_mclk";
+		qcom,codec-mclk-clk-freq = <12288000>;
+		pinctrl-names = "sleep", "active";
+		pinctrl-0 = <&pri_mi2s_mclk_b_default &sec_mi2s_mclk_a_sleep>;
+		pinctrl-1 = <&pri_mi2s_mclk_b_default &sec_mi2s_mclk_a_active>;
+	};
+};
+
+&wcd9335 {
+	qcom,cdc-mclk-clk-rate = <12288000>;
+	clock-names = "wcd_clk";
+	clocks = <&clock_audio clk_audio_lpass_mclk>;
+};
+
+&mdss_fb0 {
+	/delete-node/ qcom,cont-splash-memory;
+};
+
+/delete-node/ &cont_splash_mem;
+
+&modem_mem {
+	reg = <0x0 0x86800000 0x0 0x1500000>;
+};
+
+&adsp_fw_mem {
+	reg = <0x0 0x87d00000 0x0 0x1100000>;
+};
+
+&wcnss_fw_mem {
+	reg = <0x0 0x88e00000 0x0 0x700000>;
+};
+
+&other_ext_mem {
+	reg = <0x0 0x84f00000 0x0 0x1900000>;
+};
+
+&qcom_seecom {
+	reg = <0x84f00000 0x1400000>;
+};
+
+&secure_mem {
+	status = "disabled";
+};

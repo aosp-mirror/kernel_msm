@@ -224,8 +224,20 @@ static void dvb_frontend_add_event(struct dvb_frontend *fe, fe_status_t status)
 	wake_up_interruptible (&events->wait_queue);
 }
 
+static int dvb_frontend_test_event(struct dvb_frontend_private *fepriv,
+				   struct dvb_fe_events *events)
+{
+	int ret;
+
+	up(&fepriv->sem);
+	ret = events->eventw != events->eventr;
+	down(&fepriv->sem);
+
+	return ret;
+}
+
 static int dvb_frontend_get_event(struct dvb_frontend *fe,
-			    struct dvb_frontend_event *event, int flags)
+			          struct dvb_frontend_event *event, int flags)
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	struct dvb_fe_events *events = &fepriv->events;
@@ -243,13 +255,8 @@ static int dvb_frontend_get_event(struct dvb_frontend *fe,
 		if (flags & O_NONBLOCK)
 			return -EWOULDBLOCK;
 
-		up(&fepriv->sem);
-
-		ret = wait_event_interruptible (events->wait_queue,
-						events->eventw != events->eventr);
-
-		if (down_interruptible (&fepriv->sem))
-			return -ERESTARTSYS;
+		ret = wait_event_interruptible(events->wait_queue,
+					       dvb_frontend_test_event(fepriv, events));
 
 		if (ret < 0)
 			return ret;
@@ -2214,9 +2221,9 @@ static int dvb_frontend_ioctl_legacy(struct file *file,
 		dev_dbg(fe->dvb->device, "%s: current delivery system on cache: %d, V3 type: %d\n",
 				 __func__, c->delivery_system, fe->ops.info.type);
 
-		/* Force the CAN_INVERSION_AUTO bit on. If the frontend doesn't
-		 * do it, it is done for it. */
-		info->caps |= FE_CAN_INVERSION_AUTO;
+		/* Set CAN_INVERSION_AUTO bit on in other than oneshot mode */
+		if (!(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
+			info->caps |= FE_CAN_INVERSION_AUTO;
 		err = 0;
 		break;
 	}

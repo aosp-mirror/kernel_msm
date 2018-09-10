@@ -21,6 +21,12 @@
 #define KGSL_MMU_GLOBAL_PT 0
 #define KGSL_MMU_SECURE_PT 1
 
+#define MMU_DEFAULT_TTBR0(_d) \
+	(kgsl_mmu_pagetable_get_ttbr0((_d)->mmu.defaultpagetable))
+
+#define MMU_DEFAULT_CONTEXTIDR(_d) \
+	(kgsl_mmu_pagetable_get_contextidr((_d)->mmu.defaultpagetable))
+
 struct kgsl_device;
 
 enum kgsl_mmutype {
@@ -69,11 +75,12 @@ struct kgsl_mmu_ops {
 			(struct kgsl_mmu *mmu);
 	int (*mmu_init_pt)(struct kgsl_mmu *mmu, struct kgsl_pagetable *);
 	void (*mmu_add_global)(struct kgsl_mmu *mmu,
-			struct kgsl_memdesc *memdesc);
+			struct kgsl_memdesc *memdesc, const char *name);
 	void (*mmu_remove_global)(struct kgsl_mmu *mmu,
 			struct kgsl_memdesc *memdesc);
 	struct kgsl_pagetable * (*mmu_getpagetable)(struct kgsl_mmu *mmu,
 			unsigned long name);
+	struct kgsl_memdesc* (*mmu_get_qdss_global_entry)(void);
 };
 
 struct kgsl_mmu_pt_ops {
@@ -92,6 +99,13 @@ struct kgsl_mmu_pt_ops {
 	int (*svm_range)(struct kgsl_pagetable *, uint64_t *, uint64_t *,
 			uint64_t);
 	bool (*addr_in_range)(struct kgsl_pagetable *pagetable, uint64_t);
+	int (*mmu_map_offset)(struct kgsl_pagetable *pt,
+			uint64_t virtaddr, uint64_t virtoffset,
+			struct kgsl_memdesc *memdesc, uint64_t physoffset,
+			uint64_t size, uint64_t flags);
+	int (*mmu_unmap_offset)(struct kgsl_pagetable *pt,
+			struct kgsl_memdesc *memdesc, uint64_t addr,
+			uint64_t offset, uint64_t size);
 };
 
 /*
@@ -157,6 +171,7 @@ struct kgsl_pagetable *kgsl_mmu_getpagetable_ptbase(struct kgsl_mmu *,
 
 void kgsl_add_global_secure_entry(struct kgsl_device *device,
 					struct kgsl_memdesc *memdesc);
+void kgsl_print_global_pt_entries(struct seq_file *s);
 void kgsl_mmu_putpagetable(struct kgsl_pagetable *pagetable);
 
 int kgsl_mmu_get_gpuaddr(struct kgsl_pagetable *pagetable,
@@ -180,7 +195,7 @@ int kgsl_mmu_find_region(struct kgsl_pagetable *pagetable,
 		uint64_t *gpuaddr, uint64_t size, unsigned int align);
 
 void kgsl_mmu_add_global(struct kgsl_device *device,
-	struct kgsl_memdesc *memdesc);
+	struct kgsl_memdesc *memdesc, const char *name);
 void kgsl_mmu_remove_global(struct kgsl_device *device,
 		struct kgsl_memdesc *memdesc);
 
@@ -204,6 +219,16 @@ struct kgsl_pagetable *kgsl_get_pagetable(unsigned long name);
 
 struct kgsl_pagetable *
 kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu, unsigned int name);
+
+int kgsl_mmu_map_offset(struct kgsl_pagetable *pagetable,
+		uint64_t virtaddr, uint64_t virtoffset,
+		struct kgsl_memdesc *memdesc, uint64_t physoffset,
+		uint64_t size, uint64_t flags);
+int kgsl_mmu_unmap_offset(struct kgsl_pagetable *pagetable,
+		struct kgsl_memdesc *memdesc, uint64_t addr, uint64_t offset,
+		uint64_t size);
+
+struct kgsl_memdesc *kgsl_mmu_get_qdss_global_entry(struct kgsl_device *device);
 
 /*
  * Static inline functions of MMU that simply call the SMMU specific

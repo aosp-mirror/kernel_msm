@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -62,7 +62,6 @@
 	voice: qcom,msm-pcm-voice {
 		compatible = "qcom,msm-pcm-voice";
 		qcom,destroy-cvd;
-		qcom,vote-bms;
 	};
 
 	stub_codec: qcom,msm-stub-codec {
@@ -233,6 +232,11 @@
 			qcom,msm-dai-q6-dev-id = <240>;
 		};
 
+		afe_loopback_tx: qcom,msm-dai-q6-afe-loopback-tx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <24577>;
+		};
+
 		incall_record_rx: qcom,msm-dai-q6-incall-record-rx {
 			compatible = "qcom,msm-dai-q6-dev";
 			qcom,msm-dai-q6-dev-id = <32771>;
@@ -251,6 +255,11 @@
 		incall_music_2_rx: qcom,msm-dai-q6-incall-music-2-rx {
 			compatible = "qcom,msm-dai-q6-dev";
 			qcom,msm-dai-q6-dev-id = <32770>;
+		};
+
+		sb_6_rx: qcom,msm-dai-q6-sb-6-rx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <16396>;
 		};
 	};
 
@@ -432,6 +441,8 @@
 			"AIF4 VI", "MCLK",
 			"AIF4 VI", "MICBIAS_REGULATOR",
 			"RX_BIAS", "MCLK",
+			"MADINPUT", "MCLK",
+			"AIF4 MAD", "MICBIAS_REGULATOR",
 			"AMIC2", "MIC BIAS2",
 			"MIC BIAS2", "Headset Mic",
 			"AMIC3", "MIC BIAS2",
@@ -508,7 +519,8 @@
 				<&incall_record_rx>, <&incall_record_tx>,
 				<&incall_music_rx>, <&incall_music_2_rx>,
 				<&sb_5_rx>,  <&bt_sco_rx>,
-				<&bt_sco_tx>, <&int_fm_rx>, <&int_fm_tx>;
+				<&bt_sco_tx>, <&int_fm_rx>, <&int_fm_tx>,
+				<&sb_6_rx>;
 		asoc-cpu-names = "msm-dai-q6-auxpcm.1",
 				"msm-dai-q6-mi2s.2",
 				"msm-dai-q6-mi2s.3", "msm-dai-q6-mi2s.5",
@@ -523,7 +535,8 @@
 				"msm-dai-q6-dev.32772", "msm-dai-q6-dev.32773",
 				"msm-dai-q6-dev.32770", "msm-dai-q6-dev.16394",
 				"msm-dai-q6-dev.12288", "msm-dai-q6-dev.12289",
-				"msm-dai-q6-dev.12292", "msm-dai-q6-dev.12293";
+				"msm-dai-q6-dev.12292", "msm-dai-q6-dev.12293",
+				"msm-dai-q6-dev.16396";
 		asoc-codec = <&stub_codec>, <&hdmi_dba>;
 		asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-dba-codec-rx";
 	};
@@ -617,6 +630,14 @@
 		pinctrl-0 = <&wcd_intr_default>;
 	};
 
+	wcd_rst_gpio: wcd_gpio_ctrl {
+		status = "disabled";
+		compatible = "qcom,wcd-gpio-ctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&cdc_reset_active>;
+		pinctrl-1 = <&cdc_reset_sleep>;
+	};
+
 	clock_audio: audio_ext_clk {
 		status = "disabled";
 		compatible = "qcom,audio-ref-clk";
@@ -649,11 +670,7 @@
 			17 18 19 20 21 22 23 24 25 26 27 28 29
 			30>;
 
-		qcom,cdc-reset-gpio = <&tlmm 68 0>;
-
-		pinctrl-names = "default", "idle";
-		pinctrl-0 = <&cdc_reset_active>;
-		pinctrl-1 = <&cdc_reset_sleep>;
+		qcom,wcd-rst-gpio-node = <&wcd_rst_gpio>;
 
 		clock-names = "wcd_clk";
 		clocks = <&clock_audio clk_audio_pmi_clk>;

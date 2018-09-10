@@ -621,4 +621,3 @@
 		clock-names = "core_clk", "core_a_clk";
 	};
 };
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -74,8 +74,60 @@
 #include <vos_threads.h>
 #include <vos_timer.h>
 #include <vos_pack_align.h>
+#include <asm/arch_timer.h>
 
+/**
+ * enum userspace_log_level - Log level at userspace
+ * @LOG_LEVEL_NO_COLLECTION: verbose_level 0 corresponds to no collection
+ * @LOG_LEVEL_NORMAL_COLLECT: verbose_level 1 correspond to normal log level,
+ * with minimal user impact. this is the default value
+ * @LOG_LEVEL_ISSUE_REPRO: verbose_level 2 are enabled when user is lazily
+ * trying to reproduce a problem, wifi performances and power can be impacted
+ * but device should not otherwise be significantly impacted
+ * @LOG_LEVEL_ACTIVE: verbose_level 3+ are used when trying to
+ * actively debug a problem
+ *
+ * Various log levels defined in the userspace for logging applications
+ */
+enum userspace_log_level {
+    LOG_LEVEL_NO_COLLECTION,
+    LOG_LEVEL_NORMAL_COLLECT,
+    LOG_LEVEL_ISSUE_REPRO,
+    LOG_LEVEL_ACTIVE,
+};
 
+/**
+ * enum wifi_driver_log_level - Log level defined in the driver for logging
+ * @WLAN_LOG_LEVEL_OFF: No logging
+ * @WLAN_LOG_LEVEL_NORMAL: Default logging
+ * @WLAN_LOG_LEVEL_REPRO: Normal debug level
+ * @WLAN_LOG_LEVEL_ACTIVE: Active debug level
+ *
+ * Log levels defined for logging by the wifi driver
+ */
+enum wifi_driver_log_level {
+    WLAN_LOG_LEVEL_OFF,
+    WLAN_LOG_LEVEL_NORMAL,
+    WLAN_LOG_LEVEL_REPRO,
+    WLAN_LOG_LEVEL_ACTIVE,
+};
+
+/**
+ * enum wifi_logging_ring_id - Ring id of logging entities
+ * @RING_ID_WAKELOCK:         Power events ring id
+ * @RING_ID_CONNECTIVITY:     Connectivity event ring id
+ * @RING_ID_PER_PACKET_STATS: Per packet statistic ring id
+ *
+ * This enum has the ring id values of logging rings
+ */
+enum wifi_logging_ring_id {
+    RING_ID_WAKELOCK,
+    RING_ID_CONNECTIVITY,
+    RING_ID_PER_PACKET_STATS,
+};
+
+/* 15 Min */
+#define WLAN_POWER_COLLAPSE_FAIL_THRESHOLD  (1000 * 60 * 15)
 /**
  * enum log_event_type - Type of event initiating bug report
  * @WLAN_LOG_TYPE_NON_FATAL: Non fatal event
@@ -94,6 +146,9 @@ enum log_event_type {
  * @WLAN_LOG_INDICATOR_FRAMEWORK: Framework triggers bug report
  * @WLAN_LOG_INDICATOR_HOST_DRIVER: Host driver triggers bug report
  * @WLAN_LOG_INDICATOR_FIRMWARE: FW initiates bug report
+ * @WLAN_LOG_INDICATOR_IOCTL: Bug report is initiated by IOCTL
+ * @WLAN_LOG_INDICATOR_HOST_ONLY: Host initiated and only Host
+ * logs are needed
  *
  * Enum indicating the module that triggered the bug report
  */
@@ -102,51 +157,87 @@ enum log_event_indicator {
 	WLAN_LOG_INDICATOR_FRAMEWORK,
 	WLAN_LOG_INDICATOR_HOST_DRIVER,
 	WLAN_LOG_INDICATOR_FIRMWARE,
-	WLAN_LOG_INDICATOR_IOCTL
+	WLAN_LOG_INDICATOR_IOCTL,
+	WLAN_LOG_INDICATOR_HOST_ONLY,
 };
 
 /**
  * enum log_event_host_reason_code - Reason code for bug report
  * @WLAN_LOG_REASON_CODE_UNUSED: Unused
- * @WLAN_LOG_REASON_COMMAND_UNSUCCESSFUL: Command response status from FW
- * is error
  * @WLAN_LOG_REASON_ROAM_FAIL: Driver initiated roam has failed
  * @WLAN_LOG_REASON_THREAD_STUCK: Monitor Health of host threads and report
  * fatal event if some thread is stuck
  * @WLAN_LOG_REASON_DATA_STALL: Unable to send/receive data due to low resource
  * scenario for a prolonged period
  * @WLAN_LOG_REASON_SME_COMMAND_STUCK: SME command is stuck in SME active queue
- * @WLAN_LOG_REASON_ZERO_SCAN_RESULTS: Full scan resulted in zero scan results
  * @WLAN_LOG_REASON_QUEUE_FULL: Defer queue becomes full for a prolonged period
  * @WLAN_LOG_REASON_POWER_COLLAPSE_FAIL: Unable to allow apps power collapse
  * for a prolonged period
- * @WLAN_LOG_REASON_SSR_FAIL: Unable to gracefully complete SSR
- * @WLAN_LOG_REASON_DISCONNECT_FAIL: Disconnect from Supplicant is not
- * successful
- * @WLAN_LOG_REASON_CLEAN_UP_FAIL: Clean up of  TDLS or Pre-Auth Sessions
- * not successful
  * @WLAN_LOG_REASON_MALLOC_FAIL: Memory allocation Fails
  * @WLAN_LOG_REASON_VOS_MSG_UNDER_RUN: VOS Core runs out of message wrapper
- * @WLAN_LOG_REASON_MSG_POST_FAIL: Unable to post msg
- *
+ * @WLAN_LOG_REASON_IOCTL: Initiated by IOCTL
+ * @WLAN_LOG_REASON_CODE_FRAMEWORK: Initiated by framework
+ * @WLAN_LOG_REASON_DEL_BSS_STA_FAIL: DEL BSS/STA rsp is failure
+ * @WLAN_LOG_REASON_ADD_BSS_STA_FAIL: ADD BSS/STA rsp is failure
+ * @WLAN_LOG_REASON_ENTER_IMPS_BMPS_FAIL: Enter IMPS/BMPS rsp failure
+ * @WLAN_LOG_REASON_EXIT_IMPS_BMPS_FAIL: Exit IMPS/BMPS rsp failure
+ * @WLAN_LOG_REASON_HDD_TIME_OUT: Wait for event Timeout in HDD layer
+ * @WLAN_LOG_REASON_MGMT_FRAME_TIMEOUT:Management frame timedout
+ * @WLAN_LOG_REASON_SME_OUT_OF_CMD_BUFL sme out of cmd buffer
+ * @WLAN_LOG_REASON_SCAN_NOT_ALLOWED: scan not allowed due to connection states
  * This enum contains the different reason codes for bug report
  */
 enum log_event_host_reason_code {
 	WLAN_LOG_REASON_CODE_UNUSED,
-	WLAN_LOG_REASON_COMMAND_UNSUCCESSFUL,
 	WLAN_LOG_REASON_ROAM_FAIL,
 	WLAN_LOG_REASON_THREAD_STUCK,
 	WLAN_LOG_REASON_DATA_STALL,
 	WLAN_LOG_REASON_SME_COMMAND_STUCK,
-	WLAN_LOG_REASON_ZERO_SCAN_RESULTS,
 	WLAN_LOG_REASON_QUEUE_FULL,
 	WLAN_LOG_REASON_POWER_COLLAPSE_FAIL,
-	WLAN_LOG_REASON_SSR_FAIL,
-	WLAN_LOG_REASON_DISCONNECT_FAIL,
-	WLAN_LOG_REASON_CLEAN_UP_FAIL,
 	WLAN_LOG_REASON_MALLOC_FAIL,
 	WLAN_LOG_REASON_VOS_MSG_UNDER_RUN,
-	WLAN_LOG_REASON_MSG_POST_FAIL,
+	WLAN_LOG_REASON_IOCTL,
+	WLAN_LOG_REASON_CODE_FRAMEWORK,
+	WLAN_LOG_REASON_DEL_BSS_STA_FAIL,
+	WLAN_LOG_REASON_ADD_BSS_STA_FAIL,
+	WLAN_LOG_REASON_ENTER_IMPS_BMPS_FAIL,
+	WLAN_LOG_REASON_EXIT_IMPS_BMPS_FAIL,
+	WLAN_LOG_REASON_HDD_TIME_OUT,
+	WLAN_LOG_REASON_MGMT_FRAME_TIMEOUT,
+	WLAN_LOG_REASON_SME_OUT_OF_CMD_BUF,
+	WLAN_LOG_REASON_SCAN_NOT_ALLOWED,
+};
+
+/**
+ * vos_wdi_trace_event_type: Trace type for WDI Write/Read
+ * VOS_WDI_READ: Log the WDI read event
+ * VOS_WDI_WRITE: Log the WDI write event
+ */
+typedef enum
+{
+   VOS_WDI_READ,
+   VOS_WDI_WRITE,
+} vos_wdi_trace_event_type;
+
+/**
+ * enum vos_hang_reason - host hang/ssr reason
+ * @VOS_REASON_UNSPECIFIED: Unspecified reason
+ * @VOS_GET_MSG_BUFF_FAILURE: Unable to get the message buffer
+ * @VOS_ACTIVE_LIST_TIMEOUT: Current command processing is timedout
+ * @VOS_SCAN_REQ_EXPIRED: Scan request timed out
+ * @VOS_TRANSMISSIONS_TIMEOUT: transmission timed out
+ * @VOS_DXE_FAILURE: dxe failure
+ * @VOS_WDI_FAILURE: wdi failure
+ */
+enum vos_hang_reason {
+	VOS_REASON_UNSPECIFIED = 0,
+	VOS_GET_MSG_BUFF_FAILURE = 1,
+	VOS_ACTIVE_LIST_TIMEOUT = 2,
+	VOS_SCAN_REQ_EXPIRED = 3,
+	VOS_TRANSMISSIONS_TIMEOUT = 4,
+	VOS_DXE_FAILURE = 5,
+	VOS_WDI_FAILURE = 6,
 };
 
 /*------------------------------------------------------------------------- 
@@ -255,10 +346,15 @@ VOS_STATUS vos_logger_pkt_serialize(vos_pkt_t *pPacket, uint32 pkt_type);
 bool vos_is_log_report_in_progress(void);
 void vos_reset_log_report_in_progress(void);
 int vos_set_log_completion(uint32 is_fatal, uint32 indicator, uint32 reason_code);
-void vos_get_log_completion(uint32 *is_fatal, uint32 *indicator, uint32 *reason_code);
+void vos_get_log_and_reset_completion(uint32 *is_fatal,
+           uint32 *indicator, uint32 *reason_code, bool reset);
+v_BOOL_t vos_isFatalEventEnabled(void);
 VOS_STATUS vos_fatal_event_logs_req( uint32_t is_fatal, uint32_t indicator,
-                                 uint32_t reason_code, bool waitRequired);
+                                 uint32_t reason_code, bool wait_required,
+                                 bool dump_vos_trace);
 VOS_STATUS vos_process_done_indication(v_U8_t type, v_U32_t reason_code);
+void vos_flush_host_logs_for_fatal(void);
+
 void vos_send_fatal_event_done(void);
 
 
@@ -383,13 +479,13 @@ VOS_STATUS vos_wlanReInit(void);
   Note that this API will not initiate any RIVA subsystem restart.
 
   @param
-       NONE
+       reason: vos_hang_reason
   @return
        VOS_STATUS_SUCCESS   - Operation completed successfully.
        VOS_STATUS_E_FAILURE - Operation failed.
 
 */
-VOS_STATUS vos_wlanRestart(void);
+VOS_STATUS vos_wlanRestart(enum vos_hang_reason reason);
 
 /**
   @brief vos_fwDumpReq()
@@ -432,9 +528,68 @@ v_U8_t vos_is_fw_ev_logging_enabled(void);
 v_U8_t vos_is_fw_logging_supported(void);
 void vos_set_multicast_logging(uint8_t value);
 v_U8_t vos_is_multicast_logging(void);
-bool vos_is_wakelock_enabled(void);
+void vos_set_ring_log_level(v_U32_t ring_id, v_U32_t log_level);
+v_U8_t vos_get_ring_log_level(v_U32_t ring_id);
+void get_rate_and_MCS(per_packet_stats *stats, uint32 rateindex);
+
 v_BOOL_t vos_isUnloadInProgress(void);
 v_BOOL_t vos_isLoadUnloadInProgress(void);
 
+bool vos_get_rx_wow_dump(void);
+void vos_set_rx_wow_dump(bool value);
+
+void vos_set_hdd_bad_sta(uint8_t sta_id);
+void vos_reset_hdd_bad_sta(uint8_t sta_id);
+
 void vos_probe_threads(void);
+void vos_per_pkt_stats_to_user(void *perPktStat);
+void vos_updatePktStatsInfo(void * pktStat);
+bool vos_is_wlan_logging_enabled(void);
+
+v_BOOL_t vos_is_probe_rsp_offload_enabled(void);
+void vos_set_snoc_high_freq_voting(bool enable);
+void vos_smd_dump_stats(void);
+void vos_log_wdi_event(uint16 msg, vos_wdi_trace_event_type event);
+void vos_dump_wdi_events(void);
+
+bool vos_check_arp_target_ip(vos_pkt_t *pPacket);
+void vos_update_arp_fw_tx_delivered(void);
+void vos_update_arp_rx_drop_reorder(void);
+v_U16_t vos_get_rate_from_rateidx(uint32 rateindex);
+
+/**
+ * vos_check_monitor_state() - vos api to check monitor mode capture state
+ *
+ * This function is used to check whether capture of monitor mode is ON/OFF
+ *
+ * Return: TRUE - capture is ON, FALSE - capture is OFF
+ */
+v_BOOL_t vos_check_monitor_state(void);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
+static inline uint64_t __vos_get_log_timestamp(void)
+{
+	return arch_counter_get_cntvct();
+}
+#else
+static inline uint64_t __vos_get_log_timestamp(void)
+{
+	return arch_counter_get_cntpct();
+}
+#endif /* LINUX_VERSION_CODE */
+
+/**
+ * vos_get_recovery_reason() - get self recovery reason
+ * @reason: recovery reason
+ *
+ * Return: None
+ */
+void vos_get_recovery_reason(enum vos_hang_reason *reason);
+
+/**
+ * vos_reset_recovery_reason() - reset the reason to unspecified
+ *
+ * Return: None
+ */
+void vos_reset_recovery_reason(void);
 #endif // if !defined __VOS_NVITEM_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -54,6 +54,64 @@
 #include "limSession.h"
 #define LIM_GET_NOISE_MAX_TRY 5
 #define LIM_OPERATING_EXT_IDENTIFIER 201
+
+/**
+ * limCheckOUI() - Check if the given OUI match in IE buffer
+ * @pMac: Pointer to Global MAC structure
+ * @pIE: Pointer to starting IE
+ * @ieLen: Length of all IEs
+ *
+ * Return: None
+ */
+static void limCheckOUI(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen)
+{
+    tANI_U16 left = ieLen;
+    tANI_U8 *ptr = pIE;
+    tANI_U8 elem_id, elem_len, oui_len, i=0;
+
+    pMac->roam.configParam.agg_btc_sco_enabled = eANI_BOOLEAN_FALSE;
+
+    if (!ptr || ieLen == 0) {
+        limLog(pMac, LOGE, FL("Invalid IEs"));
+        return;
+    }
+    if (!pMac->roam.configParam.num_ba_buff_btc_sco)
+        return;
+
+    oui_len = 3;
+    while(i < oui_len && pMac->roam.configParam.agg_btc_sco_oui[i] == 0)
+          i+=1;
+    if (i == oui_len) {
+        /*
+         * If gEnableAggBTCScoOUI ini is not set, oui is set to all
+         * zeros and aggregation during SCO should be enabled for
+         * all APs.
+         */
+        pMac->roam.configParam.agg_btc_sco_enabled = eANI_BOOLEAN_TRUE;
+        return;
+    }
+
+    while (left >= 2) {
+        elem_id  = ptr[0];
+        elem_len = ptr[1];
+        left -= 2;
+        if (elem_len > left) {
+            limLog(pMac, LOGE, FL("Invalid IEs eid: %d elem_len: %d left: %d"),
+                   elem_id, elem_len, left);
+            return;
+        }
+        if (SIR_MAC_EID_VENDOR == elem_id) {
+            if (memcmp(&ptr[2], &pMac->roam.configParam.agg_btc_sco_oui,
+                oui_len) == 0) {
+                pMac->roam.configParam.agg_btc_sco_enabled = eANI_BOOLEAN_TRUE;
+                return;
+            }
+        }
+        left -= elem_len;
+        ptr += (elem_len + 2);
+    }
+}
+
 /**
  * limExtractApCapability()
  *
@@ -196,13 +254,18 @@ limExtractApCapability(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen,
         {
             psessionEntry->countryInfoPresent = TRUE;
         }
-        /* Check if Extended caps are present in probe resp or not */
+        /* Save the Extended caps from AP in probe resp or beacon */
         if (pBeaconStruct->ExtCap.present)
         {
-            psessionEntry->is_ext_caps_present = TRUE;
+            vos_mem_copy(&psessionEntry->ExtCap, &pBeaconStruct->ExtCap, sizeof(tDot11fIEExtCap));
         }
 
     }
+
+    limCheckOUI(pMac, pIE, ieLen);
+    /* Update HS 2.0 Information Element */
+    sir_copy_hs20_ie(&psessionEntry->hs20vendor_ie,
+                     &pBeaconStruct->hs20vendor_ie);
     vos_mem_free(pBeaconStruct);
     return;
 } /****** end limExtractApCapability() ******/

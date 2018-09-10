@@ -791,13 +791,15 @@ static void *arm_dma_remap(struct device *dev, void *cpu_addr,
 			dma_addr_t handle, size_t size,
 			struct dma_attrs *attrs)
 {
+	void *ptr;
 	struct page *page = pfn_to_page(dma_to_pfn(dev, handle));
 	pgprot_t prot = __get_dma_pgprot(attrs, PAGE_KERNEL);
 	unsigned long offset = handle & ~PAGE_MASK;
 
 	size = PAGE_ALIGN(size + offset);
-	return __dma_alloc_remap(page, size, GFP_KERNEL, prot,
-				__builtin_return_address(0)) + offset;
+	ptr = __dma_alloc_remap(page, size, GFP_KERNEL, prot,
+				__builtin_return_address(0));
+	return ptr ? ptr + offset : ptr;
 }
 
 static void arm_dma_unremap(struct device *dev, void *remapped_addr,
@@ -806,6 +808,7 @@ static void arm_dma_unremap(struct device *dev, void *remapped_addr,
 	unsigned int flags = VM_ARM_DMA_CONSISTENT | VM_USERMAP;
 	struct vm_struct *area;
 
+	size = PAGE_ALIGN(size);
 	remapped_addr = (void *)((unsigned long)remapped_addr & PAGE_MASK);
 
 	area = find_vm_area(remapped_addr);
@@ -816,6 +819,8 @@ static void arm_dma_unremap(struct device *dev, void *remapped_addr,
 	}
 
 	vunmap(remapped_addr);
+	flush_tlb_kernel_range((unsigned long)remapped_addr,
+			(unsigned long)(remapped_addr + size));
 }
 /*
  * Free a buffer as defined by the above mapping.
@@ -859,12 +864,30 @@ static void arm_coherent_dma_free(struct device *dev, size_t size, void *cpu_add
 	__arm_dma_free(dev, size, cpu_addr, handle, attrs, true);
 }
 
+/*
+ * The whole dma_get_sgtable() idea is fundamentally unsafe - it seems
+ * that the intention is to allow exporting memory allocated via the
+ * coherent DMA APIs through the dma_buf API, which only accepts a
+ * scattertable.  This presents a couple of problems:
+ * 1. Not all memory allocated via the coherent DMA APIs is backed by
+ *    a struct page
+ * 2. Passing coherent DMA memory into the streaming APIs is not allowed
+ *    as we will try to flush the memory through a different alias to that
+ *    actually being used (and the flushes are redundant.)
+ */
 int arm_dma_get_sgtable(struct device *dev, struct sg_table *sgt,
 		 void *cpu_addr, dma_addr_t handle, size_t size,
 		 struct dma_attrs *attrs)
 {
-	struct page *page = pfn_to_page(dma_to_pfn(dev, handle));
+	unsigned long pfn = dma_to_pfn(dev, handle);
+	struct page *page;
 	int ret;
+
+	/* If the PFN is not valid, we do not have a struct page */
+	if (!pfn_valid(pfn))
+		return -ENXIO;
+
+	page = pfn_to_page(pfn);
 
 	ret = sg_alloc_table(sgt, 1, GFP_KERNEL);
 	if (unlikely(ret))
@@ -1211,8 +1234,8 @@ static struct page **__iommu_alloc_buffer(struct device *dev, size_t size,
 					  gfp_t gfp, struct dma_attrs *attrs)
 {
 	struct page **pages;
-	int count = size >> PAGE_SHIFT;
-	int array_size = count * sizeof(struct page *);
+	size_t count = size >> PAGE_SHIFT;
+	size_t array_size = count * sizeof(struct page *);
 	int i = 0;
 
 	if (array_size <= PAGE_SIZE)

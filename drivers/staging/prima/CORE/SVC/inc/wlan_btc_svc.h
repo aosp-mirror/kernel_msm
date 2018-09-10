@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -35,5 +35,6 @@
 
 void send_btc_nlink_msg (int type, int dest_pid);
 int btc_activate_service(void *pAdapter);
+void btc_deactivate_service(void);
 
 #endif

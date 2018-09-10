@@ -60,14 +60,14 @@ struct fuse_file *fuse_file_alloc(struct fuse_conn *fc)
 {
 	struct fuse_file *ff;
 
-	ff = kmalloc(sizeof(struct fuse_file), GFP_KERNEL);
+	ff = kzalloc(sizeof(struct fuse_file), GFP_KERNEL);
 	if (unlikely(!ff))
 		return NULL;
 
 	ff->rw_lower_file = NULL;
 	ff->shortcircuit_enabled = 0;
-        if (fc->shortcircuit_io)
-	    ff->shortcircuit_enabled = 1;
+	if (fc->shortcircuit_io)
+		ff->shortcircuit_enabled = 1;
 	ff->fc = fc;
 	ff->reserved_req = fuse_request_alloc(0);
 	if (unlikely(!ff->reserved_req)) {
@@ -467,6 +467,15 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 	fuse_sync_writes(inode);
 	mutex_unlock(&inode->i_mutex);
 
+	if (test_bit(AS_ENOSPC, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_ENOSPC, &file->f_mapping->flags))
+		err = -ENOSPC;
+	if (test_bit(AS_EIO, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_EIO, &file->f_mapping->flags))
+		err = -EIO;
+	if (err)
+		return err;
+
 	req = fuse_get_req_nofail_nopages(fc, file);
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.fh = ff->fh;
@@ -512,6 +521,21 @@ int fuse_fsync_common(struct file *file, loff_t start, loff_t end,
 		goto out;
 
 	fuse_sync_writes(inode);
+
+	/*
+	 * Due to implementation of fuse writeback
+	 * filemap_write_and_wait_range() does not catch errors.
+	 * We have to do this directly after fuse_sync_writes()
+	 */
+	if (test_bit(AS_ENOSPC, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_ENOSPC, &file->f_mapping->flags))
+		err = -ENOSPC;
+	if (test_bit(AS_EIO, &file->f_mapping->flags) &&
+	    test_and_clear_bit(AS_EIO, &file->f_mapping->flags))
+		err = -EIO;
+	if (err)
+		goto out;
+
 	err = sync_inode_metadata(inode, 1);
 	if (err)
 		goto out;
@@ -1146,6 +1170,7 @@ static ssize_t fuse_fill_write_pages(struct fuse_req *req,
 		tmp = iov_iter_copy_from_user_atomic(page, ii, offset, bytes);
 		flush_dcache_page(page);
 
+		iov_iter_advance(ii, tmp);
 		if (!tmp) {
 			unlock_page(page);
 			page_cache_release(page);
@@ -1158,7 +1183,6 @@ static ssize_t fuse_fill_write_pages(struct fuse_req *req,
 		req->page_descs[req->num_pages].length = tmp;
 		req->num_pages++;
 
-		iov_iter_advance(ii, tmp);
 		count += tmp;
 		pos += tmp;
 		offset += tmp;
@@ -2192,6 +2216,7 @@ static int fuse_direct_mmap(struct file *file, struct vm_area_struct *vma)
 	struct fuse_file *ff = file->private_data;
 
 	ff->shortcircuit_enabled = 0;
+
 	/* Can't provide the coherency needed for MAP_SHARED */
 	if (vma->vm_flags & VM_MAYSHARE)
 		return -ENODEV;
@@ -2925,7 +2950,7 @@ static void fuse_do_truncate(struct file *file)
 	attr.ia_file = file;
 	attr.ia_valid |= ATTR_FILE;
 
-	fuse_do_setattr(inode, &attr, file);
+	fuse_do_setattr(file->f_path.dentry, &attr, file);
 }
 
 static inline loff_t fuse_round_up(loff_t off)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -191,6 +191,9 @@ tSirRetStatus limUpdateGlobalChannelBonding(tpAniSirGlobal pMac, tHalBitVal cbBi
 
 void limHandleLowRssiInd(tpAniSirGlobal pMac);
 void limHandleBmpsStatusInd(tpAniSirGlobal pMac);
+#ifdef WLAN_FEATURE_APFIND
+void limHandleAPFindInd(tpAniSirGlobal pMac);
+#endif
 void limHandleMissedBeaconInd(tpAniSirGlobal pMac, tpSirMsgQ pMsg);
 tMgmtFrmDropReason limIsPktCandidateForDrop(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tANI_U32 subType);
 boolean limIsDeauthDiassocForDrop(tpAniSirGlobal pMac,

@@ -64,45 +64,6 @@ void ext4_mark_bitmap_end(int start_bit, int end_bit, char *bitmap)
 		memset(bitmap + (i >> 3), 0xff, (end_bit - i) >> 3);
 }
 
-/* Initializes an uninitialized inode bitmap */
-static unsigned ext4_init_inode_bitmap(struct super_block *sb,
-				       struct buffer_head *bh,
-				       ext4_group_t block_group,
-				       struct ext4_group_desc *gdp)
-{
-	struct ext4_group_info *grp;
-	struct ext4_sb_info *sbi = EXT4_SB(sb);
-	J_ASSERT_BH(bh, buffer_locked(bh));
-
-	/* If checksum is bad mark all blocks and inodes use to prevent
-	 * allocation, essentially implementing a per-group read-only flag. */
-	if (!ext4_group_desc_csum_verify(sb, block_group, gdp)) {
-		ext4_error(sb, "Checksum bad for group %u", block_group);
-		grp = ext4_get_group_info(sb, block_group);
-		if (!EXT4_MB_GRP_BBITMAP_CORRUPT(grp))
-			percpu_counter_sub(&sbi->s_freeclusters_counter,
-					   grp->bb_free);
-		set_bit(EXT4_GROUP_INFO_BBITMAP_CORRUPT_BIT, &grp->bb_state);
-		if (!EXT4_MB_GRP_IBITMAP_CORRUPT(grp)) {
-			int count;
-			count = ext4_free_inodes_count(sb, gdp);
-			percpu_counter_sub(&sbi->s_freeinodes_counter,
-					   count);
-		}
-		set_bit(EXT4_GROUP_INFO_IBITMAP_CORRUPT_BIT, &grp->bb_state);
-		return 0;
-	}
-
-	memset(bh->b_data, 0, (EXT4_INODES_PER_GROUP(sb) + 7) / 8);
-	ext4_mark_bitmap_end(EXT4_INODES_PER_GROUP(sb), sb->s_blocksize * 8,
-			bh->b_data);
-	ext4_inode_bitmap_csum_set(sb, block_group, gdp, bh,
-				   EXT4_INODES_PER_GROUP(sb) / 8);
-	ext4_group_desc_csum_set(sb, block_group, gdp);
-
-	return EXT4_INODES_PER_GROUP(sb);
-}
-
 void ext4_end_bitmap_read(struct buffer_head *bh, int uptodate)
 {
 	if (uptodate) {
@@ -123,16 +84,22 @@ static struct buffer_head *
 ext4_read_inode_bitmap(struct super_block *sb, ext4_group_t block_group)
 {
 	struct ext4_group_desc *desc;
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
 	struct buffer_head *bh = NULL;
 	ext4_fsblk_t bitmap_blk;
 	struct ext4_group_info *grp;
-	struct ext4_sb_info *sbi = EXT4_SB(sb);
 
 	desc = ext4_get_group_desc(sb, block_group, NULL);
 	if (!desc)
 		return NULL;
 
 	bitmap_blk = ext4_inode_bitmap(sb, desc);
+	if ((bitmap_blk <= le32_to_cpu(sbi->s_es->s_first_data_block)) ||
+	    (bitmap_blk >= ext4_blocks_count(sbi->s_es))) {
+		ext4_error(sb, "Invalid inode bitmap blk %llu in "
+			   "block_group %u", bitmap_blk, block_group);
+		return ERR_PTR(-EUCLEAN);
+	}
 	bh = sb_getblk(sb, bitmap_blk);
 	if (unlikely(!bh)) {
 		ext4_error(sb, "Cannot read inode bitmap - "
@@ -151,7 +118,9 @@ ext4_read_inode_bitmap(struct super_block *sb, ext4_group_t block_group)
 
 	ext4_lock_group(sb, block_group);
 	if (desc->bg_flags & cpu_to_le16(EXT4_BG_INODE_UNINIT)) {
-		ext4_init_inode_bitmap(sb, bh, block_group, desc);
+		memset(bh->b_data, 0, (EXT4_INODES_PER_GROUP(sb) + 7) / 8);
+		ext4_mark_bitmap_end(EXT4_INODES_PER_GROUP(sb),
+				     sb->s_blocksize * 8, bh->b_data);
 		set_bitmap_uptodate(bh);
 		set_buffer_uptodate(bh);
 		set_buffer_verified(bh);
@@ -727,10 +696,24 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 	ext4_group_t i;
 	ext4_group_t flex_group;
 	struct ext4_group_info *grp;
+	int encrypt = 0;
 
 	/* Cannot create files in a deleted directory */
 	if (!dir || !dir->i_nlink)
 		return ERR_PTR(-EPERM);
+
+	if ((ext4_encrypted_inode(dir) ||
+	     DUMMY_ENCRYPTION_ENABLED(EXT4_SB(dir->i_sb))) &&
+	    (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode))) {
+		err = ext4_get_encryption_info(dir);
+		if (err)
+			return ERR_PTR(err);
+		if (ext4_encryption_info(dir) == NULL)
+			return ERR_PTR(-EPERM);
+		if (!handle)
+			nblocks += EXT4_DATA_TRANS_BLOCKS(dir->i_sb);
+		encrypt = 1;
+	}
 
 	sb = dir->i_sb;
 	ngroups = ext4_get_groups_count(sb);
@@ -1029,11 +1012,9 @@ got:
 	ext4_set_inode_state(inode, EXT4_STATE_NEW);
 
 	ei->i_extra_isize = EXT4_SB(sb)->s_want_extra_isize;
-
 	ei->i_inline_off = 0;
 	if (EXT4_HAS_INCOMPAT_FEATURE(sb, EXT4_FEATURE_INCOMPAT_INLINE_DATA))
 		ext4_set_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
-
 	ret = inode;
 	err = dquot_alloc_inode(inode);
 	if (err)
@@ -1058,6 +1039,12 @@ got:
 	if (ext4_handle_valid(handle)) {
 		ei->i_sync_tid = handle->h_transaction->t_tid;
 		ei->i_datasync_tid = handle->h_transaction->t_tid;
+	}
+
+	if (encrypt) {
+		err = ext4_inherit_context(dir, inode);
+		if (err)
+			goto fail_free_drop;
 	}
 
 	err = ext4_mark_inode_dirty(handle, inode);
@@ -1090,22 +1077,20 @@ struct inode *ext4_orphan_get(struct super_block *sb, unsigned long ino)
 	unsigned long max_ino = le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count);
 	ext4_group_t block_group;
 	int bit;
-	struct buffer_head *bitmap_bh;
+	struct buffer_head *bitmap_bh = NULL;
 	struct inode *inode = NULL;
-	long err = -EIO;
+	int err = -EIO;
 
-	/* Error cases - e2fsck has already cleaned up for us */
-	if (ino > max_ino) {
-		ext4_warning(sb, "bad orphan ino %lu!  e2fsck was run?", ino);
-		goto error;
-	}
+	if (ino < EXT4_FIRST_INO(sb) || ino > max_ino)
+		goto bad_orphan;
 
 	block_group = (ino - 1) / EXT4_INODES_PER_GROUP(sb);
 	bit = (ino - 1) % EXT4_INODES_PER_GROUP(sb);
 	bitmap_bh = ext4_read_inode_bitmap(sb, block_group);
 	if (!bitmap_bh) {
-		ext4_warning(sb, "inode bitmap error for orphan %lu", ino);
-		goto error;
+		ext4_error(sb, "inode bitmap error %ld for orphan %lu",
+			   ino, PTR_ERR(bitmap_bh));
+		return (struct inode *) bitmap_bh;
 	}
 
 	/* Having the inode bit set should be a 100% indicator that this
@@ -1116,15 +1101,21 @@ struct inode *ext4_orphan_get(struct super_block *sb, unsigned long ino)
 		goto bad_orphan;
 
 	inode = ext4_iget(sb, ino);
-	if (IS_ERR(inode))
-		goto iget_failed;
+	if (IS_ERR(inode)) {
+		err = PTR_ERR(inode);
+		ext4_error(sb, "couldn't read orphan inode %lu (err %d)",
+			   ino, err);
+		return inode;
+	}
 
 	/*
-	 * If the orphans has i_nlinks > 0 then it should be able to be
-	 * truncated, otherwise it won't be removed from the orphan list
-	 * during processing and an infinite loop will result.
+	 * If the orphans has i_nlinks > 0 then it should be able to
+	 * be truncated, otherwise it won't be removed from the orphan
+	 * list during processing and an infinite loop will result.
+	 * Similarly, it must not be a bad inode.
 	 */
-	if (inode->i_nlink && !ext4_can_truncate(inode))
+	if ((inode->i_nlink && !ext4_can_truncate(inode)) ||
+	    is_bad_inode(inode))
 		goto bad_orphan;
 
 	if (NEXT_ORPHAN(inode) > max_ino)
@@ -1132,29 +1123,25 @@ struct inode *ext4_orphan_get(struct super_block *sb, unsigned long ino)
 	brelse(bitmap_bh);
 	return inode;
 
-iget_failed:
-	err = PTR_ERR(inode);
-	inode = NULL;
 bad_orphan:
-	ext4_warning(sb, "bad orphan inode %lu!  e2fsck was run?", ino);
-	printk(KERN_WARNING "ext4_test_bit(bit=%d, block=%llu) = %d\n",
-	       bit, (unsigned long long)bitmap_bh->b_blocknr,
-	       ext4_test_bit(bit, bitmap_bh->b_data));
-	printk(KERN_WARNING "inode=%p\n", inode);
+	ext4_error(sb, "bad orphan inode %lu", ino);
+	if (bitmap_bh)
+		printk(KERN_ERR "ext4_test_bit(bit=%d, block=%llu) = %d\n",
+		       bit, (unsigned long long)bitmap_bh->b_blocknr,
+		       ext4_test_bit(bit, bitmap_bh->b_data));
 	if (inode) {
-		printk(KERN_WARNING "is_bad_inode(inode)=%d\n",
+		printk(KERN_ERR "is_bad_inode(inode)=%d\n",
 		       is_bad_inode(inode));
-		printk(KERN_WARNING "NEXT_ORPHAN(inode)=%u\n",
+		printk(KERN_ERR "NEXT_ORPHAN(inode)=%u\n",
 		       NEXT_ORPHAN(inode));
-		printk(KERN_WARNING "max_ino=%lu\n", max_ino);
-		printk(KERN_WARNING "i_nlink=%u\n", inode->i_nlink);
+		printk(KERN_ERR "max_ino=%lu\n", max_ino);
+		printk(KERN_ERR "i_nlink=%u\n", inode->i_nlink);
 		/* Avoid freeing blocks if we got a bad deleted inode */
 		if (inode->i_nlink == 0)
 			inode->i_blocks = 0;
 		iput(inode);
 	}
 	brelse(bitmap_bh);
-error:
 	return ERR_PTR(err);
 }
 

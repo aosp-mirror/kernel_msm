@@ -2834,22 +2834,10 @@ no_open:
 		dentry = lookup_real(dir, dentry, nd->flags);
 		if (IS_ERR(dentry))
 			return PTR_ERR(dentry);
-
-		if (create_error) {
-			int open_flag = op->open_flag;
-
-			error = create_error;
-			if ((open_flag & O_EXCL)) {
-				if (!dentry->d_inode)
-					goto out;
-			} else if (!dentry->d_inode) {
-				goto out;
-			} else if ((open_flag & O_TRUNC) &&
-				   S_ISREG(dentry->d_inode->i_mode)) {
-				goto out;
-			}
-			/* will fail later, go on to get the right error */
-		}
+	}
+	if (create_error && !dentry->d_inode) {
+		error = create_error;
+		goto out;
 	}
 looked_up:
 	path->dentry = dentry;
@@ -3149,6 +3137,10 @@ opened:
 			goto exit_fput;
 	}
 out:
+	if (unlikely(error > 0)) {
+		WARN_ON(1);
+		error = -EINVAL;
+	}
 	if (got_write)
 		mnt_drop_write(nd->path.mnt);
 	path_put(&save_parent);
@@ -3311,6 +3303,8 @@ out2:
 				error = -ESTALE;
 		}
 		file = ERR_PTR(error);
+	} else {
+		global_filetable_add(file);
 	}
 	return file;
 }
@@ -3675,6 +3669,8 @@ out:
 		d_delete(dentry);
 	return error;
 }
+EXPORT_SYMBOL(vfs_rmdir2);
+
 int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	return vfs_rmdir2(NULL, dir, dentry);
@@ -4177,11 +4173,11 @@ int vfs_rename2(struct vfsmount *mnt,
 {
 	int error;
 	bool is_dir = d_is_dir(old_dentry);
-	const unsigned char *old_name;
 	struct inode *source = old_dentry->d_inode;
 	struct inode *target = new_dentry->d_inode;
 	bool new_is_dir = false;
 	unsigned max_links = new_dir->i_sb->s_max_links;
+	struct name_snapshot old_name;
 
 	if (source == target)
 		return 0;
@@ -4231,7 +4227,7 @@ int vfs_rename2(struct vfsmount *mnt,
 	if (error)
 		return error;
 
-	old_name = fsnotify_oldname_init(old_dentry->d_name.name);
+	take_dentry_name_snapshot(&old_name, old_dentry);
 	dget(new_dentry);
 	if (!is_dir || (flags & RENAME_EXCHANGE))
 		lock_two_nondirectories(source, target);
@@ -4292,14 +4288,14 @@ out:
 		mutex_unlock(&target->i_mutex);
 	dput(new_dentry);
 	if (!error) {
-		fsnotify_move(old_dir, new_dir, old_name, is_dir,
+		fsnotify_move(old_dir, new_dir, old_name.name, is_dir,
 			      !(flags & RENAME_EXCHANGE) ? target : NULL, old_dentry);
 		if (flags & RENAME_EXCHANGE) {
 			fsnotify_move(new_dir, old_dir, old_dentry->d_name.name,
 				      new_is_dir, NULL, new_dentry);
 		}
 	}
-	fsnotify_oldname_free(old_name);
+	release_dentry_name_snapshot(&old_name);
 
 	return error;
 }

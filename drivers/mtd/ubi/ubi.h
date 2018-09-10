@@ -466,6 +466,7 @@ struct ubi_debug_info {
  * @fm_eba_sem: allows ubi_update_fastmap() to block EBA table changes
  * @fm_work: fastmap work queue
  * @fm_work_scheduled: non-zero if fastmap work was scheduled
+ * @fast_attach: non-zero if UBI was attached by fastmap
  *
  * @used: RB-tree of used physical eraseblocks
  * @erroneous: RB-tree of erroneous used physical eraseblocks
@@ -477,8 +478,7 @@ struct ubi_debug_info {
  * @pq_head: protection queue head
  * @wl_lock: protects the @used, @free, @pq, @pq_head, @lookuptbl, @move_from,
  *	     @move_to, @move_to_put @erase_pending, @wl_scheduled, @works,
- *	     @erroneous, @erroneous_peb_count, @fm_work_scheduled, @fm_pool,
- *	     and @fm_wl_pool fields
+ *	     @erroneous, @erroneous_peb_count, and @fm_work_scheduled fields
  * @move_mutex: serializes eraseblock moves
  * @work_sem: used to wait for all the scheduled works to finish and prevent
  * new works from being submitted
@@ -574,6 +574,7 @@ struct ubi_device {
 	size_t fm_size;
 	struct work_struct fm_work;
 	int fm_work_scheduled;
+	int fast_attach;
 
 	/* Wear-leveling sub-system's stuff */
 	struct rb_root used;
@@ -598,6 +599,7 @@ struct ubi_device {
 	char bgt_name[sizeof(UBI_BGT_NAME_PATTERN)+2];
 	bool scrub_in_progress;
 	atomic_t scrub_work_count;
+	int wl_is_inited;
 
 	/* I/O sub-system's stuff */
 	long long flash_size;
@@ -870,7 +872,7 @@ ssize_t ubi_wl_scrub_all(struct ubi_device *ubi,
 void ubi_wl_update_peb_sqnum(struct ubi_device *ubi, int pnum,
 				struct ubi_vid_hdr *vid_hdr);
 unsigned long long ubi_wl_scrub_get_min_sqnum(struct ubi_device *ubi);
-int ubi_wl_erase_peb(struct ubi_device *ubi, int pnum);
+int ubi_wl_re_erase_peb(struct ubi_device *ubi, int pnum);
 
 /* io.c */
 int ubi_io_read(const struct ubi_device *ubi, void *buf, int pnum, int offset,

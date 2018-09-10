@@ -228,7 +228,8 @@ static void sdio_enable_vendor_specific_settings(struct mmc_card *card)
 	u8 settings;
 
 	if (mmc_enable_qca6574_settings(card) ||
-		mmc_enable_qca9377_settings(card)) {
+		mmc_enable_qca9377_settings(card) ||
+		mmc_enable_qca9379_settings(card)) {
 		ret = mmc_io_rw_direct(card, 1, 0, 0xF2, 0x0F, NULL);
 		if (ret) {
 			pr_crit("%s: failed to write to fn 0xf2 %d\n",
@@ -643,17 +644,11 @@ static int mmc_sdio_init_uhs_card(struct mmc_card *card)
 	 * SPI mode doesn't define CMD19 and tuning is only valid for SDR50 and
 	 * SDR104 mode SD-cards. Note that tuning is mandatory for SDR104.
 	 */
-	if (!mmc_host_is_spi(card->host) && card->host->ops->execute_tuning &&
-			((card->sw_caps.sd3_bus_mode & SD_MODE_UHS_SDR50) ||
-			 (card->sw_caps.sd3_bus_mode & SD_MODE_UHS_SDR104))) {
-		mmc_host_clk_hold(card->host);
-		err = card->host->ops->execute_tuning(card->host,
-						      MMC_SEND_TUNING_BLOCK);
-		mmc_host_clk_release(card->host);
-	}
-
+	if (!mmc_host_is_spi(card->host) &&
+	    ((card->sw_caps.sd3_bus_mode & SD_MODE_UHS_SDR50) ||
+	     (card->sw_caps.sd3_bus_mode & SD_MODE_UHS_SDR104)))
+		err = mmc_execute_tuning(card);
 out:
-
 	return err;
 }
 
@@ -748,7 +743,7 @@ try_again:
 	 */
 	if (!powered_resume && (rocr & ocr & R4_18V_PRESENT)) {
 		err = mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_180,
-					ocr);
+					ocr_card);
 		if (err == -EAGAIN) {
 			sdio_reset(host);
 			mmc_go_idle(host);
@@ -1036,6 +1031,7 @@ static int mmc_sdio_pre_suspend(struct mmc_host *host)
  */
 static int mmc_sdio_suspend(struct mmc_host *host)
 {
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	if (mmc_card_keep_power(host) && mmc_card_wake_sdio_irq(host)) {
 		mmc_claim_host(host);
 		sdio_disable_wide(host->card);
@@ -1046,6 +1042,7 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 		mmc_power_off(host);
 	else if (host->ios.clock)
 		mmc_gate_clock(host);
+	MMC_TRACE(host, "%s: Exit\n", __func__);
 
 	return 0;
 }
@@ -1057,6 +1054,7 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	/* Basic card reinitialization. */
 	mmc_claim_host(host);
 
@@ -1107,6 +1105,8 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	mmc_release_host(host);
 
 	host->pm_flags &= ~MMC_PM_KEEP_POWER;
+	host->pm_flags &= ~MMC_PM_WAKE_SDIO_IRQ;
+	MMC_TRACE(host, "%s: Exit err: %d\n", __func__, err);
 	return err;
 }
 

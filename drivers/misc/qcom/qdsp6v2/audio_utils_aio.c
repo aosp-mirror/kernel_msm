@@ -31,7 +31,7 @@
 #ifdef CONFIG_USE_DEV_CTRL_VOLUME
 #include <linux/qdsp6v2/audio_dev_ctl.h>
 #endif /*CONFIG_USE_DEV_CTRL_VOLUME*/
-DEFINE_MUTEX(lock);
+static DEFINE_MUTEX(lock);
 #ifdef CONFIG_DEBUG_FS
 
 int audio_aio_debug_open(struct inode *inode, struct file *file)
@@ -219,7 +219,7 @@ static int audio_aio_pause(struct q6audio_aio  *audio)
 
 static int audio_aio_flush(struct q6audio_aio  *audio)
 {
-	int rc;
+	int rc = 0;
 
 	if (audio->enabled) {
 		/* Implicitly issue a pause to the decoder before flushing if
@@ -256,7 +256,7 @@ static int audio_aio_flush(struct q6audio_aio  *audio)
 			__func__, audio, atomic_read(&audio->in_samples));
 	atomic_set(&audio->in_bytes, 0);
 	atomic_set(&audio->in_samples, 0);
-	return 0;
+	return rc;
 }
 
 static int audio_aio_outport_flush(struct q6audio_aio *audio)
@@ -714,7 +714,7 @@ static int audio_aio_events_pending(struct q6audio_aio *audio)
 	spin_lock_irqsave(&audio->event_queue_lock, flags);
 	empty = !list_empty(&audio->event_queue);
 	spin_unlock_irqrestore(&audio->event_queue_lock, flags);
-	return empty || audio->event_abort;
+	return empty || audio->event_abort || audio->reset_event;
 }
 
 static long audio_aio_process_event_req_common(struct q6audio_aio *audio,
@@ -741,6 +741,12 @@ static long audio_aio_process_event_req_common(struct q6audio_aio *audio,
 	}
 	if (rc < 0)
 		return rc;
+
+	if (audio->reset_event) {
+		audio->reset_event = false;
+		pr_err("In SSR, post ENETRESET err\n");
+		return -ENETRESET;
+	}
 
 	if (audio->event_abort) {
 		audio->event_abort = 0;
@@ -1056,6 +1062,8 @@ static int audio_aio_async_write(struct q6audio_aio *audio,
 	struct audio_client *ac;
 	struct audio_aio_write_param param;
 
+	memset(&param, 0, sizeof(param));
+
 	if (!audio || !buf_node) {
 		pr_err("%s NULL pointer audio=[0x%pK], buf_node=[0x%pK]\n",
 			__func__, audio, buf_node);
@@ -1345,7 +1353,6 @@ int audio_aio_open(struct q6audio_aio *audio, struct file *file)
 	spin_lock_init(&audio->event_queue_lock);
 	init_waitqueue_head(&audio->cmd_wait);
 	init_waitqueue_head(&audio->write_wait);
-	init_waitqueue_head(&audio->event_wait);
 	INIT_LIST_HEAD(&audio->out_queue);
 	INIT_LIST_HEAD(&audio->in_queue);
 	INIT_LIST_HEAD(&audio->ion_region_queue);
@@ -1354,6 +1361,7 @@ int audio_aio_open(struct q6audio_aio *audio, struct file *file)
 
 	audio->drv_ops.out_flush(audio);
 	audio->opened = 1;
+	audio->reset_event = false;
 	file->private_data = audio;
 	audio->codec_ioctl = audio_aio_ioctl;
 	audio->codec_compat_ioctl = audio_aio_compat_ioctl;

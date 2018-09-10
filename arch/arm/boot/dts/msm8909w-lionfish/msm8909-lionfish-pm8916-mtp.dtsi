@@ -50,7 +50,6 @@
 			focaltech,fw-delay-era-flsh-ms = <2000>;
 		};
 	};
-
 };
 
 &audio_codec_mtp {
@@ -201,4 +200,3 @@
 		status = "disabled";
 	};
 };
-

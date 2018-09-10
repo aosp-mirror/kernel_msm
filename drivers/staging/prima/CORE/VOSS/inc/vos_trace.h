@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -81,21 +81,13 @@ typedef enum
     
 } VOS_TRACE_LEVEL;
 
-enum {
-	LOG_PKT_TYPE_DATA_MGMT = 0x1,
-	LOG_PKT_TYPE_FW_LOG    = 0x2
-};
-
-
-
 /* Log types. These types are defined in mailbox*/
 typedef enum
 {
     WLAN_MGMT_FRAME_LOGS    = 0,
-    WLAN_QXDM_LOGGING       = 1,
+    WLAN_FW_LOGS            = 1,
     WLAN_FW_MEMORY_DUMP     = 2
 }FrameLoggingType;
-
 
 /*-------------------------------------------------------------------------- 
   Preprocessor definitions and constants
@@ -199,10 +191,16 @@ void vos_trace_setLevel( VOS_MODULE_ID module, VOS_TRACE_LEVEL level );
 v_BOOL_t vos_trace_getLevel( VOS_MODULE_ID module, VOS_TRACE_LEVEL level );
 
 typedef void (*tpvosTraceCb) (void *pMac, tpvosTraceRecord, v_U16_t);
+typedef void (*tp_vos_state_info_cb) (void);
+
 void vos_trace(v_U8_t module, v_U8_t code, v_U8_t session, v_U32_t data);
 void vosTraceRegister(VOS_MODULE_ID, tpvosTraceCb);
+void vos_register_debug_callback(VOS_MODULE_ID moduleID,
+                                      tp_vos_state_info_cb vosStateInfoCb);
 VOS_STATUS vos_trace_spin_lock_init(void);
 void vosTraceInit(void);
+void vos_register_debugcb_init(void);
 void vosTraceEnable(v_U32_t, v_U8_t enable);
 void vosTraceDumpAll(void*, v_U8_t, v_U8_t, v_U32_t, v_U32_t);
+void vos_state_info_dump_all(void);
 #endif

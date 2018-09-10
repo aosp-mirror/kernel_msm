@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -214,6 +214,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
    int error;
    char custom[MAX_CUSTOM_LEN];
    char *p;
+   tANI_U32 status;
 
    hddLog( LOG1, "hdd_IndicateScanResult " MAC_ADDRESS_STR,
           MAC_ADDR_ARRAY(descriptor->bssId));
@@ -342,8 +343,15 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
        pDot11IEHTCaps = NULL;
 
-       dot11fUnpackBeaconIEs ((tpAniSirGlobal)
+       status = dot11fUnpackBeaconIEs ((tpAniSirGlobal)
            hHal, (tANI_U8 *) descriptor->ieFields, ie_length,  &dot11BeaconIEs);
+       if (DOT11F_FAILED(status))
+       {
+           hddLog(LOGE,
+                  FL("unpack failed for Beacon IE status:(0x%08x)"),
+                  status);
+           return -EINVAL;
+       }
 
        pDot11SSID = &dot11BeaconIEs.SSID;
 
@@ -514,7 +522,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
    event.cmd = IWEVCUSTOM;
    p = custom;
    p += scnprintf(p, MAX_CUSTOM_LEN, " Age: %lu",
-                 vos_timer_get_system_ticks() - descriptor->nReceivedTime);
+                 vos_timer_get_system_time() - descriptor->nReceivedTime);
    event.u.data.length = p - custom;
    current_event = iwe_stream_add_point (scanInfo->info,current_event, end,
                                          &event, custom);
@@ -542,10 +550,15 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
   --------------------------------------------------------------------------*/
 
-VOS_STATUS hdd_processSpoofMacAddrRequest(hdd_context_t *pHddCtx)
+void __hdd_processSpoofMacAddrRequest(struct work_struct *work)
 {
+    hdd_context_t *pHddCtx =
+        container_of(to_delayed_work(work), hdd_context_t, spoof_mac_addr_work);
 
     ENTER();
+
+    if (wlan_hdd_validate_context(pHddCtx))
+        return;
 
     mutex_lock(&pHddCtx->spoofMacAddr.macSpoofingLock);
 
@@ -556,7 +569,7 @@ VOS_STATUS hdd_processSpoofMacAddrRequest(hdd_context_t *pHddCtx)
                 pHddCtx->spoofMacAddr.isEnabled = FALSE;
                 mutex_unlock(&pHddCtx->spoofMacAddr.macSpoofingLock);
                 hddLog(LOGE, FL("Failed to generate random Mac Addr"));
-                return VOS_STATUS_E_FAILURE;
+                return;
         }
     }
 
@@ -584,7 +597,14 @@ VOS_STATUS hdd_processSpoofMacAddrRequest(hdd_context_t *pHddCtx)
 
     EXIT();
 
-    return VOS_STATUS_SUCCESS;
+    return;
+}
+
+void hdd_processSpoofMacAddrRequest(struct work_struct *work)
+{
+    vos_ssr_protect(__func__);
+    __hdd_processSpoofMacAddrRequest(work);
+    vos_ssr_unprotect(__func__);
 }
 
 /**---------------------------------------------------------------------------
@@ -614,7 +634,7 @@ static eHalStatus hdd_ScanRequestCallback(tHalHandle halHandle, void *pContext,
     
     ENTER();
 
-    hddLog(LOGW,"%s called with halHandle = %p, pContext = %p, scanID = %d,"
+    hddLog(LOGW,"%s called with halHandle = %pK, pContext = %pK, scanID = %d,"
            " returned status = %d", __func__, halHandle, pContext,
            (int) scanId, (int) status);
 
@@ -624,7 +644,7 @@ static eHalStatus hdd_ScanRequestCallback(tHalHandle halHandle, void *pContext,
        do some quick sanity before proceeding */
     if (pAdapter->dev != dev)
     {
-       hddLog(LOGW, "%s: device mismatch %p vs %p",
+       hddLog(LOGW, "%s: device mismatch %pK vs %pK",
                __func__, pAdapter->dev, dev);
         return eHAL_STATUS_SUCCESS;
     }
@@ -825,7 +845,24 @@ int __iw_set_scan(struct net_device *dev, struct iw_request_info *info,
        scanRequest.uIEFieldLen = pHddCtx->scan_info.scanAddIE.length;
        scanRequest.pIEField = pHddCtx->scan_info.scanAddIE.addIEdata;
    }
+   if (pHddCtx->spoofMacAddr.isEnabled &&
+       pHddCtx->cfg_ini->enableMacSpoofing == 1)
+   {
+        hddLog(LOG1, FL("MAC Spoofing enabled for current scan"));
+        /*
+         * Updating SelfSta Mac Addr in TL which will be used to get
+         * staidx to fill TxBds for probe request during current scan
+         */
+        status = WLANTL_updateSpoofMacAddr(pHddCtx->pvosContext,
+             &pHddCtx->spoofMacAddr.randomMacAddr,
+             &pAdapter->macAddressCurrent);
 
+        if (status != eHAL_STATUS_SUCCESS)
+        {
+           hddLog(LOGE, FL("Failed to update MAC Spoof Addr in TL"));
+           goto error;
+        }
+   }
    status = sme_ScanRequest( (WLAN_HDD_GET_CTX(pAdapter))->hHal, pAdapter->sessionId,&scanRequest, &scanId, &hdd_ScanRequestCallback, dev ); 
    if (!HAL_STATUS_SUCCESS(status))
    {
@@ -985,7 +1022,7 @@ static eHalStatus hdd_CscanRequestCallback(tHalHandle halHandle, void *pContext,
     VOS_STATUS vos_status = VOS_STATUS_SUCCESS;
     ENTER();
 
-    hddLog(LOG1,"%s called with halHandle = %p, pContext = %p, scanID = %d,"
+    hddLog(LOG1,"%s called with halHandle = %pK, pContext = %pK, scanID = %d,"
            " returned status = %d", __func__, halHandle, pContext,
             (int) scanId, (int) status);
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,4 +21,20 @@
 / {
 	model = "Qualcomm Technologies, Inc. APQ 8096 v3";
 	qcom,msm-id = <291 0x30001>;
+};
+
+&soc {
+	qcom,rmnet-ipa {
+		status = "disabled";
+	};
+
+	qcom,msm-ssc-sensors {
+		qcom,qdsp-timer-base = <0x9850000 0x32>;
+		qcom,qtimer-cntpct-lo-offset = <0x0>;
+		qcom,qtimer-cntpct-hi-offset = <0x4>;
+	};
+};
+
+&ipa_hw {
+	status = "disabled";
 };

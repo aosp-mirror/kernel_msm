@@ -345,11 +345,6 @@ struct mem_cgroup {
 	 * percpu counter.
 	 */
 	struct mem_cgroup_stat_cpu __percpu *stat;
-	/*
-	 * used when a cpu is offlined or other synchronizations
-	 * See mem_cgroup_read_stat().
-	 */
-	struct mem_cgroup_stat_cpu nocpu_base;
 	spinlock_t pcp_counter_lock;
 
 	atomic_t	dead_count;
@@ -868,15 +863,8 @@ static long mem_cgroup_read_stat(struct mem_cgroup *memcg,
 	long val = 0;
 	int cpu;
 
-	get_online_cpus();
-	for_each_online_cpu(cpu)
+	for_each_possible_cpu(cpu)
 		val += per_cpu(memcg->stat->count[idx], cpu);
-#ifdef CONFIG_HOTPLUG_CPU
-	spin_lock(&memcg->pcp_counter_lock);
-	val += memcg->nocpu_base.count[idx];
-	spin_unlock(&memcg->pcp_counter_lock);
-#endif
-	put_online_cpus();
 	return val;
 }
 
@@ -886,15 +874,8 @@ static unsigned long mem_cgroup_read_events(struct mem_cgroup *memcg,
 	unsigned long val = 0;
 	int cpu;
 
-	get_online_cpus();
-	for_each_online_cpu(cpu)
+	for_each_possible_cpu(cpu)
 		val += per_cpu(memcg->stat->events[idx], cpu);
-#ifdef CONFIG_HOTPLUG_CPU
-	spin_lock(&memcg->pcp_counter_lock);
-	val += memcg->nocpu_base.events[idx];
-	spin_unlock(&memcg->pcp_counter_lock);
-#endif
-	put_online_cpus();
 	return val;
 }
 
@@ -2262,10 +2243,10 @@ again:
  * @flags: value received from mem_cgroup_begin_page_stat()
  */
 void mem_cgroup_end_page_stat(struct mem_cgroup *memcg, bool *locked,
-			      unsigned long flags)
+			      unsigned long *flags)
 {
 	if (memcg && *locked)
-		move_unlock_mem_cgroup(memcg, &flags);
+		move_unlock_mem_cgroup(memcg, flags);
 
 	rcu_read_unlock();
 }
@@ -2454,46 +2435,18 @@ static void drain_all_stock_sync(struct mem_cgroup *root_memcg)
 	mutex_unlock(&percpu_charge_mutex);
 }
 
-/*
- * This function drains percpu counter value from DEAD cpu and
- * move it to local cpu. Note that this function can be preempted.
- */
-static void mem_cgroup_drain_pcp_counter(struct mem_cgroup *memcg, int cpu)
-{
-	int i;
-
-	spin_lock(&memcg->pcp_counter_lock);
-	for (i = 0; i < MEM_CGROUP_STAT_NSTATS; i++) {
-		long x = per_cpu(memcg->stat->count[i], cpu);
-
-		per_cpu(memcg->stat->count[i], cpu) = 0;
-		memcg->nocpu_base.count[i] += x;
-	}
-	for (i = 0; i < MEM_CGROUP_EVENTS_NSTATS; i++) {
-		unsigned long x = per_cpu(memcg->stat->events[i], cpu);
-
-		per_cpu(memcg->stat->events[i], cpu) = 0;
-		memcg->nocpu_base.events[i] += x;
-	}
-	spin_unlock(&memcg->pcp_counter_lock);
-}
-
 static int memcg_cpu_hotplug_callback(struct notifier_block *nb,
 					unsigned long action,
 					void *hcpu)
 {
 	int cpu = (unsigned long)hcpu;
 	struct memcg_stock_pcp *stock;
-	struct mem_cgroup *iter;
 
 	if (action == CPU_ONLINE)
 		return NOTIFY_OK;
 
 	if (action != CPU_DEAD && action != CPU_DEAD_FROZEN)
 		return NOTIFY_OK;
-
-	for_each_mem_cgroup(iter)
-		mem_cgroup_drain_pcp_counter(iter, cpu);
 
 	stock = &per_cpu(memcg_stock, cpu);
 	drain_stock(stock);
@@ -4483,7 +4436,7 @@ static int mem_cgroup_swappiness_write(struct cgroup_subsys_state *css,
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	if (val > 100)
+	if ((val > 200) || ((val > 100) && !css->parent))
 		return -EINVAL;
 
 	if (css->parent)
@@ -4748,16 +4701,17 @@ static void __mem_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
 swap_buffers:
 	/* Swap primary and spare array */
 	thresholds->spare = thresholds->primary;
-	/* If all events are unregistered, free the spare array */
-	if (!new) {
-		kfree(thresholds->spare);
-		thresholds->spare = NULL;
-	}
 
 	rcu_assign_pointer(thresholds->primary, new);
 
 	/* To be sure that nobody uses thresholds */
 	synchronize_rcu();
+
+	/* If all events are unregistered, free the spare array */
+	if (!new) {
+		kfree(thresholds->spare);
+		thresholds->spare = NULL;
+	}
 unlock:
 	mutex_unlock(&memcg->thresholds_lock);
 }
@@ -6001,12 +5955,6 @@ static int mem_cgroup_can_attach(struct cgroup_subsys_state *css,
 	return ret;
 }
 
-static int mem_cgroup_allow_attach(struct cgroup_subsys_state *css,
-				   struct cgroup_taskset *tset)
-{
-	return subsys_cgroup_allow_attach(css, tset);
-}
-
 static void mem_cgroup_cancel_attach(struct cgroup_subsys_state *css,
 				     struct cgroup_taskset *tset)
 {
@@ -6175,11 +6123,6 @@ static int mem_cgroup_can_attach(struct cgroup_subsys_state *css,
 {
 	return 0;
 }
-static int mem_cgroup_allow_attach(struct cgroup_subsys_state *css,
-				   struct cgroup_taskset *tset)
-{
-	return 0;
-}
 static void mem_cgroup_cancel_attach(struct cgroup_subsys_state *css,
 				     struct cgroup_taskset *tset)
 {
@@ -6215,7 +6158,6 @@ struct cgroup_subsys memory_cgrp_subsys = {
 	.can_attach = mem_cgroup_can_attach,
 	.cancel_attach = mem_cgroup_cancel_attach,
 	.attach = mem_cgroup_move_task,
-	.allow_attach = mem_cgroup_allow_attach,
 	.bind = mem_cgroup_bind,
 	.legacy_cftypes = mem_cgroup_files,
 	.early_init = 0,
@@ -6511,7 +6453,7 @@ static void uncharge_list(struct list_head *page_list)
 		next = page->lru.next;
 
 		VM_BUG_ON_PAGE(PageLRU(page), page);
-		VM_BUG_ON_PAGE(page_count(page), page);
+		VM_BUG_ON_PAGE(!PageHWPoison(page) && page_count(page), page);
 
 		pc = lookup_page_cgroup(page);
 		if (!PageCgroupUsed(pc))

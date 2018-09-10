@@ -67,6 +67,7 @@ module_param(rx_drain_timeout_msecs, uint, 0444);
 unsigned int rx_stall_timeout_msecs = 60000;
 module_param(rx_stall_timeout_msecs, uint, 0444);
 
+#define MAX_QUEUES_DEFAULT 8
 unsigned int xenvif_max_queues;
 module_param_named(max_queues, xenvif_max_queues, uint, 0644);
 MODULE_PARM_DESC(max_queues,
@@ -819,6 +820,7 @@ static void tx_add_credit(struct xenvif_queue *queue)
 		max_credit = ULONG_MAX; /* wrapped: clamp to ULONG_MAX */
 
 	queue->remaining_credit = min(max_credit, max_burst);
+	queue->rate_limited = false;
 }
 
 static void tx_credit_callback(unsigned long data)
@@ -1336,8 +1338,10 @@ static bool tx_credit_exceeded(struct xenvif_queue *queue, unsigned size)
 		msecs_to_jiffies(queue->credit_usec / 1000);
 
 	/* Timer could already be pending in rare cases. */
-	if (timer_pending(&queue->credit_timeout))
+	if (timer_pending(&queue->credit_timeout)) {
+		queue->rate_limited = true;
 		return true;
+	}
 
 	/* Passed the point where we can replenish credit? */
 	if (time_after_eq64(now, next_credit)) {
@@ -1354,6 +1358,7 @@ static bool tx_credit_exceeded(struct xenvif_queue *queue, unsigned size)
 		mod_timer(&queue->credit_timeout,
 			  next_credit);
 		queue->credit_window_start = next_credit;
+		queue->rate_limited = true;
 
 		return true;
 	}
@@ -2185,8 +2190,12 @@ static int __init netback_init(void)
 	if (!xen_domain())
 		return -ENODEV;
 
-	/* Allow as many queues as there are CPUs, by default */
-	xenvif_max_queues = num_online_cpus();
+	/* Allow as many queues as there are CPUs but max. 8 if user has not
+	 * specified a value.
+	 */
+	if (xenvif_max_queues == 0)
+		xenvif_max_queues = min_t(unsigned int, MAX_QUEUES_DEFAULT,
+					  num_online_cpus());
 
 	if (fatal_skb_slots < XEN_NETBK_LEGACY_SLOTS_MAX) {
 		pr_info("fatal_skb_slots too small (%d), bump it to XEN_NETBK_LEGACY_SLOTS_MAX (%d)\n",

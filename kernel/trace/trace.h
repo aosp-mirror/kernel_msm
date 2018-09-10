@@ -333,7 +333,7 @@ struct tracer_flags {
 
 
 /**
- * struct tracer - a specific tracer and its callbacks to interact with debugfs
+ * struct tracer - a specific tracer and its callbacks to interact with tracefs
  * @name: the name chosen to select it on the available_tracers file
  * @init: called when one switches to this tracer (echo name > current_tracer)
  * @reset: called when one switches to another tracer
@@ -541,7 +541,6 @@ struct dentry *trace_create_file(const char *name,
 				 void *data,
 				 const struct file_operations *fops);
 
-struct dentry *tracing_init_dentry_tr(struct trace_array *tr);
 struct dentry *tracing_init_dentry(void);
 
 struct ring_buffer_event;
@@ -659,7 +658,6 @@ static inline void __trace_stack(struct trace_array *tr, unsigned long flags,
 extern cycle_t ftrace_now(int cpu);
 
 extern void trace_find_cmdline(int pid, char comm[]);
-extern int trace_find_tgid(int pid);
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 extern unsigned long ftrace_update_tot_cnt;
@@ -940,7 +938,6 @@ enum trace_iterator_flags {
 	TRACE_ITER_IRQ_INFO		= 0x800000,
 	TRACE_ITER_MARKERS		= 0x1000000,
 	TRACE_ITER_FUNCTION		= 0x2000000,
-	TRACE_ITER_TGID 		= 0x4000000,
 };
 
 /*
@@ -1312,5 +1309,18 @@ int perf_ftrace_event_register(struct ftrace_event_call *call,
 #else
 #define perf_ftrace_event_register NULL
 #endif
+
+#ifdef CONFIG_FTRACE_SYSCALLS
+void init_ftrace_syscalls(void);
+#else
+static inline void init_ftrace_syscalls(void) { }
+#endif
+
+#ifdef CONFIG_EVENT_TRACING
+void trace_event_init(void);
+#else
+static inline void __init trace_event_init(void) { }
+#endif
+
 
 #endif /* _LINUX_KERNEL_TRACE_H */

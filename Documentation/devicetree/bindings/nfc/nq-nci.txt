@@ -8,7 +8,6 @@ Required properties:
 - reg: NCI i2c slave address.
 - qcom,nq-ven: specific gpio for hardware reset.
 - qcom,nq-irq: specific gpio for read interrupt.
-- qcom,nq-firm: gpio for firmware download
 - interrupt-parent: Should be phandle for the interrupt controller
                     that services interrupts for this device.
 - interrupts: Nfc read interrupt,gpio-clk-req interrupt
@@ -23,7 +22,6 @@ Optional properties:
 
 - pinctrl-names, pinctrl-0, pincntrl-1: references to our pincntrl settings
 - clocks, clock-names: must contain the NQxxxx's core clock.
-- qcom,nq-esepwr: gpio to control power of secure element
 
 Example:
 
@@ -32,8 +30,6 @@ Example:
 		reg = <0x2b>;
 		qcom,irq-gpio = <&msm_gpio 29 0x00>;
 		qcom,en-gpio = <&msm_gpio 30 0x00>;
-		qcom,nq-firm = <&msm_gpio 34 0x00>;
-		qcom,nq-esepwr = <&msm_gpio 31 0x00>;
 		qcom,clk-src = "BBCLK2";
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <29 0>;

@@ -82,6 +82,10 @@
 			focaltech,fw-delay-era-flsh-ms = <2000>;
 			focaltech,fw-auto-cal;
 			focaltech,ignore-id-check;
+			/* Underlying clocks used by secure touch */
+			clock-names = "iface_clk", "core_clk";
+			clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+				<&clock_gcc clk_gcc_blsp1_qup3_i2c_apps_clk>;
 		};
 	};
 
@@ -118,6 +122,11 @@
 &pmi_haptic {
 	status = "okay";
 	qcom,actuator-type = "erm";
+	/delete-property/ qcom,lra-auto-res-mode;
+	/delete-property/ qcom,lra-high-z;
+	/delete-property/ qcom,lra-res-cal-period;
+	/delete-property/ qcom,correct-lra-drive-freq;
+	/delete-property/ qcom,misc-trim-error-rc19p2-clk-reg-present;
 };
 
 &mdss_dsi1 {

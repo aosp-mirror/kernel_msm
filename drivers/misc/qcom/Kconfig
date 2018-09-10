@@ -1,6 +1,6 @@
 config MSM_QDSP6V2_CODECS
 	bool "Audio QDSP6V2 APR support"
-	depends on MSM_SMD
+	depends on MSM_SMD || MSM_HAB
 	help
 	  Enable Audio codecs with APR IPC protocol support between
 	  application processor and QDSP6 for B-family. APR is
@@ -16,3 +16,10 @@ config MSM_ULTRASOUND
 	  ultrasound data paths between
 	  HW and services, calculating input events
 	  upon the ultrasound data.
+
+config MSM_MCU_TIME_SYNC
+       tristate "MCU time sync with apq8009"
+       depends on SYSFS
+       help
+         Say Y here if you want to get mcu and apq8009 data transfer
+         with gpio.

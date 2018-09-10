@@ -51,11 +51,7 @@ int notrace unwind_frame(struct stackframe *frame)
 
 	frame->sp = fp + 0x10;
 	frame->fp = *(unsigned long *)(fp);
-	/*
-	 * -4 here because we care about the PC at time of bl,
-	 * not where the return will go.
-	 */
-	frame->pc = *(unsigned long *)(fp + 8) - 4;
+	frame->pc = *(unsigned long *)(fp + 8);
 
 	kasan_enable_current();
 
@@ -126,6 +122,7 @@ void save_stack_trace_tsk(struct task_struct *tsk, struct stack_trace *trace)
 	if (trace->nr_entries < trace->max_entries)
 		trace->entries[trace->nr_entries++] = ULONG_MAX;
 }
+EXPORT_SYMBOL(save_stack_trace_tsk);
 
 void save_stack_trace(struct stack_trace *trace)
 {

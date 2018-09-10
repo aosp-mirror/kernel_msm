@@ -39,14 +39,13 @@
 #include <linux/input.h>
 #include <linux/firmware.h>
 #include <linux/platform_device.h>
-#include <linux/input/synaptics_dsx.h>
+#include <linux/input/synaptics_dsx_v2_6.h>
 #include "synaptics_dsx_core.h"
 
 #define FW_IMAGE_NAME "synaptics/startup_fw_update.img"
-/*
+
 #define DO_STARTUP_FW_UPDATE
-*/
-/*
+
 #ifdef DO_STARTUP_FW_UPDATE
 #ifdef CONFIG_FB
 #define WAIT_FOR_FB_READY
@@ -54,7 +53,7 @@
 #define FB_READY_TIMEOUT_S 30
 #endif
 #endif
-*/
+
 #define FORCE_UPDATE false
 #define DO_LOCKDOWN false
 
@@ -666,50 +665,50 @@ static struct bin_attribute dev_attr_data = {
 
 static struct device_attribute attrs[] = {
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS
-	__ATTR(dorecovery, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(dorecovery, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_do_recovery_store),
-	__ATTR(doreflash, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(doreflash, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_do_reflash_store),
-	__ATTR(writeconfig, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(writeconfig, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_write_config_store),
-	__ATTR(readconfig, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(readconfig, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_read_config_store),
-	__ATTR(configarea, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(configarea, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_config_area_store),
-	__ATTR(imagename, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(imagename, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_image_name_store),
-	__ATTR(imagesize, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(imagesize, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_image_size_store),
 	__ATTR(blocksize, S_IRUGO,
 			fwu_sysfs_block_size_show,
-			synaptics_rmi4_store_error),
+			NULL),
 	__ATTR(fwblockcount, S_IRUGO,
 			fwu_sysfs_firmware_block_count_show,
-			synaptics_rmi4_store_error),
+			NULL),
 	__ATTR(configblockcount, S_IRUGO,
 			fwu_sysfs_configuration_block_count_show,
-			synaptics_rmi4_store_error),
+			NULL),
 	__ATTR(dispconfigblockcount, S_IRUGO,
 			fwu_sysfs_disp_config_block_count_show,
-			synaptics_rmi4_store_error),
+			NULL),
 	__ATTR(permconfigblockcount, S_IRUGO,
 			fwu_sysfs_perm_config_block_count_show,
-			synaptics_rmi4_store_error),
+			NULL),
 	__ATTR(blconfigblockcount, S_IRUGO,
 			fwu_sysfs_bl_config_block_count_show,
-			synaptics_rmi4_store_error),
+			NULL),
 	__ATTR(guestcodeblockcount, S_IRUGO,
 			fwu_sysfs_guest_code_block_count_show,
-			synaptics_rmi4_store_error),
-	__ATTR(writeguestcode, S_IWUGO,
-			synaptics_rmi4_show_error,
+			NULL),
+	__ATTR(writeguestcode, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_write_guest_code_store),
 #endif
 };
@@ -3418,6 +3417,7 @@ static int fwu_start_reflash(void)
 	enum flash_area flash_area;
 	const struct firmware *fw_entry = NULL;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	const unsigned char *image_name;
 
 	if (rmi4_data->sensor_sleep) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -3433,9 +3433,14 @@ static int fwu_start_reflash(void)
 	pr_notice("%s: Start of reflash process\n", __func__);
 
 	if (fwu->image == NULL) {
+		if (rmi4_data->hw_if->board_data->fw_name)
+			image_name = rmi4_data->hw_if->board_data->fw_name;
+		else
+			image_name = FW_IMAGE_NAME;
+
 		retval = secure_memcpy(fwu->image_name, MAX_IMAGE_NAME_LEN,
-				FW_IMAGE_NAME, sizeof(FW_IMAGE_NAME),
-				sizeof(FW_IMAGE_NAME));
+				image_name, strlen(image_name),
+				strlen(image_name));
 		if (retval < 0) {
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to copy image file name\n",

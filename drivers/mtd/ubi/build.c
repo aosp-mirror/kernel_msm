@@ -442,7 +442,7 @@ static ssize_t dev_attribute_store(struct device *dev,
 			   struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
-	int ret;
+	int ret = count;
 	struct ubi_device *ubi;
 	unsigned long long scrub_sqnum;
 
@@ -951,6 +951,17 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 		return -EINVAL;
 	}
 
+	/*
+	 * Both UBI and UBIFS have been designed for SLC NAND and NOR flashes.
+	 * MLC NAND is different and needs special care, otherwise UBI or UBIFS
+	 * will die soon and you will lose all your data.
+	 */
+	if (mtd->type == MTD_MLCNANDFLASH) {
+		pr_err("ubi: refuse attaching mtd%d - MLC NAND is not supported\n",
+			mtd->index);
+		return -EINVAL;
+	}
+
 	if (ubi_num == UBI_DEV_NUM_AUTO) {
 		/* Search for an empty slot in the @ubi_devices array */
 		for (ubi_num = 0; ubi_num < UBI_MAX_DEVICES; ubi_num++)
@@ -1049,6 +1060,9 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 			goto out_detach;
 	}
 
+	/* Make device "available" before it becomes accessible via sysfs */
+	ubi_devices[ubi_num] = ubi;
+
 	err = uif_init(ubi, &ref);
 	if (err)
 		goto out_detach;
@@ -1093,7 +1107,6 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 	wake_up_process(ubi->bgt_thread);
 	spin_unlock(&ubi->wl_lock);
 
-	ubi_devices[ubi_num] = ubi;
 	ubi_notify_all(ubi, UBI_VOLUME_ADDED, NULL);
 	return ubi_num;
 
@@ -1104,6 +1117,7 @@ out_uif:
 	ubi_assert(ref);
 	uif_close(ubi);
 out_detach:
+	ubi_devices[ubi_num] = NULL;
 	ubi_wl_close(ubi);
 	ubi_free_internal_volumes(ubi);
 	vfree(ubi->vtbl);

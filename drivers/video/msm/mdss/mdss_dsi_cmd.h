@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -98,7 +98,6 @@ struct dsi_cmd_desc {
 #define CMD_REQ_MAX     4
 #define CMD_REQ_RX      0x0001
 #define CMD_REQ_COMMIT  0x0002
-#define CMD_CLK_CTRL    0x0004
 #define CMD_REQ_UNICAST 0x0008
 #define CMD_REQ_DMA_TPG 0x0040
 #define CMD_REQ_NO_MAX_PKT_SIZE 0x0008
@@ -133,8 +132,6 @@ int mdss_dsi_short_read2_resp(struct dsi_buf *rp);
 int mdss_dsi_long_read_resp(struct dsi_buf *rp);
 void mdss_dsi_set_tear_on(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_set_tear_off(struct mdss_dsi_ctrl_pdata *ctrl);
-void mdss_dsi_3bit_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable);
-void mdss_dsi_brightness_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl, int brightness);
 struct dcs_cmd_req *mdss_dsi_cmdlist_get(struct mdss_dsi_ctrl_pdata *ctrl,
 				int from_mdp);
 int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,

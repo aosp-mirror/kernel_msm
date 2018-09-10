@@ -35,8 +35,6 @@
 #define DRIVER_AUTHOR "Sarah Sharp"
 #define DRIVER_DESC "'eXtensible' Host Controller (xHC) Driver"
 
-#define XHCI_INT_MODERATION_VAL 4000
-
 #define	PORT_WAKE_BITS	(PORT_WKOC_E | PORT_WKDISC_E | PORT_WKCONN_E)
 
 /* Some 0.95 hardware can't handle the chain bit on a Link TRB being cleared */
@@ -117,17 +115,20 @@ int xhci_halt(struct xhci_hcd *xhci)
 			STS_HALT, STS_HALT, XHCI_MAX_HALT_USEC);
 	if (!ret) {
 		xhci->xhc_state |= XHCI_STATE_HALTED;
-		xhci->cmd_ring_state = CMD_RING_STATE_STOPPED;
-
-		if (timer_pending(&xhci->cmd_timer)) {
-			xhci_dbg_trace(xhci, trace_xhci_dbg_init,
-					"Cleanup command queue");
-			del_timer(&xhci->cmd_timer);
-			xhci_cleanup_command_queue(xhci);
-		}
-	} else
+	} else {
 		xhci_warn(xhci, "Host not halted after %u microseconds.\n",
 				XHCI_MAX_HALT_USEC);
+	}
+
+	xhci->cmd_ring_state = CMD_RING_STATE_STOPPED;
+
+	if (timer_pending(&xhci->cmd_timer)) {
+		xhci_dbg_trace(xhci, trace_xhci_dbg_init,
+				"Cleanup command queue");
+		del_timer(&xhci->cmd_timer);
+		xhci_cleanup_command_queue(xhci);
+	}
+
 	return ret;
 }
 
@@ -156,7 +157,9 @@ static int xhci_start(struct xhci_hcd *xhci)
 				"waited %u microseconds.\n",
 				XHCI_MAX_HALT_USEC);
 	if (!ret)
-		xhci->xhc_state &= ~XHCI_STATE_HALTED;
+		/* clear state flags. Including dying, halted or removing */
+		xhci->xhc_state = 0;
+
 	return ret;
 }
 
@@ -642,7 +645,7 @@ int xhci_run(struct usb_hcd *hcd)
 			"// Set the interrupt modulation register");
 	temp = readl(&xhci->ir_set->irq_control);
 	temp &= ~ER_IRQ_INTERVAL_MASK;
-	temp |= (u32) XHCI_INT_MODERATION_VAL;
+	temp |= (u32) 160;
 	writel(temp, &xhci->ir_set->irq_control);
 
 	/* Set the HCD state before we enable the irqs */
@@ -673,15 +676,6 @@ int xhci_run(struct usb_hcd *hcd)
 }
 EXPORT_SYMBOL_GPL(xhci_run);
 
-static void xhci_only_stop_hcd(struct usb_hcd *hcd)
-{
-	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
-
-	spin_lock_irq(&xhci->lock);
-	xhci_halt(xhci);
-	spin_unlock_irq(&xhci->lock);
-}
-
 /*
  * Stop xHCI driver.
  *
@@ -698,19 +692,21 @@ void xhci_stop(struct usb_hcd *hcd)
 
 	mutex_lock(&xhci->mutex);
 
+	if (!(xhci->xhc_state & XHCI_STATE_HALTED)) {
+		spin_lock_irq(&xhci->lock);
+
+		xhci->xhc_state |= XHCI_STATE_HALTED;
+		xhci->cmd_ring_state = CMD_RING_STATE_STOPPED;
+		xhci_halt(xhci);
+		xhci_reset(xhci);
+
+		spin_unlock_irq(&xhci->lock);
+	}
+
 	if (!usb_hcd_is_primary_hcd(hcd)) {
-		xhci_only_stop_hcd(xhci->shared_hcd);
 		mutex_unlock(&xhci->mutex);
 		return;
 	}
-
-	spin_lock_irq(&xhci->lock);
-	/* Make sure the xHC is halted for a USB3 roothub
-	 * (xhci_stop() could be called as part of failed init).
-	 */
-	xhci_halt(xhci);
-	xhci_reset(xhci);
-	spin_unlock_irq(&xhci->lock);
 
 	xhci_cleanup_msix(xhci);
 
@@ -946,11 +942,39 @@ int xhci_suspend(struct xhci_hcd *xhci, bool do_wakeup)
 	/* Some chips from Fresco Logic need an extraordinary delay */
 	delay *= (xhci->quirks & XHCI_SLOW_SUSPEND) ? 10 : 1;
 
+	if ((readl(&xhci->op_regs->status) & STS_EINT) ||
+			(readl(&xhci->op_regs->status) & STS_PORT)) {
+		xhci_warn(xhci, "WARN: xHC EINT/PCD set status:%x\n",
+			readl(&xhci->op_regs->status));
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &xhci->shared_hcd->flags);
+		/* step 4: set Run/Stop bit */
+		command = readl(&xhci->op_regs->command);
+		command |= CMD_RUN;
+		writel(command, &xhci->op_regs->command);
+		spin_unlock_irq(&xhci->lock);
+		return -EBUSY;
+	}
 	if (xhci_handshake(xhci, &xhci->op_regs->status,
 		      STS_HALT, STS_HALT, delay)) {
 		xhci_warn(xhci, "WARN: xHC CMD_RUN timeout\n");
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &xhci->shared_hcd->flags);
 		spin_unlock_irq(&xhci->lock);
 		return -ETIMEDOUT;
+	}
+	if ((readl(&xhci->op_regs->status) & STS_EINT) ||
+			(readl(&xhci->op_regs->status) & STS_PORT)) {
+		xhci_warn(xhci, "WARN: xHC EINT/PCD set status:%x\n",
+			readl(&xhci->op_regs->status));
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &xhci->shared_hcd->flags);
+		/* step 4: set Run/Stop bit */
+		command = readl(&xhci->op_regs->command);
+		command |= CMD_RUN;
+		writel(command, &xhci->op_regs->command);
+		spin_unlock_irq(&xhci->lock);
+		return -EBUSY;
 	}
 	xhci_clear_command_ring(xhci);
 
@@ -964,6 +988,8 @@ int xhci_suspend(struct xhci_hcd *xhci, bool do_wakeup)
 	if (xhci_handshake(xhci, &xhci->op_regs->status,
 				STS_SAVE, 0, 10 * 1000)) {
 		xhci_warn(xhci, "WARN: xHC save state timeout\n");
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+		set_bit(HCD_FLAG_HW_ACCESSIBLE, &xhci->shared_hcd->flags);
 		spin_unlock_irq(&xhci->lock);
 		return -ETIMEDOUT;
 	}
@@ -2765,7 +2791,8 @@ int xhci_check_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 	if (ret <= 0)
 		return ret;
 	xhci = hcd_to_xhci(hcd);
-	if (xhci->xhc_state & XHCI_STATE_DYING)
+	if ((xhci->xhc_state & XHCI_STATE_DYING) ||
+		(xhci->xhc_state & XHCI_STATE_REMOVING))
 		return -ENODEV;
 
 	xhci_dbg(xhci, "%s called for udev %pK\n", __func__, udev);
@@ -3811,7 +3838,7 @@ static int xhci_setup_device(struct usb_hcd *hcd, struct usb_device *udev,
 
 	mutex_lock(&xhci->mutex);
 
-	if (xhci->xhc_state)	/* dying or halted */
+	if (xhci->xhc_state)	/* dying, removing or halted */
 		goto out;
 
 	if (!udev->slot_id) {

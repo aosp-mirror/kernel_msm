@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, 2016-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -80,18 +80,8 @@ limDeactivateMinChannelTimerDuringScan(tpAniSirGlobal pMac)
          * Beacon/Probe Response is received during active scanning.
          * Deactivate MIN channel timer if running.
          */
-
         limDeactivateAndChangeTimer(pMac,eLIM_MIN_CHANNEL_TIMER);
-        if (tx_timer_activate(&pMac->lim.limTimers.gLimMaxChannelTimer)
-                                          == TX_TIMER_ERROR)
-        {
-            /// Could not activate max channel timer.
-            // Log error
-            limLog(pMac,LOGP, FL("could not activate max channel timer"));
 
-            limCompleteMlmScan(pMac, eSIR_SME_RESOURCES_UNAVAILABLE);
-            return TX_TIMER_ERROR;
-        }
     }
     return eSIR_SUCCESS;
 } /*** end limDeactivateMinChannelTimerDuringScan() ***/
@@ -125,14 +115,14 @@ limDeactivateMinChannelTimerDuringScan(tpAniSirGlobal pMac)
  * @return None
  */
 #if defined WLAN_FEATURE_VOWIFI
-eHalStatus
+void
 limCollectBssDescription(tpAniSirGlobal pMac,
                          tSirBssDescription *pBssDescr,
                          tpSirProbeRespBeacon pBPR,
                          tANI_U8  *pRxPacketInfo,
                          tANI_U8  fScanning)
 #else
-eHalStatus
+void
 limCollectBssDescription(tpAniSirGlobal pMac,
                          tSirBssDescription *pBssDescr,
                          tpSirProbeRespBeacon pBPR,
@@ -153,26 +143,15 @@ limCollectBssDescription(tpAniSirGlobal pMac,
     pBody = WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
     rfBand = WDA_GET_RX_RFBAND(pRxPacketInfo);
 
-    /**
-     * Drop all the beacons and probe response without P2P IE during P2P search
-     */
-    if (NULL != pMac->lim.gpLimMlmScanReq && pMac->lim.gpLimMlmScanReq->p2pSearch)
-    {
-        if (NULL == limGetP2pIEPtr(pMac, (pBody + SIR_MAC_B_PR_SSID_OFFSET), ieLen))
-        {
-            limLog( pMac, LOG3, MAC_ADDRESS_STR, MAC_ADDR_ARRAY(pHdr->bssId));
-            return eHAL_STATUS_FAILURE;
-        }
-    }
 
     /**
      * Length of BSS desription is without length of
      * length itself and length of pointer
-     * that holds the next BSS description
+     * that holds ieFields
      */
     pBssDescr->length = (tANI_U16)(
-                    sizeof(tSirBssDescription) - sizeof(tANI_U16) -
-                    sizeof(tANI_U32) + ieLen);
+                    ((uintptr_t)OFFSET_OF(tSirBssDescription, ieFields)) -
+                    sizeof(pBssDescr->length) + ieLen);
 
     // Copy BSS Id
     vos_mem_copy((tANI_U8 *) &pBssDescr->bssId,
@@ -187,7 +166,32 @@ limCollectBssDescription(tpAniSirGlobal pMac,
     pBssDescr->beaconInterval = pBPR->beaconInterval;
     pBssDescr->capabilityInfo = limGetU16((tANI_U8 *) &pBPR->capabilityInfo);
 
-     if(!pBssDescr->beaconInterval )
+    pBssDescr->HTCapsPresent = 0;
+    pBssDescr->chanWidth = eHT_CHANNEL_WIDTH_20MHZ;
+    pBssDescr->wmeInfoPresent = 0;
+    pBssDescr->vhtCapsPresent = 0;
+    pBssDescr->beacomformingCapable = 0;
+    /* HT capability */
+    if (pBPR->HTCaps.present) {
+        pBssDescr->HTCapsPresent = 1;
+        if (pBPR->HTCaps.supportedChannelWidthSet)
+            pBssDescr->chanWidth = eHT_CHANNEL_WIDTH_40MHZ;
+    }
+    if (pBPR->wmeEdcaPresent)
+        pBssDescr->wmeInfoPresent = 1;
+
+#ifdef WLAN_FEATURE_11AC
+    /* VHT Parameters */
+    if (pBPR->VHTCaps.present) {
+        pBssDescr->vhtCapsPresent = 1;
+        if (pBPR->VHTCaps.muBeamformerCap)
+            pBssDescr->beacomformingCapable = 1;
+    }
+    if (pBPR->VHTOperation.present)
+        if (pBPR->VHTOperation.chanWidth == 1)
+            pBssDescr->chanWidth = eHT_CHANNEL_WIDTH_80MHZ;
+#endif
+    if(!pBssDescr->beaconInterval )
     {
 			        limLog(pMac, LOGW,
             FL("Beacon Interval is ZERO, making it to default 100 "
@@ -243,7 +247,7 @@ limCollectBssDescription(tpAniSirGlobal pMac,
     //SINR no longer reported by HW
     pBssDescr->sinr = 0;
 
-    pBssDescr->nReceivedTime = (tANI_TIMESTAMP)palGetTickCount(pMac->hHdd);
+    pBssDescr->nReceivedTime = vos_timer_get_system_time();
 
 #if defined WLAN_FEATURE_VOWIFI
     if( fScanning )
@@ -270,13 +274,14 @@ limCollectBssDescription(tpAniSirGlobal pMac,
     }
 #endif
 
-#ifdef FEATURE_WLAN_ESE
+#if defined(FEATURE_WLAN_ESE) || defined(WLAN_FEATURE_ROAM_SCAN_OFFLOAD)
     pBssDescr->QBSSLoad_present = FALSE;
     pBssDescr->QBSSLoad_avail = 0; 
     if( pBPR->QBSSLoad.present) 
     {
         pBssDescr->QBSSLoad_present = TRUE;
         pBssDescr->QBSSLoad_avail = pBPR->QBSSLoad.avail;
+        pBssDescr->QBSS_ChanLoad = pBPR->QBSSLoad.chautil;
     }
 #endif
     // Copy IE fields
@@ -292,7 +297,7 @@ limCollectBssDescription(tpAniSirGlobal pMac,
         pBssDescr->aniIndicator,
         ieLen );
 
-    return eHAL_STATUS_SUCCESS;
+    return;
 } /*** end limCollectBssDescription() ***/
 
 /**
@@ -374,6 +379,7 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
     tANI_U8               dontUpdateAll = 0;
     tANI_U8               rfBand = 0;
     tANI_U8               rxChannelInBD = 0;
+    bool chan_info_present = true;
 
     tSirMacAddr bssid = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     tSirMacAddr bssid_zero =  {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
@@ -447,7 +453,23 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
      */
     if(pBPR->channelSwitchPresent)
     {
-        return;
+       if (pBPR->ext_chan_switch_ann.new_channel !=
+           limGetChannelFromBeacon(pMac, pBPR))
+           return;
+    }
+
+    if(pBPR->ecsa_present) {
+       limLog(pMac, LOGW, FL("ECSA IE present"));
+       /* Still add to scan result if ECSA IE present and new channel
+        * equal to current channel.
+        */
+       if (pBPR->channelNumber!= HAL_INVALID_CHANNEL_ID &&
+           pBPR->ext_chan_switch_ann.new_channel != HAL_INVALID_CHANNEL_ID &&
+           pBPR->channelNumber != pBPR->ext_chan_switch_ann.new_channel) {
+             limLog(pMac, LOGW, FL("ignore this AP"));
+             return;
+        }
+
     }
 
     /* If beacon/probe resp DS param channel does not match with 
@@ -489,6 +511,10 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
            }
         }
     }
+    else
+    {
+        chan_info_present = false;
+    }
 
     /**
      * Allocate buffer to hold BSS description from
@@ -497,7 +523,7 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
      */
 
     ieLen = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
-    if (ieLen <= SIR_MAC_B_PR_SSID_OFFSET)
+    if (ieLen <= (SIR_MAC_B_PR_SSID_OFFSET + 2))
     {
         limLog(pMac, LOGP,
                FL("RX packet has invalid length %d"), ieLen);
@@ -522,19 +548,11 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
 
     // In scan state, store scan result.
 #if defined WLAN_FEATURE_VOWIFI
-    status = limCollectBssDescription(pMac, &pBssDescr->bssDescription,
+    limCollectBssDescription(pMac, &pBssDescr->bssDescription,
                              pBPR, pRxPacketInfo, fScanning);
-    if (eHAL_STATUS_SUCCESS != status)
-    {
-        goto last;
-    }
 #else
-    status = limCollectBssDescription(pMac, &pBssDescr->bssDescription,
+    limCollectBssDescription(pMac, &pBssDescr->bssDescription,
                              pBPR, pRxPacketInfo);
-    if (eHAL_STATUS_SUCCESS != status)
-    {
-        goto last;
-    }
 #endif
     pBssDescr->bssDescription.fProbeRsp = fProbeRsp;
 
@@ -556,18 +574,23 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
        limLog(pMac, LOG1, FL(" pHdr->addr3:"MAC_ADDRESS_STR),
               MAC_ADDR_ARRAY(pHdr->addr3));
        limLog( pMac, LOG1, FL("Save this entry in LFR cache"));
-       status = limLookupNaddLfrHashEntry(pMac, pBssDescr, LIM_HASH_ADD, dontUpdateAll);
+       status = limLookupNaddLfrHashEntry(pMac, pBssDescr, LIM_HASH_ADD,
+                                          dontUpdateAll, ieLen - 2);
     }
     else
 #endif
     //If it is not scanning, only save unique results
     if (pMac->lim.gLimReturnUniqueResults || (!fScanning))
     {
-        status = limLookupNaddHashEntry(pMac, pBssDescr, LIM_HASH_UPDATE, dontUpdateAll);
+        status = limLookupNaddHashEntry(pMac, pBssDescr, LIM_HASH_UPDATE,
+                                        dontUpdateAll, ieLen - 2,
+                                        chan_info_present);
     }
     else
     {
-        status = limLookupNaddHashEntry(pMac, pBssDescr, LIM_HASH_ADD, dontUpdateAll);
+        status = limLookupNaddHashEntry(pMac, pBssDescr, LIM_HASH_ADD,
+                                        dontUpdateAll, ieLen - 2,
+                                        chan_info_present);
     }
 
     if(fScanning)
@@ -609,12 +632,10 @@ limCheckAndAddBssDescription(tpAniSirGlobal pMac,
         }
     }//(eANI_BOOLEAN_TRUE == fScanning)
 
-last:
     if( eHAL_STATUS_SUCCESS != status )
     {
         vos_mem_free( pBssDescr );
     }
-    return;
 } /****** end limCheckAndAddBssDescription() ******/
 
 
@@ -678,39 +699,11 @@ limInitHashTable(tpAniSirGlobal pMac)
         pMac->lim.gLimCachedScanHashTable[i] = NULL;
 } /****** end limInitHashTable() ******/
 
-
-
-/**
- * limLookupNaddHashEntry()
- *
- *FUNCTION:
- * This function is called upon receiving a Beacon or
- * Probe Response frame during scan phase to store
- * received BSS description into scan result hash table.
- *
- *LOGIC:
- *
- *ASSUMPTIONS:
- * NA
- *
- *NOTE:
- * NA
- *
- * @param  pMac - Pointer to Global MAC structure
- * @param  pBssDescr - Pointer to BSS description to be
- *         added to the scan result hash table.
- * @param  action - Indicates action to be performed
- *         when same BSS description is found. This is
- *         dependent on whether unique scan result to
- *         be stored or not.
- *
- * @return None
- */
-
 eHalStatus
 limLookupNaddHashEntry(tpAniSirGlobal pMac,
                        tLimScanResultNode *pBssDescr, tANI_U8 action,
-                       tANI_U8 dontUpdateAll)
+                       tANI_U8 dontUpdateAll, tANI_U32 ie_len,
+                       bool chan_info_present)
 {
     tANI_U8                  index, ssidLen = 0;
     tANI_U8                found = false;
@@ -725,6 +718,11 @@ limLookupNaddHashEntry(tpAniSirGlobal pMac,
 
     //ieFields start with TLV of SSID IE
     ssidLen = * ((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1);
+    if ((ssidLen > ie_len) || (ssidLen > DOT11F_IE_SSID_MAX_LEN)) {
+        limLog(pMac, LOGE, FL("SSID length %d, IE overall Length %d"),
+               ssidLen, ie_len);
+        return eHAL_STATUS_FAILURE;
+    }
     pSirCap = (tSirMacCapabilityInfo *)&pBssDescr->bssDescription.capabilityInfo;
 
     for (pprev = ptemp; ptemp; pprev = ptemp, ptemp = ptemp->next)
@@ -738,6 +736,8 @@ limLookupNaddHashEntry(tpAniSirGlobal pMac,
              // matching band to update new channel info
             (vos_chan_to_band(pBssDescr->bssDescription.channelId) ==
                       vos_chan_to_band(ptemp->bssDescription.channelId)) &&
+            (*((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1) ==
+              *((tANI_U8 *) &ptemp->bssDescription.ieFields + 1)) &&
             vos_mem_compare( ((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1),
                            ((tANI_U8 *) &ptemp->bssDescription.ieFields + 1),
                            (tANI_U8) (ssidLen + 1)) &&
@@ -784,6 +784,33 @@ limLookupNaddHashEntry(tpAniSirGlobal pMac,
                         pbIe += pbIe[1] + 2;
                     }
                 }
+                /*
+                 * Due to Rx sensitivity issue, sometime beacons are seen on
+                 * adjacent channel so workaround in software is needed. If DS
+                 * params or HT info are present driver can get proper channel
+                 * info from these IEs and the older RSSI values are used in new
+                 * entry.
+                 *
+                 * For the cases where DS params and HT info is not present,
+                 * driver needs to check below conditions to update proper
+                 * channel so that the older RSSI and channel values are used in
+                 * new entry:
+                 *  -- The old entry channel and new entry channel are not same
+                 *  -- RSSI is below 15db or more from old value, this indicate
+                 *     that the signal has leaked in adjacent channel
+                 */
+                 if (!pBssDescr->bssDescription.fProbeRsp &&
+                     !chan_info_present &&
+                     (pBssDescr->bssDescription.channelId !=
+                      ptemp->bssDescription.channelId) &&
+                     ((ptemp->bssDescription.rssi -
+                       pBssDescr->bssDescription.rssi) >
+                      SIR_ADJACENT_CHANNEL_RSSI_DIFF_THRESHOLD)) {
+                      pBssDescr->bssDescription.channelId =
+                                 ptemp->bssDescription.channelId;
+                      pBssDescr->bssDescription.rssi =
+                                      ptemp->bssDescription.rssi;
+                 }
 
 
                 if(NULL != pMac->lim.gpLimMlmScanReq)
@@ -934,9 +961,9 @@ limInitLfrHashTable(tpAniSirGlobal pMac)
 eHalStatus
 limLookupNaddLfrHashEntry(tpAniSirGlobal pMac,
                           tLimScanResultNode *pBssDescr, tANI_U8 action,
-                          tANI_U8 dontUpdateAll)
+                          tANI_U8 dontUpdateAll, tANI_U32 ie_len)
 {
-    tANI_U8                  index, ssidLen = 0;
+    tANI_U8 index, ssidLen = 0;
     tLimScanResultNode *ptemp, *pprev;
     tSirMacCapabilityInfo *pSirCap, *pSirCapTemp;
     int idx, len;
@@ -948,6 +975,11 @@ limLookupNaddLfrHashEntry(tpAniSirGlobal pMac,
 
     //ieFields start with TLV of SSID IE
     ssidLen = * ((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1);
+    if ((ssidLen > ie_len) || (ssidLen > DOT11F_IE_SSID_MAX_LEN)) {
+        limLog(pMac, LOGE, FL("SSID length %d, IE overall Length %d"),
+               ssidLen, ie_len);
+        return eHAL_STATUS_FAILURE;
+    }
     pSirCap = (tSirMacCapabilityInfo *)&pBssDescr->bssDescription.capabilityInfo;
 
     for (pprev = ptemp; ptemp; pprev = ptemp, ptemp = ptemp->next)
@@ -960,6 +992,8 @@ limLookupNaddLfrHashEntry(tpAniSirGlobal pMac,
                       sizeof(tSirMacAddr))) &&   //matching BSSID
             (pBssDescr->bssDescription.channelId ==
                                       ptemp->bssDescription.channelId) &&
+            (*((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1) ==
+              *((tANI_U8 *) &ptemp->bssDescription.ieFields + 1)) &&
             vos_mem_compare( ((tANI_U8 *) &pBssDescr->bssDescription.ieFields + 1),
                            ((tANI_U8 *) &ptemp->bssDescription.ieFields + 1),
                            (tANI_U8) (ssidLen + 1)) &&
