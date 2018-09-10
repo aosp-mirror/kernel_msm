@@ -435,7 +435,6 @@ config ARM64_ERRATUM_845719
 config ARM64_ERRATUM_843419
 	bool "Cortex-A53: 843419: A load or store might access an incorrect address"
 	depends on MODULES
-	depends on !CC_LTO
 	default y
 	select ARM64_MODULE_CMODEL_LARGE
 	help

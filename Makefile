@@ -812,21 +812,6 @@ ifdef CONFIG_DEBUG_SECTION_MISMATCH
 KBUILD_CFLAGS += $(call cc-option, -fno-inline-functions-called-once)
 endif
 
-ifdef CONFIG_CC_LTO
-KBUILD_CFLAGS   += -fvisibility=hidden
-LDFLAGS_GOLD	+= -plugin LLVMgold.so
-DISABLE_LTO     := -fno-lto
-export DISABLE_LTO LD_FINAL_VMLINUX LDFLAGS_FINAL_VMLINUX
-ifdef CONFIG_MODVERSIONS
-LLVM_DIS	:= llvm-dis
-export LLVM_DIS
-endif
-endif
-
-ifdef CONFIG_CLANG_LTO
-KBUILD_CFLAGS   += -flto
-endif
-
 # arch Makefile may override CC so keep this after arch Makefile is included
 NOSTDINC_FLAGS += -nostdinc -isystem $(shell $(CC) -print-file-name=include)
 CHECKFLAGS     += $(NOSTDINC_FLAGS)
@@ -1527,10 +1512,7 @@ clean: $(clean-dirs)
 		-o -name '.*.d' -o -name '.*.tmp' -o -name '*.mod.c' \
 		-o -name '*.symtypes' -o -name 'modules.order' \
 		-o -name modules.builtin -o -name '.tmp_*.o.*' \
-		-o -name '*.gcno' \
-		-o -name '*.[oa].objects' \
-		-o -name '*.o.symversions' \
-		-o -name '*.modversions' \) -type f -print | xargs rm -f
+		-o -name '*.gcno' \) -type f -print | xargs rm -f
 
 # Generate tags for editors
 # ---------------------------------------------------------------------------

@@ -107,19 +107,6 @@ config LOCALVERSION_AUTO
 
 	  which is done within the script "scripts/setlocalversion".)
 
-config CC_LTO
-	bool
-
-config CLANG_LTO
-	bool "Use clang LTO"
-	select CC_LTO
-	select LD_DEAD_CODE_DATA_ELIMINATION
-	depends on !FTRACE_MCOUNT_RECORD || HAVE_C_RECORDMCOUNT
-	help
-	  This option enables clang's LTO (Link Time Optimization). Note that
-	  all intermediate linking steps are removed, which will increase the
-	  final linking time.
-
 config HAVE_KERNEL_GZIP
 	bool
 
