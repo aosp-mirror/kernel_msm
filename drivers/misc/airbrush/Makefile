@@ -11,5 +11,6 @@ airbrush-y +=	\
 		airbrush-power-gating.o \
 		airbrush-pmic-ctrl.o \
 		airbrush-ddr.o \
-		airbrush-ppmu.o
+		airbrush-ppmu.o \
+		airbrush-thermal.o
 airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS) += airbrush-debugfs.o
