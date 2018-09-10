@@ -17,6 +17,8 @@
  *
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -24,20 +26,19 @@
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/delay.h>
+#include <linux/time.h>
 #include <linux/timer.h>
 #include <linux/util_macros.h>
 #include <linux/kthread.h>
-
 #include <linux/i2c.h>
-
 #include <linux/acpi.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/kfifo_buf.h>
+
 #define PAC193X_MAX_RFSH_LIMIT						60000
 /*(17 * 60 * 1000) //around 17 minutes@1024 sps */
 #define PAC193X_MIN_POLLING_TIME					50
@@ -95,7 +96,7 @@
 #define PAC193X_PID_REG_ADDR						0xFD
 
 #define PAC193X_VPOWER_ACC_0_ADDR					0x03
-#define PAC193X_VPOWER_ACC_1_ADDR	(PAC193X_VPOWER_ACC_0_ADDR + 1)
+#define PAC193X_VPOWER_ACC_1_ADDR					0x04
 #define PAC193X_VPOWER_ACC_2_ADDR					0x05
 #define PAC193X_VPOWER_ACC_3_ADDR					0x06
 #define PAC193X_VBUS_0_ADDR						0x07
@@ -275,6 +276,7 @@ struct pac193x_chip_info {
 	u8				chip_revision;
 
 	u32				shunts[PAC193X_MAX_NUM_CHANNELS];
+	const char			*rail_name[PAC193X_MAX_NUM_CHANNELS];
 	struct reg_data			chip_reg_data;
 	unsigned int			avg_num;
 	u32				sample_rate_value;
@@ -449,6 +451,7 @@ static const struct iio_chan_spec pac193x_single_channel[] = {
 static const struct iio_chan_spec pac193x_ts[] = {
 	PAC193x_SOFT_TIMESTAMP(0),
 };
+
 /* Low-level I2c functions */
 static int pac193x_i2c_read(struct i2c_client *client, u8 reg_addr,
 				void *databuf, u8 len)
@@ -462,8 +465,7 @@ static int pac193x_i2c_read(struct i2c_client *client, u8 reg_addr,
 
 	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
 	if (ret < 0) {
-		dev_err(&client->dev,
-		"failed reading data from register 0x%02X\n", reg_addr);
+		pr_err("failed reading data from register 0x%02X\n", reg_addr);
 		return ret;
 	}
 	return 0;
@@ -482,8 +484,7 @@ static int pac193x_i2c_write_byte(struct i2c_client *client,
 
 	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
 	if (ret < 0) {
-		dev_err(&client->dev,
-			"failed writing register 0x%02X\n", reg_addr);
+		pr_err("failed writing register 0x%02X\n", reg_addr);
 		return ret;
 	}
 	return 0;
@@ -500,8 +501,7 @@ static int pac193x_i2c_send_byte(struct i2c_client *client, u8 reg_addr)
 
 	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
 	if (ret < 0) {
-		dev_err(&client->dev,
-			"failed sending byte to register 0x%02X\n", reg_addr);
+		pr_err("failed sending byte to register 0x%02X\n", reg_addr);
 		return ret;
 	}
 	return 0;
@@ -521,9 +521,7 @@ static int pac193x_i2c_write(struct i2c_client *client, u8 reg_addr,
 
 	ret = i2c_transfer(client->adapter, &msg, 1);
 	if (ret < 0) {
-		dev_err(&client->dev,
-			"failed writing data from register 0x%02X\n",
-			reg_addr);
+		pr_err("failed writing data from register 0x%02X\n", reg_addr);
 		return ret;
 	}
 	return 0;
@@ -568,6 +566,300 @@ static ssize_t rst_en_regs_wo_param_store
 	return count;
 }
 
+
+static ssize_t available_rails_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
+	const char *ptr;
+	int len = 0;
+	int cnt;
+
+	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
+		ptr = chip_info->rail_name[cnt];
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s, ", ptr);
+	}
+	if (len >= 2) {
+		buf[len - 2] = '\n';
+		buf[len - 1] = '\0';
+	}
+	return len;
+}
+
+
+static ssize_t enabled_rails_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
+	const char *ptr;
+	int len = 0;
+	int cnt;
+
+	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
+		if (!chip_info->chip_reg_data.active_channels[cnt])
+			continue;
+
+		ptr = chip_info->rail_name[cnt];
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s, ", ptr);
+	}
+	if (len >= 2) {
+		buf[len - 2] = '\n';
+		buf[len - 1] = '\0';
+	}
+	return len;
+}
+
+static ssize_t average_value_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
+	const char *ptr;
+	unsigned long temp;
+	unsigned int voltage_value;
+	unsigned int current_value;
+	unsigned int bit_resolution;
+	int len = 0;
+	int cnt;
+	int ret;
+
+	/* Refresh registers */
+	ret = pac193x_retrieve_data(chip_info, PAC193x_MIN_UPDATE_WAIT_TIME);
+	if (ret < 0) {
+		pr_err("unable to retrieve average data\n");
+		return ret;
+	}
+
+	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
+		if (!chip_info->chip_reg_data.active_channels[cnt])
+			continue;
+
+		if (chip_info->chip_reg_data.bi_dir[cnt])
+			bit_resolution = PAC193X_VOLTAGE_S_RES;
+		else
+			bit_resolution = PAC193X_VOLTAGE_U_RES;
+
+		ptr = chip_info->rail_name[cnt];
+
+		/* Scale voltage register value to uV */
+		temp = (unsigned long)
+		       (chip_info->chip_reg_data.vbus_avg[cnt] *
+			PAC193X_VOLTAGE_MILLIVOLTS_MAX) * 1000;
+		voltage_value = temp >> bit_resolution;
+
+		/* Scale current register value to uV */
+		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
+		temp /= chip_info->shunts[cnt] / 1000;
+		temp *= chip_info->chip_reg_data.vsense_avg[cnt];
+		temp *= 1000000;
+		current_value = temp >> bit_resolution;
+
+		len += scnprintf(buf + len, PAGE_SIZE - len,
+				 "%s, %d, %d\n",
+				 ptr, voltage_value, current_value);
+	}
+
+	return len;
+}
+
+static ssize_t inst_value_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
+	const char *ptr;
+	unsigned long temp;
+	unsigned int voltage_value;
+	unsigned int current_value;
+	unsigned int power_value;
+	unsigned int bit_resolution;
+	int len = 0;
+	int cnt;
+	int ret;
+
+	/* Refresh registers */
+	ret = pac193x_retrieve_data(chip_info, PAC193x_MIN_UPDATE_WAIT_TIME);
+	if (ret < 0) {
+		pr_err("unable to retrieve inst data\n");
+		return ret;
+	}
+
+	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
+		if (!chip_info->chip_reg_data.active_channels[cnt])
+			continue;
+
+		if (chip_info->chip_reg_data.bi_dir[cnt])
+			bit_resolution = PAC193X_VOLTAGE_S_RES;
+		else
+			bit_resolution = PAC193X_VOLTAGE_U_RES;
+
+		ptr = chip_info->rail_name[cnt];
+
+		/* Scale voltage register value to uV */
+		temp = (unsigned long)
+			(chip_info->chip_reg_data.vbus[cnt] *
+			 PAC193X_VOLTAGE_MILLIVOLTS_MAX) * 1000;
+		voltage_value = temp >> bit_resolution;
+
+		/* Scale current register value to uV */
+		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
+		temp /= chip_info->shunts[cnt] / 1000;
+		temp *= chip_info->chip_reg_data.vsense[cnt];
+		temp *= 1000000;
+		current_value = temp >> bit_resolution;
+
+		/* convert resistor value from uOhm to mOhm */
+		temp = chip_info->shunts[cnt] / 1000;
+
+		/* Scale register value to uW */
+		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
+		temp /= chip_info->shunts[cnt] / 1000;
+		temp *= PAC193X_VOLTAGE_MILLIVOLTS_MAX * 1000;
+		temp *= chip_info->chip_reg_data.vpower[cnt];
+		power_value = temp >> bit_resolution;
+
+		len += scnprintf(buf + len, PAGE_SIZE - len,
+				 "%s, %d, %d, %d\n",
+				 ptr, voltage_value,
+				 current_value, power_value);
+	}
+	return len;
+}
+
+static ssize_t energy_value_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
+	const char *ptr;
+	unsigned long temp;
+	unsigned int bit_resolution;
+	int len = 0;
+	int cnt;
+	int ret;
+
+	/* Refresh registers */
+	ret = pac193x_retrieve_data(chip_info, PAC193x_MIN_UPDATE_WAIT_TIME);
+	if (ret < 0) {
+		pr_err("unable to retrieve energy\n");
+		return ret;
+	}
+
+	/* get time since boot in ms */
+	len += scnprintf(buf + len, PAGE_SIZE - len, "%lu\n",
+			 iio_get_time_ns(indio_dev) / 1000000);
+
+	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
+		if (!chip_info->chip_reg_data.active_channels[cnt])
+			continue;
+
+		if (chip_info->chip_reg_data.bi_dir[cnt])
+			bit_resolution = PAC193X_POWER_S_RES;
+		else
+			bit_resolution = PAC193X_POWER_U_RES;
+
+		ptr = chip_info->rail_name[cnt];
+
+		/* Scale register value to uW-secs */
+		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
+		temp /= chip_info->shunts[cnt] / 1000;
+		temp *= PAC193X_VOLTAGE_MILLIVOLTS_MAX * 1000;
+		temp *= chip_info->chip_reg_data.vpower_acc[cnt];
+		temp >>= bit_resolution;
+
+		/* Convert to uW-secs */
+		temp /= chip_info->sample_rate_value;
+
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s, %lu\n",
+				 ptr,
+				 temp);
+	}
+	return len;
+}
+
+static ssize_t sampling_rate_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			(int)chip_info->sample_rate_value);
+}
+
+static ssize_t sampling_rate_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
+	unsigned int old_sampling_rate;
+	int sampling_rate;
+	int ret;
+
+	if (kstrtoint(buf, 10, &sampling_rate)) {
+		pr_err("sampling_rate is not a number\n");
+		return -EINVAL;
+	}
+	if (pac193x_match_samp_rate(chip_info, (u16)sampling_rate)) {
+		pr_err("sampling_rate invalid. Must be %d, %d, %d, %d\n",
+			samp_rate_map_tbl[PAC193x_SAMP_8SPS],
+			samp_rate_map_tbl[PAC193x_SAMP_64SPS],
+			samp_rate_map_tbl[PAC193x_SAMP_256SPS],
+			samp_rate_map_tbl[PAC193x_SAMP_1024SPS]);
+		return -EINVAL;
+	}
+
+	/* store the old sampling rate */
+	old_sampling_rate = chip_info->sample_rate_value;
+
+	/* we have a valid sample rate */
+	chip_info->sample_rate_value = (u16)sampling_rate;
+
+	/* now lock the access to the chip, write the new
+	 * sampling value and trigger a snapshot(incl refresh)
+	 */
+	mutex_lock(&chip_info->lock);
+
+	/* enable ALERT pin */
+	ret = pac193x_i2c_write_byte(chip_info->client,
+		PAC193X_CTRL_REG,
+		CTRL_REG(chip_info->chip_reg_data.crt_samp_speed_bitfield,
+			 0, 0, 1, 0, 0));
+	if (ret < 0) {
+		pr_err("cannot write ctrl reg at 0x%02X\n", PAC193X_CTRL_REG);
+		/* revert back to old value */
+		chip_info->sample_rate_value = old_sampling_rate;
+		pac193x_match_samp_rate(chip_info, (u16)old_sampling_rate);
+		mutex_unlock(&chip_info->lock);
+		return ret;
+	}
+
+	/* unlock the access towards the chip - register
+	 * snapshot includes its own access lock
+	 */
+	mutex_unlock(&chip_info->lock);
+
+	/* now, force a snapshot with refresh - call retrieve
+	 * data in order to update the refresh timer
+	 * alter the timestamp in order to force trigger a
+	 * register snapshot and a timestamp update
+	 */
+	chip_info->chip_reg_data.jiffies_tstamp -=
+		msecs_to_jiffies(PAC193X_MIN_POLLING_TIME);
+	ret = pac193x_retrieve_data(chip_info,
+				    (1024 / old_sampling_rate) * 1000);
+	if (ret < 0) {
+		pr_err("cannot snapshot regs\n");
+		return ret;
+	}
+
+	return count;
+}
+
+
 static ssize_t shunt_value_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -579,9 +871,12 @@ static ssize_t shunt_value_show(struct device *dev,
 
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 		i = chip_info->shunts[cnt];
-		len += scnprintf(buf + len, PAGE_SIZE, "%d ", i);
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%d ", i);
 	}
-	buf[len - 1] = '\n';
+
+	if (len >= 1)
+		buf[len - 1] = '\n';
+
 	return len;
 }
 
@@ -596,35 +891,29 @@ static ssize_t shunt_value_store(struct device *dev,
 
 	blank = strnchr(buf, ' ', count);
 	if (!blank) {
-		dev_err(dev, "%s: Missing parameters\n", "shunt_value");
+		pr_err("shunt_value: Missing parameters\n");
 		return -EINVAL;
 	}
 	memset(mybuff, 0, sizeof(mybuff));
 	memcpy(mybuff, buf, blank - buf);
 	if (kstrtoint(mybuff, 10, &chan)) {
-		dev_err(dev, "%s: Channel index is not a number\n",
-			"shunt_value");
+		pr_err("shunt_value: Channel index is not a number\n");
 		return -EINVAL;
 	}
 	if (chan < 0) {
-		dev_err(dev, "%s: Negative channel values not allowed\n",
-			"shunt_value");
+		pr_err("shunt_value: Negative channel not allowed\n");
 		return -EINVAL;
 	}
 	if (chan >= chip_info->phys_channels) {
-		dev_err(dev,
-			"%s: Channel index out of range\n",
-			"shunt_value");
+		pr_err("shunt_value: Channel index out of range\n");
 		return -EINVAL;
 	}
 	if (kstrtoint(++blank, 10, &sh_val)) {
-		dev_err(dev, "%s: Shunt value is not a number\n",
-			"shunt_value");
+		pr_err("shunt_value: Shunt value is not a number\n");
 		return -EINVAL;
 	}
 	if (sh_val < 0) {
-		dev_err(dev, "%s: Negative shunt values not allowed\n",
-			"shunt_value");
+		pr_err("shunt_value: Negative shunt values not allowed\n");
 		return -EINVAL;
 	}
 	mutex_lock(&chip_info->lock);
@@ -636,16 +925,46 @@ static ssize_t shunt_value_store(struct device *dev,
 static IIO_DEVICE_ATTR(rst_en_regs_wo_param, 0200,
 		       NULL, rst_en_regs_wo_param_store, 0);
 
+static IIO_DEVICE_ATTR(available_rails, 0444,
+		       available_rails_show,
+		       NULL, 0);
+
+static IIO_DEVICE_ATTR(enabled_rails, 0444,
+		       enabled_rails_show,
+		       NULL, 0);
+
+static IIO_DEVICE_ATTR(average_value, 0444,
+		       average_value_show,
+		       NULL, 0);
+
+static IIO_DEVICE_ATTR(inst_value, 0444,
+		       inst_value_show,
+		       NULL, 0);
+
+static IIO_DEVICE_ATTR(sampling_rate, 0644,
+		       sampling_rate_show,
+		       sampling_rate_store, 0);
 
 static IIO_DEVICE_ATTR(shunt_value, 0644,
-			shunt_value_show,
-			shunt_value_store, 0);
+		       shunt_value_show,
+		       shunt_value_store, 0);
+
+static IIO_DEVICE_ATTR(energy_value, 0444,
+		       energy_value_show,
+		       NULL, 0);
+
 
 #define PAC193x_DEV_ATTR(name) (&iio_dev_attr_##name.dev_attr.attr)
 
 static struct attribute *pac193x_custom_attributes[] = {
 	PAC193x_DEV_ATTR(rst_en_regs_wo_param),
+	PAC193x_DEV_ATTR(available_rails),
+	PAC193x_DEV_ATTR(enabled_rails),
+	PAC193x_DEV_ATTR(average_value),
+	PAC193x_DEV_ATTR(inst_value),
+	PAC193x_DEV_ATTR(sampling_rate),
 	PAC193x_DEV_ATTR(shunt_value),
+	PAC193x_DEV_ATTR(energy_value),
 	NULL
 };
 
@@ -892,7 +1211,6 @@ static int pac193x_write_raw(struct iio_dev *indio_dev,
 			       long mask)
 {
 	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
-	struct i2c_client *client = chip_info->client;
 	int ret = -EINVAL;
 	u32 old_samp_rate;
 
@@ -917,9 +1235,8 @@ static int pac193x_write_raw(struct iio_dev *indio_dev,
 		CTRL_REG(chip_info->chip_reg_data.crt_samp_speed_bitfield,
 		0, 0, 1, 0, 0));
 		if (ret < 0) {
-			dev_err(&client->dev,
-			"%s - cannot write PAC193x ctrl reg at 0x%02X\n",
-				__func__, PAC193X_CTRL_REG);
+			pr_err("cannot write ctrl reg at 0x%02X\n",
+				PAC193X_CTRL_REG);
 			mutex_unlock(&chip_info->lock);
 			return ret;
 		}
@@ -937,8 +1254,7 @@ static int pac193x_write_raw(struct iio_dev *indio_dev,
 		ret = pac193x_retrieve_data(chip_info,
 				(1024/old_samp_rate) * 1000);
 		if (ret < 0) {
-			dev_err(&client->dev,
-"%s - cannot snapshot PAC193x ctrl and measurement regs\n", __func__);
+			pr_err("cannot snapshot regs\n");
 			return ret;
 		}
 		ret = 0;
@@ -958,7 +1274,6 @@ static int pac193x_send_rfsh(struct pac193x_chip_info *chip_info,
 				bool refresh_v, u32 wait_time)
 {
 	/* this function only sends REFRESH or REFRESH_V */
-	struct i2c_client *client = chip_info->client;
 	int ret;
 	u8 rfsh_option;
 	/* if refresh_v is not false, send a REFRESH_V instead
@@ -970,8 +1285,7 @@ static int pac193x_send_rfsh(struct pac193x_chip_info *chip_info,
 	/* now write a REFRESH or a REFRESH_V command */
 	ret = pac193x_i2c_send_byte(chip_info->client, rfsh_option);
 	if (ret < 0) {
-		dev_err(&client->dev,
-"%s - cannot send byte to PAC193x 0x%02X reg\n", __func__, rfsh_option);
+		pr_err("cannot send byte 0x%02X reg\n", rfsh_option);
 		return ret;
 	}
 	/* register data retrieval timestamp */
@@ -985,7 +1299,6 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 		bool do_rfsh, bool refresh_v, u32 wait_time)
 {
 	int ret;
-	struct i2c_client *client = chip_info->client;
 	u8 offset_reg_data, samp_shift;
 	int cnt;
 
@@ -995,29 +1308,26 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 	if (do_rfsh) {
 		ret = pac193x_send_rfsh(chip_info, refresh_v, wait_time);
 		if (ret < 0) {
-			dev_err(&client->dev,
-"%s - cannot end refresh towards PAC193x\n", __func__);
+			pr_err("cannot send refresh towards PAC193x\n");
 			goto reg_snapshot_err;
 		}
 	}
 	/* read the ctrl/status registers for this snapshot */
 	ret = pac193x_i2c_read(chip_info->client, PAC193X_CTRL_STAT_REGS_ADDR,
-		(u8 *) chip_info->chip_reg_data.ctrl_regs,
-		PAC193X_CTRL_REG_SNAPSHOT_LEN);
+			       (u8 *) chip_info->chip_reg_data.ctrl_regs,
+			       PAC193X_CTRL_REG_SNAPSHOT_LEN);
 	if (ret < 0) {
-		dev_err(&client->dev,
-				"%s - cannot read PAC193x regs from 0x%02X\n",
-				__func__, PAC193X_CTRL_STAT_REGS_ADDR);
+		pr_err("cannot read regs from 0x%02X\n",
+			PAC193X_CTRL_STAT_REGS_ADDR);
 		goto reg_snapshot_err;
 	}
 	/* read the data registers */
 	ret = pac193x_i2c_read(chip_info->client, PAC193X_ACC_COUNT_REG,
-		(u8 *) chip_info->chip_reg_data.meas_regs,
-		PAC193X_MEAS_REG_SNAPSHOT_LEN);
+			       (u8 *) chip_info->chip_reg_data.meas_regs,
+			       PAC193X_MEAS_REG_SNAPSHOT_LEN);
 	if (ret < 0) {
-		dev_err(&client->dev,
-				"%s - cannot read PAC193x regs from 0x%02X\n",
-				__func__, PAC193X_ACC_COUNT_REG);
+		pr_err("cannot read regs from 0x%02X\n",
+			PAC193X_ACC_COUNT_REG);
 		goto reg_snapshot_err;
 	}
 	offset_reg_data = 0;
@@ -1157,13 +1467,11 @@ void pac193x_read_reg_timeout(unsigned long arg)
 {
 	int ret;
 	struct pac193x_chip_info *chip_info = (struct pac193x_chip_info *)arg;
-	struct i2c_client *client = chip_info->client;
 
 	ret = mod_timer(&chip_info->tmr_forced_update,
 		jiffies + msecs_to_jiffies(PAC193X_MAX_RFSH_LIMIT));
 	if (ret < 0)
-		dev_err(&client->dev,
-			"forced read timer cannot be modified!\n");
+		pr_err("forced read timer cannot be modified!\n");
 	/* schedule the periodic reading from the chip */
 	queue_work(chip_info->wq_chip, &chip_info->work_chip_rfsh);
 }
@@ -1179,17 +1487,16 @@ static int pac193x_chip_identify(struct pac193x_chip_info *chip_info)
 	ret = pac193x_i2c_read(chip_info->client, PAC193X_PID_REG_ADDR,
 				(u8 *) chip_rev_info, 3);
 	if (ret < 0) {
-		dev_err(&client->dev, "cannot read PAC193x revision\n");
+		pr_err("cannot read revision\n");
 		goto chip_identify_err;
 	}
 	if (chip_rev_info[0] !=
 		pac193x_chip_config[chip_info->chip_variant].prod_id) {
 		ret = -EINVAL;
-		dev_err(&client->dev,
-"chip's product ID doesn't match the exact one for this part\n");
+		pr_err("chip's product ID doesn't match\n");
 		goto chip_identify_err;
 	}
-	dev_info(&client->dev, "Chip revision: 0x%02X\n", chip_rev_info[2]);
+	dev_info(&client->dev, "chip revision: 0x%02X\n", chip_rev_info[2]);
 	chip_info->chip_revision = chip_rev_info[2];
 chip_identify_err:
 	return ret;
@@ -1226,12 +1533,11 @@ static const char *pac193x_match_of_device(struct i2c_client *client,
 
 	if (of_property_read_u32(client->dev.of_node, "samp-rate",
 				&chip_info->sample_rate_value)) {
-		dev_err(&client->dev, "Cannot read sample rate value ...\n");
+		pr_err("cannot read sample rate value\n");
 		return NULL;
 	}
 	if (pac193x_match_samp_rate(chip_info, chip_info->sample_rate_value)) {
-		dev_err(&client->dev,
-			"The given sample rate value is not supported: %d\n",
+		pr_err("the given sample rate value is not supported: %d\n",
 			chip_info->sample_rate_value);
 		return NULL;
 	}
@@ -1242,19 +1548,29 @@ static const char *pac193x_match_of_device(struct i2c_client *client,
 		/* check if the channel is enabled or not */
 		chip_info->chip_reg_data.active_channels[crt_ch] =
 			of_property_read_bool(node, "channel_enabled");
+
+		/* read rail name */
+		if (of_property_read_string(node,
+					    "rail-name",
+					    &chip_info->rail_name[crt_ch])) {
+			pr_err("invalid rail-name value on %s\n",
+				node->full_name);
+		}
+
 		if (!chip_info->chip_reg_data.active_channels[crt_ch]) {
-		/* set the chunt value to 0 for the disabled channels */
+		/* set the shunt value to 0 for the disabled channels */
 			chip_info->shunts[crt_ch] = 0;
 			crt_ch++;
 			continue;
 		}
+
 		if (of_property_read_u32(node,
 			"uohms-shunt-res", &chip_info->shunts[crt_ch])) {
-			dev_err(&client->dev,
-				"invalid shunt-resistor value on %s\n",
+			pr_err("invalid shunt-resistor value on %s\n",
 				node->full_name);
 			return NULL;
 		}
+
 		chip_info->chip_reg_data.bi_dir[crt_ch] =
 				of_property_read_bool(node, "bi-dir");
 		/* increment the channel index */
@@ -1266,7 +1582,6 @@ static const char *pac193x_match_of_device(struct i2c_client *client,
 static int pac193x_chip_configure(struct pac193x_chip_info *chip_info)
 {
 	int cnt, ret = 0;
-	struct i2c_client *client = chip_info->client;
 	u8 regs[PAC193X_CTRL_STATUS_INFO_LEN];
 	u32 wait_time;
 
@@ -1288,9 +1603,8 @@ static int pac193x_chip_configure(struct pac193x_chip_info *chip_info)
 	ret = pac193x_i2c_read(chip_info->client, PAC193X_CTRL_STAT_REGS_ADDR,
 				(u8 *)regs, PAC193X_CTRL_STATUS_INFO_LEN);
 	if (ret < 0) {
-		dev_err(&client->dev,
-				"%s - cannot read PAC193x regs from 0x%02X\n",
-				__func__, PAC193X_CTRL_STAT_REGS_ADDR);
+		pr_err("cannot read regs from 0x%02X\n",
+			PAC193X_CTRL_STAT_REGS_ADDR);
 		goto chip_configure_err;
 	}
 	/* write the CHANNEL_DIS and the NEG_PWR registers */
@@ -1316,9 +1630,8 @@ static int pac193x_chip_configure(struct pac193x_chip_info *chip_info)
 	ret = pac193x_i2c_write(chip_info->client, PAC193X_CTRL_STAT_REGS_ADDR,
 				3, (u8 *)regs);
 	if (ret < 0) {
-		dev_err(&client->dev,
-				"%s - cannot write PAC193x regs from 0x%02X\n",
-				__func__, PAC193X_CHANNEL_DIS_REG_OFF);
+		pr_err("cannot write regs from 0x%02X\n",
+			PAC193X_CHANNEL_DIS_REG_OFF);
 		goto chip_configure_err;
 	}
 	/* enable the ALERT pin functionality */
@@ -1326,9 +1639,8 @@ static int pac193x_chip_configure(struct pac193x_chip_info *chip_info)
 		CTRL_REG(chip_info->chip_reg_data.crt_samp_speed_bitfield,
 		0, 0, 1, 0, 0));
 	if (ret < 0) {
-		dev_err(&client->dev,
-			"%s - cannot write PAC193x ctrl reg at 0x%02X\n",
-			__func__, PAC193X_CTRL_REG);
+		pr_err("cannot write PAC193x ctrl reg at 0x%02X\n",
+			PAC193X_CTRL_REG);
 		goto chip_configure_err;
 	}
 	/* send a REFRESH to the chip, so the new settings take place
@@ -1336,9 +1648,8 @@ static int pac193x_chip_configure(struct pac193x_chip_info *chip_info)
 	 */
 	ret = pac193x_i2c_send_byte(chip_info->client, PAC193X_REFRESH_REG);
 	if (ret < 0) {
-		dev_err(&client->dev,
-				"%s - cannot send byte to PAC193x 0x%02X reg\n",
-				__func__, PAC193X_REFRESH_REG);
+		pr_err("cannot send byte to 0x%02X reg\n",
+			PAC193X_REFRESH_REG);
 		return ret;
 	}
 
@@ -1362,7 +1673,6 @@ static int pac193x_retrieve_data(struct pac193x_chip_info *chip_info,
 					u32 wait_time)
 {
 	int ret = 0;
-	struct i2c_client *client = chip_info->client;
 	/* check if the minimal elapsed time has passed and if so,
 	 * re-read the chip, otherwise the cached info is just fine
 	 */
@@ -1371,7 +1681,7 @@ static int pac193x_retrieve_data(struct pac193x_chip_info *chip_info,
 		/* we need to re-read the chip values
 		 * call the pac193x_reg_snapshot
 		 */
-		ret = pac193x_reg_snapshot(chip_info, true, false, wait_time);
+		ret = pac193x_reg_snapshot(chip_info, true, true, wait_time);
 		/* re-schedule the work for the read registers timeout
 		 * (to prevent chip regs saturation)
 		 */
@@ -1379,131 +1689,9 @@ static int pac193x_retrieve_data(struct pac193x_chip_info *chip_info,
 			chip_info->chip_reg_data.jiffies_tstamp +
 			msecs_to_jiffies(PAC193X_MAX_RFSH_LIMIT));
 		if (ret < 0)
-			dev_err(&client->dev,
-				"forced read timer cannot be modified!\n");
+			pr_err("read timer can't be modified!\n");
 	}
 	return ret;
-}
-
-static int pac193x_prep_iio_channels(struct pac193x_chip_info *chip_info,
-					struct iio_dev *indio_dev)
-{
-	struct i2c_client *client;
-	struct iio_chan_spec *ch_sp;
-	int channel_size, active_num_chan, total_iio_chan;
-	int cnt;
-	void *dyn_ch_struct, *tmp_data;
-
-	client = chip_info->client;
-	/* find out dynamically how many IIO channels we need */
-	active_num_chan = 0;
-	channel_size = 0;
-	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
-		if (chip_info->chip_reg_data.active_channels[cnt]) {
-	/* add the size of the properties of one chip physical channel */
-			channel_size += sizeof(pac193x_single_channel);
-			/* count how many enabled channels we have */
-			active_num_chan += ARRAY_SIZE(pac193x_single_channel);
-			dev_info(&client->dev,
-				":%s: Channel %d active\n", __func__, cnt);
-		}
-	}
-	/* now add the timestamp channel size */
-	channel_size += sizeof(pac193x_ts);
-	/* add one more channel which is the timestamp */
-	total_iio_chan = active_num_chan + 1;
-
-	dev_info(&client->dev,
-		":%s: Active chip channels: %d\n", __func__, total_iio_chan);
-
-	dyn_ch_struct = kzalloc(channel_size, GFP_KERNEL);
-	if (!dyn_ch_struct)
-		return -EINVAL;
-
-	tmp_data = dyn_ch_struct;
-	/* populate the dynamic channels and make all the adjustments */
-	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
-		if (chip_info->chip_reg_data.active_channels[cnt]) {
-			memcpy(tmp_data, pac193x_single_channel,
-				sizeof(pac193x_single_channel));
-			ch_sp = (struct iio_chan_spec *)tmp_data;
-			ch_sp[IIO_EN].channel = cnt;
-			ch_sp[IIO_EN].scan_index = cnt;
-			ch_sp[IIO_EN].address = cnt+
-						PAC193X_VPOWER_ACC_0_ADDR;
-			ch_sp[IIO_POW].channel = cnt;
-			ch_sp[IIO_POW].scan_index = cnt;
-			ch_sp[IIO_POW].address = cnt+
-						PAC193X_VPOWER_0_ADDR;
-			ch_sp[IIO_VOLT].channel = cnt;
-			ch_sp[IIO_VOLT].scan_index = cnt;
-			ch_sp[IIO_VOLT].address = cnt+
-						PAC193X_VBUS_0_ADDR;
-			ch_sp[IIO_CRT].channel = cnt;
-			ch_sp[IIO_CRT].scan_index = cnt;
-			ch_sp[IIO_CRT].address = cnt+
-						PAC193X_VSENSE_0_ADDR;
-			ch_sp[IIO_VOLTAVG].channel = cnt;
-			ch_sp[IIO_VOLTAVG].scan_index = cnt;
-			ch_sp[IIO_VOLTAVG].address = cnt+
-						PAC193X_VBUS_AVG_0_ADDR;
-			ch_sp[IIO_CRTAVG].channel = cnt;
-			ch_sp[IIO_CRTAVG].scan_index = cnt;
-			ch_sp[IIO_CRTAVG].address = cnt+
-						PAC193X_VSENSE_AVG_0_ADDR;
-			/* now modify the parameters in all channels if the
-			 * whole chip rail(channel) is bi-directional
-			 */
-			if (chip_info->chip_reg_data.bi_dir[cnt]) {
-				ch_sp[IIO_EN].scan_type.sign =
-					's';
-				ch_sp[IIO_EN].scan_type.realbits =
-					PAC193X_ENERGY_S_RES;
-				ch_sp[IIO_POW].scan_type.sign =
-					's';
-				ch_sp[IIO_POW].scan_type.realbits =
-					PAC193X_POWER_S_RES;
-				ch_sp[IIO_VOLT].scan_type.sign =
-					's';
-				ch_sp[IIO_VOLT].scan_type.realbits =
-					PAC193X_VOLTAGE_S_RES;
-				ch_sp[IIO_CRT].scan_type.sign =
-					's';
-				ch_sp[IIO_CRT].scan_type.realbits =
-					PAC193X_CURRENT_S_RES;
-				ch_sp[IIO_VOLTAVG].scan_type.sign =
-					's';
-				ch_sp[IIO_VOLTAVG].scan_type.realbits =
-					PAC193X_VOLTAGE_S_RES;
-				ch_sp[IIO_CRTAVG].scan_type.sign =
-					's';
-				ch_sp[IIO_CRTAVG].scan_type.realbits =
-					PAC193X_CURRENT_S_RES;
-			}
-			/* advance the pointer */
-			tmp_data += sizeof(pac193x_single_channel);
-		}
-	}
-	/* now copy the timestamp channel */
-	memcpy(tmp_data, pac193x_ts, sizeof(pac193x_ts));
-	ch_sp = (struct iio_chan_spec *)tmp_data;
-	ch_sp[0].scan_index = total_iio_chan - 1;
-
-	/* send the updated dynamic channel structure information towards IIO
-	 * prepare the required field for IIO class registration
-	 */
-	indio_dev->num_channels = total_iio_chan;
-	indio_dev->channels =
-		kmemdup((const struct iio_chan_spec *)dyn_ch_struct,
-				channel_size, GFP_KERNEL);
-	if (!indio_dev->channels) {
-		dev_err(&client->dev, "failed to duplicate channels\n");
-		return -EINVAL;
-	}
-	/* free the dynamic channels attributes memory */
-	kfree(dyn_ch_struct);
-
-	return 0;
 }
 
 static int pac193x_probe(struct i2c_client *client,
@@ -1545,6 +1733,7 @@ static int pac193x_probe(struct i2c_client *client,
 		chip_info->chip_reg_data.active_channels[cnt] = true;
 		chip_info->chip_reg_data.bi_dir[cnt] = false;
 		chip_info->shunts[cnt] = SHUNT_UOHMS_DEFAULT;
+		chip_info->rail_name[cnt] = "";
 	}
 	chip_info->chip_reg_data.crt_samp_speed_bitfield = PAC193x_SAMP_1024SPS;
 
@@ -1562,8 +1751,7 @@ static int pac193x_probe(struct i2c_client *client,
 	/* we have DT */
 	name = pac193x_match_of_device(client, chip_info);
 	if (!name) {
-		dev_err(&client->dev,
-			"DT parameter parsing returned an error\n");
+		pr_err("DT parameter parsing returned an error\n");
 		return -EINVAL;
 	}
 
@@ -1574,8 +1762,6 @@ static int pac193x_probe(struct i2c_client *client,
 	 * rate to the requested value
 	 */
 	ret = pac193x_chip_configure(chip_info);
-	/* prepare the channel information */
-	ret = pac193x_prep_iio_channels(chip_info, indio_dev);
 	if (ret < 0)
 		goto free_chan_attr_mem;
 	/* configure the IIO related fields and register this device with IIO */
@@ -1606,8 +1792,7 @@ static int pac193x_remove(struct i2c_client *client)
 	kfree(indio_dev->channels);
 	ret = try_to_del_timer_sync(&chip_info->tmr_forced_update);
 	if (ret < 0) {
-		dev_err(&client->dev,
-		"%s - cannot delete the forced readout timer\n", __func__);
+		pr_err("cannot delete the forced PAC193x readout timer\n");
 		return ret;
 	}
 	if (chip_info->wq_chip != NULL) {
