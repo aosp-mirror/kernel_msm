@@ -51,18 +51,14 @@
 #define AP314AQ_CLAIBRATION_BIAS_PATH "/persist/ap314aq_cal_bias"
 #define AP314AQ_CLAIBRATION_N2F_PATH "/persist/ap314aq_cal_n2f"
 
-#define AP314AQ_K1_CRITERIA		700
+#define AP314AQ_K1_CRITERIA		400
 #define AP314AQ_K2_CRITERIA		30
-/*
-AP314AQ_ALGO_TYPE : decide the high/low threshold for p sensor
-1: bias+thres, 2: low=n2f, high=default high thres, others: default thres
-*/
-#define AP314AQ_ALGO_TYPE		2
+#define AP314AQ_PS_CAL_GAIN 		2
 
 #define AP314AQ_PS_THRESHOLD_BIAS 	0
 #define AP314AQ_PS_THRESHOLD_HIGH 	800 // default high thres
 #define AP314AQ_PS_THRESHOLD_LOW 	500 // default low thres
-#define AP314AQ_WAITING_TIME 		100 // 5xN ms (500ms), n=0~255
+#define AP314AQ_WAITING_TIME 		20 // 5xN ms (100ms), n=0~255
 
 #ifndef SENSORS_OFFBODY_DETEC_HANDLE
 #define SENSORS_OFFBODY_DETEC_HANDLE	100
