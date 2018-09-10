@@ -178,11 +178,11 @@ SECTIONS
 	. = ALIGN(4);
 	.altinstructions : {
 		__alt_instructions = .;
-		KEEP(*(.altinstructions))
+		*(.altinstructions)
 		__alt_instructions_end = .;
 	}
 	.altinstr_replacement : {
-		KEEP(*(.altinstr_replacement))
+		*(.altinstr_replacement)
 	}
 	.rela : ALIGN(8) {
 		*(.rela .rela*)
