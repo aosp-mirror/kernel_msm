@@ -85,6 +85,10 @@ struct cs40l2x_private {
 	bool asp_enable;
 	struct hrtimer asp_timer;
 	const struct cs40l2x_fw_desc *fw_desc;
+	bool comp_enable_pend;
+	bool comp_enable;
+	bool comp_enable_redc;
+	bool comp_enable_f0;
 	struct led_classdev led_dev;
 };
 
@@ -1882,7 +1886,6 @@ static ssize_t cs40l2x_comp_enable_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
 
@@ -1891,13 +1894,12 @@ static ssize_t cs40l2x_comp_enable_show(struct device *dev,
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
-	if (ret)
+	if (cs40l2x->comp_enable_pend) {
+		ret = -EIO;
 		goto err_mutex;
+	}
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->comp_enable);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1919,18 +1921,106 @@ static ssize_t cs40l2x_comp_enable_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	cs40l2x->comp_enable_pend = true;
+	cs40l2x->comp_enable = val > 0;
+
+	switch (cs40l2x->fw_desc->id) {
+	case CS40L2X_FW_ID_ORIG:
+		ret = regmap_write(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->comp_enable);
+		break;
+	case CS40L2X_FW_ID_REMAP:
+		ret = regmap_write(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				(cs40l2x->comp_enable
+					& cs40l2x->comp_enable_redc)
+					<< CS40L2X_COMP_EN_REDC_SHIFT |
+				(cs40l2x->comp_enable
+					& cs40l2x->comp_enable_f0)
+					<< CS40L2X_COMP_EN_F0_SHIFT);
+		break;
+	default:
+		ret = -EPERM;
+	}
+
+	if (ret)
+		goto err_mutex;
+
+	cs40l2x->comp_enable_pend = false;
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_redc_comp_enable_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-					CS40L2X_XM_UNPACKED_TYPE),
-			val ? CS40L2X_COMP_ENABLED : CS40L2X_COMP_DISABLED);
+	if (cs40l2x->comp_enable_pend) {
+		ret = -EIO;
+		goto err_mutex;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->comp_enable_redc);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_redc_comp_enable_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	cs40l2x->comp_enable_pend = true;
+	cs40l2x->comp_enable_redc = val > 0;
+
+	switch (cs40l2x->fw_desc->id) {
+	case CS40L2X_FW_ID_REMAP:
+		ret = regmap_write(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				(cs40l2x->comp_enable
+					& cs40l2x->comp_enable_redc)
+					<< CS40L2X_COMP_EN_REDC_SHIFT |
+				(cs40l2x->comp_enable
+					& cs40l2x->comp_enable_f0)
+					<< CS40L2X_COMP_EN_F0_SHIFT);
+		break;
+	default:
+		ret = -EPERM;
+	}
+
 	if (ret)
 		goto err_mutex;
 
+	cs40l2x->comp_enable_pend = false;
 	ret = count;
 
 err_mutex:
@@ -2545,6 +2635,8 @@ static DEVICE_ATTR(redc_stored, 0660, cs40l2x_redc_stored_show,
 static DEVICE_ATTR(q_index, 0660, cs40l2x_q_index_show, cs40l2x_q_index_store);
 static DEVICE_ATTR(comp_enable, 0660, cs40l2x_comp_enable_show,
 		cs40l2x_comp_enable_store);
+static DEVICE_ATTR(redc_comp_enable, 0660, cs40l2x_redc_comp_enable_show,
+		cs40l2x_redc_comp_enable_store);
 static DEVICE_ATTR(dig_scale, 0660, cs40l2x_dig_scale_show,
 		cs40l2x_dig_scale_store);
 static DEVICE_ATTR(gpio1_dig_scale, 0660, cs40l2x_gpio1_dig_scale_show,
@@ -2586,6 +2678,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_redc_stored.attr,
 	&dev_attr_q_index.attr,
 	&dev_attr_comp_enable.attr,
+	&dev_attr_redc_comp_enable.attr,
 	&dev_attr_dig_scale.attr,
 	&dev_attr_gpio1_dig_scale.attr,
 	&dev_attr_cp_dig_scale.attr,
@@ -3286,9 +3379,6 @@ static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
 	struct hrtimer *asp_timer = &cs40l2x->asp_timer;
 	int ret;
 
-	cs40l2x->vpp_measured = -1;
-	cs40l2x->ipp_measured = -1;
-
 	cs40l2x->vibe_workqueue =
 		alloc_ordered_workqueue("vibe_workqueue", WQ_HIGHPRI);
 	if (!cs40l2x->vibe_workqueue) {
@@ -3615,6 +3705,23 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->num_waves == 0) {
 		dev_err(dev, "Wavetable is empty\n");
 		return -EINVAL;
+	}
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				(cs40l2x->comp_enable
+					& cs40l2x->comp_enable_redc)
+					<< CS40L2X_COMP_EN_REDC_SHIFT |
+				(cs40l2x->comp_enable
+					& cs40l2x->comp_enable_f0)
+					<< CS40L2X_COMP_EN_F0_SHIFT);
+		if (ret) {
+			dev_err(dev,
+				"Failed to configure click compensation\n");
+			return ret;
+		}
 	}
 
 	if (cs40l2x->pdata.f0_default) {
@@ -4926,6 +5033,9 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	if (!ret)
 		pdata->redc_max = out_val;
 
+	pdata->redc_comp_disable = of_property_read_bool(np,
+			"cirrus,redc-comp-disable");
+
 	ret = of_property_read_u32(np, "cirrus,gpio1-rise-index", &out_val);
 	if (!ret)
 		pdata->gpio1_rise_index = out_val;
@@ -5383,6 +5493,13 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 		}
 		cs40l2x->pdata = *pdata;
 	}
+
+	cs40l2x->vpp_measured = -1;
+	cs40l2x->ipp_measured = -1;
+
+	cs40l2x->comp_enable = true;
+	cs40l2x->comp_enable_redc = !pdata->redc_comp_disable;
+	cs40l2x->comp_enable_f0 = true;
 
 	ret = regulator_bulk_enable(cs40l2x->num_supplies, cs40l2x->supplies);
 	if (ret) {

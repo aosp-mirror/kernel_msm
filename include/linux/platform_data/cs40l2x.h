@@ -25,6 +25,7 @@ struct cs40l2x_platform_data {
 	unsigned int redc_default;
 	unsigned int redc_min;
 	unsigned int redc_max;
+	bool redc_comp_disable;
 	unsigned int gpio1_rise_index;
 	unsigned int gpio1_fall_index;
 	unsigned int gpio1_fall_timeout;
