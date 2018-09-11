@@ -37,6 +37,9 @@ static int ab_debugfs_boot(void *data, u64 val)
 	case 1:
 		ab_interrupt_M0(0);
 		break;
+	case 2:
+		gpiod_set_value(ab_sm_ctx->fw_patch_en, __GPIO_ENABLE);
+		break;
 	default:
 		printk("Unsupported value\n");
 
@@ -127,7 +130,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 		goto fail_fw_patch_en;
 	}
 
-	gpiod_set_value(ab_sm_ctx->fw_patch_en, __GPIO_ENABLE);
+	gpiod_set_value(ab_sm_ctx->fw_patch_en, __GPIO_DISABLE);
 	/* AB_READY is used by host to understand that Airbrush SPI is now in
 	 * FSM mode and host can start the SPI FSM commands to Airbrush.
 	 */
