@@ -1413,6 +1413,36 @@ static int ap314aq_remove(struct i2c_client *client)
     return 0;
 }
 
+static void ap314aq_shutdown(struct i2c_client *client)
+{
+    struct ap314aq_data *data = i2c_get_clientdata(client);
+
+    free_irq(gpio_to_irq(data->int_pin), data);
+
+    ap314aq_power_ctl(data, false);
+
+    sysfs_remove_group(&data->client->dev.kobj, &ap314aq_attr_group);
+
+    sysfs_remove_group(&data->psensor_input_dev->dev.kobj, &ap314aq_ps_attribute_group);// every devices register his own devices
+
+    ap314aq_unregister_psensor_device(client,data);
+
+    ap314aq_power_init(data, false);
+
+    device_init_wakeup(&client->dev, 0);
+
+    ap314aq_set_mode(client, 0);
+    kfree(i2c_get_clientdata(client));
+
+    if (data->psensor_wq)
+	destroy_workqueue(data->psensor_wq);
+    if (data->ap314aq_wq)
+	destroy_workqueue(data->ap314aq_wq);
+    if(&data->pl_timer)
+	del_timer(&data->pl_timer);
+
+}
+
 static const struct i2c_device_id ap314aq_id[] =
 {
     { AP314AQ_DRV_NAME, 0 },
@@ -1459,6 +1489,7 @@ static struct i2c_driver ap314aq_driver = {
     },
     .probe	= ap314aq_probe,
     .remove	= ap314aq_remove,
+    .shutdown	= ap314aq_shutdown,
     .id_table = ap314aq_id,
 };
 
