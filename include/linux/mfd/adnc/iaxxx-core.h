@@ -91,18 +91,11 @@ struct iaxxx_block_err {
 	uint32_t error[3];
 };
 
-struct kw_model_info {
-	uint32_t kw_loaded_bitmap;
-	uint32_t kw_recognize_bitmap;
-	uint32_t kw_id[IAXXX_MAX_MODELS];
-};
-
 struct iaxxx_system_state {
 	enum iaxxx_fw_state fw_state;
 	struct iaxxx_plug_inst_data plgin[IAXXX_PLGIN_ID_MASK + 1];
 	struct iaxxx_pkg_data pkg[IAXXX_PKG_ID_MASK + 1];
 	struct iaxxx_block_err err;
-	struct kw_model_info kw_info;
 };
 
 enum {
@@ -276,11 +269,12 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 		uint32_t cfg_size, uint64_t cfg_val, uint32_t block_id,
 		char *file);
 int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
-			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
-			uint32_t slot_id);
-int iaxxx_core_set_param_blk_fixed_slot(struct device *dev, uint32_t inst_id,
-			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
-			uint32_t slot_id);
+			uint32_t blk_size, const void *ptr_blk,
+			uint32_t block_id,
+			uint32_t param_blk_id);
+int iaxxx_core_set_param_blk_from_file(struct device *dev, uint32_t inst_id,
+			uint32_t block_id, uint32_t param_blk_id,
+			const char *file);
 int iaxxx_core_get_param_blk(
 		struct device *dev,
 		uint32_t  inst_id,
@@ -294,21 +288,17 @@ int iaxxx_core_set_custom_cfg(struct device *dev, uint32_t inst_id,
 int iaxxx_core_evt_subscribe(struct device *dev, uint16_t src_id,
 		uint16_t event_id, uint16_t dst_id, uint32_t dst_opaque);
 int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,
-		uint16_t event_id, uint16_t dst_id, uint32_t dst_opaque);
+		uint16_t event_id, uint16_t dst_id);
 int iaxxx_core_retrieve_event(struct device *dev, uint16_t *event_id,
 		uint32_t *data);
 int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 			uint32_t event_enable_mask, uint32_t block_id);
 int iaxxx_package_load(struct device *dev, const char *pkg_name,
 					uint32_t pkg_id, uint32_t *proc_id);
-int iaxxx_package_unload(struct device *dev, const char *pkg_name,
-					     uint32_t proc_pkg_id);
+int iaxxx_package_unload(struct device *dev,
+			int32_t pkg_id,
+			uint32_t proc_id);
 void iaxxx_tunnel_stop(struct iaxxx_priv *priv);
 int iaxxx_tunnel_recovery(struct iaxxx_priv *priv);
-int iaxxx_unload_kw_model(struct device *dev, uint32_t inst_id,
-		uint32_t blk_id, uint32_t id);
-int iaxxx_start_recognition(struct device *dev, uint32_t id);
-int iaxxx_stop_recognition(struct device *dev, uint32_t id);
-int iaxxx_get_kw_recognize_bitmap(struct device *dev, uint32_t *bitmap);
 void iaxxx_reset_codec_params(struct iaxxx_priv *priv);
 #endif /*__IAXXX_CORE_H__ */

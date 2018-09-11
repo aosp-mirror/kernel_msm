@@ -29,22 +29,6 @@ struct iaxxx_tunnel_buff_params {
 	uint32_t buff_size;
 };
 
-enum iaxxx_tunnel_mode_type {
-	TNL_MODE_SYNC = 0,
-	TNL_MODE_ASYNC,
-};
-
-enum iaxxx_tunnel_encode_type {
-	TNL_ENC_OPAQUE = 0,
-	TNL_ENC_AFLOAT = 1,
-	TNL_ENC_Q15 = 0xF,
-};
-
-enum iaxxx_tunnel_dir_type {
-	TNL_HOST_DEVICE_RX = 0,
-	TNL_DEVICE_HOST_TX,
-};
-
 enum iaxxx_out_tunnel_type {
 	TNL0 = 0,
 	TNL1,

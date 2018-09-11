@@ -66,8 +66,6 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 	char eid[14];
 	char edata[20];
 	char *event[] = {action, eid, edata, NULL};
-	static bool recognize;
-	unsigned long bitmap;
 	int ret = 0;
 
 	if (WARN_ON(!evt) || WARN_ON(!priv->tunnel_data))
@@ -107,24 +105,7 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 		dev_err(dev, "%s: KW EVENT (id=%d, src_opq=%x)\n",
 			__func__, evt->event_id, evt->src_opaque);
 
-		bitmap = priv->iaxxx_state->kw_info.kw_recognize_bitmap;
-		if (evt->src_opaque >= IAXXX_MAX_MODELS) {
-			dev_err(dev, "Invalid src_opaque value %u",
-					evt->src_opaque);
-			return 0;
-		}
-
-		if (!test_bit(evt->src_opaque, &bitmap))
-			recognize = false;
-		else {
-			recognize = true;
-			/* Event has slot id, but upper layes need KW id */
-			evt->src_opaque = priv->
-				iaxxx_state->kw_info.kw_id[evt->src_opaque];
-		}
 	}
-	if (!recognize)
-		return 0;
 
 	snprintf(eid, sizeof(eid), "EVENT_ID=%hx", evt->event_id);
 	snprintf(edata, sizeof(edata), "EVENT_DATA=%x", evt->src_opaque);

@@ -2,9 +2,8 @@
 /*
  * iaxxx-odsp.h  --  IAXXX odsp header file
  *
- * Copyright 2017 Knowles, Inc.
+ * Copyright 2018 Knowles, Inc.
  *
- * Author: Sharada Kumar <Sharada.Kumar@knowles.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -38,6 +37,7 @@ struct iaxxx_plugin_param_blk {
 	uint64_t param_blk;
 	uint8_t block_id;
 	uint32_t id;
+	char file_name[256];
 };
 
 struct iaxxx_plugin_create_cfg {
@@ -99,11 +99,7 @@ struct iaxxx_plugin_custom_cfg {
 #define ODSP_EVENT_UNSUBSCRIBE _IO(IAXXX_IOCTL_MAGIC, 0x1D)
 #define ODSP_LOAD_PACKAGE _IO(IAXXX_IOCTL_MAGIC, 0x1E)
 #define ODSP_UNLOAD_PACKAGE _IO(IAXXX_IOCTL_MAGIC, 0x1F)
-#define ODSP_UNLOAD_KW_MODEL _IO(IAXXX_IOCTL_MAGIC, 0x20)
-#define ODSP_START_RECOGNITION _IO(IAXXX_IOCTL_MAGIC, 0x21)
-#define ODSP_STOP_RECOGNITION _IO(IAXXX_IOCTL_MAGIC, 0x22)
-#define ODSP_GET_KW_RECOGNIZE_BITMAP _IO(IAXXX_IOCTL_MAGIC, 0x23)
-#define ODSP_PLG_SET_CUSTOM_CFG _IO(IAXXX_IOCTL_MAGIC, 0x24)
-#define ODSP_PLG_GET_PARAM_BLK _IO(IAXXX_IOCTL_MAGIC, 0x25)
-#define ODSP_PLG_CREATE_STATIC_PACKAGE _IO(IAXXX_IOCTL_MAGIC, 0x26)
+#define ODSP_PLG_SET_CUSTOM_CFG _IO(IAXXX_IOCTL_MAGIC, 0x20)
+#define ODSP_PLG_GET_PARAM_BLK _IO(IAXXX_IOCTL_MAGIC, 0x21)
+#define ODSP_PLG_CREATE_STATIC_PACKAGE _IO(IAXXX_IOCTL_MAGIC, 0x22)
 #endif

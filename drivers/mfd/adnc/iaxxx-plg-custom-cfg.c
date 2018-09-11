@@ -126,7 +126,7 @@ static int send_chunk_to_plugin(
 	chunk_data[nLen-1] = calculate_crc(&chunk_data[0], nLen-1);
 
 	/* use odsp public api to send the parameter block */
-	ret = iaxxx_core_set_param_blk_fixed_slot(dev, inst_id,
+	ret = iaxxx_core_set_param_blk(dev, inst_id,
 			nLen * sizeof(uint32_t),
 			&chunk_data[0], block_id, param_blk_id);
 	if (ret) {

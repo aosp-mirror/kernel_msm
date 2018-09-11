@@ -389,7 +389,7 @@ static int tunnel_event_unsubscribe(struct iaxxx_tunnel_data *t_intf_priv,
 			return ret;
 		}
 		ret = iaxxx_core_evt_unsubscribe(dev, src_id, evt_id,
-						dst_id, destOpaque);
+						dst_id);
 		if (ret) {
 			pr_err("%s failed evt subscribe %d\n", __func__, ret);
 			return ret;

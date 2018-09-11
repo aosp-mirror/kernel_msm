@@ -44,6 +44,22 @@ struct iaxxx_tnl_evt_info {
 	uint32_t evt_threshold;
 } __packed;
 
+enum iaxxx_tunnel_mode_type {
+	TNL_MODE_SYNC = 0,
+	TNL_MODE_ASYNC,
+};
+
+enum iaxxx_tunnel_encode_type {
+	TNL_ENC_OPAQUE = 0,
+	TNL_ENC_AFLOAT = 1,
+	TNL_ENC_Q15 = 0xF,
+};
+
+enum iaxxx_tunnel_dir_type {
+	TNL_HOST_DEVICE_RX = 0,
+	TNL_DEVICE_HOST_TX,
+};
+
 #define TUNNEL_SETUP			_IOWR('K', 0x011, struct tunlMsg)
 #define TUNNEL_TERMINATE		_IOWR('K', 0x012, struct tunlMsg)
 #define TUNNEL_SUBSCRIBE_META		_IO('K', 0x013)

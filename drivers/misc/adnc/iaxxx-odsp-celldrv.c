@@ -50,8 +50,6 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_pkg_mgmt_info pkg_info;
 	uint32_t *get_param_blk_buf = NULL;
 	void __user *blk_buff = NULL;
-	uint32_t id;
-	uint32_t bitmap;
 	int ret = -EINVAL;
 	unsigned long file_name_size = 0;
 
@@ -175,20 +173,36 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 				sizeof(struct iaxxx_plugin_param_blk)))
 			return -EFAULT;
 
-		blk_buff = (void __user *) (uintptr_t)param_blk_info.param_blk;
-		blk_buff = memdup_user(blk_buff, param_blk_info.param_size);
-		param_blk_info.param_blk = (uintptr_t)blk_buff;
-		if (IS_ERR(blk_buff)) {
-			ret = PTR_ERR(blk_buff);
-			pr_err("%s memdup failed %d\n", __func__, ret);
-			return ret;
+		param_blk_info.file_name[sizeof(param_blk_info.file_name) - 1]
+			 = '\0';
+
+		if (param_blk_info.param_size > 0) {
+			blk_buff = (void __user *)
+					(uintptr_t)param_blk_info.param_blk;
+			blk_buff = memdup_user(blk_buff,
+					param_blk_info.param_size);
+			param_blk_info.param_blk = (uintptr_t)blk_buff;
+			if (IS_ERR(blk_buff)) {
+				ret = PTR_ERR(blk_buff);
+				pr_err("%s memdup failed %d\n", __func__, ret);
+				return ret;
+			}
+			blk_buff = (void *)(uintptr_t)
+					(param_blk_info.param_blk);
+			ret = iaxxx_core_set_param_blk(odsp_dev_priv->parent,
+				param_blk_info.inst_id,
+				param_blk_info.param_size,
+				blk_buff, param_blk_info.block_id,
+				param_blk_info.id);
+			kfree(blk_buff);
+		} else {
+			ret = iaxxx_core_set_param_blk_from_file(
+				odsp_dev_priv->parent,
+				param_blk_info.inst_id,
+				param_blk_info.block_id,
+				param_blk_info.id,
+				param_blk_info.file_name);
 		}
-		blk_buff = (void *)(uintptr_t)(param_blk_info.param_blk);
-		ret = iaxxx_core_set_param_blk(odsp_dev_priv->parent,
-			param_blk_info.inst_id, param_blk_info.param_size,
-			blk_buff, param_blk_info.block_id,
-			param_blk_info.id);
-		kfree(blk_buff);
 		if (ret) {
 			pr_err("%s() Set param blk fail\n", __func__);
 			return ret;
@@ -316,8 +330,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		ret = iaxxx_core_evt_unsubscribe(odsp_dev_priv->parent,
 					event_info.src_id,
 					event_info.event_id,
-					event_info.dst_id,
-					event_info.dst_opaque);
+					event_info.dst_id);
 		if (ret) {
 			pr_err("%s() Event unsubscribe fail\n", __func__);
 			return ret;
@@ -358,43 +371,13 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		pkg_info.pkg_name[sizeof(pkg_info.pkg_name) - 1] = '\0';
 
 		ret = iaxxx_package_unload(odsp_dev_priv->parent,
-			pkg_info.pkg_name, pkg_info.proc_id);
-		pr_info("%s()Pkg name %s id %d\n", __func__,
-				pkg_info.pkg_name, pkg_info.pkg_id);
+			pkg_info.pkg_id, pkg_info.proc_id);
+		pr_info("%s()Pkg id 0x%x\n", __func__, pkg_info.pkg_id);
 		if (ret) {
 			pr_err("%s() Unload package failed\n", __func__);
 			return ret;
 		}
 		break;
-	case ODSP_UNLOAD_KW_MODEL:
-		if (copy_from_user(&param_blk_info, (void __user *)arg,
-				sizeof(struct iaxxx_plugin_param_blk)))
-			return -EFAULT;
-		ret = iaxxx_unload_kw_model(odsp_dev_priv->parent,
-				param_blk_info.inst_id, param_blk_info.block_id,
-				param_blk_info.id);
-		return ret;
-	case ODSP_START_RECOGNITION:
-		if (copy_from_user(&id, (void __user *)arg,
-				sizeof(uint32_t)))
-			return -EFAULT;
-		ret = iaxxx_start_recognition(odsp_dev_priv->parent, id);
-		return ret;
-	case ODSP_STOP_RECOGNITION:
-		if (copy_from_user(&id, (void __user *)arg,
-				sizeof(uint32_t)))
-			return -EFAULT;
-		ret = iaxxx_stop_recognition(odsp_dev_priv->parent, id);
-		return ret;
-	case ODSP_GET_KW_RECOGNIZE_BITMAP:
-		ret = iaxxx_get_kw_recognize_bitmap
-			(odsp_dev_priv->parent, &bitmap);
-		if (copy_to_user
-			((void __user *)arg, &bitmap, sizeof(uint32_t))) {
-			pr_info("%s() copy_to_user failed\n", __func__);
-			return -EFAULT;
-		}
-		return ret;
 	default:
 		break;
 	}

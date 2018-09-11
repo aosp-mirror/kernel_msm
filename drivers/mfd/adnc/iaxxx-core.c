@@ -924,7 +924,6 @@ static int iaxxx_fw_recovery(struct iaxxx_priv *priv)
 	int rc;
 	char action[] = "ACTION=IAXXX_RECOVERY_EVENT";
 	char *event[] = {action, NULL};
-	uint32_t kw_bitmap;
 	int try_count = 0;
 
 	priv->iaxxx_state->fw_state = FW_RECOVERY;
@@ -959,11 +958,8 @@ static int iaxxx_fw_recovery(struct iaxxx_priv *priv)
 		dev_err(priv->dev, "%s: failed to subscribe for crash event\n",
 				__func__);
 
-	/* HAL needs this info for loading already loaded KWs */
-	kw_bitmap = priv->iaxxx_state->kw_info.kw_recognize_bitmap;
 	/* Clear system state */
 	memset(priv->iaxxx_state, 0, sizeof(struct iaxxx_system_state));
-	priv->iaxxx_state->kw_info.kw_recognize_bitmap = kw_bitmap;
 	priv->iaxxx_state->fw_state = FW_APP_MODE;
 	/* Send recovery event to HAL */
 	kobject_uevent_env(&priv->dev->kobj, KOBJ_CHANGE, event);

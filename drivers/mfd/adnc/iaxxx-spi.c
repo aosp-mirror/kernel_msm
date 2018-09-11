@@ -33,6 +33,9 @@
 #define IAXXX_REG_PADDING	12
 #define IAXXX_REG_LEN_WITH_PADDING (IAXXX_REG_LEN + IAXXX_REG_PADDING)
 
+/* Burst size used when sending raw data to firmware */
+#define IAXXX_SPI_BURST_SIZE  (32*1024)
+
 /**
  * Description of driver private data
  *
@@ -285,13 +288,29 @@ static int iaxxx_regmap_spi_write(void *context, const void *data, size_t count)
 
 /* regmap bus interface - write */
 static int iaxxx_spi_raw_write(void *context,
-					 const void *reg,
-					 const void *val, size_t val_len)
+			 const void *reg,
+			 const void *val, size_t val_len)
 {
 	size_t reg_len = IAXXX_REG_LEN_WITH_PADDING;
+	size_t val_index;
+	size_t burst_size = val_len > IAXXX_SPI_BURST_SIZE ?
+			IAXXX_SPI_BURST_SIZE : val_len;
+	uint32_t reg_addr = (*(uint32_t *)reg);
+	uint8_t *val_addr = (uint8_t *)val;
+	int rc = 0;
 
-	return iaxxx_regmap_spi_gather_raw_write(context,
-			reg, reg_len, val, val_len);
+	for (val_index = 0; val_index < val_len; val_index += burst_size) {
+		rc = iaxxx_regmap_spi_gather_raw_write(context,
+			&reg_addr, reg_len,
+			(val_addr + val_index),
+			(val_len - val_index) < burst_size ?
+			(val_len - val_index) : burst_size);
+		if (rc)
+			break;
+		reg_addr += burst_size;
+	}
+
+	return rc;
 }
 
 /* regmap bus interface - read */

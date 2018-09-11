@@ -99,12 +99,11 @@ EXPORT_SYMBOL(iaxxx_core_evt_subscribe);
  * @src_id     -   System Id of event source
  * @event_id   -   Event Id
  * @dst_id     -   System Id of event destination
- * @ds_opaque  -   Information sought by destination task when even occurs.
  *
  * @ret 0 on success, -EINVAL in case of error
  ****************************************************************************/
 int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,
-			uint16_t event_id, uint16_t dst_id, uint32_t dst_opaque)
+			uint16_t event_id, uint16_t dst_id)
 {
 	int ret = -EINVAL;
 	int status;
@@ -132,12 +131,6 @@ int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,
 	}
 	sys_id = ((dst_id << 16) | src_id);
 	ret = regmap_write(priv->regmap, IAXXX_EVT_MGMT_EVT_SUB_ADDR, sys_id);
-	if (ret) {
-		dev_err(dev, "write failed %s()\n", __func__);
-		return ret;
-	}
-	ret = regmap_write(priv->regmap, IAXXX_EVT_MGMT_EVT_SUB_DST_OPAQUE_ADDR,
-			dst_opaque);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		return ret;

@@ -26,9 +26,19 @@
 #define IAXXX_BITS_SWAP	32
 #define IAXXX_BLK_HEADER_SIZE 4
 #define IAXXX_BIN_INFO_SEC_ADDR	0xF1F00000
-#define IAXXX_CORE_TO_BLOCK_MAP	3
 #define IAXXX_INVALID_FILE ('\0')
 #define IAXXX_KW_BITMAP 0x7
+#define IAXXX_MAX_VALID_KW_ID 0xffff
+#define IAXXX_VQ_PARAM_BLOCK_ID_BASE  (917520)
+#define IAXXX_VQ_INST_ID 0
+
+/*
+ * Generate package id with 'i' package id and 'p' processor id
+ */
+#define GEN_PKG_ID(i, p) \
+	((i & IAXXX_PKG_MGMT_PKG_PROC_ID_PACKAGE_ID_MASK) | \
+	((p << IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_POS) & \
+	IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_MASK))
 
 struct pkg_bin_info {
 	uint32_t    version;
@@ -74,27 +84,33 @@ static int iaxxx_core_create_plg_common(
 		struct device *dev, uint32_t inst_id,
 		uint32_t priority, uint32_t pkg_id,
 		uint32_t plg_idx, uint8_t block_id,
-		bool     static_package)
+		bool static_package)
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint32_t status;
 	uint32_t package;
+	uint8_t proc_id;
 
 	if (!priv)
 		return ret;
 
-	dev_dbg(dev, "%s()\n", __func__);
+	dev_dbg(dev,
+		"%s() inst_id=%u prio=%u pkg_id=%u plg_idx=%u blk_id=%u\n",
+		__func__, inst_id, priority, pkg_id, plg_idx,
+		block_id);
+
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 
 	inst_id &= IAXXX_PLGIN_ID_MASK;
 
+	package = pkg_id & IAXXX_PKG_ID_MASK;
+
 	/* Check Package is loaded. DO NOT check for
-	 * plugins part of statically loaded packages
+	 * statically loaded packages
 	 */
 	if (!static_package) {
-		package = pkg_id & IAXXX_PKG_ID_MASK;
 		if (!(priv->iaxxx_state->pkg[package].pkg_state)) {
 			dev_err(dev, "Package 0x%x is not created %s()\n",
 				pkg_id, __func__);
@@ -108,6 +124,14 @@ static int iaxxx_core_create_plg_common(
 		ret = -EEXIST;
 		goto core_create_plugin_err;
 	}
+
+	proc_id = IAXXX_BLOCK_ID_TO_PROC_ID(block_id);
+
+	/* Create SysID of Package ID using Package Index
+	 * and Proc ID
+	 */
+	pkg_id  = GEN_PKG_ID(package, proc_id);
+
 	/* Update Package ID of plugin to be created */
 	ret = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_INS_GRP_ORIGIN_REG(inst_id),
@@ -203,10 +227,7 @@ int iaxxx_core_create_plg_static_package(
 	 */
 	uint32_t proc_id = IAXXX_BLOCK_ID_TO_PROC_ID(block_id);
 
-	pkg_id = ((pkg_id & IAXXX_PKG_MGMT_PKG_PROC_ID_PACKAGE_ID_MASK) |
-		((proc_id << IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_POS) &
-		IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_MASK));
-
+	pkg_id = GEN_PKG_ID(pkg_id, proc_id);
 	return iaxxx_core_create_plg_common(dev, inst_id, priority,
 			pkg_id, plg_idx, block_id, true);
 }
@@ -227,23 +248,37 @@ int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id)
 {
 	int ret = -EINVAL;
+	uint32_t status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
 	if (!priv)
 		return ret;
 
-	dev_dbg(dev, "%s()\n", __func__);
+	dev_dbg(dev, "%s() inst_id:%u block_id:%u enable:%u\n", __func__,
+			inst_id, block_id, is_enable);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
+
+	/* Check plugin instance is created */
+	if (!(priv->iaxxx_state->plgin[inst_id].plugin_inst_state)) {
+		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
+				inst_id, __func__);
+		ret = -EEXIST;
+		goto core_change_plg_state_err;
+	}
+
 	/* Set enable bit in plugin inst enable header */
 	ret = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(block_id),
-		is_enable << inst_id,
+		1 << inst_id,
 		is_enable << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_change_plg_state_err;
 	}
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret)
+		dev_err(dev, "Update blk failed %s()\n", __func__);
 
 core_change_plg_state_err:
 	mutex_unlock(&priv->plugin_lock);
@@ -264,23 +299,41 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 				uint8_t block_id)
 {
 	int ret = -EINVAL;
+	uint32_t status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
 	if (!priv)
 		return ret;
 
-	dev_dbg(dev, "%s()\n", __func__);
+	dev_dbg(dev, "%s() inst_id:%u block_id:%u\n", __func__,
+			inst_id, block_id);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
+
+	/* Check plugin instance is created */
+	if (!(priv->iaxxx_state->plgin[inst_id].plugin_inst_state)) {
+		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
+				inst_id, __func__);
+		ret = -EEXIST;
+		goto core_destroy_plg_err;
+	}
+
 	/* Clear bit in plugin instance header */
 	ret = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id),
-		0 << inst_id,
+		1 << inst_id,
 		0 << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_destroy_plg_err;
 	}
+
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret) {
+		dev_err(dev, "Update blk failed %s()\n", __func__);
+	} else
+		priv->iaxxx_state->plgin[inst_id].plugin_inst_state =
+				    IAXXX_PLUGIN_UNLOADED;
 
 core_destroy_plg_err:
 	mutex_unlock(&priv->plugin_lock);
@@ -309,7 +362,8 @@ int iaxxx_core_reset_plg(struct device *dev, uint32_t inst_id,
 		return ret;
 
 	inst_id &= IAXXX_PLGIN_ID_MASK;
-	dev_dbg(dev, "%s()\n", __func__);
+	dev_dbg(dev, "%s() inst_id:%u block_id:%u\n", __func__,
+			inst_id, block_id);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 	/* Check plugin instance is created */
@@ -351,54 +405,6 @@ core_reset_plg_err:
 EXPORT_SYMBOL(iaxxx_core_reset_plg);
 
 /*****************************************************************************
- * iaxxx_core_plg_set_event()
- * @brief Enable event mask to plugin instance
- *
- * @inst_id	Plugin Instance Id
- * @block_id	Update block id
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_core_plg_set_event(struct device *dev, uint32_t inst_id,
-				uint8_t event_mask, uint8_t block_id)
-{
-	int ret = -EINVAL;
-	uint32_t status = 0;
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-
-	if (!priv)
-		return ret;
-
-	inst_id &= IAXXX_PLGIN_ID_MASK;
-	dev_dbg(dev, "%s()\n", __func__);
-	/* protect this plugin operation */
-	mutex_lock(&priv->plugin_lock);
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
-		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
-				inst_id, __func__);
-		goto plg_set_event_err;
-	}
-	/* Clear bit in plugin instance header */
-	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_INS_GRP_EVT_EN_REG(inst_id),
-		event_mask);
-	if (ret) {
-		dev_err(dev, "write failed %s()\n", __func__);
-		goto plg_set_event_err;
-	}
-
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
-	if (ret) {
-		dev_err(dev, "Update blk failed %s()\n", __func__);
-		goto plg_set_event_err;
-	}
-plg_set_event_err:
-	mutex_unlock(&priv->plugin_lock);
-	return ret;
-}
-EXPORT_SYMBOL(iaxxx_core_plg_set_event);
-
-/*****************************************************************************
  * iaxxx_core_plg_set_param_by_inst()
  * @brief Set a param in a plugin instance
  *
@@ -420,6 +426,9 @@ int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
 
 	if (!priv)
 		return ret;
+
+	dev_dbg(dev, "%s() inst_id=%u param_id=%u blk_id=%u param_val=%u\n",
+		__func__, inst_id, param_id, block_id, param_val);
 
 	inst_id &= IAXXX_PLGIN_ID_MASK;
 	/* protect this plugin operation */
@@ -499,7 +508,10 @@ int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
 		return ret;
 
 	inst_id &= IAXXX_PLGIN_ID_MASK;
-	dev_dbg(dev, "%s()\n", __func__);
+
+	dev_dbg(dev, "%s() inst_id=%u param_id=%u blk_id=%u\n",
+		__func__, inst_id, param_id, block_id);
+
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 
@@ -580,7 +592,10 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 		return ret;
 
 	inst_id &= IAXXX_PLGIN_ID_MASK;
-	dev_dbg(dev, "%s() %llx\n", __func__, cfg_val);
+
+	dev_dbg(dev, "%s() inst_id=%u cfg_size=%u blk_id=%u\n",
+		__func__, inst_id, cfg_size, block_id);
+
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 	/* If plugin instance already exist */
@@ -592,6 +607,7 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 	}
 
 	if (file[0] != IAXXX_INVALID_FILE) {
+		dev_dbg(dev, "%s() %s\n", __func__, file);
 		ret = request_firmware(&fw, file, priv->dev);
 		if (ret) {
 			dev_err(dev, "Firmware file not found = %d\n", ret);
@@ -603,10 +619,12 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 	}
 	if (cfg_size > sizeof(uint32_t)) {
 		if (file[0] == IAXXX_INVALID_FILE) {
+			dev_dbg(dev, "%s() %llx\n", __func__, cfg_val);
 			/* MSB word should be the first word to be written */
 			cfg_val = (cfg_val >> IAXXX_BITS_SWAP) |
 				(cfg_val << IAXXX_BITS_SWAP);
-			pr_debug("%s() cfg_val 0x%llx\n", __func__, cfg_val);
+			dev_dbg(dev, "%s() cfg_val 0x%llx\n",
+					__func__, cfg_val);
 		} else {
 			data = kmalloc(cfg_size, GFP_KERNEL);
 			iaxxx_copy_le32_to_cpu(data, fw->data, cfg_size);
@@ -680,37 +698,18 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 	}
 
 set_create_cfg_err:
-	release_firmware(fw);
+	if (fw)
+		release_firmware(fw);
 	mutex_unlock(&priv->plugin_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_set_create_cfg);
 
-static int iaxxx_get_slot_id(struct iaxxx_priv *priv, uint32_t id)
-{
-	int slot_id = -1;
-	int i;
-	unsigned long bitmap;
-
-	if (priv->iaxxx_state->kw_info.kw_loaded_bitmap ==
-			IAXXX_KW_BITMAP)
-		return slot_id;
-
-	bitmap = priv->iaxxx_state->kw_info.kw_loaded_bitmap;
-	for (i = 0; i < IAXXX_MAX_MODELS; i++) {
-		if (!test_bit(i, &bitmap)) {
-			slot_id = i;
-			break;
-		}
-	}
-	return slot_id;
-}
-
-static int iaxxx_core_set_param_blk_common(struct device *dev,
+int iaxxx_core_set_param_blk(
+			struct device *dev,
 			uint32_t inst_id, uint32_t blk_size,
-			void *ptr_blk, uint32_t block_id,
-			uint32_t id,
-			bool  fixed_slot)
+			const void *ptr_blk, uint32_t block_id,
+			uint32_t param_blk_id)
 {
 	int ret = -EINVAL;
 	uint32_t status = 0;
@@ -718,15 +717,13 @@ static int iaxxx_core_set_param_blk_common(struct device *dev,
 	uint32_t reg_addr;
 	uint32_t reg_val;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int32_t slot_id;
-	unsigned long bitmap;
 
 	if (!priv)
 		return ret;
 
 	inst_id &= IAXXX_PLGIN_ID_MASK;
 	dev_dbg(dev, "%s() inst_id=%u blk_size=%u blk_id=%u id=%u\n",
-		__func__, inst_id, blk_size, block_id, id);
+		__func__, inst_id, blk_size, block_id, param_blk_id);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 	/* Plugin instance exists or not */
@@ -735,13 +732,14 @@ static int iaxxx_core_set_param_blk_common(struct device *dev,
 				inst_id, __func__);
 		goto set_param_blk_err;
 	}
+
 	/* Write the PluginHdrParamBlkCtrl register */
 	/* The block size is divided by 4 here because this function gets it
 	 * as block size in bytes but firmware expects in 32bit words.
 	 */
 	reg_val =  (((blk_size >> 2) <<
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS) &
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS) &
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK);
 	reg_val |= ((inst_id <<
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
@@ -754,24 +752,9 @@ static int iaxxx_core_set_param_blk_common(struct device *dev,
 		goto set_param_blk_err;
 	}
 
-	/*
-	 * If id is greater than 0, means its KW load request.
-	 * Find the empty slot id for KW
-	 */
-	if (!fixed_slot && id) {
-		slot_id = iaxxx_get_slot_id(priv, id);
-		if (slot_id < 0) {
-			dev_err(dev, "%s invalid slot id %d\n", __func__,
-					slot_id);
-			ret = -EINVAL;
-			goto set_param_blk_err;
-		}
-	} else
-		slot_id = id;
-
 	ret = regmap_write(priv->regmap,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id),
-		slot_id);
+		param_blk_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto set_param_blk_err;
@@ -779,8 +762,8 @@ static int iaxxx_core_set_param_blk_common(struct device *dev,
 
 	ret = iaxxx_send_update_block_request(dev, &status, block_id);
 	if (ret) {
-		dev_err(dev, "Update blk failed after slot-id (%d) config %s()\n",
-				slot_id, __func__);
+		dev_err(dev, "Update blk failed after id (%u) config %s()\n",
+				param_blk_id, __func__);
 		if (status) {
 			rc = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
@@ -805,10 +788,11 @@ static int iaxxx_core_set_param_blk_common(struct device *dev,
 	}
 
 	if (priv->raw_write) {
-		ret = priv->raw_write(dev, &reg_addr, ptr_blk, blk_size);
+		ret = priv->raw_write(dev, &reg_addr, ptr_blk,
+				blk_size);
 		if (ret) {
 			dev_err(dev, "Raw blk write failed %s()\n", __func__);
-		goto set_param_blk_err;
+			goto set_param_blk_err;
 		}
 	} else {
 		dev_err(dev, "Raw blk write not supported  %s()\n", __func__);
@@ -846,63 +830,50 @@ static int iaxxx_core_set_param_blk_common(struct device *dev,
 					__func__, rc);
 			}
 	}
-	/* If its KW load request, update the slot and KW id mapping */
-	if (!ret && !fixed_slot && id > 0) {
-		priv->iaxxx_state->kw_info.kw_id[slot_id] = id;
-		bitmap = priv->iaxxx_state->kw_info.kw_loaded_bitmap;
-		set_bit(slot_id, &bitmap);
-		priv->iaxxx_state->kw_info.kw_loaded_bitmap = bitmap;
-	}
 set_param_blk_err:
 	mutex_unlock(&priv->plugin_lock);
 	return ret;
 }
-
-
-/*****************************************************************************
- * iaxxx_core_set_param_blk()
- * @brief Set parameter block to plugin instance. Actual slot id sent to
- * fw will change based on KW models loaded.
- *
- * @inst_id	Plugin Instance Id
- * @blk_size	Block data size
- * @ptr_blk	Ptr to block value
- * @block_id	Update block id
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
-			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
-			uint32_t id)
-{
-	return iaxxx_core_set_param_blk_common(dev,
-			inst_id, blk_size, ptr_blk, block_id,
-			id, false);
-}
 EXPORT_SYMBOL(iaxxx_core_set_param_blk);
 
-/*****************************************************************************
- * iaxxx_core_set_param_blk_fixed_slot()
- * @brief Set parameter block to plugin instance, but keep the id to what is
- * passed as parameter.
- *
- * @inst_id	Plugin Instance Id
- * @blk_size	Block data size
- * @ptr_blk	Ptr to block value
- * @block_id	Update block id
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_core_set_param_blk_fixed_slot(struct device *dev, uint32_t inst_id,
-			uint32_t blk_size, void *ptr_blk, uint32_t block_id,
-			uint32_t id)
+int iaxxx_core_set_param_blk_from_file(
+			struct device *dev,
+			uint32_t inst_id,
+			uint32_t block_id,
+			uint32_t param_blk_id,
+			const char *file)
 {
-	return iaxxx_core_set_param_blk_common(dev,
-			inst_id, blk_size, ptr_blk, block_id,
-			id, true);
-}
-EXPORT_SYMBOL(iaxxx_core_set_param_blk_fixed_slot);
+	int ret = -EINVAL;
+	uint8_t *data = NULL;
+	const struct firmware *fw = NULL;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
+	if (!priv)
+		return ret;
+
+	if (file && IAXXX_INVALID_FILE != file[0]) {
+		ret = request_firmware(&fw, file, priv->dev);
+		if (ret) {
+			dev_err(dev, "Firmware file not found = %d\n", ret);
+			ret = -EINVAL;
+			goto iaxxx_core_set_param_blk_from_file_err;
+		}
+		data = kmalloc(fw->size, GFP_KERNEL);
+		if (!data)
+			goto iaxxx_core_set_param_blk_from_file_err;
+		iaxxx_copy_le32_to_cpu(data, fw->data, fw->size);
+		ret = iaxxx_core_set_param_blk(
+				dev, inst_id, fw->size, fw->data,
+				block_id, param_blk_id);
+	}
+
+iaxxx_core_set_param_blk_from_file_err:
+	kfree(data);
+	if (fw)
+		release_firmware(fw);
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_set_param_blk_from_file);
 
 /*****************************************************************************
  * iaxxx_core_set_event()
@@ -926,7 +897,8 @@ int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 		return ret;
 
 	inst_id &= IAXXX_PLGIN_ID_MASK;
-	dev_dbg(dev, "%s()\n", __func__);
+	dev_dbg(dev, "%s() inst_id:%u block_id:%u event_en_mask:%x\n",
+			__func__, inst_id, block_id, event_enable_mask);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 	/* Plugin instance exists or not */
@@ -936,7 +908,8 @@ int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 		goto set_event_err;
 	}
 	ret = regmap_write(priv->regmap,
-			IAXXX_PLUGIN_INS_GRP_EVT_EN_ADDR, event_enable_mask);
+		IAXXX_PLUGIN_INS_GRP_EVT_EN_REG(inst_id),
+		event_enable_mask);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto set_event_err;
@@ -985,9 +958,7 @@ static int write_pkg_info(bool update, struct iaxxx_priv *priv, uint32_t pkg_id,
 			bin_info.bss_start_addr, bin_info.bss_end_addr);
 	if (update) {
 		pkg->req = 1 << IAXXX_PKG_MGMT_PKG_REQ_LOAD_POS;
-		pkg->proc_id = pkg_id |
-			(bin_info.core_id <<
-			 IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_POS);
+		pkg->proc_id = GEN_PKG_ID(pkg_id, bin_info.core_id);
 		pkg->info = bin_info.core_id |
 			(bin_info.vendor_id <<
 			 IAXXX_PKG_MGMT_PKG_INFO_VENDOR_ID_POS);
@@ -1007,7 +978,7 @@ static int write_pkg_info(bool update, struct iaxxx_priv *priv, uint32_t pkg_id,
 		dev_err(dev, "Pkg info write fail %s()\n", __func__);
 		return rc;
 	}
-	block_id = bin_info.core_id - IAXXX_CORE_TO_BLOCK_MAP;
+	block_id = IAXXX_PROC_ID_TO_BLOCK_ID(bin_info.core_id);
 	rc = iaxxx_send_update_block_request(dev, &status, block_id);
 	if (rc) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
@@ -1184,23 +1155,23 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 	return 0;
 }
 
-static int iaxxx_unload_pkg(struct iaxxx_priv *priv, uint32_t proc_pkg_id)
+static int iaxxx_unload_pkg(struct iaxxx_priv *priv, uint32_t pkg_id,
+			uint32_t proc_id)
 {
 	struct device *dev = priv->dev;
 	uint32_t status;
 	uint32_t block_id;
 	int rc = 0;
-	uint32_t proc_id = (proc_pkg_id &
-		IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_MASK)
-	    >> IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_POS;
+
+	uint32_t proc_pkg_id = GEN_PKG_ID(pkg_id, proc_id);
 
 	/* Write the package id and proc id */
 	rc = regmap_write(priv->regmap, IAXXX_PKG_MGMT_PKG_PROC_ID_ADDR,
 				proc_pkg_id);
 	if (rc) {
 		dev_err(dev,
-			"%s() Write to package proc id (%d) register failed\n",
-			__func__, proc_pkg_id);
+			"%s() Write to package id (%d) register failed\n",
+			__func__, pkg_id);
 		return rc;
 	}
 
@@ -1210,11 +1181,11 @@ static int iaxxx_unload_pkg(struct iaxxx_priv *priv, uint32_t proc_pkg_id)
 	if (rc) {
 		dev_err(dev,
 			"%s() Write to package (%d) request register failed\n",
-			__func__, proc_pkg_id);
+			__func__, pkg_id);
 		return rc;
 	}
 
-	block_id = proc_id - IAXXX_CORE_TO_BLOCK_MAP;
+	block_id = IAXXX_PROC_ID_TO_BLOCK_ID(proc_id);
 	rc = iaxxx_send_update_block_request(dev, &status, block_id);
 	if (rc) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
@@ -1284,173 +1255,43 @@ EXPORT_SYMBOL(iaxxx_package_load);
  * iaxxx_package_unload()
  * @brief Load the package
  *
- * @pkg_name	Package binary name
- * @proc_id	Package Id and Core Id
+ * @pkg_id	Package Id
+ * @proc_id	Process Id
  *
  * @ret 0 on success, -EINVAL in case of error
  ****************************************************************************/
-int iaxxx_package_unload(struct device *dev, const char *pkg_name,
-					     uint32_t proc_pkg_id)
+int iaxxx_package_unload(struct device *dev,
+			int32_t pkg_id,
+			uint32_t proc_id)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = -EINVAL;
 
-	dev_info(dev, "%s()\n", __func__);
-
-	if (!pkg_name) {
-		dev_err(dev, "%s() Package name is NULL\n", __func__);
-		goto out;
-	}
-	dev_info(dev, "Unloading Package %s ...\n", pkg_name);
+	dev_info(dev, "%s() pkg_id:0x%x proc_id:%u\n", __func__,
+			pkg_id, proc_id);
 
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
-	rc = iaxxx_unload_pkg(priv, proc_pkg_id);
+
+	pkg_id &= IAXXX_PKG_ID_MASK;
+	if (priv->iaxxx_state->pkg[pkg_id].pkg_state != IAXXX_PKG_LOADED) {
+		dev_err(dev, "%s() pkg not loaded already %d\n",
+			__func__, pkg_id);
+		goto out;
+	}
+
+	rc = iaxxx_unload_pkg(priv, pkg_id, proc_id);
 	if (rc) {
 		dev_err(dev, "%s() pkg unload fail %d\n", __func__, rc);
 		goto out;
 	}
-	dev_info(dev, "Package %s unloaded.\n", pkg_name);
+	priv->iaxxx_state->pkg[pkg_id].pkg_state = IAXXX_PKG_UNLOADED;
+	dev_info(dev, "Package %d unloaded.\n", pkg_id);
 out:
 	mutex_unlock(&priv->plugin_lock);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_package_unload);
-
-/*****************************************************************************
- * iaxxx_unload_kw_model()
- * @brief unload KW model
- *
- * @inst_id	Plugin Instance Id
- * @block_id	Update block id
- * @id			KW id
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_unload_kw_model(struct device *dev, uint32_t inst_id,
-		uint32_t block_id, uint32_t id)
-{
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int rc = 0;
-	int i;
-	unsigned long bitmap;
-
-	dev_info(dev, "%s() KW id %d\n", __func__, id);
-	mutex_lock(&priv->plugin_lock);
-	bitmap = priv->iaxxx_state->kw_info.kw_loaded_bitmap;
-	for (i = 0; i < IAXXX_MAX_MODELS; i++) {
-		if (id == priv->iaxxx_state->kw_info.kw_id[i]) {
-			clear_bit(i, &bitmap);
-			priv->iaxxx_state->kw_info.kw_loaded_bitmap = bitmap;
-			dev_info(dev, "Unloaded KW id %d and Slot id %d\n",
-					id, i);
-			break;
-		}
-	}
-	if (i == IAXXX_MAX_MODELS) {
-		dev_err(dev, "%d invalid id unload request\n", id);
-		mutex_unlock(&priv->plugin_lock);
-		return -EINVAL;
-	}
-	mutex_unlock(&priv->plugin_lock);
-	if (!priv->iaxxx_state->kw_info.kw_loaded_bitmap)
-		rc = iaxxx_core_reset_plg(dev, inst_id, block_id);
-	return rc;
-}
-EXPORT_SYMBOL(iaxxx_unload_kw_model);
-
-/*****************************************************************************
- * iaxxx_start_recognition()
- * @brief Mark the KW as recognize
- *
- * @id			KW id
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_start_recognition(struct device *dev, uint32_t id)
-{
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int i;
-	unsigned long bitmap;
-
-	dev_dbg(dev, "%s() KW id %d\n", __func__, id);
-	mutex_lock(&priv->plugin_lock);
-	/* Find the slot id corresponding to the KW id */
-	for (i = 0; i < IAXXX_MAX_MODELS; i++) {
-		if (id == priv->iaxxx_state->kw_info.kw_id[i]) {
-			bitmap = priv->iaxxx_state->kw_info.kw_recognize_bitmap;
-			set_bit(i, &bitmap);
-			priv->iaxxx_state->kw_info.kw_recognize_bitmap = bitmap;
-			break;
-		}
-	}
-	/* The KW id is not loaded */
-	if (i == IAXXX_MAX_MODELS) {
-		dev_err(dev, "%d invalid id recognize request\n", id);
-		mutex_unlock(&priv->plugin_lock);
-		return -EINVAL;
-	}
-	mutex_unlock(&priv->plugin_lock);
-	return 0;
-}
-EXPORT_SYMBOL(iaxxx_start_recognition);
-
-/*****************************************************************************
- * iaxxx_stop_recognition()
- * @brief Mark the KW as un-recognize
- *
- * @id			KW id
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_stop_recognition(struct device *dev, uint32_t id)
-{
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int i;
-	unsigned long bitmap;
-
-	dev_dbg(dev, "%s() Kw id %d\n", __func__, id);
-	mutex_lock(&priv->plugin_lock);
-	/* Find the slot id corresponding to the KW id */
-	for (i = 0; i < IAXXX_MAX_MODELS; i++) {
-		if (id == priv->iaxxx_state->kw_info.kw_id[i]) {
-			bitmap = priv->iaxxx_state->kw_info.kw_recognize_bitmap;
-			clear_bit(i, &bitmap);
-			priv->iaxxx_state->kw_info.kw_recognize_bitmap = bitmap;
-			break;
-		}
-	}
-	/* The KW id is not loaded */
-	if (i == IAXXX_MAX_MODELS) {
-		dev_err(dev, "%d invalid id unrecognize request\n", id);
-		mutex_unlock(&priv->plugin_lock);
-		return -EINVAL;
-	}
-	mutex_unlock(&priv->plugin_lock);
-	return 0;
-}
-EXPORT_SYMBOL(iaxxx_stop_recognition);
-
-/*****************************************************************************
- * iaxxx_get_kw_recognize_bitmap()
- * @brief Gives KW recognize bitmap
- *
- * @bitmap			returns bitmap
- *
- * @ret 0 on success, -EINVAL in case of error
- ****************************************************************************/
-int iaxxx_get_kw_recognize_bitmap(struct device *dev, uint32_t *bitmap)
-{
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-
-	dev_dbg(dev, "%s()\n", __func__);
-	mutex_lock(&priv->plugin_lock);
-	*bitmap = priv->iaxxx_state->kw_info.kw_recognize_bitmap;
-	dev_dbg(dev, "iaxxx 0x%x bitmap\n", *bitmap);
-	mutex_unlock(&priv->plugin_lock);
-	return 0;
-}
-EXPORT_SYMBOL(iaxxx_get_kw_recognize_bitmap);
 
 int iaxxx_core_get_param_blk(
 		struct device *dev,
