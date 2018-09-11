@@ -978,7 +978,7 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 		return 0;
 	}
 
-	if (chip->fg_restarting) {
+	if (chip->fg_restarting || !chip->fg_can_restart_flag) {
 		*val = chip->last_soc;
 		return 0;
 	}
