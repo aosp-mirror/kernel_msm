@@ -149,6 +149,23 @@ static int parse_dt(struct device *dev, struct synaptics_dsx_board_data *bdata)
 		bdata->reset_gpio = -1;
 	}
 
+	prop = of_find_property(np, "synaptics,switch-gpio", NULL);
+	if (prop && prop->length) {
+		bdata->switch_gpio = of_get_named_gpio_flags(np,
+				"synaptics,switch-gpio", 0, NULL);
+
+		retval = of_property_read_u32(np, "synaptics,switch-ssc-state",
+				&value);
+		if (retval < 0) {
+			dev_err(dev, "%s: Unable to read synaptics,switch-ssc-state property\n",
+					__func__);
+			return retval;
+		}
+		bdata->switch_ssc_state = value;
+	} else {
+		bdata->switch_gpio = -1;
+	}
+
 	prop = of_find_property(np, "synaptics,reset-delay-ms", NULL);
 	if (prop && prop->length) {
 		retval = of_property_read_u32(np, "synaptics,reset-delay-ms",

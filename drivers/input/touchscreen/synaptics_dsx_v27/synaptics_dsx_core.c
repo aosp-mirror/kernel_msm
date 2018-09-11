@@ -4009,6 +4009,18 @@ static int synaptics_rmi4_set_gpio(struct synaptics_rmi4_data *rmi4_data)
 		goto err_gpio_irq;
 	}
 
+	if (bdata->switch_gpio >= 0) {
+		retval = synaptics_rmi4_gpio_setup(
+				bdata->switch_gpio,
+				true, 1, !bdata->switch_ssc_state);
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to configure switch GPIO\n",
+					__func__);
+			goto err_gpio_switch;
+		}
+	}
+
 	if (bdata->power_gpio >= 0) {
 		retval = synaptics_rmi4_gpio_setup(
 				bdata->power_gpio,
@@ -4052,6 +4064,10 @@ err_gpio_reset:
 		synaptics_rmi4_gpio_setup(bdata->power_gpio, false, 0, 0);
 
 err_gpio_power:
+	if (bdata->switch_gpio >= 0)
+		synaptics_rmi4_gpio_setup(bdata->switch_gpio, false, 0, 0);
+
+err_gpio_switch:
 	synaptics_rmi4_gpio_setup(bdata->irq_gpio, false, 0, 0);
 
 err_gpio_irq:
@@ -4679,6 +4695,16 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
 	vir_button_map = bdata->vir_button_map;
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	rmi4_data->tbn = tbn_init(rmi4_data->pdev->dev.parent);
+	if (!rmi4_data->tbn) {
+		dev_err(&pdev->dev,
+			  "%s: TBN initialization error\n", __func__);
+		retval = -ENODEV;
+		goto err_init_tbn;
+	}
+#endif
+
 	retval = synaptics_rmi4_get_reg(rmi4_data, true);
 	if (retval < 0) {
 		dev_err(&pdev->dev,
@@ -4867,6 +4893,8 @@ err_set_input_dev:
 	if (bdata->power_gpio >= 0)
 		synaptics_rmi4_gpio_setup(bdata->power_gpio, false, 0, 0);
 
+	if (bdata->switch_gpio >= 0)
+		synaptics_rmi4_gpio_setup(bdata->switch_gpio, false, 0, 0);
 err_ui_hw_init:
 err_set_gpio:
 	synaptics_rmi4_enable_reg(rmi4_data, false);
@@ -4875,6 +4903,11 @@ err_enable_reg:
 	synaptics_rmi4_get_reg(rmi4_data, false);
 
 err_get_reg:
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	tbn_cleanup(rmi4_data->tbn);
+
+err_init_tbn:
+#endif
 	kfree(rmi4_data);
 
 	return retval;
@@ -4942,8 +4975,15 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	if (bdata->power_gpio >= 0)
 		synaptics_rmi4_gpio_setup(bdata->power_gpio, false, 0, 0);
 
+	if (bdata->switch_gpio >= 0)
+		synaptics_rmi4_gpio_setup(bdata->switch_gpio, false, 0, 0);
+
 	synaptics_rmi4_enable_reg(rmi4_data, false);
 	synaptics_rmi4_get_reg(rmi4_data, false);
+
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	tbn_cleanup(rmi4_data->tbn);
+#endif
 
 	kfree(rmi4_data);
 
@@ -4968,12 +5008,18 @@ static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
 			transition = *(int *)evdata->data;
 			pr_info("%s: DRM blank %d, event %ld\n",
 					__func__, transition, event);
-			if (transition == MSM_DRM_BLANK_POWERDOWN) {
-				synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
-				rmi4_data->fb_ready = false;
-			} else if (transition == MSM_DRM_BLANK_UNBLANK) {
+			if (transition == MSM_DRM_BLANK_UNBLANK) {
 				synaptics_rmi4_resume(&rmi4_data->pdev->dev);
 				rmi4_data->fb_ready = true;
+			}
+		} else if (event == MSM_DRM_EARLY_EVENT_BLANK) {
+			transition = *(int *)evdata->data;
+			pr_info("%s: DRM blank %d, event %ld\n",
+					__func__, transition, event);
+			if (transition == MSM_DRM_BLANK_POWERDOWN ||
+					transition == MSM_DRM_BLANK_LP) {
+				synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
+				rmi4_data->fb_ready = false;
 			}
 		}
 	}
@@ -5125,6 +5171,8 @@ static int synaptics_rmi4_suspend(struct device *dev)
 {
 	struct synaptics_rmi4_exp_fhandler *exp_fhandler;
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
 	unsigned char device_ctrl;
 
 	if (rmi4_data->stay_awake)
@@ -5166,6 +5214,19 @@ static int synaptics_rmi4_suspend(struct device *dev)
 		synaptics_rmi4_irq_enable(rmi4_data, false, false);
 		synaptics_rmi4_sleep_enable(rmi4_data, true);
 		synaptics_rmi4_free_fingers(rmi4_data);
+
+		if (bdata->switch_gpio >= 0) {
+			gpio_set_value(bdata->switch_gpio,
+					bdata->switch_ssc_state);
+			pr_debug("%s: swt switch gpio to %d\n",
+					__func__,
+					gpio_get_value(bdata->switch_gpio));
+		}
+
+#ifdef CONFIG_TOUCHSCREEN_TBN
+		if (rmi4_data->tbn)
+			tbn_release_bus(rmi4_data->tbn);
+#endif
 	}
 
 exit:
@@ -5189,6 +5250,8 @@ static int synaptics_rmi4_resume(struct device *dev)
 #endif
 	struct synaptics_rmi4_exp_fhandler *exp_fhandler;
 	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
+	const struct synaptics_dsx_board_data *bdata =
+			rmi4_data->hw_if->board_data;
 
 	if (rmi4_data->stay_awake)
 		return 0;
@@ -5198,10 +5261,22 @@ static int synaptics_rmi4_resume(struct device *dev)
 		goto exit;
 	}
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	if (rmi4_data->tbn)
+		tbn_request_bus(rmi4_data->tbn);
+#endif
+
+	if (bdata->switch_gpio >= 0) {
+		gpio_set_value(bdata->switch_gpio, !bdata->switch_ssc_state);
+		pr_debug("%s: swt switch gpio to %d\n",
+				__func__, gpio_get_value(bdata->switch_gpio));
+	}
+
 	rmi4_data->current_page = MASK_8BIT;
 	rmi4_data->noise_state.im_m = 0;
 	rmi4_data->noise_state.cidim_m = 0;
 
+	synaptics_rmi4_wakeup_gesture(rmi4_data, false);
 	synaptics_rmi4_sleep_enable(rmi4_data, false);
 	synaptics_rmi4_irq_enable(rmi4_data, true, false);
 

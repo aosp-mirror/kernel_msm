@@ -91,6 +91,8 @@ struct synaptics_dsx_board_data {
 	int power_on_state;
 	int reset_gpio;
 	int reset_on_state;
+	int switch_gpio;
+	int switch_ssc_state;
 	int max_y_for_2d;
 	unsigned long irq_flags;
 	unsigned short i2c_addr;

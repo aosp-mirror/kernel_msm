@@ -51,6 +51,10 @@
 #include <linux/earlysuspend.h>
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_TBN
+#include "../touch_bus_negotiator.h"
+#endif
+
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 38))
 #define KERNEL_ABOVE_2_6_38
 #endif
@@ -413,6 +417,9 @@ struct synaptics_rmi4_data {
 #endif
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
+#endif
+#ifdef CONFIG_TOUCHSCREEN_TBN
+	struct tbn_context *tbn;
 #endif
 	unsigned char current_page;
 	unsigned char button_0d_enabled;
