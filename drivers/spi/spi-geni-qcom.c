@@ -658,11 +658,10 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 	}
 
 	cs |= spi_slv->chip_select;
-	if (!xfer->cs_change) {
-		if (!list_is_last(&xfer->transfer_list,
-					&spi->cur_msg->transfers))
-			go_flags |= FRAGMENTATION;
-	}
+	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers) ==
+	    !xfer->cs_change)
+		go_flags |= FRAGMENTATION;
+
 	go_tre = setup_go_tre(cmd, cs, rx_len, go_flags, mas);
 
 	sg_init_table(xfer_tx_sg, tx_nent);
@@ -1055,11 +1054,9 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 		trans_len = (xfer->len / bytes_per_word) & TRANS_LEN_MSK;
 	}
 
-	if (!xfer->cs_change) {
-		if (!list_is_last(&xfer->transfer_list,
-					&spi->cur_msg->transfers))
-			m_param |= FRAGMENTATION;
-	}
+	if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers) ==
+	    !xfer->cs_change)
+		m_param |= FRAGMENTATION;
 
 	mas->cur_xfer = xfer;
 	if (m_cmd & SPI_TX_ONLY) {
