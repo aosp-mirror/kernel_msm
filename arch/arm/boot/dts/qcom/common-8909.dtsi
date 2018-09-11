@@ -79,7 +79,7 @@
                         qcom,bms-psy-name = "bms";
                         qcom,float-voltage-mv = <4400>;
                         qcom,charging-timeout = <180>;  /* 180 270 360 */
-                        qcom,recharge-thresh-mv = <150>; /* select 80 or 150mv */
+			qcom,recharge-thresh-mv = <80>; /* select 80 or 150mv */
 			qcom,iterm-ma = <20>; /* 20 30 50 75 */
                         qcom,fastchg-ma = <300>;
                         qcom,hot-bat-decidegc = <550>;
