@@ -565,10 +565,15 @@
 #define CS40L2X_BASIC_AMP_ERROR		0x04
 #define CS40L2X_BASIC_TEMP_RISE_WARN	0x08
 #define CS40L2X_BASIC_TEMP_ERROR	0x10
-#define CS40L2X_BASIC_SA_ERROR		0x20
 
 #define CS40L2X_GLOBAL_EN_MASK		0x00000001
 #define CS40L2X_GLOBAL_EN_SHIFT		0
+
+#define CS40L2X_BST_EN_MASK		0x00000030
+#define CS40L2X_BST_EN_SHIFT		4
+#define CS40L2X_BST_DISABLED		0
+#define CS40L2X_BST_BYPASS		1
+#define CS40L2X_BST_ENABLED		2
 
 #define CS40L2X_GP2_CTRL_MASK		0x07000000
 #define CS40L2X_GP2_CTRL_SHIFT		24
@@ -676,6 +681,22 @@
 
 #define CS40L2X_GAIN_CTRL_TRIG_MASK	0x00003FF0
 #define CS40L2X_GAIN_CTRL_TRIG_SHIFT	4
+
+#define CS40L2X_NUM_HW_ERRS		6
+
+#define CS40L2X_AMP_ERR			0x80000000
+#define CS40L2X_TEMP_ERR		0x00020000
+#define CS40L2X_TEMP_RISE_WARN		0x00008000
+#define CS40L2X_BST_SHORT_ERR		0x00000100
+#define CS40L2X_BST_UVP_ERR		0x00000080
+#define CS40L2X_BST_OVP_ERR		0x00000040
+
+#define CS40L2X_TEMP_ERR_RLS		0x00000040
+#define CS40L2X_TEMP_RISE_WARN_RLS	0x00000020
+#define CS40L2X_BST_UVP_ERR_RLS		0x00000010
+#define CS40L2X_BST_OVP_ERR_RLS		0x00000008
+#define CS40L2X_BST_SHORT_ERR_RLS	0x00000004
+#define CS40L2X_AMP_ERR_RLS		0x00000002
 
 #define CS40L2X_OTP_BOOT_ERR		0x80000000
 #define CS40L2X_OTP_BOOT_DONE		0x00000002
@@ -920,6 +941,12 @@
 #define CS40L2X_F0_OFFSET_NEG_MIN	0xE70000  /* -100 Hz */
 #define CS40L2X_F0_OFFSET_NEG_MAX	0xFFFFFF
 
+#define CS40L2X_IRQMASKSEQ_STRIDE	8
+#define CS40L2X_IRQMASKSEQ_MASK1	0x000000FF
+#define CS40L2X_IRQMASKSEQ_MASK2	0xFFFFFF00
+#define CS40L2X_IRQMASKSEQ_SHIFTUP	16
+#define CS40L2X_IRQMASKSEQ_SHIFTDN	8
+
 #define CS40L2X_Q_INDEX_MAX 		18
 
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
@@ -977,6 +1004,13 @@ struct cs40l2x_fw_desc {
 	const char *fw_file;
 };
 
+struct cs40l2x_hw_err_desc {
+	unsigned int irq_mask;
+	unsigned int rls_mask;
+	bool bst_cycle;
+	const char *err_name;
+};
+
 extern const unsigned char cs40l2x_bst_k1_table[4][5];
 extern const unsigned char cs40l2x_bst_k2_table[4][5];
 extern const unsigned char cs40l2x_bst_slope_table[4];
@@ -986,5 +1020,7 @@ extern const struct cs40l2x_otp_desc cs40l2x_otp_map[CS40L2X_NUM_OTP_MAPS];
 extern const unsigned int cs40l2x_pbq_dig_scale[CS40L2X_PBQ_SCALE_MAX + 1];
 
 extern const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS];
+
+extern const struct cs40l2x_hw_err_desc cs40l2x_hw_errs[CS40L2X_NUM_HW_ERRS];
 
 #endif /*__CS40L2X_H__*/

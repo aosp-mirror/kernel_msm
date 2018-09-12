@@ -79,6 +79,7 @@ struct cs40l2x_private {
 	struct cs40l2x_wseq_pair wseq_table[CS40L2X_WSEQ_LENGTH_MAX];
 	unsigned int wseq_length;
 	unsigned int event_control;
+	unsigned int hw_err_mask;
 	unsigned int peak_gpio1_enable;
 	int vpp_measured;
 	int ipp_measured;
@@ -3564,12 +3565,108 @@ static void cs40l2x_coeff_free(struct cs40l2x_private *cs40l2x)
 	}
 }
 
+static int cs40l2x_hw_err_rls(struct cs40l2x_private *cs40l2x,
+			unsigned int irq_mask)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	int ret, i;
+
+	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++)
+		if (cs40l2x_hw_errs[i].irq_mask == irq_mask)
+			break;
+
+	if (i == CS40L2X_NUM_HW_ERRS) {
+		dev_err(dev, "Unrecognized hardware error\n");
+		return -EINVAL;
+	}
+
+	dev_crit(dev, "Encountered %s error\n", cs40l2x_hw_errs[i].err_name);
+
+	if (cs40l2x_hw_errs[i].bst_cycle) {
+		ret = regmap_update_bits(regmap, CS40L2X_PWR_CTRL2,
+				CS40L2X_BST_EN_MASK,
+				CS40L2X_BST_DISABLED << CS40L2X_BST_EN_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to disable boost converter\n");
+			return ret;
+		}
+	}
+
+	ret = regmap_write(regmap, CS40L2X_IRQ2_STATUS1, irq_mask);
+	if (ret) {
+		dev_err(dev, "Failed to acknowledge hardware error\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L2X_PROTECT_REL_ERR_IGN, 0);
+	if (ret) {
+		dev_err(dev, "Failed to cycle error release (step 1 of 3)\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L2X_PROTECT_REL_ERR_IGN,
+			cs40l2x_hw_errs[i].rls_mask);
+	if (ret) {
+		dev_err(dev, "Failed to cycle error release (step 2 of 3)\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L2X_PROTECT_REL_ERR_IGN, 0);
+	if (ret) {
+		dev_err(dev, "Failed to cycle error release (step 3 of 3)\n");
+		return ret;
+	}
+
+	if (cs40l2x_hw_errs[i].bst_cycle) {
+		ret = regmap_update_bits(regmap, CS40L2X_PWR_CTRL2,
+				CS40L2X_BST_EN_MASK,
+				CS40L2X_BST_ENABLED << CS40L2X_BST_EN_SHIFT);
+		if (ret) {
+			dev_err(dev, "Failed to re-enable boost converter\n");
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int cs40l2x_hw_err_chk(struct cs40l2x_private *cs40l2x)
+{
+	int ret, i;
+	unsigned int val;
+
+	ret = regmap_read(cs40l2x->regmap, CS40L2X_IRQ2_STATUS1, &val);
+	if (ret) {
+		dev_err(cs40l2x->dev, "Failed to read hardware error status\n");
+		return ret;
+	}
+
+	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++)
+		if (val & cs40l2x_hw_errs[i].irq_mask) {
+			ret = cs40l2x_hw_err_rls(cs40l2x,
+					cs40l2x_hw_errs[i].irq_mask);
+			if (ret)
+				return ret;
+		}
+
+	return 0;
+}
+
+static const struct reg_sequence cs40l2x_irq2_masks[] = {
+	{CS40L2X_IRQ2_MASK1,		0xFFFFFFFF},
+	{CS40L2X_IRQ2_MASK2,		0xFFFFFFFF},
+	{CS40L2X_IRQ2_MASK3,		0xFFFF87FF},
+	{CS40L2X_IRQ2_MASK4,		0xFEFFFFFF},
+};
+
 static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int gpio_btndetect = CS40L2X_GPIO_BTNDETECT_GPIO1;
-	int ret;
+	unsigned int val;
+	int ret, i;
 
 	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL)
 		return 0;
@@ -3610,6 +3707,50 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 				cs40l2x->event_control);
 		if (ret) {
 			dev_err(dev, "Failed to configure event controls\n");
+			return ret;
+		}
+
+		for (i = 0; i < ARRAY_SIZE(cs40l2x_irq2_masks); i++) {
+			/* unmask hardware error interrupts */
+			val = cs40l2x_irq2_masks[i].def;
+			if (cs40l2x_irq2_masks[i].reg == CS40L2X_IRQ2_MASK1)
+				val &= ~cs40l2x->hw_err_mask;
+
+			/* upper half */
+			ret = regmap_write(regmap,
+					cs40l2x_dsp_reg(cs40l2x,
+						"IRQMASKSEQUENCE",
+						CS40L2X_XM_UNPACKED_TYPE)
+						+ i * CS40L2X_IRQMASKSEQ_STRIDE,
+					(val & CS40L2X_IRQMASKSEQ_MASK1)
+						<< CS40L2X_IRQMASKSEQ_SHIFTUP);
+			if (ret) {
+				dev_err(dev,
+					"Failed to write IRQMASKSEQ (upper)\n");
+				return ret;
+			}
+
+			/* lower half */
+			ret = regmap_write(regmap,
+					cs40l2x_dsp_reg(cs40l2x,
+						"IRQMASKSEQUENCE",
+						CS40L2X_XM_UNPACKED_TYPE) + 4
+						+ i * CS40L2X_IRQMASKSEQ_STRIDE,
+					(val & CS40L2X_IRQMASKSEQ_MASK2)
+						>> CS40L2X_IRQMASKSEQ_SHIFTDN);
+			if (ret) {
+				dev_err(dev,
+					"Failed to write IRQMASKSEQ (lower)\n");
+				return ret;
+			}
+		}
+
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x,
+						"IRQMASKSEQUENCE_VALID",
+						CS40L2X_XM_UNPACKED_TYPE), 1);
+		if (ret) {
+			dev_err(dev, "Failed to enable IRQMASKSEQ\n");
 			return ret;
 		}
 	}
@@ -3920,7 +4061,7 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 		dev_warn(dev, "Ignored default gpio4_fall_index\n");
 	}
 
-	return 0;
+	return cs40l2x_hw_err_chk(cs40l2x);
 }
 
 static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
@@ -5111,34 +5252,19 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 	for (i = 0; i < CS40L2X_BASIC_TIMEOUT_COUNT; i++) {
 		ret = regmap_read(regmap, CS40L2X_BASIC_AMP_STATUS, &val);
 		if (ret) {
-			dev_err(dev, "Failed to read basic-mode status\n");
+			dev_err(dev, "Failed to read basic-mode boot status\n");
 			return ret;
 		}
 
-		if (val != CS40L2X_BASIC_NO_STATUS)
+		if (val & CS40L2X_BASIC_BOOT_DONE)
 			break;
 
 		usleep_range(10000, 10100);
 	}
 
-	if (val & CS40L2X_BASIC_OTP_ERROR)
-		dev_err(dev, "Basic-mode OTP error\n");
-
-	if (val & CS40L2X_BASIC_AMP_ERROR)
-		dev_err(dev, "Basic-mode amplifier short error\n");
-
-	if (val & CS40L2X_BASIC_TEMP_RISE_WARN)
-		dev_err(dev, "Basic-mode temperature-rise error\n");
-
-	if (val & CS40L2X_BASIC_TEMP_ERROR)
-		dev_err(dev, "Basic-mode over-temperature error\n");
-
-	if (val & CS40L2X_BASIC_SA_ERROR)
-		dev_err(dev, "Basic-mode stream arbiter error\n");
-
-	if (val != CS40L2X_BASIC_BOOT_DONE) {
-		dev_err(dev, "Unexpected basic-mode status: %02X\n", val);
-		return -EIO;
+	if (i == CS40L2X_BASIC_TIMEOUT_COUNT) {
+		dev_err(dev, "Timed out waiting for basic-mode boot\n");
+		return -ETIME;
 	}
 
 	ret = cs40l2x_ack_write(cs40l2x, CS40L2X_BASIC_SHUTDOWNREQUEST, 1);
@@ -5154,11 +5280,38 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 	}
 
 	if (val != CS40L2X_BASIC_SHUTDOWN) {
-		dev_err(dev, "Unexpected basic-mode state: %02X\n", val);
+		dev_err(dev, "Unexpected basic-mode state: 0x%02X\n", val);
 		return -EBUSY;
 	}
 
-	dev_dbg(dev, "Basic-mode haptics successfully stopped\n");
+	ret = regmap_read(regmap, CS40L2X_BASIC_AMP_STATUS, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read basic-mode error status\n");
+		return ret;
+	}
+
+	if (val & CS40L2X_BASIC_OTP_ERROR) {
+		dev_err(dev, "Encountered basic-mode OTP error\n");
+		return -EIO;
+	}
+
+	if (val & CS40L2X_BASIC_AMP_ERROR) {
+		ret = cs40l2x_hw_err_rls(cs40l2x, CS40L2X_AMP_ERR);
+		if (ret)
+			return ret;
+	}
+
+	if (val & CS40L2X_BASIC_TEMP_RISE_WARN) {
+		ret = cs40l2x_hw_err_rls(cs40l2x, CS40L2X_TEMP_RISE_WARN);
+		if (ret)
+			return ret;
+	}
+
+	if (val & CS40L2X_BASIC_TEMP_ERROR) {
+		ret = cs40l2x_hw_err_rls(cs40l2x, CS40L2X_TEMP_ERR);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -5357,6 +5510,15 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 	unsigned int val;
 	int event_count = 0;
 	int ret, i;
+	irqreturn_t ret_irq = IRQ_NONE;
+
+	if (!cs40l2x->vibe_init_success)
+		return ret_irq;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP)
+		goto err_mutex;
 
 	for (i = 0; i < ARRAY_SIZE(cs40l2x_event_regs); i++) {
 		/* skip disabled event notifiers */
@@ -5371,13 +5533,18 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 		if (ret) {
 			dev_err(dev, "Failed to read %s\n",
 					cs40l2x_event_regs[i]);
-			continue;
+			goto err_mutex;
 		}
 
 		/* any event handling goes here */
 		switch (val) {
 		case CS40L2X_EVENT_CTRL_NONE:
 			continue;
+		case CS40L2X_EVENT_CTRL_HARDWARE:
+			ret = cs40l2x_hw_err_chk(cs40l2x);
+			if (ret)
+				goto err_mutex;
+			break;
 		case CS40L2X_EVENT_CTRL_TRIG_STOP:
 		case CS40L2X_EVENT_CTRL_GPIO_STOP:
 			if (asp_timeout > 0)
@@ -5393,13 +5560,13 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 		case CS40L2X_EVENT_CTRL_GPIO1_FALL
 			... CS40L2X_EVENT_CTRL_GPIO_START:
 		case CS40L2X_EVENT_CTRL_READY:
-		case CS40L2X_EVENT_CTRL_HARDWARE:
 			dev_dbg(dev, "Found notifier %d in %s\n",
 					val, cs40l2x_event_regs[i]);
 			break;
 		default:
 			dev_err(dev, "Unrecognized notifier %d in %s\n",
 					val, cs40l2x_event_regs[i]);
+			goto err_mutex;
 		}
 
 		ret = regmap_write(regmap,
@@ -5410,20 +5577,26 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 		if (ret) {
 			dev_err(dev, "Failed to acknowledge %s\n",
 					cs40l2x_event_regs[i]);
-			return IRQ_NONE;
+			goto err_mutex;
 		}
 
 		ret = regmap_write(regmap, CS40L2X_MBOX_POWERCONTROL,
 				CS40L2X_POWERCONTROL_WAKEUP);
 		if (ret) {
 			dev_err(dev, "Failed to free /ALERT output\n");
-			return IRQ_NONE;
+			goto err_mutex;
 		}
 
 		event_count++;
 	}
 
-	return (event_count > 0) ? IRQ_HANDLED : IRQ_NONE;
+	if (event_count > 0)
+		ret_irq = IRQ_HANDLED;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret_irq;
 }
 
 static struct regmap_config cs40l2x_regmap = {
@@ -5501,6 +5674,9 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	cs40l2x->comp_enable_redc = !pdata->redc_comp_disable;
 	cs40l2x->comp_enable_f0 = true;
 
+	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++)
+		cs40l2x->hw_err_mask |= cs40l2x_hw_errs[i].irq_mask;
+
 	ret = regulator_bulk_enable(cs40l2x->num_supplies, cs40l2x->supplies);
 	if (ret) {
 		dev_err(dev, "Failed to enable core supplies: %d\n", ret);
@@ -5524,28 +5700,23 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	if (ret)
 		goto err;
 
-	/* interrupts are supported by revision B1 firmware only */
-	if (cs40l2x->revid == CS40L2X_REVID_B1) {
-		if (i2c_client->irq) {
-			ret = devm_request_threaded_irq(dev, i2c_client->irq,
-					NULL, cs40l2x_irq,
-					IRQF_ONESHOT | IRQF_TRIGGER_LOW,
-					i2c_client->name, cs40l2x);
-			if (ret) {
-				dev_err(dev,
-					"Failed to request IRQ: %d\n", ret);
-				goto err;
-			}
-
-			if (pdata->asp_bclk_freq && pdata->asp_width
-					&& cs40l2x->devid == CS40L2X_DEVID_L25A)
-				cs40l2x->event_control =
-						CS40L2X_EVENT_END_ENABLED;
-			else
-				cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
-		} else {
-			cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP && i2c_client->irq) {
+		ret = devm_request_threaded_irq(dev, i2c_client->irq,
+				NULL, cs40l2x_irq,
+				IRQF_ONESHOT | IRQF_TRIGGER_LOW,
+				i2c_client->name, cs40l2x);
+		if (ret) {
+			dev_err(dev, "Failed to request IRQ: %d\n", ret);
+			goto err;
 		}
+
+		cs40l2x->event_control = CS40L2X_EVENT_HARDWARE_ENABLED;
+
+		if (pdata->asp_bclk_freq && pdata->asp_width
+				&& cs40l2x->devid == CS40L2X_DEVID_L25A)
+			cs40l2x->event_control |= CS40L2X_EVENT_END_ENABLED;
+	} else {
+		cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
 	}
 
 	ret = cs40l2x_init(cs40l2x);
@@ -5570,6 +5741,9 @@ err:
 static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 {
 	struct cs40l2x_private *cs40l2x = i2c_get_clientdata(i2c_client);
+
+	if (i2c_client->irq)
+		free_irq(i2c_client->irq, cs40l2x);
 
 	if (cs40l2x->vibe_init_success) {
 		led_classdev_unregister(&cs40l2x->led_dev);

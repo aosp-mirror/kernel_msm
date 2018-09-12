@@ -994,3 +994,42 @@ const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
 		.fw_file = "cs40l25a_cal.wmfw",
 	},
 };
+
+const struct cs40l2x_hw_err_desc cs40l2x_hw_errs[CS40L2X_NUM_HW_ERRS] = {
+	{
+		.irq_mask = CS40L2X_AMP_ERR,
+		.rls_mask = CS40L2X_AMP_ERR_RLS,
+		.bst_cycle = false,
+		.err_name = "amplifier short",
+	},
+	{
+		.irq_mask = CS40L2X_TEMP_ERR,
+		.rls_mask = CS40L2X_TEMP_ERR_RLS,
+		.bst_cycle = false,
+		.err_name = "overtemperature",
+	},
+	{
+		.irq_mask = CS40L2X_TEMP_RISE_WARN,
+		.rls_mask = CS40L2X_TEMP_RISE_WARN_RLS,
+		.bst_cycle = false,
+		.err_name = "temperature rise",
+	},
+	{
+		.irq_mask = CS40L2X_BST_SHORT_ERR,
+		.rls_mask = CS40L2X_BST_SHORT_ERR_RLS,
+		.bst_cycle = true,
+		.err_name = "boost converter short",
+	},
+	{
+		.irq_mask = CS40L2X_BST_UVP_ERR,
+		.rls_mask = CS40L2X_BST_UVP_ERR_RLS,
+		.bst_cycle = true,
+		.err_name = "boost converter undervoltage",
+	},
+	{
+		.irq_mask = CS40L2X_BST_OVP_ERR,
+		.rls_mask = CS40L2X_BST_OVP_ERR_RLS,
+		.bst_cycle = true,
+		.err_name = "boost converter overvoltage",
+	},
+};
