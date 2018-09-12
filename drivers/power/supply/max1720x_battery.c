@@ -430,10 +430,10 @@ static inline int reg_to_twos_comp_int(u16 val)
 	return -(val & 0x8000) + (val & 0x7FFF);
 }
 
-static inline int reg_to_micro_amp_h(u16 val, u16 rsense)
+static inline int reg_to_micro_amp_h(s16 val, u16 rsense)
 {
 	/* LSB: 5.0μVh/RSENSE ; Rsense LSB is 10μΩ */
-	return div_s64((u64) val * 500000, rsense);
+	return div_s64((s64) val * 500000, rsense);
 }
 
 static inline int reg_to_micro_volt(u16 val)
