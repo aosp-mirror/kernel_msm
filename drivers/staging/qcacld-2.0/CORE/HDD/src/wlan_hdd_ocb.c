@@ -1784,6 +1784,12 @@ static int __wlan_hdd_cfg80211_dcc_get_stats(struct wiphy *wiphy,
 	request_array = nla_data(
 		tb[QCA_WLAN_VENDOR_ATTR_DCC_GET_STATS_REQUEST_ARRAY]);
 
+	/* Check channel count. Per 11p spec, max 2 channels allowed */
+	if (!channel_count || channel_count > CFG_TGT_NUM_OCB_CHANNELS) {
+		hddLog(LOGE, FL("Invalid channel_count %d"), channel_count);
+		return -EINVAL;
+	}
+
 	/* Initialize the callback context */
 	hdd_request = hdd_request_alloc(&params);
 	if (!hdd_request) {
