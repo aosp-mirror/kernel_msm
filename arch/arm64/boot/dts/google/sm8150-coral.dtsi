@@ -13,4 +13,5 @@
 #include "sm8150-floral-common.dtsi"
 #include "sm8150-coral-audio.dtsi"
 #include "sm8150-coral-display.dtsi"
+#include "sm8150-coral-battery.dtsi"
 

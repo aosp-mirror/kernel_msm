@@ -12,4 +12,4 @@
 
 #include "sm8150-floral-common.dtsi"
 #include "sm8150-flame-audio.dtsi"
-
+#include "sm8150-flame-battery.dtsi"

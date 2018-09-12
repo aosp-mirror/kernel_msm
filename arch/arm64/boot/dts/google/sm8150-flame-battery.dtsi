@@ -1,0 +1,42 @@
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&qupv3_se0_i2c {
+	status = "ok";
+	max1720x_fg: max1720x@36 { };
+};
+#include "sm8150-floral-battery.dtsi"
+
+&google_charger {
+	google,chg-battery-capacity = <2186>;
+};
+
+&max1720x_fg {
+
+	maxim,n_regval =  /bits/ 16 <
+		0x9C 0x0300	/* nIChgTerm Register */
+		0x9D 0x0EB4	/* nFilterCfg Register */
+		0x9F 0x2606	/* nLearnCfg Register */
+		0xB0 0x7217	/* nConfig Register */
+		0xB3 0x0B00	/* nDesignCap Register */
+		0xB5 0x9C01     /* nPackCfg Register */
+		0xB7 0x33C1	/* nConvgCfg Register */
+		0xB8 0xCDF0	/* nNVCfg0 Register */
+		0xB9 0xB00E	/* nNVCfg1 Register */
+		0xBA 0xFF0A	/* nNVCfg2 Register */
+		0xC0 0xFF00	/* nVAlrtTh Register */
+		0xC1 0x7F80	/* nTAlrtTh Register */
+		0xC2 0xFF00	/* nSAlrtTh Register */
+		0xC6 0x5A05	/* nFullSOCThr Register */
+		0xD5 0x2D7D	/* nRFastVShdn Register */
+	>;
+};

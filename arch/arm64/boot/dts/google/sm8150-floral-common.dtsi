@@ -18,7 +18,6 @@
 
 #include "sm8150-floral-airbrush.dtsi"
 #include "sm8150-floral-audio.dtsi"
-#include "sm8150-floral-battery.dtsi"
 #include "sm8150-floral-camera-pmic.dtsi"
 #include "sm8150-floral-camera-sensor.dtsi"
 #include "sm8150-floral-citadel.dtsi"
@@ -112,15 +111,6 @@
 	qcom,vddp-ref-clk-max-microamp = <100>;
 
 	status = "ok";
-};
-
-&pm8150b_charger {
-	io-channels = <&pm8150b_vadc ADC_USB_IN_V_16>,
-		      <&pm8150b_vadc ADC_USB_IN_I>,
-		      <&pm8150b_vadc ADC_CHG_TEMP>;
-	io-channel-names = "usb_in_voltage",
-			   "usb_in_current",
-			   "chg_temp";
 };
 
 &mhi_0 {

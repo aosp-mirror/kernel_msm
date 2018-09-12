@@ -42,61 +42,38 @@
 	};
 };
 
-/* smart battery: maxim fuel gauge */
-/* FIXME: proto will use a different bus */
-&qupv3_se15_i2c {
-	status = "ok";
-	max1720x_fg: max1720x@36 {
-		compatible = "maxim,max1720x";
-		reg-names = "m5db", "nvram";
-		reg = <0x36 0x0b>;
-
-		/*
-		 * FIXME: enable interrupts
-		 * interrupt-parent = <&spmi_bus>;
-		 * interrupt-names = "max1720x_fg";
-		 * interrupts = <0x2 0xC7 0x0 IRQ_TYPE_LEVEL_LOW>;
-		 * fg,irq-gpio = <&pm8150b_gpios 8 GPIO_ACTIVE_LOW>;
-		 */
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&fg_int_default>;
-
-		/* enable experimental max17301 support */
-		maxim,max1730x-compat;
-
-		/* FIXME: force resistor ID with maxim,force-batt-or read it*/
-		maxim,force-hard-reset;
-
-		maxim,nconvgcfg-temp-hysteresis = <10>;
-		maxim,nconvgcfg-temp-limits = /bits/ 16
-		    <(-70) (-45) (-20) (-3) 14 30 55 80
-		     96 113 130 155 180 230>;
-		maxim,nconvgcfg-values = /bits/ 16
-		    <0xe7c0 0xd7c0 0xc7c0 0xb7c0 0xa740 0x9740 0x86c0 0x7640
-		     0x65c0 0x54c0 0x4440 0x3340 0x2240 0x1140>;
-	};
-};
-
 &max1720x_fg {
-	maxim,n_regval =  /bits/ 16 <
-	    0x9C 0x0380 /* nIChgTerm = 280.0 mA */
-	    0xB7 0x33C1 /* nConvgCfg: RepLow=6% VoltLowOff=140mV MinSlopeX=8/16 RepL_per_stage=1% */
-	    0x9F 0x2606 /* nLearnCfg: Filt Empty */
-	    0xB0 0x7217 /* nConfig: SS TS VS Ten Aen dSOCen TAlrtEn */
-	    0xC0 0xFF00 /* nVAlrtTh: disabled */
-	    0xC1 0x7F80 /* nTAlrtTh: disabled */
-	    0xC2 0xFF00 /* nSAlrtTh: disabled */
-	    0x9D 0x0EB4 /* nFilterCfg: TEMP=90.0s MIX=12.8h VOLT=90.0s CURR=5.625s */
-	    0xC6 0x5A05 /* nFullSOCThr = 90% */
-	    0xD5 0x307D /* nRFastVShdn: rFast=93mohm VShdn=2.5V */
-	    0xB8 0xCDF0 /* nNVCfg0: enOCV enX enCfg enFCfg enLCfg enICT enCG enVE enDC */
-	    0xB9 0xB00E /* nNVCfg1: enTGO enFTh enRFVSH enAT enCRV enCTE */
-	    0xBA 0xFF0A /* nNVCfg2: enT enSOC enMMT enMMV enMMC enVT enFC enIAvg CYCLESpSAVE=5.0 */
-	    0xB3 0x0D80 /* nDesignCap: 3456 mAh */
-	>;
-};
+	compatible = "maxim,max1720x";
+	reg-names = "m5db", "nvram";
+	reg = <0x36 0x0b>;
 
+	/*
+	 * FIXME: enable interrupts
+	 * interrupt-parent = <&spmi_bus>;
+	 * interrupt-names = "max1720x_fg";
+	 * interrupts = <0x2 0xC7 0x0 IRQ_TYPE_LEVEL_LOW>;
+	 * fg,irq-gpio = <&pm8150b_gpios 8 GPIO_ACTIVE_LOW>;
+	 */
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&fg_int_default>;
+
+	/* enable experimental max17301 support */
+	maxim,max1730x-compat;
+
+	/* FIXME: force resistor ID with maxim,force-batt-or read it*/
+	maxim,force-hard-reset;
+
+	maxim,nconvgcfg-temp-hysteresis = <10>;
+	maxim,nconvgcfg-temp-limits = /bits/ 16
+		<(-70) (-45) (-20) (-3) 14 30 55 80
+		96 113 130 155 180 230>;
+	maxim,nconvgcfg-values = /bits/ 16
+		<0xe7c0 0xd7c0 0xc7c0 0xb7c0 0xa740 0x9740 0x86c0 0x7640
+		0x65c0 0x54c0 0x4440 0x3340 0x2240 0x1140>;
+
+
+};
 
 &soc {
 	google_charger: google,charger {
@@ -108,10 +85,11 @@
 		// see b/113116988
 		// google,wlc-power-supply = "wireless";
 
-		google,fv-uv-margin-dpct = <1030>;
-		google,chg-cc-tolerance = <25>;
-		/* FIXME: isn't this 10mV?*/
-		google,cv-hw-resolution = <25>;
+		google,chg-cc-tolerance = <250>;
+		google,fv-uv-margin-dpct = <1050>;
+
+		/* FIXME: b/113611881 */
+		google,cv-hw-resolution = <25000>;
 
 		/* FIXME: charge table for floral */
 		google,chg-temp-limits = <0 100 200 420 460 480 550>;
@@ -124,10 +102,6 @@
 			 50  50   0
 			 30   0   0
 		>;
-
-		/* FIXME: Split to Flame/Coral */
-		google,chg-battery-capacity = <3430>;
-
 	};
 
 	/* FIXME: overheat mitigation */
