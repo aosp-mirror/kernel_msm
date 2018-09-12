@@ -46,6 +46,9 @@ struct pixart_pat9126_data {
 	struct pinctrl_state *pinctrl_state_active;
 	struct pinctrl_state *pinctrl_state_suspend;
 	struct pinctrl_state *pinctrl_state_release;
+	struct work_struct work;
+	struct workqueue_struct *workqueue;
+	struct delayed_work polling_work;
 	#if defined(CONFIG_FB)
 		struct notifier_block fb_notif;
 	#endif
@@ -231,16 +234,18 @@ void pat9126_exit_pix_grab_mode(struct i2c_client *client)
 		PIXART_PAT9126_PIXEL_GRAB_CLOCK_VAL1);
 }
 
-static irqreturn_t pat9126_irq(int irq, void *dev_data)
+static void pat9126_work_handler(struct work_struct *work)
 {
 	int16_t delta_x = 0, delta_y = 0;
-	struct pixart_pat9126_data *data = dev_data;
+	struct delayed_work *dw = to_delayed_work(work);
+	struct pixart_pat9126_data *data = \
+            container_of(dw, struct pixart_pat9126_data, polling_work);
 	struct input_dev *ipdev = data->input;
 	struct device *dev = &data->client->dev;
 
 	/* check if MOTION bit is set or not */
 	ots_read_motion(data->client, &delta_x, &delta_y);
-	pr_debug("[PAT9126]delta_x: %d, delta_y: %d \n", delta_x, delta_y);
+	pr_debug("[PAT9126]delta_x: %d, delta_y: %d\n", delta_x, delta_y);
 
 	/* Inverse x depending upon the device orientation */
 	delta_x = (data->inverse_x) ? -delta_x : delta_x;
@@ -254,6 +259,25 @@ static irqreturn_t pat9126_irq(int irq, void *dev_data)
 		/* Send delta_x as REL_WHEEL for rotation */
 		input_report_rel(ipdev, REL_WHEEL, (s8) delta_x);
 		input_sync(ipdev);
+	}
+	enable_irq(data->client->irq);
+}
+
+static irqreturn_t pat9126_irq(int irq, void *dev_data)
+{
+	struct pixart_pat9126_data *data = dev_data;
+	bool result = false;
+
+	disable_irq_nosync(irq);
+	if (!work_pending(&data->work)) {
+		result = schedule_delayed_work(&data->polling_work, msecs_to_jiffies(10));
+		if (result == false) {
+			/* queue_work fail */
+			pr_err("%s:queue_work fail.\n",__func__);
+		}
+	} else {
+		/* work pending */
+		pr_err("%s:queue_work pending.\n",__func__);
 	}
 
 	return IRQ_HANDLED;
@@ -973,7 +997,7 @@ static int pat9126_i2c_probe(struct i2c_client *client,
 		dev_err(dev, "Failed to initialize sensor %d\n", err);
 		return err;
 	}
-
+	INIT_DELAYED_WORK(&data->polling_work, pat9126_work_handler);
 	if (already_calibrated == 1 && en_irq_cnt == 0) {
 		pr_err("[PAT9126]: Probe Enable Irq. \n");
 		err = devm_request_threaded_irq(dev, client->irq, NULL, pat9126_irq,
@@ -1009,6 +1033,8 @@ static int pat9126_i2c_probe(struct i2c_client *client,
 err_sysfs_create:
 err_request_threaded_irq:
 err_power_on:
+	cancel_work_sync(&data->work);
+	destroy_workqueue(data->workqueue);
 	regulator_set_optimum_mode(data->vdd, 0);
 	regulator_set_optimum_mode(data->pvddio_reg, 0);
 	regulator_set_optimum_mode(data->vld, 0);
@@ -1050,6 +1076,7 @@ static int pat9126_suspend(struct device *dev)
 	struct pixart_pat9126_data *data =
 		(struct pixart_pat9126_data *) dev_get_drvdata(dev);
 
+	cancel_delayed_work_sync(&data->polling_work);
 	printk(KERN_DEBUG "[PAT9126]%s, start\n", __func__);
 	if (data->pinctrl) {
 		rc = pinctrl_select_state(data->pinctrl,
