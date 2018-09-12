@@ -101,7 +101,7 @@ static int get_v4l2_window32(struct v4l2_window __user *kp,
 static int put_v4l2_window32(struct v4l2_window __user *kp,
 			     struct v4l2_window32 __user *up)
 {
-	struct v4l2_clip __user *kclips = kp->clips;
+	struct v4l2_clip __user *kclips;
 	struct v4l2_clip32 __user *uclips;
 	compat_caddr_t p;
 	u32 clipcount;
@@ -116,6 +116,8 @@ static int put_v4l2_window32(struct v4l2_window __user *kp,
 	if (!clipcount)
 		return 0;
 
+	if (get_user(kclips, &kp->clips))
+		return -EFAULT;
 	if (get_user(p, &up->clips))
 		return -EFAULT;
 	uclips = compat_ptr(p);
@@ -392,10 +394,7 @@ static int get_v4l2_plane32(struct v4l2_plane __user *up,
 	if (copy_in_user(up, up32, 2 * sizeof(__u32)) ||
 	    copy_in_user(&up->data_offset, &up32->data_offset,
 			 sizeof(up->data_offset)) ||
-	    copy_in_user(up->reserved, up32->reserved,
-			 sizeof(up->reserved)) ||
-	    copy_in_user(&up->length, &up32->length,
-			 sizeof(up->length)))
+	    copy_in_user(up->reserved, up32->reserved, sizeof(up->reserved)))
 		return -EFAULT;
 
 	switch (memory) {
@@ -426,10 +425,9 @@ static int put_v4l2_plane32(struct v4l2_plane __user *up,
 	unsigned long p;
 
 	if (copy_in_user(up32, up, 2 * sizeof(__u32)) ||
-	    copy_in_user(up32->reserved, up->reserved,
-			 sizeof(up32->reserved)) ||
 	    copy_in_user(&up32->data_offset, &up->data_offset,
-			 sizeof(up->data_offset)))
+			 sizeof(up->data_offset)) ||
+	    copy_in_user(up32->reserved, up->reserved, sizeof(up32->reserved)))
 		return -EFAULT;
 
 	switch (memory) {
@@ -868,7 +866,7 @@ static int put_v4l2_ext_controls32(struct file *file,
 	    get_user(kcontrols, &kp->controls))
 		return -EFAULT;
 
-	if (!count)
+	if (!count || count > (U32_MAX/sizeof(*ucontrols)))
 		return 0;
 	if (get_user(p, &up->controls))
 		return -EFAULT;
@@ -1224,7 +1222,6 @@ static long do_video_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		break;
 
 	case VIDIOC_G_EDID:
-	case VIDIOC_S_EDID:
 		err = put_v4l2_edid32(up_native, up);
 		break;
 
