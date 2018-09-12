@@ -74,9 +74,7 @@
 			synaptics,max-y-for-2d = <389>;
 			synaptics,wakeup-gestures-en = <1>;
 			synaptics,resume-in-workqueue;
-			synaptics,x-flip;
-			synaptics,y-flip;
-
+			synaptics,fw-name = "PR1814809-s1222_30303032.img";
 			synaptics,reset-gpio = <&msm_gpio 31 0x0>;
 			synaptics,reset-delay-ms = <200>;
 			synaptics,reset-on-state = <0>;
@@ -299,12 +297,31 @@
 	};
 };
 
-&system_fstab {
-	fsmgr_flags = "wait";
-};
-
-&vendor_fstab {
-	fsmgr_flags = "wait";
+&firmware {
+	android {
+		compatible = "android,firmware";
+		fstab {
+			compatible = "android,fstab";
+				vendor {
+				compatible = "android,vendor";
+				dev = "/dev/block/platform/soc/7824900.sdhci/
+					by-name/vendor";
+				type = "ext4";
+				mnt_flags = "ro,barrier=1,discard";
+				fsmgr_flags = "wait";
+				status = "ok";
+			};
+				system {
+				compatible = "android,system";
+				dev = "/dev/block/platform/soc/7824900.sdhci/
+					by-name/system";
+				type = "ext4";
+				mnt_flags = "ro,barrier=1,discard";
+				fsmgr_flags = "wait";
+				status = "ok";
+			};
+		};
+	};
 };
 
 &mdss_dsi0{
