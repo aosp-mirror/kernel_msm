@@ -39,7 +39,7 @@ static uint64_t ipu_stp_reg_entry_read(
 			debug);
 	struct paintbox_data *pb = debug->pb;
 
-	/* TODO(ahampson):  Move to a JQS message based system. */
+	/* TODO(b/115386014):  Move to a JQS message based system. */
 
 	ipu_stp_select(pb, stp->stp_id);
 	return ipu_readq(pb->dev, IPU_CSR_STP_OFFSET + reg_entry->reg_offset);
@@ -53,7 +53,7 @@ static void ipu_stp_reg_entry_write(
 			debug);
 	struct paintbox_data *pb = debug->pb;
 
-	/* TODO(ahampson):  Move to a JQS message based system. */
+	/* TODO(b/115386014):  Move to a JQS message based system. */
 
 	ipu_stp_select(pb, stp->stp_id);
 	ipu_writeq(pb->dev, val, IPU_CSR_STP_OFFSET + reg_entry->reg_offset);

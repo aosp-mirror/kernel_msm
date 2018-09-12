@@ -71,7 +71,7 @@ int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 		dev_err(pb->dev,
 				"%s: jqs reported error 0x%08x for msg 0x%08x\n",
 				__func__, rsp.error, rsp.msg_type);
-		/* TODO(ahampson,rogerwolff):  Need to implement a JQS error to
+		/* TODO(b/115401717):  Need to implement a JQS error to
 		 * errno conversion function.
 		 */
 		return -EIO;
@@ -194,7 +194,7 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 
 	ret = ipu_resource_session_release(pb, session);
 
-	/* TODO(ahampson):  Handle errors will releasing resources */
+	/* TODO(b/115408270):  Handle errors will releasing resources */
 	WARN_ON(ret < 0);
 
 	ipu_resource_remove_session_from_wait_list(session);
@@ -205,7 +205,7 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 	ipu_buffer_release_session(pb, session);
 
 	ipu_jqs_send_close_session(pb, session);
-	/* TODO: (masterwilliams) errors from close session are not propigated,
+	/* TODO: (b/114760293) errors from close session are not propagated,
 	 * this should result in a catastrophic error and a reset of JQS
 	 */
 
@@ -270,7 +270,7 @@ static long ipu_client_ioctl(struct file *fp, unsigned int cmd,
 	int ret;
 
 	switch (cmd) {
-	/* TODO(ahampson):  Migrate the IPU Runtime to a IPU_* capabilities
+	/* TODO(b/115407896):  Migrate the IPU Runtime to a IPU_* capabilities
 	 * ioctl.
 	 */
 	case PB_GET_IPU_CAPABILITIES:
@@ -353,7 +353,7 @@ static void ipu_client_firmware_down(struct device *dev)
 
 	dev_info(pb->dev, "JQS firmware is going down\n");
 
-	/* TODO(ahampson):  This needs to handle a reset notification in the
+	/* TODO(b/114760293):  This needs to handle a reset notification in the
 	 * middle of a job.  Right now this will only work when the device is
 	 * quiescent.
 	 */
@@ -365,7 +365,7 @@ static void ipu_client_firmware_up(struct device *dev)
 
 	dev_info(pb->dev, "JQS firmware is ready\n");
 
-	/* TODO(ahampson):  This needs to handle a reset notification in the
+	/* TODO(b/114760293):  This needs to handle a reset notification in the
 	 * middle of a job.  Right now this will only work when the device is
 	 * quiescent.
 	 */

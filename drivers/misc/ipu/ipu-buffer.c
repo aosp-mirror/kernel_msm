@@ -239,7 +239,7 @@ int ipu_buffer_dma_buf_register_ioctl(struct paintbox_data *pb,
 		if (ret < 0)
 			goto unmap_buffer;
 	} else {
-		/* TODO(ahampson):  Return an error if the scatter list is
+		/* TODO(b/115418810):  Return an error if the scatter list is
 		 * non-continuous.
 		 */
 	}
@@ -297,7 +297,7 @@ int ipu_buffer_dma_buf_unregister_ioctl(struct paintbox_data *pb,
 		goto err_exit;
 	}
 
-	/* TODO(ahampson):  Other errors returned by
+	/* TODO(b/114760293):  Other errors returned by
 	 * ipu_buffer_send_jqs_buffer_unregister() would be catastrophic
 	 * errors and we need to take the catastrophic error path once that is
 	 * implemented.  In the event of a catastrophic error the driver should
@@ -333,8 +333,8 @@ void ipu_buffer_release_session(struct paintbox_data *pb,
 	struct paintbox_buffer *buffer;
 	int buffer_id;
 
-	/* TODO(ahampson):  We probably want to tell JQS to just invalidate the
-	 * whole table rather than tell it to remove individual entries.
+	/* TODO(b/115419412):  We probably want to tell JQS to just invalidate
+	 * the whole table rather than tell it to remove individual entries.
 	 */
 
 	idr_for_each_entry(&session->buffer_idr, buffer, buffer_id)

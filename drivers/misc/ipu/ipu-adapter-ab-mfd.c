@@ -22,9 +22,6 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
-/* TODO(ahampson):  Lassen needs to move MSI enum to a public header. */
-//#include "../../mfd/abc-pcie-private.h"
-
 #include "ipu-adapter.h"
 #include "ipu-core-jqs-msg-transport.h"
 #include "ipu-regs.h"
@@ -46,28 +43,18 @@ struct ipu_adapter_ab_mfd_data {
 };
 
 /* Paintbox IO virtual address space bounds
- * TODO:  These are place holder values.  I need to figure out the
+ * TODO(b/115432213):  These are place holder values.  I need to figure out the
  * correct value for these.  This comes out to 512MB right now.
  */
 #define PAINTBOX_IOVA_START		0x20000000
 #define PAINTBOX_IOVA_SIZE		0x40000000
 
-/* TODO(ahampson):  There is no Airbrush DRAM manager yet so we just write the
- * firmware image to the base of Airbrush DRAM.  b/74122875
- */
-#define AIRBRUSH_DRAM_START_PADDR 0x20000000
-
-/* TOOD:  The error base is specific to the platform and should
- * be passed in through the platform data.
- */
-#define PAINTBOX_ERROR_BASE		0x8000000000
-
-/* TODO:  Figure out if there is a way to get this information from
+/* TODO(b/115433779):  Figure out if there is a way to get this information from
  * the system.
  */
 #define PAINTBOX_INPUT_ADDR_SIZE	43 /* bits */
 
-/* TODO:  Determine appropriate values for airbrush. */
+/* TODO(b/115433779):  Determine appropriate values for airbrush. */
 #define PAINTBOX_OUTPUT_ADDR_SIZE	32 /* bits */
 
 /* Android APs usually use 4K pages.  This may change in future versions. */
@@ -174,7 +161,7 @@ static struct device *ipu_adapter_ab_mfd_get_dma_device(struct device *dev)
 	return dev_data->dma_dev;
 }
 
-/* TODO(ahampson, pztang):  This function should be split into two helper
+/* TODO(b/115431811):  This function should be split into two helper
  * functions, a PIO version and a DMA version.  The decision on whether or not
  * use the PIO version or DMA version will depend on the size of the transfer.
  */
@@ -191,7 +178,7 @@ void ipu_adapter_ab_mfd_sync(struct device *dev,
 
 	mutex_lock(&dev_data->sync_lock);
 
-	/* TODO(ahampson, pztang):  The Endpoint DMA interface needs to be
+	/* TODO(b/115431813):  The Endpoint DMA interface needs to be
 	 * cleaned up so that it presents a synchronous interface to kernel
 	 * clients or there needs to be mechanism to reserve a DMA channel to
 	 * the IPU.
@@ -231,7 +218,7 @@ void ipu_adapter_ab_mfd_sync(struct device *dev,
 
 	wait_for_completion(&dev_data->dma_completion);
 
-	/* TODO(ahampson, pztang):  Right now we are only holding the callback
+	/* TODO(b/115431813):  Right now we are only holding the callback
 	 * for the duration of the sync.  This should be revisted once the DMA
 	 * driver interface is cleaned up.
 	 */
@@ -240,7 +227,7 @@ void ipu_adapter_ab_mfd_sync(struct device *dev,
 	mutex_unlock(&dev_data->sync_lock);
 }
 
-/* TODO(ahampson, pztang):  This can be eliminated once the DMA interface is
+/* TODO(b/115431813):  This can be eliminated once the DMA interface is
  * cleaned up
  */
 static struct ipu_adapter_ab_mfd_data *g_dev_data;
@@ -272,9 +259,9 @@ static void ipu_adapter_ab_mfd_set_platform_data(struct platform_device *pdev,
 	pdata->dma_base = PAINTBOX_IOVA_START;
 	pdata->dma_size = PAINTBOX_IOVA_SIZE;
 
-	/* TODO(ahampson):  Figure out how to get the hardware ID from the MFD
-	 * if it is possible.  Otherwise we will need a lookup table and use the
-	 * the IPU_VERSION register to reconcile it.
+	/* TODO(b/115434021):  Figure out how to get the hardware ID from the
+	 * MFD if it is possible.  Otherwise we will need a lookup table and
+	 * use the the IPU_VERSION register to reconcile it.
 	 */
 	pdata->hardware_id = 11;
 }
@@ -310,7 +297,7 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 	mutex_init(&dev_data->sync_lock);
 
 	/* TODO(ahampson, pztang):  This can be removed once the DMA interface
-	 * clean up is done.
+	 * clean up is done. b/115431813
 	 */
 	g_dev_data = dev_data;
 

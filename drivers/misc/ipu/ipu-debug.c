@@ -55,7 +55,7 @@ int ipu_debug_vprintf(struct paintbox_data *pb, char *buf, int *written,
 		vaf.fmt = format;
 		vaf.va = &args;
 
-		/* TODO:  Add support for levels */
+		/* TODO(b/115430771):  Add support for levels */
 
 		pr_info("%pV", &vaf);
 	}

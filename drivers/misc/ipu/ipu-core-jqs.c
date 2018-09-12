@@ -101,13 +101,13 @@ static int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 			preamble.fw_and_working_set_bytes,
 			preamble.prefill_transport_offset_bytes);
 
-	/* TODO(ahampson):  It would be good to have some sort of bounds
+	/* TODO(b/115524239):  It would be good to have some sort of bounds
 	 * checking to make sure that the firmware could not allocate an
 	 * unreasonable amount of memory for its working set.
 	 *
-	 * TODO(ahampson):  The firmware is compiled for a specific address in
-	 * AB DRAM.  This will necessitate having a carveout region in AB DRAM
-	 * so we can guarantee the address.
+	 * TODO(b/115522126):  The firmware is compiled for a specific address
+	 * in AB DRAM.  This will necessitate having a carveout region in AB
+	 * DRAM so we can guarantee the address.
 	 */
 	ret = bus->ops->alloc(bus->parent_dev,
 			preamble.fw_and_working_set_bytes,

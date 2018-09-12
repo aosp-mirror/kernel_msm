@@ -40,7 +40,7 @@ void ipu_power_enable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 	if (pb->power.bif_mmu_clock_idle_disable_ref_count == 0) {
 		uint32_t val;
 
-		/* TODO(ahampson):  Determine if controlling the SSP idle is
+		/* TODO(b/115407902):  Determine if controlling the SSP idle is
 		 * necessary.
 		 */
 		val = ipu_readl(pb->dev, IPU_CSR_AON_OFFSET +
@@ -58,7 +58,7 @@ void ipu_power_disable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 	if (pb->power.bif_mmu_clock_idle_disable_ref_count == 0) {
 		uint32_t val;
 
-		/* TODO(ahampson):  Determine if controlling the SSP idle is
+		/* TODO(b/115407902):  Determine if controlling the SSP idle is
 		 * necessary.
 		 */
 		val = ipu_readl(pb->dev, IPU_CSR_AON_OFFSET +

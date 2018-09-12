@@ -128,9 +128,10 @@ static int ipu_queue_flush(struct file *fp, fl_owner_t id)
 
 	mutex_unlock(&pb->lock);
 
-	/* TODO(ahampson): An error detaching the queue from the session should
-	 * not normally occur and would likely be the result of a catastrophic
-	 * error.
+	/* TODO(b/114760293): An error detaching the queue from the session
+	 * should not normally occur and would likely be the result of a
+	 * catastrophic error. Need to go through the catastrophic error
+	 * recovery path correctly.
 	 */
 	return ret;
 }

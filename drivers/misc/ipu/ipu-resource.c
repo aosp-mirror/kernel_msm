@@ -348,7 +348,7 @@ int ipu_resource_session_release(struct paintbox_data *pb,
 
 	ret = ipu_resource_send_release(pb, session);
 
-	/* TODO(ahampson):  A busy error and a comms error should be treated
+	/* TODO(b/114760293):  A busy error and a comms error should be treated
 	 * differently here.  A comms error should be catastrophic and cause an
 	 * IPU reset.  A busy error should cause a retry.
 	 */
@@ -461,7 +461,7 @@ int ipu_resource_allocate_ioctl(struct paintbox_data *pb,
 		 */
 		ipu_resource_release_internal(pb, session);
 
-		/* TODO(ahampson):  This should go to the catastrophic error
+		/* TODO(b/114760293):  This should go to the catastrophic error
 		 * path from here.
 		 */
 	}
@@ -491,7 +491,7 @@ int ipu_resource_release_ioctl(struct paintbox_data *pb,
 
 	ipu_resource_notify_first_session_waiter(pb);
 
-	/* TODO(ahampson): Power down if there are no waiters */
+	/* TODO(b/115530379): Power down if there are no waiters */
 
 	mutex_unlock(&pb->lock);
 

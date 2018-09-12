@@ -30,7 +30,7 @@ static uint64_t ipu_lbp_reg_entry_read(
 			debug);
 	struct paintbox_data *pb = debug->pb;
 
-	/* TODO(ahampson):  Replace with JQS debug reg op message */
+	/* TODO(b/115386014):  Replace with JQS debug reg op message */
 	ipu_lbp_select(pb, lbp->pool_id);
 	return ipu_readq(pb->dev, IPU_CSR_LBP_OFFSET +
 			reg_entry->reg_offset);
@@ -44,7 +44,7 @@ static void ipu_lbp_reg_entry_write(struct paintbox_debug_reg_entry *reg_entry,
 			debug);
 	struct paintbox_data *pb = debug->pb;
 
-	/* TODO(ahampson):  Replace with JQS debug reg op message */
+	/* TODO(b/115386014):  Replace with JQS debug reg op message */
 	ipu_lbp_select(pb, lbp->pool_id);
 	ipu_writeq(pb->dev, val, IPU_CSR_LBP_OFFSET +
 			reg_entry->reg_offset);
@@ -58,7 +58,7 @@ static uint64_t ipu_lb_reg_entry_read(
 	struct paintbox_lbp *lbp = lb->lbp;
 	struct paintbox_data *pb = debug->pb;
 
-	/* TODO(ahampson):  Replace with JQS debug reg op message */
+	/* TODO(b/115386014):  Replace with JQS debug reg op message */
 	ipu_lb_select(pb, lbp->pool_id, lb->lb_id);
 	return ipu_readq(pb->dev, IPU_CSR_LBP_OFFSET + LB_BLOCK_START +
 			reg_entry->reg_offset);

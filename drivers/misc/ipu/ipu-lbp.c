@@ -60,16 +60,16 @@ int ipu_lbp_init(struct paintbox_data *pb)
 	uint32_t caps;
 	int ret;
 
-	/* TODO(ahampson):  This is an artifact of the old IPU driver and should
-	 * be factored out.
+	/* TODO(b/114734817):  This is an artifact of the old IPU driver and
+	 * should be factored out.
 	 */
 	pb->lbp.lbps = kcalloc(pb->lbp.num_lbps, sizeof(struct paintbox_lbp),
 			GFP_KERNEL);
 	if (!pb->lbp.lbps)
 		return -ENOMEM;
 
-	/* TODO(ahampson):  Remove and replace with a capabilties message to the
-	 * JQS.
+	/* TODO(b/115386014):  Remove and replace with a capabilties message to
+	 * the JQS.
 	 */
 
 	/* Read LBP/LB capabilities from LBP0 since that is always powered.

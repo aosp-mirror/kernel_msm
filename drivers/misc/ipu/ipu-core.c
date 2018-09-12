@@ -222,7 +222,7 @@ int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 	pb_dev->bus = bus;
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-	/* TODO(ahampson): Currently we use the bus's debug root for the IPU
+	/* TODO(b/115426798): Currently we use the bus's debug root for the IPU
 	 * and IOMMU devices.  In the future we might want to have separate
 	 * debug roots for each device.
 	 */

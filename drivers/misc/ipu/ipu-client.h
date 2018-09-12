@@ -41,9 +41,9 @@
  */
 #define DMA_STOP_TIMEOUT_US 500
 
-/* TODO(ahampson):  These defines need to be kept in sync with the JQS.  These
- * values could be moved to a common header or there could be a handshake
- * between the driver and JQS firmware at runtime.
+/* TODO(b/115416247):  These defines need to be kept in sync with the JQS.
+ * These values could be moved to a common header or there could be a
+ * handshake between the driver and JQS firmware at runtime.
  */
 #define JQS_SESSION_MEMORY_SIZE 16384
 #define PAINTBOX_BUFFER_ID_MAX 1024
