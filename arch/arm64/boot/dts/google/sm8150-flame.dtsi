@@ -16,4 +16,5 @@
 #include "sm8150-flame-camera-sensor.dtsi"
 #include "sm8150-coral-display.dtsi"
 #include "sm8150-flame-haptics.dtsi"
+#include "sm8150-flame-display.dtsi"
 #include "sm8150-flame-pac193x.dtsi"

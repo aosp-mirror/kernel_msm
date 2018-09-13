@@ -1,0 +1,126 @@
+
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_nt37280_dsc_fhd_cmd: qcom,mdss_dsi_nt37280 {
+		qcom,mdss-dsi-panel-name = "nt37280 amoled 5.68 cmd mode panel";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
+
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-bl-min-level = <0x001>;
+		qcom,mdss-dsi-bl-max-level = <0xFEF>;
+
+		qcom,mdss-dsi-reset-sequence = <1 5>, <0 1>, <1 10>;
+		qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-init-delay-us = <5000>;
+
+		qcom,mdss-pan-physical-width-dimension = <62>;
+		qcom,mdss-pan-physical-height-dimension = <130>;
+		qcom,mdss-dsi-display-timings {
+			timing@0 {
+				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2280>;
+				qcom,mdss-dsi-h-pulse-width = <8>;
+				qcom,mdss-dsi-h-back-porch = <16>;
+				qcom,mdss-dsi-h-front-porch = <36>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-v-back-porch = <28>;
+				qcom,mdss-dsi-v-front-porch = <1180>;
+				qcom,mdss-dsi-on-command = [
+					/* MCS */
+					15 01 00 00 00 00 02 FF E0
+					15 01 00 00 00 00 02 FB 01
+					15 01 00 00 00 00 02 18 80
+					15 01 00 00 00 00 02 1A 15
+					15 01 00 00 00 00 02 73 01
+					15 01 00 00 00 00 02 46 17
+
+					15 01 00 00 00 00 02 FF F0
+					15 01 00 00 00 00 02 FB 01
+					15 01 00 00 00 00 02 54 03
+
+					15 01 00 00 00 00 02 FF 20
+					15 01 00 00 00 00 02 FB 01
+					15 01 00 00 00 00 02 34 00
+					15 01 00 00 00 00 02 35 66
+					15 01 00 00 00 00 02 36 66
+
+					/* UCS */
+					15 01 00 00 00 00 02 FF 10
+					15 01 00 00 00 00 02 FB 01
+					15 01 00 00 00 00 02 88 07
+					39 01 00 00 00 00 05 2A 00 00 04 37
+					39 01 00 00 00 00 05 2B 00 00 08 E7
+					15 01 00 00 00 00 02 7F 07
+					15 01 00 00 00 00 02 E9 00
+					15 01 00 00 00 00 02 BF 03
+					15 01 00 00 00 00 02 C0 03
+
+					/* sleep out, Wait 120 ms */
+					05 01 00 00 78 00 01 11
+					15 01 00 00 00 00 02 35 00
+
+					/* display on */
+					05 01 00 00 00 00 01 29
+				];
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command = [
+					15 01 00 00 00 00 02 FF 10
+
+					/* display off */
+					05 01 00 00 00 00 02 28 00
+
+					/* sleep in, Wait 100 ms */
+					05 01 00 00 64 00 02 10 00
+				];
+				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-slice-height = <20>;
+				qcom,mdss-dsc-slice-width = <540>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <8>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+
+				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
+				qcom,display-topology = <2 2 1>;
+				qcom,default-topology-index = <0>;
+			};
+		};
+	};
+};
+
+
+
