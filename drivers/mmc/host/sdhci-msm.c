@@ -4062,6 +4062,79 @@ out:
 	return count;
 }
 
+static ssize_t
+eol_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (!host->mmc || !host->mmc->card)
+		return snprintf(buf, PAGE_SIZE, "0x0\n");
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
+		host->mmc->card->ext_csd.pre_eol_info);
+}
+
+static ssize_t
+length_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0x25\n");
+}
+
+static ssize_t
+type_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0x9\n");
+}
+
+static ssize_t
+lifetimeA_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (!host->mmc || !host->mmc->card)
+		return snprintf(buf, PAGE_SIZE, "0x0\n");
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
+		host->mmc->card->ext_csd.device_life_time_est_typ_a);
+}
+
+static ssize_t
+lifetimeB_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (!host->mmc || !host->mmc->card)
+		return snprintf(buf, PAGE_SIZE, "0x0\n");
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
+		host->mmc->card->ext_csd.device_life_time_est_typ_b);
+}
+
+DEVICE_ATTR_RO(eol);
+DEVICE_ATTR_RO(length);
+DEVICE_ATTR_RO(type);
+DEVICE_ATTR_RO(lifetimeA);
+DEVICE_ATTR_RO(lifetimeB);
+
+static struct attribute *mmc_health_attrs[] = {
+	&dev_attr_eol.attr,
+	&dev_attr_length.attr,
+	&dev_attr_type.attr,
+	&dev_attr_lifetimeA.attr,
+	&dev_attr_lifetimeB.attr,
+	NULL,
+};
+
+static struct attribute_group mmc_health_attr_grp = {
+	.name = "health",
+	.attrs = mmc_health_attrs,
+};
+
 #ifdef CONFIG_SMP
 static inline void set_affine_irq(struct sdhci_msm_host *msm_host,
 				struct sdhci_host *host)
@@ -4676,6 +4749,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	void __iomem *tlmm_mem;
 	unsigned long flags;
 	bool force_probe;
+	int err;
 
 	pr_debug("%s: Enter %s\n", dev_name(&pdev->dev), __func__);
 	msm_host = devm_kzalloc(&pdev->dev, sizeof(struct sdhci_msm_host),
@@ -5188,6 +5262,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	}
 	if (sdhci_msm_is_bootdevice(&pdev->dev))
 		mmc_flush_detect_work(host->mmc);
+
+	err = sysfs_create_group(&pdev->dev.kobj, &mmc_health_attr_grp);
+	if (err)
+		pr_err("%s: failed to create sysfs group with err %d\n",
+							 __func__, err);
 
 	/* Successful initialization */
 	goto out;
