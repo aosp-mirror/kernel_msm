@@ -276,7 +276,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	int error, host_gpio_ctrl;
+	int error;
 	u32 boot_time_block_state;
 
 	/* allocate device memory */
@@ -285,58 +285,40 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->pdev = pdev;
 	ab_sm_ctx->dev = &pdev->dev;
 
-	/* When this "host-gpio-ctrl" property is set, host has control over the
-	 * below gpios and can be controlled at kernel level. If this property
-	 * is not set, all the gpios and their related functionality has to be
-	 * triggered from application level (ex Juno Host)
+	/* Get the gpio_desc for all the gpios used */
+	/* FW_PATCH_EN is used to inform Airbrush about host is interested in
+	 * secondary SRAM boot. This will help Airbrush to put SPI in FSM Mode.
 	 */
-	if (!of_property_read_u32(np, "host-gpio-ctrl", &host_gpio_ctrl)) {
-
-		/* Get the gpio_desc for all the gpios used */
-		/* SOC_PWRGOOD releases M0PLUS when its low */
-		ab_sm_ctx->soc_pwrgood = devm_gpiod_get(&pdev->dev, "soc-pwrgood",
-						GPIOD_OUT_LOW);
-		if (IS_ERR(ab_sm_ctx->soc_pwrgood)) {
-			dev_err(dev, "%s: could not get soc-pwrgood gpio (%ld)\n",
-				__func__, PTR_ERR(ab_sm_ctx->soc_pwrgood));
-			error = PTR_ERR(ab_sm_ctx->soc_pwrgood);
-			goto fail_soc_pwrgood;
-		}
-
-		/* FW_PATCH_EN is used to inform Airbrush about host is interested in
-		 * secondary SRAM boot. This will help Airbrush to put SPI in FSM Mode.
-		 */
-		ab_sm_ctx->fw_patch_en = devm_gpiod_get(&pdev->dev, "fw-patch-en",
-						GPIOD_OUT_LOW);
-		if (IS_ERR(ab_sm_ctx->fw_patch_en)) {
-			dev_err(dev, "%s: could not get fw-patch-en gpio (%ld)\n",
+	ab_sm_ctx->fw_patch_en = devm_gpiod_get(&pdev->dev, "fw-patch-en",
+			GPIOD_OUT_LOW);
+	if (IS_ERR(ab_sm_ctx->fw_patch_en)) {
+		dev_err(dev, "%s: could not get fw-patch-en gpio (%ld)\n",
 				__func__, PTR_ERR(ab_sm_ctx->fw_patch_en));
-			error = PTR_ERR(ab_sm_ctx->fw_patch_en);
-			goto fail_fw_patch_en;
-		}
-
-        gpiod_set_value(ab_sm_ctx->fw_patch_en, __GPIO_DISABLE);
-		/* AB_READY is used by host to understand that Airbrush SPI is now in
-		 * FSM mode and host can start the SPI FSM commands to Airbrush.
-		 */
-		ab_sm_ctx->ab_ready = devm_gpiod_get(&pdev->dev, "ab-ready", GPIOD_IN);
-		if (IS_ERR(ab_sm_ctx->ab_ready)) {
-			dev_err(dev, "%s: could not get ab-ready gpio (%ld)\n",
-				__func__, PTR_ERR(ab_sm_ctx->ab_ready));
-			error = PTR_ERR(ab_sm_ctx->ab_ready);
-			goto fail_ab_ready;
-		}
-
-		/* Get the otp-fw-patch-dis property from dt node. This property
-		 * provides the OTP information of Airbrush for allowing the secondary
-		 * boot via SRAM.
-		 */
-		if (of_property_read_u32(np, "otp-fw-patch-dis",
-					&ab_sm_ctx->otp_fw_patch_dis))
-			dev_info(dev, "otp-fw-patch-dis property not found\n");
-
-		/* [TBD] Need DDR_SR, DDR_TRAIN, CKE_IN, CKE_IN_SENSE GPIOs for  */
+		error = PTR_ERR(ab_sm_ctx->fw_patch_en);
+		goto fail_fw_patch_en;
 	}
+
+	gpiod_set_value(ab_sm_ctx->fw_patch_en, __GPIO_DISABLE);
+	/* AB_READY is used by host to understand that Airbrush SPI is now in
+	 * FSM mode and host can start the SPI FSM commands to Airbrush.
+	 */
+	ab_sm_ctx->ab_ready = devm_gpiod_get(&pdev->dev, "ab-ready", GPIOD_IN);
+	if (IS_ERR(ab_sm_ctx->ab_ready)) {
+		dev_err(dev, "%s: could not get ab-ready gpio (%ld)\n",
+				__func__, PTR_ERR(ab_sm_ctx->ab_ready));
+		error = PTR_ERR(ab_sm_ctx->ab_ready);
+		goto fail_ab_ready;
+	}
+
+	/* Get the otp-fw-patch-dis property from dt node. This property
+	 * provides the OTP information of Airbrush for allowing the secondary
+	 * boot via SRAM.
+	 */
+	if (of_property_read_u32(np, "otp-fw-patch-dis",
+				&ab_sm_ctx->otp_fw_patch_dis))
+		dev_info(dev, "otp-fw-patch-dis property not found\n");
+
+	/* [TBD] Need DDR_SR, DDR_TRAIN, CKE_IN, CKE_IN_SENSE GPIOs for  */
 
 	/* Intialize the default state of each block for state manager */
 	boot_time_block_state = ARRAY_SIZE(ipu_property_table)-1;
@@ -382,7 +364,6 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 #endif
 	return ab_sm_ctx;
 
-fail_soc_pwrgood:
 fail_fw_patch_en:
 fail_ab_ready:
 	devm_kfree(dev, (void *)ab_sm_ctx);
