@@ -276,6 +276,7 @@ static void process_kernel_message(struct paintbox_bus *bus,
 		break;
 	case JQS_MESSAGE_TYPE_ERROR:
 		ipu_core_jqs_msg_process_error_message(bus, jqs_msg);
+		break;
 	default:
 		break;
 	}

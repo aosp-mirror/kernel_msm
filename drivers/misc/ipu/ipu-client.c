@@ -227,7 +227,7 @@ static long ipu_client_get_capabilities_ioctl(struct paintbox_data *pb,
 		struct paintbox_session *session, unsigned long arg)
 {
 	struct paintbox_pdata *pdata = pb->dev->platform_data;
-	struct ipu_capabilities caps;
+	struct ipu_capabilities_rsp caps;
 	uint32_t version;
 
 	memset(&caps, 0, sizeof(caps));
@@ -273,7 +273,7 @@ static long ipu_client_ioctl(struct file *fp, unsigned int cmd,
 	/* TODO(b/115407896):  Migrate the IPU Runtime to a IPU_* capabilities
 	 * ioctl.
 	 */
-	case PB_GET_IPU_CAPABILITIES:
+	case IPU_GET_CAPABILITIES:
 		ret = ipu_client_get_capabilities_ioctl(pb, session, arg);
 		break;
 	case IPU_ALLOCATE_CMD_QUEUE:
@@ -288,7 +288,7 @@ static long ipu_client_ioctl(struct file *fp, unsigned int cmd,
 	case IPU_REGISTER_DMA_BUF:
 		ret = ipu_buffer_dma_buf_register_ioctl(pb, session, arg);
 		break;
-	case PB_UNREGISTER_DMA_BUF:
+	case IPU_UNREGISTER_DMA_BUF:
 		ret = ipu_buffer_dma_buf_unregister_ioctl(pb, session,
 				arg);
 		break;
@@ -419,7 +419,7 @@ static int ipu_client_probe(struct device *dev)
 
 	/* register the misc device */
 	pb->misc_device.minor = MISC_DYNAMIC_MINOR,
-	pb->misc_device.name  = "paintbox",
+	pb->misc_device.name  = "ipu",
 	pb->misc_device.fops  = &ipu_client_fops,
 
 	INIT_LIST_HEAD(&pb->bulk_alloc_waiting_list);
