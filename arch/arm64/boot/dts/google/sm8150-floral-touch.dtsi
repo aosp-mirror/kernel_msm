@@ -35,9 +35,6 @@
 
 &qupv3_se4_spi {
 	status = "ok";
-	pinctrl-0 = <>;
-	pinctrl-1 = <>;
-
 	floral_spitouch: touchscreen@0 {
 		status = "ok";
 		compatible = "st,fts";
@@ -50,8 +47,8 @@
 		avdd-supply = <&pm8150_l17>;
 
 		pinctrl-names = "default", "sleep";
-		pinctrl-0 = <&qupv3_se4_spi_active &ts_active_suspend>;
-		pinctrl-1 = <&qupv3_se4_spi_active &ts_active_suspend>;
+		pinctrl-0 = <&ts_active_suspend>;
+		pinctrl-1 = <&ts_active_suspend>;
 
 		st,irq-gpio = <&tlmm 122 0>;
 		st,reset-gpio = <&tlmm 127 0>;

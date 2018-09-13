@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  */
 
+// On jaws, audio wants to keep se4 pins active in suspend.
+&qupv3_se4_spi {
+	pinctrl-1 = <&qupv3_se4_spi_active>;
+};
+
 // b/113529207 jaws can only support 400khz on qup 15.
 &qupv3_se15_i2c {
 	qcom,clk-freq-out = <400000>;

@@ -9,17 +9,28 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
+// flame/coral battery i2c
+&qupv3_se0_i2c {
+	qcom,clk-freq-out = <400000>;
+};
+
+// Touch wants se4 pins active even in suspend.
+&qupv3_se4_spi {
+	pinctrl-1 = <&qupv3_se4_spi_active>;
+};
+
+// Audio wants se11 pins active even in suspend.
+&qupv3_se11_spi {
+	pinctrl-1 = <&qupv3_se11_spi_active>;
+};
+
 &qupv3_se12_2uart {
 	status = "ok";
 };
 
 &qupv3_se13_4uart {
 	status = "ok";
-};
-
-// flame/coral battery i2c
-&qupv3_se0_i2c {
-	qcom,clk-freq-out = <400000>;
 };
 
 // Haptics/batt i2c
