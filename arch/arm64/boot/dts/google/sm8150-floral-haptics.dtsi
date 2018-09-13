@@ -48,6 +48,9 @@
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <32>;
 		cirrus,boost-ipk-milliamp = <4500>;
+		cirrus,boost-ctl-lim-en = <1>; /* enables BST_CTL */
+		cirrus,boost-ctl-millivolt = <130>; /* 9V */
+		cirrus,boost-ovp-millivolt = <16>; /* 10V */
 		cirrus,f0-default = <2514000>; /* 153 Hz */
 		cirrus,f0-min = <2424832>; /* 148 Hz */
 		cirrus,f0-max = <2703360>; /* 165 Hz */
