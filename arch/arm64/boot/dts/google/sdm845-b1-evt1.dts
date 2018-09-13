@@ -43,3 +43,7 @@
 &pmi8998_pdphy {
 	/delete-property/ goog,wlc-supported;
 };
+
+&google_charger {
+	/delete-property/ google,wlc-power-supply;
+};
