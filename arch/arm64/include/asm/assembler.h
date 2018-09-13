@@ -471,6 +471,10 @@ alternative_endif
 	mrs	\rd, sp_el0
 	.endm
 
+	.macro	pte_to_phys, phys, pte
+	and	\phys, \pte, #(((1 << (48 - PAGE_SHIFT)) - 1) << PAGE_SHIFT)
+	.endm
+
 /*
  * Check the MIDR_EL1 of the current CPU for a given model and a range of
  * variant/revision. See asm/cputype.h for the macros used below.
@@ -508,10 +512,6 @@ alternative_endif
 	and		\res, \res, \tmp2
 	.endif
 .Ldone\@:
-	.endm
-
-	.macro	pte_to_phys, phys, pte
-	and	\phys, \pte, #(((1 << (48 - PAGE_SHIFT)) - 1) << PAGE_SHIFT)
 	.endm
 
 #endif	/* __ASM_ASSEMBLER_H */
