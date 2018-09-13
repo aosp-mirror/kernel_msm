@@ -1809,6 +1809,8 @@ static void fastrpc_init(struct fastrpc_apps *me)
 		me->channel[i].sesscount = 0;
 		/* All channels are secure by default except CDSP */
 		me->channel[i].secure = SECURE_CHANNEL;
+		/* TODO: REVERT ME: b/115639468 */
+		me->channel[i].secure = NON_SECURE_CHANNEL;
 		mutex_init(&me->channel[i].smd_mutex);
 	}
 	/* Set CDSP channel to non secure */
@@ -3653,6 +3655,8 @@ static void configure_secure_channels(uint32_t secure_domains)
 		int secure = (secure_domains >> ii) & 0x01;
 
 		me->channel[ii].secure = secure;
+		/* TODO: REVERT ME: b/115639468 */
+		me->channel[ii].secure = 0;
 	}
 }
 
