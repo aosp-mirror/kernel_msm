@@ -1175,9 +1175,8 @@ static int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 
 	rc = smblib_masked_write(chg, TYPE_C_CFG_2_REG,
 				 EN_80UA_180UA_CUR_SOURCE_BIT,
-				 val->intval == POWER_SUPPLY_TYPEC_PR_SOURCE_1_5
-				 ? EN_80UA_180UA_CUR_SOURCE_BIT : 0);
-
+				 val->intval == POWER_SUPPLY_TYPEC_PR_SOURCE
+				 ? 0 : EN_80UA_180UA_CUR_SOURCE_BIT);
 	if (rc < 0)
 		smblib_err(chg, "Couldnt update EN_ISRC_180UA_BIT rc=%d\n", rc);
 
