@@ -18,3 +18,4 @@
 #include "sm8150-floral-display-jaws.dtsi"
 #include "sm8150-floral-jaws-touch.dtsi"
 #include "sm8150-floral-jaws-battery.dtsi"
+#include "sm8150-floral-jaws-camera-sensor.dtsi"

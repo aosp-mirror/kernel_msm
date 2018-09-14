@@ -52,14 +52,14 @@
 
 			max77826_ldo3: max77826_ldo3 {
 				regulator-name = "max77826_ldo3";
-				regulator-min-microvolt = <1262500>;
-				regulator-max-microvolt = <1262500>;
+				regulator-min-microvolt = <1012500>;
+				regulator-max-microvolt = <1012500>;
 			};
 
 			max77826_ldo4: max77826_ldo4 {
 				regulator-name = "max77826_ldo4";
-				regulator-min-microvolt = <2825000>;
-				regulator-max-microvolt = <2825000>;
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
 			};
 
 			max77826_ldo5: max77826_ldo5 {
@@ -76,14 +76,14 @@
 
 			max77826_ldo7: max77826_ldo7 {
 				regulator-name = "max77826_ldo7";
-				regulator-min-microvolt = <2800000>;
-				regulator-max-microvolt = <2800000>;
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <2900000>;
 			};
 
 			max77826_ldo8: max77826_ldo8 {
 				regulator-name = "max77826_ldo8";
-				regulator-min-microvolt = <2800000>;
-				regulator-max-microvolt = <2800000>;
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <2900000>;
 			};
 
 			max77826_ldo9: max77826_ldo9 {
@@ -118,26 +118,30 @@
 
 			max77826_ldo14: max77826_ldo14 {
 				regulator-name = "max77826_ldo14";
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <3375000>;
+				regulator-min-microvolt = <1950000>;
+				regulator-max-microvolt = <1950000>;
 			};
 
 			max77826_ldo15: max77826_ldo15 {
 				regulator-name = "max77826_ldo15";
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1800000>;
+				regulator-min-microvolt = <1900000>;
+				regulator-max-microvolt = <1900000>;
 			};
 
-			buck1_reg: BUCK1 {
-				regulator-name = "MAX77826_BUCK1";
-				regulator-min-microvolt = <500000>;
-				regulator-max-microvolt = <1800000>;
+			max77826_buck1: max77826_buck1 {
+				regulator-name = "max77826_buck1";
+				regulator-min-microvolt = <1350000>;
+				regulator-max-microvolt = <1350000>;
+				regulator-always-on;
+				regulator-boot-on;
 			};
 
-			buck2_reg: BUCK2 {
-				regulator-name = "MAX77826_BUCK2";
-				regulator-min-microvolt = <2600000>;
-				regulator-max-microvolt = <4187500>;
+			max77826_buck2: max77826_buck2 {
+				regulator-name = "max77826_buck2";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+				regulator-boot-on;
 			};
 		};
 	};
