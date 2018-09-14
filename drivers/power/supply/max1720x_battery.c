@@ -1803,6 +1803,24 @@ static int init_debugfs(struct max1720x_chip *chip)
 	return 0;
 }
 
+static u16 max1720x_read_rsense(const struct max1720x_chip *chip)
+{
+	u16 rsense = 0, rsense_default = 0;
+	int ret;
+
+	(void)of_property_read_u16(chip->dev->of_node, "maxim,rsense-default",
+		&rsense_default);
+
+	ret = REGMAP_READ(chip->regmap_nvram, MAX1720X_NRSENSE, &rsense);
+	if (rsense_default && (ret || rsense != rsense_default)) {
+		rsense = rsense_default;
+		dev_warn(chip->dev, "RSense, forcing %d micro Ohm (%d)\n",
+			rsense * 10, ret);
+	}
+
+	return rsense;
+}
+
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
 	u16 data = 0;
@@ -1842,7 +1860,7 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 				   MAX1720X_STATUS_POR, 0x0);
 	}
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NRSENSE, &chip->RSense);
+	chip->RSense = max1720x_read_rsense(chip);
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
 	(void) REGMAP_READ(chip->regmap, MAX1720X_CONFIG, &chip->RConfig);
 	dev_info(chip->dev, "Config: 0x%04x\n", chip->RConfig);
