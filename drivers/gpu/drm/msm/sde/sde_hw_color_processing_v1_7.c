@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016,2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -326,7 +326,7 @@ void sde_setup_dspp_pcc_v1_7(struct sde_hw_dspp *ctx, void *cfg)
 	void  __iomem *base;
 
 	if (!hw_cfg  || (hw_cfg->len != sizeof(*pcc)  && hw_cfg->payload)) {
-		DRM_ERROR("invalid params hw %p payload %p payloadsize %d \"\
+		DRM_ERROR("invalid params hw %pK payload %pK payloadsize %d \"\
 			  exp size %zd\n",
 			   hw_cfg, ((hw_cfg) ? hw_cfg->payload : NULL),
 			   ((hw_cfg) ? hw_cfg->len : 0), sizeof(*pcc));
