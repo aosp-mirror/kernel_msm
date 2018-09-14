@@ -100,8 +100,8 @@
  *
  */
 
-#define JQS_SYS_BUFFER_SIZE		SZ_1K
-#define SYS_JQS_BUFFER_SIZE		SZ_4K
+#define JQS_SYS_BUFFER_SIZE		SZ_8K
+#define SYS_JQS_BUFFER_SIZE		SZ_32K
 
 static uint32_t write_core(struct paintbox_bus *bus, uint32_t q_id,
 		const void *buf, size_t size)
@@ -260,49 +260,58 @@ static void process_kernel_message(struct paintbox_bus *bus,
 	}
 }
 
+#define MIN_MSG_BUFFERED 2
+#define MSG_BUFFER_SIZE (JQS_TRANSPORT_MAX_MESSAGE_SIZE * MIN_MSG_BUFFERED)
+
 static void process_kernel_queue(struct paintbox_bus *bus)
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 	struct host_jqs_queue *host_q =
 			&trans->queues[JQS_TRANSPORT_KERNEL_QUEUE_ID];
 	struct host_jqs_cbuf *host_cbuf = &host_q->host_jqs_sys_cbuf;
-	uint8_t buf[JQS_SYS_BUFFER_SIZE];
-	uint8_t buf_msg[JQS_TRANSPORT_MAX_MESSAGE_SIZE];
-	uint8_t *p = buf;
+	uint8_t buf_msg[MSG_BUFFER_SIZE];
 	uint32_t bytes_read;
+	uint32_t bytes_buffered = 0;
 	struct jqs_message *jqs_msg = (struct jqs_message *)buf_msg;
 	const size_t hdr_size = sizeof(struct jqs_message);
 
-	bytes_read = ipu_core_jqs_cbuf_read(bus, host_cbuf, buf, sizeof(buf),
-			ipu_core_jqs_cbus_memcpy);
+	for (;;) {
+		bytes_read = ipu_core_jqs_cbuf_read(bus, host_cbuf,
+				&buf_msg[bytes_buffered],
+				sizeof(buf_msg) - bytes_buffered,
+				ipu_core_jqs_cbus_memcpy);
 
-	while (bytes_read) {
-		if (bytes_read < hdr_size) {
-			/* Fatal error. Partial message reads are not supported
-			 * on the kernel queue
-			 */
-			dev_err(bus->parent_dev, "%s: cannot read header",
-					__func__);
-			break;
-		}
+		bytes_buffered += bytes_read;
 
-		memcpy(buf_msg, p, hdr_size);
+		/* If there are no bytes buffered for processing then exit. */
+		if (bytes_buffered == 0)
+			return;
 
-		if (bytes_read < jqs_msg->size) {
-			/* Fatal error. Partial message reads are not supported
-			 * on the kernel queue
+		if (unlikely(bytes_buffered < hdr_size ||
+				bytes_buffered < jqs_msg->size)) {
+			/* TODO(b/114760293): Fatal error. Partial message
+			 * reads are not supported on the kernel queue.
 			 */
 			dev_err(bus->parent_dev, "%s: partial read", __func__);
-			break;
+			return;
 		}
 
-		if (jqs_msg->size > hdr_size)
-			memcpy(&buf_msg[hdr_size], &p[hdr_size], jqs_msg->size -
-					hdr_size);
+		while (bytes_buffered != 0) {
+			/* If there is a partial message left in buffer then
+			 * return to outer loop to read the rest.
+			 */
+			if (bytes_buffered < hdr_size ||
+					bytes_buffered < jqs_msg->size)
+				break;
 
-		process_kernel_message(bus, jqs_msg);
-		bytes_read -= jqs_msg->size;
-		p += jqs_msg->size;
+			process_kernel_message(bus, jqs_msg);
+			/* Shift remaining bytes following the processed
+			 * message to the beginning of the message buffer.
+			 */
+			bytes_buffered -= jqs_msg->size;
+			memcpy(buf_msg, &buf_msg[jqs_msg->size],
+					bytes_buffered);
+		}
 	}
 }
 
