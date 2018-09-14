@@ -20,6 +20,7 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/irqdesc.h>
+#include <linux/wakeup_reason.h>
 
 #include "power.h"
 
@@ -879,6 +880,7 @@ bool pm_wakeup_pending(void)
 {
 	unsigned long flags;
 	bool ret = false;
+	char suspend_abort[MAX_SUSPEND_ABORT_LEN];
 
 	spin_lock_irqsave(&events_lock, flags);
 	if (events_check_enabled) {
@@ -892,7 +894,10 @@ bool pm_wakeup_pending(void)
 
 	if (ret) {
 		pr_info("PM: Wakeup pending, aborting suspend\n");
-		pm_print_active_wakeup_sources();
+		pm_get_active_wakeup_sources(suspend_abort,
+					     MAX_SUSPEND_ABORT_LEN);
+		log_suspend_abort_reason(suspend_abort);
+		pr_info("PM: %s\n", suspend_abort);
 	}
 
 	return ret || atomic_read(&pm_abort_suspend) > 0;
