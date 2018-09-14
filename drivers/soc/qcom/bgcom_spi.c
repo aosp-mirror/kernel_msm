@@ -47,6 +47,7 @@
 #define HED_EVENT_ID_LEN (0x02)
 #define HED_EVENT_SIZE_LEN (0x02)
 #define HED_EVENT_DATA_STRT_LEN (0x05)
+#define CMA_BFFR_POOL_SIZE (128*1024)
 
 #define MAX_RETRY 500
 
@@ -115,6 +116,9 @@ static struct mutex bg_resume_mutex;
 
 static atomic_t  bg_is_spi_active;
 static int bg_irq;
+
+static uint8_t *fxd_mem_buffer;
+static struct mutex cma_buffer_lock;
 
 static struct spi_device *get_spi_device(void)
 {
@@ -534,6 +538,7 @@ int bgcom_ahb_write(void *handle, uint32_t ahb_start_addr,
 	uint8_t *tx_buf;
 	uint32_t size;
 	int ret;
+	bool is_cma_used = false;
 	uint8_t cmnd = 0;
 	uint32_t ahb_addr = 0;
 	struct spi_device *spi = get_spi_device();
@@ -557,11 +562,22 @@ int bgcom_ahb_write(void *handle, uint32_t ahb_start_addr,
 		return -EBUSY;
 	}
 
+
+	mutex_lock(&cma_buffer_lock);
 	size = num_words*BG_SPI_WORD_SIZE;
 	txn_len = BG_SPI_AHB_CMD_LEN + size;
-	tx_buf = dma_zalloc_coherent(&spi->dev, txn_len, &dma_hndl, GFP_KERNEL);
-	if (!tx_buf)
+	if (fxd_mem_buffer != NULL && txn_len <= CMA_BFFR_POOL_SIZE) {
+		memset(fxd_mem_buffer, 0, txn_len);
+		tx_buf = fxd_mem_buffer;
+		is_cma_used = true;
+	} else
+		tx_buf = dma_zalloc_coherent(&spi->dev, txn_len,
+						&dma_hndl, GFP_KERNEL);
+
+	if (!tx_buf) {
+		mutex_unlock(&cma_buffer_lock);
 		return -ENOMEM;
+	}
 
 	cmnd |= BG_SPI_AHB_WRITE_CMD;
 	ahb_addr |= ahb_start_addr;
@@ -571,7 +587,9 @@ int bgcom_ahb_write(void *handle, uint32_t ahb_start_addr,
 	memcpy(tx_buf+BG_SPI_AHB_CMD_LEN, write_buf, size);
 
 	ret = bgcom_transfer(handle, tx_buf, NULL, txn_len);
-	dma_free_coherent(&spi->dev, txn_len, tx_buf, dma_hndl);
+	if (!is_cma_used)
+		dma_free_coherent(&spi->dev, txn_len, tx_buf, dma_hndl);
+	mutex_unlock(&cma_buffer_lock);
 	return ret;
 }
 EXPORT_SYMBOL(bgcom_ahb_write);
@@ -911,10 +929,15 @@ static irqreturn_t bg_irq_tasklet_hndlr(int irq, void *device)
 {
 	struct bg_spi_priv *bg_spi = device;
 	/* check if call-back exists */
-	if (list_empty(&cb_head)) {
-		pr_debug("No callback registered\n");
+	if (!atomic_read(&bg_is_spi_active)) {
+		printk_ratelimited("Interrupt received in suspend state\n");
+		return IRQ_HANDLED;
+	} else if (list_empty(&cb_head)) {
+		pr_err("No callback registered\n");
 		return IRQ_HANDLED;
 	} else if (spi_state == BGCOM_SPI_BUSY) {
+		/* delay for spi to be freed */
+		msleep(50);
 		return IRQ_HANDLED;
 	} else if (!bg_spi->irq_lock) {
 		bg_spi->irq_lock = 1;
@@ -948,6 +971,10 @@ static void bg_spi_init(struct bg_spi_priv *bg_spi)
 	bg_com_drv = &bg_spi->lhandle;
 
 	mutex_init(&bg_resume_mutex);
+
+	fxd_mem_buffer = kmalloc(CMA_BFFR_POOL_SIZE, GFP_KERNEL | GFP_ATOMIC);
+
+	mutex_init(&cma_buffer_lock);
 }
 
 static int bg_spi_probe(struct spi_device *spi)
@@ -1011,8 +1038,15 @@ static int bg_spi_remove(struct spi_device *spi)
 	mutex_destroy(&bg_spi->xfer_mutex);
 	devm_kfree(&spi->dev, bg_spi);
 	spi_set_drvdata(spi, NULL);
-
+	if (fxd_mem_buffer != NULL)
+		kfree(fxd_mem_buffer);
+	mutex_destroy(&cma_buffer_lock);
 	return 0;
+}
+
+static void bg_spi_shutdown(struct spi_device *spi)
+{
+	bg_spi_remove(spi);
 }
 
 static int bgcom_pm_suspend(struct device *dev)
@@ -1030,6 +1064,7 @@ static int bgcom_pm_suspend(struct device *dev)
 	if (ret == 0) {
 		bg_spi->bg_state = BGCOM_STATE_SUSPEND;
 		atomic_set(&bg_is_spi_active, 0);
+		disable_irq(bg_irq);
 	}
 	pr_info("suspended with : %d\n", ret);
 	return ret;
@@ -1045,8 +1080,11 @@ static int bgcom_pm_resume(struct device *dev)
 	clnt_handle.bg_spi = spi;
 	atomic_set(&bg_is_spi_active, 1);
 	ret = bgcom_resume(&clnt_handle);
-	if (ret == 0)
-		pr_info("Bgcom resumed\n");
+	if (ret == 0) {
+		pr_err("Bgcom resumed\n");
+		enable_irq(bg_irq);
+	}
+	pr_err("Bgcom resumed with : %d\n", ret);
 	return ret;
 }
 
@@ -1069,6 +1107,7 @@ static struct spi_driver bg_spi_driver = {
 	},
 	.probe = bg_spi_probe,
 	.remove = bg_spi_remove,
+	.shutdown = bg_spi_shutdown,
 };
 
 module_spi_driver(bg_spi_driver);
