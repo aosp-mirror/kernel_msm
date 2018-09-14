@@ -39,3 +39,7 @@
 				"/vendor/etc/ese/loaderservice_updater_eng_";
 	};
 };
+
+&pmi8998_pdphy {
+	/delete-property/ goog,wlc-supported;
+};
