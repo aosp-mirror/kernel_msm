@@ -2114,6 +2114,8 @@ static int tcpm_src_attach(struct tcpm_port *port)
 	if (ret < 0)
 		return ret;
 
+	tcpm_set_cc(port, tcpm_rp_cc(port));
+
 	ret = port->tcpc->set_pd_rx(port->tcpc, true);
 	if (ret < 0)
 		goto out_disable_mux;
