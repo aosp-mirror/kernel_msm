@@ -453,23 +453,6 @@ err_nomem:
 	return err;
 }
 
-static int max77826_config_buck(struct i2c_client *i2c)
-{
-	int ret = -1;
-	/*Set 3.2V to Buck-Boost*/
-	ret = max77826_write_reg(i2c, MAX77826_REG_BB_VOUT, 0x30);
-	/*Set 1.35V to Buck*/
-	ret = max77826_write_reg(i2c, MAX77826_REG_BUCK_VOUT, 0x88);
-	/*Enable PMIC Buck, Buck-Boost Voltages*/
-	ret = max77826_write_reg(i2c, MAX77826_REG_B_BB_OPMD, 0x0A);
-	/*Forced PWM on Buck*/
-	ret = max77826_write_reg(i2c, MAX77826_REG_BUCK_CFG, 0x0D);
-	/*Forced PWM on Buck-Boost*/
-	ret = max77826_write_reg(i2c, MAX77826_REG_BB_CFG, 0x3A);
-
-	return ret;
-}
-
 static int max77826_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
@@ -524,7 +507,6 @@ static int max77826_i2c_probe(struct i2c_client *i2c,
 	mutex_init(&max77826->io_lock);
 	i2c_set_clientdata(i2c, max77826);
 	ret = max77826_setup_regulators(max77826, pdata);
-	max77826_config_buck(i2c);
 
 	if (ret < 0)
 		goto err_detect;
