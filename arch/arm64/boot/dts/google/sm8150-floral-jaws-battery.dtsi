@@ -22,6 +22,7 @@
 
 &max1720x_fg {
 
+	maxim,rsense-default = <500>;
 	maxim,n_regval =  /bits/ 16 <
 		0x9C 0x0380 /* nIChgTerm = 280.0 mA */
 		0x9D 0x0EB4 /* nFilterCfg: TEMP=90.0s MIX=12.8h
