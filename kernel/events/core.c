@@ -230,7 +230,7 @@ int perf_cpu_time_max_percent_handler(struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
-	int ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	int ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 
 	if (ret || !write)
 		return ret;
@@ -3331,18 +3331,16 @@ errout:
  * Returns a matching context with refcount and pincount.
  */
 static struct perf_event_context *
-find_get_context(struct perf_event *event, struct task_struct *task, int cpu)
+find_get_context(struct pmu *pmu, struct task_struct *task, int cpu, bool check)
 {
 	struct perf_event_context *ctx, *clone_ctx = NULL;
 	struct perf_cpu_context *cpuctx;
-	struct pmu *pmu = event->pmu;
 	unsigned long flags;
 	int ctxn, err;
 
 	if (!task) {
 		/* Must be root to operate on a CPU event: */
-		if (event->owner != EVENT_OWNER_KERNEL && perf_paranoid_cpu() &&
-			!capable(CAP_SYS_ADMIN))
+		if (check && perf_paranoid_cpu() && !capable(CAP_SYS_ADMIN))
 			return ERR_PTR(-EACCES);
 
 		/*
@@ -4910,7 +4908,8 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
 		values[n++] = running;
 
-	if (leader != event)
+	if ((leader != event) &&
+	    (leader->state == PERF_EVENT_STATE_ACTIVE))
 		leader->pmu->read(leader);
 
 	values[n++] = perf_event_count(leader);
@@ -7613,7 +7612,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	/*
 	 * Get the target context (task or percpu):
 	 */
-	ctx = find_get_context(event, task, event->cpu);
+	ctx = find_get_context(pmu, task, event->cpu, true);
 	if (IS_ERR(ctx)) {
 		err = PTR_ERR(ctx);
 		goto err_alloc;
@@ -7810,8 +7809,12 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	event->owner = EVENT_OWNER_KERNEL;
 
 	account_event(event);
+	/* Skip security check on kernel owned event */
+	if (event->owner == EVENT_OWNER_KERNEL)
+		ctx = find_get_context(event->pmu, task, cpu, false);
+	else
+		ctx = find_get_context(event->pmu, task, cpu, true);
 
-	ctx = find_get_context(event, task, cpu);
 	if (IS_ERR(ctx)) {
 		err = PTR_ERR(ctx);
 		goto err_free;
