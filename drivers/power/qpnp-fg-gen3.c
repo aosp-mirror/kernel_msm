@@ -21,6 +21,7 @@
 #include <linux/of_batterydata.h>
 #include <linux/iio/consumer.h>
 #include <linux/qpnp/qpnp-revid.h>
+#include <linux/qpnp-misc.h>
 #include "fg-core.h"
 #include "fg-reg.h"
 
@@ -3621,6 +3622,22 @@ static int fg_notifier_cb(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int twm_notifier_cb(struct notifier_block *nb,
+				unsigned long action, void *data)
+{
+	struct fg_chip *chip = container_of(nb, struct fg_chip, twm_nb);
+
+	if (action != PMIC_TWM_CLEAR &&
+			action != PMIC_TWM_ENABLE) {
+		pr_debug("Unsupported option %lu\n", action);
+		return NOTIFY_OK;
+	}
+
+	chip->twm_state = (u8)action;
+
+	return NOTIFY_OK;
+}
+
 static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
@@ -5012,6 +5029,9 @@ static int fg_parse_dt(struct fg_chip *chip)
 	chip->dt.disable_esr_pull_dn = of_property_read_bool(node,
 					"qcom,fg-disable-esr-pull-dn");
 
+	chip->dt.disable_fg_twm = of_property_read_bool(node,
+					"qcom,fg-disable-in-twm");
+
 	return 0;
 }
 
@@ -5190,6 +5210,11 @@ static int fg_gen3_probe(struct spmi_device *spmi)
 		goto exit;
 	}
 
+	chip->twm_nb.notifier_call = twm_notifier_cb;
+	rc = qpnp_misc_twm_notifier_register(&chip->twm_nb);
+	if (rc < 0)
+		pr_err("Failed to register twm_notifier_cb rc=%d\n", rc);
+
 	rc = fg_register_interrupts(chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Error in registering interrupts, rc:%d\n",
@@ -5290,17 +5315,11 @@ static int fg_gen3_remove(struct spmi_device *spmi)
 	return 0;
 }
 
-static int __init get_board_id(char *buf)
-{
-	device_board_id = 0;
-	device_board_id = simple_strtol(buf, NULL, 10);
-	return 0;
-}
-
 static void fg_gen3_shutdown(struct spmi_device *spmi)
 {
 	struct fg_chip *chip = dev_get_drvdata(&spmi->dev);
 	int rc;
+	u8 mask;
 
 	rc = fg_set_esr_timer(chip, chip->dt.esr_timer_shutdown[TIMER_RETRY],
 				chip->dt.esr_timer_shutdown[TIMER_MAX], false,
@@ -5308,10 +5327,21 @@ static void fg_gen3_shutdown(struct spmi_device *spmi)
 	if (rc < 0)
 		pr_err("Error in setting ESR timer at shutdown, rc=%d\n", rc);
 
+	if (chip->twm_state == PMIC_TWM_ENABLE && chip->dt.disable_fg_twm) {
+		rc = fg_masked_write(chip, BATT_SOC_EN_CTL(chip),
+					FG_ALGORITHM_EN_BIT, 0);
+		if (rc < 0)
+			pr_err("Error in disabling FG rc=%d\n", rc);
+
+		mask = BCL_RST_BIT | MEM_RST_BIT | ALG_RST_BIT;
+		rc = fg_masked_write(chip, BATT_SOC_RST_CTRL0(chip),
+					mask, mask);
+		if (rc < 0)
+			pr_err("Error in disabling FG resets rc=%d\n", rc);
+	}
+
 	fg_cleanup(chip);
 }
-
-early_param("BuildPhase", get_board_id);
 
 static const struct of_device_id fg_gen3_match_table[] = {
 	{.compatible = FG_GEN3_DEV_NAME},
