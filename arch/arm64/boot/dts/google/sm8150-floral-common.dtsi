@@ -34,6 +34,12 @@
 #include "sm8150-floral-touch.dtsi"
 #include "sm8150-floral-vadc.dtsi"
 
+/* b/115423655 */
+&pm8150_s5 {
+	regulator-min-microvolt = <2040000>;
+	qcom,init-voltage = <2040000>;
+};
+
 &vendor {
 	bluetooth: bt_wcn3990 {
 		compatible = "qca,wcn3990";
