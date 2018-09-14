@@ -2104,7 +2104,8 @@ static int __iw_set_bitrate(struct net_device *dev,
     hdd_wext_state_t *pWextState;
     hdd_station_ctx_t *pHddStaCtx;
     hdd_context_t *pHddCtx;
-    v_U8_t supp_rates[WNI_CFG_SUPPORTED_RATES_11A_LEN];
+    v_U8_t supp_rates[WNI_CFG_SUPPORTED_RATES_11A_LEN +
+                      WNI_CFG_SUPPORTED_RATES_11B_LEN];
     v_U32_t a_len = WNI_CFG_SUPPORTED_RATES_11A_LEN;
     v_U32_t b_len = WNI_CFG_SUPPORTED_RATES_11B_LEN;
     v_U32_t i, rate;
@@ -2167,7 +2168,7 @@ static int __iw_set_bitrate(struct net_device *dev,
                         supp_rates, &a_len) == eHAL_STATUS_SUCCESS) &&
                 (ccmCfgGetStr(WLAN_HDD_GET_HAL_CTX(pAdapter),
                         WNI_CFG_SUPPORTED_RATES_11B,
-                        supp_rates, &b_len) == eHAL_STATUS_SUCCESS))
+                        supp_rates + a_len, &b_len) == eHAL_STATUS_SUCCESS))
             {
                 for (i = 0; i < (b_len + a_len); ++i)
                 {
@@ -6327,6 +6328,7 @@ static VOS_STATUS wlan_hdd_get_current_antenna_index(hdd_adapter_t *pAdapter,
    else
    {
        /* request was sent -- wait for the response */
+       ret = hdd_request_wait_for_response(request);
        if (ret)
        {
            hddLog(VOS_TRACE_LEVEL_ERROR,
@@ -8944,6 +8946,7 @@ int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest)
             {
                 hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Failure to execute Clear Filter",
                         __func__);
+                hdd_request_put(request);
                 return -EINVAL;
             }
 
