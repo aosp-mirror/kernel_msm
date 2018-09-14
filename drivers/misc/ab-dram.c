@@ -384,6 +384,9 @@ EXPORT_SYMBOL(ab_dram_alloc_dma_buf_kernel);
 
 void ab_dram_free_dma_buf_kernel(struct dma_buf *dmabuf)
 {
+	if (!dmabuf)
+		return;
+
 	dma_buf_put(dmabuf);
 }
 EXPORT_SYMBOL(ab_dram_free_dma_buf_kernel);
