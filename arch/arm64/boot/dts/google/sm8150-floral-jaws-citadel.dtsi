@@ -11,7 +11,7 @@
  */
 
 &floral_citadel {
-	/* pm8150b gpio 4 trace was cut, so this is non-functional. */
-	citadel,ctdl_rst = <&pm8150b_gpios 4 0x0>;
+	/* pm8150b gpio 4 is illegal and non-functional. */
+	citadel,ctdl_rst = <&pm8150b_gpios 10 0x0>;
 };
 
