@@ -107,11 +107,11 @@
 		/* top speaker - portrait left */
 		compatible = "cirrus,cs35l36";
 		reg = <0x41>;
-		reset-gpios = <&tlmm 128 0>;
-		irq-gpio = <&tlmm 125 0>;
+		reset-gpios = <&tlmm 35 0>;
+		irq-gpio = <&tlmm 36 0>;
 		//VA-supply = <&pm8150_s4>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <125 IRQ_TYPE_LEVEL_LOW>;
+		interrupts = <36 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cs35l36_reset_top &cs35l36_irq_top>;
 		cirrus,boost-ind-nanohenry = <1000>;
