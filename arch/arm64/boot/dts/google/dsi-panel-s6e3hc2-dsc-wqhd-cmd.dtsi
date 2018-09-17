@@ -49,14 +49,15 @@
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-clockrate = <962150400>;
 				qcom,mdss-dsi-panel-width = <1440>;
 				qcom,mdss-dsi-panel-height = <3040>;
-				qcom,mdss-dsi-h-pulse-width = <20>;
+				qcom,mdss-dsi-h-pulse-width = <16>;
 				qcom,mdss-dsi-h-back-porch = <28>;
-				qcom,mdss-dsi-h-front-porch = <64>;
+				qcom,mdss-dsi-h-front-porch = <56>;
 				qcom,mdss-dsi-h-sync-skew = <0>;
-				qcom,mdss-dsi-v-back-porch = <20>;
-				qcom,mdss-dsi-v-front-porch = <8>;
+				qcom,mdss-dsi-v-back-porch = <16>;
+				qcom,mdss-dsi-v-front-porch = <12>;
 				qcom,mdss-dsi-v-pulse-width = <4>;
 				qcom,mdss-dsi-on-command = [
 					07 01 00 00 00 00 01 01    /* Compression Enable */
@@ -78,6 +79,59 @@
 					05 01 00 00 78 00 02 10 00 /* sleep in */
 				];
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+
+				qcom,mdss-dsi-timing-switch-command = [
+					15 01 00 00 00 00 02 53 20 /* write ctl 60hz */];
+				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
+
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-slice-height = <40>;
+				qcom,mdss-dsc-slice-width = <720>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <8>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+
+				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
+				qcom,display-topology = <2 2 1>;
+				qcom,default-topology-index = <0>;
+			};
+			timing@1 {
+				qcom,mdss-dsi-panel-framerate = <90>;
+				qcom,mdss-dsi-panel-clockrate = <962150400>;
+				qcom,mdss-dsi-panel-width = <1440>;
+				qcom,mdss-dsi-panel-height = <3040>;
+				qcom,mdss-dsi-h-pulse-width = <16>;
+				qcom,mdss-dsi-h-back-porch = <28>;
+				qcom,mdss-dsi-h-front-porch = <56>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-v-back-porch = <16>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-on-command = [
+					07 01 00 00 00 00 01 01    /* Compression Enable */
+					05 01 00 00 78 00 01 11    /* sleep out, Wait 120 ms */
+					15 01 00 00 00 00 02 53 30 /* write ctl 90hz */
+					05 01 00 00 00 00 02 35 00 /* TE on */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 F1 5A 5A
+					39 01 00 00 00 00 03 B0 3C B5
+					39 01 00 00 00 00 03 B5 9C D5
+					15 01 00 00 00 00 02 F7 02
+					39 01 00 00 00 00 03 F0 A5 A5
+					39 01 00 00 00 00 03 F1 A5 A5
+					05 01 00 00 00 00 01 29    /* display on */
+				];
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 0A 00 02 28 00 /* display off */
+					05 01 00 00 78 00 02 10 00 /* sleep in */
+				];
+				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+
+				qcom,mdss-dsi-timing-switch-command = [
+					15 01 00 00 00 00 02 53 30 /* write ctl 90hz */];
+				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-slice-height = <40>;
