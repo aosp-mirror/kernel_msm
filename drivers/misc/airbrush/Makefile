@@ -9,5 +9,6 @@ airbrush-y :=	\
 		airbrush-spi.o \
 		airbrush-pmu.o \
 		airbrush-power-gating.o \
+		airbrush-pmic-ctrl.o \
 		airbrush-debugfs.o \
 		airbrush-ddr.o

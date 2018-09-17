@@ -291,13 +291,11 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
 			u32 to_chip_substate_id);
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw);
-int ab_get_pmic_resources(struct ab_state_context *ab_ctx);
 void abc_clk_register(struct ab_state_context *ab_ctx);
 int ab_ddr_init(struct ab_state_context *sc);
 int ab_ddr_suspend(struct ab_state_context *sc);
 int ab_ddr_resume(struct ab_state_context *sc);
 
-int ab_pmic_on(struct ab_state_context *ab_ctx);
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);
 

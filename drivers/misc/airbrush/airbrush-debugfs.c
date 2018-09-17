@@ -137,15 +137,6 @@ static int ab_debugfs_boot(void *data, u64 val)
 }
 DEFINE_SIMPLE_ATTRIBUTE(ab_bootsequence_fops, NULL, ab_debugfs_boot, "%lli\n");
 
-static int ab_assign_resources(void *data, u64 val)
-{
-	struct ab_state_context *sc = (struct ab_state_context *) data;
-
-	ab_get_pmic_resources(sc);
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(ab_assign_resources_fops, NULL, ab_assign_resources, "%lli\n");
 static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *) data;

@@ -33,6 +33,7 @@
 #include <linux/airbrush-sm-ctrl.h>
 
 #include "airbrush-spi.h"
+#include "airbrush-pmic-ctrl.h"
 
 #define REG_SRAM_ADDR	0x10b30374
 #define REG_DDR_INIT	0x10b30378

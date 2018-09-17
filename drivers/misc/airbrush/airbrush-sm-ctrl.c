@@ -21,6 +21,7 @@
 #include "airbrush-spi.h"
 #include "airbrush-pmu.h"
 #include "airbrush-power-gating.h"
+#include "airbrush-pmic-ctrl.h"
 
 static struct ab_state_context *ab_sm_ctx;
 
@@ -35,7 +36,7 @@ static struct block_property ipu_property_table[] = {
 	{BLOCK_STATE_1_0,	"Normal",	"PowerGated",	on,	VOLTAGE_0_75,	off,	550000000,	0,	0,	0,	0},
 	{BLOCK_STATE_1_1,	"Boost",	"PowerGated",	on,	VOLTAGE_0_85,	off,	610000000,	0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	off,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	on,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
 };
 
 static struct block_property tpu_property_table[] = {
@@ -49,7 +50,7 @@ static struct block_property tpu_property_table[] = {
 	{BLOCK_STATE_1_0,	"Normal",	"PowerGated",	on,	VOLTAGE_0_75,	off,	766000000,	0,	0,	0,	0},
 	{BLOCK_STATE_1_1,	"Boost",	"PowerGated",	on,	VOLTAGE_0_85,	off,	962000000,	0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	off,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
+	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	on,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
 };
 
 static struct block_property dram_property_table[] = {
@@ -143,11 +144,6 @@ struct block_property *get_desired_state(struct block *blk,
 	return NULL;
 }
 
-void change_power(void)
-{
-	//TODO
-}
-
 void ab_sm_register_blk_callback(block_name_t name,
 			int (*set_state)(const struct block_property *, void *),
 			void *data)
@@ -193,9 +189,10 @@ int clk_set_frequency(struct device *dev, struct block *blk,
 	return 0;
 }
 
-int blk_set_state(struct device *dev, struct block *blk,
+int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		  u32 to_block_state_id, bool power_control)
 {
+	struct device *dev = sc->dev;
 	bool power_increasing;
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
@@ -208,16 +205,47 @@ int blk_set_state(struct device *dev, struct block *blk,
 	power_increasing = (blk->current_state->logic_voltage
 				< desired_state->logic_voltage);
 
-	if(power_increasing)
-		change_power();
+	if (power_control) {
+		if (blk->current_state->voltage_rail_status == off) {
+			ab_blk_pw_rails_enable(sc, blk->name);
 
-	clk_set_frequency(dev, blk, desired_state->clk_frequency);
-	if(blk->set_state)
-		blk->set_state(desired_state, blk->data);
+			/*TODO enable after IPU/TPU cores power on/off is working*/
+			;//ab_block_power_on(blk->name);
+		} else if (!strcmp(blk->current_state->substate_name, "PowerGated")) {
+			;//ab_block_power_on(blk->name);
+		}
+		/*TODO enable after voltage change is supported in regulator*/
+#if 0
+		if (power_increasing)
+			change_voltage(sc, desired_state->logic_voltage);
+#endif
+	}
 
-	if(!power_increasing)
-		change_power();
+	if (desired_state->voltage_rail_status == on) {
+		clk_set_frequency(dev, blk, desired_state->clk_frequency);
 
+		/* Block specific hooks*/
+		/* TODO: Here we expect IP specific functions
+		 * IPU/TPU blocks turning on/off respective cores
+		 * PCIe setting GEN and lane data rate
+		 * DRAM setting data rate
+		 */
+		if (blk->set_state)
+			blk->set_state(desired_state, blk->data);
+	}
+
+	if (power_control) {
+		if (!strcmp(desired_state->substate_name, "PowerGated")) {
+			;//ab_block_power_off(blk->name);
+		} else if (desired_state->voltage_rail_status == off) {
+			;//ab_block_power_off(blk->name);
+			ab_blk_pw_rails_disable(sc, blk->name);
+		}
+#if 0
+		if (!power_increasing)
+			change_power(blk->block_regulator, desired_state->logic_voltage);
+#endif
+	}
 	blk->current_state = desired_state;
 
 	return 0;
@@ -239,28 +267,28 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
 	if (!map)
 		return -EINVAL;
 
-	if (blk_set_state(sc->dev, &(sc->blocks[BLK_IPU]),
+	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL)))
 		return -EINVAL;
 
-	if (blk_set_state(sc->dev, &(sc->blocks[BLK_TPU]),
+	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
 		      map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL)))
 		return -EINVAL;
 
-	if (blk_set_state(sc->dev, &(sc->blocks[DRAM]),
-		      map->dram_block_state_id, (map->flags & DRAM_POWER_CONTROL)))
+	if (blk_set_state(sc, &(sc->blocks[DRAM]),
+		      map->dram_block_state_id, true))
 		return -EINVAL;
 
-	if (blk_set_state(sc->dev, &(sc->blocks[BLK_MIF]),
-		      map->mif_block_state_id, (map->flags & MIF_POWER_CONTROL)))
+	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
+		      map->mif_block_state_id, true))
 		return -EINVAL;
 
-	if (blk_set_state(sc->dev, &(sc->blocks[BLK_FSYS]),
-		      map->fsys_block_state_id, (map->flags & FSYS_POWER_CONTROL)))
+	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
+		      map->fsys_block_state_id, true))
 		return -EINVAL;
 
-	if (blk_set_state(sc->dev, &(sc->blocks[BLK_AON]),
-		      map->aon_block_state_id,(map->flags & AON_POWER_CONTROL)))
+	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
+		      map->aon_block_state_id, true))
 		return -EINVAL;
 
 	sc->chip_substate_id = to_chip_substate_id;
@@ -279,92 +307,6 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 }
 EXPORT_SYMBOL(ab_sm_register_callback);
 
-int ab_pmic_on(struct ab_state_context *ab_ctx)
-{
-	struct platform_device *plat_dev = ab_ctx->pdev;
-	int ret;
-
-	ret = regulator_enable(ab_ctx->smps2);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable smps2 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_smps2;
-	}
-
-	ret = regulator_enable(ab_ctx->ldo1);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable ldo1 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_ldo1;
-	}
-
-	ret = regulator_enable(ab_ctx->smps3);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable smps3 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_smps3;
-	}
-
-	ret = regulator_enable(ab_ctx->ldo4);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable ldo4 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_ldo4;
-	}
-
-	ret = regulator_enable(ab_ctx->ldo5);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable ldo5 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_ldo5;
-	}
-
-	ret = regulator_enable(ab_ctx->smps1);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable smps1 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_smps1;
-	}
-
-	ret = regulator_enable(ab_ctx->ldo3);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable ldo3 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_ldo3;
-	}
-
-	ret = regulator_enable(ab_ctx->ldo2);
-	if (ret) {
-		dev_err(&plat_dev->dev, "%s: failed to enable ldo2 (%d)\n",
-				__func__, ret);
-		goto fail_regulator_ldo2;
-	}
-
-	return 0;
-
-fail_regulator_ldo2:
-    regulator_disable(ab_ctx->ldo3);
-fail_regulator_ldo3:
-    regulator_disable(ab_ctx->smps1);
-fail_regulator_smps1:
-    regulator_disable(ab_ctx->ldo5);
-fail_regulator_ldo5:
-    regulator_disable(ab_ctx->ldo4);
-fail_regulator_ldo4:
-    regulator_disable(ab_ctx->smps3);
-fail_regulator_smps3:
-    regulator_disable(ab_ctx->ldo1);
-fail_regulator_ldo1:
-    regulator_disable(ab_ctx->smps2);
-fail_regulator_smps2:
-
-	dev_err(&plat_dev->dev,
-			"%s: PMIC power up failure (%d)\n", __func__, ret);
-
-	return -ENODEV;
-
-}
-
 void ab_enable_pgood(struct ab_state_context *ab_ctx)
 {
 	gpiod_set_value_cansleep(ab_ctx->soc_pwrgood, __GPIO_ENABLE);
@@ -374,86 +316,6 @@ void ab_disable_pgood(struct ab_state_context *ab_ctx)
 {
 	gpiod_set_value_cansleep(ab_ctx->soc_pwrgood, __GPIO_DISABLE);
 }
-
-
-int ab_get_pmic_resources(struct ab_state_context *ab_ctx)
-{
-	struct platform_device *plat_dev = ab_ctx->pdev;
-
-	ab_ctx->soc_pwrgood = devm_gpiod_get(&plat_dev->dev, "soc-pwrgood", GPIOD_OUT_LOW);
-	if (IS_ERR(ab_ctx->soc_pwrgood)) {
-		printk("%s: Could not get pmic_soc_pwrgood gpio (%ld)\n",
-				__func__, PTR_ERR(ab_ctx->soc_pwrgood));
-	}
-
-	ab_ctx->smps1 = devm_regulator_get(&plat_dev->dev, "s2mpb04_smps1");
-	if (IS_ERR(ab_ctx->smps1)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_smps1 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->smps1));
-		return -ENODEV;
-	}
-
-	ab_ctx->smps2 = devm_regulator_get(&plat_dev->dev, "s2mpb04_smps2");
-	if (IS_ERR(ab_ctx->smps2)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_smps2 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->smps2));
-		return -ENODEV;
-	}
-
-	ab_ctx->smps3 = devm_regulator_get(&plat_dev->dev, "s2mpb04_smps3");
-	if (IS_ERR(ab_ctx->smps3)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_smps3 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->smps3));
-		return -ENODEV;
-	}
-
-	ab_ctx->ldo1 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo1");
-	if (IS_ERR(ab_ctx->ldo1)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_ldo1 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->ldo1));
-		return -ENODEV;
-	}
-
-	ab_ctx->ldo2 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo2");
-	if (IS_ERR(ab_ctx->ldo2)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_ldo2 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->ldo2));
-		return -ENODEV;
-	}
-
-	ab_ctx->ldo3 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo3");
-	if (IS_ERR(ab_ctx->ldo3)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_ldo3 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->ldo3));
-		return -ENODEV;
-	}
-
-	ab_ctx->ldo4 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo4");
-	if (IS_ERR(ab_ctx->ldo4)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_ldo4 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->ldo4));
-		return -ENODEV;
-	}
-
-	ab_ctx->ldo5 = devm_regulator_get(&plat_dev->dev, "s2mpb04_ldo5");
-	if (IS_ERR(ab_ctx->ldo5)) {
-		dev_err(&plat_dev->dev,
-			"%s: failed to get s2mpb04_ldo5 supply (%ld)\n",
-			__func__, PTR_ERR(ab_ctx->ldo5));
-		return -ENODEV;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(ab_get_pmic_resources);
-
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
@@ -555,4 +417,3 @@ fail_ab_ready:
 	return NULL;
 }
 EXPORT_SYMBOL(ab_sm_init);
-
