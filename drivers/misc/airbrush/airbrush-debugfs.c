@@ -1,10 +1,11 @@
 /*
  * Copyright (C) 2018 Samsung Electronics Co., Ltd.
  *
- * Authors: Shaik Ameer Basha <shaik.ameer@samsung.com>
- * 	    Raman Kumar Banka (raman.k2@samsung.com)
+ * Authors:
+ *	Shaik Ameer Basha <shaik.ameer@samsung.com>
+ *	Raman Kumar Banka (raman.k2@samsung.com)
  *
- * Airbrush State Manager Control driver..
+ * Airbrush State Manager Control driver.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,7 +23,7 @@ int ab_interrupt_M0(int tar_dev);
 
 static int chip_state_set(void *sc, u64 val)
 {
-	if(ab_sm_set_state((struct ab_state_context *)sc, 0, val))
+	if (ab_sm_set_state((struct ab_state_context *)sc, 0, val))
 		pr_err("State change failed\n");
 	return 0;
 }
@@ -50,7 +51,8 @@ static int vrail_status_get(void *blk_passed, u64 *val)
 	*val = blk->current_state->voltage_rail_status;
 	return 0;
 }
-DEFINE_DEBUGFS_ATTRIBUTE(fops_vrail_status, vrail_status_get, NULL, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(fops_vrail_status,
+				vrail_status_get, NULL, "%llu\n");
 
 static int logic_voltage_get(void *blk_passed, u64 *val)
 {
@@ -58,7 +60,8 @@ static int logic_voltage_get(void *blk_passed, u64 *val)
 	*val = blk->current_state->logic_voltage;
 	return 0;
 }
-DEFINE_DEBUGFS_ATTRIBUTE(fops_logic_voltage, logic_voltage_get, NULL, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(fops_logic_voltage,
+				logic_voltage_get, NULL, "%llu\n");
 
 static int clk_status_get(void *blk_passed, u64 *val)
 {
@@ -74,7 +77,8 @@ static int clk_frequency_get(void *blk_passed, u64 *val)
 	*val = blk->current_state->clk_frequency;
 	return 0;
 }
-DEFINE_DEBUGFS_ATTRIBUTE(fops_clk_frequency, clk_frequency_get, NULL, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(fops_clk_frequency,
+				clk_frequency_get, NULL, "%llu\n");
 
 static int num_powered_cores_get(void *blk_passed, u64 *val)
 {
@@ -82,7 +86,8 @@ static int num_powered_cores_get(void *blk_passed, u64 *val)
 	*val = blk->current_state->num_powered_cores;
 	return 0;
 }
-DEFINE_DEBUGFS_ATTRIBUTE(fops_num_powered_cores, num_powered_cores_get, NULL, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(fops_num_powered_cores,
+				num_powered_cores_get, NULL, "%llu\n");
 
 static int num_computing_cores_get(void *blk_passed, u64 *val)
 {
@@ -90,7 +95,8 @@ static int num_computing_cores_get(void *blk_passed, u64 *val)
 	*val = blk->current_state->num_computing_cores;
 	return 0;
 }
-DEFINE_DEBUGFS_ATTRIBUTE(fops_num_computing_cores, num_computing_cores_get, NULL, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(fops_num_computing_cores,
+				num_computing_cores_get, NULL, "%llu\n");
 
 static int num_powered_tiles_get(void *blk_passed, u64 *val)
 {
@@ -98,7 +104,8 @@ static int num_powered_tiles_get(void *blk_passed, u64 *val)
 	*val = blk->current_state->num_powered_tiles;
 	return 0;
 }
-DEFINE_DEBUGFS_ATTRIBUTE(fops_num_powered_tiles, num_powered_tiles_get, NULL, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(fops_num_powered_tiles,
+				num_powered_tiles_get, NULL, "%llu\n");
 
 static int data_rate_get(void *blk_passed, u64 *val)
 {
@@ -147,7 +154,8 @@ static int ab_debugfs_clk_register(void *data, u64 val)
 	abc_clk_register(sc);
 	return 0;
 }
-DEFINE_SIMPLE_ATTRIBUTE(ab_clk_register_fops, NULL, ab_debugfs_clk_register, "%lli\n");
+DEFINE_SIMPLE_ATTRIBUTE(ab_clk_register_fops,
+				NULL, ab_debugfs_clk_register, "%lli\n");
 
 
 static int ab_debugfs_ddr_ctrl(void *data, u64 val)
@@ -175,49 +183,50 @@ DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_ctrl_fops, NULL, ab_debugfs_ddr_ctrl, "%lli\n");
 void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 {
 	struct dentry *d;
+
 	d = debugfs_create_file("state_id", 0444, parent_dir,
 			       blk, &fops_id);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("voltage_rail_status", 0444, parent_dir,
 			       blk, &fops_vrail_status);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("logic_voltage", 0444, parent_dir,
 			       blk, &fops_logic_voltage);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("clk_status", 0444, parent_dir,
 			       blk, &fops_clk_status);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("clk_frequency", 0444, parent_dir,
 			       blk, &fops_clk_frequency);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("num_powered_cores", 0444, parent_dir,
 			       blk, &fops_num_powered_cores);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("num_computing_cores", 0444, parent_dir,
 			       blk, &fops_num_computing_cores);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("num_powered_tiles", 0444, parent_dir,
 			       blk, &fops_num_powered_tiles);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("data_rate", 0444, parent_dir,
 			       blk, &fops_data_rate);
-	if(!d)
+	if (!d)
 		goto err_out;
 
 	return;
@@ -255,43 +264,38 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d_chip)
 		goto err_out;
 
-	d = debugfs_create_file("ab_assign_resources", 0664, d_chip, sc,
-			&ab_assign_resources_fops);
+	d = debugfs_create_file("chip_state", 0664, d_chip, sc,
+				&fops_chip_state);
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_file("chip_state", 0664, d_chip, sc,
-				&fops_chip_state);
-        if (!d)
-		goto err_out;
-
 	d_block = debugfs_create_dir("ipu", d_chip);
-        if (!d_block)
+	if (!d_block)
 		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_IPU]));
 
 	d_block = debugfs_create_dir("tpu", d_chip);
-        if (!d_block)
+	if (!d_block)
 		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_TPU]));
 
 	d_block = debugfs_create_dir("dram", d_chip);
-        if (!d_block)
+	if (!d_block)
 		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[DRAM]));
 
 	d_block = debugfs_create_dir("mif", d_chip);
-        if (!d_block)
+	if (!d_block)
 		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_MIF]));
 
 	d_block = debugfs_create_dir("fsys", d_chip);
-        if (!d_block)
+	if (!d_block)
 		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_FSYS]));
 
 	d_block = debugfs_create_dir("aon", d_chip);
-        if (!d_block)
+	if (!d_block)
 		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_AON]));
 

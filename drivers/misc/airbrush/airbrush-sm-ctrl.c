@@ -61,7 +61,7 @@ static struct block_property dram_property_table[] = {
 	{BLOCK_STATE_0_6,	"PowerUp",	"MaxTransact",		on,	VOLTAGE_0_60,	on,	1867000000,	0,	0,	0,	3733},
 	{BLOCK_STATE_1_0,	"PowerDown",	"ClockOff",		on,	VOLTAGE_0_60,	off,	1867000000,	0,	0,	0,	3733},
 	{BLOCK_STATE_1_1,	"PowerDown",	"ClockOn",		on,	VOLTAGE_0_60,	on,	1867000000,	0,	0,	0,	3733},
-	{BLOCK_STATE_2_0,	"Retention",	"SelfRefresh",		on,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{BLOCK_STATE_2_0,	"Retention",	"SelfRefresh",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_DEFAULT,	"Bootup State",	"MaxTransact",		on,	VOLTAGE_0_60,	on,	1867000000,	0,	0,	0,	3733}
 };
@@ -80,15 +80,15 @@ static struct block_property mif_property_table[] = {
 
 static struct block_property fsys_property_table[] = {
 	{BLOCK_STATE_0_0,	"ElectricalIdle",	"L0s",		on,	VOLTAGE_0_85,	off,	4000000000,	0,	0,	0,	3},
-	{BLOCK_STATE_0_1,	"PowerUp",		"L0",		on,	VOLTAGE_0_85,	on,	1250000000,	0,	0,	0,	1},/*GEN1L0*/
-	{BLOCK_STATE_0_2,	"PowerUp",		"L0",		on,	VOLTAGE_0_85,	on,	2500000000,	0,	0,	0,	2},/*GEN2L0*/
-	{BLOCK_STATE_0_3,	"PowerUp",		"L0",		on,	VOLTAGE_0_85,	on,	4000000000,	0,	0,	0,	3},/*GEN3L0*/
+	{BLOCK_STATE_0_1,	"PowerUp",		"L0",		on,	VOLTAGE_0_85,	on,	1250000000,	0,	0,	0,	1}, /*GEN1L0*/
+	{BLOCK_STATE_0_2,	"PowerUp",		"L0",		on,	VOLTAGE_0_85,	on,	2500000000,	0,	0,	0,	2}, /*GEN2L0*/
+	{BLOCK_STATE_0_3,	"PowerUp",		"L0",		on,	VOLTAGE_0_85,	on,	4000000000,	0,	0,	0,	3}, /*GEN3L0*/
 	{BLOCK_STATE_1_0,	"ElectricalIdle",	"L1",		on,	VOLTAGE_0_85,	on,	4000000000,	0,	0,	0,	0},
 	{BLOCK_STATE_1_1,	"ElectricalIdle",	"L1.1",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_1_2,	"ElectricalIdle",	"L1.2",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_2_0,	"Hibernate",		"L2",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",		"L3",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",		"L0",		on,	VOLTAGE_0_85,	on,	4000000000,	0,	0,	0,	3}/*GEN3L0*/
+	{BLOCK_STATE_DEFAULT,	"Bootup State",		"L0",		on,	VOLTAGE_0_85,	on,	4000000000,	0,	0,	0,	3} /*GEN3L0*/
 };
 
 static struct block_property aon_property_table[] = {
@@ -125,15 +125,16 @@ static struct chip_to_block_map chip_state_map[] = {
 	{CHIP_STATE_2_5, BLOCK_STATE_1_0, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_2_6, BLOCK_STATE_1_1, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
 	{CHIP_STATE_3_0, BLOCK_STATE_1_0, BLOCK_STATE_1_0, BLOCK_STATE_2_0, BLOCK_STATE_0_0, BLOCK_STATE_1_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_4_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_0_0, BLOCK_STATE_1_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_5_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_6_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, IPU_POWER_CONTROL},
+	{CHIP_STATE_4_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_0_0, BLOCK_STATE_1_2, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
+	{CHIP_STATE_5_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, TPU_POWER_CONTROL},
+	{CHIP_STATE_6_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, TPU_POWER_CONTROL},
 };
 
-struct block_property* get_desired_state(struct block *blk,
+struct block_property *get_desired_state(struct block *blk,
 					 u32 to_block_state_id)
 {
 	int i;
+
 	for (i = 0; i < (blk->nr_block_states); i++) {
 		if (blk->block_property_table[i].id == to_block_state_id)
 			return &(blk->block_property_table[i]);
@@ -147,8 +148,8 @@ void change_power(void)
 }
 
 void ab_sm_register_blk_callback(block_name_t name,
-				int (*set_state)(const struct block_property *, void *),
-				void* data)
+			int (*set_state)(const struct block_property *, void *),
+			void *data)
 {
 	ab_sm_ctx->blocks[name].set_state = set_state;
 	ab_sm_ctx->blocks[name].data = data;
@@ -157,20 +158,20 @@ void ab_sm_register_blk_callback(block_name_t name,
 int clk_set_frequency(struct device *dev, struct block *blk,
 			 u64 frequency)
 {
-	switch(blk->name) {
+	switch (blk->name) {
 	case BLK_IPU:
-		if(blk->current_state->clk_frequency == 0)
+		if (blk->current_state->clk_frequency == 0)
 			ipu_pll_enable(dev);
 		ipu_set_rate(dev, frequency);
-		if(frequency==0)
-			ipu_pll_disable(dev);
+		if (frequency == 0)
+			;//ipu_pll_disable(dev);
 		break;
 	case BLK_TPU:
-		if(blk->current_state->clk_frequency == 0)
+		if (blk->current_state->clk_frequency == 0)
 			tpu_pll_enable(dev);
 		tpu_set_rate(dev, frequency);
-		if(frequency==0)
-			tpu_pll_disable(dev);
+		if (frequency == 0)
+			;//tpu_pll_disable(dev);
 		break;
 	case BLK_MIF:
 		break;

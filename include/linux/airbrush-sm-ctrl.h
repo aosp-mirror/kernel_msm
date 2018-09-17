@@ -39,7 +39,7 @@
 #define __GPIO_ENABLE	0x1
 #define __GPIO_DISABLE	0x0
 
-typedef enum __block_names{
+typedef enum __block_names {
 	BLK_IPU,
 	BLK_TPU,
 	DRAM,
@@ -48,7 +48,7 @@ typedef enum __block_names{
 	BLK_AON,
 } block_name_t;
 
-enum states{
+enum states {
 	off = 0,
 	on = 1,
 };
@@ -242,9 +242,19 @@ struct ab_state_context {
 	struct dentry *d_entry;
 #endif
 };
+
+/*
+ *  void ab_sm_register_blk_callback - register block specific state change callback
+ *
+ *  name: name of the block for which this callback should be called.
+ *  set_state: callback function.
+ *  block_property: block_property structure passed to callback.
+ *  data: the cookie that is passed back to the callback.
+ */
 void ab_sm_register_blk_callback(block_name_t name,
 				int (*set_state)(const struct block_property *, void *),
-				void* data);
+				void *data);
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie);

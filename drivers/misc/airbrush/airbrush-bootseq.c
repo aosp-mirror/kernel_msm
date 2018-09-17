@@ -3,7 +3,6 @@
  *
  * Authors: Shaik Ameer Basha <shaik.ameer@samsung.com>
  *
- *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -79,6 +78,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	int ret;
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
+
+	ret = ab_get_pmic_resources(ab_ctx);
+	if (ret)
+		return ret;
 
 	ret = ab_pmic_on(ab_ctx);
 	if (ret)
