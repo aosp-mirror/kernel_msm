@@ -42,7 +42,7 @@
 		qcom,mdss-pan-physical-height-dimension = <137>;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <1>;
+		qcom,mdss-dsi-bl-min-level = <4>;
 		qcom,mdss-dsi-bl-max-level = <1023>; /* 10 bit */
 
 		qcom,mdss-dsi-display-timings {
