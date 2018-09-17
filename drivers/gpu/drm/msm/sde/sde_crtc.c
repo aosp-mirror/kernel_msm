@@ -1875,8 +1875,7 @@ int sde_crtc_get_secure_transition_ops(struct drm_crtc *crtc,
 				POST_COMMIT : PRE_COMMIT;
 			ops |= SDE_KMS_OPS_SECURE_STATE_CHANGE;
 			if (old_valid_fb)
-				ops |= (SDE_KMS_OPS_WAIT_FOR_TX_DONE |
-				 SDE_KMS_OPS_CLEANUP_PLANE_FB);
+				ops |= SDE_KMS_OPS_WAIT_FOR_TX_DONE;
 			if (catalog->sui_misr_supported &&
 					sde_crtc->enable_sui_enhancement)
 				smmu_state->sui_misr_state =
