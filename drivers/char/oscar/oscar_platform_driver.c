@@ -5,18 +5,23 @@
  * Copyright (C) 2017 Google, Inc.
  */
 
+#include <asm/current.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
+#include <linux/list.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/mutex.h>
 #include <linux/notifier.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/refcount.h>
 #include <linux/sched.h>
+#include <linux/types.h>
 #include <linux/uaccess.h>
 
 #include "linux/mfd/abc-pcie.h"
@@ -27,8 +32,12 @@
 #include "gasket_page_table.h"
 #include "gasket_sysfs.h"
 
+/* for abc ioctls, move later */
+#include <linux/dma-buf.h>
+#include <linux/ab-dram.h>
+
 #define DRIVER_NAME "abc-pcie-tpu"
-#define DRIVER_VERSION "0.2"
+#define DRIVER_VERSION "0.3"
 
 #define OSCAR_BAR_SIZE 0x100000
 
@@ -133,6 +142,22 @@ static const struct gasket_mappable_region cm_mappable_regions[1] = {
 /* Gasket interrupt data, not really used since we manage our own IRQs */
 static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_INTS];
 
+/* Airbrush-specific DRAM buffers plus PCIe DMA engine data transfers */
+struct abc_buffer {
+	int dma_buf_fd;
+	pid_t pid;
+	refcount_t refcount;
+	uint32_t map_flags;
+	uint32_t page_table_index;
+	uint64_t device_address;
+	struct list_head abc_buffers_list; /* protected by abc_buffers_lock */
+	struct oscar_dev *oscar_dev;
+	struct dma_buf *dma_buf;
+	size_t len;
+	struct dma_buf_attachment *dma_buf_attachment;
+};
+
+
 /* One of these per oscar device instance */
 struct oscar_dev {
 	struct gasket_dev *gasket_dev;
@@ -140,7 +165,11 @@ struct oscar_dev {
 	int irqs[OSCAR_N_IRQS]; /* maps MSI IRQs to TPU logical ints */
 	struct notifier_block lowprio_irq_nb;
 	struct atomic_notifier_head *lowprio_irq_nh;
+	/* List of all active ABC DRAM buffers, protected by abc_buffers_lock */
+	struct mutex abc_buffers_lock;
+	struct list_head abc_buffers;
 };
+
 
 /* Act as if only GCB is instantiated. */
 static int bypass_top_level;
@@ -157,9 +186,172 @@ static int oscar_get_status(struct gasket_dev *gasket_dev)
 	return GASKET_STATUS_ALIVE;
 }
 
+/* Caller must hold abc_buffers_lock */
+static struct abc_buffer *abc_get_buffer_locked(struct oscar_dev *oscar_dev,
+						int fd)
+{
+	struct abc_buffer *abc_buffer;
+
+	list_for_each_entry(abc_buffer, &oscar_dev->abc_buffers,
+			    abc_buffers_list) {
+		if (abc_buffer->dma_buf_fd == fd &&
+		    abc_buffer->pid == current->pid) {
+			refcount_inc(&abc_buffer->refcount);
+			return abc_buffer;
+
+		}
+	}
+	return NULL;
+}
+
+static struct abc_buffer *abc_get_buffer(struct oscar_dev *oscar_dev, int fd)
+{
+	struct abc_buffer *buffer;
+
+	mutex_lock(&oscar_dev->abc_buffers_lock);
+	buffer = abc_get_buffer_locked(oscar_dev, fd);
+	mutex_unlock(&oscar_dev->abc_buffers_lock);
+	return buffer;
+}
+
+/* abc_buffer not valid on return */
+static void oscar_abc_release_buffer(struct abc_buffer *abc_buffer)
+{
+	dma_buf_detach(abc_buffer->dma_buf, abc_buffer->dma_buf_attachment);
+	dma_buf_put(abc_buffer->dma_buf); /* release our ref on dma_buf */
+	kfree(abc_buffer);
+}
+
+/* abc_buffer not valid on return */
+static void abc_put_buffer_locked(struct abc_buffer *abc_buffer)
+{
+	if (refcount_dec_and_test(&abc_buffer->refcount))
+		oscar_abc_release_buffer(abc_buffer);
+}
+
+/* abc_buffer not valid on return */
+static void abc_put_buffer(struct abc_buffer *abc_buffer)
+{
+	struct oscar_dev *oscar_dev = abc_buffer->oscar_dev;
+
+	mutex_lock(&oscar_dev->abc_buffers_lock);
+	abc_put_buffer_locked(abc_buffer);
+	mutex_unlock(&oscar_dev->abc_buffers_lock);
+}
+
+static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
+				  struct oscar_abdram_alloc_ioctl __user *argp)
+{
+	struct oscar_abdram_alloc_ioctl ibuf;
+	struct dma_buf *abc_dma_buf;
+	struct dma_buf *temp_dma_buf;
+	struct dma_buf_attachment *dma_buf_attachment;
+	struct abc_buffer *abc_buffer;
+	struct abc_buffer *temp_abc_buf;
+	int fd;
+	int ret;
+
+	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
+		return -EFAULT;
+
+	abc_dma_buf = ab_dram_alloc_dma_buf_kernel((size_t)ibuf.size);
+	if (IS_ERR(abc_dma_buf))
+		return PTR_ERR(abc_dma_buf);
+
+	dma_buf_attachment =
+		dma_buf_attach(abc_dma_buf, oscar_dev->gasket_dev->dev);
+	if (IS_ERR(dma_buf_attachment)) {
+		ret = PTR_ERR(dma_buf_attachment);
+		goto free_buf;
+	}
+
+	fd = dma_buf_fd(abc_dma_buf, O_CLOEXEC);
+	if (fd < 0) {
+		ret = fd;
+		goto detach_buf;
+	}
+
+	/* grab our own ref to the dma_buf for so long as we use it */
+	temp_dma_buf = dma_buf_get(fd);
+	if (IS_ERR(temp_dma_buf)) {
+		ret = PTR_ERR(temp_dma_buf);
+		goto detach_buf;
+	}
+
+	abc_buffer = kmalloc(sizeof(struct abc_buffer), GFP_KERNEL);
+	if (!abc_buffer) {
+		ret = -ENOMEM;
+		goto detach_buf;
+	}
+	abc_buffer->dma_buf_fd = fd;
+	abc_buffer->pid = current->pid;
+	abc_buffer->dma_buf = abc_dma_buf;
+	abc_buffer->dma_buf_attachment = dma_buf_attachment;
+	abc_buffer->oscar_dev = oscar_dev;
+	INIT_LIST_HEAD(&abc_buffer->abc_buffers_list);
+	refcount_set(&abc_buffer->refcount, 1);
+
+	mutex_lock(&oscar_dev->abc_buffers_lock);
+	temp_abc_buf = abc_get_buffer_locked(oscar_dev, fd);
+	if (WARN_ON(temp_abc_buf)) {
+		abc_put_buffer(temp_abc_buf);
+		kfree(abc_buffer);
+		ret = -EBUSY;
+		goto detach_buf;
+	}
+
+	list_add_tail(&oscar_dev->abc_buffers, &abc_buffer->abc_buffers_list);
+	mutex_unlock(&oscar_dev->abc_buffers_lock);
+	return fd;
+
+detach_buf:
+	dma_buf_detach(abc_dma_buf, dma_buf_attachment);
+free_buf:
+	ab_dram_free_dma_buf_kernel(abc_dma_buf);
+	return ret;
+}
+
+/*
+ * Caller must hold abc_buffers_lock.  abc_buffer not valid on return,
+ * and abc_buffers list entry is deleted, use safe iterators.
+ */
+static void oscar_abc_mark_buffer_for_release(struct abc_buffer *abc_buffer)
+{
+	list_del(&abc_buffer->abc_buffers_list);
+	abc_put_buffer_locked(abc_buffer);
+}
+
+static int oscar_abc_dealloc_buffer(struct oscar_dev *oscar_dev, int dma_buf_fd)
+{
+	struct abc_buffer *abc_buffer;
+
+	mutex_lock(&oscar_dev->abc_buffers_lock);
+	abc_buffer = abc_get_buffer_locked(oscar_dev, dma_buf_fd);
+	if (!abc_buffer) {
+		mutex_unlock(&oscar_dev->abc_buffers_lock);
+		return -EINVAL;
+	}
+	abc_put_buffer_locked(abc_buffer);
+	oscar_abc_mark_buffer_for_release(abc_buffer);
+	mutex_unlock(&oscar_dev->abc_buffers_lock);
+	return 0;
+}
+
 /* Enters GCB reset state. */
 static int oscar_enter_reset(struct gasket_dev *gasket_dev)
 {
+	struct oscar_dev *oscar_dev =
+		platform_get_drvdata(gasket_dev->platform_dev);
+	struct abc_buffer *buffer;
+	struct abc_buffer *buftemp;
+
+	mutex_lock(&oscar_dev->abc_buffers_lock);
+	list_for_each_entry_safe(buffer, buftemp, &oscar_dev->abc_buffers,
+				 abc_buffers_list) {
+		oscar_abc_mark_buffer_for_release(buffer);
+	}
+	mutex_unlock(&oscar_dev->abc_buffers_lock);
+
 	if (bypass_top_level)
 		return 0;
 
@@ -316,6 +508,9 @@ static uint oscar_ioctl_check_permissions(struct file *filp, uint cmd)
 static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 {
 	struct gasket_dev *gasket_dev = filp->private_data;
+	struct oscar_dev *oscar_dev =
+		platform_get_drvdata(gasket_dev->platform_dev);
+	struct oscar_abdram_alloc_ioctl __user *abdram_alloc;
 
 	if (!oscar_ioctl_check_permissions(filp, cmd))
 		return -EPERM;
@@ -323,6 +518,11 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 	switch (cmd) {
 	case OSCAR_IOCTL_GATE_CLOCK:
 		return oscar_clock_gating(gasket_dev, argp);
+	case OSCAR_IOCTL_ABC_ALLOC_BUFFER:
+		abdram_alloc = (struct oscar_abdram_alloc_ioctl *)argp;
+		return oscar_abc_alloc_buffer(oscar_dev, abdram_alloc);
+	case OSCAR_IOCTL_ABC_DEALLOC_BUFFER:
+		return oscar_abc_dealloc_buffer(oscar_dev, (int)argp);
 	default:
 		return -ENOTTY; /* unknown command */
 	}
@@ -620,6 +820,8 @@ static int oscar_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, oscar_dev);
 	oscar_dev->gasket_dev = gasket_dev;
+	INIT_LIST_HEAD(&oscar_dev->abc_buffers);
+	mutex_init(&oscar_dev->abc_buffers_lock);
 
 	ret = oscar_setup_device(pdev, oscar_dev, gasket_dev);
 	if (ret) {
