@@ -1,5 +1,5 @@
 /*
- * Core JQS management support for the Paintbox programmable IPU
+ * Core JQS debug management support for the Paintbox programmable IPU
  *
  * Copyright (C) 2018 Google, Inc.
  *
@@ -13,15 +13,18 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __IPU_CORE_JQS_H__
-#define __IPU_CORE_JQS_H__
+#ifndef __IPU_CORE_JQS_DEBUG_H__
+#define __IPU_CORE_JQS_DEBUG_H__
 
 #include <linux/ipu-core.h>
 #include <linux/types.h>
 
-int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus);
-void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus);
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+void ipu_core_jqs_debug_init(struct paintbox_bus *bus);
+void ipu_core_jqs_debug_remove(struct paintbox_bus *bus);
+#else
+static inline void ipu_core_jqs_debug_init(struct paintbox_bus *bus) {}
+static inline void ipu_core_jqs_debug_remove(struct paintbox_bus *bus) {}
+#endif
 
-void ipu_core_jqs_release(struct paintbox_bus *bus);
-
-#endif /* __IPU_CORE_JQS_H__ */
+#endif /* __IPU_CORE_JQS_DEBUG_H__ */

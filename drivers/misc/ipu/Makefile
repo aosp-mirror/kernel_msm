@@ -7,6 +7,7 @@ obj-$(CONFIG_IPU)			+= ipu-client.o
 obj-$(CONFIG_IPU)			+= ipu-core.o
 obj-$(CONFIG_IPU)			+= ipu-core-jqs.o
 obj-$(CONFIG_IPU)			+= ipu-core-jqs-cbuf.o
+obj-$(CONFIG_IPU_DEBUG)			+= ipu-core-jqs-debug.o
 obj-$(CONFIG_IPU)			+= ipu-core-jqs-msg-transport.o
 obj-$(CONFIG_IPU_DEBUG)			+= ipu-aon-debug.o
 obj-$(CONFIG_IPU_DEBUG)			+= ipu-apb-debug.o

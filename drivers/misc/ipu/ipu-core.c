@@ -24,6 +24,7 @@
 #include "ipu-adapter.h"
 #include "ipu-core-internal.h"
 #include "ipu-core-jqs.h"
+#include "ipu-core-jqs-debug.h"
 #include "ipu-core-jqs-msg-transport.h"
 
 struct bus_type ipu_bus_type;
