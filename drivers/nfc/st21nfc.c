@@ -73,6 +73,8 @@ struct st21nfc_dev {
 	bool irq_enabled;
 	struct st21nfc_platform platform_data;
 	spinlock_t irq_enabled_lock;
+	uint8_t rx_buffer[MAX_BUFFER_SIZE];
+	uint8_t tx_buffer[MAX_BUFFER_SIZE];
 };
 
 static int st21nfc_loc_set_polaritymode(struct st21nfc_dev *st21nfc_dev,
@@ -153,7 +155,6 @@ static ssize_t st21nfc_dev_read(struct file *filp, char __user *buf,
 	struct st21nfc_dev *st21nfc_dev = container_of(filp->private_data,
 						       struct st21nfc_dev,
 						       st21nfc_device);
-	char tmp[MAX_BUFFER_SIZE];
 	int ret;
 
 	if (count > MAX_BUFFER_SIZE)
@@ -164,22 +165,26 @@ static ssize_t st21nfc_dev_read(struct file *filp, char __user *buf,
 	mutex_lock(&st21nfc_dev->platform_data.read_mutex);
 
 	/* Read data */
-	ret = i2c_master_recv(st21nfc_dev->platform_data.client, tmp, count);
-	mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
+	ret = i2c_master_recv(st21nfc_dev->platform_data.client,
+				st21nfc_dev->rx_buffer, count);
 
 	if (ret < 0) {
 		pr_err("%s: i2c_master_recv returned %d\n", __func__, ret);
+		mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
 		return ret;
 	}
 	if (ret > count) {
 		pr_err("%s: received too many bytes from i2c (%d)\n",
 		       __func__, ret);
+		mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
 		return -EIO;
 	}
-	if (copy_to_user(buf, tmp, ret)) {
+	if (copy_to_user(buf, st21nfc_dev->rx_buffer, ret)) {
 		pr_warn("%s : failed to copy to user space\n", __func__);
+		mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
 		return -EFAULT;
 	}
+	mutex_unlock(&st21nfc_dev->platform_data.read_mutex);
 	return ret;
 }
 
@@ -187,7 +192,6 @@ static ssize_t st21nfc_dev_write(struct file *filp, const char __user *buf,
 				 size_t count, loff_t *offset)
 {
 	struct st21nfc_dev *st21nfc_dev;
-	char tmp[MAX_BUFFER_SIZE];
 	int ret = count;
 
 	st21nfc_dev = container_of(filp->private_data,
@@ -197,14 +201,17 @@ static ssize_t st21nfc_dev_write(struct file *filp, const char __user *buf,
 	if (count > MAX_BUFFER_SIZE)
 		count = MAX_BUFFER_SIZE;
 
-	if (copy_from_user(tmp, buf, count)) {
+	// Writes to i2c are serialized by the HAL layer and therefore doesn't
+	// need to be thread safe.
+	if (copy_from_user(st21nfc_dev->tx_buffer, buf, count)) {
 		pr_err("%s : failed to copy from user space\n", __func__);
 		return -EFAULT;
 	}
 
 	pr_debug("%s : writing %zu bytes.\n", __func__, count);
 	/* Write data */
-	ret = i2c_master_send(st21nfc_dev->platform_data.client, tmp, count);
+	ret = i2c_master_send(st21nfc_dev->platform_data.client,
+				st21nfc_dev->tx_buffer, count);
 	if (ret != count) {
 		pr_err("%s : i2c_master_send returned %d\n", __func__, ret);
 		ret = -EIO;
