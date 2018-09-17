@@ -596,11 +596,8 @@ static int cam_cpas_util_set_camnoc_axi_clk_rate(
 		CAM_DBG(CAM_CPAS, "Setting camnoc axi clk rate : %llu %d",
 			required_camnoc_bw, clk_rate);
 
-		rc = cam_soc_util_set_clk_rate(
-			soc_info->clk[soc_info->src_clk_idx],
-			soc_info->clk_name[soc_info->src_clk_idx],
-			clk_rate);
-		if (rc)
+		rc = cam_soc_util_set_src_clk_rate(soc_info, clk_rate);
+		if (!rc)
 			CAM_ERR(CAM_CPAS,
 				"Failed in setting camnoc axi clk %llu %d %d",
 				required_camnoc_bw, clk_rate, rc);
@@ -738,7 +735,7 @@ static int cam_cpas_hw_update_axi_vote(struct cam_hw_info *cpas_hw,
 		goto unlock_client;
 	}
 
-	CAM_DBG(CAM_CPAS,
+	CAM_DBG(CAM_PERF,
 		"Client=[%d][%s][%d] Requested compressed[%llu], uncompressed[%llu]",
 		client_indx, cpas_client->data.identifier,
 		cpas_client->data.cell_index, axi_vote.compressed_bw,
@@ -900,7 +897,7 @@ static int cam_cpas_hw_update_ahb_vote(struct cam_hw_info *cpas_hw,
 		goto unlock_client;
 	}
 
-	CAM_DBG(CAM_CPAS,
+	CAM_DBG(CAM_PERF,
 		"client=[%d][%s][%d] : type[%d], level[%d], freq[%ld], applied[%d]",
 		client_indx, cpas_client->data.identifier,
 		cpas_client->data.cell_index, ahb_vote.type,

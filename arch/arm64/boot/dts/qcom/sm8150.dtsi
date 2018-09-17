@@ -33,13 +33,14 @@
 / {
 	model = "Qualcomm Technologies, Inc. SM8150";
 	compatible = "qcom,sm8150";
-	qcom,msm-name = "SM8150";
+	qcom,msm-name = "SM8150 V1";
 	qcom,msm-id = <339 0x10000>;
 	interrupt-parent = <&pdc>;
 
 	mem-offline {
 		compatible = "qcom,mem-offline";
-		mem-percent = "35";
+		/* 1 Gb out of 6 Gb*/
+		mem-percent = "17";
 		granule = <512>;
 		mboxes = <&qmp_aop 0>;
 	};
@@ -1466,6 +1467,11 @@
 		reg = <0x182a0018 0x4>;
 	};
 
+	mccc_debug: syscon@90b0000 {
+		compatible = "syscon";
+		reg = <0x90b0000 0x1000>;
+	};
+
 	clock_cpucc: qcom,cpucc {
 		compatible = "qcom,clk-cpu-osm";
 		reg = <0x18321000 0x1400>,
@@ -1489,6 +1495,7 @@
 		qcom,npucc = <&clock_npucc>;
 		qcom,gpucc = <&clock_gpucc>;
 		qcom,cpucc = <&cpucc_debug>;
+		qcom,mccc = <&mccc_debug>;
 		clock-names = "xo_clk_src";
 		clocks = <&clock_rpmh RPMH_CXO_CLK>;
 		#clock-cells = <1>;
@@ -1649,6 +1656,7 @@
 		qcom,firmware-name = "adsp";
 		memory-region = <&pil_adsp_mem>;
 		qcom,signal-aop;
+		qcom,complete-ramdump;
 
 		/* Inputs from lpass */
 		interrupts-extended = <&pdc 0 162 1>,
@@ -1696,6 +1704,7 @@
 		status = "ok";
 		memory-region = <&pil_slpi_mem>;
 		qcom,signal-aop;
+		qcom,complete-ramdump;
 
 		/* Inputs from ssc */
 		interrupts-extended = <&pdc 0 494 1>,
@@ -1741,6 +1750,7 @@
 		qcom,pil-generic-irq-handler;
 		status = "ok";
 		qcom,signal-aop;
+		qcom,complete-ramdump;
 
 		qcom,pas-id = <14>;
 		qcom,proxy-timeout-ms = <10000>;
@@ -1796,6 +1806,7 @@
 		qcom,firmware-name = "cdsp";
 		memory-region = <&pil_cdsp_mem>;
 		qcom,signal-aop;
+		qcom,complete-ramdump;
 
 		qcom,msm-bus,name = "pil-cdsp";
 		qcom,msm-bus,num-cases = <2>;
@@ -1831,6 +1842,7 @@
 
 		vdd-supply = <&mvsc_gdsc>;
 		qcom,proxy-reg-names = "vdd";
+		qcom,complete-ramdump;
 
 		clocks = <&clock_videocc VIDEO_CC_XO_CLK>,
 			<&clock_videocc VIDEO_CC_MVSC_CORE_CLK>,
@@ -1906,6 +1918,9 @@
 
 		qcom,llcc-perfmon {
 			compatible = "qcom,llcc-perfmon";
+
+			clocks = <&clock_aop QDSS_CLK>;
+			clock-names = "qdss_clk";
 		};
 
 		qcom,llcc-erp {
@@ -2439,7 +2454,7 @@
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "sdsprpc-smd";
 			iommus = <&apps_smmu 0x5a3 0x0>;
-			shared-cb = <5>;
+			shared-cb = <2>;
 			dma-coherent;
 		};
 	};
@@ -3064,7 +3079,7 @@
 
 		dcc-ram-offset = <0x6000>;
 
-		qcom,curr-link-list = <2>;
+		qcom,curr-link-list = <3>;
 		qcom,link-list = <DCC_READ 0x18220d14 3 0>,
 				 <DCC_READ 0x18220d30 4 0>,
 				 <DCC_READ 0x18220d44 4 0>,

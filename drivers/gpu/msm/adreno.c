@@ -1860,8 +1860,6 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	if (status)
 		goto error_pwr_off;
 
-	_set_secvid(device);
-
 	status = adreno_ocmem_malloc(adreno_dev);
 	if (status) {
 		KGSL_DRV_ERR(device, "OCMEM malloc failed\n");
@@ -1880,6 +1878,8 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 		if (status)
 			goto error_oob_clear;
 	}
+
+	_set_secvid(device);
 
 	/* Enable 64 bit gpu addr if feature is set */
 	if (gpudev->enable_64bit &&
@@ -2135,7 +2135,7 @@ static int adreno_stop(struct kgsl_device *device)
 			gmu_dev_ops->oob_clear(adreno_dev, oob_gpu);
 			if (gmu_core_regulator_isenabled(device)) {
 				/* GPU is on. Try recovery */
-				gmu_core_setbit(device, GMU_FAULT);
+				set_bit(GMU_FAULT, &device->gmu_core.flags);
 				gmu_core_snapshot(device);
 				error = -EINVAL;
 			} else {
@@ -2177,7 +2177,7 @@ static int adreno_stop(struct kgsl_device *device)
 	if (!error && GMU_DEV_OP_VALID(gmu_dev_ops, wait_for_lowest_idle) &&
 			gmu_dev_ops->wait_for_lowest_idle(adreno_dev)) {
 
-		gmu_core_setbit(device, GMU_FAULT);
+		set_bit(GMU_FAULT, &device->gmu_core.flags);
 		gmu_core_snapshot(device);
 		/*
 		 * Assume GMU hang after 10ms without responding.
