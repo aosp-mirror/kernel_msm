@@ -178,6 +178,15 @@ int abc_pcie_dma_get_status(uint8_t chan, enum dma_data_direction dir,
 int abc_pcie_dma_abort(uint8_t chan, enum dma_data_direction dir);
 
 /**
+ * Top-level API for DMA transfers for kernel space memory
+ * TODO(b/114422444): AB DMA driver Clean-up & Improvements
+ * Generate scatterlist, decide on transfer mode (sblk/mblk)
+ * @dma_desc[in] Data structure describing the DMA transfer including
+ *               local and remote buffer descriptors & dma chan
+ */
+int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc);
+
+/**
  * Issue a DMA transfer
  * @param[in] dma_desc descriptor structure for the DMA transaction
  * @return 0 on success
