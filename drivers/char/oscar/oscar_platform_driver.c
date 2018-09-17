@@ -154,7 +154,10 @@ struct abc_buffer {
 	struct oscar_dev *oscar_dev;
 	struct dma_buf *dma_buf;
 	size_t len;
+	struct mutex mapping_lock; /* protects sg_table and below */
+	struct sg_table *sg_table;
 	struct dma_buf_attachment *dma_buf_attachment;
+	dma_addr_t abdram_dma_addr;
 };
 
 
@@ -214,10 +217,39 @@ static struct abc_buffer *abc_get_buffer(struct oscar_dev *oscar_dev, int fd)
 	return buffer;
 }
 
+/* caller must hold abc_buffer->mapping_lock */
+static void abc_unmap_buffer_locked(struct abc_buffer *abc_buffer)
+{
+	struct gasket_dev *gasket_dev = abc_buffer->oscar_dev->gasket_dev;
+	int pgtbl_index;
+
+	if (!abc_buffer->sg_table)
+		return;
+	pgtbl_index = abc_buffer->page_table_index;
+	gasket_page_table_unmap(gasket_dev->page_table[pgtbl_index],
+				abc_buffer->device_address,
+				abc_buffer->len / PAGE_SIZE);
+
+	dma_buf_unmap_attachment(abc_buffer->dma_buf_attachment,
+				 abc_buffer->sg_table, DMA_TO_DEVICE);
+
+	abc_buffer->sg_table = NULL;
+	abc_buffer->abdram_dma_addr = 0;
+	abc_buffer->len = 0;
+	abc_buffer->map_flags = 0;
+	abc_buffer->device_address = 0;
+	abc_buffer->page_table_index = 0;
+}
+
 /* abc_buffer not valid on return */
 static void oscar_abc_release_buffer(struct abc_buffer *abc_buffer)
 {
+	mutex_lock(&abc_buffer->mapping_lock);
+	if (abc_buffer->sg_table)
+		abc_unmap_buffer_locked(abc_buffer);
 	dma_buf_detach(abc_buffer->dma_buf, abc_buffer->dma_buf_attachment);
+	abc_buffer->dma_buf_attachment = NULL;
+	mutex_unlock(&abc_buffer->mapping_lock);
 	dma_buf_put(abc_buffer->dma_buf); /* release our ref on dma_buf */
 	kfree(abc_buffer);
 }
@@ -290,6 +322,9 @@ static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
 	abc_buffer->oscar_dev = oscar_dev;
 	INIT_LIST_HEAD(&abc_buffer->abc_buffers_list);
 	refcount_set(&abc_buffer->refcount, 1);
+	mutex_init(&abc_buffer->mapping_lock);
+	abc_buffer->sg_table = NULL;
+	abc_buffer->abdram_dma_addr = 0;
 
 	mutex_lock(&oscar_dev->abc_buffers_lock);
 	temp_abc_buf = abc_get_buffer_locked(oscar_dev, fd);
@@ -309,6 +344,87 @@ detach_buf:
 free_buf:
 	ab_dram_free_dma_buf_kernel(abc_dma_buf);
 	return ret;
+}
+
+static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
+				struct oscar_abdram_map_ioctl __user *argp)
+{
+	struct gasket_dev *gasket_dev = oscar_dev->gasket_dev;
+	struct oscar_abdram_map_ioctl ibuf;
+	struct abc_buffer *abc_buffer;
+	int fd;
+	int ret;
+
+	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
+		return -EFAULT;
+
+	if (ibuf.page_table_index >= gasket_dev->num_page_tables)
+		return -EFAULT;
+
+	fd = ibuf.fd;
+	abc_buffer = abc_get_buffer(oscar_dev, fd);
+	if (!abc_buffer)
+		return -EINVAL;
+
+	mutex_lock(&abc_buffer->mapping_lock);
+	if (abc_buffer->sg_table) {
+		ret = -EBUSY;
+		goto put_buffer;
+	}
+
+	/* TODO: merge dma dir flags support */
+	abc_buffer->sg_table =
+		dma_buf_map_attachment(abc_buffer->dma_buf_attachment,
+				       DMA_TO_DEVICE);
+	if (IS_ERR(abc_buffer->sg_table)) {
+		ret = PTR_ERR(abc_buffer->sg_table);
+		goto put_buffer;
+	}
+
+	abc_buffer->abdram_dma_addr =
+		sg_dma_address(abc_buffer->sg_table->sgl);
+	abc_buffer->len = sg_dma_len(abc_buffer->sg_table->sgl);
+
+	if (gasket_page_table_are_addrs_bad(
+			    gasket_dev->page_table[ibuf.page_table_index],
+			    abc_buffer->abdram_dma_addr, ibuf.device_address,
+			    abc_buffer->len)) {
+		ret = -EINVAL;
+		goto unmap_sg;
+	}
+
+	abc_buffer->page_table_index = ibuf.page_table_index;
+	abc_buffer->device_address = ibuf.device_address;
+	ret = gasket_page_table_map(
+		    gasket_dev->page_table[ibuf.page_table_index],
+		    abc_buffer->abdram_dma_addr, abc_buffer->device_address,
+		    abc_buffer->len / PAGE_SIZE,  false);
+
+unmap_sg:
+	if (ret) {
+		dma_buf_unmap_attachment(abc_buffer->dma_buf_attachment,
+					 abc_buffer->sg_table, DMA_TO_DEVICE);
+		abc_buffer->sg_table = NULL;
+	}
+put_buffer:
+	abc_put_buffer(abc_buffer);
+	mutex_unlock(&abc_buffer->mapping_lock);
+	return ret;
+}
+
+static int oscar_abc_unmap_buffer(struct oscar_dev *oscar_dev, int dma_buf_fd)
+{
+	struct abc_buffer *abc_buffer;
+
+	abc_buffer = abc_get_buffer(oscar_dev, dma_buf_fd);
+	if (!abc_buffer)
+		return -EINVAL;
+
+	mutex_lock(&abc_buffer->mapping_lock);
+	abc_unmap_buffer_locked(abc_buffer);
+	mutex_unlock(&abc_buffer->mapping_lock);
+	abc_put_buffer(abc_buffer);
+	return 0;
 }
 
 /*
@@ -511,6 +627,7 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 	struct oscar_dev *oscar_dev =
 		platform_get_drvdata(gasket_dev->platform_dev);
 	struct oscar_abdram_alloc_ioctl __user *abdram_alloc;
+	struct oscar_abdram_map_ioctl __user *abdram_map;
 
 	if (!oscar_ioctl_check_permissions(filp, cmd))
 		return -EPERM;
@@ -521,6 +638,11 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 	case OSCAR_IOCTL_ABC_ALLOC_BUFFER:
 		abdram_alloc = (struct oscar_abdram_alloc_ioctl *)argp;
 		return oscar_abc_alloc_buffer(oscar_dev, abdram_alloc);
+	case OSCAR_IOCTL_ABC_MAP_BUFFER:
+		abdram_map = (struct oscar_abdram_map_ioctl *)argp;
+		return oscar_abc_map_buffer(oscar_dev, abdram_map);
+	case OSCAR_IOCTL_ABC_UNMAP_BUFFER:
+		return oscar_abc_unmap_buffer(oscar_dev, (int)argp);
 	case OSCAR_IOCTL_ABC_DEALLOC_BUFFER:
 		return oscar_abc_dealloc_buffer(oscar_dev, (int)argp);
 	default:
