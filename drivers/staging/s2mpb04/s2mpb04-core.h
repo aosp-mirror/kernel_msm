@@ -135,7 +135,7 @@
 /* silicon versions */
 #define S2MPB04_REV_ES 0
 
-#define S2MPB04_NUM_GPIOS 2
+#define S2MPB04_NUM_GPIOS 3
 
 /* regulator id enum */
 enum s2mpb04_regulator_ids {
