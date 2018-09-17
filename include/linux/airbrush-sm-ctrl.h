@@ -247,6 +247,7 @@ struct ab_state_context {
 	struct gpio_desc *fw_patch_en;	/* output */
 	struct gpio_desc *ab_ready;	/* input  */
 	struct gpio_desc *ddr_sr;	/* output */
+	struct gpio_desc *ddr_iso;	/* output */
 	struct gpio_desc *ddr_train;	/* output */
 	struct gpio_desc *cke_in;	/* output */
 	struct gpio_desc *cke_in_sense;	/* output */

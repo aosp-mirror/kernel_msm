@@ -184,6 +184,26 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		}
 	}
 
+	if (!sc->ddr_sr) {
+		sc->ddr_sr =
+			devm_gpiod_get(dev, "ddr-sr", GPIOD_OUT_LOW);
+		if (IS_ERR(sc->ddr_sr)) {
+			dev_err(dev, "%s: Could not get pmic_ddr_sr gpio (%ld)\n",
+					__func__, PTR_ERR(sc->ddr_sr));
+			goto fail;
+		}
+	}
+
+	if (!sc->ddr_iso) {
+		sc->ddr_iso =
+			devm_gpiod_get(dev, "ddr-iso", GPIOD_OUT_LOW);
+		if (IS_ERR(sc->ddr_iso)) {
+			dev_err(dev, "%s: Could not get pmic_ddr_iso gpio (%ld)\n",
+					__func__, PTR_ERR(sc->ddr_iso));
+			goto fail;
+		}
+	}
+
 	if (!sc->smps1) {
 		sc->smps1 = devm_regulator_get(dev, "s2mpb04_smps1");
 		if (IS_ERR(sc->smps1)) {
