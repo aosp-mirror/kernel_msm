@@ -9,8 +9,7 @@
 &pm660_fg {
 	qcom,battery-thermal-coefficients = [d8 50 ff];
 	qcom,cl-max-decrement = <5>;
-	qcom,hold-soc-while-full;
-	qcom,linearize-soc;
+	/delete-property/ qcom,hold-soc-while-full;
 	qcom,fg-cutoff-voltage = <3300>;
 	qcom,fg-empty-voltage = <2600>;
 	qcom,fg-jeita-hyst-temp = <1>;
