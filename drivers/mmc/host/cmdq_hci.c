@@ -773,6 +773,61 @@ static void cmdq_pm_qos_unvote(struct sdhci_host *host, struct mmc_request *mrq)
 	sdhci_msm_pm_qos_cpu_unvote(host, mrq->req->cpu, true);
 }
 
+#ifdef CONFIG_DEBUG_FS
+static void
+__update_io_stat(struct mmc_host *mmc, struct mmc_io_stat *io_stat,
+		int transfer_len, int is_start)
+{
+	if (is_start) {
+		u64 diff;
+		io_stat->req_count_started++;
+		io_stat->total_bytes_started += transfer_len;
+		diff = io_stat->req_count_started -
+			io_stat->req_count_completed;
+		if (diff > io_stat->max_diff_req_count) {
+			io_stat->max_diff_req_count = diff;
+		}
+		diff = io_stat->total_bytes_started -
+			io_stat->total_bytes_completed;
+		if (diff > io_stat->max_diff_total_bytes) {
+			io_stat->max_diff_total_bytes = diff;
+		}
+	} else {
+		io_stat->req_count_completed++;
+		io_stat->total_bytes_completed += transfer_len;
+	}
+}
+
+static void
+update_io_stat(struct mmc_request *mrq, int is_start)
+{
+	struct mmc_host *mmc = mrq->host;
+	struct mmc_cmdq_req *cmdq_req = mrq->cmdq_req;
+	int transfer_len;
+
+	if (!(cmdq_req->data.flags & MMC_DATA_READ)
+			&& !(cmdq_req->data.flags & MMC_DATA_WRITE))
+		return;
+
+	transfer_len = cmdq_req->data.blocks * cmdq_req->data.blksz;
+
+	__update_io_stat(mmc, &mmc->mmc_stats.io_readwrite, transfer_len,
+			is_start);
+	if (cmdq_req->data.flags & MMC_DATA_READ) {
+		__update_io_stat(mmc, &mmc->mmc_stats.io_read, transfer_len,
+				is_start);
+	} else {
+		__update_io_stat(mmc, &mmc->mmc_stats.io_write, transfer_len,
+				is_start);
+	}
+}
+#else
+static void
+update_io_stat(struct mmc_host *mmc, int is_start)
+{
+}
+#endif
+
 static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	int err = 0;
@@ -844,6 +899,8 @@ ring_doorbell:
 	/* Commit the doorbell write immediately */
 	wmb();
 
+	update_io_stat(mrq, 1);
+
 	return err;
 
 desc_err:
@@ -894,6 +951,9 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 	if (!(cq_host->caps & CMDQ_CAP_CRYPTO_SUPPORT) &&
 			cq_host->ops->crypto_cfg_reset)
 		cq_host->ops->crypto_cfg_reset(mmc, tag);
+
+	update_io_stat(mrq, 0);
+
 	mrq->done(mrq);
 }
 

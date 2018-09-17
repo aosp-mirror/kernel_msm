@@ -454,6 +454,75 @@ static const struct file_operations mmc_err_stats_fops = {
 	.write	= mmc_err_stats_write,
 };
 
+static ssize_t mmc_io_stats_write(struct file *filp,
+		const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	struct mmc_host *host = filp->f_mapping->host->i_private;
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+	host->mmc_stats.io_read.max_diff_req_count = 0;
+	host->mmc_stats.io_read.max_diff_total_bytes = 0;
+	host->mmc_stats.io_readwrite.max_diff_req_count = 0;
+	host->mmc_stats.io_readwrite.max_diff_total_bytes = 0;
+	host->mmc_stats.io_write.max_diff_req_count = 0;
+	host->mmc_stats.io_write.max_diff_total_bytes = 0;
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return cnt;
+}
+
+static int mmc_io_stats_show(struct seq_file *file, void *data)
+{
+	struct mmc_host *host = (struct mmc_host *)file->private;
+	unsigned long flags;
+
+	seq_printf(file, "\t\t%-10s %-10s %-10s %-10s %-10s %-10s\n",
+		"ReadCnt", "ReadBytes", "WriteCnt", "WriteBytes", "RWCnt",
+		"RWBytes");
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+	seq_printf(file,
+		"Started: \t%-10llu %-10llu %-10llu %-10llu %-10llu %-10llu\n",
+		host->mmc_stats.io_read.req_count_started,
+		host->mmc_stats.io_read.total_bytes_started,
+		host->mmc_stats.io_write.req_count_started,
+		host->mmc_stats.io_write.total_bytes_started,
+		host->mmc_stats.io_readwrite.req_count_started,
+		host->mmc_stats.io_readwrite.total_bytes_started);
+	seq_printf(file,
+		"Completed: \t%-10llu %-10llu %-10llu %-10llu %-10llu %-10llu\n",
+		host->mmc_stats.io_read.req_count_completed,
+		host->mmc_stats.io_read.total_bytes_completed,
+		host->mmc_stats.io_write.req_count_completed,
+		host->mmc_stats.io_write.total_bytes_completed,
+		host->mmc_stats.io_readwrite.req_count_completed,
+		host->mmc_stats.io_readwrite.total_bytes_completed);
+	seq_printf(file,
+		"MaxDiff: \t%-10llu %-10llu %-10llu %-10llu %-10llu %-10llu\n",
+		host->mmc_stats.io_read.max_diff_req_count,
+		host->mmc_stats.io_read.max_diff_total_bytes,
+		host->mmc_stats.io_write.max_diff_req_count,
+		host->mmc_stats.io_write.max_diff_total_bytes,
+		host->mmc_stats.io_readwrite.max_diff_req_count,
+		host->mmc_stats.io_readwrite.max_diff_total_bytes);
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return 0;
+}
+
+static int mmc_io_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmc_io_stats_show, inode->i_private);
+}
+
+static const struct file_operations mmc_io_stats_desc = {
+	.open		= mmc_io_stats_open,
+	.read		= seq_read,
+	.write		= mmc_io_stats_write,
+	.release 	= single_release,
+};
+
 void mmc_add_host_debugfs(struct mmc_host *host)
 {
 	struct dentry *root;
@@ -505,6 +574,10 @@ void mmc_add_host_debugfs(struct mmc_host *host)
 
 	if (!debugfs_create_file("err_stats", 0600, root, host,
 		&mmc_err_stats_fops))
+		goto err_node;
+
+	if (!debugfs_create_file("io_stats", 0600, root, host,
+		&mmc_io_stats_desc))
 		goto err_node;
 
 #ifdef CONFIG_MMC_CLKGATE

@@ -713,6 +713,9 @@ again:
 	mmc_host_clk_init(host);
 
 	spin_lock_init(&host->lock);
+#ifdef CONFIG_DEBUG_FS
+	spin_lock_init(&host->stat_lock);
+#endif
 	init_waitqueue_head(&host->wq);
 	INIT_DELAYED_WORK(&host->detect, mmc_rescan);
 	setup_timer(&host->retune_timer, mmc_retune_timer, (unsigned long)host);

@@ -382,6 +382,32 @@ struct mmc_devfeq_clk_scaling {
 	bool		enable;
 };
 
+#ifdef CONFIG_DEBUG_FS
+/**
+ * struct mmc_io_stat - statistics for I/O amount.
+ * @req_count_started: total number of I/O requests, which were started.
+ * @total_bytes_started: total I/O amount in bytes, which were started.
+ * @req_count_completed: total number of I/O request, which were completed.
+ * @total_bytes_completed: total I/O amount in bytes, which were completed.
+ * @max_diff_req_count: MAX of 'req_count_started - req_count_completed'.
+ * @max_diff_total_bytes: MAX of 'total_bytes_started - total_bytes_completed'.
+ */
+struct mmc_io_stat {
+	u64 req_count_started;
+	u64 total_bytes_started;
+	u64 req_count_completed;
+	u64 total_bytes_completed;
+	u64 max_diff_req_count;
+	u64 max_diff_total_bytes;
+};
+
+struct mmc_stats {
+	struct mmc_io_stat io_read;
+	struct mmc_io_stat io_write;
+	struct mmc_io_stat io_readwrite;
+};
+#endif
+
 struct mmc_host {
 	struct device		*parent;
 	struct device		class_dev;
@@ -582,7 +608,10 @@ struct mmc_host {
 
 	bool			err_occurred;
 	u32			err_stats[MMC_ERR_MAX];
-
+#ifdef CONFIG_DEBUG_FS
+	struct mmc_stats mmc_stats;
+	spinlock_t		stat_lock;	/* lock for collect IO stat */
+#endif
 	struct mmc_async_req	*areq;		/* active async req */
 	struct mmc_context_info	context_info;	/* async synchronization info */
 
