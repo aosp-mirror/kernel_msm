@@ -35,6 +35,9 @@
 /* for abc ioctls, move later */
 #include <linux/dma-buf.h>
 #include <linux/ab-dram.h>
+#include <uapi/abc-pcie-dma.h>
+#include "../../mfd/abc-pcie-dma.h"
+#define OSCAR_DMA_CHAN 1
 
 #define DRIVER_NAME "abc-pcie-tpu"
 #define DRIVER_VERSION "0.3"
@@ -346,6 +349,35 @@ free_buf:
 	return ret;
 }
 
+static int oscar_abc_sync_buffer(struct oscar_dev *oscar_dev,
+				 struct oscar_abdram_sync_ioctl __user *argp)
+{
+	struct oscar_abdram_sync_ioctl ibuf;
+	struct dma_buf *abc_dma_buf;
+	struct abc_pcie_dma_desc abc_dma_desc;
+	int ret;
+
+	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
+		return -EFAULT;
+
+	abc_dma_buf = dma_buf_get(ibuf.fd);
+	if (IS_ERR(abc_dma_buf))
+		return PTR_ERR(abc_dma_buf);
+
+	abc_dma_desc.local_buf_type = DMA_BUFFER_USER;
+	abc_dma_desc.local_buf = (void *)ibuf.host_address;
+	abc_dma_desc.local_buf_size = ibuf.len;
+	abc_dma_desc.remote_buf_type = DMA_BUFFER_DMA_BUF;
+	abc_dma_desc.remote_dma_buf_fd = ibuf.fd;
+	abc_dma_desc.dir = ibuf.cmd == OSCAR_SYNC_FROM_BUFFER ?
+		DMA_FROM_DEVICE : DMA_TO_DEVICE;
+	abc_dma_desc.chan = OSCAR_DMA_CHAN;
+	ret = abc_pcie_issue_dma_xfer(&abc_dma_desc);
+
+	dma_buf_put(abc_dma_buf);
+	return ret;
+}
+
 static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 				struct oscar_abdram_map_ioctl __user *argp)
 {
@@ -627,6 +659,7 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 	struct oscar_dev *oscar_dev =
 		platform_get_drvdata(gasket_dev->platform_dev);
 	struct oscar_abdram_alloc_ioctl __user *abdram_alloc;
+	struct oscar_abdram_sync_ioctl __user *abdram_sync;
 	struct oscar_abdram_map_ioctl __user *abdram_map;
 
 	if (!oscar_ioctl_check_permissions(filp, cmd))
@@ -638,6 +671,9 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 	case OSCAR_IOCTL_ABC_ALLOC_BUFFER:
 		abdram_alloc = (struct oscar_abdram_alloc_ioctl *)argp;
 		return oscar_abc_alloc_buffer(oscar_dev, abdram_alloc);
+	case OSCAR_IOCTL_ABC_SYNC_BUFFER:
+		abdram_sync = (struct oscar_abdram_sync_ioctl *)argp;
+		return oscar_abc_sync_buffer(oscar_dev, abdram_sync);
 	case OSCAR_IOCTL_ABC_MAP_BUFFER:
 		abdram_map = (struct oscar_abdram_map_ioctl *)argp;
 		return oscar_abc_map_buffer(oscar_dev, abdram_map);
