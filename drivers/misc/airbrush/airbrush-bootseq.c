@@ -277,6 +277,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	}
     /* [TBD] DDR Related code will be added later */
 
+	/* [TBD] DDR Related code will be added later */
+
+	/* register clock driver */
+	abc_clk_register(ab_ctx);
 	return 0;
 }
 EXPORT_SYMBOL(ab_bootsequence);

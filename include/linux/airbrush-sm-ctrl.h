@@ -53,6 +53,17 @@ enum states {
 	on = 1,
 };
 
+/*
+ * Read a register from the address,addr of ABC device and put it in to_addr,
+ * all reads are currently happening through PCIe
+ */
+#define ABC_READ(addr, to_addr) abc_pcie_config_read(addr & 0xffffff, 0x0, to_addr)
+
+/*
+ * Write value to an ABC register address, addr
+ * All writes are currently happening through PCIe
+ */
+#define ABC_WRITE(addr, value) abc_pcie_config_write(addr & 0xffffff, 0x0, value)
 
 /*Should be in ascending order (for comparisons)*/
 typedef enum __logic_voltage {
@@ -174,6 +185,25 @@ struct chip_to_block_map {
 	block_state_t fsys_block_state_id;
 	block_state_t aon_block_state_id;
 	u32 flags;
+};
+
+enum ab_error_codes {
+	E_INVALID_CHIP_STATE, /* Chip state entered is invalid*/
+	E_INVALID_BLOCK_STATE, /* Block state is invalid*/
+	E_STATE_CHANGE, /*Chip State change failed*/
+	E_STATUS_TIMEOUT, /* Timeout happened while checking status */
+	E_IPU_BLOCK_OFF, /* IPU block is already off */
+	E_IPU_BLOCK_ON, /* IPU block is already on */
+	E_TPU_BLOCK_OFF, /* TPU block is already off */
+	E_TPU_BLOCK_ON, /* TPU block is already on */
+	E_IPU_CORES_ALREADY_OFF, /* All the IPU cores are already off */
+	E_IPU_CORES_ALREADY_ON, /* All the IPU cores are on */
+	E_TPU_TILES_ALREADY_OFF, /* TPU block is already on */
+	E_TPU_TILES_ALREADY_ON, /* TPU block is already on */
+	E_IPU_CORES_OFF, /* An error occurred in turning off IPU cores */
+	E_IPU_CORES_ON, /* An error occurred in turning on IPU cores */
+	E_TPU_TILES_OFF, /* An error occurred in turning off TPU tiles */
+	E_TPU_TILES_ON, /* An error occurred in turning on TPU tiles */
 };
 
 enum ab_sm_event {

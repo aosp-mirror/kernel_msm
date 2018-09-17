@@ -20,6 +20,7 @@
 
 #include "airbrush-spi.h"
 #include "airbrush-pmu.h"
+#include "airbrush-power-gating.h"
 
 static struct ab_state_context *ab_sm_ctx;
 
@@ -163,15 +164,20 @@ int clk_set_frequency(struct device *dev, struct block *blk,
 		if (blk->current_state->clk_frequency == 0)
 			ipu_pll_enable(dev);
 		ipu_set_rate(dev, frequency);
+		/*TODO Some error with disabling PLL, need to check*/
+#if 0
 		if (frequency == 0)
-			;//ipu_pll_disable(dev);
+			ipu_pll_disable(dev);
+#endif
 		break;
 	case BLK_TPU:
 		if (blk->current_state->clk_frequency == 0)
 			tpu_pll_enable(dev);
 		tpu_set_rate(dev, frequency);
+#if 0
 		if (frequency == 0)
-			;//tpu_pll_disable(dev);
+			tpu_pll_disable(dev);
+#endif
 		break;
 	case BLK_MIF:
 		break;
@@ -196,7 +202,7 @@ int blk_set_state(struct device *dev, struct block *blk,
 	if (!desired_state)
 		return -EINVAL;
 
-	if(blk->current_state->id == desired_state->id)
+	if (blk->current_state->id == desired_state->id)
 		return 0;
 
 	power_increasing = (blk->current_state->logic_voltage

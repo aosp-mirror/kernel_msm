@@ -146,18 +146,6 @@ static int ab_assign_resources(void *data, u64 val)
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(ab_assign_resources_fops, NULL, ab_assign_resources, "%lli\n");
-
-static int ab_debugfs_clk_register(void *data, u64 val)
-{
-	struct ab_state_context *sc = (struct ab_state_context *) data;
-
-	abc_clk_register(sc);
-	return 0;
-}
-DEFINE_SIMPLE_ATTRIBUTE(ab_clk_register_fops,
-				NULL, ab_debugfs_clk_register, "%lli\n");
-
-
 static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *) data;
@@ -247,11 +235,6 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("ab_boot", 0444, sc->d_entry, sc,
 					&ab_bootsequence_fops);
-	if (!d)
-		goto err_out;
-
-	d = debugfs_create_file("ab_clk_register", 0444, sc->d_entry, sc,
-					&ab_clk_register_fops);
 	if (!d)
 		goto err_out;
 
