@@ -2491,7 +2491,10 @@ static void stc311x_work(struct work_struct *work)
 	int res, Loop;
 
 	chip = container_of(work, struct stc311x_chip, work.work);
-
+	if (!wake_lock_active(&chip->wlock)) {
+		wake_lock(&chip->wlock);
+		pr_info("stc311x_wake_lock \n");
+	}
 	sav_client = chip->client;
 
 	if (chip->pdata) {
@@ -2560,10 +2563,11 @@ static void stc311x_work(struct work_struct *work)
 		chip->Temperature = 250;
 		pr_err("GasGauge_Task return (0) \n");
 	} else if (res == -1) {
+		pr_err("GasGauge_Task return (-1) \n");
+		goto i2c_error;
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 		chip->Temperature = 250;
-		pr_err("GasGauge_Task return (-1) \n");
 	}
 
 	if (g_debug) {
@@ -2588,6 +2592,7 @@ static void stc311x_work(struct work_struct *work)
 	else
 		pr_info("*** ST_SOC=%d, UI_SOC=%d, reg_soc=%d, voltage=%d, OCV=%d, charging_status=%d *** \n", chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->status);
 
+i2c_error:
 	if (chip->batt_soc > STC311x_SOC_LOW_THRESHOLD)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
 	else if ((STC311x_SOC_CRITICAL_THRESHOLD <= chip->batt_soc) && (chip->batt_soc <= STC311x_SOC_LOW_THRESHOLD))
