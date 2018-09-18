@@ -3659,7 +3659,7 @@ static int fts_set_gpio(struct fts_ts_info *info)
 	}
 
 	if (gpio_is_valid(bdata->switch_gpio)) {
-		retval = fts_gpio_setup(bdata->switch_gpio, true, 1, 1);
+		retval = fts_gpio_setup(bdata->switch_gpio, true, 1, 0);
 		if (retval < 0)
 			pr_err("%s: Failed to configure I2C switch\n",
 				__func__);
