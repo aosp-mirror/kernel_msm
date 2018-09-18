@@ -14,7 +14,15 @@
 	status = "ok";
 	max1720x_fg: max1720x@36 { };
 };
+
 #include "sm8150-floral-battery.dtsi"
+
+&qupv3_se15_i2c {
+	status = "ok";
+	p9221: p9221@61 { };
+};
+
+#include "sm8150-floral-wcharger.dtsi"
 
 &google_charger {
 	google,chg-battery-capacity = <3430>;

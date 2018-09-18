@@ -29,16 +29,13 @@
 };
 
 &pm8150b_gpios {
-	fg {
-		fg_int_default: fg_int_default {
-			pins = "gpio8";
-			function = "normal";
-			bias-pull-up;
-			input-enable;
-			drive-open-drain;
-			power-source = <0>;
-		};
-
+	fg_int_default: fg_int_default {
+		pins = "gpio8";
+		function = "normal";
+		bias-pull-up;
+		input-enable;
+		drive-open-drain;
+		power-source = <0>;
 	};
 };
 
@@ -49,10 +46,9 @@
 
 	/*
 	 * FIXME: enable interrupts
-	 * interrupt-parent = <&spmi_bus>;
-	 * interrupt-names = "max1720x_fg";
-	 * interrupts = <0x2 0xC7 0x0 IRQ_TYPE_LEVEL_LOW>;
-	 * fg,irq-gpio = <&pm8150b_gpios 8 GPIO_ACTIVE_LOW>;
+	interrupt-parent = <&spmi_bus>;
+	interrupt-names = "max1720x_fg";
+	interrupts = <0x2 0xc7 0x0 IRQ_TYPE_LEVEL_HIGH>;
 	 */
 
 	pinctrl-names = "default";
@@ -78,12 +74,12 @@
 &soc {
 	google_charger: google,charger {
 		compatible = "google,charger";
-		google,chg-power-supply = "battery";
-		google,bat-power-supply = "maxfg";
+
 		google,chg-update-interval = <30000>;
 
-		// see b/113116988
-		// google,wlc-power-supply = "wireless";
+		google,chg-power-supply = "battery";
+		google,bat-power-supply = "maxfg";
+		google,wlc-power-supply = "wireless";
 
 		google,chg-cc-tolerance = <250>;
 		google,fv-uv-margin-dpct = <1050>;
