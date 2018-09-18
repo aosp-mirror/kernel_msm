@@ -288,6 +288,7 @@ int memory_config_write(u32 offset, u32 len, u32 data){
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_AIRBRUSH_SM)
 u32 abc_pcie_get_linkspeed(void)
 {
 	u32 link_status;
@@ -429,6 +430,7 @@ int abc_pcie_state_manager(const struct block_property *property, void *data)
 	}
 	return 0;
 }
+#endif
 
 int abc_set_aspm_state(bool state)
 {
@@ -1413,8 +1415,10 @@ exit_loop:
 		goto err4;
 	}
 #endif
+#if IS_ENABLED(CONFIG_AIRBRUSH_SM)
 	/* Registering the callback to the ASM */
 	ab_sm_register_blk_callback((block_name_t)BLK_FSYS, abc_pcie_state_manager, (void*)pdev);
+#endif
 	pci_set_drvdata(pdev, abc);
 
 #if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
