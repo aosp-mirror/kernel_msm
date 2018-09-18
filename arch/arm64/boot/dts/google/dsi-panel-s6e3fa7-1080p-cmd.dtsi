@@ -12,6 +12,8 @@
 
 &mdss_mdp {
 	dsi_s6e3fa7_sdc_1080p_cmd: qcom,mdss_dsi_s6e3fa7_sdc_1080p_cmd {
+		compatible = "google,dsi_binned_lp";
+
 		qcom,mdss-dsi-panel-name = "s6e3fa7 cmd mode dsi sdc panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
@@ -78,9 +80,65 @@
 					05 01 00 00 00 00 01 28
 					05 01 00 00 78 00 01 10
 				];
+				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 00 00 01 28
+					/* HLPM on: 50nit */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 06 BB 15 0C 06 10 F5
+					15 01 00 00 00 00 02 53 22
+					39 01 00 00 11 00 03 F0 A5 A5
+				];
+				qcom,mdss-dsi-nolp-command = [
+					/* HLPM off */
+					39 01 00 00 22 00 03 F0 5A 5A
+					15 01 00 00 11 00 02 53 20
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-h-sync-pulse = <0>;
+			};
+		};
+
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					/* HLPM off */
+					39 01 00 00 22 00 03 F0 5A 5A
+					15 01 00 00 11 00 02 53 20
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "low";
+				google,dsi-lp-brightness-threshold = <10>;
+				google,dsi-lp-command = [
+					/* HLPM on: 10nit */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 06 BB 15 8C 06 10 F5
+					15 01 00 00 00 00 02 53 23
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@2 {
+				label = "high";
+				google,dsi-lp-brightness-threshold = <255>;
+				google,dsi-lp-command = [
+					/* HLPM on: 50nit */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 06 BB 15 0C 06 10 F5
+					15 01 00 00 00 00 02 53 22
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 		};
 	};
