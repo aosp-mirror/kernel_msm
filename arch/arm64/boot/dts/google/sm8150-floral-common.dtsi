@@ -24,7 +24,6 @@
 #include "sm8150-floral-haptics.dtsi"
 #include "sm8150-floral-memory.dtsi"
 #include "sm8150-floral-nfc.dtsi"
-#include "sm8150-floral-pac193x.dtsi"
 #include "sm8150-floral-pcie.dtsi"
 #include "sm8150-floral-pinctrl.dtsi"
 #include "sm8150-floral-qup.dtsi"

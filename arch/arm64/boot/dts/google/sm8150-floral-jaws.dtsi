@@ -19,3 +19,4 @@
 #include "sm8150-floral-jaws-touch.dtsi"
 #include "sm8150-floral-jaws-battery.dtsi"
 #include "sm8150-floral-jaws-camera-sensor.dtsi"
+#include "sm8150-floral-jaws-pac193x.dtsi"

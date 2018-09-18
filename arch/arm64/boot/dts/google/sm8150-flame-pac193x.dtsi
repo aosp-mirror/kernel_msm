@@ -1,0 +1,45 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&qupv3_se0_i2c {
+	status = "ok";
+	// see -qup.dtsi for clk-freq-out setting
+	pac193x@10 {
+		compatible = "microchip,pac1934";
+		reg = <0x10>;
+		samp-rate = <8>;
+		status = "okay";
+
+		ch5: channel@0 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_OLED";
+		     channel_enabled;
+		};
+
+		ch6: channel@1 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_ABH";
+		     channel_enabled;
+		};
+
+		ch7: channel@2 {
+		     bi-dir;
+		     uohms-shunt-res = <100000>;
+		     rail-name = "NC";
+		};
+
+		ch8: channel@3 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "NC";
+		};
+	};
+};

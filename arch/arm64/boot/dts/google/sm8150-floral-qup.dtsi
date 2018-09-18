@@ -15,6 +15,11 @@
 	qcom,clk-freq-out = <400000>;
 };
 
+// flame/coral pac193x i2c
+&qupv3_se9_i2c {
+	qcom,clk-freq-out = <400000>;
+};
+
 // Touch wants se4 pins active even in suspend.
 &qupv3_se4_spi {
 	pinctrl-1 = <&qupv3_se4_spi_active>;
