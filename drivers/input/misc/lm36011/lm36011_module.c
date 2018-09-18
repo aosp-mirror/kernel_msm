@@ -74,6 +74,52 @@ static const struct reg_setting silego_reg_settings[] = {
 	{0xcc, 0x81}, {0xcd, 0x93}, {0xce, 0x83}, {0x92, 0x00}, {0x93, 0x00}
 };
 
+static int silego_correct_setting(struct led_laser_ctrl_t *ctrl)
+{
+	int rc;
+	uint32_t data;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings;
+
+	reg_settings.reg_addr = 0xcd;
+	reg_settings.reg_data = 0x93;
+	reg_settings.delay = 0;
+	write_setting.reg_setting = &reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 0;
+
+	rc = camera_io_dev_write(&ctrl->io_master_info, &write_setting);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"%s: failed to overwrite setting: rc: %d",
+			__func__, rc);
+		return rc;
+	}
+
+	rc = camera_io_dev_read(
+		&ctrl->io_master_info,
+		reg_settings.reg_addr,
+		&data,
+		CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_BYTE);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"%s: failed to read back setting: rc: %d",
+			__func__, rc);
+		return rc;
+	}
+
+	if (data != 0x93) {
+		dev_err(ctrl->soc_info.dev,
+			"%s: failed, expected 0x93, got: 0x%x: rc: %d",
+			__func__, rc, data);
+		return -EINVAL;
+	}
+	return rc;
+};
+
 static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 {
 	uint32_t data;
@@ -109,7 +155,14 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 				__func__, silego_reg_settings[i].addr);
 			goto out;
 		}
-		if (data != silego_reg_settings[i].data) {
+		/* Some of Silego part isn't store final version value. Need to
+		   overwrite to correct value to provide proper functionality.
+		*/
+		if (silego_reg_settings[i].addr == 0xcd && data == 0xb3) {
+			rc = silego_correct_setting(ctrl);
+			if (rc < 0)
+				goto out;
+		} else if (data != silego_reg_settings[i].data) {
 			dev_err(ctrl->soc_info.dev,
 				"address 0x%x mismatch,"
 				" expected 0x%x but got 0x%x",
