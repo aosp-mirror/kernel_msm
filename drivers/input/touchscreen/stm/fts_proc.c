@@ -703,6 +703,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	char pbuf[count];
 	char path[100] = { 0 };
 	int res = -1, j, index = 0;
+	u8 report = 0;
 	int size = 6;
 	int temp, byte_call = 0;
 	u16 byteToRead = 0;
@@ -1738,7 +1739,15 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		/*ITO TEST*/
 		case CMD_ITOTEST:
-			res = production_test_ito(LIMITS_FILE, &tests);
+			frameMS.node_data = NULL;
+			res = production_test_ito(LIMITS_FILE, &tests,
+				&frameMS);
+
+			if (frameMS.node_data != NULL) {
+				size += (frameMS.node_data_size *
+						sizeof(short) + 2);
+				report = 1;
+			}
 			break;
 
 		/*Initialization*/
@@ -2647,7 +2656,7 @@ END:	/* here start the reporting phase, assembling the data to send in the
 				   size - index, "{ ");
 		index += scnprintf(&driver_test_buff[index],
 				   size - index, "%08X", res);
-		if (res >= OK) {
+		if (res >= OK || report) {
 			/*all the other cases are already fine printing only the
 			 * res.*/
 			switch (funcToTest[0]) {
@@ -2696,6 +2705,10 @@ END:	/* here start the reporting phase, assembling the data to send in the
 			case CMD_TP_SENS_PRECAL_MS:
 			case CMD_TP_SENS_POSTCAL_MS:
 			case CMD_TP_SENS_STD:
+			case CMD_ITOTEST:
+
+				if (frameMS.node_data == NULL)
+					break;
 
 				if (res != OK)
 					driver_test_buff[2] = '8';

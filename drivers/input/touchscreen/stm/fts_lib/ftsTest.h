@@ -296,7 +296,8 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max);
   * in order to satisfy different scenarios
   * @{
   */
-int production_test_ito(char *path_limits, TestToDo *todo);
+int production_test_ito(char *path_limits, TestToDo *todo,
+			MutualSenseFrame *frame);
 int production_test_initialization(u8 type);
 int production_test_main(char *pathThresholds, int stop_on_fail, int saveInit,
 			 TestToDo *todo);

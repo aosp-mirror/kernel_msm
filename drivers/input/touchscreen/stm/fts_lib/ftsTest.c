@@ -733,16 +733,23 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max)
   * @param path_limits name of Production Limit file to load or
   * "NULL" if the limits data should be loaded by a .h file
   * @param todo pointer to a TestToDo variable which select the test to do
+  * @param frame pointer to a MutualSenseframe variable which will store the ITO
+  *  MS RAW data. If NULL, no data will be returned while if MutualRawAdjITO
+  *  item in todo is disabled the variable will be untouched
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ito(char *path_limits, TestToDo *todo)
+int production_test_ito(char *path_limits, TestToDo *todo,
+			MutualSenseFrame *frame)
 {
 	int res = OK;
 	u8 sett[2] = { 0x00, 0x00 };
 	MutualSenseFrame msRawFrame;
+	MutualSenseFrame *ptr_frame = NULL;
 	int *thresholds = NULL;
 	u16 *adj = NULL;
 	int trows, tcolumns;
+
+	msRawFrame.node_data = NULL;
 
 	pr_info("ITO Production test is starting...\n");
 
@@ -776,7 +783,15 @@ int production_test_ito(char *path_limits, TestToDo *todo)
 	pr_info("MS RAW ITO ADJ TEST:\n");
 	if (todo->MutualRawAdjITO == 1) {
 		pr_info("Collecting MS Raw data...\n");
-		res |= getMSFrame3(MS_RAW, &msRawFrame);
+
+		if (frame != NULL) {
+			pr_info("%s: Copying MS Raw data to caller!\n",
+				__func__);
+			ptr_frame  = frame;
+		} else
+			ptr_frame = &msRawFrame;
+
+		res |= getMSFrame3(MS_RAW, ptr_frame);
 		if (res < OK) {
 			pr_err("%s: getMSFrame failed... ERROR %08X\n",
 				__func__, ERROR_PROD_TEST_ITO);
@@ -785,16 +800,16 @@ int production_test_ito(char *path_limits, TestToDo *todo)
 
 		print_frame_short("MS Raw ITO frame =",
 				  array1dTo2d_short(
-					  msRawFrame.node_data,
-					  msRawFrame.node_data_size,
-					  msRawFrame.header.sense_node),
-				  msRawFrame.header.force_node,
-				  msRawFrame.header.sense_node);
+					  (*ptr_frame).node_data,
+					  (*ptr_frame).node_data_size,
+					  (*ptr_frame).header.sense_node),
+				  (*ptr_frame).header.force_node,
+				  (*ptr_frame).header.sense_node);
 
 		pr_info("MS RAW ITO ADJ HORIZONTAL TEST:\n");
-		res = computeAdjHorizTotal(msRawFrame.node_data,
-					   msRawFrame.header.force_node,
-					   msRawFrame.header.sense_node,
+		res = computeAdjHorizTotal((*ptr_frame).node_data,
+					   (*ptr_frame).header.force_node,
+					   (*ptr_frame).header.sense_node,
 					   &adj);
 		if (res < OK) {
 			pr_err("%s: computeAdjHoriz failed... ERROR %08X\n",
@@ -805,8 +820,8 @@ int production_test_ito(char *path_limits, TestToDo *todo)
 		res = parseProductionTestLimits(path_limits, &limit_file,
 						MS_RAW_ITO_ADJH, &thresholds,
 						&trows, &tcolumns);
-		if (res < OK || (trows != msRawFrame.header.force_node ||
-				 tcolumns != msRawFrame.header.sense_node -
+		if (res < OK || (trows != (*ptr_frame).header.force_node ||
+				 tcolumns != (*ptr_frame).header.sense_node -
 				 1)) {
 			pr_err("%s: parseProductionTestLimits MS_RAW_ITO_ADJH failed... ERROR %08X\n",
 				__func__, ERROR_PROD_TEST_DATA);
@@ -814,8 +829,9 @@ int production_test_ito(char *path_limits, TestToDo *todo)
 		}
 
 
-		res = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node,
-					     msRawFrame.header.sense_node - 1,
+		res = checkLimitsMapAdjTotal(adj,
+					     (*ptr_frame).header.force_node,
+					     (*ptr_frame).header.sense_node - 1,
 					     thresholds);
 		if (res != OK) {
 			pr_err("production_test_data: checkLimitsAdj MS RAW ITO ADJH failed... ERROR COUNT = %d\n",
@@ -833,9 +849,9 @@ int production_test_ito(char *path_limits, TestToDo *todo)
 		adj = NULL;
 
 		pr_info("MS RAW ITO ADJ VERTICAL TEST:\n");
-		res = computeAdjVertTotal(msRawFrame.node_data,
-					  msRawFrame.header.force_node,
-					  msRawFrame.header.sense_node,
+		res = computeAdjVertTotal((*ptr_frame).node_data,
+					  (*ptr_frame).header.force_node,
+					  (*ptr_frame).header.sense_node,
 					  &adj);
 		if (res < OK) {
 			pr_err("%s: computeAdjVert failed... ERROR %08X\n",
@@ -846,16 +862,16 @@ int production_test_ito(char *path_limits, TestToDo *todo)
 		res = parseProductionTestLimits(path_limits, &limit_file,
 						MS_RAW_ITO_ADJV, &thresholds,
 						&trows, &tcolumns);
-		if (res < OK || (trows != msRawFrame.header.force_node - 1 ||
-				 tcolumns != msRawFrame.header.sense_node)) {
+		if (res < OK || (trows != (*ptr_frame).header.force_node - 1 ||
+				 tcolumns != (*ptr_frame).header.sense_node)) {
 			pr_err("%s: parseProductionTestLimits MS_RAW_ITO_ADJV failed... ERROR %08X\n",
 				__func__, ERROR_PROD_TEST_ITO);
 			goto ERROR;
 		}
 
 
-		res = checkLimitsMapAdjTotal(adj, msRawFrame.header.force_node -
-					     1, msRawFrame.header.sense_node,
+		res = checkLimitsMapAdjTotal(adj, (*ptr_frame).header.force_node
+					- 1, (*ptr_frame).header.sense_node,
 					     thresholds);
 		if (res != OK) {
 			pr_err("%s: checkLimitsAdj MS RAW ITO ADJV failed... ERROR COUNT = %d\n",
@@ -961,7 +977,7 @@ int production_test_main(char *pathThresholds, int stop_on_fail, int saveInit,
 	pr_info("MAIN Production test is starting...\n");
 
 	pr_info("ITO TEST:\n");
-	res = production_test_ito(pathThresholds, todo);
+	res = production_test_ito(pathThresholds, todo, NULL);
 	if (res < 0) {
 		pr_err("Error during ITO TEST! ERROR %08X\n", res);
 		goto END;/* in case of ITO TEST failure is no sense keep going
@@ -1036,6 +1052,8 @@ int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
 	int trows, tcolumns;
 
 	u16 *adj = NULL;
+
+	msRawFrame.node_data = NULL;
 
 	/************** Mutual Sense Test *************/
 	pr_info("MS RAW DATA TEST is starting...\n");
@@ -1308,6 +1326,8 @@ int production_test_ms_raw_lp(char *path_limits, int stop_on_fail,
 	int trows, tcolumns;
 
 	u16 *adj = NULL;
+
+	msRawFrame.node_data = NULL;
 
 	/************** Mutual Sense Test **************/
 	pr_info("MS RAW LP DATA TEST:\n");

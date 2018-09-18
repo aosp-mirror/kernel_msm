@@ -1389,6 +1389,8 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	MutualSenseFrame frameMS;
 	SelfSenseFrame frameSS;
 
+	u8 report = 0;
+
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
@@ -1408,7 +1410,16 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		switch (typeOfComand[0]) {
 		/*ITO TEST*/
 		case 0x01:
-			res = production_test_ito(LIMITS_FILE, &tests);
+			frameMS.node_data = NULL;
+			res = production_test_ito(LIMITS_FILE, &tests,
+				&frameMS);
+			/* report MS raw frame only if was successfully
+			 * acquired */
+			if (frameMS.node_data != NULL) {
+				size += (frameMS.node_data_size *
+						sizeof(short) + 2) * 2;
+				report = 1;
+			}
 			break;
 
 		/*PRODUCTION TEST*/
@@ -1691,11 +1702,16 @@ END:
 	index = 0;
 	index += scnprintf(all_strbuff + index, size - index, "{ %08X", res);
 
-	if (res >= OK) {
+	if (res >= OK || report) {
 		/*all the other cases are already fine printing only the res.*/
 		switch (typeOfComand[0]) {
+		case 0x01:
 		case 0x13:
 		case 0x17:
+
+			if (frameMS.node_data == NULL)
+				break;
+
 #ifdef RAW_DATA_FORMAT_DEC
 			index += scnprintf(all_strbuff + index, size - index,
 					   "%3d",
