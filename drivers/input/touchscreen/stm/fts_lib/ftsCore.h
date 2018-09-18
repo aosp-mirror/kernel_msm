@@ -53,7 +53,7 @@ typedef enum {
   * @{
   */
 /* Size in bytes of System Info data */
-#define SYS_INFO_SIZE			208	/* Num bytes of die info */
+#define SYS_INFO_SIZE			216	/* Num bytes of die info */
 #define DIE_INFO_SIZE			16	/* Num bytes of external release
 						 * in config */
 #define EXTERNAL_RELEASE_INFO_SIZE	8	/* Num bytes of release info in
@@ -101,6 +101,8 @@ typedef struct {
 	u8 u8_releaseInfo[RELEASE_INFO_SIZE];	/* /< Release information */
 	u32 u32_fwCrc;	/* /< Crc of FW */
 	u32 u32_cfgCrc;	/* /< Crc of config */
+
+	u8 u8_ssDetScanSet; /* /< Type of Detect Scan Selected */
 
 	u16 u16_scrResX;/* /< X resolution on main screen */
 	u16 u16_scrResY;/* /< Y resolution on main screen */
@@ -174,6 +176,14 @@ typedef struct {
 				  * frame */
 	u16 u16_ssPrxRxBaselineAddr;	/* /< Offset of SS proximity sense
 					 * baseline frame */
+
+	u16 u16_ssDetRawAddr;		/* /< Offset of SS detect raw frame */
+	u16 u16_ssDetFilterAddr;	/* /< Offset of SS detect filter
+					 * frame */
+	u16 u16_ssDetStrenAddr;		/* /< Offset of SS detect strength
+					 * frame */
+	u16 u16_ssDetBaselineAddr;	/* /< Offset of SS detect baseline
+					 * frame */
 } SysInfo;
 
 /** @}*/

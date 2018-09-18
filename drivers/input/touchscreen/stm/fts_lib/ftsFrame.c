@@ -340,6 +340,53 @@ int getSSFrame3(SSFrameType type, SelfSenseFrame *frame)
 		offset_force = systemInfo.u16_ssPrxTxBaselineAddr;
 		offset_sense = systemInfo.u16_ssPrxRxBaselineAddr;
 		break;
+	case SS_DETECT_RAW:
+		if (systemInfo.u8_ssDetScanSet == 0) {
+			offset_force = systemInfo.u16_ssDetRawAddr;
+			offset_sense = 0;
+			frame->header.sense_node = 0;
+		} else {
+			offset_sense = systemInfo.u16_ssDetRawAddr;
+			offset_force = 0;
+			frame->header.force_node = 0;
+		}
+		break;
+
+	case SS_DETECT_FILTER:
+		if (systemInfo.u8_ssDetScanSet == 0) {
+			offset_force = systemInfo.u16_ssDetFilterAddr;
+			offset_sense = 0;
+			frame->header.sense_node = 0;
+		} else {
+			offset_sense = systemInfo.u16_ssDetFilterAddr;
+			offset_force = 0;
+			frame->header.force_node = 0;
+		}
+		break;
+
+	case SS_DETECT_BASELINE:
+		if (systemInfo.u8_ssDetScanSet == 0) {
+			offset_force = systemInfo.u16_ssDetBaselineAddr;
+			offset_sense = 0;
+			frame->header.sense_node = 0;
+		} else {
+			offset_sense = systemInfo.u16_ssDetBaselineAddr;
+			offset_force = 0;
+			frame->header.force_node = 0;
+		}
+		break;
+
+	case SS_DETECT_STRENGTH:
+		if (systemInfo.u8_ssDetScanSet == 0) {
+			offset_force = systemInfo.u16_ssDetStrenAddr;
+			offset_sense = 0;
+			frame->header.sense_node = 0;
+		} else {
+			offset_sense = systemInfo.u16_ssDetStrenAddr;
+			offset_force = 0;
+			frame->header.force_node = 0;
+		}
+		break;
 
 	default:
 		pr_err("%s: Invalid type ERROR %08X\n", __func__,

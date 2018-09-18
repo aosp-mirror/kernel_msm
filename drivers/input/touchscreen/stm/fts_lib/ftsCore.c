@@ -630,7 +630,11 @@ int readSysInfo(int request)
 	u8ToU32(&data[index], &systemInfo.u32_cfgCrc);
 	index += 4;
 
-	index += 16;	/* skip reserved area */
+	index += 12;	/* skip reserved area */
+	systemInfo.u8_ssDetScanSet = data[index];
+	pr_info("SS Detect Scan Select = %d\n",
+		 systemInfo.u8_ssDetScanSet);
+	index += 4;
 
 	u8ToU16(&data[index], &systemInfo.u16_scrResX);
 	index += 2;
@@ -733,6 +737,20 @@ int readSysInfo(int request)
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxRxStrenAddr);
 	index += 2;
 	u8ToU16(&data[index], &systemInfo.u16_ssPrxRxBaselineAddr);
+	index += 2;
+
+	u8ToU16(&data[index], &systemInfo.u16_ssDetRawAddr);
+	pr_info("SS Detect Raw Addr = %04X\n",
+		systemInfo.u16_ssDetRawAddr);
+	index += 2;
+
+	u8ToU16(&data[index], &systemInfo.u16_ssDetFilterAddr);
+	index += 2;
+
+	u8ToU16(&data[index], &systemInfo.u16_ssDetStrenAddr);
+	index += 2;
+
+	u8ToU16(&data[index], &systemInfo.u16_ssDetBaselineAddr);
 	index += 2;
 
 	pr_info("Parsed %d bytes!\n", index);

@@ -1506,7 +1506,11 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 				  * (allow to call this function while touching
 				  * the screen without having a flooding of the
 				  * FIFO) */
-				res = getSSFrame3(SS_RAW, &frameSS);
+				if (typeOfComand[1] == LOCKED_LP_DETECT)
+					res = getSSFrame3(SS_DETECT_RAW,
+						&frameSS);
+				else
+					res = getSSFrame3(SS_RAW, &frameSS);
 
 				if (res < OK) {
 					pr_err("Error while taking the SS frame... ERROR %08X\n",

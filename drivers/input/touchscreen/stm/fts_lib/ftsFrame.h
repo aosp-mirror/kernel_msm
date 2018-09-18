@@ -76,7 +76,12 @@ typedef enum {
 	SS_PRX_FILTER	= 9,	/* /< Self Sense Proximity Filtered Frame */
 	SS_PRX_STRENGTH = 10,	/* /< Self Sense Proximity Strength Frame
 				 * (Baseline-Raw) */
-	SS_PRX_BASELINE = 11	/* /< Self Sense Proximity Baseline Frame */
+	SS_PRX_BASELINE = 11,	/* /< Self Sense Proximity Baseline Frame */
+
+	SS_DETECT_RAW = 12,  /* /< Self Sense Detect Raw Frame */
+	SS_DETECT_FILTER = 13,  /* /< Self Sense Detect Filter Frame */
+	SS_DETECT_STRENGTH = 14,  /* /< Self Sense Detect Strength Frame */
+	SS_DETECT_BASELINE = 15  /* /< Self Sense Detect Baseline Frame */
 } SSFrameType;
 
 

@@ -2621,7 +2621,7 @@ int production_test_ss_raw_lp(char *path_limits, int stop_on_fail,
 	mdelay(WAIT_FOR_FRESH_FRAMES);
 	ret |= setScanMode(SCAN_MODE_ACTIVE, 0x00);
 	mdelay(WAIT_AFTER_SENSEOFF);
-	ret |= getSSFrame3(SS_RAW, &ssRawFrame);
+	ret |= getSSFrame3(SS_DETECT_RAW, &ssRawFrame);
 	if (ret < 0) {
 		pr_err("production_test_data: getSSFrame failed... ERROR %08X\n",
 			ERROR_PROD_TEST_DATA);
@@ -2643,7 +2643,8 @@ int production_test_ss_raw_lp(char *path_limits, int stop_on_fail,
 	/* SS RAW (PROXIMITY) FORCE TEST */
 	pr_info("SS RAW LP FORCE TEST:\n");
 
-	if (todo->SelfForceRawLP == 1 || todo->SelfForceRawGapLP == 1) {
+	if ((todo->SelfForceRawLP == 1 || todo->SelfForceRawGapLP == 1) &&
+		ssRawFrame.header.force_node != 0) {
 		columns = 1;	/* there are no data for the sense channels
 				  *  because is a force frame */
 		rows = ssRawFrame.header.force_node;
@@ -2725,7 +2726,8 @@ int production_test_ss_raw_lp(char *path_limits, int stop_on_fail,
 	/* SS RAW (PROXIMITY) SENSE TEST */
 	pr_info("SS RAW LP SENSE TEST:\n");
 
-	if (todo->SelfSenseRawLP == 1 || todo->SelfSenseRawGapLP == 1) {
+	if ((todo->SelfSenseRawLP == 1 || todo->SelfSenseRawGapLP == 1) &&
+		ssRawFrame.header.sense_node != 0){
 		columns = ssRawFrame.header.sense_node;
 		rows = 1;/* there are no data for the force channels
 			  * because is a sense frame */
@@ -2801,7 +2803,8 @@ int production_test_ss_raw_lp(char *path_limits, int stop_on_fail,
 
 		kfree(ssRawFrame.sense_data);
 		ssRawFrame.sense_data = NULL;
-	}
+	} else
+		pr_info("SS RAW LP SENSE TEST:.................SKIPPED\n\n");
 
 	if (count_fail == 0) {
 		pr_info("SS RAW LP testes finished!.................OK\n\n");

@@ -358,16 +358,25 @@ int cleanUp(int enableTouch)
 short **array1dTo2d_short(short *data, int size, int columns)
 {
 	int i;
-	short **matrix = (short **)kmalloc(((int)(size / columns)) *
-					   sizeof(short *), GFP_KERNEL);
+	short **matrix = NULL;
 
-	if (matrix != NULL) {
-		for (i = 0; i < (int)(size / columns); i++)
-			matrix[i] = (short *)kmalloc(columns * sizeof(short),
-						     GFP_KERNEL);
+	if (size == 0) {
+		matrix = (short **)kmalloc_array(1,
+				sizeof(short *), GFP_KERNEL);
+		matrix[0] = (short *)kmalloc_array(0,
+				sizeof(short), GFP_KERNEL);
+	} else {
+		matrix = (short **)kmalloc_array(((int)(size / columns)),
+				sizeof(short *), GFP_KERNEL);
 
-		for (i = 0; i < size; i++)
-			matrix[i / columns][i % columns] = data[i];
+		if (matrix != NULL) {
+			for (i = 0; i < (int)(size / columns); i++)
+				matrix[i] = (short *)kmalloc_array(columns,
+						sizeof(short), GFP_KERNEL);
+
+			for (i = 0; i < size; i++)
+				matrix[i / columns][i % columns] = data[i];
+		}
 	}
 
 	return matrix;
@@ -385,16 +394,23 @@ short **array1dTo2d_short(short *data, int size, int columns)
 u16 **array1dTo2d_u16(u16 *data, int size, int columns)
 {
 	int i;
-	u16 **matrix = (u16 **)kmalloc(((int)(size / columns)) * sizeof(u16 *),
-				       GFP_KERNEL);
+	u16 **matrix = NULL;
 
-	if (matrix != NULL) {
-		for (i = 0; i < (int)(size / columns); i++)
-			matrix[i] = (u16 *)kmalloc(columns * sizeof(u16),
-						   GFP_KERNEL);
+	if (size == 0) {
+		matrix = (u16 **)kmalloc_array(1, sizeof(u16 *), GFP_KERNEL);
+		matrix[0] = (u16 *)kmalloc_array(0, sizeof(u16), GFP_KERNEL);
+	} else {
+		matrix = (u16 **)kmalloc_array(((int)(size / columns)),
+				sizeof(u16 *), GFP_KERNEL);
 
-		for (i = 0; i < size; i++)
-			matrix[i / columns][i % columns] = data[i];
+		if (matrix != NULL) {
+			for (i = 0; i < (int)(size / columns); i++)
+				matrix[i] = (u16 *)kmalloc_array(columns,
+						sizeof(u16), GFP_KERNEL);
+
+			for (i = 0; i < size; i++)
+				matrix[i / columns][i % columns] = data[i];
+		}
 	}
 
 	return matrix;
@@ -412,16 +428,25 @@ u16 **array1dTo2d_u16(u16 *data, int size, int columns)
 u8 **array1dTo2d_u8(u8 *data, int size, int columns)
 {
 	int i;
-	u8 **matrix = (u8 **)kmalloc(((int)(size / columns)) * sizeof(u8 *),
-				     GFP_KERNEL);
+	u8 **matrix = NULL;
 
-	if (matrix != NULL) {
-		for (i = 0; i < (int)(size / columns); i++)
-			matrix[i] = (u8 *)kmalloc(columns * sizeof(u8),
-						  GFP_KERNEL);
+	if (size == 0) {
+		matrix = (u8 **)kmalloc_array(1, sizeof(u8 *), GFP_KERNEL);
 
-		for (i = 0; i < size; i++)
-			matrix[i / columns][i % columns] = data[i];
+		matrix[0] = (u8 *)kmalloc_array(0, sizeof(u8), GFP_KERNEL);
+	} else {
+
+		matrix = (u8 **)kmalloc_array(((int)(size / columns)),
+				sizeof(u8 *), GFP_KERNEL);
+
+		if (matrix != NULL) {
+			for (i = 0; i < (int)(size / columns); i++)
+				matrix[i] = (u8 *)kmalloc_array(columns,
+						sizeof(u8), GFP_KERNEL);
+
+			for (i = 0; i < size; i++)
+				matrix[i / columns][i % columns] = data[i];
+		}
 	}
 
 	return matrix;
@@ -439,16 +464,23 @@ u8 **array1dTo2d_u8(u8 *data, int size, int columns)
 i8 **array1dTo2d_i8(i8 *data, int size, int columns)
 {
 	int i;
-	i8 **matrix = (i8 **)kmalloc(((int)(size / columns)) * sizeof(i8 *),
-				     GFP_KERNEL);
+	i8 **matrix = NULL;
 
-	if (matrix != NULL) {
-		for (i = 0; i < (int)(size / columns); i++)
-			matrix[i] = (i8 *)kmalloc(columns * sizeof(i8),
-						  GFP_KERNEL);
+	if (size == 0) {
+		matrix = (i8 **)kmalloc_array(1, sizeof(i8 *), GFP_KERNEL);
+		matrix[0] = (i8 *)kmalloc_array(0, sizeof(i8), GFP_KERNEL);
+	} else {
+		matrix = (i8 **)kmalloc_array(((int)(size / columns)),
+				sizeof(i8 *), GFP_KERNEL);
 
-		for (i = 0; i < size; i++)
-			matrix[i / columns][i % columns] = data[i];
+		if (matrix != NULL) {
+			for (i = 0; i < (int)(size / columns); i++)
+				matrix[i] = (i8 *)kmalloc_array(columns,
+						sizeof(i8), GFP_KERNEL);
+
+			for (i = 0; i < size; i++)
+				matrix[i / columns][i % columns] = data[i];
+		}
 	}
 
 	return matrix;
