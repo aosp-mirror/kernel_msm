@@ -33,6 +33,7 @@
 /* BATT_SOC_INT_RT_STS */
 #define SOC_READY_BIT				BIT(1)
 #define MSOC_EMPTY_BIT				BIT(5)
+#define MSOC_FULL_BIT				BIT(7)
 
 /* BATT_SOC_EN_CTL */
 #define FG_ALGORITHM_EN_BIT			BIT(7)

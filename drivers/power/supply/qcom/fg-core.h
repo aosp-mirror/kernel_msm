@@ -320,6 +320,7 @@ struct fg_dt_props {
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
 	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
 	u8	batt_therm_coeffs[BATT_THERM_NUM_COEFFS];
+	int	batt_psy_is_bms;
 };
 
 /* parameters from battery profile */

@@ -4776,8 +4776,24 @@ static irqreturn_t fg_empty_soc_irq_handler(int irq, void *data)
 static irqreturn_t fg_soc_irq_handler(int irq, void *data)
 {
 	struct fg_chip *chip = data;
+	int rc = 0;
+	u8 val = 0;
 
 	fg_dbg(chip, FG_IRQ, "irq %d triggered\n", irq);
+	if (!chip->dt.batt_psy_is_bms) {
+		/* the criterion is met when using QCOM FG */
+		rc = fg_read(chip, BATT_SOC_INT_RT_STS(chip), &val, 1);
+		if (rc < 0) {
+			fg_dbg(chip, FG_STATUS,
+			    "Error in reading SOC_INT_RT_STS, rc=%d\n", rc);
+		}
+
+		if (val & MSOC_FULL_BIT) {
+			fg_dbg(chip, FG_IRQ, "msoc-full triggered\n", irq);
+			if (batt_psy_initialized(chip))
+				power_supply_changed(chip->batt_psy);
+		}
+	}
 	return IRQ_HANDLED;
 }
 
@@ -5448,6 +5464,9 @@ static int fg_parse_dt(struct fg_chip *chip)
 
 	chip->dt.soc_irq_disable =
 		of_property_read_bool(node, "google,fg-soc-irq-disable");
+
+	chip->dt.batt_psy_is_bms =
+		of_property_read_bool(node, "google,batt_psy_is_bms");
 
 	return 0;
 }
