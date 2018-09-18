@@ -298,6 +298,7 @@ struct smb_charger {
 	struct votable		*fcc_votable;
 	struct votable		*fv_votable;
 	struct votable		*usb_icl_votable;
+	struct votable		*dc_icl_votable;
 	struct votable		*awake_votable;
 	struct votable		*pl_disable_votable;
 	struct votable		*chg_disable_votable;
