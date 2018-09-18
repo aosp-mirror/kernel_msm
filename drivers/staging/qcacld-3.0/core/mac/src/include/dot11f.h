@@ -8933,7 +8933,6 @@ typedef struct sDot11fAssocRequest{
 	tDot11fIEWFDIEOpaque                  WFDIEOpaque;
 	tDot11fIEvendor_vht_ie                vendor_vht_ie;
 	tDot11fIEhs20vendor_ie                hs20vendor_ie;
-	tDot11fIEMBO_IE                       MBO_IE;
 	tDot11fIEQCN_IE                       QCN_IE;
 	tDot11fIEosen_ie                      osen_ie;
 } tDot11fAssocRequest;
