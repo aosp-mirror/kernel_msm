@@ -158,6 +158,7 @@ enum pd_msg_request {
 #define TCPM_CC_EVENT		BIT(0)
 #define TCPM_VBUS_EVENT		BIT(1)
 #define TCPM_RESET_EVENT	BIT(2)
+#define TCPM_PORT_RESET_EVENT	BIT(3)
 
 #define LOG_BUFFER_ENTRIES	1024
 #define LOG_BUFFER_ENTRY_SIZE	128
@@ -3449,11 +3450,23 @@ static void tcpm_pd_event_handler(struct work_struct *work)
 			if (port->tcpc->get_cc(port->tcpc, &cc1, &cc2) == 0)
 				_tcpm_cc_change(port, cc1, cc2);
 		}
+		if (events & TCPM_PORT_RESET_EVENT) {
+			tcpm_set_state(port, PORT_RESET, 0);
+		}
 		spin_lock(&port->pd_event_lock);
 	}
 	spin_unlock(&port->pd_event_lock);
 	mutex_unlock(&port->lock);
 }
+
+void tcpm_port_reset(struct tcpm_port *port)
+{
+	spin_lock(&port->pd_event_lock);
+	port->pd_events = TCPM_PORT_RESET_EVENT;
+	spin_unlock(&port->pd_event_lock);
+	queue_work(port->wq, &port->event_work);
+}
+EXPORT_SYMBOL_GPL(tcpm_port_reset);
 
 void tcpm_cc_change(struct tcpm_port *port)
 {
