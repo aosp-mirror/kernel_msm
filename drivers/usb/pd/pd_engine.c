@@ -576,22 +576,30 @@ static void psy_changed_handler(struct work_struct *work)
 
 	parse_cc_status(typec_mode, typec_cc_orientation, &cc1, &cc2);
 
+	mutex_lock(&pd->lock);
+
 	pd_engine_log(pd,
-		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s]",
+		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s], pd_capable [%s]",
 		      get_psy_type_name(psy_type),
 		      pe_start ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
 		      get_typec_mode_name(typec_mode),
 		      get_typec_cc_orientation_name(typec_cc_orientation),
 		      get_typec_cc_status_name(cc1),
-		      get_typec_cc_status_name(cc2));
+		      get_typec_cc_status_name(cc2),
+		      pd->pd_capable ? "Y" : "N");
 
-	if (!pe_start && (typec_mode != POWER_SUPPLY_TYPEC_NONE)) {
+	/**
+	 * Start PD engine eihter when PE_START is set or APSD is done.
+	 * Also run pd engine when we know that port partner is pd capable.
+	 **/
+	if (!pe_start && !pd->pd_capable &&
+			  psy_type == POWER_SUPPLY_TYPE_UNKNOWN) {
 		pd_engine_log(pd, "Skipping update as PE_START not set yet");
+		mutex_unlock(&pd->lock);
 		return;
 	}
 
-	mutex_lock(&pd->lock);
 	pd->apsd_done = !!psy_type;
 	pd->psy_type = psy_type;
 	pd->is_cable_flipped = typec_cc_orientation == TYPEC_CC_ORIENTATION_CC2;
