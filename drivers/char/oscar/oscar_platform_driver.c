@@ -110,6 +110,7 @@ enum oscar_bar_regs {
 	OSCAR_BAR_REG_AON_MEM_POWERDOWN = 0x00020028,
 	OSCAR_BAR_REG_AON_CLAMP_ENABLE = 0x00020038,
 	OSCAR_BAR_REG_AON_FORCE_QUIESCE = 0x00020040,
+	OSCAR_BAR_REG_AON_AXITIEOFFS = 0x00020048,
 	OSCAR_BAR_REG_AON_IDLE = 0x00020050,
 };
 
@@ -564,6 +565,8 @@ static int oscar_device_cleanup(struct gasket_dev *gasket_dev)
 /* Quits GCB reset state. */
 static int oscar_quit_reset(struct gasket_dev *gasket_dev)
 {
+	uint64_t reg;
+
 	if (bypass_top_level)
 		return 0;
 
@@ -615,6 +618,17 @@ static int oscar_quit_reset(struct gasket_dev *gasket_dev)
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_FORCE_QUIESCE);
 
+	/*
+	 * Set tpu_aon register axiTieOffsReg fields arcache and awcache
+	 * bit 1, allowing DRAM controller to combine our 16B transactions into
+	 * 32B transactions to get full bandwidth.
+	 * TODO: May not be necessary on later Airbrush cards.
+	 */
+	reg = gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+				 OSCAR_BAR_REG_AON_AXITIEOFFS);
+	reg |= 0x2 << 18 | 0x2 << 2;
+	gasket_dev_write_64(gasket_dev, reg, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_AXITIEOFFS);
 	return 0;
 }
 
