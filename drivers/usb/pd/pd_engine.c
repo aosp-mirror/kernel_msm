@@ -1429,6 +1429,7 @@ struct usbpd *usbpd_create(struct device *parent)
 {
 	int ret;
 	struct usbpd *pd;
+	union power_supply_propval val = {0};
 
 	pd = kzalloc(sizeof(*pd), GFP_KERNEL);
 	if (!pd)
@@ -1513,14 +1514,23 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto put_psy;
 	}
 
-	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
-
 	pd->psy_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&pd->psy_nb);
 	if (ret < 0)
 		goto unreg_tcpm;
 
 	init_pd_phy_params(&pd->pdphy_params);
+
+	val.intval = POWER_SUPPLY_PD_INACTIVE;
+	ret = power_supply_set_property(pd->usb_psy,
+				  POWER_SUPPLY_PROP_PD_ACTIVE,
+				  &val);
+	if (ret < 0)
+		pd_engine_log(pd, "unable to set PD_ACTIVE to flase, ret=%d",
+			      ret);
+
+
+	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
 
 	return pd;
 
