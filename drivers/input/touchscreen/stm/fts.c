@@ -134,6 +134,11 @@ static int fts_mode_handler(struct fts_ts_info *info, int force);
 
 static int fts_chip_initialization(struct fts_ts_info *info, int init_type);
 
+static void fts_report_timestamp(struct fts_ts_info *info)
+{
+	input_event(info->input_dev, EV_MSC, MSC_TIMESTAMP,
+		info->timestamp / 1000);
+}
 
 /**
   * Release all the touches in the linux input subsystem
@@ -157,6 +162,7 @@ void release_all_touches(struct fts_ts_info *info)
 		input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1);
 	}
 	input_report_key(info->input_dev, BTN_TOUCH, 0);
+	fts_report_timestamp(info);
 	input_sync(info->input_dev);
 	info->touch_id = 0;
 #ifdef STYLUS_MODE
@@ -2081,13 +2087,14 @@ void fts_input_report_key(struct fts_ts_info *info, int key_code)
 /**
   * Event Handler for no events (EVT_ID_NOEVENT)
   */
-static void fts_nop_event_handler(struct fts_ts_info *info, unsigned
+static bool fts_nop_event_handler(struct fts_ts_info *info, unsigned
 				  char *event)
 {
 	pr_info("%s: Doing nothing for event = %02X %02X %02X %02X %02X %02X %02X %02X\n",
 		__func__, event[0], event[1], event[2], event[3],
 		event[4],
 		event[5], event[6], event[7]);
+	return false;
 }
 
 /**
@@ -2096,7 +2103,7 @@ static void fts_nop_event_handler(struct fts_ts_info *info, unsigned
   * report touch coordinates and additional information
   * to the linux input system
   */
-static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
+static bool fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 					    char *event)
 {
 	unsigned char touchId;
@@ -2196,15 +2203,16 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info, unsigned
 	 * Size = %d\n",
 	  *	__func__, *event, touchId, x, y, touchType); */
 
+	return true;
 no_report:
-	return;
+	return false;
 }
 
 /**
   * Event handler for leave event (EVT_ID_LEAVE_POINT )
   * Report to the linux input system that one touch left the display
   */
-static void fts_leave_pointer_event_handler(struct fts_ts_info *info, unsigned
+static bool fts_leave_pointer_event_handler(struct fts_ts_info *info, unsigned
 					    char *event)
 {
 	unsigned char touchId;
@@ -2245,18 +2253,19 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info, unsigned
 	default:
 		pr_err("%s : Invalid touch type = %d ! No Report...\n",
 			__func__, touchType);
-		return;
+		return false;
 	}
 
 	input_mt_report_slot_state(info->input_dev, tool, 0);
 
 	/* pr_info("%s : TouchID = %d, Touchcount = %d\n", __func__,
-	  *	touchId,touchcount); */
+	 *	touchId,touchcount); */
 
 
 	input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1);
 	/* pr_info("%s : Event 0x%02x - release ID[%d]\n", __func__,
-	  *	event[0], touchId); */
+	 *	event[0], touchId); */
+	return true;
 }
 
 /* EventId : EVT_ID_MOTION_POINT */
@@ -2269,7 +2278,7 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info, unsigned
   * Handle unexpected error events implementing recovery strategy and
   * restoring the sensing status that the IC had before the error occurred
   */
-static void fts_error_event_handler(struct fts_ts_info *info, unsigned
+static bool fts_error_event_handler(struct fts_ts_info *info, unsigned
 				    char *event)
 {
 	int error = 0;
@@ -2308,6 +2317,7 @@ static void fts_error_event_handler(struct fts_ts_info *info, unsigned
 	}
 	break;
 	}
+	return false;
 }
 
 /**
@@ -2315,7 +2325,7 @@ static void fts_error_event_handler(struct fts_ts_info *info, unsigned
   * Handle controller events received after unexpected reset of the IC updating
   * the resets flag and restoring the proper sensing status
   */
-static void fts_controller_ready_event_handler(struct fts_ts_info *info,
+static bool fts_controller_ready_event_handler(struct fts_ts_info *info,
 					       unsigned char *event)
 {
 	int error;
@@ -2330,13 +2340,14 @@ static void fts_controller_ready_event_handler(struct fts_ts_info *info,
 	if (error < OK)
 		pr_err("%s Cannot restore the device status ERROR %08X\n",
 			__func__, error);
+	return false;
 }
 
 /**
   * Event handler for status events (EVT_ID_STATUS_UPDATE)
   * Handle status update events
   */
-static void fts_status_event_handler(struct fts_ts_info *info, unsigned
+static bool fts_status_event_handler(struct fts_ts_info *info, unsigned
 				     char *event)
 {
 	switch (event[1]) {
@@ -2476,6 +2487,7 @@ static void fts_status_event_handler(struct fts_ts_info *info, unsigned
 			event[4], event[5], event[6], event[7]);
 		break;
 	}
+	return false;
 }
 
 
@@ -2672,7 +2684,7 @@ gesture_done:
   * Handle user events reported by the FW due to some interaction triggered
   * by an external user (press keys, perform gestures, etc.)
   */
-static void fts_user_report_event_handler(struct fts_ts_info *info, unsigned
+static bool fts_user_report_event_handler(struct fts_ts_info *info, unsigned
 					  char *event)
 {
 	switch (event[1]) {
@@ -2700,6 +2712,7 @@ static void fts_user_report_event_handler(struct fts_ts_info *info, unsigned
 			event[4], event[5], event[6], event[7]);
 		break;
 	}
+	return false;
 }
 
 static void heatmap_enable(void)
@@ -2811,6 +2824,7 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	unsigned char events_remaining = 0;
 	unsigned char *evt_data;
 	event_dispatch_handler_t event_handler;
+	bool processed_pointer_event = false;
 
 	/* It is possible that interrupts were disabled while the handler is
 	 * executing, before acquiring the mutex. If so, simply return.
@@ -2854,7 +2868,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 			if (eventId < NUM_EVT_ID) {
 				event_handler =
 					info->event_dispatch_table[eventId];
-				event_handler(info, (evt_data));
+				processed_pointer_event =
+					event_handler(info, evt_data);
 			}
 		}
 	}
@@ -2862,8 +2877,14 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	if (info->touch_id == 0)
 		input_report_key(info->input_dev, BTN_TOUCH, 0);
 
-	input_event(info->input_dev, EV_MSC, MSC_TIMESTAMP,
-			info->timestamp / 1000);
+	/*
+	 * Only report timestamp for pointer events and ignore events
+	 * like errors, status updates, etc.
+	 * Otherwise, we will generate events that only consist of timestamps.
+	 */
+	if (processed_pointer_event) {
+		fts_report_timestamp(info);
+	}
 	input_sync(info->input_dev);
 
 	heatmap_read(&info->v4l2, info->timestamp);

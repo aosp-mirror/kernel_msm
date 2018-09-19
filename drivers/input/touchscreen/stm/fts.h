@@ -281,8 +281,9 @@ struct fts_ts_info;
 
 /*
   * Dispatch event handler
+  * Return true if the handler has processed a pointer event
   */
-typedef void (*event_dispatch_handler_t)
+typedef bool (*event_dispatch_handler_t)
 	(struct fts_ts_info *info, unsigned char *data);
 
 /**
