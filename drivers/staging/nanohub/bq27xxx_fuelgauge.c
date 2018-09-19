@@ -354,8 +354,13 @@ static int bq27x00_battery_status(
 {
 	int status;
 
-	if (charger_online)
-		status = POWER_SUPPLY_STATUS_CHARGING;
+	if (charger_online) {
+		if ((fg_info->cache.flags & BQ27XXX_FLAG_FC) ||
+		    (fg_info->cache.capacity == 100) )
+			status = POWER_SUPPLY_STATUS_FULL;
+		else
+			status = POWER_SUPPLY_STATUS_CHARGING;
+	}
 	else
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
 
