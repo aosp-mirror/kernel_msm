@@ -23,6 +23,7 @@
 #define EXT4_XATTR_INDEX_SECURITY	        6
 #define EXT4_XATTR_INDEX_SYSTEM			7
 #define EXT4_XATTR_INDEX_RICHACL		8
+#define EXT4_XATTR_INDEX_ENCRYPTION		9
 
 struct ext4_xattr_header {
 	__le32	h_magic;	/* magic number for identification */
@@ -97,6 +98,40 @@ struct ext4_xattr_ibody_find {
 extern const struct xattr_handler ext4_xattr_user_handler;
 extern const struct xattr_handler ext4_xattr_trusted_handler;
 extern const struct xattr_handler ext4_xattr_security_handler;
+
+#define EXT4_XATTR_NAME_ENCRYPTION_CONTEXT "c"
+
+/*
+ * The EXT4_STATE_NO_EXPAND is overloaded and used for two purposes.
+ * The first is to signal that there the inline xattrs and data are
+ * taking up so much space that we might as well not keep trying to
+ * expand it.  The second is that xattr_sem is taken for writing, so
+ * we shouldn't try to recurse into the inode expansion.  For this
+ * second case, we need to make sure that we take save and restore the
+ * NO_EXPAND state flag appropriately.
+ */
+static inline void ext4_write_lock_xattr(struct inode *inode, int *save)
+{
+	down_write(&EXT4_I(inode)->xattr_sem);
+	*save = ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND);
+	ext4_set_inode_state(inode, EXT4_STATE_NO_EXPAND);
+}
+
+static inline int ext4_write_trylock_xattr(struct inode *inode, int *save)
+{
+	if (down_write_trylock(&EXT4_I(inode)->xattr_sem) == 0)
+		return 0;
+	*save = ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND);
+	ext4_set_inode_state(inode, EXT4_STATE_NO_EXPAND);
+	return 1;
+}
+
+static inline void ext4_write_unlock_xattr(struct inode *inode, int *save)
+{
+	if (*save == 0)
+		ext4_clear_inode_state(inode, EXT4_STATE_NO_EXPAND);
+	up_write(&EXT4_I(inode)->xattr_sem);
+}
 
 extern ssize_t ext4_listxattr(struct dentry *, char *, size_t);
 

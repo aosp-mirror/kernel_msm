@@ -1,6 +1,5 @@
 
 
-generic-y += auxvec.h
 generic-y += bitsperlong.h
 generic-y += cputime.h
 generic-y += current.h
@@ -38,4 +37,3 @@ generic-y += termbits.h
 generic-y += termios.h
 generic-y += timex.h
 generic-y += trace_clock.h
-generic-y += unaligned.h

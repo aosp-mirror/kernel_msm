@@ -89,11 +89,7 @@
 };
 
 &i2c_3 {
-	status = "ok";
-};
-
-&i2c_2 {
-	status = "ok";
+	status = "disabled";
 };
 
 &blsp1_uart1 {

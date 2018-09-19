@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -73,7 +73,9 @@
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-te-check-enable;
-		qcom,mdss-dsi-panel-timings = [5F 12 0A 00 32 34 10 16 0F 03 04 00];
+		qcom,mdss-dsi-panel-timings = [
+			5F 12 0A 00 32 34 10 16 0F 03 04 00
+			];
 		qcom,mdss-dsi-t-clk-post = <0x05>;
 		qcom,mdss-dsi-t-clk-pre = <0x11>;
 		qcom,mdss-dsi-bl-min-level = <1>;

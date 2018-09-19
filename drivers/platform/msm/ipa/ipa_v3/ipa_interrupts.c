@@ -46,7 +46,7 @@ static int ipa3_irq_mapping[IPA_IRQ_MAX] = {
 	[IPA_UC_TX_CMD_Q_NOT_FULL_IRQ]		= -1,
 	[IPA_UC_TO_PROC_ACK_Q_NOT_FULL_IRQ]	= -1,
 	[IPA_BAD_SNOC_ACCESS_IRQ]		= 0,
-	[IPA_EOT_COAL_IRQ]			= 1,
+	[IPA_EOT_COAL_IRQ]			= -1,
 	[IPA_UC_IRQ_0]				= 2,
 	[IPA_UC_IRQ_1]				= 3,
 	[IPA_UC_IRQ_2]				= 4,
@@ -61,7 +61,7 @@ static int ipa3_irq_mapping[IPA_IRQ_MAX] = {
 	[IPA_PROC_ERR_IRQ]			= 13,
 	[IPA_TX_SUSPEND_IRQ]			= 14,
 	[IPA_TX_HOLB_DROP_IRQ]			= 15,
-	[IPA_BAM_IDLE_IRQ]			= 16,
+	[IPA_BAM_GSI_IDLE_IRQ]			= 16,
 };
 
 static void ipa3_interrupt_defer(struct work_struct *work);
@@ -133,6 +133,20 @@ static int ipa3_handle_interrupt(int irq_num, bool isr_context)
 		}
 		suspend_interrupt_data->endpoints = suspend_data;
 		interrupt_data = suspend_interrupt_data;
+		break;
+	case IPA_UC_IRQ_0:
+		if (ipa3_ctx->apply_rg10_wa) {
+			/*
+			 * Early detect of uC crash. If RG10 workaround is
+			 * enable uC crash will not be detected as before
+			 * processing uC event the interrupt is cleared using
+			 * uC register write which times out as it crashed
+			 * already.
+			 */
+			if (ipa3_ctx->uc_ctx.uc_sram_mmio->eventOp ==
+			    IPA_HW_2_CPU_EVENT_ERROR)
+				ipa3_ctx->uc_ctx.uc_failed = true;
+		}
 		break;
 	default:
 		break;
@@ -221,6 +235,15 @@ static void ipa3_tx_suspend_interrupt_wa(void)
 	IPADBG_LOW("Exit\n");
 }
 
+static inline bool is_uc_irq(int irq_num)
+{
+	if (ipa_interrupt_to_cb[irq_num].interrupt >= IPA_UC_IRQ_0 &&
+		ipa_interrupt_to_cb[irq_num].interrupt <= IPA_UC_IRQ_3)
+		return true;
+	else
+		return false;
+}
+
 static void ipa3_process_interrupts(bool isr_context)
 {
 	u32 reg;
@@ -228,6 +251,7 @@ static void ipa3_process_interrupts(bool isr_context)
 	u32 i = 0;
 	u32 en;
 	unsigned long flags;
+	bool uc_irq;
 
 	IPADBG_LOW("Enter\n");
 
@@ -238,6 +262,14 @@ static void ipa3_process_interrupts(bool isr_context)
 		bmsk = 1;
 		for (i = 0; i < IPA_IRQ_NUM_MAX; i++) {
 			if (en & reg & bmsk) {
+				uc_irq = is_uc_irq(i);
+
+				/* Clear uC interrupt before processing to avoid
+						clearing unhandled interrupts */
+				if (uc_irq)
+					ipa3_uc_rg10_write_reg(IPA_IRQ_CLR_EE_n,
+							ipa_ee, bmsk);
+
 				/*
 				 * handle the interrupt with spin_lock
 				 * unlocked to avoid calling client in atomic
@@ -248,10 +280,22 @@ static void ipa3_process_interrupts(bool isr_context)
 				spin_unlock_irqrestore(&suspend_wa_lock, flags);
 				ipa3_handle_interrupt(i, isr_context);
 				spin_lock_irqsave(&suspend_wa_lock, flags);
+
+				/* Clear non uC interrupt after processing
+				   to avoid clearing interrupt data */
+				if (!uc_irq)
+					ipa3_uc_rg10_write_reg(IPA_IRQ_CLR_EE_n,
+							ipa_ee, bmsk);
 			}
 			bmsk = bmsk << 1;
 		}
-		ipa3_uc_rg10_write_reg(IPA_IRQ_CLR_EE_n, ipa_ee, reg);
+		/*
+		 * In case uC failed interrupt cannot be cleared.
+		 * Device will crash as part of handling uC event handler.
+		 */
+		if (ipa3_ctx->apply_rg10_wa && ipa3_ctx->uc_ctx.uc_failed)
+			break;
+
 		reg = ipahal_read_reg_n(IPA_IRQ_STTS_EE_n, ipa_ee);
 		/* since the suspend interrupt HW bug we must
 		  * read again the EN register, otherwise the while is endless
@@ -347,7 +391,7 @@ int ipa3_add_interrupt_handler(enum ipa_irq_type interrupt,
 
 	/* register SUSPEND_IRQ_EN_EE_n_ADDR for L2 interrupt*/
 	if ((interrupt == IPA_TX_SUSPEND_IRQ) &&
-		(ipa3_ctx->ipa_hw_type == IPA_HW_v3_1)) {
+		(ipa3_ctx->ipa_hw_type >= IPA_HW_v3_1)) {
 		val = ~0;
 		for (client_idx = 0; client_idx < IPA_CLIENT_MAX; client_idx++)
 			if (IPA_CLIENT_IS_Q6_CONS(client_idx) ||
@@ -392,15 +436,9 @@ int ipa3_remove_interrupt_handler(enum ipa_irq_type interrupt)
 		return -EFAULT;
 	}
 
-	kfree(ipa_interrupt_to_cb[irq_num].private_data);
-	ipa_interrupt_to_cb[irq_num].deferred_flag = false;
-	ipa_interrupt_to_cb[irq_num].handler = NULL;
-	ipa_interrupt_to_cb[irq_num].private_data = NULL;
-	ipa_interrupt_to_cb[irq_num].interrupt = -1;
-
 	/* clean SUSPEND_IRQ_EN_EE_n_ADDR for L2 interrupt */
 	if ((interrupt == IPA_TX_SUSPEND_IRQ) &&
-		(ipa3_ctx->ipa_hw_type == IPA_HW_v3_1)) {
+		(ipa3_ctx->ipa_hw_type >= IPA_HW_v3_1)) {
 		ipahal_write_reg_n(IPA_SUSPEND_IRQ_EN_EE_n, ipa_ee, 0);
 		IPADBG("wrote IPA_SUSPEND_IRQ_EN_EE_n reg = %d\n", 0);
 	}
@@ -409,6 +447,13 @@ int ipa3_remove_interrupt_handler(enum ipa_irq_type interrupt)
 	bmsk = 1 << irq_num;
 	val &= ~bmsk;
 	ipa3_uc_rg10_write_reg(IPA_IRQ_EN_EE_n, ipa_ee, val);
+
+	/* delete the handlers after clean-up interrupts */
+	kfree(ipa_interrupt_to_cb[irq_num].private_data);
+	ipa_interrupt_to_cb[irq_num].deferred_flag = false;
+	ipa_interrupt_to_cb[irq_num].handler = NULL;
+	ipa_interrupt_to_cb[irq_num].private_data = NULL;
+	ipa_interrupt_to_cb[irq_num].interrupt = -1;
 
 	return 0;
 }

@@ -346,6 +346,7 @@ void irq_init_desc(unsigned int irq)
  *	0 when the interrupt handler was not called
  *	1 when the interrupt handler was called
  */
+
 int generic_handle_irq(unsigned int irq)
 {
 	struct irq_desc *desc = irq_to_desc(irq);

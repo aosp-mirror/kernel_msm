@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,7 +30,7 @@
 #include <dt-bindings/clock/msm-clocks-cobalt.h>
 #include <dt-bindings/clock/msm-clocks-hwio-cobalt.h>
 
-#include "vdd-level-californium.h"
+#include "vdd-level-9650.h"
 
 static void __iomem *virt_base;
 
@@ -446,10 +446,10 @@ int msm_gpucc_cobalt_probe(struct platform_device *pdev)
 		return PTR_ERR(reg);
 	}
 
-	tmp = gpucc_xo.c.parent = devm_clk_get(&pdev->dev, "xo");
+	tmp = gpucc_xo.c.parent = devm_clk_get(&pdev->dev, "xo_ao");
 	if (IS_ERR(tmp)) {
 		if (PTR_ERR(tmp) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get xo clock\n");
+			dev_err(&pdev->dev, "Unable to get xo_ao clock\n");
 		return PTR_ERR(tmp);
 	}
 

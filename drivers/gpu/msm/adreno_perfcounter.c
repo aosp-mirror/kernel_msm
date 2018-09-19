@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,13 +27,9 @@
 #define VBIF2_PERF_CLR_REG_SEL_OFF 8
 /* offset of enable register from select register */
 #define VBIF2_PERF_EN_REG_SEL_OFF 16
-/* offset of high counter from low counter value */
-#define VBIF2_PERF_HIGH_REG_LOW_OFF 8
 
 /* offset of clear register from the enable register */
 #define VBIF2_PERF_PWR_CLR_REG_EN_OFF 8
-/* offset of high counter from low counter value */
-#define VBIF2_PERF_PWR_HIGH_REG_LOW_OFF 8
 
 #define REG_64BIT_VAL(hi, lo, val) (((((uint64_t) hi) << 32) | lo) + val)
 /*
@@ -526,12 +522,18 @@ int adreno_perfcounter_get(struct adreno_device *adreno_dev,
 	if (empty == -1)
 		return -EBUSY;
 
-	/* enable the new counter */
-	ret = adreno_perfcounter_enable(adreno_dev, groupid, empty, countable);
-	if (ret)
-		return ret;
 	/* initialize the new counter */
 	group->regs[empty].countable = countable;
+
+	/* enable the new counter */
+	ret = adreno_perfcounter_enable(adreno_dev, groupid, empty, countable);
+	if (ret) {
+		/* Put back the perfcounter */
+		if (!(group->flags & ADRENO_PERFCOUNTER_GROUP_FIXED))
+			group->regs[empty].countable =
+				KGSL_PERFCOUNTER_NOT_USED;
+		return ret;
+	}
 
 	/* set initial kernel and user count */
 	if (flags & PERFCOUNTER_FLAG_KERNEL) {
@@ -658,6 +660,9 @@ static void _perfcounter_enable_vbif_pwr(struct adreno_device *adreno_dev,
 static void _power_counter_enable_alwayson(struct adreno_device *adreno_dev,
 				struct adreno_perfcounters *counters)
 {
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_GPMU))
+		return;
+
 	kgsl_regwrite(KGSL_DEVICE(adreno_dev),
 		A5XX_GPMU_ALWAYS_ON_COUNTER_RESET, 1);
 	counters->groups[KGSL_PERFCOUNTER_GROUP_ALWAYSON_PWR].regs[0].value = 0;
@@ -697,6 +702,9 @@ static void _power_counter_enable_default(struct adreno_device *adreno_dev,
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_perfcount_register *reg;
+
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_GPMU))
+		return;
 
 	reg = &counters->groups[group].regs[counter];
 	kgsl_regwrite(device, reg->select, countable);
@@ -750,10 +758,22 @@ static int _perfcounter_enable_default(struct adreno_device *adreno_dev,
 		/* wait for the above commands submitted to complete */
 		ret = adreno_ringbuffer_waittimestamp(rb, rb->timestamp,
 				ADRENO_IDLE_TIMEOUT);
-		if (ret)
-			KGSL_DRV_ERR(device,
-			"Perfcounter %u/%u/%u start via commands failed %d\n",
-			group, counter, countable, ret);
+		if (ret) {
+			/*
+			 * If we were woken up because of cancelling rb events
+			 * either due to soft reset or adreno_stop, ignore the
+			 * error and return 0 here. The perfcounter is already
+			 * set up in software and it will be programmed in
+			 * hardware when we wake up or come up after soft reset,
+			 * by adreno_perfcounter_restore.
+			 */
+			if (ret == -EAGAIN)
+				ret = 0;
+			else
+				KGSL_DRV_ERR(device,
+				"Perfcounter %u/%u/%u start via commands failed %d\n",
+				group, counter, countable, ret);
+		}
 	} else {
 		/* Select the desired perfcounter */
 		kgsl_regwrite(device, reg->select, countable);
@@ -930,6 +950,9 @@ static uint64_t _perfcounter_read_pwrcntr(struct adreno_device *adreno_dev,
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_perfcount_register *reg;
 	unsigned int lo = 0, hi = 0;
+
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_GPMU))
+		return 0;
 
 	reg = &group->regs[counter];
 

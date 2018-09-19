@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,6 +12,14 @@
 #ifndef MSM_GSI_H
 #define MSM_GSI_H
 #include <linux/types.h>
+
+enum gsi_ver {
+	GSI_VER_ERR = 0,
+	GSI_VER_1_0 = 1,
+	GSI_VER_1_2 = 2,
+	GSI_VER_1_3 = 3,
+	GSI_VER_MAX,
+};
 
 enum gsi_status {
 	GSI_STATUS_SUCCESS = 0,
@@ -65,6 +73,7 @@ enum gsi_intr_type {
 /**
  * gsi_per_props - Peripheral related properties
  *
+ * @gsi:        GSI core version
  * @ee:         EE where this driver and peripheral driver runs
  * @intr:       control interrupt type
  * @intvec:     write data for MSI write
@@ -87,6 +96,7 @@ enum gsi_intr_type {
  *
  */
 struct gsi_per_props {
+	enum gsi_ver ver;
 	unsigned int ee;
 	enum gsi_intr_type intr;
 	uint32_t intvec;
@@ -357,6 +367,7 @@ enum gsi_xfer_flag {
 enum gsi_xfer_elem_type {
 	GSI_XFER_ELEM_DATA,
 	GSI_XFER_ELEM_IMME_CMD,
+	GSI_XFER_ELEM_NOP,
 };
 
 /**
@@ -399,6 +410,7 @@ enum gsi_xfer_elem_type {
  *
  *		    GSI_XFER_ELEM_DATA: for all data transfers
  *		    GSI_XFER_ELEM_IMME_CMD: for IPA immediate commands
+ *		    GSI_XFER_ELEM_NOP: for event generation only
  *
  * @xfer_user_data: cookie used in xfer_cb
  *
@@ -412,42 +424,87 @@ struct gsi_xfer_elem {
 };
 
 /**
+ * gsi_gpi_channel_scratch - GPI protocol SW config area of
+ * channel scratch
+ *
+ * @max_outstanding_tre: Used for the prefetch management sequence by the
+ *                       sequencer. Defines the maximum number of allowed
+ *                       outstanding TREs in IPA/GSI (in Bytes). RE engine
+ *                       prefetch will be limited by this configuration. It
+ *                       is suggested to configure this value to IPA_IF
+ *                       channel TLV queue size times element size. To disable
+ *                       the feature in doorbell mode (DB Mode=1). Maximum
+ *                       outstanding TREs should be set to 64KB
+ *                       (or any value larger or equal to ring length . RLEN)
+ * @outstanding_threshold: Used for the prefetch management sequence by the
+ *                       sequencer. Defines the threshold (in Bytes) as to when
+ *                       to update the channel doorbell. Should be smaller than
+ *                       Maximum outstanding TREs. value. It is suggested to
+ *                       configure this value to 2 * element size.
+ */
+struct __packed gsi_gpi_channel_scratch {
+	uint64_t resvd1;
+	uint32_t resvd2:16;
+	uint32_t max_outstanding_tre:16;
+	uint32_t resvd3:16;
+	uint32_t outstanding_threshold:16;
+};
+
+/**
  * gsi_mhi_channel_scratch - MHI protocol SW config area of
  * channel scratch
  *
  * @mhi_host_wp_addr:    Valid only when UL/DL Sync En is asserted. Defines
  *                       address in host from which channel write pointer
  *                       should be read in polling mode
- * @max_outstanding_tre: Used for the prefetch management sequence by the
- *                       sequencer. Defines the maximum number of allowed
- *                       outstanding TREs in IPA/GSI (in Bytes). RE engine
- *                       prefetch will be limited by this configuration. It
- *                       is suggested to configure this value with the IPA_IF
- *                       channel AOS queue size. To disable the feature in
- *                       doorbell mode (DB Mode=1) Maximum outstanding TREs
- *                       should be set to 64KB (or any value larger or equal
- *                       to ring length . RLEN)
  * @assert_bit40:        1: bit #41 in address should be asserted upon
  *                       IPA_IF.ProcessDescriptor routine (for MHI over PCIe
  *                       transfers)
  *                       0: bit #41 in address should be deasserted upon
  *                       IPA_IF.ProcessDescriptor routine (for non-MHI over
  *                       PCIe transfers)
- * @ul_dl_sync_en:       When asserted, UL/DL synchronization feature is
- *                       enabled for the channel. Supported only for predefined
- *                       UL/DL endpoint pair
+ * @polling_configuration: Uplink channels: Defines timer to poll on MHI
+ *                       context. Range: 1 to 31 milliseconds.
+ *                       Downlink channel: Defines transfer ring buffer
+ *                       availability threshold to poll on MHI context in
+ *                       multiple of 8. Range: 0 to 31, meaning 0 to 258 ring
+ *                       elements. E.g., value of 2 indicates 16 ring elements.
+ *                       Valid only when Burst Mode Enabled is set to 1
+ * @burst_mode_enabled:  0: Burst mode is disabled for this channel
+ *                       1: Burst mode is enabled for this channel
+ * @polling_mode:        0: the channel is not in polling mode, meaning the
+ *                       host should ring DBs.
+ *                       1: the channel is in polling mode, meaning the host
+ * @oob_mod_threshold:   Defines OOB moderation threshold. Units are in 8
+ *                       ring elements.
+ *                       should not ring DBs until notified of DB mode/OOB mode
+ * @max_outstanding_tre: Used for the prefetch management sequence by the
+ *                       sequencer. Defines the maximum number of allowed
+ *                       outstanding TREs in IPA/GSI (in Bytes). RE engine
+ *                       prefetch will be limited by this configuration. It
+ *                       is suggested to configure this value to IPA_IF
+ *                       channel TLV queue size times element size.
+ *                       To disable the feature in doorbell mode (DB Mode=1).
+ *                       Maximum outstanding TREs should be set to 64KB
+ *                       (or any value larger or equal to ring length . RLEN)
  * @outstanding_threshold: Used for the prefetch management sequence by the
  *                       sequencer. Defines the threshold (in Bytes) as to when
  *                       to update the channel doorbell. Should be smaller than
- *                       Maximum outstanding TREs. value.
+ *                       Maximum outstanding TREs. value. It is suggested to
+ *                       configure this value to min(TLV_FIFO_SIZE/2,8) *
+ *                       element size.
  */
 struct __packed gsi_mhi_channel_scratch {
 	uint64_t mhi_host_wp_addr;
-	uint32_t ul_dl_sync_en:1;
+	uint32_t rsvd1:1;
 	uint32_t assert_bit40:1;
-	uint32_t resvd1:14;
+	uint32_t polling_configuration:5;
+	uint32_t burst_mode_enabled:1;
+	uint32_t polling_mode:1;
+	uint32_t oob_mod_threshold:5;
+	uint32_t resvd2:2;
 	uint32_t max_outstanding_tre:16;
-	uint32_t resvd2:16;
+	uint32_t resvd3:16;
 	uint32_t outstanding_threshold:16;
 };
 
@@ -468,16 +525,18 @@ struct __packed gsi_mhi_channel_scratch {
  *                       sequencer. Defines the maximum number of allowed
  *                       outstanding TREs in IPA/GSI (in Bytes). RE engine
  *                       prefetch will be limited by this configuration. It
- *                       is suggested to configure this value with the IPA_IF
- *                       channel AOS queue size. To disable the feature in
- *                       doorbell mode (DB Mode=1) Maximum outstanding TREs
- *                       should be set to 64KB (or any value larger or equal
- *                       to ring length . RLEN)
+ *                       is suggested to configure this value to IPA_IF
+ *                       channel TLV queue size times element size.
+ *                       To disable the feature in doorbell mode (DB Mode=1)
+ *                       Maximum outstanding TREs should be set to 64KB
+ *                       (or any value larger or equal to ring length . RLEN)
  * @depcmd_hi_addr: Used to generate "Update Transfer" command
  * @outstanding_threshold: Used for the prefetch management sequence by the
  *                       sequencer. Defines the threshold (in Bytes) as to when
  *                       to update the channel doorbell. Should be smaller than
- *                       Maximum outstanding TREs. value.
+ *                       Maximum outstanding TREs. value. It is suggested to
+ *                       configure this value to 2 * element size. for MBIM the
+ *                       suggested configuration is the element size.
  */
 struct __packed gsi_xdci_channel_scratch {
 	uint32_t last_trb_addr:16;
@@ -497,6 +556,7 @@ struct __packed gsi_xdci_channel_scratch {
  *
  */
 union __packed gsi_channel_scratch {
+	struct __packed gsi_gpi_channel_scratch gpi;
 	struct __packed gsi_mhi_channel_scratch mhi;
 	struct __packed gsi_xdci_channel_scratch xdci;
 	struct __packed {
@@ -510,14 +570,9 @@ union __packed gsi_channel_scratch {
 /**
  * gsi_mhi_evt_scratch - MHI protocol SW config area of
  * event scratch
- *
- * @ul_dl_sync_en: When asserted, UL/DL synchronization feature is enabled for
- *                 the channel. Supported only for predefined UL/DL endpoint
- *                 pair
  */
 struct __packed gsi_mhi_evt_scratch {
-	uint32_t resvd1:31;
-	uint32_t ul_dl_sync_en:1;
+	uint32_t resvd1;
 	uint32_t resvd2;
 };
 
@@ -696,6 +751,18 @@ int gsi_query_evt_ring_db_addr(unsigned long evt_ring_hdl,
 		uint32_t *db_addr_wp_lsb, uint32_t *db_addr_wp_msb);
 
 /**
+ * gsi_ring_evt_ring_db - Peripheral should call this function for
+ * ringing the event ring doorbell with given value
+ *
+ * @evt_ring_hdl:    Client handle previously obtained from
+ *	     gsi_alloc_evt_ring
+ * @value:           The value to be used for ringing the doorbell
+ *
+ * @Return gsi_status
+ */
+int gsi_ring_evt_ring_db(unsigned long evt_ring_hdl, uint64_t value);
+
+/**
  * gsi_reset_evt_ring - Peripheral should call this function to
  * reset an event ring to recover from error state
  *
@@ -767,6 +834,18 @@ int gsi_alloc_channel(struct gsi_chan_props *props, unsigned long dev_hdl,
  */
 int gsi_write_channel_scratch(unsigned long chan_hdl,
 		union __packed gsi_channel_scratch val);
+
+/**
+ * gsi_read_channel_scratch - Peripheral should call this function to
+ * read the scratch area of the channel context
+ *
+ * @chan_hdl:  Client handle previously obtained from
+ *             gsi_alloc_channel
+ *
+ * @Return gsi_status
+ */
+int gsi_read_channel_scratch(unsigned long chan_hdl,
+		union __packed gsi_channel_scratch *ch_scratch);
 
 /**
  * gsi_start_channel - Peripheral should call this function to
@@ -982,10 +1061,11 @@ int gsi_configure_regs(phys_addr_t gsi_base_addr, u32 gsi_size,
  *
  * @gsi_base_addr: Base address of GSI register space
  * @gsi_size: Mapping size of the GSI register space
+ * @ver: GSI core version
 
  * @Return gsi_status
  */
-int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size);
+int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size, enum gsi_ver ver);
 
 /**
  * gsi_get_inst_ram_offset_and_size - Peripheral should call this function
@@ -1000,6 +1080,18 @@ int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size);
 void gsi_get_inst_ram_offset_and_size(unsigned long *base_offset,
 		unsigned long *size);
 
+/**
+ * gsi_halt_channel_ee - Peripheral should call this function
+ * to stop other EE's channel. This is usually used in SSR clean
+ *
+ * @chan_idx: Virtual channel index
+ * @ee: EE
+ * @code: [out] response code for operation
+
+ * @Return gsi_status
+ */
+int gsi_halt_channel_ee(unsigned int chan_idx, unsigned int ee, int *code);
+
 /*
  * Here is a typical sequence of calls
  *
@@ -1013,6 +1105,7 @@ void gsi_get_inst_ram_offset_and_size(unsigned long *base_offset,
  * gsi_alloc_channel (for as many channels as needed; channels can have
  * no event ring, an exclusive event ring or a shared event ring)
  * gsi_write_channel_scratch
+ * gsi_read_channel_scratch
  * gsi_start_channel
  * gsi_queue_xfer/gsi_start_xfer
  * gsi_config_channel_mode/gsi_poll_channel (if clients wants to poll on
@@ -1073,6 +1166,12 @@ static inline int gsi_query_evt_ring_db_addr(unsigned long evt_ring_hdl,
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }
 
+static inline int gsi_ring_evt_ring_db(unsigned long evt_ring_hdl,
+		uint64_t value)
+{
+	return -GSI_STATUS_UNSUPPORTED_OP;
+}
+
 static inline int gsi_reset_evt_ring(unsigned long evt_ring_hdl)
 {
 	return -GSI_STATUS_UNSUPPORTED_OP;
@@ -1087,6 +1186,12 @@ static inline int gsi_alloc_channel(struct gsi_chan_props *props,
 
 static inline int gsi_write_channel_scratch(unsigned long chan_hdl,
 		union __packed gsi_channel_scratch val)
+{
+	return -GSI_STATUS_UNSUPPORTED_OP;
+}
+
+static inline int gsi_read_channel_scratch(unsigned long chan_hdl,
+		union __packed gsi_channel_scratch *ch_scratch)
 {
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }
@@ -1196,6 +1301,12 @@ static inline int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size)
 static inline void gsi_get_inst_ram_offset_and_size(unsigned long *base_offset,
 		unsigned long *size)
 {
+}
+
+static inline int gsi_halt_channel_ee(unsigned int chan_idx, unsigned int ee,
+	 int *code)
+{
+	return -GSI_STATUS_UNSUPPORTED_OP;
 }
 #endif
 #endif

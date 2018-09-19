@@ -509,7 +509,7 @@ static int nanohub_spi_probe(struct spi_device *spi)
 	spi_data->data.bl.cmd_update_finished = CMD_UPDATE_FINISHED;
 	nanohub_spi_bl_init(spi_data);
 
-	nanohub_reset(&spi_data->data);
+	nanohub_start(&spi_data->data);
 #if defined(CONFIG_FB)
 	spi_data->fb_notif.notifier_call = fb_notifier_callback;
 	if (fb_register_client(&spi_data->fb_notif))

@@ -1317,31 +1317,15 @@ static int src_detect_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	return 0;
 }
 
-static void print_aicl_status(struct smb23x_chip *chip)
-{
-	int rc = 0;
-	u8 reg = 0x0;
-	u8 addr = 0x3F;
-
-	rc = smb23x_read(chip, addr, &reg);
-	if (!rc)
-		pr_info("AICL: reg 0x%02x=0x%02x\n", addr, reg);
-	 else
-		pr_info("AICL: read error\n");
-}
-
 static int aicl_done_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_info("rt_sts = 0x02%x\n", rt_sts);
-
-	print_aicl_status(chip);
-
+	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
 static int chg_timeout_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
-	pr_info("rt_sts = 0x02%x\n", rt_sts);
+	pr_debug("rt_sts = 0x02%x\n", rt_sts);
 	return 0;
 }
 
@@ -1357,7 +1341,7 @@ static int usbin_ov_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 	int health = !!rt_sts ? POWER_SUPPLY_HEALTH_OVERVOLTAGE :
 				POWER_SUPPLY_HEALTH_GOOD;
 
-	pr_info("chip->usb_present = %d, usb_present = %d\n",
+	pr_debug("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present != usb_present) {
 		chip->usb_present = usb_present;
@@ -1438,7 +1422,7 @@ static int usbin_uv_irq_handler(struct smb23x_chip *chip, u8 rt_sts)
 {
 	bool usb_present = !rt_sts;
 
-	pr_info("chip->usb_present = %d, usb_present = %d\n",
+	pr_debug("chip->usb_present = %d, usb_present = %d\n",
 					chip->usb_present,  usb_present);
 	if (chip->usb_present == usb_present)
 		return 0;
@@ -2053,12 +2037,9 @@ static void smb23x_external_power_changed(struct power_supply *psy)
 		online = !!prop.intval;
 
 	if (chip->usb_present && chip->usb_psy_ma != 0) {
-		if (!online && !chip->apsd_enabled) {
-			pr_info("set online=1\n");
+		if (!online && !chip->apsd_enabled)
 			power_supply_set_online(chip->usb_psy, true);
-		}
 	} else if (online && !chip->apsd_enabled) {
-		pr_info("set online=0\n");
 		power_supply_set_online(chip->usb_psy, false);
 	}
 }

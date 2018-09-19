@@ -43,6 +43,9 @@
 static u32 locator_status = LOCATOR_UNKNOWN;
 static bool service_inited;
 
+int enable = 0;
+module_param(enable, int, 0);
+
 DECLARE_COMPLETION(locator_status_known);
 
 static void service_locator_svc_arrive(struct work_struct *work);

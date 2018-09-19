@@ -36,20 +36,19 @@ APSS specific properties:
 	Usage:      required
 	Value type: <string>
 	Definition: should be one of the following:
-		    "qcom,cpr4-msmtitanium-apss-regulator";
+		    "qcom,cpr4-msm8953-apss-regulator";
 
 - interrupts
 	Usage:      required
 	Value type: <prop-encoded-array>
-	Definition: CPR interrupt specifier and a hardware closed-loop ceiling
-		    interrupt specifier.
+	Definition: CPR interrupt specifier.
 
 - interrupt-names
 	Usage:      required
 	Value type: <stringlist>
 	Definition: Interrupt names.  This list must match up 1-to-1 with the
 		    interrupts specified in the 'interrupts' property. "cpr"
-		    and "ceiling" must be specified.
+		    must be specified.
 
 - qcom,apm-ctrl
 	Usage:      required on systems that need APM management
@@ -166,7 +165,7 @@ APSS specific properties:
 		    and Turbo.
 
 - qcom,cpr-fuse-combos
-	Usage:      required
+	Usage:      optional
 	Value type: <u32>
 	Definition: Specifies the number of fuse combinations being supported by
 		    the device.  This value is utilized by several other
@@ -178,6 +177,11 @@ APSS specific properties:
 		    bin fuse value 1 along with CPR revision fuse values 0 to 7.
 		    The last 8 fuse combos correspond to speed bin fuse value 7
 		    along with CPR revision fuse values 0 to 7.
+
+		    This property must be specified unless qcom,cpr-fuse-combo-map
+		    is present. In that case, qcom,cpr-fuse-combos is implicitly
+		    assumed to have a value equal to the number of tuple lists (rows)
+		    found in the qcom,cpr-fuse-combo-map property.
 
 - qcom,cpr-speed-bins
 	Usage:      optional
@@ -348,17 +352,58 @@ APSS specific properties:
 		    regardless of the fuse combination and speed bin found
 		    on a given chip.
 
+- qcom,cpr-misc-fuse-voltage-adjustment
+	Usage:      optional
+	Value type: <prop-encoded-array>
+	Definition: A grouping of integer tuple lists where each tuple defines
+		    the voltage adjustments in microvolts for each voltage
+		    corner in order from lowest to highest. This adjustment is
+		    applied to both open-loop and closed-loop voltages.
+
+		    Each tuple list must contain a number of tuples equal to
+		    2 to the power of the number of bits selected for misc
+		    voltage adj fuse definition. For MSM8953 the tuple
+		    list must contain 2 tuples for the 1-bit misc fuse.
+		    Tuples in a list should be specified in ascending order
+		    according to the misc fuse value assuming that the fuse
+		    is treated like an unsigned integer.
+
+		    The tuple list grouping must contain qcom,cpr-speed-bins
+		    number of tuple lists in which case the lists are matched to
+		    speed bins 1-to-1 or exactly 1 list which is used regardless
+		    of the speed bin found on a given chip.
+
+- qcom,cpr-fuse-combo-map
+	Usage:      optional
+	Value type: <prop-encoded-array>
+	Definition: A grouping of integer tuple lists where each tuple list (row)
+		    defines a mapping from combinations of fuse parameter ranges
+		    to fuse combo ID (i.e., map row index). Each tuple defines the
+		    beginning and ending fuse parameter value that matches. The
+		    number of tuples in each row is equal to the number of selection
+		    fuse parameters used in fuse combo logic. For MSM8953, the fuse
+		    parameters are "speed-bin", "cpr fuse revision", and "foundry id".
+		    The tuples in each row correspond to the fuses in order:
+		    "speed-bin", "cpr fuse revision" and "foundry id". An example entry
+		    for speed-bin '3', cpr fuse revisions >= '2', and foundry '2' is
+		    as shown below:
+		         <3 3>, <2 7>, <2 2>
+
+		    The number of rows in the property is arbitrary but used to size
+		    other properties. qcom,cpr-fuse-combos must be set to the number
+		    of rows specified in this property. For msm8953, the maximum number
+		    of rows for this property is 512 (8 * 8 * 8).
+
 =======
 Example
 =======
 
 apc_cpr: cpr4-ctrl@b018000 {
-	compatible = "qcom,cpr4-msmtitanium-apss-regulator";
+	compatible = "qcom,cpr4-msm8953-apss-regulator";
 	reg = <0xb018000 0x4000>, <0xa4000 0x1000>;
 	reg-names = "cpr_ctrl", "fuse_base";
-	interrupts = <GIC_SPI 15 IRQ_TYPE_EDGE_RISING>,
-		<GIC_SPI 282 IRQ_TYPE_EDGE_RISING>;
-	interrupt-names = "cpr", "ceiling";
+	interrupts = <GIC_SPI 15 IRQ_TYPE_EDGE_RISING>;
+	interrupt-names = "cpr";
 
 	qcom,cpr-ctrl-name = "apc";
 
@@ -375,9 +420,9 @@ apc_cpr: cpr4-ctrl@b018000 {
 	qcom,apm-threshold-voltage = <848000>;
 	qcom,apm-hysteresis-voltage = <5000>;
 
-	vdd-supply = <&pmtitanium_s5>;
+	vdd-supply = <&pm8953_s5>;
 	qcom,voltage-step = <5000>;
-	vdd-limit-supply = <&pmtitanium_s5_limit>;
+	vdd-limit-supply = <&pm8953_s5_limit>;
 	mem-acc-supply = <&apc_mem_acc_vreg>;
 
 	qcom,cpr-enable;
@@ -387,6 +432,15 @@ apc_cpr: cpr4-ctrl@b018000 {
 	qcom,cpr-initial-temp-band = <3>;
 	qcom,cpr-step-quot-fixed = <16>;
 	qcom,cpr-voltage-settling-time = <1600>;
+
+	qcom,cpr-panic-reg-addr-list =
+			<0xb1d2c18 0xb1d2900 0x0b1112b0 0xb018798>;
+	qcom,cpr-panic-reg-name-list =
+			"CCI_SAW4_PMIC_STS", "CCI_SAW4_VCTL",
+			"APCS_ALIAS0_APM_CTLER_STATUS",
+			"APCS0_CPR_CORE_ADJ_MODE_REG";
+
+	qcom,cpr-aging-ref-voltage = <990000>; /* Turbo corner */
 
 	thread@0 {
 		qcom,cpr-thread-id = <0>;
@@ -421,6 +475,13 @@ apc_cpr: cpr4-ctrl@b018000 {
 				<652800000 1036800000 1401600000
 				1689600000 1843200000 1958400000
 				2150400000 2208000000>;
+
+			qcom,cpr-misc-fuse-voltage-adjustment =
+				/* Speed bin 0; misc fuse 0..1 */
+				<    0     0     0     0
+				     0     0     0     0>,
+				<    0     0 30000     0
+				     0     0     0     0>;
 
 			qcom,allow-voltage-interpolation;
 			qcom,allow-quotient-interpolation;
@@ -484,6 +545,14 @@ apc_cpr: cpr4-ctrl@b018000 {
 				<(-20000) (-15000) (-10000) 0>;
 			qcom,allow-boost =
 				<1>;
+
+			qcom,cpr-aging-max-voltage-adjustment = <15000>;
+			qcom,cpr-aging-ref-corner = <6>; /* Turbo corner */
+			qcom,cpr-aging-ro-scaling-factor = <2800>;
+			qcom,cpr-aging-derate =
+				<1000 1000 1000 1000 1000
+				 1000 1000 1000>;
+			qcom,allow-aging-voltage-adjustment = <1>;
 		};
 	};
 };

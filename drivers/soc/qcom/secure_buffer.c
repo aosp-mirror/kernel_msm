@@ -374,6 +374,10 @@ const char *msm_secure_vmid_to_string(int secure_vmid)
 		return "VMID_CP_SEC_DISPLAY";
 	case VMID_CP_APP:
 		return "VMID_CP_APP";
+	case VMID_WLAN:
+		return "VMID_WLAN";
+	case VMID_WLAN_CE:
+		return "VMID_WLAN_CE";
 	case VMID_INVAL:
 		return "VMID_INVAL";
 	default:
@@ -398,12 +402,13 @@ bool msm_secure_v2_is_supported(void)
 static int __init alloc_secure_shared_memory(void)
 {
 	int ret = 0;
+	dma_addr_t dma_handle;
 
 	qcom_secure_mem = kzalloc(QCOM_SECURE_MEM_SIZE, GFP_KERNEL);
 	if (!qcom_secure_mem) {
 		/* Fallback to CMA-DMA memory */
 		qcom_secure_mem = dma_alloc_coherent(NULL, QCOM_SECURE_MEM_SIZE,
-						NULL, GFP_KERNEL);
+						&dma_handle, GFP_KERNEL);
 		if (!qcom_secure_mem) {
 			pr_err("Couldn't allocate memory for secure use-cases. hyp_assign_table will not work\n");
 			return -ENOMEM;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -68,7 +68,7 @@ static void *dummy_q6_mvm;
 static void *dummy_q6_cvs;
 dev_t device_num;
 
-spinlock_t voicesvc_lock;
+static spinlock_t voicesvc_lock;
 static bool is_released;
 static int voice_svc_dummy_reg(void);
 static int voice_svc_dummy_dereg(void);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -90,6 +90,8 @@
 		qcom,mdss-has-decimation;
 		qcom,mdss-has-non-scalar-rgb;
 		qcom,mdss-has-rotator-downscale;
+		qcom,mdss-rot-downscale-min = <2>;
+		qcom,mdss-rot-downscale-max = <16>;
 		qcom,mdss-idle-power-collapse-enabled;
 		qcom,mdss-rot-block-size = <64>;
 
@@ -101,8 +103,7 @@
 		clock-names = "iface_clk", "bus_clk", "core_clk_src",
 				"core_clk", "vsync_clk";
 
-		qcom,mdp-settings = <0x01190 0x00000000>,
-				    <0x0506c 0x00000000>,
+		qcom,mdp-settings = <0x0506c 0x00000000>,
 				    <0x1506c 0x00000000>,
 				    <0x1706c 0x00000000>,
 				    <0x2506c 0x00000000>;
@@ -170,6 +171,16 @@
 				<1 590 0 76800>,
 				<1 590 0 160000>,
 				<1 590 0 320000>;
+		};
+
+		qcom,mdss-hw-rt-bus {
+			/* Bus Scale Settings */
+			qcom,msm-bus,name = "mdss_hw_rt";
+			qcom,msm-bus,num-cases = <2>;
+			qcom,msm-bus,num-paths = <1>;
+			qcom,msm-bus,vectors-KBps =
+				<22 512 0 0>,
+				<22 512 0 1000>;
 		};
 
 		smmu_mdp_unsec: qcom,smmu_mdp_unsec_cb {

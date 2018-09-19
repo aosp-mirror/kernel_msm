@@ -13,21 +13,51 @@
 #ifndef _IPAHAL_I_H_
 #define _IPAHAL_I_H_
 
+#include <linux/ipa.h>
+#include "../../ipa_common_i.h"
+
 #define IPAHAL_DRV_NAME "ipahal"
+
 #define IPAHAL_DBG(fmt, args...) \
-	pr_debug(IPAHAL_DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		pr_debug(IPAHAL_DRV_NAME " %s:%d " fmt, __func__, __LINE__, \
+			## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf(), \
+			IPAHAL_DRV_NAME " %s:%d " fmt, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf_low(), \
+			IPAHAL_DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
+
+#define IPAHAL_DBG_LOW(fmt, args...) \
+	do { \
+		pr_debug(IPAHAL_DRV_NAME " %s:%d " fmt, __func__, __LINE__, \
+			## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf_low(), \
+			IPAHAL_DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
+
 #define IPAHAL_ERR(fmt, args...) \
-	pr_err(IPAHAL_DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		pr_err(IPAHAL_DRV_NAME " %s:%d " fmt, __func__, __LINE__, \
+			## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf(), \
+			IPAHAL_DRV_NAME " %s:%d " fmt, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf_low(), \
+			IPAHAL_DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
 
 /*
  * struct ipahal_context - HAL global context data
  * @hw_type: IPA H/W type/version.
  * @base: Base address to be used for accessing IPA memory. This is
  *  I/O memory mapped address.
+ *  Controlled by debugfs. default is off
+ * @dent: Debugfs folder dir entry
  */
 struct ipahal_context {
 	enum ipa_hw_type hw_type;
 	void __iomem *base;
+	struct dentry *dent;
 };
 
 extern struct ipahal_context *ipahal_ctx;
@@ -346,6 +376,220 @@ struct ipa_imm_cmd_hw_dma_task_32b_addr {
 	u64 size1:16;
 	u64 addr1:32;
 	u64 packet_size:16;
+};
+
+
+
+/* IPA Status packet H/W structures and info */
+
+/*
+ * struct ipa_status_pkt_hw - IPA status packet payload in H/W format.
+ *  This structure describes the status packet H/W structure for the
+ *   following statuses: IPA_STATUS_PACKET, IPA_STATUS_DROPPED_PACKET,
+ *   IPA_STATUS_SUSPENDED_PACKET.
+ *  Other statuses types has different status packet structure.
+ * @status_opcode: The Type of the status (Opcode).
+ * @exception: (not bitmask) - the first exception that took place.
+ *  In case of exception, src endp and pkt len are always valid.
+ * @status_mask: Bit mask specifying on which H/W blocks the pkt was processed.
+ * @pkt_len: Pkt pyld len including hdr, include retained hdr if used. Does
+ *  not include padding or checksum trailer len.
+ * @endp_src_idx: Source end point index.
+ * @rsvd1: reserved
+ * @endp_dest_idx: Destination end point index.
+ *  Not valid in case of exception
+ * @rsvd2: reserved
+ * @metadata: meta data value used by packet
+ * @flt_local: Filter table location flag: Does matching flt rule belongs to
+ *  flt tbl that resides in lcl memory? (if not, then system mem)
+ * @flt_hash: Filter hash hit flag: Does matching flt rule was in hash tbl?
+ * @flt_global: Global filter rule flag: Does matching flt rule belongs to
+ *  the global flt tbl? (if not, then the per endp tables)
+ * @flt_ret_hdr: Retain header in filter rule flag: Does matching flt rule
+ *  specifies to retain header?
+ * @flt_rule_id: The ID of the matching filter rule. This info can be combined
+ *  with endp_src_idx to locate the exact rule. ID=0x3FF reserved to specify
+ *  flt miss. In case of miss, all flt info to be ignored
+ * @rt_local: Route table location flag: Does matching rt rule belongs to
+ *  rt tbl that resides in lcl memory? (if not, then system mem)
+ * @rt_hash: Route hash hit flag: Does matching rt rule was in hash tbl?
+ * @ucp: UC Processing flag.
+ * @rt_tbl_idx: Index of rt tbl that contains the rule on which was a match
+ * @rt_rule_id: The ID of the matching rt rule. This info can be combined
+ *  with rt_tbl_idx to locate the exact rule. ID=0x3FF reserved to specify
+ *  rt miss. In case of miss, all rt info to be ignored
+ * @nat_hit: NAT hit flag: Was their NAT hit?
+ * @nat_entry_idx: Index of the NAT entry used of NAT processing
+ * @nat_type: Defines the type of the NAT operation:
+ *	00: No NAT
+ *	01: Source NAT
+ *	10: Destination NAT
+ *	11: Reserved
+ * @tag_info: S/W defined value provided via immediate command
+ * @seq_num: Per source endp unique packet sequence number
+ * @time_of_day_ctr: running counter from IPA clock
+ * @hdr_local: Header table location flag: In header insertion, was the header
+ *  taken from the table resides in local memory? (If no, then system mem)
+ * @hdr_offset: Offset of used header in the header table
+ * @frag_hit: Frag hit flag: Was their frag rule hit in H/W frag table?
+ * @frag_rule: Frag rule index in H/W frag table in case of frag hit
+ * @hw_specific: H/W specific reserved value
+ */
+struct ipa_pkt_status_hw {
+	u64 status_opcode:8;
+	u64 exception:8;
+	u64 status_mask:16;
+	u64 pkt_len:16;
+	u64 endp_src_idx:5;
+	u64 rsvd1:3;
+	u64 endp_dest_idx:5;
+	u64 rsvd2:3;
+	u64 metadata:32;
+	u64 flt_local:1;
+	u64 flt_hash:1;
+	u64 flt_global:1;
+	u64 flt_ret_hdr:1;
+	u64 flt_rule_id:10;
+	u64 rt_local:1;
+	u64 rt_hash:1;
+	u64 ucp:1;
+	u64 rt_tbl_idx:5;
+	u64 rt_rule_id:10;
+	u64 nat_hit:1;
+	u64 nat_entry_idx:13;
+	u64 nat_type:2;
+	u64 tag_info:48;
+	u64 seq_num:8;
+	u64 time_of_day_ctr:24;
+	u64 hdr_local:1;
+	u64 hdr_offset:10;
+	u64 frag_hit:1;
+	u64 frag_rule:4;
+	u64 hw_specific:16;
+};
+
+/* Size of H/W Packet Status */
+#define IPA3_0_PKT_STATUS_SIZE 32
+
+/* Headers and processing context H/W structures and definitions */
+
+/* uCP command numbers */
+#define IPA_HDR_UCP_802_3_TO_802_3 6
+#define IPA_HDR_UCP_802_3_TO_ETHII 7
+#define IPA_HDR_UCP_ETHII_TO_802_3 8
+#define IPA_HDR_UCP_ETHII_TO_ETHII 9
+#define IPA_HDR_UCP_L2TP_HEADER_ADD 10
+#define IPA_HDR_UCP_L2TP_HEADER_REMOVE 11
+
+/* Processing context TLV type */
+#define IPA_PROC_CTX_TLV_TYPE_END 0
+#define IPA_PROC_CTX_TLV_TYPE_HDR_ADD 1
+#define IPA_PROC_CTX_TLV_TYPE_PROC_CMD 3
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_tlv -
+ * HW structure of IPA processing context header - TLV part
+ * @type: 0 - end type
+ *        1 - header addition type
+ *        3 - processing command type
+ * @length: number of bytes after tlv
+ *        for type:
+ *        0 - needs to be 0
+ *        1 - header addition length
+ *        3 - number of 32B including type and length.
+ * @value: specific value for type
+ *        for type:
+ *        0 - needs to be 0
+ *        1 - header length
+ *        3 - command ID (see IPA_HDR_UCP_* definitions)
+ */
+struct ipa_hw_hdr_proc_ctx_tlv {
+	u32 type:8;
+	u32 length:8;
+	u32 value:16;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_hdr_add -
+ * HW structure of IPA processing context - add header tlv
+ * @tlv: IPA processing context TLV
+ * @hdr_addr: processing context header address
+ */
+struct ipa_hw_hdr_proc_ctx_hdr_add {
+	struct ipa_hw_hdr_proc_ctx_tlv tlv;
+	u32 hdr_addr;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_l2tp_add_hdr -
+ * HW structure of IPA processing context - add l2tp header tlv
+ * @tlv: IPA processing context TLV
+ * @l2tp_params: l2tp parameters
+ */
+struct ipa_hw_hdr_proc_ctx_l2tp_add_hdr {
+	struct ipa_hw_hdr_proc_ctx_tlv tlv;
+	struct ipa_l2tp_header_add_procparams l2tp_params;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_l2tp_remove_hdr -
+ * HW structure of IPA processing context - remove l2tp header tlv
+ * @tlv: IPA processing context TLV
+ * @l2tp_params: l2tp parameters
+ */
+struct ipa_hw_hdr_proc_ctx_l2tp_remove_hdr {
+	struct ipa_hw_hdr_proc_ctx_tlv tlv;
+	struct ipa_l2tp_header_remove_procparams l2tp_params;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_add_hdr_seq -
+ * IPA processing context header - add header sequence
+ * @hdr_add: add header command
+ * @end: tlv end command (cmd.type must be 0)
+ */
+struct ipa_hw_hdr_proc_ctx_add_hdr_seq {
+	struct ipa_hw_hdr_proc_ctx_hdr_add hdr_add;
+	struct ipa_hw_hdr_proc_ctx_tlv end;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_add_hdr_cmd_seq -
+ * IPA processing context header - process command sequence
+ * @hdr_add: add header command
+ * @cmd: tlv processing command (cmd.type must be 3)
+ * @end: tlv end command (cmd.type must be 0)
+ */
+struct ipa_hw_hdr_proc_ctx_add_hdr_cmd_seq {
+	struct ipa_hw_hdr_proc_ctx_hdr_add hdr_add;
+	struct ipa_hw_hdr_proc_ctx_tlv cmd;
+	struct ipa_hw_hdr_proc_ctx_tlv end;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_add_l2tp_hdr_cmd_seq -
+ * IPA processing context header - process command sequence
+ * @hdr_add: add header command
+ * @l2tp_params: l2tp params for header addition
+ * @end: tlv end command (cmd.type must be 0)
+ */
+struct ipa_hw_hdr_proc_ctx_add_l2tp_hdr_cmd_seq {
+	struct ipa_hw_hdr_proc_ctx_hdr_add hdr_add;
+	struct ipa_hw_hdr_proc_ctx_l2tp_add_hdr l2tp_params;
+	struct ipa_hw_hdr_proc_ctx_tlv end;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_remove_l2tp_hdr_cmd_seq -
+ * IPA processing context header - process command sequence
+ * @hdr_add: add header command
+ * @l2tp_params: l2tp params for header removal
+ * @end: tlv end command (cmd.type must be 0)
+ */
+struct ipa_hw_hdr_proc_ctx_remove_l2tp_hdr_cmd_seq {
+	struct ipa_hw_hdr_proc_ctx_hdr_add hdr_add;
+	struct ipa_hw_hdr_proc_ctx_l2tp_remove_hdr l2tp_params;
+	struct ipa_hw_hdr_proc_ctx_tlv end;
 };
 
 /* IPA HW DPS/HPS image memory sizes */

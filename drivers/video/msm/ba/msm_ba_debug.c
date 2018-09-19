@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015,2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -65,10 +65,8 @@ static ssize_t dev_info_read(struct file *file, char __user *buf,
 	}
 
 	dbg_buf = kmalloc(sizeof(struct debug_buffer), GFP_KERNEL);
-	if (NULL == dbg_buf) {
-		dprintk(BA_ERR, "%s: Memory allocation failed for dbg_buf", __func__);
+	if (NULL == dbg_buf)
 		return 0;
-	}
 
 	INIT_DBG_BUF(dbg_buf);
 	write_str(dbg_buf, "===============================");
@@ -175,10 +173,8 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 	}
 
 	dbg_buf = kmalloc(sizeof(struct debug_buffer), GFP_KERNEL);
-	if (NULL == dbg_buf) {
-		dprintk(BA_ERR, "%s: Memory allocation failed for dbg_buf", __func__);
+	if (NULL == dbg_buf)
 		return 0;
-	}
 
 	INIT_DBG_BUF(dbg_buf);
 	write_str(dbg_buf, "===============================");
