@@ -2107,7 +2107,6 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 	case POWER_SUPPLY_TYPE_USB_PD_DRP:
 	case POWER_SUPPLY_TYPE_USB_PD:
 	case POWER_SUPPLY_TYPE_USB_TYPE_C:
-		g_is_charger_ability_detected = true;
 		/* PMIC doesn't recognize PD or Type-C, override APSD with
 		   command register. */
 		rc = smbchg_masked_write(chip,
@@ -5077,6 +5076,7 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 	 */
 	if (type == POWER_SUPPLY_TYPE_USB_PD) {
 		current_limit_ma = htc_battery_get_pd_current();
+		g_is_charger_ability_detected = true;
 	} else if (type == POWER_SUPPLY_TYPE_USB_TYPE_C) {
 		if (chip->utc.sink_current == utcc_1p5A)
 			current_limit_ma = 1500;
@@ -5084,6 +5084,7 @@ static int smbchg_change_usb_supply_type(struct smbchg_chip *chip,
 			current_limit_ma = 3000;
 		power_supply_set_current_limit(chip->usb_psy,
 			current_limit_ma * 1000);
+		g_is_charger_ability_detected = true;
 	} else
 #endif /* CONFIG_HTC_BATT */
 	if (chip->typec_psy && (type != POWER_SUPPLY_TYPE_USB))
@@ -5527,7 +5528,6 @@ static void smbchg_sink_current_change_worker(struct work_struct *work)
 	if (the_chip->utc.sink_current &&
 	    the_chip->utc.sink_current != utcc_default) {
 		type = POWER_SUPPLY_TYPE_USB_TYPE_C;
-		g_is_charger_ability_detected = true;
 	}
 
 	if ((type != POWER_SUPPLY_TYPE_USB_TYPE_C) ||
