@@ -27,6 +27,10 @@ struct rainbow_config {
 
 #define RAINBOW_CONFIG \
 	_IOWR('R', 1, struct rainbow_config)
+
+#define LM36011_SET_CERTIFICATION_STATUS \
+	_IOWR('R', 1, bool)
+
 /**
  * struct cam_sensor_query_cap - capabilities info for sensor
  *
