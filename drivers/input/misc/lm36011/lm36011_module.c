@@ -41,15 +41,15 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
-struct reg_setting {
-	uint32_t addr;
-	uint32_t data;
-};
-
 enum LASER_TYPE {
 	LASER_FLOOD,
 	LASER_DOT,
 	LASER_TYPE_MAX
+};
+
+struct reg_setting {
+	uint32_t addr;
+	uint32_t data;
 };
 
 struct led_laser_ctrl_t {
@@ -62,11 +62,15 @@ struct led_laser_ctrl_t {
 	bool is_probed;
 	bool is_silego_validated;
 	bool is_silego_power_up;
+	bool is_certified;
 	struct regulator *vio;
 	struct regulator *silego_vdd;
 	enum LASER_TYPE type;
 	uint32_t read_addr;
 	uint32_t read_data;
+	dev_t dev;
+	struct cdev c_dev;
+	struct class *cl;
 };
 
 static const struct reg_setting silego_reg_settings[] = {
@@ -407,6 +411,11 @@ static ssize_t led_laser_enable_store(struct device *dev,
 	int rc;
 	bool value;
 
+	if (!ctrl->is_certified) {
+		dev_err(dev, "Cannot enable laser due to uncertified");
+		return -EINVAL;
+	}
+
 	rc = kstrtobool(buf, &value);
 	if (rc != 0)
 		return rc;
@@ -448,6 +457,11 @@ static ssize_t led_laser_read_byte_store(struct device *dev,
 	uint32_t addr = 0;
 	uint32_t read_data = 0;
 	int rc = 0;
+
+	if (!ctrl->is_certified) {
+		dev_err(dev, "Cannot enable laser due to uncertified");
+		return -EINVAL;
+	}
 
 	mutex_lock(&ctrl->cam_sensor_mutex);
 	if (!ctrl->is_cci_init || !ctrl->is_power_up) {
@@ -532,16 +546,27 @@ static ssize_t is_silego_validated_show(struct device *dev,
 	return rc;
 }
 
+static ssize_t is_certified_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->is_certified);
+}
+
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
 static DEVICE_ATTR_WO(led_laser_write_byte);
 static DEVICE_ATTR_RO(is_silego_validated);
+static DEVICE_ATTR_RO(is_certified);
 
 static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_enable.attr,
 	&dev_attr_led_laser_read_byte.attr,
 	&dev_attr_led_laser_write_byte.attr,
 	&dev_attr_is_silego_validated.attr,
+	&dev_attr_is_certified.attr,
 	NULL
 };
 
@@ -549,7 +574,7 @@ ATTRIBUTE_GROUPS(led_laser_dev);
 
 static int32_t lm36011_platform_remove(struct platform_device *pdev)
 {
-	struct led_laser_ctrl_t  *ctrl;
+	struct led_laser_ctrl_t *ctrl;
 
 	ctrl = platform_get_drvdata(pdev);
 	if (!ctrl) {
@@ -560,18 +585,66 @@ static int32_t lm36011_platform_remove(struct platform_device *pdev)
 	if (!ctrl->is_probed)
 		return 0;
 
+	class_destroy(ctrl->cl);
+	cdev_del(&ctrl->c_dev);
+	unregister_chrdev_region(ctrl->dev, 1);
 	sysfs_remove_groups(&pdev->dev.kobj, led_laser_dev_groups);
 	mutex_destroy(&ctrl->cam_sensor_mutex);
 	lm36011_power_down(ctrl);
 	return 0;
 }
 
+static int lm36011_open(struct inode *inode, struct file *file)
+{
+	struct led_laser_ctrl_t *ctrl = container_of(inode->i_cdev,
+		struct led_laser_ctrl_t, c_dev);
+	get_device(ctrl->soc_info.dev);
+	file->private_data = ctrl;
+	return 0;
+}
+
+static int lm36011_release(struct inode *inode, struct file *file)
+{
+	struct led_laser_ctrl_t *ctrl = container_of(inode->i_cdev,
+		struct led_laser_ctrl_t, c_dev);
+	put_device(ctrl->soc_info.dev);
+	return 0;
+}
+
+static long lm36011_ioctl(struct file *file, unsigned int cmd,
+	unsigned long arg)
+{
+	int rc = 0;
+	struct led_laser_ctrl_t *ctrl = file->private_data;
+
+	switch (cmd) {
+	case LM36011_SET_CERTIFICATION_STATUS:
+		ctrl->is_certified = (arg == 1 ? true : false);
+		break;
+	default:
+		dev_err(ctrl->soc_info.dev,
+			"%s: Unsupported ioctl command %u", __func__, cmd);
+		rc = -EINVAL;
+		break;
+	}
+	return rc;
+}
+
+static const struct file_operations lm36011_fops = {
+	.owner		= THIS_MODULE,
+	.open		= lm36011_open,
+	.release	= lm36011_release,
+	.unlocked_ioctl	= lm36011_ioctl,
+};
+
 static int32_t lm36011_driver_platform_probe(
 	struct platform_device *pdev)
 {
 	int32_t rc;
 	uint32_t device_id = 0;
+	struct device *dev_ret;
 	struct led_laser_ctrl_t *ctrl;
+	char *class_name, *device_name;
 
 	if (cam_cci_get_subdev(CCI_DEVICE_0) == NULL ||
 		cam_cci_get_subdev(CCI_DEVICE_1) == NULL) {
@@ -623,23 +696,54 @@ static int32_t lm36011_driver_platform_probe(
 	/* Fill platform device id*/
 	pdev->id = ctrl->soc_info.index;
 
+	mutex_init(&ctrl->cam_sensor_mutex);
+
+	rc = sysfs_create_groups(&pdev->dev.kobj, led_laser_dev_groups);
+	if (rc != 0) {
+		dev_err(&pdev->dev, "failed to create sysfs files");
+		goto error_destroy_mutex;
+	}
+
+	rc = alloc_chrdev_region(&ctrl->dev, 0, 1, "lm36011_ioctl");
+	if (rc)
+		goto error_remove_sysfs;
+
+	cdev_init(&ctrl->c_dev, &lm36011_fops);
+
+	rc = cdev_add(&ctrl->c_dev, ctrl->dev, 1);
+	if (rc)
+		goto error_unregister_chrdev;
+
+	class_name = (ctrl->type == LASER_FLOOD ? "char_flood" : "char_dot");
+	ctrl->cl = class_create(THIS_MODULE, class_name);
+	rc = IS_ERR(ctrl->cl);
+	if (rc)
+		goto error_del_cdev;
+
+	device_name =
+		(ctrl->type == LASER_FLOOD ? "lm36011_flood" : "lm36011_dot");
+	dev_ret = device_create(ctrl->cl, NULL, ctrl->dev, NULL, device_name);
+	rc = IS_ERR(dev_ret);
+	if (rc)
+		goto error_destroy_class;
+
 	/* Read device id */
 	rc = lm36011_power_up(ctrl);
 	if (rc != 0) {
 		lm36011_power_down(ctrl);
-		return rc;
+		goto error_destroy_device;
 	}
 
 	rc = lm36011_read_data(ctrl,
 		DEVICE_ID_REG, &device_id);
 	if (rc != 0) {
 		lm36011_power_down(ctrl);
-		return rc;
+		goto error_destroy_device;
 	}
 
 	rc = lm36011_power_down(ctrl);
 	if (rc != 0)
-		return rc;
+		goto error_destroy_device;
 
 	if (device_id == DEVICE_ID)
 		_dev_info(&pdev->dev, "probe success, device id 0x%x rc = %d",
@@ -648,17 +752,21 @@ static int32_t lm36011_driver_platform_probe(
 		dev_warn(&pdev->dev, "Device id mismatch, got 0x%x,"
 			" expected 0x%x rc = %d", device_id, DEVICE_ID, rc);
 
-	mutex_init(&ctrl->cam_sensor_mutex);
-
-	rc = sysfs_create_groups(&pdev->dev.kobj, led_laser_dev_groups);
-	if (rc != 0) {
-		dev_err(&pdev->dev, "failed to create sysfs files");
-		mutex_destroy(&ctrl->cam_sensor_mutex);
-		return rc;
-	}
-
 	ctrl->is_probed = true;
+	return rc;
 
+error_destroy_device:
+	device_destroy(ctrl->cl, ctrl->dev);
+error_destroy_class:
+	class_destroy(ctrl->cl);
+error_del_cdev:
+	cdev_del(&ctrl->c_dev);
+error_unregister_chrdev:
+	unregister_chrdev_region(ctrl->dev, 1);
+error_remove_sysfs:
+	sysfs_remove_groups(&pdev->dev.kobj, led_laser_dev_groups);
+error_destroy_mutex:
+	mutex_destroy(&ctrl->cam_sensor_mutex);
 	return rc;
 }
 
