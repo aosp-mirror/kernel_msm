@@ -13,8 +13,8 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __PAINTBOX_JQS_MESSAGES_H__
-#define __PAINTBOX_JQS_MESSAGES_H__
+#ifndef __IPU_JQS_MESSAGES_H__
+#define __IPU_JQS_MESSAGES_H__
 
 #include <linux/types.h>
 
@@ -49,6 +49,7 @@ enum jqs_message_type {
 	/* Jqs -> Host messages */
 	JQS_MESSAGE_TYPE_ACK                = 0x80002001,
 	JQS_MESSAGE_TYPE_LOG                = 0x80002002,
+	JQS_MESSAGE_TYPE_ERROR              = 0x80002003,
 
 	JQS_MESSAGE_TYPE_FORCE_32_BIT       = 0xFFFFFFFF,
 };
@@ -153,8 +154,9 @@ struct jqs_message_clock_rate {
 /* Jqs -> Host */
 
 enum jqs_error {
-	JQS_ERROR_NONE,
+	JQS_ERROR_NONE = 0,
 	JQS_ERROR_BUSY,
+	JQS_ERROR_ASSERTION,
 };
 
 struct jqs_message_ack {
@@ -170,4 +172,18 @@ struct jqs_message_log {
 	char data[MAX_LOG_SIZE];
 };
 
-#endif /* __PAINTBOX_JQS_MESSAGES_H__ */
+#define JQS_FILE_MAX 64
+
+struct jqs_message_error {
+	struct jqs_message header;
+	enum jqs_error error;
+
+	union {
+		struct {
+			int line;
+			char file[JQS_FILE_MAX];
+		} assertion;
+	} data;
+};
+
+#endif /* __IPU_JQS_MESSAGES_H__ */

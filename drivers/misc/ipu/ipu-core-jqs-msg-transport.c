@@ -245,6 +245,25 @@ exit:
 	mutex_unlock(&trans->lock);
 }
 
+static void ipu_core_jqs_msg_process_error_message(struct paintbox_bus *bus,
+		struct jqs_message *jqs_msg)
+{
+	struct jqs_message_error *err_msg = (struct jqs_message_error *)jqs_msg;
+
+	if (err_msg->error == JQS_ERROR_ASSERTION) {
+		dev_err(bus->parent_dev, "%s: JQS: assert at %s:%d\n",
+				__func__, err_msg->data.assertion.file,
+				err_msg->data.assertion.line);
+		/* TODO(b/114760293): JQS assertion should trigger catastrophic
+		 * error here.
+		 */
+	} else {
+		dev_err(bus->parent_dev, "%s: error %d sent by JQS.\n",
+				__func__, err_msg->error);
+		/* TODO(b/116061358): proper error should be triggered. */
+	}
+}
+
 static void process_kernel_message(struct paintbox_bus *bus,
 		struct jqs_message *jqs_msg)
 {
@@ -255,6 +274,8 @@ static void process_kernel_message(struct paintbox_bus *bus,
 	case JQS_MESSAGE_TYPE_ACK:
 		process_kernel_response(bus, jqs_msg);
 		break;
+	case JQS_MESSAGE_TYPE_ERROR:
+		ipu_core_jqs_msg_process_error_message(bus, jqs_msg);
 	default:
 		break;
 	}
