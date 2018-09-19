@@ -1464,8 +1464,8 @@ static int max1720x_read_gauge_type(struct max1720x_chip *chip)
 	if (ret != 0) {
 		dev_err(chip->dev, "cannot read device name %d\n", ret);
 	} else {
-		switch (devname & 0x0f) {
-		case 0: /* max1730x sample */
+		switch (devname >> 4) {
+		case 0x404:  /* max1730x sample */
 			gauge_type = MAX1730X_GAUGE_TYPE;
 			break;
 		default: /* default to max1720x */
