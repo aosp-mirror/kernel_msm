@@ -117,6 +117,29 @@
 	status = "okay";
 };
 
+// Force-enable pm8150a gpio7.
+&pm8150l_gpios {
+	interrupts = <0x4 0xc0 0 IRQ_TYPE_NONE>,
+			<0x4 0xc1 0 IRQ_TYPE_NONE>,
+			<0x4 0xc2 0 IRQ_TYPE_NONE>,
+			<0x4 0xc3 0 IRQ_TYPE_NONE>,
+			<0x4 0xc4 0 IRQ_TYPE_NONE>,
+			<0x4 0xc5 0 IRQ_TYPE_NONE>,
+			<0x4 0xc6 0 IRQ_TYPE_NONE>, // added by google
+			<0x4 0xc7 0 IRQ_TYPE_NONE>,
+			<0x4 0xc8 0 IRQ_TYPE_NONE>,
+			<0x4 0xc9 0 IRQ_TYPE_NONE>,
+			<0x4 0xca 0 IRQ_TYPE_NONE>,
+			<0x4 0xcb 0 IRQ_TYPE_NONE>;
+	interrupt-names = "pm8150l_gpio1", "pm8150l_gpio2",
+			"pm8150l_gpio3", "pm8150l_gpio4",
+			"pm8150l_gpio5", "pm8150l_gpio6",
+			"pm8150l_gpio7", // Added by google
+			"pm8150l_gpio8", "pm8150l_gpio9",
+			"pm8150l_gpio10", "pm8150l_gpio11",
+			"pm8150l_gpio12";
+	qcom,gpios-disallowed = <>;
+};
 
 &android_fstab {
 	vendor {
