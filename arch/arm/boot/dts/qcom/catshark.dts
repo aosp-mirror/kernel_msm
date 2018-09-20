@@ -14,7 +14,7 @@
 /dts-v1/;
 
 #include "common-8909.dtsi"
-#include "msm8909w-memory.dtsi"
+#include "catshark-memory.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 1GB MTP";
