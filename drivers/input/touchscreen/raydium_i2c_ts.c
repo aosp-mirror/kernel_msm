@@ -5094,7 +5094,7 @@ static int raydium_ts_probe(struct i2c_client *client,
     dev_err(&client->dev, "[touch]client irq : %d, pdata flags : %d \n", client->irq, pdata->irqflags);//108
 
     ret = request_threaded_irq(gpio_to_irq(raydium_ts->pdata->irq_gpio), NULL, raydium_ts_interrupt,
-                    pdata->irqflags | IRQF_TRIGGER_LOW | IRQF_ONESHOT | IRQF_NO_SUSPEND, client->dev.driver->name,
+                    pdata->irqflags | IRQF_TRIGGER_FALLING | IRQF_ONESHOT | IRQF_NO_SUSPEND, client->dev.driver->name,
                     raydium_ts);
     if (ret < 0)
     {
