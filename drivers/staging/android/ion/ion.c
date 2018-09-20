@@ -47,6 +47,15 @@
 #include "ion_priv.h"
 #include "compat_ion.h"
 
+/*
+ * For fragmentation analysis,
+ * Group allocations of order 10 and above together
+ */
+#define ION_DEBUG_MAX_ORDER	10
+#define ION_DEBUG_ROW_HEADER  "       " \
+	"4K       8K      16K      32K      64K     128K     256K     " \
+	"512K       1M       2M       4M      >=8M"
+
 /**
  * struct ion_device - the metadata of the ion device node
  * @dev:		the actual misc device
@@ -1717,8 +1726,28 @@ static const struct file_operations ion_fops = {
 	.compat_ioctl   = compat_ion_ioctl,
 };
 
-static size_t ion_debug_heap_total(struct ion_client *client,
-				   unsigned int id)
+static void ion_debug_update_orders(struct ion_buffer *buffer,
+				    size_t *orders)
+{
+	struct scatterlist *sg;
+	struct sg_table *table = buffer->sg_table;
+	int i;
+
+	if (!table)
+		return;
+
+	for_each_sg(table->sgl, sg, table->nents, i) {
+		int order = get_order(sg->length);
+
+		if (order > ION_DEBUG_MAX_ORDER)
+			orders[ION_DEBUG_MAX_ORDER + 1] += sg->length;
+		else
+			orders[order]++;
+	}
+}
+
+static size_t ion_debug_heap_totals(struct ion_client *client,
+				    unsigned int id, size_t *orders)
 {
 	size_t size = 0;
 	struct rb_node *n;
@@ -1728,8 +1757,10 @@ static size_t ion_debug_heap_total(struct ion_client *client,
 		struct ion_handle *handle = rb_entry(n,
 						     struct ion_handle,
 						     node);
-		if (handle->buffer->heap->id == id)
+		if (handle->buffer->heap->id == id) {
 			size += handle->buffer->size;
+			ion_debug_update_orders(handle->buffer, orders);
+		}
 	}
 	mutex_unlock(&client->lock);
 	return size;
@@ -1847,14 +1878,18 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	size_t total_size = 0;
 	size_t total_orphaned_size = 0;
 
-	seq_printf(s, "%16s %16s %16s\n", "client", "pid", "size");
-	seq_puts(s, "----------------------------------------------------\n");
+	seq_printf(s, "%16s %16s %16s %16s\n", "client", "pid", "size",
+		   "page counts");
+	seq_puts(s, "--------------------------------------------------"
+				ION_DEBUG_ROW_HEADER "\n");
 
 	down_read(&dev->lock);
 	for (n = rb_first(&dev->clients); n; n = rb_next(n)) {
 		struct ion_client *client = rb_entry(n, struct ion_client,
 						     node);
-		size_t size = ion_debug_heap_total(client, heap->id);
+		int i;
+		size_t orders[ION_DEBUG_MAX_ORDER + 2] = {};
+		size_t size = ion_debug_heap_totals(client, heap->id, orders);
 
 		if (!size)
 			continue;
@@ -1862,12 +1897,17 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 			char task_comm[TASK_COMM_LEN];
 
 			get_task_comm(task_comm, client->task);
-			seq_printf(s, "%16s %16u %16zu\n", task_comm,
+			seq_printf(s, "%16s %16u %16zu ", task_comm,
 				   client->pid, size);
 		} else {
-			seq_printf(s, "%16s %16u %16zu\n", client->name,
+			seq_printf(s, "%16s %16u %16zu ", client->name,
 				   client->pid, size);
 		}
+		for (i = 0; i < ION_DEBUG_MAX_ORDER + 1; i++)
+			seq_printf(s, "%8zu ", orders[i]);
+		seq_printf(s, "%8zuM", orders[i] / (1024 * 1024));
+		seq_puts(s, "\n");
+
 	}
 	up_read(&dev->lock);
 
