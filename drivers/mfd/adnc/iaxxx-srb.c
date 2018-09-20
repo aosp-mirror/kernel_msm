@@ -57,7 +57,11 @@ iaxxx_regmap_wait_clear(struct iaxxx_priv *priv, uint32_t reg, uint32_t mask)
 {
 	uint32_t req;
 	int rc, retries;
-	const int max_retries = 10;
+	/* TODO: enable_sensor_route()
+	 * takes too long and need more timeout
+	 * tolerances. 200 times * 10ms
+	 */
+	const int max_retries = 200;
 	struct device *dev = priv->dev;
 
 	for (retries = 0; retries < max_retries; ++retries) {
@@ -82,14 +86,7 @@ iaxxx_regmap_wait_clear(struct iaxxx_priv *priv, uint32_t reg, uint32_t mask)
 
 		if (priv->bus == IAXXX_SPI) {
 			if (priv->is_application_mode) {
-				/* TODO: fix me, soli enable_sensor_route()
-				 * takes too long and need more timeout
-				 * tolerances.
-				 */
-				dev_err(priv->dev,
-					"iaxxx: %s() sleep 2000 ms for soli\n",
-					__func__);
-				msleep(2000);
+				usleep_range(10000, 10005);
 			} else
 				msleep(20);
 		}
