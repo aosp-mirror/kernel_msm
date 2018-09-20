@@ -800,6 +800,12 @@ static void max1720x_restore_cycle_counter(struct max1720x_chip *chip)
 	int i;
 	u16 data = 0;
 
+	/* TODO: re-enable cycle counter if max1730x is POR */
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		dev_warn(chip->dev, "ignore restoring cycle_counter\n");
+		return;
+	}
+
 	mutex_lock(&chip->cyc_ctr.lock);
 
 	for (i = 0; i < BUCKET_COUNT; i++) {
@@ -1280,6 +1286,17 @@ static void max1720x_fg_reset(struct max1720x_chip *chip)
  */
 static int max1720x_full_reset(struct max1720x_chip *chip)
 {
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		/* a full (hw) reset on max1730x cause charge and discharge FET
+		 * to toggle and the device will lose power. Will need to
+		 * connect the device to a charger to get max1730x firmware to
+		 * start and max1730x to close the FETs. Never send a HW reset
+		 * to a 1730x while in system...
+		 */
+		dev_warn(chip->dev, "ignore reset of fuel gauge\n");
+		return 0;
+	}
+
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HARDWARE_RESET);
 
@@ -1829,9 +1846,14 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	if (of_property_read_bool(chip->dev->of_node, "maxim,force-hard-reset"))
 		max1720x_full_reset(chip);
 
-	ret = max1720x_handle_dt_shadow_config(chip);
-	if (ret == -EPROBE_DEFER)
-		return ret;
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		/* TODO: enable overrides on max1730x if becomes POR */
+		dev_warn(chip->dev, "ignore shadow overrides\n");
+	} else {
+		ret = max1720x_handle_dt_shadow_config(chip);
+		if (ret == -EPROBE_DEFER)
+			return ret;
+	}
 
 	ret = max1720x_handle_dt_register_config(chip);
 	if (ret == -EPROBE_DEFER)
