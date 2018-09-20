@@ -360,7 +360,13 @@ int nanohub_comms_rx_retrans_boottime(struct nanohub_data *data, uint32_t cmd,
 	seq = data->comms.seq++;
 
 	do {
-		data->comms.open(data);
+		if (data->comms.open)
+			data->comms.open(data);
+		else {
+			pr_err("nanohub: %s: %d: data->comms.open is null.\n",
+				__func__, __LINE__);
+			return ERROR_NACK;
+		}
 		get_monotonic_boottime(&ts);
 		boottime = timespec_to_ns(&ts);
 		packet_size =

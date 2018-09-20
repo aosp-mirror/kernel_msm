@@ -1,3 +1,8 @@
+# Some of the tools (perf) use same make variables
+# as in kernel build.
+export srctree=
+export objtree=
+
 include scripts/Makefile.include
 
 help:
@@ -25,6 +30,10 @@ help:
 	@echo '  from the kernel command line to build and install one of'
 	@echo '  the tools above'
 	@echo ''
+	@echo '  $$ make tools/all'
+	@echo ''
+	@echo '  builds all tools.'
+	@echo ''
 	@echo '  $$ make tools/install'
 	@echo ''
 	@echo '  installs all tools.'
@@ -47,11 +56,16 @@ cgroup firewire hv guest usb virtio vm net: FORCE
 liblockdep: FORCE
 	$(call descend,lib/lockdep)
 
-libapikfs: FORCE
+libapi: FORCE
 	$(call descend,lib/api)
 
-perf: libapikfs FORCE
-	$(call descend,$@)
+# The perf build does not follow the descend function setup,
+# invoking it via it's own make rule.
+PERF_O   = $(if $(O),$(O)/tools/perf,)
+
+perf: FORCE
+	$(Q)mkdir -p $(PERF_O) .
+	$(Q)$(MAKE) --no-print-directory -C perf O=$(PERF_O) subdir=
 
 selftests: FORCE
 	$(call descend,testing/$@)
@@ -61,6 +75,11 @@ turbostat x86_energy_perf_policy: FORCE
 
 tmon: FORCE
 	$(call descend,thermal/$@)
+
+all: acpi cgroup cpupower hv firewire lguest \
+		perf selftests turbostat usb \
+		virtio vm net x86_energy_perf_policy \
+		tmon
 
 acpi_install:
 	$(call descend,power/$(@:_install=),install)
@@ -97,10 +116,10 @@ cgroup_clean hv_clean firewire_clean lguest_clean usb_clean virtio_clean vm_clea
 liblockdep_clean:
 	$(call descend,lib/lockdep,clean)
 
-libapikfs_clean:
+libapi_clean:
 	$(call descend,lib/api,clean)
 
-perf_clean: libapikfs_clean
+perf_clean:
 	$(call descend,$(@:_clean=),clean)
 
 selftests_clean:

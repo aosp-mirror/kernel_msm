@@ -31,6 +31,7 @@
 #include "uvc_v4l2.h"
 #include "uvc_video.h"
 #include "u_uvc.h"
+#include "f_uvc.h"
 
 unsigned int uvc_gadget_trace_param;
 
@@ -63,6 +64,7 @@ static struct usb_gadget_strings *uvc_function_strings[] = {
 #define UVC_INTF_VIDEO_STREAMING		1
 
 #define UVC_STATUS_MAX_PACKET_SIZE		16	/* 16 bytes status */
+#define UVC_STREAMING_SS_MAX_PACKET_SIZE	1024
 
 static struct usb_interface_assoc_descriptor uvc_iad = {
 	.bLength		= sizeof(uvc_iad),
@@ -83,7 +85,7 @@ static struct usb_interface_descriptor uvc_control_intf = {
 	.bNumEndpoints		= 1,
 	.bInterfaceClass	= USB_CLASS_VIDEO,
 	.bInterfaceSubClass	= UVC_SC_VIDEOCONTROL,
-	.bInterfaceProtocol	= 0x00,
+	.bInterfaceProtocol	= 0x01,
 	.iInterface		= 0,
 };
 
@@ -120,7 +122,7 @@ static struct usb_interface_descriptor uvc_streaming_intf_alt0 = {
 	.bNumEndpoints		= 0,
 	.bInterfaceClass	= USB_CLASS_VIDEO,
 	.bInterfaceSubClass	= UVC_SC_VIDEOSTREAMING,
-	.bInterfaceProtocol	= 0x00,
+	.bInterfaceProtocol	= 0x01,
 	.iInterface		= 0,
 };
 
@@ -132,7 +134,7 @@ static struct usb_interface_descriptor uvc_streaming_intf_alt1 = {
 	.bNumEndpoints		= 1,
 	.bInterfaceClass	= USB_CLASS_VIDEO,
 	.bInterfaceSubClass	= UVC_SC_VIDEOSTREAMING,
-	.bInterfaceProtocol	= 0x00,
+	.bInterfaceProtocol	= 0x01,
 	.iInterface		= 0,
 };
 
@@ -412,7 +414,8 @@ uvc_function_connect(struct uvc_device *uvc)
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
 	int ret;
 
-	if ((ret = usb_function_activate(&uvc->func)) < 0)
+	ret = video_ready_callback(&uvc->func);
+	if (ret < 0)
 		INFO(cdev, "UVC connect failed with %d\n", ret);
 }
 
@@ -422,7 +425,8 @@ uvc_function_disconnect(struct uvc_device *uvc)
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
 	int ret;
 
-	if ((ret = usb_function_deactivate(&uvc->func)) < 0)
+	ret = video_closed_callback(&uvc->func);
+	if (ret < 0)
 		INFO(cdev, "UVC disconnect failed with %d\n", ret);
 }
 
@@ -637,13 +641,14 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		cpu_to_le16(max_packet_size | ((max_packet_mult - 1) << 11));
 	uvc_hs_streaming_ep.bInterval = opts->streaming_interval;
 
-	uvc_ss_streaming_ep.wMaxPacketSize = cpu_to_le16(max_packet_size);
+	uvc_ss_streaming_ep.wMaxPacketSize =
+			UVC_STREAMING_SS_MAX_PACKET_SIZE;
 	uvc_ss_streaming_ep.bInterval = opts->streaming_interval;
-	uvc_ss_streaming_comp.bmAttributes = max_packet_mult - 1;
+	uvc_ss_streaming_comp.bmAttributes = 0;
 	uvc_ss_streaming_comp.bMaxBurst = opts->streaming_maxburst;
 	uvc_ss_streaming_comp.wBytesPerInterval =
-		cpu_to_le16(max_packet_size * max_packet_mult *
-			    opts->streaming_maxburst);
+		cpu_to_le16(UVC_STREAMING_SS_MAX_PACKET_SIZE * 1 *
+			    (opts->streaming_maxburst + 1));
 
 	/* Allocate endpoints. */
 	ep = usb_ep_autoconfig(cdev->gadget, &uvc_control_ep);
@@ -717,11 +722,9 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	uvc->control_req->complete = uvc_function_ep0_complete;
 	uvc->control_req->context = uvc;
 
-	/* Avoid letting this gadget enumerate until the userspace server is
-	 * active.
+	/* Gadget drivers avoids enumerattion until the userspace server is
+	 * active - when it opens uvc video device node.
 	 */
-	if ((ret = usb_function_deactivate(f)) < 0)
-		goto error;
 
 	if (v4l2_device_register(&cdev->gadget->dev, &uvc->v4l2_dev)) {
 		printk(KERN_INFO "v4l2_device_register failed\n");

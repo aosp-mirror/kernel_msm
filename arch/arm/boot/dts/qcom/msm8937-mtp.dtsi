@@ -78,6 +78,11 @@
 &pmi_haptic{
 	qcom,wave-play-rate-us = <4165>;
 	qcom,actuator-type = "lra";
+	qcom,lra-auto-res-mode="qwd";
+	qcom,lra-high-z="opt1";
+	qcom,lra-res-cal-period = <4>;
+	qcom,correct-lra-drive-freq;
+	qcom,misc-trim-error-rc19p2-clk-reg-present;
 };
 
 &spi_3 { /* BLSP1 QUP3 */
@@ -253,11 +258,6 @@
 	gpio@c100 {
 		qcom,mode = <0>;
 		qcom,vin-sel = <3>;
-		qcom,dtest-sel = <1>;
 		status = "okay";
 	};
-};
-
-&qpdi {
-	qcom,pmic-carddetect-gpio = <&pm8937_gpios 0x2 0>;
 };

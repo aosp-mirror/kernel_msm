@@ -370,7 +370,7 @@ asmlinkage int compat_sys_sigreturn(struct pt_regs *regs)
 	struct compat_sigframe __user *frame;
 
 	/* Always make any pending restarted system calls return -EINTR */
-	current_thread_info()->restart_block.fn = do_no_restart_syscall;
+	current->restart_block.fn = do_no_restart_syscall;
 
 	/*
 	 * Since we stacked the signal on a 64-bit boundary,
@@ -404,7 +404,7 @@ asmlinkage int compat_sys_rt_sigreturn(struct pt_regs *regs)
 	struct compat_rt_sigframe __user *frame;
 
 	/* Always make any pending restarted system calls return -EINTR */
-	current_thread_info()->restart_block.fn = do_no_restart_syscall;
+	current->restart_block.fn = do_no_restart_syscall;
 
 	/*
 	 * Since we stacked the signal on a 64-bit boundary,
@@ -527,7 +527,7 @@ static int compat_setup_sigframe(struct compat_sigframe __user *sf,
 
 	__put_user_error((compat_ulong_t)0, &sf->uc.uc_mcontext.trap_no, err);
 	/* set the compat FSR WnR */
-	__put_user_error(!!(current->thread.fault_code & ESR_EL1_WRITE) <<
+	__put_user_error(!!(current->thread.fault_code & ESR_ELx_WNR) <<
 			 FSR_WRITE_SHIFT, &sf->uc.uc_mcontext.error_code, err);
 	__put_user_error(current->thread.fault_address, &sf->uc.uc_mcontext.fault_address, err);
 	__put_user_error(set->sig[0], &sf->uc.uc_mcontext.oldmask, err);

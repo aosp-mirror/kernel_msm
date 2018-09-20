@@ -41,31 +41,6 @@
 
 };
 
-/ {
-	firmware {
-		android {
-			compatible = "android,firmware";
-			fstab {
-				compatible = "android,fstab";
-				system {
-					compatible = "android,system";
-					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
-					type = "ext4";
-					mnt_flags = "ro,barrier=1";
-					fsmgr_flags = "wait";
-				};
-				vendor {
-					compatible = "android,vendor";
-					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
-					type = "ext4";
-					mnt_flags = "ro,barrier=1";
-					fsmgr_flags = "wait";
-				};
-			};
-		};
-	};
-};
-
 &soc {
         i2c@78b5000 { /* BLSP1 QUP1 */
                 /*linear charger*/
@@ -79,7 +54,7 @@
                         qcom,bms-psy-name = "bms";
                         qcom,float-voltage-mv = <4400>;
                         qcom,charging-timeout = <180>;  /* 180 270 360 */
-			qcom,recharge-thresh-mv = <80>; /* select 80 or 150mv */
+                        qcom,recharge-thresh-mv = <150>; /* select 80 or 150mv */
 			qcom,iterm-ma = <20>; /* 20 30 50 75 */
                         qcom,fastchg-ma = <300>;
                         qcom,hot-bat-decidegc = <550>;
@@ -398,6 +373,10 @@
 	/delete-node/ si_auo_400p_cmd;
 };
 
+&soc {
+	/delete-node/ qcom,msm-ssc-sensors;
+};
+
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_rm67162_wqvga_cmd>;
 	/delete-property/ qcom,platform-bklight-en-gpio;
@@ -412,4 +391,12 @@
 };
 &qcom_seecom {
         reg = <0x87a00000 0x200000>;
+};
+
+&usb_otg {
+        qcom,floated-charger-enable = <1>;
+};
+
+&spi_4{
+	status = "ok";
 };

@@ -150,34 +150,6 @@
 					bias-disable = <0>; /* No PULL */
 				};
 			};
-
-			spi4_cs0_active: cs0_active {
-				/* CS */
-				mux {
-					pins = "gpio14";
-					function = "blsp_spi4";
-				};
-
-				config {
-					pins = "gpio14";
-					drive-strength = <2>;
-					bias-disable = <0>;
-				};
-			};
-
-			spi4_cs0_sleep: cs0_sleep {
-				/* CS */
-				mux {
-					pins = "gpio14";
-					function = "blsp_spi4";
-				};
-
-				config {
-					pins = "gpio14";
-					drive-strength = <2>;
-					bias-disable = <0>;
-				};
-			};
 		};
 
 		sensorhub_ctrl {

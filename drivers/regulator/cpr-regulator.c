@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -404,6 +404,8 @@ struct cpr_regulator {
 	bool		skip_voltage_change_during_suspend;
 
 	struct cpr_aging_info	*aging_info;
+
+	struct notifier_block	panic_notifier;
 };
 
 #define CPR_DEBUG_MASK_IRQ	BIT(0)
@@ -1298,6 +1300,8 @@ _exit:
 	/* Program the delay count for the timer */
 	val = (cpr_vreg->ref_clk_khz * cpr_vreg->timer_delay_us) / 1000;
 	cpr_write(cpr_vreg, REG_RBCPR_TIMER_INTERVAL, val);
+
+	kfree(quot_delta_results);
 
 	return rc;
 }
@@ -3807,8 +3811,8 @@ static int cpr_aging_init(struct platform_device *pdev,
 			i, cpr_vreg->cpr_fuse_target_quot[i]);
 	}
 
-err:
 	kfree(fuse_sel_orig);
+err:
 	kfree(aging_sensor_id);
 	return rc;
 }
@@ -5164,10 +5168,16 @@ static void tsens_threshold_notify(struct therm_threshold *tsens_cb_data)
 		break;
 	}
 
-	rc = sensor_mgr_set_threshold(tsens_cb_data->sensor_id,
-					tsens_cb_data->threshold);
-	if (rc < 0)
-		cpr_err(cpr_vreg, "Failed to set temp. threshold, rc=%d\n", rc);
+	if (tsens_cb_data->cur_state != tsens_cb_data->trip_triggered) {
+		rc = sensor_mgr_set_threshold(tsens_cb_data->sensor_id,
+						tsens_cb_data->threshold);
+		if (rc < 0)
+			cpr_err(cpr_vreg,
+			"Failed to set temp. threshold, rc=%d\n", rc);
+		else
+			tsens_cb_data->cur_state =
+				tsens_cb_data->trip_triggered;
+	}
 }
 
 static int cpr_check_tsens(struct cpr_regulator *cpr_vreg)
@@ -6014,6 +6024,35 @@ static void cpr_debugfs_base_remove(void)
 
 #endif
 
+/**
+ * cpr_panic_callback() - panic notification callback function. This function
+ *		is invoked when a kernel panic occurs.
+ * @nfb:	Notifier block pointer of CPR regulator
+ * @event:	Value passed unmodified to notifier function
+ * @data:	Pointer passed unmodified to notifier function
+ *
+ * Return: NOTIFY_OK
+ */
+static int cpr_panic_callback(struct notifier_block *nfb,
+			unsigned long event, void *data)
+{
+	struct cpr_regulator *cpr_vreg = container_of(nfb,
+				struct cpr_regulator, panic_notifier);
+	int corner, fuse_corner, volt;
+
+	corner = cpr_vreg->corner;
+	fuse_corner = cpr_vreg->corner_map[corner];
+	if (cpr_is_allowed(cpr_vreg))
+		volt = cpr_vreg->last_volt[corner];
+	else
+		volt = cpr_vreg->open_loop_volt[corner];
+
+	cpr_err(cpr_vreg, "[corner:%d, fuse_corner:%d] = %d uV\n",
+		corner, fuse_corner, volt);
+
+	return NOTIFY_OK;
+}
+
 static int cpr_regulator_probe(struct platform_device *pdev)
 {
 	struct regulator_config reg_config = {};
@@ -6219,6 +6258,11 @@ static int cpr_regulator_probe(struct platform_device *pdev)
 		}
 	}
 
+	/* Register panic notification call back */
+	cpr_vreg->panic_notifier.notifier_call = cpr_panic_callback;
+	atomic_notifier_chain_register(&panic_notifier_list,
+			&cpr_vreg->panic_notifier);
+
 	mutex_lock(&cpr_regulator_list_mutex);
 	list_add(&cpr_vreg->list, &cpr_regulator_list);
 	mutex_unlock(&cpr_regulator_list_mutex);
@@ -6252,6 +6296,9 @@ static int cpr_regulator_remove(struct platform_device *pdev)
 		if (cpr_vreg->cpr_disable_on_temperature)
 			sensor_mgr_remove_threshold(
 				&cpr_vreg->tsens_threshold_config);
+
+		atomic_notifier_chain_unregister(&panic_notifier_list,
+			&cpr_vreg->panic_notifier);
 
 		cpr_apc_exit(cpr_vreg);
 		cpr_debugfs_remove(cpr_vreg);

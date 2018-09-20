@@ -142,6 +142,7 @@ static const struct file_operations nanohub_fileops = {
 };
 
 enum {
+	ST_RESET,
 	ST_IDLE,
 	ST_ERROR,
 	ST_RUNNING
@@ -660,6 +661,8 @@ static inline int nanohub_wakeup_unlock(struct nanohub_data *data)
 		nanohub_bl_close(data);
 	if (data->irq2)
 		enable_irq(data->irq2);
+	if (data->irq3)
+		enable_irq(data->irq3);
 	release_wakeup_ex(data, KEY_WAKEUP_LOCK, mode);
 	if (!data->irq2)
 		nanohub_unmask_interrupt(data, 2);
@@ -1697,10 +1700,15 @@ static int nanohub_kthread(void *arg)
 
 	data->kthread_err_cnt = 0;
 	sched_setscheduler(current, SCHED_FIFO, &param);
-	nanohub_set_state(data, ST_IDLE);
+	nanohub_set_state(data, ST_RESET);
 
 	while (!kthread_should_stop()) {
 		switch (nanohub_get_state(data)) {
+		case ST_RESET:
+			nanohub_reset(data);
+			nanohub_wakeup_unlock(data);
+			nanohub_set_state(data, ST_IDLE);
+			break;
 		case ST_IDLE:
 			wait_event_interruptible(data->kthread_wait,
 						 atomic_read(&data->kthread_run)
@@ -2200,10 +2208,11 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	wake_lock_init(&data->wakelock_read, WAKE_LOCK_SUSPEND,
 		       "nanohub_wakelock_read");
 
-	atomic_set(&data->lock_mode, LOCK_MODE_NONE);
+	/* hold lock until reset completes */
+	atomic_set(&data->lock_mode, LOCK_MODE_RESET);
 	atomic_set(&data->wakeup_cnt, 0);
-	atomic_set(&data->wakeup_lock_cnt, 0);
-	atomic_set(&data->wakeup_acquired, 0);
+	atomic_set(&data->wakeup_lock_cnt, 1);
+	atomic_set(&data->wakeup_acquired, KEY_WAKEUP_LOCK);
 	atomic_set(&data->download_bl_status, DOWNLOAD_BL_NOT_START);
 	atomic_set(&data->hub_mode_ap_active, GPIO_CMD_NORMAL);
 	atomic_set(&data->hub_mode_ap_pwr_down, GPIO_CMD_POWEROFF);
@@ -2233,15 +2242,16 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 	if (ret)
 		goto fail_dev;
 
-	data->thread = kthread_run(nanohub_kthread, data, "nanohub");
-
-	udelay(30);
 	bq27x00_powersupply_init(dev, data);
-	pr_info("nanohub: nanohub_probe end successfully\n");
 
 	__nanohub_send_AP_cmd(data, GPIO_CMD_NORMAL);
 
-	return iio_dev;
+	data->thread = kthread_create(nanohub_kthread, data, "nanohub");
+
+	if (!IS_ERR(data->thread)) {
+		pr_info("nanohub: nanohub_probe end successfully\n");
+		return iio_dev;
+	}
 
 fail_dev:
 	iio_device_unregister(iio_dev);
@@ -2258,6 +2268,11 @@ fail_vma:
 	return ERR_PTR(ret);
 }
 
+void nanohub_start(struct nanohub_data *data)
+{
+	wake_up_process(data->thread);
+}
+
 int nanohub_reset(struct nanohub_data *data)
 {
 	const struct nanohub_platform_data *pdata = data->pdata;
@@ -2270,17 +2285,7 @@ int nanohub_reset(struct nanohub_data *data)
 		gpio_set_value(pdata->nreset_gpio, 0);
 	}
 	usleep_range(650000, 700000);
-	enable_irq(data->irq1);
-	if (data->irq2)
-		enable_irq(data->irq2);
-	else
-		nanohub_unmask_interrupt(data, 2);
-
-	if (data->irq3)
-		enable_irq(data->irq3);
-
 	__nanohub_send_AP_cmd(data, GPIO_CMD_RESEND);
-
 	return 0;
 }
 

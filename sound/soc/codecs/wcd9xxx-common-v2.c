@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,6 +21,7 @@
 #include "wcd9xxx-common-v2.h"
 
 #define WCD_USLEEP_RANGE 50
+#define MAX_IMPED_PARAMS 6
 
 enum {
 	DAC_GAIN_0DB = 0,
@@ -49,9 +50,165 @@ enum {
 	DELTA_I_50MA,
 };
 
+struct wcd_imped_val {
+	u32 imped_val;
+	u8 index;
+};
+
+static const struct wcd_reg_mask_val imped_table[][MAX_IMPED_PARAMS] = {
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xf5},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xf5},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x01},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xf5},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xf5},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x01},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xf7},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xf7},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x01},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xf7},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xf7},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x01},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xf9},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xf9},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x0},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xf9},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xf9},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x0},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xfa},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xfa},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x01},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xfa},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xfa},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x01},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xfb},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xfb},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x01},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xfb},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xfb},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x01},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xfc},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xfc},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x01},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xfc},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xfc},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x01},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xfd},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xfd},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x01},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xfd},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xfd},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x01},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xfe},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xfe},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x01},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xfe},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xfe},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x01},
+	},
+	{
+		{WCD9XXX_CDC_RX1_RX_VOL_CTL, 0xff, 0xff},
+		{WCD9XXX_CDC_RX1_RX_VOL_MIX_CTL, 0xff, 0xff},
+		{WCD9XXX_CDC_RX1_RX_PATH_SEC1, 0x01, 0x00},
+		{WCD9XXX_CDC_RX2_RX_VOL_CTL , 0xff, 0xff},
+		{WCD9XXX_CDC_RX2_RX_VOL_MIX_CTL, 0xff, 0xff},
+		{WCD9XXX_CDC_RX2_RX_PATH_SEC1, 0x01, 0x00},
+	},
+};
+
+static const struct wcd_imped_val imped_index[] = {
+	{4, 0},
+	{5, 1},
+	{6, 2},
+	{7, 3},
+	{8, 4},
+	{9, 5},
+	{10, 6},
+	{11, 7},
+	{12, 8},
+	{13, 9},
+};
+
 static void (*clsh_state_fp[NUM_CLSH_STATES_V2])(struct snd_soc_codec *,
 					      struct wcd_clsh_cdc_data *,
 					      u8 req_state, bool en, int mode);
+
+static int get_impedance_index(int imped)
+{
+	int i = 0;
+
+	if (imped < imped_index[i].imped_val) {
+		pr_debug("%s, detected impedance is less than 4 Ohm\n",
+				__func__);
+		i = 0;
+		goto ret;
+	}
+	if (imped >= imped_index[ARRAY_SIZE(imped_index) - 1].imped_val) {
+		pr_debug("%s, detected impedance is greater than 12 Ohm\n",
+				__func__);
+		i = ARRAY_SIZE(imped_index) - 1;
+		goto ret;
+	}
+	for (i = 0; i < ARRAY_SIZE(imped_index) - 1; i++) {
+		if (imped >= imped_index[i].imped_val &&
+			imped < imped_index[i + 1].imped_val)
+			break;
+	}
+ret:
+	pr_debug("%s: selected impedance index = %d\n",
+			__func__, imped_index[i].index);
+	return imped_index[i].index;
+}
+
+/*
+ * Function: wcd_clsh_imped_config
+ * Params: codec, imped, reset
+ * Description:
+ * This function updates HPHL and HPHR gain settings
+ * according to the impedance value.
+ */
+void wcd_clsh_imped_config(struct snd_soc_codec *codec, int imped, bool reset)
+{
+	int i;
+	int index = 0;
+
+	/* reset = 1, which means request is to reset the register values */
+	if (reset) {
+		for (i = 0; i < MAX_IMPED_PARAMS; i++)
+			snd_soc_update_bits(codec, imped_table[index][i].reg,
+				imped_table[index][i].mask, 0);
+		return;
+	}
+	index = get_impedance_index(imped);
+	if (index >= (ARRAY_SIZE(imped_index) - 1)) {
+		pr_debug("%s, impedance not in range = %d\n", __func__, imped);
+		return;
+	}
+	if (index >= ARRAY_SIZE(imped_table)) {
+		pr_debug("%s, impedance index not in range = %d\n", __func__,
+			index);
+		return;
+	}
+	for (i = 0; i < MAX_IMPED_PARAMS; i++)
+		snd_soc_update_bits(codec, imped_table[index][i].reg,
+				imped_table[index][i].mask,
+				imped_table[index][i].val);
+}
+EXPORT_SYMBOL(wcd_clsh_imped_config);
 
 static bool is_native_44_1_active(struct snd_soc_codec *codec)
 {
@@ -284,6 +441,8 @@ static void wcd_clsh_set_gain_path(struct snd_soc_codec *codec,
 	case CLS_H_LP:
 		val = 0x01;
 		break;
+	default:
+		return;
 	};
 	snd_soc_update_bits(codec, WCD9XXX_HPH_L_EN, 0xC0, (val << 6));
 	snd_soc_update_bits(codec, WCD9XXX_HPH_R_EN, 0xC0, (val << 6));
@@ -320,6 +479,8 @@ static void wcd_clsh_set_hph_mode(struct snd_soc_codec *codec,
 		val = 0x04;
 		ipeak = DELTA_I_30MA;
 		break;
+	default:
+		return;
 	};
 
 	snd_soc_update_bits(codec, WCD9XXX_A_ANA_HPH, 0x0C, val);
@@ -331,6 +492,22 @@ static void wcd_clsh_set_hph_mode(struct snd_soc_codec *codec,
 					    0x07, gain);
 		snd_soc_update_bits(codec, WCD9XXX_CLASSH_CTRL_CCL_1,
 				    0xF0, (ipeak << 4));
+	}
+}
+
+static void wcd_clsh_set_flyback_vneg_ctl(struct snd_soc_codec *codec,
+					  bool enable)
+{
+	if (enable) {
+		snd_soc_update_bits(codec, WCD9XXX_FLYBACK_VNEG_CTRL_1, 0xE0,
+				    0x00);
+		snd_soc_update_bits(codec, WCD9XXX_FLYBACK_VNEGDAC_CTRL_2,
+				    0xE0, (0x07 << 5));
+	} else {
+		snd_soc_update_bits(codec, WCD9XXX_FLYBACK_VNEG_CTRL_1, 0xE0,
+				    (0x07 << 5));
+		snd_soc_update_bits(codec, WCD9XXX_FLYBACK_VNEGDAC_CTRL_2,
+				    0xE0, (0x02 << 5));
 	}
 }
 
@@ -369,6 +546,7 @@ static void wcd_clsh_state_lo(struct snd_soc_codec *codec,
 
 	if (is_enable) {
 		wcd_clsh_set_buck_regulator_mode(codec, mode);
+		wcd_clsh_set_flyback_vneg_ctl(codec, true);
 		wcd_clsh_set_buck_mode(codec, mode);
 		wcd_clsh_set_flyback_mode(codec, mode);
 		wcd_clsh_flyback_ctrl(codec, clsh_d, mode, true);
@@ -379,6 +557,7 @@ static void wcd_clsh_state_lo(struct snd_soc_codec *codec,
 		wcd_clsh_flyback_ctrl(codec, clsh_d, mode, false);
 		wcd_clsh_set_flyback_mode(codec, CLS_H_NORMAL);
 		wcd_clsh_set_buck_mode(codec, CLS_H_NORMAL);
+		wcd_clsh_set_flyback_vneg_ctl(codec, false);
 		wcd_clsh_set_buck_regulator_mode(codec, CLS_H_NORMAL);
 	}
 }
@@ -405,6 +584,8 @@ static void wcd_clsh_state_hph_ear(struct snd_soc_codec *codec,
 			else if (clsh_d->state & WCD_CLSH_STATE_HPHR)
 				hph_mode = wcd_clsh_get_int_mode(clsh_d,
 						WCD_CLSH_STATE_HPHR);
+			else
+				return;
 			if (hph_mode != CLS_AB && !is_native_44_1_active(codec))
 				snd_soc_update_bits(codec,
 						WCD9XXX_A_CDC_RX0_RX_PATH_CFG0,
@@ -556,6 +737,7 @@ static void wcd_clsh_state_hph_lo(struct snd_soc_codec *codec,
 						WCD9XXX_A_CDC_CLSH_K1_LSB,
 						0xFF, 0xC0);
 				wcd_clsh_set_flyback_mode(codec, mode);
+				wcd_clsh_set_flyback_vneg_ctl(codec, false);
 				wcd_clsh_set_buck_mode(codec, mode);
 				wcd_clsh_set_hph_mode(codec, mode);
 				wcd_clsh_set_gain_path(codec, mode);
@@ -591,6 +773,7 @@ static void wcd_clsh_state_hph_lo(struct snd_soc_codec *codec,
 			if ((clsh_d->state & WCD_CLSH_STATE_HPH_ST)
 				!= WCD_CLSH_STATE_HPH_ST) {
 				wcd_enable_clsh_block(codec, clsh_d, false);
+				wcd_clsh_set_flyback_vneg_ctl(codec, true);
 				wcd_clsh_set_flyback_mode(codec, CLS_H_NORMAL);
 				wcd_clsh_set_buck_mode(codec, CLS_H_NORMAL);
 			}
@@ -606,6 +789,8 @@ static void wcd_clsh_state_hph_lo(struct snd_soc_codec *codec,
 			else if (clsh_d->state & WCD_CLSH_STATE_HPHR)
 				hph_mode = wcd_clsh_get_int_mode(clsh_d,
 						WCD_CLSH_STATE_HPHR);
+			else
+				return;
 			dev_dbg(codec->dev, "%s: hph_mode = %d\n", __func__,
 				hph_mode);
 

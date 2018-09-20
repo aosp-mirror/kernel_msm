@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,8 +11,6 @@
  * GNU General Public License for more details.
  */
 
-#include "msm8909-pm8916-camera-sensor-mtp.dtsi"
-
 &soc {
 	i2c@78b9000 {
 		synaptics@20 {
@@ -20,6 +18,13 @@
 			vdd-supply = <&pm8916_l6>;
 		};
 	};
+
+	i2c@78b6000 {
+		nq@28 {
+			qcom,nq-clkreq = <&pm8916_gpios 2 0>;
+		};
+	};
+
 };
 
 &audio_codec_mtp {
@@ -45,6 +50,32 @@
 &sdhc_2 {
 	vdd-supply = <&pm8916_l11>;
 	vdd-io-supply = <&pm8916_l12>;
+};
+
+&i2c_3 {
+	qcom,actuator@0 {
+		cam_vaf-supply = <&pm8916_l8>;
+	};
+
+
+	qcom,eeprom@6c{
+		cam_vdig-supply = <&pm8916_l2>;
+		cam_vana-supply = <&pm8916_l10>;
+		cam_vio-supply = <&pm8916_l6>;
+		cam_vaf-supply = <&pm8916_l8>;
+	};
+
+	qcom,camera@0 {
+		cam_vdig-supply = <&pm8916_l2>;
+		cam_vana-supply = <&pm8916_l10>;
+		cam_vio-supply = <&pm8916_l6>;
+		cam_vaf-supply = <&pm8916_l8>;
+	};
+
+	qcom,camera@1 {
+		cam_vana-supply = <&pm8916_l10>;
+		cam_vio-supply = <&pm8916_l6>;
+	};
 };
 
 &dsi_auo_qvga_cmd {
@@ -146,7 +177,6 @@
 		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
 		qcom,src-sel = <2>; /* QPNP_PIN_SEL_FUNC_1 */
 		qcom,master-en = <1>;
-		status = "okay";
 	};
 
 	gpio@c200 { /* GPIO 3 */

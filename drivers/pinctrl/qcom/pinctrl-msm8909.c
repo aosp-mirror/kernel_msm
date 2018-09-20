@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -510,8 +510,8 @@ static const char * const gpio_groups[] = {
 	"gpio85", "gpio86", "gpio87", "gpio88", "gpio89", "gpio90", "gpio91",
 	"gpio92", "gpio93", "gpio94", "gpio95", "gpio96", "gpio97", "gpio98",
 	"gpio99", "gpio100", "gpio101", "gpio102", "gpio103", "gpio104",
-	"gpio105", "gpio106", "gpio107", "gpio108", "gpio109", "gpio111",
-	"gpio112",
+	"gpio105", "gpio106", "gpio107", "gpio108", "gpio109", "gpio110",
+	"gpio111", "gpio112",
 };
 static const char * const sec_mi2s_groups[] = {
 	"gpio0", "gpio1", "gpio2", "gpio3", "gpio98",
@@ -1164,7 +1164,7 @@ static const struct msm_pingroup msm8909_groups[] = {
 	PINGROUP(55, uim1_reset, NA, NA, NA, NA, NA, NA, NA, NA),
 	PINGROUP(56, uim1_present, NA, NA, NA, NA, NA, NA, NA, NA),
 	PINGROUP(57, uim_batt, NA, NA, NA, NA, NA, NA, NA, NA),
-	PINGROUP(58, qdss_tracedata_a, NA, NA, NA, NA, NA, NA, NA, NA),
+	PINGROUP(58, qdss_tracedata_a, smb_int, NA, NA, NA, NA, NA, NA, NA),
 	PINGROUP(59, cdc_pdm0, pri_mi2s_mclk_a, atest_char3, NA, NA, NA, NA,
 		 NA, bimc_dte0),
 	PINGROUP(60, cdc_pdm0, pri_mi2s_sck_a, atest_char2, NA, NA, NA, NA, NA,

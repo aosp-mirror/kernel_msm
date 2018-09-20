@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -62,6 +62,10 @@ struct msm_rpm_master_stats {
 	uint32_t wakeup_reason; /* 0 = rude wakeup, 1 = scheduled wakeup */
 	uint32_t last_sleep_transition_duration;
 	uint32_t last_wake_transition_duration;
+	uint32_t xo_count;
+	uint64_t xo_last_entered_at;
+	uint64_t xo_last_exited_at;
+	uint64_t xo_accumulated_duration;
 };
 
 struct msm_rpm_master_stats_private_data {
@@ -95,6 +99,7 @@ static int msm_rpm_master_copy_stats(
 	static int master_cnt;
 	int count, j = 0;
 	char *buf;
+	unsigned long active_cores;
 
 	/* Iterate possible number of masters */
 	if (master_cnt > prvdata->num_masters - 1) {
@@ -142,6 +147,34 @@ static int msm_rpm_master_copy_stats(
 			GET_FIELD(record.bringup_ack),
 			record.bringup_ack);
 
+		record.xo_last_entered_at = readq_relaxed(prvdata->reg_base +
+			(master_cnt * pdata->master_offset +
+			offsetof(struct msm_rpm_master_stats,
+			xo_last_entered_at)));
+
+		SNPRINTF(buf, count, "\t%s:0x%llX\n",
+			GET_FIELD(record.xo_last_entered_at),
+			record.xo_last_entered_at);
+
+		record.xo_last_exited_at = readq_relaxed(prvdata->reg_base +
+			(master_cnt * pdata->master_offset +
+			offsetof(struct msm_rpm_master_stats,
+			xo_last_exited_at)));
+
+		SNPRINTF(buf, count, "\t%s:0x%llX\n",
+			GET_FIELD(record.xo_last_exited_at),
+			record.xo_last_exited_at);
+
+		record.xo_accumulated_duration =
+				readq_relaxed(prvdata->reg_base +
+				(master_cnt * pdata->master_offset +
+				offsetof(struct msm_rpm_master_stats,
+				xo_accumulated_duration)));
+
+		SNPRINTF(buf, count, "\t%s:0x%llX\n",
+			GET_FIELD(record.xo_accumulated_duration),
+			record.xo_accumulated_duration);
+
 		record.last_sleep_transition_duration =
 				readl_relaxed(prvdata->reg_base +
 				(master_cnt * pdata->master_offset +
@@ -161,6 +194,16 @@ static int msm_rpm_master_copy_stats(
 		SNPRINTF(buf, count, "\t%s:0x%x\n",
 			GET_FIELD(record.last_wake_transition_duration),
 			record.last_wake_transition_duration);
+
+		record.xo_count =
+				readl_relaxed(prvdata->reg_base +
+				(master_cnt * pdata->master_offset +
+				offsetof(struct msm_rpm_master_stats,
+				xo_count)));
+
+		SNPRINTF(buf, count, "\t%s:0x%x\n",
+			GET_FIELD(record.xo_count),
+			record.xo_count);
 
 		record.wakeup_reason = readl_relaxed(prvdata->reg_base +
 					(master_cnt * pdata->master_offset +
@@ -205,12 +248,11 @@ static int msm_rpm_master_copy_stats(
 			record.active_cores);
 	}
 
-	j = find_first_bit((unsigned long *)&record.active_cores,
-							BITS_PER_LONG);
+	active_cores = record.active_cores;
+	j = find_first_bit(&active_cores, BITS_PER_LONG);
 	while (j < BITS_PER_LONG) {
 		SNPRINTF(buf, count, "\t\tcore%d\n", j);
-		j = find_next_bit((unsigned long *)&record.active_cores,
-				BITS_PER_LONG, j + 1);
+		j = find_next_bit(&active_cores, BITS_PER_LONG, j + 1);
 	}
 
 	master_cnt++;

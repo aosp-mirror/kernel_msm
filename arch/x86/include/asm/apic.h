@@ -234,7 +234,15 @@ void register_lapic_address(unsigned long address);
 extern void setup_boot_APIC_clock(void);
 extern void setup_secondary_APIC_clock(void);
 extern int APIC_init_uniprocessor(void);
+
+#ifdef CONFIG_X86_64
+static inline int apic_force_enable(unsigned long addr)
+{
+	return -1;
+}
+#else
 extern int apic_force_enable(unsigned long addr);
+#endif
 
 /*
  * On 32bit this is mach-xxx local
@@ -651,8 +659,8 @@ static inline void entering_irq(void)
 
 static inline void entering_ack_irq(void)
 {
-	ack_APIC_irq();
 	entering_irq();
+	ack_APIC_irq();
 }
 
 static inline void exiting_irq(void)

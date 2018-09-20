@@ -249,6 +249,13 @@ int __rtc_read_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 			missing = year;
 	}
 
+	/* Can't proceed if alarm is still invalid after replacing
+	 * missing fields.
+	 */
+	err = rtc_valid_tm(&alarm->time);
+	if (err)
+		goto done;
+
 	/* with luck, no rollover is needed */
 	rtc_tm_to_time(&now, &t_now);
 	rtc_tm_to_time(&alarm->time, &t_alm);
@@ -300,9 +307,9 @@ int __rtc_read_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 		dev_warn(&rtc->dev, "alarm rollover not handled\n");
 	}
 
-done:
 	err = rtc_valid_tm(&alarm->time);
 
+done:
 	if (err) {
 		dev_warn(&rtc->dev, "invalid alarm value: %d-%d-%d %d:%d:%d\n",
 			alarm->time.tm_year + 1900, alarm->time.tm_mon + 1,
@@ -394,6 +401,14 @@ int rtc_set_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 }
 EXPORT_SYMBOL_GPL(rtc_set_alarm);
 
+static void rtc_alarm_disable(struct rtc_device *rtc)
+{
+	if (!rtc->ops || !rtc->ops->alarm_irq_enable)
+		return;
+
+	rtc->ops->alarm_irq_enable(rtc->dev.parent, false);
+}
+
 /* Called once per device from rtc_device_register */
 int rtc_initialize_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 {
@@ -421,7 +436,11 @@ int rtc_initialize_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 
 		rtc->aie_timer.enabled = 1;
 		timerqueue_add(&rtc->timerqueue, &rtc->aie_timer.node);
+	} else if (alarm->enabled && (rtc_tm_to_ktime(now).tv64 >=
+			rtc->aie_timer.node.expires.tv64)){
+		rtc_alarm_disable(rtc);
 	}
+
 	mutex_unlock(&rtc->ops_lock);
 	return err;
 }
@@ -798,14 +817,6 @@ static int rtc_timer_enqueue(struct rtc_device *rtc, struct rtc_timer *timer)
 		}
 	}
 	return 0;
-}
-
-static void rtc_alarm_disable(struct rtc_device *rtc)
-{
-	if (!rtc->ops || !rtc->ops->alarm_irq_enable)
-		return;
-
-	rtc->ops->alarm_irq_enable(rtc->dev.parent, false);
 }
 
 /**

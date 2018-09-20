@@ -384,7 +384,7 @@ static void mdss_rotator_install_fence_fd(struct mdss_rot_entry_container *req)
 
 static int mdss_rotator_create_fence(struct mdss_rot_entry *entry)
 {
-	int ret, fd;
+	int ret = 0, fd;
 	u32 val;
 	struct sync_pt *sync_pt;
 	struct sync_fence *fence;
@@ -760,7 +760,8 @@ static struct mdss_rot_hw_resource *mdss_rotator_hw_alloc(
 		goto error;
 
 	pipe_ndx = mdata->dma_pipes[pipe_id].ndx;
-	hw->pipe = mdss_mdp_pipe_assign(mdata, hw->mixer, pipe_ndx);
+	hw->pipe = mdss_mdp_pipe_assign(mdata, hw->mixer,
+			pipe_ndx, MDSS_MDP_PIPE_RECT0);
 	if (IS_ERR_OR_NULL(hw->pipe)) {
 		pr_err("dma pipe allocation failed\n");
 		ret = -ENODEV;
@@ -1198,13 +1199,17 @@ static int mdss_rotator_config_dnsc_factor(struct mdss_rot_mgr *mgr,
 		}
 		entry->dnsc_factor_w = src_w / dst_w;
 		bit = fls(entry->dnsc_factor_w);
-		if ((entry->dnsc_factor_w & ~BIT(bit - 1)) || (bit > 5)) {
+		/*
+		 * New Chipsets supports downscale upto 1/64
+		 * change the Bit check from 5 to 7 to support 1/64 down scale
+		 */
+		if ((entry->dnsc_factor_w & ~BIT(bit - 1)) || (bit > 7)) {
 			ret = -EINVAL;
 			goto dnsc_err;
 		}
 		entry->dnsc_factor_h = src_h / dst_h;
 		bit = fls(entry->dnsc_factor_h);
-		if ((entry->dnsc_factor_h & ~BIT(bit - 1)) || (bit > 5)) {
+		if ((entry->dnsc_factor_h & ~BIT(bit - 1)) || (bit > 7)) {
 			ret = -EINVAL;
 			goto dnsc_err;
 		}
@@ -1725,11 +1730,13 @@ static int mdss_rotator_config_hw(struct mdss_rot_hw_resource *hw,
 {
 	struct mdss_mdp_pipe *pipe;
 	struct mdp_rotation_item *item;
+	struct mdss_rot_perf *perf;
 	int ret;
 
 	ATRACE_BEGIN(__func__);
 	pipe = hw->pipe;
 	item = &entry->item;
+	perf = entry->perf;
 
 	pipe->flags = mdss_rotator_translate_flags(item->flags);
 	pipe->src_fmt = mdss_mdp_get_format_params(item->input.format);
@@ -1737,7 +1744,8 @@ static int mdss_rotator_config_hw(struct mdss_rot_hw_resource *hw,
 	pipe->img_height = item->input.height;
 	mdss_rotator_translate_rect(&pipe->src, &item->src_rect);
 	mdss_rotator_translate_rect(&pipe->dst, &item->src_rect);
-	pipe->scale.enable_pxl_ext = 0;
+	pipe->scaler.enable = 0;
+	pipe->frame_rate = perf->config.frame_rate;
 
 	pipe->params_changed++;
 
@@ -2185,6 +2193,12 @@ static int mdss_rotator_handle_request(struct mdss_rot_mgr *mgr,
 	struct mdss_rot_entry_container *req = NULL;
 	int size, ret;
 	uint32_t req_count;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	if (mdata->handoff_pending) {
+		pr_err("Rotator request failed. Handoff pending\n");
+		return -EPERM;
+	}
 
 	if (mdss_get_sd_client_cnt()) {
 		pr_err("rot request not permitted during secure display session\n");
@@ -2425,6 +2439,31 @@ handle_request32_err:
 	return ret;
 }
 
+static unsigned int __do_compat_ioctl_rot(unsigned int cmd32)
+{
+	unsigned int cmd;
+
+	switch (cmd32) {
+	case MDSS_ROTATION_REQUEST32:
+		cmd = MDSS_ROTATION_REQUEST;
+		break;
+	case MDSS_ROTATION_OPEN32:
+		cmd = MDSS_ROTATION_OPEN;
+		break;
+	case MDSS_ROTATION_CLOSE32:
+		cmd = MDSS_ROTATION_CLOSE;
+		break;
+	case MDSS_ROTATION_CONFIG32:
+		cmd = MDSS_ROTATION_CONFIG;
+		break;
+	default:
+		cmd = cmd32;
+		break;
+	}
+
+	return cmd;
+}
+
 static long mdss_rotator_compat_ioctl(struct file *file, unsigned int cmd,
 	unsigned long arg)
 {
@@ -2446,6 +2485,8 @@ static long mdss_rotator_compat_ioctl(struct file *file, unsigned int cmd,
 		pr_err("Calling ioctl with unrecognized rot_file_private\n");
 		return -EINVAL;
 	}
+
+	cmd = __do_compat_ioctl_rot(cmd);
 
 	switch (cmd) {
 	case MDSS_ROTATION_REQUEST:

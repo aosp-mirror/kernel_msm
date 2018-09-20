@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,7 +31,7 @@
 #include <dt-bindings/clock/msm-clocks-cobalt.h>
 #include <dt-bindings/clock/msm-clocks-hwio-cobalt.h>
 
-#include "vdd-level-californium.h"
+#include "vdd-level-9650.h"
 
 static void __iomem *virt_base;
 static void __iomem *virt_dbgbase;
@@ -826,7 +826,7 @@ static struct rcg_clk gp3_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_hmss_rbcpr_clk_src[] = {
-	F(  19200000,    cxo_clk_src,    1,    0,     0),
+	F(  19200000,    cxo_clk_src_ao,    1,    0,     0),
 	F_END
 };
 
@@ -839,7 +839,6 @@ static struct rcg_clk hmss_rbcpr_clk_src = {
 	.c = {
 		.dbg_name = "hmss_rbcpr_clk_src",
 		.ops = &clk_ops_rcg,
-		VDD_DIG_FMAX_MAP2(LOWER, 19200000, NOMINAL, 50000000),
 		CLK_INIT(hmss_rbcpr_clk_src.c),
 	},
 };
@@ -1778,17 +1777,6 @@ static struct branch_clk gcc_mmss_noc_cfg_ahb_clk = {
 	},
 };
 
-static struct branch_clk gcc_mmss_qm_ahb_clk = {
-	.cbcr_reg = GCC_MMSS_QM_AHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_mmss_qm_ahb_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_mmss_qm_ahb_clk.c),
-	},
-};
-
 static struct branch_clk gcc_mmss_sys_noc_axi_clk = {
 	.cbcr_reg = GCC_MMSS_SYS_NOC_AXI_CBCR,
 	.has_sibling = 1,
@@ -2268,6 +2256,17 @@ static struct branch_clk gcc_mss_snoc_axi_clk = {
 	},
 };
 
+static struct branch_clk gcc_dcc_ahb_clk = {
+	.cbcr_reg = GCC_DCC_AHB_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_dcc_ahb_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_dcc_ahb_clk.c),
+	},
+};
+
 static struct branch_clk hlos1_vote_lpass_core_smmu_clk = {
 	.cbcr_reg = GCC_HLOS1_VOTE_LPASS_CORE_SMMU_CBCR,
 	.has_sibling = 0,
@@ -2393,6 +2392,7 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_ufs_rx_symbol_0_clk.c, 0x00ed },
 		{ &gcc_ufs_unipro_core_clk.c, 0x00f0 },
 		{ &gcc_ufs_ice_core_clk.c, 0x00f1 },
+		{ &gcc_dcc_ahb_clk.c, 0x0119 },
 		{ &ipa_clk.c, 0x011b },
 		{ &gcc_mss_cfg_ahb_clk.c, 0x011f },
 		{ &gcc_mss_q6_bimc_axi_clk.c, 0x0124 },
@@ -2601,7 +2601,6 @@ static struct clk_lookup msm_clocks_gcc_cobalt[] = {
 	CLK_LIST(gcc_hmss_dvm_bus_clk),
 	CLK_LIST(gcc_hmss_rbcpr_clk),
 	CLK_LIST(gcc_mmss_noc_cfg_ahb_clk),
-	CLK_LIST(gcc_mmss_qm_ahb_clk),
 	CLK_LIST(gcc_mmss_sys_noc_axi_clk),
 	CLK_LIST(gcc_pcie_0_aux_clk),
 	CLK_LIST(gcc_pcie_0_cfg_ahb_clk),
@@ -2648,6 +2647,7 @@ static struct clk_lookup msm_clocks_gcc_cobalt[] = {
 	CLK_LIST(gcc_rx1_usb2_clkref_clk),
 	CLK_LIST(gcc_ufs_clkref_clk),
 	CLK_LIST(gcc_usb3_clkref_clk),
+	CLK_LIST(gcc_dcc_ahb_clk),
 	CLK_LIST(hlos1_vote_lpass_core_smmu_clk),
 	CLK_LIST(hlos1_vote_lpass_adsp_smmu_clk),
 };
@@ -2695,6 +2695,7 @@ static int msm_gcc_cobalt_probe(struct platform_device *pdev)
 		return PTR_ERR(vdd_dig.regulator[0]);
 	}
 
+	bimc_clk.c.parent = &cxo_clk_src.c;
 	ret = of_msm_clock_register(pdev->dev.of_node, msm_clocks_rpm_cobalt,
 				    ARRAY_SIZE(msm_clocks_rpm_cobalt));
 	if (ret)

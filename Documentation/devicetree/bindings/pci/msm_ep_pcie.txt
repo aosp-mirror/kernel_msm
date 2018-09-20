@@ -40,11 +40,19 @@ Optional Properties:
   - max-clock-frequency-hz: list of the maximum operating frequencies stored
 				in the same order of clock names;
   - qcom,pcie-phy-ver: version of PCIe PHY.
+  - qcom,phy-init: The initialization sequence to bring up the PCIe PHY.
+    Should be specified in groups (offset, value, delay, direction).
+  - qcom,phy-status-reg: Register offset for PHY status.
+  - qcom,dbi-base-reg: Register offset for DBI base address.
+  - qcom,slv-space-reg: Register offset for slave address space size.
   - qcom,pcie-link-speed: generation of PCIe link speed. The value could be
     1, 2 or 3.
   - qcom,pcie-active-config: boolean type; active configuration of PCIe
     addressing.
   - qcom,pcie-aggregated-irq: boolean type; interrupts are aggregated.
+  - qcom,pcie-mhi-a7-irq: boolean type; MHI a7 has separate irq.
+  - qcom,pcie-perst-enum: Link enumeration will be triggered by PERST
+    deassertion.
   - mdm2apstatus-gpio: GPIO used by PCIe endpoint side to notify the host side.
   - Refer to "Documentation/devicetree/bindings/arm/msm/msm_bus.txt" for
     below optional properties:
@@ -110,4 +118,15 @@ Example:
 		qcom,pcie-link-speed = <1>;
 		qcom,pcie-active-config;
 		qcom,pcie-aggregated-irq;
+		qcom,pcie-mhi-a7-irq;
+		qcom,pcie-perst-enum;
+		qcom,phy-status-reg = <0x728>;
+		qcom,dbi-base-reg = <0x168>;
+		qcom,slv-space-reg = <0x16c>;
+
+		qcom,phy-init = <0x604 0x03 0x0 0x1
+					0x048 0x08 0x0 0x1
+					0x64c 0x4d 0x0 0x1
+					0x600 0x00 0x0 0x1
+					0x608 0x03 0x0 0x1>;
 	};

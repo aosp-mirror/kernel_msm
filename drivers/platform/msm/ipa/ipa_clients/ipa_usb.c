@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, 2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,6 +19,7 @@
 #include <linux/rndis_ipa.h>
 #include <linux/ecm_ipa.h>
 #include "../ipa_v3/ipa_i.h"
+#include "../ipa_rm_i.h"
 
 #define IPA_USB_RM_TIMEOUT_MSEC 10000
 #define IPA_USB_DEV_READY_TIMEOUT_MSEC 10000
@@ -32,12 +33,44 @@
 #define IPA_USB_MAX_MSG_LEN 4096
 
 #define IPA_USB_DRV_NAME "ipa_usb"
+
 #define IPA_USB_DBG(fmt, args...) \
-	pr_debug(IPA_USB_DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		pr_debug(IPA_USB_DRV_NAME " %s:%d " fmt, \
+			__func__, __LINE__, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf(), \
+			IPA_USB_DRV_NAME " %s:%d " fmt, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf_low(), \
+			IPA_USB_DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
+
+#define IPA_USB_DBG_LOW(fmt, args...) \
+	do { \
+		pr_debug(IPA_USB_DRV_NAME " %s:%d " fmt, \
+			__func__, __LINE__, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf_low(), \
+			IPA_USB_DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
+
 #define IPA_USB_ERR(fmt, args...) \
-	pr_err(IPA_USB_DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		pr_err(IPA_USB_DRV_NAME " %s:%d " fmt, \
+			__func__, __LINE__, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf(), \
+			IPA_USB_DRV_NAME " %s:%d " fmt, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf_low(), \
+			IPA_USB_DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
+
 #define IPA_USB_INFO(fmt, args...) \
-	pr_info(IPA_USB_DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		pr_info(IPA_USB_DRV_NAME " %s:%d " fmt, \
+			__func__, __LINE__, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf(), \
+			IPA_USB_DRV_NAME " %s:%d " fmt, ## args); \
+		IPA_IPC_LOGGING(ipa_get_ipc_logbuf_low(), \
+			IPA_USB_DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
 
 struct ipa_usb_xdci_connect_params_internal {
 	enum ipa_usb_max_usb_packet_size max_pkt_size;
@@ -92,8 +125,8 @@ enum ipa3_usb_state {
 	IPA_USB_CONNECTED,
 	IPA_USB_STOPPED,
 	IPA_USB_SUSPEND_REQUESTED,
-	IPA_USB_SUSPEND_IN_PROGRESS,
 	IPA_USB_SUSPENDED,
+	IPA_USB_SUSPENDED_NO_RWAKEUP,
 	IPA_USB_RESUME_IN_PROGRESS
 };
 
@@ -112,11 +145,10 @@ enum ipa3_usb_transport_type {
 #define IPA3_USB_IS_TTYPE_DPL(__ttype) \
 	((__ttype) == IPA_USB_TRANSPORT_DPL)
 
-struct finish_suspend_work_context {
-	struct work_struct work;
-	enum ipa3_usb_transport_type ttype;
-	u32 dl_clnt_hdl;
-	u32 ul_clnt_hdl;
+struct ipa3_usb_teth_prot_conn_params {
+	u32 usb_to_ipa_clnt_hdl;
+	u32 ipa_to_usb_clnt_hdl;
+	struct ipa_usb_teth_prot_params params;
 };
 
 /**
@@ -128,7 +160,13 @@ struct ipa3_usb_transport_type_ctx {
 	int (*ipa_usb_notify_cb)(enum ipa_usb_notify_event, void *user_data);
 	void *user_data;
 	enum ipa3_usb_state state;
-	struct finish_suspend_work_context finish_suspend_work;
+	struct ipa_usb_xdci_chan_params ch_params;
+	struct ipa3_usb_teth_prot_conn_params teth_conn_params;
+};
+
+struct ipa3_usb_smmu_reg_map {
+	int cnt;
+	phys_addr_t addr;
 };
 
 struct ipa3_usb_context {
@@ -144,19 +182,21 @@ struct ipa3_usb_context {
 	struct mutex general_mutex;
 	struct ipa3_usb_transport_type_ctx
 		ttype_ctx[IPA_USB_TRANSPORT_MAX];
-	struct dentry *dfile_ipa_usb;
+	struct dentry *dfile_state_info;
 	struct dentry *dent;
+	struct ipa3_usb_smmu_reg_map smmu_reg_map;
 };
 
 enum ipa3_usb_op {
-	IPA_USB_INIT_TETH_PROT,
-	IPA_USB_REQUEST_CHANNEL,
-	IPA_USB_CONNECT,
-	IPA_USB_DISCONNECT,
-	IPA_USB_RELEASE_CHANNEL,
-	IPA_USB_DEINIT_TETH_PROT,
-	IPA_USB_SUSPEND,
-	IPA_USB_RESUME
+	IPA_USB_OP_INIT_TETH_PROT,
+	IPA_USB_OP_REQUEST_CHANNEL,
+	IPA_USB_OP_CONNECT,
+	IPA_USB_OP_DISCONNECT,
+	IPA_USB_OP_RELEASE_CHANNEL,
+	IPA_USB_OP_DEINIT_TETH_PROT,
+	IPA_USB_OP_SUSPEND,
+	IPA_USB_OP_SUSPEND_NO_RWAKEUP,
+	IPA_USB_OP_RESUME
 };
 
 struct ipa3_usb_status_dbg_info {
@@ -172,38 +212,34 @@ struct ipa3_usb_status_dbg_info {
 
 static void ipa3_usb_wq_notify_remote_wakeup(struct work_struct *work);
 static void ipa3_usb_wq_dpl_notify_remote_wakeup(struct work_struct *work);
-static void ipa3_usb_wq_notify_suspend_completed(struct work_struct *work);
-static void ipa3_usb_wq_dpl_notify_suspend_completed(struct work_struct *work);
 static DECLARE_WORK(ipa3_usb_notify_remote_wakeup_work,
 	ipa3_usb_wq_notify_remote_wakeup);
 static DECLARE_WORK(ipa3_usb_dpl_notify_remote_wakeup_work,
 	ipa3_usb_wq_dpl_notify_remote_wakeup);
-static DECLARE_WORK(ipa3_usb_notify_suspend_completed_work,
-	ipa3_usb_wq_notify_suspend_completed);
-static DECLARE_WORK(ipa3_usb_dpl_notify_suspend_completed_work,
-	ipa3_usb_wq_dpl_notify_suspend_completed);
 
 struct ipa3_usb_context *ipa3_usb_ctx;
 
 static char *ipa3_usb_op_to_string(enum ipa3_usb_op op)
 {
 	switch (op) {
-	case IPA_USB_INIT_TETH_PROT:
-		return "IPA_USB_INIT_TETH_PROT";
-	case IPA_USB_REQUEST_CHANNEL:
-		return "IPA_USB_REQUEST_CHANNEL";
-	case IPA_USB_CONNECT:
-		return "IPA_USB_CONNECT";
-	case IPA_USB_DISCONNECT:
-		return "IPA_USB_DISCONNECT";
-	case IPA_USB_RELEASE_CHANNEL:
-		return "IPA_USB_RELEASE_CHANNEL";
-	case IPA_USB_DEINIT_TETH_PROT:
-		return "IPA_USB_DEINIT_TETH_PROT";
-	case IPA_USB_SUSPEND:
-		return "IPA_USB_SUSPEND";
-	case IPA_USB_RESUME:
-		return "IPA_USB_RESUME";
+	case IPA_USB_OP_INIT_TETH_PROT:
+		return "IPA_USB_OP_INIT_TETH_PROT";
+	case IPA_USB_OP_REQUEST_CHANNEL:
+		return "IPA_USB_OP_REQUEST_CHANNEL";
+	case IPA_USB_OP_CONNECT:
+		return "IPA_USB_OP_CONNECT";
+	case IPA_USB_OP_DISCONNECT:
+		return "IPA_USB_OP_DISCONNECT";
+	case IPA_USB_OP_RELEASE_CHANNEL:
+		return "IPA_USB_OP_RELEASE_CHANNEL";
+	case IPA_USB_OP_DEINIT_TETH_PROT:
+		return "IPA_USB_OP_DEINIT_TETH_PROT";
+	case IPA_USB_OP_SUSPEND:
+		return "IPA_USB_OP_SUSPEND";
+	case IPA_USB_OP_SUSPEND_NO_RWAKEUP:
+		return "IPA_USB_OP_SUSPEND_NO_RWAKEUP";
+	case IPA_USB_OP_RESUME:
+		return "IPA_USB_OP_RESUME";
 	}
 
 	return "UNSUPPORTED";
@@ -222,10 +258,10 @@ static char *ipa3_usb_state_to_string(enum ipa3_usb_state state)
 		return "IPA_USB_STOPPED";
 	case IPA_USB_SUSPEND_REQUESTED:
 		return "IPA_USB_SUSPEND_REQUESTED";
-	case IPA_USB_SUSPEND_IN_PROGRESS:
-		return "IPA_USB_SUSPEND_IN_PROGRESS";
 	case IPA_USB_SUSPENDED:
 		return "IPA_USB_SUSPENDED";
+	case IPA_USB_SUSPENDED_NO_RWAKEUP:
+		return "IPA_USB_SUSPENDED_NO_RWAKEUP";
 	case IPA_USB_RESUME_IN_PROGRESS:
 		return "IPA_USB_RESUME_IN_PROGRESS";
 	}
@@ -272,41 +308,26 @@ static bool ipa3_usb_set_state(enum ipa3_usb_state new_state, bool err_permit,
 		if (state == IPA_USB_INITIALIZED ||
 			state == IPA_USB_STOPPED ||
 			state == IPA_USB_RESUME_IN_PROGRESS ||
+			state == IPA_USB_SUSPENDED_NO_RWAKEUP ||
 			/*
 			 * In case of failure during suspend request
 			 * handling, state is reverted to connected.
 			 */
-			(err_permit && state == IPA_USB_SUSPEND_REQUESTED) ||
-			/*
-			 * In case of failure during suspend completing
-			 * handling, state is reverted to connected.
-			 */
-			(err_permit && state == IPA_USB_SUSPEND_IN_PROGRESS))
+			(err_permit && state == IPA_USB_SUSPEND_REQUESTED))
 			state_legal = true;
 		break;
 	case IPA_USB_STOPPED:
-		if (state == IPA_USB_SUSPEND_IN_PROGRESS ||
-			state == IPA_USB_CONNECTED ||
-			state == IPA_USB_SUSPENDED)
+		if (state == IPA_USB_CONNECTED ||
+			state == IPA_USB_SUSPENDED ||
+			state == IPA_USB_SUSPENDED_NO_RWAKEUP)
 			state_legal = true;
 		break;
 	case IPA_USB_SUSPEND_REQUESTED:
 		if (state == IPA_USB_CONNECTED)
 			state_legal = true;
 		break;
-	case IPA_USB_SUSPEND_IN_PROGRESS:
-		if (state == IPA_USB_SUSPEND_REQUESTED ||
-			/*
-			 * In case of failure during resume, state is reverted
-			 * to original, which could be suspend_in_progress.
-			 * Allow it.
-			 */
-			(err_permit && state == IPA_USB_RESUME_IN_PROGRESS))
-			state_legal = true;
-		break;
 	case IPA_USB_SUSPENDED:
 		if (state == IPA_USB_SUSPEND_REQUESTED ||
-			state == IPA_USB_SUSPEND_IN_PROGRESS ||
 			/*
 			 * In case of failure during resume, state is reverted
 			 * to original, which could be suspended. Allow it
@@ -314,9 +335,12 @@ static bool ipa3_usb_set_state(enum ipa3_usb_state new_state, bool err_permit,
 			(err_permit && state == IPA_USB_RESUME_IN_PROGRESS))
 			state_legal = true;
 		break;
+	case IPA_USB_SUSPENDED_NO_RWAKEUP:
+		if (state == IPA_USB_CONNECTED)
+			state_legal = true;
+		break;
 	case IPA_USB_RESUME_IN_PROGRESS:
-		if (state == IPA_USB_SUSPEND_IN_PROGRESS ||
-			state == IPA_USB_SUSPENDED)
+		if (state == IPA_USB_SUSPENDED)
 			state_legal = true;
 		break;
 	default:
@@ -348,7 +372,7 @@ static bool ipa3_usb_set_state(enum ipa3_usb_state new_state, bool err_permit,
 		}
 		/* Notify RM that consumer is granted */
 		if (rm_ctx->cons_requested) {
-			ipa3_rm_notify_completion(
+			ipa_rm_notify_completion(
 				IPA_RM_RESOURCE_GRANTED,
 				rm_ctx->cons_params.name);
 			rm_ctx->cons_state = IPA_USB_CONS_GRANTED;
@@ -378,32 +402,32 @@ static bool ipa3_usb_check_legal_op(enum ipa3_usb_op op,
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
 	state = ipa3_usb_ctx->ttype_ctx[ttype].state;
 	switch (op) {
-	case IPA_USB_INIT_TETH_PROT:
+	case IPA_USB_OP_INIT_TETH_PROT:
 		if (state == IPA_USB_INVALID ||
 			(!is_dpl && state == IPA_USB_INITIALIZED))
 			is_legal = true;
 		break;
-	case IPA_USB_REQUEST_CHANNEL:
+	case IPA_USB_OP_REQUEST_CHANNEL:
 		if (state == IPA_USB_INITIALIZED)
 			is_legal = true;
 		break;
-	case IPA_USB_CONNECT:
+	case IPA_USB_OP_CONNECT:
 		if (state == IPA_USB_INITIALIZED || state == IPA_USB_STOPPED)
 			is_legal = true;
 		break;
-	case IPA_USB_DISCONNECT:
+	case IPA_USB_OP_DISCONNECT:
 		if  (state == IPA_USB_CONNECTED ||
-			state == IPA_USB_SUSPEND_IN_PROGRESS ||
-			state == IPA_USB_SUSPENDED)
+			state == IPA_USB_SUSPENDED ||
+			state == IPA_USB_SUSPENDED_NO_RWAKEUP)
 			is_legal = true;
 		break;
-	case IPA_USB_RELEASE_CHANNEL:
+	case IPA_USB_OP_RELEASE_CHANNEL:
 		/* when releasing 1st channel state will be changed already */
 		if (state == IPA_USB_STOPPED ||
 			(!is_dpl && state == IPA_USB_INITIALIZED))
 			is_legal = true;
 		break;
-	case IPA_USB_DEINIT_TETH_PROT:
+	case IPA_USB_OP_DEINIT_TETH_PROT:
 		/*
 		 * For data tethering we should allow deinit an inited protocol
 		 * always. E.g. rmnet is inited and rndis is connected.
@@ -413,13 +437,17 @@ static bool ipa3_usb_check_legal_op(enum ipa3_usb_op op,
 		if (!is_dpl || state == IPA_USB_INITIALIZED)
 			is_legal = true;
 		break;
-	case IPA_USB_SUSPEND:
+	case IPA_USB_OP_SUSPEND:
 		if (state == IPA_USB_CONNECTED)
 			is_legal = true;
 		break;
-	case IPA_USB_RESUME:
+	case IPA_USB_OP_SUSPEND_NO_RWAKEUP:
+		if (state == IPA_USB_CONNECTED)
+			is_legal = true;
+		break;
+	case IPA_USB_OP_RESUME:
 		if (state == IPA_USB_SUSPENDED ||
-			state == IPA_USB_SUSPEND_IN_PROGRESS)
+			state == IPA_USB_SUSPENDED_NO_RWAKEUP)
 			is_legal = true;
 		break;
 	default:
@@ -465,10 +493,10 @@ static void ipa3_usb_notify_do(enum ipa3_usb_transport_type ttype,
  */
 void ipa3_usb_device_ready_notify_cb(void)
 {
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	ipa3_usb_notify_do(IPA_USB_TRANSPORT_TETH,
 		IPA_USB_DEVICE_READY);
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 }
 
 static void ipa3_usb_prod_notify_cb_do(enum ipa_rm_event event,
@@ -476,23 +504,23 @@ static void ipa3_usb_prod_notify_cb_do(enum ipa_rm_event event,
 {
 	struct ipa3_usb_rm_context *rm_ctx;
 
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 
 	rm_ctx = &ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx;
 
 	switch (event) {
 	case IPA_RM_RESOURCE_GRANTED:
 		IPA_USB_DBG(":%s granted\n",
-			ipa3_rm_resource_str(rm_ctx->prod_params.name));
+			ipa_rm_resource_str(rm_ctx->prod_params.name));
 		complete_all(&rm_ctx->prod_comp);
 		break;
 	case IPA_RM_RESOURCE_RELEASED:
 		IPA_USB_DBG(":%s released\n",
-			ipa3_rm_resource_str(rm_ctx->prod_params.name));
+			ipa_rm_resource_str(rm_ctx->prod_params.name));
 		complete_all(&rm_ctx->prod_comp);
 		break;
 	}
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 }
 
 static void ipa3_usb_prod_notify_cb(void *user_data, enum ipa_rm_event event,
@@ -517,71 +545,6 @@ static void ipa3_usb_wq_dpl_notify_remote_wakeup(struct work_struct *work)
 	ipa3_usb_notify_do(IPA_USB_TRANSPORT_DPL, IPA_USB_REMOTE_WAKEUP);
 }
 
-static void ipa3_usb_wq_notify_suspend_completed(struct work_struct *work)
-{
-	ipa3_usb_notify_do(IPA_USB_TRANSPORT_TETH, IPA_USB_SUSPEND_COMPLETED);
-}
-
-static void ipa3_usb_wq_dpl_notify_suspend_completed(struct work_struct *work)
-{
-	ipa3_usb_notify_do(IPA_USB_TRANSPORT_DPL, IPA_USB_SUSPEND_COMPLETED);
-}
-
-static void ipa3_usb_wq_finish_suspend_work(struct work_struct *work)
-{
-	struct finish_suspend_work_context *finish_suspend_work_ctx;
-	unsigned long flags;
-	int result = -EFAULT;
-	struct ipa3_usb_transport_type_ctx *tctx;
-
-	mutex_lock(&ipa3_usb_ctx->general_mutex);
-	IPA_USB_DBG("entry\n");
-	finish_suspend_work_ctx = container_of(work,
-		struct finish_suspend_work_context, work);
-	tctx = &ipa3_usb_ctx->ttype_ctx[finish_suspend_work_ctx->ttype];
-
-	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
-	if (tctx->state != IPA_USB_SUSPEND_IN_PROGRESS) {
-		spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
-		mutex_unlock(&ipa3_usb_ctx->general_mutex);
-		return;
-	}
-	spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
-
-	/* Stop DL/DPL channel */
-	result = ipa3_stop_gsi_channel(finish_suspend_work_ctx->dl_clnt_hdl);
-	if (result) {
-		IPAERR("Error stopping DL/DPL channel: %d, resuming channel\n",
-			result);
-		ipa3_xdci_resume(finish_suspend_work_ctx->ul_clnt_hdl,
-			finish_suspend_work_ctx->dl_clnt_hdl,
-			IPA3_USB_IS_TTYPE_DPL(finish_suspend_work_ctx->ttype));
-		/* Change state back to CONNECTED */
-		if (!ipa3_usb_set_state(IPA_USB_CONNECTED, true,
-			finish_suspend_work_ctx->ttype))
-			IPA_USB_ERR("failed to change state to connected\n");
-		queue_work(ipa3_usb_ctx->wq,
-			IPA3_USB_IS_TTYPE_DPL(finish_suspend_work_ctx->ttype) ?
-			&ipa3_usb_dpl_notify_remote_wakeup_work :
-			&ipa3_usb_notify_remote_wakeup_work);
-		mutex_unlock(&ipa3_usb_ctx->general_mutex);
-		return;
-	}
-
-	/* Change ipa_usb state to SUSPENDED */
-	if (!ipa3_usb_set_state(IPA_USB_SUSPENDED, false,
-		finish_suspend_work_ctx->ttype))
-		IPA_USB_ERR("failed to change state to suspended\n");
-
-	queue_work(ipa3_usb_ctx->wq,
-		IPA3_USB_IS_TTYPE_DPL(finish_suspend_work_ctx->ttype) ?
-		&ipa3_usb_dpl_notify_suspend_completed_work :
-		&ipa3_usb_notify_suspend_completed_work);
-
-	IPA_USB_DBG("exit\n");
-	mutex_unlock(&ipa3_usb_ctx->general_mutex);
-}
-
 static int ipa3_usb_cons_request_resource_cb_do(
 	enum ipa3_usb_transport_type ttype,
 	struct work_struct *remote_wakeup_work)
@@ -590,7 +553,7 @@ static int ipa3_usb_cons_request_resource_cb_do(
 	unsigned long flags;
 	int result;
 
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	rm_ctx = &ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx;
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
 	IPA_USB_DBG("state is %s\n",
@@ -598,6 +561,7 @@ static int ipa3_usb_cons_request_resource_cb_do(
 				ipa3_usb_ctx->ttype_ctx[ttype].state));
 	switch (ipa3_usb_ctx->ttype_ctx[ttype].state) {
 	case IPA_USB_CONNECTED:
+	case IPA_USB_SUSPENDED_NO_RWAKEUP:
 		rm_ctx->cons_state = IPA_USB_CONS_GRANTED;
 		result = 0;
 		break;
@@ -607,17 +571,6 @@ static int ipa3_usb_cons_request_resource_cb_do(
 			result = 0;
 		else
 			result = -EINPROGRESS;
-		break;
-	case IPA_USB_SUSPEND_IN_PROGRESS:
-		/*
-		 * This case happens due to suspend interrupt.
-		 * CONS is granted
-		 */
-		if (!rm_ctx->cons_requested) {
-			rm_ctx->cons_requested = true;
-			queue_work(ipa3_usb_ctx->wq, remote_wakeup_work);
-		}
-		result = 0;
 		break;
 	case IPA_USB_SUSPENDED:
 		if (!rm_ctx->cons_requested) {
@@ -632,7 +585,7 @@ static int ipa3_usb_cons_request_resource_cb_do(
 		break;
 	}
 	spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
-	IPA_USB_DBG("exit with %d\n", result);
+	IPA_USB_DBG_LOW("exit with %d\n", result);
 	return result;
 }
 
@@ -654,22 +607,17 @@ static int ipa3_usb_cons_release_resource_cb_do(
 	unsigned long flags;
 	struct ipa3_usb_rm_context *rm_ctx;
 
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	rm_ctx = &ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx;
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
 	IPA_USB_DBG("state is %s\n",
 			ipa3_usb_state_to_string(
 			ipa3_usb_ctx->ttype_ctx[ttype].state));
 	switch (ipa3_usb_ctx->ttype_ctx[ttype].state) {
-	case IPA_USB_SUSPEND_IN_PROGRESS:
+	case IPA_USB_SUSPENDED:
 		/* Proceed with the suspend if no DL/DPL data */
 		if (rm_ctx->cons_requested)
 			rm_ctx->cons_requested_released = true;
-		else {
-			queue_work(ipa3_usb_ctx->wq,
-				&ipa3_usb_ctx->ttype_ctx[ttype].
-				finish_suspend_work.work);
-		}
 		break;
 	case IPA_USB_SUSPEND_REQUESTED:
 		if (rm_ctx->cons_requested)
@@ -677,6 +625,7 @@ static int ipa3_usb_cons_release_resource_cb_do(
 		break;
 	case IPA_USB_STOPPED:
 	case IPA_USB_RESUME_IN_PROGRESS:
+	case IPA_USB_SUSPENDED_NO_RWAKEUP:
 		if (rm_ctx->cons_requested)
 			rm_ctx->cons_requested = false;
 		break;
@@ -693,7 +642,7 @@ static int ipa3_usb_cons_release_resource_cb_do(
 
 	rm_ctx->cons_state = IPA_USB_CONS_RELEASED;
 	spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	return 0;
 }
 
@@ -778,13 +727,13 @@ static int ipa3_usb_create_rm_resources(enum ipa3_usb_transport_type ttype)
 		result = ipa_rm_create_resource(&rm_ctx->prod_params);
 		if (result) {
 			IPA_USB_ERR("Failed to create %s RM resource\n",
-				ipa3_rm_resource_str(rm_ctx->prod_params.name));
+				ipa_rm_resource_str(rm_ctx->prod_params.name));
 			return result;
 		}
 		rm_ctx->prod_valid = true;
 		created = true;
 		IPA_USB_DBG("Created %s RM resource\n",
-			ipa3_rm_resource_str(rm_ctx->prod_params.name));
+			ipa_rm_resource_str(rm_ctx->prod_params.name));
 	}
 
 	/* Create CONS */
@@ -806,12 +755,12 @@ static int ipa3_usb_create_rm_resources(enum ipa3_usb_transport_type ttype)
 		result = ipa_rm_create_resource(&rm_ctx->cons_params);
 		if (result) {
 			IPA_USB_ERR("Failed to create %s RM resource\n",
-				ipa3_rm_resource_str(rm_ctx->cons_params.name));
+				ipa_rm_resource_str(rm_ctx->cons_params.name));
 			goto create_cons_rsc_fail;
 		}
 		rm_ctx->cons_valid = true;
 		IPA_USB_DBG("Created %s RM resource\n",
-			ipa3_rm_resource_str(rm_ctx->cons_params.name));
+			ipa_rm_resource_str(rm_ctx->cons_params.name));
 	}
 
 	return 0;
@@ -834,7 +783,7 @@ int ipa_usb_init_teth_prot(enum ipa_usb_teth_prot teth_prot,
 	enum ipa3_usb_transport_type ttype;
 
 	mutex_lock(&ipa3_usb_ctx->general_mutex);
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (teth_prot < 0 || teth_prot >= IPA_USB_MAX_TETH_PROT_SIZE ||
 		((teth_prot == IPA_USB_RNDIS || teth_prot == IPA_USB_ECM) &&
 		teth_params == NULL) || ipa_usb_notify_cb == NULL ||
@@ -846,7 +795,7 @@ int ipa_usb_init_teth_prot(enum ipa_usb_teth_prot teth_prot,
 
 	ttype = IPA3_USB_GET_TTYPE(teth_prot);
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_INIT_TETH_PROT, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_INIT_TETH_PROT, ttype)) {
 		IPA_USB_ERR("Illegal operation.\n");
 		result = -EPERM;
 		goto bad_params;
@@ -978,7 +927,7 @@ int ipa_usb_init_teth_prot(enum ipa_usb_teth_prot teth_prot,
 	if (!ipa3_usb_set_state(IPA_USB_INITIALIZED, false, ttype))
 			IPA_USB_ERR("failed to change state to initialized\n");
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return 0;
 
@@ -1000,39 +949,41 @@ EXPORT_SYMBOL(ipa_usb_init_teth_prot);
 
 void ipa3_usb_gsi_evt_err_cb(struct gsi_evt_err_notify *notify)
 {
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (!notify)
 		return;
 	IPA_USB_ERR("Received event error %d, description: %d\n",
 		notify->evt_id, notify->err_desc);
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 }
 
 void ipa3_usb_gsi_chan_err_cb(struct gsi_chan_err_notify *notify)
 {
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (!notify)
 		return;
 	IPA_USB_ERR("Received channel error %d, description: %d\n",
 		notify->evt_id, notify->err_desc);
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 }
 
 static bool ipa3_usb_check_chan_params(struct ipa_usb_xdci_chan_params *params)
 {
-	IPA_USB_DBG("gevntcount_low_addr = %x\n", params->gevntcount_low_addr);
-	IPA_USB_DBG("gevntcount_hi_addr = %x\n", params->gevntcount_hi_addr);
-	IPA_USB_DBG("dir = %d\n", params->dir);
-	IPA_USB_DBG("xfer_ring_len = %d\n", params->xfer_ring_len);
-	IPA_USB_DBG("xfer_ring_base_addr = %llx\n",
+	IPA_USB_DBG_LOW("gevntcount_low_addr = %x\n",
+			params->gevntcount_low_addr);
+	IPA_USB_DBG_LOW("gevntcount_hi_addr = %x\n",
+			params->gevntcount_hi_addr);
+	IPA_USB_DBG_LOW("dir = %d\n", params->dir);
+	IPA_USB_DBG_LOW("xfer_ring_len = %d\n", params->xfer_ring_len);
+	IPA_USB_DBG_LOW("xfer_ring_base_addr = %llx\n",
 		params->xfer_ring_base_addr);
-	IPA_USB_DBG("last_trb_addr = %x\n",
-		params->xfer_scratch.last_trb_addr);
-	IPA_USB_DBG("const_buffer_size = %d\n",
+	IPA_USB_DBG_LOW("last_trb_addr_iova = %x\n",
+		params->xfer_scratch.last_trb_addr_iova);
+	IPA_USB_DBG_LOW("const_buffer_size = %d\n",
 		params->xfer_scratch.const_buffer_size);
-	IPA_USB_DBG("depcmd_low_addr = %x\n",
+	IPA_USB_DBG_LOW("depcmd_low_addr = %x\n",
 		params->xfer_scratch.depcmd_low_addr);
-	IPA_USB_DBG("depcmd_hi_addr = %x\n",
+	IPA_USB_DBG_LOW("depcmd_hi_addr = %x\n",
 		params->xfer_scratch.depcmd_hi_addr);
 
 	if (params->client >= IPA_CLIENT_MAX  ||
@@ -1078,6 +1029,74 @@ static bool ipa3_usb_check_chan_params(struct ipa_usb_xdci_chan_params *params)
 	return true;
 }
 
+static int ipa3_usb_smmu_map_xdci_channel(
+	struct ipa_usb_xdci_chan_params *params, bool map)
+{
+	int result;
+	u32 gevntcount_r = rounddown(params->gevntcount_low_addr, PAGE_SIZE);
+	u32 xfer_scratch_r =
+		rounddown(params->xfer_scratch.depcmd_low_addr, PAGE_SIZE);
+
+	if (gevntcount_r != xfer_scratch_r) {
+		IPA_USB_ERR("No support more than 1 page map for USB regs\n");
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	if (map) {
+		if (ipa3_usb_ctx->smmu_reg_map.cnt == 0) {
+			ipa3_usb_ctx->smmu_reg_map.addr = gevntcount_r;
+			result = ipa3_smmu_map_peer_reg(
+				ipa3_usb_ctx->smmu_reg_map.addr, true);
+			if (result) {
+				IPA_USB_ERR("failed to map USB regs %d\n",
+					result);
+				return result;
+			}
+		} else {
+			if (gevntcount_r != ipa3_usb_ctx->smmu_reg_map.addr) {
+				IPA_USB_ERR(
+					"No support for map different reg\n");
+				return -EINVAL;
+			}
+		}
+		ipa3_usb_ctx->smmu_reg_map.cnt++;
+	} else {
+		if (gevntcount_r != ipa3_usb_ctx->smmu_reg_map.addr) {
+			IPA_USB_ERR(
+				"No support for map different reg\n");
+			return -EINVAL;
+		}
+
+		if (ipa3_usb_ctx->smmu_reg_map.cnt == 1) {
+			result = ipa3_smmu_map_peer_reg(
+				ipa3_usb_ctx->smmu_reg_map.addr, false);
+			if (result) {
+				IPA_USB_ERR("failed to unmap USB regs %d\n",
+					result);
+				return result;
+			}
+		}
+		ipa3_usb_ctx->smmu_reg_map.cnt--;
+	}
+
+	result = ipa3_smmu_map_peer_buff(params->xfer_ring_base_addr_iova,
+		params->xfer_ring_base_addr, params->xfer_ring_len, map);
+	if (result) {
+		IPA_USB_ERR("failed to map Xfer ring %d\n", result);
+		return result;
+	}
+
+	result = ipa3_smmu_map_peer_buff(params->data_buff_base_addr_iova,
+		params->data_buff_base_addr, params->data_buff_base_len, map);
+	if (result) {
+		IPA_USB_ERR("failed to map TRBs buff %d\n", result);
+		return result;
+	}
+
+	return 0;
+}
+
 static int ipa3_usb_request_xdci_channel(
 	struct ipa_usb_xdci_chan_params *params,
 	struct ipa_req_chan_out_params *out_params)
@@ -1086,7 +1105,7 @@ static int ipa3_usb_request_xdci_channel(
 	struct ipa_request_gsi_channel_params chan_params;
 	enum ipa3_usb_transport_type ttype;
 
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (params == NULL || out_params == NULL ||
 		!ipa3_usb_check_chan_params(params)) {
 		IPA_USB_ERR("bad parameters\n");
@@ -1095,7 +1114,7 @@ static int ipa3_usb_request_xdci_channel(
 
 	ttype = IPA3_USB_GET_TTYPE(params->teth_prot);
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_REQUEST_CHANNEL, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_REQUEST_CHANNEL, ttype)) {
 		IPA_USB_ERR("Illegal operation\n");
 		return -EPERM;
 	}
@@ -1152,6 +1171,16 @@ static int ipa3_usb_request_xdci_channel(
 	default:
 		break;
 	}
+
+	result = ipa3_usb_smmu_map_xdci_channel(params, true);
+	if (result) {
+		IPA_USB_ERR("failed to smmu map %d\n", result);
+		return result;
+	}
+
+	/* store channel params for SMMU unmap */
+	ipa3_usb_ctx->ttype_ctx[ttype].ch_params = *params;
+
 	chan_params.keep_ipa_awake = params->keep_ipa_awake;
 	chan_params.evt_ring_params.intf = GSI_EVT_CHTYPE_XDCI_EV;
 	chan_params.evt_ring_params.intr = GSI_INTR_IRQ;
@@ -1181,7 +1210,7 @@ static int ipa3_usb_request_xdci_channel(
 	chan_params.chan_params.ring_base_addr =
 		params->xfer_ring_base_addr;
 	chan_params.chan_params.ring_base_vaddr = NULL;
-	chan_params.chan_params.use_db_eng = GSI_CHAN_DIRECT_MODE;
+	chan_params.chan_params.use_db_eng = GSI_CHAN_DB_MODE;
 	chan_params.chan_params.max_prefetch = GSI_ONE_PREFETCH_SEG;
 	if (params->dir == GSI_CHAN_DIR_FROM_GSI)
 		chan_params.chan_params.low_weight =
@@ -1193,7 +1222,7 @@ static int ipa3_usb_request_xdci_channel(
 	chan_params.chan_params.err_cb = ipa3_usb_gsi_chan_err_cb;
 	chan_params.chan_params.chan_user_data = NULL;
 	chan_params.chan_scratch.xdci.last_trb_addr =
-		params->xfer_scratch.last_trb_addr;
+		params->xfer_scratch.last_trb_addr_iova;
 	/* xferrscidx will be updated later */
 	chan_params.chan_scratch.xdci.xferrscidx = 0;
 	chan_params.chan_scratch.xdci.const_buffer_size =
@@ -1202,14 +1231,18 @@ static int ipa3_usb_request_xdci_channel(
 		params->xfer_scratch.depcmd_low_addr;
 	chan_params.chan_scratch.xdci.depcmd_hi_addr =
 		params->xfer_scratch.depcmd_hi_addr;
+	chan_params.chan_scratch.xdci.outstanding_threshold =
+		((params->teth_prot == IPA_USB_MBIM) ? 1 : 2) *
+		chan_params.chan_params.re_size;
 	/* max_outstanding_tre is set in ipa3_request_gsi_channel() */
 	result = ipa3_request_gsi_channel(&chan_params, out_params);
 	if (result) {
 		IPA_USB_ERR("failed to allocate GSI channel\n");
+		ipa3_usb_smmu_map_xdci_channel(params, false);
 		return result;
 	}
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	return 0;
 }
 
@@ -1218,13 +1251,13 @@ static int ipa3_usb_release_xdci_channel(u32 clnt_hdl,
 {
 	int result = 0;
 
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (ttype < 0 || ttype >= IPA_USB_TRANSPORT_MAX) {
 		IPA_USB_ERR("bad parameter.\n");
 		return -EINVAL;
 	}
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_RELEASE_CHANNEL, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_RELEASE_CHANNEL, ttype)) {
 		IPA_USB_ERR("Illegal operation.\n");
 		return -EPERM;
 	}
@@ -1236,11 +1269,14 @@ static int ipa3_usb_release_xdci_channel(u32 clnt_hdl,
 		return result;
 	}
 
+	result = ipa3_usb_smmu_map_xdci_channel(
+		&ipa3_usb_ctx->ttype_ctx[ttype].ch_params, false);
+
 	/* Change ipa_usb state to INITIALIZED */
 	if (!ipa3_usb_set_state(IPA_USB_INITIALIZED, false, ttype))
 		IPA_USB_ERR("failed to change state to initialized\n");
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	return 0;
 }
 
@@ -1251,11 +1287,11 @@ static int ipa3_usb_request_prod(enum ipa3_usb_transport_type ttype)
 	const char *rsrc_str;
 
 	rm_ctx = &ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx;
-	rsrc_str = ipa3_rm_resource_str(rm_ctx->prod_params.name);
+	rsrc_str = ipa_rm_resource_str(rm_ctx->prod_params.name);
 
-	IPA_USB_DBG("requesting %s\n", rsrc_str);
+	IPA_USB_DBG_LOW("requesting %s\n", rsrc_str);
 	init_completion(&rm_ctx->prod_comp);
-	result = ipa3_rm_request_resource(rm_ctx->prod_params.name);
+	result = ipa_rm_request_resource(rm_ctx->prod_params.name);
 	if (result) {
 		if (result != -EINPROGRESS) {
 			IPA_USB_ERR("failed to request %s: %d\n",
@@ -1270,7 +1306,7 @@ static int ipa3_usb_request_prod(enum ipa3_usb_transport_type ttype)
 		}
 	}
 
-	IPA_USB_DBG("%s granted\n", rsrc_str);
+	IPA_USB_DBG_LOW("%s granted\n", rsrc_str);
 	return 0;
 }
 
@@ -1281,9 +1317,9 @@ static int ipa3_usb_release_prod(enum ipa3_usb_transport_type ttype)
 	const char *rsrc_str;
 
 	rm_ctx = &ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx;
-	rsrc_str = ipa3_rm_resource_str(rm_ctx->prod_params.name);
+	rsrc_str = ipa_rm_resource_str(rm_ctx->prod_params.name);
 
-	IPA_USB_DBG("releasing %s\n", rsrc_str);
+	IPA_USB_DBG_LOW("releasing %s\n", rsrc_str);
 
 	init_completion(&rm_ctx->prod_comp);
 	result = ipa_rm_release_resource(rm_ctx->prod_params.name);
@@ -1301,16 +1337,16 @@ static int ipa3_usb_release_prod(enum ipa3_usb_transport_type ttype)
 		}
 	}
 
-	IPA_USB_DBG("%s released\n", rsrc_str);
+	IPA_USB_DBG_LOW("%s released\n", rsrc_str);
 	return 0;
 }
 
 static bool ipa3_usb_check_connect_params(
 	struct ipa_usb_xdci_connect_params_internal *params)
 {
-	IPA_USB_DBG("ul xferrscidx = %d\n", params->usb_to_ipa_xferrscidx);
-	IPA_USB_DBG("dl xferrscidx = %d\n", params->ipa_to_usb_xferrscidx);
-	IPA_USB_DBG("max_supported_bandwidth_mbps = %d\n",
+	IPA_USB_DBG_LOW("ul xferrscidx = %d\n", params->usb_to_ipa_xferrscidx);
+	IPA_USB_DBG_LOW("dl xferrscidx = %d\n", params->ipa_to_usb_xferrscidx);
+	IPA_USB_DBG_LOW("max_supported_bandwidth_mbps = %d\n",
 		params->max_supported_bandwidth_mbps);
 
 	if (params->max_pkt_size < IPA_USB_HIGH_SPEED_512B  ||
@@ -1362,10 +1398,10 @@ static int ipa3_usb_connect_dpl(void)
 	 * is sync in order to make sure the IPA clocks are up before we
 	 * continue and notify the USB driver it may continue.
 	 */
-	res = ipa3_rm_add_dependency_sync(IPA_RM_RESOURCE_USB_DPL_DUMMY_PROD,
+	res = ipa_rm_add_dependency_sync(IPA_RM_RESOURCE_USB_DPL_DUMMY_PROD,
 				    IPA_RM_RESOURCE_Q6_CONS);
 	if (res < 0) {
-		IPA_USB_ERR("ipa3_rm_add_dependency_sync() failed.\n");
+		IPA_USB_ERR("ipa_rm_add_dependency_sync() failed.\n");
 		return res;
 	}
 
@@ -1374,11 +1410,11 @@ static int ipa3_usb_connect_dpl(void)
 	 * status is connected (which can happen only later in the flow),
 	 * the clocks are already up so the call doesn't need to block.
 	 */
-	res = ipa3_rm_add_dependency(IPA_RM_RESOURCE_Q6_PROD,
+	res = ipa_rm_add_dependency(IPA_RM_RESOURCE_Q6_PROD,
 				    IPA_RM_RESOURCE_USB_DPL_CONS);
 	if (res < 0 && res != -EINPROGRESS) {
-		IPA_USB_ERR("ipa3_rm_add_dependency() failed.\n");
-		ipa3_rm_delete_dependency(IPA_RM_RESOURCE_USB_DPL_DUMMY_PROD,
+		IPA_USB_ERR("ipa_rm_add_dependency() failed.\n");
+		ipa_rm_delete_dependency(IPA_RM_RESOURCE_USB_DPL_DUMMY_PROD,
 				IPA_RM_RESOURCE_Q6_CONS);
 		return res;
 	}
@@ -1386,81 +1422,79 @@ static int ipa3_usb_connect_dpl(void)
 	return 0;
 }
 
-static int ipa3_usb_connect_teth_prot(
-	struct ipa_usb_xdci_connect_params_internal *params,
-	enum ipa3_usb_transport_type ttype)
+static int ipa3_usb_connect_teth_prot(enum ipa_usb_teth_prot teth_prot)
 {
 	int result;
 	struct teth_bridge_connect_params teth_bridge_params;
+	struct ipa3_usb_teth_prot_conn_params *teth_conn_params;
+	enum ipa3_usb_transport_type ttype;
 
-	IPA_USB_DBG("connecting protocol = %d\n",
-		params->teth_prot);
-	switch (params->teth_prot) {
+	IPA_USB_DBG("connecting protocol = %s\n",
+		ipa3_usb_teth_prot_to_string(teth_prot));
+
+	ttype = IPA3_USB_GET_TTYPE(teth_prot);
+
+	teth_conn_params = &(ipa3_usb_ctx->ttype_ctx[ttype].teth_conn_params);
+
+	switch (teth_prot) {
 	case IPA_USB_RNDIS:
 		if (ipa3_usb_ctx->teth_prot_ctx[IPA_USB_RNDIS].state ==
 			IPA_USB_TETH_PROT_CONNECTED) {
 			IPA_USB_DBG("%s is already connected.\n",
-				ipa3_usb_teth_prot_to_string(
-				params->teth_prot));
+				ipa3_usb_teth_prot_to_string(teth_prot));
 			break;
 		}
 		ipa3_usb_ctx->ttype_ctx[ttype].user_data =
 			ipa3_usb_ctx->teth_prot_ctx[IPA_USB_RNDIS].user_data;
 		result = rndis_ipa_pipe_connect_notify(
-			params->usb_to_ipa_clnt_hdl,
-			params->ipa_to_usb_clnt_hdl,
-			params->teth_prot_params.max_xfer_size_bytes_to_dev,
-			params->teth_prot_params.max_packet_number_to_dev,
-			params->teth_prot_params.max_xfer_size_bytes_to_host,
+			teth_conn_params->usb_to_ipa_clnt_hdl,
+			teth_conn_params->ipa_to_usb_clnt_hdl,
+			teth_conn_params->params.max_xfer_size_bytes_to_dev,
+			teth_conn_params->params.max_packet_number_to_dev,
+			teth_conn_params->params.max_xfer_size_bytes_to_host,
 			ipa3_usb_ctx->teth_prot_ctx[IPA_USB_RNDIS].
 			teth_prot_params.rndis.private);
 		if (result) {
 			IPA_USB_ERR("failed to connect %s.\n",
-				ipa3_usb_teth_prot_to_string(
-				params->teth_prot));
+				ipa3_usb_teth_prot_to_string(teth_prot));
 			ipa3_usb_ctx->ttype_ctx[ttype].user_data = NULL;
 			return result;
 		}
 		ipa3_usb_ctx->teth_prot_ctx[IPA_USB_RNDIS].state =
 			IPA_USB_TETH_PROT_CONNECTED;
 		IPA_USB_DBG("%s is connected.\n",
-			ipa3_usb_teth_prot_to_string(
-			params->teth_prot));
+			ipa3_usb_teth_prot_to_string(teth_prot));
 		break;
 	case IPA_USB_ECM:
 		if (ipa3_usb_ctx->teth_prot_ctx[IPA_USB_ECM].state ==
 			IPA_USB_TETH_PROT_CONNECTED) {
 			IPA_USB_DBG("%s is already connected.\n",
-				ipa3_usb_teth_prot_to_string(
-				params->teth_prot));
+				ipa3_usb_teth_prot_to_string(teth_prot));
 			break;
 		}
 		ipa3_usb_ctx->ttype_ctx[ttype].user_data =
 			ipa3_usb_ctx->teth_prot_ctx[IPA_USB_ECM].user_data;
-		result = ecm_ipa_connect(params->usb_to_ipa_clnt_hdl,
-			params->ipa_to_usb_clnt_hdl,
+		result = ecm_ipa_connect(teth_conn_params->usb_to_ipa_clnt_hdl,
+			teth_conn_params->ipa_to_usb_clnt_hdl,
 			ipa3_usb_ctx->teth_prot_ctx[IPA_USB_ECM].
 			teth_prot_params.ecm.private);
 		if (result) {
 			IPA_USB_ERR("failed to connect %s.\n",
-				ipa3_usb_teth_prot_to_string(
-				params->teth_prot));
+				ipa3_usb_teth_prot_to_string(teth_prot));
 			ipa3_usb_ctx->ttype_ctx[ttype].user_data = NULL;
 			return result;
 		}
 		ipa3_usb_ctx->teth_prot_ctx[IPA_USB_ECM].state =
 			IPA_USB_TETH_PROT_CONNECTED;
 		IPA_USB_DBG("%s is connected.\n",
-			ipa3_usb_teth_prot_to_string(
-			params->teth_prot));
+			ipa3_usb_teth_prot_to_string(teth_prot));
 		break;
 	case IPA_USB_RMNET:
 	case IPA_USB_MBIM:
-		if (ipa3_usb_ctx->teth_prot_ctx[params->teth_prot].state ==
+		if (ipa3_usb_ctx->teth_prot_ctx[teth_prot].state ==
 			IPA_USB_TETH_PROT_CONNECTED) {
 			IPA_USB_DBG("%s is already connected.\n",
-				ipa3_usb_teth_prot_to_string(
-				params->teth_prot));
+				ipa3_usb_teth_prot_to_string(teth_prot));
 			break;
 		}
 		result = ipa3_usb_init_teth_bridge();
@@ -1468,14 +1502,14 @@ static int ipa3_usb_connect_teth_prot(
 			return result;
 
 		ipa3_usb_ctx->ttype_ctx[ttype].user_data =
-			ipa3_usb_ctx->teth_prot_ctx[params->teth_prot].
+			ipa3_usb_ctx->teth_prot_ctx[teth_prot].
 			user_data;
 		teth_bridge_params.ipa_usb_pipe_hdl =
-			params->ipa_to_usb_clnt_hdl;
+			teth_conn_params->ipa_to_usb_clnt_hdl;
 		teth_bridge_params.usb_ipa_pipe_hdl =
-			params->usb_to_ipa_clnt_hdl;
+			teth_conn_params->usb_to_ipa_clnt_hdl;
 		teth_bridge_params.tethering_mode =
-			(params->teth_prot == IPA_USB_RMNET) ?
+			(teth_prot == IPA_USB_RMNET) ?
 			(TETH_TETHERING_MODE_RMNET):(TETH_TETHERING_MODE_MBIM);
 		teth_bridge_params.client_type = IPA_CLIENT_USB_PROD;
 		result = ipa3_usb_connect_teth_bridge(&teth_bridge_params);
@@ -1483,27 +1517,23 @@ static int ipa3_usb_connect_teth_prot(
 			ipa3_usb_ctx->ttype_ctx[ttype].user_data = NULL;
 			return result;
 		}
-		ipa3_usb_ctx->teth_prot_ctx[params->teth_prot].state =
+		ipa3_usb_ctx->teth_prot_ctx[teth_prot].state =
 			IPA_USB_TETH_PROT_CONNECTED;
 		ipa3_usb_notify_do(ttype, IPA_USB_DEVICE_READY);
 		IPA_USB_DBG("%s (%s) is connected.\n",
-			ipa3_usb_teth_prot_to_string(
-			params->teth_prot),
-			ipa3_usb_teth_bridge_prot_to_string(
-			params->teth_prot));
+			ipa3_usb_teth_prot_to_string(teth_prot),
+			ipa3_usb_teth_bridge_prot_to_string(teth_prot));
 		break;
 	case IPA_USB_DIAG:
 		if (ipa3_usb_ctx->teth_prot_ctx[IPA_USB_DIAG].state ==
 			IPA_USB_TETH_PROT_CONNECTED) {
 			IPA_USB_DBG("%s is already connected.\n",
-				ipa3_usb_teth_prot_to_string(
-				params->teth_prot));
+				ipa3_usb_teth_prot_to_string(teth_prot));
 			break;
 		}
 
 		ipa3_usb_ctx->ttype_ctx[ttype].user_data =
-			ipa3_usb_ctx->teth_prot_ctx[params->teth_prot].
-			user_data;
+			ipa3_usb_ctx->teth_prot_ctx[teth_prot].user_data;
 		result = ipa3_usb_connect_dpl();
 		if (result) {
 			IPA_USB_ERR("Failed connecting DPL result=%d\n",
@@ -1515,8 +1545,7 @@ static int ipa3_usb_connect_teth_prot(
 			IPA_USB_TETH_PROT_CONNECTED;
 		ipa3_usb_notify_do(ttype, IPA_USB_DEVICE_READY);
 		IPA_USB_DBG("%s is connected.\n",
-			ipa3_usb_teth_prot_to_string(
-			params->teth_prot));
+			ipa3_usb_teth_prot_to_string(teth_prot));
 		break;
 	default:
 		IPA_USB_ERR("Invalid tethering protocol\n");
@@ -1544,12 +1573,12 @@ static int ipa3_usb_disconnect_dpl(void)
 	int res;
 
 	/* Remove DPL RM dependency */
-	res = ipa3_rm_delete_dependency(IPA_RM_RESOURCE_USB_DPL_DUMMY_PROD,
+	res = ipa_rm_delete_dependency(IPA_RM_RESOURCE_USB_DPL_DUMMY_PROD,
 				    IPA_RM_RESOURCE_Q6_CONS);
 	if (res)
 		IPA_USB_ERR("deleting DPL_DUMMY_PROD rsrc dependency fail\n");
 
-	res = ipa3_rm_delete_dependency(IPA_RM_RESOURCE_Q6_PROD,
+	res = ipa_rm_delete_dependency(IPA_RM_RESOURCE_Q6_PROD,
 				 IPA_RM_RESOURCE_USB_DPL_CONS);
 	if (res)
 		IPA_USB_ERR("deleting DPL_CONS rsrc dependencty fail\n");
@@ -1641,7 +1670,7 @@ static int ipa3_usb_xdci_connect_internal(
 	struct ipa_rm_perf_profile profile;
 	enum ipa3_usb_transport_type ttype;
 
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (params == NULL || !ipa3_usb_check_connect_params(params)) {
 		IPA_USB_ERR("bad parameters.\n");
 		return -EINVAL;
@@ -1650,10 +1679,18 @@ static int ipa3_usb_xdci_connect_internal(
 	ttype = (params->teth_prot == IPA_USB_DIAG) ? IPA_USB_TRANSPORT_DPL :
 		IPA_USB_TRANSPORT_TETH;
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_CONNECT, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_CONNECT, ttype)) {
 		IPA_USB_ERR("Illegal operation.\n");
 		return -EPERM;
 	}
+
+	ipa3_usb_ctx->ttype_ctx[ttype].teth_conn_params.ipa_to_usb_clnt_hdl
+		= params->ipa_to_usb_clnt_hdl;
+	if (!IPA3_USB_IS_TTYPE_DPL(ttype))
+		ipa3_usb_ctx->ttype_ctx[ttype].teth_conn_params.
+			usb_to_ipa_clnt_hdl = params->usb_to_ipa_clnt_hdl;
+	ipa3_usb_ctx->ttype_ctx[ttype].teth_conn_params.params
+		= params->teth_prot_params;
 
 	/* Set EE xDCI specific scratch */
 	result = ipa3_set_usb_max_packet_size(params->max_pkt_size);
@@ -1670,7 +1707,7 @@ static int ipa3_usb_xdci_connect_internal(
 		&profile);
 	if (result) {
 		IPA_USB_ERR("failed to set %s perf profile\n",
-			ipa3_rm_resource_str(ipa3_usb_ctx->ttype_ctx[ttype].
+			ipa_rm_resource_str(ipa3_usb_ctx->ttype_ctx[ttype].
 				rm_ctx.prod_params.name));
 		return result;
 	}
@@ -1679,7 +1716,7 @@ static int ipa3_usb_xdci_connect_internal(
 		&profile);
 	if (result) {
 		IPA_USB_ERR("failed to set %s perf profile\n",
-			ipa3_rm_resource_str(ipa3_usb_ctx->ttype_ctx[ttype].
+			ipa_rm_resource_str(ipa3_usb_ctx->ttype_ctx[ttype].
 				rm_ctx.cons_params.name));
 		return result;
 	}
@@ -1691,7 +1728,7 @@ static int ipa3_usb_xdci_connect_internal(
 
 	if (params->teth_prot != IPA_USB_DIAG) {
 		/* Start UL channel */
-		result = ipa3_xdci_connect(params->usb_to_ipa_clnt_hdl,
+		result = ipa3_xdci_start(params->usb_to_ipa_clnt_hdl,
 			params->usb_to_ipa_xferrscidx,
 			params->usb_to_ipa_xferrscidx_valid);
 		if (result) {
@@ -1701,7 +1738,7 @@ static int ipa3_usb_xdci_connect_internal(
 	}
 
 	/* Start DL/DPL channel */
-	result = ipa3_xdci_connect(params->ipa_to_usb_clnt_hdl,
+	result = ipa3_xdci_start(params->ipa_to_usb_clnt_hdl,
 		params->ipa_to_usb_xferrscidx,
 		params->ipa_to_usb_xferrscidx_valid);
 	if (result) {
@@ -1710,7 +1747,7 @@ static int ipa3_usb_xdci_connect_internal(
 	}
 
 	/* Connect tethering protocol */
-	result = ipa3_usb_connect_teth_prot(params, ttype);
+	result = ipa3_usb_connect_teth_prot(params->teth_prot);
 	if (result) {
 		IPA_USB_ERR("failed to connect teth protocol\n");
 		goto connect_teth_prot_fail;
@@ -1722,7 +1759,7 @@ static int ipa3_usb_xdci_connect_internal(
 		goto state_change_connected_fail;
 	}
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	return 0;
 
 state_change_connected_fail:
@@ -1763,7 +1800,7 @@ static int ipa3_usb_get_status_dbg_info(struct ipa3_usb_status_dbg_info *status)
 	int i;
 	unsigned long flags;
 
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 
 	if (ipa3_usb_ctx == NULL) {
 		IPA_USB_ERR("IPA USB was not inited yet\n");
@@ -1824,7 +1861,7 @@ static int ipa3_usb_get_status_dbg_info(struct ipa3_usb_status_dbg_info *status)
 	}
 
 	res = 0;
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 bail:
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return res;
@@ -1903,22 +1940,22 @@ const struct file_operations ipa3_ipa_usb_ops = {
 	.read = ipa3_read_usb_state_info,
 };
 
-void ipa_usb_debugfs_init(void)
+static void ipa_usb_debugfs_init(void)
 {
 	const mode_t read_only_mode = S_IRUSR | S_IRGRP | S_IROTH;
 
 	ipa3_usb_ctx->dent = debugfs_create_dir("ipa_usb", 0);
 	if (IS_ERR(ipa3_usb_ctx->dent)) {
-		IPA_USB_ERR("fail to create folder in debug_fs.\n");
+		pr_err("fail to create folder in debug_fs.\n");
 		return;
 	}
 
-	ipa3_usb_ctx->dfile_ipa_usb = debugfs_create_file("state_info",
+	ipa3_usb_ctx->dfile_state_info = debugfs_create_file("state_info",
 			read_only_mode, ipa3_usb_ctx->dent, 0,
 			&ipa3_ipa_usb_ops);
-	if (!ipa3_usb_ctx->dfile_ipa_usb ||
-		IS_ERR(ipa3_usb_ctx->dfile_ipa_usb)) {
-		IPA_USB_ERR("fail to create file for debug_fs ipa_usb\n");
+	if (!ipa3_usb_ctx->dfile_state_info ||
+		IS_ERR(ipa3_usb_ctx->dfile_state_info)) {
+		pr_err("failed to create file for state_info\n");
 		goto fail;
 	}
 
@@ -1929,19 +1966,31 @@ fail:
 	ipa3_usb_ctx->dent = NULL;
 }
 
-void ipa_usb_debugfs_remove(void)
+static void ipa_usb_debugfs_remove(void)
 {
 	if (IS_ERR(ipa3_usb_ctx->dent)) {
-		IPA_USB_ERR("ipa_debugfs_remove: folder was not created.\n");
+		IPA_USB_ERR("ipa_usb debugfs folder was not created.\n");
 		return;
 	}
 
 	debugfs_remove_recursive(ipa3_usb_ctx->dent);
 }
 #else /* CONFIG_DEBUG_FS */
-void ipa_usb_debugfs_init(void){}
-void ipa_usb_debugfs_remove(void){}
+static void ipa_usb_debugfs_init(void){}
+static void ipa_usb_debugfs_remove(void){}
 #endif /* CONFIG_DEBUG_FS */
+
+static int ipa_usb_set_lock_unlock(bool is_lock)
+{
+	IPA_USB_DBG("entry\n");
+	if (is_lock)
+		mutex_lock(&ipa3_usb_ctx->general_mutex);
+	else
+		mutex_unlock(&ipa3_usb_ctx->general_mutex);
+	IPA_USB_DBG("exit\n");
+
+	return 0;
+}
 
 
 
@@ -1955,7 +2004,7 @@ int ipa_usb_xdci_connect(struct ipa_usb_xdci_chan_params *ul_chan_params,
 	struct ipa_usb_xdci_connect_params_internal conn_params;
 
 	mutex_lock(&ipa3_usb_ctx->general_mutex);
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (connect_params == NULL || dl_chan_params == NULL ||
 		dl_out_params == NULL ||
 		(connect_params->teth_prot != IPA_USB_DIAG &&
@@ -2005,17 +2054,20 @@ int ipa_usb_xdci_connect(struct ipa_usb_xdci_chan_params *ul_chan_params,
 		goto connect_fail;
 	}
 
-	IPA_USB_DBG("exit\n");
+	/* Register for xdci lock/unlock callback with ipa core driver */
+	ipa3_register_lock_unlock_callback(&ipa_usb_set_lock_unlock,
+		ul_out_params->clnt_hdl);
+	IPA_USB_DBG_LOW("exit\n");
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return 0;
 
 connect_fail:
 	ipa3_usb_release_xdci_channel(dl_out_params->clnt_hdl,
-		dl_chan_params->teth_prot);
+		IPA3_USB_GET_TTYPE(dl_chan_params->teth_prot));
 alloc_dl_chan_fail:
 	if (connect_params->teth_prot != IPA_USB_DIAG)
 		ipa3_usb_release_xdci_channel(ul_out_params->clnt_hdl,
-			ul_chan_params->teth_prot);
+			IPA3_USB_GET_TTYPE(ul_chan_params->teth_prot));
 bad_params:
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return result;
@@ -2039,6 +2091,73 @@ static int ipa3_usb_check_disconnect_prot(enum ipa_usb_teth_prot teth_prot)
 	return 0;
 }
 
+/* Assumes lock already acquired */
+static int ipa_usb_xdci_dismiss_channels(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
+				enum ipa_usb_teth_prot teth_prot)
+{
+	int result = 0;
+	enum ipa3_usb_transport_type ttype;
+
+	ttype = IPA3_USB_GET_TTYPE(teth_prot);
+
+	IPA_USB_DBG_LOW("entry\n");
+
+	/* Reset DL channel */
+	result = ipa3_reset_gsi_channel(dl_clnt_hdl);
+	if (result) {
+		IPA_USB_ERR("failed to reset DL channel.\n");
+		return result;
+	}
+
+	/* Reset DL event ring */
+	result = ipa3_reset_gsi_event_ring(dl_clnt_hdl);
+	if (result) {
+		IPA_USB_ERR("failed to reset DL event ring.\n");
+		return result;
+	}
+
+	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
+		ipa3_xdci_ep_delay_rm(ul_clnt_hdl); /* Remove ep_delay if set */
+		/* Reset UL channel */
+		result = ipa3_reset_gsi_channel(ul_clnt_hdl);
+		if (result) {
+			IPA_USB_ERR("failed to reset UL channel.\n");
+			return result;
+		}
+
+		/* Reset UL event ring */
+		result = ipa3_reset_gsi_event_ring(ul_clnt_hdl);
+		if (result) {
+			IPA_USB_ERR("failed to reset UL event ring.\n");
+			return result;
+		}
+	}
+
+	ipa3_deregister_lock_unlock_callback(ul_clnt_hdl);
+
+	/* Change state to STOPPED */
+	if (!ipa3_usb_set_state(IPA_USB_STOPPED, false, ttype))
+		IPA_USB_ERR("failed to change state to stopped\n");
+
+	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
+		result = ipa3_usb_release_xdci_channel(ul_clnt_hdl, ttype);
+		if (result) {
+			IPA_USB_ERR("failed to release UL channel.\n");
+			return result;
+		}
+	}
+
+	result = ipa3_usb_release_xdci_channel(dl_clnt_hdl, ttype);
+	if (result) {
+		IPA_USB_ERR("failed to release DL channel.\n");
+		return result;
+	}
+
+	IPA_USB_DBG_LOW("exit\n");
+
+	return 0;
+}
+
 int ipa_usb_xdci_disconnect(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 			    enum ipa_usb_teth_prot teth_prot)
 {
@@ -2049,21 +2168,32 @@ int ipa_usb_xdci_disconnect(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	enum ipa3_usb_transport_type ttype;
 
 	mutex_lock(&ipa3_usb_ctx->general_mutex);
-	IPA_USB_DBG("entry\n");
-	if (ipa3_usb_check_disconnect_prot(teth_prot)) {
-		result = -EINVAL;
-		goto bad_params;
-	}
+	IPA_USB_DBG_LOW("entry\n");
 
 	ttype = IPA3_USB_GET_TTYPE(teth_prot);
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_DISCONNECT, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_DISCONNECT, ttype)) {
 		IPA_USB_ERR("Illegal operation.\n");
 		result = -EPERM;
 		goto bad_params;
 	}
 
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
+	if (ipa3_usb_ctx->ttype_ctx[ttype].state ==
+		IPA_USB_SUSPENDED_NO_RWAKEUP) {
+		spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
+		result = ipa_usb_xdci_dismiss_channels(ul_clnt_hdl, dl_clnt_hdl,
+			teth_prot);
+		mutex_unlock(&ipa3_usb_ctx->general_mutex);
+		return result;
+	}
+
+	if (ipa3_usb_check_disconnect_prot(teth_prot)) {
+		spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
+		result = -EINVAL;
+		goto bad_params;
+	}
+
 	if (ipa3_usb_ctx->ttype_ctx[ttype].state != IPA_USB_SUSPENDED) {
 		spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
 		/* Stop DL/DPL channel */
@@ -2083,83 +2213,35 @@ int ipa_usb_xdci_disconnect(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
 	orig_state = ipa3_usb_ctx->ttype_ctx[ttype].state;
 	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
-		if (orig_state != IPA_USB_SUSPEND_IN_PROGRESS &&
-			orig_state != IPA_USB_SUSPENDED) {
+		if (orig_state != IPA_USB_SUSPENDED) {
 			spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock,
 				flags);
 			/* Stop UL channel */
 			result = ipa3_xdci_disconnect(ul_clnt_hdl,
-				(teth_prot == IPA_USB_RMNET ||
-				teth_prot == IPA_USB_MBIM),
+				true,
 				ipa3_usb_ctx->qmi_req_id);
 			if (result) {
 				IPA_USB_ERR("failed disconnect UL channel\n");
 				goto bad_params;
 			}
-			if (teth_prot == IPA_USB_RMNET ||
-				teth_prot == IPA_USB_MBIM)
-				ipa3_usb_ctx->qmi_req_id++;
+			ipa3_usb_ctx->qmi_req_id++;
 		} else
 			spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock,
 				flags);
 	} else
 		spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
 
-	/* Reset DL channel */
-	result = ipa3_reset_gsi_channel(dl_clnt_hdl);
-	if (result) {
-		IPA_USB_ERR("failed to reset DL channel.\n");
+	result = ipa_usb_xdci_dismiss_channels(ul_clnt_hdl, dl_clnt_hdl,
+			teth_prot);
+	if (result)
 		goto bad_params;
-	}
-
-	/* Reset DL event ring */
-	result = ipa3_reset_gsi_event_ring(dl_clnt_hdl);
-	if (result) {
-		IPA_USB_ERR("failed to reset DL event ring.\n");
-		goto bad_params;
-	}
-
-	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
-		/* Reset UL channel */
-		result = ipa3_reset_gsi_channel(ul_clnt_hdl);
-		if (result) {
-			IPA_USB_ERR("failed to reset UL channel.\n");
-			goto bad_params;
-		}
-
-		/* Reset UL event ring */
-		result = ipa3_reset_gsi_event_ring(ul_clnt_hdl);
-		if (result) {
-			IPA_USB_ERR("failed to reset UL event ring.\n");
-			goto bad_params;
-		}
-	}
-
-	/* Change state to STOPPED */
-	if (!ipa3_usb_set_state(IPA_USB_STOPPED, false, ttype))
-		IPA_USB_ERR("failed to change state to stopped\n");
-
-	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
-		result = ipa3_usb_release_xdci_channel(ul_clnt_hdl, ttype);
-		if (result) {
-			IPA_USB_ERR("failed to release UL channel.\n");
-			goto bad_params;
-		}
-	}
-
-	result = ipa3_usb_release_xdci_channel(dl_clnt_hdl, ttype);
-	if (result) {
-		IPA_USB_ERR("failed to release DL channel.\n");
-		goto bad_params;
-	}
 
 	/* Disconnect tethering protocol */
 	result = ipa3_usb_disconnect_teth_prot(teth_prot);
 	if (result)
 		goto bad_params;
 
-	if (orig_state != IPA_USB_SUSPEND_IN_PROGRESS &&
-		orig_state != IPA_USB_SUSPENDED) {
+	if (orig_state != IPA_USB_SUSPENDED) {
 		result = ipa3_usb_release_prod(ttype);
 		if (result) {
 			IPA_USB_ERR("failed to release PROD.\n");
@@ -2167,7 +2249,7 @@ int ipa_usb_xdci_disconnect(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 		}
 	}
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return 0;
 
@@ -2184,7 +2266,7 @@ int ipa_usb_deinit_teth_prot(enum ipa_usb_teth_prot teth_prot)
 	enum ipa3_usb_transport_type ttype;
 
 	mutex_lock(&ipa3_usb_ctx->general_mutex);
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 	if (teth_prot < 0 || teth_prot >= IPA_USB_MAX_TETH_PROT_SIZE) {
 		IPA_USB_ERR("bad parameters.\n");
 		result = -EINVAL;
@@ -2193,7 +2275,7 @@ int ipa_usb_deinit_teth_prot(enum ipa_usb_teth_prot teth_prot)
 
 	ttype = IPA3_USB_GET_TTYPE(teth_prot);
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_DEINIT_TETH_PROT, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_DEINIT_TETH_PROT, ttype)) {
 		IPA_USB_ERR("Illegal operation.\n");
 		result = -EPERM;
 		goto bad_params;
@@ -2279,7 +2361,7 @@ int ipa_usb_deinit_teth_prot(enum ipa_usb_teth_prot teth_prot)
 		ipa3_usb_ctx->ttype_ctx[ttype].ipa_usb_notify_cb = NULL;
 	}
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return 0;
 
@@ -2289,25 +2371,103 @@ bad_params:
 }
 EXPORT_SYMBOL(ipa_usb_deinit_teth_prot);
 
-int ipa_usb_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
+/* Assumes lock already acquired */
+static int ipa3_usb_suspend_no_remote_wakeup(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	enum ipa_usb_teth_prot teth_prot)
 {
 	int result = 0;
+	enum ipa3_usb_transport_type ttype;
+
+	ttype = IPA3_USB_GET_TTYPE(teth_prot);
+
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_SUSPEND_NO_RWAKEUP, ttype)) {
+		IPA_USB_ERR("Illegal operation.\n");
+		result = -EPERM;
+		goto fail_exit;
+	}
+
+	IPA_USB_DBG("Start suspend with no remote wakeup sequence: %s\n",
+		IPA3_USB_IS_TTYPE_DPL(ttype) ?
+		"DPL channel":"Data Tethering channels");
+
+	if (ipa3_usb_check_disconnect_prot(teth_prot)) {
+		result = -EINVAL;
+		goto fail_exit;
+	}
+
+	/* Stop DL/DPL channel */
+	result = ipa3_xdci_disconnect(dl_clnt_hdl, false, -1);
+	if (result) {
+		IPA_USB_ERR("failed to disconnect DL/DPL channel.\n");
+		goto fail_exit;
+	}
+
+	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
+		/* Stop UL channel */
+		result = ipa3_xdci_disconnect(ul_clnt_hdl, true,
+			ipa3_usb_ctx->qmi_req_id);
+		if (result) {
+			IPA_USB_ERR("failed disconnect UL channel\n");
+			goto start_dl;
+		}
+		ipa3_usb_ctx->qmi_req_id++;
+	}
+
+	/* Disconnect tethering protocol */
+	result = ipa3_usb_disconnect_teth_prot(teth_prot);
+	if (result)
+		goto start_ul;
+
+	result = ipa3_usb_release_prod(ttype);
+	if (result) {
+		IPA_USB_ERR("failed to release PROD.\n");
+		goto connect_teth;
+	}
+
+	/* Change ipa_usb state to SUSPENDED_NO_RWAKEUP */
+	if (!ipa3_usb_set_state(IPA_USB_SUSPENDED_NO_RWAKEUP, false, ttype))
+		IPA_USB_ERR("failed to change state to suspend no rwakeup\n");
+
+	IPA_USB_DBG_LOW("exit\n");
+	return 0;
+
+connect_teth:
+	(void)ipa3_usb_connect_teth_prot(teth_prot);
+start_ul:
+	if (!IPA3_USB_IS_TTYPE_DPL(ttype))
+		(void)ipa3_xdci_connect(ul_clnt_hdl);
+start_dl:
+	(void)ipa3_xdci_connect(dl_clnt_hdl);
+fail_exit:
+	return result;
+}
+
+int ipa_usb_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
+	enum ipa_usb_teth_prot teth_prot, bool with_remote_wakeup)
+{
+	int result = 0;
 	unsigned long flags;
-	enum ipa3_usb_cons_state curr_cons_state;
 	enum ipa3_usb_transport_type ttype;
 
 	mutex_lock(&ipa3_usb_ctx->general_mutex);
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
+
 	if (teth_prot < 0 || teth_prot >= IPA_USB_MAX_TETH_PROT_SIZE) {
 		IPA_USB_ERR("bad parameters.\n");
 		result = -EINVAL;
 		goto bad_params;
 	}
 
+	if (!with_remote_wakeup) {
+		result = ipa3_usb_suspend_no_remote_wakeup(ul_clnt_hdl,
+			dl_clnt_hdl, teth_prot);
+		mutex_unlock(&ipa3_usb_ctx->general_mutex);
+		return result;
+	}
+
 	ttype = IPA3_USB_GET_TTYPE(teth_prot);
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_SUSPEND, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_SUSPEND, ttype)) {
 		IPA_USB_ERR("Illegal operation.\n");
 		result = -EPERM;
 		goto bad_params;
@@ -2327,16 +2487,13 @@ int ipa_usb_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 
 	/* Stop UL channel & suspend DL/DPL EP */
 	result = ipa3_xdci_suspend(ul_clnt_hdl, dl_clnt_hdl,
-		(teth_prot == IPA_USB_RMNET ||
-		teth_prot == IPA_USB_MBIM),
+		true,
 		ipa3_usb_ctx->qmi_req_id, IPA3_USB_IS_TTYPE_DPL(ttype));
 	if (result) {
 		IPA_USB_ERR("failed to suspend\n");
 		goto suspend_fail;
 	}
-	if (teth_prot == IPA_USB_RMNET ||
-		teth_prot == IPA_USB_MBIM)
-		ipa3_usb_ctx->qmi_req_id++;
+	ipa3_usb_ctx->qmi_req_id++;
 
 	result = ipa3_usb_release_prod(ttype);
 	if (result) {
@@ -2344,49 +2501,20 @@ int ipa_usb_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 		goto release_prod_fail;
 	}
 
+	/* Check if DL/DPL data pending */
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
-	curr_cons_state = ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx.cons_state;
+	if (ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx.cons_state ==
+		IPA_USB_CONS_GRANTED &&
+		ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx.cons_requested) {
+
+		IPA_USB_DBG("DL/DPL data pending, invoke remote wakeup\n");
+		queue_work(ipa3_usb_ctx->wq,
+			IPA3_USB_IS_TTYPE_DPL(ttype) ?
+			&ipa3_usb_dpl_notify_remote_wakeup_work :
+			&ipa3_usb_notify_remote_wakeup_work);
+	}
 	spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
-	if (curr_cons_state == IPA_USB_CONS_GRANTED) {
-		/* Change state to SUSPEND_IN_PROGRESS */
-		if (!ipa3_usb_set_state(IPA_USB_SUSPEND_IN_PROGRESS,
-			false, ttype))
-			IPA_USB_ERR("fail set state to suspend_in_progress\n");
 
-		/* Check if DL/DPL data pending */
-		spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
-		if (ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx.cons_requested) {
-			IPA_USB_DBG(
-				"DL/DPL data pending, invoke remote wakeup\n");
-			queue_work(ipa3_usb_ctx->wq,
-				IPA3_USB_IS_TTYPE_DPL(ttype) ?
-				&ipa3_usb_dpl_notify_remote_wakeup_work :
-				&ipa3_usb_notify_remote_wakeup_work);
-		}
-		spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
-
-		ipa3_usb_ctx->ttype_ctx[ttype].finish_suspend_work.ttype =
-			ttype;
-		ipa3_usb_ctx->ttype_ctx[ttype].finish_suspend_work.dl_clnt_hdl =
-			dl_clnt_hdl;
-		ipa3_usb_ctx->ttype_ctx[ttype].finish_suspend_work.ul_clnt_hdl =
-			ul_clnt_hdl;
-		INIT_WORK(&ipa3_usb_ctx->ttype_ctx[ttype].
-			finish_suspend_work.work,
-			ipa3_usb_wq_finish_suspend_work);
-
-		result = -EINPROGRESS;
-		IPA_USB_DBG("exit with suspend_in_progress\n");
-		goto bad_params;
-	}
-
-	/* Stop DL channel */
-	result = ipa3_stop_gsi_channel(dl_clnt_hdl);
-	if (result) {
-		IPAERR("Error stopping DL/DPL channel: %d\n", result);
-		result = -EFAULT;
-		goto release_prod_fail;
-	}
 	/* Change state to SUSPENDED */
 	if (!ipa3_usb_set_state(IPA_USB_SUSPENDED, false, ttype))
 		IPA_USB_ERR("failed to change state to suspended\n");
@@ -2394,14 +2522,15 @@ int ipa_usb_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	/* Check if DL/DPL data pending */
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
 	if (ipa3_usb_ctx->ttype_ctx[ttype].rm_ctx.cons_requested) {
-		IPA_USB_DBG("DL/DPL data is pending, invoking remote wakeup\n");
+		IPA_USB_DBG_LOW(
+			"DL/DPL data is pending, invoking remote wakeup\n");
 		queue_work(ipa3_usb_ctx->wq, IPA3_USB_IS_TTYPE_DPL(ttype) ?
 			&ipa3_usb_dpl_notify_remote_wakeup_work :
 			&ipa3_usb_notify_remote_wakeup_work);
 	}
 	spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return 0;
 
@@ -2418,6 +2547,72 @@ bad_params:
 }
 EXPORT_SYMBOL(ipa_usb_xdci_suspend);
 
+/* Assumes lock already acquired */
+static int ipa3_usb_resume_no_remote_wakeup(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
+	enum ipa_usb_teth_prot teth_prot)
+{
+	int result = -EFAULT;
+	enum ipa3_usb_transport_type ttype;
+
+	ttype = IPA3_USB_GET_TTYPE(teth_prot);
+
+	IPA_USB_DBG("Start resume with no remote wakeup sequence: %s\n",
+		IPA3_USB_IS_TTYPE_DPL(ttype) ?
+		"DPL channel":"Data Tethering channels");
+
+	/* Request USB_PROD */
+	result = ipa3_usb_request_prod(ttype);
+	if (result)
+		goto fail_exit;
+
+	/* Connect tethering protocol */
+	result = ipa3_usb_connect_teth_prot(teth_prot);
+	if (result) {
+		IPA_USB_ERR("failed to connect teth protocol\n");
+		goto release_prod;
+	}
+
+	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
+		/* Start UL channel */
+		result = ipa3_xdci_connect(ul_clnt_hdl);
+		if (result) {
+			IPA_USB_ERR("failed to start UL channel.\n");
+			goto disconn_teth;
+		}
+	}
+
+	/* Start DL/DPL channel */
+	result = ipa3_xdci_connect(dl_clnt_hdl);
+	if (result) {
+		IPA_USB_ERR("failed to start DL/DPL channel.\n");
+		goto stop_ul;
+	}
+
+	/* Change state to CONNECTED */
+	if (!ipa3_usb_set_state(IPA_USB_CONNECTED, false, ttype)) {
+		IPA_USB_ERR("failed to change state to connected\n");
+		result = -EFAULT;
+		goto stop_dl;
+	}
+
+	return 0;
+
+stop_dl:
+	(void)ipa3_xdci_disconnect(dl_clnt_hdl, false, -1);
+stop_ul:
+	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
+		(void)ipa3_xdci_disconnect(ul_clnt_hdl, true,
+			ipa3_usb_ctx->qmi_req_id);
+		ipa3_usb_ctx->qmi_req_id++;
+	}
+disconn_teth:
+	(void)ipa3_usb_disconnect_teth_prot(teth_prot);
+release_prod:
+	(void)ipa3_usb_release_prod(ttype);
+fail_exit:
+	return result;
+}
+
 int ipa_usb_xdci_resume(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	enum ipa_usb_teth_prot teth_prot)
 {
@@ -2427,7 +2622,7 @@ int ipa_usb_xdci_resume(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	enum ipa3_usb_transport_type ttype;
 
 	mutex_lock(&ipa3_usb_ctx->general_mutex);
-	IPA_USB_DBG("entry\n");
+	IPA_USB_DBG_LOW("entry\n");
 
 	if (teth_prot < 0 || teth_prot >= IPA_USB_MAX_TETH_PROT_SIZE) {
 		IPA_USB_ERR("bad parameters.\n");
@@ -2437,19 +2632,25 @@ int ipa_usb_xdci_resume(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 
 	ttype = IPA3_USB_GET_TTYPE(teth_prot);
 
-	if (!ipa3_usb_check_legal_op(IPA_USB_RESUME, ttype)) {
+	if (!ipa3_usb_check_legal_op(IPA_USB_OP_RESUME, ttype)) {
 		IPA_USB_ERR("Illegal operation.\n");
 		result = -EPERM;
 		goto bad_params;
 	}
 
-	IPA_USB_DBG("Start resume sequence: %s\n",
-		IPA3_USB_IS_TTYPE_DPL(ttype) ?
-		"DPL channel" : "Data Tethering channels");
-
 	spin_lock_irqsave(&ipa3_usb_ctx->state_lock, flags);
 	prev_state = ipa3_usb_ctx->ttype_ctx[ttype].state;
 	spin_unlock_irqrestore(&ipa3_usb_ctx->state_lock, flags);
+	if (prev_state == IPA_USB_SUSPENDED_NO_RWAKEUP) {
+		result = ipa3_usb_resume_no_remote_wakeup(ul_clnt_hdl,
+			dl_clnt_hdl, teth_prot);
+		mutex_unlock(&ipa3_usb_ctx->general_mutex);
+		return result;
+	}
+
+	IPA_USB_DBG("Start resume sequence: %s\n",
+		IPA3_USB_IS_TTYPE_DPL(ttype) ?
+		"DPL channel" : "Data Tethering channels");
 
 	/* Change state to RESUME_IN_PROGRESS */
 	if (!ipa3_usb_set_state(IPA_USB_RESUME_IN_PROGRESS, false, ttype)) {
@@ -2472,13 +2673,11 @@ int ipa_usb_xdci_resume(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 		}
 	}
 
-	if (prev_state != IPA_USB_SUSPEND_IN_PROGRESS) {
-		/* Start DL/DPL channel */
-		result = ipa3_start_gsi_channel(dl_clnt_hdl);
-		if (result) {
-			IPA_USB_ERR("failed to start DL/DPL channel.\n");
-			goto start_dl_fail;
-		}
+	/* Start DL/DPL channel */
+	result = ipa3_start_gsi_channel(dl_clnt_hdl);
+	if (result) {
+		IPA_USB_ERR("failed to start DL/DPL channel.\n");
+		goto start_dl_fail;
 	}
 
 	/* Change state to CONNECTED */
@@ -2488,17 +2687,15 @@ int ipa_usb_xdci_resume(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 		goto state_change_connected_fail;
 	}
 
-	IPA_USB_DBG("exit\n");
+	IPA_USB_DBG_LOW("exit\n");
 	mutex_unlock(&ipa3_usb_ctx->general_mutex);
 	return 0;
 
 state_change_connected_fail:
-	if (prev_state != IPA_USB_SUSPEND_IN_PROGRESS) {
-		result = ipa3_stop_gsi_channel(dl_clnt_hdl);
-		if (result)
-			IPA_USB_ERR("Error stopping DL/DPL channel: %d\n",
-				result);
-	}
+	result = ipa3_stop_gsi_channel(dl_clnt_hdl);
+	if (result)
+		IPA_USB_ERR("Error stopping DL/DPL channel: %d\n",
+			result);
 start_dl_fail:
 	if (!IPA3_USB_IS_TTYPE_DPL(ttype)) {
 		result = ipa3_stop_gsi_channel(ul_clnt_hdl);
@@ -2524,14 +2721,13 @@ static int __init ipa3_usb_init(void)
 	unsigned long flags;
 	int res;
 
-	IPA_USB_DBG("entry\n");
+	pr_debug("entry\n");
 	ipa3_usb_ctx = kzalloc(sizeof(struct ipa3_usb_context), GFP_KERNEL);
 	if (ipa3_usb_ctx == NULL) {
-		IPA_USB_ERR("failed to allocate memory\n");
-		res = -EFAULT;
-		goto ipa_usb_init_fail;
+		pr_err("failed to allocate memory\n");
+		pr_err(":ipa_usb init failed\n");
+		return -EFAULT;
 	}
-
 	memset(ipa3_usb_ctx, 0, sizeof(struct ipa3_usb_context));
 
 	for (i = 0; i < IPA_USB_MAX_TETH_PROT_SIZE; i++)
@@ -2561,26 +2757,26 @@ static int __init ipa3_usb_init(void)
 
 	ipa3_usb_ctx->wq = create_singlethread_workqueue("ipa_usb_wq");
 	if (!ipa3_usb_ctx->wq) {
-		IPA_USB_ERR("failed to create workqueue\n");
-		kfree(ipa3_usb_ctx);
+		pr_err("failed to create workqueue\n");
 		res = -EFAULT;
-		goto ipa_usb_init_fail;
+		goto ipa_usb_workqueue_fail;
 	}
 
 	ipa_usb_debugfs_init();
 
-	IPA_USB_INFO("exit: IPA_USB init success!\n");
+	pr_info("exit: IPA_USB init success!\n");
 
 	return 0;
 
-ipa_usb_init_fail:
-	IPA_USB_ERR(":ipa_usb init failed (%d)\n", -res);
+ipa_usb_workqueue_fail:
+	pr_err(":init failed (%d)\n", -res);
+	kfree(ipa3_usb_ctx);
 	return res;
 }
 
 static void ipa3_usb_exit(void)
 {
-	IPA_USB_DBG("IPA_USB exit\n");
+	IPA_USB_DBG_LOW("IPA_USB exit\n");
 	ipa_usb_debugfs_remove();
 	kfree(ipa3_usb_ctx);
 }

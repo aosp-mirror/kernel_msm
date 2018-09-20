@@ -2861,7 +2861,7 @@ static void rndis_wlan_do_link_down_work(struct usbnet *usbdev)
 
 		deauthenticate(usbdev);
 
-		cfg80211_disconnected(usbdev->net, 0, NULL, 0, GFP_KERNEL);
+		cfg80211_disconnected(usbdev->net, 0, NULL, 0, true, GFP_KERNEL);
 	}
 
 	netif_carrier_off(usbdev->net);
@@ -3425,6 +3425,10 @@ static int rndis_wlan_bind(struct usbnet *usbdev, struct usb_interface *intf)
 
 	/* because rndis_command() sleeps we need to use workqueue */
 	priv->workqueue = create_singlethread_workqueue("rndis_wlan");
+	if (!priv->workqueue) {
+		wiphy_free(wiphy);
+		return -ENOMEM;
+	}
 	INIT_WORK(&priv->work, rndis_wlan_worker);
 	INIT_DELAYED_WORK(&priv->dev_poller_work, rndis_device_poller);
 	INIT_DELAYED_WORK(&priv->scan_work, rndis_get_scan_results);
