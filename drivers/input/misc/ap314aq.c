@@ -263,33 +263,22 @@ static int ap314aq_set_phthres(struct i2c_client *client, int val)
 static int ap314aq_set_ps_thres(struct i2c_client *client)
 {
     int bias, n2f, value_l, value_h;
-    const int max_limit=1000;
-    const int min_limit=800;
 
     bias = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_BIAS_PATH);
     n2f = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_N2F_PATH);
     LDBG("bias = %d, n2f = %d, THRESHOLD_LOW = %d, THRESHOLD_HIGH= %d\n",
 		bias, n2f, AP314AQ_PS_THRESHOLD_LOW, AP314AQ_PS_THRESHOLD_HIGH);
-    if(AP314AQ_ALGO_TYPE == 1){
-	value_l = AP314AQ_PS_THRESHOLD_LOW + bias;
-	value_h = AP314AQ_PS_THRESHOLD_HIGH + bias;
-    }
-    else if (AP314AQ_ALGO_TYPE == 2 && n2f > 0){
-	value_l = n2f;
-	value_h = AP314AQ_PS_THRESHOLD_HIGH;
+    if (n2f > 0 && n2f < AP314AQ_PS_THRESHOLD_LOW){
+	value_l = n2f/AP314AQ_PS_CAL_GAIN;
     }
     else{
-	value_l = AP314AQ_PS_THRESHOLD_LOW;
-	value_h = AP314AQ_PS_THRESHOLD_HIGH;
+	value_l = AP314AQ_PS_THRESHOLD_LOW/AP314AQ_PS_CAL_GAIN;
     }
-    if (value_l > min_limit)
-	value_l = min_limit;
-    if (value_h > max_limit)
-	value_h = max_limit;
+    value_h = AP314AQ_PS_THRESHOLD_HIGH;
 
     ap314aq_set_plthres(client, value_l);
     ap314aq_set_phthres(client, value_h);
-    LDBG("ALGO_TYPE = %d, plthres = %d, phthres = %d\n", AP314AQ_ALGO_TYPE, value_l, value_h);
+    LDBG("Complete to set plthres = %d, phthres = %d\n", value_l, value_h);
 
     return 0;
 }
@@ -340,8 +329,12 @@ static int ap314aq_ps_enable(struct ap314aq_data *ps_data,int enable)
 #ifdef AP314AQ_DEBUG_MORE
      LDBG("%s, misc_ps_opened = %d, enable= %d \n", __func__, misc_ps_opened, enable);
 #endif
-    if(misc_ps_opened == enable)
-                return 0;
+    if(misc_ps_opened == enable){
+	if(enable)
+		queue_work(ps_data->psensor_wq, &ps_data->psensor_work);
+	return 0;
+    }
+
     if(enable && !(ps_data->load_cal))
     {
 	ap314aq_set_ps_thres(ps_data->client);
@@ -723,16 +716,14 @@ static ssize_t ap314aq_show_ping(struct device *dev,
 {
     struct input_dev *input = to_input_dev(dev);
     struct ap314aq_data *data = input_get_drvdata(input);
-    int val,bias,n2f,pass;
+    int val,pass;
 
-    bias = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_BIAS_PATH);
-    n2f = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_N2F_PATH);
-    val = ap314aq_get_plthres(data->client);
-    if(val==AP314AQ_PS_THRESHOLD_LOW || val==(AP314AQ_PS_THRESHOLD_LOW+bias) || (val==n2f && n2f>0) )
+    val = ap314aq_get_phthres(data->client);
+    if(val == AP314AQ_PS_THRESHOLD_HIGH)
 	pass=1;
     else
 	pass=0;
-    LDBG("val=%d, PS_THRESHOLD_LOW=%d, bias=%d, n2f=%d : pass=%d\n",val,AP314AQ_PS_THRESHOLD_LOW,bias,n2f,pass);
+    LDBG("val=%d, PS_THRESHOLD_HIGH=%d : pass=%d\n",val,AP314AQ_PS_THRESHOLD_HIGH,pass);
 
     return sprintf(buf, "Ping : %d\n",pass );
 }
@@ -1060,6 +1051,8 @@ static int ap314aq_init_client(struct i2c_client *client)
     i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_INTCTRL,AP314AQ_SYS_PS_INT_ENABLE);
 		/*Set wait time*/
     i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_WAITTIME,AP314AQ_WAITING_TIME);
+		/*Set p-sensor gain*/
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_PS_CONF,AP314AQ_PS_GAIN_1);
 		/*lsensor high low thread*/
     i2c_smbus_write_byte_data(client, AP314AQ_REG_ALS_THDL_L, 0);
     i2c_smbus_write_byte_data(client, AP314AQ_REG_ALS_THDL_H, 0);
