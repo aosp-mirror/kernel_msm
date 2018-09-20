@@ -368,28 +368,67 @@ static int smblib_set_opt_freq_buck(struct smb_charger *chg, int fsw_khz)
 
 #define NORMAL_TEMP 420
 #define OVERHEAT_TEMP 450
-static int batt_temp = 0;
-static bool wpc_enabled = 1;
-static bool therm_work_ongoing = 0;
+static int batt_temp;
+static bool wpc_normal_thermal;
+static bool wpc_reset_done;
+static bool therm_work_ongoing;
+static bool wpc_enable;
+static int boot_count;
+
+void smblib_set_WPC_enable(struct smb_charger *chg)
+{
+	if (!wpc_normal_thermal || !wpc_reset_done) {
+		if (wpc_enable) {
+			gpio_set_value(chg->wpc_en_gpio, 1);
+			wpc_enable = 0;
+			pr_info("smblib_set_wpc_enable: disable WPC\n");
+		}
+	} else {
+		if (!wpc_enable) {
+			gpio_set_value(chg->wpc_en_gpio, 0);
+			wpc_enable = 1;
+			pr_info("smblib_set_wpc_enable: enable WPC\n");
+		}
+	}
+}
+
+static void smblib_wpc_enable_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+							wpc_enable_work.work);
+
+	if (boot_count < 10) {
+		boot_count++;
+		schedule_delayed_work(&chg->wpc_enable_work,
+				msecs_to_jiffies(2000));
+	} else {
+		if (wpc_reset_done) {
+			wpc_reset_done = 0;
+			smblib_set_WPC_enable(chg);
+			schedule_delayed_work(&chg->wpc_enable_work,
+					msecs_to_jiffies(1000));
+		} else {
+			wpc_reset_done = 1;
+			smblib_set_WPC_enable(chg);
+		}
+	}
+}
+
 static void smblib_vbatt_therm_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
 							vbatt_therm_work.work);
 
-	if (batt_temp >= OVERHEAT_TEMP && wpc_enabled) {
-		if (gpio_is_valid(chg->wpc_en_gpio)) {
-			gpio_set_value(chg->wpc_en_gpio, 1);
-			wpc_enabled = 0;
-			pr_info("smblib_vbatt_therm_work: disable WPC \n");
-		}
-	} else if (batt_temp <= NORMAL_TEMP && !wpc_enabled) {
-		if (gpio_is_valid(chg->wpc_en_gpio)) {
-			gpio_set_value(chg->wpc_en_gpio, 0);
-			wpc_enabled = 1;
-			pr_info("smblib_vbatt_therm_work: enable WPC \n");
-			therm_work_ongoing = 0;
-			return;
-		}
+	if (batt_temp >= OVERHEAT_TEMP && wpc_normal_thermal) {
+		wpc_normal_thermal = 0;
+		pr_info("smblib_vbatt_therm_work: disable WPC\n");
+		smblib_set_WPC_enable(chg);
+	} else if (batt_temp <= NORMAL_TEMP && !wpc_normal_thermal) {
+		wpc_normal_thermal = 1;
+		therm_work_ongoing = 0;
+		pr_info("smblib_vbatt_therm_work: enable WPC\n");
+		smblib_set_WPC_enable(chg);
+		return;
 	}
 	schedule_delayed_work(&chg->vbatt_therm_work, msecs_to_jiffies(20000));
 }
@@ -401,8 +440,8 @@ int smblib_set_charge_param(struct smb_charger *chg,
 	u8 val_raw;
 
 	if (!strcmp(param->name,"usb input current limit")) {
-		pr_info("smblib_set_charge_param: set usb input current to 500mA \n");
-		val_u = 500000;
+		pr_info("smblib_set_charge_param: set usb input current to 300mA\n");
+		val_u = 300000;
 	}
 
 	if (param->set_proc) {
@@ -1610,6 +1649,14 @@ int smblib_debug_info(struct smb_charger *chg)
 	smblib_err(chg, "RR_THERM_STS:0x%x, STS_avail:%d, skin_temp_too_hot:%d, skin_temp_hot:%d \n", data1, (data1&0x40)>>6, (data1&0x20)>>5, (data1&0x10)>>4);
 */
 	return rc;
+}
+
+static void smblib_alg_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+							alg_work.work);
+
+	smblib_set_charge_param(chg, &chg->param.fcc, 125000);
 }
 
 int smblib_get_prop_batt_capacity(struct smb_charger *chg,
@@ -3361,7 +3408,11 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 						chg->chg_freq.freq_removal);
 
 	if (vbus_rising) {
-		power_supply_set_present(chg->usb_psy, true);
+		if (boot_count > 9 && wpc_reset_done)
+			cancel_delayed_work(&chg->wpc_enable_work);
+
+//		power_supply_set_present(chg->usb_psy, true);
+		schedule_delayed_work(&chg->alg_work, msecs_to_jiffies(33000));
 		/* vote to the USB stack to float DP_DM before APSD */
 		power_supply_set_dp_dm(chg->usb_psy,
 					POWER_SUPPLY_DP_DM_DPF_DMF);
@@ -3370,7 +3421,15 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 		schedule_delayed_work(&chg->pl_enable_work,
 					msecs_to_jiffies(PL_DELAY_MS));
 	} else {
-		power_supply_set_present(chg->usb_psy, false);
+		cancel_delayed_work(&chg->alg_work);
+		smblib_set_charge_param(chg, &chg->param.fcc, 50000);
+		if (boot_count > 9) {
+			cancel_delayed_work(&chg->wpc_enable_work);
+			schedule_delayed_work(&chg->wpc_enable_work,
+					msecs_to_jiffies(3000));
+		}
+
+//		power_supply_set_present(chg->usb_psy, false);
 		if (chg->wa_flags & BOOST_BACK_WA) {
 			data = chg->irq_info[SWITCH_POWER_OK_IRQ].irq_data;
 			if (data) {
@@ -3646,7 +3705,7 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		 * limit ICL to 100mA, the USB driver will enumerate to check
 		 * if this is a SDP and appropriately set the current
 		 */
-		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 500000);
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 300000);
 		break;
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
@@ -4151,16 +4210,17 @@ irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 			update_storm_count(wdata, BOOST_BACK_STORM_COUNT);
 		} else {
 			smblib_err(chg,
-				"Reverse boost detected: voting 0mA to suspend input\n");
-			vote(chg->usb_icl_votable, BOOST_BACK_VOTER, true, 0);
-			vote(chg->awake_votable, BOOST_BACK_VOTER, true, 0);
+				"Reverse boost detected: voting 100 mA to suspend input\n");
+			vote(chg->usb_icl_votable, BOOST_BACK_VOTER, true,
+					100000);
+//			vote(chg->awake_votable, BOOST_BACK_VOTER, true, 0);
 			/*
 			 * Remove the boost-back vote after a delay, to avoid
 			 * permanently suspending the input if the boost-back
 			 * condition is unintentionally hit.
 			 */
-			schedule_delayed_work(&chg->bb_removal_work,
-				msecs_to_jiffies(BOOST_BACK_UNVOTE_DELAY_MS));
+//			schedule_delayed_work(&chg->bb_removal_work,
+//				msecs_to_jiffies(BOOST_BACK_UNVOTE_DELAY_MS));
 		}
 	}
 
@@ -4792,6 +4852,13 @@ int smblib_init(struct smb_charger *chg)
 {
 	int rc = 0;
 
+	batt_temp = 0;
+	wpc_normal_thermal = 1;
+	wpc_reset_done = 1;
+	therm_work_ongoing = 0;
+	wpc_enable = 1;
+	boot_count = 0;
+
 	mutex_init(&chg->lock);
 	mutex_init(&chg->write_lock);
 	mutex_init(&chg->otg_oc_lock);
@@ -4808,9 +4875,13 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+	INIT_DELAYED_WORK(&chg->alg_work, smblib_alg_work);
 	INIT_DELAYED_WORK(&chg->vbatt_therm_work, smblib_vbatt_therm_work);
+	INIT_DELAYED_WORK(&chg->wpc_enable_work, smblib_wpc_enable_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
+
+	schedule_delayed_work(&chg->wpc_enable_work, msecs_to_jiffies(2000));
 
 	switch (chg->mode) {
 	case PARALLEL_MASTER:

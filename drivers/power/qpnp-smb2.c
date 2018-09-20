@@ -1976,6 +1976,8 @@ static int smb2_probe(struct spmi_device *spmi)
 
 	smb2_create_debugfs(chip);
 
+	smblib_set_charge_param(chg, &chg->param.fcc, 50000);
+
 	rc = smblib_get_prop_batt_present(chg, &val);
 	if (rc < 0) {
 		pr_err("Couldn't get batt present rc=%d\n", rc);

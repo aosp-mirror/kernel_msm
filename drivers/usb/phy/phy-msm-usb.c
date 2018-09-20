@@ -139,6 +139,7 @@ static u32 bus_freqs[USB_NOC_NUM_VOTE][USB_NUM_BUS_CLOCKS]  /*bimc,snoc,pcnoc*/;
 static char bus_clkname[USB_NUM_BUS_CLOCKS][20] = {"bimc_clk", "snoc_clk",
 						"pcnoc_clk"};
 static bool bus_clk_rate_set;
+static int boot_count;
 
 static void dbg_inc(unsigned *idx)
 {
@@ -1934,8 +1935,21 @@ static void msm_fake_online_work(struct work_struct *w)
 {
 	struct msm_otg *motg = container_of(w, struct msm_otg, fake_online_work.work);
 
-	motg->fake_online = 0;
-	power_supply_changed(&motg->usb_psy);
+	if (boot_count < 25) {
+		if (boot_count == 24) {
+			if (motg->fake_online && !motg->online) {
+				schedule_delayed_work(&motg->fake_online_work,
+						msecs_to_jiffies(2500));
+			}
+		} else {
+			schedule_delayed_work(&motg->fake_online_work,
+						msecs_to_jiffies(2500));
+		}
+		boot_count++;
+	} else {
+		motg->fake_online = 0;
+		power_supply_changed(&motg->usb_psy);
+	}
 }
 
 static void msm_otg_start_host(struct usb_otg *otg, int on)
@@ -3591,11 +3605,16 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 	/* The ONLINE property reflects if usb has enumerated */
 	case POWER_SUPPLY_PROP_ONLINE:
 		if (motg->online != val->intval) {
-			cancel_delayed_work_sync(&motg->fake_online_work);
 			motg->fake_online = 1;
 			motg->online = val->intval;
-			if (!val->intval)
-				schedule_delayed_work(&motg->fake_online_work, msecs_to_jiffies(2500));
+			if (boot_count > 24) {
+				cancel_delayed_work_sync(
+						&motg->fake_online_work);
+				if (!val->intval)
+					schedule_delayed_work(
+							&motg->fake_online_work,
+							msecs_to_jiffies(2500));
+			}
 		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
@@ -4780,6 +4799,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 
 	motg->id_state = USB_ID_FLOAT;
 	motg->fake_online = 0;
+	boot_count = 0;
 	set_bit(ID, &motg->inputs);
 	wake_lock_init(&motg->wlock, WAKE_LOCK_SUSPEND, "msm_otg");
 	INIT_WORK(&motg->sm_work, msm_otg_sm_work);
@@ -5051,6 +5071,8 @@ static int msm_otg_probe(struct platform_device *pdev)
 	motg->pm_notify.notifier_call = msm_otg_pm_notify;
 	register_pm_notifier(&motg->pm_notify);
 	msm_otg_dbg_log_event(phy, "OTG PROBE", motg->caps, motg->lpm_flags);
+
+	schedule_delayed_work(&motg->fake_online_work, msecs_to_jiffies(2500));
 
 	return 0;
 
