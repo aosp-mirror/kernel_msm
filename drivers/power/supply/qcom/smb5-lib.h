@@ -588,4 +588,9 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+
+int smblib_get_prop_input_current_max(struct smb_charger *chg,
+				      union power_supply_propval *val);
+int smblib_set_prop_input_current_max(struct smb_charger *chg,
+				      const union power_supply_propval *val);
 #endif /* __SMB5_CHARGER_H */
