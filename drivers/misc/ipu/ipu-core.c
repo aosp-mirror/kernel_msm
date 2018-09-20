@@ -327,9 +327,8 @@ int ipu_bus_initialize(struct device *parent_dev,
 	ret = ipu_core_debug_init(bus);
 	if (ret < 0)
 		return ret;
-
-	ipu_core_jqs_debug_init(bus);
 #endif
+	ipu_core_jqs_debug_init(bus);
 
 	ret = ipu_core_jqs_enable_firmware(bus);
 	if (ret < 0) {
@@ -359,8 +358,8 @@ void ipu_bus_deinitialize(struct paintbox_bus *bus)
 
 	ipu_core_jqs_release(bus);
 
-#if IS_ENABLED(CONFIG_IPU_DEBUG)
 	ipu_core_jqs_debug_remove(bus);
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
 	debugfs_remove(bus->debug_root);
 #endif
 

@@ -80,7 +80,38 @@ static int ipu_core_jqs_send_set_log_info(struct paintbox_bus *bus,
 			(const struct jqs_message *)&req);
 }
 
-static int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
+int ipu_core_jqs_load_firmware(struct paintbox_bus *bus)
+{
+	int ret;
+
+	dev_dbg(bus->parent_dev, "requesting firmware %s\n", JQS_FIRMWARE_NAME);
+
+	ret = request_firmware(&bus->fw, JQS_FIRMWARE_NAME, bus->parent_dev);
+	if (ret < 0) {
+		dev_err(bus->parent_dev, "%s: unable to load %s, %d\n",
+				__func__, JQS_FIRMWARE_NAME, ret);
+		return ret;
+	}
+
+	bus->fw_status = JQS_FW_STATUS_REQUESTED;
+
+	return 0;
+}
+
+void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus)
+{
+	if (bus->fw_status != JQS_FW_STATUS_REQUESTED)
+		return;
+
+	dev_dbg(bus->parent_dev, "%s: unloading firmware\n", __func__);
+
+	release_firmware(bus->fw);
+
+	bus->fw = NULL;
+	bus->fw_status = JQS_FW_STATUS_INIT;
+}
+
+int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 {
 	struct jqs_firmware_preamble preamble;
 	size_t fw_binary_len_bytes;
@@ -125,12 +156,25 @@ static int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	bus->ops->sync(bus->parent_dev, &bus->fw_shared_buffer, 0,
 			fw_binary_len_bytes, DMA_TO_DEVICE);
 
-	bus->fw_status = JQS_FW_STATUS_RAM_STAGED;
+	bus->fw_status = JQS_FW_STATUS_STAGED;
 
 	return 0;
 }
 
-static void ipu_core_jqs_start_firmware(struct paintbox_bus *bus,
+void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
+{
+	if (bus->fw_status != JQS_FW_STATUS_STAGED)
+		return;
+
+	dev_dbg(bus->parent_dev, "%s: unstaging firmware\n", __func__);
+
+	bus->ops->free(bus->parent_dev, &bus->fw_shared_buffer);
+	memset(&bus->fw_shared_buffer, 0,
+			sizeof(struct paintbox_shared_buffer));
+	bus->fw_status = JQS_FW_STATUS_REQUESTED;
+}
+
+static void ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 		dma_addr_t boot_ab_paddr, dma_addr_t smem_ab_paddr)
 {
 	/* The Airbrush IPU needs to be put in reset before turning on the
@@ -186,27 +230,17 @@ static void ipu_core_jqs_start_firmware(struct paintbox_bus *bus,
 			IPU_CSR_AON_OFFSET + JQS_CONTROL);
 }
 
-static void ipu_core_jqs_start_rom_firmware(struct paintbox_bus *bus)
-{
-	dev_dbg(bus->parent_dev, "enabling ROM firmware\n");
-	ipu_core_jqs_start_firmware(bus, JQS_BOOT_ADDR_DEF, 0);
-	bus->fw_status = JQS_FW_STATUS_ROM_RUNNING;
-
-	/* Notify paintbox devices that the firmware is up */
-	ipu_core_notify_firmware_up(bus);
-}
-
-static int ipu_core_jqs_start_ram_firmware(struct paintbox_bus *bus)
+static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 {
 	int ret;
 
-	dev_dbg(bus->parent_dev, "enabling RAM firmware\n");
+	dev_dbg(bus->parent_dev, "%s: enabling firmware\n", __func__);
 
 	ret = ipu_core_jqs_msg_transport_init(bus);
 	if (ret < 0)
 		return ret;
 
-	ipu_core_jqs_start_firmware(bus, bus->fw_shared_buffer.jqs_paddr,
+	ipu_core_jqs_power_enable(bus, bus->fw_shared_buffer.jqs_paddr,
 			bus->jqs_msg_transport->shared_buf.jqs_paddr);
 
 	ret = ipu_core_jqs_send_clock_rate(bus, A0_IPU_DEFAULT_CLOCK_RATE);
@@ -218,7 +252,7 @@ static int ipu_core_jqs_start_ram_firmware(struct paintbox_bus *bus)
 	if (ret < 0)
 		return ret;
 
-	bus->fw_status = JQS_FW_STATUS_RAM_RUNNING;
+	bus->fw_status = JQS_FW_STATUS_RUNNING;
 
 	/* Notify paintbox devices that the firmware is up */
 	ipu_core_notify_firmware_up(bus);
@@ -226,84 +260,53 @@ static int ipu_core_jqs_start_ram_firmware(struct paintbox_bus *bus)
 	return 0;
 }
 
-static void ipu_core_jqs_release_resources(struct paintbox_bus *bus)
-{
-	bus->ops->free(bus->parent_dev, &bus->fw_shared_buffer);
-	if (bus->fw) {
-		release_firmware(bus->fw);
-		bus->fw = NULL;
-	}
-}
-
 int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 {
 	int ret;
 
-	/* Firmware status will be set to INIT at boot or if Airbursh has been
-	 * turned off while running the ROM based firmware.  RAM based firmware
-	 * only needs to be requested once at boot.
+	/* Firmware status will be set to INIT at boot or if the driver is
+	 * unloaded and reloaded (likely due to a PCIe link change).
 	 */
 	if (bus->fw_status == JQS_FW_STATUS_INIT) {
-		dev_dbg(bus->parent_dev, "requesting firmware %s\n",
-				JQS_FIRMWARE_NAME);
-		ret = request_firmware(&bus->fw, JQS_FIRMWARE_NAME,
-				bus->parent_dev);
-		if (ret < 0) {
-			dev_warn(bus->parent_dev,
-					"unable to load %s, defaulting to ROM based firmware, ret %d\n",
-				JQS_FIRMWARE_NAME, ret);
-			goto reset_to_rom;
-		}
-
-		bus->fw_status = JQS_FW_STATUS_RAM_REQUESTED;
+		ret = ipu_core_jqs_load_firmware(bus);
+		if (ret < 0)
+			return ret;
 	}
 
 	/* If the firmware is in the requested state then stage it to DRAM.
 	 * Firmware status will return this state whenever Airbrush transitions
 	 * to the OFF state.
 	 */
-	if (bus->fw_status == JQS_FW_STATUS_RAM_REQUESTED) {
+	if (bus->fw_status == JQS_FW_STATUS_REQUESTED) {
 		ret = ipu_core_jqs_stage_firmware(bus);
 		if (ret < 0)
-			goto reset_to_rom;
+			return ret;
 	}
 
 	/* If the firmware has been staged then enable the firmware.  Firmware
 	 * status will return to this state for all suspend and sleep states
 	 * with the exception of OFF.
 	 */
-	if (bus->fw_status == JQS_FW_STATUS_RAM_STAGED) {
-		ret = ipu_core_jqs_start_ram_firmware(bus);
+	if (bus->fw_status == JQS_FW_STATUS_STAGED) {
+		ret = ipu_core_jqs_start_firmware(bus);
 		if (ret < 0)
-			goto reset_to_rom;
+			return ret;
 	}
 
-	return 0;
-
-reset_to_rom:
-	ipu_core_jqs_release_resources(bus);
-	ipu_core_jqs_start_rom_firmware(bus);
 	return 0;
 }
 
 void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 {
+	if (bus->fw_status != JQS_FW_STATUS_RUNNING)
+		return;
+
+	dev_dbg(bus->parent_dev, "%s: disabling firmware\n", __func__);
+
 	/* Notify paintbox devices that the firmware is down */
 	ipu_core_notify_firmware_down(bus);
 
-	switch (bus->fw_status) {
-	case JQS_FW_STATUS_RAM_RUNNING:
-		dev_dbg(bus->parent_dev, "disabling RAM based firmware\n");
-		ipu_core_jqs_msg_transport_shutdown(bus);
-		bus->fw_status = JQS_FW_STATUS_RAM_STAGED;
-		break;
-	case JQS_FW_STATUS_ROM_RUNNING:
-		dev_dbg(bus->parent_dev, "disabling ROM based firmware\n");
-		bus->fw_status = JQS_FW_STATUS_INIT;
-		break;
-	default:
-		return;
-	};
+	ipu_core_jqs_msg_transport_shutdown(bus);
 
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
 
@@ -331,13 +334,15 @@ void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 	ipu_core_writeq(bus, IO_POWER_ON_N_PRE_MASK |
 			IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
 			IO_POWER_ON_N);
+
+	bus->fw_status = JQS_FW_STATUS_STAGED;
 }
 
 void ipu_core_jqs_release(struct paintbox_bus *bus)
 {
 	ipu_core_jqs_disable_firmware(bus);
-
-	ipu_core_jqs_release_resources(bus);
+	ipu_core_jqs_unstage_firmware(bus);
+	ipu_core_jqs_unload_firmware(bus);
 }
 
 enum paintbox_jqs_status ipu_bus_get_fw_status(struct paintbox_bus *bus)

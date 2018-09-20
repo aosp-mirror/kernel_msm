@@ -116,6 +116,7 @@ struct paintbox_bus {
 	struct iommu_group *group;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 	struct dentry *debug_root;
+	struct dentry *fw_state_dentry;
 #endif
 	enum paintbox_jqs_status fw_status;
 
@@ -123,11 +124,6 @@ struct paintbox_bus {
 	struct paintbox_shared_buffer fw_shared_buffer;
 	struct paintbox_jqs_msg_transport *jqs_msg_transport;
 	spinlock_t irq_lock;
-
-#if IS_ENABLED(CONFIG_IPU_DEBUG)
-	struct dentry *fw_enable_dentry;
-	struct dentry *fw_enq_dentry;
-#endif
 };
 
 struct paintbox_device {

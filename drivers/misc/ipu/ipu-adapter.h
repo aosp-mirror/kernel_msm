@@ -35,10 +35,9 @@ enum paintbox_device_type {
 
 enum paintbox_jqs_status {
 	JQS_FW_STATUS_INIT = 0,
-	JQS_FW_STATUS_ROM_RUNNING,
-	JQS_FW_STATUS_RAM_REQUESTED,
-	JQS_FW_STATUS_RAM_STAGED,
-	JQS_FW_STATUS_RAM_RUNNING
+	JQS_FW_STATUS_REQUESTED,
+	JQS_FW_STATUS_STAGED,
+	JQS_FW_STATUS_RUNNING
 };
 
 /* Interface between the common paintbox bus layer and bus implementation layer.
