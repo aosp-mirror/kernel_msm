@@ -150,6 +150,7 @@ struct spi_geni_master {
 	void *ipc;
 	bool shared_se;
 	bool dis_autosuspend;
+	bool pinctrl_sleep_at_probe;
 	bool cmd_done;
 };
 
@@ -757,7 +758,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 
 	/* Adjust the IB based on the max speed of the slave.*/
 	rsc->ib = max_speed * DEFAULT_BUS_WIDTH;
-	if (mas->shared_se) {
+	if (mas->shared_se || mas->pinctrl_sleep_at_probe) {
 		struct se_geni_rsc *rsc;
 		int ret = 0;
 
@@ -1494,6 +1495,19 @@ static int spi_geni_probe(struct platform_device *pdev)
 	init_completion(&geni_mas->xfer_done);
 	init_completion(&geni_mas->tx_cb);
 	init_completion(&geni_mas->rx_cb);
+
+	/* Set the pinctrl state to sleep.  Pinctrl will be set to active in
+	 * spi_geni_prepare_transfer_hardware.
+	 */
+	ret = pinctrl_select_state(rsc->geni_pinctrl, rsc->geni_gpio_sleep);
+	if (ret) {
+		dev_err(&pdev->dev, "pinctrl_select_state failed err:%d\n",
+				ret);
+		goto spi_geni_probe_unmap;
+	}
+
+	geni_mas->pinctrl_sleep_at_probe = true;
+
 	pm_runtime_set_suspended(&pdev->dev);
 	if (!geni_mas->dis_autosuspend) {
 		pm_runtime_set_autosuspend_delay(&pdev->dev,
@@ -1501,6 +1515,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 		pm_runtime_use_autosuspend(&pdev->dev);
 	}
 	pm_runtime_enable(&pdev->dev);
+
 	ret = spi_register_master(spi);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register SPI master\n");
