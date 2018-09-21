@@ -14,3 +14,4 @@
 #include "sm8150-flame-audio.dtsi"
 #include "sm8150-flame-battery.dtsi"
 #include "sm8150-flame-camera-sensor.dtsi"
+#include "sm8150-coral-display.dtsi"
