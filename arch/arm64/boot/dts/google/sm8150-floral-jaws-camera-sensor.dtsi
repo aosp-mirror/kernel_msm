@@ -404,6 +404,8 @@
 		cell-index = <0>;
 		compatible = "qcom,cam-sensor";
 		reg = <0x0>;
+		override-slave-addr = <0x34>;
+		override-sensor-id = <0x333>;
 		csiphy-sd-index = <0>;
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
@@ -451,6 +453,7 @@
 		cell-index = <1>;
 		compatible = "qcom,cam-sensor";
 		reg = <0x1>;
+		override-slave-addr = <0x20>;
 		csiphy-sd-index = <1>;
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
