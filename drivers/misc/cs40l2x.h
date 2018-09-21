@@ -766,7 +766,6 @@
 #define CS40L2X_FALSEI2CTIMEOUT_MIN	10
 #define CS40L2X_FALSEI2CTIMEOUT_MAX	500
 
-#define CS40L2X_HALO_STATE_RUNNING	0x2
 #define CS40L2X_STATUS_IDLE		0xFFFFFF
 
 #define CS40L2X_MBOX_TRIGGERINDEX	CS40L2X_DSP_VIRT1_MBOX_1
@@ -1006,6 +1005,7 @@ struct cs40l2x_wseq_pair {
 struct cs40l2x_fw_desc {
 	unsigned int id;
 	unsigned int min_rev;
+	unsigned int halo_state_run;
 	unsigned int num_coeff_files;
 	const char * const *coeff_files;
 	const char *fw_file;

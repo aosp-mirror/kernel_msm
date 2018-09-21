@@ -3801,7 +3801,7 @@ static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 
-		if (val == CS40L2X_HALO_STATE_RUNNING)
+		if (val == cs40l2x->fw_desc->halo_state_run)
 			break;
 
 		dsp_timeout--;
