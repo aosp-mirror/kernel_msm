@@ -315,6 +315,11 @@ struct cam_camera_slave_info {
 	uint16_t sensor_id_mask;
 };
 
+struct cam_sensor_override_info {
+	uint16_t sensor_slave_addr;
+	uint16_t sensor_id;
+};
+
 struct msm_sensor_init_params {
 	int modes_supported;
 	unsigned int sensor_mount_angle;

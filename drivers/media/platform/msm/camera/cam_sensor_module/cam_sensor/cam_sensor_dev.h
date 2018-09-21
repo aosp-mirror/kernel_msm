@@ -118,6 +118,7 @@ struct cam_sensor_ctrl_t {
 	uint32_t streamoff_count;
 	int bob_reg_index;
 	bool bob_pwm_switch;
+	struct cam_sensor_override_info override_info;
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */

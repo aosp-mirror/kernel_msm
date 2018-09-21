@@ -276,6 +276,9 @@ static int32_t cam_sensor_driver_platform_probe(
 	s_ctrl->of_node = pdev->dev.of_node;
 	s_ctrl->is_probe_succeed = 0;
 
+	s_ctrl->override_info.sensor_slave_addr = 0;
+	s_ctrl->override_info.sensor_id = 0;
+
 	/*fill in platform device*/
 	s_ctrl->pdev = pdev;
 

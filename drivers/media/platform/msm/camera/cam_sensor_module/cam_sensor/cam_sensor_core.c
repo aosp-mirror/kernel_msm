@@ -320,6 +320,15 @@ int32_t cam_sensor_update_i2c_info(struct cam_cmd_i2c_info *i2c_info,
 			return -EINVAL;
 		}
 		cci_client->cci_i2c_master = s_ctrl->cci_i2c_master;
+
+		if (s_ctrl->override_info.sensor_slave_addr) {
+			CAM_INFO(CAM_SENSOR, "slave_addr > ori: 0x%x new: 0x%x",
+				i2c_info->slave_addr,
+				s_ctrl->override_info.sensor_slave_addr);
+			i2c_info->slave_addr =
+				s_ctrl->override_info.sensor_slave_addr;
+		}
+
 		cci_client->sid = i2c_info->slave_addr >> 1;
 		cci_client->retries = 3;
 		cci_client->id_map = 0;
@@ -341,6 +350,14 @@ int32_t cam_sensor_update_slave_info(struct cam_cmd_probe *probe_info,
 
 	s_ctrl->sensordata->slave_info.sensor_id_reg_addr =
 		probe_info->reg_addr;
+
+	if (s_ctrl->override_info.sensor_id) {
+		CAM_INFO(CAM_SENSOR, "sensor_id > ori: 0x%x new: 0x%x",
+			probe_info->expected_data,
+			s_ctrl->override_info.sensor_id);
+		probe_info->expected_data = s_ctrl->override_info.sensor_id;
+	}
+
 	s_ctrl->sensordata->slave_info.sensor_id =
 		probe_info->expected_data;
 	s_ctrl->sensordata->slave_info.sensor_id_mask =
