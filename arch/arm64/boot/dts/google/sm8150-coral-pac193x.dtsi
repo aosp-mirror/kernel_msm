@@ -22,12 +22,14 @@
 		ch1: channel@0 {
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PPVAR_VPH_PWR_OLED";
+		     subsys-name = "display";
 		     channel_enabled;
 		};
 
 		ch2: channel@1 {
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PPVAR_VPH_PWR_WIFI";
+		     subsys-name = "wifi";
 		     channel_enabled;
 		};
 
@@ -35,12 +37,14 @@
 		     bi-dir;
 		     uohms-shunt-res = <100000>;
 		     rail-name = "PP3300_L11C_WIFI";
+		     subsys-name = "wifi";
 		     channel_enabled;
 		};
 
 		ch4: channel@3 {
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PP3000_L10C_WIFI";
+		     subsys-name = "wifi";
 		     channel_enabled;
 		};
 	};
@@ -58,12 +62,14 @@
 		ch5: channel@0 {
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PPVAR_VPH_PWR_RF";
+		     subsys-name = "cellular";
 		     channel_enabled;
 		};
 
 		ch6: channel@1 {
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PP1700_L15A_MODEM";
+		     subsys-name = "cellular";
 		     channel_enabled;
 		};
 
@@ -71,12 +77,14 @@
 		     bi-dir;
 		     uohms-shunt-res = <100000>;
 		     rail-name = "PP800_L11A_MODEM";
+		     subsys-name = "cellular";
 		     channel_enabled;
 		};
 
 		ch8: channel@3 {
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PP1200_L6A_MODEM";
+		     subsys-name = "cellular";
 		     channel_enabled;
 		};
 	};
