@@ -148,10 +148,13 @@ void ipu_adapter_ab_mfd_free(struct device *dev,
 {
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
 
-	ab_dram_free_dma_buf_kernel(shared_buffer->ab_dram_dma_buf);
-	dma_free_coherent(dev_data->dma_dev, shared_buffer->size,
-			shared_buffer->host_vaddr,
-			shared_buffer->host_dma_addr);
+	if (shared_buffer->ab_dram_dma_buf)
+		ab_dram_free_dma_buf_kernel(shared_buffer->ab_dram_dma_buf);
+
+	if (shared_buffer->host_vaddr)
+		dma_free_coherent(dev_data->dma_dev, shared_buffer->size,
+				shared_buffer->host_vaddr,
+				shared_buffer->host_dma_addr);
 }
 
 static struct device *ipu_adapter_ab_mfd_get_dma_device(struct device *dev)

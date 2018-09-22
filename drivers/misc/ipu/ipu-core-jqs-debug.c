@@ -35,15 +35,23 @@ static int ipu_core_jqs_fw_state_set(void *data, u64 val)
 
 	/* Check if a higher readiness state was requested. */
 	while (val > bus->fw_status) {
+		int ret;
+
 		switch (bus->fw_status) {
 		case JQS_FW_STATUS_INIT:
-			ipu_core_jqs_load_firmware(bus);
+			ret = ipu_core_jqs_load_firmware(bus);
+			if (ret < 0)
+				return ret;
 			break;
 		case JQS_FW_STATUS_REQUESTED:
-			ipu_core_jqs_stage_firmware(bus);
+			ret = ipu_core_jqs_stage_firmware(bus);
+			if (ret < 0)
+				return ret;
 			break;
 		case JQS_FW_STATUS_STAGED:
-			ipu_core_jqs_enable_firmware(bus);
+			ret = ipu_core_jqs_enable_firmware(bus);
+			if (ret < 0)
+				return ret;
 			break;
 		case JQS_FW_STATUS_RUNNING:
 			return 0;

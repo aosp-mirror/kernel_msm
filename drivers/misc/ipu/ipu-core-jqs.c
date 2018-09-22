@@ -105,9 +105,11 @@ void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus)
 
 	dev_dbg(bus->parent_dev, "%s: unloading firmware\n", __func__);
 
-	release_firmware(bus->fw);
+	if (bus->fw) {
+		release_firmware(bus->fw);
+		bus->fw = NULL;
+	}
 
-	bus->fw = NULL;
 	bus->fw_status = JQS_FW_STATUS_INIT;
 }
 
@@ -116,6 +118,9 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	struct jqs_firmware_preamble preamble;
 	size_t fw_binary_len_bytes;
 	int ret;
+
+	if (WARN_ON(!bus->fw))
+		return -EINVAL;
 
 	memcpy(&preamble, bus->fw->data, min(sizeof(preamble), bus->fw->size));
 
@@ -168,9 +173,7 @@ void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
 
 	dev_dbg(bus->parent_dev, "%s: unstaging firmware\n", __func__);
 
-	bus->ops->free(bus->parent_dev, &bus->fw_shared_buffer);
-	memset(&bus->fw_shared_buffer, 0,
-			sizeof(struct paintbox_shared_buffer));
+	ipu_core_memory_free(bus, &bus->fw_shared_buffer);
 	bus->fw_status = JQS_FW_STATUS_REQUESTED;
 }
 
@@ -260,6 +263,16 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 	return 0;
 }
 
+static void ipu_core_jqs_start_rom_firmware(struct paintbox_bus *bus)
+{
+	dev_dbg(bus->parent_dev, "enabling ROM firmware\n");
+	ipu_core_jqs_power_enable(bus, JQS_BOOT_ADDR_DEF, 0);
+	bus->fw_status = JQS_FW_STATUS_RUNNING;
+
+	/* Notify paintbox devices that the firmware is up */
+	ipu_core_notify_firmware_up(bus);
+}
+
 int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 {
 	int ret;
@@ -270,7 +283,7 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	if (bus->fw_status == JQS_FW_STATUS_INIT) {
 		ret = ipu_core_jqs_load_firmware(bus);
 		if (ret < 0)
-			return ret;
+			goto start_rom_firmware;
 	}
 
 	/* If the firmware is in the requested state then stage it to DRAM.
@@ -280,7 +293,7 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	if (bus->fw_status == JQS_FW_STATUS_REQUESTED) {
 		ret = ipu_core_jqs_stage_firmware(bus);
 		if (ret < 0)
-			return ret;
+			goto unload_firmware;
 	}
 
 	/* If the firmware has been staged then enable the firmware.  Firmware
@@ -290,9 +303,17 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	if (bus->fw_status == JQS_FW_STATUS_STAGED) {
 		ret = ipu_core_jqs_start_firmware(bus);
 		if (ret < 0)
-			return ret;
+			goto unstage_firmware;
 	}
 
+	return 0;
+
+unstage_firmware:
+	ipu_core_jqs_unstage_firmware(bus);
+unload_firmware:
+	ipu_core_jqs_unload_firmware(bus);
+start_rom_firmware:
+	ipu_core_jqs_start_rom_firmware(bus);
 	return 0;
 }
 

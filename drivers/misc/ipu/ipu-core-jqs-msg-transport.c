@@ -458,6 +458,9 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 
+	if (!trans)
+		return;
+
 	ipu_core_memory_free(bus, &trans->shared_buf);
 	kfree(bus->jqs_msg_transport);
 
