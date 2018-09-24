@@ -84,9 +84,26 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	if (ret)
 		return ret;
 
+	ab_disable_pgood(ab_ctx);
+
 	ret = ab_pmic_on(ab_ctx);
 	if (ret)
 		return ret;
+
+	if (patch_fw) {
+		gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_ENABLE);
+
+		fw_status = request_firmware(&fw_entry, M0_FIRMWARE_PATH1, ab_ctx->dev);
+		if (fw_status != 0) {
+			pr_info("Airbrush Firmware Not Found: %d, %d\n", fw_status,
+					__LINE__);
+			return -EIO;
+		}
+		image_size_dw = fw_entry->size / 4;
+		image_dw_buf = vmalloc(image_size_dw * sizeof(uint32_t));
+		parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
+		release_firmware(fw_entry);
+	}
 
 	ab_enable_pgood(ab_ctx);
 
@@ -98,16 +115,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		}
 	}
 
-	fw_status = request_firmware(&fw_entry, M0_FIRMWARE_PATH1, ab_ctx->dev);
-	if (fw_status != 0) {
-		pr_info("Airbrush Firmware Not Found: %d, %d\n", fw_status,
-				__LINE__);
-		return -EIO;
-	}
-	image_size_dw = fw_entry->size / 4;
-	image_dw_buf = vmalloc(image_size_dw * sizeof(uint32_t));
-	parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
-	release_firmware(fw_entry);
 	/* [TBD] Get the current state of CLK_IN, DDR_SR GPIOs */
 
 	/* [TBD] until DDR is not integrated, use the hard-coded values */
@@ -118,8 +125,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	state_suspend = (gpio_clk_in == 0) && (gpio_ddr_sr == 1);
 	state_sleep   = (gpio_clk_in == 1) && (gpio_ddr_sr == 1);
 
-	if (patch_fw)
-		gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_ENABLE);
 
 	/* From sleep/suspend to active, perform DDR Pad Isolation
 	 * deassertion
@@ -260,21 +265,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		/* [TBD] Keeping some delay to have ABC and HOST PCIe
 		 * linkup completed.
 		 */
-		msleep(5);
-		/* PCIE Enumeration should be called here */
-		pci_lock_rescan_remove();
-		pci_stop_and_remove_bus_device(pdev);
-		pci_unlock_rescan_remove();
-		udelay(100);
-		pci_lock_rescan_remove();
-		ret = pci_rescan_bus(pbus);
-		pci_unlock_rescan_remove();
-
-		if (!abc_pcie_enumerated()) {
-			dev_err(&plat_dev->dev, "ABC PCIe Not Enumerated\n");
-			return -ENODEV;
-		}
-
 	}
     /* [TBD] DDR Related code will be added later */
 
