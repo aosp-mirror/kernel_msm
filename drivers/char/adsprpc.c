@@ -2207,8 +2207,9 @@ static int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		if (err)
 			goto bail;
 		map->raddr = raddr;
-
- bail:
+	}
+	ud->vaddrout = raddr;
+  bail:
 	if (err && map)
 		fastrpc_mmap_free(map);
 	mutex_unlock(&fl->map_mutex);
