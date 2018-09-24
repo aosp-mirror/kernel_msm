@@ -113,9 +113,6 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 				goto fail_regulator_disable;
 		break;
 	case DRAM:
-		if (regulator_is_enabled(sc->ldo2))
-			if (regulator_disable(sc->ldo2))
-				goto fail_regulator_disable;
 		break;
 
 	case BLK_MIF:
