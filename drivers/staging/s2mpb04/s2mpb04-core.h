@@ -177,7 +177,7 @@ struct s2mpb04_core {
 /* platform data structure */
 struct s2mpb04_platform_data {
 	int pon_gpio;
-	int resetb_gpio;
+	int pmic_ready_gpio;
 	int intb_gpio;
 	unsigned int resetb_irq;
 	unsigned int intb_irq;

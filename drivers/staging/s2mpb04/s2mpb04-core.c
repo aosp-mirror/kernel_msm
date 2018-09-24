@@ -112,7 +112,7 @@ EXPORT_SYMBOL_GPL(s2mpb04_dump_regs);
 static inline bool s2mpb04_is_ready(struct s2mpb04_core *ddata)
 {
 #if 0
-	return (gpio_get_value(ddata->pdata->resetb_gpio) == 1);
+	return (gpio_get_value(ddata->pdata->pmic_ready_gpio) == 1);
 #else
 	return true;
 #endif
@@ -374,9 +374,9 @@ static struct s2mpb04_platform_data *s2mpb04_get_platform_data_from_dt
 		return ERR_PTR(-ENOMEM);
 
 	pdata->pon_gpio = of_get_named_gpio(np, "samsung,pon-gpio", 0);
-	pdata->resetb_gpio = of_get_named_gpio(np, "samsung,resetb-gpio", 0);
+	pdata->pmic_ready_gpio = of_get_named_gpio(np, "samsung,pmic-ready-gpio", 0);
 	pdata->intb_gpio = of_get_named_gpio(np, "samsung,intb-gpio", 0);
-	pdata->resetb_irq = gpio_to_irq(pdata->resetb_gpio);
+	pdata->resetb_irq = gpio_to_irq(pdata->pmic_ready_gpio);
 	pdata->intb_irq = gpio_to_irq(pdata->intb_gpio);
 
 	return pdata;
@@ -461,8 +461,8 @@ static int s2mpb04_probe(struct i2c_client *client,
 	/* request GPIOs and IRQs */
 	devm_gpio_request_one(dev, pdata->pon_gpio, GPIOF_OUT_INIT_LOW,
 			      "S2MPB04 PON");
-	devm_gpio_request_one(dev, pdata->resetb_gpio, GPIOF_IN,
-			      "S2MPB04 RESETB");
+	devm_gpio_request_one(dev, pdata->pmic_ready_gpio, GPIOF_IN,
+			      "S2MPB04 PMIC READY");
 	devm_gpio_request_one(dev, pdata->intb_gpio, GPIOF_IN,
 			      "S2MPB04 INTB");
 
@@ -475,12 +475,12 @@ static int s2mpb04_probe(struct i2c_client *client,
 
 		/* poll on the gpio until it goes high or until we timeout */
 		timeout = jiffies + S2MPB04_PON_RESET_TIMEOUT;
-		while (!gpio_get_value(pdata->resetb_gpio) &&
+		while (!gpio_get_value(pdata->pmic_ready_gpio) &&
 		       time_before(jiffies, timeout)) {
 			usleep_range(100, 105);
 		}
 
-		if (gpio_get_value(pdata->resetb_gpio))
+		if (gpio_get_value(pdata->pmic_ready_gpio))
 			break;
 
 		dev_err(dev, "%s: powering on timed out, try (%d/%d)\n",
