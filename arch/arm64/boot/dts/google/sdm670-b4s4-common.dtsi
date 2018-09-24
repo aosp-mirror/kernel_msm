@@ -43,13 +43,6 @@
 };
 
 &android_fstab {
-	product {
-		compatible = "android,product";
-		dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/product";
-		type = "ext4";
-		mnt_flags = "ro";
-		fsmgr_flags = "wait,slotselect,avb";
-	};
 	vendor {
 		dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/vendor";
 	};
