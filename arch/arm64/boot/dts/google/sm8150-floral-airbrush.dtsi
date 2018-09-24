@@ -53,6 +53,36 @@
 	};
 };
 
+&pm8150l_gpios {
+	airbrush_fw {
+		ab_fw_patch_en_default: ab_fw_patch_en_default {
+			pins = "gpio1";
+			function = "normal";
+			output-low;
+		};
+	};
+
+	airbrush_abready {
+		ab_ready_default: ab_ready_default {
+			pins = "gpio10";
+			function = "normal";
+			input-enable;
+			bias-disable;
+			power-source = <1>;	/* 1.8V input supply */
+		};
+	};
+
+	airbrush_pmic_ready {
+		ab_pmic_ready_default: ab_pmic_ready_default {
+			pins = "gpio11";
+			function = "normal";
+			input-enable;
+			bias-disable;
+			power-source = <1>;	/* 1.8V input supply */
+		};
+	};
+};
+
 &qupv3_se18_i2c {
 	status = "okay";
 	airbrush_pmic: s2mpb04@66 {
@@ -64,11 +94,13 @@
 		interrupt-names = "s2mpb04_intb";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&s2mpb04_pon_default &s2mpb04_intb_default>;
+		pinctrl-0 = <&s2mpb04_pon_default
+					 &s2mpb04_intb_default
+					 &ab_pmic_ready_default>;
 
 		samsung,pon-gpio = <&tlmm 29 0x00>;
 		samsung,intb-gpio = <&tlmm 41 0x00>;
-		samsung,resetb-gpio = <&pm8150l_gpios 11 GPIO_ACTIVE_LOW>;
+		samsung,pmic-ready-gpio = <&pm8150l_gpios 11 GPIO_ACTIVE_HIGH>;
 
 		s2mpb04_regulator: regulator {
 			compatible = "samsung,s2mpb04-regulator";
@@ -100,27 +132,6 @@
 		compatible = "abc,airbrush-spidev";
 		reg = <0>;
 		spi-max-frequency = <1000000>;
-	};
-};
-
-&pm8150l_gpios {
-	abc_pins {
-		ab_ready_default: ab_ready_default {
-			mux {
-				pins = "gpio10";
-				function = "normal";
-				bias-disable;
-				input-enable;
-			};
-		};
-		ab_fw_patch_en_default: ab_fw_patch_en_default {
-			mux {
-				pins = "gpio1";
-				function = "normal";
-				bias-pull-down;
-				qcom,pull-down-strength = <2>;
-			};
-		};
 	};
 };
 
@@ -192,7 +203,7 @@
 				"tpu_switch_mux";
 
 		/* Provide GPIOs used in Airbrush boot sequence */
-		//soc-pwrgood-gpio = <&gpf6 2 GPIO_ACTIVE_LOW>;	/* output */
+		soc-pwrgood-gpio = <&s2mpb04_gpio 0 GPIO_ACTIVE_HIGH>;	/* output */
 		//fw-patch-en-gpio = <&gpd0 3 GPIO_ACTIVE_HIGH>;	/* output */
 		//ab-ready-gpio = <&gpd0 0 GPIO_ACTIVE_HIGH>;	/* input  */
 		// ddr-sr-gpio = <>;
