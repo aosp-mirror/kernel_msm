@@ -4119,6 +4119,11 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 		goto err_rls_fw;
 	}
 
+	if (fw->size % 4) {
+		dev_err(dev, "Coefficient file is not word-aligned\n");
+		goto err_rls_fw;
+	}
+
 	while (pos < fw->size) {
 		block_offset = fw->data[pos]
 				+ (fw->data[pos + 1] << 8);
@@ -4150,6 +4155,9 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 		pos += CS40L2X_WT_DBLK_LENGTH_SIZE;
 
 		switch (block_type) {
+		case CS40L2X_WMDR_NAME_TYPE:
+			ret = 0;
+			break;
 		case CS40L2X_XM_UNPACKED_TYPE:
 			ret = -EINVAL;
 			for (i = 0; i < cs40l2x->num_algos; i++)
@@ -4234,9 +4242,15 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 				goto err_rls_fw;
 			}
 			break;
+		default:
+			dev_err(dev, "Unexpected block type: 0x%04X\n",
+					block_type);
+			ret = -EINVAL;
+			goto err_rls_fw;
 		}
 
-		pos += block_length;
+		/* blocks are word-aligned */
+		pos += (block_length + 3) & ~0x00000003;
 	}
 
 err_rls_fw:
@@ -4358,6 +4372,11 @@ static int cs40l2x_firmware_parse(struct cs40l2x_private *cs40l2x,
 		goto err_rls_fw;
 	}
 
+	if (fw->size % 4) {
+		dev_err(dev, "Firmware file is not word-aligned\n");
+		goto err_rls_fw;
+	}
+
 	while (pos < fw->size) {
 		block_offset = fw->data[pos]
 				+ (fw->data[pos + 1] << 8)
@@ -4374,6 +4393,8 @@ static int cs40l2x_firmware_parse(struct cs40l2x_private *cs40l2x,
 		pos += CS40L2X_FW_DBLK_LENGTH_SIZE;
 
 		switch (block_type) {
+		case CS40L2X_WMFW_INFO_TYPE:
+			break;
 		case CS40L2X_PM_PACKED_TYPE:
 			ret = cs40l2x_raw_write(cs40l2x,
 					CS40L2X_DSP1_PMEM_0
@@ -4418,9 +4439,15 @@ static int cs40l2x_firmware_parse(struct cs40l2x_private *cs40l2x,
 				goto err_rls_fw;
 			}
 			break;
+		default:
+			dev_err(dev, "Unexpected block type: 0x%02X\n",
+					block_type);
+			ret = -EINVAL;
+			goto err_rls_fw;
 		}
 
-		pos += block_length;
+		/* blocks are word-aligned */
+		pos += (block_length + 3) & ~0x00000003;
 	}
 
 	ret = cs40l2x_coeff_init(cs40l2x);
