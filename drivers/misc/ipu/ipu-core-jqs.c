@@ -268,9 +268,6 @@ static void ipu_core_jqs_start_rom_firmware(struct paintbox_bus *bus)
 	dev_dbg(bus->parent_dev, "enabling ROM firmware\n");
 	ipu_core_jqs_power_enable(bus, JQS_BOOT_ADDR_DEF, 0);
 	bus->fw_status = JQS_FW_STATUS_RUNNING;
-
-	/* Notify paintbox devices that the firmware is up */
-	ipu_core_notify_firmware_up(bus);
 }
 
 int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
@@ -369,4 +366,18 @@ void ipu_core_jqs_release(struct paintbox_bus *bus)
 enum paintbox_jqs_status ipu_bus_get_fw_status(struct paintbox_bus *bus)
 {
 	return bus->fw_status;
+}
+
+bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
+{
+	if (bus->fw_status != JQS_FW_STATUS_RUNNING)
+		return false;
+
+	/* Don't report ready if the JQS is running from its ROM firmware.  The
+	 * ROM firmware is only used for debug.
+	 */
+	if (bus->fw == NULL)
+		return false;
+
+	return true;
 }

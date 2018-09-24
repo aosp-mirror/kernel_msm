@@ -189,6 +189,14 @@ void ipu_set_device_ops(struct device *dev,
 	pb_dev->dev_ops = dev_ops;
 }
 
+bool ipu_is_jqs_ready(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	return ipu_core_jqs_is_ready(bus);
+}
+
 static void ipu_bus_device_release(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);

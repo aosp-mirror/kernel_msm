@@ -128,6 +128,11 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 
 	pb = container_of(m, struct paintbox_data, misc_device);
 
+	if (!ipu_is_jqs_ready(pb->dev)) {
+		dev_err(pb->dev, "%s: JQS firmware not ready\n", __func__);
+		return -ENOTCONN;
+	}
+
 	session = kzalloc(sizeof(struct paintbox_session), GFP_KERNEL);
 	if (!session)
 		return -ENOMEM;
