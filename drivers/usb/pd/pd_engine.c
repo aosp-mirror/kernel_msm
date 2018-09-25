@@ -1774,12 +1774,14 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->vbus = devm_regulator_get(parent, "vbus");
 	if (IS_ERR_OR_NULL(pd->vbus)) {
+		dev_err(&pd->dev, "Can't find vbus-supply\n");
 		ret = PTR_ERR(pd->vbus);
 		goto exit_debugfs;
 	}
 
 	pd->vconn = devm_regulator_get(parent, "vconn");
 	if (IS_ERR_OR_NULL(pd->vconn)) {
+		dev_err(&pd->dev, "Can't find vconn-supply\n");
 		ret = PTR_ERR(pd->vconn);
 		goto exit_debugfs;
 	}
@@ -1791,6 +1793,7 @@ struct usbpd *usbpd_create(struct device *parent)
 	if (pd->ext_vbus_supported) {
 		pd->ext_vbus = devm_regulator_get(parent, "ext-vbus");
 		if (IS_ERR_OR_NULL(pd->ext_vbus)) {
+			dev_err(&pd->dev, "Can't find ext-vbus-supply\n");
 			ret = PTR_ERR(pd->ext_vbus);
 			goto exit_debugfs;
 		}
@@ -1798,7 +1801,7 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->extcon = devm_extcon_dev_allocate(parent, usbpd_extcon_cable);
 	if (IS_ERR(pd->extcon)) {
-		pd_engine_log(pd, "failed to allocate extcon device");
+		dev_err(&pd->dev, "extcon allocation failed\n");
 		ret = PTR_ERR(pd->extcon);
 		goto exit_debugfs;
 	}
@@ -1806,7 +1809,7 @@ struct usbpd *usbpd_create(struct device *parent)
 	extcon_set_mutually_exclusive(pd->extcon, usbpd_extcon_exclusive);
 	ret = devm_extcon_dev_register(parent, pd->extcon);
 	if (ret < 0) {
-		pd_engine_log(pd, "failed to register extcon device");
+		dev_err(&pd->dev, "failed to register extcon device");
 		goto exit_debugfs;
 	}
 
@@ -1822,6 +1825,7 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->wq = create_singlethread_workqueue(dev_name(&pd->dev));
 	if (!pd->wq) {
+		dev_err(&pd->dev, "workqueue creation failed\n");
 		ret = -ENOMEM;
 		goto exit_debugfs;
 	}
@@ -1830,8 +1834,8 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
-		pd_engine_log(pd,
-			      "Could not get USB power_supply, deferring probe");
+		dev_err(&pd->dev,
+			"Could not get USB power_supply, deferring probe");
 		ret = -EPROBE_DEFER;
 		goto del_wq;
 	}
@@ -1849,14 +1853,17 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->tcpm_port = tcpm_register_port(&pd->dev, &pd->tcpc_dev);
 	if (IS_ERR(pd->tcpm_port)) {
+		dev_err(&pd->dev, "tcpm port register failed\n");
 		ret = PTR_ERR(pd->tcpm_port);
 		goto put_psy;
 	}
 
 	pd->psy_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&pd->psy_nb);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(&pd->dev, "psy notifier register failed\n");
 		goto unreg_tcpm;
+	}
 
 	init_pd_phy_params(&pd->pdphy_params);
 	pd_phy_assign_pm_callbacks(&pd->pdphy_params);
@@ -1866,8 +1873,7 @@ struct usbpd *usbpd_create(struct device *parent)
 				  POWER_SUPPLY_PROP_PD_ACTIVE,
 				  &val);
 	if (ret < 0)
-		pd_engine_log(pd, "unable to set PD_ACTIVE to flase, ret=%d",
-			      ret);
+		dev_err(&pd->dev, "Cannot set POWER_SUPPLY_PROP_PD_ACTIVE\n");
 
 	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
 
