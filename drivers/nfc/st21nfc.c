@@ -36,13 +36,15 @@
 #include <linux/poll.h>
 #include <linux/miscdevice.h>
 #include <linux/spinlock.h>
-#include "st21nfc.h"
 #include <linux/of_gpio.h>
-
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+#include <linux/clk.h>
+#endif
+#include "st21nfc.h"
 
 #define MAX_BUFFER_SIZE 260
 
-#define DRIVER_VERSION "2.0.1"
+#define DRIVER_VERSION "2.0.2"
 
 /* prototypes */
 static irqreturn_t st21nfc_dev_irq_handler(int irq, void *dev_id);
@@ -60,6 +62,9 @@ struct st21nfc_platform {
 	unsigned int irq_gpio;
 	unsigned int reset_gpio;
 	unsigned int ena_gpio;
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	unsigned int clkreq_gpio;
+#endif
 	unsigned int polarity_mode;
 };
 
@@ -75,7 +80,63 @@ struct st21nfc_dev {
 	spinlock_t irq_enabled_lock;
 	uint8_t rx_buffer[MAX_BUFFER_SIZE];
 	uint8_t tx_buffer[MAX_BUFFER_SIZE];
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	/* CLK control */
+	bool                    clk_run;
+	struct  clk             *s_clk;
+#endif
 };
+
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+/*
+ * Routine to enable clock.
+ * this routine can be extended to select from multiple
+ * sources based on clk_src_name.
+ */
+static int st_clock_select(struct st21nfc_dev *st21nfc_dev)
+{
+	int r = 0;
+
+	st21nfc_dev->s_clk = clk_get(&st21nfc_dev->platform_data.client->dev, "nfc_ref_clk");
+
+	/* if NULL we assume external crystal and dont fail */
+	if ((st21nfc_dev->s_clk == NULL) || IS_ERR(st21nfc_dev->s_clk))
+		return 0;
+
+	if (st21nfc_dev->clk_run == false)
+		r = clk_prepare_enable(st21nfc_dev->s_clk);
+
+	if (r)
+		goto err_clk;
+
+	st21nfc_dev->clk_run = true;
+	return r;
+
+err_clk:
+	return -1;
+}
+
+/*
+ * Routine to disable clocks
+ */
+static int st_clock_deselect(struct st21nfc_dev *st21nfc_dev)
+{
+	int r = -1;
+
+	/* if NULL we assume external crystal and dont fail */
+	if ((st21nfc_dev->s_clk == NULL) || IS_ERR(st21nfc_dev->s_clk))
+		return 0;
+
+	if ((st21nfc_dev->s_clk != NULL) && !IS_ERR(st21nfc_dev->s_clk)) {
+		if (st21nfc_dev->clk_run == true) {
+			clk_disable_unprepare(st21nfc_dev->s_clk);
+			st21nfc_dev->clk_run = false;
+		}
+		return 0;
+	}
+	return r;
+}
+#endif
 
 static int st21nfc_loc_set_polaritymode(struct st21nfc_dev *st21nfc_dev,
 					int mode)
@@ -493,6 +554,13 @@ static int nfc_parse_dt(struct device *dev, struct st21nfc_platform_data *pdata)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	pdata->clkreq_gpio = of_get_named_gpio(np, "st,clkreq_gpio", 0);
+	if ((!gpio_is_valid(pdata->clkreq_gpio))) {
+		pr_err("[dsc]%s: [OPTIONAL] fail to get clkreq_gpio\n", __func__);
+	}
+#endif
+
 	pdata->polarity_mode = IRQF_TRIGGER_RISING;
 	pr_err("[dsc]%s : get reset_gpio[%d], irq_gpio[%d], \
 			polarity_mode[%d]\n", __func__, pdata->reset_gpio,
@@ -562,6 +630,9 @@ static int st21nfc_probe(struct i2c_client *client,
 
 	/* store for later use */
 	st21nfc_dev->platform_data.irq_gpio = platform_data->irq_gpio;
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	st21nfc_dev->platform_data.clkreq_gpio = platform_data->clkreq_gpio;
+#endif
 	st21nfc_dev->platform_data.ena_gpio = platform_data->ena_gpio;
 	st21nfc_dev->platform_data.reset_gpio = platform_data->reset_gpio;
 	st21nfc_dev->platform_data.polarity_mode = platform_data->polarity_mode;
@@ -580,6 +651,20 @@ static int st21nfc_probe(struct i2c_client *client,
 		ret = -ENODEV;
 		goto err_free_buffer;
 	}
+
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	ret = gpio_request(platform_data->clkreq_gpio, "clkreq_gpio");
+	if (ret) {
+		pr_err("%s : [OPTIONAL] gpio_request failed\n", __FILE__);
+		ret = 0;
+	} else {
+		ret = gpio_direction_input(platform_data->clkreq_gpio);
+		if (ret) {
+			pr_err("%s : [OPTIONAL] gpio_direction_input failed\n", __FILE__);
+			ret = 0;
+		}
+	}
+#endif
 
 	/* initialize irqIsAttached variable */
 	irqIsAttached = false;
@@ -632,6 +717,15 @@ static int st21nfc_probe(struct i2c_client *client,
 		goto err_request_irq_failed;
 	}
 	st21nfc_disable_irq(st21nfc_dev);
+
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	ret = st_clock_select(st21nfc_dev);
+	if (ret < 0) {
+		pr_err("%s : st_clock_select failed\n", __FILE__);
+		goto err_request_irq_failed;
+	}
+	pr_info("%s:successfully\n", __func__);
+#endif
 	return 0;
 
 err_request_irq_failed:
@@ -652,6 +746,9 @@ static int st21nfc_remove(struct i2c_client *client)
 	struct st21nfc_dev *st21nfc_dev;
 
 	st21nfc_dev = i2c_get_clientdata(client);
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	st_clock_deselect(st21nfc_dev);
+#endif
 	free_irq(client->irq, st21nfc_dev);
 	misc_deregister(&st21nfc_dev->st21nfc_device);
 	mutex_destroy(&st21nfc_dev->platform_data.read_mutex);

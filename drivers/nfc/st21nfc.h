@@ -24,8 +24,6 @@
 /*
  * ST21NFC power control via ioctl
  * ST21NFC_GET_WAKEUP :  poll gpio-level for Wakeup pin
- * PN544_SET_PWR(1): power on
- * PN544_SET_PWR(>1): power on with firmware download enabled
  */
 #define ST21NFC_GET_WAKEUP	      _IOR(ST21NFC_MAGIC, 0x01, unsigned int)
 #define ST21NFC_PULSE_RESET		_IOR(ST21NFC_MAGIC, 0x02, unsigned int)
@@ -39,5 +37,8 @@ struct st21nfc_platform_data {
 	unsigned int irq_gpio;
 	unsigned int ena_gpio;
 	unsigned int reset_gpio;
+#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	unsigned int clkreq_gpio;
+#endif
 	unsigned int polarity_mode;
 };
