@@ -1,0 +1,21 @@
+&soc {
+	msm_cirrus_playback {
+		/* the resistance is 7.8197 ohm */
+		cirrus,top-speaker-impedance = <10937>;
+
+		/* the percentage of tolerance is 10 */
+		cirrus,top-speaker-tolerance = <10>;
+
+		/* the resistance is 7.0375 ohm */
+		cirrus,top-speaker-mean = <9843>;
+
+		/* the resistance is 6.3697 ohm */
+		cirrus,bottom-speaker-impedance = <8909>;
+
+		/* the percentage of tolerance is 10 */
+		cirrus,bottom-speaker-tolerance = <10>;
+
+		/* the resistance is 5.5797 ohm */
+		cirrus,bottom-speaker-mean = <7804>;
+	};
+};
