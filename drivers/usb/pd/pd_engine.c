@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/power_supply.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/rtc.h>
 #include <linux/sched/clock.h>
@@ -102,6 +103,8 @@ struct usbpd {
 	/* Indicates whether the device has to honor usb suspend power limits*/
 	bool suspend_supported;
 	bool usb_comm_capable;
+
+	bool ext_vbus_supported;
 };
 
 /*
@@ -606,6 +609,9 @@ void update_external_vbus(struct work_struct *work)
 					ext_vbus_work);
 
 	mutex_lock(&pd->lock);
+
+	if (!pd->ext_vbus_supported)
+		goto err;
 	/* Exit when the old value is same as the new value or
 	 * update the value and exit when vbus is not on.
 	 */
@@ -1690,6 +1696,10 @@ static int update_ext_vbus(struct notifier_block *self, unsigned long action,
 		pm_relax(&pd->dev);
 
 	mutex_lock(&pd->lock);
+
+	if (!pd->ext_vbus_supported)
+		goto exit;
+
 	pd->external_vbus_update = turn_on_ext_vbus;
 	work_queued = queue_delayed_work(pd->wq, &pd->ext_vbus_work,
 				turn_on_ext_vbus ?
@@ -1703,6 +1713,8 @@ static int update_ext_vbus(struct notifier_block *self, unsigned long action,
 			      (action == EXT_VBUS_ON) ?
 			      "ON" : "OFF");
 	}
+
+exit:
 	mutex_unlock(&pd->lock);
 	return NOTIFY_OK;
 }
@@ -1768,21 +1780,27 @@ struct usbpd *usbpd_create(struct device *parent)
 	device_init_wakeup(&pd->dev, true);
 
 	pd->vbus = devm_regulator_get(parent, "vbus");
-	if (IS_ERR(pd->vbus)) {
+	if (IS_ERR_OR_NULL(pd->vbus)) {
 		ret = PTR_ERR(pd->vbus);
 		goto exit_debugfs;
 	}
 
 	pd->vconn = devm_regulator_get(parent, "vconn");
-	if (IS_ERR(pd->vconn)) {
+	if (IS_ERR_OR_NULL(pd->vconn)) {
 		ret = PTR_ERR(pd->vconn);
 		goto exit_debugfs;
 	}
 
-	pd->ext_vbus = devm_regulator_get(parent, "ext-vbus");
-	if (IS_ERR(pd->ext_vbus)) {
-		ret = PTR_ERR(pd->ext_vbus);
-		goto exit_debugfs;
+
+	pd->ext_vbus_supported = device_property_read_bool(parent,
+				 "google,ext_vbus-supported");
+
+	if (pd->ext_vbus_supported) {
+		pd->ext_vbus = devm_regulator_get(parent, "ext-vbus");
+		if (IS_ERR_OR_NULL(pd->ext_vbus)) {
+			ret = PTR_ERR(pd->ext_vbus);
+			goto exit_debugfs;
+		}
 	}
 
 	pd->extcon = devm_extcon_dev_allocate(parent, usbpd_extcon_cable);
@@ -1854,7 +1872,6 @@ struct usbpd *usbpd_create(struct device *parent)
 	if (ret < 0)
 		pd_engine_log(pd, "unable to set PD_ACTIVE to flase, ret=%d",
 			      ret);
-
 
 	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
 
