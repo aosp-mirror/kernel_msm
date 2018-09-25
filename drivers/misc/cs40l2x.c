@@ -83,6 +83,7 @@ struct cs40l2x_private {
 	unsigned int peak_gpio1_enable;
 	int vpp_measured;
 	int ipp_measured;
+	bool asp_available;
 	bool asp_enable;
 	struct hrtimer asp_timer;
 	const struct cs40l2x_fw_desc *fw_desc;
@@ -2365,15 +2366,21 @@ static int cs40l2x_refclk_switch(struct cs40l2x_private *cs40l2x,
 			unsigned int refclk_freq)
 {
 	unsigned int refclk_sel, pll_config;
-	int ret;
+	int ret, i;
 
 	refclk_sel = (refclk_freq == CS40L2X_PLL_REFCLK_FREQ_32K) ?
 			CS40L2X_PLL_REFCLK_SEL_MCLK :
 			CS40L2X_PLL_REFCLK_SEL_BCLK;
 
+	for (i = 0; i < CS40L2X_NUM_PLL_REFCLK_FREQ; i++)
+		if (cs40l2x_pll_refclk_freq[i] == refclk_freq)
+			break;
+	if (i == CS40L2X_NUM_PLL_REFCLK_FREQ)
+		return -EINVAL;
+
 	pll_config = ((1 << CS40L2X_PLL_REFCLK_EN_SHIFT)
 				& CS40L2X_PLL_REFCLK_EN_MASK) |
-			((refclk_freq << CS40L2X_PLL_REFCLK_FREQ_SHIFT)
+			((i << CS40L2X_PLL_REFCLK_FREQ_SHIFT)
 				& CS40L2X_PLL_REFCLK_FREQ_MASK) |
 			((refclk_sel << CS40L2X_PLL_REFCLK_SEL_SHIFT)
 				& CS40L2X_PLL_REFCLK_SEL_MASK);
@@ -2426,14 +2433,14 @@ static ssize_t cs40l2x_asp_enable_show(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	unsigned int fw_id;
 
+	if (!cs40l2x->asp_available)
+		return -EPERM;
+
 	mutex_lock(&cs40l2x->lock);
 	fw_id = cs40l2x->fw_desc->id;
 	mutex_unlock(&cs40l2x->lock);
 
 	if (fw_id != CS40L2X_FW_ID_REMAP)
-		return -EPERM;
-
-	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
 		return -EPERM;
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->asp_enable);
@@ -2447,20 +2454,14 @@ static ssize_t cs40l2x_asp_enable_store(struct device *dev,
 	int ret;
 	unsigned int val, fw_id;
 
+	if (!cs40l2x->asp_available)
+		return -EPERM;
+
 	mutex_lock(&cs40l2x->lock);
 	fw_id = cs40l2x->fw_desc->id;
 	mutex_unlock(&cs40l2x->lock);
 
 	if (fw_id != CS40L2X_FW_ID_REMAP)
-		return -EPERM;
-
-	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
-		return -EPERM;
-
-	if (!cs40l2x->pdata.asp_bclk_freq)
-		return -EPERM;
-
-	if (!cs40l2x->pdata.asp_width)
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &val);
@@ -2483,14 +2484,14 @@ static ssize_t cs40l2x_asp_timeout_show(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	unsigned int fw_id;
 
+	if (!cs40l2x->asp_available)
+		return -EPERM;
+
 	mutex_lock(&cs40l2x->lock);
 	fw_id = cs40l2x->fw_desc->id;
 	mutex_unlock(&cs40l2x->lock);
 
 	if (fw_id != CS40L2X_FW_ID_REMAP)
-		return -EPERM;
-
-	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
 		return -EPERM;
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->pdata.asp_timeout);
@@ -2504,20 +2505,14 @@ static ssize_t cs40l2x_asp_timeout_store(struct device *dev,
 	int ret;
 	unsigned int val, fw_id;
 
+	if (!cs40l2x->asp_available)
+		return -EPERM;
+
 	mutex_lock(&cs40l2x->lock);
 	fw_id = cs40l2x->fw_desc->id;
 	mutex_unlock(&cs40l2x->lock);
 
 	if (fw_id != CS40L2X_FW_ID_REMAP)
-		return -EPERM;
-
-	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
-		return -EPERM;
-
-	if (!cs40l2x->pdata.asp_bclk_freq)
-		return -EPERM;
-
-	if (!cs40l2x->pdata.asp_width)
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &val);
@@ -4788,12 +4783,39 @@ static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
-static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x,
-			unsigned int asp_width)
+static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	int ret;
+	unsigned int asp_bclk_freq = cs40l2x->pdata.asp_bclk_freq;
+	unsigned int asp_slot_width = cs40l2x->pdata.asp_slot_width;
+	unsigned int asp_samp_width = cs40l2x->pdata.asp_samp_width;
+	int ret, i;
+
+	for (i = 0; i < CS40L2X_NUM_PLL_REFCLK_FREQ; i++)
+		if (cs40l2x_pll_refclk_freq[i] == asp_bclk_freq)
+			break;
+	if (i == CS40L2X_NUM_PLL_REFCLK_FREQ) {
+		dev_err(dev, "Invalid ASP_BCLK frequency: %d Hz\n",
+				asp_bclk_freq);
+		return -EINVAL;
+	}
+
+	if (asp_bclk_freq % asp_slot_width
+			|| asp_slot_width < CS40L2X_ASP_RX_WIDTH_MIN
+			|| asp_slot_width > CS40L2X_ASP_RX_WIDTH_MAX) {
+		dev_err(dev, "Invalid ASP slot width: %d bits\n",
+				asp_slot_width);
+		return -EINVAL;
+	}
+
+	if (asp_samp_width > asp_slot_width
+			|| asp_samp_width < CS40L2X_ASP_RX_WL_MIN
+			|| asp_samp_width > CS40L2X_ASP_RX_WL_MAX) {
+		dev_err(dev, "Invalid ASP sample width: %d bits\n",
+				asp_samp_width);
+		return -EINVAL;
+	}
 
 	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_ENABLES, 0);
 	if (ret) {
@@ -4803,14 +4825,14 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x,
 
 	ret = regmap_update_bits(regmap, CS40L2X_SP_FORMAT,
 			CS40L2X_ASP_RX_WIDTH_MASK,
-			asp_width << CS40L2X_ASP_RX_WIDTH_SHIFT);
+			asp_slot_width << CS40L2X_ASP_RX_WIDTH_SHIFT);
 	if (ret) {
 		dev_err(dev, "Failed to write ASP slot width\n");
 		return ret;
 	}
 
 	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_FORMAT,
-			((asp_width << CS40L2X_ASP_RX_WIDTH_SHIFT)
+			((asp_slot_width << CS40L2X_ASP_RX_WIDTH_SHIFT)
 				& CS40L2X_ASP_RX_WIDTH_MASK) |
 			((CS40L2X_ASP_TX_WIDTH_DEFAULT
 				<< CS40L2X_ASP_TX_WIDTH_SHIFT)
@@ -4825,17 +4847,17 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x,
 
 	ret = regmap_update_bits(regmap, CS40L2X_SP_RX_WL,
 			CS40L2X_ASP_RX_WL_MASK,
-			asp_width << CS40L2X_ASP_RX_WL_SHIFT);
+			asp_samp_width << CS40L2X_ASP_RX_WL_SHIFT);
 	if (ret) {
-		dev_err(dev, "Failed to write ASP data width\n");
+		dev_err(dev, "Failed to write ASP sample width\n");
 		return ret;
 	}
 
 	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_RX_WL,
-			((asp_width << CS40L2X_ASP_RX_WL_SHIFT)
+			((asp_samp_width << CS40L2X_ASP_RX_WL_SHIFT)
 				& CS40L2X_ASP_RX_WL_MASK));
 	if (ret) {
-		dev_err(dev, "Failed to sequence ASP data width\n");
+		dev_err(dev, "Failed to sequence ASP sample width\n");
 		return ret;
 	}
 
@@ -4987,10 +5009,7 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 		}
 	}
 
-	/* ASP is supported by CS40L25A device only */
-	if (cs40l2x->devid == CS40L2X_DEVID_L25A
-			&& cs40l2x->pdata.asp_bclk_freq
-			&& cs40l2x->pdata.asp_width) {
+	if (cs40l2x->asp_available) {
 		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_PLL_CLK_CTRL,
 				((1 << CS40L2X_PLL_REFCLK_EN_SHIFT)
 					& CS40L2X_PLL_REFCLK_EN_MASK) |
@@ -5002,7 +5021,7 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 
-		ret = cs40l2x_asp_config(cs40l2x, cs40l2x->pdata.asp_width);
+		ret = cs40l2x_asp_config(cs40l2x);
 		if (ret)
 			return ret;
 	}
@@ -5250,13 +5269,17 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 
 	pdata->hiber_enable = of_property_read_bool(np, "cirrus,hiber-enable");
 
-	ret = of_property_read_u32(np, "cirrus,asp-bclk-freq", &out_val);
+	ret = of_property_read_u32(np, "cirrus,asp-bclk-freq-hz", &out_val);
 	if (!ret)
 		pdata->asp_bclk_freq = out_val;
 
-	ret = of_property_read_u32(np, "cirrus,asp-width", &out_val);
+	ret = of_property_read_u32(np, "cirrus,asp-slot-width", &out_val);
 	if (!ret)
-		pdata->asp_width = out_val;
+		pdata->asp_slot_width = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,asp-samp-width", &out_val);
+	if (!ret)
+		pdata->asp_samp_width = out_val;
 
 	ret = of_property_read_u32(np, "cirrus,asp-timeout", &out_val);
 	if (!ret) {
@@ -5727,6 +5750,11 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	if (ret)
 		goto err;
 
+	cs40l2x->asp_available = (cs40l2x->devid == CS40L2X_DEVID_L25A)
+			&& pdata->asp_bclk_freq
+			&& pdata->asp_slot_width
+			&& pdata->asp_samp_width;
+
 	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP && i2c_client->irq) {
 		ret = devm_request_threaded_irq(dev, i2c_client->irq,
 				NULL, cs40l2x_irq,
@@ -5738,9 +5766,7 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 		}
 
 		cs40l2x->event_control = CS40L2X_EVENT_HARDWARE_ENABLED;
-
-		if (pdata->asp_bclk_freq && pdata->asp_width
-				&& cs40l2x->devid == CS40L2X_DEVID_L25A)
+		if (cs40l2x->asp_available)
 			cs40l2x->event_control |= CS40L2X_EVENT_END_ENABLED;
 	} else {
 		cs40l2x->event_control = CS40L2X_EVENT_DISABLED;

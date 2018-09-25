@@ -38,7 +38,8 @@ struct cs40l2x_platform_data {
 	unsigned int gpio4_fall_index;
 	bool hiber_enable;
 	unsigned int asp_bclk_freq;
-	unsigned int asp_width;
+	unsigned int asp_slot_width;
+	unsigned int asp_samp_width;
 	unsigned int asp_timeout;
 };
 
