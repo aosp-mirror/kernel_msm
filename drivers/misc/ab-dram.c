@@ -24,8 +24,9 @@
 #include <linux/scatterlist.h>
 #include <uapi/ab-dram.h>
 
-#define AIRBRUSH_DRAM_START_PADDR 0x20000000
-#define AIRBRUSH_DRAM_SIZE (512UL << 20)
+/* TODO(b/116617722): Add carveout support */
+#define AIRBRUSH_DRAM_START_PADDR 0x24000000
+#define AIRBRUSH_DRAM_SIZE (448UL << 20)
 
 #define MAX_ABD_SESSION 100
 #define MAX_ALLOC_REF_PER_SESSION 1000
