@@ -33,3 +33,10 @@
 &google_charger {
 	google,chg-battery-capacity = <3000>;
 };
+
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <580>;
+		google,end-mitigation-temp = <450>;
+	};
+};
