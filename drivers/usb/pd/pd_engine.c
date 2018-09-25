@@ -1623,32 +1623,23 @@ unlock:
 	mutex_unlock(&pd->lock);
 }
 
-#define PDO_FIXED_FLAGS \
-	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
-
-static const u32 src_pdo[] = {
-	PDO_FIXED(5000, 900, PDO_FIXED_FLAGS),
-};
-
-static const u32 snk_pdo[] = {
-	PDO_FIXED(5000, 3000, PDO_FIXED_FLAGS),
-	PDO_FIXED(9000, 3000, PDO_FIXED_FLAGS),
-};
-
 static const struct tcpc_config pd_tcpc_config = {
-	.src_pdo = src_pdo,
-	.nr_src_pdo = ARRAY_SIZE(src_pdo),
-	.snk_pdo = snk_pdo,
-	.nr_snk_pdo = ARRAY_SIZE(snk_pdo),
-	.operating_snk_mw = 7600,
-	.type = TYPEC_PORT_DRP,
-	.default_role = TYPEC_SINK,
 	.alt_modes = NULL,
 	.try_role_hw = true,
 };
 
-static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
+static int init_tcpc_dev(struct usbpd *pd,
+			  struct device *parent)
 {
+	struct tcpc_dev *pd_tcpc_dev = &pd->tcpc_dev;
+
+	pd_tcpc_dev->fwnode = device_get_named_child_node(parent,
+							  "connector");
+	if (!pd_tcpc_dev->fwnode) {
+		dev_err(&pd->dev, "Can't find connector node.\n");
+		return -EINVAL;
+	}
+
 	pd_tcpc_dev->config = &pd_tcpc_config;
 	pd_tcpc_dev->init = tcpm_init;
 	pd_tcpc_dev->get_vbus = tcpm_get_vbus;
@@ -1668,6 +1659,8 @@ static void init_tcpc_dev(struct tcpc_dev *pd_tcpc_dev)
 	pd_tcpc_dev->set_in_hard_reset = set_in_hard_reset;
 	pd_tcpc_dev->log_rtc = log_rtc;
 	pd_tcpc_dev->set_suspend_supported = tcpm_set_suspend_supported;
+
+	return 0;
 }
 
 static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
@@ -1850,7 +1843,10 @@ struct usbpd *usbpd_create(struct device *parent)
 	 * TCPM callbacks may access pd->usb_psy. Therefore, tcpm_register_port
 	 * must be called after pd->usb_psy is initialized.
 	 */
-	init_tcpc_dev(&pd->tcpc_dev);
+	ret = init_tcpc_dev(pd, parent);
+	if (ret < 0)
+		goto put_psy;
+
 	pd->tcpm_port = tcpm_register_port(&pd->dev, &pd->tcpc_dev);
 	if (IS_ERR(pd->tcpm_port)) {
 		ret = PTR_ERR(pd->tcpm_port);
