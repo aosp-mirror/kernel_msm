@@ -169,13 +169,14 @@ Optional properties:
     device remains in standby and automatic entry into hibernation mode is
     effectively disabled.
 
-  - cirrus,asp-bclk-freq : Specifies the frequency of the ASP_BCLK/REFCLK pin
-    (CS40L25A only). See the description for the PLL_REFCLK_FREQ field in the
-    CS40L25A data sheet for acceptable values. If this value is omitted, ASP
-    support is disabled.
+  - cirrus,asp-bclk-freq-hz : Specifies the frequency (in Hz) of the ASP_BCLK
+    pin (CS40L25A only). If this value is omitted, ASP support is disabled.
 
-  - cirrus,asp-width : ASP sample width (CS40L25A only), specified in bits (12
-    through 24). If this value is omitted, ASP support is disabled.
+  - cirrus,asp-slot-width : ASP slot width (CS40L25A only), specified in bits
+    (12 through 128). If this value is omitted, ASP support is disabled.
+
+  - cirrus,asp-samp-width : ASP sample width (CS40L25A only), specified in bits
+    (12 through 24). If this value is omitted, ASP support is disabled.
 
   - cirrus,asp-timeout : Specifies the minimum number of milliseconds to pause
     ASP playback following haptic playback interruption (CS40L25A only). If this
@@ -217,4 +218,7 @@ Examples:
     cirrus,boost-ind-nanohenry = <1000>;
     cirrus,boost-cap-microfarad = <4>;
     cirrus,boost-ipk-milliamp = <4500>;
+    cirrus,asp-bclk-freq-hz = <1536000>;
+    cirrus,asp-slot-width = <16>;
+    cirrus,asp-samp-width = <16>;
   };
