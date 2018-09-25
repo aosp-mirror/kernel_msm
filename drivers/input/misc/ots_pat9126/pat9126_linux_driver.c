@@ -1076,7 +1076,8 @@ static int pat9126_suspend(struct device *dev)
 	struct pixart_pat9126_data *data =
 		(struct pixart_pat9126_data *) dev_get_drvdata(dev);
 
-	cancel_delayed_work_sync(&data->polling_work);
+	flush_scheduled_work();
+
 	printk(KERN_DEBUG "[PAT9126]%s, start\n", __func__);
 	if (data->pinctrl) {
 		rc = pinctrl_select_state(data->pinctrl,
