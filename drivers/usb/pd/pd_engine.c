@@ -602,7 +602,6 @@ static int update_vbus_locked(struct usbpd *pd, bool vbus_output)
 void update_external_vbus(struct work_struct *work)
 {
 	int ret = 0;
-	union power_supply_propval val = {0};
 	struct usbpd *pd = container_of(to_delayed_work(work), struct usbpd,
 					ext_vbus_work);
 
