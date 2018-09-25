@@ -17,6 +17,7 @@
 #include "sdm845-patherm.dtsi"
 #include "sdm845-usbctherm.dtsi"
 #include "sdm845-b1-usb-v3.dtsi"
+#include "sdm845-b1-audio-cal.dtsi"
 
 / {
 	model = "Google Inc. MSM sdm845 B1 DVT1.1";
