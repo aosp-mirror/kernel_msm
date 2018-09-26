@@ -1105,7 +1105,6 @@ struct synaptics_rmi4_f54_handle {
 	struct f54_data_31 data_31;
 	struct f54_control control;
 	struct mutex status_mutex;
-	struct kobject *sysfs_dir;
 	struct hrtimer watchdog;
 	struct work_struct timeout_work;
 	struct work_struct test_report_work;
@@ -3036,9 +3035,11 @@ exit:
 
 static void test_remove_sysfs(void)
 {
-	sysfs_remove_group(f54->sysfs_dir, &attr_group);
-	sysfs_remove_bin_file(f54->sysfs_dir, &test_report_data);
-	kobject_put(f54->sysfs_dir);
+	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
+
+	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &attr_group);
+	sysfs_remove_bin_file(&rmi4_data->input_dev->dev.kobj,
+			&test_report_data);
 
 	return;
 }
@@ -3048,16 +3049,8 @@ static int test_set_sysfs(void)
 	int retval;
 	struct synaptics_rmi4_data *rmi4_data = f54->rmi4_data;
 
-	f54->sysfs_dir = kobject_create_and_add(SYSFS_FOLDER_NAME,
-			&rmi4_data->input_dev->dev.kobj);
-	if (!f54->sysfs_dir) {
-		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Failed to create sysfs directory\n",
-				__func__);
-		goto exit_directory;
-	}
-
-	retval = sysfs_create_bin_file(f54->sysfs_dir, &test_report_data);
+	retval = sysfs_create_bin_file(&rmi4_data->input_dev->dev.kobj,
+			&test_report_data);
 	if (retval < 0) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to create sysfs bin file\n",
@@ -3065,7 +3058,8 @@ static int test_set_sysfs(void)
 		goto exit_bin_file;
 	}
 
-	retval = sysfs_create_group(f54->sysfs_dir, &attr_group);
+	retval = sysfs_create_group(&rmi4_data->input_dev->dev.kobj,
+			&attr_group);
 	if (retval < 0) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Failed to create sysfs attributes\n",
@@ -3076,13 +3070,11 @@ static int test_set_sysfs(void)
 	return 0;
 
 exit_attributes:
-	sysfs_remove_group(f54->sysfs_dir, &attr_group);
-	sysfs_remove_bin_file(f54->sysfs_dir, &test_report_data);
+	sysfs_remove_group(&rmi4_data->input_dev->dev.kobj, &attr_group);
+	sysfs_remove_bin_file(&rmi4_data->input_dev->dev.kobj,
+			&test_report_data);
 
 exit_bin_file:
-	kobject_put(f54->sysfs_dir);
-
-exit_directory:
 	return -ENODEV;
 }
 
