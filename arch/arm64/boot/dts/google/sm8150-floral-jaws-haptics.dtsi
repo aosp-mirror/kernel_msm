@@ -20,7 +20,7 @@
 	};
 };
 
-&floral_cs40l20 {
+&floral_cs40l25a {
 	reset-gpios = <&tlmm 108 0>;
 };
 

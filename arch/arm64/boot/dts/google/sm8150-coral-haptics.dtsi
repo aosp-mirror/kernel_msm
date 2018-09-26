@@ -9,11 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+&floral_cs40l25a {
+	cirrus,boost-ctl-millivolt = <11000>; /* 11V */
+	cirrus,boost-ovp-millivolt = <12000>; /* 12V */
+};
 
-#include "sm8150-floral-common.dtsi"
-#include "sm8150-flame-audio.dtsi"
-#include "sm8150-flame-battery.dtsi"
-#include "sm8150-flame-camera-sensor.dtsi"
-#include "sm8150-coral-display.dtsi"
-#include "sm8150-flame-haptics.dtsi"
-#include "sm8150-flame-pac193x.dtsi"

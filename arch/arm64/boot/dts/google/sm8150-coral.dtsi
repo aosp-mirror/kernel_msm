@@ -15,4 +15,5 @@
 #include "sm8150-coral-display.dtsi"
 #include "sm8150-coral-battery.dtsi"
 #include "sm8150-coral-camera-sensor.dtsi"
+#include "sm8150-coral-haptics.dtsi"
 #include "sm8150-coral-pac193x.dtsi"

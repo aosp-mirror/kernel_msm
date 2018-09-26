@@ -39,8 +39,8 @@
 &qupv3_se15_i2c {
 	status = "ok";
 	// see -qup.dtsi for clk-freq-out setting
-	floral_cs40l20: cs40l20@43 {
-		compatible = "cirrus,cs40l20";
+	floral_cs40l25a: cs40l25a@43 {
+		compatible = "cirrus,cs40l25a";
 		pinctrl-names = "default";
 		pinctrl-0 = <&cs40l20_rst &clk_out_default>;
 		reset-gpios = <&tlmm 152 0>;
@@ -48,12 +48,12 @@
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <32>;
 		cirrus,boost-ipk-milliamp = <4500>;
-		cirrus,boost-ctl-lim-en = <1>; /* enables BST_CTL */
-		cirrus,boost-ctl-millivolt = <130>; /* 9V */
-		cirrus,boost-ovp-millivolt = <16>; /* 10V */
+		cirrus,boost-ctl-millivolt = <11000>; /* 11V */
+		cirrus,boost-ovp-millivolt = <12000>; /* 12V */
 		cirrus,f0-default = <2514000>; /* 153 Hz */
 		cirrus,f0-min = <2424832>; /* 148 Hz */
 		cirrus,f0-max = <2703360>; /* 165 Hz */
+		cirrus,redc-comp-disable = <1>; /* disabling ReDC clk comp */
 		cirrus,redc-default = <327728>; /* 15 Ohm */
 		cirrus,redc-min = <302112>; /* 13.5 Ohm */
 		cirrus,redc-max = <369248>; /* 16.5 Ohm */
