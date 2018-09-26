@@ -187,10 +187,15 @@ void ipu_power_enable_cores(struct paintbox_data *pb,
 }
 
 /* The caller to this function must hold pb->lock */
-static void ipu_power_disable_cores(struct paintbox_data *pb,
+void ipu_power_disable_cores(struct paintbox_data *pb,
 		unsigned int requested_cores)
 {
 	uint32_t max_core_mask;
+
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	if (requested_cores < pb->power.min_active_core_count)
+		requested_cores = pb->power.min_active_core_count;
+#endif
 
 	/* If the active core count is already at our requested core count then
 	 * there is nothing to do.

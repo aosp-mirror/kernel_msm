@@ -26,6 +26,8 @@ void ipu_power_disable_mmu_bif_idle_clock_gating(struct paintbox_data *pb);
 /* The caller to these functions must hold pb->lock */
 void ipu_power_enable_cores(struct paintbox_data *pb,
 		unsigned int requested_cores);
+void ipu_power_disable_cores(struct paintbox_data *pb,
+		unsigned int requested_cores);
 void ipu_power_core_power_walk_down(struct paintbox_data *pb);
 
 void ipu_power_init(struct paintbox_data *pb);

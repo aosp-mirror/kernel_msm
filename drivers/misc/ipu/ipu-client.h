@@ -125,7 +125,10 @@ struct paintbox_debug {
 struct paintbox_power {
 	unsigned int active_core_count;
 	int bif_mmu_clock_idle_disable_ref_count;
-
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	struct dentry *min_core_enable_dentry;
+	unsigned int min_active_core_count;
+#endif
 	struct {
 		uint32_t dma_chan_en;
 	} regs;

@@ -21,6 +21,7 @@
 #include "ipu-aon-debug.h"
 #include "ipu-client.h"
 #include "ipu-debug.h"
+#include "ipu-power.h"
 #include "ipu-regs.h"
 
 static uint64_t ipu_aon_reg_entry_read(
@@ -102,6 +103,45 @@ err_exit:
 	return ret;
 }
 
+static int ipu_aon_debug_min_core_enable_set(void *data, u64 val)
+{
+	struct paintbox_data *pb = data;
+
+	mutex_lock(&pb->lock);
+
+	/* The maximum number of cores is equal to the number of STPs. */
+	if (val > pb->stp.num_stps)
+		val = pb->stp.num_stps;
+
+	pb->power.min_active_core_count = val;
+
+	if (val > pb->power.active_core_count)
+		ipu_power_enable_cores(pb, val);
+	else if (val < pb->power.active_core_count)
+		ipu_power_disable_cores(pb, val);
+
+	mutex_unlock(&pb->lock);
+
+	return 0;
+}
+
+static int ipu_aon_debug_min_core_enable_get(void *data, u64 *val)
+{
+	struct paintbox_data *pb = data;
+
+	mutex_lock(&pb->lock);
+
+	*val = pb->power.min_active_core_count;
+
+	mutex_unlock(&pb->lock);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(ion_aon_debug_min_core_enable_fops,
+		ipu_aon_debug_min_core_enable_get,
+		ipu_aon_debug_min_core_enable_set, "%llu\n");
+
 void ipu_aon_debug_init(struct paintbox_data *pb)
 {
 	ipu_debug_create_entry(pb, &pb->aon_debug, pb->debug_root, "aon", -1,
@@ -110,10 +150,20 @@ void ipu_aon_debug_init(struct paintbox_data *pb)
 	ipu_debug_create_reg_entries(pb, &pb->aon_debug, ipu_aon_reg_names,
 			IO_AON_NUM_REGS, ipu_aon_reg_entry_write,
 			ipu_aon_reg_entry_read);
+
+	pb->power.min_core_enable_dentry =
+			debugfs_create_file("min_core_enable", 0640,
+			pb->aon_debug.debug_dir, pb,
+			&ion_aon_debug_min_core_enable_fops);
+	if (IS_ERR(pb->power.min_core_enable_dentry)) {
+		dev_err(pb->dev, "%s: err = %ld", __func__,
+				PTR_ERR(pb->power.min_core_enable_dentry));
+	}
 }
 
 void ipu_aon_debug_remove(struct paintbox_data *pb)
 {
+	debugfs_remove(pb->power.min_core_enable_dentry);
 	ipu_debug_free_reg_entries(&pb->aon_debug);
 	ipu_debug_free_entry(&pb->aon_debug);
 }
