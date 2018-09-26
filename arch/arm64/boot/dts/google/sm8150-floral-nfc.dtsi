@@ -22,6 +22,9 @@
         interrupts = <47  0>;
         st,reset_gpio = <&tlmm 21 0x00>;
         st,irq_gpio = <&tlmm 47 0x00>;
+        st,clkreq_gpio = <&tlmm 96 0x00>;
+        clocks = <&clock_rpmh RPMH_RF_CLK3>;
+        clock-names = "nfc_ref_clk";
         status = "ok";
     };
 };
