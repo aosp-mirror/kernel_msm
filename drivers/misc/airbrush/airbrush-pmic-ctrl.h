@@ -14,9 +14,9 @@
 #define _AIRBRUSH_PMIC_CTRL_H_
 
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
-				   block_name_t blk_name);
+		block_name_t blk_name, u32 to_chip_substate_id);
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,
-				   block_name_t blk_name);
+		block_name_t blk_name, u32 to_chip_substate_id);
 
 int ab_pmic_on(struct ab_state_context *ab_ctx);
 int ab_get_pmic_resources(struct ab_state_context *ab_ctx);

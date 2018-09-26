@@ -100,6 +100,7 @@ typedef enum __chip_state {
 	CHIP_STATE_4_0 = 40,
 	CHIP_STATE_5_0 = 50,
 	CHIP_STATE_6_0 = 60,
+	CHIP_STATE_DEFAULT,
 } chip_state_t;
 
 typedef enum __block_state {
@@ -230,8 +231,6 @@ struct ab_state_context {
 	struct platform_device *pdev;
 	struct device *dev;
 	struct block blocks[NUM_BLOCKS];
-	enum {S0, S1, S2, S3, S4, S5, S6} sw_state_id;
-	char *sw_state_name;
 	chip_state_t chip_substate_id;
 	char *chip_substate_name;
 	struct chip_to_block_map *chip_state_table;
@@ -270,6 +269,7 @@ struct ab_state_context {
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
 #endif
+	bool ab_sm_ctrl_pmic;
 };
 
 /*
@@ -288,8 +288,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev);
 void ab_sm_exit(struct platform_device *pdev);
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie);
-int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
-			u32 to_chip_substate_id);
+int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id);
+
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw);
 void abc_clk_register(struct ab_state_context *ab_ctx);
 int ab_ddr_init(struct ab_state_context *sc);

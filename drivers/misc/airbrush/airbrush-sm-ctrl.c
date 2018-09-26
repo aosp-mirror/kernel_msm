@@ -36,8 +36,15 @@ static struct block_property ipu_property_table[] = {
 	{BLOCK_STATE_0_6,	"Boost",	"MaxCompute",	on,	VOLTAGE_0_85,	on,	610000000,	14,	14,	0,	0},
 	{BLOCK_STATE_1_0,	"Normal",	"PowerGated",	on,	VOLTAGE_0_75,	off,	550000000,	0,	0,	0,	0},
 	{BLOCK_STATE_1_1,	"Boost",	"PowerGated",	on,	VOLTAGE_0_85,	off,	610000000,	0,	0,	0,	0},
+	{
+		BLOCK_STATE_1_2, "Normal", "Sleep", on, VOLTAGE_0_75, off, 0, 0,
+		0, 0, 0
+	},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	on,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
+	{
+		BLOCK_STATE_DEFAULT, "BootupState", "NoClock", on, VOLTAGE_0_75,
+		off, 0, 0, 0, 0, 0
+	}
 };
 
 static struct block_property tpu_property_table[] = {
@@ -50,8 +57,15 @@ static struct block_property tpu_property_table[] = {
 	{BLOCK_STATE_0_6,	"Boost",	"MaxCompute",	on,	VOLTAGE_0_85,	on,	962000000,	0,	0,	16,	0},
 	{BLOCK_STATE_1_0,	"Normal",	"PowerGated",	on,	VOLTAGE_0_75,	off,	766000000,	0,	0,	0,	0},
 	{BLOCK_STATE_1_1,	"Boost",	"PowerGated",	on,	VOLTAGE_0_85,	off,	962000000,	0,	0,	0,	0},
+	{
+		BLOCK_STATE_1_2, "Normal", "Sleep", on, VOLTAGE_0_75, off, 0, 0,
+		0, 0, 0
+	},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",	"NoClock",	on,	VOLTAGE_0_75,	off,	0,		0,	0,	0,	0}
+	{
+		BLOCK_STATE_DEFAULT, "BootupState", "NoClock", on, VOLTAGE_0_75,
+		off, 0, 0, 0, 0, 0
+	}
 };
 
 static struct block_property dram_property_table[] = {
@@ -66,7 +80,10 @@ static struct block_property dram_property_table[] = {
 	{BLOCK_STATE_1_1,	"PowerDown",	"ClockOn",		on,	VOLTAGE_0_60,	on,	1867000000,	0,	0,	0,	3733},
 	{BLOCK_STATE_2_0,	"Retention",	"SelfRefresh",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",	"MaxTransact",		on,	VOLTAGE_0_60,	on,	1867000000,	0,	0,	0,	3733}
+	{
+		BLOCK_STATE_DEFAULT, "BootupState", "MaxTransact", on,
+		VOLTAGE_0_60, on, 1867000000, 0, 0, 0, 3733
+	}
 };
 
 static struct block_property mif_property_table[] = {
@@ -78,7 +95,10 @@ static struct block_property mif_property_table[] = {
 	{BLOCK_STATE_0_5,	"Normal",	"MidTransact",		on,	VOLTAGE_0_85,	on,	400000000,	0,	0,	0,	0},
 	{BLOCK_STATE_0_6,	"Normal",	"MaxTransact",		on,	VOLTAGE_0_85,	on,	467000000,	0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",	"MaxTransact",		on,	VOLTAGE_0_85,	on,	467000000,	0,	0,	0,	0}
+	{
+		BLOCK_STATE_DEFAULT, "BootupState", "MaxTransact", on,
+		VOLTAGE_0_85, on, 467000000, 0, 0, 0, 0
+	}
 };
 
 static struct block_property fsys_property_table[] = {
@@ -91,7 +111,10 @@ static struct block_property fsys_property_table[] = {
 	{BLOCK_STATE_1_2,	"ElectricalIdle",	"L1.2",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_2_0,	"Hibernate",		"L2",		on,	VOLTAGE_0_85,	on,	0,		0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",		"L3",		off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",		"L0",		on,	VOLTAGE_0_85,	on,	4000000000,	0,	0,	0,	3} /*GEN3L0*/
+	{
+		BLOCK_STATE_DEFAULT, "BootupState", "L0", on, VOLTAGE_0_85, on,
+		4000000000, 0, 0, 0, 3
+	} /*GEN3L0*/
 };
 
 static struct block_property aon_property_table[] = {
@@ -99,38 +122,56 @@ static struct block_property aon_property_table[] = {
 	{BLOCK_STATE_0_1,	"PowerUp",	"Boot",		on,	VOLTAGE_0_85,	on,	19200000,	0,	0,	0,	0},
 	{BLOCK_STATE_0_2,	"PowerUp",	"Compute",	on,	VOLTAGE_0_85,	on,	233000000,	0,	0,	0,	0},
 	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
-	{BLOCK_STATE_DEFAULT,	"Bootup State",	"Compute",	on,	VOLTAGE_0_85,	on,	233000000,	0,	0,	0,	0}
+	{
+		BLOCK_STATE_DEFAULT, "BootupState", "Compute", on, VOLTAGE_0_85,
+		on, 233000000, 0, 0, 0, 0
+	}
 };
 
+#define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon, core) \
+	{								\
+		CHIP_STATE_ ## cs,					\
+		BLOCK_STATE_ ## ipu,					\
+		BLOCK_STATE_ ## tpu,					\
+		BLOCK_STATE_ ## dram,					\
+		BLOCK_STATE_ ## mif,					\
+		BLOCK_STATE_ ## fsys,					\
+		BLOCK_STATE_ ## aon,					\
+		core ## _POWER_CONTROL,					\
+	}
+
 static struct chip_to_block_map chip_state_map[] = {
-	{CHIP_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_2, BLOCK_STATE_0_2, BLOCK_STATE_0_2, BLOCK_STATE_0_2, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_3, BLOCK_STATE_0_3, BLOCK_STATE_0_3, BLOCK_STATE_0_4, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_4, BLOCK_STATE_0_4, BLOCK_STATE_0_4, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_5, BLOCK_STATE_0_5, BLOCK_STATE_0_2, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_6, BLOCK_STATE_0_2, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_7, BLOCK_STATE_0_5, BLOCK_STATE_0_3, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_8, BLOCK_STATE_0_3, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_0_9, BLOCK_STATE_0_5, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_0, BLOCK_STATE_0_0, BLOCK_STATE_1_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_1, BLOCK_STATE_0_1, BLOCK_STATE_1_0, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_2, BLOCK_STATE_0_2, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_3, BLOCK_STATE_0_2, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_4, BLOCK_STATE_0_4, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_5, BLOCK_STATE_0_5, BLOCK_STATE_1_0, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_1_6, BLOCK_STATE_0_6, BLOCK_STATE_1_1, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_2_0, BLOCK_STATE_1_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_2_1, BLOCK_STATE_1_0, BLOCK_STATE_0_1, BLOCK_STATE_0_6, BLOCK_STATE_0_1, BLOCK_STATE_0_1, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_2_2, BLOCK_STATE_1_0, BLOCK_STATE_0_2, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_2_3, BLOCK_STATE_1_0, BLOCK_STATE_0_3, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_2_4, BLOCK_STATE_1_0, BLOCK_STATE_0_4, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_2_5, BLOCK_STATE_1_0, BLOCK_STATE_0_5, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_2_6, BLOCK_STATE_1_1, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_6, BLOCK_STATE_0_3, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_3_0, BLOCK_STATE_1_0, BLOCK_STATE_1_0, BLOCK_STATE_2_0, BLOCK_STATE_0_0, BLOCK_STATE_1_2, BLOCK_STATE_0_0, IPU_POWER_CONTROL},
-	{CHIP_STATE_4_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_0_0, BLOCK_STATE_1_2, BLOCK_STATE_0_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_5_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_2_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, TPU_POWER_CONTROL},
-	{CHIP_STATE_6_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, BLOCK_STATE_3_0, TPU_POWER_CONTROL},
+	/*                     CS   IPU  TPU DRAM  MIF FSYS  AON  PC */
+	CHIP_TO_BLOCK_MAP_INIT(0_0, 0_0, 0_0, 0_0, 0_0, 0_0, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_1, 0_1, 0_1, 0_1, 0_1, 0_1, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_2, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_5, 0_5, 0_2, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_6, 0_2, 0_5, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_7, 0_5, 0_3, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_8, 0_3, 0_5, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_9, 0_5, 0_5, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_0, 0_0, 1_0, 0_0, 0_0, 0_0, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_1, 0_1, 1_0, 0_1, 0_1, 0_1, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_2, 0_2, 1_0, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_3, 0_3, 1_0, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_4, 0_4, 1_0, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_5, 0_5, 1_0, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_6, 0_6, 1_1, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_0, 1_0, 0_0, 0_0, 0_0, 0_0, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_1, 1_0, 0_1, 0_6, 0_1, 0_1, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_2, 1_0, 0_2, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_3, 1_0, 0_3, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_4, 1_0, 0_4, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_0, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(4_0, 3_0, 3_0, 2_0, 0_0, 1_2, 0_0, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_0, 3_0, 3_0, 3_0, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT,
+			       DEFAULT, DEFAULT, IPU),
 };
 
 struct block_property *get_desired_state(struct block *blk,
@@ -160,10 +201,14 @@ int clk_set_frequency(struct device *dev, struct block *blk,
 	case BLK_IPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
 			ipu_pll_enable(dev);
-		if(blk->current_state->clk_status == off && clk_status == on)
+		if (blk->current_state->clk_status == off && clk_status == on)
 			ipu_ungate(dev);
+		if (blk->current_state->clk_frequency == 0 && !frequency)
+			break;
+
 		ipu_set_rate(dev, frequency);
-		if(blk->current_state->clk_status == on && clk_status == off)
+
+		if (blk->current_state->clk_status == on && clk_status == off)
 			ipu_gate(dev);
 		if (!clk_status && !frequency)
 			ipu_pll_disable(dev);
@@ -171,20 +216,21 @@ int clk_set_frequency(struct device *dev, struct block *blk,
 	case BLK_TPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
 			tpu_pll_enable(dev);
-		if(blk->current_state->clk_status == off && clk_status == on)
+		if (blk->current_state->clk_status == off && clk_status == on)
 			tpu_ungate(dev);
+		if (blk->current_state->clk_frequency == 0 && !frequency)
+			break;
+
 		tpu_set_rate(dev, frequency);
-		if(blk->current_state->clk_status == on && clk_status == off)
+
+		if (blk->current_state->clk_status == on && clk_status == off)
 			tpu_gate(dev);
 		if (!clk_status && !frequency)
 			tpu_pll_disable(dev);
 		break;
 	case BLK_MIF:
-		break;
 	case BLK_FSYS:
-		break;
 	case BLK_AON:
-		break;
 	case DRAM:
 		break;
 	default:
@@ -194,7 +240,7 @@ int clk_set_frequency(struct device *dev, struct block *blk,
 }
 
 int blk_set_state(struct ab_state_context *sc, struct block *blk,
-		  u32 to_block_state_id, bool power_control)
+	u32 to_block_state_id, bool power_control, u32 to_chip_substate_id)
 {
 	struct device *dev = sc->dev;
 	bool power_increasing;
@@ -209,53 +255,52 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	power_increasing = (blk->current_state->logic_voltage
 				< desired_state->logic_voltage);
 
-	if (power_control) {
-		if (blk->current_state->voltage_rail_status == off) {
-			ab_blk_pw_rails_enable(sc, blk->name);
+	/* Regulator Settings */
+	if (power_control && power_increasing) {
+		if (blk->current_state->voltage_rail_status == off)
+			ab_blk_pw_rails_enable(sc, blk->name,
+			to_chip_substate_id);
+		/*TODO: change regulator voltage*/
+	}
 
-			/*TODO enable after IPU/TPU cores power on/off is working*/
-			;//ab_block_power_on(blk->name);
-		} else if (!strcmp(blk->current_state->substate_name, "PowerGated")) {
-			;//ab_block_power_on(blk->name);
-		}
-		/*TODO enable after voltage change is supported in regulator*/
-#if 0
-		if (power_increasing)
-			change_voltage(sc, desired_state->logic_voltage);
-#endif
+	/* PMU settings */
+	if (power_control && blk->name == BLK_IPU) {
+		if (desired_state->id != BLOCK_STATE_1_2
+				&& desired_state->id != BLOCK_STATE_3_0
+				&& blk->current_state->id >= BLOCK_STATE_1_2)
+			if (ab_pmu_resume())
+				return -EAGAIN;
 	}
 
 	clk_set_frequency(dev, blk, desired_state->clk_frequency,
 			desired_state->clk_status);
 
-	/* Block specific hooks*/
-	/* TODO: Here we expect IP specific functions
-	 * IPU/TPU blocks turning on/off respective cores
-	 * PCIe setting GEN and lane data rate
-	 * DRAM setting data rate
-	 */
+	/* Block specific hooks */
 	if (blk->set_state)
 		blk->set_state(desired_state, blk->data);
 
-	if (power_control) {
-		if (!strcmp(desired_state->substate_name, "PowerGated")) {
-			;//ab_block_power_off(blk->name);
-		} else if (desired_state->voltage_rail_status == off) {
-			;//ab_block_power_off(blk->name);
-			ab_blk_pw_rails_disable(sc, blk->name);
-		}
-#if 0
-		if (!power_increasing)
-			change_power(blk->block_regulator, desired_state->logic_voltage);
-#endif
+	/* PMU settings */
+	if (power_control && blk->name == BLK_TPU) {
+		if (desired_state->id == BLOCK_STATE_1_2 && ab_pmu_sleep())
+			return -EAGAIN;
+		if (desired_state->id == BLOCK_STATE_3_0 && ab_pmu_deep_sleep())
+			return -EAGAIN;
 	}
+
+	/*Regulator Settings*/
+	if (power_control && !power_increasing) {
+		/*TODO: change regulator voltage*/
+		if (desired_state->voltage_rail_status == off)
+			ab_blk_pw_rails_disable(sc, blk->name,
+			to_chip_substate_id);
+	}
+
 	blk->current_state = desired_state;
 
 	return 0;
 }
 
-int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
-		    u32 to_chip_substate_id)
+int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 {
 	int i;
 	struct chip_to_block_map *map = NULL;
@@ -271,27 +316,29 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
 		return -EINVAL;
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
-		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL)))
+		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
+			to_chip_substate_id))
 		return -EINVAL;
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
-		      map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL)))
+		      map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL),
+			to_chip_substate_id))
 		return -EINVAL;
 
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
-		      map->dram_block_state_id, true))
+		      map->dram_block_state_id, true, to_chip_substate_id))
 		return -EINVAL;
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-		      map->mif_block_state_id, true))
+		      map->mif_block_state_id, true, to_chip_substate_id))
 		return -EINVAL;
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-		      map->fsys_block_state_id, true))
+		      map->fsys_block_state_id, true, to_chip_substate_id))
 		return -EINVAL;
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-		      map->aon_block_state_id, true))
+		      map->aon_block_state_id, true, to_chip_substate_id))
 		return -EINVAL;
 
 	sc->chip_substate_id = to_chip_substate_id;
@@ -366,6 +413,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 				&ab_sm_ctx->otp_fw_patch_dis))
 		dev_info(dev, "otp-fw-patch-dis property not found\n");
 
+	ab_sm_ctx->ab_sm_ctrl_pmic = true;
+
 	/* [TBD] Need DDR_SR, DDR_TRAIN, CKE_IN, CKE_IN_SENSE GPIOs for  */
 
 	/* Intialize the default state of each block for state manager */
@@ -402,10 +451,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	/* intitialize the default chip state */
 	ab_sm_ctx->chip_state_table = chip_state_map;
 	ab_sm_ctx->nr_chip_states = ARRAY_SIZE(chip_state_map);
-	ab_sm_ctx->sw_state_id = S0;
-	ab_sm_ctx->sw_state_name = "Active";
-	ab_sm_ctx->chip_substate_id = 0;
-	ab_sm_ctx->chip_substate_name = "Ready";
+	ab_sm_ctx->chip_substate_id = CHIP_STATE_DEFAULT;
 
 	ab_sm_create_debugfs(ab_sm_ctx);
 	return ab_sm_ctx;

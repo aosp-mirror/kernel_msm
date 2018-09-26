@@ -6,7 +6,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  *
-*/
+ */
 
 #ifndef _AIRBRUSH_CLK_H_
 #define _AIRBRUSH_CLK_H_

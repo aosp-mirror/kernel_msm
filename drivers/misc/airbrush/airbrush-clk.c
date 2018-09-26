@@ -10,9 +10,9 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/clk.h>
-#include<linux/mfd/abc-pcie.h>
 #include <linux/airbrush-sm-ctrl.h>
+#include <linux/clk.h>
+#include <linux/mfd/abc-pcie.h>
 
 #define OSC_RATE 19200000
 
@@ -23,6 +23,8 @@ void ipu_pll_enable(struct device *dev)
 {
 	struct clk *ipu_pll;
 
+	dev_dbg(dev, "%s: enable IPU PLL\n", __func__);
+
 	ipu_pll = clk_get(dev, "ipu_pll");
 	clk_prepare(ipu_pll);
 	clk_enable(ipu_pll);
@@ -31,6 +33,8 @@ void ipu_pll_enable(struct device *dev)
 void ipu_pll_disable(struct device *dev)
 {
 	struct clk *ipu_pll;
+
+	dev_dbg(dev, "%s: disable IPU PLL\n", __func__);
 
 	ipu_pll = clk_get(dev, "ipu_pll");
 	clk_disable(ipu_pll);
@@ -41,8 +45,11 @@ void ipu_gate(struct device *dev)
 {
 	uint32_t val;
 
+	dev_dbg(dev, "%s: gate IPU clock\n", __func__);
+
 	ABC_READ(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, &val);
-	val &= ~(1<<21);
+	val |= (1 << 20);
+	val &= ~(1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
 }
 
@@ -50,8 +57,11 @@ void ipu_ungate(struct device *dev)
 {
 	uint32_t val;
 
+	dev_dbg(dev, "%s: ungate IPU clock\n", __func__);
+
 	ABC_READ(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, &val);
-	val |= (1<<21);
+	val |= (1 << 20);
+	val |= (1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
 }
 
@@ -66,6 +76,8 @@ u64 ipu_set_rate(struct device *dev, u64 rate)
 
 	if (rate == 0)
 		rate = OSC_RATE;
+
+	dev_dbg(dev, "%s: set IPU clock rate to %llu\n", __func__, rate);
 
 	ipu_pll_mux = clk_get(dev, "ipu_pll_mux");
 	ipu_pll = clk_get(dev, "ipu_pll");
@@ -94,8 +106,11 @@ void tpu_gate(struct device *dev)
 {
 	uint32_t val;
 
+	dev_dbg(dev, "%s: gate TPU clocks\n", __func__);
+
 	ABC_READ(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, &val);
-	val &= ~(1<<21);
+	val |= (1 << 20);
+	val &= ~(1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
 }
 
@@ -103,14 +118,19 @@ void tpu_ungate(struct device *dev)
 {
 	uint32_t val;
 
+	dev_dbg(dev, "%s: ungate TPU clocks\n", __func__);
+
 	ABC_READ(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, &val);
-	val |= (1<<21);
+	val |= (1 << 20);
+	val |= (1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
 }
 
 void tpu_pll_enable(struct device *dev)
 {
 	struct clk *tpu_pll;
+
+	dev_dbg(dev, "%s: Enable TPU PLL\n", __func__);
 
 	tpu_pll = clk_get(dev, "tpu_pll");
 	clk_prepare(tpu_pll);
@@ -120,6 +140,8 @@ void tpu_pll_enable(struct device *dev)
 void tpu_pll_disable(struct device *dev)
 {
 	struct clk *tpu_pll;
+
+	dev_dbg(dev, "%s: Disable TPU PLL\n", __func__);
 
 	tpu_pll = clk_get(dev, "tpu_pll");
 	clk_disable(tpu_pll);
@@ -137,6 +159,8 @@ u64 tpu_set_rate(struct device *dev, u64 rate)
 
 	if (rate == 0)
 		rate = OSC_RATE;
+
+	dev_dbg(dev, "%s: set TPU clock rate to %llu\n", __func__, rate);
 
 	tpu_pll_mux = clk_get(dev, "tpu_pll_mux");
 	tpu_pll = clk_get(dev, "tpu_pll");

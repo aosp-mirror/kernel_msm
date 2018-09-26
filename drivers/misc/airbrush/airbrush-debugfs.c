@@ -21,7 +21,7 @@ int ab_interrupt_M0(int tar_dev);
 
 static int chip_state_set(void *sc, u64 val)
 {
-	if (ab_sm_set_state((struct ab_state_context *)sc, 0, val))
+	if (ab_sm_set_state((struct ab_state_context *)sc, val))
 		pr_err("State change failed\n");
 	return 0;
 }

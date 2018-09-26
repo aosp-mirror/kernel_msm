@@ -93,6 +93,15 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
 
+	if (!ab_ctx->ab_sm_ctrl_pmic) {
+		dev_dbg(ab_ctx->dev,
+				"%s: No ABC booting by state manager in current setup\n",
+				__func__);
+		/* register clock driver */
+		abc_clk_register(ab_ctx);
+		return 0;
+	}
+
 	ret = ab_get_pmic_resources(ab_ctx);
 	if (ret)
 		return ret;
@@ -297,7 +306,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	}
 
 	/* [TBD] DDR Related code will be added later */
-
 	/* register clock driver */
 	abc_clk_register(ab_ctx);
 	return 0;

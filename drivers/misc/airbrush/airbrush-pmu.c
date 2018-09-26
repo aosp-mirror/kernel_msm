@@ -17,7 +17,7 @@
 #include "airbrush-pmu.h"
 
 /* IPU and TPU Status Timeout */
-#define IPU_TPU_STATUS_TIMEOUT			20000
+#define IPU_TPU_STATUS_TIMEOUT			1000
 
 /* ABC PMU config regisetr offsets */
 #define SYSREG_PMU_PMU_CONTROL				0x10ba0004
@@ -25,144 +25,99 @@
 #define CMU_IPU_IPU_CONTROLLER_OPTION			0x10240800
 #define CMU_TPU_TPU_CONTROLLER_OPTION			0x10040800
 
-bool is_ab_ipu_on(void)
-{
-	u32 val;
-
-	ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
-	if (val & 0x1) /*PMU_STATUS[0:0]*/
-		return true;
-	return false;
-}
-
-bool is_ab_tpu_on(void)
-{
-	u32 val;
-
-	ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
-	if (val & 0x2) /*PMU_STATUS[1:1]*/
-		return true;
-	return false;
-}
-
-int ab_block_power_off(block_name_t block)
+int ab_pmu_sleep(void)
 {
 	uint32_t val;
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
 
-	switch (block) {
-	case BLK_IPU:
-		/* check for IPU status */
-		if (!is_ab_ipu_on())
-			return E_IPU_BLOCK_OFF;
+	pr_debug("%s: airbrush entering sleep\n", __func__);
 
-		/* IPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
-		ABC_READ(CMU_IPU_IPU_CONTROLLER_OPTION, &val);
-		val |= (1<<29);
-		ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, val);
+	/* IPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
+	ABC_READ(CMU_IPU_IPU_CONTROLLER_OPTION, &val);
+	val |= (0x1 << 29);
+	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, val);
 
-		/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
-		ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
-		val &= ~(1<<0);
-		ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
-		do {
-			/* PMU_STATUS[0:0] BLK_IPU_UP_STATUS */
-			ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
-		} while ((val & 0x1) && --timeout > 0);
+	/* TPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
+	ABC_READ(CMU_TPU_TPU_CONTROLLER_OPTION, &val);
+	val |= (0x1 << 29);
+	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, val);
 
-		if (timeout == 0) {
-			pr_err("Timeout waiting for IPU up status\n");
-			return E_STATUS_TIMEOUT;
-		}
+	/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
+	/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
+	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
+	val &= ~0x3;
+	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
 
-		break;
+	do {
+		/* PMU_STATUS[0:0] BLK_IPU_UP_STATUS */
+		/* PMU_STATUS[1:1] BLK_IPU_UP_STATUS */
+		ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
+	} while ((val & 0x3) && --timeout > 0);
 
-	case BLK_TPU:
-		/* check for TPU status */
-		if (!is_ab_tpu_on())
-			return E_TPU_BLOCK_OFF;
-
-		/* TPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
-		ABC_READ(CMU_TPU_TPU_CONTROLLER_OPTION, &val);
-		val |= (1<<29);
-		ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, val);
-
-		/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
-		ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
-		val &= ~(1<<1);
-		ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
-		do {
-			/* PMU_STATUS[1:1] BLK_TPU_UP_STATUS */
-			ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
-		} while ((val & 0x2) && --timeout > 0);
-
-		if (timeout == 0) {
-			pr_err("Timeout waiting for TPU up status\n");
-			return E_STATUS_TIMEOUT;
-		}
-		break;
-
-	default:
-		break;
+	if (timeout == 0) {
+		pr_err("%s: Timeout waiting for IPU/TPU down status\n",
+				__func__);
+		return E_STATUS_TIMEOUT;
 	}
 	return 0;
 }
 
-int ab_block_power_on(block_name_t block)
+int ab_pmu_deep_sleep(void)
 {
 	uint32_t val;
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
 
-	switch (block) {
-	case BLK_IPU:
-		/* check for IPU status */
-		if (is_ab_ipu_on())
-			return E_IPU_BLOCK_ON;
+	pr_debug("%s: airbrush entering deep sleep\n", __func__);
 
-		/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
-		ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
-		val |= (1 << 0);
+	ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
+	if (val & 0x3)
+		ab_pmu_sleep();
 
-		/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
-		ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
+	/* PMU_CONTROL[2:2] DEEP_SLEEP */
+	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
+	val |= (0x1 << 2);
+	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
 
-		do {
-			ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
+	do {
+		/* PMU_STATUS[2:2] DEEP_SLEEP_STATUS */
+		ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
+	} while ((val & 0x4) && --timeout > 0);
 
-		} while (!(val & 0x1) && --timeout > 0);
-
-		if (timeout == 0) {
-			pr_err("Timeout - IPU up status\n");
-			return E_STATUS_TIMEOUT;
-		}
-
-		break;
-
-	case BLK_TPU:
-		/* check for TPU status */
-		if (is_ab_tpu_on())
-			return E_TPU_BLOCK_ON;
-
-		/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
-		ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
-		val |= (1 << 1);
-
-		/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
-		ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
-
-		do {
-			ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
-
-		} while (!(val & 0x2) && --timeout > 0);
-
-		if (timeout == 0) {
-			pr_err("Timeout - TPU up status\n");
-			return E_STATUS_TIMEOUT;
-		}
-		break;
-
-	default:
-		break;
+	if (timeout == 0) {
+		pr_err("%s: Timeout waiting for deep_sleep set status\n",
+				__func__);
+		return E_STATUS_TIMEOUT;
 	}
+
+	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
+	val &= ~(0x1 << 2);
+	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
+
+	return 0;
+}
+
+int ab_pmu_resume(void)
+{
+	uint32_t val;
+	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
+
+	pr_debug("%s: airbrush resuming\n", __func__);
+
+	/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
+	/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
+	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
+	val |= (0x3 << 0);
+	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
+	do {
+		/* PMU_STATUS[0:0] BLK_IPU_UP_STATUS */
+		/* PMU_STATUS[1:1] BLK_IPU_UP_STATUS */
+		ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
+	} while ((!(val & 0x2) || !(val & 0x1)) && --timeout > 0);
+
+	if (timeout == 0) {
+		pr_err("%s: Timeout waiting for IPU/TPU up status\n", __func__);
+		return E_STATUS_TIMEOUT;
+	}
+
 	return 0;
 }

@@ -17,7 +17,8 @@
 
 #include <linux/airbrush-sm-ctrl.h>
 
-int ab_block_power_off(block_name_t block);
-int ab_block_power_on(block_name_t block);
+int ab_pmu_sleep(void);
+int ab_pmu_deep_sleep(void);
+int ab_pmu_resume(void);
 
 #endif //_AIRBRUSH_PMU_H_

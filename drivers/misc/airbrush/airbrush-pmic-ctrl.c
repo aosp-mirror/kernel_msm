@@ -13,10 +13,20 @@
 #include <linux/airbrush-sm-ctrl.h>
 
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
-				   block_name_t blk_name)
+			   block_name_t blk_name, u32 to_chip_substate_id)
 {
-	switch (blk_name) {
+	if (!sc->ab_sm_ctrl_pmic) {
+		dev_err(sc->dev,
+				"%s:No power rail controlled by state manager\n",
+				__func__);
+		return 0;
+	}
 
+	dev_dbg(sc->dev,
+			"%s: enabling rails for block %u chip substate id %u\n",
+			__func__, blk_name, to_chip_substate_id);
+
+	switch (blk_name) {
 	case BLK_IPU:
 	case BLK_TPU:
 		if (!regulator_is_enabled(sc->smps2))
@@ -85,20 +95,28 @@ fail_regulator_enable:
 }
 
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,
-				   block_name_t blk_name)
+			   block_name_t blk_name, u32 to_chip_substate_id)
 {
-	switch (blk_name) {
+	if (!sc->ab_sm_ctrl_pmic) {
+		dev_err(sc->dev,
+				"%s:No power rail controlled by state manager\n",
+				__func__);
+		return 0;
+	}
 
+	dev_dbg(sc->dev,
+			"%s: disabling rails for block %u chip substate id %u\n",
+			__func__, blk_name, to_chip_substate_id);
+
+	switch (blk_name) {
 	case BLK_IPU:
 	case BLK_TPU:
-		if (regulator_is_enabled(sc->ldo3)) {
+		if (regulator_is_enabled(sc->ldo3))
 			if (regulator_disable(sc->ldo3))
 				goto fail_regulator_disable;
-		}
-		if (regulator_is_enabled(sc->smps1)) {
+		if (regulator_is_enabled(sc->smps1))
 			if (regulator_disable(sc->smps1))
 				goto fail_regulator_disable;
-		}
 		break;
 
 	case BLK_AON:
@@ -112,14 +130,22 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 			if (regulator_disable(sc->smps2))
 				goto fail_regulator_disable;
 		break;
+
 	case DRAM:
+		if (to_chip_substate_id == CHIP_STATE_4_0) {
+			if (regulator_is_enabled(sc->ldo2))
+				if (regulator_disable(sc->ldo2))
+					goto fail_regulator_disable;
+		}
 		break;
 
 	case BLK_MIF:
 	case BLK_FSYS:
+		break;
 	default:
 		return -EINVAL;
 	}
+
 	return 0;
 
 fail_regulator_disable:
@@ -130,6 +156,15 @@ fail_regulator_disable:
 
 int ab_pmic_on(struct ab_state_context *sc)
 {
+	if (!sc->ab_sm_ctrl_pmic) {
+		dev_err(sc->dev,
+				"%s:No power rail controlled by state manager\n",
+				__func__);
+		return 0;
+	}
+
+	dev_dbg(sc->dev, "%s: setting rails to on\n", __func__);
+
 	if (regulator_enable(sc->smps2))
 		goto fail_regulator_smps2;
 	if (regulator_enable(sc->ldo1))
@@ -171,6 +206,12 @@ fail_regulator_smps2:
 int ab_get_pmic_resources(struct ab_state_context *sc)
 {
 	struct device *dev = sc->dev;
+
+	if (!sc->ab_sm_ctrl_pmic) {
+		dev_err(dev, "%s:No power rail controlled by state manager\n",
+				__func__);
+		return 0;
+	}
 
 	mutex_lock(&sc->lock);
 
@@ -277,6 +318,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	}
 
 	mutex_unlock(&sc->lock);
+
 	return 0;
 
 fail:
