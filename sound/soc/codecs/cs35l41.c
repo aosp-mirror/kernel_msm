@@ -792,6 +792,50 @@ static int cs35l41_get_output_dev(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+static const char * const cs35l41_vpbr_rel_rate_text[] = {
+	"5ms", "10ms", "25ms", "50ms", "100ms", "250ms", "500ms", "1000ms"};
+
+static SOC_ENUM_SINGLE_DECL(vpbr_rel_rate, CS35L41_VPBR_CFG,
+				CS35L41_REL_RATE_SHIFT,
+				cs35l41_vpbr_rel_rate_text);
+
+static const char * const cs35l41_vpbr_wait_text[] = {
+	"10ms", "100ms", "250ms", "500ms"};
+
+static SOC_ENUM_SINGLE_DECL(vpbr_wait, CS35L41_VPBR_CFG,
+				CS35L41_VPBR_WAIT_SHIFT,
+				cs35l41_vpbr_wait_text);
+
+static const char * const cs35l41_vpbr_atk_rate_text[] = {
+	"2.5us", "5us", "10us", "25us", "50us", "100us", "250us", "500us"};
+
+static SOC_ENUM_SINGLE_DECL(vpbr_atk_rate, CS35L41_VPBR_CFG,
+				CS35L41_VPBR_ATK_RATE_SHIFT,
+				cs35l41_vpbr_atk_rate_text);
+
+static const char * const cs35l41_vpbr_atk_vol_text[] = {
+	"0.0625dB", "0.125dB", "0.25dB", "0.5dB",
+	"0.75dB", "1dB", "1.25dB", "1.5dB"};
+
+static SOC_ENUM_SINGLE_DECL(vpbr_atk_vol, CS35L41_VPBR_CFG,
+				CS35L41_VPBR_ATK_VOL_SHIFT,
+				cs35l41_vpbr_atk_vol_text);
+
+static const char * const cs35l41_vpbr_thld1_text[] = {
+	"2.402", "2.449", "2.497", "2.544", "2.592", "2.639", "2.687", "2.734",
+	"2.782", "2.829", "2.877", "2.924", "2.972", "3.019", "3.067", "3.114",
+	"3.162", "3.209", "3.257", "3.304", "3.352", "3.399", "3.447", "3.494",
+	"3.542", "3.589", "3.637", "3.684", "3.732", "3.779", "3.827", "3.874"};
+
+static SOC_ENUM_SINGLE_DECL(vpbr_thld1, CS35L41_VPBR_CFG,
+				CS35L41_VPBR_THLD_SHIFT,
+				cs35l41_vpbr_thld1_text);
+
+static const char * const cs35l41_vpbr_en_text[] = {"Disabled", "Enabled"};
+
+static SOC_ENUM_SINGLE_DECL(vpbr_enable, CS35L41_PWR_CTRL3, 12,
+				cs35l41_vpbr_en_text);
+
 static const char * const cs35l41_pcm_source_texts[] = {"ASP", "DSP"};
 static const unsigned int cs35l41_pcm_source_values[] = {0x08, 0x32};
 static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_pcm_source_enum,
@@ -1382,6 +1426,13 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 			 0, 7, 0),
 	SOC_SINGLE_RANGE("ASPRX2 Slot Position", CS35L41_SP_FRAME_RX_SLOT, 8,
 			 0, 7, 0),
+	SOC_ENUM("VPBR Release Rate", vpbr_rel_rate),
+	SOC_ENUM("VPBR Wait", vpbr_wait),
+	SOC_ENUM("VPBR Attack Rate", vpbr_atk_rate),
+	SOC_ENUM("VPBR Attack Volume", vpbr_atk_vol),
+	SOC_SINGLE_RANGE("VPBR Max Attenuation", CS35L41_VPBR_CFG, 8, 0, 15, 0),
+	SOC_ENUM("VPBR Threshold 1", vpbr_thld1),
+	SOC_ENUM("VPBR Enable", vpbr_enable),
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
 	SOC_SINGLE_EXT("DSP Booted", SND_SOC_NOPM, 0, 1, 0,
 			cs35l41_halo_booted_get, cs35l41_halo_booted_put),
