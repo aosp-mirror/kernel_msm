@@ -250,6 +250,11 @@ int store_fuelguage_cache(struct bq27x00_reg_cache *cache_data)
 
 	memcpy(&(fg_info->cache), cache_data, sizeof(struct bq27x00_reg_cache));
 
+	if (fg_info->cache.capacity >= 5 && fg_info->cache.voltage < 3500) {
+		pr_info("nanohub: [FG] SOC:%d; voltage:%d\n",
+			fg_info->cache.capacity, fg_info->cache.voltage);
+		fg_info->cache.capacity = 0;
+	}
 	bq27x00_update(fg_info);
 	if (poll_interval > 0) {
 		/* The timer does not have to be accurate. */
