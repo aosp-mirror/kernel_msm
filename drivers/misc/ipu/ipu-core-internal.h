@@ -19,6 +19,7 @@
 #include <linux/ipu-core.h>
 #include <linux/iommu.h>
 #include <linux/mutex.h>
+#include <linux/pm_domain.h>
 #include <linux/types.h>
 
 #include "ipu-adapter.h"
@@ -111,6 +112,7 @@ struct paintbox_device;
 
 struct paintbox_bus {
 	struct paintbox_device *devices[PAINTBOX_DEVICE_TYPE_COUNT];
+	struct generic_pm_domain gpd;
 	struct paintbox_bus_ops *ops;
 	struct paintbox_pdata *pdata;
 	struct device *parent_dev;

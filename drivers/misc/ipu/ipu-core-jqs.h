@@ -28,7 +28,8 @@ void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus);
 int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus);
 
-void ipu_core_jqs_release(struct paintbox_bus *bus);
+int ipu_core_jqs_init(struct paintbox_bus *bus);
+void ipu_core_jqs_remove(struct paintbox_bus *bus);
 
 bool ipu_core_jqs_is_ready(struct paintbox_bus *bus);
 

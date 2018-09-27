@@ -28,7 +28,7 @@ static int ipu_core_jqs_fw_state_set(void *data, u64 val)
 	struct paintbox_bus *bus = data;
 
 	if (val > JQS_FW_STATUS_RUNNING) {
-		dev_err(bus->parent_dev, "%s: invalid value, val = %d",
+		dev_err(bus->parent_dev, "%s: invalid value, val = %llu",
 				__func__, val);
 		return -EINVAL;
 	}

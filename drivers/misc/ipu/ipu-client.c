@@ -16,12 +16,13 @@
 #include <linux/ab-dram.h>
 #include <linux/completion.h>
 #include <linux/ipu-core.h>
+#include <linux/ipu-jqs-messages.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/ipu-jqs-messages.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -42,8 +43,8 @@
 #include "ipu-resource.h"
 #include "ipu-stp.h"
 
-typedef int (*resource_allocator_t)(struct paintbox_data *,
-		struct paintbox_session *, unsigned int);
+#define JQS_STARTUP_LATENCY_US (10 * 1000)
+#define JQS_AUTO_SUSPEND_TIMEOUT_MS 250
 
 int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 		const struct jqs_message *req)
@@ -63,7 +64,10 @@ int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 	if (rsp.header.type != JQS_MESSAGE_TYPE_ACK ||
 			rsp.header.size != sizeof(rsp) ||
 			rsp.msg_type != req->type) {
-		dev_err(pb->dev, "%s: protocol error\n", __func__);
+		dev_err(pb->dev,
+				"%s: protocol error rsp type 0x%08x req 0x%08x rsp 0x%08x sz %u expected %zu\n",
+				__func__, rsp.header.type, req->type,
+				rsp.msg_type, rsp.header.size, sizeof(rsp));
 		return -EPROTO;
 	}
 
@@ -128,11 +132,6 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 
 	pb = container_of(m, struct paintbox_data, misc_device);
 
-	if (!ipu_is_jqs_ready(pb->dev)) {
-		dev_err(pb->dev, "%s: JQS firmware not ready\n", __func__);
-		return -ENOTCONN;
-	}
-
 	session = kzalloc(sizeof(struct paintbox_session), GFP_KERNEL);
 	if (!session)
 		return -ENOMEM;
@@ -150,9 +149,24 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 
 	mutex_lock(&pb->lock);
 
-	ret = ipu_buffer_init_session(pb, session);
+	ret = pm_runtime_get_sync(pb->dev);
 	if (ret < 0)
 		goto free_session;
+
+	/* TODO(b/117150299):  Remove once support for ROM firmware fallback is
+	 * removed.  When the ROM firmware fallback is removed the
+	 * pm_runtime_get_sync call will return an error if the JQS firmware
+	 * could not be loaded.
+	 */
+	if (!ipu_is_jqs_ready(pb->dev)) {
+		dev_err(pb->dev, "%s: JQS firmware not ready\n", __func__);
+		ret = -ENOTCONN;
+		goto put_runtime;
+	}
+
+	ret = ipu_buffer_init_session(pb, session);
+	if (ret < 0)
+		goto put_runtime;
 
 	ret = idr_alloc(&pb->session_idr, session, 0,
 			PAINTBOX_SESSION_ID_MAX, GFP_KERNEL);
@@ -179,9 +193,11 @@ free_session_idr:
 	idr_remove(&pb->session_idr, session->session_id);
 free_buffer_table:
 	ipu_buffer_release_session(pb, session);
+put_runtime:
+	pm_runtime_mark_last_busy(pb->dev);
+	pm_runtime_put_autosuspend(pb->dev);
 free_session:
 	mutex_unlock(&pb->lock);
-
 	kfree(session);
 
 	return ret;
@@ -221,11 +237,14 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 	 */
 	ab_dram_free_dma_buf_kernel(session->buffer_id_table);
 
+	pm_runtime_mark_last_busy(pb->dev);
+	ret = pm_runtime_put_autosuspend(pb->dev);
+
 	mutex_unlock(&pb->lock);
 
 	kfree(session);
 
-	return 0;
+	return ret;
 }
 
 static long ipu_client_get_capabilities_ioctl(struct paintbox_data *pb,
@@ -356,7 +375,7 @@ static void ipu_client_firmware_down(struct device *dev)
 {
 	struct paintbox_data *pb = dev_get_drvdata(dev);
 
-	dev_info(pb->dev, "JQS firmware is going down\n");
+	dev_dbg(pb->dev, "JQS firmware is going down\n");
 
 	/* TODO(b/114760293):  This needs to handle a reset notification in the
 	 * middle of a job.  Right now this will only work when the device is
@@ -368,7 +387,7 @@ static void ipu_client_firmware_up(struct device *dev)
 {
 	struct paintbox_data *pb = dev_get_drvdata(dev);
 
-	dev_info(pb->dev, "JQS firmware is ready\n");
+	dev_dbg(pb->dev, "JQS firmware is ready\n");
 
 	/* TODO(b/114760293):  This needs to handle a reset notification in the
 	 * middle of a job.  Right now this will only work when the device is
@@ -430,10 +449,23 @@ static int ipu_client_probe(struct device *dev)
 	INIT_LIST_HEAD(&pb->bulk_alloc_waiting_list);
 
 	ret = misc_register(&pb->misc_device);
-	if (ret) {
+	if (ret < 0) {
 		pr_err("Failed to register misc device node (ret = %d)", ret);
 		return ret;
 	}
+
+	ret = dev_pm_qos_add_request(dev, &pb->pm_qos,
+			DEV_PM_QOS_RESUME_LATENCY, JQS_STARTUP_LATENCY_US);
+	if (ret < 0) {
+		dev_err(pb->dev, "%s: Unable to configure pm qos, ret %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	pm_runtime_set_suspended(pb->dev);
+	pm_runtime_set_autosuspend_delay(pb->dev, JQS_AUTO_SUSPEND_TIMEOUT_MS);
+	pm_runtime_use_autosuspend(pb->dev);
+	pm_runtime_enable(pb->dev);
 
 	return 0;
 }
@@ -441,6 +473,11 @@ static int ipu_client_probe(struct device *dev)
 static int ipu_client_remove(struct device *dev)
 {
 	struct paintbox_data *pb = dev_get_drvdata(dev);
+
+	pm_runtime_disable(pb->dev);
+
+	if (dev_pm_qos_request_active(&pb->pm_qos))
+		dev_pm_qos_remove_request(&pb->pm_qos);
 
 	misc_deregister(&pb->misc_device);
 	ipu_aon_debug_remove(pb);

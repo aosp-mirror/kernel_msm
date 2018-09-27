@@ -17,6 +17,7 @@
 #include <linux/err.h>
 #include <linux/ipu-core.h>
 #include <linux/kernel.h>
+#include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -190,7 +191,18 @@ static int ipu_debug_regs_show(struct seq_file *s, void *unused)
 
 	written = ret;
 
+	ret = pm_runtime_get_sync(pb->dev);
+	if (ret < 0) {
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
+				ret);
+		return ret;
+	}
+
 	ret = debug->register_dump(debug, buf + written, len - written);
+
+	pm_runtime_mark_last_busy(pb->dev);
+	pm_runtime_put_autosuspend(pb->dev);
 
 	mutex_unlock(&pb->lock);
 
@@ -273,48 +285,62 @@ void ipu_debug_create_entry(struct paintbox_data *pb,
 	}
 }
 
-static int ipu_debug_reg_entry_show(struct seq_file *s, void *p)
+static int ipu_debug_reg_entry_set(void *data, u64 val)
 {
-	struct paintbox_debug_reg_entry *reg_entry = s->private;
-
-	seq_printf(s, "0x%016llx\n", reg_entry->read(reg_entry));
-	return 0;
-}
-
-static int ipu_debug_reg_entry_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, ipu_debug_reg_entry_show, inode->i_private);
-}
-
-static ssize_t ipu_debug_reg_entry_write(struct file *file,
-		const char __user *user_buf, size_t count, loff_t *ppos)
-{
-	struct seq_file *s = (struct seq_file *)file->private_data;
-	struct paintbox_debug_reg_entry *reg_entry = s->private;
+	struct paintbox_debug_reg_entry *reg_entry = data;
 	struct paintbox_debug *debug = reg_entry->debug;
 	struct paintbox_data *pb = debug->pb;
-	uint64_t val;
 	int ret;
 
-	ret = kstrtou64_from_user(user_buf, count, 0, &val);
+	mutex_lock(&pb->lock);
+
+	ret = pm_runtime_get_sync(pb->dev);
 	if (ret < 0) {
-		dev_err(pb->dev, "%s: invalid value, err = %d", __func__, ret);
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
+				ret);
 		return ret;
 	}
 
 	reg_entry->write(reg_entry, val);
 
-	return count;
+	pm_runtime_mark_last_busy(pb->dev);
+	ret = pm_runtime_put_autosuspend(pb->dev);
+
+	mutex_unlock(&pb->lock);
+
+	return ret;
 }
 
-static const struct file_operations ipu_debug_reg_entry_fops = {
-	.open = ipu_debug_reg_entry_open,
-	.write = ipu_debug_reg_entry_write,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-	.owner = THIS_MODULE,
-};
+static int ipu_debug_reg_entry_get(void *data, u64 *val)
+{
+	struct paintbox_debug_reg_entry *reg_entry = data;
+	struct paintbox_debug *debug = reg_entry->debug;
+	struct paintbox_data *pb = debug->pb;
+	int ret;
+
+	mutex_lock(&pb->lock);
+
+	ret = pm_runtime_get_sync(pb->dev);
+	if (ret < 0) {
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
+				ret);
+		return ret;
+	}
+
+	*val = reg_entry->read(reg_entry);
+
+	pm_runtime_mark_last_busy(pb->dev);
+	ret = pm_runtime_put_autosuspend(pb->dev);
+
+	mutex_unlock(&pb->lock);
+
+	return ret;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(ipu_debug_reg_entry_fops, ipu_debug_reg_entry_get,
+			ipu_debug_reg_entry_set, "%llx\n");
 
 int ipu_debug_alloc_reg_entries(struct paintbox_data *pb,
 		struct paintbox_debug *debug, size_t reg_count)
@@ -407,6 +433,14 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 
 	mutex_lock(&pb->lock);
 
+	ret = pm_runtime_get_sync(pb->dev);
+	if (ret < 0) {
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
+				ret);
+		return ret;
+	}
+
 	ret = ipu_aon_dump_registers(&pb->aon_debug, buf + written, len -
 			written);
 	if (ret < 0)
@@ -472,13 +506,19 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 		}
 	}
 
+	pm_runtime_mark_last_busy(pb->dev);
+	ret = pm_runtime_put_autosuspend(pb->dev);
+
 	mutex_unlock(&pb->lock);
 
 	seq_commit(s, written);
 
-	return 0;
+	return ret;
 
 err_exit:
+	pm_runtime_mark_last_busy(pb->dev);
+	pm_runtime_put_autosuspend(pb->dev);
+
 	mutex_unlock(&pb->lock);
 	dev_err(pb->dev, "%s: register dump error, err = %d", __func__, ret);
 	return ret;

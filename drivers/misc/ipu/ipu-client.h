@@ -23,6 +23,7 @@
 #include <linux/ipu-core.h>
 #include <linux/ktime.h>
 #include <linux/miscdevice.h>
+#include <linux/pm_qos.h>
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>
 
@@ -245,6 +246,7 @@ struct paintbox_buffer {
 struct paintbox_data {
 	struct mutex lock;
 	struct miscdevice misc_device;
+	struct dev_pm_qos_request pm_qos;
 	struct device *dev;
 
 	/* Depending on the IOMMU configuration the board, the IPU driver may

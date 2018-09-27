@@ -57,7 +57,6 @@ static int ipu_lbp_init_line_buffer_pool(struct paintbox_data *pb,
 int ipu_lbp_init(struct paintbox_data *pb)
 {
 	unsigned int i;
-	uint32_t caps;
 	int ret;
 
 	/* TODO(b/114734817):  This is an artifact of the old IPU driver and
@@ -71,14 +70,7 @@ int ipu_lbp_init(struct paintbox_data *pb)
 	/* TODO(b/115386014):  Remove and replace with a capabilties message to
 	 * the JQS.
 	 */
-
-	/* Read LBP/LB capabilities from LBP0 since that is always powered.
-	 * The capabilities are the same for the other LBPs.
-	 */
-	ipu_lbp_select(pb, 0);
-	caps = ipu_readl(pb->dev, IPU_CSR_LBP_OFFSET + LBP_CAP0);
-
-	pb->lbp.max_lbs = caps & LBP_CAP0_MAX_LB_MASK;
+	pb->lbp.max_lbs = LBP_CAP0_DEF & LBP_CAP0_MAX_LB_MASK;
 
 	for (i = 0; i < pb->lbp.num_lbps; i++) {
 		ret = ipu_lbp_init_line_buffer_pool(pb, i);

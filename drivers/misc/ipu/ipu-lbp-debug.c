@@ -22,6 +22,7 @@
 #include "ipu-lbp.h"
 #include "ipu-regs.h"
 
+/* The caller to this function must hold pb->lock */
 static uint64_t ipu_lbp_reg_entry_read(
 		struct paintbox_debug_reg_entry *reg_entry)
 {
@@ -36,6 +37,7 @@ static uint64_t ipu_lbp_reg_entry_read(
 			reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static void ipu_lbp_reg_entry_write(struct paintbox_debug_reg_entry *reg_entry,
 		uint64_t val)
 {
@@ -50,6 +52,7 @@ static void ipu_lbp_reg_entry_write(struct paintbox_debug_reg_entry *reg_entry,
 			reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static uint64_t ipu_lb_reg_entry_read(
 		struct paintbox_debug_reg_entry *reg_entry)
 {
@@ -64,6 +67,7 @@ static uint64_t ipu_lb_reg_entry_read(
 			reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static void ipu_lb_reg_entry_write(struct paintbox_debug_reg_entry *reg_entry,
 			uint64_t val)
 {
@@ -322,6 +326,7 @@ static int ipu_lb_dump_lb_sb_delta_register(struct paintbox_data *pb,
 			"\tSB_DELTA %u\n", val & LB_SB_DELTA_SB_DELTA_MASK);
 }
 
+/* The caller to this function must hold pb->lock */
 int ipu_lbp_dump_registers(struct paintbox_debug *debug, char *buf, size_t len)
 {
 	struct paintbox_lbp *lbp = container_of(debug, struct paintbox_lbp,
@@ -366,6 +371,7 @@ int ipu_lbp_dump_registers(struct paintbox_debug *debug, char *buf, size_t len)
 	return written;
 }
 
+/* The caller to this function must hold pb->lock */
 int ipu_lb_dump_registers(struct paintbox_debug *debug, char *buf, size_t len)
 {
 	struct paintbox_lb *lb = container_of(debug, struct paintbox_lb, debug);

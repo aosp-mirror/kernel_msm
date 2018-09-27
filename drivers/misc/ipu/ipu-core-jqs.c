@@ -17,6 +17,7 @@
 #include <linux/firmware.h>
 #include <linux/ipu-core.h>
 #include <linux/ipu-jqs-messages.h>
+#include <linux/pm_domain.h>
 #include <linux/types.h>
 
 #include "ipu-core-internal.h"
@@ -84,6 +85,9 @@ int ipu_core_jqs_load_firmware(struct paintbox_bus *bus)
 {
 	int ret;
 
+	if (bus->fw_status > JQS_FW_STATUS_INIT)
+		return 0;
+
 	dev_dbg(bus->parent_dev, "requesting firmware %s\n", JQS_FIRMWARE_NAME);
 
 	ret = request_firmware(&bus->fw, JQS_FIRMWARE_NAME, bus->parent_dev);
@@ -118,6 +122,9 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	struct jqs_firmware_preamble preamble;
 	size_t fw_binary_len_bytes;
 	int ret;
+
+	if (bus->fw_status > JQS_FW_STATUS_STAGED)
+		return 0;
 
 	if (WARN_ON(!bus->fw))
 		return -EINVAL;
@@ -310,7 +317,11 @@ unstage_firmware:
 unload_firmware:
 	ipu_core_jqs_unload_firmware(bus);
 start_rom_firmware:
+	/* TODO(b/117150299):  Remove support for ROM firmware fallback once the
+	 * JQS Firmware is fully integrated into the Android build.
+	 */
 	ipu_core_jqs_start_rom_firmware(bus);
+
 	return 0;
 }
 
@@ -356,13 +367,6 @@ void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 	bus->fw_status = JQS_FW_STATUS_STAGED;
 }
 
-void ipu_core_jqs_release(struct paintbox_bus *bus)
-{
-	ipu_core_jqs_disable_firmware(bus);
-	ipu_core_jqs_unstage_firmware(bus);
-	ipu_core_jqs_unload_firmware(bus);
-}
-
 enum paintbox_jqs_status ipu_bus_get_fw_status(struct paintbox_bus *bus)
 {
 	return bus->fw_status;
@@ -380,4 +384,83 @@ bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
 		return false;
 
 	return true;
+}
+
+static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
+{
+	struct paintbox_bus *bus;
+
+	bus = container_of(genpd, struct paintbox_bus, gpd);
+	if (WARN_ON(!bus))
+		return -EINVAL;
+
+	dev_dbg(bus->parent_dev, "%s: runtime request to power up JQS\n",
+			__func__);
+
+	return ipu_core_jqs_enable_firmware(bus);
+}
+
+static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
+{
+	struct paintbox_bus *bus;
+
+	bus = container_of(genpd, struct paintbox_bus, gpd);
+	if (WARN_ON(!bus))
+		return -EINVAL;
+
+	dev_dbg(bus->parent_dev, "%s: runtime request to power down JQS\n",
+			__func__);
+
+	ipu_core_jqs_disable_firmware(bus);
+
+	return 0;
+}
+
+int ipu_core_jqs_init(struct paintbox_bus *bus)
+{
+	int ret;
+
+	bus->gpd.name = "ipu_jqs";
+	bus->gpd.power_off = ipu_core_jqs_power_off;
+	bus->gpd.power_on = ipu_core_jqs_power_on;
+
+	/* Create a generic power down for managing JQS power through runtime
+	 * power management.
+	 */
+	ret = pm_genpd_init(&bus->gpd, NULL, true /* is_off */);
+	if (ret < 0) {
+		dev_err(bus->parent_dev,
+				"%s: unable to create power domain for IPU JQS, ret %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	/* Try to load the pre-load the firmware if it is available. */
+	ret = ipu_core_jqs_load_firmware(bus);
+	if (ret < 0)
+		dev_warn(bus->parent_dev,
+				"%s: unable to preload JQS firmware, ret %d\n",
+				__func__, ret);
+
+	/* TODO(b/116190655):  Once the FW download SPI issue is resolved and we
+	 * can start DRAM at PCIe probe we should try to stage the JQS FW to
+	 * Airbrush DRAM at IPU driver probe.
+	 */
+
+	return 0;
+}
+
+void ipu_core_jqs_remove(struct paintbox_bus *bus)
+{
+	int ret;
+
+	ipu_core_jqs_disable_firmware(bus);
+	ipu_core_jqs_unstage_firmware(bus);
+	ipu_core_jqs_unload_firmware(bus);
+
+	ret = pm_genpd_remove(&bus->gpd);
+	if (ret < 0)
+		dev_err(bus->parent_dev,
+				"%s: unable to remove power down for IPU JQS, ret %d\n",
+				__func__, ret);
 }

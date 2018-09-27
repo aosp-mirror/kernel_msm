@@ -31,6 +31,7 @@ static inline void ipu_stp_select(struct paintbox_data *pb,
 	ipu_writel(pb->dev, stp_id, IPU_CSR_STP_OFFSET + STP_SEL);
 }
 
+/* The caller to this function must hold pb->lock */
 static uint64_t ipu_stp_reg_entry_read(
 		struct paintbox_debug_reg_entry *reg_entry)
 {
@@ -45,6 +46,7 @@ static uint64_t ipu_stp_reg_entry_read(
 	return ipu_readq(pb->dev, IPU_CSR_STP_OFFSET + reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static void ipu_stp_reg_entry_write(
 		struct paintbox_debug_reg_entry *reg_entry, uint64_t val)
 {
@@ -139,6 +141,7 @@ static int ipu_stp_dump_stp_stat_register(struct paintbox_data *pb,
 			val & STP_STAT_PC_MASK);
 }
 
+/* The caller to this function must hold pb->lock */
 int ipu_stp_dump_registers(struct paintbox_debug *debug, char *buf,
 		size_t len)
 {

@@ -75,7 +75,7 @@ static void ipu_adapter_ab_mfd_writel(struct device *dev, uint32_t val,
 	 * running jobs and reset the IPU.
 	 */
 	if (ret < 0)
-		dev_err(dev, "%s: write error offset %u val 0x08x, ret %d\n",
+		dev_err(dev, "%s: write error offset %u val 0x%08x, ret %d\n",
 				__func__, offset, val, ret);
 
 }
@@ -100,7 +100,7 @@ static uint32_t ipu_adapter_ab_mfd_readl(struct device *dev,
 		 * be considered a catastrophic failure.  The IPU stack should
 		 * cancel any running jobs and reset the IPU.
 		 */
-		dev_err(dev, "%s: read error offset %u val 0x08x, ret %d\n",
+		dev_err(dev, "%s: read error offset %u val 0x%08x, ret %d\n",
 				__func__, offset, val, ret);
 		return 0;
 	}

@@ -96,6 +96,7 @@ static const char *ipu_dma_grp_reg_names[DMA_GRP_NUM_REGS] = {
 	REG_NAME_ENTRY(DMA_GRP_SPARE)
 };
 
+/* The caller to this function must hold pb->lock */
 static inline void ipu_dma_select_channel(struct paintbox_data *pb,
 		unsigned int channel_id)
 {
@@ -104,6 +105,7 @@ static inline void ipu_dma_select_channel(struct paintbox_data *pb,
 			IPU_CSR_DMA_GRP_OFFSET + DMA_SEL);
 }
 
+/* The caller to this function must hold pb->lock */
 static uint64_t ipu_dma_reg_entry_read(
 		struct paintbox_debug_reg_entry *reg_entry)
 {
@@ -114,6 +116,7 @@ static uint64_t ipu_dma_reg_entry_read(
 			reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static void ipu_dma_reg_entry_write(
 		struct paintbox_debug_reg_entry *reg_entry, uint64_t val)
 {
@@ -124,6 +127,7 @@ static void ipu_dma_reg_entry_write(
 			reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static uint64_t ipu_dma_channel_reg_entry_read(
 		struct paintbox_debug_reg_entry *reg_entry)
 {
@@ -138,6 +142,7 @@ static uint64_t ipu_dma_channel_reg_entry_read(
 			reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static void ipu_dma_channel_reg_entry_write(
 		struct paintbox_debug_reg_entry *reg_entry, uint64_t val)
 {
@@ -429,6 +434,7 @@ static int ipu_dma_dump_dma_ssp_status_register(struct paintbox_data *pb,
 			len, "\tSEG_AVAIL %u\n", val);
 }
 
+/* The caller to this function must hold pb->lock */
 int ipu_dma_dump_registers(struct paintbox_debug *debug, char *buf, size_t len)
 {
 	uint64_t dma_top_registers[DMA_TOP_NUM_REGS];
@@ -715,6 +721,7 @@ static inline uint64_t get_reg_value(uint64_t *reg_values, uint32_t reg_offset)
 	return reg_values[REG_INDEX(reg_offset)];
 }
 
+/* The caller to this function must hold pb->lock */
 int ipu_dma_dump_channel_registers(struct paintbox_debug *debug, char *buf,
 			size_t len)
 {

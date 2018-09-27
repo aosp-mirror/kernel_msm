@@ -220,6 +220,7 @@ int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 
 	pb_dev->dev.bus = &ipu_bus_type;
 	pb_dev->dev.platform_data = pdata;
+	pb_dev->dev.parent = bus->parent_dev;
 
 	/* TODO:  Look for a better way to do this.  Normally it is
 	 * done in OF but since we are manually constructing the IOMMU device we
@@ -238,16 +239,25 @@ int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 	pb_dev->debug_root = bus->debug_root;
 #endif
 
+	device_initialize(&pb_dev->dev);
+
 	dev_set_name(&pb_dev->dev, name);
 
-	ret = device_register(&pb_dev->dev);
+	/* Add the new device to the IPU JQS power domain */
+	ret = pm_genpd_add_device(&bus->gpd, &pb_dev->dev);
+	if (ret < 0) {
+		dev_err(bus->parent_dev,
+				"failed to add device %s to %s power domain, ret %d\n",
+				name, bus->gpd.name, ret);
+		goto put_device;
+	}
+
+	ret = device_add(&pb_dev->dev);
 	if (ret < 0) {
 		dev_err(bus->parent_dev,
 				"failed to register device %s, ret %d\n",
 				name, ret);
-		put_device(&pb_dev->dev);
-		kfree(pb_dev);
-		return ret;
+		goto remove_from_power_domain;
 	}
 
 	bus->devices[type] = pb_dev;
@@ -268,6 +278,13 @@ int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 	}
 
 	return 0;
+
+remove_from_power_domain:
+	pm_genpd_remove_device(&bus->gpd, &pb_dev->dev);
+put_device:
+	put_device(&pb_dev->dev);
+	kfree(pb_dev);
+	return ret;
 }
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
@@ -338,7 +355,7 @@ int ipu_bus_initialize(struct device *parent_dev,
 #endif
 	ipu_core_jqs_debug_init(bus);
 
-	ret = ipu_core_jqs_enable_firmware(bus);
+	ret = ipu_core_jqs_init(bus);
 	if (ret < 0) {
 		ipu_bus_deinitialize(bus);
 		return ret;
@@ -361,10 +378,12 @@ void ipu_bus_deinitialize(struct paintbox_bus *bus)
 
 		bus->devices[i] = NULL;
 
+		pm_genpd_remove_device(&bus->gpd, &pb_dev->dev);
+
 		device_unregister(&pb_dev->dev);
 	}
 
-	ipu_core_jqs_release(bus);
+	ipu_core_jqs_remove(bus);
 
 	ipu_core_jqs_debug_remove(bus);
 #if IS_ENABLED(CONFIG_IPU_DEBUG)

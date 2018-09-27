@@ -24,6 +24,7 @@
 #include "ipu-debug.h"
 #include "ipu-regs.h"
 
+/* The caller to this function must hold pb->lock */
 static uint64_t ipu_apb_reg_entry_read(
 		struct paintbox_debug_reg_entry *reg_entry)
 {
@@ -33,6 +34,7 @@ static uint64_t ipu_apb_reg_entry_read(
 	return ipu_readq(pb->dev, IPU_CSR_APB_OFFSET + reg_entry->reg_offset);
 }
 
+/* The caller to this function must hold pb->lock */
 static void ipu_apb_reg_entry_write(
 		struct paintbox_debug_reg_entry *reg_entry, uint64_t val)
 {
@@ -74,6 +76,7 @@ static inline int ipu_apb_dump_reg(struct paintbox_data *pb,
 			reg_name, buf, written, len);
 }
 
+/* The caller to this function must hold pb->lock */
 int ipu_apb_dump_registers(struct paintbox_debug *debug, char *buf, size_t len)
 {
 	struct paintbox_data *pb = debug->pb;
@@ -81,20 +84,19 @@ int ipu_apb_dump_registers(struct paintbox_debug *debug, char *buf, size_t len)
 	int ret, written = 0;
 
 	for (i = 0; i < IO_APB_NUM_REGS; i++) {
-		if (ipu_apb_reg_names[i] != NULL) {
-			ret = ipu_apb_dump_reg(pb, i * IPU_REG_WIDTH, buf,
-					&written, len);
-			if (ret < 0)
-				goto err_exit;
+		if (ipu_apb_reg_names[i] == NULL)
+			continue;
+
+		ret = ipu_apb_dump_reg(pb, i * IPU_REG_WIDTH, buf, &written,
+				len);
+		if (ret < 0) {
+			dev_err(pb->dev, "%s: register dump error, err = %d",
+					__func__, ret);
+			return ret;
 		}
 	}
 
 	return written;
-
-err_exit:
-	dev_err(pb->dev, "%s: register dump error, err = %d", __func__, ret);
-
-	return ret;
 }
 
 void ipu_apb_debug_init(struct paintbox_data *pb)
