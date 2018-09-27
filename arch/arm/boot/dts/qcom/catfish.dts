@@ -14,13 +14,13 @@
 /dts-v1/;
 
 #include "common-8909.dtsi"
-#include "apq8009w-memory.dtsi"
+#include "catfish-memory.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 MTP";
-	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
+	model = "Qualcomm Technologies, Inc. APQ8009W-PM8916 1GB CDP";
+	compatible = "qcom,apq8009-cdp", "qcom,apq8009", "qcom,cdp";
 	qcom,msm-id = <265 0>,
-		      <301 0>;
+			<301 0>;
 	qcom,board-id= <8 0x105>;
 };
 

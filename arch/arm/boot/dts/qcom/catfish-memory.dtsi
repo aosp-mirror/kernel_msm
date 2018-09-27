@@ -1,0 +1,9 @@
+#include "apq8009w-memory.dtsi"
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x01700000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x89700000 0x0 0x0000000>;
+};
