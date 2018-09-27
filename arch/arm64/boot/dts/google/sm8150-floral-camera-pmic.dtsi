@@ -40,8 +40,8 @@
 		regulators {
 			max77826_ldo1: max77826_ldo1 {
 				regulator-name = "max77826_ldo1";
-				regulator-min-microvolt = <1100000>;
-				regulator-max-microvolt = <1100000>;
+				regulator-min-microvolt = <1050000>;
+				regulator-max-microvolt = <1050000>;
 			};
 
 			max77826_ldo2: max77826_ldo2 {
@@ -64,8 +64,8 @@
 
 			max77826_ldo5: max77826_ldo5 {
 				regulator-name = "max77826_ldo5";
-				regulator-min-microvolt = <2900000>;
-				regulator-max-microvolt = <2900000>;
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
 			};
 
 			max77826_ldo6: max77826_ldo6 {
@@ -88,8 +88,8 @@
 
 			max77826_ldo9: max77826_ldo9 {
 				regulator-name = "max77826_ldo9";
-				regulator-min-microvolt = <1850000>;
-				regulator-max-microvolt = <1850000>;
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
 			};
 
 			max77826_ldo10: max77826_ldo10 {
@@ -106,14 +106,14 @@
 
 			max77826_ldo12: max77826_ldo12 {
 				regulator-name = "max77826_ldo12";
-				regulator-min-microvolt = <3000000>;
-				regulator-max-microvolt = <3000000>;
+				regulator-min-microvolt = <2800000>;
+				regulator-max-microvolt = <2800000>;
 			};
 
 			max77826_ldo13: max77826_ldo13 {
 				regulator-name = "max77826_ldo13";
-				regulator-min-microvolt = <1850000>;
-				regulator-max-microvolt = <1850000>;
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
 			};
 
 			max77826_ldo14: max77826_ldo14 {
