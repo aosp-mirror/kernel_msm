@@ -594,7 +594,10 @@ static struct msm_pcm_routing_fdai_data
 
 static unsigned long session_copp_map[MSM_FRONTEND_DAI_MAX][2]
 				     [MSM_BACKEND_DAI_MAX];
-static struct msm_pcm_routing_app_type_data app_type_cfg[MAX_APP_TYPES];
+static struct msm_pcm_routing_app_type_data app_type_cfg[MAX_APP_TYPES] = {
+	{69936,48000,16},
+	{69938,48000,16},
+};
 static struct msm_pcm_routing_app_type_data lsm_app_type_cfg[MAX_APP_TYPES];
 static struct msm_pcm_stream_app_type_cfg
 			 fe_dai_app_type_cfg[MSM_FRONTEND_DAI_MAX][2];
