@@ -592,8 +592,8 @@ static struct bio *f2fs_grab_read_bio(struct inode *inode, block_t blkaddr,
 	bio->bi_end_io = f2fs_read_end_io;
 	bio_set_op_attrs(bio, REQ_OP_READ, 0);
 
-	if (f2fs_encrypted_file(inode) &&
-	    !fscrypt_using_hardware_encryption(inode))
+        if (f2fs_encrypted_file(inode) &&
+            !fscrypt_using_hardware_encryption(inode))
 		post_read_steps |= 1 << STEP_DECRYPT;
 	if (f2fs_verity_file(inode) && !(flags & F2FS_GETPAGE_SKIP_VERITY))
 		post_read_steps |= 1 << STEP_VERITY;
@@ -2151,6 +2151,18 @@ continue_unlock:
 	return ret;
 }
 
+static inline bool __should_serialize_io(struct inode *inode,
+					struct writeback_control *wbc)
+{
+	if (!S_ISREG(inode->i_mode))
+		return false;
+	if (wbc->sync_mode != WB_SYNC_ALL)
+		return true;
+	if (get_dirty_pages(inode) >= SM_I(F2FS_I_SB(inode))->min_seq_blocks)
+		return true;
+	return false;
+}
+
 int __f2fs_write_data_pages(struct address_space *mapping,
 						struct writeback_control *wbc,
 						enum iostat_type io_type)
@@ -2159,6 +2171,7 @@ int __f2fs_write_data_pages(struct address_space *mapping,
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct blk_plug plug;
 	int ret;
+	bool locked = false;
 
 	/* deal with chardevs and other special file */
 	if (!mapping->a_ops->writepage)
@@ -2189,9 +2202,17 @@ int __f2fs_write_data_pages(struct address_space *mapping,
 	else if (atomic_read(&sbi->wb_sync_req))
 		goto skip_write;
 
+	if (__should_serialize_io(inode, wbc)) {
+		mutex_lock(&sbi->writepages);
+		locked = true;
+	}
+
 	blk_start_plug(&plug);
 	ret = f2fs_write_cache_pages(mapping, wbc, io_type);
 	blk_finish_plug(&plug);
+
+	if (locked)
+		mutex_unlock(&sbi->writepages);
 
 	if (wbc->sync_mode == WB_SYNC_ALL)
 		atomic_dec(&sbi->wb_sync_req);
