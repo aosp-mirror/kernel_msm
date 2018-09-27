@@ -22,6 +22,7 @@
 #include <linux/io.h>
 #include <linux/kthread.h>
 #include <linux/time.h>
+#include <linux/rtc.h>
 #include <linux/suspend.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
@@ -267,6 +268,36 @@ restart_level_show(struct device *dev, struct device_attribute *attr, char *buf)
 	return snprintf(buf, PAGE_SIZE, "%s\n", restart_levels[level]);
 }
 
+static ssize_t crash_reason_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+	unsigned long flags;
+	struct subsys_device *subsys = to_subsys(dev);
+
+	spin_lock_irqsave(&subsys->desc->ssr_sysfs_lock, flags);
+	ret = snprintf(buf, PAGE_SIZE, "%s\n",
+		to_subsys(dev)->desc->last_crash_reason);
+	spin_unlock_irqrestore(&subsys->desc->ssr_sysfs_lock, flags);
+	return ret;
+}
+static DEVICE_ATTR_RO(crash_reason);
+
+static ssize_t crash_timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+	unsigned long flags;
+	struct subsys_device *subsys = to_subsys(dev);
+
+	spin_lock_irqsave(&subsys->desc->ssr_sysfs_lock, flags);
+	ret = snprintf(buf, PAGE_SIZE, "%s\n",
+		to_subsys(dev)->desc->last_crash_timestamp);
+	spin_unlock_irqrestore(&subsys->desc->ssr_sysfs_lock, flags);
+	return ret;
+}
+static DEVICE_ATTR_RO(crash_timestamp);
+
 static ssize_t restart_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -387,6 +418,8 @@ static struct attribute *subsys_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_state.attr,
 	&dev_attr_crash_count.attr,
+	&dev_attr_crash_reason.attr,
+	&dev_attr_crash_timestamp.attr,
 	&dev_attr_restart_level.attr,
 	&dev_attr_firmware_name.attr,
 	&dev_attr_system_debug.attr,
@@ -736,7 +769,11 @@ static int wait_for_err_ready(struct subsys_device *subsys)
 static int subsystem_shutdown(struct subsys_device *dev, void *data)
 {
 	const char *name = dev->desc->name;
+	char *timestamp = dev->desc->last_crash_timestamp;
 	int ret;
+	struct timespec ts_rtc;
+	struct rtc_time tm;
+	unsigned long flags;
 
 	pr_info("[%s:%d]: Shutting down %s\n",
 			current->comm, current->pid, name);
@@ -750,6 +787,17 @@ static int subsystem_shutdown(struct subsys_device *dev, void *data)
 			return ret;
 		}
 	}
+
+	spin_lock_irqsave(&dev->desc->ssr_sysfs_lock, flags);
+	/* record crash time */
+	getnstimeofday(&ts_rtc);
+	rtc_time_to_tm(ts_rtc.tv_sec - (sys_tz.tz_minuteswest * 60), &tm);
+	snprintf(timestamp, MAX_CRASH_TIMESTAMP_LEN,
+			"%d-%02d-%02d_%02d-%02d-%02d",
+			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec);
+	spin_unlock_irqrestore(&dev->desc->ssr_sysfs_lock, flags);
+
 	dev->crash_count++;
 	subsys_set_state(dev, SUBSYS_OFFLINE);
 	disable_all_irqs(dev);
@@ -1807,6 +1855,7 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	INIT_WORK(&subsys->work, subsystem_restart_wq_func);
 	INIT_WORK(&subsys->device_restart_work, device_restart_work_hdlr);
 	spin_lock_init(&subsys->track.s_lock);
+	spin_lock_init(&subsys->desc->ssr_sysfs_lock);
 	init_subsys_timer(desc);
 
 	subsys->id = ida_simple_get(&subsys_ida, 0, 0, GFP_KERNEL);

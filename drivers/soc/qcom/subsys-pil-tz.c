@@ -796,15 +796,17 @@ static struct pil_reset_ops pil_ops_trusted = {
 	.deinit_image = pil_deinit_image_trusted,
 };
 
-static void log_failure_reason(const struct pil_tz_data *d)
+static void log_failure_reason(struct pil_tz_data *d)
 {
 	size_t size;
-	char *smem_reason, reason[MAX_SSR_REASON_LEN];
+	char *smem_reason, *reason;
 	const char *name = d->subsys_desc.name;
+	unsigned long flags;
 
 	if (d->smem_id == -1)
 		return;
 
+	reason = d->subsys_desc.last_crash_reason;
 	smem_reason = qcom_smem_get(QCOM_SMEM_HOST_ANY, d->smem_id, &size);
 	if (IS_ERR(smem_reason) || !size) {
 		pr_err("%s SFR: (unknown, qcom_smem_get failed).\n",
@@ -815,8 +817,9 @@ static void log_failure_reason(const struct pil_tz_data *d)
 		pr_err("%s SFR: (unknown, empty string found).\n", name);
 		return;
 	}
-
+	spin_lock_irqsave(&d->subsys_desc.ssr_sysfs_lock, flags);
 	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
+	spin_unlock_irqrestore(&d->subsys_desc.ssr_sysfs_lock, flags);
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
 }
 

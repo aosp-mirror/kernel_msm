@@ -17,6 +17,9 @@
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
 
+#define MAX_SSR_REASON_LEN  256U
+#define MAX_CRASH_TIMESTAMP_LEN  30U
+
 struct subsys_device;
 extern struct bus_type subsys_bus_type;
 
@@ -83,6 +86,9 @@ struct subsys_notif_timeout {
  * @ignore_ssr_failure: SSR failures are usually fatal and results in panic. If
  * set will ignore failure.
  * @edge: GLINK logical name of the subsystem
+ * @last_crash_reason: reason of the last crash
+ * @last_crash_timestamp: timestamp of the last crash
+ * @ssr_sysfs_lock: protects ssr sysfs nodes access
  */
 struct subsys_desc {
 	const char *name;
@@ -122,6 +128,9 @@ struct subsys_desc {
 	bool ignore_ssr_failure;
 	const char *edge;
 	struct qcom_smem_state *state;
+	char last_crash_reason[MAX_SSR_REASON_LEN];
+	char last_crash_timestamp[MAX_CRASH_TIMESTAMP_LEN];
+	spinlock_t ssr_sysfs_lock;
 #ifdef CONFIG_SETUP_SSR_NOTIF_TIMEOUTS
 	struct subsys_notif_timeout timeout_data;
 #endif /* CONFIG_SETUP_SSR_NOTIF_TIMEOUTS */
