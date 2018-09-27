@@ -61,6 +61,7 @@ struct host_jqs_queue_waiter {
 
 	void *buf;
 	size_t size;
+	bool enabled;
 };
 
 struct host_jqs_queue {
@@ -71,7 +72,7 @@ struct host_jqs_queue {
 	struct host_jqs_cbuf host_sys_jqs_cbuf;
 
 	/* The waiter, if any, on this queue */
-	struct host_jqs_queue_waiter *waiter;
+	struct host_jqs_queue_waiter waiter;
 };
 
 struct paintbox_jqs_msg_transport {

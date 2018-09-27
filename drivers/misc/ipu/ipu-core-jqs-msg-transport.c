@@ -131,115 +131,34 @@ static uint32_t write_core(struct paintbox_bus *bus, uint32_t q_id,
 	return bytes_written;
 }
 
-/* Must hold trans->lock */
-static int init_waiter(struct host_jqs_queue *host_q, void *buf, size_t size,
-		struct host_jqs_queue_waiter *waiter)
-{
-	/* Two concurrent calls to read is not supported */
-	if (host_q->waiter)
-		return -EBUSY;
-
-	init_completion(&waiter->completion);
-	waiter->ret = 0;
-	waiter->buf = buf;
-	waiter->size = size;
-
-	host_q->waiter = waiter;
-	return 0;
-}
-
-/* Must hold trans->lock && host_q->waiter != nullptr */
-static void signal_waiter(struct host_jqs_queue *host_q, int ret)
-{
-	struct host_jqs_queue_waiter *waiter = host_q->waiter;
-
-	waiter->ret = ret;
-	complete(&waiter->completion);
-	host_q->waiter = NULL;
-}
-
-/* Must hold trans->lock */
-static void remove_waiter(struct host_jqs_queue *host_q,
-		struct host_jqs_queue_waiter *waiter)
-{
-	/* A waiter can be removed in three circumstances.
-	 * 1. Data arrives on the queue
-	 * 2. A timeout occurs
-	 * 3. The queue is deallocated
-	 *
-	 * Ideally, the only thread that should remove a waiter should be
-	 * itself. However, I didn't want to require another synchronization
-	 * step on #3, where the queue was deallocated, but there was still a
-	 * waiter on it.  Since the host_q are statically allocated, we could
-	 * avoid that synchronization, and just leave this 'dangling' waiter to
-	 * wake up, realize it had been signaled due to a broken queue, remove
-	 * itself and then return, but perhaps even worse than the dangling
-	 * waiter, if that queue got reallocated, the waiter could cause a
-	 * failure for a read on a newly created queue, perhaps even from a
-	 * different session.
-	 *
-	 * Slightly cleaner, I think, is this approach, where the waiter is
-	 * removed from the host_q as soon as it is signalled. In this case,
-	 * there are a couple of subtle race conditions where a waiter could
-	 * may be trying to remove itself from #2, say, while #1 has also
-	 * occurred, and now host_q->waiter is either NULL already, or even
-	 * worse, has a new waiter waiting on it. This check should suffice.
-	 *
-	 * All that being said, I'd certainly be interested in a cleaner
-	 * solution to this.
-	 */
-	if (host_q->waiter == waiter)
-		host_q->waiter = NULL;
-}
-
-/* Must hold trans->lock and have set up waiter */
-static int wait_for_data(struct paintbox_bus *bus,
-		struct host_jqs_queue *host_q, int timeout_ms)
-{
-	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
-	unsigned long timeout = msecs_to_jiffies(timeout_ms);
-	struct host_jqs_queue_waiter *waiter = host_q->waiter;
-	int ret;
-
-	mutex_unlock(&trans->lock);
-	timeout = wait_for_completion_timeout(&waiter->completion, timeout);
-
-	ret = (timeout == 0) ? -ETIMEDOUT : waiter->ret;
-	mutex_lock(&trans->lock);
-	remove_waiter(host_q, waiter);
-
-	return ret;
-}
-
 static void process_kernel_response(struct paintbox_bus *bus,
 		struct jqs_message *jqs_msg)
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 	struct host_jqs_queue *host_q =
 			&trans->queues[JQS_TRANSPORT_KERNEL_QUEUE_ID];
-
+	struct host_jqs_queue_waiter *waiter = &host_q->waiter;
 	int ret = 0;
 
 	mutex_lock(&trans->lock);
 
-	if (!host_q->waiter) {
+	if (!waiter->enabled) {
 		/* No one is waiting for this response */
 		dev_err(bus->parent_dev, "%s: unexpected response", __func__);
 		goto exit;
 	}
 
-	if (host_q->waiter->size < jqs_msg->size) {
+	if (waiter->size >= jqs_msg->size) {
+		memcpy(waiter->buf, jqs_msg, jqs_msg->size);
+		ret = jqs_msg->size;
+	} else {
 		/* Not enough room, the entire response must be stored */
 		ret = -EINVAL;
 		dev_err(bus->parent_dev, "%s: response too large", __func__);
-		goto signal_waiter;
 	}
 
-	memcpy(host_q->waiter->buf, jqs_msg, jqs_msg->size);
-	ret = jqs_msg->size;
-
-signal_waiter:
-	signal_waiter(host_q, ret);
+	waiter->ret = ret;
+	complete(&waiter->completion);
 
 exit:
 	mutex_unlock(&trans->lock);
@@ -360,9 +279,9 @@ static void process_queues(struct paintbox_bus *bus, uint32_t q_ids)
 		else {
 			mutex_lock(&trans->lock);
 
-			if (host_q->waiter) {
-				host_q->waiter->ret = 0;
-				complete(&host_q->waiter->completion);
+			if (host_q->waiter.enabled) {
+				host_q->waiter.ret = 0;
+				complete(&host_q->waiter.completion);
 			}
 
 			mutex_unlock(&trans->lock);
@@ -370,7 +289,8 @@ static void process_queues(struct paintbox_bus *bus, uint32_t q_ids)
 	}
 }
 
-static int setup_queue(struct paintbox_bus *bus, uint32_t q_id)
+static int ipu_core_jqs_msg_transport_setup_queue(struct paintbox_bus *bus,
+		uint32_t q_id)
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 	size_t size = JQS_SYS_BUFFER_SIZE + JQS_CACHE_LINE_SIZE +
@@ -385,7 +305,7 @@ static int setup_queue(struct paintbox_bus *bus, uint32_t q_id)
 	if (ipu_core_memory_alloc(bus, size, &host_q->shared_buf_data) < 0)
 		return -ENOMEM;
 
-	host_q->waiter = NULL;
+	memset(&host_q->waiter, 0, sizeof(struct host_jqs_queue_waiter));
 
 	ipu_core_jqs_cbuf_init(&host_q->host_jqs_sys_cbuf,
 			&trans->shared_buf,
@@ -431,7 +351,8 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	mutex_init(&trans->lock);
 
 	/* Preallocate the kernel queue */
-	ret = setup_queue(bus, JQS_TRANSPORT_KERNEL_QUEUE_ID);
+	ret = ipu_core_jqs_msg_transport_setup_queue(bus,
+			JQS_TRANSPORT_KERNEL_QUEUE_ID);
 	if (ret < 0)
 		goto free_remote_dram;
 
@@ -501,7 +422,7 @@ int ipu_core_jqs_msg_transport_alloc_queue(struct paintbox_bus *bus)
 	if (q_id == -1)
 		return -ENOMEM;
 
-	ret = setup_queue(bus, q_id);
+	ret = ipu_core_jqs_msg_transport_setup_queue(bus, q_id);
 
 	if (ret < 0)
 		return ret;
@@ -514,13 +435,14 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 	struct host_jqs_queue *host_q = &trans->queues[q_id];
+	struct host_jqs_queue_waiter *waiter = &host_q->waiter;
 
 	mutex_lock(&trans->lock);
 
-	if (host_q->waiter) {
+	if (waiter->enabled) {
 		/* Release the waiting thread, the queue is disappearing */
-		host_q->waiter->ret = -ECONNRESET;
-		complete(&host_q->waiter->completion);
+		waiter->ret = -ECONNRESET;
+		complete(&waiter->completion);
 	}
 
 	ipu_core_memory_free(bus, &host_q->shared_buf_data);
@@ -533,11 +455,11 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		uint32_t q_id, void __user *buf, size_t size)
 {
-	struct host_jqs_queue_waiter waiter;
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 	struct host_jqs_queue *host_q = &trans->queues[q_id];
 	struct host_jqs_cbuf *host_cbuf = &host_q->host_jqs_sys_cbuf;
 	unsigned long timeout_ms = USER_READ_TIMEOUT_MS;
+	struct host_jqs_queue_waiter *waiter = &host_q->waiter;
 	ssize_t ret;
 
 	mutex_lock(&trans->lock);
@@ -551,16 +473,15 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	}
 
 	/* Two concurrent calls to read is not supported */
-	if (host_q->waiter) {
+	if (waiter->enabled) {
 		mutex_unlock(&trans->lock);
 		dev_err(bus->parent_dev, "%s: queue busy", __func__);
 		return -EBUSY;
 	}
 
-	memset(&waiter, 0, sizeof(waiter));
-	init_completion(&waiter.completion);
-
-	host_q->waiter = &waiter;
+	memset(waiter, 0, sizeof(struct host_jqs_queue_waiter));
+	waiter->enabled = true;
+	init_completion(&waiter->completion);
 
 	while (true) {
 		long time_remaining;
@@ -579,7 +500,7 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		mutex_unlock(&trans->lock);
 
 		time_remaining = wait_for_completion_interruptible_timeout(
-				&waiter.completion,
+				&waiter->completion,
 				msecs_to_jiffies(timeout_ms));
 
 		mutex_lock(&trans->lock);
@@ -587,8 +508,8 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		/* An error reported by the queue takes precedence over other
 		 * errors.
 		 */
-		if (waiter.ret != 0) {
-			ret = waiter.ret;
+		if (waiter->ret != 0) {
+			ret = waiter->ret;
 			break;
 		}
 
@@ -603,11 +524,10 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		}
 
 		timeout_ms = jiffies_to_msecs(time_remaining);
-		reinit_completion(&waiter.completion);
+		reinit_completion(&waiter->completion);
 	}
 
-	host_q->waiter = NULL;
-
+	memset(waiter, 0, sizeof(struct host_jqs_queue_waiter));
 	mutex_unlock(&trans->lock);
 
 	return ret;
@@ -632,31 +552,58 @@ int ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
 	return 0;
 }
 
+/* TODO(b/116817730):  This timeout should be revaluated.  Once JQS watchdog and
+ * PCIe link status change handling is in place then the need for a timeout may
+ * go away.
+ */
+#define IPU_JQS_KERNEL_QUEUE_WRITE_SYNC_TIMEOUT_MS 10000
+
 int ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 	const struct jqs_message *msg, struct jqs_message *rsp, size_t rsp_size)
 {
-	struct host_jqs_queue_waiter waiter;
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 	struct host_jqs_queue *host_q =
 			&trans->queues[JQS_TRANSPORT_KERNEL_QUEUE_ID];
+	struct host_jqs_queue_waiter *waiter = &host_q->waiter;
+	unsigned long timeout;
 	int ret;
+
+	timeout = msecs_to_jiffies(IPU_JQS_KERNEL_QUEUE_WRITE_SYNC_TIMEOUT_MS);
 
 	/* Schedule the waiter to store the response data */
 	mutex_lock(&trans->lock);
-	ret = init_waiter(host_q, rsp, rsp_size, &waiter);
-	mutex_unlock(&trans->lock);
 
-	if (ret < 0)
-		return ret;
+	/* Two concurrent calls to write sync are not supported */
+	if (waiter->enabled) {
+		mutex_unlock(&trans->lock);
+		dev_err(bus->parent_dev, "%s: write in progress\n", __func__);
+		return -EBUSY;
+	}
+
+	memset(waiter, 0, sizeof(struct host_jqs_queue_waiter));
+	waiter->enabled = true;
+	waiter->buf = rsp;
+	waiter->size = rsp_size;
+	init_completion(&waiter->completion);
+
+	mutex_unlock(&trans->lock);
 
 	/* Do the write */
 	ret = ipu_core_jqs_msg_transport_kernel_write(bus, msg);
-	if (ret < 0)
-		return ret;
+	if (ret >= 0) {
+		/* Wait for the response */
+		timeout = wait_for_completion_timeout(&waiter->completion,
+				timeout);
 
-	 /* Wait for the response */
+		/* A message error has higher priority than a timeout error. */
+		if (waiter->ret)
+			ret = waiter->ret;
+		else if (timeout == 0)
+			ret = -ETIMEDOUT;
+	}
+
 	mutex_lock(&trans->lock);
-	ret = wait_for_data(bus, host_q, 10000);
+	memset(waiter, 0, sizeof(struct host_jqs_queue_waiter));
 	mutex_unlock(&trans->lock);
 
 	return ret;
