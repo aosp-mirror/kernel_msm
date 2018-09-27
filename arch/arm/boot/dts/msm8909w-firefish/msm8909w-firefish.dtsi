@@ -52,6 +52,9 @@
 		clock-names = "cpu0_clk", "cpu1_clk",
 				"cpu2_clk", "cpu3_clk";
 		qcom,cpufreq-table =
+			 <  200000 >,
+			 <  400000 >,
+			 <  533330 >,
 			 <  800000 >,
 			 < 1094400 >,
 			 < 1267200 >;
@@ -74,7 +77,7 @@
 		cpubw-cpufreq {
 			target-dev = <&cpubw>;
 			cpu-to-dev-map =
-				 <  800000  1464>,
+				 <  800000  2929>,
 				 < 1094400  2929>,
 				 < 1267200  2929>;
 		};
