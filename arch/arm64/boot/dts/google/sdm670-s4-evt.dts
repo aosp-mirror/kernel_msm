@@ -15,6 +15,7 @@
 
 #include "sdm670-s4-common.dtsi"
 #include "sdm670-camera-sensor-v2.dtsi"
+#include "sdm670-s4-usb-v2.dtsi"
 
 /* TODO: Add dev board display and touch includes here */
 /* TODO: Fix model/compatible/board-id */
