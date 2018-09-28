@@ -1201,9 +1201,6 @@ static int tcpm_start_drp_toggling(struct tcpc_dev *dev,
 		goto unlock;
 	}
 
-	pd->cc1 = TYPEC_CC_OPEN;
-	pd->cc2 = TYPEC_CC_OPEN;
-
 	pd_engine_log(pd, "start toggling");
 
 	/* Force a recheck of the CC status since cc lines are
