@@ -44,6 +44,16 @@
 					 * readings */
 
 
+
+#define FW_CFG_PID_C2		0x00C2
+#define FW_CFG_PID_C2_ALT1	0x0008
+
+#define FW_CFG_PID_F2		0x00F2
+#define FW_CFG_PID_F2_ALT1	0x0009
+#define FW_CFG_PID_F2_ALT2	0x000B
+
+#define PATH_FILE_FW_FMT	"ftm5_fw_pid%04x.ftb"
+
 #ifdef FW_H_FILE
 #define PATH_FILE_FW		"NULL"
 #else

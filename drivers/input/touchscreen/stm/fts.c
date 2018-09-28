@@ -3743,9 +3743,11 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 
 	retval = of_property_read_string(np, "st,firmware_name", &name);
 	if (retval == -EINVAL)
-		bdata->fw_name = PATH_FILE_FW;
+		scnprintf(bdata->fw_name, sizeof(bdata->fw_name),
+			"%s", PATH_FILE_FW);
 	else if (retval >= 0)
-		bdata->fw_name = name;
+		scnprintf(bdata->fw_name, sizeof(bdata->fw_name),
+			"%s", name);
 	pr_info("firmware name = %s\n", bdata->fw_name);
 
 	if (of_property_read_u32_array(np, "st,max-coords", coords, 2)) {
@@ -4021,6 +4023,43 @@ static int fts_probe(struct spi_device *client)
 		error = -ENODEV;
 		goto ProbeErrorExit_6;
 	}
+
+	/* Update the FW name by config project ID,
+	 * TODO:
+	 * 1. Monitor the project ID will be consistent or not.
+	 * 2. Decide which FW will use when there is no FW on touch IC
+	 *    or FW corrupted.
+	 */
+	switch (systemInfo.u16_cfgProjectId) {
+	case FW_CFG_PID_C2:
+	case FW_CFG_PID_F2:
+		scnprintf(info->board->fw_name,
+			sizeof(info->board->fw_name),
+			PATH_FILE_FW_FMT,
+			systemInfo.u16_cfgProjectId);
+		break;
+
+	case FW_CFG_PID_C2_ALT1:
+		scnprintf(info->board->fw_name,
+			sizeof(info->board->fw_name),
+			PATH_FILE_FW_FMT,
+			FW_CFG_PID_C2);
+
+	case FW_CFG_PID_F2_ALT1:
+	case FW_CFG_PID_F2_ALT2:
+		scnprintf(info->board->fw_name,
+			sizeof(info->board->fw_name),
+			PATH_FILE_FW_FMT,
+			FW_CFG_PID_F2);
+		break;
+
+	default:
+		pr_err("New PID %04X need to check!",
+			systemInfo.u16_cfgProjectId);
+		break;
+	}
+	pr_info("firmware name update by config project id = %s\n",
+		info->board->fw_name);
 
 #if defined(FW_UPDATE_ON_PROBE) && defined(FW_H_FILE)
 	pr_info("FW Update and Sensing Initialization:\n");
