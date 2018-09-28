@@ -115,6 +115,10 @@ struct mmc_request {
 	struct mmc_cmdq_req	*cmdq_req;
 	struct request *req;
 
+#ifdef CONFIG_DEBUG_FS
+	ktime_t issue_time_stamp;
+	ktime_t complete_time_stamp;
+#endif
 	/* Allow other commands during this ongoing data transfer or busy wait */
 	bool			cap_cmd_during_tfr;
 	ktime_t			io_start;

@@ -821,9 +821,68 @@ update_io_stat(struct mmc_request *mrq, int is_start)
 				is_start);
 	}
 }
+
+static int mmc_tag_req_type(struct request *rq)
+{
+	int rq_type = TS_WRITE;
+
+	if (!rq || !(rq->cmd_type & REQ_TYPE_FS))
+		rq_type = TS_NOT_SUPPORTED;
+	else if ((rq->cmd_flags & REQ_PREFLUSH) ||
+		 (req_op(rq) == REQ_OP_FLUSH))
+		rq_type = TS_FLUSH;
+	else if (req_op(rq) == REQ_OP_DISCARD)
+		rq_type = TS_DISCARD;
+	else if (rq_data_dir(rq) == READ)
+		rq_type = (rq->cmd_flags & REQ_URGENT) ?
+			TS_URGENT_READ : TS_READ;
+	else if (rq->cmd_flags & REQ_URGENT)
+		rq_type = TS_URGENT_WRITE;
+
+	return rq_type;
+}
+
+static void update_mmc_req_stats(struct mmc_request *mrq)
+{
+	int rq_type;
+	struct mmc_host *mmc = mrq->host;
+	struct request *rq = mrq->req;
+	s64 delta = ktime_us_delta(mrq->complete_time_stamp,
+		mrq->issue_time_stamp);
+
+	/* update general request statistics */
+	if (mmc->mmc_req_stats[TS_TAG].count == 0)
+		mmc->mmc_req_stats[TS_TAG].min = delta;
+	mmc->mmc_req_stats[TS_TAG].count++;
+	mmc->mmc_req_stats[TS_TAG].sum += delta;
+	if (delta > mmc->mmc_req_stats[TS_TAG].max)
+		mmc->mmc_req_stats[TS_TAG].max = delta;
+	if (delta < mmc->mmc_req_stats[TS_TAG].min)
+		mmc->mmc_req_stats[TS_TAG].min = delta;
+
+	rq_type = mmc_tag_req_type(rq);
+	if (rq_type == TS_NOT_SUPPORTED)
+		return;
+
+	/* update request type specific statistics */
+	if (mmc->mmc_req_stats[rq_type].count == 0)
+		mmc->mmc_req_stats[rq_type].min = delta;
+	mmc->mmc_req_stats[rq_type].count++;
+	mmc->mmc_req_stats[rq_type].sum += delta;
+	if (delta > mmc->mmc_req_stats[rq_type].max)
+		mmc->mmc_req_stats[rq_type].max = delta;
+	if (delta < mmc->mmc_req_stats[rq_type].min)
+		mmc->mmc_req_stats[rq_type].min = delta;
+}
+
 #else
 static void
 update_io_stat(struct mmc_request *mrq, int is_start)
+{
+}
+
+static void
+update_mmc_req_stats(struct mmc_request *mrq)
 {
 }
 #endif
@@ -837,6 +896,7 @@ static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
 	struct sdhci_host *host = mmc_priv(mmc);
 	u64 ice_ctx = 0;
+	struct request *rq = mrq->req;
 
 	if (!cq_host->enabled) {
 		pr_err("%s: CMDQ host not enabled yet !!!\n",
@@ -883,6 +943,11 @@ static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	}
 
 	cq_host->mrq_slot[tag] = mrq;
+
+#ifdef CONFIG_DEBUG_FS
+	cq_host->mrq_slot[tag]->issue_time_stamp = ktime_get();
+	cq_host->mrq_slot[tag]->complete_time_stamp = ktime_set(0, 0);
+#endif
 
 	/* PM QoS */
 	sdhci_msm_pm_qos_irq_vote(host);
@@ -953,6 +1018,11 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 		cq_host->ops->crypto_cfg_reset(mmc, tag);
 
 	update_io_stat(mrq, 0);
+
+#ifdef CONFIG_DEBUG_FS
+	mrq->complete_time_stamp = ktime_get();
+#endif
+	update_mmc_req_stats(mrq);
 
 	mrq->done(mrq);
 }

@@ -383,6 +383,33 @@ struct mmc_devfeq_clk_scaling {
 };
 
 #ifdef CONFIG_DEBUG_FS
+/* tag stats statistics types */
+enum ts_types {
+	TS_NOT_SUPPORTED	= -1,
+	TS_TAG			= 0,
+	TS_READ			= 1,
+	TS_WRITE		= 2,
+	TS_URGENT_READ		= 3,
+	TS_URGENT_WRITE		= 4,
+	TS_FLUSH		= 5,
+	TS_DISCARD		= 6,
+	TS_NUM_STATS		= 7,
+};
+
+/**
+ * struct mmc_req_stat - statistics for request handling times (in usec)
+ * @min: shortest time measured
+ * @max: longest time measured
+ * @sum: sum of all the handling times measured (used for average calculation)
+ * @count: number of measurements taken
+ */
+struct mmc_req_stat {
+	u64 min;
+	u64 max;
+	u64 sum;
+	u64 count;
+};
+
 /**
  * struct mmc_io_stat - statistics for I/O amount.
  * @req_count_started: total number of I/O requests, which were started.
@@ -609,6 +636,7 @@ struct mmc_host {
 	bool			err_occurred;
 	u32			err_stats[MMC_ERR_MAX];
 #ifdef CONFIG_DEBUG_FS
+	struct mmc_req_stat mmc_req_stats[TS_NUM_STATS];
 	struct mmc_stats mmc_stats;
 	spinlock_t		stat_lock;	/* lock for collect IO stat */
 #endif
@@ -712,6 +740,15 @@ static inline void *mmc_cmdq_private(struct mmc_host *host)
 {
 	return host->cmdq_private;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static inline void mmc_init_req_stats(struct mmc_host *host)
+{
+	memset(host->mmc_req_stats, 0, sizeof(host->mmc_req_stats));
+}
+#else
+static inline void mmc_init_req_stats(struct mmc_host *host) {}
+#endif
 
 #define mmc_host_is_spi(host)	((host)->caps & MMC_CAP_SPI)
 

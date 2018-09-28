@@ -454,6 +454,72 @@ static const struct file_operations mmc_err_stats_fops = {
 	.write	= mmc_err_stats_write,
 };
 
+static ssize_t mmc_req_stats_write(struct file *filp,
+		const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	struct mmc_host *host = filp->f_mapping->host->i_private;
+	int val;
+	int ret;
+	unsigned long flags;
+
+	ret = kstrtoint_from_user(ubuf, cnt, 0, &val);
+	if (ret) {
+		dev_err(&host->class_dev, "%s: Invalid argument\n", __func__);
+		return ret;
+	}
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+	mmc_init_req_stats(host);
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return cnt;
+}
+
+static int mmc_req_stats_show(struct seq_file *file, void *data)
+{
+	struct mmc_host *host = (struct mmc_host *)file->private;
+	int i;
+	unsigned long flags;
+
+	/* Header */
+	seq_printf(file, "\t%-10s %-10s %-10s %-10s %-10s %-10s %-10s",
+		"All", "Read", "Write", "Read(urg)", "Write(urg)", "Flush",
+		"Discard");
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+
+	seq_printf(file, "\n%s:\t", "Min");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].min);
+	seq_printf(file, "\n%s:\t", "Max");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].max);
+	seq_printf(file, "\n%s:\t", "Avg.");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ",
+			div64_u64(host->mmc_req_stats[i].sum,
+				host->mmc_req_stats[i].count));
+	seq_printf(file, "\n%s:\t", "Count");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].count);
+	seq_puts(file, "\n");
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return 0;
+}
+
+static int mmc_req_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmc_req_stats_show, inode->i_private);
+}
+
+static const struct file_operations mmc_req_stats_desc = {
+	.open		= mmc_req_stats_open,
+	.read		= seq_read,
+	.write		= mmc_req_stats_write,
+	.release        = single_release,
+};
+
 static ssize_t mmc_io_stats_write(struct file *filp,
 		const char __user *ubuf, size_t cnt, loff_t *ppos)
 {
@@ -578,6 +644,10 @@ void mmc_add_host_debugfs(struct mmc_host *host)
 
 	if (!debugfs_create_file("io_stats", 0600, root, host,
 		&mmc_io_stats_desc))
+		goto err_node;
+
+	if (!debugfs_create_file("req_stats", 0600, root, host,
+		&mmc_req_stats_desc))
 		goto err_node;
 
 #ifdef CONFIG_MMC_CLKGATE
