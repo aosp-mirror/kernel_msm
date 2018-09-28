@@ -3668,6 +3668,8 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 			tcpm_set_state(port, SRC_ATTACH_WAIT, 0);
 		else if (tcpm_port_is_sink(port))
 			tcpm_set_state(port, SNK_ATTACH_WAIT, 0);
+		else if (tcpm_port_is_disconnected(port))
+			port->hard_reset_count = 0;
 		break;
 	case SRC_UNATTACHED:
 	case ACC_UNATTACHED:
