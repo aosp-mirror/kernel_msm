@@ -20,17 +20,21 @@
 #include "airbrush-ppmu.h"
 
 /**
- * PWRITE:
- * PREAD: functions for Reading/Writing register through PCIe channel
+ * ppmu_write:
+ * ppmu_read: functions for Reading/Writing register through PCIe channel
  * Need to be rewrite according to final PCIe provided read/write function calls
-*/
-void PWRITE(u32 value, u32 offset) { pcie_config_write(offset, 4, value); }
+ */
 
-u32 PREAD(u32 offset)
+void ppmu_write(u32 value, u32 offset)
+{
+	abc_pcie_config_write(offset, 4, value);
+}
+
+u32 ppmu_read(u32 offset)
 {
 	u32 data;
 
-	pcie_config_read(offset, 4, &data);
+	abc_pcie_config_read(offset, 4, &data);
 	return data;
 }
 
@@ -45,9 +49,9 @@ void reset_counter(struct airbrush_ppmu *ppmu)
 
 	base = ppmu->base;
 
-	regvalue = PREAD(base + PPMU25_PMNC);
+	regvalue = ppmu_read(base + PPMU25_PMNC);
 	/* Reset CCNT and PMCNT's */
-	PWRITE((regvalue | (1 << PPMU_PMNC_CC_RESET_SHIFT) |
+	ppmu_write((regvalue | (1 << PPMU_PMNC_CC_RESET_SHIFT) |
 		(1 << PPMU_PMNC_COUNTER_RESET_SHIFT)), base + PPMU25_PMNC);
 }
 
@@ -68,25 +72,25 @@ int ppmu_reset(struct airbrush_ppmu *ppmu)
 
 	reset_counter(ppmu);
 
-	regvalue = PREAD(base + PPMU25_PMNC);
-	PWRITE(regvalue & ~0x1 << 0, base + PPMU25_PMNC);
+	regvalue = ppmu_read(base + PPMU25_PMNC);
+	ppmu_write(regvalue & ~0x1 << 0, base + PPMU25_PMNC);
 
 	/* CCNT is Clock event(31st Bit)
 	 * PMCNT2 counter is 2nd bit, used for Read+Write data event count.
 	 */
-	PWRITE(0x80000004,	base + PPMU25_CNTENS);
-	PWRITE(0,	base + PPMU25_CNTENC);
+	ppmu_write(0x80000004,	base + PPMU25_CNTENS);
+	ppmu_write(0,	base + PPMU25_CNTENC);
 	/* Enabling interrupt for CCNT and PMCNT2 */
-	PWRITE(0x80000004,	base + PPMU25_INTENS);
-	PWRITE(0,	base + PPMU25_INTENC);
+	ppmu_write(0x80000004,	base + PPMU25_INTENS);
+	ppmu_write(0,	base + PPMU25_INTENC);
 	/* Clearing all events' overflow status Flags at starting */
-	PWRITE(0x800000FF,	base + PPMU25_FLAG);
+	ppmu_write(0x800000FF,	base + PPMU25_FLAG);
 
-	PWRITE(0,	base + PPMU25_CIG_CFG0);
-	PWRITE(0,	base + PPMU25_CIG_CFG1);
-	PWRITE(0,	base + PPMU25_CIG_CFG2);
-	PWRITE(0x11,	base + PPMU25_CIG_RESULT);
-	PWRITE(0x800000FF,	base + PPMU25_CNT_RESET);
+	ppmu_write(0,	base + PPMU25_CIG_CFG0);
+	ppmu_write(0,	base + PPMU25_CIG_CFG1);
+	ppmu_write(0,	base + PPMU25_CIG_CFG2);
+	ppmu_write(0x11,	base + PPMU25_CIG_RESULT);
+	ppmu_write(0x800000FF,	base + PPMU25_CNT_RESET);
 
 	return 0;
 
@@ -117,7 +121,7 @@ int ppmu_config(struct airbrush_ppmu *ppmu, unsigned int event)
 	base = ppmu->base;
 	ppmu->state->conf_events++;
 	/* Currently only Event counter 2 is used.*/
-	PWRITE(event, base + PPMU25_EVENT_EV2_TYPE);
+	ppmu_write(event, base + PPMU25_EVENT_EV2_TYPE);
 	return 0;
 }
 
@@ -126,9 +130,9 @@ int ppmu_start(struct airbrush_ppmu *ppmu)
 	u32 base, regvalue;
 
 	base = ppmu->base;
-	regvalue = PREAD(base + PPMU25_PMNC);
+	regvalue = ppmu_read(base + PPMU25_PMNC);
 	regvalue = regvalue | 1 << PPMU_PMNC_ENABLE_SHIFT;
-	PWRITE(regvalue, base + PPMU25_PMNC);
+	ppmu_write(regvalue, base + PPMU25_PMNC);
 	return 0;
 }
 
@@ -137,8 +141,8 @@ int ppmu_stop(struct airbrush_ppmu *ppmu)
 	u32 base, regvalue;
 
 	base = ppmu->base;
-	regvalue = PREAD(base + PPMU25_PMNC);
-	PWRITE(regvalue & ~0x1 << 0, base + PPMU25_PMNC);
+	regvalue = ppmu_read(base + PPMU25_PMNC);
+	ppmu_write(regvalue & ~0x1 << 0, base + PPMU25_PMNC);
 	return 0;
 }
 
@@ -184,17 +188,19 @@ int ppmu_get_result(struct airbrush_ppmu *ppmu, unsigned long long *counter)
 	counter[7] = (unsigned long long)ppmu->state->over_flow[7] << 32;
 	counter[8] = (unsigned long long)ppmu->state->over_flow[8] << 32;
 
-	counter[0] |= (unsigned long long)PREAD(base + PPMU25_PMCNT0);
-	counter[1] |= (unsigned long long)PREAD(base + PPMU25_PMCNT1);
-	counter[2] |= (unsigned long long)PREAD(base + PPMU25_PMCNT2);
-	counter[3] |= (unsigned long long)PREAD(base + PPMU25_PMCNT3) |
-		(unsigned long long)(PREAD(base + PPMU25_PMCNT3_HIGH) & 0xFF) << 32;
-	counter[4] |= (unsigned long long)PREAD(base + PPMU25_PMCNT4);
-	counter[5] |= (unsigned long long)PREAD(base + PPMU25_PMCNT5);
-	counter[6] |= (unsigned long long)PREAD(base + PPMU25_PMCNT6);
-	counter[7] |= (unsigned long long)PREAD(base + PPMU25_PMCNT7) |
-		(unsigned long long)(PREAD(base + PPMU25_PMCNT7_HIGH) & 0xFF) << 32;
-	counter[8] |= (unsigned long long)PREAD(base + PPMU25_CCNT);
+	counter[0] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT0);
+	counter[1] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT1);
+	counter[2] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT2);
+	counter[3] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT3) |
+		(unsigned long long)(ppmu_read(
+			base + PPMU25_PMCNT3_HIGH) & 0xFF) << 32;
+	counter[4] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT4);
+	counter[5] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT5);
+	counter[6] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT6);
+	counter[7] |= (unsigned long long)ppmu_read(base + PPMU25_PMCNT7) |
+		(unsigned long long)(ppmu_read(
+			base + PPMU25_PMCNT7_HIGH) & 0xFF) << 32;
+	counter[8] |= (unsigned long long)ppmu_read(base + PPMU25_CCNT);
 
 	show_bandwidth(ppmu, counter);
 	return 0;
@@ -208,16 +214,15 @@ static const struct of_device_id airbrush_ppmu_id_match[] = {
 };
 MODULE_DEVICE_TABLE(of, airbrush_ppmu_id_match);
 
-int ppmu_irq_handler(unsigned int irq, void *info)
+int ppmu_irq_handler(unsigned int irq, struct airbrush_ppmu *ppmu)
 {
 	unsigned int regvalue;
-	struct airbrush_ppmu *ppmu = (struct airbrush_ppmu *)info;
 	u32 base = ppmu->base;
 	struct airbrush_ppmu_state *ppmu_state = ppmu->state;
 
-	regvalue = PREAD(base + PPMU25_FLAG);
+	regvalue = ppmu_read(base + PPMU25_FLAG);
 	pr_err("flag: %x\n", regvalue);
-	PWRITE(regvalue, base + PPMU25_FLAG);
+	ppmu_write(regvalue, base + PPMU25_FLAG);
 
 	/* This is to handle interrupt due to CCNT overflow.*/
 	if (regvalue & 0x80000000)
@@ -270,13 +275,13 @@ static int airbrush_ppmu_parse_dt(struct platform_device *pdev,
 
 /*----Attributes creation-------------*/
 static ssize_t test_read_store(struct device *child,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
+	struct device_attribute *attr,
+	const char *buf, size_t count)
 {
 	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
 	u32 base = ppmu->base;
 	/* transaction on PCIe Master*/
-	PREAD(base + PPMU25_VER);
+	ppmu_read(base + PPMU25_VER);
 	pr_err("1 read");
 
 	return count;
@@ -290,7 +295,7 @@ static ssize_t test_write_store(struct device *child,
 	u32 base = ppmu->base;
 	u32 val = 0x25000;
 
-	PWRITE(val, base + PPMU25_VER);
+	ppmu_write(val, base + PPMU25_VER);
 	pr_err("1 write");
 
 	return count;
@@ -305,7 +310,7 @@ static ssize_t set_cnt_size_store(struct device *child,
 
 	pr_err("val: %ld\n", val);
 	ppmu->ppmu_data.event_count = val;
-	PWRITE(0xffffffff-(val-1), ppmu->base + PPMU25_PMCNT2);
+	ppmu_write(0xffffffff-(val-1), ppmu->base + PPMU25_PMCNT2);
 	return count;
 }
 
@@ -321,13 +326,29 @@ static ssize_t set_clk_freq_store(struct device *child,
 	return count;
 }
 
+
+static int ppmu_irq_notify(struct notifier_block *nb,
+					unsigned long irq, void *data)
+{
+	struct airbrush_ppmu *dev =
+		container_of(nb, struct airbrush_ppmu, nb);
+	u32 intnc_val = (u32)data;
+
+	if (irq == ABC_MSI_AON_INTNC &&
+			(intnc_val & (1 << (dev->irq - ABC_MSI_COUNT))))
+		return ppmu_irq_handler(irq, dev);
+
+	return 0;
+}
+
 static ssize_t register_irq_store(struct device *child,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
 {
 	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
 
-	abc_reg_irq_callback2(ppmu_irq_handler, ppmu->irq, ppmu);
+	ppmu->nb.notifier_call = ppmu_irq_notify;
+	abc_reg_notifier_callback(&ppmu->nb);
 	pr_err("irq: %d\n", ppmu->irq);
 	return count;
 }
@@ -347,29 +368,29 @@ static ssize_t ppmu_config_show(struct device *child,
 				struct device_attribute *attr, char *buf)
 {
 	return scnprintf(buf, "%s", PAGE_SIZE,
-			"PPMU_EVENT_READ_BUSY			= 0\n"
-			"PPMU_EVENT_WRITE_BUSY			= 1,\n"
-			"PPMU_EVENT_READ_REQUEST		= 2,\n"
-			"PPMU_EVENT_WRITE_REQUEST		= 3,\n"
-			"PPMU_EVENT_READ_DATA			= 4,\n"
-			"PPMU_EVENT_WRITE_DATA			= 5,\n"
-			"PPMU_EVENT_WRITE_RESP			= 6,\n"
-			"PPMU_EVENT_READ_LAST			= 7,\n"
-			"PPMU_EVENT_WRITE_LAST			= 8,\n"
-			"PPMU_EVENT_READ_REQ_BLOCK		= 0x10,\n"
-			"PPMU_EVENT_WRITE_REQ_BLOCK		= 0x11,\n"
-			"PPMU_EVENT_READ_DATA_BLOCK		= 0x12,\n"
-			"PPMU_EVENT_WRITE_DATA_BLOCK	= 0x13,\n"
-			"PPMU_EVENT_WRITE_RESP_BLOCK	= 0x14,\n"
-			"PPMU_EVENT_EXT_0				= 0x30,\n"
-			"PPMU_EVENT_EXT_1				= 0x31,\n"
-			"PPMU_EVENT_EXT_2				= 0x32,\n"
-			"PPMU_EVENT_RW_BUSY				= 0x20,\n"
-			"PPMU_EVENT_RW_REQUEST			= 0x21,\n"
-			"PPMU_EVENT_RW_DATA				= 0x22,\n"
-			"PPMU_EVENT_RW_REQ_BLOCK		= 0x23,\n"
-			"PPMU_EVENT_READ_LATENCY		= 0x24,\n"
-			"PPMU_EVENT_WRITE_LATENCY		= 0x25,\n");
+		"PPMU_EVENT_READ_BUSY			= 0\n"
+		"PPMU_EVENT_WRITE_BUSY			= 1,\n"
+		"PPMU_EVENT_READ_REQUEST		= 2,\n"
+		"PPMU_EVENT_WRITE_REQUEST		= 3,\n"
+		"PPMU_EVENT_READ_DATA			= 4,\n"
+		"PPMU_EVENT_WRITE_DATA			= 5,\n"
+		"PPMU_EVENT_WRITE_RESP			= 6,\n"
+		"PPMU_EVENT_READ_LAST			= 7,\n"
+		"PPMU_EVENT_WRITE_LAST			= 8,\n"
+		"PPMU_EVENT_READ_REQ_BLOCK		= 0x10,\n"
+		"PPMU_EVENT_WRITE_REQ_BLOCK		= 0x11,\n"
+		"PPMU_EVENT_READ_DATA_BLOCK		= 0x12,\n"
+		"PPMU_EVENT_WRITE_DATA_BLOCK	= 0x13,\n"
+		"PPMU_EVENT_WRITE_RESP_BLOCK	= 0x14,\n"
+		"PPMU_EVENT_EXT_0				= 0x30,\n"
+		"PPMU_EVENT_EXT_1				= 0x31,\n"
+		"PPMU_EVENT_EXT_2				= 0x32,\n"
+		"PPMU_EVENT_RW_BUSY				= 0x20,\n"
+		"PPMU_EVENT_RW_REQUEST			= 0x21,\n"
+		"PPMU_EVENT_RW_DATA				= 0x22,\n"
+		"PPMU_EVENT_RW_REQ_BLOCK		= 0x23,\n"
+		"PPMU_EVENT_READ_LATENCY		= 0x24,\n"
+		"PPMU_EVENT_WRITE_LATENCY		= 0x25,\n");
 }
 
 static ssize_t ppmu_config_store(struct device *child,
@@ -434,8 +455,8 @@ static ssize_t ppmu_config_store(struct device *child,
 }
 
 static ssize_t ppmu_start_store(struct device *child,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
+	struct device_attribute *attr,
+	const char *buf, size_t count)
 {
 	u32 base;
 	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
@@ -499,7 +520,7 @@ NULL,
 };
 
 struct attribute_group ppmu_attrs_grp = {
-		.attrs = ppmu_attrs,
+	.attrs = ppmu_attrs,
 };
 
 static int airbrush_ppmu_probe(struct platform_device *pdev)

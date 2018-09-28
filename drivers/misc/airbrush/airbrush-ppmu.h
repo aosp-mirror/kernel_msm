@@ -40,6 +40,7 @@ struct airbrush_ppmu {
 	struct device dev;
 	u32 base;
 	u32 irq;
+	struct notifier_block nb;
 	struct airbrush_ppmu_data ppmu_data;
 	struct airbrush_ppmu_state *state;
 };
