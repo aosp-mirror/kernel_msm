@@ -94,7 +94,8 @@ int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 		base_offset = abc_dev->sfr_misc_config + region_offset;
 #endif
 	}
-	*data = readl(base_offset);
+	*data = readl_relaxed(base_offset);
+	__iormb();
 	return 0;
 }
 
@@ -141,7 +142,8 @@ int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 		base_offset = abc_dev->sfr_misc_config + region_offset;
 #endif
 	}
-	writel(data, base_offset);
+	__iowmb();
+	writel_relaxed(data, base_offset);
 	return 0;
 }
 
@@ -153,7 +155,8 @@ int aon_config_read(u32 offset, u32 len, u32 *data)
 		return -EFAULT;
 
 	base_offset = abc_dev->aon_config + offset;
-	*data = readl(base_offset);
+	*data = readl_relaxed(base_offset);
+	__iormb();
 	return 0;
 }
 
@@ -165,7 +168,8 @@ int aon_config_write(u32 offset, u32 len, u32 data)
 		return -EFAULT;
 
 	base_offset = abc_dev->aon_config + offset;
-	writel(data, base_offset);
+	__iowmb();
+	writel_relaxed(data, base_offset);
 	return 0;
 }
 
@@ -177,7 +181,8 @@ int ipu_config_read(u32 offset, u32 len, u32 *data)
 		return -EFAULT;
 
 	base_offset = abc_dev->ipu_config + offset;
-	*data = readl(base_offset);
+	*data = readl_relaxed(base_offset);
+	__iormb();
 	return 0;
 }
 
@@ -189,7 +194,8 @@ int ipu_config_write(u32 offset, u32 len, u32 data)
 		return -EFAULT;
 
 	base_offset = abc_dev->ipu_config + offset;
-	writel(data, base_offset);
+	__iowmb();
+	writel_relaxed(data, base_offset);
 	return 0;
 }
 
@@ -201,7 +207,8 @@ int tpu_config_read(u32 offset, u32 len, u32 *data)
 		return -EFAULT;
 
 	base_offset = abc_dev->tpu_config + offset;
-	*data = readl(base_offset);
+	*data = readl_relaxed(base_offset);
+	__iormb();
 	return 0;
 }
 
@@ -213,19 +220,21 @@ int tpu_config_write(u32 offset, u32 len, u32 data)
 		return -EFAULT;
 
 	base_offset = abc_dev->tpu_config + offset;
-	writel(data, base_offset);
+	__iowmb();
+	writel_relaxed(data, base_offset);
 	return 0;
 }
 
 /* memory_config_read can be used to read from
  * SRAM and DRAM of ABC.
  */
-int memory_config_read(u32 offset, u32 len, u32 *data){
+int memory_config_read(u32 offset, u32 len, u32 *data)
+{
 	void __iomem *base_offset;
 	struct inb_region   ir;
 	u32 region_offset;
 
-	if(!abc_dev || !abc_dev->memory_config)
+	if (!abc_dev || !abc_dev->memory_config)
 		return -EFAULT;
 
 	region_offset = offset & ~(ABC_MEMORY_REGION_MASK);
@@ -248,19 +257,22 @@ int memory_config_read(u32 offset, u32 len, u32 *data){
 
 	region_offset = offset & ABC_MEMORY_REGION_MASK;
 	base_offset = abc_dev->memory_config + region_offset;
-	*data = readl(base_offset);
+	*data = readl_relaxed(base_offset);
+	__iormb();
+
 	return 0;
 }
 
 /* memory_config_write can be used to write to
  * SRAM and DRAM of ABC.
  */
-int memory_config_write(u32 offset, u32 len, u32 data){
+int memory_config_write(u32 offset, u32 len, u32 data)
+{
 	void __iomem *base_offset;
 	struct inb_region   ir;
 	u32 region_offset;
 
-	if(!abc_dev || !abc_dev->memory_config)
+	if (!abc_dev || !abc_dev->memory_config)
 		return -EFAULT;
 
 
@@ -284,7 +296,8 @@ int memory_config_write(u32 offset, u32 len, u32 data){
 
 	region_offset = offset & ABC_MEMORY_REGION_MASK;
 	base_offset = abc_dev->memory_config + region_offset;
-	writel(data, base_offset);
+	__iowmb();
+	writel_relaxed(data, base_offset);
 	return 0;
 }
 
@@ -292,6 +305,7 @@ int memory_config_write(u32 offset, u32 len, u32 data){
 u32 abc_pcie_get_linkspeed(void)
 {
 	u32 link_status;
+
 	abc_pcie_config_read(ABC_PCIE_DBI_BASE + LINK_CONTROL_LINK_STATUS_REG,
 				0x0, &link_status);
 	return (link_status >> 16) & LINK_SPEED;
@@ -307,16 +321,14 @@ u32 abc_pcie_get_linkstate(void)
 	abc_pcie_config_read(ABC_PCIE_DBI_BASE + L1SUB_CONTROL1_REG,
 			 0x0, &l1_substate);
 	if (link_state & ASPM_L1_ENABLE) {
-		if (l1_substate & ASPM_L1_1_ENABLE) {
+		if (l1_substate & ASPM_L1_1_ENABLE)
 			return ASPM_L11;
-		}
-		if (l1_substate & ASPM_L1_2_ENABLE) {
+		if (l1_substate & ASPM_L1_2_ENABLE)
 			return ASPM_L12;
-		}
 	}
-	if (link_state & ASPM_L0s_ENABLE) {
+	if (link_state & ASPM_L0s_ENABLE)
 		return ASPM_L0s;
-	}
+
 	/* If ASPM is disabled only L0 */
 	return NOASPM;
 }
@@ -327,22 +339,21 @@ void abc_pcie_set_linkspeed(u32 target_linkspeed)
 	u32 val;
 	u32 current_linkspeed;
 
-	if (target_linkspeed == 0){
-		return ;
-	}
+	if (target_linkspeed == 0)
+		return;
 
 	current_linkspeed = abc_pcie_get_linkspeed();
-	if (target_linkspeed == current_linkspeed) {
-		return ;
-	}
+	if (target_linkspeed == current_linkspeed)
+		return;
 
 	/* Changing the target link speed in link_control2_link_status2 */
 	abc_pcie_config_read(ABC_PCIE_DBI_BASE + LINK_CONTROL2_LINK_STATUS2_REG,
 			 0x0, &link_status2);
 	link_status2 &= ~(TARGET_LINK_SPEED);
 	link_status2 |= target_linkspeed;
-	abc_pcie_config_write(ABC_PCIE_DBI_BASE + LINK_CONTROL2_LINK_STATUS2_REG,
-			  0x0, link_status2);
+	abc_pcie_config_write(
+		ABC_PCIE_DBI_BASE + LINK_CONTROL2_LINK_STATUS2_REG,
+		0x0, link_status2);
 
 	/* Asserting the directed speed change */
 	abc_pcie_config_read(ABC_PCIE_DBI_BASE + PORT_LOGIC_GEN2_CTRL_OFF,
@@ -363,9 +374,9 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 	smctrl.aspm_L12 = 0;
 
 	current_linkstate = abc_pcie_get_linkstate();
-	if (target_linkstate == current_linkstate) {
-		return ;
-	}
+	if (target_linkstate == current_linkstate)
+		return;
+
 	if (target_linkstate == NOASPM) {
 		abc_set_pcie_pm_ctrl(&smctrl);
 		return;
@@ -390,19 +401,18 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 
 u32 string_to_integer(char *string)
 {
-	if (!strcmp(string, "L0s")){
+	if (!strcmp(string, "L0s"))
 		return ASPM_L0s;
-	} else if (!strcmp(string, "L0")) {
+	else if (!strcmp(string, "L0"))
 		return NOASPM;
-	} else if (!strcmp(string, "L1.1")) {
+	else if (!strcmp(string, "L1.1"))
 		return ASPM_L11;
-	} else if (!strcmp(string, "L1.2")) {
+	else if (!strcmp(string, "L1.2"))
 		return ASPM_L12;
-	} else if (!strcmp(string, "L3") || !strcmp(string, "L2")) {
+	else if (!strcmp(string, "L3") || !strcmp(string, "L2"))
 		return PM_L2;
-	} else {
+	else
 		return NOASPM;
-	}
 }
 
 int abc_pcie_state_manager(const struct block_property *property, void *data)
@@ -413,7 +423,8 @@ int abc_pcie_state_manager(const struct block_property *property, void *data)
 	u32 current_linkspeed;
 
 	if (!property)
-		return -1;
+		return -EINVAL;
+
 	target_linkstate = string_to_integer(property->substate_name);
 	target_linkspeed = property->data_rate;
 
@@ -426,7 +437,7 @@ int abc_pcie_state_manager(const struct block_property *property, void *data)
 
 	if (current_linkspeed == target_linkspeed &&
 	    current_linkstate == target_linkstate) {
-		return -1;
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -439,33 +450,41 @@ int abc_set_aspm_state(bool state)
 
 	if (state) {
 		/* Enabling ASPM L0s, L1 support [1:0] = 0x3 */
-		aspm_sts = readl(abc_dev->pcie_config +
+		aspm_sts = readl_relaxed(abc_dev->pcie_config +
 				 LINK_CONTROL_LINK_STATUS_REG);
+		__iormb();
 		aspm_sts &= CLEAR_ASPM;
 		aspm_sts |= ENABLE_ASPM;
-		writel(aspm_sts, abc_dev->pcie_config +
+		__iowmb();
+		writel_relaxed(aspm_sts, abc_dev->pcie_config +
 		       LINK_CONTROL_LINK_STATUS_REG);
 
 		/* Enabling ASPM L1 substates L1.1 [3:3] = 0x1, [2:2] = 0x1 */
-		aspm_l1_sub_states = readl(abc_dev->pcie_config +
+		aspm_l1_sub_states = readl_relaxed(abc_dev->pcie_config +
 					   L1SUB_CONTROL1_REG);
+		__iormb();
 		aspm_l1_sub_states &= CLEAR_L1_SUBSTATES;
 		aspm_l1_sub_states |= ENABLE_L1_SUBSTATES;
-		writel(aspm_l1_sub_states, abc_dev->pcie_config +
+		__iowmb();
+		writel_relaxed(aspm_l1_sub_states, abc_dev->pcie_config +
 		       L1SUB_CONTROL1_REG);
 	} else {
 		/* Disabling ASPM L0s, L1 support [1:0] = 0x0 */
-		aspm_sts = readl(abc_dev->pcie_config +
+		aspm_sts = readl_relaxed(abc_dev->pcie_config +
 				 LINK_CONTROL_LINK_STATUS_REG);
+		__iormb();
 		aspm_sts &= CLEAR_ASPM;
-		writel(aspm_sts, abc_dev->pcie_config +
+		__iowmb();
+		writel_relaxed(aspm_sts, abc_dev->pcie_config +
 		       LINK_CONTROL_LINK_STATUS_REG);
 
 		/* Disabling ASPM L1 substates L1.1 [3:3] = 0x0, [2:2] = 0x0 */
-		aspm_l1_sub_states = readl(abc_dev->pcie_config +
+		aspm_l1_sub_states = readl_relaxed(abc_dev->pcie_config +
 					   L1SUB_CONTROL1_REG);
+		__iormb();
 		aspm_l1_sub_states &= CLEAR_L1_SUBSTATES;
-		writel(aspm_l1_sub_states, abc_dev->pcie_config +
+		__iowmb();
+		writel_relaxed(aspm_l1_sub_states, abc_dev->pcie_config +
 		       L1SUB_CONTROL1_REG);
 	}
 
@@ -481,54 +500,67 @@ int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	if (pmctrl == NULL)
 		return -EINVAL;
 
-	aspm_l11_l12 = readl(abc_dev->pcie_config
+	aspm_l11_l12 = readl_relaxed(abc_dev->pcie_config
 				+ L1SUB_CONTROL1_REG);
+	__iormb();
 	aspm_l11_l12 &= ~(0xC);
 	aspm_l11_l12 |= (pmctrl->aspm_L11 << 3);
 	aspm_l11_l12 |= (pmctrl->aspm_L12 << 2);
 
-	l1_l0s_enable = readl(abc_dev->pcie_config
+	l1_l0s_enable = readl_relaxed(abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
+	__iormb();
 	l1_l0s_enable &= ~(0x3);
 	l1_l0s_enable |= (pmctrl->l0s_en << 0);
 	l1_l0s_enable |= (pmctrl->l1_en << 1);
 
+	__iowmb();
+
 	/* Enabling ASPM L11 & L12, PCI_PM L11 & L12 */
-	writel(aspm_l11_l12, abc_dev->pcie_config + L1SUB_CONTROL1_REG);
+	writel_relaxed(aspm_l11_l12,
+		abc_dev->pcie_config + L1SUB_CONTROL1_REG);
 
 	/* Enabling L1 or L0s or both */
-	writel(l1_l0s_enable, abc_dev->pcie_config
+	writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
 	/* LTR Enable */
 	if (pmctrl->aspm_L12) {
-		val = readl(abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		val = readl_relaxed(
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		__iormb();
 		val |= LTR_ENABLE;
-		writel(val, abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		__iowmb();
+		writel_relaxed(val,
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
 	} else {
 		/* Clearing LTR Enable bit */
-		val = readl(abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		val = readl_relaxed(
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		__iormb();
 		val &= ~(LTR_ENABLE);
-		writel(val, abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		__iowmb();
+		writel_relaxed(val,
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
 	}
 
 	/* Clock Request Enable*/
-	writel(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
+	writel_relaxed(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
 	return 0;
 }
 
-int set_inbound_iatu(struct inb_region inb)
+int set_inbound_iatu(struct inb_region ir)
 {
 	unsigned long flags;
 	u32 val;
 	u32 set_val;
-	u32 config = inb.memmode;
-	int bar = inb.bar;
-	u32 iatu_offset = (inb.region * IATU_REGION_OFFSET);
+	u32 config = ir.memmode;
+	int bar = ir.bar;
+	u32 iatu_offset = (ir.region * IATU_REGION_OFFSET);
 	u32 size;
 
 	if (bar > BAR_4) {
 		pr_err("Exceeding BAR number\n");
-		return -1;
+		return -EIO;
 	}
 
 	size = abc_dev->bar_base[bar].end - abc_dev->bar_base[bar].start;
@@ -536,107 +568,119 @@ int set_inbound_iatu(struct inb_region inb)
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for iATU access mode */
-	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	val = readl_relaxed(
+		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iormb();
+
 	set_val = val & ~(DBI_OVERRIDE_MASK);
 	set_val |= DBI_OVERRIDE_IATU;
-	writel(set_val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	__iowmb();
+	writel_relaxed(set_val,
+		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	/* Lower Base address */
-	writel(abc_dev->bar_base[bar].start,
+	writel_relaxed(abc_dev->bar_base[bar].start,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_LWR_BASE_ADDR_OFF_INBOUND));
 
 	/* Upper Base address */
-	writel(0x0,
+	writel_relaxed(0x0,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_UPPER_BASE_ADDR_OFF_INBOUND));
 
 	/* Limit */
-	writel(abc_dev->bar_base[bar].start + size,
+	writel_relaxed(abc_dev->bar_base[bar].start + size,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_LIMIT_ADDR_OFF_INBOUND));
 
 	/* Lower Target address */
-	writel(inb.target_pcie_address,
+	writel_relaxed(ir.target_pcie_address,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_LWR_TARGET_ADDR_OFF_INBOUND));
 
 	/* Upper Target address */
-	writel(inb.u_target_pcie_address,
+	writel_relaxed(ir.u_target_pcie_address,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_UPPER_TARGET_ADDR_OFF_INBOUND));
 
 	/* Configuring Region control */
-	writel(config,
+	writel_relaxed(config,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_1_OFF_INBOUND));
 
 	/* Enable region */
-	writel(0x80000000,
+	writel_relaxed(0x80000000,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND));
 
-	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	writel_relaxed(val,
+			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
 	return 0;
 }
 
-int set_outbound_iatu(struct outb_region outb)
+int set_outbound_iatu(struct outb_region outreg)
 {
 	unsigned long flags;
 	u32 val;
 	u32 set_val;
 
-	u32 iatu_offset = (outb.region * IATU_REGION_OFFSET);
+	u32 iatu_offset = (outreg.region * IATU_REGION_OFFSET);
 
-	u32 config = outb.memmode;
+	u32 config = outreg.memmode;
 
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for iATU access mode */
-	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	val = readl_relaxed(
+		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iormb();
 	set_val = val & ~(DBI_OVERRIDE_MASK);
 	set_val |= DBI_OVERRIDE_IATU;
-	writel(set_val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	__iowmb();
+	writel_relaxed(set_val,
+		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	/* Writing the lower source address */
-	writel(outb.base_address,
+	writel_relaxed(outreg.base_address,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_LWR_BASE_ADDR_OFF_OUTBOUND));
 
 	/* Writing the upper source address */
-	writel(outb.u_base_address,
+	writel_relaxed(outreg.u_base_address,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_UPPER_BASE_ADDR_OFF_OUTBOUND));
 
 	/* Wrting the limit register */
-	writel(outb.limit_address,
+	writel_relaxed(outreg.limit_address,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_LIMIT_ADDR_OFF_OUTBOUND));
 
 	/* Writing the lower target address*/
-	writel(outb.target_pcie_address,
+	writel_relaxed(outreg.target_pcie_address,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_LWR_TARGET_ADDR_OFF_OUTBOUND));
 
 	/* Writing the upper target address*/
-	writel(outb.u_target_pcie_address,
+	writel_relaxed(outreg.u_target_pcie_address,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_UPPER_TARGET_ADDR_OFF_OUTBOUND));
 
 	/* Configuring Region control */
-	writel(config,
+	writel_relaxed(config,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_1_OFF_OUTBOUND));
 
 	/* Enable region */
-	writel(0x80000000,
+	writel_relaxed(0x80000000,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_OUTBOUND));
 
-	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	writel_relaxed(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
@@ -741,39 +785,50 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for DMA access mode */
-	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	val = readl_relaxed(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iormb();
 	set_val = val & ~(DBI_OVERRIDE_MASK);
 	set_val |= DBI_OVERRIDE_DMA;
-	writel(set_val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iowmb();
+	writel_relaxed(set_val,
+		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 	if (dir == DMA_FROM_DEVICE) {
 		pr_debug("DMA MBLK WRITE[EP2AP]: CH%d\n", chan);
 		dma_offset = chan * DMA_WRITE_OFFSET;
-		writel(DMA_ENABLE, abc_dev->pcie_config + DMA_WRITE_ENGINE);
-		writel(DMA_MASK, abc_dev->pcie_config +
-						DMA_WRITE_INTERRUPT_MASK);
-		writel(0x04000308, abc_dev->pcie_config + dma_offset +
-						DMA_WRITE_CHANNEL_CONTROL_1);
-		writel(list_addr_l, abc_dev->pcie_config + dma_offset +
-						DMA_LLP_LOW_OFF_WRCH);
-		writel(list_addr_u, abc_dev->pcie_config + dma_offset +
-						DMA_LLP_HIGH_OFF_WRCH);
-		writel(chan, abc_dev->pcie_config + DMA_WRITE_DOORBELL);
+
+		__iowmb();
+		writel_relaxed(DMA_ENABLE,
+			abc_dev->pcie_config + DMA_WRITE_ENGINE);
+		writel_relaxed(DMA_MASK, abc_dev->pcie_config +
+			DMA_WRITE_INTERRUPT_MASK);
+		writel_relaxed(0x04000308, abc_dev->pcie_config + dma_offset +
+			DMA_WRITE_CHANNEL_CONTROL_1);
+		writel_relaxed(list_addr_l, abc_dev->pcie_config + dma_offset +
+			DMA_LLP_LOW_OFF_WRCH);
+		writel_relaxed(list_addr_u, abc_dev->pcie_config + dma_offset +
+			DMA_LLP_HIGH_OFF_WRCH);
+		writel_relaxed(chan, abc_dev->pcie_config + DMA_WRITE_DOORBELL);
 	} else {
 		pr_debug("DMA MBLK READ[AP2EP]: CH%d\n", chan);
 		dma_offset = chan * DMA_READ_OFFSET;
-		writel(DMA_ENABLE, abc_dev->pcie_config + DMA_READ_ENGINE);
-		writel(DMA_MASK, abc_dev->pcie_config +
-						DMA_READ_INTERRUPT_MASK);
-		writel(0x04000308, abc_dev->pcie_config + dma_offset +
-						DMA_READ_CHANNEL_CONTROL_1);
-		writel(list_addr_l, abc_dev->pcie_config + dma_offset +
-						DMA_LLP_LOW_OFF_RDCH);
-		writel(list_addr_u, abc_dev->pcie_config + dma_offset +
-						DMA_LLP_HIGH_OFF_RDCH);
-		writel(chan, abc_dev->pcie_config + DMA_READ_DOORBELL);
+
+		__iowmb();
+		writel_relaxed(DMA_ENABLE,
+			abc_dev->pcie_config + DMA_READ_ENGINE);
+		writel_relaxed(DMA_MASK, abc_dev->pcie_config +
+			DMA_READ_INTERRUPT_MASK);
+		writel_relaxed(0x04000308, abc_dev->pcie_config + dma_offset +
+			DMA_READ_CHANNEL_CONTROL_1);
+		writel_relaxed(list_addr_l, abc_dev->pcie_config + dma_offset +
+			DMA_LLP_LOW_OFF_RDCH);
+		writel_relaxed(list_addr_u, abc_dev->pcie_config + dma_offset +
+			DMA_LLP_HIGH_OFF_RDCH);
+		writel_relaxed(chan,
+			abc_dev->pcie_config + DMA_READ_DOORBELL);
 	}
 
-	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iowmb();
+	writel_relaxed(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
@@ -794,10 +849,13 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for DMA access mode */
-	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	val = readl_relaxed(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iormb();
 	set_val = val & ~(DBI_OVERRIDE_MASK);
 	set_val |= DBI_OVERRIDE_DMA;
-	writel(set_val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iowmb();
+	writel_relaxed(set_val,
+			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	if (dir ==  DMA_TO_DEVICE) {
 		dma_offset = chan * DMA_READ_OFFSET;
@@ -845,7 +903,8 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 		writel_relaxed(chan, abc_dev->pcie_config + DMA_WRITE_DOORBELL);
 	}
 
-	writel(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iowmb();
+	writel_relaxed(val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
@@ -892,20 +951,25 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 	spin_lock(&abc_dev->fsys_reg_lock);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for DMA access mode */
-	override_val = readl(abc_dev->fsys_config +
+	override_val = readl_relaxed(abc_dev->fsys_config +
 					SYSREG_FSYS_DBI_OVERRIDE);
+	__iormb();
 	override_set_val = override_val & ~(DBI_OVERRIDE_MASK);
 	override_set_val = DBI_OVERRIDE_DMA;
-	writel(override_set_val, abc_dev->fsys_config +
+	__iowmb();
+	writel_relaxed(override_set_val, abc_dev->fsys_config +
 					SYSREG_FSYS_DBI_OVERRIDE);
 
 	/* DMA Read Callback Implementation */
-	dma_rd_stat = readl(abc_dev->pcie_config + DMA_READ_INT_STATUS_OFF);
+	dma_rd_stat = readl_relaxed(
+		abc_dev->pcie_config + DMA_READ_INT_STATUS_OFF);
+	__iormb();
 	pos = 0;
 	pr_debug("---dma_rd_stat = 0x%x--\n", dma_rd_stat);
 	while ((pos = find_next_bit((unsigned long *) &dma_rd_stat, 32,
 					pos)) != 32) {
-		writel((0x1 << pos),
+		__iowmb();
+		writel_relaxed((0x1 << pos),
 				abc_dev->pcie_config + DMA_READ_INT_CLEAR_OFF);
 
 		spin_lock(&abc_dev->dma_callback_lock);
@@ -928,12 +992,15 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 	}
 
 	/* DMA Write Callback Implementation */
-	dma_wr_stat = readl(abc_dev->pcie_config + DMA_WRITE_INT_STATUS_OFF);
+	dma_wr_stat = readl_relaxed(
+		abc_dev->pcie_config + DMA_WRITE_INT_STATUS_OFF);
+	__iormb();
 	pos = 0;
 	pr_debug("---dma_wr_stat = 0x%x--\n", dma_wr_stat);
 	while ((pos = find_next_bit((unsigned long *) &dma_wr_stat, 32,
 					pos)) != 32) {
-		writel((0x1 << pos),
+		__iowmb();
+		writel_relaxed((0x1 << pos),
 				abc_dev->pcie_config + DMA_WRITE_INT_CLEAR_OFF);
 
 		spin_lock(&abc_dev->dma_callback_lock);
@@ -955,7 +1022,9 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 		pos++;
 	}
 
-	writel(override_val, abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iowmb();
+	writel_relaxed(override_val,
+		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock(&abc_dev->fsys_reg_lock);
 
@@ -979,15 +1048,22 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 		}
 	} else if (irq == ABC_MSI_AON_INTNC) {
 		/* Mask 31st MSI during Interrupt handling period */
-		msi_cap_val = readl(abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
-		writel((msi_cap_val | MSI_CAP_MASK_31),
+		msi_cap_val = readl_relaxed(
 				abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
+		__iormb();
+		__iowmb();
+		writel_relaxed((msi_cap_val | MSI_CAP_MASK_31),
+			abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
 
 		/* Check the sysreg status register and do the callback */
-		intnc_val = readl(abc_dev->fsys_config + SYSREG_FSYS_INTERRUPT);
+		intnc_val = readl_relaxed(
+			abc_dev->fsys_config + SYSREG_FSYS_INTERRUPT);
+		__iormb();
 		atomic_notifier_call_chain(&abc_dev->intnc_notifier,
 					   irq, (void *)(u64)intnc_val);
-		writel(msi_cap_val, abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
+		__iowmb();
+		writel_relaxed(msi_cap_val,
+			abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
 	}
 	spin_unlock(&abc_dev->lock);
 	return IRQ_HANDLED;
@@ -1035,7 +1111,7 @@ static int abc_pcie_ipu_tpu_enable(void)
 		return err;
 
 	/* TODO(basso):  Determine the proper timeout here. */
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	/* Reduce AON clk to 233MHz to safely make IPU/TPU APB clk changes */
 	err = abc_pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0x00000003);
@@ -1056,7 +1132,7 @@ static int abc_pcie_ipu_tpu_enable(void)
 		return err;
 
 	/* TODO(basso):  Determine the proper timeout here. */
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	err = abc_pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0213);
 	if (WARN_ON(err < 0))
@@ -1072,7 +1148,7 @@ static int abc_pcie_ipu_tpu_enable(void)
 		return err;
 
 	/* TODO(basso):  Determine the proper timeout here. */
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	return 0;
 }
@@ -1285,7 +1361,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 {
 	int i;
 	int err;
-	volatile int bar;
+	int bar;
 	void __iomem *base;
 	struct device *dev = &pdev->dev;
 	struct abc_pcie_devdata *abc;
@@ -1296,14 +1372,11 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 		return -ENODEV;
 
 	abc = kzalloc(sizeof(struct abc_pcie_devdata), GFP_KERNEL);
-	if (abc == NULL) {
-		dev_err(&pdev->dev, "no memory for device data\n");
+	if (abc == NULL)
 		return -ENOMEM;
-	}
 
 	abc_dev = kzalloc(sizeof(struct abc_device), GFP_KERNEL);
 	if (abc_dev == NULL) {
-		dev_err(&pdev->dev, "no memory for abc device data\n");
 		err = -ENOMEM;
 		goto err1;
 	}
@@ -1402,7 +1475,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 		bar++;
 #else
-		bar +=2;
+		bar += 2;
 #endif
 	}
 
@@ -1417,7 +1490,8 @@ exit_loop:
 #endif
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM)
 	/* Registering the callback to the ASM */
-	ab_sm_register_blk_callback((block_name_t)BLK_FSYS, abc_pcie_state_manager, (void*)pdev);
+	ab_sm_register_blk_callback((block_name_t)BLK_FSYS,
+			abc_pcie_state_manager, (void *)pdev);
 #endif
 	pci_set_drvdata(pdev, abc);
 
@@ -1456,7 +1530,7 @@ static void abc_pcie_remove(struct pci_dev *pdev)
 
 	mfd_remove_devices(&pdev->dev);
 
-	for (bar = BAR_0; bar <= BAR_4; bar+=2) {
+	for (bar = BAR_0; bar <= BAR_4; bar += 2) {
 		if (abc->bar[bar])
 			iounmap(abc->bar[bar]);
 	}
