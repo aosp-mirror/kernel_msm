@@ -260,6 +260,7 @@ int memory_config_read(u32 offset, u32 len, u32 *data);
 int memory_config_write(u32 offset, u32 len, u32 data);
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan);
 int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no);
+int abc_reg_notifier_callback(struct notifier_block *nb);
 void *abc_alloc_coherent(size_t size, dma_addr_t *dma_addr);
 void abc_free_coherent(size_t size, void *cpu_addr, dma_addr_t dma_addr);
 dma_addr_t abc_dma_map_page(struct page *page, size_t offset, size_t size,

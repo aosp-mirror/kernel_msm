@@ -911,6 +911,19 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 	return 0;
 }
 
+int abc_reg_notifier_callback(struct notifier_block *nb)
+{
+	int ret = atomic_notifier_chain_register(&abc_dev->intnc_notifier, nb);
+
+	if (ret) {
+		pr_err("Could not register notifier\n");
+		return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(abc_reg_notifier_callback);
+
 int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no)
 {
 	unsigned long flags;
