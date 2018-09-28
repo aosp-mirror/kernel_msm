@@ -151,4 +151,11 @@
 	vendor {
 		dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/vendor";
 	};
+	product {
+		compatible = "android,product";
+		dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/product";
+		type = "ext4";
+		mnt_flags = "ro";
+		fsmgr_flags = "wait,slotselect,avb";
+	};
 };
