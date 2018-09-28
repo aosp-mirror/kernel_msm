@@ -458,6 +458,10 @@
 	};
 };
 
+&wcd_usbc_analog_en1_gpio {
+	status = "disabled";
+};
+
 &cdc_sdw_gpios {
 	status = "disabled";
 };
