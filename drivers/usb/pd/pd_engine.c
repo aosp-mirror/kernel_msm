@@ -35,6 +35,7 @@
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 #include "usbpd.h"
+#include <../../power/supply/qcom/smb5-reg.h>
 
 #define LOG_BUFFER_ENTRIES	1024
 #define LOG_BUFFER_ENTRY_SIZE	256
@@ -835,6 +836,7 @@ static int tcpm_get_vbus(struct tcpc_dev *dev)
 static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 {
 	union power_supply_propval val = {0};
+	union power_supply_propval rp_val = {0};
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
 
@@ -849,6 +851,11 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		break;
 	case TYPEC_CC_RP_DEF:
 		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
+		rp_val.intval = TYPEC_SRC_RP_STD;
+		break;
+	case TYPEC_CC_RP_1_5:
+		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
+		rp_val.intval = TYPEC_SRC_RP_1P5A;
 		break;
 	default:
 		pd_engine_log(pd, "tcpm_set_cc: invalid cc %s",
@@ -856,6 +863,21 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		ret = -EINVAL;
 		goto unlock;
 	}
+
+	if (cc == TYPEC_CC_RP_DEF || cc == TYPEC_CC_RP_1_5) {
+		ret = power_supply_set_property(pd->usb_psy,
+						POWER_SUPPLY_PROP_TYPEC_SRC_RP,
+						&rp_val);
+		if (ret < 0) {
+			pd_engine_log(pd, "unable to set Rp, ret=%d",
+				      ret);
+		} else {
+			pd_engine_log(pd, "set Rp to %s",
+				      rp_val.intval == TYPEC_SRC_RP_STD ?
+				      "Rp-def" : "Rp-1.5A");
+		}
+	}
+
 	ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
 					&val);
