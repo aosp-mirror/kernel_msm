@@ -62,9 +62,11 @@ struct led_laser_ctrl_t {
 	bool is_probed;
 	bool is_silego_validated;
 	bool is_silego_power_up;
+	bool is_sx9320_power_up;
 	bool is_certified;
 	struct regulator *vio;
 	struct regulator *silego_vdd;
+	struct regulator *sx9320_vdd;
 	enum LASER_TYPE type;
 	uint32_t read_addr;
 	uint32_t read_data;
@@ -77,6 +79,46 @@ static const struct reg_setting silego_reg_settings[] = {
 	{0xc0, 0x09}, {0xc1, 0x5b}, {0xc2, 0x09}, {0xc3, 0x5b}, {0xcb, 0x93},
 	{0xcc, 0x81}, {0xcd, 0x93}, {0xce, 0x83}, {0x92, 0x00}, {0x93, 0x00}
 };
+
+static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
+{
+	int rc, io_release_rc;
+	uint32_t old_sid, old_cci_master, data;
+
+	old_sid = ctrl->io_master_info.cci_client->sid;
+	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
+	ctrl->io_master_info.cci_client->sid = 0x28;
+	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
+
+	rc = camera_io_init(&(ctrl->io_master_info));
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"cam io init for cap sense failed: rc: %d", rc);
+		ctrl->io_master_info.cci_client->sid = old_sid;
+		ctrl->io_master_info.cci_client->cci_i2c_master =
+			old_cci_master;
+		return rc;
+	}
+
+	rc = camera_io_dev_read(
+		&ctrl->io_master_info,
+		0x00,
+		&data,
+		CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_BYTE);
+	if (rc < 0)
+		dev_err(ctrl->soc_info.dev, "clean up NIRQ failed");
+
+	io_release_rc = camera_io_release(&(ctrl->io_master_info));
+	if (io_release_rc < 0) {
+		dev_err(ctrl->soc_info.dev, "cap sense cci_release failed");
+		if (!rc)
+			rc = io_release_rc;
+	}
+	ctrl->io_master_info.cci_client->sid = old_sid;
+	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
+	return rc;
+}
 
 static int silego_correct_setting(struct led_laser_ctrl_t *ctrl)
 {
@@ -248,6 +290,17 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 {
 	int rc;
 
+	if (!ctrl->is_sx9320_power_up) {
+		rc = regulator_enable(ctrl->sx9320_vdd);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"cap sense regulator_enable failed: rc: %d",
+				rc);
+			return rc;
+		}
+		ctrl->is_sx9320_power_up = true;
+	}
+
 	if (!ctrl->is_silego_power_up) {
 		rc = regulator_enable(ctrl->silego_vdd);
 		if (rc < 0) {
@@ -266,6 +319,14 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 			return rc;
 		}
 		ctrl->is_power_up = true;
+	}
+
+	rc = sx9320_cleanup_nirq(ctrl);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"clean up cap sense irq failed: rc: %d", rc);
+		ctrl->is_silego_validated = false;
+		return rc;
 	}
 
 	rc = silego_verify_settings(ctrl);
@@ -325,6 +386,17 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 			ctrl->is_silego_power_up = false;
 	}
 
+	if (ctrl->is_sx9320_power_up) {
+		is_error = regulator_disable(ctrl->sx9320_vdd);
+		if (is_error < 0) {
+			rc = is_error;
+			dev_err(ctrl->soc_info.dev,
+				"cap sense regulator_disable failed: rc: %d",
+				rc);
+		} else
+			ctrl->is_sx9320_power_up = false;
+	}
+
 	return rc;
 }
 
@@ -344,6 +416,13 @@ static int lm36011_parse_dt(struct device *dev)
 	if (IS_ERR(ctrl->silego_vdd)) {
 		ctrl->silego_vdd = NULL;
 		dev_err(dev, "unable to get silego vdd");
+		return -ENOENT;
+	}
+
+	ctrl->sx9320_vdd = devm_regulator_get(dev, "sx9320_vdd");
+	if (IS_ERR(ctrl->sx9320_vdd)) {
+		ctrl->sx9320_vdd = NULL;
+		dev_err(dev, "unable to get cap sense vdd");
 		return -ENOENT;
 	}
 
@@ -424,8 +503,9 @@ static ssize_t led_laser_enable_store(struct device *dev,
 	if (value == true) {
 		rc = lm36011_power_up(ctrl);
 		if (rc != 0) {
+			rc = lm36011_power_down(ctrl);
 			mutex_unlock(&ctrl->cam_sensor_mutex);
-			return rc;
+			return rc < 0 ? rc : count;
 		}
 		rc = lm36011_write_data(ctrl,
 			ENABLE_REG, IR_ENABLE_MODE);
