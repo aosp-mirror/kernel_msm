@@ -31,6 +31,7 @@
 #include <linux/firmware.h>
 #include <linux/pci.h>
 #include <linux/airbrush-sm-ctrl.h>
+#include <linux/clk.h>
 
 #include "airbrush-spi.h"
 #include "airbrush-pmic-ctrl.h"
@@ -48,6 +49,16 @@
 #define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100) /* TBD */
 
 #define M0_FIRMWARE_PATH1 "ab.fw"
+
+static int enable_ref_clk(struct device *dev)
+{
+	struct clk *ref_clk = clk_get(dev, "ab_ref");
+
+	if (!IS_ERR(ref_clk))
+		return clk_prepare_enable(ref_clk);
+	else
+		return PTR_ERR(ref_clk);
+}
 
 void parse_fw(uint32_t *image_dw_buf, const unsigned char *image_buf,
 		int image_size_dw)
@@ -93,16 +104,25 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	if (patch_fw) {
 		gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_ENABLE);
 
-		fw_status = request_firmware(&fw_entry, M0_FIRMWARE_PATH1, ab_ctx->dev);
+		fw_status =
+			request_firmware(&fw_entry,
+				M0_FIRMWARE_PATH1, ab_ctx->dev);
 		if (fw_status != 0) {
-			pr_info("Airbrush Firmware Not Found: %d, %d\n", fw_status,
-					__LINE__);
+			pr_info("Airbrush Firmware Not Found: %d, %d\n",
+					fw_status, __LINE__);
 			return -EIO;
 		}
 		image_size_dw = fw_entry->size / 4;
 		image_dw_buf = vmalloc(image_size_dw * sizeof(uint32_t));
 		parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
 		release_firmware(fw_entry);
+	}
+
+	ret = enable_ref_clk(ab_ctx->dev);
+	if (ret) {
+		dev_err(ab_ctx->dev,
+			"Unable to enable reference clock (err %d)", ret);
+		return ret;
 	}
 
 	ab_enable_pgood(ab_ctx);
@@ -129,9 +149,9 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	/* From sleep/suspend to active, perform DDR Pad Isolation
 	 * deassertion
 	 */
-	if (state_suspend || state_sleep) {
-		/* [TBD] */
-	}
+	/* [TBD]
+	 * if (state_suspend || state_sleep)
+	 */
 
 	if (state_suspend || state_off) {
 
@@ -266,7 +286,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		 * linkup completed.
 		 */
 	}
-    /* [TBD] DDR Related code will be added later */
 
 	/* [TBD] DDR Related code will be added later */
 
