@@ -143,7 +143,7 @@
 		clock-frequency = <19200000>;
 		#clock-cells = <0>;
 	};
-    ppmu_pcie_m: ppmu_pcie_m@41fa0000 {
+	ppmu_pcie_m: ppmu_pcie_m@41fa0000 {
 		compatible = "abc,airbrush-ppmu-v2";
 		reg = <0x0 0x41fa0000 0x0 0x300>;
 		interrupt = <42>;
@@ -190,7 +190,8 @@
 			<&clock_tpu FOUT_PLL_TPU>,
 			<&clock_tpu MOUT_TPU_PLL_TPU>,
 			<&clock_tpu DOUT_TPU_TPU_PLL_DIV_CLK_1>,
-			<&clock_tpu MOUT_TPU_AONCLK_PLLCLK>;
+			<&clock_tpu MOUT_TPU_AONCLK_PLLCLK>,
+			<&clock_rpmh RPMH_LN_BB_CLK2>;
 		clock-names =	"osc_clk",
 				"ipu_pll",
 				"ipu_pll_mux",
@@ -200,7 +201,8 @@
 				"tpu_pll",
 				"tpu_pll_mux",
 				"tpu_pll_div",
-				"tpu_switch_mux";
+				"tpu_switch_mux",
+				"ab_ref";
 
 		/* Provide GPIOs used in Airbrush boot sequence */
 		soc-pwrgood-gpio = <&s2mpb04_gpio 0 GPIO_ACTIVE_HIGH>;	/* output */
