@@ -88,13 +88,16 @@
 
 static int tmu_read_enable;
 
-void tmu_write(u32 value, u32 offset) {pcie_config_write(offset, 4, value); }
+void tmu_write(u32 value, u32 offset)
+{
+	abc_pcie_config_write(offset, 4, value);
+}
 
 u32 tmu_read(u32 offset)
 {
 	u32 data;
 
-	pcie_config_read(offset, 4, &data);
+	abc_pcie_config_read(offset, 4, &data);
 	return data;
 }
 
@@ -169,7 +172,7 @@ struct airbrush_tmu_platform_data {
 
 static void airbrush_report_trigger(struct airbrush_tmu_data *p)
 {
-	char data[10], *envp[] = { data, NULL };
+	char data[11], *envp[] = { data, NULL };
 	struct thermal_zone_device *tz = p->tzd;
 	int temp;
 	unsigned int i;
@@ -242,61 +245,6 @@ static int tmu_irq_notify(struct notifier_block *nb,
 	return 0;
 }
 
-/*
- * TMU treats temperature as a mapped temperature code.
- * The temperature is converted differently depending on the calibration type.
- */
-#if 0 /*TODO: reenable these fucntions once we have TRIMINFO*/
-static int temp_to_code(struct airbrush_tmu_data *data, u8 temp)
-{
-	struct airbrush_tmu_platform_data *pdata = data->pdata;
-	int temp_code;
-
-	switch (pdata->cal_type) {
-	case AIRBRUSH_TWO_POINT_TRIMMING:
-		temp_code = (temp - pdata->first_point_trim) *
-			(data->temp_error2 - data->temp_error1) /
-			(pdata->second_point_trim - pdata->first_point_trim) +
-			data->temp_error1;
-		break;
-	case AIRBRUSH_ONE_POINT_TRIMMING:
-		temp_code = temp + data->temp_error1 - pdata->first_point_trim;
-		break;
-	default:
-		temp_code = temp + pdata->default_temp_offset;
-		break;
-	}
-
-	return temp_code;
-}
-
-/*
- * Calculate a temperature value from a temperature code.
- * The unit of the temperature is degree Celsius.
- */
-static int code_to_temp(struct airbrush_tmu_data *data, u16 temp_code)
-{
-	struct airbrush_tmu_platform_data *pdata = data->pdata;
-	int temp;
-
-	switch (pdata->cal_type) {
-	case AIRBRUSH_TWO_POINT_TRIMMING:
-		temp = (temp_code - data->temp_error1) *
-			(pdata->second_point_trim - pdata->first_point_trim) /
-			(data->temp_error2 - data->temp_error1) +
-			pdata->first_point_trim;
-		break;
-	case AIRBRUSH_ONE_POINT_TRIMMING:
-		temp = temp_code - data->temp_error1 + pdata->first_point_trim;
-		break;
-	default:
-		temp = temp_code - pdata->default_temp_offset;
-		break;
-	}
-
-	return temp;
-}
-#endif
 static void airbrush_tmu_core_enable(struct platform_device *pdev, bool enable)
 {
 	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
@@ -336,48 +284,6 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 	    (data->temp_error1 > pdata->max_efuse_value))
 		data->temp_error1 = pdata->efuse_value & AIRBRUSH_TMU_TEMP_MASK;
 
-#if 0 /* TODO: remove them once we have right setting */
-	tmu_write(0x064005A, data->base + AIRBRUSH_THD_TEMP_RISE7_6);
-	tmu_write(0x0500046, data->base + AIRBRUSH_THD_TEMP_RISE5_4);
-	tmu_write(0x03c0032, data->base + AIRBRUSH_THD_TEMP_RISE3_2);
-	tmu_write(0x028001e, data->base + AIRBRUSH_THD_TEMP_RISE1_0);
-#endif
-#if 0 /* TODO: Enable the below code for setting threshold value */
-	struct thermal_zone_device *tz = data->tzd;
-	unsigned int rising_threshold = 0, falling_threshold = 0;
-	int threshold_code, i;
-	int temp, temp_hist;
-	unsigned int reg_off, bit_off;
-
-	for (i = (of_thermal_get_ntrips(tz) - 1); i >= 0; i--) {
-
-		reg_off = ((7 - i) / 2) * 4;
-		bit_off = ((8 - i) % 2);
-
-		tz->ops->get_trip_temp(tz, i, &temp);
-		temp /= MCELSIUS;
-
-		tz->ops->get_trip_hyst(tz, i, &temp_hist);
-		temp_hist = temp - (temp_hist / MCELSIUS);
-
-		/* Set 9-bit temperature code for rising threshold levels */
-		threshold_code = temp_to_code(data, temp);
-		rising_threshold = readl(data->base +
-			EXYNOS7_THD_TEMP_RISE7_6 + reg_off);
-		rising_threshold &= ~(EXYNOS7_TMU_TEMP_MASK << (16 * bit_off));
-		rising_threshold |= threshold_code << (16 * bit_off);
-		writel(rising_threshold,
-		       data->base + EXYNOS7_THD_TEMP_RISE7_6 + reg_off);
-
-		/* Set 9-bit temperature code for falling threshold levels */
-		threshold_code = temp_to_code(data, temp_hist);
-		falling_threshold &= ~(EXYNOS7_TMU_TEMP_MASK << (16 * bit_off));
-		falling_threshold |= threshold_code << (16 * bit_off);
-		writel(falling_threshold,
-		       data->base + EXYNOS7_THD_TEMP_FALL7_6 + reg_off);
-	}
-#endif
-
 	airbrush_tmu_clear_irqs(data);
 out:
 	return ret;
@@ -389,41 +295,6 @@ static void airbrush_tmu_control(struct platform_device *pdev, bool on)
 
 	airbrush_tmu_core_enable(pdev, 0);
 
-#if 0 /* TODO: Enable the below code to set TMU control bits*/
-	struct thermal_zone_device *tz = data->tzd;
-	unsigned int con, interrupt_en;
-
-	con = tmu_read(data->base + AIRBRUSH_TMU_REG_CONTROL);
-	if (on) {
-		con |= (1 << AIRBRUSH_TMU_CORE_EN_SHIFT) |
-			(1 << AIRBRUSH_TMU_EN_TRIP_SHIFT) |
-			(0x0 << AIRBRUSH_TMU_TRIP_MODE_SHIFT);
-
-		interrupt_en =
-			(of_thermal_is_trip_valid(tz, 7)
-			<< AIRBRUSH_TMU_INTEN_RISE7_SHIFT) |
-			(of_thermal_is_trip_valid(tz, 6)
-			<< AIRBRUSH_TMU_INTEN_RISE6_SHIFT) |
-			(of_thermal_is_trip_valid(tz, 5)
-			<< AIRBRUSH_TMU_INTEN_RISE5_SHIFT) |
-			(of_thermal_is_trip_valid(tz, 4)
-			<< AIRBRUSH_TMU_INTEN_RISE4_SHIFT) |
-			(of_thermal_is_trip_valid(tz, 3)
-			<< AIRBRUSH_TMU_INTEN_RISE3_SHIFT) |
-			(of_thermal_is_trip_valid(tz, 2)
-			<< AIRBRUSH_TMU_INTEN_RISE2_SHIFT) |
-			(of_thermal_is_trip_valid(tz, 1)
-			<< AIRBRUSH_TMU_INTEN_RISE1_SHIFT) |
-			(of_thermal_is_trip_valid(tz, 0)
-			<< AIRBRUSH_TMU_INTEN_RISE0_SHIFT);
-
-		interrupt_en |=
-			interrupt_en << AIRBRUSH_TMU_INTEN_FALL0_SHIFT;
-	} else {
-		con &= ~(1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
-		interrupt_en = 0; /* Disable all interrupts */
-	}
-#endif
 	tmu_write(0xff007f, data->base + AIRBRUSH_TMU_REG_INTEN);
 	tmu_write(0x1003, data->base + AIRBRUSH_TMU_REG_CONTROL);
 	airbrush_tmu_core_enable(pdev, 1);
@@ -503,9 +374,10 @@ out:
 	return ret;
 }
 #else
-#define airbrush_tmu_set_emulation NULL
 static int airbrush_tmu_set_emulation(void *drv_data, int temp)
-	{ return -EINVAL; }
+{
+	return -EINVAL;
+}
 #endif /* CONFIG_THERMAL_EMULATION */
 
 static const struct of_device_id airbrush_tmu_match[] = {
