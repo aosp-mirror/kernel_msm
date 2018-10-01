@@ -630,7 +630,13 @@ int readSysInfo(int request)
 	u8ToU32(&data[index], &systemInfo.u32_cfgCrc);
 	index += 4;
 
-	index += 12;	/* skip reserved area */
+	index += 4;	/* skip reserved area */
+
+	systemInfo.u8_mpFlag = data[index++];
+	pr_info("MP FLAG = %02X\n", systemInfo.u8_mpFlag);
+
+	index += 3 + 4; /* +3 remaining from mp flag address */
+
 	systemInfo.u8_ssDetScanSet = data[index];
 	pr_info("SS Detect Scan Select = %d\n",
 		 systemInfo.u8_ssDetScanSet);
@@ -740,8 +746,6 @@ int readSysInfo(int request)
 	index += 2;
 
 	u8ToU16(&data[index], &systemInfo.u16_ssDetRawAddr);
-	pr_info("SS Detect Raw Addr = %04X\n",
-		systemInfo.u16_ssDetRawAddr);
 	index += 2;
 
 	u8ToU16(&data[index], &systemInfo.u16_ssDetFilterAddr);
@@ -1172,7 +1176,7 @@ int writeHostDataMemory(u8 type, u8 *data, u8 msForceLen, u8 msSenseLen,
 	memcpy(&temp[16], data, size);
 
 	pr_info("%s: Write Host Data Memory in buffer...\n", __func__);
-	res = fts_writeU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16,
+	res = fts_writeU8UX(FTS_CMD_FRAMEBUFFER_W, BITS_16,
 			    ADDR_FRAMEBUFFER, temp, size +
 			    SYNCFRAME_DATA_HEADER);
 
@@ -1195,5 +1199,41 @@ int writeHostDataMemory(u8 type, u8 *data, u8 msForceLen, u8 msSenseLen,
 
 
 	pr_info("%s: write Host Data Memory FINISHED!\n", __func__);
+	return OK;
+}
+
+/*
+ * Save MP flag value into the flash
+ * @param mpflag Value to write in the MP Flag field
+ * @return OK if success or an error code which specify the type of error
+ */
+int saveMpFlag(u8 mpflag)
+{
+	int ret;
+
+	pr_info("%s: Saving MP Flag = %02X\n", __func__, mpflag);
+	ret = writeSysCmd(SYS_CMD_MP_FLAG, &mpflag, 1);
+	if (ret < OK) {
+		pr_err("%s: Error while writing MP flag on ram... ERROR %08X\n",
+			__func__, ret);
+		return ret;
+	}
+
+	mpflag =  SAVE_PANEL_CONF;
+	ret = writeSysCmd(SYS_CMD_SAVE_FLASH, &mpflag, 1);
+	if (ret < OK) {
+		pr_err("%s: Error while saving MP flag on flash... ERROR %08X\n",
+			__func__, ret);
+		return ret;
+	}
+
+	ret = readSysInfo(1);
+	if (ret < OK) {
+		pr_err("%s: Error while refreshing SysInfo... ERROR %08X\n",
+			__func__, ret);
+		return ret;
+	}
+
+	pr_info("%s: Saving MP Flag OK!\n", __func__);
 	return OK;
 }

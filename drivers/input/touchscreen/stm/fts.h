@@ -50,9 +50,9 @@
   */
 /* **** CODE CONFIGURATION **** */
 #define FTS_TS_DRV_NAME		"fts"	/* driver name */
-#define FTS_TS_DRV_VERSION	"5.2.10.2_Google_C2"	/* driver version string
+#define FTS_TS_DRV_VERSION	"5.2.16_Google_C2"	/* driver version string
 							 * */
-#define FTS_TS_DRV_VER		0x05020A02	/* driver version u32 format */
+#define FTS_TS_DRV_VER		0x05021000	/* driver version u32 format */
 
 /* #define DEBUG */	/* /< define to print more logs in the kernel log
 			 * and better follow the code flow */
@@ -65,15 +65,17 @@
 			  * of the driver and fts_lib from command shell
 			  * (useful for enginering/debug operations) */
 
-/* Comment 2 flags to disable auto-tune in MP test and device boot-up */
-/* if defined allow to have some procedures at the boot or from file node to
-  * assure that touch works under any condition that usually are disabled in the
-  * MP stage of the project
-  */
-/* #define ENGINEERING_CODE */
-/* Initialization of CX memory allowed on the phone */
-/* #define COMPUTE_CX_ON_PHONE */
-#define PRE_SAVED_METHOD
+/* If both COMPUTE_INIT_METHOD and PRE_SAVED_METHOD are not defined,
+ * driver will be automatically configured as GOLDEN_VALUE_METHOD
+ */
+#define COMPUTE_INIT_METHOD  /* Allow to compute init data on phone during
+			      * production
+			      */
+#ifndef COMPUTE_INIT_METHOD
+#define PRE_SAVED_METHOD /* Pre-Saved Method used
+			  * during production
+			  */
+#endif
 
 /*#define FW_H_FILE*/			/* include the FW data as header file */
 #ifdef FW_H_FILE

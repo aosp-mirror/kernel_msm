@@ -73,6 +73,16 @@
 /* FLASH UNLOCK PARAMETER */
 #define FLASH_UNLOCK_CODE0		0x25
 #define FLASH_UNLOCK_CODE1		0x20
+#define FLASH_UNLOCK_CODE2		0x6B
+#define FLASH_UNLOCK_CODE3		0x00
+
+/* FLASH UVLO ENABLE PARAMETER */
+#define FLASH_UVLO_ENABLE_CODE0		0x1B
+#define FLASH_UVLO_ENABLE_CODE1		0x66
+
+/* FLASH AUTOPOWERDOWN ENABLE PARAMETER */
+#define FLASH_AUTOPOWERDOWN_ENABLE_CODE0 0x68
+#define FLASH_AUTOPOWERDOWN_ENABLE_CODE1 0x13
 
 /* FLASH ERASE and DMA PARAMETER */
 #define FLASH_ERASE_START		0x80
@@ -147,6 +157,9 @@
 					 * FTI */
 #define FTS_CMD_HW_REG_W	0xFA	/* /< command to write an hw register if
 					 * FTI */
+#define FTS_CMD_FRAMEBUFFER_W	0xA6	/* /< command to write the framebuffer
+					 * if FTI
+					 */
 #define FTS_CMD_FRAMEBUFFER_R	0xA6	/* /< command to read the framebuffer if
 					 * FTI */
 #define FTS_CMD_CONFIG_R	0xA8	/* /< command to read the config memory
@@ -158,6 +171,9 @@
 					 * FTI */
 #define FTS_CMD_HW_REG_W	0xFA	/* /< command to write an hw register if
 					 * FTI */
+#define FTS_CMD_FRAMEBUFFER_W	0xA6	/* /< command to write the framebuffer
+					 * if FTI
+					 */
 #define FTS_CMD_FRAMEBUFFER_R	0xA7	/* /< command to read the framebuffer if
 					 * FTI */
 #define FTS_CMD_CONFIG_R	0xA9	/* /< command to read the config memory

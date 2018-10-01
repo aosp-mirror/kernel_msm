@@ -101,7 +101,7 @@ typedef struct {
 	u8 u8_releaseInfo[RELEASE_INFO_SIZE];	/* /< Release information */
 	u32 u32_fwCrc;	/* /< Crc of FW */
 	u32 u32_cfgCrc;	/* /< Crc of config */
-
+	u8 u8_mpFlag; /* /< MP Flag */
 	u8 u8_ssDetScanSet; /* /< Type of Detect Scan Selected */
 
 	u16 u16_scrResX;/* /< X resolution on main screen */
@@ -214,4 +214,5 @@ int requestSyncFrame(u8 type);
 int setActiveScanFrequency(u32 freq);
 int writeHostDataMemory(u8 type, u8 *data, u8 msForceLen, u8 msSenseLen,
 			u8 ssForceLen, u8 ssSenseLen, int save);
+int saveMpFlag(u8 mpflag);
 #endif	/* FTS_CORE_H */

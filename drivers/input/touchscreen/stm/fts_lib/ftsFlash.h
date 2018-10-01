@@ -119,6 +119,7 @@ int parseBinFile(u8 *fw_data, int fw_size, Firmware *fw, int keep_cx);
 int readFwFile(const char *path, Firmware *fw, int keep_cx);
 int flash_burn(Firmware fw, int force_burn, int keep_cx);
 int flashProcedure(const char *path, int force, int keep_cx);
+int flash_enable_uvlo_autopowerdown(void);
 
 #endif
 

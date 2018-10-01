@@ -216,27 +216,29 @@ static ssize_t fts_fwupdate_store(struct device *dev,
 	mode[1] = 1;
 
 	/* reading out firmware upgrade parameters */
-	sscanf(buf, "%100s %d %d", path, &mode[0], &mode[1]);
-	pr_info("fts_fwupdate_store: path = %s\n", path);
+	if (sscanf(buf, "%100s %d %d", path, &mode[0], &mode[1]) >= 1) {
+		pr_info("%s: file = %s, force = %d, keep_cx = %d\n", __func__,
+			path, mode[0], mode[1]);
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true);
 
-	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true);
+		if (info->sensor_sleep)
+			ret = ERROR_BUS_WR;
+		else
+			ret = flashProcedure(path, mode[0], mode[1]);
 
-	if (info->sensor_sleep)
-		ret = ERROR_BUS_WR;
-	else
-		ret = flashProcedure(path, mode[0], mode[1]);
+		info->fwupdate_stat = ret;
 
-	info->fwupdate_stat = ret;
+		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 
-	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-
-	if (ret == ERROR_BUS_WR)
-		pr_err("%s: bus is not accessible. ERROR %08X\n",
-			__func__, ret);
-	else if (ret < OK)
-		pr_err("%s Unable to upgrade firmware! ERROR %08X\n",
-			__func__, ret);
-
+		if (ret == ERROR_BUS_WR)
+			pr_err("%s: bus is not accessible. ERROR %08X\n",
+				__func__, ret);
+		else if (ret < OK)
+			pr_err("%s Unable to upgrade firmware! ERROR %08X\n",
+				__func__, ret);
+	} else
+		pr_err("%s: Wrong number of parameters! ERROR %08X\n",
+			__func__, ERROR_OP_NOT_ALLOW);
 	return count;
 }
 
@@ -545,7 +547,7 @@ static ssize_t fts_feature_enable_store(struct device *dev,
 {
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 	char *p = (char *)buf;
-	unsigned int temp;
+	unsigned int temp, temp2;
 	int res = OK;
 
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
@@ -559,73 +561,76 @@ static ssize_t fts_feature_enable_store(struct device *dev,
 		pr_err("fts_feature_enable: Number of parameter wrong! %d > %d\n",
 			(count - 2 + 1) / 3, 1);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
-		res = check_feature_feasibility(info, temp);
-		if (res >= OK) {
-			switch (temp) {
-	#ifdef GESTURE_MODE
-			case FEAT_SEL_GESTURE:
-				sscanf(p, "%02X ", &info->gesture_enabled);
-				pr_info("fts_feature_enable: Gesture Enabled = %d\n",
-					info->gesture_enabled);
-				break;
-	#endif
+		if (sscanf(p, "%02X %02X ", &temp, &temp2) == 2) {
+			p += 3;
+			res = check_feature_feasibility(info, temp);
+			if (res >= OK) {
+				switch (temp) {
+		#ifdef GESTURE_MODE
+				case FEAT_SEL_GESTURE:
+					info->gesture_enabled = temp2;
+					pr_info("fts_feature_enable: Gesture Enabled = %d\n",
+						info->gesture_enabled);
+					break;
+		#endif
 
-	#ifdef GLOVE_MODE
-			case FEAT_SEL_GLOVE:
-				sscanf(p, "%02X ", &info->glove_enabled);
-				pr_info("fts_feature_enable: Glove Enabled = %d\n",
-					info->glove_enabled);
-				break;
-	#endif
+		#ifdef GLOVE_MODE
+				case FEAT_SEL_GLOVE:
+					info->glove_enabled = temp2;
+					pr_info("fts_feature_enable: Glove Enabled = %d\n",
+						info->glove_enabled);
+					break;
+		#endif
 
-	#ifdef STYLUS_MODE
-			case FEAT_SEL_STYLUS:
-				sscanf(p, "%02X ", &info->stylus_enabled);
-				pr_info("fts_feature_enable: Stylus Enabled = %d\n",
-					info->stylus_enabled);
-				break;
-	#endif
+		#ifdef STYLUS_MODE
+				case FEAT_SEL_STYLUS:
+					info->stylus_enabled = temp2;
+					pr_info("fts_feature_enable: Stylus Enabled = %d\n",
+						info->stylus_enabled);
+					break;
+		#endif
 
-	#ifdef COVER_MODE
-			case FEAT_SEL_COVER:
-				sscanf(p, "%02X ", &info->cover_enabled);
-				pr_info("fts_feature_enable: Cover Enabled = %d\n",
-					info->cover_enabled);
-				break;
-	#endif
+		#ifdef COVER_MODE
+				case FEAT_SEL_COVER:
+					info->cover_enabled = temp2;
+					pr_info("fts_feature_enable: Cover Enabled = %d\n",
+						info->cover_enabled);
+					break;
+		#endif
 
-	#ifdef CHARGER_MODE
-			case FEAT_SEL_CHARGER:
-				sscanf(p, "%02X ", &info->charger_enabled);
-				pr_info("fts_feature_enable: Charger Enabled = %d\n",
-					info->charger_enabled);
-				break;
-	#endif
+		#ifdef CHARGER_MODE
+				case FEAT_SEL_CHARGER:
+					info->charger_enabled = temp2;
+					pr_info("fts_feature_enable: Charger Enabled = %d\n",
+						info->charger_enabled);
+					break;
+		#endif
 
-	#ifdef GRIP_MODE
-			case FEAT_SEL_GRIP:
-				sscanf(p, "%02X ", &info->grip_enabled);
-				pr_info("fts_feature_enable: Grip Enabled = %d\n",
-					info->grip_enabled);
-				break;
-	#endif
+		#ifdef GRIP_MODE
+				case FEAT_SEL_GRIP:
+					info->grip_enabled = temp2;
+					pr_info("fts_feature_enable: Grip Enabled = %d\n",
+						info->grip_enabled);
+					break;
+		#endif
 
 
 
-			default:
-				pr_err("fts_feature_enable: Feature %08X not valid! ERROR %08X\n",
-					temp, ERROR_OP_NOT_ALLOW);
-				res = ERROR_OP_NOT_ALLOW;
+				default:
+					pr_err("fts_feature_enable: Feature %08X not valid! ERROR %08X\n",
+						temp, ERROR_OP_NOT_ALLOW);
+					res = ERROR_OP_NOT_ALLOW;
+				}
+				feature_feasibility = res;
 			}
-			feature_feasibility = res;
-		}
-		if (feature_feasibility >= OK)
-			feature_feasibility = fts_mode_handler(info, 1);
-		else
-			pr_err("%s: Call echo XX 00/01 > feature_enable with a correct feature value (XX)! ERROR %08X\n",
-				__func__, res);
+			if (feature_feasibility >= OK)
+				feature_feasibility = fts_mode_handler(info, 1);
+			else
+				pr_err("%s: Call echo XX 00/01 > feature_enable with a correct feature value (XX)! ERROR %08X\n",
+					__func__, res);
+		} else
+			pr_err("%s: Error when reading with sscanf!\n",
+				__func__);
 	}
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
@@ -708,21 +713,24 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
+		if (sscanf(p, "%02X ", &temp) == 1) {
+			p += 3;
 
 /* standard code that should be always used when a feature is enabled! */
 /* first step : check if the wanted feature can be enabled */
 /* second step: call fts_mode_handler to actually enable it */
 /* NOTE: Disabling a feature is always allowed by default */
-		res = check_feature_feasibility(info, FEAT_SEL_GRIP);
-		if (res >= OK || temp == FEAT_DISABLE) {
-			info->grip_enabled = temp;
-			res = fts_mode_handler(info, 1);
-			if (res < OK)
-				pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
-					__func__, res);
-		}
+			res = check_feature_feasibility(info, FEAT_SEL_GRIP);
+			if (res >= OK || temp == FEAT_DISABLE) {
+				info->grip_enabled = temp;
+				res = fts_mode_handler(info, 1);
+				if (res < OK)
+					pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
+						__func__, res);
+			}
+		} else
+			pr_err("%s: Error when reading with sscanf!\n",
+				__func__);
 	}
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
@@ -783,22 +791,26 @@ static ssize_t fts_charger_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
+		if (sscanf(p, "%02X ", &temp) == 1) {
+			p += 3;
 
 /** standard code that should be always used when a feature is enabled!
   * first step : check if the wanted feature can be enabled
   * second step: call fts_mode_handler to actually enable it
   * NOTE: Disabling a feature is always allowed by default
   */
-		res = check_feature_feasibility(info, FEAT_SEL_CHARGER);
-		if (res >= OK || temp == FEAT_DISABLE) {
-			info->charger_enabled = temp;
-			res = fts_mode_handler(info, 1);
-			if (res < OK)
-				pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
-					__func__, res);
-		}
+			res = check_feature_feasibility(info, FEAT_SEL_CHARGER);
+			if (res >= OK || temp == FEAT_DISABLE) {
+				info->charger_enabled = temp;
+				res = fts_mode_handler(info, 1);
+				if (res < OK)
+					pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
+						__func__, res);
+			}
+		} else
+			pr_err("%s: Error when reading with sscanf!\n",
+				__func__);
+
 	}
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
@@ -857,21 +869,24 @@ static ssize_t fts_glove_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
+		if (sscanf(p, "%02X ", &temp) == 1) {
+			p += 3;
 
 /* standard code that should be always used when a feature is enabled! */
 /* first step : check if the wanted feature can be enabled */
 /* second step: call fts_mode_handler to actually enable it */
 /* NOTE: Disabling a feature is always allowed by default */
-		res = check_feature_feasibility(info, FEAT_SEL_GLOVE);
-		if (res >= OK || temp == FEAT_DISABLE) {
-			info->glove_enabled = temp;
-			res = fts_mode_handler(info, 1);
-			if (res < OK)
-				pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
-					__func__, res);
-		}
+			res = check_feature_feasibility(info, FEAT_SEL_GLOVE);
+			if (res >= OK || temp == FEAT_DISABLE) {
+				info->glove_enabled = temp;
+				res = fts_mode_handler(info, 1);
+				if (res < OK)
+					pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
+						__func__, res);
+			}
+		} else
+			pr_err("%s: Error when reading with sscanf!\n",
+				__func__);
 	}
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
@@ -941,21 +956,24 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
+		if (sscanf(p, "%02X ", &temp) == 1) {
+			p += 3;
 
 /* standard code that should be always used when a feature is enabled! */
 /* first step : check if the wanted feature can be enabled */
 /* second step: call fts_mode_handler to actually enable it */
 /* NOTE: Disabling a feature is always allowed by default */
-		res = check_feature_feasibility(info, FEAT_SEL_COVER);
-		if (res >= OK || temp == FEAT_DISABLE) {
-			info->cover_enabled = temp;
-			res = fts_mode_handler(info, 1);
-			if (res < OK)
-				pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
-					__func__, res);
-		}
+			res = check_feature_feasibility(info, FEAT_SEL_COVER);
+			if (res >= OK || temp == FEAT_DISABLE) {
+				info->cover_enabled = temp;
+				res = fts_mode_handler(info, 1);
+				if (res < OK)
+					pr_err("%s: Error during fts_mode_handler! ERROR %08X\n",
+						__func__, res);
+			}
+		} else
+			pr_err("%s: Error when reading with sscanf!\n",
+				__func__);
 	}
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
@@ -1007,11 +1025,12 @@ static ssize_t fts_stylus_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
-
-
-		info->stylus_enabled = temp;
+		if (sscanf(p, "%02X ", &temp) == 1) {
+			p += 3;
+			info->stylus_enabled = temp;
+		} else
+			pr_err("%s: Error when reading with sscanf!\n",
+				__func__);
 	}
 
 	return count;
@@ -1122,10 +1141,13 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 	} else {
 		mask[0] = ((count + 1) / 3) - 1;
 		for (n = 1; n <= (count + 1) / 3; n++) {
-			sscanf(p, "%02X ", &temp);
-			p += 3;
-			mask[n] = (u8)temp;
-			pr_info("mask[%d] = %02X\n", n, mask[n]);
+			if (sscanf(p, "%02X ", &temp) == 1) {
+				p += 3;
+				mask[n] = (u8)temp;
+				pr_info("mask[%d] = %02X\n", n, mask[n]);
+			} else
+				pr_err("%s: Error when reading with sscanf!\n",
+					__func__);
 		}
 	}
 
@@ -1208,20 +1230,32 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 	} else {
 		memset(mask, 0, GESTURE_MASK_SIZE + 2);
 		mask[0] = ((count + 1) / 3) - 1;
-		sscanf(p, "%02X ", &temp);
-		p += 3;
-		mask[1] = (u8)temp;
-		for (n = 1; n < (count + 1) / 3; n++) {
-			sscanf(p, "%02X ", &temp);
+		if (sscanf(p, "%02X ", &temp) == 1) {
 			p += 3;
-			fromIDtoMask((u8)temp, &mask[2], GESTURE_MASK_SIZE);
-		}
+			mask[1] = (u8)temp;
+			for (n = 1; n < (count + 1) / 3; n++) {
+				if (sscanf(p, "%02X ", &temp) == 1) {
+					p += 3;
+					fromIDtoMask((u8)temp, &mask[2],
+						GESTURE_MASK_SIZE);
+				} else {
+					pr_err("%s: Error when reading with sscanf!\n",
+						__func__);
+					mask[0] = 0;
+					goto END;
+				}
+			}
 
-		for (n = 0; n < GESTURE_MASK_SIZE + 2; n++)
-			pr_info("mask[%d] = %02X\n", n, mask[n]);
+			for (n = 0; n < GESTURE_MASK_SIZE + 2; n++)
+				pr_info("mask[%d] = %02X\n", n, mask[n]);
+		} else {
+			pr_err("%s: Error when reading with sscanf!\n",
+				__func__);
+			mask[0] = 0;
+		}
 	}
 
-
+END:
 	if (mask[0] == 0) {
 		res = ERROR_OP_NOT_ALLOW;
 		pr_err("%s: Call before echo enable/disable xx xx .... > gesture_mask with a correct number of parameters! ERROR %08X\n",
@@ -1361,15 +1395,18 @@ static ssize_t stm_fts_cmd_store(struct device *dev,
 	char *p = (char *)buf;
 
 	memset(typeOfComand, 0, CMD_STR_LEN * sizeof(u32));
-
+	numberParameters = 0;
 	pr_info("%s:\n", __func__);
 	for (n = 0; n < (count + 1) / 3; n++) {
-		sscanf(p, "%02X ", &typeOfComand[n]);
-		p += 3;
-		pr_info("typeOfComand[%d] = %02X\n", n, typeOfComand[n]);
+		if (sscanf(p, "%02X ", &typeOfComand[n]) == 1) {
+			p += 3;
+			pr_info("typeOfComand[%d] = %02X\n", n,
+				typeOfComand[n]);
+			numberParameters++;
+		}
 	}
 
-	numberParameters = n;
+	/* numberParameters = n; */
 	pr_info("Number of Parameters = %d\n", numberParameters);
 	return count;
 }
@@ -1434,124 +1471,122 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			break;
 
 		case 0x00:
+#ifndef COMPUTE_INIT_METHOD
 			if (systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer) {
 				res = ERROR_OP_NOT_ALLOW;
 				pr_err("Miss match in CX version! MP test not allowed with wrong CX memory! ERROR %08X\n",
 					res);
 				break;
 			}
-
+#else
+			if (systemInfo.u8_mpFlag != MP_FLAG_FACTORY) {
+				init_type = SPECIAL_FULL_PANEL_INIT;
+				pr_info("Select Full Panel Init!\n");
+			} else {
+				init_type = NO_INIT;
+				pr_info("Skip Full Panel Init!\n");
+			}
+#endif
 			res = production_test_main(LIMITS_FILE, 1, init_type,
-						   &tests);
+						   &tests, MP_FLAG_FACTORY);
 			break;
 
 		/*read mutual raw*/
 		case 0x13:
-			if (numberParameters > 1) {
-				pr_info("Get 1 MS Frame\n");
-				setScanMode(SCAN_MODE_LOCKED, typeOfComand[1]);
-				mdelay(WAIT_FOR_FRESH_FRAMES);
-				setScanMode(SCAN_MODE_ACTIVE, 0x00);
-				mdelay(WAIT_AFTER_SENSEOFF);
-				/* Delete the events related to some touch
-				  * (allow to call this function while touching
-				  * the screen without having a flooding of the
-				  * FIFO)
-				  */
-				flushFIFO();
-				res = getMSFrame3(MS_RAW, &frameMS);
-				if (res < 0) {
-					pr_err("Error while taking the MS frame... ERROR %08X\n",
-						res);
-				} else {
-					pr_info("The frame size is %d words\n",
-						res);
-#ifdef RAW_DATA_FORMAT_DEC
-					size += 3 * 2 +
-					    (7 * frameMS.header.sense_node + 1)
-					    * frameMS.header.force_node;
-#else
-					size += (res * sizeof(short) + 2) * 2;
-#endif
-					/* set res to OK because if getMSFrame
-					  * is successful res = number of words
-					  * read
-					  */
-					res = OK;
-					print_frame_short(
-						"MS frame =",
-						array1dTo2d_short(
-							frameMS.node_data,
-							frameMS.node_data_size,
-							frameMS.header.
-							sense_node),
-						frameMS.header.force_node,
-						frameMS.header.sense_node);
-				}
+			pr_info("Get 1 MS Frame\n");
+			if (numberParameters >= 2 && typeOfComand[1] == 1)
+				setScanMode(SCAN_MODE_LOCKED, LOCKED_LP_ACTIVE);
+			else
+				setScanMode(SCAN_MODE_LOCKED, LOCKED_ACTIVE);
+			msleep(WAIT_FOR_FRESH_FRAMES);
+			setScanMode(SCAN_MODE_ACTIVE, 0x00);
+			msleep(WAIT_AFTER_SENSEOFF);
+			/* Delete the events related to some touch
+			 * (allow to call this function while touching
+			 * the screen without having a flooding of the
+			 * FIFO)
+			 */
+			flushFIFO();
+			res = getMSFrame3(MS_RAW, &frameMS);
+			if (res < 0) {
+				pr_err("Error while taking the MS frame... ERROR %08X\n",
+					res);
 			} else {
-				pr_err("Wrong number of parameters!\n");
-				res = ERROR_OP_NOT_ALLOW;
+				pr_info("The frame size is %d words\n",
+					res);
+#ifdef RAW_DATA_FORMAT_DEC
+				size += 3 * 2 +
+				    (7 * frameMS.header.sense_node + 1)
+				    * frameMS.header.force_node;
+#else
+				size += (res * sizeof(short) + 2) * 2;
+#endif
+				/* set res to OK because if getMSFrame is
+				 * successful res = number of words read
+				 */
+				res = OK;
+				print_frame_short(
+					"MS frame =",
+					array1dTo2d_short(
+						frameMS.node_data,
+						frameMS.node_data_size,
+						frameMS.header.sense_node),
+					frameMS.header.force_node,
+					frameMS.header.sense_node);
 			}
 			break;
 		/*read self raw*/
 		case 0x15:
-			if (numberParameters > 1) {
-				pr_info("Get 1 SS Frame\n");
-				setScanMode(SCAN_MODE_LOCKED, typeOfComand[1]);
-				mdelay(WAIT_FOR_FRESH_FRAMES);
-				setScanMode(SCAN_MODE_ACTIVE, 0x00);
-				mdelay(WAIT_AFTER_SENSEOFF);
-				flushFIFO();
-				/* delete the events related to some touch
-				  * (allow to call this function while touching
-				  * the screen without having a flooding of the
-				  * FIFO) */
-				if (typeOfComand[1] == LOCKED_LP_DETECT)
-					res = getSSFrame3(SS_DETECT_RAW,
-						&frameSS);
-				else
-					res = getSSFrame3(SS_RAW, &frameSS);
+			pr_info("Get 1 SS Frame\n");
+			if (numberParameters >= 2 && typeOfComand[1] == 1)
+				setScanMode(SCAN_MODE_LOCKED, LOCKED_LP_DETECT);
+			else
+				setScanMode(SCAN_MODE_LOCKED, LOCKED_ACTIVE);
+			msleep(WAIT_FOR_FRESH_FRAMES);
+			setScanMode(SCAN_MODE_ACTIVE, 0x00);
+			msleep(WAIT_AFTER_SENSEOFF);
+			flushFIFO();
+			/* delete the events related to some touch
+			 * (allow to call this function while touching
+			 * the screen without having a flooding of the
+			 * FIFO)
+			 */
+			if (numberParameters >= 2 && typeOfComand[1] == 1)
+				res = getSSFrame3(SS_DETECT_RAW, &frameSS);
+			else
+				res = getSSFrame3(SS_RAW, &frameSS);
 
-				if (res < OK) {
-					pr_err("Error while taking the SS frame... ERROR %08X\n",
-						res);
-				} else {
-					pr_info("The frame size is %d words\n",
-						res);
-#ifdef RAW_DATA_FORMAT_DEC
-					size += 3 * 2 + 5 +
-						(frameSS.header.sense_node +
-						 frameSS.header.force_node) * 7;
-#else
-					size += (res * sizeof(short) + 2) * 2;
-#endif
-					/* set res to OK because if getMSFrame
-					  * is successful res = number of words
-					  * read
-					  */
-					res = OK;
-					print_frame_short(
-						"SS force frame =",
-						array1dTo2d_short(
-							frameSS.force_data,
-							frameSS.header.
-							force_node, 1),
-						frameSS.header.force_node, 1);
-					print_frame_short(
-						"SS sense frame =",
-						array1dTo2d_short(
-							frameSS.sense_data,
-							frameSS.header.
-							sense_node,
-							frameSS.header.
-							sense_node),
-						1, frameSS.header.sense_node);
-				}
+			if (res < OK) {
+				pr_err("Error while taking the SS frame... ERROR %08X\n",
+					res);
 			} else {
-				pr_err("Wrong number of parameters!\n");
-				res = ERROR_OP_NOT_ALLOW;
+				pr_info("The frame size is %d words\n", res);
+#ifdef RAW_DATA_FORMAT_DEC
+				size += 3 * 2 + 5 +
+					(frameSS.header.sense_node +
+					 frameSS.header.force_node) * 7;
+#else
+				size += (res * sizeof(short) + 2) * 2;
+#endif
+				/* set res to OK because if getMSFrame is
+				 * successful res = number of words read
+				 */
+				res = OK;
+				print_frame_short(
+					"SS force frame =",
+					array1dTo2d_short(
+						frameSS.force_data,
+						frameSS.header.force_node,
+						1),
+					frameSS.header.force_node, 1);
+				print_frame_short(
+					"SS sense frame =",
+					array1dTo2d_short(
+						frameSS.sense_data,
+						frameSS.header.sense_node,
+						frameSS.header.sense_node),
+					1, frameSS.header.sense_node);
 			}
-
 			break;
 
 		case 0x14:	/* read mutual comp data */
@@ -2258,6 +2293,7 @@ static void fts_error_event_handler(struct fts_ts_info *info, unsigned
 				__func__, error);
 	}
 	break;
+	case EVT_TYPE_ERROR_HARD_FAULT:	/* hard fault */
 	case EVT_TYPE_ERROR_WATCHDOG:	/* watch dog timer */
 	{
 		dumpErrorInfo(NULL, 0);
@@ -2761,10 +2797,11 @@ static int fts_fw_update(struct fts_ts_info *info)
 				  EVT_TYPE_ERROR_CRC_CX,
 				  EVT_TYPE_ERROR_CRC_CX_SUB_HEAD,
 				  EVT_TYPE_ERROR_CRC_CX_SUB };
-	int ret = 0;
+	int ret;
+	int error = 0;
 	int init_type = NO_INIT;
 
-#ifdef PRE_SAVED_METHOD
+#if defined(PRE_SAVED_METHOD) || defined(COMPUTE_INIT_METHOD)
 	int keep_cx = 1;
 #else
 	int keep_cx = 0;
@@ -2832,10 +2869,15 @@ static int fts_fw_update(struct fts_ts_info *info)
 			  * a CRC error in code or config which not allow the fw
 			  * to compute the CRC in the CX before
 			  */
+#ifndef COMPUTE_INIT_METHOD
 			pr_info("%s: Try to recovery with CX in fw file...\n",
 				__func__);
 			ret = flashProcedure(info->board->fw_name, CRC_CX, 0);
 			pr_info("%s: Refresh panel init data", __func__);
+#else
+			pr_info("%s: Select Full Panel Init...\n", __func__);
+			init_type = SPECIAL_FULL_PANEL_INIT;
+#endif
 		}
 	} else {
 		/* Skip initialization because the real state is unknown */
@@ -2844,12 +2886,17 @@ static int fts_fw_update(struct fts_ts_info *info)
 	}
 
 	if (init_type == NO_INIT) {
-#ifdef PRE_SAVED_METHOD
-		if (systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer) {
+#if defined(PRE_SAVED_METHOD) || defined(COMPUTE_INIT_METHOD)
+		if ((systemInfo.u8_cfgAfeVer != systemInfo.u8_cxAfeVer)
+#ifdef COMPUTE_INIT_METHOD
+			|| ((systemInfo.u8_mpFlag != MP_FLAG_BOOT) &&
+				(systemInfo.u8_mpFlag != MP_FLAG_FACTORY))
+#endif
+			) {
 			init_type = SPECIAL_FULL_PANEL_INIT;
-			pr_err("%s: Different CX AFE Ver: %02X != %02X... Execute FULL Panel Init!\n",
+			pr_err("%s: Different CX AFE Ver: %02X != %02X or invalid MpFlag = %02X... Execute FULL Panel Init!\n",
 				__func__, systemInfo.u8_cfgAfeVer,
-				systemInfo.u8_cxAfeVer);
+				systemInfo.u8_cxAfeVer, systemInfo.u8_mpFlag);
 		} else
 #endif
 		if (systemInfo.u8_cfgAfeVer != systemInfo.u8_panelCfgAfeVer) {
@@ -2862,25 +2909,26 @@ static int fts_fw_update(struct fts_ts_info *info)
 	}
 
 out:
-	/** Reinitialize after a complete FW update or if the initialization
-	  * status is not correct.
-	  */
-	if (init_type != NO_INIT) {
-		ret = fts_chip_initialization(info, init_type);
-		if (ret < OK) {
+
+	if (init_type != NO_INIT) { /* initialization status not correct or
+				     * after FW complete update, do
+				     * initialization.
+				     */
+		error = fts_chip_initialization(info, init_type);
+		if (error < OK) {
 			pr_err("%s: Cannot initialize the chip ERROR %08X\n",
-				__func__, ret);
+				__func__, error);
 		}
 	}
 
-	ret = fts_init_sensing(info);
-	if (ret < OK) {
+	error = fts_init_sensing(info);
+	if (error < OK) {
 		pr_err("Cannot initialize the hardware device ERROR %08X\n",
-			ret);
+			error);
 	}
 
-	pr_err("Fw Update Finished! error = %08X\n", ret);
-	return ret;
+	pr_err("Fw Update Finished! error = %08X\n", error);
+	return error;
 }
 
 #ifndef FW_UPDATE_ON_PROBE
@@ -2915,8 +2963,13 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 	int initretrycnt = 0;
 
 	/* initialization error, retry initialization */
-	for (retry = 0; retry <= RETRY_INIT_BOOT; retry++) {
+	for (retry = 0; retry < RETRY_INIT_BOOT; retry++) {
+#ifndef COMPUTE_INIT_METHOD
 		ret2 = production_test_initialization(init_type);
+#else
+		ret2 = production_test_main(LIMITS_FILE, 1, init_type, &tests,
+			MP_FLAG_BOOT);
+#endif
 		if (ret2 == OK)
 			break;
 		initretrycnt++;
@@ -2926,7 +2979,7 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 	}
 
 	if (ret2 < OK)	/* initialization error */
-		pr_err("fts initialization failed 3 times\n");
+		pr_err("fts initialization failed %d times\n", RETRY_INIT_BOOT);
 
 
 	return ret2;

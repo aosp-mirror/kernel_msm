@@ -135,6 +135,11 @@ typedef enum {
 #define LOCKED_ONLY_MUTUAL_2	0x06	/* /< Only Mutual Sense scan mode */
 #define LOCKED_ONLY_MUTUAL_3	0x07	/* /< Only Mutual Sense scan mode at
 					 * highest freq */
+#define LOCKED_SINGLE_ENDED_ONLY_MUTUAL_0	0x20	/* /< Only Mutual Sense
+							 * scan mode at lowest
+							 * freq in single ended
+							 * mode
+							 */
 #define LOCKED_LP_DETECT	0x10	/* /< Low Power SS */
 #define LOCKED_LP_ACTIVE	0x11	/* /< Low Power MS */
 /** @}*/
@@ -218,6 +223,7 @@ typedef enum {
 #define SYS_CMD_SAVE_FLASH	0x05	/* /< Saving to flash */
 #define SYS_CMD_LOAD_DATA	0x06	/* /< Load Host data memory */
 #define SYS_CMD_SPECIAL_TUNING	0x08	/* /< Perform some special tuning */
+#define SYS_CMD_MP_FLAG		0x0C	/* /< Update value of MP flag in RAM */
 /** @} */
 
 /* System command settings */
@@ -416,6 +422,7 @@ typedef enum {
   * Types of EVT_ID_ERROR events reported by the FW
   * @{
   */
+#define EVT_TYPE_ERROR_HARD_FAULT	0x02	/* /< Hard Fault */
 #define EVT_TYPE_ERROR_WATCHDOG		0x06	/* /< Watchdog timer expired */
 
 #define EVT_TYPE_ERROR_CRC_CFG_HEAD	0x20	/* /< CRC error in the Config
@@ -485,6 +492,23 @@ typedef enum {
 					 * register */
 #define ADDR_CONFIG_R0_CYCLE	0x01F2	/* /< Address where is stored the first
 					 * R cycle */
+/** @}*/
+
+/** @}*/
+
+/* @defgroup mp_flags MP Flags value
+ * @ingroup mp_test
+ * Specify the MP flags value which are written into the flash after performing
+ * a full panel initialization which pass all the tests.
+ * @{
+ */
+
+#define MP_FLAG_FACTORY		0xA5	/* /< Full Panel Init done in factory */
+#define MP_FLAG_BOOT		0x5A	/* /< Full Panel Init done at boot */
+#define MP_FLAG_OTHERS		0xFF   /* /< Full Panel Init done somewhere
+					* else
+					*/
+
 /** @}*/
 
 /** @}*/

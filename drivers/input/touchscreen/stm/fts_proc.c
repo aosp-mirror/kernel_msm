@@ -245,6 +245,14 @@
 							 * pass: enable (if 1
 							 * will enable the
 							 * interrupt) */
+#define CMD_SETSCANMODE				0x18	/* /< set Scan Mode
+							 * need to pass:
+							 * scanType option
+							 */
+#define CMD_SAVEMPFLAG				0x19	/* /< save manually a
+							 * value in the MP flag
+							 * need to pass: mpflag
+							 */
 
 /* Frame */
 #define CMD_GETFORCELEN				0x20	/* /< Get the number of
@@ -257,6 +265,10 @@
 #define CMD_GETSSFRAME				0x24	/* /< Get a SS frame:
 							 * need to pass:
 							 * SSFrameType */
+#define CMD_GETSYNCFRAME			0x25	/* /< Get a SS frame:
+							 * need to pass:
+							 * SSFrameType
+							 */
 
 /* Compensation */
 #define CMD_REQCOMPDATA				0x30	/* /< Request Init data:
@@ -848,10 +860,11 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		}
 	} else {
 		if (((count + 1) / 3) >= 1) {
-			sscanf(p, "%02X ", &funcToTest[0]);
-			p += 3;
-			cmd[0] = (u8)funcToTest[0];
-			numberParam = 1;
+			if (sscanf(p, "%02X ", &funcToTest[0]) == 1) {
+				p += 3;
+				cmd[0] = (u8)funcToTest[0];
+				numberParam = 1;
+			}
 		} else {
 			res = ERROR_OP_NOT_ALLOW;
 			goto END;
@@ -863,24 +876,28 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		case CMD_GETFWFILE:
 		case CMD_GETLIMITSFILE:
 			if (count - 2 - 1 > 1) {
-				numberParam = 2;/** the first byte is an hex
-						  * string coded in three byte
-						  * (2 chars for hex and the
-						  * space)
-						  * and -1 for the space at the
-						  * end */
-				sscanf(p, "%100s", path);
+				if (sscanf(p, "%100s", path) == 1) {
+					numberParam = 2;
+					/* the first byte is an hex string
+					 * coded in three byte (2  chars for
+					 * hex and the space) and -1 for the
+					 * space at the end
+					 */
+				}
 			}
 			break;
 
 		default:
 			for (; numberParam < (count + 1) / 3; numberParam++) {
-				sscanf(p, "%02X ", &funcToTest[numberParam]);
-				p += 3;
-				cmd[numberParam] = (u8)funcToTest[numberParam];
-				pr_info("functionToTest[%d] = %02X cmd[%d]= %02X\n",
+				if (sscanf(p, "%02X ",
+					&funcToTest[numberParam]) == 1) {
+					p += 3;
+					cmd[numberParam] =
+						(u8)funcToTest[numberParam];
+					pr_info("functionToTest[%d] = %02X cmd[%d]= %02X\n",
 					numberParam, funcToTest[numberParam],
 					numberParam, cmd[numberParam]);
+				}
 			}
 		}
 	}
@@ -946,12 +963,20 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			fileSize |= 0x00100000;
 #endif
 
+#ifdef COMPUTE_INIT_METHOD
+			fileSize |= 0x00200000;
+#endif
+
 #ifdef USE_GESTURE_MASK
 			fileSize |= 0x00100000;
 #endif
 
 #ifdef I2C_INTERFACE
 			fileSize |= 0x00200000;
+#endif
+
+#ifdef SPI4_WIRE
+			fileSize |= 0x00400000;
 #endif
 
 #ifdef PHONE_KEY	/* it is a feature enabled in the config of the chip */
@@ -1235,6 +1260,25 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			}
 			break;
 
+		case CMD_SETSCANMODE:
+			/* need to pass: scanMode option */
+			if (numberParam >= 3)
+				res = setScanMode(cmd[1], cmd[2]);
+			else {
+				pr_err("Wrong number of parameters!\n");
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
+		case CMD_SAVEMPFLAG:
+			/* need to pass: mpflag */
+			if (numberParam == 2)
+				res = saveMpFlag(cmd[1]);
+			else {
+				pr_err("Wrong number of parameters!\n");
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
 
 		case CMD_READCONFIG:
 			if (numberParam == 5) {	/* need to pass: addr[0]
@@ -1342,10 +1386,11 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		case CMD_GETMSFRAME:
 			if (numberParam == 2) {
 				pr_info("Get 1 MS Frame\n");
-				setScanMode(SCAN_MODE_ACTIVE, 0xFF);
-				mdelay(WAIT_FOR_FRESH_FRAMES);
-				setScanMode(SCAN_MODE_ACTIVE, 0x00);
-				mdelay(WAIT_AFTER_SENSEOFF);
+				/* setScanMode(SCAN_MODE_ACTIVE, 0xFF);
+				 * mdelay(WAIT_FOR_FRESH_FRAMES);
+				 * setScanMode(SCAN_MODE_ACTIVE, 0x00);
+				 * mdelay(WAIT_AFTER_SENSEOFF);
+				 */
 				/* flushFIFO(); //delete the events related to
 				 * some touch (allow to call this function while
 				 * touching the screen without having a flooding
@@ -1384,15 +1429,16 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		/*read self raw*/
 		case CMD_GETSSFRAME:
 			if (numberParam == 2) {
-				pr_info("Get 1 SS Frame\n");
+				/* pr_info("Get 1 SS Frame\n"); */
 				/* flushFIFO(); //delete the events related to
 				 * some touch (allow to call this function while
 				 * touching the screen without having a flooding
 				 * of the FIFO) */
-				setScanMode(SCAN_MODE_ACTIVE, 0xFF);
-				mdelay(WAIT_FOR_FRESH_FRAMES);
-				setScanMode(SCAN_MODE_ACTIVE, 0x00);
-				mdelay(WAIT_AFTER_SENSEOFF);
+				/* setScanMode(SCAN_MODE_ACTIVE, 0xFF);
+				 * mdelay(WAIT_FOR_FRESH_FRAMES);
+				 * setScanMode(SCAN_MODE_ACTIVE, 0x00);
+				 * mdelay(WAIT_AFTER_SENSEOFF);
+				 */
 				res = getSSFrame3((SSFrameType)cmd[1],
 						  &frameSS);
 
@@ -1422,6 +1468,57 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 						  frameSS.header.sense_node,
 						  frameSS.header.sense_node),
 						  1,
+						frameSS.header.sense_node);
+				}
+			} else {
+				pr_err("Wrong number of parameters!\n");
+				res = ERROR_OP_NOT_ALLOW;
+			}
+			break;
+
+		case CMD_GETSYNCFRAME:
+			/* need to pass: frameType (this parameter can be
+			 * one of LOAD_SYNC_FRAME_X)
+			 */
+			if (numberParam == 2) {
+				pr_info("Reading Sync Frame...\n");
+				res = getSyncFrame(cmd[1], &frameMS, &frameSS);
+				if (res < OK)
+					pr_err("Error while taking the Sync Frame frame... ERROR %08X\n",
+						res);
+
+				else {
+					pr_info("The total frames size is %d words\n",
+						 res);
+					size += (res * sizeof(short) + 4);
+					/* +4 to add force and sense channels
+					 * for MS and SS.
+					 * Set res to OK because if getSyncFrame
+					 * is successful res = number of words
+					 * read
+					 */
+					res = OK;
+
+					print_frame_short("MS frame =",
+						array1dTo2d_short(
+						    frameMS.node_data,
+						    frameMS.node_data_size,
+						    frameMS.header.sense_node),
+						frameMS.header.force_node,
+						frameMS.header.sense_node);
+					print_frame_short("SS force frame =",
+						array1dTo2d_short(
+						    frameSS.force_data,
+						    frameSS.header.force_node,
+						    1),
+						frameSS.header.force_node,
+						1);
+					print_frame_short("SS sense frame =",
+						array1dTo2d_short(
+						    frameSS.sense_data,
+						    frameSS.header.sense_node,
+						    frameSS.header.sense_node),
+						1,
 						frameSS.header.sense_node);
 				}
 			} else {
@@ -1805,10 +1902,20 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		/*PRODUCTION TEST*/
 		case CMD_MAINTEST:
-			if (numberParam == 3)	/* need to specify if stopOnFail
-						 * and saveInit */
-				res = production_test_main(LIMITS_FILE, cmd[1],
-							   cmd[2], &tests);
+			if (numberParam >= 3)	/* need to specify if stopOnFail
+						 * saveInit and
+						 * mpflag(optional)
+						 */
+				if (numberParam == 3)
+					res = production_test_main(LIMITS_FILE,
+							   cmd[1],
+							   cmd[2], &tests,
+							   MP_FLAG_OTHERS);
+				else
+					res = production_test_main(LIMITS_FILE,
+							   cmd[1],
+							   cmd[2], &tests,
+							   cmd[3]);
 			else {
 				pr_err("Wrong number of parameters!\n");
 				res = ERROR_OP_NOT_ALLOW;
@@ -2418,12 +2525,22 @@ END_DIAGNOSTIC:
 		case CMD_TP_SENS_SET_SCAN_MODE:
 			/* need to pass: scan_type, enableGains */
 			if (numberParam == 3) {
-				res = tp_sensitivity_set_scan_mode(cmd[1],
-								   cmd[2]);
-				/* this force the IC to  lock in a scan mode */
-				if (res < OK)
-					pr_err("Error while setting TP Sens scan mode... ERROR %08X\n",
+				if (cmd[1] == 0x07) { /* To match the api for
+						       * C2/F2
+						       */
+					res = tp_sensitivity_set_scan_mode(
+					    LOCKED_SINGLE_ENDED_ONLY_MUTUAL_0,
+					    cmd[2]);
+					/* this force the IC to lock in a scan
+					 * mode
+					 */
+					if (res < OK)
+						pr_err("Error while setting TP Sens scan mode... ERROR %08X\n",
 						res);
+				} else {
+					pr_err("Wrong parameter!\n");
+					 res = ERROR_OP_NOT_ALLOW;
+				}
 			} else {
 				pr_err("Wrong number of parameters!\n");
 				res = ERROR_OP_NOT_ALLOW;
@@ -2487,11 +2604,11 @@ END_DIAGNOSTIC:
 
 				if (cmd[3] != 0) {
 					pr_info("Computing gains with target = %d and saveGain = %d\n",
-						(cmd[1] << 8 | cmd[2]), cmd[3]);
+						(cmd[1] << 8 | cmd[2]), 0);
 					temp = tp_sensitivity_compute_gains(
 						&frameMS, (cmd[1] << 8 |
 							   cmd[2]),
-						cmd[3]);
+						0);
 					if (temp < OK)
 						pr_err("Error during TP Sensitivity Calibration... ERROR %08X\n",
 							temp);
@@ -2792,6 +2909,63 @@ END:	/* here start the reporting phase, assembling the data to send in the
 					  frameSS.sense_data[j] & 0xFF);
 				}
 
+				kfree(frameSS.force_data);
+				kfree(frameSS.sense_data);
+				break;
+
+			case CMD_GETSYNCFRAME:
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameMS.header.force_node);
+
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameMS.header.sense_node);
+
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameSS.header.force_node);
+
+				index += scnprintf(&driver_test_buff[index],
+						size - index, "%02X",
+						(u8)frameSS.header.sense_node);
+
+				/* Copying mutual data */
+				for (j = 0; j < frameMS.node_data_size; j++) {
+					index += scnprintf(
+						&driver_test_buff[index],
+						size - index,
+						"%02X%02X",
+						(frameMS.node_data[j] &
+							0xFF00) >> 8,
+						frameMS.node_data[j] & 0xFF);
+				}
+
+				/* Copying self data Force */
+				for (j = 0; j < frameSS.header.force_node;
+				     j++) {
+					index += scnprintf(
+						&driver_test_buff[index],
+						size - index,
+						"%02X%02X",
+						(frameSS.force_data[j] &
+							0xFF00) >> 8,
+						frameSS.force_data[j] & 0xFF);
+				}
+
+				/* Copying self  data Sense */
+				for (j = 0; j < frameSS.header.sense_node;
+				     j++) {
+					index += scnprintf(
+						&driver_test_buff[index],
+						size - index,
+						"%02X%02X",
+						(frameSS.sense_data[j] &
+							0xFF00) >> 8,
+						frameSS.sense_data[j] & 0xFF);
+				}
+
+				kfree(frameMS.node_data);
 				kfree(frameSS.force_data);
 				kfree(frameSS.sense_data);
 				break;
