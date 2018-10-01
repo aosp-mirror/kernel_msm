@@ -5795,8 +5795,9 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 {
 	struct cs40l2x_private *cs40l2x = i2c_get_clientdata(i2c_client);
 
-	if (i2c_client->irq)
-		free_irq(i2c_client->irq, cs40l2x);
+	/* manually free irq ahead of destroying workqueue */
+	if (cs40l2x->event_control != CS40L2X_EVENT_DISABLED)
+		devm_free_irq(&i2c_client->dev, i2c_client->irq, cs40l2x);
 
 	if (cs40l2x->vibe_init_success) {
 		led_classdev_unregister(&cs40l2x->led_dev);
