@@ -19,6 +19,7 @@
 #include <linux/mfd/abc-pcie.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/notifier.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
@@ -40,6 +41,9 @@ struct ipu_adapter_ab_mfd_data {
 	struct paintbox_bus_ops ops;
 	struct completion dma_completion;
 	struct mutex sync_lock;
+
+	struct notifier_block low_priority_irq_nb;
+	struct atomic_notifier_head *low_priority_irq_nh;
 };
 
 /* Paintbox IO virtual address space bounds
@@ -253,6 +257,29 @@ static irqreturn_t ipu_adapter_ab_mfd_interrupt(int irq, void *arg)
 	return ipu_core_jqs_msg_transport_interrupt(dev_data->bus);
 }
 
+static int ipu_adapter_ab_mfd_lowprio_irq_notify(struct notifier_block *nb,
+				    unsigned long irq, void *data)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data =
+		container_of(nb, struct ipu_adapter_ab_mfd_data,
+				low_priority_irq_nb);
+	uint32_t intnc_val = (uint32_t)data;
+
+	if (irq != ABC_MSI_AON_INTNC)
+		return NOTIFY_DONE;
+
+	if ((intnc_val & 1 << INTNC_IPU_HPM_APBIF) ||
+		(intnc_val & 1 << INTNC_IPU_ERR))
+		/* TODO(b/114760293): watchdog timer timeout should trigger
+		 * catastrophic error.
+		 */
+		dev_err(dev_data->dev,
+				"%s: IPU low priority interrupt notification caught!",
+				__func__);
+
+	return NOTIFY_OK;
+}
+
 static void ipu_adapter_ab_mfd_set_platform_data(struct platform_device *pdev,
 		struct paintbox_pdata *pdata)
 {
@@ -281,6 +308,44 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->get_dma_device = &ipu_adapter_ab_mfd_get_dma_device;
 }
 
+static int ipu_adapter_ab_mfd_rigister_low_priority_irq(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	int ret;
+	uint64_t prop;
+
+	ret = device_property_read_u64(dev_data->dev, "intnc-notifier-chain",
+			&prop);
+	if (ret < 0) {
+		dev_err(dev_data->dev,
+				"intnc-notifier-chain property not supplied, ret=%d\n",
+				ret);
+		return ret;
+	}
+
+	dev_data->low_priority_irq_nh =
+		(struct atomic_notifier_head *)prop;
+
+	if (!dev_data->low_priority_irq_nh) {
+		dev_err(dev_data->dev,
+				"no intnc non-critical irq notifier supplied\n");
+		return -ENOENT;
+	}
+
+	dev_data->low_priority_irq_nb.notifier_call =
+		ipu_adapter_ab_mfd_lowprio_irq_notify;
+	ret = atomic_notifier_chain_register(dev_data->low_priority_irq_nh,
+			&dev_data->low_priority_irq_nb);
+	if (ret) {
+		dev_err(dev_data->dev,
+				"Cannot register notifier for low priority irq, ret=%d\n",
+				ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 {
 	struct ipu_adapter_ab_mfd_data *dev_data;
@@ -299,8 +364,8 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 
 	mutex_init(&dev_data->sync_lock);
 
-	/* TODO(ahampson, pztang):  This can be removed once the DMA interface
-	 * clean up is done. b/115431813
+	/* TODO(b/115431813):  This can be removed once the DMA interface
+	 * clean up is done.
 	 */
 	g_dev_data = dev_data;
 
@@ -325,6 +390,14 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 					__func__, ret);
 			return ret;
 		}
+	}
+
+	ret = ipu_adapter_ab_mfd_rigister_low_priority_irq(dev_data);
+	if (ret < 0) {
+		dev_err(&pdev->dev,
+				"%s: failed to register low priority irq, err %d\n",
+				__func__, ret);
+		return ret;
 	}
 
 	if (iommu_present(pdev->dev.parent->bus)) {
@@ -362,6 +435,8 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 
 err_deinitialize_bus:
 	ipu_bus_deinitialize(dev_data->bus);
+	atomic_notifier_chain_unregister(dev_data->low_priority_irq_nh,
+				&dev_data->low_priority_irq_nb);
 
 	return ret;
 }
@@ -373,6 +448,8 @@ static int ipu_adapter_ab_mfd_remove(struct platform_device *pdev)
 
 	ipu_bus_deinitialize(dev_data->bus);
 	dev_data->bus = NULL;
+	atomic_notifier_chain_unregister(dev_data->low_priority_irq_nh,
+			&dev_data->low_priority_irq_nb);
 
 	return 0;
 }

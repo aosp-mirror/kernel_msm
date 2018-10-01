@@ -1252,6 +1252,12 @@ static void abc_pcie_irq_free(struct pci_dev *pdev)
 	pci_free_irq_vectors(pdev);
 }
 
+#define IPU_INTNC_NOTIFIER	0 /* index of intnc-notifier-chain ipu prop */
+static struct property_entry ipu_properties[] = {
+	/* filled in with notifier chain for mux'ed low-priority interrupts */
+	PROPERTY_ENTRY_U64("intnc-notifier-chain", 0),
+};
+
 static const struct resource ipu_resources[] = {
 	{
 		.name = DRV_NAME_ABC_PCIE_IPU,
@@ -1317,7 +1323,7 @@ static const struct resource pcie_dma_resources[] = {
 
 static struct mfd_cell abc_pcie_bar0[] = {
 	DEVPROP(DRV_NAME_ABC_PCIE_TPU, tpu_resources, tpu_properties),
-	DEV(DRV_NAME_ABC_PCIE_IPU, ipu_resources),
+	DEVPROP(DRV_NAME_ABC_PCIE_IPU, ipu_resources, ipu_properties),
 #ifndef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 	DEV(DRV_NAME_ABC_PCIE_BLK_FSYS, fsys_resources),
 	DEV(DRV_NAME_ABC_PCIE_DMA, pcie_dma_resources),
@@ -1340,6 +1346,10 @@ static const struct pci_device_id abc_pcie_ids[] = {
 static int abc_pcie_init_child_devices(struct pci_dev *pdev)
 {
 	int err;
+
+	/* fill in address of notifier block for the INTNC mux'ed IRQ */
+	ipu_properties[IPU_INTNC_NOTIFIER].value.u64_data =
+		(u64)&abc_dev->intnc_notifier;
 
 	/* fill in tpu-mem-mapping with VA of our mapping for tpu-mem */
 	tpu_properties[TPU_MEM_MAPPING].value.u64_data =
