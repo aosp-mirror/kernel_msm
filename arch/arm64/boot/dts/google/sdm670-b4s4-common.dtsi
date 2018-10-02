@@ -288,6 +288,16 @@
 			output-low;
 		};
 	};
+
+	disp_err_fg {
+		disp_err_fg_default: disp_err_fg_default {
+			pins = "gpio6";
+			function = "normal";
+			power-source = <1>;
+			input-enable;
+			bias-no-pull;
+		};
+	};
 };
 
 &pm660_pon {
