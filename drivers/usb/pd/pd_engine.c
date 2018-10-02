@@ -165,11 +165,12 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args,
 			   bool force_print_utc)
 {
 	char tmpbuffer[LOG_BUFFER_ENTRY_SIZE];
+	unsigned long flags;
 
 	if (!force_print_utc)
 		vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt, args);
 
-	spin_lock(&pd->logbuffer_lock);
+	spin_lock_irqsave(&pd->logbuffer_lock, flags);
 	if (pd->logbuffer_head < 0 ||
 	    pd->logbuffer_head >= LOG_BUFFER_ENTRIES) {
 		dev_warn(&pd->dev,
@@ -190,7 +191,7 @@ static void _pd_engine_log(struct usbpd *pd, const char *fmt, va_list args,
 		__pd_engine_log(pd, tmpbuffer, false);
 
 abort:
-	spin_unlock(&pd->logbuffer_lock);
+	spin_unlock_irqrestore(&pd->logbuffer_lock, flags);
 }
 
 static void pd_engine_log(struct usbpd *pd, const char *fmt, ...)
