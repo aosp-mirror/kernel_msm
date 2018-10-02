@@ -10892,7 +10892,6 @@ manual_gc_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	u32 status = MANUAL_GC_OFF;
-	int err = 0;
 
 	if (hba->manual_gc.state == MANUAL_GC_DISABLE)
 		return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
@@ -10900,17 +10899,19 @@ manual_gc_show(struct device *dev, struct device_attribute *attr, char *buf)
 	pm_runtime_get_sync(hba->dev);
 
 	down_read(&hba->query_lock);
-	if (!ufshcd_is_link_hibern8(hba))
-		err = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
-			QUERY_ATTR_IDN_MANUAL_GC_STATUS, 0, 0, &status);
+	if (!ufshcd_is_link_hibern8(hba) && hba->manual_gc.hagc_support) {
+		int err = ufshcd_query_attr_retry(hba,
+				UPIU_QUERY_OPCODE_READ_ATTR,
+				QUERY_ATTR_IDN_MANUAL_GC_STATUS, 0, 0, &status);
+
+		hba->manual_gc.hagc_support = err ? false: true;
+	}
 	up_read(&hba->query_lock);
 	pm_runtime_mark_last_busy(hba->dev);
 	pm_runtime_put_noidle(hba->dev);
-	if (err) {
-		hba->manual_gc.state = MANUAL_GC_DISABLE;
-		return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
-	}
 
+	if (!hba->manual_gc.hagc_support)
+		return scnprintf(buf, PAGE_SIZE, "%s", "bkops\n");
 	return scnprintf(buf, PAGE_SIZE, "%s",
 			status == MANUAL_GC_OFF ? "off\n" : "on\n");
 }
@@ -10922,7 +10923,7 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	enum query_opcode opcode;
 	u32 value;
-	int err;
+	int err = 0;
 
 	if (kstrtou32(buf, 0, &value))
 		return -EINVAL;
@@ -10949,15 +10950,27 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 
 	ufshcd_hold(hba, false);
 
-	opcode = (value == MANUAL_GC_ON) ? UPIU_QUERY_OPCODE_SET_FLAG:
-					UPIU_QUERY_OPCODE_CLEAR_FLAG;
-	err = ufshcd_query_flag_retry(hba, opcode,
-				QUERY_FLAG_IDN_MANUAL_GC_CONT, NULL);
+	if (hba->manual_gc.hagc_support) {
+		opcode = (value == MANUAL_GC_ON) ? UPIU_QUERY_OPCODE_SET_FLAG:
+						UPIU_QUERY_OPCODE_CLEAR_FLAG;
+		err = ufshcd_query_flag_retry(hba, opcode,
+					QUERY_FLAG_IDN_MANUAL_GC_CONT, NULL);
+		hba->manual_gc.hagc_support = err ? false: true;
+	}
+
+	if (!hba->manual_gc.hagc_support) {
+		err = ufshcd_bkops_ctrl(hba, (value == MANUAL_GC_ON) ?
+					BKOPS_STATUS_NON_CRITICAL:
+					BKOPS_STATUS_CRITICAL);
+		if (!hba->auto_bkops_enabled)
+			err = -EAGAIN;
+	}
+
 	ufshcd_release(hba, false);
 	if (err || !ufshcd_is_auto_hibern8_supported(hba)) {
 		pm_runtime_mark_last_busy(hba->dev);
 		pm_runtime_put_noidle(hba->dev);
-		hba->manual_gc.state = MANUAL_GC_DISABLE;
+		return count;
 	} else {
 		/* pm_runtime_put_sync in delay_ms */
 		hrtimer_start(&hba->manual_gc.hrtimer,
@@ -11004,7 +11017,7 @@ static void ufshcd_mgc_hibern8_work(struct work_struct *work)
 	struct ufs_hba *hba = container_of(work, struct ufs_hba,
 						manual_gc.hibern8_work);
 	pm_runtime_mark_last_busy(hba->dev);
-	pm_runtime_put_noidle(hba->dev);
+	/* bkops will be disabled when power down */
 }
 
 static void ufshcd_init_manual_gc(struct ufs_hba *hba)
@@ -11018,6 +11031,7 @@ static void ufshcd_init_manual_gc(struct ufs_hba *hba)
 	}
 
 	mgc->state = MANUAL_GC_ENABLE;
+	mgc->hagc_support = true;
 	mgc->delay_ms = UFSHCD_MANUAL_GC_HOLD_HIBERN8;
 
 	hrtimer_init(&mgc->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);

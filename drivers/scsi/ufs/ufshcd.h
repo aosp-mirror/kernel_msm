@@ -415,6 +415,7 @@ struct ufs_hba_variant {
 /* for manual gc */
 struct ufs_manual_gc {
 	int state;
+	bool hagc_support;
 	struct hrtimer hrtimer;
 	unsigned long delay_ms;
 	struct work_struct hibern8_work;
