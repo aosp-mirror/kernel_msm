@@ -1513,6 +1513,7 @@ static int init_tcpc_config(struct tcpc_dev *pd_tcpc_dev)
 
 	/* TODO: parse alt mode from DT */
 	config->alt_modes = NULL;
+	config->self_powered = true;
 
 	return 0;
 }
