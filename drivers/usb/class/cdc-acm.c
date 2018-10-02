@@ -1480,6 +1480,8 @@ skip_countries:
 		usb_clear_halt(usb_dev, usb_sndbulkpipe(usb_dev, epwrite->bEndpointAddress));
 	}
 
+	usb_enable_autosuspend(usb_dev);
+
 	return 0;
 alloc_fail8:
 	if (acm->country_codes) {
@@ -1539,6 +1541,7 @@ static void acm_disconnect(struct usb_interface *intf)
 		return;
 
 	mutex_lock(&acm->mutex);
+	usb_disable_autosuspend(usb_dev);
 	acm->disconnected = true;
 	if (acm->country_codes) {
 		device_remove_file(&acm->control->dev,

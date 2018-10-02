@@ -1368,6 +1368,9 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 		goto err_free;
 	}
 
+	/* enable suspend/resume support for HID devices. */
+	usb_enable_autosuspend(dev);
+
 	return 0;
 err_free:
 	kfree(usbhid);
@@ -1379,11 +1382,13 @@ err:
 static void usbhid_disconnect(struct usb_interface *intf)
 {
 	struct hid_device *hid = usb_get_intfdata(intf);
+	struct usb_device *dev = interface_to_usbdev(intf);
 	struct usbhid_device *usbhid;
 
 	if (WARN_ON(!hid))
 		return;
 
+	usb_disable_autosuspend(dev);
 	usbhid = hid->driver_data;
 	spin_lock_irq(&usbhid->lock);	/* Sync with error and led handlers */
 	set_bit(HID_DISCONNECTED, &usbhid->iofl);
