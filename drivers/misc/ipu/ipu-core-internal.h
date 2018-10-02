@@ -108,23 +108,39 @@ struct paintbox_jqs_msg_transport {
 	uint32_t process_queues_request;
 };
 
+struct paintbox_jqs {
+	struct paintbox_shared_buffer fw_shared_buffer;
+	struct mutex lock;
+	const struct firmware *fw;
+	enum paintbox_jqs_status status;
+	enum jqs_log_level log_level;
+	enum jqs_log_level log_trigger_level;
+	uint32_t log_sink_mask;
+	uint32_t uart_baud;
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	struct dentry *jqs_dentry;
+	struct dentry *fw_state_dentry;
+	struct dentry *log_level_dentry;
+	struct dentry *trigger_level_dentry;
+	struct dentry *kernel_log_dentry;
+	struct dentry *uart_log_dentry;
+	struct dentry *uart_baud_dentry;
+#endif
+};
+
 struct paintbox_device;
 
 struct paintbox_bus {
 	struct paintbox_device *devices[PAINTBOX_DEVICE_TYPE_COUNT];
 	struct generic_pm_domain gpd;
+	struct paintbox_jqs jqs;
 	struct paintbox_bus_ops *ops;
 	struct paintbox_pdata *pdata;
 	struct device *parent_dev;
 	struct iommu_group *group;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 	struct dentry *debug_root;
-	struct dentry *fw_state_dentry;
 #endif
-	enum paintbox_jqs_status fw_status;
-
-	const struct firmware *fw;
-	struct paintbox_shared_buffer fw_shared_buffer;
 	struct paintbox_jqs_msg_transport *jqs_msg_transport;
 	spinlock_t irq_lock;
 };

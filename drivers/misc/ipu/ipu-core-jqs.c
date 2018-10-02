@@ -28,6 +28,11 @@
 
 #define JQS_FIRMWARE_NAME "paintbox-jqs.fw"
 
+#define JQS_LOG_LEVEL_DEF         JQS_LOG_LEVEL_ERROR
+#define JQS_LOG_TRIGGER_LEVEL_DEF JQS_LOG_LEVEL_ERROR
+#define JQS_LOG_SINK_DEF          JQS_LOG_SINK_MESSAGE
+#define JQS_LOG_UART_BAUD_DEF     115200
+
 #define A0_IPU_DEFAULT_CLOCK_RATE 549000000 /* hz */
 
 /* Delay for I/O block to wake up */
@@ -58,78 +63,81 @@ static int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
 			(const struct jqs_message *)&req);
 }
 
-static int ipu_core_jqs_send_set_log_info(struct paintbox_bus *bus,
-		enum jqs_log_level log_level,
-		enum jqs_log_level interrupt_level,
-		uint32_t log_sinks, uint32_t uart_baud_rate)
+/* The caller to this function must hold bus->jqs.lock */
+int ipu_core_jqs_send_set_log_info(struct paintbox_bus *bus)
 {
 	struct jqs_message_set_log_info req;
 
 	dev_dbg(bus->parent_dev,
 			"%s: log sinks 0x%08x log level %u log int level %u uart baud_rate %u\n",
-			__func__, log_sinks, log_level, interrupt_level,
-			uart_baud_rate);
+			__func__, bus->jqs.log_sink_mask, bus->jqs.log_level,
+			bus->jqs.log_trigger_level, bus->jqs.uart_baud);
 
 	INIT_JQS_MSG(req, JQS_MESSAGE_TYPE_SET_LOG_INFO);
 
-	req.log_level = log_level;
-	req.interrupt_level = interrupt_level;
-	req.log_sinks = log_sinks;
-	req.uart_baud_rate = uart_baud_rate;
+	req.log_level = bus->jqs.log_level;
+	req.interrupt_level = bus->jqs.log_trigger_level;
+	req.log_sinks = bus->jqs.log_sink_mask;
+	req.uart_baud_rate = bus->jqs.uart_baud;
 
 	return ipu_core_jqs_msg_transport_kernel_write(bus,
 			(const struct jqs_message *)&req);
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 int ipu_core_jqs_load_firmware(struct paintbox_bus *bus)
 {
 	int ret;
 
-	if (bus->fw_status > JQS_FW_STATUS_INIT)
+	if (bus->jqs.status > JQS_FW_STATUS_INIT)
 		return 0;
 
 	dev_dbg(bus->parent_dev, "requesting firmware %s\n", JQS_FIRMWARE_NAME);
 
-	ret = request_firmware(&bus->fw, JQS_FIRMWARE_NAME, bus->parent_dev);
+	ret = request_firmware(&bus->jqs.fw, JQS_FIRMWARE_NAME,
+			bus->parent_dev);
 	if (ret < 0) {
 		dev_err(bus->parent_dev, "%s: unable to load %s, %d\n",
 				__func__, JQS_FIRMWARE_NAME, ret);
 		return ret;
 	}
 
-	bus->fw_status = JQS_FW_STATUS_REQUESTED;
+	bus->jqs.status = JQS_FW_STATUS_REQUESTED;
 
 	return 0;
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus)
 {
-	if (bus->fw_status != JQS_FW_STATUS_REQUESTED)
+	if (bus->jqs.status != JQS_FW_STATUS_REQUESTED)
 		return;
 
 	dev_dbg(bus->parent_dev, "%s: unloading firmware\n", __func__);
 
-	if (bus->fw) {
-		release_firmware(bus->fw);
-		bus->fw = NULL;
+	if (bus->jqs.fw) {
+		release_firmware(bus->jqs.fw);
+		bus->jqs.fw = NULL;
 	}
 
-	bus->fw_status = JQS_FW_STATUS_INIT;
+	bus->jqs.status = JQS_FW_STATUS_INIT;
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 {
 	struct jqs_firmware_preamble preamble;
 	size_t fw_binary_len_bytes;
 	int ret;
 
-	if (bus->fw_status > JQS_FW_STATUS_STAGED)
+	if (bus->jqs.status > JQS_FW_STATUS_STAGED)
 		return 0;
 
-	if (WARN_ON(!bus->fw))
+	if (WARN_ON(!bus->jqs.fw))
 		return -EINVAL;
 
-	memcpy(&preamble, bus->fw->data, min(sizeof(preamble), bus->fw->size));
+	memcpy(&preamble, bus->jqs.fw->data, min(sizeof(preamble),
+			bus->jqs.fw->size));
 
 	if (preamble.magic != JQS_PREAMBLE_MAGIC_WORD) {
 		dev_err(bus->parent_dev,
@@ -154,34 +162,35 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	 */
 	ret = bus->ops->alloc(bus->parent_dev,
 			preamble.fw_and_working_set_bytes,
-			&bus->fw_shared_buffer);
+			&bus->jqs.fw_shared_buffer);
 	if (ret < 0)
 		return ret;
 
-	fw_binary_len_bytes = bus->fw->size -
+	fw_binary_len_bytes = bus->jqs.fw->size -
 			sizeof(struct jqs_firmware_preamble);
 
-	memcpy(bus->fw_shared_buffer.host_vaddr, bus->fw->data +
+	memcpy(bus->jqs.fw_shared_buffer.host_vaddr, bus->jqs.fw->data +
 			sizeof(struct jqs_firmware_preamble),
 			fw_binary_len_bytes);
 
-	bus->ops->sync(bus->parent_dev, &bus->fw_shared_buffer, 0,
+	bus->ops->sync(bus->parent_dev, &bus->jqs.fw_shared_buffer, 0,
 			fw_binary_len_bytes, DMA_TO_DEVICE);
 
-	bus->fw_status = JQS_FW_STATUS_STAGED;
+	bus->jqs.status = JQS_FW_STATUS_STAGED;
 
 	return 0;
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
 {
-	if (bus->fw_status != JQS_FW_STATUS_STAGED)
+	if (bus->jqs.status != JQS_FW_STATUS_STAGED)
 		return;
 
 	dev_dbg(bus->parent_dev, "%s: unstaging firmware\n", __func__);
 
-	ipu_core_memory_free(bus, &bus->fw_shared_buffer);
-	bus->fw_status = JQS_FW_STATUS_REQUESTED;
+	ipu_core_memory_free(bus, &bus->jqs.fw_shared_buffer);
+	bus->jqs.status = JQS_FW_STATUS_REQUESTED;
 }
 
 static void ipu_core_jqs_power_enable(struct paintbox_bus *bus,
@@ -240,6 +249,7 @@ static void ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 			IPU_CSR_AON_OFFSET + JQS_CONTROL);
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 {
 	int ret;
@@ -250,19 +260,18 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 	if (ret < 0)
 		return ret;
 
-	ipu_core_jqs_power_enable(bus, bus->fw_shared_buffer.jqs_paddr,
+	ipu_core_jqs_power_enable(bus, bus->jqs.fw_shared_buffer.jqs_paddr,
 			bus->jqs_msg_transport->shared_buf.jqs_paddr);
 
 	ret = ipu_core_jqs_send_clock_rate(bus, A0_IPU_DEFAULT_CLOCK_RATE);
 	if (ret < 0)
 		return ret;
 
-	ret = ipu_core_jqs_send_set_log_info(bus, JQS_LOG_LEVEL_INFO,
-			JQS_LOG_LEVEL_INFO, JQS_LOG_SINK_UART, 115200);
+	ret = ipu_core_jqs_send_set_log_info(bus);
 	if (ret < 0)
 		return ret;
 
-	bus->fw_status = JQS_FW_STATUS_RUNNING;
+	bus->jqs.status = JQS_FW_STATUS_RUNNING;
 
 	/* Notify paintbox devices that the firmware is up */
 	ipu_core_notify_firmware_up(bus);
@@ -270,13 +279,15 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 	return 0;
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 static void ipu_core_jqs_start_rom_firmware(struct paintbox_bus *bus)
 {
 	dev_dbg(bus->parent_dev, "enabling ROM firmware\n");
 	ipu_core_jqs_power_enable(bus, JQS_BOOT_ADDR_DEF, 0);
-	bus->fw_status = JQS_FW_STATUS_RUNNING;
+	bus->jqs.status = JQS_FW_STATUS_RUNNING;
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 {
 	int ret;
@@ -284,7 +295,7 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	/* Firmware status will be set to INIT at boot or if the driver is
 	 * unloaded and reloaded (likely due to a PCIe link change).
 	 */
-	if (bus->fw_status == JQS_FW_STATUS_INIT) {
+	if (bus->jqs.status == JQS_FW_STATUS_INIT) {
 		ret = ipu_core_jqs_load_firmware(bus);
 		if (ret < 0)
 			goto start_rom_firmware;
@@ -294,7 +305,7 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	 * Firmware status will return this state whenever Airbrush transitions
 	 * to the OFF state.
 	 */
-	if (bus->fw_status == JQS_FW_STATUS_REQUESTED) {
+	if (bus->jqs.status == JQS_FW_STATUS_REQUESTED) {
 		ret = ipu_core_jqs_stage_firmware(bus);
 		if (ret < 0)
 			goto unload_firmware;
@@ -304,7 +315,7 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	 * status will return to this state for all suspend and sleep states
 	 * with the exception of OFF.
 	 */
-	if (bus->fw_status == JQS_FW_STATUS_STAGED) {
+	if (bus->jqs.status == JQS_FW_STATUS_STAGED) {
 		ret = ipu_core_jqs_start_firmware(bus);
 		if (ret < 0)
 			goto unstage_firmware;
@@ -325,9 +336,10 @@ start_rom_firmware:
 	return 0;
 }
 
+/* The caller to this function must hold bus->jqs.lock */
 void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 {
-	if (bus->fw_status != JQS_FW_STATUS_RUNNING)
+	if (bus->jqs.status != JQS_FW_STATUS_RUNNING)
 		return;
 
 	dev_dbg(bus->parent_dev, "%s: disabling firmware\n", __func__);
@@ -364,31 +376,29 @@ void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 			IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
 			IO_POWER_ON_N);
 
-	bus->fw_status = JQS_FW_STATUS_STAGED;
-}
-
-enum paintbox_jqs_status ipu_bus_get_fw_status(struct paintbox_bus *bus)
-{
-	return bus->fw_status;
+	bus->jqs.status = JQS_FW_STATUS_STAGED;
 }
 
 bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
 {
-	if (bus->fw_status != JQS_FW_STATUS_RUNNING)
-		return false;
+	bool ready = true;
+
+	if (bus->jqs.status != JQS_FW_STATUS_RUNNING)
+		ready = false;
 
 	/* Don't report ready if the JQS is running from its ROM firmware.  The
 	 * ROM firmware is only used for debug.
 	 */
-	if (bus->fw == NULL)
-		return false;
+	if (bus->jqs.fw == NULL)
+		ready = false;
 
-	return true;
+	return ready;
 }
 
 static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
 {
 	struct paintbox_bus *bus;
+	int ret;
 
 	bus = container_of(genpd, struct paintbox_bus, gpd);
 	if (WARN_ON(!bus))
@@ -397,7 +407,13 @@ static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
 	dev_dbg(bus->parent_dev, "%s: runtime request to power up JQS\n",
 			__func__);
 
-	return ipu_core_jqs_enable_firmware(bus);
+	mutex_lock(&bus->jqs.lock);
+
+	ret = ipu_core_jqs_enable_firmware(bus);
+
+	mutex_unlock(&bus->jqs.lock);
+
+	return ret;
 }
 
 static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
@@ -411,7 +427,11 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 	dev_dbg(bus->parent_dev, "%s: runtime request to power down JQS\n",
 			__func__);
 
+	mutex_lock(&bus->jqs.lock);
+
 	ipu_core_jqs_disable_firmware(bus);
+
+	mutex_unlock(&bus->jqs.lock);
 
 	return 0;
 }
@@ -419,6 +439,8 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 int ipu_core_jqs_init(struct paintbox_bus *bus)
 {
 	int ret;
+
+	mutex_init(&bus->jqs.lock);
 
 	bus->gpd.name = "ipu_jqs";
 	bus->gpd.power_off = ipu_core_jqs_power_off;
@@ -447,6 +469,11 @@ int ipu_core_jqs_init(struct paintbox_bus *bus)
 	 * Airbrush DRAM at IPU driver probe.
 	 */
 
+	bus->jqs.log_level = JQS_LOG_LEVEL_DEF;
+	bus->jqs.log_trigger_level = JQS_LOG_TRIGGER_LEVEL_DEF;
+	bus->jqs.log_sink_mask = JQS_LOG_SINK_DEF;
+	bus->jqs.uart_baud = JQS_LOG_UART_BAUD_DEF;
+
 	return 0;
 }
 
@@ -454,13 +481,19 @@ void ipu_core_jqs_remove(struct paintbox_bus *bus)
 {
 	int ret;
 
+	mutex_lock(&bus->jqs.lock);
+
 	ipu_core_jqs_disable_firmware(bus);
 	ipu_core_jqs_unstage_firmware(bus);
 	ipu_core_jqs_unload_firmware(bus);
+
+	mutex_unlock(&bus->jqs.lock);
 
 	ret = pm_genpd_remove(&bus->gpd);
 	if (ret < 0)
 		dev_err(bus->parent_dev,
 				"%s: unable to remove power down for IPU JQS, ret %d\n",
 				__func__, ret);
+
+	mutex_destroy(&bus->jqs.lock);
 }

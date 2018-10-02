@@ -19,14 +19,15 @@
 #include <linux/ipu-core.h>
 #include <linux/types.h>
 
+/* The caller to these functions must hold bus->jqs.lock */
 int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus);
-
 int ipu_core_jqs_load_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus);
-
 int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus);
+
+int ipu_core_jqs_send_set_log_info(struct paintbox_bus *bus);
 
 int ipu_core_jqs_init(struct paintbox_bus *bus);
 void ipu_core_jqs_remove(struct paintbox_bus *bus);

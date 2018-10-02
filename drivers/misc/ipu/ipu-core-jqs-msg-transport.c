@@ -131,7 +131,7 @@ static uint32_t write_core(struct paintbox_bus *bus, uint32_t q_id,
 	return bytes_written;
 }
 
-static void process_kernel_response(struct paintbox_bus *bus,
+static void ipu_core_jqs_msg_process_ack_message(struct paintbox_bus *bus,
 		struct jqs_message *jqs_msg)
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
@@ -164,21 +164,43 @@ exit:
 	mutex_unlock(&trans->lock);
 }
 
+static void ipu_core_jqs_msg_process_log_message(struct paintbox_bus *bus,
+		struct jqs_message *jqs_msg)
+{
+	struct jqs_message_log *log_msg = (struct jqs_message_log *)jqs_msg;
+	char buf[MAX_LOG_SIZE];
+
+	scnprintf(buf, MAX_LOG_SIZE, "JQS: %s", log_msg->data);
+
+	switch (log_msg->log_level) {
+	case JQS_LOG_LEVEL_FATAL:
+	case JQS_LOG_LEVEL_ERROR:
+		dev_err(bus->parent_dev, "%s\n", buf);
+		break;
+	case JQS_LOG_LEVEL_WARNING:
+		dev_warn(bus->parent_dev, "%s\n", buf);
+		break;
+	case JQS_LOG_LEVEL_INFO:
+		dev_info(bus->parent_dev, "%s\n", buf);
+		break;
+	};
+}
+
 static void ipu_core_jqs_msg_process_error_message(struct paintbox_bus *bus,
 		struct jqs_message *jqs_msg)
 {
 	struct jqs_message_error *err_msg = (struct jqs_message_error *)jqs_msg;
 
 	if (err_msg->error == JQS_ERROR_ASSERTION) {
-		dev_err(bus->parent_dev, "%s: JQS: assert at %s:%d\n",
-				__func__, err_msg->data.assertion.file,
+		dev_err(bus->parent_dev, "JQS: assert at %s:%d\n",
+				err_msg->data.assertion.file,
 				err_msg->data.assertion.line);
 		/* TODO(b/114760293): JQS assertion should trigger catastrophic
 		 * error here.
 		 */
 	} else {
-		dev_err(bus->parent_dev, "%s: error %d sent by JQS.\n",
-				__func__, err_msg->error);
+		dev_err(bus->parent_dev, "JQS: error %d reported\n",
+				err_msg->error);
 		/* TODO(b/116061358): proper error should be triggered. */
 	}
 }
@@ -191,7 +213,10 @@ static void process_kernel_message(struct paintbox_bus *bus,
 	 * kernel queue
 	 */
 	case JQS_MESSAGE_TYPE_ACK:
-		process_kernel_response(bus, jqs_msg);
+		ipu_core_jqs_msg_process_ack_message(bus, jqs_msg);
+		break;
+	case JQS_MESSAGE_TYPE_LOG:
+		ipu_core_jqs_msg_process_log_message(bus, jqs_msg);
 		break;
 	case JQS_MESSAGE_TYPE_ERROR:
 		ipu_core_jqs_msg_process_error_message(bus, jqs_msg);
