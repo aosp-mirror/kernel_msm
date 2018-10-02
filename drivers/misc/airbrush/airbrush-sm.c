@@ -31,6 +31,12 @@ static int airbrush_sm_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int airbrush_sm_remove(struct platform_device *pdev)
+{
+	ab_sm_exit(pdev);
+	return 0;
+}
+
 static const struct of_device_id airbrush_sm_of_match[] = {
 	{ .compatible = "abc,airbrush-sm" },
 	{ },
@@ -43,6 +49,7 @@ static struct platform_driver airbrush_sm_driver = {
 		.of_match_table	= airbrush_sm_of_match,
 	},
 	.probe	= airbrush_sm_probe,
+	.remove	= airbrush_sm_remove,
 };
 module_platform_driver(airbrush_sm_driver);
 

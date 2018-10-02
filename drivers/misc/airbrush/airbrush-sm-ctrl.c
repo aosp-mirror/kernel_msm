@@ -404,9 +404,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->chip_substate_id = 0;
 	ab_sm_ctx->chip_substate_name = "Ready";
 
-#ifdef CONFIG_DEBUGFS_AIRBRUSH
 	ab_sm_create_debugfs(ab_sm_ctx);
-#endif
 	return ab_sm_ctx;
 
 fail_fw_patch_en:
@@ -417,3 +415,8 @@ fail_ab_ready:
 	return NULL;
 }
 EXPORT_SYMBOL(ab_sm_init);
+
+void ab_sm_exit(struct platform_device *pdev)
+{
+	ab_sm_remove_debugfs(ab_sm_ctx);
+}

@@ -287,6 +287,7 @@ void ab_sm_register_blk_callback(block_name_t name,
 				void *data);
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
+void ab_sm_exit(struct platform_device *pdev);
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie);
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_sw_state_id,
@@ -302,6 +303,10 @@ void ab_disable_pgood(struct ab_state_context *ab_ctx);
 
 #ifdef CONFIG_DEBUGFS_AIRBRUSH
 void ab_sm_create_debugfs(struct ab_state_context *sc);
+void ab_sm_remove_debugfs(struct ab_state_context *sc);
+#else
+inline void ab_sm_create_debugfs(struct ab_state_context *sc) {}
+inline void ab_sm_remove_debugfs(struct ab_state_context *sc) {}
 #endif
 
 #endif /* _AIRBRUSH_SM_CTRL_H */

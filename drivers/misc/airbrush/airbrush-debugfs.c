@@ -278,4 +278,9 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 err_out:
 	pr_err("Some error occured, couldn't create debugfs entry for ab_device states\n");
 }
+
+void ab_sm_remove_debugfs(struct ab_state_context *sc)
+{
+	debugfs_remove_recursive(sc->d_entry);
+}
 #endif /* CONFIG_DEBUGFS_AIRBRUSH */
