@@ -88,7 +88,7 @@ struct usbpd {
 	bool in_hard_reset;
 
 	/* Flag gets set when a pd_capable partner is attached */
-	enum tcpm_pd_capability pd_capable;
+	bool pd_capable;
 
 	/* debugfs logging */
 	struct dentry *dentry;
@@ -730,27 +730,6 @@ err:
 	mutex_unlock(&pd->lock);
 }
 
-static void check_update_usb_data_role(struct usbpd *pd)
-{
-	pd_engine_log(pd,
-		      "check_update_usb_data_role: apsd_done: %c pd->pending_update_usb_data: %c pd resolved: %c",
-		      pd->apsd_done ? 'Y' : 'N',
-		      pd->pending_update_usb_data ? 'Y' : 'N',
-		      pd->pd_capable != TCPC_NOT_RESOLVED ? 'Y' : 'N');
-
-	if (pd->apsd_done && pd->pending_update_usb_data &&
-	    pd->pd_capable != TCPC_NOT_RESOLVED) {
-		int ret = 0;
-
-		pd_engine_log(pd,
-			      "APSD is done now and pd capability updated, update pending usb data role");
-		ret = update_usb_data_role(pd);
-		if (ret < 0)
-			return;
-		pd->pending_update_usb_data = false;
-	}
-}
-
 #define PDO_FIXED_FLAGS \
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
@@ -802,7 +781,7 @@ static void psy_changed_handler(struct work_struct *work)
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read TYPEC_MODE, ret=%d",
 			      ret);
-		goto ret;
+		return;
 	}
 	typec_mode = val.intval;
 
@@ -811,7 +790,7 @@ static void psy_changed_handler(struct work_struct *work)
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read PE_START, ret=%d",
 			      ret);
-		goto ret;
+		return;
 	}
 	pe_start = !!val.intval;
 
@@ -819,7 +798,7 @@ static void psy_changed_handler(struct work_struct *work)
 					POWER_SUPPLY_PROP_REAL_TYPE, &val);
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read TYPE, ret=%d", ret);
-		goto ret;
+		return;
 	}
 	psy_type = val.intval;
 	pd->apsd_done = !!psy_type;
@@ -829,7 +808,7 @@ static void psy_changed_handler(struct work_struct *work)
 	if (ret < 0) {
 		pd_engine_log(pd, "Unable to read ONLINE, ret=%d",
 			      ret);
-		goto ret;
+		return;
 	}
 	vbus_present = val.intval;
 
@@ -840,7 +819,7 @@ static void psy_changed_handler(struct work_struct *work)
 		pd_engine_log(pd,
 			      "Unable to read TYPEC_CC_ORIENTATION, ret=%d",
 			      ret);
-		goto ret;
+		return;
 	}
 	typec_cc_orientation = val.intval;
 
@@ -923,12 +902,17 @@ static void psy_changed_handler(struct work_struct *work)
 		tcpm_cc_change(pd->tcpm_port);
 	}
 
-	check_update_usb_data_role(pd);
-
+	if (pd->apsd_done && pd->pending_update_usb_data) {
+		pd_engine_log(pd,
+			      "APSD is done now, update pending usb data role");
+		ret = update_usb_data_role(pd);
+		if (ret < 0)
+			goto unlock;
+		pd->pending_update_usb_data = false;
+	}
 unlock:
-	mutex_unlock(&pd->lock);
-ret:
 	kfree(event);
+	mutex_unlock(&pd->lock);
 }
 
 static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
@@ -1179,7 +1163,7 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 min_mv,
 	 * smb-lib manages the current limits when pd capable partner is
 	 * not attached.
 	 */
-	if (pd->pd_capable == TCPC_PD_CAPABLE) {
+	if (pd->pd_capable) {
 		val.intval = max_ma * 1000;
 		ret = power_supply_set_property(pd->usb_psy,
 						POWER_SUPPLY_PROP_PD_CURRENT_MAX,
@@ -1192,8 +1176,7 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 min_mv,
 	}
 
 	pd_engine_log(pd, "max_ma := %d, min_mv := %d, max_mv := %d, pd_capable := %c",
-		      max_ma, min_mv, max_mv,
-		      pd->pd_capable == TCPC_PD_CAPABLE ? 'Y' : 'N');
+		      max_ma, min_mv, max_mv, pd->pd_capable ? 'Y' : 'N');
 	return ret;
 }
 
@@ -1663,17 +1646,15 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 	pd->usb_comm_capable = usb_comm_capable;
 
 	pd_engine_log(pd,
-		      "set usb_data_role: power [%s], data [%s], apsd_done [%s], attached [%s], comm [%s] pd_capable [%s]",
+		      "set usb_data_role: power [%s], data [%s], apsd_done [%s], attached [%s], comm [%s]",
 		      get_typec_role_name(role),
 		      get_typec_data_role_name(data),
 		      pd->apsd_done ? "Y" : "N",
 		      attached ? "Y" : "N",
-		      usb_comm_capable ? "Y" : "N",
-		      pd->pd_capable == TCPC_PD_CAPABLE ? "Y" : "N");
+		      usb_comm_capable ? "Y" : "N");
 
 	if (attached && role == TYPEC_SINK &&
-	    !((pd->apsd_done && pd->pd_capable != TCPC_NOT_RESOLVED) ||
-	      usb_comm_capable)) {
+	    !(pd->apsd_done || usb_comm_capable)) {
 		/* wait for APSD done */
 		pd_engine_log(pd,
 			      "APSD is not done, delay update usb data role");
@@ -1820,34 +1801,26 @@ static void log_rtc(struct tcpc_dev *dev)
 	}
 }
 
-static void set_pd_capable(struct tcpc_dev *dev,
-			   enum tcpm_pd_capability capable)
+static void set_pd_capable(struct tcpc_dev *dev, bool capable)
 {
 	union power_supply_propval val = {0};
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
 
-	val.intval = capable == TCPC_PD_CAPABLE ? 1 : 0;
+	val.intval = capable ? 1 : 0;
 
-	mutex_lock(&pd->lock);
-
-	if (pd->pd_capable == capable) {
-		mutex_unlock(&pd->lock);
+	if (pd->pd_capable == capable)
 		return;
-	}
 
 	ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PD_ACTIVE,
 					&val);
 	if (ret < 0) {
 		pd_engine_log(pd, "unable to set pd capable to %s, ret=%d",
-			      capable == TCPC_PD_CAPABLE ? "true" : "false",
-			      ret);
+			      capable ? "true" : "false", ret);
 	}
 
 	pd->pd_capable = capable;
-	check_update_usb_data_role(pd);
-	mutex_unlock(&pd->lock);
 }
 
 static void set_in_hard_reset(struct tcpc_dev *dev, bool status)
