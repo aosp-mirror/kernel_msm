@@ -155,7 +155,7 @@
 #define DEFAULT_COLD_CC 100
 #define DEFAULT_HOT_FV 4305
 #define DEFAULT_HOT_CC 100
-#define DEFAULT_TWM_SOC_VALUE 3
+#define DEFAULT_TWM_SOC_VALUE 0
 
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);

@@ -287,7 +287,7 @@ struct smb_charger {
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
 	struct delayed_work	alg_work;
-	struct delayed_work	vbatt_therm_work;
+	struct delayed_work	vbatt_therm_icl_work;
 	struct delayed_work	wpc_enable_work;
 
 	/* cached status */

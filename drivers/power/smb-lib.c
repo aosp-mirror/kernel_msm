@@ -371,13 +371,13 @@ static int smblib_set_opt_freq_buck(struct smb_charger *chg, int fsw_khz)
 static int batt_temp;
 static bool wpc_normal_thermal;
 static bool wpc_reset_done;
-static bool therm_work_ongoing;
 static bool wpc_enable;
 static int boot_count;
+static bool icl_reset_flag;
 
 void smblib_set_WPC_enable(struct smb_charger *chg)
 {
-	if (!wpc_normal_thermal || !wpc_reset_done) {
+	if (!wpc_normal_thermal || !wpc_reset_done || !icl_reset_flag) {
 		if (wpc_enable) {
 			gpio_set_value(chg->wpc_en_gpio, 1);
 			wpc_enable = 0;
@@ -414,23 +414,47 @@ static void smblib_wpc_enable_work(struct work_struct *work)
 	}
 }
 
-static void smblib_vbatt_therm_work(struct work_struct *work)
+static void smblib_vbatt_therm_icl_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
-							vbatt_therm_work.work);
+				vbatt_therm_icl_work.work);
 
+	int rc;
+	u8 data1, data2, data3;
+	union power_supply_propval val;
+
+	power_supply_get_property(chg->bms_psy, POWER_SUPPLY_PROP_TEMP, &val);
+	batt_temp = val.intval;
 	if (batt_temp >= OVERHEAT_TEMP && wpc_normal_thermal) {
 		wpc_normal_thermal = 0;
-		pr_info("smblib_vbatt_therm_work: disable WPC\n");
+		pr_info("smblib_vbatt_therm_icl_work: temperature high, disable WPC\n");
 		smblib_set_WPC_enable(chg);
 	} else if (batt_temp <= NORMAL_TEMP && !wpc_normal_thermal) {
 		wpc_normal_thermal = 1;
-		therm_work_ongoing = 0;
-		pr_info("smblib_vbatt_therm_work: enable WPC\n");
+		pr_info("smblib_vbatt_therm_icl_work: temperature normal, enable WPC\n");
 		smblib_set_WPC_enable(chg);
-		return;
 	}
-	schedule_delayed_work(&chg->vbatt_therm_work, msecs_to_jiffies(20000));
+
+	//ICL check
+	rc = smblib_read(chg, 0x00001061, &data1);
+	rc = smblib_read(chg, 0x00001370, &data2);
+	rc = smblib_read(chg, 0x00001607, &data3);
+	smblib_err(chg, "fast charge =%d mA, USB limit=%d, MISC ICL=%d mA\n",
+			data1*25, data2*25, data3*25);
+
+	if (!data3 && icl_reset_flag) {
+		icl_reset_flag = 0;
+		smblib_set_WPC_enable(chg);
+		schedule_delayed_work(&chg->vbatt_therm_icl_work,
+			msecs_to_jiffies(1000));
+	} else {
+		if (!icl_reset_flag) {
+			icl_reset_flag = 1;
+			smblib_set_WPC_enable(chg);
+		}
+		schedule_delayed_work(&chg->vbatt_therm_icl_work,
+			msecs_to_jiffies(30000));
+	}
 }
 
 int smblib_set_charge_param(struct smb_charger *chg,
@@ -1619,38 +1643,6 @@ int smblib_get_prop_batt_present(struct smb_charger *chg,
 	return rc;
 }
 
-//TODO:Remove the debug info after charge function is ok
-int smblib_debug_info(struct smb_charger *chg)
-{
-	int rc = -EINVAL;
-	u8 data1, data2, data3;
-
-	rc = smblib_read(chg, 0x00001061, &data1);
-	rc = smblib_read(chg, 0x00001370, &data2);
-	rc = smblib_read(chg, 0x00001607, &data3);
-	smblib_err(chg, "fast charge current=%d mA, USB current limit=%d , MISC ICL=%d mA \n", data1*25, data2*25, data3*25);
-/*
-	rc = smblib_read(chg, 0x00001366, &data1);
-	switch ((data1 & 0x06)>>1) {
-	case 0x00:
-		smblib_err(chg, "usb_icl_option usb2.0, 100mA \n");
-		break;
-	case 0x01:
-		smblib_err(chg, "usb_icl_option usb2.0, 500mA \n");
-		break;
-	case 0x02:
-		smblib_err(chg, "usb_icl_option usb3.0, 150mA \n");
-		break;
-	case 0x03:
-		smblib_err(chg, "usb_icl_option usb3.0, 900mA \n");
-		break;
-	}
-	rc = smblib_read(chg, 0x00004582, &data1);
-	smblib_err(chg, "RR_THERM_STS:0x%x, STS_avail:%d, skin_temp_too_hot:%d, skin_temp_hot:%d \n", data1, (data1&0x40)>>6, (data1&0x20)>>5, (data1&0x10)>>4);
-*/
-	return rc;
-}
-
 static void smblib_alg_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -1672,8 +1664,6 @@ int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 	if (chg->bms_psy)
 		rc = power_supply_get_property(chg->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, val);
-
-	smblib_debug_info(chg);
 
 	return rc;
 }
@@ -1906,11 +1896,7 @@ int smblib_get_prop_batt_temp(struct smb_charger *chg,
 
 	rc = power_supply_get_property(chg->bms_psy,
 				       POWER_SUPPLY_PROP_TEMP, val);
-	batt_temp = val->intval;
-	if (batt_temp > NORMAL_TEMP && !therm_work_ongoing) {
-		schedule_delayed_work(&chg->vbatt_therm_work, msecs_to_jiffies(1000));
-		therm_work_ongoing = 1;
-	}
+
 	return rc;
 }
 
@@ -4855,9 +4841,9 @@ int smblib_init(struct smb_charger *chg)
 	batt_temp = 0;
 	wpc_normal_thermal = 1;
 	wpc_reset_done = 1;
-	therm_work_ongoing = 0;
 	wpc_enable = 1;
 	boot_count = 0;
+	icl_reset_flag = 1;
 
 	mutex_init(&chg->lock);
 	mutex_init(&chg->write_lock);
@@ -4876,12 +4862,16 @@ int smblib_init(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
 	INIT_DELAYED_WORK(&chg->alg_work, smblib_alg_work);
-	INIT_DELAYED_WORK(&chg->vbatt_therm_work, smblib_vbatt_therm_work);
+	INIT_DELAYED_WORK(&chg->vbatt_therm_icl_work,
+				smblib_vbatt_therm_icl_work);
 	INIT_DELAYED_WORK(&chg->wpc_enable_work, smblib_wpc_enable_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
 
-	schedule_delayed_work(&chg->wpc_enable_work, msecs_to_jiffies(2000));
+	schedule_delayed_work(&chg->wpc_enable_work,
+			msecs_to_jiffies(2000));
+	schedule_delayed_work(&chg->vbatt_therm_icl_work,
+			msecs_to_jiffies(30000));
 
 	switch (chg->mode) {
 	case PARALLEL_MASTER:
