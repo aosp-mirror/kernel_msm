@@ -426,6 +426,7 @@ enum {
 
 struct ufs_manual_gc {
 	int state;
+	bool hagc_support;
 	struct hrtimer hrtimer;
 	unsigned long delay_ms;
 	struct work_struct hibern8_work;
@@ -1374,6 +1375,7 @@ int ufshcd_change_power_mode(struct ufs_hba *hba,
 			     struct ufs_pa_layer_attr *pwr_mode);
 void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba,
 		int result);
+int ufshcd_bkops_ctrl(struct ufs_hba *hba, enum bkops_status status);
 
 int ufshcd_map_desc_id_to_length(struct ufs_hba *hba, enum desc_idn desc_id,
 	int *desc_length);
