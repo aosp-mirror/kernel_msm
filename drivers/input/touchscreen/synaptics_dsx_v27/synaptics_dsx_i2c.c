@@ -53,6 +53,7 @@
 */
 
 static unsigned char *wr_buf;
+static unsigned int wr_buf_size;
 
 static struct synaptics_dsx_hw_interface hw_if;
 
@@ -345,20 +346,19 @@ skip_fwupdate_feautre:
 static int synaptics_rmi4_i2c_alloc_buf(struct synaptics_rmi4_data *rmi4_data,
 		unsigned int count)
 {
-	static unsigned int buf_size;
-
-	if (count > buf_size) {
-		if (buf_size)
+	if (count > wr_buf_size) {
+		if (wr_buf_size)
 			kfree(wr_buf);
+
 		wr_buf = kzalloc(count, GFP_KERNEL);
 		if (!wr_buf) {
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to alloc mem for buffer\n",
 					__func__);
-			buf_size = 0;
+			wr_buf_size = 0;
 			return -ENOMEM;
 		}
-		buf_size = count;
+		wr_buf_size = count;
 	}
 
 	return 0;
@@ -535,11 +535,11 @@ static int synaptics_rmi4_i2c_write(struct synaptics_rmi4_data *rmi4_data,
 	struct i2c_client *i2c = to_i2c_client(rmi4_data->pdev->dev.parent);
 	struct i2c_msg msg[1];
 
+	mutex_lock(&rmi4_data->rmi4_io_ctrl_mutex);
+
 	retval = synaptics_rmi4_i2c_alloc_buf(rmi4_data, length + 1);
 	if (retval < 0)
-		return retval;
-
-	mutex_lock(&rmi4_data->rmi4_io_ctrl_mutex);
+		goto exit;
 
 	retval = synaptics_rmi4_i2c_set_page(rmi4_data, addr);
 	if (retval != PAGE_SELECT_LEN) {
@@ -679,6 +679,8 @@ static int synaptics_rmi4_i2c_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
+	wr_buf_size = 0;
+
 	return 0;
 }
 
@@ -727,6 +729,8 @@ EXPORT_SYMBOL(synaptics_rmi4_bus_init);
 void synaptics_rmi4_bus_exit(void)
 {
 	kfree(wr_buf);
+
+	wr_buf_size = 0;
 
 	i2c_del_driver(&synaptics_rmi4_i2c_driver);
 

@@ -4866,7 +4866,7 @@ err_virtual_buttons:
 
 err_enable_irq:
 #ifdef CONFIG_DRM
-	msm_drm_unregister_client(&rmi4_data->fb_notifier);
+	msm_drm_unregister_client(&rmi4_data->drm_notifier);
 #endif
 #ifdef CONFIG_FB
 	fb_unregister_client(&rmi4_data->fb_notifier);
@@ -4948,7 +4948,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	synaptics_rmi4_irq_enable(rmi4_data, false, false);
 
 #ifdef CONFIG_DRM
-	msm_drm_unregister_client(&rmi4_data->fb_notifier);
+	msm_drm_unregister_client(&rmi4_data->drm_notifier);
 #endif
 
 #ifdef CONFIG_FB
