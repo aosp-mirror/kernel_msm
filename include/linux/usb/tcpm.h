@@ -54,12 +54,6 @@ enum tcpm_transmit_type {
 	TCPC_TX_BIST_MODE_2 = 7
 };
 
-enum tcpm_pd_capability {
-	TCPC_NOT_RESOLVED = 0,
-	TCPC_PD_CAPABLE = 1,
-	TCPC_PD_NOT_CAPABLE,
-};
-
 /**
  * struct tcpc_config - Port configuration
  * @src_pdo:	PDO parameters sent to port partner as response to
@@ -191,8 +185,7 @@ struct tcpc_dev {
 	int (*pd_transmit)(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 			   const struct pd_message *msg);
 	int (*set_in_pr_swap)(struct tcpc_dev *dev, bool pr_swap);
-	void (*set_pd_capable)(struct tcpc_dev *dev,
-			       enum tcpm_pd_capability capable);
+	void (*set_pd_capable)(struct tcpc_dev *dev, bool capable);
 	void (*set_in_hard_reset)(struct tcpc_dev *dev, bool status);
 	void (*log_rtc)(struct tcpc_dev *dev);
 	int (*set_suspend_supported)(struct tcpc_dev *dev,
