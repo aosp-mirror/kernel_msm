@@ -535,7 +535,7 @@ static int persistent_ram_post_init(struct persistent_ram_zone *prz, u32 sig,
 	/* Rewind missing or invalid memory area. */
 	prz->buffer->sig = sig;
 	persistent_ram_zap(prz);
-
+	prz->buffer_lock = __RAW_SPIN_LOCK_UNLOCKED(buffer_lock);
 	return 0;
 }
 
