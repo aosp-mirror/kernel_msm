@@ -552,18 +552,10 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 		/* Make the DMA-space address available to the device. */
 		dma_addr = (ptes[i].dma_addr + offset) | GASKET_VALID_SLOT_FLAG;
 
-		if (is_simple_mapping) {
+		if (is_simple_mapping)
 			writeq(dma_addr, &slots[i]);
-		} else {
+		else
 			((u64 __force *)slots)[i] = dma_addr;
-
-			if (!dev_managed_subtable) {
-				dma_map_single(pg_tbl->gasket_dev->dma_dev,
-					       (void *)
-					       &((u64 __force *)slots)[i],
-					       sizeof(u64), DMA_TO_DEVICE);
-			}
-		}
 
 		/* Set PTE flags equal to flags param with STATUS=PTE_INUSE. */
 		ptes[i].flags = SET(FLAGS_STATUS, flags, PTE_INUSE);
@@ -678,14 +670,10 @@ static void gasket_perform_unmapping(struct gasket_page_table *pg_tbl,
 	 */
 	for (i = 0; i < num_pages; i++) {
 		/* release the address from the device, */
-		if (is_simple_mapping ||
-		    GET(FLAGS_STATUS, ptes[i].flags) == PTE_INUSE) {
+		if (is_simple_mapping)
 			writeq(0, &slots[i]);
-		} else {
+		else
 			((u64 __force *)slots)[i] = 0;
-			/* sync above PTE update before updating mappings */
-			wmb();
-		}
 
 		gasket_release_entry(pg_tbl, &ptes[i]);
 	}
@@ -727,14 +715,22 @@ static u64 __iomem *get_subtable(struct gasket_page_table *pg_tbl,
 	return slot_base;
 }
 
-/* Unmap extended Level-1 page table from CPU if needed. */
+/* Unmap/sync extended Level-1 page table. */
 static void put_subtable(struct gasket_page_table *pg_tbl,
-			 struct gasket_page_table_entry *pte)
+			 struct gasket_page_table_entry *pte,
+			 uint lvl1_start_idx, uint len)
 {
 	gasket_subtable_manage_cb_t subtbl_manage_cb;
 
-	if (!GET(FLAGS_DEV_SUBTABLE, pte->flags))
+	if (!GET(FLAGS_DEV_SUBTABLE, pte->flags)) {
+		/* Sync CPU updates to subtable in DRAM */
+		dma_sync_single_for_device(pg_tbl->gasket_dev->dma_dev,
+					   pte->dma_addr +
+					   lvl1_start_idx * sizeof(u64),
+					   len * sizeof(u64), DMA_TO_DEVICE);
+
 		return;
+	}
 
 	subtbl_manage_cb = gasket_get_subtable_manage_cb(pg_tbl->gasket_dev);
 	subtbl_manage_cb(pg_tbl->gasket_dev, GASKET_DEV_SUBTABLE_UNMAP_FROM_CPU,
@@ -756,7 +752,7 @@ static void finish_subtable(struct gasket_page_table *pg_tbl,
 
 	if (!GET(FLAGS_DEV_SUBTABLE, pte->flags) ||
 	    GET(FLAGS_DEV_SUBTABLE_INITED, pte->flags)) {
-		put_subtable(pg_tbl, pte);
+		put_subtable(pg_tbl, pte, lvl1_start_idx, len);
 		return;
 	}
 
@@ -770,11 +766,11 @@ static void finish_subtable(struct gasket_page_table *pg_tbl,
 			  (GASKET_PAGES_PER_SUBTABLE - lvl1_next_idx) * 8);
 	}
 
+	pte->flags = SET(FLAGS_DEV_SUBTABLE_INITED, pte->flags, 1);
+	put_subtable(pg_tbl, pte, 0, GASKET_PAGES_PER_SUBTABLE);
 	slot = pg_tbl->base_slot + pg_tbl->num_simple_entries + lvl0_idx;
 	/* write sub-level PTE address to the device page table slot */
 	writeq(pte->dma_addr | GASKET_VALID_SLOT_FLAG, slot);
-	pte->flags = SET(FLAGS_DEV_SUBTABLE_INITED, pte->flags, 1);
-	put_subtable(pg_tbl, pte);
 }
 
 /*
@@ -804,7 +800,7 @@ static void gasket_unmap_extended_pages(struct gasket_page_table *pg_tbl,
 						 pg_tbl,
 						 pte->sublevel + slot_idx,
 						 slot_base + slot_idx, len, 0);
-				put_subtable(pg_tbl, pte);
+				put_subtable(pg_tbl, pte, slot_idx, len);
 			}
 		}
 
