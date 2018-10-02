@@ -35,11 +35,21 @@
 
 /* ABC FW and workload binary offsets */
 #define WORKLOAD_ADDR			0x20000000
-#define COMPLETION_FLAG_ADDR		0x20006000
-#define JQS_DEPTH_ADDR			0x21000000
-#define JQS_AFFINE_ADDR			0x22000000
-#define IMAGE_LEFT_ADDR			0x23000000
-#define IMAGE_RIGHT_ADDR 		0x23800000
+#define COMPLETION_FLAG_ADDR		0x21fffffc
+#define JQS_DEPTH_ADDR			0x22000000
+#define JQS_AFFINE_ADDR			0x22100000
+#define IMAGE_LEFT_ADDR			0x22800000
+#define IMAGE_RIGHT_ADDR 		0x22900000
+#define DEPTH_RAW_OUT_ADDR		0x22a00000
+#define AFFINE_RAW_OUT_ADDR		0x22b00000
+#define FSSD_IN_ADDR			0x23000000
+#define FSSD_OUT_ADDR			0x23100000
+#define FACENET_IN_ADDR			0x23200000
+#define FACENET_OUT_ADDR		0x23300000
+#define GAZENET_IN_ADDR			0x23400000
+#define GAZENET_OUT_ADDR		0x23500000
+#define DEPTHID_IN_ADDR			0x23600000
+#define DEPTHID_OUT_ADDR		0x23700000
 
 /* ABC FW and workload path */
 #define M0_WORKLOAD_PATH "m0_workload.fw"
@@ -58,6 +68,7 @@ static int dma_write_dw(struct file *file, const int remote_addr,
 			const int val);
 static int dma_read_dw(struct file *file, const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
+static int dma_read_result(struct faceauth_start_data *data);
 static int dma_send_workloads(void);
 
 struct faceauth_data {
@@ -94,6 +105,19 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&start_step_data, (const void __user *)arg,
 				   sizeof(start_step_data)))
 			return -EFAULT;
+
+		if (!start_step_data.image_dot_left_size)
+			return -EINVAL;
+		if (!start_step_data.image_dot_right_size)
+			return -EINVAL;
+		if (!start_step_data.image_flood_size)
+			return -EINVAL;
+		if (!start_step_data.facenet_input_size)
+			return -EINVAL;
+		if (!start_step_data.gazenet_input_size)
+			return -EINVAL;
+		if (!start_step_data.depthid_input_size)
+			return -EINVAL;
 
 		pr_info("%s: Send images\n", __func__);
 		err = dma_send_images(&start_step_data);
@@ -141,27 +165,13 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			msleep(1);
 		}
 
-		if (!start_step_data.image_dot_left_size)
-			return -EINVAL;
-		if (!start_step_data.image_dot_right_size)
-			return -EINVAL;
-		if (!start_step_data.image_flood_size)
-			return -EINVAL;
+		pr_info("%s: Read back result from AB DRAM\n", __func__);
+		err = dma_read_result(&start_step_data);
+		if (err) {
+			pr_err("%s: Error in read back result\n", __func__);
+			return err;
+		}
 
-		/*
-		if (copy_from_user(ab_dram_dot_left,
-				start_step_data.image_dot_left,
-				start_step_data.image_dot_left_size))
-			return -EFAULT;
-		if (copy_from_user(ab_dram_dot_right,
-				start_step_data.image_dot_right,
-				start_step_data.image_dot_right_size))
-			return -EFAULT;
-		if (copy_from_user(ab_dram_flood,
-				start_step_data.image_flood,
-				start_step_data.image_flood_size))
-			return -EFAULT;
-		*/
 		break;
 	case FACEAUTH_DEV_IOC_CONTINUE:
 		pr_info("faceauth continue IOCTL\n");
@@ -369,19 +379,111 @@ static int dma_send_images(struct faceauth_start_data *data)
 {
 	int err = 0;
 
-	pr_info("Send left image\n");
+	pr_info("Send left dot image\n");
 	err = dma_xfer(data->image_dot_left, data->image_dot_left_size,
 		       IMAGE_LEFT_ADDR, DMA_TO_DEVICE);
 	if (err) {
-		pr_err("%s: Error sending left image\n", __func__);
+		pr_err("%s: Error sending left dot image\n", __func__);
 		return err;
 	}
 
-	pr_info("Send right image\n");
+	pr_info("Send right dot image\n");
 	err = dma_xfer(data->image_dot_right, data->image_dot_right_size,
 		       IMAGE_RIGHT_ADDR, DMA_TO_DEVICE);
 	if (err) {
-		pr_err("%s: Error sending right image\n", __func__);
+		pr_err("%s: Error sending right dot image\n", __func__);
+		return err;
+	}
+
+	/* This is data to feed individual TPU stages */
+	pr_info("Send flood image\n");
+	err = dma_xfer(data->image_flood, data->image_flood_size,
+		       FSSD_IN_ADDR, DMA_TO_DEVICE);
+	if (err) {
+		pr_err("%s: Error sending flood image\n", __func__);
+		return err;
+	}
+
+	pr_info("Send facenet input\n");
+	err = dma_xfer(data->facenet_input, data->facenet_input_size,
+		       FACENET_IN_ADDR, DMA_TO_DEVICE);
+	if (err) {
+		pr_err("%s: Error sending facenet input\n", __func__);
+		return err;
+	}
+
+	pr_info("Send gazenet input\n");
+	err = dma_xfer(data->gazenet_input, data->gazenet_input_size,
+		       GAZENET_IN_ADDR, DMA_TO_DEVICE);
+	if (err) {
+		pr_err("%s: Error sending gazenet input\n", __func__);
+		return err;
+	}
+
+	pr_info("Send depthid input\n");
+	err = dma_xfer(data->depthid_input, data->depthid_input_size,
+		       DEPTHID_IN_ADDR, DMA_TO_DEVICE);
+	if (err) {
+		pr_err("%s: Error sending flood image\n", __func__);
+		return err;
+	}
+	return err;
+}
+
+/**
+ * Local function to read FaceAuth data from Airbrush memory via PCIE
+ * @param[in] data Data structure copied from user space
+ * @return Status, zero if succeed, non-zero if fail
+ */
+static int dma_read_result(struct faceauth_start_data *data)
+{
+	int err = 0;
+
+	pr_info("Read depth output\n");
+	err = dma_xfer(data->depth_output, data->depth_output_size,
+		       DEPTH_RAW_OUT_ADDR, DMA_FROM_DEVICE);
+	if (err) {
+		pr_err("%s: Error reading depth output\n", __func__);
+		return err;
+	}
+
+	pr_info("Read affine output\n");
+	err = dma_xfer(data->affine_output, data->affine_output_size,
+		       AFFINE_RAW_OUT_ADDR, DMA_FROM_DEVICE);
+	if (err) {
+		pr_err("%s: Error reading affine output\n", __func__);
+		return err;
+	}
+
+	pr_info("Read fssd output\n");
+	err = dma_xfer(data->fssd_output, data->fssd_output_size,
+		       FSSD_OUT_ADDR, DMA_FROM_DEVICE);
+	if (err) {
+		pr_err("%s: Error reading fssd output\n", __func__);
+		return err;
+	}
+
+	pr_info("Read facenet output\n");
+	err = dma_xfer(data->facenet_output, data->facenet_output_size,
+		       FACENET_OUT_ADDR, DMA_FROM_DEVICE);
+	if (err) {
+		pr_err("%s: Error reading facenet output\n", __func__);
+		return err;
+	}
+
+	pr_info("Read gazenet output\n");
+	err = dma_xfer(data->gazenet_output, data->gazenet_output_size,
+		       GAZENET_OUT_ADDR, DMA_FROM_DEVICE);
+	if (err) {
+		pr_err("%s: Error reading gazenet output\n", __func__);
+		return err;
+	}
+
+	pr_info("Read depthid output\n");
+	err = dma_xfer(data->depthid_output, data->depthid_output_size,
+		       DEPTHID_OUT_ADDR, DMA_FROM_DEVICE);
+	if (err) {
+		pr_err("%s: Error reading depthid output\n", __func__);
 		return err;
 	}
 

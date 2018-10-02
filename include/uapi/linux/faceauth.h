@@ -29,12 +29,45 @@ struct faceauth_start_data {
 
 	__u8 __user *image_flood;
 	__u32 image_flood_size;
+
+	/*
+	 * This is data to feed individual TPU stages, for debug and demo
+	 * TODO: To be removed
+	 */
+	__u8 __user *facenet_input;
+	__u32 facenet_input_size;
+
+	__u8 __user *gazenet_input;
+	__u32 gazenet_input_size;
+
+	__u8 __user *depthid_input;
+	__u32 depthid_input_size;
+
+	__u8 __user *depth_output;
+	__u32 depth_output_size;
+
+	__u8 __user *affine_output;
+	__u32 affine_output_size;
+
+	__u8 __user *fssd_output;
+	__u32 fssd_output_size;
+
+	__u8 __user *facenet_output;
+	__u32 facenet_output_size;
+
+	__u8 __user *gazenet_output;
+	__u32 gazenet_output_size;
+
+	__u8 __user *depthid_output;
+	__u32 depthid_output_size;
+
 };
 
 /* This struct is written by kernel */
 struct faceauth_continue_data {
 	__u8 completed; /* is faceauth process completed? */
 	__u8 success; /* is faceauth process successful? */
+
 };
 
 #define FACEAUTH_DEV_IOC_INIT _IO('f', 1)
