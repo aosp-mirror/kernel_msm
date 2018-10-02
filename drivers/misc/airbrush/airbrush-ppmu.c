@@ -367,7 +367,7 @@ static ssize_t ppmu_reset_store(struct device *child,
 static ssize_t ppmu_config_show(struct device *child,
 				struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, "%s", PAGE_SIZE,
+	return scnprintf(buf, PAGE_SIZE, "%s",
 		"PPMU_EVENT_READ_BUSY			= 0\n"
 		"PPMU_EVENT_WRITE_BUSY			= 1,\n"
 		"PPMU_EVENT_READ_REQUEST		= 2,\n"
