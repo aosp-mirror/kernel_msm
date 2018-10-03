@@ -49,12 +49,6 @@ struct ipu_resource_allocate_request {
 	uint64_t timeout_ns;
 };
 
-struct ipu_resource_release_request {
-	uint64_t stp_mask;
-	uint64_t lbp_mask;
-	uint64_t dma_channel_mask;
-};
-
 /* On success will return 0, otherwise will return -1 with errno set. */
 #define IPU_GET_CAPABILITIES _IOR('i', 1, struct ipu_capabilities_rsp)
 
@@ -66,8 +60,7 @@ struct ipu_resource_release_request {
 		struct ipu_resource_allocate_request)
 
 /* On success will return 0, otherwise will return -1 with errno set. */
-#define IPU_RELEASE_RESOURCES _IOW('i', 4, \
-		struct ipu_resource_release_request)
+#define IPU_RELEASE_RESOURCES _IO('i', 4)
 
 /* On success the return value will be zero and the buffer_id field will be set
  * to the buffer id for the buffer.  On error the return value will be set to -1
