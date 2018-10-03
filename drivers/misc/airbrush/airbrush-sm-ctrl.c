@@ -303,6 +303,32 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	return 0;
 }
 
+static bool is_valid_transition(u32 curr_chip_substate_id,
+				u32 to_chip_substate_id)
+{
+	switch (curr_chip_substate_id) {
+	case CHIP_STATE_4_0:
+		if (to_chip_substate_id == CHIP_STATE_3_0)
+			return false;
+		break;
+	case CHIP_STATE_5_0:
+		if (to_chip_substate_id == CHIP_STATE_4_0)
+			return false;
+		if (to_chip_substate_id == CHIP_STATE_3_0)
+			return false;
+		break;
+	case CHIP_STATE_6_0:
+		if (to_chip_substate_id == CHIP_STATE_5_0)
+			return false;
+		if (to_chip_substate_id == CHIP_STATE_4_0)
+			return false;
+		if (to_chip_substate_id == CHIP_STATE_3_0)
+			return false;
+		break;
+	}
+	return true;
+}
+
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 {
 	int i;
@@ -317,6 +343,17 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 
 	if (!map)
 		return -EINVAL;
+
+	if (!is_valid_transition(sc->chip_substate_id, to_chip_substate_id)) {
+		dev_err(sc->dev,
+				"%s: invalid state change, current %u, requested %u\n",
+				__func__, sc->chip_substate_id,
+				to_chip_substate_id);
+		return -EINVAL;
+	}
+
+	if (sc->chip_substate_id == to_chip_substate_id)
+		return 0;
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
