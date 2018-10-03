@@ -23,6 +23,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pkg-mgmt.h>
 #include "iaxxx.h"
+#include "iaxxx-plugin-common.h"
 
 #define IAXXX_INVALID_FILE ('\0')
 
@@ -43,47 +44,9 @@
 #define PROXY_FUNCTION_ID_3RDPARTY_CHUNK  112
 #define MAX_STATUS_RETRIES 5
 #define CHUNK_RESPONSE_SIZE_IN_WORDS 4
-#define CHUNK_RESPONSE_ERRORCODE_INDEX 1
+#define CHUNK_RESPONSE_ERRORCODE1 1
+#define CHUNK_RESPONSE_ERRORCODE2 2
 #define FW_ERROR_CODE_BUSY 4
-
-static int read_plugin_error(
-		struct device  *dev,
-		const uint32_t  block_id,
-		uint32_t *error,
-		uint8_t  *error_instance)
-{
-	int ret;
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	uint32_t reg_val;
-
-	if (!priv)
-		return -EINVAL;
-
-	ret = regmap_read(priv->regmap,
-		IAXXX_PLUGIN_HDR_ERROR_BLOCK_ADDR(block_id),
-		&reg_val);
-	if (ret) {
-		dev_err(dev, "read plugin error failed %s()\n", __func__);
-		goto read_plugin_error_err;
-	}
-
-	*error = reg_val;
-
-	ret = regmap_read(priv->regmap,
-		IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_ADDR(block_id),
-		&reg_val);
-	if (ret) {
-		dev_err(dev, "read plugin error instance failed %s()\n",
-			__func__);
-		goto read_plugin_error_err;
-	}
-	*error_instance = (uint8_t) reg_val;
-
-read_plugin_error_err:
-	return ret;
-
-}
-
 
 static uint32_t calculate_crc(const uint32_t *pBuf, const uint32_t nLen)
 {
@@ -105,11 +68,8 @@ static int send_chunk_to_plugin(
 		uint32_t       *chunk_data,
 		const uint32_t  chunk_actual_size_in_words)
 {
-	int ret;
-	int max_status_retries = MAX_STATUS_RETRIES;
+	int ret = 0;
 	uint32_t get_param_data[CHUNK_RESPONSE_SIZE_IN_WORDS];
-	uint32_t error;
-	uint8_t  error_instance;
 
 	/* In the chunk sent to plugin, 3 extra words are added.
 	 * First word contains chunk_length+3 and ID
@@ -125,50 +85,23 @@ static int send_chunk_to_plugin(
 	chunk_data[1] = chunk_actual_size_in_words;
 	chunk_data[nLen-1] = calculate_crc(&chunk_data[0], nLen-1);
 
-	/* use odsp public api to send the parameter block */
-	ret = iaxxx_core_set_param_blk(dev, inst_id,
-			nLen * sizeof(uint32_t),
-			&chunk_data[0], block_id, param_blk_id);
+	ret = iaxxx_core_set_param_blk_with_ack_common(dev, inst_id,
+			param_blk_id, block_id,
+			&chunk_data[0], nLen * sizeof(uint32_t),
+			get_param_data,
+			sizeof(get_param_data) / sizeof(uint32_t),
+			MAX_STATUS_RETRIES);
 	if (ret) {
 		dev_err(dev, "Error sending chunk! %s()\n",
 			__func__);
-		goto out;
+		return ret;
 	}
-
-	while (max_status_retries--) {
-		memset(get_param_data, 0, sizeof(get_param_data));
-		ret = iaxxx_core_get_param_blk(dev, inst_id, block_id,
-				param_blk_id, get_param_data,
-				ARRAY_SIZE(get_param_data));
-		if (ret) {
-			ret = read_plugin_error(dev, block_id,
-					&error, &error_instance);
-
-			if (!ret && error == FW_ERROR_CODE_BUSY) {
-				dev_err(dev,
-				"Getparamblk busy..retry after delay\n");
-				usleep_range(10000, 10005);
-			} else {
-				dev_err(dev, "Getparamblk error error=%x\n",
-						error);
-				goto out_err;
-			}
-		} else {
-			if (get_param_data[CHUNK_RESPONSE_ERRORCODE_INDEX]) {
-				dev_err(dev,
-				"Chunk write returned errcode=%x %u\n",
-				get_param_data[1], get_param_data[2]);
-				goto out_err;
-			} else {
-				ret = 0;
-				goto out;
-			}
-		}
+	if (get_param_data[CHUNK_RESPONSE_ERRORCODE1]) {
+		dev_err(dev, "Chunk write returned errcode=%x %u\n",
+			get_param_data[CHUNK_RESPONSE_ERRORCODE1],
+			get_param_data[CHUNK_RESPONSE_ERRORCODE2]);
+		ret = -EINVAL;
 	}
-
-out_err:
-	ret = -EINVAL;
-out:
 	return ret;
 }
 
@@ -300,10 +233,10 @@ int iaxxx_core_set_custom_cfg(
 	if (!priv)
 		return ret;
 
-	inst_id &= IAXXX_PLGIN_ID_MASK;
-
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
+
+	inst_id &= IAXXX_PLGIN_ID_MASK;
 
 	/* Check if plugin exists */
 	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
@@ -313,7 +246,6 @@ int iaxxx_core_set_custom_cfg(
 		ret = -EEXIST;
 		goto set_custom_cfg_err;
 	}
-	mutex_unlock(&priv->plugin_lock);
 
 	if (file[0] == IAXXX_INVALID_FILE) {
 		dev_err(dev, "Invalid custom config file name %s()\n",
@@ -359,6 +291,7 @@ int iaxxx_core_set_custom_cfg(
 set_custom_cfg_err:
 	if (fw)
 		release_firmware(fw);
+	mutex_unlock(&priv->plugin_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_set_custom_cfg);

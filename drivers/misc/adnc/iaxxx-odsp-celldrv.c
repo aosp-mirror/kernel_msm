@@ -48,6 +48,8 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_get_event get_event;
 	struct iaxxx_evt_info event_info;
 	struct iaxxx_pkg_mgmt_info pkg_info;
+	struct iaxxx_plugin_error_info plugin_error_info;
+	struct iaxxx_plugin_set_param_blk_with_ack_info param_blk_with_ack;
 	uint32_t *get_param_blk_buf = NULL;
 	void __user *blk_buff = NULL;
 	int ret = -EINVAL;
@@ -263,6 +265,53 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 #endif
 		break;
 
+	case ODSP_PLG_SET_PARAM_BLK_WITH_ACK:
+		if (copy_from_user(&param_blk_with_ack, (void __user *)arg,
+				sizeof(param_blk_with_ack)))
+			return -EFAULT;
+		blk_buff = (void __user *)
+			(uintptr_t)param_blk_with_ack.set_param_blk_buffer;
+		blk_buff = memdup_user(blk_buff,
+				param_blk_with_ack.set_param_blk_size);
+		param_blk_with_ack.set_param_blk_buffer = (uintptr_t)blk_buff;
+		if (IS_ERR(blk_buff)) {
+			ret = PTR_ERR(blk_buff);
+			pr_err("%s memdup failed %d\n", __func__, ret);
+			return ret;
+		}
+
+		get_param_blk_buf = kzalloc(
+				param_blk_with_ack.response_buf_size *
+				sizeof(uint32_t), GFP_KERNEL);
+
+		ret = iaxxx_core_set_param_blk_with_ack(
+			odsp_dev_priv->parent,
+			param_blk_with_ack.inst_id,
+			param_blk_with_ack.param_blk_id,
+			param_blk_with_ack.block_id,
+			blk_buff,
+			param_blk_with_ack.set_param_blk_size,
+			get_param_blk_buf,
+			param_blk_with_ack.response_buf_size,
+			param_blk_with_ack.max_retries);
+
+		if (copy_to_user((void __user *)
+				param_blk_with_ack.response_buffer,
+				get_param_blk_buf,
+				param_blk_with_ack.response_buf_size*
+				sizeof(uint32_t))) {
+			pr_err("%s() copy to user fail\n", __func__);
+			return -EFAULT;
+		}
+
+		kfree(blk_buff);
+		kfree(get_param_blk_buf);
+		if (ret) {
+			pr_err("%s() Set param blk with ack fail\n", __func__);
+			return ret;
+		}
+		break;
+
 	case ODSP_PLG_SET_CREATE_CFG:
 		if (copy_from_user(&cfg_info, (void __user *)arg,
 						sizeof(cfg_info)))
@@ -377,6 +426,24 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("%s() Unload package failed\n", __func__);
 			return ret;
 		}
+		break;
+
+	case ODSP_PLG_READ_PLUGIN_ERROR:
+		if (copy_from_user(&plugin_error_info, (void __user *)arg,
+				sizeof(plugin_error_info)))
+			return -EFAULT;
+		ret = iaxxx_core_read_plugin_error(odsp_dev_priv->parent,
+				plugin_error_info.block_id,
+				&plugin_error_info.error_code,
+				&plugin_error_info.error_instance);
+		if (ret) {
+			pr_err("%s() Read plugin error fail\n", __func__);
+			return ret;
+		}
+		/*After read copy back the data to user space */
+		if (copy_to_user((void __user *)arg, &plugin_error_info,
+				sizeof(plugin_error_info)))
+			return -EFAULT;
 		break;
 	default:
 		break;

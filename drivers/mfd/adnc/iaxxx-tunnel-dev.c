@@ -61,65 +61,10 @@
 
 
 #define IAXXX_DEBUG_LAUNCH_DELAY 60000 /* 60 seconds */
-#define IAXXX_BUFFER_DRAIN_BIT		0
-
-struct iaxxx_circ_buf {
-	char *buf;
-	int head;
-	int tail;
-	int size;
-};
-
-struct iaxxx_tunnel_client {
-	struct iaxxx_tunnel_data *tunnel_data;
-	struct iaxxx_circ_buf user_circ;
-	struct list_head node;
-	wait_queue_head_t wq;
-	unsigned long tid_flag;
-};
 
 struct iaxxx_tunnel_ep {
 	struct tunlMsg tnl_ep;
 	struct list_head src_head_list;
-};
-
-struct iaxxx_tunnel_data {
-	struct device *dev; /* mfd device */
-	struct iaxxx_priv *priv;
-
-	struct cdev tunnel_cdev;
-
-	struct iaxxx_circ_buf stream_circ;
-
-	struct list_head list;
-	struct list_head src_list;
-	spinlock_t lock;
-
-	/* Bit 0: Tunnel 0, ... Bit31: Tunnel 31 */
-	unsigned long flags;
-
-	/* Bit 0: Tunnel 0, ... Bit31: Tunnel 31
-	 * Corresponding bits are enabled to indicate which
-	 * Tunnels are setup for Sync Mode
-	 */
-	unsigned long flags_sync_mode;
-
-	int client_no;
-	atomic_t src_enable_id[TNLMAX];
-	atomic_t event_occurred;
-	atomic_t tunnel_ref_cnt[TNLMAX];
-	atomic_t tunnel_evt_cnt;
-	uint32_t tunnel_seq_no[TNLMAX];
-	unsigned long tunnel_packet_no[TNLMAX];
-	unsigned long tunnel_total_packet_no;
-	uint32_t tunnel_seq_err[TNLMAX];
-	unsigned long tunnel_magic_errcnt;
-	struct task_struct *producer_thread;
-	struct task_struct *consumer_thread;
-	wait_queue_head_t consumer_wq;
-	wait_queue_head_t producer_wq;
-	unsigned long buffer_drain;
-	bool event_registered;
 };
 
 static phys_addr_t iaxxx_prod_buf;
@@ -345,7 +290,6 @@ static int tunnel_event_subscribe(struct iaxxx_tunnel_data *t_intf_priv,
 
 	if (atomic_inc_return(&t_intf_priv->tunnel_evt_cnt) == 1) {
 		pr_debug("%s(): flushing the left overs\n", __func__);
-		iaxxx_flush_tunnel_fw_buff(priv);
 		ret = iaxxx_set_tunnel_event_threshold(priv,
 					IAXXX_TUNNEL_THRESHOLD);
 		if (ret) {
@@ -360,7 +304,6 @@ static int tunnel_event_subscribe(struct iaxxx_tunnel_data *t_intf_priv,
 			return ret;
 		}
 	}
-	clear_bit(IAXXX_BUFFER_DRAIN_BIT, &t_intf_priv->buffer_drain);
 	return ret;
 }
 
@@ -394,13 +337,6 @@ static int tunnel_event_unsubscribe(struct iaxxx_tunnel_data *t_intf_priv,
 			pr_err("%s failed evt subscribe %d\n", __func__, ret);
 			return ret;
 		}
-		/* After all tunnels are disabled clear any stale audio data
-		 * in FW tunnel buffer before we start enabling them again
-		 * since this is not a tunnel event host will set buffer
-		 * drain flag to clear this buffer from producer thread.
-		 */
-		set_bit(IAXXX_BUFFER_DRAIN_BIT, &t_intf_priv->buffer_drain);
-		wake_up(&t_intf_priv->producer_wq);
 	}
 
 	return ret;
@@ -443,17 +379,18 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 					(tnl_src_node->tnl_ep.tunlEncode
 					== TNL_ENC_Q15) ? "Q15" : "Other");
 
-					if (iaxxx_tunnel_setup(priv,
+					if (iaxxx_tunnel_setup_hw(priv,
 					tnl_src_node->tnl_ep.tunlEP,
 					tnl_src_node->tnl_ep.tunlSrc & 0xffff,
 					tnl_src_node->tnl_ep.tunlMode,
 					tnl_src_node->tnl_ep.tunlEncode)) {
-						pr_err("%s: iaxxx_tunnel_setup failed\n",
-								__func__);
+						pr_err("%s: iaxxx_tunnel_setup_hw failed\n",
+							__func__);
 						return;
 					}
 					/* Init sequence no */
 					t_intf_priv->tunnel_seq_no[id] = 0;
+					t_intf_priv->tunnels_active_count++;
 				}
 			}
 
@@ -470,8 +407,13 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 			}
 		} else {
 			pr_notice("terminate tunnel %d\n", id);
-			if (iaxxx_tunnel_terminate(priv, id))
+			if (iaxxx_tunnel_terminate_hw(priv, id))
 				pr_err("iaxxx_tunnel_terminate failed\n");
+
+			if (t_intf_priv->tunnels_active_count > 0)
+				t_intf_priv->tunnels_active_count--;
+			else
+				pr_err("decrementing tunnel active count exceeded\n");
 
 			list_for_each_safe(position,
 					tmp, &t_intf_priv->src_list) {
@@ -545,12 +487,12 @@ static int producer_thread(void *arg)
 
 		WARN_ONCE(size < 4, "No more buffer");
 
-		if (size >= 4) {
+		if (size >= 4 && t_intf_priv->tunnels_active_count > 0) {
 			/* Get the data max size words.
 			 * Sync mode reading is enabled if at least
 			 * one tunnel is configured in sync mode
 			 */
-			bytes = iaxxx_tunnel_read(priv,
+			bytes = iaxxx_tunnel_read_hw(priv,
 					buf, size >> 2,
 					t_intf_priv->flags_sync_mode,
 					&bytes_remaining) << 2;
@@ -592,26 +534,18 @@ static int producer_thread(void *arg)
 				pr_debug("%s: tnl producer wait for event\n",
 							__func__);
 
-				if (!test_bit(IAXXX_BUFFER_DRAIN_BIT,
-						&t_intf_priv->buffer_drain)) {
-					wait_event(t_intf_priv->producer_wq,
-						atomic_read(
-						&t_intf_priv->event_occurred)
-						|| kthread_should_stop() ||
-						t_intf_priv->flags !=
-						tunnel_flags || test_bit(
-						IAXXX_BUFFER_DRAIN_BIT,
-						&t_intf_priv->buffer_drain));
-					continue;
-				}
+				wait_event(t_intf_priv->producer_wq,
+					atomic_read(
+					&t_intf_priv->event_occurred)
+					|| kthread_should_stop() ||
+					t_intf_priv->flags !=
+					tunnel_flags);
+				continue;
 			}
-
 		}
-		clear_bit(IAXXX_BUFFER_DRAIN_BIT, &t_intf_priv->buffer_drain);
 
 		if (tunnel_flags) {
 			usleep_range(wait_time_us, wait_time_us + 5);
-
 			/*
 			 * If failed, keep increasing wait time to
 			 * 100us until MAX
@@ -865,7 +799,7 @@ static int consumer_thread(void *arg)
 /*
  * Request to setup a tunnel to producer
  */
-static int tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
+int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 				uint32_t mode, uint32_t encode)
 {
 	struct iaxxx_tunnel_data *t_intf_priv =
@@ -918,7 +852,7 @@ static int tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 /*
  * Terminate a tunnel for a client (Producer will terminate the tunnel)
  */
-static int tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
+int iaxxx_tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 				uint32_t mode, uint32_t encode)
 {
 	struct iaxxx_tunnel_data *t_intf_priv =
@@ -946,8 +880,8 @@ static int tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 	return rc;
 }
 
-static ssize_t tunneling_read(struct file *filp, char __user *buf,
-			      size_t count, loff_t *f_pos)
+int iaxxx_tunnel_read(struct file *filp, char __user *buf,
+			size_t count)
 {
 	struct iaxxx_tunnel_client *client = filp->private_data;
 	struct iaxxx_circ_buf *user_circ = &client->user_circ;
@@ -958,18 +892,25 @@ static ssize_t tunneling_read(struct file *filp, char __user *buf,
 		if (filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 
-		wait_event_interruptible(client->wq,
-					circ_cnt(user_circ));
-
+		if (!(wait_event_interruptible_timeout(client->wq,
+						circ_cnt(user_circ), HZ))) {
+			pr_err("Timeout in iaxxx_tunnel_read\n");
+			return 0;
+		}
 	}
 	ret = circ_to_user(user_circ, buf, count, &copied);
 
 	return ret ? ret : copied;
 }
 
-static int tunneling_open(struct inode *inode, struct file *filp)
+static ssize_t tunnel_read(struct file *filp, char __user *buf,
+			size_t count, loff_t *f_pos)
 {
-	struct iaxxx_tunnel_data *t_intf_priv;
+	return iaxxx_tunnel_read(filp, buf, count);
+}
+int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
+{
+	struct iaxxx_tunnel_data *t_intf_priv = NULL;
 	struct iaxxx_tunnel_client *client;
 	int rc;
 
@@ -980,8 +921,13 @@ static int tunneling_open(struct inode *inode, struct file *filp)
 		return -ENODEV;
 	}
 
-	t_intf_priv = container_of((inode)->i_cdev,
+	if (id == TUNNEL_0)
+		t_intf_priv = container_of((inode)->i_cdev,
 				struct iaxxx_tunnel_data, tunnel_cdev);
+	else if (id == TUNNEL_1)
+		t_intf_priv = container_of((inode)->i_cdev,
+				struct iaxxx_tunnel_data, tunnel_sensor_cdev);
+
 	if (t_intf_priv == NULL) {
 		pr_err("Unable to fetch tunnel private data");
 		return -ENODEV;
@@ -1006,6 +952,12 @@ static int tunneling_open(struct inode *inode, struct file *filp)
 	filp->private_data = client;
 
 	return 0;
+}
+
+static int tunnel_open(struct inode *inode, struct file *filp)
+{
+	/* need to be protected to ensure  concurrency*/
+	return iaxxx_tunnel_open_common(inode, filp, TUNNEL_0);
 }
 
 static long tunnel_ioctl(struct file *filp, unsigned int cmd,
@@ -1052,16 +1004,16 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 
 	switch (cmd) {
 	case TUNNEL_SETUP:
-		ret = tunnel_setup(client, msg.tunlSrc, msg.tunlMode,
-						msg.tunlEncode);
+		ret = iaxxx_tunnel_setup(client, msg.tunlSrc, msg.tunlMode,
+					msg.tunlEncode);
 		if (ret) {
 			pr_err("Unable to setup tunnel");
 			return	-EINVAL;
 		}
 		break;
 	case TUNNEL_TERMINATE:
-		ret = tunnel_term(client, msg.tunlSrc, msg.tunlMode,
-						msg.tunlEncode);
+		ret = iaxxx_tunnel_term(client, msg.tunlSrc, msg.tunlMode,
+					msg.tunlEncode);
 		if (ret) {
 			pr_err("Unable to terminate tunnel");
 			ret = -EINVAL;
@@ -1077,15 +1029,15 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 
 #ifdef CONFIG_COMPAT
 static long tunnel_compat_ioctl(struct file *filp, unsigned int cmd,
-							unsigned long arg)
+				unsigned long arg)
 {
 	return tunnel_ioctl(filp, cmd, (unsigned long)compat_ptr(arg));
 }
 #endif
 
-static int tunnel_release(struct inode *inode, struct file *filp)
+int iaxxx_tunnel_release_common(struct inode *inode, struct file *filp, int id)
 {
-	struct iaxxx_tunnel_data *t_intf_priv;
+	struct iaxxx_tunnel_data *t_intf_priv = NULL;
 	struct iaxxx_tunnel_client *client;
 
 	pr_debug("tunneling device release called");
@@ -1100,8 +1052,13 @@ static int tunnel_release(struct inode *inode, struct file *filp)
 		goto error;
 	}
 
-	t_intf_priv = container_of((inode)->i_cdev, struct iaxxx_tunnel_data,
-					tunnel_cdev);
+	if (id == TUNNEL_0)
+		t_intf_priv = container_of((inode)->i_cdev,
+				struct iaxxx_tunnel_data, tunnel_cdev);
+	else if (id == TUNNEL_1)
+		t_intf_priv = container_of((inode)->i_cdev,
+				struct iaxxx_tunnel_data, tunnel_sensor_cdev);
+
 	if (t_intf_priv == NULL) {
 		pr_err("unable to fetch tunnel private data");
 		goto error;
@@ -1114,12 +1071,16 @@ static int tunnel_release(struct inode *inode, struct file *filp)
 	/* ignore threadfn return value */
 	pr_debug("stopping stream kthread");
 
-
 	kfree(client);
 	filp->private_data = NULL;
 
 error:
 	return 0;
+}
+
+static int tunnel_release(struct inode *inode, struct file *filp)
+{
+	return iaxxx_tunnel_release_common(inode, filp, TUNNEL_0);
 }
 
 static unsigned int tunnel_poll(struct file *filep,
@@ -1137,8 +1098,8 @@ static unsigned int tunnel_poll(struct file *filep,
 
 static const struct file_operations tunneling_fops = {
 	.owner = THIS_MODULE,
-	.open = tunneling_open,
-	.read = tunneling_read,
+	.open = tunnel_open,
+	.read = tunnel_read,
 	.unlocked_ioctl	= tunnel_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= tunnel_compat_ioctl,
@@ -1366,7 +1327,6 @@ int iaxxx_tunnel_dev_init_early(struct iaxxx_priv *priv)
 	priv->tunnel_data = t_intf_priv;
 	t_intf_priv->priv = priv;
 
-	clear_bit(IAXXX_BUFFER_DRAIN_BIT, &t_intf_priv->buffer_drain);
 	return 0;
 }
 
@@ -1418,6 +1378,9 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&t_intf_priv->list);
 	spin_lock_init(&t_intf_priv->lock);
 
+#ifdef CONFIG_MFD_IAXXX_SENSOR_TUNNEL
+	iaxxx_sensor_tunnel_init(priv);
+#endif
 	err = iaxxx_cdev_create(&t_intf_priv->tunnel_cdev,
 		&tunneling_fops, t_intf_priv, IAXXX_CDEV_TUNNEL);
 	if (err) {
@@ -1481,6 +1444,10 @@ static int iaxxx_tunnel_dev_remove(struct platform_device *pdev)
 
 	t_intf_priv = priv->tunnel_data;
 
+	iaxxx_cdev_destroy(&t_intf_priv->tunnel_cdev);
+#ifdef CONFIG_MFD_IAXXX_SENSOR_TUNNEL
+	iaxxx_sensor_tunnel_exit(priv);
+#endif
 	sysfs_remove_group(&priv->dev->kobj, &iaxxx_attr_group);
 	kthread_stop(t_intf_priv->producer_thread);
 	kthread_stop(t_intf_priv->consumer_thread);

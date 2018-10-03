@@ -95,22 +95,31 @@ struct iaxxx_codec_priv {
 	bool sensor_en[IAXXX_MAX_SENSOR];
 	u32 op_channels_active;
 	/* pdm mic enable flags*/
-	u32 portb_mic0_en;
-	u32 portb_mic1_en;
-	u32 portb_mic2_en;
-	u32 portb_mic3_en;
-	u32 portc_mic0_en;
-	u32 portc_mic1_en;
-	u32 portc_mic2_en;
-	u32 portc_mic3_en;
-	u32 cdc0_mic0_en;
-	u32 cdc0_mic1_en;
-	u32 cdc0_mic2_en;
-	u32 cdc1_mic0_en;
+	bool port_mic0_en;
+	bool port_mic1_en;
+	bool port_mic2_en;
+	bool port_mic3_en;
+	bool port_mic4_en;
+	bool port_mic5_en;
+	bool port_mic6_en;
+	bool port_mic7_en;
+	bool port_codec_mic0_en;
+	bool port_codec_mic1_en;
+	bool port_codec_mic2_en;
+	bool port_codec_mic3_en;
+	bool port_codec_mic4_en;
+	bool port_codec_mic5_en;
+	bool port_codec_mic6_en;
+	bool port_codec_mic7_en;
 	bool portb_micbias_en;
 	bool portc_micbias_en;
 	bool cdc0_micbias_en;
 	bool cdc1_micbias_en;
+	bool portb_do_mic0_en;
+	bool portb_do_mic1_en;
+	bool portc_do_mic0_en;
+	bool portc_do_mic1_en;
+
 	/* pdm bclk and aclk flags for port configuration*/
 	u32 pdm_bclk;
 	u32 pdm_aclk;
@@ -129,39 +138,6 @@ static const u32 cic_rx_addr[] = {
 	IAXXX_CNR0_CIC_RX_4_5_ADDR,
 	IAXXX_CNR0_CIC_RX_6_7_ADDR,
 	IAXXX_CNR0_CIC_RX_6_7_ADDR,
-};
-
-static const u32 cic_rx_clr_mask[] = {
-	IAXXX_CNR0_CIC_RX_0_1_CLR_0_MASK,
-	IAXXX_CNR0_CIC_RX_0_1_CLR_1_MASK,
-	IAXXX_CNR0_CIC_RX_2_3_CLR_2_MASK,
-	IAXXX_CNR0_CIC_RX_2_3_CLR_3_MASK,
-	IAXXX_CNR0_CIC_RX_4_5_CLR_4_MASK,
-	IAXXX_CNR0_CIC_RX_4_5_CLR_5_MASK,
-	IAXXX_CNR0_CIC_RX_6_7_CLR_6_MASK,
-	IAXXX_CNR0_CIC_RX_6_7_CLR_7_MASK,
-};
-
-static const u32 cic_rx_m_mask[] = {
-	IAXXX_CNR0_CIC_RX_0_1_M_0_MASK,
-	IAXXX_CNR0_CIC_RX_0_1_M_1_MASK,
-	IAXXX_CNR0_CIC_RX_2_3_M_2_MASK,
-	IAXXX_CNR0_CIC_RX_2_3_M_3_MASK,
-	IAXXX_CNR0_CIC_RX_4_5_M_4_MASK,
-	IAXXX_CNR0_CIC_RX_4_5_M_5_MASK,
-	IAXXX_CNR0_CIC_RX_6_7_M_6_MASK,
-	IAXXX_CNR0_CIC_RX_6_7_M_7_MASK,
-};
-
-static const u32 cic_rx_clr_pos[] = {
-	IAXXX_CNR0_CIC_RX_0_1_CLR_0_POS,
-	IAXXX_CNR0_CIC_RX_0_1_CLR_1_POS,
-	IAXXX_CNR0_CIC_RX_2_3_CLR_2_POS,
-	IAXXX_CNR0_CIC_RX_2_3_CLR_3_POS,
-	IAXXX_CNR0_CIC_RX_4_5_CLR_4_POS,
-	IAXXX_CNR0_CIC_RX_4_5_CLR_5_POS,
-	IAXXX_CNR0_CIC_RX_6_7_CLR_6_POS,
-	IAXXX_CNR0_CIC_RX_6_7_CLR_7_POS,
 };
 
 static const u32 cic_rx_m_pos[] = {
@@ -275,6 +251,11 @@ enum {
 	PDM_CDC_DAC_OUT0,  /*!< PDM DAC Out0 */
 	PDM_CDC_DAC_OUT1,  /*!< PDM DAC Out1 */
 
+	PDM_DMIC_MONO_IN0, /*!< PDM DMIC MONO Input0 */
+	PDM_DMIC_MONO_IN1, /*!< PDM DMIC MONO Input1 */
+	PDM_DMIC_MONO_IN2, /*!< PDM DMIC MONO Input2 */
+	PDM_DMIC_MONO_IN3, /*!< PDM DMIC MONO Input3 */
+
 	PDM_NUM_IO_MICS
 };
 
@@ -373,43 +354,79 @@ struct iaxxx_pdm_bit_cfg {
 };
 
 /* PDM port number to IO_CTRL register mapping */
-static const uint32_t iaxxx_io_ctrl_data[18][2] = {
+static const uint32_t iaxxx_io_ctrl_data[PDM_NUM_IO_MICS][2] = {
+	/* PDM_DMIC_IN0 */
 	{IAXXX_IO_CTRL_PORTC_FS_ADDR,
-	IAXXX_IO_CTRL_PORTC_FS_PDM0_DI0_AND_SEL_MASK},/* PDM_DMIC_IN0 */
+		IAXXX_IO_CTRL_PORTC_FS_PDM0_DI0_AND_SEL_MASK},
+	/* PDM_DMIC_IN1 */
 	{IAXXX_IO_CTRL_PORTC_FS_ADDR,
-		IAXXX_IO_CTRL_PORTC_FS_PDM0_DI0_AND_SEL_MASK},/* PDM_DMIC_IN1 */
+		IAXXX_IO_CTRL_PORTC_FS_PDM0_DI0_AND_SEL_MASK},
+	/* PDM_DMIC_IN2 */
 	{IAXXX_IO_CTRL_PORTC_DI_ADDR,
-		IAXXX_IO_CTRL_PORTC_DI_PDM0_DI1_AND_SEL_MASK},/* PDM_DMIC_IN2 */
+		IAXXX_IO_CTRL_PORTC_DI_PDM0_DI1_AND_SEL_MASK},
+	/* PDM_DMIC_IN3 */
 	{IAXXX_IO_CTRL_PORTC_DI_ADDR,
-		IAXXX_IO_CTRL_PORTC_DI_PDM0_DI1_AND_SEL_MASK},/* PDM_DMIC_IN3 */
+		IAXXX_IO_CTRL_PORTC_DI_PDM0_DI1_AND_SEL_MASK},
+	/* PDM_DMIC_IN4 */
 	{IAXXX_IO_CTRL_PORTB_FS_ADDR,
-		IAXXX_IO_CTRL_PORTB_FS_PDM1_DI0_AND_SEL_MASK},/* PDM_DMIC_IN4 */
+		IAXXX_IO_CTRL_PORTB_FS_PDM1_DI0_AND_SEL_MASK},
+	/* PDM_DMIC_IN5 */
 	{IAXXX_IO_CTRL_PORTB_FS_ADDR,
-		IAXXX_IO_CTRL_PORTB_FS_PDM1_DI0_AND_SEL_MASK},/* PDM_DMIC_IN5 */
+		IAXXX_IO_CTRL_PORTB_FS_PDM1_DI0_AND_SEL_MASK},
+	/* PDM_DMIC_IN6 */
 	{IAXXX_IO_CTRL_PORTB_DI_ADDR,
-		IAXXX_IO_CTRL_PORTB_DI_PDM1_DI1_AND_SEL_MASK},/* PDM_DMIC_IN6 */
+		IAXXX_IO_CTRL_PORTB_DI_PDM1_DI1_AND_SEL_MASK},
+	/* PDM_DMIC_IN7 */
 	{IAXXX_IO_CTRL_PORTB_DI_ADDR,
-		IAXXX_IO_CTRL_PORTB_DI_PDM1_DI1_AND_SEL_MASK},/* PDM_DMIC_IN7 */
+		IAXXX_IO_CTRL_PORTB_DI_PDM1_DI1_AND_SEL_MASK},
+	/* PDM_DMIC_OUT0 */
 	{IAXXX_IO_CTRL_PORTC_DO_ADDR,
-		IAXXX_IO_CTRL_PORTC_DO_FI_19_AND_SEL_MASK},/* PDM_DMIC_OUT0 */
+		IAXXX_IO_CTRL_PORTC_DO_FI_19_AND_SEL_MASK},
+	/* PDM_DMIC_OUT1 */
 	{IAXXX_IO_CTRL_PORTB_DO_ADDR,
-		IAXXX_IO_CTRL_PORTB_DO_FI_15_AND_SEL_MASK},/* PDM_DMIC_OUT1 */
+		IAXXX_IO_CTRL_PORTB_DO_FI_15_AND_SEL_MASK},
+	/*PDM_CDC0_IN0 */
 	{IAXXX_IO_CTRL_CDC_PDM0_ADDR,
-		IAXXX_IO_CTRL_CDC_PDM0_CDC_ADC_0_AND_SEL_MASK},/*PDM_CDC0_IN0 */
+		IAXXX_IO_CTRL_CDC_PDM0_CDC_ADC_0_AND_SEL_MASK},
+	/*PDM_CDC1_IN1 */
 	{IAXXX_IO_CTRL_CDC_PDM1_ADDR,
-		IAXXX_IO_CTRL_CDC_PDM1_CDC_ADC_1_AND_SEL_MASK},/*PDM_CDC1_IN1 */
+		IAXXX_IO_CTRL_CDC_PDM1_CDC_ADC_1_AND_SEL_MASK},
+	/*PDM_CDC2_IN2 */
 	{IAXXX_IO_CTRL_CDC_PDM2_ADDR,
-		IAXXX_IO_CTRL_CDC_PDM2_CDC_ADC_2_AND_SEL_MASK},/*PDM_CDC2_IN2 */
+		IAXXX_IO_CTRL_CDC_PDM2_CDC_ADC_2_AND_SEL_MASK},
+	/*PDM_CDC3_IN3 */
 	{IAXXX_IO_CTRL_PORTD_DI_ADDR,
-		IAXXX_IO_CTRL_PORTD_DI_CDC_ADC_3_AND_SEL_MASK},/*PDM_CDC3_IN3 */
+		IAXXX_IO_CTRL_PORTD_DI_CDC_ADC_3_AND_SEL_MASK},
+	/*PDM_CDC0_IN4 */
 	{IAXXX_IO_CTRL_CDC_PDM0_ADDR,
-		IAXXX_IO_CTRL_CDC_PDM0_CDC_ADC_0_AND_SEL_MASK},/*PDM_CDC0_IN4 */
+		IAXXX_IO_CTRL_CDC_PDM0_CDC_ADC_0_AND_SEL_MASK},
+	/*PDM_CDC1_IN5 */
 	{IAXXX_IO_CTRL_CDC_PDM1_ADDR,
-		IAXXX_IO_CTRL_CDC_PDM1_CDC_ADC_1_AND_SEL_MASK},/*PDM_CDC1_IN5 */
+		IAXXX_IO_CTRL_CDC_PDM1_CDC_ADC_1_AND_SEL_MASK},
+	/*PDM_CDC2_IN6 */
 	{IAXXX_IO_CTRL_CDC_PDM2_ADDR,
-		IAXXX_IO_CTRL_CDC_PDM2_CDC_ADC_2_AND_SEL_MASK},/*PDM_CDC2_IN6 */
+		IAXXX_IO_CTRL_CDC_PDM2_CDC_ADC_2_AND_SEL_MASK},
+	/*PDM_CDC3_IN7 */
 	{IAXXX_IO_CTRL_PORTD_DI_ADDR,
-		IAXXX_IO_CTRL_PORTD_DI_CDC_ADC_3_AND_SEL_MASK},/*PDM_CDC3_IN7 */
+		IAXXX_IO_CTRL_PORTD_DI_CDC_ADC_3_AND_SEL_MASK},
+	/*PDM_CDC_DAC_OUT0 */
+	{IAXXX_IO_CTRL_PORTC_DO_ADDR,
+		IAXXX_IO_CTRL_PORTC_DO_FI_19_AND_SEL_MASK},
+	/*PDM_CDC_DAC_OUT1 */
+	{IAXXX_IO_CTRL_PORTC_DO_ADDR,
+		IAXXX_IO_CTRL_PORTC_DO_FI_19_AND_SEL_MASK},
+	/*PDM_DMIC_MONO_IN0 */
+	{IAXXX_IO_CTRL_PORTC_FS_ADDR,
+		IAXXX_IO_CTRL_PORTC_FS_PDM0_DI0_AND_SEL_MASK},
+	/*PDM_DMIC_MONO_IN1 */
+	{IAXXX_IO_CTRL_PORTC_DI_ADDR,
+		IAXXX_IO_CTRL_PORTC_DI_PDM0_DI1_AND_SEL_MASK},
+	/*PDM_DMIC_MONO_IN2 */
+	{IAXXX_IO_CTRL_PORTB_FS_ADDR,
+		IAXXX_IO_CTRL_PORTB_FS_PDM1_DI0_AND_SEL_MASK},
+	/*PDM_DMIC_MONO_IN3 */
+	{IAXXX_IO_CTRL_PORTB_DI_ADDR,
+		IAXXX_IO_CTRL_PORTB_DI_PDM1_DI1_AND_SEL_MASK},
 };
 
 /* PDM clock to IO_CTRL register mapping */
@@ -790,6 +807,10 @@ static const char * const pdm_clr_texts[] = {
 	"PDM_CDC3_IN7",
 	"PDM_CDC_DAC_OUT0",
 	"PDM_CDC_DAC_OUT1",
+	"PDM_DMIC_MONO_IN0",
+	"PDM_DMIC_MONO_IN1",
+	"PDM_DMIC_MONO_IN2",
+	"PDM_DMIC_MONO_IN3",
 };
 static const struct soc_enum iaxxx_pdm_clr_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(pdm_clr_texts),
@@ -817,10 +838,6 @@ static const unsigned int io_port_value[] = {
 	IAXXX_SYSID_PDMI0, IAXXX_SYSID_PDMI1, IAXXX_SYSID_PDMI2,
 	IAXXX_SYSID_PDMI3, IAXXX_SYSID_PDMI4, IAXXX_SYSID_PDMI5,
 	IAXXX_SYSID_PDMI6, IAXXX_SYSID_PDMI7, IAXXX_SYSID_PDMO0,
-	IAXXX_SYSID_ADC0_IN0, IAXXX_SYSID_ADC1_IN1,
-	IAXXX_SYSID_ADC2_IN2, IAXXX_SYSID_ADC3_IN3,
-	IAXXX_SYSID_ADC0_IN4, IAXXX_SYSID_ADC1_IN5,
-	IAXXX_SYSID_ADC2_IN6, IAXXX_SYSID_ADC3_IN7,
 };
 
 static const char * const io_port_texts[] = {
@@ -830,8 +847,6 @@ static const char * const io_port_texts[] = {
 	"PDMI0", "PDMI1", "PDMI2", "PDMI3",
 	"PDMI4", "PDMI5", "PDMI6", "PDMI7",
 	"PDMO0",
-	"ADC_IN0", "ADC_IN1", "ADC_IN2", "ADC_IN3",
-	"ADC_IN4", "ADC_IN5", "ADC_IN6", "ADC_IN7",
 };
 
 static const unsigned int str_id_rx_values[] = {0x0, 0x1,
@@ -2641,10 +2656,12 @@ static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 	/* Disable Clock output */
 	if (port == PDM_CDC) {
 		snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-				IAXXX_AO_CLK_CFG_CDC_MCLK_OE_POS, 0);
+			IAXXX_AO_CLK_CFG_CDC_MCLK_OE_MASK,
+			0 << IAXXX_AO_CLK_CFG_CDC_MCLK_OE_POS);
 	} else {
 		snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-			(IAXXX_AO_CLK_CFG_PORTA_CLK_OE_MASK << port), 0);
+			(IAXXX_AO_CLK_CFG_PORTA_CLK_OE_MASK << port),
+			(0 << port));
 	}
 
 	/* DISABLE I2S PORT */
@@ -2659,7 +2676,7 @@ static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 			IAXXX_I2S_TRIGGER_HIGH);
 
 	snd_soc_update_bits(codec, IAXXX_SRB_I2S_PORT_PWR_EN_ADDR,
-			IAXXX_SRB_I2S_PORT_PWR_EN_MASK_VAL, (0x0 << port));
+			(0x0 << port), (0x0 << port));
 
 	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, &status,
 							IAXXX_BLOCK_0);
@@ -2757,7 +2774,7 @@ static int iaxxx_set_i2s_controller(struct snd_soc_codec *codec,
 	/* CNR0_I2S_Enable  - Disable I2S */
 	snd_soc_update_bits(codec, IAXXX_CNR0_I2S_ENABLE_ADDR,
 		IAXXX_CNR0_I2S_ENABLE_MASK(id),
-		IAXXX_CNR0_I2S_ENABLE_LOW);
+		IAXXX_CNR0_I2S_ENABLE_LOW << id);
 
 	/* I2S Trigger - Disable I2S */
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
@@ -2880,19 +2897,24 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 	u32 cic_hb = 0, hb_dec = 0;
 	u32 io_ctrl_reg, io_ctrl_mask, io_ctrl_val;
 	u32 io_ctrl_clk_reg, io_ctrl_clk_val;
-	u32 codec_dmic = iaxxx->cdc_dmic_enable;
 	u32 cic_ctrl = 0;
-	u32 cic_rx_rt_ctrl = 0, cic_rx_reset = 0, cic_rx_dec = 0;
+	u32 cic_rx_rt_ctrl = 0, cic_dec = 0;
 	int ret = -EINVAL;
 	int io_port_mic = dmic;
 	u32 status = 0;
 	int clk_src = 0;
 	int pdm_mstr = 0;
 	int port_clk = 0;
+	u32 port_type = 0;
 
 	cic_rx_id = cic;
 	pdm_bclk = iaxxx->pdm_bclk;
 	aud_port_clk = iaxxx->pdm_aclk;
+
+	if (dmic >= PDM_NUM_IO_MICS) {
+		pr_err("Invalid port number");
+		return ret;
+	}
 
 	port_clk = iaxxx_pdm_port_clk_src(iaxxx, port);
 	switch (port_clk) {
@@ -2925,7 +2947,6 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 			clk_src, pdm_mstr);
 	io_ctrl_clk_reg = iaxxx_io_ctrl_clk[clk_src][0];
 	io_ctrl_clk_val = iaxxx_io_ctrl_clk[clk_src][pdm_mstr + 1];
-
 	snd_soc_write(codec, io_ctrl_clk_reg, io_ctrl_clk_val);
 
 #ifdef CONFIG_IAXXX_PORT_CLOCK_FORWARD
@@ -2958,74 +2979,178 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 	}
 #endif
 
-	snd_soc_update_bits(codec, IAXXX_SRB_PDMI_PORT_PWR_EN_ADDR,
-				(1 << cic_rx_id), (1 << cic_rx_id));
-
-	iaxxx_send_update_block_request(iaxxx->dev_parent, &status,
-						    IAXXX_BLOCK_0);
-
-	if ((dmic >= PDM_CDC0_IN0) && (dmic <= PDM_CDC3_IN7)) {
+	if ((dmic >= PDM_DMIC_IN0) && (dmic <= PDM_DMIC_IN7)) {
+		/* PDM port is of DMIC type */
+		port_type = PDM_PORT_DMIC;
+	} else if ((dmic >= PDM_CDC0_IN0) && (dmic <= PDM_CDC3_IN7)) {
+		/* PDM port is of ADC type */
+		port_type = PDM_PORT_ADC;
 		dmic  = dmic - PDM_CDC0_IN0;
-		codec_dmic = 1;
+	} else if ((dmic >= PDM_DMIC_OUT0) && (dmic <= PDM_DMIC_OUT1)) {
+		/* PDM port is of Output type */
+		port_type = PDM_PORT_PDMO;
+	} else if ((dmic >= PDM_DMIC_MONO_IN0) && (dmic <= PDM_DMIC_MONO_IN3)) {
+		/* PDM port is of Mono input type
+		 * In mono mode, PDM inputs are mapped to CICs 4-7
+		 */
+		port_type = PDM_PORT_MONO;
+		dmic = (dmic - PDM_DMIC_MONO_IN0 + 4);
 	}
 
-	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_ADTL_CTRL_ADDR,
+	switch (port_type) {
+	case PDM_PORT_DMIC:
+	case PDM_PORT_ADC:
+	case PDM_PORT_MONO:
+		snd_soc_update_bits(codec, IAXXX_SRB_PDMI_PORT_PWR_EN_ADDR,
+					(1 << cic_rx_id), (1 << cic_rx_id));
+
+		iaxxx_send_update_block_request(iaxxx->dev_parent, &status,
+						IAXXX_BLOCK_0);
+
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_ADTL_CTRL_ADDR,
 				IAXXX_CIC_ADTL_RX_MASK(cic_rx_id), 0);
 
-	cic_rx_reset =	IAXXX_CIC_RX_RESET <<
-			cic_rx_clr_pos[cic_rx_id];
-	snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
-			cic_rx_clr_mask[cic_rx_id], cic_rx_reset);
+		/* Get CIC decimation value and half band decimation value */
+		ret = get_decimator_val(pdm_bclk, aud_port_clk,
+					&cic_dec, &hb_dec);
+		if (ret)
+			return ret;
 
-	/* Get CIC decimation value and half band decimation value */
-	ret = get_decimator_val(pdm_bclk, aud_port_clk,
-				&cic_rx_dec, &hb_dec);
-	if (ret)
-		return ret;
-	cic_rx_dec = cic_rx_dec << cic_rx_m_pos[cic_rx_id];
+		cic_dec = cic_dec << cic_rx_m_pos[cic_rx_id];
 
-	/* Green box /Half band decimation filter */
-	cic_hb = hb_dec << IAXXX_CNR0_CIC_HB_CIC_RX_POS(cic_rx_id);
+		/* Set state bit, Disable the Filter */
+		if ((cic_rx_id & 0x1) != 0) {
+			/* we are in the 'odd' channel : 1/3/5/7 */
+			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
+				IAXXX_CNR0_CIC_RX_0_1_CLR_1_MASK,
+				(1 << IAXXX_CNR0_CIC_RX_0_1_CLR_1_POS));
+			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
+				IAXXX_CNR0_CIC_RX_0_1_M_1_MASK, cic_dec);
+		} else {
+			/* we are in even channels : 0/2/4/6 */
+			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
+				IAXXX_CNR0_CIC_RX_0_1_CLR_0_MASK,
+				(1 << IAXXX_CNR0_CIC_RX_0_1_CLR_0_POS));
+			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
+				IAXXX_CNR0_CIC_RX_0_1_M_0_MASK, cic_dec);
+		}
 
-	/* setup input clk source (base/alternative) & Bit Polarity*/
-	if (port_clk == PDM_PORTC || port_clk == PDM_CDC)
-		cic_ctrl = IAXXX_DMIC0_CLK << cic_rx_id;
-	else
-		cic_ctrl = IAXXX_DMIC1_CLK << cic_rx_id;
+		/* setup input clk source (base/alternative) & Bit Polarity*/
+		if (port_clk == PDM_PORTC || port_clk == PDM_CDC)
+			cic_ctrl = IAXXX_DMIC0_CLK << cic_rx_id;
+		else
+			cic_ctrl = IAXXX_DMIC1_CLK << cic_rx_id;
 
-	cic_ctrl = cic_ctrl | (IAXXX_PDM_POLARITY <<
-		IAXXX_CNR0_CIC_CTRL_RX_POL_POS(cic_rx_id));
-	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_CTRL_ADDR,
-		IAXXX_CNR0_CIC_CTRL_RX_MASK(cic_rx_id), cic_ctrl);
+		cic_ctrl = cic_ctrl | (IAXXX_PDM_POLARITY <<
+			IAXXX_CNR0_CIC_CTRL_RX_POL_POS(cic_rx_id));
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_CTRL_ADDR,
+			IAXXX_CNR0_CIC_CTRL_RX_MASK(cic_rx_id), cic_ctrl);
 
+		/* Green box /Half band decimation filter */
+		cic_hb = hb_dec << IAXXX_CNR0_CIC_HB_CIC_RX_POS(cic_rx_id);
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_HB_ADDR,
+			IAXXX_CNR0_CIC_HB_CIC_RX_MASK(cic_rx_id), cic_hb);
 
-	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_HB_ADDR,
-		IAXXX_CNR0_CIC_HB_CIC_RX_MASK(cic_rx_id), cic_hb);
+		if (port_type == PDM_PORT_DMIC) {
+			cic_rx_rt_ctrl = IAXXX_CIC_MIC_ENABLE <<
+				IAXXX_CNR0_CIC_RX_RT_CTRL_MIC_POS(cic_rx_id);
+			cic_rx_rt_ctrl = cic_rx_rt_ctrl |
+				(IAXXX_CIC_S_DMIC_ENABLE <<
+				IAXXX_CNR0_CIC_RX_RT_CTRL_S_POS(cic_rx_id));
+		}
+		cic_rx_rt_ctrl = cic_rx_rt_ctrl | (IAXXX_CLK_ENABLE <<
+			IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_POS(cic_rx_id));
 
-	if (((port_clk != PDM_CDC) && (port_clk != PCM_PORTD))
-						&& !codec_dmic) {
-		cic_rx_rt_ctrl = IAXXX_CIC_MIC_ENABLE <<
-			IAXXX_CNR0_CIC_RX_RT_CTRL_MIC_POS(cic_rx_id);
-		cic_rx_rt_ctrl = cic_rx_rt_ctrl | (IAXXX_CIC_S_DMIC_ENABLE<<
-			IAXXX_CNR0_CIC_RX_RT_CTRL_S_POS(cic_rx_id));
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
+			IAXXX_CNR0_CIC_RX_RT_MASK(cic_rx_id), cic_rx_rt_ctrl);
+
+		io_ctrl_reg = iaxxx_io_ctrl_data[io_port_mic][0];
+		io_ctrl_mask = iaxxx_io_ctrl_data[io_port_mic][1];
+		io_ctrl_val = iaxxx_io_ctrl_data[io_port_mic][1];
+
+		snd_soc_write(codec, io_ctrl_reg, io_ctrl_val);
+
+		/* Set state bit, Disable the Filter */
+		if ((cic_rx_id & 0x1) != 0) {
+			/* we are in the 'odd' channel : 1/3/5/7 */
+			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
+				IAXXX_CNR0_CIC_RX_0_1_CLR_1_MASK,
+				(0 << IAXXX_CNR0_CIC_RX_0_1_CLR_1_POS));
+		} else {
+			/* we are in even channels : 0/2/4/6 */
+			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
+				IAXXX_CNR0_CIC_RX_0_1_CLR_0_MASK,
+				(0 << IAXXX_CNR0_CIC_RX_0_1_CLR_0_POS));
+		}
+		break;
+	case PDM_PORT_PDMO:
+		/* get the output Port Number */
+		dmic = dmic - PDM_DMIC_OUT0;
+
+		snd_soc_update_bits(codec, IAXXX_SRB_PDMO_PORT_PWR_EN_ADDR,
+					(1 << cic_rx_id), (1 << cic_rx_id));
+
+		iaxxx_send_update_block_request(iaxxx->dev_parent, &status,
+					IAXXX_BLOCK_0);
+
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_ADTL_CTRL_ADDR,
+				IAXXX_CNR0_CIC_ADTL_CTRL_G_TX_0_1_MASK |
+				IAXXX_CNR0_CIC_ADTL_CTRL_DBG_TX_0_1_MASK, 0);
+
+		/* CIC filter config */
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_TX_HOS_ADDR,
+				IAXXX_CNR0_CIC_TX_HOS_MASK_VAL, 1 << dmic);
+
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_TX_0_1_ADDR,
+				IAXXX_CNR0_CIC_TX_0_1_DSEL_0_1_MASK |
+				IAXXX_CNR0_CIC_TX_0_1_PHASE_0_1_MASK,
+				IAXXX_CNR0_CIC_TX_0_1_DSEL_0_1_MASK |
+				(3 << IAXXX_CNR0_CIC_TX_0_1_PHASE_0_1_MASK));
+
+		/* Get CIC decimation value and half band decimation value */
+		ret = get_decimator_val(pdm_bclk, aud_port_clk,
+					&cic_dec, &hb_dec);
+		if (ret)
+			return ret;
+
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_TX_0_1_ADDR,
+				IAXXX_CNR0_CIC_TX_0_1_L_0_1_MASK, cic_dec);
+
+		/* setup input clk source (base/alternative) & Bit Polarity*/
+		if (port_clk == PDM_PORTC || port_clk == PDM_CDC)
+			cic_ctrl = IAXXX_DMIC0_CLK;
+		else
+			cic_ctrl = IAXXX_DMIC1_CLK;
+
+		cic_ctrl = cic_ctrl << IAXXX_CNR0_CIC_CTRL_TX_AC_0_1_POS |
+			(IAXXX_PDM_POLARITY <<
+			IAXXX_CNR0_CIC_CTRL_TX_POL_0_1_POS);
+		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_CTRL_ADDR,
+			IAXXX_CNR0_CIC_CTRL_TX_AC_0_1_MASK |
+			IAXXX_CNR0_CIC_CTRL_TX_POL_0_1_MASK, cic_ctrl);
+
+		io_ctrl_reg = iaxxx_io_ctrl_data[io_port_mic][0];
+		io_ctrl_mask = iaxxx_io_ctrl_data[io_port_mic][1];
+		io_ctrl_val = iaxxx_io_ctrl_data[io_port_mic][1];
+
+		snd_soc_write(codec, io_ctrl_reg, io_ctrl_val);
+
+		snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
+			IAXXX_CNR0_CIC_TX_0_1_CLR_0_MASK, 0);
+
+		if (port_clk == PDM_PORTC || port_clk == PDM_CDC) {
+			snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
+				IAXXX_AO_CLK_CFG_PORTC_DO_OE_MASK,
+				IAXXX_AO_CLK_CFG_PORTC_DO_OE_MASK);
+		} else {
+			snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
+				IAXXX_AO_CLK_CFG_PORTB_DO_OE_MASK,
+				IAXXX_AO_CLK_CFG_PORTB_DO_OE_MASK);
+		}
+		break;
+	default:
+		break;
 	}
-	cic_rx_rt_ctrl = cic_rx_rt_ctrl | (IAXXX_CLK_ENABLE <<
-		IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_POS(cic_rx_id));
-
-	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
-		IAXXX_CNR0_CIC_RX_RT_MASK(cic_rx_id), cic_rx_rt_ctrl);
-
-	io_ctrl_reg = iaxxx_io_ctrl_data[io_port_mic][0];
-	io_ctrl_mask = iaxxx_io_ctrl_data[io_port_mic][1];
-	io_ctrl_val = iaxxx_io_ctrl_data[io_port_mic][1];
-
-	snd_soc_write(codec, io_ctrl_reg, io_ctrl_val);
-
-	snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
-		cic_rx_m_mask[cic_rx_id], cic_rx_dec);
-
-	snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
-		cic_rx_clr_mask[cic_rx_id], ~cic_rx_reset);
 
 	return 0;
 }
@@ -3046,7 +3171,7 @@ static int iaxxx_pdm_port_clr(struct snd_kcontrol *kcontrol,
 	io_ctrl_reg = iaxxx_io_ctrl_data[port_mic][0];
 	io_ctrl_mask = iaxxx_io_ctrl_data[port_mic][1];
 
-	if (port_mic > PDM_CDC_DAC_OUT1) {
+	if (port_mic > PDM_DMIC_MONO_IN3) {
 		pr_err("PDM port stop failed Invalid port number\n");
 		return -EINVAL;
 	}
@@ -3061,9 +3186,15 @@ static int iaxxx_pdm_port_clr(struct snd_kcontrol *kcontrol,
 	} else if ((port_mic >= PDM_DMIC_OUT0) && (port_mic <= PDM_DMIC_OUT1)) {
 		/* PDM port is of Output type */
 		port_type = PDM_PORT_PDMO;
+	} else if ((port_mic >= PDM_DMIC_MONO_IN0) &&
+		(port_mic <= PDM_DMIC_MONO_IN3)) {
+		/* PDM port is of mono type */
+		port_type = PDM_PORT_MONO;
+		port_mic = (port_mic - PDM_DMIC_MONO_IN0 + 4);
 	}
 
-	if ((port_type == PDM_PORT_DMIC) || (port_type == PDM_PORT_ADC)) {
+	if ((port_type == PDM_PORT_DMIC) || (port_type == PDM_PORT_ADC)
+		|| (port_type == PDM_PORT_MONO)) {
 		/* Set state bit, Disable the Filter */
 		if ((port_mic & 0x1) != 0) {
 			/* we are in the 'odd' channel : 1/3/5/7 */
@@ -3146,496 +3277,132 @@ static int iaxxx_pdm_port_clr(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int iaxxx_portb_mic0_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_PORTB;
-
-	if (iaxxx->portb_mic0_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portb_mic0_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portb_mic0_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTB,
-						CIC4, PDM_DMIC_IN4);
-#else
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTB,
-						CIC6, PDM_DMIC_IN4);
-#endif
-	} else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTB);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTB;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN4);
-	}
+/* DMIC MIC START */
+#define IAXXX_PDM_DMIC_MIC_PUT_GET(mic_no, port, mic_in, cic) \
+static int iaxxx_port_mic##mic_no##_put(struct snd_kcontrol *kcontrol, \
+			struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec); \
+	int mstr_port = port; \
+	if (iaxxx->port_mic##mic_no##_en == ucontrol->value.integer.value[0]) \
+		return 0; \
+	iaxxx->port_mic##mic_no##_en =  ucontrol->value.integer.value[0]; \
+	if (iaxxx->port_mic##mic_no##_en) { \
+		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, port, \
+					cic, mic_in); \
+	} else { \
+		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, port); \
+		if (mstr_port > IAXXX_MAX_PDM_PORTS) \
+			mstr_port = port; \
+		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port, \
+					mic_in); \
+	} \
+} \
+static int iaxxx_port_mic##mic_no##_get(struct snd_kcontrol *kcontrol, \
+	struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
+	ucontrol->value.integer.value[0] = iaxxx->port_mic##mic_no##_en; \
+	return 0; \
 }
 
-static int iaxxx_portb_mic0_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
+IAXXX_PDM_DMIC_MIC_PUT_GET(0, PDM_PORTC, PDM_DMIC_IN0, CIC0)
+IAXXX_PDM_DMIC_MIC_PUT_GET(1, PDM_PORTC, PDM_DMIC_IN1, CIC1)
+IAXXX_PDM_DMIC_MIC_PUT_GET(2, PDM_PORTC, PDM_DMIC_IN2, CIC2)
+IAXXX_PDM_DMIC_MIC_PUT_GET(3, PDM_PORTC, PDM_DMIC_IN3, CIC3)
+IAXXX_PDM_DMIC_MIC_PUT_GET(4, PDM_PORTB, PDM_DMIC_IN4, CIC4)
+IAXXX_PDM_DMIC_MIC_PUT_GET(5, PDM_PORTB, PDM_DMIC_IN5, CIC5)
+IAXXX_PDM_DMIC_MIC_PUT_GET(6, PDM_PORTB, PDM_DMIC_IN6, CIC6)
+IAXXX_PDM_DMIC_MIC_PUT_GET(7, PDM_PORTB, PDM_DMIC_IN7, CIC7)
+/* DMIC MIC END */
 
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portb_mic0_en;
-	return 0;
+/* CDC START*/
+#define IAXXX_PDM_CODEC_MIC_PUT_GET(mic_no, port, mic_in, cic) \
+static int iaxxx_port_codec_mic##mic_no##_put( \
+		struct snd_kcontrol *kcontrol, \
+		struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec); \
+	int mstr_port = port; \
+	if (iaxxx->port_codec_mic##mic_no##_en == \
+		ucontrol->value.integer.value[0]) \
+		return 0; \
+	iaxxx->port_codec_mic##mic_no##_en = \
+		ucontrol->value.integer.value[0]; \
+	if (iaxxx->port_codec_mic##mic_no##_en) { \
+		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, port, \
+					cic, mic_in); \
+	} else { \
+		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, port); \
+		if (mstr_port > IAXXX_MAX_PDM_PORTS) \
+			mstr_port = port; \
+		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port, \
+					mic_in); \
+	} \
+} \
+\
+static int iaxxx_port_codec_mic##mic_no##_get( \
+		struct snd_kcontrol *kcontrol, \
+		struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
+	ucontrol->value.integer.value[0] = \
+			iaxxx->port_codec_mic##mic_no##_en; \
+	return 0; \
 }
 
-static int iaxxx_portb_mic1_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-	int mstr_port = PDM_PORTB;
-#endif
-
-	if (iaxxx->portb_mic1_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portb_mic1_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portb_mic1_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTB,
-						CIC5, PDM_DMIC_IN5);
-#else
-		return 0;
-#endif
-	} else {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTB);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTB;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN5);
-#else
-		return 0;
-#endif
-	}
-}
-
-static int iaxxx_portb_mic1_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portb_mic1_en;
-	return 0;
-}
-
-static int iaxxx_portb_mic2_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_PORTB;
-
-	if (iaxxx->portb_mic2_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portb_mic2_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portb_mic2_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTB,
-						CIC6, PDM_DMIC_IN6);
-#else
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTB,
-						CIC7, PDM_DMIC_IN6);
-#endif
-	} else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTB);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTB;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN6);
-	}
-}
-
-static int iaxxx_portb_mic2_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portb_mic2_en;
-	return 0;
-}
-
-static int iaxxx_portb_mic3_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-	int mstr_port = PDM_PORTB;
-#endif
-
-	if (iaxxx->portb_mic3_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portb_mic3_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portb_mic3_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTB,
-						CIC7, PDM_DMIC_IN7);
-#else
-		return 0;
-#endif
-	} else {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTB);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTB;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN7);
-#else
-		return 0;
-#endif
-	}
-}
-
-static int iaxxx_portb_mic3_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portb_mic3_en;
-	return 0;
-}
-
-static int iaxxx_portc_mic0_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_PORTC;
-
-	if (iaxxx->portc_mic0_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portc_mic0_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portc_mic0_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTC,
-						CIC0, PDM_DMIC_IN0);
-#else
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTC,
-						CIC4, PDM_DMIC_IN0);
-#endif
-	} else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTC);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTC;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN0);
-	}
-}
-
-static int iaxxx_portc_mic0_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portc_mic0_en;
-	return 0;
-}
-
-static int iaxxx_portc_mic1_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-	int mstr_port = PDM_PORTC;
-#endif
-
-	if (iaxxx->portc_mic1_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portc_mic1_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portc_mic1_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTC,
-						CIC1, PDM_DMIC_IN1);
-#else
-		return 0;
-#endif
-	} else {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTC);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTC;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN1);
-#else
-		return 0;
-#endif
-	}
-}
-
-static int iaxxx_portc_mic1_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portc_mic1_en;
-	return 0;
-}
-
-static int iaxxx_portc_mic2_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_PORTC;
-
-	if (iaxxx->portc_mic2_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portc_mic2_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portc_mic2_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTC,
-						CIC2, PDM_DMIC_IN2);
-#else
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTC,
-						CIC5, PDM_DMIC_IN2);
-#endif
-	} else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTC);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTC;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN2);
-	}
-}
-
-static int iaxxx_portc_mic2_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portc_mic2_en;
-	return 0;
-}
-
-static int iaxxx_portc_mic3_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-	int mstr_port = PDM_PORTC;
-#endif
-
-	if (iaxxx->portc_mic3_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->portc_mic3_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->portc_mic3_en) {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTC,
-						CIC3, PDM_DMIC_IN3);
-#else
-		return 0;
-#endif
-	} else {
-#ifdef CONFIG_IAXXX_PDM_DMIC_MODE
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTC);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTC;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_DMIC_IN3);
-#else
-		return 0;
-#endif
-	}
-}
-
-static int iaxxx_portc_mic3_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->portc_mic3_en;
-	return 0;
-}
-
-
-/* CDC start*/
-static int iaxxx_cdc0_mic0_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_CDC;
-
-	if (iaxxx->cdc0_mic0_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->cdc0_mic0_en =  ucontrol->value.integer.value[0];
-	if (iaxxx->cdc0_mic0_en)
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_CDC,
-						CIC0, PDM_CDC0_IN0);
-	else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_CDC);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_CDC;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_CDC0_IN0);
-	}
-}
-
-static int iaxxx_cdc0_mic0_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->cdc0_mic0_en;
-	return 0;
-}
-
-static int iaxxx_cdc0_mic1_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_CDC;
-
-	if (iaxxx->cdc0_mic1_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->cdc0_mic1_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->cdc0_mic1_en)
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_CDC,
-						CIC1, PDM_CDC1_IN1);
-	else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_CDC);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_CDC;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_CDC1_IN1);
-	}
-}
-
-static int iaxxx_cdc0_mic1_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->cdc0_mic1_en;
-	return 0;
-}
-
-static int iaxxx_cdc0_mic2_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_CDC;
-
-	if (iaxxx->cdc0_mic2_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->cdc0_mic2_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->cdc0_mic2_en)
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_CDC,
-						CIC2, PDM_CDC2_IN2);
-	else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_CDC);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_CDC;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_CDC2_IN2);
-	}
-}
-
-static int iaxxx_cdc0_mic2_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->cdc0_mic2_en;
-	return 0;
-}
-
-static int iaxxx_cdc1_mic0_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	int mstr_port = PDM_PORTD;
-
-	if (iaxxx->cdc1_mic0_en == ucontrol->value.integer.value[0])
-		return 0;
-
-	iaxxx->cdc1_mic0_en =  ucontrol->value.integer.value[0];
-
-	if (iaxxx->cdc1_mic0_en)
-		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, PDM_PORTD,
-						CIC3, PDM_CDC3_IN3);
-	else {
-		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, PDM_PORTD);
-		if (mstr_port > IAXXX_MAX_PDM_PORTS)
-			mstr_port = PDM_PORTD;
-		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port,
-						PDM_CDC3_IN3);
-	}
-}
-
-static int iaxxx_cdc1_mic0_get(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->cdc1_mic0_en;
-	return 0;
-}
+IAXXX_PDM_CODEC_MIC_PUT_GET(0, PDM_CDC, PDM_CDC0_IN0, CIC0)
+IAXXX_PDM_CODEC_MIC_PUT_GET(1, PDM_CDC, PDM_CDC1_IN1, CIC1)
+IAXXX_PDM_CODEC_MIC_PUT_GET(2, PDM_CDC, PDM_CDC2_IN2, CIC2)
+IAXXX_PDM_CODEC_MIC_PUT_GET(3, PDM_PORTD, PDM_CDC3_IN3, CIC3)
+IAXXX_PDM_CODEC_MIC_PUT_GET(4, PDM_PORTC, PDM_DMIC_MONO_IN0, CIC4)
+IAXXX_PDM_CODEC_MIC_PUT_GET(5, PDM_PORTC, PDM_DMIC_MONO_IN1, CIC5)
+IAXXX_PDM_CODEC_MIC_PUT_GET(6, PDM_PORTB, PDM_DMIC_MONO_IN2, CIC6)
+IAXXX_PDM_CODEC_MIC_PUT_GET(7, PDM_PORTB, PDM_DMIC_MONO_IN3, CIC7)
 /* CDC end */
+
+/* PDM OUTPUT START */
+#define IAXXX_PDM_DO_MIC_PUT_GET(name, mic_no, port, mic_out, cic) \
+static int iaxxx_##name##_do_mic##mic_no##_put( \
+			struct snd_kcontrol *kcontrol, \
+			struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec); \
+	int mstr_port = port; \
+	if (iaxxx->name##_do_mic##mic_no##_en == \
+				ucontrol->value.integer.value[0]) \
+		return 0; \
+	iaxxx->name##_do_mic##mic_no##_en = ucontrol->value.integer.value[0]; \
+	if (iaxxx->name##_do_mic##mic_no##_en) { \
+		return iaxxx_pdm_mic_setup(kcontrol, ucontrol, port, \
+						cic, mic_out); \
+	} else { \
+		mstr_port = iaxxx_pdm_port_clk_src(iaxxx, port); \
+		if (mstr_port > IAXXX_MAX_PDM_PORTS) \
+			mstr_port = port; \
+		return iaxxx_pdm_port_clr(kcontrol, ucontrol, mstr_port, \
+						mic_out); \
+	} \
+} \
+static int iaxxx_##name##_do_mic##mic_no##_get(struct snd_kcontrol *kcontrol, \
+	struct snd_ctl_elem_value *ucontrol) \
+{ \
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
+	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
+	ucontrol->value.integer.value[0] = iaxxx->name##_do_mic##mic_no##_en; \
+	return 0; \
+}
+
+IAXXX_PDM_DO_MIC_PUT_GET(portc, 0, PDM_PORTC, PDM_DMIC_OUT0, CIC0)
+IAXXX_PDM_DO_MIC_PUT_GET(portc, 1, PDM_PORTC, PDM_DMIC_OUT1, CIC1)
+IAXXX_PDM_DO_MIC_PUT_GET(portb, 0, PDM_PORTB, PDM_DMIC_OUT0, CIC0)
+IAXXX_PDM_DO_MIC_PUT_GET(portb, 1, PDM_PORTB, PDM_DMIC_OUT1, CIC1)
+/* PDM OUTPUT END */
 
 static int iaxxx_pdm_port_setup(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol, int port)
@@ -4034,8 +3801,7 @@ static int iaxxx_pdm_head_strm_put(struct snd_kcontrol *kcontrol,
 		value = iaxxx->head_of_strm_all;
 
 	/* CIC filter config */
-	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_RX_HOS_ADDR,
-		IAXXX_CNR0_CIC_RX_HOS_MASK_VAL, value);
+	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_RX_HOS_ADDR, value, value);
 
 	return 0;
 }
@@ -4162,7 +3928,8 @@ static int iaxxx_pcm_port_start(struct snd_kcontrol *kcontrol,
 		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(port),
 		IAXXX_AO_DO_ENABLE <<
 			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(port));
-	/* Set cn0 pcm active reg */
+
+	/* Set cnr0 pcm active reg */
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
 		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(port),
 		IAXXX_CNR0_PCM_ENABLE <<
@@ -4480,41 +4247,61 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 		iaxxx_pcm_portf_start_get, iaxxx_pcm_portf_start_put),
 
 	SOC_SINGLE_BOOL_EXT("Pdm PortB DMic0 En", 0,
-		iaxxx_portb_mic0_get, iaxxx_portb_mic0_put),
+		iaxxx_port_mic4_get, iaxxx_port_mic4_put),
 	SOC_SINGLE_BOOL_EXT("Pdm PortB DMic1 En", 0,
-		iaxxx_portb_mic1_get, iaxxx_portb_mic1_put),
+		iaxxx_port_mic5_get, iaxxx_port_mic5_put),
 	SOC_SINGLE_BOOL_EXT("Pdm PortB DMic2 En", 0,
-			iaxxx_portb_mic2_get, iaxxx_portb_mic2_put),
+		iaxxx_port_mic6_get, iaxxx_port_mic6_put),
 	SOC_SINGLE_BOOL_EXT("Pdm PortB DMic3 En", 0,
-			iaxxx_portb_mic3_get, iaxxx_portb_mic3_put),
+		iaxxx_port_mic7_get, iaxxx_port_mic7_put),
 
 	SOC_SINGLE_BOOL_EXT("Pdm PortC DMic0 En", 0,
-			iaxxx_portc_mic0_get, iaxxx_portc_mic0_put),
+		iaxxx_port_mic0_get, iaxxx_port_mic0_put),
 	SOC_SINGLE_BOOL_EXT("Pdm PortC DMic1 En", 0,
-			iaxxx_portc_mic1_get, iaxxx_portc_mic1_put),
+		iaxxx_port_mic1_get, iaxxx_port_mic1_put),
 	SOC_SINGLE_BOOL_EXT("Pdm PortC DMic2 En", 0,
-			iaxxx_portc_mic2_get, iaxxx_portc_mic2_put),
+		iaxxx_port_mic2_get, iaxxx_port_mic2_put),
 	SOC_SINGLE_BOOL_EXT("Pdm PortC DMic3 En", 0,
-			iaxxx_portc_mic3_get, iaxxx_portc_mic3_put),
+		iaxxx_port_mic3_get, iaxxx_port_mic3_put),
 
-	SOC_SINGLE_BOOL_EXT("Pdm CDC0 DMic0 En", 0,
-			iaxxx_cdc0_mic0_get, iaxxx_cdc0_mic0_put),
-	SOC_SINGLE_BOOL_EXT("Pdm CDC0 DMic1 En", 0,
-			iaxxx_cdc0_mic1_get, iaxxx_cdc0_mic1_put),
-	SOC_SINGLE_BOOL_EXT("Pdm CDC0 DMic2 En", 0,
-			iaxxx_cdc0_mic2_get, iaxxx_cdc0_mic2_put),
+	SOC_SINGLE_BOOL_EXT("Pdm CDC0 CDC DMic0 En", 0,
+		iaxxx_port_codec_mic0_get, iaxxx_port_codec_mic0_put),
+	SOC_SINGLE_BOOL_EXT("Pdm CDC0 CDC DMic1 En", 0,
+		iaxxx_port_codec_mic1_get, iaxxx_port_codec_mic1_put),
+	SOC_SINGLE_BOOL_EXT("Pdm CDC0 CDC DMic2 En", 0,
+		iaxxx_port_codec_mic2_get, iaxxx_port_codec_mic2_put),
 
-	SOC_SINGLE_BOOL_EXT("Pdm CDC1 DMic0 En", 0,
-			iaxxx_cdc1_mic0_get, iaxxx_cdc1_mic0_put),
+	SOC_SINGLE_BOOL_EXT("Pdm CDC1 CDC DMic3 En", 0,
+		iaxxx_port_codec_mic3_get, iaxxx_port_codec_mic3_put),
+
+	SOC_SINGLE_BOOL_EXT("Pdm PortC CDC DMic4 En", 0,
+		iaxxx_port_codec_mic4_get, iaxxx_port_codec_mic4_put),
+	SOC_SINGLE_BOOL_EXT("Pdm PortC CDC DMic5 En", 0,
+		iaxxx_port_codec_mic5_get, iaxxx_port_codec_mic5_put),
+
+	SOC_SINGLE_BOOL_EXT("Pdm PortB CDC DMic6 En", 0,
+		iaxxx_port_codec_mic6_get, iaxxx_port_codec_mic6_put),
+	SOC_SINGLE_BOOL_EXT("Pdm PortB CDC DMic7 En", 0,
+		iaxxx_port_codec_mic7_get, iaxxx_port_codec_mic7_put),
+
+	SOC_SINGLE_BOOL_EXT("Pdm PortB DO DMic0 En", 0,
+		iaxxx_portb_do_mic0_get, iaxxx_portb_do_mic0_put),
+	SOC_SINGLE_BOOL_EXT("Pdm PortB DO DMic1 En", 0,
+		iaxxx_portb_do_mic1_get, iaxxx_portb_do_mic1_put),
+
+	SOC_SINGLE_BOOL_EXT("Pdm PortC DO DMic0 En", 0,
+		iaxxx_portc_do_mic0_get, iaxxx_portc_do_mic0_put),
+	SOC_SINGLE_BOOL_EXT("Pdm PortC DO DMic1 En", 0,
+		iaxxx_portc_do_mic1_get, iaxxx_portc_do_mic1_put),
 
 	SOC_SINGLE_BOOL_EXT("Pdm PortB Setup", 0,
 		iaxxx_pdm_portb_get, iaxxx_pdm_portb_put),
 	SOC_SINGLE_BOOL_EXT("Pdm PortC Setup", 0,
 		iaxxx_pdm_portc_get, iaxxx_pdm_portc_put),
 	SOC_SINGLE_BOOL_EXT("Pdm CDC Setup", 0,
-			iaxxx_pdm_cdc_get, iaxxx_pdm_cdc_put),
+		iaxxx_pdm_cdc_get, iaxxx_pdm_cdc_put),
 	SOC_SINGLE_BOOL_EXT("Pdm CDC1 Setup", 0,
-			iaxxx_pdm_cdc1_get, iaxxx_pdm_cdc1_put),
+		iaxxx_pdm_cdc1_get, iaxxx_pdm_cdc1_put),
 
 	/* Enable DMIC0_CLK paths. For TX ports [9:8] are 0R/0L,
 	 * for RX ports [7/6/5/4/3/2/1/0] are 3R/3L/2R/2L/1R/1L/0R/0L
@@ -5531,7 +5318,6 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id),
 		ao_do_val << IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id));
 
-
 	/* Port E configuration */
 	/* Set Port  clk, FS, DO reg */
 	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
@@ -6093,18 +5879,26 @@ void iaxxx_reset_codec_params(struct iaxxx_priv *priv)
 		iaxxx->plugin_blk_en[i] = 0;
 		iaxxx->stream_en[i] = 0;
 	}
-	iaxxx->portb_mic0_en = 0;
-	iaxxx->portb_mic1_en = 0;
-	iaxxx->portb_mic2_en = 0;
-	iaxxx->portb_mic3_en = 0;
-	iaxxx->portc_mic0_en = 0;
-	iaxxx->portc_mic1_en = 0;
-	iaxxx->portc_mic2_en = 0;
-	iaxxx->portc_mic3_en = 0;
-	iaxxx->cdc0_mic0_en = 0;
-	iaxxx->cdc0_mic1_en = 0;
-	iaxxx->cdc0_mic2_en = 0;
-	iaxxx->cdc1_mic0_en = 0;
+	iaxxx->port_mic0_en = 0;
+	iaxxx->port_mic1_en = 0;
+	iaxxx->port_mic2_en = 0;
+	iaxxx->port_mic3_en = 0;
+	iaxxx->port_mic4_en = 0;
+	iaxxx->port_mic5_en = 0;
+	iaxxx->port_mic6_en = 0;
+	iaxxx->port_mic7_en = 0;
+	iaxxx->port_codec_mic0_en = 0;
+	iaxxx->port_codec_mic1_en = 0;
+	iaxxx->port_codec_mic2_en = 0;
+	iaxxx->port_codec_mic3_en = 0;
+	iaxxx->port_codec_mic4_en = 0;
+	iaxxx->port_codec_mic5_en = 0;
+	iaxxx->port_codec_mic6_en = 0;
+	iaxxx->port_codec_mic7_en = 0;
+	iaxxx->portb_do_mic0_en = 0;
+	iaxxx->portb_do_mic1_en = 0;
+	iaxxx->portc_do_mic0_en = 0;
+	iaxxx->portc_do_mic1_en = 0;
 	iaxxx->portb_micbias_en = 0;
 	iaxxx->portc_micbias_en = 0;
 	iaxxx->cdc0_micbias_en = 0;

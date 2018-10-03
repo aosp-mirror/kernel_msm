@@ -22,15 +22,12 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-pkg-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include "iaxxx.h"
+#include "iaxxx-plugin-common.h"
 
 #define IAXXX_BITS_SWAP	32
 #define IAXXX_BLK_HEADER_SIZE 4
 #define IAXXX_BIN_INFO_SEC_ADDR	0xF1F00000
 #define IAXXX_INVALID_FILE ('\0')
-#define IAXXX_KW_BITMAP 0x7
-#define IAXXX_MAX_VALID_KW_ID 0xffff
-#define IAXXX_VQ_PARAM_BLOCK_ID_BASE  (917520)
-#define IAXXX_VQ_INST_ID 0
 
 /*
  * Generate package id with 'i' package id and 'p' processor id
@@ -705,6 +702,18 @@ set_create_cfg_err:
 }
 EXPORT_SYMBOL(iaxxx_core_set_create_cfg);
 
+/**************************************************************************
+ * iaxxx_core_set_param_blk
+ * @brief Set parameter block on a plugin from given buffer
+ *
+ * @dev			device structure
+ * @inst_id		Instance ID
+ * @block_id		Block ID
+ * @param_blk_id	Parameter block id
+ * @blk_size		Size of buffer data in bytes
+ * @ptr_blk		Pointer to buffer data
+ * @ret - 0 on success, on failure < 0
+ **************************************************************************/
 int iaxxx_core_set_param_blk(
 			struct device *dev,
 			uint32_t inst_id, uint32_t blk_size,
@@ -712,130 +721,31 @@ int iaxxx_core_set_param_blk(
 			uint32_t param_blk_id)
 {
 	int ret = -EINVAL;
-	uint32_t status = 0;
-	int rc;
-	uint32_t reg_addr;
-	uint32_t reg_val;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
 	if (!priv)
 		return ret;
 
-	inst_id &= IAXXX_PLGIN_ID_MASK;
-	dev_dbg(dev, "%s() inst_id=%u blk_size=%u blk_id=%u id=%u\n",
-		__func__, inst_id, blk_size, block_id, param_blk_id);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
-	/* Plugin instance exists or not */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
-		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
-				inst_id, __func__);
-		goto set_param_blk_err;
-	}
-
-	/* Write the PluginHdrParamBlkCtrl register */
-	/* The block size is divided by 4 here because this function gets it
-	 * as block size in bytes but firmware expects in 32bit words.
-	 */
-	reg_val =  (((blk_size >> 2) <<
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS) &
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK);
-	reg_val |= ((inst_id <<
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
-	reg_val |= IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_REQ_MASK;
-	ret = regmap_write(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-			reg_val);
-	if (ret) {
-		dev_err(dev, "write failed %s()\n", __func__);
-		goto set_param_blk_err;
-	}
-
-	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id),
-		param_blk_id);
-	if (ret) {
-		dev_err(dev, "write failed %s()\n", __func__);
-		goto set_param_blk_err;
-	}
-
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
-	if (ret) {
-		dev_err(dev, "Update blk failed after id (%u) config %s()\n",
-				param_blk_id, __func__);
-		if (status) {
-			rc = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_REQ_MASK,
-			0);
-			if (rc) {
-				dev_err(dev, "clear failed %s() %d\n",
-					__func__, rc);
-				goto set_param_blk_err;
-			}
-		}
-		goto set_param_blk_err;
-	}
-	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id),
-			&reg_addr);
-	if (ret) {
-		dev_err(dev, "read failed %s()\n", __func__);
-		goto set_param_blk_err;
-	}
-
-	if (priv->raw_write) {
-		ret = priv->raw_write(dev, &reg_addr, ptr_blk,
-				blk_size);
-		if (ret) {
-			dev_err(dev, "Raw blk write failed %s()\n", __func__);
-			goto set_param_blk_err;
-		}
-	} else {
-		dev_err(dev, "Raw blk write not supported  %s()\n", __func__);
-		goto set_param_blk_err;
-	}
-
-	/* The block size is divided by 4 here because this function gets it
-	 * as block size in bytes but firmware expects in 32bit words.
-	 */
-	reg_val =  (((blk_size >> 2)
-		<< IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS) &
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK);
-	reg_val |= ((inst_id <<
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
-	reg_val |= IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_DONE_MASK;
-	ret = regmap_write(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-			reg_val);
-
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
-	if (ret) {
-		dev_err(dev,
-		"Update blk failed after plugin ctrl block config %s()\n",
-		__func__);
-		if (status) {
-			rc = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_DONE_MASK,
-			0);
-			if (rc)
-				dev_err(dev, "clear failed %s() %d\n",
-					__func__, rc);
-			}
-	}
-set_param_blk_err:
+	ret = iaxxx_core_set_param_blk_common(dev, inst_id, blk_size,
+				ptr_blk, block_id, param_blk_id);
 	mutex_unlock(&priv->plugin_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_set_param_blk);
 
+/**************************************************************************
+ *  iaxxx_core_set_param_blk_from_file
+ *  @brief Set parameter block on a plugin from a file
+ *
+ * @dev			device structure
+ * @inst_id		Instance ID
+ * @block_id		Block ID
+ * @param_blk_id	Parameter block id
+ * @file		File in firmware directory with setparamblk data
+ * @ret - 0 on success, on failure < 0
+ **************************************************************************/
 int iaxxx_core_set_param_blk_from_file(
 			struct device *dev,
 			uint32_t inst_id,
@@ -851,6 +761,9 @@ int iaxxx_core_set_param_blk_from_file(
 	if (!priv)
 		return ret;
 
+	/* protect this plugin operation */
+	mutex_lock(&priv->plugin_lock);
+
 	if (file && IAXXX_INVALID_FILE != file[0]) {
 		ret = request_firmware(&fw, file, priv->dev);
 		if (ret) {
@@ -862,7 +775,7 @@ int iaxxx_core_set_param_blk_from_file(
 		if (!data)
 			goto iaxxx_core_set_param_blk_from_file_err;
 		iaxxx_copy_le32_to_cpu(data, fw->data, fw->size);
-		ret = iaxxx_core_set_param_blk(
+		ret = iaxxx_core_set_param_blk_common(
 				dev, inst_id, fw->size, fw->data,
 				block_id, param_blk_id);
 	}
@@ -871,6 +784,7 @@ iaxxx_core_set_param_blk_from_file_err:
 	kfree(data);
 	if (fw)
 		release_firmware(fw);
+	mutex_unlock(&priv->plugin_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_set_param_blk_from_file);
@@ -1293,6 +1207,18 @@ out:
 }
 EXPORT_SYMBOL(iaxxx_package_unload);
 
+/**************************************************************************
+ *  iaxxx_core_get_param_blk
+ *  @brief Get a parameter block from a plugin
+ *
+ * @dev					device structure
+ * @inst_id				Instance ID
+ * @block_id				Block ID
+ * @param_blk_id			Parameter block id
+ * @getparam_block_data			Pointer to buffer to copy data.
+ * @getparam_block_size_in_words	Size of buffer in words.
+ * @ret - 0 on success, on failure < 0
+ **************************************************************************/
 int iaxxx_core_get_param_blk(
 		struct device *dev,
 		uint32_t  inst_id,
@@ -1303,125 +1229,104 @@ int iaxxx_core_get_param_blk(
 {
 	int ret;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	uint32_t write_val, read_val, getparam_block_size;
-	uint32_t status = 0;
 
 	if (!priv || !getparam_block_data || !getparam_block_size_in_words)
 		return -EINVAL;
 
-	dev_dbg(dev, "%s() inst_id=%u blk_size=%u blk_id=%u param_blk_id=%u\n",
-		__func__, inst_id, getparam_block_size_in_words, block_id,
-		param_blk_id);
-
-	inst_id &= IAXXX_PLGIN_ID_MASK;
-
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
-
-	/* Check if plugin exists */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
-		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
-				inst_id, __func__);
-		ret = -EEXIST;
-		goto iaxxx_core_get_param_error;
-	}
-
-	/* Write the PluginHdrParamBlkCtrl register
-	 * to request the parameter block.
-	 */
-	write_val = ((inst_id <<
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
-	write_val |= IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_GET_BLK_REQ_MASK;
-
-	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-		write_val);
-	if (ret) {
-		dev_err(dev, "getparamblk request failed %s()\n", __func__);
-		goto iaxxx_core_get_param_error;
-	}
-
-	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id),
-		param_blk_id);
-	if (ret) {
-		dev_err(dev, "write failed %s()\n", __func__);
-		goto iaxxx_core_get_param_error;
-	}
-
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
-	if (ret) {
-		dev_err(dev, "Update blk failed(%x) after GET_BLK_REQ %s()\n",
-				status, __func__);
-		goto iaxxx_core_get_param_error;
-	}
-
-	/* Get block size of parameter block to read and validate it */
-	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-			&read_val);
-	if (ret) {
-		dev_err(dev, "getparamblk blksize failed %s()\n", __func__);
-		goto iaxxx_core_get_param_error;
-	}
-
-	getparam_block_size = (read_val &
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK)
-		>> IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS;
-
-	if (!getparam_block_size ||
-		getparam_block_size > getparam_block_size_in_words) {
-		dev_err(dev, "invalid getparam blocksize %s()\n", __func__);
-		ret = -EINVAL;
-		goto iaxxx_core_get_param_error;
-	}
-
-	/* Get parameter block address to read */
-	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id),
-			&read_val);
-	if (ret) {
-		dev_err(dev, "getparamblk addr failed %s()\n", __func__);
-		goto iaxxx_core_get_param_error;
-	}
-
-	/* read the block from the address */
-	ret = priv->bulk_read(priv->dev,
-		read_val, getparam_block_data,
-		getparam_block_size_in_words);
-
-	if (ret != getparam_block_size_in_words) {
-		dev_err(dev, "getparamblk read failed %s()\n", __func__);
-		goto iaxxx_core_get_param_error;
-	}
-
-	/* Write the param block done */
-	write_val = ((inst_id <<
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
-	write_val |=
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_GET_BLK_DONE_MASK;
-
-	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-		write_val);
-	if (ret) {
-		dev_err(dev, "getparamblk done failed %s()\n", __func__);
-		goto iaxxx_core_get_param_error;
-	}
-
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
-	if (ret) {
-		dev_err(dev, "Update blk failed(%x) after GET_BLK_DONE %s()\n",
-				status, __func__);
-		goto iaxxx_core_get_param_error;
-	}
-	ret = 0;
-
-iaxxx_core_get_param_error:
+	ret = iaxxx_core_get_param_blk_common(dev, inst_id, block_id,
+			param_blk_id,
+			getparam_block_data, getparam_block_size_in_words);
 	mutex_unlock(&priv->plugin_lock);
 	return ret;
 
 }
 EXPORT_SYMBOL(iaxxx_core_get_param_blk);
+
+/**************************************************************************
+ *  iaxxx_core_set_param_blk_with_ack
+ *  @brief Set a parameter block on a plugin and get ack to
+ *  ensure the data has been sent and retry if not.
+ *
+ * @dev			device structure
+ * @inst_id		Instance ID
+ * @param_blk_id	Parameter block id
+ * @block_id		Block ID
+ * @set_param_buf	Pointer to the parameter block
+ * @set_param_buf_sz	Parameter block size in bytes
+ * @response_data_buf	Buffer for response data from plugin
+ * @response_data_sz	Size of Buffer in uint32 words for
+ *			response data from plugin
+ * @max_no_retries	Max number of retries in case of busy
+ *			response from plugin.
+ * @ret - 0 on success, on failure < 0
+ **************************************************************************/
+int iaxxx_core_set_param_blk_with_ack(struct device *dev,
+					const uint32_t inst_id,
+					const uint32_t param_blk_id,
+					const uint32_t block_id,
+					const void *set_param_buf,
+					const uint32_t set_param_buf_sz,
+					uint32_t *response_data_buf,
+					const uint32_t response_data_sz,
+					const uint32_t max_no_retries)
+{
+	int ret = -EINVAL;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t plugin_instace_id = inst_id & IAXXX_PLGIN_ID_MASK;
+
+	if (!priv)
+		return ret;
+
+	/* protect this plugin operation */
+	mutex_lock(&priv->plugin_lock);
+
+	/* Check if plugin exists */
+	if (!priv->iaxxx_state->plgin[plugin_instace_id].plugin_inst_state) {
+		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
+			inst_id, __func__);
+		ret = -EEXIST;
+		goto set_param_blk_with_ack_err;
+	}
+	ret = iaxxx_core_set_param_blk_with_ack_common(dev,
+			plugin_instace_id, param_blk_id, block_id,
+			set_param_buf, set_param_buf_sz,
+			response_data_buf,
+			response_data_sz,
+			max_no_retries);
+
+set_param_blk_with_ack_err:
+	mutex_unlock(&priv->plugin_lock);
+	return ret;
+
+}
+EXPORT_SYMBOL(iaxxx_core_set_param_blk_with_ack);
+
+/*****************************************************************************
+ * iaxxx_core_read_plugin_error()
+ * @brief Read info on plugin error occurred.
+ *
+ * @dev               Core device pointer
+ * @block_id	      Update block id
+ * @error             Error code of error occurred
+ * @error_instance    Instance of plugin where error occurred
+ * @ret 0 on success, -EINVAL in case of error
+ ****************************************************************************/
+int iaxxx_core_read_plugin_error(
+		struct device *dev,
+		const uint32_t block_id,
+		uint32_t *error,
+		uint8_t *error_instance)
+{
+	int ret;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+
+	/* protect this plugin operation */
+	mutex_lock(&priv->plugin_lock);
+	ret = iaxxx_core_read_plugin_error_common(dev, block_id,
+			error, error_instance);
+	mutex_unlock(&priv->plugin_lock);
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_read_plugin_error);

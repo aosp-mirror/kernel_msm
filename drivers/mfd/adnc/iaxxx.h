@@ -35,6 +35,9 @@ struct iaxxx_evt_queue;
 #define EVENT_ID_FALSE_ACCEPTANCE     4
 #define EVENT_ID_MAX_CONFIDENCE_LEVEL 5
 
+#define IAXXX_READ_DELAY        10	/* 10 us delay before SPI read */
+#define IAXXX_READ_DELAY_RANGE  10	/* 10 us range */
+
 /* Checksum Calculation */
 #define CALC_FLETCHER16(DATA, SUM1, SUM2)	\
 do {						\

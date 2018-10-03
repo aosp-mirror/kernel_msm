@@ -197,39 +197,6 @@ update_error:
 }
 
 /**
- * iaxxx_flush_tunnel_fw_buff() - flush the fw tunnel circular buffer.
- * @priv: pointer to the MFD Private struct.
- *
- * Returns success or failure.
- */
-int iaxxx_flush_tunnel_fw_buff(struct iaxxx_priv *priv)
-{
-	struct iaxxx_tunnel_buff_params buff_param;
-	int rc = 0;
-	struct device *dev = priv->dev;
-
-	dev_dbg(priv->dev,
-		"%s: flush tunnel_buff\n", __func__);
-	/* get fw tunnel buff head and tail pointers to read frames */
-	rc = iaxxx_get_tunnel_buff_params(priv, &buff_param);
-	if (rc < 0) {
-		dev_err(dev,
-			"Failed to get tunnel buff params, rc = %d\n", rc);
-		return rc;
-	}
-
-	rc = iaxxx_update_tunnel_buff_params(priv,
-					buff_param.buff_tail, true);
-	if (rc) {
-		dev_err(dev,
-			"failed to update buff head to tail rc = %d\n", rc);
-		return rc;
-	}
-
-	return rc;
-}
-
-/**
  * iaxxx_tunnel_read_async() - read tunneling data.
  * @dev: pointer to the MFD device.
  * @readbuff: buffer pointer to which data has to be copied.
@@ -239,7 +206,7 @@ int iaxxx_flush_tunnel_fw_buff(struct iaxxx_priv *priv)
  *
  * Returns the number of bytes copied to the buffer.
  */
-int iaxxx_tunnel_read(struct iaxxx_priv *priv, void *readbuff,
+int iaxxx_tunnel_read_hw(struct iaxxx_priv *priv, void *readbuff,
 			    int words_to_read, int mode, int *bytes_remaining)
 {
 	struct device *dev = priv->dev;
@@ -365,7 +332,7 @@ int iaxxx_tunnel_read(struct iaxxx_priv *priv, void *readbuff,
  *
  * Returns 0 in success < 0 if any error caused in unsubscribe.
  */
-int iaxxx_tunnel_setup(struct iaxxx_priv *priv,
+int iaxxx_tunnel_setup_hw(struct iaxxx_priv *priv,
 			uint32_t tunlEP, uint32_t tunlSrc,
 			uint32_t tunlMode, uint32_t tunlEncode)
 {
@@ -436,13 +403,13 @@ error:
 }
 
 /**
- * iaxxx_tunnel_terminate() - terminate the tunneling endpoint.
+ * iaxxx_tunnel_terminate_hw() - terminate the tunneling endpoint.
  * @dev: pointer to the MFD device.
  * @tunlEP: endpoint to terminate from.
  *
  * Returns 0 in success < 0 if any error caused in unsubscribe.
  */
-int iaxxx_tunnel_terminate(struct iaxxx_priv *priv, uint32_t tunlEP)
+int iaxxx_tunnel_terminate_hw(struct iaxxx_priv *priv, uint32_t tunlEP)
 {
 	struct device *dev = priv->dev;
 	uint32_t tunnel_hdr_dis = 0;

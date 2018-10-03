@@ -249,26 +249,6 @@ enum iaxxx_device_instance_pdmo_e {
 	IAXXX_DEV_INSTANCE_PDMO_FORCE_SIZE = INT_MAX,
 };
 
-/** Enum defining the instances of ADCs
- * There are only 4 ADC inputs. Each can be mapped to two CIC Filter
- * instances. Extra 4 ADC instances are added to accommodate this
- */
-enum iaxxx_device_instance_adc_e {
-	IAXXX_DEV_INSTANCE_ADC0_IN0 = 0,
-	IAXXX_DEV_INSTANCE_ADC1_IN1,
-	IAXXX_DEV_INSTANCE_ADC2_IN2,
-	IAXXX_DEV_INSTANCE_ADC3_IN3,
-	IAXXX_DEV_INSTANCE_ADC0_IN4,
-	IAXXX_DEV_INSTANCE_ADC1_IN5,
-	IAXXX_DEV_INSTANCE_ADC2_IN6,
-	IAXXX_DEV_INSTANCE_ADC3_IN7,
-
-	IAXXX_DEV_NUM_INSTANCE_ADC,
-
-	/* Force enums to be of size int */
-	IAXXX_DEV_INSTANCE_ADC_FORCE_SIZE = INT_MAX,
-};
-
 /** Enum defining the instances of DACs */
 enum iaxxx_device_instance_dac_e {
 	IAXXX_DEV_INSTANCE_DAC0 = 0,
@@ -386,6 +366,173 @@ enum iaxxx_device_instance_timer_e {
 	IAXXX_DEV_INSTANCE_TIMER_FORCE_SIZE = INT_MAX,
 };
 
+enum iaxxx_module_type_e {
+	IAXXX_MODULE_TYPE_PWR_MGR = 0,		/* Power Manager */
+	IAXXX_MODULE_TYPE_CTRL_MGR,		/* Control Manager */
+	IAXXX_MODULE_TYPE_SCRIPT_MGR,		/* Script Manager */
+	IAXXX_MODULE_TYPE_EVT_MGR,		/* Event Manager */
+	IAXXX_MODULE_TYPE_PLUGIN_MGR,		/* Plugin Package Manager */
+	IAXXX_MODULE_TYPE_FLASH_MGR,		/* Flash Manager */
+	IAXXX_MODULE_TYPE_STREAM_MGR,		/* Stream Manager */
+	IAXXX_MODULE_TYPE_TUNNEL_MGR,		/* Tunnel Manager */
+	IAXXX_MODULE_TYPE_PLUGIN_VM,		/* Plugin Virtual Machine */
+	IAXXX_MODULE_TYPE_CONTROLLER,		/* Controller */
+	IAXXX_MODULE_TYPE_BUTTON_MGR,		/* Button Manager */
+	IAXXX_MODULE_TYPE_LED_MGR,		/* LED Manager */
+	IAXXX_MODULE_TYPE_ROUTES_MGR,		/* Route Manager */
+	IAXXX_MODULE_TYPE_USB_MGR,		/* USB Manager */
+	IAXXX_MODULE_TYPE_BT_MGR,		/* Bluetooth manager */
+	IAXXX_MODULE_TYPE_BT_CORE,		/* Bluetooth core */
+	IAXXX_MODULE_TYPE_MIPS_PROFILER,	/* MIPS profiler */
+	IAXXX_MODULE_TYPE_BATTERY_MGR,		/* Battery manager */
+	IAXXX_MODULE_TYPE_SENSOR_MGR,		/* Sensor manager */
+	IAXXX_MODULE_TYPE_SYSTEM_SERVICE,	/* System Service */
+	IAXXX_MODULE_TYPE_USB_SERVICE,		/* USB Service */
+	IAXXX_MODULE_TYPE_UI_SERVICE,		/* UI Service */
+	IAXXX_MODULE_TYPE_NOTIFY_SERVICE,	/* Notify Service */
+	IAXXX_MODULE_TYPE_SYSTEM_APP,		/* System App */
+	IAXXX_MODULE_TYPE_DEBUG_MONITOR,	/* Debug and Monitor */
+
+	IAXXX_MODULE_TYPE_TEMPLATE,		/* Template Module */
+	/* Number of modules in the system */
+	IAXXX_MODULE_TYPE_NUM,
+	/* Maximum limit on number of modules*/
+	IAXXX_MODULE_TYPE_MAX = 32,
+	/* Force enums to be of size int */
+	IAXXX_MODULE_TYPE_FORCE_SIZE = INT_MAX
+};
+
+#define IAXXX_SYSID_MODULE_PWR_MGR  \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_PWR_MGR, 0))
+
+/** System id for the control manager module for a specific processor */
+#define IAXXX_SYSID_MODULE_CTRL_MGR(proc)         \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(proc, \
+	IAXXX_MODULE_TYPE_CTRL_MGR, 0))
+
+/** System id for the script manager module */
+#define IAXXX_SYSID_MODULE_SCRIPT_MGR             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_SCRIPT_MGR, 0))
+
+/** System id for the event manager module */
+#define IAXXX_SYSID_MODULE_EVT_MGR                \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_EVT_MGR, 0))
+
+/** System id for the plugin package manager module */
+#define IAXXX_SYSID_MODULE_PLUGIN_MGR             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_PLUGIN_MGR, 0))
+
+/** System id for the flash manager module */
+#define IAXXX_SYSID_MODULE_FLASHMGR               \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_FLASH_MGR, 0))
+
+/** System id for the battery manager module */
+#define IAXXX_SYSID_MODULE_BATTERYMGR             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_BATTERY_MGR, 0))
+
+/** System id for the power manager module */
+#define IAXXX_SYSID_MODULE_STREAM_MGR             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_STREAM_MGR, 0))
+
+/** System id for the tunnel manager module */
+#define IAXXX_SYSID_MODULE_TUNNEL_MGR(inst)       \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_TUNNEL_MGR, inst))
+
+/** System id for the specific instance of plugin virtual
+ *  machine module on specific processor
+ */
+#define IAXXX_SYSID_MODULE_PLUGIN_VM(proc, inst)   \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(proc,         \
+	IAXXX_MODULE_TYPE_PLUGIN_VM, inst))
+
+/** System id for the controller module */
+#define IAXXX_SYSID_MODULE_CONTROLLER             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_CONTROLLER, 0))
+
+/** System id for the button manager module */
+#define IAXXX_SYSID_MODULE_BUTTON_MGR             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_BUTTON_MGR, 0))
+
+/** System id for the LED manager module */
+#define IAXXX_SYSID_MODULE_LED_MGR                \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_LED_MGR, 0))
+
+/** System id for the route manager module */
+#define IAXXX_SYSID_MODULE_ROUTES_MGR		\
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_ROUTES_MGR, 0))
+
+/** System id for the USB manager module */
+#define IAXXX_SYSID_MODULE_USB_MGR                \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_USB_MGR, 0))
+
+/** System id for the bluetooth manager module */
+#define IAXXX_SYSID_MODULE_BT_MGR                 \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(LOCAL_PROC_ID, \
+	IAXXX_MODULE_TYPE_BT_MGR, 0))
+
+/** System id for the bluetooth core module */
+#define IAXXX_SYSID_MODULE_BT_CORE                \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(LOCAL_PROC_ID,\
+	IAXXX_MODULE_TYPE_BT_CORE, 0))
+
+/** System id for the MIPS profiler module */
+#define IAXXX_SYSID_MODULE_MIPS_PROFILER(proc)    \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(proc, \
+	IAXXX_MODULE_TYPE_MIPS_PROFILER, 0))
+
+/** System id for the sensor manager module */
+#define IAXXX_SYSID_MODULE_SENSOR_MGR             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_SENSOR_MGR, 0))
+
+/** System id for the system service module */
+#define IAXXX_SYSID_MODULE_SYSTEM_SERVICE         \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_SYSTEM_SERVICE, 0))
+
+/** System id for the USB service module */
+#define IAXXX_SYSID_MODULE_USB_SERVICE            \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_USB_SERVICE, 0))
+
+/** System id for the user interface service module */
+#define IAXXX_SYSID_MODULE_UI_SERVICE             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID,\
+	IAXXX_MODULE_TYPE_UI_SERVICE, 0))
+
+/** System id for the notify service module */
+#define IAXXX_SYSID_MODULE_NOTIFY_SERVICE         \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID,\
+	IAXXX_MODULE_TYPE_NOTIFY_SERVICE, 0))
+
+/** System id for the System app */
+#define IAXXX_SYSID_MODULE_SYSTEM_APP             \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(LOCAL_PROC_ID, \
+	IAXXX_MODULE_TYPE_SYSTEM_APP, 0))
+
+/** System id for the template module */
+#define IAXXX_SYSID_MODULE_TEMPLATE               \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(CTRL_PROC_ID, \
+	IAXXX_MODULE_TYPE_TEMPLATE, 0))
+
+/** System id for the debug module */
+#define IAXXX_SYSID_MODULE_DEBUG(proc)            \
+	(IAXXX_SYSID_GEN_MODULE_SYSID(proc, \
+	IAXXX_MODULE_TYPE_DEBUG_MONITOR, 0))
+
 /** The System Ids for all the existing driver. Sorted by the current
  * driver id order
  */
@@ -499,22 +646,6 @@ enum iaxxx_device_instance_timer_e {
 #define IAXXX_SYSID_PDMO1       (IAXXX_SYSID_GEN_DRIVER_SYSID               \
 		(IAXXX_SYSID_DRIVER_TYPE_PDM_OUT, IAXXX_DEV_INSTANCE_PDMO1))
 
-#define IAXXX_SYSID_ADC0_IN0    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC0_IN0))
-#define IAXXX_SYSID_ADC1_IN1    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC1_IN1))
-#define IAXXX_SYSID_ADC2_IN2    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC2_IN2))
-#define IAXXX_SYSID_ADC3_IN3    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC3_IN3))
-#define IAXXX_SYSID_ADC0_IN4    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC0_IN4))
-#define IAXXX_SYSID_ADC1_IN5    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC1_IN5))
-#define IAXXX_SYSID_ADC2_IN6    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC2_IN6))
-#define IAXXX_SYSID_ADC3_IN7    (IAXXX_SYSID_GEN_DRIVER_SYSID               \
-		(IAXXX_SYSID_DRIVER_TYPE_ADC, IAXXX_DEV_INSTANCE_ADC3_IN7))
 #define IAXXX_SYSID_DAC0        (IAXXX_SYSID_GEN_DRIVER_SYSID                 \
 		(IAXXX_SYSID_DRIVER_TYPE_DAC, IAXXX_DEV_INSTANCE_DAC0))
 #define IAXXX_SYSID_DAC1        (IAXXX_SYSID_GEN_DRIVER_SYSID                 \
@@ -577,10 +708,9 @@ enum iaxxx_device_instance_timer_e {
 
 /* Sum of all Audio ports */
 #define IAXXX_PORT_NUM_INSTANCES		\
-		(IAXXX_DEV_NUM_INSTANCE_PCM  + IAXXX_DEV_NUM_INSTANCE_SLBUS + \
-		IAXXX_DEV_NUM_INSTANCE_PDMI + IAXXX_DEV_NUM_INSTANCE_PDMO  + \
-		IAXXX_DEV_NUM_INSTANCE_ADC  + IAXXX_DEV_NUM_INSTANCE_DAC   + \
-		IAXXX_DEV_NUM_INSTANCE_I2S)
+		(IAXXX_DEV_NUM_INSTANCE_PCM + IAXXX_DEV_NUM_INSTANCE_SLBUS + \
+		IAXXX_DEV_NUM_INSTANCE_PDMI + IAXXX_DEV_NUM_INSTANCE_PDMO + \
+		IAXXX_DEV_NUM_INSTANCE_DAC + IAXXX_DEV_NUM_INSTANCE_I2S)
 
 
 /** Enum defining the instances of button */
@@ -2867,8 +2997,6 @@ enum iaxxx_drv_sys_id_range_e {
 	IAXXX_SYSID_PDMI_END      = IAXXX_SYSID_PDMI7,
 	IAXXX_SYSID_PDMO_START    = IAXXX_SYSID_PDMO0,
 	IAXXX_SYSID_PDMO_END      = IAXXX_SYSID_PDMO1,
-	IAXXX_SYSID_ADC_START     = IAXXX_SYSID_ADC0_IN0,
-	IAXXX_SYSID_ADC_END       = IAXXX_SYSID_ADC3_IN7,
 	IAXXX_SYSID_DAC_START     = IAXXX_SYSID_DAC0,
 	IAXXX_SYSID_DAC_END       = IAXXX_SYSID_DAC1,
 	IAXXX_SYSID_SPI_START     = IAXXX_SYSID_SPI0,
@@ -2880,16 +3008,6 @@ enum iaxxx_drv_sys_id_range_e {
 	IAXXX_DRV_SYSID_RANGE_FORCE_SIZE = INT_MAX,
 };
 
-
-/****************************************************************************
- * External/Shared Variables
- ****************************************************************************/
-// Variables used by these functions that are located elsewhere
-
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-// Prototypes for functions provided by the accompanying code file
 
 #endif /* __IAXXX_RESMGR_SYSIDS_H__ */
 /*** eof ***/

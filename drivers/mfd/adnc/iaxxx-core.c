@@ -140,7 +140,8 @@ static const u32 iaxxx_port_do_addr[] = {
 /* Firmware download error code */
 enum {
 	E_IAXXX_REGMAP_ERROR = -1,
-	E_IAXXX_BOOTUP_ERROR = -2
+	E_IAXXX_BOOTUP_ERROR = -2,
+	E_IAXXX_RESET_SYNC_ERROR = -3,
 };
 
 /*===========================================================================
@@ -665,6 +666,44 @@ void iaxxx_regdump_exit(struct iaxxx_priv *priv)
 	kfree(priv->reg_dump);
 }
 
+static int iaxxx_reset_check_sbl_mode(struct iaxxx_priv *priv)
+{
+	uint32_t status;
+	int ret = 0;
+	int mode = 0;
+	int mode_retry = 5;
+
+	if (priv->reset_cb)
+		priv->reset_cb(priv->dev);
+
+	do {
+		/* Verify that the device is in bootloader mode */
+		ret = regmap_read(priv->regmap,
+				IAXXX_SRB_SYS_STATUS_ADDR, &status);
+		if (ret)
+			dev_err(priv->dev,
+				"regmap_read failed, ret = %d\n", ret);
+
+		mode = status & IAXXX_SRB_SYS_STATUS_MODE_MASK;
+		dev_dbg(priv->dev,
+			"System Status: 0x%.08X mode: 0x%.08X\n",
+			status, mode);
+
+		/* Give some time to device before read */
+		usleep_range(IAXXX_READ_DELAY,
+			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
+	} while (!mode && mode_retry--);
+
+	if (!mode && !mode_retry) {
+		WARN_ON(mode != SYSTEM_STATUS_MODE_SBL);
+		dev_err(priv->dev,
+			"SBL SYS MODE retry expired in crash dump\n");
+		ret = -ETIMEDOUT;
+	}
+
+	return ret;
+}
+
 /**
  * iaxxx_do_fw_update - reset and sync target and do firmware update
  *
@@ -678,31 +717,13 @@ void iaxxx_regdump_exit(struct iaxxx_priv *priv)
 static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 {
 	int rc;
-	uint32_t reg, mode, status, mem_elec_ctrl_val;
+	uint32_t reg, mem_elec_ctrl_val;
 	struct device *dev = priv->dev;
-	int mode_retry = 5;
 
-	if (priv->reset_cb)
-		priv->reset_cb(dev);
-
-	do {
-		/* Verify that the device is in bootloader mode */
-		rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_STATUS_ADDR,
-				&status);
-		if (rc) {
-			dev_err(dev, "regmap_read failed, rc = %d\n", rc);
-			return E_IAXXX_REGMAP_ERROR;
-		}
-
-		mode = status & IAXXX_SRB_SYS_STATUS_MODE_MASK;
-		dev_dbg(dev, "System Status: 0x%.08X mode: 0x%.08X\n", status,
-				mode);
-	} while (!mode && mode_retry--);
-
-	if (!mode && !mode_retry) {
-		WARN_ON(mode != SYSTEM_STATUS_MODE_SBL);
-		dev_err(dev, "SBL SYS MODE retry expired\n");
-		return -ETIMEDOUT;
+	rc = iaxxx_reset_check_sbl_mode(priv);
+	if (rc) {
+		dev_err(dev, "SBL sysmode check failed, rc = %d\n", rc);
+		return rc;
 	}
 
 	/* Get and log the Device ID */
@@ -850,75 +871,6 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv)
 				priv->crashlog->header[i].log_size);
 }
 
-static int iaxxx_dump_cm4crashlog(struct iaxxx_priv *priv)
-{
-	uint32_t buf_size;
-	uint32_t data_written = 0;
-	uint32_t log_addr;
-	uint32_t log_size;
-	int ret;
-
-	if (!priv->crashlog->cm4header.log_size) {
-		dev_err(priv->dev,
-			"Nothing to read from CM4 crash log\n");
-		return 0;
-	}
-	/* If memory already allocated */
-	kfree(priv->crashlog->log_buffer);
-	priv->crashlog->log_buffer = NULL;
-
-	/* Calculate total crash log dump size */
-	buf_size = sizeof(struct iaxxx_crashlog_header);
-	buf_size += priv->crashlog->cm4header.log_size;
-	priv->crashlog->log_buffer_size = buf_size;
-	/* Allocate the memory */
-	priv->crashlog->log_buffer = kzalloc(buf_size, GFP_KERNEL);
-	if (!priv->crashlog->log_buffer)
-		return -ENOMEM;
-
-	/* Copy header information */
-	memcpy(priv->crashlog->log_buffer + data_written,
-				&priv->crashlog->cm4header,
-				sizeof(struct iaxxx_crashlog_header));
-	data_written += sizeof(struct iaxxx_crashlog_header);
-	log_addr = priv->crashlog->cm4header.log_addr;
-	log_size = priv->crashlog->cm4header.log_size;
-
-	/* Read the logs */
-	ret = priv->bulk_read(priv->dev,
-			log_addr, priv->crashlog->log_buffer + data_written,
-			log_size / sizeof(uint32_t));
-	if (ret != log_size / sizeof(uint32_t)) {
-		dev_err(priv->dev, "Not able to read Debug logs %d\n",
-					ret);
-		return ret;
-	}
-	data_written += log_size;
-
-	dev_dbg(priv->dev, "Data written 0x%x\n", data_written);
-	return 0;
-}
-
-static void iaxxx_cm4_crashlog_header_read(struct iaxxx_priv *priv)
-{
-	int ret;
-
-	priv->crashlog->cm4header.log_type = IAXXX_CRASHLOG_CM4;
-	ret = regmap_bulk_read(priv->regmap,
-			IAXXX_DEBUGLOG_BLOCK_0_CRASHLOG_ADDR_ADDR,
-			&priv->crashlog->cm4header.log_addr, 2);
-	if (ret) {
-		dev_err(priv->dev,
-			"IAXXX_CRASHLOG_CM4 address read fail %d\n", ret);
-		priv->crashlog->cm4header.log_addr = 0;
-		priv->crashlog->cm4header.log_size = 0;
-	}
-
-	dev_dbg(priv->dev, "CM4: addr 0x%x size 0x%x\n",
-				priv->crashlog->cm4header.log_addr,
-				priv->crashlog->cm4header.log_size);
-}
-
 static int iaxxx_fw_recovery(struct iaxxx_priv *priv)
 {
 	int rc;
@@ -933,10 +885,17 @@ static int iaxxx_fw_recovery(struct iaxxx_priv *priv)
 	do {
 		/* Firmware download */
 		rc = iaxxx_do_fw_update(priv);
-	} while (rc && ++try_count < IAXXX_FW_RETRY_COUNT);
+
+		if (rc && ++try_count < IAXXX_FW_RETRY_COUNT)
+			dev_err(priv->dev,
+				"Firmware Download Retry %d\n", rc);
+		else
+			break;
+
+	} while (true);
 	if (rc) {
 		dev_err(priv->dev,
-			"Recovery retry's expired with reason:%d\n", rc);
+			"Recovery retries expired with reason:%d\n", rc);
 		priv->iaxxx_state->fw_state = FW_CRASH;
 		return rc;
 	}
@@ -974,8 +933,6 @@ static void iaxxx_crash_work(struct kthread_work *work)
 	char action[] = "ACTION=IAXXX_CRASH_EVENT";
 	char *event[] = {action, NULL};
 	uint32_t core_crashed = 0;
-	uint32_t mode, status;
-	int mode_retry = 5;
 
 	priv->crash_count++;
 	dev_info(priv->dev, "iaxxx %d time crashed\n",
@@ -984,12 +941,18 @@ static void iaxxx_crash_work(struct kthread_work *work)
 	/* Clear event queue */
 	if (gpio_is_valid(priv->event_gpio))
 		disable_irq(gpio_to_irq(priv->event_gpio));
+
 	mutex_lock(&priv->event_queue_lock);
 	priv->event_queue->w_index = -1;
 	priv->event_queue->r_index = -1;
 	mutex_unlock(&priv->event_queue_lock);
+
 	priv->route_status = 0;
-	if (!priv->cm4_crashed) {
+
+	if (priv->cm4_crashed) {
+		dev_info(priv->dev, "D4100S CM4 core crashed\n");
+		priv->cm4_crashed = false;
+	} else {
 		ret = regmap_read(priv->regmap,
 				IAXXX_SRB_PROCESSOR_CRASH_STATUS_ADDR,
 				&core_crashed);
@@ -998,54 +961,31 @@ static void iaxxx_crash_work(struct kthread_work *work)
 			dev_info(priv->dev,
 					"Crash status read fail %s()\n",
 					__func__);
+			core_crashed = IAXXX_CM4_ID;
 		}
-		if (core_crashed == 1 << IAXXX_HMD_ID)
+		if (core_crashed == IAXXX_CM4_ID) {
+			dev_info(priv->dev, "D4100S CM4 core crashed\n");
+			priv->cm4_crashed = false;
+		} else if (core_crashed == 1 << IAXXX_HMD_ID)
 			dev_info(priv->dev, "D4100S HMD core crashed\n");
 		else if (core_crashed == 1 << IAXXX_DMX_ID)
 			dev_info(priv->dev, "D4100S DMX Core Crashed\n");
 		else
 			dev_info(priv->dev, "D4100S Update block failed recovery\n");
-
-		mutex_lock(&priv->crashdump_lock);
-		iaxxx_crashlog_header_read(priv);
-		iaxxx_dump_crashlogs(priv);
-		mutex_unlock(&priv->crashdump_lock);
-	} else {
-		dev_info(priv->dev, "D4100S CM4 core crashed\n");
-		if (priv->reset_cb)
-			priv->reset_cb(priv->dev);
-
-		do {
-			/* Verify that the device is in bootloader mode */
-			ret = regmap_read(priv->regmap,
-					IAXXX_SRB_SYS_STATUS_ADDR, &status);
-			if (ret) {
-				dev_err(priv->dev,
-					"regmap_read failed, ret = %d\n", ret);
-			}
-
-			mode = status & IAXXX_SRB_SYS_STATUS_MODE_MASK;
-			dev_dbg(priv->dev,
-				"System Status: 0x%.08X mode: 0x%.08X\n",
-				status, mode);
-		} while (!mode && mode_retry--);
-
-		if (!mode && !mode_retry) {
-			WARN_ON(mode != SYSTEM_STATUS_MODE_SBL);
-			dev_err(priv->dev,
-				"SBL SYS MODE retry expired in crash dump\n");
-			return;
-		}
-
-		mutex_lock(&priv->crashdump_lock);
-		iaxxx_dump_cm4crashlog(priv);
-		priv->cm4_crashed = false;
-		mutex_unlock(&priv->crashdump_lock);
 	}
+
+	mutex_lock(&priv->crashdump_lock);
+	iaxxx_reset_check_sbl_mode(priv);
+	iaxxx_dump_crashlogs(priv);
+	mutex_unlock(&priv->crashdump_lock);
+
+	/* stop tunnel threads till we recover the chip */
 	iaxxx_tunnel_stop(priv);
+	/* reset all codec params for route setup after recovery */
 	iaxxx_reset_codec_params(priv);
-	/* Collect the crash logs */
+	/* Notify the user about crash */
 	kobject_uevent_env(&priv->dev->kobj, KOBJ_CHANGE, event);
+	/* start recovery */
 	ret = iaxxx_fw_recovery(priv);
 	if (ret)
 		dev_err(priv->dev, "Recovery fail\n");
@@ -1131,8 +1071,10 @@ static void iaxxx_dev_init_work(struct kthread_work *work)
 	struct iaxxx_priv *priv = iaxxx_ptr2priv(work, dev_init_work);
 	struct device *dev = priv->dev;
 	int rc;
+
 	rc = iaxxx_do_fw_update(priv);
-	if (rc == E_IAXXX_REGMAP_ERROR) {
+	if ((rc == E_IAXXX_REGMAP_ERROR) ||
+		(rc == E_IAXXX_RESET_SYNC_ERROR)) {
 		goto err_chip_reset;
 	} else if (rc == E_IAXXX_BOOTUP_ERROR) {
 		static int try_count;
@@ -1183,7 +1125,7 @@ static void iaxxx_dev_init_work(struct kthread_work *work)
 
 	atomic_set(&priv->power_state, IAXXX_NORMAL);
 
-	iaxxx_cm4_crashlog_header_read(priv);
+	iaxxx_crashlog_header_read(priv);
 	/* Subscribing for FW crash event */
 	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
 			IAXXX_CRASH_EVENT_ID, IAXXX_SYSID_HOST, 0);
@@ -2129,6 +2071,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->event_work_lock);
 	mutex_init(&priv->event_queue_lock);
 	mutex_init(&priv->plugin_lock);
+	mutex_init(&priv->module_lock);
 	mutex_init(&priv->crashdump_lock);
 
 	iaxxx_init_kthread_worker(&priv->worker);
@@ -2233,6 +2176,12 @@ err_regdump_init:
 		iaxxx_dfs_del_regmap(priv->dev, priv->regmap);
 		regmap_exit(priv->regmap);
 	}
+	mutex_destroy(&priv->update_block_lock);
+	mutex_destroy(&priv->event_work_lock);
+	mutex_destroy(&priv->event_queue_lock);
+	mutex_destroy(&priv->plugin_lock);
+	mutex_destroy(&priv->module_lock);
+	mutex_destroy(&priv->crashdump_lock);
 	return -EINVAL;
 }
 
@@ -2263,6 +2212,13 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 
 	iaxxx_flush_kthread_worker(&priv->worker);
 	kthread_stop(priv->thread);
+
+	mutex_destroy(&priv->update_block_lock);
+	mutex_destroy(&priv->event_work_lock);
+	mutex_destroy(&priv->event_queue_lock);
+	mutex_destroy(&priv->plugin_lock);
+	mutex_destroy(&priv->module_lock);
+	mutex_destroy(&priv->crashdump_lock);
 
 	iaxxx_regdump_exit(priv);
 	iaxxx_irq_exit(priv);

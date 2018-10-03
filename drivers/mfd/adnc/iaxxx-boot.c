@@ -23,6 +23,7 @@
 #include <linux/mfd/adnc/iaxxx-core.h>
 
 #define IAXXX_CHUNK_SIZE 32768
+#define IAXXX_REDUCED_CHUNK_SIZE 4096
 
 /* Firmware and hardware configuration files */
 static const char *iaxxx_fw_filename = "RomeApp.bin";
@@ -42,6 +43,54 @@ void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes)
 }
 
 /**
+ * iaxxx_download_section_chunks - downloads a firmware text or data section
+ *
+ * @priv    : iaxxx private data
+ * @data    : the section data to be downloaded
+ * @chunk_size: max chunk size downloaded
+ * @section : pointer to the section data (section address, length, etc).
+ */
+static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
+			const uint8_t *data, uint32_t chunk_size,
+			const struct firmware_section_header *section)
+{
+	int rc, i = 0;
+	struct device *dev = priv->dev;
+	int rem_bytes = section->length % chunk_size;
+	int temp_len = section->length / chunk_size;
+	int chunk_word_size = chunk_size * 4;
+
+	dev_err(dev, "Writing section at 0x%.08X, %d words(s)\n",
+				section->start_address, section->length);
+
+	/* Write the section data directly to the device memory */
+	for (i = 0; i < temp_len; i++) {
+		rc = regmap_bulk_write(priv->regmap,
+			(section->start_address + ((i * chunk_word_size))),
+			data + (i * chunk_word_size), chunk_size);
+		if (rc) {
+			dev_err(dev,
+				"regmap bulk write section chunk failed, rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+	if (rem_bytes) {
+		rc = regmap_bulk_write(priv->regmap,
+			(section->start_address + ((i * chunk_word_size))),
+			data + (i * chunk_word_size), rem_bytes);
+		if (rc) {
+			dev_err(dev,
+				"regmap bulk write rem_bytes failed, rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+
+/**
  * iaxxx_download_section - downloads a firmware text or data section
  *
  * @priv    : iaxxx private data
@@ -51,42 +100,37 @@ void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes)
 int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				const struct firmware_section_header *section)
 {
-	int rc, i = 0;
+	int rc = 0;
 	struct device *dev = priv->dev;
 	uint32_t iaxxx_chunk_size = (priv->bus == IAXXX_I2C)
 				? IAXXX_CHUNK_SIZE/64 : IAXXX_CHUNK_SIZE;
-	int rem_bytes = section->length % (iaxxx_chunk_size);
-	int temp_len = section->length / (iaxxx_chunk_size);
-	int chunk_word_size = iaxxx_chunk_size * 4;
 
-
-	dev_err(dev, "Writing section at 0x%.08X, %d words(s)\n",
-				section->start_address, section->length);
-
-	/* Write the section data directly to the device memory */
-	for (i = 0; i < temp_len; i++) {
-
-		rc = regmap_bulk_write(priv->regmap,
-			(section->start_address + ((i * chunk_word_size))),
-			data + (i * chunk_word_size), iaxxx_chunk_size);
-		if (rc) {
-			dev_err(dev, "%s: regmap_write failed, rc=%d\n",
-						__func__, rc);
+	rc = iaxxx_download_section_chunks(priv, data,
+						iaxxx_chunk_size, section);
+	if (rc == -ENOMEM) {
+		iaxxx_chunk_size = (priv->bus == IAXXX_I2C)
+					? IAXXX_REDUCED_CHUNK_SIZE / 64 :
+					IAXXX_REDUCED_CHUNK_SIZE;
+		dev_err(dev, "retry section download with reduced chunk size\n");
+		rc = iaxxx_download_section_chunks(priv, data,
+						iaxxx_chunk_size, section);
+		if (rc == -ENOMEM) {
+			dev_err(dev,
+				"retry failed: %d, with reduced chunk size: %d",
+				rc, IAXXX_REDUCED_CHUNK_SIZE);
 			return rc;
 		}
 	}
-	if (rem_bytes) {
-		rc = regmap_bulk_write(priv->regmap,
-			(section->start_address + ((i * chunk_word_size))),
-			data + (i * chunk_word_size), rem_bytes);
-		if (rc) {
-			dev_err(dev, "%s: regmap_write failed, rc=%d\n",
-						__func__, rc);
-			return rc;
-		}
-	}
+	if (rc)
+		dev_err(dev,
+			"regmap bulk write section failed, rc=%d\n",
+			rc);
+	else
+		dev_dbg(dev,
+			"download section at 0x%.08X, %d words(s) successful\n",
+			section->start_address, section->length);
 
-	return 0;
+	return rc;
 }
 
 int iaxxx_verify_fw_header(struct device *dev,
@@ -193,8 +237,8 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 
 		if (checksum != file_section.start_address) {
 			rc = -EINVAL;
-			dev_err(dev, "%s(): Checksum mismatch 0x%.08X != 0x%.08X\n",
-				__func__, checksum, file_section.start_address);
+			dev_err(dev, "Checksum mismatch 0x%.08X != 0x%.08X\n",
+				checksum, file_section.start_address);
 		}
 	}
 

@@ -19,6 +19,7 @@ enum iaxxx_cdev_types {
 	IAXXX_CDEV_DEBUG,
 	IAXXX_CDEV_CUSTOM,
 	IAXXX_CDEV_CRASHDUMP,
+	IAXXX_CDEV_SENSOR_TUNNEL_DEV,
 	/* Last available enum index */
 	IAXXX_CDEV_LAST,
 };

@@ -649,7 +649,15 @@ static int iaxxx_spi_sync(struct iaxxx_spi_priv *spi_priv)
 	uint32_t sync_response;
 	struct device *dev = spi_priv->priv.dev;
 	const uint32_t SBL_SYNC_CMD = 0x80000000;
+	const uint32_t SBL_SYNC_CMD_RESPONSE = 0x8000FFFF;
 	const uint32_t CMD_REGMAP_MODE = 0x80040000;
+
+#ifdef IAXXX_SBL_DEBUG
+	const uint32_t SBL_SYNC_CMD_2 = 0x80720080;
+	const uint32_t SBL_SYNC_CMD_3 = 0x80735001;
+	const uint32_t SBL_SYNC_CMD_4 = 0x80740000;
+	const uint32_t SBL_SYNC_CMD_5 = 0x80750000;
+#endif
 
 	do {
 		retry--;
@@ -662,45 +670,76 @@ static int iaxxx_spi_sync(struct iaxxx_spi_priv *spi_priv)
 		}
 
 		/* Send a SYNC command */
-		rc = iaxxx_spi_cmd(spi_priv->spi, SBL_SYNC_CMD, &sync_response);
-		if (rc)
+		rc = iaxxx_spi_cmd(spi_priv->spi, SBL_SYNC_CMD,
+				&sync_response);
+		if (rc || sync_response != SBL_SYNC_CMD_RESPONSE) {
+			dev_err(dev,
+				"%s SYNC fail, err:%d response:0x%.08X\n",
+				__func__, rc, sync_response);
 			continue;
+		}
 
 		dev_dbg(dev, "SYNC response: 0x%.08X\n", sync_response);
 
+		/* The additional SPI testing is enabled only
+		 * with DEBUG flag
+		 */
+#ifdef IAXXX_SBL_DEBUG
 		sync_response = 0;
 		/* Send a SYNC command */
-		rc = iaxxx_spi_cmd(spi_priv->spi, 0x80720080, &sync_response);
-		if (rc)
-			dev_err(dev, "%s SYNC fail, err:%d\n", __func__, rc);
+		rc = iaxxx_spi_cmd(spi_priv->spi, SBL_SYNC_CMD_2,
+				&sync_response);
+		if (rc || sync_response != SBL_SYNC_CMD_2) {
+			dev_err(dev,
+				"%s SYNC fail, err:%d response:0x%.08X\n",
+				__func__, rc, sync_response);
+			continue;
+		}
 		dev_dbg(dev, "SYNC response: 0x%.08X\n", sync_response);
 		sync_response = 0;
 		/* Send a SYNC command */
-		rc = iaxxx_spi_cmd(spi_priv->spi, 0x80735001, &sync_response);
-		if (rc)
-			dev_err(dev, "%s SYNC fail, err:%d\n", __func__, rc);
+		rc = iaxxx_spi_cmd(spi_priv->spi, SBL_SYNC_CMD_3,
+				&sync_response);
+		if (rc || sync_response != SBL_SYNC_CMD_3) {
+			dev_err(dev,
+				"%s SYNC fail, err:%d response:0x%.08X\n",
+				__func__, rc, sync_response);
+			continue;
+		}
 		dev_dbg(dev, "SYNC response: 0x%.08X\n", sync_response);
 		sync_response = 0;
 		/* Send a SYNC command */
-		rc = iaxxx_spi_cmd(spi_priv->spi, 0x80740000, &sync_response);
-		if (rc)
-			dev_err(dev, "%s SYNC fail, err:%d\n", __func__, rc);
+		rc = iaxxx_spi_cmd(spi_priv->spi, SBL_SYNC_CMD_4,
+				&sync_response);
+		if (rc || sync_response != SBL_SYNC_CMD_4) {
+			dev_err(dev,
+				"%s SYNC fail, err:%d response:0x%.08X\n",
+				__func__, rc, sync_response);
+			continue;
+		}
 		dev_dbg(dev, "SYNC response: 0x%.08X\n", sync_response);
 		sync_response = 0;
 		/* Send a SYNC command */
-		rc = iaxxx_spi_cmd(spi_priv->spi, 0x80750000, &sync_response);
-		if (rc)
-			dev_err(dev, "%s SYNC fail, err:%d\n", __func__, rc);
+		rc = iaxxx_spi_cmd(spi_priv->spi, SBL_SYNC_CMD_5,
+				&sync_response);
+		if (rc || sync_response != SBL_SYNC_CMD_5) {
+			dev_err(dev,
+				"%s SYNC fail, err:%d response:0x%.08X\n",
+				__func__, rc, sync_response);
+			continue;
+		}
 		dev_dbg(dev, "SYNC response: 0x%.08X\n", sync_response);
 		sync_response = 0;
-
+#endif
 		dev_dbg(dev, "Putting device in regmap mode\n");
 
 		/* Switch the device into regmap mode */
 		rc = iaxxx_spi_cmd(spi_priv->spi, CMD_REGMAP_MODE, NULL);
-		if (rc)
-			continue;
-	} while (rc && retry);
+		if (rc == 0)
+			break;
+		dev_err(dev, "REGMAP MODE CMD fail, err:%d\n",
+			rc);
+	} while (retry);
 
 	return rc;
 }

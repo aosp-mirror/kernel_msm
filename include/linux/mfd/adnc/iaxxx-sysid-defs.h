@@ -59,7 +59,7 @@ enum {
 	IAXXX_SYSID_RESOURCE_TYPE_BT,			/* Bluetooth */
 	IAXXX_SYSID_RESOURCE_TYPE_SENSOR,		/* Sensor */
 	IAXXX_SYSID_RESOURCE_TYPE_DEBUG,		/* Debug */
-
+	IAXXX_SYSID_RESOURCE_TYPE_FILE,			/*File */
 	IAXXX_SYSID_RESOURCE_TYPE_NUM,
 
 	/* Force enums to be of size int */
@@ -89,7 +89,6 @@ enum sysid_driver_type_e {
 	IAXXX_SYSID_DRIVER_TYPE_I3C_DATA,	/* I3C data driver */
 	IAXXX_SYSID_DRIVER_TYPE_SSP,		/* SSP driver */
 	IAXXX_SYSID_DRIVER_TYPE_AF,		/* AF driver */
-	IAXXX_SYSID_DRIVER_TYPE_ADC,		/* ADC driver */
 	IAXXX_SYSID_DRIVER_TYPE_DAC,		/* DAC driver */
 	IAXXX_SYSID_DRIVER_TYPE_A400,		/* A400 driver */
 	IAXXX_SYSID_DRIVER_TYPE_FILTER_IN,	/* Filter input driver */
@@ -345,6 +344,30 @@ enum sysid_dir_e {
 #define IAXXX_SYSID_MASK_BT_EP_INDEX              (0x001F)
 
 
+/** Bit offset of the 'FILE ' field in the file endpoint system id
+ */
+#define IAXXX_SYSID_POS_FILE_ID                   (6)
+/** Bit mask of the 'flie id' field in the file endpoint system id
+ */
+#define IAXXX_SYSID_MASK_FILE_ID                  (0x0FC0)
+
+/** Bit offset of the 'FILE endpoint direction' field
+ * in the FILE endpoint system id
+ */
+#define IAXXX_SYSID_POS_FILE_EP_DIR               (5)
+/** Bit mask of the 'FILE endpoint direction' field
+ * in the FILE endpoint system id
+ */
+#define IAXXX_SYSID_MASK_FILE_EP_DIR              (0x0020)
+
+/** Bit offset of the 'FILE endpoint index' field
+ * in the FILE endpoint system id
+ */
+#define IAXXX_SYSID_POS_FILE_EP_INDEX             (0)
+/** Bit mask of the 'FILE endpoint index' field
+ * in the FILE endpoint system id
+ */
+#define IAXXX_SYSID_MASK_FILE_EP_INDEX            (0x001F)
 /** Bit offset of the 'Sensor ' field in the sensor endpoint system id
  */
 #define IAXXX_SYSID_POS_SENSOR_ID                 (6)
@@ -510,6 +533,11 @@ enum sysid_dir_e {
 #define IAXXX_SYSID_IS_HOST(id)       ((IAXXX_SYSID_IS_SPECIAL(id)) &&        \
 	(IAXXX_SYSID_GET_SPECIAL_TYPE(id) == IAXXX_SYSID_SPECIAL_TYPE_HOST))
 
+/** Evaluates to true if the system id is file system id
+ */
+#define IAXXX_SYSID_IS_FILE(id)       \
+	(IAXXX_SYSID_GET_RESOURCE_TYPE(id) == IAXXX_SYSID_RESOURCE_TYPE_FILE)
+
 /* Special Resource type System Ids */
 #define IAXXX_SYSID_GEN_SPECIAL_SYSID(type, index)                            \
 	(((IAXXX_SYSID_RESOURCE_TYPE_SPECIAL << IAXXX_SYSID_POS_RESOURCE_TYPE)\
@@ -540,7 +568,7 @@ enum sysid_dir_e {
  */
 #define IAXXX_SYSID_GEN_DRIVER_SYSID(type, index)                             \
 	(((IAXXX_SYSID_RESOURCE_TYPE_DRIVER << IAXXX_SYSID_POS_RESOURCE_TYPE) \
-	&  IAXXX_SYSID_MASK_RESOURCE_TYPE) |                                  \
+	& IAXXX_SYSID_MASK_RESOURCE_TYPE) |                                  \
 	(((type)                      << IAXXX_SYSID_POS_DRIVER_TYPE)         \
 	& IAXXX_SYSID_MASK_DRIVER_TYPE)    |                                  \
 	(((index)                     << IAXXX_SYSID_POS_DRIVER_INST_INDEX)   \
@@ -711,6 +739,33 @@ enum sysid_dir_e {
 #define IAXXX_SYSID_GET_BT_EP_INDEX(sysId)                               \
 { ((sysId) & IAXXX_SYSID_MASK_BT_EP_INDEX) >> IAXXX_SYSID_POS_BT_EP_INDEX) }
 
+/** Generate the File endpoint system id give the bt id,
+ * direction and index
+ */
+#define IAXXX_SYSID_GEN_FILE_SYSID(fileId, dir, index)                    \
+	(((IAXXX_SYSID_RESOURCE_TYPE_FILE << IAXXX_SYSID_POS_RESOURCE_TYPE) & \
+	IAXXX_SYSID_MASK_RESOURCE_TYPE)  | \
+	(((fileId)                 << IAXXX_SYSID_POS_FILE_ID)         &  \
+	IAXXX_SYSID_MASK_FILE_ID)        | \
+	(((dir)                    << IAXXX_SYSID_POS_FILE_EP_DIR)     &   \
+	IAXXX_SYSID_MASK_FILE_EP_DIR)    | \
+	(((index)                  << IAXXX_SYSID_POS_FILE_EP_INDEX)   &  \
+			IAXXX_SYSID_MASK_FILE_EP_INDEX))
+
+/** Get the file endpoint id from the file endpoint system id
+ */
+#define IAXXX_SYSID_GET_FILE_ID(sysId)                                     \
+	(((sysId) & IAXXX_SYSID_MASK_FILE_ID) >> IAXXX_SYSID_POS_FILE_ID)
+/** Get the file endpoint direction from the file (endpoint) system id
+ */
+#define IAXXX_SYSID_GET_FILE_EP_DIR(sysId)                                 \
+	(((sysId) & IAXXX_SYSID_MASK_FILE_EP_DIR) >> \
+	IAXXX_SYSID_POS_FILE_EP_DIR)
+/** Get the file endpoint index from the file (endpoint) system id
+ */
+#define IAXXX_SYSID_GET_FILE_EP_INDEX(sysId)                               \
+	(((sysId) & IAXXX_SYSID_MASK_FILE_EP_INDEX) >> \
+	IAXXX_SYSID_POS_FILE_EP_INDEX)
 
 /** Generate the Sensor(endpoint) system id give the Sensor id,
  * direction and index
@@ -829,30 +884,7 @@ IAXXX_SYSID_GEN_SPECIAL_SYSID(IAXXX_SYSID_SPECIAL_TYPE_HOST, 0)
 #define IAXXX_SYSID_HOST_1    \
 IAXXX_SYSID_GEN_SPECIAL_SYSID(IAXXX_SYSID_SPECIAL_TYPE_HOST, 1)
 
-/***************************************************************************//**
- * @}
- ******************************************************************************/
-
-/***************************************************************************//**
- * @defgroup sysid_const Constants
- * @{
- ******************************************************************************/
-
-/************************************************************************//**
- * System ID type
- ****************************************************************************/
-typedef uint16_t iaxxx_system_id_t;
-
-
-/***************************************************************************//**
- * @}
- ******************************************************************************/
-
-/***************************************************************************//**
- * @}
- ******************************************************************************/
-
-#endif  // Header sentinel
+#endif  /* Header sentinel */
 
 /* EOF */
 

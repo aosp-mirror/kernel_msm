@@ -7,21 +7,10 @@ config SND_SOC_IAXXX
 	---help---
 	  Enable codec driver for IAxxx
 
-config IAXXX_PCM_MODE
-	bool "Enable PCM DAI"
-	---help---
-	This config enables IAXXX PCM
-
 config IAXXX_ACLK_338640
 	bool "Enable for ACLK 338640"
 	---help---
 	This config enables IAXXX ACLK 338640
-
-config IAXXX_PDM_DMIC_MODE
-	bool "Enable if PDM in DUAL MIC mode"
-	---help---
-	This config enables PDM dual mic
-	configuration
 
 config IAXXX_PCM_DAI_FORMAT_DSP_A
 	bool "Set Default PCM DAI Format"

@@ -80,6 +80,23 @@ struct iaxxx_plugin_custom_cfg {
 	uint32_t custom_config_id;
 };
 
+struct iaxxx_plugin_error_info {
+	uint8_t  block_id;
+	uint32_t error_code;
+	uint8_t  error_instance;
+};
+
+struct iaxxx_plugin_set_param_blk_with_ack_info {
+	uint32_t inst_id;
+	uint8_t  block_id;
+	uint32_t param_blk_id;
+	uint32_t set_param_blk_size;
+	uint64_t set_param_blk_buffer;
+	uint64_t response_buffer;
+	uint32_t response_buf_size;
+	uint32_t max_retries;
+};
+
 /* IOCTL Magic character */
 #define IAXXX_IOCTL_MAGIC 'I'
 
@@ -102,4 +119,6 @@ struct iaxxx_plugin_custom_cfg {
 #define ODSP_PLG_SET_CUSTOM_CFG _IO(IAXXX_IOCTL_MAGIC, 0x20)
 #define ODSP_PLG_GET_PARAM_BLK _IO(IAXXX_IOCTL_MAGIC, 0x21)
 #define ODSP_PLG_CREATE_STATIC_PACKAGE _IO(IAXXX_IOCTL_MAGIC, 0x22)
+#define ODSP_PLG_READ_PLUGIN_ERROR _IO(IAXXX_IOCTL_MAGIC, 0x23)
+#define ODSP_PLG_SET_PARAM_BLK_WITH_ACK _IO(IAXXX_IOCTL_MAGIC, 0x24)
 #endif

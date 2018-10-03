@@ -41,18 +41,17 @@
  * Error code that corresponds to the latest block update.
  * ARB error codes are application specific.
  * Error codes for the SRB.
- * 0x0 - No error.
- * 0x1 - Invalid Jump Address (if address is not
- * within the processor's IRAM range).
- * 0x2 - Checksum calculation failed.
- * 0x3 - Memory allocation failed.
- * 0x4 - Memory deallocation failed.
- * 0x5 - Script registration failed.
- * 0x6 - Script execution failed.
- * 0x7 - Script de-registration failed.
- * 0x8 - Event subscription failed.
- * 0x9 - Event trigger failed.
- * 0xA - Event un-subscription failed.
+ * 0x0 - No error (Error Code: SYSRC_SUCCESS)
+ * 0x1 - General Error (Error Code: SYSRC_FAIL)
+ * 0x2 - Bad parameter in function call (Error Code: SYSRC_ERR_PARM)
+ * 0x3 - Out of Memory condition (Error Code: SYSRC_ERR_MEM)
+ * 0x4 - Busy, unable to process call (Error Code: SYSRC_ERR_BUSY)
+ * 0x5 - No Error. Completion is Asynchronous (Error Code: SYSRC_ERR_PEND)
+ * 0x6 - Callee in wrong state (Error Code: SYSRC_ERR_STAT)
+ * 0x7 - Some limit(s) exceeded (Error Code: SYSRC_ERR_LIMIT)
+ * 0x8 - Boundary violation (Error Code: SYSRC_ERR_BOUNDARY)
+ * 0x9 - Input/output error (Error Code: SYSRC_ERR_IO)
+ * 0xA - Plugin Error (Error Code: SYSRC_ERR_PLUGIN)
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK 0x000000ff
 #define IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_RESET_VAL 0x0
@@ -107,18 +106,17 @@
  * Error code that corresponds to the latest block update.
  * ARB error codes are application specific.
  * Error codes for the SRB.
- * 0x0 - No error.
- * 0x1 - Invalid Jump Address (if address is not
- * within the processor's IRAM range).
- * 0x2 - Checksum calculation failed.
- * 0x3 - Memory allocation failed.
- * 0x4 - Memory deallocation failed.
- * 0x5 - Script registration failed.
- * 0x6 - Script execution failed.
- * 0x7 - Script de-registration failed.
- * 0x8 - Event subscription failed.
- * 0x9 - Event trigger failed.
- * 0xA - Event un-subscription failed.
+ * 0x0 - No error (Error Code: SYSRC_SUCCESS)
+ * 0x1 - General Error (Error Code: SYSRC_FAIL)
+ * 0x2 - Bad parameter in function call (Error Code: SYSRC_ERR_PARM)
+ * 0x3 - Out of Memory condition (Error Code: SYSRC_ERR_MEM)
+ * 0x4 - Busy, unable to process call (Error Code: SYSRC_ERR_BUSY)
+ * 0x5 - No Error. Completion is Asynchronous (Error Code: SYSRC_ERR_PEND)
+ * 0x6 - Callee in wrong state (Error Code: SYSRC_ERR_STAT)
+ * 0x7 - Some limit(s) exceeded (Error Code: SYSRC_ERR_LIMIT)
+ * 0x8 - Boundary violation (Error Code: SYSRC_ERR_BOUNDARY)
+ * 0x9 - Input/output error (Error Code: SYSRC_ERR_IO)
+ * 0xA - Plugin Error (Error Code: SYSRC_ERR_PLUGIN)
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_ERR_CODE_MASK 0x000000ff
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_ERR_CODE_RESET_VAL 0x0
@@ -173,18 +171,17 @@
  * Error code that corresponds to the latest block update.
  * ARB error codes are application specific.
  * Error codes for the SRB.
- * 0x0 - No error.
- * 0x1 - Invalid Jump Address (if address is not
- * within the processor's IRAM range).
- * 0x2 - Checksum calculation failed.
- * 0x3 - Memory allocation failed.
- * 0x4 - Memory deallocation failed.
- * 0x5 - Script registration failed.
- * 0x6 - Script execution failed.
- * 0x7 - Script de-registration failed.
- * 0x8 - Event subscription failed.
- * 0x9 - Event trigger failed.
- * 0xA - Event un-subscription failed.
+ * 0x0 - No error (Error Code: SYSRC_SUCCESS)
+ * 0x1 - General Error (Error Code: SYSRC_FAIL)
+ * 0x2 - Bad parameter in function call (Error Code: SYSRC_ERR_PARM)
+ * 0x3 - Out of Memory condition (Error Code: SYSRC_ERR_MEM)
+ * 0x4 - Busy, unable to process call (Error Code: SYSRC_ERR_BUSY)
+ * 0x5 - No Error. Completion is Asynchronous (Error Code: SYSRC_ERR_PEND)
+ * 0x6 - Callee in wrong state (Error Code: SYSRC_ERR_STAT)
+ * 0x7 - Some limit(s) exceeded (Error Code: SYSRC_ERR_LIMIT)
+ * 0x8 - Boundary violation (Error Code: SYSRC_ERR_BOUNDARY)
+ * 0x9 - Input/output error (Error Code: SYSRC_ERR_IO)
+ * 0xA - Plugin Error (Error Code: SYSRC_ERR_PLUGIN)
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_ERR_CODE_MASK 0x000000ff
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_ERR_CODE_RESET_VAL 0x0
@@ -249,18 +246,17 @@
  * Error code that corresponds to the latest block update.
  * ARB error codes are application specific.
  * Error codes for the SRB.
- * 0x0 - No error.
- * 0x1 - Invalid Jump Address (if address is not
- * within the processor's IRAM range).
- * 0x2 - Checksum calculation failed.
- * 0x3 - Memory allocation failed.
- * 0x4 - Memory deallocation failed.
- * 0x5 - Script registration failed.
- * 0x6 - Script execution failed.
- * 0x7 - Script de-registration failed.
- * 0x8 - Event subscription failed.
- * 0x9 - Event trigger failed.
- * 0xA - Event un-subscription failed.
+ * 0x0 - No error (Error Code: SYSRC_SUCCESS)
+ * 0x1 - General Error (Error Code: SYSRC_FAIL)
+ * 0x2 - Bad parameter in function call (Error Code: SYSRC_ERR_PARM)
+ * 0x3 - Out of Memory condition (Error Code: SYSRC_ERR_MEM)
+ * 0x4 - Busy, unable to process call (Error Code: SYSRC_ERR_BUSY)
+ * 0x5 - No Error. Completion is Asynchronous (Error Code: SYSRC_ERR_PEND)
+ * 0x6 - Callee in wrong state (Error Code: SYSRC_ERR_STAT)
+ * 0x7 - Some limit(s) exceeded (Error Code: SYSRC_ERR_LIMIT)
+ * 0x8 - Boundary violation (Error Code: SYSRC_ERR_BOUNDARY)
+ * 0x9 - Input/output error (Error Code: SYSRC_ERR_IO)
+ * 0xA - Plugin Error (Error Code: SYSRC_ERR_PLUGIN)
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_ERR_CODE_MASK 0x000000ff
 #define IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_ERR_CODE_RESET_VAL 0x0
@@ -315,18 +311,17 @@
  * Error code that corresponds to the latest block update.
  * ARB error codes are application specific.
  * Error codes for the SRB.
- * 0x0 - No error.
- * 0x1 - Invalid Jump Address (if address is not
- * within the processor's IRAM range).
- * 0x2 - Checksum calculation failed.
- * 0x3 - Memory allocation failed.
- * 0x4 - Memory deallocation failed.
- * 0x5 - Script registration failed.
- * 0x6 - Script execution failed.
- * 0x7 - Script de-registration failed.
- * 0x8 - Event subscription failed.
- * 0x9 - Event trigger failed.
- * 0xA - Event un-subscription failed.
+ * 0x0 - No error (Error Code: SYSRC_SUCCESS)
+ * 0x1 - General Error (Error Code: SYSRC_FAIL)
+ * 0x2 - Bad parameter in function call (Error Code: SYSRC_ERR_PARM)
+ * 0x3 - Out of Memory condition (Error Code: SYSRC_ERR_MEM)
+ * 0x4 - Busy, unable to process call (Error Code: SYSRC_ERR_BUSY)
+ * 0x5 - No Error. Completion is Asynchronous (Error Code: SYSRC_ERR_PEND)
+ * 0x6 - Callee in wrong state (Error Code: SYSRC_ERR_STAT)
+ * 0x7 - Some limit(s) exceeded (Error Code: SYSRC_ERR_LIMIT)
+ * 0x8 - Boundary violation (Error Code: SYSRC_ERR_BOUNDARY)
+ * 0x9 - Input/output error (Error Code: SYSRC_ERR_IO)
+ * 0xA - Plugin Error (Error Code: SYSRC_ERR_PLUGIN)
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_HOST_1_ERR_CODE_MASK 0x000000ff
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_HOST_1_ERR_CODE_RESET_VAL 0x0
@@ -381,18 +376,17 @@
  * Error code that corresponds to the latest block update.
  * ARB error codes are application specific.
  * Error codes for the SRB.
- * 0x0 - No error.
- * 0x1 - Invalid Jump Address (if address is not
- * within the processor's IRAM range).
- * 0x2 - Checksum calculation failed.
- * 0x3 - Memory allocation failed.
- * 0x4 - Memory deallocation failed.
- * 0x5 - Script registration failed.
- * 0x6 - Script execution failed.
- * 0x7 - Script de-registration failed.
- * 0x8 - Event subscription failed.
- * 0x9 - Event trigger failed.
- * 0xA - Event un-subscription failed.
+ * 0x0 - No error (Error Code: SYSRC_SUCCESS)
+ * 0x1 - General Error (Error Code: SYSRC_FAIL)
+ * 0x2 - Bad parameter in function call (Error Code: SYSRC_ERR_PARM)
+ * 0x3 - Out of Memory condition (Error Code: SYSRC_ERR_MEM)
+ * 0x4 - Busy, unable to process call (Error Code: SYSRC_ERR_BUSY)
+ * 0x5 - No Error. Completion is Asynchronous (Error Code: SYSRC_ERR_PEND)
+ * 0x6 - Callee in wrong state (Error Code: SYSRC_ERR_STAT)
+ * 0x7 - Some limit(s) exceeded (Error Code: SYSRC_ERR_LIMIT)
+ * 0x8 - Boundary violation (Error Code: SYSRC_ERR_BOUNDARY)
+ * 0x9 - Input/output error (Error Code: SYSRC_ERR_IO)
+ * 0xA - Plugin Error (Error Code: SYSRC_ERR_PLUGIN)
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_HOST_1_ERR_CODE_MASK 0x000000ff
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_HOST_1_ERR_CODE_RESET_VAL 0x0
@@ -484,25 +478,57 @@
 #define IAXXX_SRB_SYS_STATUS_MODE_POS 0
 #define IAXXX_SRB_SYS_STATUS_MODE_SIZE 2
 
-/*** SRB_SYS_RESERVED_9 (0x58000028) ***/
+/*** SRB_REGMAP_VERSION (0x58000028) ***/
 /*
- * Reserved register space for future use
+ * Contains Rome Register Map version.
  */
-#define IAXXX_SRB_SYS_RESERVED_9_ADDR (0x58000028)
-#define IAXXX_SRB_SYS_RESERVED_9_MASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_9_RMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_9_WMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_9_RESET_VAL 0x00000000
+#define IAXXX_SRB_REGMAP_VERSION_ADDR (0x58000028)
+#define IAXXX_SRB_REGMAP_VERSION_MASK_VAL 0x00ffffff
+#define IAXXX_SRB_REGMAP_VERSION_RMASK_VAL 0x00ffffff
+#define IAXXX_SRB_REGMAP_VERSION_WMASK_VAL 0x00000000
+#define IAXXX_SRB_REGMAP_VERSION_RESET_VAL 0x00000000
 
-/*** SRB_SYS_RESERVED_10 (0x5800002c) ***/
 /*
- * Reserved register space for future use
+ * Rome Register Map Patch version.
  */
-#define IAXXX_SRB_SYS_RESERVED_10_ADDR (0x5800002c)
-#define IAXXX_SRB_SYS_RESERVED_10_MASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_10_RMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_10_WMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_10_RESET_VAL 0x00000000
+#define IAXXX_SRB_REGMAP_VERSION_PATCH_MASK 0x000000ff
+#define IAXXX_SRB_REGMAP_VERSION_PATCH_RESET_VAL 0x0
+#define IAXXX_SRB_REGMAP_VERSION_PATCH_POS 0
+#define IAXXX_SRB_REGMAP_VERSION_PATCH_SIZE 8
+
+/*
+ * Rome Register Map Minor version.
+ */
+#define IAXXX_SRB_REGMAP_VERSION_MINOR_MASK 0x0000ff00
+#define IAXXX_SRB_REGMAP_VERSION_MINOR_RESET_VAL 0x0
+#define IAXXX_SRB_REGMAP_VERSION_MINOR_POS 8
+#define IAXXX_SRB_REGMAP_VERSION_MINOR_SIZE 8
+
+/*
+ * Rome Register Map Major version.
+ */
+#define IAXXX_SRB_REGMAP_VERSION_MAJOR_MASK 0x00ff0000
+#define IAXXX_SRB_REGMAP_VERSION_MAJOR_RESET_VAL 0x0
+#define IAXXX_SRB_REGMAP_VERSION_MAJOR_POS 16
+#define IAXXX_SRB_REGMAP_VERSION_MAJOR_SIZE 8
+
+/*** SRB_SYS_FEATURE_SUPPORT (0x5800002c) ***/
+/*
+ * Features supported in the current applicaton.
+ */
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_ADDR (0x5800002c)
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_MASK_VAL 0x00000001
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_RMASK_VAL 0x00000001
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_WMASK_VAL 0x00000000
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_RESET_VAL 0x00000000
+
+/*
+ * Bulk Transfer Support.
+ */
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_BULK_TRANSFER_MASK 0x00000001
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_BULK_TRANSFER_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_BULK_TRANSFER_POS 0
+#define IAXXX_SRB_SYS_FEATURE_SUPPORT_BULK_TRANSFER_SIZE 1
 
 /*** SRB_SYS_RESERVED_11 (0x58000030) ***/
 /*
@@ -758,7 +784,11 @@
 /*
  * Host sets this bit to request
  * firmware to switch to an optimal power
- * mode for the current use case.
+ * mode for the current use case. In a multi
+ * host system, this request is honoured if
+ * all the other HOSTs are inactive(their
+ * control interfaces are in powered down
+ * mode).
  * 0 - No Power mode switch required
  * 1 - Switch to optimal power mode.
  * 2 - Switch to System Sleep Mode.
@@ -789,32 +819,73 @@
  * firmware to disable all the control
  * interfaces.
  * 0 - No Change
- * 1 - Control interfaces will be powered down.
+ * 1 - Control interfaces of this HOST will be powered down.
  */
 #define IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_MASK 0x00000010
 #define IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_RESET_VAL 0x0
 #define IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_POS 4
 #define IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_SIZE 1
 
-/*** SRB_SYS_RESERVED_12 (0x58000060) ***/
+/*** SRB_SYS_POWER_CTRL_1 (0x58000060) ***/
+/*
+ * System Power control Register for Second Host
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_1_ADDR (0x58000060)
+#define IAXXX_SRB_SYS_POWER_CTRL_1_MASK_VAL 0x0000001f
+#define IAXXX_SRB_SYS_POWER_CTRL_1_RMASK_VAL 0x0000001f
+#define IAXXX_SRB_SYS_POWER_CTRL_1_WMASK_VAL 0x00000017
+#define IAXXX_SRB_SYS_POWER_CTRL_1_RESET_VAL 0x00000000
+
+/*
+ * Host sets this bit to request
+ * firmware to switch to an optimal power
+ * mode for the current use case. In a multi
+ * host system, this request is honoured iff
+ * all the other HOSTs are inactive(their
+ * control interfaces are in powered down
+ * mode).
+ * 0 - No Power mode switch required
+ * 1 - Switch to optimal power mode.
+ * 2 - Switch to System Sleep Mode.
+ *       All control interfaces would be
+ *       powered down. Wake up by any
+ *       PCTRL interrupt.
+ * 4 - Switch to Normal power mode.
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_POWER_MODE_MASK 0x00000007
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_POWER_MODE_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_POWER_MODE_POS 0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_POWER_MODE_SIZE 3
+
+/*
+ * Currently not supported for the second host.
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_MASK 0x00000008
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_POS 3
+#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_SIZE 1
+
+/*
+ * Host sets this bit to request
+ * firmware to disable the control
+ * interfaces of this Host.
+ * 0 - No Change
+ * 1 - Control interfaces of this HOST will be powered down.
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK 0x00000010
+#define IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS 4
+#define IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_SIZE 1
+
+/*** SRB_SYS_RESERVED_12 (0x58000064) ***/
 /*
  * Reserved register space for future use
  */
-#define IAXXX_SRB_SYS_RESERVED_12_ADDR (0x58000060)
+#define IAXXX_SRB_SYS_RESERVED_12_ADDR (0x58000064)
 #define IAXXX_SRB_SYS_RESERVED_12_MASK_VAL 0x00000000
 #define IAXXX_SRB_SYS_RESERVED_12_RMASK_VAL 0x00000000
 #define IAXXX_SRB_SYS_RESERVED_12_WMASK_VAL 0x00000000
 #define IAXXX_SRB_SYS_RESERVED_12_RESET_VAL 0x00000000
-
-/*** SRB_SYS_RESERVED_13 (0x58000064) ***/
-/*
- * Reserved register space for future use
- */
-#define IAXXX_SRB_SYS_RESERVED_13_ADDR (0x58000064)
-#define IAXXX_SRB_SYS_RESERVED_13_MASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_13_RMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_13_WMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_13_RESET_VAL 0x00000000
 
 /*** SRB_PROCESSOR_CRASH_STATUS (0x58000068) ***/
 /*

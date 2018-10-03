@@ -39,29 +39,37 @@
 
 #define IAXXX_MAX_CORES	3
 
-#define IAXXX_READ_DELAY        10	/* 10 us delay before SPI read */
-#define IAXXX_READ_DELAY_RANGE  10	/* 10 us range */
+/* The reserved bits in Update block register used to
+ * set values to check if those bits are still set
+ * even after request_bit is cleared.
+ */
+#define IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK 0xf0000
+
+/* No of times to retry in case of update block register
+ * does not return expected value.
+ */
+#define UPDATE_BLOCK_FAIL_RETRIES 200
 
 /**
- * iaxxx_regmap_wait_clear - waits for the masked bits of a register to clear
+ * iaxxx_regmap_wait_match - waits for register read value
+ * to match the given value. This is a dual test to check
+ * if necessary bits are cleared and necessary bits bit
+ * still set. This is to fix cases when invalid 0 value
+ * read from spi would be treated as update block
+ * success.
  *
  * @priv: iaxxx private data
  * @reg : the register to be monitored
- * @mask: the mask of the bits to be tested
+ * @match: the value to be matched
  *
- * This functions polls a register until all of the mask bits are cleared.
  * Returns 0 on success or -ETIMEDOUT if the bits didn't clear.
  */
 static int
-iaxxx_regmap_wait_clear(struct iaxxx_priv *priv, uint32_t reg, uint32_t mask)
+iaxxx_regmap_wait_match(struct iaxxx_priv *priv, uint32_t reg, uint32_t match)
 {
 	uint32_t req;
 	int rc, retries;
-	/* TODO: enable_sensor_route()
-	 * takes too long and need more timeout
-	 * tolerances. 200 times * 10ms
-	 */
-	const int max_retries = 200;
+	const int max_retries = UPDATE_BLOCK_FAIL_RETRIES;
 	struct device *dev = priv->dev;
 
 	for (retries = 0; retries < max_retries; ++retries) {
@@ -80,14 +88,14 @@ iaxxx_regmap_wait_clear(struct iaxxx_priv *priv, uint32_t reg, uint32_t mask)
 			dev_err(dev, "regmap_read failed, rc = %d\n", rc);
 		}
 
-		/* Has the update bit been cleared */
-		if (!(req & mask))
+		/* Read value matches */
+		if (req == match)
 			return 0;
 
 		if (priv->bus == IAXXX_SPI) {
-			if (priv->is_application_mode) {
+			if (priv->is_application_mode)
 				usleep_range(10000, 10005);
-			} else
+			else
 				msleep(20);
 		}
 	}
@@ -186,9 +194,13 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv, uint32_t *status)
 	/* To protect concurrent update blocks requests*/
 	mutex_lock(&priv->update_block_lock);
 
-	/* Set the UPDATE_BLOCK_REQUEST bit in the SRB_UPDATE_CTRL register */
+	/*
+	 * Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
+	 * in the SRB_UPDATE_CTRL register
+	 */
 	rc = regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
-			       IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK |
+			IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 	if (rc) {
 		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
 		goto out;
@@ -200,11 +212,14 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv, uint32_t *status)
 	 * incoming event and wakes us up when the block update has completed.
 	 */
 
-	/* Poll waiting for the UPDATE_BLOCK_REQUEST bit to clear */
-	rc = iaxxx_regmap_wait_clear(priv, IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
-				     IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	/*
+	 * Poll waiting for the UPDATE_BLOCK_REQUEST bit to clear
+	 * and reserved bits to match the value written
+	 */
+	rc = iaxxx_regmap_wait_match(priv, IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
+			IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 	if (rc) {
-		dev_err(dev, "BLOCK_UPDATE failed, rc = %d\n", rc);
+		dev_err(dev, "Update Block Failed, rc = %d\n", rc);
 		goto out;
 	}
 
@@ -218,6 +233,9 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv, uint32_t *status)
 		dev_err(dev, "Failed to read SYSTEM_STATUS, rc = %d\n", rc);
 		goto out;
 	}
+
+	/* Clear reserved bits set earlier in update block status */
+	*status &= (~IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 
 	/*
 	 * If the BLOCK_UPDATE_RESULT is non-zero, then some update failed. The
@@ -266,9 +284,13 @@ static int iaxxx_update_block1_request(struct iaxxx_priv *priv,
 	/* To protect concurrent update blocks requests*/
 	mutex_lock(&priv->update_block_lock);
 
-	/* Set the UPDATE_BLOCK_REQUEST bit in the SRB_UPDATE_CTRL register */
+	/*
+	 * Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
+	 * in the SRB_UPDATE_CTRL register
+	 */
 	rc = regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_1_ADDR,
-			       IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK |
+			IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 	if (rc) {
 		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
 		goto out;
@@ -280,11 +302,14 @@ static int iaxxx_update_block1_request(struct iaxxx_priv *priv,
 	 * incoming event and wakes us up when the block update has completed.
 	 */
 
-	/* Poll waiting for the UPDATE_BLOCK_REQUEST bit to clear */
-	rc = iaxxx_regmap_wait_clear(priv, IAXXX_SRB_SYS_BLK_UPDATE_1_ADDR,
-				     IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	/*
+	 * Poll waiting for the UPDATE_BLOCK_REQUEST bit to clear
+	 * and reserved bits to match the value written
+	 */
+	rc = iaxxx_regmap_wait_match(priv, IAXXX_SRB_SYS_BLK_UPDATE_1_ADDR,
+			IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 	if (rc) {
-		dev_err(dev, "BLOCK_UPDATE failed, rc = %d\n", rc);
+		dev_err(dev, "Update Block Failed, rc = %d\n", rc);
 		goto out;
 	}
 
@@ -294,6 +319,9 @@ static int iaxxx_update_block1_request(struct iaxxx_priv *priv,
 		dev_err(dev, "Failed to read SYSTEM_STATUS, rc = %d\n", rc);
 		goto out;
 	}
+
+	/* Clear reserved bits set earlier in update block status */
+	*status &= (~IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 
 	/*
 	 * If the BLOCK_UPDATE_RESULT is non-zero, then some update failed. The
@@ -340,9 +368,13 @@ static int iaxxx_update_block2_request(struct iaxxx_priv *priv,
 	/* To protect concurrent update blocks requests*/
 	mutex_lock(&priv->update_block_lock);
 
-	/* Set the UPDATE_BLOCK_REQUEST bit in the SRB_UPDATE_CTRL register */
+	/*
+	 * Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
+	 * in the SRB_UPDATE_CTRL register
+	 */
 	rc = regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_2_ADDR,
-			       IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK |
+			IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 	if (rc) {
 		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
 		goto out;
@@ -355,10 +387,10 @@ static int iaxxx_update_block2_request(struct iaxxx_priv *priv,
 	 */
 
 	/* Poll waiting for the UPDATE_BLOCK_REQUEST bit to clear */
-	rc = iaxxx_regmap_wait_clear(priv, IAXXX_SRB_SYS_BLK_UPDATE_2_ADDR,
-				     IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	rc = iaxxx_regmap_wait_match(priv, IAXXX_SRB_SYS_BLK_UPDATE_2_ADDR,
+			IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 	if (rc) {
-		dev_err(dev, "BLOCK_UPDATE failed, rc = %d\n", rc);
+		dev_err(dev, "Update Block Failed, rc = %d\n", rc);
 		goto out;
 	}
 
@@ -368,6 +400,9 @@ static int iaxxx_update_block2_request(struct iaxxx_priv *priv,
 		dev_err(dev, "Failed to read SYSTEM_STATUS, rc = %d\n", rc);
 		goto out;
 	}
+
+	/* Clear reserved bits set earlier in update block status */
+	*status &= (~IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK);
 
 	/*
 	 * If the BLOCK_UPDATE_RESULT is non-zero, then some update failed. The
@@ -408,26 +443,25 @@ static int iaxxx_bootloader_request(struct iaxxx_priv *priv, u32 mask, u32 val)
 		goto out;
 	}
 
-	/* Wait for the request to complete */
-	rc = iaxxx_update_block_request(priv, &status);
+	/*
+	 * Set the UPDATE_BLOCK_REQUEST bit in the SRB_UPDATE_CTRL register
+	 * to trigger BOOTLOADER request. Don't check update block
+	 * status to avoid spi-reads that could return invalid data.
+	 *
+	 */
+	rc = regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
+			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
 	if (rc) {
-		dev_err(dev, "BOOTLOADER_REQUEST status = 0x%.08X\n", status);
-		dev_err(dev, "BOOTLOADER_REQUEST failed, rc = %d\n", rc);
-
-		/* 0x01 - SRB block update failure */
-		WARN_ON(GET_SYS_STATUS_BLK_UPDATE_RESULT(status) != 0x01);
-
-		if (mask == IAXXX_SRB_BOOT_REQ_JUMP_REQ_MASK) {
-			/* 0x01 - Invalid Jump Address */
-			WARN_ON(GET_SYS_STATUS_BLK_UPDATE_CODE(status) != 0x01);
-		}
-
+		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
 		goto out;
 	}
+	/*
+	 * [TODO]Current design doesn't support interrupt pin with firmware.
+	 * b/117865331 seek better solution with vendor.
+	 */
 
-	/* Special case, give extra time on jump-to-RAM requests */
-	if (mask & IAXXX_SRB_BOOT_REQ_JUMP_REQ_MASK)
-		msleep(200);
+	/* Allow time for firmware to boot */
+	msleep(200);
 
 	/* The bit should have been cleared by firmware */
 	rc = regmap_read(priv->regmap, IAXXX_SRB_BOOT_REQ_ADDR, &status);
@@ -526,8 +560,8 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 
 	/* Set the CHECKSUM_REQUEST bit in CHECKSUM_REQUEST */
 	rc = regmap_update_bits(priv->regmap, IAXXX_SRB_CHKSUM_ADDR,
-			       IAXXX_SRB_CHKSUM_REQ_MASK,
-			       0x1 << IAXXX_SRB_CHKSUM_REQ_POS);
+				IAXXX_SRB_CHKSUM_REQ_MASK,
+				0x1 << IAXXX_SRB_CHKSUM_REQ_POS);
 	if (rc) {
 		dev_err(dev, "Failed to set CHECKSUM_REQUEST, rc = %d\n", rc);
 		goto out;

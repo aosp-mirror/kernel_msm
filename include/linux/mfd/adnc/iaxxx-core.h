@@ -224,7 +224,7 @@ struct iaxxx_priv {
 	int (*crash_handler)(struct iaxxx_priv *priv);
 	struct iaxxx_crashlog *crashlog;
 	struct mutex crashdump_lock;
-	bool   debug_isr_disable;
+	bool debug_isr_disable;
 };
 
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
@@ -235,69 +235,79 @@ static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
 int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id);
 int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
-				uint32_t param_id,
-				uint32_t *param_val, uint32_t block_id);
+			uint32_t param_id, uint32_t *param_val,
+			uint32_t block_id);
 int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
-				uint32_t param_id,
-				uint32_t param_val, uint32_t block_id);
+			uint32_t param_id, uint32_t param_val,
+			uint32_t block_id);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
-							int id);
+			int id);
 int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
-				uint32_t param_id,
-				uint32_t *param_val, uint32_t block_id);
+			uint32_t param_id, uint32_t *param_val,
+			uint32_t block_id);
 int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
-				uint32_t param_id,
-				uint32_t param_val, uint32_t block_id);
+			uint32_t param_id, uint32_t param_val,
+			uint32_t block_id);
 int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
-				uint32_t priority, uint32_t pkg_id,
-				uint32_t plg_idx, uint8_t block_id);
-int iaxxx_core_create_plg_static_package(
-				struct device *dev, uint32_t inst_id,
-				uint32_t priority, uint32_t pkg_id,
-				uint32_t plg_idx, uint8_t block_id);
-
+			uint32_t priority, uint32_t pkg_id,
+			uint32_t plg_idx, uint8_t block_id);
+int iaxxx_core_create_plg_static_package(struct device *dev, uint32_t inst_id,
+			uint32_t priority, uint32_t pkg_id,
+			uint32_t plg_idx, uint8_t block_id);
 int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
-				uint8_t is_enable, uint8_t block_id);
+			uint8_t is_enable, uint8_t block_id);
 int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
-				uint8_t block_id);
+			uint8_t block_id);
 int iaxxx_core_reset_plg(struct device *dev, uint32_t inst_id,
-				uint8_t block_id);
+			uint8_t block_id);
 int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
-				uint32_t param_id,
-				uint32_t param_val, uint32_t block_id);
+			uint32_t param_id, uint32_t param_val,
+			uint32_t block_id);
 int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
-		uint32_t cfg_size, uint64_t cfg_val, uint32_t block_id,
-		char *file);
+			uint32_t cfg_size, uint64_t cfg_val, uint32_t block_id,
+			char *file);
+int iaxxx_core_set_param_blk_common(struct device *dev, uint32_t inst_id,
+			uint32_t blk_size, const void *ptr_blk,
+			uint32_t block_id, uint32_t param_blk_id);
 int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
 			uint32_t blk_size, const void *ptr_blk,
-			uint32_t block_id,
-			uint32_t param_blk_id);
+			uint32_t block_id, uint32_t param_blk_id);
 int iaxxx_core_set_param_blk_from_file(struct device *dev, uint32_t inst_id,
 			uint32_t block_id, uint32_t param_blk_id,
 			const char *file);
-int iaxxx_core_get_param_blk(
-		struct device *dev,
-		uint32_t  inst_id,
-		uint32_t  block_id,
-		uint32_t  param_blk_id,
-		uint32_t *getparam_block_data,
-		uint32_t  getparam_block_size_in_words);
+int iaxxx_core_set_param_blk_with_ack(struct device *dev,
+			const uint32_t inst_id, const uint32_t param_blk_id,
+			const uint32_t block_id, const void *set_param_buf,
+			const uint32_t set_param_buf_sz,
+			uint32_t *response_data_buf,
+			const uint32_t response_data_sz,
+			const uint32_t max_no_retries);
+int iaxxx_core_get_param_blk_common(struct device *dev, uint32_t inst_id,
+			uint32_t block_id, uint32_t param_blk_id,
+			uint32_t *getparam_block_data,
+			uint32_t getparam_block_size_in_words);
+int iaxxx_core_get_param_blk(struct device *dev, uint32_t inst_id,
+			uint32_t block_id, uint32_t param_blk_id,
+			uint32_t *getparam_block_data,
+			uint32_t getparam_block_size_in_words);
 int iaxxx_core_set_custom_cfg(struct device *dev, uint32_t inst_id,
-		uint32_t block_id, uint32_t param_blk_id,
-		uint32_t custom_config_id, char *file);
+			uint32_t block_id, uint32_t param_blk_id,
+			uint32_t custom_config_id, char *file);
 int iaxxx_core_evt_subscribe(struct device *dev, uint16_t src_id,
-		uint16_t event_id, uint16_t dst_id, uint32_t dst_opaque);
+			uint16_t event_id, uint16_t dst_id,
+			uint32_t dst_opaque);
 int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,
-		uint16_t event_id, uint16_t dst_id);
+			uint16_t event_id, uint16_t dst_id);
 int iaxxx_core_retrieve_event(struct device *dev, uint16_t *event_id,
-		uint32_t *data);
+			uint32_t *data);
 int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 			uint32_t event_enable_mask, uint32_t block_id);
 int iaxxx_package_load(struct device *dev, const char *pkg_name,
-					uint32_t pkg_id, uint32_t *proc_id);
-int iaxxx_package_unload(struct device *dev,
-			int32_t pkg_id,
+			uint32_t pkg_id, uint32_t *proc_id);
+int iaxxx_package_unload(struct device *dev, int32_t pkg_id,
 			uint32_t proc_id);
+int iaxxx_core_read_plugin_error(struct device *dev, const uint32_t block_id,
+			uint32_t *error_code, uint8_t *error_instance);
 void iaxxx_tunnel_stop(struct iaxxx_priv *priv);
 int iaxxx_tunnel_recovery(struct iaxxx_priv *priv);
 void iaxxx_reset_codec_params(struct iaxxx_priv *priv);
