@@ -266,9 +266,12 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	if (power_control && blk->name == BLK_IPU) {
 		if (desired_state->id != BLOCK_STATE_1_2
 				&& desired_state->id != BLOCK_STATE_3_0
-				&& blk->current_state->id >= BLOCK_STATE_1_2)
+				&& blk->current_state->id >= BLOCK_STATE_1_2) {
 			if (ab_pmu_resume())
 				return -EAGAIN;
+			if (sc->chip_substate_id == CHIP_STATE_4_0)
+				abc_ipu_tpu_enable();
+		}
 	}
 
 	clk_set_frequency(dev, blk, desired_state->clk_frequency,

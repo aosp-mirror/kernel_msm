@@ -20,5 +20,6 @@
 int ab_pmu_sleep(void);
 int ab_pmu_deep_sleep(void);
 int ab_pmu_resume(void);
+void abc_ipu_tpu_enable(void);
 
 #endif //_AIRBRUSH_PMU_H_

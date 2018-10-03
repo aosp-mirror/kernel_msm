@@ -96,6 +96,18 @@ int ab_pmu_deep_sleep(void)
 	return 0;
 }
 
+#define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x10041800
+#define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x10241800
+#define REG_PCIe_INIT 0x10B30388
+
+void abc_ipu_tpu_enable(void)
+{
+	ABC_WRITE(REG_PCIe_INIT, 0x1);
+
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x3);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x3);
+}
+
 int ab_pmu_resume(void)
 {
 	uint32_t val;
@@ -118,6 +130,8 @@ int ab_pmu_resume(void)
 		pr_err("%s: Timeout waiting for IPU/TPU up status\n", __func__);
 		return E_STATUS_TIMEOUT;
 	}
+
+	abc_ipu_tpu_enable();
 
 	return 0;
 }
