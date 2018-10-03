@@ -277,6 +277,7 @@ struct pac193x_chip_info {
 
 	u32				shunts[PAC193X_MAX_NUM_CHANNELS];
 	const char			*rail_name[PAC193X_MAX_NUM_CHANNELS];
+	const char			*subsys_name[PAC193X_MAX_NUM_CHANNELS];
 	struct reg_data			chip_reg_data;
 	unsigned int			avg_num;
 	u32				sample_rate_value;
@@ -572,17 +573,13 @@ static ssize_t available_rails_show(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
-	const char *ptr;
 	int len = 0;
 	int cnt;
 
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
-		ptr = chip_info->rail_name[cnt];
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s, ", ptr);
-	}
-	if (len >= 2) {
-		buf[len - 2] = '\n';
-		buf[len - 1] = '\0';
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s:%s\n",
+				 chip_info->rail_name[cnt],
+				 chip_info->subsys_name[cnt]);
 	}
 	return len;
 }
@@ -593,7 +590,6 @@ static ssize_t enabled_rails_show(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct pac193x_chip_info *chip_info = iio_priv(indio_dev);
-	const char *ptr;
 	int len = 0;
 	int cnt;
 
@@ -601,12 +597,9 @@ static ssize_t enabled_rails_show(struct device *dev,
 		if (!chip_info->chip_reg_data.active_channels[cnt])
 			continue;
 
-		ptr = chip_info->rail_name[cnt];
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s, ", ptr);
-	}
-	if (len >= 2) {
-		buf[len - 2] = '\n';
-		buf[len - 1] = '\0';
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s:%s\n",
+				 chip_info->rail_name[cnt],
+				 chip_info->subsys_name[cnt]);
 	}
 	return len;
 }
@@ -1557,6 +1550,13 @@ static const char *pac193x_match_of_device(struct i2c_client *client,
 				node->full_name);
 		}
 
+		if (of_property_read_string(node,
+					    "subsys-name",
+					    &chip_info->subsys_name[crt_ch])) {
+			pr_err("invalid subsys-name value on %s\n",
+				node->full_name);
+		}
+
 		if (!chip_info->chip_reg_data.active_channels[crt_ch]) {
 		/* set the shunt value to 0 for the disabled channels */
 			chip_info->shunts[crt_ch] = 0;
@@ -1734,6 +1734,7 @@ static int pac193x_probe(struct i2c_client *client,
 		chip_info->chip_reg_data.bi_dir[cnt] = false;
 		chip_info->shunts[cnt] = SHUNT_UOHMS_DEFAULT;
 		chip_info->rail_name[cnt] = "";
+		chip_info->subsys_name[cnt] = "";
 	}
 	chip_info->chip_reg_data.crt_samp_speed_bitfield = PAC193x_SAMP_1024SPS;
 
