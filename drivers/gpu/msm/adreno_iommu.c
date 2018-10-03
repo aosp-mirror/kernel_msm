@@ -929,6 +929,13 @@ int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
 	cpu_path = !(flags & ADRENO_CONTEXT_SWITCH_FORCE_GPU) &&
 		_ctx_switch_use_cpu_path(adreno_dev, new_pt, rb);
 
+	if (adreno_idle(device)) {
+		return -ETIMEDOUT;
+	}
+
+	/* Force it to CPU PATH */
+	cpu_path = 1;
+
 	/* Pagetable switch */
 	if (new_pt != cur_pt) {
 		if (cpu_path)
