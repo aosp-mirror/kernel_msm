@@ -306,7 +306,8 @@ static ssize_t set_cnt_size_store(struct device *child,
 				const char *buf, size_t count)
 {
 	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
-	unsigned long val = kstrtoul(buf, NULL, 10);
+	unsigned long val;
+	kstrtoul(buf, 10, &val);
 
 	pr_err("val: %ld\n", val);
 	ppmu->ppmu_data.event_count = val;
@@ -319,7 +320,8 @@ static ssize_t set_clk_freq_store(struct device *child,
 				const char *buf, size_t count)
 {
 	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
-	unsigned long val = kstrtoul(buf, NULL, 10);
+	unsigned long val;
+	kstrtoul(buf, 10, &val);
 
 	pr_err("clk_freq %ld\n", val);
 	ppmu->ppmu_data.clk_freq = val;
