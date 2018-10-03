@@ -154,6 +154,87 @@ fail_regulator_disable:
 	return -ENODEV;
 }
 
+int ab_pmic_off(struct ab_state_context *sc)
+{
+	int ret1, ret2 = 0;
+
+	dev_dbg(sc->dev, "%s: Turning OFF all the PMIC rails\n", __func__);
+
+	if (regulator_is_enabled(sc->ldo2)) {
+		ret1 = regulator_disable(sc->ldo2);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable LDO2, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	if (regulator_is_enabled(sc->ldo3)) {
+		ret1 = regulator_disable(sc->ldo3);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable LDO3, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	if (regulator_is_enabled(sc->smps1)) {
+		ret1 = regulator_disable(sc->smps1);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable SMPS1, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	if (regulator_is_enabled(sc->ldo5)) {
+		ret1 = regulator_disable(sc->ldo5);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable LDO5, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	if (regulator_is_enabled(sc->ldo4)) {
+		ret1 = regulator_disable(sc->ldo4);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable LDO4, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	if (regulator_is_enabled(sc->smps3)) {
+		ret1 = regulator_disable(sc->smps3);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable SMPS3, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	if (regulator_is_enabled(sc->ldo1)) {
+		ret1 = regulator_disable(sc->ldo1);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable LDO1, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	if (regulator_is_enabled(sc->smps2)) {
+		ret1 = regulator_disable(sc->smps2);
+		if (ret1 < 0)
+			dev_err(sc->dev,
+					"%s: failed to disable SMPS2, ret %d\n",
+					__func__, ret1);
+		ret2 = ret2 ? ret2 : ret1;
+	}
+
+	return ret2;
+}
+
 int ab_pmic_on(struct ab_state_context *sc)
 {
 	if (!sc->ab_sm_ctrl_pmic) {
@@ -200,7 +281,6 @@ fail_regulator_ldo1:
 fail_regulator_smps2:
 	dev_err(sc->dev, "%s: PMIC power up failure\n", __func__);
 	return -ENODEV;
-
 }
 
 int ab_get_pmic_resources(struct ab_state_context *sc)

@@ -352,6 +352,15 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 		return -EINVAL;
 	}
 
+	if ((sc->chip_substate_id == CHIP_STATE_6_0 ||
+	   sc->chip_substate_id == CHIP_STATE_5_0) &&
+	   to_chip_substate_id < CHIP_STATE_3_0) {
+		if (sc->ab_alternate_boot)
+			ab_bootsequence(sc, 1);
+		else
+			ab_bootsequence(sc, 0);
+	}
+
 	if (sc->chip_substate_id == to_chip_substate_id)
 		return 0;
 
@@ -381,6 +390,10 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 		      map->aon_block_state_id, true, to_chip_substate_id))
 		return -EINVAL;
 
+	if (to_chip_substate_id == CHIP_STATE_6_0) {
+		ab_pmic_off(sc);
+		ab_disable_pgood(sc);
+	}
 	sc->chip_substate_id = to_chip_substate_id;
 	return 0;
 }

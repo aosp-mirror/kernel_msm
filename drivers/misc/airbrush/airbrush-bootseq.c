@@ -94,11 +94,12 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	unsigned long timeout;
 
 	if (!ab_ctx->ab_sm_ctrl_pmic) {
-		dev_dbg(ab_ctx->dev,
-				"%s: No ABC booting by state manager in current setup\n",
-				__func__);
 		/* register clock driver */
 		abc_clk_register(ab_ctx);
+
+		dev_dbg(ab_ctx->dev, "%s: No ABC booting by state manager\n",
+				__func__);
+
 		return 0;
 	}
 

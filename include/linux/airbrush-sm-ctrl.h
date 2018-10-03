@@ -256,6 +256,7 @@ struct ab_state_context {
 	unsigned int ab_ready_irq;	/* ab_ready_gpio irq */
 
 	int otp_fw_patch_dis;		/* OTP info from Airbrush (DT property) */
+	int ab_alternate_boot;		/* Check for alternate boot */
 
 	ab_sm_callback_t cb_event;	/* Event callback registered by the SM */
 	void *cb_cookie;		/* Private data sent by SM while registering event callback */
