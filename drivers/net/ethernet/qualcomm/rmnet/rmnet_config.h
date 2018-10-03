@@ -71,6 +71,7 @@ struct rmnet_port {
 	/* dl marker elements */
 	struct list_head dl_list;
 	struct rmnet_port_priv_stats stats;
+	int dl_marker_flush;
 };
 
 extern struct rtnl_link_ops rmnet_link_ops;
@@ -106,7 +107,7 @@ struct rmnet_priv {
 	struct rmnet_pcpu_stats __percpu *pcpu_stats;
 	struct gro_cells gro_cells;
 	struct rmnet_priv_stats stats;
-	void *qos_info;
+	void __rcu *qos_info;
 };
 
 int rmnet_is_real_dev_registered(const struct net_device *real_dev);

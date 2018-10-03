@@ -827,9 +827,11 @@ static void ipa_work_handler(struct work_struct *w)
 			ipa_resume_work_handler(d_port);
 			d_port->sm_state = STATE_CONNECTED;
 		} else if (event == EVT_DISCONNECTED) {
+			usb_gadget_autopm_get(d_port->gadget);
 			ipa_disconnect_work_handler(d_port);
 			d_port->sm_state = STATE_INITIALIZED;
 			log_event_dbg("%s: ST_SUS_EVT_DIS", __func__);
+			usb_gadget_autopm_put_async(d_port->gadget);
 		}
 		break;
 	default:
@@ -1173,7 +1175,7 @@ static long gsi_ctrl_dev_ioctl(struct file *fp, unsigned int cmd,
 	struct f_gsi *gsi;
 	struct gsi_ctrl_pkt *cpkt;
 	struct ep_info info;
-	struct data_buf_info data_info;
+	struct data_buf_info data_info = {0};
 	enum ipa_usb_teth_prot prot_id =
 		*(enum ipa_usb_teth_prot *)(fp->private_data);
 	struct gsi_inst_status *inst_cur = &inst_status[prot_id];
@@ -2342,6 +2344,14 @@ static void gsi_resume(struct usb_function *f)
 	log_event_dbg("%s: completed", __func__);
 }
 
+static int gsi_get_status(struct usb_function *f)
+{
+	unsigned int remote_wakeup_en_status = f->func_wakeup_allowed ? 1 : 0;
+
+	return (remote_wakeup_en_status << FUNC_WAKEUP_ENABLE_SHIFT) |
+		(1 << FUNC_WAKEUP_CAPABLE_SHIFT);
+}
+
 static int gsi_func_suspend(struct usb_function *f, u8 options)
 {
 	bool func_wakeup_allowed;
@@ -3002,6 +3012,7 @@ static int gsi_bind_config(struct f_gsi *gsi)
 	gsi->function.disable = gsi_disable;
 	gsi->function.free_func = gsi_free_func;
 	gsi->function.suspend = gsi_suspend;
+	gsi->function.get_status = gsi_get_status;
 	gsi->function.func_suspend = gsi_func_suspend;
 	gsi->function.resume = gsi_resume;
 

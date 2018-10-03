@@ -286,20 +286,30 @@ static int __cam_node_handle_release_dev(struct cam_node *node,
 		return -EINVAL;
 	}
 
-	rc = cam_context_handle_release_dev(ctx, release);
-	if (rc)
-		CAM_ERR(CAM_CORE, "context release failed node %s", node->name);
+	if (ctx->state > CAM_CTX_UNINIT && ctx->state < CAM_CTX_STATE_MAX) {
+		rc = cam_context_handle_release_dev(ctx, release);
+		if (rc)
+			CAM_ERR(CAM_CORE, "context release failed for node %s",
+				node->name);
+	} else {
+		CAM_WARN(CAM_CORE,
+			"node %s context id %u state %d invalid to release hdl",
+			node->name, ctx->ctx_id, ctx->state);
+		goto destroy_dev_hdl;
+	}
 
+	cam_context_putref(ctx);
+
+destroy_dev_hdl:
 	rc = cam_destroy_device_hdl(release->dev_handle);
 	if (rc)
-		CAM_ERR(CAM_CORE, "destroy device handle is failed node %s",
+		CAM_ERR(CAM_CORE, "destroy device hdl failed for node %s",
 			node->name);
 
 	CAM_DBG(CAM_CORE, "[%s] Release ctx_id=%d, refcount=%d",
 		node->name, ctx->ctx_id,
 		atomic_read(&(ctx->refcount.refcount.refs)));
 
-	cam_context_putref(ctx);
 	return rc;
 }
 
@@ -413,13 +423,16 @@ int cam_node_deinit(struct cam_node *node)
 int cam_node_shutdown(struct cam_node *node)
 {
 	int i = 0;
+	int rc = 0;
 
 	if (!node)
 		return -EINVAL;
 
 	for (i = 0; i < node->ctx_size; i++) {
-		if (node->ctx_list[i].dev_hdl >= 0) {
-			cam_context_shutdown(&(node->ctx_list[i]));
+		if (node->ctx_list[i].dev_hdl > 0) {
+			rc = cam_context_shutdown(&(node->ctx_list[i]));
+			if (rc)
+				continue;
 			cam_context_putref(&(node->ctx_list[i]));
 		}
 	}

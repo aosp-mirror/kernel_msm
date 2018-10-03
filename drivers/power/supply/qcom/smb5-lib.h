@@ -62,7 +62,9 @@ enum print_reason {
 #define WBC_VOTER			"WBC_VOTER"
 #define HW_LIMIT_VOTER			"HW_LIMIT_VOTER"
 #define PL_SMB_EN_VOTER			"PL_SMB_EN_VOTER"
+#define FORCE_RECHARGE_VOTER		"FORCE_RECHARGE_VOTER"
 #define LPD_VOTER			"LPD_VOTER"
+#define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
 
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
@@ -81,6 +83,12 @@ enum sink_src_mode {
 	SINK_MODE,
 	SRC_MODE,
 	UNATTACHED_MODE,
+};
+
+enum qc2_non_comp_voltage {
+	QC2_COMPLIANT,
+	QC2_NON_COMPLIANT_9V,
+	QC2_NON_COMPLIANT_12V
 };
 
 enum {
@@ -195,6 +203,18 @@ enum lpd_reason {
 	LPD_NONE,
 	LPD_MOISTURE_DETECTED,
 	LPD_FLOATING_CABLE,
+};
+
+/* Following states are applicable only for floating cable during LPD */
+enum lpd_stage {
+	/* initial stage */
+	LPD_STAGE_NONE,
+	/* started and ongoing */
+	LPD_STAGE_FLOAT,
+	/* cancel if started,  or don't start */
+	LPD_STAGE_FLOAT_CANCEL,
+	/* confirmed and mitigation measures taken for 60 s */
+	LPD_STAGE_COMMIT,
 };
 
 /* EXTCON_USB and EXTCON_USB_HOST are mutually exclusive */
@@ -331,6 +351,7 @@ struct smb_charger {
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
 	struct delayed_work	lpd_ra_open_work;
+	struct delayed_work	lpd_detach_work;
 
 	struct alarm		lpd_recheck_timer;
 
@@ -384,14 +405,16 @@ struct smb_charger {
 	bool			jeita_configured;
 	int			charger_temp_max;
 	int			smb_temp_max;
-	bool			lpd_in_progress;
-	int			lpd_reason;
+	u8			typec_try_mode;
+	enum lpd_stage		lpd_stage;
+	enum lpd_reason		lpd_reason;
+	bool			fcc_stepper_enable;
 
 	/* workaround flag */
 	u32			wa_flags;
 	int			boost_current_ua;
 	int                     qc2_max_pulses;
-	bool                    non_compliant_chg_detected;
+	enum qc2_non_comp_voltage qc2_unsupported_voltage;
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
@@ -531,6 +554,8 @@ int smblib_get_prop_usb_voltage_max(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_usb_voltage_now(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblib_get_prop_low_power(struct smb_charger *chg,
+				union power_supply_propval *val);
 int smblib_get_prop_usb_current_now(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_usb_port_temp(struct smb_charger *chg,
@@ -551,8 +576,7 @@ int smblib_get_pe_start(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_get_prop_charger_temp(struct smb_charger *chg,
 				union power_supply_propval *val);
-int smblib_get_prop_die_health(struct smb_charger *chg,
-			       union power_supply_propval *val);
+int smblib_get_prop_die_health(struct smb_charger *chg);
 int smblib_get_prop_connector_health(struct smb_charger *chg);
 int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 				const union power_supply_propval *val);

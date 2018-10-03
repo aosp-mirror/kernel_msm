@@ -271,7 +271,6 @@ enum {
 	DITHER_LEN,
 	DITHER_VER,
 	PP_MERGE_3D_ID,
-	TE_SOURCE,
 	PP_PROP_MAX,
 };
 
@@ -334,6 +333,7 @@ enum {
 	MIXER_PAIR_MASK,
 	MIXER_BLOCKS,
 	MIXER_DISP,
+	MIXER_CWB,
 	MIXER_PROP_MAX,
 };
 
@@ -572,6 +572,8 @@ static struct sde_prop_type mixer_prop[] = {
 	{MIXER_BLOCKS, "qcom,sde-mixer-blocks", false, PROP_TYPE_NODE},
 	{MIXER_DISP, "qcom,sde-mixer-display-pref", false,
 		PROP_TYPE_STRING_ARRAY},
+	{MIXER_CWB, "qcom,sde-mixer-cwb-pref", false,
+		PROP_TYPE_STRING_ARRAY},
 };
 
 static struct sde_prop_type mixer_blocks_prop[] = {
@@ -635,7 +637,6 @@ static struct sde_prop_type pp_prop[] = {
 	{DITHER_LEN, "qcom,sde-dither-size", false, PROP_TYPE_U32},
 	{DITHER_VER, "qcom,sde-dither-version", false, PROP_TYPE_U32},
 	{PP_MERGE_3D_ID, "qcom,sde-pp-merge-3d-id", false, PROP_TYPE_U32_ARRAY},
-	{TE_SOURCE, "qcom,sde-te-source", false, PROP_TYPE_U32_ARRAY},
 };
 
 static struct sde_prop_type dsc_prop[] = {
@@ -1628,6 +1629,7 @@ static int sde_mixer_parse_dt(struct device_node *np,
 	for (i = 0, mixer_count = 0, pp_idx = 0, dspp_idx = 0,
 			ds_idx = 0; i < off_count; i++) {
 		const char *disp_pref = NULL;
+		const char *cwb_pref = NULL;
 
 		mixer_base = PROP_VALUE_ACCESS(prop_value, MIXER_OFF, i);
 		if (!mixer_base)
@@ -1674,6 +1676,11 @@ static int sde_mixer_parse_dt(struct device_node *np,
 			mixer_prop[MIXER_DISP].prop_name, i, &disp_pref);
 		if (disp_pref && !strcmp(disp_pref, "primary"))
 			set_bit(SDE_DISP_PRIMARY_PREF, &mixer->features);
+
+		of_property_read_string_index(np,
+			mixer_prop[MIXER_CWB].prop_name, i, &cwb_pref);
+		if (cwb_pref && !strcmp(cwb_pref, "cwb"))
+			set_bit(SDE_DISP_CWB_PREF, &mixer->features);
 
 		mixer->pingpong = pp_count > 0 ? pp_idx + PINGPONG_0
 							: PINGPONG_MAX;
@@ -2833,10 +2840,6 @@ static int sde_pp_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 		snprintf(pp->name, SDE_HW_BLK_NAME_LEN, "pingpong_%u",
 				pp->id - PINGPONG_0);
 		pp->len = PROP_VALUE_ACCESS(prop_value, PP_LEN, 0);
-		pp->te_source = PROP_VALUE_ACCESS(prop_value, TE_SOURCE, i);
-		if (!prop_exists[TE_SOURCE] ||
-			pp->te_source > SDE_VSYNC_SOURCE_WD_TIMER_0)
-			pp->te_source = SDE_VSYNC0_SOURCE_GPIO;
 
 		sblk->te.base = PROP_VALUE_ACCESS(prop_value, TE_OFF, i);
 		sblk->te.id = SDE_PINGPONG_TE;

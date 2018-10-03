@@ -937,11 +937,18 @@ static int ufs_qcom_crypto_req_setup(struct ufs_hba *hba,
 		req = lrbp->cmd->request;
 	else
 		return 0;
-
-	/* Use request LBA as the DUN value */
-	if (req->bio)
-		*dun = (req->bio->bi_iter.bi_sector) >>
-				UFS_QCOM_ICE_TR_DATA_UNIT_4_KB;
+	/*
+	 * Right now ICE do not support variable dun but can be
+	 * taken as future enhancement
+	 * if (bio_dun(req->bio)) {
+	 *      dun @bio can be split, so we have to adjust offset
+	 *      *dun = bio_dun(req->bio);
+	 * } else
+	 */
+	if (req->bio) {
+		*dun = req->bio->bi_iter.bi_sector;
+		*dun >>= UFS_QCOM_ICE_TR_DATA_UNIT_4_KB;
+	}
 
 	ret = ufs_qcom_ice_req_setup(host, lrbp->cmd, cc_index, enable);
 
@@ -1613,7 +1620,8 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 		 * If auto hibern8 is supported then the link will already
 		 * be in hibern8 state and the ref clock can be gated.
 		 */
-		if (ufshcd_is_auto_hibern8_supported(hba) ||
+		if ((ufshcd_is_auto_hibern8_supported(hba) &&
+		     hba->hibern8_on_idle.is_enabled) ||
 		    !ufs_qcom_is_link_active(hba)) {
 			/* disable device ref_clk */
 			ufs_qcom_dev_ref_clk_ctrl(host, false);
@@ -2092,6 +2100,7 @@ static int ufs_qcom_parse_reg_info(struct ufs_qcom_host *host, char *name,
 		dev_dbg(dev, "%s: unable to find %s err %d, using default\n",
 			__func__, prop_name, ret);
 		vreg->min_uV = VDDP_REF_CLK_MIN_UV;
+		ret = 0;
 	}
 
 	snprintf(prop_name, MAX_PROP_SIZE, "%s-max-uV", name);
@@ -2100,6 +2109,7 @@ static int ufs_qcom_parse_reg_info(struct ufs_qcom_host *host, char *name,
 		dev_dbg(dev, "%s: unable to find %s err %d, using default\n",
 			__func__, prop_name, ret);
 		vreg->max_uV = VDDP_REF_CLK_MAX_UV;
+		ret = 0;
 	}
 
 out:
@@ -2179,6 +2189,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		dev_err(dev, "%s: ufs_qcom_ice_get_dev failed %d\n",
 			__func__, err);
 		goto out_variant_clear;
+	} else {
+		hba->host->inlinecrypt_support = 1;
 	}
 
 	host->generic_phy = devm_phy_get(dev, "ufsphy");

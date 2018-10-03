@@ -23,8 +23,50 @@
 #include <linux/clk-provider.h>
 #include <linux/regmap.h>
 #include <linux/mfd/syscon.h>
+#include <linux/msm-bus.h>
+#include <dt-bindings/msm/msm-bus-ids.h>
 
 #include "clk-debug.h"
+
+#define MSM_BUS_VECTOR(_src, _dst, _ab, _ib)	\
+{						\
+	.src = _src,				\
+	.dst = _dst,				\
+	.ab = _ab,				\
+	.ib = _ib,				\
+}
+
+static struct msm_bus_vectors clk_measure_vectors[] = {
+	MSM_BUS_VECTOR(MSM_BUS_MASTER_AMPSS_M0,
+			MSM_BUS_SLAVE_CAMERA_CFG, 0, 0),
+	MSM_BUS_VECTOR(MSM_BUS_MASTER_AMPSS_M0,
+			MSM_BUS_SLAVE_VENUS_CFG, 0, 0),
+	MSM_BUS_VECTOR(MSM_BUS_MASTER_AMPSS_M0,
+			MSM_BUS_SLAVE_DISPLAY_CFG, 0, 0),
+	MSM_BUS_VECTOR(MSM_BUS_MASTER_AMPSS_M0,
+			MSM_BUS_SLAVE_CAMERA_CFG, 0, 1),
+	MSM_BUS_VECTOR(MSM_BUS_MASTER_AMPSS_M0,
+			MSM_BUS_SLAVE_VENUS_CFG, 0, 1),
+	MSM_BUS_VECTOR(MSM_BUS_MASTER_AMPSS_M0,
+			MSM_BUS_SLAVE_DISPLAY_CFG, 0, 1),
+};
+
+static struct msm_bus_paths clk_measure_usecases[] = {
+	{
+		.num_paths = 3,
+		.vectors = &clk_measure_vectors[0],
+	},
+	{
+		.num_paths = 3,
+		.vectors = &clk_measure_vectors[3],
+	}
+};
+
+static struct msm_bus_scale_pdata clk_measure_scale_table = {
+	.usecase = clk_measure_usecases,
+	.num_usecases = ARRAY_SIZE(clk_measure_usecases),
+	.name = "clk_measure",
+};
 
 static struct measure_clk_data debug_mux_priv = {
 	.ctl_reg = 0x62038,
@@ -118,6 +160,7 @@ static const char *const debug_mux_parent_names[] = {
 	"disp_cc_mdss_rscc_vsync_clk",
 	"disp_cc_mdss_vsync_clk",
 	"disp_cc_xo_clk",
+	"measure_only_cdsp_clk",
 	"measure_only_snoc_clk",
 	"measure_only_cnoc_clk",
 	"measure_only_mccc_clk",
@@ -465,6 +508,8 @@ static struct clk_debug_mux gcc_debug_mux = {
 			0x14, 0xFF, 0, 0x3, 0, 4, 0x7000, 0x5008, 0x500C },
 		{ "disp_cc_xo_clk", 0x56, 1, DISP_CC,
 			0x36, 0xFF, 0, 0x3, 0, 4, 0x7000, 0x5008, 0x500C },
+		{ "measure_only_cdsp_clk", 0xDB, 2, GCC,
+			0xDB, 0x3FF, 0, 0xF, 0, 2, 0x62000, 0x62004, 0x62008 },
 		{ "measure_only_snoc_clk", 0x7, 1, GCC,
 			0x7, 0x3FF, 0, 0xF, 0, 1, 0x62000, 0x62004, 0x62008 },
 		{ "measure_only_cnoc_clk", 0x19, 1, GCC,
@@ -874,6 +919,12 @@ static int clk_debug_sm8150_probe(struct platform_device *pdev)
 	ret = map_debug_bases(pdev, "qcom,mccc", MC_CC);
 	if (ret)
 		return ret;
+
+	gcc_debug_mux.bus_cl_id =
+		msm_bus_scale_register_client(&clk_measure_scale_table);
+
+	if (!gcc_debug_mux.bus_cl_id)
+		return -EPROBE_DEFER;
 
 	clk = devm_clk_register(&pdev->dev, &gcc_debug_mux.hw);
 	if (IS_ERR(clk)) {

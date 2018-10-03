@@ -60,11 +60,38 @@
 #define DEFAULT_AGGR_TIME_LIMIT 1000 /* 1ms */
 #define DEFAULT_AGGR_PKT_LIMIT 0
 
-#define RNDIS_IPA_ERROR(fmt, args...) \
-		pr_err(DRV_NAME "@%s@%d@ctx:%s: "\
-				fmt, __func__, __LINE__, current->comm, ## args)
+#define IPA_RNDIS_IPC_LOG_PAGES 50
+
+#define IPA_RNDIS_IPC_LOGGING(buf, fmt, args...) \
+	do { \
+		if (buf) \
+			ipc_log_string((buf), fmt, __func__, __LINE__, \
+				## args); \
+	} while (0)
+
+static void *ipa_rndis_logbuf;
+
 #define RNDIS_IPA_DEBUG(fmt, args...) \
-			pr_debug("ctx: %s, "fmt, current->comm, ## args)
+	do { \
+		pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+		if (ipa_rndis_logbuf) { \
+			IPA_RNDIS_IPC_LOGGING(ipa_rndis_logbuf, \
+				DRV_NAME " %s:%d " fmt, ## args); \
+		} \
+	} while (0)
+
+#define RNDIS_IPA_DEBUG_XMIT(fmt, args...) \
+	pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+
+#define RNDIS_IPA_ERROR(fmt, args...) \
+	do { \
+		pr_err(DRV_NAME "@%s@%d@ctx:%s: "\
+			fmt, __func__, __LINE__, current->comm, ## args);\
+		if (ipa_rndis_logbuf) { \
+			IPA_RNDIS_IPC_LOGGING(ipa_rndis_logbuf, \
+				DRV_NAME " %s:%d " fmt, ## args); \
+		} \
+	} while (0)
 
 #define NULL_CHECK_RETVAL(ptr) \
 		do { \
@@ -454,6 +481,11 @@ struct rndis_pkt_hdr rndis_template_hdr = {
 	.zeroes = {0},
 };
 
+static void rndis_ipa_msg_free_cb(void *buff, u32 len, u32 type)
+{
+	kfree(buff);
+}
+
 /**
  * rndis_ipa_init() - create network device and initialize internal
  *  data structures
@@ -677,6 +709,8 @@ int rndis_ipa_pipe_connect_notify(
 	int result;
 	int ret;
 	unsigned long flags;
+	struct ipa_ecm_msg *rndis_msg;
+	struct ipa_msg_meta msg_meta;
 
 	RNDIS_IPA_LOG_ENTRY();
 
@@ -761,6 +795,26 @@ int rndis_ipa_pipe_connect_notify(
 		goto fail;
 	}
 	RNDIS_IPA_DEBUG("netif_carrier_on() was called\n");
+
+	rndis_msg = kzalloc(sizeof(*rndis_msg), GFP_KERNEL);
+	if (!rndis_msg) {
+		result = -ENOMEM;
+		goto fail;
+	}
+
+	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
+	msg_meta.msg_type = ECM_CONNECT;
+	msg_meta.msg_len = sizeof(struct ipa_ecm_msg);
+	strlcpy(rndis_msg->name, rndis_ipa_ctx->net->name,
+		IPA_RESOURCE_NAME_MAX);
+	rndis_msg->ifindex = rndis_ipa_ctx->net->ifindex;
+
+	result = ipa_send_msg(&msg_meta, rndis_msg, rndis_ipa_msg_free_cb);
+	if (result) {
+		RNDIS_IPA_ERROR("fail to send ECM_CONNECT for rndis\n");
+		kfree(rndis_msg);
+		goto fail;
+	}
 
 	spin_lock_irqsave(&rndis_ipa_ctx->state_lock, flags);
 	next_state = rndis_ipa_next_state(rndis_ipa_ctx->state,
@@ -883,7 +937,7 @@ static netdev_tx_t rndis_ipa_start_xmit(struct sk_buff *skb,
 
 	netif_trans_update(net);
 
-	RNDIS_IPA_DEBUG
+	RNDIS_IPA_DEBUG_XMIT
 		("Tx, len=%d, skb->protocol=%d, outstanding=%d\n",
 		skb->len, skb->protocol,
 		atomic_read(&rndis_ipa_ctx->outstanding_pkts));
@@ -1001,7 +1055,9 @@ static void rndis_ipa_tx_complete_notify(
 	rndis_ipa_ctx->net->stats.tx_packets++;
 	rndis_ipa_ctx->net->stats.tx_bytes += skb->len;
 
-	atomic_dec(&rndis_ipa_ctx->outstanding_pkts);
+	if (atomic_read(&rndis_ipa_ctx->outstanding_pkts) > 0)
+		atomic_dec(&rndis_ipa_ctx->outstanding_pkts);
+
 	if
 		(netif_queue_stopped(rndis_ipa_ctx->net) &&
 		netif_carrier_ok(rndis_ipa_ctx->net) &&
@@ -1222,6 +1278,8 @@ int rndis_ipa_pipe_disconnect_notify(void *private)
 	int retval;
 	int ret;
 	unsigned long flags;
+	struct ipa_ecm_msg *rndis_msg;
+	struct ipa_msg_meta msg_meta;
 
 	RNDIS_IPA_LOG_ENTRY();
 
@@ -1252,6 +1310,24 @@ int rndis_ipa_pipe_disconnect_notify(void *private)
 
 	netif_carrier_off(rndis_ipa_ctx->net);
 	RNDIS_IPA_DEBUG("carrier_off notification was sent\n");
+
+	rndis_msg = kzalloc(sizeof(*rndis_msg), GFP_KERNEL);
+	if (!rndis_msg)
+		return -ENOMEM;
+
+	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
+	msg_meta.msg_type = ECM_DISCONNECT;
+	msg_meta.msg_len = sizeof(struct ipa_ecm_msg);
+	strlcpy(rndis_msg->name, rndis_ipa_ctx->net->name,
+		IPA_RESOURCE_NAME_MAX);
+	rndis_msg->ifindex = rndis_ipa_ctx->net->ifindex;
+
+	retval = ipa_send_msg(&msg_meta, rndis_msg, rndis_ipa_msg_free_cb);
+	if (retval) {
+		RNDIS_IPA_ERROR("fail to send ECM_DISCONNECT for rndis\n");
+		kfree(rndis_msg);
+		return -EPERM;
+	}
 
 	netif_stop_queue(rndis_ipa_ctx->net);
 	RNDIS_IPA_DEBUG("queue stopped\n");
@@ -2611,12 +2687,21 @@ static ssize_t rndis_ipa_debugfs_atomic_read
 
 static int rndis_ipa_init_module(void)
 {
+	ipa_rndis_logbuf = ipc_log_context_create(IPA_RNDIS_IPC_LOG_PAGES,
+		"ipa_rndis", 0);
+	if (ipa_rndis_logbuf == NULL)
+		RNDIS_IPA_DEBUG("failed to create IPC log, continue...\n");
+
 	pr_info("RNDIS_IPA module is loaded.");
 	return 0;
 }
 
 static void rndis_ipa_cleanup_module(void)
 {
+	if (ipa_rndis_logbuf)
+		ipc_log_context_destroy(ipa_rndis_logbuf);
+	ipa_rndis_logbuf = NULL;
+
 	pr_info("RNDIS_IPA module is unloaded.");
 }
 

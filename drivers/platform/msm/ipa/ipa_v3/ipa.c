@@ -59,6 +59,7 @@
 
 #define CREATE_TRACE_POINTS
 #include "ipa_trace.h"
+#include "ipa_odl.h"
 
 /*
  * The following for adding code (ie. for EMULATION) not found on x86.
@@ -2548,6 +2549,9 @@ void ipa3_q6_pre_shutdown_cleanup(void)
 
 	ipa3_q6_pipe_delay(true);
 	ipa3_q6_avoid_holb();
+	if (ipa3_ctx->ipa_config_is_mhi)
+		ipa3_set_reset_client_cons_pipe_sus_holb(true,
+		IPA_CLIENT_MHI_CONS);
 	if (ipa3_q6_clean_q6_tables()) {
 		IPAERR("Failed to clean Q6 tables\n");
 		/*
@@ -2568,8 +2572,11 @@ void ipa3_q6_pre_shutdown_cleanup(void)
 	 * on pipe reset procedure
 	 */
 	ipa3_q6_pipe_delay(false);
-
-	ipa3_set_usb_prod_pipe_delay();
+	ipa3_set_reset_client_prod_pipe_delay(true,
+		IPA_CLIENT_USB_PROD);
+	if (ipa3_ctx->ipa_config_is_mhi)
+		ipa3_set_reset_client_prod_pipe_delay(true,
+		IPA_CLIENT_MHI_PROD);
 
 	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 	IPADBG_LOW("Exit with success\n");
@@ -2590,11 +2597,6 @@ void ipa3_q6_post_shutdown_cleanup(void)
 
 	IPADBG_LOW("ENTER\n");
 
-	if (!ipa3_ctx->uc_ctx.uc_loaded) {
-		IPAERR("uC is not loaded. Skipping\n");
-		return;
-	}
-
 	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
 
 	/* Handle the issue where SUSPEND was removed for some reason */
@@ -2610,6 +2612,11 @@ void ipa3_q6_post_shutdown_cleanup(void)
 	}
 
 	ipa3_halt_q6_gsi_channels(prod);
+
+	if (!ipa3_ctx->uc_ctx.uc_loaded) {
+		IPAERR("uC is not loaded. Skipping\n");
+		return;
+	}
 
 	for (client_idx = 0; client_idx < IPA_CLIENT_MAX; client_idx++)
 		if (IPA_CLIENT_IS_Q6_PROD(client_idx)) {
@@ -3240,7 +3247,7 @@ static int ipa3_setup_apps_pipes(void)
 	sys_in.ipa_ep_cfg.hdr_ext.hdr_payload_len_inc_padding = false;
 	sys_in.ipa_ep_cfg.hdr_ext.hdr_total_len_or_pad_offset = 0;
 	sys_in.ipa_ep_cfg.hdr_ext.hdr_pad_to_alignment = 2;
-	sys_in.ipa_ep_cfg.cfg.cs_offload_en = IPA_ENABLE_CS_OFFLOAD_DL;
+	sys_in.ipa_ep_cfg.cfg.cs_offload_en = IPA_DISABLE_CS_OFFLOAD;
 
 	/**
 	 * ipa_lan_rx_cb() intended to notify the source EP about packet
@@ -3579,7 +3586,6 @@ void ipa3_enable_clks(void)
  */
 void _ipa_disable_clks_v3_0(void)
 {
-	ipa3_suspend_apps_pipes(true);
 	ipa3_uc_notify_clk_state(false);
 	if (ipa3_clk) {
 		IPADBG_LOW("disabling gcc_ipa_clk\n");
@@ -3824,6 +3830,7 @@ static void __ipa3_dec_client_disable_clks(void)
 	ret = atomic_sub_return(1, &ipa3_ctx->ipa3_active_clients.cnt);
 	if (ret > 0)
 		goto unlock_mutex;
+	ipa3_suspend_apps_pipes(true);
 	ipa3_disable_clks();
 
 unlock_mutex:
@@ -4261,7 +4268,7 @@ int ipa3_init_interrupts(void)
 	return 0;
 
 fail_add_interrupt_handler:
-	free_irq(ipa3_res.ipa_irq, &ipa3_ctx->master_pdev->dev);
+	ipa3_interrupts_destroy(ipa3_res.ipa_irq, &ipa3_ctx->master_pdev->dev);
 	return result;
 }
 
@@ -4311,8 +4318,10 @@ static void ipa3_freeze_clock_vote_and_notify_modem(void)
 		ipa3_ctx->smp2p_info.ipa_clk_on = true;
 
 	qcom_smem_state_update_bits(ipa3_ctx->smp2p_info.smem_state,
-			BIT(IPA_SMP2P_SMEM_STATE_MASK),
-			BIT(ipa3_ctx->smp2p_info.ipa_clk_on | (1 << 1)));
+			IPA_SMP2P_SMEM_STATE_MASK,
+			((ipa3_ctx->smp2p_info.ipa_clk_on <<
+			IPA_SMP2P_OUT_CLK_VOTE_IDX) |
+			(1 << IPA_SMP2P_OUT_CLK_RSP_CMPLT_IDX)));
 
 	ipa3_ctx->smp2p_info.res_sent = true;
 	IPADBG("IPA clocks are %s\n",
@@ -4328,8 +4337,10 @@ void ipa3_reset_freeze_vote(void)
 		IPA_ACTIVE_CLIENTS_DEC_SPECIAL("FREEZE_VOTE");
 
 	qcom_smem_state_update_bits(ipa3_ctx->smp2p_info.smem_state,
-		BIT(IPA_SMP2P_SMEM_STATE_MASK),
-		BIT(ipa3_ctx->smp2p_info.ipa_clk_on | (1 << 1)));
+			IPA_SMP2P_SMEM_STATE_MASK,
+			((ipa3_ctx->smp2p_info.ipa_clk_on <<
+			IPA_SMP2P_OUT_CLK_VOTE_IDX) |
+			(1 << IPA_SMP2P_OUT_CLK_RSP_CMPLT_IDX)));
 
 	ipa3_ctx->smp2p_info.res_sent = false;
 	ipa3_ctx->smp2p_info.ipa_clk_on = false;
@@ -4437,6 +4448,38 @@ static int ipa3_gsi_pre_fw_load_init(void)
 	return 0;
 }
 
+static int ipa3_alloc_gsi_channel(void)
+{
+	const struct ipa_gsi_ep_config *gsi_ep_cfg;
+	enum ipa_client_type type;
+	int code = 0;
+	int ret = 0;
+	int i;
+
+	for (i = 0; i < ipa3_ctx->ipa_num_pipes; i++) {
+		type = ipa3_get_client_by_pipe(i);
+		gsi_ep_cfg = ipa3_get_gsi_ep_info(type);
+		IPADBG("for ep %d client is %d\n", i, type);
+		if (!gsi_ep_cfg)
+			continue;
+
+		ret = gsi_alloc_channel_ee(gsi_ep_cfg->ipa_gsi_chan_num,
+					gsi_ep_cfg->ee, &code);
+		if (ret == GSI_STATUS_SUCCESS) {
+			IPADBG("alloc gsi ch %d ee %d with code %d\n",
+					gsi_ep_cfg->ipa_gsi_chan_num,
+					gsi_ep_cfg->ee,
+					code);
+		} else {
+			IPAERR("failed to alloc ch %d ee %d code %d\n",
+					gsi_ep_cfg->ipa_gsi_chan_num,
+					gsi_ep_cfg->ee,
+					code);
+			return ret;
+		}
+	}
+	return ret;
+}
 /**
  * ipa3_post_init() - Initialize the IPA Driver (Part II).
  * This part contains all initialization which requires interaction with
@@ -4664,6 +4707,17 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_register_device;
 	}
 	IPADBG("IPA gsi is registered\n");
+	/* GSI 2.2 requires to allocate all EE GSI channel
+	 * during device bootup.
+	 */
+	if (ipa3_get_gsi_ver(resource_p->ipa_hw_type) == GSI_VER_2_2) {
+		result = ipa3_alloc_gsi_channel();
+		if (result) {
+			IPAERR("Failed to alloc the GSI channels\n");
+			result = -ENODEV;
+			goto fail_alloc_gsi_channel;
+		}
+	}
 
 	/* setup the AP-IPA pipes */
 	if (ipa3_setup_apps_pipes()) {
@@ -4727,6 +4781,7 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 
 fail_teth_bridge_driver_init:
 	ipa3_teardown_apps_pipes();
+fail_alloc_gsi_channel:
 fail_setup_apps_pipes:
 	gsi_deregister_device(ipa3_ctx->gsi_dev_hdl, false);
 fail_register_device:
@@ -5504,6 +5559,16 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	IPADBG("ipa cdev added successful. major:%d minor:%d\n",
 			MAJOR(ipa3_ctx->cdev.dev_num),
 			MINOR(ipa3_ctx->cdev.dev_num));
+
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_1) {
+		result = ipa_odl_init();
+		if (result) {
+			IPADBG("Error: ODL init fialed\n");
+			result = -ENODEV;
+			goto fail_cdev_add;
+		}
+	}
+
 	/*
 	 * for IPA 4.0 offline charge is not needed and we need to prevent
 	 * power collapse until IPA uC is loaded.
@@ -5513,7 +5578,6 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	if (ipa3_ctx->ipa_hw_type != IPA_HW_v4_0)
 		ipa3_proxy_clk_unvote();
 	return 0;
-
 fail_cdev_add:
 fail_gsi_pre_fw_load_init:
 	ipa3_dma_shutdown();

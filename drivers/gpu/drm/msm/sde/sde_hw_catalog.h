@@ -203,6 +203,7 @@ enum {
  * @SDE_MIXER_SOURCESPLIT     Layer mixer supports source-split configuration
  * @SDE_MIXER_GC              Gamma correction block
  * @SDE_DIM_LAYER             Layer mixer supports dim layer
+ * @SDE_DISP_CWB_PREF         Layer mixer preferred for CWB
  * @SDE_DISP_PRIMARY_PREF     Layer mixer preferred for primary display
  * @SDE_MIXER_MAX             maximum value
  */
@@ -212,6 +213,7 @@ enum {
 	SDE_MIXER_GC,
 	SDE_DIM_LAYER,
 	SDE_DISP_PRIMARY_PREF,
+	SDE_DISP_CWB_PREF,
 	SDE_MIXER_MAX
 };
 
@@ -751,7 +753,6 @@ struct sde_ds_cfg {
  */
 struct sde_pingpong_cfg  {
 	SDE_HW_BLK_INFO;
-	u32 te_source;
 	const struct sde_pingpong_sub_blks *sblk;
 	int merge_3d_id;
 };

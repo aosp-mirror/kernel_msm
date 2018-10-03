@@ -109,8 +109,8 @@ static void process_one_prefetch(struct ion_heap *sys_heap,
 	int ret;
 	int vmid;
 
+	memset(&buffer, 0, sizeof(struct ion_buffer));
 	buffer.heap = sys_heap;
-	buffer.flags = 0;
 
 	ret = sys_heap->ops->allocate(sys_heap, &buffer, info->size,
 					buffer.flags);
@@ -167,6 +167,7 @@ static void process_one_shrink(struct ion_heap *sys_heap,
 	size_t pool_size, size;
 	int ret;
 
+	memset(&buffer, 0, sizeof(struct ion_buffer));
 	buffer.heap = sys_heap;
 	buffer.flags = info->vmid;
 
@@ -462,7 +463,10 @@ int ion_secure_page_pool_shrink(
 		sg = sg_next(sg);
 	}
 
-	if (ion_hyp_unassign_sg(&sgt, &vmid, 1, true))
+	ret = ion_hyp_unassign_sg(&sgt, &vmid, 1, true, true);
+	if (ret == -EADDRNOTAVAIL)
+		goto out3;
+	else if (ret < 0)
 		goto out2;
 
 	list_for_each_entry_safe(page, tmp, &pages, lru) {
@@ -473,6 +477,8 @@ int ion_secure_page_pool_shrink(
 	sg_free_table(&sgt);
 	return freed;
 
+out2:
+	sg_free_table(&sgt);
 out1:
 	/* Restore pages to secure pool */
 	list_for_each_entry_safe(page, tmp, &pages, lru) {
@@ -480,7 +486,7 @@ out1:
 		ion_page_pool_free(pool, page);
 	}
 	return 0;
-out2:
+out3:
 	/*
 	 * The security state of the pages is unknown after a failure;
 	 * They can neither be added back to the secure pool nor buddy system.

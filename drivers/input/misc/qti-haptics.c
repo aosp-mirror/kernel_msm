@@ -10,8 +10,10 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/fs.h>
 #include <linux/hrtimer.h>
 #include <linux/init.h>
 #include <linux/input.h>
@@ -24,8 +26,9 @@
 #include <linux/pwm.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
-#include <linux/uaccess.h>
+#include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
 
 enum actutor_type {
 	ACT_LRA,
@@ -70,6 +73,7 @@ enum haptics_custom_effect_param {
 #define HAP_SC_DET_MAX_COUNT		5
 #define HAP_SC_DET_TIME_US		1000000
 #define FF_EFFECT_COUNT_MAX		32
+#define HAP_DISABLE_DELAY_USEC		1000
 
 /* haptics module register definitions */
 #define REG_HAP_STATUS1			0x0A
@@ -175,6 +179,7 @@ struct qti_hap_effect {
 	u8			*pattern;
 	int			pattern_length;
 	u16			play_rate_us;
+	u16			vmax_mv;
 	u8			wf_repeat_n;
 	u8			wf_s_repeat_n;
 	u8			brake[HAP_BRAKE_PATTERN_MAX];
@@ -215,6 +220,8 @@ struct qti_hap_chip {
 	struct qti_hap_effect		constant;
 	struct regulator		*vdd_supply;
 	struct hrtimer			stop_timer;
+	struct hrtimer			hap_disable_timer;
+	struct dentry			*hap_debugfs;
 	spinlock_t			bus_lock;
 	ktime_t				last_sc_time;
 	int				play_irq;
@@ -523,11 +530,25 @@ static int qti_haptics_config_play_rate_us(struct qti_hap_chip *chip,
 	return rc;
 }
 
-static int qti_haptics_config_brake(struct qti_hap_chip *chip, u8 *brake)
+static int qti_haptics_brake_enable(struct qti_hap_chip *chip, bool en)
 {
 	u8 addr, mask, val;
+	int rc;
+
+	addr = REG_HAP_EN_CTL2;
+	mask = HAP_BRAKE_EN_BIT;
+	val = en ? HAP_BRAKE_EN_BIT : 0;
+	rc = qti_haptics_masked_write(chip, addr, mask, val);
+	if (rc < 0)
+		dev_err(chip->dev, "write BRAKE_EN failed, rc=%d\n", rc);
+
+	return rc;
+}
+
+static int qti_haptics_config_brake(struct qti_hap_chip *chip, u8 *brake)
+{
+	u8 addr,  val;
 	int i, rc;
-	bool en = true;
 
 	addr = REG_HAP_BRAKE;
 	for (val = 0, i = 0; i < HAP_BRAKE_PATTERN_MAX; i++)
@@ -539,17 +560,11 @@ static int qti_haptics_config_brake(struct qti_hap_chip *chip, u8 *brake)
 		dev_err(chip->dev, "write brake pattern failed, rc=%d\n", rc);
 		return rc;
 	}
-
-	if (val == 0)
-		en = false;
-
-	/* Set BRAKE_EN only if brake pattern is non-zero */
-	addr = REG_HAP_EN_CTL2;
-	mask = HAP_BRAKE_EN_BIT;
-	val = en;
-	rc = qti_haptics_masked_write(chip, addr, mask, val);
-	if (rc < 0)
-		dev_err(chip->dev, "set EN_CTL2 failed, rc=%d\n", rc);
+	/*
+	 * Set BRAKE_EN regardless of the brake pattern, this helps to stop
+	 * playing immediately once the valid values in WF_Sx are played.
+	 */
+	rc = qti_haptics_brake_enable(chip, true);
 
 	return rc;
 }
@@ -569,16 +584,49 @@ static int qti_haptics_lra_auto_res_enable(struct qti_hap_chip *chip, bool en)
 	return rc;
 }
 
+#define HAP_CLEAR_PLAYING_RATE_US	15
+static int qti_haptics_clear_settings(struct qti_hap_chip *chip)
+{
+	int rc;
+	u8 pattern[HAP_WAVEFORM_BUFFER_MAX] = {1, 0, 0, 0, 0, 0, 0, 0};
+
+	rc = qti_haptics_brake_enable(chip, false);
+	if (rc < 0)
+		return rc;
+
+	rc = qti_haptics_lra_auto_res_enable(chip, false);
+	if (rc < 0)
+		return rc;
+
+	rc = qti_haptics_config_play_rate_us(chip, HAP_CLEAR_PLAYING_RATE_US);
+	if (rc < 0)
+		return rc;
+
+	rc = qti_haptics_write(chip, REG_HAP_WF_S1, pattern,
+			HAP_WAVEFORM_BUFFER_MAX);
+	if (rc < 0)
+		return rc;
+
+	rc = qti_haptics_play(chip, true);
+	if (rc < 0)
+		return rc;
+
+	rc = qti_haptics_play(chip, false);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
+
 static int qti_haptics_load_constant_waveform(struct qti_hap_chip *chip)
 {
 	struct qti_hap_play_info *play = &chip->play;
 	struct qti_hap_config *config = &chip->config;
 	int rc = 0;
 
-	rc = qti_haptics_module_en(chip, true);
+	rc = qti_haptics_config_play_rate_us(chip, config->play_rate_us);
 	if (rc < 0)
 		return rc;
-
 	/*
 	 * Using VMAX waveform source if playing length is >= 20ms,
 	 * otherwise using buffer waveform source and calculate the
@@ -603,6 +651,7 @@ static int qti_haptics_load_constant_waveform(struct qti_hap_chip *chip)
 			return rc;
 
 		play->playing_pattern = false;
+		play->effect = NULL;
 	} else {
 		rc = qti_haptics_config_vmax(chip, config->vmax_mv);
 		if (rc < 0)
@@ -643,11 +692,6 @@ static int qti_haptics_load_predefined_effect(struct qti_hap_chip *chip,
 
 	play->effect = &chip->predefined[effect_idx];
 	play->playing_pos = 0;
-
-	rc = qti_haptics_module_en(chip, true);
-	if (rc < 0)
-		return rc;
-
 	rc = qti_haptics_config_vmax(chip, play->vmax_mv);
 	if (rc < 0)
 		return rc;
@@ -696,7 +740,6 @@ static irqreturn_t qti_haptics_play_irq_handler(int irq, void *data)
 	dev_dbg(chip->dev, "play_irq triggered\n");
 	if (play->playing_pos == effect->pattern_length) {
 		dev_dbg(chip->dev, "waveform playing done\n");
-		qti_haptics_play(chip, false);
 		if (chip->play_irq_en) {
 			disable_irq_nosync(chip->play_irq);
 			chip->play_irq_en = false;
@@ -790,15 +833,15 @@ static int qti_haptics_upload_effect(struct input_dev *dev,
 	struct qti_hap_play_info *play = &chip->play;
 	int rc = 0, tmp, i;
 	s16 level, data[CUSTOM_DATA_LEN];
+	ktime_t rem;
+	s64 time_us;
 
-	if (chip->vdd_supply && !chip->vdd_enabled) {
-		rc = regulator_enable(chip->vdd_supply);
-		if (rc < 0) {
-			dev_err(chip->dev, "Enable VDD supply failed, rc=%d\n",
-					rc);
-			return rc;
-		}
-		chip->vdd_enabled = true;
+	if (hrtimer_active(&chip->hap_disable_timer)) {
+		rem = hrtimer_get_remaining(&chip->hap_disable_timer);
+		time_us = ktime_to_us(rem);
+		dev_dbg(chip->dev, "waiting for playing clear sequence: %ld us\n",
+				time_us);
+		usleep_range(time_us, time_us + 100);
 	}
 
 	switch (effect->type) {
@@ -814,31 +857,22 @@ static int qti_haptics_upload_effect(struct input_dev *dev,
 		if (rc < 0) {
 			dev_err(chip->dev, "Play constant waveform failed, rc=%d\n",
 					rc);
-			goto disable_vdd;
+			return rc;
 		}
 		break;
 
 	case FF_PERIODIC:
-		if (chip->effects_count == 0) {
-			rc = -EINVAL;
-			goto disable_vdd;
-		}
+		if (chip->effects_count == 0)
+			return -EINVAL;
 
 		if (effect->u.periodic.waveform != FF_CUSTOM) {
 			dev_err(chip->dev, "Only accept custom waveforms\n");
-			rc = -EINVAL;
-			goto disable_vdd;
+			return -EINVAL;
 		}
-
-		level = effect->u.periodic.magnitude;
-		tmp = level * config->vmax_mv;
-		play->vmax_mv = tmp / 0x7fff;
 
 		if (copy_from_user(data, effect->u.periodic.custom_data,
-					sizeof(s16) * CUSTOM_DATA_LEN)) {
-			rc = -EFAULT;
-			goto disable_vdd;
-		}
+					sizeof(s16) * CUSTOM_DATA_LEN))
+			return -EFAULT;
 
 		for (i = 0; i < chip->effects_count; i++)
 			if (chip->predefined[i].id ==
@@ -848,9 +882,12 @@ static int qti_haptics_upload_effect(struct input_dev *dev,
 		if (i == chip->effects_count) {
 			dev_err(chip->dev, "predefined effect %d is NOT supported\n",
 					data[0]);
-			rc = -EINVAL;
-			goto disable_vdd;
+			return -EINVAL;
 		}
+
+		level = effect->u.periodic.magnitude;
+		tmp = level * chip->predefined[i].vmax_mv;
+		play->vmax_mv = tmp / 0x7fff;
 
 		dev_dbg(chip->dev, "upload effect %d, vmax_mv=%d\n",
 				chip->predefined[i].id, play->vmax_mv);
@@ -858,7 +895,7 @@ static int qti_haptics_upload_effect(struct input_dev *dev,
 		if (rc < 0) {
 			dev_err(chip->dev, "Play predefined effect %d failed, rc=%d\n",
 					chip->predefined[i].id, rc);
-			goto disable_vdd;
+			return rc;
 		}
 
 		get_play_length(play, &play->length_us);
@@ -873,30 +910,27 @@ static int qti_haptics_upload_effect(struct input_dev *dev,
 		 * send stop playing command after it's done.
 		 */
 		if (copy_to_user(effect->u.periodic.custom_data, data,
-					sizeof(s16) * CUSTOM_DATA_LEN)) {
-			rc = -EFAULT;
-			goto disable_vdd;
-		}
+					sizeof(s16) * CUSTOM_DATA_LEN))
+			return -EFAULT;
 		break;
 
 	default:
 		dev_err(chip->dev, "Unsupported effect type: %d\n",
 				effect->type);
-		break;
+		return -EINVAL;
 	}
 
-	return 0;
-disable_vdd:
-	if (chip->vdd_supply && chip->vdd_enabled) {
-		rc = regulator_disable(chip->vdd_supply);
+	if (chip->vdd_supply && !chip->vdd_enabled) {
+		rc = regulator_enable(chip->vdd_supply);
 		if (rc < 0) {
-			dev_err(chip->dev, "Disable VDD supply failed, rc=%d\n",
+			dev_err(chip->dev, "Enable VDD supply failed, rc=%d\n",
 					rc);
 			return rc;
 		}
-		chip->vdd_enabled = false;
+		chip->vdd_enabled = true;
 	}
-	return rc;
+
+	return 0;
 }
 
 static int qti_haptics_playback(struct input_dev *dev, int effect_id, int val)
@@ -909,6 +943,10 @@ static int qti_haptics_playback(struct input_dev *dev, int effect_id, int val)
 
 	dev_dbg(chip->dev, "playback, val = %d\n", val);
 	if (!!val) {
+		rc = qti_haptics_module_en(chip, true);
+		if (rc < 0)
+			return rc;
+
 		rc = qti_haptics_play(chip, true);
 		if (rc < 0)
 			return rc;
@@ -918,6 +956,10 @@ static int qti_haptics_playback(struct input_dev *dev, int effect_id, int val)
 				enable_irq(chip->play_irq);
 				chip->play_irq_en = true;
 			}
+			/* Toggle PLAY when playing pattern */
+			rc = qti_haptics_play(chip, false);
+			if (rc < 0)
+				return rc;
 		} else {
 			if (chip->play_irq_en) {
 				disable_irq_nosync(chip->play_irq);
@@ -935,10 +977,6 @@ static int qti_haptics_playback(struct input_dev *dev, int effect_id, int val)
 		if (rc < 0)
 			return rc;
 
-		rc = qti_haptics_module_en(chip, false);
-		if (rc < 0)
-			return rc;
-
 		if (chip->play_irq_en) {
 			disable_irq_nosync(chip->play_irq);
 			chip->play_irq_en = false;
@@ -951,7 +989,7 @@ static int qti_haptics_playback(struct input_dev *dev, int effect_id, int val)
 static int qti_haptics_erase(struct input_dev *dev, int effect_id)
 {
 	struct qti_hap_chip *chip = input_get_drvdata(dev);
-	int rc = 0;
+	int delay_us, rc = 0;
 
 	if (chip->vdd_supply && chip->vdd_enabled) {
 		rc = regulator_disable(chip->vdd_supply);
@@ -963,7 +1001,39 @@ static int qti_haptics_erase(struct input_dev *dev, int effect_id)
 		chip->vdd_enabled = false;
 	}
 
+	rc = qti_haptics_clear_settings(chip);
+	if (rc < 0) {
+		dev_err(chip->dev, "clear setting failed, rc=%d\n", rc);
+		return rc;
+	}
+
+	if (chip->play.effect)
+		delay_us = chip->play.effect->play_rate_us;
+	else
+		delay_us = chip->config.play_rate_us;
+
+	delay_us += HAP_DISABLE_DELAY_USEC;
+	hrtimer_start(&chip->hap_disable_timer,
+			ktime_set(0, delay_us * NSEC_PER_USEC),
+			HRTIMER_MODE_REL);
+
 	return rc;
+}
+
+static void qti_haptics_set_gain(struct input_dev *dev, u16 gain)
+{
+	struct qti_hap_chip *chip = input_get_drvdata(dev);
+	struct qti_hap_config *config = &chip->config;
+	struct qti_hap_play_info *play = &chip->play;
+
+	if (gain == 0)
+		return;
+
+	if (gain > 0x7fff)
+		gain = 0x7fff;
+
+	play->vmax_mv = ((u32)(gain * config->vmax_mv)) / 0x7fff;
+	qti_haptics_config_vmax(chip, play->vmax_mv);
 }
 
 static int qti_haptics_hw_init(struct qti_hap_chip *chip)
@@ -1073,16 +1143,43 @@ static enum hrtimer_restart qti_hap_stop_timer(struct hrtimer *timer)
 
 	chip->play.length_us = 0;
 	rc = qti_haptics_play(chip, false);
-	if (rc < 0) {
+	if (rc < 0)
 		dev_err(chip->dev, "Stop playing failed, rc=%d\n", rc);
-		goto err_out;
-	}
+
+	return HRTIMER_NORESTART;
+}
+
+static enum hrtimer_restart qti_hap_disable_timer(struct hrtimer *timer)
+{
+	struct qti_hap_chip *chip = container_of(timer, struct qti_hap_chip,
+			hap_disable_timer);
+	int rc;
 
 	rc = qti_haptics_module_en(chip, false);
 	if (rc < 0)
-		dev_err(chip->dev, "Disable module failed, rc=%d\n", rc);
-err_out:
+		dev_err(chip->dev, "Disable haptics module failed\n", rc);
+
 	return HRTIMER_NORESTART;
+}
+
+static void verify_brake_setting(struct qti_hap_effect *effect)
+{
+	int i = effect->brake_pattern_length - 1;
+	u8 val = 0;
+
+	for (; i >= 0; i--) {
+		if (effect->brake[i] != 0)
+			break;
+
+		effect->brake_pattern_length--;
+	}
+
+	for (i = 0; i < effect->brake_pattern_length; i++) {
+		effect->brake[i] &= HAP_BRAKE_PATTERN_MASK;
+		val |= effect->brake[i] << (i * HAP_BRAKE_PATTERN_SHIFT);
+	}
+
+	effect->brake_en = (val != 0);
 }
 
 static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
@@ -1092,8 +1189,7 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 	struct device_node *child_node;
 	struct qti_hap_effect *effect;
 	const char *str;
-	int rc = 0, tmp, i = 0, j;
-	u8 val;
+	int rc = 0, tmp, i = 0, j, m;
 
 	rc = of_property_read_u32(node, "reg", &tmp);
 	if (rc < 0) {
@@ -1234,6 +1330,15 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 			return rc;
 		}
 
+		effect->vmax_mv = config->vmax_mv;
+		rc = of_property_read_u32(child_node, "qcom,wf-vmax-mv", &tmp);
+		if (rc < 0)
+			dev_dbg(chip->dev, "Read qcom,wf-vmax-mv failed, rc=%d\n",
+					rc);
+		else
+			effect->vmax_mv = (tmp > HAP_VMAX_MV_MAX) ?
+				HAP_VMAX_MV_MAX : tmp;
+
 		rc = of_property_count_elems_of_size(child_node,
 				"qcom,wf-pattern", sizeof(u8));
 		if (rc < 0) {
@@ -1301,7 +1406,7 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 			effect->wf_s_repeat_n = j;
 		}
 
-		effect->lra_auto_res_disable = of_property_read_bool(node,
+		effect->lra_auto_res_disable = of_property_read_bool(child_node,
 				"qcom,lra-auto-resonance-disable");
 
 		tmp = of_property_count_elems_of_size(child_node,
@@ -1324,21 +1429,417 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 		}
 
 		effect->brake_pattern_length = tmp;
-		for (j = tmp - 1; j >= 0; j--) {
-			if (effect->brake[j] != 0)
-				break;
-			effect->brake_pattern_length--;
-		}
+		verify_brake_setting(effect);
+	}
 
-		for (val = 0, j = 0; j < effect->brake_pattern_length; j++)
-			val |= (effect->brake[j] & HAP_BRAKE_PATTERN_MASK)
-				<< j * HAP_BRAKE_PATTERN_SHIFT;
-
-		effect->brake_en = (val != 0);
+	for (j = 0; j < i; j++) {
+		dev_dbg(chip->dev, "effect: %d\n", chip->predefined[j].id);
+		dev_dbg(chip->dev, "        vmax: %d mv\n",
+				chip->predefined[j].vmax_mv);
+		dev_dbg(chip->dev, "        play_rate: %d us\n",
+				chip->predefined[j].play_rate_us);
+		for (m = 0; m < chip->predefined[j].pattern_length; m++)
+			dev_dbg(chip->dev, "        pattern[%d]: 0x%x\n",
+					m, chip->predefined[j].pattern[m]);
+		for (m = 0; m < chip->predefined[j].brake_pattern_length; m++)
+			dev_dbg(chip->dev, "        brake_pattern[%d]: 0x%x\n",
+					m, chip->predefined[j].brake[m]);
+		dev_dbg(chip->dev, "    brake_en: %d\n",
+				chip->predefined[j].brake_en);
+		dev_dbg(chip->dev, "    wf_repeat_n: %d\n",
+				chip->predefined[j].wf_repeat_n);
+		dev_dbg(chip->dev, "    wf_s_repeat_n: %d\n",
+				chip->predefined[j].wf_s_repeat_n);
+		dev_dbg(chip->dev, "    lra_auto_res_disable: %d\n",
+				chip->predefined[j].lra_auto_res_disable);
 	}
 
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static int play_rate_dbgfs_read(void *data, u64 *val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	*val = effect->play_rate_us;
+
+	return 0;
+}
+
+static int play_rate_dbgfs_write(void *data, u64 val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	if (val > HAP_PLAY_RATE_US_MAX)
+		val = HAP_PLAY_RATE_US_MAX;
+
+	effect->play_rate_us = val;
+
+	return 0;
+}
+
+static int vmax_dbgfs_read(void *data, u64 *val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	*val = effect->vmax_mv;
+
+	return 0;
+}
+
+static int vmax_dbgfs_write(void *data, u64 val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	if (val > HAP_VMAX_MV_MAX)
+		val = HAP_VMAX_MV_MAX;
+
+	effect->vmax_mv = val;
+
+	return 0;
+}
+
+static int wf_repeat_n_dbgfs_read(void *data, u64 *val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	*val = wf_repeat[effect->wf_repeat_n];
+
+	return 0;
+}
+
+static int wf_repeat_n_dbgfs_write(void *data, u64 val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(wf_repeat); i++)
+		if (val == wf_repeat[i])
+			break;
+
+	if (i == ARRAY_SIZE(wf_repeat))
+		pr_err("wf_repeat value %lu is invalid\n", val);
+	else
+		effect->wf_repeat_n = i;
+
+	return 0;
+}
+
+static int wf_s_repeat_n_dbgfs_read(void *data, u64 *val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	*val = wf_s_repeat[effect->wf_s_repeat_n];
+
+	return 0;
+}
+
+static int wf_s_repeat_n_dbgfs_write(void *data, u64 val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(wf_s_repeat); i++)
+		if (val == wf_s_repeat[i])
+			break;
+
+	if (i == ARRAY_SIZE(wf_s_repeat))
+		pr_err("wf_s_repeat value %lu is invalid\n", val);
+	else
+		effect->wf_s_repeat_n = i;
+
+	return 0;
+}
+
+
+static int auto_res_dbgfs_read(void *data, u64 *val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	*val = !effect->lra_auto_res_disable;
+
+	return 0;
+}
+
+static int auto_res_dbgfs_write(void *data, u64 val)
+{
+	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
+
+	effect->lra_auto_res_disable = !val;
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(play_rate_debugfs_ops,  play_rate_dbgfs_read,
+		play_rate_dbgfs_write, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(vmax_debugfs_ops, vmax_dbgfs_read,
+		vmax_dbgfs_write, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(wf_repeat_n_debugfs_ops,  wf_repeat_n_dbgfs_read,
+		wf_repeat_n_dbgfs_write, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(wf_s_repeat_n_debugfs_ops,  wf_s_repeat_n_dbgfs_read,
+		wf_s_repeat_n_dbgfs_write, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(auto_res_debugfs_ops,  auto_res_dbgfs_read,
+		auto_res_dbgfs_write, "%llu\n");
+
+#define CHAR_PER_PATTERN 8
+static ssize_t brake_pattern_dbgfs_read(struct file *filep,
+		char __user *buf, size_t count, loff_t *ppos)
+{
+	struct qti_hap_effect *effect =
+		(struct qti_hap_effect *)filep->private_data;
+	char *kbuf, *tmp;
+	int rc, length, i, len;
+
+	kbuf = kcalloc(CHAR_PER_PATTERN, HAP_BRAKE_PATTERN_MAX, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	tmp = kbuf;
+	for (length = 0, i = 0; i < HAP_BRAKE_PATTERN_MAX; i++) {
+		len = snprintf(tmp, CHAR_PER_PATTERN, "0x%x ",
+				effect->brake[i]);
+		tmp += len;
+		length += len;
+	}
+
+	kbuf[length++] = '\n';
+	kbuf[length++] = '\0';
+
+	rc = simple_read_from_buffer(buf, count, ppos, kbuf, length);
+
+	kfree(kbuf);
+	return rc;
+}
+
+static ssize_t brake_pattern_dbgfs_write(struct file *filep,
+		const char __user *buf, size_t count, loff_t *ppos)
+{
+	struct qti_hap_effect *effect =
+		(struct qti_hap_effect *)filep->private_data;
+	char *kbuf, *token;
+	int rc = 0, i = 0, j;
+	u32 val;
+
+	kbuf = kmalloc(count + 1, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	rc = copy_from_user(kbuf, buf, count);
+	if (rc > 0) {
+		rc = -EFAULT;
+		goto err;
+	}
+
+	kbuf[count] = '\0';
+	*ppos += count;
+
+	while ((token = strsep(&kbuf, " ")) != NULL) {
+		rc = kstrtouint(token, 0, &val);
+		if (rc < 0) {
+			rc = -EINVAL;
+			goto err;
+		}
+
+		effect->brake[i++] = val & HAP_BRAKE_PATTERN_MASK;
+
+		if (i >= HAP_BRAKE_PATTERN_MAX)
+			break;
+	}
+
+	for (j = i; j < HAP_BRAKE_PATTERN_MAX; j++)
+		effect->brake[j] = 0;
+
+	effect->brake_pattern_length = i;
+	verify_brake_setting(effect);
+
+	rc = count;
+err:
+	kfree(kbuf);
+	return rc;
+}
+
+static const struct file_operations brake_pattern_dbgfs_ops = {
+	.read = brake_pattern_dbgfs_read,
+	.write = brake_pattern_dbgfs_write,
+	.owner = THIS_MODULE,
+	.open = simple_open,
+};
+
+static ssize_t pattern_dbgfs_read(struct file *filep,
+		char __user *buf, size_t count, loff_t *ppos)
+{
+	struct qti_hap_effect *effect =
+		(struct qti_hap_effect *)filep->private_data;
+	char *kbuf, *tmp;
+	int rc, length, i, len;
+
+	kbuf = kcalloc(CHAR_PER_PATTERN, effect->pattern_length, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	tmp = kbuf;
+	for (length = 0, i = 0; i < effect->pattern_length; i++) {
+		len = snprintf(tmp, CHAR_PER_PATTERN, "0x%x ",
+				effect->pattern[i]);
+		tmp += len;
+		length += len;
+	}
+
+	kbuf[length++] = '\n';
+	kbuf[length++] = '\0';
+
+	rc = simple_read_from_buffer(buf, count, ppos, kbuf, length);
+
+	kfree(kbuf);
+	return rc;
+}
+
+static ssize_t pattern_dbgfs_write(struct file *filep,
+		const char __user *buf, size_t count, loff_t *ppos)
+{
+	struct qti_hap_effect *effect =
+		(struct qti_hap_effect *)filep->private_data;
+	char *kbuf, *token;
+	int rc = 0, i = 0, j;
+	u32 val;
+
+	kbuf = kmalloc(count + 1, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	rc = copy_from_user(kbuf, buf, count);
+	if (rc > 0) {
+		rc = -EFAULT;
+		goto err;
+	}
+
+	kbuf[count] = '\0';
+	*ppos += count;
+
+	while ((token = strsep(&kbuf, " ")) != NULL) {
+		rc = kstrtouint(token, 0, &val);
+		if (rc < 0) {
+			rc = -EINVAL;
+			goto err;
+		}
+
+		effect->pattern[i++] = val & 0xff;
+
+		if (i >= effect->pattern_length)
+			break;
+	}
+
+	for (j = i; j < effect->pattern_length; j++)
+		effect->pattern[j] = 0;
+
+	rc = count;
+err:
+	kfree(kbuf);
+	return rc;
+}
+
+static const struct file_operations pattern_dbgfs_ops = {
+	.read = pattern_dbgfs_read,
+	.write = pattern_dbgfs_write,
+	.owner = THIS_MODULE,
+	.open = simple_open,
+};
+
+static int create_effect_debug_files(struct qti_hap_effect *effect,
+				struct dentry *dir)
+{
+	struct dentry *file;
+
+	file = debugfs_create_file("play_rate_us", 0644, dir,
+			effect, &play_rate_debugfs_ops);
+	if (!file) {
+		pr_err("create play-rate debugfs node failed\n");
+		return -ENOMEM;
+	}
+
+	file = debugfs_create_file("vmax_mv", 0644, dir,
+			effect, &vmax_debugfs_ops);
+	if (!file) {
+		pr_err("create vmax debugfs node failed\n");
+		return -ENOMEM;
+	}
+
+	file = debugfs_create_file("wf_repeat_n", 0644, dir,
+			effect, &wf_repeat_n_debugfs_ops);
+	if (!file) {
+		pr_err("create wf-repeat debugfs node failed\n");
+		return -ENOMEM;
+	}
+
+	file = debugfs_create_file("wf_s_repeat_n", 0644, dir,
+			effect, &wf_s_repeat_n_debugfs_ops);
+	if (!file) {
+		pr_err("create wf-s-repeat debugfs node failed\n");
+		return -ENOMEM;
+	}
+
+	file = debugfs_create_file("lra_auto_res_en", 0644, dir,
+			effect, &auto_res_debugfs_ops);
+	if (!file) {
+		pr_err("create lra-auto-res-en debugfs node failed\n");
+		return -ENOMEM;
+	}
+
+	file = debugfs_create_file("brake", 0644, dir,
+			effect, &brake_pattern_dbgfs_ops);
+	if (!file) {
+		pr_err("create brake debugfs node failed\n");
+		return -ENOMEM;
+	}
+
+	file = debugfs_create_file("pattern", 0644, dir,
+			effect, &pattern_dbgfs_ops);
+	if (!file) {
+		pr_err("create pattern debugfs node failed\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int qti_haptics_add_debugfs(struct qti_hap_chip *chip)
+{
+	struct dentry *hap_dir, *effect_dir;
+	char str[12] = {0};
+	int i, rc = 0;
+
+	hap_dir = debugfs_create_dir("haptics", NULL);
+	if (!hap_dir) {
+		pr_err("create haptics debugfs directory failed\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < chip->effects_count; i++) {
+		snprintf(str, ARRAY_SIZE(str), "effect%d", i);
+		effect_dir = debugfs_create_dir(str, hap_dir);
+		if (!effect_dir) {
+			pr_err("create %s debugfs directory failed\n", str);
+			rc = -ENOMEM;
+			goto cleanup;
+		}
+
+		rc = create_effect_debug_files(&chip->predefined[i],
+				effect_dir);
+		if (rc < 0) {
+			rc = -ENOMEM;
+			goto cleanup;
+		}
+	}
+
+	chip->hap_debugfs = hap_dir;
+	return 0;
+
+cleanup:
+	debugfs_remove_recursive(hap_dir);
+	return rc;
+}
+#endif
 
 static int qti_haptics_probe(struct platform_device *pdev)
 {
@@ -1398,12 +1899,15 @@ static int qti_haptics_probe(struct platform_device *pdev)
 
 	hrtimer_init(&chip->stop_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	chip->stop_timer.function = qti_hap_stop_timer;
-
+	hrtimer_init(&chip->hap_disable_timer, CLOCK_MONOTONIC,
+						HRTIMER_MODE_REL);
+	chip->hap_disable_timer.function = qti_hap_disable_timer;
 	input_dev->name = "qti-haptics";
 	input_set_drvdata(input_dev, chip);
 	chip->input_dev = input_dev;
 
 	input_set_capability(input_dev, EV_FF, FF_CONSTANT);
+	input_set_capability(input_dev, EV_FF, FF_GAIN);
 	if (chip->effects_count != 0) {
 		input_set_capability(input_dev, EV_FF, FF_PERIODIC);
 		input_set_capability(input_dev, EV_FF, FF_CUSTOM);
@@ -1424,6 +1928,7 @@ static int qti_haptics_probe(struct platform_device *pdev)
 	ff->upload = qti_haptics_upload_effect;
 	ff->playback = qti_haptics_playback;
 	ff->erase = qti_haptics_erase;
+	ff->set_gain = qti_haptics_set_gain;
 
 	rc = input_register_device(input_dev);
 	if (rc < 0) {
@@ -1433,6 +1938,11 @@ static int qti_haptics_probe(struct platform_device *pdev)
 	}
 
 	dev_set_drvdata(chip->dev, chip);
+#ifdef CONFIG_DEBUG_FS
+	rc = qti_haptics_add_debugfs(chip);
+	if (rc < 0)
+		dev_dbg(chip->dev, "create debugfs failed, rc=%d\n", rc);
+#endif
 	return 0;
 
 destroy_ff:
@@ -1444,10 +1954,33 @@ static int qti_haptics_remove(struct platform_device *pdev)
 {
 	struct qti_hap_chip *chip = dev_get_drvdata(&pdev->dev);
 
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove_recursive(chip->hap_debugfs);
+#endif
 	input_ff_destroy(chip->input_dev);
 	dev_set_drvdata(chip->dev, NULL);
 
 	return 0;
+}
+
+static void qti_haptics_shutdown(struct platform_device *pdev)
+{
+	struct qti_hap_chip *chip = dev_get_drvdata(&pdev->dev);
+	int rc;
+
+	dev_dbg(chip->dev, "Shutdown!\n");
+
+	qti_haptics_module_en(chip, false);
+
+	if (chip->vdd_supply && chip->vdd_enabled) {
+		rc = regulator_disable(chip->vdd_supply);
+		if (rc < 0) {
+			dev_err(chip->dev, "Disable VDD supply failed, rc=%d\n",
+					rc);
+			return;
+		}
+		chip->vdd_enabled = false;
+	}
 }
 
 static const struct of_device_id haptics_match_table[] = {
@@ -1460,10 +1993,12 @@ static const struct of_device_id haptics_match_table[] = {
 static struct platform_driver qti_haptics_driver = {
 	.driver		= {
 		.name = "qcom,haptics",
+		.owner = THIS_MODULE,
 		.of_match_table = haptics_match_table,
 	},
 	.probe		= qti_haptics_probe,
 	.remove		= qti_haptics_remove,
+	.shutdown	= qti_haptics_shutdown,
 };
 module_platform_driver(qti_haptics_driver);
 

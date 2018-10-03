@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  *
  */
+#include <linux/module.h>
 #include <linux/device.h>
 #include <linux/iommu.h>
 #include <linux/interrupt.h>
@@ -26,6 +27,13 @@
 #include "kgsl_hfi.h"
 #include "adreno.h"
 
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "kgsl."
+
+static bool noacd;
+module_param(noacd, bool, 0444);
+MODULE_PARM_DESC(noacd, "Disable GPU ACD");
+
 #define GMU_CONTEXT_USER		0
 #define GMU_CONTEXT_KERNEL		1
 #define GMU_KERNEL_ENTRIES		16
@@ -40,16 +48,15 @@ struct gmu_iommu_context {
 
 #define DUMMY_SIZE   SZ_4K
 
-#define GMU_DCACHE_SIZE  (SZ_256K - SZ_16K) /* GMU DCache VA size: 240KB */
-#define GMU_ICACHE_SIZE  (SZ_256K - SZ_16K) /* GMU ICache VA size: 240KB */
-
 /* Define target specific GMU VMA configurations */
 static const struct gmu_vma_entry {
 	unsigned int start;
 	unsigned int size;
 } gmu_vma[] = {
-	[GMU_CACHED_CODE] = { .start = 0x04000, .size = GMU_ICACHE_SIZE },
-	[GMU_CACHED_DATA] = { .start = 0x44000, .size = GMU_DCACHE_SIZE },
+	[GMU_ITCM] = { .start = 0x00000, .size = SZ_16K },
+	[GMU_ICACHE] = { .start = 0x04000, .size = (SZ_256K - SZ_16K) },
+	[GMU_DTCM] = { .start = 0x40000, .size = SZ_16K },
+	[GMU_DCACHE] = { .start = 0x44000, .size = (SZ_256K - SZ_16K) },
 	[GMU_NONCACHED_KERNEL] = { .start = 0x60000000, .size = SZ_512M },
 	[GMU_NONCACHED_USER] = { .start = 0x80000000, .size = SZ_1G },
 };
@@ -125,6 +132,9 @@ static int alloc_and_map(struct gmu_device *gmu, unsigned int ctx_id,
 	int ret;
 	struct iommu_domain *domain;
 
+	if (md->mem_type == GMU_ITCM || md->mem_type == GMU_DTCM)
+		return 0;
+
 	domain = gmu_ctx[ctx_id].domain;
 
 	md->hostptr = dma_alloc_attrs(&gmu->pdev->dev, (size_t) md->size,
@@ -145,6 +155,25 @@ static int alloc_and_map(struct gmu_device *gmu, unsigned int ctx_id,
 	return ret;
 }
 
+struct gmu_memdesc *gmu_get_memdesc(unsigned int addr, unsigned int size)
+{
+	int i;
+	struct gmu_memdesc *mem;
+
+	for (i = 0; i < GMU_KERNEL_ENTRIES; i++) {
+		if (!test_bit(i, &gmu_kmem_bitmap))
+			continue;
+
+		mem = &gmu_kmem_entries[i];
+
+		if (addr >= mem->gmuaddr &&
+				(addr + size < mem->gmuaddr + mem->size))
+			return mem;
+	}
+
+	return NULL;
+}
+
 /*
  * allocate_gmu_kmem() - allocates and maps uncached GMU kernel shared memory
  * @gmu: Pointer to GMU device
@@ -152,10 +181,12 @@ static int alloc_and_map(struct gmu_device *gmu, unsigned int ctx_id,
  * @attrs: IOMMU mapping attributes
  */
 static struct gmu_memdesc *allocate_gmu_kmem(struct gmu_device *gmu,
-		uint32_t mem_type, unsigned int size, unsigned int attrs)
+		enum gmu_mem_type mem_type, unsigned int size,
+		unsigned int attrs)
 {
 	struct gmu_memdesc *md;
-	int ret, entry_idx = find_first_zero_bit(
+	int ret = 0;
+	int entry_idx = find_first_zero_bit(
 			&gmu_kmem_bitmap, GMU_KERNEL_ENTRIES);
 
 	if (entry_idx >= GMU_KERNEL_ENTRIES) {
@@ -174,55 +205,54 @@ static struct gmu_memdesc *allocate_gmu_kmem(struct gmu_device *gmu,
 			return ERR_PTR(-EINVAL);
 		}
 
-		/* Allocate GMU virtual memory */
 		md = &gmu_kmem_entries[entry_idx];
 		md->gmuaddr = gmu_vma[mem_type].start +
 			(num_uncached_entries * SZ_1M);
 		set_bit(entry_idx, &gmu_kmem_bitmap);
 		md->size = size;
 		md->mem_type = mem_type;
-
 		break;
-	case GMU_CACHED_DATA:
-		if (size != GMU_DCACHE_SIZE) {
-			dev_err(&gmu->pdev->dev,
-					"Invalid cached GMU memory req %d\n",
-					size);
-			return ERR_PTR(-EINVAL);
-		}
 
-		/* Allocate GMU virtual memory */
+	case GMU_DCACHE:
 		md = &gmu_kmem_entries[entry_idx];
 		md->gmuaddr = gmu_vma[mem_type].start;
 		set_bit(entry_idx, &gmu_kmem_bitmap);
 		md->size = size;
 		md->mem_type = mem_type;
-
 		break;
-	case GMU_CACHED_CODE:
-		if (size != GMU_ICACHE_SIZE) {
-			dev_err(&gmu->pdev->dev,
-					"Invalid cached GMU memory req %d\n",
-					size);
-			return ERR_PTR(-EINVAL);
-		}
 
-		/* Allocate GMU virtual memory */
+	case GMU_ICACHE:
 		md = &gmu_kmem_entries[entry_idx];
 		md->gmuaddr = gmu_vma[mem_type].start;
 		set_bit(entry_idx, &gmu_kmem_bitmap);
 		md->size = size;
 		md->mem_type = mem_type;
-
 		break;
+
+	case GMU_ITCM:
+		md = &gmu_kmem_entries[entry_idx];
+		md->gmuaddr = gmu_vma[mem_type].start;
+		set_bit(entry_idx, &gmu_kmem_bitmap);
+		md->size = size;
+		md->mem_type = mem_type;
+		break;
+
+	case GMU_DTCM:
+		md = &gmu_kmem_entries[entry_idx];
+		md->gmuaddr = gmu_vma[mem_type].start;
+		set_bit(entry_idx, &gmu_kmem_bitmap);
+		md->size = size;
+		md->mem_type = mem_type;
+		break;
+
 	default:
 		dev_err(&gmu->pdev->dev,
-				"Invalid memory type requested\n");
+				"Invalid memory type (%d) requested\n",
+				mem_type);
 			return ERR_PTR(-EINVAL);
 	};
 
 	ret = alloc_and_map(gmu, GMU_CONTEXT_KERNEL, md, attrs);
-
 	if (ret) {
 		clear_bit(entry_idx, &gmu_kmem_bitmap);
 		md->gmuaddr = 0;
@@ -233,15 +263,6 @@ static struct gmu_memdesc *allocate_gmu_kmem(struct gmu_device *gmu,
 		num_uncached_entries++;
 
 	return md;
-}
-
-/* Checks if cached fw code size falls within the cached code segment range */
-bool is_cached_fw_size_valid(uint32_t size_in_bytes)
-{
-	if (size_in_bytes > gmu_vma[GMU_CACHED_CODE].size)
-		return false;
-
-	return true;
 }
 
 static int gmu_iommu_cb_probe(struct gmu_device *gmu,
@@ -338,22 +359,22 @@ static void gmu_kmem_close(struct gmu_device *gmu)
 	struct gmu_iommu_context *ctx = &gmu_ctx[GMU_CONTEXT_KERNEL];
 
 	gmu->hfi_mem = NULL;
-	gmu->bw_mem = NULL;
 	gmu->dump_mem = NULL;
 	gmu->gmu_log = NULL;
 
-	/* Unmap all memories in GMU kernel memory pool */
+	/* Unmap and free all memories in GMU kernel memory pool */
 	for (i = 0; i < GMU_KERNEL_ENTRIES; i++) {
+		if (!test_bit(i, &gmu_kmem_bitmap))
+			continue;
+
 		md = &gmu_kmem_entries[i];
 
-		if (md->gmuaddr)
+		if (md->gmuaddr && md->mem_type != GMU_ITCM &&
+				md->mem_type != GMU_DTCM)
 			iommu_unmap(ctx->domain, md->gmuaddr, md->size);
-	}
 
-	/* Free GMU shared kernel memory */
-	for (i = 0; i < GMU_KERNEL_ENTRIES; i++) {
-		md = &gmu_kmem_entries[i];
 		free_gmu_mem(gmu, md);
+
 		clear_bit(i, &gmu_kmem_bitmap);
 	}
 
@@ -390,6 +411,20 @@ static int gmu_memory_probe(struct kgsl_device *device,
 	if (ret)
 		return ret;
 
+	/* Reserve a memdesc for ITCM. No actually memory allocated */
+	md = allocate_gmu_kmem(gmu, GMU_ITCM, gmu_vma[GMU_ITCM].size, 0);
+	if (IS_ERR(md)) {
+		ret = PTR_ERR(md);
+		goto err_ret;
+	}
+
+	/* Reserve a memdesc for DTCM. No actually memory allocated */
+	md = allocate_gmu_kmem(gmu, GMU_DTCM, gmu_vma[GMU_DTCM].size, 0);
+	if (IS_ERR(md)) {
+		ret = PTR_ERR(md);
+		goto err_ret;
+	}
+
 	/* Allocates & maps memory for WB DUMMY PAGE */
 	/* Must be the first alloc */
 	md = allocate_gmu_kmem(gmu, GMU_NONCACHED_KERNEL,
@@ -400,7 +435,7 @@ static int gmu_memory_probe(struct kgsl_device *device,
 	}
 
 	/* Allocates & maps memory for DCACHE */
-	md = allocate_gmu_kmem(gmu, GMU_CACHED_DATA, GMU_DCACHE_SIZE,
+	md = allocate_gmu_kmem(gmu, GMU_DCACHE, gmu_vma[GMU_DCACHE].size,
 			(IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV));
 	if (IS_ERR(md)) {
 		ret = PTR_ERR(md);
@@ -408,11 +443,10 @@ static int gmu_memory_probe(struct kgsl_device *device,
 	}
 
 	/* Allocates & maps memory for ICACHE */
-	gmu->icache_mem = allocate_gmu_kmem(gmu, GMU_CACHED_CODE,
-			GMU_ICACHE_SIZE,
+	md = allocate_gmu_kmem(gmu, GMU_ICACHE, gmu_vma[GMU_ICACHE].size,
 			(IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV));
-	if (IS_ERR(gmu->icache_mem)) {
-		ret = PTR_ERR(gmu->icache_mem);
+	if (IS_ERR(md)) {
+		ret = PTR_ERR(md);
 		goto err_ret;
 	}
 
@@ -421,13 +455,6 @@ static int gmu_memory_probe(struct kgsl_device *device,
 			(IOMMU_READ | IOMMU_WRITE));
 	if (IS_ERR(gmu->hfi_mem)) {
 		ret = PTR_ERR(gmu->hfi_mem);
-		goto err_ret;
-	}
-
-	gmu->bw_mem = allocate_gmu_kmem(gmu, GMU_NONCACHED_KERNEL, BWMEM_SIZE,
-			IOMMU_READ);
-	if (IS_ERR(gmu->bw_mem)) {
-		ret = PTR_ERR(gmu->bw_mem);
 		goto err_ret;
 	}
 
@@ -477,10 +504,6 @@ static int gmu_dcvs_set(struct kgsl_device *device,
 		.bw = INVALID_DCVS_IDX,
 	};
 
-	/* Do not set to XO and lower GPU clock vote from GMU */
-	if ((gpu_pwrlevel != INVALID_DCVS_IDX) &&
-			(gpu_pwrlevel >= gmu->num_gpupwrlevels - 1))
-		return -EINVAL;
 
 	/* If GMU has not been started, save it */
 	if (!test_bit(GMU_HFI_ON, &device->gmu_core.flags)) {
@@ -488,6 +511,11 @@ static int gmu_dcvs_set(struct kgsl_device *device,
 		set_bit(GMU_DCVS_REPLAY, &device->gmu_core.flags);
 		return 0;
 	}
+
+	/* Do not set to XO and lower GPU clock vote from GMU */
+	if ((gpu_pwrlevel != INVALID_DCVS_IDX) &&
+			(gpu_pwrlevel >= gmu->num_gpupwrlevels - 1))
+		return -EINVAL;
 
 	if (gpu_pwrlevel < gmu->num_gpupwrlevels - 1)
 		req.freq = gmu->num_gpupwrlevels - gpu_pwrlevel - 1;
@@ -759,33 +787,35 @@ static void build_rpmh_bw_votes(struct gmu_bw_votes *rpmh_vote,
 	}
 }
 
-/* TODO: Remove this and use the actual bus API */
-#define GET_IB_VAL(i)	((i) & 0x3FFF)
-#define GET_AB_VAL(i)	(((i) >> 14) & 0x3FFF)
-
-static void build_rpmh_bw_buf(struct gmu_device *gmu)
+static void build_bwtable_cmd_cache(struct gmu_device *gmu)
 {
-	struct hfi_bwbuf *bwbuf = gmu->bw_mem->hostptr;
+	struct hfi_bwtable_cmd *cmd = &gmu->hfi.bwtbl_cmd;
 	struct rpmh_votes_t *votes = &gmu->rpmh_votes;
-	unsigned int i, val;
+	unsigned int i, j;
 
-	/* TODO: wait for IB/AB query API ready */
+	cmd->hdr = 0xFFFFFFFF;
+	cmd->bw_level_num = gmu->num_bwlevels;
+	cmd->cnoc_cmds_num = votes->cnoc_votes.cmds_per_bw_vote;
+	cmd->cnoc_wait_bitmask = votes->cnoc_votes.cmds_wait_bitmask;
+	cmd->ddr_cmds_num = votes->ddr_votes.cmds_per_bw_vote;
+	cmd->ddr_wait_bitmask = votes->ddr_votes.cmds_wait_bitmask;
 
-	/* Build from DDR votes in case IB/AB query API fail */
-	for (i = 0; i < gmu->num_bwlevels; i++) {
-		/* FIXME: wait for HPG to specify which node has IB/AB
-		 * node 0 for now
-		 */
-		/* Get IB val */
-		val = GET_IB_VAL(votes->ddr_votes.cmd_data[i][0]);
-		/* If IB val not set, use AB val */
-		if (val == 0)
-			val = GET_AB_VAL(votes->ddr_votes.cmd_data[i][0]);
+	for (i = 0; i < cmd->ddr_cmds_num; i++)
+		cmd->ddr_cmd_addrs[i] = votes->ddr_votes.cmd_addrs[i];
 
-		/* Set only vote data */
-		bwbuf->arr[i] &= 0xFFFF;
-		bwbuf->arr[i] |= (val << 16);
-	}
+	for (i = 0; i < cmd->bw_level_num; i++)
+		for (j = 0; j < cmd->ddr_cmds_num; j++)
+			cmd->ddr_cmd_data[i][j] =
+				votes->ddr_votes.cmd_data[i][j];
+
+	for (i = 0; i < cmd->cnoc_cmds_num; i++)
+		cmd->cnoc_cmd_addrs[i] =
+			votes->cnoc_votes.cmd_addrs[i];
+
+	for (i = 0; i < MAX_CNOC_LEVELS; i++)
+		for (j = 0; j < cmd->cnoc_cmds_num; j++)
+			cmd->cnoc_cmd_data[i][j] =
+				votes->cnoc_votes.cmd_data[i][j];
 }
 
 /*
@@ -825,7 +855,7 @@ static int gmu_bus_vote_init(struct gmu_device *gmu, struct kgsl_pwrctrl *pwr)
 
 	build_rpmh_bw_votes(&votes->cnoc_votes, gmu->num_cnocbwlevels, hdl);
 
-	build_rpmh_bw_buf(gmu);
+	build_bwtable_cmd_cache(gmu);
 
 out:
 	kfree(usecases);
@@ -1021,10 +1051,6 @@ static int gmu_clocks_probe(struct gmu_device *gmu, struct device_node *node)
 static int gmu_gpu_bw_probe(struct kgsl_device *device, struct gmu_device *gmu)
 {
 	struct msm_bus_scale_pdata *bus_scale_table;
-	struct msm_bus_paths *usecase;
-	struct msm_bus_vectors *vector;
-	struct hfi_bwbuf *bwbuf = gmu->bw_mem->hostptr;
-	int i;
 
 	bus_scale_table = msm_bus_cl_get_pdata(device->pdev);
 	if (bus_scale_table == NULL) {
@@ -1037,25 +1063,6 @@ static int gmu_gpu_bw_probe(struct kgsl_device *device, struct gmu_device *gmu)
 	if (!gmu->pcl) {
 		dev_err(&gmu->pdev->dev, "dt: cannot register bus client\n");
 		return -ENODEV;
-	}
-
-	/* 0-15: num levels; 16-31: arr offset in bytes */
-	bwbuf->hdr[0] = (12 << 16) | (bus_scale_table->num_usecases & 0xFFFF);
-	/* 0-15: element size in bytes; 16-31: data size in bytes */
-	bwbuf->hdr[1] = (2 << 16) | 4;
-	/* 0-15: bw val offset in bytes; 16-31: vote data offset in bytes */
-	bwbuf->hdr[2] = (2 << 16) | 0;
-
-	for (i = 0; i < bus_scale_table->num_usecases; i++) {
-		usecase = &bus_scale_table->usecase[i];
-		vector = &usecase->vectors[0];
-		/* Clear bw val */
-		bwbuf->arr[i] &= 0xFFFF0000;
-		/* Set bw val if not first entry */
-		if (i)
-			bwbuf->arr[i] |=
-				(DIV_ROUND_UP_ULL(vector->ib, 1048576)
-				 & 0xFFFF);
 	}
 
 	return 0;
@@ -1145,6 +1152,103 @@ static int gmu_irq_probe(struct kgsl_device *device, struct gmu_device *gmu)
 	return ret;
 }
 
+struct mbox_message {
+	uint32_t len;
+	void *msg;
+};
+
+static void gmu_aop_send_acd_state(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
+	struct mbox_message msg;
+	char msg_buf[33];
+	bool state = test_bit(ADRENO_ACD_CTRL, &adreno_dev->pwrctrl_flag);
+	int ret;
+
+	if (!gmu->mailbox.client)
+		return;
+
+	msg.len = scnprintf(msg_buf, sizeof(msg_buf),
+			"{class: gpu, res: acd, value: %d}", state);
+	msg.msg = msg_buf;
+
+	ret = mbox_send_message(gmu->mailbox.channel, &msg);
+	if (ret < 0)
+		dev_err(&gmu->pdev->dev,
+				"AOP mbox send message failed: %d\n", ret);
+}
+
+static void gmu_aop_mailbox_destroy(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
+	struct kgsl_mailbox *mailbox = &gmu->mailbox;
+
+	if (!mailbox->client)
+		return;
+
+	mbox_free_channel(mailbox->channel);
+	mailbox->channel = NULL;
+
+	kfree(mailbox->client);
+	mailbox->client = NULL;
+
+	clear_bit(ADRENO_ACD_CTRL, &adreno_dev->pwrctrl_flag);
+}
+
+static int gmu_aop_mailbox_init(struct kgsl_device *device,
+		struct gmu_device *gmu)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_mailbox *mailbox = &gmu->mailbox;
+
+	mailbox->client = kzalloc(sizeof(*mailbox->client), GFP_KERNEL);
+	if (!mailbox->client)
+		return -ENOMEM;
+
+	mailbox->client->dev = &gmu->pdev->dev;
+	mailbox->client->tx_block = true;
+	mailbox->client->tx_tout = 1000;
+	mailbox->client->knows_txdone = false;
+
+	mailbox->channel = mbox_request_channel(mailbox->client, 0);
+	if (IS_ERR(mailbox->channel)) {
+		kfree(mailbox->client);
+		mailbox->client = NULL;
+		return PTR_ERR(mailbox->channel);
+	}
+
+	set_bit(ADRENO_ACD_CTRL, &adreno_dev->pwrctrl_flag);
+	return 0;
+}
+
+static int gmu_acd_set(struct kgsl_device *device, unsigned int val)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
+
+	if (!gmu->mailbox.client)
+		return -EINVAL;
+
+	/* Don't do any unneeded work if ACD is already in the correct state */
+	if (val == test_bit(ADRENO_ACD_CTRL, &adreno_dev->pwrctrl_flag))
+		return 0;
+
+	mutex_lock(&device->mutex);
+
+	/* Power down the GPU before enabling or disabling ACD */
+	kgsl_pwrctrl_change_state(device, KGSL_STATE_SUSPEND);
+	if (val)
+		set_bit(ADRENO_ACD_CTRL, &adreno_dev->pwrctrl_flag);
+	else
+		clear_bit(ADRENO_ACD_CTRL, &adreno_dev->pwrctrl_flag);
+	kgsl_pwrctrl_change_state(device, KGSL_STATE_SLUMBER);
+
+	mutex_unlock(&device->mutex);
+	return 0;
+}
+
 /* Do not access any GMU registers in GMU probe function */
 static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 {
@@ -1203,9 +1307,10 @@ static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 	disable_irq(gmu->gmu_interrupt_num);
 	disable_irq(hfi->hfi_interrupt_num);
 
-	tasklet_init(&hfi->tasklet, hfi_receiver, (unsigned long)device);
+	tasklet_init(&hfi->tasklet, hfi_receiver, (unsigned long) gmu);
 	INIT_LIST_HEAD(&hfi->msglist);
 	spin_lock_init(&hfi->msglock);
+	spin_lock_init(&hfi->read_queue_lock);
 	hfi->kgsldev = device;
 
 	/* Retrieves GMU/GPU power level configurations*/
@@ -1219,6 +1324,7 @@ static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 		int j = gmu->num_gpupwrlevels - 1 - i;
 
 		gmu->gpu_freqs[i] = pwr->pwrlevels[j].gpu_freq;
+		gmu->acd_dvm_vals[i] = pwr->pwrlevels[j].acd_dvm_val;
 	}
 
 	/* Initializes GPU b/w levels configuration */
@@ -1250,10 +1356,18 @@ static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 	else
 		gmu->idle_level = GPU_HW_ACTIVE;
 
-	/* disable LM during boot time */
-	clear_bit(ADRENO_LM_CTRL, &adreno_dev->pwrctrl_flag);
-	set_bit(GMU_ENABLED, &device->gmu_core.flags);
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_ACD) && !noacd) {
+		ret = gmu_aop_mailbox_init(device, gmu);
+		if (ret)
+			dev_err(&gmu->pdev->dev,
+					"AOP mailbox init failed: %d\n", ret);
+	}
 
+	/* disable LM if the feature is not enabled */
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_LM))
+		clear_bit(ADRENO_LM_CTRL, &adreno_dev->pwrctrl_flag);
+
+	set_bit(GMU_ENABLED, &device->gmu_core.flags);
 	device->gmu_core.dev_ops = &adreno_a6xx_gmudev;
 
 	return 0;
@@ -1380,7 +1494,15 @@ static int gmu_suspend(struct kgsl_device *device)
 		return -EINVAL;
 
 	gmu_disable_clks(device);
+
+	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_CX_GDSC))
+		regulator_set_mode(gmu->cx_gdsc, REGULATOR_MODE_IDLE);
+
 	gmu_disable_gdsc(gmu);
+
+	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_CX_GDSC))
+		regulator_set_mode(gmu->cx_gdsc, REGULATOR_MODE_NORMAL);
+
 	dev_err(&gmu->pdev->dev, "Suspended GMU\n");
 	return 0;
 }
@@ -1429,6 +1551,9 @@ static int gmu_start(struct kgsl_device *device)
 	case KGSL_STATE_INIT:
 	case KGSL_STATE_SUSPEND:
 		WARN_ON(test_bit(GMU_CLK_ON, &device->gmu_core.flags));
+
+		gmu_aop_send_acd_state(device);
+
 		gmu_enable_gdsc(gmu);
 		gmu_enable_clks(device);
 		gmu_dev_ops->irq_enable(device);
@@ -1456,6 +1581,9 @@ static int gmu_start(struct kgsl_device *device)
 
 	case KGSL_STATE_SLUMBER:
 		WARN_ON(test_bit(GMU_CLK_ON, &device->gmu_core.flags));
+
+		gmu_aop_send_acd_state(device);
+
 		gmu_enable_gdsc(gmu);
 		gmu_enable_clks(device);
 		gmu_dev_ops->irq_enable(device);
@@ -1476,6 +1604,9 @@ static int gmu_start(struct kgsl_device *device)
 		if (test_bit(ADRENO_DEVICE_HARD_RESET, &adreno_dev->priv) ||
 			test_bit(GMU_FAULT, &device->gmu_core.flags)) {
 			gmu_suspend(device);
+
+			gmu_aop_send_acd_state(device);
+
 			gmu_enable_gdsc(gmu);
 			gmu_enable_clks(device);
 			gmu_dev_ops->irq_enable(device);
@@ -1495,6 +1626,8 @@ static int gmu_start(struct kgsl_device *device)
 		} else {
 			/* GMU fast boot */
 			hfi_stop(gmu);
+
+			gmu_aop_send_acd_state(device);
 
 			ret = gmu_dev_ops->rpmh_gpu_pwrctrl(adreno_dev,
 					GMU_FW_START, GMU_COLD_BOOT, 0);
@@ -1581,6 +1714,8 @@ static void gmu_remove(struct kgsl_device *device)
 
 	gmu_stop(device);
 
+	gmu_aop_mailbox_destroy(device);
+
 	while ((i < MAX_GMU_CLKS) && gmu->clks[i]) {
 		gmu->clks[i] = NULL;
 		i++;
@@ -1654,4 +1789,5 @@ struct gmu_core_ops gmu_ops = {
 	.snapshot = gmu_snapshot,
 	.regulator_isenabled = gmu_regulator_isenabled,
 	.suspend = gmu_suspend,
+	.acd_set = gmu_acd_set,
 };

@@ -49,6 +49,13 @@
 	qcom,battery-data = <&qrd_batterydata>;
 	qcom,hold-soc-while-full;
 	qcom,linearize-soc;
+	/* ESR fast calibration */
+	qcom,fg-esr-timer-chg-fast = <0 7>;
+	qcom,fg-esr-timer-dischg-fast = <0 7>;
+	qcom,fg-esr-timer-chg-slow = <0 96>;
+	qcom,fg-esr-timer-dischg-slow = <0 96>;
+	qcom,fg-esr-cal-soc-thresh = <26 230>;
+	qcom,fg-esr-cal-temp-thresh = <10 40>;
 };
 
 &soc {
@@ -132,8 +139,8 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <1>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
-	qcom,mdss-brightness-max-level = <1023>;
+	qcom,mdss-dsi-bl-max-level = <1023>;
+	qcom,mdss-brightness-max-level = <255>;
 	qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
 	qcom,panel-mode-gpio = <&tlmm 7 0>;
 	qcom,platform-te-gpio = <&tlmm 8 0>;
@@ -144,8 +151,8 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <1>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
-	qcom,mdss-brightness-max-level = <1023>;
+	qcom,mdss-dsi-bl-max-level = <1023>;
+	qcom,mdss-brightness-max-level = <255>;
 	qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
 	qcom,panel-mode-gpio = <&tlmm 7 0>;
 	qcom,platform-te-gpio = <&tlmm 8 0>;
@@ -156,8 +163,8 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vdd_no_labibb>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <1>;
-	qcom,mdss-dsi-bl-max-level = <4095>;
-	qcom,mdss-brightness-max-level = <1023>;
+	qcom,mdss-dsi-bl-max-level = <1023>;
+	qcom,mdss-brightness-max-level = <255>;
 	qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
 	qcom,panel-mode-gpio = <&tlmm 7 0>;
 	qcom,platform-te-gpio = <&tlmm 8 0>;
@@ -190,10 +197,10 @@
 		compatible = "onnn,redriver";
 		reg = <0x19>;
 		extcon = <&pm8150b_pdphy>, <&pm8150b_pdphy>;
-		eq = /bits/ 8 <0x5 0x4 0x4 0x5>;
+		eq = /bits/ 8 <0x4 0x4 0x4 0x4>;
 		flat-gain = /bits/ 8 <0x3 0x1 0x1 0x3>;
 		output-comp = /bits/ 8 <0x2 0x2 0x2 0x2>;
-		loss-match = /bits/ 8 <0x0 0x3 0x3 0x0>;
+		loss-match = /bits/ 8 <0x1 0x3 0x3 0x1>;
 	};
 };
 
@@ -521,6 +528,38 @@
 	status = "ok";
 };
 
+&pm8150b_haptics {
+	qcom,vmax-mv = <2545>;
+	qcom,play-rate-us = <4255>;
+	wf_0 {
+		/* CLICK */
+		qcom,wf-pattern = [3e 3e 3e 3e];
+		qcom,wf-play-rate-us = <4255>;
+	};
+	wf_1 {
+		/* DOUBLE CLICK */
+		qcom,wf-play-rate-us = <7143>;
+	};
+	wf_2 {
+		/* TICK */
+		qcom,wf-play-rate-us = <4000>;
+	};
+	wf_3 {
+		/* THUD */
+		qcom,wf-pattern = [7e 7e 7e 7e];
+		qcom,wf-play-rate-us = <4255>;
+	};
+	wf_4 {
+		/* POP */
+		qcom,wf-play-rate-us = <5000>;
+	};
+	wf_5 {
+		/* HEAVY CLICK */
+		qcom,wf-pattern = [7e 7e 7e 7e];
+		qcom,wf-play-rate-us = <4255>;
+	};
+};
+
 &pm8150b_charger {
 	qcom,sec-charger-config = <1>;
 	qcom,auto-recharge-soc = <98>;
@@ -536,6 +575,7 @@
 			   "chg_temp";
 	qcom,battery-data = <&qrd_batterydata>;
 	qcom,sw-jeita-enable;
+	qcom,wd-bark-time-secs = <16>;
 };
 
 &smb1390 {

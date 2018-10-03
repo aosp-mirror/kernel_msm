@@ -301,12 +301,6 @@ static void a6xx_gmu_power_config(struct kgsl_device *device)
 		break;
 	}
 
-	/* ACD feature enablement */
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_LM) &&
-		test_bit(ADRENO_LM_CTRL, &adreno_dev->pwrctrl_flag))
-		gmu_core_regrmw(device, A6XX_GMU_BOOT_KMD_LM_HANDSHAKE, 0,
-				BIT(10));
-
 	/* Enable RPMh GPU client */
 	if (ADRENO_FEATURE(adreno_dev, ADRENO_RPMH))
 		gmu_core_regrmw(device, A6XX_GMU_RPMH_CTRL, 0,
@@ -471,23 +465,14 @@ static int a6xx_rpmh_power_off_gpu(struct kgsl_device *device)
 	return 0;
 }
 
-#define GMU_ITCM_VA_START 0x0
-#define GMU_ITCM_VA_END   (GMU_ITCM_VA_START + 0x4000) /* 16 KB */
-
-#define GMU_DTCM_VA_START 0x40000
-#define GMU_DTCM_VA_END   (GMU_DTCM_VA_START + 0x4000) /* 16 KB */
-
-#define GMU_ICACHE_VA_START 0x4000
-#define GMU_ICACHE_VA_END   (GMU_ICACHE_VA_START + 0x3C000) /* 240 KB */
-
 static int load_gmu_fw(struct kgsl_device *device)
 {
 	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
 	uint8_t *fw = (uint8_t *)gmu->fw_image->data;
-	struct gmu_block_header *blk;
-	uint32_t *fwptr;
 	int j;
-	int tcm_slot;
+	int tcm_addr;
+	struct gmu_block_header *blk;
+	struct gmu_memdesc *md;
 
 	while (fw < (uint8_t *)gmu->fw_image->data + gmu->fw_image->size) {
 		blk = (struct gmu_block_header *)fw;
@@ -497,35 +482,33 @@ static int load_gmu_fw(struct kgsl_device *device)
 		if (blk->size == 0)
 			continue;
 
-		if ((blk->addr >= GMU_ITCM_VA_START) &&
-				(blk->addr < GMU_ITCM_VA_END)) {
-			fwptr = (uint32_t *)fw;
-			tcm_slot = (blk->addr - GMU_ITCM_VA_START)
-				/ sizeof(uint32_t);
+		md = gmu_get_memdesc(blk->addr, blk->size);
+		if (md == NULL) {
+			dev_err(&gmu->pdev->dev,
+					"No backing memory for 0x%8.8X\n",
+					blk->addr);
+			return -EINVAL;
+		}
+
+		if (md->mem_type == GMU_ITCM || md->mem_type == GMU_DTCM) {
+			uint32_t *fwptr = (uint32_t *)fw;
+
+			tcm_addr = (blk->addr - (uint32_t)md->gmuaddr) /
+				sizeof(uint32_t);
+
+			if (md->mem_type == GMU_ITCM)
+				tcm_addr += A6XX_GMU_CM3_ITCM_START;
+			else
+				tcm_addr += A6XX_GMU_CM3_DTCM_START;
 
 			for (j = 0; j < blk->size / sizeof(uint32_t); j++)
-				gmu_core_regwrite(device,
-					A6XX_GMU_CM3_ITCM_START + tcm_slot + j,
+				gmu_core_regwrite(device, tcm_addr + j,
 					fwptr[j]);
-		} else if ((blk->addr >= GMU_DTCM_VA_START) &&
-				(blk->addr < GMU_DTCM_VA_END)) {
-			fwptr = (uint32_t *)fw;
-			tcm_slot = (blk->addr - GMU_DTCM_VA_START)
-				/ sizeof(uint32_t);
+		} else {
+			uint32_t offset = blk->addr - (uint32_t)md->gmuaddr;
 
-			for (j = 0; j < blk->size / sizeof(uint32_t); j++)
-				gmu_core_regwrite(device,
-					A6XX_GMU_CM3_DTCM_START + tcm_slot + j,
-					fwptr[j]);
-		} else if ((blk->addr >= GMU_ICACHE_VA_START) &&
-				(blk->addr < GMU_ICACHE_VA_END)) {
-			if (!is_cached_fw_size_valid(blk->size)) {
-				dev_err(&gmu->pdev->dev,
-						"GMU firmware size too big\n");
-				return -EINVAL;
-
-			}
-			memcpy(gmu->icache_mem->hostptr, fw, blk->size);
+			/* Copy the memory directly */
+			memcpy(md->hostptr + offset, fw, blk->size);
 		}
 
 		fw += blk->size;
@@ -1278,6 +1261,37 @@ static uint32_t lm_limit(struct adreno_device *adreno_dev)
 	return adreno_dev->lm_limit;
 }
 
+static int a640_throttling_counters[ADRENO_GPMU_THROTTLE_COUNTERS] = {
+	0x11, 0x15, 0x19
+};
+
+static void _setup_throttling_counters(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
+	int i, ret;
+
+	for (i = 0; i < ARRAY_SIZE(a640_throttling_counters); i++) {
+		adreno_dev->busy_data.throttle_cycles[i] = 0;
+
+		if (!a640_throttling_counters[i])
+			continue;
+		if (adreno_dev->gpmu_throttle_counters[i])
+			continue;
+
+		ret = adreno_perfcounter_get(adreno_dev,
+				KGSL_PERFCOUNTER_GROUP_GPMU_PWR,
+				a640_throttling_counters[i],
+				&adreno_dev->gpmu_throttle_counters[i],
+				NULL,
+				PERFCOUNTER_FLAG_KERNEL);
+		if (ret)
+			dev_err_once(&gmu->pdev->dev,
+				"Unable to get counter for LM: GPMU_PWR %d\n",
+				a640_throttling_counters[i]);
+	}
+}
+
 #define LIMITS_CONFIG(t, s, c, i, a) ( \
 		(t & 0xF) | \
 		((s & 0xF) << 4) | \
@@ -1296,6 +1310,12 @@ void a6xx_gmu_enable_lm(struct kgsl_device *device)
 	if (!ADRENO_FEATURE(adreno_dev, ADRENO_LM) ||
 			!test_bit(ADRENO_LM_CTRL, &adreno_dev->pwrctrl_flag))
 		return;
+
+	/* a640 only needs to set up throttling counters for DCVS */
+	if (adreno_is_a640(adreno_dev)) {
+		_setup_throttling_counters(adreno_dev);
+		return;
+	}
 
 	gmu_core_regwrite(device, A6XX_GPU_GMU_CX_GMU_PWR_THRESHOLD,
 		GPU_LIMIT_THRESHOLD_ENABLE | lm_limit(adreno_dev));
@@ -1411,7 +1431,6 @@ static void a6xx_gmu_snapshot(struct adreno_device *adreno_dev,
 	struct gmu_mem_type_desc desc[] = {
 		{gmu->hfi_mem, SNAPSHOT_GMU_HFIMEM},
 		{gmu->gmu_log, SNAPSHOT_GMU_LOG},
-		{gmu->bw_mem, SNAPSHOT_GMU_BWMEM},
 		{gmu->dump_mem, SNAPSHOT_GMU_DUMPMEM} };
 	unsigned int val, i;
 

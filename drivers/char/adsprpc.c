@@ -2578,13 +2578,14 @@ static int fastrpc_internal_mmap(struct fastrpc_file *fl,
 								1, &rbuf);
 		if (err)
 			goto bail;
-		err = fastrpc_mmap_on_dsp(fl, ud->flags,
-				(uintptr_t)rbuf->virt,
+		err = fastrpc_mmap_on_dsp(fl, ud->flags, 0,
 				rbuf->phys, rbuf->size, &raddr);
 		if (err)
 			goto bail;
 		rbuf->raddr = raddr;
 	} else {
+		uintptr_t va_to_dsp;
+
 		mutex_lock(&fl->map_mutex);
 		VERIFY(err, !fastrpc_mmap_create(fl, ud->fd, 0,
 				(uintptr_t)ud->vaddrin, ud->size,
@@ -2592,7 +2593,13 @@ static int fastrpc_internal_mmap(struct fastrpc_file *fl,
 		mutex_unlock(&fl->map_mutex);
 		if (err)
 			goto bail;
-		VERIFY(err, 0 == fastrpc_mmap_on_dsp(fl, ud->flags, map->va,
+
+		if (ud->flags == ADSP_MMAP_HEAP_ADDR ||
+				ud->flags == ADSP_MMAP_REMOTE_HEAP_ADDR)
+			va_to_dsp = 0;
+		else
+			va_to_dsp = (uintptr_t)map->va;
+		VERIFY(err, 0 == fastrpc_mmap_on_dsp(fl, ud->flags, va_to_dsp,
 				map->phys, map->size, &raddr));
 		if (err)
 			goto bail;
@@ -3094,7 +3101,7 @@ static int fastrpc_get_info(struct fastrpc_file *fl, uint32_t *info)
 			 * invoke any other methods without failure
 			 */
 			if (fl->apps->channel[cid].secure == SECURE_CHANNEL) {
-				err = -EPERM;
+				err = -EACCES;
 				goto bail;
 			}
 		}

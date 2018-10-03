@@ -182,7 +182,7 @@ struct dsi_panel {
 
 	u32 init_delay_us;
 	bool lp11_init;
-	bool ulps_enabled;
+	bool ulps_feature_enabled;
 	bool ulps_suspend_enabled;
 	bool allow_phy_power_off;
 	atomic_t esd_recovery_pending;
@@ -199,7 +199,7 @@ struct dsi_panel {
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
 {
-	return panel->ulps_enabled;
+	return panel->ulps_feature_enabled;
 }
 
 static inline bool dsi_panel_initialized(struct dsi_panel *panel)

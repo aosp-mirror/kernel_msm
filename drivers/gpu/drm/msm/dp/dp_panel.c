@@ -899,6 +899,7 @@ static int dp_panel_read_sink_caps(struct dp_panel *dp_panel,
 			count = DP_GET_SINK_COUNT(count);
 			if (!count) {
 				pr_err("no downstream ports connected\n");
+				panel->link->sink_count.count = 0;
 				rc = -ENOTCONN;
 				goto end;
 			}
@@ -1206,6 +1207,7 @@ static int dp_panel_set_stream_info(struct dp_panel *dp_panel,
 static int dp_panel_init_panel_info(struct dp_panel *dp_panel)
 {
 	int rc = 0;
+	struct dp_panel_private *panel;
 	struct dp_panel_info *pinfo;
 
 	if (!dp_panel) {
@@ -1214,27 +1216,22 @@ static int dp_panel_init_panel_info(struct dp_panel *dp_panel)
 		goto end;
 	}
 
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 	pinfo = &dp_panel->pinfo;
 
 	/*
 	 * print resolution info as this is a result
 	 * of user initiated action of cable connection
 	 */
-	pr_info("SET NEW RESOLUTION:\n");
-	pr_info("%dx%d@%dfps\n", pinfo->h_active,
-		pinfo->v_active, pinfo->refresh_rate);
-	pr_info("h_porches(back|front|width) = (%d|%d|%d)\n",
-			pinfo->h_back_porch,
-			pinfo->h_front_porch,
-			pinfo->h_sync_width);
-	pr_info("v_porches(back|front|width) = (%d|%d|%d)\n",
-			pinfo->v_back_porch,
-			pinfo->v_front_porch,
-			pinfo->v_sync_width);
-	pr_info("pixel clock (KHz)=(%d)\n", pinfo->pixel_clk_khz);
-	pr_info("bpp = %d\n", pinfo->bpp);
-	pr_info("active low (h|v)=(%d|%d)\n", pinfo->h_active_low,
-		pinfo->v_active_low);
+	pr_info("DP RESOLUTION: active(back|front|width|low)\n");
+	pr_info("%d(%d|%d|%d|%d)x%d(%d|%d|%d|%d)@%dfps %dbpp %dKhz %dLR %dLn\n",
+		pinfo->h_active, pinfo->h_back_porch, pinfo->h_front_porch,
+		pinfo->h_sync_width, pinfo->h_active_low,
+		pinfo->v_active, pinfo->v_back_porch, pinfo->v_front_porch,
+		pinfo->v_sync_width, pinfo->v_active_low,
+		pinfo->refresh_rate, pinfo->bpp, pinfo->pixel_clk_khz,
+		panel->link->link_params.bw_code,
+		panel->link->link_params.lane_count);
 end:
 	return rc;
 }
@@ -1271,6 +1268,7 @@ static int dp_panel_deinit_panel_info(struct dp_panel *dp_panel)
 	connector->hdr_max_luminance = 0;
 	connector->hdr_avg_luminance = 0;
 	connector->hdr_min_luminance = 0;
+	connector->hdr_supported = false;
 
 	memset(&c_state->hdr_meta, 0, sizeof(c_state->hdr_meta));
 
@@ -1329,11 +1327,6 @@ static int dp_panel_setup_hdr(struct dp_panel *dp_panel,
 		pr_err("invalid input\n");
 		rc = -EINVAL;
 		goto end;
-	}
-
-	if (dp_panel->stream_id >= DP_STREAM_MAX) {
-		pr_err("invalid stream id:%d\n", dp_panel->stream_id);
-		return -EINVAL;
 	}
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
@@ -1615,6 +1608,47 @@ end:
 	return mst_cap;
 }
 
+static void dp_panel_convert_to_dp_mode(struct dp_panel *dp_panel,
+		const struct drm_display_mode *drm_mode,
+		struct dp_display_mode *dp_mode)
+{
+	const u32 num_components = 3, default_bpp = 24;
+
+	dp_mode->timing.h_active = drm_mode->hdisplay;
+	dp_mode->timing.h_back_porch = drm_mode->htotal - drm_mode->hsync_end;
+	dp_mode->timing.h_sync_width = drm_mode->htotal -
+			(drm_mode->hsync_start + dp_mode->timing.h_back_porch);
+	dp_mode->timing.h_front_porch = drm_mode->hsync_start -
+					 drm_mode->hdisplay;
+	dp_mode->timing.h_skew = drm_mode->hskew;
+
+	dp_mode->timing.v_active = drm_mode->vdisplay;
+	dp_mode->timing.v_back_porch = drm_mode->vtotal - drm_mode->vsync_end;
+	dp_mode->timing.v_sync_width = drm_mode->vtotal -
+		(drm_mode->vsync_start + dp_mode->timing.v_back_porch);
+
+	dp_mode->timing.v_front_porch = drm_mode->vsync_start -
+					 drm_mode->vdisplay;
+
+	dp_mode->timing.refresh_rate = drm_mode->vrefresh;
+
+	dp_mode->timing.pixel_clk_khz = drm_mode->clock;
+
+	dp_mode->timing.v_active_low =
+		!!(drm_mode->flags & DRM_MODE_FLAG_NVSYNC);
+
+	dp_mode->timing.h_active_low =
+		!!(drm_mode->flags & DRM_MODE_FLAG_NHSYNC);
+
+	dp_mode->timing.bpp =
+		dp_panel->connector->display_info.bpc * num_components;
+	if (!dp_mode->timing.bpp)
+		dp_mode->timing.bpp = default_bpp;
+
+	dp_mode->timing.bpp = dp_panel_get_mode_bpp(dp_panel,
+			dp_mode->timing.bpp, dp_mode->timing.pixel_clk_khz);
+}
+
 struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 {
 	int rc = 0;
@@ -1645,7 +1679,6 @@ struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 	dp_panel->spd_enabled = true;
 	memcpy(panel->spd_vendor_name, vendor_name, (sizeof(u8) * 8));
 	memcpy(panel->spd_product_description, product_desc, (sizeof(u8) * 16));
-	dp_panel->stream_id = DP_STREAM_MAX;
 	dp_panel->connector = in->connector;
 
 	if (in->base_panel) {
@@ -1673,6 +1706,7 @@ struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 	dp_panel->read_sink_status = dp_panel_read_sink_sts;
 	dp_panel->update_edid = dp_panel_update_edid;
 	dp_panel->read_mst_cap = dp_panel_read_mst_cap;
+	dp_panel->convert_to_dp_mode = dp_panel_convert_to_dp_mode;
 
 	sde_conn = to_sde_connector(dp_panel->connector);
 	sde_conn->drv_panel = dp_panel;

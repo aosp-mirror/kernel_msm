@@ -58,7 +58,7 @@ static u32 dsi_dsc_rc_buf_thresh[] = {0x0e, 0x1c, 0x2a, 0x38, 0x46, 0x54,
  * Rate control - Min QP values for each ratio type in dsi_dsc_ratio_type
  */
 static char dsi_dsc_rc_range_min_qp_1_1[][15] = {
-	{0, 0, 1, 1, 3, 3, 3, 3, 3, 3, 5, 5, 5, 7, 13},
+	{0, 0, 1, 1, 3, 3, 3, 3, 3, 3, 5, 5, 5, 7, 12},
 	{0, 4, 5, 5, 7, 7, 7, 7, 7, 7, 9, 9, 9, 11, 17},
 	{0, 4, 9, 9, 11, 11, 11, 11, 11, 11, 13, 13, 13, 15, 21},
 	};
@@ -79,7 +79,7 @@ static char dsi_dsc_rc_range_min_qp_1_1_scr1[][15] = {
  */
 static char dsi_dsc_rc_range_max_qp_1_1[][15] = {
 	{4, 4, 5, 6, 7, 7, 7, 8, 9, 10, 11, 12, 13, 13, 15},
-	{8, 8, 9, 10, 11, 11, 11, 12, 13, 14, 15, 16, 17, 17, 19},
+	{4, 8, 9, 10, 11, 11, 11, 12, 13, 14, 15, 16, 17, 17, 19},
 	{12, 12, 13, 14, 15, 15, 15, 16, 17, 18, 19, 20, 21, 21, 23},
 	};
 
@@ -90,7 +90,7 @@ static char dsi_dsc_rc_range_max_qp_1_1[][15] = {
 static char dsi_dsc_rc_range_max_qp_1_1_scr1[][15] = {
 	{4, 4, 5, 6, 7, 7, 7, 8, 9, 10, 10, 11, 11, 12, 13},
 	{8, 8, 9, 10, 11, 11, 11, 12, 13, 14, 14, 15, 15, 16, 17},
-	{12, 12, 13, 14, 15, 15, 15, 16, 17, 18, 18, 19, 19, 20, 21},
+	{12, 12, 13, 14, 15, 15, 15, 16, 17, 18, 18, 19, 19, 20, 23},
 	};
 
 /*
@@ -1604,8 +1604,8 @@ static int dsi_panel_parse_cmd_sets_sub(struct dsi_panel_cmd_set *cmd,
 	pr_debug("type=%d, name=%s, length=%d\n", type,
 		cmd_set_prop_map[type], length);
 
-	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_NONE,
-		8, 1, data, length, false);
+	print_hex_dump_debug("", DUMP_PREFIX_NONE,
+		       8, 1, data, length, false);
 
 	rc = dsi_panel_get_cmd_pkt_count(data, length, &packet_count);
 	if (rc) {
@@ -1756,11 +1756,11 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 	struct dsi_parser_utils *utils = &panel->utils;
 	u32 val;
 
-	panel->ulps_enabled =
+	panel->ulps_feature_enabled =
 		utils->read_bool(utils->data, "qcom,ulps-enabled");
 
 	pr_info("%s: ulps feature %s\n", __func__,
-		(panel->ulps_enabled ? "enabled" : "disabled"));
+		(panel->ulps_feature_enabled ? "enabled" : "disabled"));
 
 	panel->ulps_suspend_enabled =
 		utils->read_bool(utils->data, "qcom,suspend-ulps-enabled");
@@ -1773,6 +1773,7 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 
 	panel->sync_broadcast_en = utils->read_bool(utils->data,
 			"qcom,cmd-sync-wait-broadcast");
+
 	panel->lp11_init = utils->read_bool(utils->data,
 			"qcom,mdss-dsi-lp11-init");
 	if (!utils->read_u32(utils->data,
@@ -2075,7 +2076,6 @@ int dsi_dsc_populate_static_param(struct msm_display_dsc_info *dsc)
 	int hrd_delay;
 	int pre_num_extra_mux_bits, num_extra_mux_bits;
 	int slice_bits;
-	int target_bpp_x16;
 	int data;
 	int final_value, final_scale;
 	int ratio_index, mod_offset;
@@ -2117,7 +2117,7 @@ int dsi_dsc_populate_static_param(struct msm_display_dsc_info *dsc)
 	}
 	dsc->range_bpg_offset = dsi_dsc_rc_range_bpg_offset;
 
-	if (bpp == 8)
+	if (bpp <= 10)
 		dsc->initial_offset = 6144;
 	else
 		dsc->initial_offset = 2048;	/* bpp = 12 */
@@ -2127,22 +2127,21 @@ int dsi_dsc_populate_static_param(struct msm_display_dsc_info *dsc)
 	else
 		mux_words_size = 48;		/* bpc == 8/10 */
 
+	dsc->line_buf_depth = bpc + 1;
+
 	if (bpc == 8) {
-		dsc->line_buf_depth = 9;
 		dsc->input_10_bits = 0;
 		dsc->min_qp_flatness = 3;
 		dsc->max_qp_flatness = 12;
 		dsc->quant_incr_limit0 = 11;
 		dsc->quant_incr_limit1 = 11;
 	} else if (bpc == 10) { /* 10bpc */
-		dsc->line_buf_depth = 11;
 		dsc->input_10_bits = 1;
 		dsc->min_qp_flatness = 7;
 		dsc->max_qp_flatness = 16;
 		dsc->quant_incr_limit0 = 15;
 		dsc->quant_incr_limit1 = 15;
 	} else { /* 12 bpc */
-		dsc->line_buf_depth = 9;
 		dsc->input_10_bits = 0;
 		dsc->min_qp_flatness = 11;
 		dsc->max_qp_flatness = 20;
@@ -2165,7 +2164,7 @@ int dsi_dsc_populate_static_param(struct msm_display_dsc_info *dsc)
 		break;
 	}
 
-	dsc->det_thresh_flatness = 7 + 2*(bpc - 8);
+	dsc->det_thresh_flatness = 2 << (bpc - 8);
 
 	dsc->initial_xmit_delay = dsc->rc_model_size / (2 * bpp);
 
@@ -2204,14 +2203,7 @@ int dsi_dsc_populate_static_param(struct msm_display_dsc_info *dsc)
 		+ num_extra_mux_bits);
 	dsc->slice_bpg_offset = DIV_ROUND_UP(data, groups_total);
 
-	/* bpp * 16 + 0.5 */
-	data = bpp * 16;
-	data *= 2;
-	data++;
-	data /= 2;
-	target_bpp_x16 = data;
-
-	data = (dsc->initial_xmit_delay * target_bpp_x16) / 16;
+	data = dsc->initial_xmit_delay * bpp;
 	final_value =  dsc->rc_model_size - data + num_extra_mux_bits;
 
 	final_scale = 8 * dsc->rc_model_size /
@@ -3923,14 +3915,19 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	if (!atomic_read(&panel->esd_recovery_pending)) {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
 		if (rc) {
-			pr_err("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
+			/*
+			 * Sending panel off commands may fail when  DSI
+			 * controller is in a bad state. These failures can be
+			 * ignored since controller will go for full reset on
+			 * subsequent display enable anyway.
+			 */
+			pr_warn_ratelimited("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
 					panel->name, rc);
-			goto error;
+			rc = 0;
 		}
 	}
 	panel->panel_initialized = false;
 
-error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }

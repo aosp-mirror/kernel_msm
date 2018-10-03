@@ -80,9 +80,9 @@ static const struct kernel_param_ops mtu_max_ops = {
 module_param_cb(mtu_max, &mtu_max_ops, &mtu_max, 0444);
 MODULE_PARM_DESC(mtu_max, " Max MTU value.");
 
-static uint rx_ring_order	 = WIL_RX_RING_SIZE_ORDER_DEFAULT;
-static uint tx_ring_order	 = WIL_TX_RING_SIZE_ORDER_DEFAULT;
-static uint bcast_ring_order	 = WIL_BCAST_RING_SIZE_ORDER_DEFAULT;
+static uint rx_ring_order;
+static uint tx_ring_order = WIL_TX_RING_SIZE_ORDER_DEFAULT;
+static uint bcast_ring_order = WIL_BCAST_RING_SIZE_ORDER_DEFAULT;
 
 static int ring_order_set(const char *val, const struct kernel_param *kp)
 {
@@ -281,6 +281,7 @@ __acquires(&sta->tid_rx_lock) __releases(&sta->tid_rx_lock)
 	}
 	/* statistics */
 	memset(&sta->stats, 0, sizeof(sta->stats));
+	sta->stats.tx_latency_min_us = U32_MAX;
 }
 
 static bool wil_vif_is_connected(struct wil6210_priv *wil, u8 mid)
@@ -361,6 +362,8 @@ static void _wil6210_disconnect(struct wil6210_vif *vif, const u8 *bssid,
 			vif->bss = NULL;
 		}
 		clear_bit(wil_vif_fwconnecting, vif->status);
+		clear_bit(wil_vif_ft_roam, vif->status);
+
 		break;
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_P2P_GO:
@@ -1133,6 +1136,9 @@ void wil_refresh_fw_capabilities(struct wil6210_priv *wil)
 		wiphy->max_sched_scan_plans = WMI_MAX_PLANS_NUM;
 	}
 
+	if (test_bit(WMI_FW_CAPABILITY_TX_REQ_EXT, wil->fw_capabilities))
+		wiphy->flags |= WIPHY_FLAG_OFFCHAN_TX;
+
 	if (wil->platform_ops.set_features) {
 		features = (test_bit(WMI_FW_CAPABILITY_REF_CLOCK_CONTROL,
 				     wil->fw_capabilities) &&
@@ -1154,6 +1160,8 @@ void wil_refresh_fw_capabilities(struct wil6210_priv *wil)
 		wil->max_agg_wsize = WIL_MAX_AGG_WSIZE;
 		wil->max_ampdu_size = WIL_MAX_AMPDU_SIZE;
 	}
+
+	update_supported_bands(wil);
 }
 
 void wil_mbox_ring_le2cpus(struct wil6210_mbox_ring *r)
@@ -1330,7 +1338,7 @@ static int wil_get_otp_info(struct wil6210_priv *wil)
 
 static int wil_wait_for_fw_ready(struct wil6210_priv *wil)
 {
-	ulong to = msecs_to_jiffies(1000);
+	ulong to = msecs_to_jiffies(2000);
 	ulong left = wait_for_completion_timeout(&wil->wmi_ready, to);
 
 	if (0 == left) {
@@ -1710,6 +1718,11 @@ int __wil_up(struct wil6210_priv *wil)
 		return rc;
 
 	/* Rx RING. After MAC and beacon */
+	if (rx_ring_order == 0)
+		rx_ring_order = wil->hw_version < HW_VER_TALYN_MB ?
+			WIL_RX_RING_SIZE_ORDER_DEFAULT :
+			WIL_RX_RING_SIZE_ORDER_TALYN_DEFAULT;
+
 	rc = wil->txrx_ops.rx_init(wil, 1 << rx_ring_order);
 	if (rc)
 		return rc;

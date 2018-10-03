@@ -47,7 +47,7 @@
 			cell-id = <MSM_BUS_RSC_DISP>;
 			label = "disp_rsc";
 			qcom,rsc-dev;
-			qcom,req_state = <3>;
+			qcom,req_state = <2>;
 		};
 
 	/*BCMs*/
@@ -175,6 +175,14 @@
 			cell-id = <MSM_BUS_BCM_SN1>;
 			label = "SN1";
 			qcom,bcm-name = "SN1";
+			qcom,rscs = <&rsc_apps>;
+			qcom,bcm-dev;
+		};
+
+		bcm_cn1: bcm-cn1 {
+			cell-id = <MSM_BUS_BCM_CN1>;
+			label = "CN1";
+			qcom,bcm-name = "CN1";
 			qcom,rscs = <&rsc_apps>;
 			qcom,bcm-dev;
 		};
@@ -409,8 +417,8 @@
 			qcom,qos-off = <4096>;
 			qcom,base-offset = <45056>;
 			qcom,sbm-offset = <0>;
-			qcom,bypass-qos-prg;
 			qcom,bus-type = <1>;
+			qcom,bypass-qos-prg;
 			clocks = <>;
 		};
 
@@ -483,6 +491,7 @@
 			qcom,qport = <19>;
 			qcom,connections = <&slv_qns_a1noc_snoc>;
 			qcom,bus-dev = <&fab_aggre1_noc>;
+			qcom,bcms = <&bcm_cn1>;
 			qcom,ap-owned;
 			qcom,prio = <2>;
 		};
@@ -501,7 +510,7 @@
 		};
 
 		mas_qhm_qup1: mas-qhm-qup1 {
-			cell-id = <MSM_BUS_MASTER_BLSP_1>;
+			cell-id = <MSM_BUS_MASTER_QUP_1>;
 			label = "mas-qhm-qup1";
 			qcom,buswidth = <4>;
 			qcom,agg-ports = <1>;
@@ -551,6 +560,8 @@
 			qcom,ap-owned;
 			qcom,prio = <2>;
 			qcom,forwarding;
+			qcom,defer-init-qos;
+			qcom,node-qos-bcms = <7035 0 1>;
 		};
 
 		mas_xm_emac_avb: mas-xm-emac-avb {
@@ -574,7 +585,7 @@
 			qcom,connections = <&slv_qns_pcie_snoc>;
 			qcom,bus-dev = <&fab_aggre1_noc>;
 			qcom,ap-owned;
-			qcom,prio = <2>;
+			qcom,prio = <0>;
 		};
 
 		mas_xm_qdss_etr: mas-xm-qdss-etr {
@@ -597,6 +608,7 @@
 			qcom,qport = <10>;
 			qcom,connections = <&slv_qns_a1noc_snoc>;
 			qcom,bus-dev = <&fab_aggre1_noc>;
+			qcom,bcms = <&bcm_cn1>;
 			qcom,ap-owned;
 			qcom,prio = <2>;
 		};
@@ -609,6 +621,7 @@
 			qcom,qport = <18>;
 			qcom,connections = <&slv_qns_a1noc_snoc>;
 			qcom,bus-dev = <&fab_aggre1_noc>;
+			qcom,bcms = <&bcm_cn1>;
 			qcom,ap-owned;
 			qcom,prio = <2>;
 		};
@@ -623,6 +636,12 @@
 			qcom,bus-dev = <&fab_aggre1_noc>;
 			qcom,ap-owned;
 			qcom,prio = <2>;
+			qcom,node-qos-clks {
+				clocks =
+				<&clock_gcc GCC_AGGRE_UFS_PHY_AXI_CLK>;
+				clock-names =
+				"clk-aggre-ufs-phy-axi-no-rate";
+			};
 		};
 
 		mas_xm_usb2: mas-xm-usb2 {
@@ -635,6 +654,12 @@
 			qcom,bus-dev = <&fab_aggre1_noc>;
 			qcom,ap-owned;
 			qcom,prio = <2>;
+			qcom,node-qos-clks {
+				clocks =
+				<&clock_gcc GCC_AGGRE_USB2_SEC_AXI_CLK>;
+				clock-names =
+				"clk-usb3-sec-axi-no-rate";
+			};
 		};
 
 		mas_xm_usb3_0: mas-xm-usb3-0 {
@@ -647,6 +672,12 @@
 			qcom,bus-dev = <&fab_aggre1_noc>;
 			qcom,ap-owned;
 			qcom,prio = <2>;
+			qcom,node-qos-clks {
+				clocks =
+				<&clock_gcc GCC_AGGRE_USB3_PRIM_AXI_CLK>;
+				clock-names =
+				"clk-usb3-sec-axi-no-rate";
+			};
 		};
 
 		mas_qxm_camnoc_hf0_uncomp: mas-qxm-camnoc-hf0-uncomp {
@@ -833,6 +864,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qnm_mnoc_sf: mas-qnm-mnoc-sf {
@@ -847,6 +879,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qnm_snoc_gc: mas-qnm-snoc-gc {
@@ -888,7 +921,7 @@
 			cell-id = <MSM_BUS_MASTER_LLCC>;
 			label = "mas-llcc-mc";
 			qcom,buswidth = <4>;
-			qcom,agg-ports = <4>;
+			qcom,agg-ports = <2>;
 			qcom,connections = <&slv_ebi>;
 			qcom,bus-dev = <&fab_mc_virt>;
 		};
@@ -914,6 +947,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qxm_camnoc_hf1: mas-qxm-camnoc-hf1 {
@@ -928,6 +962,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qxm_camnoc_sf: mas-qxm-camnoc-sf {
@@ -942,6 +977,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qxm_mdp0: mas-qxm-mdp0 {
@@ -956,6 +992,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qxm_rot: mas-qxm-rot {
@@ -970,6 +1007,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qxm_venus0: mas-qxm-venus0 {
@@ -984,6 +1022,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qxm_venus_arm9: mas-qxm-venus-arm9 {
@@ -998,6 +1037,7 @@
 			qcom,ap-owned;
 			qcom,prio = <0>;
 			qcom,forwarding;
+			qcom,node-qos-bcms = <7012 0 1>;
 		};
 
 		mas_qhm_snoc_cfg: mas-qhm-snoc-cfg {
@@ -1042,6 +1082,9 @@
 			qcom,connections = <&slv_xs_pcie>;
 			qcom,bus-dev = <&fab_system_noc>;
 			qcom,bcms = <&bcm_sn8>;
+			qcom,ap-owned;
+			qcom,prio = <0>;
+			qcom,forwarding;
 		};
 
 		mas_qnm_lpass_anoc: mas-qnm-lpass-anoc {
@@ -1129,7 +1172,7 @@
 			cell-id = <MSM_BUS_MASTER_LLCC_DISPLAY>;
 			label = "mas-llcc-mc_display";
 			qcom,buswidth = <4>;
-			qcom,agg-ports = <4>;
+			qcom,agg-ports = <2>;
 			qcom,connections = <&slv_ebi_display>;
 			qcom,bus-dev = <&fab_mc_virt_display>;
 		};
@@ -1221,7 +1264,7 @@
 			qcom,buswidth = <4>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_config_noc>;
-			qcom,bcms = <&bcm_cn0>;
+			qcom,bcms = <&bcm_cn1>;
 		};
 
 		slv_qhs_ahb2phy_west:slv-qhs-ahb2phy-west {
@@ -1230,7 +1273,7 @@
 			qcom,buswidth = <4>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_config_noc>;
-			qcom,bcms = <&bcm_cn0>;
+			qcom,bcms = <&bcm_cn1>;
 		};
 
 		slv_qhs_aop:slv-qhs-aop {
@@ -1412,7 +1455,7 @@
 			qcom,buswidth = <4>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_config_noc>;
-			qcom,bcms = <&bcm_cn0>;
+			qcom,bcms = <&bcm_cn1>;
 		};
 
 		slv_qhs_qup0:slv-qhs-qup0 {
@@ -1439,7 +1482,7 @@
 			qcom,buswidth = <4>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_config_noc>;
-			qcom,bcms = <&bcm_cn0>;
+			qcom,bcms = <&bcm_cn1>;
 		};
 
 		slv_qhs_sdc2:slv-qhs-sdc2 {
@@ -1448,7 +1491,7 @@
 			qcom,buswidth = <4>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_config_noc>;
-			qcom,bcms = <&bcm_cn0>;
+			qcom,bcms = <&bcm_cn1>;
 		};
 
 		slv_qhs_snoc_cfg:slv-qhs-snoc-cfg {
@@ -1645,7 +1688,7 @@
 			cell-id = <MSM_BUS_SLAVE_EBI_CH0>;
 			label = "slv-ebi";
 			qcom,buswidth = <4>;
-			qcom,agg-ports = <4>;
+			qcom,agg-ports = <2>;
 			qcom,bus-dev = <&fab_mc_virt>;
 			qcom,bcms = <&bcm_mc0>, <&bcm_acv>;
 		};
@@ -1782,7 +1825,7 @@
 			cell-id = <MSM_BUS_SLAVE_EBI_CH0_DISPLAY>;
 			label = "slv-ebi_display";
 			qcom,buswidth = <4>;
-			qcom,agg-ports = <4>;
+			qcom,agg-ports = <2>;
 			qcom,bus-dev = <&fab_mc_virt_display>;
 			qcom,bcms = <&bcm_mc0_display>;
 		};

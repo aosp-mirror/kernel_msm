@@ -199,10 +199,10 @@
 			};
 			port@1 {
 				reg = <5>;
-				funnel_swao_in_funnel_ssc: endpoint {
+				funnel_swao_in_ssc_etm0: endpoint {
 					slave-mode;
 					remote-endpoint=
-						<&funnel_ssc_out_funnel_swao>;
+						<&ssc_etm0_out_funnel_swao>;
 				};
 			};
 			port@2 {
@@ -321,7 +321,12 @@
 		reg-names = "tmc-base", "bam-base";
 
 		qcom,smmu-s1-bypass;
-		iommus = <&apps_smmu 0x05e0 0>;
+		iommus = <&apps_smmu 0x05e0 0>,
+			<&apps_smmu 0x04a0 0>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
 		arm,buffer-size = <0x400000>;
 
 		coresight-name = "coresight-tmc-etr";
@@ -1885,7 +1890,7 @@
 		reg = <0x6a02000 0x1000>;
 		reg-names = "cti-base";
 
-		coresight-name = "coresight-cti-ddr_dl_0_cti0";
+		coresight-name = "coresight-cti-ddr_dl_0_cti_0";
 
 		clocks = <&clock_aop QDSS_CLK>;
 		clock-names = "apb_pclk";
@@ -1897,7 +1902,7 @@
 		reg = <0x6a03000 0x1000>;
 		reg-names = "cti-base";
 
-		coresight-name = "coresight-cti-ddr_dl_0_cti1";
+		coresight-name = "coresight-cti-ddr_dl_0_cti_1";
 
 		clocks = <&clock_aop QDSS_CLK>;
 		clock-names = "apb_pclk";
@@ -1909,7 +1914,7 @@
 		reg = <0x6a10000 0x1000>;
 		reg-names = "cti-base";
 
-		coresight-name = "coresight-cti-ddr_dl_1_cti0";
+		coresight-name = "coresight-cti-ddr_dl_1_cti_0";
 
 		clocks = <&clock_aop QDSS_CLK>;
 		clock-names = "apb_pclk";
@@ -1921,7 +1926,7 @@
 		reg = <0x6a11000 0x1000>;
 		reg-names = "cti-base";
 
-		coresight-name = "coresight-cti-ddr_dl_1_cti1";
+		coresight-name = "coresight-cti-ddr_dl_1_cti_1";
 
 		clocks = <&clock_aop QDSS_CLK>;
 		clock-names = "apb_pclk";
@@ -2383,9 +2388,9 @@
 		qcom,inst-id = <8>;
 
 		port {
-			ssc_etm0_out_funnel_ssc: endpoint {
+			ssc_etm0_out_funnel_swao: endpoint {
 				remote-endpoint =
-					<&funnel_ssc_in_ssc_etm0>;
+					<&funnel_swao_in_ssc_etm0>;
 			};
 		};
 	};
@@ -2706,41 +2711,6 @@
 					slave-mode;
 					remote-endpoint =
 						<&etm7_out_funnel_apss>;
-				};
-			};
-		};
-	};
-
-	funnel_ssc: funnel@6b14000 {
-		compatible = "arm,primecell";
-		arm,primecell-periphid = <0x0003b908>;
-
-		reg = <0x6b14000 0x1000>;
-		reg-names = "funnel-base";
-
-		coresight-name = "coresight-funnel-ssc";
-
-		clocks = <&clock_aop QDSS_CLK>;
-		clock-names = "apb_pclk";
-
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				funnel_ssc_out_funnel_swao: endpoint {
-					remote-endpoint =
-					    <&funnel_swao_in_funnel_ssc>;
-				};
-			};
-
-			port@1 {
-				reg = <0>;
-				funnel_ssc_in_ssc_etm0: endpoint {
-					slave-mode;
-					remote-endpoint =
-					    <&ssc_etm0_out_funnel_ssc>;
 				};
 			};
 		};

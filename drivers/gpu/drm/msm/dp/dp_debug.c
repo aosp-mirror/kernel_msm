@@ -35,8 +35,6 @@ struct dp_debug_private {
 	u8 *dpcd;
 	u32 dpcd_size;
 
-	int vdo;
-
 	char exe_mode[SZ_32];
 	char reg_dump[SZ_32];
 
@@ -47,7 +45,6 @@ struct dp_debug_private {
 	struct dp_catalog *catalog;
 	struct drm_connector **connector;
 	struct device *dev;
-	struct work_struct sim_work;
 	struct dp_debug dp_debug;
 	struct dp_parser *parser;
 };
@@ -120,8 +117,24 @@ static ssize_t dp_debug_write_edid(struct file *file,
 		goto bail;
 
 	if (edid_size != debug->edid_size) {
-		pr_debug("clearing debug edid\n");
-		goto bail;
+		pr_debug("realloc debug edid\n");
+
+		if (debug->edid) {
+			devm_kfree(debug->dev, debug->edid);
+
+			debug->edid = devm_kzalloc(debug->dev,
+						edid_size, GFP_KERNEL);
+			if (!debug->edid) {
+				rc = -ENOMEM;
+				goto bail;
+			}
+
+			debug->edid_size = edid_size;
+
+			debug->aux->set_sim_mode(debug->aux,
+					debug->dp_debug.sim_mode,
+					debug->edid, debug->dpcd);
+		}
 	}
 
 	while (edid_size--) {
@@ -579,6 +592,56 @@ static ssize_t dp_debug_read_connected(struct file *file,
 	len += snprintf(buf, SZ_8, "%d\n", debug->hpd->hpd_high);
 
 	if (copy_to_user(user_buff, buf, len))
+		return -EFAULT;
+
+	*ppos += len;
+	return len;
+}
+
+static ssize_t dp_debug_write_hdcp(struct file *file,
+		const char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_8];
+	size_t len = 0;
+	int hdcp = 0;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	/* Leave room for termination char */
+	len = min_t(size_t, count, SZ_8 - 1);
+	if (copy_from_user(buf, user_buff, len))
+		goto end;
+
+	buf[len] = '\0';
+
+	if (kstrtoint(buf, 10, &hdcp) != 0)
+		goto end;
+
+	debug->dp_debug.hdcp_disabled = !hdcp;
+end:
+	return len;
+}
+
+static ssize_t dp_debug_read_hdcp(struct file *file,
+		char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	u32 len = 0;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	len = sizeof(debug->dp_debug.hdcp_status);
+
+	if (copy_to_user(user_buff, debug->dp_debug.hdcp_status, len))
 		return -EFAULT;
 
 	*ppos += len;
@@ -1068,9 +1131,7 @@ static ssize_t dp_debug_write_attention(struct file *file,
 	if (kstrtoint(buf, 10, &vdo) != 0)
 		goto end;
 
-	debug->vdo = vdo;
-
-	schedule_work(&debug->sim_work);
+	debug->hpd->simulate_attention(debug->hpd, vdo);
 end:
 	return len;
 }
@@ -1226,6 +1287,12 @@ static const struct file_operations max_pclk_khz_fops = {
 	.read = dp_debug_max_pclk_khz_read,
 };
 
+static const struct file_operations hdcp_fops = {
+	.open = simple_open,
+	.write = dp_debug_write_hdcp,
+	.read = dp_debug_read_hdcp,
+};
+
 static int dp_debug_init(struct dp_debug *dp_debug)
 {
 	int rc = 0;
@@ -1371,6 +1438,7 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 		rc = PTR_ERR(file);
 		pr_err("[%s] debugfs max_bw_code failed, rc=%d\n",
 		       DEBUG_NAME, rc);
+		goto error_remove_dir;
 	}
 
 	file = debugfs_create_file("mst_sideband_mode", 0644, dir,
@@ -1379,6 +1447,7 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 		rc = PTR_ERR(file);
 		pr_err("[%s] debugfs max_bw_code failed, rc=%d\n",
 		       DEBUG_NAME, rc);
+		goto error_remove_dir;
 	}
 
 	file = debugfs_create_file("max_pclk_khz", 0644, dir,
@@ -1387,6 +1456,25 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 		rc = PTR_ERR(file);
 		pr_err("[%s] debugfs max_pclk_khz failed, rc=%d\n",
 		       DEBUG_NAME, rc);
+		goto error_remove_dir;
+	}
+
+	file = debugfs_create_bool("force_encryption", 0644, dir,
+			&debug->dp_debug.force_encryption);
+	if (IS_ERR_OR_NULL(file)) {
+		rc = PTR_ERR(file);
+		pr_err("[%s] debugfs force_encryption failed, rc=%d\n",
+		       DEBUG_NAME, rc);
+		goto error_remove_dir;
+	}
+
+	file = debugfs_create_file("hdcp", 0644, dir,
+					debug, &hdcp_fops);
+	if (IS_ERR_OR_NULL(file)) {
+		rc = PTR_ERR(file);
+		pr_err("[%s] debugfs hdcp failed, rc=%d\n",
+			DEBUG_NAME, rc);
+		goto error_remove_dir;
 	}
 
 	return 0;
@@ -1397,14 +1485,6 @@ error_remove_dir:
 	debugfs_remove_recursive(dir);
 error:
 	return rc;
-}
-
-static void dp_debug_sim_work(struct work_struct *work)
-{
-	struct dp_debug_private *debug =
-		container_of(work, typeof(*debug), sim_work);
-
-	debug->hpd->simulate_attention(debug->hpd, debug->vdo);
 }
 
 u8 *dp_debug_get_edid(struct dp_debug *dp_debug)
@@ -1419,39 +1499,33 @@ u8 *dp_debug_get_edid(struct dp_debug *dp_debug)
 	return debug->edid;
 }
 
-struct dp_debug *dp_debug_get(struct device *dev, struct dp_panel *panel,
-			struct dp_hpd *hpd, struct dp_link *link,
-			struct dp_aux *aux, struct drm_connector **connector,
-			struct dp_catalog *catalog,
-			struct dp_parser *parser)
+struct dp_debug *dp_debug_get(struct dp_debug_in *in)
 {
 	int rc = 0;
 	struct dp_debug_private *debug;
 	struct dp_debug *dp_debug;
 
-	if (!dev || !panel || !hpd || !link || !catalog) {
+	if (!in->dev || !in->panel || !in->hpd || !in->link || !in->catalog) {
 		pr_err("invalid input\n");
 		rc = -EINVAL;
 		goto error;
 	}
 
-	debug = devm_kzalloc(dev, sizeof(*debug), GFP_KERNEL);
+	debug = devm_kzalloc(in->dev, sizeof(*debug), GFP_KERNEL);
 	if (!debug) {
 		rc = -ENOMEM;
 		goto error;
 	}
 
-	INIT_WORK(&debug->sim_work, dp_debug_sim_work);
-
 	debug->dp_debug.debug_en = false;
-	debug->hpd = hpd;
-	debug->link = link;
-	debug->panel = panel;
-	debug->aux = aux;
-	debug->dev = dev;
-	debug->connector = connector;
-	debug->catalog = catalog;
-	debug->parser = parser;
+	debug->hpd = in->hpd;
+	debug->link = in->link;
+	debug->panel = in->panel;
+	debug->aux = in->aux;
+	debug->dev = in->dev;
+	debug->connector = in->connector;
+	debug->catalog = in->catalog;
+	debug->parser = in->parser;
 
 	dp_debug = &debug->dp_debug;
 	dp_debug->vdisplay = 0;
@@ -1460,7 +1534,7 @@ struct dp_debug *dp_debug_get(struct device *dev, struct dp_panel *panel,
 
 	rc = dp_debug_init(dp_debug);
 	if (rc) {
-		devm_kfree(dev, debug);
+		devm_kfree(in->dev, debug);
 		goto error;
 	}
 

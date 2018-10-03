@@ -420,6 +420,8 @@ static int smp2p_update_bits(void *data, u32 mask, u32 value)
 	val |= value;
 	writel(val, entry->value);
 	spin_unlock(&entry->lock);
+	SMP2P_INFO("%d: %s: orig:0x%0x new:0x%0x\n",
+		   entry->smp2p->remote_pid, entry->name, orig, val);
 
 	if (val != orig)
 		qcom_smp2p_kick(entry->smp2p);
@@ -621,13 +623,13 @@ static int qcom_smp2p_probe(struct platform_device *pdev)
 
 	ret = devm_request_threaded_irq(&pdev->dev, smp2p->irq,
 					NULL, qcom_smp2p_intr,
-					IRQF_ONESHOT,
+					IRQF_NO_SUSPEND | IRQF_ONESHOT,
 					"smp2p", (void *)smp2p);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request interrupt\n");
 		goto unwind_interfaces;
 	}
-
+	enable_irq_wake(smp2p->irq);
 
 	return 0;
 

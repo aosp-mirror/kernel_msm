@@ -229,6 +229,8 @@ enum {
 # define __cpuc_flush_dcache_area __flush_dcache_area
 #endif
 
+#define IPA_SMP2P_OUT_CLK_RSP_CMPLT_IDX 0
+#define IPA_SMP2P_OUT_CLK_VOTE_IDX 1
 #define IPA_SMP2P_SMEM_STATE_MASK 3
 
 
@@ -1966,7 +1968,10 @@ int ipa3_xdci_disconnect(u32 clnt_hdl, bool should_force_clear, u32 qmi_req_id);
 void ipa3_xdci_ep_delay_rm(u32 clnt_hdl);
 void ipa3_register_lock_unlock_callback(int (*client_cb)(bool), u32 ipa_ep_idx);
 void ipa3_deregister_lock_unlock_callback(u32 ipa_ep_idx);
-void ipa3_set_usb_prod_pipe_delay(void);
+int ipa3_set_reset_client_prod_pipe_delay(bool set_reset,
+		enum ipa_client_type client);
+int ipa3_set_reset_client_cons_pipe_sus_holb(bool set_reset,
+		enum ipa_client_type client);
 
 int ipa3_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	bool should_force_clear, u32 qmi_req_id, bool is_dpl);
@@ -2322,6 +2327,7 @@ void ipa3_proxy_clk_unvote(void);
 bool ipa3_is_client_handle_valid(u32 clnt_hdl);
 
 enum ipa_client_type ipa3_get_client_mapping(int pipe_idx);
+enum ipa_client_type ipa3_get_client_by_pipe(int pipe_idx);
 
 void ipa_init_ep_flt_bitmap(void);
 
@@ -2394,6 +2400,7 @@ int ipa3_active_clients_log_print_buffer(char *buf, int size);
 int ipa3_active_clients_log_print_table(char *buf, int size);
 void ipa3_active_clients_log_clear(void);
 int ipa3_interrupts_init(u32 ipa_irq, u32 ee, struct device *ipa_dev);
+void ipa3_interrupts_destroy(u32 ipa_irq, struct device *ipa_dev);
 int __ipa3_del_rt_rule(u32 rule_hdl);
 int __ipa3_del_hdr(u32 hdr_hdl, bool by_user);
 int __ipa3_release_hdr(u32 hdr_hdl);

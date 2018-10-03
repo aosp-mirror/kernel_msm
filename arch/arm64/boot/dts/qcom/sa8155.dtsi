@@ -10,15 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150.dtsi"
-
-/ {
-	model = "Qualcomm Technologies, Inc. SA8155";
-	compatible = "qcom,sa8155";
-	qcom,msm-name = "SA8155";
-	qcom,msm-id = <362 0x10000>;
-};
-
 /* Remove regulator nodes specific to SA8155 */
 &soc {
 	/delete-node/ regulator-pm8150-s4;
@@ -78,6 +69,10 @@
 
 /* Add regulator nodes specific to SA8155 */
 #include "sa8155-regulator.dtsi"
+
+&slpi_tlmm {
+	status = "ok";
+};
 
 &cam_csiphy0 {
 	mipi-csi-vdd-supply = <&pm8150_2_l8>;
@@ -178,6 +173,15 @@
 &gpu_gx_gdsc {
 	parent-supply = <&pm8150_2_s3_level>;
 	vdd_parent-supply = <&pm8150_2_s3_level>;
+};
+
+&ufsphy_mem {
+	vdda-phy-supply = <&pm8150_2_l18>;
+};
+
+&clock_scc {
+	vdd_scc_cx-supply = <&VDD_CX_LEVEL>;
+	status = "ok";
 };
 
 &thermal_zones {
@@ -607,8 +611,18 @@
 	qcom,panel-force-clock-lane-hs;
 };
 
+&mdss_dsi0_pll {
+	/delete-property/ qcom,dsi-pll-ssc-en;
+};
+
+&mdss_dsi1_pll {
+	/delete-property/ qcom,dsi-pll-ssc-en;
+};
+
 &mdss_mdp {
-	connectors = <&dsi_dp1 &dsi_dp2 &sde_dp &sde_wb>;
+	connectors = <&sde_rscc &dsi_dp1 &dsi_dp2 &sde_dp &sde_wb>;
+	qcom,sde-mixer-display-pref = "primary", "none", "none",
+				"none", "none", "none";
 };
 
 #include <dt-bindings/gpio/gpio.h>

@@ -14,6 +14,7 @@
 #define __KGSL_PWRCTRL_H
 
 #include <linux/pm_qos.h>
+#include <soc/qcom/cx_ipeak.h>
 
 /*****************************************************************************
  * power flags
@@ -106,12 +107,14 @@ struct kgsl_pwr_constraint {
  * @bus_freq:          Bus bandwidth vote index
  * @bus_min:           Min bus index @gpu_freq
  * @bus_max:           Max bus index @gpu_freq
+ * @acd_dvm_val:       Register setting for ACD
  */
 struct kgsl_pwrlevel {
 	unsigned int gpu_freq;
 	unsigned int bus_freq;
 	unsigned int bus_min;
 	unsigned int bus_max;
+	unsigned int acd_dvm_val;
 };
 
 struct kgsl_regulator {
@@ -170,6 +173,8 @@ struct kgsl_regulator {
  * isense_clk_indx - index of isense clock, 0 if no isense
  * isense_clk_on_level - isense clock rate is XO rate below this level.
  * tzone_name - pointer to thermal zone name of GPU temperature sensor
+ * gpu_cx_ipeak - pointer to CX Ipeak client used by GPU
+ * cx_ipeak_gpu_freq - Value of GPU CX Ipeak frequency
  */
 
 struct kgsl_pwrctrl {
@@ -227,6 +232,8 @@ struct kgsl_pwrctrl {
 	unsigned int gpu_bimc_int_clk_freq;
 	bool gpu_bimc_interface_enabled;
 	const char *tzone_name;
+	struct cx_ipeak_client *gpu_cx_ipeak;
+	unsigned int cx_ipeak_gpu_freq;
 };
 
 int kgsl_pwrctrl_init(struct kgsl_device *device);

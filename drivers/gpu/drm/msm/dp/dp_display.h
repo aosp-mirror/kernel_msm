@@ -48,7 +48,6 @@ struct dp_display {
 	struct dp_bridge *bridge;
 	struct drm_connector *base_connector;
 	void *base_dp_panel;
-	bool is_connected;
 	bool is_sst_connected;
 	u32 max_pclk_khz;
 	void *dp_mst_prv_info;
@@ -61,8 +60,8 @@ struct dp_display {
 
 	int (*set_mode)(struct dp_display *dp_display, void *panel,
 			struct dp_display_mode *mode);
-	int (*validate_mode)(struct dp_display *dp_display, void *panel,
-			u32 mode_pclk_khz);
+	enum drm_mode_status (*validate_mode)(struct dp_display *dp_display,
+			void *panel, struct drm_display_mode *mode);
 	int (*get_modes)(struct dp_display *dp_display, void *panel,
 		struct dp_display_mode *dp_mode);
 	int (*prepare)(struct dp_display *dp_display, void *panel);
@@ -85,9 +84,11 @@ struct dp_display {
 			struct edid *edid);
 	int (*get_mst_caps)(struct dp_display *dp_display,
 			struct dp_mst_caps *mst_caps);
-	int (*set_stream_info)(struct dp_display *dp_display,
-			void *panel, u32 ch_id, u32 ch_start_slot,
-			u32 ch_tot_slots, u32 pbn);
+	int (*set_stream_info)(struct dp_display *dp_display, void *panel,
+			u32 strm_id, u32 start_slot, u32 num_slots, u32 pbn);
+	void (*convert_to_dp_mode)(struct dp_display *dp_display, void *panel,
+			const struct drm_display_mode *drm_mode,
+			struct dp_display_mode *dp_mode);
 };
 
 int dp_display_get_num_of_displays(void);

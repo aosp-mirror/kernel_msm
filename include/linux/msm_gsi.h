@@ -659,15 +659,16 @@ struct __packed gsi_wdi_channel_scratch {
 	uint32_t update_ri_moderation_threshold:5;
 	uint32_t update_ri_moderation_counter:6;
 	uint32_t wdi_rx_tre_proc_in_progress:1;
+	uint32_t resv1:4;
 	uint32_t wdi_rx_vdev_id:8;
 	uint32_t wdi_rx_fw_desc:8;
 	uint32_t endp_metadatareg_offset:16;
 	uint32_t qmap_id:16;
 	uint32_t wdi_rx_pkt_length:16;
-	uint32_t resv1:2;
+	uint32_t resv2:2;
 	uint32_t pkt_comp_count:11;
 	uint32_t stop_in_progress_stm:3;
-	uint32_t resv2:16;
+	uint32_t resv3:16;
 	uint32_t wdi_rx_qmap_id_internal:16;
 };
 
@@ -1296,6 +1297,19 @@ int gsi_unmap_base(void);
  */
 int gsi_map_virtual_ch_to_per_ep(u32 ee, u32 chan_num, u32 per_ep_index);
 
+/**
+ * gsi_alloc_channel_ee - Peripheral should call this function
+ * to alloc other EE's channel. This is usually done in bootup to allocate all
+ * chnnels.
+ *
+ * @chan_idx: Virtual channel index
+ * @ee: EE
+ * @code: [out] response code for operation
+
+ * @Return gsi_status
+ */
+int gsi_alloc_channel_ee(unsigned int chan_idx, unsigned int ee, int *code);
+
 /*
  * Here is a typical sequence of calls
  *
@@ -1539,6 +1553,12 @@ static inline int gsi_unmap_base(void)
 
 static inline int gsi_map_virtual_ch_to_per_ep(
 	u32 ee, u32 chan_num, u32 per_ep_index)
+{
+	return -GSI_STATUS_UNSUPPORTED_OP;
+}
+
+static inline int gsi_alloc_channel_ee(unsigned int chan_idx, unsigned int ee,
+	 int *code)
 {
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }

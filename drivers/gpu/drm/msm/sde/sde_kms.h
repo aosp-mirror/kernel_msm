@@ -225,6 +225,7 @@ struct sde_kms {
 	struct msm_gem_address_space *aspace[MSM_SMMU_DOMAIN_MAX];
 	struct sde_power_client *core_client;
 	struct pm_qos_request pm_qos_cpu_req;
+	atomic_t pm_qos_counts;
 
 	struct sde_power_event *power_event;
 
@@ -350,11 +351,14 @@ static inline bool sde_kms_is_secure_session_inprogress(struct sde_kms *sde_kms)
 		return false;
 
 	mutex_lock(&sde_kms->secure_transition_lock);
-	if (((sde_kms->smmu_state.secure_level == SDE_DRM_SEC_ONLY) &&
+	if (((sde_kms->catalog->sui_ns_allowed) &&
+		(sde_kms->smmu_state.secure_level == SDE_DRM_SEC_ONLY) &&
 			((sde_kms->smmu_state.state == DETACHED_SEC) ||
-				(sde_kms->smmu_state.state == DETACH_SEC_REQ)))
+				(sde_kms->smmu_state.state == DETACH_SEC_REQ) ||
+				(sde_kms->smmu_state.state == ATTACH_SEC_REQ)))
 		|| (((sde_kms->smmu_state.state == DETACHED) ||
-			(sde_kms->smmu_state.state == DETACH_ALL_REQ))))
+			(sde_kms->smmu_state.state == DETACH_ALL_REQ) ||
+			(sde_kms->smmu_state.state == ATTACH_ALL_REQ))))
 		ret = true;
 	mutex_unlock(&sde_kms->secure_transition_lock);
 

@@ -803,7 +803,6 @@ static void _sde_crtc_setup_blend_cfg(struct sde_crtc_mixer *mixer,
 			if (fg_alpha != 0xff) {
 				bg_alpha = fg_alpha;
 				blend_op |= SDE_BLEND_FG_MOD_ALPHA |
-					SDE_BLEND_FG_INV_MOD_ALPHA |
 					SDE_BLEND_BG_MOD_ALPHA |
 					SDE_BLEND_BG_INV_MOD_ALPHA;
 			} else {
@@ -1990,20 +1989,17 @@ int sde_crtc_get_secure_transition_ops(struct drm_crtc *crtc,
 				  || (smmu_state->state == DETACH_SEC_REQ)))) {
 			smmu_state->state = catalog->sui_ns_allowed ?
 						ATTACH_SEC_REQ : ATTACH_ALL_REQ;
-			smmu_state->secure_level = secure_level;
 			smmu_state->transition_type = post_commit ?
 						POST_COMMIT : PRE_COMMIT;
 			ops |= SDE_KMS_OPS_SECURE_STATE_CHANGE;
 			if (old_valid_fb)
-				ops |= (SDE_KMS_OPS_WAIT_FOR_TX_DONE |
-						SDE_KMS_OPS_CLEANUP_PLANE_FB);
+				ops |= SDE_KMS_OPS_WAIT_FOR_TX_DONE;
 			if (catalog->sui_misr_supported)
 				smmu_state->sui_misr_state =
 						SUI_MISR_DISABLE_REQ;
 		} else if ((smmu_state->state == DETACHED_SEC)
 				|| (smmu_state->state == DETACH_SEC_REQ)) {
 			smmu_state->state = ATTACH_SEC_REQ;
-			smmu_state->secure_level = secure_level;
 			smmu_state->transition_type = post_commit ?
 						POST_COMMIT : PRE_COMMIT;
 			ops |= SDE_KMS_OPS_SECURE_STATE_CHANGE;
@@ -2020,9 +2016,9 @@ int sde_crtc_get_secure_transition_ops(struct drm_crtc *crtc,
 
 	/* log only during actual transition times */
 	if (ops) {
-		SDE_DEBUG("crtc%d: state %d, secure_level %d, type %d ops %x\n",
+		SDE_DEBUG("crtc%d: state%d sec%d sec_lvl%d type%d ops%x\n",
 			DRMID(crtc), smmu_state->state,
-			smmu_state->secure_level,
+			secure_level, smmu_state->secure_level,
 			smmu_state->transition_type, ops);
 		SDE_EVT32(DRMID(crtc), secure_level, translation_mode,
 				smmu_state->state, smmu_state->transition_type,
@@ -3125,6 +3121,7 @@ static void _sde_crtc_setup_mixers(struct drm_crtc *crtc)
 	}
 
 	mutex_unlock(&sde_crtc->crtc_lock);
+	_sde_crtc_check_dest_scaler_data(crtc, crtc->state);
 }
 
 static void _sde_crtc_setup_is_ppsplit(struct drm_crtc_state *state)
@@ -4237,6 +4234,7 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 	struct sde_crtc_irq_info *node = NULL;
 	struct drm_event event;
 	u32 power_on;
+	bool in_cont_splash = false;
 	int ret, i;
 
 	if (!crtc || !crtc->dev || !crtc->dev->dev_private || !crtc->state) {
@@ -4319,8 +4317,18 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 	}
 	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
 
+	drm_for_each_encoder(encoder, crtc->dev) {
+		if (encoder->crtc != crtc)
+			continue;
+
+		if (sde_encoder_in_cont_splash(encoder)) {
+			in_cont_splash = true;
+			break;
+		}
+	}
+
 	/* avoid clk/bw downvote if cont-splash is enabled */
-	if (!sde_kms->splash_data.cont_splash_en)
+	if (!in_cont_splash)
 		sde_core_perf_crtc_update(crtc, 0, true);
 
 	drm_for_each_encoder(encoder, crtc->dev) {
@@ -6359,6 +6367,7 @@ static int _sde_crtc_event_enable(struct sde_kms *kms,
 	unsigned long flags;
 	bool found = false;
 	int ret, i = 0;
+	bool add_event = false;
 
 	crtc = to_sde_crtc(crtc_drm);
 	spin_lock_irqsave(&crtc->spin_lock, flags);
@@ -6408,10 +6417,23 @@ static int _sde_crtc_event_enable(struct sde_kms *kms,
 		}
 
 		INIT_LIST_HEAD(&node->irq.list);
+
+		mutex_lock(&crtc->crtc_lock);
 		ret = node->func(crtc_drm, true, &node->irq);
+		if (!ret) {
+			spin_lock_irqsave(&crtc->spin_lock, flags);
+			list_add_tail(&node->list, &crtc->user_event_list);
+			add_event = true;
+			spin_unlock_irqrestore(&crtc->spin_lock, flags);
+		}
+		mutex_unlock(&crtc->crtc_lock);
+
 		sde_power_resource_enable(&priv->phandle, kms->core_client,
 				false);
 	}
+
+	if (add_event)
+		return 0;
 
 	if (!ret) {
 		spin_lock_irqsave(&crtc->spin_lock, flags);

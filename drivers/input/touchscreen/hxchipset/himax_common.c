@@ -187,7 +187,7 @@ static ssize_t himax_HSEN_write(struct file *file, const char __user *buff, size
 		return -EINVAL;
 
 	g_core_fp.fp_set_HSEN_enable(ts->HSEN_enable, ts->suspended);
-	I("%s: HSEN_enable = %d.\n", __func__, ts->HSEN_enable);
+	D("%s: HSEN_enable = %d.\n", __func__, ts->HSEN_enable);
 	return len;
 }
 
@@ -449,8 +449,9 @@ int himax_input_register(struct himax_ts_data *ts)
 	input_mt_init_slots(ts->input_dev, ts->nFinger_support);
 #endif
 #endif
-	I("input_set_abs_params: mix_x %d, max_x %d, min_y %d, max_y %d\n",
-	  ts->pdata->abs_x_min, ts->pdata->abs_x_max, ts->pdata->abs_y_min, ts->pdata->abs_y_max);
+	D("input_set_abs_params: mix_x %d, max_x %d, min_y %d, max_y %d\n",
+		ts->pdata->abs_x_min, ts->pdata->abs_x_max,
+		ts->pdata->abs_y_min, ts->pdata->abs_y_max);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, ts->pdata->abs_x_min, ts->pdata->abs_x_max, ts->pdata->abs_x_fuzz, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, ts->pdata->abs_y_min, ts->pdata->abs_y_max, ts->pdata->abs_y_fuzz, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MAJOR, ts->pdata->abs_pressure_min, ts->pdata->abs_pressure_max, ts->pdata->abs_pressure_fuzz, 0);
@@ -467,7 +468,7 @@ int himax_input_register(struct himax_ts_data *ts)
 	ret = INPUT_REGISTER_FAIL;
 
 input_device_fail:
-	I("%s, input device register fail!\n", __func__);
+	E("%s, input device register fail\n", __func__);
 	return ret;
 }
 
@@ -489,7 +490,11 @@ static void calcDataSize(uint8_t finger_num)
 		ts_data->x_channel + ts_data->y_channel) / ts_data->raw_data_frame_size +
 		(((uint32_t)ts_data->x_channel * ts_data->y_channel +
 		ts_data->x_channel + ts_data->y_channel) % ts_data->raw_data_frame_size) ? 1 : 0;
-	I("%s: coord_data_size: %d, area_data_size:%d, raw_data_frame_size:%d, raw_data_nframes:%d", __func__, ts_data->coord_data_size, ts_data->area_data_size, ts_data->raw_data_frame_size, ts_data->raw_data_nframes);
+
+	D("%s: coord_data_size:%d, area_data_size:%d\n", __func__,
+		ts_data->coord_data_size, ts_data->area_data_size);
+	D("%s: raw_data_frame_size:%d, raw_data_nframes:%d\n", __func__,
+		ts_data->raw_data_frame_size, ts_data->raw_data_nframes);
 }
 
 static void calculate_point_number(void)
@@ -569,7 +574,7 @@ update_retry:
 
 static int himax_loadSensorConfig(struct himax_i2c_platform_data *pdata)
 {
-	I("%s: initialization complete\n", __func__);
+	D("%s: initialization complete\n", __func__);
 	return NO_ERR;
 }
 
@@ -870,8 +875,15 @@ int himax_report_data_init(void)
 		hx_touch_data->rawdata_frame_size = (ic_data->HX_TX_NUM * ic_data->HX_RX_NUM + ic_data->HX_TX_NUM + ic_data->HX_RX_NUM) / hx_touch_data->rawdata_size + 1;
 
 
-	I("%s: rawdata_frame_size = %d ", __func__, hx_touch_data->rawdata_frame_size);
-	I("%s: ic_data->HX_MAX_PT:%d, hx_raw_cnt_max:%d, hx_raw_cnt_rmd:%d, g_hx_rawdata_size:%d, hx_touch_data->touch_info_size:%d\n", __func__, ic_data->HX_MAX_PT, hx_touch_data->raw_cnt_max, hx_touch_data->raw_cnt_rmd, hx_touch_data->rawdata_size, hx_touch_data->touch_info_size);
+	D("%s: rawdata_frame_size = %d",
+		__func__, hx_touch_data->rawdata_frame_size);
+
+	D("%s: ic_data->HX_MAX_PT:%d, hx_raw_cnt_max:%d, hx_raw_cnt_rmd:%d\n",
+		__func__, ic_data->HX_MAX_PT, hx_touch_data->raw_cnt_max,
+		hx_touch_data->raw_cnt_rmd);
+	D("%s: g_hx_rawdata_size:%d, hx_touch_data->touch_info_size:%d\n",
+		__func__, hx_touch_data->rawdata_size,
+		hx_touch_data->touch_info_size);
 	hx_touch_data->hx_coord_buf = kzalloc(sizeof(uint8_t) * (hx_touch_data->touch_info_size), GFP_KERNEL);
 
 	if (hx_touch_data->hx_coord_buf == NULL)
@@ -934,7 +946,6 @@ void himax_cable_detect_func(bool force_renew)
 	connect_status = USB_detect_flag;/* upmu_is_chr_det(); */
 	ts = private_ts;
 
-	/* I("Touch: cable status=%d, cable_config=%p, usb_connected=%d\n", connect_status, ts->cable_config, ts->usb_connected); */
 	if (ts->cable_config) {
 		if (((!!connect_status) != ts->usb_connected) || force_renew) {
 			if (!!connect_status) {
@@ -986,7 +997,7 @@ static int himax_touch_get(struct himax_ts_data *ts, uint8_t *buf, int ts_path, 
 			|| (HX_ESD_RESET_ACTIVATE)
 #endif
 			) {
-			if (!g_core_fp.fp_read_event_stack(buf, 128)) {
+			if (!g_core_fp.fp_read_event_stack(buf, HX_REPORT_SZ)) {
 				E("%s: can't read data from chip!\n", __func__);
 				ts_status = HX_TS_GET_DATA_FAIL;
 				goto END_FUNCTION;
@@ -1013,7 +1024,7 @@ static int himax_touch_get(struct himax_ts_data *ts, uint8_t *buf, int ts_path, 
 		break;
 #endif
 	case HX_REPORT_COORD_RAWDATA:
-		if (!g_core_fp.fp_read_event_stack(buf, 128)) {
+		if (!g_core_fp.fp_read_event_stack(buf, HX_REPORT_SZ)) {
 			E("%s: can't read data from chip!\n", __func__);
 			ts_status = HX_TS_GET_DATA_FAIL;
 			goto END_FUNCTION;
@@ -1193,7 +1204,7 @@ static int himax_err_ctrl(struct himax_ts_data *ts, uint8_t *buf, int ts_path, i
 	if (HX_HW_RESET_ACTIVATE) {
 		/* drop 1st interrupts after chip reset */
 		HX_HW_RESET_ACTIVATE = 0;
-		I("[HX_HW_RESET_ACTIVATE]:%s: Back from reset, ready to serve.\n", __func__);
+		D(":%s: Back from reset, ready to serve.\n", __func__);
 		ts_status = HX_RST_OK;
 		goto END_FUNCTION;
 	}
@@ -1277,7 +1288,6 @@ int himax_parse_report_points(struct himax_ts_data *ts, int ts_path, int ts_stat
 	if (g_ts_dbg != 0)
 		I("%s: start!\n", __func__);
 
-
 	ts->old_finger = ts->pre_finger_mask;
 	ts->pre_finger_mask = 0;
 	hx_touch_data->finger_num = hx_touch_data->hx_coord_buf[ts->coordInfoSize - 4] & 0x0F;
@@ -1313,7 +1323,7 @@ int himax_parse_report_points(struct himax_ts_data *ts, int ts_path, int ts_stat
 
 			if (!ts->first_pressed) {
 				ts->first_pressed = 1;
-				I("S1@%d, %d\n", x, y);
+				D("S1@%d, %d\n", x, y);
 			}
 
 			ts->pre_finger_data[loop_i][0] = x;
@@ -1328,7 +1338,8 @@ int himax_parse_report_points(struct himax_ts_data *ts, int ts_path, int ts_stat
 
 			if (loop_i == 0 && ts->first_pressed == 1) {
 				ts->first_pressed = 2;
-				I("E1@%d, %d\n", ts->pre_finger_data[0][0], ts->pre_finger_data[0][1]);
+				D("E1@%d, %d\n", ts->pre_finger_data[0][0],
+					ts->pre_finger_data[0][1]);
 			}
 		}
 	}
@@ -1750,7 +1761,7 @@ int himax_report_data(struct himax_ts_data *ts, int ts_path, int ts_status)
 static int himax_ts_operation(struct himax_ts_data *ts, int ts_path, int ts_status)
 {
 	uint8_t hw_reset_check[2];
-	uint8_t buf[128];
+	uint8_t buf[HX_REPORT_SZ];
 
 	memset(buf, 0x00, sizeof(buf));
 	memset(hw_reset_check, 0x00, sizeof(hw_reset_check));
@@ -1808,7 +1819,7 @@ void himax_ts_work(struct himax_ts_data *ts)
 		goto END_FUNCTION;
 
 GET_TOUCH_FAIL:
-	I("%s: Now reset the Touch chip.\n", __func__);
+	E("%s: Now reset the Touch chip.\n", __func__);
 #ifdef HX_RST_PIN_FUNC
 	g_core_fp.fp_ic_reset(false, true);
 #endif
@@ -1890,30 +1901,32 @@ static void himax_update_register(struct work_struct *work)
 #endif
 
 #ifdef CONFIG_DRM
-static void himax_fb_register(struct work_struct *work)
+int himax_fb_register(struct himax_ts_data *ts)
 {
 	int ret = 0;
-	struct himax_ts_data *ts = container_of(work, struct himax_ts_data, work_att.work);
 
-	I(" %s in\n", __func__);
-	ts->fb_notif.notifier_call = fb_notifier_callback;
+	D(" %s in\n", __func__);
+	ts->fb_notif.notifier_call = drm_notifier_callback;
 	ret = msm_drm_register_client(&ts->fb_notif);
 	if (ret)
 		E(" Unable to register fb_notifier: %d\n", ret);
+
+	return ret;
 }
 
 #elif defined CONFIG_FB
-static void himax_fb_register(struct work_struct *work)
+int himax_fb_register(struct himax_ts_data *ts)
 {
 	int ret = 0;
-	struct himax_ts_data *ts = container_of(work, struct himax_ts_data, work_att.work);
 
-	I(" %s in\n", __func__);
+	D(" %s in\n", __func__);
 	ts->fb_notif.notifier_call = fb_notifier_callback;
 	ret = fb_register_client(&ts->fb_notif);
 
 	if (ret)
 		E(" Unable to register fb_notifier: %d\n", ret);
+
+	return ret;
 }
 #endif
 
@@ -1930,18 +1943,18 @@ int himax_chip_common_init(void)
 #if defined(HX_AUTO_UPDATE_FW) || defined(HX_ZERO_FLASH)
 	bool auto_update_flag = false;
 #endif
-	int ret = 0, err = 0;
+	int ret = 0, err = -1;
 	struct himax_ts_data *ts = private_ts;
 	struct himax_i2c_platform_data *pdata;
 
-	I("PDATA START\n");
+	D("PDATA START\n");
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (pdata == NULL) { /* Allocate Platform data space */
 		err = -ENOMEM;
 		goto err_dt_platform_data_fail;
 	}
 
-	I("ic_data START\n");
+	D("ic_data START\n");
 	ic_data = kzalloc(sizeof(*ic_data), GFP_KERNEL);
 	if (ic_data == NULL) { /* Allocate IC data space */
 		err = -ENOMEM;
@@ -1956,7 +1969,8 @@ int himax_chip_common_init(void)
 	}
 
 	if (himax_parse_dt(ts, pdata) < 0) {
-		I(" pdata is NULL for DT\n");
+		E(" pdata is NULL for DT\n");
+		err = -ECANCELED;
 		goto err_alloc_dt_pdata_failed;
 	}
 
@@ -1971,6 +1985,7 @@ int himax_chip_common_init(void)
 
 		if (ret < 0) {
 			E("%s: power on failed\n", __func__);
+			err = ret;
 			goto err_power_failed;
 		}
 	}
@@ -1982,10 +1997,12 @@ int himax_chip_common_init(void)
 			g_core_fp.fp_chip_init();
 		} else {
 			E("%s: chip detect failed!\n", __func__);
+			err = -ECANCELED;
 			goto error_ic_detect_failed;
 		}
 	} else {
 		E("%s: function point is NULL!\n", __func__);
+		err = -ECANCELED;
 		goto error_ic_detect_failed;
 	}
 
@@ -2026,6 +2043,7 @@ FW_force_upgrade:
 	/* Himax Power On and Load Config */
 	if (himax_loadSensorConfig(pdata)) {
 		E("%s: Load Sesnsor configuration failed, unload driver.\n", __func__);
+		err = -ECANCELED;
 		goto err_detect_failed;
 	}
 
@@ -2041,7 +2059,7 @@ FW_force_upgrade:
 	ts->nFinger_support = ic_data->HX_MAX_PT;
 	/* calculate the i2c data size */
 	calcDataSize(ts->nFinger_support);
-	I("%s: calcDataSize complete\n", __func__);
+	D("%s: calcDataSize complete\n", __func__);
 #ifdef CONFIG_OF
 	ts->pdata->abs_pressure_min        = 0;
 	ts->pdata->abs_pressure_max        = 200;
@@ -2060,29 +2078,16 @@ FW_force_upgrade:
 #else
 	ts->protocol_type = PROTOCOL_TYPE_B;
 #endif
-	I("%s: Use Protocol Type %c\n", __func__,
+	D("%s: Use Protocol Type %c\n", __func__,
 	  ts->protocol_type == PROTOCOL_TYPE_A ? 'A' : 'B');
 
 	ret = himax_input_register(ts);
 	if (ret) {
 		E("%s: Unable to register %s input device\n",
 		  __func__, ts->input_dev->name);
+		err = ret;
 		goto err_input_register_device_failed;
 	}
-
-#if defined(CONFIG_DRM) || defined(CONFIG_FB)
-
-	ts->himax_att_wq = create_singlethread_workqueue("HMX_ATT_request");
-
-	if (!ts->himax_att_wq) {
-		E(" allocate syn_att_wq failed\n");
-		err = -ENOMEM;
-		goto err_get_intr_bit_failed;
-	}
-
-	INIT_DELAYED_WORK(&ts->work_att, himax_fb_register);
-	queue_delayed_work(ts->himax_att_wq, &ts->work_att, msecs_to_jiffies(15000));
-#endif
 
 #ifdef HX_SMART_WAKEUP
 	ts->SMWP_enable = 0;
@@ -2110,6 +2115,7 @@ FW_force_upgrade:
 
 	if (himax_common_proc_init()) {
 		E(" %s: himax_common proc_init failed!\n", __func__);
+		err = -ECANCELED;
 		goto err_creat_proc_file_failed;
 	}
 
@@ -2148,11 +2154,6 @@ err_ito_test_wq_failed:
 #ifdef HX_SMART_WAKEUP
 	wakeup_source_trash(&ts->ts_SMWP_wake_src);
 #endif
-#if defined(CONFIG_FB) || defined(CONFIG_DRM)
-err_get_intr_bit_failed:
-	cancel_delayed_work_sync(&ts->work_att);
-	destroy_workqueue(ts->himax_att_wq);
-#endif
 err_input_register_device_failed:
 	input_free_device(ts->input_dev);
 err_detect_failed:
@@ -2186,7 +2187,6 @@ err_alloc_touch_data_failed:
 err_dt_ic_data_fail:
 	kfree(pdata);
 err_dt_platform_data_fail:
-	kfree(ts);
 	probe_fail_flag = 1;
 	return err;
 }
@@ -2217,13 +2217,9 @@ void himax_chip_common_deinit(void)
 #ifdef CONFIG_DRM
 	if (msm_drm_unregister_client(&ts->fb_notif))
 		E("Error occurred while unregistering fb_notifier.\n");
-	cancel_delayed_work_sync(&ts->work_att);
-	destroy_workqueue(ts->himax_att_wq);
 #elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		E("Error occurred while unregistering fb_notifier.\n");
-	cancel_delayed_work_sync(&ts->work_att);
-	destroy_workqueue(ts->himax_att_wq);
 #endif
 	input_free_device(ts->input_dev);
 #ifdef HX_ZERO_FLASH
@@ -2244,6 +2240,7 @@ void himax_chip_common_deinit(void)
 	kfree(hx_touch_data);
 	kfree(ic_data);
 	kfree(ts->pdata);
+	kfree(ts->report_i2c_data);
 	kfree(ts);
 	probe_fail_flag = 0;
 }
@@ -2258,7 +2255,7 @@ int himax_chip_common_suspend(struct himax_ts_data *ts)
 	}
 
 	ts->suspended = true;
-	I("%s: enter\n", __func__);
+	D("%s: enter\n", __func__);
 
 	if (debug_data != NULL && debug_data->flash_dump_going == true) {
 		I("[himax] %s: Flash dump is going, reject suspend\n", __func__);
@@ -2298,16 +2295,16 @@ int himax_chip_common_suspend(struct himax_ts_data *ts)
 	if (ts->pdata->powerOff3V3 && ts->pdata->power)
 		ts->pdata->power(0);
 
-	I("%s: END\n", __func__);
+	D("%s: END\n", __func__);
 	return 0;
 }
 
 int himax_chip_common_resume(struct himax_ts_data *ts)
 {
-	I("%s: enter\n", __func__);
+	D("%s: enter\n", __func__);
 
 	if (ts->suspended == false) {
-		I("%s: It had entered resume, skip this step\n", __func__);
+		D("%s: It had entered resume, skip this step\n", __func__);
 		return 0;
 	}
 	ts->suspended = false;
@@ -2327,6 +2324,6 @@ int himax_chip_common_resume(struct himax_ts_data *ts)
 	g_core_fp.fp_resume_ic_action();
 	himax_int_enable(1);
 
-	I("%s: END\n", __func__);
+	D("%s: END\n", __func__);
 	return 0;
 }

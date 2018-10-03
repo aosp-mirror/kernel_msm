@@ -62,6 +62,8 @@ union wil_tx_desc;
 #define WIL_DEFAULT_BUS_REQUEST_KBPS 128000 /* ~1Gbps */
 #define WIL_MAX_BUS_REQUEST_KBPS 800000 /* ~6.1Gbps */
 
+#define WIL_NUM_LATENCY_BINS 200
+
 /* maximum number of virtual interfaces the driver supports
  * (including the main interface)
  */
@@ -81,6 +83,7 @@ static inline u32 WIL_GET_BITS(u32 x, int b0, int b1)
 
 #define WIL_TX_Q_LEN_DEFAULT		(4000)
 #define WIL_RX_RING_SIZE_ORDER_DEFAULT	(10)
+#define WIL_RX_RING_SIZE_ORDER_TALYN_DEFAULT	(11)
 #define WIL_TX_RING_SIZE_ORDER_DEFAULT	(12)
 #define WIL_BCAST_RING_SIZE_ORDER_DEFAULT	(7)
 #define WIL_BCAST_MCS0_LIMIT		(1024) /* limit for MCS0 frame size */
@@ -449,6 +452,15 @@ static inline void parse_cidxtid(u8 cidxtid, u8 *cid, u8 *tid)
 	*tid = (cidxtid >> 4) & 0xf;
 }
 
+/**
+ * wil_cid_valid - check cid is valid
+ * @cid: CID value
+ */
+static inline bool wil_cid_valid(u8 cid)
+{
+	return (cid >= 0 && cid < WIL6210_MAX_CID);
+}
+
 struct wil6210_mbox_ring {
 	u32 base;
 	u16 entry_size; /* max. size of mbox entry, incl. all headers */
@@ -562,6 +574,9 @@ struct wil_net_stats {
 	unsigned long	rx_bytes;
 	unsigned long	tx_bytes;
 	unsigned long	tx_errors;
+	u32 tx_latency_min_us;
+	u32 tx_latency_max_us;
+	u64 tx_latency_total_us;
 	unsigned long	rx_dropped;
 	unsigned long	rx_non_data_frame;
 	unsigned long	rx_short_frame;
@@ -573,6 +588,7 @@ struct wil_net_stats {
 	unsigned long	rx_csum_err;
 	u16 last_mcs_rx;
 	u64 rx_per_mcs[WIL_MCS_MAX + 1];
+	u32 ft_roams; /* relevant in STA mode */
 };
 
 /**
@@ -595,6 +611,8 @@ struct wil_txrx_ops {
 			      struct wil_ctx *ctx);
 	int (*tx_ring_tso)(struct wil6210_priv *wil, struct wil6210_vif *vif,
 			   struct wil_ring *ring, struct sk_buff *skb);
+	int (*tx_ring_modify)(struct wil6210_vif *vif, int ring_id,
+			      int cid, int tid);
 	irqreturn_t (*irq_tx)(int irq, void *cookie);
 	/* RX ops */
 	int (*rx_init)(struct wil6210_priv *wil, u16 ring_size);
@@ -723,6 +741,14 @@ struct wil_sta_info {
 	u8 mid;
 	enum wil_sta_status status;
 	struct wil_net_stats stats;
+	/**
+	 * 20 latency bins. 1st bin counts packets with latency
+	 * of 0..tx_latency_res, last bin counts packets with latency
+	 * of 19*tx_latency_res and above.
+	 * tx_latency_res is configured from "tx_latency" debug-fs.
+	 */
+	u64 *tx_latency_bins;
+	struct wmi_link_stats_basic fw_stats_basic;
 	/* Rx BACK */
 	struct wil_tid_ampdu_rx *tid_rx[WIL_STA_TID_NUM];
 	spinlock_t tid_rx_lock; /* guarding tid_rx array */
@@ -810,6 +836,7 @@ extern u8 led_polarity;
 enum wil6210_vif_status {
 	wil_vif_fwconnecting,
 	wil_vif_fwconnected,
+	wil_vif_ft_roam,
 	wil_vif_status_last /* keep last */
 };
 
@@ -840,6 +867,8 @@ struct wil6210_vif {
 	struct mutex probe_client_mutex; /* protect @probe_client_pending */
 	struct work_struct probe_client_worker;
 	int net_queue_stopped; /* netif_tx_stop_all_queues invoked */
+	bool fw_stats_ready; /* per-cid statistics are ready inside sta_info */
+	u64 fw_stats_tsf; /* measurement timestamp */
 };
 
 /**
@@ -865,6 +894,12 @@ struct wil_rx_buff_mgmt {
 	struct list_head active;
 	struct list_head free;
 	unsigned long free_list_empty_cnt; /* statistics */
+};
+
+struct wil_fw_stats_global {
+	bool ready;
+	u64 tsf; /* measurement timestamp */
+	struct wmi_link_stats_global stats;
 };
 
 struct wil6210_priv {
@@ -960,6 +995,8 @@ struct wil6210_priv {
 	struct wil_suspend_stats suspend_stats;
 	struct wil_debugfs_data dbg_data;
 	u8 force_edmg_channel;
+	bool tx_latency; /* collect TX latency measurements */
+	size_t tx_latency_res; /* bin resolution in usec */
 
 	void *platform_handle;
 	struct wil_platform_ops platform_ops;
@@ -1021,6 +1058,8 @@ struct wil6210_priv {
 
 	u32 max_agg_wsize;
 	u32 max_ampdu_size;
+
+	struct wil_fw_stats_global fw_stats_global;
 };
 
 #define wil_to_wiphy(i) (i->wiphy)
@@ -1205,6 +1244,7 @@ int wmi_add_cipher_key(struct wil6210_vif *vif, u8 key_index,
 int wmi_echo(struct wil6210_priv *wil);
 int wmi_set_ie(struct wil6210_vif *vif, u8 type, u16 ie_len, const void *ie);
 int wmi_rx_chain_add(struct wil6210_priv *wil, struct wil_ring *vring);
+int wmi_update_ft_ies(struct wil6210_vif *vif, u16 ie_len, const void *ie);
 int wmi_rxon(struct wil6210_priv *wil, bool on);
 int wmi_get_temperature(struct wil6210_priv *wil, u32 *t_m, u32 *t_r);
 int wmi_disconnect_sta(struct wil6210_vif *vif, const u8 *mac,
@@ -1226,6 +1266,7 @@ int wmi_get_tt_cfg(struct wil6210_priv *wil, struct wmi_tt_data *tt_data);
 int wmi_port_allocate(struct wil6210_priv *wil, u8 mid,
 		      const u8 *mac, enum nl80211_iftype iftype);
 int wmi_port_delete(struct wil6210_priv *wil, u8 mid);
+int wmi_link_stats_cfg(struct wil6210_vif *vif, u32 type, u8 cid, u32 interval);
 int wil_addba_rx_request(struct wil6210_priv *wil, u8 mid,
 			 u8 cidxtid, u8 dialog_token, __le16 ba_param_set,
 			 __le16 ba_timeout, __le16 ba_seq_ctrl);
@@ -1325,6 +1366,9 @@ void wil6210_unmask_irq_tx_edma(struct wil6210_priv *wil);
 void wil_rx_handle(struct wil6210_priv *wil, int *quota);
 void wil6210_unmask_irq_rx(struct wil6210_priv *wil);
 void wil6210_unmask_irq_rx_edma(struct wil6210_priv *wil);
+void wil_set_crypto_rx(u8 key_index, enum wmi_key_usage key_usage,
+		       struct wil_sta_info *cs,
+		       struct key_params *params);
 
 int wil_iftype_nl2wmi(enum nl80211_iftype type);
 
@@ -1380,6 +1424,8 @@ int wmi_start_sched_scan(struct wil6210_priv *wil,
 			 struct cfg80211_sched_scan_request *request);
 int wmi_stop_sched_scan(struct wil6210_priv *wil);
 int wmi_mgmt_tx(struct wil6210_vif *vif, const u8 *buf, size_t len);
+int wmi_mgmt_tx_ext(struct wil6210_vif *vif, const u8 *buf, size_t len,
+		    u8 channel, u16 duration_ms);
 
 int wil_wmi2spec_ch(u8 wmi_ch, u8 *spec_ch);
 int wil_spec2wmi_ch(u8 spec_ch, u8 *wmi_ch);
@@ -1398,5 +1444,7 @@ int wil_wmi_bcast_desc_ring_add(struct wil6210_vif *vif, int ring_id);
 int wmi_addba_rx_resp_edma(struct wil6210_priv *wil, u8 mid, u8 cid,
 			   u8 tid, u8 token, u16 status, bool amsdu,
 			   u16 agg_wsize, u16 timeout);
+
+void update_supported_bands(struct wil6210_priv *wil);
 
 #endif /* __WIL6210_H__ */

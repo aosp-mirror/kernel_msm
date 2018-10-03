@@ -30,7 +30,7 @@ extern int lockdep_tasklist_lock_is_held(void);
 #endif /* #ifdef CONFIG_PROVE_RCU */
 
 extern asmlinkage void schedule_tail(struct task_struct *prev);
-extern void init_idle(struct task_struct *idle, int cpu, bool cpu_up);
+extern void init_idle(struct task_struct *idle, int cpu);
 
 extern int sched_fork(unsigned long clone_flags, struct task_struct *p);
 extern void sched_dead(struct task_struct *p);
@@ -75,7 +75,7 @@ extern long _do_fork(unsigned long, unsigned long, unsigned long, int __user *, 
 extern long do_fork(unsigned long, unsigned long, unsigned long, int __user *, int __user *);
 struct task_struct *fork_idle(int);
 extern pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
-extern long kernel_wait4(pid_t, int *, int, struct rusage *);
+extern long kernel_wait4(pid_t, int __user *, int, struct rusage *);
 
 extern void free_task(struct task_struct *tsk);
 

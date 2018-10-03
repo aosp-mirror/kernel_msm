@@ -42,6 +42,7 @@
 #define MAX_NAME_SIZE	64
 
 #define DSI_CLOCK_BITRATE_RADIX 10
+#define MAX_TE_SOURCE_ID  2
 
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
@@ -71,6 +72,52 @@ static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			continue;
 		dsi_ctrl_mask_error_status_interrupts(ctrl->ctrl, mask, enable);
 	}
+}
+
+static int dsi_display_config_clk_gating(struct dsi_display *display,
+					bool enable)
+{
+	int rc = 0, i = 0;
+	struct dsi_display_ctrl *mctrl, *ctrl;
+
+	if (!display) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+	mctrl = &display->ctrl[display->clk_master_idx];
+	if (!mctrl) {
+		pr_err("Invalid controller\n");
+		return -EINVAL;
+	}
+
+	rc = dsi_ctrl_config_clk_gating(mctrl->ctrl, enable, PIXEL_CLK |
+							DSI_PHY);
+	if (rc) {
+		pr_err("[%s] failed to %s clk gating, rc=%d\n",
+				display->name, enable ? "enable" : "disable",
+				rc);
+		return rc;
+	}
+
+	for (i = 0; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		if (!ctrl->ctrl || (ctrl == mctrl))
+			continue;
+		/**
+		 * In Split DSI usecase we should not enable clock gating on
+		 * DSI PHY1 to ensure no display atrifacts are seen.
+		 */
+		rc = dsi_ctrl_config_clk_gating(ctrl->ctrl, enable, PIXEL_CLK);
+		if (rc) {
+			pr_err("[%s] failed to %s pixel clk gating, rc=%d\n",
+				display->name, enable ? "enable" : "disable",
+				rc);
+			return rc;
+		}
+	}
+
+	return 0;
 }
 
 static void dsi_display_set_ctrl_esd_check_flag(struct dsi_display *display,
@@ -536,10 +583,12 @@ static bool dsi_display_validate_reg_read(struct dsi_panel *panel)
 	return false;
 }
 
-static void dsi_display_parse_te_gpio(struct dsi_display *display)
+static void dsi_display_parse_te_data(struct dsi_display *display)
 {
 	struct platform_device *pdev;
 	struct device *dev;
+	int rc = 0;
+	u32 val = 0;
 
 	pdev = display->pdev;
 	if (!pdev) {
@@ -555,6 +604,20 @@ static void dsi_display_parse_te_gpio(struct dsi_display *display)
 
 	display->disp_te_gpio = of_get_named_gpio(dev->of_node,
 					"qcom,platform-te-gpio", 0);
+
+	if (display->fw)
+		rc = dsi_parser_read_u32(display->parser_node,
+			"qcom,panel-te-source", &val);
+	else
+		rc = of_property_read_u32(dev->of_node,
+			"qcom,panel-te-source", &val);
+
+	if (rc || (val  > MAX_TE_SOURCE_ID)) {
+		pr_err("invalid vsync source selection\n");
+		val = 0;
+	}
+
+	display->te_source = val;
 }
 
 static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
@@ -744,6 +807,7 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 		rc = -EINVAL;
 		goto release_panel_lock;
 	}
+	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 
 	if (te_check_override && gpio_is_valid(dsi_display->disp_te_gpio))
 		status_mode = ESD_MODE_PANEL_TE;
@@ -782,6 +846,7 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 
 release_panel_lock:
 	dsi_panel_release_panel_lock(panel);
+	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 
 	return rc;
 }
@@ -1204,7 +1269,7 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 		rc = dsi_panel_trigger_esd_attack(display->panel);
 		if (rc) {
 			pr_err("Failed to trigger ESD attack\n");
-			return rc;
+			goto error;
 		}
 	}
 
@@ -1476,16 +1541,23 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 		}
 	}
 
-	if (!debugfs_create_bool("ulps_enable", 0600, dir,
-			&display->panel->ulps_enabled)) {
-		pr_err("[%s] debugfs create ulps enable file failed\n",
+	if (!debugfs_create_bool("ulps_feature_enable", 0600, dir,
+			&display->panel->ulps_feature_enabled)) {
+		pr_err("[%s] debugfs create ulps feature enable file failed\n",
 		       display->name);
 		goto error_remove_dir;
 	}
 
-	if (!debugfs_create_bool("ulps_suspend_enable", 0600, dir,
+	if (!debugfs_create_bool("ulps_suspend_feature_enable", 0600, dir,
 			&display->panel->ulps_suspend_enabled)) {
-		pr_err("[%s] debugfs create ulps-suspend enable file failed\n",
+		pr_err("[%s] debugfs create ulps-suspend feature enable file failed\n",
+		       display->name);
+		goto error_remove_dir;
+	}
+
+	if (!debugfs_create_bool("ulps_status", 0400, dir,
+			&display->ulps_enabled)) {
+		pr_err("[%s] debugfs create ulps status file failed\n",
 		       display->name);
 		goto error_remove_dir;
 	}
@@ -1899,7 +1971,8 @@ static void dsi_config_host_engine_state_for_cont_splash
 	enum dsi_engine_state host_state = DSI_CTRL_ENGINE_ON;
 
 	/* Sequence does not matter for split dsi usecases */
-	for (i = 0; i < display->ctrl_count; i++) {
+	for (i = 0; (i < display->ctrl_count) &&
+			(i < MAX_DSI_CTRLS_PER_DISPLAY); i++) {
 		ctrl = &display->ctrl[i];
 		if (!ctrl->ctrl)
 			continue;
@@ -1972,11 +2045,12 @@ static void dsi_display_parse_cmdline_topology(struct dsi_display *display,
 	char *boot_str = NULL;
 	char *str = NULL;
 	char *sw_te = NULL;
-	unsigned long value;
+	unsigned long cmdline_topology = NO_OVERRIDE;
+	unsigned long cmdline_timing = NO_OVERRIDE;
 
 	if (display_type >= MAX_DSI_ACTIVE_DISPLAY) {
 		pr_err("display_type=%d not supported\n", display_type);
-		return;
+		goto end;
 	}
 
 	if (display_type == DSI_PRIMARY)
@@ -1990,27 +2064,29 @@ static void dsi_display_parse_cmdline_topology(struct dsi_display *display,
 
 	str = strnstr(boot_str, ":config", strlen(boot_str));
 	if (!str)
-		return;
+		goto end;
 
 	if (kstrtol(str + strlen(":config"), INT_BASE_10,
-				(unsigned long *)&value)) {
+				(unsigned long *)&cmdline_topology)) {
 		pr_err("invalid config index override: %s\n", boot_str);
-		return;
+		goto end;
 	}
-	display->cmdline_topology = value;
 
 	str = strnstr(boot_str, ":timing", strlen(boot_str));
 	if (!str)
-		return;
+		goto end;
 
 	if (kstrtol(str + strlen(":timing"), INT_BASE_10,
-				(unsigned long *)&value)) {
+				(unsigned long *)&cmdline_timing)) {
 		pr_err("invalid timing index override: %s. resetting both timing and config\n",
 			boot_str);
-		display->cmdline_topology = NO_OVERRIDE;
-		return;
+		cmdline_topology = NO_OVERRIDE;
+		goto end;
 	}
-	display->cmdline_timing = value;
+	pr_debug("successfully parsed command line topology and timing\n");
+end:
+	display->cmdline_topology = cmdline_topology;
+	display->cmdline_timing = cmdline_timing;
 }
 
 /**
@@ -2951,6 +3027,10 @@ int dsi_pre_clkoff_cb(void *priv,
 			if (rc)
 				pr_err("%s: Failed to enable dsi clamps. rc=%d\n",
 					__func__, rc);
+			rc = dsi_display_config_clk_gating(display, false);
+			if (rc)
+				pr_err("[%s] failed to disable clk gating, rc=%d\n",
+						display->name, rc);
 
 			rc = dsi_display_phy_reset_config(display, false);
 			if (rc)
@@ -3028,6 +3108,13 @@ int dsi_post_clkon_cb(void *priv,
 					__func__, rc);
 				goto error;
 			}
+		}
+
+		rc = dsi_display_config_clk_gating(display, true);
+		if (rc) {
+			pr_err("[%s] failed to enable clk gating %d\n",
+					display->name, rc);
+			goto error;
 		}
 
 		rc = dsi_display_phy_reset_config(display, true);
@@ -3347,8 +3434,8 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 		goto error;
 	}
 
-	/* Parse TE gpio */
-	dsi_display_parse_te_gpio(display);
+	/* Parse TE data */
+	dsi_display_parse_te_data(display);
 
 	/* Parse external bridge from port 0, reg 0 */
 	display->ext_bridge_of = of_graph_get_remote_node(of_node, 0, 0);
@@ -3596,6 +3683,7 @@ static int dsi_display_dfps_update(struct dsi_display *display,
 	/* For split DSI, update the clock master first */
 
 	pr_debug("configuring seamless dynamic fps\n\n");
+	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 
 	m_ctrl = &display->ctrl[display->clk_master_idx];
 	rc = dsi_ctrl_async_timing_update(m_ctrl->ctrl, timing);
@@ -3630,6 +3718,7 @@ static int dsi_display_dfps_update(struct dsi_display *display,
 	panel_mode->dsi_mode_flags = 0;
 
 error:
+	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 	return rc;
 }
 
@@ -4923,7 +5012,12 @@ static int dsi_display_ext_get_info(struct drm_connector *connector,
 		info->h_tile_instance[i] = display->ctrl[i].ctrl->cell_index;
 
 	info->is_connected = connector->status != connector_status_disconnected;
-	info->is_primary = true;
+
+	if (!strcmp(display->display_type, "primary"))
+		info->is_primary = true;
+	else
+		info->is_primary = false;
+
 	info->capabilities |= (MSM_DISPLAY_CAP_VID_MODE |
 		MSM_DISPLAY_CAP_EDID | MSM_DISPLAY_CAP_HOT_PLUG);
 
@@ -5184,6 +5278,8 @@ int dsi_display_get_info(struct drm_connector *connector,
 
 	if (display->panel->esd_config.esd_enabled)
 		info->capabilities |= MSM_DISPLAY_ESD_ENABLED;
+
+	info->te_source = display->te_source;
 
 error:
 	mutex_unlock(&display->display_lock);
@@ -5884,7 +5980,7 @@ static int dsi_display_cb_error_handler(void *data,
 {
 	struct dsi_display *display =  data;
 
-	if (!display)
+	if (!display || !(display->err_workq))
 		return -EINVAL;
 
 	switch (event_idx) {
@@ -5971,6 +6067,7 @@ int dsi_display_prepare(struct dsi_display *display)
 		return -EINVAL;
 	}
 
+	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
 
 	mode = display->panel->cur_mode;
@@ -6107,6 +6204,7 @@ error_panel_post_unprep:
 	(void)dsi_panel_post_unprepare(display->panel);
 error:
 	mutex_unlock(&display->display_lock);
+	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 	return rc;
 }
 
@@ -6374,6 +6472,7 @@ int dsi_display_enable(struct dsi_display *display)
 		pr_err("no valid mode set for the display");
 		return -EINVAL;
 	}
+	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 
 	/* Engine states and panel states are populated during splash
 	 * resource init and hence we return early
@@ -6459,6 +6558,7 @@ error_disable_panel:
 	(void)dsi_panel_disable(display->panel);
 error:
 	mutex_unlock(&display->display_lock);
+	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 	return rc;
 }
 
@@ -6521,6 +6621,7 @@ int dsi_display_disable(struct dsi_display *display)
 		return -EINVAL;
 	}
 
+	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
 
 	rc = dsi_display_wake_up(display);
@@ -6549,6 +6650,7 @@ int dsi_display_disable(struct dsi_display *display)
 		       display->name, rc);
 
 	mutex_unlock(&display->display_lock);
+	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 	return rc;
 }
 
@@ -6578,6 +6680,7 @@ int dsi_display_unprepare(struct dsi_display *display)
 		return -EINVAL;
 	}
 
+	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
 
 	rc = dsi_display_wake_up(display);
@@ -6601,9 +6704,6 @@ int dsi_display_unprepare(struct dsi_display *display)
 		pr_err("[%s] failed to disable Link clocks, rc=%d\n",
 		       display->name, rc);
 
-	/* Free up DSI ERROR event callback */
-	dsi_display_unregister_error_handler(display);
-
 	rc = dsi_display_ctrl_deinit(display);
 	if (rc)
 		pr_err("[%s] failed to deinit controller, rc=%d\n",
@@ -6625,12 +6725,16 @@ int dsi_display_unprepare(struct dsi_display *display)
 	/* destrory dsi isr set up */
 	dsi_display_ctrl_isr_configure(display, false);
 
+	/* Free up DSI ERROR event callback */
+	dsi_display_unregister_error_handler(display);
+
 	rc = dsi_panel_post_unprepare(display->panel);
 	if (rc)
 		pr_err("[%s] panel post-unprepare failed, rc=%d\n",
 		       display->name, rc);
 
 	mutex_unlock(&display->display_lock);
+	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 	return rc;
 }
 
