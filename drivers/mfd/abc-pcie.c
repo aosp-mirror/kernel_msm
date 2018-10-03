@@ -1094,14 +1094,16 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 
 int abc_reg_notifier_callback(struct notifier_block *nb)
 {
-	int ret = atomic_notifier_chain_register(&abc_dev->intnc_notifier, nb);
+	int ret;
 
-	if (ret) {
-		pr_err("Could not register notifier\n");
-		return ret;
-	}
+	if (!abc_dev || !abc_dev->pcie_config)
+		return -EAGAIN;
 
-	return 0;
+	ret = atomic_notifier_chain_register(&abc_dev->intnc_notifier, nb);
+	if (ret < 0)
+		pr_err("%s: Could not register notifier, ret\n", __func__, ret);
+
+	return ret;
 }
 EXPORT_SYMBOL(abc_reg_notifier_callback);
 
