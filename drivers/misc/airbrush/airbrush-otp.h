@@ -16,7 +16,6 @@
 #include "airbrush-regs.h"
 
 typedef uint32_t (*fn_read_otp_t)(uint32_t);
-fn_read_otp_t RD_DDR_OTP;
 
 enum ddr_otp_idx {
 	/* Important: The below are contigious registers in OTP_WRAPPER starting
@@ -342,7 +341,7 @@ static uint32_t ddr_otp_values[o_DDR_OTP_MAX] __attribute__ ((section(".otpddr")
 #define IS_M0_DDR_INIT()	( !(OTP_AP_HW_OPTION_1() & (1 << 9)))
 
 
-static inline uint32_t RD_OTP_Wrapper(uint32_t offset)
+static inline uint32_t read_otp_wrapper(uint32_t offset)
 {
 	if (offset < o_PCIe_reg_75)
 		return RD_REG(ABC_BASE_OTP_WRAPPER + 0x7000 + (offset * 4));
@@ -352,7 +351,7 @@ static inline uint32_t RD_OTP_Wrapper(uint32_t offset)
 		return RD_REG(ABC_BASE_OTP_WRAPPER + 0x6000 + ((offset - o_SECURE_JTAG0) * 4));
 }
 
-static inline uint32_t RD_OTP_Array(uint32_t offset)
+static inline uint32_t read_otp_array(uint32_t offset)
 {
 	return ddr_otp_values[offset];
 }

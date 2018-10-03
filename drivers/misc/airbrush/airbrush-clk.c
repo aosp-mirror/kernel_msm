@@ -11,6 +11,7 @@
  */
 
 #include <linux/airbrush-sm-ctrl.h>
+#include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/mfd/abc-pcie.h>
 
@@ -189,6 +190,14 @@ void abc_clk_register(struct ab_state_context *ab_ctx)
 {
 	struct platform_device *pdev = ab_ctx->pdev;
 	struct device_node *child = NULL;
+
+	/* TODO(Lassen):  There are a lot of initialization state checks in the
+	 * Airbrush State Manager.  These should not be necessary and the code
+	 * should initialize the resources in the right order for all entry
+	 * points into the code.
+	 */
+	if (atomic_cmpxchg(&ab_ctx->clocks_registered, 1, 0))
+		return;
 
 	/* Registering CMUs to Common Clock Framework.
 	 * Parse through the airbrush device node and scan for cmu nodes.

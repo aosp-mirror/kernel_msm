@@ -10,14 +10,27 @@
  * only version 2 as published by the Free Software Foundation.
  */
 
-#include <linux/delay.h>
 #include <linux/airbrush-sm-ctrl.h>
+#include <linux/delay.h>
+#include <linux/pci.h>
 
 #include "airbrush-ddr.h"
 #include "airbrush-ddr-internal.h"
+#include "airbrush-pmic-ctrl.h"
+#include "airbrush-regs.h"
 
 unsigned long g_timer_end;
 unsigned long g_timer_running;
+
+/* In case the DDR Initialization/Training OTPs are already fused to the OTP
+ * array, then the below function pointer is updated with the address of the
+ * function which reads OTPs from the fused OTP memory.
+ *
+ * In case the OTPs are not fused, this will point to the function which reads
+ * the OTPs from the global array stored in the data segment.
+ */
+ /* TODO(Lassen):  Move to context structure. */
+fn_read_otp_t read_ddr_otp;
 
 static void ddr_timer_start(uint32_t usec)
 {
@@ -51,8 +64,7 @@ static void ddr_sleep(uint32_t usec)
 }
 
 //for vref voltage of PHY (13.5% ~ 46.1%)
-uint32_t gPhy_vref[PHY_MAX_VREF + 1] =
-{
+uint32_t gPhy_vref[PHY_MAX_VREF + 1] = {
 	0x0,	0x1,	0x2,	0x3,	0x4,	0x5,
 	0x6,	0x7,	0x8,	0x9,	0xa,	0xb,
 	0xc,	0xd,	0xe,	0xf,	0x10,	0x11,
@@ -67,8 +79,7 @@ uint32_t gPhy_vref[PHY_MAX_VREF + 1] =
 };
 
 //for vref voltage of DRAM (10.0% ~ 30.0%)
-uint32_t gDram_vref[DRAM_MAX_VREF + 1] =
-{
+uint32_t gDram_vref[DRAM_MAX_VREF + 1] = {
 	0x0,	0x1,	0x2,	0x3,	0x4,	0x5,
 	0x6,	0x7,	0x8,	0x9,	0xa,	0xb,
 	0xc,	0xd,	0xe,	0xf,	0x10,	0x11,
@@ -114,7 +125,8 @@ void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1, eVref_byte byt
 void ddrphy_set_write_vref(uint32_t vref, eVref_byte byte)
 {
 	//issue MRW command for DRAM vref
-	DDRPHY_VREF_WR32(DREX_BASE_ADDR, rDIRECTCMD_offset, (0x8c << 9) | (vref <<2));
+	DDRPHY_VREF_WR32(DREX_BASE_ADDR, rDIRECTCMD_offset, (0x8c << 9) |
+			(vref << 2));
 }
 
 uint32_t ddrphy_get_byte_svref(eVref_byte byte, ePHY phy)
@@ -122,7 +134,7 @@ uint32_t ddrphy_get_byte_svref(eVref_byte byte, ePHY phy)
 	sZQ_CON9 zq_con9;
 	int DDRPHY_BASE_ADDR = phy ? DDRPHY1_BASE_ADDR : DDRPHY0_BASE_ADDR;
 
-	zq_con9.n = DDRPHY_VREF_RD32(DDRPHY_BASE_ADDR,rZQ_CON9_offset);
+	zq_con9.n = DDRPHY_VREF_RD32(DDRPHY_BASE_ADDR, rZQ_CON9_offset);
 
 	if (byte == VREF_BYTE1)  {
 		return zq_con9.bits.zq_ds1_vref;
@@ -134,10 +146,12 @@ uint32_t ddrphy_get_byte_svref(eVref_byte byte, ePHY phy)
 void ddrphy_set_prbs_training_init(void)
 {
 	WR_REG(DDRPHY0_BASE_ADDR + rPRBS_CON0_offset, 0x50000);
-	WR_REG(DDRPHY0_BASE_ADDR + rPRBS_CON1_offset, RD_DDR_OTP(o_PCIe_reg_address_79));
+	WR_REG(DDRPHY0_BASE_ADDR + rPRBS_CON1_offset,
+			read_ddr_otp(o_PCIe_reg_address_79));
 
 	WR_REG(DDRPHY1_BASE_ADDR + rPRBS_CON0_offset, 0x50000);
-	WR_REG(DDRPHY1_BASE_ADDR + rPRBS_CON1_offset, RD_DDR_OTP(o_PCIe_reg_address_79));
+	WR_REG(DDRPHY1_BASE_ADDR + rPRBS_CON1_offset,
+			read_ddr_otp(o_PCIe_reg_address_79));
 }
 
 int32_t ddrphy_run_prbs_training(eVref_op rw)
@@ -146,38 +160,38 @@ int32_t ddrphy_run_prbs_training(eVref_op rw)
 	sCAL_CON0 cal_con0;
 	uint32_t poll_multiplier;
 
-	poll_multiplier = RD_DDR_OTP(o_SECURE_JTAG2) + 1;
+	poll_multiplier = read_ddr_otp(o_SECURE_JTAG2) + 1;
 
 	prbs_con0.n = DDRPHY_VREF_RD32(DDRPHY0_BASE_ADDR, rPRBS_CON0_offset);
-	if (rw == VREF_WRITE){
+	if (rw == VREF_WRITE)
 		prbs_con0.bits.prbs_write_start = 0x1;
-	} else { //VREF_READ or default
+	else //VREF_READ or default
 		prbs_con0.bits.prbs_read_start = 0x1;
-	}
 
-	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rPRBS_CON0_offset,prbs_con0.n);
+	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rPRBS_CON0_offset, prbs_con0.n);
 
 	prbs_con0.n = DDRPHY_VREF_RD32(DDRPHY1_BASE_ADDR, rPRBS_CON0_offset);
-	if (rw == VREF_WRITE){
+	if (rw == VREF_WRITE)
 		prbs_con0.bits.prbs_write_start = 0x1;
-	} else { //VREF_READ or default
+	else //VREF_READ or default
 		prbs_con0.bits.prbs_read_start = 0x1;
-	}
 
-	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rPRBS_CON0_offset,prbs_con0.n);
+	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rPRBS_CON0_offset, prbs_con0.n);
 
 	ddr_timer_start(VREF_PRBS_TIMEOUT_USEC * poll_multiplier);
-	while ((!(RD_REG(DDRPHY0_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) && !ddr_timer_expired());
-	if (ddr_timer_expired()) {
+	while ((!(RD_REG(DDRPHY0_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) &&
+	       !ddr_timer_expired())
+		;
+	if (ddr_timer_expired())
 		return VREF_PRBS_TIMEOUT;
-	}
 	ddr_timer_stop();
 
 	ddr_timer_start(VREF_PRBS_TIMEOUT_USEC * poll_multiplier);
-	while ((!(RD_REG(DDRPHY1_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) && !ddr_timer_expired());
-	if (ddr_timer_expired()) {
+	while ((!(RD_REG(DDRPHY1_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) &&
+	       !ddr_timer_expired())
+		;
+	if (ddr_timer_expired())
 		return VREF_PRBS_TIMEOUT;
-	}
 	ddr_timer_stop();
 
 	prbs_con0.n = DDRPHY_VREF_RD32(DDRPHY0_BASE_ADDR, rPRBS_CON0_offset);
@@ -187,7 +201,7 @@ int32_t ddrphy_run_prbs_training(eVref_op rw)
 		prbs_con0.bits.prbs_read_start = 0x0;
 	}
 
-	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rPRBS_CON0_offset,prbs_con0.n);
+	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rPRBS_CON0_offset, prbs_con0.n);
 
 	prbs_con0.n = DDRPHY_VREF_RD32(DDRPHY1_BASE_ADDR, rPRBS_CON0_offset);
 	if (rw == VREF_WRITE) {
@@ -196,17 +210,20 @@ int32_t ddrphy_run_prbs_training(eVref_op rw)
 		prbs_con0.bits.prbs_read_start = 0x0;
 	}
 
-	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rPRBS_CON0_offset,prbs_con0.n);
+	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rPRBS_CON0_offset, prbs_con0.n);
 
 	ddr_timer_start(VREF_PRBS_TIMEOUT_USEC * poll_multiplier);
-	while (((RD_REG(DDRPHY0_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) && !ddr_timer_expired());
-	if (ddr_timer_expired()) {
+	while (((RD_REG(DDRPHY0_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) &&
+	       !ddr_timer_expired())
+		;
+	if (ddr_timer_expired())
 		return VREF_PRBS_TIMEOUT;
-	}
 	ddr_timer_stop();
 
 	ddr_timer_start(VREF_PRBS_TIMEOUT_USEC * poll_multiplier);
-	while (((RD_REG(DDRPHY1_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) && !ddr_timer_expired());
+	while (((RD_REG(DDRPHY1_BASE_ADDR + rPRBS_CON0_offset) & 0x1)) &&
+	       !ddr_timer_expired())
+		;
 	if (ddr_timer_expired()) {
 		return VREF_PRBS_TIMEOUT;
 	}
@@ -215,29 +232,29 @@ int32_t ddrphy_run_prbs_training(eVref_op rw)
 	cal_con0.n = DDRPHY_VREF_RD32(DDRPHY0_BASE_ADDR, rCAL_CON0_offset);
 	cal_con0.bits.wrlvl_mode = 0x1;
 	cal_con0.bits.ca_cal_mode = 0x1;
-	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rCAL_CON0_offset,cal_con0.n );
+	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rCAL_CON0_offset, cal_con0.n);
 
 	cal_con0.n = DDRPHY_VREF_RD32(DDRPHY0_BASE_ADDR, rCAL_CON0_offset);
 	cal_con0.bits.wrlvl_mode = 0x0;
 	cal_con0.bits.ca_cal_mode = 0x0;
-	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rCAL_CON0_offset,cal_con0.n );
+	DDRPHY_VREF_WR32(DDRPHY0_BASE_ADDR, rCAL_CON0_offset, cal_con0.n);
 
 	cal_con0.n = DDRPHY_VREF_RD32(DDRPHY1_BASE_ADDR, rCAL_CON0_offset);
 	cal_con0.bits.wrlvl_mode = 0x1;
 	cal_con0.bits.ca_cal_mode = 0x1;
-	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rCAL_CON0_offset,cal_con0.n );
+	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rCAL_CON0_offset, cal_con0.n);
 
 	cal_con0.n = DDRPHY_VREF_RD32(DDRPHY1_BASE_ADDR, rCAL_CON0_offset);
 	cal_con0.bits.wrlvl_mode = 0x0;
 	cal_con0.bits.ca_cal_mode = 0x0;
-	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rCAL_CON0_offset,cal_con0.n );
+	DDRPHY_VREF_WR32(DDRPHY1_BASE_ADDR, rCAL_CON0_offset, cal_con0.n);
 
 	return VREF_PRBS_SUCCESS;
 }
 
 uint32_t ddrphy_get_prbs_training_result(eVref_byte byte, ePHY phy)
 {
-	uint32_t byte0 = 0 , byte1 = 0;
+	uint32_t byte0 = 0, byte1 = 0;
 	sPRBS_CON6 prbs_con6;
 	sPRBS_CON7 prbs_con7;
 	int DDRPHY_BASE_ADDR = phy ? DDRPHY1_BASE_ADDR : DDRPHY0_BASE_ADDR;
@@ -262,7 +279,7 @@ uint32_t ddrphy_get_prbs_training_result(eVref_byte byte, ePHY phy)
 		prbs_con6.n = DDRPHY_VREF_RD32(DDRPHY_BASE_ADDR, rPRBS_CON6_offset);
 		prbs_con7.n = DDRPHY_VREF_RD32(DDRPHY_BASE_ADDR, rPRBS_CON7_offset);
 
-		if(prbs_con6.bits.prbs_offset_left1 == 0x1ff)
+		if (prbs_con6.bits.prbs_offset_left1 == 0x1ff)
 			byte1 = 0;
 		else
 			byte1 = prbs_con6.bits.prbs_offset_left1;
@@ -319,27 +336,25 @@ void ddrphy_reset_prbs_training_result(void)
 	WR_REG(DDRPHY1_BASE_ADDR + rCAL_CON3_offset, 0xfc7f9800);
 }
 
-uint32_t ddrphy_sum_vref_training_prbs_result(uint32_t* vwm)
+uint32_t ddrphy_sum_vref_training_prbs_result(uint32_t *vwm)
 {
 	uint32_t i;
 	int32_t output = 0;
 
-	for (i = 0; i < VREF_REF_NUM; i++) {
+	for (i = 0; i < VREF_REF_NUM; i++)
 		output += vwm[i];
-	}
 	return output;
 }
 
-void ddrphy_shift_prbs_result(uint32_t* vwm)
+void ddrphy_shift_prbs_result(uint32_t *vwm)
 {
 	uint32_t vwm_idx;
 
-	for (vwm_idx = 1 ; vwm_idx < VREF_REF_NUM ; vwm_idx++) {
+	for (vwm_idx = 1 ; vwm_idx < VREF_REF_NUM ; vwm_idx++)
 		vwm[vwm_idx - 1] = vwm[vwm_idx];
-	}
 }
 
-int32_t ddrphy_get_optimal_vref(eVref_op rw,eVref_byte byte)
+int32_t ddrphy_get_optimal_vref(eVref_op rw, eVref_byte byte)
 {
 	uint32_t vwm_phy0_vref[VREF_REF_NUM];
 	uint32_t vwm_phy1_vref[VREF_REF_NUM];
@@ -352,14 +367,13 @@ int32_t ddrphy_get_optimal_vref(eVref_op rw,eVref_byte byte)
 	uint32_t max_vwm_sum_phy1_vref = 0;
 	uint32_t maxVref;
 	uint32_t vref;
-	int32_t optimalVref;
+	int32_t optimal_vref;
 
-	// memset(vwm_phyx_vref, 0x00, sizeof(vwm_phyx_vref));
 	for (vrefIdx = 0; vrefIdx < VREF_REF_NUM ; vrefIdx++) {
 		vwm_phy0_vref[vrefIdx] = 0;
 		vwm_phy1_vref[vrefIdx] = 0;
 	}
-	//////////////////////////////////
+
 	if (rw == VREF_WRITE)
 		maxVref = DRAM_MAX_VREF;
 	else
@@ -368,8 +382,9 @@ int32_t ddrphy_get_optimal_vref(eVref_op rw,eVref_byte byte)
 	ddrphy_set_prbs_training_init();
 
 	for (vrefIdx = VREF_FROM; vrefIdx <= maxVref ; vrefIdx += VREF_STEP) {
-		vref  = (rw == VREF_WRITE) ? gDram_vref[vrefIdx] : gPhy_vref[vrefIdx];
-		if(rw == VREF_READ)
+		vref = (rw == VREF_WRITE) ? gDram_vref[vrefIdx] :
+				gPhy_vref[vrefIdx];
+		if (rw == VREF_READ)
 			ddrphy_set_read_vref(vref, vref, byte);
 		else
 			ddrphy_set_write_vref(vref, byte);
@@ -378,10 +393,10 @@ int32_t ddrphy_get_optimal_vref(eVref_op rw,eVref_byte byte)
 		ddrphy_reset_prbs_training_result();
 
 		if (ddrphy_run_prbs_training(rw) == VREF_PRBS_SUCCESS) {
-			if(vrefIdx < (VREF_FROM + VREF_REF_NUM - 1)) {
+			if (vrefIdx < (VREF_FROM + VREF_REF_NUM - 1)) {
 				vwm_phy0_vref[vwm_vref_idx] = ddrphy_get_prbs_training_result(byte, PHY0);
 				vwm_phy1_vref[vwm_vref_idx] = ddrphy_get_prbs_training_result(byte, PHY1);
-				vwm_vref_idx +=1;
+				vwm_vref_idx += 1;
 			} else {
 				vwm_phy0_vref[vwm_vref_idx] = ddrphy_get_prbs_training_result(byte, PHY0);
 				vwm_phy1_vref[vwm_vref_idx] = ddrphy_get_prbs_training_result(byte, PHY1);
@@ -407,69 +422,74 @@ int32_t ddrphy_get_optimal_vref(eVref_op rw,eVref_byte byte)
 		}
 	}
 
-	if ((vref_at_max_sum_phy0 - (VREF_REF_NUM/2)) < 0) {
+	if ((vref_at_max_sum_phy0 - (VREF_REF_NUM/2)) < 0)
 		return VREF_ERROR;
-	} else if ((vref_at_max_sum_phy1 - (VREF_REF_NUM/2)) < 0) {
+	else if ((vref_at_max_sum_phy1 - (VREF_REF_NUM/2)) < 0)
 		return VREF_ERROR;
-	} else {
-		optimalVref = (rw == VREF_WRITE) ?
-			gDram_vref[vref_at_max_sum_phy0 - (VREF_REF_NUM/2)] :
-			gPhy_vref[vref_at_max_sum_phy0 - (VREF_REF_NUM/2)];
 
-		optimalVref += ((rw == VREF_WRITE) ?
+	optimal_vref = (rw == VREF_WRITE) ?
+		gDram_vref[vref_at_max_sum_phy0 - (VREF_REF_NUM/2)] :
+		gPhy_vref[vref_at_max_sum_phy0 - (VREF_REF_NUM/2)];
+
+	optimal_vref += ((rw == VREF_WRITE) ?
 			gDram_vref[vref_at_max_sum_phy1 - (VREF_REF_NUM/2)] << 8 :
 			gPhy_vref[vref_at_max_sum_phy1 - (VREF_REF_NUM/2)]) << 8;
 
-		return optimalVref;
-	}
+	return optimal_vref;
 }
 
 int32_t ddrphy_run_vref_training(void)
 {
-	int32_t optimalVref;
+	int32_t optimal_vref;
 	uint32_t sVref_byte0_phy0_init, sVref_byte1_phy0_init;
 	uint32_t sVref_byte0_phy1_init, sVref_byte1_phy1_init;
 	uint32_t dVref_init;
 
-	//The below section of code is for Read Training of both Phy's
+	/* The below section of code is for Read Training of both Phy's */
 	sVref_byte0_phy0_init = ddrphy_get_byte_svref(VREF_BYTE0, PHY0);
 	sVref_byte1_phy0_init = ddrphy_get_byte_svref(VREF_BYTE1, PHY0);
 	sVref_byte0_phy1_init = ddrphy_get_byte_svref(VREF_BYTE0, PHY1);
 	sVref_byte1_phy1_init = ddrphy_get_byte_svref(VREF_BYTE1, PHY1);
-	dVref_init = 0x5;  //MR14_VREF(DQ) value. Should save this value during DRAM initialization.
 
-	//read vref training byte all
-	optimalVref = ddrphy_get_optimal_vref(VREF_READ, VREF_BYTE_ALL);
-	if (optimalVref < 0 || ((optimalVref >> 8) < 0)) {
-		ddrphy_set_read_vref(sVref_byte0_phy0_init, sVref_byte0_phy1_init, VREF_BYTE0);
-		ddrphy_set_read_vref(sVref_byte1_phy0_init, sVref_byte1_phy1_init, VREF_BYTE1);
+	/* MR14_VREF(DQ) value. Should save this value during DRAM
+	 * initialization.
+	 */
+	dVref_init = 0x5;
+
+	/* read vref training byte all */
+	optimal_vref = ddrphy_get_optimal_vref(VREF_READ, VREF_BYTE_ALL);
+	if (optimal_vref < 0 || ((optimal_vref >> 8) < 0)) {
+		ddrphy_set_read_vref(sVref_byte0_phy0_init,
+				sVref_byte0_phy1_init, VREF_BYTE0);
+		ddrphy_set_read_vref(sVref_byte1_phy0_init,
+				sVref_byte1_phy1_init, VREF_BYTE1);
 		return VREF_ERROR;
-	} else  {
-		ddrphy_set_read_vref((optimalVref & 0xff), ((optimalVref >> 8) & 0xff), VREF_BYTE_ALL);
 	}
+	ddrphy_set_read_vref((optimal_vref & 0xff),
+			((optimal_vref >> 8) & 0xff), VREF_BYTE_ALL);
 
-	optimalVref = ddrphy_get_optimal_vref(VREF_WRITE, VREF_BYTE_ALL);
-	if (optimalVref < 0) {
+	optimal_vref = ddrphy_get_optimal_vref(VREF_WRITE, VREF_BYTE_ALL);
+	if (optimal_vref < 0) {
 		ddrphy_set_write_vref(dVref_init, VREF_BYTE_ALL);
 		return VREF_ERROR;
-	} else  {
-		ddrphy_set_write_vref((optimalVref & 0xff), VREF_BYTE_ALL);
 	}
+
+	ddrphy_set_write_vref((optimal_vref & 0xff), VREF_BYTE_ALL);
 
 	ddrphy_reset_prbs_training_result();
 
 	return VREF_SUCCESS;
 }
 
-
 static int ddr_register_control(__CONST ddr_reg_control_t *ddr_cfg)
 {
 	int index = 0;
-	__CONST ddr_reg_poll_t *poll = NULL;
-	__CONST ddr_reg_control_t *cfg;
 	uint32_t poll_multiplier;
 
-	poll_multiplier = RD_DDR_OTP(o_SECURE_JTAG2) + 1;
+	__CONST ddr_reg_poll_t *poll = NULL;
+	__CONST ddr_reg_control_t *cfg;
+
+	poll_multiplier = read_ddr_otp(o_SECURE_JTAG2) + 1;
 
 	while (ddr_cfg[index].reg) {
 
@@ -478,17 +498,23 @@ static int ddr_register_control(__CONST ddr_reg_control_t *ddr_cfg)
 		if (!(cfg->flags & FLG_NON_DIRECT)) {
 			WR_REG(cfg->reg, cfg->val);
 		} else if (cfg->flags & FLG_OTP) {
-			WR_REG(cfg->reg, RD_DDR_OTP(cfg->val));
+			WR_REG(cfg->reg, read_ddr_otp(cfg->val));
 		} else if (cfg->flags & FLG_POLL) {
 			poll = &ddr_reg_poll[cfg->val];
 			if (poll->usec_timeout) {
-				ddr_timer_start(poll->usec_timeout * poll_multiplier);
-				while (((RD_REG(cfg->reg) & poll->mask) != poll->val) && !ddr_timer_expired());
+				ddr_timer_start(poll->usec_timeout *
+						poll_multiplier);
+				while (((RD_REG(cfg->reg) & poll->mask) !=
+						poll->val) &&
+						!ddr_timer_expired())
+					;
 				if (ddr_timer_expired())
 					return DDR_FAIL;
 				ddr_timer_stop();
 			} else {
-				while ((RD_REG(cfg->reg) & poll->mask) != poll->val);
+				while ((RD_REG(cfg->reg) & poll->mask) !=
+						poll->val)
+					;
 			}
 		} else if (cfg->flags & FLG_WAIT) {
 			ddr_sleep(cfg->val * poll_multiplier);
@@ -498,7 +524,7 @@ static int ddr_register_control(__CONST ddr_reg_control_t *ddr_cfg)
 			WR_REG(cfg->reg, RD_REG(cfg->reg) & (~cfg->val));
 		}
 
-		index ++;
+		index++;
 	}
 
 	return DDR_SUCCESS;
@@ -511,7 +537,7 @@ static int ddr_register_control_onstate(__CONST ddr_reg_control_t *ddr_cfg, uint
 	__CONST ddr_reg_control_t *cfg;
 	uint32_t poll_multiplier;
 
-	poll_multiplier = RD_DDR_OTP(o_SECURE_JTAG2) + 1;
+	poll_multiplier = read_ddr_otp(o_SECURE_JTAG2) + 1;
 
 	while (ddr_cfg[index].reg) {
 
@@ -522,17 +548,24 @@ static int ddr_register_control_onstate(__CONST ddr_reg_control_t *ddr_cfg, uint
 			if (!(cfg->flags & FLG_NON_DIRECT)) {
 				WR_REG(cfg->reg, cfg->val);
 			} else if (cfg->flags & FLG_OTP) {
-				WR_REG(cfg->reg, RD_DDR_OTP(cfg->val));
+				WR_REG(cfg->reg, read_ddr_otp(cfg->val));
 			} else if (cfg->flags & FLG_POLL) {
 				poll = &ddr_reg_poll[cfg->val];
 				if (poll->usec_timeout) {
 					ddr_timer_start(poll->usec_timeout * poll_multiplier);
-					while (((RD_REG(cfg->reg) & poll->mask) != poll->val) && !ddr_timer_expired());
+					while (((RD_REG(cfg->reg) &
+							poll->mask) !=
+							poll->val) &&
+							!ddr_timer_expired())
+						;
 					if (ddr_timer_expired())
 						return DDR_FAIL;
 					ddr_timer_stop();
 				} else {
-					while ((RD_REG(cfg->reg) & poll->mask) != poll->val);
+					while ((RD_REG(cfg->reg) &
+							poll->mask) !=
+							poll->val)
+						;
 				}
 			} else if (cfg->flags & FLG_WAIT) {
 				ddr_sleep(cfg->val * poll_multiplier);
@@ -543,7 +576,7 @@ static int ddr_register_control_onstate(__CONST ddr_reg_control_t *ddr_cfg, uint
 			}
 		}
 
-		index ++;
+		index++;
 	}
 
 	return DDR_SUCCESS;
@@ -667,7 +700,12 @@ static void ddr_train_restore_configuration(uint32_t *ddr_train_save_value)
 }
 
 #ifdef CONFIG_DDR_BOOT_TEST
-void ab_ddr_read_write_test(int bExtraRead)
+
+#define DDR_BOOT_TEST_READ	(0x1 << 0)
+#define DDR_BOOT_TEST_WRITE	(0x1 << 1)
+#define DDR_BOOT_TEST_READ_WRITE (DDR_BOOT_TEST_READ | DDR_BOOT_TEST_WRITE)
+
+void ab_ddr_read_write_test(int read_write)
 {
 	uint32_t ddr_addr[] = {
 		0x20000000, 0x20008004, 0x20800008, 0x28000000,
@@ -683,11 +721,16 @@ void ab_ddr_read_write_test(int bExtraRead)
 
 	int i;
 
-	for (i = 0; i < 13; i++)
-		WR_DDR_REG(ddr_addr[i], ddr_data[i]);
+	if (DDR_BOOT_TEST_WRITE & read_write) {
+		for (i = 0; i < 13; i++)
+			WR_DDR_REG(ddr_addr[i], ddr_data[i]);
+	}
 
-	for (i = 0; i < 13; i++)
-		printk("0x%x: 0x%x\n", ddr_addr[i], RD_DDR_REG(ddr_addr[i]));
+	if (DDR_BOOT_TEST_READ & read_write) {
+		for (i = 0; i < 13; i++)
+			pr_debug("0x%x: 0x%x\n", ddr_addr[i],
+					RD_DDR_REG(ddr_addr[i]));
+	}
 }
 
 #endif /* CONFIG_DDR_BOOT_TEST */
@@ -921,9 +964,8 @@ static int32_t ab_ddr_init_internal_isolation(void)
 	}
 
 	/* DDR training */
-	if (ab_ddr_train(DDR_SR)) {
+	if (ab_ddr_train(DDR_SR))
 		goto ddr_init_fail;
-	}
 
 	/* Now M0 can enter WFI for GPIO_DDR_TRAIN or REG_DDR_TRAIN */
 	return DDR_SUCCESS;
@@ -941,7 +983,8 @@ void ab_ddr_train_gpio(void)
 	/* Read the DDR_SR */
 	DDR_SR = GPIO_DDR_SR();
 
-	while(GPIO_CKE_IN_SENSE());
+	while (GPIO_CKE_IN_SENSE())
+		;
 
 	/* self-refresh exit sequence */
 	do_ddr_blk_config(b_Exit_Self_Refresh_mode, 0);
@@ -991,23 +1034,30 @@ void ab_ddr_restore_training_results(uint32_t sram_address)
 
 int32_t ab_ddr_resume(struct ab_state_context *sc)
 {
-	/* [TODO] Control PMIC to configure GPIOs and disable regulators
-	 * ./pmic_ctrl buck2 1
-	 * ./pmic_ctrl ldo4 1
-	 * ./pmic_ctrl ldo5 1
-	 * ./pmic_ctrl buck1 1
-	 * ./pmic_ctrl ldo3 1
-	 * ./pmic_ctrl ldo2 1
-	 *
-	 * ./pmic_pgood 1
-	 * ./pmic_ddr_iso 0
+	/* TBD: HACK
+	 * Remove this after waiting for the DDR Initialization interrupts
 	 */
+	msleep(200);
 
-	/* PCIe RESCAN/Enumeration Logic */
+	if (!IS_HOST_DDR_INIT()) {
+		/* TBD: The below code is not part of ABC A0 BootROM.
+		 * For B0 BootROM, we can remove this code.
+		 */
+		/* Self-refresh exit sequence */
+		if (do_ddr_blk_config(b_Exit_Self_Refresh_mode, 0))
+			pr_err("ERROR!!! Exit from Self-Refresh is fail\n");
 
-	ab_ddr_init(sc);
+		if (do_ddr_blk_config(b_AXI_Enable_After_All_training, 0)) {
+			pr_err("ERROR!!! Enable AXI fail\n");
+			return DDR_FAIL;
+		}
+	}
+
+	/* Disable the DDR_SR GPIO */
+	ab_gpio_disable_ddr_sr(sc);
+
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(0);
+	ab_ddr_read_write_test(DDR_BOOT_TEST_READ);
 #endif
 	return DDR_SUCCESS;
 }
@@ -1015,6 +1065,12 @@ EXPORT_SYMBOL(ab_ddr_resume);
 
 int32_t ab_ddr_suspend(struct ab_state_context *sc)
 {
+#ifdef CONFIG_DDR_BOOT_TEST
+	ab_ddr_read_write_test(DDR_BOOT_TEST_WRITE);
+#endif
+	/* Block AXI Before entering self-refresh */
+	WR_REG(reg_ACTIVATE_AXI_READY, 0x0);
+
 	/* Self-refresh entry sequence */
 	if (do_ddr_blk_config(b_Enter_Self_Refresh_mode, 0))
 		goto ddr_suspend_fail;
@@ -1022,18 +1078,15 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 	/* Enable the PMU Retention */
 	PMU_CONTROL_PHY_RET_ON();
 
-	/* [TODO] Control PMIC to configure GPIOs and disable regulators
-	 * ./pmic_ddr_sr 1
-	 * ./pmic_ddr_iso 1
-	 * ./pmic_pgood 0
-	 *
-	 * ./pmic_ctrl ldo2 0
-	 * ./pmic_ctrl ldo3 0
-	 * ./pmic_ctrl buck1 0
-	 * ./pmic_ctrl ldo5 0
-	 * ./pmic_ctrl ldo4 0
-	 * ./pmic_ctrl buck2 0
+	/* Enable GPIOs to inform DDR is in suspend mode and turnoff the
+	 * power to airbrush
 	 */
+	ab_gpio_enable_ddr_sr(sc);
+	ab_gpio_enable_ddr_iso(sc);
+	ab_disable_pgood(sc);
+
+	/* Disable the unused regulators */
+	//ab_pmic_suspend(sc);
 
 	return DDR_SUCCESS;
 
@@ -1042,15 +1095,46 @@ ddr_suspend_fail:
 }
 EXPORT_SYMBOL(ab_ddr_suspend);
 
-int32_t ab_ddr_init(struct ab_state_context *sc)
+int32_t ab_ddr_selfrefresh_exit(struct ab_state_context *sc)
 {
-	int32_t ret;
+	/* Self-refresh exit sequence */
+	if (do_ddr_blk_config(b_Exit_Self_Refresh_mode, 0))
+		return DDR_FAIL;
+
+	/* Allow AXI after exiting from self-refresh */
+	WR_REG(reg_ACTIVATE_AXI_READY, 0x1);
+
+#ifdef CONFIG_DDR_BOOT_TEST
+	ab_ddr_read_write_test(DDR_BOOT_TEST_READ);
+#endif
+	return DDR_SUCCESS;
+}
+EXPORT_SYMBOL(ab_ddr_selfrefresh_exit);
+
+int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
+{
+#ifdef CONFIG_DDR_BOOT_TEST
+	ab_ddr_read_write_test(DDR_BOOT_TEST_WRITE);
+#endif
+	/* Block AXI Before entering self-refresh */
+	WR_REG(reg_ACTIVATE_AXI_READY, 0x0);
+
+	/* Self-refresh entry sequence */
+	if (do_ddr_blk_config(b_Enter_Self_Refresh_mode, 0))
+		return DDR_FAIL;
+
+	return DDR_SUCCESS;
+}
+EXPORT_SYMBOL(ab_ddr_selfrefresh_enter);
+
+int32_t ab_ddr_setup(struct ab_state_context *sc)
+{
 	int data;
 	struct platform_device *pdev;
-	uint32_t DDR_SR;
 
-	/* Read the DDR_SR */
-	DDR_SR = GPIO_DDR_SR();
+	/* ab_ddr_setup is already called */
+	if (read_ddr_otp)
+		return DDR_SUCCESS;
 
 	if (!(sc && sc->pdev))
 		return DDR_FAIL;
@@ -1058,16 +1142,43 @@ int32_t ab_ddr_init(struct ab_state_context *sc)
 	pdev = sc->pdev;
 
 	/* If DDR OTP is not flashed, then use the OTP array instead */
-	if (of_property_read_u32(pdev->dev.of_node, "ddr-otp-flashed", &data))
-		RD_DDR_OTP = &RD_OTP_Array;
-	else
-		RD_DDR_OTP = &RD_OTP_Wrapper;
+	if (of_property_read_u32(pdev->dev.of_node, "ddr-otp-flashed", &data)) {
+		dev_dbg(sc->dev, "%s: DDR OTPs NOT flashed. Use local array.\n",
+				__func__);
+		read_ddr_otp = &read_otp_array;
+	} else {
+		dev_dbg(sc->dev, "%s: DDR OTPs flashed\n", __func__);
+		read_ddr_otp = &read_otp_wrapper;
+	}
+
+#ifdef DEBUG
+	for (data = 0; data < o_DDR_OTP_MAX; data++)
+		dev_dbg(sc->dev, "%d: 0x%x\n", data, (data));
+#endif
+
+	/* In A0 BootROM Auto Refresh setting is missing. To fix this issue,
+	 * set the Auto-Refresh enable during the ddr setup.
+	 */
+	if (!IS_HOST_DDR_INIT())
+		WR_REG(reg_CONCONTROL, RD_REG(reg_CONCONTROL) | (0x1 << 5));
+
+	return DDR_SUCCESS;
+}
+
+
+int32_t ab_ddr_init(struct ab_state_context *sc)
+{
+	int32_t ret;
+	uint32_t DDR_SR;
+
+	/* Read the DDR_SR */
+	DDR_SR = GPIO_DDR_SR();
 
 	ret = ab_ddr_init_internal_isolation();
 
 #ifdef CONFIG_DDR_BOOT_TEST
 	if (!DDR_SR && !ret)
-		ab_ddr_read_write_test(0);
+		ab_ddr_read_write_test(DDR_BOOT_TEST_READ_WRITE);
 #endif
 	return ret;
 }

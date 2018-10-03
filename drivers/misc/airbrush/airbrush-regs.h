@@ -56,6 +56,22 @@ static inline void WR_DDR_REG(uint32_t addr, uint32_t data)
 #define ABC_BASE_SYSREG_CENTRAL_PMU	0x10BA0000
 #define ABC_BASE_OTP_WRAPPER		0x10BB0000
 
+/* --------------------------------------------------
+ * 1.7.1.65 AP_HW_OPTION_1
+ *    Base Address: 0x10BB_0000
+ *    Address = Base Address + 0x4014, Reset Value = 0x0000_0000
+ *    OTP_DBG_DIS[2] (OTP_FW_PATCH_DIS)
+ *    OTP_UART_PRINT_DISABLE[3] (Disable UART prints when set)
+ *    OTP_DDR_OTP_FLASHED[7]
+ *    OTP_AP_DDR [9] (0: M0_DDR_INIT, 1: HOST_DDR_INIT)
+ * --------------------------------------------------
+ */
+#define OTP_AP_HW_OPTION_1()	(RD_REG(ABC_BASE_OTP_WRAPPER + 0x4014))
+#define IS_OTP_FW_PATCH_DIS()	(!!(OTP_AP_HW_OPTION_1() & (1 << 2)))
+#define IS_UART_PRINT_DISABLE() (!!(OTP_AP_HW_OPTION_1() & (1 << 3)))
+#define IS_DDR_OTP_FLASHED()	(!!(OTP_AP_HW_OPTION_1() & (1 << 7)))
+#define IS_HOST_DDR_INIT()	((OTP_AP_HW_OPTION_1() & (1 << 9)))
+
 /* SYSREG REGISTERS */
 #define SYSREG_AON_IPU_REG31		(ABC_BASE_SYSREG_AON + 0x440)
 #define GET_DDR_TRAIN_STATE()		(RD_REG(SYSREG_AON_IPU_REG31))

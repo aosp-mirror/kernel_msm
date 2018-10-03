@@ -15,6 +15,7 @@
 #ifndef _AIRBRUSH_SM_CTRL_H
 #define _AIRBRUSH_SM_CTRL_H
 
+#include <linux/atomic.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -275,6 +276,7 @@ struct ab_state_context {
 	struct dentry *d_entry;
 #endif
 	bool ab_sm_ctrl_pmic;
+	atomic_t clocks_registered;
 };
 
 /*
@@ -299,9 +301,18 @@ void abc_clk_register(struct ab_state_context *ab_ctx);
 int ab_ddr_init(struct ab_state_context *sc);
 int ab_ddr_suspend(struct ab_state_context *sc);
 int ab_ddr_resume(struct ab_state_context *sc);
+int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);
+int ab_ddr_selfrefresh_exit(struct ab_state_context *sc);
+int ab_ddr_setup(struct ab_state_context *sc);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);
+void ab_gpio_enable_ddr_sr(struct ab_state_context *ab_ctx);
+void ab_gpio_disable_ddr_sr(struct ab_state_context *ab_ctx);
+int  ab_gpio_get_ddr_sr(struct ab_state_context *ab_ctx);
+void ab_gpio_enable_ddr_iso(struct ab_state_context *ab_ctx);
+void ab_gpio_disable_ddr_iso(struct ab_state_context *ab_ctx);
+int  ab_gpio_get_ddr_iso(struct ab_state_context *ab_ctx);
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 void ab_sm_create_debugfs(struct ab_state_context *sc);

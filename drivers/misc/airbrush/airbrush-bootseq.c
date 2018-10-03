@@ -34,8 +34,9 @@
 #include <linux/clk.h>
 #include <linux/msm_pcie.h>
 
-#include "airbrush-spi.h"
 #include "airbrush-pmic-ctrl.h"
+#include "airbrush-regs.h"
+#include "airbrush-spi.h"
 
 #define REG_SRAM_ADDR	0x10b30374
 #define REG_DDR_INIT	0x10b30378
@@ -79,7 +80,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 {
 	/* Number of attempts to flash SRAM bootcode when CRC error happens */
 	int num_attempts = 1;
-	int gpio_clk_in, gpio_ddr_sr, crc_ok = 1;
+	int gpio_cke_in, gpio_ddr_sr, crc_ok = 1;
 	int state_suspend, state_sleep, state_off;
 	unsigned int data;
 	struct airbrush_spi_packet spi_packet;
@@ -93,12 +94,18 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
 
-	if (!ab_ctx->ab_sm_ctrl_pmic) {
-		/* register clock driver */
-		abc_clk_register(ab_ctx);
+	if (!ab_ctx)
+		return -EINVAL;
 
+	if (!ab_ctx->ab_sm_ctrl_pmic) {
 		dev_dbg(ab_ctx->dev, "%s: No ABC booting by state manager\n",
 				__func__);
+
+		/* Setup the function pointer to read DDR OTPs */
+		ab_ddr_setup(ab_ctx);
+
+		/* register clock driver */
+		abc_clk_register(ab_ctx);
 
 		return 0;
 	}
@@ -108,10 +115,17 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		return ret;
 
 	ab_disable_pgood(ab_ctx);
+	/* Get the current state of CKE_IN, DDR_SR GPIOs */
+	gpio_cke_in = ab_gpio_get_ddr_iso(ab_ctx);
+	gpio_ddr_sr = ab_gpio_get_ddr_sr(ab_ctx);
 
 	ret = ab_pmic_on(ab_ctx);
-	if (ret)
+	if (ret) {
+		dev_err(ab_ctx->dev,
+				"%s: PMIC failure during ABC Boot, ret %d\n",
+				__func__, ret);
 		return ret;
+	}
 
 	if (patch_fw) {
 		gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_ENABLE);
@@ -139,6 +153,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 
 	ab_enable_pgood(ab_ctx);
 
+	gpiod_get_value_cansleep(ab_ctx->ab_ready);
+
 	if (pbus) {
 		pdev = pbus->self;
 		while (!pci_is_root_bus(pbus)) {
@@ -147,25 +163,33 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		}
 	}
 
-	/* [TBD] Get the current state of CLK_IN, DDR_SR GPIOs */
+	state_off = gpio_cke_in == 0 && gpio_ddr_sr == 0;
+	state_suspend = !!gpio_ddr_sr;
+	state_sleep = gpio_cke_in == 1 && gpio_ddr_sr == 1;
 
-	/* [TBD] until DDR is not integrated, use the hard-coded values */
-	gpio_clk_in = 0;
-	gpio_ddr_sr = 0;
-
-	state_off	 = (gpio_clk_in == 0) && (gpio_ddr_sr == 0);
-	state_suspend = (gpio_clk_in == 0) && (gpio_ddr_sr == 1);
-	state_sleep   = (gpio_clk_in == 1) && (gpio_ddr_sr == 1);
-
-
-	/* From sleep/suspend to active, perform DDR Pad Isolation
-	 * deassertion
+	/* [TBD] REMOVE THIS HACK.
+	 * FIND ANY DEPENDENCY FOR CONTROLLING DDR_ISO
 	 */
-	/* [TBD]
-	 * if (state_suspend || state_sleep)
+	msleep(1000);
+
+	/* From sleep/suspend to active,
+	 * perform DDR Pad Isolation deassertion
 	 */
+	if (state_suspend || state_sleep)
+		ab_gpio_disable_ddr_iso(ab_ctx);
 
 	if (state_suspend || state_off) {
+		if (patch_fw && !ab_ctx->otp_fw_patch_dis) {
+			/* Configure the below GPIO before signalling the
+			 * SOC_PWRGOOD via XnRESET. Enable the FW_PATCH_EN pin
+			 * via GPIO.
+			 */
+			gpiod_set_value_cansleep(ab_ctx->fw_patch_en,
+							__GPIO_ENABLE);
+		}
+
+		/* Signal the SOC_PWRGOOD */
+		ab_enable_pgood(ab_ctx);
 
 		timeout = jiffies + SOC_PWRGOOD_WAIT_TIMEOUT;
 		/* Wait till the soc_pwrgood is put to high by PMIC */
@@ -175,7 +199,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 
 		if (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood)) {
 			dev_err(&plat_dev->dev,
-			"ABC PWRGOOD is not enabled");
+					"ABC PWRGOOD is not enabled");
 			return -EIO;
 		}
 
@@ -200,7 +224,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 			}
 
 			/* Enable CRC via SPI-FSM */
-
 			while (num_attempts) {
 				/* [TBD] Reset CRC Register via SPI-FSM */
 
@@ -301,14 +324,23 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 			return -EIO;
 		}
 
-		/* [TBD] Keeping some delay to have ABC and HOST PCIe
-		 * linkup completed.
+		/* [TBD]
+		 * Keeping some delay to have ABC and HOST PCIe linkup completed
 		 */
 	}
 
-	/* [TBD] DDR Related code will be added later */
+	/* Setup the function pointer to read DDR OTPs */
+	ab_ddr_setup(ab_ctx);
+
+	/* In case the M0_DDR_INIT (Renamed HOST_DDR_INIT) is 1,
+	 * perform the DDR Initialization here.
+	 */
+	if (IS_HOST_DDR_INIT())
+		ab_ddr_init(ab_ctx);
+
 	/* register clock driver */
 	abc_clk_register(ab_ctx);
+
 	return 0;
 }
 EXPORT_SYMBOL(ab_bootsequence);

@@ -19,11 +19,17 @@
 
 int ab_interrupt_M0(int tar_dev);
 
-static int chip_state_set(void *sc, u64 val)
+static int chip_state_set(void *data, u64 val)
 {
-	if (ab_sm_set_state((struct ab_state_context *)sc, val))
-		pr_err("State change failed\n");
-	return 0;
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+	int ret;
+
+	ret = ab_sm_set_state(sc, val);
+	if (ret < 0)
+		dev_err(sc->dev, "%s: State change failed, ret %d\n",
+				__func__, ret);
+
+	return ret;
 }
 
 static int chip_state_get(void *sc, u64 *val)
@@ -115,23 +121,14 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_data_rate, data_rate_get, NULL, "%llu\n");
 
 static int ab_debugfs_boot(void *data, u64 val)
 {
-	struct ab_state_context *sc = (struct ab_state_context *) data;
+	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	switch (val) {
-	case 0:
+	if (sc->ab_alternate_boot) {
+		dev_dbg(sc->dev, "%s: M0 using alternate boot\n", __func__);
 		ab_bootsequence(sc, 1);
-		break;
-	case 1:
-		ab_interrupt_M0(0);
-		break;
-	case 2:
-		gpiod_set_value(sc->fw_patch_en, __GPIO_ENABLE);
-		break;
-	case 3:
+	} else {
+		dev_dbg(sc->dev, "%s: M0 using normal boot\n", __func__);
 		ab_bootsequence(sc, 0);
-		break;
-	default:
-		pr_info("Unsupported value\n");
 	}
 
 	return 0;
@@ -151,6 +148,12 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 		break;
 	case 2:
 		ab_ddr_resume(sc);
+		break;
+	case 3:
+		ab_ddr_selfrefresh_enter(sc);
+		break;
+	case 4:
+		ab_ddr_selfrefresh_exit(sc);
 		break;
 	default:
 		pr_err("ERROR!! Invalid DDR Control\n");

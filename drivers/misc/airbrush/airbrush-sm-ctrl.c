@@ -420,6 +420,36 @@ void ab_disable_pgood(struct ab_state_context *ab_ctx)
 	gpiod_set_value_cansleep(ab_ctx->soc_pwrgood, __GPIO_DISABLE);
 }
 
+int ab_gpio_get_ddr_sr(struct ab_state_context *ab_ctx)
+{
+	return gpiod_get_value_cansleep(ab_ctx->ddr_sr);
+}
+
+void ab_gpio_enable_ddr_sr(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->ddr_sr, __GPIO_ENABLE);
+}
+
+void ab_gpio_disable_ddr_sr(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->ddr_sr, __GPIO_DISABLE);
+}
+
+int ab_gpio_get_ddr_iso(struct ab_state_context *ab_ctx)
+{
+	return gpiod_get_value_cansleep(ab_ctx->ddr_iso);
+}
+
+void ab_gpio_enable_ddr_iso(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->ddr_iso, __GPIO_ENABLE);
+}
+
+void ab_gpio_disable_ddr_iso(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->ddr_iso, __GPIO_DISABLE);
+}
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -469,6 +499,11 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->ab_sm_ctrl_pmic = true;
 
 	/* [TBD] Need DDR_SR, DDR_TRAIN, CKE_IN, CKE_IN_SENSE GPIOs for  */
+
+	/* Check for alternate boot */
+	if (of_property_read_u32(np, "ab-alternate-boot",
+			&ab_sm_ctx->ab_alternate_boot))
+		dev_info(dev, "ab-alternate-boot property not set\n");
 
 	/* Intialize the default state of each block for state manager */
 	boot_time_block_state = ARRAY_SIZE(ipu_property_table)-1;
