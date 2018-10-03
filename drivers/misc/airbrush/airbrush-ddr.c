@@ -1127,6 +1127,60 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 }
 EXPORT_SYMBOL(ab_ddr_selfrefresh_enter);
 
+static int ab_ddr_set_state(const struct block_property *prop_from,
+			const struct block_property *prop_to,
+			chip_state_t chip_state_id, void *data)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	if (!sc || !prop_from || !prop_to)
+		return -EINVAL;
+
+	switch (chip_state_id) {
+	case CHIP_STATE_0_0 ... CHIP_STATE_2_6:
+		if (sc->ddr_state == DDR_SLEEP)
+			ab_ddr_selfrefresh_exit(sc);
+		else if (sc->ddr_state == DDR_SUSPEND)
+			ab_ddr_resume(sc);
+		sc->ddr_state = DDR_ON;
+		break;
+
+	case CHIP_STATE_3_0 ... CHIP_STATE_4_0:
+		/* ddr sleep/deep-sleep functionality */
+		if (sc->ddr_state != DDR_ON)
+			return -EINVAL;
+
+		ab_ddr_selfrefresh_enter(sc);
+
+		sc->ddr_state = DDR_SLEEP;
+		break;
+
+	case CHIP_STATE_5_0:
+		/* ddr suspend functionality */
+		if (sc->ddr_state == DDR_SUSPEND)
+			return -EINVAL;
+		ab_ddr_suspend(sc);
+
+		sc->ddr_state = DDR_SUSPEND;
+		break;
+
+	case CHIP_STATE_6_0:
+		if (sc->ddr_state == DDR_SUSPEND) {
+			ab_gpio_disable_ddr_sr(sc);
+			ab_gpio_disable_ddr_iso(sc);
+		}
+
+		sc->ddr_state = DDR_OFF;
+		break;
+
+	default:
+		break;
+	}
+
+	/* Based on the state, call the corresponding DDR functionality */
+	return 0;
+}
+
 int32_t ab_ddr_setup(struct ab_state_context *sc)
 {
 	int data;
@@ -1162,6 +1216,9 @@ int32_t ab_ddr_setup(struct ab_state_context *sc)
 	if (!IS_HOST_DDR_INIT())
 		WR_REG(reg_CONCONTROL, RD_REG(reg_CONCONTROL) | (0x1 << 5));
 
+	/* Register the Airbrush State Manager (ASM) callback */
+	ab_sm_register_blk_callback(DRAM, &ab_ddr_set_state, sc);
+
 	return DDR_SUCCESS;
 }
 
@@ -1170,6 +1227,8 @@ int32_t ab_ddr_init(struct ab_state_context *sc)
 {
 	int32_t ret;
 	uint32_t DDR_SR;
+
+	sc->ddr_state = DDR_ON;
 
 	/* Read the DDR_SR */
 	DDR_SR = GPIO_DDR_SR();

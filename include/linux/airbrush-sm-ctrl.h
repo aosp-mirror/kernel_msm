@@ -72,6 +72,13 @@ typedef enum __logic_voltage {
 	VOLTAGE_0_85,
 } logic_voltage_t;
 
+enum ddr_state {
+	DDR_ON,
+	DDR_SLEEP,
+	DDR_SUSPEND,
+	DDR_OFF,
+};
+
 typedef enum __chip_state {
 	CHIP_STATE_0_0 = 0,
 	CHIP_STATE_0_1,
@@ -277,6 +284,7 @@ struct ab_state_context {
 #endif
 	bool ab_sm_ctrl_pmic;
 	atomic_t clocks_registered;
+	enum ddr_state ddr_state;
 };
 
 /*
