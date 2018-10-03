@@ -823,7 +823,7 @@ update_io_stat(struct mmc_request *mrq, int is_start)
 }
 #else
 static void
-update_io_stat(struct mmc_host *mmc, int is_start)
+update_io_stat(struct mmc_request *mrq, int is_start)
 {
 }
 #endif
