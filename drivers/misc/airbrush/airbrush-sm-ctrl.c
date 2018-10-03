@@ -187,10 +187,9 @@ struct block_property *get_desired_state(struct block *blk,
 }
 
 void ab_sm_register_blk_callback(block_name_t name,
-			int (*set_state)(const struct block_property *, void *),
-			void *data)
+		ab_sm_set_block_state_t callback, void *data)
 {
-	ab_sm_ctx->blocks[name].set_state = set_state;
+	ab_sm_ctx->blocks[name].set_state = callback;
 	ab_sm_ctx->blocks[name].data = data;
 }
 
@@ -277,7 +276,8 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* Block specific hooks */
 	if (blk->set_state)
-		blk->set_state(desired_state, blk->data);
+		blk->set_state(blk->current_state, desired_state,
+			       to_chip_substate_id, blk->data);
 
 	/* PMU settings */
 	if (power_control && blk->name == BLK_TPU) {

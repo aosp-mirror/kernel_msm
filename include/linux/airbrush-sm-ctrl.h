@@ -156,6 +156,10 @@ struct block_property {
 	u32 data_rate;
 };
 
+typedef int (*ab_sm_set_block_state_t)(
+		const struct block_property *current_property,
+		const struct block_property *desired_property,
+		chip_state_t chip_substate_id, void *data);
 
 /**
  * struct block - stores the information about a SOC block
@@ -171,7 +175,7 @@ struct block {
 	struct block_property *current_state;
 	struct block_property *block_property_table;
 	u32 nr_block_states;
-	int (*set_state)(const struct block_property *, void *);
+	ab_sm_set_block_state_t set_state;
 	void *data; /*IP specific data*/
 };
 
@@ -276,13 +280,12 @@ struct ab_state_context {
  *  void ab_sm_register_blk_callback - register block specific state change callback
  *
  *  name: name of the block for which this callback should be called.
- *  set_state: callback function.
+ *  callback: set_state callback function.
  *  block_property: block_property structure passed to callback.
  *  data: the cookie that is passed back to the callback.
  */
 void ab_sm_register_blk_callback(block_name_t name,
-				int (*set_state)(const struct block_property *, void *),
-				void *data);
+		ab_sm_set_block_state_t callback, void *data);
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
 void ab_sm_exit(struct platform_device *pdev);

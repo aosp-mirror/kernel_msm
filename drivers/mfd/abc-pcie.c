@@ -415,18 +415,20 @@ u32 string_to_integer(char *string)
 		return NOASPM;
 }
 
-int abc_pcie_state_manager(const struct block_property *property, void *data)
+int abc_pcie_state_manager(const struct block_property *current_property,
+		const struct block_property *target_property,
+		chip_state_t chip_substate_id, void *data)
 {
 	u32 target_linkstate;
 	u32 current_linkstate;
 	u32 target_linkspeed;
 	u32 current_linkspeed;
 
-	if (!property)
+	if (!target_property)
 		return -EINVAL;
 
-	target_linkstate = string_to_integer(property->substate_name);
-	target_linkspeed = property->data_rate;
+	target_linkstate = string_to_integer(target_property->substate_name);
+	target_linkspeed = target_property->data_rate;
 
 	/* change to the requested speed and state */
 	abc_pcie_set_linkspeed(target_linkspeed);
