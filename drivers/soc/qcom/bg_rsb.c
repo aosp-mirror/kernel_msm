@@ -344,6 +344,8 @@ static int bgrsb_ldo_work(struct bgrsb_priv *dev, enum ldo_task ldo_action)
 {
 	int ret = 0;
 
+	pr_err("[PAT_RSB]%s, ldo command: %d.\n", __func__, ldo_action);
+
 	switch (ldo_action) {
 	case BGRSB_ENABLE_LDO11:
 		ret = regulator_set_voltage(dev->rgltr.regldo11,
@@ -771,6 +773,8 @@ static int split_bg_work(struct bgrsb_priv *dev, char *str)
 	if (ret < 0)
 		return ret;
 
+	pr_err("[PAT_RSB]%s, echo command: %ld.\n", __func__, val);
+
 	switch (val) {
 	case BGRSB_POWER_DISABLE:
 		queue_work(dev->bgrsb_wq, &dev->rsb_down_work);
@@ -985,56 +989,13 @@ static int bg_rsb_remove(struct platform_device *pdev)
 
 static int bg_rsb_resume(struct device *pldev)
 {
-	struct platform_device *pdev = to_platform_device(pldev);
-	struct bgrsb_priv *dev = platform_get_drvdata(pdev);
-
-	mutex_lock(&dev->rsb_state_mutex);
-	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_CONFIGURED)
-		goto ret_success;
-
-	if (dev->bgrsb_current_state == BGRSB_STATE_INIT) {
-		if (bgrsb_ldo_work(dev, BGRSB_ENABLE_LDO11) == 0) {
-			dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
-			pr_debug("RSB Cofigured\n");
-			goto ret_success;
-		}
-		pr_err("RSB failed to resume\n");
-	}
-	mutex_unlock(&dev->rsb_state_mutex);
-	return -EINVAL;
-
-ret_success:
-	mutex_unlock(&dev->rsb_state_mutex);
+	pr_err("[PAT_RSB]%s, enter rsb_resume.\n", __func__);
 	return 0;
 }
 
 static int bg_rsb_suspend(struct device *pldev)
 {
-	struct platform_device *pdev = to_platform_device(pldev);
-	struct bgrsb_priv *dev = platform_get_drvdata(pdev);
-
-	mutex_lock(&dev->rsb_state_mutex);
-	if (dev->bgrsb_current_state == BGRSB_STATE_INIT)
-		goto ret_success;
-
-	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
-		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15) != 0)
-			goto ret_err;
-	}
-
-	if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO11) == 0) {
-		dev->bgrsb_current_state = BGRSB_STATE_INIT;
-		pr_debug("RSB Init\n");
-		goto ret_success;
-	}
-
-ret_err:
-	pr_err("RSB failed to suspend\n");
-	mutex_unlock(&dev->rsb_state_mutex);
-	return -EINVAL;
-
-ret_success:
-	mutex_unlock(&dev->rsb_state_mutex);
+	pr_err("[PAT_RSB]%s, enter rsb_suspend.\n", __func__);
 	return 0;
 }
 
