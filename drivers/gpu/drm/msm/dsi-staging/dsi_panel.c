@@ -3339,6 +3339,10 @@ ssize_t dsi_panel_debugfs_write_reg(struct file *file,
 	char *payload;
 	size_t len;
 	int rc = 0;
+
+	if (!panel || !panel->panel_initialized)
+		return -EPERM;
+
 	/* calculate length for worst case (1 digit per byte + whitespace) */
 	len = (count + 1) / 2;
 	buf = kmalloc(count + 1, GFP_KERNEL);
@@ -3377,6 +3381,10 @@ int dsi_panel_debugfs_read_reg(struct seq_file *seq, void *data)
 	ssize_t rc;
 	size_t len;
 	u8 cmd;
+
+	if (!panel || !panel->panel_initialized)
+		return -EPERM;
+
 	len = panel->debug.reg_read_len;
 	cmd = panel->debug.reg_read_cmd;
 	if (len == 0)
