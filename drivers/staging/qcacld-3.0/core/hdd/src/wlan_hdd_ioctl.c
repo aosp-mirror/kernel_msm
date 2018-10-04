@@ -7257,6 +7257,10 @@ static const struct hdd_drv_cmd hdd_drv_cmds[] = {
 	{"SET_DISABLE_CHANNEL_LIST",  drv_cmd_set_disable_chan_list, true},
 	{"GET_DISABLE_CHANNEL_LIST",  drv_cmd_get_disable_chan_list, false},
 	{"STOP",                      drv_cmd_dummy, false},
+	{"BTCOEXSCAN-START",          drv_cmd_dummy, false},
+	{"BTCOEXSCAN-STOP",           drv_cmd_dummy, false},
+	{"RXFILTER-START",            drv_cmd_dummy, false},
+	{"RXFILTER-STOP",             drv_cmd_dummy, false},
 };
 
 /**
