@@ -723,20 +723,14 @@ static int tcpm_set_current_limit(struct tcpm_port *port, u32 max_ma,
 	return ret;
 }
 
-static void tcpm_set_pd_capable(struct tcpm_port *port,
-				enum tcpm_pd_capability capability)
+static void tcpm_set_pd_capable(struct tcpm_port *port, bool capable)
 {
-	tcpm_log(port, "Setting pd capable %s",
-		 capability == TCPC_PD_CAPABLE ? "true" : "false");
+	tcpm_log(port, "Setting pd capable %s", capable ? "true" : "false");
 
 	if (port->tcpc->set_pd_capable)
-		port->tcpc->set_pd_capable(port->tcpc, capability);
+		port->tcpc->set_pd_capable(port->tcpc, capable);
 
-	if (capability == TCPC_PD_CAPABLE)
-		port->pd_capable = true;
-	else
-		port->pd_capable = false;
-
+	port->pd_capable = capable;
 }
 
 static void tcpm_port_in_hard_reset(struct tcpm_port *port, bool status)
@@ -2136,7 +2130,7 @@ static int tcpm_src_attach(struct tcpm_port *port)
 	if (ret < 0)
 		goto out_disable_vconn;
 
-	tcpm_set_pd_capable(port, TCPC_NOT_RESOLVED);
+	tcpm_set_pd_capable(port, false);
 
 	port->partner = NULL;
 
@@ -2181,7 +2175,7 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	tcpm_unregister_altmodes(port);
 	tcpm_typec_disconnect(port);
 	port->attached = false;
-	tcpm_set_pd_capable(port, TCPC_NOT_RESOLVED);
+	tcpm_set_pd_capable(port, false);
 	port->usb_comm_capable = false;
 
 	/*
@@ -2232,7 +2226,7 @@ static int tcpm_snk_attach(struct tcpm_port *port)
 	if (ret < 0)
 		return ret;
 
-	tcpm_set_pd_capable(port, TCPC_NOT_RESOLVED);
+	tcpm_set_pd_capable(port, false);
 
 	port->partner = NULL;
 
@@ -2474,7 +2468,7 @@ static void run_state_machine(struct tcpm_port *port)
 			 */
 			/* port->hard_reset_count = 0; */
 			port->caps_count = 0;
-			tcpm_set_pd_capable(port, TCPC_PD_CAPABLE);
+			tcpm_set_pd_capable(port, true);
 			tcpm_set_state_cond(port, hard_reset_state(port),
 					    PD_T_SEND_SOURCE_CAP);
 		}
@@ -2521,8 +2515,6 @@ static void run_state_machine(struct tcpm_port *port)
 				== TYPEC_CC_RP_DEF)
 			tcpm_set_cc(port, TYPEC_CC_RP_1_5);
 		tcpm_check_send_discover(port);
-		tcpm_set_pd_capable(port, port->pd_capable ?
-				    TCPC_PD_CAPABLE : TCPC_PD_NOT_CAPABLE);
 		/*
 		 * 6.3.5
 		 * Sending ping messages is not necessary if
@@ -2695,7 +2687,7 @@ static void run_state_machine(struct tcpm_port *port)
 		}
 		break;
 	case SNK_NEGOTIATE_CAPABILITIES:
-		tcpm_set_pd_capable(port, TCPC_PD_CAPABLE);
+		tcpm_set_pd_capable(port, true);
 		port->usb_comm_capable = port->source_caps[0] &
 					 PDO_FIXED_USB_COMM;
 		/* Notify TCPC of usb_comm_capable. */
@@ -2735,8 +2727,6 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_swap_complete(port, 0);
 		tcpm_typec_connect(port);
 		tcpm_check_send_discover(port);
-		tcpm_set_pd_capable(port, port->pd_capable ? TCPC_PD_CAPABLE :
-				    TCPC_PD_NOT_CAPABLE);
 		break;
 
 	/* Accessory states */
@@ -2761,7 +2751,6 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case HARD_RESET_START:
 		tcpm_port_in_hard_reset(port, true);
-		tcpm_set_pd_capable(port, TCPC_NOT_RESOLVED);
 		port->hard_reset_count++;
 		port->tcpc->set_pd_rx(port->tcpc, false);
 		tcpm_unregister_altmodes(port);
