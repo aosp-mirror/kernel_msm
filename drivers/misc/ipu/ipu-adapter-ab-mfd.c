@@ -214,11 +214,12 @@ static struct device *ipu_adapter_ab_mfd_get_dma_device(struct device *dev)
 	return dev_data->dma_dev;
 }
 
-/* TODO(b/115431811):  This function should be split into two helper
- * functions, a PIO version and a DMA version.  The decision on whether or not
- * use the PIO version or DMA version will depend on the size of the transfer.
+/* TODO(b/117619644): profile PIO vs DMA transfer speed to find the correct
+ * threshold value.
  */
-void ipu_adapter_ab_mfd_sync(struct device *dev,
+#define MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE 1024
+
+static void ipu_adapter_ab_mfd_sync_dma(struct device *dev,
 		struct paintbox_shared_buffer *shared_buffer, uint32_t offset,
 		size_t size, enum dma_data_direction direction)
 {
@@ -228,8 +229,6 @@ void ipu_adapter_ab_mfd_sync(struct device *dev,
 	dma_addr_t jqs_addr = offset + shared_buffer->jqs_paddr;
 
 	desc.len = size;
-
-	mutex_lock(&dev_data->sync_lock);
 
 	/* TODO(b/115431813):  The Endpoint DMA interface needs to be
 	 * cleaned up so that it presents a synchronous interface to kernel
@@ -276,6 +275,36 @@ void ipu_adapter_ab_mfd_sync(struct device *dev,
 	 * driver interface is cleaned up.
 	 */
 	(void)abc_reg_dma_irq_callback(NULL, 0);
+}
+
+static void ipu_adapter_ab_mfd_sync_pio(struct device *dev,
+		struct paintbox_shared_buffer *shared_buffer, uint32_t offset,
+		size_t size, enum dma_data_direction direction)
+{
+	void __iomem *io_vaddr = shared_buffer->mapping.bar_vaddr + offset;
+	void *buffer_vaddr = shared_buffer->host_vaddr + offset;
+
+	if (direction == DMA_TO_DEVICE)
+		memcpy_toio(io_vaddr, buffer_vaddr, size);
+	else
+		memcpy_fromio(buffer_vaddr, io_vaddr, size);
+}
+
+void ipu_adapter_ab_mfd_sync(struct device *dev,
+		struct paintbox_shared_buffer *shared_buffer, uint32_t offset,
+		size_t size, enum dma_data_direction direction)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+
+	mutex_lock(&dev_data->sync_lock);
+
+	if (size <= MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE &&
+			shared_buffer->mapped_to_bar)
+		ipu_adapter_ab_mfd_sync_pio(dev, shared_buffer, offset,
+				size, direction);
+	else
+		ipu_adapter_ab_mfd_sync_dma(dev, shared_buffer, offset,
+				size, direction);
 
 	mutex_unlock(&dev_data->sync_lock);
 }
