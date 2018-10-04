@@ -1135,7 +1135,8 @@ static int check_alu_op(struct verifier_env *env, struct bpf_insn *insn)
 				regs[insn->dst_reg].type = UNKNOWN_VALUE;
 				regs[insn->dst_reg].map_ptr = NULL;
 			}
-		} else {
+		} else if (BPF_CLASS(insn->code) == BPF_ALU64 ||
+			   insn->imm >= 0) {
 			/* case: R = imm
 			 * remember the value we stored into this reg
 			 */
@@ -2100,7 +2101,7 @@ static int replace_map_fd_with_map_ptr(struct verifier_env *env)
 			/* hold the map. If the program is rejected by verifier,
 			 * the map will be released by release_maps() or it
 			 * will be used by the valid program until it's unloaded
-			 * and all maps are released in free_bpf_prog_info()
+			 * and all maps are released in free_used_maps()
 			 */
 			map = bpf_map_inc(map, false);
 			if (IS_ERR(map)) {
@@ -2486,7 +2487,7 @@ free_log_buf:
 		vfree(log_buf);
 	if (!env->prog->aux->used_maps)
 		/* if we didn't copy map pointers into bpf_prog_info, release
-		 * them now. Otherwise free_bpf_prog_info() will release them.
+		 * them now. Otherwise free_used_maps() will release them.
 		 */
 		release_maps(env);
 	*prog = env->prog;

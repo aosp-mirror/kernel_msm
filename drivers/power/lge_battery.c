@@ -735,6 +735,10 @@ static int bm_init(struct battery_manager *bm)
 	if (rc < 0)
 		pr_bm(ERROR, "Couldn't set pl float voltage, rc=%d", rc);
 
+	rc = bm_vote_fcc(bm, BM_REASON_DEFAULT, CHG_CURRENT_MAX);
+	if (rc < 0)
+		pr_bm(ERROR, "Couldn't set ibat current rc=%d\n", rc);
+
 	INIT_WORK(&bm->bm_fb_update, bm_fb_update_work);
 	INIT_WORK(&bm->bm_batt_update, bm_batt_update_work);
 	INIT_WORK(&bm->bm_usb_update, bm_usb_update_work);

@@ -4,6 +4,13 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 
+/* Built-in __init functions needn't be compiled with retpoline */
+#if defined(RETPOLINE) && !defined(MODULE)
+#define __noretpoline __attribute__((indirect_branch("keep")))
+#else
+#define __noretpoline
+#endif
+
 /* These macros are used to mark some functions or 
  * initialized data (doesn't apply to uninitialized data)
  * as `initialization' functions. The kernel can take this
@@ -39,7 +46,7 @@
 
 /* These are for everybody (although not all archs will actually
    discard it in modules) */
-#define __init		__section(.init.text) __cold notrace
+#define __init		__section(.init.text) __cold notrace __noretpoline
 #define __initdata	__section(.init.data)
 #define __initconst	__constsection(.init.rodata)
 #define __exitdata	__section(.exit.data)
@@ -156,8 +163,24 @@ extern bool initcall_debug;
 
 #ifndef __ASSEMBLY__
 
-/*
- * initcalls are now grouped by functionality into separate
+#ifdef CONFIG_LTO
+/* Work around a LTO gcc problem: when there is no reference to a variable
+ * in a module it will be moved to the end of the program. This causes
+ * reordering of initcalls which the kernel does not like.
+ * Add a dummy reference function to avoid this. The function is
+ * deleted by the linker.
+ */
+#define LTO_REFERENCE_INITCALL(x) \
+	; /* yes this is needed */			\
+	static __used __exit void *reference_##x(void)	\
+	{						\
+		return &x;				\
+	}
+#else
+#define LTO_REFERENCE_INITCALL(x)
+#endif
+
+/* initcalls are now grouped by functionality into separate 
  * subsections. Ordering inside the subsections is determined
  * by link order. 
  * For backwards compatibility, initcall() puts the call in 
@@ -165,16 +188,12 @@ extern bool initcall_debug;
  *
  * The `id' arg to __define_initcall() is needed so that multiple initcalls
  * can point at the same handler without causing duplicate-symbol build errors.
- *
- * Initcalls are run by placing pointers in initcall sections that the
- * kernel iterates at runtime. The linker can do dead code / data elimination
- * and remove that completely, so the initcall sections have to be marked
- * as KEEP() in the linker script.
  */
 
 #define __define_initcall(fn, id) \
 	static initcall_t __initcall_##fn##id __used \
-	__attribute__((__section__(".initcall" #id ".init"))) = fn;
+	__attribute__((__section__(".initcall" #id ".init"))) = fn; \
+	LTO_REFERENCE_INITCALL(__initcall_##fn##id)
 
 /*
  * Early initcalls run before initializing SMP.
@@ -210,15 +229,15 @@ extern bool initcall_debug;
 
 #define __initcall(fn) device_initcall(fn)
 
-#define __exitcall(fn)						\
+#define __exitcall(fn) \
 	static exitcall_t __exitcall_##fn __exit_call = fn
 
-#define console_initcall(fn)					\
-	static initcall_t __initcall_##fn			\
+#define console_initcall(fn) \
+	static initcall_t __initcall_##fn \
 	__used __section(.con_initcall.init) = fn
 
-#define security_initcall(fn)					\
-	static initcall_t __initcall_##fn			\
+#define security_initcall(fn) \
+	static initcall_t __initcall_##fn \
 	__used __section(.security_initcall.init) = fn
 
 struct obs_kernel_param {

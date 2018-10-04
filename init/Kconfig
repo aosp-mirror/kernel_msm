@@ -107,19 +107,6 @@ config LOCALVERSION_AUTO
 
 	  which is done within the script "scripts/setlocalversion".)
 
-config CC_LTO
-	bool
-
-config CLANG_LTO
-	bool "Use clang LTO"
-	select CC_LTO
-	select LD_DEAD_CODE_DATA_ELIMINATION
-	depends on !FTRACE_MCOUNT_RECORD || HAVE_C_RECORDMCOUNT
-	help
-	  This option enables clang's LTO (Link Time Optimization). Note that
-	  all intermediate linking steps are removed, which will increase the
-	  final linking time.
-
 config HAVE_KERNEL_GZIP
 	bool
 
@@ -1394,6 +1381,17 @@ source "usr/Kconfig"
 
 endif
 
+choice
+	prompt "Compiler optimization level"
+	default CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
+
+config CC_OPTIMIZE_FOR_PERFORMANCE
+	bool "Optimize for performance"
+	help
+	  This is the default optimization level for the kernel, building
+	  with the "-O2" compiler flag for best performance and most
+	  helpful compile-time warnings.
+
 config CC_OPTIMIZE_FOR_SIZE
 	bool "Optimize for size"
 	help
@@ -1401,6 +1399,8 @@ config CC_OPTIMIZE_FOR_SIZE
 	  your compiler resulting in a smaller kernel.
 
 	  If unsure, say N.
+
+endchoice
 
 config SYSCTL
 	bool

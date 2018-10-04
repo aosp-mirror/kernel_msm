@@ -1641,18 +1641,27 @@ static struct binder_ref *binder_get_ref_olocked(struct binder_proc *proc,
 	return NULL;
 }
 
-static void dump_ref_desc_tree(struct binder_ref *new_ref)
+
+static void dump_ref_desc_tree(struct binder_ref *new_ref, struct rb_node *n_in)
 {
 	struct binder_proc *proc = new_ref->proc;
 	uint32_t desc = new_ref->data.desc;
 	struct rb_node *n, *p;
+	struct binder_ref *ref;
 	int i = 0;
 
-	pr_info("BUG.%d:%d: dump of refs_by_desc rb tree, new desc=%u\n",
-			proc->pid, current->pid, desc);
+	pr_info("BUG.%d:%d: dump of refs_by_desc rb tree, new desc=%u, n%sNULL\n",
+			proc->pid, current->pid, desc, n_in ? "!=" : "==");
+	if (n_in) {
+		ref = rb_entry(n_in, struct binder_ref, rb_node_desc);
+		pr_info("ref containing n: id %d desc %u n %d s %d w %d\n",
+			ref->data.debug_id, ref->data.desc,
+			ref->node->debug_id,
+			ref->data.strong, ref->data.weak);
+	}
+
 	for (n = rb_first(&proc->refs_by_desc); n != NULL; n = rb_next(n)) {
 		struct binder_ref *left=NULL, *right=NULL, *parent=NULL;
-		struct binder_ref *ref;
 
 		ref = rb_entry(n, struct binder_ref, rb_node_desc);
 		if (n->rb_left)
@@ -1665,10 +1674,11 @@ static void dump_ref_desc_tree(struct binder_ref *new_ref)
 		if (p)
 			parent = rb_entry(p, struct binder_ref, rb_node_desc);
 
-		pr_info("%d: id %d desc %u%s%s n %d s %d w %d l %d r %d p %d\n",
+		pr_info("%d: id %d desc %u%s%s%s n %d s %d w %d l %d r %d p %d\n",
 			i++, ref->data.debug_id, ref->data.desc,
 			(n == proc->refs_by_desc.rb_node) ? " (ROOT)" : "",
 			(ref->data.desc == desc) ? " (MATCH)" : "",
+			(n_in == n) ? " (BREAK)" : "",
 			ref->node->debug_id,
 			ref->data.strong, ref->data.weak,
 			left ? left->data.debug_id : -1,
@@ -1745,7 +1755,7 @@ static struct binder_ref *binder_get_ref_for_node_olocked(
 		else if (new_ref->data.desc > ref->data.desc)
 			p = &(*p)->rb_right;
 		else {
-			dump_ref_desc_tree(new_ref);
+			dump_ref_desc_tree(new_ref, n);
 			BUG();
 		}
 	}
@@ -4587,6 +4597,8 @@ static unsigned int binder_poll(struct file *filp,
 	bool wait_for_proc_work;
 
 	thread = binder_get_thread(proc);
+	if (!thread)
+		return POLLERR;
 
 	binder_inner_proc_lock(thread->proc);
 	thread->looper |= BINDER_LOOPER_STATE_POLL;

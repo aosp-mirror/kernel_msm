@@ -1,5 +1,3 @@
-CFLAGS_empty.o += $(DISABLE_LTO)
-
 hostprogs-y	:= modpost mk_elfconfig
 always		:= $(hostprogs-y) empty.o
 

@@ -230,56 +230,20 @@
 
 #include <linux/types.h>
 
-#define ___MRS_MSR_S_REGNUM					\
-"	.irp	num,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30\n" \
-"	.equ	.L__reg_num_x\\num, \\num\n"			\
-"	.endr\n"						\
-"	.equ	.L__reg_num_xzr, 31\n"
-
-#define ___MRS_S						\
-"	.macro	mrs_s, rt, sreg\n"				\
-"	.inst	0xd5200000|(\\sreg)|(.L__reg_num_\\rt)\n"	\
-"	.endm\n"
-
-#define ___MSR_S						\
-"	.macro	msr_s, sreg, rt\n"				\
-"	.inst	0xd5000000|(\\sreg)|(.L__reg_num_\\rt)\n"	\
-"	.endm\n"
-
-/*
- * llvm-as doesn't allow macros defined in an asm block to be used in other
- * asm blocks, which means we cannot define them globally.
- */
-#if !defined(CONFIG_CC_LTO) && !defined(__LLVM_AS__)
 asm(
-	___MRS_MSR_S_REGNUM
-	___MRS_S
-	___MSR_S
+"	.irp	num,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30\n"
+"	.equ	.L__reg_num_x\\num, \\num\n"
+"	.endr\n"
+"	.equ	.L__reg_num_xzr, 31\n"
+"\n"
+"	.macro	mrs_s, rt, sreg\n"
+"	.inst	0xd5200000|(\\sreg)|(.L__reg_num_\\rt)\n"
+"	.endm\n"
+"\n"
+"	.macro	msr_s, sreg, rt\n"
+"	.inst	0xd5000000|(\\sreg)|(.L__reg_num_\\rt)\n"
+"	.endm\n"
 );
-
-#undef  ___MRS_MSR_S_REGNUM
-#define ___MRS_MSR_S_REGNUM
-#undef  ___MRS_S
-#define ___MRS_S
-#undef  ___MSR_S
-#define ___MSR_S
-#endif
-
-#define __mrs_s(r, v)						\
-	___MRS_MSR_S_REGNUM					\
-	___MRS_S						\
-"	mrs_s %0, " __stringify(r) : "=r" (v)
-
-#define __msr_s(r, v)						\
-	___MRS_MSR_S_REGNUM					\
-	___MSR_S						\
-"	msr_s " __stringify(r) ", %0" : : "r" (v)
-
-#define mrs_s(r, v)	({ asm volatile(__mrs_s(r, v)); })
-#define mrs_s_nv(r, v)	({ asm(__mrs_s(r, v)); })
-
-#define msr_s(r, v)	({ asm volatile(__msr_s(r, v)); })
-#define msr_s_nv(r, v)	({ asm(__msr_s(r, v)); })
 
 static inline void config_sctlr_el1(u32 clear, u32 set)
 {

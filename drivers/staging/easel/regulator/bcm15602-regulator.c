@@ -49,6 +49,8 @@
 /* defines the timeout in jiffies for ADC conversion completion */
 #define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
+#define BCM15602_PANIC_ON_RESETB_DEFAULT 1
+
 static int bcm15602_chip_init(struct bcm15602_chip *ddata);
 static int bcm15602_regulator_set_voltage(struct regulator_dev *rdev,
 					  int min_uV, int max_uV,
@@ -818,12 +820,25 @@ static void bcm15602_reset_work(struct work_struct *data)
 	/* wait for chip to come out of reset, signaled by resetb interrupt */
 	timeout = wait_for_completion_timeout(&ddata->reset_complete,
 					      BCM15602_SHUTDOWN_RESET_TIMEOUT);
-	if (!timeout)
+	if (!timeout) {
 		dev_err(ddata->dev,
 			"%s: timeout waiting for device to return from reset\n",
 			__func__);
-	else
-		bcm15602_chip_init(ddata);
+		return;
+	}
+
+	bcm15602_chip_init(ddata);
+
+	/* b/76434914 */
+	if (ddata->should_panic_on_resetb) {
+		dev_err(ddata->dev,
+			"%s: will panic after unexpected reset\n",
+			__func__);
+		msleep_interruptible(1000);
+		panic("bcm15602: intentional kernel panic (b/76434914)\n");
+	}
+
+	dev_info(ddata->dev, "%s: complete\n", __func__);
 }
 
 /* irq handler for resetb pin */
@@ -1268,6 +1283,9 @@ static int bcm15602_probe(struct i2c_client *client,
 	ddata->dev = dev;
 	ddata->pdata = pdata;
 	dev->platform_data = pdata;
+
+	/* initialize resetb handler behavior */
+	ddata->should_panic_on_resetb = BCM15602_PANIC_ON_RESETB_DEFAULT;
 
 	/* initialize some structures */
 	INIT_WORK(&ddata->reset_work, bcm15602_reset_work);

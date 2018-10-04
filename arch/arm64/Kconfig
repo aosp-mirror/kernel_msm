@@ -435,7 +435,6 @@ config ARM64_ERRATUM_845719
 config ARM64_ERRATUM_843419
 	bool "Cortex-A53: 843419: A load or store might access an incorrect address"
 	depends on MODULES
-	depends on !CC_LTO
 	default y
 	select ARM64_MODULE_CMODEL_LARGE
 	help
@@ -447,6 +446,20 @@ config ARM64_ERRATUM_843419
 	  Note that the kernel itself must be linked with a version of ld
 	  which fixes potentially affected ADRP instructions through the
 	  use of veneers.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_1024718
+	bool "Cortex-A55: 1024718: Update of DBM/AP bits without break before make might result in incorrect update"
+	default y
+	help
+	  This option adds work around for Arm Cortex-A55 Erratum 1024718.
+
+	  Affected Cortex-A55 cores (r0p0, r0p1, r1p0) could cause incorrect
+	  update of the hardware dirty bit when the DBM/AP bits are updated
+	  without a break-before-make. The work around is to disable the usage
+	  of hardware DBM locally on the affected cores. CPUs not affected by
+	  erratum will continue to use the feature.
 
 	  If unsure, say Y.
 
@@ -924,8 +937,8 @@ config RELOCATABLE
 
 config RANDOMIZE_BASE
 	bool "Randomize the address of the kernel image"
+	select ARM64_MODULE_PLTS if MODULES
 	select RELOCATABLE
-	select ARM64_MODULE_PLTS if RANDOMIZE_MODULE_REGION_FULL
 	help
 	  Randomizes the virtual address at which the kernel image is
 	  loaded, as a security feature that deters exploit attempts
@@ -943,7 +956,7 @@ config RANDOMIZE_BASE
 
 config RANDOMIZE_MODULE_REGION_FULL
 	bool "Randomize the module region independently from the core kernel"
-	depends on RANDOMIZE_BASE && !DYNAMIC_FTRACE && !CC_LTO
+	depends on RANDOMIZE_BASE && !DYNAMIC_FTRACE
 	default y
 	help
 	  Randomizes the location of the module region without considering the
@@ -1072,7 +1085,7 @@ source "fs/Kconfig.binfmt"
 config COMPAT
 	bool "Kernel support for 32-bit EL0"
 	depends on ARM64_4K_PAGES || EXPERT
-	select COMPAT_BINFMT_ELF
+	select COMPAT_BINFMT_ELF if BINFMT_ELF
 	select HAVE_UID16
 	select OLD_SIGSUSPEND3
 	select COMPAT_OLD_SIGACTION

@@ -327,10 +327,12 @@ void mdss_dsi_err_detect_irq_control(struct mdss_dsi_ctrl_pdata *ctrl_pdata, boo
 
 	irq = gpio_to_irq(ctrl_pdata->disp_err_detect_gpio);
 
-	if (enable)
+	if (enable) {
 		enable_irq(irq);
-	else
+	} else {
 		disable_irq(irq);
+		cancel_delayed_work_sync(&ctrl_pdata->err_int_work);
+	}
 	pr_debug(" %s : enable(%d)\n", __func__, enable);
 }
 
@@ -522,8 +524,6 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_set_value(ctrl_pdata->lcd_mode_sel_gpio, 0);
 			gpio_free(ctrl_pdata->lcd_mode_sel_gpio);
 		}
-		if (pinfo->err_detect_enabled)
-			mdss_dsi_err_detect_irq_control(ctrl_pdata, false);
 	}
 
 exit:
@@ -1090,6 +1090,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
+
+	if (pinfo->err_detect_enabled)
+		mdss_dsi_err_detect_irq_control(ctrl, false);
 
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);

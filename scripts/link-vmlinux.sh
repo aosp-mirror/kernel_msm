@@ -37,65 +37,12 @@ info()
 	fi
 }
 
-expand()
-{
-	if [ -n "${CONFIG_CC_LTO}" ]; then
-		local objs=
-		for o in $*; do
-			if [ -f ${o}.objects ]; then
-				objs="${objs} $(xargs < ${o}.objects)"
-			else
-				objs="${objs} ${o}"
-			fi
-		done
-		echo "${objs}"
-	else
-		echo $*
-	fi
-}
-
-recordmcount()
-{
-	if [ -n "${CONFIG_FTRACE_MCOUNT_RECORD}" ]; then
-		scripts/recordmcount ${RECORDMCOUNT_FLAGS} $*
-	fi
-}
-
-modversions()
-{
-	if [ -z "${CONFIG_CC_LTO}" ]; then
-		return
-	fi
-	if [ -z "${CONFIG_MODVERSIONS}" ]; then
-		return
-	fi
-
-	if [ -n "${CACHED_MODVERSIONS}" ]; then
-		echo ${CACHED_MODVERSIONS}
-		return
-	fi
-
-	rm -f .tmp_symversions
-
-	for o in $(expand ${KBUILD_VMLINUX_INIT}) $(expand ${KBUILD_VMLINUX_MAIN}); do
-		if [ -f ${o}.symversions ]; then
-			cat ${o}.symversions >> .tmp_symversions
-		fi
-	done
-
-	if [ "${SRCARCH}" != "um" ]; then
-		echo "-T .tmp_symversions"
-	else
-		echo ",-T,.tmp_symversions"
-	fi
-}
-
 # Link of vmlinux.o used for section mismatch analysis
 # ${1} output file
 modpost_link()
 {
-	${LD} ${LDFLAGS} -r -o ${1} $(expand ${KBUILD_VMLINUX_INIT})          \
-		--start-group $(expand ${KBUILD_VMLINUX_MAIN}) --end-group
+	${LD} ${LDFLAGS} -r -o ${1} ${KBUILD_VMLINUX_INIT}                   \
+		--start-group ${KBUILD_VMLINUX_MAIN} --end-group
 }
 
 # Link of vmlinux
@@ -104,47 +51,22 @@ modpost_link()
 vmlinux_link()
 {
 	local lds="${objtree}/${KBUILD_LDS}"
-	local ld=${LD}
-	local ldflags="${LDFLAGS} ${LDFLAGS_vmlinux}"
-
-	if [ -n "${LD_FINAL_VMLINUX}" ]; then
-		ld=${LD_FINAL_VMLINUX}
-		ldflags="${LDFLAGS_FINAL_VMLINUX} ${LDFLAGS_vmlinux}"
-	fi
 
 	if [ "${SRCARCH}" != "um" ]; then
-		${ld} ${ldflags} -o ${2}                  \
-			-T ${lds} $(modversions)                     \
-			$(expand ${KBUILD_VMLINUX_INIT})                     \
-			--start-group $(expand ${KBUILD_VMLINUX_MAIN})       \
-			--end-group ${1}
+		${LD} ${LDFLAGS} ${LDFLAGS_vmlinux} -o ${2}                  \
+			-T ${lds} ${KBUILD_VMLINUX_INIT}                     \
+			--start-group ${KBUILD_VMLINUX_MAIN} --end-group ${1}
 	else
 		${CC} ${CFLAGS_vmlinux} -o ${2}                              \
-			-Wl,-T,${lds}$(modversions)                  \
-			$(expand ${KBUILD_VMLINUX_INIT})                     \
+			-Wl,-T,${lds} ${KBUILD_VMLINUX_INIT}                 \
 			-Wl,--start-group                                    \
-				 $(expand ${KBUILD_VMLINUX_MAIN})            \
+				 ${KBUILD_VMLINUX_MAIN}                      \
 			-Wl,--end-group                                      \
 			-lutil -lrt -lpthread ${1}
 		rm -f linux
 	fi
 }
 
-update_version()
-{
-	# Update version
-	info GEN .version
-	if [ ! -r .version ]; then
-		rm -f .version;
-		echo 1 >.version;
-	else
-		mv .version .old_version;
-		expr 0$(cat .old_version) + 1 >.version;
-	fi;
-
-	# final build of init/
-	${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init
-}
 
 # Create ${2} .o file with all symbols from the ${1} object file
 kallsyms()
@@ -195,7 +117,6 @@ cleanup()
 	rm -f .tmp_System.map
 	rm -f .tmp_kallsyms*
 	rm -f .tmp_version
-	rm -f .tmp_symversions
 	rm -f .tmp_vmlinux*
 	rm -f System.map
 	rm -f vmlinux
@@ -240,12 +161,6 @@ case "${KCONFIG_CONFIG}" in
 	. "./${KCONFIG_CONFIG}"
 esac
 
-# Update version before modpost_link, so we can reuse vmlinux.o
-if [ -n "${CONFIG_CC_LTO}" ]; then
-	update_version
-	CACHED_MODVERSIONS=$(modversions)
-fi
-
 #link vmlinux.o
 info LD vmlinux.o
 modpost_link vmlinux.o
@@ -253,16 +168,18 @@ modpost_link vmlinux.o
 # modpost vmlinux.o to check for section mismatches
 ${MAKE} -f "${srctree}/scripts/Makefile.modpost" vmlinux.o
 
-if [ -n "${CONFIG_CC_LTO}" ]; then
-	# Re-use vmlinux.o, so we can avoid slow LTO linking again
-	KBUILD_VMLINUX_INIT=
-	KBUILD_VMLINUX_MAIN=vmlinux.o
-
-	# Call recordmcount if needed
-	recordmcount vmlinux.o
+# Update version
+info GEN .version
+if [ ! -r .version ]; then
+	rm -f .version;
+	echo 1 >.version;
 else
-	update_version
-fi
+	mv .version .old_version;
+	expr 0$(cat .old_version) + 1 >.version;
+fi;
+
+# final build of init/
+${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init
 
 kallsymso=""
 kallsyms_vmlinux=""
