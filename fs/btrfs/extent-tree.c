@@ -3946,6 +3946,7 @@ again:
 	if (wait_for_alloc) {
 		mutex_unlock(&fs_info->chunk_mutex);
 		wait_for_alloc = 0;
+		cond_resched();
 		goto again;
 	}
 
@@ -4280,7 +4281,7 @@ static int flush_space(struct btrfs_root *root,
 		break;
 	}
 
-	return ret;
+	return 0;
 }
 
 static inline u64

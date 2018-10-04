@@ -662,10 +662,11 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx, uint8_t *buf,
 			       tDot11fIEExtCap *ext_cap);
 tSirRetStatus lim_strip_extcap_update_struct(tpAniSirGlobal mac_ctx,
 		uint8_t* addn_ie, uint16_t *addn_ielen, tDot11fIEExtCap *dst);
-void lim_merge_extcap_struct(tDot11fIEExtCap *dst, tDot11fIEExtCap *src);
+void lim_merge_extcap_struct(tDot11fIEExtCap *dst, tDot11fIEExtCap *src,
+			bool add);
 uint8_t
 lim_get_80Mhz_center_channel(uint8_t primary_channel);
-bool lim_is_ext_cap_ie_present (struct s_ext_cap *ext_cap);
+tANI_U8 lim_compute_ext_cap_ie_length (tDot11fIEExtCap *ext_cap);
 bool lim_is_robust_mgmt_action_frame(uint8_t action_catagory);
 void lim_update_caps_info_for_bss(tpAniSirGlobal mac_ctx,
 				uint16_t *caps, uint16_t bss_caps);

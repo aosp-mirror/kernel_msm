@@ -412,7 +412,7 @@ tANI_U32 limSendProbeRspTemplateToHal(tpAniSirGlobal pMac,tpPESession psessionEn
     tANI_U8 *pFrame2Hal = psessionEntry->pSchProbeRspTemplate;
     tpSendProbeRespParams pprobeRespParams=NULL;
     tANI_U32  retCode = eSIR_FAILURE;
-    tANI_U32             nPayload,nBytes,nStatus;
+    tANI_U32             nPayload, nBytes = 0, nStatus;
     tpSirMacMgmtHdr      pMacHdr;
     tANI_U32             addnIEPresent = VOS_FALSE;
     tSirRetStatus        nSirStatus;
@@ -425,24 +425,6 @@ tANI_U32 limSendProbeRspTemplateToHal(tpAniSirGlobal pMac,tpPESession psessionEn
     tDot11fProbeResponse *prb_rsp_frm;
     tSirRetStatus status;
     uint16_t addn_ielen = 0;
-
-    nStatus = dot11fGetPackedProbeResponseSize( pMac, &psessionEntry->probeRespFrame, &nPayload );
-    if ( DOT11F_FAILED( nStatus ) )
-    {
-        schLog( pMac, LOGE, FL("Failed to calculate the packed size f"
-                               "or a Probe Response (0x%08x)."),
-                nStatus );
-        // We'll fall back on the worst case scenario:
-        nPayload = sizeof( tDot11fProbeResponse );
-    }
-    else if ( DOT11F_WARNED( nStatus ) )
-    {
-        schLog( pMac, LOGE, FL("There were warnings while calculating"
-                               "the packed size for a Probe Response "
-                               "(0x%08x)."), nStatus );
-    }
-
-    nBytes = nPayload + sizeof( tSirMacMgmtHdr );
 
     //Check if probe response IE is present or not
     addnIEPresent = (psessionEntry->addIeParams.probeRespDataLen != 0);
@@ -512,6 +494,28 @@ tANI_U32 limSendProbeRspTemplateToHal(tpAniSirGlobal pMac,tpPESession psessionEn
             addnIEPresent = false; //Dont include the IE.
     }
 
+    /* merge extcap IE */
+    prb_rsp_frm = &psessionEntry->probeRespFrame;
+    if (extcap_present)
+        lim_merge_extcap_struct(&prb_rsp_frm->ExtCap, &extracted_extcap, true);
+
+    nStatus = dot11fGetPackedProbeResponseSize(pMac, &psessionEntry->probeRespFrame, &nPayload);
+    if (DOT11F_FAILED(nStatus))
+    {
+        schLog(pMac, LOGE,
+             FL("Failed to calculate the packed size for a Probe Response (0x%08x)."),
+             nStatus);
+        /* We'll fall back on the worst case scenario: */
+        nPayload = sizeof(tDot11fProbeResponse);
+    }
+    else if (DOT11F_WARNED(nStatus))
+    {
+        schLog(pMac, LOGE,
+             FL("There were warnings while calculating the packed size for a Probe Response (0x%08x)."),
+             nStatus);
+    }
+
+    nBytes += nPayload + sizeof(tSirMacMgmtHdr);
 
     // Paranoia:
     vos_mem_set(pFrame2Hal, nBytes, 0);
@@ -533,11 +537,6 @@ tANI_U32 limSendProbeRspTemplateToHal(tpAniSirGlobal pMac,tpPESession psessionEn
     pMacHdr = ( tpSirMacMgmtHdr ) pFrame2Hal;
 
     sirCopyMacAddr(pMacHdr->bssId,psessionEntry->bssId);
-
-    /* merge extcap IE */
-    prb_rsp_frm = &psessionEntry->probeRespFrame;
-    if (extcap_present)
-        lim_merge_extcap_struct(&prb_rsp_frm->ExtCap, &extracted_extcap);
 
     // That done, pack the Probe Response:
     nStatus = dot11fPackProbeResponse( pMac, &psessionEntry->probeRespFrame, pFrame2Hal + sizeof(tSirMacMgmtHdr),

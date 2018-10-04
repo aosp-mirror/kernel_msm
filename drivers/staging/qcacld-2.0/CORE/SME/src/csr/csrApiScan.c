@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -3232,8 +3232,17 @@ static void csrMoveTempScanResultsToMainList(tpAniSirGlobal pMac,
     tDot11fBeaconIEs *pIesLocal = NULL;
     tAniSSID tmpSsid;
     v_TIME_t timer=0;
+    bool temp_bss_cnt_exceed_max = false;
 
     tmpSsid.length = 0;
+    /*
+     * If tempScanResults count is greater than the max count flush all the
+     * main list scan entry.
+     */
+    if (csrLLCount(&pMac->scan.tempScanResults) >= pMac->scan.nBssLimit) {
+        temp_bss_cnt_exceed_max = true;
+        csrLLScanPurgeResult(pMac, &pMac->scan.scanResultList);
+    }
 
     // remove the BSS descriptions from temporary list
     while ((pEntry = csrLLRemoveTail(&pMac->scan.tempScanResults,
@@ -3245,6 +3254,14 @@ static void csrMoveTempScanResultsToMainList(tpAniSirGlobal pMac,
                       MAC_ADDR_ARRAY(pBssDescription->Result.BssDescriptor.bssId),
                       pBssDescription->Result.BssDescriptor.channelId,
                 pBssDescription->Result.BssDescriptor.rssi * (-1) );
+        if (temp_bss_cnt_exceed_max && CSR_SCAN_IS_OVER_BSS_LIMIT(pMac) &&
+            !( eCsrScanGetLfrResult == reason )) {
+              smsLog(pMac, LOG1,
+                     FL("received tempScanResults greater than the max count and we have already added max %d AP during this scan so drop this"),
+                     pMac->scan.nBssLimit);
+              csrFreeScanResultEntry(pMac, pBssDescription);
+              continue;
+        }
 
         //At this time, pBssDescription->Result.pvIes may be NULL
         pIesLocal = (tDot11fBeaconIEs *)( pBssDescription->Result.pvIes );
