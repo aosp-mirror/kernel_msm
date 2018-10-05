@@ -55,6 +55,11 @@ struct cs40l2x_private {
 	unsigned int num_waves;
 	unsigned int wt_limit_xm;
 	unsigned int wt_limit_ym;
+	bool exc_available;
+	struct cs40l2x_dblk_desc pre_dblks[CS40L2X_MAX_A2H_LEVELS];
+	struct cs40l2x_dblk_desc a2h_dblks[CS40L2X_MAX_A2H_LEVELS];
+	unsigned int num_a2h_levels;
+	int a2h_level;
 	bool vibe_init_success;
 	bool vibe_mode;
 	struct gpio_desc *reset_gpio;
@@ -127,6 +132,11 @@ static const unsigned int cs40l2x_event_masks[] = {
 	CS40L2X_EVENT_READY_ENABLED,
 	CS40L2X_EVENT_HARDWARE_ENABLED,
 };
+
+static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
+			const void *val, size_t val_len, size_t limit);
+static int cs40l2x_ack_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
+			unsigned int val);
 
 static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 			unsigned int fw_id);
@@ -2670,7 +2680,8 @@ static ssize_t cs40l2x_exc_enable_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP
+			|| !cs40l2x->exc_available || cs40l2x->a2h_level) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
@@ -2683,6 +2694,123 @@ static ssize_t cs40l2x_exc_enable_store(struct device *dev,
 		goto err_mutex;
 
 	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_a2h_level_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->a2h_level < 0) {
+		ret = -EIO;
+		goto err_mutex;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->a2h_level);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_a2h_level_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val, algo_state;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (val >= cs40l2x->num_a2h_levels) {
+		ret = -EINVAL;
+		goto err_mutex;
+	}
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP
+			|| !cs40l2x->exc_available) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
+					CS40L2X_XM_UNPACKED_TYPE), &algo_state);
+	if (ret)
+		goto err_mutex;
+
+	if (algo_state != CS40L2X_EXC_ENABLED) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "PRE_FILTER_ENABLED",
+					CS40L2X_YM_UNPACKED_TYPE), &algo_state);
+	if (ret)
+		goto err_mutex;
+
+	if (algo_state != CS40L2X_PRE_ENABLED) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	cs40l2x->a2h_level = -1;
+
+	ret = cs40l2x_raw_write(cs40l2x, cs40l2x->pre_dblks[val].reg,
+			cs40l2x->pre_dblks[val].data,
+			cs40l2x->pre_dblks[val].length, CS40L2X_MAX_WLEN);
+	if (ret)
+		goto err_mutex;
+
+	ret = cs40l2x_raw_write(cs40l2x, cs40l2x->a2h_dblks[val].reg,
+			cs40l2x->a2h_dblks[val].data,
+			cs40l2x->a2h_dblks[val].length, CS40L2X_MAX_WLEN);
+	if (ret)
+		goto err_mutex;
+
+	cs40l2x->a2h_level = val;
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_num_a2h_levels_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->num_a2h_levels);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -2752,6 +2880,9 @@ static DEVICE_ATTR(asp_timeout, 0660, cs40l2x_asp_timeout_show,
 		cs40l2x_asp_timeout_store);
 static DEVICE_ATTR(exc_enable, 0660, cs40l2x_exc_enable_show,
 		cs40l2x_exc_enable_store);
+static DEVICE_ATTR(a2h_level, 0660, cs40l2x_a2h_level_show,
+		cs40l2x_a2h_level_store);
+static DEVICE_ATTR(num_a2h_levels, 0660, cs40l2x_num_a2h_levels_show, NULL);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -2789,6 +2920,8 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_asp_enable.attr,
 	&dev_attr_asp_timeout.attr,
 	&dev_attr_exc_enable.attr,
+	&dev_attr_a2h_level.attr,
+	&dev_attr_num_a2h_levels.attr,
 	NULL,
 };
 
@@ -4307,6 +4440,12 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 			const struct firmware *fw)
 {
 	struct device *dev = cs40l2x->dev;
+	struct cs40l2x_dblk_desc dblk, *dblk_base;
+	struct cs40l2x_dblk_desc pre_dblks[CS40L2X_MAX_A2H_LEVELS];
+	struct cs40l2x_dblk_desc a2h_dblks[CS40L2X_MAX_A2H_LEVELS];
+	unsigned int *dblk_index;
+	unsigned int pre_index = 0;
+	unsigned int a2h_index = 0;
 	unsigned int pos = CS40L2X_WT_FILE_HEADER_SIZE;
 	unsigned int block_offset, block_type, block_length;
 	unsigned int algo_id, algo_rev, reg;
@@ -4353,18 +4492,14 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 				+ (fw->data[pos + 3] << 24);
 		pos += CS40L2X_WT_DBLK_LENGTH_SIZE;
 
-		switch (block_type) {
-		case CS40L2X_WMDR_NAME_TYPE:
-			ret = 0;
-			break;
-		case CS40L2X_XM_UNPACKED_TYPE:
-			ret = -EINVAL;
+		if (block_type != CS40L2X_WMDR_NAME_TYPE) {
 			for (i = 0; i < cs40l2x->num_algos; i++)
 				if (algo_id == cs40l2x->algo_info[i].id)
 					break;
 			if (i == cs40l2x->num_algos) {
 				dev_err(dev, "Invalid algo. ID: 0x%06X\n",
-					algo_id);
+						algo_id);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
@@ -4372,12 +4507,36 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 					!= (cs40l2x->algo_info[i].rev
 						& CS40L2X_ALGO_REV_MASK)) {
 				dev_err(dev, "Invalid algo. rev.: %d.%d.%d\n",
-					(algo_rev & 0xFF000000) >> 24,
-					(algo_rev & 0xFF0000) >> 16,
-					(algo_rev & 0xFF00) >> 8);
+						(algo_rev & 0xFF000000) >> 24,
+						(algo_rev & 0xFF0000) >> 16,
+						(algo_rev & 0xFF00) >> 8);
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 
+			switch (algo_id) {
+			case CS40L2X_ALGO_ID_PRE:
+				dblk_index = &pre_index;
+				dblk_base = pre_dblks;
+				break;
+			case CS40L2X_ALGO_ID_A2H:
+				dblk_index = &a2h_index;
+				dblk_base = a2h_dblks;
+				break;
+			case CS40L2X_ALGO_ID_EXC:
+				cs40l2x->exc_available = true;
+				/* intentionally fall through */
+			default:
+				dblk_index = NULL;
+			}
+		}
+
+		switch (block_type) {
+		case CS40L2X_WMDR_NAME_TYPE:
+			reg = 0;
+			dblk_index = NULL;
+			break;
+		case CS40L2X_XM_UNPACKED_TYPE:
 			reg = CS40L2X_DSP1_XMEM_UNPACK24_0 + block_offset
 					+ cs40l2x->algo_info[i].xm_base * 4;
 
@@ -4388,38 +4547,11 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 				dev_err(dev,
 					"Wavetable too large: %d bytes (XM)\n",
 					block_length / 4 * 3);
-				goto err_rls_fw;
-			}
-
-			ret = cs40l2x_raw_write(cs40l2x, reg, &fw->data[pos],
-					block_length, CS40L2X_MAX_WLEN);
-			if (ret) {
-				dev_err(dev,
-					"Failed to write XM_UNPACKED memory\n");
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 			break;
 		case CS40L2X_YM_UNPACKED_TYPE:
-			ret = -EINVAL;
-			for (i = 0; i < cs40l2x->num_algos; i++)
-				if (algo_id == cs40l2x->algo_info[i].id)
-					break;
-			if (i == cs40l2x->num_algos) {
-				dev_err(dev, "Invalid algo. ID: 0x%06X\n",
-					algo_id);
-				goto err_rls_fw;
-			}
-
-			if (((algo_rev >> 8) & CS40L2X_ALGO_REV_MASK)
-					!= (cs40l2x->algo_info[i].rev
-						& CS40L2X_ALGO_REV_MASK)) {
-				dev_err(dev, "Invalid algo. rev.: %d.%d.%d\n",
-					(algo_rev & 0xFF000000) >> 24,
-					(algo_rev & 0xFF0000) >> 16,
-					(algo_rev & 0xFF00) >> 8);
-				goto err_rls_fw;
-			}
-
 			reg = CS40L2X_DSP1_YMEM_UNPACK24_0 + block_offset
 					+ cs40l2x->algo_info[i].ym_base * 4;
 
@@ -4430,14 +4562,7 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 				dev_err(dev,
 					"Wavetable too large: %d bytes (YM)\n",
 					block_length / 4 * 3);
-				goto err_rls_fw;
-			}
-
-			ret = cs40l2x_raw_write(cs40l2x, reg, &fw->data[pos],
-					block_length, CS40L2X_MAX_WLEN);
-			if (ret) {
-				dev_err(dev,
-					"Failed to write YM_UNPACKED memory\n");
+				ret = -EINVAL;
 				goto err_rls_fw;
 			}
 			break;
@@ -4448,8 +4573,63 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 			goto err_rls_fw;
 		}
 
+		/* not all data blocks go directly to DSP */
+		if (dblk_index) {
+			if (*dblk_index >= CS40L2X_MAX_A2H_LEVELS) {
+				dev_err(dev, "Too many A2H blocks\n");
+				ret = -E2BIG;
+				goto err_rls_fw;
+			}
+
+			dblk = *(dblk_base + *dblk_index);
+
+			dblk.data = devm_kzalloc(dev, block_length, GFP_KERNEL);
+			if (!dblk.data) {
+				ret = -ENOMEM;
+				goto err_rls_fw;
+			}
+
+			memcpy(dblk.data, &fw->data[pos], block_length);
+			dblk.length = block_length;
+			dblk.reg = reg;
+
+			/* cancel register write for all but "off" level */
+			if (*dblk_index)
+				reg = 0;
+
+			*(dblk_base + (*dblk_index)++) = dblk;
+		}
+
+		if (reg) {
+			ret = cs40l2x_raw_write(cs40l2x, reg, &fw->data[pos],
+					block_length, CS40L2X_MAX_WLEN);
+			if (ret) {
+				dev_err(dev, "Failed to write coefficients\n");
+				goto err_rls_fw;
+			}
+		} else {
+			ret = 0;
+		}
+
 		/* blocks are word-aligned */
 		pos += (block_length + 3) & ~0x00000003;
+	}
+
+	if (a2h_index) {
+		if (a2h_index != pre_index) {
+			dev_err(dev, "Invalid number of A2H blocks\n");
+			ret = -EINVAL;
+			goto err_rls_fw;
+		}
+
+		for (i = 0; i < a2h_index; i++) {
+			cs40l2x->pre_dblks[i] = pre_dblks[i];
+			cs40l2x->a2h_dblks[i] = a2h_dblks[i];
+		}
+		cs40l2x->num_a2h_levels = a2h_index;
+	} else {
+		for (i = 0; i < pre_index; i++)
+			devm_kfree(dev, pre_dblks[i].data);
 	}
 
 err_rls_fw:
@@ -4462,16 +4642,16 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 {
 	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
 	unsigned int num_coeff_files;
-	int ret;
-
-	if (fw) {
-		ret = cs40l2x_coeff_file_parse(cs40l2x, fw);
-		if (ret)
-			return;
-	}
+	int ret = 0;
 
 	mutex_lock(&cs40l2x->lock);
-	num_coeff_files = ++(cs40l2x->num_coeff_files);
+
+	if (fw)
+		ret = cs40l2x_coeff_file_parse(cs40l2x, fw);
+
+	if (!ret)
+		num_coeff_files = ++(cs40l2x->num_coeff_files);
+
 	mutex_unlock(&cs40l2x->lock);
 
 	if (num_coeff_files == cs40l2x->fw_desc->num_coeff_files) {
@@ -4750,6 +4930,15 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 
 	if (fw_id == CS40L2X_FW_ID_CAL)
 		cs40l2x->diag_state = CS40L2X_DIAG_STATE_INIT;
+
+	cs40l2x->exc_available = false;
+
+	for (i = 0; i < cs40l2x->num_a2h_levels; i++) {
+		devm_kfree(dev, cs40l2x->pre_dblks[i].data);
+		devm_kfree(dev, cs40l2x->a2h_dblks[i].data);
+	}
+	cs40l2x->num_a2h_levels = 0;
+	cs40l2x->a2h_level = 0;
 
 	cs40l2x->fw_desc = cs40l2x_firmware_match(cs40l2x, fw_id);
 	if (!cs40l2x->fw_desc)

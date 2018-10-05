@@ -966,6 +966,9 @@
 #define CS40L2X_EXC_ENABLED		1
 #define CS40L2X_EXC_DISABLED		0
 
+#define CS40L2X_PRE_ENABLED		1
+#define CS40L2X_PRE_DISABLED		0
+
 #define CS40L2X_ENDPLAYBACK_RETRIES	10
 #define CS40L2X_ENDPLAYBACK_REQ		1
 #define CS40L2X_ENDPLAYBACK_ACK		0
@@ -990,6 +993,12 @@
 #define CS40L2X_IRQMASKSEQ_MASK2	0xFFFFFF00
 #define CS40L2X_IRQMASKSEQ_SHIFTUP	16
 #define CS40L2X_IRQMASKSEQ_SHIFTDN	8
+
+#define CS40L2X_ALGO_ID_EXC		0x000100
+#define CS40L2X_ALGO_ID_PRE		0x000109
+#define CS40L2X_ALGO_ID_A2H		0x000110
+
+#define CS40L2X_MAX_A2H_LEVELS		10
 
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
@@ -1052,6 +1061,12 @@ struct cs40l2x_hw_err_desc {
 	unsigned int rls_mask;
 	bool bst_cycle;
 	const char *err_name;
+};
+
+struct cs40l2x_dblk_desc {
+	unsigned int *data;
+	unsigned int length;
+	unsigned int reg;
 };
 
 extern const unsigned char cs40l2x_bst_k1_table[4][5];
