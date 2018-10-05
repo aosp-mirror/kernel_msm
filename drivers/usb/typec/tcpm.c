@@ -3035,9 +3035,7 @@ static void run_state_machine(struct tcpm_port *port)
 
 		tcpm_swap_complete(port, 0);
 		tcpm_typec_connect(port);
-		if (port->explicit_contract && tcpm_rp_cc(port)
-				== TYPEC_CC_RP_DEF)
-			tcpm_set_cc(port, TYPEC_CC_RP_1_5);
+
 		tcpm_check_send_discover(port);
 		/*
 		 * 6.3.5
