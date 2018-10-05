@@ -137,6 +137,8 @@ struct bgrsb_priv {
 	bool is_calibrd;
 };
 
+static bool enter_resume = false;
+
 static void *bgrsb_drv;
 static int bgrsb_enable(struct bgrsb_priv *dev, bool enable);
 
@@ -824,6 +826,16 @@ static int split_bg_work(struct bgrsb_priv *dev, char *str)
 		queue_work(dev->bgrsb_wq, &dev->rsb_glink_up_work);
 		break;
 	}
+
+	if (enter_resume) {
+		switch (val) {
+		case BGRSB_POWER_ENABLE:
+			queue_work(dev->bgrsb_wq, &dev->rsb_up_work);
+			break;
+		}
+		enter_resume = false;
+	}
+
 	return 0;
 }
 
@@ -990,6 +1002,7 @@ static int bg_rsb_remove(struct platform_device *pdev)
 static int bg_rsb_resume(struct device *pldev)
 {
 	pr_err("[PAT_RSB]%s, enter rsb_resume.\n", __func__);
+	enter_resume = true;
 	return 0;
 }
 
