@@ -4117,6 +4117,7 @@ static int fts_probe(struct spi_device *client)
 			sizeof(info->board->fw_name),
 			PATH_FILE_FW_FMT,
 			FW_CFG_PID_C2);
+		break;
 
 	case FW_CFG_PID_F2_ALT1:
 	case FW_CFG_PID_F2_ALT2:
