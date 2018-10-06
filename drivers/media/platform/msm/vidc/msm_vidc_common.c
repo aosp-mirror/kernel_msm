@@ -2734,7 +2734,7 @@ exit:
 	put_inst(inst);
 }
 
-void handle_cmd_response(enum hal_command_response cmd, void *data)
+void handle_cmd_response(u32 cmd, void *data)
 {
 	dprintk(VIDC_DBG, "Command response = %d\n", cmd);
 	switch (cmd) {

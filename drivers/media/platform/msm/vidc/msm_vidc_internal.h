@@ -490,7 +490,7 @@ struct msm_vidc_ctrl {
 	const char * const *qmenu;
 };
 
-void handle_cmd_response(enum hal_command_response cmd, void *data);
+void handle_cmd_response(u32 cmd, void *data);
 int msm_vidc_trigger_ssr(struct msm_vidc_core *core,
 	enum hal_ssr_trigger_type type);
 int msm_vidc_noc_error_info(struct msm_vidc_core *core);
