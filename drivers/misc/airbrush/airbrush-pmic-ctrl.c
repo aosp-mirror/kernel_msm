@@ -172,69 +172,96 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 {
 	struct device *dev = sc->dev;
 
-	sc->soc_pwrgood = devm_gpiod_get(dev, "soc-pwrgood", GPIOD_OUT_LOW);
-	if (IS_ERR(sc->soc_pwrgood)) {
-		dev_err(dev, "%s: Could not get pmic_soc_pwrgood gpio (%ld)\n",
-				__func__, PTR_ERR(sc->soc_pwrgood));
+	mutex_lock(&sc->lock);
+
+	if (!sc->soc_pwrgood) {
+		sc->soc_pwrgood =
+			devm_gpiod_get(dev, "soc-pwrgood", GPIOD_OUT_LOW);
+		if (IS_ERR(sc->soc_pwrgood)) {
+			dev_err(dev, "%s: Could not get pmic_soc_pwrgood gpio (%ld)\n",
+					__func__, PTR_ERR(sc->soc_pwrgood));
+			goto fail;
+		}
 	}
 
-	sc->smps1 = devm_regulator_get(dev, "s2mpb04_smps1");
-	if (IS_ERR(sc->smps1)) {
-		dev_err(dev, "%s: failed to get s2mpb04_smps1 supply (%ld)\n",
-			__func__, PTR_ERR(sc->smps1));
-		return -ENODEV;
+	if (!sc->smps1) {
+		sc->smps1 = devm_regulator_get(dev, "s2mpb04_smps1");
+		if (IS_ERR(sc->smps1)) {
+			dev_err(dev, "%s: failed to get s2mpb04_smps1 supply (%ld)\n",
+					__func__, PTR_ERR(sc->smps1));
+			goto fail;
+		}
 	}
 
-	sc->smps2 = devm_regulator_get(dev, "s2mpb04_smps2");
-	if (IS_ERR(sc->smps2)) {
-		dev_err(dev, "%s: failed to get s2mpb04_smps2 supply (%ld)\n",
-			__func__, PTR_ERR(sc->smps2));
-		return -ENODEV;
+	if (!sc->smps2) {
+		sc->smps2 = devm_regulator_get(dev, "s2mpb04_smps2");
+		if (IS_ERR(sc->smps2)) {
+			dev_err(dev, "%s: failed to get s2mpb04_smps2 supply (%ld)\n",
+					__func__, PTR_ERR(sc->smps2));
+			goto fail;
+		}
 	}
 
-	sc->smps3 = devm_regulator_get(dev, "s2mpb04_smps3");
-	if (IS_ERR(sc->smps3)) {
-		dev_err(dev, "%s: failed to get s2mpb04_smps3 supply (%ld)\n",
-			__func__, PTR_ERR(sc->smps3));
-		return -ENODEV;
+	if (!sc->smps3) {
+		sc->smps3 = devm_regulator_get(dev, "s2mpb04_smps3");
+		if (IS_ERR(sc->smps3)) {
+			dev_err(dev, "%s: failed to get s2mpb04_smps3 supply (%ld)\n",
+					__func__, PTR_ERR(sc->smps3));
+			goto fail;
+		}
 	}
 
-	sc->ldo1 = devm_regulator_get(dev, "s2mpb04_ldo1");
-	if (IS_ERR(sc->ldo1)) {
-		dev_err(dev, "%s: failed to get s2mpb04_ldo1 supply (%ld)\n",
-			__func__, PTR_ERR(sc->ldo1));
-		return -ENODEV;
+	if (!sc->ldo1) {
+		sc->ldo1 = devm_regulator_get(dev, "s2mpb04_ldo1");
+		if (IS_ERR(sc->ldo1)) {
+			dev_err(dev, "%s: failed to get s2mpb04_ldo1 supply (%ld)\n",
+					__func__, PTR_ERR(sc->ldo1));
+			goto fail;
+		}
 	}
 
-	sc->ldo2 = devm_regulator_get(dev, "s2mpb04_ldo2");
-	if (IS_ERR(sc->ldo2)) {
-		dev_err(dev, "%s: failed to get s2mpb04_ldo2 supply (%ld)\n",
-			__func__, PTR_ERR(sc->ldo2));
-		return -ENODEV;
+	if (!sc->ldo2) {
+		sc->ldo2 = devm_regulator_get(dev, "s2mpb04_ldo2");
+		if (IS_ERR(sc->ldo2)) {
+			dev_err(dev, "%s: failed to get s2mpb04_ldo2 supply (%ld)\n",
+					__func__, PTR_ERR(sc->ldo2));
+			goto fail;
+		}
 	}
 
-	sc->ldo3 = devm_regulator_get(dev, "s2mpb04_ldo3");
-	if (IS_ERR(sc->ldo3)) {
-		dev_err(dev, "%s: failed to get s2mpb04_ldo3 supply (%ld)\n",
-			__func__, PTR_ERR(sc->ldo3));
-		return -ENODEV;
+	if (!sc->ldo3) {
+		sc->ldo3 = devm_regulator_get(dev, "s2mpb04_ldo3");
+		if (IS_ERR(sc->ldo3)) {
+			dev_err(dev, "%s: failed to get s2mpb04_ldo3 supply (%ld)\n",
+					__func__, PTR_ERR(sc->ldo3));
+			goto fail;
+		}
 	}
 
-	sc->ldo4 = devm_regulator_get(dev, "s2mpb04_ldo4");
-	if (IS_ERR(sc->ldo4)) {
-		dev_err(dev, "%s: failed to get s2mpb04_ldo4 supply (%ld)\n",
-			__func__, PTR_ERR(sc->ldo4));
-		return -ENODEV;
+	if (!sc->ldo4) {
+		sc->ldo4 = devm_regulator_get(dev, "s2mpb04_ldo4");
+		if (IS_ERR(sc->ldo4)) {
+			dev_err(dev, "%s: failed to get s2mpb04_ldo4 supply (%ld)\n",
+					__func__, PTR_ERR(sc->ldo4));
+			goto fail;
+		}
 	}
 
-	sc->ldo5 = devm_regulator_get(dev, "s2mpb04_ldo5");
-	if (IS_ERR(sc->ldo5)) {
-		dev_err(dev, "%s: failed to get s2mpb04_ldo5 supply (%ld)\n",
-			__func__, PTR_ERR(sc->ldo5));
-		return -ENODEV;
+	if (!sc->ldo5) {
+		sc->ldo5 = devm_regulator_get(dev, "s2mpb04_ldo5");
+		if (IS_ERR(sc->ldo5)) {
+			dev_err(dev, "%s: failed to get s2mpb04_ldo5 supply (%ld)\n",
+					__func__, PTR_ERR(sc->ldo5));
+			goto fail;
+		}
 	}
 
+	mutex_unlock(&sc->lock);
 	return 0;
+
+fail:
+	mutex_unlock(&sc->lock);
+	return -ENODEV;
 }
 
 
