@@ -22,5 +22,6 @@
 
 &floral_cs40l25a {
 	reset-gpios = <&tlmm 108 0>;
+	cirrus,boost-cap-microfarad = <32>;
 };
 

@@ -46,7 +46,7 @@
 		reset-gpios = <&tlmm 152 0>;
 		reg = <0x43>;
 		cirrus,boost-ind-nanohenry = <1000>;
-		cirrus,boost-cap-microfarad = <32>;
+		cirrus,boost-cap-microfarad = <4>;
 		cirrus,boost-ipk-milliamp = <4500>;
 		cirrus,boost-ctl-millivolt = <11000>; /* 11V */
 		cirrus,boost-ovp-millivolt = <12000>; /* 12V */
