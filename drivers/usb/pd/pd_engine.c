@@ -748,8 +748,7 @@ static void psy_changed_handler(struct work_struct *work)
 	 * Also run pd engine when we know that port partner is pd capable.
 	 **/
 	if (!pe_start && !pd->pd_capable &&
-			  psy_type == POWER_SUPPLY_TYPE_UNKNOWN &&
-			  typec_mode != POWER_SUPPLY_TYPEC_NONE) {
+			  psy_type == POWER_SUPPLY_TYPE_UNKNOWN) {
 		pd_engine_log(pd, "Skipping update as PE_START not set yet");
 		mutex_unlock(&pd->lock);
 		return;
