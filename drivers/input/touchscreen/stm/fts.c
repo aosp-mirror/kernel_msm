@@ -1420,6 +1420,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	int init_type = SPECIAL_PANEL_INIT;
 	u8 *all_strbuff = buf;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	char *limits_file = info->board->limits_name;
 
 	MutualSenseData compData;
 	SelfSenseData comData;
@@ -1448,7 +1449,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		/*ITO TEST*/
 		case 0x01:
 			frameMS.node_data = NULL;
-			res = production_test_ito(LIMITS_FILE, &tests,
+			res = production_test_ito(limits_file, &tests,
 				&frameMS);
 			/* report MS raw frame only if was successfully
 			 * acquired */
@@ -1487,7 +1488,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 				pr_info("Skip Full Panel Init!\n");
 			}
 #endif
-			res = production_test_main(LIMITS_FILE, 1, init_type,
+			res = production_test_main(limits_file, 1, init_type,
 						   &tests, MP_FLAG_FACTORY);
 			break;
 
@@ -1688,28 +1689,28 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		case 0x03:	/* MS Raw DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ms_raw(LIMITS_FILE, 1,
+				res = production_test_ms_raw(limits_file, 1,
 							     &tests);
 			break;
 
 		case 0x04:	/* MS CX DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ms_cx(LIMITS_FILE, 1,
+				res = production_test_ms_cx(limits_file, 1,
 							    &tests);
 			break;
 
 		case 0x05:	/* SS RAW DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ss_raw(LIMITS_FILE, 1,
+				res = production_test_ss_raw(limits_file, 1,
 							     &tests);
 			break;
 
 		case 0x06:	/* SS IX CX DATA TEST */
 			res = fts_system_reset();
 			if (res >= OK)
-				res = production_test_ss_ix_cx(LIMITS_FILE, 1,
+				res = production_test_ss_ix_cx(limits_file, 1,
 							       &tests);
 			break;
 
@@ -2964,13 +2965,14 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 	int ret2 = 0;
 	int retry;
 	int initretrycnt = 0;
+	char *limits_file = info->board->limits_name;
 
 	/* initialization error, retry initialization */
 	for (retry = 0; retry < RETRY_INIT_BOOT; retry++) {
 #ifndef COMPUTE_INIT_METHOD
 		ret2 = production_test_initialization(init_type);
 #else
-		ret2 = production_test_main(LIMITS_FILE, 1, init_type, &tests,
+		ret2 = production_test_main(limits_file, 1, init_type, &tests,
 			MP_FLAG_BOOT);
 #endif
 		if (ret2 == OK)
@@ -4100,10 +4102,10 @@ static int fts_probe(struct spi_device *client)
 		goto ProbeErrorExit_6;
 	}
 
-	/* Update the FW name by config project ID,
+	/* Update the FW/LIMITS name by config project ID,
 	 * TODO:
 	 * 1. Monitor the project ID will be consistent or not.
-	 * 2. Decide which FW will use when there is no FW on touch IC
+	 * 2. Decide which FW/LIMITS will use when there is no FW on touch IC
 	 *    or FW corrupted.
 	 */
 	switch (systemInfo.u16_cfgProjectId) {
@@ -4113,12 +4115,20 @@ static int fts_probe(struct spi_device *client)
 			sizeof(info->board->fw_name),
 			PATH_FILE_FW_FMT,
 			systemInfo.u16_cfgProjectId);
+		scnprintf(info->board->limits_name,
+			sizeof(info->board->limits_name),
+			PATH_FILE_LIMITS_FMT,
+			systemInfo.u16_cfgProjectId);
 		break;
 
 	case FW_CFG_PID_C2_ALT1:
 		scnprintf(info->board->fw_name,
 			sizeof(info->board->fw_name),
 			PATH_FILE_FW_FMT,
+			FW_CFG_PID_C2);
+		scnprintf(info->board->limits_name,
+			sizeof(info->board->limits_name),
+			PATH_FILE_LIMITS_FMT,
 			FW_CFG_PID_C2);
 		break;
 
@@ -4128,15 +4138,22 @@ static int fts_probe(struct spi_device *client)
 			sizeof(info->board->fw_name),
 			PATH_FILE_FW_FMT,
 			FW_CFG_PID_F2);
+		scnprintf(info->board->limits_name,
+			sizeof(info->board->limits_name),
+			PATH_FILE_LIMITS_FMT,
+			FW_CFG_PID_F2);
 		break;
 
 	default:
 		pr_err("New PID %04X need to check!",
 			systemInfo.u16_cfgProjectId);
+		scnprintf(info->board->limits_name,
+			sizeof(info->board->limits_name),
+			LIMITS_FILE);
 		break;
 	}
-	pr_info("firmware name update by config project id = %s\n",
-		info->board->fw_name);
+	pr_info("FW/LIMITS name update by config pid = %s, %s\n",
+		info->board->fw_name, info->board->limits_name);
 
 #if defined(FW_UPDATE_ON_PROBE) && defined(FW_H_FILE)
 	pr_info("FW Update and Sensing Initialization:\n");

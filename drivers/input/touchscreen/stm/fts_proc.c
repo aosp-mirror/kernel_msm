@@ -741,6 +741,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 	Firmware fw;
 	LimitFile lim;
+	char *limits_file = info->board->limits_name;
 
 	mess.dummy = 0;
 	mess.action = 0;
@@ -1837,7 +1838,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		/*ITO TEST*/
 		case CMD_ITOTEST:
 			frameMS.node_data = NULL;
-			res = production_test_ito(LIMITS_FILE, &tests,
+			res = production_test_ito(limits_file, &tests,
 				&frameMS);
 
 			if (frameMS.node_data != NULL) {
@@ -1862,7 +1863,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		case CMD_MSRAWTEST:	/* MS Raw DATA TEST */
 			if (numberParam == 2)	/* need to specify if stopOnFail
 						 * */
-				res = production_test_ms_raw(LIMITS_FILE,
+				res = production_test_ms_raw(limits_file,
 							     cmd[1], &tests);
 			else {
 				pr_err("Wrong number of parameters!\n");
@@ -1872,7 +1873,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		case CMD_MSINITDATATEST:/* MS CX DATA TEST */
 			if (numberParam == 2)	/* need stopOnFail */
-				res = production_test_ms_cx(LIMITS_FILE, cmd[1],
+				res = production_test_ms_cx(limits_file, cmd[1],
 							    &tests);
 			else {
 				pr_err("Wrong number of parameters!\n");
@@ -1882,7 +1883,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		case CMD_SSRAWTEST:	/* SS RAW DATA TEST */
 			if (numberParam == 2) /* need stopOnFail */
-				res = production_test_ss_raw(LIMITS_FILE,
+				res = production_test_ss_raw(limits_file,
 							     cmd[1], &tests);
 			else {
 				pr_err("Wrong number of parameters!\n");
@@ -1892,7 +1893,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 		case CMD_SSINITDATATEST:/* SS IX CX DATA TEST */
 			if (numberParam == 2)	/* need stopOnFail */
-				res = production_test_ss_ix_cx(LIMITS_FILE,
+				res = production_test_ss_ix_cx(limits_file,
 							       cmd[1], &tests);
 			else {
 				pr_err("Wrong number of parameters!\n");
@@ -1907,12 +1908,12 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 						 * mpflag(optional)
 						 */
 				if (numberParam == 3)
-					res = production_test_main(LIMITS_FILE,
+					res = production_test_main(limits_file,
 							   cmd[1],
 							   cmd[2], &tests,
 							   MP_FLAG_OTHERS);
 				else
-					res = production_test_main(LIMITS_FILE,
+					res = production_test_main(limits_file,
 							   cmd[1],
 							   cmd[2], &tests,
 							   cmd[3]);
@@ -1938,7 +1939,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				lim.data = NULL;
 				lim.size = 0;
 				if (numberParam == 1)
-					res = getLimitsFile(LIMITS_FILE, &lim);
+					res = getLimitsFile(limits_file, &lim);
 				else
 					res = getLimitsFile(path, &lim);
 				readData = lim.data;
@@ -1964,7 +1965,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 				addr = ((u64)byteToRead) * 4;	/* number of
 								 * words */
 
-				res = getLimitsFile(LIMITS_FILE, &lim);
+				res = getLimitsFile(limits_file, &lim);
 
 				readData = lim.data;
 				fileSize = lim.size;

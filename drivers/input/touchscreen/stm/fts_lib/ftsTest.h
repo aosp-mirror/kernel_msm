@@ -25,6 +25,8 @@
 #include "ftsSoftware.h"
 #include "ftsFrame.h"
 
+#define PATH_FILE_LIMITS_FMT		"stm_fts_production_limits_pid%04x.csv"
+
 #ifndef LIMITS_H_FILE
 /* /< Name of the Production Test Limit File */
 #define LIMITS_FILE			"stm_fts_production_limits.csv"
