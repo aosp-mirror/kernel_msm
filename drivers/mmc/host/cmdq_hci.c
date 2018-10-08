@@ -896,7 +896,6 @@ static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
 	struct sdhci_host *host = mmc_priv(mmc);
 	u64 ice_ctx = 0;
-	struct request *rq = mrq->req;
 
 	if (!cq_host->enabled) {
 		pr_err("%s: CMDQ host not enabled yet !!!\n",
