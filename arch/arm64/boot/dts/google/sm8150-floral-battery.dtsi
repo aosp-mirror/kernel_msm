@@ -57,8 +57,9 @@
 	/* enable experimental max17301 support */
 	maxim,max1730x-compat;
 
-	/* FIXME: force resistor ID with maxim,force-batt-or read it*/
 	maxim,force-hard-reset;
+	/* FIXME: route to google_battery when available */
+	maxim,bat-power-supply = "bms";
 
 	maxim,nconvgcfg-temp-hysteresis = <10>;
 	maxim,nconvgcfg-temp-limits = /bits/ 16
