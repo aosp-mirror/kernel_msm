@@ -266,7 +266,11 @@ lr	.req	x30		// link register
 	 */
 	.macro adr_this_cpu, dst, sym, tmp
 	adr_l	\dst, \sym
+alternative_if_not ARM64_HAS_VIRT_HOST_EXTN
 	mrs	\tmp, tpidr_el1
+alternative_else
+	mrs	\tmp, tpidr_el2
+alternative_endif
 	add	\dst, \dst, \tmp
 	.endm
 
@@ -277,7 +281,11 @@ lr	.req	x30		// link register
 	 */
 	.macro ldr_this_cpu dst, sym, tmp
 	adr_l	\dst, \sym
+alternative_if_not ARM64_HAS_VIRT_HOST_EXTN
 	mrs	\tmp, tpidr_el1
+alternative_else
+	mrs	\tmp, tpidr_el2
+alternative_endif
 	ldr	\dst, [\dst, \tmp]
 	.endm
 
@@ -471,6 +479,10 @@ alternative_endif
 	mrs	\rd, sp_el0
 	.endm
 
+	.macro	pte_to_phys, phys, pte
+	and	\phys, \pte, #(((1 << (48 - PAGE_SHIFT)) - 1) << PAGE_SHIFT)
+	.endm
+
 /*
  * Check the MIDR_EL1 of the current CPU for a given model and a range of
  * variant/revision. See asm/cputype.h for the macros used below.
@@ -508,10 +520,6 @@ alternative_endif
 	and		\res, \res, \tmp2
 	.endif
 .Ldone\@:
-	.endm
-
-	.macro	pte_to_phys, phys, pte
-	and	\phys, \pte, #(((1 << (48 - PAGE_SHIFT)) - 1) << PAGE_SHIFT)
 	.endm
 
 #endif	/* __ASM_ASSEMBLER_H */

@@ -1156,8 +1156,9 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		return ret;
 	}
-	std_ac_if_desc.bInterfaceNumber = ret;
 	iad_desc.bFirstInterface = ret;
+
+	std_ac_if_desc.bInterfaceNumber = ret;
 	agdev->ac_intf = ret;
 	agdev->ac_alt = 0;
 
