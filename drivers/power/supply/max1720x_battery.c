@@ -1420,54 +1420,51 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 
 static int max1720x_read_batt_id(struct max1720x_chip *chip, int *batt_id)
 {
-	int ret, temp_id;
-	const char *dt_iio_ch_name, *iio_ch_name;
 	struct device_node *node = chip->dev->of_node;
+	const char *batt_psy_name = NULL;
+	struct power_supply *batt_psy;
+	union power_supply_propval val;
+	int rc = 0, temp_id;
 
 	*batt_id = 0;
 
-	ret = of_property_read_u32(node, "maxim,force-batt-id", &temp_id);
-	if (ret == 0) {
+	rc = of_property_read_u32(node, "maxim,force-batt-id", &temp_id);
+	if (rc == 0) {
 		dev_warn(chip->dev, "forcing battery RID %d\n", temp_id);
 		*batt_id = temp_id;
 		return 0;
 	}
 
-	ret = of_property_read_string(node, "io-channel-names",
-				      &dt_iio_ch_name);
-	if (ret == -EINVAL)
-		return 0;
-
-	if (ret) {
-		dev_warn(chip->dev, "failed to read io-channel-names\n");
+	rc = of_property_read_string(node, "maxim,bat-power-supply",
+				     &batt_psy_name);
+	if (rc) {
+		/* only method now */
+		dev_warn(chip->dev,
+			"cannot read bat-power-supply, rc=%d\n", rc);
 		return -EINVAL;
 	}
 
-	iio_ch_name = devm_kstrdup(chip->dev, dt_iio_ch_name, GFP_KERNEL);
-	if (!iio_ch_name)
-		return -EINVAL;
-
-	chip->iio_ch = iio_channel_get(chip->dev, iio_ch_name);
-	if (PTR_ERR(chip->iio_ch) == -EPROBE_DEFER) {
-		dev_warn(chip->dev, "iio_channel_get %s not ready\n",
-			 iio_ch_name);
-		devm_kfree(chip->dev, (void *) iio_ch_name);
+	batt_psy = power_supply_get_by_name(batt_psy_name);
+	if (!batt_psy) {
+		dev_warn(chip->dev, "failed to get battery power supply\n");
 		return -EPROBE_DEFER;
-	} else if (IS_ERR(chip->iio_ch)) {
-		dev_warn(chip->dev, "iio_channel_get %s error: %ld\n",
-			 iio_ch_name, PTR_ERR(chip->iio_ch));
-		devm_kfree(chip->dev, (void *) iio_ch_name);
+	}
+
+	/* POWER_SUPPLY_PROP_RESISTANCE_ID is in ohms */
+	rc = power_supply_get_property(batt_psy,
+				       POWER_SUPPLY_PROP_RESISTANCE_ID, &val);
+	if (rc == -EINVAL) {
+		return -EPROBE_DEFER;
+	} else if (rc < 0) {
+		dev_err(chip->dev, "failed to get batt-id rc=%d\n", rc);
 		return -EINVAL;
 	}
 
-	devm_kfree(chip->dev, (void *) iio_ch_name);
-	ret = iio_read_channel_processed(chip->iio_ch, &temp_id);
-	if (ret < 0) {
-		dev_warn(chip->dev, "failed to read battery id: %d\n", ret);
-		return -EINVAL;
-	}
+	if (val.intval < 0)
+		*batt_id = val.intval;
+	else
+		*batt_id = val.intval / 1000;
 
-	*batt_id = temp_id / 1000;
 	return 0;
 }
 
@@ -1508,7 +1505,7 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 		/* Don't fail probe on that, just ignore error */
 		return 0;
 
-	dev_info(chip->dev, "device battery RID: %d\n", batt_id);
+	dev_info(chip->dev, "device battery RID: %d kohm\n", batt_id);
 
 	ret = of_property_read_u32(node, "maxim,batt-id-range-pct",
 				   &batt_id_range);
@@ -2070,8 +2067,7 @@ static int history_dev_open(struct inode *inode, struct file *file)
 	if (history_count < 0) {
 		return history_count;
 	} else if (history_count == 0) {
-		dev_info(chip->dev,
-			"No battery history has been recorded\n");
+		dev_info(chip->dev, "No battery history has been recorded\n");
 	}
 
 	return 0;
