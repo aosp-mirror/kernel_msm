@@ -501,7 +501,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 
 	if (entskb->tstamp.tv64) {
 		struct nfqnl_msg_packet_timestamp ts;
-		struct timespec64 kts = ktime_to_timespec64(skb->tstamp);
+		struct timespec64 kts = ktime_to_timespec64(entskb->tstamp);
 
 		ts.sec = cpu_to_be64(kts.tv_sec);
 		ts.usec = cpu_to_be64(kts.tv_nsec / NSEC_PER_USEC);
@@ -1106,6 +1106,9 @@ nfqnl_recv_unsupp(struct sock *ctnl, struct sk_buff *skb,
 static const struct nla_policy nfqa_cfg_policy[NFQA_CFG_MAX+1] = {
 	[NFQA_CFG_CMD]		= { .len = sizeof(struct nfqnl_msg_config_cmd) },
 	[NFQA_CFG_PARAMS]	= { .len = sizeof(struct nfqnl_msg_config_params) },
+	[NFQA_CFG_QUEUE_MAXLEN]	= { .type = NLA_U32 },
+	[NFQA_CFG_MASK]		= { .type = NLA_U32 },
+	[NFQA_CFG_FLAGS]	= { .type = NLA_U32 },
 };
 
 static const struct nf_queue_handler nfqh = {
