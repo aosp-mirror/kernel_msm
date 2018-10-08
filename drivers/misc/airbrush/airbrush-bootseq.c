@@ -32,6 +32,7 @@
 #include <linux/pci.h>
 #include <linux/airbrush-sm-ctrl.h>
 #include <linux/clk.h>
+#include <linux/msm_pcie.h>
 
 #include "airbrush-spi.h"
 #include "airbrush-pmic-ctrl.h"
@@ -265,6 +266,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 				return -EIO;
 			}
 		}
+
+		msm_pcie_enumerate(1);
 
 		/* Wait for AB_READY = 1,
 		 * this ensures the SPI FSM is initialized to flash the
