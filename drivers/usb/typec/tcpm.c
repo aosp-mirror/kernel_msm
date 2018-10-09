@@ -533,8 +533,6 @@ static int tcpm_seq_show(struct seq_file *s, void *v)
 		seq_printf(s, "%s\n", port->logbuffer[tail]);
 		tail = (tail + 1) % LOG_BUFFER_ENTRIES;
 	}
-	if (!seq_has_overflowed(s))
-		port->logbuffer_tail = tail;
 	mutex_unlock(&port->logbuffer_lock);
 
 	return 0;
