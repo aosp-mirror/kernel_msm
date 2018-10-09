@@ -4111,6 +4111,7 @@ static void smblib_notify_usb_host(struct smb_charger *chg, bool enable)
 }
 
 #define HVDCP_DET_MS 2500
+#define AICL_RERUN_DELAY_MS 50
 static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 {
 	const struct apsd_result *apsd_result;
@@ -4132,6 +4133,10 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 		if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB
 						|| chg->use_extcon)
 			smblib_notify_device_mode(chg, true);
+		if (apsd_result->bit == CDP_CHARGER_BIT) {
+			schedule_delayed_work(&chg->aicl_rerun_work,
+				msecs_to_jiffies(AICL_RERUN_DELAY_MS));
+		}
 		break;
 	case OCP_CHARGER_BIT:
 	case FLOAT_CHARGER_BIT:
@@ -4766,6 +4771,24 @@ static void smblib_bb_removal_work(struct work_struct *work)
 
 	vote(chg->usb_icl_votable, BOOST_BACK_VOTER, false, 0);
 	vote(chg->awake_votable, BOOST_BACK_VOTER, false, 0);
+}
+
+static void smblib_aicl_rerun_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						aicl_rerun_work.work);
+
+	//TODO: Temporary WA for aicl is low when reboot with CDP charger
+	//	Remove after root cause found
+	smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
+				USBIN_AICL_EN_BIT, 0);
+	msleep(AICL_RERUN_DELAY_MS);
+	smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
+				USBIN_AICL_EN_BIT, USBIN_AICL_EN_BIT);
+	msleep(AICL_RERUN_DELAY_MS);
+	smblib_rerun_aicl(chg);
+
+	return;
 }
 
 #define BOOST_BACK_UNVOTE_DELAY_MS		750
@@ -5516,6 +5539,7 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+	INIT_DELAYED_WORK(&chg->aicl_rerun_work, smblib_aicl_rerun_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
 	chg->fake_batt_status = -EINVAL;
