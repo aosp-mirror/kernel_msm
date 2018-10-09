@@ -397,9 +397,6 @@ static void s2mpb04_config_ints(struct s2mpb04_core *ddata)
 /* initialize the chip */
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata)
 {
-
-	s2mpb04_toggle_pon(ddata);
-
 	s2mpb04_print_status(ddata);
 
 	s2mpb04_config_ints(ddata);
