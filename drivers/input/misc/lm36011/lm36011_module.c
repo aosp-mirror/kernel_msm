@@ -63,6 +63,7 @@ struct led_laser_ctrl_t {
 	bool is_silego_validated;
 	bool is_silego_power_up;
 	bool is_sx9320_power_up;
+	bool is_sx9320_validated;
 	bool is_certified;
 	struct regulator *vio;
 	struct regulator *silego_vdd;
@@ -326,8 +327,10 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		dev_err(ctrl->soc_info.dev,
 			"clean up cap sense irq failed: rc: %d", rc);
 		ctrl->is_silego_validated = false;
+		ctrl->is_sx9320_validated = false;
 		return rc;
 	}
+	ctrl->is_sx9320_validated = true;
 
 	rc = silego_verify_settings(ctrl);
 	if (rc < 0) {
@@ -635,11 +638,21 @@ static ssize_t is_certified_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->is_certified);
 }
 
+static ssize_t is_cap_sense_validated_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->is_sx9320_validated);
+}
+
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
 static DEVICE_ATTR_WO(led_laser_write_byte);
 static DEVICE_ATTR_RO(is_silego_validated);
 static DEVICE_ATTR_RO(is_certified);
+static DEVICE_ATTR_RO(is_cap_sense_validated);
 
 static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_enable.attr,
@@ -647,6 +660,7 @@ static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_write_byte.attr,
 	&dev_attr_is_silego_validated.attr,
 	&dev_attr_is_certified.attr,
+	&dev_attr_is_cap_sense_validated.attr,
 	NULL
 };
 
@@ -750,6 +764,7 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->is_probed = false;
 	ctrl->is_silego_power_up = false;
 	ctrl->is_silego_validated = false;
+	ctrl->is_sx9320_validated = false;
 
 	ctrl->io_master_info.cci_client = devm_kzalloc(&pdev->dev,
 		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
