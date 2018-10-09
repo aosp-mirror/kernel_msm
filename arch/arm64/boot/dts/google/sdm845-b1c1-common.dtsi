@@ -98,8 +98,15 @@
 
 	bootloader_log {
 		compatible = "qcom,bldr_log";
-		reg = <0xA1800000 0x6000>, <0xA1806000 0x6000>;
+		reg = <0xA1800000 0x5C00>, <0xA1806000 0x5C00>;
 		reg-names = "bl_log", "bl_old_log";
+		memory-region = <&debug_info>;
+	};
+
+	bootloader_kinfo {
+		compatible = "bootloader_kinfo";
+		reg = <0xA1805C00 0x400>;
+		reg-names = "kinfo";
 		memory-region = <&debug_info>;
 	};
 
