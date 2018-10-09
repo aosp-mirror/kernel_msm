@@ -495,7 +495,7 @@ static void cam_ois_read_work(struct work_struct *work)
 	get_monotonic_boottime(&ts);
 	rc = camera_io_dev_read_seq(&ois_timer_in->o_ctrl->io_master_info,
 		0xE001, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
-		CAMERA_SENSOR_I2C_TYPE_WORD, 6);
+		CAMERA_SENSOR_I2C_TYPE_DWORD, 6);
 
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
@@ -640,15 +640,17 @@ static int cam_ois_get_shift(struct cam_ois_ctrl_t *o_ctrl,
 	write_pos = o_ctrl->buf.write_pos;
 	if (o_ctrl->buf.is_full) {
 		query_size = CAM_OIS_SHIFT_DATA_BUFFER_SIZE - write_pos;
-		memcpy(&buf[0], &o_ctrl->buf.buffer[write_pos], query_size);
+		memcpy(&buf[0], &o_ctrl->buf.buffer[write_pos],
+			query_size * sizeof(struct cam_ois_shift));
 		if (write_pos > 0)
 			memcpy(&buf[query_size], &o_ctrl->buf.buffer[0],
-				write_pos);
+				write_pos * sizeof(struct cam_ois_shift));
 		query_size = CAM_OIS_SHIFT_DATA_BUFFER_SIZE;
 	} else {
 		query_size = write_pos;
 		if (query_size != 0)
-			memcpy(buf, o_ctrl->buf.buffer, query_size);
+			memcpy(buf, o_ctrl->buf.buffer,
+				query_size * sizeof(struct cam_ois_shift));
 	}
 	// reset ring buffer
 	o_ctrl->buf.write_pos = 0;
