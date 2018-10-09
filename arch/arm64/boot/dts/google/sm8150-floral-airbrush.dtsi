@@ -186,22 +186,26 @@
 			<&clock_ipu MOUT_IPU_PLL_IPU>,
 			<&clock_ipu DOUT_IPU_IPU_PLL_CLK_DIV_1>,
 			<&clock_ipu MOUT_IPU_AONCLK_PLLCLK1>,
+			<&clock_ipu CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU>,
 			<&clock_aon DOUT_AON_SHARED_DIV_AON_PLL>,
 			<&clock_tpu FOUT_PLL_TPU>,
 			<&clock_tpu MOUT_TPU_PLL_TPU>,
 			<&clock_tpu DOUT_TPU_TPU_PLL_DIV_CLK_1>,
 			<&clock_tpu MOUT_TPU_AONCLK_PLLCLK>,
+			<&clock_tpu CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU>,
 			<&clock_rpmh RPMH_LN_BB_CLK2>;
 		clock-names =	"osc_clk",
 				"ipu_pll",
 				"ipu_pll_mux",
 				"ipu_pll_div",
 				"ipu_switch_mux",
+				"ipu_gate_clk",
 				"shared_div_aon_pll",
 				"tpu_pll",
 				"tpu_pll_mux",
 				"tpu_pll_div",
 				"tpu_switch_mux",
+				"tpu_gate_clk",
 				"ab_ref";
 
 		/* Provide GPIOs used in Airbrush boot sequence */
