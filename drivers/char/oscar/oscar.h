@@ -39,7 +39,7 @@ struct oscar_abdram_sync_ioctl {
 struct oscar_abdram_map_ioctl {
 	uint32_t fd;			/* AB-DRAM buffer dma_buf fd */
 	uint32_t flags;			/* gasket mapping flags */
-	uint32_t page_table_index;	/* gasket page table idnex */
+	uint32_t page_table_index;	/* gasket page table index */
 	uint64_t device_address;	/* TPU address at which to map */
 };
 
