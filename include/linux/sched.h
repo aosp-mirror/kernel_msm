@@ -2644,7 +2644,7 @@ static inline void mmdrop(struct mm_struct * mm)
 }
 
 /* mmput gets rid of the mappings and all user-space */
-extern int mmput(struct mm_struct *);
+extern void mmput(struct mm_struct *);
 /* same as above but performs the slow path from the async kontext. Can
  * be called from the atomic context as well
  */
