@@ -582,6 +582,13 @@ config AIRBRUSH_SM
 	  This includes the support for CLK, LPDDR, UART, SPI and other IP
 	  configurations which can be controlled through the PCIe interface.
 
+config AIRBRUSH_SM_DEBUGFS
+	bool "Debugfs api for Airbrush State Manager"
+	depends on AIRBRUSH_SM
+	default "n"
+	---help---
+	  This option enables debugfs api for Airbrush State Manager.
+
 config AIRBRUSH_DRAM
 	bool "Airbrush DRAM Manager"
 	default "n"

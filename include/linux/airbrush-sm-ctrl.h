@@ -34,8 +34,6 @@
 
 #define NUM_BLOCKS 6
 
-#define CONFIG_DEBUGFS_AIRBRUSH
-
 #define __GPIO_ENABLE	0x1
 #define __GPIO_DISABLE	0x0
 
@@ -269,7 +267,7 @@ struct ab_state_context {
 	struct regulator *ldo4;
 	struct regulator *ldo5;
 
-#ifdef CONFIG_DEBUGFS_AIRBRUSH
+#if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
 #endif
 };
@@ -301,12 +299,12 @@ int ab_ddr_resume(struct ab_state_context *sc);
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);
 
-#ifdef CONFIG_DEBUGFS_AIRBRUSH
+#if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 void ab_sm_create_debugfs(struct ab_state_context *sc);
 void ab_sm_remove_debugfs(struct ab_state_context *sc);
 #else
-inline void ab_sm_create_debugfs(struct ab_state_context *sc) {}
-inline void ab_sm_remove_debugfs(struct ab_state_context *sc) {}
+static inline void ab_sm_create_debugfs(struct ab_state_context *sc) {}
+static inline void ab_sm_remove_debugfs(struct ab_state_context *sc) {}
 #endif
 
 #endif /* _AIRBRUSH_SM_CTRL_H */

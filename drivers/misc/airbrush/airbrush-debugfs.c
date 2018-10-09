@@ -19,8 +19,6 @@
 
 int ab_interrupt_M0(int tar_dev);
 
-#ifdef CONFIG_DEBUGFS_AIRBRUSH
-
 static int chip_state_set(void *sc, u64 val)
 {
 	if (ab_sm_set_state((struct ab_state_context *)sc, 0, val))
@@ -283,4 +281,3 @@ void ab_sm_remove_debugfs(struct ab_state_context *sc)
 {
 	debugfs_remove_recursive(sc->d_entry);
 }
-#endif /* CONFIG_DEBUGFS_AIRBRUSH */

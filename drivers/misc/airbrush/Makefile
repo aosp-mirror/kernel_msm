@@ -1,6 +1,6 @@
-obj-$(CONFIG_AIRBRUSH_SM) := airbrush.o
+obj-$(CONFIG_AIRBRUSH_SM) += airbrush.o
 
-airbrush-y :=	\
+airbrush-y +=	\
 		airbrush-sm.o \
 		airbrush-sm-ctrl.o \
 		airbrush-clk.o \
@@ -10,6 +10,6 @@ airbrush-y :=	\
 		airbrush-pmu.o \
 		airbrush-power-gating.o \
 		airbrush-pmic-ctrl.o \
-		airbrush-debugfs.o \
 		airbrush-ddr.o \
 		airbrush-ppmu.o
+airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS) += airbrush-debugfs.o
