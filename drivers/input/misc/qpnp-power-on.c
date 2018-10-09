@@ -2054,7 +2054,7 @@ static ssize_t debugfs_pon_regs_read(struct file *file, char __user *ubuf,
 	ret = simple_read_from_buffer(ubuf, count, ppos, buf, msg_len);
 	if (ret < 0) {
 		dev_err(&pon->pdev->dev,
-			"debugfs_pon_regs_read failed %d\n", ret);
+			"debugfs_pon_regs_read failed %zd\n", ret);
 	}
 
 	kfree(buf);
