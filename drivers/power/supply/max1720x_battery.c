@@ -270,7 +270,9 @@ enum max1730x_register {
 	MAX1730X_TEMP = 0x1B,
 	MAX1730X_CURRENT = 0x1C,
 	MAX1730X_AVGCURRENT = 0x1D,
+	MAX1730X_MIXCAP = 0x2B,
 	MAX1730X_FULLCAP = 0x35,
+	MAX1730X_LEARNCFG = 0xA1,
 	MAX1730X_MAXPEAKPWR = 0xA4,
 	MAX1730X_SUSPEAKPWR = 0xA5,
 	MAX1730X_PACKRESISTANCE = 0xA6,
@@ -290,6 +292,7 @@ enum max17xxx_register {
 	MAX17XXX_TEMP		= MAX1720X_TEMP,
 	MAX17XXX_CURRENT	= MAX1720X_CURRENT,
 	MAX17XXX_AVGCURRENT	= MAX1720X_AVGCURRENT,
+	MAX17XXX_MIXCAP		= MAX1720X_MIXCAP,
 };
 #define BUCKET_COUNT 10
 
@@ -397,6 +400,9 @@ static int max1730x_regmap_map(int reg)
 	case MAX17XXX_AVGCURRENT:
 		out = MAX1730X_AVGCURRENT;
 		break;
+	case MAX17XXX_MIXCAP:
+		out = MAX1730X_MIXCAP;
+		break;
 	default:
 		out = reg;
 		break;
@@ -473,6 +479,14 @@ bool max1720x_is_reg(struct device *dev, unsigned int reg)
 	case 0xB0 ... 0xDF:
 		return true;
 	}
+
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		switch (reg) {
+		case MAX1730X_LEARNCFG:
+			return true;
+		}
+	}
+
 	return false;
 }
 
@@ -937,7 +951,7 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 {
 	u16 data = 0;
 
-	(void) REGMAP_READ(chip->regmap, MAX1720X_MIXCAP, &data);
+	(void) REGMAP_READ(chip->regmap, MAX17XXX_MIXCAP, &data);
 	chip->current_capacity = data;
 
 	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18C, ~data);
