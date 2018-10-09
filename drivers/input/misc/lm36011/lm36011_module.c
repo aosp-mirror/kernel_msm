@@ -332,6 +332,9 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	}
 	ctrl->is_sx9320_validated = true;
 
+	/* Silego i2c need at least 1 ms after vdd is up */
+	usleep_range(1000, 3000);
+
 	rc = silego_verify_settings(ctrl);
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev,
@@ -506,9 +509,9 @@ static ssize_t led_laser_enable_store(struct device *dev,
 	if (value == true) {
 		rc = lm36011_power_up(ctrl);
 		if (rc != 0) {
-			rc = lm36011_power_down(ctrl);
+			lm36011_power_down(ctrl);
 			mutex_unlock(&ctrl->cam_sensor_mutex);
-			return rc < 0 ? rc : count;
+			return rc;
 		}
 		rc = lm36011_write_data(ctrl,
 			ENABLE_REG, IR_ENABLE_MODE);
