@@ -92,10 +92,12 @@
 					39 01 00 00 11 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
 					/* HLPM off */
 					39 01 00 00 22 00 03 F0 5A 5A
 					15 01 00 00 11 00 02 53 20
 					39 01 00 00 00 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
 				];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
