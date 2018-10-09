@@ -1054,20 +1054,6 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 			pr_debug("%s:     %d bytes transferred: %d\n",
 				mmc_hostname(host),
 				mrq->data->bytes_xfered, mrq->data->error);
-#ifdef CONFIG_BLOCK
-			if (mrq->lat_hist_enabled) {
-				ktime_t completion;
-				u_int64_t delta_us;
-
-				completion = ktime_get();
-				delta_us = ktime_us_delta(completion,
-							  mrq->io_start);
-				blk_update_latency_hist(
-					(mrq->data->flags & MMC_DATA_READ) ?
-					&host->io_lat_read :
-					&host->io_lat_write, delta_us);
-			}
-#endif
 		}
 
 		if (mrq->stop) {
@@ -1277,6 +1263,14 @@ static int mmc_start_cmdq_request(struct mmc_host *host,
 		mrq->cmd->error = 0;
 		mrq->cmd->mrq = mrq;
 	}
+
+#ifdef CONFIG_BLOCK
+	if (host->latency_hist_enabled) {
+		mrq->io_start = ktime_get();
+		mrq->lat_hist_enabled = 1;
+	} else
+		mrq->lat_hist_enabled = 0;
+#endif
 
 	mmc_host_clk_hold(host);
 	mmc_cmdq_check_retune(host);
@@ -1931,13 +1925,6 @@ struct mmc_async_req *mmc_start_req(struct mmc_host *host,
 	}
 
 	if (!err && areq) {
-#ifdef CONFIG_BLOCK
-		if (host->latency_hist_enabled) {
-			areq->mrq->io_start = ktime_get();
-			areq->mrq->lat_hist_enabled = 1;
-		} else
-			areq->mrq->lat_hist_enabled = 0;
-#endif
 		start_err = __mmc_start_data_req(host, areq->mrq);
 	}
 

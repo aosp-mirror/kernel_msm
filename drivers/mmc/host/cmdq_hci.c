@@ -1023,6 +1023,22 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 #endif
 	update_mmc_req_stats(mrq);
 
+#ifdef CONFIG_BLOCK
+	if (mrq->data) {
+		if (mrq->lat_hist_enabled) {
+			ktime_t completion;
+			u_int64_t delta_us;
+
+			completion = ktime_get();
+			delta_us = ktime_us_delta(completion,
+							 mrq->io_start);
+			blk_update_latency_hist(
+				(mrq->data->flags & MMC_DATA_READ) ?
+				&mmc->io_lat_read :
+				&mmc->io_lat_write, delta_us);
+		}
+	}
+#endif
 	mrq->done(mrq);
 }
 
