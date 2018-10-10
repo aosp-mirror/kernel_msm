@@ -219,6 +219,18 @@ static inline void ipu_core_sync(struct paintbox_bus *bus,
 	bus->ops->sync(bus->parent_dev, alloc, offset, size, direction);
 }
 
+static inline void ipu_core_memory_map_to_bar(struct paintbox_bus *bus,
+		struct paintbox_shared_buffer *alloc)
+{
+	bus->ops->map_to_bar(bus->parent_dev, alloc);
+}
+
+static inline void ipu_core_memory_unmap_from_bar(struct paintbox_bus *bus,
+		struct paintbox_shared_buffer *alloc)
+{
+	bus->ops->unmap_from_bar(bus->parent_dev, alloc);
+}
+
 void ipu_core_notify_firmware_up(struct paintbox_bus *bus);
 void ipu_core_notify_firmware_down(struct paintbox_bus *bus);
 

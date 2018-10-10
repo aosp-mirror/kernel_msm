@@ -16,7 +16,6 @@
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
-#include <linux/mfd/abc-pcie.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
@@ -123,6 +122,50 @@ static uint64_t ipu_adapter_ab_mfd_readq(struct device *dev,
 	return (((uint64_t)high) << 32) | low;
 }
 
+static int ipu_adapter_ab_mfd_map_to_bar(struct device *dev,
+		struct paintbox_shared_buffer *shared_buffer)
+{
+	int ret;
+
+	if (shared_buffer->mapped_to_bar) {
+		dev_warn(dev, "%s: shared buffer already mapped to bar\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	ret = abc_pcie_map_bar_region(dev->parent, BAR_2, shared_buffer->size,
+			shared_buffer->jqs_paddr, &shared_buffer->mapping);
+	if (ret < 0) {
+		dev_err(dev, "bar mapping failed\n");
+		return ret;
+	}
+
+	shared_buffer->mapped_to_bar = true;
+	return 0;
+}
+
+static int ipu_adapter_ab_mfd_unmap_from_bar(struct device *dev,
+		struct paintbox_shared_buffer *shared_buffer)
+{
+	int ret;
+
+	if (!shared_buffer->mapped_to_bar) {
+		dev_warn(dev, "%s: shared buffer not mapped to bar\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	ret = abc_pcie_unmap_bar_region(dev->parent, &shared_buffer->mapping);
+	if (ret < 0) {
+		dev_err(dev, "bar unmapping failed\n");
+		return ret;
+	}
+
+	shared_buffer->mapped_to_bar = false;
+	memset(&shared_buffer->mapping, 0, sizeof(shared_buffer->mapping));
+	return 0;
+}
+
 static int ipu_adapter_ab_mfd_alloc(struct device *dev, size_t size,
 		struct paintbox_shared_buffer *shared_buffer)
 {
@@ -147,10 +190,13 @@ static int ipu_adapter_ab_mfd_alloc(struct device *dev, size_t size,
 	return 0;
 }
 
-void ipu_adapter_ab_mfd_free(struct device *dev,
+static void ipu_adapter_ab_mfd_free(struct device *dev,
 		struct paintbox_shared_buffer *shared_buffer)
 {
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+
+	if (shared_buffer->mapped_to_bar)
+		ipu_adapter_ab_mfd_unmap_from_bar(dev, shared_buffer);
 
 	if (shared_buffer->ab_dram_dma_buf)
 		ab_dram_free_dma_buf_kernel(shared_buffer->ab_dram_dma_buf);
@@ -312,6 +358,8 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->alloc = &ipu_adapter_ab_mfd_alloc;
 	ops->free = &ipu_adapter_ab_mfd_free;
 	ops->sync = &ipu_adapter_ab_mfd_sync;
+	ops->map_to_bar = &ipu_adapter_ab_mfd_map_to_bar;
+	ops->unmap_from_bar = &ipu_adapter_ab_mfd_unmap_from_bar;
 	ops->get_dma_device = &ipu_adapter_ab_mfd_get_dma_device;
 }
 

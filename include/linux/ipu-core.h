@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 #include <linux/ipu-jqs-messages.h>
 #include <linux/types.h>
+#include <linux/mfd/abc-pcie.h>
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
 
@@ -51,6 +52,9 @@ struct paintbox_shared_buffer {
 	dma_addr_t host_dma_addr;
 	dma_addr_t jqs_paddr;
 	struct dma_buf *ab_dram_dma_buf;
+	bool mapped_to_bar;
+	/* data in this struct only valid if mapped_to_bar is true */
+	struct bar_mapping mapping;
 };
 
 extern struct bus_type ipu_bus_type;
