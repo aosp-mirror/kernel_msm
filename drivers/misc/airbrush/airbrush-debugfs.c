@@ -222,7 +222,7 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 		goto err_out;
 	}
 
-	d = debugfs_create_file("ab_boot", 0444, sc->d_entry, sc,
+	d = debugfs_create_file("ab_boot", 0666, sc->d_entry, sc,
 					&ab_bootsequence_fops);
 	if (!d)
 		goto err_out;
@@ -236,7 +236,7 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d_chip)
 		goto err_out;
 
-	d = debugfs_create_file("chip_state", 0664, d_chip, sc,
+	d = debugfs_create_file("chip_state", 0666, d_chip, sc,
 				&fops_chip_state);
 	if (!d)
 		goto err_out;
