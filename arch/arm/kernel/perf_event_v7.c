@@ -846,8 +846,8 @@ static void armv7pmu_start(struct arm_pmu *cpu_pmu)
 	struct pmu_hw_events *events = cpu_pmu->get_hw_events();
 
 	raw_spin_lock_irqsave(&events->pmu_lock, flags);
-	/* Enable all counters */
-	armv7_pmnc_write(armv7_pmnc_read() | ARMV7_PMNC_E);
+	/* Enable all counters (and count cycles in prohibited regions) */
+	armv7_pmnc_write((armv7_pmnc_read() & ~ARMV7_PMNC_DP) | ARMV7_PMNC_E);
 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 

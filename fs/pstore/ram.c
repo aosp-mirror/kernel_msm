@@ -34,7 +34,6 @@
 #include <linux/slab.h>
 #include <linux/compiler.h>
 #include <linux/pstore_ram.h>
-#include <linux/proc_fs.h>
 
 #define RAMOOPS_KERNMSG_HDR "===="
 #define MIN_MEM_SIZE 4096UL
@@ -44,7 +43,7 @@ module_param(record_size, ulong, 0400);
 MODULE_PARM_DESC(record_size,
 		"size of each dump done on oops/panic");
 
-static ulong ramoops_console_size = 256*1024UL;
+static ulong ramoops_console_size = MIN_MEM_SIZE;
 module_param_named(console_size, ramoops_console_size, ulong, 0400);
 MODULE_PARM_DESC(console_size, "size of kernel console log");
 
@@ -56,12 +55,12 @@ static ulong ramoops_pmsg_size = MIN_MEM_SIZE;
 module_param_named(pmsg_size, ramoops_pmsg_size, ulong, 0400);
 MODULE_PARM_DESC(pmsg_size, "size of user space message log");
 
-static ulong mem_address = 0x9ff00000;
+static ulong mem_address;
 module_param(mem_address, ulong, 0400);
 MODULE_PARM_DESC(mem_address,
 		"start of reserved RAM used to store oops/panic logs");
 
-static ulong mem_size = 0x100000;
+static ulong mem_size;
 module_param(mem_size, ulong, 0400);
 MODULE_PARM_DESC(mem_size,
 		"size of reserved RAM used to store oops/panic logs");
@@ -296,7 +295,6 @@ static int notrace ramoops_pstore_write_buf(enum pstore_type_id type,
 
 	prz = cxt->przs[cxt->dump_write_cnt];
 
-	persistent_ram_zap(prz);
 	hlen = ramoops_write_kmsg_hdr(prz, compressed);
 	if (size + hlen > prz->buffer_size)
 		size = prz->buffer_size - hlen;
@@ -464,29 +462,6 @@ void notrace ramoops_console_write_buf(const char *buf, size_t size)
 	persistent_ram_write(cxt->cprz, buf, size);
 }
 
-static int last_kmsg_proc_show(struct seq_file *seq, void *v)
-{
-    if (oops_cxt.cprz && persistent_ram_old(oops_cxt.cprz)) {
-        seq_write(seq, persistent_ram_old(oops_cxt.cprz),
-            persistent_ram_old_size(oops_cxt.cprz));
-    } else
-        seq_puts(seq, "");
-    return 0;
-}
-
-static int last_kmsg_proc_open(struct inode *inode, struct file *file)
-{
-    return single_open(file, last_kmsg_proc_show, inode->i_private);
-}
-
-static const struct file_operations last_kmsg_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = last_kmsg_proc_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-
 static int ramoops_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -586,8 +561,6 @@ static int ramoops_probe(struct platform_device *pdev)
 	pr_info("attached 0x%lx@0x%llx, ecc: %d/%d\n",
 		cxt->size, (unsigned long long)cxt->phys_addr,
 		cxt->ecc_info.ecc_size, cxt->ecc_info.block_size);
-
-	proc_create("last_kmsg", 0444, NULL, &last_kmsg_proc_fops);
 
 	return 0;
 
