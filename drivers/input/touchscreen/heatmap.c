@@ -7,6 +7,19 @@
 
 static const int FIRST_FREE_NODE = -1;
 
+/**
+ * Optimization: keep track of how many consecutive frames
+ * have been dropped due to not having any buffers available.
+ * If too many have been recently dropped, and still no free buffers
+ * are available, then skip the bus read.
+ * This situation could happen if an app have opened the video device,
+ * but went into paused state, and did not close the video device in
+ * onPause. With this optimization, we would avoid the wasteful bus reads
+ * when no one is likely to consume the buffers.
+ */
+static const unsigned int NUM_BUFFERS_BEFORE_DROP = 3;
+static unsigned int consecutive_frames_dropped;
+
 struct heatmap_vb2_buffer {
 	struct vb2_v4l2_buffer v4l2_vb;
 	struct list_head list;
@@ -63,8 +76,36 @@ void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp)
 	struct vb2_buffer *vb2_buf;
 	strength_t *data;
 	int total_bytes = v4l2->format.sizeimage;
+	strength_t temp_buffer[total_bytes];
 	bool read_success;
 
+	if (!vb2_is_streaming(&v4l2->queue)) {
+		/* No need to read, no one is viewing the video */
+		return;
+	}
+
+	/* Optimization */
+	if (consecutive_frames_dropped >= NUM_BUFFERS_BEFORE_DROP) {
+		spin_lock(&v4l2->heatmap_lock);
+		if (list_empty(&v4l2->heatmap_buffer_list)) {
+			/*
+			 * Already dropped some frames, and still don't have
+			 * any free buffers. A buffer could become available
+			 * during read_frame(..), but given that we already
+			 * dropped some frames, this is unlikely.
+			 */
+			spin_unlock(&v4l2->heatmap_lock);
+			return; /* Drop the frame */
+		}
+		spin_unlock(&v4l2->heatmap_lock);
+	}
+
+	/* This is a potentially slow operation */
+	read_success = v4l2->read_frame(v4l2, temp_buffer);
+	if (!read_success)
+		return;
+
+	/* Copy the data into the buffer */
 	spin_lock(&v4l2->heatmap_lock);
 	if (list_empty(&v4l2->heatmap_buffer_list)) {
 		/*
@@ -74,42 +115,31 @@ void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp)
 		 * aren't any available buffers, then this indicates
 		 * slowness in the userspace for reading or
 		 * processing buffers.
-		 * Note: vb2_queue::streaming is marked as a private element
-		 * in videobuf2-core.h.
 		 */
-		if (v4l2->queue.streaming) {
-			dev_warn(v4l2->parent_dev, "heatmap: No buffers available, dropping frame");
-		}
+		dev_warn(v4l2->parent_dev, "heatmap: No buffers available, dropping frame\n");
+		consecutive_frames_dropped++;
 		spin_unlock(&v4l2->heatmap_lock);
 		return;
 	}
+	consecutive_frames_dropped = 0;
 	new_buf = list_entry(v4l2->heatmap_buffer_list.next,
 		struct heatmap_vb2_buffer, list);
 	list_del(&new_buf->list);
-	spin_unlock(&v4l2->heatmap_lock);
 
 	vb2_buf = &new_buf->v4l2_vb.vb2_buf;
 	data = vb2_plane_vaddr(vb2_buf, 0);
 	if (!data) {
 		dev_err(v4l2->parent_dev, "heatmap: Error acquiring frame pointer\n");
-		goto buffer_error;
+		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
+		spin_unlock(&v4l2->heatmap_lock);
+		return;
 	}
 
-	read_success = v4l2->read_frame(v4l2, data);
-	if (!read_success) {
-		goto clear_data;
-	}
-
+	memcpy(data, temp_buffer, total_bytes);
+	vb2_set_plane_payload(vb2_buf, /* plane number */ 0, total_bytes);
 	vb2_buf->timestamp = timestamp;
-	vb2_set_plane_payload(vb2_buf, 0, total_bytes);
 	vb2_buffer_done(vb2_buf, VB2_BUF_STATE_DONE);
-	return;
-
-clear_data:
-	/* Clear data to prevent potential data leak */
-	memset(data, 0, total_bytes);
-buffer_error:
-	vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
+	spin_unlock(&v4l2->heatmap_lock);
 }
 EXPORT_SYMBOL(heatmap_read);
 

@@ -32,9 +32,16 @@ struct v4l2_heatmap {
 	 * It should return true on successful heatmap read
 	 * and false on failure
 	 */
-	bool (*read_frame)(struct v4l2_heatmap *v4l2, int16_t *data);
+	bool (*read_frame)(struct v4l2_heatmap *v4l2, strength_t *data);
 };
 
 int heatmap_probe(struct v4l2_heatmap *v4l2);
 void heatmap_remove(struct v4l2_heatmap *v4l2);
+/**
+ * Read the heatmap and populate an available buffer with data.
+ * The timestamp provided to this function will be used as the frame time.
+ * Designed to be called from interrupt context.
+ * This function should be called from the driver. Internally, it will call
+ * read_frame(..) provided by the driver to read the actual data.
+ */
 void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp);
