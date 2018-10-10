@@ -43,6 +43,7 @@
 #define RAM_CRC_CLR	0x10b30390
 #define RAM_CRC_En	0x10b30394
 #define RAM_CRC_VAL	0x10b30398
+#define GPB0_DRV	0x10b4006c
 
 #define SRAM_BL_ADDR	0x20000
 
@@ -268,6 +269,11 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		}
 
 		msm_pcie_enumerate(1);
+
+		/* Enable schmitt trigger mode for SPI clk pad.
+		 * This is to filter out any noise on SPI clk line.
+		 */
+		ABC_WRITE(GPB0_DRV, 0x22222262);
 
 		/* Wait for AB_READY = 1,
 		 * this ensures the SPI FSM is initialized to flash the
