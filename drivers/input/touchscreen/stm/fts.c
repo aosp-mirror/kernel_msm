@@ -1774,7 +1774,7 @@ END:
 					index += scnprintf(all_strbuff + index,
 							   size - index, "\n");
 				index += scnprintf(all_strbuff + index,
-						   size - index, "%7d",
+						   size - index, "%d ",
 						   frameMS.node_data[j]);
 #else
 				index += scnprintf(all_strbuff + index,
@@ -1813,7 +1813,7 @@ END:
 #ifdef RAW_DATA_FORMAT_DEC
 				index += scnprintf(all_strbuff + index,
 						   size - index,
-						   "%7d",
+						   "%d ",
 						   frameSS.force_data[j]);
 #else
 				index += scnprintf(all_strbuff + index,
@@ -1835,7 +1835,7 @@ END:
 			for (j = 0; j < frameSS.header.sense_node; j++) {
 #ifdef RAW_DATA_FORMAT_DEC
 				index += scnprintf(all_strbuff + index,
-						   size - index, "%7d",
+						   size - index, "%d ",
 						   frameSS.sense_data[j]);
 #else
 				index += scnprintf(all_strbuff + index,
