@@ -12,6 +12,9 @@ ifneq ($(CONFIG_MMU),y)
 obj-y				+= nommu.o
 endif
 obj-$(CONFIG_EARLY_IOREMAP)    += early_ioremap.o
+ifneq ($(CONFIG_ARM_LPAE),y)
+obj-$(CONFIG_MMU)		+= gup.o
+endif
 obj-$(CONFIG_ARM_PTDUMP)	+= dump.o
 obj-$(CONFIG_MODULES)		+= proc-syms.o
 
