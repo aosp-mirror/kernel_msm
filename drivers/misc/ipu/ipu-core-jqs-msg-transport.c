@@ -332,6 +332,8 @@ static int ipu_core_jqs_msg_transport_setup_queue(struct paintbox_bus *bus,
 	if (ipu_core_memory_alloc(bus, size, &host_q->shared_buf_data) < 0)
 		return -ENOMEM;
 
+	ipu_core_memory_map_to_bar(bus, &host_q->shared_buf_data);
+
 	memset(&host_q->waiter, 0, sizeof(struct host_jqs_queue_waiter));
 
 	ipu_core_jqs_cbuf_init(&host_q->host_jqs_sys_cbuf,
@@ -374,6 +376,8 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	if (ret < 0)
 		goto free_local_dram;
 
+	ipu_core_memory_map_to_bar(bus, &trans->shared_buf);
+
 	trans->jqs_shared_state = (struct jqs_msg_transport_shared_state *)
 		trans->shared_buf.host_vaddr;
 	bus->jqs_msg_transport = trans;
@@ -410,6 +414,9 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 
 	if (!trans)
 		return;
+
+	ipu_core_jqs_msg_transport_free_queue(bus,
+			JQS_TRANSPORT_KERNEL_QUEUE_ID);
 
 	ipu_core_memory_free(bus, &trans->shared_buf);
 	kfree(bus->jqs_msg_transport);
