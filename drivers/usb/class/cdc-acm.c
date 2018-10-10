@@ -1541,7 +1541,6 @@ static void acm_disconnect(struct usb_interface *intf)
 		return;
 
 	mutex_lock(&acm->mutex);
-	usb_disable_autosuspend(usb_dev);
 	acm->disconnected = true;
 	if (acm->country_codes) {
 		device_remove_file(&acm->control->dev,
