@@ -12,11 +12,12 @@
  * only version 2 as published by the Free Software Foundation.
  */
 
+#include <linux/airbrush-clk.h>
+#include <linux/airbrush-sm-ctrl.h>
+#include <linux/debugfs.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
-#include <linux/debugfs.h>
 #include <linux/kernel.h>
-#include <linux/airbrush-sm-ctrl.h>
 
 #include "airbrush-spi.h"
 #include "airbrush-pmu.h"
@@ -153,27 +154,30 @@ void ab_sm_register_blk_callback(block_name_t name,
 }
 
 int clk_set_frequency(struct device *dev, struct block *blk,
-			 u64 frequency)
+			 u64 frequency, enum states clk_status)
 {
 	switch (blk->name) {
 	case BLK_IPU:
-		if (blk->current_state->clk_frequency == 0)
+		if (blk->current_state->clk_frequency == 0 && frequency != 0)
 			ipu_pll_enable(dev);
+		if(blk->current_state->clk_status == off && clk_status == on)
+			ipu_ungate(dev);
 		ipu_set_rate(dev, frequency);
-		/*TODO Some error with disabling PLL, need to check*/
-#if 0
-		if (frequency == 0)
+		if(blk->current_state->clk_status == on && clk_status == off)
+			ipu_gate(dev);
+		if (!clk_status && !frequency)
 			ipu_pll_disable(dev);
-#endif
 		break;
 	case BLK_TPU:
-		if (blk->current_state->clk_frequency == 0)
+		if (blk->current_state->clk_frequency == 0 && frequency != 0)
 			tpu_pll_enable(dev);
+		if(blk->current_state->clk_status == off && clk_status == on)
+			tpu_ungate(dev);
 		tpu_set_rate(dev, frequency);
-#if 0
-		if (frequency == 0)
+		if(blk->current_state->clk_status == on && clk_status == off)
+			tpu_gate(dev);
+		if (!clk_status && !frequency)
 			tpu_pll_disable(dev);
-#endif
 		break;
 	case BLK_MIF:
 		break;
@@ -221,18 +225,17 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 #endif
 	}
 
-	if (desired_state->voltage_rail_status == on) {
-		clk_set_frequency(dev, blk, desired_state->clk_frequency);
+	clk_set_frequency(dev, blk, desired_state->clk_frequency,
+			desired_state->clk_status);
 
-		/* Block specific hooks*/
-		/* TODO: Here we expect IP specific functions
-		 * IPU/TPU blocks turning on/off respective cores
-		 * PCIe setting GEN and lane data rate
-		 * DRAM setting data rate
-		 */
-		if (blk->set_state)
-			blk->set_state(desired_state, blk->data);
-	}
+	/* Block specific hooks*/
+	/* TODO: Here we expect IP specific functions
+	 * IPU/TPU blocks turning on/off respective cores
+	 * PCIe setting GEN and lane data rate
+	 * DRAM setting data rate
+	 */
+	if (blk->set_state)
+		blk->set_state(desired_state, blk->data);
 
 	if (power_control) {
 		if (!strcmp(desired_state->substate_name, "PowerGated")) {

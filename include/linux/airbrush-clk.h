@@ -21,10 +21,14 @@ void abc_clk_mif_init(struct device_node *np);
 void abc_clk_ipu_init(struct device_node *np);
 void abc_clk_tpu_init(struct device_node *np);
 
+void ipu_gate(struct device *dev);
+void ipu_ungate(struct device *dev);
 void ipu_pll_enable(struct device *dev);
 void ipu_pll_disable(struct device *dev);
 u64 ipu_set_rate(struct device *dev, u64 rate);
 
+void tpu_gate(struct device *dev);
+void tpu_ungate(struct device *dev);
 void tpu_pll_enable(struct device *dev);
 void tpu_pll_disable(struct device *dev);
 u64 tpu_set_rate(struct device *dev, u64 rate);

@@ -16,6 +16,9 @@
 
 #define OSC_RATE 19200000
 
+#define GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU	0x1024202c
+#define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
+
 void ipu_pll_enable(struct device *dev)
 {
 	struct clk *ipu_pll;
@@ -32,6 +35,24 @@ void ipu_pll_disable(struct device *dev)
 	ipu_pll = clk_get(dev, "ipu_pll");
 	clk_disable(ipu_pll);
 	clk_unprepare(ipu_pll);
+}
+
+void ipu_gate(struct device *dev)
+{
+	uint32_t val;
+
+	ABC_READ(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, &val);
+	val &= ~(1<<21);
+	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
+}
+
+void ipu_ungate(struct device *dev)
+{
+	uint32_t val;
+
+	ABC_READ(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, &val);
+	val |= (1<<21);
+	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
 }
 
 u64 ipu_set_rate(struct device *dev, u64 rate)
@@ -67,6 +88,24 @@ u64 ipu_set_rate(struct device *dev, u64 rate)
 	clk_set_parent(ipu_switch_mux, ipu_pll_div);
 
 	return clk_get_rate(ipu_switch_mux);
+}
+
+void tpu_gate(struct device *dev)
+{
+	uint32_t val;
+
+	ABC_READ(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, &val);
+	val &= ~(1<<21);
+	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
+}
+
+void tpu_ungate(struct device *dev)
+{
+	uint32_t val;
+
+	ABC_READ(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, &val);
+	val |= (1<<21);
+	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
 }
 
 void tpu_pll_enable(struct device *dev)
