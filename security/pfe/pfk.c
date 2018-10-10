@@ -212,18 +212,13 @@ static struct inode *pfk_bio_get_inode(const struct bio *bio)
 		/* Using direct-io (O_DIRECT) without page cache */
 		inode = dio_bio_get_inode((struct bio *)bio);
 		pr_debug("inode on direct-io, inode = 0x%pK.\n", inode);
-
 		return inode;
 	}
 
 	if (!page_mapping(bio->bi_io_vec->bv_page))
 		return NULL;
 
-	if (!bio->bi_io_vec->bv_page->mapping->host)
-
-		return NULL;
-
-	return bio->bi_io_vec->bv_page->mapping->host;
+	return page_mapping(bio->bi_io_vec->bv_page)->host;
 }
 
 /**
@@ -241,7 +236,6 @@ int pfk_key_size_to_key_type(size_t key_size,
 	 *  in the future, table with supported key sizes might
 	 *  be introduced
 	 */
-
 	if (key_size != PFK_SUPPORTED_KEY_SIZE) {
 		pr_err("not supported key size %zu\n", key_size);
 		return -EINVAL;
@@ -325,7 +319,6 @@ static int pfk_get_key_for_bio(const struct bio *bio,
 	return 0;
 }
 
-
 /**
  * pfk_load_key_start() - loads PFE encryption key to the ICE
  *			  Can also be invoked from non
@@ -376,7 +369,6 @@ int pfk_load_key_start(const struct bio *bio,
 	}
 
 	ret = pfk_get_key_for_bio(bio, &key_info, &algo_mode, is_pfe);
-
 	if (ret != 0)
 		return ret;
 
@@ -487,9 +479,6 @@ bool pfk_allow_merge_bio(const struct bio *bio1, const struct bio *bio2)
 	if (bio1 == bio2)
 		return true;
 
-	key1 = bio1->bi_crypt_key;
-	key2 = bio2->bi_crypt_key;
-
 	inode1 = pfk_bio_get_inode(bio1);
 	inode2 = pfk_bio_get_inode(bio2);
 
@@ -507,7 +496,7 @@ bool pfk_allow_merge_bio(const struct bio *bio1, const struct bio *bio2)
 	if (which_pfe1 != INVALID_PFE) {
 		/* Both bios are for the same type of encrypted file. */
 		return (*(pfk_allow_merge_bio_ftable[which_pfe1]))(bio1, bio2,
-				inode1, inode2);
+			inode1, inode2);
 	}
 
 	/*

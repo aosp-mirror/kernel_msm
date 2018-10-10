@@ -3279,14 +3279,6 @@ static inline bool f2fs_may_encrypt(struct inode *inode)
 #endif
 }
 
-static inline bool f2fs_force_buffered_io(struct inode *inode, int rw)
-{
-	return ((f2fs_post_read_required(inode) &&
-		!fscrypt_using_hardware_encryption(inode)) ||
-			(rw == WRITE && test_opt(F2FS_I_SB(inode), LFS)) ||
-			F2FS_I_SB(inode)->s_ndevs);
-}
-
 static inline bool f2fs_may_encrypt_bio(struct inode *inode,
 		struct f2fs_io_info *fio)
 {
@@ -3295,6 +3287,14 @@ static inline bool f2fs_may_encrypt_bio(struct inode *inode,
 
 	return (f2fs_encrypted_file(inode) &&
 			fscrypt_using_hardware_encryption(inode));
+}
+
+static inline bool f2fs_force_buffered_io(struct inode *inode, int rw)
+{
+	return ((f2fs_encrypted_file(inode) &&
+			!fscrypt_using_hardware_encryption(inode)) ||
+			(rw == WRITE && test_opt(F2FS_I_SB(inode), LFS)) ||
+			F2FS_I_SB(inode)->s_ndevs);
 }
 
 #endif

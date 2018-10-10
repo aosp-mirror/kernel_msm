@@ -17,6 +17,8 @@
 #include <linux/fs.h>
 
 #define FS_CRYPTO_BLOCK_SIZE		16
+#define FS_ENCRYPTION_MODE_PRIVATE	127
+#define FS_AES_256_XTS_KEY_SIZE		64
 
 struct fscrypt_ctx;
 

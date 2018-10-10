@@ -279,7 +279,6 @@ int fscrypt_get_encryption_info(struct inode *inode)
 	struct crypto_skcipher *ctfm;
 	const char *cipher_str;
 	int keysize;
-	u8 *raw_key = NULL;
 	int res;
 
 	if (inode->i_crypt_info)
@@ -327,17 +326,7 @@ int fscrypt_get_encryption_info(struct inode *inode)
 	if (res)
 		goto out;
 
-	/*
-	 * This cannot be a stack buffer because it is passed to the scatterlist
-	 * crypto API as part of key derivation.
-	 */
-	res = -ENOMEM;
-	raw_key = kmalloc(FS_MAX_KEY_SIZE, GFP_NOFS);
-	if (!raw_key)
-		goto out;
-
-	res = validate_user_key(crypt_info, &ctx, FS_KEY_DESC_PREFIX,
-				keysize);
+	res = validate_user_key(crypt_info, &ctx, FS_KEY_DESC_PREFIX, keysize);
 	if (res && inode->i_sb->s_cop->key_prefix) {
 		int res2 = validate_user_key(crypt_info, &ctx,
 					     inode->i_sb->s_cop->key_prefix,
@@ -401,7 +390,6 @@ out:
 	if (res == -ENOKEY)
 		res = 0;
 	put_crypt_info(crypt_info);
-	kzfree(raw_key);
 	return res;
 }
 EXPORT_SYMBOL(fscrypt_get_encryption_info);
