@@ -43,6 +43,9 @@
 static void update_sw_icl_max(struct smb_charger *chg, int pst);
 static int smblib_get_prop_typec_mode(struct smb_charger *chg);
 
+int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
+				       const union power_supply_propval *val);
+
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val)
 {
 	unsigned int value;
@@ -1771,6 +1774,26 @@ static int smblib_temp_change_irq_disable_vote_callback(struct votable *votable,
 	chg->irq_info[TEMP_CHANGE_IRQ].enabled = !disable;
 
 	return 0;
+}
+
+static int smblib_disable_power_role_switch_callback(struct votable *votable,
+	void *data, int disable, const char *client)
+{
+	struct smb_charger *chg = data;
+	union power_supply_propval pval;
+	int rc = 0;
+
+	pval.intval = disable ? POWER_SUPPLY_TYPEC_PR_NONE
+		: POWER_SUPPLY_TYPEC_PR_DUAL;
+	rc = __smblib_set_prop_typec_power_role(chg, &pval);
+	if (rc)
+		smblib_err(chg, "power_role_switch = %s failed, rc=%d\n",
+		disable ? "disabled" : "enabled", rc);
+	else
+		smblib_dbg(chg, PR_MISC, "power_role_switch = %s\n",
+		disable ? "disabled" : "enabled");
+
+	return rc;
 }
 
 /*******************
@@ -4460,7 +4483,7 @@ void smblib_typec_irq_config(struct smb_charger *chg, bool en)
 }
 
 #define PR_LOCK_TIMEOUT_MS	1000
-int smblib_set_prop_typec_power_role(struct smb_charger *chg,
+int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				     const union power_supply_propval *val)
 {
 	int rc = 0;
@@ -4546,6 +4569,18 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 
 	chg->power_role = val->intval;
 	return rc;
+}
+
+int smblib_set_prop_typec_power_role(struct smb_charger *chg,
+	const union power_supply_propval *val)
+{
+	/* Check if power role switch is disabled */
+	if (!get_effective_result(chg->disable_power_role_switch))
+		return __smblib_set_prop_typec_power_role(chg, val);
+
+
+	smblib_err(chg, "Power role switch is disabled\n");
+	return -EINVAL;
 }
 
 int smblib_set_prop_typec_select_rp(struct smb_charger *chg,
@@ -6848,6 +6883,7 @@ int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 {
 	int rc;
 	u8 stat = 0, orientation;
+	union power_supply_propval pval;
 
 	smblib_dbg(chg, PR_MISC, "Requested PR_SWAP %d\n", val->intval);
 	chg->pr_swap_in_progress = val->intval;
@@ -6900,8 +6936,8 @@ int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 		}
 
 		/* enable DRP */
-		rc = smblib_masked_write(chg, TYPE_C_MODE_CFG_REG,
-				 TYPEC_POWER_ROLE_CMD_MASK, 0);
+		pval.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
+		rc = smblib_set_prop_typec_power_role(chg, &pval);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't enable DRP rc=%d\n", rc);
 			return rc;
@@ -7688,6 +7724,17 @@ static int smblib_create_votables(struct smb_charger *chg)
 		return rc;
 	}
 
+	chg->disable_power_role_switch =
+			create_votable("DISABLE_POWER_ROLE_SWITCH",
+			VOTE_SET_ANY,
+			smblib_disable_power_role_switch_callback,
+			chg);
+	if (IS_ERR(chg->disable_power_role_switch)) {
+		rc = PTR_ERR(chg->disable_power_role_switch);
+		chg->disable_power_role_switch = NULL;
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -7701,6 +7748,8 @@ static void smblib_destroy_votables(struct smb_charger *chg)
 		destroy_votable(chg->awake_votable);
 	if (chg->chg_disable_votable)
 		destroy_votable(chg->chg_disable_votable);
+	if (chg->disable_power_role_switch)
+		destroy_votable(chg->disable_power_role_switch);
 }
 
 static void smblib_iio_deinit(struct smb_charger *chg)
