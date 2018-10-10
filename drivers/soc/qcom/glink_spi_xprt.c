@@ -485,6 +485,13 @@ static int glink_spi_xprt_rx_cmd(struct edge_info *einfo, void *dst,
 		    (einfo->rx_fifo_start + einfo->fifo_size))
 			size_to_read = einfo->rx_fifo_start + einfo->fifo_size
 					- read_id;
+
+		if ((offset + size_to_read) > size) {
+			pr_err("%s:wrong sz split_sz %u bufsz %u offset %u\n",
+				__func__, size_to_read, size, offset);
+			return -EINVAL;
+		}
+
 		ret = glink_spi_xprt_rx_data(einfo, (void *)(size_t)read_id,
 					     dst + offset, size_to_read);
 		if (ret < 0) {
@@ -540,6 +547,13 @@ static int glink_spi_xprt_tx_cmd_safe(struct edge_info *einfo, void *src,
 		    (einfo->tx_fifo_start + einfo->fifo_size))
 			size_to_write = einfo->tx_fifo_start + einfo->fifo_size
 					- write_id;
+
+		if ((offset + size_to_write) > size) {
+			pr_err("%s:wrong sz split_sz %u bufsz %u offset %u\n",
+				__func__, size_to_write, size, offset);
+			return -EINVAL;
+		}
+
 		ret = glink_spi_xprt_tx_data(einfo, src + offset,
 				(void *)(size_t)write_id, size_to_write);
 		if (ret < 0) {
