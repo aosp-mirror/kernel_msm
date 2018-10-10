@@ -44,3 +44,11 @@
 		0xD5 0x307D	 /* nRFastVShdn Register */
 	>;
 };
+
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <500>;
+		google,end-mitigation-temp = <400>;
+	};
+};
+

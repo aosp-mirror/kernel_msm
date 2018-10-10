@@ -45,3 +45,10 @@
 		0xD5 0x2D7D	/* nRFastVShdn Register */
 	>;
 };
+
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <550>;
+		google,end-mitigation-temp = <450>;
+	};
+};
