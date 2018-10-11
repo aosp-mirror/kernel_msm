@@ -106,11 +106,8 @@
 				label = "off";
 				google,dsi-lp-brightness-threshold = <0>;
 				google,dsi-lp-command = [
-					/* HLPM off */
-					39 01 00 00 22 00 03 F0 5A 5A
-					15 01 00 00 00 00 02 53 20
-					15 01 00 00 00 00 02 F7 03
-					39 01 00 00 22 00 03 F0 A5 A5
+					/* blank */
+					05 01 00 00 00 00 01 28
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
