@@ -1379,19 +1379,7 @@ int gasket_free_coherent_memory(struct gasket_dev *gasket_dev, u64 size,
 	if (driver_desc->coherent_buffer_description.base != dma_address)
 		return -EADDRNOTAVAIL;
 
-	if (gasket_dev->coherent_buffer.length_bytes) {
-		dma_free_coherent(gasket_dev->dma_dev,
-				  gasket_dev->coherent_buffer.length_bytes,
-				  gasket_dev->coherent_buffer.virt_base,
-				  gasket_dev->coherent_buffer.phys_base);
-		gasket_dev->coherent_buffer.length_bytes = 0;
-		gasket_dev->coherent_buffer.virt_base = NULL;
-		gasket_dev->coherent_buffer.phys_base = 0;
-	}
-
-	kfree(gasket_dev->page_table[index]->coherent_pages);
-	gasket_dev->page_table[index]->coherent_pages = NULL;
-	gasket_dev->page_table[index]->num_coherent_pages = 0;
+	gasket_free_coherent_memory_all(gasket_dev, index);
 
 	return 0;
 }
@@ -1412,4 +1400,8 @@ void gasket_free_coherent_memory_all(
 		gasket_dev->coherent_buffer.virt_base = NULL;
 		gasket_dev->coherent_buffer.phys_base = 0;
 	}
+
+	kfree(gasket_dev->page_table[index]->coherent_pages);
+	gasket_dev->page_table[index]->coherent_pages = NULL;
+	gasket_dev->page_table[index]->num_coherent_pages = 0;
 }
