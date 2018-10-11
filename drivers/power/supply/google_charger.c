@@ -121,10 +121,11 @@ static char *psy_chgt_str[] = {
 };
 
 static char *psy_usb_type_str[] = {
-	"Unknown", "Battery", "UPS", "Mains", "USB", "USB_DCP",
-	"USB_CDP", "USB_ACA", "USB_HVDCP", "USB_HVDCP_3", "USB_PD",
-	"Wireless", "USB_FLOAT", "BMS", "Parallel", "Main", "Wipower",
-	"TYPEC", "TYPEC_UFP", "TYPEC_DFP"
+	"Unknown", "Battery", "UPS", "Mains", "USB",
+	"USB_DCP", "USB_CDP", "USB_ACA", "USB_C",
+	"USB_PD", "USB_PD_DRP", "BrickID",
+	"USB_HVDCP", "USB_HVDCP_3", "Wireless", "USB_FLOAT",
+	"BMS", "Parallel", "Main", "Wipower", "USB_C_UFP", "USB_C_DFP",
 };
 
 #define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
