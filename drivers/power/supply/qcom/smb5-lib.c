@@ -650,10 +650,15 @@ int smblib_get_prop_from_bms(struct smb_charger *chg,
 int smblib_configure_hvdcp_apsd(struct smb_charger *chg, bool enable)
 {
 	int rc;
-	u8 mask = HVDCP_EN_BIT | BC1P2_SRC_DETECT_BIT;
+	u8 mask;
 
 	if (chg->pd_not_supported)
 		return 0;
+
+	if (chg->hvdcp_disable)
+		mask = BC1P2_SRC_DETECT_BIT;
+	else
+		mask = HVDCP_EN_BIT | BC1P2_SRC_DETECT_BIT;
 
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG, mask,
 						enable ? mask : 0);

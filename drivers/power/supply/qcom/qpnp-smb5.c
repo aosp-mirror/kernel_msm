@@ -402,7 +402,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 
 	chip->dt.hvdcp_disable = of_property_read_bool(node,
 						"qcom,hvdcp-disable");
-
+	chg->hvdcp_disable = chip->dt.hvdcp_disable;
 
 	rc = of_property_read_u32(node, "qcom,chg-inhibit-threshold-mv",
 				&chip->dt.chg_inhibit_thr_mv);
@@ -1746,6 +1746,15 @@ static int smb5_init_hw(struct smb5 *chip)
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't configure HVDCP rc=%d\n", rc);
 		return rc;
+	}
+
+	if (chip->dt.hvdcp_disable) {
+		rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
+					 HVDCP_EN_BIT, 0);
+		if (rc <0) {
+			dev_err(chg->dev, "Couldn't disable HVDCP rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	/*

@@ -407,6 +407,9 @@ struct smb_charger {
 	const char		*usb_port_tz_name;
 	struct thermal_zone_device *usb_port_tz;
 
+	/* disable/enable HVDCP */
+	bool			hvdcp_disable;
+
 	int			die_health;
 	int			connector_health;
 
