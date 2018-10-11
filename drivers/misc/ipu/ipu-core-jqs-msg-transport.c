@@ -366,7 +366,9 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	if (!trans)
 		return -ENOMEM;
 
-	ret = ipu_core_memory_alloc(bus, sizeof(*trans), &trans->shared_buf);
+	ret = ipu_core_memory_alloc(bus,
+			sizeof(struct jqs_msg_transport_shared_state),
+			&trans->shared_buf);
 	if (ret < 0)
 		goto free_local_dram;
 
