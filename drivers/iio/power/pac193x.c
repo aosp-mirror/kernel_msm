@@ -38,6 +38,7 @@
 #include <linux/iio/sysfs.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/kfifo_buf.h>
+#include <linux/regulator/consumer.h>
 
 #define PAC193X_MAX_RFSH_LIMIT						60000
 /*(17 * 60 * 1000) //around 17 minutes@1024 sps */
@@ -261,6 +262,7 @@ struct pac193x_chip_info {
 	const struct iio_info		*indio_info;
 	struct i2c_client		*client;
 	struct mutex			lock;
+	struct regulator		*avdd_reg;
 
 	struct timer_list		tmr_forced_update;
 	/* to be used to now when will be the chip read timeout */
@@ -1474,8 +1476,39 @@ static int pac193x_chip_identify(struct pac193x_chip_info *chip_info)
 	int ret = 0;
 	struct i2c_client *client = chip_info->client;
 	u8 chip_rev_info[3];
-	/*try to identify the chip variant
-	 * read the chip ID values
+	const char *reg_name;
+
+	/* If regulator has not been defined in the device tree,
+	 * print a debug warning, but assume that its always on,
+	 * and proceed with the probe
+	 * else get the regulator and enable it.
+	 */
+
+	if (of_property_read_string(client->dev.of_node,
+				    "pac193x,regulator_avdd", &reg_name)) {
+		pr_debug("failed to find regulator\n");
+	} else {
+		chip_info->avdd_reg = regulator_get(&client->dev, reg_name);
+		if (IS_ERR(chip_info->avdd_reg)) {
+			pr_err("failed to get regulator\n");
+			if (chip_info->avdd_reg) {
+				regulator_put(chip_info->avdd_reg);
+				chip_info->avdd_reg = NULL;
+			}
+			return -EINVAL;
+		}
+		ret = regulator_enable(chip_info->avdd_reg);
+		if (ret < 0) {
+			pr_err("failed to enable regulator\n");
+			return ret;
+		}
+
+		/* Spec defines time to first communcation as 14.25ms typical */
+		msleep(20);
+	}
+
+	/* Try to identify the chip variant.
+	 * Read the chip ID values.
 	 */
 	ret = pac193x_i2c_read(chip_info->client, PAC193X_PID_REG_ADDR,
 				(u8 *) chip_rev_info, 3);
