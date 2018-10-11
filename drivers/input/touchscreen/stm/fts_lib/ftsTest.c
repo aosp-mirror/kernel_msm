@@ -597,7 +597,7 @@ int checkLimitsMinMax(short *data, int row, int column, int min, int max)
 		for (j = 0; j < column; j++) {
 			if (data[i * column + j] < min || data[i * column + j] >
 			    max) {
-				pr_err("checkLimitsMinMax: Node[%d,%d] = %d exceed limit [%d, %d]\n",
+				pr_debug("%s: Node[%d,%d] = %d exceed limit [%d, %d]\n",
 					i, j, data[i * column + j], min, max);
 				count++;
 			}
@@ -723,7 +723,7 @@ int checkLimitsMap(i8 *data, int row, int column, int *min, int *max)
 		for (j = 0; j < column; j++) {
 			if (data[i * column + j] < min[i * column + j] ||
 			    data[i * column + j] > max[i * column + j]) {
-				pr_err("checkLimitsMap: Node[%d,%d] = %d exceed limit [%d, %d]\n",
+				pr_debug("%s: Node[%d,%d] = %d exceed limit [%d, %d]\n",
 					i, j, data[i * column + j],
 					min[i * column + j],
 					max[i * column + j]);
@@ -758,7 +758,7 @@ int checkLimitsMapTotal(short *data, int row, int column, int *min, int *max)
 		for (j = 0; j < column; j++) {
 			if (data[i * column + j] < min[i * column + j] ||
 			    data[i * column + j] > max[i * column + j]) {
-				pr_err("checkLimitsMapTotal: Node[%d,%d] = %d exceed limit [%d, %d]\n",
+				pr_debug("%s: Node[%d,%d] = %d exceed limit [%d, %d]\n",
 					i, j, data[i * column + j],
 					min[i * column + j],
 					max[i * column + j]);
@@ -793,7 +793,7 @@ int checkLimitsMapFromU(u8 *data, int row, int column, int *min, int *max)
 		for (j = 0; j < column; j++) {
 			if (data[i * column + j] < min[i * column + j] ||
 			    data[i * column + j] > max[i * column + j]) {
-				pr_err("checkLimitsMap: Node[%d,%d] = %d exceed limit [%d, %d]\n",
+				pr_debug("%s: Node[%d,%d] = %d exceed limit [%d, %d]\n",
 					i, j, data[i * column + j],
 					min[i * column + j],
 					max[i * column + j]);
@@ -828,7 +828,7 @@ int checkLimitsMapTotalFromU(u16 *data, int row, int column, int *min, int *max)
 		for (j = 0; j < column; j++) {
 			if (data[i * column + j] < min[i * column + j] ||
 			    data[i * column + j] > max[i * column + j]) {
-				pr_err("checkLimitsMapTotal: Node[%d,%d] = %d exceed limit [%d, %d]\n",
+				pr_debug("%s: Node[%d,%d] = %d exceed limit [%d, %d]\n",
 					i, j, data[i * column + j],
 					min[i * column + j],
 					max[i * column + j]);
@@ -860,7 +860,7 @@ int checkLimitsMapAdj(u8 *data, int row, int column, int *max)
 	for (i = 0; i < row; i++) {
 		for (j = 0; j < column; j++) {
 			if (data[i * column + j] > max[i * column + j]) {
-				pr_err("checkLimitsMapAdj: Node[%d,%d] = %d exceed limit > %d\n",
+				pr_debug("%s: Node[%d,%d] = %d exceed limit > %d\n",
 					i, j,
 					data[i * column + j],
 					max[i * column + j]);
@@ -892,7 +892,7 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max)
 	for (i = 0; i < row; i++) {
 		for (j = 0; j < column; j++) {
 			if (data[i * column + j] > max[i * column + j]) {
-				pr_err("checkLimitsMapAdjTotal: Node[%d,%d] = %d exceed limit > %d\n",
+				pr_debug("%s: Node[%d,%d] = %d exceed limit > %d\n",
 					i, j,
 					data[i * column + j],
 					max[i * column + j]);
