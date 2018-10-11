@@ -82,6 +82,7 @@
 		google,chg-power-supply = "battery";
 		google,bat-power-supply = "maxfg";
 		google,wlc-power-supply = "wireless";
+		google,tcpm-power-supply = "tcpm-source-psy-usbpd0";
 
 		google,chg-cc-tolerance = <25>;
 		google,fv-uv-margin-dpct = <1050>;
