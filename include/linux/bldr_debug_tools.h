@@ -16,6 +16,8 @@
 #include <linux/types.h>
 
 #if defined(CONFIG_BLDR_DEBUG_LOG)
+#define BOOT_DEBUG_MAGIC        0xAACCBBDD
+
 ssize_t bldr_log_read_once(char __user *userbuf, ssize_t klog_size);
 ssize_t bldr_last_log_read_once(char __user *userbuf, ssize_t klog_size);
 ssize_t bldr_log_read(const void *lastk_buf, ssize_t lastk_size,
