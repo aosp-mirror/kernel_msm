@@ -4789,7 +4789,7 @@ static irqreturn_t fg_soc_irq_handler(int irq, void *data)
 		}
 
 		if (val & MSOC_FULL_BIT) {
-			fg_dbg(chip, FG_IRQ, "msoc-full triggered\n", irq);
+			fg_dbg(chip, FG_IRQ, "msoc-full triggered\n");
 			if (batt_psy_initialized(chip))
 				power_supply_changed(chip->batt_psy);
 		}
