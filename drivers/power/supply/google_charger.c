@@ -65,6 +65,8 @@ struct chg_drv {
 	const char *wlc_psy_name;
 	struct power_supply *bat_psy;
 	const char *bat_psy_name;
+	struct power_supply *tcpm_psy;
+	const char *tcpm_psy_name;
 	struct chg_profile chg_profile;
 	struct notifier_block psy_nb;
 
@@ -126,6 +128,11 @@ static char *psy_usb_type_str[] = {
 	"USB_PD", "USB_PD_DRP", "BrickID",
 	"USB_HVDCP", "USB_HVDCP_3", "Wireless", "USB_FLOAT",
 	"BMS", "Parallel", "Main", "Wipower", "USB_C_UFP", "USB_C_DFP",
+};
+
+static char *psy_usbc_type_str[] = {
+	"Unknown", "SDP", "DCP", "CDP", "ACA", "C",
+	"PD", "PD_DRP", "PD_PPS", "BrickID"
 };
 
 #define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
@@ -190,11 +197,17 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
 			   struct power_supply *wlc_psy,
+			   struct power_supply *tcpm_psy,
 			   int temp, int ibatt, int vbatt, int vchrg,
 			   int chg_type, int fv_uv,
 			   int soc, int usb_present, int wlc_online)
 {
-	int usb_type = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_REAL_TYPE);
+	int usb_type, usbc_type;
+
+	usb_type = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_REAL_TYPE);
+
+	if (tcpm_psy)
+		usbc_type = PSY_GET_PROP(tcpm_psy, POWER_SUPPLY_PROP_USB_TYPE);
 
 	pr_info("l=%d vb=%d vc=%d c=%d fv=%d t=%d s=%s usb=%d wlc=%d\n",
 		soc, vbatt / 1000, vchrg / 1000, ibatt / 1000,
@@ -202,8 +215,9 @@ static void pr_info_states(struct power_supply *chg_psy,
 		usb_present, wlc_online);
 
 	if (usb_present)
-		pr_info("usbchg=%s usbv=%d usbc=%d usbMv=%d usbMc=%d\n",
+		pr_info("usbchg=%s typec=%s usbv=%d usbc=%d usbMv=%d usbMc=%d\n",
 			psy_usb_type_str[usb_type],
+			tcpm_psy ? psy_usbc_type_str[usbc_type] : "null",
 			PSY_GET_PROP(usb_psy,
 				     POWER_SUPPLY_PROP_VOLTAGE_NOW) / 1000,
 			PSY_GET_PROP(usb_psy,
@@ -331,6 +345,7 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *usb_psy = chg_drv->usb_psy;
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
+	struct power_supply *tcpm_psy = chg_drv->tcpm_psy;
 	int temp, ibatt, vbatt, vchrg, soc, chg_type;
 	int usb_present, wlc_online = 0;
 	int vbatt_idx = chg_drv->vbatt_idx, fv_uv = chg_drv->fv_uv, temp_idx;
@@ -369,7 +384,7 @@ static void chg_work(struct work_struct *work)
 	    usb_present == -EINVAL || wlc_online == -EINVAL)
 		goto error_rerun;
 
-	pr_info_states(chg_psy, usb_psy, wlc_psy,
+	pr_info_states(chg_psy, usb_psy, wlc_psy, tcpm_psy,
 		       temp, ibatt, vbatt, vchrg,
 		       chg_type, chg_drv->fv_uv,
 		       soc, usb_present, wlc_online);
@@ -1129,6 +1144,7 @@ static void google_charger_init_work(struct work_struct *work)
 	struct chg_drv *chg_drv = container_of(work, struct chg_drv,
 					       init_work.work);
 	struct power_supply *chg_psy, *usb_psy, *wlc_psy = NULL, *bat_psy;
+	struct power_supply *tcpm_psy = NULL;
 	int ret = 0;
 
 	chg_psy = power_supply_get_by_name(chg_drv->chg_psy_name);
@@ -1166,10 +1182,25 @@ static void google_charger_init_work(struct work_struct *work)
 		}
 	}
 
+	if (chg_drv->tcpm_psy_name) {
+		tcpm_psy = power_supply_get_by_name(chg_drv->tcpm_psy_name);
+		if (!tcpm_psy) {
+			pr_info("failed to get \"%s\" power supply\n",
+				chg_drv->tcpm_psy_name);
+			power_supply_put(chg_psy);
+			power_supply_put(bat_psy);
+			power_supply_put(usb_psy);
+			if (wlc_psy)
+				power_supply_put(wlc_psy);
+			goto retry_init_work;
+		}
+	}
+
 	chg_drv->chg_psy = chg_psy;
 	chg_drv->wlc_psy = wlc_psy;
 	chg_drv->usb_psy = usb_psy;
 	chg_drv->bat_psy = bat_psy;
+	chg_drv->tcpm_psy = tcpm_psy;
 
 	chg_drv->charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
 	chg_drv->charge_start_level = DEFAULT_CHARGE_START_LEVEL;
@@ -1197,6 +1228,7 @@ retry_init_work:
 static int google_charger_probe(struct platform_device *pdev)
 {
 	const char *chg_psy_name, *bat_psy_name, *wlc_psy_name = NULL;
+	const char *tcpm_psy_name = NULL;
 	struct chg_drv *chg_drv;
 	int ret;
 
@@ -1239,6 +1271,18 @@ static int google_charger_probe(struct platform_device *pdev)
 		chg_drv->wlc_psy_name =
 		    devm_kstrdup(&pdev->dev, wlc_psy_name, GFP_KERNEL);
 		if (!chg_drv->wlc_psy_name)
+			return -ENOMEM;
+	}
+
+	ret = of_property_read_string(pdev->dev.of_node,
+				      "google,tcpm-power-supply",
+				      &tcpm_psy_name);
+	if (ret != 0)
+		pr_warn("google,tcpm-power-supply not defined\n");
+	if (tcpm_psy_name) {
+		chg_drv->tcpm_psy_name =
+		    devm_kstrdup(&pdev->dev, tcpm_psy_name, GFP_KERNEL);
+		if (!chg_drv->tcpm_psy_name)
 			return -ENOMEM;
 	}
 
@@ -1311,6 +1355,8 @@ static int google_charger_remove(struct platform_device *pdev)
 			power_supply_put(chg_drv->usb_psy);
 		if (chg_drv->wlc_psy)
 			power_supply_put(chg_drv->wlc_psy);
+		if (chg_drv->tcpm_psy)
+			power_supply_put(chg_drv->tcpm_psy);
 		wakeup_source_trash(&chg_drv->chg_ws);
 	}
 
