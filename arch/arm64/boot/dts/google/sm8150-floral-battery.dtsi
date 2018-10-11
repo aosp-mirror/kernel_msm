@@ -28,6 +28,7 @@
 			   "chg_temp";
 
 	google,batt_psy_is_bms;
+	qcom,hvdcp-disable;
 };
 
 &pm8150b_gpios {
