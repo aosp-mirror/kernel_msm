@@ -52,7 +52,10 @@
 		clock-names = "cpu0_clk", "cpu1_clk",
 				"cpu2_clk", "cpu3_clk";
 		qcom,cpufreq-table =
-			 <  800000 >,
+			 < 200000 >,
+			 < 400000 >,
+			 < 533330 >,
+			 < 800000 >,
 			 < 1094400 >,
 			 < 1267200 >;
 	};
