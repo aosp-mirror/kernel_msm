@@ -327,7 +327,6 @@ static void chg_work(struct work_struct *work)
 	struct chg_drv *chg_drv =
 	    container_of(work, struct chg_drv, chg_work.work);
 	struct chg_profile *profile = &chg_drv->chg_profile;
-	union power_supply_propval val;
 	struct power_supply *chg_psy = chg_drv->chg_psy;
 	struct power_supply *usb_psy = chg_drv->usb_psy;
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
@@ -672,7 +671,7 @@ static void chg_work(struct work_struct *work)
 		pr_err("chg_work charging status UNKNOWN\n");
 		goto error_rerun;
 	default:
-		pr_err("chg_work invalid charging status %d\n", val.intval);
+		pr_err("invalid charging status %d\n", batt_status);
 		goto error_rerun;
 	}
 
