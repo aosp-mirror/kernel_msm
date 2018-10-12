@@ -117,19 +117,22 @@ static int ab_debugfs_boot(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *) data;
 
-    switch (val) {
-    case 0:
-        ab_bootsequence(sc, 1);
-        break;
-    case 1:
-        ab_interrupt_M0(0);
-        break;
-    case 2:
-        gpiod_set_value(sc->fw_patch_en, __GPIO_ENABLE);
-        break;
-    default:
-        pr_info("Unsupported value\n");
-    }
+	switch (val) {
+	case 0:
+		ab_bootsequence(sc, 1);
+		break;
+	case 1:
+		ab_interrupt_M0(0);
+		break;
+	case 2:
+		gpiod_set_value(sc->fw_patch_en, __GPIO_ENABLE);
+		break;
+	case 3:
+		ab_bootsequence(sc, 0);
+		break;
+	default:
+		pr_info("Unsupported value\n");
+	}
 
 	return 0;
 }
