@@ -307,25 +307,27 @@ static int iaxxx_regmap_spi_read(void *context,
 	uint32_t *readbuf;
 	uint32_t words = val_len / sizeof(uint32_t);
 	uint32_t reg2[4] = { };
-	uint8_t *padding;
-	uint8_t *preg2;
+	uint8_t *rx_buf;
+	uint8_t *tx_buf;
 	int i = 0, rc = 0;
 
 	/* For reads, most significant bit is set after address shifted */
 	uint32_t reg_addr = be32_to_cpu(*(uint32_t *)reg);
 	uint32_t addr = reg_addr;
+	size_t msg_len = max(sizeof(reg2),
+			     val_len + IAXXX_REG_LEN_WITH_PADDING);
 
 	if (atomic_read(&priv->power_state) == IAXXX_SUSPEND)
 		return -ENXIO;
 
-	preg2 = kzalloc(sizeof(reg2), GFP_DMA | GFP_KERNEL);
-	if (preg2 == NULL) {
+	tx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
+	if (tx_buf == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
 
-	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
-	if (padding == NULL) {
+	rx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
+	if (rx_buf == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		rc = -ENOMEM;
 		goto mem_alloc_fail;
@@ -333,21 +335,21 @@ static int iaxxx_regmap_spi_read(void *context,
 
 	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
 	reg2[0] = reg_addr;
-	memcpy(preg2, reg2, sizeof(reg2));
+	memcpy(tx_buf, reg2, sizeof(reg2));
 
 	spi_message_init(&m);
 
 	/* Register address */
-	t[0].len = IAXXX_REG_LEN_WITH_PADDING + val_len;
-	t[0].tx_buf = preg2;
-	t[0].rx_buf = padding;
+	t[0].len = msg_len;
+	t[0].tx_buf = tx_buf;
+	t[0].rx_buf = rx_buf;
 	spi_message_add_tail(&t[0], &m);
 
 	rc = spi_sync(spi, &m);
 	if (rc)
 		goto reg_read_err;
 
-	memcpy(val, padding + IAXXX_REG_LEN_WITH_PADDING, val_len);
+	memcpy(val, rx_buf + IAXXX_REG_LEN_WITH_PADDING, val_len);
 	if (priv->dump_log) {
 		readbuf = (uint32_t *)val;
 		for (i = 0; i < words; i++)
@@ -356,9 +358,9 @@ static int iaxxx_regmap_spi_read(void *context,
 	}
 
 reg_read_err:
-	kfree(padding);
+	kfree(rx_buf);
 mem_alloc_fail:
-	kfree(preg2);
+	kfree(tx_buf);
 
 	return rc;
 }
@@ -398,48 +400,52 @@ static int iaxxx_spi_bus_read(struct device *dev,
 	int rc;
 	struct spi_device *spi = to_spi_device(dev);
 	struct spi_message m;
-	uint32_t pad[4] = {0};
+	uint32_t be32_reg_addr[4] = {0};
 	struct spi_transfer t[1] = { };
-	uint8_t *padding;
-	uint8_t *ppad;
+	uint8_t *rx_buf;
+	uint8_t *tx_buf;
 
 	/* For reads, most significant bit is set after address shifted */
 	uint32_t reg_addr = reg;
 
-	ppad = kzalloc(sizeof(pad), GFP_DMA | GFP_KERNEL);
-	if (ppad == NULL) {
+	size_t msg_len = max(sizeof(be32_reg_addr),
+			     IAXXX_REG_LEN_WITH_PADDING + val_len);
+
+	tx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
+	if (tx_buf == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
 
-	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
-	pad[0] = reg_addr;
-	memcpy(ppad, pad, sizeof(pad));
-
-	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
-	if (padding == NULL) {
+	rx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
+	if (rx_buf == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		rc = -ENOMEM;
 		goto mem_alloc_fail;
 	}
+
+	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
+	be32_reg_addr[0] = reg_addr;
+	memcpy(tx_buf, be32_reg_addr, sizeof(be32_reg_addr));
+
 	spi_message_init(&m);
 
 	/* Register address */
-	t[0].len = IAXXX_REG_LEN_WITH_PADDING + val_len;
-	t[0].tx_buf = ppad;
-	t[0].rx_buf = padding;
+	t[0].len = msg_len;
+	t[0].tx_buf = tx_buf;
+	t[0].rx_buf = rx_buf;
 	spi_message_add_tail(&t[0], &m);
 
 	rc = spi_sync(spi, &m);
 	if (rc)
 		goto bus_read_err;
 
-	memcpy(val, padding + IAXXX_REG_LEN_WITH_PADDING, val_len);
+	memcpy(val, rx_buf + IAXXX_REG_LEN_WITH_PADDING, val_len);
 
 bus_read_err:
-	kfree(padding);
+	kfree(rx_buf);
 mem_alloc_fail:
-	kfree(ppad);
+	kfree(tx_buf);
 
 	return rc;
 }
@@ -463,7 +469,7 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 
 	spi_message_init(&m);
 
-	preg_addr = kzalloc(IAXXX_REG_LEN_WITH_PADDING, GFP_DMA | GFP_KERNEL);
+	preg_addr = kzalloc(len, GFP_DMA | GFP_KERNEL);
 	if (preg_addr == NULL) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		return -ENOMEM;
