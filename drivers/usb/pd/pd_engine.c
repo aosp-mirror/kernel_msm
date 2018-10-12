@@ -43,6 +43,7 @@
 
 #define OTG_ICL_VOTER "OTG_ICL_VOTER"
 #define OTG_DISABLE_APSD_VOTER "OTG_DISABLE_APSD_VOTER"
+#define DISABLE_CC_VOTER "DISABLE_CC_VOTER"
 
 struct usbpd {
 	struct device		dev;
@@ -122,6 +123,8 @@ struct usbpd {
 	/* alternate source capabilities */
 	struct work_struct update_pdo_work;
 	bool default_src_cap;
+
+	struct votable *disable_pr_switch;
 };
 
 /*
@@ -987,6 +990,24 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		ret = -EINVAL;
 		goto unlock;
 	}
+
+	if (cc == TYPEC_CC_OPEN) {
+		/* Set CC to open and block later changes */
+		ret = vote(pd->disable_pr_switch, DISABLE_CC_VOTER, true, 0);
+		if (ret < 0) {
+			pd_engine_log(pd, "vote disable_pr_switch fail, ret %d",
+				      ret);
+		}
+	} else {
+		/* Make CC be configurable */
+		ret = vote(pd->disable_pr_switch, DISABLE_CC_VOTER, false, 0);
+		if (ret < 0) {
+			pd_engine_log(pd,
+				      "unvote disable_pr_switch fail, ret %d",
+				      ret);
+		}
+	}
+
 	ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
 					&val);
@@ -1388,6 +1409,11 @@ static int tcpm_start_drp_toggling(struct tcpc_dev *dev,
 	int ret;
 
 	mutex_lock(&pd->lock);
+
+	/* Make CC be configurable */
+	ret = vote(pd->disable_pr_switch, DISABLE_CC_VOTER, false, 0);
+	if (ret < 0)
+		pd_engine_log(pd, "unvote disable_pr_switch fail, ret %d", ret);
 
 	val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
 
@@ -2227,9 +2253,18 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto put_psy_wireless;
 	}
 
+	pd->disable_pr_switch = find_votable("DISABLE_POWER_ROLE_SWITCH");
+	if (pd->disable_pr_switch == NULL) {
+		pd_engine_log(pd,
+			      "Couldn't find DISABLE_POWER_ROLE_SWITCH votable, deferring");
+		ret = -EPROBE_DEFER;
+		goto put_psy_wireless;
+	}
+
 	/* initialize votable */
 	vote(pd->usb_icl_votable, OTG_ICL_VOTER, false, 0);
 	vote(pd->apsd_disable_votable, OTG_DISABLE_APSD_VOTER, false, 0);
+	vote(pd->disable_pr_switch, DISABLE_CC_VOTER, false, 0);
 
 	pd->ext_vbus_nb.notifier_call = update_ext_vbus;
 	ext_vbus_register_notify(&pd->ext_vbus_nb);
