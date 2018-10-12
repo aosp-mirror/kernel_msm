@@ -268,6 +268,8 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	mutex_lock(&dev->buffer_lock);
 	ion_buffer_add(dev, buffer);
 	mutex_unlock(&dev->buffer_lock);
+	trace_ion_heap_grow(heap->name, len,
+				atomic_read(&heap->total_allocated));
 	atomic_add(len, &heap->total_allocated);
 	return buffer;
 
@@ -288,6 +290,8 @@ void ion_buffer_destroy(struct ion_buffer *buffer)
 		buffer->heap->ops->unmap_kernel(buffer->heap, buffer);
 	buffer->heap->ops->unmap_dma(buffer->heap, buffer);
 
+	trace_ion_heap_shrink(buffer->heap->name,  buffer->size,
+				atomic_read(&buffer->heap->total_allocated));
 	atomic_sub(buffer->size, &buffer->heap->total_allocated);
 	buffer->heap->ops->free(buffer);
 	if (buffer->pages)
