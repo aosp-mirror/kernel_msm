@@ -215,6 +215,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		eeprom-src = <&eeprom_ir1>;
 		cam_vio-supply = <&max77826_ldo11>;
 		cam_vana-supply = <&max77826_ldo7>;
 		cam_vdig-supply = <&max77826_ldo11>;
@@ -256,6 +257,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		eeprom-src = <&eeprom_ir2>;
 		cam_vio-supply = <&max77826_ldo11>;
 		cam_vana-supply = <&max77826_ldo7>;
 		cam_vdig-supply = <&max77826_ldo11>;
@@ -569,6 +571,7 @@
 		sensor-position-roll = <90>;
 		sensor-position-pitch = <0>;
 		sensor-position-yaw = <180>;
+		eeprom-src = <&eeprom_front>;
 		cam_vio-supply  = <&max77826_ldo11>;
 		cam_vana-supply = <&max77826_ldo8>;
 		cam_vdig-supply = <&max77826_ldo3>;
