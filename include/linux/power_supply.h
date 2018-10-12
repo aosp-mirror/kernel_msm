@@ -320,6 +320,7 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT,
+	POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
