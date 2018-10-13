@@ -21,6 +21,10 @@
 #include "ipu-client.h"
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
+#define REG_NAME_COLUMN_NUMBER 8
+#define REG_VALUE_COLUMN_NUMBER 44
+#define REG_VALUE_COL_WIDTH (REG_VALUE_COLUMN_NUMBER - REG_NAME_COLUMN_NUMBER)
+
 int ipu_debug_vprintf(struct paintbox_data *pb, char *buf, int *written,
 		size_t len, const char *format, va_list args);
 

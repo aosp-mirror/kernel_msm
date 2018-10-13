@@ -13,28 +13,19 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __IPU_AON_H__
-#define __IPU_AON_H__
+#ifndef __IPU_AON_DEBUG_H__
+#define __IPU_AON_DEBUG_H__
 
 #include <linux/types.h>
 
 #include "ipu-client.h"
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-int ipu_aon_dump_registers(struct paintbox_debug *debug, char *buf,
-		size_t len);
-
 void ipu_aon_debug_init(struct paintbox_data *pb);
 void ipu_aon_debug_remove(struct paintbox_data *pb);
 #else
-static inline int ipu_aon_dump_registers(struct paintbox_debug *debug,
-		char *buf, size_t len)
-{
-	return 0;
-}
-
 static inline void ipu_aon_debug_init(struct paintbox_data *pb) {}
 static inline void ipu_aon_debug_remove(struct paintbox_data *pb) {}
 #endif
 
-#endif /* __IPU_AON_H__ */
+#endif /* __IPU_AON_DEBUG_H__ */

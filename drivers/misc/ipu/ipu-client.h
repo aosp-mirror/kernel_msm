@@ -30,6 +30,8 @@
 #include <uapi/ipu.h>
 #include <uapi/paintbox.h>
 
+#include "ipu-regs.h"
+
 #define RESOURCE_NAME_LEN    16
 
 /* This timeout is the minimum wait time for a MIPI stream cleanup to
@@ -78,6 +80,14 @@ struct paintbox_session {
 	struct idr buffer_idr;
 	struct dma_buf *buffer_id_table;
 };
+
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+struct ipu_debug_register {
+	struct paintbox_data *pb;
+	struct dentry *dentry;
+	unsigned int offset;
+};
+#endif
 
 struct paintbox_debug_reg_entry;
 struct paintbox_debug;
@@ -265,11 +275,13 @@ struct paintbox_data {
 	struct list_head bulk_alloc_waiting_list;
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-	struct paintbox_debug aon_debug;
 	struct paintbox_debug apb_debug;
 	struct paintbox_debug bif_debug;
 	struct dentry *debug_root;
 	struct dentry *regs_dentry;
+	struct dentry *aon_debug_dir;
+	struct dentry *aon_reg_dump;
+	struct ipu_debug_register aon_debug_registers[IO_AON_NUM_REGS];
 #endif
 };
 

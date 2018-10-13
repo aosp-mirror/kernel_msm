@@ -32,9 +32,6 @@
 #include "ipu-regs.h"
 #include "ipu-stp-debug.h"
 
-#define REG_NAME_COLUMN_NUMBER 8
-#define REG_VALUE_COLUMN_NUMBER 44
-
 int ipu_debug_vprintf(struct paintbox_data *pb, char *buf, int *written,
 		size_t len, const char *format, va_list args)
 {
@@ -440,13 +437,6 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 				ret);
 		return ret;
 	}
-
-	ret = ipu_aon_dump_registers(&pb->aon_debug, buf + written, len -
-			written);
-	if (ret < 0)
-		goto err_exit;
-
-	written += ret;
 
 	ret = ipu_apb_dump_registers(&pb->apb_debug, buf + written, len -
 			written);
