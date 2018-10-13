@@ -183,6 +183,8 @@ static void ipu_core_jqs_msg_process_log_message(struct paintbox_bus *bus,
 	case JQS_LOG_LEVEL_INFO:
 		dev_info(bus->parent_dev, "%s\n", buf);
 		break;
+	case JQS_LOG_LEVEL_NONE:
+		break;
 	};
 }
 

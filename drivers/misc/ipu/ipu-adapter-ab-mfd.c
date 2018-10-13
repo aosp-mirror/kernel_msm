@@ -257,8 +257,8 @@ static irqreturn_t ipu_adapter_ab_mfd_interrupt(int irq, void *arg)
 	return ipu_core_jqs_msg_transport_interrupt(dev_data->bus);
 }
 
-static int ipu_adapter_ab_mfd_lowprio_irq_notify(struct notifier_block *nb,
-				    unsigned long irq, void *data)
+static int ipu_adapter_ab_mfd_low_priority_irq_notify(struct notifier_block *nb,
+		unsigned long irq, void *data)
 {
 	struct ipu_adapter_ab_mfd_data *dev_data =
 		container_of(nb, struct ipu_adapter_ab_mfd_data,
@@ -268,13 +268,20 @@ static int ipu_adapter_ab_mfd_lowprio_irq_notify(struct notifier_block *nb,
 	if (irq != ABC_MSI_AON_INTNC)
 		return NOTIFY_DONE;
 
-	if ((intnc_val & 1 << INTNC_IPU_HPM_APBIF) ||
-		(intnc_val & 1 << INTNC_IPU_ERR))
+	if (intnc_val & 1 << INTNC_IPU_HPM_APBIF)
+		dev_err(dev_data->dev,
+				"%s: IPU Hardware Performance Monitor Interrupt Received",
+				__func__);
+
+	if (intnc_val & 1 << INTNC_IPU_ERR)
 		/* TODO(b/114760293): watchdog timer timeout should trigger
 		 * catastrophic error.
 		 */
+		dev_err(dev_data->dev, "%s: JQS watchdog tripped", __func__);
+
+	if (intnc_val & 1 << INTNC_PPMU_IPU)
 		dev_err(dev_data->dev,
-				"%s: IPU low priority interrupt notification caught!",
+				"%s: IPU Performance Monitor Interrupt Received",
 				__func__);
 
 	return NOTIFY_OK;
@@ -308,7 +315,7 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->get_dma_device = &ipu_adapter_ab_mfd_get_dma_device;
 }
 
-static int ipu_adapter_ab_mfd_rigister_low_priority_irq(
+static int ipu_adapter_ab_mfd_register_low_priority_irq(
 		struct ipu_adapter_ab_mfd_data *dev_data)
 {
 	int ret;
@@ -333,7 +340,7 @@ static int ipu_adapter_ab_mfd_rigister_low_priority_irq(
 	}
 
 	dev_data->low_priority_irq_nb.notifier_call =
-		ipu_adapter_ab_mfd_lowprio_irq_notify;
+			ipu_adapter_ab_mfd_low_priority_irq_notify;
 	ret = atomic_notifier_chain_register(dev_data->low_priority_irq_nh,
 			&dev_data->low_priority_irq_nb);
 	if (ret) {
@@ -392,7 +399,7 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 		}
 	}
 
-	ret = ipu_adapter_ab_mfd_rigister_low_priority_irq(dev_data);
+	ret = ipu_adapter_ab_mfd_register_low_priority_irq(dev_data);
 	if (ret < 0) {
 		dev_err(&pdev->dev,
 				"%s: failed to register low priority irq, err %d\n",

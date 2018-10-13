@@ -56,7 +56,7 @@ int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 			sizeof(rsp));
 	if (ret < 0) {
 		dev_err(pb->dev,
-				"%s: error sending message type %u, err = %d\n",
+				"%s: error sending message type 0x%08x, err = %d\n",
 				__func__, req->type, ret);
 		return ret;
 	}
