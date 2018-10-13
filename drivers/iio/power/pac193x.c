@@ -256,6 +256,7 @@ struct reg_data {
 	 * channels are currently enabled
 	 */
 	u8	num_enabled_channels;
+	uint64_t tstamp_ms;
 };
 struct pac193x_chip_info {
 	const struct iio_chan_spec	*channels;
@@ -680,6 +681,8 @@ static ssize_t inst_value_show(struct device *dev,
 		pr_err("unable to retrieve inst data\n");
 		return ret;
 	}
+	len += scnprintf(buf + len, PAGE_SIZE - len, "%lu\n",
+			 chip_info->chip_reg_data.tstamp_ms);
 
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 		if (!chip_info->chip_reg_data.active_channels[cnt])
@@ -744,7 +747,7 @@ static ssize_t energy_value_show(struct device *dev,
 
 	/* get time since boot in ms */
 	len += scnprintf(buf + len, PAGE_SIZE - len, "%lu\n",
-			 iio_get_time_ns(indio_dev) / 1000000);
+			 chip_info->chip_reg_data.tstamp_ms);
 
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 		if (!chip_info->chip_reg_data.active_channels[cnt])
@@ -1296,6 +1299,7 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 	int ret;
 	u8 offset_reg_data, samp_shift;
 	int cnt;
+	uint64_t tstamp_ms;
 
 	/* protect the access to the chip */
 	mutex_lock(&chip_info->lock);
@@ -1307,6 +1311,7 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 			goto reg_snapshot_err;
 		}
 	}
+	tstamp_ms = ktime_get_boot_ns()/1000000;
 	/* read the ctrl/status registers for this snapshot */
 	ret = pac193x_i2c_read(chip_info->client, PAC193X_CTRL_STAT_REGS_ADDR,
 			       (u8 *) chip_info->chip_reg_data.ctrl_regs,
@@ -1325,6 +1330,7 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 			PAC193X_ACC_COUNT_REG);
 		goto reg_snapshot_err;
 	}
+	chip_info->chip_reg_data.tstamp_ms = tstamp_ms;
 	offset_reg_data = 0;
 	chip_info->chip_reg_data.acc_count =
 	mACC_COUNT(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
