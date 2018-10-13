@@ -74,6 +74,7 @@ struct led_laser_ctrl_t {
 	dev_t dev;
 	struct cdev c_dev;
 	struct class *cl;
+	uint32_t sx9320_sid;
 };
 
 static const struct reg_setting silego_reg_settings[] = {
@@ -88,7 +89,7 @@ static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 
 	old_sid = ctrl->io_master_info.cci_client->sid;
 	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
-	ctrl->io_master_info.cci_client->sid = 0x28;
+	ctrl->io_master_info.cci_client->sid = ctrl->sx9320_sid;
 	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
 
 	rc = camera_io_init(&(ctrl->io_master_info));
@@ -437,6 +438,12 @@ static int lm36011_parse_dt(struct device *dev)
 		return -ENOENT;
 	}
 	ctrl->type = value;
+
+	if (of_property_read_u32(dev->of_node, "sx9320_sid", &value)) {
+		dev_err(dev, "cap sense slave address not specified in dt");
+		return -ENOENT;
+	}
+	ctrl->sx9320_sid = value;
 
 	return 0;
 }
