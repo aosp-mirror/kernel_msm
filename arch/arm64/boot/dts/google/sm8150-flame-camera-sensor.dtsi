@@ -131,7 +131,16 @@
 	};
 };
 
+&lm36011_flood {
+    sx9320_sid = <0x2c>;
+};
+
+&lm36011_dot {
+    sx9320_sid = <0x2c>;
+};
+
 &cam_cci0 {
+
 	qcom,cam-res-mgr {
 		compatible = "qcom,cam-res-mgr";
 		status = "ok";
