@@ -268,12 +268,15 @@ static int ap314aq_set_ps_thres(struct i2c_client *client)
     n2f = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_N2F_PATH);
     LDBG("bias = %d, n2f = %d, THRESHOLD_LOW = %d, THRESHOLD_HIGH= %d\n",
 		bias, n2f, AP314AQ_PS_THRESHOLD_LOW, AP314AQ_PS_THRESHOLD_HIGH);
+#if 0
     if (n2f > 0 && n2f < AP314AQ_PS_THRESHOLD_LOW){
 	value_l = n2f/AP314AQ_PS_CAL_GAIN;
     }
     else{
 	value_l = AP314AQ_PS_THRESHOLD_LOW/AP314AQ_PS_CAL_GAIN;
     }
+#endif
+    value_l = AP314AQ_PS_THRESHOLD_LOW; //Using golden value to setting the low threshold
     value_h = AP314AQ_PS_THRESHOLD_HIGH;
 
     ap314aq_set_plthres(client, value_l);
@@ -1052,7 +1055,7 @@ static int ap314aq_init_client(struct i2c_client *client)
 		/*Set wait time*/
     i2c_smbus_write_byte_data(client,AP314AQ_REG_SYS_WAITTIME,AP314AQ_WAITING_TIME);
 		/*Set p-sensor gain*/
-    i2c_smbus_write_byte_data(client,AP314AQ_REG_PS_CONF,AP314AQ_PS_GAIN_1);
+    i2c_smbus_write_byte_data(client,AP314AQ_REG_PS_CONF,AP314AQ_PS_GAIN_2);
 		/*lsensor high low thread*/
     i2c_smbus_write_byte_data(client, AP314AQ_REG_ALS_THDL_L, 0);
     i2c_smbus_write_byte_data(client, AP314AQ_REG_ALS_THDL_H, 0);

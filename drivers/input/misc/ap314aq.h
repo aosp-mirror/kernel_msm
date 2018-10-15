@@ -53,7 +53,7 @@
 
 #define AP314AQ_K1_CRITERIA		400
 #define AP314AQ_K2_CRITERIA		30
-#define AP314AQ_PS_CAL_GAIN 		2
+#define AP314AQ_PS_CAL_GAIN 		1
 
 #define AP314AQ_PS_THRESHOLD_BIAS 	0
 #define AP314AQ_PS_THRESHOLD_HIGH 	800 // default high thres
