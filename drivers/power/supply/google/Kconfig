@@ -1,0 +1,30 @@
+menu "Google, Inc. Charging and Fuel Gauge support"
+
+config GOOGLE_BATTERY_CHARGING
+	tristate "Google Battery and Charging Control"
+	select GOOGLE_CHARGER
+	select GOOGLE_BATTERY
+	help
+	  Say Y here to enable new Google Gen Features.
+	  This option selects Google Battery and Multi Step Charging enabling
+	  new features such as battery controlled charge tables and charge path
+	  resistance compensation. New gen features require configuration in
+	  device tree.
+
+config GOOGLE_CHARGER
+	tristate "Google Multi Step Charging"
+	help
+	  Say Y here to choose the Google Multi Step Charging control.
+	  The driver implements a multi CC-CV steps charging using battery
+	  temperature and voltage to set the charger's constant charging
+	  current and float voltage.
+
+config GOOGLE_BATTERY
+	tristate "Google Battery"
+	help
+	  Say Y here to choose the Google Battery.
+	  The driver handles charge tables, recharge threshold, state of charge,
+	  battery statistics such as bin count and other features common to all
+	  google battery powered devices.
+
+endmenu

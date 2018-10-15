@@ -621,12 +621,6 @@ config CHARGER_RT9455
 	help
 	  Say Y to enable support for Richtek RT9455 battery charger.
 
-config GOOGLE_CHARGER
-	tristate "Google Battery Charging Control"
-	help
-	  Say Y here to choose the Google battery charging control.
-	  The driver performs a multi CC-CV steps charging setting the Constant
-	  Charge Current given battery temperature and voltage limits.
 
 config USB_OVERHEAT_MITIGATION
 	tristate "Google USB Overheat Mitigation"
@@ -634,5 +628,6 @@ config USB_OVERHEAT_MITIGATION
 	  Say Y here to enable Google USB overheat mitigation
 
 source "drivers/power/supply/qcom/Kconfig"
+source "drivers/power/supply/google/Kconfig"
 
 endif # POWER_SUPPLY
