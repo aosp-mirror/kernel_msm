@@ -173,7 +173,7 @@
 		sensor-position = <1>;
 		sensor-mode = <0>;
 		cci-device = <0>;
-		cci-master = <1>;
+		cci-master = <0>;
 		status = "ok";
 		clocks = <&clock_camcc CAM_CC_MCLK1_CLK>;
 		clock-names = "cam_clk";
@@ -208,7 +208,7 @@
 		sensor-position = <1>;
 		sensor-mode = <0>;
 		cci-device = <0>;
-		cci-master = <1>;
+		cci-master = <0>;
 		status = "ok";
 		clocks = <&clock_camcc CAM_CC_MCLK1_CLK>;
 		clock-names = "cam_clk";
