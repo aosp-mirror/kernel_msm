@@ -35,7 +35,7 @@ Optional properties:
      during ir drop compensation before a new attempt to raise voltage when
      battery voltage is found above tier limit. Defaults to 10 cycles (20
      seconds for default cv-update-interval).
- - google,chg-tolerance: the deci-percent tolerance we need to give the PMIC to
+ - google,chg-cc-tolerance: the deci-percent tolerance we need to give the PMIC to
      ensure actual current is below chg-cc-limits (divide by 10 to get
      percentage points). Max allowed tolerance is 25%.
 - google,fv-uv-margin-dpct: the deci-percent margin on vtier that charger float
