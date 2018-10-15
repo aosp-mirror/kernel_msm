@@ -648,8 +648,10 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 
 	rmidev_allocate_buffer(count);
 
-	if (copy_from_user(rmidev->tmpbuf, buf, count))
-		return -EFAULT;
+	if (copy_from_user(rmidev->tmpbuf, buf, count)) {
+		retval = -EFAULT;
+		goto err_copy_user;
+	}
 
 	retval = synaptics_rmi4_reg_write(rmidev->rmi4_data,
 			*f_pos,
@@ -658,6 +660,7 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 	if (retval >= 0)
 		*f_pos += retval;
 
+err_copy_user:
 	mutex_unlock(&(dev_data->file_mutex));
 
 	return retval;
