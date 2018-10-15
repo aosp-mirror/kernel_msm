@@ -66,3 +66,13 @@
 &pil_cdsp_mem {
 	reg = <0x0 0x9AB00000 0x0 0x1400000>;
 };
+
+&reserved_memory {
+	ramoops@A47FF000 {
+		compatible = "ramoops";
+		reg = <0 0xA47FF000 0 0x200000>;
+		record-size = <0x20000>;
+		console-size = <0x100000>;
+		pmsg-size = <0x80000>;
+	};
+};
