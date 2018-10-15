@@ -86,7 +86,7 @@
 		google,bat-power-supply = "maxfg";
 		google,wlc-power-supply = "wireless";
 
-		google,chg-cc-tolerance = <250>;
+		google,chg-cc-tolerance = <25>;
 		google,fv-uv-margin-dpct = <1050>;
 
 		/* FIXME: b/113611881 */
