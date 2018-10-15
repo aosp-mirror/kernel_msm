@@ -74,6 +74,41 @@
 };
 
 &soc {
+	google_battery: google,battery {
+		compatible = "google,battery";
+
+		google,psy-name = "gbattery";
+		google,fg-psy-name = "maxfg";
+
+		/* chg-battery-capacity = <0> -> read FULL_DESIGN from FG */
+		google,chg-battery-capacity = <0>;
+		/* charge table for floral */
+		google,chg-temp-limits = <0 100 200 420 460 480 550>;
+		google,chg-cv-limits = <4200000 4300000 4400000>;
+		google,chg-cc-limits = <
+			 30  10   0
+			 50  30  30
+			100  70  50
+			 80  50  50
+			 50  50   0
+			 30   0   0
+		>;
+
+		/* battery poll rate */
+		google,update-interval = <30000>;
+		/* IRDrop Compensation */
+		google,fv-uv-resolution = <25>;
+		google,fv-uv-margin-dpct = <1020>;
+		google,cv-range-accuracy = <10>;
+		/* tier switch */
+		google,cv-debounce-cnt = <3>;
+		google,cv-tier-ov-cnt = <10>;
+		google,cv-tier-switch-cnt = <3>;
+		/* experimental */
+		google,cv-otv-margin = <0>;
+	};
+
+
 	google_charger: google,charger {
 		compatible = "google,charger";
 
