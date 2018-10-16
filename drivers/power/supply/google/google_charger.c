@@ -35,6 +35,8 @@
 #define DEFAULT_CHARGE_STOP_LEVEL 100
 #define DEFAULT_CHARGE_START_LEVEL 0
 
+#define CHG_WORK_ERROR_RETRY_MS 1000
+
 struct chg_profile {
 	u32 update_interval;
 	u32 battery_capacity;
@@ -88,6 +90,10 @@ struct chg_drv {
 	bool lowerdb_reached;
 	int charge_stop_level;
 	int charge_start_level;
+
+	// newgen
+	int fcc;
+
 };
 
 /* Used as left operand also */
@@ -181,6 +187,7 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->temp_idx = -1;
 	chg_drv->vbatt_idx = -1;
 	chg_drv->fv_uv = -1;
+	chg_drv->fcc = -1;
 	chg_drv->checked_cv_cnt = 0;
 	chg_drv->checked_ov_cnt = 0;
 	chg_drv->checked_tier_switch_cnt = 0;
@@ -278,8 +285,206 @@ static int is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 	return disable_charging;
 }
 
+static int chg_set_charger(struct power_supply *chg_psy, int fv_uv, int fcc)
+{
+	int rc;
 
-/* 1. charge profile idx based on the battery temperature */
+	/* TAPER CONTROL is in the charger */
+	rc = PSY_SET_PROP(chg_psy,
+		POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, fcc);
+	if (rc != 0) {
+		pr_err("ng: cannot set charging current rc=%d\n", rc);
+		return -EIO;
+	}
+
+	rc = PSY_SET_PROP(chg_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv);
+	if (rc != 0) {
+		pr_err("ng: cannot set float voltage rc=%d\n", rc);
+		return -EIO;
+	}
+
+	return rc;
+}
+
+/* new gen charging code */
+#ifdef CONFIG_GOOGLE_BATTERY_CHARGING
+static int chg_work_ng__(struct chg_drv *chg_drv)
+{
+	int rc;
+	struct power_supply *chg_psy = chg_drv->chg_psy;
+	struct power_supply *bat_psy = chg_drv->bat_psy;
+	int vchrg, chg_type, chg_status, fv_uv, fcc;
+	int update_interval = chg_drv->chg_profile.update_interval;
+	uint64_t chg_state;
+
+	vchrg = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	chg_type = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
+	chg_status = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
+	pr_info("ng: vchrg=%d chg_type=%d chg_status=%d\n",
+		vchrg, chg_type, chg_status);
+	if (vchrg == -EINVAL || chg_type == -EINVAL || chg_status == -EINVAL)
+		return -EINVAL;
+
+	/* TODO: b/117520650 charge logic, b/117527786 irdrop compensation
+	 * Also use chg_mode (debug) to disable irdrop compensation, see
+	 * legacy code for details.
+	 * NOTE: see also b/117899012 for factoring common code.
+	 */
+
+	chg_state = chg_type;
+
+	rc = PSY_SET_PROP(bat_psy,
+		POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE, chg_state);
+	fv_uv = PSY_GET_PROP(bat_psy,
+		POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT);
+	fcc = PSY_GET_PROP(bat_psy,
+		POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE);
+	pr_info("ng: chg_state=%lu fv_uv=%d fcc=%d rc=%d\n",
+		(unsigned long)chg_state, fv_uv, fcc, rc);
+	if (rc || fv_uv < 0 || fcc < 0)
+		return -EINVAL;
+
+	/* APPLY IRDROP COMPENSATION if the battery doesn't do it
+	 * Battery needs to know charger voltage and state to run the irdrop
+	 * compensation code, this could be configured from DT.
+	 */
+
+	/* TODO: b/117949231, support for PSS */
+
+	pr_info("ng: cchg_drv->fv_uv=%d chg_drv->fcc=%d\n",
+		chg_drv->fv_uv, chg_drv->fcc);
+
+	if (chg_drv->fv_uv != fv_uv || chg_drv->fcc != fcc) {
+		/* TAPER CONTROL is in the charger */
+		rc = chg_set_charger(chg_psy, fcc, fv_uv);
+		if (rc != 0)
+			return -EINVAL;
+
+		chg_drv->fv_uv = fv_uv;
+		chg_drv->fcc = fcc;
+	}
+
+	/* DISCHARGING only when not connected */
+	switch (chg_status) {
+	case POWER_SUPPLY_STATUS_DISCHARGING:
+		update_interval = 0;
+		break;
+	case POWER_SUPPLY_STATUS_CHARGING:
+	case POWER_SUPPLY_STATUS_FULL:
+	case POWER_SUPPLY_STATUS_NOT_CHARGING:
+		break;
+	//case POWER_SUPPLY_STATUS_UNKNOWN:
+	default:
+		pr_err("chg_work invalid charging status %d\n", chg_status);
+		update_interval = CHG_WORK_ERROR_RETRY_MS;
+		break;
+	}
+
+	return update_interval;
+}
+
+/* new gen charging code */
+static void chg_work_ng(struct work_struct *work)
+{
+	struct chg_drv *chg_drv =
+	    container_of(work, struct chg_drv, chg_work.work);
+	struct power_supply *usb_psy = chg_drv->usb_psy;
+	struct power_supply *wlc_psy = chg_drv->wlc_psy;
+	struct power_supply *bat_psy = chg_drv->bat_psy;
+	struct power_supply *chg_psy = chg_drv->chg_psy;
+	int usb_present, wlc_online = 0;
+	int update_interval = chg_drv->chg_profile.update_interval;
+	int soc, disable_charging;
+	int disable_pwrsrc;
+
+	__pm_stay_awake(&chg_drv->chg_ws);
+	pr_debug("battery charging work item\n");
+
+	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
+	if (wlc_psy)
+		wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
+
+	/* If no power source, disable charging and exit */
+	if (!usb_present && !wlc_online) {
+		pr_info("no power source detected, disabling charging\n");
+		reset_chg_drv_state(chg_drv);
+		goto exit_chg_work;
+	}
+
+	/* need this only if is_charging_disabled() is enabled */
+	soc = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
+	if (soc == -EINVAL)
+		goto error_rerun;
+
+	/* this force drain: we might decide to run from power instead */
+	disable_charging = is_charging_disabled(chg_drv, soc);
+	if (disable_charging && soc > chg_drv->charge_stop_level)
+		disable_pwrsrc = 1;
+	else
+		disable_pwrsrc = 0;
+
+	if (disable_charging != chg_drv->disable_charging) {
+		pr_info("set disable_charging(%d)", disable_charging);
+		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE,
+			     disable_charging);
+	}
+	chg_drv->disable_charging = disable_charging;
+
+	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
+		pr_info("set disable_pwrsrc(%d)", disable_pwrsrc);
+		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND,
+			     disable_pwrsrc);
+	}
+	chg_drv->disable_pwrsrc = disable_pwrsrc;
+
+	if (chg_drv->disable_charging || chg_drv->disable_pwrsrc) {
+		/* no need to reschedule, battery psy event will reschedule */
+	} else {
+		/* TODO: find a strategy for update_interval. Could start with
+		 * long interval during fast charge (discharge while connected?)
+		 * and short interval at taper. NOTE that  battery might require
+		 * a different strategy. So, either the charge code read the
+		 * update interval as part of the charging loop and use a MIN
+		 * votable to set the rate, or battery send a PS notification
+		 * (same type? new PS type?) to request re-running the chage
+		 * logic again, ot battery vote to a common votable in
+		 * google_bms.
+		 */
+		update_interval = chg_work_ng__(chg_drv);
+		if (update_interval < 0)
+			update_interval = CHG_WORK_ERROR_RETRY_MS;
+	}
+
+
+	if (update_interval) {
+		pr_debug("rerun battery charging work in %d ms\n",
+			 update_interval);
+		schedule_delayed_work(&chg_drv->chg_work,
+				      msecs_to_jiffies(update_interval));
+	} else {
+		pr_info("stop battery charging work:\n");
+		reset_chg_drv_state(chg_drv);
+	}
+
+	goto exit_chg_work;
+
+error_rerun:
+	pr_err("error occurred, rerun battery charging work in %d ms\n",
+	       CHG_WORK_ERROR_RETRY_MS);
+	schedule_delayed_work(&chg_drv->chg_work,
+			      msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
+
+exit_chg_work:
+	__pm_relax(&chg_drv->chg_ws);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+/* 1. charge profile idx based on the battery temperature
+ * TODO: move to google_bms.c
+ */
 static int msc_temp_idx(struct chg_profile *profile, int temp)
 {
 	int temp_idx = 0;
@@ -295,6 +500,7 @@ static int msc_temp_idx(struct chg_profile *profile, int temp)
  * When selecting an index need to make sure that headroom for the tier voltage
  * will allow to send to the battery _at least_ next tier max FCC current and
  * well over charge termination current.
+ * TODO: move to google_bms.c
  */
 static int msc_voltage_idx(struct chg_profile *profile, int vbatt)
 {
@@ -316,7 +522,9 @@ static int msc_voltage_idx(struct chg_profile *profile, int vbatt)
 	return vbatt_idx;
 }
 
-/* Cap to fv_uv_margin_pct of VTIER if needed */
+/* Cap to fv_uv_margin_pct of VTIER if needed
+ * TODO: move to google_bms.c
+ */
 static int msc_round_fv_uv(struct chg_profile *profile, int vtier, int fv_uv)
 {
 	int result;
@@ -335,7 +543,6 @@ static int msc_round_fv_uv(struct chg_profile *profile, int vtier, int fv_uv)
 	return result;
 }
 
-#define CHG_WORK_ERROR_RETRY_MS 1000
 static void chg_work(struct work_struct *work)
 {
 	struct chg_drv *chg_drv =
@@ -654,12 +861,7 @@ static void chg_work(struct work_struct *work)
 				POWER_SUPPLY_TAPER_CONTROL_MODE_IMMEDIATE);
 		}
 
-		rc = PSY_SET_PROP(chg_psy,
-			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, cc_max);
-		if (rc == 0)
-			rc = PSY_SET_PROP(chg_psy,
-					POWER_SUPPLY_PROP_VOLTAGE_MAX, fv_uv);
-
+		rc = chg_set_charger(chg_psy, cc_max, fv_uv);
 		if (rc != 0) {
 			pr_err("MSC_SET: error rc=%d\n", rc);
 			goto error_rerun;
@@ -713,6 +915,9 @@ exit_chg_work:
 	__pm_relax(&chg_drv->chg_ws);
 }
 
+// ----------------------------------------------------------------------------
+
+ /* TODO: move to google_bms.c */
 static void dump_profile(struct chg_profile *profile)
 {
 	char buff[256];
@@ -739,6 +944,7 @@ static void dump_profile(struct chg_profile *profile)
 	}
 }
 
+/* TODO: factor with google_charger and move to google_bms.c */
 static int chg_init_chg_profile(struct chg_drv *chg_drv)
 {
 	struct device *dev = chg_drv->device;
@@ -1333,7 +1539,12 @@ static int google_charger_probe(struct platform_device *pdev)
 	init_debugfs(chg_drv);
 
 	INIT_DELAYED_WORK(&chg_drv->init_work, google_charger_init_work);
+
+#ifdef CONFIG_GOOGLE_BATTERY_CHARGING
+	INIT_DELAYED_WORK(&chg_drv->chg_work, chg_work_ng);
+#else
 	INIT_DELAYED_WORK(&chg_drv->chg_work, chg_work);
+#endif
 	platform_set_drvdata(pdev, chg_drv);
 
 	schedule_delayed_work(&chg_drv->init_work,
