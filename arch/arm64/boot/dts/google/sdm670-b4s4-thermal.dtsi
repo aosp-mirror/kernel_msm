@@ -15,7 +15,7 @@
 /*
  * Rename msm_therm to mb_therm.
  * Rename emmc_therm to key_therm.
- * Rename quiet_therm to usb_therm.
+ * Rename quiet_therm to usbc_therm.
  * Register pa_therm1 thermistor.
  */
 &spmi_bus {
@@ -41,7 +41,7 @@
 			};
 
 			chan@51 {
-				label = "usb_therm";
+				label = "usbc_therm";
 			};
 		};
 
@@ -66,7 +66,7 @@
 			};
 
 			chan@51 {
-				label = "usb_therm";
+				label = "usbc_therm";
 			};
 		};
 	};
@@ -76,7 +76,7 @@
 /*
  * Rename msm-therm-adc to mb-therm-adc.
  * Rename emmc-therm-adc to key-therm-adc.
- * Rename quiet-therm-adc to usb-therm-adc.
+ * Rename quiet-therm-adc to usbc-therm-adc.
  * Register pa_therm1 thermal_zone.
  */
 &thermal_zones {
@@ -155,7 +155,7 @@
 		};
 	};
 
-	usb-therm-adc {
+	usbc-therm-adc {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
 		thermal-sensors = <&pm660_adc_tm 0x51>;
