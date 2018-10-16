@@ -84,7 +84,6 @@
 					39 01 00 00 64 00 03 F0 5A 5A
 					15 01 00 00 01 00 02 53 22
 					39 01 00 00 11 00 03 F0 A5 A5
-					39 01 00 00 00 00 03 51 03 FF
 				];
 				qcom,mdss-dsi-nolp-command = [
 					05 01 00 00 00 00 01 28
@@ -106,8 +105,9 @@
 				label = "off";
 				google,dsi-lp-brightness-threshold = <0>;
 				google,dsi-lp-command = [
-					/* blank */
+					/* blank and turn off brightness */
 					05 01 00 00 00 00 01 28
+					39 01 00 00 00 00 03 51 00 00
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
@@ -120,6 +120,7 @@
 					39 01 00 00 64 00 03 F0 5A 5A
 					15 01 00 00 01 00 02 53 23
 					39 01 00 00 11 00 03 F0 A5 A5
+					39 01 00 00 00 00 03 51 00 05
 					05 01 00 00 00 00 01 29
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
@@ -133,6 +134,7 @@
 					39 01 00 00 64 00 03 F0 5A 5A
 					15 01 00 00 01 00 02 53 22
 					39 01 00 00 11 00 03 F0 A5 A5
+					39 01 00 00 00 00 03 51 00 19
 					05 01 00 00 00 00 01 29
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
