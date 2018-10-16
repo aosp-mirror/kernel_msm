@@ -2854,10 +2854,10 @@ static bool csr_get_rsn_information(tHalHandle hal, tCsrAuthList *auth_type,
 			CSR_RSN_OUI_SIZE);
 	c_ucast_cipher =
 		(uint8_t) (rsn_ie->pwise_cipher_suite_count);
-	c_auth_suites = (uint8_t) (rsn_ie->akm_suite_count);
+	c_auth_suites = (uint8_t) (rsn_ie->akm_suite_cnt);
 	for (i = 0; i < c_auth_suites && i < CSR_RSN_MAX_AUTH_SUITES; i++) {
 		qdf_mem_copy((void *)&authsuites[i],
-			(void *)&rsn_ie->akm_suites[i], CSR_RSN_OUI_SIZE);
+			(void *)&rsn_ie->akm_suite[i], CSR_RSN_OUI_SIZE);
 	}
 
 	/* Check - Is requested unicast Cipher supported by the BSS. */
@@ -3310,6 +3310,7 @@ uint8_t csr_construct_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
 	bool fRSNMatch;
 	uint8_t cbRSNIe = 0;
+	uint32_t ret;
 	uint8_t UnicastCypher[CSR_RSN_OUI_SIZE];
 	uint8_t MulticastCypher[CSR_RSN_OUI_SIZE];
 	uint8_t AuthSuite[CSR_RSN_OUI_SIZE];
@@ -3323,6 +3324,7 @@ uint8_t csr_construct_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 	tDot11fBeaconIEs *pIesLocal = pIes;
 	eCsrAuthType negAuthType = eCSR_AUTH_TYPE_UNKNOWN;
 	tCsrRoamSession *session = CSR_GET_SESSION(pMac, sessionId);
+	tDot11fIERSN rsn_ie = {0};
 
 	if (!CSR_IS_SESSION_VALID(pMac, sessionId) || !session)
 		return 0;
@@ -3337,6 +3339,21 @@ uint8_t csr_construct_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 			     (csr_get_parsed_bss_description_ies
 				     (pMac, pSirBssDesc, &pIesLocal)))) {
 			break;
+		}
+
+		/*
+		 * Use intersection of the RSN cap sent by user space and
+		 * the AP, so that only common capability are enabled.
+		 */
+		if (pProfile->pRSNReqIE && pProfile->nRSNReqIELength) {
+			ret = dot11f_unpack_ie_rsn(pMac, pProfile->pRSNReqIE + 2,
+				  pProfile->nRSNReqIELength -2, &rsn_ie, false);
+			if (DOT11F_SUCCEEDED(ret)) {
+				pIesLocal->RSN.RSN_Cap[0] = pIesLocal->RSN.RSN_Cap[0] &
+							    rsn_ie.RSN_Cap[0];
+				pIesLocal->RSN.RSN_Cap[1] = pIesLocal->RSN.RSN_Cap[1] &
+							    rsn_ie.RSN_Cap[1];
+			}
 		}
 		/* See if the cyphers in the Bss description match with the
 		 * settings in the profile.
@@ -3370,14 +3387,12 @@ uint8_t csr_construct_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 		qdf_mem_copy(&pAuthSuite->AuthOui[0], AuthSuite,
 			     sizeof(AuthSuite));
 
-		/* RSN capabilities follows the Auth Suite (two octects)
-		 * !!REVIEW - What should STA put in RSN capabilities, currently
-		 * just putting back APs capabilities For one, we shouldn't
-		 * EVER be sending out "pre-auth supported".  It is an AP only
-		 * capability For another, we should use the Management Frame
-		 * Protection values given by the supplicant
-		 */
+		/* PreAuthSupported is an AP only capability */
 		RSNCapabilities.PreAuthSupported = 0;
+		/*
+		 * Use the Management Frame Protection values given by the
+		 * supplicant, if AP and STA both are MFP capable.
+		 */
 #ifdef WLAN_FEATURE_11W
 		if (RSNCapabilities.MFPCapable && pProfile->MFPCapable) {
 			RSNCapabilities.MFPCapable = pProfile->MFPCapable;
@@ -4064,6 +4079,22 @@ uint8_t csr_retrieve_rsn_ie(tHalHandle hHal, uint32_t sessionId,
 	do {
 		if (!csr_is_profile_rsn(pProfile))
 			break;
+		/* copy RSNIE from user as it is if test mode is enabled */
+		if (pProfile->force_rsne_override &&
+		    pProfile->nRSNReqIELength && pProfile->pRSNReqIE) {
+			sme_debug("force_rsne_override, copy RSN IE provided by user");
+			if (pProfile->nRSNReqIELength <=
+					DOT11F_IE_RSN_MAX_LEN) {
+				cbRsnIe = (uint8_t) pProfile->nRSNReqIELength;
+				qdf_mem_copy(pRsnIe, pProfile->pRSNReqIE,
+					     cbRsnIe);
+			} else {
+				sme_warn("csr_retrieve_rsn_ie detect invalid RSN IE length (%d)",
+					 pProfile->nRSNReqIELength);
+			}
+			break;
+		}
+
 		if (csr_roam_is_fast_roam_enabled(pMac, sessionId)) {
 			/* If "Legacy Fast Roaming" is enabled ALWAYS rebuild
 			 * the RSN IE from scratch. So it contains the current
@@ -5078,6 +5109,74 @@ static bool csr_is_fils_realm_match(tSirBssDescription *bss_descr,
 	return true;
 }
 #endif
+
+/**
+ * csr_match_security() - wrapper to check if the security is matching
+ * @mac_ctx: mac context
+ * @filter: scan filter
+ * @bss_desc: BSS Descriptor
+ * @ies_ptr:  Pointer to the IE fields
+ * @neg_auth_type: Negotiated Auth type with the AP
+ * @neg_uc_cipher: Negotiated unicast cipher suite
+ * @neg_mc_cipher: Negotiated multicast cipher
+ *
+ * Return: true if matched else false.
+ */
+#ifdef WLAN_FEATURE_11W
+static inline bool csr_match_security(tpAniSirGlobal mac_ctx,
+	tCsrScanResultFilter *filter, tSirBssDescription *bss_desc,
+	tDot11fBeaconIEs *ies_ptr, eCsrAuthType *neg_auth,
+	eCsrEncryptionType *neg_uc,
+	eCsrEncryptionType *neg_mc)
+{
+
+	if (!filter)
+		return false;
+
+	if (filter->bWPSAssociation || filter->bOSENAssociation)
+		return true;
+
+	if (filter->ignore_pmf_cap)
+		return csr_is_security_match(mac_ctx, &filter->authType,
+					     &filter->EncryptionType,
+					     &filter->mcEncryptionType,
+					     NULL, NULL, NULL,
+					     bss_desc, ies_ptr, neg_auth,
+					     neg_uc, neg_mc);
+	else
+		return csr_is_security_match(mac_ctx, &filter->authType,
+					     &filter->EncryptionType,
+					     &filter->mcEncryptionType,
+					     &filter->MFPEnabled,
+					     &filter->MFPRequired,
+					     &filter->MFPCapable,
+					     bss_desc, ies_ptr, neg_auth,
+					     neg_uc, neg_mc);
+
+}
+#else
+static inline bool csr_match_security(tpAniSirGlobal mac_ctx,
+	tCsrScanResultFilter *filter, tSirBssDescription *bss_desc,
+	tDot11fBeaconIEs *ies_ptr, eCsrAuthType *neg_auth,
+	eCsrEncryptionType *neg_uc,
+	eCsrEncryptionType *neg_mc)
+
+{
+	if (!filter)
+		return false;
+
+	if (filter->bWPSAssociation || filter->bOSENAssociation)
+		return true;
+
+	return csr_is_security_match(mac_ctx, &filter->authType,
+				&filter->EncryptionType,
+				&filter->mcEncryptionType,
+				NULL, NULL, NULL,
+				bss_desc, ies_ptr, neg_auth,
+				neg_uc, neg_mc);
+}
+#endif
+
 /**
  * csr_match_bss() - to compare the bss
  * @hal: pointer to hal context
@@ -5192,25 +5291,8 @@ bool csr_match_bss(tHalHandle hal, tSirBssDescription *bss_descr,
 			NULL, NULL, ie_ptr))
 		goto end;
 
-#ifdef WLAN_FEATURE_11W
-	if ((!filter->bWPSAssociation) && (!filter->bOSENAssociation) &&
-			!csr_is_security_match(mac_ctx, &filter->authType,
-				&filter->EncryptionType,
-				&filter->mcEncryptionType,
-				&filter->MFPEnabled,
-				&filter->MFPRequired,
-				&filter->MFPCapable,
-				bss_descr, ie_ptr, neg_auth,
-				neg_uc, neg_mc))
-#else
-	if ((!filter->bWPSAssociation) && (!filter->bOSENAssociation) &&
-			!csr_is_security_match(mac_ctx, &filter->authType,
-				&filter->EncryptionType,
-				&filter->mcEncryptionType,
-				NULL, NULL, NULL,
-				bss_descr, ie_ptr, neg_auth,
-				neg_uc, neg_mc))
-#endif
+	if (!csr_match_security(mac_ctx, filter, bss_descr, ie_ptr, neg_auth,
+			       neg_uc, neg_mc))
 		goto end;
 	if (!csr_is_capabilities_match(mac_ctx, filter->BSSType, bss_descr))
 		goto end;

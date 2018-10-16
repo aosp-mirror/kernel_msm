@@ -1673,6 +1673,7 @@ QDF_STATUS sme_hdd_ready_ind(tHalHandle hHal)
 		msg->add_bssdescr_cb = csr_scan_process_single_bssdescr;
 		msg->csr_roam_synch_cb = csr_roam_synch_callback;
 		msg->sme_msg_cb = sme_process_msg_callback;
+		msg->stop_roaming_cb = sme_stop_roaming;
 
 		if (eSIR_FAILURE != u_mac_post_ctrl_msg(hHal, (tSirMbMsg *)
 							msg))
@@ -2396,6 +2397,7 @@ static QDF_STATUS sme_process_antenna_mode_resp(tpAniSirGlobal mac,
 	tListElem *entry;
 	tSmeCmd *command;
 	bool found;
+	void *context;
 	antenna_mode_cb callback;
 	struct sir_antenna_mode_resp *param;
 
@@ -2424,13 +2426,13 @@ static QDF_STATUS sme_process_antenna_mode_resp(tpAniSirGlobal mac,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	callback =
-		command->u.set_antenna_mode_cmd.set_antenna_mode_resp;
+	context = command->u.set_antenna_mode_cmd.set_antenna_mode_ctx;
+	callback = command->u.set_antenna_mode_cmd.set_antenna_mode_resp;
 	if (callback) {
 		if (!param)
 			sme_err("Set antenna mode call back is NULL");
 		else
-			callback(param->status);
+			callback(param->status, context);
 	} else
 		sme_err("Callback does not exist");
 
@@ -6160,6 +6162,53 @@ QDF_STATUS sme_close_session(tHalHandle hHal, uint8_t sessionId,
 	return status;
 }
 
+void sme_print_commands(tHalHandle hal_handle)
+{
+	QDF_STATUS status;
+	tpAniSirGlobal pMac = PMAC_STRUCT(hal_handle);
+	tListElem *entry;
+	tSmeCmd *command;
+
+	status = sme_acquire_global_lock(&pMac->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		sme_err("Active sme commands:");
+		csr_ll_lock(&pMac->sme.smeCmdActiveList);
+		if (!csr_ll_is_list_empty(&pMac->sme.smeCmdActiveList,
+		    LL_ACCESS_NOLOCK)) {
+			entry = csr_ll_peek_head(&pMac->sme.smeCmdActiveList,
+						 false);
+			while (entry) {
+				command = GET_BASE_ADDR(entry, tSmeCmd, Link);
+				dump_csr_command_info(pMac, command);
+				entry = csr_ll_next(&pMac->sme.smeCmdActiveList,
+						    entry, LL_ACCESS_NOLOCK);
+			}
+		}
+		csr_ll_unlock(&pMac->sme.smeCmdActiveList);
+		sme_err("Pending sme commands:");
+		csr_ll_lock(&pMac->sme.smeCmdPendingList);
+		if (!csr_ll_is_list_empty(&pMac->sme.smeCmdPendingList,
+		    LL_ACCESS_NOLOCK)) {
+			entry = csr_ll_peek_head(&pMac->sme.smeCmdPendingList,
+						 false);
+			while (entry) {
+				command = GET_BASE_ADDR(entry, tSmeCmd, Link);
+				dump_csr_command_info(pMac, command);
+				entry = csr_ll_next(&pMac->sme.
+						    smeCmdPendingList,
+						    entry, LL_ACCESS_NOLOCK);
+			}
+		}
+		csr_ll_unlock(&pMac->sme.smeCmdPendingList);
+		sme_err("active scan commands:%d pending scan commands:%d",
+			csr_ll_count(&pMac->sme.smeScanCmdActiveList),
+			csr_ll_count(&pMac->sme.smeScanCmdPendingList));
+
+		sme_release_global_lock(&pMac->sme);
+	}
+
+}
+
 /**
  * sme_roam_update_apwpsie() - To update AP's WPS IE. This function should be
  * called after SME AP session is created
@@ -9050,18 +9099,21 @@ QDF_STATUS sme_config_fast_roaming(tHalHandle hal, uint8_t session_id,
 	tCsrRoamSession *session = CSR_GET_SESSION(mac_ctx, session_id);
 	QDF_STATUS status;
 
-	/* do_not_roam flag is set in wlan_hdd_cfg80211_connect_start
-	 * when supplicant initiate connect request with BSSID.
-	 * This flag reset when supplicant sends vendor command to enable
-	 * roaming after association.
+	/*
+	 * supplicant_disabled_roaming flag is set to true in
+	 * wlan_hdd_cfg80211_connect_start when supplicant initiate connect
+	 * request with BSSID. This flag is reset when supplicant sends
+	 * vendor command to enable roaming after association.
 	 *
 	 * This request from wpa_supplicant will be skipped in this function
-	 * if roaming is disabled using driver command or INI and do_not_roam
-	 * flag remains set. So make sure to set do_not_roam flag as per
-	 * wpa_supplicant even if roam request from wpa_supplicant ignored.
+	 * if roaming is disabled using driver command or INI and
+	 * supplicant_disabled_roaming flag remains set. So make sure to set
+	 * supplicant_disabled_roaming flag as per wpa_supplicant even if roam
+	 * request from wpa_supplicant ignored.
 	 */
 	if (session && session->pCurRoamProfile)
-		session->pCurRoamProfile->do_not_roam = !is_fast_roam_enabled;
+		session->pCurRoamProfile->supplicant_disabled_roaming =
+			!is_fast_roam_enabled;
 
 	if (!mac_ctx->roam.configParam.isFastRoamIniFeatureEnabled) {
 		sme_debug("Fast roam is disabled through ini");
@@ -9127,11 +9179,33 @@ QDF_STATUS sme_stop_roaming(tHalHandle hal, uint8_t session_id, uint8_t reason)
 	tSirRoamOffloadScanReq *req;
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 	tpCsrNeighborRoamControlInfo roam_info;
+	tCsrRoamSession *session;
 
 	if (!CSR_IS_SESSION_VALID(mac_ctx, session_id)) {
 		sme_err("incorrect session/vdev ID");
 		return QDF_STATUS_E_INVAL;
 	}
+
+	session = CSR_GET_SESSION(mac_ctx, session_id);
+	if (session->pCurRoamProfile &&
+		!session->pCurRoamProfile->roaming_allowed_on_iface) {
+		sme_debug("Roaming was never started on session %d",
+				session_id);
+		return QDF_STATUS_SUCCESS;
+	}
+
+	/*
+	 * set the driver_disabled_roaming flag to true even if roaming
+	 * is not enabled on this session so that roam start requests for
+	 * this session can be blocked until driver enables roaming
+	 */
+	if (reason == eCsrDriverDisabled && session->pCurRoamProfile &&
+	    session->pCurRoamProfile->csrPersona == QDF_STA_MODE) {
+		session->pCurRoamProfile->driver_disabled_roaming = true;
+		sme_debug("driver_disabled_roaming set for session %d",
+			  session_id);
+	}
+
 	roam_info = &mac_ctx->roam.neighborRoamInfo[session_id];
 	req = qdf_mem_malloc(sizeof(*req));
 	if (!req) {
@@ -9140,10 +9214,12 @@ QDF_STATUS sme_stop_roaming(tHalHandle hal, uint8_t session_id, uint8_t reason)
 	}
 
 	req->Command = ROAM_SCAN_OFFLOAD_STOP;
-	if (reason == eCsrForcedDisassoc)
+
+	if ((reason == eCsrForcedDisassoc) || (reason == eCsrDriverDisabled))
 		req->reason = REASON_ROAM_STOP_ALL;
 	else
-		req->reason = REASON_ROAM_SYNCH_FAILED;
+		req->reason = REASON_SME_ISSUED;
+
 	req->sessionId = session_id;
 	if (csr_neighbor_middle_of_roaming(mac_ctx, session_id))
 		req->middle_of_roaming = 1;
@@ -14484,11 +14560,12 @@ QDF_STATUS sme_ll_stats_set_req(tHalHandle hHal, tSirLLStatsSetReq
  *
  * @hHal
  * @pgetStatsReq: Link Layer get stats request params structure
+ * @context: Callback context for ll stats
  *
  * Return QDF_STATUS
  */
 QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal, tSirLLStatsGetReq
-				*pgetStatsReq)
+				*pgetStatsReq, void *context)
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
@@ -14507,6 +14584,7 @@ QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal, tSirLLStatsGetReq
 
 	*get_stats_req = *pgetStatsReq;
 
+	pMac->sme.ll_stats_context = context;
 	if (QDF_STATUS_SUCCESS == sme_acquire_global_lock(&pMac->sme)) {
 		/* Serialize the req through MC thread */
 		cds_message.bodyptr = get_stats_req;
@@ -14536,16 +14614,17 @@ QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal, tSirLLStatsGetReq
 
 /**
  * sme_set_link_layer_stats_ind_cb() - SME API to trigger the stats are
- * available  after get request
+ * available after get request
  *
- * @hHal
- * @callback_routine - HDD callback which needs to be invoked after
- *	   getting status notification from FW
+ * @hHal: handle in hdd context
+ * @callback_routine: HDD callback which needs to be invoked after
+ * getting status notification from FW
  *
  * Return QDF_STATUS
  */
 QDF_STATUS sme_set_link_layer_stats_ind_cb(tHalHandle hHal,
-	void (*callback_routine)(void *callbackCtx, int indType, void *pRsp))
+	void (*callback_routine)(void *callbackCtx, int indType, void *pRsp,
+				 void *context))
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
@@ -15339,6 +15418,20 @@ bool sme_neighbor_middle_of_roaming(tHalHandle hHal, uint8_t sessionId)
 	return val;
 }
 
+bool sme_is_any_session_in_middle_of_roaming(tHalHandle hal)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+	uint8_t session_id;
+
+	for (session_id = 0; session_id < CSR_ROAM_SESSION_MAX; session_id++) {
+		if (CSR_IS_SESSION_VALID(mac_ctx, session_id) &&
+		    csr_neighbor_middle_of_roaming(mac_ctx, session_id))
+			return true;
+	}
+
+	return false;
+}
+
 /**
  * sme_send_flush_logs_cmd_to_fw() - Flush FW logs
  * @mac: MAC handle
@@ -15584,13 +15677,15 @@ QDF_STATUS sme_set_rssi_threshold_breached_cb(tHalHandle h_hal,
  * sme_set_nud_debug_stats_cb() - set nud debug stats callback
  * @hal: global hal handle
  * @cb: callback function pointer
+ * @context: callback context
  *
- * This function stores nud debug stats callback function.
+ * This function stores nud debug stats callback function and context
  *
  * Return: QDF_STATUS enumeration.
  */
 QDF_STATUS sme_set_nud_debug_stats_cb(tHalHandle hal,
-				void (*cb)(void *, struct rsp_stats *))
+			void (*cb)(void *, struct rsp_stats *, void *),
+			void *context)
 {
 	QDF_STATUS status  = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal mac;
@@ -15611,6 +15706,7 @@ QDF_STATUS sme_set_nud_debug_stats_cb(tHalHandle hal,
 	}
 
 	mac->sme.get_arp_stats_cb = cb;
+	mac->sme.get_arp_stats_context = context;
 	sme_release_global_lock(&mac->sme);
 	return status;
 }
@@ -18276,26 +18372,37 @@ QDF_STATUS sme_get_chain_rssi(tHalHandle phal,
 	return status;
 }
 
-/**
- * sme_chain_rssi_register_callback - chain rssi callback
- * @hal: global hal handle
- * @pchain_rssi_ind_cb: callback function pointer
- *
- * Return: QDF_STATUS enumeration.
- */
-QDF_STATUS sme_chain_rssi_register_callback(tHalHandle phal,
-			void (*pchain_rssi_ind_cb)(void *, void *))
+QDF_STATUS
+sme_chain_rssi_register_callback(tHalHandle phal,
+				 void (*pchain_rssi_ind_cb)(void *, void *,
+							    void *),
+				 void *context)
 {
 	QDF_STATUS status;
 	tpAniSirGlobal pmac = PMAC_STRUCT(phal);
 
 	status = sme_acquire_global_lock(&pmac->sme);
 	if (QDF_STATUS_SUCCESS == status) {
+		pmac->sme.pchain_rssi_ind_ctx = context;
 		pmac->sme.pchain_rssi_ind_cb = pchain_rssi_ind_cb;
 		sme_release_global_lock(&pmac->sme);
 	}
 
 	return status;
+}
+
+void sme_chain_rssi_deregister_callback(tHalHandle hal)
+{
+	tpAniSirGlobal pmac;
+
+	if (!hal) {
+		sme_err("hal is not valid");
+		return;
+	}
+
+	pmac = PMAC_STRUCT(hal);
+	if (pmac->sme.pchain_rssi_ind_cb)
+		pmac->sme.pchain_rssi_ind_cb = NULL;
 }
 
 QDF_STATUS sme_set_reorder_timeout(tHalHandle hal,
@@ -18777,6 +18884,15 @@ free_action_oui:
 	qdf_mutex_destroy(&action_oui->oui_ext_list_lock);
 	qdf_mem_free(action_oui);
 	action_oui = NULL;
+}
+
+uint32_t sme_unpack_rsn_ie(tHalHandle hal, uint8_t *buf,
+			   uint8_t buf_len, tDot11fIERSN *rsn_ie,
+			   bool append_ie)
+{
+	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
+
+	return dot11f_unpack_ie_rsn(mac_ctx, buf, buf_len, rsn_ie, append_ie);
 }
 
 /**

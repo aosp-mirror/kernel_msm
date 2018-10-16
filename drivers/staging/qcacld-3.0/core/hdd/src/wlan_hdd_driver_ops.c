@@ -390,8 +390,6 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const struct hif_bus_i
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 	hdd_remove_pm_qos(dev);
 
-	cds_clear_fw_state(CDS_FW_STATE_DOWN);
-
 	cds_set_driver_in_bad_state(false);
 	probe_fail_cnt = 0;
 	re_init_fail_cnt = 0;
@@ -417,7 +415,6 @@ err_hdd_deinit:
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 	hdd_remove_pm_qos(dev);
 
-	cds_clear_fw_state(CDS_FW_STATE_DOWN);
 	hdd_stop_driver_ops_timer();
 	mutex_unlock(&hdd_init_deinit_lock);
 	return ret;
@@ -1316,9 +1313,8 @@ static void wlan_hdd_set_the_pld_uevent(struct pld_uevent_data *uevent)
 	case PLD_RECOVERY:
 		cds_set_recovery_in_progress(true);
 		break;
-	case PLD_FW_DOWN:
-		cds_set_fw_state(CDS_FW_STATE_DOWN);
-		break;
+	default:
+		return;
 	}
 }
 
