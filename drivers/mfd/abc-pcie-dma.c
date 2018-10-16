@@ -931,6 +931,8 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 
 		/* Register DMA callback */
 		err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
+		if (err < 0)
+			goto release_remote_sg_list;
 
 		dma_blk.src_addr = (dma_desc->dir == DMA_TO_DEVICE) ?
 			LOWER((phys_addr_t)local_sg_entries[0].paddr) :
@@ -965,7 +967,7 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 				__func__, err);
 		}
 		/* unregister callback */
-		err = abc_reg_dma_irq_callback(NULL, dma_chan);
+		abc_reg_dma_irq_callback(NULL, dma_chan);
 		mutex_unlock(&dma_mutex);
 
 	/* Multi block transfer */
@@ -986,16 +988,12 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 
 	switch (dma_desc->remote_buf_type) {
 	case DMA_BUFFER_USER:
-		err = abc_pcie_user_remote_buf_sg_destroy(&remote_sg_entries);
+		abc_pcie_user_remote_buf_sg_destroy(&remote_sg_entries);
 		break;
 	case DMA_BUFFER_DMA_BUF:
-		err = abc_pcie_sg_release_from_dma_buf(remote_sg_list);
+		abc_pcie_sg_release_from_dma_buf(remote_sg_list);
 		break;
 	default:
-		dev_err(&abc_dma.pdev->dev,
-			"%s: Unknown remote DMA buffer type %d\n",
-		       __func__, dma_desc->remote_buf_type);
-		err = -EINVAL;
 		break;
 	}
 
@@ -1003,8 +1001,7 @@ release_remote_sg_list:
 	kfree(remote_sg_list);
 
 release_local_buf:
-	err = abc_pcie_user_local_buf_sg_destroy(&local_sg_entries,
-						 local_sg_list);
+	abc_pcie_user_local_buf_sg_destroy(&local_sg_entries, local_sg_list);
 
 release_local_sg_list:
 	kfree(local_sg_list);
@@ -1126,6 +1123,8 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 
 		/* Register DMA callback */
 		err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
+		if (err < 0)
+			goto release_remote_sg_list;
 
 		dma_blk.src_addr = (dma_desc->dir == DMA_TO_DEVICE) ?
 			LOWER((uint64_t)local_sg_entries[0].paddr) :
@@ -1160,7 +1159,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 				__func__, err);
 		}
 		/* unregister callback */
-		err = abc_reg_dma_irq_callback(NULL, dma_chan);
+		abc_reg_dma_irq_callback(NULL, dma_chan);
 		mutex_unlock(&dma_mutex);
 
 	/* Multi block transfer */
@@ -1181,16 +1180,12 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 
 	switch (dma_desc->remote_buf_type) {
 	case DMA_BUFFER_USER:
-		err = abc_pcie_user_remote_buf_sg_destroy(&remote_sg_entries);
+		abc_pcie_user_remote_buf_sg_destroy(&remote_sg_entries);
 		break;
 	case DMA_BUFFER_DMA_BUF:
-		err = abc_pcie_sg_release_from_dma_buf(remote_sg_list);
+		abc_pcie_sg_release_from_dma_buf(remote_sg_list);
 		break;
 	default:
-		dev_err(&abc_dma.pdev->dev,
-			"%s: Unknown remote DMA buffer type %d\n",
-		       __func__, dma_desc->remote_buf_type);
-		err = -EINVAL;
 		break;
 	}
 
@@ -1200,17 +1195,13 @@ release_remote_sg_list:
 release_local_buf:
 	switch (dma_desc->local_buf_type) {
 	case DMA_BUFFER_USER:
-		err = abc_pcie_user_local_buf_sg_destroy(&local_sg_entries,
+		abc_pcie_user_local_buf_sg_destroy(&local_sg_entries,
 							 local_sg_list);
 		break;
 	case DMA_BUFFER_DMA_BUF:
-		err = abc_pcie_sg_release_from_dma_buf(local_sg_list);
+		abc_pcie_sg_release_from_dma_buf(local_sg_list);
 		break;
 	default:
-		dev_err(&abc_dma.pdev->dev,
-			"%s: Unknown local DMA buffer type %d\n",
-		       __func__, dma_desc->local_buf_type);
-		err = -EINVAL;
 		break;
 	}
 
