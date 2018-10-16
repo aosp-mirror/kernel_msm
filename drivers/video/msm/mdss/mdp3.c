@@ -628,6 +628,8 @@ static void mdp3_clk_remove(void)
 
 u64 mdp3_clk_round_off(u64 clk_rate)
 {
+	return MDP_CORE_CLK_RATE_MAX;
+#if 0
 	u64 clk_round_off = 0;
 
 	if (clk_rate <= MDP_CORE_CLK_RATE_SVS)
@@ -640,6 +642,7 @@ u64 mdp3_clk_round_off(u64 clk_rate)
 	pr_debug("clk = %llu rounded to = %llu\n",
 		clk_rate, clk_round_off);
 	return clk_round_off;
+#endif
 }
 
 int mdp3_clk_enable(int enable, int dsi_clk)
