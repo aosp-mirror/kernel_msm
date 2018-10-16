@@ -766,6 +766,7 @@ QDF_INC :=	-I$(WLAN_COMMON_INC)/$(QDF_OS_INC_DIR) \
 
 QDF_OBJS := 	$(QDF_OBJ_DIR)/qdf_defer.o \
 		$(QDF_OBJ_DIR)/qdf_event.o \
+		$(QDF_OBJ_DIR)/qdf_idr.o \
 		$(QDF_OBJ_DIR)/qdf_list.o \
 		$(QDF_OBJ_DIR)/qdf_lock.o \
 		$(QDF_OBJ_DIR)/qdf_mc_timer.o \

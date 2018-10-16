@@ -289,6 +289,13 @@ QDF_STATUS sme_close_session(tHalHandle hHal, uint8_t sessionId,
 		bool flush_all_sme_cmds,
 		csr_roamSessionCloseCallback callback,
 		void *pContext);
+/**
+ * sme_print_commands(): Print active, pending sme and scan commands
+ * @hal_handle: The handle returned by mac_open
+ *
+ * Return: None
+ */
+void sme_print_commands(tHalHandle hal_handle);
 QDF_STATUS sme_update_roam_params(tHalHandle hHal, uint8_t session_id,
 		struct roam_ext_params *roam_params_src, int update_param);
 #ifdef FEATURE_WLAN_SCAN_PNO
@@ -1017,10 +1024,12 @@ QDF_STATUS sme_ll_stats_clear_req(tHalHandle hHal,
 QDF_STATUS sme_ll_stats_set_req(tHalHandle hHal,
 		tSirLLStatsSetReq *psetStatsReq);
 QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal,
-		tSirLLStatsGetReq *pgetStatsReq);
+				tSirLLStatsGetReq *pgetStatsReq,
+				void *context);
 QDF_STATUS sme_set_link_layer_stats_ind_cb(tHalHandle hHal,
 		void (*callbackRoutine)(void *callbackCtx,
-				int indType, void *pRsp));
+					int indType, void *pRsp,
+					void *cookie));
 QDF_STATUS sme_set_link_layer_ext_cb(tHalHandle hal,
 		     void (*ll_stats_ext_cb)(tHddHandle callback_ctx,
 					     tSirLLStatsResults * rsp));
@@ -1104,6 +1113,16 @@ QDF_STATUS sme_wifi_start_logger(tHalHandle hal,
 
 bool sme_neighbor_middle_of_roaming(tHalHandle hHal,
 						uint8_t sessionId);
+
+/*
+ * sme_is_any_session_in_middle_of_roaming() - check if roaming is in progress
+ * @hal: HAL Handle
+ *
+ * Checks if any SME session is in middle of roaming
+ *
+ * Return : true if roaming is in progress else false
+ */
+bool sme_is_any_session_in_middle_of_roaming(tHalHandle hal);
 
 QDF_STATUS sme_enable_uapsd_for_ac(void *cds_ctx, uint8_t sta_id,
 				      sme_ac_enum_type ac, uint8_t tid,
@@ -1551,7 +1570,8 @@ QDF_STATUS sme_get_nud_debug_stats(tHalHandle hal,
 				   struct get_arp_stats_params
 				   *get_stats_param);
 QDF_STATUS sme_set_nud_debug_stats_cb(tHalHandle hal,
-				      void (*cb)(void *, struct rsp_stats *));
+			void (*cb)(void *, struct rsp_stats *, void *context),
+			void *context);
 
 
 #ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
@@ -1715,11 +1735,26 @@ QDF_STATUS sme_get_chain_rssi(tHalHandle phal,
  * sme_chain_rssi_register_callback - chain rssi callback
  * @phal: global hal handle
  * @pchain_rssi_ind_cb: callback function pointer
+ * @context: callback context
  *
  * Return: QDF_STATUS enumeration.
  */
-QDF_STATUS sme_chain_rssi_register_callback(tHalHandle phal,
-			void (*pchain_rssi_ind_cb)(void *ctx, void *pmsg));
+QDF_STATUS
+sme_chain_rssi_register_callback(tHalHandle phal,
+				 void (*pchain_rssi_ind_cb)(void *ctx,
+							    void *pmsg,
+							    void *context),
+				 void *context);
+
+/**
+ * sme_chain_rssi_deregister_callback() - De-register chain rssi callback
+ * @hal: global hal handle
+ *
+ * This function De-registers the scandone callback  to SME
+ *
+ * Return: None
+ */
+void sme_chain_rssi_deregister_callback(tHalHandle hal);
 
 /**
  * sme_process_msg_callback() - process callback message from LIM
@@ -1972,6 +2007,20 @@ void sme_display_disconnect_stats(tHalHandle hal, uint8_t session_id);
  */
 QDF_STATUS sme_set_vc_mode_config(uint32_t vc_bitmap);
 
+/**
+ * sme_unpack_rsn_ie: wrapper to unpack RSN IE and update def RSN params
+ * if optional fields are not present.
+ * @hal: handle returned by mac_open
+ * @buf: rsn ie buffer pointer
+ * @buf_len: rsn ie buffer length
+ * @rsn_ie: outframe rsn ie structure
+ * @append_ie: flag to indicate if the rsn_ie need to be appended from buf
+ *
+ * Return: parse status
+ */
+uint32_t sme_unpack_rsn_ie(tHalHandle hal, uint8_t *buf,
+			   uint8_t buf_len, tDot11fIERSN *rsn_ie,
+			   bool append_ie);
 /**
  * sme_is_sta_key_exchange_in_progress() - checks whether the STA/P2P client
  * session has key exchange in progress

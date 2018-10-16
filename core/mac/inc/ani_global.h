@@ -839,6 +839,8 @@ typedef struct sAniSirLim {
 		uint32_t scan_id, uint32_t flags);
 	QDF_STATUS(*sme_msg_callback)
 		(tHalHandle hal, cds_msg_t *msg);
+	QDF_STATUS(*stop_roaming_callback)
+		(tHalHandle hal, uint8_t session_id, uint8_t reason);
 	uint8_t retry_packet_cnt;
 	uint8_t scan_disabled;
 	uint8_t beacon_probe_rsp_cnt_per_scan;
@@ -987,6 +989,10 @@ typedef struct sAniSirGlobal {
 	void *readyToExtWoWContext;
 #endif
 	uint32_t f_sta_miracast_mcc_rest_time_val;
+	uint32_t sta_scan_burst_duration;
+	uint32_t p2p_scan_burst_duration;
+	uint32_t go_scan_burst_duration;
+	uint32_t ap_scan_burst_duration;
 	uint8_t f_prefer_non_dfs_on_radar;
 	hdd_ftm_msg_processor ftm_msg_processor_callback;
 	uint32_t fine_time_meas_cap;

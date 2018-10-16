@@ -364,8 +364,12 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 				 * of channels in every transition by using
 				 * burst scan.
 				 */
-				cmd->burst_duration =
-					 wma_get_burst_duration(
+				if (pMac->go_scan_burst_duration)
+					cmd->burst_duration =
+						pMac->go_scan_burst_duration;
+				else
+					cmd->burst_duration =
+						wma_get_burst_duration(
 						scan_req->maxChannelTime,
 						wma_handle->miracast_value);
 
@@ -373,14 +377,19 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 			}
 			if (wma_is_sta_active(wma_handle) ||
 			    wma_is_p2p_cli_active(wma_handle)) {
-				if (scan_req->burst_scan_duration)
+				if (pMac->sta_scan_burst_duration) {
 					cmd->burst_duration =
+						pMac->sta_scan_burst_duration;
+				} else {
+					if (scan_req->burst_scan_duration)
+						cmd->burst_duration =
 						scan_req->burst_scan_duration;
-				else
-					/* Typical background scan.
-					 * Disable burst scan for now.
-					 */
-					cmd->burst_duration = 0;
+					else
+						/* Typical background scan.
+						 * Disable burst scan for now.
+						 */
+						cmd->burst_duration = 0;
+				}
 				break;
 			}
 			if (wma_is_ndi_active(wma_handle)) {
@@ -426,20 +435,28 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 				cmd->repeat_probe_time =
 					scan_req->maxChannelTime / 3;
 
-			cmd->burst_duration =
-				WMA_BURST_SCAN_MAX_NUM_OFFCHANNELS *
-				scan_req->maxChannelTime;
-			if (cmd->burst_duration >
-			    WMA_P2P_SCAN_MAX_BURST_DURATION) {
-				uint8_t channels =
-					WMA_P2P_SCAN_MAX_BURST_DURATION /
+			if (pMac->p2p_scan_burst_duration) {
+				cmd->burst_duration =
+					pMac->p2p_scan_burst_duration;
+			} else {
+				cmd->burst_duration =
+					WMA_BURST_SCAN_MAX_NUM_OFFCHANNELS *
 					scan_req->maxChannelTime;
-				if (channels)
-					cmd->burst_duration =
-						channels * scan_req->maxChannelTime;
-				else
-					cmd->burst_duration =
+				if (cmd->burst_duration >
+					WMA_P2P_SCAN_MAX_BURST_DURATION) {
+					uint8_t channels =
+						WMA_P2P_SCAN_MAX_BURST_DURATION
+						/ scan_req->maxChannelTime;
+					if (channels) {
+						cmd->burst_duration =
+							channels *
+							scan_req->
+							maxChannelTime;
+					} else {
+						cmd->burst_duration =
 						WMA_P2P_SCAN_MAX_BURST_DURATION;
+					}
+				}
 			}
 			cmd->scan_priority = WMI_SCAN_PRIORITY_MEDIUM;
 			break;
@@ -465,11 +482,16 @@ QDF_STATUS wma_get_buf_start_scan_cmd(tp_wma_handle wma_handle,
 					cds_get_channel(CDS_SAP_MODE, NULL)))) {
 			cmd->dwell_time_passive = cmd->dwell_time_active;
 		}
-		cmd->burst_duration = 0;
-		if (CDS_IS_DFS_CH(cds_get_channel(CDS_SAP_MODE, NULL)))
-			cmd->burst_duration =
-				WMA_BURST_SCAN_MAX_NUM_OFFCHANNELS *
-				scan_req->maxChannelTime;
+
+		if (pMac->ap_scan_burst_duration) {
+			cmd->burst_duration = pMac->ap_scan_burst_duration;
+		} else {
+			cmd->burst_duration = 0;
+			if (CDS_IS_DFS_CH(cds_get_channel(CDS_SAP_MODE, NULL)))
+				cmd->burst_duration =
+					WMA_BURST_SCAN_MAX_NUM_OFFCHANNELS *
+					scan_req->maxChannelTime;
+		}
 		WMA_LOGD("SAP: burst_duration: %d", cmd->burst_duration);
 	}
 
@@ -2099,7 +2121,8 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 			wma_roam_scan_fill_scan_params(wma_handle, pMac,
 						       NULL, &scan_params);
 
-			if (roam_req->reason == REASON_ROAM_STOP_ALL)
+			if (roam_req->reason == REASON_ROAM_STOP_ALL ||
+			    roam_req->reason == REASON_ROAM_SYNCH_FAILED)
 				mode = WMI_ROAM_SCAN_MODE_NONE;
 			else
 				mode = WMI_ROAM_SCAN_MODE_NONE |
@@ -3559,7 +3582,7 @@ QDF_STATUS wma_pno_start(tp_wma_handle wma, tpSirPNOScanReq pno)
 			pno->aNetworks[i].ssId.length;
 		qdf_mem_copy(params->aNetworks[i].ssid.mac_ssid,
 			pno->aNetworks[i].ssId.ssId,
-				WMI_MAC_MAX_SSID_LENGTH);
+				pno->aNetworks[i].ssId.length);
 	}
 
 	params->enable_pno_scan_randomization =
@@ -6020,7 +6043,7 @@ QDF_STATUS wma_set_epno_network_list(tp_wma_handle wma,
 					req->networks[i].ssid.length;
 			qdf_mem_copy(params->networks[i].ssid.mac_ssid,
 					req->networks[i].ssid.ssId,
-					WMI_MAC_MAX_SSID_LENGTH);
+					req->networks[i].ssid.length);
 		}
 	}
 

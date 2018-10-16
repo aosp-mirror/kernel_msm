@@ -147,6 +147,10 @@ static inline uint8_t *pld_snoc_get_wlan_mac_address(struct device *dev,
 	*num = 0;
 	return NULL;
 }
+static inline int pld_snoc_is_fw_down(void)
+{
+	return 0;
+}
 static inline int pld_snoc_force_assert_target(struct device *dev)
 {
 	return 0;
@@ -335,6 +339,11 @@ unsigned int pld_snoc_socinfo_get_serial_number(struct device *dev)
 {
 	return icnss_socinfo_get_serial_number(dev);
 }
+static inline int pld_snoc_is_fw_down(void)
+{
+	return icnss_is_fw_down();
+}
+
 static inline uint8_t *pld_snoc_get_wlan_mac_address(struct device *dev,
 						      uint32_t *num)
 {
