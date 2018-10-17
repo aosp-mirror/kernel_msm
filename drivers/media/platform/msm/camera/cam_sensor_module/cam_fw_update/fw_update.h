@@ -15,3 +15,4 @@ int checkOISFWUpdate(struct cam_sensor_ctrl_t *s_ctrl);
 int GyroReCalib(struct camera_io_master *io_master_info,
 	stReCalib *cal_result);
 int WrGyroOffsetData(void);
+int getFWVersion(struct cam_sensor_ctrl_t *s_ctrl);

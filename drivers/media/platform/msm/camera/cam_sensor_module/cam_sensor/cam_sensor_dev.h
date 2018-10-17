@@ -117,6 +117,8 @@ struct intf_params {
  * @first_strobe_frame: indicate first strobe frame count after reset
  * @last_flush_req: Last request to flush
  * @pipeline_delay: Sensor pipeline delay
+ * @ois_fw_ver: OIS firmware version
+ * @vcm_fw_ver: VCM firmware version
  */
 struct cam_sensor_ctrl_t {
 	struct platform_device *pdev;
@@ -148,6 +150,8 @@ struct cam_sensor_ctrl_t {
 	uint8_t fw_update_flag;
 	enum strobe_type strobeType;
 	uint64_t first_strobe_frame;
+	uint16_t ois_fw_ver;
+	uint16_t vcm_fw_ver;
 };
 
 struct sensor_status_t {
