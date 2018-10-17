@@ -335,7 +335,7 @@ static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
 		goto detach_buf;
 	}
 
-	list_add_tail(&oscar_dev->abc_buffers, &abc_buffer->abc_buffers_list);
+	list_add_tail(&abc_buffer->abc_buffers_list, &oscar_dev->abc_buffers);
 	mutex_unlock(&oscar_dev->abc_buffers_lock);
 	return fd;
 
