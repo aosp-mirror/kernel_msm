@@ -13,6 +13,7 @@ airbrush-y +=	\
 		airbrush-ddr.o \
 		airbrush-ppmu.o \
 		airbrush-cooling.o \
+		airbrush-thermal.o \
 		airbrush-tmu.o \
 		airbrush-sysfs.o
 

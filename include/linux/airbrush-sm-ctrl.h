@@ -84,6 +84,13 @@ enum ddr_state {
 	DDR_OFF,
 };
 
+enum throttle_state {
+	THROTTLE_NONE = 0,
+	THROTTLE_TO_MID,
+	THROTTLE_TO_LOW,
+	THROTTLE_TO_MIN,
+};
+
 enum chip_state {
 	CHIP_STATE_UNDEFINED = -1,
 	CHIP_STATE_0_0 = 0,
