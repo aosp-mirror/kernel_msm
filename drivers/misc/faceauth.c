@@ -35,6 +35,7 @@
 
 /* ABC FW and workload binary offsets */
 #define WORKLOAD_ADDR			0x20000000
+#define COMPARE_RESULT_FLAG_ADDR	0x21fffff4
 #define ENROLLMENT_FLAG_ADDR		0x21fffff8
 #define COMPLETION_FLAG_ADDR		0x21fffffc
 #define JQS_DEPTH_ADDR			0x22000000
@@ -83,6 +84,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_continue_data continue_step_data = { 0 };
 	unsigned long stop;
+	uint32_t success;
 
 	switch (cmd) {
 	case FACEAUTH_DEV_IOC_INIT:
@@ -184,8 +186,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		pr_info("faceauth continue IOCTL\n");
 
 		continue_step_data.completed = 1;
-		/* verify that data matches one stored in Citadel */
-		continue_step_data.success = 1;
+
+		pr_info("Read comparison result\n");
+		dma_read_dw(file, COMPARE_RESULT_FLAG_ADDR, &success);
+		continue_step_data.success = success;
 
 		if (copy_to_user((void __user *)arg, &continue_step_data,
 				 sizeof(continue_step_data)))
