@@ -24,6 +24,43 @@
 #include "../cam_fw_update/fw_update.h"
 #endif
 
+static ssize_t ois_fw_ver_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc;
+	struct cam_sensor_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->ois_fw_ver);
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
+static ssize_t vcm_fw_ver_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc;
+	struct cam_sensor_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->vcm_fw_ver);
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return rc;
+}
+
+static DEVICE_ATTR_RO(ois_fw_ver);
+static DEVICE_ATTR_RO(vcm_fw_ver);
+
+static struct attribute *sensor_fw_dev_attrs[] = {
+	&dev_attr_ois_fw_ver.attr,
+	&dev_attr_vcm_fw_ver.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(sensor_fw_dev);
+
 static void cam_sensor_update_req_mgr(
 	struct cam_sensor_ctrl_t *s_ctrl,
 	struct cam_packet *csl_packet)
@@ -745,6 +782,21 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			rc = checkOISFWUpdate(s_ctrl);
 		}
 #endif
+
+		if (s_ctrl->ois_fw_ver == 0 || s_ctrl->vcm_fw_ver == 0) {
+			rc = getFWVersion(s_ctrl);
+			if (rc >= 0) {
+				dev_set_drvdata(&s_ctrl->pdev->dev, s_ctrl);
+				rc = sysfs_create_groups(
+					&s_ctrl->pdev->dev.kobj,
+					sensor_fw_dev_groups);
+				if (rc < 0) {
+					CAM_ERR(CAM_SENSOR,
+						"failed to create sysfs");
+					goto free_power_settings;
+				}
+			}
+		}
 
 		rc = cam_sensor_power_down(s_ctrl);
 		if (rc < 0) {
