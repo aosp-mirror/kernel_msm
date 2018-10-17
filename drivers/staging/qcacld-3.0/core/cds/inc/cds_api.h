@@ -83,11 +83,9 @@ enum cds_driver_state {
 /**
  * enum cds_fw_state - Firmware state
  * @CDS_FW_STATE_UNINITIALIZED: Firmware is in uninitialized state.
- * CDS_FW_STATE_DOWN: Firmware is down.
  */
 enum cds_fw_state {
 	CDS_FW_STATE_UNINITIALIZED = 0,
-	CDS_FW_STATE_DOWN,
 };
 
 #define __CDS_IS_FW_STATE(_state, _mask) (((_state) & (_mask)) == (_mask))
@@ -256,9 +254,7 @@ static inline int cds_is_module_state_transitioning(void)
  */
 static inline bool cds_is_fw_down(void)
 {
-	enum cds_fw_state state = cds_get_fw_state();
-
-	return __CDS_IS_FW_STATE(state, BIT(CDS_FW_STATE_DOWN));
+	return pld_is_fw_down();
 }
 
 /**

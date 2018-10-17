@@ -2648,8 +2648,8 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 	uint32_t ret;
 	uint8_t *pRsnIe;
 	uint16_t RSNIeLen;
-	tDot11fIERSN dot11RSNIE;
-	tDot11fIEWPA dot11WPAIE;
+	tDot11fIERSN dot11RSNIE = {0};
+	tDot11fIEWPA dot11WPAIE = {0};
 
 	if (NULL == halHandle) {
 		hdd_err("Error haHandle returned NULL");
@@ -2672,25 +2672,27 @@ int hdd_softap_unpack_ie(tHalHandle halHandle,
 		RSNIeLen = gen_ie_len - 2;
 		/* Unpack the RSN IE */
 		memset(&dot11RSNIE, 0, sizeof(tDot11fIERSN));
-		ret = dot11f_unpack_ie_rsn((tpAniSirGlobal) halHandle,
-					   pRsnIe, RSNIeLen, &dot11RSNIE,
-					   false);
-		if (DOT11F_FAILED(ret)) {
+		ret = sme_unpack_rsn_ie(halHandle, pRsnIe, RSNIeLen,
+					&dot11RSNIE, false);
+		if (!DOT11F_SUCCEEDED(ret)) {
 			hdd_err("unpack failed, ret: 0x%x", ret);
 			return -EINVAL;
 		}
+
+		 hdd_debug("gp_cipher_suite_present: %d",
+			   dot11RSNIE.gp_cipher_suite_present);
 		/* Copy out the encryption and authentication types */
 		hdd_debug("pairwise cipher suite count: %d",
 		       dot11RSNIE.pwise_cipher_suite_count);
 		hdd_debug("authentication suite count: %d",
-		       dot11RSNIE.akm_suite_count);
+		       dot11RSNIE.akm_suite_cnt);
 		/* Here we have followed the apple base code,
 		 * but probably I suspect we can do something different
 		 * dot11RSNIE.akm_suite_count
 		 * Just translate the FIRST one
 		 */
 		*pAuthType =
-			hdd_translate_rsn_to_csr_auth_type(dot11RSNIE.akm_suites[0]);
+			hdd_translate_rsn_to_csr_auth_type(dot11RSNIE.akm_suite[0]);
 		/* dot11RSNIE.pwise_cipher_suite_count */
 		*pEncryptType =
 			hdd_translate_rsn_to_csr_encryption_type(dot11RSNIE.
@@ -7984,7 +7986,6 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	tpWLAN_SAPEventCB pSapEventCallback;
 	hdd_hostapd_state_t *pHostapdState;
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pHostapdAdapter);
-	struct qc_mac_acl_entry *acl_entry = NULL;
 	int32_t i;
 	struct hdd_config *iniConfig;
 	hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pHostapdAdapter);
@@ -8036,11 +8037,28 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		wlan_hdd_disconnect(sta_adapter, eCSR_DISCONNECT_REASON_DEAUTH);
 	}
 
+	/*
+	 * Reject start bss if reassoc in progress on any adapter.
+	 * sme_is_any_session_in_middle_of_roaming is for LFR2 and
+	 * hdd_is_roaming_in_progress is for LFR3
+	 */
+	if (sme_is_any_session_in_middle_of_roaming(hHal) ||
+	    hdd_is_roaming_in_progress(pHddCtx)) {
+		hdd_info("Reassociation in progress");
+		ret = -EINVAL;
+		goto ret_status;
+	}
+
+	/*
+	 * Disable Roaming on all adapters before starting bss
+	 */
+	wlan_hdd_disable_roaming(pHostapdAdapter);
+
 	sme_config = qdf_mem_malloc(sizeof(tSmeConfigParams));
 	if (!sme_config) {
 		hdd_err("failed to allocate memory");
 		ret = -EINVAL;
-		goto ret_status;
+		goto enable_roaming;
 	}
 
 	iniConfig = pHddCtx->config;
@@ -8058,6 +8076,11 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 			hdd_err("Can't start BSS: update channel list failed");
 			return -EINVAL;
 		}
+
+		/* check if STA is on indoor channel*/
+		if (cds_is_force_scc())
+			hdd_check_and_disconnect_sta_on_invalid_channel(
+								       pHddCtx);
 	}
 
 	if (pHostapdAdapter->device_mode == QDF_SAP_MODE) {
@@ -8221,8 +8244,10 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	pIe = wlan_hdd_get_wps_ie_ptr(pBeacon->tail, pBeacon->tail_len);
 
 	if (pIe) {
-		if (pIe[1] < (2 + WPS_OUI_TYPE_SIZE)) {
-			hdd_err("**Wps Ie Length is too small***");
+		/* To acess pIe[15], length needs to be atlest 14 */
+		if (pIe[1] < 14) {
+			hdd_err("**Wps Ie Length(%hhu) is too small***",
+				pIe[1]);
 			ret = -EINVAL;
 			goto error;
 		} else if (memcmp(&pIe[2], WPS_OUI_TYPE, WPS_OUI_TYPE_SIZE) ==
@@ -8389,60 +8414,6 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 		pConfig->cc_switch_mode = iniConfig->WlanMccToSccSwitchMode;
 #endif
 
-	pIe =
-		wlan_hdd_get_vendor_oui_ie_ptr(BLACKLIST_OUI_TYPE,
-					       WPA_OUI_TYPE_SIZE, pBeacon->tail,
-					       pBeacon->tail_len);
-
-	/* pIe for black list is following form:
-	 * type    : 1 byte
-	 * length  : 1 byte
-	 * OUI     : 4 bytes
-	 * acl type : 1 byte
-	 * no of mac addr in black list: 1 byte
-	 * list of mac_acl_entries: variable, 6 bytes per mac
-	 * address + sizeof(int) for vlan id
-	 */
-	if ((pIe != NULL) && (pIe[1] != 0)) {
-		pConfig->SapMacaddr_acl = pIe[6];
-		pConfig->num_deny_mac = pIe[7];
-		hdd_debug("acl type = %d no deny mac = %d", pIe[6], pIe[7]);
-		if (pConfig->num_deny_mac > MAX_ACL_MAC_ADDRESS)
-			pConfig->num_deny_mac = MAX_ACL_MAC_ADDRESS;
-		acl_entry = (struct qc_mac_acl_entry *)(pIe + 8);
-		for (i = 0; i < pConfig->num_deny_mac; i++) {
-			qdf_mem_copy(&pConfig->deny_mac[i], acl_entry->addr,
-				     sizeof(qcmacaddr));
-			acl_entry++;
-		}
-	}
-	pIe = wlan_hdd_get_vendor_oui_ie_ptr(WHITELIST_OUI_TYPE,
-			WPA_OUI_TYPE_SIZE, pBeacon->tail,
-			pBeacon->tail_len);
-
-	/* pIe for white list is following form:
-	 * type    : 1 byte
-	 * length  : 1 byte
-	 * OUI     : 4 bytes
-	 * acl type : 1 byte
-	 * no of mac addr in white list: 1 byte
-	 * list of mac_acl_entries: variable, 6 bytes per mac
-	 * address + sizeof(int) for vlan id
-	 */
-	if ((pIe != NULL) && (pIe[1] != 0)) {
-		pConfig->SapMacaddr_acl = pIe[6];
-		pConfig->num_accept_mac = pIe[7];
-		hdd_debug("acl type = %d no accept mac = %d",
-		       pIe[6], pIe[7]);
-		if (pConfig->num_accept_mac > MAX_ACL_MAC_ADDRESS)
-			pConfig->num_accept_mac = MAX_ACL_MAC_ADDRESS;
-		acl_entry = (struct qc_mac_acl_entry *)(pIe + 8);
-		for (i = 0; i < pConfig->num_accept_mac; i++) {
-			qdf_mem_copy(&pConfig->accept_mac[i], acl_entry->addr,
-				     sizeof(qcmacaddr));
-			acl_entry++;
-		}
-	}
 	if (!pHddCtx->config->force_sap_acs &&
 	    !(ssid && qdf_str_len(PRE_CAC_SSID) == ssid_len &&
 	      (0 == qdf_mem_cmp(ssid, PRE_CAC_SSID, ssid_len)))) {
@@ -8673,6 +8644,10 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	pHostapdState->bCommit = true;
 	if (sme_config)
 		qdf_mem_free(sme_config);
+
+	/* Enable Roaming after start bss */
+	wlan_hdd_enable_roaming(pHostapdAdapter);
+
 	EXIT();
 
 	return 0;
@@ -8694,9 +8669,14 @@ error:
 		pHostapdAdapter->sessionCtx.ap.sapConfig.acs_cfg.ch_list = NULL;
 	}
 
+enable_roaming:
+	/* Enable Roaming after start bss in case of failure */
+	wlan_hdd_enable_roaming(pHostapdAdapter);
+
 ret_status:
 	if (disable_fw_tdls_state)
 		wlan_hdd_check_conc_and_update_tdls_state(pHddCtx, false);
+
 	return ret;
 }
 

@@ -2827,6 +2827,14 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 
 		pMac->f_sta_miracast_mcc_rest_time_val =
 			pParam->f_sta_miracast_mcc_rest_time_val;
+		pMac->sta_scan_burst_duration =
+			pParam->sta_scan_burst_duration;
+		pMac->p2p_scan_burst_duration =
+			pParam->p2p_scan_burst_duration;
+		pMac->go_scan_burst_duration =
+			pParam->go_scan_burst_duration;
+		pMac->ap_scan_burst_duration =
+			pParam->ap_scan_burst_duration;
 #ifdef FEATURE_AP_MCC_CH_AVOIDANCE
 		pMac->sap.sap_channel_avoidance =
 			pParam->sap_channel_avoidance;
@@ -3146,6 +3154,14 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 	pParam->enable5gEBT = pMac->enable5gEBT;
 	pParam->f_sta_miracast_mcc_rest_time_val =
 		pMac->f_sta_miracast_mcc_rest_time_val;
+	pParam->sta_scan_burst_duration =
+		pMac->sta_scan_burst_duration;
+	pParam->p2p_scan_burst_duration =
+		pMac->p2p_scan_burst_duration;
+	pParam->go_scan_burst_duration =
+		pMac->go_scan_burst_duration;
+	pParam->ap_scan_burst_duration =
+		pMac->ap_scan_burst_duration;
 	sme_update_roam_pno_channel_prediction_config(pMac, pParam,
 			ROAM_CONFIG_TO_SME_CONFIG);
 	pParam->early_stop_scan_enable =
@@ -6077,11 +6093,6 @@ QDF_STATUS csr_roam_process_command(tpAniSirGlobal pMac, tSmeCmd *pCommand)
 
 	switch (pCommand->u.roamCmd.roamReason) {
 	case eCsrForcedDisassoc:
-		if (eCSR_ROAMING_STATE_IDLE == pMac->roam.curState[sessionId]) {
-			sme_err("Ignore eCsrForcedDisassoc cmd on roam state %d",
-				eCSR_ROAMING_STATE_IDLE);
-			return QDF_STATUS_E_FAILURE;
-		}
 		status = csr_roam_process_disassoc_deauth(pMac, pCommand,
 				true, false);
 		csr_free_roam_profile(pMac, sessionId);
@@ -6319,7 +6330,7 @@ static QDF_STATUS csr_roam_save_params(tpAniSirGlobal mac_ctx,
 			 */
 			nIeLen = 8 + 2 + 2
 				+ (rsnie->pwise_cipher_suite_count * 4)
-				+ (rsnie->akm_suite_count * 4);
+				+ (rsnie->akm_suite_cnt * 4);
 			if (rsnie->pmkid_count)
 				/* pmkid */
 				nIeLen += 2 + rsnie->pmkid_count * 4;
@@ -6348,17 +6359,17 @@ static QDF_STATUS csr_roam_save_params(tpAniSirGlobal mac_ctx,
 					rsnie->pwise_cipher_suite_count * 4);
 				pIeBuf += rsnie->pwise_cipher_suite_count * 4;
 			}
-			qdf_mem_copy(pIeBuf, &rsnie->akm_suite_count, 2);
+			qdf_mem_copy(pIeBuf, &rsnie->akm_suite_cnt, 2);
 			pIeBuf += 2;
-			if (rsnie->akm_suite_count) {
+			if (rsnie->akm_suite_cnt) {
 				/* copy akm_suites */
-				qdf_mem_copy(pIeBuf, rsnie->akm_suites,
-					rsnie->akm_suite_count * 4);
-				pIeBuf += rsnie->akm_suite_count * 4;
+				qdf_mem_copy(pIeBuf, rsnie->akm_suite,
+					rsnie->akm_suite_cnt * 4);
+				pIeBuf += rsnie->akm_suite_cnt * 4;
 			}
 			/* copy the rest */
-			qdf_mem_copy(pIeBuf, rsnie->akm_suites +
-				rsnie->akm_suite_count * 4,
+			qdf_mem_copy(pIeBuf, rsnie->akm_suite +
+				rsnie->akm_suite_cnt * 4,
 				2 + rsnie->pmkid_count * 4);
 			session_ptr->nWpaRsnRspIeLength = nIeLen + 2;
 		}
@@ -8002,7 +8013,10 @@ QDF_STATUS csr_roam_copy_profile(tpAniSirGlobal pMac,
 	pDstProfile->wps_state = pSrcProfile->wps_state;
 	pDstProfile->ieee80211d = pSrcProfile->ieee80211d;
 	pDstProfile->sap_dot11mc = pSrcProfile->sap_dot11mc;
-	pDstProfile->do_not_roam = pSrcProfile->do_not_roam;
+	pDstProfile->supplicant_disabled_roaming =
+		pSrcProfile->supplicant_disabled_roaming;
+	pDstProfile->roaming_allowed_on_iface =
+		pSrcProfile->roaming_allowed_on_iface;
 	qdf_mem_copy(&pDstProfile->Keys, &pSrcProfile->Keys,
 		sizeof(pDstProfile->Keys));
 #ifdef WLAN_FEATURE_11W
@@ -8036,6 +8050,7 @@ QDF_STATUS csr_roam_copy_profile(tpAniSirGlobal pMac,
 	}
 	pDstProfile->chan_switch_hostapd_rate_enabled =
 			pSrcProfile->chan_switch_hostapd_rate_enabled;
+	pDstProfile->force_rsne_override = pSrcProfile->force_rsne_override;
 end:
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		csr_release_profile(pMac, pDstProfile);
@@ -10987,9 +11002,34 @@ csr_roam_prepare_filter_from_profile(tpAniSirGlobal mac_ctx,
 		goto free_filter;
 	}
 	scan_fltr->uapsd_mask = profile->uapsd_mask;
-	scan_fltr->authType = profile->AuthType;
-	scan_fltr->EncryptionType = profile->EncryptionType;
-	scan_fltr->mcEncryptionType = profile->mcEncryptionType;
+	if (profile->force_rsne_override) {
+		sme_debug("force_rsne_override enabled fill all auth type and enctype");
+
+		scan_fltr->authType.numEntries = eCSR_NUM_OF_SUPPORT_AUTH_TYPE;
+		for (i = 0; i < scan_fltr->authType.numEntries; i++)
+			scan_fltr->authType.authType[i] = i;
+
+		idx = 0;
+		for (i = 0; i < eCSR_NUM_OF_ENCRYPT_TYPE; i++) {
+			if (i == eCSR_ENCRYPT_TYPE_TKIP ||
+			    i == eCSR_ENCRYPT_TYPE_AES ||
+			    i == eCSR_ENCRYPT_TYPE_AES_GCMP ||
+			    i == eCSR_ENCRYPT_TYPE_AES_GCMP_256) {
+				scan_fltr->
+				   EncryptionType.encryptionType[idx] = i;
+				scan_fltr->
+				   mcEncryptionType.encryptionType[idx] = i;
+				idx++;
+			}
+		}
+		scan_fltr->EncryptionType.numEntries = idx;
+		scan_fltr->mcEncryptionType.numEntries = idx;
+		scan_fltr->ignore_pmf_cap = true;
+	} else {
+		scan_fltr->authType = profile->AuthType;
+		scan_fltr->EncryptionType = profile->EncryptionType;
+		scan_fltr->mcEncryptionType = profile->mcEncryptionType;
+	}
 	scan_fltr->BSSType = profile->BSSType;
 	scan_fltr->phyMode = profile->phyMode;
 #ifdef FEATURE_WLAN_WAPI
@@ -11428,6 +11468,12 @@ csr_roam_send_disconnect_done_indication(tpAniSirGlobal mac_ctx, tSirSmeRsp
 	} else
 		sme_err("Inactive session %d",
 			discon_ind->session_id);
+
+	/*
+	 * Release WM status change command as eWNI_SME_DISCONNECT_DONE_IND
+	 * has been sent to HDD and there is nothing else left to do.
+	 */
+	csr_roam_wm_status_change_complete(mac_ctx);
 }
 
 static void
@@ -12801,7 +12847,7 @@ QDF_STATUS csr_roam_lost_link(tpAniSirGlobal pMac, uint32_t sessionId,
 }
 
 
-static void csr_roam_wm_status_change_complete(tpAniSirGlobal pMac)
+void csr_roam_wm_status_change_complete(tpAniSirGlobal pMac)
 {
 	tListElem *pEntry;
 	tSmeCmd *pCommand;
@@ -12836,7 +12882,7 @@ void csr_roam_process_wm_status_change_command(tpAniSirGlobal pMac,
 
 	if (!pSession) {
 		sme_err("session %d not found", pCommand->sessionId);
-		return;
+		goto end;
 	}
 	sme_debug("session:%d, CmdType : %d",
 		pCommand->sessionId, pCommand->u.wmStatusChangeCmd.Type);
@@ -12863,10 +12909,15 @@ void csr_roam_process_wm_status_change_command(tpAniSirGlobal pMac,
 			pCommand->u.wmStatusChangeCmd.Type);
 		break;
 	}
-	/* Lost Link just triggers a roaming sequence.  We can complte the
-	 * Lost Link command here since there is nothing else to do.
-	 */
-	csr_roam_wm_status_change_complete(pMac);
+
+end:
+	if (status != QDF_STATUS_SUCCESS) {
+		/*
+		 * As status returned is not success, there is nothing else
+		 * left to do so release WM status change command here.
+		 */
+		csr_roam_wm_status_change_complete(pMac);
+	}
 }
 
 
@@ -15100,6 +15151,8 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 				csr_retrieve_rsn_ie(pMac, sessionId, pProfile,
 						    pBssDescription, pIes,
 						    (tCsrRSNIe *) (wpaRsnIE));
+			csr_join_req->force_rsne_override =
+						pProfile->force_rsne_override;
 		}
 #ifdef FEATURE_WLAN_WAPI
 		else if (csr_is_profile_wapi(pProfile)) {
@@ -15975,6 +16028,7 @@ QDF_STATUS csr_send_mb_disassoc_cnf_msg(tpAniSirGlobal pMac,
 			status = QDF_STATUS_SUCCESS;
 		if (!QDF_IS_STATUS_SUCCESS(status))
 			break;
+		pMsg->sme_session_id = pDisassocInd->sessionId;
 		pMsg->messageType = eWNI_SME_DISASSOC_CNF;
 		pMsg->statusCode = eSIR_SME_SUCCESS;
 		pMsg->length = sizeof(tSirSmeDisassocCnf);
@@ -16015,6 +16069,7 @@ QDF_STATUS csr_send_mb_deauth_cnf_msg(tpAniSirGlobal pMac,
 		pMsg->messageType = eWNI_SME_DEAUTH_CNF;
 		pMsg->statusCode = eSIR_SME_SUCCESS;
 		pMsg->length = sizeof(tSirSmeDeauthCnf);
+		pMsg->sme_session_id = pDeauthInd->sessionId;
 		qdf_copy_macaddr(&pMsg->bssid, &pDeauthInd->bssid);
 		status = QDF_STATUS_SUCCESS;
 		if (!QDF_IS_STATUS_SUCCESS(status)) {
@@ -19597,10 +19652,31 @@ csr_roam_offload_scan(tpAniSirGlobal mac_ctx, uint8_t session_id,
 		return QDF_STATUS_E_FAILURE;
 	}
 
+	if ((session->pCurRoamProfile &&
+		session->pCurRoamProfile->roaming_allowed_on_iface == false)) {
+		sme_debug("Roaming disabled on iface, session: %d", session_id);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if ((command == ROAM_SCAN_OFFLOAD_START) &&
+	    (session->pCurRoamProfile &&
+	    session->pCurRoamProfile->driver_disabled_roaming)) {
+		if (reason == REASON_DRIVER_ENABLED) {
+			session->pCurRoamProfile->
+				driver_disabled_roaming = false;
+			sme_debug("driver_disabled_roaming reset for session %d",
+				  session_id);
+		} else {
+			sme_debug("Roam start received for session %d on which driver has disabled roaming",
+				  session_id);
+			return QDF_STATUS_E_FAILURE;
+		}
+	}
+
 	if ((ROAM_SCAN_OFFLOAD_START == command &&
-			REASON_CTX_INIT != reason) &&
-			(session->pCurRoamProfile &&
-			 session->pCurRoamProfile->do_not_roam)) {
+	    REASON_CTX_INIT != reason) &&
+	    (session->pCurRoamProfile &&
+	    session->pCurRoamProfile->supplicant_disabled_roaming)) {
 		sme_debug("Supplicant disabled driver roaming");
 		return QDF_STATUS_E_FAILURE;
 	}
@@ -19626,7 +19702,7 @@ csr_roam_offload_scan(tpAniSirGlobal mac_ctx, uint8_t session_id,
 	/* Roaming is not supported currently for FILS akm */
 	if (session->pCurRoamProfile && CSR_IS_AUTH_TYPE_FILS(
 	    session->pCurRoamProfile->AuthType.authType[0]) &&
-				!mac_ctx->is_fils_roaming_supported) {
+	    !mac_ctx->is_fils_roaming_supported) {
 		sme_info("FILS Roaming not suppprted by fw");
 		return QDF_STATUS_SUCCESS;
 	}
