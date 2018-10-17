@@ -93,10 +93,19 @@ Optional properties:
     upper-bound validation is performed.
 
   - cirrus,redc-comp-disable : Boolean for disabling ReDC-based click
-    compensation. If this property is omitted, ReDC-based click compensation
-    remains enabled. ReDC-based click compensation can be enabled or disabled
-    at a later time by writing 1 or 0 to the redc_enable sysfs control,
-    respectively. This property does not affect f0-based click compensation.
+    compensation (silicon revision B1 only). If this property is omitted, ReDC-
+    based click compensation remains enabled in the absence of the comp-disable
+    property. ReDC-based click compensation can be enabled or disabled at a
+    later time by writing 1 or 0 to the redc_comp_enable sysfs control,
+    respectively. This property does not affect f0-based click compensation and
+    its effect is overridden in the presence of the comp-disable property.
+
+  - cirrus,comp-disable : Boolean for disabling both f0-based and ReDC-based
+    click compensation. If this property is omitted, f0-based click compensation
+    remains enabled and ReDC-based click compensation is enabled or disabled as
+    a function of the redc-comp-disable property. Both f0-based and ReDC-based
+    click compensation can be enabled or disabled at a later time by writing 1
+    or 0 to the comp_enable sysfs control, respectively.
 
   - cirrus,gpio1-rise-index : Specifies the wavetable index mapped to GPIO1
     rising edges. If this value is omitted, specified as zero or exceeds the
