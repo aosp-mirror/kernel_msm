@@ -60,15 +60,13 @@ struct faceauth_start_data {
 
 	__u8 __user *depthid_output;
 	__u32 depthid_output_size;
-
-};
+} __attribute__((packed));
 
 /* This struct is written by kernel */
 struct faceauth_continue_data {
 	__u8 completed; /* is faceauth process completed? */
 	__u8 success; /* is faceauth process successful? */
-
-};
+} __attribute__((packed));
 
 #define FACEAUTH_DEV_IOC_INIT _IO('f', 1)
 #define FACEAUTH_DEV_IOC_START _IOW('f', 2, struct faceauth_start_data)
