@@ -35,6 +35,7 @@
 
 /* ABC FW and workload binary offsets */
 #define WORKLOAD_ADDR			0x20000000
+#define ENROLLMENT_FLAG_ADDR		0x21fffff8
 #define COMPLETION_FLAG_ADDR		0x21fffffc
 #define JQS_DEPTH_ADDR			0x22000000
 #define JQS_AFFINE_ADDR			0x22100000
@@ -137,6 +138,12 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		pr_info("%s: Set M0 workload addr = 0x%08x\n", __func__,
 			WORKLOAD_ADDR);
 		dma_write_dw(file, SYSREG_AON_IPU_REG29_ADDR, WORKLOAD_ADDR);
+
+		/* Set enrollment flag flag */
+		pr_info("%s: Set faceauth enrollment flag at 0x%08x\n",
+			__func__, ENROLLMENT_FLAG_ADDR);
+		dma_write_dw(file, ENROLLMENT_FLAG_ADDR,
+			start_step_data.enroll);
 
 		/* Reset completion flag */
 		pr_info("%s: Clearing completion flag at 0x%08x\n", __func__,

@@ -21,6 +21,13 @@
 
 /* This struct is written by userspace and read by kernel */
 struct faceauth_start_data {
+	/*
+	 * Whether the image data is used for enrollment:
+	 *  true - enroll and save embeddings to the user's storage
+	 *  false - verify against stored user data
+	 */
+	__u32 enroll;
+
 	__u8 __user *image_dot_left;
 	__u32 image_dot_left_size;
 
