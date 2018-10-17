@@ -137,6 +137,8 @@
 #define MASK_2BIT 0x03
 #define MASK_1BIT 0x01
 
+
+#define ABNORMAL_STATUS			BIT(1)
 #define SHOW_INT_I2C_BUF		BIT(2)
 //Priority: Bit(3) > Bit(4) > Bit(5)
 //Print Down/Up logs
@@ -316,11 +318,21 @@ struct synaptics_rmi4_report_points {
 	int z;
 };
 
+/*
+im 0~999     ->  im_level  0
+im 1000~2999 ->  im_level  1
+im >= 3000   ->  im_level  2
+cidim 0~9    ->  cidim_level  0
+cidim 10~19  ->  cidim_level  1
+cidim >= 20  ->  cidim_level  2
+*/
 struct synaptics_rmi4_noise_state {
 	uint16_t im;
 	uint16_t im_m;
+	uint8_t im_lvl;
 	uint16_t cidim;
 	uint16_t cidim_m;
+	uint8_t cidim_lvl;
 	uint8_t freq;
 	uint8_t ns;
 };

@@ -1057,9 +1057,9 @@ static ssize_t synaptics_rmi4_debug_level_store(struct device *dev,
 		return -EINVAL;
 
 	if (!(rmi4_data->factor_width && rmi4_data->factor_height)) {
-		if (rmi4_data->debug_mask & (SHOW_INT_I2C_BUF |
-				TOUCH_DOWN_UP_LOG | TOUCH_KPI_LOG |
-				TOUCH_BREAKDOWN_TIME)) {
+		if (rmi4_data->debug_mask & (ABNORMAL_STATUS |
+				SHOW_INT_I2C_BUF | TOUCH_DOWN_UP_LOG |
+				TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME)) {
 			rmi4_data->debug_mask = 0;
 			pr_err("%s Set debug_level fail, debug_level = %u",
 					__func__, rmi4_data->debug_mask);
@@ -1241,8 +1241,24 @@ static int synaptics_rmi4_get_noise_state(struct synaptics_rmi4_data *rmi4_data)
 			(noise_state.cidim > rmi4_data->noise_state.cidim_m) ?
 			noise_state.cidim : rmi4_data->noise_state.cidim_m;
 
+	if (noise_state.im < 1000)
+		noise_state.im_lvl = 0;
+	else if (noise_state.im < 3000)
+		noise_state.im_lvl = 1;
+	else
+		noise_state.im_lvl = 2;
+
+	if (noise_state.cidim < 10)
+		noise_state.cidim_lvl = 0;
+	else if (noise_state.cidim < 20)
+		noise_state.cidim_lvl = 1;
+	else
+		noise_state.cidim_lvl = 2;
+
 	if ((noise_state.freq != rmi4_data->noise_state.freq) ||
-			(noise_state.ns != rmi4_data->noise_state.ns)) {
+	    (noise_state.ns != rmi4_data->noise_state.ns) ||
+	    (noise_state.im_lvl != rmi4_data->noise_state.im_lvl) ||
+	    (noise_state.cidim_lvl != rmi4_data->noise_state.cidim_lvl)) {
 		pr_info("[NS]: IM:%d(M-%d), CIDIM:%d(M-%d), Freq:%d, NS:%d\n",
 				noise_state.im,
 				noise_state.im_m,
@@ -1623,8 +1639,9 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	mutex_lock(&(rmi4_data->rmi4_report_mutex));
 
 	for (finger = 0; finger < fingers_to_process; finger++) {
-		if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
-				TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME))
+		if (rmi4_data->debug_mask & (ABNORMAL_STATUS |
+				TOUCH_DOWN_UP_LOG | TOUCH_KPI_LOG |
+				TOUCH_BREAKDOWN_TIME))
 			rmi4_data->rp[finger].finger_ind = 0;
 		finger_data = data + finger;
 		finger_status = finger_data->object_type_and_status;
@@ -1749,7 +1766,8 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 					rmi4_data->rp[finger].wy = wy;
 					rmi4_data->rp[finger].state = 1;
 				}
-			} else if (rmi4_data->debug_mask & (TOUCH_KPI_LOG |
+			} else if (rmi4_data->debug_mask & (ABNORMAL_STATUS |
+					TOUCH_KPI_LOG |
 					TOUCH_BREAKDOWN_TIME)) {
 				rmi4_data->rp[finger].x =
 						(x * rmi4_data->factor_width)
@@ -1825,7 +1843,8 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 					MT_TOOL_FINGER, 0);
 #endif
 
-			if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
+			if (rmi4_data->debug_mask & (ABNORMAL_STATUS |
+					TOUCH_DOWN_UP_LOG |
 					TOUCH_KPI_LOG |
 					TOUCH_BREAKDOWN_TIME)) {
 				if (rmi4_data->rp[finger].state != 0) {
@@ -1869,8 +1888,9 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 			input_sync(rmi4_data->stylus_dev);
 		}
 
-		if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
-				TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME)) {
+		if (rmi4_data->debug_mask & (ABNORMAL_STATUS |
+				TOUCH_DOWN_UP_LOG | TOUCH_KPI_LOG |
+				TOUCH_BREAKDOWN_TIME)) {
 			for (finger = 0; finger < fingers_to_process;
 					finger++) {
 				if (rmi4_data->rp[finger].state != 0) {
@@ -1898,7 +1918,27 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 	if (rmi4_data->debug_mask & TOUCH_BREAKDOWN_LOG)
 		pr_info("[TP][KPI] %s: get_noise_state done\n", __func__);
 
-	if (rmi4_data->debug_mask & TOUCH_DOWN_UP_LOG) {
+	if (rmi4_data->debug_mask & ABNORMAL_STATUS) {
+		for (finger = 0; finger < fingers_to_process; finger++) {
+			if ((rmi4_data->rp[finger].finger_ind != 0) &&
+			    (rmi4_data->rp[finger].dnup != 0) &&
+			    ((rmi4_data->rp[finger].wx < 3) ||
+			    (rmi4_data->rp[finger].wy < 3))) {
+				pr_info("Screen:F[%02d]:%s, Wx=%d, Wy=%d\n",
+					rmi4_data->rp[finger].finger_ind,
+					finger_dnup_state(rmi4_data, finger),
+					rmi4_data->rp[finger].wx,
+					rmi4_data->rp[finger].wy);
+				pr_info("[NS]: IM:%d(M-%d), CIDIM:%d(M-%d), Freq:%d, NS:%d\n",
+						rmi4_data->noise_state.im,
+						rmi4_data->noise_state.im_m,
+						rmi4_data->noise_state.cidim,
+						rmi4_data->noise_state.cidim_m,
+						rmi4_data->noise_state.freq,
+						rmi4_data->noise_state.ns);
+			}
+		}
+	} else if (rmi4_data->debug_mask & TOUCH_DOWN_UP_LOG) {
 		for (finger = 0; finger < fingers_to_process; finger++) {
 			if (rmi4_data->rp[finger].finger_ind != 0) {
 				pr_info("Screen:F[%02d]:%s, X=%d, Y=%d, Wx=%d, Wy=%d\n",
@@ -4184,8 +4224,9 @@ static int synaptics_rmi4_free_fingers(struct synaptics_rmi4_data *rmi4_data)
 		input_mt_slot(rmi4_data->input_dev, ii);
 		input_mt_report_slot_state(rmi4_data->input_dev,
 				MT_TOOL_FINGER, 0);
-		if (rmi4_data->debug_mask & (TOUCH_DOWN_UP_LOG |
-				TOUCH_KPI_LOG | TOUCH_BREAKDOWN_TIME))
+		if (rmi4_data->debug_mask & (ABNORMAL_STATUS |
+				TOUCH_DOWN_UP_LOG | TOUCH_KPI_LOG |
+				TOUCH_BREAKDOWN_TIME))
 			rmi4_data->rp[ii].state = 0;
 	}
 #endif
@@ -4682,7 +4723,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->sleep_enable = synaptics_rmi4_sleep_enable;
 	rmi4_data->report_touch = synaptics_rmi4_report_touch;
 
-	rmi4_data->debug_mask = 0;
+	rmi4_data->debug_mask = ABNORMAL_STATUS;
 	memset(&rmi4_data->noise_state, 0, sizeof(rmi4_data->noise_state));
 
 	mutex_init(&(rmi4_data->rmi4_reset_mutex));
