@@ -70,18 +70,28 @@ int ab_pmu_deep_sleep(void)
 	pr_debug("%s: airbrush entering deep sleep\n", __func__);
 
 	ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
-	if (val & 0x3)
-		ab_pmu_sleep();
+	if (val & 0x3) {
+		/* IPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
+		ABC_READ(CMU_IPU_IPU_CONTROLLER_OPTION, &val);
+		val |= (0x1 << 29);
+		ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, val);
+
+		/* TPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
+		ABC_READ(CMU_TPU_TPU_CONTROLLER_OPTION, &val);
+		val |= (0x1 << 29);
+		ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, val);
+	}
 
 	/* PMU_CONTROL[2:2] DEEP_SLEEP */
 	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
 	val |= (0x1 << 2);
+	val &= ~(0x3 << 0);
 	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
 
 	do {
 		/* PMU_STATUS[2:2] DEEP_SLEEP_STATUS */
 		ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
-	} while ((val & 0x4) && --timeout > 0);
+	} while (((val & 0x7) != 0x4) && --timeout > 0);
 
 	if (timeout == 0) {
 		pr_err("%s: Timeout waiting for deep_sleep set status\n",
@@ -96,16 +106,16 @@ int ab_pmu_deep_sleep(void)
 	return 0;
 }
 
+#define CLK_CON_DIV_PLL_AON_CLK 0x10B1180C
 #define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x10041800
 #define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x10241800
-#define REG_PCIe_INIT 0x10B30388
 
 void abc_ipu_tpu_enable(void)
 {
-	ABC_WRITE(REG_PCIe_INIT, 0x1);
-
+	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
 	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x3);
 	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x3);
+	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
 }
 
 int ab_pmu_resume(void)

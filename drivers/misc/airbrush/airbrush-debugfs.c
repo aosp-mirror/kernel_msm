@@ -16,6 +16,7 @@
 #include <linux/gpio/consumer.h>
 
 #include <linux/airbrush-sm-ctrl.h>
+#include "airbrush-regs.h"
 
 int ab_interrupt_M0(int tar_dev);
 
@@ -119,21 +120,13 @@ static int data_rate_get(void *blk_passed, u64 *val)
 }
 DEFINE_DEBUGFS_ATTRIBUTE(fops_data_rate, data_rate_get, NULL, "%llu\n");
 
-static int ab_debugfs_boot(void *data, u64 val)
+static int ab_debugfs_m0_intr(void *data, u64 val)
 {
-	struct ab_state_context *sc = (struct ab_state_context *)data;
-
-	if (sc->ab_alternate_boot) {
-		dev_dbg(sc->dev, "%s: M0 using alternate boot\n", __func__);
-		ab_bootsequence(sc, 1);
-	} else {
-		dev_dbg(sc->dev, "%s: M0 using normal boot\n", __func__);
-		ab_bootsequence(sc, 0);
-	}
+	ab_interrupt_M0(0);
 
 	return 0;
 }
-DEFINE_SIMPLE_ATTRIBUTE(ab_bootsequence_fops, NULL, ab_debugfs_boot, "%lli\n");
+DEFINE_SIMPLE_ATTRIBUTE(ab_m0_intr_fops, NULL, ab_debugfs_m0_intr, "%lli\n");
 
 static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 {
@@ -141,7 +134,8 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 
 	switch (val) {
 	case 0:
-		ab_ddr_init(sc);
+		if (IS_HOST_DDR_INIT())
+			ab_ddr_init(sc);
 		break;
 	case 1:
 		ab_ddr_suspend(sc);
@@ -154,6 +148,9 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 		break;
 	case 4:
 		ab_ddr_selfrefresh_exit(sc);
+		break;
+	case 5:
+		ab_ddr_setup(sc);
 		break;
 	default:
 		pr_err("ERROR!! Invalid DDR Control\n");
@@ -228,8 +225,8 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 		goto err_out;
 	}
 
-	d = debugfs_create_file("ab_boot", 0666, sc->d_entry, sc,
-					&ab_bootsequence_fops);
+	d = debugfs_create_file("m0_intr", 0666, sc->d_entry, sc,
+					&ab_m0_intr_fops);
 	if (!d)
 		goto err_out;
 

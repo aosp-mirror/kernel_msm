@@ -14,15 +14,17 @@
 
 #include <linux/airbrush-clk.h>
 #include <linux/airbrush-sm-ctrl.h>
+#include <linux/clk.h>
 #include <linux/debugfs.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
 #include <linux/kernel.h>
+#include <linux/msm_pcie.h>
 
-#include "airbrush-spi.h"
+#include "airbrush-pmic-ctrl.h"
 #include "airbrush-pmu.h"
 #include "airbrush-power-gating.h"
-#include "airbrush-pmic-ctrl.h"
+#include "airbrush-spi.h"
 
 static struct ab_state_context *ab_sm_ctx;
 
@@ -254,13 +256,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	power_increasing = (blk->current_state->logic_voltage
 				< desired_state->logic_voltage);
 
-	/* Regulator Settings */
-	if (power_control && power_increasing) {
-		if (blk->current_state->voltage_rail_status == off)
-			ab_blk_pw_rails_enable(sc, blk->name,
-			to_chip_substate_id);
-		/*TODO: change regulator voltage*/
-	}
 
 	/* PMU settings */
 	if (power_control && blk->name == BLK_IPU) {
@@ -269,8 +264,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 				&& blk->current_state->id >= BLOCK_STATE_1_2) {
 			if (ab_pmu_resume())
 				return -EAGAIN;
-			if (sc->chip_substate_id == CHIP_STATE_4_0)
-				abc_ipu_tpu_enable();
 		}
 	}
 
@@ -329,6 +322,17 @@ static bool is_valid_transition(u32 curr_chip_substate_id,
 	return true;
 }
 
+static int disable_ref_clk(struct device *dev)
+{
+	struct clk *ref_clk = clk_get(dev, "ab_ref");
+
+	if (!IS_ERR(ref_clk)) {
+		clk_disable_unprepare(ref_clk);
+		return 0;
+	} else
+		return PTR_ERR(ref_clk);
+}
+
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 {
 	int i;
@@ -343,6 +347,9 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 
 	if (!map)
 		return -EINVAL;
+
+	if (sc->chip_substate_id == to_chip_substate_id)
+		return 0;
 
 	if (!is_valid_transition(sc->chip_substate_id, to_chip_substate_id)) {
 		dev_err(sc->dev,
@@ -361,8 +368,10 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 			ab_bootsequence(sc, 0);
 	}
 
-	if (sc->chip_substate_id == to_chip_substate_id)
-		return 0;
+	if ((sc->chip_substate_id == CHIP_STATE_4_0 ||
+	   sc->chip_substate_id == CHIP_STATE_3_0) &&
+	   to_chip_substate_id < CHIP_STATE_3_0)
+		ab_pmic_on(sc);
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
@@ -390,10 +399,24 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 		      map->aon_block_state_id, true, to_chip_substate_id))
 		return -EINVAL;
 
-	if (to_chip_substate_id == CHIP_STATE_6_0) {
-		ab_pmic_off(sc);
+	if ((to_chip_substate_id == CHIP_STATE_5_0) ||
+		(to_chip_substate_id == CHIP_STATE_6_0)) {
+		if (msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0, sc->pcie_dev, NULL,
+				MSM_PCIE_CONFIG_NO_CFG_RESTORE))
+			pr_err("PCIe failed to disable link\n");
+
 		ab_disable_pgood(sc);
+		ab_gpio_disable_fw_patch(sc);
+		disable_ref_clk(sc->dev);
 	}
+
+	ab_pmic_off(sc);
+
+	if (to_chip_substate_id == CHIP_STATE_5_0) {
+		ab_gpio_disable_ddr_iso(sc);
+		ab_gpio_disable_ddr_sr(sc);
+	}
+
 	sc->chip_substate_id = to_chip_substate_id;
 	return 0;
 }
@@ -448,6 +471,16 @@ void ab_gpio_enable_ddr_iso(struct ab_state_context *ab_ctx)
 void ab_gpio_disable_ddr_iso(struct ab_state_context *ab_ctx)
 {
 	gpiod_set_value_cansleep(ab_ctx->ddr_iso, __GPIO_DISABLE);
+}
+
+void ab_gpio_enable_fw_patch(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_ENABLE);
+}
+
+void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx)
+{
+	gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_DISABLE);
 }
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
@@ -539,7 +572,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	/* intitialize the default chip state */
 	ab_sm_ctx->chip_state_table = chip_state_map;
 	ab_sm_ctx->nr_chip_states = ARRAY_SIZE(chip_state_map);
-	ab_sm_ctx->chip_substate_id = CHIP_STATE_DEFAULT;
+	ab_sm_ctx->chip_substate_id = CHIP_STATE_6_0;
 
 	ab_sm_create_debugfs(ab_sm_ctx);
 	return ab_sm_ctx;

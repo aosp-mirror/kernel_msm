@@ -51,7 +51,7 @@
 #define SOC_PWRGOOD_WAIT_TIMEOUT	msecs_to_jiffies(100) /* TBD */
 #define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100) /* TBD */
 
-#define M0_FIRMWARE_PATH1 "ab.fw"
+#define M0_FIRMWARE_PATH "ab.fw"
 
 static int enable_ref_clk(struct device *dev)
 {
@@ -81,18 +81,19 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	/* Number of attempts to flash SRAM bootcode when CRC error happens */
 	int num_attempts = 1;
 	int gpio_cke_in, gpio_ddr_sr, crc_ok = 1;
-	int state_suspend, state_sleep, state_off;
+	int state_suspend, state_off;
 	unsigned int data;
 	struct airbrush_spi_packet spi_packet;
 	const struct firmware *fw_entry;
 	uint32_t *image_dw_buf;
 	int image_size_dw;
 	int fw_status;
-	struct pci_bus *pbus = pci_find_bus(1, 0);
+	struct pci_bus *pbus = 0;
 	struct pci_dev *pdev = 0;
 	int ret;
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
+	static int abc_clk_registered;
 
 	if (!ab_ctx)
 		return -EINVAL;
@@ -104,8 +105,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		/* Setup the function pointer to read DDR OTPs */
 		ab_ddr_setup(ab_ctx);
 
-		/* register clock driver */
-		abc_clk_register(ab_ctx);
+		if (!abc_clk_registered) {
+			abc_clk_register(ab_ctx);
+			abc_clk_registered = 1;
+		}
 
 		return 0;
 	}
@@ -114,81 +117,52 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	if (ret)
 		return ret;
 
-	ab_disable_pgood(ab_ctx);
 	/* Get the current state of CKE_IN, DDR_SR GPIOs */
 	gpio_cke_in = ab_gpio_get_ddr_iso(ab_ctx);
 	gpio_ddr_sr = ab_gpio_get_ddr_sr(ab_ctx);
 
-	ret = ab_pmic_on(ab_ctx);
-	if (ret) {
-		dev_err(ab_ctx->dev,
-				"%s: PMIC failure during ABC Boot, ret %d\n",
-				__func__, ret);
-		return ret;
-	}
-
-	if (patch_fw) {
-		gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_ENABLE);
-
-		fw_status =
-			request_firmware(&fw_entry,
-				M0_FIRMWARE_PATH1, ab_ctx->dev);
-		if (fw_status != 0) {
-			pr_info("Airbrush Firmware Not Found: %d, %d\n",
-					fw_status, __LINE__);
-			return -EIO;
-		}
-		image_size_dw = fw_entry->size / 4;
-		image_dw_buf = vmalloc(image_size_dw * sizeof(uint32_t));
-		parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
-		release_firmware(fw_entry);
-	}
-
-	ret = enable_ref_clk(ab_ctx->dev);
-	if (ret) {
-		dev_err(ab_ctx->dev,
-			"Unable to enable reference clock (err %d)", ret);
-		return ret;
-	}
-
-	ab_enable_pgood(ab_ctx);
-
-	gpiod_get_value_cansleep(ab_ctx->ab_ready);
-
-	if (pbus) {
-		pdev = pbus->self;
-		while (!pci_is_root_bus(pbus)) {
-			pdev = pbus->self;
-			pbus = pbus->self->bus;
-		}
-	}
-
-	state_off = gpio_cke_in == 0 && gpio_ddr_sr == 0;
-	state_suspend = !!gpio_ddr_sr;
-	state_sleep = gpio_cke_in == 1 && gpio_ddr_sr == 1;
-
-	/* [TBD] REMOVE THIS HACK.
-	 * FIND ANY DEPENDENCY FOR CONTROLLING DDR_ISO
-	 */
-	msleep(1000);
-
-	/* From sleep/suspend to active,
-	 * perform DDR Pad Isolation deassertion
-	 */
-	if (state_suspend || state_sleep)
-		ab_gpio_disable_ddr_iso(ab_ctx);
+	state_off = (ab_ctx->chip_substate_id == CHIP_STATE_6_0) ||
+			    ((gpio_cke_in == 0) && (gpio_ddr_sr == 0));
+	state_suspend = (ab_ctx->chip_substate_id == CHIP_STATE_5_0);
 
 	if (state_suspend || state_off) {
-		if (patch_fw && !ab_ctx->otp_fw_patch_dis) {
-			/* Configure the below GPIO before signalling the
-			 * SOC_PWRGOOD via XnRESET. Enable the FW_PATCH_EN pin
-			 * via GPIO.
-			 */
-			gpiod_set_value_cansleep(ab_ctx->fw_patch_en,
-							__GPIO_ENABLE);
+		ab_disable_pgood(ab_ctx);
+
+		ret = ab_pmic_on(ab_ctx);
+		if (ret) {
+			pr_err("ERROR!!! PMIC failure during ABC Boot\n");
+			return ret;
 		}
 
-		/* Signal the SOC_PWRGOOD */
+		ret = enable_ref_clk(ab_ctx->dev);
+		if (ret) {
+			dev_err(ab_ctx->dev,
+				"Unable to enable reference clock (err %d)",
+				ret);
+			return ret;
+		}
+
+		if (patch_fw && !ab_ctx->otp_fw_patch_dis) {
+			ab_gpio_enable_fw_patch(ab_ctx);
+
+			fw_status =
+				request_firmware(&fw_entry,
+					M0_FIRMWARE_PATH, ab_ctx->dev);
+			if (fw_status != 0) {
+				pr_info("Airbrush Firmware Not Found: %d, %d\n",
+						fw_status, __LINE__);
+				return -EIO;
+			}
+			image_size_dw = fw_entry->size / 4;
+			image_dw_buf = vmalloc(image_size_dw *
+					sizeof(uint32_t));
+			parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
+			release_firmware(fw_entry);
+		}
+
+		if (state_suspend)
+			ab_gpio_enable_ddr_sr(ab_ctx);
+
 		ab_enable_pgood(ab_ctx);
 
 		timeout = jiffies + SOC_PWRGOOD_WAIT_TIMEOUT;
@@ -207,7 +181,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		 * go for secondary boot.
 		 */
 		if (patch_fw && !ab_ctx->otp_fw_patch_dis) {
-
 			/* Wait for AB_READY = 1,
 			 * this ensures the SPI FSM is initialized to flash the
 			 * alternate bootcode to SRAM.
@@ -301,7 +274,32 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 			}
 		}
 
-		msm_pcie_enumerate(1);
+		if (!ab_ctx->pcie_enumerated) {
+			if (msm_pcie_enumerate(1)) {
+				pr_err("PCIe enumeration failed\n");
+				return -EIO;
+			}
+
+			ab_ctx->pcie_enumerated = true;
+
+			pbus = pci_find_bus(1, 1);
+			if (pbus) {
+				pdev = pbus->self;
+				while (!pci_is_root_bus(pbus)) {
+					pdev = pbus->self;
+					pbus = pbus->self->bus;
+				}
+				ab_ctx->pcie_dev = pdev;
+			}
+		} else {
+			ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
+				ab_ctx->pcie_dev, NULL,
+				MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+			if (ret)
+				pr_err("PCIe failed to enable link\n");
+			else
+				msm_pcie_recover_config(ab_ctx->pcie_dev);
+		}
 
 		/* Enable schmitt trigger mode for SPI clk pad.
 		 * This is to filter out any noise on SPI clk line.
@@ -323,10 +321,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 				"ab_ready is not High");
 			return -EIO;
 		}
-
-		/* [TBD]
-		 * Keeping some delay to have ABC and HOST PCIe linkup completed
-		 */
 	}
 
 	/* Setup the function pointer to read DDR OTPs */
@@ -338,8 +332,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	if (IS_HOST_DDR_INIT())
 		ab_ddr_init(ab_ctx);
 
-	/* register clock driver */
-	abc_clk_register(ab_ctx);
+	if (!abc_clk_registered) {
+		abc_clk_register(ab_ctx);
+		abc_clk_registered = 1;
+	}
 
 	return 0;
 }

@@ -32,37 +32,47 @@ int ab_blk_pw_rails_enable(struct ab_state_context *sc,
 		if (!regulator_is_enabled(sc->smps2))
 			if (regulator_enable(sc->smps2))
 				goto fail_regulator_enable;
+		sc->smps2_state = true;
 		if (!regulator_is_enabled(sc->ldo4))
 			if (regulator_enable(sc->ldo4))
 				goto fail_regulator_enable;
+		sc->ldo4_state = true;
 		if (!regulator_is_enabled(sc->ldo5))
 			if (regulator_enable(sc->ldo5))
 				goto fail_regulator_enable;
+		sc->ldo5_state = true;
 		if (!regulator_is_enabled(sc->smps1))
 			if (regulator_enable(sc->smps1))
 				goto fail_regulator_enable;
+		sc->smps1_state = true;
 		if (!regulator_is_enabled(sc->ldo3))
 			if (regulator_enable(sc->ldo3))
 				goto fail_regulator_enable;
+		sc->ldo3_state = true;
 		if (!regulator_is_enabled(sc->ldo2))
 			if (regulator_enable(sc->ldo2))
 				goto fail_regulator_enable;
+		sc->ldo2_state = true;
 		break;
 	case BLK_AON:
 		if (!regulator_is_enabled(sc->smps2))
 			if (regulator_enable(sc->smps2))
 				goto fail_regulator_enable;
+		sc->smps2_state = true;
 		if (!regulator_is_enabled(sc->ldo4))
 			if (regulator_enable(sc->ldo4))
 				goto fail_regulator_enable;
+		sc->ldo4_state = true;
 		if (!regulator_is_enabled(sc->ldo5))
 			if (regulator_enable(sc->ldo5))
 				goto fail_regulator_enable;
+		sc->ldo5_state = true;
 		break;
 	case DRAM:
 		if (!regulator_is_enabled(sc->ldo2))
 			if (regulator_enable(sc->ldo2))
 				goto fail_regulator_enable;
+		sc->ldo2_state = true;
 		break;
 	case BLK_MIF:
 		break;
@@ -74,24 +84,37 @@ int ab_blk_pw_rails_enable(struct ab_state_context *sc,
 	return 0;
 
 fail_regulator_enable:
-	if (regulator_is_enabled(sc->ldo3))
+	if (regulator_is_enabled(sc->ldo3)) {
 		regulator_disable(sc->ldo3);
-	if (regulator_is_enabled(sc->smps1))
+		sc->ldo3_state = false;
+	}
+	if (regulator_is_enabled(sc->smps1)) {
 		regulator_disable(sc->smps1);
-	if (regulator_is_enabled(sc->ldo5))
+		sc->smps1_state = false;
+	}
+	if (regulator_is_enabled(sc->ldo5)) {
 		regulator_disable(sc->ldo5);
-	if (regulator_is_enabled(sc->ldo4))
+		sc->ldo5_state = false;
+	}
+	if (regulator_is_enabled(sc->ldo4)) {
 		regulator_disable(sc->ldo4);
-	if (regulator_is_enabled(sc->smps3))
+		sc->ldo4_state = false;
+	}
+	if (regulator_is_enabled(sc->smps3)) {
 		regulator_disable(sc->smps3);
-	if (regulator_is_enabled(sc->ldo1))
+		sc->smps3_state = false;
+	}
+	if (regulator_is_enabled(sc->ldo1)) {
 		regulator_disable(sc->ldo1);
-	if (regulator_is_enabled(sc->smps2))
+		sc->ldo1_state = false;
+	}
+	if (regulator_is_enabled(sc->smps2)) {
 		regulator_disable(sc->smps2);
+		sc->smps2_state = false;
+	}
 	dev_err(sc->dev, "%s: PMIC power up failure\n", __func__);
 
 	return -ENODEV;
-
 }
 
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,
@@ -111,34 +134,21 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 	switch (blk_name) {
 	case BLK_IPU:
 	case BLK_TPU:
-		if (regulator_is_enabled(sc->ldo3))
-			if (regulator_disable(sc->ldo3))
-				goto fail_regulator_disable;
-		if (regulator_is_enabled(sc->smps1))
-			if (regulator_disable(sc->smps1))
-				goto fail_regulator_disable;
+		sc->ldo3_state = false;
+		sc->smps1_state = false;
 		break;
-
 	case BLK_AON:
-		if (regulator_is_enabled(sc->ldo5))
-			if (regulator_disable(sc->ldo5))
-				goto fail_regulator_disable;
-		if (regulator_is_enabled(sc->ldo4))
-			if (regulator_disable(sc->ldo4))
-				goto fail_regulator_disable;
-		if (regulator_is_enabled(sc->smps2))
-			if (regulator_disable(sc->smps2))
-				goto fail_regulator_disable;
+		sc->ldo5_state = false;
+		sc->ldo4_state = false;
+		sc->smps2_state = false;
 		break;
-
 	case DRAM:
-		if (to_chip_substate_id == CHIP_STATE_4_0) {
-			if (regulator_is_enabled(sc->ldo2))
-				if (regulator_disable(sc->ldo2))
-					goto fail_regulator_disable;
+		sc->ldo2_state = false;
+		if (to_chip_substate_id == CHIP_STATE_6_0) {
+			sc->ldo1_state = false;
+			sc->smps3_state = false;
 		}
 		break;
-
 	case BLK_MIF:
 	case BLK_FSYS:
 		break;
@@ -147,11 +157,6 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 	}
 
 	return 0;
-
-fail_regulator_disable:
-	dev_err(sc->dev, "%s: PMIC power down failure\n", __func__);
-
-	return -ENODEV;
 }
 
 int ab_pmic_off(struct ab_state_context *sc)
@@ -160,7 +165,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 
 	dev_dbg(sc->dev, "%s: Turning OFF all the PMIC rails\n", __func__);
 
-	if (regulator_is_enabled(sc->ldo2)) {
+	if (!sc->ldo2_state && regulator_is_enabled(sc->ldo2)) {
 		ret1 = regulator_disable(sc->ldo2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -169,7 +174,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (regulator_is_enabled(sc->ldo3)) {
+	if (!sc->ldo3_state && regulator_is_enabled(sc->ldo3)) {
 		ret1 = regulator_disable(sc->ldo3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -178,7 +183,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (regulator_is_enabled(sc->smps1)) {
+	if (!sc->smps1_state && regulator_is_enabled(sc->smps1)) {
 		ret1 = regulator_disable(sc->smps1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -187,7 +192,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (regulator_is_enabled(sc->ldo5)) {
+	if (!sc->ldo5_state && regulator_is_enabled(sc->ldo5)) {
 		ret1 = regulator_disable(sc->ldo5);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -196,7 +201,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (regulator_is_enabled(sc->ldo4)) {
+	if (!sc->ldo4_state && regulator_is_enabled(sc->ldo4)) {
 		ret1 = regulator_disable(sc->ldo4);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -205,7 +210,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (regulator_is_enabled(sc->smps3)) {
+	if (!sc->smps3_state && regulator_is_enabled(sc->smps3)) {
 		ret1 = regulator_disable(sc->smps3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -214,7 +219,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (regulator_is_enabled(sc->ldo1)) {
+	if (!sc->ldo1_state && regulator_is_enabled(sc->ldo1)) {
 		ret1 = regulator_disable(sc->ldo1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -223,7 +228,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (regulator_is_enabled(sc->smps2)) {
+	if (!sc->smps2_state && regulator_is_enabled(sc->smps2)) {
 		ret1 = regulator_disable(sc->smps2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -246,39 +251,70 @@ int ab_pmic_on(struct ab_state_context *sc)
 
 	dev_dbg(sc->dev, "%s: setting rails to on\n", __func__);
 
-	if (regulator_enable(sc->smps2))
-		goto fail_regulator_smps2;
-	if (regulator_enable(sc->ldo1))
-		goto fail_regulator_ldo1;
-	if (regulator_enable(sc->smps3))
-		goto fail_regulator_smps3;
-	if (regulator_enable(sc->ldo4))
-		goto fail_regulator_ldo4;
-	if (regulator_enable(sc->ldo5))
-		goto fail_regulator_ldo5;
-	if (regulator_enable(sc->smps1))
-		goto fail_regulator_smps1;
-	if (regulator_enable(sc->ldo3))
-		goto fail_regulator_ldo3;
-	if (regulator_enable(sc->ldo2))
-		goto fail_regulator_ldo2;
+	if (!regulator_is_enabled(sc->smps2))
+		if (regulator_enable(sc->smps2))
+			goto fail_regulator_enable;
+	sc->smps2_state = true;
+
+	if (!regulator_is_enabled(sc->ldo1))
+		if (regulator_enable(sc->ldo1))
+			goto fail_regulator_enable;
+	sc->ldo1_state = true;
+
+	if (!regulator_is_enabled(sc->smps3))
+		if (regulator_enable(sc->smps3))
+			goto fail_regulator_enable;
+	sc->smps3_state = true;
+
+	if (!regulator_is_enabled(sc->ldo4))
+		if (regulator_enable(sc->ldo4))
+			goto fail_regulator_enable;
+	sc->ldo4_state = true;
+
+	if (!regulator_is_enabled(sc->ldo5))
+		if (regulator_enable(sc->ldo5))
+			goto fail_regulator_enable;
+	sc->ldo5_state = true;
+
+	if (!regulator_is_enabled(sc->smps1))
+		if (regulator_enable(sc->smps1))
+			goto fail_regulator_enable;
+	sc->smps1_state = true;
+
+	if (!regulator_is_enabled(sc->ldo3))
+		if (regulator_enable(sc->ldo3))
+			goto fail_regulator_enable;
+	sc->ldo3_state = true;
+
+	if (!regulator_is_enabled(sc->ldo2))
+		if (regulator_enable(sc->ldo2))
+			goto fail_regulator_enable;
+	sc->ldo2_state = true;
+
 	return 0;
 
-fail_regulator_ldo2:
+fail_regulator_enable:
+	if (regulator_is_enabled(sc->ldo3))
 		regulator_disable(sc->ldo3);
-fail_regulator_ldo3:
+	sc->ldo3_state = false;
+	if (regulator_is_enabled(sc->smps1))
 		regulator_disable(sc->smps1);
-fail_regulator_smps1:
+	sc->smps1_state = false;
+	if (regulator_is_enabled(sc->ldo5))
 		regulator_disable(sc->ldo5);
-fail_regulator_ldo5:
+	sc->ldo5_state = false;
+	if (regulator_is_enabled(sc->ldo4))
 		regulator_disable(sc->ldo4);
-fail_regulator_ldo4:
+	sc->ldo4_state = false;
+	if (regulator_is_enabled(sc->smps3))
 		regulator_disable(sc->smps3);
-fail_regulator_smps3:
+	sc->smps3_state = false;
+	if (regulator_is_enabled(sc->ldo1))
 		regulator_disable(sc->ldo1);
-fail_regulator_ldo1:
+	sc->ldo1_state = false;
+	if (regulator_is_enabled(sc->smps2))
 		regulator_disable(sc->smps2);
-fail_regulator_smps2:
+	sc->smps2_state = false;
 	dev_err(sc->dev, "%s: PMIC power up failure\n", __func__);
 	return -ENODEV;
 }

@@ -70,7 +70,7 @@ static inline void WR_DDR_REG(uint32_t addr, uint32_t data)
 #define IS_OTP_FW_PATCH_DIS()	(!!(OTP_AP_HW_OPTION_1() & (1 << 2)))
 #define IS_UART_PRINT_DISABLE() (!!(OTP_AP_HW_OPTION_1() & (1 << 3)))
 #define IS_DDR_OTP_FLASHED()	(!!(OTP_AP_HW_OPTION_1() & (1 << 7)))
-#define IS_HOST_DDR_INIT()	((OTP_AP_HW_OPTION_1() & (1 << 9)))
+#define IS_HOST_DDR_INIT()	(!!(OTP_AP_HW_OPTION_1() & (1 << 9)))
 
 /* SYSREG REGISTERS */
 #define SYSREG_AON_IPU_REG31		(ABC_BASE_SYSREG_AON + 0x440)

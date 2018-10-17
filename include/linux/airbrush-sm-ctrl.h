@@ -279,12 +279,23 @@ struct ab_state_context {
 	struct regulator *ldo4;
 	struct regulator *ldo5;
 
+	bool smps1_state;
+	bool smps2_state;
+	bool smps3_state;
+	bool ldo1_state;
+	bool ldo2_state;
+	bool ldo3_state;
+	bool ldo4_state;
+	bool ldo5_state;
+
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
 #endif
 	bool ab_sm_ctrl_pmic;
 	atomic_t clocks_registered;
 	enum ddr_state ddr_state;
+	struct pci_dev *pcie_dev;
+	bool pcie_enumerated;
 };
 
 /*
@@ -321,6 +332,8 @@ int  ab_gpio_get_ddr_sr(struct ab_state_context *ab_ctx);
 void ab_gpio_enable_ddr_iso(struct ab_state_context *ab_ctx);
 void ab_gpio_disable_ddr_iso(struct ab_state_context *ab_ctx);
 int  ab_gpio_get_ddr_iso(struct ab_state_context *ab_ctx);
+void ab_gpio_enable_fw_patch(struct ab_state_context *ab_ctx);
+void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx);
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 void ab_sm_create_debugfs(struct ab_state_context *sc);

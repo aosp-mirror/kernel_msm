@@ -1078,15 +1078,9 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 	/* Enable the PMU Retention */
 	PMU_CONTROL_PHY_RET_ON();
 
-	/* Enable GPIOs to inform DDR is in suspend mode and turnoff the
-	 * power to airbrush
-	 */
+	/* Enable GPIOs to inform DDR is in suspend mode */
 	ab_gpio_enable_ddr_sr(sc);
 	ab_gpio_enable_ddr_iso(sc);
-	ab_disable_pgood(sc);
-
-	/* Disable the unused regulators */
-	//ab_pmic_suspend(sc);
 
 	return DDR_SUCCESS;
 
