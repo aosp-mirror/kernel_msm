@@ -1104,8 +1104,8 @@ static int __ipa_validate_flt_rule(const struct ipa_flt_rule *rule,
 	}
 
 	if (rule->rule_id) {
-		if (rule->rule_id >= IPA_RULE_ID_MIN_VAL &&
-		    rule->rule_id <= IPA_RULE_ID_MAX_VAL) {
+		if (rule->rule_id < IPA_RULE_ID_MIN ||
+		    rule->rule_id >= IPA_RULE_ID_MAX) {
 			IPAERR_RL("invalid rule_id provided 0x%x\n"
 				"rule_id 0x%x - 0x%x  are auto generated\n",
 				rule->rule_id,
@@ -1758,8 +1758,16 @@ int ipa3_reset_flt(enum ipa_ip_type ip, bool user_only)
 			}
 		}
 	}
-	mutex_unlock(&ipa3_ctx->lock);
 
+	/* commit the change to IPA-HW */
+	if (ipa3_ctx->ctrl->ipa3_commit_flt(IPA_IP_v4) ||
+		ipa3_ctx->ctrl->ipa3_commit_flt(IPA_IP_v6)) {
+		IPAERR("fail to commit flt-rule\n");
+		WARN_ON_RATELIMIT_IPA(1);
+		mutex_unlock(&ipa3_ctx->lock);
+		return -EPERM;
+	}
+	mutex_unlock(&ipa3_ctx->lock);
 	return 0;
 }
 

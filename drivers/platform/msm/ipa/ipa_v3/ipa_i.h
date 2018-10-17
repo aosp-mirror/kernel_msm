@@ -207,6 +207,10 @@
 #define IPA_RULE_ID_MAX_VAL (0x1FF)
 #define IPA_RULE_ID_RULE_MISS (0x3FF)
 
+#define IPA_RULE_ID_MIN (0x200)
+#define IPA_RULE_ID_MAX ((IPA_RULE_ID_MIN << 1) - 1)
+
+
 #define IPA_HDR_PROC_CTX_TABLE_ALIGNMENT_BYTE 8
 #define IPA_HDR_PROC_CTX_TABLE_ALIGNMENT(start_ofst) \
 	(((start_ofst) + IPA_HDR_PROC_CTX_TABLE_ALIGNMENT_BYTE - 1) & \
@@ -1544,7 +1548,10 @@ int ipa3_xdci_disconnect(u32 clnt_hdl, bool should_force_clear, u32 qmi_req_id);
 void ipa3_xdci_ep_delay_rm(u32 clnt_hdl);
 void ipa3_register_lock_unlock_callback(int (*client_cb)(bool), u32 ipa_ep_idx);
 void ipa3_deregister_lock_unlock_callback(u32 ipa_ep_idx);
-void ipa3_set_usb_prod_pipe_delay(void);
+int ipa3_set_reset_client_prod_pipe_delay(bool set_reset,
+		enum ipa_client_type client);
+int ipa3_set_reset_client_cons_pipe_sus_holb(bool set_reset,
+		enum ipa_client_type client);
 
 int ipa3_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	bool should_force_clear, u32 qmi_req_id, bool is_dpl);

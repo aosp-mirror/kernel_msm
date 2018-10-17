@@ -45,7 +45,6 @@ struct mdp3_session_data {
 	struct msm_fb_data_type *mfd;
 	ktime_t vsync_time;
 	struct timer_list vsync_timer;
-	int vsync_period;
 	struct kernfs_node *vsync_event_sd;
 	struct kernfs_node *bl_event_sd;
 	struct mdp_overlay overlay;
@@ -97,5 +96,6 @@ int mdp3_ctrl_get_pack_pattern(u32 imgType);
 int mdp3_ctrl_reset(struct msm_fb_data_type *mfd);
 int mdp3_get_ion_client(struct msm_fb_data_type *mfd);
 int config_secure_display(struct mdp3_session_data *mdp3_session);
+void mdp3_flush_dma_done(struct mdp3_session_data *mdp3_session);
 
 #endif /* MDP3_CTRL_H */

@@ -539,7 +539,7 @@
 			compatible = "bosch-sensortec,bmi160";
 			reg = <0x68>;
 			pinctrl-names = "default";
-			pinctrl-0 = <&bmi160_int1_default &bmi160_int2_default>;
+			pinctrl-0 = <&sensor_int1_default &sensor_int2_default>;
 			interrupt-parent = <&tlmm_pinmux>;
 			interrupts = <78 0x2002>;
 			bmi,init-interval = <200>;
@@ -551,7 +551,7 @@
 			compatible = "inven,iam20680";
 			reg = <0x69>;
 			pinctrl-names = "default";
-			pinctrl-0 = <&bmi160_int1_default &bmi160_int2_default>;
+			pinctrl-0 = <&sensor_int1_default &sensor_int2_default>;
 			interrupt-parent = <&tlmm_pinmux>;
 			interrupts = <78 IRQ_TYPE_EDGE_RISING>;
 			axis_map_x = <1>;
@@ -569,7 +569,7 @@
 			compatible = "st,asm330lhh";
 			reg = <0x6b>;
 			pinctrl-names = "default";
-			pinctrl-0 = <&bmi160_int1_default &bmi160_int2_default>;
+			pinctrl-0 = <&sensor_int1_default &sensor_int2_default>;
 			interrupt-parent = <&tlmm_pinmux>;
 			interrupts = <78 IRQ_TYPE_EDGE_RISING>;
 		};
@@ -1736,6 +1736,26 @@
 				<47 512 0 0>,
 				<47 512 0 0>,
 				<47 512 120000 1200000>,
+				<47 512 393600 3936000>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			<&clock_gcc clk_gcc_crypto_clk>,
+			<&clock_gcc clk_gcc_crypto_ahb_clk>,
+			<&clock_gcc clk_gcc_crypto_axi_clk>;
+		clock-names = "core_clk_src", "core_clk",
+				"iface_clk", "bus_clk";
+		qcom,ce-opp-freq = <100000000>;
+		status = "ok";
+	};
+
+	qcom_smcinvoke: smcinvoke@88000000 {
+		compatible = "qcom,smcinvoke";
+		reg = <0x88000000 0x500000>;
+		qcom,clock-support;
+		qcom,msm-bus,name = "smcinvoke-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<47 512 0 0>,
 				<47 512 393600 3936000>;
 		clocks = <&clock_gcc clk_crypto_clk_src>,
 			<&clock_gcc clk_gcc_crypto_clk>,
