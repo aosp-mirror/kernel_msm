@@ -143,12 +143,10 @@
 //Priority: Bit(3) > Bit(4) > Bit(5)
 //Print Down/Up logs
 #define TOUCH_DOWN_UP_LOG		BIT(3)
-//Print Down/Move/Up with interrupt received time and input_sync time
-#define TOUCH_KPI_LOG			BIT(4)
 //Print Down/Move/Up with total handling time and bus time
-#define TOUCH_BREAKDOWN_TIME		BIT(5)
+#define TOUCH_BREAKDOWN_TIME		BIT(4)
 //Print logs while enter or leave critical functions.
-#define TOUCH_BREAKDOWN_LOG		BIT(6)
+#define TOUCH_BREAKDOWN_LOG		BIT(5)
 
 enum exp_fn {
 	RMI_DEV = 0,
