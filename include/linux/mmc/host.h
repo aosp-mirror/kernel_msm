@@ -652,6 +652,8 @@ struct mmc_host {
 
 	bool			err_occurred;
 	u32			err_stats[MMC_ERR_MAX];
+	ktime_t			last_failed_rq_time;
+	ktime_t			last_completed_rq_time;
 #ifdef CONFIG_DEBUG_FS
 	struct mmc_req_stat mmc_req_stats[TS_NUM_STATS];
 	struct mmc_stats mmc_stats;
