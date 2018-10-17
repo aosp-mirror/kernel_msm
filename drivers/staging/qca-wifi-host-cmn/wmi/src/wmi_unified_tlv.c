@@ -9086,7 +9086,7 @@ QDF_STATUS send_stats_ext_req_cmd_tlv(wmi_unified_t wmi_handle,
 	QDF_STATUS ret;
 	wmi_req_stats_ext_cmd_fixed_param *cmd;
 	wmi_buf_t buf;
-	uint16_t len;
+	size_t len;
 	uint8_t *buf_ptr;
 
 	len = sizeof(*cmd) + WMI_TLV_HDR_SIZE + preq->request_data_len;
@@ -9387,6 +9387,18 @@ QDF_STATUS send_nan_req_cmd_tlv(wmi_unified_t wmi_handle,
 	nan_data_len = nan_req->request_data_len;
 	nan_data_len_aligned = roundup(nan_req->request_data_len,
 				       sizeof(uint32_t));
+	if (nan_data_len_aligned < nan_req->request_data_len) {
+		WMI_LOGE("%s: integer overflow while rounding up data_len",
+			 __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (nan_data_len_aligned > WMI_SVC_MSG_MAX_SIZE - WMI_TLV_HDR_SIZE) {
+		WMI_LOGE("%s: wmi_max_msg_size overflow for given datalen",
+			 __func__);
+		return QDF_STATUS_E_FAILURE;
+	}
+
 	len += WMI_TLV_HDR_SIZE + nan_data_len_aligned;
 	buf = wmi_buf_alloc(wmi_handle, len);
 	if (!buf) {
