@@ -25,6 +25,18 @@
 	pinctrl-1 = <&qupv3_se4_spi_active>;
 };
 
+&qupv3_se10_spi_active {
+	config {
+		drive-strength = <2>;
+	};
+};
+
+&qupv3_se10_spi_sleep {
+	config {
+		drive-strength = <2>;
+	};
+};
+
 // Audio wants se11 pins active even in suspend.
 &qupv3_se11_spi {
 	pinctrl-1 = <&qupv3_se11_spi_active>;
