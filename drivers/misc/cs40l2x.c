@@ -3843,7 +3843,14 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 		return -EINVAL;
 	}
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
+	switch (cs40l2x->fw_desc->id) {
+	case CS40L2X_FW_ID_ORIG:
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
+						CS40L2X_XM_UNPACKED_TYPE),
+				cs40l2x->comp_enable);
+		break;
+	case CS40L2X_FW_ID_REMAP:
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
 						CS40L2X_XM_UNPACKED_TYPE),
@@ -3853,11 +3860,14 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 				(cs40l2x->comp_enable
 					& cs40l2x->comp_enable_f0)
 					<< CS40L2X_COMP_EN_F0_SHIFT);
-		if (ret) {
-			dev_err(dev,
-				"Failed to configure click compensation\n");
-			return ret;
-		}
+		break;
+	default:
+		ret = -EPERM;
+	}
+
+	if (ret) {
+		dev_err(dev, "Failed to configure click compensation\n");
+		return ret;
 	}
 
 	if (cs40l2x->pdata.f0_default) {
@@ -5223,6 +5233,8 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	pdata->redc_comp_disable = of_property_read_bool(np,
 			"cirrus,redc-comp-disable");
 
+	pdata->comp_disable = of_property_read_bool(np, "cirrus,comp-disable");
+
 	ret = of_property_read_u32(np, "cirrus,gpio1-rise-index", &out_val);
 	if (!ret)
 		pdata->gpio1_rise_index = out_val;
@@ -5720,7 +5732,7 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	cs40l2x->vpp_measured = -1;
 	cs40l2x->ipp_measured = -1;
 
-	cs40l2x->comp_enable = true;
+	cs40l2x->comp_enable = !pdata->comp_disable;
 	cs40l2x->comp_enable_redc = !pdata->redc_comp_disable;
 	cs40l2x->comp_enable_f0 = true;
 
