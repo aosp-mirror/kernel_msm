@@ -419,6 +419,7 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 		const struct block_property *target_property,
 		chip_state_t chip_substate_id, void *data)
 {
+	struct pci_dev *pdev = (struct pci_dev *)data;
 	u32 target_linkstate;
 	u32 current_linkstate;
 	u32 target_linkspeed;
@@ -426,6 +427,16 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 
 	if (!target_property)
 		return -EINVAL;
+
+	/* TODO(aikhan):  Could you provide an explanation as to why the DISABLE
+	 * state is not supported for the PCIe driver.
+	 */
+	if (chip_substate_id == CHIP_STATE_5_0) {
+		dev_err(&pdev->dev,
+				"%s: Chip State 5 (Disabled) not supported\n",
+				__func__);
+		return -EINVAL;
+	}
 
 	target_linkstate = string_to_integer(target_property->substate_name);
 	target_linkspeed = target_property->data_rate;
