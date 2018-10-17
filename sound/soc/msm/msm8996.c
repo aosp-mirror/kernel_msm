@@ -5021,8 +5021,37 @@ static int msm8996_wsa881x_init(struct snd_soc_component *component)
 #endif
 //HTC_AUD_END
 
+static int msm_snd_card_late_probe(struct snd_soc_card *card)
+{
+	const char *be_dl_name = LPASS_BE_SLIMBUS_0_RX;
+	struct snd_soc_pcm_runtime *rtd;
+	int ret = 0;
+
+	rtd = snd_soc_get_pcm_runtime(card, be_dl_name);
+	if (!rtd) {
+		dev_err(card->dev,
+			"%s: snd_soc_get_pcm_runtime for %s failed!\n",
+			__func__, be_dl_name);
+		ret = -EINVAL;
+		goto err_pcm_runtime;
+	}
+
+	ret = tasha_cpe_initialize(rtd->codec);
+	if (ret) {
+		dev_err(card->dev,
+			"%s: cpe initialization failed, err = %d\n",
+			__func__, ret);
+		/* Do not fail probe if CPE failed */
+		ret = 0;
+	}
+
+err_pcm_runtime:
+	return ret;
+}
+
 struct snd_soc_card snd_soc_card_tasha_msm8996 = {
 	.name		= "msm8996-tasha-snd-card",
+	.late_probe	= msm_snd_card_late_probe,
 };
 
 static int msm8996_populate_dai_link_component_of_node(

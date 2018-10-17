@@ -12864,7 +12864,7 @@ static struct cpe_svc_init_param cpe_svc_params = {
 	.change_freq_plan_cb = tasha_cdc_change_cpe_clk,
 };
 
-static int tasha_cpe_initialize(struct snd_soc_codec *codec)
+int tasha_cpe_initialize(struct snd_soc_codec *codec)
 {
 	struct tasha_priv *tasha = snd_soc_codec_get_drvdata(codec);
 	struct wcd_cpe_params cpe_params;
@@ -12900,6 +12900,7 @@ static int tasha_cpe_initialize(struct snd_soc_codec *codec)
 
 	return 0;
 }
+EXPORT_SYMBOL(tasha_cpe_initialize);
 
 static const struct wcd_resmgr_cb tasha_resmgr_cb = {
 	.cdc_rco_ctrl = __tasha_codec_internal_rco_ctrl,
@@ -13205,15 +13206,6 @@ static int tasha_codec_probe(struct snd_soc_codec *codec)
 	if (ret) {
 		pr_err("%s: tasha irq setup failed %d\n", __func__, ret);
 		goto err_pdata;
-	}
-
-	ret = tasha_cpe_initialize(codec);
-	if (ret) {
-		dev_err(codec->dev,
-			"%s: cpe initialization failed, err = %d\n",
-			__func__, ret);
-		/* Do not fail probe if CPE failed */
-		ret = 0;
 	}
 
 	for (i = 0; i < TASHA_NUM_DECIMATORS; i++) {
