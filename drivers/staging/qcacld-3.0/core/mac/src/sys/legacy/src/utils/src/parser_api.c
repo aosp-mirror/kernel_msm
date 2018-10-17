@@ -1500,7 +1500,7 @@ populate_dot11f_rsn(tpAniSirGlobal pMac,
 			status = dot11f_unpack_ie_rsn(pMac, pRsnIe->rsnIEdata + idx + 2,   /* EID, length */
 						      pRsnIe->rsnIEdata[idx + 1],
 						      pDot11f, false);
-			if (DOT11F_FAILED(status)) {
+			if (!DOT11F_SUCCEEDED(status)) {
 				pe_err("Parse failure in Populate Dot11fRSN (0x%08x)",
 					status);
 				return eSIR_FAILURE;
@@ -1806,7 +1806,8 @@ tSirRetStatus
 populate_dot11f_tpc_report(tpAniSirGlobal pMac,
 			   tDot11fIETPCReport *pDot11f, tpPESession psessionEntry)
 {
-	uint16_t staid, txPower;
+	uint16_t staid;
+	uint8_t tx_power;
 	tSirRetStatus nSirStatus;
 
 	nSirStatus = lim_get_mgmt_staid(pMac, &staid, psessionEntry);
@@ -1817,8 +1818,9 @@ populate_dot11f_tpc_report(tpAniSirGlobal pMac,
 	}
 	/* FramesToDo: This function was "misplaced" in the move to Gen4_TVM... */
 	/* txPower = halGetRateToPwrValue( pMac, staid, pMac->lim.gLimCurrentChannelId, isBeacon ); */
-	txPower = 0;
-	pDot11f->tx_power = (uint8_t) txPower;
+	tx_power = cfg_get_regulatory_max_transmit_power(pMac,
+				psessionEntry->currentOperChannel);
+	pDot11f->tx_power = tx_power;
 	pDot11f->link_margin = 0;
 	pDot11f->present = 1;
 

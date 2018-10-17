@@ -1413,7 +1413,8 @@ static int wma_unified_link_peer_stats_event_handler(void *handle,
 	 */
 	pMac->sme.pLinkLayerStatsIndCallback(pMac->hHdd,
 					     WMA_LINK_LAYER_STATS_RESULTS_RSP,
-					     link_stats_results);
+					     link_stats_results,
+					     pMac->sme.ll_stats_context);
 	qdf_mem_free(link_stats_results);
 
 	return 0;
@@ -1608,8 +1609,9 @@ post_stats:
 	 * used to retrieve the correct HDD context
 	 */
 	mac->sme.pLinkLayerStatsIndCallback(mac->hHdd,
-		WMA_LINK_LAYER_STATS_RESULTS_RSP,
-		link_stats_results);
+					    WMA_LINK_LAYER_STATS_RESULTS_RSP,
+					    link_stats_results,
+					    mac->sme.ll_stats_context);
 	wma_unified_radio_tx_mem_free(handle);
 
 	return 0;
@@ -1813,7 +1815,8 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 
 	pMac->sme.pLinkLayerStatsIndCallback(pMac->hHdd,
 					     WMA_LINK_LAYER_STATS_RESULTS_RSP,
-					     link_stats_results);
+					     link_stats_results,
+					     pMac->sme.ll_stats_context);
 	wma_unified_radio_tx_mem_free(handle);
 
 	return 0;
@@ -2291,7 +2294,8 @@ int wma_unified_link_iface_stats_event_handler(void *handle,
 	 */
 	pMac->sme.pLinkLayerStatsIndCallback(pMac->hHdd,
 					     WMA_LINK_LAYER_STATS_RESULTS_RSP,
-					     link_stats_results);
+					     link_stats_results,
+					     pMac->sme.ll_stats_context);
 	qdf_mem_free(link_stats_results);
 
 	return 0;
@@ -3230,7 +3234,7 @@ int wma_stats_event_handler(void *handle, uint8_t *cmd_param_info,
 	} while (0);
 
 	if (excess_data ||
-		(sizeof(*event) > WMI_SVC_MSG_MAX_SIZE - buf_len)) {
+		(buf_len > WMI_SVC_MSG_MAX_SIZE - sizeof(*event))) {
 		WMA_LOGE("excess wmi buffer: stats pdev %d vdev %d peer %d",
 			 event->num_pdev_stats, event->num_vdev_stats,
 			 event->num_peer_stats);
