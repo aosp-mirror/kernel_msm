@@ -107,6 +107,7 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 	int i = 0;
 	uint32_t cam_snesor_slave_addr = 0;
 	uint32_t cam_sensor_id = 0;
+	uint32_t cam_power_aurora_v2 = 0;
 	struct cam_sensor_board_info *sensordata = NULL;
 	struct device_node *of_node = s_ctrl->of_node;
 	struct cam_hw_soc_info *soc_info = &s_ctrl->soc_info;
@@ -226,6 +227,13 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 			(uint16_t)cam_sensor_id;
 		CAM_INFO(CAM_SENSOR, "sensor id override, 0x%x",
 			s_ctrl->override_info.sensor_id);
+	}
+	if (of_property_read_u32(of_node, "power-up-v-custom1",
+		&cam_power_aurora_v2) >= 0) {
+		s_ctrl->sensordata->power_info.cam_power_aurora_v2 =
+			(uint8_t)cam_power_aurora_v2;
+		CAM_INFO(CAM_SENSOR, "Is front camera of aurora v2= %d",
+			s_ctrl->sensordata->power_info.cam_power_aurora_v2);
 	}
 
 	return rc;

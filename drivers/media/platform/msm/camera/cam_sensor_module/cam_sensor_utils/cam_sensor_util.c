@@ -1539,6 +1539,21 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 					soc_info->rgltr_max_volt[vreg_idx],
 					soc_info->rgltr_op_mode[vreg_idx],
 					soc_info->rgltr_delay[vreg_idx]);
+
+				if (ctrl->cam_power_aurora_v2 == 1 &&
+					power_setting->seq_type == SENSOR_VIO) {
+					rc =
+					cam_soc_util_regulator_enable(
+						regulator_get(
+						soc_info->dev,
+						"cam_v_custom1"),
+						"cam_v_custom1",
+						1800000,
+						1800000,
+						0,
+						0);
+				}
+
 				if (rc) {
 					CAM_ERR(CAM_SENSOR,
 						"Reg Enable failed for %s",
@@ -1630,6 +1645,20 @@ power_up_failed:
 					soc_info->rgltr_max_volt[vreg_idx],
 					soc_info->rgltr_op_mode[vreg_idx],
 					soc_info->rgltr_delay[vreg_idx]);
+
+				if (ctrl->cam_power_aurora_v2 == 1 &&
+					power_setting->seq_type == SENSOR_VIO) {
+					rc =
+					cam_soc_util_regulator_disable(
+						regulator_get(
+						soc_info->dev,
+						"cam_v_custom1"),
+						"cam_v_custom1",
+						1800000,
+						1800000,
+						0,
+						0);
+				}
 
 				if (rc) {
 					CAM_ERR(CAM_SENSOR,
@@ -1803,6 +1832,21 @@ int msm_camera_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 					soc_info->rgltr_max_volt[ps->seq_val],
 					soc_info->rgltr_op_mode[ps->seq_val],
 					soc_info->rgltr_delay[ps->seq_val]);
+
+					if (ctrl->cam_power_aurora_v2 == 1 &&
+						pd->seq_type == SENSOR_VIO) {
+						ret =
+						cam_soc_util_regulator_disable(
+							regulator_get(
+							soc_info->dev,
+							"cam_v_custom1"),
+							"cam_v_custom1",
+							1800000,
+							1800000,
+							0,
+							0);
+					}
+
 					if (ret) {
 						CAM_ERR(CAM_SENSOR,
 						"Reg: %s disable failed",

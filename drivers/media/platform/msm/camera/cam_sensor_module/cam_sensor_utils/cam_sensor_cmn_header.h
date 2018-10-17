@@ -311,6 +311,7 @@ struct cam_sensor_power_ctrl_t {
 	struct msm_camera_gpio_num_info *gpio_num_info;
 	struct msm_pinctrl_info pinctrl_info;
 	uint8_t cam_pinctrl_status;
+	uint8_t cam_power_aurora_v2;
 };
 
 struct cam_camera_slave_info {
