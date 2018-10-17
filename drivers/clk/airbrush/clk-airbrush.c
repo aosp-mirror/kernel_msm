@@ -599,7 +599,7 @@ static const unsigned long ipu_clk_regs[] = {
 static const struct airbrush_pll_rate_table pll_ipu_tbl[] = {
 #ifdef CONFIG_B0
 	PLL_F081XX_RATE(850000000, 531, 3, 2),
-	PLL_F081XX_RATE(720000000, 300, 2, 2),
+	PLL_F081XX_RATE(680000000, 283, 2, 2),
 	PLL_F081XX_RATE(576000000, 360, 3, 2),
 	PLL_F081XX_RATE(432000000, 360, 2, 3),
 	PLL_F081XX_RATE(288000000, 360, 3, 3),
@@ -896,7 +896,7 @@ static const unsigned long tpu_clk_regs[] = {
 static const struct airbrush_pll_rate_table pll_tpu_tbl[] = {
 #ifdef CONFIG_B0
 	PLL_F081XX_RATE(1000000000, 625, 3, 2),
-	PLL_F081XX_RATE(840000000, 525, 3, 2),
+	PLL_F081XX_RATE(790000000, 494, 3, 2),
 	PLL_F081XX_RATE(672000000, 400, 3, 2),
 	PLL_F081XX_RATE(504000000, 420, 2, 3),
 	PLL_F081XX_RATE(336000000, 280, 2, 3),
