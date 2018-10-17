@@ -1238,6 +1238,12 @@ static int get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
 	uint32_t addr;
 	uint32_t i = 0;
 
+	if (priv == NULL || priv->regmap == NULL) {
+		dev_err(priv->dev, "%s() regmap is not initialized yet.\n",
+			__func__);
+		return -EIO;
+	}
+
 	/* Read the version string address */
 	rc = regmap_read(priv->regmap, reg, &addr);
 	if (rc) {
