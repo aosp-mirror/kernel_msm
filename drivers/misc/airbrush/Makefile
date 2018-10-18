@@ -12,6 +12,7 @@ airbrush-y +=	\
 		airbrush-pmic-ctrl.o \
 		airbrush-ddr.o \
 		airbrush-ppmu.o \
+		airbrush-cooling.o \
 		airbrush-tmu.o \
 		airbrush-sysfs.o
 
