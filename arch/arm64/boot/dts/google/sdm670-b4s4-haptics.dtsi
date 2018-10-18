@@ -32,7 +32,7 @@
 &qupv3_se10_i2c {
 	status = "okay";
 	qcom,clk-freq-out = <400000>;
-	drv2624@5a {
+	b4s4_drv2624: drv2624@5a {
 		compatible = "ti,drv2624";
 		reg = <0x5a>;
 		pinctrl-names = "default";
@@ -41,9 +41,9 @@
 		ti,smart-loop = <1>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
 		ti,rated-voltage = <75>;
-		ti,odclamp-voltage = <93>; /* 1.8 Vrms */
+		ti,odclamp-voltage = <106>; /* 2.1 Vrms */
 		ti,lra-frequency = <172>; /* f0 = 172Hz */
-		ti,ol-lra-frequency = <170>; /* off-f0 in OL */
+		ti,ol-lra-frequency = <160>; /* off-f0 in OL */
 		ti,bemf-factor = <150>;
 		ti,bemf-gain = <0>;
 		ti,voltage-comp = <18>;
