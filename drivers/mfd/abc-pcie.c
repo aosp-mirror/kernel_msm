@@ -1502,20 +1502,8 @@ static struct resource tpu_resources[] = {
 		.flags = IORESOURCE_IRQ,
 	},
 };
-static const struct resource fsys_resources[] = {
-};
 
-static const struct resource pcie_dma_resources[] = {
-	{
-		.name = DRV_NAME_ABC_PCIE_DMA,
-		.start = 0, /* tbd */
-		.end = (2 * 1024 * 1024) - 1, /* tbd */
-		.flags = IORESOURCE_MEM, /* tbd */
-	}
-};
-
-#define DEV(_name, _r) \
-	{ .name = _name, .num_resources = ARRAY_SIZE(_r), .resources = _r, }
+#define DEV(_name, _r) { .name = _name }
 #define DEVPROP(_name, _r, _p)						   \
 	{ .name = _name, .num_resources = ARRAY_SIZE(_r), .resources = _r,   \
 	      .properties = _p }
