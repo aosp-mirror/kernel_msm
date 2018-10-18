@@ -28,8 +28,6 @@
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
 
-#include "airbrush-clk.h"
-
 #define __GPIO_ENABLE   0x1
 #define __GPIO_DISABLE   0x0
 
@@ -288,10 +286,23 @@ struct ab_state_context {
 	bool ldo4_state;
 	bool ldo5_state;
 
+	/* clk descriptors */
+	struct clk *ipu_pll;
+	struct clk *ipu_pll_mux;
+	struct clk *ipu_pll_div;
+	struct clk *ipu_switch_mux;
+	struct clk *tpu_pll;
+	struct clk *tpu_pll_mux;
+	struct clk *tpu_pll_div;
+	struct clk *tpu_switch_mux;
+	struct clk *osc_clk;
+	struct clk *shared_div_aon_pll;
+
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
 #endif
 	bool ab_sm_ctrl_pmic;
+	atomic_t clocks_initialized;
 	atomic_t clocks_registered;
 	enum ddr_state ddr_state;
 	struct pci_dev *pcie_dev;

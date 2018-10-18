@@ -11,6 +11,7 @@
 #ifndef _AIRBRUSH_CLK_H_
 #define _AIRBRUSH_CLK_H_
 
+#include <linux/airbrush-sm-ctrl.h>
 #include <linux/clk-provider.h>
 #include <linux/of.h>
 
@@ -21,16 +22,19 @@ void abc_clk_mif_init(struct device_node *np);
 void abc_clk_ipu_init(struct device_node *np);
 void abc_clk_tpu_init(struct device_node *np);
 
-void ipu_gate(struct device *dev);
-void ipu_ungate(struct device *dev);
-void ipu_pll_enable(struct device *dev);
-void ipu_pll_disable(struct device *dev);
-u64 ipu_set_rate(struct device *dev, u64 rate);
+/* TODO: Move away from using state manager context
+ * pointer. This is a temporary fix to kernel crashing.
+ */
+void ipu_gate(struct ab_state_context *ab_ctx);
+void ipu_ungate(struct ab_state_context *ab_ctx);
+int ipu_pll_enable(struct ab_state_context *ab_ctx);
+void ipu_pll_disable(struct ab_state_context *ab_ctx);
+u64 ipu_set_rate(struct ab_state_context *ab_ctx, u64 rate);
 
-void tpu_gate(struct device *dev);
-void tpu_ungate(struct device *dev);
-void tpu_pll_enable(struct device *dev);
-void tpu_pll_disable(struct device *dev);
-u64 tpu_set_rate(struct device *dev, u64 rate);
+void tpu_gate(struct ab_state_context *ab_ctx);
+void tpu_ungate(struct ab_state_context *ab_ctx);
+int tpu_pll_enable(struct ab_state_context *ab_ctx);
+void tpu_pll_disable(struct ab_state_context *ab_ctx);
+u64 tpu_set_rate(struct ab_state_context *ab_ctx, u64 rate);
 
 #endif //_AIRBRUSH_CLK_H_

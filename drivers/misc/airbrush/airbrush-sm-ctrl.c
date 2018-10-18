@@ -195,39 +195,39 @@ void ab_sm_register_blk_callback(block_name_t name,
 	ab_sm_ctx->blocks[name].data = data;
 }
 
-int clk_set_frequency(struct device *dev, struct block *blk,
+int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 u64 frequency, enum states clk_status)
 {
 	switch (blk->name) {
 	case BLK_IPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
-			ipu_pll_enable(dev);
+			ipu_pll_enable(sc);
 		if (blk->current_state->clk_status == off && clk_status == on)
-			ipu_ungate(dev);
+			ipu_ungate(sc);
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
-		ipu_set_rate(dev, frequency);
+		ipu_set_rate(sc, frequency);
 
 		if (blk->current_state->clk_status == on && clk_status == off)
-			ipu_gate(dev);
+			ipu_gate(sc);
 		if (!clk_status && !frequency)
-			ipu_pll_disable(dev);
+			ipu_pll_disable(sc);
 		break;
 	case BLK_TPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
-			tpu_pll_enable(dev);
+			tpu_pll_enable(sc);
 		if (blk->current_state->clk_status == off && clk_status == on)
-			tpu_ungate(dev);
+			tpu_ungate(sc);
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
-		tpu_set_rate(dev, frequency);
+		tpu_set_rate(sc, frequency);
 
 		if (blk->current_state->clk_status == on && clk_status == off)
-			tpu_gate(dev);
+			tpu_gate(sc);
 		if (!clk_status && !frequency)
-			tpu_pll_disable(dev);
+			tpu_pll_disable(sc);
 		break;
 	case BLK_MIF:
 	case BLK_FSYS:
@@ -267,7 +267,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		}
 	}
 
-	clk_set_frequency(dev, blk, desired_state->clk_frequency,
+	clk_set_frequency(sc, blk, desired_state->clk_frequency,
 			desired_state->clk_status);
 
 	/* Block specific hooks */
@@ -573,6 +573,9 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->chip_state_table = chip_state_map;
 	ab_sm_ctx->nr_chip_states = ARRAY_SIZE(chip_state_map);
 	ab_sm_ctx->chip_substate_id = CHIP_STATE_6_0;
+
+	atomic_set(&ab_sm_ctx->clocks_registered, 0);
+	atomic_set(&ab_sm_ctx->clocks_initialized, 0);
 
 	ab_sm_create_debugfs(ab_sm_ctx);
 	return ab_sm_ctx;
