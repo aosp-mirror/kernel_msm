@@ -3464,10 +3464,10 @@ static void tcpm_pd_event_handler(struct work_struct *work)
 
 void tcpm_port_reset(struct tcpm_port *port)
 {
-        spin_lock(&port->pd_event_lock);
-        port->pd_events = TCPM_PORT_RESET_EVENT;
-        spin_unlock(&port->pd_event_lock);
-        queue_work(port->wq, &port->event_work);
+	spin_lock(&port->pd_event_lock);
+	port->pd_events = TCPM_PORT_RESET_EVENT;
+	spin_unlock(&port->pd_event_lock);
+	queue_work(port->wq, &port->event_work);
 }
 EXPORT_SYMBOL_GPL(tcpm_port_reset);
 
