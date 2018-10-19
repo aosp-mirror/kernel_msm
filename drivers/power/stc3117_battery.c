@@ -71,6 +71,7 @@
 /* minimum application current consumption in mA ( <0 !) */
 #define APP_MIN_CURRENT     (-5)
 #define APP_MIN_VOLTAGE	    3300  /* application cut-off voltage*/
+#define APP_MIN_THRESHOLD	100
 #define TEMP_MIN_ADJ	    (-5) /* minimum temperature for gain adjustment */
 
 /* normalized VM_CNF at 60, 40, 25, 10, 0, -10°C, -20°C */
@@ -192,7 +193,7 @@ static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 //static int g_low_battery_counter;
-static bool g_debug, g_standby_mode, g_boot_phase;
+static bool g_debug, g_standby_mode, g_boot_phase, g_force_SOC_update;
 static int g_ui_soc, g_last_status, g_ocv, g_reg_soc;
 static const char * const charge_status[] = {
 	"unknown",
@@ -851,12 +852,12 @@ static int STC311x_Startup(void)
  * Input          : None
  * Return         :
  *****************************************************************************/
-#define SOC_DIFF 3
+#define HRSOC_1_PERCENT (MAX_HRSOC/100)
 static int STC311x_Restore(void)
 {
 	int res;
 	int ocv;
-	int ram_soc, reg_soc;
+	int ram_hrsoc, reg_soc;
 
 	/* check STC310x status */
 	res = STC311x_Status();
@@ -868,21 +869,20 @@ static int STC311x_Restore(void)
 
 	STC311x_SetParam();  /* set parameters  */
 
+	reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/HRSOC_1_PERCENT);
+	ram_hrsoc = (GG_Ram.reg.HRSOC);
+	pr_info("STC311x_Restore-reg_soc:%d, ram_HRSOC: %d\n",
+		reg_soc, ram_hrsoc);
+	pr_info("STC311x_Restore-GG_status: %c, GG_Ram.reg.SOC: %d\n",
+		GG_Ram.reg.GG_Status, GG_Ram.reg.SOC);
+
 	/* if restore from unexpected reset, restore SOC (system dependent) */
 	if (GG_Ram.reg.GG_Status == GG_RUNNING) {
 		if (GG_Ram.reg.SOC != 0) {
-			//compare the ram SOC with register SOC.
-			reg_soc = (STC31xx_ReadWord(STC311x_REG_SOC)/512);
-			ram_soc = (GG_Ram.reg.HRSOC/512);
-			pr_info("reg_soc:%d, ram_HRSOC:%d \n", reg_soc, ram_soc);
-			if (reg_soc <= STC311x_SOC_LOW_THRESHOLD)
-				pr_err("Battery is low, skip restore SOC from ram \n");
-			else if (((reg_soc > ram_soc) && (reg_soc - ram_soc > SOC_DIFF)) || ((ram_soc > reg_soc) && (ram_soc - reg_soc > SOC_DIFF)))
-				pr_err("SOC not match, skip restore SOC from ram \n");
-			else			
-				/*   restore SOC */
-				STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
-		}
+			/*   restore SOC */
+			STC31xx_WriteWord(STC311x_REG_SOC, GG_Ram.reg.HRSOC);
+		} else
+			STC31xx_WriteWord(STC311x_REG_SOC, HRSOC_1_PERCENT);
 	}
 
 	/* rewrite ocv to start SOC with updated OCV curve*/
@@ -1406,7 +1406,7 @@ static void Reset_FSM_GG(void)
 /* -------------------- Algo functions ------------------------------------- */
 
 //Temporarily skip soc_correction() to fix soc jumps problem
-//#define OG2
+#define OG2
 
 #define CURRENT_TH  (GG->Cnom/10)
 #define GAIN 10
@@ -1485,7 +1485,9 @@ void SOC_correction(struct GasGauge_DataTypeDef *GG)
 	BattData.SOC = (SOCopt*10+256)/512;
 	if ((Var4 < (-VAR4MAX)) || (Var4 >= VAR4MAX)) {
 		/*rewrite SOCopt into STC311x and clear acc registers*/
-		pr_err("SOC_correction() set new raw SOC: %d (1/512) \n", SOCopt);
+		if (g_debug)
+			pr_err("SOC_correction() set new raw SOC: %d (1/512)\n",
+				SOCopt);
 		STC311x_SetSOC(SOCopt);
 	}
 
@@ -1586,6 +1588,8 @@ int GasGauge_Start(struct GasGauge_DataTypeDef *GG)
 
 
 	GG_Ram.reg.GG_Status = GG_INIT;
+	GG_Ram.reg.CC_cnf = BattData.CC_cnf;
+	GG_Ram.reg.VM_cnf = BattData.VM_cnf;
 	/* update the crc */
 	UpdateRamCrc();
 	STC311x_WriteRamData(GG_Ram.db);
@@ -1942,6 +1946,7 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 	if ((BattData.STC_Status & M_RUN) == 0) {
 		pr_err("stc311x in standby mode, rewrite OCV \n");
 		STC311x_Rewrite_OCV();
+		g_force_SOC_update = 1;
 
 		/* if not running, restore STC3117 */
 		STC311x_Restore();
@@ -1962,6 +1967,7 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		batt_temp = GG->ExternalTemperature;
 		if (g_debug)
 			pr_err("stc3117 temp= %d, battery NTC temp = %d \n", BattData.Temperature, batt_temp);
+
 		//If read PMIC NTC success, update the temperature. Else, use stc3117 temperature
 		if (batt_temp != BATTERY_NTC_ERROR_TEMP)
 			BattData.Temperature = batt_temp;
@@ -2018,7 +2024,8 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		if ((BattData.STC_Status & M_BATFAIL) == 0)
 			BattData.BattOnline = 1;
 
-		SOC_correction(GG);
+		if (g_boot_phase == 0)
+			SOC_correction(GG);
 		/* SOC derating with temperature */
 		BattData.SOC = CompensateSOC(BattData.SOC,
 					     BattData.Temperature);
@@ -2030,15 +2037,21 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		if (BattData.Voltage < value)
 			value = BattData.Voltage;
 		//In the boot up phase, skip early empty compensation to avoid soc drop
-		if ((g_boot_phase == 0) && value < (APP_MIN_VOLTAGE+50) &&
-		    value > (APP_MIN_VOLTAGE-500)) {
+		if ((g_boot_phase == 0) &&
+			value < (APP_MIN_VOLTAGE+APP_MIN_THRESHOLD) &&
+			value > (APP_MIN_VOLTAGE-500)) {
+			if (g_debug)
+				pr_err("early empty compensation: voltage = %d, BattData.SOC = %d (0.1)\n",
+					value, BattData.SOC);
 			if ((value < APP_MIN_VOLTAGE) && ((BattData.AvgCurrent > -100) && (BattData.AvgCurrent < 0)))
 				BattData.SOC = 0;
 			else
 				BattData.SOC = BattData.SOC *
-					(value - APP_MIN_VOLTAGE) / 50;
+					(value - APP_MIN_VOLTAGE) /
+					APP_MIN_THRESHOLD;
 			if (g_debug)
-				pr_err("early empty compensation:  AvgVoltage = %d, BattData.Voltage = %d, BattData.SOC = %d (0.1)\n", BattData.AvgVoltage, BattData.Voltage, BattData.SOC);
+				pr_err("early empty compensation: new BattData.SOC = %d (0.1)\n",
+					BattData.SOC);
 		}
 
 		BattData.AccVoltage += (BattData.Voltage - BattData.AvgVoltage);
@@ -2073,7 +2086,11 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 			if (BattData.AvgCurrent < 0 &&
 			   BattData.SOC >= 15 &&
 			   BattData.SOC < 20 &&
-			   BattData.Voltage > (APP_MIN_VOLTAGE+50)) {
+			   BattData.Voltage >
+			   APP_MIN_VOLTAGE+APP_MIN_THRESHOLD) {
+				if (g_debug)
+					pr_err("Lately empty compen:SOC=%d\n",
+						BattData.SOC);
 				BattData.SOC = 20;
 				STC311x_SetSOC(2*512);
 			}
@@ -2083,7 +2100,8 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 		if (BattData.HRSOC > (MAX_HRSOC+512)) {
 			BattData.SOC = MAX_SOC;
 			STC311x_SetSOC(MAX_HRSOC+512);
-		} else if (BattData.SOC <= 0)
+		}
+		if (BattData.SOC <= 0)
 			BattData.SOC = 0;
 
 		/* -------- APPLICATION RESULTS ------------ */
@@ -2476,7 +2494,10 @@ static void stc311x_work(struct work_struct *work)
 	int res, Loop;
 
 	chip = container_of(work, struct stc311x_chip, work.work);
-
+	if (!wake_lock_active(&chip->wlock)) {
+		wake_lock(&chip->wlock);
+		pr_debug("stc311x_wake_lock\n");
+	}
 	sav_client = chip->client;
 
 	if (chip->pdata) {
@@ -2545,10 +2566,11 @@ static void stc311x_work(struct work_struct *work)
 		chip->Temperature = 250;
 		pr_err("GasGauge_Task return (0) \n");
 	} else if (res == -1) {
+		pr_err("GasGauge_Task return (-1)\n");
+		goto i2c_error;
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 		chip->Temperature = 250;
-		pr_err("GasGauge_Task return (-1) \n");
 	}
 
 	if (g_debug) {
@@ -2558,7 +2580,12 @@ static void stc311x_work(struct work_struct *work)
 
 	stc311x_check_charger_state(chip);
 
-	if ((chip->batt_soc ^ g_ui_soc) || (chip->batt_soc == 0))
+	if (g_force_SOC_update) {
+		pr_info("gauge reset, update SOC: old: %d, new: %d\n",
+			g_ui_soc, chip->batt_soc);
+		g_ui_soc = chip->batt_soc;
+		g_force_SOC_update = 0;
+	} else if ((chip->batt_soc ^ g_ui_soc) || (chip->batt_soc == 0))
 		UI_soc_adjustment(chip);
 
 	//Control SOC between  0 - 100%
@@ -2570,7 +2597,12 @@ static void stc311x_work(struct work_struct *work)
 	stc311x_updata();
 	if (g_debug)
 		pr_err("*** ST_SOC = %d, UI_SOC = %d, reg_soc = %d, voltage = %d mv, OCV = %d mv, current = %d mA, Temperature = %d, charging_status = %d *** \n", chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->batt_current, chip->Temperature, chip->status);
+	else
+		pr_info("ST_SOC=%d, UI_SOC=%d, reg_soc=%d, voltage=%d, OCV=%d, charging_status=%d\n",
+			chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage,
+			g_ocv, chip->status);
 
+i2c_error:
 	if (chip->batt_soc > STC311x_SOC_LOW_THRESHOLD)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
 	else if ((STC311x_SOC_CRITICAL_THRESHOLD <= chip->batt_soc) && (chip->batt_soc <= STC311x_SOC_LOW_THRESHOLD))
@@ -2580,7 +2612,7 @@ static void stc311x_work(struct work_struct *work)
 
 	if (wake_lock_active(&chip->wlock)) {
 		wake_unlock(&chip->wlock);
-		pr_info("stc311x_wake_unlock \n");
+		pr_debug("stc311x_wake_unlock\n");
 	}
 
 }
@@ -2591,12 +2623,11 @@ static void stc311x_boot_up_work(struct work_struct *work)
 }
 
 static enum power_supply_property stc311x_battery_props[] = {
+	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
-	POWER_SUPPLY_PROP_TECHNOLOGY,
-
 };
 
 static int stc311x_probe(struct i2c_client *client,
@@ -2625,6 +2656,7 @@ static int stc311x_probe(struct i2c_client *client,
 	pr_err("\n\nstc311x probe started\n\n");
 	g_debug = 0;
 	g_boot_phase = 1;
+	g_force_SOC_update = 0;
 
 	/* The common I2C client data is placed right specific data. */
 	chip->client = client;
@@ -2779,6 +2811,10 @@ static int stc311x_probe(struct i2c_client *client,
 
 	if (g_debug)
 		pr_err("SOC = %d, reg_soc = %d, voltage = %d, OCV = %d, temp = %d \n", chip->batt_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->Temperature);
+	else
+		pr_info("SOC=%d, reg_soc=%d, voltage=%d, OCV=%d, temp=%d\n",
+			chip->batt_soc, g_reg_soc, chip->batt_voltage, g_ocv,
+			chip->Temperature);
 	pr_info("stc311x FG successfully probed\n");
 	return 0;
 }
@@ -2809,7 +2845,7 @@ static int stc311x_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
-	pr_info("stc311x_suspend \n");
+	pr_debug("stc311x_suspend\n");
 	cancel_delayed_work(&chip->work);
 	return 0;
 }
@@ -2819,11 +2855,9 @@ static int stc311x_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
-	pr_info("stc311x_resume \n");
-
 	if (!wake_lock_active(&chip->wlock)) {
 		wake_lock(&chip->wlock);
-		pr_info("stc311x_wake_lock \n");
+		pr_debug("stc311x_resume, wake_lock\n");
 	}
 	schedule_delayed_work(&chip->work, 0);
 	return 0;
