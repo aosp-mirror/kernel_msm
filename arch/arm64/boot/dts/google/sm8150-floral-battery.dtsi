@@ -13,7 +13,7 @@
 &pm8150b_fg {
 	qcom,hold-soc-while-full;
 	qcom,linearize-soc;
-/* TODO: google,fg-soc-irq-disable */
+	google,fg-soc-irq-disable;
 };
 
 &pm8150b_charger {
