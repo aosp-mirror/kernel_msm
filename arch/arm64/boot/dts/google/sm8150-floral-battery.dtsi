@@ -48,15 +48,12 @@
 	reg-names = "m5db", "nvram";
 	reg = <0x36 0x0b>;
 
-	/*
-	 * FIXME: enable interrupts
-	interrupt-parent = <&spmi_bus>;
-	interrupt-names = "max1720x_fg";
-	interrupts = <0x2 0xc7 0x0 IRQ_TYPE_LEVEL_HIGH>;
-	 */
-
 	pinctrl-names = "default";
 	pinctrl-0 = <&fg_int_default>;
+
+	interrupt-parent = <&spmi_bus>;
+	interrupt-names = "max1720x_fg";
+	interrupts = <0x2 0xc7 0x0 IRQ_TYPE_LEVEL_LOW>;
 
 	/* enable experimental max17301 support */
 	maxim,max1730x-compat;
