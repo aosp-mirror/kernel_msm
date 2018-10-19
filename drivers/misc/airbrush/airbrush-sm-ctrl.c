@@ -26,6 +26,7 @@
 #include "airbrush-pmu.h"
 #include "airbrush-power-gating.h"
 #include "airbrush-spi.h"
+#include "airbrush-thermal.h"
 
 #define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 10)
 
@@ -623,6 +624,22 @@ static const struct file_operations ab_misc_fops = {
 	.unlocked_ioctl = ab_sm_misc_ioctl,
 };
 
+static void ab_sm_thermal_throttle_state_updated(
+		enum throttle_state throttle_state_id, void *op_data)
+{
+	struct ab_state_context *ctx = op_data;
+
+	mutex_lock(&ctx->state_lock);
+	ctx->throttle_state_id = throttle_state_id;
+	dev_dbg(ctx->dev, "Throttle state updated to %lu", throttle_state_id);
+	ab_sm_update_chip_state(ctx);
+	mutex_unlock(&ctx->state_lock);
+}
+
+static const struct ab_thermal_ops ab_sm_thermal_ops = {
+	.throttle_state_updated = ab_sm_thermal_throttle_state_updated,
+};
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -746,6 +763,13 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	init_completion(&ab_sm_ctx->state_change_comp);
 
+
+	/*
+	 * TODO error handle at airbrush-sm should return non-zero value to
+	 * free this.
+	 */
+	devm_ab_thermal_create(ab_sm_ctx->dev, &ab_sm_thermal_ops, ab_sm_ctx);
+	ab_sm_ctx->throttle_state_id = THROTTLE_NONE;
 
 	ab_sm_create_debugfs(ab_sm_ctx);
 	ab_sm_create_sysfs(ab_sm_ctx);
