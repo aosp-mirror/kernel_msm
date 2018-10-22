@@ -101,7 +101,6 @@ struct rmidev_handle {
 	struct kobject *sysfs_dir;
 	struct siginfo interrupt_signal;
 	struct siginfo terminate_signal;
-	struct task_struct *task;
 	void *data;
 	bool concurrent;
 };
@@ -396,8 +395,7 @@ static ssize_t rmidev_sysfs_pid_store(struct device *dev,
 	rmidev->pid = input;
 
 	if (rmidev->pid) {
-		rmidev->task = pid_task(find_vpid(rmidev->pid), PIDTYPE_PID);
-		if (!rmidev->task) {
+		if (!pid_task(find_vpid(rmidev->pid), PIDTYPE_PID)) {
 			dev_err(rmi4_data->pdev->dev.parent,
 					"%s: Failed to locate PID of data logging tool\n",
 					__func__);
@@ -419,8 +417,14 @@ static ssize_t rmidev_sysfs_term_store(struct device *dev,
 	if (input != 1)
 		return -EINVAL;
 
-	if (rmidev->pid)
-		send_sig_info(SIGTERM, &rmidev->terminate_signal, rmidev->task);
+	if (rmidev->pid) {
+		struct task_struct *task;
+		rcu_read_lock();
+		task = pid_task(find_vpid(rmidev->pid), PIDTYPE_PID);
+		if (task)
+			send_sig_info(SIGTERM, &rmidev->terminate_signal, task);
+		rcu_read_unlock();
+	}
 
 	return count;
 }
@@ -573,9 +577,9 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 
 	address = (unsigned short)(*f_pos);
 
-	rmidev_allocate_buffer(count);
-
 	mutex_lock(&(dev_data->file_mutex));
+
+	rmidev_allocate_buffer(count);
 
 	retval = synaptics_rmi4_reg_read(rmidev->rmi4_data,
 			*f_pos,
@@ -642,12 +646,14 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 	if (count > (REG_ADDR_LIMIT - *f_pos))
 		count = REG_ADDR_LIMIT - *f_pos;
 
+	mutex_lock(&(dev_data->file_mutex));
+
 	rmidev_allocate_buffer(count);
 
-	if (copy_from_user(rmidev->tmpbuf, buf, count))
-		return -EFAULT;
-
-	mutex_lock(&(dev_data->file_mutex));
+	if (copy_from_user(rmidev->tmpbuf, buf, count)) {
+		retval = -EFAULT;
+		goto err_copy_user;
+	}
 
 	retval = synaptics_rmi4_reg_write(rmidev->rmi4_data,
 			*f_pos,
@@ -656,6 +662,7 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 	if (retval >= 0)
 		*f_pos += retval;
 
+err_copy_user:
 	mutex_unlock(&(dev_data->file_mutex));
 
 	return retval;
@@ -789,8 +796,14 @@ static void rmidev_attn(struct synaptics_rmi4_data *rmi4_data,
 	if (!rmidev)
 		return;
 
-	if (rmidev->pid && (rmidev->intr_mask & intr_mask))
-		send_sig_info(SIGIO, &rmidev->interrupt_signal, rmidev->task);
+	if (rmidev->pid && (rmidev->intr_mask & intr_mask)) {
+		struct task_struct *task;
+		rcu_read_lock();
+		task = pid_task(find_vpid(rmidev->pid), PIDTYPE_PID);
+		if (task)
+			send_sig_info(SIGIO, &rmidev->interrupt_signal, task);
+		rcu_read_unlock();
+	}
 
 	return;
 }

@@ -1421,6 +1421,7 @@ static int compact_zone(struct zone *zone, struct compact_control *cc)
 	unsigned long end_pfn = zone_end_pfn(zone);
 	const int migratetype = gfpflags_to_migratetype(cc->gfp_mask);
 	const bool sync = cc->mode != MIGRATE_ASYNC;
+	ktime_t event_ts;
 
 	ret = compaction_suitable(zone, cc->order, cc->alloc_flags,
 							cc->classzone_idx);
@@ -1459,6 +1460,7 @@ static int compact_zone(struct zone *zone, struct compact_control *cc)
 	}
 	cc->last_migrated_pfn = 0;
 
+	mm_event_start(&event_ts);
 	trace_mm_compaction_begin(start_pfn, cc->migrate_pfn,
 				cc->free_pfn, end_pfn, sync);
 
@@ -1532,6 +1534,7 @@ check_drain:
 	}
 
 out:
+	mm_event_end(MM_COMPACTION, event_ts);
 	/*
 	 * Release free pages and update where the free scanner should restart,
 	 * so we don't leave any returned pages behind in the next attempt.
@@ -1610,6 +1613,7 @@ unsigned long try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 	int may_perform_io = gfp_mask & __GFP_IO;
 	struct zoneref *z;
 	struct zone *zone;
+	ktime_t event_ts;
 	int rc = COMPACT_DEFERRED;
 	int all_zones_contended = COMPACT_CONTENDED_LOCK; /* init for &= op */
 
@@ -1619,6 +1623,7 @@ unsigned long try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 	if (!order || !may_enter_fs || !may_perform_io)
 		return COMPACT_SKIPPED;
 
+	mm_event_start(&event_ts);
 	trace_mm_compaction_try_to_compact_pages(order, gfp_mask, mode);
 
 	/* Compact each zone in the list */
@@ -1702,6 +1707,7 @@ break_loop:
 	if (rc > COMPACT_SKIPPED && all_zones_contended)
 		*contended = COMPACT_CONTENDED_LOCK;
 
+	mm_event_end(MM_COMPACTION, event_ts);
 	return rc;
 }
 
