@@ -583,4 +583,6 @@ TRACE_EVENT(sched_load_to_gov,
 		__entry->sysctl_sched_little_cluster_coloc_fmin_khz,
 		__entry->coloc_boost_load)
 );
+#else
+#define trace_sched_load_balance_skip_tasks(...)
 #endif
