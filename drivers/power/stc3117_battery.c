@@ -1493,7 +1493,9 @@ void SOC_correction(struct GasGauge_DataTypeDef *GG)
 	BattData.SOC = (SOCopt*10+256)/512;
 	if ((Var4 < (-VAR4MAX)) || (Var4 >= VAR4MAX)) {
 		/*rewrite SOCopt into STC311x and clear acc registers*/
-		pr_err("SOC_correction() set new raw SOC: %d (1/512) \n", SOCopt);
+		if (g_debug)
+			pr_err("SOC_correction() set new raw SOC: %d (1/512)\n",
+				SOCopt);
 		STC311x_SetSOC(SOCopt);
 	}
 
@@ -2494,7 +2496,10 @@ static void stc311x_work(struct work_struct *work)
 	int res, Loop;
 
 	chip = container_of(work, struct stc311x_chip, work.work);
-
+	if (!wake_lock_active(&chip->wlock)) {
+		wake_lock(&chip->wlock);
+		pr_debug("stc311x_wake_lock\n");
+	}
 	sav_client = chip->client;
 
 	if (chip->pdata) {
@@ -2563,10 +2568,11 @@ static void stc311x_work(struct work_struct *work)
 		chip->Temperature = 250;
 		pr_err("GasGauge_Task return (0) \n");
 	} else if (res == -1) {
+		pr_err("GasGauge_Task return (-1)\n");
+		goto i2c_error;
 		chip->batt_voltage = GasGaugeData.Voltage;
 		chip->batt_soc = (GasGaugeData.SOC+5)/10;
 		chip->Temperature = 250;
-		pr_err("GasGauge_Task return (-1) \n");
 	}
 
 	if (g_debug) {
@@ -2595,6 +2601,7 @@ static void stc311x_work(struct work_struct *work)
 	else
 		pr_info("*** ST_SOC=%d, UI_SOC=%d, reg_soc=%d, voltage=%d, OCV=%d, charging_status=%d *** \n", chip->batt_soc, g_ui_soc, g_reg_soc, chip->batt_voltage, g_ocv, chip->status);
 
+i2c_error:
 	if (chip->batt_soc > STC311x_SOC_LOW_THRESHOLD)
 		schedule_delayed_work(&chip->work, STC311x_DELAY);
 	else if ((STC311x_SOC_CRITICAL_THRESHOLD <= chip->batt_soc) && (chip->batt_soc <= STC311x_SOC_LOW_THRESHOLD))
@@ -2604,7 +2611,7 @@ static void stc311x_work(struct work_struct *work)
 
 	if (wake_lock_active(&chip->wlock)) {
 		wake_unlock(&chip->wlock);
-		pr_info("stc311x_wake_unlock \n");
+		pr_debug("stc311x_wake_unlock\n");
 	}
 
 }
@@ -2837,7 +2844,7 @@ static int stc311x_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
-	pr_info("stc311x_suspend \n");
+	pr_debug("stc311x_suspend\n");
 	cancel_delayed_work(&chip->work);
 	return 0;
 }
@@ -2847,11 +2854,9 @@ static int stc311x_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct stc311x_chip *chip = i2c_get_clientdata(client);
 
-	pr_info("stc311x_resume \n");
-
 	if (!wake_lock_active(&chip->wlock)) {
 		wake_lock(&chip->wlock);
-		pr_info("stc311x_wake_lock \n");
+		pr_debug("stc311x_resume, wake_lock\n");
 	}
 	schedule_delayed_work(&chip->work, 0);
 	return 0;
