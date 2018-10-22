@@ -329,7 +329,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		return 0;
 	}
 
-	mutex_lock(&sc->lock);
+	mutex_lock(&sc->pmic_lock);
 
 	if (!sc->soc_pwrgood) {
 		sc->soc_pwrgood =
@@ -433,12 +433,12 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		}
 	}
 
-	mutex_unlock(&sc->lock);
+	mutex_unlock(&sc->pmic_lock);
 
 	return 0;
 
 fail:
-	mutex_unlock(&sc->lock);
+	mutex_unlock(&sc->pmic_lock);
 	return -ENODEV;
 }
 

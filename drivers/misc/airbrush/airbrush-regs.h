@@ -108,4 +108,10 @@ static inline void WR_DDR_REG(uint32_t addr, uint32_t data)
 #define GPIO_CKE_IN_SENSE()		(!!(RD_REG(GPIO_GPG0_DAT) & (1 << 6)))
 #define GPIO_DDR_SR()			(!!(RD_REG(GPIO_GPG0_DAT) & (1 << 4)))
 
+#define OTP_CHIP_ID_ADDR		(ABC_BASE_OTP_WRAPPER + 0x10)
+#define OTP_CHIP_ID_SHIFT		20
+#define OTP_CHIP_ID_MASK		(0xF << OTP_CHIP_ID_SHIFT)
+#define CHIP_ID_A0				0
+#define CHIP_ID_B0				1
+
 #endif	/* _AIRBRUSH_REGS_H_ */

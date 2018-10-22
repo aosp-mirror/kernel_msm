@@ -335,6 +335,7 @@ static int disable_ref_clk(struct device *dev)
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 {
 	int i;
+	int ret = 0;
 	struct chip_to_block_map *map = NULL;
 
 	for (i = 0; i < sc->nr_chip_states; i++) {
@@ -358,6 +359,8 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 		return -EINVAL;
 	}
 
+	mutex_lock(&sc->state_lock);
+
 	if ((sc->chip_substate_id == CHIP_STATE_6_0 ||
 	   sc->chip_substate_id == CHIP_STATE_5_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0) {
@@ -374,29 +377,41 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
-			to_chip_substate_id))
-		return -EINVAL;
+			to_chip_substate_id)) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
 		      map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL),
-			to_chip_substate_id))
-		return -EINVAL;
+			to_chip_substate_id)) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
 
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
-		      map->dram_block_state_id, true, to_chip_substate_id))
-		return -EINVAL;
+		      map->dram_block_state_id, true, to_chip_substate_id)) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-		      map->mif_block_state_id, true, to_chip_substate_id))
-		return -EINVAL;
+		      map->mif_block_state_id, true, to_chip_substate_id)) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-		      map->fsys_block_state_id, true, to_chip_substate_id))
-		return -EINVAL;
+		      map->fsys_block_state_id, true, to_chip_substate_id)) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-		      map->aon_block_state_id, true, to_chip_substate_id))
-		return -EINVAL;
+		      map->aon_block_state_id, true, to_chip_substate_id)) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
 
 	if ((to_chip_substate_id == CHIP_STATE_5_0) ||
 		(to_chip_substate_id == CHIP_STATE_6_0)) {
@@ -418,7 +433,10 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 
 	sc->chip_substate_id = to_chip_substate_id;
 	complete_all(&sc->state_change_comp);
-	return 0;
+
+cleanup:
+	mutex_unlock(&sc->state_lock);
+	return ret;
 }
 EXPORT_SYMBOL(ab_sm_set_state);
 
@@ -569,10 +587,13 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	u32 boot_time_block_state;
 
 	/* allocate device memory */
+	// TODO: Check return value is not NULL
 	ab_sm_ctx = devm_kzalloc(dev, sizeof(struct ab_state_context),
 							GFP_KERNEL);
+
 	ab_sm_ctx->pdev = pdev;
 	ab_sm_ctx->dev = &pdev->dev;
+	dev_set_drvdata(ab_sm_ctx->dev, ab_sm_ctx);
 
 	ab_sm_ctx->misc_dev.minor = MISC_DYNAMIC_MINOR;
 	ab_sm_ctx->misc_dev.name = "ab_sm";
@@ -664,12 +685,15 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->nr_chip_states = ARRAY_SIZE(chip_state_map);
 	ab_sm_ctx->chip_substate_id = CHIP_STATE_6_0;
 
+	mutex_init(&ab_sm_ctx->pmic_lock);
+	mutex_init(&ab_sm_ctx->state_lock);
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	atomic_set(&ab_sm_ctx->clocks_initialized, 0);
-
 	init_completion(&ab_sm_ctx->state_change_comp);
 
+
 	ab_sm_create_debugfs(ab_sm_ctx);
+	ab_sm_create_sysfs(ab_sm_ctx);
 	return ab_sm_ctx;
 
 fail_fw_patch_en:
@@ -685,5 +709,6 @@ EXPORT_SYMBOL(ab_sm_init);
 
 void ab_sm_exit(struct platform_device *pdev)
 {
+	ab_sm_remove_sysfs(ab_sm_ctx);
 	ab_sm_remove_debugfs(ab_sm_ctx);
 }

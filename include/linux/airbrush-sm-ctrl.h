@@ -249,6 +249,7 @@ struct ab_state_context {
 	struct platform_device *pdev;
 	struct device *dev;
 	struct miscdevice misc_dev;
+
 	struct block blocks[NUM_BLOCKS];
 	enum chip_state chip_substate_id;
 	char *chip_substate_name;
@@ -256,7 +257,8 @@ struct ab_state_context {
 	u32 nr_chip_states;
 
 	/* Synchronization structs */
-	struct mutex lock;
+	struct mutex pmic_lock;
+	struct mutex state_lock;
 	struct completion state_change_comp;
 
 	/* pins used in bootsequence */
@@ -368,5 +370,8 @@ void ab_sm_remove_debugfs(struct ab_state_context *sc);
 static inline void ab_sm_create_debugfs(struct ab_state_context *sc) {}
 static inline void ab_sm_remove_debugfs(struct ab_state_context *sc) {}
 #endif
+
+void ab_sm_create_sysfs(struct ab_state_context *sc);
+void ab_sm_remove_sysfs(struct ab_state_context *sc);
 
 #endif /* _AIRBRUSH_SM_CTRL_H */

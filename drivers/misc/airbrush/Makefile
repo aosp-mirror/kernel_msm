@@ -12,5 +12,7 @@ airbrush-y +=	\
 		airbrush-pmic-ctrl.o \
 		airbrush-ddr.o \
 		airbrush-ppmu.o \
-		airbrush-thermal.o
+		airbrush-thermal.o \
+		airbrush-sysfs.o
+
 airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS) += airbrush-debugfs.o
