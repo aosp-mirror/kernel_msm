@@ -117,6 +117,37 @@
 			focaltech,key-y-coord = <1350>;
 			focaltech,key-x-coords = <180 350 540>;*/
 		};
+
+		it7259@46 {
+			compatible = "ite,it7259_ts";
+			reg = <0x46>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <65 0x2008>;
+			avdd-supply = <&pm8916_l17>;
+			vdd-supply = <&pm8916_l6>;
+			/* pins used by touchscreen */
+
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend",
+						"pmx_ts_release";
+			pinctrl-0 = <&ts_int_active &ts_ite_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_ite_reset_suspend>;
+			pinctrl-2 = <&ts_release>;
+
+			ite,reset-gpio = <&msm_gpio 23 0x00>;
+			ite,irq-gpio = <&msm_gpio 65 0x2008>;
+			ite,switch-gpio = <&msm_gpio 93 0x00>;
+			ite,panel-coords = <0 0 400 400>;
+			ite,display-coords = <0 0 400 400>;
+			ite,reset-delay = <20>;
+			ite,num-fingers = <2>;
+			ite,wakeup;
+			ite,palm-detect-en;
+			ite,palm-detect-keycode = <142>;
+			ite,fw-name = "it7260_fw_050D0014.bin";
+			ite,cfg-name = "it7260_cfg_62011E01.bin";
+			ite,avdd-lpm-cur = <3000>;
+		};
+
 		drv2605@5a {
 			compatible = "ti,drv2605";
 			reg = <0x5a>;

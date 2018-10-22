@@ -120,6 +120,56 @@
 			};
 		};
 
+
+		/* Pinctrl dt nodes for reset gpio for ITE tech controller */
+		pmx_ts_ite_reset_active {
+			ts_ite_reset_active: ts_ite_reset_active {
+				mux {
+					pins = "gpio23";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio23";
+					drive-strength = <8>;
+					output-high;
+				};
+			};
+		};
+
+		pmx_ts_ite_reset_suspend {
+			ts_ite_reset_suspend: ts_ite_reset_suspend {
+				mux {
+					pins = "gpio23";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio23";
+					drive-strength = <2>;
+					bias-pull-down;
+					output-low;
+				};
+			};
+		};
+
+		pmx_ts_release {
+			ts_release: ts_release {
+				mux {
+					pins = "gpio23", "gpio65";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio23", "gpio65";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+
+
 		spi4 {
 			spi4_default: spi4_default {
 				/* active state */
