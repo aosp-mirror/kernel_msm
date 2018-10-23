@@ -982,7 +982,7 @@ const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
 	},
 	{
 		.id = CS40L2X_FW_ID_REMAP,
-		.min_rev = 0x070100,
+		.min_rev = 0x080000,
 		.halo_state_run = 203,
 		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_remap),
 		.coeff_files = cs40l2x_coeff_files_remap,
@@ -990,7 +990,7 @@ const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
 	},
 	{
 		.id = CS40L2X_FW_ID_CAL,
-		.min_rev = 0x070100,
+		.min_rev = 0x080000,
 		.halo_state_run = 203,
 		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_cal),
 		.coeff_files = cs40l2x_coeff_files_cal,
