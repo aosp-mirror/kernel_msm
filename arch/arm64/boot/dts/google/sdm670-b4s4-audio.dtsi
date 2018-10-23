@@ -432,7 +432,7 @@
 		"MIC BIAS Internal1", "Handset Mic",
 		"Stereo1 DMIC Mux", "MIC BIAS Internal1",
 		"Stereo2 DMIC Mux", "Mic2_3 REGULATOR",
-		"DSP_IN", "MIC BIAS Internal1";
+		"DSP_IN", "SoundTrigger Switch";
 	qcom,wsa-disable;
 	qcom,wsa-max-devs = <0>;
 	qcom,msm-micbias1-ext-cap;
