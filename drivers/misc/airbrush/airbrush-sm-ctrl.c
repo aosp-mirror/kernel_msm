@@ -243,7 +243,6 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	u32 to_block_state_id, bool power_control, u32 to_chip_substate_id)
 {
-	struct device *dev = sc->dev;
 	bool power_increasing;
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
@@ -418,6 +417,7 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 	}
 
 	sc->chip_substate_id = to_chip_substate_id;
+	complete_all(&sc->state_change_comp);
 	return 0;
 }
 EXPORT_SYMBOL(ab_sm_set_state);
@@ -483,11 +483,89 @@ void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx)
 	gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_DISABLE);
 }
 
+static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
+		unsigned long arg)
+{
+	int ret;
+
+	if (sess->last_state != CHIP_STATE_UNDEFINED) {
+		ret = wait_for_completion_interruptible(
+				&sess->sc->state_change_comp);
+		if (ret < 0)
+			return ret;
+	}
+
+	reinit_completion(&sess->sc->state_change_comp);
+
+	sess->last_state = sess->sc->chip_substate_id;
+	if (copy_to_user((void __user *)arg,
+				&sess->last_state,
+				sizeof(sess->last_state)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int ab_sm_misc_open(struct inode *ip, struct file *fp)
+{
+	struct ab_sm_misc_session *sess;
+	struct miscdevice *misc_dev = fp->private_data;
+	struct ab_state_context *sc =
+		container_of(misc_dev, struct ab_state_context, misc_dev);
+
+	sess = kzalloc(sizeof(struct ab_sm_misc_session), GFP_KERNEL);
+	if (!sess)
+		return -ENOMEM;
+
+	sess->sc = sc;
+	sess->last_state = CHIP_STATE_UNDEFINED;
+
+	fp->private_data = sess;
+
+	return 0;
+}
+
+static int ab_sm_misc_release(struct inode *ip, struct file *fp)
+{
+	struct ab_sm_misc_session *sess = fp->private_data;
+
+	complete_all(&sess->sc->state_change_comp);
+	kfree(sess);
+	return 0;
+}
+
+static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
+		unsigned long arg)
+{
+	long ret;
+	struct ab_sm_misc_session *sess = fp->private_data;
+
+	switch (cmd) {
+	case AB_SM_ASYNC_NOTIFY:
+		ret = ab_sm_async_notify(sess, arg);
+		break;
+	default:
+		dev_err(sess->sc->dev,
+			"%s: Unknown ioctl cmd 0x%X\n", __func__, cmd);
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static const struct file_operations ab_misc_fops = {
+	.owner = THIS_MODULE,
+	.open = ab_sm_misc_open,
+	.release = ab_sm_misc_release,
+	.unlocked_ioctl = ab_sm_misc_ioctl,
+};
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	int error;
+	int ret;
 	u32 boot_time_block_state;
 
 	/* allocate device memory */
@@ -495,6 +573,18 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 							GFP_KERNEL);
 	ab_sm_ctx->pdev = pdev;
 	ab_sm_ctx->dev = &pdev->dev;
+
+	ab_sm_ctx->misc_dev.minor = MISC_DYNAMIC_MINOR;
+	ab_sm_ctx->misc_dev.name = "ab_sm";
+	ab_sm_ctx->misc_dev.fops = &ab_misc_fops;
+
+	ret = misc_register(&ab_sm_ctx->misc_dev);
+	if (ret < 0) {
+		dev_err(ab_sm_ctx->dev,
+			"Failed to register misc device node (ret = %d)", ret);
+		goto fail_misc_reg;
+	}
+
 
 	/* Get the gpio_desc for all the gpios used */
 	/* FW_PATCH_EN is used to inform Airbrush about host is interested in
@@ -577,11 +667,15 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	atomic_set(&ab_sm_ctx->clocks_initialized, 0);
 
+	init_completion(&ab_sm_ctx->state_change_comp);
+
 	ab_sm_create_debugfs(ab_sm_ctx);
 	return ab_sm_ctx;
 
 fail_fw_patch_en:
 fail_ab_ready:
+fail_misc_reg:
+	misc_deregister(&ab_sm_ctx->misc_dev);
 	devm_kfree(dev, (void *)ab_sm_ctx);
 	ab_sm_ctx = NULL;
 

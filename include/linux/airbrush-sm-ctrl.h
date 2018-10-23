@@ -16,17 +16,21 @@
 #define _AIRBRUSH_SM_CTRL_H
 
 #include <linux/atomic.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/ioctl.h>
+#include <linux/mfd/abc-pcie.h>
+#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-#include <linux/types.h>
-#include <linux/mfd/abc-pcie.h>
 #include <linux/regulator/consumer.h>
-#include <linux/of_gpio.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
 
 #define __GPIO_ENABLE   0x1
 #define __GPIO_DISABLE   0x0
@@ -35,6 +39,9 @@
 
 #define __GPIO_ENABLE	0x1
 #define __GPIO_DISABLE	0x0
+
+#define AB_SM_IOCTL_MAGIC	'a'
+#define AB_SM_ASYNC_NOTIFY _IOR(AB_SM_IOCTL_MAGIC, 0, int)
 
 typedef enum __block_names {
 	BLK_IPU,
@@ -77,7 +84,9 @@ enum ddr_state {
 	DDR_OFF,
 };
 
+// TODO: remove typedef
 typedef enum __chip_state {
+	CHIP_STATE_UNDEFINED = -1,
 	CHIP_STATE_0_0 = 0,
 	CHIP_STATE_0_1,
 	CHIP_STATE_0_2,
@@ -240,14 +249,16 @@ typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 struct ab_state_context {
 	struct platform_device *pdev;
 	struct device *dev;
+	struct miscdevice misc_dev;
 	struct block blocks[NUM_BLOCKS];
 	chip_state_t chip_substate_id;
 	char *chip_substate_name;
 	struct chip_to_block_map *chip_state_table;
 	u32 nr_chip_states;
 
-	/* mutex for synchronization (if needed) */
+	/* Synchronization structs */
 	struct mutex lock;
+	struct completion state_change_comp;
 
 	/* pins used in bootsequence */
 	struct gpio_desc *soc_pwrgood;	/* output */
@@ -307,6 +318,11 @@ struct ab_state_context {
 	enum ddr_state ddr_state;
 	struct pci_dev *pcie_dev;
 	bool pcie_enumerated;
+};
+
+struct ab_sm_misc_session {
+	struct ab_state_context *sc;
+	chip_state_t last_state;
 };
 
 /*
