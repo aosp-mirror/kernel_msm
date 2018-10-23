@@ -1,0 +1,747 @@
+/*
+ * Copyright 2018 Google, Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#define BMS_DEV_NAME	"sm8150_bms"
+#define pr_fmt(fmt) BMS_DEV_NAME": " fmt
+
+#include <linux/of.h>
+#include <linux/of_platform.h>
+#include <linux/of_batterydata.h>
+#include <linux/module.h>
+#include <linux/platform_device.h>
+#include <linux/power_supply.h>
+#include <linux/regmap.h>
+#include "google_bms.h"
+
+#define BIAS_STS_READY	BIT(0)
+
+struct bms_dev {
+	struct	device			*dev;
+	struct	power_supply		*psy;
+	struct	regmap			*pmic_regmap;
+	struct	notifier_block		nb;
+	int				batt_id_ohms;
+	int				taper_control;
+	bool				fcc_stepper_enable;
+	union	gbms_charger_state	chg_chgr_state;
+};
+
+struct bias_config {
+	u16	status_reg;
+	u16	lsb_reg;
+	int	bias_kohms;
+};
+
+#define CHGR_BATTERY_CHARGER_STATUS_1_REG	0x1006
+
+#define CHGR_BATTERY_CHARGER_STATUS_2_REG	0x1007
+#define CHG_ERR_STATUS_SFT_EXPIRE		BIT(2)
+
+#define CHGR_BATTERY_CHARGER_STATUS_5_REG	0x100B
+#define ENABLE_TRICKLE_BIT			BIT(2)
+#define ENABLE_PRE_CHARGING_BIT			BIT(1)
+#define ENABLE_FULLON_MODE_BIT			BIT(0)
+
+#define CHGR_FLOAT_VOLTAGE_NOW			0x1009
+#define CHGR_CHARGING_ENABLE_CMD		0x1042
+#define CHARGING_ENABLE_CMD_BIT			BIT(0)
+
+#define CHGR_FAST_CHARGE_CURRENT_SETTING	0x1061
+#define CHGR_FLOAT_VOLTAGE_SETTING		0x1070
+
+#define DCDC_AICL_STATUS_REG			0x110A
+#define DCDC_SOFT_ILIMIT_BIT			BIT(6)
+
+#define DCDC_POWER_PATH_STATUS_REG		0x110B
+#define USE_USBIN_BIT				BIT(4)
+#define USE_DCIN_BIT				BIT(3)
+#define VALID_INPUT_POWER_SOURCE_STS_BIT	BIT(0)
+
+#define CHGR_BATTERY_CHARGER_STATUS_MASK	GENMASK(2, 0)
+
+#define CHGR_FLOAT_VOLTAGE_BASE		3600000
+#define CHGR_FLOAT_VOLTAGE_LEVEL	50000
+
+enum sm8150_chg_status {
+	SM8150_INHIBIT_CHARGE	= 0,
+	SM8150_TRICKLE_CHARGE	= 1,
+	SM8150_PRE_CHARGE	= 2,
+	SM8150_FULLON_CHARGE	= 3,
+	SM8150_TAPER_CHARGE	= 4,
+	SM8150_TERMINATE_CHARGE	= 5,
+	SM8150_PAUSE_CHARGE	= 6,
+	SM8150_DISABLE_CHARGE	= 7,
+};
+
+static int sm8150_read(struct regmap *pmic_regmap, int addr, u8 *val, int len)
+{
+	int rc;
+
+	if (!pmic_regmap)
+		return -ENXIO;
+
+	rc = regmap_bulk_read(pmic_regmap, addr, val, len);
+	if (rc < 0) {
+		pr_err("regmap_read failed for address %04x rc=%d\n",
+			addr, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int sm8150_write(struct regmap *pmic_regmap, int addr, u8 *val, int len)
+{
+	int rc;
+
+	if (!pmic_regmap)
+		return -ENXIO;
+
+	rc = regmap_bulk_write(pmic_regmap, addr, val, len);
+	if (rc < 0) {
+		pr_err("regmap_write failed for address %04x rc=%d\n",
+			addr, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+
+static struct bias_config batt_id_table[3] = {
+	{0x4265, 0x4266, 400},
+	{0x426D, 0x426E, 100},
+	{0x4275, 0x4276, 30},
+};
+
+#define MAX_BIAS_CODE	0x70E4
+static void sm8150_get_batt_id(const struct bms_dev *bms, int *batt_id_ohms)
+{
+	int i, rc, batt_id_kohms;
+	u16 tmp = 0, bias_code = 0, delta = 0;
+	u8 val, bias_id = 0;
+
+	for (i = 0; i < ARRAY_SIZE(batt_id_table); i++)  {
+		rc = sm8150_read(bms->pmic_regmap, batt_id_table[i].status_reg,
+				&val, 1);
+		if (rc < 0) {
+			pr_err("Failed to read bias_sts, rc=%d\n", rc);
+			return;
+		}
+
+		if (val & BIAS_STS_READY) {
+			rc = sm8150_read(bms->pmic_regmap,
+					batt_id_table[i].lsb_reg,
+					(u8 *)&tmp, 2);
+			if (rc < 0) {
+				pr_err("Failed to read bias_lsb_reg, rc=%d\n",
+					rc);
+				return;
+			}
+		}
+
+		pr_info("bias_code[%d]: 0x%04x\n", i, tmp);
+
+		/*
+		 * Bias code closer to MAX_BIAS_CODE/2 is the one which should
+		 * be used for calculating battery id.
+		 */
+		if (!delta || abs(tmp - MAX_BIAS_CODE / 2) < delta) {
+			bias_id = i;
+			bias_code = tmp;
+			delta = abs(tmp - MAX_BIAS_CODE / 2);
+		}
+	}
+
+	pr_info("bias_id: %d bias_code: 0x%04x\n", bias_id, bias_code);
+
+	/*
+	 * Following equation is used for calculating battery id.
+	 * batt_id(KOhms) = bias_id(KOhms) / ((MAX_BIAS_CODE / bias_code) - 1)
+	 */
+	batt_id_kohms = (batt_id_table[bias_id].bias_kohms * bias_code) * 10 /
+			(MAX_BIAS_CODE - bias_code);
+	*batt_id_ohms = (batt_id_kohms * 1000) / 10;
+	pr_info("batt_id = %d\n", *batt_id_ohms);
+}
+
+#define MAX_READ_TRIES		 5
+#define BATT_INFO_IBATT_LSB	0x41A2
+#define BATT_INFO_IBATT_LSB_CP	0x41A8
+#define BATT_CURRENT_NUMR	488281
+#define BATT_CURRENT_DENR	1000
+static int sm8150_get_battery_current(const struct bms_dev *bms, int *val)
+{
+	int rc = 0, tries = 0;
+	int64_t temp = 0;
+	u8 buf[2], buf_cp[2];
+
+	while (tries++ < MAX_READ_TRIES) {
+		rc = sm8150_read(bms->pmic_regmap, BATT_INFO_IBATT_LSB, buf, 2);
+		if (rc < 0) {
+			return rc;
+		}
+
+		rc = sm8150_read(bms->pmic_regmap, BATT_INFO_IBATT_LSB_CP,
+				buf_cp, 2);
+		if (rc < 0) {
+			return rc;
+		}
+
+		if (buf[0] == buf_cp[0] && buf[1] == buf_cp[1])
+			break;
+	}
+
+	if (tries == MAX_READ_TRIES) {
+		pr_err("IBATT: shadow registers do not match\n");
+		return -EINVAL;
+	}
+
+	temp = buf[1] << 8 | buf[0];
+	/* Sign bit is bit 15 */
+	temp = sign_extend32(temp, 15);
+	*val = div_s64((s64)temp * BATT_CURRENT_NUMR, BATT_CURRENT_DENR);
+	return 0;
+}
+
+#define BATT_INFO_VBATT_LSB	0x41A0
+#define BATT_INFO_VBATT_LSB_CP	0x41A6
+#define BATT_VOLTAGE_NUMR	122070
+#define BATT_VOLTAGE_DENR	1000
+static int sm8150_get_battery_voltage(const struct bms_dev *bms, int *val)
+{
+	int rc = 0, tries = 0;
+	u16 temp = 0;
+	u8 buf[2], buf_cp[2];
+
+	while (tries++ < MAX_READ_TRIES) {
+		rc = sm8150_read(bms->pmic_regmap, BATT_INFO_VBATT_LSB, buf, 2);
+		if (rc < 0) {
+			return rc;
+		}
+
+		rc = sm8150_read(bms->pmic_regmap, BATT_INFO_VBATT_LSB_CP,
+				buf_cp, 2);
+		if (rc < 0) {
+			return rc;
+		}
+
+		if (buf[0] == buf_cp[0] && buf[1] == buf_cp[1])
+			break;
+	}
+
+	if (tries == MAX_READ_TRIES) {
+		pr_err("VBATT: shadow registers do not match\n");
+		return -EINVAL;
+	}
+
+	temp = buf[1] << 8 | buf[0];
+	*val = div_u64((u64)temp * BATT_VOLTAGE_NUMR, BATT_VOLTAGE_DENR);
+	return 0;
+}
+
+static int sm8150_get_batt_status(const struct bms_dev *bms)
+{
+	bool usb_online, dc_online;
+	int rc, ret;
+	u8 stat;
+
+	rc = sm8150_read(bms->pmic_regmap, DCDC_POWER_PATH_STATUS_REG,
+				&stat, 1);
+	if (rc < 0) {
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+	}
+	dc_online = (stat & USE_DCIN_BIT) &&
+			(stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+
+	usb_online = (stat & USE_USBIN_BIT) &&
+			(stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+
+	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
+				&stat, 1);
+	if (rc < 0) {
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+	}
+	stat = stat & CHGR_BATTERY_CHARGER_STATUS_MASK;
+
+	if (!usb_online && !dc_online) {
+		switch (stat) {
+		case SM8150_TERMINATE_CHARGE:
+		case SM8150_INHIBIT_CHARGE:
+			ret = POWER_SUPPLY_STATUS_FULL;
+			break;
+		default:
+			ret = POWER_SUPPLY_STATUS_DISCHARGING;
+			break;
+		}
+		return ret;
+	}
+
+	switch (stat) {
+	case SM8150_TRICKLE_CHARGE:
+	case SM8150_PRE_CHARGE:
+	case SM8150_FULLON_CHARGE:
+	case SM8150_TAPER_CHARGE:
+		ret = POWER_SUPPLY_STATUS_CHARGING;
+		break;
+	case SM8150_TERMINATE_CHARGE:
+	case SM8150_INHIBIT_CHARGE:
+		ret = POWER_SUPPLY_STATUS_FULL;
+		break;
+	case SM8150_DISABLE_CHARGE:
+	case SM8150_PAUSE_CHARGE:
+		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		break;
+	default:
+		ret = POWER_SUPPLY_STATUS_UNKNOWN;
+		break;
+	}
+
+	if (ret != POWER_SUPPLY_STATUS_CHARGING)
+		return ret;
+
+	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_5_REG,
+				&stat, 1);
+	if (rc < 0) {
+		return ret;
+	}
+
+	stat &= ENABLE_TRICKLE_BIT | ENABLE_PRE_CHARGING_BIT |
+					ENABLE_FULLON_MODE_BIT;
+	if (!stat)
+		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
+
+	return ret;
+}
+
+static int
+sm8150_get_chg_chgr_state(const struct bms_dev *bms,
+			  union gbms_charger_state *state)
+{
+	u8 val, chg_type;
+	int ivalue;
+	int rc = 0;
+
+	state->v = 0;
+
+	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
+				&val, 1);
+	if (rc < 0) {
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
+		return -EINVAL;
+	} else {
+		switch (val & CHGR_BATTERY_CHARGER_STATUS_MASK) {
+		case SM8150_TRICKLE_CHARGE:
+		case SM8150_PRE_CHARGE:
+			chg_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
+			break;
+		case SM8150_FULLON_CHARGE:
+			chg_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
+			break;
+		case SM8150_TAPER_CHARGE:
+			chg_type = POWER_SUPPLY_CHARGE_TYPE_TAPER;
+			break;
+		default:
+			chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
+			break;
+		}
+	}
+	state->f.chg_type = chg_type;
+
+	state->f.chg_status = sm8150_get_batt_status(bms);
+	if (state->f.chg_status != POWER_SUPPLY_STATUS_DISCHARGING)
+		state->f.flags |= GBMS_CS_FLAG_BUCK_EN;
+	if (state->f.chg_status == POWER_SUPPLY_STATUS_FULL)
+		state->f.flags |= GBMS_CS_FLAG_DONE;
+
+	rc = sm8150_get_battery_voltage(bms, &ivalue);
+	if (rc < 0) {
+		pr_err("Couldn't read VOLTAGE_NOW rc=%d\n", rc);
+		state->f.vchrg = 0;
+	} else {
+		state->f.vchrg = ivalue;
+	}
+
+	return 0;
+}
+
+static int sm8150_psy_get_property(struct power_supply *psy,
+				       enum power_supply_property psp,
+				       union power_supply_propval *pval)
+{
+	struct bms_dev *bms = (struct bms_dev *)power_supply_get_drvdata(psy);
+	u8 val;
+	int ivalue = 0;
+	int rc = 0;
+
+	if (!bms->psy) {
+		pr_err("failed to get power supply\n");
+		return -ENODATA;
+	}
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_RESISTANCE_ID:
+		pval->intval = bms->batt_id_ohms;
+		break;
+	/*pixel battery management subsystem*/
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+		/*CHGR_FAST_CHARGE_CURRENT_SETTING, 0x1061
+		 * 7 : 0 => FAST_CHARGE_CURRENT_SETTING:
+		 * Fast Charge Current = DATA x 50mA
+		 */
+		rc = sm8150_read(bms->pmic_regmap,
+				CHGR_FAST_CHARGE_CURRENT_SETTING, &val, 1);
+		if (!rc) {
+			pr_info("CHGR_CURRENT_SETTING: %d\n", val);
+			pval->intval = val * CHGR_FLOAT_VOLTAGE_LEVEL;
+		}
+		break;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
+		/*CHGR_FLOAT_VOLTAGE_SETTING  0x1070
+		 * 7 : 0 => FLOAT_VOLTAGE_SETTING:
+		 * Float voltage setting = 3.6V + (DATA x 10mV)
+		 */
+		rc = sm8150_read(bms->pmic_regmap, CHGR_FLOAT_VOLTAGE_SETTING,
+				&val, 1);
+		if (!rc) {
+			pr_info("FLOAT_VOLTAGE_SETTING: %d\n", val);
+			pval->intval = val * 10000 + CHGR_FLOAT_VOLTAGE_BASE;
+		}
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
+		rc = sm8150_get_chg_chgr_state(bms, &bms->chg_chgr_state);
+		if (!rc) {
+			pval->int64val = bms->chg_chgr_state.v;
+		}
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		rc = sm8150_read(bms->pmic_regmap,
+				CHGR_BATTERY_CHARGER_STATUS_1_REG, &val, 1);
+		if (rc < 0) {
+			pval->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
+		} else {
+			switch (val & CHGR_BATTERY_CHARGER_STATUS_MASK) {
+			case SM8150_TRICKLE_CHARGE:
+			case SM8150_PRE_CHARGE:
+				pval->intval =
+					POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
+				break;
+			case SM8150_FULLON_CHARGE:
+				pval->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
+				break;
+			case SM8150_TAPER_CHARGE:
+				pval->intval = POWER_SUPPLY_CHARGE_TYPE_TAPER;
+				break;
+			default:
+				pval->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
+			}
+		}
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_DONE:
+		rc = sm8150_read(bms->pmic_regmap,
+				CHGR_BATTERY_CHARGER_STATUS_1_REG, &val, 1);
+		if (!rc) {
+			pr_info("CHARGER_STATUS_1: 0x%x\n", val);
+			val = val & CHGR_BATTERY_CHARGER_STATUS_MASK;
+			pval->intval = (val == SM8150_TERMINATE_CHARGE);
+		}
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		rc = sm8150_get_battery_current(bms, &ivalue);
+		if (!rc) {
+			pval->intval = ivalue;
+		}
+		break;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
+		rc = sm8150_read(bms->pmic_regmap, DCDC_AICL_STATUS_REG,
+				&val, 1);
+		if (!rc) {
+			pr_info("AICL : %d\n", val);
+			pval->intval = (val & DCDC_SOFT_ILIMIT_BIT) ? 1 : 0;
+		}
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		/*CHGR_FLOAT_VOLTAGE_NOW 0x1009
+		 * 7 : 0 => FLOAT_VOLTAGE:
+		 * Float voltage after JEITA compensation
+		 */
+		rc = sm8150_read(bms->pmic_regmap, CHGR_FLOAT_VOLTAGE_NOW,
+				&val, 1);
+		if (!rc) {
+			pr_info("FLOAT_VOLTAGE_NOW : %d\n", val);
+			pval->intval = val * 10000 + CHGR_FLOAT_VOLTAGE_BASE;
+		}
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		rc = sm8150_get_battery_voltage(bms, &ivalue);
+		if (!rc) {
+			pval->intval = ivalue;
+		}
+		break;
+	case POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED:
+		rc = sm8150_read(bms->pmic_regmap,
+				CHGR_BATTERY_CHARGER_STATUS_2_REG, &val, 1);
+		if (!rc) {
+			pr_info("CHARGER_STATUS_2: 0x%x\n", val);
+			pval->intval = (val & CHG_ERR_STATUS_SFT_EXPIRE) ?
+					1 : 0;
+		}
+		break;
+	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
+		pval->intval = bms->fcc_stepper_enable;
+		break;
+	case POWER_SUPPLY_PROP_TAPER_CONTROL:
+		pval->intval = bms->taper_control;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
+		rc = sm8150_read(bms->pmic_regmap,CHGR_CHARGING_ENABLE_CMD,
+				&val, 1);
+		if (!rc) {
+			pval->intval = (val & CHARGING_ENABLE_CMD_BIT) ? 0 : 1;
+		}
+		break;
+	default:
+		pr_err("getting unsupported property: %d\n", psp);
+		return -EINVAL;
+	}
+
+	if (rc < 0)
+		return -ENODATA;
+
+	return 0;
+}
+
+static int sm8150_psy_set_property(struct power_supply *psy,
+				  enum power_supply_property psp,
+				  const union power_supply_propval *pval)
+{
+	struct bms_dev *bms = (struct bms_dev *)power_supply_get_drvdata(psy);
+	u8 val;
+	int ivalue = 0;
+	int rc = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+		/*CHGR_FAST_CHARGE_CURRENT_SETTING, 0x1061
+		 * 7 : 0 => FAST_CHARGE_CURRENT_SETTING:
+		 * Fast Charge Current = DATA x 50mA
+		 */
+		ivalue = pval->intval;
+		if (ivalue < CHGR_FLOAT_VOLTAGE_LEVEL) {
+			val = 0;
+		} else {
+			val = ivalue / CHGR_FLOAT_VOLTAGE_LEVEL;
+		}
+		rc = sm8150_write(bms->pmic_regmap,
+				CHGR_FAST_CHARGE_CURRENT_SETTING, &val, 1);
+		if (rc < 0)
+			pr_err("Couldn't set CHARGE_CURRENT rc=%d\n", rc);
+		break;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
+		/*CHGR_FLOAT_VOLTAGE_SETTING  0x1070
+		 * 7 : 0 => FLOAT_VOLTAGE_SETTING:
+		 * Float voltage setting = 3.6V + (DATA x 10mV)
+		 */
+		ivalue = pval->intval;
+		if (ivalue < CHGR_FLOAT_VOLTAGE_BASE){
+			val = 0;
+		} else {
+			val = (ivalue - CHGR_FLOAT_VOLTAGE_BASE) / 10000;
+		}
+		rc = sm8150_write(bms->pmic_regmap, CHGR_FLOAT_VOLTAGE_SETTING,
+				&val, 1);
+		if (rc < 0)
+			pr_err("Couldn't set FLOAT_VOLTAGE rc=%d\n", rc);
+		break;
+	case POWER_SUPPLY_PROP_TAPER_CONTROL:
+		bms->taper_control = pval->intval;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
+		val = (pval->intval)? 0 : CHARGING_ENABLE_CMD_BIT;
+		rc = sm8150_write(bms->pmic_regmap,CHGR_CHARGING_ENABLE_CMD,
+				&val, 1);
+		if(rc < 0) {
+			pr_err("Couldn't set CHARGING_ENABLE rc=%d\n", rc);
+		}
+		break;
+	default:
+		pr_err("setting unsupported property: %d\n", psp);
+		break;
+	}
+
+	return rc;
+}
+
+static int sm8150_property_is_writeable(struct power_supply *psy,
+					enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
+	case POWER_SUPPLY_PROP_TAPER_CONTROL:
+	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
+		return 1;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static enum power_supply_property sm8150_psy_props[] = {
+	POWER_SUPPLY_PROP_RESISTANCE_ID,
+	//pixel battery management subsystem
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
+	POWER_SUPPLY_PROP_CHARGE_TYPE,
+	POWER_SUPPLY_PROP_CHARGE_DONE,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
+	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
+	POWER_SUPPLY_PROP_CHARGE_DISABLE,
+	POWER_SUPPLY_PROP_TAPER_CONTROL,
+
+};
+
+static struct power_supply_desc sm8150_psy_desc = {
+	.name = "sm8150_bms",
+	.type = POWER_SUPPLY_TYPE_BMS,
+	.properties = sm8150_psy_props,
+	.num_properties = ARRAY_SIZE(sm8150_psy_props),
+	.get_property = sm8150_psy_get_property,
+	.set_property = sm8150_psy_set_property,
+	.property_is_writeable = sm8150_property_is_writeable,
+};
+
+/* All callback functions below */
+
+static int sm8150_notifier_cb(struct notifier_block *nb,
+		unsigned long event, void *data)
+{
+	if (event != PSY_EVENT_PROP_CHANGED)
+		return NOTIFY_OK;
+	/*TBD: notification?*/
+	return NOTIFY_OK;
+}
+
+/* All init functions below this */
+static int sm8150_parse_dt(struct bms_dev *bms)
+{
+	struct device_node *node = bms->dev->of_node;
+	const char *psy_name = NULL;
+	int ret = 0;
+
+	if (!node)  {
+		pr_err("device tree node missing\n");
+		return -ENXIO;
+	}
+
+	bms->taper_control= POWER_SUPPLY_TAPER_CONTROL_MODE_STEPPER;
+
+	ret = of_property_read_string(node, "google,psy-name",
+					&psy_name);
+	if (ret == 0) {
+		sm8150_psy_desc.name =
+			devm_kstrdup(bms->dev, psy_name, GFP_KERNEL);
+	}
+	bms->fcc_stepper_enable = of_property_read_bool(node,
+						"qcom,fcc-stepping-enable");
+	return 0;
+}
+
+static int bms_probe(struct platform_device *pdev)
+{
+	struct bms_dev *bms;
+	struct power_supply_config bms_psy_cfg;
+	int rc = 0;
+
+	bms = devm_kzalloc(&pdev->dev, sizeof(*bms), GFP_KERNEL);
+	if (!bms) {
+		pr_info("kalloc error\n");
+		return -ENOMEM;
+	}
+	bms->dev = &pdev->dev;
+	bms->batt_id_ohms = -EINVAL;
+	bms->pmic_regmap = dev_get_regmap(bms->dev->parent, NULL);
+	if (!bms->pmic_regmap) {
+		pr_err("Parent regmap is unavailable\n");
+	} else {
+		sm8150_get_batt_id(bms, &bms->batt_id_ohms);
+	}
+
+	rc = sm8150_parse_dt(bms);
+	if (rc < 0) {
+		pr_err("Parse the device tree fail. rc = %d\n", rc);
+		goto exit;
+	}
+
+	/* Register the power supply */
+	bms_psy_cfg.drv_data = bms;
+	bms_psy_cfg.of_node = NULL;
+	bms_psy_cfg.supplied_to = NULL;
+	bms_psy_cfg.num_supplicants = 0;
+	bms->psy = devm_power_supply_register(bms->dev, &sm8150_psy_desc,
+			&bms_psy_cfg);
+	if (IS_ERR(bms->psy)) {
+		pr_err("failed to register psy rc = %ld\n", PTR_ERR(bms->psy));
+		goto exit;
+	}
+
+	bms->nb.notifier_call = sm8150_notifier_cb;
+	rc = power_supply_reg_notifier(&bms->nb);
+	if (rc < 0) {
+		pr_err("Couldn't register psy notifier rc = %d\n", rc);
+		goto exit;
+	}
+
+	pr_info("BMS driver probed successfully\n");
+	return 0;
+exit:
+	return rc;
+}
+
+static int bms_remove(struct platform_device *pdev)
+{
+	return 0;
+}
+
+static void bms_shutdown(struct platform_device *pdev)
+{
+	return;
+}
+
+static const struct of_device_id bms_of_match[] = {
+	{.compatible = "google,sm8150_bms"},
+	{},
+};
+
+static struct platform_driver sm8150_bms_driver = {
+	.driver = {
+		.name = BMS_DEV_NAME,
+		.owner = THIS_MODULE,
+		.of_match_table = bms_of_match,
+	},
+	.probe		= bms_probe,
+	.remove		= bms_remove,
+	.shutdown	= bms_shutdown,
+};
+
+module_platform_driver(sm8150_bms_driver);
+MODULE_DESCRIPTION("SM8150 BMS driver");
+MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:" BMS_DEV_NAME);
