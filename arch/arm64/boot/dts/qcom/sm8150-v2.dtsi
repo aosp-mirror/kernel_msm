@@ -31,6 +31,8 @@
 
 &mdss_mdp {
 	qcom,fullsize-va-map;
+	qcom,sde-min-core-ib-kbps = <0>;
+	qcom,sde-min-llcc-ib-kbps = <0>;
 };
 
 &mdss_rotator {
@@ -44,6 +46,10 @@
 		iommus = <&apps_smmu 0x2041 0x0>;
 		qcom,fullsize-va-map;
 	};
+};
+
+&tmc_etr {
+	/delete-property/ qcom,smmu-s1-bypass;
 };
 
 &spss_utils {
@@ -655,6 +661,15 @@
 	};
 };
 
+&gmu {
+	reg = <0x2c6a000 0x30000>,
+		<0xb290000 0x10000>,
+		<0xb490000 0x10000>;
+	reg-names = "kgsl_gmu_reg",
+		"kgsl_gmu_pdc_cfg",
+		"kgsl_gmu_pdc_seq";
+};
+
 /* NPU overrides */
 &msm_npu {
 	iommus = <&apps_smmu 0x1081 0x400>;
@@ -1067,4 +1082,21 @@
 	     USB3_DP_PCS_USB3_LFPS_DET_HIGH_COUNT_VAL 0xf8 0
 	     USB3_DP_PCS_USB3_RXEQTRAINING_DFE_TIME_S2 0x07 0
 	     0xffffffff 0xffffffff 0x00>;
+};
+
+/* qcedev override */
+&qcom_cedev {
+	qcom_cedev_ns_cb {
+		iommus = <&apps_smmu 0x512 0>,
+			 <&apps_smmu 0x518 0>,
+			 <&apps_smmu 0x519 0>,
+			 <&apps_smmu 0x51f 0>;
+	};
+
+	qcom_cedev_s_cb {
+		iommus = <&apps_smmu 0x513 0>,
+			 <&apps_smmu 0x51c 0>,
+			 <&apps_smmu 0x51d 0>,
+			 <&apps_smmu 0x51e 0>;
+	};
 };

@@ -848,12 +848,12 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	if (host_cfg->data_lanes & DSI_DATA_LANE_3)
 		num_of_lanes++;
 
-	if (config->bit_clk_rate_hz == 0) {
+	if (config->bit_clk_rate_hz_override == 0) {
 		h_period = DSI_H_TOTAL_DSC(timing);
 		v_period = DSI_V_TOTAL(timing);
 		bit_rate = h_period * v_period * timing->refresh_rate * bpp;
 	} else {
-		bit_rate = config->bit_clk_rate_hz * num_of_lanes;
+		bit_rate = config->bit_clk_rate_hz_override * num_of_lanes;
 	}
 
 	bit_rate_per_lane = bit_rate;
@@ -870,6 +870,7 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	dsi_ctrl->clk_freq.byte_clk_rate = byte_clk_rate;
 	dsi_ctrl->clk_freq.pix_clk_rate = pclk_rate;
 	dsi_ctrl->clk_freq.esc_clk_rate = config->esc_clk_rate_hz;
+	config->bit_clk_rate_hz = dsi_ctrl->clk_freq.byte_clk_rate * 8;
 
 	rc = dsi_clk_set_link_frequencies(clk_handle, dsi_ctrl->clk_freq,
 					dsi_ctrl->cell_index);
@@ -1076,7 +1077,19 @@ int dsi_message_validate_tx_mode(struct dsi_ctrl *dsi_ctrl,
 			pr_err(" Cannot transfer command,ops not defined\n");
 			return -ENOTSUPP;
 		}
+		if ((cmd_len + 4) > SZ_4K) {
+			pr_err("Cannot transfer,size is greater than 4096\n");
+			return -ENOTSUPP;
+		}
 	}
+
+	if (*flags & DSI_CTRL_CMD_FETCH_MEMORY) {
+		if ((dsi_ctrl->cmd_len + cmd_len + 4) > SZ_4K) {
+			pr_err("Cannot transfer,size is greater than 4096\n");
+			return -ENOTSUPP;
+		}
+	}
+
 	return rc;
 }
 
@@ -2697,6 +2710,16 @@ void dsi_ctrl_isr_configure(struct dsi_ctrl *dsi_ctrl, bool enable)
 	else
 		_dsi_ctrl_destroy_isr(dsi_ctrl);
 
+	mutex_unlock(&dsi_ctrl->ctrl_lock);
+}
+
+void dsi_ctrl_set_continuous_clk(struct dsi_ctrl *dsi_ctrl, bool enable)
+{
+	if (!dsi_ctrl)
+		return;
+
+	mutex_lock(&dsi_ctrl->ctrl_lock);
+	dsi_ctrl->hw.ops.set_continuous_clk(&dsi_ctrl->hw, enable);
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
 }
 

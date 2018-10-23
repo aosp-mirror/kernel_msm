@@ -2655,6 +2655,7 @@
 
 			label = "adsp";
 			qcom,glink-label = "lpass";
+			cpu-affinity = <1 2>;
 
 			qcom,adsp_qrtr {
 				qcom,glink-channels = "IPCRTR";
@@ -2809,6 +2810,21 @@
 			qcom,wdsp_data {
 				qcom,glink-channels = "g_glink_audio_data";
 				qcom,intents = <0x1000 2>;
+			};
+
+			qcom,diag_data {
+				qcom,glink-channels = "DIAG_DATA";
+				qcom,intents = <0x4000 2>;
+			};
+
+			qcom,diag_ctrl {
+				qcom,glink-channels = "DIAG_CTRL";
+				qcom,intents = <0x4000 1>;
+			};
+
+			qcom,diag_cmd {
+				qcom,glink-channels = "DIAG_CMD";
+				qcom,intents = <0x4000 1 >;
 			};
 		};
 	};
@@ -3607,8 +3623,10 @@
 		reg = <0xa0000000 0x10000000>,
 		      <0xb0000000 0x10000>;
 		reg-names = "smmu_iova_base", "smmu_iova_ipa";
-		pinctrl-names = "disabled";
-		pinctrl-0 = <>;
+		wlan-en-gpio = <&tlmm 169 0>;
+		pinctrl-names = "wlan_en_active", "wlan_en_sleep";
+		pinctrl-0 = <&cnss_wlan_en_active>;
+		pinctrl-1 = <&cnss_wlan_en_sleep>;
 		qcom,wlan-rc-num = <0>;
 		qcom,wlan-ramdump-dynamic = <0x400000>;
 
@@ -3723,8 +3741,6 @@
 			     <0 425 0 /* CE11 */ >;
 		qcom,wlan-msa-memory = <0x100000>;
 		qcom,wlan-msa-fixed-region = <&pil_wlan_fw_mem>;
-		qcom,gpio-force-fatal-error = <&smp2pgpio_wlan_1_in 0 0>;
-		qcom,gpio-early-crash-ind = <&smp2pgpio_wlan_1_in 1 0>;
 
 		vdd-cx-mx-supply = <&pm8150_l1>;
 		vdd-1.8-xo-supply = <&pm8150_l7>;
@@ -3732,6 +3748,12 @@
 		vdd-3.3-ch0-supply = <&pm8150l_l11>;
 		qcom,vdd-cx-mx-config = <752000 752000>;
 		qcom,vdd-3.3-ch0-config = <3104000 3312000>;
+		qcom,smp2p_map_wlan_1_in {
+			interrupts-extended = <&smp2p_wlan_1_in 0 0>,
+					      <&smp2p_wlan_1_in 1 0>;
+			interrupt-names = "qcom,smp2p-force-fatal-error",
+					  "qcom,smp2p-early-crash-ind";
+		};
 	};
 
 	wil6210: qcom,wil6210 {

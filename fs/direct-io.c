@@ -432,9 +432,11 @@ dio_bio_alloc(struct dio *dio, struct dio_submit *sdio,
 	sdio->logical_offset_in_bio = sdio->cur_page_fs_offset;
 }
 
+
 #ifdef CONFIG_PFK
 static bool is_inode_filesystem_type(const struct inode *inode,
 		const char *fs_type)
+
 {
 	if (!inode || !fs_type)
 		return false;
@@ -482,6 +484,13 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 		fscrypt_set_ice_dun(dio->inode, bio, PG_DIO_DUN(dio->inode,
 			(sdio->logical_offset_in_bio >> PAGE_SHIFT)));
 #endif
+/* iv sector for security/pfe/pfk_fscrypt.c and f2fs in fs/f2fs/f2fs.h */
+#define PG_DUN_NEW(i,p)                                            \
+	(((((u64)(i)->i_ino) & 0xffffffff) << 32) | ((p) & 0xffffffff))
+
+	if (is_inode_filesystem_type(dio->inode, "f2fs"))
+		fscrypt_set_ice_dun(dio->inode, bio, PG_DUN_NEW(dio->inode,
+			(sdio->logical_offset_in_bio >> PAGE_SHIFT)));
 
 	if (sdio->submit_io) {
 		sdio->submit_io(bio, dio->inode, sdio->logical_offset_in_bio);

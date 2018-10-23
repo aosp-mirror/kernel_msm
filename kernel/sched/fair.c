@@ -6940,6 +6940,7 @@ static inline int find_idlest_cpu(struct sched_domain *sd, struct task_struct *p
 }
 
 #ifdef CONFIG_SCHED_SMT
+DEFINE_STATIC_KEY_FALSE(sched_smt_present);
 
 static inline void set_idle_cores(int cpu, int val)
 {
@@ -7361,6 +7362,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 	unsigned int active_cpus_count = 0;
 	int prev_cpu = task_cpu(p);
 	bool next_group_higher_cap = false;
+	int isolated_candidate = -1;
 
 	*backup_cpu = -1;
 
@@ -7421,6 +7423,8 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			if (!cpu_online(i) || cpu_isolated(i))
 				continue;
 
+			if (isolated_candidate == -1)
+				isolated_candidate = i;
 			/*
 			 * This CPU is the target of an active migration that's
 			 * yet to complete. Avoid placing another task on it.
@@ -7582,12 +7586,8 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			if (capacity_orig < capacity_orig_of(cpu))
 				continue;
 
-			/*
-			 * Favor CPUs with smaller capacity for non latency
-			 * sensitive tasks.
-			 */
-			if (capacity_orig > target_capacity)
-				continue;
+
+
 
 			/*
 			 * Case B) Non latency sensitive tasks on IDLE CPUs.
@@ -7689,6 +7689,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 		if (!prefer_idle &&
 			(target_cpu != -1 || best_idle_cpu != -1) &&
 			(fbt_env->placement_boost == SCHED_BOOST_NONE ||
+			sched_boost() != FULL_THROTTLE_BOOST ||
 			(fbt_env->placement_boost == SCHED_BOOST_ON_BIG &&
 				!next_group_higher_cap)))
 			break;
@@ -7783,6 +7784,11 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 		target_cpu = *backup_cpu;
 		*backup_cpu = -1;
 	}
+
+	if (target_cpu == -1 && isolated_candidate != -1 &&
+	    cpu_isolated(prev_cpu))
+		target_cpu = isolated_candidate;
+
 out:
 	return target_cpu;
 }
@@ -9778,6 +9784,11 @@ group_is_overloaded(struct lb_env *env, struct sg_lb_stats *sgs)
 {
 	if (sgs->sum_nr_running <= sgs->group_weight)
 		return false;
+
+#ifdef CONFIG_SCHED_WALT
+	if (env->idle != CPU_NOT_IDLE && walt_rotation_enabled)
+		return true;
+#endif
 
 	if ((sgs->group_capacity * 100) <
 			(sgs->group_util * env->sd->imbalance_pct))

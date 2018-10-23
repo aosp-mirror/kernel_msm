@@ -670,6 +670,7 @@ static const struct of_device_id spidev_dt_ids[] = {
 	{ .compatible = "ge,achc" },
 	{ .compatible = "semtech,sx1301" },
 	{ .compatible = "abc,airbrush-spidev",},
+	{ .compatible = "qcom,spi-msm-codec-slave" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, spidev_dt_ids);

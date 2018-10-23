@@ -1,4 +1,5 @@
-/* Copyright (c) 2012-2015, 2017-2018 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, 2018, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -242,7 +243,7 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 			need_sleep = !regulator_is_enabled(in_vreg[i].vreg);
 			if (in_vreg[i].pre_on_sleep && need_sleep)
 				usleep_range(in_vreg[i].pre_on_sleep * 1000,
-					in_vreg[i].pre_on_sleep * 1000);
+					(in_vreg[i].pre_on_sleep * 1000) + 10);
 			rc = regulator_set_load(in_vreg[i].vreg,
 				in_vreg[i].enable_load);
 			if (rc < 0) {
@@ -254,7 +255,7 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 			rc = regulator_enable(in_vreg[i].vreg);
 			if (in_vreg[i].post_on_sleep && need_sleep)
 				usleep_range(in_vreg[i].post_on_sleep * 1000,
-					in_vreg[i].post_on_sleep * 1000);
+					(in_vreg[i].post_on_sleep * 1000) + 10);
 			if (rc < 0) {
 				DEV_ERR("%pS->%s: %s enable failed\n",
 					__builtin_return_address(0), __func__,
@@ -277,13 +278,13 @@ int msm_dss_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
 			}
 			if (in_vreg[i].pre_off_sleep)
 				usleep_range(in_vreg[i].pre_off_sleep * 1000,
-					in_vreg[i].pre_off_sleep * 1000);
+					(in_vreg[i].pre_off_sleep * 1000) + 10);
 			regulator_set_load(in_vreg[i].vreg,
 				in_vreg[i].disable_load);
 			regulator_disable(in_vreg[i].vreg);
 			if (in_vreg[i].post_off_sleep)
 				usleep_range(in_vreg[i].post_off_sleep * 1000,
-					in_vreg[i].post_off_sleep * 1000);
+				(in_vreg[i].post_off_sleep * 1000) + 10);
 		}
 	}
 	return rc;
@@ -295,13 +296,13 @@ vreg_set_opt_mode_fail:
 	for (i--; i >= 0; i--) {
 		if (in_vreg[i].pre_off_sleep)
 			usleep_range(in_vreg[i].pre_off_sleep * 1000,
-				in_vreg[i].pre_off_sleep * 1000);
+				(in_vreg[i].pre_off_sleep * 1000) + 10);
 		regulator_set_load(in_vreg[i].vreg,
 			in_vreg[i].disable_load);
 		regulator_disable(in_vreg[i].vreg);
 		if (in_vreg[i].post_off_sleep)
 			usleep_range(in_vreg[i].post_off_sleep * 1000,
-				in_vreg[i].post_off_sleep * 1000);
+				(in_vreg[i].post_off_sleep * 1000) + 10);
 	}
 
 	return rc;
@@ -388,27 +389,41 @@ error:
 } /* msm_dss_get_clk */
 EXPORT_SYMBOL(msm_dss_get_clk);
 
+int msm_dss_single_clk_set_rate(struct dss_clk *clk)
+{
+	int rc = 0;
+
+	if (!clk) {
+		DEV_ERR("invalid clk struct\n");
+		return -EINVAL;
+	}
+
+	DEV_DBG("%pS->%s: set_rate '%s'\n",
+			__builtin_return_address(0), __func__,
+			clk->clk_name);
+
+	if (clk->type != DSS_CLK_AHB) {
+		rc = clk_set_rate(clk->clk, clk->rate);
+		if (rc)
+			DEV_ERR("%pS->%s: %s failed. rc=%d\n",
+					__builtin_return_address(0),
+					__func__,
+					clk->clk_name, rc);
+	}
+
+	return rc;
+} /* msm_dss_single_clk_set_rate */
+EXPORT_SYMBOL(msm_dss_single_clk_set_rate);
+
 int msm_dss_clk_set_rate(struct dss_clk *clk_arry, int num_clk)
 {
 	int i, rc = 0;
 
 	for (i = 0; i < num_clk; i++) {
 		if (clk_arry[i].clk) {
-			if (clk_arry[i].type != DSS_CLK_AHB) {
-				DEV_DBG("%pS->%s: '%s' rate %ld\n",
-					__builtin_return_address(0), __func__,
-					clk_arry[i].clk_name,
-					clk_arry[i].rate);
-				rc = clk_set_rate(clk_arry[i].clk,
-					clk_arry[i].rate);
-				if (rc) {
-					DEV_ERR("%pS->%s: %s failed. rc=%d\n",
-						__builtin_return_address(0),
-						__func__,
-						clk_arry[i].clk_name, rc);
-					break;
-				}
-			}
+			rc = msm_dss_single_clk_set_rate(&clk_arry[i]);
+			if (rc)
+				break;
 		} else {
 			DEV_ERR("%pS->%s: '%s' is not available\n",
 				__builtin_return_address(0), __func__,

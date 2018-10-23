@@ -677,10 +677,11 @@ static void armv8pmu_disable_event(struct perf_event *event)
 
 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
-
+#ifdef CONFIG_KRYO_PMU_WORKAROUND
 static inline u32 armv8pmu_get_enabled_ints(void)
 {
 	u32 int_enset;
+
 	int_enset = read_sysreg(pmintenset_el1);
 	write_sysreg(0xffffffff, pmintenclr_el1);
 	isb();
@@ -689,7 +690,7 @@ static inline u32 armv8pmu_get_enabled_ints(void)
 
 static inline u32 armv8pmu_update_enabled_ints(u32 value, int idx, int set)
 {
-	if(set)
+	if (set)
 		value |=  BIT(ARMV8_IDX_TO_COUNTER(idx));
 	else
 		value &= ~(BIT(ARMV8_IDX_TO_COUNTER(idx)));
@@ -702,6 +703,15 @@ static inline void armv8pmu_set_enabled_ints(u32 mask)
 	write_sysreg(mask, pmintenset_el1);
 	isb();
 }
+#else
+static inline u32 armv8pmu_get_enabled_ints(void)
+{ return 0; }
+
+static inline u32 armv8pmu_update_enabled_ints(u32 value, int idx, int set)
+{ return value; }
+
+static inline void armv8pmu_set_enabled_ints(u32 mask) { }
+#endif
 
 static irqreturn_t armv8pmu_handle_irq(int irq_num, void *dev)
 {
@@ -726,10 +736,8 @@ static irqreturn_t armv8pmu_handle_irq(int irq_num, void *dev)
 	/*
 	 * Did an overflow occur?
 	 */
-	if (!armv8pmu_has_overflowed(pmovsr)) {
-		BUG_ON(1);
+	if (!armv8pmu_has_overflowed(pmovsr))
 		return IRQ_NONE;
-	}
 
 	/*
 	 * Handle the counter(s) overflow(s)
@@ -761,9 +769,11 @@ static irqreturn_t armv8pmu_handle_irq(int irq_num, void *dev)
 			cpu_pmu->disable(event);
 
 			/*
-			 * Update the list of interrupts that should be reenabled.
+			 * Update the list of interrupts
+			 * that should be reenabled.
 			 */
-			enabled_ints = armv8pmu_update_enabled_ints(enabled_ints, idx, 0);
+			enabled_ints = armv8pmu_update_enabled_ints(
+					enabled_ints, idx, 0);
 		}
 	}
 

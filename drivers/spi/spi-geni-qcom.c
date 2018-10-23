@@ -1022,7 +1022,6 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 		}
 	}
 
-
 	/* Ensure all writes are done before the WM interrupt */
 	mb();
 }

@@ -427,6 +427,7 @@ struct dsi_mode_info {
  * @append_tx_eot:       Append EOT packets for forward transmissions if set to
  *                       true.
  * @ext_bridge_mode:     External bridge is connected.
+ * @force_hs_clk_lane:   Send continuous clock to the panel.
  */
 struct dsi_host_common_cfg {
 	enum dsi_pixel_format dst_format;
@@ -446,6 +447,7 @@ struct dsi_host_common_cfg {
 	bool ignore_rx_eot;
 	bool append_tx_eot;
 	bool ext_bridge_mode;
+	bool force_hs_clk_lane;
 };
 
 /**
@@ -504,6 +506,7 @@ struct dsi_cmd_engine_cfg {
  * @cmd_engine:            Cmd engine configuration if panel is in cmd mode.
  * @esc_clk_rate_khz:      Esc clock frequency in Hz.
  * @bit_clk_rate_hz:       Bit clock frequency in Hz.
+ * @bit_clk_rate_hz_override: DSI bit clk rate override from dt/sysfs.
  * @video_timing:          Video timing information of a frame.
  * @lane_map:              Mapping between logical and physical lanes.
  */
@@ -516,6 +519,7 @@ struct dsi_host_config {
 	} u;
 	u64 esc_clk_rate_hz;
 	u64 bit_clk_rate_hz;
+	u64 bit_clk_rate_hz_override;
 	struct dsi_mode_info video_timing;
 	struct dsi_lane_map lane_map;
 };

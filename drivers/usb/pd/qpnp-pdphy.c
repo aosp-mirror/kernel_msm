@@ -359,6 +359,13 @@ int pd_phy_assign_pm_callbacks(struct pd_phy_params *params)
 	return 0;
 }
 EXPORT_SYMBOL(pd_phy_assign_pm_callbacks);
+int pd_phy_update_frame_filter(u8 frame_filter_val)
+{
+	struct usb_pdphy *pdphy = __pdphy;
+
+	return pdphy_reg_write(pdphy, USB_PDPHY_FRAME_FILTER, frame_filter_val);
+}
+EXPORT_SYMBOL(pd_phy_update_frame_filter);
 
 int pd_phy_open(struct pd_phy_params *params)
 {

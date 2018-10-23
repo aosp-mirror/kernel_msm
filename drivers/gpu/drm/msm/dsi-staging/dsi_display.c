@@ -876,6 +876,21 @@ end:
 	return rc;
 }
 
+static void _dsi_display_continuous_clk_ctrl(struct dsi_display *display,
+					     bool enable)
+{
+	int i;
+	struct dsi_display_ctrl *ctrl;
+
+	if (!display || !display->panel->host_config.force_hs_clk_lane)
+		return;
+
+	for (i = 0; i < display->ctrl_count; i++) {
+		ctrl = &display->ctrl[i];
+		dsi_ctrl_set_continuous_clk(ctrl->ctrl, enable);
+	}
+}
+
 int dsi_display_soft_reset(void *display)
 {
 	struct dsi_display *dsi_display;
@@ -943,7 +958,8 @@ static bool dsi_display_get_cont_splash_status(struct dsi_display *display)
 	struct dsi_display_ctrl *ctrl;
 	struct dsi_ctrl_hw *hw;
 
-	for (i = 0; i < display->ctrl_count ; i++) {
+	for (i = 0; (i < display->ctrl_count) &&
+	     (i < MAX_DSI_CTRLS_PER_DISPLAY); i++) {
 		ctrl = &(display->ctrl[i]);
 		if (!ctrl || !ctrl->ctrl)
 			continue;
@@ -2946,6 +2962,12 @@ int dsi_pre_clkoff_cb(void *priv,
 	if ((clk & DSI_LINK_CLK) && (new_state == DSI_CLK_OFF) &&
 		(l_type && DSI_LINK_LP_CLK)) {
 		/*
+		 * If continuous clock is enabled then disable it
+		 * before entering into ULPS Mode.
+		 */
+		if (display->panel->host_config.force_hs_clk_lane)
+			_dsi_display_continuous_clk_ctrl(display, false);
+		/*
 		 * If ULPS feature is enabled, enter ULPS first.
 		 * However, when blanking the panel, we should enter ULPS
 		 * only if ULPS during suspend feature is enabled.
@@ -3096,6 +3118,9 @@ int dsi_post_clkon_cb(void *priv,
 				goto error;
 			}
 		}
+
+		if (display->panel->host_config.force_hs_clk_lane)
+			_dsi_display_continuous_clk_ctrl(display, true);
 	}
 
 	/* enable dsi to serve irqs */
@@ -3420,7 +3445,7 @@ static int dsi_display_res_init(struct dsi_display *display)
 	display->panel = dsi_panel_get(&display->pdev->dev,
 				display->panel_of,
 				display->parser_node,
-				display->root,
+				display->display_type,
 				display->cmdline_topology);
 	if (IS_ERR_OR_NULL(display->panel)) {
 		rc = PTR_ERR(display->panel);
@@ -4122,7 +4147,7 @@ static int dsi_display_request_update_dsi_bitrate(struct dsi_display *display,
 		return -EINVAL;
 	}
 
-	display->config.bit_clk_rate_hz = bit_clk_rate;
+	display->config.bit_clk_rate_hz_override = bit_clk_rate;
 
 	for (i = 0; i < display->ctrl_count; i++) {
 		struct dsi_display_ctrl *dsi_disp_ctrl = &display->ctrl[i];
@@ -4150,7 +4175,8 @@ static int dsi_display_request_update_dsi_bitrate(struct dsi_display *display,
 			goto error;
 		}
 
-		bit_rate = display->config.bit_clk_rate_hz * num_of_lanes;
+		bit_rate = display->config.bit_clk_rate_hz_override *
+						num_of_lanes;
 		bit_rate_per_lane = bit_rate;
 		do_div(bit_rate_per_lane, num_of_lanes);
 		pclk_rate = bit_rate;
@@ -4171,7 +4197,7 @@ static int dsi_display_request_update_dsi_bitrate(struct dsi_display *display,
 			goto error;
 		}
 
-		ctrl->host_config.bit_clk_rate_hz = bit_clk_rate;
+		ctrl->host_config.bit_clk_rate_hz_override = bit_clk_rate;
 error:
 		mutex_unlock(&ctrl->ctrl_lock);
 
@@ -4709,7 +4735,16 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 				disp_node = np;
 				break;
 			}
-		} else if (of_property_read_bool(np, disp_active)) {
+			continue;
+		} else if (index == DSI_SECONDARY) {
+			/*
+			 * secondary display is currently
+			 * supported through boot params only
+			 */
+			break;
+		}
+
+		if (of_property_read_bool(np, disp_active)) {
 			disp_node = np;
 
 			if (IS_ENABLED(CONFIG_DSI_PARSER))
