@@ -5373,7 +5373,6 @@ end:
 
 void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count)
 {
-	struct sde_kms *sde_kms;
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_mixer *m;
 	int i;
@@ -5383,20 +5382,6 @@ void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count)
 		return;
 	}
 	sde_crtc = to_sde_crtc(crtc);
-
-	sde_kms = _sde_crtc_get_kms(crtc);
-	if (!sde_kms) {
-		SDE_ERROR("invalid sde_kms\n");
-		return;
-	}
-
-	mutex_lock(&sde_crtc->crtc_lock);
-	if (sde_kms_is_secure_session_inprogress(sde_kms)) {
-		SDE_DEBUG("crtc:%d misr enable/disable not allowed\n",
-				DRMID(crtc));
-		mutex_unlock(&sde_crtc->crtc_lock);
-		return;
-	}
 
 	sde_crtc->misr_enable = enable;
 	sde_crtc->misr_frame_count = frame_count;
@@ -5408,7 +5393,6 @@ void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count)
 
 		m->hw_lm->ops.setup_misr(m->hw_lm, enable, frame_count);
 	}
-	mutex_unlock(&sde_crtc->crtc_lock);
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -5564,12 +5548,19 @@ static ssize_t _sde_crtc_misr_setup(struct file *file,
 	char buf[MISR_BUFF_SIZE + 1];
 	u32 frame_count, enable;
 	size_t buff_copy;
+	struct sde_kms *sde_kms;
 
 	if (!file || !file->private_data)
 		return -EINVAL;
 
 	sde_crtc = file->private_data;
 	crtc = &sde_crtc->base;
+
+	sde_kms = _sde_crtc_get_kms(crtc);
+	if (!sde_kms) {
+		SDE_ERROR("invalid sde_kms\n");
+		return -EINVAL;
+	}
 
 	buff_copy = min_t(size_t, count, MISR_BUFF_SIZE);
 	if (copy_from_user(buf, user_buf, buff_copy)) {
@@ -5586,7 +5577,16 @@ static ssize_t _sde_crtc_misr_setup(struct file *file,
 	if (rc)
 		return rc;
 
+	mutex_lock(&sde_crtc->crtc_lock);
+	if (sde_kms_is_secure_session_inprogress(sde_kms)) {
+		SDE_DEBUG("crtc:%d misr enable/disable not allowed\n",
+				DRMID(crtc));
+		goto end;
+	}
 	sde_crtc_misr_setup(crtc, enable, frame_count);
+
+end:
+	mutex_unlock(&sde_crtc->crtc_lock);
 	_sde_crtc_power_enable(sde_crtc, false);
 
 	return count;
