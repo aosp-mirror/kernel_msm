@@ -25,6 +25,11 @@
 
 #define USB_OVERHEAT_MITIGATION_VOTER	"USB_OVERHEAT_MITIGATION_VOTER"
 
+enum {
+	USB_NO_LIMIT = 0,
+	USB_MAX_THROTTLE_STATE = 1,
+};
+
 static int fake_port_temp = -1;
 module_param_named(
 	fake_port_temp, fake_port_temp, int, 0600
@@ -43,6 +48,7 @@ struct overheat_info {
 	struct notifier_block      psy_nb;
 	struct delayed_work        port_overheat_work;
 	struct wakeup_source	   overheat_ws;
+	struct thermal_cooling_device *cooling_dev;
 
 	bool usb_connected;
 	bool accessory_connected;
@@ -57,6 +63,7 @@ struct overheat_info {
 	int monitor_accessory_s;
 	time_t accessory_connect_time;
 	int check_status;
+	uint32_t throttle_state;
 };
 
 #define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
@@ -349,7 +356,7 @@ static void port_overheat_work(struct work_struct *work)
 		dev_err(ovh_info->dev, "Port overheat mitigated\n");
 		resume_usb(ovh_info);
 	} else if (!ovh_info->overheat_mitigation &&
-		 enable && temp > ovh_info->begin_temp) {
+		 enable && temp >= ovh_info->begin_temp) {
 		dev_err(ovh_info->dev, "Port overheat triggered\n");
 		suspend_usb(ovh_info);
 		goto rerun;
@@ -357,6 +364,8 @@ static void port_overheat_work(struct work_struct *work)
 
 	if (ovh_info->overheat_mitigation || ovh_info->usb_connected ||
 	    should_check_accessory(ovh_info))
+		goto rerun;
+	if (ovh_info->throttle_state)
 		goto rerun;
 	// Do not run again, USB port isn't overheated or connected to something
 	ovh_info->overheat_work_running = false;
@@ -368,6 +377,59 @@ rerun:
 			&ovh_info->port_overheat_work,
 			msecs_to_jiffies(ovh_info->overheat_work_delay_ms));
 }
+
+static int usb_get_cur_state(struct thermal_cooling_device *cooling_dev,
+							unsigned long *state)
+{
+	struct overheat_info *usb_dev = cooling_dev->devdata;
+
+	if (!usb_dev)
+		return -EINVAL;
+
+	*state = usb_dev->throttle_state;
+
+	return 0;
+}
+
+static int usb_get_max_state(struct thermal_cooling_device *cooling_dev,
+							unsigned long *state)
+{
+	struct overheat_info *usb_dev = cooling_dev->devdata;
+
+	if (!usb_dev)
+		return -EINVAL;
+
+	*state = USB_MAX_THROTTLE_STATE;
+
+	return 0;
+}
+
+static int usb_set_cur_state(struct thermal_cooling_device *cooling_dev,
+							unsigned long state)
+{
+	struct overheat_info *usb_dev = cooling_dev->devdata;
+
+	if (!usb_dev)
+		return -EINVAL;
+
+	if (state > USB_MAX_THROTTLE_STATE)
+		state = USB_MAX_THROTTLE_STATE;
+
+	usb_dev->throttle_state = state;
+
+	dev_info(usb_dev->dev, "usb overheat throttle state=%lu, work running=%s\n",
+		state, (usb_dev->overheat_work_running) ? "true" : "false");
+	if (state && !usb_dev->overheat_work_running)
+		schedule_delayed_work(&usb_dev->port_overheat_work, 0);
+
+	return 0;
+}
+
+static const struct thermal_cooling_device_ops usb_cooling_ops = {
+	.get_max_state = usb_get_max_state,
+	.get_cur_state = usb_get_cur_state,
+	.set_cur_state = usb_set_cur_state,
+};
 
 static int ovh_probe(struct platform_device *pdev)
 {
@@ -426,6 +488,19 @@ static int ovh_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, ovh_info);
+
+	/* Register cooling device */
+	ovh_info->cooling_dev = thermal_of_cooling_device_register(
+				dev_of_node(ovh_info->dev), "usb",
+				ovh_info, &usb_cooling_ops);
+
+	if (IS_ERR(ovh_info->cooling_dev)) {
+		ret = PTR_ERR(ovh_info->cooling_dev);
+		dev_err(ovh_info->dev, "%s: failed to register cooling device: %d\n",
+				__func__, ret);
+		return ret;
+	}
+
 	wakeup_source_init(&ovh_info->overheat_ws, "overheat_mitigation");
 	INIT_DELAYED_WORK(&ovh_info->port_overheat_work, port_overheat_work);
 	schedule_delayed_work(&ovh_info->port_overheat_work, 0);
