@@ -39,7 +39,9 @@
 #define ENROLLMENT_FLAG_ADDR		0x21fffff8
 #define COMPLETION_FLAG_ADDR		0x21fffffc
 #define JQS_DEPTH_ADDR			0x22000000
-#define JQS_AFFINE_ADDR			0x22100000
+#define JQS_AFFINE_DEPTH_ADDR		0x22100000
+#define JQS_AFFINE_RGB_ADDR		0x22200000
+#define JQS_AFFINE_SKIN_ADDR		0x22300000
 #define IMAGE_LEFT_ADDR			0x22800000
 #define IMAGE_RIGHT_ADDR 		0x22900000
 #define DEPTH_RAW_OUT_ADDR		0x22a00000
@@ -54,9 +56,11 @@
 #define DEPTHID_OUT_ADDR		0x23700000
 
 /* ABC FW and workload path */
-#define M0_WORKLOAD_PATH "m0_workload.fw"
-#define JQS_DEPTH_PATH "depth.fw"
-#define JQS_AFFINE_PATH "affine.fw"
+#define M0_WORKLOAD_PATH		"m0_workload.fw"
+#define JQS_DEPTH_PATH			"depth.fw"
+#define JQS_AFFINE_DEPTH_PATH		"affine.fw"
+#define JQS_AFFINE_RGB_PATH		"affine_rgb.fw"
+#define JQS_AFFINE_SKIN_PATH		"affine_8.fw"
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 1000
@@ -519,9 +523,27 @@ static int dma_send_workloads(void)
 		return err;
 	}
 
-	pr_info("%s: Set JQS Affine addr = 0x%08x\n", __func__,
-		JQS_AFFINE_ADDR);
-	err = dma_send_fw(JQS_AFFINE_PATH, JQS_AFFINE_ADDR);
+	pr_info("%s: Set JQS Affine Depth addr = 0x%08x\n", __func__,
+		JQS_AFFINE_DEPTH_ADDR);
+	err = dma_send_fw(JQS_AFFINE_DEPTH_PATH, JQS_AFFINE_DEPTH_ADDR);
+	if (err) {
+		pr_err("%s: Error during JQS binary transfer: %d\n",
+		       __func__, err);
+		return err;
+	}
+
+	pr_info("%s: Set JQS Affine RGB addr = 0x%08x\n", __func__,
+		JQS_AFFINE_RGB_ADDR);
+	err = dma_send_fw(JQS_AFFINE_RGB_PATH, JQS_AFFINE_RGB_ADDR);
+	if (err) {
+		pr_err("%s: Error during JQS binary transfer: %d\n",
+		       __func__, err);
+		return err;
+	}
+
+	pr_info("%s: Set JQS Affine Skin addr = 0x%08x\n", __func__,
+		JQS_AFFINE_SKIN_ADDR);
+	err = dma_send_fw(JQS_AFFINE_SKIN_PATH, JQS_AFFINE_SKIN_ADDR);
 	if (err) {
 		pr_err("%s: Error during JQS binary transfer: %d\n",
 		       __func__, err);
@@ -562,6 +584,6 @@ static void __exit faceauth_exit(void)
 module_init(faceauth_init);
 module_exit(faceauth_exit);
 
-MODULE_AUTHOR("Anatol Pomazau <anatol@google.com>");
+MODULE_AUTHOR("Anatol Pomazau <anatol@google.com>, Lei Liu <leliu@google.com>");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Google FaceAuth driver");
