@@ -1316,6 +1316,7 @@ static long report_time(struct synaptics_rmi4_data *rmi4_data,
 				rmi4_data->tp_report_read_start_time.tv_nsec))
 				/ 1000);
 	}
+	return 0;
 }
 
 static int synaptics_rmi4_f11_abs_report(struct synaptics_rmi4_data *rmi4_data,
