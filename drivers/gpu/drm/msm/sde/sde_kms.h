@@ -375,7 +375,8 @@ static inline bool sde_kms_is_secure_session_inprogress(struct sde_kms *sde_kms)
 
 	mutex_lock(&sde_kms->secure_transition_lock);
 	if ((sde_kms->smmu_state.state == DETACHED)
-		|| (sde_kms->smmu_state.state == DETACH_ALL_REQ))
+		|| (sde_kms->smmu_state.state == DETACH_ALL_REQ)
+		|| (sde_kms->smmu_state.state == ATTACH_ALL_REQ))
 		ret = true;
 	mutex_unlock(&sde_kms->secure_transition_lock);
 
