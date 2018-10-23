@@ -83,19 +83,19 @@ struct ipu_adapter_ab_mfd_data {
  * TODO(b/115432213):  These are place holder values.  I need to figure out the
  * correct value for these.  This comes out to 512MB right now.
  */
-#define PAINTBOX_IOVA_START		0x20000000
-#define PAINTBOX_IOVA_SIZE		0x40000000
+#define PAINTBOX_IOVA_START		0x40000000
+#define PAINTBOX_IOVA_SIZE		0x80000000
 
 /* TODO(b/115433779):  Figure out if there is a way to get this information from
  * the system.
  */
-#define PAINTBOX_INPUT_ADDR_SIZE	43 /* bits */
+#define IPU_INPUT_ADDR_SIZE	43 /* bits */
 
 /* TODO(b/115433779):  Determine appropriate values for airbrush. */
-#define PAINTBOX_OUTPUT_ADDR_SIZE	32 /* bits */
+#define IPU_OUTPUT_ADDR_SIZE	32 /* bits */
 
 /* Android APs usually use 4K pages.  This may change in future versions. */
-#define PAINTBOX_PAGE_SIZE_BITMAP	SZ_4K
+#define IPU_PAGE_SIZE_BITMAP	(SZ_4K | SZ_2M | SZ_1G)
 
 static int ipu_adapter_ab_mfd_dma_callback(uint8_t chan,
 		enum dma_data_direction dir, enum abc_dma_trans_status status);
@@ -829,9 +829,9 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 static void ipu_adapter_ab_mfd_set_platform_data(struct platform_device *pdev,
 		struct paintbox_pdata *pdata)
 {
-	pdata->page_size_bitmap = PAINTBOX_PAGE_SIZE_BITMAP;
-	pdata->input_address_size = PAINTBOX_INPUT_ADDR_SIZE;
-	pdata->output_address_size = PAINTBOX_OUTPUT_ADDR_SIZE;
+	pdata->page_size_bitmap = IPU_PAGE_SIZE_BITMAP;
+	pdata->input_address_size = IPU_INPUT_ADDR_SIZE;
+	pdata->output_address_size = IPU_OUTPUT_ADDR_SIZE;
 	pdata->dma_base = PAINTBOX_IOVA_START;
 	pdata->dma_size = PAINTBOX_IOVA_SIZE;
 
@@ -1015,8 +1015,8 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
-#if IS_ENABLED(CONFIG_PAINTBOX_AIRBRUSH_IOMMU)
-	ret = ipu_bus_device_register(dev_data->bus, "paintbox-iommu",
+#if IS_ENABLED(CONFIG_IPU_IOMMU)
+	ret = ipu_bus_device_register(dev_data->bus, "ipu-iommu",
 			PAINTBOX_DEVICE_TYPE_IOMMU);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "IOMMU device register failed, ret %d\n",

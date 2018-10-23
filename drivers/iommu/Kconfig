@@ -481,4 +481,15 @@ config QCOM_IOMMU
 	help
 	  Support for IOMMU on certain Qualcomm SoCs.
 
+config IPU_IOMMU
+	bool "IPU IOMMU support"
+	depends on IPU
+	select IOMMU_API
+	select IOMMU_IO_PGTABLE_LPAE
+	select IOMMU_IOVA
+	help
+	  Support for IPU IOMMU
+
+	  Say Y here to enable IOMMU support on the IPU.
+
 endif # IOMMU_SUPPORT

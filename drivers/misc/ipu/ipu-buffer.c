@@ -127,7 +127,16 @@ static int ipu_buffer_map_iommu(struct paintbox_data *pb,
 		struct paintbox_session *session,
 		struct paintbox_buffer *buffer)
 {
-	int ret = dma_map_sg_attrs(pb->dev, buffer->sg_table->sgl,
+	int ret;
+	struct scatterlist *s;
+	int i;
+
+	for_each_sg(buffer->sg_table->sgl, s,
+			buffer->sg_table->nents, i)
+		s->page_link = (unsigned long)phys_to_page(
+			s->dma_address);
+
+	ret = dma_map_sg_attrs(pb->dev, buffer->sg_table->sgl,
 				buffer->sg_table->nents, buffer->dir,
 				DMA_ATTR_SKIP_CPU_SYNC);
 	if (ret == 0) {
