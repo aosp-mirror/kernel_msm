@@ -564,4 +564,16 @@ config DM_ANDROID_VERITY
 	  of the metadata contents are verified against the key included
 	  in the system keyring. Upon success, the underlying verity
 	  target is setup.
+
+config DM_BOW
+	tristate "Create a device that backs up all changes to free blocks"
+	depends on BLK_DEV_DM
+	---help---
+	  This device-mapper target takes a device and keeps a log of all
+	  changes using free blocks identified by issuing a trim command.
+	  This can then be restored by running a command line utility,
+	  or committed by simply replacing the target.
+
+	  If unsure, say N.
+
 endif # MD
