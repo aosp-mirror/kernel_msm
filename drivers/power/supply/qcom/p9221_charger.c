@@ -27,6 +27,7 @@
 #include <linux/delay.h>
 #include <linux/power_supply.h>
 #include <linux/pmic-voter.h>
+#include <linux/alarmtimer.h>
 #include "p9221_charger.h"
 
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
@@ -40,6 +41,9 @@
 #define OVC_THRESHOLD			1400000
 #define OVC_BACKOFF_LIMIT		900000
 #define OVC_BACKOFF_AMOUNT		100000
+
+static void p9221_icl_ramp_reset(struct p9221_charger_data *charger);
+static void p9221_icl_ramp_start(struct p9221_charger_data *charger);
 
 static const u32 p9221_ov_set_lut[] = {
 	17000000, 20000000, 15000000, 13000000,
@@ -681,6 +685,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 
 	p9221_abort_transfers(charger);
 	cancel_delayed_work(&charger->dcin_work);
+	p9221_icl_ramp_reset(charger);
 	del_timer(&charger->vrect_timer);
 
 	p9221_vote_defaults(charger);
@@ -995,14 +1000,17 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 		}
 	}
 
-	/* Default to 1000mA ICL */
+	/* Default to BPP ICL */
 	icl = P9221_DC_ICL_BPP_UA;
 
-	/* For EPP operation, use 1100mA ICL */
+	if (charger->icl_ramp)
+		icl = charger->icl_ramp_ua;
+
 	if (p9221_is_epp(charger))
 		icl = P9221_DC_ICL_EPP_UA;
 
-	dev_info(&charger->client->dev, "Setting ICL %duA\n", icl);
+	dev_info(&charger->client->dev, "Setting ICL %duA ramp=%d\n", icl,
+		 charger->icl_ramp);
 	ret = vote(charger->dc_icl_votable, P9221_WLC_VOTER, true, icl);
 	if (ret)
 		dev_err(&charger->client->dev,
@@ -1016,6 +1024,74 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 			"Could not set rx_iout limit reg: %d\n", ret);
 
 	return ret;
+}
+
+static enum alarmtimer_restart p9221_icl_ramp_alarm_cb(struct alarm *alarm,
+						       ktime_t now)
+{
+	struct p9221_charger_data *charger =
+			container_of(alarm, struct p9221_charger_data,
+				     icl_ramp_alarm);
+
+	dev_info(&charger->client->dev, "ICL alarm, ramp=%d\n",
+		 charger->icl_ramp);
+
+	/* Alarm is in atomic context, schedule work to complete the task */
+	pm_stay_awake(charger->dev);
+	schedule_work(&charger->icl_ramp_work);
+
+	return ALARMTIMER_NORESTART;
+}
+
+static void p9221_icl_ramp_work(struct work_struct *work)
+{
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, icl_ramp_work);
+
+	dev_info(&charger->client->dev, "ICL ramp, ramp=%d\n",
+		 charger->icl_ramp);
+
+	pm_runtime_get_sync(charger->dev);
+	if (!charger->resume_complete) {
+		pm_runtime_put_sync(charger->dev);
+		schedule_work(&charger->icl_ramp_work);
+		dev_info(&charger->client->dev, "Ramp reschedule\n");
+		return;
+	}
+	pm_runtime_put_sync(charger->dev);
+
+	charger->icl_ramp = true;
+	p9221_set_dc_icl(charger);
+
+	pm_relax(charger->dev);
+}
+
+static void p9221_icl_ramp_reset(struct p9221_charger_data *charger)
+{
+	dev_info(&charger->client->dev, "ICL ramp reset, ramp=%d\n",
+		 charger->icl_ramp);
+
+	charger->icl_ramp = false;
+
+	if (alarm_try_to_cancel(&charger->icl_ramp_alarm) < 0)
+		dev_warn(&charger->client->dev, "Couldn't cancel icl_ramp_alarm\n");
+	cancel_work(&charger->icl_ramp_work);
+}
+
+static void p9221_icl_ramp_start(struct p9221_charger_data *charger)
+{
+	/* Only ramp on BPP at this time */
+	if (p9221_is_epp(charger))
+		return;
+
+	p9221_icl_ramp_reset(charger);
+
+	dev_info(&charger->client->dev, "ICL ramp set alarm %dms, %dua, ramp=%d\n",
+		 charger->icl_ramp_delay_ms, charger->icl_ramp_ua,
+		 charger->icl_ramp);
+
+	alarm_start_relative(&charger->icl_ramp_alarm,
+			     ms_to_ktime(charger->icl_ramp_delay_ms));
 }
 
 static void p9221_set_online(struct p9221_charger_data *charger)
@@ -1084,6 +1160,7 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 		p9221_write_fod(charger);
 		if (charger->last_capacity > 0)
 			p9221_send_csp(charger, charger->last_capacity);
+		p9221_icl_ramp_start(charger);
 	}
 
 	/* We may have already gone online during check_det */
@@ -1395,6 +1472,65 @@ static ssize_t p9221_store_count(struct device *dev,
 
 static DEVICE_ATTR(count, 0644, p9221_show_count, p9221_store_count);
 
+static ssize_t p9221_show_icl_ramp_delay_ms(struct device *dev,
+					    struct device_attribute *attr,
+					    char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->icl_ramp_delay_ms);
+}
+
+static ssize_t p9221_store_icl_ramp_delay_ms(struct device *dev,
+					     struct device_attribute *attr,
+					     const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret;
+	u32 ms;
+
+	ret = kstrtou32(buf, 10, &ms);
+	if (ret < 0)
+		return ret;
+	charger->icl_ramp_delay_ms = ms;
+	return count;
+}
+
+static DEVICE_ATTR(icl_ramp_delay_ms, 0644,
+		   p9221_show_icl_ramp_delay_ms,
+		   p9221_store_icl_ramp_delay_ms);
+
+static ssize_t p9221_show_icl_ramp_ua(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->icl_ramp_ua);
+}
+
+static ssize_t p9221_store_icl_ramp_ua(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret;
+	u32 ua;
+
+	ret = kstrtou32(buf, 10, &ua);
+	if (ret < 0)
+		return ret;
+	charger->icl_ramp_ua = ua;
+	return count;
+}
+
+static DEVICE_ATTR(icl_ramp_ua, 0644,
+		   p9221_show_icl_ramp_ua, p9221_store_icl_ramp_ua);
+
 static ssize_t p9221_show_addr(struct device *dev,
 			       struct device_attribute *attr,
 			       char *buf)
@@ -1614,6 +1750,8 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_txlen.attr,
 	&dev_attr_rxlen.attr,
 	&dev_attr_rxdone.attr,
+	&dev_attr_icl_ramp_ua.attr,
+	&dev_attr_icl_ramp_delay_ms.attr,
 	NULL
 };
 
@@ -2109,6 +2247,9 @@ static int p9221_charger_probe(struct i2c_client *client,
 		    (unsigned long)charger);
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
+	INIT_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
+	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
+		   p9221_icl_ramp_alarm_cb);
 
 	/* Default enable */
 	charger->enabled = true;
@@ -2135,6 +2276,9 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->dc_icl_votable = find_votable("DC_ICL");
 	if (!charger->dc_icl_votable)
 		dev_warn(&charger->client->dev, "Could not find DC_ICL votable\n");
+
+	charger->icl_ramp_ua = P9221_DC_ICL_BPP_RAMP_DEFAULT_UA;
+	charger->icl_ramp_delay_ms = P9221_DC_ICL_BPP_RAMP_DELAY_DEFAULT_MS;
 
 	/* Test to see if the charger is online */
 	ret = p9221_reg_read_16(charger, P9221_CHIP_ID_REG, &chip_id);
@@ -2219,6 +2363,8 @@ static int p9221_charger_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&charger->dcin_work);
 	cancel_delayed_work_sync(&charger->tx_work);
+	cancel_work_sync(&charger->icl_ramp_work);
+	alarm_try_to_cancel(&charger->icl_ramp_alarm);
 	del_timer_sync(&charger->vrect_timer);
 	device_init_wakeup(charger->dev, false);
 	cancel_delayed_work_sync(&charger->notifier_work);

@@ -19,6 +19,8 @@
 #define P9221_USER_VOTER			"WLC_USER_VOTER"
 #define P9221_OCP_VOTER				"OCP_VOTER"
 #define P9221_DC_ICL_BPP_UA			700000
+#define P9221_DC_ICL_BPP_RAMP_DEFAULT_UA	900000
+#define P9221_DC_ICL_BPP_RAMP_DELAY_DEFAULT_MS	(7 * 60 * 1000)  /* 7 mins */
 #define P9221_DC_ICL_EPP_UA			1100000
 #define P9221_EPP_THRESHOLD_UV			7000000
 #define P9221_MAX_VOUT_SET_MV_DEFAULT		9000
@@ -231,6 +233,8 @@ struct p9221_charger_data {
 	struct delayed_work		notifier_work;
 	struct delayed_work		dcin_work;
 	struct delayed_work		tx_work;
+	struct work_struct		icl_ramp_work;
+	struct alarm			icl_ramp_alarm;
 	struct timer_list		vrect_timer;
 	struct bin_attribute		bin;
 	int				online;
@@ -253,6 +257,9 @@ struct p9221_charger_data {
 	bool				check_det;
 	int				last_capacity;
 	bool				resume_complete;
+	bool				icl_ramp;
+	u32				icl_ramp_ua;
+	u32				icl_ramp_delay_ms;
 };
 
 struct p9221_prop_reg_map_entry {
