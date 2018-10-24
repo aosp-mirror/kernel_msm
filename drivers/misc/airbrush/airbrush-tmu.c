@@ -464,8 +464,9 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	/* TODO: get clock from dt */
 
 	/*
-	 * data->tzd must be registered before calling airbrush_tmu_initialize(),
-	 * requesting irq and calling airbrush_tmu_control().
+	 * data->tzd must be registered before calling
+	 * airbrush_tmu_initialize(), requesting irq and calling
+	 * airbrush_tmu_control().
 	 */
 	data->tzd = thermal_zone_of_sensor_register(&pdev->dev, 0, data,
 						    &airbrush_sensor_ops);
