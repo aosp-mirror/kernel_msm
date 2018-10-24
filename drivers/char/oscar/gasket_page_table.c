@@ -462,60 +462,69 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 {
 	int ret;
 	ulong offset;
-	struct page *page;
+	struct page **pages = NULL;
 	dma_addr_t dma_addr;
-	ulong page_addr;
+	uintptr_t page_addr;
 	int i;
+	int user_pages_mapped = 0;
+
+	if (is_user_addr) {
+		pages = kcalloc(num_pages, sizeof(struct page *), GFP_KERNEL);
+		if (!pages)
+			return -ENOMEM;
+		ret = get_user_pages_fast(host_addr & PAGE_MASK, num_pages, 1,
+					  pages);
+		if (ret <= 0) {
+			dev_dbg(pg_tbl->gasket_dev->dev,
+				"get user pages failed addr=%pK "
+				"npages=%u [ret=%d]\n",
+				(void *)host_addr, num_pages, ret);
+			kfree(pages);
+			return ret ? ret : -ENOMEM;
+		}
+		if (ret < num_pages) {
+			dev_dbg(pg_tbl->gasket_dev->dev,
+				"get user pages partial failed addr=%pK "
+				"npages=%u pinned=%d\n",
+				(void *)host_addr, num_pages, ret);
+			num_pages = ret;
+			ret = -ENOMEM;
+			goto unpin;
+		}
+	}
 
 	for (i = 0; i < num_pages; i++) {
 		page_addr = host_addr + i * PAGE_SIZE;
 		offset = page_addr & (PAGE_SIZE - 1);
-		dev_dbg(pg_tbl->gasket_dev->dev, "%s i %d\n", __func__, i);
+
 		if (!is_user_addr) {
 			ptes[i].page = NULL;
 			ptes[i].offset = offset;
 			ptes[i].dma_addr = page_addr - offset;
 
 		} else {
-			ret = get_user_pages_fast(page_addr - offset, 1, 1,
-						  &page);
-
-			if (ret <= 0) {
-				dev_err(pg_tbl->gasket_dev->dev,
-					"get user pages failed for addr=0x%lx, "
-					"offset=0x%lx [ret=%d]\n",
-					page_addr, offset, ret);
-				return ret ? ret : -ENOMEM;
-			}
-			++pg_tbl->num_active_pages;
-
-			ptes[i].page = page;
+			ptes[i].page = pages[i];
 			ptes[i].offset = offset;
 
 			/* Map the page into DMA space. */
 			ptes[i].dma_addr =
-				dma_map_page(pg_tbl->gasket_dev->dma_dev, page,
-					     0, PAGE_SIZE, DMA_BIDIRECTIONAL);
-			dev_dbg(pg_tbl->gasket_dev->dma_dev,
-				"%s i %d pte %p pfn %p -> mapped %llx\n",
-				__func__, i, &ptes[i],
-				(void *)page_to_pfn(page),
-				(unsigned long long)ptes[i].dma_addr);
+				dma_map_page(pg_tbl->gasket_dev->dma_dev,
+					     ptes[i].page, 0, PAGE_SIZE,
+					     DMA_BIDIRECTIONAL);
 
 			if (dma_mapping_error(pg_tbl->gasket_dev->dma_dev,
 					      ptes[i].dma_addr)) {
-				dev_dbg(pg_tbl->gasket_dev->dev,
+				dev_dbg(pg_tbl->gasket_dev->dma_dev,
 					"dma mapping error i=%d page=%pK vaddr=%pK\n",
 					i, ptes[i].page, (void *)page_addr);
-
-				/* clean up */
-				if (gasket_release_page(ptes[i].page))
-					--pg_tbl->num_active_pages;
-
 				memset(&ptes[i], 0,
 				       sizeof(struct gasket_page_table_entry));
-				return -EINVAL;
+				ret = -EINVAL;
+				goto unpin;
 			}
+
+			++pg_tbl->num_active_pages;
+			user_pages_mapped++;
 		}
 
 		/* Make the DMA-space address available to the device. */
@@ -534,7 +543,21 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 		}
 		ptes[i].status = PTE_INUSE;
 	}
+
+	kfree(pages);
 	return 0;
+
+ unpin:
+	if (is_user_addr) {
+		/*
+		 * Release pages pinned here but not mapped; unmap will do the
+		 * rest.
+		 */
+		for (i = user_pages_mapped; i < num_pages; i++)
+			put_page(pages[i]);
+		kfree(pages);
+	}
+	return ret;
 }
 
 /*
@@ -1169,8 +1192,8 @@ bool gasket_page_table_are_addrs_bad(
 {
 	if (host_addr & (PAGE_SIZE - 1)) {
 		dev_err(pg_tbl->gasket_dev->dev,
-			"host mapping address 0x%lx must be page aligned\n",
-			host_addr);
+			"host mapping address %pK must be page aligned\n",
+			(void *)host_addr);
 		return true;
 	}
 
