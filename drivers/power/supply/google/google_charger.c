@@ -861,7 +861,7 @@ static void chg_work(struct work_struct *work)
 				POWER_SUPPLY_TAPER_CONTROL_MODE_IMMEDIATE);
 		}
 
-		rc = chg_set_charger(chg_psy, cc_max, fv_uv);
+		rc = chg_set_charger(chg_psy, fv_uv, cc_max);
 		if (rc != 0) {
 			pr_err("MSC_SET: error rc=%d\n", rc);
 			goto error_rerun;
