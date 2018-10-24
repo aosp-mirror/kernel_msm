@@ -15,35 +15,18 @@
 
 static inline uint32_t RD_REG(uint32_t addr)
 {
-	uint32_t data;
+	uint32_t data = 0xffffffff;
 
-	if (abc_pcie_config_read(addr & 0xFFFFFF, 0x4, &data))
-		BUG_ON(1);
+	/* TODO(b/121225073): Add synchronization and fail check */
+	WARN_ON(abc_pcie_config_read(addr & 0xFFFFFF, 0x4, &data));
 
 	return data;
 }
 
 static inline void WR_REG(uint32_t addr, uint32_t data)
 {
-	if (abc_pcie_config_write(addr & 0xFFFFFF, 0x4, data))
-		BUG_ON(1);
-}
-
-
-static inline uint32_t RD_DDR_REG(uint32_t addr)
-{
-	uint32_t data;
-
-	if (memory_config_read(addr, 0x4, &data))
-		BUG_ON(1);
-
-	return data;
-}
-
-static inline void WR_DDR_REG(uint32_t addr, uint32_t data)
-{
-	if (memory_config_write(addr, 0x4, data))
-		BUG_ON(1);
+	/* TODO(b/121225073): Add synchronization and fail check */
+	WARN_ON(abc_pcie_config_write(addr & 0xFFFFFF, 0x4, data));
 }
 
 #define ABC_BASE_CMU_AON		0x10b10000

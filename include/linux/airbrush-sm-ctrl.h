@@ -500,7 +500,7 @@ struct ab_state_context {
 	struct dentry *d_entry;
 #endif
 	atomic_t clocks_registered;
-	enum ddr_state ddr_state;
+	void *ddr_data; /* ddr private data */
 	struct pci_dev *pcie_dev;
 	bool cold_boot;
 

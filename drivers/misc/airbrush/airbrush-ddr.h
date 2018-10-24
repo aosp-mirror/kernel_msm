@@ -15,7 +15,7 @@
 
 #include <linux/airbrush-sm-ctrl.h>
 
-#define DDR_SUCCESS	( 0)
+#define DDR_SUCCESS	(0)
 #define DDR_FAIL	(-1)
 
 #define DDR_TRAIN_STARTED		(0x1 << 0)
@@ -29,12 +29,8 @@
 #define DDR_TRAIN_SAVE_COMPLETE		(0x1 << 8)
 #define DDR_TRAIN_FAIL			(0x1 << 9)
 
-void ab_ddr_train_gpio(void);
-void ab_ddr_train_sysreg(void);
-void ab_ddr_train_gpio_interrupt(void);
-void ab_ddr_train_sysreg_interrupt(void);
-void ab_ddr_save_training_results(void);
-void ab_ddr_restore_training_results(uint32_t sram_address);
+void ab_ddr_train_gpio(struct ab_state_context *sc);
+void ab_ddr_train_sysreg(struct ab_state_context *sc);
 int32_t ab_ddr_init(struct ab_state_context *sc);
 
 #endif /* _AIRBRUSH_DDR_H_ */

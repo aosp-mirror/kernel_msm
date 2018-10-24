@@ -11,6 +11,7 @@ airbrush-y +=	\
 		airbrush-power-gating.o \
 		airbrush-pmic-ctrl.o \
 		airbrush-ddr.o \
+		airbrush-ddr-vref.o \
 		airbrush-ppmu.o \
 		airbrush-cooling.o \
 		airbrush-thermal.o \
