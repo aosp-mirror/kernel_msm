@@ -1439,6 +1439,10 @@ int check_TP_ID(char *buf, ssize_t buf_len, u8 tp_id) {
 		buf_len += snprintf(buf + buf_len,
 			STR_SIZE, "TP is FZW6 KOTL\n");
 		break;
+	case TP_ID_T_AUO:
+		buf_len += snprintf(buf + buf_len,
+			STR_SIZE, "TP is FZW6 KOTL AUO\n");
+		break;
 	case TP_ID_S:
 		buf_len += snprintf(buf + buf_len,
 			STR_SIZE, "TP is FZW7 KOTL\n");
