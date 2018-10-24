@@ -54,7 +54,7 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
  *    case that no data can be written.
  *
  */
-int ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
+ssize_t ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
 		uint32_t q_id, const void __user *buf, size_t size);
 
 /* Read data from an application queue.
@@ -76,7 +76,7 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
  * Partial writes are not allowed, if there isn't enough room for the entire
  * message, a failure result will be returned.
  */
-int ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
+ssize_t ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
 		const struct jqs_message *msg);
 
 /* Write a message to JQS and wait for a response.
@@ -90,7 +90,7 @@ int ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
  *            message.
  *        Only one outstanding synchronous message may occur at a time.
  */
-int ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
+ssize_t ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 		const struct jqs_message *msg, struct jqs_message *rsp,
 		size_t rsp_size);
 

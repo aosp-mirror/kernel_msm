@@ -103,19 +103,10 @@
 #define JQS_SYS_BUFFER_SIZE		SZ_8K
 #define SYS_JQS_BUFFER_SIZE		SZ_32K
 
-static uint32_t write_core(struct paintbox_bus *bus, uint32_t q_id,
-		const void *buf, size_t size)
+/* The caller to this function must hold trans->lock */
+static void ipu_core_jqs_signal_queue(struct paintbox_bus *bus, uint32_t q_id)
 {
-	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
-	struct host_jqs_queue *host_q = &trans->queues[q_id];
-	struct host_jqs_cbuf *host_cbuf = &host_q->host_sys_jqs_cbuf;
-	uint32_t bytes_written, dbl;
-	jqs_cbuf_copy cpy = (q_id == JQS_TRANSPORT_KERNEL_QUEUE_ID) ?
-			ipu_core_jqs_cbus_memcpy :
-			ipu_core_jqs_cbus_copy_from_user;
-
-	mutex_lock(&trans->lock);
-	bytes_written = ipu_core_jqs_cbuf_write(bus, host_cbuf, buf, size, cpy);
+	uint32_t dbl;
 
 	/* Notify the JQS that data has been written into the queue.
 	 * Note that it is possible that the JQS could do a read clear of the
@@ -125,10 +116,6 @@ static uint32_t write_core(struct paintbox_bus *bus, uint32_t q_id,
 	dbl = ipu_core_readl(bus, IPU_CSR_JQS_OFFSET + SYS_JQS_DBL);
 	dbl |= (1 << q_id);
 	ipu_core_writel(bus, dbl, IPU_CSR_JQS_OFFSET + SYS_JQS_DBL);
-
-	mutex_unlock(&trans->lock);
-
-	return bytes_written;
 }
 
 static void ipu_core_jqs_msg_process_ack_message(struct paintbox_bus *bus,
@@ -569,23 +556,52 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	return ret;
 }
 
-int ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
-		uint32_t q_id, const void __user *p, size_t size)
+ssize_t ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
+		uint32_t q_id, const void __user *buf, size_t size)
 {
-	return write_core(bus, q_id, p, size);
+	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
+	struct host_jqs_queue *host_q = &trans->queues[q_id];
+	struct host_jqs_cbuf *host_cbuf = &host_q->host_sys_jqs_cbuf;
+	ssize_t bytes_written;
+
+	mutex_lock(&trans->lock);
+
+	bytes_written = ipu_core_jqs_cbuf_write(bus, host_cbuf, buf, size,
+			ipu_core_jqs_cbus_copy_from_user);
+
+	ipu_core_jqs_signal_queue(bus, q_id);
+
+	mutex_unlock(&trans->lock);
+
+	return bytes_written;
 }
 
-int ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
+ssize_t ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
 	const struct jqs_message *msg)
 {
-	int ret;
+	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
+	struct host_jqs_queue *host_q =
+			&trans->queues[JQS_TRANSPORT_KERNEL_QUEUE_ID];
+	struct host_jqs_cbuf *host_cbuf = &host_q->host_sys_jqs_cbuf;
+	ssize_t bytes_written;
 
-	ret = write_core(bus, JQS_TRANSPORT_KERNEL_QUEUE_ID, msg,
-			msg->size);
-	if (ret != msg->size)
+	mutex_lock(&trans->lock);
+
+	bytes_written = ipu_core_jqs_cbuf_write(bus, host_cbuf, msg, msg->size,
+			ipu_core_jqs_cbus_memcpy);
+	if (bytes_written != msg->size) {
+		mutex_unlock(&trans->lock);
+		dev_err(bus->parent_dev,
+				"%s: message size mismatch, expected %u, got %u\n",
+				__func__, msg->size, bytes_written);
 		return -EFAULT;
+	}
 
-	return 0;
+	ipu_core_jqs_signal_queue(bus, JQS_TRANSPORT_KERNEL_QUEUE_ID);
+
+	mutex_unlock(&trans->lock);
+
+	return bytes_written;
 }
 
 /* TODO(b/116817730):  This timeout should be revaluated.  Once JQS watchdog and
@@ -594,7 +610,7 @@ int ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
  */
 #define IPU_JQS_KERNEL_QUEUE_WRITE_SYNC_TIMEOUT_MS 10000
 
-int ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
+ssize_t ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 	const struct jqs_message *msg, struct jqs_message *rsp, size_t rsp_size)
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
@@ -602,7 +618,7 @@ int ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 			&trans->queues[JQS_TRANSPORT_KERNEL_QUEUE_ID];
 	struct host_jqs_queue_waiter *waiter = &host_q->waiter;
 	unsigned long timeout;
-	int ret;
+	ssize_t ret;
 
 	timeout = msecs_to_jiffies(IPU_JQS_KERNEL_QUEUE_WRITE_SYNC_TIMEOUT_MS);
 
