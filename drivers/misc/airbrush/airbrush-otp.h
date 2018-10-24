@@ -186,37 +186,37 @@ static uint32_t ddr_otp_values[o_DDR_OTP_MAX] __attribute__ ((section(".otpddr")
 	[o_DREX_CONCONTROL_1] = 0x9fff8102,
 	[o_DREX_DFIRSTCONTROL_0] = 0x0,
 	[o_DREX_DFIRSTCONTROL_1] = 0x1,
-	[o_DREX_DIRECTCMD_0] = 0x10c90,
-	[o_DREX_DIRECTCMD_1] = 0x11070,
-	[o_DREX_DIRECTCMD_10] = 0x21850,
-	[o_DREX_DIRECTCMD_11] = 0x300013c,
-	[o_DREX_DIRECTCMD_12] = 0x3000144,
-	[o_DREX_DIRECTCMD_13] = 0x311070,
-	[o_DREX_DIRECTCMD_14] = 0x311838,
-	[o_DREX_DIRECTCMD_15] = 0x4000000,
-	[o_DREX_DIRECTCMD_16] = 0x40154,
-	[o_DREX_DIRECTCMD_17] = 0x5b8,
-	[o_DREX_DIRECTCMD_18] = 0x418,
-	[o_DREX_DIRECTCMD_19] = 0x502a8,
-	[o_DREX_DIRECTCMD_2] = 0x111070,
-	[o_DREX_DIRECTCMD_20] = 0x6000000,
-	[o_DREX_DIRECTCMD_21] = 0x7000000,
-	[o_DREX_DIRECTCMD_22] = 0x8000000,
-	[o_DREX_DIRECTCMD_23] = 0x8d8,
-	[o_DREX_DIRECTCMD_24] = 0x86c,
-	[o_DREX_DIRECTCMD_25] = 0x9000000,
-	[o_DREX_DIRECTCMD_26] = 0x9001400,
-	[o_DREX_DIRECTCMD_27] = 0x9010000,
-	[o_DREX_DIRECTCMD_28] = 0x9101400,
-	[o_DREX_DIRECTCMD_29] = 0x9201400,
-	[o_DREX_DIRECTCMD_3] = 0x111838,
-	[o_DREX_DIRECTCMD_30] = 0xfc4,
-	[o_DREX_DIRECTCMD_4] = 0x11420,
-	[o_DREX_DIRECTCMD_5] = 0x11838,
-	[o_DREX_DIRECTCMD_6] = 0x11d54,
-	[o_DREX_DIRECTCMD_7] = 0x211070,
-	[o_DREX_DIRECTCMD_8] = 0x211838,
-	[o_DREX_DIRECTCMD_9] = 0x212a8,
+	[o_DREX_DIRECTCMD_0]  = 0x0010c90, /* [W], MR: 11, OP: 0x24 */
+	[o_DREX_DIRECTCMD_1]  = 0x0011070, /* [W], MR: 12, OP: 0x1c */
+	[o_DREX_DIRECTCMD_10] = 0x0021850, /* [W], MR: 22, OP: 0x14 */
+	[o_DREX_DIRECTCMD_11] = 0x300013c, /* NOP */
+	[o_DREX_DIRECTCMD_12] = 0x3000144, /* NOP */
+	[o_DREX_DIRECTCMD_13] = 0x0311070, /* [W], MR: 12, OP: 0x1c */
+	[o_DREX_DIRECTCMD_14] = 0x0311838, /* [W], MR: 14, OP: 0x0e */
+	[o_DREX_DIRECTCMD_15] = 0x4000000, /* SREF_ENTRY command */
+	[o_DREX_DIRECTCMD_16] = 0x0040154, /* [W], MR: 32, OP: 0x55 */
+	[o_DREX_DIRECTCMD_17] = 0x00005b8, /* [W], MR: 01, OP: 0x6e */
+	[o_DREX_DIRECTCMD_18] = 0x0000418, /* [W], MR: 01, OP: 0x06 */
+	[o_DREX_DIRECTCMD_19] = 0x00502a8, /* [W], MR: 40, OP: 0xaa */
+	[o_DREX_DIRECTCMD_2]  = 0x0111070, /* [W], MR: 12, OP: 0x1c */
+	[o_DREX_DIRECTCMD_20] = 0x6000000, /* CKEL command */
+	[o_DREX_DIRECTCMD_21] = 0x7000000, /* PD_EXIT command */
+	[o_DREX_DIRECTCMD_22] = 0x8000000, /* SREF_EXIT command */
+	[o_DREX_DIRECTCMD_23] = 0x00008d8, /* [W], MR: 02, OP: 0x36 */
+	[o_DREX_DIRECTCMD_24] = 0x000086c, /* [W], MR: 02, OP: 0x1b */
+	[o_DREX_DIRECTCMD_25] = 0x9000000, /* [R], MR: 00, OP: 0x00 */
+	[o_DREX_DIRECTCMD_26] = 0x9001400, /* [R], MR: 05, OP: 0x00 */
+	[o_DREX_DIRECTCMD_27] = 0x9010000, /* [R], MR: 08, OP: 0x00 */
+	[o_DREX_DIRECTCMD_28] = 0x9101400, /* [R], MR: 05, OP: 0x00 */
+	[o_DREX_DIRECTCMD_29] = 0x9201400, /* [R], MR: 05, OP: 0x00 */
+	[o_DREX_DIRECTCMD_3]  = 0x0111838, /* [W], MR: 14, OP: 0x0e */
+	[o_DREX_DIRECTCMD_30] = 0x0000fc4, /* [W], MR: 03, OP: 0xf1 */
+	[o_DREX_DIRECTCMD_4]  = 0x0011420, /* [W], MR: 13, OP: 0x08 */
+	[o_DREX_DIRECTCMD_5]  = 0x0011838, /* [W], MR: 14, OP: 0x0e */
+	[o_DREX_DIRECTCMD_6]  = 0x0011d54, /* [W], MR: 15, OP: 0x55 */
+	[o_DREX_DIRECTCMD_7]  = 0x0211070, /* [W], MR: 12, OP: 0x1c */
+	[o_DREX_DIRECTCMD_8]  = 0x0211838, /* [W], MR: 14, OP: 0x0e */
+	[o_DREX_DIRECTCMD_9]  = 0x00212a8, /* [W], MR: 20, OP: 0xaa */
 	[o_DPHY_CAL_CON0_0] = 0x780806c0,
 	[o_DPHY_CAL_CON0_1] = 0x780806c1,
 	[o_DPHY_CAL_CON0_2] = 0x780806c4,
@@ -242,7 +242,7 @@ static uint32_t ddr_otp_values[o_DDR_OTP_MAX] __attribute__ ((section(".otpddr")
 	[o_DPHY_MDLL_CON0_1] = 0x10000150,
 	[o_DPHY_MDLL_CON0_2] = 0x10000170,
 	[o_DPHY_MDLL_CON0_3] = 0x10800170,
-	[o_DPHY_OFFSETD_CON0_0] = 0x1000000,
+	[o_DPHY_OFFSETD_CON0_0] = 0x01000000,
 	[o_DPHY_OFFSETD_CON0_1] = 0x11000000,
 	[o_DPHY_ZQ_CON0_0] =  0xff807304,
 	[o_DPHY_ZQ_CON0_1] =  0xff807304,
@@ -322,21 +322,6 @@ static uint32_t ddr_otp_values[o_DDR_OTP_MAX] __attribute__ ((section(".otpddr")
 	[o_SECURE_JTAG4] = 0x11,
 	[o_SECURE_JTAG5] = 0x3,
 };
-
-/* --------------------------------------------------
- * 1.7.1.65 AP_HW_OPTION_1
- *    Base Address: 0x10BB_0000
- *    Address = Base Address + 0x4014, Reset Value = 0x0000_0000
- *    OTP_DBG_DIS[2] (OTP_FW_PATCH_DIS)
- *    OTP_UART_PRINT_DISABLE[3] (Disable UART prints when set)
- *    OTP_DDR_OTP_FLASHED[7]
- *    OTP_AP_DDR [9] (0: M0_DDR_INIT, 1: HOST_DDR_INIT)
- * -------------------------------------------------- */
-#define OTP_AP_HW_OPTION_1()	(RD_REG(ABC_BASE_OTP_WRAPPER + 0x4014))
-#define IS_OTP_FW_PATCH_DIS()	(!!(OTP_AP_HW_OPTION_1() & (1 << 2)))
-#define IS_UART_PRINT_DISABLE() (!!(OTP_AP_HW_OPTION_1() & (1 << 3)))
-#define IS_DDR_OTP_FLASHED()	(!!(OTP_AP_HW_OPTION_1() & (1 << 7)))
-#define IS_M0_DDR_INIT()	( !(OTP_AP_HW_OPTION_1() & (1 << 9)))
 
 static inline uint32_t read_otp_wrapper(uint32_t offset)
 {

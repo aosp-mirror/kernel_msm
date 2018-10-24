@@ -29,8 +29,8 @@
 #define DDR_TRAIN_SAVE_COMPLETE		(0x1 << 8)
 #define DDR_TRAIN_FAIL			(0x1 << 9)
 
-void ab_ddr_train_gpio(struct ab_state_context *sc);
-void ab_ddr_train_sysreg(struct ab_state_context *sc);
+int32_t ab_ddr_train_gpio(struct ab_state_context *sc);
+int32_t ab_ddr_train_sysreg(struct ab_state_context *sc);
 int32_t ab_ddr_init(struct ab_state_context *sc);
 
 #endif /* _AIRBRUSH_DDR_H_ */

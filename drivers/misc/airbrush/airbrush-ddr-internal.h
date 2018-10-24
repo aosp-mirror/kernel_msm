@@ -19,38 +19,161 @@
 /* ------------------------------------------------------------------------ */
 /* Depending on the usage, please comment/uncomment the below config macros */
 /* ------------------------------------------------------------------------ */
-//#define CONFIG_DDR_VREF_DISABLE
 //#define CONFIG_DDR_BOOT_TEST
 /* ------------------------------------------------------------------------ */
 
-#define pll_locktime_pll_phy_mif	0x10510008
-#define pll_con0_pll_phy_mif		0x10510140
-#define clk_con_div_dfi_div2		0x10511800
-#define clk_con_div_div2_pllclk_mif	0x10511804
-#define clk_con_div_div4_pllclk_mif	0x10511808
-#define phy0_init_ctrl_reg		0x10530400
-#define phy0_rst_ctrl_reg		0x10530404
-#define phy1_init_ctrl_reg		0x10530500
-#define phy1_rst_ctrl_reg		0x10530504
-#define mif_pll_wrap_ctrl_reg		0x10530510
+#define PLL_LOCKTIME_PLL_PHY_MIF	0x10510008
+#define PLL_CON0_PLL_PHY_MIF		0x10510140
+#define PLL_MUX_SEL(x)			(x << 4)
+#define PLL_MUX_SEL_OSCCLK		(0x0)
+#define PLL_MUX_SEL_PLLOUT		(0x1)
+#define DIV_S_MSK			(0x7 << 0)
+#define DIV_S(x)			(((x) & 0x7) << 0)
+#define DIV_P_MSK			(0x3f << 8)
+#define DIV_P(x)			(((x) & 0x3f) << 8)
+#define DIV_M_MSK			(0x3ff << 16)
+#define DIV_M(x)			(((x) & 0x3ff) << 16)
+#define PLL_PMS_MSK			(DIV_P_MSK | DIV_M_MSK | DIV_S_MSK)
+#define PLL_PMS(p, m, s)		(DIV_P(p) | DIV_M(m) | DIV_S(s))
+#define PLL_STABLE			(0x1 << 29)
+#define PLL_ENABLE			(0x1 << 31)
+
+#define CLK_CON_DIV_DFI_DIV2		0x10511800
+#define CLK_CON_DIV_DIV2_PLLCLK_MIF	0x10511804
+#define CLK_CON_DIV_DIV4_PLLCLK_MIF	0x10511808
+#define PHY0_INIT_CTRL_REG		0x10530400
+
+#define PHY1_INIT_CTRL_REG		0x10530500
+#define INIT_PLL_IS_STABLE		(0x1 << 0)
+
+#define PHY0_RST_CTRL_REG		0x10530404
+#define PHY1_RST_CTRL_REG		0x10530504
+#define RST_N				(0x1 << 15)
+#define DIV_RST_N			(0x1 << 7)
+
+#define MIF_PLL_WRAP_CTRL_REG		0x10530510
+#define SEL_CLKMUX_PLL			(0x1 << 1)
+#define DDRPHY2XCLKGATE_ENABLE		(0x1 << 2)
+#define WRAP_PLL_IS_STABLE		(0x1 << 3)
 
 #define DREX_BASE_ADDR			0x10580000
 #define DPHY_BASE_ADDR			0x105b0000
 #define DPHY2_BASE_ADDR			0x105c0000
 
 #define DREX_CONCONTROL			0x10580000
+#define UPDATE_MODE			(0x1 << 3)
+#define AREF_EN				(0x1 << 5)
+#define DFI_INIT_START_PHY2		(0x1 << 15)
+#define DFI_INIT_START			(0x1 << 28)
+
 #define DREX_MEMCONTROL			0x10580004
+#define CLK_STOP_EN			(0x1 << 0)
+#define DPWRDN_EN			(0x1 << 1)
+#define DPWRDN_TYPE_MSK			(0x3 << 2)
+#define DPWRDN_TYPE(x)			(((x) & 0x3) << 2)
+#define ACTIVE_PRECHARGE_PD		(0x0)
+#define FORCED_PRECHARGE_PD		(0x1)
+#define PB_REF_EN			(0x1 << 27)
+#define DBI_EN				(0x1 << 23)
+
+#define DREX_CGCONTROL			0x10580008
+#define PHY_CG_EN			(0x1 << 4)
+
 #define DREX_DIRECTCMD			0x10580010
+#define CMD_TYPE_NOP			(0x3 << 24)
+#define CMD_TYPE_SREF_ENTR		(0x4 << 24)
+#define CMD_TYPE_CKEL			(0x6 << 24)
+#define CMD_TYPE_PD_EXIT		(0x7 << 24)
+#define CMD_TYPE_SREF_EXIT		(0x8 << 24)
+
 #define DREX_PRECHCONFIG0		0x10580014
+#define PORT_POLICY_MSK			(0xf << 16)
+#define PORT_POLICY(x)			(((x) & 0xf) << 16)
+#define PORT_POLICY_OPEN_PAGE		(0x0)
+#define PORT_POLICY_CLOSE_PAGE		(0xf) /* for all ports */
+#define TP_EN_MSK			(0xf << 28)
+
 #define DREX_PHYCONTROL0		0x10580018
+#define FP_RESYNC			(0x1 << 3)
+#define PAUSE_NO_RELOCK			(0x1 << 7)
+
 #define DREX_TIMINGRFCPB		0x10580020
+#define t_rfcpb0(x)			(((x) & 0x7f) << 0)
+#define t_rfcpb1(x)			(((x) & 0x7f) << 8)
+#define TMGPBR_1866			(t_rfcpb0(0x42) | t_rfcpb1(0x42))
+#define TMGPBR_1600			(t_rfcpb0(0x38) | t_rfcpb1(0x38))
+#define TMGPBR_1200			(t_rfcpb0(0x2b) | t_rfcpb1(0x2b))
+#define TMGPBR_933			(t_rfcpb0(0x21) | t_rfcpb1(0x21))
+#define TMGPBR_800			(t_rfcpb0(0x1c) | t_rfcpb1(0x1c))
+
 #define DREX_PWRDNCONFIG		0x10580028
+
 #define DREX_TIMINGROW0			0x10580034
+#define t_ras(x)			(((x) & 0x3f) << 0)
+#define t_rc(x)				(((x) & 0x3f) << 6)
+#define t_rcd(x)			(((x) & 0xf) << 12)
+#define t_rp(x)				(((x) & 0xf) << 16)
+#define t_rrd(x)			(((x) & 0xf) << 20)
+#define t_rfc(x)			(((x) & 0xff) << 24)
+#define TMGROW_1866	\
+(t_ras(0x15) | t_rc(0x20) | t_rcd(0xa) | t_rp(0xb) | t_rrd(0x6) | t_rfc(0x83))
+#define TMGROW_1600	\
+(t_ras(0x12) | t_rc(0x1b) | t_rcd(0x8) | t_rp(0xa) | t_rrd(0x5) | t_rfc(0x70))
+#define TMGROW_1200	\
+(t_ras(0x0e) | t_rc(0x15) | t_rcd(0x6) | t_rp(0x7) | t_rrd(0x4) | t_rfc(0x55))
+#define TMGROW_933	\
+(t_ras(0x0b) | t_rc(0x10) | t_rcd(0x5) | t_rp(0x6) | t_rrd(0x3) | t_rfc(0x42))
+#define TMGROW_800	\
+(t_ras(0x09) | t_rc(0x0e) | t_rcd(0x4) | t_rp(0x5) | t_rrd(0x3) | t_rfc(0x38))
+
+
 #define DREX_TIMINGDATA0		0x10580038
+#define rl(x)				(((x) & 0x3f) << 0)
+#define r_to_w(x)			(((x) & 0x1f) << 6)
+#define wl(x)				(((x) & 0x1f) << 11)
+#define t_rtp(x)			(((x) & 0xf) << 20)
+#define t_wr(x)				(((x) & 0xf) << 24)
+#define t_wtr(x)			(((x) & 0xf) << 28)
+#define TMGDTA_1866	\
+(rl(0x24) | r_to_w(0x11) | wl(0x10) | t_rtp(0x4) | t_wr(0xa) | t_wtr(0x6))
+#define TMGDTA_1600	\
+(rl(0x20) | r_to_w(0x0e) | wl(0x0e) | t_rtp(0x3) | t_wr(0x8) | t_wtr(0x5))
+#define TMGDTA_1200	\
+(rl(0x1c) | r_to_w(0x0e) | wl(0x0c) | t_rtp(0x3) | t_wr(0x7) | t_wtr(0x4))
+#define TMGDTA_933	\
+(rl(0x16) | r_to_w(0x0b) | wl(0x0a) | t_rtp(0x2) | t_wr(0x5) | t_wtr(0x3))
+#define TMGDTA_800	\
+(rl(0x10) | r_to_w(0x0c) | wl(0x08) | t_rtp(0x2) | t_wr(0x4) | t_wtr(0x3))
+
+
 #define DREX_TIMINGPOWER0		0x1058003c
+#define t_mrd(x)			(((x) & 0xf) << 0)
+#define t_cke(x)			(((x) & 0xf) << 4)
+#define t_xp(x)				(((x) & 0xff) << 8)
+#define t_xsr(x)			(((x) & 0x3ff) << 16)
+#define t_faw(x)			(((x) & 0x3f) << 26)
+#define TMGPWR_1866	\
+(t_mrd(0x1) | t_cke(0x7) | t_xp(0x4) | t_xsr(0x88) | t_faw(0x13))
+#define TMGPWR_1600	\
+(t_mrd(0x1) | t_cke(0x7) | t_xp(0x3) | t_xsr(0x74) | t_faw(0x10))
+#define TMGPWR_1200	\
+(t_mrd(0x1) | t_cke(0x7) | t_xp(0x3) | t_xsr(0x58) | t_faw(0x0d))
+#define TMGPWR_933	\
+(t_mrd(0x1) | t_cke(0x7) | t_xp(0x2) | t_xsr(0x45) | t_faw(0x0a))
+#define TMGPWR_800	\
+(t_mrd(0x1) | t_cke(0x7) | t_xp(0x2) | t_xsr(0x3b) | t_faw(0x08))
+
 #define DREX_PHYSTATUS			0x10580040
+#define DFI_INIT_COMPLETE_ALL		(0x3 << 3)
+#define TRAIN_COMPLETE_ALL		(0x3 << 14)
+
 #define DREX_ETCTIMING			0x10580044
+
 #define DREX_CHIPSTATUS			0x10580048
+#define CHIP_SREF_STATE(n)		(0x1 << (8 + n))
+#define CHIP_SREF_ENTRY(n)		(0x1 << (8 + n))
+#define CHIP_SREF_EXIT(n)		(0x0 << (8 + n))
+
 #define DREX_RDFETCH0			0x1058004c
 #define DREX_RDFETCH1			0x10580050
 #define DREX_MRSTATUS			0x10580054
@@ -58,51 +181,185 @@
 #define DREX_TIMINGROW1			0x105800e4
 #define DREX_TIMINGDATA1		0x105800e8
 #define DREX_TIMINGPOWER1		0x105800ec
+
 #define DREX_ALL_INIT_INDI		0x10580400
+#define ALL_INIT_DONE			(0x1 << 0)
+
 #define DREX_INIT_TRAIN_CONFIG		0x10580430
+#define INIT_READ_TRAIN_CHIP0		(0x1 << 1)
+#define INIT_WRITE_TRAIN_CHIP0		(0x1 << 2)
+
 #define DREX_INIT_TRAIN_CONTROL		0x10580434
+#define INIT_TRAIN_START		(0x1 << 0)
+
 #define DREX_WRTRA_PATTERN0		0x10580460
 #define DREX_WRTRA_PATTERN1		0x10580464
 #define DREX_WRTRA_PATTERN2		0x10580468
 #define DREX_DFIRSTCONTROL		0x10580708
+#define DFI_RESET_CONTROL		(0x1 << 0)
+#define PB_WA_EN			(0x1 << 8)
+
 #define DREX_ACTIVATE_AXI_READY		0x10580714
+#define ACTIVATE_AXI_READY		(0x1 << 0)
+
 #define DREX_1CHIP_MASKING		0x1058076c
+
+/* configure dram base as 0x20000000 and size as 512MB */
 #define DREX_ASP_MEMBASECONFIG0		0x10590f00
+#define CHUNK_START_END			(0x20009)
+
 #define DREX_ASP_MEMCONFIG0		0x10590f10
 #define DREX_ASP_CHIP0SIZECONFIG	0x10590f20
+#define CHIP_SIZE_512MB			(0x1 << 0)
+
 #define DPHY_GNR_CON0			0x105b0000
+#define CTRL_DFDQS			(0x1 << 26)
+
 #define DPHY_CAL_CON0			0x105b0004
+#define WRLVL_MODE			(0x1 << 0)
+#define GATE_CAL_MODE			(0x1 << 1)
+#define CA_CAL_MODE			(0x1 << 2)
+#define RD_CAL_MODE			(0x1 << 3)
+#define WR_CAL_MODE			(0x1 << 5)
+#define DVFS_WR_TRAIN_EN		(0x1 << 26)
+
 #define DPHY_CAL_CON1			0x105b0008
+#define RDLVL_PERIODIC_INCR_ADJ_MSK	(0x7f << 0)
+#define RDLVL_PERIODIC_INCR_ADJ(x)	(((x) & 0x7f) << 0)
+#define GLVL_PERIODIC_INCR_ADJ_MSK	(0x7f << 7)
+#define GLVL_PERIODIC_INCR_ADJ(x)	(((x) & 0x7f) << 7)
+#define RDLVL_PASS_ADJ_MSK		(0xf << 16)
+#define RDLVL_PASS_ADJ(x)		(((x) & 0xf) << 16)
+
 #define DPHY_CAL_CON2			0x105b000c
+#define CTRL_READADJ_MSK		(0xf << 12)
+#define CTRL_READADJ(x)			(((x) & 0xf) << 12)
+#define CTRL_READDURADJ_MSK		(0xf << 16)
+#define CTRL_READDURADJ(x)		(((x) & 0xf) << 16)
+#define CTRL_GATEADJ_MSK		(0xf << 20)
+#define CTRL_GATEADJ(x)			(((x) & 0xf) << 20)
+#define CTRL_GATEDURADJ_MSK		(0xf << 24)
+#define CTRL_GATEDURADJ(x)		(((x) & 0xf) << 24)
+#define CTRL_SHGATE			(0x1 << 29)
+#define CTRL_RODT_DISABLE		(0x1 << 30)
+
 #define DPHY_CAL_CON3			0x105b0010
+#define PRBS_SW_MODE			(0x1 << 6)
+#define RD_SW_MODE			(0x1 << 8)
+#define WR_SW_MODE			(0x1 << 9)
+#define AUTO_DQS_CLEAN			(0x1 << 11)
+
 #define DPHY_CAL_CON4			0x105b0014
+#define GLITCH_REMOVAL_EN		(0x1 << 22)
+#define GLVL_PERIODIC_FINE_INCR_ADJ_MSK	(0x7f << 24)
+#define GLVL_PERIODIC_FINE_INCR_ADJ(x)	(((x) & 0x7f) << 24)
+
 #define DPHY_LP_CON0			0x105b0018
+#define CTRL_PULLD_DQS			(0x3 << 0)
+#define MDLL_CG_EN			(0x1 << 11)
+#define PCL_PD				(0x1 << 12)
+#define DS_IO_PD			(0x1 << 14)
+#define CTRL_PULLD_DQ			(0x3 << 16)
+
 #define DPHY_GATE_CON0			0x105b001c
 #define DPHY_OFFSETD_CON0		0x105b0050
+#define CTRL_RESYNC			(0x1 << 24)
+#define UPD_MODE			(0x1 << 28)
+
+#define DPHY_CA_DESKEW_CON0		0x105b007c
+#define DPHY_CA_DESKEW_CON1		0x105b0080
+#define DPHY_CA_DESKEW_CON2		0x105b0084
+
 #define DPHY_CAL_WR_PATTERN_CON0	0x105b0098
 #define DPHY_CAL_WR_PATTERN_CON1	0x105b009c
 #define DPHY_CAL_WR_PATTERN_CON2	0x105b00a0
 #define DPHY_CAL_WR_PATTERN_CON3	0x105b00a4
 #define DPHY_CAL_WR_PATTERN_CON4	0x105b00a8
 #define DPHY_CAL_RD_PATTERN_CON0	0x105b00ac
+
 #define DPHY_MDLL_CON0			0x105b00b0
+#define CTRL_DLL_ON			(0x1 << 5)
+#define CTRL_START			(0x1 << 6)
+#define CAL_VTC_EN			(0x1 << 22)
+#define CLKM_CG_EN_SW			(0x1 << 23)
+
 #define DPHY_MDLL_CON1			0x105b00b4
+#define CTRL_LOCKED			(0x1 << 18)
+#define LOCK_VALUE_INIT_OVERRIDE	(0x1 << 21)
+#define CTRL_LOCK_VALUE_INIT_MSK	(0x3ff << 22)
+#define CTRL_LOCK_VALUE_INIT(x)		(((x) & 0x3ff) << 22)
+
 #define DPHY_DVFS_CON			0x105b00b8
+#define PER_DVFS_TRAIN_DISABLE		(0x1 << 13)
+#define DVFS_CON_MSK			(0xfff << 0)
+#define DVFS_CON(x)		(PER_DVFS_TRAIN_DISABLE | (((x) & 0xfff) << 0))
+
 #define DPHY_ZQ_CON0			0x105b03c8
+#define ZQ_MANUAL_STR			(0x1 << 1)
+#define ZQ_MANUAL_MODE_MSK		(0x3 << 2)
+#define ZQ_MANUAL_MODE(x)		(((x) & 0x3) << 2)
+#define ZQ_MANUAL_MODE_FORCE		0x0
+#define ZQ_MANUAL_MODE_LONG		0x1
+#define ZQ_MANUAL_MODE_SHORT		0x2
+#define ZQ_CLK_DIV_EN			(0x1 << 18)
+#define ZQ_MODE_NOTERM			(0x1 << 19)
+#define ZQ_RGDDR3			(0x1 << 20)
+#define ZQ_MODE_TERM_MSK		(0x7 << 21)
+#define ZQ_MODE_TERM(x)			(((x) & 0x7) << 21)
+#define ZQ_MODE_TERM_60_OHM		0x4
+#define ZQ_MODE_TERM_120_OHM		0x2
+#define ZQ_MODE_TERM_240_OHM		0x1
+#define ZQ_CLK_EN			(0x1 << 27)
+#define ZQ_MODE_LP4			(0x1 << 31)
+
 #define DPHY_ZQ_CON1			0x105b03cc
+#define ZQ_DONE				(0x1 << 0)
+
+#define DPHY_ZQ_CON2			0x105b03d0
+#define CTRL_ZQ_CLK_DIV_MSK		(0xffff << 0)
+#define CTRL_ZQ_CLK_DIV(x)		(((x) & 0xffff) << 0)
+
 #define DPHY_ZQ_CON3			0x105b03d4
 #define DPHY_ZQ_CON6			0x105b03e0
+#define ZQ_DS0_NOTERM			(0x1 << 1)
+#define ZQ_DS1_NOTERM			(0x1 << 9)
+
 #define DPHY_ZQ_CON9			0x105b03ec
+
 #define DPHY_TESTIRCV_CON0		0x105b0400
+#define DQS0_TESTIRCV_MSK		(0xf << 0)
+#define DQS0_TESTIRCV(x)		(((x) & 0xf) << 0)
+#define DQS1_TESTIRCV_MSK		(0xf << 4)
+#define DQS1_TESTIRCV(x)		(((x) & 0xf) << 4)
+
 #define DPHY_CBT_CON0			0x105b0608
+#define CBT_CA_VREF_MODE_DS0		(0x1 << 9)
+#define CBT_CA_VREF_MODE_DS1		(0x1 << 10)
+#define CBT_CMD_CLEAR			(0x1 << 14)
+#define CBT_CS_MSK			(0x3 << 30)
+#define CBT_CS(x)			(((x) & 0x3) << 30)
+#define CBT_CS_RANK0			(1)
+#define CBT_CS_RANK1			(2)
+
 #define DPHY_PRBS_CON0			0x105b0684
+#define PRBS_DONE			(0x1 << 0)
+#define PRBS_READ_START			(0x1 << 1)
+#define PRBS_WRITE_START		(0x1 << 2)
+#define PRBS_CON0_INIT_PATTERN		(0x5 << 16)
+
 #define DPHY_PRBS_CON1			0x105b0688
+#define DPHY_PRBS_CON2			0x105b068c
+#define DPHY_PRBS_CON3			0x105b0690
 #define DPHY_PRBS_CON4			0x105b0694
 #define DPHY_PRBS_CON5			0x105b0698
 #define DPHY_PRBS_CON6			0x105b069c
 #define DPHY_PRBS_CON7			0x105b06a0
+
 #define DPHY_PRBS_CON8			0x105b06a4
+#define PRBS_DRAM_ACT_ENABLE		(0x1 << 31)
+
 #define DPHY_MON_CON0			0x105b0700
+#define MDLL_MONITOR_EN			(0x1 << 15)
 
 #define DPHY2_GNR_CON0			0x105c0000
 #define DPHY2_CAL_CON0			0x105c0004
@@ -113,6 +370,9 @@
 #define DPHY2_LP_CON0			0x105c0018
 #define DPHY2_GATE_CON0			0x105c001c
 #define DPHY2_OFFSETD_CON0		0x105c0050
+#define DPHY2_CA_DESKEW_CON0		0x105c007c
+#define DPHY2_CA_DESKEW_CON1		0x105c0080
+#define DPHY2_CA_DESKEW_CON2		0x105c0084
 #define DPHY2_CAL_WR_PATTERN_CON0	0x105c0098
 #define DPHY2_CAL_WR_PATTERN_CON1	0x105c009c
 #define DPHY2_CAL_WR_PATTERN_CON2	0x105c00a0
@@ -124,6 +384,7 @@
 #define DPHY2_DVFS_CON			0x105c00b8
 #define DPHY2_ZQ_CON0			0x105c03c8
 #define DPHY2_ZQ_CON1			0x105c03cc
+#define DPHY2_ZQ_CON2			0x105c03d0
 #define DPHY2_ZQ_CON3			0x105c03d4
 #define DPHY2_ZQ_CON6			0x105c03e0
 #define DPHY2_ZQ_CON9			0x105c03ec
@@ -131,6 +392,8 @@
 #define DPHY2_CBT_CON0			0x105c0608
 #define DPHY2_PRBS_CON0			0x105c0684
 #define DPHY2_PRBS_CON1			0x105c0688
+#define DPHY2_PRBS_CON2			0x105c068c
+#define DPHY2_PRBS_CON3			0x105c0690
 #define DPHY2_PRBS_CON4			0x105c0694
 #define DPHY2_PRBS_CON5			0x105c0698
 #define DPHY2_PRBS_CON6			0x105c069c
@@ -138,9 +401,320 @@
 #define DPHY2_PRBS_CON8			0x105c06a4
 #define DPHY2_MON_CON0			0x105c0700
 
+/* DDR training save and restore registers */
+#define DPHY_RD_DESKEW_CENTER_CS0_CON_DM	0x105b018c
+#define DPHY_RD_DESKEW_CENTER_CS0_CON0		0x105b0190
+#define DPHY_RD_DESKEW_CENTER_CS0_CON1		0x105b019c
+#define DPHY_RD_DESKEW_CENTER_CS0_CON2		0x105b01a8
+#define DPHY_RD_DESKEW_CENTER_CS0_CON3		0x105b01b4
+#define DPHY_RD_DESKEW_CENTER_CS0_CON4		0x105b01c0
+#define DPHY_RD_DESKEW_CENTER_CS0_CON5		0x105b01cc
+#define DPHY_RD_DESKEW_CENTER_CS0_CON6		0x105b01d8
+#define DPHY_RD_DESKEW_CENTER_CS0_CON7		0x105b01e4
+#define DPHY_WR_DESKEWC_CS0_CON0		0x105b01f0
+#define DPHY_WR_DESKEWC_CS0_CON1		0x105b01fc
+#define DPHY_WR_DESKEWC_CS0_CON2		0x105b0208
+#define DPHY_WR_DESKEWC_CS0_CON3		0x105b0214
+#define DPHY_WR_DESKEWC_CS0_CON4		0x105b0220
+#define DPHY_WR_DESKEWC_CS0_CON5		0x105b022c
+#define DPHY_WR_DESKEWC_CS0_CON6		0x105b0238
+#define DPHY_WR_DESKEWC_CS0_CON7		0x105b0244
+#define DPHY_DM_DESKEWC_CS0_CON0		0x105b0250
+#define DPHY_WR_DESKEWC_CS1_CON0		0x105b0410
+#define DPHY_WR_DESKEWC_CS1_CON1		0x105b041c
+#define DPHY_WR_DESKEWC_CS1_CON2		0x105b0428
+#define DPHY_WR_DESKEWC_CS1_CON3		0x105b0434
+#define DPHY_WR_DESKEWC_CS1_CON4		0x105b0440
+#define DPHY_WR_DESKEWC_CS1_CON5		0x105b044c
+#define DPHY_WR_DESKEWC_CS1_CON6		0x105b0458
+#define DPHY_WR_DESKEWC_CS1_CON7		0x105b0464
+#define DPHY_DM_DESKEWC_CS1_CON0		0x105b0470
+#define DPHY_WR_DESKEWL_CS0_CON0		0x105b0490
+#define DPHY_WR_DESKEWL_CS0_CON1		0x105b049c
+#define DPHY_WR_DESKEWL_CS0_CON2		0x105b04a8
+#define DPHY_WR_DESKEWL_CS0_CON3		0x105b04b4
+#define DPHY_WR_DESKEWL_CS0_CON4		0x105b04c0
+#define DPHY_WR_DESKEWL_CS0_CON5		0x105b04cc
+#define DPHY_WR_DESKEWL_CS0_CON6		0x105b04d8
+#define DPHY_WR_DESKEWL_CS0_CON7		0x105b04e4
+#define DPHY_DM_DESKEWL_CS0_CON0		0x105b04f0
+#define DPHY_WR_DESKEWL_CS1_CON0		0x105b0500
+#define DPHY_WR_DESKEWL_CS1_CON1		0x105b050c
+#define DPHY_WR_DESKEWL_CS1_CON2		0x105b0518
+#define DPHY_WR_DESKEWL_CS1_CON3		0x105b0524
+#define DPHY_WR_DESKEWL_CS1_CON4		0x105b0530
+#define DPHY_WR_DESKEWL_CS1_CON5		0x105b053c
+#define DPHY_WR_DESKEWL_CS1_CON6		0x105b0548
+#define DPHY_WR_DESKEWL_CS1_CON7		0x105b0554
+#define DPHY_DM_DESKEWL_CS1_CON0		0x105b0560
+#define DPHY_RD_DQS_VWML_CS0_CON0		0x105b0574
+#define DPHY_RD_DQS_VWMC_CS0_CON0		0x105b0580
+#define DPHY_RD_DESKEW_LEFT_CS0_CON_DM		0x105b0610
+#define DPHY_RD_DESKEW_LEFT_CS0_CON0		0x105b0614
+#define DPHY_RD_DESKEW_LEFT_CS0_CON1		0x105b0620
+#define DPHY_RD_DESKEW_LEFT_CS0_CON2		0x105b062c
+#define DPHY_RD_DESKEW_LEFT_CS0_CON3		0x105b0638
+#define DPHY_RD_DESKEW_LEFT_CS0_CON4		0x105b0644
+#define DPHY_RD_DESKEW_LEFT_CS0_CON5		0x105b0650
+#define DPHY_RD_DESKEW_LEFT_CS0_CON6		0x105b065c
+#define DPHY_RD_DESKEW_LEFT_CS0_CON7		0x105b0668
+#define DPHY_RD_DQS_VWML_CS1_CON0		0x105b0764
+#define DPHY_RD_DQS_VWMC_CS1_CON0		0x105b0768
+#define DPHY_RD_DESKEW_CENTER_CS1_CON_DM	0x105b076c
+#define DPHY_RD_DESKEW_CENTER_CS1_CON0		0x105b0770
+#define DPHY_RD_DESKEW_CENTER_CS1_CON1		0x105b0774
+#define DPHY_RD_DESKEW_CENTER_CS1_CON2		0x105b0778
+#define DPHY_RD_DESKEW_CENTER_CS1_CON3		0x105b077c
+#define DPHY_RD_DESKEW_CENTER_CS1_CON4		0x105b0780
+#define DPHY_RD_DESKEW_CENTER_CS1_CON5		0x105b0784
+#define DPHY_RD_DESKEW_CENTER_CS1_CON6		0x105b0788
+#define DPHY_RD_DESKEW_CENTER_CS1_CON7		0x105b078c
+#define DPHY_RD_DESKEW_LEFT_CS1_CON_DM		0x105b0790
+#define DPHY_RD_DESKEW_LEFT_CS1_CON0		0x105b0794
+#define DPHY_RD_DESKEW_LEFT_CS1_CON1		0x105b0798
+#define DPHY_RD_DESKEW_LEFT_CS1_CON2		0x105b079c
+#define DPHY_RD_DESKEW_LEFT_CS1_CON3		0x105b07a0
+#define DPHY_RD_DESKEW_LEFT_CS1_CON4		0x105b07a4
+#define DPHY_RD_DESKEW_LEFT_CS1_CON5		0x105b07a8
+#define DPHY_RD_DESKEW_LEFT_CS1_CON6		0x105b07ac
+#define DPHY_RD_DESKEW_LEFT_CS1_CON7		0x105b07b0
+#define DPHY_SW_RD_DQS_VWML_CS0_CON0		0x105b07c0
+#define DPHY_SW_RD_DQS_VWMC_CS0_CON0		0x105b07c4
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON_DM	0x105b07c8
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON0	0x105b07cc
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON1	0x105b07d0
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON2	0x105b07d4
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON3	0x105b07d8
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON4	0x105b07dc
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON5	0x105b07e0
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON6	0x105b07e4
+#define DPHY_SW_RD_DESKEW_CENTER_CS0_CON7	0x105b07e8
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON_DM	0x105b07f0
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON0		0x105b07f4
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON1		0x105b07f8
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON2		0x105b07fc
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON3		0x105b0800
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON4		0x105b0804
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON5		0x105b0808
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON6		0x105b080c
+#define DPHY_SW_RD_DESKEW_LEFT_CS0_CON7		0x105b0810
+#define DPHY_SW_RD_DQS_VWML_CS1_CON0		0x105b0814
+#define DPHY_SW_RD_DQS_VWMC_CS1_CON0		0x105b0818
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON_DM	0x105b0820
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON0	0x105b0824
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON1	0x105b0828
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON2	0x105b082c
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON3	0x105b0830
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON4	0x105b0834
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON5	0x105b0838
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON6	0x105b083c
+#define DPHY_SW_RD_DESKEW_CENTER_CS1_CON7	0x105b0840
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON_DM	0x105b0850
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON0		0x105b0854
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON1		0x105b0858
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON2		0x105b085c
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON3		0x105b0860
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON4		0x105b0864
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON5		0x105b0868
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON6		0x105b086c
+#define DPHY_SW_RD_DESKEW_LEFT_CS1_CON7		0x105b0870
+#define DPHY_SW_WR_DESKEWC_CS0_CON0		0x105b0880
+#define DPHY_SW_WR_DESKEWC_CS0_CON1		0x105b0884
+#define DPHY_SW_WR_DESKEWC_CS0_CON2		0x105b0888
+#define DPHY_SW_WR_DESKEWC_CS0_CON3		0x105b088c
+#define DPHY_SW_WR_DESKEWC_CS0_CON4		0x105b0890
+#define DPHY_SW_WR_DESKEWC_CS0_CON5		0x105b0894
+#define DPHY_SW_WR_DESKEWC_CS0_CON6		0x105b0898
+#define DPHY_SW_WR_DESKEWC_CS0_CON7		0x105b089c
+#define DPHY_SW_DM_DESKEWC_CS0_CON0		0x105b08a0
+#define DPHY_SW_WR_DESKEWL_CS0_CON0		0x105b08b0
+#define DPHY_SW_WR_DESKEWL_CS0_CON1		0x105b08b4
+#define DPHY_SW_WR_DESKEWL_CS0_CON2		0x105b08b8
+#define DPHY_SW_WR_DESKEWL_CS0_CON3		0x105b08bc
+#define DPHY_SW_WR_DESKEWL_CS0_CON4		0x105b08c0
+#define DPHY_SW_WR_DESKEWL_CS0_CON5		0x105b08c4
+#define DPHY_SW_WR_DESKEWL_CS0_CON6		0x105b08c8
+#define DPHY_SW_WR_DESKEWL_CS0_CON7		0x105b08cc
+#define DPHY_SW_DM_DESKEWL_CS0_CON0		0x105b08d0
+#define DPHY_SW_WR_DESKEWC_CS1_CON0		0x105b08e0
+#define DPHY_SW_WR_DESKEWC_CS1_CON1		0x105b08e4
+#define DPHY_SW_WR_DESKEWC_CS1_CON2		0x105b08e8
+#define DPHY_SW_WR_DESKEWC_CS1_CON3		0x105b08ec
+#define DPHY_SW_WR_DESKEWC_CS1_CON4		0x105b08f0
+#define DPHY_SW_WR_DESKEWC_CS1_CON5		0x105b08f4
+#define DPHY_SW_WR_DESKEWC_CS1_CON6		0x105b08f8
+#define DPHY_SW_WR_DESKEWC_CS1_CON7		0x105b08fc
+#define DPHY_SW_DM_DESKEWC_CS1_CON0		0x105b0900
+#define DPHY_SW_WR_DESKEWL_CS1_CON0		0x105b0910
+#define DPHY_SW_WR_DESKEWL_CS1_CON1		0x105b0914
+#define DPHY_SW_WR_DESKEWL_CS1_CON2		0x105b0918
+#define DPHY_SW_WR_DESKEWL_CS1_CON3		0x105b091c
+#define DPHY_SW_WR_DESKEWL_CS1_CON4		0x105b0920
+#define DPHY_SW_WR_DESKEWL_CS1_CON5		0x105b0924
+#define DPHY_SW_WR_DESKEWL_CS1_CON6		0x105b0928
+#define DPHY_SW_WR_DESKEWL_CS1_CON7		0x105b092c
+#define DPHY_SW_DM_DESKEWL_CS1_CON0		0x105b0930
+
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON_DM	0x105c018c
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON0		0x105c0190
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON1		0x105c019c
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON2		0x105c01a8
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON3		0x105c01b4
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON4		0x105c01c0
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON5		0x105c01cc
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON6		0x105c01d8
+#define DPHY2_RD_DESKEW_CENTER_CS0_CON7		0x105c01e4
+#define DPHY2_WR_DESKEWC_CS0_CON0		0x105c01f0
+#define DPHY2_WR_DESKEWC_CS0_CON1		0x105c01fc
+#define DPHY2_WR_DESKEWC_CS0_CON2		0x105c0208
+#define DPHY2_WR_DESKEWC_CS0_CON3		0x105c0214
+#define DPHY2_WR_DESKEWC_CS0_CON4		0x105c0220
+#define DPHY2_WR_DESKEWC_CS0_CON5		0x105c022c
+#define DPHY2_WR_DESKEWC_CS0_CON6		0x105c0238
+#define DPHY2_WR_DESKEWC_CS0_CON7		0x105c0244
+#define DPHY2_DM_DESKEWC_CS0_CON0		0x105c0250
+#define DPHY2_WR_DESKEWC_CS1_CON0		0x105c0410
+#define DPHY2_WR_DESKEWC_CS1_CON1		0x105c041c
+#define DPHY2_WR_DESKEWC_CS1_CON2		0x105c0428
+#define DPHY2_WR_DESKEWC_CS1_CON3		0x105c0434
+#define DPHY2_WR_DESKEWC_CS1_CON4		0x105c0440
+#define DPHY2_WR_DESKEWC_CS1_CON5		0x105c044c
+#define DPHY2_WR_DESKEWC_CS1_CON6		0x105c0458
+#define DPHY2_WR_DESKEWC_CS1_CON7		0x105c0464
+#define DPHY2_DM_DESKEWC_CS1_CON0		0x105c0470
+#define DPHY2_WR_DESKEWL_CS0_CON0		0x105c0490
+#define DPHY2_WR_DESKEWL_CS0_CON1		0x105c049c
+#define DPHY2_WR_DESKEWL_CS0_CON2		0x105c04a8
+#define DPHY2_WR_DESKEWL_CS0_CON3		0x105c04b4
+#define DPHY2_WR_DESKEWL_CS0_CON4		0x105c04c0
+#define DPHY2_WR_DESKEWL_CS0_CON5		0x105c04cc
+#define DPHY2_WR_DESKEWL_CS0_CON6		0x105c04d8
+#define DPHY2_WR_DESKEWL_CS0_CON7		0x105c04e4
+#define DPHY2_DM_DESKEWL_CS0_CON0		0x105c04f0
+#define DPHY2_WR_DESKEWL_CS1_CON0		0x105c0500
+#define DPHY2_WR_DESKEWL_CS1_CON1		0x105c050c
+#define DPHY2_WR_DESKEWL_CS1_CON2		0x105c0518
+#define DPHY2_WR_DESKEWL_CS1_CON3		0x105c0524
+#define DPHY2_WR_DESKEWL_CS1_CON4		0x105c0530
+#define DPHY2_WR_DESKEWL_CS1_CON5		0x105c053c
+#define DPHY2_WR_DESKEWL_CS1_CON6		0x105c0548
+#define DPHY2_WR_DESKEWL_CS1_CON7		0x105c0554
+#define DPHY2_DM_DESKEWL_CS1_CON0		0x105c0560
+#define DPHY2_RD_DQS_VWML_CS0_CON0		0x105c0574
+#define DPHY2_RD_DQS_VWMC_CS0_CON0		0x105c0580
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON_DM		0x105c0610
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON0		0x105c0614
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON1		0x105c0620
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON2		0x105c062c
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON3		0x105c0638
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON4		0x105c0644
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON5		0x105c0650
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON6		0x105c065c
+#define DPHY2_RD_DESKEW_LEFT_CS0_CON7		0x105c0668
+#define DPHY2_RD_DQS_VWML_CS1_CON0		0x105c0764
+#define DPHY2_RD_DQS_VWMC_CS1_CON0		0x105c0768
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON_DM	0x105c076c
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON0		0x105c0770
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON1		0x105c0774
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON2		0x105c0778
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON3		0x105c077c
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON4		0x105c0780
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON5		0x105c0784
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON6		0x105c0788
+#define DPHY2_RD_DESKEW_CENTER_CS1_CON7		0x105c078c
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON_DM		0x105c0790
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON0		0x105c0794
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON1		0x105c0798
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON2		0x105c079c
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON3		0x105c07a0
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON4		0x105c07a4
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON5		0x105c07a8
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON6		0x105c07ac
+#define DPHY2_RD_DESKEW_LEFT_CS1_CON7		0x105c07b0
+#define DPHY2_SW_RD_DQS_VWML_CS0_CON0		0x105c07c0
+#define DPHY2_SW_RD_DQS_VWMC_CS0_CON0		0x105c07c4
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON_DM	0x105c07c8
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON0	0x105c07cc
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON1	0x105c07d0
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON2	0x105c07d4
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON3	0x105c07d8
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON4	0x105c07dc
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON5	0x105c07e0
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON6	0x105c07e4
+#define DPHY2_SW_RD_DESKEW_CENTER_CS0_CON7	0x105c07e8
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON_DM	0x105c07f0
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON0	0x105c07f4
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON1	0x105c07f8
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON2	0x105c07fc
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON3	0x105c0800
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON4	0x105c0804
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON5	0x105c0808
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON6	0x105c080c
+#define DPHY2_SW_RD_DESKEW_LEFT_CS0_CON7	0x105c0810
+#define DPHY2_SW_RD_DQS_VWML_CS1_CON0		0x105c0814
+#define DPHY2_SW_RD_DQS_VWMC_CS1_CON0		0x105c0818
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON_DM	0x105c0820
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON0	0x105c0824
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON1	0x105c0828
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON2	0x105c082c
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON3	0x105c0830
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON4	0x105c0834
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON5	0x105c0838
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON6	0x105c083c
+#define DPHY2_SW_RD_DESKEW_CENTER_CS1_CON7	0x105c0840
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON_DM	0x105c0850
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON0	0x105c0854
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON1	0x105c0858
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON2	0x105c085c
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON3	0x105c0860
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON4	0x105c0864
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON5	0x105c0868
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON6	0x105c086c
+#define DPHY2_SW_RD_DESKEW_LEFT_CS1_CON7	0x105c0870
+#define DPHY2_SW_WR_DESKEWC_CS0_CON0		0x105c0880
+#define DPHY2_SW_WR_DESKEWC_CS0_CON1		0x105c0884
+#define DPHY2_SW_WR_DESKEWC_CS0_CON2		0x105c0888
+#define DPHY2_SW_WR_DESKEWC_CS0_CON3		0x105c088c
+#define DPHY2_SW_WR_DESKEWC_CS0_CON4		0x105c0890
+#define DPHY2_SW_WR_DESKEWC_CS0_CON5		0x105c0894
+#define DPHY2_SW_WR_DESKEWC_CS0_CON6		0x105c0898
+#define DPHY2_SW_WR_DESKEWC_CS0_CON7		0x105c089c
+#define DPHY2_SW_DM_DESKEWC_CS0_CON0		0x105c08a0
+#define DPHY2_SW_WR_DESKEWL_CS0_CON0		0x105c08b0
+#define DPHY2_SW_WR_DESKEWL_CS0_CON1		0x105c08b4
+#define DPHY2_SW_WR_DESKEWL_CS0_CON2		0x105c08b8
+#define DPHY2_SW_WR_DESKEWL_CS0_CON3		0x105c08bc
+#define DPHY2_SW_WR_DESKEWL_CS0_CON4		0x105c08c0
+#define DPHY2_SW_WR_DESKEWL_CS0_CON5		0x105c08c4
+#define DPHY2_SW_WR_DESKEWL_CS0_CON6		0x105c08c8
+#define DPHY2_SW_WR_DESKEWL_CS0_CON7		0x105c08cc
+#define DPHY2_SW_DM_DESKEWL_CS0_CON0		0x105c08d0
+#define DPHY2_SW_WR_DESKEWC_CS1_CON0		0x105c08e0
+#define DPHY2_SW_WR_DESKEWC_CS1_CON1		0x105c08e4
+#define DPHY2_SW_WR_DESKEWC_CS1_CON2		0x105c08e8
+#define DPHY2_SW_WR_DESKEWC_CS1_CON3		0x105c08ec
+#define DPHY2_SW_WR_DESKEWC_CS1_CON4		0x105c08f0
+#define DPHY2_SW_WR_DESKEWC_CS1_CON5		0x105c08f4
+#define DPHY2_SW_WR_DESKEWC_CS1_CON6		0x105c08f8
+#define DPHY2_SW_WR_DESKEWC_CS1_CON7		0x105c08fc
+#define DPHY2_SW_DM_DESKEWC_CS1_CON0		0x105c0900
+#define DPHY2_SW_WR_DESKEWL_CS1_CON0		0x105c0910
+#define DPHY2_SW_WR_DESKEWL_CS1_CON1		0x105c0914
+#define DPHY2_SW_WR_DESKEWL_CS1_CON2		0x105c0918
+#define DPHY2_SW_WR_DESKEWL_CS1_CON3		0x105c091c
+#define DPHY2_SW_WR_DESKEWL_CS1_CON4		0x105c0920
+#define DPHY2_SW_WR_DESKEWL_CS1_CON5		0x105c0924
+#define DPHY2_SW_WR_DESKEWL_CS1_CON6		0x105c0928
+#define DPHY2_SW_WR_DESKEWL_CS1_CON7		0x105c092c
+#define DPHY2_SW_DM_DESKEWL_CS1_CON0		0x105c0930
+
 /* Register offsets used during PRBS training */
 #define DPHY_OFFSET_PRBS_CON6		0x69c
 #define DPHY_OFFSET_PRBS_CON7		0x6a0
+
+#define PATTERN_55AA55AA		0x55aa55aa
+#define PATTERN_AA55AA55		0xaa55aa55
+#define PATTERN_5555			0x5555
 
 #define pll_locktime_pll_aon		0x10b10000
 #define pll_con0_pll_aon		0x10b10100
@@ -150,6 +724,26 @@
 #define clk_con_div_pll_aon_clk		0x10b1180c
 #define clk_con_div_shared_div_aon_pll	0x10b11810
 #define clk_con_div_shared_div_mif	0x10b11814
+
+#define POLL_TIMEOUT_USEC		10000
+#define DDR_POLL_USLEEP_MIN		100
+#define DDR_CLK_IN_SENSE_TIMEOUT	5000
+/* Minimum RESET_n LOW time after completion of voltage ramp */
+#define DDR_INIT_TIMING_tINIT1_USEC	400
+/* Minimum CKE low time after RESET_n high */
+#define DDR_INIT_TIMING_tINIT3_USEC	2000
+/* CKE High to CS delay */
+#define DDR_INIT_CKE2CS_DELAY_USEC	100
+#define DDR_DLL_CTRL_OFF_ON_UDELAY	10
+
+#define ddr_usleep(usec)		(usleep_range(usec, usec + 1))
+
+#define VREF_REF_NUM			0x05
+#define PHY_VREF_LEVELS			64
+#define DRAM_VREF_LEVELS		51
+#define VREF_FROM			0x0
+#define VREF_STEP			0x1
+#define VREF_PRBS_TIMEOUT_USEC		5000
 
 enum ddr_poll_index {
 	p_pll_con0_pll_phy_mif,
@@ -161,12 +755,6 @@ enum ddr_poll_index {
 	p_DREX_CHIPSTATUS_sr_exit,
 	p_DPHY_PRBS_CON0_prbs_done,
 	p_DPHY_PRBS_CON0_prbs_disable,
-};
-
-struct ddr_reg_poll_t {
-	uint32_t mask;
-	uint32_t val;
-	uint32_t usec_timeout;
 };
 
 enum ddr_train_save_index {
@@ -339,226 +927,6 @@ enum ddr_train_save_index {
 	s_train_max_index,
 };
 
-enum ddr_train_restore_read_index {
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON_DM,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON0,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON1,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON2,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON3,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON4,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON5,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON6,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS0_CON7,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON_DM,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON0,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON1,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON2,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON3,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON4,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON5,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON6,
-	r_DPHY_SW_RD_DESKEW_CENTER_CS1_CON7,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON_DM,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON0,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON1,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON2,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON3,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON4,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON5,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON6,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS0_CON7,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON_DM,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON0,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON1,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON2,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON3,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON4,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON5,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON6,
-	r_DPHY_SW_RD_DESKEW_LEFT_CS1_CON7,
-	r_DPHY_SW_RD_DQS_VWMC_CS0_CON0,
-	r_DPHY_SW_RD_DQS_VWMC_CS1_CON0,
-	r_DPHY_SW_RD_DQS_VWML_CS0_CON0,
-	r_DPHY_SW_RD_DQS_VWML_CS1_CON0,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON_DM,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON0,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON1,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON2,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON3,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON4,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON5,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON6,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS0_CON7,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON_DM,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON0,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON1,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON2,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON3,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON4,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON5,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON6,
-	r_DPHY2_SW_RD_DESKEW_CENTER_CS1_CON7,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON_DM,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON0,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON1,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON2,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON3,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON4,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON5,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON6,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS0_CON7,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON_DM,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON0,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON1,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON2,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON3,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON4,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON5,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON6,
-	r_DPHY2_SW_RD_DESKEW_LEFT_CS1_CON7,
-	r_DPHY2_SW_RD_DQS_VWMC_CS0_CON0,
-	r_DPHY2_SW_RD_DQS_VWMC_CS1_CON0,
-	r_DPHY2_SW_RD_DQS_VWML_CS0_CON0,
-	r_DPHY2_SW_RD_DQS_VWML_CS1_CON0,
-};
-
-enum ddr_train_restore_write_index {
-	r_DPHY_SW_WR_DESKEWC_CS0_CON0,
-	r_DPHY_SW_WR_DESKEWC_CS0_CON1,
-	r_DPHY_SW_WR_DESKEWC_CS0_CON2,
-	r_DPHY_SW_WR_DESKEWC_CS0_CON3,
-	r_DPHY_SW_WR_DESKEWC_CS0_CON4,
-	r_DPHY_SW_WR_DESKEWC_CS0_CON5,
-	r_DPHY_SW_WR_DESKEWC_CS0_CON6,
-	r_DPHY_SW_WR_DESKEWC_CS0_CON7,
-	r_DPHY_SW_DM_DESKEWC_CS0_CON0,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON0,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON1,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON2,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON3,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON4,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON5,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON6,
-	r_DPHY_SW_WR_DESKEWC_CS1_CON7,
-	r_DPHY_SW_DM_DESKEWC_CS1_CON0,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON0,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON1,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON2,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON3,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON4,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON5,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON6,
-	r_DPHY_SW_WR_DESKEWL_CS0_CON7,
-	r_DPHY_SW_DM_DESKEWL_CS0_CON0,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON0,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON1,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON2,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON3,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON4,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON5,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON6,
-	r_DPHY_SW_WR_DESKEWL_CS1_CON7,
-	r_DPHY_SW_DM_DESKEWL_CS1_CON0,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON0,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON1,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON2,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON3,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON4,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON5,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON6,
-	r_DPHY2_SW_WR_DESKEWC_CS0_CON7,
-	r_DPHY2_SW_DM_DESKEWC_CS0_CON0,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON0,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON1,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON2,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON3,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON4,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON5,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON6,
-	r_DPHY2_SW_WR_DESKEWC_CS1_CON7,
-	r_DPHY2_SW_DM_DESKEWC_CS1_CON0,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON0,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON1,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON2,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON3,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON4,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON5,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON6,
-	r_DPHY2_SW_WR_DESKEWL_CS0_CON7,
-	r_DPHY2_SW_DM_DESKEWL_CS0_CON0,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON0,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON1,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON2,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON3,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON4,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON5,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON6,
-	r_DPHY2_SW_WR_DESKEWL_CS1_CON7,
-	r_DPHY2_SW_DM_DESKEWL_CS1_CON0,
-};
-
-#define DDR_POLL_USLEEP_MIN		100
-/* Minimum RESET_n LOW time after completion of voltage ramp */
-#define DDR_INIT_TIMING_tINIT1_USEC	400
-/* Minimum CKE low time after RESET_n high */
-#define DDR_INIT_TIMING_tINIT3_USEC	2000
-/* CKE High to CS delay */
-#define DDR_INIT_CKE2CS_DELAY_USEC	100
-
-#define ddr_usleep(usec)	(usleep_range(usec, usec + 1))
-
-static inline uint32_t ddr_reg_rd(uint32_t addr)
-{
-	uint32_t data = 0xffffffff;
-
-	/* TODO(b/121225073): Add synchronization and fail check */
-	WARN_ON(abc_pcie_config_read(addr & 0xFFFFFF, 0x4, &data));
-
-	return data;
-}
-
-static inline void ddr_reg_wr(uint32_t addr, uint32_t data)
-{
-	/* TODO(b/121225073): Add synchronization and fail check */
-	WARN_ON(abc_pcie_config_write(addr & 0xFFFFFF, 0x4, data));
-}
-
-static inline void ddr_reg_set(uint32_t addr, uint32_t mask)
-{
-	ddr_reg_wr(addr, ddr_reg_rd(addr) | mask);
-}
-
-static inline void ddr_reg_clr(uint32_t addr, uint32_t mask)
-{
-	ddr_reg_wr(addr, ddr_reg_rd(addr) & (~mask));
-}
-
-static inline uint32_t ddr_mem_rd(uint32_t addr)
-{
-	uint32_t data = 0xffffffff;
-
-	/* TODO(b/121225073): Add synchronization and fail check */
-	WARN_ON(memory_config_read(addr, 0x4, &data));
-
-	return data;
-}
-
-static inline void ddr_mem_wr(uint32_t addr, uint32_t data)
-{
-	/* TODO(b/121225073): Add synchronization and fail check */
-	WARN_ON(memory_config_write(addr, 0x4, data));
-}
-
-void ddr_prbs_training_init(void);
-
-#define VREF_REF_NUM		0x05
-#define PHY_VREF_LEVELS		64
-#define DRAM_VREF_LEVELS	51
-#define VREF_FROM		0x0
-#define VREF_STEP		0x1
-
-#define VREF_PRBS_TIMEOUT_USEC	5000
-
 enum vref_operation_t {
 	VREF_READ = 0,
 	VREF_WRITE
@@ -681,6 +1049,66 @@ struct ab_ddr_context {
 	uint32_t ddr_train_save_value[s_train_max_index];
 };
 
+struct ddr_reg_poll_t {
+	uint32_t mask;
+	uint32_t val;
+	uint32_t usec_timeout;
+};
+
+struct ddr_train_save_restore_t {
+	uint32_t reg_save;
+	uint32_t reg_restore;
+};
+
+static inline uint32_t ddr_reg_rd(uint32_t addr)
+{
+	uint32_t data = 0xffffffff;
+
+	/* TODO(b/121225073): Add synchronization and fail check */
+	WARN_ON(abc_pcie_config_read(addr & 0xFFFFFF, 0x4, &data));
+
+	return data;
+}
+
+static inline void ddr_reg_wr(uint32_t addr, uint32_t data)
+{
+	/* TODO(b/121225073): Add synchronization and fail check */
+	WARN_ON(abc_pcie_config_write(addr & 0xFFFFFF, 0x4, data));
+}
+
+static inline void ddr_reg_set(uint32_t addr, uint32_t mask)
+{
+	ddr_reg_wr(addr, ddr_reg_rd(addr) | mask);
+}
+
+static inline void ddr_reg_clr(uint32_t addr, uint32_t mask)
+{
+	ddr_reg_wr(addr, ddr_reg_rd(addr) & (~mask));
+}
+
+static inline void ddr_reg_clr_set(uint32_t addr,
+			uint32_t clr_mask, uint32_t set_mask)
+{
+	ddr_reg_wr(addr, (ddr_reg_rd(addr) & (~clr_mask)) | set_mask);
+}
+
+static inline uint32_t ddr_mem_rd(uint32_t addr)
+{
+	uint32_t data = 0xffffffff;
+
+	/* TODO(b/121225073): Add synchronization and fail check */
+	WARN_ON(memory_config_read(addr, 0x4, &data));
+
+	return data;
+}
+
+static inline void ddr_mem_wr(uint32_t addr, uint32_t data)
+{
+	/* TODO(b/121225073): Add synchronization and fail check */
+	WARN_ON(memory_config_write(addr, 0x4, data));
+}
+
+void ddr_prbs_training_init(void);
 int32_t ddrphy_run_vref_training(struct ab_ddr_context *ctx);
 
 #endif /* _AIRBRUSH_DDR_INTERNAL_H_ */
