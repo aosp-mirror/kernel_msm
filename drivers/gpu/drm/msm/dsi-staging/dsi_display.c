@@ -2014,27 +2014,25 @@ static void dsi_display_parse_cmdline_topology(struct dsi_display *display,
 		display->sw_te_using_wd = true;
 
 	str = strnstr(boot_str, ":config", strlen(boot_str));
-	if (!str)
-		goto end;
-
-	if (kstrtol(str + strlen(":config"), INT_BASE_10,
-				(unsigned long *)&cmdline_topology)) {
-		pr_err("invalid config index override: %s\n", boot_str);
-		goto end;
+	if (str) {
+		if (sscanf(str, ":config%lu", &cmdline_topology) <= 0) {
+			pr_err("invalid config index override: %s\n", boot_str);
+			goto end;
+		}
+		pr_debug("parsed command line topology: %d\n",
+			 cmdline_topology);
 	}
 
 	str = strnstr(boot_str, ":timing", strlen(boot_str));
-	if (!str)
-		goto end;
-
-	if (kstrtol(str + strlen(":timing"), INT_BASE_10,
-				(unsigned long *)&cmdline_timing)) {
-		pr_err("invalid timing index override: %s. resetting both timing and config\n",
-			boot_str);
-		cmdline_topology = NO_OVERRIDE;
-		goto end;
+	if (str) {
+		if (sscanf(str, ":timing%lu", &cmdline_timing) <= 0) {
+			pr_err("invalid timing index override: %s. resetting both timing and config\n",
+				boot_str);
+			cmdline_topology = NO_OVERRIDE;
+			goto end;
+		}
+		pr_debug("parsed command line timing: %d\n", cmdline_timing);
 	}
-	pr_debug("successfully parsed command line topology and timing\n");
 end:
 	display->cmdline_topology = cmdline_topology;
 	display->cmdline_timing = cmdline_timing;
