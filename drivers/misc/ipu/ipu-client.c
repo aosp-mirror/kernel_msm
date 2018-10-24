@@ -153,17 +153,6 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 	if (ret < 0)
 		goto free_session;
 
-	/* TODO(b/117150299):  Remove once support for ROM firmware fallback is
-	 * removed.  When the ROM firmware fallback is removed the
-	 * pm_runtime_get_sync call will return an error if the JQS firmware
-	 * could not be loaded.
-	 */
-	if (!ipu_is_jqs_ready(pb->dev)) {
-		dev_err(pb->dev, "%s: JQS firmware not ready\n", __func__);
-		ret = -ENOTCONN;
-		goto put_runtime;
-	}
-
 	ret = ipu_buffer_init_session(pb, session);
 	if (ret < 0)
 		goto put_runtime;

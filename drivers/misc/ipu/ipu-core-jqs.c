@@ -280,14 +280,6 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 }
 
 /* The caller to this function must hold bus->jqs.lock */
-static void ipu_core_jqs_start_rom_firmware(struct paintbox_bus *bus)
-{
-	dev_dbg(bus->parent_dev, "enabling ROM firmware\n");
-	ipu_core_jqs_power_enable(bus, JQS_BOOT_ADDR_DEF, 0);
-	bus->jqs.status = JQS_FW_STATUS_RUNNING;
-}
-
-/* The caller to this function must hold bus->jqs.lock */
 int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 {
 	int ret;
@@ -298,7 +290,7 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	if (bus->jqs.status == JQS_FW_STATUS_INIT) {
 		ret = ipu_core_jqs_load_firmware(bus);
 		if (ret < 0)
-			goto start_rom_firmware;
+			return ret;
 	}
 
 	/* If the firmware is in the requested state then stage it to DRAM.
@@ -327,13 +319,8 @@ unstage_firmware:
 	ipu_core_jqs_unstage_firmware(bus);
 unload_firmware:
 	ipu_core_jqs_unload_firmware(bus);
-start_rom_firmware:
-	/* TODO(b/117150299):  Remove support for ROM firmware fallback once the
-	 * JQS Firmware is fully integrated into the Android build.
-	 */
-	ipu_core_jqs_start_rom_firmware(bus);
 
-	return 0;
+	return ret;
 }
 
 /* The caller to this function must hold bus->jqs.lock */
@@ -381,18 +368,7 @@ void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 
 bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
 {
-	bool ready = true;
-
-	if (bus->jqs.status != JQS_FW_STATUS_RUNNING)
-		ready = false;
-
-	/* Don't report ready if the JQS is running from its ROM firmware.  The
-	 * ROM firmware is only used for debug.
-	 */
-	if (bus->jqs.fw == NULL)
-		ready = false;
-
-	return ready;
+	return bus->jqs.status == JQS_FW_STATUS_RUNNING;
 }
 
 static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
