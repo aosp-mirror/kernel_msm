@@ -258,8 +258,9 @@ struct ab_state_context {
 	struct miscdevice misc_dev;
 
 	struct block blocks[NUM_BLOCKS];
-	enum chip_state chip_substate_id;
-	char *chip_substate_name;
+	enum throttle_state throttle_state_id;
+	enum chip_state dest_chip_substate_id;
+	enum chip_state curr_chip_substate_id;
 	struct chip_to_block_map *chip_state_table;
 	u32 nr_chip_states;
 

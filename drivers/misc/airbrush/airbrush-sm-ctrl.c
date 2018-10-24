@@ -21,10 +21,13 @@
 #include <linux/kernel.h>
 #include <linux/msm_pcie.h>
 
+#include "airbrush-cooling.h"
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-pmu.h"
 #include "airbrush-power-gating.h"
 #include "airbrush-spi.h"
+
+#define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 10)
 
 static struct ab_state_context *ab_sm_ctx;
 
@@ -332,11 +335,40 @@ static int disable_ref_clk(struct device *dev)
 		return PTR_ERR(ref_clk);
 }
 
-int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
+static const u32 chip_substate_throttler_map
+		[][AIRBRUSH_COOLING_STATE_MAX + 1] = {
+	{CHIP_STATE_0_9, CHIP_STATE_0_4, CHIP_STATE_0_3, CHIP_STATE_0_2},
+	{CHIP_STATE_1_6, CHIP_STATE_1_4, CHIP_STATE_1_3, CHIP_STATE_1_2},
+	{CHIP_STATE_2_6, CHIP_STATE_2_4, CHIP_STATE_2_3, CHIP_STATE_2_2},
+};
+
+static u32 ab_sm_throttled_chip_substate_id(
+		u32 chip_substate_id, enum throttle_state throttle_state_id)
 {
+	u32 substate_category;
+	u32 throttler_substate_id;
+
+	if (chip_substate_id >= CHIP_STATE_3_0)
+		return chip_substate_id;
+
+	substate_category = to_chip_substate_category(chip_substate_id);
+	throttler_substate_id = chip_substate_throttler_map
+			[substate_category][throttle_state_id];
+	return min(chip_substate_id, throttler_substate_id);
+}
+
+static int ab_sm_update_chip_state(struct ab_state_context *sc)
+{
+	u32 to_chip_substate_id;
 	int i;
-	int ret = 0;
 	struct chip_to_block_map *map = NULL;
+
+	to_chip_substate_id = ab_sm_throttled_chip_substate_id(
+			sc->dest_chip_substate_id,
+			sc->throttle_state_id);
+
+	if (sc->curr_chip_substate_id == to_chip_substate_id)
+		return 0;
 
 	for (i = 0; i < sc->nr_chip_states; i++) {
 		if (sc->chip_state_table[i].chip_substate_id == to_chip_substate_id) {
@@ -348,21 +380,8 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 	if (!map)
 		return -EINVAL;
 
-	if (sc->chip_substate_id == to_chip_substate_id)
-		return 0;
-
-	if (!is_valid_transition(sc->chip_substate_id, to_chip_substate_id)) {
-		dev_err(sc->dev,
-				"%s: invalid state change, current %u, requested %u\n",
-				__func__, sc->chip_substate_id,
-				to_chip_substate_id);
-		return -EINVAL;
-	}
-
-	mutex_lock(&sc->state_lock);
-
-	if ((sc->chip_substate_id == CHIP_STATE_6_0 ||
-	   sc->chip_substate_id == CHIP_STATE_5_0) &&
+	if ((sc->curr_chip_substate_id == CHIP_STATE_6_0 ||
+	   sc->curr_chip_substate_id == CHIP_STATE_5_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0) {
 		if (sc->ab_alternate_boot)
 			ab_bootsequence(sc, 1);
@@ -370,47 +389,46 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 			ab_bootsequence(sc, 0);
 	}
 
-	if ((sc->chip_substate_id == CHIP_STATE_4_0 ||
-	   sc->chip_substate_id == CHIP_STATE_3_0) &&
+	if ((sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
+	   sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0)
 		ab_pmic_on(sc);
+
+	/*
+	 * TODO May need to roll-back the block states if only partial
+	 * blocks are set to destination state.
+	 */
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
 			to_chip_substate_id)) {
-		ret = -EINVAL;
-		goto cleanup;
+		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
 		      map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL),
 			to_chip_substate_id)) {
-		ret = -EINVAL;
-		goto cleanup;
+		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
 		      map->dram_block_state_id, true, to_chip_substate_id)) {
-		ret = -EINVAL;
-		goto cleanup;
+		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
 		      map->mif_block_state_id, true, to_chip_substate_id)) {
-		ret = -EINVAL;
-		goto cleanup;
+		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
 		      map->fsys_block_state_id, true, to_chip_substate_id)) {
-		ret = -EINVAL;
-		goto cleanup;
+		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
 		      map->aon_block_state_id, true, to_chip_substate_id)) {
-		ret = -EINVAL;
-		goto cleanup;
+		return -EINVAL;
 	}
 
 	if ((to_chip_substate_id == CHIP_STATE_5_0) ||
@@ -431,10 +449,37 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id)
 		ab_gpio_disable_ddr_sr(sc);
 	}
 
-	sc->chip_substate_id = to_chip_substate_id;
+	sc->curr_chip_substate_id = to_chip_substate_id;
 	complete_all(&sc->state_change_comp);
 
-cleanup:
+	return 0;
+}
+
+static int _ab_sm_set_state(struct ab_state_context *sc,
+		u32 dest_chip_substate_id)
+{
+	if (sc->dest_chip_substate_id == dest_chip_substate_id)
+		return 0;
+
+	if (!is_valid_transition(sc->curr_chip_substate_id,
+			dest_chip_substate_id)) {
+		dev_err(sc->dev,
+				"%s: invalid state change, current %u, requested %u\n",
+				__func__, sc->curr_chip_substate_id,
+				dest_chip_substate_id);
+		return -EINVAL;
+	}
+
+	sc->dest_chip_substate_id = dest_chip_substate_id;
+	return ab_sm_update_chip_state(sc);
+}
+
+int ab_sm_set_state(struct ab_state_context *sc, u32 dest_chip_substate_id)
+{
+	int ret;
+
+	mutex_lock(&sc->state_lock);
+	ret = _ab_sm_set_state(sc, dest_chip_substate_id);
 	mutex_unlock(&sc->state_lock);
 	return ret;
 }
@@ -515,7 +560,7 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 
 	reinit_completion(&sess->sc->state_change_comp);
 
-	sess->last_state = sess->sc->chip_substate_id;
+	sess->last_state = sess->sc->curr_chip_substate_id;
 	if (copy_to_user((void __user *)arg,
 				&sess->last_state,
 				sizeof(sess->last_state)))
@@ -693,7 +738,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	/* intitialize the default chip state */
 	ab_sm_ctx->chip_state_table = chip_state_map;
 	ab_sm_ctx->nr_chip_states = ARRAY_SIZE(chip_state_map);
-	ab_sm_ctx->chip_substate_id = CHIP_STATE_6_0;
+	ab_sm_ctx->dest_chip_substate_id = CHIP_STATE_6_0;
+	ab_sm_ctx->curr_chip_substate_id = CHIP_STATE_6_0;
 
 	mutex_init(&ab_sm_ctx->pmic_lock);
 	mutex_init(&ab_sm_ctx->state_lock);

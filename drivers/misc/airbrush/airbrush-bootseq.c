@@ -117,9 +117,9 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	gpio_cke_in = ab_gpio_get_ddr_iso(ab_ctx);
 	gpio_ddr_sr = ab_gpio_get_ddr_sr(ab_ctx);
 
-	state_off = (ab_ctx->chip_substate_id == CHIP_STATE_6_0) ||
+	state_off = (ab_ctx->curr_chip_substate_id == CHIP_STATE_6_0) ||
 			    ((gpio_cke_in == 0) && (gpio_ddr_sr == 0));
-	state_suspend = (ab_ctx->chip_substate_id == CHIP_STATE_5_0);
+	state_suspend = (ab_ctx->curr_chip_substate_id == CHIP_STATE_5_0);
 
 	if (state_suspend || state_off) {
 		ab_disable_pgood(ab_ctx);
