@@ -1030,6 +1030,18 @@ static int debugfs_dump_info_read(struct seq_file *seq, void *data)
 	seq_printf(seq, "\tClock master = %s\n",
 			display->ctrl[display->clk_master_idx].ctrl->name);
 
+	seq_puts(seq, "\tList of modes:\n");
+	list_for_each_entry(mode, &conn->modes, head) {
+		struct dsi_display_mode_priv_info *priv_info;
+
+		priv_info = (typeof(priv_info)) mode->private;
+
+		seq_printf(seq, "\t\t%dx%d@%d drm_clk:%u dsi_clk:%llu %s\n",
+			   mode->htotal, mode->vtotal, mode->vrefresh,
+			   mode->clock, priv_info->clk_rate_hz,
+			   mode->type & DRM_MODE_TYPE_PREFERRED ? "*" : "");
+	}
+
 	return 0;
 }
 
@@ -5313,6 +5325,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 	u32 num_dfps_rates, panel_mode_count, total_mode_count;
 	u32 mode_idx, array_idx = 0;
 	int i, rc = -EINVAL;
+	int preferred_timing;
 
 	if (!display || !out_modes) {
 		pr_err("Invalid params\n");
@@ -5352,14 +5365,21 @@ int dsi_display_get_modes(struct dsi_display *display,
 
 	panel_mode_count = display->panel->num_timing_nodes;
 
+	preferred_timing = display->cmdline_timing;
+	/* if there's no preferred timing, use first timing as preferred */
+	if (preferred_timing == NO_OVERRIDE)
+		preferred_timing = 0;
+
 	for (mode_idx = 0; mode_idx < panel_mode_count; mode_idx++) {
 		struct dsi_display_mode panel_mode;
 		int topology_override = NO_OVERRIDE;
 
-		if (display->cmdline_timing == mode_idx)
-			topology_override = display->cmdline_topology;
-
 		memset(&panel_mode, 0, sizeof(panel_mode));
+
+		if (preferred_timing == mode_idx) {
+			topology_override = display->cmdline_topology;
+			panel_mode.preferred = true;
+		}
 
 		rc = dsi_panel_get_mode(display->panel, mode_idx,
 						&panel_mode, topology_override);
