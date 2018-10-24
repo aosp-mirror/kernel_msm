@@ -1515,6 +1515,21 @@ static ssize_t ddr_mbist_store(struct device *dev,
 
 static DEVICE_ATTR_WO(ddr_mbist);
 
+/* Halt CPU only */
+static ssize_t cpu_cg_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	/* CPU clock gated */
+	MNH_SCU_OUTf(CCU_CLK_CTL, CPU_CLKEN, 0);
+
+	/* CPU clock enable based on CPU_CLKEN */
+	MNH_SCU_OUTf(CCU_CLK_CTL, HALT_CPUCG_EN, 0);
+
+	return count;
+}
+static DEVICE_ATTR_WO(cpu_cg);
+
 #if IS_ENABLED(CONFIG_MNH_SIG)
 /* issue signature verification of the firmware in memory and print results */
 static ssize_t verify_fw_show(struct device *dev,
@@ -1561,6 +1576,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_fw_ver.attr,
 	&dev_attr_mipi_config.attr,
 	&dev_attr_ddr_mbist.attr,
+	&dev_attr_cpu_cg.attr,
 #if IS_ENABLED(CONFIG_MNH_SIG)
 	&dev_attr_verify_fw.attr,
 #endif
