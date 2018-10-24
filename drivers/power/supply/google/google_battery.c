@@ -15,9 +15,10 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #ifdef CONFIG_PM_SLEEP
-// disabled for now, will need to keep track of sleep to potentially change
-// wake mask etc.
-//#define SUPPORT_PM_SLEEP
+/* disabled for now, will need to keep track of sleep to potentially change
+ * wake mask etc.
+ * #define SUPPORT_PM_SLEEP
+ */
 #endif
 
 #include <linux/kernel.h>
@@ -28,49 +29,23 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/pm_wakeup.h>
+#include "google_bms.h"
+#include "google_psy.h"
 
-/* TODO: b/117899012, move to google_bms.h */
-#define CHG_TEMP_NB_LIMITS_MAX 10
-#define CHG_VOLT_NB_LIMITS_MAX 5
 
 #define BATT_DELAY_INIT_MS 250
-#define DEFAULT_BATT_DRV_UPDATE_INTERVAL 30000
 
-/* TODO: b/117899012, move to google_bms.h */
-struct chg_profile {
-	u32 battery_capacity;
-	int temp_nb_limits;
-	s32 temp_limits[CHG_TEMP_NB_LIMITS_MAX];
-	int volt_nb_limits;
-	s32 volt_limits[CHG_VOLT_NB_LIMITS_MAX];
-	/* Array of constant current limits */
-	s32 *cccm_limits;
-	u32 fv_uv_resolution;
-	u32 fv_uv_margin_dpct;
-	u32 cv_range_accuracy;
-	u32 cv_otv_margin;
-	u32 cv_debounce_cnt;
-	u32 cv_update_interval;
-	u32 cv_tier_ov_cnt;
-	u32 cv_tier_switch_cnt;
-};
+#define DEFAULT_BATT_DRV_UPDATE_INTERVAL	30000
+#define BATT_WORK_ERROR_RETRY_MS		1000
 
-/* TODO: b/117899012,  move to google_bms.h */
+#define DEFAULT_BATT_DRV_RL_SOC_THRESHOLD	97
+
+
 struct batt_ssoc_state {
 	int ssoc_gdf;	/* output of gauge data filter */
 	int ssoc_uic;	/* output of UI Curves */
 	int ssoc_rl;	/* output of rate limiter */
-};
-
-/* TODO: share with google charger in google_bms.c */
-union chg_charger_state {
-	uint64_t v;
-	struct {
-		uint8_t chg_type;
-		uint8_t pad0[3];
-		uint16_t vchrg;
-		uint8_t pad1[2];
-	} f;
+	int ssoc;	/* level% */
 };
 
 enum batt_rl_status {
@@ -88,7 +63,7 @@ struct batt_drv {
 
 	struct delayed_work init_work;
 	struct delayed_work batt_work;
-	struct wakeup_source chg_ws;
+	struct wakeup_source batt_ws;
 
 	/* TODO: b/111407333, will likely need to adjust SOC% on wakeup */
 	bool init_complete;
@@ -107,8 +82,10 @@ struct batt_drv {
 	/* NG charging */
 	bool stop_charging;
 	int disable_charging;
-	struct chg_profile chg_profile;
-	union chg_charger_state chg_state;
+	struct gbms_chg_profile chg_profile;
+	u32 battery_capacity;
+
+	union gbms_charger_state chg_state;
 	int temp_idx;
 	int vbatt_idx;
 	int checked_cv_cnt;
@@ -116,15 +93,13 @@ struct batt_drv {
 	int checked_tier_switch_cnt;
 	int chg_mode;
 	int fv_uv;
-	int fcc;
+	int cc_max;
 	/* recharge logic */
 	enum batt_rl_status rl_status;
+	int rl_soc_threshold;
+
 	int fg_status;
 };
-
-/* Used as left operand also */
-#define CCCM_LIMITS(profile, ti, vi) \
-	profile->cccm_limits[(ti * profile->volt_nb_limits) + vi]
 
 static int psy_changed(struct notifier_block *nb,
 		       unsigned long action, void *data)
@@ -147,198 +122,133 @@ static int psy_changed(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-/* TODO: b/117899012,  move to google_bms.c, google_bms.h */
-#define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
-static inline int psy_get_prop(struct power_supply *psy,
-			       enum power_supply_property psp, char *prop_name)
-{
-	union power_supply_propval val;
-	int ret = 0;
+/* ------------------------------------------------------------------------- */
 
-	if (!psy)
-		return -EINVAL;
-	ret = power_supply_get_property(psy, psp, &val);
-	if (ret < 0) {
-		pr_err("failed to get %s from '%s', ret=%d\n",
-		       prop_name, psy->desc->name, ret);
-		return -EINVAL;
-	}
-	pr_debug("get %s for '%s' => %d\n",
-		 prop_name, psy->desc->name, val.intval);
-	return val.intval;
+static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
+{
+	return ssoc->ssoc_gdf;
 }
 
-/* TODO: b/117899012,  move to google_bms.c, google_bms.h */
-#define PSY_SET_PROP(psy, psp, val) psy_set_prop(psy, psp, val, #psp)
-static inline int psy_set_prop(struct power_supply *psy,
-			       enum power_supply_property psp,
-			       int intval, char *prop_name)
+/* TODO: b/111407333, apply UI curve to GDF */
+static int ssoc_apply_uic(struct batt_ssoc_state *ssoc)
 {
-	union power_supply_propval val;
-	int ret = 0;
+	return ssoc->ssoc_gdf;
+}
 
-	if (!psy)
+/* TODO: b/111407333, apply rate limiter to UIC */
+static int ssoc_apply_rl(struct batt_ssoc_state *ssoc)
+{
+	return ssoc->ssoc_uic;
+}
+
+/* TODO: b/111407333, software state of charge */
+static int ssoc_work(struct batt_ssoc_state *ssoc, struct power_supply *fg_psy)
+{
+	int soc;
+
+	/* gauge data filter: make sense of gauge data */
+	soc = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CAPACITY);
+	if (soc < 0)
 		return -EINVAL;
-	val.intval = intval;
-	pr_debug("set %s for '%s' to %d\n", prop_name, psy->desc->name, intval);
-	ret = power_supply_set_property(psy, psp, &val);
-	if (ret < 0) {
-		pr_err("failed to set %s for '%s', ret=%d\n",
-		       prop_name, psy->desc->name, ret);
-		return -EINVAL;
-	}
+	ssoc->ssoc_gdf = soc;
+
+	/* apply UI curves: spoof UI @ EOC */
+	ssoc->ssoc_uic = ssoc_apply_uic(ssoc);
+	/* apply rate limiter: monotonicity and rate of change */
+	ssoc->ssoc_rl = ssoc_apply_rl(ssoc);
+
 	return 0;
 }
+
+/* reported to userspace */
+static int ssoc_get_capacity(const struct batt_drv *batt_drv)
+{
+	/* FULL while in recharge logic, hack until b/111407333 */
+	if (batt_drv->rl_status != BATT_RL_STATUS_NONE)
+		return 100;
+	/* TODO: round to 1% */
+	return batt_drv->ssoc_state.ssoc_rl;
+}
+
+/* enter recharge logic on charger_DONE or Gauge FULL */
+static void batt_rl_enter(struct batt_drv *batt_drv)
+{
+	if (batt_drv->rl_status != BATT_RL_STATUS_NONE)
+		return;
+
+	/* TODO: modify UI curve */
+
+	/* enter RL, UI curve will report 100% */
+	batt_drv->rl_status = BATT_RL_STATUS_DISCHARGE;
+
+	/* TODO: should I trigger a ps change? */
+}
+
+/* just reset state, no PS notifications */
+static void batt_rl_reset(struct batt_drv *batt_drv)
+{
+	batt_drv->rl_status = BATT_RL_STATUS_NONE;
+}
+
+/* exit recharge logic */
+static void batt_rl_exit(struct batt_drv *batt_drv)
+{
+	if (batt_drv->rl_status == BATT_RL_STATUS_NONE)
+		return;
+	batt_rl_reset(batt_drv);
+	if (batt_drv->psy)
+		power_supply_changed(batt_drv->psy);
+}
+
+/* RL recharge: after SSOC work, restat charging */
+static void batt_rl_update_status(struct batt_drv *batt_drv)
+{
+	struct batt_ssoc_state *ssoc = &batt_drv->ssoc_state;
+	int soc;
+
+	/* already in _RECHARGE or _NONE, done */
+	if (batt_drv->rl_status != BATT_RL_STATUS_DISCHARGE)
+		return;
+
+	/* recharge logic work on real soc */
+	soc = ssoc_get_real(ssoc);
+	if (batt_drv->rl_soc_threshold && soc <= batt_drv->rl_soc_threshold) {
+		batt_drv->rl_status = BATT_RL_STATUS_RECHARGE;
+		if (batt_drv->psy)
+			power_supply_changed(batt_drv->psy);
+	}
+
+}
+
+/* ------------------------------------------------------------------------- */
 
 static inline void reset_chg_drv_state(struct batt_drv *batt_drv)
 {
 	batt_drv->temp_idx = -1;
 	batt_drv->vbatt_idx = -1;
 	batt_drv->fv_uv = -1;
+	batt_drv->cc_max = -1;
 	batt_drv->checked_cv_cnt = 0;
 	batt_drv->checked_ov_cnt = 0;
 	batt_drv->checked_tier_switch_cnt = 0;
 	batt_drv->disable_charging = 0;
 	batt_drv->stop_charging = true;
+	batt_rl_reset(batt_drv);
 }
-
-/* 1. charge profile idx based on the battery temperature
- * TODO: b/117899012,  move to google_bms.c, google_bms.h
- */
-static int msc_temp_idx(struct chg_profile *profile, int temp)
-{
-	int temp_idx = 0;
-
-	while (temp_idx < profile->temp_nb_limits - 1 &&
-	       temp >= profile->temp_limits[temp_idx + 1])
-		temp_idx++;
-
-	return temp_idx;
-}
-
-/* 2. compute the step index given the battery voltage
- * When selecting an index need to make sure that headroom for the tier voltage
- * will allow to send to the battery _at least_ next tier max FCC current and
- * well over charge termination current.
- * TODO: b/117899012,  move to google_bms.c, google_bms.h
- */
-static int msc_voltage_idx(struct chg_profile *profile, int vbatt)
-{
-	int vbatt_idx = 0;
-
-	while (vbatt_idx < profile->volt_nb_limits - 1 &&
-	       vbatt > profile->volt_limits[vbatt_idx])
-		vbatt_idx++;
-
-	/* assumes that 3 times the hardware resolution is ok */
-	if (vbatt_idx != profile->volt_nb_limits - 1) {
-		const int vt = profile->volt_limits[vbatt_idx];
-		const int headr = profile->fv_uv_resolution * 3;
-
-		if ((vt - vbatt) < headr)
-			vbatt_idx += 1;
-	}
-
-	return vbatt_idx;
-}
-
-/* Cap to fv_uv_margin_pct of VTIER if needed
- * TODO: b/117899012,  move to google_bms.c, google_bms.h
- */
-static int msc_round_fv_uv(struct chg_profile *profile, int vtier, int fv_uv)
-{
-	int result = fv_uv;
-	const unsigned int fv_uv_max = (vtier / 1000) *
-					profile->fv_uv_margin_dpct;
-
-	if (fv_uv_max != 0 && fv_uv > fv_uv_max)
-		result = fv_uv_max;
-
-	if (fv_uv_max != 0)
-		pr_info("MSC_ROUND: vtier=%d fv_uv_max=%d fv_uv=%d -> %d\n",
-			vtier, fv_uv_max, fv_uv, result);
-
-	return result;
-}
-
-/* poll the battery, run SOC% etc, scheduled from psy_changed and from timer */
-static void google_battery_work(struct work_struct *work)
-{
-	struct batt_drv *batt_drv =
-	    container_of(work, struct batt_drv, batt_work.work);
-	struct power_supply *fg_psy = batt_drv->fg_psy;
-	int update_interval = batt_drv->update_interval;
-	int soc, fg_status;
-
-	pr_debug("battery work item\n");
-
-	__pm_stay_awake(&batt_drv->chg_ws);
-
-	/* TODO: implement recharge logic, missing disconect/reconnect cases
-	 * and corner cases.
-	 */
-	mutex_lock(&batt_drv->chg_lock);
-	fg_status = PSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS);
-	if (fg_status < 0) {
-		goto reschedule;
-	} else if (fg_status == POWER_SUPPLY_STATUS_FULL &&
-			fg_status != batt_drv->fg_status) {
-		/* trigger recharge logic state machine */
-		/* if (batt_drv->rl_status != BATT_RL_STATUS_RECHARGE) {
-		 *     Change the UI curve if not changed already.
-		 * }
-		 */
-		batt_drv->rl_status = BATT_RL_STATUS_DISCHARGE;
-	}
-	mutex_unlock(&batt_drv->chg_lock);
-
-	batt_drv->fg_status = fg_status;
-
-	mutex_lock(&batt_drv->batt_lock);
-	soc = PSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CAPACITY);
-
-	/* TODO: b/111407333 software state of charge, separate to functions */
-	batt_drv->ssoc_state.ssoc_gdf = soc;
-	batt_drv->ssoc_state.ssoc_uic = soc;
-	batt_drv->ssoc_state.ssoc_rl = soc;
-
-	mutex_unlock(&batt_drv->batt_lock);
-
-	if (batt_drv->rl_status != BATT_RL_STATUS_DISCHARGE) {
-		/* in recharge or outside RL zone */
-	} else if (batt_drv->ssoc_state.ssoc_gdf > 95) {
-		/* TODO: voltage or SOC threshold in DT */
-		batt_drv->rl_status = BATT_RL_STATUS_RECHARGE;
-
-		if (batt_drv->psy)
-			power_supply_changed(batt_drv->psy);
-	}
-
-	pr_info("batt_work: soc=%d\n", soc);
-
-reschedule:
-	if (update_interval) {
-		pr_debug("rerun battery work in %d ms\n", update_interval);
-		schedule_delayed_work(&batt_drv->batt_work,
-				      msecs_to_jiffies(update_interval));
-	}
-
-	__pm_relax(&batt_drv->chg_ws);
-}
-
 
 static int google_charge_logic_internal(struct batt_drv *batt_drv)
 {
 	struct power_supply *fg_psy = batt_drv->fg_psy;
-	struct chg_profile *profile = &batt_drv->chg_profile;
+	struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	int vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv, temp_idx;
 	int temp, ibatt, vbatt, vchrg, chg_type;
 	int update_interval = 0; /* TODO: route this to power supply somehow */
 
-	temp = PSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP);
+	temp = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP);
 	if (temp == -EINVAL)
-		return -EINVAL;
-	/* JEITA, update _SOH, take out from here */
+		return -EIO;
+
+	/* JEITA, update _SOH? */
 	if (temp < profile->temp_limits[0] ||
 	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
 		if (!batt_drv->stop_charging) {
@@ -354,27 +264,27 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 		batt_drv->stop_charging = false;
 	}
 
-	ibatt = PSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
-	vbatt = PSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	ibatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
+	vbatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	if (ibatt == -EINVAL || vbatt == -EINVAL)
-		return -EINVAL;
+		return -EIO;
 
-	/* from charger state */
+	/* invalid vchg disable IDROP compensation in FAST */
+	chg_type = batt_drv->chg_state.f.chg_type;
 	vchrg = batt_drv->chg_state.f.vchrg;
 	if (vchrg <= 0)
 		vchrg = vbatt;
-	chg_type = batt_drv->chg_state.f.chg_type;
 
 	/* Multi Step Charging with IRDROP compensation when vchrg is != 0
 	 * vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv
 	 */
-	temp_idx = msc_temp_idx(profile, temp);
+	temp_idx = gbms_msc_temp_idx(profile, temp);
 	if (temp_idx != batt_drv->temp_idx || batt_drv->fv_uv == -1 ||
 		batt_drv->vbatt_idx == -1) {
 
 		/* seed voltage only when really needed */
 		if (batt_drv->vbatt_idx == -1)
-			vbatt_idx = msc_voltage_idx(profile, vbatt);
+			vbatt_idx = gbms_msc_voltage_idx(profile, vbatt);
 
 		pr_info("MSC_SEED temp=%d vbatt=%d temp_idx:%d->%d, vbatt_idx:%d->%d\n",
 			temp, vbatt, batt_drv->temp_idx, temp_idx,
@@ -391,7 +301,7 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 		 * disconnect.
 		 * NOTE: same vbat_idx will not change fv_uv
 		 */
-		vbatt_idx = msc_voltage_idx(profile, vbatt);
+		vbatt_idx = gbms_msc_voltage_idx(profile, vbatt);
 		update_interval = profile->cv_update_interval;
 
 		pr_info("MSC_DSG vbatt_idx:%d->%d vbatt=%d ibatt=%d fv_uv=%d cv_cnt=%d ov_cnt=%d\n",
@@ -414,13 +324,13 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 		const int utv_margin = profile->cv_range_accuracy;
 		const int otv_margin = profile->cv_otv_margin;
 		const int switch_cnt = profile->cv_tier_switch_cnt;
-		const int cc_next_max = CCCM_LIMITS(profile, temp_idx,
+		const int cc_next_max = GBMS_CCCM_LIMITS(profile, temp_idx,
 						    vbatt_idx + 1);
 
 		if ((vbatt - vtier) > otv_margin) {
 		/* OVER: vbatt over vtier for more than margin (usually 0) */
 			const int cc_max =
-				CCCM_LIMITS(profile, temp_idx, vbatt_idx);
+				GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx);
 
 			/* pullback when over tier voltage, fast poll, penalty
 			 * on TAPER_RAISE and no cv debounce (so will consider
@@ -428,7 +338,7 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 			 * NOTE: lowering voltage might cause a small drop in
 			 * current (we should remain  under next tier)
 			 */
-			fv_uv = msc_round_fv_uv(profile, vtier,
+			fv_uv = gbms_msc_round_fv_uv(profile, vtier,
 				fv_uv - profile->fv_uv_resolution);
 			if (fv_uv < vtier)
 				fv_uv = vtier;
@@ -469,7 +379,7 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 		 * NOTE: could add PID loop for management of thermals
 		 */
 			if (vchrg && vchrg > vbatt) {
-				fv_uv = msc_round_fv_uv(profile, vtier,
+				fv_uv = gbms_msc_round_fv_uv(profile, vtier,
 					vtier + (vchrg - vbatt));
 			} else {
 				/* could keep it steady instead */
@@ -523,7 +433,7 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 		/* TAPER_RAISE: under tier vlim, raise one click & debounce
 		 * taper (see above handling of "close enough")
 		 */
-			fv_uv = msc_round_fv_uv(profile, vtier,
+			fv_uv = gbms_msc_round_fv_uv(profile, vtier,
 				fv_uv + profile->fv_uv_resolution);
 			update_interval = profile->cv_update_interval;
 
@@ -568,7 +478,8 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 	if ((vbatt_idx != batt_drv->vbatt_idx)
 		|| (temp_idx != batt_drv->temp_idx)
 		|| (fv_uv != batt_drv->fv_uv)) {
-		const int cc_max = CCCM_LIMITS(profile, temp_idx, vbatt_idx);
+		const int cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
+						    vbatt_idx);
 
 		/* need a new fv_uv only on a new voltage tier */
 		if (vbatt_idx != batt_drv->vbatt_idx) {
@@ -585,205 +496,131 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 		batt_drv->vbatt_idx = vbatt_idx;
 		batt_drv->temp_idx = temp_idx;
 		batt_drv->fv_uv = fv_uv;
-		batt_drv->fcc = cc_max;
+		batt_drv->cc_max = cc_max;
 	}
 
 	return 0;
 }
 
-static void google_charge_logic(struct batt_drv *batt_drv)
+static int google_charge_logic(struct batt_drv *batt_drv)
 {
 	int err;
 
 	if (!batt_drv->chg_profile.cccm_limits)
-		return;
+		return -EINVAL;
 
-	__pm_stay_awake(&batt_drv->chg_ws);
+	__pm_stay_awake(&batt_drv->batt_ws);
 	pr_debug("battery charging item\n");
 
-	/* TODO: reset batt_drv->rl_status to BATT_RL_STATUS_NONE and
-	 * set batt->fg_status to proper value on disconnect.
-	 */
+	pr_info("MSC_STATE: chg_state[%x:%x:%x:%x]:%lx\n",
+		batt_drv->chg_state.f.chg_type,
+		batt_drv->chg_state.f.chg_status,
+		batt_drv->chg_state.f.flags,
+		batt_drv->chg_state.f.vchrg,
+		(unsigned long)batt_drv->chg_state.v);
+
+	/* google_charger can trigger the recharge logic and get out of it */
+	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0)
+		batt_rl_exit(batt_drv);
+	else if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0)
+		batt_rl_enter(batt_drv);
+
 	err = google_charge_logic_internal(batt_drv);
 	if (err == 0) {
-		pr_info("chg_ng: fv_uv=%d fcc=%d\n",
-			batt_drv->fv_uv, batt_drv->fcc);
+		pr_info("chg_ng: fv_uv=%d cc_max=%d\n",
+			batt_drv->fv_uv, batt_drv->cc_max);
 	} else {
-		pr_err("chg_ng: ERROR fv_uv=%d fcc=%d\n",
-			batt_drv->fv_uv, batt_drv->fcc);
+		pr_err("chg_ng: ERROR fv_uv=%d cc_max=%d\n",
+			batt_drv->fv_uv, batt_drv->cc_max);
 	}
 
-	__pm_relax(&batt_drv->chg_ws);
+	__pm_relax(&batt_drv->batt_ws);
+	return err;
 }
 
-/* TODO: move to google_bms.c */
-static void dump_profile(struct chg_profile *profile)
-{
-	char buff[256];
-	int ti, vi, count, len = sizeof(buff);
-
-	pr_info("Profile constant charge limits:\n");
-	count = 0;
-	for (vi = 0; vi < profile->volt_nb_limits; vi++) {
-		count += scnprintf(buff + count, len - count, "  %4d",
-				   profile->volt_limits[vi] / 1000);
-	}
-	pr_info("|T \\ V%s\n", buff);
-
-	for (ti = 0; ti < profile->temp_nb_limits - 1; ti++) {
-		count = 0;
-		count += scnprintf(buff + count, len - count, "|%2d:%2d",
-				   profile->temp_limits[ti] / 10,
-				   profile->temp_limits[ti + 1] / 10);
-		for (vi = 0; vi < profile->volt_nb_limits; vi++) {
-			count += scnprintf(buff + count, len - count, "  %4d",
-					   CCCM_LIMITS(profile, ti, vi) / 1000);
-		}
-		pr_info("%s\n", buff);
-	}
-}
-
-/* TODO: move to google_bms.c ? */
-static void batt_init_chg_table(struct chg_profile *profile)
-{
-	u32 ccm;
-	int vi, ti;
-
-	/* chg-battery-capacity is in mAh, chg-cc-limits relative to 100 */
-	for (ti = 0; ti < profile->temp_nb_limits - 1; ti++) {
-		for (vi = 0; vi < profile->volt_nb_limits; vi++) {
-			ccm = CCCM_LIMITS(profile, ti, vi);
-			ccm *= profile->battery_capacity * 10;
-			// round to the nearest resolution the PMIC can handle
-			CCCM_LIMITS(profile, ti, vi) = ccm;
-		}
-	}
-}
-
-/* TODO: factor with google_charger and move to google_bms.c */
 static int batt_init_chg_profile(struct batt_drv *batt_drv)
 {
-	struct device *dev = batt_drv->device;
-	struct device_node *node = dev->of_node;
-	struct chg_profile *profile = &batt_drv->chg_profile;
-	u32 cccm_array_size;
-	int ret = 0, vi;
+	struct device_node *node = batt_drv->device->of_node;
+	struct gbms_chg_profile *profile = &batt_drv->chg_profile;
+	int ret = 0;
 
 	/* handle retry */
 	if (profile->cccm_limits)
 		return 0;
 
-	profile->temp_nb_limits =
-	    of_property_count_elems_of_size(node, "google,chg-temp-limits",
-					    sizeof(u32));
-	if (profile->temp_nb_limits <= 0) {
-		ret = profile->temp_nb_limits;
-		pr_err("cannot read chg-temp-limits, ret=%d\n", ret);
-		return ret;
-	}
-	if (profile->temp_nb_limits > CHG_TEMP_NB_LIMITS_MAX) {
-		pr_err("chg-temp-nb-limits exceeds driver max: %d\n",
-		       CHG_TEMP_NB_LIMITS_MAX);
+	ret = gbms_init_chg_profile(profile, node);
+	if (ret < 0)
 		return -EINVAL;
-	}
-	ret = of_property_read_u32_array(node, "google,chg-temp-limits",
-					 profile->temp_limits,
-					 profile->temp_nb_limits);
-	if (ret < 0) {
-		pr_err("cannot read chg-temp-limits table, ret=%d\n", ret);
-		return ret;
-	}
-
-	profile->volt_nb_limits =
-	    of_property_count_elems_of_size(node, "google,chg-cv-limits",
-					    sizeof(u32));
-	if (profile->volt_nb_limits <= 0) {
-		ret = profile->volt_nb_limits;
-		pr_err("cannot read chg-cv-limits, ret=%d\n", ret);
-		return ret;
-	}
-	if (profile->volt_nb_limits > CHG_VOLT_NB_LIMITS_MAX) {
-		pr_err("chg-cv-nb-limits exceeds driver max: %d\n",
-		       CHG_VOLT_NB_LIMITS_MAX);
-		return -EINVAL;
-	}
-	ret = of_property_read_u32_array(node, "google,chg-cv-limits",
-					 profile->volt_limits,
-					 profile->volt_nb_limits);
-	if (ret < 0) {
-		pr_err("cannot read chg-cv-limits table, ret=%d\n", ret);
-		return ret;
-	}
-	for (vi = 0; vi < profile->volt_nb_limits; vi++)
-		profile->volt_limits[vi] = profile->volt_limits[vi];
-
-	cccm_array_size =
-	    (profile->temp_nb_limits - 1) * profile->volt_nb_limits;
-	profile->cccm_limits = devm_kzalloc(dev,
-					    sizeof(s32) * cccm_array_size,
-					    GFP_KERNEL);
-
-	ret = of_property_read_u32_array(node, "google,chg-cc-limits",
-					 profile->cccm_limits, cccm_array_size);
-	if (ret < 0) {
-		pr_err("cannot read chg-cc-limits table, ret=%d\n", ret);
-		devm_kfree(dev, profile->cccm_limits);
-		profile->cccm_limits = 0;
-		return ret;
-	}
-
 
 	ret = of_property_read_u32(node, "google,chg-battery-capacity",
-				   &profile->battery_capacity);
+				   &batt_drv->battery_capacity);
 	if (ret < 0)
 		pr_warn("cannot read chg-battery-capacity, ret=%d\n", ret);
 
-	/* taper step, */
-	ret = of_property_read_u32(node, "google,fv-uv-resolution",
-				   &profile->fv_uv_resolution);
-	if (ret < 0)
-		profile->fv_uv_resolution = 25000;
-
-	/* IEEE1725, default to 0, 1030 for 3% of VTIER */
-	ret = of_property_read_u32(node, "google,fv-uv-margin-dpct",
-				   &profile->fv_uv_margin_dpct);
-	if (ret < 0)
-		profile->fv_uv_margin_dpct = 1020;
-
-	/* how close to a voltage is close enough */
-	ret = of_property_read_u32(node, "google,cv-range-accuracy",
-				   &profile->cv_range_accuracy);
-	if (ret < 0)
-		profile->cv_range_accuracy = profile->fv_uv_resolution / 2;
-
-	/* allow being "a little" over tier voltage, experimental */
-	ret = of_property_read_u32(node, "google,cv-otv-margin",
-				   &profile->cv_otv_margin);
-	if (ret < 0)
-		profile->cv_otv_margin = 0;
-
-	ret = of_property_read_u32(node, "google,cv-debounce-cnt",
-				   &profile->cv_debounce_cnt);
-	if (ret < 0)
-		profile->cv_debounce_cnt = 3;
-
-	ret = of_property_read_u32(node, "google,cv-update-interval",
-				   &profile->cv_update_interval);
-	if (ret < 0)
-		profile->cv_update_interval = 2000;
-
-	ret = of_property_read_u32(node, "google,cv-tier-ov-cnt",
-				   &profile->cv_tier_ov_cnt);
-	if (ret < 0)
-		profile->cv_tier_ov_cnt = 10;
-
-	ret = of_property_read_u32(node, "google,cv-tier-switch-cnt",
-				   &profile->cv_tier_switch_cnt);
-	if (ret < 0)
-		profile->cv_tier_switch_cnt = 3;
-
 	return 0;
 }
+
+/* ------------------------------------------------------------------------- */
+
+/* poll the battery, run SOC% etc, scheduled from psy_changed and from timer */
+static void google_battery_work(struct work_struct *work)
+{
+	struct batt_drv *batt_drv =
+	    container_of(work, struct batt_drv, batt_work.work);
+	struct power_supply *fg_psy = batt_drv->fg_psy;
+	struct batt_ssoc_state *ssoc = &batt_drv->ssoc_state;
+	int update_interval = batt_drv->update_interval;
+	int ret;
+
+	pr_debug("battery work item\n");
+
+	__pm_stay_awake(&batt_drv->batt_ws);
+
+	mutex_lock(&batt_drv->chg_lock);
+	if (batt_drv->rl_status == BATT_RL_STATUS_NONE) {
+		int fg_status;
+
+		fg_status = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS);
+		if (fg_status < 0)
+			goto reschedule;
+
+		/* fuel gauge triggered recharge logic */
+		if (fg_status == POWER_SUPPLY_STATUS_FULL)
+			batt_rl_enter(batt_drv);
+
+	}
+
+	mutex_lock(&batt_drv->batt_lock);
+	ret = ssoc_work(ssoc, fg_psy);
+	pr_info("SSOC=%d%% gdf=%d, uic=%d, rl=%d\n",
+		ssoc_get_capacity(batt_drv),
+		ssoc->ssoc_gdf, ssoc->ssoc_uic, ssoc->ssoc_rl);
+
+	/* TODO: poll other data here */
+
+	mutex_unlock(&batt_drv->batt_lock);
+
+	if (ret < 0) {
+		update_interval = BATT_WORK_ERROR_RETRY_MS;
+		goto reschedule;
+	}
+
+	batt_rl_update_status(batt_drv);
+
+reschedule:
+	mutex_unlock(&batt_drv->chg_lock);
+
+	if (update_interval) {
+		pr_debug("rerun battery work in %d ms\n", update_interval);
+		schedule_delayed_work(&batt_drv->batt_work,
+				      msecs_to_jiffies(update_interval));
+	}
+
+	__pm_relax(&batt_drv->batt_ws);
+}
+
+/* ------------------------------------------------------------------------- */
+
 
 static int init_debugfs(struct batt_drv *batt_drv)
 {
@@ -849,7 +686,7 @@ static int gbatt_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_CAPACITY:
 		mutex_lock(&batt_drv->batt_lock);
-		val->intval = batt_drv->ssoc_state.ssoc_rl;
+		val->intval = ssoc_get_capacity(batt_drv);
 		mutex_unlock(&batt_drv->batt_lock);
 		break;
 
@@ -863,13 +700,13 @@ static int gbatt_get_property(struct power_supply *psy,
 		    batt_drv->rl_status == BATT_RL_STATUS_DISCHARGE) {
 			val->intval = 0;
 		} else {
-			val->intval = batt_drv->fv_uv;
+			val->intval = batt_drv->cc_max;
 		}
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		mutex_lock(&batt_drv->chg_lock);
-		val->intval = batt_drv->fcc;
+		val->intval = batt_drv->fv_uv;
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
 
@@ -902,6 +739,7 @@ static int gbatt_set_property(struct power_supply *psy,
 				 const union power_supply_propval *val)
 {
 	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret;
 
 #ifdef SUPPORT_PM_SLEEP
 	pm_runtime_get_sync(chip->device);
@@ -914,14 +752,12 @@ static int gbatt_set_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
 		mutex_lock(&batt_drv->chg_lock);
-		batt_drv->chg_state.v = val->intval;
+		batt_drv->chg_state.v = val->int64val;
 
-		pr_info("MSC_STATE: val=%x, chg_type=%x vchrg=%d\n",
-			batt_drv->chg_state.v,
-			batt_drv->chg_state.f.chg_type,
-			batt_drv->chg_state.f.vchrg);
+		ret = google_charge_logic(batt_drv);
+		if (ret < 0)
+			return -EINVAL;
 
-		google_charge_logic(batt_drv);
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	default:
@@ -967,7 +803,6 @@ static void google_battery_init_work(struct work_struct *work)
 	mutex_init(&batt_drv->chg_lock);
 	mutex_init(&batt_drv->batt_lock);
 
-
 	fg_psy = power_supply_get_by_name(batt_drv->fg_psy_name);
 	if (!fg_psy) {
 		pr_info("failed to get \"%s\" power supply, retrying...\n",
@@ -979,26 +814,37 @@ static void google_battery_init_work(struct work_struct *work)
 
 	ret = batt_init_chg_profile(batt_drv);
 	if (ret < 0) {
-		// No support for charge table
+		/* No support for charge table, legacy */
 		pr_err("charging profile disabled, ret=%d\n", ret);
 	} else {
-		struct chg_profile *profile = &batt_drv->chg_profile;
+		struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 
 		/* use battery FULL design when capacity is not specified */
-		if (profile->battery_capacity == 0) {
+		if (batt_drv->battery_capacity == 0) {
 			u32 fc;
 
-			fc = PSY_GET_PROP(fg_psy,
+			fc = GPSY_GET_PROP(fg_psy,
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN);
 			if (fc == -EINVAL)
 				goto retry_init_work;
 
-			profile->battery_capacity = fc / 1000;
+			/* convert uA to mAh*/
+			batt_drv->battery_capacity = fc / 1000;
 		}
 
+		/* NOTE: with NG charger tolerance is applied from "charger" */
+		gbms_init_chg_table(profile, batt_drv->battery_capacity);
 		pr_info("successfully read charging profile:\n");
-		batt_init_chg_table(profile);
-		dump_profile(profile);
+		gbms_dump_chg_profile(profile);
+
+		/* recharge logic */
+		ret = of_property_read_u32(batt_drv->device->of_node,
+					"google,recharge-soc-threshold",
+					&batt_drv->rl_soc_threshold);
+		if (ret < 0)
+			batt_drv->rl_soc_threshold =
+				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
+
 	}
 
 	batt_drv->fg_nb.notifier_call = psy_changed;
@@ -1007,7 +853,7 @@ static void google_battery_init_work(struct work_struct *work)
 		pr_err("google_battery: cannot register power supply notifer, ret=%d\n",
 			ret);
 
-	wakeup_source_init(&batt_drv->chg_ws, gbatt_psy_desc.name);
+	wakeup_source_init(&batt_drv->batt_ws, gbatt_psy_desc.name);
 
 	batt_drv->psy = devm_power_supply_register(batt_drv->device,
 					       &gbatt_psy_desc, &psy_cfg);
@@ -1088,7 +934,9 @@ static int google_battery_remove(struct platform_device *pdev)
 		if (batt_drv->fg_psy)
 			power_supply_put(batt_drv->fg_psy);
 
-		wakeup_source_trash(&batt_drv->chg_ws);
+		gbms_free_chg_profile(&batt_drv->chg_profile);
+
+		wakeup_source_trash(&batt_drv->batt_ws);
 	}
 
 	return 0;
