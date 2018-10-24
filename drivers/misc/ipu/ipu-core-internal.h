@@ -16,14 +16,19 @@
 #ifndef __IPU_CORE_INTERNAL_H__
 #define __IPU_CORE_INTERNAL_H__
 
+#include <linux/atomic.h>
 #include <linux/ipu-core.h>
 #include <linux/iommu.h>
 #include <linux/mutex.h>
 #include <linux/pm_domain.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 #include "ipu-adapter.h"
 #include "ipu-core-jqs-structs.h"
+
+#define IPU_STATE_LINK_READY (1 << 0)
+#define IPU_STATE_JQS_READY  (1 << 1)
 
 /* Host-side only data associated with a jqs_circular_buffer */
 struct host_jqs_cbuf {
@@ -143,6 +148,8 @@ struct paintbox_bus {
 #endif
 	struct paintbox_jqs_msg_transport *jqs_msg_transport;
 	spinlock_t irq_lock;
+	struct work_struct recovery_work;
+	atomic_t state;
 };
 
 struct paintbox_device {
@@ -158,6 +165,16 @@ struct paintbox_device {
 static inline struct paintbox_device *to_paintbox_device(struct device *dev)
 {
 	return container_of(dev, struct paintbox_device, dev);
+}
+
+static inline bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
+{
+	return !!(atomic_read(&bus->state) & IPU_STATE_JQS_READY);
+}
+
+static inline bool ipu_core_link_is_ready(struct paintbox_bus *bus)
+{
+	return !!(atomic_read(&bus->state) & IPU_STATE_LINK_READY);
 }
 
 static inline void ipu_core_writel(struct paintbox_bus *bus, uint32_t val,

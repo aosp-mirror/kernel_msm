@@ -58,6 +58,7 @@ struct paintbox_data;
  */
 struct paintbox_session {
 	struct paintbox_data *dev;
+	struct list_head session_entry;
 	struct list_head dma_list;
 	struct list_head stp_list;
 	struct list_head lbp_list;
@@ -273,6 +274,7 @@ struct paintbox_data {
 	struct idr session_idr;
 
 	struct list_head bulk_alloc_waiting_list;
+	struct list_head session_list;
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 	struct paintbox_debug apb_debug;

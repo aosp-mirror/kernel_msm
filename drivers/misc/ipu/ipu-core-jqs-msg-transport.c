@@ -488,6 +488,11 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	struct host_jqs_queue_waiter *waiter = &host_q->waiter;
 	ssize_t ret;
 
+	if (!ipu_core_jqs_is_ready(bus)) {
+		dev_err(bus->parent_dev, "%s: JQS is not ready\n", __func__);
+		return -ENETDOWN;
+	}
+
 	mutex_lock(&trans->lock);
 
 	/* If the queue was freed before the trans->lock was acquired for the
@@ -567,6 +572,11 @@ ssize_t ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
 	struct host_jqs_cbuf *host_cbuf = &host_q->host_sys_jqs_cbuf;
 	ssize_t bytes_written;
 
+	if (!ipu_core_jqs_is_ready(bus)) {
+		dev_err(bus->parent_dev, "%s: JQS is not ready\n", __func__);
+		return -ENETDOWN;
+	}
+
 	mutex_lock(&trans->lock);
 
 	bytes_written = ipu_core_jqs_cbuf_write(bus, host_cbuf, buf, size,
@@ -587,6 +597,11 @@ ssize_t ipu_core_jqs_msg_transport_kernel_write(struct paintbox_bus *bus,
 			&trans->queues[JQS_TRANSPORT_KERNEL_QUEUE_ID];
 	struct host_jqs_cbuf *host_cbuf = &host_q->host_sys_jqs_cbuf;
 	ssize_t bytes_written;
+
+	if (!ipu_core_jqs_is_ready(bus)) {
+		dev_err(bus->parent_dev, "%s: JQS is not ready\n", __func__);
+		return -ENETDOWN;
+	}
 
 	mutex_lock(&trans->lock);
 

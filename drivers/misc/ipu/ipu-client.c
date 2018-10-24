@@ -149,6 +149,8 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 
 	mutex_lock(&pb->lock);
 
+	list_add_tail(&session->session_entry, &pb->session_list);
+
 	ret = pm_runtime_get_sync(pb->dev);
 	if (ret < 0)
 		goto free_session;
@@ -186,6 +188,7 @@ put_runtime:
 	pm_runtime_mark_last_busy(pb->dev);
 	pm_runtime_put_autosuspend(pb->dev);
 free_session:
+	list_del(&session->session_entry);
 	mutex_unlock(&pb->lock);
 	kfree(session);
 
@@ -228,6 +231,8 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 
 	pm_runtime_mark_last_busy(pb->dev);
 	ret = pm_runtime_put_autosuspend(pb->dev);
+
+	list_del(&session->session_entry);
 
 	mutex_unlock(&pb->lock);
 
@@ -363,13 +368,19 @@ static void ipu_client_get_capabilities(struct paintbox_data *pb)
 static void ipu_client_firmware_down(struct device *dev)
 {
 	struct paintbox_data *pb = dev_get_drvdata(dev);
+	struct paintbox_session *session, *session_next;
 
 	dev_dbg(pb->dev, "JQS firmware is going down\n");
 
-	/* TODO(b/114760293):  This needs to handle a reset notification in the
-	 * middle of a job.  Right now this will only work when the device is
-	 * quiescent.
+	/* Walk the session list and notify the sessions that the JQS is down.
 	 */
+	mutex_lock(&pb->lock);
+
+	list_for_each_entry_safe(session, session_next, &pb->session_list,
+			session_entry)
+		ipu_queue_session_release(pb, session);
+
+	mutex_unlock(&pb->lock);
 }
 
 static void ipu_client_firmware_up(struct device *dev)
@@ -377,11 +388,6 @@ static void ipu_client_firmware_up(struct device *dev)
 	struct paintbox_data *pb = dev_get_drvdata(dev);
 
 	dev_dbg(pb->dev, "JQS firmware is ready\n");
-
-	/* TODO(b/114760293):  This needs to handle a reset notification in the
-	 * middle of a job.  Right now this will only work when the device is
-	 * quiescent.
-	 */
 }
 
 static const struct paintbox_device_ops ipu_client_dev_ops = {
@@ -436,6 +442,7 @@ static int ipu_client_probe(struct device *dev)
 	pb->misc_device.fops  = &ipu_client_fops,
 
 	INIT_LIST_HEAD(&pb->bulk_alloc_waiting_list);
+	INIT_LIST_HEAD(&pb->session_list);
 
 	ret = misc_register(&pb->misc_device);
 	if (ret < 0) {

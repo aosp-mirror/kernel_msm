@@ -193,9 +193,17 @@ void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
 	bus->jqs.status = JQS_FW_STATUS_REQUESTED;
 }
 
-static void ipu_core_jqs_power_enable(struct paintbox_bus *bus,
+static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 		dma_addr_t boot_ab_paddr, dma_addr_t smem_ab_paddr)
 {
+	/* If the PCIe link is down then we are not ready */
+	if (!ipu_core_link_is_ready(bus)) {
+		dev_err(bus->parent_dev,
+				"%s: unable to enable JQS, link not ready\n",
+				__func__);
+		return -ENETDOWN;
+	}
+
 	/* The Airbrush IPU needs to be put in reset before turning on the
 	 * I/O block.
 	 */
@@ -247,10 +255,16 @@ static void ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 	/* Enable the JQS */
 	ipu_core_writel(bus, JQS_CONTROL_CORE_FETCH_EN_MASK,
 			IPU_CSR_AON_OFFSET + JQS_CONTROL);
+
+	return 0;
 }
 
 static void ipu_core_jqs_power_disable(struct paintbox_bus *bus)
 {
+	/* If the PCIe link is down then there is nothing to be done. */
+	if (!ipu_core_link_is_ready(bus))
+		return;
+
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
 
 	/* Turn on isolation for I/O block */
@@ -294,8 +308,13 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 	if (ret < 0)
 		goto err_shutdown_transport;
 
-	ipu_core_jqs_power_enable(bus, bus->jqs.fw_shared_buffer.jqs_paddr,
+	ret = ipu_core_jqs_power_enable(bus,
+			bus->jqs.fw_shared_buffer.jqs_paddr,
 			bus->jqs_msg_transport->shared_buf.jqs_paddr);
+	if (ret < 0)
+		goto err_free_kernel_queue;
+
+	atomic_or(IPU_STATE_JQS_READY, &bus->state);
 
 	ret = ipu_core_jqs_send_clock_rate(bus, A0_IPU_DEFAULT_CLOCK_RATE);
 	if (ret < 0)
@@ -367,19 +386,24 @@ unload_firmware:
 }
 
 /* The caller to this function must hold bus->jqs.lock */
-void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
+void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus, int reason_code)
 {
 	if (bus->jqs.status != JQS_FW_STATUS_RUNNING)
 		return;
 
-	dev_dbg(bus->parent_dev, "%s: disabling firmware\n", __func__);
+	dev_dbg(bus->parent_dev, "%s: disabling firmware, reason %d\n",
+			__func__, reason_code);
+
+	atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
 
 	/* Free the kernel queue, this will unblock any thread waiting on a
 	 * kernel queue message.
 	 */
-	ipu_core_jqs_msg_transport_free_kernel_queue(bus, -ECONNABORTED);
+	ipu_core_jqs_msg_transport_free_kernel_queue(bus, reason_code);
 
-	/* Notify paintbox devices that the firmware is down */
+	/* Notify paintbox devices that the firmware is down.  The IPU client
+	 * will free any application queues and unblock any waiting threads.
+	 */
 	ipu_core_notify_firmware_down(bus);
 
 	ipu_core_jqs_msg_transport_shutdown(bus);
@@ -387,11 +411,6 @@ void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 	ipu_core_jqs_power_disable(bus);
 
 	bus->jqs.status = JQS_FW_STATUS_STAGED;
-}
-
-bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
-{
-	return bus->jqs.status == JQS_FW_STATUS_RUNNING;
 }
 
 static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
@@ -428,7 +447,7 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 
 	mutex_lock(&bus->jqs.lock);
 
-	ipu_core_jqs_disable_firmware(bus);
+	ipu_core_jqs_disable_firmware_normal(bus);
 
 	mutex_unlock(&bus->jqs.lock);
 
@@ -482,7 +501,7 @@ void ipu_core_jqs_remove(struct paintbox_bus *bus)
 
 	mutex_lock(&bus->jqs.lock);
 
-	ipu_core_jqs_disable_firmware(bus);
+	ipu_core_jqs_disable_firmware_normal(bus);
 	ipu_core_jqs_unstage_firmware(bus);
 	ipu_core_jqs_unload_firmware(bus);
 

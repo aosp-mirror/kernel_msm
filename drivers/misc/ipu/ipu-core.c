@@ -12,6 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <linux/atomic.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
@@ -20,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 #include "ipu-adapter.h"
 #include "ipu-core-internal.h"
@@ -331,6 +333,18 @@ void ipu_core_notify_firmware_down(struct paintbox_bus *bus)
 	}
 }
 
+static void ipu_bus_recovery_work(struct work_struct *work)
+{
+	struct paintbox_bus *bus = container_of(work, struct paintbox_bus,
+			recovery_work);
+
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_jqs_disable_firmware_error(bus);
+
+	mutex_unlock(&bus->jqs.lock);
+}
+
 int ipu_bus_initialize(struct device *parent_dev,
 		struct paintbox_bus_ops *ops, struct paintbox_pdata *pdata,
 		struct paintbox_bus **pb_bus)
@@ -347,6 +361,10 @@ int ipu_bus_initialize(struct device *parent_dev,
 	bus->pdata = pdata;
 
 	spin_lock_init(&bus->irq_lock);
+
+	atomic_set(&bus->state, IPU_STATE_LINK_READY);
+
+	INIT_WORK(&bus->recovery_work, ipu_bus_recovery_work);
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 	ret = ipu_core_debug_init(bus);
@@ -391,6 +409,28 @@ void ipu_bus_deinitialize(struct paintbox_bus *bus)
 #endif
 
 	kfree(bus);
+}
+
+/* This function can be called in an atomic context */
+void ipu_bus_notify_watchdog(struct paintbox_bus *bus)
+{
+	atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
+
+	queue_work(system_wq, &bus->recovery_work);
+}
+
+/* This function can be called in an atomic context */
+void ipu_bus_notify_link_up(struct paintbox_bus *bus)
+{
+	atomic_or(IPU_STATE_LINK_READY, &bus->state);
+}
+
+/* This function can be called in an atomic context */
+void ipu_bus_notify_link_down(struct paintbox_bus *bus)
+{
+	atomic_andnot(IPU_STATE_JQS_READY | IPU_STATE_LINK_READY, &bus->state);
+
+	queue_work(system_wq, &bus->recovery_work);
 }
 
 /* The Linux IOMMU is designed around an IOMMU providing translation services to
