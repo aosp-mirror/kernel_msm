@@ -1598,23 +1598,6 @@ static void set_in_hard_reset(struct tcpc_dev *dev, bool status)
 		goto unlock;
 	}
 
-	switch (pd->cur_pwr_role) {
-	case TYPEC_SINK:
-		val.intval = POWER_SUPPLY_TYPEC_PR_SINK;
-		break;
-	case TYPEC_SOURCE:
-		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
-		break;
-	default:
-		goto unlock;
-	}
-	ret = power_supply_set_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
-					&val);
-	if (ret < 0)
-		pd_engine_log(pd, "unable to set POWER_ROLE, ret=%d",
-			      ret);
-
 	pd->in_hard_reset = status;
 
 unlock:
