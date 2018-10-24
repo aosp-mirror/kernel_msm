@@ -1000,55 +1000,42 @@ int dsi_display_set_power(struct drm_connector *connector,
 	return rc;
 }
 
-static ssize_t debugfs_dump_info_read(struct file *file,
-				      char __user *user_buf,
-				      size_t user_len,
-				      loff_t *ppos)
+static int debugfs_dump_info_read(struct seq_file *seq, void *data)
 {
-	struct dsi_display *display = file->private_data;
-	char *buf;
-	u32 len = 0;
+	struct dsi_display *display = seq->private;
+	struct drm_connector *conn;
+	struct drm_display_mode *mode;
 	int i;
 
 	if (!display)
 		return -ENODEV;
 
-	if (*ppos)
-		return 0;
+	conn = display->drm_conn;
 
-	buf = kzalloc(SZ_4K, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	len += snprintf(buf + len, (SZ_4K - len), "name = %s\n", display->name);
-	len += snprintf(buf + len, (SZ_4K - len),
-			"\tResolution = %dx%d\n",
+	seq_printf(seq, "name = %s\n", display->name);
+	seq_printf(seq, "\tResolution = %dx%d Fps = %d\n",
 			display->config.video_timing.h_active,
-			display->config.video_timing.v_active);
+			display->config.video_timing.v_active,
+			display->config.video_timing.refresh_rate);
+	seq_printf(seq, "\tclk rate = %d\n",
+		   display->config.video_timing.clk_rate_hz);
 
 	for (i = 0; i < display->ctrl_count; i++) {
-		len += snprintf(buf + len, (SZ_4K - len),
-				"\tCTRL_%d:\n\t\tctrl = %s\n\t\tphy = %s\n",
-				i, display->ctrl[i].ctrl->name,
-				display->ctrl[i].phy->name);
+		seq_printf(seq, "\tCTRL_%d:\n\t\tctrl = %s\n\t\tphy = %s\n",
+			   i, display->ctrl[i].ctrl->name,
+			   display->ctrl[i].phy->name);
 	}
 
-	len += snprintf(buf + len, (SZ_4K - len),
-			"\tPanel = %s\n", display->panel->name);
-
-	len += snprintf(buf + len, (SZ_4K - len),
-			"\tClock master = %s\n",
+	seq_printf(seq, "\tPanel = %s\n", display->panel->name);
+	seq_printf(seq, "\tClock master = %s\n",
 			display->ctrl[display->clk_master_idx].ctrl->name);
 
-	if (copy_to_user(user_buf, buf, len)) {
-		kfree(buf);
-		return -EFAULT;
-	}
+	return 0;
+}
 
-	*ppos += len;
-
-	kfree(buf);
-	return len;
+static int debugfs_dump_info_open(struct inode *inode, struct file *f)
+{
+	return single_open(f, debugfs_dump_info_read, inode->i_private);
 }
 
 static ssize_t debugfs_misr_setup(struct file *file,
@@ -1390,8 +1377,10 @@ error:
 }
 
 static const struct file_operations dump_info_fops = {
-	.open = simple_open,
-	.read = debugfs_dump_info_read,
+	.open =		debugfs_dump_info_open,
+	.read =		seq_read,
+	.llseek =	seq_lseek,
+	.release =	single_release,
 };
 
 static const struct file_operations misr_data_fops = {
