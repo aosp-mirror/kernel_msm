@@ -15,6 +15,7 @@
 	qcom,fg-jeita-hyst-temp = <1>;
 	qcom,fg-jeita-thresholds = <0 0 55 55>;
 	qcom,fg-force-load-profile;
+	qcom,fg-rsense-sel = <0>;
 };
 
 &soc {
@@ -33,7 +34,6 @@
 			 50  50   0
 			 30   0   0
 		>;
-		google,chg-cc-tolerance = <25>;
 	};
 };
 

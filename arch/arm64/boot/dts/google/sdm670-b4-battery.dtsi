@@ -28,7 +28,7 @@
 &pm660_fg {
 	qcom,battery-data = <&b4_batterydata>;
 	qcom,fg-chg-term-current = <185>;
-	qcom,fg-sys-term-current = <(-231)>;
+	qcom,fg-sys-term-current = <(-555)>;
 	qcom,fastchg-current-ma = <3700>;
 };
 
