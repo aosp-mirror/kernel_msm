@@ -1209,18 +1209,25 @@ int writeHostDataMemory(u8 type, u8 *data, u8 msForceLen, u8 msSenseLen,
  */
 int saveMpFlag(u8 mpflag)
 {
+	u8 cmd_write_flag[] = {FTS_CMD_SYSTEM, SYS_CMD_MP_FLAG, mpflag};
+	u8 cmd_save_conf[] = {FTS_CMD_SYSTEM, SYS_CMD_SAVE_FLASH,
+			      SAVE_PANEL_CONF};
 	int ret;
 
 	pr_info("%s: Saving MP Flag = %02X\n", __func__, mpflag);
-	ret = writeSysCmd(SYS_CMD_MP_FLAG, &mpflag, 1);
+
+	/* Workaround potential firmware issue to save the MP Flag without
+	 * checking for an echo event.
+	 * TODO: b/118406364
+	 */
+	ret = fts_write(cmd_write_flag, sizeof(cmd_write_flag));
 	if (ret < OK) {
 		pr_err("%s: Error while writing MP flag on ram... ERROR %08X\n",
 			__func__, ret);
 		return ret;
 	}
 
-	mpflag =  SAVE_PANEL_CONF;
-	ret = writeSysCmd(SYS_CMD_SAVE_FLASH, &mpflag, 1);
+	ret = fts_write(cmd_save_conf, sizeof(cmd_save_conf));
 	if (ret < OK) {
 		pr_err("%s: Error while saving MP flag on flash... ERROR %08X\n",
 			__func__, ret);
