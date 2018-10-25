@@ -661,8 +661,6 @@ static inline int nanohub_wakeup_unlock(struct nanohub_data *data)
 		nanohub_bl_close(data);
 	if (data->irq2)
 		enable_irq(data->irq2);
-	if (data->irq3)
-		enable_irq(data->irq3);
 	release_wakeup_ex(data, KEY_WAKEUP_LOCK, mode);
 	if (!data->irq2)
 		nanohub_unmask_interrupt(data, 2);
@@ -2252,6 +2250,9 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 		pr_info("nanohub: nanohub_probe end successfully\n");
 		return iio_dev;
 	}
+
+	if (data->irq3)
+		enable_irq(data->irq3);
 
 fail_dev:
 	iio_device_unregister(iio_dev);
