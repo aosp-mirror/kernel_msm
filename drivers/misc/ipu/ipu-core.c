@@ -36,11 +36,11 @@ int ipu_alloc_queue(struct device *dev)
 	return ipu_core_jqs_msg_transport_alloc_queue(pb_dev->bus);
 }
 
-void ipu_free_queue(struct device *dev, uint32_t q_id)
+void ipu_free_queue(struct device *dev, uint32_t q_id, int queue_err)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 
-	ipu_core_jqs_msg_transport_free_queue(pb_dev->bus, q_id);
+	ipu_core_jqs_msg_transport_free_queue(pb_dev->bus, q_id, queue_err);
 }
 
 int ipu_user_write(struct device *dev, uint32_t q_id,

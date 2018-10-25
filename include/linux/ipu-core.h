@@ -76,7 +76,7 @@ int ipu_alloc_queue(struct device *dev);
  *
  * Returns: q_id > 0 on success. < 0 on failure.
  */
-void ipu_free_queue(struct device *dev, uint32_t queue_id);
+void ipu_free_queue(struct device *dev, uint32_t queue_id, int queue_err);
 
 /* Write data into a user queue.
  *

@@ -368,13 +368,8 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	trans->jqs_shared_state = (struct jqs_msg_transport_shared_state *)
 		trans->shared_buf.host_vaddr;
 	bus->jqs_msg_transport = trans;
-	mutex_init(&trans->lock);
 
-	/* Preallocate the kernel queue */
-	ret = ipu_core_jqs_msg_transport_setup_queue(bus,
-			JQS_TRANSPORT_KERNEL_QUEUE_ID);
-	if (ret < 0)
-		goto free_remote_dram;
+	mutex_init(&trans->lock);
 
 	/* The free_queue_bits field in the transport structure is set up to
 	 * match the bits in the JQS_SYS_DBL register.  Bits 0 and 1 in the
@@ -387,8 +382,6 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 
 	return 0;
 
-free_remote_dram:
-	ipu_core_memory_free(bus, &trans->shared_buf);
 free_local_dram:
 	kfree(trans);
 
@@ -401,9 +394,6 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 
 	if (!trans)
 		return;
-
-	ipu_core_jqs_msg_transport_free_queue(bus,
-			JQS_TRANSPORT_KERNEL_QUEUE_ID);
 
 	ipu_core_memory_free(bus, &trans->shared_buf);
 	kfree(bus->jqs_msg_transport);
@@ -453,8 +443,14 @@ int ipu_core_jqs_msg_transport_alloc_queue(struct paintbox_bus *bus)
 	return q_id;
 }
 
+int ipu_core_jqs_msg_transport_alloc_kernel_queue(struct paintbox_bus *bus)
+{
+	return ipu_core_jqs_msg_transport_setup_queue(bus,
+			JQS_TRANSPORT_KERNEL_QUEUE_ID);
+}
+
 void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
-		uint32_t q_id)
+		uint32_t q_id, int queue_err)
 {
 	struct paintbox_jqs_msg_transport *trans = bus->jqs_msg_transport;
 	struct host_jqs_queue *host_q = &trans->queues[q_id];
@@ -464,7 +460,7 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 
 	if (waiter->enabled) {
 		/* Release the waiting thread, the queue is disappearing */
-		waiter->ret = -ECONNRESET;
+		waiter->ret = queue_err;
 		complete(&waiter->completion);
 	}
 
@@ -473,6 +469,13 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 	trans->free_queue_ids |= (1 << q_id);
 
 	mutex_unlock(&trans->lock);
+}
+
+void ipu_core_jqs_msg_transport_free_kernel_queue(struct paintbox_bus *bus,
+		int queue_err)
+{
+	ipu_core_jqs_msg_transport_free_queue(bus,
+		JQS_TRANSPORT_KERNEL_QUEUE_ID, queue_err);
 }
 
 ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
@@ -492,7 +495,7 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	 */
 	if (trans->free_queue_ids & (1 << q_id)) {
 		mutex_unlock(&trans->lock);
-		return -ECONNRESET;
+		return -ECONNABORTED;
 	}
 
 	/* Two concurrent calls to read is not supported */

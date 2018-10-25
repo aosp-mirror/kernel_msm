@@ -249,6 +249,36 @@ static void ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 			IPU_CSR_AON_OFFSET + JQS_CONTROL);
 }
 
+static void ipu_core_jqs_power_disable(struct paintbox_bus *bus)
+{
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
+
+	/* Turn on isolation for I/O block */
+	ipu_core_writel(bus, IO_ISO_ON_VAL_MASK, IPU_CSR_AON_OFFSET +
+			IO_ISO_ON);
+
+	/* Turn off clocks to I/O block */
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
+
+	/* Power off RAMs for I/O block */
+	ipu_core_writel(bus, IO_RAM_ON_N_VAL_MASK, IPU_CSR_AON_OFFSET +
+			IO_RAM_ON_N);
+
+	/* Need to briefly turn on the clocks to the I/O block to propagate the
+	 * RAM SD pin change into the RAM, then need to turn the clocks off
+	 * again, since the I/O block is being turned off.
+	 */
+	ipu_core_writel(bus, IPU_IO_SWITCHED_CLK_EN_VAL_MASK,
+			IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET +
+			IPU_IO_SWITCHED_CLK_EN);
+
+	/* Power off I/O block */
+	ipu_core_writeq(bus, IO_POWER_ON_N_PRE_MASK |
+			IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
+			IO_POWER_ON_N);
+}
+
 /* The caller to this function must hold bus->jqs.lock */
 static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 {
@@ -260,16 +290,20 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 	if (ret < 0)
 		return ret;
 
+	ret = ipu_core_jqs_msg_transport_alloc_kernel_queue(bus);
+	if (ret < 0)
+		goto err_shutdown_transport;
+
 	ipu_core_jqs_power_enable(bus, bus->jqs.fw_shared_buffer.jqs_paddr,
 			bus->jqs_msg_transport->shared_buf.jqs_paddr);
 
 	ret = ipu_core_jqs_send_clock_rate(bus, A0_IPU_DEFAULT_CLOCK_RATE);
 	if (ret < 0)
-		return ret;
+		goto err_disable_jqs;
 
 	ret = ipu_core_jqs_send_set_log_info(bus);
 	if (ret < 0)
-		return ret;
+		goto err_disable_jqs;
 
 	bus->jqs.status = JQS_FW_STATUS_RUNNING;
 
@@ -277,6 +311,15 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 	ipu_core_notify_firmware_up(bus);
 
 	return 0;
+
+err_disable_jqs:
+	ipu_core_jqs_power_disable(bus);
+err_free_kernel_queue:
+	ipu_core_jqs_msg_transport_free_kernel_queue(bus, ret);
+err_shutdown_transport:
+	ipu_core_jqs_msg_transport_shutdown(bus);
+
+	return ret;
 }
 
 /* The caller to this function must hold bus->jqs.lock */
@@ -331,37 +374,17 @@ void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 
 	dev_dbg(bus->parent_dev, "%s: disabling firmware\n", __func__);
 
+	/* Free the kernel queue, this will unblock any thread waiting on a
+	 * kernel queue message.
+	 */
+	ipu_core_jqs_msg_transport_free_kernel_queue(bus, -ECONNABORTED);
+
 	/* Notify paintbox devices that the firmware is down */
 	ipu_core_notify_firmware_down(bus);
 
 	ipu_core_jqs_msg_transport_shutdown(bus);
 
-	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
-
-	/* Turn on isolation for I/O block */
-	ipu_core_writel(bus, IO_ISO_ON_VAL_MASK, IPU_CSR_AON_OFFSET +
-			IO_ISO_ON);
-
-	/* Turn off clocks to I/O block */
-	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
-
-	/* Power off RAMs for I/O block */
-	ipu_core_writel(bus, IO_RAM_ON_N_VAL_MASK, IPU_CSR_AON_OFFSET +
-			IO_RAM_ON_N);
-
-	/* Need to briefly turn on the clocks to the I/O block to propagate the
-	 * RAM SD pin change into the RAM, then need to turn the clocks off
-	 * again, since the I/O block is being turned off.
-	 */
-	ipu_core_writel(bus, IPU_IO_SWITCHED_CLK_EN_VAL_MASK,
-			IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
-	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET +
-			IPU_IO_SWITCHED_CLK_EN);
-
-	/* Power off I/O block */
-	ipu_core_writeq(bus, IO_POWER_ON_N_PRE_MASK |
-			IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
-			IO_POWER_ON_N);
+	ipu_core_jqs_power_disable(bus);
 
 	bus->jqs.status = JQS_FW_STATUS_STAGED;
 }

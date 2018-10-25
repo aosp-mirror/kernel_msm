@@ -35,6 +35,9 @@ struct paintbox_cmd_queue {
 	struct paintbox_session *session;
 	struct paintbox_data *pb;
 	int queue_id;
+
+	/* Set if the queue has been detached due to an error. */
+	int err;
 };
 
 /* The caller to this function must hold pb->lock */
@@ -76,7 +79,7 @@ static int ipu_queue_remove_from_session(struct paintbox_data *pb,
 		struct paintbox_session *session,
 		struct paintbox_cmd_queue *cmd_queue)
 {
-	int ret;
+	int ret = 0;
 
 	/* Check if the session has already been removed from the session */
 	if (session == NULL)
@@ -88,13 +91,25 @@ static int ipu_queue_remove_from_session(struct paintbox_data *pb,
 	list_del(&cmd_queue->session_entry);
 	cmd_queue->session = NULL;
 
-	ret = ipu_queue_jqs_send_release(pb, session, cmd_queue->queue_id);
+	/* If the JQS is up then this a client initiated shutdown.  Notify the
+	 * JQS that the queue is released from the session and unblock any
+	 * threads waiting on the queue with ECONNABORTED.
+	 *
+	 * Otherwise, if JQS is down then report that the connection was reset.
+	 */
+	if (ipu_is_jqs_ready(pb->dev)) {
+		ret = ipu_queue_jqs_send_release(pb, session,
+				cmd_queue->queue_id);
+		cmd_queue->err = -ECONNABORTED;
+	} else {
+		cmd_queue->err = -ECONNRESET;
+	}
 
 	/* Call down to the transport layer to remove the queue.  If the
 	 * message to the JQS failed then we still want to free up the queue at
 	 * the transport layer.
 	 */
-	ipu_free_queue(pb->dev, cmd_queue->queue_id);
+	ipu_free_queue(pb->dev, cmd_queue->queue_id, cmd_queue->err);
 
 	return ret;
 }
@@ -166,8 +181,10 @@ static ssize_t ipu_queue_read(struct file *fp, char __user *buf, size_t size,
 	mutex_lock(&pb->lock);
 
 	if (cmd_queue->session == NULL) {
+		int ret = cmd_queue->err;
+
 		mutex_unlock(&pb->lock);
-		return -EPIPE;
+		return ret;
 	}
 
 	mutex_unlock(&pb->lock);
@@ -185,8 +202,10 @@ static ssize_t ipu_queue_write(struct file *fp, const char __user *buf,
 	mutex_lock(&pb->lock);
 
 	if (cmd_queue->session == NULL) {
+		int ret = cmd_queue->err;
+
 		mutex_unlock(&pb->lock);
-		return -EPIPE;
+		return ret;
 	}
 
 	mutex_unlock(&pb->lock);
@@ -248,7 +267,7 @@ int ipu_queue_allocate_ioctl(struct paintbox_data *pb,
 send_jqs_release:
 	ipu_queue_jqs_send_release(pb, session,  cmd_queue->queue_id);
 release_queue:
-	ipu_free_queue(pb->dev, cmd_queue->queue_id);
+	ipu_free_queue(pb->dev, cmd_queue->queue_id, ret);
 release_queue_memory:
 	mutex_unlock(&pb->lock);
 	kfree(cmd_queue);

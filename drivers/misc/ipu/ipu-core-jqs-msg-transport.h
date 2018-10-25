@@ -42,7 +42,7 @@ int ipu_core_jqs_msg_transport_alloc_queue(struct paintbox_bus *bus);
  * JQS_MESSAGE_TYPE_FREE_QUEUE to notify JQS about queue deallocation.
  */
 void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
-		uint32_t q_id);
+		uint32_t q_id, int queue_err);
 
 /* Write data into a user queue.
  *
@@ -103,6 +103,10 @@ ssize_t ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
  */
 void ipu_core_jqs_msg_transport_process_queues(struct paintbox_bus *bus,
 		uint32_t q_ids);
+
+int ipu_core_jqs_msg_transport_alloc_kernel_queue(struct paintbox_bus *bus);
+void ipu_core_jqs_msg_transport_free_kernel_queue(struct paintbox_bus *bus,
+		int queue_err);
 
 /* Called in an interrupt context */
 irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus);
