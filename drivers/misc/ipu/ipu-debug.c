@@ -445,13 +445,6 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 
 	written += ret;
 
-	ret = ipu_bif_dump_registers(&pb->bif_debug, buf + written, len -
-			written);
-	if (ret < 0)
-		goto err_exit;
-
-	written += ret;
-
 	ret = ipu_dma_dump_registers(&pb->dma.debug, buf + written, len -
 			written);
 	if (ret < 0)
