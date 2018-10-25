@@ -1,53 +1,54 @@
 
 qcom,b4-10k {
 	qcom, = <24>;
-	/* #3582977_Google_B4swdatl_3700mAh_averaged_MasterSlave_Aug30th2018*/
+	// #3582977_3633625_Google_B4SWDATL
+	// 3700mAh_averaged_MasterSlave_Oct23rd2018
 	qcom,max-voltage-uv = <4400000>;
 	qcom,fg-cc-cv-threshold-mv = <4390>;
 	qcom,nom-batt-capacity-mah = <3700>;
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <4360>;
 	qcom,battery-type = "b4-10k";
-	qcom,checksum = <0x9D41>;
+	qcom,checksum = <0x71DE>;
 	qcom,gui-version = "PM660GUI - 0.0.0.45";
 	qcom,fg-profile-data = [
-		 3C 1F FB 05
-		 37 0A 87 06
-		 EB 1C BB FB
-		 DE 0D 81 0A
-		 DE 17 04 2A
-		 FA 4D C8 5A
-		 72 00 00 00
-		 0F 00 00 00
-		 00 00 99 C4
-		 E8 C4 44 CA
-		 19 00 08 00
-		 86 CB D3 E5
-		 25 07 1D F2
-		 37 FB 08 13
-		 06 EC 4C 22
+		 84 20 BA 04
+		 F9 0A F2 05
+		 FF 1C F7 FA
+		 5D 05 1A 03
+		 D5 17 F8 23
+		 1E 44 96 5A
+		 8E 00 00 00
+		 10 00 00 00
+		 00 00 D3 C5
+		 DD CD BE C2
+		 1A 00 08 00
+		 68 DA 0E E5
+		 3B F4 3F F2
+		 EF FA CB 12
+		 24 05 A7 2A
 		 19 06 09 20
 		 27 00 14 00
-		 F1 1F 4E 05
-		 BC 0A 00 06
-		 D5 1C C1 02
-		 5D 0C F7 0B
-		 98 18 AE 23
-		 1A 44 DA 5A
+		 D0 1F 88 05
+		 7E 0A 48 06
+		 D7 1C BF 02
+		 66 0C E4 0B
+		 99 18 AF 23
+		 19 44 DB 5A
 		 6D 00 00 00
 		 0E 00 00 00
-		 00 00 6E CC
-		 7C AB 31 CA
-		 16 00 00 00
-		 EB E3 D3 E5
-		 15 F5 79 00
-		 7D D4 66 0A
-		 C1 E2 84 13
-		 AB 33 CC FF
+		 00 00 75 CC
+		 C4 B2 03 CA
+		 18 00 00 00
+		 59 EA 0E E5
+		 06 F5 7F EB
+		 91 E3 64 0A
+		 BF EA 34 1A
+		 AD 33 CC FF
 		 07 10 00 00
-		 C5 0E 66 46
-		 16 00 40 00
-		 8E 01 0A FA
+		 DD 0E 66 46
+		 18 00 40 00
+		 93 01 0A FA
 		 FF 00 00 00
 		 00 00 00 00
 		 00 00 00 00
