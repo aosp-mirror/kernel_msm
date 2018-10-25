@@ -1040,6 +1040,90 @@ static void fts_ts_late_resume(struct early_suspend *handler)
 }
 #endif
 
+int fts_ts_inputdev_open(struct input_dev *dev)
+{
+	struct fts_ts_data *data = input_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+	const struct fts_ts_platform_data *pdata = data->pdata;
+	int err;
+
+	FTS_INFO("%s users = %d", __func__, dev->users);
+
+	if (data->inputdev_opened) {
+		FTS_INFO("%s input_dev already opened.", __func__);
+		return 0;
+	}
+
+	if (pdata->switch_gpio < 0) {
+		dev_err(&client->dev, "gpio switch is not valid %d\n",
+				pdata->switch_gpio);
+		return -EIO;
+	}
+
+	err = gpio_direction_output(pdata->switch_gpio, 1);
+	if (err) {
+		dev_err(&client->dev, "unable to set direction for switch gpio %d\n",
+				pdata->switch_gpio);
+		return -EIO;
+	}
+
+	fts_reset_proc(200);
+
+	err = fts_wait_tp_to_valid(client);
+	if (err) {
+		FTS_ERROR("failed to open input dev!");
+		return -EIO;
+	}
+
+	data->inputdev_opened = true;
+	return 0;
+}
+
+void fts_ts_inputdev_close(struct input_dev *dev)
+{
+	struct fts_ts_data *data = input_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+	const struct fts_ts_platform_data *pdata = data->pdata;
+	int err;
+
+	FTS_INFO("%s: users = %d", __func__, dev->users);
+
+	/* TP enter sleep mode */
+	err = fts_i2c_write_reg(data->client, FTS_REG_POWER_MODE,
+			FTS_REG_POWER_MODE_SLEEP_VALUE);
+	if (err < 0)
+		FTS_ERROR("Set TP to sleep mode fail, ret=%d!", err);
+
+	if (!(data->inputdev_opened)) {
+		FTS_INFO("%s input_dev already closed.", __func__);
+		return;
+	}
+	if (pdata->switch_gpio < 0) {
+		dev_err(&client->dev, "gpio switch is not valid %d\n",
+				pdata->switch_gpio);
+		return;
+	}
+
+	err = gpio_direction_output(pdata->switch_gpio, 0);
+	if (err) {
+		dev_err(&client->dev, "unable to set direction for switch gpio %d\n",
+				pdata->switch_gpio);
+		return;
+	}
+	data->inputdev_opened = false;
+}
+
+int fts_ts_inputdev_flush(struct input_dev *dev, struct file *file)
+{
+	return 0;
+}
+
+int fts_ts_inputdev_event(struct input_dev *dev, unsigned int type,
+		unsigned int code, int value)
+{
+	return 0;
+}
+
 /*****************************************************************************
 *  Name: fts_ts_probe
 *  Brief:
@@ -1115,6 +1199,11 @@ static int fts_ts_probe(struct i2c_client *client,
 		FTS_FUNC_EXIT();
 		return -ENOMEM;
 	}
+
+	input_dev->open = fts_ts_inputdev_open;
+	input_dev->close = fts_ts_inputdev_close;
+	input_dev->flush = fts_ts_inputdev_flush;
+	input_dev->event = fts_ts_inputdev_event;
 
 	data->input_dev = input_dev;
 	data->client = client;
@@ -1400,9 +1489,11 @@ static int fts_ts_resume(struct device *dev)
 	}
 	fts_release_all_finger();
 
+/*
 #if (!FTS_CHIP_IDC)
 	fts_reset_proc(1);
 #endif
+*/
 
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_resume();
