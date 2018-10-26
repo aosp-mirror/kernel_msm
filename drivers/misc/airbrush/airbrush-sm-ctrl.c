@@ -632,13 +632,23 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 		goto fail_ab_ready;
 	}
 
-	/* Get the otp-fw-patch-dis property from dt node. This property
-	 * provides the OTP information of Airbrush for allowing the secondary
-	 * boot via SRAM.
+	/* Get the patch-firmware-on-boot property from dt node.
+	 * Patching is only allowed if property exists
 	 */
-	if (of_property_read_u32(np, "otp-fw-patch-dis",
+	if (of_property_read_bool(np, "patch-firmware-on-boot")) {
+		/* Get the otp-fw-patch-dis property from dt node. This property
+		 * provides the OTP information of Airbrush for allowing the
+		 * secondary boot via SRAM.
+		 */
+		if (of_property_read_u32(np, "otp-fw-patch-dis",
 				&ab_sm_ctx->otp_fw_patch_dis))
-		dev_info(dev, "otp-fw-patch-dis property not found\n");
+			dev_info(dev, "otp-fw-patch-dis property not found\n");
+
+		dev_info(dev, "patching allowed\n");
+	} else {
+		ab_sm_ctx->otp_fw_patch_dis = true;
+		dev_info(dev, "patching NOT allowed\n");
+	}
 
 	ab_sm_ctx->ab_sm_ctrl_pmic = true;
 
