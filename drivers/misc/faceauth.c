@@ -26,32 +26,32 @@
 #include "../mfd/abc-pcie-dma.h"
 
 /* ABC AON config regisetr offsets */
-#define SYSREG_AON			0x30000
-#define SYSREG_REG_GP_INT0		(SYSREG_AON + 0x37C)
-#define SYSREG_AON_IPU_REG29		(SYSREG_AON + 0x438)
-#define SYSREG_BASE			0x10B00000
-#define SYSREG_REG_GP_INT0_ADDR		(SYSREG_BASE + SYSREG_REG_GP_INT0)
-#define SYSREG_AON_IPU_REG29_ADDR	(SYSREG_BASE + SYSREG_AON_IPU_REG29)
+#define SYSREG_AON 0x30000
+#define SYSREG_REG_GP_INT0 (SYSREG_AON + 0x37C)
+#define SYSREG_AON_IPU_REG29 (SYSREG_AON + 0x438)
+#define SYSREG_BASE 0x10B00000
+#define SYSREG_REG_GP_INT0_ADDR (SYSREG_BASE + SYSREG_REG_GP_INT0)
+#define SYSREG_AON_IPU_REG29_ADDR (SYSREG_BASE + SYSREG_AON_IPU_REG29)
 
 /* ABC FW and workload binary offsets */
-#define WORKLOAD_ADDR			0x20000000
-#define COMPARE_RESULT_FLAG_ADDR	0x21fffff4
-#define ENROLLMENT_FLAG_ADDR		0x21fffff8
-#define COMPLETION_FLAG_ADDR		0x21fffffc
-#define JQS_DEPTH_ADDR			0x22000000
-#define JQS_AFFINE_DEPTH_ADDR		0x22100000
-#define JQS_AFFINE_RGB_ADDR		0x22200000
-#define JQS_AFFINE_SKIN_ADDR		0x22300000
-#define DOT_IMAGE_LEFT_ADDR		0x22800000
-#define DOT_IMAGE_RIGHT_ADDR 		0x22900000
-#define FLOOD_IMAGE_ADDR		0x23000000
+#define WORKLOAD_ADDR 0x20000000
+#define COMPARE_RESULT_FLAG_ADDR 0x21fffff4
+#define ENROLLMENT_FLAG_ADDR 0x21fffff8
+#define COMPLETION_FLAG_ADDR 0x21fffffc
+#define JQS_DEPTH_ADDR 0x22000000
+#define JQS_AFFINE_DEPTH_ADDR 0x22100000
+#define JQS_AFFINE_RGB_ADDR 0x22200000
+#define JQS_AFFINE_SKIN_ADDR 0x22300000
+#define DOT_IMAGE_LEFT_ADDR 0x22800000
+#define DOT_IMAGE_RIGHT_ADDR 0x22900000
+#define FLOOD_IMAGE_ADDR 0x23000000
 
 /* ABC FW and workload path */
-#define M0_WORKLOAD_PATH		"m0_workload.fw"
-#define JQS_DEPTH_PATH			"depth.fw"
-#define JQS_AFFINE_DEPTH_PATH		"affine.fw"
-#define JQS_AFFINE_RGB_PATH		"affine_rgb.fw"
-#define JQS_AFFINE_SKIN_PATH		"affine_8.fw"
+#define M0_WORKLOAD_PATH "m0_workload.fw"
+#define JQS_DEPTH_PATH "depth.fw"
+#define JQS_AFFINE_DEPTH_PATH "affine.fw"
+#define JQS_AFFINE_RGB_PATH "affine_rgb.fw"
+#define JQS_AFFINE_SKIN_PATH "affine_8.fw"
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 1000
@@ -134,7 +134,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		pr_info("%s: Set faceauth enrollment flag at 0x%08x\n",
 			__func__, ENROLLMENT_FLAG_ADDR);
 		dma_write_dw(file, ENROLLMENT_FLAG_ADDR,
-			start_step_data.enroll);
+			     start_step_data.enroll);
 
 		/* Reset completion flag */
 		pr_info("%s: Clearing completion flag at 0x%08x\n", __func__,
@@ -255,11 +255,9 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.dir = dir;
 	dma_desc.chan = 1;
-	pr_info("%s: MBLK AP src = %pK; AB dest = %pK; size = %d\n",
-		__func__,
+	pr_info("%s: MBLK AP src = %pK; AB dest = %pK; size = %d\n", __func__,
 		(unsigned long)dma_desc.local_buf,
-		(unsigned long)dma_desc.remote_buf,
-		dma_desc.local_buf_size);
+		(unsigned long)dma_desc.remote_buf, dma_desc.local_buf_size);
 	err = abc_pcie_issue_dma_xfer(&dma_desc);
 	return err;
 }
@@ -288,11 +286,9 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.dir = dir;
 	dma_desc.chan = 1;
-	pr_info("%s: MBLK AP src = %pK; AB dest = %pK; size = %d\n",
-		__func__,
+	pr_info("%s: MBLK AP src = %pK; AB dest = %pK; size = %d\n", __func__,
 		(unsigned long)dma_desc.local_buf,
-		(unsigned long)dma_desc.remote_buf,
-		dma_desc.local_buf_size);
+		(unsigned long)dma_desc.remote_buf, dma_desc.local_buf_size);
 	err = abc_pcie_issue_dma_xfer_vmalloc(&dma_desc);
 	return err;
 }
@@ -312,16 +308,15 @@ static int dma_send_fw(const char *path, const int remote_addr)
 	fw_status = request_firmware(&fw_entry, path,
 				     faceauth_miscdevice.this_device);
 	if (fw_status != 0) {
-		pr_err("Firmware Not Found: %d, %d\n", fw_status,
-				__LINE__);
+		pr_err("Firmware Not Found: %d, %d\n", fw_status, __LINE__);
 		return -EIO;
 	}
 
 	err = dma_xfer_vmalloc((void *)(fw_entry->data), fw_entry->size,
 			       remote_addr, DMA_TO_DEVICE);
 	if (err)
-		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n", __func__,
+		       err);
 	release_firmware(fw_entry);
 	return err;
 }
@@ -342,8 +337,8 @@ static int dma_write_dw(struct file *file, const int remote_addr, const int val)
 	err = dma_xfer_vmalloc((void *)&(data->dma_dw_buf), sizeof(val),
 			       remote_addr, DMA_TO_DEVICE);
 	if (err)
-		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n", __func__,
+		       err);
 	return err;
 }
 
@@ -362,8 +357,8 @@ static int dma_read_dw(struct file *file, const int remote_addr, int *val)
 	err = dma_xfer_vmalloc((void *)&(data->dma_dw_buf), sizeof(*val),
 			       remote_addr, DMA_FROM_DEVICE);
 	if (err) {
-		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n", __func__,
+		       err);
 		return err;
 	}
 	*val = data->dma_dw_buf;
@@ -428,12 +423,11 @@ static int dma_send_workloads(void)
 	int err = 0;
 
 	/* Send IPU workload */
-	pr_info("%s: Set JQS Depth addr = 0x%08x\n", __func__,
-		JQS_DEPTH_ADDR);
+	pr_info("%s: Set JQS Depth addr = 0x%08x\n", __func__, JQS_DEPTH_ADDR);
 	err = dma_send_fw(JQS_DEPTH_PATH, JQS_DEPTH_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
+		       err);
 		return err;
 	}
 
@@ -441,8 +435,8 @@ static int dma_send_workloads(void)
 		JQS_AFFINE_DEPTH_ADDR);
 	err = dma_send_fw(JQS_AFFINE_DEPTH_PATH, JQS_AFFINE_DEPTH_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
+		       err);
 		return err;
 	}
 
@@ -450,8 +444,8 @@ static int dma_send_workloads(void)
 		JQS_AFFINE_RGB_ADDR);
 	err = dma_send_fw(JQS_AFFINE_RGB_PATH, JQS_AFFINE_RGB_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
+		       err);
 		return err;
 	}
 
@@ -459,8 +453,8 @@ static int dma_send_workloads(void)
 		JQS_AFFINE_SKIN_ADDR);
 	err = dma_send_fw(JQS_AFFINE_SKIN_PATH, JQS_AFFINE_SKIN_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
+		       err);
 		return err;
 	}
 
@@ -469,8 +463,8 @@ static int dma_send_workloads(void)
 		WORKLOAD_ADDR);
 	err = dma_send_fw(M0_WORKLOAD_PATH, WORKLOAD_ADDR);
 	if (err) {
-		pr_err("%s: Error during M0 workload transfer: %d\n",
-		       __func__, err);
+		pr_err("%s: Error during M0 workload transfer: %d\n", __func__,
+		       err);
 		return err;
 	}
 
