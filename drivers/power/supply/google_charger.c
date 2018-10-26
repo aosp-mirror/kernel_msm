@@ -86,6 +86,7 @@ struct chg_drv {
 	bool lowerdb_reached;
 	int charge_stop_level;
 	int charge_start_level;
+	unsigned long last_cnt_time;
 };
 
 /* Used as left operand also */
@@ -180,6 +181,7 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->disable_pwrsrc = 0;
 	chg_drv->lowerdb_reached = true;
 	chg_drv->stop_charging = true;
+	chg_drv->last_cnt_time = 0;
 	PSY_SET_PROP(chg_drv->chg_psy,
 		     POWER_SUPPLY_PROP_TAPER_CONTROL,
 		     POWER_SUPPLY_TAPER_CONTROL_OFF);
@@ -466,6 +468,13 @@ static void chg_work(struct work_struct *work)
 		const int switch_cnt = profile->cv_tier_switch_cnt;
 		const int cc_next_max = CCCM_LIMITS(profile, temp_idx,
 						    vbatt_idx + 1);
+		unsigned long cur_time, last_cnt_interval;
+		bool skip_cnt = false;
+
+		cur_time = jiffies_to_msecs(jiffies);
+		last_cnt_interval = cur_time - chg_drv->last_cnt_time;
+		skip_cnt = (last_cnt_interval <
+			      profile->cv_update_interval) ? true : false;
 
 		if ((vbatt - vtier) > otv_margin) {
 		/* OVER: vbatt over vtier for more than margin (usually 0) */
@@ -550,16 +559,19 @@ static void chg_work(struct work_struct *work)
 		/* TAPER_COUNTDOWN: countdown to raise fv_uv and/or check
 		 * for tier switch, will keep steady...
 		 */
-			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d\n",
+			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d, skip_cnt=%d\n",
 				vtier, vbatt, fv_uv, profile->cv_range_accuracy,
 				chg_drv->checked_cv_cnt,
-				chg_drv->checked_ov_cnt);
+				chg_drv->checked_ov_cnt, skip_cnt);
 
 			update_interval = profile->cv_update_interval;
-			if (chg_drv->checked_cv_cnt)
-				chg_drv->checked_cv_cnt -= 1;
-			if (chg_drv->checked_ov_cnt)
-				chg_drv->checked_ov_cnt -= 1;
+			if (!skip_cnt) {
+				if (chg_drv->checked_cv_cnt)
+					chg_drv->checked_cv_cnt -= 1;
+				if (chg_drv->checked_ov_cnt)
+					chg_drv->checked_ov_cnt -= 1;
+				chg_drv->last_cnt_time = cur_time;
+			}
 
 		} else if ((vtier - vbatt) < utv_margin) {
 		/* TAPER_STEADY: close enough to tier, don't need to adjust */
@@ -604,13 +616,20 @@ static void chg_work(struct work_struct *work)
 				vbatt, ibatt, chg_drv->vbatt_idx, vbatt_idx);
 		} else {
 		/* current under next tier, increase tier switch count */
-			chg_drv->checked_tier_switch_cnt++;
+			if (!skip_cnt) {
+				chg_drv->checked_tier_switch_cnt++;
+				chg_drv->last_cnt_time = cur_time;
+			}
 
-			pr_info("MSC_NYET ibatt=%d cc_next_max=%d t_cnt=%d\n",
+			pr_info("MSC_NYET ibatt=%d cc_next_max=%d t_cnt=%d, skip_cnt=%d\n",
 				ibatt, cc_next_max,
-				chg_drv->checked_tier_switch_cnt);
+				chg_drv->checked_tier_switch_cnt, skip_cnt);
 		}
 
+		if (skip_cnt &&
+		    (update_interval == profile->cv_update_interval)) {
+			update_interval -= last_cnt_interval;
+		}
 	}
 
 	/* update fv or cc will change in last tier... */
