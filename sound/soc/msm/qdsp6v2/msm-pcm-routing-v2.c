@@ -607,6 +607,7 @@ static struct msm_pcm_routing_app_type_data app_type_cfg[MAX_APP_TYPES];
 static struct msm_pcm_routing_app_type_data lsm_app_type_cfg[MAX_APP_TYPES];
 static struct msm_pcm_stream_app_type_cfg
 			 fe_dai_app_type_cfg[MSM_FRONTEND_DAI_MAX][2];
+static bool app_type_cfg_supported = false;
 
 /* The caller of this should aqcuire routing lock */
 void msm_pcm_routing_get_bedai_info(int be_idx,
@@ -1095,7 +1096,7 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, int perf_mode,
 					sample_rate;
 				bit_width =
 				lsm_app_type_cfg[app_type_idx].bit_width;
-			} else if (app_type) {
+			} else if (app_type && app_type_cfg_supported) {
 				app_type_idx =
 					msm_pcm_routing_get_app_type_idx(
 						app_type);
@@ -1310,7 +1311,7 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 
 			app_type =
 			fe_dai_app_type_cfg[fedai_id][session_type].app_type;
-			if (app_type) {
+			if (app_type && app_type_cfg_supported) {
 				app_type_idx =
 				msm_pcm_routing_get_app_type_idx(app_type);
 				sample_rate =
@@ -1557,7 +1558,7 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 					sample_rate;
 				bits_per_sample =
 				lsm_app_type_cfg[app_type_idx].bit_width;
-			} else if (app_type) {
+			} else if (app_type && app_type_cfg_supported) {
 				app_type_idx =
 				msm_pcm_routing_get_app_type_idx(app_type);
 				sample_rate =
@@ -9567,6 +9568,7 @@ static int msm_routing_put_app_type_cfg_control(struct snd_kcontrol *kcontrol,
 				ucontrol->value.integer.value[i++];
 		app_type_cfg[j].bit_width =
 				ucontrol->value.integer.value[i++];
+		app_type_cfg_supported = true;
 	}
 
 	return 0;
@@ -13598,7 +13600,7 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 					sample_rate;
 				bits_per_sample =
 				lsm_app_type_cfg[app_type_idx].bit_width;
-			} else if (app_type) {
+			} else if (app_type && app_type_cfg_supported) {
 				app_type_idx =
 				msm_pcm_routing_get_app_type_idx(app_type);
 				sample_rate =
