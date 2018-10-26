@@ -393,6 +393,13 @@
 	/delete-node/ si_auo_400p_cmd;
 };
 
+&vendor_fstab{
+	fsmgr_flags = "wait";
+};
+&system_fstab{
+	fsmgr_flags = "wait";
+};
+
 &soc {
 	/delete-node/ qcom,msm-ssc-sensors;
 };
