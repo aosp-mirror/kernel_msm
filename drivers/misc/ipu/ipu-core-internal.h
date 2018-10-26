@@ -239,12 +239,20 @@ static inline void ipu_core_sync(struct paintbox_bus *bus,
 static inline void ipu_core_memory_map_to_bar(struct paintbox_bus *bus,
 		struct paintbox_shared_buffer *alloc)
 {
+	/* map_to_bar is only supported on PCI based platforms */
+	if (!bus->ops->map_to_bar)
+		return;
+
 	bus->ops->map_to_bar(bus->parent_dev, alloc);
 }
 
 static inline void ipu_core_memory_unmap_from_bar(struct paintbox_bus *bus,
 		struct paintbox_shared_buffer *alloc)
 {
+	/* unmap_from_bar is only supported on PCI based platforms */
+	if (!bus->ops->unmap_from_bar)
+		return;
+
 	bus->ops->unmap_from_bar(bus->parent_dev, alloc);
 }
 
