@@ -171,6 +171,7 @@ enum usb_id_state {
  * @extcon_id: Used for ID notification registration.
  * @vbus_nb: Notification callback for VBUS event.
  * @id_nb: Notification callback for ID event.
+ * @extcon_registered: indicates if extcon notifier registered or not.
  * @dpdm_desc: Regulator descriptor for D+ and D- voting.
  * @dpdm_rdev: Regulator class device for dpdm regulator.
  * @dbg_idx: Dynamic debug buffer Index.

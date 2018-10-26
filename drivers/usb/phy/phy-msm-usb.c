@@ -3681,7 +3681,7 @@ static int msm_otg_extcon_register(struct msm_otg *motg)
 	int ret = 0;
 
 	if (motg->extcon_registered) {
-		dev_err(&motg->pdev->dev, "extcon already registered\n");
+		dev_info(&motg->pdev->dev, "extcon_nb already registered\n");
 		return 0;
 	}
 
