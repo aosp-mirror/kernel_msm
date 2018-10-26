@@ -188,7 +188,7 @@ struct block_property *get_desired_state(struct block *blk,
 	return NULL;
 }
 
-void ab_sm_register_blk_callback(block_name_t name,
+void ab_sm_register_blk_callback(enum block_name name,
 		ab_sm_set_block_state_t callback, void *data)
 {
 	ab_sm_ctx->blocks[name].set_state = callback;

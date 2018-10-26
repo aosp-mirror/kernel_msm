@@ -1123,7 +1123,7 @@ EXPORT_SYMBOL(ab_ddr_selfrefresh_enter);
 
 static int ab_ddr_set_state(const struct block_property *prop_from,
 			const struct block_property *prop_to,
-			chip_state_t chip_state_id, void *data)
+			enum chip_state chip_state_id, void *data)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 

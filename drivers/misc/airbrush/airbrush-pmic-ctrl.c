@@ -13,7 +13,7 @@
 #include <linux/airbrush-sm-ctrl.h>
 
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
-			   block_name_t blk_name, u32 to_chip_substate_id)
+			   enum block_name blk_name, u32 to_chip_substate_id)
 {
 	if (!sc->ab_sm_ctrl_pmic) {
 		dev_err(sc->dev,
@@ -118,7 +118,7 @@ fail_regulator_enable:
 }
 
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,
-			   block_name_t blk_name, u32 to_chip_substate_id)
+			   enum block_name blk_name, u32 to_chip_substate_id)
 {
 	if (!sc->ab_sm_ctrl_pmic) {
 		dev_err(sc->dev,

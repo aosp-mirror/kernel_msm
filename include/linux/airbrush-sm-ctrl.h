@@ -43,14 +43,14 @@
 #define AB_SM_IOCTL_MAGIC	'a'
 #define AB_SM_ASYNC_NOTIFY _IOR(AB_SM_IOCTL_MAGIC, 0, int)
 
-typedef enum __block_names {
+enum block_name {
 	BLK_IPU,
 	BLK_TPU,
 	DRAM,
 	BLK_MIF,
 	BLK_FSYS,
 	BLK_AON,
-} block_name_t;
+};
 
 enum states {
 	off = 0,
@@ -70,12 +70,12 @@ enum states {
 #define ABC_WRITE(addr, value) abc_pcie_config_write(addr & 0xffffff, 0x0, value)
 
 /*Should be in ascending order (for comparisons)*/
-typedef enum __logic_voltage {
+enum logic_voltage {
 	VOLTAGE_0_0,
 	VOLTAGE_0_60,
 	VOLTAGE_0_75,
 	VOLTAGE_0_85,
-} logic_voltage_t;
+};
 
 enum ddr_state {
 	DDR_ON,
@@ -84,8 +84,7 @@ enum ddr_state {
 	DDR_OFF,
 };
 
-// TODO: remove typedef
-typedef enum __chip_state {
+enum chip_state {
 	CHIP_STATE_UNDEFINED = -1,
 	CHIP_STATE_0_0 = 0,
 	CHIP_STATE_0_1,
@@ -116,9 +115,9 @@ typedef enum __chip_state {
 	CHIP_STATE_5_0 = 50,
 	CHIP_STATE_6_0 = 60,
 	CHIP_STATE_DEFAULT,
-} chip_state_t;
+};
 
-typedef enum __block_state {
+enum block_state {
 	BLOCK_STATE_0_0 = 0,
 	BLOCK_STATE_0_1,
 	BLOCK_STATE_0_2,
@@ -132,7 +131,7 @@ typedef enum __block_state {
 	BLOCK_STATE_2_0 = 20,
 	BLOCK_STATE_3_0 = 30,
 	BLOCK_STATE_DEFAULT,
-} block_state_t;
+};
 
 #define bit(x) (1<<x)
 #define IPU_POWER_CONTROL	bit(0)
@@ -158,11 +157,11 @@ typedef enum __block_state {
  * @data_rate: Rate of data transfer.
  */
 struct block_property {
-	block_state_t id;
+	enum block_state id;
 	char *state_name;
 	char *substate_name;
 	enum states voltage_rail_status;
-	logic_voltage_t logic_voltage;
+	enum logic_voltage logic_voltage;
 	enum states clk_status;
 	u64 clk_frequency;
 	u32 num_powered_cores;
@@ -174,7 +173,7 @@ struct block_property {
 typedef int (*ab_sm_set_block_state_t)(
 		const struct block_property *current_property,
 		const struct block_property *desired_property,
-		chip_state_t chip_substate_id, void *data);
+		enum chip_state chip_substate_id, void *data);
 
 /**
  * struct block - stores the information about a SOC block
@@ -186,7 +185,7 @@ typedef int (*ab_sm_set_block_state_t)(
  * @nr_block_states: number of possible states for this block
  */
 struct block {
-	block_name_t name;
+	enum block_name name;
 	struct block_property *current_state;
 	struct block_property *block_property_table;
 	u32 nr_block_states;
@@ -195,13 +194,13 @@ struct block {
 };
 
 struct chip_to_block_map {
-	chip_state_t chip_substate_id;
-	block_state_t ipu_block_state_id;
-	block_state_t tpu_block_state_id;
-	block_state_t dram_block_state_id;
-	block_state_t mif_block_state_id;
-	block_state_t fsys_block_state_id;
-	block_state_t aon_block_state_id;
+	enum chip_state chip_substate_id;
+	enum block_state ipu_block_state_id;
+	enum block_state tpu_block_state_id;
+	enum block_state dram_block_state_id;
+	enum block_state mif_block_state_id;
+	enum block_state fsys_block_state_id;
+	enum block_state aon_block_state_id;
 	u32 flags;
 };
 
@@ -251,7 +250,7 @@ struct ab_state_context {
 	struct device *dev;
 	struct miscdevice misc_dev;
 	struct block blocks[NUM_BLOCKS];
-	chip_state_t chip_substate_id;
+	enum chip_state chip_substate_id;
 	char *chip_substate_name;
 	struct chip_to_block_map *chip_state_table;
 	u32 nr_chip_states;
@@ -322,7 +321,7 @@ struct ab_state_context {
 
 struct ab_sm_misc_session {
 	struct ab_state_context *sc;
-	chip_state_t last_state;
+	enum chip_state last_state;
 };
 
 /*
@@ -333,7 +332,7 @@ struct ab_sm_misc_session {
  *  block_property: block_property structure passed to callback.
  *  data: the cookie that is passed back to the callback.
  */
-void ab_sm_register_blk_callback(block_name_t name,
+void ab_sm_register_blk_callback(enum block_name name,
 		ab_sm_set_block_state_t callback, void *data);
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);

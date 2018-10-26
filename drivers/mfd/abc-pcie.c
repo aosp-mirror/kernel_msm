@@ -423,7 +423,7 @@ u32 string_to_integer(char *string)
 
 int abc_pcie_state_manager(const struct block_property *current_property,
 		const struct block_property *target_property,
-		chip_state_t chip_substate_id, void *data)
+		enum chip_state chip_substate_id, void *data)
 {
 	struct pci_dev *pdev = (struct pci_dev *)data;
 	u32 target_linkstate;
@@ -1729,7 +1729,7 @@ exit_loop:
 #endif
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM)
 	/* Registering the callback to the ASM */
-	ab_sm_register_blk_callback((block_name_t)BLK_FSYS,
+	ab_sm_register_blk_callback(BLK_FSYS,
 			abc_pcie_state_manager, (void *)pdev);
 #endif
 	pci_set_drvdata(pdev, abc);
