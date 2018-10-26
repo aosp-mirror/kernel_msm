@@ -230,16 +230,17 @@ int tpu_config_write(u32 offset, u32 len, u32 data)
 	return 0;
 }
 
-/* memory_config_read can be used to read from
- * SRAM and DRAM of ABC.
+/* DEBUG ONLY: Reconfiguring iATU for each transaction is very costly
+ * memory_config_read can be used to read from SRAM and DRAM of ABC.
  */
 int memory_config_read(u32 offset, u32 len, u32 *data)
 {
+#if IS_ENABLED(CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR)
 	void __iomem *base_offset;
 	struct inb_region   ir;
 	u32 region_offset;
 
-	if(!abc_dev || !abc_dev->memory_config ||
+	if (!abc_dev || !abc_dev->memory_config ||
 			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
@@ -251,11 +252,7 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 		ir.u_target_pcie_address = 0x0;
 		ir.mode =  MEM_MATCH;
 		ir.region = 4;
-#ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 		ir.bar = 3;
-#else
-		ir.bar = 2;
-#endif
 		ir.memmode = 0;
 		set_inbound_iatu(ir);
 		abc_dev->memory_map = region_offset;
@@ -265,20 +262,43 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 	base_offset = abc_dev->memory_config + region_offset;
 	*data = readl_relaxed(base_offset);
 	__iormb();
+#else
+	int ret;
+	struct device *dev = abc_dev->dev;
+	struct bar_mapping mapping;
+	int bar = BAR_2;
 
+	ret = abc_pcie_map_bar_region(dev, bar, len, (uint64_t)offset,
+			&mapping);
+	if (ret < 0) {
+		pr_err("%s: unable to map for bar region, ret=%d\n", __func__,
+				ret);
+		return ret;
+	}
+
+	memcpy_fromio((void *)data, mapping.bar_vaddr, len);
+
+	ret = abc_pcie_unmap_bar_region(dev, &mapping);
+	if (ret < 0) {
+		pr_err("%s: unable to unmap for bar region, ret=%d\n",
+				__func__, ret);
+		return ret;
+	}
+#endif
 	return 0;
 }
 
-/* memory_config_write can be used to write to
- * SRAM and DRAM of ABC.
+/* DEBUG ONLY: Reconfiguring iATU for each transaction is very costly
+ * memory_config_write can be used to read from SRAM and DRAM of ABC.
  */
 int memory_config_write(u32 offset, u32 len, u32 data)
 {
+#if IS_ENABLED(CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR)
 	void __iomem *base_offset;
 	struct inb_region   ir;
 	u32 region_offset;
 
-	if(!abc_dev || !abc_dev->memory_config ||
+	if (!abc_dev || !abc_dev->memory_config ||
 			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
 
@@ -291,11 +311,7 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 		ir.u_target_pcie_address = 0x0;
 		ir.mode =  MEM_MATCH;
 		ir.region = 4;
-#ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 		ir.bar = 3;
-#else
-		ir.bar = 2;
-#endif
 		ir.memmode = 0;
 		set_inbound_iatu(ir);
 		abc_dev->memory_map = region_offset;
@@ -305,6 +321,29 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 	base_offset = abc_dev->memory_config + region_offset;
 	__iowmb();
 	writel_relaxed(data, base_offset);
+#else
+	int ret;
+	struct device *dev = abc_dev->dev;
+	struct bar_mapping mapping;
+	int bar = BAR_2;
+
+	ret = abc_pcie_map_bar_region(dev, bar, len, (uint64_t)offset,
+			&mapping);
+	if (ret < 0) {
+		pr_err("%s: unable to map for bar region, ret=%d\n", __func__,
+				ret);
+		return ret;
+	}
+
+	memcpy_toio(mapping.bar_vaddr, (void *)(&data), len);
+
+	ret = abc_pcie_unmap_bar_region(dev, &mapping);
+	if (ret < 0) {
+		pr_err("%s: unable to unmap for bar region, ret=%d\n",
+				__func__, ret);
+		return ret;
+	}
+#endif
 	return 0;
 }
 
@@ -1679,10 +1718,8 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 				abc_pcie_bar0[i].pdata_size = sizeof(*abc_dev);
 			}
 		}
-		if (bar == 2) {
+		if (bar == 2)
 			abc_dev->bar2_base = base;
-			abc_dev->memory_config = base;
-		}
 		if (bar == 4)
 			abc_dev->bar4_base = base;
 #endif
