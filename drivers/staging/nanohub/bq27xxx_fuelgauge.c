@@ -150,6 +150,11 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 		  fg_info->last_capacity > fg_info->cache.capacity)) {
 			power_supply_changed(&fg_info->bat);
 			fg_info->last_capacity = fg_info->cache.capacity;
+			wake_lock_timeout(&fg_info->wakelock_report,
+				msecs_to_jiffies(20));
+			do_gettimeofday(&cur);
+			fg_info->ts_wakelock_report = timeval_to_ns(&cur);
+			fg_info->wakelock_active_time = 20 * 1000000l;
 		} else if (!charger_online && (fg_info->last_capacity > 0) &&
 			   (fg_info->last_capacity < fg_info->cache.capacity)) {
 			fg_info->cache.capacity = fg_info->last_capacity;
@@ -450,9 +455,10 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 					enum power_supply_property psp,
 					union power_supply_propval *val)
 {
-	int ret = 0;
+	struct timeval cur = {0, };
 	struct Nanohub_FuelGauge_Info *fg_info =
 		container_of(psy, struct Nanohub_FuelGauge_Info, bat);
+	int ret = 0;
 
 	mutex_lock(&fg_info->lock);
 	if (time_is_before_jiffies(fg_info->last_update + 5 * HZ)) {
@@ -461,8 +467,10 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 	}
 	mutex_unlock(&fg_info->lock);
 
-	if (psp != POWER_SUPPLY_PROP_PRESENT && fg_info->cache.flags < 0)
-		return -ENODEV;
+	if (psp != POWER_SUPPLY_PROP_PRESENT && fg_info->cache.flags < 0) {
+		ret = -ENODEV;
+		goto GET_PROPERTY_OUT;
+	}
 
 	if (fg_info->requested)
 		msleep(150);
@@ -529,9 +537,17 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 		ret = bq27x00_simple_value(fg_info->cache.health, val);
 		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
+		goto GET_PROPERTY_OUT;
 	}
 
+GET_PROPERTY_OUT:
+	if (wake_lock_active(&fg_info->wakelock_report)) {
+		wake_unlock(&fg_info->wakelock_report);
+		do_gettimeofday(&cur);
+		fg_info->wakelock_active_time =
+			timeval_to_ns(&cur) - fg_info->ts_wakelock_report;
+	}
 	return ret;
 }
 
@@ -614,6 +630,7 @@ int bq27x00_powersupply_init(struct device *dev,
 	}
 	fg_info->usb_psy = usb_psy;
 	fg_info->hub_data = hub_data;
+	fg_info->hub_data->fg_info = fg_info;
 	fg_info->dev = dev;
 	fg_info->bat.name = name;
 	fg_info->bat.type = POWER_SUPPLY_TYPE_BATTERY;
@@ -630,6 +647,9 @@ int bq27x00_powersupply_init(struct device *dev,
 	INIT_DELAYED_WORK(&fg_info->work, fuelgauge_battery_poll);
 	INIT_DELAYED_WORK(&fg_info->request_delayed_work, request_delayed_func);
 	mutex_init(&fg_info->lock);
+
+	wake_lock_init(&fg_info->wakelock_report, WAKE_LOCK_SUSPEND,
+		       "fuelgauge_wakelock_report");
 
 	retval = power_supply_register(fg_info->dev, &fg_info->bat);
 	if (ret) {
@@ -672,6 +692,7 @@ void bq27x00_powersupply_unregister(void)
 	power_supply_unregister(&fg_info->bat);
 	cancel_delayed_work_sync(&fg_info->work);
 	mutex_destroy(&fg_info->lock);
+	wake_lock_destroy(&fg_info->wakelock_report);
 	kfree(fg_info->bat.name);
 	kfree(fg_info);
 }

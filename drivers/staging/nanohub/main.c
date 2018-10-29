@@ -849,6 +849,15 @@ static ssize_t nanohub_sensorhal_status_get(struct device *dev,
 		"%d\n", atomic_read(&data->sensor_hal_alive));
 }
 
+static ssize_t fuelgauge_wakelock_time_get(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct nanohub_data *data = dev_get_nanohub_data(dev);
+
+	return scnprintf(buf, PAGE_SIZE,
+		"%lld\n", data->fg_info->wakelock_active_time);
+}
+
 static ssize_t nanohub_erase_shared(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
@@ -1191,6 +1200,8 @@ static struct device_attribute attributes[] = {
 	__ATTR(lcd_mutex, 0660, nanohub_lcd_mutex_status, nanohub_lcd_mutex),
 	__ATTR(sensorhal_alive, 0660, nanohub_sensorhal_status_get,
 		nanohub_sensorhal_status_set),
+	__ATTR(fuelgauge_wakelock_time, 0440, fuelgauge_wakelock_time_get,
+		NULL),
 };
 
 static inline int nanohub_create_sensor(struct nanohub_data *data)

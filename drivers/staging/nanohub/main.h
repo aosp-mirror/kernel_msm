@@ -135,6 +135,7 @@ struct nanohub_data {
 #endif
 	struct mutex hub_mode_set_lock;
 	struct mutex nanohub_write_lock;
+	struct Nanohub_FuelGauge_Info *fg_info;
 	uint32_t nanohub_variant_version;
 	uint16_t nanohub_hw_type;
 };

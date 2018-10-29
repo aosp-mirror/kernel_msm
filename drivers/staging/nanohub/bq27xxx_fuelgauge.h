@@ -56,23 +56,28 @@ struct bq27x00_reg_cache {
 } __packed;
 
 struct Nanohub_FuelGauge_Info {
-	struct device *dev;
 	struct mutex lock;
 	struct bq27x00_reg_cache cache;
-	int charge_design_full;
-	unsigned long last_update;
 	struct power_supply bat;
-	unsigned int  pre_interval;
-	struct nanohub_data *hub_data;
 	struct delayed_work work;
 	struct delayed_work request_delayed_work;
-	bool requested;
+	struct wake_lock wakelock_report;
+	struct nanohub_data *hub_data;
+	struct device *dev;
 	struct power_supply	*usb_psy;
-	bool charger_online;
-	uint16_t last_capacity;
+
+	uint64_t ts_wakelock_report;
+	uint64_t wakelock_active_time;
+	unsigned long last_update;
+
+	unsigned int  pre_interval;
+	int charge_design_full;
 #if FUEL_GAUGE_USE_FAKE_CAPACITY
 	int fake_capacity;
 #endif
+	uint16_t last_capacity;
+	bool charger_online;
+	bool requested;
 };
 
 
@@ -85,4 +90,3 @@ int is_fuel_gauge_data(struct nanohub_buf *buf, int len);
 int handle_fuelgauge_data(struct nanohub_buf *buf, int len);
 
 #endif
-
