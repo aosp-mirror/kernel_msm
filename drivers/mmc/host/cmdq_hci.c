@@ -840,6 +840,26 @@ update_io_stat(struct mmc_request *mrq, int is_start)
 	}
 }
 
+static inline char *mmc_parse_optype(u8 optype)
+{
+	/* string should be less than 16 byte-long */
+	switch (optype) {
+	case TS_READ:
+		return "READ";
+	case TS_WRITE:
+		return "WRITE";
+	case TS_URGENT_READ:
+		return "URGENT_READ";
+	case TS_URGENT_WRITE:
+		return "URGENT_WRITE";
+	case TS_FLUSH:
+		return "FLUSH";
+	case TS_DISCARD:
+		return "DISCARD";
+	}
+	return NULL;
+}
+
 static int mmc_tag_req_type(struct request *rq)
 {
 	int rq_type = TS_WRITE;
@@ -858,6 +878,49 @@ static int mmc_tag_req_type(struct request *rq)
 		rq_type = TS_URGENT_WRITE;
 
 	return rq_type;
+}
+
+static void mmc_log_slowio(struct mmc_host *mmc,
+		struct mmc_request *mrq, s64 iotime_us)
+{
+	sector_t lba = -1;
+	int transfer_len = -1;
+	char opcode_str[16];
+	u64 slowio_cnt = 0;
+	enum ts_types optype = 0;
+	struct request *rq = mrq->req;
+
+	/* For common case */
+	if (likely(iotime_us < mmc->slowio_min_us))
+		return;
+
+	if (rq) {
+		optype = mmc_tag_req_type(rq);
+		if (optype < TS_NUM_STATS) {
+			if (iotime_us < mmc->slowio[optype][MMC_SLOWIO_US])
+				return;
+			slowio_cnt = ++mmc->slowio[optype][MMC_SLOWIO_CNT];
+		}
+		if ((optype == TS_READ)
+				|| (optype == TS_WRITE)
+				|| (optype == TS_URGENT_READ)
+				|| (optype == TS_URGENT_WRITE)
+				|| (optype == TS_DISCARD)) {
+			if (rq->bio) {
+				lba = rq->bio->bi_iter.bi_sector;
+				transfer_len = rq->bio->bi_iter.bi_size;
+			}
+		}
+	}
+	snprintf(opcode_str, 16, "%s", mmc_parse_optype(optype));
+	pr_err_ratelimited(
+		"%s: Slow MMC (%lld): time = %lld us, opcode = %s, lba = %ld, len = %d\n",
+		rq->rq_disk->disk_name,
+		slowio_cnt,
+		iotime_us,
+		opcode_str,
+		lba,
+		transfer_len);
 }
 
 static void update_mmc_req_stats(struct mmc_request *mrq)
@@ -891,6 +954,8 @@ static void update_mmc_req_stats(struct mmc_request *mrq)
 		mmc->mmc_req_stats[rq_type].max = delta;
 	if (delta < mmc->mmc_req_stats[rq_type].min)
 		mmc->mmc_req_stats[rq_type].min = delta;
+
+	mmc_log_slowio(mrq->host, mrq, delta);
 }
 
 #else

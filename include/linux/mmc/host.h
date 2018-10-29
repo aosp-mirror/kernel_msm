@@ -396,6 +396,21 @@ enum ts_types {
 	TS_NUM_STATS		= 7,
 };
 
+/* eMMC Slow I/O sysfs entry types */
+enum mmc_slowio_systype {
+	MMC_SLOWIO_US = 0,
+	MMC_SLOWIO_CNT = 1,
+	MMC_SLOWIO_SYS_MAX = 2,
+};
+
+#define MMC_MIN_SLOWIO_US                  (50000)    /* 50 ms      */
+#define MMC_DEFAULT_SLOWIO_READ_US         (5000000)  /*  5 seconds */
+#define MMC_DEFAULT_SLOWIO_WRITE_US        (10000000) /* 10 seconds */
+#define MMC_DEFAULT_SLOWIO_URGENT_READ_US  (5000000)  /*  5 seconds */
+#define MMC_DEFAULT_SLOWIO_URGENT_WRITE_US (10000000) /* 10 seconds */
+#define MMC_DEFAULT_SLOWIO_FLUSH_US        (10000000) /* 10 seconds */
+#define MMC_DEFAULT_SLOWIO_DISCARD_US      (30000000) /* 30 seconds */
+
 /**
  * struct mmc_req_stat - statistics for request handling times (in usec)
  * @min: shortest time measured
@@ -639,6 +654,10 @@ struct mmc_host {
 	struct mmc_req_stat mmc_req_stats[TS_NUM_STATS];
 	struct mmc_stats mmc_stats;
 	spinlock_t		stat_lock;	/* lock for collect IO stat */
+
+	/* Slow IO */
+	u64 slowio_min_us;
+	u64 slowio[TS_NUM_STATS][MMC_SLOWIO_SYS_MAX];
 #endif
 	struct mmc_async_req	*areq;		/* active async req */
 	struct mmc_context_info	context_info;	/* async synchronization info */
