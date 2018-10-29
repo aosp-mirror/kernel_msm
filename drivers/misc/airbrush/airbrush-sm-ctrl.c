@@ -688,7 +688,6 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	mutex_init(&ab_sm_ctx->pmic_lock);
 	mutex_init(&ab_sm_ctx->state_lock);
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
-	atomic_set(&ab_sm_ctx->clocks_initialized, 0);
 	init_completion(&ab_sm_ctx->state_change_comp);
 
 

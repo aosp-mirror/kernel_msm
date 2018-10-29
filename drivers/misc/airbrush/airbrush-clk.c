@@ -23,8 +23,8 @@
 
 int ipu_pll_enable(struct ab_state_context *sc)
 {
-	if (!atomic_read(&sc->clocks_initialized)) {
-		dev_err(sc->dev, "clocks not initialized\n");
+	if (!atomic_read(&sc->clocks_registered)) {
+		dev_err(sc->dev, "clocks not registered\n");
 		return -ENODEV;
 	}
 
@@ -34,8 +34,8 @@ int ipu_pll_enable(struct ab_state_context *sc)
 
 void ipu_pll_disable(struct ab_state_context *sc)
 {
-	if (!atomic_read(&sc->clocks_initialized)) {
-		dev_err(sc->dev, "clocks not initialized\n");
+	if (!atomic_read(&sc->clocks_registered)) {
+		dev_err(sc->dev, "clocks not registered\n");
 		return;
 	}
 
@@ -71,8 +71,8 @@ void ipu_ungate(struct ab_state_context *sc)
 
 u64 ipu_set_rate(struct ab_state_context *sc, u64 rate)
 {
-	if (!atomic_read(&sc->clocks_initialized)) {
-		dev_err(sc->dev, "clocks not initialized\n");
+	if (!atomic_read(&sc->clocks_registered)) {
+		dev_err(sc->dev, "clocks not registered\n");
 		return 0;
 	}
 
@@ -126,8 +126,8 @@ void tpu_ungate(struct ab_state_context *sc)
 
 int tpu_pll_enable(struct ab_state_context *sc)
 {
-	if (!atomic_read(&sc->clocks_initialized)) {
-		dev_err(sc->dev, "clocks not initialized\n");
+	if (!atomic_read(&sc->clocks_registered)) {
+		dev_err(sc->dev, "clocks not registered\n");
 		return -ENODEV;
 	}
 
@@ -138,8 +138,8 @@ int tpu_pll_enable(struct ab_state_context *sc)
 
 void tpu_pll_disable(struct ab_state_context *sc)
 {
-	if (!atomic_read(&sc->clocks_initialized)) {
-		dev_err(sc->dev, "clocks not initialized\n");
+	if (!atomic_read(&sc->clocks_registered)) {
+		dev_err(sc->dev, "clocks not registered\n");
 		return;
 	}
 
@@ -149,6 +149,11 @@ void tpu_pll_disable(struct ab_state_context *sc)
 
 u64 tpu_set_rate(struct ab_state_context *sc, u64 rate)
 {
+	if (!atomic_read(&sc->clocks_registered)) {
+		dev_err(sc->dev, "clocks not registered\n");
+		return 0;
+	}
+
 	if (rate == 0)
 		rate = OSC_RATE;
 
@@ -180,7 +185,8 @@ void abc_clk_register(struct ab_state_context *sc)
 	 * should initialize the resources in the right order for all entry
 	 * points into the code.
 	 */
-	if (atomic_cmpxchg(&sc->clocks_registered, 0, 1)) {
+
+	if (!atomic_cmpxchg(&sc->clocks_registered, 0, 1)) {
 		/* Registering CMUs to Common Clock Framework.
 		 * Parse through the ab device node and scan for cmu nodes.
 		 * once found, register the same with the common clock framework
@@ -206,9 +212,7 @@ void abc_clk_register(struct ab_state_context *sc)
 				abc_clk_tpu_init(child);
 			}
 		}
-	}
 
-	if (atomic_cmpxchg(&sc->clocks_initialized, 0, 1)) {
 		sc->ipu_pll			= clk_get(sc->dev, "ipu_pll");
 		sc->ipu_pll_mux		= clk_get(sc->dev, "ipu_pll_mux");
 		sc->ipu_pll_div		= clk_get(sc->dev, "ipu_pll_div");
@@ -232,8 +236,8 @@ void abc_clk_register(struct ab_state_context *sc)
 				IS_ERR(sc->tpu_switch_mux) ||
 				IS_ERR(sc->osc_clk) ||
 				IS_ERR(sc->shared_div_aon_pll)) {
-			dev_err(sc->dev, "could not initialize all clocks\n");
-			atomic_set(&sc->clocks_initialized, 0);
+			dev_err(sc->dev, "could not register all clocks\n");
+			atomic_set(&sc->clocks_registered, 0);
 		}
 	}
 }
