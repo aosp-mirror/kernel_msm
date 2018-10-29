@@ -1493,6 +1493,8 @@ static int max1720x_read_gauge_type(struct max1720x_chip *chip)
 		dev_err(chip->dev, "cannot read device name %d\n", ret);
 	} else {
 		switch (devname >> 4) {
+		case 0x406:  /* max1730x pass2 silicon */
+		case 0x405:  /* max1730x pass2 silicon initial samples */
 		case 0x404:  /* max1730x sample */
 			gauge_type = MAX1730X_GAUGE_TYPE;
 			break;
