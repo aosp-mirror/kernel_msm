@@ -15,6 +15,8 @@
 		compatible = "google,dsi_binned_lp";
 
 		qcom,mdss-dsi-panel-name = "S6E3HA8 6.3 command mode panel";
+		google,mdss-dsi-panel-vendor = "SAMSUNG";
+		google,mdss-dsi-panel-sn-location = <0xA1 6 7>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-bpp = <24>;
@@ -30,8 +32,7 @@
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 1>, <1 0>;
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <0x50>;
-		/* equivalent to 2 nits.  >= 0x0a for PMIC safety in VR mode. */
+		qcom,mdss-dsi-bl-min-level = <0x5>;
 		qcom,mdss-dsi-bl-max-level = <0x3ff>;
 		qcom,mdss-dsi-panel-hdr-enabled;
 		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
@@ -53,8 +54,8 @@
 
 		qcom,mdss-dsi-init-delay-us = <5000>;
 
-		qcom,mdss-pan-physical-width-dimension  = <73>;
-		qcom,mdss-pan-physical-height-dimension = <154>;
+		qcom,mdss-pan-physical-width-dimension  = <70>;
+		qcom,mdss-pan-physical-height-dimension = <144>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
@@ -92,6 +93,8 @@
 					39 01 00 00 00 00 03 F0 5A 5A
 					15 01 00 00 00 00 02 B8 11
 					39 01 00 00 00 00 05 B1 02 54 0C 00
+					15 01 00 00 00 00 02 B0 07
+					15 01 00 00 00 00 02 B1 07
 					15 01 00 00 00 00 02 B0 10
 					39 01 00 00 00 00 03 CB 03 0E
 					15 01 00 00 00 00 02 B0 25
@@ -99,24 +102,24 @@
 					15 01 00 00 00 00 02 B0 43
 					15 01 00 00 00 00 02 CB 8F
 					15 01 00 00 00 00 02 F7 03
-					15 01 00 00 00 00 02 B0 08
-					15 01 00 00 00 00 02 B1 4D
 					39 01 00 00 00 00 03 F0 A5 A5
-					39 01 00 00 00 00 03 51 01 D7
+					39 01 00 00 00 00 03 51 00 BB
+					15 01 00 00 00 00 02 53 20
 				];
 
 				qcom,mdss-dsi-novr-command = [
 					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B8 15
+					39 01 00 00 00 00 05 B1 00 0C 0C A0
 					15 01 00 00 00 00 02 B0 08
-					15 01 00 00 00 00 02 B1 2D
+					15 01 00 00 00 00 02 B1 0C
 					15 01 00 00 00 00 02 B0 10
 					39 01 00 00 00 00 03 CB 0B 06
 					15 01 00 00 00 00 02 B0 25
 					15 01 00 00 00 00 02 CB 09
 					15 01 00 00 00 00 02 B0 43
 					15 01 00 00 00 00 02 CB 0F
-					39 01 00 00 00 00 03 B1 00 0C
-					15 01 00 00 00 00 02 F7 03
+					15 01 00 00 14 00 02 F7 03
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
@@ -154,7 +157,7 @@
 			lp-mode@1 {
 				label = "low";
 
-				google,dsi-lp-brightness-threshold = <70>;
+				google,dsi-lp-brightness-threshold = <10>;
 				google,dsi-lp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
 					15 01 00 00 00 00 02 B0 05
@@ -178,6 +181,77 @@
 					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+		};
+
+		google,hbm-ranges {
+			google,dsi-hbm-exit-command = [
+				/* Disable high brightness and enable
+				 * brightness dimming
+				 */
+				15 01 00 00 00 00 02 53 28
+			];
+			google,dsi-hbm-exit-num-dimming-frames = <32>;
+			google,dsi-hbm-exit-dimming-stop-command = [
+				/* Disable high brightness and disable
+				 * brightness dimming
+				 */
+				15 01 00 00 00 00 02 53 20
+			];
+			google,dsi-hbm-commands-state = "dsi_lp_mode";
+
+			hbm-range@0 {
+				google,dsi-hbm-range-brightness-threshold = <1>;
+
+				google,dsi-hbm-range-bl-min-level = <0x5>;
+				google,dsi-hbm-range-bl-max-level = <0x3ff>;
+				google,dsi-hbm-range-entry-command = [
+					/* Disable high brightness and enable
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 28
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Disable high brightness and disable
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 20
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			hbm-range@1 {
+				/* Normal brightness mode covers ~2 to 400
+				 * nits, using panel brightness values up to
+				 * 0x3ff. HBM extends the range to 600 nits,
+				 * and remaps user brightness 1-255 to cover
+				 * this extended range. In this extended range,
+				 * 400 nits / 0x3ff corresponds to user
+				 * brightness 170. Panel brightness is not
+				 * adjustable in the 400-600 nit segment.
+				 */
+				google,dsi-hbm-range-brightness-threshold =
+					<170>;
+
+				google,dsi-hbm-range-bl-min-level = <0x3ff>;
+				google,dsi-hbm-range-bl-max-level = <0x3ff>;
+
+				google,dsi-hbm-range-entry-command = [
+					/* Enable high brightness */
+					15 01 00 00 00 00 02 53 E8
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Enable high brightness and disable
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 E0
+				];
+
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
 			};
 		};
 	};
