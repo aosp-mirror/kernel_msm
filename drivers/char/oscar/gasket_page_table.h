@@ -35,9 +35,8 @@ struct gasket_page_table;
  *                         is extended.
  * @total_entries: The total number of entries in the device's address
  *                 translation table.
- * @device: Device structure for the underlying device. Only used for logging.
- * @pci_dev: PCI system descriptor for the underlying device.
- * whether the driver will supply its own.
+ * @gasket_dev: Associated gasket device struct, used for logging and issuing
+ *              DMA calls to the proper devices.
  *
  * Description: Allocates and initializes data to track address translation -
  * simple and extended page table metadata. Initially, the page table is
@@ -49,7 +48,7 @@ struct gasket_page_table;
 int gasket_page_table_init(struct gasket_page_table **ppg_tbl,
 			   const struct gasket_bar_data *bar_data,
 			   const struct gasket_page_table_config *page_table_config,
-			   struct device *device, struct pci_dev *pci_dev);
+			   struct gasket_dev *gasket_dev);
 
 /*
  * Deallocate and cleanup page table data.
