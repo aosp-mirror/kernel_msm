@@ -852,19 +852,14 @@ static int oscar_setup_device(struct platform_device *pdev,
 	ulong page_table_ready;
 	int retries = 0;
 	struct device *dev = &pdev->dev;
-	const struct dma_map_ops *parent_dma_ops =
-		get_dma_ops(pdev->dev.parent);
 	phys_addr_t mem_phys;
 	resource_size_t mem_size;
 	void *mem_virt = NULL;
 	u64 u64prop;
 	int ret;
 
-	if (parent_dma_ops)
-		set_dma_ops(dev, parent_dma_ops);
-	else
-		dev_warn(dev, "No dma_ops to inherit from parent mfd device\n");
-
+	/* Use the parent abc device for DMA, which has the IOMMU config */
+	gasket_set_dma_device(gasket_dev, pdev->dev.parent);
 	/*
 	 * The memory resource passes the physical address range of our
 	 * memory region in the associated BAR of the parent mfd device.
