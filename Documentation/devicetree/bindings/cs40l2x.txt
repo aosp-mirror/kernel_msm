@@ -92,6 +92,23 @@ Optional properties:
     as cirrus,redc-default. If this value is omitted or specified as zero, no
     upper-bound validation is performed.
 
+  - cirrus,q-default : Default LRA Q factor (silicon revision B1 only),
+    expressed as follows: cirrus,q-default = Q * 2^16. This value represents
+    the unit-specific Q factor used to select the correct sub-waveform for
+    Q-dependent wavetable indexes. It can be overwritten at a later time by
+    writing to the q_stored sysfs control. If this value is omitted or specified
+    as zero, a default value of 27 is used.
+
+  - cirrus,q-min : Minimum LRA Q factor that may be written to the q_stored
+    sysfs control (silicon revision B1 only), expressed using the same numerical
+    format as cirrus,q-default. If this value is omitted or specified as zero,
+    no lower-bound validation is performed.
+
+  - cirrus,q-max : Maximum LRA Q factor that may be written to the q_stored
+    sysfs control (silicon revision B1 only), expressed using the same numerical
+    format as cirrus,q-default. If this value is omitted or specified as zero,
+    no upper-bound validation is performed.
+
   - cirrus,redc-comp-disable : Boolean for disabling ReDC-based click
     compensation (silicon revision B1 only). If this property is omitted, ReDC-
     based click compensation remains enabled in the absence of the comp-disable
