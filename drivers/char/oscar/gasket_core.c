@@ -1743,14 +1743,6 @@ const struct gasket_driver_desc *gasket_get_driver_desc(struct gasket_dev *dev)
 	return dev->internal_desc->driver_desc;
 }
 
-/* Get the device structure for a given gasket_dev.
- * @dev: pointer to gasket_dev, implementing the requested driver.
- */
-struct device *gasket_get_device(struct gasket_dev *dev)
-{
-	return dev->dev;
-}
-
 /**
  * Asynchronously waits on device.
  * @gasket_dev: Device struct.
