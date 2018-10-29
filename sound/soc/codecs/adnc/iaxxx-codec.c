@@ -2552,10 +2552,24 @@ IAXXX_SENSOR_EN_SET_GET(SENSOR1)
 IAXXX_SENSOR_EN_SET_GET(SENSOR2)
 IAXXX_SENSOR_EN_SET_GET(SENSOR3)
 
+#define IAXXXCORE_SENSOR_ENUM(sensor) \
+	SOC_VALUE_ENUM_SINGLE_DECL(sensor##_ip_enum, \
+			IAXXX_SENSOR_GRP_CONNECT_REG(sensor), \
+			IAXXX_SENSOR_GRP_CONNECT_SOURCE_ID_POS, \
+			(IAXXX_SENSOR_GRP_CONNECT_SOURCE_ID_MASK >> \
+			IAXXX_SENSOR_GRP_CONNECT_SOURCE_ID_POS), \
+			ip_ep_texts, ip_ep_values)
+
+IAXXXCORE_SENSOR_ENUM(SENSOR0);
+IAXXXCORE_SENSOR_ENUM(SENSOR1);
+IAXXXCORE_SENSOR_ENUM(SENSOR2);
+IAXXXCORE_SENSOR_ENUM(SENSOR3);
+
 #define IAXXXCORE_SENSOR_KCTRL(sensor, sensor_name) \
 	SOC_SINGLE_BOOL_EXT(sensor_name" En", 0, \
 		       iaxxxcore_get_sensor##sensor##_en, \
-		       iaxxxcore_set_sensor##sensor##_en)
+		       iaxxxcore_set_sensor##sensor##_en), \
+	SOC_ENUM(sensor_name" Ip Conf", sensor##_ip_enum)
 
 /*
  * Each MIC can have a clock source from the port it is
