@@ -215,6 +215,7 @@ static int gasket_alloc_dev(struct gasket_internal_desc *internal_desc,
 	gasket_dev->dev_idx = dev_idx;
 	snprintf(gasket_dev->kobj_name, GASKET_NAME_MAX, "%s", parent_name);
 	gasket_dev->dev = get_device(parent);
+	gasket_dev->dma_dev = get_device(parent);
 	/* gasket_bar_data is uninitialized. */
 	gasket_dev->num_page_tables = driver_desc->num_page_tables;
 	/* max_page_table_size and *page table are uninit'ed */
@@ -247,6 +248,7 @@ static void gasket_free_dev(struct gasket_dev *gasket_dev)
 	internal_desc->devs[gasket_dev->dev_idx] = NULL;
 	mutex_unlock(&internal_desc->mutex);
 	put_device(gasket_dev->dev);
+	put_device(gasket_dev->dma_dev);
 	kfree(gasket_dev);
 }
 
@@ -1641,6 +1643,14 @@ void gasket_platform_remove_device(struct platform_device *pdev)
 	__gasket_remove_device(internal_desc, gasket_dev);
 }
 EXPORT_SYMBOL(gasket_platform_remove_device);
+
+void gasket_set_dma_device(struct gasket_dev *gasket_dev,
+			   struct device *dma_dev)
+{
+	put_device(gasket_dev->dma_dev);
+	gasket_dev->dma_dev = get_device(dma_dev);
+}
+EXPORT_SYMBOL(gasket_set_dma_device);
 
 /**
  * Lookup a name by number in a num_name table.

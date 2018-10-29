@@ -260,6 +260,9 @@ struct gasket_dev {
 	/* Device info */
 	struct device *dev;
 
+	/* DMA device to use, may be same as above or a parent */
+	struct device *dma_dev;
+
 	/* PCI device pointer for PCI devices */
 	struct pci_dev *pci_dev;
 
@@ -543,6 +546,10 @@ int gasket_platform_add_device(struct platform_device *pdev,
 
 /* Remove a platform gasket device. */
 void gasket_platform_remove_device(struct platform_device *pdev);
+
+/* Set DMA device to use (if different from PCI/platform device) */
+void gasket_set_dma_device(struct gasket_dev *gasket_dev,
+			   struct device *dma_dev);
 
 /* Enable a Gasket device. */
 int gasket_enable_device(struct gasket_dev *gasket_dev);
