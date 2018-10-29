@@ -93,7 +93,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	int ret;
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
-	static int abc_clk_registered;
 
 	if (!ab_ctx)
 		return -EINVAL;
@@ -105,10 +104,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		/* Setup the function pointer to read DDR OTPs */
 		ab_ddr_setup(ab_ctx);
 
-		if (!abc_clk_registered) {
-			abc_clk_register(ab_ctx);
-			abc_clk_registered = 1;
-		}
+		abc_clk_register(ab_ctx);
 
 		return 0;
 	}
@@ -332,10 +328,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	if (IS_HOST_DDR_INIT())
 		ab_ddr_init(ab_ctx);
 
-	if (!abc_clk_registered) {
-		abc_clk_register(ab_ctx);
-		abc_clk_registered = 1;
-	}
+	abc_clk_register(ab_ctx);
 
 	return 0;
 }

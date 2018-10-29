@@ -314,7 +314,6 @@ struct ab_state_context {
 	struct dentry *d_entry;
 #endif
 	bool ab_sm_ctrl_pmic;
-	atomic_t clocks_initialized;
 	atomic_t clocks_registered;
 	enum ddr_state ddr_state;
 	struct pci_dev *pcie_dev;
