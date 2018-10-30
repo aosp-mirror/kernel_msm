@@ -39,6 +39,24 @@
 #define TRUE  1
 #define FALSE 0
 
+/* The sensor define need to match to dtsi slot number */
+#define REAR_WIDE 0
+#define REAR_TELE 1
+#define FRONT_CAM 2
+#define IR_MASTER 3
+#define IR_SLAVE 4
+
+#define FLASH_STROBE_ADDR 0x3B81
+#define FLASH_STROBE_EVEN 0xAA
+#define FLASH_STROBE_ODD 0x55
+#define FLASH_STROBE_DISABLE 0x00
+
+#define REAR_WIDE_STREAMON_MASK (1 << REAR_WIDE)
+#define REAR_TELE_STREAMON_MASK (1 << REAR_TELE)
+#define FRONT_CAM_STREAMON_MASK (1 << FRONT_CAM)
+#define IR_MASTER_STREAMON_MASK (1 << IR_MASTER)
+#define IR_SLAVE_STREAMON_MASK (1 << IR_SLAVE)
+
 #undef CDBG
 #ifdef CAM_SENSOR_DEBUG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
@@ -104,6 +122,7 @@ struct cam_sensor_ctrl_t {
 	enum cci_i2c_master_t cci_i2c_master;
 	enum cci_device_num cci_num;
 	struct camera_io_master io_master_info;
+	struct camera_io_master peer_ir_info;
 	enum cam_sensor_state_t sensor_state;
 	uint8_t is_probe_succeed;
 	uint32_t id;
@@ -121,6 +140,7 @@ struct cam_sensor_ctrl_t {
 	bool bob_pwm_switch;
 	struct cam_sensor_override_info override_info;
 	uint8_t fw_update_flag;
+	enum strobe_type strobeType;
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */

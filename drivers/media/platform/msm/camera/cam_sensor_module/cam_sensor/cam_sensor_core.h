@@ -90,4 +90,11 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl, void *arg);
  */
 void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl);
 
+/**
+ * @apply: Req mgr structure for applying request
+ *
+ * This API provide storbe reset when both IR is streaming on
+ */
+int cam_sensor_set_strobe(struct cam_req_mgr_apply_request *apply, bool enable);
+
 #endif /* _CAM_SENSOR_CORE_H_ */

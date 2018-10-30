@@ -50,6 +50,7 @@ typedef int (*cam_req_mgr_add_req)(struct cam_req_mgr_add_request *);
  * @cam_req_mgr_apply_req   : CRM asks device to apply certain request id.
  * @cam_req_mgr_flush_req   : Flush or cancel request
  * cam_req_mgr_process_evt  : generic events
+ * cam_req_mgr_set_strobe   : to reset IR camera storbe
  */
 typedef int (*cam_req_mgr_get_dev_info) (struct cam_req_mgr_device_info *);
 typedef int (*cam_req_mgr_link_setup)(
@@ -57,6 +58,7 @@ typedef int (*cam_req_mgr_link_setup)(
 typedef int (*cam_req_mgr_apply_req)(struct cam_req_mgr_apply_request *);
 typedef int (*cam_req_mgr_flush_req)(struct cam_req_mgr_flush_request *);
 typedef int (*cam_req_mgr_process_evt)(struct cam_req_mgr_link_evt_data *);
+typedef int (*cam_req_mgr_set_strobe)(struct cam_req_mgr_apply_request *, bool);
 
 /**
  * @brief          : cam_req_mgr_crm_cb - func table
@@ -79,6 +81,7 @@ struct cam_req_mgr_crm_cb {
  * @apply_req    : payload to apply request id on a device linked
  * @flush_req    : payload to flush request
  * @process_evt  : payload to generic event
+ * @set_strobe   : payload to reset IR storbe
  */
 struct cam_req_mgr_kmd_ops {
 	cam_req_mgr_get_dev_info     get_dev_info;
@@ -86,6 +89,7 @@ struct cam_req_mgr_kmd_ops {
 	cam_req_mgr_apply_req        apply_req;
 	cam_req_mgr_flush_req        flush_req;
 	cam_req_mgr_process_evt      process_evt;
+	cam_req_mgr_set_strobe       set_strobe;
 };
 
 /**
@@ -290,6 +294,7 @@ struct cam_req_mgr_apply_request {
 	uint64_t   request_id;
 	int32_t    report_if_bubble;
 	uint32_t   trigger_point;
+	uint64_t   frame_count;
 };
 
 /**

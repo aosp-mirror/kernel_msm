@@ -243,6 +243,17 @@ FREE_SENSOR_DATA:
 	return rc;
 }
 
+static void msm_sensor_fill_peer_ir_info(struct cam_sensor_ctrl_t *s_ctrl)
+{
+	s_ctrl->peer_ir_info.cci_client->sid = 0x60;
+	s_ctrl->peer_ir_info.cci_client->cci_device = 0;
+	s_ctrl->peer_ir_info.cci_client->retries = 3;
+	s_ctrl->peer_ir_info.cci_client->id_map = 0;
+	s_ctrl->peer_ir_info.cci_client->i2c_freq_mode = I2C_FAST_MODE;
+	s_ctrl->peer_ir_info.cci_client->cci_i2c_master =
+		(s_ctrl->soc_info.index == IR_MASTER ? 1 : 0);
+}
+
 int32_t msm_sensor_init_default_params(struct cam_sensor_ctrl_t *s_ctrl)
 {
 	/* Validate input parameters */
@@ -251,6 +262,10 @@ int32_t msm_sensor_init_default_params(struct cam_sensor_ctrl_t *s_ctrl)
 			s_ctrl);
 		return -EINVAL;
 	}
+
+	if (s_ctrl->soc_info.index == IR_MASTER ||
+		s_ctrl->soc_info.index == IR_SLAVE)
+		s_ctrl->peer_ir_info.master_type = CCI_MASTER;
 
 	CAM_DBG(CAM_SENSOR,
 		"master_type: %d", s_ctrl->io_master_info.master_type);
@@ -263,6 +278,15 @@ int32_t msm_sensor_init_default_params(struct cam_sensor_ctrl_t *s_ctrl)
 		} else {
 			s_ctrl->io_master_info.cci_client->cci_device
 				= s_ctrl->cci_num;
+		}
+
+		/* Fill up peer IR io info */
+		if (s_ctrl->peer_ir_info.master_type == CCI_MASTER) {
+			s_ctrl->peer_ir_info.cci_client = kzalloc(sizeof(
+				struct cam_sensor_cci_client), GFP_KERNEL);
+			if (!(s_ctrl->io_master_info.cci_client))
+				return -ENOMEM;
+			msm_sensor_fill_peer_ir_info(s_ctrl);
 		}
 
 	} else if (s_ctrl->io_master_info.master_type == I2C_MASTER) {

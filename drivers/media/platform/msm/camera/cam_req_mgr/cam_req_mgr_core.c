@@ -1793,11 +1793,13 @@ end:
  */
 static int cam_req_mgr_process_trigger(void *priv, void *data)
 {
-	int                                  rc = 0;
+	int                                  rc = 0, i;
 	struct cam_req_mgr_trigger_notify   *trigger_data = NULL;
 	struct cam_req_mgr_core_link        *link = NULL;
 	struct cam_req_mgr_req_queue        *in_q = NULL;
 	struct crm_task_payload             *task_data = NULL;
+	struct cam_req_mgr_connected_device *dev = NULL;
+	struct cam_req_mgr_apply_request     apply_req;
 
 	if (!data || !priv) {
 		CAM_ERR(CAM_CRM, "input args NULL %pK %pK", data, priv);
@@ -1816,6 +1818,30 @@ static int cam_req_mgr_process_trigger(void *priv, void *data)
 	in_q = link->req.in_q;
 
 	mutex_lock(&link->req.lock);
+
+	/* Call to sensor strobe api */;
+	for (i = 0; i < link->num_devs; i++) {
+		dev = &link->l_dev[i];
+		if (dev &&
+			(dev->dev_info.dev_id ==
+			CAM_REQ_MGR_DEVICE_SENSOR))
+			break;
+	}
+	if ((dev->dev_info.trigger & trigger_data->trigger) != 0) {
+		apply_req.dev_hdl = dev->dev_hdl;
+		apply_req.request_id = 0;
+		apply_req.trigger_point = trigger_data->trigger;
+		apply_req.frame_count = trigger_data->frame_id;
+
+		if (dev->ops && dev->ops->set_strobe) {
+			rc = dev->ops->set_strobe(&apply_req, true);
+			if (rc < 0)
+				CAM_ERR(CAM_CRM,
+					"failed to reset strobe");
+		}
+	}
+
+
 	/*
 	 * Check if current read index is in applied state, if yes make it free
 	 *    and increment read index to next slot.

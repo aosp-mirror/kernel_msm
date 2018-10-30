@@ -18,6 +18,12 @@ enum rainbow_op_type {
 	RAINBOW_RANDOM_WRITE
 };
 
+enum strobe_type {
+	STROBE_ALTERNATIVE,
+	STROBE_SYNCHRONIZE,
+	STROBE_NONE
+};
+
 struct rainbow_config {
 	enum rainbow_op_type operation;
 	uint32_t             size;

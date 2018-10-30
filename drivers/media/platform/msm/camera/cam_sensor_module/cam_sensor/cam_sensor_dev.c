@@ -132,6 +132,33 @@ static int cam_sensor_init_subdev_params(struct cam_sensor_ctrl_t *s_ctrl)
 	return rc;
 }
 
+static ssize_t set_strobe_type_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = dev_get_drvdata(dev);
+	int rc, value;
+
+	rc = kstrtouint(buf, 0, &value);
+	if (rc)
+		return rc;
+
+	if (value > STROBE_NONE)
+		return -EINVAL;
+
+	s_ctrl->strobeType = value;
+
+	return count;
+}
+static DEVICE_ATTR_WO(set_strobe_type);
+
+static struct attribute *cam_sensor_dev_attrs[] = {
+	&dev_attr_set_strobe_type.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(cam_sensor_dev);
+
 static int32_t cam_sensor_driver_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
@@ -224,6 +251,7 @@ static int cam_sensor_platform_remove(struct platform_device *pdev)
 
 	kfree(s_ctrl->i2c_data.per_frame);
 	devm_kfree(&pdev->dev, s_ctrl);
+	sysfs_remove_groups(&pdev->dev.kobj, cam_sensor_dev_groups);
 
 	return 0;
 }
@@ -319,10 +347,15 @@ static int32_t cam_sensor_driver_platform_probe(
 	s_ctrl->bridge_intf.ops.link_setup = cam_sensor_establish_link;
 	s_ctrl->bridge_intf.ops.apply_req = cam_sensor_apply_request;
 	s_ctrl->bridge_intf.ops.flush_req = cam_sensor_flush_request;
+	s_ctrl->bridge_intf.ops.set_strobe = cam_sensor_set_strobe;
 
 	s_ctrl->sensordata->power_info.dev = &pdev->dev;
 	platform_set_drvdata(pdev, s_ctrl);
 	v4l2_set_subdevdata(&(s_ctrl->v4l2_dev_str.sd), s_ctrl);
+
+	rc = sysfs_create_groups(&pdev->dev.kobj, cam_sensor_dev_groups);
+	if (rc < 0)
+		goto unreg_subdev;
 
 	s_ctrl->sensor_state = CAM_SENSOR_INIT;
 

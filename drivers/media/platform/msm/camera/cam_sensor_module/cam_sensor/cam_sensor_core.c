@@ -21,6 +21,8 @@
 #include "../cam_fw_update/fw_update.h"
 #endif
 
+static uint8_t streamon_mask;
+
 static void cam_sensor_update_req_mgr(
 	struct cam_sensor_ctrl_t *s_ctrl,
 	struct cam_packet *csl_packet)
@@ -559,6 +561,70 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 	return rc;
 }
 
+static int32_t cam_sensor_update_ir_cams_strobe(
+	struct cam_sensor_ctrl_t *s_ctrl, bool enable)
+{
+	int32_t rc;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings;
+
+	reg_settings.reg_addr = FLASH_STROBE_ADDR;
+	reg_settings.delay = 0;
+
+	write_setting.reg_setting = &reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 0;
+
+	if (enable == true) {
+		CAM_INFO(CAM_SENSOR, "re-setting storbe, strobe type: %d",
+			s_ctrl->strobeType);
+		write_setting.reg_setting->reg_data = FLASH_STROBE_EVEN;
+
+		rc = camera_io_dev_write(&(s_ctrl->peer_ir_info),
+			&write_setting);
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR,
+				"failed on cci write, addr 0x%x, data: 0x%x",
+				reg_settings.reg_addr, reg_settings.reg_data);
+			goto out;
+		}
+
+		if (s_ctrl->strobeType == STROBE_ALTERNATIVE)
+			write_setting.reg_setting->reg_data = FLASH_STROBE_ODD;
+
+		rc = camera_io_dev_write(&(s_ctrl->io_master_info),
+			&write_setting);
+		if (rc < 0)
+			CAM_ERR(CAM_SENSOR,
+				"failed on cci write, addr 0x%x, data: 0x%x",
+				reg_settings.reg_addr, reg_settings.reg_data);
+	} else {
+		write_setting.reg_setting->reg_data = FLASH_STROBE_DISABLE;
+
+		rc = camera_io_dev_write(&(s_ctrl->io_master_info),
+			&write_setting);
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR,
+				"failed on cci write, addr 0x%x, data: 0x%x",
+				reg_settings.reg_addr, reg_settings.reg_data);
+			goto out;
+		}
+
+		rc = camera_io_dev_write(&(s_ctrl->peer_ir_info),
+			&write_setting);
+		if (rc < 0) {
+			CAM_ERR(CAM_SENSOR,
+				"failed on cci write, addr 0x%x, data: 0x%x",
+				reg_settings.reg_addr, reg_settings.reg_data);
+		}
+	}
+
+out:
+	return rc;
+}
+
 int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 	void *arg)
 {
@@ -790,6 +856,19 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto release_mutex;
 		}
 
+		/* Disable strobe when peer IR is streaming on */
+		if (((s_ctrl->soc_info.index == IR_MASTER) &&
+			((streamon_mask & IR_SLAVE_STREAMON_MASK) != 0)) ||
+			((s_ctrl->soc_info.index == IR_SLAVE) &&
+			((streamon_mask & IR_MASTER_STREAMON_MASK) != 0))) {
+			rc = cam_sensor_update_ir_cams_strobe(s_ctrl, false);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"failed to disable strobe");
+			}
+
+		}
+
 		if (s_ctrl->i2c_data.streamon_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.streamon_settings.request_id == 0)) {
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
@@ -800,11 +879,16 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				goto release_mutex;
 			}
 		}
+
+		streamon_mask |= (1 << s_ctrl->soc_info.index);
+		s_ctrl->strobeType = STROBE_NONE;
 		s_ctrl->sensor_state = CAM_SENSOR_START;
 		CAM_INFO(CAM_SENSOR,
-			"CAM_START_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
+			"CAM_START_DEV Success, sensor_id:0x%x,"
+			"sensor_slave_addr:0x%x index: %d",
 			s_ctrl->sensordata->slave_info.sensor_id,
-			s_ctrl->sensordata->slave_info.sensor_slave_addr);
+			s_ctrl->sensordata->slave_info.sensor_slave_addr,
+			s_ctrl->soc_info.index);
 	}
 		break;
 	case CAM_STOP_DEV: {
@@ -826,12 +910,18 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			}
 		}
 
+		streamon_mask &= ~(1 << s_ctrl->soc_info.index);
+		s_ctrl->strobeType = STROBE_NONE;
+
 		cam_sensor_release_per_frame_resource(s_ctrl);
+
 		s_ctrl->sensor_state = CAM_SENSOR_ACQUIRE;
 		CAM_INFO(CAM_SENSOR,
-			"CAM_STOP_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
+			"CAM_STOP_DEV Success, sensor_id:0x%x,"
+			"sensor_slave_addr:0x%x index: %d",
 			s_ctrl->sensordata->slave_info.sensor_id,
-			s_ctrl->sensordata->slave_info.sensor_slave_addr);
+			s_ctrl->sensordata->slave_info.sensor_slave_addr,
+			s_ctrl->soc_info.index);
 	}
 		break;
 	case CAM_CONFIG_DEV: {
@@ -994,8 +1084,21 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 	rc = camera_io_init(&(s_ctrl->io_master_info));
-	if (rc < 0)
+	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "cci_init failed: rc: %d", rc);
+		return rc;
+	}
+
+	if (soc_info->index == IR_MASTER || soc_info->index == IR_SLAVE) {
+		if (!s_ctrl->peer_ir_info.cci_client) {
+			CAM_ERR(CAM_SENSOR, "peer IR io info is empty");
+			return -EFAULT;
+		}
+		rc = camera_io_init(&(s_ctrl->peer_ir_info));
+		if (rc < 0)
+			CAM_ERR(CAM_SENSOR,
+				"cci_init for peer ir failed: rc: %d", rc);
+	}
 
 	return rc;
 }
@@ -1035,6 +1138,12 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 	camera_io_release(&(s_ctrl->io_master_info));
+
+	if (soc_info->index == IR_MASTER || soc_info->index == IR_SLAVE) {
+		if (!s_ctrl->peer_ir_info.cci_client)
+			return rc;
+		camera_io_release(&(s_ctrl->peer_ir_info));
+	}
 
 	return rc;
 }
@@ -1226,5 +1335,34 @@ int32_t cam_sensor_flush_request(struct cam_req_mgr_flush_request *flush_req)
 		CAM_DBG(CAM_SENSOR,
 			"Flush request id:%lld not found in the pending list",
 			flush_req->req_id);
+	return rc;
+}
+
+int cam_sensor_set_strobe(struct cam_req_mgr_apply_request *apply, bool enable)
+{
+	int rc = 0;
+	struct cam_sensor_ctrl_t *s_ctrl = NULL;
+
+	if (!apply)
+		return -EINVAL;
+
+	s_ctrl = (struct cam_sensor_ctrl_t *)
+		cam_get_device_priv(apply->dev_hdl);
+	if (!s_ctrl) {
+		CAM_ERR(CAM_SENSOR, "Device data is NULL");
+		return -EINVAL;
+	}
+
+	if (s_ctrl->strobeType == STROBE_NONE)
+		return 0;
+
+	if (s_ctrl->soc_info.index == IR_SLAVE)
+		rc = cam_sensor_update_ir_cams_strobe(s_ctrl, enable);
+	if (rc < 0)
+		CAM_ERR(CAM_SENSOR,
+			"failed to set strobe");
+
+	s_ctrl->strobeType = STROBE_NONE;
+
 	return rc;
 }
