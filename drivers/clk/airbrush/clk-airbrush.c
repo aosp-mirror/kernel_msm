@@ -141,7 +141,8 @@ static const struct airbrush_pll_rate_table pll_aon_tbl[] = {
 
 /* List of PLL clocks in CMU_AON */
 static const struct airbrush_pll_clock aon_pll_clks[] = {
-	PLL(pll_f0816x, 0, "fout_pll_aon", "fin_pll_ab", PLL_LOCKTIME_PLL_AON, PLL_CON0_PLL_AON, pll_aon_tbl)
+	PLL(pll_f0816x, FOUT_PLL_AON, "fout_pll_aon", "fin_pll_ab",
+		PLL_LOCKTIME_PLL_AON, PLL_CON0_PLL_AON, pll_aon_tbl)
 };
 
 /* list of parent clocks for muxes in cmu_aon */
@@ -149,7 +150,8 @@ PNAME(mout_aon_aon_pll_p) = { "fin_pll_ab", "fout_pll_aon" };
 
 /* List of mux clocks in CMU_AON */
 static const struct airbrush_mux_clock aon_mux_clks[] = {
-	MUX(0, "mout_aon_pll_aon", mout_aon_aon_pll_p, PLL_CON0_PLL_AON, 4, 1),
+	MUX(MOUT_AON_PLL_AON, "mout_aon_pll_aon",
+		mout_aon_aon_pll_p, PLL_CON0_PLL_AON, 4, 1),
 };
 
 /* List of div clocks in CMU_AON */

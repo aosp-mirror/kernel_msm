@@ -11,10 +11,12 @@
 #define _DT_BINDINGS_CLOCK_ABC_H
 
 /*AON*/
-#define DOUT_AON_PLL_AON_CLK		1
-#define DOUT_AON_SHARED_DIV_AON_PLL	2
-#define DOUT_AON_SHARED_DIV_MIF		3
-#define AON_NR_CLK			4
+#define FOUT_PLL_AON			1
+#define MOUT_AON_PLL_AON		2
+#define DOUT_AON_PLL_AON_CLK		3
+#define DOUT_AON_SHARED_DIV_AON_PLL	4
+#define DOUT_AON_SHARED_DIV_MIF		5
+#define AON_NR_CLK			6
 
 /*CORE*/
 #define CORE_NR_CLK			1
