@@ -1835,10 +1835,11 @@ static int init_debugfs(struct max1720x_chip *chip)
 
 static u16 max1720x_read_rsense(const struct max1720x_chip *chip)
 {
-	u16 rsense = 0, rsense_default = 0;
+	u16 rsense = 0;
+	u32 rsense_default = 0;
 	int ret;
 
-	(void)of_property_read_u16(chip->dev->of_node, "maxim,rsense-default",
+	(void)of_property_read_u32(chip->dev->of_node, "maxim,rsense-default",
 		&rsense_default);
 
 	ret = REGMAP_READ(chip->regmap_nvram, MAX1720X_NRSENSE, &rsense);
