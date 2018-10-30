@@ -317,6 +317,8 @@ struct ab_state_context {
 	struct clk *tpu_switch_mux;
 	struct clk *osc_clk;
 	struct clk *shared_div_aon_pll;
+	struct clk *aon_pll;
+	struct clk *aon_pll_mux;
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;

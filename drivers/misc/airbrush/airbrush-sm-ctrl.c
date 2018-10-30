@@ -124,13 +124,24 @@ static struct block_property fsys_property_table[] = {
 };
 
 static struct block_property aon_property_table[] = {
-	{BLOCK_STATE_0_0,	"PowerUp",	"WFI",		on,	VOLTAGE_0_85,	off,	233000000,	0,	0,	0,	0},
-	{BLOCK_STATE_0_1,	"PowerUp",	"Boot",		on,	VOLTAGE_0_85,	on,	19200000,	0,	0,	0,	0},
-	{BLOCK_STATE_0_2,	"PowerUp",	"Compute",	on,	VOLTAGE_0_85,	on,	233000000,	0,	0,	0,	0},
-	{BLOCK_STATE_3_0,	"Disabled",	"NoRail",	off,	VOLTAGE_0_0,	off,	0,		0,	0,	0,	0},
+	{
+		BLOCK_STATE_0_0, "PowerUp", "WFI", on, VOLTAGE_0_85,
+		off,	934000000,	0,	0,	0,	0},
+	{
+		BLOCK_STATE_0_1, "PowerUp", "Boot", on, VOLTAGE_0_85,
+		on,		19200000,	0,	0,	0,	0
+	},
+	{
+		BLOCK_STATE_0_2, "PowerUp", "Compute", on, VOLTAGE_0_85,
+		on,		934000000,	0,	0,	0,	0
+	},
+	{
+		BLOCK_STATE_3_0, "Disabled", "NoRail", off, VOLTAGE_0_0,
+		off,	0,			0,	0,	0,	0
+	},
 	{
 		BLOCK_STATE_DEFAULT, "BootupState", "Compute", on, VOLTAGE_0_85,
-		on, 233000000, 0, 0, 0, 0
+		on,		934000000,	0,	0,	0,	0
 	}
 };
 
@@ -172,8 +183,8 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(2_4, 1_0, 0_4, 0_6, 0_6, 0_3, 0_0, IPU),
 	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_3, 0_0, IPU),
 	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_0, IPU),
-	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_0, TPU),
-	CHIP_TO_BLOCK_MAP_INIT(4_0, 3_0, 3_0, 2_0, 0_0, 1_2, 0_0, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_1, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(4_0, 3_0, 3_0, 2_0, 0_0, 1_2, 0_1, TPU),
 	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_0, 3_0, 3_0, 3_0, TPU),
 	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0, TPU),
 	CHIP_TO_BLOCK_MAP_INIT(DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT,
@@ -234,8 +245,14 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			tpu_pll_disable(sc);
 		break;
 	case BLK_MIF:
+		break;
 	case BLK_FSYS:
+		break;
 	case BLK_AON:
+		if (blk->current_state->clk_frequency == 0 && !frequency)
+			break;
+		aon_set_rate(sc, frequency);
+		break;
 	case DRAM:
 		break;
 	default:

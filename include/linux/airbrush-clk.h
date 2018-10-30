@@ -37,4 +37,6 @@ int tpu_pll_enable(struct ab_state_context *ab_ctx);
 void tpu_pll_disable(struct ab_state_context *ab_ctx);
 u64 tpu_set_rate(struct ab_state_context *ab_ctx, u64 rate);
 
+u64 aon_set_rate(struct ab_state_context *sc, u64 rate);
+
 #endif //_AIRBRUSH_CLK_H_

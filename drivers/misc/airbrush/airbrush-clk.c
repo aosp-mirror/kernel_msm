@@ -175,6 +175,29 @@ u64 tpu_set_rate(struct ab_state_context *sc, u64 rate)
 	return clk_get_rate(sc->tpu_switch_mux);
 }
 
+u64 aon_set_rate(struct ab_state_context *sc, u64 rate)
+{
+	if (!atomic_read(&sc->clocks_registered)) {
+		dev_err(sc->dev, "clocks not registered\n");
+		return 0;
+	}
+
+	if (rate == 0)
+		rate = OSC_RATE;
+
+	dev_dbg(sc->dev, "%s: set AON clock rate to %llu\n", __func__, rate);
+
+	if (rate == OSC_RATE) {
+		clk_set_parent(sc->aon_pll_mux, sc->osc_clk);
+		return clk_get_rate(sc->aon_pll_mux);
+	}
+
+	clk_set_parent(sc->aon_pll_mux, sc->aon_pll);
+	clk_set_rate(sc->aon_pll, rate);
+
+	return clk_get_rate(sc->aon_pll_mux);
+}
+
 void abc_clk_register(struct ab_state_context *sc)
 {
 	struct platform_device *pdev = sc->pdev;
@@ -225,6 +248,8 @@ void abc_clk_register(struct ab_state_context *sc)
 
 		sc->osc_clk			= clk_get(sc->dev, "osc_clk");
 		sc->shared_div_aon_pll = clk_get(sc->dev, "shared_div_aon_pll");
+		sc->aon_pll			= clk_get(sc->dev, "aon_pll");
+		sc->aon_pll_mux		= clk_get(sc->dev, "aon_pll_mux");
 
 		if (IS_ERR(sc->ipu_pll) ||
 				IS_ERR(sc->ipu_pll_mux) ||
@@ -235,7 +260,9 @@ void abc_clk_register(struct ab_state_context *sc)
 				IS_ERR(sc->tpu_pll_div) ||
 				IS_ERR(sc->tpu_switch_mux) ||
 				IS_ERR(sc->osc_clk) ||
-				IS_ERR(sc->shared_div_aon_pll)) {
+				IS_ERR(sc->shared_div_aon_pll) ||
+				IS_ERR(sc->aon_pll) ||
+				IS_ERR(sc->aon_pll_mux)) {
 			dev_err(sc->dev, "could not register all clocks\n");
 			atomic_set(&sc->clocks_registered, 0);
 		}
