@@ -642,6 +642,8 @@ int set_inbound_iatu(struct inb_region ir)
 	ctrl_2_set_val = IATU_CTRL_2_REGION_EN_MASK <<
 		IATU_CTRL_2_REGION_EN_SHIFT;
 
+	__iowmb();
+
 	if (ir.mode == BAR_MATCH) {
 		/* Set MATCH_MODE to BAR_match mode: 1 */
 		ctrl_2_set_val |= IATU_CTRL_2_MATCH_MODE_MASK <<
@@ -686,6 +688,46 @@ int set_inbound_iatu(struct inb_region ir)
 	writel_relaxed(ctrl_2_set_val,
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND));
+
+	__iowmb();
+	writel_relaxed(val,
+			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
+	return 0;
+}
+
+static int disable_inbound_iatu_region(u32 region)
+{
+	unsigned long flags;
+	u32 val;
+	u32 set_val;
+	u32 iatu_offset = (region * IATU_REGION_OFFSET);
+
+	if (region >= NUM_IATU_REGIONS) {
+		pr_err("%s: Invalid iATU region: %d\n", __func__, region);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
+
+	/* Set SYSREG_FSYS DBI_OVERRIDE for iATU access mode */
+	val = readl_relaxed(
+			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iormb();
+
+	set_val = val & ~(DBI_OVERRIDE_MASK);
+	set_val |= DBI_OVERRIDE_IATU;
+
+	__iowmb();
+	writel_relaxed(set_val,
+		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+
+	__iowmb();
+	/* Enable region */
+	writel_relaxed(0x0, abc_dev->pcie_config + iatu_offset +
+			PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND);
 
 	__iowmb();
 	writel_relaxed(val,
@@ -973,6 +1015,8 @@ int abc_pcie_unmap_bar_region(struct device *dev, struct bar_mapping *mapping)
 	iatu->bar_offset = 0;
 	iatu->ab_paddr = 0;
 	iatu->size = 0;
+
+	disable_inbound_iatu_region(iatu_id);
 
 	mutex_unlock(&abc->mutex);
 	return 0;
