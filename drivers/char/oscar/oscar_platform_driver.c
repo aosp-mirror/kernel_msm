@@ -470,7 +470,7 @@ static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 	ret = gasket_page_table_map(
 		    gasket_dev->page_table[ibuf.page_table_index],
 		    abdram_dma_addr, abc_buffer->device_address,
-		    len / PAGE_SIZE,  false);
+		    len / PAGE_SIZE, DMA_TO_DEVICE << 1, false);
 
 unmap_sg:
 	if (ret) {
