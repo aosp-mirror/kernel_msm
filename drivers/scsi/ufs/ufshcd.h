@@ -3,7 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -341,14 +341,20 @@ struct ufs_hba_variant_ops {
  * struct ufs_hba_crypto_variant_ops - variant specific crypto callbacks
  * @crypto_req_setup:	retreieve the necessary cryptographic arguments to setup
 			a requests's transfer descriptor.
- * @crypto_engine_cfg: configure cryptographic engine according to tag parameter
+ * @crypto_engine_cfg_start: start configuring cryptographic engine
+ *							 according to tag
+ *							 parameter
+ * @crypto_engine_cfg_end: end configuring cryptographic engine
+ *						   according to tag parameter
  * @crypto_engine_reset: perform reset to the cryptographic engine
  * @crypto_engine_get_status: get errors status of the cryptographic engine
  */
 struct ufs_hba_crypto_variant_ops {
 	int	(*crypto_req_setup)(struct ufs_hba *, struct ufshcd_lrb *lrbp,
 				    u8 *cc_index, bool *enable, u64 *dun);
-	int	(*crypto_engine_cfg)(struct ufs_hba *, unsigned int);
+	int	(*crypto_engine_cfg_start)(struct ufs_hba *, unsigned int);
+	int	(*crypto_engine_cfg_end)(struct ufs_hba *, struct ufshcd_lrb *,
+			struct request *);
 	int	(*crypto_engine_reset)(struct ufs_hba *);
 	int	(*crypto_engine_get_status)(struct ufs_hba *, u32 *);
 };
@@ -415,6 +421,7 @@ struct ufs_clk_gating {
 	struct device_attribute enable_attr;
 	bool is_enabled;
 	int active_reqs;
+	struct workqueue_struct *ungating_workq;
 };
 
 /* Hibern8 state  */
@@ -532,6 +539,8 @@ struct debugfs_files {
 	u32 dme_local_attr_id;
 	u32 dme_peer_attr_id;
 	struct dentry *reset_controller;
+	struct dentry *err_state;
+	bool err_occurred;
 #ifdef CONFIG_UFS_FAULT_INJECTION
 	struct dentry *err_inj_scenario;
 	struct dentry *err_inj_stats;
@@ -799,6 +808,7 @@ struct ufs_hba {
 	u32 saved_uic_err;
 	u32 saved_ce_err;
 	bool silence_err_logs;
+	bool force_host_reset;
 
 	/* Device management request data */
 	struct ufs_dev_cmd dev_cmd;
@@ -878,6 +888,10 @@ struct ufs_hba {
 	bool no_ref_clk_gating;
 
 	int scsi_block_reqs_cnt;
+
+	int			latency_hist_enabled;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
 };
 
 /* Returns true if clocks can be gated. Otherwise false */
@@ -1233,12 +1247,24 @@ static inline int ufshcd_vops_crypto_req_setup(struct ufs_hba *hba,
 	return 0;
 }
 
-static inline int ufshcd_vops_crypto_engine_cfg(struct ufs_hba *hba,
-		unsigned int task_tag)
+static inline int ufshcd_vops_crypto_engine_cfg_start(struct ufs_hba *hba,
+						unsigned int task_tag)
 {
 	if (hba->var && hba->var->crypto_vops &&
-	    hba->var->crypto_vops->crypto_engine_cfg)
-		return hba->var->crypto_vops->crypto_engine_cfg(hba, task_tag);
+	    hba->var->crypto_vops->crypto_engine_cfg_start)
+		return hba->var->crypto_vops->crypto_engine_cfg_start
+				(hba, task_tag);
+	return 0;
+}
+
+static inline int ufshcd_vops_crypto_engine_cfg_end(struct ufs_hba *hba,
+						struct ufshcd_lrb *lrbp,
+						struct request *req)
+{
+	if (hba->var && hba->var->crypto_vops &&
+	    hba->var->crypto_vops->crypto_engine_cfg_end)
+		return hba->var->crypto_vops->crypto_engine_cfg_end
+				(hba, lrbp, req);
 	return 0;
 }
 

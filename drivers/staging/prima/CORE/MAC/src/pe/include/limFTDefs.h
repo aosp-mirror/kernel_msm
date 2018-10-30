@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -57,6 +57,7 @@ typedef struct sSirFTPreAuthReq
 {
    tANI_U16    messageType;      // eWNI_SME_FT_PRE_AUTH_REQ
    tANI_U16    length;
+   tANI_U32    dot11mode;
    tANI_BOOLEAN bPreAuthRspProcessed; /* Track if response is processed for this request
                                          We expect only one response per request. */
    tANI_U8     preAuthchannelNum;
@@ -81,6 +82,10 @@ typedef struct sSirFTPreAuthRsp
    tANI_U8          ft_ies[MAX_FTIE_SIZE];
    tANI_U16         ric_ies_length;
    tANI_U8          ric_ies[MAX_FTIE_SIZE];
+#ifdef WLAN_FEATURE_LFR_MBB
+   enum sir_roam_cleanup_type reason;
+   tCsrRoamInfo *roam_info;
+#endif
 } tSirFTPreAuthRsp, *tpSirFTPreAuthRsp;
 
 /*--------------------------------------------------------------------------

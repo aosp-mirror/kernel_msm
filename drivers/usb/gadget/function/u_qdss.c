@@ -100,7 +100,6 @@ static int set_qdss_data_connection(struct usb_gadget *gadget,
 
 		res = usb_bam_connect(usb_bam_type, idx,
 					&(bam_info.usb_bam_pipe_idx));
-		gadget->bam2bam_func_enabled = true;
 	} else {
 		kfree(bam_info.data_fifo);
 		res = usb_bam_disconnect_pipe(usb_bam_type, idx);
@@ -121,7 +120,7 @@ static int init_data(struct usb_ep *ep)
 	pr_debug("init_data\n");
 
 	if (gadget_is_dwc3(gadget)) {
-		res = msm_ep_config(ep, qdss->endless_req, GFP_ATOMIC);
+		res = msm_ep_config(ep, qdss->endless_req);
 		if (res)
 			pr_err("msm_ep_config failed\n");
 	} else {

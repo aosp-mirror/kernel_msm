@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -134,4 +134,66 @@ void hddTraceDump(void *pMac, tpvosTraceRecord pRecord, tANI_U16 recIndex)
 void hddTraceInit()
 {
     vosTraceRegister(VOS_MODULE_ID_HDD, (tpvosTraceCb)&hddTraceDump);
+}
+
+/**
+ * hdd_state_info_dump() - prints state information of hdd layer
+ */
+static void hdd_state_info_dump(void)
+{
+    v_CONTEXT_t vos_ctx_ptr;
+    hdd_context_t *hdd_ctx_ptr = NULL;
+    hdd_adapter_list_node_t *adapter_node = NULL, *next = NULL;
+    VOS_STATUS status;
+    hdd_station_ctx_t *hdd_sta_ctx = NULL;
+    hdd_adapter_t *adapter =NULL;
+
+    /* get the global voss context */
+    vos_ctx_ptr = vos_get_global_context(VOS_MODULE_ID_VOSS, NULL);
+
+    if (!vos_ctx_ptr) {
+        hddLog(LOGE, FL("Invalid Global VOSS Context"));
+        VOS_ASSERT(0);
+        return;
+    }
+    hdd_ctx_ptr = vos_get_context(VOS_MODULE_ID_HDD, vos_ctx_ptr);
+    if (!hdd_ctx_ptr) {
+       hddLog(LOGE, FL("HDD context is Null"));
+       return;
+    }
+
+    hddLog(LOG1,
+           FL("mScanPending %d isWlanSuspended %d disable_dfs_flag %d"),
+           hdd_ctx_ptr->scan_info.mScanPending,
+           hdd_ctx_ptr->isWlanSuspended, hdd_ctx_ptr->disable_dfs_flag);
+
+    status = hdd_get_front_adapter(hdd_ctx_ptr, &adapter_node);
+
+    while (NULL != adapter_node && VOS_STATUS_SUCCESS == status) {
+       adapter = adapter_node->pAdapter;
+       if (adapter->dev)
+           hddLog(LOG1, FL("device name: %s"), adapter->dev->name);
+       switch (adapter->device_mode) {
+       case WLAN_HDD_INFRA_STATION:
+       case WLAN_HDD_P2P_CLIENT:
+           hdd_sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
+           hddLog(LOG1, FL("connState: %d device_mode: %d"),
+                  hdd_sta_ctx->conn_info.connState, adapter->device_mode);
+           break;
+
+       default:
+           break;
+       }
+       status = hdd_get_next_adapter(hdd_ctx_ptr, adapter_node, &next);
+       adapter_node = next;
+    }
+}
+
+/**
+ * hdd_register_debug_callback() - registration function for hdd layer
+ * to print hdd state information
+ */
+void hdd_register_debug_callback()
+{
+    vos_register_debug_callback(VOS_MODULE_ID_HDD, &hdd_state_info_dump);
 }

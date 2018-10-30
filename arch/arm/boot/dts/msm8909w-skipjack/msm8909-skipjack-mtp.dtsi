@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -49,16 +49,18 @@
 			jeita-check-enabled;
 			max-temp-zone = <6>;
 			/*
-			<[start_temp_for_zone] [voltage] [current] [hysteresis direction] [hysteresis delta temp]>
-			hysteresis direction:
-				 0: do not hysteresis.
-				 1: tracking toward up
-				-1: tracking toward down
-			example: zone-5 jump to zone-4,
-				Algorithm doens't switch to zone-4 directly
-				while just decrease from 46 to 44 deg-C.
-				It will stay at zone-5 until decreasing to 43 deg-C and switch to zone-4.
-			*/
+			 * <[start_temp_for_zone] [voltage] [current]
+			 * [hysteresis direction] [hysteresis delta temp]>
+			 * hysteresis direction:
+			 *   0: do not hysteresis.
+			 *   1: tracking toward up
+			 *  -1: tracking toward down
+			 * example: zone-5 jump to zone-4,
+			 *  Algorithm doens't switch to zone-4 directly
+			 *  while just decrease from 46 to 44 deg-C.
+			 *  It will stay at zone-5 until decreasing to
+			 *  43 deg-C and switch to zone-4.
+			 */
 			temp-zone-0 = <(-40) 4400 0 1 20>;
 			temp-zone-1 = <0 4400 100 1 20>;
 			temp-zone-2 = <60 4400 100 1 20>;
@@ -271,7 +273,6 @@
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,msm-micbias1-ext-cap;
 		qcom,split-a2dp;
-		qcom,msm-afe-clk-ver = <1>;
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
@@ -367,6 +368,11 @@
 
 &qcom_tzlog {
 	status = "okay";
+};
+
+
+&qnand_1 {
+	status = "ok";
 };
 
 &sdhc_1 {

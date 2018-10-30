@@ -12,6 +12,7 @@
  */
 
 #define CREATE_TRACE_POINTS
+#include "msm_vidc_common.h"
 #define MAX_SSR_STRING_LEN 10
 #include "msm_vidc_debug.h"
 #include "vidc_hfi_api.h"
@@ -23,9 +24,8 @@ int msm_vidc_fw_debug_mode = 1;
 int msm_vidc_fw_low_power_mode = 1;
 int msm_vidc_hw_rsp_timeout = 1000;
 int msm_vidc_fw_coverage = 0;
-int msm_vidc_vpe_csc_601_to_709 = 0;
-int msm_vidc_dec_dcvs_mode = 0;
-int msm_vidc_enc_dcvs_mode = 0;
+int msm_vidc_dec_dcvs_mode = 1;
+int msm_vidc_enc_dcvs_mode = 1;
 int msm_vidc_sys_idle_indicator = 0;
 int msm_vidc_firmware_unload_delay = 15000;
 int msm_vidc_thermal_mitigation_disabled = 0;
@@ -181,7 +181,7 @@ struct dentry *msm_vidc_debugfs_init_drv(void)
 	struct dentry *f = debugfs_create_##__type(__name, S_IRUGO | S_IWUSR, \
 		dir, __value);                                                \
 	if (IS_ERR_OR_NULL(f)) {                                              \
-		dprintk(VIDC_ERR, "Failed creating debugfs file '%pKd/%s'\n",  \
+		dprintk(VIDC_ERR, "Failed creating debugfs file '%pd/%s'\n",  \
 			dir, __name);                                         \
 		f = NULL;                                                     \
 	}                                                                     \
@@ -199,8 +199,6 @@ struct dentry *msm_vidc_debugfs_init_drv(void)
 			&msm_vidc_fw_low_power_mode) &&
 	__debugfs_create(u32, "debug_output", &msm_vidc_debug_out) &&
 	__debugfs_create(u32, "hw_rsp_timeout", &msm_vidc_hw_rsp_timeout) &&
-	__debugfs_create(bool, "enable_vpe_csc_601_709",
-			&msm_vidc_vpe_csc_601_to_709) &&
 	__debugfs_create(bool, "sys_idle_indicator",
 			&msm_vidc_sys_idle_indicator) &&
 	__debugfs_create(u32, "firmware_unload_delay",
@@ -296,7 +294,7 @@ static int publish_unreleased_reference(struct msm_vidc_inst *inst,
 	return 0;
 }
 
-void put_inst_helper(struct kref *kref)
+static void put_inst_helper(struct kref *kref)
 {
 	struct msm_vidc_inst *inst = container_of(kref,
 			struct msm_vidc_inst, kref);
@@ -363,11 +361,11 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 		cur += write_str(cur, end - cur, "capability: %s\n",
 			i == OUTPUT_PORT ? "Output" : "Capture");
 		cur += write_str(cur, end - cur, "name : %s\n",
-			inst->fmts[i]->name);
+			inst->fmts[i].name);
 		cur += write_str(cur, end - cur, "planes : %d\n",
-			inst->fmts[i]->num_planes);
+			inst->fmts[i].num_planes);
 		cur += write_str(cur, end - cur,
-			"type: %s\n", inst->fmts[i]->type == OUTPUT_PORT ?
+			"type: %s\n", inst->fmts[i].type == OUTPUT_PORT ?
 			"Output" : "Capture");
 
 		switch (inst->buffer_mode_set[i]) {
@@ -391,7 +389,7 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 		cur += write_str(cur, end - cur, "count: %u\n",
 				inst->bufq[i].vb2_bufq.num_buffers);
 
-		for (j = 0; j < inst->fmts[i]->num_planes; j++)
+		for (j = 0; j < inst->fmts[i].num_planes; j++)
 			cur += write_str(cur, end - cur,
 			"size for plane %d: %u\n", j,
 			inst->bufq[i].vb2_bufq.plane_sizes[j]);
@@ -445,7 +443,6 @@ struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst,
 		dprintk(VIDC_ERR, "Invalid params, inst: %pK\n", inst);
 		goto exit;
 	}
-
 	snprintf(debugfs_name, MAX_DEBUGFS_NAME, "inst_%pK", inst);
 
 	idata = kzalloc(sizeof(struct core_inst_pair), GFP_KERNEL);

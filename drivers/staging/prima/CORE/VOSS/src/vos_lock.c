@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -482,6 +482,14 @@ VOS_STATUS vos_spin_lock_destroy(vos_spin_lock_t *pLock)
    return VOS_STATUS_SUCCESS;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && \
+	defined(WLAN_OPEN_SOURCE)
+VOS_STATUS vos_wake_lock_init(vos_wake_lock_t *pLock, const char *name)
+{
+	wakeup_source_init(pLock, name);
+	return VOS_STATUS_SUCCESS;
+}
+#else
 /*--------------------------------------------------------------------------
 
   \brief vos_wake_lock_init() - initializes a vOSS wake lock
@@ -499,8 +507,18 @@ VOS_STATUS vos_wake_lock_init(vos_wake_lock_t *pLock, const char *name)
 #endif
     return VOS_STATUS_SUCCESS;
 }
+#endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && \
+	defined(WLAN_OPEN_SOURCE)
+static const char *vos_wake_lock_name(vos_wake_lock_t *pLock)
+{
+	if (pLock->name)
+		return pLock->name;
 
+	return "UNNAMED_WAKELOCK";
+}
+#else
 /*--------------------------------------------------------------------------
  * vos_wake_lock_name() - This function returns the name of the wakelock
  * @pLock: Pointer to the wakelock
@@ -521,7 +539,19 @@ static const char* vos_wake_lock_name(vos_wake_lock_t *pLock)
         return "UNNAMED_WAKELOCK";
 #endif
 }
+#endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && \
+	defined(WLAN_OPEN_SOURCE)
+VOS_STATUS vos_wake_lock_acquire(vos_wake_lock_t *pLock, uint32_t reason)
+{
+	vos_log_wlock_diag(reason, vos_wake_lock_name(pLock),
+			   WIFI_POWER_EVENT_DEFAULT_WAKELOCK_TIMEOUT,
+			   WIFI_POWER_EVENT_WAKELOCK_TAKEN);
+	__pm_stay_awake(pLock);
+	return VOS_STATUS_SUCCESS;
+}
+#else
 /*--------------------------------------------------------------------------
 
   \brief vos_wake_lock_acquire() - acquires a wake lock
@@ -545,7 +575,21 @@ VOS_STATUS vos_wake_lock_acquire(vos_wake_lock_t *pLock,
     return VOS_STATUS_SUCCESS;
 
 }
+#endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && \
+	defined(WLAN_OPEN_SOURCE)
+VOS_STATUS vos_wake_lock_timeout_release(vos_wake_lock_t *pLock, v_U32_t msec,
+					 uint32_t reason)
+{
+	/*
+	 * Wakelock for Rx is frequent.
+	 * It is reported only during active debug
+	 */
+	__pm_wakeup_event(pLock, msec);
+	return VOS_STATUS_SUCCESS;
+}
+#else
 /*--------------------------------------------------------------------------
 
   \brief vos_wake_lock_timeout_release() - release a wake lock with a timeout
@@ -577,7 +621,19 @@ VOS_STATUS vos_wake_lock_timeout_release(vos_wake_lock_t *pLock,
    return VOS_STATUS_SUCCESS;
 
 }
+#endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && \
+	defined(WLAN_OPEN_SOURCE)
+VOS_STATUS vos_wake_lock_release(vos_wake_lock_t *pLock, uint32_t reason)
+{
+	vos_log_wlock_diag(reason, vos_wake_lock_name(pLock),
+			   WIFI_POWER_EVENT_DEFAULT_WAKELOCK_TIMEOUT,
+			   WIFI_POWER_EVENT_WAKELOCK_RELEASED);
+	__pm_relax(pLock);
+	return VOS_STATUS_SUCCESS;
+}
+#else
 /*--------------------------------------------------------------------------
 
   \brief vos_wake_lock_release() - releases a wake lock
@@ -602,7 +658,16 @@ VOS_STATUS vos_wake_lock_release(vos_wake_lock_t *pLock, uint32_t reason)
 
 
 }
+#endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && \
+	defined(WLAN_OPEN_SOURCE)
+VOS_STATUS vos_wake_lock_destroy(vos_wake_lock_t *pLock)
+{
+	wakeup_source_trash(pLock);
+	return VOS_STATUS_SUCCESS;
+}
+#else
 /*--------------------------------------------------------------------------
 
   \brief vos_wake_lock_destroy() - destroys a wake lock
@@ -620,3 +685,20 @@ VOS_STATUS vos_wake_lock_destroy(vos_wake_lock_t *pLock)
 #endif
     return VOS_STATUS_SUCCESS;
 }
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)) && \
+	defined(WLAN_OPEN_SOURCE)
+bool vos_wake_lock_active(vos_wake_lock_t *lock)
+{
+	return lock->active;
+}
+#else
+bool vos_wake_lock_active(vos_wake_lock_t *lock)
+{
+#if defined(WLAN_OPEN_SOURCE)
+	return wake_lock_active(lock);
+#endif
+	return false;
+}
+#endif

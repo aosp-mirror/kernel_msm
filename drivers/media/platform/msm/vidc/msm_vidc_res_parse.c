@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -75,6 +75,18 @@ static inline void msm_vidc_free_cycles_per_mb_table(
 		struct msm_vidc_platform_resources *res)
 {
 	res->clock_freq_tbl.clk_prof_entries = NULL;
+}
+
+static inline void msm_vidc_free_platform_version_table(
+		struct msm_vidc_platform_resources *res)
+{
+	res->pf_ver_tbl = NULL;
+}
+
+static inline void msm_vidc_free_capability_version_table(
+		struct msm_vidc_platform_resources *res)
+{
+	res->pf_cap_tbl = NULL;
 }
 
 static inline void msm_vidc_free_freq_table(
@@ -155,6 +167,8 @@ void msm_vidc_free_platform_resources(
 	msm_vidc_free_clock_table(res);
 	msm_vidc_free_regulator_table(res);
 	msm_vidc_free_freq_table(res);
+	msm_vidc_free_platform_version_table(res);
+	msm_vidc_free_capability_version_table(res);
 	msm_vidc_free_dcvs_table(res);
 	msm_vidc_free_dcvs_limit(res);
 	msm_vidc_free_cycles_per_mb_table(res);
@@ -351,10 +365,131 @@ int msm_vidc_load_u32_table(struct platform_device *pdev,
 		return -EINVAL;
 	}
 
-	*num_elements = num_elemts;
 	*table = ptbl;
+	if (num_elements)
+		*num_elements = num_elemts;
 
 	return rc;
+}
+
+static int msm_vidc_load_platform_version_table(
+		struct msm_vidc_platform_resources *res)
+{
+	int rc = 0;
+	struct platform_device *pdev = res->pdev;
+
+	if (!of_find_property(pdev->dev.of_node,
+			"qcom,platform-version", NULL)) {
+		dprintk(VIDC_DBG, "qcom,platform-version not found\n");
+		return 0;
+	}
+
+	rc = msm_vidc_load_u32_table(pdev, pdev->dev.of_node,
+			"qcom,platform-version",
+			sizeof(*res->pf_ver_tbl),
+			(u32 **)&res->pf_ver_tbl,
+			NULL);
+	if (rc) {
+		dprintk(VIDC_ERR,
+			"%s: failed to read platform version table\n",
+			__func__);
+		return rc;
+	}
+
+	return 0;
+}
+
+static int msm_vidc_load_capability_version_table(
+		struct msm_vidc_platform_resources *res)
+{
+	int rc = 0;
+	struct platform_device *pdev = res->pdev;
+
+	if (!of_find_property(pdev->dev.of_node,
+			"qcom,capability-version", NULL)) {
+		dprintk(VIDC_DBG, "qcom,capability-version not found\n");
+		return 0;
+	}
+
+	rc = msm_vidc_load_u32_table(pdev, pdev->dev.of_node,
+			"qcom,capability-version",
+			sizeof(*res->pf_cap_tbl),
+			(u32 **)&res->pf_cap_tbl,
+			NULL);
+	if (rc) {
+		dprintk(VIDC_ERR,
+			"%s: failed to read platform version table\n",
+			__func__);
+		return rc;
+	}
+
+	return 0;
+}
+
+static void clock_override(struct platform_device *pdev,
+	struct msm_vidc_platform_resources *platform_res,
+	struct allowed_clock_rates_table *clk_table)
+{
+	struct resource *res;
+	void __iomem *base;
+	u32 config_efuse, bin;
+	u32 venus_uplift_freq;
+	u32 is_speed_bin = 7;
+	int rc = 0;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+			"efuse");
+	if (!res) {
+		dprintk(VIDC_DBG,
+			"Failed to get resource efuse\n");
+		return;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node, "qcom,venus-uplift-freq",
+			&venus_uplift_freq);
+	if (rc) {
+		dprintk(VIDC_DBG,
+			"Failed to determine venus-uplift-freq: %d\n", rc);
+		return;
+	}
+
+	if (!of_find_property(pdev->dev.of_node,
+		"qcom,speedbin-version", NULL)) {
+		dprintk(VIDC_DBG, "qcom,speedbin-version not found\n");
+		return;
+	}
+
+	rc = msm_vidc_load_u32_table(pdev, pdev->dev.of_node,
+		"qcom,speedbin-version",
+		sizeof(*platform_res->pf_speedbin_tbl),
+		(u32 **)&platform_res->pf_speedbin_tbl,
+		NULL);
+	if (rc) {
+		dprintk(VIDC_ERR,
+			"%s: failed to read speedbin version table\n",
+			__func__);
+		return;
+	}
+
+	base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	if (!base) {
+		dev_warn(&pdev->dev,
+			"Unable to ioremap efuse reg address. Defaulting to 0.\n");
+		return;
+	}
+
+	config_efuse = readl_relaxed(base);
+	devm_iounmap(&pdev->dev, base);
+
+	bin = (config_efuse >> platform_res->pf_speedbin_tbl->version_shift) &
+		platform_res->pf_speedbin_tbl->version_mask;
+
+	if (bin == is_speed_bin) {
+		dprintk(VIDC_DBG,
+			"Venus speed binning available overwriting %d to %d\n",
+			clk_table[0].clock_rate, venus_uplift_freq);
+		clk_table[0].clock_rate = venus_uplift_freq;
+	}
 }
 
 static int msm_vidc_load_allowed_clocks_table(
@@ -379,6 +514,8 @@ static int msm_vidc_load_allowed_clocks_table(
 			"%s: failed to read allowed clocks table\n", __func__);
 		return rc;
 	}
+	if (res->allowed_clks_tbl_size)
+		clock_override(pdev, res, res->allowed_clks_tbl);
 
 	return 0;
 }
@@ -968,6 +1105,15 @@ int read_platform_resources_from_dt(
 	if (rc)
 		dprintk(VIDC_DBG, "HFI packetization will default to legacy\n");
 
+	rc = msm_vidc_load_platform_version_table(res);
+	if (rc)
+		dprintk(VIDC_ERR, "Failed to load pf version table: %d\n", rc);
+
+	rc = msm_vidc_load_capability_version_table(res);
+	if (rc)
+		dprintk(VIDC_ERR,
+			"Failed to load pf capability table: %d\n", rc);
+
 	rc = msm_vidc_load_freq_table(res);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to load freq table: %d\n", rc);
@@ -1210,7 +1356,7 @@ int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
 		port = is_decode ? OUTPUT_PORT : CAPTURE_PORT;
 		dprintk(VIDC_ERR,
 			"%s session, Codec type: %s HxW: %d x %d fps: %d bitrate: %d bit-depth: %s\n",
-			is_decode ? "Decode" : "Encode", inst->fmts[port]->name,
+			is_decode ? "Decode" : "Encode", inst->fmts[port].name,
 			inst->prop.height[port], inst->prop.width[port],
 			inst->prop.fps, inst->prop.bitrate,
 			!inst->bit_depth ? "8" : "10");

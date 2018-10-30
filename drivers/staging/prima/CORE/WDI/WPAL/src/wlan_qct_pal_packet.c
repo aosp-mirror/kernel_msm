@@ -1069,8 +1069,27 @@ void wpalLogPktSerialize
 ---------------------------------------------------------------------------*/
 void wpalFwLogPktSerialize
 (
-   wpt_packet *pFrame
+   wpt_packet *pFrame, wpt_uint32 pktType
 )
 {
-    vos_logger_pkt_serialize(WPAL_TO_VOS_PKT(pFrame),LOG_PKT_TYPE_FW_LOG);
+    vos_logger_pkt_serialize(WPAL_TO_VOS_PKT(pFrame), pktType);
+}
+
+
+/*---------------------------------------------------------------------------
+    wpalPerPktSerialize - Serialize perpkt data to logger thread
+
+    Param:
+
+
+    Return:
+        NONE
+
+---------------------------------------------------------------------------*/
+void wpalPerPktSerialize
+(
+   void *perPktStat
+)
+{
+   vos_per_pkt_stats_to_user(perPktStat);
 }

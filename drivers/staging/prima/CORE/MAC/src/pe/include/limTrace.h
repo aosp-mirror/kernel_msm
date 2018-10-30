@@ -93,6 +93,7 @@ enum {
 
 
 void limTraceInit(tpAniSirGlobal pMac);
+void lim_register_debug_callback(void);
 void limTraceReset(tpAniSirGlobal pMac);
 void limTraceUpdateMgmtStat(tpAniSirGlobal pMac, tANI_U8 subtype);
 void limTraceDumpMgmtStat(tpAniSirGlobal pMac, tANI_U8 subtype);

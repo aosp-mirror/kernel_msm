@@ -33,6 +33,7 @@ struct sip_length {
 	int msg_length[SIP_LIST_ELEMENTS];
 	int skb_len[SIP_LIST_ELEMENTS];
 	int data_len[SIP_LIST_ELEMENTS];
+	int orig_data_len[SIP_LIST_ELEMENTS];
 };
 
 /* per conntrack: protocol private data */
@@ -132,6 +133,7 @@ struct nf_conn {
 
 	struct list_head sip_segment_list;
 	const char *dptr_prev;
+	bool dir_prev;
 	struct sip_length segment;
 	bool sip_original_dir;
 	bool sip_reply_dir;
@@ -315,6 +317,8 @@ int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp);
 extern unsigned int nf_conntrack_htable_size;
 extern unsigned int nf_conntrack_max;
 extern unsigned int nf_conntrack_hash_rnd;
+extern unsigned int nf_conntrack_pkt_threshold;
+
 void init_nf_conntrack_hash_rnd(void);
 
 void nf_conntrack_tmpl_insert(struct net *net, struct nf_conn *tmpl);

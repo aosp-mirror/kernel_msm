@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,10 +14,208 @@
  */
 
 #include "msm_qpic_nand.h"
+#include <linux/timer.h>
 
 #define QPIC_BAM_DEFAULT_IPC_LOGLVL 2
+#define SW_REQ_TIMEOUT_SEC 10
 
 static bool enable_euclean;
+static bool enable_perfstats;
+
+static ssize_t msm_nand_attr_perf_stats_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf);
+static ssize_t msm_nand_attr_perf_stats_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count);
+
+static struct device_attribute dev_msm_nand_perf_stats =
+	__ATTR(perf_stats, S_IRUGO | S_IWUSR,
+		msm_nand_attr_perf_stats_show, msm_nand_attr_perf_stats_store);
+
+#define print_sysfs(fmt, ...) \
+{ \
+	count += scnprintf(buf + count, PAGE_SIZE - count, \
+			fmt, ##__VA_ARGS__); \
+}
+
+static ssize_t msm_nand_attr_perf_stats_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	ssize_t count = 0;
+	struct msm_nand_info *info = dev_get_drvdata(dev);
+
+	if (!enable_perfstats) {
+		print_sysfs("Performance stats is disabled\n");
+		return count;
+	}
+
+	spin_lock(&info->perf.lock);
+	print_sysfs("total_read_size = %llu\n", info->perf.total_read_size);
+	print_sysfs("total_write_size = %llu\n", info->perf.total_write_size);
+	print_sysfs("total_erase_blks = %llu\n\n", info->perf.total_erase_blks);
+
+	print_sysfs("total_read_time_us = %lld\n",
+			ktime_to_us(info->perf.total_read_time));
+	print_sysfs("total_write_time_us = %lld\n",
+			ktime_to_us(info->perf.total_write_time));
+	print_sysfs("total_erase_time_us = %lld\n\n",
+			ktime_to_us(info->perf.total_erase_time));
+
+	print_sysfs("min_read_time_us = %lld\n",
+			ktime_to_us(info->perf.min_read_time));
+	print_sysfs("min_write_time_us = %lld\n",
+			ktime_to_us(info->perf.min_write_time));
+	print_sysfs("min_erase_time_us = %lld\n\n",
+			ktime_to_us(info->perf.min_erase_time));
+
+	print_sysfs("max_read_time_us = %lld\n",
+			ktime_to_us(info->perf.max_read_time));
+	print_sysfs("max_write_time_us = %lld\n",
+			ktime_to_us(info->perf.max_write_time));
+	print_sysfs("max_erase_time_us = %lld\n\n",
+			ktime_to_us(info->perf.max_erase_time));
+
+	spin_unlock(&info->perf.lock);
+	return count;
+}
+
+static ssize_t msm_nand_attr_perf_stats_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count)
+{
+	struct msm_nand_info *info = dev_get_drvdata(dev);
+
+	if (!enable_perfstats) {
+		pr_err("couldn't write as perf stats is disabled\n");
+		return -EPERM;
+	}
+
+	if (count > 1 || (count == 1 && *buf != '\n')) {
+		pr_err("write not permitted\n");
+		return -EPERM;
+	}
+
+	spin_lock(&info->perf.lock);
+	info->perf.min_read_time = ktime_set(KTIME_MAX, 0);
+	info->perf.min_write_time = ktime_set(KTIME_MAX, 0);
+	info->perf.min_erase_time = ktime_set(KTIME_MAX, 0);
+
+	info->perf.max_read_time = ktime_set(0, 0);
+	info->perf.max_write_time = ktime_set(0, 0);
+	info->perf.max_erase_time = ktime_set(0, 0);
+
+	info->perf.total_read_time = ktime_set(0, 0);
+	info->perf.total_write_time = ktime_set(0, 0);
+	info->perf.total_erase_time = ktime_set(0, 0);
+
+	info->perf.total_read_size = 0;
+	info->perf.total_write_size = 0;
+	info->perf.total_erase_blks = 0;
+	spin_unlock(&info->perf.lock);
+
+	return count;
+}
+
+static void msm_nand_init_perf_stats(struct msm_nand_info *info)
+{
+	spin_lock_init(&info->perf.lock);
+	info->perf.min_read_time = ktime_set(KTIME_MAX, 0);
+	info->perf.min_write_time = ktime_set(KTIME_MAX, 0);
+	info->perf.min_erase_time = ktime_set(KTIME_MAX, 0);
+}
+
+static void msm_nand_init_sysfs(struct device *dev)
+{
+	sysfs_attr_init(&dev_msm_nand_perf_stats);
+	if (device_create_file(dev, &dev_msm_nand_perf_stats))
+		pr_err("Sysfs entry create failed");
+}
+
+static void msm_nand_cleanup_sysfs(struct device *dev)
+{
+	device_remove_file(dev, &dev_msm_nand_perf_stats);
+}
+
+static void msm_nand_update_read_perf_stats(struct msm_nand_info *info,
+					    ktime_t start, u32 size)
+{
+	ktime_t time_delta;
+
+	time_delta = ktime_sub(ktime_get(), start);
+
+	spin_lock(&info->perf.lock);
+	info->perf.total_read_size += size;
+	info->perf.total_read_time = ktime_add(info->perf.total_read_time,
+						time_delta);
+	if (ktime_after(time_delta, info->perf.max_read_time))
+		info->perf.max_read_time = time_delta;
+
+	if (ktime_before(time_delta, info->perf.min_read_time))
+		info->perf.min_read_time = time_delta;
+
+	spin_unlock(&info->perf.lock);
+}
+
+static void msm_nand_update_write_perf_stats(struct msm_nand_info *info,
+					     ktime_t start, u32 size)
+{
+	ktime_t time_delta;
+
+	time_delta = ktime_sub(ktime_get(), start);
+
+	spin_lock(&info->perf.lock);
+	info->perf.total_write_size += size;
+	info->perf.total_write_time = ktime_add(info->perf.total_write_time,
+						time_delta);
+	if (ktime_after(time_delta, info->perf.max_write_time))
+		info->perf.max_write_time = time_delta;
+
+	if (ktime_before(time_delta, info->perf.min_write_time))
+		info->perf.min_write_time = time_delta;
+
+	spin_unlock(&info->perf.lock);
+}
+
+static void msm_nand_update_erase_perf_stats(struct msm_nand_info *info,
+					     ktime_t start, u32 count)
+{
+	ktime_t time_delta;
+
+	time_delta = ktime_sub(ktime_get(), start);
+
+	spin_lock(&info->perf.lock);
+	info->perf.total_erase_blks += count;
+	info->perf.total_erase_time = ktime_add(info->perf.total_erase_time,
+						time_delta);
+	if (ktime_after(time_delta, info->perf.max_erase_time))
+		info->perf.max_erase_time = time_delta;
+
+	if (ktime_before(time_delta, info->perf.min_erase_time))
+		info->perf.min_erase_time = time_delta;
+
+	spin_unlock(&info->perf.lock);
+}
+
+static struct timer_list timer;
+
+static void msm_nand_tout_work_fn(struct work_struct *work)
+{
+	struct msm_nand_info *info = container_of(work, struct msm_nand_info,
+					    tout_work);
+
+	sps_get_bam_debug_info(info->sps.bam_handle, 93,
+			(SPS_BAM_PIPE(0) | SPS_BAM_PIPE(1) | SPS_BAM_PIPE(2)),
+				 0, 2);
+}
+static void msm_nand_transfer_timeout(unsigned long data)
+{
+	struct msm_nand_info *info = (struct msm_nand_info *)data;
+
+	pr_err("NAND request timeout\n");
+	schedule_work(&info->tout_work);
+}
 
 /*
  * Get the DMA memory for requested amount of size. It returns the pointer
@@ -601,10 +799,6 @@ static uint16_t msm_nand_flash_onfi_crc_check(uint8_t *buffer, uint16_t count)
 struct msm_nand_flash_onfi_data {
 	struct msm_nand_common_cfgs cfg;
 	uint32_t exec;
-	uint32_t devcmd1_orig;
-	uint32_t devcmdvld_orig;
-	uint32_t devcmd1_mod;
-	uint32_t devcmdvld_mod;
 	uint32_t ecc_bch_cfg;
 };
 
@@ -676,11 +870,11 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 	uint32_t onfi_signature = 0;
 
 	/* SPS command/data descriptors */
-	uint32_t total_cnt = 13;
+	uint32_t total_cnt = 9;
 	/*
-	 * The following 13 commands are required to get onfi parameters -
-	 * flash, addr0, addr1, cfg0, cfg1, dev0_ecc_cfg, cmd_vld, dev_cmd1,
-	 * read_loc_0, exec, flash_status (read cmd), dev_cmd1, cmd_vld.
+	 * The following 9 commands are required to get onfi parameters -
+	 * flash, addr0, addr1, cfg0, cfg1, dev0_ecc_cfg,
+	 * read_loc_0, exec, flash_status (read cmd).
 	 */
 	struct {
 		struct sps_transfer xfer;
@@ -695,9 +889,9 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 
 	ret = msm_nand_version_check(info, &nandc_version);
 	if (!ret && !(nandc_version.nand_major == 1 &&
-			nandc_version.nand_minor == 1 &&
+			nandc_version.nand_minor >= 5 &&
 			nandc_version.qpic_major == 1 &&
-			nandc_version.qpic_minor == 1)) {
+			nandc_version.qpic_minor >= 5)) {
 		ret = -EPERM;
 		goto out;
 	}
@@ -720,32 +914,26 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 	}
 
 	memset(&data, 0, sizeof(struct msm_nand_flash_onfi_data));
-	ret = msm_nand_flash_rd_reg(info, MSM_NAND_DEV_CMD1(info),
-				&data.devcmd1_orig);
-	if (ret < 0)
-		goto free_dma;
-	ret = msm_nand_flash_rd_reg(info, MSM_NAND_DEV_CMD_VLD(info),
-			&data.devcmdvld_orig);
-	if (ret < 0)
-		goto free_dma;
 
-	/* Lookup the 'APPS' partition's first page address */
+	/* Lookup the partition to which apps has access to */
 	for (i = 0; i < FLASH_PTABLE_MAX_PARTS_V4; i++) {
-		if (!strcmp("apps", mtd_part[i].name)) {
+		if (mtd_part[i].name && !strcmp("boot", mtd_part[i].name)) {
 			page_address = mtd_part[i].offset << 6;
 			break;
 		}
 	}
-	data.cfg.cmd = MSM_NAND_CMD_PAGE_READ_ALL;
+	if (!page_address) {
+		pr_info("%s: no apps partition found in smem\n", __func__);
+		ret = -EPERM;
+		goto free_dma;
+	}
+	data.cfg.cmd = MSM_NAND_CMD_PAGE_READ_ONFI;
 	data.exec = 1;
 	data.cfg.addr0 = (page_address << 16) |
 				FLASH_READ_ONFI_PARAMETERS_ADDRESS;
 	data.cfg.addr1 = (page_address >> 16) & 0xFF;
 	data.cfg.cfg0 =	MSM_NAND_CFG0_RAW_ONFI_PARAM_INFO;
 	data.cfg.cfg1 = MSM_NAND_CFG1_RAW_ONFI_PARAM_INFO;
-	data.devcmd1_mod = (data.devcmd1_orig & 0xFFFFFF00) |
-				FLASH_READ_ONFI_PARAMETERS_COMMAND;
-	data.devcmdvld_mod = data.devcmdvld_orig & 0xFFFFFFFE;
 	data.ecc_bch_cfg = 1 << ECC_CFG_ECC_DISABLE;
 	dma_buffer->flash_status = 0xeeeeeeee;
 
@@ -755,14 +943,6 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 	cmd = curr_cmd;
 	msm_nand_prep_single_desc(cmd, MSM_NAND_DEV0_ECC_CFG(info), WRITE,
 			data.ecc_bch_cfg, 0);
-	cmd++;
-
-	msm_nand_prep_single_desc(cmd, MSM_NAND_DEV_CMD_VLD(info), WRITE,
-			data.devcmdvld_mod, 0);
-	cmd++;
-
-	msm_nand_prep_single_desc(cmd, MSM_NAND_DEV_CMD1(info), WRITE,
-			data.devcmd1_mod, 0);
 	cmd++;
 
 	rdata = (0 << 0) | (ONFI_PARAM_INFO_LENGTH << 16) | (1 << 31);
@@ -775,16 +955,8 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 	cmd++;
 
 	msm_nand_prep_single_desc(cmd, MSM_NAND_FLASH_STATUS(info), READ,
-		msm_virt_to_dma(chip, &dma_buffer->flash_status), 0);
-	cmd++;
-
-	msm_nand_prep_single_desc(cmd, MSM_NAND_DEV_CMD1(info), WRITE,
-			data.devcmd1_orig, 0);
-	cmd++;
-
-	msm_nand_prep_single_desc(cmd, MSM_NAND_DEV_CMD_VLD(info), WRITE,
-			data.devcmdvld_orig,
-			SPS_IOVEC_FLAG_UNLOCK | SPS_IOVEC_FLAG_INT);
+		msm_virt_to_dma(chip, &dma_buffer->flash_status),
+		SPS_IOVEC_FLAG_UNLOCK | SPS_IOVEC_FLAG_INT);
 	cmd++;
 
 	BUG_ON(cmd - dma_buffer->cmd > ARRAY_SIZE(dma_buffer->cmd));
@@ -839,8 +1011,9 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 	}
 
 	ret = msm_nand_put_device(chip->dev);
+	mutex_unlock(&info->lock);
 	if (ret)
-		goto unlock_mutex;
+		goto free_dma;
 
 	/* Check for flash status errors */
 	if (dma_buffer->flash_status & (FS_OP_ERR | FS_MPU_ERR)) {
@@ -880,6 +1053,7 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 					flash->pagesize;
 	flash->oobsize  = onfi_param_page_ptr->number_of_spare_bytes_per_page;
 	flash->density  = onfi_param_page_ptr->number_of_blocks_per_logical_unit
+				* onfi_param_page_ptr->number_of_logical_units
 					* flash->blksize;
 	flash->ecc_correctability = onfi_param_page_ptr->
 					number_of_bits_ecc_correctability;
@@ -894,7 +1068,7 @@ static int msm_nand_flash_onfi_probe(struct msm_nand_info *info)
 	 */
 	if (!strcmp(onfi_param_page_ptr->device_model, "MT29F4G08ABC"))
 		flash->widebus  = 0;
-	goto unlock_mutex;
+	goto free_dma;
 put_dev:
 	msm_nand_put_device(chip->dev);
 unlock_mutex:
@@ -1081,22 +1255,26 @@ static void msm_nand_update_rw_reg_data(struct msm_nand_chip *chip,
 			data->ecc_bch_cfg = chip->ecc_bch_cfg;
 		} else {
 			data->cmd = MSM_NAND_CMD_PAGE_READ_ALL;
-			data->cfg0 = chip->cfg0_raw;
+			data->cfg0 =
+			(chip->cfg0_raw & ~(7U << CW_PER_PAGE)) |
+			(((args->cwperpage-1) - args->start_sector)
+			 << CW_PER_PAGE);
 			data->cfg1 = chip->cfg1_raw;
 			data->ecc_bch_cfg = chip->ecc_cfg_raw;
 		}
 
 	} else {
 		if (ops->mode != MTD_OPS_RAW) {
+			data->cmd = MSM_NAND_CMD_PRG_PAGE;
 			data->cfg0 = chip->cfg0;
 			data->cfg1 = chip->cfg1;
 			data->ecc_bch_cfg = chip->ecc_bch_cfg;
 		} else {
+			data->cmd = MSM_NAND_CMD_PRG_PAGE_ALL;
 			data->cfg0 = chip->cfg0_raw;
 			data->cfg1 = chip->cfg1_raw;
 			data->ecc_bch_cfg = chip->ecc_cfg_raw;
 		}
-		data->cmd = MSM_NAND_CMD_PRG_PAGE;
 		data->clrfstatus = MSM_NAND_RESET_FLASH_STS;
 		data->clrrstatus = MSM_NAND_RESET_READ_STS;
 	}
@@ -1619,6 +1797,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 	struct sps_iovec iovec_temp;
 	bool erased_page;
 	uint64_t fix_data_in_pages = 0;
+	ktime_t start;
 
 	/*
 	 * The following 6 commands will be sent only once for the first
@@ -1643,6 +1822,9 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		} result[cwperpage];
 	} *dma_buffer;
 	struct msm_nand_rw_cmd_desc *cmd_list = NULL;
+
+	if (unlikely(enable_perfstats))
+		start = ktime_get();
 
 	memset(&rw_params, 0, sizeof(struct msm_nand_rw_params));
 	err = msm_nand_validate_mtd_params(mtd, true, from, ops, &rw_params);
@@ -1727,6 +1909,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			iovec++;
 		}
 		mutex_lock(&info->lock);
+		mod_timer(&timer, jiffies + SW_REQ_TIMEOUT_SEC * HZ);
 		err = msm_nand_get_device(chip->dev);
 		if (err)
 			goto unlock_mutex;
@@ -1778,6 +1961,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 		}
 
 		err = msm_nand_put_device(chip->dev);
+		del_timer_sync(&timer);
 		mutex_unlock(&info->lock);
 		if (err)
 			goto free_dma;
@@ -1904,6 +2088,7 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 put_dev:
 	msm_nand_put_device(chip->dev);
 unlock_mutex:
+	del_timer_sync(&timer);
 	mutex_unlock(&info->lock);
 free_dma:
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
@@ -1951,6 +2136,8 @@ validate_mtd_params_failed:
 			err, ops->retlen, ops->oobretlen);
 
 	pr_debug("========================================================\n");
+	if (unlikely(enable_perfstats) && likely(!err))
+		msm_nand_update_read_perf_stats(info, start, ops->retlen);
 	return err;
 }
 
@@ -1975,6 +2162,7 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 	size_t len;
 	size_t actual_len, ret_len;
 	int is_euclean = 0;
+	int is_ebadmsg = 0;
 
 	actual_len = ops->len;
 	ret_len = 0;
@@ -2012,9 +2200,15 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 			err = 0;
 		}
 
+		if (err == -EBADMSG) {
+			is_ebadmsg = 1;
+			err = 0;
+		}
+
 		if (err < 0) {
-			/* Clear previously set EUCLEAN */
+			/* Clear previously set EUCLEAN / EBADMSG */
 			is_euclean = 0;
+			is_ebadmsg = 0;
 			ret_len = ops->retlen;
 			break;
 		}
@@ -2038,6 +2232,10 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 out:
 	if (is_euclean == 1)
 		err = -EUCLEAN;
+
+	/* Snub EUCLEAN if we also have EBADMSG */
+	if (is_ebadmsg == 1)
+		err = -EBADMSG;
 	return err;
 }
 
@@ -2050,6 +2248,7 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 {
 	int ret;
 	int is_euclean = 0;
+	int is_ebadmsg = 0;
 	struct mtd_oob_ops ops;
 	unsigned char *bounce_buf = NULL;
 
@@ -2088,9 +2287,14 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 					is_euclean = 1;
 					ret = 0;
 				}
+				if (ret == -EBADMSG) {
+					is_ebadmsg = 1;
+					ret = 0;
+				}
 				if (ret < 0) {
-					/* Clear previously set EUCLEAN */
+					/* Clear previously set errors */
 					is_euclean = 0;
+					is_ebadmsg = 0;
 					break;
 				}
 
@@ -2130,6 +2334,11 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 out:
 	if (is_euclean == 1)
 		ret = -EUCLEAN;
+
+	/* Snub EUCLEAN if we also have EBADMSG */
+	if (is_ebadmsg == 1)
+		ret = -EBADMSG;
+
 	return ret;
 }
 
@@ -2149,6 +2358,8 @@ static int msm_nand_write_oob(struct mtd_info *mtd, loff_t to,
 	struct msm_nand_rw_reg_data data;
 	struct sps_iovec *iovec;
 	struct sps_iovec iovec_temp;
+	ktime_t start;
+
 	/*
 	 * The following 7 commands will be sent only once :
 	 * For first codeword (CW) - addr0, addr1, dev0_cfg0, dev0_cfg1,
@@ -2172,6 +2383,9 @@ static int msm_nand_write_oob(struct mtd_info *mtd, loff_t to,
 		} data[cwperpage];
 	} *dma_buffer;
 	struct msm_nand_rw_cmd_desc *cmd_list = NULL;
+
+	if (unlikely(enable_perfstats))
+		start = ktime_get();
 
 	memset(&rw_params, 0, sizeof(struct msm_nand_rw_params));
 	err = msm_nand_validate_mtd_params(mtd, false, to, ops, &rw_params);
@@ -2242,6 +2456,7 @@ static int msm_nand_write_oob(struct mtd_info *mtd, loff_t to,
 			iovec++;
 		}
 		mutex_lock(&info->lock);
+		mod_timer(&timer, jiffies + SW_REQ_TIMEOUT_SEC * HZ);
 		err = msm_nand_get_device(chip->dev);
 		if (err)
 			goto unlock_mutex;
@@ -2292,6 +2507,7 @@ static int msm_nand_write_oob(struct mtd_info *mtd, loff_t to,
 		}
 
 		err = msm_nand_put_device(chip->dev);
+		del_timer_sync(&timer);
 		mutex_unlock(&info->lock);
 		if (err)
 			goto free_dma;
@@ -2325,6 +2541,7 @@ static int msm_nand_write_oob(struct mtd_info *mtd, loff_t to,
 put_dev:
 	msm_nand_put_device(chip->dev);
 unlock_mutex:
+	del_timer_sync(&timer);
 	mutex_unlock(&info->lock);
 free_dma:
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
@@ -2348,6 +2565,8 @@ validate_mtd_params_failed:
 			err, ops->retlen, ops->oobretlen);
 
 	pr_debug("================================================\n");
+	if (unlikely(enable_perfstats) && likely(!err))
+		msm_nand_update_write_perf_stats(info, start, ops->retlen);
 	return err;
 }
 
@@ -2445,6 +2664,8 @@ static int msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	struct sps_iovec *iovec;
 	struct sps_iovec iovec_temp;
 	uint32_t total_cnt = 9;
+	ktime_t start;
+
 	/*
 	 * The following 9 commands are required to erase a page -
 	 * flash, addr0, addr1, cfg0, cfg1, exec, flash_status(read),
@@ -2456,6 +2677,9 @@ static int msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 		struct msm_nand_sps_cmd cmd[total_cnt];
 		uint32_t flash_status;
 	} *dma_buffer;
+
+	if (unlikely(enable_perfstats))
+		start = ktime_get();
 
 	if (mtd->writesize == PAGE_SIZE_2K)
 		page = instr->addr >> 11;
@@ -2524,6 +2748,7 @@ static int msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 		iovec++;
 	}
 	mutex_lock(&info->lock);
+	mod_timer(&timer, jiffies + SW_REQ_TIMEOUT_SEC * HZ);
 	err = msm_nand_get_device(chip->dev);
 	if (err)
 		goto unlock_mutex;
@@ -2568,9 +2793,12 @@ static int msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 put_dev:
 	msm_nand_put_device(chip->dev);
 unlock_mutex:
+	del_timer_sync(&timer);
 	mutex_unlock(&info->lock);
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
 out:
+	if (unlikely(enable_perfstats) && likely(!err))
+		msm_nand_update_erase_perf_stats(info, start, 1);
 	return err;
 }
 
@@ -2693,8 +2921,10 @@ static int msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 		iovec++;
 	}
 	mutex_lock(&info->lock);
+	mod_timer(&timer, jiffies + SW_REQ_TIMEOUT_SEC * HZ);
 	ret = msm_nand_get_device(chip->dev);
 	if (ret) {
+		del_timer_sync(&timer);
 		mutex_unlock(&info->lock);
 		goto free_dma;
 	}
@@ -2732,6 +2962,7 @@ static int msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 	}
 
 	ret = msm_nand_put_device(chip->dev);
+	del_timer_sync(&timer);
 	mutex_unlock(&info->lock);
 	if (ret)
 		goto free_dma;
@@ -2754,6 +2985,7 @@ static int msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 	goto free_dma;
 put_dev:
 	msm_nand_put_device(chip->dev);
+	del_timer_sync(&timer);
 	mutex_unlock(&info->lock);
 free_dma:
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer) + 4);
@@ -3347,6 +3579,9 @@ static int msm_nand_parse_smem_ptable(int *nr_parts)
 }
 #endif
 
+#define BOOT_DEV_MASK 0x1E
+#define BOOT_DEV_NAND 0x4
+
 /*
  * This function gets called when its device named msm-nand is added to
  * device tree .dts file with all its resources such as physical addresses
@@ -3363,6 +3598,27 @@ static int msm_nand_probe(struct platform_device *pdev)
 	struct resource *res;
 	int i, err, nr_parts;
 	struct device *dev;
+	u32 adjustment_offset;
+	void __iomem *boot_cfg_base;
+	u32 boot_dev;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+						"boot_cfg");
+	if (res && res->start) {
+		boot_cfg_base = devm_ioremap(&pdev->dev, res->start,
+						resource_size(res));
+		if (!boot_cfg_base) {
+			pr_err("ioremap() failed for addr 0x%x size 0x%x\n",
+				res->start, resource_size(res));
+			return -ENOMEM;
+		}
+		boot_dev = (readl_relaxed(boot_cfg_base) & BOOT_DEV_MASK) >> 1;
+		if (boot_dev != BOOT_DEV_NAND) {
+			pr_err("disabling nand as boot device (%x) is not NAND\n",
+					boot_dev);
+			return -ENODEV;
+		}
+	}
 	/*
 	 * The partition information can also be passed from kernel command
 	 * line. Also, the MTD core layer supports adding the whole device as
@@ -3382,6 +3638,18 @@ static int msm_nand_probe(struct platform_device *pdev)
 		goto out;
 	}
 	info->nand_phys = res->start;
+
+	err = of_property_read_u32(pdev->dev.of_node,
+				   "qcom,reg-adjustment-offset",
+				   &adjustment_offset);
+	if (err) {
+		pr_err("adjustment_offset not found, err = %d\n", err);
+		WARN_ON(1);
+		return err;
+	}
+
+	info->nand_phys_adjusted = info->nand_phys + adjustment_offset;
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						"bam_phys");
 	if (!res || !res->start) {
@@ -3473,6 +3741,8 @@ static int msm_nand_probe(struct platform_device *pdev)
 		err = -ENXIO;
 		goto free_bam;
 	}
+	INIT_WORK(&info->tout_work, msm_nand_tout_work_fn);
+	setup_timer(&timer, msm_nand_transfer_timeout, (unsigned long)info);
 	for (i = 0; i < nr_parts; i++) {
 		mtd_part[i].offset *= info->mtd.erasesize;
 		mtd_part[i].size *= info->mtd.erasesize;
@@ -3488,6 +3758,8 @@ static int msm_nand_probe(struct platform_device *pdev)
 			info->nand_phys, info->bam_phys, info->bam_irq);
 	pr_info("Allocated DMA buffer at virt_addr 0x%p, phys_addr 0x%x\n",
 		info->nand_chip.dma_virt_addr, info->nand_chip.dma_phys_addr);
+	msm_nand_init_sysfs(dev);
+	msm_nand_init_perf_stats(info);
 	goto out;
 free_bam:
 	msm_nand_bam_free(info);
@@ -3509,6 +3781,7 @@ static int msm_nand_remove(struct platform_device *pdev)
 {
 	struct msm_nand_info *info = dev_get_drvdata(&pdev->dev);
 
+	msm_nand_cleanup_sysfs(&pdev->dev);
 	if (pm_runtime_suspended(&(pdev)->dev))
 		pm_runtime_resume(&(pdev)->dev);
 
@@ -3552,6 +3825,9 @@ static struct platform_driver msm_nand_driver = {
 
 module_param(enable_euclean, bool, 0644);
 MODULE_PARM_DESC(enable_euclean, "Set this parameter to enable reporting EUCLEAN to upper layer when the correctable bitflips are equal to the max correctable limit.");
+
+module_param(enable_perfstats, bool, 0644);
+MODULE_PARM_DESC(enable_perfstats, "Set this parameter to enable collection and reporting of performance data.");
 
 module_platform_driver(msm_nand_driver);
 

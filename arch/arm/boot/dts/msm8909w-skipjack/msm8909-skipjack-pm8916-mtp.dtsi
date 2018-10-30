@@ -164,7 +164,7 @@
 		qcom,vin-sel = <3>;		/* PM8926_L6 1.8v */
 		qcom,src-sel = <0>;		/* MPP Constant */
 		qcom,ain-route = <2>;	/* QPNP_PIN_AIN_AMUX_CH6 = 1 */
-		qcom,master-en = <1>;	/* Enable MPP */	
+		qcom,master-en = <1>;	/* Enable MPP */
 	};
 
 	mpp@a300 { /* MPP 4 */

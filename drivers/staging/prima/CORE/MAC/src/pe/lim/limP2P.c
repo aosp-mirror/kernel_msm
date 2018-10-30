@@ -342,7 +342,8 @@ tSirRetStatus limCreateSessionForRemainOnChn(tpAniSirGlobal pMac, tPESession **p
         }
         /* Store PE sessionId in session Table  */
         psessionEntry->peSessionId = sessionId;
-
+        /* Store SME session Id in sessionTable */
+        psessionEntry->smeSessionId = pMac->lim.gpLimRemainOnChanReq->sessionId;
         psessionEntry->limSystemRole = eLIM_P2P_DEVICE_ROLE;
         CFG_GET_STR( nSirStatus, pMac,  WNI_CFG_SUPPORTED_RATES_11A,
                psessionEntry->rateSet.rate, val , SIR_MAC_MAX_NUMBER_OF_RATES );
@@ -503,9 +504,9 @@ void limProcessInsertSingleShotNOATimeout(tpAniSirGlobal pMac)
  *------------------------------------------------------------------*/
 void limConvertActiveChannelToPassiveChannel(tpAniSirGlobal pMac )
 {
-    tANI_U32 currentTime;
-    tANI_U32 lastTime = 0;
-    tANI_U32 timeDiff;
+    v_TIME_t currentTime;
+    v_TIME_t lastTime = 0;
+    v_TIME_t timeDiff;
     tANI_U8 i;
     currentTime = vos_timer_get_system_time();
     for (i = 1; i < SIR_MAX_24G_5G_CHANNEL_RANGE ; i++)
@@ -694,8 +695,6 @@ void limRemainOnChnRsp(tpAniSirGlobal pMac, eHalStatus status, tANI_U32 *data)
            limLog( pMac, LOGE, "Unable to change link state");
        }
 
-       pMac->lim.gLimSystemInScanLearnMode = 0;
-       pMac->lim.gLimHalScanState = eLIM_HAL_IDLE_SCAN_STATE;
        SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
     }
 

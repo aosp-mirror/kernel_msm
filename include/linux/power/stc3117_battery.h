@@ -40,8 +40,7 @@ struct stc311x_platform_data {
 	int RelaxCurrent;
 	/* 1=Adaptive mode enabled, 0=Adaptive mode disabled */
 	int Adaptive;
-	/* capacity derating in 0.1%, for temp = 60, 40, 25, 10,   0, -10
-	 * °C,-20°C */
+	/* capacity derating in 0.1%, for temp = 60, 40, 25, 10, 0, -10, -20 */
 	int CapDerating[7];
 	/* OCV curve adjustment */
 	int OCVValue[OCVTAB_SIZE];

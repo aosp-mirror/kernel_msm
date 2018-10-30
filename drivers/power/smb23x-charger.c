@@ -2443,7 +2443,7 @@ static int smb23x_get_prop_batt_capacity(struct smb23x_chip *chip)
 static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 {
 	union power_supply_propval ret = {0, };
-	static int charge_disable_count = 0;
+	static int charge_disable_count;
 	int charge_current;
 
 	if (chip->bms_psy == NULL)
@@ -2501,8 +2501,8 @@ static int smb23x_get_prop_batt_temp(struct smb23x_chip *chip)
 			max_chg_voltage = (system_voltage - DELTA_VOLTAGE)*1000;
 		}
 		/* pr_info("max_chg_voltage:%d\n", max_chg_voltage); */
-		if ((charge_current > 0) && 
-					(charge_current <= 20000) && 
+		if ((charge_current > 0) &&
+					(charge_current <= 20000) &&
 					!(chip->charge_disable_reason & BATT_FULL)) {
 			if (charge_disable_count < 5) {
 				charge_disable_count++;
@@ -2709,7 +2709,7 @@ void smb23x_delaywork_init_register(struct work_struct *work)
 	power_supply_changed(g_chip->usb_psy);
 	if (rc < 0) {
 		pr_err("Initialize register failed!\n");
-	} else if (g_chip->boot_up_phase == 0){
+	} else if (g_chip->boot_up_phase == 0) {
 		rc = smb23x_print_register(g_chip);
 		if (rc < 0)
 			pr_err("print register failed!\n");
@@ -2938,7 +2938,7 @@ static int smb23x_battery_set_property(struct power_supply *psy,
 		if (chip->charger_plugin) {
 			chip->index_soft_temp_comp_mv = NORMAL;
 			chip->timer_init_register.expires = jiffies + HZ;
-			add_timer(&chip->timer_init_register); 
+			add_timer(&chip->timer_init_register);
 		} else {
 			schedule_delayed_work(&chip->delaywork_charging_disable, 10);
 			chip->charge_disable_reason &= ~BATT_FULL;

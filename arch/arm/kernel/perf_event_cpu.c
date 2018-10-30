@@ -200,15 +200,27 @@ static void cpu_pmu_init(struct arm_pmu *cpu_pmu)
 static int cpu_pmu_notify(struct notifier_block *b, unsigned long action,
 			  void *hcpu)
 {
-	if ((action & ~CPU_TASKS_FROZEN) != CPU_STARTING)
+	unsigned long masked_action = action & ~CPU_TASKS_FROZEN;
+
+	if (!cpu_pmu)
 		return NOTIFY_DONE;
 
-	if (cpu_pmu && cpu_pmu->reset)
-		cpu_pmu->reset(cpu_pmu);
-	else
+	if ((masked_action != CPU_DYING) &&
+		(masked_action != CPU_STARTING))
 		return NOTIFY_DONE;
 
-	return NOTIFY_OK;
+	switch (masked_action) {
+	case CPU_DYING:
+		if (cpu_pmu->plat_device)
+			disable_percpu_irq(cpu_pmu->percpu_irq);
+		break;
+	case CPU_STARTING:
+		if (cpu_pmu->reset)
+			cpu_pmu->reset(cpu_pmu);
+		break;
+	}
+
+	return NOTIFY_DONE;
 }
 
 static struct notifier_block cpu_pmu_hotplug_notifier = {
@@ -230,6 +242,7 @@ static struct of_device_id cpu_pmu_of_device_ids[] = {
 	{.compatible = "arm,arm1176-pmu",	.data = armv6_1176_pmu_init},
 	{.compatible = "arm,arm1136-pmu",	.data = armv6_1136_pmu_init},
 	{.compatible = "qcom,krait-pmu",	.data = krait_pmu_init},
+	{.compatible = "arm,armv8-pmuv3",	.data = armv8_pmuv3_pmu_init},
 	{},
 };
 
@@ -311,6 +324,7 @@ static int cpu_pmu_device_probe(struct platform_device *pdev)
 
 	cpu_pmu = pmu;
 	cpu_pmu->plat_device = pdev;
+	cpu_pmu->percpu_irq = platform_get_irq(pdev, 0);
 
 	if (node && (of_id = of_match_node(cpu_pmu_of_device_ids, pdev->dev.of_node))) {
 		init_fn = of_id->data;

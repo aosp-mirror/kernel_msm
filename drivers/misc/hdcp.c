@@ -487,7 +487,7 @@ static int hdcp_lib_enable_encryption(struct hdcp_lib_handle *handle)
 	pr_debug("success\n");
 	return 0;
 error:
-	if (!atomic_read(&handle->hdcp_off))
+	if (handle && !atomic_read(&handle->hdcp_off))
 		HDCP_LIB_EXECUTE(clean);
 
 	return rc;
@@ -718,6 +718,11 @@ static void hdcp_lib_stream(struct hdcp_lib_handle *handle)
 
 	if (atomic_read(&handle->hdcp_off)) {
 		pr_debug("invalid state, hdcp off\n");
+		return;
+	}
+
+	if (!handle->repeater_flag) {
+		pr_debug("invalid state, not a repeater\n");
 		return;
 	}
 
@@ -1188,7 +1193,7 @@ static void hdcp_lib_msg_recvd(struct hdcp_lib_handle *handle)
 	struct hdcp_rcvd_msg_req *req_buf;
 	struct hdcp_rcvd_msg_rsp *rsp_buf;
 	uint32_t msglen;
-	char *msg;
+	char *msg = NULL;
 
 	if (!handle || !handle->qseecom_handle ||
 		!handle->qseecom_handle->sbuf) {

@@ -2010,8 +2010,11 @@ when       who     what, where, why
 
 #define LOG_TRSP_DATA_STALL_C                                       ((0x801) + LOG_1X_BASE_C)
 
+#define LOG_WLAN_PKT_LOG_INFO_C                                     ((0x8E0) + LOG_1X_BASE_C)
+
+
 /* The last defined DMSS log code */
-#define LOG_1X_LAST_C                                   ((0x801) + LOG_1X_BASE_C)
+#define LOG_1X_LAST_C                                   ((0x8E0) + LOG_1X_BASE_C)
 
 
 /* This is only here for old (pre equipment ID update) logging code */

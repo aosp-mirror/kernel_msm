@@ -1,4 +1,4 @@
-/* Copyright (c) 2007, 2012-2013, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007, 2012-2013, 2016-2017, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -1332,7 +1332,7 @@ int config_ppp_op_mode(struct ppp_blit_op *blit_op)
 	pr_debug("ROI(x %d,y %d, w %d, h %d) ",
 		blit_op->dst.roi.x, blit_op->dst.roi.y,
 		blit_op->dst.roi.width, blit_op->dst.roi.height);
-	pr_debug("Addr %pK, Stride S0 %d Addr_P1 %pK, Stride S1 %d\n",
+	pr_debug("Addr %p, Stride S0 %d Addr_P1 %p, Stride S1 %d\n",
 		blit_op->dst.p0, blit_op->dst.stride0,
 		blit_op->dst.p1, blit_op->dst.stride1);
 

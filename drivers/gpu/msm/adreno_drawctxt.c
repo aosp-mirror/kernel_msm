@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,8 +20,6 @@
 #include "kgsl_sharedmem.h"
 #include "adreno.h"
 #include "adreno_trace.h"
-
-#define KGSL_INIT_REFTIMESTAMP		0x7FFFFFFF
 
 static void wait_callback(struct kgsl_device *device,
 		struct kgsl_event_group *group, void *priv, int result)
@@ -215,10 +213,12 @@ static int adreno_drawctxt_wait_rb(struct adreno_device *adreno_dev,
 	BUG_ON(!mutex_is_locked(&device->mutex));
 
 	/*
-	 * If the context is invalid then return immediately - we may end up
-	 * waiting for a timestamp that will never come
+	 * If the context is invalid (OR) not submitted commands to GPU
+	 * then return immediately - we may end up waiting for a timestamp
+	 * that will never come
 	 */
-	if (kgsl_context_invalid(context))
+	if (kgsl_context_invalid(context) ||
+			!test_bit(KGSL_CONTEXT_PRIV_SUBMITTED, &context->priv))
 		goto done;
 
 	trace_adreno_drawctxt_wait_start(drawctxt->rb->id, context->id,
@@ -297,6 +297,7 @@ void adreno_drawctxt_invalidate(struct kgsl_device *device,
 	/* Give the bad news to everybody waiting around */
 	wake_up_all(&drawctxt->waiting);
 	wake_up_all(&drawctxt->wq);
+	wake_up_all(&drawctxt->timeout);
 }
 
 /*
@@ -342,13 +343,15 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 		KGSL_CONTEXT_PER_CONTEXT_TS |
 		KGSL_CONTEXT_USER_GENERATED_TS |
 		KGSL_CONTEXT_NO_FAULT_TOLERANCE |
+		KGSL_CONTEXT_INVALIDATE_ON_FAULT |
 		KGSL_CONTEXT_CTX_SWITCH |
 		KGSL_CONTEXT_PRIORITY_MASK |
 		KGSL_CONTEXT_TYPE_MASK |
 		KGSL_CONTEXT_PWR_CONSTRAINT |
 		KGSL_CONTEXT_IFH_NOP |
 		KGSL_CONTEXT_SECURE |
-		KGSL_CONTEXT_PREEMPT_STYLE_MASK);
+		KGSL_CONTEXT_PREEMPT_STYLE_MASK |
+		KGSL_CONTEXT_NO_SNAPSHOT);
 
 	/* Check for errors before trying to initialize */
 
@@ -387,6 +390,7 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 	spin_lock_init(&drawctxt->lock);
 	init_waitqueue_head(&drawctxt->wq);
 	init_waitqueue_head(&drawctxt->waiting);
+	init_waitqueue_head(&drawctxt->timeout);
 
 	/* Set the context priority */
 	_set_context_priority(drawctxt);
@@ -419,6 +423,8 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 			0);
 
 	adreno_context_debugfs_init(ADRENO_DEVICE(device), drawctxt);
+
+	INIT_LIST_HEAD(&drawctxt->active_node);
 
 	/* copy back whatever flags we dediced were valid */
 	*flags = drawctxt->base.flags;
@@ -462,19 +468,9 @@ void adreno_drawctxt_detach(struct kgsl_context *context)
 	drawctxt = ADRENO_CONTEXT(context);
 	rb = drawctxt->rb;
 
-	/* deactivate context */
-	mutex_lock(&device->mutex);
-	if (rb->drawctxt_active == drawctxt) {
-		if (adreno_dev->cur_rb == rb) {
-			if (!kgsl_active_count_get(device)) {
-				adreno_drawctxt_switch(adreno_dev, rb, NULL, 0);
-				kgsl_active_count_put(device);
-			} else
-				BUG();
-		} else
-			adreno_drawctxt_switch(adreno_dev, rb, NULL, 0);
-	}
-	mutex_unlock(&device->mutex);
+	spin_lock(&adreno_dev->active_list_lock);
+	list_del_init(&drawctxt->active_node);
+	spin_unlock(&adreno_dev->active_list_lock);
 
 	spin_lock(&drawctxt->lock);
 	count = drawctxt_detach_cmdbatches(drawctxt, list);
@@ -507,14 +503,33 @@ void adreno_drawctxt_detach(struct kgsl_context *context)
 		drawctxt->internal_timestamp, 30 * 1000);
 
 	/*
-	 * If the wait for global fails due to timeout then nothing after this
-	 * point is likely to work very well - BUG_ON() so we can take advantage
-	 * of the debug tools to figure out what the h - e - double hockey
-	 * sticks happened. If EAGAIN error is returned then recovery will kick
-	 * in and there will be no more commands in the RB pipe from this
-	 * context which is waht we are waiting for, so ignore -EAGAIN error
+	 * If the wait for global fails due to timeout then mark it as
+	 * context detach timeout fault and schedule dispatcher to kick
+	 * in GPU recovery. For a ADRENO_CTX_DETATCH_TIMEOUT_FAULT we clear
+	 * the policy and invalidate the context. If EAGAIN error is returned
+	 * then recovery will kick in and there will be no more commands in the
+	 * RB pipe from this context which is what we are waiting for, so ignore
+	 * -EAGAIN error.
 	 */
-	BUG_ON(ret && ret != -EAGAIN);
+	if (ret && ret != -EAGAIN) {
+		KGSL_DRV_ERR(device,
+				"Wait for global ctx=%d ts=%d type=%d error=%d\n",
+				drawctxt->base.id, drawctxt->internal_timestamp,
+				drawctxt->type, ret);
+
+		adreno_set_gpu_fault(adreno_dev,
+				ADRENO_CTX_DETATCH_TIMEOUT_FAULT);
+		mutex_unlock(&device->mutex);
+
+		/* Schedule dispatcher to kick in recovery */
+		adreno_dispatcher_schedule(device);
+
+		/* Wait for context to be invalidated and release context */
+		ret = wait_event_interruptible_timeout(drawctxt->timeout,
+					kgsl_context_invalid(&drawctxt->base),
+					msecs_to_jiffies(5000));
+		return;
+	}
 
 	kgsl_sharedmem_writel(device, &device->memstore,
 			KGSL_MEMSTORE_OFFSET(context->id, soptimestamp),
@@ -544,12 +559,21 @@ void adreno_drawctxt_destroy(struct kgsl_context *context)
 	kfree(drawctxt);
 }
 
+static void _drawctxt_switch_wait_callback(struct kgsl_device *device,
+		struct kgsl_event_group *group,
+		void *priv, int result)
+{
+	struct adreno_context *drawctxt = (struct adreno_context *) priv;
+
+	kgsl_context_put(&drawctxt->base);
+}
+
 /**
  * adreno_drawctxt_switch - switch the current draw context in a given RB
  * @adreno_dev - The 3D device that owns the context
  * @rb: The ringubffer pointer on which the current context is being changed
  * @drawctxt - the 3D context to switch to
- * @flags - Flags to accompany the switch (from user space)
+ * @flags: Control flags for the switch
  *
  * Switch the current draw context in given RB
  */
@@ -570,8 +594,16 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 	if (rb->drawctxt_active == drawctxt)
 		return ret;
 
-	trace_adreno_drawctxt_switch(rb,
-		drawctxt, flags);
+	/*
+	 * Submitting pt switch commands from a detached context can
+	 * lead to a race condition where the pt is destroyed before
+	 * the pt switch commands get executed by the GPU, leading to
+	 * pagefaults.
+	 */
+	if (drawctxt != NULL && kgsl_context_detached(&drawctxt->base))
+		return -ENOENT;
+
+	trace_adreno_drawctxt_switch(rb, drawctxt);
 
 	/* Get a refcount to the new instance */
 	if (drawctxt) {
@@ -583,16 +615,18 @@ int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 		 /* No context - set the default pagetable and thats it. */
 		new_pt = device->mmu.defaultpagetable;
 	}
-	ret = adreno_ringbuffer_set_pt_ctx(rb, new_pt, drawctxt);
-	if (ret) {
-		KGSL_DRV_ERR(device,
-			"Failed to set pagetable on rb %d\n", rb->id);
+	ret = adreno_ringbuffer_set_pt_ctx(rb, new_pt, drawctxt, flags);
+	if (ret)
 		return ret;
-	}
 
-	/* Put the old instance of the active drawctxt */
-	if (rb->drawctxt_active)
-		kgsl_context_put(&rb->drawctxt_active->base);
+	if (rb->drawctxt_active) {
+		/* Wait for the timestamp to expire */
+		if (kgsl_add_event(device, &rb->events, rb->timestamp,
+			_drawctxt_switch_wait_callback,
+			rb->drawctxt_active)) {
+			kgsl_context_put(&rb->drawctxt_active->base);
+		}
+	}
 
 	rb->drawctxt_active = drawctxt;
 	return 0;

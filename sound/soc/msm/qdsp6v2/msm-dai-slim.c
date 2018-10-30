@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -344,6 +344,13 @@ static int msm_dai_slim_prepare(struct snd_pcm_substream *substream,
 			"%s: dai id (%d) has invalid state 0x%x\n",
 			__func__, dai->id, dai_data->status);
 		return -EINVAL;
+	}
+
+	if (dai_data->status & DAI_STATE_PREPARED) {
+		dev_dbg(dai->dev,
+			"%s: dai id (%d) has already prepared.\n",
+			__func__, dai->id);
+		return 0;
 	}
 
 	dma_data = &dai_data->dma_data;

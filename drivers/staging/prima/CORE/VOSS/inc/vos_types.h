@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -65,6 +65,9 @@
 #define VOS_SWAP_U32(_x) \
   (( ( ( (_x) << 24 ) & 0xFF000000 ) | ( ( (_x) >> 24 ) & 0x000000FF ) ) | \
    ( ( ( (_x) << 8 ) & 0x00FF0000 ) | ( ( (_x) >> 8 ) & 0x0000FF00 ) ))
+
+/* Length enough to include full DHCP/EAPOL/Management frame */
+#define MAX_PKT_STAT_DATA_LEN         800
 
 // Endian operations for Big Endian and Small Endian modes
 #ifdef ANI_LITTLE_BYTE_ENDIAN
@@ -149,6 +152,7 @@ typedef enum
 //bit 1 - ap mode
 //bit 2 - p2p client mode
 //bit 3 - p2p go mode
+//bit 4 - monitor mode
 typedef enum
 {
     VOS_STA=1, 
@@ -156,6 +160,8 @@ typedef enum
     VOS_STA_SAP=3, //to support sta, softAp  mode . This means STA+AP mode
     VOS_P2P_CLIENT=4,
     VOS_P2P_GO=8,
+    VOS_MON=16,
+    VOS_STA_MON=17, /* station and monitor mode together */
     VOS_MAX_CONCURRENCY_PERSONA=4
 } tVOS_CONCURRENCY_MODE;
  
@@ -198,6 +204,25 @@ typedef struct
     
 } v_MACADDR_t;
 
+typedef enum {
+    VOS_MODE_11A        = 0,   /* 11a Mode */
+    VOS_MODE_11G        = 1,   /* 11b/g Mode */
+    VOS_MODE_11B        = 2,   /* 11b Mode */
+    VOS_MODE_11GONLY    = 3,   /* 11g only Mode */
+    VOS_MODE_11NA_HT20   = 4,  /* 11a HT20 mode */
+    VOS_MODE_11NG_HT20   = 5,  /* 11g HT20 mode */
+    VOS_MODE_11NA_HT40   = 6,  /* 11a HT40 mode */
+    VOS_MODE_11NG_HT40   = 7,  /* 11g HT40 mode */
+    VOS_MODE_11AC_VHT20 = 8,
+    VOS_MODE_11AC_VHT40 = 9,
+    VOS_MODE_11AC_VHT80 = 10,
+//    VOS_MODE_11AC_VHT160 = 11,
+    VOS_MODE_11AC_VHT20_2G = 11,
+    VOS_MODE_11AC_VHT40_2G = 12,
+    VOS_MODE_11AC_VHT80_2G = 13,
+    VOS_MODE_UNKNOWN    = 14,
+    VOS_MODE_MAX        = 14
+} VOS_WLAN_PHY_MODE;
 
 /// This macro is used to initialize a vOSS MacAddress to the 
 /// broadcast MacAddress.  It is used like this...

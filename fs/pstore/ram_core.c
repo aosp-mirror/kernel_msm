@@ -17,15 +17,16 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/errno.h>
-#include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/memblock.h>
+#include <linux/pstore_ram.h>
 #include <linux/rslib.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 #include <linux/vmalloc.h>
-#include <linux/pstore_ram.h>
 #include <asm/page.h>
 
 struct persistent_ram_buffer {
@@ -80,16 +81,15 @@ static void buffer_size_add_atomic(struct persistent_ram_zone *prz, size_t a)
 	} while (atomic_cmpxchg(&prz->buffer->size, old, new) != old);
 }
 
-static DEFINE_RAW_SPINLOCK(buffer_lock);
-
 /* increase and wrap the start pointer, returning the old value */
 static size_t buffer_start_add_locked(struct persistent_ram_zone *prz, size_t a)
 {
 	int old;
 	int new;
-	unsigned long flags;
+	unsigned long flags = 0;
 
-	raw_spin_lock_irqsave(&buffer_lock, flags);
+	if (!(prz->flags & PRZ_FLAG_NO_LOCK))
+		raw_spin_lock_irqsave(&prz->buffer_lock, flags);
 
 	old = atomic_read(&prz->buffer->start);
 	new = old + a;
@@ -97,7 +97,8 @@ static size_t buffer_start_add_locked(struct persistent_ram_zone *prz, size_t a)
 		new -= prz->buffer_size;
 	atomic_set(&prz->buffer->start, new);
 
-	raw_spin_unlock_irqrestore(&buffer_lock, flags);
+	if (!(prz->flags & PRZ_FLAG_NO_LOCK))
+		raw_spin_unlock_irqrestore(&prz->buffer_lock, flags);
 
 	return old;
 }
@@ -107,9 +108,10 @@ static void buffer_size_add_locked(struct persistent_ram_zone *prz, size_t a)
 {
 	size_t old;
 	size_t new;
-	unsigned long flags;
+	unsigned long flags = 0;
 
-	raw_spin_lock_irqsave(&buffer_lock, flags);
+	if (!(prz->flags & PRZ_FLAG_NO_LOCK))
+		raw_spin_lock_irqsave(&prz->buffer_lock, flags);
 
 	old = atomic_read(&prz->buffer->size);
 	if (old == prz->buffer_size)
@@ -121,7 +123,8 @@ static void buffer_size_add_locked(struct persistent_ram_zone *prz, size_t a)
 	atomic_set(&prz->buffer->size, new);
 
 exit:
-	raw_spin_unlock_irqrestore(&buffer_lock, flags);
+	if (!(prz->flags & PRZ_FLAG_NO_LOCK))
+		raw_spin_unlock_irqrestore(&prz->buffer_lock, flags);
 }
 
 static size_t (*buffer_start_add)(struct persistent_ram_zone *, size_t) = buffer_start_add_atomic;
@@ -303,6 +306,16 @@ static void notrace persistent_ram_update(struct persistent_ram_zone *prz,
 	persistent_ram_update_ecc(prz, start, count);
 }
 
+static int notrace persistent_ram_update_user(struct persistent_ram_zone *prz,
+	const void __user *s, unsigned int start, unsigned int count)
+{
+	struct persistent_ram_buffer *buffer = prz->buffer;
+	int ret = unlikely(__copy_from_user(buffer->data + start, s, count)) ?
+		-EFAULT : 0;
+	persistent_ram_update_ecc(prz, start, count);
+	return ret;
+}
+
 void persistent_ram_save_old(struct persistent_ram_zone *prz)
 {
 	struct persistent_ram_buffer *buffer = prz->buffer;
@@ -354,6 +367,38 @@ int notrace persistent_ram_write(struct persistent_ram_zone *prz,
 	persistent_ram_update_header_ecc(prz);
 
 	return count;
+}
+
+int notrace persistent_ram_write_user(struct persistent_ram_zone *prz,
+	const void __user *s, unsigned int count)
+{
+	int rem, ret = 0, c = count;
+	size_t start;
+
+	if (unlikely(!access_ok(VERIFY_READ, s, count)))
+		return -EFAULT;
+	if (unlikely(c > prz->buffer_size)) {
+		s += c - prz->buffer_size;
+		c = prz->buffer_size;
+	}
+
+	buffer_size_add(prz, c);
+
+	start = buffer_start_add(prz, c);
+
+	rem = prz->buffer_size - start;
+	if (unlikely(rem < c)) {
+		ret = persistent_ram_update_user(prz, s, start, rem);
+		s += rem;
+		c -= rem;
+		start = 0;
+	}
+	if (likely(!ret))
+		ret = persistent_ram_update_user(prz, s, start, c);
+
+	persistent_ram_update_header_ecc(prz);
+
+	return unlikely(ret) ? ret : count;
 }
 
 size_t persistent_ram_old_size(struct persistent_ram_zone *prz)
@@ -487,6 +532,7 @@ static int persistent_ram_post_init(struct persistent_ram_zone *prz, u32 sig,
 			 prz->buffer->sig);
 	}
 
+	/* Rewind missing or invalid memory area. */
 	prz->buffer->sig = sig;
 	persistent_ram_zap(prz);
 
@@ -513,7 +559,7 @@ void persistent_ram_free(struct persistent_ram_zone *prz)
 
 struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,
 			u32 sig, struct persistent_ram_ecc_info *ecc_info,
-			unsigned int memtype)
+			unsigned int memtype, u32 flags)
 {
 	struct persistent_ram_zone *prz;
 	int ret = -ENOMEM;
@@ -523,6 +569,10 @@ struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,
 		pr_err("failed to allocate persistent ram zone\n");
 		goto err;
 	}
+
+	/* Initialize general buffer state. */
+	raw_spin_lock_init(&prz->buffer_lock);
+	prz->flags = flags;
 
 	ret = persistent_ram_buffer_map(start, size, prz, memtype);
 	if (ret)

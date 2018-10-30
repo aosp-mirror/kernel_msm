@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1177,5 +1177,17 @@ v_PVOID_t vos_get_pkt_end(vos_pkt_t *pPacket);
 
 */
 v_VOID_t vos_recover_tail(vos_pkt_t *pPacket);
+
+/**
+  @breaf vos_is_arp_pkt() - Check the packet is ARP or not.
+
+  @param
+        pskb - pointer to skb
+        is_translated - header translation check
+  @return
+         TRUE - if packet is ARP
+         FALSE -if packet is not ARP
+*/
+bool vos_is_arp_pkt(void *pskb, bool is_translated);
 
 #endif  // !defined( __VOS_PKT_H )

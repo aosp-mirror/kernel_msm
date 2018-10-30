@@ -115,7 +115,7 @@ static int sensor_set_power(struct camif_dev *camif, int on)
 	struct cam_sensor *sensor = &camif->sensor;
 	int err = 0;
 
-	if (!on == camif->sensor.power_count)
+	if (camif->sensor.power_count == !on)
 		err = v4l2_subdev_call(sensor->sd, core, s_power, on);
 	if (!err)
 		sensor->power_count += on ? 1 : -1;
@@ -131,7 +131,7 @@ static int sensor_set_streaming(struct camif_dev *camif, int on)
 	struct cam_sensor *sensor = &camif->sensor;
 	int err = 0;
 
-	if (!on == camif->sensor.stream_count)
+	if (camif->sensor.stream_count == !on)
 		err = v4l2_subdev_call(sensor->sd, video, s_stream, on);
 	if (!err)
 		sensor->stream_count += on ? 1 : -1;
@@ -1280,16 +1280,17 @@ static void __camif_subdev_try_format(struct camif_dev *camif,
 {
 	const struct s3c_camif_variant *variant = camif->variant;
 	const struct vp_pix_limits *pix_lim;
-	int i = ARRAY_SIZE(camif_mbus_formats);
+	unsigned int i;
 
 	/* FIXME: constraints against codec or preview path ? */
 	pix_lim = &variant->vp_pix_limits[VP_CODEC];
 
-	while (i-- >= 0)
+	for (i = 0; i < ARRAY_SIZE(camif_mbus_formats); i++)
 		if (camif_mbus_formats[i] == mf->code)
 			break;
 
-	mf->code = camif_mbus_formats[i];
+	if (i == ARRAY_SIZE(camif_mbus_formats))
+		mf->code = camif_mbus_formats[0];
 
 	if (pad == CAMIF_SD_PAD_SINK) {
 		v4l_bound_align_image(&mf->width, 8, CAMIF_MAX_PIX_WIDTH,

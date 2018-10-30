@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, 2017-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -75,6 +75,8 @@
 #define SME_QOS_UAPSD_CFG_BE_CHANGED_MASK     0xF2
 #define SME_QOS_UAPSD_CFG_VI_CHANGED_MASK     0xF4
 #define SME_QOS_UAPSD_CFG_VO_CHANGED_MASK     0xF8
+
+#define HDD_ETH_HEADER_LEN      14
 
 /* WLAN_DHCP_DEBUG */
 #define RX_PATH     ( 0 )
@@ -397,5 +399,36 @@ static inline void wlan_hdd_log_eapol(struct sk_buff *skb,
 {
 }
 #endif /* FEATURE_WLAN_DIAG_SUPPORT */
+
+/**
+ * hdd_rx_fwd_eapol() - forward cached eapol frames
+ * @vosContext : pointer to vos global context
+ * @pVosPacket: pointer to vos packet
+ *
+ * Return: None
+ *
+ */
+void hdd_rx_fwd_eapol(v_VOID_t *vosContext, vos_pkt_t *pVosPacket);
+
+/*
+ * As of the 4.7 kernel, net_device->trans_start is removed. Create shims to
+ * support compiling against older versions of the kernel.
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
+static inline void netif_trans_update(struct net_device *dev)
+{
+	dev->trans_start = jiffies;
+}
+
+#define TX_TIMEOUT_TRACE(dev, module_id) VOS_TRACE( \
+        module_id, VOS_TRACE_LEVEL_ERROR, \
+        "%s: Transmission timeout occurred jiffies %lu trans_start %lu", \
+        __func__, jiffies, dev->trans_start)
+#else
+#define TX_TIMEOUT_TRACE(dev, module_id) VOS_TRACE( \
+        module_id, VOS_TRACE_LEVEL_ERROR, \
+        "%s: Transmission timeout occurred jiffies %lu", \
+        __func__, jiffies)
+#endif
 
 #endif    // end #if !defined( WLAN_HDD_TX_RX_H )

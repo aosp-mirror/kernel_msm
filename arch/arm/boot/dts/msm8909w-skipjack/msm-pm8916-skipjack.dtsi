@@ -616,6 +616,7 @@
 						   "cdc-vdda-cp";
 
 			qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias";
+			qcom,subsys-name = "modem";
 		};
 
 		pm8916_tombak_analog: msm8x16_wcd_codec@f100{
