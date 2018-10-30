@@ -7,7 +7,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x0011
+#define RAYDIUM_VER     0x0013
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
 /* IC timing control arguments */
