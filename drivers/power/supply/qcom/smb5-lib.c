@@ -4779,6 +4779,11 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 	bool dcin_present, vbus_present;
 	int rc, wireless_vout = 0;
 
+	if (!chg->iio.vph_v_chan) {
+		smblib_err(chg, "Couldn't get vph voltage channel\n");
+		return IRQ_HANDLED;
+	}
+
 	rc = iio_read_channel_processed(chg->iio.vph_v_chan,
 			&wireless_vout);
 	if (rc < 0)
