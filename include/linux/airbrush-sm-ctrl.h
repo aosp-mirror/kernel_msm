@@ -369,6 +369,7 @@ int ab_ddr_resume(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_exit(struct ab_state_context *sc);
 int ab_ddr_setup(struct ab_state_context *sc);
+void ab_ddr_read_write_test(int read_write);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);

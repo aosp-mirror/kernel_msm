@@ -152,6 +152,9 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 	case 5:
 		ab_ddr_setup(sc);
 		break;
+	case 6:
+		ab_ddr_read_write_test(3);
+		break;
 	default:
 		pr_err("ERROR!! Invalid DDR Control\n");
 		break;

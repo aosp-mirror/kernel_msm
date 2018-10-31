@@ -699,41 +699,93 @@ static void ddr_train_restore_configuration(uint32_t *ddr_train_save_value)
 #endif
 }
 
-#ifdef CONFIG_DDR_BOOT_TEST
-
-#define DDR_BOOT_TEST_READ	(0x1 << 0)
-#define DDR_BOOT_TEST_WRITE	(0x1 << 1)
+#define DDR_BOOT_TEST_READ (0x1 << 0)
+#define DDR_BOOT_TEST_WRITE (0x1 << 1)
 #define DDR_BOOT_TEST_READ_WRITE (DDR_BOOT_TEST_READ | DDR_BOOT_TEST_WRITE)
+#define DMA_SZ (16 * 1024 * 1024)
 
+static DECLARE_COMPLETION(dma_completion);
+
+static int dma_callback(uint8_t chan, enum dma_data_direction dir,
+			enum abc_dma_trans_status status)
+{
+	complete(&dma_completion);
+
+	return 0;
+}
+
+/* TODO(b/118829034): Move to a separate test file */
 void ab_ddr_read_write_test(int read_write)
 {
-	uint32_t ddr_addr[] = {
-		0x20000000, 0x20008004, 0x20800008, 0x28000000,
-		0x28008004, 0x28800008, 0x30000000, 0x30008004,
-		0x30800008, 0x38000000, 0x38008004, 0x38800008,
-		0x3ffffffc };
+	size_t size = DMA_SZ;
+	char *host_vaddr;
+	dma_addr_t host_paddr, ab_paddr;
+	struct dma_element_t desc;
+	int i, j;
 
-	uint32_t ddr_data[] = {
-		0x12345678, 0xabcdef89, 0xa5a5a5a5, 0x12345678,
-		0xabcdef89, 0xa5a5a5a5, 0x12345678, 0xabcdef89,
-		0xa5a5a5a5, 0x12345678, 0xabcdef89, 0xa5a5a5a5,
-		0xa5a5a5a5 };
+	host_vaddr = abc_alloc_coherent(size, &host_paddr);
+	if (!host_vaddr) {
+		pr_err("%s: buffer allocation failed\n", __func__);
+		return;
+	}
 
-	int i;
+	for (i = 0; i < DMA_SZ; i++)
+		host_vaddr[i] = i & 0xff;
+
+	(void)abc_reg_dma_irq_callback(&dma_callback, 0);
+
+	desc.len = size;
+	desc.chan = 0;
 
 	if (DDR_BOOT_TEST_WRITE & read_write) {
-		for (i = 0; i < 13; i++)
-			WR_DDR_REG(ddr_addr[i], ddr_data[i]);
+		desc.src_addr = (uint32_t)(host_paddr & 0xFFFFFFFF);
+		desc.src_u_addr = (uint32_t)(host_paddr >> 32);
+
+		ab_paddr = 0x20000000;
+
+		for (j = 0; j < 32; j++) {
+			desc.dst_addr = (uint32_t)(ab_paddr & 0xFFFFFFFF);
+			desc.dst_u_addr = (uint32_t)(ab_paddr >> 32);
+
+			reinit_completion(&dma_completion);
+
+			(void)dma_sblk_start(0, DMA_TO_DEVICE, &desc);
+
+			wait_for_completion(&dma_completion);
+
+			ab_paddr = ab_paddr + DMA_SZ;
+		}
 	}
 
 	if (DDR_BOOT_TEST_READ & read_write) {
-		for (i = 0; i < 13; i++)
-			pr_debug("0x%x: 0x%x\n", ddr_addr[i],
-					RD_DDR_REG(ddr_addr[i]));
-	}
-}
+		desc.dst_addr = (uint32_t)(host_paddr & 0xFFFFFFFF);
+		desc.dst_u_addr = (uint32_t)(host_paddr >> 32);
 
-#endif /* CONFIG_DDR_BOOT_TEST */
+		ab_paddr = 0x20000000;
+
+		for (j = 0; j < 32; j++) {
+			desc.src_addr = (uint32_t)(ab_paddr & 0xFFFFFFFF);
+			desc.src_u_addr = (uint32_t)(ab_paddr >> 32);
+
+			reinit_completion(&dma_completion);
+
+			(void)dma_sblk_start(0, DMA_FROM_DEVICE, &desc);
+
+			wait_for_completion(&dma_completion);
+
+			for (i = 0; i < DMA_SZ; i++)
+				if (host_vaddr[i] != (i & 0xff))
+					pr_err("%s: mismatch for byte %d\n",
+							__func__, i);
+
+			ab_paddr = ab_paddr + DMA_SZ;
+		}
+	}
+
+	(void)abc_reg_dma_irq_callback(NULL, 0);
+
+	abc_free_coherent(size, host_vaddr, host_paddr);
+}
 
 static int ab_ddr_train(uint32_t DDR_SR)
 {
