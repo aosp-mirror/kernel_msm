@@ -62,15 +62,14 @@ struct kernel_info {
 	phys_addr_t _token_index_va;
 	phys_addr_t _markers_va;
 
-	/* For virt_to_phys & frame pointer */
+	/* For frame pointer */
 	u32 thread_size;
+
+	/* For virt_to_phys */
 	u32 va_bits;
 	u64 page_offset;
 	u64 phys_offset;
 	u64 kimage_voffset;
-
-	/* For random uuid */
-	u8  random_uuid[64];
 };
 
 struct kernel_all_info {
@@ -86,7 +85,6 @@ static void backup_kernel_info(void)
 	struct kernel_all_info *all_info;
 	struct kernel_info *info;
 	u32 *checksum_info;
-	u8  uuid[16];
 	int num_reg = 0;
 	int ret, index;
 
@@ -152,8 +150,6 @@ static void backup_kernel_info(void)
 	info->page_offset = PAGE_OFFSET;
 	info->phys_offset = PHYS_OFFSET;
 	info->kimage_voffset = kimage_voffset;
-	generate_random_uuid(uuid);
-	snprintf(info->random_uuid, sizeof(info->random_uuid), "%pU", uuid);
 
 	for (index = 0; index < sizeof(struct kernel_info)/sizeof(u32);
 		index++) {
