@@ -105,7 +105,7 @@
 
 	bootloader_kinfo {
 		compatible = "bootloader_kinfo";
-		reg = <0xA1805C00 0x400>;
+		reg = <0xA1805C00 0x3C0>;
 		reg-names = "kinfo";
 		memory-region = <&debug_info>;
 	};
