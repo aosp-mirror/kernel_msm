@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0
 menu "Device Drivers"
 
+config BUILTINS_ASYNC_PROBE
+	bool "For builtin drivers to async probe"
+	default n
+	help
+	  Force all builtin drivers to use async probe. If in doubt, say N
+
 source "drivers/amba/Kconfig"
 
 source "drivers/base/Kconfig"
