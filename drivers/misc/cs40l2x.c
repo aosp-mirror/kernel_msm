@@ -5922,6 +5922,7 @@ static struct i2c_driver cs40l2x_i2c_driver = {
 		.name = "cs40l2x",
 		.of_match_table = cs40l2x_of_match,
 		.pm = &cs40l2x_pm_ops,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 	.id_table = cs40l2x_id,
 	.probe = cs40l2x_i2c_probe,
