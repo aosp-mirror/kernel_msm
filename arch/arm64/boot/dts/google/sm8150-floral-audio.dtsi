@@ -191,6 +191,18 @@
 		cirrus,bottom-speaker-mean = <8671>;
 	};
 
+	qcom,msm-dai-tdm-quat-rx {
+		qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+		qcom,msm-cpudai-tdm-sync-mode = <0>;
+		qcom,msm-cpudai-tdm-invert-sync = <0>;
+	};
+
+	qcom,msm-dai-tdm-quat-tx {
+		qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+		qcom,msm-cpudai-tdm-sync-mode = <0>;
+		qcom,msm-cpudai-tdm-invert-sync = <0>;
+	};
+
 	iaxxx-mic {
 		compatible = "knowles,iaxxx-msm";
 		model = "msm-oq-iaxxx";
