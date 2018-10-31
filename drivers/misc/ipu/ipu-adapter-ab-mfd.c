@@ -540,6 +540,7 @@ static int ipu_adapter_ab_mfd_remove(struct platform_device *pdev)
 static struct platform_driver ipu_adapter_ab_mfd_driver = {
 	.driver = {
 		.name	= DRV_NAME_ABC_PCIE_IPU,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 	.probe		= ipu_adapter_ab_mfd_probe,
 	.remove		= ipu_adapter_ab_mfd_remove,
