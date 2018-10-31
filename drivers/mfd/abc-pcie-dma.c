@@ -1513,6 +1513,7 @@ static struct platform_driver abc_pcie_dma_driver = {
 	.id_table = abc_pcie_dma_ids,
 	.driver   = {
 		.name = DRV_NAME_ABC_PCIE_DMA,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 module_platform_driver(abc_pcie_dma_driver);
