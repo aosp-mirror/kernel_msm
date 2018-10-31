@@ -196,6 +196,8 @@
 			<&clock_tpu DOUT_TPU_TPU_PLL_DIV_CLK_1>,
 			<&clock_tpu MOUT_TPU_AONCLK_PLLCLK>,
 			<&clock_tpu CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU>,
+			<&clock_aon FOUT_PLL_AON>,
+			<&clock_aon MOUT_AON_PLL_AON>,
 			<&clock_rpmh RPMH_LN_BB_CLK2>;
 		clock-names =	"osc_clk",
 				"ipu_pll",
@@ -209,6 +211,8 @@
 				"tpu_pll_div",
 				"tpu_switch_mux",
 				"tpu_gate_clk",
+				"aon_pll",
+				"aon_pll_mux",
 				"ab_ref";
 
 		/* Provide GPIOs used in Airbrush boot sequence */
