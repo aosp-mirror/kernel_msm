@@ -264,6 +264,7 @@ static int nitrous_rfkill_set_power(void *data, bool blocked)
 		gpio_set_value(lpm->gpio_power, 0);
 		msleep(30);
 		gpio_set_value(lpm->gpio_power, 1);
+		msleep(50);
 		rc = regulator_enable(reg_ldo);
 		printk(KERN_ERR "regulator enabled\n");
 		/* Enable host_wake irq to get ready */
