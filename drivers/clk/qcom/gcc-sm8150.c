@@ -4308,6 +4308,7 @@ static struct platform_driver gcc_sm8150_driver = {
 	.driver		= {
 		.name	= "gcc-sm8150",
 		.of_match_table = gcc_sm8150_match_table,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 
