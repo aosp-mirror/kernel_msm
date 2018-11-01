@@ -197,6 +197,7 @@ struct smb_dt_props {
 	int			term_current_thresh_hi_ma;
 	int			term_current_thresh_lo_ma;
 	int			batt_psy_is_bms;
+	const char		*batt_psy_name;
 
 };
 
@@ -441,6 +442,9 @@ static int smb5_parse_dt(struct smb5 *chip)
 
 	chip->dt.batt_psy_is_bms =
 		of_property_read_bool(node, "google,batt_psy_is_bms");
+
+	(void)of_property_read_string(node, "google,batt_psy_name",
+				      &chip->dt.batt_psy_name);
 
 	chg->fcc_stepper_enable = of_property_read_bool(node,
 					"qcom,fcc-stepping-enable");
@@ -1478,6 +1482,8 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 
 	if (chip->dt.batt_psy_is_bms)
 		batt_psy_desc.type = POWER_SUPPLY_TYPE_BMS;
+	if (chip->dt.batt_psy_name)
+		batt_psy_desc.name = chip->dt.batt_psy_name;
 
 	chg->batt_psy = devm_power_supply_register(chg->dev,
 					   &batt_psy_desc,
