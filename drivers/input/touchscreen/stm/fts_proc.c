@@ -741,7 +741,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 
 	Firmware fw;
 	LimitFile lim;
-	char *limits_file = info->board->limits_name;
+	const char *limits_file = info->board->limits_name;
 
 	mess.dummy = 0;
 	mess.action = 0;

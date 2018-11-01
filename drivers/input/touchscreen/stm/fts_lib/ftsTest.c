@@ -915,7 +915,7 @@ int checkLimitsMapAdjTotal(u16 *data, int row, int column, int *max)
   *  item in todo is disabled the variable will be untouched
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ito(char *path_limits, TestToDo *todo,
+int production_test_ito(const char *path_limits, TestToDo *todo,
 			MutualSenseFrame *frame)
 {
 	int res = OK;
@@ -1147,8 +1147,8 @@ int production_test_initialization(u8 type)
   * @param mpflag MP flag value to write in case of successful test
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_main(char *pathThresholds, int stop_on_fail, int saveInit,
-			 TestToDo *todo, u8 mpflag)
+int production_test_main(const char *pathThresholds, int stop_on_fail,
+			 int saveInit, TestToDo *todo, u8 mpflag)
 {
 	int res, ret;
 
@@ -1243,7 +1243,8 @@ END:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
+int production_test_ms_raw(const char *path_limits, int stop_on_fail,
+			   TestToDo *todo)
 {
 	int ret, count_fail = 0;
 	MutualSenseFrame msRawFrame;
@@ -1745,7 +1746,7 @@ ERROR_LIMITS:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ms_raw_lp(char *path_limits, int stop_on_fail,
+int production_test_ms_raw_lp(const char *path_limits, int stop_on_fail,
 			      TestToDo *todo)
 {
 	int ret, count_fail = 0;
@@ -2043,7 +2044,7 @@ ERROR_LIMITS:
   * "NULL" if the limits data should be loaded by a .h file
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ms_key_raw(char *path_limits)
+int production_test_ms_key_raw(const char *path_limits)
 {
 	int ret;
 	MutualSenseFrame msRawFrame;
@@ -2125,7 +2126,8 @@ ERROR_LIMITS:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ms_cx(char *path_limits, int stop_on_fail, TestToDo *todo)
+int production_test_ms_cx(const char *path_limits, int stop_on_fail,
+			  TestToDo *todo)
 {
 	int ret;
 	int count_fail = 0;
@@ -2620,7 +2622,7 @@ ERROR_LIMITS:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ms_key_cx(char *path_limits, int stop_on_fail,
+int production_test_ms_key_cx(const char *path_limits, int stop_on_fail,
 			      TestToDo *todo)
 {
 	int ret;
@@ -2855,7 +2857,7 @@ ERROR_LIMITS:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ms_cx_lp(char *path_limits, int stop_on_fail,
+int production_test_ms_cx_lp(const char *path_limits, int stop_on_fail,
 			     TestToDo *todo)
 {
 	int ret;
@@ -3324,7 +3326,8 @@ ERROR_LIMITS:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo)
+int production_test_ss_raw(const char *path_limits, int stop_on_fail,
+			   TestToDo *todo)
 {
 	int ret;
 	int count_fail = 0;
@@ -3695,7 +3698,7 @@ ERROR_LIMITS:
  * @param todo pointer to a TestToDo variable which select the test to do
  * @return OK if success or an error code which specify the type of error
  */
-int production_test_ss_raw_lp(char *path_limits, int stop_on_fail,
+int production_test_ss_raw_lp(const char *path_limits, int stop_on_fail,
 			      TestToDo *todo)
 {
 	int ret;
@@ -4057,7 +4060,7 @@ ERROR_LIMITS:
  * @param todo pointer to a TestToDo variable which select the test to do
  * @return OK if success or an error code which specify the type of error
  */
-int production_test_ss_ix_cx(char *path_limits, int stop_on_fail,
+int production_test_ss_ix_cx(const char *path_limits, int stop_on_fail,
 			     TestToDo *todo)
 {
 	int ret;
@@ -5224,7 +5227,7 @@ ERROR_LIMITS:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_ss_ix_cx_lp(char *path_limits, int stop_on_fail,
+int production_test_ss_ix_cx_lp(const char *path_limits, int stop_on_fail,
 			     TestToDo *todo)
 {
 	int ret;
@@ -6384,7 +6387,8 @@ ERROR_LIMITS:
   * @param todo pointer to a TestToDo variable which select the test to do
   * @return OK if success or an error code which specify the type of error
   */
-int production_test_data(char *path_limits, int stop_on_fail, TestToDo *todo)
+int production_test_data(const char *path_limits, int stop_on_fail,
+			 TestToDo *todo)
 {
 	int res = OK, ret;
 
@@ -7379,7 +7383,7 @@ ERROR:
   * data
   * @return OK if success or an error code which specify the type of error
   */
-int getLimitsFile(char *path, LimitFile *file)
+int getLimitsFile(const char *path, LimitFile *file)
 {
 	const struct firmware *fw = NULL;
 	struct device *dev = NULL;
@@ -7510,7 +7514,7 @@ int freeCurrentLimitsFile(void)
   * column of data
   * @return OK if success or an error code which specify the type of error
   */
-int parseProductionTestLimits(char *path, LimitFile *file, char *label,
+int parseProductionTestLimits(const char *path, LimitFile *file, char *label,
 			      int **data, int *row, int *column)
 {
 	int find = 0;
@@ -7527,7 +7531,7 @@ int parseProductionTestLimits(char *path, LimitFile *file, char *label,
 
 	if (file == NULL || strcmp(path, file->name) != 0 || file->size == 0) {
 		struct fts_ts_info *info = dev_get_drvdata(getDev());
-		char *limits_file = info->board->limits_name;
+		const char *limits_file = info->board->limits_name;
 
 		pr_info("No limit File data passed... try to get them from the system!\n");
 		ret = getLimitsFile(limits_file, &limit_file);

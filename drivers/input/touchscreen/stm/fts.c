@@ -46,6 +46,7 @@
 #include <linux/spi/spi.h>
 #include <linux/completion.h>
 #include <linux/device.h>
+#include <linux/of.h>
 
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
@@ -57,6 +58,9 @@
 #ifdef KERNEL_ABOVE_2_6_38
 #include <linux/input/mt.h>
 #endif
+
+#include <drm/drm_panel.h>
+#include <video/display_timing.h>
 
 
 #include "fts.h"
@@ -1482,7 +1486,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	int init_type = SPECIAL_PANEL_INIT;
 	u8 *all_strbuff = buf;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
-	char *limits_file = info->board->limits_name;
+	const char *limits_file = info->board->limits_name;
 
 	MutualSenseData compData;
 	SelfSenseData comData;
@@ -3145,7 +3149,7 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 	int ret2 = 0;
 	int retry;
 	int initretrycnt = 0;
-	char *limits_file = info->board->limits_name;
+	const char *limits_file = info->board->limits_name;
 
 	/* initialization error, retry initialization */
 	for (retry = 0; retry < RETRY_INIT_BOOT; retry++) {
@@ -3973,9 +3977,29 @@ err_gpio_irq:
 static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 {
 	int retval;
+	int index;
+	struct of_phandle_args panelmap;
+	struct drm_panel *panel = NULL;
+	struct display_timing timing;
 	const char *name;
 	struct device_node *np = dev->of_node;
 	u32 coords[2];
+
+	if (of_property_read_bool(np, "st,panel_map")) {
+		for (index = 0 ;; index++) {
+			retval = of_parse_phandle_with_fixed_args(np,
+								  "st,panel_map",
+								  1,
+								  index,
+								  &panelmap);
+			if (retval)
+				return -EPROBE_DEFER;
+			panel = of_drm_find_panel(panelmap.np);
+			of_node_put(panelmap.np);
+			if (panel)
+				break;
+		}
+	}
 
 	bdata->switch_gpio = of_get_named_gpio(np, "st,switch_gpio", 0);
 	pr_info("switch_gpio = %d\n", bdata->switch_gpio);
@@ -4013,16 +4037,35 @@ static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 	} else
 		bdata->reset_gpio = GPIO_NOT_DEFINED;
 
-	retval = of_property_read_string(np, "st,firmware_name", &name);
-	if (retval == -EINVAL)
-		scnprintf(bdata->fw_name, sizeof(bdata->fw_name),
-			"%s", PATH_FILE_FW);
-	else if (retval >= 0)
-		scnprintf(bdata->fw_name, sizeof(bdata->fw_name),
-			"%s", name);
+	name = NULL;
+	if (panel)
+		retval = of_property_read_string_index(np, "st,firmware_names",
+						       panelmap.args[0], &name);
+	if (!name)
+		retval = of_property_read_string(np, "st,firmware_name", &name);
+	if (!name)
+		bdata->fw_name = PATH_FILE_FW;
+	else
+		bdata->fw_name = name;
 	pr_info("firmware name = %s\n", bdata->fw_name);
 
-	if (of_property_read_u32_array(np, "st,max-coords", coords, 2)) {
+	name = NULL;
+	if (panel)
+		retval = of_property_read_string_index(np, "st,limits_names",
+						       panelmap.args[0], &name);
+	if (!name)
+		retval = of_property_read_string(np, "st,limits_name", &name);
+	if (!name)
+		bdata->limits_name = LIMITS_FILE;
+	else
+		bdata->limits_name = name;
+	pr_info("limits name = %s\n", bdata->limits_name);
+
+	if (panel && panel->funcs && panel->funcs->get_timings &&
+	    panel->funcs->get_timings(panel, 1, &timing) > 0) {
+		coords[0] = timing.hactive.max - 1;
+		coords[1] = timing.vactive.max - 1;
+	} else if (of_property_read_u32_array(np, "st,max-coords", coords, 2)) {
 		pr_err("st,max-coords not found, using 1440x2560\n");
 		coords[0] = 1440;
 		coords[1] = 2560;
@@ -4116,7 +4159,9 @@ static int fts_probe(struct spi_device *client)
 			pr_err("ERROR:info.board kzalloc failed\n");
 			goto ProbeErrorExit_1;
 		}
-		parse_dt(&client->dev, info->board);
+		error = parse_dt(&client->dev, info->board);
+		if (error)
+			goto ProbeErrorExit_1;
 	}
 
 	pr_info("SET Regulators:\n");
@@ -4321,59 +4366,6 @@ static int fts_probe(struct spi_device *client)
 	if (error < OK)
 		goto ProbeErrorExit_6;
 
-	/* Update the FW/LIMITS name by config project ID,
-	 * TODO:
-	 * 1. Monitor the project ID will be consistent or not.
-	 * 2. Decide which FW/LIMITS will use when there is no FW on touch IC
-	 *    or FW corrupted.
-	 */
-	switch (systemInfo.u16_cfgProjectId) {
-	case FW_CFG_PID_C2:
-	case FW_CFG_PID_F2:
-		scnprintf(info->board->fw_name,
-			sizeof(info->board->fw_name),
-			PATH_FILE_FW_FMT,
-			systemInfo.u16_cfgProjectId);
-		scnprintf(info->board->limits_name,
-			sizeof(info->board->limits_name),
-			PATH_FILE_LIMITS_FMT,
-			systemInfo.u16_cfgProjectId);
-		break;
-
-	case FW_CFG_PID_C2_ALT1:
-		scnprintf(info->board->fw_name,
-			sizeof(info->board->fw_name),
-			PATH_FILE_FW_FMT,
-			FW_CFG_PID_C2);
-		scnprintf(info->board->limits_name,
-			sizeof(info->board->limits_name),
-			PATH_FILE_LIMITS_FMT,
-			FW_CFG_PID_C2);
-		break;
-
-	case FW_CFG_PID_F2_ALT1:
-	case FW_CFG_PID_F2_ALT2:
-		scnprintf(info->board->fw_name,
-			sizeof(info->board->fw_name),
-			PATH_FILE_FW_FMT,
-			FW_CFG_PID_F2);
-		scnprintf(info->board->limits_name,
-			sizeof(info->board->limits_name),
-			PATH_FILE_LIMITS_FMT,
-			FW_CFG_PID_F2);
-		break;
-
-	default:
-		pr_err("New PID %04X need to check!",
-			systemInfo.u16_cfgProjectId);
-		scnprintf(info->board->limits_name,
-			sizeof(info->board->limits_name),
-			LIMITS_FILE);
-		break;
-	}
-	pr_info("FW/LIMITS name update by config pid = %s, %s\n",
-		info->board->fw_name, info->board->limits_name);
-
 #if defined(FW_UPDATE_ON_PROBE) && defined(FW_H_FILE)
 	pr_info("FW Update and Sensing Initialization:\n");
 	error = fts_fw_update(info);
@@ -4450,7 +4442,8 @@ ProbeErrorExit_1:
 	kfree(info);
 
 ProbeErrorExit_0:
-	pr_err("Probe Failed!\n");
+	if (error != -EPROBE_DEFER)
+		pr_err("Probe Failed!\n");
 
 	return error;
 }

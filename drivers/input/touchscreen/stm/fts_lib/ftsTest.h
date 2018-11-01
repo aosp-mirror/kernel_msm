@@ -25,8 +25,6 @@
 #include "ftsSoftware.h"
 #include "ftsFrame.h"
 
-#define PATH_FILE_LIMITS_FMT		"stm_fts_production_limits_pid%04x.csv"
-
 #ifndef LIMITS_H_FILE
 /* /< Name of the Production Test Limit File */
 #define LIMITS_FILE			"stm_fts_production_limits.csv"
@@ -442,38 +440,42 @@ int checkLimitsGapOffsets(short *data, int row, int column, int threshold,
   * in order to satisfy different scenarios
   * @{
   */
-int production_test_ito(char *path_limits, TestToDo *todo,
+int production_test_ito(const char *path_limits, TestToDo *todo,
 			MutualSenseFrame *frame);
 int production_test_initialization(u8 type);
-int production_test_main(char *pathThresholds, int stop_on_fail, int saveInit,
-			 TestToDo *todo, u8 mpflag);
-int production_test_ms_raw(char *path_limits, int stop_on_fail, TestToDo *todo);
-int production_test_ms_raw_lp(char *path_limits, int stop_on_fail,
+int production_test_main(const char *pathThresholds, int stop_on_fail,
+			 int saveInit, TestToDo *todo, u8 mpflag);
+int production_test_ms_raw(const char *path_limits, int stop_on_fail,
+			   TestToDo *todo);
+int production_test_ms_raw_lp(const char *path_limits, int stop_on_fail,
 			      TestToDo *todo);
-int production_test_ms_cx(char *path_limits, int stop_on_fail, TestToDo *todo);
-int production_test_ms_cx_lp(char *path_limits, int stop_on_fail,
+int production_test_ms_cx(const char *path_limits, int stop_on_fail,
+			  TestToDo *todo);
+int production_test_ms_cx_lp(const char *path_limits, int stop_on_fail,
 			     TestToDo *todo);
-int production_test_ss_raw(char *path_limits, int stop_on_fail, TestToDo *todo);
-int production_test_ss_raw_lp(char *path_limits, int stop_on_fail,
+int production_test_ss_raw(const char *path_limits, int stop_on_fail,
+			  TestToDo *todo);
+int production_test_ss_raw_lp(const char *path_limits, int stop_on_fail,
 			      TestToDo *todo);
-int production_test_ss_ix_cx(char *path_limits, int stop_on_fail,
+int production_test_ss_ix_cx(const char *path_limits, int stop_on_fail,
 			     TestToDo *todo);
-int production_test_ss_ix_cx_lp(char *path_limits, int stop_on_fail,
+int production_test_ss_ix_cx_lp(const char *path_limits, int stop_on_fail,
 			     TestToDo *todo);
-int production_test_data(char *path_limits, int stop_on_fail, TestToDo *todo);
-int production_test_ms_key_cx(char *path_limits, int stop_on_fail,
+int production_test_data(const char *path_limits, int stop_on_fail,
+			  TestToDo *todo);
+int production_test_ms_key_cx(const char *path_limits, int stop_on_fail,
 			      TestToDo *todo);
-int production_test_ms_key_raw(char *path_limits);
+int production_test_ms_key_raw(const char *path_limits);
 /** @}*/
 
 /**
   * @addtogroup limit_file
   * @{
   */
-int parseProductionTestLimits(char *path, LimitFile *file, char *label,
+int parseProductionTestLimits(const char *path, LimitFile *file, char *label,
 			      int **data, int *row, int *column);
 int readLine(char *data, char *line, int size, int *n);
-int getLimitsFile(char *path, LimitFile *file);
+int getLimitsFile(const char *path, LimitFile *file);
 int freeLimitsFile(LimitFile *file);
 int freeCurrentLimitsFile(void);
 /**@}*/
