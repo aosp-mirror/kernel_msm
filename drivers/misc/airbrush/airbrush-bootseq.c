@@ -76,6 +76,7 @@ void parse_fw(uint32_t *image_dw_buf, const unsigned char *image_buf,
 	}
 }
 
+/* Caller must hold ab_ctx->state_lock */
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 {
 	/* Number of attempts to flash SRAM bootcode when CRC error happens */

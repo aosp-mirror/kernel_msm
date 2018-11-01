@@ -20,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/ioctl.h>
+#include <linux/kfifo.h>
 #include <linux/mfd/abc-pcie.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
@@ -41,7 +42,9 @@
 #define __GPIO_DISABLE	0x0
 
 #define AB_SM_IOCTL_MAGIC	'a'
-#define AB_SM_ASYNC_NOTIFY _IOR(AB_SM_IOCTL_MAGIC, 0, int)
+#define AB_SM_ASYNC_NOTIFY	_IOR(AB_SM_IOCTL_MAGIC, 0, int)
+#define AB_SM_SET_STATE		_IOW(AB_SM_IOCTL_MAGIC, 1, int)
+#define AB_SM_GET_STATE		_IOR(AB_SM_IOCTL_MAGIC, 2, int)
 
 enum block_name {
 	BLK_IPU,
@@ -328,11 +331,16 @@ struct ab_state_context {
 	enum ddr_state ddr_state;
 	struct pci_dev *pcie_dev;
 	bool pcie_enumerated;
+
+	atomic_t async_in_use;
+	struct mutex async_fifo_lock;
+	struct kfifo *async_entries;
 };
 
 struct ab_sm_misc_session {
 	struct ab_state_context *sc;
-	enum chip_state last_state;
+	bool first_entry;
+	struct kfifo async_entries;
 };
 
 /*
@@ -351,6 +359,7 @@ void ab_sm_exit(struct platform_device *pdev);
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie);
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id);
+enum chip_state ab_sm_get_state(struct ab_state_context *sc);
 
 int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw);
 void abc_clk_register(struct ab_state_context *ab_ctx);

@@ -22,7 +22,7 @@ static ssize_t chip_state_show(struct device *dev,
 	struct ab_state_context *sc =
 		(struct ab_state_context *)dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", sc->curr_chip_substate_id);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ab_sm_get_state(sc));
 }
 
 static ssize_t chip_state_store(struct device *dev,

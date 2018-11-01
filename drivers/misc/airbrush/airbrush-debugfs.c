@@ -35,7 +35,7 @@ static int chip_state_set(void *data, u64 val)
 
 static int chip_state_get(void *sc, u64 *val)
 {
-	*val = ((struct ab_state_context *)sc)->curr_chip_substate_id;
+	*val = ab_sm_get_state((struct ab_state_context *)sc);
 	return 0;
 }
 

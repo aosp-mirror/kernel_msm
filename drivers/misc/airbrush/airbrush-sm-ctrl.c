@@ -375,6 +375,7 @@ static u32 ab_sm_throttled_chip_substate_id(
 	return min(chip_substate_id, throttler_substate_id);
 }
 
+/* Caller must hold sc->state_lock */
 static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
 	u32 to_chip_substate_id;
@@ -501,11 +502,20 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	sc->curr_chip_substate_id = to_chip_substate_id;
-	complete_all(&sc->state_change_comp);
 
+	mutex_lock(&sc->async_fifo_lock);
+	if (sc->async_entries) {
+		kfifo_in(sc->async_entries,
+			&sc->curr_chip_substate_id,
+			sizeof(sc->curr_chip_substate_id));
+	}
+	mutex_unlock(&sc->async_fifo_lock);
+
+	complete_all(&sc->state_change_comp);
 	return 0;
 }
 
+/* Caller must hold sc->state_lock */
 static int _ab_sm_set_state(struct ab_state_context *sc,
 		u32 dest_chip_substate_id)
 {
@@ -532,9 +542,21 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 dest_chip_substate_id)
 	mutex_lock(&sc->state_lock);
 	ret = _ab_sm_set_state(sc, dest_chip_substate_id);
 	mutex_unlock(&sc->state_lock);
+
 	return ret;
 }
 EXPORT_SYMBOL(ab_sm_set_state);
+
+enum chip_state ab_sm_get_state(struct ab_state_context *sc)
+{
+	enum chip_state ret;
+
+	mutex_lock(&sc->state_lock);
+	ret = sc->curr_chip_substate_id;
+	mutex_unlock(&sc->state_lock);
+	return ret;
+}
+EXPORT_SYMBOL(ab_sm_get_state);
 
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie)
@@ -601,22 +623,48 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 		unsigned long arg)
 {
 	int ret;
+	int chip_state;
 
-	if (sess->last_state != CHIP_STATE_UNDEFINED) {
-		ret = wait_for_completion_interruptible(
-				&sess->sc->state_change_comp);
-		if (ret < 0)
-			return ret;
+	mutex_lock(&sess->sc->async_fifo_lock);
+	sess->sc->async_entries = &sess->async_entries;
+	mutex_unlock(&sess->sc->async_fifo_lock);
+
+	if (kfifo_is_empty(&sess->async_entries)) {
+		if (sess->first_entry) {
+			sess->first_entry = false;
+			if (copy_to_user((void __user *)arg,
+					&sess->sc->curr_chip_substate_id,
+					sizeof(chip_state)))
+				return -EFAULT;
+
+			reinit_completion(&sess->sc->state_change_comp);
+			return 0;
+
+		} else {
+			ret = wait_for_completion_interruptible(
+					&sess->sc->state_change_comp);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	reinit_completion(&sess->sc->state_change_comp);
 
-	sess->last_state = sess->sc->curr_chip_substate_id;
-	if (copy_to_user((void __user *)arg,
-				&sess->last_state,
-				sizeof(sess->last_state)))
-		return -EFAULT;
+	if (!kfifo_is_empty(&sess->async_entries)) {
+		kfifo_out(&sess->async_entries, &chip_state,
+				sizeof(chip_state));
+		if (copy_to_user((void __user *)arg,
+				&chip_state,
+				sizeof(chip_state)))
+			return -EFAULT;
+	} else {
+		/* Another ioctl may have closed causing a completion,
+		 * can safely ignore
+		 */
+		return -EAGAIN;
+	}
 
+	sess->first_entry = false;
 	return 0;
 }
 
@@ -632,7 +680,8 @@ static int ab_sm_misc_open(struct inode *ip, struct file *fp)
 		return -ENOMEM;
 
 	sess->sc = sc;
-	sess->last_state = CHIP_STATE_UNDEFINED;
+	sess->first_entry = true;
+	kfifo_alloc(&sess->async_entries, 32 * sizeof(int), GFP_KERNEL);
 
 	fp->private_data = sess;
 
@@ -642,9 +691,15 @@ static int ab_sm_misc_open(struct inode *ip, struct file *fp)
 static int ab_sm_misc_release(struct inode *ip, struct file *fp)
 {
 	struct ab_sm_misc_session *sess = fp->private_data;
+	struct ab_state_context *sc = sess->sc;
 
-	complete_all(&sess->sc->state_change_comp);
+	complete_all(&sc->state_change_comp);
+
+	mutex_lock(&sc->async_fifo_lock);
+	if (&sess->async_entries == sc->async_entries)
+		sc->async_entries = NULL;
 	kfree(sess);
+	mutex_unlock(&sc->async_fifo_lock);
 	return 0;
 }
 
@@ -653,13 +708,32 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 {
 	long ret;
 	struct ab_sm_misc_session *sess = fp->private_data;
+	struct ab_state_context *sc = sess->sc;
 
 	switch (cmd) {
 	case AB_SM_ASYNC_NOTIFY:
-		ret = ab_sm_async_notify(sess, arg);
+		if (!atomic_cmpxchg(&sc->async_in_use, 0, 1)) {
+			ret = ab_sm_async_notify(sess, arg);
+			atomic_set(&sc->async_in_use, 0);
+		} else {
+			dev_info(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
+			ret = -EBUSY;
+		}
 		break;
+
+	case AB_SM_SET_STATE:
+		ret = ab_sm_set_state(sc, (u32)arg);
+		break;
+
+	case AB_SM_GET_STATE:
+		ret = ab_sm_get_state(sess->sc);
+		if (copy_to_user((void __user *)arg, &ret, sizeof(int)))
+			return -EFAULT;
+		ret = 0;
+		break;
+
 	default:
-		dev_err(sess->sc->dev,
+		dev_err(sc->dev,
 			"%s: Unknown ioctl cmd 0x%X\n", __func__, cmd);
 		return -EINVAL;
 	}
@@ -810,9 +884,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 
 	mutex_init(&ab_sm_ctx->pmic_lock);
 	mutex_init(&ab_sm_ctx->state_lock);
+	mutex_init(&ab_sm_ctx->async_fifo_lock);
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
+	atomic_set(&ab_sm_ctx->async_in_use, 0);
 	init_completion(&ab_sm_ctx->state_change_comp);
-
 
 	/*
 	 * TODO error handle at airbrush-sm should return non-zero value to
