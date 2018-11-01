@@ -943,15 +943,17 @@ static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	cq_host->mrq_slot[tag] = mrq;
 
-#ifdef CONFIG_DEBUG_FS
-	cq_host->mrq_slot[tag]->issue_time_stamp = ktime_get();
-	cq_host->mrq_slot[tag]->complete_time_stamp = ktime_set(0, 0);
-#endif
 
 	/* PM QoS */
 	sdhci_msm_pm_qos_irq_vote(host);
 	cmdq_pm_qos_vote(host, mrq);
 ring_doorbell:
+
+#ifdef CONFIG_DEBUG_FS
+	cq_host->mrq_slot[tag]->issue_time_stamp = ktime_get();
+	cq_host->mrq_slot[tag]->complete_time_stamp = ktime_set(0, 0);
+#endif
+
 	/* Ensure the task descriptor list is flushed before ringing doorbell */
 	wmb();
 	if (cmdq_readl(cq_host, CQTDBR) & (1 << tag)) {
