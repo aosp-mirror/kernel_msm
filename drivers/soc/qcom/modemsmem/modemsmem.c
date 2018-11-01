@@ -22,9 +22,9 @@
 #include <linux/of.h>
 #include <linux/ctype.h>
 #include <linux/io.h>
+#include <soc/qcom/socinfo.h>
 #include <soc/qcom/smem.h>
 #include "modemsmem.h"
-#include <soc/qcom/socinfo.h>
 
 #define BOOTMODE_LENGTH			20
 
@@ -142,7 +142,9 @@ static int modem_smem_probe(struct platform_device *pdev)
 	struct device *dev = NULL;
 	struct modem_smem_type *modem_smem;
 	struct device_node *dtnp = NULL;
-	u32 value = 0;
+	int len = 0;
+	u8 buff[8 + 1];
+	u32 val = 0;
 
 	pr_debug("[SMEM] %s: Enter probe\n", __func__);
 
@@ -189,9 +191,29 @@ static int modem_smem_probe(struct platform_device *pdev)
 
 	modem_smem_set_u32(modem_smem, subtype, socinfo_get_platform_subtype());
 
-	dtnp = of_find_node_by_path(DEVICE_TREE_CDT_CDB2_PATH);
-	if (dtnp && !of_property_read_u32(dtnp, "modem_flag", &value))
-		modem_smem_set_u32(modem_smem, modem_flag, value);
+	do {
+		dtnp = of_find_node_by_path(DEVICE_TREE_CDT_CDB2_PATH);
+		if (dtnp && !of_find_property(dtnp, "modem_flag", &len)) {
+			dev_info(dev, "Get modem_flag node failed\n");
+			break;
+		}
+		if (len > ARRAY_SIZE(buff) || len < 2) {
+			dev_err(dev, "Invalid modem_flag length %d", len);
+			break;
+		}
+		ret = of_property_read_u8_array(dtnp, "modem_flag", buff, len);
+		if (ret) {
+			dev_err(dev, "Get modem_flag failed %d", ret);
+			break;
+		}
+		buff[len - 1] = '\0';
+		ret = kstrtou32(buff, 16, &val);
+		if (ret) {
+			dev_err(dev, "Set modem_flag failed %d\n", ret);
+			break;
+		}
+		modem_smem_set_u32(modem_smem, modem_flag, val);
+	} while (0);
 
 	if (is_factory_bootmode()) {
 		modem_smem_set_u32(modem_smem, ftm_magic, MODEM_FTM_MAGIC);
