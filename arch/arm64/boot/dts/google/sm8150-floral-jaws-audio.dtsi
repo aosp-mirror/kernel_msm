@@ -95,7 +95,7 @@
 		 * 1 is tdm mode
 		 * 2 is DSP_A mode
 		 */
-		adnc,pcm-port-fmt =  <1>, <0>, <0>, <0>, <0>, <0>;
+		adnc,pcm-port-fmt =  <2>, <0>, <0>, <0>, <2>, <0>;
 		/* input pcm port acting as master or slave */
 		adnc,ip-port-master = <0>, <0>, <0>, <0>, <0>, <0>, <0>;
 		/* Input pdm clock source for all microphones are defined
