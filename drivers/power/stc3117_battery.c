@@ -193,7 +193,7 @@ static const int TempTable[NTEMP] = {60, 40, 25, 10, 0, -10, -20};
 static const int DefVMTempTable[NTEMP] = VMTEMPTABLE;
 static const char *charger_name = "battery";
 //static int g_low_battery_counter;
-static bool g_debug, g_standby_mode, g_boot_phase;
+static bool g_debug, g_standby_mode, g_boot_phase, g_force_SOC_update;
 static int g_ui_soc, g_last_status, g_ocv, g_reg_soc;
 static const char * const charge_status[] = {
 	"unknown",
@@ -1947,6 +1947,7 @@ int GasGauge_Task(struct GasGauge_DataTypeDef *GG)
 	if ((BattData.STC_Status & M_RUN) == 0) {
 		pr_err("stc311x in standby mode, rewrite OCV \n");
 		STC311x_Rewrite_OCV();
+		g_force_SOC_update = 1;
 
 		/* if not running, restore STC3117 */
 		STC311x_Restore();
@@ -2575,7 +2576,12 @@ static void stc311x_work(struct work_struct *work)
 
 	stc311x_check_charger_state(chip);
 
-	if ((chip->batt_soc ^ g_ui_soc) || (chip->batt_soc == 0))
+	if (g_force_SOC_update) {
+		pr_info("gauge reset, update SOC: old: %d, new: %d\n",
+			g_ui_soc, chip->batt_soc);
+		g_ui_soc = chip->batt_soc;
+		g_force_SOC_update = 0;
+	} else if ((chip->batt_soc ^ g_ui_soc) || (chip->batt_soc == 0))
 		UI_soc_adjustment(chip);
 
 	//Control SOC between  0 - 100%
@@ -2645,6 +2651,7 @@ static int stc311x_probe(struct i2c_client *client,
 	pr_err("\n\nstc311x probe started\n\n");
 	g_debug = 0;
 	g_boot_phase = 1;
+	g_force_SOC_update = 0;
 
 	/* The common I2C client data is placed right specific data. */
 	chip->client = client;
