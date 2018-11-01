@@ -2927,6 +2927,9 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
 
+	cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
+	cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
+
 	hrtimer_cancel(&cs40l2x->pbq_timer);
 
 	ret = cs40l2x_stop_playback(cs40l2x);
@@ -2937,7 +2940,7 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 	if (ret)
 		return ret;
 
-	cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
+	pm_relax(cs40l2x->dev);
 
 	return 0;
 }
@@ -2961,12 +2964,7 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 				break;
 			case 0:
 				/* queue is finished */
-				cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
-				cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
-
-				ret = cs40l2x_cp_dig_scale_set(cs40l2x,
-						cs40l2x->pbq_cp_dig_scale);
-				return ret;
+				return cs40l2x_pbq_cancel(cs40l2x);
 			default:
 				/* loop once more */
 				cs40l2x->pbq_remain--;
@@ -3011,12 +3009,15 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 			if (ret)
 				return ret;
 
+			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_PLAYING;
+			cs40l2x->pbq_index++;
+
+			if (cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED)
+				continue;
+
 			hrtimer_start(&cs40l2x->pbq_timer,
 					ktime_set(0, CS40L2X_PBQ_POLL_NS),
 					HRTIMER_MODE_REL);
-
-			cs40l2x->pbq_state = CS40L2X_PBQ_STATE_PLAYING;
-			cs40l2x->pbq_index++;
 		}
 
 	} while (tag == CS40L2X_PBQ_TAG_START || tag == CS40L2X_PBQ_TAG_STOP);
@@ -3038,9 +3039,12 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 	switch (cs40l2x->pbq_state) {
 	case CS40L2X_PBQ_STATE_IDLE:
 		/* queue may have been canceled */
-		break;
+		goto err_mutex;
 
 	case CS40L2X_PBQ_STATE_PLAYING:
+		if (cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED)
+			break;
+
 		ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "STATUS",
 				CS40L2X_XM_UNPACKED_TYPE), &val);
 		if (ret) {
@@ -3054,22 +3058,20 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 					HRTIMER_MODE_REL);
 			goto err_mutex;
 		}
-
-		ret = cs40l2x_pbq_pair_launch(cs40l2x);
-		if (ret)
-			dev_err(dev, "Failed to continue playback queue\n");
 		break;
 
 	case CS40L2X_PBQ_STATE_SILENT:
-		ret = cs40l2x_pbq_pair_launch(cs40l2x);
-		if (ret)
-			dev_err(dev, "Failed to continue playback queue\n");
 		break;
 
 	default:
 		dev_err(dev, "Unexpected playback queue state: %d\n",
 				cs40l2x->pbq_state);
+		goto err_mutex;
 	}
+
+	ret = cs40l2x_pbq_pair_launch(cs40l2x);
+	if (ret)
+		dev_err(dev, "Failed to continue playback queue\n");
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -3215,8 +3217,10 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 	case CS40L2X_INDEX_PBQ:
 		ret = cs40l2x_pbq_cancel(cs40l2x);
-		if (ret)
+		if (ret) {
 			dev_err(dev, "Failed to cancel playback queue\n");
+			goto err_mutex;
+		}
 		break;
 	}
 
@@ -3231,6 +3235,9 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 	}
 
 	switch (cs40l2x->cp_trailer_index) {
+	case CS40L2X_INDEX_PBQ:
+		pm_stay_awake(dev);
+		break;
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
 	case CS40L2X_INDEX_QEST:
@@ -4704,7 +4711,9 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 			return ret;
 		}
 
-		ret = cs40l2x_stop_playback(cs40l2x);
+		ret = (cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE) ?
+				cs40l2x_pbq_cancel(cs40l2x) :
+				cs40l2x_stop_playback(cs40l2x);
 		if (ret) {
 			dev_err(dev, "Failed to stop playback\n");
 			return ret;
@@ -5818,6 +5827,9 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 				goto err_mutex;
 			break;
 		case CS40L2X_EVENT_CTRL_TRIG_STOP:
+			queue_work(cs40l2x->vibe_workqueue,
+					&cs40l2x->vibe_pbq_work);
+			/* intentionally fall through */
 		case CS40L2X_EVENT_CTRL_GPIO_STOP:
 			if (asp_timeout > 0)
 				hrtimer_start(&cs40l2x->asp_timer,
@@ -5989,9 +6001,8 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 			goto err;
 		}
 
-		cs40l2x->event_control = CS40L2X_EVENT_HARDWARE_ENABLED;
-		if (cs40l2x->asp_available)
-			cs40l2x->event_control |= CS40L2X_EVENT_END_ENABLED;
+		cs40l2x->event_control = CS40L2X_EVENT_HARDWARE_ENABLED
+				| CS40L2X_EVENT_END_ENABLED;
 	} else {
 		cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
 	}
