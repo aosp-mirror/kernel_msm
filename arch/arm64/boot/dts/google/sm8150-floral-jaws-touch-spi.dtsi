@@ -53,9 +53,15 @@
 		st,reset-gpio = <&tlmm 130 0>;
 		// TODO: configure switch
 		//st,switch_gpio = <&tlmm 136 0>;
-		st,max-coords = <1439 2959>;
 		st,regulator_dvdd = "vdd";
 		st,regulator_avdd = "avdd";
+
+		st,firmware_names = "ftm5_fw_pid00c2.ftb",
+				    "ftm5_fw_pid00f2.ftb";
+		st,limits_names = "stm_fts_production_limits_pid00c2.csv",
+				  "stm_fts_production_limits_pid00f2.csv";
+		st,panel_map = <&dsi_s6e3hc2_dsc_wqhd_cmd 0>,
+			       <&dsi_nt37280_dsc_fhd_cmd 1>;
 	};
 };
 
