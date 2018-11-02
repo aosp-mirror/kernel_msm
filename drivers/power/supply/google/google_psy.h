@@ -27,7 +27,7 @@ static inline int gpsy_set_prop(struct power_supply *psy,
 
 	if (!psy)
 		return -EINVAL;
-	pr_debug("set %s for '%s' to %d\n", prop_name, psy->desc->name,
+	pr_debug("set %s for '%s' to %ld\n", prop_name, psy->desc->name,
 		val.int64val);
 	ret = power_supply_set_property(psy, psp, &val);
 	if (ret < 0) {

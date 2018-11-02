@@ -682,7 +682,8 @@ static int gbatt_get_property(struct power_supply *psy,
 				 union power_supply_propval *val)
 {
 	int err = 0;
-	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	struct batt_drv *batt_drv = (struct batt_drv *)
+					power_supply_get_drvdata(psy);
 
 #ifdef SUPPORT_PM_SLEEP
 	pm_runtime_get_sync(chip->device);
@@ -798,7 +799,8 @@ static int gbatt_set_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 const union power_supply_propval *val)
 {
-	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	struct batt_drv *batt_drv = (struct batt_drv *)
+					power_supply_get_drvdata(psy);
 	int ret = 0;
 
 #ifdef SUPPORT_PM_SLEEP

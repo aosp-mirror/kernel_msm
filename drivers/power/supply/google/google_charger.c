@@ -246,19 +246,15 @@ static int chg_set_charger(struct power_supply *chg_psy, int fv_uv, int cc_max)
 	return rc;
 }
 
-/* 0 stop charging, <0 error, positive keep going */
-static int chg_work_ng_roundtrip(struct power_supply *chg_psy,
-				 struct power_supply *bat_psy,
-				 int *fv_uv, int *cc_max)
+/* TODO: chg_state.v = GPSY_GET_INT64_PROP(chg_psy,
+ *                              POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE)
+ * values can be negative, cannot assign directly to chg_state
+ */
+static int chg_work_read_state(union gbms_charger_state *chg_state,
+			       struct power_supply *chg_psy)
 {
 	int vchrg, chg_type, chg_status;
-	union gbms_charger_state chg_state = { .v = 0 };
-	int rc;
 
-	/* TODO: chg_state.v = GPSY_GET_INT64_PROP(chg_psy,
-	 *                              POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE)
-	 * values can be negative, cannot assign directly to chg_state
-	 */
 	vchrg = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	chg_type = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
 	chg_status = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
@@ -267,15 +263,29 @@ static int chg_work_ng_roundtrip(struct power_supply *chg_psy,
 	if (vchrg == -EINVAL || chg_type == -EINVAL || chg_status == -EINVAL)
 		return -EINVAL;
 
-
-	chg_state.f.chg_type = chg_type;
-	chg_state.f.chg_status = chg_status;
-	chg_state.f.vchrg = vchrg / 1000; /* vchrg is in uA, f.vchrg us mA */
+	chg_state->f.chg_type = chg_type;
+	chg_state->f.chg_status = chg_status;
+	chg_state->f.vchrg = vchrg / 1000; /* vchrg is in uA, f.vchrg us mA */
 
 	if (chg_status != POWER_SUPPLY_STATUS_DISCHARGING)
-		chg_state.f.flags |= GBMS_CS_FLAG_BUCK_EN;
+		chg_state->f.flags |= GBMS_CS_FLAG_BUCK_EN;
 	if (chg_status == POWER_SUPPLY_STATUS_FULL)
-		chg_state.f.flags |= GBMS_CS_FLAG_DONE;
+		chg_state->f.flags |= GBMS_CS_FLAG_DONE;
+
+	return 0;
+}
+
+/* 0 stop charging, <0 error, positive keep going */
+static int chg_work_ng_roundtrip(struct power_supply *chg_psy,
+				 struct power_supply *bat_psy,
+				 int *fv_uv, int *cc_max)
+{
+	union gbms_charger_state chg_state = { .v = 0 };
+	int rc;
+
+	rc = chg_work_read_state(&chg_state, chg_psy);
+	if (rc < 0)
+		return -EINVAL;
 
 	/* NOTE: can disable battery side IRDrop compensation in battery */
 
@@ -310,7 +320,7 @@ static int chg_work_ng_roundtrip(struct power_supply *chg_psy,
 	 * battery doesn't do it.
 	 */
 
-	switch (chg_status) {
+	switch (chg_state.f.chg_status) {
 	case POWER_SUPPLY_STATUS_CHARGING:
 	case POWER_SUPPLY_STATUS_FULL:
 	case POWER_SUPPLY_STATUS_NOT_CHARGING:
@@ -321,7 +331,7 @@ static int chg_work_ng_roundtrip(struct power_supply *chg_psy,
 		return 0;
 	default:
 		/* case POWER_SUPPLY_STATUS_UNKNOWN: */
-		pr_err("invalid charging status %d\n", chg_status);
+		pr_err("invalid charging status %d\n", chg_state.f.chg_status);
 		return -EINVAL;
 	}
 
