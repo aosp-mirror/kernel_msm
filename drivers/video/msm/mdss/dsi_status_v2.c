@@ -132,7 +132,6 @@ void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 
 	mutex_lock(&mdp3_session->lock);
 	if (!mdp3_session->status) {
-		mutex_unlock(&mdp3_session->lock);
 		pr_debug("%s: display off already\n", __func__);
 		mutex_unlock(&mdp3_session->lock);
 		return;
