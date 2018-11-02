@@ -45,6 +45,12 @@ enum jqs_message_type {
 	JQS_MESSAGE_TYPE_CLOCK_RATE         = 0x8000100a,
 	/* struct jqs_message_set_log_info -> n/a */
 	JQS_MESSAGE_TYPE_SET_LOG_INFO       = 0x8000100b,
+	/* JqsMessageIpuRegAccess      ->   JqsMessageIpuRegValues */
+	JQS_MESSAGE_TYPE_IPU_REG_ACCESS     = 0x8000100c,
+	/* JqsMessageRegisterBuffers    ->   JqsMessageAck */
+	JQS_MESSAGE_TYPE_REGISTER_BUFFERS   = 0x8000100d,
+	/* JqsMessageUnregisterBuffers  ->  JqsMessageAck */
+	JQS_MESSAGE_TYPE_UNREGISTER_BUFFERS = 0x8000100e,
 
 	/* Jqs -> Host messages */
 	JQS_MESSAGE_TYPE_ACK                = 0x80002001,
@@ -120,6 +126,28 @@ struct jqs_message_unregister_buffer {
 	struct jqs_message header;
 	uint32_t session_id;
 	uint32_t buffer_id;
+};
+
+struct buffer_registration {
+	uint32_t buffer_id;
+	uint64_t buffer_addr;
+	uint32_t buffer_size;
+};
+
+#define MAX_BUFFER_REGISTRATION 64
+
+struct jqs_message_register_buffers {
+	struct jqs_message header;
+	uint32_t session_id;
+	uint32_t num_buffers;
+	struct buffer_registration registrations[MAX_BUFFER_REGISTRATION];
+};
+
+struct jqs_message_unregister_buffers {
+	struct jqs_message header;
+	uint32_t session_id;
+	uint32_t num_buffers;
+	uint32_t buffer_ids[MAX_BUFFER_REGISTRATION];
 };
 
 struct jqs_message_alloc_resources {

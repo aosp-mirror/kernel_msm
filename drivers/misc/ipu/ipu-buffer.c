@@ -191,7 +191,85 @@ static int ipu_buffer_send_jqs_buffer_unregister(struct paintbox_data *pb,
 }
 
 /* The caller to this function must hold pb->lock */
-static int ipu_buffer_unmap_buffer(struct paintbox_data *pb,
+static int ipu_buffer_send_jqs_buffers_register(struct paintbox_data *pb,
+		struct paintbox_session *session,
+		unsigned int num_buffers,
+		struct ipu_dma_buf_register_entry *bufs)
+{
+	struct jqs_message_register_buffers msg;
+	struct paintbox_buffer *buffer;
+	unsigned int i, buffer_id;
+
+	if (WARN_ON(!bufs))
+		return -EINVAL;
+
+	if (WARN_ON((num_buffers > MAX_BUFFER_REGISTRATION) ||
+				(num_buffers == 0)))
+		return -EINVAL;
+
+	INIT_JQS_MSG(msg, JQS_MESSAGE_TYPE_REGISTER_BUFFERS);
+
+	msg.header.size =
+		offsetof(struct jqs_message_register_buffers, registrations) +
+		sizeof(msg.registrations[0]) * num_buffers;
+
+
+	msg.session_id = session->session_id;
+	msg.num_buffers = num_buffers;
+
+	for (i = 0; i < num_buffers; i++) {
+		buffer_id = bufs[i].buffer_id;
+		buffer = ipu_buffer_get_buffer(session, buffer_id);
+		if (!buffer) {
+			dev_err(pb->dev, "%s: Unable to find buffer %d\n",
+					__func__, buffer_id);
+			return -EINVAL;
+		}
+		msg.registrations[i].buffer_id = buffer_id;
+		msg.registrations[i].buffer_addr =
+				sg_dma_address(buffer->sg_table->sgl);
+		msg.registrations[i].buffer_size =
+				sg_dma_len(buffer->sg_table->sgl);
+
+		dev_dbg(pb->dev, "%s: session_id %u buffer id %u addr %pad sz %u\n",
+				__func__, session->session_id,
+				buffer_id,
+				&msg.registrations[i].buffer_addr,
+				msg.registrations[i].buffer_size);
+	}
+
+	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&msg);
+}
+
+/* The caller to this function must hold pb->lock */
+static int ipu_buffer_send_jqs_buffers_unregister(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned int num_buffers,
+		uint32_t *buffer_ids)
+{
+	struct jqs_message_unregister_buffers msg;
+
+	if (WARN_ON(!buffer_ids))
+		return -EINVAL;
+
+	if (WARN_ON((num_buffers > MAX_BUFFER_REGISTRATION) ||
+				(num_buffers == 0)))
+		return -EINVAL;
+
+	INIT_JQS_MSG(msg, JQS_MESSAGE_TYPE_UNREGISTER_BUFFERS);
+
+	msg.header.size =
+		offsetof(struct jqs_message_unregister_buffers, buffer_ids) +
+		sizeof(msg.buffer_ids[0]) * num_buffers;
+	msg.session_id = session->session_id;
+	msg.num_buffers = num_buffers;
+
+	memcpy(msg.buffer_ids, buffer_ids, num_buffers * sizeof(uint32_t));
+
+	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&msg);
+}
+
+/* The caller to this function must hold pb->lock */
+static void ipu_buffer_unmap_and_release_buffer(struct paintbox_data *pb,
 		struct paintbox_session *session,
 		struct paintbox_buffer *buffer)
 {
@@ -200,7 +278,206 @@ static int ipu_buffer_unmap_buffer(struct paintbox_data *pb,
 		ipu_buffer_unmap_iommu(pb, session, buffer);
 
 	ipu_buffer_unmap_dma_buf(pb, session, buffer);
+	ipu_buffer_release_buffer(session, buffer);
+}
+
+/* The caller to this function must hold pb->lock */
+static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
+		struct paintbox_session *session,
+		struct ipu_dma_buf_register_entry *entry)
+{
+	struct paintbox_buffer *buffer;
+	int ret;
+
+	if (WARN_ON(!entry))
+		return -EINVAL;
+
+	/* Allocate a buffer id within the session. */
+	ret = ipu_buffer_alloc(pb, session, &buffer);
+	if (ret < 0)
+		return ret;
+
+	/* Convert the DMA Buf fd to a scatter list. */
+	ret = ipu_buffer_map_dma_buf(pb, session, entry->dma_buf_fd,
+			entry->dir, buffer);
+	if (ret < 0)
+		goto release_buffer;
+
+	/* If the IOMMU is enabled then map the buffer into the IOMMU IOVA
+	 * space.
+	 */
+	if (iommu_present(&ipu_bus_type)) {
+		ret = ipu_buffer_map_iommu(pb, session, buffer);
+		if (ret < 0)
+			goto unmap_dma_buf;
+	} else {
+		if (buffer->sg_table->nents > 1) {
+			dev_err(pb->dev, "%s: dma_buf is non-contiguous when iommu is not present",
+					__func__);
+			ret = -EFAULT;
+			goto unmap_dma_buf;
+		}
+	}
+
+	entry->buffer_id = buffer->buffer_id;
+
 	return 0;
+
+unmap_dma_buf:
+	ipu_buffer_unmap_dma_buf(pb, session, buffer);
+release_buffer:
+	ipu_buffer_release_buffer(session, buffer);
+	return ret;
+}
+
+int ipu_buffer_dma_buf_bulk_register_ioctl(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned long arg)
+{
+	struct ipu_dma_buf_bulk_register_req __user *user_req;
+	struct ipu_dma_buf_bulk_register_req req;
+	struct ipu_dma_buf_register_entry *req_bufs;
+	struct paintbox_buffer *buffer;
+	unsigned int num_processed_bufs = 0;
+	unsigned int i;
+	int ret, len;
+
+	/* copy number of buffer to kernel to determine request list size */
+	user_req = (struct ipu_dma_buf_bulk_register_req __user *)arg;
+	if (copy_from_user(&req, user_req, sizeof(req)))
+		return -EFAULT;
+
+	if (req.num_buffers > MAX_BUFFER_REGISTRATION || req.num_buffers == 0) {
+		dev_err(pb->dev, "%s: Invalid request to register %d buffers",
+				__func__, req.num_buffers);
+		return -EINVAL;
+	}
+
+	if (!req.bufs) {
+		dev_err(pb->dev, "%s: request buf array is NULL", __func__);
+		return -EINVAL;
+	}
+
+	len = req.num_buffers * sizeof(struct ipu_dma_buf_register_entry);
+
+	req_bufs = kzalloc(len, GFP_KERNEL);
+	if (!req_bufs)
+		return -ENOMEM;
+
+	if (copy_from_user(req_bufs, req.bufs, len)) {
+		kfree(req_bufs);
+		return -EFAULT;
+	}
+
+	mutex_lock(&pb->lock);
+
+	for (i = 0; i < req.num_buffers; i++) {
+		ret = ipu_buffer_dma_buf_process_registration(pb, session,
+				&req_bufs[i]);
+		if (ret != 0)
+			break;
+
+		num_processed_bufs++;
+	}
+
+	if (num_processed_bufs != req.num_buffers) {
+		dev_err(pb->dev, "%s: Buffer registration processing incomplete\n",
+				__func__);
+		goto unmap_and_cleanup;
+	}
+
+	if (copy_to_user(req.bufs, req_bufs, sizeof(req))) {
+		dev_err(pb->dev, "%s: Copy to user failed\n", __func__);
+		ret = -EFAULT;
+		goto unmap_and_cleanup;
+	}
+	/* Notify the JQS that the buffer has been mapped. */
+	ret = ipu_buffer_send_jqs_buffers_register(pb, session,
+			req.num_buffers, req_bufs);
+	if (ret < 0)
+		goto unmap_and_cleanup;
+
+	mutex_unlock(&pb->lock);
+	kfree(req_bufs);
+
+	return 0;
+
+/* Unwinding registration on failure */
+unmap_and_cleanup:
+	for (i = 0; i < num_processed_bufs; i++) {
+		buffer = ipu_buffer_get_buffer(session, req_bufs[i].buffer_id);
+		if (likely(buffer))
+			ipu_buffer_unmap_and_release_buffer(pb, session,
+					buffer);
+	}
+	mutex_unlock(&pb->lock);
+	kfree(req_bufs);
+
+	return ret;
+}
+
+int ipu_buffer_dma_buf_bulk_unregister_ioctl(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned long arg)
+{
+	struct ipu_dma_buf_bulk_unregister_req __user *user_req;
+	struct ipu_dma_buf_bulk_unregister_req req;
+	struct paintbox_buffer *buffer;
+	uint32_t *buf_ids;
+	int ret, len, i;
+
+	user_req = (struct ipu_dma_buf_bulk_unregister_req __user *)arg;
+	if (copy_from_user(&req, user_req, sizeof(req)))
+		return -EFAULT;
+
+	if (req.num_buffers > MAX_BUFFER_REGISTRATION || req.num_buffers == 0) {
+		dev_err(pb->dev, "%s: Invalid request to register %d buffers",
+				__func__, req.num_buffers);
+		return -EINVAL;
+	}
+
+	len = req.num_buffers * sizeof(uint32_t);
+
+	buf_ids = kzalloc(len, GFP_KERNEL);
+	if (!buf_ids)
+		return -ENOMEM;
+
+	if (copy_from_user(buf_ids, req.buf_ids, len)) {
+		kfree(buf_ids);
+		return -EFAULT;
+	}
+
+	mutex_lock(&pb->lock);
+
+	ret = ipu_buffer_send_jqs_buffers_unregister(pb, session,
+			req.num_buffers, buf_ids);
+	if (ret == -EBUSY) {
+		/* If the JQS returns that the buffer is busy then report back
+		 * the busy error immediately.  The userspace will need to try
+		 * again when the DMA transfer on that buffer has completed.
+		 */
+		goto err_exit;
+	}
+
+	/* TODO(b/114760293):  Other errors returned by
+	 * ipu_buffer_send_jqs_buffer_unregister() would be catastrophic
+	 * errors and we need to take the catastrophic error path once that is
+	 * implemented.  In the event of a catastrophic error the driver should
+	 * still unmap the buffer since the JQS will be reset.
+	 */
+	for (i = 0; i < req.num_buffers; i++) {
+		buffer = ipu_buffer_get_buffer(session, buf_ids[i]);
+		if (!buffer) {
+			dev_err(pb->dev, "%s: Unable to find buffer %d\n",
+				__func__, buf_ids[i]);
+			ret = -EINVAL;
+		}
+		ipu_buffer_unmap_and_release_buffer(pb, session, buffer);
+	}
+
+err_exit:
+	mutex_unlock(&pb->lock);
+	kfree(buf_ids);
+
+	return ret;
 }
 
 int ipu_buffer_dma_buf_register_ioctl(struct paintbox_data *pb,
@@ -303,9 +580,7 @@ int ipu_buffer_dma_buf_unregister_ioctl(struct paintbox_data *pb,
 	 * implemented.  In the event of a catastrophic error the driver should
 	 * still unmap the buffer since the JQS will be reset.
 	 */
-	ipu_buffer_unmap_buffer(pb, session, buffer);
-
-	ipu_buffer_release_buffer(session, buffer);
+	ipu_buffer_unmap_and_release_buffer(pb, session, buffer);
 
 err_exit:
 	mutex_unlock(&pb->lock);
@@ -333,12 +608,8 @@ void ipu_buffer_release_session(struct paintbox_data *pb,
 	struct paintbox_buffer *buffer;
 	int buffer_id;
 
-	/* TODO(b/115419412):  We probably want to tell JQS to just invalidate
-	 * the whole table rather than tell it to remove individual entries.
-	 */
-
 	idr_for_each_entry(&session->buffer_idr, buffer, buffer_id)
-		(void)ipu_buffer_unmap_buffer(pb, session, buffer);
+		ipu_buffer_unmap_and_release_buffer(pb, session, buffer);
 
 	ab_dram_free_dma_buf_kernel(session->buffer_id_table);
 
