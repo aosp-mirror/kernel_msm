@@ -4310,6 +4310,7 @@ static int fts_probe(struct spi_device *client)
 	 * the chip to be initialized.
 	 */
 	info->v4l2.parent_dev = info->dev;
+	info->v4l2.input_dev = info->input_dev;
 	info->v4l2.read_frame = read_heatmap_raw;
 	info->v4l2.width = getForceLen();
 	info->v4l2.height = getSenseLen();

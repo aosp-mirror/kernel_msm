@@ -8,6 +8,8 @@ typedef int16_t strength_t;
 
 struct v4l2_heatmap {
 	struct device *parent_dev;
+	/* Can be NULL. Used to get the input device name */
+	struct input_dev *input_dev;
 	struct v4l2_device device;
 	struct v4l2_pix_format format;
 	struct video_device vdev;
