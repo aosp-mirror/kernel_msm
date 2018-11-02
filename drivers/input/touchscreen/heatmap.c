@@ -211,10 +211,14 @@ static const struct vb2_queue heatmap_queue = {
 static int heatmap_vidioc_querycap(struct file *file, void *priv,
 		struct v4l2_capability *cap) {
 	struct v4l2_heatmap *v4l2 = video_drvdata(file);
-
 	strlcpy(cap->driver, v4l2->parent_dev->driver->name,
 		sizeof(cap->driver));
-	strlcpy(cap->card, KBUILD_MODNAME, sizeof(cap->card));
+	if (v4l2->input_dev != NULL) {
+		strlcpy(cap->card, v4l2->input_dev->name, sizeof(cap->card));
+	} else {
+		strlcpy(cap->card, KBUILD_MODNAME, sizeof(cap->card));
+	}
+
 	strlcpy(cap->bus_info, dev_name(v4l2->parent_dev),
 		sizeof(cap->bus_info));
 	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_TOUCH |
@@ -329,8 +333,8 @@ int heatmap_probe(struct v4l2_heatmap *v4l2)
 	heatmap_set_input(v4l2, 0);
 
 	/* register video device */
-	strlcpy(v4l2->device.name, v4l2->parent_dev->driver->name,
-		sizeof(v4l2->device.name));
+	strlcpy(v4l2->device.name, dev_name(v4l2->parent_dev),
+		V4L2_DEVICE_NAME_SIZE);
 	error = v4l2_device_register(v4l2->parent_dev, &v4l2->device);
 	if (error)
 		goto err_probe;

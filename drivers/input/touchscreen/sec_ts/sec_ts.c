@@ -2114,6 +2114,7 @@ static int sec_ts_probe(struct i2c_client *client,
 	 * heatmap_read and cause NPE, since read_frame would not yet be set.
 	 */
 	ts->v4l2.parent_dev = &ts->client->dev;
+	ts->v4l2.input_dev = ts->input_dev;
 	ts->v4l2.read_frame = read_heatmap_raw;
 	ts->v4l2.width = ts->tx_count;
 	ts->v4l2.height = ts->rx_count;
