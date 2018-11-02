@@ -438,22 +438,6 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 		return ret;
 	}
 
-	ret = ipu_dma_dump_registers(&pb->dma.debug, buf + written, len -
-			written);
-	if (ret < 0)
-		goto err_exit;
-
-	written += ret;
-
-	for (i = 0; i < pb->dma.num_channels; i++) {
-		ret = ipu_dma_dump_channel_registers(&pb->dma.channels[i].debug,
-				buf + written, len - written);
-		if (ret < 0)
-			goto err_exit;
-
-		written += ret;
-	}
-
 	for (i = 0; i < pb->stp.num_stps; i++) {
 		ret = ipu_stp_dump_registers(&pb->stp.stps[i].debug, buf +
 				written, len - written);

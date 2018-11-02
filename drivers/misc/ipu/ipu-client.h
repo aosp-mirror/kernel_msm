@@ -88,6 +88,10 @@ struct ipu_debug_register {
 	struct dentry *dentry;
 	unsigned int offset;
 };
+struct ipu_dma_channel_debug_register {
+	struct ipu_debug_register debug_register;
+	unsigned int channel_id;
+};
 #endif
 
 struct paintbox_debug_reg_entry;
@@ -102,6 +106,7 @@ typedef void (*register_write_t)(struct paintbox_debug_reg_entry *reg_entry,
 		uint64_t val);
 typedef uint64_t (*register_read_t)(struct paintbox_debug_reg_entry *reg_entry);
 
+/* TODO(b/114734817) After debugfs refactoring completed, remove this struct */
 struct paintbox_debug_reg_entry {
 	struct paintbox_debug *debug;
 	struct dentry *debug_dentry;
@@ -110,6 +115,8 @@ struct paintbox_debug_reg_entry {
 	register_read_t read;
 };
 
+
+/* TODO(b/114734817) After debugfs refactoring completed, remove this struct */
 struct paintbox_debug {
 	struct paintbox_data *pb;
 	struct dentry *debug_dir;
@@ -160,22 +167,32 @@ struct paintbox_dma_channel {
 	 */
 	struct list_head session_entry;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-	struct paintbox_debug debug;
+	struct dentry *debug_dir;
+	struct dentry *debug_reg_dump;
+	struct ipu_dma_channel_debug_register
+			debug_dma_registers[DMA_GRP_NUM_REGS];
 #endif
 	struct paintbox_session *session;
 	unsigned int channel_id;
 };
 
+/*
+ * TODO(b/114734817) Need to evaluate if these structures are still needed
+ * or if they should be reorganized
+ */
 struct paintbox_dma {
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-	struct paintbox_debug debug;
+	struct dentry *debug_dir;
+	struct dentry *debug_reg_dump;
+	struct dentry *debug_enable_dentry;
+	struct ipu_debug_register debug_registers[DMA_TOP_NUM_REGS];
 #endif
 	struct paintbox_dma_channel *channels;
 	unsigned int num_channels;
 	uint64_t available_channel_mask;
-	struct dentry *debug_enable_dentry;
 	bool debug_enabled;
 };
+
 
 /* Data structure for information specific to a Stencil Processor.
  * One entry will be allocated for each processor on the IPU.
@@ -280,13 +297,13 @@ struct paintbox_data {
 	struct dentry *debug_root;
 	struct dentry *regs_dentry;
 
-	struct dentry *apb_debug_dir;
-	struct dentry *apb_reg_dump;
-	struct ipu_debug_register apb_debug_registers[IO_APB_NUM_REGS];
-
 	struct dentry *aon_debug_dir;
 	struct dentry *aon_reg_dump;
 	struct ipu_debug_register aon_debug_registers[IO_AON_NUM_REGS];
+
+	struct dentry *apb_debug_dir;
+	struct dentry *apb_reg_dump;
+	struct ipu_debug_register apb_debug_registers[IO_APB_NUM_REGS];
 
 	struct dentry *bif_debug_dir;
 	struct dentry *bif_reg_dump;

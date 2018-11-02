@@ -46,6 +46,13 @@
 #define JQS_STARTUP_LATENCY_US (10 * 1000)
 #define JQS_AUTO_SUSPEND_TIMEOUT_MS 250
 
+/*
+ * TODO(b/118694468): IPU Driver: Add management interface
+ *
+ * Looks like this should be moved to the common
+ * ipu_session files
+ *
+ */
 int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 		const struct jqs_message *req)
 {
@@ -84,7 +91,14 @@ int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 	return 0;
 }
 
-/* The caller to this function must hold pb->lock */
+/*
+ * TODO(b/118694468): IPU Driver: Add management interface
+ *
+ * Looks like this should be moved to the common
+ * ipu_session files
+ *
+ * The caller to this function must hold pb->lock
+ */
 static int ipu_jqs_send_open_session(struct paintbox_data *pb,
 		struct paintbox_session *session)
 {
@@ -108,7 +122,14 @@ static int ipu_jqs_send_open_session(struct paintbox_data *pb,
 	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&req);
 }
 
-/* The caller to this function must hold pb->lock */
+/*
+ * TODO(b/118694468): IPU Driver: Add management interface
+ *
+ * Looks like this should be moved to the common
+ * ipu_session files
+ *
+ * The caller to this function must hold pb->lock
+ */
 static int ipu_jqs_send_close_session(struct paintbox_data *pb,
 		struct paintbox_session *session)
 {

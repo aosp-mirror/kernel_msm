@@ -25,11 +25,6 @@
 		REG_DEBUG_BUFFER_SIZE)
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-int ipu_dma_dump_registers(struct paintbox_debug *debug, char *buf,
-		size_t len);
-int ipu_dma_dump_channel_registers(struct paintbox_debug *debug, char *buf,
-		size_t len);
-
 void ipu_dma_debug_init(struct paintbox_data *pb);
 void ipu_dma_debug_remove(struct paintbox_data *pb);
 void ipu_dma_channel_debug_init(struct paintbox_data *pb,
@@ -37,18 +32,6 @@ void ipu_dma_channel_debug_init(struct paintbox_data *pb,
 void ipu_dma_channel_debug_remove(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel);
 #else
-static inline int ipu_dma_dump_registers(struct paintbox_debug *debug,
-		char *buf, size_t len)
-{
-	return 0;
-}
-
-static inline int ipu_dma_dump_channel_registers(struct paintbox_debug *debug,
-		char *buf, size_t len)
-{
-	return 0;
-}
-
 static inline void ipu_dma_debug_init(struct paintbox_data *pb) {}
 static inline void ipu_dma_debug_remove(struct paintbox_data *pb) {}
 static inline void ipu_dma_channel_debug_init(struct paintbox_data *pb,
