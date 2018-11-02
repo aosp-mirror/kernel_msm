@@ -532,6 +532,10 @@ struct ufs_dev_info {
 
 	/* Device deviations from standard UFS device spec. */
 	unsigned int quirks;
+
+	unsigned int pre_eol_info;
+	unsigned int lifetime_a;
+	unsigned int lifetime_b;
 };
 
 #endif /* End of Header */
