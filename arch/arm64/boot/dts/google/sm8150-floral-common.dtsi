@@ -77,6 +77,28 @@
 		};
 	};
 
+	qcom,msm-imem@146bf000 {
+		uuid_info@cf8 {
+			compatible = "msm-imem-uuid_info";
+			reg = <0xcf8 64>;
+		};
+
+		rst_info@d38 {
+			compatible = "msm-imem-rst_info";
+			reg = <0xd38 100>;
+		};
+
+		bldr_info@d9c {
+			compatible = "msm-imem-bldr_info";
+			reg = <0xd9c 256>;
+		};
+
+		kernel_info@e9c {
+			compatible = "msm-imem-kernel_info";
+			reg = <0xe9c 256>;
+		};
+	};
+
 	modemsmem {
 		compatible = "modemsmem";
 	};
