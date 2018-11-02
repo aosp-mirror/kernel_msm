@@ -96,7 +96,7 @@ struct batt_drv {
 	int cc_max;
 	/* recharge logic */
 	enum batt_rl_status rl_status;
-	int rl_soc_threshold;
+	int batt_rl_soc_threshold;
 
 	int fg_status;
 };
@@ -141,7 +141,9 @@ static int ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 	return ssoc->ssoc_uic;
 }
 
-/* TODO: b/111407333, software state of charge */
+/* TODO: b/111407333, software state of charge
+ * call while holding batt_lock
+ */
 static int ssoc_work(struct batt_ssoc_state *ssoc, struct power_supply *fg_psy)
 {
 	int soc;
@@ -160,7 +162,9 @@ static int ssoc_work(struct batt_ssoc_state *ssoc, struct power_supply *fg_psy)
 	return 0;
 }
 
-/* reported to userspace */
+/* reported to userspace
+ * call while holding batt_lock
+ */
 static int ssoc_get_capacity(const struct batt_drv *batt_drv)
 {
 	/* FULL while in recharge logic, hack until b/111407333 */
@@ -170,7 +174,9 @@ static int ssoc_get_capacity(const struct batt_drv *batt_drv)
 	return batt_drv->ssoc_state.ssoc_rl;
 }
 
-/* enter recharge logic on charger_DONE or Gauge FULL */
+/* enter recharge logic on charger_DONE or Gauge FULL.
+ * NOTE: call holding chg_lock
+ */
 static void batt_rl_enter(struct batt_drv *batt_drv)
 {
 	if (batt_drv->rl_status != BATT_RL_STATUS_NONE)
@@ -184,13 +190,17 @@ static void batt_rl_enter(struct batt_drv *batt_drv)
 	/* TODO: should I trigger a ps change? */
 }
 
-/* just reset state, no PS notifications */
+/* just reset state, no PS notifications.
+ * NOTE: call holding chg_lock
+ */
 static void batt_rl_reset(struct batt_drv *batt_drv)
 {
 	batt_drv->rl_status = BATT_RL_STATUS_NONE;
 }
 
-/* exit recharge logic */
+/* exit recharge logic
+ * NOTE: call holding chg_lock
+ */
 static void batt_rl_exit(struct batt_drv *batt_drv)
 {
 	if (batt_drv->rl_status == BATT_RL_STATUS_NONE)
@@ -200,7 +210,9 @@ static void batt_rl_exit(struct batt_drv *batt_drv)
 		power_supply_changed(batt_drv->psy);
 }
 
-/* RL recharge: after SSOC work, restat charging */
+/* RL recharge: after SSOC work, restart charging.
+ * NOTE: call holding chg_lock
+ */
 static void batt_rl_update_status(struct batt_drv *batt_drv)
 {
 	struct batt_ssoc_state *ssoc = &batt_drv->ssoc_state;
@@ -212,7 +224,9 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 
 	/* recharge logic work on real soc */
 	soc = ssoc_get_real(ssoc);
-	if (batt_drv->rl_soc_threshold && soc <= batt_drv->rl_soc_threshold) {
+	if (batt_drv->batt_rl_soc_threshold &&
+	    soc <= batt_drv->batt_rl_soc_threshold) {
+
 		batt_drv->rl_status = BATT_RL_STATUS_RECHARGE;
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
@@ -502,6 +516,7 @@ static int google_charge_logic_internal(struct batt_drv *batt_drv)
 	return 0;
 }
 
+/* called holding chg_lock */
 static int google_charge_logic(struct batt_drv *batt_drv)
 {
 	int err;
@@ -519,7 +534,7 @@ static int google_charge_logic(struct batt_drv *batt_drv)
 		batt_drv->chg_state.f.vchrg,
 		(unsigned long)batt_drv->chg_state.v);
 
-	/* google_charger can trigger the recharge logic and get out of it */
+	/* google_charger can trigger the recharge logic and get out of it. */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0)
 		batt_rl_exit(batt_drv);
 	else if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0)
@@ -592,9 +607,10 @@ static void google_battery_work(struct work_struct *work)
 
 	mutex_lock(&batt_drv->batt_lock);
 	ret = ssoc_work(ssoc, fg_psy);
-	pr_info("SSOC=%d%% gdf=%d, uic=%d, rl=%d\n",
+	pr_info("SSOC: [ssoc=%d%% gdf=%d, uic=%d, rl=%d] rls=%d\n",
 		ssoc_get_capacity(batt_drv),
-		ssoc->ssoc_gdf, ssoc->ssoc_uic, ssoc->ssoc_rl);
+		ssoc->ssoc_gdf, ssoc->ssoc_uic, ssoc->ssoc_rl,
+		batt_drv->rl_status);
 
 	/* TODO: poll other data here */
 
@@ -602,10 +618,10 @@ static void google_battery_work(struct work_struct *work)
 
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
-		goto reschedule;
+	} else {
+		batt_rl_update_status(batt_drv);
 	}
 
-	batt_rl_update_status(batt_drv);
 
 reschedule:
 	mutex_unlock(&batt_drv->chg_lock);
@@ -634,8 +650,10 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
+	POWER_SUPPLY_PROP_CHARGE_DONE,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
@@ -643,6 +661,7 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CYCLE_COUNTS,
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_RECHARGE_SOC,
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_RESISTANCE,
 	POWER_SUPPLY_PROP_TEMP,
@@ -675,8 +694,10 @@ static int gbatt_get_property(struct power_supply *psy,
 #endif
 	switch (psp) {
 
+	/* TODO: "charger" will expose this but I'd rather use an API from
+	 * google_bms.h.
+	 */
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
-		/* TODO: route to bms */
 		val->intval = -ENODATA;
 		break;
 
@@ -690,7 +711,11 @@ static int gbatt_get_property(struct power_supply *psy,
 		mutex_unlock(&batt_drv->batt_lock);
 		break;
 
-	/* ng charging */
+	/* ng charging:
+	 * 1) write to POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
+	 * 2) read POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT and
+	 * POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE
+	 */
 	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
 		val->intval = batt_drv->chg_state.v;
 		break;
@@ -710,6 +735,38 @@ static int gbatt_get_property(struct power_supply *psy,
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
 
+	/* compat, I need this when you run w/o b/118820788 */
+	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
+	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
+		val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_QNOVO_ENABLE:
+		val->intval = 0;
+		break;
+
+	/* POWER_SUPPLY_PROP_CHARGE_DONE comes from the charger BUT battery
+	 * has also an idea about it. Now using a software state: charge is
+	 * DONE when we are in the discharge phase of the recharge logic.
+	 */
+	case POWER_SUPPLY_PROP_CHARGE_DONE:
+		mutex_lock(&batt_drv->chg_lock);
+		val->intval = (batt_drv->rl_status == BATT_RL_STATUS_DISCHARGE);
+		mutex_unlock(&batt_drv->chg_lock);
+		break;
+	/* POWER_SUPPLY_PROP_CHARGE_TYPE comes from the charger so using the
+	 * last value reported from the CHARGER. This (of course) means that
+	 * NG charging needs to be enabled.
+	 */
+	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		mutex_lock(&batt_drv->chg_lock);
+		val->intval = batt_drv->chg_state.f.chg_type;
+		mutex_unlock(&batt_drv->chg_lock);
+		break;
+
+	case POWER_SUPPLY_PROP_RECHARGE_SOC:
+		val->intval = batt_drv->batt_rl_soc_threshold;
+		break;
+
 	/* health */
 	case POWER_SUPPLY_PROP_HEALTH:
 		if (!batt_drv->fg_psy)
@@ -718,6 +775,7 @@ static int gbatt_get_property(struct power_supply *psy,
 		if (err == 0)
 			batt_drv->soh = val->intval;
 		break;
+	/* define this better */
 	case POWER_SUPPLY_PROP_SOH:
 		val->intval = batt_drv->soh;
 		break;
@@ -728,8 +786,10 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 	}
 
-	if (err < 0)
+	if (err < 0) {
+		pr_debug("gbatt: get_prop cannot read psp=%d\n", psp);
 		return err;
+	}
 
 	return 0;
 }
@@ -739,7 +799,7 @@ static int gbatt_set_property(struct power_supply *psy,
 				 const union power_supply_propval *val)
 {
 	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
-	int ret;
+	int ret = 0;
 
 #ifdef SUPPORT_PM_SLEEP
 	pm_runtime_get_sync(chip->device);
@@ -755,14 +815,48 @@ static int gbatt_set_property(struct power_supply *psy,
 		batt_drv->chg_state.v = val->int64val;
 
 		ret = google_charge_logic(batt_drv);
-		if (ret < 0)
-			return -EINVAL;
-
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
+
+	/* TODO: b/118843345, just a switch to disable step charging */
+	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
+		break;
+	/* TODO: b/118843345 JEITA limits MUST be in charger hardware, this
+	 * only enable/disable the software checks.
+	 */
+	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
+		break;
+
+	/* This is a software implementation of the recharge threshold: I don't
+	 * see big advantages in using the hardware controlled one since we will
+	 * likely wakeup on dSOC changes anyway.
+	 * NOTE: the HW controlled recharge might rely on chipset specific
+	 * understanding of FG SOC which (generally) won't match the SOC
+	 * reported from an external FG. Voltage would work.
+	 * NOTE: qc set this in smb5_init_hw() via smblib:
+	 * int smblib_set_prop_rechg_soc_thresh(struct smb_charger *chg,
+	 *		const union power_supply_propval *val) { }
+	 */
+	case POWER_SUPPLY_PROP_RECHARGE_SOC:
+		if (val->intval < 0 || val->intval > 100) {
+			pr_err("recharge-soc is incorrect\n");
+			ret = -EINVAL;
+		} else if (batt_drv->batt_rl_soc_threshold != val->intval) {
+			batt_drv->batt_rl_soc_threshold = val->intval;
+			if (batt_drv->psy)
+				power_supply_changed(batt_drv->psy);
+		}
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
+		break;
 	}
+
+	if (ret < 0) {
+		pr_debug("gbatt: get_prop cannot write psp=%d\n", psp);
+		return ret;
+	}
+
 
 	return 0;
 }
@@ -771,6 +865,8 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 					  enum power_supply_property psp)
 {
 	switch (psp) {
+	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
+	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
 		return 1;
 	default:
@@ -840,9 +936,9 @@ static void google_battery_init_work(struct work_struct *work)
 		/* recharge logic */
 		ret = of_property_read_u32(batt_drv->device->of_node,
 					"google,recharge-soc-threshold",
-					&batt_drv->rl_soc_threshold);
+					&batt_drv->batt_rl_soc_threshold);
 		if (ret < 0)
-			batt_drv->rl_soc_threshold =
+			batt_drv->batt_rl_soc_threshold =
 				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
 
 	}
