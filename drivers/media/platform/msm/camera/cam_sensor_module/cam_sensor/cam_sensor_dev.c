@@ -348,6 +348,7 @@ static int32_t cam_sensor_driver_platform_probe(
 	s_ctrl->bridge_intf.ops.apply_req = cam_sensor_apply_request;
 	s_ctrl->bridge_intf.ops.flush_req = cam_sensor_flush_request;
 	s_ctrl->bridge_intf.ops.set_strobe = cam_sensor_set_strobe;
+	s_ctrl->bridge_intf.ops.tag_laser = cam_sensor_tag_laser_type;
 
 	s_ctrl->sensordata->power_info.dev = &pdev->dev;
 	platform_set_drvdata(pdev, s_ctrl);

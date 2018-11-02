@@ -113,6 +113,8 @@ struct intf_params {
  * @bob_reg_index: Hold to BoB regulator index
  * @bob_pwm_switch: Boolean flag to switch into PWM mode for BoB regulator
  * @fw_update_flag: Update OIS firmware
+ * @strobe_type: Strobe type that indicate how to reset strobe
+ * @first_strobe_frame: indicate first strobe frame count after reset
  */
 struct cam_sensor_ctrl_t {
 	struct platform_device *pdev;
@@ -141,6 +143,12 @@ struct cam_sensor_ctrl_t {
 	struct cam_sensor_override_info override_info;
 	uint8_t fw_update_flag;
 	enum strobe_type strobeType;
+	uint64_t first_strobe_frame;
+};
+
+struct sensor_status_t {
+	uint8_t streamon_mask;
+	bool is_strobe_disabled;
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */

@@ -458,5 +458,13 @@ void cam_req_mgr_handle_core_shutdown(void);
  */
 int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control);
 
+
+/**
+ * cam_req_mgr_tag_laser()
+ * @brief: find laser type with corresponding frame
+ * @msg: SOF message
+ */
+int cam_req_mgr_tag_laser(struct cam_req_mgr_message *msg);
+
 #endif
 

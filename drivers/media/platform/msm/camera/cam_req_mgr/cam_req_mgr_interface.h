@@ -51,6 +51,7 @@ typedef int (*cam_req_mgr_add_req)(struct cam_req_mgr_add_request *);
  * @cam_req_mgr_flush_req   : Flush or cancel request
  * cam_req_mgr_process_evt  : generic events
  * cam_req_mgr_set_strobe   : to reset IR camera storbe
+ * cam_reg_mgr_tag_laser_type : get laser tag for corresponding sof frame
  */
 typedef int (*cam_req_mgr_get_dev_info) (struct cam_req_mgr_device_info *);
 typedef int (*cam_req_mgr_link_setup)(
@@ -59,6 +60,8 @@ typedef int (*cam_req_mgr_apply_req)(struct cam_req_mgr_apply_request *);
 typedef int (*cam_req_mgr_flush_req)(struct cam_req_mgr_flush_request *);
 typedef int (*cam_req_mgr_process_evt)(struct cam_req_mgr_link_evt_data *);
 typedef int (*cam_req_mgr_set_strobe)(struct cam_req_mgr_apply_request *, bool);
+typedef int (*cam_reg_mgr_tag_laser_type)
+	(struct cam_req_mgr_message *, int32_t);
 
 /**
  * @brief          : cam_req_mgr_crm_cb - func table
@@ -82,6 +85,7 @@ struct cam_req_mgr_crm_cb {
  * @flush_req    : payload to flush request
  * @process_evt  : payload to generic event
  * @set_strobe   : payload to reset IR storbe
+ * @get_laser_tag : payload to get laser tag
  */
 struct cam_req_mgr_kmd_ops {
 	cam_req_mgr_get_dev_info     get_dev_info;
@@ -90,6 +94,8 @@ struct cam_req_mgr_kmd_ops {
 	cam_req_mgr_flush_req        flush_req;
 	cam_req_mgr_process_evt      process_evt;
 	cam_req_mgr_set_strobe       set_strobe;
+	cam_reg_mgr_tag_laser_type   tag_laser;
+
 };
 
 /**

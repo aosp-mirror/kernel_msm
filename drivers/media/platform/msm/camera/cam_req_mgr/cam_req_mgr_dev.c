@@ -509,6 +509,7 @@ int cam_req_mgr_notify_message(struct cam_req_mgr_message *msg,
 	if (!msg)
 		return -EINVAL;
 
+	cam_req_mgr_tag_laser(msg);
 	event.id = id;
 	event.type = type;
 	ev_header = CAM_REQ_MGR_GET_PAYLOAD_PTR(event,

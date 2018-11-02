@@ -21,7 +21,7 @@
 #include "../cam_fw_update/fw_update.h"
 #endif
 
-static uint8_t streamon_mask;
+static struct sensor_status_t sensor_status;
 
 static void cam_sensor_update_req_mgr(
 	struct cam_sensor_ctrl_t *s_ctrl,
@@ -596,10 +596,12 @@ static int32_t cam_sensor_update_ir_cams_strobe(
 
 		rc = camera_io_dev_write(&(s_ctrl->io_master_info),
 			&write_setting);
-		if (rc < 0)
+		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR,
 				"failed on cci write, addr 0x%x, data: 0x%x",
 				reg_settings.reg_addr, reg_settings.reg_data);
+		} else
+			sensor_status.is_strobe_disabled = false;
 	} else {
 		write_setting.reg_setting->reg_data = FLASH_STROBE_DISABLE;
 
@@ -618,7 +620,8 @@ static int32_t cam_sensor_update_ir_cams_strobe(
 			CAM_ERR(CAM_SENSOR,
 				"failed on cci write, addr 0x%x, data: 0x%x",
 				reg_settings.reg_addr, reg_settings.reg_data);
-		}
+		} else
+			sensor_status.is_strobe_disabled = true;
 	}
 
 out:
@@ -858,9 +861,11 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 
 		/* Disable strobe when peer IR is streaming on */
 		if (((s_ctrl->soc_info.index == IR_MASTER) &&
-			((streamon_mask & IR_SLAVE_STREAMON_MASK) != 0)) ||
+			((sensor_status.streamon_mask &
+				IR_SLAVE_STREAMON_MASK) != 0)) ||
 			((s_ctrl->soc_info.index == IR_SLAVE) &&
-			((streamon_mask & IR_MASTER_STREAMON_MASK) != 0))) {
+			((sensor_status.streamon_mask &
+				IR_MASTER_STREAMON_MASK) != 0))) {
 			rc = cam_sensor_update_ir_cams_strobe(s_ctrl, false);
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,
@@ -880,8 +885,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			}
 		}
 
-		streamon_mask |= (1 << s_ctrl->soc_info.index);
+		sensor_status.streamon_mask |= (1 << s_ctrl->soc_info.index);
 		s_ctrl->strobeType = STROBE_NONE;
+		s_ctrl->first_strobe_frame = 0;
 		s_ctrl->sensor_state = CAM_SENSOR_START;
 		CAM_INFO(CAM_SENSOR,
 			"CAM_START_DEV Success, sensor_id:0x%x,"
@@ -910,8 +916,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			}
 		}
 
-		streamon_mask &= ~(1 << s_ctrl->soc_info.index);
+		sensor_status.streamon_mask &= ~(1 << s_ctrl->soc_info.index);
 		s_ctrl->strobeType = STROBE_NONE;
+		s_ctrl->first_strobe_frame = 0;
 
 		cam_sensor_release_per_frame_resource(s_ctrl);
 
@@ -1362,7 +1369,92 @@ int cam_sensor_set_strobe(struct cam_req_mgr_apply_request *apply, bool enable)
 		CAM_ERR(CAM_SENSOR,
 			"failed to set strobe");
 
+	switch (s_ctrl->strobeType) {
+	case STROBE_ALTERNATIVE:
+		if (s_ctrl->soc_info.index == IR_SLAVE) {
+			s_ctrl->first_strobe_frame = apply->frame_count + 2;
+		} else
+			s_ctrl->first_strobe_frame = apply->frame_count + 1;
+		break;
+	case STROBE_SYNCHRONIZE:
+		if (s_ctrl->soc_info.index == IR_SLAVE) {
+			s_ctrl->first_strobe_frame = apply->frame_count + 1;
+		} else
+			s_ctrl->first_strobe_frame = apply->frame_count + 2;
+		break;
+	default:
+		CAM_ERR(CAM_SENSOR,
+			"Unsupport strobe type, should not be here");
+	}
+
 	s_ctrl->strobeType = STROBE_NONE;
 
 	return rc;
+}
+
+int cam_sensor_tag_laser_type(
+	struct cam_req_mgr_message *msg,
+	int32_t dev_hdl)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = NULL;
+	enum laser_tag_type laserTag = LASER_TAG_NONE;
+	bool is_both_ir_streamon;
+	bool is_ir_camera;
+
+	s_ctrl = (struct cam_sensor_ctrl_t *)
+		cam_get_device_priv(dev_hdl);
+	if (!s_ctrl) {
+		CAM_ERR(CAM_SENSOR, "Device data is NULL");
+		msg->u.frame_msg.laser_tag = laserTag;
+		return -EINVAL;
+	}
+
+	is_both_ir_streamon =
+		(((sensor_status.streamon_mask &
+			IR_MASTER_STREAMON_MASK) != 0) &&
+		((sensor_status.streamon_mask &
+			IR_SLAVE_STREAMON_MASK) != 0));
+	is_ir_camera =
+		(s_ctrl->soc_info.index == IR_SLAVE ||
+		s_ctrl->soc_info.index == IR_MASTER);
+
+	if (sensor_status.is_strobe_disabled)
+		goto out;
+
+	if (is_ir_camera && is_both_ir_streamon) {
+		/* Tagging laser by strobe frame count after reset */
+		if (s_ctrl->soc_info.index == IR_MASTER) {
+			laserTag = ((msg->u.frame_msg.frame_id -
+				s_ctrl->first_strobe_frame) % 2) ?
+				LASER_TAG_DOT : LASER_TAG_FLOOD;
+		} else
+			laserTag = ((msg->u.frame_msg.frame_id -
+				s_ctrl->first_strobe_frame) % 2) ?
+				LASER_TAG_FLOOD : LASER_TAG_DOT;
+	} else if (is_ir_camera && !is_both_ir_streamon) {
+		/* Static tagging for single IR case */
+		if (s_ctrl->first_strobe_frame == 0) {
+			if (s_ctrl->soc_info.index == IR_MASTER) {
+				laserTag =
+					(msg->u.frame_msg.frame_id % 2) ?
+					LASER_TAG_NONE : LASER_TAG_FLOOD;
+			} else
+				laserTag = (msg->u.frame_msg.frame_id % 2) ?
+					LASER_TAG_DOT : LASER_TAG_NONE;
+		} else {
+			if (s_ctrl->soc_info.index == IR_MASTER) {
+				laserTag = ((msg->u.frame_msg.frame_id -
+				s_ctrl->first_strobe_frame) % 2) ?
+					LASER_TAG_NONE : LASER_TAG_FLOOD;
+			} else
+				laserTag = ((msg->u.frame_msg.frame_id -
+				s_ctrl->first_strobe_frame) % 2) ?
+					LASER_TAG_NONE : LASER_TAG_DOT;
+
+		}
+	}
+out:
+	msg->u.frame_msg.laser_tag = laserTag;
+
+	return 0;
 }
