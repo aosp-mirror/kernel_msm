@@ -2558,6 +2558,7 @@ static int cfq_merge(struct request_queue *q, struct request **req,
 
 	__rq = cfq_find_rq_fmerge(cfqd, bio);
 	if (__rq && elv_bio_merge_ok(__rq, bio)) {
+		WARN_ON(1);
 		*req = __rq;
 		return ELEVATOR_FRONT_MERGE;
 	}
