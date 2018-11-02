@@ -3897,12 +3897,7 @@ static int fts_probe(struct spi_device *client)
 	bus_type = BUS_I2C;
 #else
 	pr_info("SPI interface...\n");
-	client->mode = SPI_MODE_0;
-#ifndef SPI4_WIRE
-	client->mode |= SPI_3WIRE;
-#endif
 
-	client->max_speed_hz = SPI_CLOCK_FREQ;
 	client->bits_per_word = 8;
 	if (spi_setup(client) < 0) {
 		pr_err("Unsupported SPI functionality\n");
