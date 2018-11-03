@@ -483,7 +483,6 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 		bio_put(bio);
 		return -EFAULT;
 	}
-	fio->op_flags |= fio->encrypted_page ? REQ_NOENCRYPT : 0;
 
 	if (fio->io_wbc && !is_read_io(fio->op))
 		wbc_account_io(fio->io_wbc, page, PAGE_SIZE);
@@ -533,7 +532,6 @@ next:
 	dun = PG_DUN(inode, fio->page);
 	bi_crypt_skip = fio->encrypted_page ? 1 : 0;
 	bio_encrypted = f2fs_may_encrypt_bio(inode, fio);
-	fio->op_flags |= fio->encrypted_page ? REQ_NOENCRYPT : 0;
 
 	/* set submitted = true as a return value */
 	fio->submitted = true;
