@@ -47,6 +47,29 @@
 #define PF0_ATU_CAP_IATU_UPPER_TARGET_ADDR_OFF_INBOUND  0x0118
 
 #define IATU_REGION_OFFSET				0x200
+#define IATU_ENABLE					(0x1 << 31)
+/* Parameters for the waiting for iATU enabled routine */
+#define IATU_ENABLE_DISABLE_RETRIES			(5)
+#define IATU_WAIT_TIME_IN_MSEC				(9)
+
+/* Inbound IATU lower target address must be aligned to a
+ * CX_ATU_MIN_REGION_SIZE kB boundary (in address match mode); and to the
+ * Bar size boundary (in BAR match mode) so that these bits are always '0'.
+ * If the BAR is smaller than the iATU region size, then the iATU target
+ * address must align to the iATU region size; otherwise it must align to the
+ * BAR size.
+ *
+ * A write to this location is ignored by the PCIe controller.
+ *   Field size depends on log2(CX_ATU_MIN_REGION_SIZE) in address match mode.
+ *   Field size depends on log2(BAR_MASK+1) in BAR match mode.
+ *
+ * Currently CX_ATU_MIN_REGION_SIZE is 4KB. So lower 12bits are masked and
+ * are write ignored.
+ *
+ * Please refer "1.47.15 IATU_LWR_TARGET_ADDR_OFF_INBOUND_i" section in
+ * designware register description manual (v5.00a)
+ */
+#define IATU_LWR_TARGET_ADDR_INBOUND_MASK		(0xFFFFF000)
 
 #define DMA_READ_DOORBELL				0x0030
 #define DMA_READ_ENGINE					0x002C

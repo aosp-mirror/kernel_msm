@@ -239,6 +239,7 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 	void __iomem *base_offset;
 	struct inb_region   ir;
 	u32 region_offset;
+	int ret = 0;
 
 	if (!abc_dev || !abc_dev->memory_config ||
 			!atomic_read(&abc_dev->link_state))
@@ -254,7 +255,11 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 		ir.region = 4;
 		ir.bar = 3;
 		ir.memmode = 0;
-		set_inbound_iatu(ir);
+		ret = set_inbound_iatu(ir);
+		if (ret < 0) {
+			pr_err("%s: set_inbound_iatu failed.\n", __func__);
+			return ret;
+		}
 		abc_dev->memory_map = region_offset;
 	}
 
@@ -297,11 +302,11 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 	void __iomem *base_offset;
 	struct inb_region   ir;
 	u32 region_offset;
+	int ret = 0;
 
 	if (!abc_dev || !abc_dev->memory_config ||
 			!atomic_read(&abc_dev->link_state))
 		return -EFAULT;
-
 
 	region_offset = offset & ~(ABC_MEMORY_REGION_MASK);
 
@@ -313,7 +318,11 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 		ir.region = 4;
 		ir.bar = 3;
 		ir.memmode = 0;
-		set_inbound_iatu(ir);
+		ret = set_inbound_iatu(ir);
+		if (ret < 0) {
+			pr_err("%s: set_inbound_iatu failed.\n", __func__);
+			return ret;
+		}
 		abc_dev->memory_map = region_offset;
 	}
 
@@ -618,6 +627,8 @@ int set_inbound_iatu(struct inb_region ir)
 	int bar = ir.bar;
 	u32 iatu_offset = (ir.region * IATU_REGION_OFFSET);
 	u32 ctrl_2_set_val;
+	u32 rdata;
+	int retries, ret = 0;
 
 	if (bar > BAR_4) {
 		pr_err("Exceeding BAR number\n");
@@ -689,13 +700,32 @@ int set_inbound_iatu(struct inb_region ir)
 	       (abc_dev->pcie_config + iatu_offset +
 		PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND));
 
+	/* Make sure ATU enable takes effect before any subsequent
+	 * transactions. Currently the exact time is not specified in the
+	 * user manual. So, following the synopsys designware driver.
+	 */
+	for (retries = 0; retries < IATU_ENABLE_DISABLE_RETRIES; retries++) {
+		rdata = readl_relaxed(abc_dev->pcie_config + iatu_offset +
+				PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND);
+		__iormb();
+
+		if (rdata & IATU_ENABLE)
+			break;
+		msleep(IATU_WAIT_TIME_IN_MSEC);
+	}
+
+	if (!(rdata & IATU_ENABLE)) {
+		pr_err("%s: IATU enable timedout!!\n", __func__);
+		ret = -ETIMEDOUT;
+	}
+
 	__iowmb();
 	writel_relaxed(val,
 			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
-	return 0;
+	return ret;
 }
 
 static int disable_inbound_iatu_region(u32 region)
@@ -704,6 +734,8 @@ static int disable_inbound_iatu_region(u32 region)
 	u32 val;
 	u32 set_val;
 	u32 iatu_offset = (region * IATU_REGION_OFFSET);
+	u32 rdata;
+	int retries, ret = 0;
 
 	if (region >= NUM_IATU_REGIONS) {
 		pr_err("%s: Invalid iATU region: %d\n", __func__, region);
@@ -729,13 +761,32 @@ static int disable_inbound_iatu_region(u32 region)
 	writel_relaxed(0x0, abc_dev->pcie_config + iatu_offset +
 			PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND);
 
+	/* Make sure ATU disable takes effect before any subsequent
+	 * transactions. Currently the exact time is not specified in the
+	 * user manual. So, following the synopsys designware driver.
+	 */
+	for (retries = 0; retries < IATU_ENABLE_DISABLE_RETRIES; retries++) {
+		rdata = readl_relaxed(abc_dev->pcie_config + iatu_offset +
+				PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND);
+		__iormb();
+
+		if (!(rdata & IATU_ENABLE))
+			break;
+		msleep(IATU_WAIT_TIME_IN_MSEC);
+	}
+
+	if (rdata & IATU_ENABLE) {
+		pr_err("%s: IATU disable timedout!!\n", __func__);
+		ret = -ETIMEDOUT;
+	}
+
 	__iowmb();
 	writel_relaxed(val,
 			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
-	return 0;
+	return ret;
 }
 
 int set_outbound_iatu(struct outb_region outreg)
@@ -902,12 +953,17 @@ int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
 	int ret;
 	int i;
 	size_t size_aligned;
+	uint32_t ab_paddr_aligned;
 	struct inb_region ir;
 	uint64_t bar_range_offset;
 	uint64_t host_addr;
 	struct iatu_status *iatu;
+	size_t requested_size = size;
 
 	mutex_lock(&abc->mutex);
+
+	ab_paddr_aligned = ab_paddr & IATU_LWR_TARGET_ADDR_INBOUND_MASK;
+	size = size + (ab_paddr & ~IATU_LWR_TARGET_ADDR_INBOUND_MASK);
 
 	/* set size to be 4kB aligned */
 	size_aligned = ALIGN(size, IATU_REGION_ALIGNMENT);
@@ -955,7 +1011,7 @@ int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
 	ir.u_base_address = (uint32_t)(host_addr >> 32);
 	ir.limit_address = (uint32_t)((host_addr + size_aligned - 1) &
 			0xFFFFFFFF);
-	ir.target_pcie_address = (uint32_t)(ab_paddr & 0xFFFFFFFF);
+	ir.target_pcie_address = (uint32_t)ab_paddr_aligned;
 	ir.u_target_pcie_address = (uint32_t)(ab_paddr >> 32);
 
 	ret = set_inbound_iatu(ir);
@@ -969,14 +1025,15 @@ int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
 	iatu->is_used = true;
 	iatu->bar = bar;
 	iatu->bar_offset = bar_range_offset;
-	iatu->ab_paddr = ab_paddr;
+	iatu->ab_paddr = ab_paddr_aligned;
 	iatu->size = size_aligned;
 
 	/* Set returning struct */
 	mapping->iatu = iatu_id;
 	mapping->bar = bar;
-	mapping->mapping_size = size_aligned;
-	mapping->bar_vaddr = abc->bar[bar] + bar_range_offset;
+	mapping->mapping_size = requested_size;
+	mapping->bar_vaddr = abc->bar[bar] + bar_range_offset +
+				(ab_paddr & ~IATU_LWR_TARGET_ADDR_INBOUND_MASK);
 
 	mutex_unlock(&abc->mutex);
 	return 0;
