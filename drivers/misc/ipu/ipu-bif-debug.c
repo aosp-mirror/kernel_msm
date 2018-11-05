@@ -25,26 +25,6 @@
 #include "ipu-debug.h"
 #include "ipu-regs.h"
 
-/* The caller to this function must hold pb->lock */
-static uint64_t ipu_bif_reg_entry_read(
-		struct paintbox_debug_reg_entry *reg_entry)
-{
-	struct paintbox_debug *debug = reg_entry->debug;
-	struct paintbox_data *pb = debug->pb;
-
-	return ipu_readq(pb->dev, IPU_CSR_AXI_OFFSET + reg_entry->reg_offset);
-}
-
-/* The caller to this function must hold pb->lock */
-static void ipu_bif_reg_entry_write(
-		struct paintbox_debug_reg_entry *reg_entry, uint64_t val)
-{
-	struct paintbox_debug *debug = reg_entry->debug;
-	struct paintbox_data *pb = debug->pb;
-
-	ipu_writeq(pb->dev, val, IPU_CSR_AXI_OFFSET + reg_entry->reg_offset);
-}
-
 static const char *ipu_bif_reg_names[IO_AXI_NUM_REGS] = {
 	REG_NAME_ENTRY64(MMU_CTRL),
 	REG_NAME_ENTRY64(MMU_ENABLE_CTRL),
