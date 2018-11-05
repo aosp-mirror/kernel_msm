@@ -622,11 +622,6 @@ config CHARGER_RT9455
 	  Say Y to enable support for Richtek RT9455 battery charger.
 
 
-config USB_OVERHEAT_MITIGATION
-	tristate "Google USB Overheat Mitigation"
-	help
-	  Say Y here to enable Google USB overheat mitigation
-
 source "drivers/power/supply/qcom/Kconfig"
 source "drivers/power/supply/google/Kconfig"
 

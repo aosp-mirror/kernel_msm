@@ -32,4 +32,9 @@ config GOOGLE_BATTERY
 	  battery statistics such as bin count and other features common to all
 	  google battery powered devices.
 
+config USB_OVERHEAT_MITIGATION
+	tristate "Google USB Overheat Mitigation"
+	help
+	  Say Y here to enable Google USB overheat mitigation
+
 endif	# GOOGLE_BMS
