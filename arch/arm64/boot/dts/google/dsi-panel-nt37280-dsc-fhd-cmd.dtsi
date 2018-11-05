@@ -12,6 +12,8 @@
 
 &mdss_mdp {
 	dsi_nt37280_dsc_fhd_cmd: qcom,mdss_dsi_nt37280 {
+		compatible = "google,dsi_binned_lp";
+
 		qcom,mdss-dsi-panel-name = "nt37280 amoled 5.68 cmd mode panel";
 		google,mdss-dsi-panel-vendor = "LG";
 		google,mdss-dsi-panel-sn-location = <0xA0 0 9>;
@@ -116,6 +118,16 @@
 					15 01 00 00 00 00 02 BB 10 /* 60hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
+				qcom,mdss-dsi-lp1-command = [
+					15 01 00 00 00 00 02 FF 10
+					05 01 00 00 00 00 01 22
+					05 01 00 00 32 00 01 39	   /* AOD on */
+				];
+				qcom,mdss-dsi-nolp-command = [
+					15 01 00 00 00 00 02 FF 10
+					05 01 00 00 5A 00 01 38	   /* AOD off */
+				];
+
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-slice-height = <20>;
 				qcom,mdss-dsc-slice-width = <540>;
@@ -198,6 +210,16 @@
 					15 01 00 00 00 00 02 BB 90 /* 90hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
+				qcom,mdss-dsi-lp1-command = [
+					15 01 00 00 00 00 02 FF 10
+					05 01 00 00 00 00 01 22
+					05 01 00 00 32 00 01 39	   /* AOD on */
+				];
+				qcom,mdss-dsi-nolp-command = [
+					15 01 00 00 00 00 02 FF 10
+					05 01 00 00 5A 00 01 38	   /* AOD off */
+				];
+
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-slice-height = <20>;
 				qcom,mdss-dsc-slice-width = <540>;
@@ -209,6 +231,54 @@
 				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
 				qcom,display-topology = <2 2 1>;
 				qcom,default-topology-index = <0>;
+			};
+		};
+
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					15 01 00 00 00 00 02 FF 10
+					05 01 00 00 00 00 01 22
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "dim";
+
+				google,dsi-lp-brightness-threshold = <5>;
+				google,dsi-lp-command = [
+					15 01 00 00 00 00 02 FF 10
+					39 01 00 00 00 00 03 51 02 00
+					05 01 00 00 00 00 01 13
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+			lp-mode@2 {
+				label = "low";
+
+				google,dsi-lp-brightness-threshold = <20>;
+				google,dsi-lp-command = [
+					15 01 00 00 00 00 02 FF 10
+					39 01 00 00 00 00 03 51 06 80
+					05 01 00 00 00 00 01 13
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@3 {
+				label = "high";
+
+				google,dsi-lp-brightness-threshold = <255>;
+				google,dsi-lp-command = [
+					15 01 00 00 00 00 02 FF 10
+					39 01 00 00 00 00 03 51 0F FF
+					05 01 00 00 00 00 01 13
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 		};
 	};
