@@ -482,7 +482,6 @@ void f2fs_submit_page_write(struct f2fs_io_info *fio)
 	bool bio_encrypted;
 	int bi_crypt_skip;
 	u64 dun;
-	int err = 0;
 
 	f2fs_bug_on(sbi, is_read_io(fio->op));
 
