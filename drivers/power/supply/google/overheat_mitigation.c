@@ -22,6 +22,7 @@
 #include <linux/thermal.h>
 #include <linux/time.h>
 #include <linux/pm_wakeup.h>
+#include "google_psy.h"
 
 #define USB_OVERHEAT_MITIGATION_VOTER	"USB_OVERHEAT_MITIGATION_VOTER"
 
@@ -58,28 +59,6 @@ struct overheat_info {
 	time_t accessory_connect_time;
 	int check_status;
 };
-
-#define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
-static inline int psy_get_prop(struct power_supply *psy,
-			       enum power_supply_property psp,
-			       char *prop_name)
-{
-	union power_supply_propval val;
-	int ret = 0;
-
-	if (!psy)
-		return -EINVAL;
-	pr_debug("get %s for '%s'...\n", prop_name, psy->desc->name);
-	ret = power_supply_get_property(psy, psp, &val);
-	if (ret < 0) {
-		pr_err("failed to get %s from '%s', ret=%d\n", prop_name,
-		       psy->desc->name, ret);
-		return ret;
-	}
-	pr_debug("get %s for '%s' => %d\n", prop_name, psy->desc->name,
-		 val.intval);
-	return val.intval;
-}
 
 static inline int get_dts_vars(struct overheat_info *ovh_info)
 {
@@ -227,12 +206,12 @@ static int update_usb_status(struct overheat_info *ovh_info)
 	}
 
 	dev_dbg(ovh_info->dev, "Updating USB connected status\n");
-	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_ONLINE);
+	ret = GPSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_ONLINE);
 	if (ret < 0)
 		return ret;
 	ovh_info->usb_connected = ret;
 
-	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_TYPEC_MODE);
+	ret = GPSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_TYPEC_MODE);
 	if (ret < 0)
 		return ret;
 	ovh_info->accessory_connected = (ret == POWER_SUPPLY_TYPEC_SINK) ||
@@ -269,7 +248,7 @@ static inline int get_usb_port_temp(struct overheat_info *ovh_info)
 {
 	int temp;
 
-	temp = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_TEMP);
+	temp = GPSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_TEMP);
 
 	if (fake_port_temp > 0)
 		temp = fake_port_temp;
