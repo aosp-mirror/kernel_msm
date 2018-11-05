@@ -19,14 +19,21 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
+/* Keep it in sync with faceauth firmware */
+#define FACEAUTH_OP_ERASE 0
+#define FACEAUTH_OP_ENROLL 1
+#define FACEAUTH_OP_VALIDATE 2
+
+/* Keep it in sync with faceauth firmware */
+#define FACEAUTH_RESULT_SUCCESS 0
+#define FACEAUTH_RESULT_FAILURE 1
+
 /* This struct is written by userspace and read by kernel */
 struct faceauth_start_data {
 	/*
-	 * Whether the image data is used for enrollment:
-	 *  true - enroll and save embeddings to the user's storage
-	 *  false - verify against stored user data
+	 * Operation requested by user, see FACEAUTH_OP_*
 	 */
-	__u32 enroll;
+	__u32 operation;
 
 	__u8 __user *image_dot_left;
 	__u32 image_dot_left_size;
@@ -36,45 +43,18 @@ struct faceauth_start_data {
 
 	__u8 __user *image_flood;
 	__u32 image_flood_size;
-
-	/*
-	 * This is data to feed individual TPU stages, for debug and demo
-	 * TODO: To be removed
-	 */
-	__u8 __user *facenet_input;
-	__u32 facenet_input_size;
-
-	__u8 __user *gazenet_input;
-	__u32 gazenet_input_size;
-
-	__u8 __user *depthid_input;
-	__u32 depthid_input_size;
-
-	__u8 __user *depth_output;
-	__u32 depth_output_size;
-
-	__u8 __user *affine_output;
-	__u32 affine_output_size;
-
-	__u8 __user *fssd_output;
-	__u32 fssd_output_size;
-
-	__u8 __user *facenet_output;
-	__u32 facenet_output_size;
-
-	__u8 __user *gazenet_output;
-	__u32 gazenet_output_size;
-
-	__u8 __user *depthid_output;
-	__u32 depthid_output_size;
 } __attribute__((packed));
 
 /* This struct is written by kernel */
 struct faceauth_continue_data {
 	__u8 completed; /* is faceauth process completed? */
-	__u8 success; /* is faceauth process successful? */
+	__u8 result; /* FACEAUTH_RESULT_* */
 } __attribute__((packed));
 
+/*
+ * Prepare AP and AB for faceauth workflow. This step might include slow
+ * operations like reading fiemware from filesystem and copying to AB memory.
+ */
 #define FACEAUTH_DEV_IOC_INIT _IO('f', 1)
 #define FACEAUTH_DEV_IOC_START _IOW('f', 2, struct faceauth_start_data)
 #define FACEAUTH_DEV_IOC_CONTINUE _IOR('f', 3, struct faceauth_continue_data)

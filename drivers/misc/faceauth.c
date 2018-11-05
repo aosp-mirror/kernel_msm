@@ -38,7 +38,7 @@
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
 #define COMPARE_RESULT_FLAG_ADDR 0x21fffff4
-#define ENROLLMENT_FLAG_ADDR 0x21fffff8
+#define OPERATION_FLAG_ADDR 0x21fffff8
 #define COMPLETION_FLAG_ADDR 0x21fffffc
 #define JQS_DEPTH_ADDR 0x22000000
 #define JQS_AFFINE_DEPTH_ADDR 0x22100000
@@ -54,10 +54,6 @@
 #define JQS_AFFINE_DEPTH_PATH "affine.fw"
 #define JQS_AFFINE_RGB_PATH "affine_rgb.fw"
 #define JQS_AFFINE_SKIN_PATH "affine_8.fw"
-
-#define EMBEDDING_ERASEALL 0
-#define EMBEDDING_ENROLL 1
-#define EMBEDDING_VALIDATE 2
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
@@ -84,7 +80,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_continue_data continue_step_data = { 0 };
 	unsigned long stop, ioctl_start;
-	uint32_t success;
+	uint32_t result;
 
 	ioctl_start = jiffies;
 
@@ -108,8 +104,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			goto exit;
 		}
 
-		if (start_step_data.enroll == EMBEDDING_ENROLL ||
-		    start_step_data.enroll == EMBEDDING_VALIDATE) {
+		if (start_step_data.operation == FACEAUTH_OP_ENROLL ||
+		    start_step_data.operation == FACEAUTH_OP_VALIDATE) {
 			if (!start_step_data.image_dot_left_size) {
 				err = -EINVAL;
 				goto exit;
@@ -135,11 +131,11 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		pr_info("Set M0 firmware addr = 0x%08x\n", M0_FIRMWARE_ADDR);
 		dma_write_dw(file, SYSREG_AON_IPU_REG29_ADDR, M0_FIRMWARE_ADDR);
 
-		/* Set enrollment flag flag */
-		pr_info("Set faceauth enrollment flag at 0x%08x\n",
-			ENROLLMENT_FLAG_ADDR);
-		dma_write_dw(file, ENROLLMENT_FLAG_ADDR,
-			     start_step_data.enroll);
+		/* Set operation flag */
+		pr_info("Set faceauth operation flag at 0x%08x\n",
+			OPERATION_FLAG_ADDR);
+		dma_write_dw(file, OPERATION_FLAG_ADDR,
+			     start_step_data.operation);
 
 		/* Reset completion flag */
 		pr_info("Clearing completion flag at 0x%08x\n",
@@ -175,8 +171,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		continue_step_data.completed = 1;
 
 		pr_info("Read comparison result\n");
-		dma_read_dw(file, COMPARE_RESULT_FLAG_ADDR, &success);
-		continue_step_data.success = success;
+		dma_read_dw(file, COMPARE_RESULT_FLAG_ADDR, &result);
+		continue_step_data.result = result;
 
 		if (copy_to_user((void __user *)arg, &continue_step_data,
 				 sizeof(continue_step_data)))
