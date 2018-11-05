@@ -182,6 +182,7 @@ static struct smb_params smb5_pm8150b_params = {
 
 struct smb_dt_props {
 	int			usb_icl_ua;
+	int			dc_icl_ua;
 	struct device_node	*revid_dev_node;
 	enum float_options	float_option;
 	int			chg_inhibit_thr_mv;
@@ -351,6 +352,11 @@ static int smb5_parse_dt(struct smb5 *chip)
 	if (rc < 0)
 		chg->otg_cl_ua = (chip->chg.smb_version == PMI632_SUBTYPE) ?
 							MICRO_1PA : MICRO_1P5A;
+
+	rc = of_property_read_u32(node,
+				  "qcom,dc-icl-ua", &chip->dt.dc_icl_ua);
+	if (rc < 0)
+		chip->dt.dc_icl_ua = -EINVAL;
 
 	rc = of_property_read_u32(node, "qcom,chg-term-src",
 			&chip->dt.term_current_src);
@@ -1909,12 +1915,11 @@ static int smb5_init_hw(struct smb5 *chip)
 			chg->hw_max_icl_ua > 0, chg->hw_max_icl_ua);
 
 	/* set DC icl_max 1A */
-	rc = smblib_set_charge_param(chg, &chg->param.dc_icl, 1000000);
-	if (rc < 0) {
-		dev_err(chg->dev,
-			"Couldn't set dc_icl rc=%d\n", rc);
-		return rc;
-	}
+	if (chip->dt.dc_icl_ua < 0)
+		vote(chg->dc_icl_votable, DEFAULT_VOTER, true, 1000000);
+	else
+		vote(chg->dc_icl_votable, DEFAULT_VOTER,
+		     true, chip->dt.dc_icl_ua);
 
 	/*
 	 * AICL configuration:
