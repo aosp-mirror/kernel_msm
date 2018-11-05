@@ -1,4 +1,3 @@
-
 /* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -14,6 +13,8 @@
 &mdss_mdp {
 	dsi_nt37280_dsc_fhd_cmd: qcom,mdss_dsi_nt37280 {
 		qcom,mdss-dsi-panel-name = "nt37280 amoled 5.68 cmd mode panel";
+		google,mdss-dsi-panel-vendor = "LG";
+		google,mdss-dsi-panel-sn-location = <0xA0 0 9>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-bpp = <24>;
