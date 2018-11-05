@@ -7139,7 +7139,7 @@ int tp_sensitivity_mode(u8 enter, int saveGain)
 		 __func__, enter);
 	if (enter == 1) {
 		/* enter TP Sensitivity mode*/
-		ret = fts_disableInterrupt();
+		ret = fts_enableInterrupt(false);
 		pr_info("%s: Entering TP Sensitivity Mode disabling algos...\n",
 			__func__);
 		cmd[3] = 0x01;
@@ -7172,7 +7172,7 @@ int tp_sensitivity_mode(u8 enter, int saveGain)
 		}
 
 		res |= senseOn();
-		res |= fts_enableInterrupt();
+		res |= fts_enableInterrupt(true);
 	}
 
 	res |= ret;

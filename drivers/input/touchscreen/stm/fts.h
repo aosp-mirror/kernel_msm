@@ -336,6 +336,9 @@ struct fts_ts_info {
 	struct regulator        *vdd_reg;	/* DVDD power regulator */
 	struct regulator        *avdd_reg;	/* AVDD power regulator */
 
+	spinlock_t fts_int;	/* Spinlock to protect interrupt toggling */
+	bool irq_enabled;	/* Interrupt state */
+
 	struct mutex bus_mutex;	/* Protect access to the bus */
 	unsigned int bus_refmask; /* References to the bus */
 

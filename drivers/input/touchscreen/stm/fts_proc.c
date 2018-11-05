@@ -1252,9 +1252,9 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			/* need to pass: enable */
 			if (numberParam >= 2) {
 				if (cmd[1] == 1)
-					res = fts_enableInterrupt();
+					res = fts_enableInterrupt(true);
 				else
-					res = fts_disableInterrupt();
+					res = fts_enableInterrupt(false);
 			} else {
 				pr_err("Wrong number of parameters!\n");
 				res = ERROR_OP_NOT_ALLOW;
@@ -2344,9 +2344,9 @@ END_DIAGNOSTIC:
 		case CMD_TRIGGER_FORCECAL:
 			cmd[0] = CAL_MS_TOUCH | CAL_SS_TOUCH;
 			cmd[1] = 0x00;
-			fts_disableInterrupt();
+			fts_enableInterrupt(false);
 			res = writeSysCmd(SYS_CMD_FORCE_CAL, cmd, 2);
-			res |= fts_enableInterrupt();
+			res |= fts_enableInterrupt(true);
 			if (res < OK)
 				pr_err("can not trigger Force Cal! ERROR %08X\n",
 					res);
@@ -2469,7 +2469,7 @@ END_DIAGNOSTIC:
 		case CMD_SET_OPERATING_FREQ:
 			/* need to pass: freq3 freq2 freq1 freq0 */
 			if (numberParam == 5) {
-				res = fts_disableInterrupt();
+				res = fts_enableInterrupt(false);
 				if (res >= OK) {
 					pr_info("Setting Scan Freq...\n");
 					u8ToU32_be(&cmd[1], &fileSize);
@@ -2492,7 +2492,8 @@ END_DIAGNOSTIC:
 							LOCKED_ACTIVE);
 						/* this is a choice to force
 						 * the IC to use the freq set */
-						res |= fts_enableInterrupt();
+						res |= fts_enableInterrupt(
+								true);
 						pr_info("Setting Scan Freq... res = %08X\n",
 							res);
 					}
@@ -2727,7 +2728,7 @@ END_DIAGNOSTIC:
 			break;
 		}
 
-		/* res2 = fts_enableInterrupt();
+		/* res2 = fts_enableInterrupt(true);
 		 * the interrupt was disabled on purpose in this node because it
 		 * can be used for testing procedure and between one step and
 		 * another the interrupt wan to be kept disabled

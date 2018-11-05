@@ -126,8 +126,6 @@ static u8 key_mask;	/* /< store the last update of the key mask
 				  * published by the IC */
 #endif
 
-extern spinlock_t fts_int;
-
 static int fts_init_sensing(struct fts_ts_info *info);
 static int fts_mode_handler(struct fts_ts_info *info, int force);
 
@@ -361,7 +359,7 @@ static ssize_t fts_strength_frame_show(struct device *dev,
 
 	frame.node_data = NULL;
 
-	res = fts_disableInterrupt();
+	res = fts_enableInterrupt(false);
 	if (res < OK)
 		goto END;
 
@@ -437,7 +435,7 @@ END:
 		pr_err("%s: Unable to allocate all_strbuff! ERROR %08X\n",
 			__func__, ERROR_ALLOC);
 
-	fts_enableInterrupt();
+	fts_enableInterrupt(true);
 	return count;
 }
 #endif
@@ -1438,9 +1436,9 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	}
 
 	if (numberParameters >= 1) {
-		res = fts_disableInterrupt();
+		res = fts_enableInterrupt(false);
 		if (res < 0) {
-			pr_err("fts_disableInterrupt: ERROR %08X\n", res);
+			pr_err("fts_enableInterrupt: ERROR %08X\n", res);
 			res = (res | ERROR_DISABLE_INTER);
 			goto END;
 		}
@@ -1729,7 +1727,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 
 		doClean = fts_mode_handler(info, 1);
 		if (typeOfComand[0] != 0xF0)
-			doClean |= fts_enableInterrupt();
+			doClean |= fts_enableInterrupt(true);
 		if (doClean < 0)
 			pr_err("%s: ERROR %08X\n", __func__,
 				 (doClean | ERROR_ENABLE_INTER));
@@ -2291,7 +2289,7 @@ static void fts_error_event_handler(struct fts_ts_info *info, unsigned
 
 		error = fts_system_reset();
 		error |= fts_mode_handler(info, 0);
-		error |= fts_enableInterrupt();
+		error |= fts_enableInterrupt(true);
 		if (error < OK)
 			pr_err("%s Cannot restore the device ERROR %08X\n",
 				__func__, error);
@@ -2305,7 +2303,7 @@ static void fts_error_event_handler(struct fts_ts_info *info, unsigned
 		release_all_touches(info);
 		error = fts_system_reset();
 		error |= fts_mode_handler(info, 0);
-		error |= fts_enableInterrupt();
+		error |= fts_enableInterrupt(true);
 		if (error < OK)
 			pr_err("%s Cannot reset the device ERROR %08X\n",
 				__func__, error);
@@ -3038,7 +3036,7 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 	install_handler(info, USER_REPORT, user_report);
 
 	/* disable interrupts in any case */
-	error = fts_disableInterrupt();
+	error = fts_enableInterrupt(false);
 	if (error) {
 		pr_err("%s Failed to disable interrupts.\n",
 			 __func__);
@@ -3048,6 +3046,7 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 	error = request_threaded_irq(info->client->irq, NULL,
 			fts_interrupt_handler, IRQF_ONESHOT | IRQF_TRIGGER_LOW,
 			FTS_TS_DRV_NAME, info);
+	info->irq_enabled = true;
 
 	if (error) {
 		pr_err("Request irq failed\n");
@@ -3063,7 +3062,7 @@ static int fts_interrupt_install(struct fts_ts_info *info)
   */
 static void fts_interrupt_uninstall(struct fts_ts_info *info)
 {
-	fts_disableInterrupt();
+	fts_enableInterrupt(false);
 
 	kfree(info->event_dispatch_table);
 
@@ -3120,7 +3119,7 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 	pr_info("%s: Disabling IRQ...\n", __func__);
 	/** if IRQ pin is short with DVDD a call to the ISR will triggered when
 	  * the regulator is turned off if IRQ not disabled */
-	fts_disableInterrupt();
+	fts_enableInterrupt(false);
 
 	if (info->vdd_reg) {
 		error = regulator_disable(info->vdd_reg);
@@ -3194,8 +3193,7 @@ static int fts_init_sensing(struct fts_ts_info *info)
 	error |= fts_interrupt_install(info);	/* register event handler */
 	error |= fts_mode_handler(info, 0);	/* enable the features and
 						 * sensing */
-	error |= fts_enableInterrupt();		/* enable the interrupt */
-	error |= fts_resetDisableIrqCount();
+	error |= fts_enableInterrupt(true);	/* enable the interrupt */
 
 	if (error < OK)
 		pr_err("%s Init after Probe error (ERROR = %08X)\n",
@@ -3442,7 +3440,7 @@ static void fts_resume_work(struct work_struct *work)
 
 	info->sensor_sleep = false;
 
-	fts_enableInterrupt();
+	fts_enableInterrupt(true);
 
 	complete_all(&info->bus_resumed);
 }
@@ -3472,7 +3470,7 @@ static void fts_suspend_work(struct work_struct *work)
 
 	info->sensor_sleep = true;
 
-	fts_disableInterrupt();
+	fts_enableInterrupt(false);
 
 	fts_set_switch_gpio(info, FTS_SWITCH_GPIO_VALUE_SLPI_MASTER);
 
@@ -4077,7 +4075,7 @@ static int fts_probe(struct spi_device *client)
 	mutex_init(&gestureMask_mutex);
 #endif
 
-	spin_lock_init(&fts_int);
+	spin_lock_init(&info->fts_int);
 
 	/* register the multi-touch input device */
 	error = input_register_device(info->input_dev);

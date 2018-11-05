@@ -225,7 +225,7 @@ int enterGestureMode(int reload)
 {
 	int res, ret;
 
-	res = fts_disableInterrupt();
+	res = fts_enableInterrupt(false);
 	if (res < OK) {
 		pr_err("enterGestureMode: ERROR %08X\n",
 			res | ERROR_DISABLE_INTER);
@@ -252,7 +252,7 @@ int enterGestureMode(int reload)
 
 	res = OK;
 END:
-	ret = fts_enableInterrupt();
+	ret = fts_enableInterrupt(true);
 	if (ret < OK) {
 		pr_err("enterGestureMode: fts_enableInterrupt ERROR %08X\n",
 			res | ERROR_ENABLE_INTER);

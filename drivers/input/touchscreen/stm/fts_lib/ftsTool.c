@@ -339,7 +339,7 @@ int cleanUp(int enableTouch)
 		if (res < OK)
 			return res;
 		pr_info("cleanUp: enabling interrupts...\n");
-		res = fts_enableInterrupt();
+		res = fts_enableInterrupt(true);
 		if (res < OK)
 			return res;
 	}

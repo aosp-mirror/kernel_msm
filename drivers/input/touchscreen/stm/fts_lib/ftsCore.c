@@ -48,13 +48,6 @@ static int system_reseted_up;	/* /< flag checked during resume to understand
 static int system_reseted_down; /* /< flag checked during suspend to understand
 				 * if there was a system reset
 				 *  and restore the proper state */
-static int disable_irq_count = 1;	/* /< count the number of call to
-					 * disable_irq,
-					 * start with 1 because at the boot IRQ
-					 * are already disabled */
-spinlock_t fts_int;	/* /< spinlock to control the access to the
-			 * disable_irq_counter */
-
 
 /**
   * Initialize core variables of the library.
@@ -111,7 +104,7 @@ int fts_system_reset(void)
 	pr_info("System resetting...\n");
 	for (i = 0; i < RETRY_SYSTEM_RESET && res < 0; i++) {
 		resetErrorList();
-		fts_disableInterrupt();
+		fts_enableInterrupt(false);
 		/* disable interrupt before resetting to be able to get boot
 		 * events */
 
@@ -829,99 +822,39 @@ int writeConfig(u16 offset, u8 *data, int len)
 	return OK;
 }
 
-/**
-  * Disable the interrupt so the ISR of the driver can not be called
-  * @return OK if success or an error code which specify the type of error
-  */
-int fts_disableInterrupt(void)
+/* Set the interrupt state
+ * @param enable Indicates whether interrupts should enabled.
+ * @return OK if success
+ */
+int fts_enableInterrupt(bool enable)
 {
+	struct fts_ts_info *info = NULL;
 	unsigned long flag;
 
-	if (getClient() != NULL) {
-		spin_lock_irqsave(&fts_int, flag);
-		pr_debug("Number of disable = %d\n", disable_irq_count);
-		if (disable_irq_count == 0) {
-			pr_debug("Executing Disable...\n");
-			disable_irq_nosync(getClient()->irq);
-			disable_irq_count++;
-		}
-		/* disable_irq is re-entrant so it is required to keep track
-		 * of the number of calls of this when reenabling */
-		spin_unlock_irqrestore(&fts_int, flag);
-		pr_debug("Interrupt Disabled!\n");
-		return OK;
-	} else {
-		pr_err("%s: Impossible get client irq... ERROR %08X\n",
-			__func__, ERROR_OP_NOT_ALLOW);
+	if (getClient() == NULL) {
+		pr_err("Cannot get client irq. Error = %08X\n",
+			ERROR_OP_NOT_ALLOW);
 		return ERROR_OP_NOT_ALLOW;
 	}
-}
+	info = dev_get_drvdata(&getClient()->dev);
 
+	spin_lock_irqsave(&info->fts_int, flag);
 
-/**
-  * Disable the interrupt async so the ISR of the driver can not be called
-  * @return OK if success or an error code which specify the type of error
-  */
-int fts_disableInterruptNoSync(void)
-{
-	if (getClient() != NULL) {
-		spin_lock_irq(&fts_int);
-		pr_debug("Number of disable = %d\n", disable_irq_count);
-		if (disable_irq_count == 0) {
-			pr_debug("Executing Disable...\n");
-			disable_irq_nosync(getClient()->irq);
-			disable_irq_count++;
-		}
-		/* disable_irq is re-entrant so it is required to keep track
-		 * of the number of calls of this when reenabling */
-
-		spin_unlock(&fts_int);
-		pr_debug("Interrupt No Sync Disabled!\n");
-		return OK;
-	} else {
-		pr_err("%s: Impossible get client irq... ERROR %08X\n",
-			__func__, ERROR_OP_NOT_ALLOW);
-		return ERROR_OP_NOT_ALLOW;
-	}
-}
-
-/**
-  * Reset the disable_irq count
-  * @return OK
-  */
-int fts_resetDisableIrqCount(void)
-{
-	disable_irq_count = 0;
-	return OK;
-}
-
-/**
-  * Enable the interrupt so the ISR of the driver can be called
-  * @return OK if success or an error code which specify the type of error
-  */
-int fts_enableInterrupt(void)
-{
-	unsigned long flag;
-
-	if (getClient() != NULL) {
-		spin_lock_irqsave(&fts_int, flag);
-		pr_debug("Number of re-enable = %d\n", disable_irq_count);
-		while (disable_irq_count > 0) {
-			/* loop N times according on the pending number of
-			 * disable_irq to truly re-enable the int */
-			pr_debug("Executing Enable...\n");
+	if (enable == info->irq_enabled)
+		pr_debug("Interrupt is already set (enable = %d).\n", enable);
+	else {
+		info->irq_enabled = enable;
+		if (enable) {
 			enable_irq(getClient()->irq);
-			disable_irq_count--;
+			pr_debug("Interrupt enabled.\n");
+		} else {
+			disable_irq_nosync(getClient()->irq);
+			pr_debug("Interrupt disabled.\n");
 		}
-
-		spin_unlock_irqrestore(&fts_int, flag);
-		pr_debug("Interrupt Enabled!\n");
-		return OK;
-	} else {
-		pr_err("%s: Impossible get client irq... ERROR %08X\n",
-			__func__, ERROR_OP_NOT_ALLOW);
-		return ERROR_OP_NOT_ALLOW;
 	}
+
+	spin_unlock_irqrestore(&info->fts_int, flag);
+	return OK;
 }
 
 /**
