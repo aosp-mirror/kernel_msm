@@ -79,7 +79,7 @@ int getFWdata(const char *pathToFile, u8 **data, int *size)
 	pr_info("getFWdata starting ...\n");
 	if (strncmp(pathToFile, "NULL", 4) == 0) {
 		from = 1;
-		if (info != NULL && info->board->fw_name)
+		if (info != NULL && info->board)
 			path = (char *)info->board->fw_name;
 		else
 			path = PATH_FILE_FW;
