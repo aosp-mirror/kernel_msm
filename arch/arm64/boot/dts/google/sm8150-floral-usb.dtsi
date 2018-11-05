@@ -1,6 +1,26 @@
 #include <dt-bindings/usb/pd.h>
 
+&vendor {
+	ext_5v_boost: ext_5v_boost {
+		compatible = "regulator-tps";
+		regulator-name = "ext_5v_boost";
+		nr-control-gpios = <3>;
+		control-gpios = <&tlmm 146 GPIO_ACTIVE_HIGH>,
+				<&tlmm 66 GPIO_ACTIVE_HIGH>,
+				<&tlmm 118 GPIO_ACTIVE_HIGH>;
+		nr-gpio-enable-sequence = <3>;
+		gpio-enable-sequence = <1 2 3>;
+		gpio-enable-delay = <1000 100 300>;
+		nr-gpio-disable-sequence = <3>;
+		gpio-disable-sequence = <2 3 1>;
+		gpio-disable-delay = <0 0 0>;
+		status = "okay";
+	};
+};
+
 &pm8150b_pdphy {
+	ext-vbus-supply = <&ext_5v_boost>;
+
 	usb_con: connector {
 		compatible = "usb-c-connector";
 		label = "USB-C";
