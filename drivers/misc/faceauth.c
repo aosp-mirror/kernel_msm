@@ -13,6 +13,8 @@
  * GNU General Public License for more details.
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/faceauth.h>
@@ -111,62 +113,60 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		if (!start_step_data.image_flood_size)
 			return -EINVAL;
 
-		pr_info("%s: Send images\n", __func__);
+		pr_info("Send images\n");
 		err = dma_send_images(&start_step_data);
 		if (err) {
-			pr_err("%s: Error in sending workload\n", __func__);
+			pr_err("Error in sending workload\n");
 			return err;
 		}
 
-		pr_info("%s: Send workloads\n", __func__);
+		pr_info("Send workloads\n");
 		err = dma_send_workloads();
 		if (err) {
-			pr_err("%s: Error in sending workload\n", __func__);
+			pr_err("Error in sending workload\n");
 			return err;
 		}
 
 		/* Set M0 workload address */
-		pr_info("%s: Set M0 workload addr = 0x%08x\n", __func__,
-			WORKLOAD_ADDR);
+		pr_info("Set M0 workload addr = 0x%08x\n", WORKLOAD_ADDR);
 		dma_write_dw(file, SYSREG_AON_IPU_REG29_ADDR, WORKLOAD_ADDR);
 
 		/* Set enrollment flag flag */
-		pr_info("%s: Set faceauth enrollment flag at 0x%08x\n",
-			__func__, ENROLLMENT_FLAG_ADDR);
+		pr_info("Set faceauth enrollment flag at 0x%08x\n",
+			ENROLLMENT_FLAG_ADDR);
 		dma_write_dw(file, ENROLLMENT_FLAG_ADDR,
 			     start_step_data.enroll);
 
 		/* Reset completion flag */
-		pr_info("%s: Clearing completion flag at 0x%08x\n", __func__,
+		pr_info("Clearing completion flag at 0x%08x\n",
 			COMPLETION_FLAG_ADDR);
 		dma_write_dw(file, COMPLETION_FLAG_ADDR, 0);
 
 		/* Trigger M0 Interrupt */
-		pr_info("%s: Interrupting M0\n", __func__);
+		pr_info("Interrupting M0\n");
 		dma_write_dw(file, SYSREG_REG_GP_INT0_ADDR, 1);
 
 		/* Check completion flag */
-		pr_info("%s: Waiting for completion.\n", __func__);
+		pr_info("Waiting for completion.\n");
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
 		for (;;) {
 			int done;
 			dma_read_dw(file, COMPLETION_FLAG_ADDR, &done);
 			if (done) {
-				pr_info("%s: Workload completes.\n", __func__);
+				pr_info("Workload completes.\n");
 				break;
 			}
 			if (time_before(stop, jiffies)) {
-				pr_err("%s: Airbrush workload timeout!\n",
-				       __func__);
+				pr_err("Airbrush workload timeout!\n");
 				return -ETIME;
 			}
 			msleep(1);
 		}
 
-		pr_info("%s: Read back result from AB DRAM\n", __func__);
+		pr_info("Read back result from AB DRAM\n");
 		err = dma_read_result(&start_step_data);
 		if (err) {
-			pr_err("%s: Error in read back result\n", __func__);
+			pr_err("Error in read back result\n");
 			return err;
 		}
 
@@ -201,7 +201,7 @@ static int faceauth_open(struct inode *inode, struct file *file)
 
 	data = vmalloc(sizeof(*data));
 	if (!data) {
-		pr_err("%s: Failed to vmalloc DW buffer\n", __func__);
+		pr_err("Failed to vmalloc DW buffer\n");
 		return -ENOMEM;
 	}
 	file->private_data = (void *)data;
@@ -255,7 +255,7 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.dir = dir;
 	dma_desc.chan = 1;
-	pr_info("%s: MBLK AP src = %pK; AB dest = %pK; size = %d\n", __func__,
+	pr_info("MBLK AP src = %pK; AB dest = %pK; size = %d\n",
 		(unsigned long)dma_desc.local_buf,
 		(unsigned long)dma_desc.remote_buf, dma_desc.local_buf_size);
 	err = abc_pcie_issue_dma_xfer(&dma_desc);
@@ -286,7 +286,7 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.dir = dir;
 	dma_desc.chan = 1;
-	pr_info("%s: MBLK AP src = %pK; AB dest = %pK; size = %d\n", __func__,
+	pr_info("MBLK AP src = %pK; AB dest = %pK; size = %d\n",
 		(unsigned long)dma_desc.local_buf,
 		(unsigned long)dma_desc.remote_buf, dma_desc.local_buf_size);
 	err = abc_pcie_issue_dma_xfer_vmalloc(&dma_desc);
@@ -308,15 +308,14 @@ static int dma_send_fw(const char *path, const int remote_addr)
 	fw_status = request_firmware(&fw_entry, path,
 				     faceauth_miscdevice.this_device);
 	if (fw_status != 0) {
-		pr_err("Firmware Not Found: %d, %d\n", fw_status, __LINE__);
+		pr_err("Firmware Not Found: %d\n", fw_status);
 		return -EIO;
 	}
 
 	err = dma_xfer_vmalloc((void *)(fw_entry->data), fw_entry->size,
 			       remote_addr, DMA_TO_DEVICE);
 	if (err)
-		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n", __func__,
-		       err);
+		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
 	release_firmware(fw_entry);
 	return err;
 }
@@ -337,8 +336,7 @@ static int dma_write_dw(struct file *file, const int remote_addr, const int val)
 	err = dma_xfer_vmalloc((void *)&(data->dma_dw_buf), sizeof(val),
 			       remote_addr, DMA_TO_DEVICE);
 	if (err)
-		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n", __func__,
-		       err);
+		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
 	return err;
 }
 
@@ -357,8 +355,7 @@ static int dma_read_dw(struct file *file, const int remote_addr, int *val)
 	err = dma_xfer_vmalloc((void *)&(data->dma_dw_buf), sizeof(*val),
 			       remote_addr, DMA_FROM_DEVICE);
 	if (err) {
-		pr_err("%s: Error from abc_pcie_issue_dma_xfer: %d\n", __func__,
-		       err);
+		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
 		return err;
 	}
 	*val = data->dma_dw_buf;
@@ -378,7 +375,7 @@ static int dma_send_images(struct faceauth_start_data *data)
 	err = dma_xfer(data->image_dot_left, data->image_dot_left_size,
 		       DOT_IMAGE_LEFT_ADDR, DMA_TO_DEVICE);
 	if (err) {
-		pr_err("%s: Error sending left dot image\n", __func__);
+		pr_err("Error sending left dot image\n");
 		return err;
 	}
 
@@ -386,7 +383,7 @@ static int dma_send_images(struct faceauth_start_data *data)
 	err = dma_xfer(data->image_dot_right, data->image_dot_right_size,
 		       DOT_IMAGE_RIGHT_ADDR, DMA_TO_DEVICE);
 	if (err) {
-		pr_err("%s: Error sending right dot image\n", __func__);
+		pr_err("Error sending right dot image\n");
 		return err;
 	}
 
@@ -395,7 +392,7 @@ static int dma_send_images(struct faceauth_start_data *data)
 	err = dma_xfer(data->image_flood, data->image_flood_size,
 		       FLOOD_IMAGE_ADDR, DMA_TO_DEVICE);
 	if (err) {
-		pr_err("%s: Error sending flood image\n", __func__);
+		pr_err("Error sending flood image\n");
 		return err;
 	}
 
@@ -423,48 +420,39 @@ static int dma_send_workloads(void)
 	int err = 0;
 
 	/* Send IPU workload */
-	pr_info("%s: Set JQS Depth addr = 0x%08x\n", __func__, JQS_DEPTH_ADDR);
+	pr_info("Set JQS Depth addr = 0x%08x\n", JQS_DEPTH_ADDR);
 	err = dma_send_fw(JQS_DEPTH_PATH, JQS_DEPTH_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
-		       err);
+		pr_err("Error during JQS binary transfer: %d\n", err);
 		return err;
 	}
 
-	pr_info("%s: Set JQS Affine Depth addr = 0x%08x\n", __func__,
-		JQS_AFFINE_DEPTH_ADDR);
+	pr_info("Set JQS Affine Depth addr = 0x%08x\n", JQS_AFFINE_DEPTH_ADDR);
 	err = dma_send_fw(JQS_AFFINE_DEPTH_PATH, JQS_AFFINE_DEPTH_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
-		       err);
+		pr_err("Error during JQS binary transfer: %d\n", err);
 		return err;
 	}
 
-	pr_info("%s: Set JQS Affine RGB addr = 0x%08x\n", __func__,
-		JQS_AFFINE_RGB_ADDR);
+	pr_info("Set JQS Affine RGB addr = 0x%08x\n", JQS_AFFINE_RGB_ADDR);
 	err = dma_send_fw(JQS_AFFINE_RGB_PATH, JQS_AFFINE_RGB_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
-		       err);
+		pr_err("Error during JQS binary transfer: %d\n", err);
 		return err;
 	}
 
-	pr_info("%s: Set JQS Affine Skin addr = 0x%08x\n", __func__,
-		JQS_AFFINE_SKIN_ADDR);
+	pr_info("Set JQS Affine Skin addr = 0x%08x\n", JQS_AFFINE_SKIN_ADDR);
 	err = dma_send_fw(JQS_AFFINE_SKIN_PATH, JQS_AFFINE_SKIN_ADDR);
 	if (err) {
-		pr_err("%s: Error during JQS binary transfer: %d\n", __func__,
-		       err);
+		pr_err("Error during JQS binary transfer: %d\n", err);
 		return err;
 	}
 
 	/* Send M0 workload */
-	pr_info("%s: Send M0 workload to addr 0x%08x\n", __func__,
-		WORKLOAD_ADDR);
+	pr_info("Send M0 workload to addr 0x%08x\n", WORKLOAD_ADDR);
 	err = dma_send_fw(M0_WORKLOAD_PATH, WORKLOAD_ADDR);
 	if (err) {
-		pr_err("%s: Error during M0 workload transfer: %d\n", __func__,
-		       err);
+		pr_err("Error during M0 workload transfer: %d\n", err);
 		return err;
 	}
 
