@@ -51,7 +51,8 @@ __setup("androidboot.mode=", get_bootmode);
 
 static bool is_factory_bootmode(void)
 {
-	for (int i = 0; i < ARRAY_SIZE(factory_bootmodes); i++)
+	int i = 0;
+	for (; i < ARRAY_SIZE(factory_bootmodes); i++)
 		if (!strncmp(factory_bootmodes[i], bootmode, sizeof(bootmode)))
 			return true;
 	return false;
