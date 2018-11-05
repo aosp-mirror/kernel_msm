@@ -32,7 +32,6 @@ static ssize_t chip_state_store(struct device *dev,
 {
 	int ret;
 	int val;
-	int rc;
 	struct ab_state_context *sc =
 		(struct ab_state_context *)dev_get_drvdata(dev);
 
@@ -57,8 +56,6 @@ static ssize_t version_show(struct device *dev,
 {
 	uint32_t val;
 	int ret = 0;
-	struct ab_state_context *sc =
-		(struct ab_state_context *)dev_get_drvdata(dev);
 
 	ret = ABC_READ(OTP_CHIP_ID_ADDR, &val);
 	if (ret < 0)
