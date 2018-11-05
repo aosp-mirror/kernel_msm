@@ -102,6 +102,13 @@
 	modemsmem {
 		compatible = "modemsmem";
 	};
+
+	bootloader_log {
+		compatible = "qcom,bldr_log";
+		reg = <0xA47EF000 0x5C00>, <0xA47F4C00 0x5C00>;
+		reg-names = "bl_log", "bl_old_log";
+		memory-region = <&debug_info>;
+	};
 };
 
 &ufsphy_mem {

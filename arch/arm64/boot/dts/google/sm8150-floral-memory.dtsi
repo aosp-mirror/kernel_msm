@@ -68,6 +68,12 @@
 };
 
 &reserved_memory {
+	debug_info: debug_info@A47EF000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xA47EF000 0 0x00010000>;
+	};
+
 	ramoops@A47FF000 {
 		compatible = "ramoops";
 		reg = <0 0xA47FF000 0 0x200000>;
