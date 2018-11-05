@@ -30,6 +30,7 @@
 	google,batt_psy_is_bms;
 	qcom,hvdcp-disable;
 	google,usb-port-tz-name = "usbc-therm";
+	qcom,dc-icl-ua = <1100000>;
 };
 
 &pm8150b_gpios {
