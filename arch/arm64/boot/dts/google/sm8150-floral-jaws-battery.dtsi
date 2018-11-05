@@ -22,7 +22,7 @@
 	p9221: p9221@61 { };
 };
 
-#include "sm8150-floral-wcharger.dtsi"
+#include "sm8150-floral-jaws-wcharger.dtsi"
 
 &google_charger {
 	google,chg-battery-capacity = <3430>;
