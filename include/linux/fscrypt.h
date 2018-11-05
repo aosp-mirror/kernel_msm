@@ -17,15 +17,8 @@
 #include <linux/fs.h>
 
 #define FS_CRYPTO_BLOCK_SIZE		16
-#define FS_ENCRYPTION_MODE_PRIVATE	127
-#define FS_AES_256_XTS_KEY_SIZE		64
 
 struct fscrypt_ctx;
-
-/* iv sector for security/pfe/pfk_fscrypt.c and f2fs */
-#define PG_DUN(i, p)                                            \
-	(((((u64)(i)->i_ino) & 0xffffffff) << 32) | ((p)->index & 0xffffffff))
-
 struct fscrypt_info;
 
 struct fscrypt_str {
