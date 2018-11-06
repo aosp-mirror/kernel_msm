@@ -229,17 +229,17 @@ static void cmdq_dumpregs(struct cmdq_host *cq_host)
 		mmc_hostname(mmc));
 	pr_err(DRV_NAME ": manfid = %u\n", mmc->card->cid.manfid);
 	pr_err(DRV_NAME ": part = %s\n", mmc->card->cid.prod_name);
-	pr_err(DRV_NAME ": prv = %u\n", mmc->card->cid.prv);
-	pr_err(DRV_NAME ": fwrev = %u\n", mmc->card->cid.fwrev);
-	pr_err(DRV_NAME ": pre_eol_info = %u\n",
+	pr_err(DRV_NAME ": prv = 0x%x\n", mmc->card->cid.prv);
+	pr_err(DRV_NAME ": fwrev = 0x%x\n", mmc->card->cid.fwrev);
+	pr_err(DRV_NAME ": pre_eol_info = 0x%x\n",
 		mmc->card->ext_csd.pre_eol_info);
-	pr_err(DRV_NAME ": lifetime_a = %u\n",
+	pr_err(DRV_NAME ": lifetime_a = 0x%x\n",
 		mmc->card->ext_csd.device_life_time_est_typ_a);
-	pr_err(DRV_NAME ": lifetime_b = %u\n",
+	pr_err(DRV_NAME ": lifetime_b = 0x%x\n",
 		mmc->card->ext_csd.device_life_time_est_typ_b);
-	pr_err(DRV_NAME ": fw_version = %u\n", mmc->card->ext_csd.fw_version);
+	pr_err(DRV_NAME ": fw_version = 0x%x\n", mmc->card->ext_csd.fw_version);
 	for (i = 0; i< MMC_FIRMWARE_LEN; i++) {
-		pr_err(DRV_NAME ": fwrev[%d] = %u\n",i,
+		pr_err(DRV_NAME ": fwrev[%d] = 0x%x\n",i,
 		mmc->card->ext_csd.fwrev[i]);
 	}
 
