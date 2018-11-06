@@ -52,6 +52,8 @@ function update_perf_config() {
     -d EFI \
     -d L2TP_DEBUGFS \
     -d REGMAP_ALLOW_WRITE_DEBUGFS \
+    -d CORESIGHT \
+    -d PAGE_POISONING \
 
 
   (cd ${OUT_DIR} && \
