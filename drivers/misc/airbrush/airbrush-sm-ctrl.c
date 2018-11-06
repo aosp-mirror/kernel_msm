@@ -449,8 +449,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		return -EINVAL;
 	}
 
-	if ((to_chip_substate_id == CHIP_STATE_5_0) ||
-		(to_chip_substate_id == CHIP_STATE_6_0)) {
+	if (((to_chip_substate_id == CHIP_STATE_5_0) ||
+			(to_chip_substate_id == CHIP_STATE_6_0)) &&
+			(sc->chip_substate_id < CHIP_STATE_5_0)) {
 		if (msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0, sc->pcie_dev, NULL,
 				MSM_PCIE_CONFIG_NO_CFG_RESTORE))
 			pr_err("PCIe failed to disable link\n");
