@@ -85,13 +85,21 @@
 #define AIRBRUSH_TMU_INTEN_RISE6_SHIFT		6
 #define AIRBRUSH_TMU_INTEN_RISE7_SHIFT		7
 
-#define AIRBRUSH_ONE_POINT_TRIMMING	0
-#define AIRBRUSH_TWO_POINT_TRIMMING	1
+#define AIRBRUSH_NO_TRIMMING	0
+#define AIRBRUSH_ONE_POINT_TRIMMING	1
+#define AIRBRUSH_TWO_POINT_TRIMMING	2
 
 #define AIRBRUSH_TMU_NO_TRIMMING_ERROR1	285
 #define AIRBRUSH_TMU_NO_TRIMMING_ERROR2	345
 
 #define AIRBRUSH_TMU_BASE	0xB90000
+#define AIRBRUSH_TEMP_PROBE_MAIN		0
+#define AIRBRUSH_TEMP_PROBE_IPU0		1
+#define AIRBRUSH_TEMP_PROBE_IPU1		2
+#define AIRBRUSH_TEMP_PROBE_IPU2		3
+#define AIRBRUSH_TEMP_PROBE_IPU_TPU		4
+#define AIRBRUSH_TEMP_PROBE_TPU0		5
+#define AIRBRUSH_TEMP_PROBE_TPU1		6
 #define AIRBRUSH_NUM_REMOTE_PROBE		0x6
 #define AIRBRUSH_REMOTE_PROBE_SHIFT		16
 #define AIRBRUSH_TMU_TEMP_SHIFT			9
@@ -269,6 +277,7 @@ static int temp_to_code(struct airbrush_tmu_data *data, u8 temp)
 	int temp_code;
 
 	switch (pdata->cal_type) {
+	case AIRBRUSH_NO_TRIMMING:
 	case AIRBRUSH_TWO_POINT_TRIMMING:
 		temp_code = (temp - pdata->first_point_trim) *
 			(data->temp_error2 - data->temp_error1) /
@@ -296,6 +305,7 @@ static int code_to_temp(struct airbrush_tmu_data *data, u16 temp_code)
 	int temp;
 
 	switch (pdata->cal_type) {
+	case AIRBRUSH_NO_TRIMMING:
 	case AIRBRUSH_TWO_POINT_TRIMMING:
 		temp = (temp_code - data->temp_error1) *
 			(pdata->second_point_trim - pdata->first_point_trim) /
@@ -357,8 +367,10 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 	    (data->temp_error1 > pdata->max_efuse_value))
 		data->temp_error1 = pdata->efuse_value & AIRBRUSH_TMU_TEMP_MASK;
 
-	data->temp_error1 = AIRBRUSH_TMU_NO_TRIMMING_ERROR1;
-	data->temp_error2 = AIRBRUSH_TMU_NO_TRIMMING_ERROR2;
+	if (pdata->cal_type == AIRBRUSH_NO_TRIMMING) {
+		data->temp_error1 = AIRBRUSH_TMU_NO_TRIMMING_ERROR1;
+		data->temp_error2 = AIRBRUSH_TMU_NO_TRIMMING_ERROR2;
+	}
 
 	for (i = (of_thermal_get_ntrips(tz) - 1); i >= 0; i--) {
 
@@ -549,7 +561,13 @@ static int airbrush_map_dt_data(struct platform_device *pdev)
 
 	pdata->min_efuse_value = AIRBRUSH_TMU_MIN_EFUSE_VAL;
 	pdata->max_efuse_value = AIRBRUSH_TMU_MAX_EFUSE_VAL;
-	pdata->cal_type = AIRBRUSH_TWO_POINT_TRIMMING;
+
+	if (of_property_read_u32(pdev->dev.of_node, "ab-tmu-trimming",
+			&pdata->cal_type)) {
+		pdata->cal_type = AIRBRUSH_NO_TRIMMING;
+		dev_dbg(&pdev->dev, "No ab-tmu-trimming property\n");
+	}
+
 	data->pdata = pdata;
 
 	return 0;
