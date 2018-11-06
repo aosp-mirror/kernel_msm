@@ -131,6 +131,9 @@ struct zram {
 	bool claim; /* Protected by bdev->bd_mutex */
 	struct file *backing_dev;
 #ifdef CONFIG_ZRAM_WRITEBACK
+	spinlock_t wb_limit_lock;
+	bool stop_writeback;
+	u64 bd_wb_limit;
 	struct block_device *bdev;
 	unsigned int old_block_size;
 	unsigned long *bitmap;
