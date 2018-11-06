@@ -1,13 +1,8 @@
-# FTM5 support
-obj-$(CONFIG_TOUCHSCREEN_FTS)	+= ftm5.o
-ftm5-objs = fts.o fts_proc.o
-ftm5-objs += \
-	fts_lib/ftsCompensation.o fts_lib/ftsCore.o fts_lib/ftsError.o \
-	fts_lib/ftsFrame.o fts_lib/ftsIO.o fts_lib/ftsTest.o fts_lib/ftsTime.o \
-	fts_lib/ftsTool.o fts_lib/ftsFlash.o fts_lib/ftsGesture.o
+KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
+M ?= $(shell pwd)
 
-# TODO: remove me b/62057517
-subdir-ccflags-y += \
-	-Wno-strncat-size \
-	-Wno-typedef-redefinition \
-	-Wno-parentheses-equality \
+KBUILD_OPTIONS += CONFIG_TOUCHSCREEN_FTS=m
+
+modules modules_install clean:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $(KBUILD_OPTIONS) $(@)
+
