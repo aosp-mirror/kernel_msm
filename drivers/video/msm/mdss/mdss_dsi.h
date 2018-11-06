@@ -555,6 +555,7 @@ struct mdss_dsi_ctrl_pdata {
 
 	bool timing_db_mode;
 	bool update_phy_timing; /* flag to recalculate PHY timings */
+	struct delayed_work idle_work;
 
 	bool phy_power_off;
 };
