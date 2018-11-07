@@ -658,6 +658,9 @@ got_it:
 	fio.page = page;
 	fio.new_blkaddr = fio.old_blkaddr = dn.data_blkaddr;
 
+	/* wait writeback before reading out */
+	f2fs_wait_on_block_writeback(inode, dn.data_blkaddr);
+
 	fio.encrypted_page = f2fs_pagecache_get_page(META_MAPPING(sbi),
 					dn.data_blkaddr,
 					FGP_LOCK | FGP_CREAT, GFP_NOFS);
@@ -754,6 +757,9 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	/* read page */
 	fio.page = page;
 	fio.new_blkaddr = fio.old_blkaddr = dn.data_blkaddr;
+
+	/* wait writeback before reading out */
+	f2fs_wait_on_block_writeback(inode, fio.old_blkaddr);
 
 	if (lfs_mode)
 		down_write(&fio.sbi->io_order_lock);
