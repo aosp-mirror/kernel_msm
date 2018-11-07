@@ -640,29 +640,44 @@ static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int index, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->cp_trigger_index < CS40L2X_INDEX_CLICK_MIN) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
+	index = cs40l2x->cp_trigger_index;
 
-	if (cs40l2x->cp_trigger_index > CS40L2X_INDEX_CLICK_MAX) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
+	switch (cs40l2x->fw_desc->id) {
+	case CS40L2X_FW_ID_REMAP:
+		if (index < CS40L2X_INDEX_CLICK_MIN
+				|| index > CS40L2X_INDEX_CLICK_MAX) {
+			ret = -EINVAL;
+			goto err_mutex;
+		}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = cs40l2x_user_ctrl_exec(cs40l2x,
+				CS40L2X_USER_CTRL_DURATION, index, &val);
+		if (ret)
+			goto err_mutex;
+		break;
+	case CS40L2X_FW_ID_CAL:
+		if (index != CS40L2X_INDEX_QEST) {
+			ret = -EINVAL;
+			goto err_mutex;
+		}
+
+		ret = regmap_read(cs40l2x->regmap,
+				cs40l2x_dsp_reg(cs40l2x, "TONE_DURATION_MS",
+						CS40L2X_XM_UNPACKED_TYPE),
+				&val);
+		if (ret)
+			goto err_mutex;
+
+		val *= CS40L2X_QEST_SRATE;
+		break;
+	default:
 		ret = -EPERM;
 		goto err_mutex;
 	}
-
-	ret = cs40l2x_user_ctrl_exec(cs40l2x, CS40L2X_USER_CTRL_DURATION,
-			cs40l2x->cp_trigger_index, &val);
-	if (ret)
-		goto err_mutex;
 
 	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
 
@@ -3143,10 +3158,14 @@ static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 		ret = regmap_read(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "Q_EST",
 						CS40L2X_XM_UNPACKED_TYPE),
-				&cs40l2x->q_measured);
+				&val);
 		if (ret)
 			return ret;
 
+		if (val == CS40L2X_QEST_ERROR)
+			return -EIO;
+
+		cs40l2x->q_measured = val;
 		cs40l2x->diag_state = CS40L2X_DIAG_STATE_DONE2;
 		return 0;
 
@@ -3489,7 +3508,8 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 	case CS40L2X_INDEX_QEST:
 		ret = cs40l2x_diag_capture(cs40l2x);
 		if (ret)
-			dev_err(dev, "Failed to capture measured value(s)\n");
+			dev_err(dev, "Failed to capture measurement(s): %d\n",
+					ret);
 
 		ret = cs40l2x_diag_enable(cs40l2x, CS40L2X_F0_TRACKING_OFF);
 		if (ret)
