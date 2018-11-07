@@ -190,6 +190,14 @@
 };
 
 &android_fstab {
+	system {
+		compatible = "android,system";
+		dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/system";
+		type = "ext4";
+		mnt_flags = "ro";
+		mnt_point = "/system";
+		fsmgr_flags = "wait,slotselect,avb";
+	};
 	product {
 		compatible = "android,product";
 		dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/product";
