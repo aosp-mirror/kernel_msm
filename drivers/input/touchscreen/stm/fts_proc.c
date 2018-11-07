@@ -700,7 +700,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	int numberParam = 0;
 	struct fts_ts_info *info = dev_get_drvdata(getDev());
 	char *p = NULL;
-	char pbuf[count];
+	char *pbuf = NULL;
 	char path[100] = { 0 };
 	int res = -1, j, index = 0;
 	int size = 6;
@@ -709,7 +709,7 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	u32 fileSize = 0;
 	u8 *readData = NULL;
 	u8 *cmd = NULL;	/* worst case needs count bytes */
-	u32 funcToTest[((count + 1) / 3)];
+	u32 *funcToTest = NULL;
 	u64 addr = 0;
 	MutualSenseFrame frameMS;
 	MutualSenseFrame deltas;
@@ -740,6 +740,19 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			limit = scnprintf(driver_test_buff, size, "{ %08X }\n",
 					  res);
 		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
+		goto ERROR;
+	}
+
+	pbuf = kmalloc(count * sizeof(*pbuf), GFP_KERNEL);
+	if (!pbuf) {
+		res = ERROR_ALLOC;
+		goto ERROR;
+	}
+
+	funcToTest = kmalloc(((count + 1) / 3) * sizeof(*funcToTest),
+			     GFP_KERNEL);
+	if (!funcToTest) {
+		res = ERROR_ALLOC;
 		goto ERROR;
 	}
 
@@ -3258,6 +3271,8 @@ ERROR:
 
 	kfree(readData);
 	kfree(cmd);
+	kfree(funcToTest);
+	kfree(pbuf);
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 
