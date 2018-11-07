@@ -17,6 +17,7 @@
 			function = "gpio";
 		};
 		config {
+			pins = "gpio152";
 			drive-strength = <2>;
 			output-low;
 		};
