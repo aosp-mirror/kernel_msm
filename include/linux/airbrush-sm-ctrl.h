@@ -264,6 +264,87 @@ struct ab_sm_state_stat {
 
 typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 
+struct ab_sm_pwr_ops {
+	void *ctx;
+
+	// TODO: Define pwr ops
+	int (*pmu_sleep)(void *ctx);
+	int (*pmu_deep_sleep)(void *ctx);
+	int (*pmu_resume)(void *ctx);
+};
+
+static int pmu_sleep_stub(void *ctx)      { return -ENODEV; }
+static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
+static int pmu_resume_stub(void *ctx)     { return -ENODEV; }
+
+static struct ab_sm_pwr_ops pwr_ops_stub = {
+	.ctx = NULL,
+
+	// TODO: Fill in with pwr ops
+	.pmu_sleep = &pmu_sleep_stub,
+	.pmu_deep_sleep = &pmu_deep_sleep_stub,
+	.pmu_resume = &pmu_resume_stub,
+};
+
+struct ab_sm_clk_ops {
+	void *ctx;
+
+	int (*ipu_gate)(void *ctx);
+	int (*ipu_ungate)(void *ctx);
+	int (*tpu_gate)(void *ctx);
+	int (*tpu_ungate)(void *ctx);
+	int (*attach_mif_clk_ref)(void *ctx);
+	int (*deattach_mif_clk_ref)(void *ctx);
+};
+
+static int ipu_gate_stub(void *ctx)   { return -ENODEV; }
+static int ipu_ungate_stub(void *ctx) { return -ENODEV; }
+static int tpu_gate_stub(void *ctx)   { return -ENODEV; }
+static int tpu_ungate_stub(void *ctx) { return -ENODEV; }
+static int attach_mif_clk_ref_stub(void *ctx)   { return -ENODEV; }
+static int deattach_mif_clk_ref_stub(void *ctx) { return -ENODEV; }
+
+static struct ab_sm_clk_ops clk_ops_stub = {
+	.ctx = NULL,
+
+	.ipu_gate = &ipu_gate_stub,
+	.ipu_ungate = &ipu_ungate_stub,
+	.tpu_gate = &tpu_gate_stub,
+	.tpu_ungate = &tpu_ungate_stub,
+	.attach_mif_clk_ref = &attach_mif_clk_ref_stub,
+	.deattach_mif_clk_ref = &deattach_mif_clk_ref_stub,
+};
+
+struct ab_sm_dram_ops {
+	void *ctx;
+
+	// TODO: Define dram ops
+};
+
+static struct ab_sm_dram_ops dram_ops_stub = {
+	.ctx = NULL,
+
+	// TODO: Fill in with dram ops
+};
+
+struct ab_sm_mfd_ops {
+	void *ctx;
+
+	// TODO: Define mfd ops
+	int (*enter_el2)(void *ctx);
+	int (*exit_el2)(void *ctx);
+};
+
+static int enter_el2_stub(void *ctx) { return -ENODEV; }
+static int exit_el2_stub(void *ctx)  { return -ENODEV; }
+
+static struct ab_sm_mfd_ops mfd_ops_stub = {
+	.ctx = NULL,
+
+	.enter_el2 = &enter_el2_stub,
+	.exit_el2 = &exit_el2_stub,
+};
+
 /**
  * struct ab_state_context - stores the context of airbrush soc
  *
@@ -364,6 +445,19 @@ struct ab_state_context {
 
 	/* power state stats */
 	struct ab_sm_state_stat state_stats[STAT_STATE_SIZE];
+
+	// MFD child operations
+	struct mutex 		op_lock;
+	struct ab_sm_pwr_ops	*pwr_ops;
+	struct ab_sm_clk_ops	*clk_ops;
+	struct ab_sm_dram_ops	*dram_ops;
+
+	/* NOTE: separate lock needed for mfd ops, as enter/exit_el2
+	 * will likely cause mfd to call unregister methods for other ops.
+	 * Would deadlock if using op_lock.
+	 */
+	struct mutex 		mfd_lock;
+	struct ab_sm_mfd_ops	*mfd_ops;
 };
 
 struct ab_sm_misc_session {
@@ -382,6 +476,15 @@ struct ab_sm_misc_session {
  */
 void ab_sm_register_blk_callback(enum block_name name,
 		ab_sm_set_block_state_t callback, void *data);
+
+void ab_sm_register_pwr_ops(struct ab_sm_pwr_ops *ops);
+void ab_sm_unregister_pwr_ops(void);
+void ab_sm_register_clk_ops(struct ab_sm_clk_ops *ops);
+void ab_sm_unregister_clk_ops(void);
+void ab_sm_register_dram_ops(struct ab_sm_dram_ops *ops);
+void ab_sm_unregister_dram_ops(void);
+void ab_sm_register_mfd_ops(struct ab_sm_mfd_ops *ops);
+void ab_sm_unregister_mfd_ops(void);
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
 void ab_sm_exit(struct platform_device *pdev);

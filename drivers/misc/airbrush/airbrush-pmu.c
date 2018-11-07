@@ -25,7 +25,7 @@
 #define CMU_IPU_IPU_CONTROLLER_OPTION			0x10240800
 #define CMU_TPU_TPU_CONTROLLER_OPTION			0x10040800
 
-int ab_pmu_sleep(void)
+int ab_pmu_sleep(void *ctx)
 {
 	uint32_t val;
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
@@ -62,7 +62,7 @@ int ab_pmu_sleep(void)
 	return 0;
 }
 
-int ab_pmu_deep_sleep(void)
+int ab_pmu_deep_sleep(void *ctx)
 {
 	uint32_t val;
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
@@ -118,7 +118,7 @@ void abc_ipu_tpu_enable(void)
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
 }
 
-int ab_pmu_resume(void)
+int ab_pmu_resume(void *ctx)
 {
 	uint32_t val;
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;

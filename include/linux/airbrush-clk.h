@@ -29,18 +29,21 @@ void abc_clk_tpu_init(struct device_node *np);
 /* TODO: Move away from using state manager context
  * pointer. This is a temporary fix to kernel crashing.
  */
-void ipu_gate(struct ab_state_context *ab_ctx);
-void ipu_ungate(struct ab_state_context *ab_ctx);
+int ipu_gate(void *ctx);
+int ipu_ungate(void *ctx);
 int ipu_pll_enable(struct ab_state_context *ab_ctx);
 void ipu_pll_disable(struct ab_state_context *ab_ctx);
 u64 ipu_set_rate(struct ab_state_context *ab_ctx, u64 rate);
 
-void tpu_gate(struct ab_state_context *ab_ctx);
-void tpu_ungate(struct ab_state_context *ab_ctx);
+int tpu_gate(void *ctx);
+int tpu_ungate(void *ctx);
 int tpu_pll_enable(struct ab_state_context *ab_ctx);
 void tpu_pll_disable(struct ab_state_context *ab_ctx);
 u64 tpu_set_rate(struct ab_state_context *ab_ctx, u64 rate);
 
 u64 aon_set_rate(struct ab_state_context *sc, u64 rate);
+
+int attach_mif_clk_ref(void *ctx);
+int deattach_mif_clk_ref(void *ctx);
 
 #endif //_AIRBRUSH_CLK_H_

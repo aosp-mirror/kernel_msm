@@ -186,37 +186,45 @@ void ab_sm_register_blk_callback(enum block_name name,
 	ab_sm_ctx->blocks[name].data = data;
 }
 
+/* Caller must hold sc->op_lock */
 int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 u64 frequency, enum states clk_status)
 {
+	int ret = 0;
+	struct ab_sm_clk_ops *clk = sc->clk_ops;
+
 	switch (blk->name) {
 	case BLK_IPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
 			ipu_pll_enable(sc);
-		if (blk->current_state->clk_status == off && clk_status == on)
-			ipu_ungate(sc);
+		if (blk->current_state->clk_status == off && clk_status == on) {
+			ret = clk->ipu_ungate(clk->ctx);
+		}
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
 		ipu_set_rate(sc, frequency);
 
-		if (blk->current_state->clk_status == on && clk_status == off)
-			ipu_gate(sc);
+		if (blk->current_state->clk_status == on && clk_status == off) {
+			ret = clk->ipu_gate(clk->ctx);
+		}
 		if (!clk_status && !frequency)
 			ipu_pll_disable(sc);
 		break;
 	case BLK_TPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
 			tpu_pll_enable(sc);
-		if (blk->current_state->clk_status == off && clk_status == on)
-			tpu_ungate(sc);
+		if (blk->current_state->clk_status == off && clk_status == on) {
+			ret = clk->tpu_ungate(clk->ctx);
+		}
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
 		tpu_set_rate(sc, frequency);
 
-		if (blk->current_state->clk_status == on && clk_status == off)
-			tpu_gate(sc);
+		if (blk->current_state->clk_status == on && clk_status == off) {
+			ret = clk->tpu_gate(clk->ctx);
+		}
 		if (!clk_status && !frequency)
 			tpu_pll_disable(sc);
 		break;
@@ -234,12 +242,13 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	default:
 		return -EINVAL;
 	}
-	return 0;
+	return ret;
 }
 
 int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	u32 to_block_state_id, bool power_control, u32 to_chip_substate_id)
 {
+	struct ab_sm_pwr_ops *pwr;
 	bool power_increasing;
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
@@ -252,14 +261,17 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	power_increasing = (blk->current_state->logic_voltage
 				< desired_state->logic_voltage);
 
-
+	mutex_lock(&sc->op_lock);
+	pwr = sc->pwr_ops;
 	/* PMU settings */
 	if (power_control && blk->name == BLK_IPU) {
 		if (desired_state->id != BLOCK_STATE_1_2
 				&& desired_state->id != BLOCK_STATE_3_0
 				&& blk->current_state->id >= BLOCK_STATE_1_2) {
-			if (ab_pmu_resume())
+			if (pwr->pmu_resume(pwr->ctx)) {
+				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
+			}
 		}
 	}
 
@@ -269,14 +281,18 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	/* Block specific hooks */
 	if (blk->set_state)
 		blk->set_state(blk->current_state, desired_state,
-			       to_chip_substate_id, blk->data);
+				   to_chip_substate_id, blk->data);
 
 	/* PMU settings */
 	if (power_control && blk->name == BLK_TPU) {
-		if (desired_state->id == BLOCK_STATE_1_2 && ab_pmu_sleep())
+		if (desired_state->id == BLOCK_STATE_1_2 && pwr->pmu_sleep(pwr->ctx)) {
+			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
-		if (desired_state->id == BLOCK_STATE_3_0 && ab_pmu_deep_sleep())
+		}
+		if (desired_state->id == BLOCK_STATE_3_0 && pwr->pmu_deep_sleep(pwr->ctx)) {
+			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
+		}
 	}
 
 	/*Regulator Settings*/
@@ -289,6 +305,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	blk->current_state = desired_state;
 
+	mutex_unlock(&sc->op_lock);
 	return 0;
 }
 
@@ -400,8 +417,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
 	u32 to_chip_substate_id;
 	int i;
-	uint32_t val;
-	uint32_t timeout = MIF_PLL_TIMEOUT;
+	int ret;
 	struct chip_to_block_map *map = NULL;
 	enum chip_state prev_state = sc->curr_chip_substate_id;
 
@@ -437,23 +453,15 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	   to_chip_substate_id < CHIP_STATE_3_0)
 		ab_pmic_on(sc);
 
-	/* TODO(b/119189465): remove when clk framework method is available */
 	if ((sc->curr_chip_substate_id == CHIP_STATE_5_0 ||
-	    sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
-	    sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
-	    to_chip_substate_id < CHIP_STATE_3_0) {
-		ABC_READ(MIF_PLL_CONTROL0, &val);
-		val |= (1 << 4);
-		val |= (1 << 31);
-		ABC_WRITE(MIF_PLL_CONTROL0, val);
-		do {
-			ABC_READ(MIF_PLL_CONTROL0, &val);
-		} while (!(val & 0x20000000) && --timeout > 0);
-
-		if (timeout == 0) {
-			pr_err("Timeout waiting for AIRBRUSH MIF PLL lock\n");
-			return -E_STATUS_TIMEOUT;
-		}
+			sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
+			sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
+			to_chip_substate_id < CHIP_STATE_3_0) {
+		mutex_lock(&sc->op_lock);
+		ret = sc->clk_ops->deattach_mif_clk_ref(sc->clk_ops->ctx);
+		mutex_unlock(&sc->op_lock);
+		if (ret)
+			return ret;
 	}
 
 	/*
@@ -462,46 +470,46 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 */
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
-		      map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
+			map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
 			to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
-		      map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL),
+			map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL),
 			to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
-		      map->dram_block_state_id, true, to_chip_substate_id)) {
+			map->dram_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-		      map->mif_block_state_id, true, to_chip_substate_id)) {
+			map->mif_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-		      map->fsys_block_state_id, true, to_chip_substate_id)) {
+			map->fsys_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-		      map->aon_block_state_id, true, to_chip_substate_id)) {
+			map->aon_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
-	/* TODO(b/119189465): remove when clk framework method is available */
 	if ((to_chip_substate_id == CHIP_STATE_3_0 ||
-	    to_chip_substate_id == CHIP_STATE_4_0 ||
-	    to_chip_substate_id == CHIP_STATE_5_0) &&
-	    sc->curr_chip_substate_id < CHIP_STATE_3_0) {
-		ABC_READ(MIF_PLL_CONTROL0, &val);
-		val &= ~(1 << 4);
-		val &= ~(1 << 31);
-		ABC_WRITE(MIF_PLL_CONTROL0, val);
+			to_chip_substate_id == CHIP_STATE_4_0 ||
+			to_chip_substate_id == CHIP_STATE_5_0) &&
+			sc->curr_chip_substate_id < CHIP_STATE_3_0) {
+		mutex_lock(&sc->op_lock);
+		ret = sc->clk_ops->attach_mif_clk_ref(sc->clk_ops->ctx);
+		mutex_unlock(&sc->op_lock);
+		if (ret)
+			return ret;
 	}
 
 	if (((to_chip_substate_id == CHIP_STATE_5_0) ||
@@ -631,6 +639,70 @@ enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 
 	return sc->chip_id;
 }
+
+void ab_sm_register_pwr_ops(struct ab_sm_pwr_ops *ops)
+{
+	mutex_lock(&ab_sm_ctx->op_lock);
+	ab_sm_ctx->pwr_ops = ops;
+	mutex_unlock(&ab_sm_ctx->op_lock);
+}
+EXPORT_SYMBOL(ab_sm_register_pwr_ops);
+
+void ab_sm_unregister_pwr_ops(void)
+{
+	mutex_lock(&ab_sm_ctx->op_lock);
+	ab_sm_ctx->pwr_ops = &pwr_ops_stub;
+	mutex_unlock(&ab_sm_ctx->op_lock);
+}
+EXPORT_SYMBOL(ab_sm_unregister_pwr_ops);
+
+void ab_sm_register_clk_ops(struct ab_sm_clk_ops *ops)
+{
+	mutex_lock(&ab_sm_ctx->op_lock);
+	ab_sm_ctx->clk_ops = ops;
+	mutex_unlock(&ab_sm_ctx->op_lock);
+}
+EXPORT_SYMBOL(ab_sm_register_clk_ops);
+
+void ab_sm_unregister_clk_ops(void)
+{
+	mutex_lock(&ab_sm_ctx->op_lock);
+	ab_sm_ctx->clk_ops = &clk_ops_stub;
+	mutex_unlock(&ab_sm_ctx->op_lock);
+}
+EXPORT_SYMBOL(ab_sm_unregister_clk_ops);
+
+void ab_sm_register_dram_ops(struct ab_sm_dram_ops *ops)
+{
+	mutex_lock(&ab_sm_ctx->op_lock);
+	ab_sm_ctx->dram_ops = ops;
+	mutex_unlock(&ab_sm_ctx->op_lock);
+}
+EXPORT_SYMBOL(ab_sm_register_dram_ops);
+
+void ab_sm_unregister_dram_ops(void)
+{
+	mutex_lock(&ab_sm_ctx->op_lock);
+	ab_sm_ctx->dram_ops = &dram_ops_stub;
+	mutex_unlock(&ab_sm_ctx->op_lock);
+}
+EXPORT_SYMBOL(ab_sm_unregister_dram_ops);
+
+void ab_sm_register_mfd_ops(struct ab_sm_mfd_ops *ops)
+{
+	mutex_lock(&ab_sm_ctx->mfd_lock);
+	ab_sm_ctx->mfd_ops = ops;
+	mutex_unlock(&ab_sm_ctx->mfd_lock);
+}
+EXPORT_SYMBOL(ab_sm_register_mfd_ops);
+
+void ab_sm_unregister_mfd_ops(void)
+{
+	mutex_lock(&ab_sm_ctx->mfd_lock);
+	ab_sm_ctx->mfd_ops = &mfd_ops_stub;
+	mutex_unlock(&ab_sm_ctx->mfd_lock);
+}
+EXPORT_SYMBOL(ab_sm_unregister_mfd_ops);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx)
 {
@@ -836,6 +908,23 @@ static void ab_sm_state_stats_init(struct ab_state_context *sc)
 	sc->state_stats[curr_stat_state].last_entry = ktime_get_boottime();
 }
 
+// TODO: Pull this out to clock driver
+static struct ab_sm_clk_ops clk_ops = {
+	.ipu_gate = &ipu_gate,
+	.ipu_ungate = &ipu_ungate,
+	.tpu_gate = &tpu_gate,
+	.tpu_ungate = &tpu_ungate,
+	.attach_mif_clk_ref = &attach_mif_clk_ref,
+	.deattach_mif_clk_ref = &deattach_mif_clk_ref,
+};
+
+//TODO: Pull this out to pmu driver
+static struct ab_sm_pwr_ops pwr_ops = {
+	.pmu_sleep = &ab_pmu_sleep,
+	.pmu_deep_sleep = &ab_pmu_deep_sleep,
+	.pmu_resume = &ab_pmu_resume,
+};
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -953,6 +1042,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	mutex_init(&ab_sm_ctx->pmic_lock);
 	mutex_init(&ab_sm_ctx->state_lock);
 	mutex_init(&ab_sm_ctx->async_fifo_lock);
+	mutex_init(&ab_sm_ctx->op_lock);
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	atomic_set(&ab_sm_ctx->async_in_use, 0);
 	init_completion(&ab_sm_ctx->state_change_comp);
@@ -961,6 +1051,20 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 
 	/* initialize state stats */
 	ab_sm_state_stats_init(ab_sm_ctx);
+
+	/* Initialize mfd ops */
+	ab_sm_register_pwr_ops(&pwr_ops_stub);
+	ab_sm_register_clk_ops(&clk_ops_stub);
+	ab_sm_register_dram_ops(&dram_ops_stub);
+	ab_sm_register_mfd_ops(&mfd_ops_stub);
+
+	// TODO: Pull this out to clock driver
+	clk_ops.ctx = ab_sm_ctx;
+	ab_sm_register_clk_ops(&clk_ops);
+
+	// TODO: Pull this out to pmu driver
+	pwr_ops.ctx = ab_sm_ctx;
+	ab_sm_register_pwr_ops(&pwr_ops);
 
 	/*
 	 * TODO error handle at airbrush-sm should return non-zero value to

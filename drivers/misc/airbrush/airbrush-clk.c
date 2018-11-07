@@ -43,8 +43,10 @@ void ipu_pll_disable(struct ab_state_context *sc)
 	clk_disable_unprepare(sc->ipu_pll);
 }
 
-void ipu_gate(struct ab_state_context *sc)
+// TODO: Pull this out to clock driver
+int ipu_gate(void *ctx)
 {
+	struct ab_state_context *sc = (struct ab_state_context *)ctx;
 	uint32_t val;
 
 	dev_dbg(sc->dev, "%s: gate IPU clock\n", __func__);
@@ -54,10 +56,14 @@ void ipu_gate(struct ab_state_context *sc)
 	val |= (1 << 20);
 	val &= ~(1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
+
+	return 0;
 }
 
-void ipu_ungate(struct ab_state_context *sc)
+// TODO: Pull this out to clock driver
+int ipu_ungate(void *ctx)
 {
+	struct ab_state_context *sc = (struct ab_state_context *)ctx;
 	uint32_t val;
 
 	dev_dbg(sc->dev, "%s: ungate IPU clock\n", __func__);
@@ -67,6 +73,8 @@ void ipu_ungate(struct ab_state_context *sc)
 	val |= (1 << 20);
 	val |= (1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
+
+	return 0;
 }
 
 u64 ipu_set_rate(struct ab_state_context *sc, u64 rate)
@@ -98,8 +106,10 @@ u64 ipu_set_rate(struct ab_state_context *sc, u64 rate)
 	return clk_get_rate(sc->ipu_switch_mux);
 }
 
-void tpu_gate(struct ab_state_context *sc)
+// TODO: Pull this out to clock driver
+int tpu_gate(void *ctx)
 {
+	struct ab_state_context *sc = (struct ab_state_context *)ctx;
 	uint32_t val;
 
 	dev_dbg(sc->dev, "%s: gate TPU clocks\n", __func__);
@@ -109,10 +119,14 @@ void tpu_gate(struct ab_state_context *sc)
 	val |= (1 << 20);
 	val &= ~(1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
+
+	return 0;
 }
 
-void tpu_ungate(struct ab_state_context *sc)
+// TODO: Pull this out to clock driver
+int tpu_ungate(void *ctx)
 {
+	struct ab_state_context *sc = (struct ab_state_context *)ctx;
 	uint32_t val;
 
 	dev_dbg(sc->dev, "%s: ungate TPU clocks\n", __func__);
@@ -122,6 +136,8 @@ void tpu_ungate(struct ab_state_context *sc)
 	val |= (1 << 20);
 	val |= (1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
+
+	return 0;
 }
 
 int tpu_pll_enable(struct ab_state_context *sc)
@@ -198,6 +214,42 @@ u64 aon_set_rate(struct ab_state_context *sc, u64 rate)
 	return clk_get_rate(sc->aon_pll_mux);
 }
 
+/* TODO: Pull this out to clock driver */
+/* TODO(b/119189465): remove when clk framework method is available */
+int attach_mif_clk_ref(void *ctx)
+{
+	uint32_t val;
+	ABC_READ(MIF_PLL_CONTROL0, &val);
+	val &= ~(1 << 4);
+	val &= ~(1 << 31);
+	ABC_WRITE(MIF_PLL_CONTROL0, val);
+	return 0;
+}
+
+/* TODO: Pull this out to clock driver */
+/* TODO(b/119189465): remove when clk framework method is available */
+int deattach_mif_clk_ref(void *ctx)
+{
+	uint32_t val;
+	uint32_t timeout = MIF_PLL_TIMEOUT;
+	ABC_READ(MIF_PLL_CONTROL0, &val);
+	val |= (1 << 4);
+	val |= (1 << 31);
+	ABC_WRITE(MIF_PLL_CONTROL0, val);
+	do {
+		ABC_READ(MIF_PLL_CONTROL0, &val);
+	} while (!(val & 0x20000000) && --timeout > 0);
+
+	if (timeout == 0) {
+		pr_err("Timeout waiting for AIRBRUSH MIF PLL lock\n");
+		return -E_STATUS_TIMEOUT;
+	}
+
+	return 0;
+}
+
+/* TODO: Pull this out to clk driver.
+ * To be called during probe/pci link up? */
 void abc_clk_register(struct ab_state_context *sc)
 {
 	struct platform_device *pdev = sc->pdev;
