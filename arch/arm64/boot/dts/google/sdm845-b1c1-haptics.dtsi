@@ -12,6 +12,7 @@
 			function = "gpio";
 		};
 		config {
+			pins = "gpio87";
 			drive-strength = <2>;
 			output-low;
 		};
