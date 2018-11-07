@@ -85,21 +85,9 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case FACEAUTH_DEV_IOC_INIT:
-		/*
-		 * TODO: A number of things need to be done here:
-		 *   init PCI link
-		 *   load M0 firmware
-		 */
 		pr_info("faceauth init IOCTL\n");
 		break;
 	case FACEAUTH_DEV_IOC_START:
-		/*
-		 * TODO:
-		 *   load models from filesystem
-		 *   verify models
-		 *   clean Airbrush DRAM
-		 *   load models into Airbrush DRAM
-		 */
 		pr_info("faceauth start IOCTL\n");
 
 		if (copy_from_user(&start_step_data, (const void __user *)arg,
