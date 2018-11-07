@@ -808,6 +808,7 @@ static ssize_t reipl_generic_loadparm_store(struct ipl_parameter_block *ipb,
 	/* copy and convert to ebcdic */
 	memcpy(ipb->hdr.loadparm, buf, lp_len);
 	ASCEBC(ipb->hdr.loadparm, LOADPARM_LEN);
+	ipb->hdr.flags |= DIAG308_FLAGS_LP_VALID;
 	return len;
 }
 
@@ -2101,13 +2102,6 @@ void s390_reset_system(void (*func)(void *), void *data)
 	S390_lowcore.program_new_psw.mask = PSW_KERNEL_BITS | PSW_MASK_DAT;
 	S390_lowcore.program_new_psw.addr =
 		PSW_ADDR_AMODE | (unsigned long) s390_base_pgm_handler;
-
-	/*
-	 * Clear subchannel ID and number to signal new kernel that no CCW or
-	 * SCSI IPL has been done (for kexec and kdump)
-	 */
-	S390_lowcore.subchannel_id = 0;
-	S390_lowcore.subchannel_nr = 0;
 
 	/* Store status at absolute zero */
 	store_status();

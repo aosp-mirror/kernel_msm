@@ -174,6 +174,7 @@ static const struct flag_entry context_flags[] = {KGSL_CONTEXT_FLAGS};
  * KGSL_CONTEXT_PRIV_DEVICE_SPECIFIC so it is ok to cross the streams here.
  */
 static const struct flag_entry context_priv[] = {
+	{ KGSL_CONTEXT_PRIV_SUBMITTED, "submitted"},
 	{ KGSL_CONTEXT_PRIV_DETACHED, "detached"},
 	{ KGSL_CONTEXT_PRIV_INVALID, "invalid"},
 	{ KGSL_CONTEXT_PRIV_PAGEFAULT, "pagefault"},
@@ -232,8 +233,7 @@ static void cmdbatch_print(struct seq_file *s, struct kgsl_cmdbatch *cmdbatch)
 	if (cmdbatch->flags & KGSL_CONTEXT_SYNC)
 		return;
 
-	seq_printf(s, "\t%d: ib: expires: %lu",
-		cmdbatch->timestamp, cmdbatch->expires);
+	seq_printf(s, "\t%d: ", cmdbatch->timestamp);
 
 	seq_puts(s, " flags: ");
 	print_flags(s, cmdbatch_flags, ARRAY_SIZE(cmdbatch_flags),

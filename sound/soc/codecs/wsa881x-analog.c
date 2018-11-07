@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -903,7 +903,8 @@ static int wsa881x_startup(struct wsa881x_pdata *pdata)
 	if (pdata->enable_mclk) {
 		ret = pdata->enable_mclk(card, true);
 		if (ret < 0) {
-			pr_err("%s: mclk enable failed %d\n",
+			dev_err_ratelimited(codec->dev,
+				"%s: mclk enable failed %d\n",
 				__func__, ret);
 			return ret;
 		}
@@ -966,7 +967,8 @@ static int32_t wsa881x_resource_acquire(struct snd_soc_codec *codec,
 	if (enable) {
 		ret = wsa881x_startup(wsa881x);
 		if (ret < 0) {
-			pr_err("%s: failed to startup\n", __func__);
+			dev_err_ratelimited(codec->dev,
+				"%s: failed to startup\n", __func__);
 			return ret;
 		}
 	}
@@ -975,7 +977,8 @@ static int32_t wsa881x_resource_acquire(struct snd_soc_codec *codec,
 	if (!enable) {
 		ret = wsa881x_shutdown(wsa881x);
 		if (ret < 0)
-			pr_err("%s: failed to shutdown\n", __func__);
+			dev_err_ratelimited(codec->dev,
+				"%s: failed to shutdown\n", __func__);
 	}
 	return ret;
 }
@@ -984,12 +987,18 @@ static int32_t wsa881x_temp_reg_read(struct snd_soc_codec *codec,
 				     struct wsa_temp_register *wsa_temp_reg)
 {
 	struct wsa881x_pdata *wsa881x = snd_soc_codec_get_drvdata(codec);
+	int ret = 0;
 
 	if (!wsa881x) {
 		dev_err(codec->dev, "%s: wsa881x is NULL\n", __func__);
 		return -EINVAL;
 	}
-	wsa881x_resource_acquire(codec, true);
+	ret = wsa881x_resource_acquire(codec, true);
+	if (ret) {
+		dev_err_ratelimited(codec->dev,
+			"%s: resource acquire fail\n", __func__);
+		return ret;
+	}
 
 	if (WSA881X_IS_2_0(wsa881x->version)) {
 		snd_soc_update_bits(codec, WSA881X_TADC_VALUE_CTL, 0x01, 0x00);
@@ -1007,9 +1016,12 @@ static int32_t wsa881x_temp_reg_read(struct snd_soc_codec *codec,
 	wsa_temp_reg->d2_msb = snd_soc_read(codec, WSA881X_OTP_REG_3);
 	wsa_temp_reg->d2_lsb = snd_soc_read(codec, WSA881X_OTP_REG_4);
 
-	wsa881x_resource_acquire(codec, false);
+	ret = wsa881x_resource_acquire(codec, false);
+	if (ret)
+		dev_err_ratelimited(codec->dev,
+			"%s: resource release fail\n", __func__);
 
-	return 0;
+	return ret;
 }
 
 static int wsa881x_probe(struct snd_soc_codec *codec)
@@ -1246,8 +1258,10 @@ static int wsa881x_i2c_probe(struct i2c_client *client,
 
 	if ((client->addr == WSA881X_I2C_SPK0_SLAVE1_ADDR ||
 		client->addr == WSA881X_I2C_SPK1_SLAVE1_ADDR) &&
-		(pdata->status == WSA881X_STATUS_PROBING))
+		(pdata->status == WSA881X_STATUS_PROBING)) {
+		wsa881x_probing_count++;
 		return ret;
+	}
 
 	if (pdata->status == WSA881X_STATUS_I2C) {
 		dev_dbg(&client->dev, "%s:probe for other slaves\n"
@@ -1276,6 +1290,7 @@ static int wsa881x_i2c_probe(struct i2c_client *client,
 					pdata->regmap[WSA881X_ANALOG_SLAVE],
 					WSA881X_ANALOG_SLAVE);
 
+		wsa881x_probing_count++;
 		return ret;
 	} else if (pdata->status == WSA881X_STATUS_PROBING) {
 		pdata->index = wsa881x_index;
@@ -1301,7 +1316,6 @@ static int wsa881x_i2c_probe(struct i2c_client *client,
 			ret = -EINVAL;
 			goto err;
 		}
-		i2c_set_clientdata(client, pdata);
 		dev_set_drvdata(&client->dev, client);
 
 		pdata->regmap[WSA881X_DIGITAL_SLAVE] =
@@ -1359,7 +1373,7 @@ err:
 
 static int wsa881x_i2c_remove(struct i2c_client *client)
 {
-	struct wsa881x_pdata *wsa881x = i2c_get_clientdata(client);
+	struct wsa881x_pdata *wsa881x = client->dev.platform_data;
 
 	snd_soc_unregister_codec(&client->dev);
 	i2c_set_clientdata(client, NULL);
@@ -1406,6 +1420,7 @@ static struct i2c_driver wsa881x_codec_driver = {
 	.driver = {
 		.name = "wsa881x-i2c-codec",
 		.owner = THIS_MODULE,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 #ifdef CONFIG_PM_SLEEP
 		.pm = &wsa881x_i2c_pm_ops,
 #endif

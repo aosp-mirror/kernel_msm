@@ -1,4 +1,5 @@
-/* Copyright (c) 2013-2014, 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, 2016-2018, The Linux Foundation. All rights reserved.
+ *
  * Copyright (C) 2007 Google Incorporated
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,11 +31,16 @@
 #define MDP_CORE_CLK_RATE_SVS	160000000
 #define MDP_CORE_CLK_RATE_SUPER_SVS	200000000
 #define MDP_CORE_CLK_RATE_MAX	307200000
+#define SEC_DEVICE_MDP3         1
+
+#define CLK_FUDGE_NUM		12
+#define CLK_FUDGE_DEN		10
 
 /* PPP cant work at SVS for panel res above qHD */
 #define SVS_MAX_PIXEL		(540 * 960)
 
-#define KOFF_TIMEOUT msecs_to_jiffies(84)
+#define KOFF_TIMEOUT_MS 84
+#define KOFF_TIMEOUT msecs_to_jiffies(KOFF_TIMEOUT_MS)
 #define WAIT_DMA_TIMEOUT msecs_to_jiffies(84)
 
 /*
@@ -43,6 +49,9 @@
  */
 #define MDP_SMART_BLIT                 0xC0000000
 
+#define BITS_PER_BYTE 8
+#define MDP_IMGTYPE_LIMIT1 0x100
+#define BITS_TO_BYTES(x) DIV_ROUND_UP(x, BITS_PER_BYTE)
 
 enum  {
 	MDP3_CLK_AHB,
@@ -78,6 +87,7 @@ enum {
 	MDP3_CLIENT_DSI = 1,
 	MDP3_CLIENT_PPP,
 	MDP3_CLIENT_IOMMU,
+	MDP3_CLIENT_SPI,
 	MDP3_CLIENT_MAX,
 };
 
@@ -85,6 +95,12 @@ enum {
 	DI_PARTITION_NUM = 0,
 	DI_DOMAIN_NUM = 1,
 	DI_MAX,
+};
+
+enum mdp3_sd_transition {
+	NO_TRANSITION,
+	NONSECURE_TO_SECURE,
+	SECURE_TO_NONSECURE,
 };
 
 struct mdp3_bus_handle_map {
@@ -203,6 +219,13 @@ struct mdp3_hw_resource {
 	bool solid_fill_vote_en;
 	struct list_head reg_bus_clist;
 	struct mutex reg_bus_lock;
+	int bklt_level;
+	int bklt_update;
+	bool twm_en;
+	u32 max_bw;
+
+	u8 ppp_formats[BITS_TO_BYTES(MDP_IMGTYPE_LIMIT1)];
+	u8 dma_formats[BITS_TO_BYTES(MDP_IMGTYPE_LIMIT1)];
 };
 
 struct mdp3_img_data {
@@ -221,9 +244,24 @@ struct mdp3_img_data {
 	struct dma_buf *srcp_dma_buf;
 	struct dma_buf_attachment *srcp_attachment;
 	struct sg_table *srcp_table;
+	struct sg_table *tab_clone;
 };
 
 extern struct mdp3_hw_resource *mdp3_res;
+
+/*
+ * mdp3_is_idle_pc: - checks if a panel is idle
+ */
+static inline bool mdp3_is_idle_pc(void)
+{
+	bool ret = 0;
+
+	mutex_lock(&mdp3_res->fs_idle_pc_lock);
+	ret = mdp3_res->idle_pc;
+	mutex_unlock(&mdp3_res->fs_idle_pc_lock);
+
+	return ret;
+}
 
 struct mdp3_dma *mdp3_get_dma_pipe(int capability);
 struct mdp3_intf *mdp3_get_display_intf(int type);
@@ -240,6 +278,7 @@ int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota);
 int mdp3_put_img(struct mdp3_img_data *data, int client);
 int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data,
 		int client);
+int mdp3_map_layer(struct mdp3_img_data *data, int client);
 int mdp3_iommu_enable(int client);
 int mdp3_iommu_disable(int client);
 int mdp3_iommu_is_attached(void);
@@ -256,6 +295,7 @@ int mdp3_misr_get(struct mdp_misr *misr_resp);
 void mdp3_enable_regulator(int enable);
 void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 				uint32_t interval);
+void mdp3_check_spi_panel_status(struct work_struct *work, uint32_t interval);
 int mdp3_dynamic_clock_gating_ctrl(int enable);
 int mdp3_footswitch_ctrl(int enable);
 int mdp3_qos_remapper_setup(struct mdss_panel_data *panel);
@@ -267,6 +307,13 @@ void mdp3_calc_dma_res(struct mdss_panel_info *panel_info, u64 *clk_rate,
 		u64 *ab, u64 *ib, uint32_t bpp);
 void mdp3_clear_irq(u32 interrupt_mask);
 int mdp3_enable_panic_ctrl(void);
+
+void mdss_spi_panel_bl_ctrl_update(struct mdss_panel_data *pdata, u32 bl_level);
+
+int mdp3_layer_pre_commit(struct msm_fb_data_type *mfd,
+	struct file *file, struct mdp_layer_commit_v1 *commit);
+int mdp3_layer_atomic_validate(struct msm_fb_data_type *mfd,
+	struct file *file, struct mdp_layer_commit_v1 *commit);
 
 #define MDP3_REG_WRITE(addr, val) writel_relaxed(val, mdp3_res->mdp_base + addr)
 #define MDP3_REG_READ(addr) readl_relaxed(mdp3_res->mdp_base + addr)

@@ -24,14 +24,9 @@
 #ifdef __KERNEL__
 
 #include <linux/types.h>
-#include <linux/delay.h>
-#include <linux/vmalloc.h>
-#include <asm/string.h>
-#include <asm/mem-layout.h>
 #include <asm/iomap.h>
 #include <asm/page.h>
 #include <asm/cacheflush.h>
-#include <asm/tlbflush.h>
 
 /*
  * We don't have PCI yet.
@@ -219,6 +214,12 @@ static inline void memcpy_toio(volatile void __iomem *dst, const void *src,
 	int count)
 {
 	memcpy((void *) dst, src, count);
+}
+
+static inline void memset_io(volatile void __iomem *addr, int value,
+			     size_t size)
+{
+	memset((void __force *)addr, value, size);
 }
 
 #define PCI_IO_ADDR	(volatile void __iomem *)

@@ -602,13 +602,15 @@ int ipa3_uc_mhi_init(void (*ready_cb)(void), void (*wakeup_request_cb)(void))
 
 void ipa3_uc_mhi_cleanup(void)
 {
+	struct ipa3_uc_hdlrs null_hdlrs = { 0 };
+
 	IPADBG("Enter\n");
 
 	if (!ipa3_uc_mhi_ctx) {
 		IPAERR("ipa3_uc_mhi_ctx is not initialized\n");
 		return;
 	}
-	ipa3_uc_register_handlers(IPA_HW_FEATURE_MHI, NULL);
+	ipa3_uc_register_handlers(IPA_HW_FEATURE_MHI, &null_hdlrs);
 	kfree(ipa3_uc_mhi_ctx);
 	ipa3_uc_mhi_ctx = NULL;
 
@@ -620,7 +622,7 @@ int ipa3_uc_mhi_init_engine(struct ipa_mhi_msi_info *msi, u32 mmio_addr,
 	u32 first_evt_idx)
 {
 	int res;
-	struct ipa3_mem_buffer mem;
+	struct ipa_mem_buffer mem;
 	struct IpaHwMhiInitCmdData_t *init_cmd_data;
 	struct IpaHwMhiMsiCmdData_t *msi_cmd;
 
@@ -885,7 +887,7 @@ disable_clks:
 	return res;
 }
 
-int ipa3_uc_mhi_send_dl_ul_sync_info(union IpaHwMhiDlUlSyncCmdData_t cmd)
+int ipa3_uc_mhi_send_dl_ul_sync_info(union IpaHwMhiDlUlSyncCmdData_t *cmd)
 {
 	int res;
 
@@ -895,13 +897,14 @@ int ipa3_uc_mhi_send_dl_ul_sync_info(union IpaHwMhiDlUlSyncCmdData_t cmd)
 	}
 
 	IPADBG("isDlUlSyncEnabled=0x%x UlAccmVal=0x%x\n",
-		cmd.params.isDlUlSyncEnabled, cmd.params.UlAccmVal);
+		cmd->params.isDlUlSyncEnabled, cmd->params.UlAccmVal);
 	IPADBG("ulMsiEventThreshold=0x%x dlMsiEventThreshold=0x%x\n",
-		cmd.params.ulMsiEventThreshold, cmd.params.dlMsiEventThreshold);
+		cmd->params.ulMsiEventThreshold,
+		cmd->params.dlMsiEventThreshold);
 
 	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
 
-	res = ipa3_uc_send_cmd(cmd.raw32b,
+	res = ipa3_uc_send_cmd(cmd->raw32b,
 		IPA_CPU_2_HW_CMD_MHI_DL_UL_SYNC_INFO, 0, false, HZ);
 	if (res) {
 		IPAERR("ipa3_uc_send_cmd failed %d\n", res);

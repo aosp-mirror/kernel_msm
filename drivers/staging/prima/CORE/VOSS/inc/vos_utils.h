@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -59,6 +59,14 @@
 #define VOS_BAND_5GHZ          2
 
 #define VOS_24_GHZ_CHANNEL_14  14
+
+
+/* Type of packet log events.
+ */
+#define PKTLOG_TYPE_PKT_STAT         9
+
+
+
 /*-------------------------------------------------------------------------- 
   Type declarations
   ------------------------------------------------------------------------*/
@@ -68,11 +76,14 @@
   Function declarations and documenation
   ------------------------------------------------------------------------*/
 
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3,19,0)) || \
+	defined(WLAN_BTAMP_FEATURE)
+
 VOS_STATUS vos_crypto_init( v_U32_t *phCryptProv );
 
 VOS_STATUS vos_crypto_deinit( v_U32_t hCryptProv );
 
-
+#endif
 
 /**
  * vos_rand_get_bytes
@@ -89,6 +100,8 @@ VOS_STATUS vos_crypto_deinit( v_U32_t hCryptProv );
 */
 VOS_STATUS vos_rand_get_bytes( v_U32_t handle, v_U8_t *pbBuf, v_U32_t numBytes );
 
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3,19,0)) || \
+	defined(WLAN_BTAMP_FEATURE)
 
 /**
  * vos_sha1_hmac_str
@@ -161,9 +174,34 @@ VOS_STATUS vos_decrypt_AES(v_U32_t cryptHandle, /* Handle */
                            v_U8_t *pDecrypted,
                            v_U8_t *pKey); /* pointer to authentication key */
 
+#endif
+
 v_U8_t vos_chan_to_band(v_U32_t chan);
 void vos_get_wlan_unsafe_channel(v_U16_t *unsafeChannelList,
                     v_U16_t buffer_size, v_U16_t *unsafeChannelCount);
+
+typedef struct {
+    v_BOOL_t  is_rx;
+    v_U8_t  tid;     // transmit or received tid
+    v_U8_t  num_retries;                   // number of attempted retries
+    v_U8_t  rssi;    // TX: RSSI of ACK for that packet
+                    // RX: RSSI of packet
+    v_U32_t rate_idx;           // last transmit rate in .5 mbps
+    v_U16_t seq_num; // receive sequence for that MPDU packet
+    v_U64_t dxe_timestamp;     // DXE timestamp
+    v_U32_t data_len;
+    /* Whole frame for management/EAPOl/DHCP frames and 802.11 + LLC
+    * header + 40 bytes or full frame whichever is smaller for
+    * remaining Data packets
+    */
+    v_U8_t data[MAX_PKT_STAT_DATA_LEN];
+} tPerPacketStats;
+
+typedef struct {
+    v_U32_t lastTxRate;           // 802.11 data rate at which the last data frame is transmitted.
+    v_U32_t  txAvgRetry;           // Average number of retries per 10 packets.
+    v_S7_t  avgRssi;              // Average of the Beacon RSSI.
+} tPerTxPacketFrmFw;
 
 #define ROAM_DELAY_TABLE_SIZE   10
 
@@ -293,4 +331,21 @@ v_BOOL_t vos_roam_delay_stats_deinit(void);
 void    vos_reset_roam_timer_log(void);
 void    vos_dump_roam_time_log_service(void);
 void    vos_record_roam_event(enum e_roaming_event, void *pBuff, v_ULONG_t buff_len);
+v_U32_t vos_copy_80211_data(void *pBuff, v_U8_t *dst, v_U8_t frametype);
+extern  v_U8_t vos_get_ring_log_level(v_U32_t ring_id);
+bool vos_isPktStatsEnabled(void);
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+void vos_tdls_tx_rx_mgmt_event(uint8_t event_id, uint8_t tx_rx,
+              uint8_t type, uint8_t sub_type, uint8_t *peer_mac);
+#else
+static inline
+void vos_tdls_tx_rx_mgmt_event(uint8_t event_id, uint8_t tx_rx,
+              uint8_t type, uint8_t sub_type, uint8_t *peer_mac)
+
+{
+    return;
+}
+#endif /* FEATURE_WLAN_DIAG_SUPPORT */
+
 #endif // #if !defined __VOSS_UTILS_H

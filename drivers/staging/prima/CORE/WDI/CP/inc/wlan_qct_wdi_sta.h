@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -69,45 +69,6 @@ when        who    what, where, why
   -------------------------------------------------------------------------*/
 /*Invalid station index */
 #define WDI_STA_INVALID_IDX 0xFF
-
-/*----------------------------------------------------------------------------
-  WDI_AddStaParams
-  -------------------------------------------------------------------------*/
-typedef struct 
-{
-  wpt_uint8    ucSTAIdx; 
-  wpt_uint8    ucWmmEnabled;
-  wpt_uint8    ucHTCapable; 
-
-  /* MAC Address of STA */
-  wpt_macAddr staMacAddr;
-
-  /*MAC Address of the BSS*/
-  wpt_macAddr  macBSSID;
-
-  /* Field to indicate if this is sta entry for itself STA adding entry for itself
-     or remote (AP adding STA after successful association.
-     This may or may not be required in production driver.
-     0 - Self, 1 other/remote, 2 - bssid */
-  wpt_uint8   ucStaType;       
-
-
-  /*DPU Information*/
-  wpt_uint8   dpuIndex;                      // DPU table index
-  wpt_uint8   dpuSig;                        // DPU signature
-  wpt_uint8   bcastDpuIndex;
-  wpt_uint8   bcastDpuSignature;
-  wpt_uint8   bcastMgmtDpuIndex;
-  wpt_uint8   bcastMgmtDpuSignature;
-
-
-  /*RMF enabled/disabled*/
-  wpt_uint8   ucRmfEnabled;
-
-  /* Index into the BSS Session table */
-  wpt_uint8   ucBSSIdx;
-
-}WDI_AddStaParams; 
 
 /*----------------------------------------------------------------------------
   WDI_StaStruct
@@ -204,41 +165,6 @@ WDI_Status
 WDI_STATableClose
 (
   WDI_ControlBlockType*  pWDICtx
-);
-
-
-/**
- @brief WDI_STATableAddSta - Function to Add Station
-
- 
- @param  pWDICtx:     pointer to the WLAN DAL context 
-         pwdiParam:   station parameters  
-  
- @see
- @return Result of the function call
-*/
-WDI_Status
-WDI_STATableAddSta
-(
-    WDI_ControlBlockType*  pWDICtx,
-    WDI_AddStaParams*      pwdiParam
-);
-
-/**
- @brief WDI_STATableDelSta - Function to Delete a Station
-
- 
- @param  pWDICtx:         pointer to the WLAN DAL context 
-         ucSTAIdx:        station to be deleted
-  
- @see
- @return Result of the function call
-*/
-WDI_Status
-WDI_STATableDelSta
-(
-    WDI_ControlBlockType*  pWDICtx,
-    wpt_uint8              ucSTAIdx
 );
 
 /**
@@ -354,25 +280,6 @@ WDI_STATableSetStaType
     wpt_uint8              staType
 );
 
-
-/**
- @brief WDI_STATableFindStaidByAddr - Given a station mac address, search
-        for the corresponding station index from the Station Table.
- 
- @param  pWDICtx:  WDI Context pointer
-         staAddr:  station address
-         pucStaId: output station id 
-  
- @see
- @return Result of the function call
-*/
-WDI_Status
-WDI_STATableFindStaidByAddr
-(
-    WDI_ControlBlockType*  pWDICtx, 
-    wpt_macAddr            staAddr, 
-    wpt_uint8*             pucStaId
-);
 
 /**
  @brief WDI_STATableGetStaAddr - get station address

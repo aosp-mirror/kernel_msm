@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -143,9 +143,9 @@ static int acdtd_val_pwrcl = 0x00006A11;
 static int acdtd_val_perfcl = 0x00006A11;
 static int dvmrc_val = 0x000E0F0F;
 static int acdsscr_val = 0x00000601;
-static int acdcr_val_pwrcl = 0x002D5FFD;
+static int acdcr_val_pwrcl = 0x002C5FFD;
 module_param(acdcr_val_pwrcl, int, 0444);
-static int acdcr_val_perfcl = 0x002D5FFD;
+static int acdcr_val_perfcl = 0x002C5FFD;
 module_param(acdcr_val_perfcl, int, 0444);
 int enable_acd = 1;
 module_param(enable_acd, int, 0444);
@@ -238,6 +238,7 @@ static struct alpha_pll_clk perfcl_alt_pll = {
 	.post_div_config = 0x100, /* Div-2 */
 	.config_ctl_val = 0x4001051B,
 	.offline_bit_workaround = true,
+	.no_irq_dis = true,
 	.c = {
 		.always_on = true,
 		.parent = &alpha_xo_ao.c,
@@ -300,6 +301,7 @@ static struct alpha_pll_clk pwrcl_alt_pll = {
 	.post_div_config = 0x100, /* Div-2 */
 	.config_ctl_val = 0x4001051B,
 	.offline_bit_workaround = true,
+	.no_irq_dis = true,
 	.c = {
 		.always_on = true,
 		.dbg_name = "pwrcl_alt_pll",
@@ -552,7 +554,13 @@ static enum handoff cpu_clk_8996_handoff(struct clk *c)
 
 static long cpu_clk_8996_round_rate(struct clk *c, unsigned long rate)
 {
-	return clk_round_rate(c->parent, rate);
+	int i;
+
+	for (i = 0; i < c->num_fmax; i++)
+		if (rate <= c->fmax[i])
+			return clk_round_rate(c->parent, c->fmax[i]);
+
+	return clk_round_rate(c->parent, c->fmax[c->num_fmax - 1]);
 }
 
 static unsigned long alt_pll_perfcl_freqs[] = {
@@ -1300,6 +1308,7 @@ static int cpu_clock_8996_driver_probe(struct platform_device *pdev)
 	unsigned long pwrclrate, perfclrate, cbfrate;
 	int pvs_ver = 0;
 	u32 pte_efuse;
+	u32 clk_rate;
 	char perfclspeedbinstr[] = "qcom,perfcl-speedbinXX-vXX";
 	char pwrclspeedbinstr[] = "qcom,pwrcl-speedbinXX-vXX";
 	char cbfspeedbinstr[] = "qcom,cbf-speedbinXX-vXX";
@@ -1427,6 +1436,18 @@ static int cpu_clock_8996_driver_probe(struct platform_device *pdev)
 	clk_prepare_enable(&pwrcl_alt_pll.c);
 	clk_prepare_enable(&cbf_pll.c);
 
+	/* Override the existing ealry boot frequency for power cluster */
+	ret = of_property_read_u32(pdev->dev.of_node,
+				"qcom,pwrcl-early-boot-freq", &clk_rate);
+	if (!ret)
+		pwrcl_early_boot_rate = clk_rate;
+
+	/* Override the existing ealry boot frequency for perf cluster */
+	ret = of_property_read_u32(pdev->dev.of_node,
+				"qcom,perfcl-early-boot-freq", &clk_rate);
+	if (!ret)
+		perfcl_early_boot_rate = clk_rate;
+
 	/* Set the early boot rate. This may also switch us to the ACD leg */
 	clk_set_rate(&pwrcl_clk.c, pwrcl_early_boot_rate);
 	clk_set_rate(&perfcl_clk.c, perfcl_early_boot_rate);
@@ -1442,6 +1463,7 @@ static struct of_device_id match_table[] = {
 	{ .compatible = "qcom,cpu-clock-8996" },
 	{ .compatible = "qcom,cpu-clock-8996-v3" },
 	{ .compatible = "qcom,cpu-clock-8996-pro" },
+	{ .compatible = "qcom,cpu-clock-8996-auto" },
 	{}
 };
 
@@ -1471,6 +1493,7 @@ module_exit(cpu_clock_8996_exit);
 #define CBF_BASE_PHY 0x09A11000
 #define CBF_PLL_BASE_PHY 0x09A20000
 #define AUX_BASE_PHY 0x09820050
+#define APCC_RECAL_DLY_BASE 0x099E00C8
 
 #define CLK_CTL_OFFSET 0x44
 #define PSCTL_OFFSET 0x164
@@ -1478,6 +1501,10 @@ module_exit(cpu_clock_8996_exit);
 #define CBF_AUTO_CLK_SEL_BIT BIT(6)
 #define AUTO_CLK_SEL_ALWAYS_ON_MASK BM(5, 4)
 #define AUTO_CLK_SEL_ALWAYS_ON_GPLL0_SEL (0x3 << 4)
+#define APCC_RECAL_DLY_SIZE 0x10
+#define APCC_RECAL_VCTL_OFFSET 0x8
+#define APCC_RECAL_CPR_DLY_SETTING 0x00000000
+#define APCC_RECAL_VCTL_DLY_SETTING 0x800003ff
 
 #define HF_MUX_MASK 0x3
 #define LF_MUX_MASK 0x3
@@ -1485,6 +1512,9 @@ module_exit(cpu_clock_8996_exit);
 #define HF_MUX_SEL_EARLY_PLL 0x1
 #define HF_MUX_SEL_LF_MUX 0x1
 #define LF_MUX_SEL_ALT_PLL 0x1
+
+#define PWRCL_EARLY_BOOT_RATE 1286400000
+#define PERFCL_EARLY_BOOT_RATE 1363200000
 
 static int use_alt_pll;
 module_param(use_alt_pll, int, 0444);
@@ -1516,13 +1546,19 @@ static struct notifier_block __refdata clock_cpu_8996_cpu_notifier = {
 int __init cpu_clock_8996_early_init(void)
 {
 	int ret = 0;
-	void __iomem *auxbase;
+	void __iomem *auxbase, *acd_recal_base;
 	u32 regval;
 
 	if (of_find_compatible_node(NULL, NULL,
 					 "qcom,cpu-clock-8996-pro")) {
 		cpu_clocks_v3 = true;
 		cpu_clocks_pro = true;
+	} else if (of_find_compatible_node(NULL, NULL,
+					"qcom,cpu-clock-8996-auto")) {
+		cpu_clocks_v3 = true;
+		cpu_clocks_pro = true;
+		pwrcl_early_boot_rate = PWRCL_EARLY_BOOT_RATE;
+		perfcl_early_boot_rate = PERFCL_EARLY_BOOT_RATE;
 	} else if (of_find_compatible_node(NULL, NULL,
 					 "qcom,cpu-clock-8996-v3")) {
 		cpu_clocks_v3 = true;
@@ -1592,6 +1628,13 @@ int __init cpu_clock_8996_early_init(void)
 		WARN(1, "Unable to ioremap aux base. Can't configure CPU clocks\n");
 		ret = -ENOMEM;
 		goto auxbase_fail;
+	}
+
+	acd_recal_base = ioremap(APCC_RECAL_DLY_BASE, APCC_RECAL_DLY_SIZE);
+	if (!acd_recal_base) {
+		WARN(1, "Unable to ioremap ACD recal base. Can't configure ACD\n");
+		ret = -ENOMEM;
+		goto acd_recal_base_fail;
 	}
 
 	/*
@@ -1785,6 +1828,21 @@ int __init cpu_clock_8996_early_init(void)
 			writel_relaxed(0x3, vbases[APC1_BASE] +
 							MDD_DROOP_CODE);
 			/*
+			 * Ensure that the writes go through before going
+			 * forward.
+			 */
+			wmb();
+
+			/*
+			 * Program the DLY registers to set a voltage settling
+			 * delay time for HW based ACD recalibration.
+			 */
+			writel_relaxed(APCC_RECAL_CPR_DLY_SETTING,
+						acd_recal_base);
+			writel_relaxed(APCC_RECAL_VCTL_DLY_SETTING,
+						acd_recal_base +
+						APCC_RECAL_VCTL_OFFSET);
+			/*
 			 * Ensure that the writes go through before enabling
 			 * ACD.
 			 */
@@ -1829,6 +1887,8 @@ int __init cpu_clock_8996_early_init(void)
 	 */
 	pr_info("%s: finished CPU clock configuration\n", __func__);
 
+	iounmap(acd_recal_base);
+acd_recal_base_fail:
 	iounmap(auxbase);
 auxbase_fail:
 	iounmap(vbases[CBF_PLL_BASE]);

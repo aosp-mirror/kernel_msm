@@ -14,9 +14,11 @@ Required properties:
  - vld-supply	: Power source required to power up I2C bus.
 
 Optional properties:
- - pixart,inverse-x 	: boolean, use this to invert the x data before sending it to input framework
- - pixart,inverse-y 	: boolean, use this to invert the y data before sending it to input framework
- - pixart,press-enabled : boolean, use this to enable detection of pressing the button
+ - pixart,inverse-x 	: boolean, use this to invert the x data before sending it to input
+			framework.
+ - pixart,inverse-y 	: boolean, use this to invert the y data before sending it to input
+			framework.
+ - pixart,press-enabled : boolean, use this to enable detection of pressing the button.
  - pinctrl-names	: This should be defined if a target uses pinctrl framework.
 			See "pinctrl" in Documentation/devicetree/bindings/pinctrl/msm-pinctrl.txt
 			It should specify the names of the configs that pinctrl can

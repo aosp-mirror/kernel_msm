@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -664,61 +664,29 @@ eHalStatus csrTdlsProcessDelSta( tpAniSirGlobal pMac, tSmeCmd *cmd )
 eHalStatus csrTdlsProcessCmd(tpAniSirGlobal pMac, tSmeCmd *cmd)
 {
     eSmeCommandType  cmdType = cmd->command ;
-    tANI_BOOLEAN status = eANI_BOOLEAN_TRUE;
+    eHalStatus status = eHAL_STATUS_SUCCESS;
     switch(cmdType)
     {
         case eSmeCommandTdlsSendMgmt:
-        {
-            status = csrTdlsProcessSendMgmt( pMac, cmd );
-            if(HAL_STATUS_SUCCESS( status ) )
-            {
-               status = eANI_BOOLEAN_FALSE ;
-            }
-        }
+            status = csrTdlsProcessSendMgmt(pMac, cmd);
         break ;
         case eSmeCommandTdlsAddPeer:
-        {
-            status = csrTdlsProcessAddSta( pMac, cmd );
-            if(HAL_STATUS_SUCCESS( status ) )
-            {
-               status = eANI_BOOLEAN_FALSE ;
-            }
-        }
+            status = csrTdlsProcessAddSta(pMac, cmd);
         break;
         case eSmeCommandTdlsDelPeer: 
-        {
-            status = csrTdlsProcessDelSta( pMac, cmd );
-            if(HAL_STATUS_SUCCESS( status ) )
-            {
-               status = eANI_BOOLEAN_FALSE ;
-            }
-        }
+            status = csrTdlsProcessDelSta(pMac, cmd);
         break;
         case eSmeCommandTdlsLinkEstablish:
-        {
-            status = csrTdlsProcessLinkEstablish( pMac, cmd );
-            if(HAL_STATUS_SUCCESS( status ) )
-            {
-               status = eANI_BOOLEAN_FALSE ;
-            }
-        }
+            status = csrTdlsProcessLinkEstablish(pMac, cmd);
         break;
 // tdlsoffchan
         case eSmeCommandTdlsChannelSwitch:
-        {
-             status = csrTdlsProcessChanSwitchReq( pMac, cmd );
-             if(HAL_STATUS_SUCCESS( status ) )
-             {
-               status = eANI_BOOLEAN_FALSE ;
-             }
-        }
+            status = csrTdlsProcessChanSwitchReq(pMac, cmd);
         break;
        default:
-       {
+           status = eHAL_STATUS_FAILURE;
             /* TODO: Add defualt handling */  
            break ;
-       } 
-             
     }
     return status ; 
 }
@@ -945,6 +913,11 @@ eHalStatus tdlsMsgProcessor(tpAniSirGlobal pMac,  v_U16_t msgType,
             roamInfo.staId = delStaRsp->staId ;
             roamInfo.statusCode = delStaRsp->statusCode ;
 #endif
+            vos_mem_copy(&roamInfo.peerMac, linkEstablishReqRsp->peerMac,
+                                         sizeof(tSirMacAddr)) ;
+            roamInfo.staId  = (tANI_U8)linkEstablishReqRsp->sta_idx;
+            roamInfo.statusCode = linkEstablishReqRsp->statusCode;
+
             csrRoamCallCallback(pMac, linkEstablishReqRsp->sessionId, &roamInfo, 0,
                          eCSR_ROAM_TDLS_STATUS_UPDATE,
                                eCSR_ROAM_RESULT_LINK_ESTABLISH_REQ_RSP);
@@ -966,6 +939,19 @@ eHalStatus tdlsMsgProcessor(tpAniSirGlobal pMac,  v_U16_t msgType,
                                 eCSR_ROAM_TDLS_STATUS_UPDATE,
                                 eCSR_ROAM_RESULT_LINK_ESTABLISH_REQ_RSP);
 #endif
+            tSirTdlsChanSwitchReqRsp *ChanSwitchReqRsp =
+                            (tSirTdlsChanSwitchReqRsp *) pMsgBuf ;
+            tCsrRoamInfo roamInfo = {0} ;
+
+            vos_mem_copy(&roamInfo.peerMac, ChanSwitchReqRsp->peerMac,
+                         sizeof(tSirMacAddr));
+            roamInfo.staId  = (tANI_U8)ChanSwitchReqRsp->sta_idx;
+            roamInfo.statusCode = ChanSwitchReqRsp->statusCode;
+
+            csrRoamCallCallback(pMac, ChanSwitchReqRsp->sessionId, &roamInfo, 0,
+                                eCSR_ROAM_TDLS_STATUS_UPDATE,
+                                eCSR_ROAM_RESULT_CHANNEL_SWITCH_REQ_RSP);
+
             /* remove pending eSmeCommandTdlsChanSwitch command */
             csrTdlsRemoveSmeCmd(pMac, eSmeCommandTdlsChannelSwitch);
             break;

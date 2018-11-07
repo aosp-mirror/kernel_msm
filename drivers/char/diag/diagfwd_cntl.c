@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -117,19 +117,31 @@ void diag_notify_md_client(uint8_t peripheral, int data)
 	if (driver->logging_mode != DIAG_MEMORY_DEVICE_MODE)
 		return;
 
+	mutex_lock(&driver->md_session_lock);
 	memset(&info, 0, sizeof(struct siginfo));
 	info.si_code = SI_QUEUE;
 	info.si_int = (PERIPHERAL_MASK(peripheral) | data);
 	info.si_signo = SIGCONT;
 	if (driver->md_session_map[peripheral] &&
-	    driver->md_session_map[peripheral]->task) {
-		stat = send_sig_info(info.si_signo, &info,
-				     driver->md_session_map[peripheral]->task);
-		if (stat)
-			pr_err("diag: Err sending signal to memory device client, signal data: 0x%x, stat: %d\n",
-			       info.si_int, stat);
+		driver->md_session_map[peripheral]->task) {
+		if (driver->md_session_map[peripheral]->pid ==
+			driver->md_session_map[peripheral]->task->tgid) {
+			DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
+				"md_session %d pid = %d, md_session %d task tgid = %d\n",
+				peripheral,
+				driver->md_session_map[peripheral]->pid,
+				peripheral,
+				driver->md_session_map[peripheral]->task->tgid);
+			stat = send_sig_info(info.si_signo, &info,
+				driver->md_session_map[peripheral]->task);
+			if (stat)
+				pr_err("diag: Err sending signal to memory device client, signal data: 0x%x, stat: %d\n",
+					info.si_int, stat);
+		} else
+			pr_err("diag: md_session_map[%d] data is corrupted, signal data: 0x%x, stat: %d\n",
+				peripheral, info.si_int, stat);
 	}
-
+	mutex_unlock(&driver->md_session_lock);
 }
 
 static void process_pd_status(uint8_t *buf, uint32_t len,
@@ -346,6 +358,8 @@ static void process_incoming_feature_mask(uint8_t *buf, uint32_t len,
 		feature_mask_len = FEATURE_MASK_LEN;
 	}
 
+	diag_cmd_remove_reg_by_proc(peripheral);
+
 	driver->feature[peripheral].rcvd_feature_mask = 1;
 
 	for (i = 0; i < feature_mask_len && read_len < len; i++) {
@@ -390,8 +404,8 @@ static void process_last_event_report(uint8_t *buf, uint32_t len,
 	header = (struct diag_ctrl_last_event_report *)ptr;
 	event_size = ((header->event_last_id / 8) + 1);
 	if (event_size >= driver->event_mask_size) {
-		pr_debug("diag: In %s, receiving event mask size more that Apps can handle\n",
-			 __func__);
+		DIAG_LOG(DIAG_DEBUG_MASKS,
+		"diag: receiving event mask size more that Apps can handle\n");
 		temp = krealloc(driver->event_mask->ptr, event_size,
 				GFP_KERNEL);
 		if (!temp) {
@@ -505,6 +519,10 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 		mask_ptr = (struct diag_msg_mask_t *)msg_mask.ptr;
 		found = 0;
 		for (j = 0; j < driver->msg_mask_tbl_count; j++, mask_ptr++) {
+			if (!mask_ptr || !ssid_range) {
+				found = 1;
+				break;
+			}
 			if (mask_ptr->ssid_first != ssid_range->ssid_first)
 				continue;
 			mutex_lock(&mask_ptr->lock);
@@ -523,6 +541,8 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 
 		new_size = (driver->msg_mask_tbl_count + 1) *
 			   sizeof(struct diag_msg_mask_t);
+		DIAG_LOG(DIAG_DEBUG_MASKS,
+			"diag: receiving msg mask size more that Apps can handle\n");
 		temp = krealloc(msg_mask.ptr, new_size, GFP_KERNEL);
 		if (!temp) {
 			pr_err("diag: In %s, Unable to add new ssid table to msg mask, ssid first: %d, last: %d\n",
@@ -531,6 +551,7 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 			continue;
 		}
 		msg_mask.ptr = temp;
+		mask_ptr = (struct diag_msg_mask_t *)msg_mask.ptr;
 		err = diag_create_msg_mask_table_entry(mask_ptr, ssid_range);
 		if (err) {
 			pr_err("diag: In %s, Unable to create a new msg mask table entry, first: %d last: %d err: %d\n",
@@ -570,6 +591,10 @@ static void diag_build_time_mask_update(uint8_t *buf,
 	num_items = range->ssid_last - range->ssid_first + 1;
 
 	for (i = 0; i < driver->bt_msg_mask_tbl_count; i++, build_mask++) {
+		if (!build_mask) {
+			found = 1;
+			break;
+		}
 		if (build_mask->ssid_first != range->ssid_first)
 			continue;
 		found = 1;
@@ -580,7 +605,8 @@ static void diag_build_time_mask_update(uint8_t *buf,
 			       __func__);
 		}
 		dest_ptr = build_mask->ptr;
-		for (j = 0; j < build_mask->range; j++, mask_ptr++, dest_ptr++)
+		for (j = 0; (j < build_mask->range) && mask_ptr && dest_ptr;
+			j++, mask_ptr++, dest_ptr++)
 			*(uint32_t *)dest_ptr |= *mask_ptr;
 		mutex_unlock(&build_mask->lock);
 		break;
@@ -588,8 +614,12 @@ static void diag_build_time_mask_update(uint8_t *buf,
 
 	if (found)
 		goto end;
+
 	new_size = (driver->bt_msg_mask_tbl_count + 1) *
 		   sizeof(struct diag_msg_mask_t);
+	DIAG_LOG(DIAG_DEBUG_MASKS,
+		"diag: receiving build time mask size more that Apps can handle\n");
+
 	temp = krealloc(driver->build_time_mask->ptr, new_size, GFP_KERNEL);
 	if (!temp) {
 		pr_err("diag: In %s, unable to create a new entry for build time mask\n",
@@ -597,6 +627,7 @@ static void diag_build_time_mask_update(uint8_t *buf,
 		goto end;
 	}
 	driver->build_time_mask->ptr = temp;
+	build_mask = (struct diag_msg_mask_t *)driver->build_time_mask->ptr;
 	err = diag_create_msg_mask_table_entry(build_mask, range);
 	if (err) {
 		pr_err("diag: In %s, Unable to create a new msg mask table entry, err: %d\n",
@@ -643,8 +674,8 @@ static void process_build_mask_report(uint8_t *buf, uint32_t len,
 void diag_cntl_process_read_data(struct diagfwd_info *p_info, void *buf,
 				 int len)
 {
-	int read_len = 0;
-	int header_len = sizeof(struct diag_ctrl_pkt_header_t);
+	uint32_t read_len = 0;
+	uint32_t header_len = sizeof(struct diag_ctrl_pkt_header_t);
 	uint8_t *ptr = buf;
 	struct diag_ctrl_pkt_header_t *ctrl_pkt = NULL;
 
@@ -1091,7 +1122,7 @@ int diag_send_peripheral_buffering_mode(struct diag_buffering_mode_t *params)
 	driver->buffering_mode[peripheral].mode = params->mode;
 	driver->buffering_mode[peripheral].low_wm_val = params->low_wm_val;
 	driver->buffering_mode[peripheral].high_wm_val = params->high_wm_val;
-	if (mode == DIAG_BUFFERING_MODE_STREAMING)
+	if (params->mode == DIAG_BUFFERING_MODE_STREAMING)
 		driver->buffering_flag[peripheral] = 0;
 fail:
 	mutex_unlock(&driver->mode_lock);

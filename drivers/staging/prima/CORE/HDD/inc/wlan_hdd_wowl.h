@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -112,6 +112,24 @@
 /*----------------------------------------------------------------------------
  * Type Declarations
  * -------------------------------------------------------------------------*/
+/* wake reason types */
+enum hdd_wakeup_reason_type {
+	WLAN_HDD_WAKE_REASON_NONE               = 0,
+	/* magic packet match */
+	WLAN_HDD_WAKE_REASON_MAGIC_PACKET       = 1,
+	/* host defined pattern match */
+	WLAN_HDD_WAKE_REASON_PATTERN_MATCH      = 2,
+	/* EAP-ID frame detected */
+	WLAN_HDD_WAKE_REASON_EAPID_PACKET       = 3,
+	/* start of EAPOL 4-way handshake detected */
+	WLAN_HDD_WAKE_REASON_EAPOL4WAY_PACKET   = 4,
+	/* network scan offload match */
+	WLAN_HDD_WAKE_REASON_NETSCAN_OFFL_MATCH = 5,
+	/* GTK rekey status wakeup */
+	WLAN_HDD_WAKE_REASON_GTK_REKEY_STATUS   = 6,
+	/* BSS connection lost */
+	WLAN_HDD_WAKE_REASON_BSS_CONN_LOST      = 7,
+};
 
 /**============================================================================
   @brief hdd_add_wowl_ptrn() - Function which will add the WoWL pattern to be

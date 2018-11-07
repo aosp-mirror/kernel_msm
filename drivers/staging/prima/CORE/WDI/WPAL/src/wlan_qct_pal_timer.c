@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, 2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -40,6 +40,7 @@
 #include "wlan_qct_pal_trace.h"
 #include "wlan_qct_os_status.h"
 #include "vos_threads.h"
+#include "vos_api.h"
 
 #include <linux/delay.h>
 #if defined(ANI_OS_TYPE_ANDROID)
@@ -218,7 +219,7 @@ wpt_uint32 wpalGetSystemTime(void)
 #if defined(ANI_OS_TYPE_ANDROID)
 wpt_uint64 wpalGetArchCounterTime(void)
 {
-   return arch_counter_get_cntpct();
+   return __vos_get_log_timestamp();
 }/*wpalGetArchCounterTime*/
 #else
 wpt_uint64 wpalGetArchCounterTime(void)

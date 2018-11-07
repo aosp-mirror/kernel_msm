@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -87,8 +87,28 @@ int hdd_softap_unpackIE( tHalHandle halHandle,
                 u_int16_t gen_ie_len,
                 u_int8_t *gen_ie );
 
+/**
+ * hdd_change_ch_avoidance_status() - update is_ch_avoid_in_progress flag
+ *
+ * @hdd_ctx: pointer to hdd context
+ * @value: value to set
+ *
+ * This function will change the value of is_ch_avoid_in_progress
+ *
+ * Return: none
+ */
+static inline void
+hdd_change_ch_avoidance_status(hdd_context_t *hdd_ctx,
+                               bool value)
+{
+    vos_spin_lock_acquire(&hdd_ctx->sap_update_info_lock);
+    hdd_ctx->is_ch_avoid_in_progress = value;
+    vos_spin_lock_release(&hdd_ctx->sap_update_info_lock);
+}
+
+
 VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCallback);
-VOS_STATUS hdd_init_ap_mode( hdd_adapter_t *pAdapter );
+VOS_STATUS hdd_init_ap_mode(hdd_adapter_t *pAdapter, bool re_init);
 void hdd_set_ap_ops( struct net_device *pWlanHostapdDev );
 int hdd_hostapd_stop (struct net_device *dev);
 void hdd_restart_softap (hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter);
@@ -96,4 +116,34 @@ void hdd_restart_softap (hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter);
 void hdd_hostapd_ch_avoid_cb(void *pAdapter, void *indParam);
 #endif /* FEATURE_WLAN_CH_AVOID */
 int hdd_del_all_sta(hdd_adapter_t *pAdapter);
+void hdd_sap_indicate_disconnect_for_sta(hdd_adapter_t *adapter);
+void hdd_sap_destroy_timers(hdd_adapter_t *adapter);
+
+#ifdef SAP_AUTH_OFFLOAD
+bool  hdd_set_sap_auth_offload(hdd_adapter_t *pHostapdAdapter,
+        bool enabled);
+#else
+static inline bool
+hdd_set_sap_auth_offload(hdd_adapter_t *pHostapdAdapter, bool enabled)
+{
+}
+#endif
+
+/**
+ * hdd_check_for_unsafe_ch() - Check the current operating channel with
+ * unsafe channel list.
+ * @phostapd_adapter : Pointer to HDD adapter.
+ * @hdd_ctx: pointer to hdd context.
+ *
+ * Check the current operating chennel of SAP with unsafe channel list
+ * and Restart the SAP on safe channel if currently SAP is
+ * on unsafe channel.
+ *
+ * Return : None
+ */
+void hdd_check_for_unsafe_ch(hdd_adapter_t *phostapd_adapter,
+                                           hdd_context_t *hdd_ctx);
+void hdd_force_scc_restart_sap(hdd_adapter_t *adapter,
+    hdd_context_t *hdd_ctx, tANI_U8  channelId);
+
 #endif    // end #if !defined( WLAN_HDD_HOSTAPD_H )

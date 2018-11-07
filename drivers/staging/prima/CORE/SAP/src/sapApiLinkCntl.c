@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2016-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -128,6 +128,16 @@ void sapSetOperatingChannel(ptSapContext psapContext, v_U8_t operChannel)
 {
     v_U8_t i = 0;
     v_U32_t event;
+    tHalHandle hHal = NULL;
+    uint32_t operating_band = 0;
+
+    hHal = VOS_GET_HAL_CB(psapContext->pvosGCtx);
+    if (NULL == hHal)
+    {
+        VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                     "hHal is NULL in %s", __func__);
+        return;
+    }
 
     VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
                 FL("SAP Channel : %d"), psapContext->channel);
@@ -143,7 +153,7 @@ void sapSetOperatingChannel(ptSapContext psapContext, v_U8_t operChannel)
         {
             if(psapContext->channelList != NULL)
             {
-                 psapContext->channel = SAP_DEFAULT_CHANNEL;
+                 psapContext->channel = SAP_CHANNEL_NOT_SELECTED;
                  for ( i = 0 ; i < psapContext->numofChannel ; i++)
                  {
                     if (NV_CHANNEL_ENABLE ==
@@ -154,13 +164,41 @@ void sapSetOperatingChannel(ptSapContext psapContext, v_U8_t operChannel)
                     }
                  }
             }
-            else
+
+            /*
+             * In case if channel is not selected then channel
+             * to be selected based on band configured in .ini
+             */
+            if (!psapContext->channel)
             {
-                /* if the channel list is empty then there is no valid channel
-                   in the selected sub-band so select default channel in the
-                   BAND(2.4GHz) as 2.4 channels are available in all the
-                   countries*/
-                   psapContext->channel = SAP_DEFAULT_CHANNEL;
+                ccmCfgGetInt(hHal, WNI_CFG_SAP_CHANNEL_SELECT_OPERATING_BAND,
+                             &operating_band);
+                if (operating_band == eSAP_RF_SUBBAND_5_LOW_GHZ ||
+                    operating_band == eSAP_RF_SUBBAND_5_MID_GHZ ||
+                    operating_band == eSAP_RF_SUBBAND_5_HIGH_GHZ)
+                {
+                    VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+                              FL("Default channel selection from band %d"),
+                              operating_band);
+
+                    (operating_band == eSAP_RF_SUBBAND_5_LOW_GHZ) ?
+                            (psapContext->channel =
+                                     SAP_DEFAULT_LOW_5GHZ_CHANNEL) :
+                    (operating_band == eSAP_RF_SUBBAND_5_MID_GHZ) ?
+                            (psapContext->channel =
+                                     SAP_DEFAULT_MID_5GHZ_CHANNEL) :
+                    (operating_band == eSAP_RF_SUBBAND_5_HIGH_GHZ) ?
+                            (psapContext->channel =
+                                     SAP_DEFAULT_HIGH_5GHZ_CHANNEL) : 0;
+
+                    VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+                              FL("channel selected to start bss %d"),
+                              psapContext->channel);
+                }
+                else
+                {
+                    psapContext->channel = SAP_DEFAULT_24GHZ_CHANNEL;
+                }
             }
         }
         else
@@ -179,7 +217,7 @@ void sapSetOperatingChannel(ptSapContext psapContext, v_U8_t operChannel)
         }
     }
 #else
-       psapContext->channel = SAP_DEFAULT_CHANNEL;
+       psapContext->channel = SAP_DEFAULT_24GHZ_CHANNEL;
 #endif
     else
     {
@@ -242,7 +280,8 @@ void sap_ht2040_timer_cb(v_PVOID_t usrDataForCallback)
     sapPhyMode =
         sapConvertSapPhyModeToCsrPhyMode(sapContext->csrRoamProfile.phyMode);
 
-    sme_SelectCBMode(hHal, sapPhyMode, sapContext->channel);
+    sme_SelectCBMode(hHal, sapPhyMode,
+                     sapContext->channel, eHT_MAX_CHANNEL_WIDTH);
 
     cbMode = sme_GetChannelBondingMode24G(hHal);
 
@@ -672,7 +711,8 @@ eHalStatus sapGet24GOBSSAffectedChannel(tHalHandle halHandle,
     sapPhyMode =
      sapConvertSapPhyModeToCsrPhyMode(psapCtx->csrRoamProfile.phyMode);
 
-    sme_SelectCBMode(halHandle, sapPhyMode, psapCtx->channel);
+    sme_SelectCBMode(halHandle, sapPhyMode,
+                     psapCtx->channel, eHT_MAX_CHANNEL_WIDTH);
 
     cbMode = sme_GetChannelBondingMode24G(halHandle);
 
@@ -827,8 +867,7 @@ eHalStatus sapCheck40Mhz24G(tHalHandle halHandle, ptSapContext psapCtx,
 
         if ((pScanResult->BssDescriptor.ieFields != NULL))
         {
-            ieLen = (pScanResult->BssDescriptor.length + sizeof(tANI_U16));
-            ieLen += (sizeof(tANI_U32) - sizeof(tSirBssDescription));
+            ieLen = GET_IE_LEN_IN_BSS(pScanResult->BssDescriptor.length);
             vos_mem_set((tANI_U8 *) pBeaconStruct,
                                sizeof(tSirProbeRespBeacon), 0);
 
@@ -1071,7 +1110,8 @@ WLANSAP_ScanCallback
 #ifdef WLAN_FEATURE_AP_HT40_24G
     if (psapContext->channel > SIR_11B_CHANNEL_END)
 #endif
-        sme_SelectCBMode(halHandle, sapPhyMode, psapContext->channel);
+        sme_SelectCBMode(halHandle, sapPhyMode,
+                         psapContext->channel, eHT_MAX_CHANNEL_WIDTH);
 
 #ifdef SOFTAP_CHANNEL_RANGE
     if(psapContext->channelList != NULL)
@@ -1097,6 +1137,97 @@ WLANSAP_ScanCallback
 
     return sapstatus;
 }// WLANSAP_ScanCallback
+
+/**
+ * sap_roam_process_ecsa_bcn_tx_ind() - handles the case for
+ * eCSR_ROAM_ECSA_BCN_TX_IND in wlansap_roam_callback()
+ * @hal: hal global context
+ * @sap_ctx: sap context
+ *
+ * Return: VOS_STATUS
+ */
+static VOS_STATUS sap_roam_process_ecsa_bcn_tx_ind(tHalHandle hHal,
+     ptSapContext sap_ctx)
+{
+   tWLAN_SAPEvent sap_event;
+   VOS_STATUS qdf_status;
+
+   if (eSAP_STARTED != sap_ctx->sapsMachine) {
+       VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_WARN,
+                 FL("eCSR_ROAM_ECSA_BCN_TX_IND received in (%d) state"),
+                 sap_ctx->sapsMachine);
+                 return VOS_STATUS_E_INVAL;
+   }
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             FL("sapdfs: from state eSAP_STARTED => eSAP_DISCONNECTING"));
+   /* SAP to be moved to DISCONNECTING state */
+   sap_ctx->sapsMachine = eSAP_DISCONNECTING;
+
+   /* Send channel switch request */
+   sap_event.event = eWNI_ECSA_TX_COMPLETED;
+   sap_event.params = 0;
+   sap_event.u1 = 0;
+   sap_event.u2 = 0;
+   /* Handle event */
+   qdf_status = sapFsm(sap_ctx, &sap_event);
+   if (!VOS_IS_STATUS_SUCCESS(qdf_status)) {
+        VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                  FL("post chnl chng req failed, sap[%pK]"), sap_ctx);
+        return VOS_STATUS_E_FAILURE;
+   }
+   return VOS_STATUS_SUCCESS;
+}
+
+/**
+ * sap_roam_process_ch_change_resp() - handles the case for
+ * eCSR_ROAM_ECSA_CHAN_CHANGE_RSP in function wlansap_roam_callback()
+ * @sap_ctx: sap context
+ * @csr_roam_info:  raom info struct
+ *
+ * Return: VOS_STATUS
+ */
+static VOS_STATUS sap_roam_process_ch_change_resp(ptSapContext sap_ctx,
+          tCsrRoamInfo *csr_roam_info)
+{
+   tWLAN_SAPEvent sap_event;
+   VOS_STATUS status;
+
+   if (!VOS_IS_STATUS_SUCCESS(csr_roam_info->ap_chan_change_rsp->status)) {
+        sap_event.event = eWNI_ECSA_CHANNEL_CHANGE_RSP;
+        sap_event.params = 0;
+        sap_event.u1 = eCSR_ROAM_INFRA_IND;
+        sap_event.u2 = eCSR_ROAM_RESULT_FAILURE;
+
+        status = sapFsm(sap_ctx, &sap_event);
+        return status;
+   }
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             FL("sapdfs: changing target channel to [%d]"),
+             sap_ctx->ecsa_info.new_channel);
+   sap_ctx->channel = sap_ctx->ecsa_info.new_channel;
+
+   if (eSAP_DISCONNECTING != sap_ctx->sapsMachine)
+        return VOS_STATUS_E_FAILURE;
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             FL("sapdfs: from state eSAP_DISCONNECTING => eSAP_STARTING on sapctx[%pK]"),
+             sap_ctx);
+   sap_ctx->sapsMachine = eSAP_STARTING;
+   sap_event.event = eSAP_MAC_START_BSS_SUCCESS;
+   sap_event.params = csr_roam_info;
+   sap_event.u1 = eCSR_ROAM_INFRA_IND;
+   sap_event.u2 = eCSR_ROAM_RESULT_INFRA_STARTED;
+
+   /* Handle the event */
+   status = sapFsm(sap_ctx, &sap_event);
+
+   wlansap_reset_chan_change_in_progress(sap_ctx);
+   complete(&sap_ctx->ecsa_info.chan_switch_comp);
+
+   return status;
+}
 
 /*==========================================================================
   FUNCTION    WLANSAP_RoamCallback()
@@ -1298,6 +1429,38 @@ WLANSAP_RoamCallback
            sapCheckHT2040CoexAction(sapContext, pCsrRoamInfo->pSmeHT2040CoexInfoInd);
            break;
 #endif
+        case eCSR_ROAM_ECSA_BCN_TX_IND:
+            {
+                tHalHandle hal = VOS_GET_HAL_CB(sapContext->pvosGCtx);
+
+                VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+                            FL("CSR roamStatus = %s (%d)"),
+                            get_eRoamCmdStatus_str(roamStatus), roamStatus);
+                if (!hal)
+                {
+                   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                              "In %s invalid hHal", __func__);
+                   halStatus = eHAL_STATUS_FAILED_ALLOC;
+                   break;
+                }
+                vosStatus = sap_roam_process_ecsa_bcn_tx_ind(hal, sapContext);
+                if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+                    halStatus = eHAL_STATUS_FAILURE;
+                break;
+           }
+        case eCSR_ROAM_ECSA_CHAN_CHANGE_RSP:
+            vosStatus = sap_roam_process_ch_change_resp(sapContext,
+                                                        pCsrRoamInfo);
+            if (!VOS_IS_STATUS_SUCCESS(vosStatus))
+                halStatus = eHAL_STATUS_FAILURE;
+            break;
+        case eCSR_ROAM_LOSTLINK_DETECTED:
+            if (pCsrRoamInfo) {
+                sapSignalHDDevent(sapContext, pCsrRoamInfo,
+                                  eSAP_STA_LOSTLINK_DETECTED,
+                                  (v_PVOID_t)eSAP_STATUS_SUCCESS);
+                return eHAL_STATUS_SUCCESS;
+           }
 
         default:
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
@@ -1314,18 +1477,22 @@ WLANSAP_RoamCallback
                          FL( "CSR roamResult = %s (%d)"),
                              "eCSR_ROAM_RESULT_INFRA_ASSOCIATION_IND",
                               roamResult);
+            if (!pCsrRoamInfo) {
+                   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                             FL("pCsrRoamInfo NULL " ));
+                    halStatus = eHAL_STATUS_FAILURE;
+                    break;
+             }
             sapContext->nStaWPARSnReqIeLength = pCsrRoamInfo->rsnIELen;
              
             if(sapContext->nStaWPARSnReqIeLength)
                 vos_mem_copy( sapContext->pStaWpaRsnReqIE,
                               pCsrRoamInfo->prsnIE, sapContext->nStaWPARSnReqIeLength);
-
             sapContext->nStaAddIeLength = pCsrRoamInfo->addIELen;
              
             if(sapContext->nStaAddIeLength)
                 vos_mem_copy( sapContext->pStaAddIE,
                         pCsrRoamInfo->paddIE, sapContext->nStaAddIeLength);
-
             sapContext->SapQosCfg.WmmIsEnabled = pCsrRoamInfo->wmmEnabledSta;
             // MAC filtering
             vosStatus = sapIsPeerMacAllowed(sapContext, (v_U8_t *)pCsrRoamInfo->peerMac);
@@ -1360,8 +1527,15 @@ WLANSAP_RoamCallback
                           FL("CSR roamResult = %s (%d)"),
                              "eCSR_ROAM_RESULT_INFRA_ASSOCIATION_CNF",
                               roamResult);
+                if (!pCsrRoamInfo) {
+                       VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                                  FL("pCsrRoamInfo NULL " ));
+                        halStatus = eHAL_STATUS_FAILURE;
+                        break;
+                 }
 
-            sapContext->nStaWPARSnReqIeLength = pCsrRoamInfo->rsnIELen;
+                sapContext->nStaWPARSnReqIeLength = pCsrRoamInfo->rsnIELen;
+
             if (sapContext->nStaWPARSnReqIeLength)
                 vos_mem_copy( sapContext->pStaWpaRsnReqIE,
                               pCsrRoamInfo->prsnIE, sapContext->nStaWPARSnReqIeLength);
@@ -1389,32 +1563,17 @@ WLANSAP_RoamCallback
 #endif
             break;
 
+        case eCSR_ROAM_RESULT_DEAUTH_IND:
         case eCSR_ROAM_RESULT_DISASSOC_IND:
             VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
                           FL("CSR roamResult = %s (%d)"),
                              "eCSR_ROAM_RESULT_DISASSOC_IND",
                               roamResult);
 #ifdef WLAN_FEATURE_AP_HT40_24G
-            sapRemoveHT40IntolerantSta(sapContext, pCsrRoamInfo);
+            if (pCsrRoamInfo)
+                sapRemoveHT40IntolerantSta(sapContext, pCsrRoamInfo);
 #endif
             /* Fill in the event structure */
-            vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_DISASSOC_EVENT, (v_PVOID_t)eSAP_STATUS_SUCCESS);
-            if(!VOS_IS_STATUS_SUCCESS(vosStatus))
-            {
-                halStatus = eHAL_STATUS_FAILURE;
-            }
-            break;
-
-        case eCSR_ROAM_RESULT_DEAUTH_IND:
-            VOS_TRACE( VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO_HIGH,
-                          FL("CSR roamResult = %s (%d)"),
-                             "eCSR_ROAM_RESULT_DEAUTH_IND",
-                              roamResult);
-#ifdef WLAN_FEATURE_AP_HT40_24G
-            sapRemoveHT40IntolerantSta(sapContext, pCsrRoamInfo);
-#endif
-            /* Fill in the event structure */
-            //TODO: we will use the same event inorder to inform HDD to disassociate the station
             vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_DISASSOC_EVENT, (v_PVOID_t)eSAP_STATUS_SUCCESS);
             if(!VOS_IS_STATUS_SUCCESS(vosStatus))
             {
@@ -1429,7 +1588,13 @@ WLANSAP_RoamCallback
                               roamResult);
             /* Fill in the event structure */
             //TODO: support for group key MIC failure event to be handled
-            vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_MIC_FAILURE_EVENT,(v_PVOID_t) NULL);
+                if (!pCsrRoamInfo) {
+                       VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                                  FL("pCsrRoamInfo NULL " ));
+                        halStatus = eHAL_STATUS_FAILURE;
+                        break;
+                 }
+                vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_MIC_FAILURE_EVENT,(v_PVOID_t) NULL);
             if(!VOS_IS_STATUS_SUCCESS(vosStatus))
             {
                 halStatus = eHAL_STATUS_FAILURE;
@@ -1443,7 +1608,13 @@ WLANSAP_RoamCallback
                               roamResult);
             /* Fill in the event structure */
             //TODO: support for unicast key MIC failure event to be handled
-            vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_MIC_FAILURE_EVENT,(v_PVOID_t) NULL);
+                if (!pCsrRoamInfo) {
+                       VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                                  FL("pCsrRoamInfo NULL " ));
+                        halStatus = eHAL_STATUS_FAILURE;
+                        break;
+                 }
+                vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_MIC_FAILURE_EVENT,(v_PVOID_t) NULL);
             if(!VOS_IS_STATUS_SUCCESS(vosStatus))
             {
                 halStatus = eHAL_STATUS_FAILURE;
@@ -1517,7 +1688,13 @@ WLANSAP_RoamCallback
                               roamResult);
             /* Fill in the event structure */
             //TODO: support for group key MIC failure event to be handled
-            vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_WPS_PBC_PROBE_REQ_EVENT,(v_PVOID_t) NULL);
+                if (!pCsrRoamInfo) {
+                       VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                                  FL("pCsrRoamInfo NULL " ));
+                        halStatus = eHAL_STATUS_FAILURE;
+                        break;
+                 }
+                vosStatus = sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_WPS_PBC_PROBE_REQ_EVENT,(v_PVOID_t) NULL);
             if(!VOS_IS_STATUS_SUCCESS(vosStatus))
             {
                 halStatus = eHAL_STATUS_FAILURE;
@@ -1530,11 +1707,13 @@ WLANSAP_RoamCallback
                              "eCSR_ROAM_RESULT_FORCED",
                               roamResult);
 #ifdef WLAN_FEATURE_AP_HT40_24G
-            sapRemoveHT40IntolerantSta(sapContext, pCsrRoamInfo);
+            if (pCsrRoamInfo)
+                sapRemoveHT40IntolerantSta(sapContext, pCsrRoamInfo);
 #endif
             //This event can be used to inform hdd about user triggered disassoc event
             /* Fill in the event structure */
-            sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_DISASSOC_EVENT, (v_PVOID_t)eSAP_STATUS_SUCCESS);
+            if (pCsrRoamInfo)
+                sapSignalHDDevent( sapContext, pCsrRoamInfo, eSAP_STA_DISASSOC_EVENT, (v_PVOID_t)eSAP_STATUS_SUCCESS);
             break;
 
         case eCSR_ROAM_RESULT_NONE:

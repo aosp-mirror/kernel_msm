@@ -28,6 +28,7 @@
 	qcom,board-id= <8 0x105>;
 };
 
+
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
 		synaptics@20 {

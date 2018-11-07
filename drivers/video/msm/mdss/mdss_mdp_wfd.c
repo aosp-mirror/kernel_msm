@@ -89,6 +89,8 @@ void mdss_mdp_wfd_destroy(struct mdss_mdp_wfd *wfd)
 	if (ctl->ops.stop_fnc)
 		ctl->ops.stop_fnc(ctl, 0);
 
+	mdss_mdp_reset_mixercfg(ctl);
+
 	if (ctl->wb)
 		mdss_mdp_wb_free(ctl->wb);
 
@@ -129,6 +131,7 @@ int mdss_mdp_wfd_setup(struct mdss_mdp_wfd *wfd,
 	u32 wb_idx = layer->writeback_ndx;
 	struct mdss_mdp_ctl *ctl = wfd->ctl;
 	struct mdss_mdp_writeback *wb = NULL;
+	struct mdss_mdp_format_params *fmt = NULL;
 	int ret = 0;
 	u32 width, height, max_mixer_width;
 
@@ -168,6 +171,32 @@ int mdss_mdp_wfd_setup(struct mdss_mdp_wfd *wfd,
 	ctl->height = height;
 	ctl->roi =  (struct mdss_rect) {0, 0, width, height};
 	ctl->is_secure = (layer->flags & MDP_LAYER_SECURE_SESSION);
+
+	fmt = mdss_mdp_get_format_params(layer->buffer.format);
+
+	if (fmt == NULL) {
+		pr_err("invalid buffer format\n");
+		ret = -EINVAL;
+		goto wfd_setup_error;
+	}
+
+	/* only 3 csc type supported */
+	if (fmt->is_yuv) {
+		switch (layer->color_space) {
+		case MDP_CSC_ITU_R_601:
+			ctl->csc_type = MDSS_MDP_CSC_RGB2YUV_601L;
+			break;
+		case MDP_CSC_ITU_R_709:
+			ctl->csc_type = MDSS_MDP_CSC_RGB2YUV_709L;
+			break;
+		case MDP_CSC_ITU_R_601_FR:
+		default:
+			ctl->csc_type = MDSS_MDP_CSC_RGB2YUV_601FR;
+			break;
+		}
+	} else {
+		ctl->csc_type = MDSS_MDP_CSC_RGB2RGB;
+	}
 
 	if (ctl->mdata->wfd_mode == MDSS_MDP_WFD_INTERFACE) {
 		ctl->mixer_left = mdss_mdp_mixer_alloc(ctl,
@@ -348,6 +377,12 @@ static int mdss_mdp_wfd_validate_out_configuration(struct mdss_mdp_wfd *wfd,
 		fmt = mdss_mdp_get_format_params(layer->buffer.format);
 		if (fmt && !(fmt->flag & VALID_MDP_WB_INTF_FORMAT)) {
 			pr_err("wb=%d does not support dst fmt:%d\n", wb_idx,
+				layer->buffer.format);
+			return -EINVAL;
+		}
+
+		if (!ctl->mdata->has_wb_ubwc && mdss_mdp_is_ubwc_format(fmt)) {
+			pr_err("wb=%d does not support UBWC fmt:%d\n", wb_idx,
 				layer->buffer.format);
 			return -EINVAL;
 		}

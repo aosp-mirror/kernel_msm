@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -87,8 +87,8 @@ static long audio_ioctl_shared(struct file *file, unsigned int cmd,
 		}
 		wmapro_cfg.avg_bytes_per_sec =
 				wmapro_config->avgbytespersecond;
-		if ((wmapro_config->asfpacketlength <= 13376) ||
-		(wmapro_config->asfpacketlength > 0)) {
+		if ((wmapro_config->asfpacketlength <= 13376) &&
+			(wmapro_config->asfpacketlength > 0)) {
 			wmapro_cfg.block_align =
 				wmapro_config->asfpacketlength;
 		} else {
@@ -325,6 +325,8 @@ static int audio_open(struct inode *inode, struct file *file)
 	audio->miscdevice = &audio_wmapro_misc;
 	audio->wakelock_voted = false;
 	audio->audio_ws_mgr = &audio_wmapro_ws_mgr;
+
+	init_waitqueue_head(&audio->event_wait);
 
 	audio->ac = q6asm_audio_client_alloc((app_cb) q6_audio_cb,
 					     (void *)audio);
