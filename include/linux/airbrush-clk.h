@@ -15,6 +15,10 @@
 #include <linux/clk-provider.h>
 #include <linux/of.h>
 
+#define MIF_PLL_TIMEOUT		1000
+
+#define MIF_PLL_CONTROL0	0x10510140
+
 void abc_clk_aon_init(struct device_node *np);
 void abc_clk_core_init(struct device_node *np);
 void abc_clk_fsys_init(struct device_node *np);

@@ -379,6 +379,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
 	u32 to_chip_substate_id;
 	int i;
+	uint32_t val;
+	uint32_t timeout = MIF_PLL_TIMEOUT;
 	struct chip_to_block_map *map = NULL;
 
 	to_chip_substate_id = ab_sm_throttled_chip_substate_id(
@@ -411,6 +413,25 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	   sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0)
 		ab_pmic_on(sc);
+
+	/* TODO(b/119189465): remove when clk framework method is available */
+	if ((sc->curr_chip_substate_id == CHIP_STATE_5_0 ||
+	    sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
+	    sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
+	    to_chip_substate_id < CHIP_STATE_3_0) {
+		ABC_READ(MIF_PLL_CONTROL0, &val);
+		val |= (1 << 4);
+		val |= (1 << 31);
+		ABC_WRITE(MIF_PLL_CONTROL0, val);
+		do {
+			ABC_READ(MIF_PLL_CONTROL0, &val);
+		} while (!(val & 0x20000000) && --timeout > 0);
+
+		if (timeout == 0) {
+			pr_err("Timeout waiting for AIRBRUSH MIF PLL lock\n");
+			return -E_STATUS_TIMEOUT;
+		}
+	}
 
 	/*
 	 * TODO May need to roll-back the block states if only partial
@@ -449,9 +470,20 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		return -EINVAL;
 	}
 
+	/* TODO(b/119189465): remove when clk framework method is available */
+	if ((to_chip_substate_id == CHIP_STATE_3_0 ||
+	    to_chip_substate_id == CHIP_STATE_4_0 ||
+	    to_chip_substate_id == CHIP_STATE_5_0) &&
+	    sc->curr_chip_substate_id < CHIP_STATE_3_0) {
+		ABC_READ(MIF_PLL_CONTROL0, &val);
+		val &= ~(1 << 4);
+		val &= ~(1 << 31);
+		ABC_WRITE(MIF_PLL_CONTROL0, val);
+	}
+
 	if (((to_chip_substate_id == CHIP_STATE_5_0) ||
 			(to_chip_substate_id == CHIP_STATE_6_0)) &&
-			(sc->chip_substate_id < CHIP_STATE_5_0)) {
+			(sc->curr_chip_substate_id < CHIP_STATE_5_0)) {
 		if (msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0, sc->pcie_dev, NULL,
 				MSM_PCIE_CONFIG_NO_CFG_RESTORE))
 			pr_err("PCIe failed to disable link\n");
