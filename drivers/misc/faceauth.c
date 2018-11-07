@@ -67,7 +67,6 @@ static int dma_write_dw(struct file *file, const int remote_addr,
 			const int val);
 static int dma_read_dw(struct file *file, const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
-static int dma_read_result(struct faceauth_start_data *data);
 static int dma_send_workloads(void);
 
 struct faceauth_data {
@@ -149,13 +148,6 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 				return -ETIME;
 			}
 			msleep(1);
-		}
-
-		pr_info("Read back result from AB DRAM\n");
-		err = dma_read_result(&start_step_data);
-		if (err) {
-			pr_err("Error in read back result\n");
-			return err;
 		}
 
 		break;
@@ -383,18 +375,6 @@ static int dma_send_images(struct faceauth_start_data *data)
 		pr_err("Error sending flood image\n");
 		return err;
 	}
-
-	return err;
-}
-
-/**
- * Local function to read FaceAuth data from Airbrush memory via PCIE
- * @param[in] data Data structure copied from user space
- * @return Status, zero if succeed, non-zero if fail
- */
-static int dma_read_result(struct faceauth_start_data *data)
-{
-	int err = 0;
 
 	return err;
 }
