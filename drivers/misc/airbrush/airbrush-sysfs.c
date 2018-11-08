@@ -73,9 +73,57 @@ static ssize_t version_show(struct device *dev,
 	return 0;
 }
 
+static ssize_t state_stats_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	/* keep contents of states array in sync with stat_state enum */
+	const char * const states[STAT_STATE_SIZE] = {"ACTIVE", "SLEEP",
+		"DEEP SLEEP", "SUSPEND", "OFF", "UNKNOWN"};
+	u32 pos = 0;
+	u32 i;
+	struct ab_state_context *sc =
+		(struct ab_state_context *)dev_get_drvdata(dev);
+
+	pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+			"Airbrush Subsystem Power Stats\n");
+
+	mutex_lock(&sc->state_lock);
+
+	for (i = 0; i < STAT_STATE_SIZE; i++) {
+		ktime_t adjusted_duration = sc->state_stats[i].duration;
+		ktime_t last_entry = sc->state_stats[i].last_entry;
+		ktime_t last_exit = sc->state_stats[i].last_exit;
+
+		/* adjust duration for current state */
+		if (sc->curr_chip_substate_id == i &&
+				ktime_after(last_entry, last_exit)) {
+			ktime_t partial_duration = ktime_sub(
+					ktime_get_boottime(), last_entry);
+			adjusted_duration = ktime_add(adjusted_duration,
+					partial_duration);
+		}
+
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%s\n"
+				"\tCumulative count: %llu\n"
+				"\tCumulative duration msec:  %llu\n"
+				"\tLast entry timestamp msec: %llu\n"
+				"\tLast exit timestamp msec:  %llu\n",
+				states[i], sc->state_stats[i].counter,
+				ktime_to_ms(adjusted_duration),
+				ktime_to_ms(last_entry),
+				ktime_to_ms(last_exit));
+	}
+
+	mutex_unlock(&sc->state_lock);
+
+	return pos;
+}
+
 static struct device_attribute ab_sm_attrs[] = {
 	__ATTR_RW(chip_state),
 	__ATTR_RO(version),
+	__ATTR_RO(state_stats),
 };
 
 void ab_sm_create_sysfs(struct ab_state_context *sc)

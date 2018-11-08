@@ -142,6 +142,16 @@ enum block_state {
 	BLOCK_STATE_3_0 = 30,
 };
 
+enum stat_state {
+	STAT_STATE_ACTIVE = 0,
+	STAT_STATE_SLEEP,
+	STAT_STATE_DEEP_SLEEP,
+	STAT_STATE_SUSPEND,
+	STAT_STATE_OFF,
+	STAT_STATE_UNKNOWN,
+	STAT_STATE_SIZE,
+};
+
 #define bit(x) (1<<x)
 #define IPU_POWER_CONTROL	bit(0)
 #define TPU_POWER_CONTROL	bit(1)
@@ -245,6 +255,13 @@ enum ab_chip_id {
 	CHIP_ID_B0,
 };
 
+struct ab_sm_state_stat {
+	u64 counter;		/* cumulative */
+	ktime_t duration;	/* cumulative */
+	ktime_t last_entry;
+	ktime_t last_exit;
+};
+
 typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 
 /**
@@ -344,6 +361,9 @@ struct ab_state_context {
 	struct kfifo *async_entries;
 
 	struct blocking_notifier_head clk_subscribers;
+
+	/* power state stats */
+	struct ab_sm_state_stat state_stats[STAT_STATE_SIZE];
 };
 
 struct ab_sm_misc_session {

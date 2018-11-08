@@ -351,6 +351,50 @@ static u32 ab_sm_throttled_chip_substate_id(
 	return min(chip_substate_id, throttler_substate_id);
 }
 
+static const enum stat_state chip_state_to_stat_state(
+		enum chip_state chip_state_id)
+{
+	if ((chip_state_id >= CHIP_STATE_0_0) &&
+			(chip_state_id < CHIP_STATE_3_0)) {
+		return STAT_STATE_ACTIVE;
+	}
+	switch (chip_state_id) {
+	case CHIP_STATE_3_0:
+		return STAT_STATE_SLEEP;
+	case CHIP_STATE_4_0:
+		return STAT_STATE_DEEP_SLEEP;
+	case CHIP_STATE_5_0:
+		return STAT_STATE_SUSPEND;
+	case CHIP_STATE_6_0:
+		return STAT_STATE_OFF;
+	default:
+		/* should never hit this code path */
+		return STAT_STATE_UNKNOWN;
+	}
+}
+
+/* Caller must hold sc->state_lock */
+static void ab_sm_record_state_change(enum chip_state prev_state,
+		enum chip_state new_state,
+		struct ab_state_context *sc)
+{
+	enum stat_state prev_stat_state = chip_state_to_stat_state(prev_state);
+	enum stat_state new_stat_state = chip_state_to_stat_state(new_state);
+	ktime_t time, time_diff;
+
+	if (new_stat_state == prev_stat_state)
+		return;
+
+	time = ktime_get_boottime();
+	sc->state_stats[new_stat_state].counter++;
+	sc->state_stats[new_stat_state].last_entry = time;
+	sc->state_stats[prev_stat_state].last_exit = time;
+	time_diff = ktime_sub(sc->state_stats[prev_stat_state].last_exit,
+			sc->state_stats[prev_stat_state].last_entry);
+	sc->state_stats[prev_stat_state].duration = ktime_add(
+			sc->state_stats[prev_stat_state].duration, time_diff);
+}
+
 /* Caller must hold sc->state_lock */
 static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
@@ -359,6 +403,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	uint32_t val;
 	uint32_t timeout = MIF_PLL_TIMEOUT;
 	struct chip_to_block_map *map = NULL;
+	enum chip_state prev_state = sc->curr_chip_substate_id;
 
 	to_chip_substate_id = ab_sm_throttled_chip_substate_id(
 			sc->dest_chip_substate_id,
@@ -480,6 +525,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	sc->curr_chip_substate_id = to_chip_substate_id;
+
+	/* record state change */
+	ab_sm_record_state_change(prev_state, sc->curr_chip_substate_id, sc);
 
 	mutex_lock(&sc->async_fifo_lock);
 	if (sc->async_entries) {
@@ -779,6 +827,15 @@ static const struct ab_thermal_ops ab_sm_thermal_ops = {
 	.throttle_state_updated = ab_sm_thermal_throttle_state_updated,
 };
 
+static void ab_sm_state_stats_init(struct ab_state_context *sc)
+{
+	enum stat_state curr_stat_state =
+		chip_state_to_stat_state(sc->curr_chip_substate_id);
+
+	sc->state_stats[curr_stat_state].counter++;
+	sc->state_stats[curr_stat_state].last_entry = ktime_get_boottime();
+}
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -901,6 +958,9 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	init_completion(&ab_sm_ctx->state_change_comp);
 
 	ab_sm_ctx->chip_id = CHIP_ID_UNKNOWN;
+
+	/* initialize state stats */
+	ab_sm_state_stats_init(ab_sm_ctx);
 
 	/*
 	 * TODO error handle at airbrush-sm should return non-zero value to
