@@ -124,6 +124,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 
 	if (state_suspend || state_off) {
 		ab_disable_pgood(ab_ctx);
+		msm_pcie_assert_perst(1);
 
 		ret = ab_pmic_on(ab_ctx);
 		if (ret) {
@@ -160,6 +161,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		if (state_suspend)
 			ab_gpio_enable_ddr_sr(ab_ctx);
 
+		msm_pcie_deassert_perst(1);
 		ab_enable_pgood(ab_ctx);
 
 		timeout = jiffies + SOC_PWRGOOD_WAIT_TIMEOUT;
