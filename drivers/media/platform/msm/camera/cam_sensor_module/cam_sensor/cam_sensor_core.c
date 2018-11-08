@@ -292,6 +292,14 @@ static int32_t cam_sensor_i2c_modes_util(
 {
 	int32_t rc = 0;
 	uint32_t i, size;
+	uint16_t default_sid = 0;
+
+	if ((io_master_info->master_type == CCI_MASTER) &&
+		(i2c_list->i2c_settings.slave_addr != 0)) {
+		default_sid = io_master_info->cci_client->sid;
+		io_master_info->cci_client->sid =
+			i2c_list->i2c_settings.slave_addr >> 1;
+	}
 
 	if (i2c_list->op_code == CAM_SENSOR_I2C_WRITE_RANDOM) {
 		rc = camera_io_dev_write(io_master_info,
@@ -341,6 +349,11 @@ static int32_t cam_sensor_i2c_modes_util(
 				return rc;
 			}
 		}
+	}
+
+	if ((io_master_info->master_type == CCI_MASTER) &&
+		(i2c_list->i2c_settings.slave_addr != 0)) {
+		io_master_info->cci_client->sid = default_sid;
 	}
 
 	return rc;
@@ -1161,6 +1174,9 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	struct cam_camera_slave_info *slave_info;
 	struct cam_hw_soc_info *soc_info =
 		&s_ctrl->soc_info;
+	struct cam_sensor_i2c_reg_setting i2c_settings;
+	struct cam_sensor_i2c_reg_array reg_setting[2];
+	uint16_t default_sid = 0;
 
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "failed: %pK", s_ctrl);
@@ -1208,6 +1224,39 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 				"cci_init for peer ir failed: rc: %d", rc);
 	}
 
+	if (s_ctrl->soc_info.index != IR_MASTER)
+		goto done;
+
+	default_sid = s_ctrl->io_master_info.cci_client->sid;
+	s_ctrl->io_master_info.cci_client->sid = 0xC0 >> 1;
+	reg_setting[0].reg_addr = 0x0103;
+	reg_setting[0].reg_data = 0x01;
+	reg_setting[0].delay = 0;
+	reg_setting[0].data_mask = 0xFF;
+	reg_setting[1].reg_addr = 0x302B;
+	reg_setting[1].reg_data = 0xE4;
+	reg_setting[1].delay = 0;
+	reg_setting[1].data_mask = 0xFF;
+	i2c_settings.reg_setting = reg_setting;
+	i2c_settings.size = 2;
+	i2c_settings.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+	i2c_settings.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_settings.delay = 0;
+	rc = camera_io_dev_write(&(s_ctrl->io_master_info),
+		&i2c_settings);
+	s_ctrl->io_master_info.cci_client->sid = default_sid;
+
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR,
+			"Reprogram IR_MASTER slave address failed rc = %d",
+			rc);
+		return rc;
+	} else {
+		CAM_DBG(CAM_SENSOR,
+			"Reprogram IR_MASTER slave address success");
+	}
+
+done:
 	return rc;
 }
 

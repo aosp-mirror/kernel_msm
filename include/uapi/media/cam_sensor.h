@@ -262,7 +262,7 @@ struct cam_cmd_power {
  * @ cmd_type        :   Command buffer type
  * @ data_type       :   I2C data type
  * @ addr_type       :   I2C address type
- * @ reserved
+ * @ slave_addr      :   Slave address
  */
 struct i2c_rdwr_header {
 	uint16_t    count;
@@ -270,7 +270,7 @@ struct i2c_rdwr_header {
 	uint8_t     cmd_type;
 	uint8_t     data_type;
 	uint8_t     addr_type;
-	uint16_t    reserved;
+	uint16_t    slave_addr;
 } __attribute__((packed));
 
 /**

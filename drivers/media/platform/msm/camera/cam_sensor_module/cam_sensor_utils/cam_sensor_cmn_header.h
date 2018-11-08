@@ -280,6 +280,7 @@ struct cam_sensor_i2c_reg_setting {
 	enum camera_sensor_i2c_type addr_type;
 	enum camera_sensor_i2c_type data_type;
 	unsigned short delay;
+	unsigned short slave_addr;
 };
 
 struct i2c_settings_list {
