@@ -319,7 +319,12 @@ static int mdm_handle_boot_fail(struct esoc_clink *esoc_clink, u8 *pon_trial)
 		break;
 	case BOOT_FAIL_ACTION_PANIC:
 		esoc_mdm_log("Calling panic!!\n");
-		panic("Panic requested on external modem boot failure\n");
+		/* Skip panic for early development w/o sdx50 daughter board
+		 * STOPSHIP:117303510
+		 */
+		//panic("Panic requested on external modem boot failure\n");
+		dev_err(&esoc_clink->dev,
+		"Skip panic requested on external modem boot failure\n");
 		break;
 	case BOOT_FAIL_ACTION_NOP:
 		esoc_mdm_log("Leaving the modem in its curent state\n");
@@ -516,6 +521,10 @@ static struct esoc_compat compat_table[] = {
 	},
 	{
 		.name = "SDX50M",
+		.data = NULL,
+	},
+	{
+		.name = "SDXPRAIRIE",
 		.data = NULL,
 	},
 };

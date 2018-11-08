@@ -40,7 +40,12 @@ enum attr_idn {
 	QUERY_ATTR_IDN_CORR_PRG_BLK_NUM		= 0x11,
 	/* use one reserved bit */
 	QUERY_ATTR_IDN_MANUAL_GC_STATUS		= 0x17,
+        /* should be 0x17 in UFS 3.0 */
+	QUERY_ATTR_IDN_REF_CLK_GATING_WAIT_TIME	= 0xff,
 };
+
+#define QUERY_ATTR_IDN_REF_CLK_GATING_WAIT_TIME \
+				QUERY_ATTR_IDN_REF_CLK_GATING_WAIT_TIME
 
 #define QUERY_ATTR_IDN_BOOT_LU_EN_MAX	0x02
 

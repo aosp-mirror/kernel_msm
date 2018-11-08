@@ -194,6 +194,9 @@ Optional properties:
 					If unspecified, this LUT is unused and unallocated. Instead, userspace
 					brightness gets mapped linearly, during runtime, to the range defined by
 					qcom,mdss-dsi-bl-min-level and qcom,mdss-dsi-bl-max-level.
+- qcom,bl-update-flag:			A string that specifies controls for backlight update of the panel.
+					"delay_until_first_frame" = Delay backlight update of the panel
+					until the first frame is received from the HW.
 - qcom,mdss-dsi-interleave-mode:	Specifies interleave mode.
 					0 = default value.
 - qcom,mdss-dsi-panel-type:		Specifies the panel operating mode.
@@ -551,6 +554,8 @@ Optional properties:
 					- address of DDIC's register
 					- number of start byte. example: 0 means start from byte 0.
 					- length of the SN
+- qcom,mdss-dsi-dma-schedule-line:	An integer value indicates the line number after vertical active
+					region, at which command DMA needs to be triggered.
 
 Required properties for sub-nodes:	None
 Optional properties:
@@ -626,6 +631,7 @@ Example:
 		qcom,mdss-dsi-bl-min-level = <1>;
 		qcom,mdss-dsi-bl-max-level = < 15>;
 		qcom,mdss-brightness-max-level = <255>;
+		qcom,bl-update-flag = "delay_until_first_frame";
 		qcom,mdss-dsi-interleave-mode = <0>;
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
 		qcom,mdss-dsi-te-check-enable;
@@ -808,5 +814,6 @@ Example:
 		qcom,display-topology = <1 1 1>,
 			                <2 2 1>;
 		qcom,default-topology-index = <0>;
+		qcom,mdss-dsi-dma-schedule-line = <5>;
 	};
 };

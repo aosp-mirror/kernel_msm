@@ -519,6 +519,7 @@ struct ufs_dev_info {
 	u8	b_device_sub_class;
 	u16	w_manufacturer_id;
 	u8	i_product_name;
+	u16	w_spec_version;
 
 	/* query flags */
 	bool f_power_on_wp_en;
@@ -546,6 +547,7 @@ struct ufs_dev_info {
 struct ufs_dev_desc {
 	u16 wmanufacturerid;
 	char model[MAX_MODEL_LEN + 1];
+	u16 wspecversion;
 };
 
 #endif /* End of Header */
