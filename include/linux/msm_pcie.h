@@ -108,6 +108,9 @@ int msm_pcie_deregister_event(struct msm_pcie_register_event *reg);
  */
 int msm_pcie_recover_config(struct pci_dev *dev);
 
+int msm_pcie_assert_perst(u32 rc_idx);
+int msm_pcie_deassert_perst(u32 rc_idx);
+
 /**
  * msm_pcie_enumerate - enumerate Endpoints.
  * @rc_idx:	RC that Endpoints connect to.
