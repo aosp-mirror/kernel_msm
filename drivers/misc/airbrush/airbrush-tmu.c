@@ -560,6 +560,78 @@ static struct thermal_zone_of_device_ops airbrush_sensor_ops = {
 	.set_emul_temp = airbrush_tmu_set_emulation,
 };
 
+static inline int airbrush_tmu_get_current_temp(struct airbrush_tmu_data *data,
+		int id)
+{
+	u32 reg_offset, reg_id_min, reg_shift;
+	u32 code;
+
+	switch (id) {
+	case 0:
+	case 1:
+		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP0_1;
+		reg_id_min = 0;
+		break;
+	case 2:
+	case 3:
+	case 4:
+		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP2_4;
+		reg_id_min = 2;
+		break;
+	case 5:
+	case 6:
+	case 7:
+		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP5_7;
+		reg_id_min = 5;
+		break;
+	default:
+		pr_warn("Bug: bad sensor probe id %d", id);
+		return 0;
+	}
+	reg_shift = AIRBRUSH_TMU_TEMP_SHIFT * (id - reg_id_min);
+
+	code = (tmu_read(data->base + reg_offset) >> reg_shift)
+			& AIRBRUSH_TMU_TEMP_MASK;
+	return code_to_temp(data, code);
+}
+
+static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
+{
+	struct airbrush_tmu_data *data = dev_get_drvdata(dev);
+	int temp = airbrush_tmu_get_current_temp(data, id);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", temp);
+}
+
+#define AB_TMU_TEMP_PROBE_ATTR_RO(name, id) \
+	static ssize_t temp_probe_##name##_show(struct device *dev, \
+			struct device_attribute *attr, char *buf) \
+	{ \
+		return temp_probe_show(dev, (id), buf); \
+	} \
+	static DEVICE_ATTR_RO(temp_probe_##name)
+
+AB_TMU_TEMP_PROBE_ATTR_RO(main, AIRBRUSH_TEMP_PROBE_MAIN);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu0, AIRBRUSH_TEMP_PROBE_IPU0);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu1, AIRBRUSH_TEMP_PROBE_IPU1);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu2, AIRBRUSH_TEMP_PROBE_IPU2);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu_tpu, AIRBRUSH_TEMP_PROBE_IPU_TPU);
+AB_TMU_TEMP_PROBE_ATTR_RO(tpu0, AIRBRUSH_TEMP_PROBE_TPU0);
+AB_TMU_TEMP_PROBE_ATTR_RO(tpu1, AIRBRUSH_TEMP_PROBE_TPU1);
+
+static struct attribute *airbrush_tmu_attrs[] = {
+	&dev_attr_temp_probe_main.attr,
+	&dev_attr_temp_probe_ipu0.attr,
+	&dev_attr_temp_probe_ipu1.attr,
+	&dev_attr_temp_probe_ipu2.attr,
+	&dev_attr_temp_probe_ipu_tpu.attr,
+	&dev_attr_temp_probe_tpu0.attr,
+	&dev_attr_temp_probe_tpu1.attr,
+	NULL,
+};
+
+ATTRIBUTE_GROUPS(airbrush_tmu);
+
 static int airbrush_tmu_probe(struct platform_device *pdev)
 {
 	struct airbrush_tmu_data *data;
@@ -569,6 +641,10 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 					GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
+
+	ret = devm_device_add_groups(&pdev->dev, airbrush_tmu_groups);
+	if (ret)
+		goto err;
 
 	platform_set_drvdata(pdev, data);
 	mutex_init(&data->lock);
