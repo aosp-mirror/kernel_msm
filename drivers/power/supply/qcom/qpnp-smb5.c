@@ -220,6 +220,7 @@ module_param_named(
 );
 
 #define PMI632_MAX_ICL_UA	3000000
+#define PM6150_MAX_FCC_UA	3000000
 static int smb5_chg_config_init(struct smb5 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
@@ -256,6 +257,7 @@ static int smb5_chg_config_init(struct smb5 *chip)
 		chg->param = smb5_pm8150b_params;
 		chg->name = "pm6150_charger";
 		chg->wa_flags |= SW_THERM_REGULATION_WA;
+		chg->main_fcc_max = PM6150_MAX_FCC_UA;
 		break;
 	case PMI632_SUBTYPE:
 		chip->chg.smb_version = PMI632_SUBTYPE;
@@ -291,6 +293,7 @@ out:
 #define MICRO_1P5A			1500000
 #define MICRO_P1A			100000
 #define MICRO_1PA			1000000
+#define MICRO_3PA			3000000
 #define OTG_DEFAULT_DEGLITCH_TIME_MS	50
 #define DEFAULT_WD_BARK_TIME		64
 static int smb5_parse_dt(struct smb5 *chip)
@@ -347,7 +350,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 				"qcom,otg-cl-ua", &chg->otg_cl_ua);
 	if (rc < 0)
 		chg->otg_cl_ua = (chip->chg.smb_version == PMI632_SUBTYPE) ?
-							MICRO_1PA : MICRO_1P5A;
+							MICRO_1PA : MICRO_3PA;
 
 	rc = of_property_read_u32(node, "qcom,chg-term-src",
 			&chip->dt.term_current_src);
@@ -441,10 +444,21 @@ static int smb5_parse_dt(struct smb5 *chip)
 					"qcom,fcc-stepping-enable");
 
 	/* Extract ADC channels */
-	rc = smblib_get_iio_channel(chg, "usb_in_voltage",
-					&chg->iio.usbin_v_chan);
+	rc = smblib_get_iio_channel(chg, "mid_voltage", &chg->iio.mid_chan);
 	if (rc < 0)
 		return rc;
+
+	if (!chg->iio.mid_chan) {
+		rc = smblib_get_iio_channel(chg, "usb_in_voltage",
+				&chg->iio.usbin_v_chan);
+		if (rc < 0)
+			return rc;
+
+		if (!chg->iio.usbin_v_chan) {
+			dev_err(chg->dev, "No voltage channel defined");
+			return -EINVAL;
+		}
+	}
 
 	rc = smblib_get_iio_channel(chg, "chg_temp", &chg->iio.temp_chan);
 	if (rc < 0)
@@ -885,6 +899,7 @@ static enum power_supply_property smb5_usb_main_props[] = {
 	POWER_SUPPLY_PROP_FLASH_ACTIVE,
 	POWER_SUPPLY_PROP_FLASH_TRIGGER,
 	POWER_SUPPLY_PROP_TOGGLE_STAT,
+	POWER_SUPPLY_PROP_MAIN_FCC_MAX,
 };
 
 static int smb5_usb_main_get_prop(struct power_supply *psy,
@@ -927,6 +942,9 @@ static int smb5_usb_main_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TOGGLE_STAT:
 		val->intval = 0;
 		break;
+	case POWER_SUPPLY_PROP_MAIN_FCC_MAX:
+		val->intval = chg->main_fcc_max;
+		break;
 	default:
 		pr_debug("get prop %d is not supported in usb-main\n", psp);
 		rc = -EINVAL;
@@ -964,6 +982,10 @@ static int smb5_usb_main_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TOGGLE_STAT:
 		rc = smblib_toggle_smb_en(chg, val->intval);
 		break;
+	case POWER_SUPPLY_PROP_MAIN_FCC_MAX:
+		chg->main_fcc_max = val->intval;
+		rerun_election(chg->fcc_votable);
+		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
 		rc = -EINVAL;
@@ -980,6 +1002,7 @@ static int smb5_usb_main_prop_is_writeable(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_TOGGLE_STAT:
+	case POWER_SUPPLY_PROP_MAIN_FCC_MAX:
 		rc = 1;
 		break;
 	default:
@@ -2066,15 +2089,6 @@ static int smb5_init_hw(struct smb5 *chip)
 		}
 	}
 
-	/* set the Source (OTG) mode current limit */
-	rc = smblib_masked_write(chg, DCDC_OTG_CURRENT_LIMIT_CFG_REG,
-			OTG_CURRENT_LIMIT_MASK, OTG_CURRENT_LIMIT_3000_MA);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't configure DCDC_OTG_CURRENT_LIMIT_CFG rc=%d\n",
-				rc);
-		return rc;
-	}
-
 	if (chg->sw_jeita_enabled) {
 		rc = smblib_disable_hw_jeita(chg, true);
 		if (rc < 0) {
@@ -2484,6 +2498,13 @@ static int smb5_request_interrupts(struct smb5 *chip)
 	if (chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq)
 		chg->usb_icl_change_irq_enabled = true;
 
+	/*
+	 * Disable WDOG SNARL IRQ by default to prevent IRQ storm. If required
+	 * for any application, enable it through votable.
+	 */
+	if (chg->irq_info[WDOG_SNARL_IRQ].irq)
+		vote(chg->wdog_snarl_irq_en_votable, DEFAULT_VOTER, false, 0);
+
 	return rc;
 }
 
@@ -2642,6 +2663,7 @@ static int smb5_probe(struct platform_device *pdev)
 	chg->die_health = -EINVAL;
 	chg->connector_health = -EINVAL;
 	chg->otg_present = false;
+	chg->main_fcc_max = -EINVAL;
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {
