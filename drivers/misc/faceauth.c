@@ -36,7 +36,7 @@
 #define SYSREG_AON_IPU_REG29_ADDR (SYSREG_BASE + SYSREG_AON_IPU_REG29)
 
 /* ABC FW and workload binary offsets */
-#define WORKLOAD_ADDR 0x20000000
+#define M0_FIRMWARE_ADDR 0x20000000
 #define COMPARE_RESULT_FLAG_ADDR 0x21fffff4
 #define ENROLLMENT_FLAG_ADDR 0x21fffff8
 #define COMPLETION_FLAG_ADDR 0x21fffffc
@@ -49,7 +49,7 @@
 #define FLOOD_IMAGE_ADDR 0x23000000
 
 /* ABC FW and workload path */
-#define M0_WORKLOAD_PATH "m0_workload.fw"
+#define M0_FIRMWARE_PATH "m0_workload.fw"
 #define JQS_DEPTH_PATH "depth.fw"
 #define JQS_AFFINE_DEPTH_PATH "affine.fw"
 #define JQS_AFFINE_RGB_PATH "affine_rgb.fw"
@@ -88,7 +88,14 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case FACEAUTH_DEV_IOC_INIT:
-		pr_info("faceauth init IOCTL\n");
+		pr_info("faceauth init IOCTL\nSend faceauth workloads\n");
+
+		err = dma_send_workloads();
+		if (err) {
+			pr_err("Error in sending M0 firmware\n");
+			return err;
+		}
+
 		break;
 	case FACEAUTH_DEV_IOC_START:
 		pr_info("faceauth start IOCTL\n");
@@ -114,16 +121,9 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			}
 		}
 
-		pr_info("Send workloads\n");
-		err = dma_send_workloads();
-		if (err) {
-			pr_err("Error in sending workload\n");
-			return err;
-		}
-
-		/* Set M0 workload address */
-		pr_info("Set M0 workload addr = 0x%08x\n", WORKLOAD_ADDR);
-		dma_write_dw(file, SYSREG_AON_IPU_REG29_ADDR, WORKLOAD_ADDR);
+		/* Set M0 firmware address */
+		pr_info("Set M0 firmware addr = 0x%08x\n", M0_FIRMWARE_ADDR);
+		dma_write_dw(file, SYSREG_AON_IPU_REG29_ADDR, M0_FIRMWARE_ADDR);
 
 		/* Set enrollment flag flag */
 		pr_info("Set faceauth enrollment flag at 0x%08x\n",
@@ -147,11 +147,11 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			int done;
 			dma_read_dw(file, COMPLETION_FLAG_ADDR, &done);
 			if (done) {
-				pr_info("Workload completes.\n");
+				pr_info("Faceauth workflow completes.\n");
 				break;
 			}
 			if (time_before(stop, jiffies)) {
-				pr_err("Airbrush workload timeout!\n");
+				pr_err("Faceauth workflow timeout!\n");
 				return -ETIME;
 			}
 			msleep(1);
@@ -423,11 +423,11 @@ static int dma_send_workloads(void)
 		return err;
 	}
 
-	/* Send M0 workload */
-	pr_info("Send M0 workload to addr 0x%08x\n", WORKLOAD_ADDR);
-	err = dma_send_fw(M0_WORKLOAD_PATH, WORKLOAD_ADDR);
+	/* Send M0 firmware */
+	pr_info("Send M0 firmware to addr 0x%08x\n", M0_FIRMWARE_ADDR);
+	err = dma_send_fw(M0_FIRMWARE_PATH, M0_FIRMWARE_ADDR);
 	if (err) {
-		pr_err("Error during M0 workload transfer: %d\n", err);
+		pr_err("Error during M0 firmware transfer: %d\n", err);
 		return err;
 	}
 
