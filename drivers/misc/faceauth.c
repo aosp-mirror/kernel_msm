@@ -60,7 +60,7 @@
 #define EMBEDDING_VALIDATE 2
 
 /* Timeout */
-#define FACEAUTH_TIMEOUT 1000
+#define FACEAUTH_TIMEOUT 3000
 
 static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir);
