@@ -55,6 +55,10 @@
 #define JQS_AFFINE_RGB_PATH "affine_rgb.fw"
 #define JQS_AFFINE_SKIN_PATH "affine_8.fw"
 
+#define EMBEDDING_ERASEALL 0
+#define EMBEDDING_ENROLL 1
+#define EMBEDDING_VALIDATE 2
+
 /* Timeout */
 #define FACEAUTH_TIMEOUT 1000
 
@@ -93,18 +97,21 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 				   sizeof(start_step_data)))
 			return -EFAULT;
 
-		if (!start_step_data.image_dot_left_size)
-			return -EINVAL;
-		if (!start_step_data.image_dot_right_size)
-			return -EINVAL;
-		if (!start_step_data.image_flood_size)
-			return -EINVAL;
+		if (start_step_data.enroll == EMBEDDING_ENROLL ||
+		    start_step_data.enroll == EMBEDDING_VALIDATE) {
+			if (!start_step_data.image_dot_left_size)
+				return -EINVAL;
+			if (!start_step_data.image_dot_right_size)
+				return -EINVAL;
+			if (!start_step_data.image_flood_size)
+				return -EINVAL;
 
-		pr_info("Send images\n");
-		err = dma_send_images(&start_step_data);
-		if (err) {
-			pr_err("Error in sending workload\n");
-			return err;
+			pr_info("Send images\n");
+			err = dma_send_images(&start_step_data);
+			if (err) {
+				pr_err("Error in sending workload\n");
+				return err;
+			}
 		}
 
 		pr_info("Send workloads\n");
