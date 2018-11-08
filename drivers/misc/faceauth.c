@@ -83,8 +83,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	int err = 0;
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_continue_data continue_step_data = { 0 };
-	unsigned long stop;
+	unsigned long stop, ioctl_start;
 	uint32_t success;
+
+	ioctl_start = jiffies;
 
 	switch (cmd) {
 	case FACEAUTH_DEV_IOC_INIT:
@@ -93,7 +95,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		err = dma_send_workloads();
 		if (err) {
 			pr_err("Error in sending M0 firmware\n");
-			return err;
+			goto exit;
 		}
 
 		break;
@@ -101,23 +103,31 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		pr_info("faceauth start IOCTL\n");
 
 		if (copy_from_user(&start_step_data, (const void __user *)arg,
-				   sizeof(start_step_data)))
-			return -EFAULT;
+				   sizeof(start_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
 
 		if (start_step_data.enroll == EMBEDDING_ENROLL ||
 		    start_step_data.enroll == EMBEDDING_VALIDATE) {
-			if (!start_step_data.image_dot_left_size)
-				return -EINVAL;
-			if (!start_step_data.image_dot_right_size)
-				return -EINVAL;
-			if (!start_step_data.image_flood_size)
-				return -EINVAL;
+			if (!start_step_data.image_dot_left_size) {
+				err = -EINVAL;
+				goto exit;
+			}
+			if (!start_step_data.image_dot_right_size) {
+				err = -EINVAL;
+				goto exit;
+			}
+			if (!start_step_data.image_flood_size) {
+				err = -EINVAL;
+				goto exit;
+			}
 
 			pr_info("Send images\n");
 			err = dma_send_images(&start_step_data);
 			if (err) {
 				pr_err("Error in sending workload\n");
-				return err;
+				goto exit;
 			}
 		}
 
@@ -152,7 +162,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			}
 			if (time_before(stop, jiffies)) {
 				pr_err("Faceauth workflow timeout!\n");
-				return -ETIME;
+				err = -ETIME;
+				goto exit;
 			}
 			msleep(1);
 		}
@@ -169,17 +180,22 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 		if (copy_to_user((void __user *)arg, &continue_step_data,
 				 sizeof(continue_step_data)))
-			return -EFAULT;
+			err = -EFAULT;
+		goto exit;
 		break;
 	case FACEAUTH_DEV_IOC_CLEANUP:
 		/* TODO cleanup Airbrush DRAM */
 		pr_info("faceauth cleanup IOCTL\n");
 		break;
 	default:
-		return -EFAULT;
+		err = -EFAULT;
+		goto exit;
 	}
 
-	return 0;
+exit:
+	pr_info("Faceauth action took %dus\n",
+		jiffies_to_usecs(jiffies - ioctl_start));
+	return err;
 }
 
 static int faceauth_open(struct inode *inode, struct file *file)
