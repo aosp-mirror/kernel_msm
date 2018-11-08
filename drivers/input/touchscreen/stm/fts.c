@@ -2982,16 +2982,6 @@ static int fts_chip_initialization(struct fts_ts_info *info, int init_type)
 #endif
 		if (ret2 == OK)
 			break;
-		else {
-			/* Workaround for the production test failing every
-			 * time. Simply return success since the test results
-			 * were unreliable.
-			 * TODO: b/118406364
-			 */
-			pr_err("Temporarily returning success until the production test is more reliable.\n");
-			ret2 = OK;
-			break;
-		}
 		initretrycnt++;
 		pr_err("initialization cycle count = %04d - ERROR %08X\n",
 			initretrycnt, ret2);

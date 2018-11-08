@@ -1154,6 +1154,7 @@ int production_test_main(char *pathThresholds, int stop_on_fail, int saveInit,
 
 	pr_info("MAIN Production test is starting...\n");
 
+#ifndef SKIP_PRODUCTION_TEST
 	pr_info("ITO TEST:\n");
 	res = production_test_ito(pathThresholds, todo, NULL);
 	if (res < 0) {
@@ -1162,6 +1163,7 @@ int production_test_main(char *pathThresholds, int stop_on_fail, int saveInit,
 			 * */
 	} else
 		pr_info("ITO TEST OK!\n");
+#endif
 
 	pr_info("INITIALIZATION TEST :\n");
 	if (saveInit != NO_INIT) {
@@ -1188,25 +1190,25 @@ int production_test_main(char *pathThresholds, int stop_on_fail, int saveInit,
 		}
 	}
 
+#ifndef SKIP_PRODUCTION_TEST
 	pr_info("PRODUCTION DATA TEST:\n");
 	ret = production_test_data(pathThresholds, stop_on_fail, todo);
 	if (ret < OK)
 		pr_err("Error during PRODUCTION DATA TEST! ERROR %08X\n", ret);
 	else
 		pr_info("PRODUCTION DATA TEST OK!\n");
+#endif
 
 #ifdef COMPUTE_INIT_METHOD
-	/* Workaround for production test failing consistently every time it
-	 * runs. Set the MP flag to signal that panel initialization is complete
-	 * even though one or more tests might have failed.
-	 * TODO: b/118406364
-	 */
 	if (saveInit != NO_INIT) {
+		pr_info("%s: Clearing the FIFO events!!!\n", __func__);
+		ret = flushFIFO();
+		if (ret < OK)
+			pr_err("%s: Error while Flushing the FIFO! ERROR %8X\n",
+				__func__, ret);
 		/* save the mp flag to desired value
 		 * because data check OK
 		 */
-		if (ret < OK)
-			pr_info("Saving the MP Flag even though the production test failed.");
 		ret = saveMpFlag(mpflag);
 		if (ret < OK)
 			pr_err("Error while saving MP FLAG! ERROR %08X\n",

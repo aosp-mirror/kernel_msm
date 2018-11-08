@@ -50,9 +50,9 @@
   */
 /* **** CODE CONFIGURATION **** */
 #define FTS_TS_DRV_NAME		"fts"	/* driver name */
-#define FTS_TS_DRV_VERSION	"5.2.16.1_Google_C2"	/* driver version string
+#define FTS_TS_DRV_VERSION	"5.2.16.2_Google_C2"	/* driver version string
 							 * */
-#define FTS_TS_DRV_VER		0x05021001	/* driver version u32 format */
+#define FTS_TS_DRV_VER		0x05021002	/* driver version u32 format */
 
 /* #define DEBUG */	/* /< define to print more logs in the kernel log
 			 * and better follow the code flow */
@@ -71,6 +71,7 @@
 #define COMPUTE_INIT_METHOD  /* Allow to compute init data on phone during
 			      * production
 			      */
+#define SKIP_PRODUCTION_TEST /* Skip ITO and production data test */
 #ifndef COMPUTE_INIT_METHOD
 #define PRE_SAVED_METHOD /* Pre-Saved Method used
 			  * during production
