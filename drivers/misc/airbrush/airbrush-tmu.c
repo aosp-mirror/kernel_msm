@@ -483,26 +483,15 @@ void tmu_set_emulate_data(struct airbrush_tmu_data *data,  u16 next_time,
 static int airbrush_tmu_set_emulation(void *drv_data, int temp)
 {
 	struct airbrush_tmu_data *data = drv_data;
-	int ret = -EINVAL;
 
-	if (temp && temp < MCELSIUS)
-		goto out;
-
-	if (temp)
-		temp /= MCELSIUS;
-
-	tmu_enable_emulate();
-	tmu_set_emulate_data(data, 1, temp);
-	/* One can comment below emulation disable function, when wants to
-	 * try TMU emulation mode, in that case once entered emulation
-	 * mode then emulation mode will be always enabled and one needs
-	 * to restart ABC to disable emulation.
-	 */
-	tmu_disable_emulate();
+	if (temp != 0) {
+		tmu_enable_emulate();
+		tmu_set_emulate_data(data, 1, temp / MCELSIUS);
+	} else {
+		tmu_disable_emulate();
+	}
 
 	return 0;
-out:
-	return ret;
 }
 #else
 static int airbrush_tmu_set_emulation(void *drv_data, int temp)
