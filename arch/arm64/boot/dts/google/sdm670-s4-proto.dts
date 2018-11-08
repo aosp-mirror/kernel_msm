@@ -16,6 +16,7 @@
 #include "sdm670-s4-common.dtsi"
 #include "sdm670-b4s4-key-dev-proto.dtsi"
 #include "sdm670-b4s4-touch-dev-proto.dtsi"
+#include "sdm670-b4s4-thermal-proto.dtsi"
 #include "sdm670-camera-sensor.dtsi"
 #include "sdm670-s4-usb-v2.dtsi"
 
