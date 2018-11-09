@@ -182,7 +182,7 @@
 		ab-tmu-trimming = <0>;
 	};
 
-	abc_sm: abc-sm {
+	abc-sm {
 		compatible = "abc,airbrush-sm";
 
 		clocks = <&fin_pll_ab>,

@@ -20,7 +20,3 @@
 #include "sm8150-floral-jaws-battery.dtsi"
 #include "sm8150-floral-jaws-camera-sensor.dtsi"
 #include "sm8150-floral-jaws-pac193x.dtsi"
-
-&abc_sm {
-	patch-firmware-on-boot;
-};
