@@ -169,6 +169,7 @@
 
 &thermal_zones {
 	vbat {
+		polling-delay-passive = <100>;
 		cooling-maps {
 			vbat_cpu4 {
 				trip = <&low_vbat>;
@@ -223,6 +224,7 @@
 		};
 	};
 	ibat-high {
+		polling-delay-passive = <100>;
 		cooling-maps {
 			ibat_cpu4 {
 				trip = <&ibat_high>;
