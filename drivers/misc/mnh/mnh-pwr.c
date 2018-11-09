@@ -88,7 +88,7 @@ static int mnh_pwr_smps1_notifier_cb(struct notifier_block *nb,
 	mnh_pwr->pcie_failure = true;
 
 	/* force emergency shutdown if regulator output has failed */
-	if (event == REGULATOR_EVENT_FAIL) {
+	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(mnh_pwr->dev,
 			"%s: smps1 supply has failed, forcing shutdown\n",
 			__func__);
@@ -108,7 +108,7 @@ static int mnh_pwr_smps2_notifier_cb(struct notifier_block *nb,
 	mnh_pwr->pcie_failure = true;
 
 	/* force emergency shutdown if regulator output has failed */
-	if (event == REGULATOR_EVENT_FAIL) {
+	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(mnh_pwr->dev,
 			"%s: smps2 supply has failed, forcing shutdown\n",
 			__func__);
@@ -128,7 +128,7 @@ static int mnh_pwr_ldo1_notifier_cb(struct notifier_block *nb,
 	mnh_pwr->pcie_failure = true;
 
 	/* force emergency shutdown if regulator output has failed */
-	if (event == REGULATOR_EVENT_FAIL) {
+	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(mnh_pwr->dev,
 			"%s: ldo1 supply has failed, forcing shutdown\n",
 			__func__);
@@ -148,7 +148,7 @@ static int mnh_pwr_ldo2_notifier_cb(struct notifier_block *nb,
 	mnh_pwr->pcie_failure = true;
 
 	/* force emergency shutdown if regulator output has failed */
-	if (event == REGULATOR_EVENT_FAIL) {
+	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(mnh_pwr->dev,
 			"%s: ldo2 supply has failed, forcing shutdown\n",
 			__func__);
