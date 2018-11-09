@@ -4042,7 +4042,7 @@ static int iaxxx_pcm_port_setup(struct snd_kcontrol *kcontrol,
 		reg_srdd_val = 0;
 		mode = IAXXX_PCM_CTRL_DEFAULT_TDMFMT;
 	} else if (iaxxx->pcm_port_fmt[port] == 2) {
-		reg_srdd_val = 0;
+		reg_srdd_val = 1;
 		mode = IAXXX_PCM_CTRL_DEFAULT_DSPFMT;
 	} else {
 		dev_err(codec->dev, "unsupported format\n");
@@ -5164,7 +5164,7 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		iaxxx->pcm_dai_fmt[id] = SND_SOC_DAIFMT_I2S;
 		break;
 	case SND_SOC_DAIFMT_DSP_A:
-		reg_srdd_val = 0;
+		reg_srdd_val = 1;
 		iaxxx->pcm_dai_fmt[id] = SND_SOC_DAIFMT_DSP_A;
 		break;
 	default:
