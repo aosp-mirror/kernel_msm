@@ -24,7 +24,8 @@
 			config {
 				pins = "gpio80";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-pull-down;
+				input-enable;
 			};
 		};
 
@@ -50,7 +51,8 @@
 			config {
 				pins = "gpio79";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-pull-down;
+				input-enable;
 			};
 		};
 	};
@@ -320,8 +322,8 @@
 		cirrus,multi-amp-mode;
 
 		cirrus,irq-config {
-			cirrus,irq-drive-select = <0x00>;
-			cirrus,irq-polarity = <0x00>;
+			cirrus,irq-drive-select = <0x01>;
+			cirrus,irq-polarity = <0x01>;
 			cirrus,irq-gpio-select = <0x00>;
 			cirrus,irq-output-enable = <0x01>;
 			cirrus,irq-src-select = <0x01>;
@@ -352,8 +354,8 @@
 		cirrus,multi-amp-mode;
 
 		cirrus,irq-config {
-			cirrus,irq-drive-select = <0x00>;
-			cirrus,irq-polarity = <0x00>;
+			cirrus,irq-drive-select = <0x01>;
+			cirrus,irq-polarity = <0x01>;
 			cirrus,irq-gpio-select = <0x00>;
 			cirrus,irq-output-enable = <0x01>;
 			cirrus,irq-src-select = <0x01>;
