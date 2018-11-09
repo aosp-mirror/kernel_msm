@@ -7,6 +7,7 @@
  * published by the Free Software Foundation.
  *
  */
+ #include <dt-bindings/thermal/thermal.h>
 
 &soc {
 	thermal-zones {
@@ -55,6 +56,27 @@
 					temperature = <130000>;
 					hysteresis = <0>;
 					type = "critical";
+				};
+			};
+		};
+		pm8150b-vbat-lvl0 {
+			cooling-maps {
+				airbrush {
+					trip = <&vbat_lvl0>;
+					cooling-device = <&abc_cooling
+						THERMAL_NO_LIMIT
+						THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+
+		soc {
+			cooling-maps {
+				airbrush {
+					trip = <&soc_trip>;
+					cooling-device = <&abc_cooling
+						THERMAL_NO_LIMIT
+						THERMAL_NO_LIMIT>;
 				};
 			};
 		};
