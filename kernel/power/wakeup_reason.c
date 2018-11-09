@@ -308,14 +308,15 @@ static inline void stop_logging_wakeup_reasons(void)
  */
 void log_base_wakeup_reason(int irq)
 {
-	/* No locking is needed, since this function is called within
-	 * syscore_resume, with both nonboot CPUs and interrupts disabled.
-	 */
+	unsigned long flags;
+
+	spin_lock_irqsave(&resume_reason_lock, flags);
 	base_irq_nodes = add_to_siblings(base_irq_nodes, irq);
 	WARN_ON(!base_irq_nodes);
 #ifndef CONFIG_DEDUCE_WAKEUP_REASONS
 	base_irq_nodes->handled = true;
 #endif
+	spin_unlock_irqrestore(&resume_reason_lock, flags);
 }
 
 #ifdef CONFIG_DEDUCE_WAKEUP_REASONS
