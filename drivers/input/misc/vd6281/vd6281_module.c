@@ -269,7 +269,7 @@ static ssize_t rainbow_read_byte_store(struct device *dev,
 	}
 	mutex_unlock(&ctrl->cam_sensor_mutex);
 
-	return read_data;
+	return count;
 
 error_out:
 	mutex_unlock(&ctrl->cam_sensor_mutex);
