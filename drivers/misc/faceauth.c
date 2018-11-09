@@ -41,9 +41,9 @@
 #define OPERATION_FLAG_ADDR 0x21fffff8
 #define COMPLETION_FLAG_ADDR 0x21fffffc
 #define JQS_DEPTH_ADDR 0x22000000
-#define JQS_AFFINE_DEPTH_ADDR 0x22100000
+#define JQS_AFFINE_16_ADDR 0x22100000
 #define JQS_AFFINE_RGB_ADDR 0x22200000
-#define JQS_AFFINE_SKIN_ADDR 0x22300000
+#define JQS_AFFINE_8_ADDR 0x22300000
 #define DOT_IMAGE_LEFT_ADDR 0x22800000
 #define DOT_IMAGE_RIGHT_ADDR 0x22900000
 #define FLOOD_IMAGE_ADDR 0x23000000
@@ -51,9 +51,9 @@
 /* ABC FW and workload path */
 #define M0_FIRMWARE_PATH "m0_workload.fw"
 #define JQS_DEPTH_PATH "depth.fw"
-#define JQS_AFFINE_DEPTH_PATH "affine.fw"
+#define JQS_AFFINE_8_PATH "affine_8.fw"
+#define JQS_AFFINE_16_PATH "affine_16.fw"
 #define JQS_AFFINE_RGB_PATH "affine_rgb.fw"
-#define JQS_AFFINE_SKIN_PATH "affine_8.fw"
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
@@ -414,8 +414,8 @@ static int dma_send_workloads(void)
 		return err;
 	}
 
-	pr_info("Set JQS Affine Depth addr = 0x%08x\n", JQS_AFFINE_DEPTH_ADDR);
-	err = dma_send_fw(JQS_AFFINE_DEPTH_PATH, JQS_AFFINE_DEPTH_ADDR);
+	pr_info("Set JQS Affine16 addr = 0x%08x\n", JQS_AFFINE_16_ADDR);
+	err = dma_send_fw(JQS_AFFINE_16_PATH, JQS_AFFINE_16_ADDR);
 	if (err) {
 		pr_err("Error during JQS binary transfer: %d\n", err);
 		return err;
@@ -428,8 +428,8 @@ static int dma_send_workloads(void)
 		return err;
 	}
 
-	pr_info("Set JQS Affine Skin addr = 0x%08x\n", JQS_AFFINE_SKIN_ADDR);
-	err = dma_send_fw(JQS_AFFINE_SKIN_PATH, JQS_AFFINE_SKIN_ADDR);
+	pr_info("Set JQS Affine8 addr = 0x%08x\n", JQS_AFFINE_8_ADDR);
+	err = dma_send_fw(JQS_AFFINE_8_PATH, JQS_AFFINE_8_ADDR);
 	if (err) {
 		pr_err("Error during JQS binary transfer: %d\n", err);
 		return err;
