@@ -665,6 +665,11 @@ static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
 			goto err_mutex;
 		}
 
+		if (cs40l2x->diag_state < CS40L2X_DIAG_STATE_DONE1) {
+			ret = -ENODATA;
+			goto err_mutex;
+		}
+
 		ret = regmap_read(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "TONE_DURATION_MS",
 						CS40L2X_XM_UNPACKED_TYPE),
@@ -3162,7 +3167,7 @@ static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 		if (ret)
 			return ret;
 
-		if (val == CS40L2X_QEST_ERROR)
+		if (val & CS40L2X_QEST_ERROR)
 			return -EIO;
 
 		cs40l2x->q_measured = val;
