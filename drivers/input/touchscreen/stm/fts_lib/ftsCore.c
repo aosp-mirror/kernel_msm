@@ -217,7 +217,7 @@ int pollForEvent(int *event_to_search, int event_bytes, u8 *readData, int
 	       >= OK) {
 		/* Log of errors */
 		if (readData[0] == EVT_ID_ERROR) {
-			pr_debug("%s\n",
+			pr_err("%s\n",
 				 printHex("ERROR EVENT = ",
 					  readData,
 					  FIFO_EVENT_SIZE,
@@ -234,7 +234,7 @@ int pollForEvent(int *event_to_search, int event_bytes, u8 *readData, int
 			}
 		} else {
 			if (readData[0] != EVT_ID_NOEVENT) {
-				pr_debug("%s\n",
+				pr_info("%s\n",
 					 printHex("READ EVENT = ", readData,
 						  FIFO_EVENT_SIZE,
 						  temp,
@@ -267,7 +267,7 @@ int pollForEvent(int *event_to_search, int event_bytes, u8 *readData, int
 		pr_err("pollForEvent: ERROR %08X\n", ERROR_TIMEOUT);
 		return ERROR_TIMEOUT;
 	} else if (find == 1) {
-		pr_debug("%s\n",
+		pr_info("%s\n",
 			 printHex("FOUND EVENT = ",
 				  readData,
 				  FIFO_EVENT_SIZE,
