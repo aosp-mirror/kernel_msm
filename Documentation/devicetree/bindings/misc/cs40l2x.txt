@@ -198,6 +198,26 @@ Optional properties:
   - cirrus,asp-bclk-freq-hz : Specifies the frequency (in Hz) of the ASP_BCLK
     pin (CS40L25A only). If this value is omitted, ASP support is disabled.
 
+  - cirrus,asp-bclk-inv : Boolean to specify that the ASP_BCLK pin is inverted
+    relative to that which is defined for cirrus,asp-fmt (CS40L25A only).
+
+  - cirrus,asp-fsync-inv : Boolean to specify that the ASP_FSYNC pin is inverted
+    relative to that which is defined for cirrus,asp-fmt (CS40L25A only).
+
+  - cirrus,asp-fmt : Specifies the interface format of the ASP, equal to one of
+    the following (refer to the device's data sheet for more information).
+
+    0 = TDM 1
+    1 = Reserved
+    2 = I2S
+    3 = Reserved
+    4 = TDM 1.5
+
+    If this value is omitted, I2S is assumed.
+
+  - cirrus,asp-slot-num : ASP slot number (CS40L25A only) relative to the start
+    of the frame (0 through 63). If this value is omitted, slot 0 is assumed.
+
   - cirrus,asp-slot-width : ASP slot width (CS40L25A only), specified in bits
     (12 through 128). If this value is omitted, ASP support is disabled.
 
