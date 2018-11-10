@@ -5030,8 +5030,13 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int asp_bclk_freq = cs40l2x->pdata.asp_bclk_freq;
+	bool asp_bclk_inv = cs40l2x->pdata.asp_bclk_inv;
+	bool asp_fsync_inv = cs40l2x->pdata.asp_fsync_inv;
+	unsigned int asp_fmt = cs40l2x->pdata.asp_fmt;
+	unsigned int asp_slot_num = cs40l2x->pdata.asp_slot_num;
 	unsigned int asp_slot_width = cs40l2x->pdata.asp_slot_width;
 	unsigned int asp_samp_width = cs40l2x->pdata.asp_samp_width;
+	unsigned int asp_frame_cfg = 0;
 	int ret, i;
 
 	for (i = 0; i < CS40L2X_NUM_PLL_REFCLK_FREQ; i++)
@@ -5059,31 +5064,63 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
 		return -EINVAL;
 	}
 
+	if (asp_fmt) {
+		asp_fmt &= CS40L2X_PDATA_MASK;
+
+		switch (asp_fmt) {
+		case CS40L2X_ASP_FMT_TDM1:
+		case CS40L2X_ASP_FMT_I2S:
+		case CS40L2X_ASP_FMT_TDM1R5:
+			break;
+		default:
+			dev_err(dev, "Invalid ASP format: %d\n", asp_fmt);
+			return -EINVAL;
+		}
+	} else {
+		asp_fmt = CS40L2X_ASP_FMT_I2S;
+	}
+
+	if (asp_slot_num > CS40L2X_ASP_RX1_SLOT_MAX) {
+		dev_err(dev, "Invalid ASP slot number: %d\n", asp_slot_num);
+		return -EINVAL;
+	}
+
 	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_ENABLES, 0);
 	if (ret) {
 		dev_err(dev, "Failed to sequence ASP enable controls\n");
 		return ret;
 	}
 
-	ret = regmap_update_bits(regmap, CS40L2X_SP_FORMAT,
-			CS40L2X_ASP_RX_WIDTH_MASK,
-			asp_slot_width << CS40L2X_ASP_RX_WIDTH_SHIFT);
+	asp_frame_cfg |= (asp_slot_width << CS40L2X_ASP_RX_WIDTH_SHIFT);
+	asp_frame_cfg |= (asp_slot_width << CS40L2X_ASP_TX_WIDTH_SHIFT);
+	asp_frame_cfg |= (asp_fmt << CS40L2X_ASP_FMT_SHIFT);
+	asp_frame_cfg |= (asp_bclk_inv ? CS40L2X_ASP_BCLK_INV_MASK : 0);
+	asp_frame_cfg |= (asp_fsync_inv ? CS40L2X_ASP_FSYNC_INV_MASK : 0);
+
+	ret = regmap_write(regmap, CS40L2X_SP_FORMAT, asp_frame_cfg);
 	if (ret) {
-		dev_err(dev, "Failed to write ASP slot width\n");
+		dev_err(dev, "Failed to write ASP frame configuration\n");
 		return ret;
 	}
 
-	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_FORMAT,
-			((asp_slot_width << CS40L2X_ASP_RX_WIDTH_SHIFT)
-				& CS40L2X_ASP_RX_WIDTH_MASK) |
-			((CS40L2X_ASP_TX_WIDTH_DEFAULT
-				<< CS40L2X_ASP_TX_WIDTH_SHIFT)
-				& CS40L2X_ASP_TX_WIDTH_MASK) |
-			((CS40L2X_ASP_FMT_I2S
-				<< CS40L2X_ASP_FMT_SHIFT)
-				& CS40L2X_ASP_FMT_MASK));
+	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_FORMAT, asp_frame_cfg);
 	if (ret) {
-		dev_err(dev, "Failed to sequence ASP slot width\n");
+		dev_err(dev, "Failed to sequence ASP frame configuration\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_SP_FRAME_RX_SLOT,
+			CS40L2X_ASP_RX1_SLOT_MASK,
+			asp_slot_num << CS40L2X_ASP_RX1_SLOT_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write ASP slot number\n");
+		return ret;
+	}
+
+	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_FRAME_RX_SLOT,
+			asp_slot_num << CS40L2X_ASP_RX1_SLOT_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to sequence ASP slot number\n");
 		return ret;
 	}
 
@@ -5096,8 +5133,7 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
 	}
 
 	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_RX_WL,
-			((asp_samp_width << CS40L2X_ASP_RX_WL_SHIFT)
-				& CS40L2X_ASP_RX_WL_MASK));
+			asp_samp_width << CS40L2X_ASP_RX_WL_SHIFT);
 	if (ret) {
 		dev_err(dev, "Failed to sequence ASP sample width\n");
 		return ret;
@@ -5528,6 +5564,19 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	ret = of_property_read_u32(np, "cirrus,asp-bclk-freq-hz", &out_val);
 	if (!ret)
 		pdata->asp_bclk_freq = out_val;
+
+	pdata->asp_bclk_inv = of_property_read_bool(np, "cirrus,asp-bclk-inv");
+
+	pdata->asp_fsync_inv = of_property_read_bool(np,
+			"cirrus,asp-fsync-inv");
+
+	ret = of_property_read_u32(np, "cirrus,asp-fmt", &out_val);
+	if (!ret)
+		pdata->asp_fmt = out_val | CS40L2X_PDATA_PRESENT;
+
+	ret = of_property_read_u32(np, "cirrus,asp-slot-num", &out_val);
+	if (!ret)
+		pdata->asp_slot_num = out_val;
 
 	ret = of_property_read_u32(np, "cirrus,asp-slot-width", &out_val);
 	if (!ret)
