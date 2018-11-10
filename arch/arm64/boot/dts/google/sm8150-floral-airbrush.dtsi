@@ -309,5 +309,8 @@
 			status = "okay";
 		};
 	};
-};
 
+	abc_cooling: abc-cooling {
+		#cooling-cells = <2>;
+	};
+};
