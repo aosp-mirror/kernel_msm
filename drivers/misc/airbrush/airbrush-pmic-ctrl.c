@@ -181,6 +181,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 					"%s: failed to disable LDO3, ret %d\n",
 					__func__, ret1);
 		ret2 = ret2 ? ret2 : ret1;
+		usleep_range(2000, 3000);
 	}
 
 	if (!sc->smps1_state && regulator_is_enabled(sc->smps1)) {
