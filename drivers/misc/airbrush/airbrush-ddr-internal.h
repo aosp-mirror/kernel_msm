@@ -745,6 +745,18 @@
 #define VREF_STEP			0x1
 #define VREF_PRBS_TIMEOUT_USEC		5000
 
+enum ddr_freq_index {
+	f_DPHY_DVFS_CON,
+	f_DPHY_CAL_CON2,
+	f_DPHY_GNR_CON0_NODBI,
+	f_DPHY_GNR_CON0_DBI,
+	f_DREX_TIMINGRFCPB,
+	f_DREX_TIMINGROW,
+	f_DREX_TIMINGDATA,
+	f_DREX_TIMINGPOWER,
+	f_reg_max
+};
+
 enum ddr_poll_index {
 	p_pll_con0_pll_phy_mif,
 	p_DPHY_ZQ_CON1,
@@ -927,6 +939,23 @@ enum ddr_train_save_index {
 	s_train_max_index,
 };
 
+enum ddr_freq_t {
+	AB_DRAM_FREQ_MHZ_1866,
+	AB_DRAM_FREQ_MHZ_1600,
+	AB_DRAM_FREQ_MHZ_1200,
+	AB_DRAM_FREQ_MHZ_933,
+	AB_DRAM_FREQ_MHZ_800,
+	AB_DRAM_FREQ_MAX
+};
+
+/* returns true for all frequencies less than or equal to 933Mhz */
+#define is_low_freq(x) ((x >= AB_DRAM_FREQ_MHZ_933) ? 1 : 0)
+
+enum ddr_restore_mode_t {
+	AB_RESTORE_FULL,
+	AB_RESTORE_DVFS,
+};
+
 enum vref_operation_t {
 	VREF_READ = 0,
 	VREF_WRITE
@@ -1043,10 +1072,20 @@ union dphy_prbs_con7_t {
 	} bits;
 };
 
-struct ab_ddr_context {
-	struct ab_state_context *ab_state_ctx;
-	enum ddr_state ddr_state;
-	uint32_t ddr_train_save_value[s_train_max_index];
+struct airbrush_ddr_pll_t {
+	unsigned int p;
+	unsigned int m;
+	unsigned int s;
+};
+
+struct airbrush_ddr_mrw_set_t {
+	unsigned int mr1;
+	unsigned int mr2;
+	unsigned int mr3;
+	unsigned int mr11;
+	unsigned int mr13;
+	unsigned int mr22;
+	unsigned int mr8;
 };
 
 struct ddr_reg_poll_t {
@@ -1058,6 +1097,32 @@ struct ddr_reg_poll_t {
 struct ddr_train_save_restore_t {
 	uint32_t reg_save;
 	uint32_t reg_restore;
+};
+
+struct ab_ddr_context {
+	struct ab_state_context *ab_state_ctx;
+	enum ddr_state ddr_state; /* keeps track of current ddr state */
+
+	enum ddr_freq_t cur_freq; /* current frequency */
+
+	/* Array to store ddr train results for various frequencies. */
+	unsigned int ddr_train_save_value[AB_DRAM_FREQ_MAX][s_train_max_index];
+
+	/* Flag to indicate whether the training results for a given frequency
+	 * is valid or not.
+	 */
+	unsigned int ddr_train_completed[AB_DRAM_FREQ_MAX];
+
+	/* When M0 performs the ddr initialization and training, training
+	 * results are stored in SRAM. During ddr_setup() read this address
+	 * information and update here.
+	 */
+	unsigned int ddr_train_sram_location;
+
+	/* for vref voltage of PHY (13.5% ~ 46.1%) of VDD2 */
+	uint32_t phy_vref_lvl[PHY_VREF_LEVELS];
+	/* for vref voltage of DRAM (10.0% ~ 30.0%) of VDD2 */
+	uint32_t dram_vref_lvl[DRAM_VREF_LEVELS];
 };
 
 static inline uint32_t ddr_reg_rd(uint32_t addr)
