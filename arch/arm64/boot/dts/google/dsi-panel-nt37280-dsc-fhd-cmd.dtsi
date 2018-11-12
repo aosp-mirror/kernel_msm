@@ -48,6 +48,7 @@
 		qcom,mdss-pan-physical-height-dimension = <130>;
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
+				qcom,mdss-dsi-panel-clockrate = <527990400>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-panel-width = <1080>;
 				qcom,mdss-dsi-panel-height = <2280>;
@@ -56,7 +57,7 @@
 				qcom,mdss-dsi-h-front-porch = <36>;
 				qcom,mdss-dsi-v-pulse-width = <4>;
 				qcom,mdss-dsi-v-back-porch = <28>;
-				qcom,mdss-dsi-v-front-porch = <1180>;
+				qcom,mdss-dsi-v-front-porch = <16>;
 				qcom,mdss-dsi-on-command = [
 					/* MCS */
 					15 01 00 00 00 00 02 FF E0
@@ -76,8 +77,8 @@
 					15 01 00 00 00 00 02 FF 20
 					15 01 00 00 00 00 02 FB 01
 					15 01 00 00 00 00 02 34 00
-					15 01 00 00 00 00 02 35 66
-					15 01 00 00 00 00 02 36 66
+					15 01 00 00 00 00 02 35 00
+					15 01 00 00 00 00 02 36 00
 
 					/* UCS */
 					15 01 00 00 00 00 02 FF 10
@@ -128,6 +129,7 @@
 			};
 
 			timing@1 {
+				qcom,mdss-dsi-panel-clockrate = <527990400>;
 				qcom,mdss-dsi-panel-framerate = <90>;
 				qcom,mdss-dsi-panel-width = <1080>;
 				qcom,mdss-dsi-panel-height = <2280>;
@@ -156,8 +158,8 @@
 					15 01 00 00 00 00 02 FF 20
 					15 01 00 00 00 00 02 FB 01
 					15 01 00 00 00 00 02 34 00
-					15 01 00 00 00 00 02 35 66
-					15 01 00 00 00 00 02 36 66
+					15 01 00 00 00 00 02 35 00
+					15 01 00 00 00 00 02 36 00
 
 					/* UCS */
 					15 01 00 00 00 00 02 FF 10
