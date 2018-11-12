@@ -241,6 +241,22 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
+void mdss_dsi_idle_work(struct work_struct *work)
+{
+    struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+    struct delayed_work *dw = to_delayed_work(work);
+
+    ctrl = container_of(dw, struct mdss_dsi_ctrl_pdata, idle_work);
+    if (!ctrl) {
+        pr_err("%s: invalid ctrl data\n", __func__);
+        return;
+    }
+
+    pr_info("%s: start to send idle command\n", __func__);
+    mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
+        CMD_REQ_COMMIT);
+}
+
 static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 							bool enable)
 {
@@ -262,12 +278,12 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
-					CMD_REQ_COMMIT);
+			schedule_delayed_work(&ctrl->idle_work, msecs_to_jiffies(400));
 			ctrl->idle = true;
 			pr_debug("Idle on\n");
 		}
 	} else {
+		cancel_delayed_work_sync(&ctrl->idle_work);
 		if (ctrl->idle_off_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds,
 					CMD_REQ_COMMIT);
@@ -2884,5 +2900,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 			mdss_dsi_panel_apply_display_setting;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
+
+	INIT_DELAYED_WORK(&ctrl_pdata->idle_work, mdss_dsi_idle_work);
+
 	return 0;
 }
