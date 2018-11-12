@@ -124,7 +124,7 @@ enum chip_state {
 	CHIP_STATE_4_0 = 40,
 	CHIP_STATE_5_0 = 50,
 	CHIP_STATE_6_0 = 60,
-	CHIP_STATE_DEFAULT,
+	CHIP_STATE_DEF,
 };
 
 enum block_state {
@@ -140,7 +140,7 @@ enum block_state {
 	BLOCK_STATE_1_2,
 	BLOCK_STATE_2_0 = 20,
 	BLOCK_STATE_3_0 = 30,
-	BLOCK_STATE_DEFAULT,
+	BLOCK_STATE_DEF,
 };
 
 #define bit(x) (1<<x)

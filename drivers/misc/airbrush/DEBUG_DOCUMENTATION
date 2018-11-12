@@ -52,10 +52,8 @@ information about the respective block:
 2. Clocks (/sys/kernel/debug/clk/)
 --------------------------------------------------------------------------------
 
-one can register clocks after boot time by writing anything to
-/sys/kernel/debug/airbrush/ab_clk_register
-(echo 1 > /sys/kernel/debug/airbrush/ab_clk_register)
-
+After the first write to /sys/kernel/debug/airbrush/airbrush_sm/chip_state,
+various clocks will be registered.
 Once registered we can see various debugfs entries inside /sys/kernel/debug/clk/
 
 "clk_summary" is one such read-only debugfs entry provided by CCF
