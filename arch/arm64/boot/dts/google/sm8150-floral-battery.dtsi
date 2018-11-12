@@ -74,6 +74,15 @@
 
 };
 
+&spmi_bus {
+	qcom,pm8150b@2 {
+		google_bms: google,bms {
+		compatible = "google,sm8150_bms";
+		google,psy-name = "charger";
+		};
+	};
+};
+
 &soc {
 	google_battery: google,battery {
 		compatible = "google,battery";
