@@ -29,6 +29,25 @@
 #define DDR_TRAIN_SAVE_COMPLETE		(0x1 << 8)
 #define DDR_TRAIN_FAIL			(0x1 << 9)
 
+#define DDR_BOOT_TEST_WRITE		(0x1 << 0)
+#define DDR_BOOT_TEST_READ		(0x1 << 1)
+#define DDR_TEST_MEMTESTER		(0x1 << 4)
+#define DDR_TEST_PCIE_DMA		(0x1 << 5)
+#define DDR_TEST_NOPRINT		(0x1 << 31)
+/* size should be multiple of 1MB */
+#define DDR_TEST_PCIE_DMA_SIZE_MB(x)	(((x) & (0x3ff << 8)) >> 8)
+#define DDR_BOOT_TEST_READ_WRITE (DDR_BOOT_TEST_READ | DDR_BOOT_TEST_WRITE)
+
+#define DDR_TEST_PCIE_DMA_READ(x)	\
+	(DDR_TEST_PCIE_DMA | DDR_BOOT_TEST_READ | (x << 8))
+
+#define DDR_TEST_PCIE_DMA_WRITE(x)	\
+	(DDR_TEST_PCIE_DMA | DDR_BOOT_TEST_WRITE | (x << 8))
+
+#define DDR_TEST_PCIE_DMA_READ_WRITE(x)	\
+	(DDR_TEST_PCIE_DMA_READ(x) | DDR_TEST_PCIE_DMA_WRITE(x))
+
+int ab_ddr_read_write_test(unsigned int test_data);
 int32_t ab_ddr_train_gpio(struct ab_state_context *sc);
 int32_t ab_ddr_train_sysreg(struct ab_state_context *sc);
 int32_t ab_ddr_init(struct ab_state_context *sc);

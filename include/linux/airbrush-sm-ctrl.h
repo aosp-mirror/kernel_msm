@@ -576,7 +576,7 @@ int ab_ddr_resume(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_exit(struct ab_state_context *sc);
 int ab_ddr_setup(struct ab_state_context *sc);
-void ab_ddr_read_write_test(int read_write);
+int ab_ddr_read_write_test(unsigned int read_write);
 
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);
 

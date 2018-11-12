@@ -17,6 +17,7 @@
 
 #include <linux/airbrush-sm-ctrl.h>
 #include "airbrush-regs.h"
+#include "airbrush-ddr.h"
 
 int ab_interrupt_M0(int tar_dev);
 
@@ -205,7 +206,7 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 		ab_ddr_setup(sc);
 		break;
 	case 6:
-		ab_ddr_read_write_test(3);
+		ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ_WRITE(512));
 		break;
 	default:
 		pr_err("ERROR!! Invalid DDR Control\n");

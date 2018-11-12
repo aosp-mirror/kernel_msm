@@ -1587,94 +1587,6 @@ static void ddr_train_restore_configuration(struct ab_ddr_context *ddr_ctx,
 	ddr_reg_clr(DPHY2_MDLL_CON1, LOCK_VALUE_INIT_OVERRIDE);
 }
 
-#define DDR_BOOT_TEST_READ (0x1 << 0)
-#define DDR_BOOT_TEST_WRITE (0x1 << 1)
-#define DDR_BOOT_TEST_READ_WRITE (DDR_BOOT_TEST_READ | DDR_BOOT_TEST_WRITE)
-#define DMA_SZ (16 * 1024 * 1024)
-
-static DECLARE_COMPLETION(dma_completion);
-
-static int dma_callback(uint8_t chan, enum dma_data_direction dir,
-			enum abc_dma_trans_status status)
-{
-	complete(&dma_completion);
-
-	return 0;
-}
-
-/* TODO(b/118829034): Move to a separate test file */
-void ab_ddr_read_write_test(int read_write)
-{
-	size_t size = DMA_SZ;
-	char *host_vaddr;
-	dma_addr_t host_paddr, ab_paddr;
-	struct dma_element_t desc;
-	int i, j;
-
-	host_vaddr = abc_alloc_coherent(size, &host_paddr);
-	if (!host_vaddr) {
-		pr_err("%s: buffer allocation failed\n", __func__);
-		return;
-	}
-
-	for (i = 0; i < DMA_SZ; i++)
-		host_vaddr[i] = i & 0xff;
-
-	(void)abc_reg_dma_irq_callback(&dma_callback, 0);
-
-	desc.len = size;
-	desc.chan = 0;
-
-	if (DDR_BOOT_TEST_WRITE & read_write) {
-		desc.src_addr = (uint32_t)(host_paddr & 0xFFFFFFFF);
-		desc.src_u_addr = (uint32_t)(host_paddr >> 32);
-
-		ab_paddr = 0x20000000;
-
-		for (j = 0; j < 32; j++) {
-			desc.dst_addr = (uint32_t)(ab_paddr & 0xFFFFFFFF);
-			desc.dst_u_addr = (uint32_t)(ab_paddr >> 32);
-
-			reinit_completion(&dma_completion);
-
-			(void)dma_sblk_start(0, DMA_TO_DEVICE, &desc);
-
-			wait_for_completion(&dma_completion);
-
-			ab_paddr = ab_paddr + DMA_SZ;
-		}
-	}
-
-	if (DDR_BOOT_TEST_READ & read_write) {
-		desc.dst_addr = (uint32_t)(host_paddr & 0xFFFFFFFF);
-		desc.dst_u_addr = (uint32_t)(host_paddr >> 32);
-
-		ab_paddr = 0x20000000;
-
-		for (j = 0; j < 32; j++) {
-			desc.src_addr = (uint32_t)(ab_paddr & 0xFFFFFFFF);
-			desc.src_u_addr = (uint32_t)(ab_paddr >> 32);
-
-			reinit_completion(&dma_completion);
-
-			(void)dma_sblk_start(0, DMA_FROM_DEVICE, &desc);
-
-			wait_for_completion(&dma_completion);
-
-			for (i = 0; i < DMA_SZ; i++)
-				if (host_vaddr[i] != (i & 0xff))
-					pr_err("%s: mismatch for byte %d\n",
-							__func__, i);
-
-			ab_paddr = ab_paddr + DMA_SZ;
-		}
-	}
-
-	(void)abc_reg_dma_irq_callback(NULL, 0);
-
-	abc_free_coherent(size, host_vaddr, host_paddr);
-}
-
 static int ab_ddr_initial_trainings(struct ab_ddr_context *ddr_ctx)
 {
 	ddr_prepare_training(ddr_ctx->cur_freq);
@@ -1928,7 +1840,7 @@ static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
 	ddr_ctx->cur_freq = freq;
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_TEST_MEMTESTER | DDR_BOOT_TEST_WRITE);
+	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
@@ -2018,7 +1930,7 @@ static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
 
 #ifdef CONFIG_DDR_BOOT_TEST
 	/* Run MEMTESTER for the data integrity */
-	ab_ddr_read_write_test(DDR_BOOT_TEST_READ_WRITE);
+	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 
@@ -2120,7 +2032,7 @@ int32_t ab_ddr_resume(struct ab_state_context *sc)
 	ab_gpio_disable_ddr_sr(sc);
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_BOOT_TEST_READ);
+	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 }
@@ -2129,7 +2041,7 @@ EXPORT_SYMBOL(ab_ddr_resume);
 int32_t ab_ddr_suspend(struct ab_state_context *sc)
 {
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_BOOT_TEST_WRITE);
+	ab_ddr_read_write_test(DDR_TEST_MEMTESTER | DDR_BOOT_TEST_WRITE);
 #endif
 	/* Block AXI Before entering self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
@@ -2189,7 +2101,7 @@ int32_t ab_ddr_selfrefresh_exit(struct ab_state_context *sc)
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x1);
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_BOOT_TEST_READ);
+	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 }
@@ -2203,7 +2115,7 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 	}
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_BOOT_TEST_WRITE);
+	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
@@ -2400,7 +2312,7 @@ int32_t ab_ddr_init(struct ab_state_context *sc)
 	ddr_sr = GPIO_DDR_SR();
 
 	if (!ddr_sr && !ret)
-		ab_ddr_read_write_test(DDR_BOOT_TEST_READ_WRITE);
+		ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ_WRITE(512));
 #endif
 	return ret;
 }
