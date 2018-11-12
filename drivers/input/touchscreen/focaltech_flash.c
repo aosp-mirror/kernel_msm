@@ -103,6 +103,10 @@ static unsigned char CTPM_FW_TP_ID_T[] = {
 #include "FTS_FW/CEI_TULIP_FZW6_3267_0x98_V0x05_20180815_app.i"
 };
 
+static unsigned char CTPM_FW_TP_ID_T_AUO[] = {
+#include "FTS_FW/CEI_TULIP_FZW6_3267_0x9C_V0x01_20181018_app.i"
+};
+
 static unsigned char CTPM_FW_TP_ID_S[] = {
 #include "FTS_FW/CEI_Sakura_FZW7_3267_0x99_V0x03_20180515_app.i"
 };
@@ -3629,6 +3633,10 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id,
 	case TP_ID_T:
 		CTPM_FW = CTPM_FW_TP_ID_T;
 		fw_size = sizeof(CTPM_FW_TP_ID_T);
+		break;
+	case TP_ID_T_AUO:
+		CTPM_FW = CTPM_FW_TP_ID_T_AUO;
+		fw_size = sizeof(CTPM_FW_TP_ID_T_AUO);
 		break;
 	case TP_ID_S:
 		CTPM_FW = CTPM_FW_TP_ID_S;
