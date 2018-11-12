@@ -19,6 +19,7 @@
 };
 
 &pm8150b_pdphy {
+	google,ext_vbus-supported;
 	ext-vbus-supply = <&ext_5v_boost>;
 
 	usb_con: connector {
