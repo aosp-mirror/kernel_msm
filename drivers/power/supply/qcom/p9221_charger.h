@@ -245,6 +245,7 @@ struct p9221_charger_platform_data {
 	int				irq_int;
 	int				irq_det_gpio;
 	int				irq_det_int;
+	int				qien_gpio;
 	int				max_vout_mv;
 	u8				fod[P9221_NUM_FOD];
 	u8				fod_epp[P9221_NUM_FOD];
@@ -268,7 +269,7 @@ struct p9221_charger_data {
 	struct timer_list		vrect_timer;
 	struct bin_attribute		bin;
 	int				online;
-	int				next_online;
+	bool				enabled;
 	u16				addr;
 	u8				count;
 	u8				cust_id;
