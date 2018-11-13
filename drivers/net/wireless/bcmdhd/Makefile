@@ -17,6 +17,7 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DBCMDRIVER -DSDTEST       \
 	-DENABLE_INSMOD_NO_FW_LOAD                                            \
 	-I$(src) -I$(src)/include
 #DHDCFLAGS += -DDHD_DEBUG
+DHDCFLAGS += -DLINKSTAT_SUPPORT
 DHDCFLAGS += -DGET_CUSTOM_MAC_ENABLE
 
 ifneq ($(CONFIG_WAKELOCK),)
@@ -34,7 +35,8 @@ DHDOFILES = aiutils.o siutils.o sbutils.o bcmutils.o bcmwifi_channels.o \
 	dhd_linux.o dhd_linux_platdev.o dhd_linux_sched.o dhd_pno.o \
 	dhd_common.o dhd_ip.o dhd_linux_wq.o dhd_custom_gpio.o \
 	bcmevent.o hndpmu.o linux_osl.o wldev_common.o wl_android.o \
-	hnd_pktq.o hnd_pktpool.o dhd_config.o wl_cfgvendor.o
+	hnd_pktq.o hnd_pktpool.o dhd_config.o wl_cfgvendor.o bcmxtlv.o \
+	bcm_app_utils.o
 
 ifneq ($(CONFIG_BCMDHD_SDIO),)
 DHDCFLAGS += \
