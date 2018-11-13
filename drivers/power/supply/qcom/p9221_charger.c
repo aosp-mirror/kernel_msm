@@ -560,6 +560,7 @@ struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
 	{POWER_SUPPLY_PROP_VOLTAGE_MAX, P9221R5_VOUT_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_TEMP,	P9221R5_DIE_TEMP_ADC_REG,	1, 0},
 	{POWER_SUPPLY_PROP_CAPACITY,	0,				1, 1},
+	{POWER_SUPPLY_PROP_ONLINE,	0,				1, 1},
 };
 
 static struct p9221_prop_reg_map_entry *p9221_get_map_entry(
@@ -773,7 +774,7 @@ static int p9221_get_property(struct power_supply *psy,
 		val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = charger->online;
+		val->intval = charger->online && charger->enabled;
 		break;
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		val->strval = p9221_get_tx_id_str(charger);
@@ -816,18 +817,47 @@ static int p9221_set_property(struct power_supply *psy,
 {
 	struct p9221_charger_data *charger = power_supply_get_drvdata(psy);
 	int ret = 0;
+	bool changed = false;
 
 	switch (prop) {
-	case POWER_SUPPLY_PROP_CAPACITY:
-		if (charger->last_capacity == val->intval)
+	case POWER_SUPPLY_PROP_ONLINE:
+		if ((val->intval < 0) || (val->intval > 1)) {
+			ret = -EINVAL;
 			break;
-		if (charger->online) {
-			charger->last_capacity = val->intval;
-			ret = p9221_send_csp(charger, charger->last_capacity);
-			if (ret)
-				dev_err(&charger->client->dev,
-					"Could send csp: %d\n", ret);
 		}
+
+		if (charger->enabled == val->intval)
+			break;
+
+		/*
+		 * Asserting the enable line will automatically take bring
+		 * us online if we are in field.  De-asserting the enable
+		 * line will automatically take us offline if we are in field.
+		 * This is due to the fact that DC in will change state
+		 * appropriately when we change the state of this line.
+		 */
+		charger->enabled = val->intval;
+
+		dev_warn(&charger->client->dev, "Set enable %d\n",
+			 charger->enabled);
+
+		gpio_set_value(charger->pdata->qien_gpio,
+			       charger->enabled ? 0 : 1);
+
+		changed = true;
+		break;
+
+	case POWER_SUPPLY_PROP_CAPACITY:
+		if (!charger->online || charger->last_capacity == val->intval)
+			break;
+
+		charger->last_capacity = val->intval;
+		ret = p9221_send_csp(charger, charger->last_capacity);
+		if (ret)
+			dev_err(&charger->client->dev,
+				"Could send csp: %d\n", ret);
+		changed = true;
+
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		if (val->intval < 0) {
@@ -835,20 +865,30 @@ static int p9221_set_property(struct power_supply *psy,
 			break;
 		}
 
-		if (!charger->dc_icl_votable)
-			return -EAGAIN;
+		if (!charger->dc_icl_votable) {
+			ret = -EAGAIN;
+			break;
+		}
 
 		ret = vote(charger->dc_icl_votable, P9221_USER_VOTER, true,
 			   val->intval);
+
+		changed = true;
 		break;
 	default:
 		ret = p9221_set_property_reg(charger, prop, val);
+		if (ret == 0)
+			changed = true;
 		break;
 	}
 
 	if (ret)
 		dev_dbg(&charger->client->dev,
 			"Couldn't set prop %d, ret=%d\n", prop, ret);
+
+	if (changed)
+		power_supply_changed(psy);
+
 	return ret;
 }
 
@@ -1902,11 +1942,18 @@ static int p9221_parse_dt(struct device *dev,
 	int ret = 0;
 	u32 data;
 	struct device_node *node = dev->of_node;
-	enum of_gpio_flags irq_gpio_flags;
-	enum of_gpio_flags irq_det_flags;
+
+	/* Enable */
+	ret = of_get_named_gpio(node, "idt,gpio_qien", 0);
+	if (ret < 0) {
+		dev_err(dev, "unable to read idt,gpio_qien from dt: %d\n", ret);
+		return ret;
+	}
+	pdata->qien_gpio = ret;
+	dev_info(dev, "enable gpio:%d", pdata->qien_gpio);
 
 	/* Main IRQ */
-	ret = of_get_named_gpio_flags(node, "idt,irq_gpio", 0, &irq_gpio_flags);
+	ret = of_get_named_gpio(node, "idt,irq_gpio", 0);
 	if (ret < 0) {
 		dev_err(dev, "unable to read idt,irq_gpio from dt: %d\n", ret);
 		return ret;
@@ -1917,8 +1964,7 @@ static int p9221_parse_dt(struct device *dev,
 		 pdata->irq_int);
 
 	/* Optional Detect IRQ */
-	ret = of_get_named_gpio_flags(node, "idt,irq_det_gpio", 0,
-				      &irq_det_flags);
+	ret = of_get_named_gpio(node, "idt,irq_det_gpio", 0);
 	pdata->irq_det_gpio = ret;
 	if (ret < 0) {
 		dev_warn(dev, "unable to read idt,irq_det_gpio from dt: %d\n",
@@ -2062,6 +2108,10 @@ static int p9221_charger_probe(struct i2c_client *client,
 		    (unsigned long)charger);
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
+
+	/* Default enable */
+	charger->enabled = true;
+	gpio_direction_output(charger->pdata->qien_gpio, 0);
 
 	/* Default to R5+ */
 	charger->cust_id = 5;
