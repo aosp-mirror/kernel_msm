@@ -700,7 +700,7 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 			ret = ab_sm_async_notify(sess, arg);
 			atomic_set(&sc->async_in_use, 0);
 		} else {
-			dev_info(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
+			dev_dbg(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
 			ret = -EBUSY;
 		}
 		break;
@@ -808,7 +808,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	 */
 	if (of_property_read_u32(np, "otp-fw-patch-dis",
 			&ab_sm_ctx->otp_fw_patch_dis))
-		dev_info(dev, "otp-fw-patch-dis property not found\n");
+		dev_dbg(dev, "otp-fw-patch-dis property not found\n");
 
 	ab_sm_ctx->ab_sm_ctrl_pmic = true;
 
@@ -817,7 +817,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	/* Check for alternate boot */
 	if (of_property_read_u32(np, "ab-alternate-boot",
 			&ab_sm_ctx->ab_alternate_boot))
-		dev_info(dev, "ab-alternate-boot property not set\n");
+		dev_dbg(dev, "ab-alternate-boot property not set\n");
 
 	/* Intialize the default state of each block for state manager */
 	boot_time_block_state = ARRAY_SIZE(ipu_property_table)-1;

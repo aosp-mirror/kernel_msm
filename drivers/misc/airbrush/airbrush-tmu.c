@@ -700,7 +700,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	airbrush_tmu_control(pdev, false);
 	tmu_read_enable = 1;
 
-	dev_info(&pdev->dev, "%s: done.\n", __func__);
+	dev_dbg(&pdev->dev, "%s: done.\n", __func__);
 
 	return 0;
 
