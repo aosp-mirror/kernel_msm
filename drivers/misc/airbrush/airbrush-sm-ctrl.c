@@ -19,6 +19,7 @@
 #include <linux/gpio/machine.h>
 #include <linux/kernel.h>
 #include <linux/msm_pcie.h>
+#include <uapi/ab-sm.h>
 
 #include "airbrush-cooling.h"
 #include "airbrush-pmic-ctrl.h"
@@ -863,6 +864,18 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		if (copy_to_user((void __user *)arg, &ret, sizeof(int)))
 			return -EFAULT;
 		ret = 0;
+		break;
+
+	case AB_SM_ENTER_EL2:
+		mutex_lock(&sc->mfd_lock);
+		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
+		break;
+
+	case AB_SM_EXIT_EL2:
+		mutex_lock(&sc->mfd_lock);
+		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
 		break;
 
 	default:

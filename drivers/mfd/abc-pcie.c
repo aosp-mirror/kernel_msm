@@ -1526,7 +1526,7 @@ static int abc_pcie_ipu_tpu_enable(void)
 #define OTP_CHIP_ID_SHIFT		20
 #define OTP_CHIP_ID_MASK		(0xF << OTP_CHIP_ID_SHIFT)
 
-int abc_get_chip_id(void *ctx, enum ab_chip_id *val)
+static int abc_pcie_get_chip_id_handler(void *ctx, enum ab_chip_id *val)
 {
 	uint32_t data;
 	struct device *dev = (struct device *)ctx;
@@ -1542,8 +1542,23 @@ int abc_get_chip_id(void *ctx, enum ab_chip_id *val)
 	return 0;
 }
 
+static int abc_pcie_enter_el2_handler(void *ctx)
+{
+	// TODO: Implement
+	return 0;
+}
+
+static int abc_pcie_exit_el2_handler(void *ctx)
+{
+	// TODO: Implement
+	return 0;
+}
+
 static struct ab_sm_mfd_ops mfd_ops = {
-	.get_chip_id = &abc_get_chip_id,
+	.enter_el2 = &abc_pcie_enter_el2_handler,
+	.exit_el2 = &abc_pcie_exit_el2_handler,
+
+	.get_chip_id = &abc_pcie_get_chip_id_handler,
 };
 
 uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
