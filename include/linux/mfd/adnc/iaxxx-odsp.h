@@ -97,6 +97,35 @@ struct iaxxx_plugin_set_param_blk_with_ack_info {
 	uint32_t max_retries;
 };
 
+struct iaxxx_plugin_status_info {
+	uint32_t inst_id;
+	uint32_t block_id;
+	uint8_t create_status;
+	uint8_t enable_status;
+	uint16_t process_count;
+	uint16_t process_err_count;
+	uint32_t in_frames_consumed;
+	uint32_t out_frames_produced;
+	uint32_t private_memsize;
+	uint8_t frame_notification_mode;
+	uint8_t state_management_mode;
+};
+
+struct iaxxx_plugin_endpoint_status_info {
+	uint32_t inst_id;
+	uint8_t ep_index;
+	uint8_t direction;
+	uint8_t status;
+	uint8_t frame_status;
+	uint8_t endpoint_status;
+	uint8_t usage;
+	uint8_t mandatory;
+	uint16_t counter;
+	uint8_t op_encoding;
+	uint8_t op_sample_rate;
+	uint16_t op_frame_length;
+};
+
 /* IOCTL Magic character */
 #define IAXXX_IOCTL_MAGIC 'I'
 
@@ -121,4 +150,6 @@ struct iaxxx_plugin_set_param_blk_with_ack_info {
 #define ODSP_PLG_CREATE_STATIC_PACKAGE _IO(IAXXX_IOCTL_MAGIC, 0x22)
 #define ODSP_PLG_READ_PLUGIN_ERROR _IO(IAXXX_IOCTL_MAGIC, 0x23)
 #define ODSP_PLG_SET_PARAM_BLK_WITH_ACK _IO(IAXXX_IOCTL_MAGIC, 0x24)
+#define ODSP_PLG_GET_STATUS_INFO _IO(IAXXX_IOCTL_MAGIC, 0x25)
+#define ODSP_PLG_GET_ENDPOINT_STATUS _IO(IAXXX_IOCTL_MAGIC, 0x26)
 #endif

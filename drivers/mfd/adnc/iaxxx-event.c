@@ -167,7 +167,7 @@ int iaxxx_core_retrieve_event(struct device *dev, uint16_t *event_id,
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int r_index = priv->event_queue->r_index;
+	int r_index;
 
 	if (!priv)
 		return ret;
@@ -175,6 +175,7 @@ int iaxxx_core_retrieve_event(struct device *dev, uint16_t *event_id,
 	dev_dbg(dev, "%s()\n", __func__);
 
 	mutex_lock(&priv->event_queue_lock);
+	r_index = priv->event_queue->r_index;
 	r_index++;
 	/* Check if there are no events */
 	if (r_index == (priv->event_queue->w_index + 1)) {
@@ -220,13 +221,10 @@ static void iaxxx_get_event_work(struct work_struct *work)
 	if (priv->cm4_crashed) {
 		dev_dbg(priv->dev, "CM4 crash event handler called:%d\n",
 							priv->cm4_crashed);
-		if (priv->iaxxx_state->fw_state == FW_APP_MODE) {
-			priv->iaxxx_state->fw_state = FW_CRASH;
-			if (priv->crash_handler)
-				rc = priv->crash_handler(priv);
-			goto out;
-		}
+		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_EVENT);
+		goto out;
 	}
+
 	/* Read the count of available events */
 	rc = regmap_read(priv->regmap, IAXXX_EVT_MGMT_EVT_COUNT_ADDR,
 			&count);

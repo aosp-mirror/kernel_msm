@@ -427,19 +427,6 @@
  * 0xa: SWRM2 Soundwire Master (SoundWire Master IP ports 3 (TX) and 8 (RX)).
  * (NOT USED IN D4100s)
  * 0xb - 0xf: Reserved
- *
- Field encoding values:
- *   0x0: pcm0
- *   0x1: pcm1
- *   0x2: pcm2
- *   0x3: pcm3
- *   0x4: pcm4
- *   0x5: pcm5
- *   0x6: ssmm
- *   0x7: cic_combo
- *   0x8: swrm0
- *   0x9: swrm1
- *   0xa: swrm2
  */
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_MASK 0x000001e0
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_RESET_VAL 0x0
@@ -12280,36 +12267,38 @@
 #define IAXXX_AF_LS_15_PT_1_VLD_POS 31
 #define IAXXX_AF_LS_15_PT_1_VLD_SIZE 1
 
-// Field encodings for register LS_MAP_0's field PHY_STR_TYPE_0.
-// Physical Stream Type mapped to Logical Stream 0.
-// 0x0: PCM0
-// 0x1: PCM1
-// 0x2: PCM2
-// 0x3: PCM3
-// 0x4: PCM4
-// 0x5: PCM5
-// 0x6: SSMM (Slimbus/SoundWire Slave Muxing Module)
-// 0x7: CIC Combo
-// 0x8: SWRM0 Soundwire Master (SoundWire Master IP ports 1 (TX) and 6 (RX)).
-// (NOT USED IN D4100s)
-// 0x9: SWRM1 Soundwire Master (SoundWire Master IP ports 2 (TX) and 7 (RX)).
-// (NOT USED IN D4100s)
-// 0xa: SWRM2 Soundwire Master (SoundWire Master IP ports 3 (TX) and 8 (RX)).
-// (NOT USED IN D4100s)
-// 0xb - 0xf: Reserved
-
-// Field encoding values:
-//   0x0: pcm0
-//   0x1: pcm1
-//   0x2: pcm2
-//   0x3: pcm3
-//   0x4: pcm4
-//   0x5: pcm5
-//   0x6: ssmm
-//   0x7: cic_combo
-//   0x8: swrm0
-//   0x9: swrm1
-//   0xa: swrm2
+/*
+ * Field encodings for register LS_MAP_0's field PHY_STR_TYPE_0.
+ * Physical Stream Type mapped to Logical Stream 0.
+ * 0x0: PCM0
+ * 0x1: PCM1
+ * 0x2: PCM2
+ * 0x3: PCM3
+ * 0x4: PCM4
+ * 0x5: PCM5
+ * 0x6: SSMM (Slimbus/SoundWire Slave Muxing Module)
+ * 0x7: CIC Combo
+ * 0x8: SWRM0 Soundwire Master (SoundWire Master IP ports 1 (TX) and 6 (RX)).
+ * (NOT USED IN D4100s)
+ * 0x9: SWRM1 Soundwire Master (SoundWire Master IP ports 2 (TX) and 7 (RX)).
+ * (NOT USED IN D4100s)
+ * 0xa: SWRM2 Soundwire Master (SoundWire Master IP ports 3 (TX) and 8 (RX)).
+ * (NOT USED IN D4100s)
+ * 0xb - 0xf: Reserved
+ *
+ * Field encoding values:
+ *   0x0: pcm0
+ *   0x1: pcm1
+ *   0x2: pcm2
+ *   0x3: pcm3
+ *   0x4: pcm4
+ *   0x5: pcm5
+ *   0x6: ssmm
+ *   0x7: cic_combo
+ *   0x8: swrm0
+ *   0x9: swrm1
+ *   0xa: swrm2
+ */
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_PCM0_VAL 0x0
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_PCM1_VAL 0x1
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_PCM2_VAL 0x2
@@ -12322,214 +12311,242 @@
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_SWRM1_VAL 0x9
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_SWRM2_VAL 0xa
 
-// Field encodings for register LS_DEADLINE_0's field SR_FAMILY_0.
-// Sample Rate Family Logical Stream 0.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_0's field SR_FAMILY_0.
+ * Sample Rate Family Logical Stream 0.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_0_SR_FAMILY_0_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_0_SR_FAMILY_0_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_0_SR_FAMILY_0_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_0_SR_FAMILY_0_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_1's field SR_FAMILY_1.
-// Sample Rate Family Logical Stream 1.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_1's field SR_FAMILY_1.
+ * Sample Rate Family Logical Stream 1.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_1_SR_FAMILY_1_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_1_SR_FAMILY_1_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_1_SR_FAMILY_1_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_1_SR_FAMILY_1_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_2's field SR_FAMILY_2.
-// Sample Rate Family Logical Stream 2.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_2's field SR_FAMILY_2.
+ * Sample Rate Family Logical Stream 2.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_2_SR_FAMILY_2_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_2_SR_FAMILY_2_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_2_SR_FAMILY_2_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_2_SR_FAMILY_2_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_3's field SR_FAMILY_3.
-// Sample Rate Family Logical Stream 3.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_3's field SR_FAMILY_3.
+ * Sample Rate Family Logical Stream 3.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_3_SR_FAMILY_3_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_3_SR_FAMILY_3_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_3_SR_FAMILY_3_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_3_SR_FAMILY_3_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_4's field SR_FAMILY_4.
-// Sample Rate Family Logical Stream 4.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_4's field SR_FAMILY_4.
+ * Sample Rate Family Logical Stream 4.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_4_SR_FAMILY_4_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_4_SR_FAMILY_4_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_4_SR_FAMILY_4_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_4_SR_FAMILY_4_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_5's field SR_FAMILY_5.
-// Sample Rate Family Logical Stream 5.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_5's field SR_FAMILY_5.
+ * Sample Rate Family Logical Stream 5.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_5_SR_FAMILY_5_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_5_SR_FAMILY_5_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_5_SR_FAMILY_5_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_5_SR_FAMILY_5_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_6's field SR_FAMILY_6.
-// Sample Rate Family Logical Stream 6.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_6's field SR_FAMILY_6.
+ * Sample Rate Family Logical Stream 6.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_6_SR_FAMILY_6_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_6_SR_FAMILY_6_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_6_SR_FAMILY_6_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_6_SR_FAMILY_6_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_7's field SR_FAMILY_7.
-// Sample Rate Family Logical Stream 7.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_7's field SR_FAMILY_7.
+ * Sample Rate Family Logical Stream 7.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_7_SR_FAMILY_7_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_7_SR_FAMILY_7_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_7_SR_FAMILY_7_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_7_SR_FAMILY_7_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_8's field SR_FAMILY_8.
-// Sample Rate Family Logical Stream 8.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_8's field SR_FAMILY_8.
+ * Sample Rate Family Logical Stream 8.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_8_SR_FAMILY_8_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_8_SR_FAMILY_8_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_8_SR_FAMILY_8_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_8_SR_FAMILY_8_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_9's field SR_FAMILY_9.
-// Sample Rate Family Logical Stream 9.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_9's field SR_FAMILY_9.
+ * Sample Rate Family Logical Stream 9.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_9_SR_FAMILY_9_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_9_SR_FAMILY_9_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_9_SR_FAMILY_9_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_9_SR_FAMILY_9_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_10's field SR_FAMILY_10.
-// Sample Rate Family Logical Stream 10.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_10's field SR_FAMILY_10.
+ * Sample Rate Family Logical Stream 10.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_10_SR_FAMILY_10_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_10_SR_FAMILY_10_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_10_SR_FAMILY_10_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_10_SR_FAMILY_10_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_11's field SR_FAMILY_11.
-// Sample Rate Family Logical Stream 11.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_11's field SR_FAMILY_11.
+ * Sample Rate Family Logical Stream 11.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_11_SR_FAMILY_11_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_11_SR_FAMILY_11_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_11_SR_FAMILY_11_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_11_SR_FAMILY_11_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_12's field SR_FAMILY_12.
-// Sample Rate Family Logical Stream 12.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_12's field SR_FAMILY_12.
+ * Sample Rate Family Logical Stream 12.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_12_SR_FAMILY_12_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_12_SR_FAMILY_12_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_12_SR_FAMILY_12_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_12_SR_FAMILY_12_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_13's field SR_FAMILY_13.
-// Sample Rate Family Logical Stream 13.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_13's field SR_FAMILY_13.
+ * Sample Rate Family Logical Stream 13.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_13_SR_FAMILY_13_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_13_SR_FAMILY_13_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_13_SR_FAMILY_13_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_13_SR_FAMILY_13_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_14's field SR_FAMILY_14.
-// Sample Rate Family Logical Stream 14.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_14's field SR_FAMILY_14.
+ * Sample Rate Family Logical Stream 14.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_14_SR_FAMILY_14_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_14_SR_FAMILY_14_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_14_SR_FAMILY_14_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_14_SR_FAMILY_14_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register LS_DEADLINE_15's field SR_FAMILY_15.
-// Sample Rate Family Logical Stream 15.
-// Field encoding values:
-//   0x0: unused_family
-//   0x1: 4khz_family
-//   0x2: 5_5khz_family
-//   0x3: 6khz_family
+/*
+ * Field encodings for register LS_DEADLINE_15's field SR_FAMILY_15.
+ * Sample Rate Family Logical Stream 15.
+ * Field encoding values:
+ *   0x0: unused_family
+ *   0x1: 4khz_family
+ *   0x2: 5_5khz_family
+ *   0x3: 6khz_family
+ */
 #define IAXXX_AF_LS_DEADLINE_15_SR_FAMILY_15_UNUSED_FAMILY_VAL 0x0
 #define IAXXX_AF_LS_DEADLINE_15_SR_FAMILY_15_4KHZ_FAMILY_VAL 0x1
 #define IAXXX_AF_LS_DEADLINE_15_SR_FAMILY_15_5_5KHZ_FAMILY_VAL 0x2
 #define IAXXX_AF_LS_DEADLINE_15_SR_FAMILY_15_6KHZ_FAMILY_VAL 0x3
 
-// Field encodings for register WCPT_SCALE's field VAL.
-// Post NR WCPT Clock Scaling Factor
-// The fields should be programmed according to this table:
-// 00 - Wall Clock is greater than or equal to 24.576 MHz.
-// 01 - Wall Clock is less than 24.546 MHz, but greater than or equal to 12.288
-// MHz.
-// 10 - Wall Clock is less than 12.288 MHz, but greater than or equal to 6.144
-// MHz.
-// 11 - Wall Clock is less than 6.144  MHz, but greater than or equal to 3.0732
-// MHz.
-
-// Field encoding values:
-//   0x0: grtr_or_eq_to_24_576
-//   0x1: grtr_or_eq_to_12_288
-//   0x2: grtr_or_eq_to_6_144
-//   0x3: grtr_or_eq_to_3_072
+/*
+ * Field encodings for register WCPT_SCALE's field VAL.
+ * Post NR WCPT Clock Scaling Factor
+ * The fields should be programmed according to this table:
+ * 00 - Wall Clock is greater than or equal to 24.576 MHz.
+ * 01 - Wall Clock is less than 24.546 MHz, but greater than or equal to 12.288
+ *      MHz.
+ * 10 - Wall Clock is less than 12.288 MHz, but greater than or equal to 6.144
+ *      MHz.
+ * 11 - Wall Clock is less than 6.144  MHz, but greater than or equal to 3.0732
+ *      MHz.
+ */
 #define IAXXX_AF_WCPT_SCALE_VAL_GRTR_OR_EQ_TO_24_576_VAL 0x0
 #define IAXXX_AF_WCPT_SCALE_VAL_GRTR_OR_EQ_TO_12_288_VAL 0x1
 #define IAXXX_AF_WCPT_SCALE_VAL_GRTR_OR_EQ_TO_6_144_VAL 0x2

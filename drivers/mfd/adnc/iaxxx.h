@@ -69,6 +69,19 @@ enum {
 	SYSRC_ERR_IO,
 };
 
+enum iaxxx_fw_recover_result {
+	IAXXX_FW_RECOVERY_FAIL = 0,
+	IAXXX_FW_RECOVERY_SUCCESS = 1,
+};
+
+enum iaxxx_fw_crash_reasons {
+	IAXXX_FW_CRASH_EVENT = 1,
+	IAXXX_FW_CRASH_ON_FLUSH_EVENTS = 2,
+	IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR = 3,
+	IAXXX_FW_CRASH_UPDATE_BLOCK_REQ = 4,
+	IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF = 5,
+};
+
 struct iaxxx_register_log {
 	u32 addr;
 	u32 val;
@@ -137,6 +150,7 @@ int iaxxx_unsubscribe_request(struct iaxxx_priv *priv,
 				u16 event_id, u16 event_src, u16 event_dst);
 int iaxxx_event_init(struct iaxxx_priv *priv);
 void iaxxx_event_exit(struct iaxxx_priv *priv);
+int iaxxx_get_event_flush(struct iaxxx_priv *priv);
 void register_transac_log(struct device *dev, uint32_t reg, uint32_t val,
 								bool op);
 int iaxxx_verify_fw_header(struct device *dev,
@@ -144,5 +158,6 @@ int iaxxx_verify_fw_header(struct device *dev,
 int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				const struct firmware_section_header *section);
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes);
+int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons);
 
 #endif /* __MFD_IAXXX_H__ */

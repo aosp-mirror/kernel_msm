@@ -30,15 +30,15 @@
 
 static struct module_cell_params module_cell_priv;
 
-
-
 static long module_dev_ioctl(struct file *file, unsigned int cmd,
 							unsigned long arg)
 {
 	struct module_device_priv *module_dev_priv = file->private_data;
 	struct iaxxx_priv *priv = to_iaxxx_priv(module_dev_priv->parent);
 	struct iaxxx_sensor_info sensor_info;
+	struct iaxxx_script_info script_info;
 	struct iaxxx_sensor_param param_info;
+	uint16_t script_id;
 	int ret = -EINVAL;
 
 	pr_debug("%s() cmd %d\n", __func__, cmd);
@@ -46,25 +46,50 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	if (!priv)
 		return -EINVAL;
 
-	if (priv->iaxxx_state->fw_state != FW_APP_MODE) {
-		dev_err(priv->dev, "FW state not valid %d %s()\n",
-			priv->iaxxx_state->fw_state, __func__);
-		return -EIO;
+	if (!pm_runtime_enabled(priv->dev) || !pm_runtime_active(priv->dev))
+		return -EINVAL;
+
+	if (!priv->iaxxx_state) {
+		dev_err(priv->dev, "Chip state NULL\n");
+		return -EINVAL;
 	}
 
 	switch (cmd) {
+	case SCRIPT_LOAD:
+		if (copy_from_user(&script_info, (void __user *)arg,
+					sizeof(script_info)))
+			return -EFAULT;
+		ret = iaxxx_core_script_load(module_dev_priv->parent,
+				script_info.script_name, script_info.script_id);
+		break;
+	case SCRIPT_UNLOAD:
+		if (copy_from_user(&script_id, (void __user *)arg,
+					sizeof(uint16_t)))
+			return -EFAULT;
+		ret = iaxxx_core_script_unload(
+				module_dev_priv->parent, script_id);
+		break;
+	case SCRIPT_TRIGGER:
+		if (copy_from_user(&script_id, (void __user *)arg,
+					sizeof(uint16_t)))
+			return -EFAULT;
+		ret = iaxxx_core_script_trigger(
+				module_dev_priv->parent, script_id);
+		break;
 	case MODULE_SENSOR_ENABLE:
 		if (copy_from_user(&sensor_info, (void __user *)arg,
 				   sizeof(sensor_info)))
 			return -EFAULT;
-		iaxxx_core_sensor_change_state(module_dev_priv->parent,
+		ret = iaxxx_core_sensor_change_state(
+				module_dev_priv->parent,
 				sensor_info.inst_id, 1, sensor_info.block_id);
 		break;
 	case MODULE_SENSOR_DISABLE:
 		if (copy_from_user(&sensor_info, (void __user *)arg,
 				   sizeof(sensor_info)))
 			return -EFAULT;
-		iaxxx_core_sensor_change_state(module_dev_priv->parent,
+		ret = iaxxx_core_sensor_change_state(
+				module_dev_priv->parent,
 				sensor_info.inst_id, 0, sensor_info.block_id);
 		break;
 	case MODULE_SENSOR_SET_PARAM:
@@ -106,7 +131,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	default:
 		break;
 	}
-	return 0;
+	return ret;
 }
 
 #ifdef CONFIG_COMPAT
@@ -187,7 +212,7 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, module_dev_priv);
 	pr_debug("MODULE device cdev initialized.\n");
-
+	pm_runtime_enable(dev);
 	return 0;
 
 err_device_create:
@@ -213,6 +238,21 @@ static int iaxxx_module_dev_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int iaxxx_module_celldrv_suspend_rt(struct device *dev)
+{
+		return 0;
+}
+
+static int iaxxx_module_celldrv_resume_rt(struct device *dev)
+{
+		return 0;
+}
+
+static const struct dev_pm_ops iaxxx_module_celldrv_pm_ops = {
+		SET_RUNTIME_PM_OPS(iaxxx_module_celldrv_suspend_rt,
+			iaxxx_module_celldrv_resume_rt, NULL)
+
+};
 
 static const struct of_device_id iaxxx_module_dt_match[] = {
 	{.compatible = "knowles,iaxxx-module-celldrv"},
@@ -226,6 +266,7 @@ static struct platform_driver iaxxx_module_driver = {
 		.name = "iaxxx-module-celldrv",
 		.owner = THIS_MODULE,
 		.of_match_table = iaxxx_module_dt_match,
+		.pm = &iaxxx_module_celldrv_pm_ops,
 	},
 };
 

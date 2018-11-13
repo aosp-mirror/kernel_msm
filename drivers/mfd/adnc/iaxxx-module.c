@@ -14,10 +14,12 @@
  */
 #include <linux/kernel.h>
 #include <linux/regmap.h>
+#include <linux/firmware.h>
 #include <linux/slab.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-sensor-header.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-script-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-sensor-registers.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include "iaxxx.h"
@@ -183,3 +185,297 @@ sensor_get_param_inst_err:
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_get_param_by_inst);
+
+static int iaxxx_download_script(struct iaxxx_priv *priv,
+				const struct firmware *fw, uint16_t script_id)
+{
+	struct device *dev = priv->dev;
+	size_t script_size = 0;
+	uint32_t script_addr;
+	const uint8_t *data;
+	/* Checksum variable */
+	unsigned int sum1 = 0xffff;
+	unsigned int sum2 = 0xffff;
+	unsigned int finalsum1 = 0xffff;
+	unsigned int finalsum2 = 0xffff;
+	uint32_t *word_data;
+	int i;
+	int rc = 0;
+	uint32_t value = 0;
+	uint8_t *buf_data;
+	uint32_t status;
+	uint32_t checksum;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	/* fw->size = script_size + checksum_size (sizeof(uint32_t))
+	 * so it should be more than 4 bytes
+	 */
+	if (fw->size <= 4) {
+		dev_err(dev, "%s() bad script binary file size: %zu\n",
+			__func__, fw->size);
+		return -EINVAL;
+	}
+	script_size = fw->size - sizeof(uint32_t);
+
+	buf_data = kzalloc(fw->size, GFP_KERNEL);
+	if (!buf_data)
+		return -ENOMEM;
+
+	data = fw->data;
+
+	iaxxx_copy_le32_to_cpu(buf_data, data, fw->size);
+	word_data = (uint32_t *)buf_data;
+
+	/* Include file header fields as part of the checksum */
+	for (i = 0 ; i < (script_size >> 2); i++)
+		CALC_FLETCHER16(word_data[i], sum1, sum2);
+
+	checksum = (sum2 << 16) | sum1;
+
+	dev_dbg(dev, "%s() calculated binary checksum = 0x%.08X\n",
+		__func__, checksum);
+	if (checksum != word_data[(script_size >> 2)]) {
+		dev_err(dev, "%s(): script bin mismatch 0x%.08X != 0x%.08X\n",
+			__func__, checksum, word_data[(script_size >> 2)]);
+		goto out;
+	}
+
+	value = IAXXX_SCRIPT_MGMT_SCRIPT_REQ_LOAD_MASK |
+		(IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_MASK &
+		(script_id << IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_POS));
+	rc = regmap_write(priv->regmap,
+			IAXXX_SCRIPT_MGMT_SCRIPT_REQ_ADDR, value);
+	if (rc) {
+		dev_err(dev,
+			"%s() write to script req (%u) register failed: %d\n",
+			__func__, script_id, rc);
+		goto out;
+	}
+
+	rc = regmap_write(priv->regmap,
+			IAXXX_SCRIPT_MGMT_SCRIPT_SIZE_ADDR, script_size);
+	if (rc) {
+		dev_err(dev,
+			"%s() write to script size (%zu) register failed: %d\n",
+			__func__, script_size, rc);
+		goto out;
+	}
+
+	rc = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
+	if (rc) {
+		/* Read script error */
+		rc = regmap_read(priv->regmap,
+				IAXXX_SCRIPT_MGMT_SCRIPT_ERROR_ADDR, &status);
+		if (rc) {
+			dev_err(dev, "%s() script error read failed: %d\n",
+				__func__, rc);
+			goto out;
+		}
+		rc = -EIO;
+		dev_err(dev, "%s() script error reg status: %d rc: %d\n",
+			__func__, status, rc);
+		goto out;
+	}
+
+	rc = regmap_read(priv->regmap,
+			IAXXX_SCRIPT_MGMT_SCRIPT_ADDR_ADDR, &script_addr);
+	if (rc) {
+		dev_err(dev, "%s() script addr req read failed: %d\n",
+			__func__, rc);
+		goto out;
+	}
+	dev_dbg(dev, "%s() script write physical addr:0x%08x\n",
+		__func__, script_addr);
+
+	/* Write Package Binary information */
+	rc = regmap_bulk_write(priv->regmap, script_addr,
+				(uint32_t *)buf_data, script_size >> 2);
+	if (rc) {
+		dev_err(dev, "%s() script download failed addr: 0x%08x\n",
+			__func__, script_addr);
+		goto out;
+	}
+
+	/* Include checksum for this section */
+	rc = iaxxx_checksum_request(priv,
+				script_addr, (script_size >> 2),
+				&finalsum1, &finalsum2);
+	if (rc) {
+		dev_err(dev, "%s() script Checksum request error: %d\n",
+			__func__, rc);
+		goto out;
+	}
+
+	dev_dbg(dev, "final calculated binary checksum = 0x%04X-0x%04X\n",
+		finalsum1, finalsum2);
+	if (finalsum1 != sum1 || finalsum2 != sum2) {
+		dev_err(dev, "script after download Checksum failed\n");
+		dev_err(dev,
+			"checksum mismatch 0x%04X-0x%04X != 0x%04X-0x%04X\n",
+			sum2, sum1, finalsum2, finalsum1);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	dev_dbg(dev, "%s() script download successful", __func__);
+out:
+	kfree(buf_data);
+	return rc;
+}
+
+/*****************************************************************************
+ * iaxxx_core_script_load()
+ * @brief Load the script
+ *
+ * @script_name	Script binary name
+ * @script_id	Script Id
+ *
+ * @ret 0 on success, error in case of failure
+ ****************************************************************************/
+int iaxxx_core_script_load(struct device *dev, const char *script_name,
+			uint32_t script_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	const struct firmware *fw = NULL;
+	int rc = -EINVAL;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	if (!script_name) {
+		dev_err(dev, "%s() Script name is NULL\n", __func__);
+		return -EINVAL;
+	}
+	dev_dbg(dev, "%s() Download script %s\n", __func__, script_name);
+
+	/* protect this plugin operation */
+	mutex_lock(&priv->module_lock);
+
+	rc = request_firmware(&fw, script_name, priv->dev);
+	if (rc || !fw) {
+		dev_err(dev, "%s() request firmware %s image failed rc = %d\n",
+			__func__, script_name, rc);
+		goto out;
+	}
+
+	rc = iaxxx_download_script(priv, fw, script_id);
+	if (rc) {
+		dev_err(dev, "%s() script %d(%s) load fail %d\n",
+			__func__, script_id, script_name, rc);
+		goto out;
+	}
+	dev_info(dev, "%s() script %d load success\n", __func__, script_id);
+out:
+	release_firmware(fw);
+	mutex_unlock(&priv->module_lock);
+	return rc;
+}
+EXPORT_SYMBOL(iaxxx_core_script_load);
+
+/*****************************************************************************
+ * iaxxx_core_script_unload()
+ * @brief UnLoad the script
+ *
+ * @script_id	Script Id
+ *
+ * @ret 0 on success, error in case of failure
+ ****************************************************************************/
+int iaxxx_core_script_unload(struct device *dev, uint32_t script_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t value = 0;
+	uint32_t status = 0;
+	int rc = -EINVAL;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	/* protect this module operation */
+	mutex_lock(&priv->module_lock);
+
+	value = IAXXX_SCRIPT_MGMT_SCRIPT_REQ_UNLOAD_MASK |
+		(IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_MASK &
+		(script_id << IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_POS));
+	rc = regmap_write(priv->regmap,
+			IAXXX_SCRIPT_MGMT_SCRIPT_REQ_ADDR, value);
+	if (rc) {
+		dev_err(dev,
+			"%s() Write to script req (%d) register failed: %d\n",
+			__func__, script_id, rc);
+		goto out;
+	}
+
+	rc = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
+	if (rc) {
+		/* Read script error */
+		rc = regmap_read(priv->regmap,
+				IAXXX_SCRIPT_MGMT_SCRIPT_ERROR_ADDR, &status);
+		if (rc) {
+			dev_err(dev, "%s() script error read failed: %d\n",
+				__func__, rc);
+			goto out;
+		}
+		rc = -EIO;
+		dev_err(dev, "%s() script error reg status: %d rc: %d\n",
+			__func__, status, rc);
+		goto out;
+	}
+	dev_info(dev, "%s() script %d unload success\n", __func__, script_id);
+out:
+	mutex_unlock(&priv->module_lock);
+	return rc;
+}
+EXPORT_SYMBOL(iaxxx_core_script_unload);
+
+/*****************************************************************************
+ * iaxxx_core_script_trigger()
+ * @brief trigger the script
+ *
+ * @script_id	Script Id
+ *
+ * @ret 0 on success, error in case of failure
+ ****************************************************************************/
+int iaxxx_core_script_trigger(struct device *dev, uint32_t script_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t value = 0;
+	uint32_t status = 0;
+	int rc = -EINVAL;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	/* protect this module operation */
+	mutex_lock(&priv->module_lock);
+
+	value = IAXXX_SCRIPT_MGMT_SCRIPT_REQ_EXECUTE_MASK |
+		(IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_MASK &
+		(script_id << IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_POS));
+	rc = regmap_write(priv->regmap,
+			IAXXX_SCRIPT_MGMT_SCRIPT_REQ_ADDR, value);
+	if (rc) {
+		dev_err(dev,
+			"%s() Write to script req (%d) register failed: %d\n",
+			__func__, script_id, rc);
+		goto out;
+	}
+
+	rc = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
+	if (rc) {
+		/* Read script error */
+		rc = regmap_read(priv->regmap,
+				IAXXX_SCRIPT_MGMT_SCRIPT_ERROR_ADDR, &status);
+		if (rc) {
+			dev_err(dev, "%s() script error read failed: %d\n",
+				__func__, rc);
+			goto out;
+		}
+		rc = -EIO;
+		dev_err(dev, "%s() script error reg status: %d rc: %d\n",
+			__func__, status, rc);
+		goto out;
+	}
+	dev_info(dev, "%s() script %d execute success\n", __func__, script_id);
+out:
+	mutex_unlock(&priv->module_lock);
+	return rc;
+}
+EXPORT_SYMBOL(iaxxx_core_script_trigger);

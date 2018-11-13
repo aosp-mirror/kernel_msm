@@ -50,6 +50,10 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_pkg_mgmt_info pkg_info;
 	struct iaxxx_plugin_error_info plugin_error_info;
 	struct iaxxx_plugin_set_param_blk_with_ack_info param_blk_with_ack;
+	struct iaxxx_plugin_status_info plugin_status_info;
+	struct iaxxx_plugin_status_data plugin_status_data;
+	struct iaxxx_plugin_endpoint_status_info plugin_ep_status_info;
+	struct iaxxx_plugin_endpoint_status_data plugin_ep_status_data;
 	uint32_t *get_param_blk_buf = NULL;
 	void __user *blk_buff = NULL;
 	int ret = -EINVAL;
@@ -57,18 +61,13 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 
 	pr_debug("%s() cmd %d\n", __func__, cmd);
 
-	if (atomic_read(&odsp_dev_priv->power_state) != IAXXX_NORMAL)
-		return -ENXIO;
 	if (!priv)
+		return -EINVAL;
+	if (!pm_runtime_enabled(priv->dev) || !pm_runtime_active(priv->dev))
 		return -EINVAL;
 	if (!priv->iaxxx_state) {
 		dev_err(priv->dev, "Chip state NULL\n");
 		return -EINVAL;
-	}
-	if (priv->iaxxx_state->fw_state != FW_APP_MODE) {
-		dev_err(priv->dev, "FW state not valid %d %s()\n",
-			priv->iaxxx_state->fw_state, __func__);
-		return -EIO;
 	}
 
 	switch (cmd) {
@@ -420,7 +419,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		pkg_info.pkg_name[sizeof(pkg_info.pkg_name) - 1] = '\0';
 
 		ret = iaxxx_package_unload(odsp_dev_priv->parent,
-			pkg_info.pkg_id, pkg_info.proc_id);
+					pkg_info.pkg_id);
 		pr_info("%s()Pkg id 0x%x\n", __func__, pkg_info.pkg_id);
 		if (ret) {
 			pr_err("%s() Unload package failed\n", __func__);
@@ -445,6 +444,86 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 				sizeof(plugin_error_info)))
 			return -EFAULT;
 		break;
+
+	case ODSP_PLG_GET_STATUS_INFO:
+		if (copy_from_user(&plugin_status_info, (void __user *)arg,
+				sizeof(plugin_status_info)))
+			return -EFAULT;
+		ret = iaxxx_core_plg_get_status_info(odsp_dev_priv->parent,
+						plugin_status_info.inst_id,
+						&plugin_status_data);
+		if (ret) {
+			pr_err("%s() Plugin status info fail\n", __func__);
+			return ret;
+		}
+		plugin_status_info.block_id = plugin_status_data.block_id;
+		plugin_status_info.create_status =
+				plugin_status_data.create_status;
+		plugin_status_info.enable_status =
+				plugin_status_data.enable_status;
+		plugin_status_info.in_frames_consumed =
+				plugin_status_data.in_frames_consumed;
+		plugin_status_info.out_frames_produced =
+				plugin_status_data.out_frames_produced;
+		plugin_status_info.process_err_count =
+				plugin_status_data.process_err_count;
+		plugin_status_info.process_count =
+				plugin_status_data.process_count;
+		plugin_status_info.private_memsize =
+				plugin_status_data.private_memsize;
+		plugin_status_info.frame_notification_mode =
+				plugin_status_data.frame_notification_mode;
+		plugin_status_info.state_management_mode =
+				plugin_status_data.state_management_mode;
+
+		/*After read copy back the data to user space */
+		if (copy_to_user((void __user *)arg, &plugin_status_info,
+				sizeof(plugin_status_info)))
+			return -EFAULT;
+
+		break;
+
+	case ODSP_PLG_GET_ENDPOINT_STATUS:
+		if (copy_from_user(&plugin_ep_status_info, (void __user *)arg,
+				sizeof(plugin_ep_status_info)))
+			return -EFAULT;
+		ret = iaxxx_core_plg_get_endpoint_status(
+				odsp_dev_priv->parent,
+				plugin_ep_status_info.inst_id,
+				plugin_ep_status_info.ep_index,
+				plugin_ep_status_info.direction,
+				&plugin_ep_status_data);
+		if (ret) {
+			pr_err("%s() Plugin endpoint status fail\n", __func__);
+			return ret;
+		}
+
+		plugin_ep_status_info.status
+				= plugin_ep_status_data.status;
+		plugin_ep_status_info.frame_status
+				= plugin_ep_status_data.frame_status;
+		plugin_ep_status_info.endpoint_status
+				= plugin_ep_status_data.endpoint_status;
+		plugin_ep_status_info.usage
+				= plugin_ep_status_data.usage;
+		plugin_ep_status_info.mandatory
+				= plugin_ep_status_data.mandatory;
+		plugin_ep_status_info.counter
+				= plugin_ep_status_data.counter;
+		plugin_ep_status_info.op_encoding
+				= plugin_ep_status_data.op_encoding;
+		plugin_ep_status_info.op_sample_rate
+				= plugin_ep_status_data.op_sample_rate;
+		plugin_ep_status_info.op_frame_length
+				= plugin_ep_status_data.op_frame_length;
+
+		/*After read copy back the data to user space */
+		if (copy_to_user((void __user *)arg, &plugin_ep_status_info,
+				sizeof(plugin_ep_status_info)))
+			return -EFAULT;
+
+		break;
+
 	default:
 		break;
 	}
@@ -517,7 +596,7 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 		goto free_odsp;
 	}
 
-	odsp_dev_priv->dev = device_create(odsp_cell_priv.cdev_class, NULL,
+	odsp_dev_priv->dev = device_create(odsp_cell_priv.cdev_class, dev,
 			odsp_dev_priv->dev_num, odsp_dev_priv, dev_name(dev));
 	if (IS_ERR(odsp_dev_priv->dev)) {
 		ret = PTR_ERR(dev);
@@ -527,6 +606,8 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, odsp_dev_priv);
 	pr_info("ODSP device cdev initialized.\n");
+
+	pm_runtime_enable(dev);
 
 	return 0;
 
@@ -553,6 +634,20 @@ static int iaxxx_odsp_dev_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int iaxxx_odsp_rt_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int iaxxx_odsp_rt_resume(struct device *dev)
+{
+	return 0;
+}
+
+static const struct dev_pm_ops iaxxx_odsp_pm_ops = {
+	SET_RUNTIME_PM_OPS(iaxxx_odsp_rt_suspend,
+			iaxxx_odsp_rt_resume, NULL)
+};
 
 static const struct of_device_id iaxxx_odsp_dt_match[] = {
 	{.compatible = "knowles,iaxxx-odsp-celldrv"},
@@ -566,6 +661,7 @@ static struct platform_driver iaxxx_odsp_driver = {
 		.name = "iaxxx-odsp-celldrv",
 		.owner = THIS_MODULE,
 		.of_match_table = iaxxx_odsp_dt_match,
+		.pm = &iaxxx_odsp_pm_ops,
 	},
 };
 

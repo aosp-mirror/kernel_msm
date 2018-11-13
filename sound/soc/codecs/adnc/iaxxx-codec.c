@@ -77,7 +77,9 @@ struct iaxxx_codec_priv {
 	int pcm_dai_fmt[IAXXX_MAX_PORTS];
 	struct regmap *regmap;
 	struct snd_soc_codec *codec;
+	struct device *dev;
 	struct device *dev_parent;
+	struct notifier_block nb_core;	/* Core notifier */
 	/* Add entry for plg_param struct for each proc
 	 * param id and param val registers are set as pair
 	 */
@@ -1182,11 +1184,12 @@ static int iaxxx_put_route_status(struct snd_kcontrol *kcontrol,
 	int ret = 0;
 
 	pr_debug("enter %s connection\n", __func__);
-	if (ucontrol->value.enumerated.item[0] && priv->crash_count) {
-		dev_info(dev, "Route active request after crash\n");
-		ret = iaxxx_tunnel_recovery(priv);
+	if (ucontrol->value.enumerated.item[0]) {
+		dev_info(dev, "Route active request received\n");
+		ret = iaxxx_fw_notifier_call(priv->dev,
+					IAXXX_EV_ROUTE_ACTIVE, NULL);
 		if (ret)
-			dev_err(dev, "not able to restart tunneling\n");
+			dev_err(dev, "not able to propagate route status\n");
 	}
 	priv->route_status = ucontrol->value.enumerated.item[0];
 
@@ -3273,7 +3276,8 @@ static int iaxxx_pdm_port_clr(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
-	if (port_type == PDM_PORT_DMIC) {
+	if (port_type == PDM_PORT_DMIC || port_type == PDM_PORT_ADC ||
+		port_type == PDM_PORT_MONO) {
 		snd_soc_update_bits(codec, IAXXX_SRB_PDMI_PORT_PWR_EN_ADDR,
 						(1 << port_mic), 0);
 	} else if (port_type == PDM_PORT_PDMO) {
@@ -3836,24 +3840,34 @@ static int iaxxx_pcm_port_stop(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
+	uint32_t status = 0;
+	int ret;
 
 	pr_debug("%s() port:%d mstrclk:%d\n",
 			__func__, port, iaxxx->is_ip_port_master[port]);
 	if (iaxxx->port_pcm_start[port] ==  ucontrol->value.integer.value[0])
 		return 0;
 
+	snd_soc_update_bits(codec, IAXXX_PCM_SRSA_ADDR(port),
+			IAXXX_PCM0_SRSA_WMASK_VAL, 0);
+
+	snd_soc_update_bits(codec, IAXXX_PCM_STSA_ADDR(port),
+			IAXXX_PCM0_STSA_WMASK_VAL, 0);
+
 	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(port),
-		IAXXX_AO_BCLK_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(port),
+			IAXXX_AO_BCLK_DISABLE <<
 			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(port));
 
 	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(port),
-		IAXXX_AO_FS_DISABLE << IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(port));
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(port),
+			IAXXX_AO_FS_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(port));
 
 	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(port),
-		IAXXX_AO_DO_DISABLE << IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(port));
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(port),
+			IAXXX_AO_DO_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(port));
 
 	if (iaxxx->is_ip_port_master[port]) {
 		/* CNR0_I2S_Enable  - Disable I2S  */
@@ -3866,15 +3880,34 @@ static int iaxxx_pcm_port_stop(struct snd_kcontrol *kcontrol,
 			IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
 			IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 			IAXXX_I2S_TRIGGER_HIGH);
-	}
+
+		snd_soc_update_bits(codec, IAXXX_SRB_I2S_PORT_PWR_EN_ADDR,
+				(0x1 << port), (0 << port));
+
+		ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
+						&status, IAXXX_BLOCK_0);
+		if (ret) {
+			pr_err("Update block fail %s()\n", __func__);
+			return ret;
+		} }
 	/* Set cn0 pcm active reg */
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
-		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(port),
-		IAXXX_CNR0_PCM_DISABLE <<
+			IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(port),
+			IAXXX_CNR0_PCM_DISABLE <<
 			IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(port));
 
+	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
+			(0x1 << port), (0 << port));
+
+	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, &status,
+					IAXXX_BLOCK_0);
+	if (ret) {
+		pr_err("Update block fail %s()\n", __func__);
+		return ret;
+	}
+
 	iaxxx->port_pcm_start[port] = 0;
-	return 0;
+	return ret;
 }
 
 static int iaxxx_pcm_port_start(struct snd_kcontrol *kcontrol,
@@ -5876,9 +5909,8 @@ static struct snd_soc_dai_driver iaxxx_dai[] = {
 	},
 };
 
-void iaxxx_reset_codec_params(struct iaxxx_priv *priv)
+static void iaxxx_reset_codec_params(struct iaxxx_codec_priv *iaxxx)
 {
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(priv->codec_dev);
 	int i = 0;
 
 	for (i = 0; i < IAXXX_MAX_PDM_PORTS; i++) {
@@ -5998,6 +6030,29 @@ static const struct of_device_id iaxxx_platform_dt_match[] = {
 	{}
 };
 
+static int iaxxx_codec_notify(struct notifier_block *nb,
+			unsigned long action, void *data)
+{
+	struct iaxxx_codec_priv *iaxxx =
+			container_of(nb, struct iaxxx_codec_priv, nb_core);
+	int ret;
+
+	switch (action) {
+	case IAXXX_EV_STARTUP:
+		ret = snd_soc_register_codec(iaxxx->dev, &soc_codec_iaxxx,
+					iaxxx_dai, ARRAY_SIZE(iaxxx_dai));
+		if (ret)
+			dev_err(iaxxx->dev,
+				"codec registration failed rc = %d\n", ret);
+		break;
+	case IAXXX_EV_CRASH:
+		iaxxx_reset_codec_params(iaxxx);
+		break;
+	}
+
+	return 0;
+}
+
 static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 {
 	struct iaxxx_codec_priv *iaxxx;
@@ -6042,13 +6097,13 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	iaxxx->regmap = priv->regmap;
+	iaxxx->dev = dev;
 	iaxxx->dev_parent = dev->parent;
 	iaxxx->plugin_param[0].param_id = IAXXX_MAX_VAL;
 	iaxxx->plugin_param[1].param_id = IAXXX_MAX_VAL;
 	iaxxx->plugin_param[2].param_id = IAXXX_MAX_VAL;
 	iaxxx->cdc_dmic_enable = 0;
 	platform_set_drvdata(pdev, iaxxx);
-	priv->codec_dev = dev;
 	if (pdev->dev.of_node)
 		dev_set_name(&pdev->dev, "%s", "iaxxx-codec");
 
@@ -6105,20 +6160,12 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 
 	}
 
+	iaxxx->nb_core.notifier_call = iaxxx_codec_notify;
+	iaxxx_fw_notifier_register(priv->dev, &iaxxx->nb_core);
+
 	pm_runtime_enable(&pdev->dev);
-	pm_runtime_idle(&pdev->dev);
 
-	/* Check FW download done */
-	if (priv->iaxxx_state->fw_state != FW_APP_MODE) {
-		dev_err(dev, "FW not downloaded\n");
-		return -EIO;
-	}
-	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_iaxxx,
-					iaxxx_dai, ARRAY_SIZE(iaxxx_dai));
-	if (ret)
-		dev_err(dev, "codec registration failed\n");
-
-	return ret;
+	return 0;
 }
 
 static int iaxxx_codec_driver_remove(struct platform_device *pdev)
@@ -6128,24 +6175,22 @@ static int iaxxx_codec_driver_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
-static int iaxxx_suspend(struct device *dev)
+static int iaxxx_codec_rt_suspend(struct device *dev)
 {
 	/* struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(dev); */
 
 	return 0;
 }
 
-static int iaxxx_resume(struct device *dev)
+static int iaxxx_codec_rt_resume(struct device *dev)
 {
 	/* struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(dev); */
 
 	return 0;
 }
-#endif
 
-static const struct dev_pm_ops iaxxx_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(iaxxx_suspend, iaxxx_resume)
+static const struct dev_pm_ops iaxxx_codec_pm_ops = {
+	SET_RUNTIME_PM_OPS(iaxxx_codec_rt_suspend, iaxxx_codec_rt_resume, NULL)
 };
 
 
@@ -6155,6 +6200,7 @@ static struct platform_driver iaxxx_codec_driver = {
 	.driver = {
 		.name = "iaxxx-codec",
 		.of_match_table = iaxxx_platform_dt_match,
+		.pm = &iaxxx_codec_pm_ops,
 	},
 };
 

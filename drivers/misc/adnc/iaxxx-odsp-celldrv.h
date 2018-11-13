@@ -51,10 +51,6 @@ struct odsp_device_priv {
 	 * spinlock_t odsp_cell_lock
 	 */
 	struct regmap *regmap;
-
-	/* Synchronize suspend/resume on this */
-	atomic_t power_state;
-	struct notifier_block notifier_fbp;
 };
 
 #endif

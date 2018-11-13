@@ -311,21 +311,20 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 		pr_err("Unable to fetch tunnel private data\n");
 		return -EINVAL;
 	}
+
 	if (!priv->iaxxx_state) {
 		dev_err(priv->dev, "Chip state NULL\n");
 		return -EINVAL;
 	}
-	if (priv->iaxxx_state->fw_state != FW_APP_MODE) {
-		dev_err(priv->dev, "FW state not valid %d %s()\n",
-			priv->iaxxx_state->fw_state, __func__);
+
+	if (!pm_runtime_enabled(t_intf_priv->dev) ||
+		!pm_runtime_active(t_intf_priv->dev)) {
+		dev_err(priv->dev, "FW state not valid %s()\n", __func__);
 		return -EIO;
 	}
 
-	if (atomic_read(&priv->power_state) != IAXXX_NORMAL)
-		return -ENXIO;
-
-	if (arg != 0 && _IOC_DIR(cmd) == (_IOC_READ | _IOC_WRITE)
-		&& _IOC_SIZE(cmd) == sizeof(struct tunlMsg)) {
+	if (arg != 0 && _IOC_DIR(cmd) == (_IOC_READ | _IOC_WRITE) &&
+		_IOC_SIZE(cmd) == sizeof(struct tunlMsg)) {
 		if (copy_from_user(&msg, (void __user *)arg,
 					sizeof(struct tunlMsg))) {
 			pr_err("parameter copy from user failed\n");
@@ -403,6 +402,7 @@ int iaxxx_sensor_tunnel_init(struct iaxxx_priv *priv)
 
 	t_intf_priv = priv->tunnel_data;
 	err = iaxxx_cdev_create(&t_intf_priv->tunnel_sensor_cdev,
+				t_intf_priv->dev,
 				&sensor_tunnel_fops, t_intf_priv,
 				IAXXX_CDEV_SENSOR_TUNNEL_DEV);
 	if (err) {

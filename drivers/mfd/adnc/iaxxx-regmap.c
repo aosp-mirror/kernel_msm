@@ -42,6 +42,8 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-out-endpoint-group.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-debuglog.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-script-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-pwr-mgmt.h>
 #include "iaxxx.h"
 #include <linux/mfd/adnc/iaxxx-core.h>
 
@@ -59,17 +61,19 @@
 #define IAXXX_MAX_REGISTER	  (IAXXX_SRB_ARB_N_SIZE(31))
 #define IAXXX_SRB_SIZE		  ((IAXXX_MAX_REGISTER+4) - IAXXX_SRB_REGS_ADDR)
 
-#define IAXXX_BLOCK_CHANNEL						       1
-#define IAXXX_BLOCK_STREAM						       2
-#define IAXXX_BLOCK_TUNNEL						       3
-#define IAXXX_BLOCK_PACKAGE						       4
-#define IAXXX_BLOCK_PLUGIN						       5
-#define IAXXX_BLOCK_DBGLOG				10
-#define IAXXX_BLOCK_EVENT				0xf
+#define IAXXX_BLOCK_CHANNEL				1
+#define IAXXX_BLOCK_STREAM				2
+#define IAXXX_BLOCK_TUNNEL				3
+#define IAXXX_BLOCK_PACKAGE				4
+#define IAXXX_BLOCK_PLUGIN				5
+#define IAXXX_BLOCK_DBGLOG				0xa
 #define IAXXX_BLOCK_SENSOR				0xd
+#define IAXXX_BLOCK_POWER				0xe
+#define IAXXX_BLOCK_EVENT				0xf
+#define IAXXX_BLOCK_SCRIPT				0x10
 
-#define IAXXX_VIRTUAL_ADDR_START				      0x01000000
-#define IAXXX_VIRTUAL_ADDR_END					      0x0FFFFFFF
+#define IAXXX_VIRTUAL_ADDR_START		0x01000000
+#define IAXXX_VIRTUAL_ADDR_END			0x10FFFFFF
 
 #define IAXXX_VIRTUAL_BASE_ADDR(B)				     ((B) << 24)
 #define IAXXX_INDEX_FROM_VIRTUAL(A)				     ((A) >> 24)
@@ -114,6 +118,8 @@
 #define IAXXX_REG_DBGLOG_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_DBGLOG)
 #define IAXXX_REG_EVENT_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_EVENT)
 #define IAXXX_REG_SENSOR_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_SENSOR)
+#define IAXXX_REG_SCRIPT_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_SCRIPT)
+#define IAXXX_REG_POWER_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_POWER)
 
 
 /* Returns true if register is in the supported physical address range */
@@ -164,6 +170,14 @@ static bool iaxxx_readable_register(struct device *dev, unsigned int reg)
 	if (WARN_ON(!priv))
 		return false;	/* Something went wrong */
 
+	if (current == priv->worker.task) {
+		if (test_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags))
+			return false;
+	} else {
+		if (test_bit(IAXXX_FLG_BUS_BLOCK_CLIENTS, &priv->flags))
+			return false;
+	}
+
 	cfg = priv->regmap_config->ranges;
 
 	/* Virtual addresses are only supported when mapped */
@@ -180,6 +194,21 @@ static bool iaxxx_readable_register(struct device *dev, unsigned int reg)
 
 	/* Support physical address */
 	return iaxxx_is_physical_address(reg);
+}
+
+static bool iaxxx_writeable_register(struct device *dev, unsigned int reg)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+
+	if (current == priv->worker.task) {
+		if (test_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags))
+			return false;
+	} else {
+		if (test_bit(IAXXX_FLG_BUS_BLOCK_CLIENTS, &priv->flags))
+			return false;
+	}
+
+	return true;
 }
 
 static bool iaxxx_volatile_register(struct device *dev, unsigned int reg)
@@ -228,6 +257,11 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	case IAXXX_TNL_HDR_TNL_COUNT_ADDR:
 	/* Endpoints ARB Regs */
 	case IAXXX_IN_EP_GRP_STATUS_ADDR:
+	case IAXXX_SRB_CHKSUM_ADDR:
+	case IAXXX_SRB_CHKSUM_VAL1_ADDR:
+	case IAXXX_SRB_CHKSUM_VAL2_ADDR:
+	case IAXXX_SRB_SYS_POWER_CTRL_ADDR:
+	case IAXXX_SRB_SYS_POWER_CTRL_1_ADDR:
 		return true;
 	}
 
@@ -335,8 +369,15 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 			return true;
 	}
 
-	if (reg >= IAXXX_DEBUGLOG_REGS_ADDR && reg <=
-			IAXXX_DEBUGLOG_BLOCK_2_CRASHLOG_SIZE_ADDR)
+	if (reg == IAXXX_SCRIPT_MGMT_SCRIPT_ADDR_ADDR)
+		return true;
+
+	if (reg >= IAXXX_DEBUGLOG_REGS_ADDR &&
+		reg <= IAXXX_DEBUGLOG_BLOCK_2_CRASHLOG_SIZE_ADDR)
+		return true;
+
+	if (reg >= IAXXX_PWR_MGMT_REGS_ADDR &&
+		reg <= IAXXX_PWR_MGMT_MAX_UART1_MASTER_SPEED_REQ_ADDR)
 		return true;
 	return false;
 }
@@ -402,7 +443,20 @@ static const struct regmap_range_cfg iaxxx_ranges[] = {
 		.selector_mask = SRB_BLOCK_SELECT_MASK,
 		.selector_shift = SRB_BLOCK_SELECT_SHIFT,
 	},
-
+	{
+		.name = "Script",
+		.range_min = IAXXX_REG_SCRIPT_BASE,
+		.selector_reg = SRB_BLOCK_SELECT_REG,
+		.selector_mask = SRB_BLOCK_SELECT_MASK,
+		.selector_shift = SRB_BLOCK_SELECT_SHIFT,
+	},
+	{
+		.name = "Power",
+		.range_min = IAXXX_REG_POWER_BASE,
+		.selector_reg = SRB_BLOCK_SELECT_REG,
+		.selector_mask = SRB_BLOCK_SELECT_MASK,
+		.selector_shift = SRB_BLOCK_SELECT_SHIFT,
+	},
 };
 
 static struct regmap_config iaxxx_regmap_config = {
@@ -413,7 +467,7 @@ static struct regmap_config iaxxx_regmap_config = {
 	.reg_format_endian = REGMAP_ENDIAN_BIG,
 	.val_format_endian = REGMAP_ENDIAN_BIG,
 	.volatile_reg = iaxxx_volatile_register,
-	/*.writeable_reg = iaxxx_writeable_register,*/
+	.writeable_reg = iaxxx_writeable_register,
 	.cache_type = REGCACHE_RBTREE,
 
 	/* These will be set before the second regmap_init() */
@@ -497,10 +551,8 @@ static int iaxxx_update_relocatable_blocks(struct iaxxx_priv *priv)
 
 	/* Allocate a range configuration for the number of blocks */
 	range_cfg = devm_kzalloc(dev, nblks * sizeof(*range_cfg), GFP_KERNEL);
-	if (!range_cfg) {
-		dev_err(dev, "%s() devm_kzalloc failed\n", __func__);
+	if (!range_cfg)
 		return -ENOMEM;
-	}
 
 	/* Build the range configuration table */
 	curr_range_cfg = range_cfg;

@@ -16,8 +16,8 @@
 #ifndef _IAXXX_BUILD_INFO_H
 #define _IAXXX_BUILD_INFO_H
 
-#define HOST_SOFTWARE_VERSION_STR "1.2.2"
+#define HOST_SOFTWARE_VERSION_STR "1.2.4"
 
-#define FW_VERSION_IN_HOST_STR "2.0.1"
+#define FW_VERSION_IN_HOST_STR "2.0.2"
 
 #endif

@@ -86,6 +86,9 @@ iaxxx_regmap_wait_match(struct iaxxx_priv *priv, uint32_t reg, uint32_t match)
 			 * with our retries
 			 */
 			dev_err(dev, "regmap_read failed, rc = %d\n", rc);
+
+			if (rc == -EIO)
+				break;
 		}
 
 		/* Read value matches */
@@ -100,7 +103,13 @@ iaxxx_regmap_wait_match(struct iaxxx_priv *priv, uint32_t reg, uint32_t match)
 		}
 	}
 
-	return -ETIMEDOUT;
+	dev_err(dev, "No update block response from FW and host timed out\n");
+
+	/* regmap functions return -EIO when access is denied */
+	if (rc != -EIO)
+		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR);
+
+	return rc;
 }
 
 static inline int
@@ -876,9 +885,6 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 
 	/* WARN_ON(!mutex_is_locked(&priv->srb_lock)); */
 
-	if (atomic_read(&priv->power_state) != IAXXX_NORMAL)
-		return -ENXIO;
-
 	if (!priv)
 		return -EINVAL;
 	if (id == IAXXX_BLOCK_0)
@@ -904,11 +910,48 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 	} else
 		return rc;
 
-	if (priv->iaxxx_state->fw_state == FW_APP_MODE) {
-		priv->iaxxx_state->fw_state = FW_CRASH;
-		schedule_work(&priv->crash_recover_work);
-	}
+	iaxxx_fw_crash(dev, IAXXX_FW_CRASH_UPDATE_BLOCK_REQ);
 
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_request);
+
+/**
+ * iaxxx_update_block_no_wait - sends Update Block Request and no wait
+ *
+ * @priv   : iaxxx private data
+ * @status : pointer for the returned system status
+ *
+ * Core lock must be held by the caller.
+ *
+ * This is intend to be used for triggering a block update request. there is no
+ * wait for the result after that. one use case is to disable control interface.
+ */
+
+int iaxxx_send_update_block_no_wait(struct device *dev, int host_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	int rc = 0, reg_addr;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	/* To protect concurrent update blocks requests*/
+	mutex_lock(&priv->update_block_lock);
+
+	if (!host_id)
+		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_ADDR;
+	else
+		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_ADDR;
+
+	/* Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
+	 * in the SRB_UPDATE_CTRL register
+	 */
+	rc = regmap_write(priv->regmap, reg_addr,
+			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	if (rc)
+		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit %d\n", rc);
+
+	mutex_unlock(&priv->update_block_lock);
+	return rc;
+}
+EXPORT_SYMBOL(iaxxx_send_update_block_no_wait);

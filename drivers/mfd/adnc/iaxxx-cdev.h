@@ -24,15 +24,22 @@ enum iaxxx_cdev_types {
 	IAXXX_CDEV_LAST,
 };
 
+struct iaxxx_cdev {
+	struct cdev cdev;
+	struct device *dev;
+};
+
 int iaxxx_cdev_init(void);
 void iaxxx_cdev_exit(void);
 
-int iaxxx_cdev_create(struct cdev *cdev,
+int iaxxx_cdev_create(struct iaxxx_cdev *cdev,
+	struct device *parent,
 	const struct file_operations *fops,
 	void *drvdata, enum iaxxx_cdev_types type);
-int iaxxx_cdev_create_name(struct cdev *cdev,
+int iaxxx_cdev_create_name(struct iaxxx_cdev *cdev,
+	struct device *parent,
 	const struct file_operations *fops,
 	void *drvdata, char *name, ...);
-void iaxxx_cdev_destroy(struct cdev *cdev);
+void iaxxx_cdev_destroy(struct iaxxx_cdev *cdev);
 
 #endif /* __IAXXX_CDEV__ */

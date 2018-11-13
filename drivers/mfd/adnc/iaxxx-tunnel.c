@@ -243,6 +243,7 @@ int iaxxx_tunnel_read_hw(struct iaxxx_priv *priv, void *readbuff,
 
 	if (buff_param.buff_size == 0 || buff_param.buff_addr == 0) {
 		dev_err(dev, "wrong buff params\n");
+		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF);
 		return -EINVAL;
 	}
 	while (buff_param.buff_head != buff_param.buff_tail

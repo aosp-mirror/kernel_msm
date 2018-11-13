@@ -21,6 +21,7 @@
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/cdev.h>
 #include "iaxxx.h"
+#include "iaxxx-cdev.h"
 
 enum {
 	TUNNEL_0,
@@ -70,8 +71,8 @@ struct iaxxx_tunnel_data {
 	struct device *dev; /* mfd device */
 	struct iaxxx_priv *priv;
 
-	struct cdev tunnel_cdev;
-	struct cdev tunnel_sensor_cdev;
+	struct iaxxx_cdev tunnel_cdev;
+	struct iaxxx_cdev tunnel_sensor_cdev;
 
 	struct iaxxx_circ_buf stream_circ;
 
@@ -101,6 +102,7 @@ struct iaxxx_tunnel_data {
 	struct task_struct *consumer_thread;
 	wait_queue_head_t consumer_wq;
 	wait_queue_head_t producer_wq;
+	struct notifier_block crash_notifier;
 	bool event_registered;
 };
 

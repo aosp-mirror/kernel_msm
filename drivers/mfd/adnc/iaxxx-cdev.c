@@ -47,7 +47,8 @@ static char *iaxxx_cdev_get_name(enum iaxxx_cdev_types type)
 	return NULL;
 }
 
-int iaxxx_cdev_create(struct cdev *cdev,
+int iaxxx_cdev_create(struct iaxxx_cdev *cdev,
+	struct device *parent,
 	const struct file_operations *fops,
 	void *drvdata, enum iaxxx_cdev_types type)
 {
@@ -60,19 +61,20 @@ int iaxxx_cdev_create(struct cdev *cdev,
 	if (!name)
 		return -EINVAL;
 
-	cdev_init(cdev, fops);
-	cdev->owner = THIS_MODULE;
+	cdev_init(&cdev->cdev, fops);
+	cdev->cdev.owner = THIS_MODULE;
 
 	devno = MKDEV(iaxxx_cdev_major, iaxxx_cdev_minor);
-	err = cdev_add(cdev, devno, 1);
+	err = cdev_add(&cdev->cdev, devno, 1);
 	if (err) {
 		pr_err("failed to add cdev=%04x error: %d", devno, err);
 		goto exit_cdev_add;
 	}
 
 	idx = iaxxx_cdev_indexes[type];
-	dev = device_create(iaxxx_cdev_class, NULL, devno, drvdata, name, idx);
-	if (IS_ERR(dev)) {
+	cdev->dev = device_create(iaxxx_cdev_class, parent, devno,
+				drvdata, name, idx);
+	if (IS_ERR(cdev->dev)) {
 		err = PTR_ERR(dev);
 		pr_err("device_create cdev=%04x failed: %d\n", devno, err);
 		goto exit_dev_create;
@@ -84,12 +86,13 @@ int iaxxx_cdev_create(struct cdev *cdev,
 	return 0;
 
 exit_dev_create:
-	cdev_del(cdev);
+	cdev_del(&cdev->cdev);
 exit_cdev_add:
 	return err;
 }
 
-int iaxxx_cdev_create_name(struct cdev *cdev,
+int iaxxx_cdev_create_name(struct iaxxx_cdev *cdev,
+	struct device *parent,
 	const struct file_operations *fops,
 	void *drvdata, char *name, ...)
 {
@@ -103,7 +106,7 @@ int iaxxx_cdev_create_name(struct cdev *cdev,
 	if (!iaxxx_cdev_name)
 		return -ENOMEM;
 
-	ret = iaxxx_cdev_create(cdev, fops, drvdata, IAXXX_CDEV_CUSTOM);
+	ret = iaxxx_cdev_create(cdev, parent, fops, drvdata, IAXXX_CDEV_CUSTOM);
 
 	kfree(iaxxx_cdev_name);
 	iaxxx_cdev_name = NULL;
@@ -111,15 +114,15 @@ int iaxxx_cdev_create_name(struct cdev *cdev,
 	return ret;
 }
 
-void iaxxx_cdev_destroy(struct cdev *cdev)
+void iaxxx_cdev_destroy(struct iaxxx_cdev *cdev)
 {
-	device_destroy(iaxxx_cdev_class, cdev->dev);
-	cdev_del(cdev);
+	device_destroy(iaxxx_cdev_class, cdev->cdev.dev);
+	cdev_del(&cdev->cdev);
 }
 
 int iaxxx_cdev_init(void)
 {
-	static const char *cdev_name = "iaxxx";
+	static const char *cdev_name = "iaxxx-dev";
 	dev_t devno;
 	int err;
 

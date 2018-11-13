@@ -22,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/mutex.h>
 #include <linux/kthread.h>
+#include <linux/pm_runtime.h>
 
 typedef int (*iaxxx_cb_func_ptr_t)(struct device *dev);
 typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
@@ -37,7 +38,21 @@ struct workqueue_struct;
 #define IAXXX_PLGIN_ID_MASK	0x001F
 #define IAXXX_SENSR_ID_MASK	0x0003
 
-#define IAXXX_FLG_STARTUP		1
+/* Flags denoting various states of FW and events */
+enum {
+	IAXXX_FLG_STARTUP,		/* Initial state */
+	IAXXX_FLG_FW_READY,		/* FW is downloaded successully and
+					 * is in app mode
+					 */
+	IAXXX_FLG_FW_CRASH,		/* FW has crashed */
+	IAXXX_FLG_PM_SUSPEND,		/* Suspend state */
+	IAXXX_FLG_BUS_BLOCK_CLIENTS,	/* Block client node access to bus */
+	IAXXX_FLG_BUS_BLOCK_CORE,	/* Block core node access (CM4 Crash) */
+	IAXXX_FLG_RESUME_BY_STARTUP,	/* System boot up */
+	IAXXX_FLG_RESUME_BY_RECOVERY,	/* FW update and resume
+					 * after fw crash
+					 */
+};
 
 enum {
 	IAXXX_NORMAL,
@@ -57,11 +72,14 @@ enum iaxxx_bus {
 	IAXXX_UART,
 };
 
-enum iaxxx_fw_state {
-	FW_SBL_MODE = 0,
-	FW_APP_MODE,
-	FW_CRASH,
-	FW_RECOVERY,
+enum iaxxx_events {
+	IAXXX_EV_UNKNOWN = 0,		/* Reserve value 0 */
+	IAXXX_EV_APP_MODE,		/* FW entered in application mode */
+	IAXXX_EV_STARTUP,		/* First ready system startup */
+	IAXXX_EV_RECOVERY,		/* Recovery complete after fw crash */
+	IAXXX_EV_CRASH,			/* Notify for FW crash */
+	IAXXX_EV_ROUTE_ACTIVE,		/* Audio routing path is done */
+	IAXXX_EV_PACKAGE,		/* Loaded plugin */
 };
 
 enum iaxxx_plugin_state {
@@ -81,6 +99,31 @@ struct iaxxx_plug_inst_data {
 	enum iaxxx_plugin_state plugin_inst_state;
 };
 
+struct iaxxx_plugin_status_data {
+	uint32_t block_id;
+	uint8_t create_status;
+	uint8_t enable_status;
+	uint16_t process_count;
+	uint16_t process_err_count;
+	uint32_t in_frames_consumed;
+	uint32_t out_frames_produced;
+	uint32_t private_memsize;
+	uint8_t frame_notification_mode;
+	uint8_t state_management_mode;
+};
+
+struct iaxxx_plugin_endpoint_status_data {
+	uint8_t status;
+	uint8_t frame_status;
+	uint8_t endpoint_status;
+	uint8_t usage;
+	uint8_t mandatory;
+	uint16_t counter;
+	uint8_t op_encoding;
+	uint8_t op_sample_rate;
+	uint16_t op_frame_length;
+};
+
 struct iaxxx_pkg_data {
 	int proc_id;
 	enum iaxxx_pkg_state pkg_state;
@@ -92,7 +135,6 @@ struct iaxxx_block_err {
 };
 
 struct iaxxx_system_state {
-	enum iaxxx_fw_state fw_state;
 	struct iaxxx_plug_inst_data plgin[IAXXX_PLGIN_ID_MASK + 1];
 	struct iaxxx_pkg_data pkg[IAXXX_PKG_ID_MASK + 1];
 	struct iaxxx_block_err err;
@@ -177,11 +219,9 @@ struct iaxxx_priv {
 	/* Core kthread */
 	struct task_struct *thread;
 	struct kthread_worker worker;
-
-	/* Work for device init */
-	struct kthread_work dev_init_work;
-	struct kthread_work crash_work;
-	struct work_struct crash_recover_work;
+	struct kthread_work fw_update_work;
+	struct kthread_work fw_crash_work;
+	struct kthread_work runtime_work;
 
 	void *tunnel_data;
 	/* Event Manager */
@@ -207,24 +247,33 @@ struct iaxxx_priv {
 	struct iaxxx_reg_dump_priv *reg_dump;
 	void *intf_priv;
 	bool dump_log;
+	bool is_irq_enabled;
 
 	void *dfs_node;
+
+	/* Notifiers */
+	struct srcu_notifier_head core_notifier_list;
+	struct notifier_block notifier_core;
 
 	/* iaxxx core flags for atomic bit field operations */
 	unsigned long flags;
 
 	/* Synchronize suspend/resume on this */
-	atomic_t power_state;
-	struct notifier_block notifier_fbp;
 	struct iaxxx_system_state *iaxxx_state;
 	bool sensor_en[IAXXX_SENSR_ID_MASK + 1];
 	uint32_t crash_count;
 	bool cm4_crashed;
 	bool route_status;
-	int (*crash_handler)(struct iaxxx_priv *priv);
 	struct iaxxx_crashlog *crashlog;
 	struct mutex crashdump_lock;
 	bool debug_isr_disable;
+
+	/* FW Crash info */
+	int fw_crash_reasons;
+	int recovery_try_count;
+	int try_count;
+	int package_version_package_index;
+	int plugin_version_plugin_index;
 };
 
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
@@ -242,6 +291,7 @@ int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
 			uint32_t block_id);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
+int iaxxx_send_update_block_no_wait(struct device *dev, int host_id);
 int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
 			uint32_t param_id, uint32_t *param_val,
 			uint32_t block_id);
@@ -302,13 +352,32 @@ int iaxxx_core_retrieve_event(struct device *dev, uint16_t *event_id,
 			uint32_t *data);
 int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 			uint32_t event_enable_mask, uint32_t block_id);
+int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
+			struct iaxxx_plugin_status_data *plugin_status_data);
+
+int iaxxx_core_plg_get_endpoint_status(struct device *dev,
+	uint32_t inst_id, uint8_t ep_index, uint8_t direction,
+	struct iaxxx_plugin_endpoint_status_data *plugin_ep_status_data);
+
+int iaxxx_core_resume_rt(struct device *dev);
+int iaxxx_core_suspend_rt(struct device *dev);
+int iaxxx_core_dev_resume(struct device *dev);
+int iaxxx_core_dev_suspend(struct device *dev);
+
 int iaxxx_package_load(struct device *dev, const char *pkg_name,
 			uint32_t pkg_id, uint32_t *proc_id);
-int iaxxx_package_unload(struct device *dev, int32_t pkg_id,
-			uint32_t proc_id);
+int iaxxx_package_unload(struct device *dev,
+			int32_t pkg_id);
 int iaxxx_core_read_plugin_error(struct device *dev, const uint32_t block_id,
 			uint32_t *error_code, uint8_t *error_instance);
-void iaxxx_tunnel_stop(struct iaxxx_priv *priv);
-int iaxxx_tunnel_recovery(struct iaxxx_priv *priv);
-void iaxxx_reset_codec_params(struct iaxxx_priv *priv);
+int iaxxx_core_script_load(struct device *dev,
+			const char *script_name,
+			uint32_t script_id);
+int iaxxx_core_script_unload(struct device *dev,
+			uint32_t script_id);
+int iaxxx_core_script_trigger(struct device *dev,
+			uint32_t script_id);
+int iaxxx_fw_notifier_register(struct device *dev, struct notifier_block *nb);
+int iaxxx_fw_notifier_unregister(struct device *dev, struct notifier_block *nb);
+int iaxxx_fw_notifier_call(struct device *dev, unsigned long val, void *v);
 #endif /*__IAXXX_CORE_H__ */

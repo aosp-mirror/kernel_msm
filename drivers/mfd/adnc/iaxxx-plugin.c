@@ -37,6 +37,10 @@
 	((p << IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_POS) & \
 	IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_MASK))
 
+#define GET_PROC_ID_FROM_PKG_ID(pkg_id) \
+	((pkg_id & IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_MASK) \
+	>> IAXXX_PKG_MGMT_PKG_PROC_ID_PROC_ID_POS)
+
 struct pkg_bin_info {
 	uint32_t    version;
 	uint32_t    entry_point;
@@ -175,7 +179,8 @@ static int iaxxx_core_create_plg_common(
 
 	priv->iaxxx_state->plgin[inst_id].plugin_inst_state =
 		IAXXX_PLUGIN_LOADED;
-	priv->iaxxx_state->plgin[inst_id].proc_id = pkg_id;
+
+	priv->iaxxx_state->plgin[inst_id].proc_id = proc_id;
 
 core_create_plugin_err:
 	mutex_unlock(&priv->plugin_lock);
@@ -1170,19 +1175,15 @@ EXPORT_SYMBOL(iaxxx_package_load);
  * @brief Load the package
  *
  * @pkg_id	Package Id
- * @proc_id	Process Id
  *
  * @ret 0 on success, -EINVAL in case of error
  ****************************************************************************/
 int iaxxx_package_unload(struct device *dev,
-			int32_t pkg_id,
-			uint32_t proc_id)
+			int32_t pkg_id)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = -EINVAL;
-
-	dev_info(dev, "%s() pkg_id:0x%x proc_id:%u\n", __func__,
-			pkg_id, proc_id);
+	uint32_t proc_id;
 
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
@@ -1194,6 +1195,11 @@ int iaxxx_package_unload(struct device *dev,
 		goto out;
 	}
 
+	proc_id = GET_PROC_ID_FROM_PKG_ID(
+				priv->iaxxx_state->pkg[pkg_id].proc_id);
+
+	dev_info(dev, "%s() pkg_id:0x%x proc_id:%u\n", __func__,
+		pkg_id, proc_id);
 	rc = iaxxx_unload_pkg(priv, pkg_id, proc_id);
 	if (rc) {
 		dev_err(dev, "%s() pkg unload fail %d\n", __func__, rc);
@@ -1274,7 +1280,7 @@ int iaxxx_core_set_param_blk_with_ack(struct device *dev,
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	uint32_t plugin_instace_id = inst_id & IAXXX_PLGIN_ID_MASK;
+	uint32_t plugin_instance_id = inst_id & IAXXX_PLGIN_ID_MASK;
 
 	if (!priv)
 		return ret;
@@ -1283,14 +1289,14 @@ int iaxxx_core_set_param_blk_with_ack(struct device *dev,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Check if plugin exists */
-	if (!priv->iaxxx_state->plgin[plugin_instace_id].plugin_inst_state) {
+	if (!priv->iaxxx_state->plgin[plugin_instance_id].plugin_inst_state) {
 		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
 			inst_id, __func__);
 		ret = -EEXIST;
 		goto set_param_blk_with_ack_err;
 	}
 	ret = iaxxx_core_set_param_blk_with_ack_common(dev,
-			plugin_instace_id, param_blk_id, block_id,
+			plugin_instance_id, param_blk_id, block_id,
 			set_param_buf, set_param_buf_sz,
 			response_data_buf,
 			response_data_sz,
@@ -1330,3 +1336,233 @@ int iaxxx_core_read_plugin_error(
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_read_plugin_error);
+
+int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
+			struct iaxxx_plugin_status_data *plugin_status_data)
+{
+	int ret = -EINVAL;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t plugin_instance_id = inst_id & IAXXX_PLGIN_ID_MASK;
+	uint32_t block_id;
+	uint32_t reg_val;
+	uint8_t  proc_id;
+
+	if (!priv)
+		return ret;
+
+	/* protect this plugin operation */
+	mutex_lock(&priv->plugin_lock);
+
+	/* Check if plugin exists */
+	if (!priv->iaxxx_state->plgin[plugin_instance_id].plugin_inst_state) {
+		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
+			inst_id, __func__);
+		ret = -EEXIST;
+		goto get_plugin_status_info_err;
+	}
+
+	proc_id  = priv->iaxxx_state->plgin[plugin_instance_id].proc_id;
+	block_id = IAXXX_PROC_ID_TO_BLOCK_ID(proc_id);
+
+	plugin_status_data->block_id = block_id;
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id),
+			&reg_val);
+	if (ret) {
+		dev_err(dev, "plugin create status read failed %s()\n",
+			__func__);
+		goto get_plugin_status_info_err;
+	}
+	plugin_status_data->create_status = (reg_val & (1 << inst_id)) ? 1 : 0;
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(block_id),
+			&reg_val);
+	if (ret) {
+		dev_err(dev, "plugin enable status read failed %s()\n",
+			__func__);
+		goto get_plugin_status_info_err;
+	}
+	plugin_status_data->enable_status = (reg_val & (1 << inst_id)) ? 1 : 0;
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_INS_GRP_PROCESS_COUNTS_REG(inst_id),
+			&reg_val);
+	if (ret) {
+		dev_err(dev, "plugin process count read failed %s()\n",
+			__func__);
+		goto get_plugin_status_info_err;
+	}
+
+	plugin_status_data->process_count = ((reg_val &
+		IAXXX_PLUGIN_INS_GRP_PROCESS_COUNTS_PROCESS_COUNT_MASK) >>
+		IAXXX_PLUGIN_INS_GRP_PROCESS_COUNTS_PROCESS_COUNT_POS);
+
+	plugin_status_data->process_err_count = ((reg_val &
+		IAXXX_PLUGIN_INS_GRP_PROCESS_COUNTS_PROCESS_ERR_COUNT_MASK) >>
+		IAXXX_PLUGIN_INS_GRP_PROCESS_COUNTS_PROCESS_ERR_COUNT_POS);
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_INS_GRP_IN_FRAMES_CONSUMED_REG(inst_id),
+			&reg_val);
+	if (ret) {
+		dev_err(dev, "plugin in frames consumed read failed %s()\n",
+			__func__);
+		goto get_plugin_status_info_err;
+	}
+
+	plugin_status_data->in_frames_consumed = ((reg_val &
+		IAXXX_PLUGIN_INS_GRP_IN_FRAMES_CONSUMED_COUNT_MASK) >>
+		IAXXX_PLUGIN_INS_GRP_IN_FRAMES_CONSUMED_COUNT_POS);
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_INS_GRP_OUT_FRAMES_PRODUCED_REG(inst_id),
+			&reg_val);
+	if (ret) {
+		dev_err(dev, "plugin out frames produced read failed %s()\n",
+			__func__);
+		goto get_plugin_status_info_err;
+	}
+
+	plugin_status_data->out_frames_produced = ((reg_val &
+		IAXXX_PLUGIN_INS_GRP_OUT_FRAMES_PRODUCED_COUNT_MASK) >>
+		IAXXX_PLUGIN_INS_GRP_OUT_FRAMES_PRODUCED_COUNT_POS);
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_INS_GRP_PLUGIN_INFO_REG(inst_id),
+			&reg_val);
+	if (ret) {
+		dev_err(dev, "plugin info reg read failed %s()\n",
+			__func__);
+		goto get_plugin_status_info_err;
+	}
+
+	plugin_status_data->private_memsize = ((reg_val &
+		IAXXX_PLUGIN_INS_GRP_PLUGIN_INFO_PRIVATE_MEMORY_SIZE_MASK) >>
+		IAXXX_PLUGIN_INS_GRP_PLUGIN_INFO_PRIVATE_MEMORY_SIZE_POS);
+
+	plugin_status_data->frame_notification_mode = ((reg_val &
+		IAXXX_PLUGIN_INS_GRP_PLUGIN_INFO_FRAME_NOTIFICATION_MODE_MASK)
+		>>
+		IAXXX_PLUGIN_INS_GRP_PLUGIN_INFO_FRAME_NOTIFICATION_MODE_POS);
+
+	plugin_status_data->state_management_mode = ((reg_val &
+		IAXXX_PLUGIN_INS_GRP_PLUGIN_INFO_STATE_MANAGEMENT_MODE_MASK) >>
+		IAXXX_PLUGIN_INS_GRP_PLUGIN_INFO_STATE_MANAGEMENT_MODE_POS);
+
+get_plugin_status_info_err:
+	mutex_unlock(&priv->plugin_lock);
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_get_status_info);
+
+int iaxxx_core_plg_get_endpoint_status(struct device *dev,
+	uint32_t inst_id, uint8_t ep_index, uint8_t direction,
+	struct iaxxx_plugin_endpoint_status_data *plugin_ep_status_data)
+{
+	int ret = -EINVAL;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t plugin_instance_id = inst_id & IAXXX_PLGIN_ID_MASK;
+	uint32_t reg_val;
+
+	if (!priv)
+		return ret;
+
+	/* protect this plugin operation */
+	mutex_lock(&priv->plugin_lock);
+
+	/* Check if plugin exists */
+	if (!priv->iaxxx_state->plgin[plugin_instance_id].plugin_inst_state) {
+		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
+			inst_id, __func__);
+		ret = -EEXIST;
+		goto get_plugin_ep_status_info_err;
+	}
+
+	if (direction) {
+		ret = regmap_read(priv->regmap,
+				IAXXX_PLUGIN_INS_GRP_OUT_EP_STATUS_REG(
+				inst_id, ep_index),
+				&reg_val);
+		if (ret) {
+			dev_err(dev, "plugin endpoint status read failed %s()\n",
+				__func__);
+			goto get_plugin_ep_status_info_err;
+		}
+
+		plugin_ep_status_data->status = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_SINK_STATE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_SINK_STATE_POS;
+		plugin_ep_status_data->frame_status = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_FRAME_STATE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_FRAME_STATE_POS;
+		plugin_ep_status_data->endpoint_status = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_ENDPOINT_STATE_MASK)
+			>>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_ENDPOINT_STATE_POS;
+		plugin_ep_status_data->usage = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_USAGE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_USAGE_POS;
+		plugin_ep_status_data->mandatory = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_MANDATORY_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_MANDATORY_POS;
+		plugin_ep_status_data->counter = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_COUNTER_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_COUNTER_POS;
+
+		ret = regmap_read(priv->regmap,
+				IAXXX_PLUGIN_INS_GRP_OUT_EP_FORMAT_REG(
+							inst_id, ep_index),
+				&reg_val);
+		if (ret) {
+			dev_err(dev,
+				"plugin endpoint format read failed %s()\n",
+				__func__);
+			goto get_plugin_ep_status_info_err;
+		}
+
+		plugin_ep_status_data->op_encoding = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_FORMAT_ENCODING_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_FORMAT_ENCODING_POS;
+		plugin_ep_status_data->op_sample_rate = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_FORMAT_SAMPLE_RATE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_FORMAT_SAMPLE_RATE_POS;
+		plugin_ep_status_data->op_frame_length = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_OUT_0_FORMAT_LENGTH_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_OUT_0_FORMAT_LENGTH_POS;
+	} else {
+		ret = regmap_read(priv->regmap,
+				IAXXX_PLUGIN_INS_GRP_IN_EP_STATUS_REG(
+							inst_id, ep_index),
+				&reg_val);
+		if (ret) {
+			dev_err(dev,
+				"plugin endpoint status read failed %s()\n",
+				__func__);
+			goto get_plugin_ep_status_info_err;
+		}
+
+		plugin_ep_status_data->status  = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_SRC_STATE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_SRC_STATE_POS;
+		plugin_ep_status_data->frame_status  = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_FRAME_STATE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_FRAME_STATE_POS;
+		plugin_ep_status_data->endpoint_status = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_ENDPOINT_STATE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_ENDPOINT_STATE_POS;
+		plugin_ep_status_data->usage = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_USAGE_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_USAGE_POS;
+		plugin_ep_status_data->mandatory = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_MANDATORY_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_MANDATORY_POS;
+		plugin_ep_status_data->counter = (reg_val &
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_COUNTER_MASK) >>
+			IAXXX_PLUGIN_INS_GRP_IN_0_STATUS_COUNTER_POS;
+	}
+get_plugin_ep_status_info_err:
+	mutex_unlock(&priv->plugin_lock);
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_get_endpoint_status);

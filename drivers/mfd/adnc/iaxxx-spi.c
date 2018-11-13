@@ -218,10 +218,6 @@ static int iaxxx_regmap_spi_gather_write(void *context,
 
 	/* Device protocol requires address to be shifted by one bit */
 	uint32_t reg_addr = be32_to_cpu(*(uint32_t *)reg);
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-
-	if (atomic_read(&priv->power_state) == IAXXX_SUSPEND)
-		return -ENXIO;
 
 	pr_debug("%s() Register address %x\n", __func__, reg_addr);
 	reg_addr = cpu_to_be32(reg_addr >> 1);
@@ -325,7 +321,7 @@ static int iaxxx_regmap_spi_read(void *context,
 	struct spi_transfer t[1] = { };
 	uint32_t *readbuf;
 	uint32_t words = val_len / sizeof(uint32_t);
-	uint32_t reg2[4] = { };
+	uint32_t reg2[4] = {0};
 	uint8_t *rx_buf;
 	uint8_t *tx_buf;
 	int i = 0, rc = 0;
@@ -336,18 +332,12 @@ static int iaxxx_regmap_spi_read(void *context,
 	size_t msg_len = max(sizeof(reg2),
 			     val_len + IAXXX_REG_LEN_WITH_PADDING);
 
-	if (atomic_read(&priv->power_state) == IAXXX_SUSPEND)
-		return -ENXIO;
-
 	tx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
-	if (tx_buf == NULL) {
-		pr_err("%s() failed to allocate memory\n", __func__);
+	if (tx_buf == NULL)
 		return -ENOMEM;
-	}
 
 	rx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
 	if (rx_buf == NULL) {
-		pr_err("%s() failed to allocate memory\n", __func__);
 		rc = -ENOMEM;
 		goto mem_alloc_fail;
 	}
@@ -420,25 +410,21 @@ static int iaxxx_spi_bus_read(struct device *dev,
 	struct spi_device *spi = to_spi_device(dev);
 	struct spi_message m;
 	uint32_t be32_reg_addr[4] = {0};
-	struct spi_transfer t[1] = { };
+	struct spi_transfer t[1] = {};
 	uint8_t *rx_buf;
 	uint8_t *tx_buf;
+	size_t msg_len = max(sizeof(be32_reg_addr),
+			     IAXXX_REG_LEN_WITH_PADDING + val_len);
 
 	/* For reads, most significant bit is set after address shifted */
 	uint32_t reg_addr = reg;
 
-	size_t msg_len = max(sizeof(be32_reg_addr),
-			     IAXXX_REG_LEN_WITH_PADDING + val_len);
-
 	tx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
-	if (tx_buf == NULL) {
-		pr_err("%s() failed to allocate memory\n", __func__);
+	if (tx_buf == NULL)
 		return -ENOMEM;
-	}
 
 	rx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
 	if (rx_buf == NULL) {
-		pr_err("%s() failed to allocate memory\n", __func__);
 		rc = -ENOMEM;
 		goto mem_alloc_fail;
 	}
@@ -896,6 +882,10 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 	return 0;
 }
 
+static const struct dev_pm_ops iaxxx_spi_pm_ops = {
+	SET_RUNTIME_PM_OPS(iaxxx_core_suspend_rt, iaxxx_core_resume_rt, NULL)
+};
+
 static const struct spi_device_id iaxxx_spi_id[] = {
 	{ "iaxxx-spi", 0 },
 	{ }
@@ -913,7 +903,7 @@ static struct spi_driver iaxxx_spi_driver = {
 	.driver = {
 		.name = "iaxxx-spi",
 		.owner = THIS_MODULE,
-	/*	.pm = &iaxxx_spi_pm_ops, */
+		.pm = &iaxxx_spi_pm_ops,
 		.of_match_table = iaxxx_spi_dt_match,
 	},
 	.probe = iaxxx_spi_probe,

@@ -26,9 +26,9 @@
 
 struct iaxxx_debug_data {
 	struct iaxxx_priv *priv;
-	struct cdev raw_cdev;
-	struct cdev regdump_cdev;
-	struct cdev crashdump_cdev;
+	struct iaxxx_cdev raw_cdev;
+	struct iaxxx_cdev regdump_cdev;
+	struct iaxxx_cdev crashdump_cdev;
 };
 
 static ssize_t raw_read(struct file *filp, char __user *buf,
@@ -118,13 +118,13 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	pr_debug("%s() called\n", __func__);
 
-	if (atomic_read(&iaxxx->power_state) != IAXXX_NORMAL)
-		return -ENXIO;
-
 	if (iaxxx == NULL) {
 		pr_err("Invalid private pointer");
 		return -EINVAL;
 	}
+
+	if (!pm_runtime_active(iaxxx->dev))
+		return -ENXIO;
 
 	switch (cmd) {
 	case IAXXX_BUS_CONFIG:
@@ -169,7 +169,7 @@ static int raw_open(struct inode *inode, struct file *filp)
 	}
 
 	intf_priv = container_of((inode)->i_cdev,
-			struct iaxxx_debug_data, raw_cdev);
+			struct iaxxx_debug_data, raw_cdev.cdev);
 
 	if (intf_priv == NULL) {
 		pr_err("Unable to fetch tunnel private data");
@@ -308,7 +308,7 @@ static int regdump_open(struct inode *inode, struct file *filp)
 	}
 
 	intf_priv = container_of((inode)->i_cdev,
-			struct iaxxx_debug_data, regdump_cdev);
+			struct iaxxx_debug_data, regdump_cdev.cdev);
 
 	if (intf_priv == NULL) {
 		pr_err("Unable to fetch register dump private data");
@@ -340,7 +340,7 @@ static int crashdump_open(struct inode *inode, struct file *filp)
 		return -ENODEV;
 	}
 	intf_priv = container_of((inode)->i_cdev,
-			struct iaxxx_debug_data, crashdump_cdev);
+			struct iaxxx_debug_data, crashdump_cdev.cdev);
 
 	if (intf_priv == NULL) {
 		pr_err("Unable to fetch crash dump private data");
@@ -445,7 +445,7 @@ int iaxxx_debug_init(struct iaxxx_priv *priv)
 	priv->intf_priv = intf_priv;
 	intf_priv->priv = priv;
 
-	err = iaxxx_cdev_create(&intf_priv->raw_cdev,
+	err = iaxxx_cdev_create(&intf_priv->raw_cdev, priv->dev,
 		&raw_fops, intf_priv, IAXXX_CDEV_DEBUG);
 	if (err) {
 		pr_err("%s() error in creating the raw char device\n",
@@ -454,7 +454,7 @@ int iaxxx_debug_init(struct iaxxx_priv *priv)
 		goto raw_cdev_err;
 	}
 
-	err = iaxxx_cdev_create(&intf_priv->regdump_cdev,
+	err = iaxxx_cdev_create(&intf_priv->regdump_cdev, priv->dev,
 		&regdump_fops, intf_priv, IAXXX_CDEV_REGDUMP);
 	if (err) {
 		pr_err("error in creating the char device");
@@ -462,7 +462,7 @@ int iaxxx_debug_init(struct iaxxx_priv *priv)
 		goto regdump_cdev_err;
 	}
 
-	err = iaxxx_cdev_create(&intf_priv->crashdump_cdev,
+	err = iaxxx_cdev_create(&intf_priv->crashdump_cdev, priv->dev,
 		&crashdump_fops, intf_priv, IAXXX_CDEV_CRASHDUMP);
 	if (err) {
 		pr_err("error in creating the char device");

@@ -190,6 +190,12 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 	CALC_FLETCHER16(header.number_of_sections, sum1, sum2);
 	CALC_FLETCHER16(header.entry_point, sum1, sum2);
 
+	if (header.number_of_sections <= 1) {
+		dev_err(dev, "No sections available to download\n");
+		rc = -EINVAL;
+		goto out;
+	}
+
 	/* Download each memory section */
 	for (i = 0; i < header.number_of_sections; ++i) {
 		/* Load the next data section */
@@ -222,7 +228,8 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 				dev_err(dev, "Checksum request error\n");
 				goto out;
 			}
-
+			dev_dbg(dev, "%s(): section(%d) Checksum 0x%04X%04x\n",
+				__func__, i, sum2, sum1);
 			/* Next section */
 			data += file_section_bytes;
 			WARN_ON((data - fw->data) > fw->size);
