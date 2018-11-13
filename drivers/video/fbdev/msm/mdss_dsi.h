@@ -482,6 +482,11 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds status_cmds;
 	struct dsi_panel_cmds idle_on_cmds; /* for lp mode */
 	struct dsi_panel_cmds idle_off_cmds;
+
+	struct dsi_panel_cmds hbm0_on_cmds;
+	struct dsi_panel_cmds hbm1_on_cmds;
+	struct dsi_panel_cmds hbm_off_cmds;
+
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
 	u32 *status_value;
@@ -564,6 +569,10 @@ struct mdss_dsi_ctrl_pdata {
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 
 	bool phy_power_off;
+
+	/* boost mode */
+	char read_back_param[1];
+	char id3_code[1]; //for Module/Driver ID
 };
 
 struct dsi_status_data {
@@ -689,6 +698,11 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata, int power_state);
 void mdss_dsi_ctrl_phy_reset(struct mdss_dsi_ctrl_pdata *ctrl);
 
 void mdss_dsi_debug_bus_init(struct mdss_dsi_data *sdata);
+
+void mdss_dsi_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+		struct dsi_panel_cmds *pcmds, u32 flags);
+int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char page,
+		char addr, void (*fxn)(int), char *rbuf, int len);
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {

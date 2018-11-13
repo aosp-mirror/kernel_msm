@@ -721,6 +721,31 @@ void mdss_dsi_set_tear_off(struct mdss_dsi_ctrl_pdata *ctrl)
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
+static char switch_page[2] = {0xFE, 0x00};
+static struct dsi_cmd_desc dsi_switch_page_cmd = {
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(switch_page)}, switch_page};
+
+void mdss_dsi_switch_page(struct mdss_dsi_ctrl_pdata *ctrl, char page)
+{
+	struct dcs_cmd_req cmdreq;
+	struct mdss_panel_info *pinfo;
+
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
+		return;
+
+	switch_page[1] = page;
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds = &dsi_switch_page_cmd;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
 /*
  * mdss_dsi_cmd_get: ctrl->cmd_mutex acquired by caller
  */
@@ -791,3 +816,121 @@ int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 	return ret;
 }
 
+void mdss_dsi_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+		struct dsi_panel_cmds *pcmds, u32 flags)
+{
+	struct dcs_cmd_req cmdreq;
+	struct mdss_panel_info *pinfo;
+
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left) {
+		if (ctrl->ndx != DSI_CTRL_LEFT)
+			return;
+	}
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds = pcmds->cmds;
+	cmdreq.cmds_cnt = pcmds->cmd_cnt;
+	cmdreq.flags = flags;
+
+	if (pcmds->link_state == DSI_LP_MODE)
+		cmdreq.flags  |= CMD_REQ_LP_MODE;
+	else if (pcmds->link_state == DSI_HS_MODE)
+		cmdreq.flags |= CMD_REQ_HS_MODE;
+
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
+static char _dcs_cmd[2] = {0x00, 0x00};
+static struct dsi_cmd_desc _dcs_read_cmd = {
+	{DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(_dcs_cmd)}, _dcs_cmd};
+
+int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char page,
+		char addr, void (*fxn)(int), char *rbuf, int len)
+{
+	struct dcs_cmd_req cmdreq;
+	struct mdss_panel_info *pinfo;
+
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left) {
+		if (ctrl->ndx != DSI_CTRL_LEFT)
+		return -EINVAL;
+	}
+
+	//switch to the correct page prior to reading
+	mdss_dsi_switch_page(ctrl, page);
+
+	_dcs_cmd[0] = addr;
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds = &_dcs_read_cmd;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_RX | CMD_REQ_COMMIT;
+	cmdreq.rlen = len;
+	cmdreq.rbuf = rbuf;
+	cmdreq.cb = fxn; /* call back */
+	/*
+	 * blocked here, until call back called
+	 */
+
+	return mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
+void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	struct dsi_panel_cmds *hbm_on_cmds = NULL;
+
+	pr_info("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
+
+	switch (ctrl->id3_code[0]) {
+	case 0x01:
+		hbm_on_cmds = &ctrl->hbm0_on_cmds;
+		break;
+
+	case 0x03:
+		hbm_on_cmds = &ctrl->hbm1_on_cmds;
+		break;
+
+	case 0x04:
+		hbm_on_cmds = &ctrl->hbm1_on_cmds;
+		break;
+
+	default:
+		/*
+		 * technically speaking, we won't get here since
+		 * the value would be set anyway during boot phase
+		 */
+		pr_info("%s: HBM err: default case (%d)\n", __func__,
+				ctrl->id3_code[0]);
+
+		if (hbm_on_cmds == NULL)
+			hbm_on_cmds = &ctrl->hbm1_on_cmds;
+		break;
+	}
+
+	if (hbm_on_cmds->cmd_cnt) {
+		mdss_dsi_cmds_send(ctrl, hbm_on_cmds, CMD_REQ_COMMIT);
+
+		pr_info("%s: boost on!\n", __func__);
+	}
+}
+
+void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	struct dsi_panel_cmds *hbm_off_cmds = NULL;
+
+	pr_info("%s: read_back_param[0] = 0x%02x\n", __func__,
+			ctrl->read_back_param[0]);
+
+	//write back to HBM off command flow
+	hbm_off_cmds = &ctrl->hbm_off_cmds;
+	hbm_off_cmds->cmds[12].payload[1] = ctrl->read_back_param[0];
+
+	if (hbm_off_cmds->cmd_cnt) {
+		mdss_dsi_cmds_send(ctrl, hbm_off_cmds, CMD_REQ_COMMIT);
+
+		pr_info("%s: boost off!\n", __func__);
+	}
+}
