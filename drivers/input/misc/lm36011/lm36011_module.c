@@ -60,21 +60,25 @@ struct led_laser_ctrl_t {
 	bool is_power_up;
 	bool is_cci_init;
 	bool is_probed;
-	bool is_silego_validated;
-	bool is_silego_power_up;
-	bool is_sx9320_power_up;
-	bool is_sx9320_validated;
 	bool is_certified;
 	struct regulator *vio;
-	struct regulator *silego_vdd;
-	struct regulator *sx9320_vdd;
 	enum LASER_TYPE type;
 	uint32_t read_addr;
 	uint32_t read_data;
 	dev_t dev;
 	struct cdev c_dev;
 	struct class *cl;
-	uint32_t sx9320_sid;
+	struct {
+		bool is_validated;
+		bool is_power_up;
+		struct regulator *vdd;
+	} silego;
+	struct {
+		bool is_power_up;
+		bool is_validated;
+		struct regulator *vdd;
+		uint32_t sid;
+	} cap_sense;
 };
 
 static const struct reg_setting silego_reg_settings[] = {
@@ -89,7 +93,7 @@ static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 
 	old_sid = ctrl->io_master_info.cci_client->sid;
 	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
-	ctrl->io_master_info.cci_client->sid = ctrl->sx9320_sid;
+	ctrl->io_master_info.cci_client->sid = ctrl->cap_sense.sid;
 	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
 
 	rc = camera_io_init(&(ctrl->io_master_info));
@@ -292,25 +296,25 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 {
 	int rc;
 
-	if (!ctrl->is_sx9320_power_up) {
-		rc = regulator_enable(ctrl->sx9320_vdd);
+	if (!ctrl->cap_sense.is_power_up) {
+		rc = regulator_enable(ctrl->cap_sense.vdd);
 		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev,
 				"cap sense regulator_enable failed: rc: %d",
 				rc);
 			return rc;
 		}
-		ctrl->is_sx9320_power_up = true;
+		ctrl->cap_sense.is_power_up = true;
 	}
 
-	if (!ctrl->is_silego_power_up) {
-		rc = regulator_enable(ctrl->silego_vdd);
+	if (!ctrl->silego.is_power_up) {
+		rc = regulator_enable(ctrl->silego.vdd);
 		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev,
 				"silego regulator_enable failed: rc: %d", rc);
 			return rc;
 		}
-		ctrl->is_silego_power_up = true;
+		ctrl->silego.is_power_up = true;
 	}
 
 	if (!ctrl->is_power_up) {
@@ -327,11 +331,11 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev,
 			"clean up cap sense irq failed: rc: %d", rc);
-		ctrl->is_silego_validated = false;
-		ctrl->is_sx9320_validated = false;
+		ctrl->silego.is_validated = false;
+		ctrl->cap_sense.is_validated = false;
 		return rc;
 	}
-	ctrl->is_sx9320_validated = true;
+	ctrl->cap_sense.is_validated = true;
 
 	/* Silego i2c need at least 1 ms after vdd is up */
 	usleep_range(1000, 3000);
@@ -341,10 +345,10 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		dev_err(ctrl->soc_info.dev,
 			"verify silego reg setting failed: rc: %d",
 			rc);
-		ctrl->is_silego_validated = false;
+		ctrl->silego.is_validated = false;
 		return rc;
 	}
-	ctrl->is_silego_validated = true;
+	ctrl->silego.is_validated = true;
 
 	if (!ctrl->is_cci_init) {
 		rc = camera_io_init(&(ctrl->io_master_info));
@@ -383,25 +387,25 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 			ctrl->is_power_up = false;
 	}
 
-	if (ctrl->is_silego_power_up) {
-		is_error = regulator_disable(ctrl->silego_vdd);
+	if (ctrl->silego.is_power_up) {
+		is_error = regulator_disable(ctrl->silego.vdd);
 		if (is_error < 0) {
 			rc = is_error;
 			dev_err(ctrl->soc_info.dev,
 				"silego regulator_disable failed: rc: %d", rc);
 		} else
-			ctrl->is_silego_power_up = false;
+			ctrl->silego.is_power_up = false;
 	}
 
-	if (ctrl->is_sx9320_power_up) {
-		is_error = regulator_disable(ctrl->sx9320_vdd);
+	if (ctrl->cap_sense.is_power_up) {
+		is_error = regulator_disable(ctrl->cap_sense.vdd);
 		if (is_error < 0) {
 			rc = is_error;
 			dev_err(ctrl->soc_info.dev,
 				"cap sense regulator_disable failed: rc: %d",
 				rc);
 		} else
-			ctrl->is_sx9320_power_up = false;
+			ctrl->cap_sense.is_power_up = false;
 	}
 
 	return rc;
@@ -419,16 +423,16 @@ static int lm36011_parse_dt(struct device *dev)
 		return -ENOENT;
 	}
 
-	ctrl->silego_vdd = devm_regulator_get(dev, "silego_vdd");
-	if (IS_ERR(ctrl->silego_vdd)) {
-		ctrl->silego_vdd = NULL;
+	ctrl->silego.vdd = devm_regulator_get(dev, "silego_vdd");
+	if (IS_ERR(ctrl->silego.vdd)) {
+		ctrl->silego.vdd = NULL;
 		dev_err(dev, "unable to get silego vdd");
 		return -ENOENT;
 	}
 
-	ctrl->sx9320_vdd = devm_regulator_get(dev, "sx9320_vdd");
-	if (IS_ERR(ctrl->sx9320_vdd)) {
-		ctrl->sx9320_vdd = NULL;
+	ctrl->cap_sense.vdd = devm_regulator_get(dev, "sx9320_vdd");
+	if (IS_ERR(ctrl->cap_sense.vdd)) {
+		ctrl->cap_sense.vdd = NULL;
 		dev_err(dev, "unable to get cap sense vdd");
 		return -ENOENT;
 	}
@@ -443,7 +447,7 @@ static int lm36011_parse_dt(struct device *dev)
 		dev_err(dev, "cap sense slave address not specified in dt");
 		return -ENOENT;
 	}
-	ctrl->sx9320_sid = value;
+	ctrl->cap_sense.sid = value;
 
 	return 0;
 }
@@ -634,7 +638,7 @@ static ssize_t is_silego_validated_show(struct device *dev,
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 
 	mutex_lock(&ctrl->cam_sensor_mutex);
-	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->is_silego_validated);
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->silego.is_validated);
 	mutex_unlock(&ctrl->cam_sensor_mutex);
 	return rc;
 }
@@ -654,7 +658,7 @@ static ssize_t is_cap_sense_validated_show(struct device *dev,
 {
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->is_sx9320_validated);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->cap_sense.is_validated);
 }
 
 static DEVICE_ATTR_RW(led_laser_enable);
@@ -772,9 +776,9 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->is_power_up = false;
 	ctrl->is_cci_init = false;
 	ctrl->is_probed = false;
-	ctrl->is_silego_power_up = false;
-	ctrl->is_silego_validated = false;
-	ctrl->is_sx9320_validated = false;
+	ctrl->silego.is_power_up = false;
+	ctrl->silego.is_validated = false;
+	ctrl->cap_sense.is_validated = false;
 
 	ctrl->io_master_info.cci_client = devm_kzalloc(&pdev->dev,
 		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
