@@ -1514,6 +1514,33 @@ static int smblib_smb_disable_override_vote_callback(struct votable *votable,
 	return rc;
 }
 
+static int smblib_apsd_disable_vote_callback(struct votable *votable,
+			void *data,
+			int apsd_disable, const char *client)
+{
+	struct smb_charger *chg = data;
+	int rc;
+
+	if (apsd_disable) {
+		rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
+					 BC1P2_SRC_DETECT_BIT, 0);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't disable APSD rc=%d\n", rc);
+			return rc;
+		}
+	} else {
+		rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
+					 BC1P2_SRC_DETECT_BIT,
+					 BC1P2_SRC_DETECT_BIT);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't enable APSD rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+
 static int smblib_dc_suspend_vote_callback(struct votable *votable, void *data,
 			int suspend, const char *client)
 {
@@ -6503,6 +6530,16 @@ static int smblib_create_votables(struct smb_charger *chg)
 		smblib_err(chg,
 			"Couldn't find votable PL_ENABLE_INDIRECT rc=%d\n",
 			rc);
+		return rc;
+	}
+
+	chg->apsd_disable_votable = create_votable("APSD_DISABLE",
+					VOTE_SET_ANY,
+					smblib_apsd_disable_vote_callback,
+					chg);
+	if (IS_ERR(chg->apsd_disable_votable)) {
+		rc = PTR_ERR(chg->apsd_disable_votable);
+		chg->apsd_disable_votable = NULL;
 		return rc;
 	}
 

@@ -403,6 +403,7 @@ struct smb_charger {
 	struct votable		*disable_power_role_switch;
 	struct votable		*cp_disable_votable;
 	struct votable		*smb_override_votable;
+	struct votable		*apsd_disable_votable;
 
 	/* work */
 	struct work_struct	bms_update_work;
