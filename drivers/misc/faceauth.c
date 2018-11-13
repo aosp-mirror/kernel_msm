@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/faceauth.h>
 #include <linux/firmware.h>
+#include <misc/faceauth_hypx.h>
 
 #include <linux/mfd/abc-pcie.h>
 
@@ -105,6 +106,11 @@ struct {
 } debug_data_queue;
 #endif // #if ENABLE_AIRBRUSH_DEBUG
 
+static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
+				   unsigned long arg);
+static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
+				   unsigned long arg);
+
 struct faceauth_data {
 	int dma_dw_buf;
 };
@@ -155,6 +161,15 @@ will result in the following settings:
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
 {
+	if (hypx_enable)
+		return faceauth_dev_ioctl_el2(file, cmd, arg);
+	else
+		return faceauth_dev_ioctl_el1(file, cmd, arg);
+}
+
+static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
+				   unsigned long arg)
+{
 	int err = 0;
 	int polling_interval = M0_POLLING_INTERVAL;
 	struct faceauth_start_data start_step_data = { 0 };
@@ -175,12 +190,12 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case FACEAUTH_DEV_IOC_INIT:
-		pr_info("faceauth init IOCTL\nSend faceauth workloads\n");
+		pr_info("faceauth init IOCTL\n");
 
 		err = dma_send_fw(M0_FIRMWARE_PATH, M0_FIRMWARE_ADDR);
 		if (err) {
 			pr_err("Error during M0 firmware transfer: %d\n", err);
-			return err;
+			goto exit;
 		}
 
 		pio_write_qw(M0_VERBOSITY_LEVEL_FLAG_ADDR, m0_verbosity_level);
@@ -404,6 +419,117 @@ exit:
 			jiffies_to_usecs(jiffies - ioctl_start));
 	}
 
+	return err;
+}
+
+static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
+				   unsigned long arg)
+{
+	int err = 0;
+	int polling_interval = M0_POLLING_INTERVAL;
+	struct faceauth_start_data start_step_data = { 0 };
+	unsigned long stop, ioctl_start;
+	bool send_images_data;
+
+	ioctl_start = jiffies;
+
+	switch (cmd) {
+	case FACEAUTH_DEV_IOC_INIT:
+		pr_info("el2: faceauth init IOCTL\n");
+
+		err = el2_faceauth_wait_pil_dma_over();
+		if (err < 0)
+			goto exit;
+
+		err = el2_faceauth_init(&faceauth_pdev->dev,
+					m0_verbosity_level);
+		if (err < 0)
+			goto exit;
+
+		break;
+	case FACEAUTH_DEV_IOC_START:
+		pr_info("el2: faceauth start IOCTL\n");
+
+		if (copy_from_user(&start_step_data, (const void __user *)arg,
+				   sizeof(start_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
+
+		send_images_data =
+			start_step_data.operation == FACEAUTH_OP_ENROLL ||
+			start_step_data.operation == FACEAUTH_OP_VALIDATE;
+		if (send_images_data) {
+			if (!start_step_data.image_dot_left_size) {
+				err = -EINVAL;
+				goto exit;
+			}
+			if (!start_step_data.image_dot_right_size) {
+				err = -EINVAL;
+				goto exit;
+			}
+			if (!start_step_data.image_flood_size) {
+				err = -EINVAL;
+				goto exit;
+			}
+		}
+
+		err = el2_faceauth_process(&start_step_data);
+		if (err)
+			goto exit;
+
+		/* Check completion flag */
+		pr_info("Waiting for completion.\n");
+		msleep(M0_POLLING_PAUSE);
+		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
+		for (;;) {
+			err = el2_faceauth_get_process_result(&start_step_data);
+
+			if (err) {
+				pr_err("Failed to get process results from EL2 %d\n",
+				       err);
+				goto exit;
+			}
+
+			if (start_step_data.result !=
+			    AB_WORKLOAD_STATUS_NO_STATUS) {
+				/* We've got a non-zero status from AB executor
+				 * Faceauth processing is completed
+				 */
+				break;
+			}
+			if (time_before(stop, jiffies)) {
+				err = -ETIME;
+				goto exit;
+			}
+
+			msleep(polling_interval);
+			polling_interval = polling_interval > 1 ?
+						   polling_interval >> 1 :
+						   1;
+		}
+
+		if (copy_to_user((void __user *)arg, &start_step_data,
+				 sizeof(start_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
+
+		break;
+	case FACEAUTH_DEV_IOC_CLEANUP:
+		/* In case of EL2 cleanup happens in PIL callback */
+		/* TODO cleanup Airbrush DRAM */
+		pr_info("el2: faceauth cleanup IOCTL\n");
+		el2_faceauth_cleanup(&faceauth_pdev->dev);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		goto exit;
+	}
+
+exit:
+	pr_info("Faceauth action took %d us\n",
+		jiffies_to_usecs(jiffies - ioctl_start));
 	return err;
 }
 
@@ -975,8 +1101,8 @@ static int faceauth_remove(struct platform_device *pdev)
 }
 
 static struct platform_driver faceauth_driver = {
-    .probe = faceauth_probe,
-    .remove = faceauth_remove,
+	.probe = faceauth_probe,
+	.remove = faceauth_remove,
 	.driver = {
 		.name = "faceauth",
 		.owner = THIS_MODULE,
@@ -991,6 +1117,7 @@ static int __init faceauth_init(void)
 		platform_device_register_simple("faceauth", -1, NULL, 0);
 	if (IS_ERR(faceauth_pdev))
 		return PTR_ERR(faceauth_pdev);
+	arch_setup_dma_ops(&faceauth_pdev->dev, 0, U64_MAX, NULL, false);
 
 	ret = platform_driver_register(&faceauth_driver);
 	if (ret)
