@@ -42,7 +42,7 @@
 #define LOG_BUFFER_ENTRY_SIZE	256
 
 #define EXT_VBUS_WORK_DELAY_MS 5000
-#define EXT_VBUS_OVERLAP_MS       5
+#define EXT_VBUS_OVERLAP_MS       7
 
 #define CHARING_TEST_BOOT_MODE "chargingtest"
 
@@ -122,6 +122,9 @@ struct usbpd {
 
 	bool ext_vbus_supported;
 	bool wireless_online;
+
+	bool low_power_udev;
+	bool switch_based_on_maxpower;
 };
 
 static u8 always_enable_data;
@@ -725,6 +728,104 @@ err:
 	mutex_unlock(&pd->lock);
 }
 
+static int fast_role_swap_set(struct usbpd *pd, bool enable)
+{
+	union power_supply_propval val = {0};
+	int ret;
+
+	val.intval = enable ? 1 : 0;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_OTG_FASTROLESWAP,
+					&val);
+
+	if (ret < 0) {
+		pd_engine_log(pd, "unable to %s FASTROLESWAP, ret=%d",
+			      enable ? "set" : "clear", ret);
+	}
+
+	return ret;
+}
+
+static int update_wireless_locked(struct usbpd *pd, bool wireless_online)
+{
+	int ret = 0;
+
+	if (wireless_online == pd->wireless_online)
+		return 0;
+
+	pd->wireless_online = wireless_online;
+	pd_engine_log(pd,
+		      "pd->vbus_output: %c pd->external_vbus: %c low_power:%c",
+		      pd->vbus_output ? 'Y' : 'N',
+		      pd->external_vbus ? 'Y' : 'N',
+		      pd->low_power_udev ? 'Y' : 'N');
+
+	/* Wireless charging enabled when high power usb device is connected */
+	if (pd->vbus_output && !pd->external_vbus
+	    && pd->wireless_online && !pd->low_power_udev) {
+
+		/* Turn off internal vbus */
+		if (pd_regulator_update(pd, false, false))
+			return -EAGAIN;
+
+		/* Force disconnect to reduce power requirement to USB 2.0*/
+		/* disable host mode */
+		pd->extcon_usb_host = false;
+		if (update_usb_data_role(pd))
+			return -EAGAIN;
+
+		/* Turn on external vbus */
+		if (pd_regulator_update(pd, true, true))
+			return -EAGAIN;
+		pd->external_vbus = true;
+
+		/* enable host mode */
+		pd->extcon_usb_host = true;
+		if (update_usb_data_role(pd))
+			return -EAGAIN;
+
+		pd_engine_log(pd,
+			      "psy_changed: swiched to external vbus");
+	/* Wireless charging enabled when low power usb device is connected */
+	} else if (pd->vbus_output && !pd->external_vbus
+		   && pd->wireless_online && pd->low_power_udev) {
+
+		/* Turn on external vbus */
+		if (pd_regulator_update(pd, true, true))
+			return -EAGAIN;
+		pd->external_vbus = true;
+
+		msleep(EXT_VBUS_OVERLAP_MS);
+
+		/* Turn off internal vbus */
+		if (pd_regulator_update(pd, false, false))
+			return -EAGAIN;
+	/* Wireless charging disabled. Switch back to internal pmic when
+	 * wireless charging is disabled.
+	 */
+	} else if (!pd->wireless_online && pd->vbus_output
+		   && pd->external_vbus) {
+		fast_role_swap_set(pd, true);
+
+		/* Turn on internal vbus */
+		if (pd_regulator_update(pd, false, true)) {
+			ret = -EAGAIN;
+			goto clear;
+		}
+		pd->external_vbus = false;
+
+		msleep(EXT_VBUS_OVERLAP_MS);
+
+		/* Turn off external vbus */
+		if (pd_regulator_update(pd, true, false))
+			ret = -EAGAIN;
+clear:
+		fast_role_swap_set(pd, false);
+
+	}
+	return ret;
+}
+
 static void psy_changed_handler(struct work_struct *work)
 {
 	struct psy_changed_event *event = container_of(work,
@@ -817,35 +918,8 @@ static void psy_changed_handler(struct work_struct *work)
 		      wireless_online ? "Y" : "N");
 
 	mutex_lock(&pd->lock);
-	if (wireless_online != pd->wireless_online) {
-		pd->wireless_online = wireless_online;
-		pd_engine_log(pd, "pd->vbus_output: %c pd->external_vbus: %c",
-			      pd->vbus_output ? 'Y' : 'N',
-			      pd->external_vbus ? 'Y' : 'N');
-		if (pd->vbus_output && !pd->external_vbus) {
-			/* Turn off internal vbus */
-			if (pd_regulator_update(pd, false, false))
-				goto unlock;
-
-			/* disable host mode */
-			pd->extcon_usb_host = false;
-			if (update_usb_data_role(pd))
-				goto unlock;
-
-			/* Turn on external vbus */
-			if (pd_regulator_update(pd, true, true))
-				goto unlock;
-			pd->external_vbus = true;
-
-			/* enable host mode */
-			pd->extcon_usb_host = true;
-			if (update_usb_data_role(pd))
-				goto unlock;
-
-			pd_engine_log(pd,
-				      "psy_changed: swiched to external vbus");
-		}
-	}
+	if (update_wireless_locked(pd, wireless_online))
+		goto unlock;
 
 	/* Dont proceed as pmi might still be evaluating connections */
 	if (!pe_start && !pd->pd_capable &&
@@ -1878,18 +1952,23 @@ static int update_ext_vbus(struct notifier_block *self, unsigned long action,
 	if (!pd->ext_vbus_supported)
 		goto exit;
 
-	pd->external_vbus_update = turn_on_ext_vbus;
-	work_queued = queue_delayed_work(pd->wq, &pd->ext_vbus_work,
-				turn_on_ext_vbus ?
-				msecs_to_jiffies(EXT_VBUS_WORK_DELAY_MS)
-				: 0);
-	if (!work_queued)
-		pd_engine_log(pd, "error: queueing ext_vbus_work failed");
-	else {
-		pm_stay_awake(&pd->dev);
-		pd_engine_log(pd, "queued work EXT_VBUS_%s",
-			      (action == EXT_VBUS_ON) ?
-			      "ON" : "OFF");
+	pd->low_power_udev = turn_on_ext_vbus;
+
+	if (pd->switch_based_on_maxpower) {
+		pd->external_vbus_update = turn_on_ext_vbus;
+		work_queued = queue_delayed_work(pd->wq, &pd->ext_vbus_work,
+					turn_on_ext_vbus ?
+					msecs_to_jiffies(EXT_VBUS_WORK_DELAY_MS)
+					: 0);
+		if (!work_queued)
+			pd_engine_log(pd,
+				      "error: queueing ext_vbus_work failed");
+		else {
+			pm_stay_awake(&pd->dev);
+			pd_engine_log(pd, "queued work EXT_VBUS_%s",
+				      (action == EXT_VBUS_ON) ?
+					"ON" : "OFF");
+		}
 	}
 
 exit:
@@ -1992,6 +2071,9 @@ struct usbpd *usbpd_create(struct device *parent)
 			goto exit_debugfs;
 		}
 	}
+
+	pd->switch_based_on_maxpower = device_property_read_bool(parent,
+				       "google,maxpower-switch");
 
 	pd->extcon = devm_extcon_dev_allocate(parent, usbpd_extcon_cable);
 	if (IS_ERR(pd->extcon)) {
