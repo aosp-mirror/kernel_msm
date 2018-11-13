@@ -2264,15 +2264,15 @@ struct iio_dev *nanohub_probe(struct device *dev, struct iio_dev *iio_dev)
 
 	__nanohub_send_AP_cmd(data, GPIO_CMD_NORMAL);
 
+	if (data->irq3)
+		enable_irq(data->irq3);
+
 	data->thread = kthread_create(nanohub_kthread, data, "nanohub");
 
 	if (!IS_ERR(data->thread)) {
 		pr_info("nanohub: nanohub_probe end successfully\n");
 		return iio_dev;
 	}
-
-	if (data->irq3)
-		enable_irq(data->irq3);
 
 fail_dev:
 	iio_device_unregister(iio_dev);
@@ -2360,6 +2360,7 @@ int nanohub_suspend(struct iio_dev *iio_dev)
 			dev_dbg(&iio_dev->dev, "nanohub: %s: cnt=%d\n",
 				__func__, cnt);
 			enable_irq_wake(data->irq1);
+			enable_irq_wake(data->irq3);
 			__nanohub_send_AP_cmd(data, GPIO_CMD_SUSPEND);
 
 #if (NANOHUB_WAKEUP_TRACE_ENABLE)
@@ -2397,6 +2398,7 @@ int nanohub_resume(struct iio_dev *iio_dev)
 #endif
 
 	disable_irq_wake(data->irq1);
+	disable_irq_wake(data->irq3);
 	nanohub_wakeup_unlock(data);
 
 	return 0;
