@@ -1719,6 +1719,7 @@ exit:
 static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
+	EXTCON_DISP_DP,
 	EXTCON_NONE,
 };
 
