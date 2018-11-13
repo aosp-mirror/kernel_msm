@@ -24,6 +24,7 @@
 #include <uapi/linux/sched/types.h>
 
 #include "airbrush-cooling.h"
+#include "airbrush-ddr.h"
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-pmu.h"
 #include "airbrush-power-gating.h"

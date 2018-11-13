@@ -208,6 +208,13 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 	case 6:
 		ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ_WRITE(512));
 		break;
+	case 1866:
+	case 1600:
+	case 1200:
+	case 933:
+	case 800:
+		ab_ddr_freq_change(sc, val);
+		break;
 	default:
 		pr_err("ERROR!! Invalid DDR Control\n");
 		break;
@@ -215,6 +222,23 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_ctrl_fops, NULL, ab_debugfs_ddr_ctrl, "%lli\n");
+
+static int ab_debugfs_ddr_test(void *data, u64 val)
+{
+	ab_ddr_read_write_test((unsigned int)val);
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_test_fops, NULL, ab_debugfs_ddr_test, "%lli\n");
+
+static int ab_debugfs_ddr_eye_margin(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *) data;
+
+	ab_ddr_measure_eye(sc, (unsigned int)val);
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_eye_margin_fops, NULL,
+				ab_debugfs_ddr_eye_margin, "%lli\n");
 
 void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 {
@@ -286,8 +310,18 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_file("ab_ddr_ctrl", 0444, sc->d_entry, sc,
+	d = debugfs_create_file("ab_ddr_ctrl", 0200, sc->d_entry, sc,
 					&ab_ddr_ctrl_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ab_ddr_test", 0200, sc->d_entry, sc,
+					&ab_ddr_test_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ab_ddr_eye_margin", 0200, sc->d_entry, sc,
+					&ab_ddr_eye_margin_fops);
 	if (!d)
 		goto err_out;
 

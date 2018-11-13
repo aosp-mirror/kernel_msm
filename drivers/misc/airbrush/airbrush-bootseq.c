@@ -34,6 +34,7 @@
 #include <linux/clk.h>
 #include <linux/msm_pcie.h>
 
+#include "airbrush-ddr.h"
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-regs.h"
 #include "airbrush-spi.h"

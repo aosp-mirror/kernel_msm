@@ -570,14 +570,6 @@ int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id);
 enum chip_state ab_sm_get_state(struct ab_state_context *sc);
 
 int ab_bootsequence(struct ab_state_context *ab_ctx);
-int ab_ddr_init(struct ab_state_context *sc);
-int ab_ddr_suspend(struct ab_state_context *sc);
-int ab_ddr_resume(struct ab_state_context *sc);
-int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);
-int ab_ddr_selfrefresh_exit(struct ab_state_context *sc);
-int ab_ddr_setup(struct ab_state_context *sc);
-int ab_ddr_read_write_test(unsigned int read_write);
-
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
