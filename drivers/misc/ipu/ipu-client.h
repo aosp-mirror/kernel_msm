@@ -277,14 +277,19 @@ struct paintbox_data {
 	struct list_head session_list;
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-	struct paintbox_debug apb_debug;
 	struct dentry *debug_root;
 	struct dentry *regs_dentry;
+
+	struct dentry *apb_debug_dir;
+	struct dentry *apb_reg_dump;
+	struct ipu_debug_register apb_debug_registers[IO_APB_NUM_REGS];
+
 	struct dentry *aon_debug_dir;
-	struct dentry *bif_debug_dir;
 	struct dentry *aon_reg_dump;
-	struct dentry *bif_reg_dump;
 	struct ipu_debug_register aon_debug_registers[IO_AON_NUM_REGS];
+
+	struct dentry *bif_debug_dir;
+	struct dentry *bif_reg_dump;
 	struct ipu_debug_register bif_debug_registers[IO_AXI_NUM_REGS];
 #endif
 };

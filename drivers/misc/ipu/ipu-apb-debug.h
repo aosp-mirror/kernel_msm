@@ -21,17 +21,9 @@
 #include "ipu-client.h"
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-int ipu_apb_dump_registers(struct paintbox_debug *debug, char *buf, size_t len);
-
 void ipu_apb_debug_init(struct paintbox_data *pb);
 void ipu_apb_debug_remove(struct paintbox_data *pb);
 #else
-static inline int ipu_apb_dump_registers(struct paintbox_debug *debug,
-		char *buf, size_t len)
-{
-	return 0;
-}
-
 static inline void ipu_apb_debug_init(struct paintbox_data *pb) {};
 static inline void ipu_apb_debug_remove(struct paintbox_data *pb) {};
 #endif

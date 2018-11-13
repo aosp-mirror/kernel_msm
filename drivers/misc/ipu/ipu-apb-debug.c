@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
 #include <linux/types.h>
 
@@ -24,93 +25,160 @@
 #include "ipu-debug.h"
 #include "ipu-regs.h"
 
-/* The caller to this function must hold pb->lock */
-static uint64_t ipu_apb_reg_entry_read(
-		struct paintbox_debug_reg_entry *reg_entry)
-{
-	struct paintbox_debug *debug = reg_entry->debug;
-	struct paintbox_data *pb = debug->pb;
-
-	return ipu_readq(pb->dev, IPU_CSR_APB_OFFSET + reg_entry->reg_offset);
-}
-
-/* The caller to this function must hold pb->lock */
-static void ipu_apb_reg_entry_write(
-		struct paintbox_debug_reg_entry *reg_entry, uint64_t val)
-{
-	struct paintbox_debug *debug = reg_entry->debug;
-	struct paintbox_data *pb = debug->pb;
-
-	ipu_writeq(pb->dev, val, IPU_CSR_APB_OFFSET + reg_entry->reg_offset);
-}
-
 static const char *ipu_apb_reg_names[IO_APB_NUM_REGS] = {
-	REG_NAME_ENTRY(IPU_ISR),
-	REG_NAME_ENTRY(IPU_ITR),
-	REG_NAME_ENTRY(IPU_IER),
-	REG_NAME_ENTRY(DMA_CHAN_ISR),
-	REG_NAME_ENTRY(DMA_CHAN_ITR),
-	REG_NAME_ENTRY(DMA_CHAN_IER),
-	REG_NAME_ENTRY(DMA_CHAN_IMR),
-	REG_NAME_ENTRY(DMA_ERR_ISR),
-	REG_NAME_ENTRY(DMA_ERR_IMR),
-	REG_NAME_ENTRY(DMA_ERR_IER),
-	REG_NAME_ENTRY(DMA_ERR_ITR),
-	REG_NAME_ENTRY(IPU_STP_ISR),
-	REG_NAME_ENTRY(IPU_STP_ITR),
-	REG_NAME_ENTRY(IPU_STP_IER),
-	REG_NAME_ENTRY(IPU_STP_IMR),
-	REG_NAME_ENTRY(STP_ERR_ISR),
-	REG_NAME_ENTRY(STP_ERR_IMR),
-	REG_NAME_ENTRY(STP_ERR_IER),
-	REG_NAME_ENTRY(STP_ERR_ITR),
-	REG_NAME_ENTRY(IPU_STP_GRP_SEL),
+	REG_NAME_ENTRY64(IPU_ISR),
+	REG_NAME_ENTRY64(IPU_ITR),
+	REG_NAME_ENTRY64(IPU_IER),
+	REG_NAME_ENTRY64(DMA_CHAN_ISR),
+	REG_NAME_ENTRY64(DMA_CHAN_ITR),
+	REG_NAME_ENTRY64(DMA_CHAN_IER),
+	REG_NAME_ENTRY64(DMA_CHAN_IMR),
+	REG_NAME_ENTRY64(DMA_ERR_ISR),
+	REG_NAME_ENTRY64(DMA_ERR_IMR),
+	REG_NAME_ENTRY64(DMA_ERR_IER),
+	REG_NAME_ENTRY64(DMA_ERR_ITR),
+	REG_NAME_ENTRY64(IPU_STP_ISR),
+	REG_NAME_ENTRY64(IPU_STP_ITR),
+	REG_NAME_ENTRY64(IPU_STP_IER),
+	REG_NAME_ENTRY64(IPU_STP_IMR),
+	REG_NAME_ENTRY64(STP_ERR_ISR),
+	REG_NAME_ENTRY64(STP_ERR_IMR),
+	REG_NAME_ENTRY64(STP_ERR_IER),
+	REG_NAME_ENTRY64(STP_ERR_ITR),
+	REG_NAME_ENTRY64(IPU_STP_GRP_SEL),
 };
 
-static inline int ipu_apb_dump_reg(struct paintbox_data *pb,
-		uint32_t reg_offset, char *buf, int *written, size_t len)
+static int ipu_apb_debug_read_registers(struct seq_file *s, void *data)
 {
-	const char *reg_name = ipu_apb_reg_names[REG_INDEX(reg_offset)];
-
-	return ipu_debug_dump_register(pb, IPU_CSR_APB_OFFSET, reg_offset,
-			reg_name, buf, written, len);
-}
-
-/* The caller to this function must hold pb->lock */
-int ipu_apb_dump_registers(struct paintbox_debug *debug, char *buf, size_t len)
-{
-	struct paintbox_data *pb = debug->pb;
+	struct paintbox_data *pb = dev_get_drvdata(s->private);
 	unsigned int i;
-	int ret, written = 0;
+	int ret;
+
+	mutex_lock(&pb->lock);
+
+	ret = pm_runtime_get_sync(pb->dev);
+	if (ret < 0) {
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
+				ret);
+		return ret;
+	}
 
 	for (i = 0; i < IO_APB_NUM_REGS; i++) {
+		unsigned int offset;
+
 		if (ipu_apb_reg_names[i] == NULL)
 			continue;
 
-		ret = ipu_apb_dump_reg(pb, i * IPU_REG_WIDTH, buf, &written,
-				len);
-		if (ret < 0) {
-			dev_err(pb->dev, "%s: register dump error, err = %d",
-					__func__, ret);
-			return ret;
-		}
+		offset = i * IPU_REG_WIDTH_BYTES + IPU_CSR_APB_OFFSET;
+
+		seq_printf(s, "0x%04lx: %-*s0x%016llx\n", offset,
+				REG_VALUE_COL_WIDTH, ipu_apb_reg_names[i],
+				ipu_readq(pb->dev, offset));
 	}
 
-	return written;
+	pm_runtime_mark_last_busy(pb->dev);
+	ret = pm_runtime_put_autosuspend(pb->dev);
+
+	mutex_unlock(&pb->lock);
+
+	return ret;
 }
+
+static int ipu_apb_debug_register_set(void *data, u64 val)
+{
+	struct ipu_debug_register *reg = (struct ipu_debug_register *)data;
+	struct paintbox_data *pb = reg->pb;
+	int ret;
+
+	mutex_lock(&pb->lock);
+
+	ret = pm_runtime_get_sync(pb->dev);
+	if (ret < 0) {
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
+				ret);
+		return ret;
+	}
+
+	ipu_writeq(pb->dev, val, reg->offset);
+
+	pm_runtime_mark_last_busy(pb->dev);
+	ret = pm_runtime_put_autosuspend(pb->dev);
+
+	mutex_unlock(&pb->lock);
+
+	return ret;
+}
+
+static int ipu_apb_debug_register_get(void *data, u64 *val)
+{
+	struct ipu_debug_register *reg = (struct ipu_debug_register *)data;
+	struct paintbox_data *pb = reg->pb;
+	int ret;
+
+	mutex_lock(&pb->lock);
+
+	ret = pm_runtime_get_sync(pb->dev);
+	if (ret < 0) {
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
+				ret);
+		return ret;
+	}
+
+	*val = ipu_readq(pb->dev, reg->offset);
+
+	pm_runtime_mark_last_busy(pb->dev);
+	ret = pm_runtime_put_autosuspend(pb->dev);
+
+	mutex_unlock(&pb->lock);
+
+	return ret;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(ipu_apb_debug_register_fops, ipu_apb_debug_register_get,
+		ipu_apb_debug_register_set, "%llx\n");
+
+static void ipu_apb_debug_create_register_file(struct paintbox_data *pb,
+		struct ipu_debug_register *reg, const char *name,
+		unsigned int offset)
+{
+	reg->offset = IPU_CSR_APB_OFFSET + offset;
+	reg->pb = pb;
+
+	reg->dentry = debugfs_create_file(name, 0640, pb->apb_debug_dir, reg,
+			&ipu_apb_debug_register_fops);
+	if (WARN_ON(IS_ERR(reg->dentry)))
+		reg->dentry = NULL;
+}
+
+
 
 void ipu_apb_debug_init(struct paintbox_data *pb)
 {
-	ipu_debug_create_entry(pb, &pb->apb_debug, pb->debug_root, "apb", -1,
-			ipu_apb_dump_registers, NULL, pb);
+	unsigned int i;
 
-	ipu_debug_create_reg_entries(pb, &pb->apb_debug, ipu_apb_reg_names,
-			IO_APB_NUM_REGS, ipu_apb_reg_entry_write,
-			ipu_apb_reg_entry_read);
+	pb->apb_debug_dir = debugfs_create_dir("apb", pb->debug_root);
+	if (WARN_ON(IS_ERR_OR_NULL(pb->apb_debug_dir)))
+		return;
+
+	pb->apb_reg_dump = debugfs_create_devm_seqfile(pb->dev, "regs",
+			pb->apb_debug_dir, ipu_apb_debug_read_registers);
+	if (WARN_ON(IS_ERR_OR_NULL(pb->apb_reg_dump)))
+		return;
+
+	for (i = 0; i < IO_APB_NUM_REGS; i++) {
+		if (!ipu_apb_reg_names[i])
+			continue;
+
+		ipu_apb_debug_create_register_file(pb,
+				&pb->apb_debug_registers[i],
+				ipu_apb_reg_names[i], i * IPU_REG_WIDTH_BYTES);
+	}
 }
 
 void ipu_apb_debug_remove(struct paintbox_data *pb)
 {
-	ipu_debug_free_reg_entries(&pb->apb_debug);
-	ipu_debug_free_entry(&pb->apb_debug);
+	debugfs_remove_recursive(pb->apb_debug_dir);
 }
