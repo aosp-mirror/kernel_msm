@@ -40,7 +40,7 @@
 			linux,input-type = <1>;
 			linux,code = <115>;
 			gpio-key,wakeup;
-			debounce-interval = <20>;
+			debounce-interval = <15>;
 		};
 	};
 };
