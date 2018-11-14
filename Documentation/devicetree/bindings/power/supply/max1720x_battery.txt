@@ -21,10 +21,17 @@ Optional properties :
    battery.
  - maxim,batt-id-kohm: the value of the battery resitance ID the config applies
    to.
- - maxim,n_regval: An array of u16 that are pairs of register address and
+ - maxim,n_regval_1720x: An array of u16 that are pairs of register address and
    corresponding values. These values will be written to the shadow registers
    of Maxim fuel gauge their address must be within 0x80 - 0xDF to be considered
- - maxim,r_regval: An array of u16 that are pairs of register address and
+ - maxim,r_regval_1720x: An array of u16 that are pairs of register address and
    corresponding values. These values will be written to the ModelGauge m5
    Register their address must be within 0x00 - 0x4D, 0xB0 - 0xDF to be
+   considered.
+ - maxim,n_regval_1730x: An array of u16 that are pairs of register address and
+   corresponding values. These values will be written to the shadow registers
+   of Maxim fuel gauge their address must be within 0x80 - 0xEF to be considered
+ - maxim,r_regval_1730x: An array of u16 that are pairs of register address and
+   corresponding values. These values will be written to the ModelGauge m5
+   Register their address must be within 0x00 - 0x4F, 0xA0 - 0xDF to be
    considered.

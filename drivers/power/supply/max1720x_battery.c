@@ -378,6 +378,7 @@ struct max1720x_chip {
 	u16 *convgcfg_values;
 	struct mutex convgcfg_lock;
 	unsigned int debug_irq_none_cnt;
+	bool shadow_override;
 };
 
 static int max1730x_regmap_map(int reg)
@@ -1495,13 +1496,15 @@ static int max1720x_read_gauge_type(struct max1720x_chip *chip)
 		switch (devname >> 4) {
 		case 0x406:  /* max1730x pass2 silicon */
 		case 0x405:  /* max1730x pass2 silicon initial samples */
+			gauge_type = MAX1730X_GAUGE_TYPE;
+			break;
 		case 0x404:  /* max1730x sample */
+			chip->shadow_override = false;
 			gauge_type = MAX1730X_GAUGE_TYPE;
 			break;
 		default: /* default to max1720x */
 			break;
 		}
-
 	}
 
 	return gauge_type;
@@ -1550,19 +1553,23 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 	return 0;
 }
 
-static int max1720x_apply_regval_shadow(struct max1720x_chip *chip,
+static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 					struct device_node *node,
 					u16 *nRAM, int nb)
 {
 	int ret, idx;
 	u16 *regs;
+	char *propname = NULL;
+
+	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
+		 "maxim,n_regval_1730x" : "maxim,n_regval_1720x";
 
 	if (!node || nb <= 0)
 		return 0;
 
 	if (nb & 1) {
-		dev_warn(chip->dev, "%s maxim,n_regval u16 elems count is not even: %d\n",
-			 node->name, nb);
+		dev_warn(chip->dev, "%s %s u16 elems count is not even: %d\n",
+			 node->name, propname, nb);
 		return -EINVAL;
 	}
 
@@ -1570,9 +1577,9 @@ static int max1720x_apply_regval_shadow(struct max1720x_chip *chip,
 	if (!regs)
 		return -ENOMEM;
 
-	ret = of_property_read_u16_array(node, "maxim,n_regval", regs, nb);
+	ret = of_property_read_u16_array(node, propname, regs, nb);
 	if (ret) {
-		dev_warn(chip->dev, "failed to read maxim,n_regval: %d\n", ret);
+		dev_warn(chip->dev, "failed to read %s: %d\n", propname, ret);
 		goto shadow_out;
 	}
 
@@ -1587,23 +1594,30 @@ shadow_out:
 	return ret;
 }
 
-static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
+static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 {
 	int ret = 0;
 	u16 *nRAM_current, *nRAM_updated;
 	int batt_cnt = 0, glob_cnt;
+	char *propname = NULL;
 
 	ret = max1720x_handle_dt_batt_id(chip);
 	if (ret)
 		return ret;
 
+	if (!chip->shadow_override) {
+		dev_info(chip->dev, "ignore shadow override\n");
+		return 0;
+	}
+
+	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
+		 "maxim,n_regval_1730x" : "maxim,n_regval_1720x";
+
 	if (chip->batt_node)
 		batt_cnt = of_property_count_elems_of_size(chip->batt_node,
-							   "maxim,n_regval",
-							   sizeof(u16));
+					 propname, sizeof(u16));
 	glob_cnt = of_property_count_elems_of_size(chip->dev->of_node,
-						   "maxim,n_regval",
-						   sizeof(u16));
+				 propname, sizeof(u16));
 
 	nRAM_current = kmalloc_array(MAX1720X_NVRAM_U16_SIZE,
 				     sizeof(u16), GFP_KERNEL);
@@ -1626,9 +1640,9 @@ static int max1720x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	}
 	memcpy(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE);
 	if (chip->batt_node)
-		max1720x_apply_regval_shadow(chip, chip->batt_node,
+		max17x0x_apply_regval_shadow(chip, chip->batt_node,
 					     nRAM_updated, batt_cnt);
-	max1720x_apply_regval_shadow(chip, chip->dev->of_node,
+	max17x0x_apply_regval_shadow(chip, chip->dev->of_node,
 				     nRAM_updated, glob_cnt);
 
 	/* Ensure nCGain is not 0 if nNVCfg0.enCG is set */
@@ -1663,20 +1677,23 @@ error_out:
 	return ret;
 }
 
-static int max1720x_apply_regval_register(struct max1720x_chip *chip,
+static int max17x0x_apply_regval_register(struct max1720x_chip *chip,
 					struct device_node *node)
 {
 	int cnt, ret = 0, idx, err;
 	u16 *regs, data;
+	char *propname = NULL;
 
-	cnt =  of_property_count_elems_of_size(node, "maxim,r_regval",
-					       sizeof(u16));
+	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
+		 "maxim,r_regval_1730x" : "maxim,r_regval_1720x";
+
+	cnt =  of_property_count_elems_of_size(node, propname, sizeof(u16));
 	if (!node || cnt <= 0)
 		return 0;
 
 	if (cnt & 1) {
-		dev_warn(chip->dev, "%s maxim,r_regval u16 elems count is not even: %d\n",
-			 node->name, cnt);
+		dev_warn(chip->dev, "%s %s u16 elems count is not even: %d\n",
+			 node->name, propname, cnt);
 		return -EINVAL;
 	}
 
@@ -1684,10 +1701,10 @@ static int max1720x_apply_regval_register(struct max1720x_chip *chip,
 	if (!regs)
 		return -ENOMEM;
 
-	ret = of_property_read_u16_array(node, "maxim,r_regval", regs, cnt);
+	ret = of_property_read_u16_array(node, propname, regs, cnt);
 	if (ret) {
-		dev_warn(chip->dev, "failed to read %s maxim,r_regval: %d\n",
-			 node->name, ret);
+		dev_warn(chip->dev, "failed to read %s %s: %d\n",
+			 node->name, propname, ret);
 		goto register_out;
 	}
 
@@ -1704,17 +1721,17 @@ register_out:
 	return ret;
 }
 
-static int max1720x_handle_dt_register_config(struct max1720x_chip *chip)
+static int max17x0x_handle_dt_register_config(struct max1720x_chip *chip)
 {
 	int ret = 0;
 
 	if (chip->batt_node)
-		ret = max1720x_apply_regval_register(chip, chip->batt_node);
+		ret = max17x0x_apply_regval_register(chip, chip->batt_node);
 
 	if (ret)
 		return ret;
 
-	ret = max1720x_apply_regval_register(chip, chip->dev->of_node);
+	ret = max17x0x_apply_regval_register(chip, chip->dev->of_node);
 
 	return ret;
 }
@@ -1860,16 +1877,11 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	if (of_property_read_bool(chip->dev->of_node, "maxim,force-hard-reset"))
 		max1720x_full_reset(chip);
 
-	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
-		/* TODO: enable overrides on max1730x if becomes POR */
-		dev_warn(chip->dev, "ignore shadow overrides\n");
-	} else {
-		ret = max1720x_handle_dt_shadow_config(chip);
-		if (ret == -EPROBE_DEFER)
-			return ret;
-	}
+	ret = max17x0x_handle_dt_shadow_config(chip);
+	if (ret == -EPROBE_DEFER)
+		return ret;
 
-	ret = max1720x_handle_dt_register_config(chip);
+	ret = max17x0x_handle_dt_register_config(chip);
 	if (ret == -EPROBE_DEFER)
 		return ret;
 
@@ -2210,6 +2222,7 @@ static int max1720x_probe(struct i2c_client *client,
 
 	mutex_init(&chip->cyc_ctr.lock);
 
+	chip->shadow_override = true;
 	if (of_property_read_bool(dev->of_node, "maxim,max1730x-compat")) {
 		/* NOTE: NEED TO COME BEFORE REGISTER ACCESS */
 		max17xxx_gauge_type = max1720x_read_gauge_type(chip);
