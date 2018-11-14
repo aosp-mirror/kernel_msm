@@ -110,6 +110,7 @@
 
 #define	DRV2624_REG_LOOP_CONTROL		0x23
 #define	BEMFGAIN_MASK				0x03
+#define	FB_BRAKE_FACTOR_MASK			0x70
 
 #define	DRV2624_REG_DRIVE_TIME			0x27
 #define	DRIVE_TIME_MASK				0x1f
@@ -204,6 +205,7 @@ struct actuator_data {
 	int zc_det_time;
 	int lra_wave_shape;
 	int waveform_interval;
+	int fb_brake_factor;
 };
 
 enum wave_seq_loop {
