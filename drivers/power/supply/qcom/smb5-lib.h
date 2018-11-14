@@ -319,6 +319,7 @@ struct smb_params {
 	struct smb_chg_param	icl_max_stat;
 	struct smb_chg_param	icl_stat;
 	struct smb_chg_param	otg_cl;
+	struct smb_chg_param	otg_out;
 	struct smb_chg_param	dc_icl;
 	struct smb_chg_param	jeita_cc_comp_hot;
 	struct smb_chg_param	jeita_cc_comp_cold;
@@ -462,6 +463,7 @@ struct smb_charger {
 	bool			suspend_input_on_debug_batt;
 	int			default_icl_ua;
 	int			otg_cl_ua;
+	int			otg_out_uv;
 	bool			uusb_apsd_rerun_done;
 	bool			typec_present;
 	int			fake_input_current_limited;

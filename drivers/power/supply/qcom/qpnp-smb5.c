@@ -156,6 +156,13 @@ static struct smb_params smb5_pm8150b_params = {
 		.max_u	= 3000000,
 		.step_u	= 500000,
 	},
+	.otg_out = {
+		.name   = "usb otg output voltage",
+		.reg    = SCHG_P_DCDC_VBOOST_CFG,
+		.min_u  = 4800000,
+		.max_u  = 5500000,
+		.step_u = 100000,
+	},
 	.dc_icl		= {
 		.name   = "DC input current limit",
 		.reg    = DCDC_CFG_REF_MAX_PSNS_REG,
@@ -450,6 +457,8 @@ static int smb5_parse_dt(struct smb5 *chip)
 				  "qcom,dc-icl-ua", &chip->dt.dc_icl_ua);
 	if (rc < 0)
 		chip->dt.dc_icl_ua = -EINVAL;
+
+	of_property_read_u32(node, "google,otg-out-uv", &chg->otg_out_uv);
 
 	rc = of_property_read_u32(node, "qcom,chg-term-src",
 			&chip->dt.term_current_src);
@@ -1754,6 +1763,16 @@ static int smb5_init_vbus_regulator(struct smb5 *chip)
 				      GFP_KERNEL);
 	if (!chg->vbus_vreg)
 		return -ENOMEM;
+
+	if (chg->otg_out_uv != 0) {
+		rc = smblib_set_charge_param(chg, &chg->param.otg_out,
+					     chg->otg_out_uv);
+		if (rc < 0) {
+			pr_err("Couldn't set otg output voltage rc=%d\n", rc);
+
+			return rc;
+		}
+	}
 
 	cfg.dev = chg->dev;
 	cfg.driver_data = chip;

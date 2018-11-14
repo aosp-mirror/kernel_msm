@@ -152,6 +152,8 @@ enum {
 
 #define DCDC_CFG_REF_MAX_PSNS_REG		(DCDC_BASE + 0x8C)
 
+#define SCHG_P_DCDC_VBOOST_CFG			(DCDC_BASE + 0x86)
+
 #define DCDC_ENG_SDCDC_CFG5_REG			(DCDC_BASE + 0xC4)
 #define ENG_SDCDC_BAT_HPWR_MASK			GENMASK(7, 6)
 enum {
