@@ -618,6 +618,24 @@ int smblib_get_aicl_cont_threshold(struct smb_chg_param *param, u8 val_raw)
 	return base + (reg * step);
 }
 
+int smblib_get_prop_otg_fastroleswap(struct smb_charger *chg,
+				     union power_supply_propval *val)
+{
+	int rc = 0;
+	u8 stat = 0;
+
+	rc = smblib_read(chg, DCDC_CMD_OTG_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read OTG quickstart rc=%d\n",
+			   rc);
+	}
+	if (stat & FAST_ROLE_SWAP_CMD)
+		val->intval = 1;
+	else
+		val->intval = 0;
+	return rc;
+}
+
 /********************
  * REGISTER SETTERS *
  ********************/
@@ -877,6 +895,21 @@ int smblib_set_aicl_cont_threshold(struct smb_chg_param *param,
 	*val_raw = ((val_u - base) / step) + offset;
 
 	return 0;
+}
+
+int smblib_set_prop_otg_fastroleswap(struct smb_charger *chg,
+				     const union power_supply_propval *val)
+{
+	int rc;
+
+	rc = smblib_masked_write(chg, DCDC_CMD_OTG_REG,
+			FAST_ROLE_SWAP_CMD,
+			val->intval ? FAST_ROLE_SWAP_CMD : 0);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set OTG quickstart rc=%d\n",
+			   rc);
+	}
+	return rc;
 }
 
 /********************

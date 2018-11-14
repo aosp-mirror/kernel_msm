@@ -142,6 +142,7 @@ enum {
 
 #define DCDC_CMD_OTG_REG			(DCDC_BASE + 0x40)
 #define OTG_EN_BIT				BIT(0)
+#define FAST_ROLE_SWAP_CMD			BIT(1)
 
 #define DCDC_FSW_SEL_REG			(DCDC_BASE + 0x50)
 
