@@ -22,7 +22,7 @@
 #include "sm8150-floral-wcharger.dtsi"
 
 &google_charger {
-	google,chg-battery-capacity = <2186>;
+	google,chg-battery-capacity = <2800>;
 };
 
 &max1720x_fg {
