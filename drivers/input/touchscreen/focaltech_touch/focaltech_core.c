@@ -73,6 +73,9 @@ int g_show_log = 0;
 char g_sz_debug[1024] = {0};
 #endif
 
+static int  irq_count_when_suspend;
+#define MAX_SUSPEND_IRQ 100
+
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
@@ -731,6 +734,15 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	int ret = -1;
 	ktime_t cur_time;
 
+	if (fts_wq_data->suspended) {
+		irq_count_when_suspend++;
+		if(irq_count_when_suspend > MAX_SUSPEND_IRQ){
+			fts_reset_proc(10);
+			printk(KERN_ERR "%s %d reset tp\n", __func__, __LINE__);
+			irq_count_when_suspend = 0;
+		}
+	}
+
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_set_intr(1);
 #endif
@@ -1140,6 +1152,8 @@ static int fts_ts_probe(struct i2c_client *client,
 	int err;
 
 	FTS_FUNC_ENTER();
+
+	irq_count_when_suspend = 0;
 	/* 1. Get Platform data */
 	if (client->dev.of_node) {
 		pdata = devm_kzalloc(&client->dev,
@@ -1489,11 +1503,9 @@ static int fts_ts_resume(struct device *dev)
 	}
 	fts_release_all_finger();
 
-/*
 #if (!FTS_CHIP_IDC)
 	fts_reset_proc(1);
 #endif
-*/
 
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_resume();
@@ -1502,6 +1514,7 @@ static int fts_ts_resume(struct device *dev)
 	printk(KERN_DEBUG "[FTS] fts_ts_resume data->suspended =%d\n",
 		data->suspended);
 
+	irq_count_when_suspend = 0;
 	if (data->suspended) {
 		if (device_may_wakeup(&fts_wq_data->client->dev))
 			disable_irq_wake(fts_wq_data->client->irq);
