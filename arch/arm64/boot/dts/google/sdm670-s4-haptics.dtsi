@@ -12,5 +12,4 @@
 
 &b4s4_drv2624 {
 	ti,odclamp-voltage = <93>; /* 1.8 Vrms */
-	ti,ol-lra-frequency = <155>; /* off-f0 in OL */
 };

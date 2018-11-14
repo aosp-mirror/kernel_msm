@@ -43,7 +43,7 @@
 		ti,rated-voltage = <75>;
 		ti,odclamp-voltage = <106>; /* 2.1 Vrms */
 		ti,lra-frequency = <172>; /* f0 = 172Hz */
-		ti,ol-lra-frequency = <160>; /* off-f0 in OL */
+		ti,ol-lra-frequency = <155>; /* off-f0 in OL */
 		ti,bemf-factor = <150>;
 		ti,bemf-gain = <0>;
 		ti,voltage-comp = <18>;
@@ -52,6 +52,7 @@
 		ti,zc-det-time = <0>; /* 100 us*/
 		ti,lra-wave-shape = <0>; /* Square wave */
 		ti,waveform-interval = <1>; /* 1 ms */
+		ti,fb-brake-factor = <0>; /* braking factor 1 */
 		status = "ok";
 	};
 };
