@@ -318,6 +318,11 @@
 				hysteresis = <1000>;
 				type = "passive";
 			};
+			batt_charging_lv4: batt-charging_lv4 {
+				temperature = <48000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
 		};
 		cooling-maps {
 			charging_cdev_lv1 {
@@ -331,6 +336,10 @@
 			charging_cdev_lv3 {
 				trip = <&batt_charging_lv3>;
 				cooling-device = <&pmi8998_charger 3 3>;
+			};
+			charging_cdev_lv4 {
+				trip = <&batt_charging_lv4>;
+				cooling-device = <&pmi8998_charger 4 4>;
 			};
 		};
 	};
