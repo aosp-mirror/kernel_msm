@@ -362,6 +362,7 @@ struct max1720x_chip {
 
 	u16 RSense;
 	u16 RConfig;
+	int batt_id;
 	bool init_complete;
 	bool resume_complete;
 	u16 health_status;
@@ -763,6 +764,7 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_RESISTANCE,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG,
@@ -1192,6 +1194,9 @@ static int max1720x_get_property(struct power_supply *psy,
 		err = REGMAP_READ(map, MAX1720X_STATUS, &data);
 		val->intval = (((u16) data) & MAX1720X_STATUS_BST) ? 0 : 1;
 		break;
+	case POWER_SUPPLY_PROP_RESISTANCE_ID:
+		val->intval = chip->batt_id;
+		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
 		err = REGMAP_READ(map, MAX1720X_RCELL, &data);
 		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
@@ -1433,7 +1438,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	return IRQ_HANDLED;
 }
 
-static int max1720x_read_batt_id(struct max1720x_chip *chip, int *batt_id)
+static int max1720x_read_batt_id(const struct max1720x_chip *chip, int *batt_id)
 {
 	struct device_node *node = chip->dev->of_node;
 	const char *batt_psy_name = NULL;
@@ -1475,11 +1480,6 @@ static int max1720x_read_batt_id(struct max1720x_chip *chip, int *batt_id)
 		return -EINVAL;
 	}
 
-	if (val.intval < 0)
-		*batt_id = val.intval;
-	else
-		*batt_id = val.intval / 1000;
-
 	return 0;
 }
 
@@ -1510,6 +1510,7 @@ static int max1720x_read_gauge_type(struct max1720x_chip *chip)
 	return gauge_type;
 }
 
+
 static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 {
 	int ret, batt_id;
@@ -1517,14 +1518,14 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 	struct device_node *node = chip->dev->of_node;
 	struct device_node *config_node, *child_node;
 
-	ret = max1720x_read_batt_id(chip, &batt_id);
+	ret = max1720x_read_batt_id(chip, &chip->batt_id);
 	if (ret == -EPROBE_DEFER)
 		return -EPROBE_DEFER;
-	else if (ret < 0)
+	else if (ret < 0 || chip->batt_id < 0)
 		/* Don't fail probe on that, just ignore error */
 		return 0;
 
-	dev_info(chip->dev, "device battery RID: %d kohm\n", batt_id);
+	dev_info(chip->dev, "device battery RID: %d kohm\n", chip->batt_id);
 
 	ret = of_property_read_u32(node, "maxim,batt-id-range-pct",
 				   &batt_id_range);
@@ -1537,6 +1538,7 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 		return 0;
 	}
 
+	batt_id = chip->batt_id / 1000;
 	for_each_child_of_node(config_node, child_node) {
 		ret = of_property_read_u32(child_node, "maxim,batt-id-kohm",
 					   &batt_id_kohm);
