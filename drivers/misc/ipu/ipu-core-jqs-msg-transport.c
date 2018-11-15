@@ -406,6 +406,7 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus)
 	uint32_t q_ids;
 
 	q_ids = ipu_core_readl(bus, IPU_CSR_JQS_OFFSET + JQS_SYS_DBL);
+	bus->jqs.shadow_reg_jqs_sys_dbl = q_ids;
 	if (!q_ids)
 		return IRQ_NONE;
 

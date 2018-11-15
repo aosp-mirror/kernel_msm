@@ -24,6 +24,7 @@
 #include <linux/types.h>
 #include <linux/workqueue.h>
 
+#include "ipu-regs.h"
 #include "ipu-adapter.h"
 #include "ipu-core-jqs-structs.h"
 
@@ -113,6 +114,14 @@ struct paintbox_jqs_msg_transport {
 	uint32_t process_queues_request;
 };
 
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+struct ipu_bus_debug_register {
+	struct paintbox_bus *bus;
+	struct dentry *dentry;
+	unsigned int offset;
+};
+#endif
+
 struct paintbox_jqs {
 	struct paintbox_shared_buffer fw_shared_buffer;
 	struct mutex lock;
@@ -124,13 +133,16 @@ struct paintbox_jqs {
 	uint32_t uart_baud;
 	uint64_t clock_rate_hz;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
-	struct dentry *jqs_dentry;
+	struct dentry *debug_dir;
 	struct dentry *fw_state_dentry;
 	struct dentry *log_level_dentry;
 	struct dentry *trigger_level_dentry;
 	struct dentry *kernel_log_dentry;
 	struct dentry *uart_log_dentry;
 	struct dentry *uart_baud_dentry;
+	struct dentry *reg_dump;
+	struct ipu_bus_debug_register debug_registers[IO_JQS_NUM_REGS];
+	uint32_t shadow_reg_jqs_sys_dbl;
 #endif
 };
 
