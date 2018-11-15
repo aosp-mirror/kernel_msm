@@ -11,15 +11,17 @@
  */
 
 &tlmm {
-	cs40l20_rst:cs40l20_rst {
-		mux {
+	cs40l2x_pinctrl: cs40l25ax_pinctrl {
+		rst {
 			pins = "gpio152";
 			function = "gpio";
-		};
-		config {
-			pins = "gpio152";
 			drive-strength = <2>;
 			output-low;
+		};
+		irq {
+			pins = "gpio129";
+			function = "gpio";
+			bias-disable;
 		};
 	};
 };
@@ -43,9 +45,11 @@
 	floral_cs40l25a: cs40l25a@43 {
 		compatible = "cirrus,cs40l25a";
 		pinctrl-names = "default";
-		pinctrl-0 = <&cs40l20_rst &clk_out_default>;
+		pinctrl-0 = <&cs40l2x_pinctrl &clk_out_default>;
 		reset-gpios = <&tlmm 152 0>;
 		reg = <0x43>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <129 IRQ_TYPE_LEVEL_LOW>;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <4>;
 		cirrus,boost-ipk-milliamp = <4500>;
@@ -63,6 +67,12 @@
 		cirrus,gpio1-fall-timeout = <47278>; /* 985 ms */
 		cirrus,gpio1-mode = <2>; /* enabled only in suspend mode */
 		cirrus,refclk-gpio2 = <1>; /* set GPIO2 as REFCLK  */
+		cirrus,asp-bclk-freq-hz = <12288000>;
+		cirrus,asp-bclk-inv;
+		cirrus,asp-fmt = <0>;
+		cirrus,asp-slot-num = <2>;
+		cirrus,asp-slot-width = <32>;
+		cirrus,asp-samp-width = <24>;
 		status = "ok";
 	};
 };

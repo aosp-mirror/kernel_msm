@@ -9,14 +9,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-&cs40l20_rst {
-	mux {
+&cs40l2x_pinctrl {
+	rst {
 		pins = "gpio108";
-		function = "gpio";
-	};
-	config {
-		drive-strength = <2>;
-		output-low;
 	};
 };
 
