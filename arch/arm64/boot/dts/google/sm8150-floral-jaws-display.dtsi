@@ -10,8 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-coral-display.dtsi"
-#include "sm8150-flame-display.dtsi"
 #include "dsi-panel-s6e3ha8-dsc-wqhd-cmd.dtsi"
 
 &sde_dsi {

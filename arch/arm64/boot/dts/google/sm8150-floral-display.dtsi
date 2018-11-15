@@ -11,6 +11,8 @@
  */
 
 #include "../qcom/sm8150-sde-display.dtsi"
+#include "dsi-panel-s6e3hc2-dsc-wqhd-cmd.dtsi"
+#include "dsi-panel-nt37280-dsc-fhd-cmd.dtsi"
 
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 
@@ -23,7 +25,9 @@
 	/delete-property/ lab-supply;
 	/delete-property/ ibb-supply;
 
-	qcom,dsi-display-list = <&dsi_sim_vid_display>;
+	qcom,dsi-display-list = <&dsi_nt37280_cmd_display
+				 &dsi_s6e3hc2_cmd_display
+				 &dsi_sim_vid_display>;
 };
 
 &sde_dsi1 {
@@ -49,6 +53,42 @@
 		timing@0 {
 			qcom,mdss-dsi-panel-width = <1080>;
 			qcom,mdss-dsi-panel-height = <1920>;
+		};
+	};
+};
+
+&dsi_s6e3hc2_dsc_wqhd_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,platform-reset-gpio = <&tlmm 67 0>;
+
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_floral>;
+
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings =
+				[00 21 08 08 25 23 08 08 06 02 04 00 1B 18];
+		};
+		timing@1 {
+			qcom,mdss-dsi-panel-phy-timings =
+				[00 21 08 08 25 23 08 08 06 02 04 00 1B 18];
+		};
+	};
+};
+
+&dsi_nt37280_dsc_fhd_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,platform-reset-gpio = <&tlmm 67 0>;
+
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_floral>;
+
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings =
+				[00 13 05 04 1F 1E 05 05 03 02 04 00 12 14];
+		};
+		timing@1 {
+			qcom,mdss-dsi-panel-phy-timings =
+				[00 13 05 04 1F 1E 05 05 03 02 04 00 12 14];
 		};
 	};
 };
@@ -85,5 +125,29 @@
 			qcom,supply-disable-load = <100>;
 			qcom,supply-post-on-sleep = <0>;
 		};
+	};
+
+	dsi_s6e3hc2_cmd_display: qcom,dsi-display@1 {
+		label = "dsi_s6e3hc2_cmd_display";
+		qcom,display-type = "primary";
+		qcom,dsi-display-active;
+
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+
+		qcom,dsi-panel = <&dsi_s6e3hc2_dsc_wqhd_cmd>;
+	};
+
+	dsi_nt37280_cmd_display: qcom,dsi-display@2 {
+		label = "dsi_nt37280_cmd_display";
+		qcom,display-type = "primary";
+		qcom,dsi-display-active;
+
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+
+		qcom,dsi-panel = <&dsi_nt37280_dsc_fhd_cmd>;
 	};
 };
