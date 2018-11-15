@@ -795,6 +795,9 @@ static int p9221_get_property(struct power_supply *psy,
 			break;
 
 		val->intval = ret;
+
+		/* success */
+		ret = 0;
 		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
