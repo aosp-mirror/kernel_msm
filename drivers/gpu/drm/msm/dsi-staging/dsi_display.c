@@ -31,6 +31,7 @@
 #include "dsi_pwr.h"
 #include "sde_dbg.h"
 #include "dsi_parser.h"
+#include "sde_trace.h"
 
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
@@ -5616,6 +5617,13 @@ int dsi_display_validate_mode_vrr(struct dsi_display *display,
 			goto error;
 		}
 
+		if (!dfps_caps.dfps_support) {
+			pr_debug("switching to %d FPS with mode switch\n",
+				adj_mode.timing.refresh_rate);
+			mode->dsi_mode_flags |= DSI_MODE_FLAG_DMS_FPS;
+			goto error;
+		}
+
 		cur_mode.timing.refresh_rate =
 			adj_mode.timing.refresh_rate;
 
@@ -6588,7 +6596,9 @@ int dsi_display_enable(struct dsi_display *display)
 		}
 	}
 
-	if (mode->priv_info->dsc_enabled) {
+	/* only update PPS if something other than refresh rate is changing */
+	if (mode->priv_info->dsc_enabled &&
+	    !(mode->dsi_mode_flags & DSI_MODE_FLAG_DMS_FPS)) {
 		mode->priv_info->dsc.pic_width *= display->ctrl_count;
 		rc = dsi_panel_update_pps(display->panel);
 		if (rc) {

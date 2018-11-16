@@ -259,6 +259,7 @@ struct sde_encoder_virt {
 	u32 misr_frame_count;
 
 	bool idle_pc_enabled;
+	bool force_vid_rsc;
 	struct mutex rc_lock;
 	enum sde_enc_rc_states rc_state;
 	struct kthread_delayed_work delayed_off_work;
@@ -1833,7 +1834,7 @@ static int _sde_encoder_update_rsc_client(
 	int pipe = -1;
 	int rc = 0;
 	int wait_refcount;
-	u32 qsync_mode = 0;
+	bool force_vid_rsc = false;
 
 	if (!drm_enc || !drm_enc->dev) {
 		SDE_ERROR("invalid encoder arguments\n");
@@ -1863,24 +1864,34 @@ static int _sde_encoder_update_rsc_client(
 
 	/**
 	 * only primary command mode panel without Qsync can request CMD state.
+	 * if there's a dynamic mode switch that requires fps update keep in VID
+	 * state to prevent waits during reconfiguration.
 	 * all other panels/displays can request for VID state including
 	 * secondary command mode panel.
 	 * Clone mode encoder can request CLK STATE only.
 	 */
-	if (sde_enc->cur_master)
-		qsync_mode = sde_connector_get_qsync_mode(
-				sde_enc->cur_master->connector);
+	if (sde_enc->force_vid_rsc) {
+		force_vid_rsc = true;
+	} else if (crtc->state && crtc->state->mode_changed &&
+		   msm_is_mode_seamless_dms_fps(&crtc->state->adjusted_mode)) {
+		SDE_DEBUG_ENC(sde_enc, "seamless dms with fps\n");
+		force_vid_rsc = true;
+	} else if (sde_enc->cur_master && sde_connector_get_qsync_mode(
+			sde_enc->cur_master->connector)) {
+		force_vid_rsc = true;
+	}
 
-	if (sde_encoder_in_clone_mode(drm_enc))
-		rsc_state = enable ? SDE_RSC_CLK_STATE : SDE_RSC_IDLE_STATE;
+	if (!enable)
+		rsc_state = SDE_RSC_IDLE_STATE;
+	else if (sde_encoder_in_clone_mode(drm_enc))
+		rsc_state = SDE_RSC_CLK_STATE;
+	else if ((disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE) &&
+		 disp_info->is_primary && !force_vid_rsc)
+		rsc_state = SDE_RSC_CMD_STATE;
 	else
-		rsc_state = enable ?
-			(((disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE)
-			  && disp_info->is_primary && !qsync_mode) ?
-			 SDE_RSC_CMD_STATE : SDE_RSC_VID_STATE) :
-			SDE_RSC_IDLE_STATE;
+		rsc_state = SDE_RSC_VID_STATE;
 
-	SDE_EVT32(rsc_state, qsync_mode);
+	SDE_EVT32(rsc_state, force_vid_rsc);
 
 	prefill_lines = config ? mode_info.prefill_lines +
 		config->inline_rotate_prefill : mode_info.prefill_lines;
@@ -2732,9 +2743,11 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 
 	/* release resources before seamless mode change */
 	if (msm_is_mode_seamless_dms(adj_mode)) {
+		SDE_ATRACE_BEGIN("pre_modeset");
 		/* restore resource state before releasing them */
 		ret = sde_encoder_resource_control(drm_enc,
 				SDE_ENC_RC_EVENT_PRE_MODESET);
+		SDE_ATRACE_END("pre_modeset");
 		if (ret) {
 			SDE_ERROR_ENC(sde_enc,
 					"sde resource control failed: %d\n",
@@ -2744,9 +2757,11 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 
 		/*
 		 * Disable dsc before switch the mode and after pre_modeset,
-		 * to guarantee that previous kickoff finished.
+		 * to guarantee that previous kickoff finished. No need to
+		 * disable if there's only change in refresh rate
 		 */
-		_sde_encoder_dsc_disable(sde_enc);
+		if (!msm_is_mode_seamless_dms_fps(adj_mode))
+			_sde_encoder_dsc_disable(sde_enc);
 	}
 
 	/* Reserve dynamic resources now. Indicating non-AtomicTest phase */
@@ -2805,9 +2820,12 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	}
 
 	/* update resources after seamless mode change */
-	if (msm_is_mode_seamless_dms(adj_mode))
+	if (msm_is_mode_seamless_dms(adj_mode)) {
+		SDE_ATRACE_BEGIN("post_modeset");
 		sde_encoder_resource_control(&sde_enc->base,
 						SDE_ENC_RC_EVENT_POST_MODESET);
+		SDE_ATRACE_END("post_modeset");
+	}
 }
 
 void sde_encoder_control_te(struct drm_encoder *drm_enc, bool enable)
@@ -4898,6 +4916,9 @@ static int _sde_encoder_init_debugfs(struct drm_encoder *drm_enc)
 
 	debugfs_create_bool("idle_power_collapse", 0600, sde_enc->debugfs_root,
 			&sde_enc->idle_pc_enabled);
+
+	debugfs_create_bool("force_vid_rsc", 0600, sde_enc->debugfs_root,
+			&sde_enc->force_vid_rsc);
 
 	for (i = 0; i < sde_enc->num_phys_encs; i++)
 		if (sde_enc->phys_encs[i] &&

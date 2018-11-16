@@ -89,6 +89,7 @@ enum dsi_mode_flags {
 	DSI_MODE_FLAG_VBLANK_PRE_MODESET	= BIT(2),
 	DSI_MODE_FLAG_DMS			= BIT(3),
 	DSI_MODE_FLAG_VRR			= BIT(4),
+	DSI_MODE_FLAG_DMS_FPS			= BIT(5),
 };
 
 /**
