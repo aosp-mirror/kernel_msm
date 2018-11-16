@@ -54,16 +54,14 @@ static ssize_t version_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	uint32_t val;
-	int ret = 0;
+	enum ab_chip_id chip_id;
 
-	ret = ABC_READ(OTP_CHIP_ID_ADDR, &val);
-	if (ret < 0)
-		return ret;
+	struct ab_state_context *sc =
+		(struct ab_state_context *)dev_get_drvdata(dev);
 
-	val = (val & OTP_CHIP_ID_MASK) >> OTP_CHIP_ID_SHIFT;
+	chip_id = ab_get_chip_id(sc);
 
-	switch (val) {
+	switch (chip_id) {
 	case CHIP_ID_A0:
 		return scnprintf(buf, PAGE_SIZE, "A0\n");
 	case CHIP_ID_B0:
@@ -71,6 +69,7 @@ static ssize_t version_show(struct device *dev,
 	default:
 		return scnprintf(buf, PAGE_SIZE, "Unknown\n");
 	}
+
 	return 0;
 }
 

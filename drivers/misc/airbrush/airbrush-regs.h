@@ -111,7 +111,5 @@ static inline void WR_DDR_REG(uint32_t addr, uint32_t data)
 #define OTP_CHIP_ID_ADDR		(ABC_BASE_OTP_WRAPPER + 0x10)
 #define OTP_CHIP_ID_SHIFT		20
 #define OTP_CHIP_ID_MASK		(0xF << OTP_CHIP_ID_SHIFT)
-#define CHIP_ID_A0				0
-#define CHIP_ID_B0				1
 
 #endif	/* _AIRBRUSH_REGS_H_ */

@@ -333,6 +333,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 
 	abc_clk_register(ab_ctx);
 
+	/* Disable patching if ab is B0 */
+	if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
+		ab_ctx->otp_fw_patch_dis = 1;
+
 	return 0;
 }
 EXPORT_SYMBOL(ab_bootsequence);

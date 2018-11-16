@@ -240,6 +240,12 @@ enum ab_sm_event {
 	// ...
 };
 
+enum ab_chip_id {
+	CHIP_ID_UNKNOWN = -1,
+	CHIP_ID_A0 = 0,
+	CHIP_ID_B0,
+};
+
 typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 
 /**
@@ -266,6 +272,8 @@ struct ab_state_context {
 	enum chip_state curr_chip_substate_id;
 	struct chip_to_block_map *chip_state_table;
 	u32 nr_chip_states;
+
+	enum ab_chip_id chip_id;
 
 	/* Synchronization structs */
 	struct mutex pmic_lock;
@@ -370,6 +378,8 @@ int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_exit(struct ab_state_context *sc);
 int ab_ddr_setup(struct ab_state_context *sc);
 void ab_ddr_read_write_test(int read_write);
+
+enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);

@@ -25,6 +25,7 @@
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-pmu.h"
 #include "airbrush-power-gating.h"
+#include "airbrush-regs.h"
 #include "airbrush-spi.h"
 #include "airbrush-thermal.h"
 
@@ -553,6 +554,26 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 }
 EXPORT_SYMBOL(ab_sm_register_callback);
 
+enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
+{
+	uint32_t val;
+	int ret;
+
+	if (sc->chip_id == CHIP_ID_UNKNOWN) {
+		/* TODO: Change this to a call into mfd driver ops */
+		ret = ABC_READ(OTP_CHIP_ID_ADDR, &val);
+		if (ret < 0) {
+			dev_err(sc->dev, "Unable to read ab chip id\n");
+			return ret;
+		}
+
+		val = (val & OTP_CHIP_ID_MASK) >> OTP_CHIP_ID_SHIFT;
+		sc->chip_id = (enum ab_chip_id)val;
+	}
+
+	return sc->chip_id;
+}
+
 void ab_enable_pgood(struct ab_state_context *ab_ctx)
 {
 	gpiod_set_value_cansleep(ab_ctx->soc_pwrgood, __GPIO_ENABLE);
@@ -868,6 +889,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	atomic_set(&ab_sm_ctx->async_in_use, 0);
 	init_completion(&ab_sm_ctx->state_change_comp);
+
+	ab_sm_ctx->chip_id = CHIP_ID_UNKNOWN;
 
 	/*
 	 * TODO error handle at airbrush-sm should return non-zero value to
