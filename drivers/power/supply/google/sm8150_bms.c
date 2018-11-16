@@ -667,7 +667,7 @@ static int sm8150_parse_dt(struct bms_dev *bms)
 static int bms_probe(struct platform_device *pdev)
 {
 	struct bms_dev *bms;
-	struct power_supply_config bms_psy_cfg;
+	struct power_supply_config bms_psy_cfg = {};
 	int rc = 0;
 
 	bms = devm_kzalloc(&pdev->dev, sizeof(*bms), GFP_KERNEL);
