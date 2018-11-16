@@ -671,6 +671,7 @@ static ssize_t inst_value_show(struct device *dev,
 	unsigned int current_value;
 	unsigned int power_value;
 	unsigned int bit_resolution;
+	unsigned int bit_resolution_power;
 	int len = 0;
 	int cnt;
 	int ret;
@@ -688,10 +689,13 @@ static ssize_t inst_value_show(struct device *dev,
 		if (!chip_info->chip_reg_data.active_channels[cnt])
 			continue;
 
-		if (chip_info->chip_reg_data.bi_dir[cnt])
+		if (chip_info->chip_reg_data.bi_dir[cnt]) {
 			bit_resolution = PAC193X_VOLTAGE_S_RES;
-		else
+			bit_resolution_power = PAC193X_POWER_S_RES;
+		} else {
 			bit_resolution = PAC193X_VOLTAGE_U_RES;
+			bit_resolution_power = PAC193X_POWER_U_RES;
+		}
 
 		ptr = chip_info->rail_name[cnt];
 
@@ -716,7 +720,7 @@ static ssize_t inst_value_show(struct device *dev,
 		temp /= chip_info->shunts[cnt] / 1000;
 		temp *= PAC193X_VOLTAGE_MILLIVOLTS_MAX * 1000;
 		temp *= chip_info->chip_reg_data.vpower[cnt];
-		power_value = temp >> bit_resolution;
+		power_value = temp >> bit_resolution_power;
 
 		len += scnprintf(buf + len, PAGE_SIZE - len,
 				 "%s, %d, %d, %d\n",
@@ -764,7 +768,7 @@ static ssize_t energy_value_show(struct device *dev,
 		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
 		temp /= chip_info->shunts[cnt] / 1000;
 		temp *= PAC193X_VOLTAGE_MILLIVOLTS_MAX * 1000;
-		temp *= chip_info->chip_reg_data.vpower_acc[cnt];
+		temp *= chip_info->chip_reg_data.energy_sec_acc[cnt];
 		temp >>= bit_resolution;
 
 		/* Convert to uW-secs */
@@ -1297,7 +1301,7 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 		bool do_rfsh, bool refresh_v, u32 wait_time)
 {
 	int ret;
-	u8 offset_reg_data, samp_shift;
+	u8 offset_reg_data;
 	int cnt;
 	uint64_t tstamp_ms;
 
@@ -1321,6 +1325,7 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 			PAC193X_CTRL_STAT_REGS_ADDR);
 		goto reg_snapshot_err;
 	}
+
 	/* read the data registers */
 	ret = pac193x_i2c_read(chip_info->client, PAC193X_ACC_COUNT_REG,
 			       (u8 *) chip_info->chip_reg_data.meas_regs,
@@ -1330,6 +1335,7 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 			PAC193X_ACC_COUNT_REG);
 		goto reg_snapshot_err;
 	}
+
 	chip_info->chip_reg_data.tstamp_ms = tstamp_ms;
 	offset_reg_data = 0;
 	chip_info->chip_reg_data.acc_count =
@@ -1341,114 +1347,112 @@ static int pac193x_reg_snapshot(struct pac193x_chip_info *chip_info,
 		/* check if the channel is active(within the data read from
 		 * the chip), skip all fields if disabled
 		 */
-		if (((
+		if ((
 chip_info->chip_reg_data.ctrl_regs[PAC193X_CHANNEL_DIS_LAT_REG_OFF] << cnt) &
-			0x80) == 0) {
-			/* add the power_acc field */
-			if (chip_info->chip_reg_data.bi_dir[cnt]) {
-				/* bi-directional channel */
-				chip_info->chip_reg_data.vpower_acc[cnt] =
+			0x80)
+			continue;
+
+		/* add the power_acc field */
+		if (chip_info->chip_reg_data.bi_dir[cnt]) {
+			/* bi-directional channel */
+			chip_info->chip_reg_data.vpower_acc[cnt] =
 	mVPOWER_ACCs(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			} else {
-				/* uni-directional channel */
-				chip_info->chip_reg_data.vpower_acc[cnt] =
+		} else {
+			/* uni-directional channel */
+			chip_info->chip_reg_data.vpower_acc[cnt] =
 	mVPOWER_ACCu(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			}
-			offset_reg_data += PAC193X_VPOWER_ACC_REG_LEN;
-			/* now compute the scaled to 1 second
-			 * accumulated energy value; see how much shift
-			 * is required by the sample rate
-			 */
-			samp_shift = get_count_order(
-				samp_rate_map_tbl[((
-chip_info->chip_reg_data.ctrl_regs[PAC193X_CTRL_LAT_REG_OFF])>>6)]);
-/* energy accumulator scaled to 1sec = (VPOWER_ACC * ACC_COUNT)/2^samp_shift */
-		/* the chip's sampling rate is 2^samp_shift samples/sec */
-			chip_info->chip_reg_data.energy_sec_acc[cnt] +=
-			(s64)((s64)(chip_info->chip_reg_data.vpower_acc[cnt] *
-			chip_info->chip_reg_data.acc_count) >> samp_shift);
 		}
+		offset_reg_data += PAC193X_VPOWER_ACC_REG_LEN;
+
+		chip_info->chip_reg_data.energy_sec_acc[cnt] +=
+			(s64)(chip_info->chip_reg_data.vpower_acc[cnt]);
 	}
 	/* continue with VBUS */
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 	/* check if the channel is active, skip all fields if disabled */
-		if (((
+		if ((
 chip_info->chip_reg_data.ctrl_regs[PAC193X_CHANNEL_DIS_LAT_REG_OFF] << cnt) &
-			0x80) == 0) {
-			/* read the VBUS channels */
-			chip_info->chip_reg_data.vbus[cnt] =
+			0x80)
+			continue;
+
+		/* read the VBUS channels */
+		chip_info->chip_reg_data.vbus[cnt] =
 	mVBUS_SENSEu(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
 			offset_reg_data += PAC193X_VBUS_SENSE_REG_LEN;
-		}
 	}
 	/* VSENSE */
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 	/* check if the channel is active, skip all fields if disabled */
-		if (((
+		if ((
 chip_info->chip_reg_data.ctrl_regs[PAC193X_CHANNEL_DIS_LAT_REG_OFF] << cnt) &
-			0x80) == 0) {
-			/* read the VSENSE registers */
-			if (chip_info->chip_reg_data.bi_dir[cnt]) {
-				/* bi-directional channel */
-				chip_info->chip_reg_data.vsense[cnt] =
+			0x80)
+			continue;
+
+		/* read the VSENSE registers */
+		if (chip_info->chip_reg_data.bi_dir[cnt]) {
+			/* bi-directional channel */
+			chip_info->chip_reg_data.vsense[cnt] =
 	mVBUS_SENSEs(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			} else {
-				/* uni-directional channel */
-				chip_info->chip_reg_data.vsense[cnt] =
+		} else {
+			/* uni-directional channel */
+			chip_info->chip_reg_data.vsense[cnt] =
 	mVBUS_SENSEu(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			}
-			offset_reg_data += PAC193X_VBUS_SENSE_REG_LEN;
 		}
+		offset_reg_data += PAC193X_VBUS_SENSE_REG_LEN;
 	}
 	/* VBUS_AVG */
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 	/* check if the channel is active, skip all fields if disabled */
-		if (((
+		if  ((
 chip_info->chip_reg_data.ctrl_regs[PAC193X_CHANNEL_DIS_LAT_REG_OFF] << cnt) &
-			0x80) == 0) {
-			/* read the VBUS_AVG registers */
-			chip_info->chip_reg_data.vbus_avg[cnt] =
+			0x80)
+			continue;
+
+		/* read the VBUS_AVG registers */
+		chip_info->chip_reg_data.vbus_avg[cnt] =
 	mVBUS_SENSEu(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
 			offset_reg_data += PAC193X_VBUS_SENSE_REG_LEN;
-		}
 	}
 	/* VSENSE_AVG */
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 	/* check if the channel is active, skip all fields if disabled */
-		if (((
+		if ((
 chip_info->chip_reg_data.ctrl_regs[PAC193X_CHANNEL_DIS_LAT_REG_OFF] << cnt) &
-			0x80) == 0) {
-			/* read the VSENSE_AVG registers */
-			if (chip_info->chip_reg_data.bi_dir[cnt]) {
-				/* bi-directional channel */
-				chip_info->chip_reg_data.vsense_avg[cnt] =
+			0x80)
+			continue;
+
+		/* read the VSENSE_AVG registers */
+		if (chip_info->chip_reg_data.bi_dir[cnt]) {
+			/* bi-directional channel */
+			chip_info->chip_reg_data.vsense_avg[cnt] =
 	mVBUS_SENSEs(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			} else {
-				/* uni-directional channel */
-				chip_info->chip_reg_data.vsense_avg[cnt] =
+		} else {
+			/* uni-directional channel */
+			chip_info->chip_reg_data.vsense_avg[cnt] =
 	mVBUS_SENSEu(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			}
-			offset_reg_data += PAC193X_VBUS_SENSE_REG_LEN;
 		}
+		offset_reg_data += PAC193X_VBUS_SENSE_REG_LEN;
 	}
 	/* VPOWER */
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
 	/* check if the channel is active, skip all fields if disabled */
-		if (((
+		if ((
 chip_info->chip_reg_data.ctrl_regs[PAC193X_CHANNEL_DIS_LAT_REG_OFF] << cnt) &
-			0x80) == 0) {
-			/* read the VPOWER fields */
-			if (chip_info->chip_reg_data.bi_dir[cnt]) {
-				/* bi-directional channel */
-				chip_info->chip_reg_data.vpower[cnt] =
+			0x80)
+			continue;
+
+		/* read the VPOWER fields */
+		if (chip_info->chip_reg_data.bi_dir[cnt]) {
+			/* bi-directional channel */
+			chip_info->chip_reg_data.vpower[cnt] =
 	mVPOWERs(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			} else {
-				/* uni-directional channel */
-				chip_info->chip_reg_data.vpower[cnt] =
+		} else {
+			/* uni-directional channel */
+			chip_info->chip_reg_data.vpower[cnt] =
 	mVPOWERu(&chip_info->chip_reg_data.meas_regs[offset_reg_data]);
-			}
-			offset_reg_data += PAC193X_VPOWER_REG_LEN;
 		}
+		offset_reg_data += PAC193X_VPOWER_REG_LEN;
+
 	}
 reg_snapshot_err:
 	mutex_unlock(&chip_info->lock);
@@ -1720,7 +1724,7 @@ static int pac193x_retrieve_data(struct pac193x_chip_info *chip_info,
 		/* we need to re-read the chip values
 		 * call the pac193x_reg_snapshot
 		 */
-		ret = pac193x_reg_snapshot(chip_info, true, true, wait_time);
+		ret = pac193x_reg_snapshot(chip_info, true, false, wait_time);
 		/* re-schedule the work for the read registers timeout
 		 * (to prevent chip regs saturation)
 		 */
