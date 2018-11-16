@@ -107,6 +107,41 @@
 			qcom,drive-strength = <2>;
 		};
 	};
+
+	ir_vcsel_test: ir_vcsel_test {
+		mux {
+			pins = "gpio4";
+			function = "normal";
+			bias-disable;
+			input-enable;
+		};
+	};
+};
+
+&tlmm {
+	ir_vcsel_fault: ir_vcsel_fault {
+		mux {
+			pins = "gpio124";
+			function = "normal";
+		};
+		config {
+			pins = "gpio124";
+			bias-disable;
+			input-enable;
+		};
+	};
+
+	csense_irq: csense_irq {
+		mux {
+			pins = "gpio49";
+			function = "normal";
+		};
+		config {
+			pins = "gpio49";
+			bias-disable;
+			input-enable;
+		};
+	};
 };
 
 &soc {
@@ -132,7 +167,13 @@
 };
 
 &lm36011_flood {
-    sx9320_sid = <0x2c>;
+	sx9320_sid = <0x2c>;
+	pinctrl-names = "lm36011_init";
+	pinctrl-0 = <&ir_vcsel_fault &ir_vcsel_test &csense_irq>;
+	gpios = <&tlmm 124 0>,
+		<&pm8150l_gpios 4 0>,
+		<&pm8150l_gpios 5 0>,
+		<&tlmm 49 0>;
 };
 
 &lm36011_dot {
