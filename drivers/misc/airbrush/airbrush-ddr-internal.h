@@ -743,7 +743,7 @@
 #define DRAM_VREF_LEVELS		51
 #define VREF_FROM			0x0
 #define VREF_STEP			0x1
-#define VREF_PRBS_TIMEOUT_USEC		5000
+#define VREF_PRBS_TIMEOUT_USEC		10000
 
 enum ddr_freq_index {
 	f_DPHY_DVFS_CON,

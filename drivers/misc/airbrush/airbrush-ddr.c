@@ -1908,8 +1908,19 @@ static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
 
 	ddr_ctx->cur_freq = freq;
 
+#ifdef CONFIG_DDR_BOOT_TEST
+	ab_ddr_read_write_test(DDR_TEST_MEMTESTER | DDR_BOOT_TEST_WRITE);
+#endif
 	/* Block AXI Before entering self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
+
+	/* Disable PB Refresh & Auto Refresh */
+	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+
+	/* safe to send a manual all bank refresh command */
+	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
 
 	/* Self-refresh entry sequence */
 	if (ddr_enter_self_refresh_mode()) {
@@ -2132,6 +2143,14 @@ int32_t ab_ddr_selfrefresh_exit(struct ab_state_context *sc)
 		return DDR_FAIL;
 	}
 
+	/* safe to send a manual all bank refresh command */
+	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+
+	/* Enable PB Refresh & Auto Refresh */
+	ddr_reg_set(DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_set(DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_set(DREX_CONCONTROL, AREF_EN);
+
 	/* Allow AXI after exiting from self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x1);
 
@@ -2149,6 +2168,14 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 #endif
 	/* Block AXI Before entering self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
+
+	/* Disable PB Refresh & Auto Refresh */
+	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+
+	/* safe to send a manual all bank refresh command */
+	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
 
 	/* Self-refresh entry sequence */
 	if (ddr_enter_self_refresh_mode()) {
