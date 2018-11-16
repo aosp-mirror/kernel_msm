@@ -4770,7 +4770,7 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	}
 
 	/* Register the power supply */
-	fg_psy_cfg.drv_data = fg;
+	fg_psy_cfg.drv_data = chip;
 	fg_psy_cfg.of_node = NULL;
 	fg_psy_cfg.supplied_to = NULL;
 	fg_psy_cfg.num_supplicants = 0;
