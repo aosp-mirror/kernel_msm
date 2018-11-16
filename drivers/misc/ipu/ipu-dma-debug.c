@@ -541,8 +541,9 @@ static void ipu_dma_debug_dump_ssp_status(struct seq_file *s,
 
 int ipu_dma_channel_debug_read_registers(struct seq_file *s, void *data)
 {
-	struct paintbox_data *pb = dev_get_drvdata(s->private);
-	struct paintbox_dma_channel *channel = pb->dma.channels;
+	struct ipu_dma_channel_debug_regs *debug_reg_dump = s->private;
+	struct paintbox_data *pb = debug_reg_dump->pb;
+	struct paintbox_dma_channel *channel = debug_reg_dump->channel;
 	uint64_t dma_grp_registers[DMA_GRP_NUM_REGS];
 	uint64_t dma_stat_ctrl_val;
 	uint64_t dma_stat_state_val;
@@ -755,25 +756,44 @@ static void ipu_dma_channel_debug_create_register_file(struct paintbox_data *pb,
 		reg->debug_register.dentry = NULL;
 }
 
+
+static int ipu_dma_channel_reg_dump_open(struct inode *inode, struct file *file)
+{
+	return single_open_size(file, ipu_dma_channel_debug_read_registers,
+			inode->i_private,
+			DMA_GRP_NUM_REGS * REG_DEBUG_BUFFER_SIZE);
+}
+
+static const struct file_operations ipu_dma_channel_reg_dump_fops = {
+	.open = ipu_dma_channel_reg_dump_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 void ipu_dma_channel_debug_init(struct paintbox_data *pb,
 		struct paintbox_dma_channel *channel)
 {
 	char channel_name[RESOURCE_NAME_LEN];
 	int ret, i;
 
+	channel->debug_reg_dump.pb = pb;
+	channel->debug_reg_dump.channel = channel;
+
 	ret = scnprintf(channel_name, RESOURCE_NAME_LEN, "%s%u", "channel",
 		channel->channel_id);
 
 	channel->debug_dir = debugfs_create_dir(channel_name,
 			pb->dma.debug_dir);
-	if (WARN_ON(IS_ERR_OR_NULL(&channel->debug_dir)))
+	if (WARN_ON(IS_ERR_OR_NULL(channel->debug_dir)))
 		return;
 
-	channel->debug_reg_dump = debugfs_create_devm_seqfile(pb->dev, "regs",
-			channel->debug_dir,
-			ipu_dma_channel_debug_read_registers);
-	if (WARN_ON(IS_ERR_OR_NULL(channel->debug_reg_dump)))
+	channel->debug_reg_dump.dentry = debugfs_create_file("regs", 0640,
+			channel->debug_dir, &channel->debug_reg_dump,
+			&ipu_dma_channel_reg_dump_fops);
+	if (WARN_ON(IS_ERR_OR_NULL(channel->debug_reg_dump.dentry)))
 		return;
+
 
 	for (i = 0; i < DMA_GRP_NUM_REGS; i++) {
 		if (!ipu_dma_grp_reg_names[i])

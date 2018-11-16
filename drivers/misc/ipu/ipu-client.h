@@ -92,6 +92,11 @@ struct ipu_dma_channel_debug_register {
 	struct ipu_debug_register debug_register;
 	unsigned int channel_id;
 };
+struct ipu_dma_channel_debug_regs {
+	struct paintbox_data *pb;
+	struct paintbox_dma_channel *channel;
+	struct dentry *dentry;
+};
 #endif
 
 struct paintbox_debug_reg_entry;
@@ -168,7 +173,7 @@ struct paintbox_dma_channel {
 	struct list_head session_entry;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 	struct dentry *debug_dir;
-	struct dentry *debug_reg_dump;
+	struct ipu_dma_channel_debug_regs debug_reg_dump;
 	struct ipu_dma_channel_debug_register
 			debug_dma_registers[DMA_GRP_NUM_REGS];
 #endif
