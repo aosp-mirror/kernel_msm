@@ -9,7 +9,11 @@ Required properties:
      Celsius at which to end overheat mitigation
  - google,port-overheat-work-interval: period in milliseconds at which the
      driver should monitor the overheat status
- - google,accessory-monitoring-period: time in seconds that the driver should
-     monitor usb accessories after they are first connected
- - google,polling-freq: period in port-overheat-work-interval that the driver
-     should poll the USB connection status to maintain the desired duty cycle
+ - google,polling-freq: the frequency at which the USB connected status should
+     be polled (ex. if this is set to 3, check USB status every 3rd work
+     interval)
+
+Optional properties:
+ - google,accessory-monitoring-period: the length of time in seconds that the
+     driver should monitor USB port temperature after a USB accessory is plugged
+     in
