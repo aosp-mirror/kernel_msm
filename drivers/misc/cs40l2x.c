@@ -5995,6 +5995,8 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 		case CS40L2X_EVENT_CTRL_GPIO1_FALL
 			... CS40L2X_EVENT_CTRL_GPIO_START:
 		case CS40L2X_EVENT_CTRL_READY:
+		case CS40L2X_EVENT_CTRL_TRIG_SUSP
+			... CS40L2X_EVENT_CTRL_TRIG_RESM:
 			dev_dbg(dev, "Found notifier %d in %s\n",
 					val, cs40l2x_event_regs[i]);
 			break;
