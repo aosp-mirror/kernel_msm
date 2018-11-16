@@ -333,16 +333,20 @@ struct ab_sm_mfd_ops {
 	// TODO: Define mfd ops
 	int (*enter_el2)(void *ctx);
 	int (*exit_el2)(void *ctx);
+
+	int (*get_chip_id)(void *ctx, enum ab_chip_id *val);
 };
 
 static int enter_el2_stub(void *ctx) { return -ENODEV; }
 static int exit_el2_stub(void *ctx)  { return -ENODEV; }
+static int get_chip_id_stub(void *ctx, enum ab_chip_id *val)  { return -ENODEV; }
 
 static struct ab_sm_mfd_ops mfd_ops_stub = {
 	.ctx = NULL,
 
 	.enter_el2 = &enter_el2_stub,
 	.exit_el2 = &exit_el2_stub,
+	.get_chip_id = &get_chip_id_stub,
 };
 
 /**

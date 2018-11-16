@@ -626,14 +626,13 @@ enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 	int ret;
 
 	if (sc->chip_id == CHIP_ID_UNKNOWN) {
-		/* TODO: Change this to a call into mfd driver ops */
-		ret = ABC_READ(OTP_CHIP_ID_ADDR, &val);
-		if (ret < 0) {
-			dev_err(sc->dev, "Unable to read ab chip id\n");
-			return ret;
-		}
+		mutex_lock(&sc->mfd_lock);
+		ret = sc->mfd_ops->get_chip_id(sc->mfd_ops->ctx, &val);
+		mutex_unlock(&sc->mfd_lock);
 
-		val = (val & OTP_CHIP_ID_MASK) >> OTP_CHIP_ID_SHIFT;
+		if (ret < 0)
+			return CHIP_ID_UNKNOWN;
+
 		sc->chip_id = (enum ab_chip_id)val;
 	}
 

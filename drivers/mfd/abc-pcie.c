@@ -30,6 +30,7 @@
 #include <linux/signal.h>
 #include <linux/types.h>
 
+#include <linux/airbrush-sm-ctrl.h>
 #include <linux/mfd/abc-pcie.h>
 #include <linux/mfd/abc-pcie-sfr.h>
 
@@ -1511,6 +1512,31 @@ static int abc_pcie_ipu_tpu_enable(void)
 	return 0;
 }
 
+#define ABC_BASE_OTP_WRAPPER		0x10BB0000
+#define OTP_CHIP_ID_ADDR		(ABC_BASE_OTP_WRAPPER + 0x10)
+#define OTP_CHIP_ID_SHIFT		20
+#define OTP_CHIP_ID_MASK		(0xF << OTP_CHIP_ID_SHIFT)
+
+int abc_get_chip_id(void *ctx, enum ab_chip_id *val)
+{
+	uint32_t data;
+	struct device *dev = (struct device *)ctx;
+
+	int ret = abc_pcie_config_read(OTP_CHIP_ID_ADDR & 0xffffff, 0x0, &data);
+	if (ret) {
+		dev_err(dev, "Unable to read ab chip id (err %d)\n", ret);
+		return ret;
+	}
+
+	data = (data & OTP_CHIP_ID_MASK) >> OTP_CHIP_ID_SHIFT;
+	*val = (enum ab_chip_id)data;
+	return 0;
+}
+
+static struct ab_sm_mfd_ops mfd_ops = {
+	.get_chip_id = &abc_get_chip_id,
+};
+
 uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
 {
 	int err, vector, i;
@@ -1885,6 +1911,10 @@ exit_loop:
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
 		goto err5;
+
+	/* Register state manager operations */
+	mfd_ops.ctx = dev;
+	ab_sm_register_mfd_ops(&mfd_ops);
 
 	return 0;
 err5:
