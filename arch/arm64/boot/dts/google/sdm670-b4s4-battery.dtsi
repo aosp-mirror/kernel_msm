@@ -34,6 +34,7 @@
 			 50  50   0
 			 30   0   0
 		>;
+		google,cv-otv-margin = <15000>;
 	};
 	google_overheat_mitigation: google,overheat_mitigation {
 		compatible = "google,overheat_mitigation";
