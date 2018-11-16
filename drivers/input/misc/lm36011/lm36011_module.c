@@ -41,6 +41,18 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
+enum SILEGO_GPIO {
+	IR_VCSEL_FAULT,
+	IR_VCSEL_TEST,
+	SILEGO_SW_HALT,
+	SILEGO_GPIO_MAX
+};
+
+enum CAP_SENSE_GPIO {
+	CSENSE_PROXAVG_READ,
+	CAP_SENSE_GPIO_MAX
+};
+
 enum LASER_TYPE {
 	LASER_FLOOD,
 	LASER_DOT,
@@ -68,16 +80,26 @@ struct led_laser_ctrl_t {
 	dev_t dev;
 	struct cdev c_dev;
 	struct class *cl;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *gpio_init_state;
+	int gpio_count;
 	struct {
 		bool is_validated;
 		bool is_power_up;
+		bool is_vcsel_fault;
+		bool is_csense_halt;
+		uint32_t vcsel_fault_count;
 		struct regulator *vdd;
+		struct gpio *gpio_array;
+		unsigned int irq[SILEGO_GPIO_MAX];
 	} silego;
 	struct {
 		bool is_power_up;
 		bool is_validated;
 		struct regulator *vdd;
 		uint32_t sid;
+		struct gpio *gpio_array;
+		unsigned int irq[CAP_SENSE_GPIO_MAX];
 	} cap_sense;
 };
 
@@ -411,6 +433,239 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 	return rc;
 }
 
+static irqreturn_t silego_ir_vcsel_fault_handler(int irq, void *dev_id)
+{
+	struct device *dev = (struct device *)dev_id;
+	struct led_laser_ctrl_t *ctrl;
+
+	if (!dev)
+		return IRQ_NONE;
+
+	dev_err(dev, "Silego under fault condition, irq: %d", irq);
+	ctrl = dev_get_drvdata(dev);
+	ctrl->silego.is_vcsel_fault = true;
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t silego_ir_vcsel_fault_count_handler(int irq, void *dev_id)
+{
+	struct device *dev = (struct device *)dev_id;
+	struct led_laser_ctrl_t *ctrl;
+
+	if (!dev)
+		return IRQ_NONE;
+
+	ctrl = dev_get_drvdata(dev);
+	ctrl->silego.vcsel_fault_count++;
+	dev_dbg(dev, "Silego fault count: %d, irq: %d",
+		ctrl->silego.vcsel_fault_count, irq);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t cap_sense_irq_handler(int irq, void *dev_id)
+{
+	struct device *dev = (struct device *)dev_id;
+	struct led_laser_ctrl_t *ctrl;
+
+	if (!dev)
+		return IRQ_NONE;
+
+	dev_warn(dev, "received cap sense irq: %d, read PROXAVG now", irq);
+	/* TODO: Read cap sense PROXAVG and compare to AVGPOSTHRESH */
+	ctrl = dev_get_drvdata(dev);
+
+	return IRQ_HANDLED;
+}
+
+static int lm36011_set_up_silego_irq(
+	struct device *dev,
+	unsigned int irq,
+	int gpio_index)
+{
+	int rc;
+
+	switch (gpio_index) {
+	case IR_VCSEL_FAULT:
+		dev_dbg(dev, "setup irq IR_VCSEL_FAULT");
+		rc = request_irq(irq, silego_ir_vcsel_fault_handler,
+			IRQF_TRIGGER_FALLING, "ir_vcsel_fault", dev);
+		break;
+	case IR_VCSEL_TEST:
+		dev_dbg(dev, "setup irq IR_VCSEL_TEST");
+		rc = request_irq(irq, silego_ir_vcsel_fault_count_handler,
+			IRQF_TRIGGER_RISING, "ir_vcsel_fault_count", dev);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return rc;
+}
+
+static int lm36011_set_up_cap_sense_irq(
+	struct device *dev,
+	unsigned int irq,
+	int gpio_index)
+{
+	int rc;
+
+	switch (gpio_index) {
+	case CSENSE_PROXAVG_READ:
+		dev_dbg(dev, "setup irq CSENSE_PROXAVG_READ");
+		rc = request_irq(irq, cap_sense_irq_handler,
+			IRQF_TRIGGER_RISING, "cap_sense_irq", dev);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return rc;
+}
+
+static void lm36011_enable_gpio_irq(struct device *dev)
+{
+	int index;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	if (ctrl->gpio_count <= 0)
+		return;
+
+	for (index = 0; index < SILEGO_GPIO_MAX; index++) {
+		if (ctrl->silego.irq[index] <= 0) {
+			dev_warn(dev, "%s no available irq for gpio: %d",
+				__func__, ctrl->silego.gpio_array[index].gpio);
+		} else if (index == SILEGO_SW_HALT) {
+			gpio_request(ctrl->silego.gpio_array[index].gpio,
+				"SILEGO_SW_HALT");
+		} else
+			lm36011_set_up_silego_irq(
+				dev, ctrl->silego.irq[index], index);
+	}
+
+	for (index = 0; index < CAP_SENSE_GPIO_MAX; index++) {
+		if (ctrl->cap_sense.irq[index] <= 0) {
+			dev_warn(dev, "%s no available irq for gpio: %d",
+				__func__, ctrl->cap_sense.irq[index]);
+		} else
+			lm36011_set_up_cap_sense_irq(
+				dev, ctrl->cap_sense.irq[index], index);
+	}
+}
+
+static void lm36011_disable_gpio_irq(struct device *dev)
+{
+	int index;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	if (ctrl->gpio_count <= 0)
+		return;
+
+	for (index = 0; index < SILEGO_GPIO_MAX; index++) {
+		if (ctrl->silego.irq[index] <= 0) {
+			dev_warn(dev, "%s no available irq for gpio: %d",
+				__func__, ctrl->silego.gpio_array[index].gpio);
+		} else if (index == SILEGO_SW_HALT) {
+			gpio_free(ctrl->silego.gpio_array[index].gpio);
+		} else
+			free_irq(ctrl->silego.irq[index], dev);
+	}
+
+	for (index = 0; index < CAP_SENSE_GPIO_MAX; index++) {
+		if (ctrl->cap_sense.irq[index] <= 0) {
+			dev_warn(dev, "%s no available irq for gpio: %d",
+				__func__, ctrl->cap_sense.irq[index]);
+		} else
+			free_irq(ctrl->cap_sense.irq[index], dev);
+	}
+}
+
+static int lm36011_init_pinctrl(struct device *dev)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	ctrl->pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR_OR_NULL(ctrl->pinctrl)) {
+		dev_err(dev, "getting pinctrl handle failed");
+		return -EINVAL;
+	}
+
+	ctrl->gpio_init_state =
+		pinctrl_lookup_state(ctrl->pinctrl,
+				"lm36011_init");
+	if (IS_ERR_OR_NULL(ctrl->gpio_init_state)) {
+		dev_err(dev,
+			"failed to get the gpio init state pinctrl handle");
+		return -EINVAL;
+	}
+
+	if (pinctrl_select_state(
+		ctrl->pinctrl,
+		ctrl->gpio_init_state) < 0) {
+		dev_err(dev,
+			"failed to set gpio state");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int lm36011_get_gpio_info(struct device *dev)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	int16_t gpio_array_size = 0, index;
+
+	gpio_array_size = of_gpio_count(dev->of_node);
+	ctrl->gpio_count = gpio_array_size;
+
+	if (gpio_array_size <= 0)
+		return 0;
+
+	if (gpio_array_size > (SILEGO_GPIO_MAX + CAP_SENSE_GPIO_MAX)) {
+		dev_err(dev, "too many gpio defined, max num: %d",
+			(SILEGO_GPIO_MAX + CAP_SENSE_GPIO_MAX));
+		return -EINVAL;
+	}
+
+	ctrl->silego.gpio_array = devm_kzalloc(dev,
+		sizeof(struct gpio)*SILEGO_GPIO_MAX, GFP_KERNEL);
+	if (!ctrl->silego.gpio_array) {
+		dev_err(dev, "no memory for silego gpio");
+		return -ENOMEM;
+	}
+
+	ctrl->cap_sense.gpio_array = devm_kzalloc(dev,
+		sizeof(struct gpio)*CAP_SENSE_GPIO_MAX, GFP_KERNEL);
+	if (!ctrl->silego.gpio_array) {
+		dev_err(dev, "no memory for cap sense gpio");
+		return -ENOMEM;
+	}
+
+	if (lm36011_init_pinctrl(dev) < 0) {
+		dev_err(dev, "failed to init gpio state");
+		return -EFAULT;
+	}
+
+	for (index = 0; index < gpio_array_size; index++) {
+		if (index < SILEGO_GPIO_MAX) {
+			ctrl->silego.gpio_array[index].gpio =
+				of_get_gpio(dev->of_node, index);
+			ctrl->silego.irq[index] =
+				gpio_to_irq(
+					ctrl->silego.gpio_array[index].gpio);
+		} else {
+			ctrl->cap_sense.gpio_array[0].gpio =
+				of_get_gpio(dev->of_node, index);
+			ctrl->cap_sense.irq[0] =
+				gpio_to_irq(
+					ctrl->cap_sense.gpio_array[0].gpio);
+		}
+	}
+
+	return 0;
+}
+
 static int lm36011_parse_dt(struct device *dev)
 {
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
@@ -448,6 +703,11 @@ static int lm36011_parse_dt(struct device *dev)
 		return -ENOENT;
 	}
 	ctrl->cap_sense.sid = value;
+
+	if (lm36011_get_gpio_info(dev)) {
+		dev_err(dev, "failed to parse gpio and irq info");
+		return -EFAULT;
+	}
 
 	return 0;
 }
@@ -524,10 +784,20 @@ static ssize_t led_laser_enable_store(struct device *dev,
 			mutex_unlock(&ctrl->cam_sensor_mutex);
 			return rc;
 		}
+		if (ctrl->type == LASER_FLOOD)
+			lm36011_enable_gpio_irq(dev);
+
 		rc = lm36011_write_data(ctrl,
 			ENABLE_REG, IR_ENABLE_MODE);
-	} else
+	} else {
+		if (ctrl->type == LASER_FLOOD)
+			lm36011_disable_gpio_irq(dev);
+
 		rc = lm36011_power_down(ctrl);
+	}
+	ctrl->silego.vcsel_fault_count = 0;
+	ctrl->silego.is_vcsel_fault = false;
+	ctrl->silego.is_csense_halt = false;
 	mutex_unlock(&ctrl->cam_sensor_mutex);
 
 	return rc < 0 ? rc : count;
@@ -643,6 +913,39 @@ static ssize_t is_silego_validated_show(struct device *dev,
 	return rc;
 }
 
+static ssize_t silego_vcsel_fault_detected_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->silego.is_vcsel_fault);
+	return rc;
+}
+
+static ssize_t silego_vcsel_fault_count_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->silego.vcsel_fault_count);
+	return rc;
+}
+
+static ssize_t silego_is_cap_sense_halt_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	rc = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->silego.is_csense_halt);
+	return rc;
+}
+
 static ssize_t is_certified_show(struct device *dev,
 	struct device_attribute *attr,
 	char *buf)
@@ -665,6 +968,9 @@ static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
 static DEVICE_ATTR_WO(led_laser_write_byte);
 static DEVICE_ATTR_RO(is_silego_validated);
+static DEVICE_ATTR_RO(silego_vcsel_fault_detected);
+static DEVICE_ATTR_RO(silego_vcsel_fault_count);
+static DEVICE_ATTR_RO(silego_is_cap_sense_halt);
 static DEVICE_ATTR_RO(is_certified);
 static DEVICE_ATTR_RO(is_cap_sense_validated);
 
@@ -673,6 +979,9 @@ static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_read_byte.attr,
 	&dev_attr_led_laser_write_byte.attr,
 	&dev_attr_is_silego_validated.attr,
+	&dev_attr_silego_vcsel_fault_detected.attr,
+	&dev_attr_silego_vcsel_fault_count.attr,
+	&dev_attr_silego_is_cap_sense_halt.attr,
 	&dev_attr_is_certified.attr,
 	&dev_attr_is_cap_sense_validated.attr,
 	NULL
@@ -778,6 +1087,9 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->is_probed = false;
 	ctrl->silego.is_power_up = false;
 	ctrl->silego.is_validated = false;
+	ctrl->silego.is_vcsel_fault = false;
+	ctrl->silego.is_csense_halt = false;
+	ctrl->silego.vcsel_fault_count = 0;
 	ctrl->cap_sense.is_validated = false;
 
 	ctrl->io_master_info.cci_client = devm_kzalloc(&pdev->dev,
