@@ -55,6 +55,9 @@ struct gbms_chg_profile {
 
 #define GBMS_CS_FLAG_BUCK_EN    (1 << 0)
 #define GBMS_CS_FLAG_DONE       (1 << 1)
+#define GBMS_CS_FLAG_CC       	(1 << 2)
+#define GBMS_CS_FLAG_CV       	(1 << 3)
+#define GBMS_CS_FLAG_ILIM       (1 << 4)
 
 union gbms_charger_state {
 	uint64_t v;
@@ -80,9 +83,13 @@ void gbms_free_chg_profile(struct gbms_chg_profile *profile);
 void gbms_dump_raw_profile(const struct gbms_chg_profile *profile, int scale);
 #define gbms_dump_chg_profile(profile) gbms_dump_raw_profile(profile, 1000)
 
-
 int gbms_msc_temp_idx(const struct gbms_chg_profile *profile, int temp);
 int gbms_msc_voltage_idx(const struct gbms_chg_profile *profile, int vbatt);
 int gbms_msc_round_fv_uv(const struct gbms_chg_profile *profile,
 			   int vtier, int fv_uv);
+
+/* debug/print */
+const char *gbms_chg_type_s(int chg_type);
+const char *gbms_chg_status_s(int chg_status);
+
 #endif  /* __GOOGLE_BMS_H_ */
