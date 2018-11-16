@@ -17,7 +17,12 @@
 
 static inline void *__scs_base(struct task_struct *tsk)
 {
-	return (void *)((uintptr_t)task_scs(tsk) & ~(SCS_SIZE - 1));
+	return task_thread_info(tsk)->shadow_call_stack_base;
+}
+
+static inline void scs_set_base(struct task_struct *tsk, void *s)
+{
+	task_thread_info(tsk)->shadow_call_stack_base = s;
 }
 
 static inline void *scs_alloc(int node)
@@ -48,10 +53,12 @@ static inline void scs_set_magic(struct task_struct *tsk)
 void scs_task_init(struct task_struct *tsk)
 {
 	task_set_scs(tsk, NULL);
+	scs_set_base(tsk, NULL);
 }
 
 void scs_set_init_magic(struct task_struct *tsk)
 {
+	scs_set_base(tsk, init_shadow_call_stack);
 	scs_save(tsk);
 	scs_set_magic(tsk);
 	scs_load(tsk);
@@ -72,6 +79,7 @@ int scs_prepare(struct task_struct *tsk, int node)
 		return -ENOMEM;
 
 	task_set_scs(tsk, s);
+	scs_set_base(tsk, s);
 	scs_set_magic(tsk);
 	scs_account(tsk, 1);
 
@@ -116,9 +124,39 @@ static inline void scs_check_usage(struct task_struct *tsk)
 }
 #endif
 
+static void scs_dump(struct task_struct *tsk)
+{
+	unsigned long *base = __scs_base(tsk);
+	unsigned long *p = scs_magic(tsk);
+	bool skipping = false;
+
+	pr_err("dumping shadow stack for PID %d (%.20s)\n", tsk->pid,
+		tsk->comm);
+	pr_err("%px: [<%px>] %pF [magic]\n", p, (void *)*p, (void *)*p);
+
+	while (--p >= base) {
+		if (!*p) {
+			if (!skipping)
+				pr_err("...\n");
+
+			skipping = true;
+			continue;
+		}
+
+		pr_err("%px: [<%px>] %pF\n", p, (void *)*p, (void *)*p);
+		skipping = false;
+	}
+}
+
 bool scs_corrupted(struct task_struct *tsk)
 {
-	return *scs_magic(tsk) != SCS_END_MAGIC;
+	if (unlikely(*scs_magic(tsk) != SCS_END_MAGIC)) {
+		pr_err("invalid shadow stack magic detected\n");
+		scs_dump(tsk);
+		return true;
+	}
+
+	return false;
 }
 
 void scs_release(struct task_struct *tsk)
