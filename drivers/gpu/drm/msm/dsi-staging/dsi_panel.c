@@ -19,6 +19,7 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <video/mipi_display.h>
+#include <video/display_timing.h>
 
 #include "dsi_panel.h"
 #include "dsi_ctrl_hw.h"
@@ -2862,6 +2863,69 @@ end:
 	utils->node = panel->panel_of_node;
 }
 
+static int drm_panel_get_timings(struct drm_panel *panel,
+				 unsigned int num_timings,
+				 struct display_timing *timings)
+{
+	struct dsi_panel *p = container_of(panel, struct dsi_panel, drm_panel);
+	unsigned int i;
+	int rc = 0;
+
+	if (p->num_timing_nodes < num_timings)
+		num_timings = p->num_timing_nodes;
+
+	if (timings)
+		for (i = 0; i < num_timings; i++) {
+			struct display_timing *t = &timings[i];
+			struct dsi_display_mode m;
+			rc = dsi_panel_get_mode(p, i, &m, -1);
+			if (rc)
+				break;
+
+			t->pixelclock.typ = m.pixel_clk_khz;
+			t->hactive.typ = m.timing.h_active;
+			t->hfront_porch.typ = m.timing.h_front_porch;
+			t->hback_porch.typ = m.timing.h_back_porch;
+			t->hsync_len.typ = m.timing.h_sync_width;
+			t->vactive.typ = m.timing.v_active;
+			t->vfront_porch.typ = m.timing.v_front_porch;
+			t->vback_porch.typ = m.timing.v_back_porch;
+			t->vsync_len.typ = m.timing.v_sync_width;
+			t->flags = m.timing.h_sync_polarity ?
+				   DISPLAY_FLAGS_HSYNC_HIGH :
+				   DISPLAY_FLAGS_HSYNC_LOW |
+				   m.timing.v_sync_polarity ?
+				   DISPLAY_FLAGS_VSYNC_HIGH :
+				   DISPLAY_FLAGS_VSYNC_LOW;
+
+			t->pixelclock.max = t->pixelclock.typ;
+			t->hactive.max = t->hactive.typ;
+			t->hfront_porch.max = t->hfront_porch.typ;
+			t->hback_porch.max = t->hback_porch.typ;
+			t->hsync_len.max = t->hsync_len.typ;
+			t->vactive.max = t->vactive.typ;
+			t->vfront_porch.max = t->vfront_porch.typ;
+			t->vback_porch.max = t->vback_porch.typ;
+			t->vsync_len.max = t->vsync_len.typ;
+
+			t->pixelclock.min = t->pixelclock.typ;
+			t->hactive.min = t->hactive.typ;
+			t->hfront_porch.min = t->hfront_porch.typ;
+			t->hback_porch.min = t->hback_porch.typ;
+			t->hsync_len.min = t->hsync_len.typ;
+			t->vactive.min = t->vactive.typ;
+			t->vfront_porch.min = t->vfront_porch.typ;
+			t->vback_porch.min = t->vback_porch.typ;
+			t->vsync_len.min = t->vsync_len.typ;
+		}
+
+	return rc ?: p->num_timing_nodes;
+}
+
+static const struct drm_panel_funcs drm_panel_funcs = {
+	.get_timings = drm_panel_get_timings,
+};
+
 struct dsi_panel *dsi_panel_get(struct device *parent,
 				struct device_node *of_node,
 				struct device_node *parser_node,
@@ -2957,6 +3021,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	drm_panel_init(&panel->drm_panel);
 	panel->drm_panel.dev = &panel->mipi_device.dev;
 	panel->mipi_device.dev.of_node = of_node;
+	panel->drm_panel.funcs = &drm_panel_funcs;
 
 	rc = drm_panel_add(&panel->drm_panel);
 	if (rc)
