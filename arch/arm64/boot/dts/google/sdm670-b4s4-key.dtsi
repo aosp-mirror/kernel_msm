@@ -43,4 +43,11 @@
 			debounce-interval = <15>;
 		};
 	};
+
+	keydebug {
+		compatible = "keydebug";
+		key_down_delay = <7000>;
+		keys_down = <116>;
+		dbg_fn_delay = <2500>;
+	};
 };
