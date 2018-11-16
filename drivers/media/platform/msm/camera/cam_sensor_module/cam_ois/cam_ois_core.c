@@ -443,15 +443,13 @@ release_firmware:
 
 /**
  * cam_ois_shift_data_enqueue - enqueue shift data to ring buffer
- * @time_readout:       ctrl structure
- * @shift_x:            shift in x
- * @shift_y:            shift in y
- * @buffer:             rint buffer
+ * @o_shift_data:       ois shift data
+ * @o_ctrl:             ctrl structure
  *
  * Returns success or failure
  */
-static int cam_ois_shift_data_enqueue(int64_t time_readout, int16_t shift_x,
-	int16_t shift_y, struct cam_ois_ctrl_t *o_ctrl)
+static int cam_ois_shift_data_enqueue(struct cam_ois_shift *o_shift_data,
+	struct cam_ois_ctrl_t *o_ctrl)
 {
 	int rc = 0;
 
@@ -466,9 +464,11 @@ static int cam_ois_shift_data_enqueue(int64_t time_readout, int16_t shift_x,
 		struct cam_ois_shift *pb =
 			&o_ctrl->buf.buffer[o_ctrl->buf.write_pos];
 
-		pb->time_readout = time_readout;
-		pb->ois_shift_x = shift_x;
-		pb->ois_shift_y = shift_y;
+		pb->time_readout = o_shift_data->time_readout;
+		pb->ois_shift_x = o_shift_data->ois_shift_x;
+		pb->ois_shift_y = o_shift_data->ois_shift_y;
+		pb->af_shift_z = o_shift_data->af_shift_z;
+		pb->af_ois_xtalk_z = o_shift_data->af_ois_xtalk_z;
 		o_ctrl->buf.write_pos++;
 		if (o_ctrl->buf.write_pos == CAM_OIS_SHIFT_DATA_BUFFER_SIZE) {
 			o_ctrl->buf.write_pos = 0;
@@ -487,11 +487,10 @@ static int cam_ois_shift_data_enqueue(int64_t time_readout, int16_t shift_x,
  */
 static void cam_ois_read_work(struct work_struct *work)
 {
-	uint8_t buf[8] = { 0 };
+	uint8_t buf[12] = { 0 };
 	int32_t rc = 0;
-	int16_t shift_x, shift_y;
 	struct timespec ts;
-	int64_t time_readout;
+	struct cam_ois_shift ois_shift_data;
 	struct cam_ois_timer_t *ois_timer_in;
 
 	ois_timer_in = container_of(work, struct cam_ois_timer_t, g_work);
@@ -517,6 +516,20 @@ static void cam_ois_read_work(struct work_struct *work)
 			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 	}
 
+	// For AF position readout lower the frequency to 10Hz.
+	ois_timer_in->o_ctrl->buf.af_read_times++;
+	if (!(ois_timer_in->o_ctrl->buf.af_read_times % 20)) {
+		rc = camera_io_dev_read_seq(
+			&ois_timer_in->o_ctrl->io_master_info,
+			0x0758, &buf[8], CAMERA_SENSOR_I2C_TYPE_WORD,
+			CAMERA_SENSOR_I2C_TYPE_WORD, 2);
+		rc = camera_io_dev_read_seq(
+			&ois_timer_in->o_ctrl->io_master_info,
+			0x0764, &buf[10], CAMERA_SENSOR_I2C_TYPE_WORD,
+			CAMERA_SENSOR_I2C_TYPE_WORD, 2);
+		ois_timer_in->o_ctrl->buf.af_read_times = 0;
+	}
+
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
 		CAM_ERR(CAM_OIS, "read seq fail. cnt = %d",
@@ -529,12 +542,18 @@ static void cam_ois_read_work(struct work_struct *work)
 	}
 
 	ois_timer_in->i2c_fail_count = 0;
-	time_readout = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
-	shift_x = (int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
-	shift_y = (int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
+	ois_shift_data.time_readout =
+		(int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+	ois_shift_data.ois_shift_x =
+		(int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
+	ois_shift_data.ois_shift_y =
+		(int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
+	ois_shift_data.af_shift_z =
+		(int16_t)(((uint16_t)buf[8] << 8) + (uint16_t)buf[9]);
+	ois_shift_data.af_ois_xtalk_z =
+		(int16_t)(((uint16_t)buf[10] << 8) + (uint16_t)buf[11]);
 
-	rc = cam_ois_shift_data_enqueue(time_readout, shift_x,
-		shift_y, ois_timer_in->o_ctrl);
+	rc = cam_ois_shift_data_enqueue(&ois_shift_data, ois_timer_in->o_ctrl);
 	if (rc != 0)
 		CAM_ERR(CAM_OIS, "OIS shift data enqueue failed");
 }
@@ -632,6 +651,7 @@ static int cam_ois_start_shift_reader(struct cam_ois_ctrl_t *o_ctrl)
 
 	mutex_lock(&o_ctrl->ois_shift_mutex);
 	o_ctrl->buf.write_pos = 0;
+	o_ctrl->buf.af_read_times = 0;
 	o_ctrl->buf.is_full = false;
 	mutex_unlock(&o_ctrl->ois_shift_mutex);
 
