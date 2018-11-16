@@ -672,7 +672,7 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			 * see JEDEC JESD84-B51 section 7.4.19
 			 */
 			card->ext_csd.cmdq_depth =
-				ext_csd[EXT_CSD_CMDQ_DEPTH] + 1;
+				min(ext_csd[EXT_CSD_CMDQ_DEPTH] + 1, 16);
 			pr_info("%s: CMDQ supported: depth: %d\n",
 				mmc_hostname(card->host),
 				card->ext_csd.cmdq_depth);
