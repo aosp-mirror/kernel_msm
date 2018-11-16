@@ -48,6 +48,7 @@
 };
 
 &usb0 {
+	google,switch-vbus = <500>;
 	dwc3@a600000 {
 		maximum-speed = "super-speed";
 	};
