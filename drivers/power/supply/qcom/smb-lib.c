@@ -4145,10 +4145,6 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 		if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB
 						|| chg->use_extcon)
 			smblib_notify_device_mode(chg, true);
-		if (apsd_result->bit == CDP_CHARGER_BIT) {
-			schedule_delayed_work(&chg->aicl_rerun_work,
-				msecs_to_jiffies(AICL_RERUN_DELAY_MS));
-		}
 		break;
 	case OCP_CHARGER_BIT:
 	case FLOAT_CHARGER_BIT:
@@ -4170,6 +4166,9 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 	default:
 		break;
 	}
+
+	schedule_delayed_work(&chg->aicl_rerun_work,
+				msecs_to_jiffies(AICL_RERUN_DELAY_MS));
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: apsd-done rising; %s detected\n",
 		   apsd_result->name);
