@@ -47,6 +47,7 @@
 /* defines the timeout in jiffies for ADC conversion completion */
 #define S2MPB04_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
+static int s2mpb04_prepare_pon(struct s2mpb04_core *ddata);
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata);
 static int s2mpb04_core_fixup(struct s2mpb04_core *ddata);
 static void s2mpb04_print_status(struct s2mpb04_core *ddata);
@@ -80,6 +81,10 @@ int s2mpb04_toggle_pon(struct s2mpb04_core *ddata)
 	reinit_completion(&ddata->init_complete);
 
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
+
+	/* force state machine in low power state */
+	s2mpb04_prepare_pon(ddata);
+
 	usleep_range(20, 25);
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
 
@@ -588,6 +593,25 @@ static int s2mpb04_core_fixup(struct s2mpb04_core *ddata)
 	return 0;
 }
 
+/* Force state machine in low power state. This should be state machine's
+ * state when PON=0 and BUV (battery under volatge)=0. But, when LDO OI
+ * issue happens, it's stuck in power-down state.
+ *
+ * In low power state, PON 0 -> 1 toggle will initiate power-up sequence
+ * and reload register values from OTP. So, this function should be called
+ * when PON is set to 0.
+ */
+static int s2mpb04_prepare_pon(struct s2mpb04_core *ddata)
+{
+	dev_info(ddata->dev, "%s: applying workaround for LDO OI issue\n",
+		 __func__);
+
+	s2mpb04_write_byte(ddata, S2MPB04_REG_SEQ1, 0x66);
+	s2mpb04_write_byte(ddata, S2MPB04_REG_SEQ2, 0x66);
+
+	return 0;
+}
+
 /* initialize the chip */
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata)
 {
@@ -670,6 +694,9 @@ static int s2mpb04_probe(struct i2c_client *client,
 
 	/* initialize chip */
 	s2mpb04_chip_init(ddata);
+
+	/* force state machine in low power state */
+	s2mpb04_prepare_pon(ddata);
 
 	for (i = 0; i < S2MPB04_PON_RETRY_CNT; i++) {
 		dev_dbg(dev, "%s: powering on s2mpb04\n", __func__);
