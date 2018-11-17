@@ -2483,10 +2483,10 @@ static int cs40l2x_refclk_switch(struct cs40l2x_private *cs40l2x,
 			CS40L2X_PLL_REFCLK_SEL_MCLK :
 			CS40L2X_PLL_REFCLK_SEL_BCLK;
 
-	for (i = 0; i < CS40L2X_NUM_PLL_REFCLK_FREQ; i++)
-		if (cs40l2x_pll_refclk_freq[i] == refclk_freq)
+	for (i = 0; i < CS40L2X_NUM_REFCLKS; i++)
+		if (cs40l2x_refclks[i].freq == refclk_freq)
 			break;
-	if (i == CS40L2X_NUM_PLL_REFCLK_FREQ)
+	if (i == CS40L2X_NUM_REFCLKS)
 		return -EINVAL;
 
 	pll_config = ((1 << CS40L2X_PLL_REFCLK_EN_SHIFT)
@@ -5195,15 +5195,6 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
 	unsigned int asp_frame_cfg = 0;
 	int ret, i;
 
-	for (i = 0; i < CS40L2X_NUM_PLL_REFCLK_FREQ; i++)
-		if (cs40l2x_pll_refclk_freq[i] == asp_bclk_freq)
-			break;
-	if (i == CS40L2X_NUM_PLL_REFCLK_FREQ) {
-		dev_err(dev, "Invalid ASP_BCLK frequency: %d Hz\n",
-				asp_bclk_freq);
-		return -EINVAL;
-	}
-
 	if (asp_bclk_freq % asp_slot_width
 			|| asp_slot_width < CS40L2X_ASP_RX_WIDTH_MIN
 			|| asp_slot_width > CS40L2X_ASP_RX_WIDTH_MAX) {
@@ -5244,6 +5235,43 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
 	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_ENABLES, 0);
 	if (ret) {
 		dev_err(dev, "Failed to sequence ASP enable controls\n");
+		return ret;
+	}
+
+	for (i = 0; i < CS40L2X_NUM_REFCLKS; i++)
+		if (cs40l2x_refclks[i].freq == asp_bclk_freq)
+			break;
+	if (i == CS40L2X_NUM_REFCLKS) {
+		dev_err(dev, "Invalid ASP_BCLK frequency: %d Hz\n",
+				asp_bclk_freq);
+		return -EINVAL;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_SP_RATE_CTRL,
+			CS40L2X_ASP_BCLK_FREQ_MASK,
+			i << CS40L2X_ASP_BCLK_FREQ_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write ASP_BCLK frequency\n");
+		return ret;
+	}
+
+	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_SP_RATE_CTRL,
+			i << CS40L2X_ASP_BCLK_FREQ_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to sequence ASP_BCLK frequency\n");
+		return ret;
+	}
+
+	ret = regmap_write(regmap, CS40L2X_FS_MON_0, cs40l2x_refclks[i].coeff);
+	if (ret) {
+		dev_err(dev, "Failed to write ASP coefficients\n");
+		return ret;
+	}
+
+	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_FS_MON_0,
+			cs40l2x_refclks[i].coeff);
+	if (ret) {
+		dev_err(dev, "Failed to sequence ASP coefficients\n");
 		return ret;
 	}
 

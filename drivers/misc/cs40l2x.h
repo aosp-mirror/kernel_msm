@@ -55,6 +55,7 @@
 #define CS40L2X_DSP_CLK_CTRL		0x00002C08
 #define CS40L2X_GLOBAL_CLK_CTRL		0x00002C0C
 #define CS40L2X_DATA_FS_SEL		0x00002C10
+#define CS40L2X_FS_MON_0		0x00002D10
 #define CS40L2X_PLL_LOOP_PARAM		0x00003008
 #define CS40L2X_PLL_MISC_CTRL		0x00003014
 #define CS40L2X_MDSYNC_EN		0x00003400
@@ -611,7 +612,7 @@
 #define CS40L2X_PLL_REFCLK_FREQ_MASK	0x000007E0
 #define CS40L2X_PLL_REFCLK_FREQ_SHIFT	5
 #define CS40L2X_PLL_REFCLK_FREQ_32K	32768
-#define CS40L2X_NUM_PLL_REFCLK_FREQ	64
+#define CS40L2X_NUM_REFCLKS		64
 
 #define CS40L2X_PLL_REFCLK_SEL_MASK	0x00000007
 #define CS40L2X_PLL_REFCLK_SEL_SHIFT	0
@@ -620,6 +621,9 @@
 
 #define CS40L2X_ASP_RX1_EN_MASK		0x00010000
 #define CS40L2X_ASP_RX1_EN_SHIFT	16
+
+#define CS40L2X_ASP_BCLK_FREQ_MASK	0x0000003F
+#define CS40L2X_ASP_BCLK_FREQ_SHIFT	0
 
 #define CS40L2X_ASP_RX_WIDTH_MASK	0xFF000000
 #define CS40L2X_ASP_RX_WIDTH_SHIFT	24
@@ -1069,6 +1073,11 @@ struct cs40l2x_dblk_desc {
 	unsigned int reg;
 };
 
+struct cs40l2x_refclk_pair {
+	unsigned int freq;
+	unsigned int coeff;
+};
+
 extern const unsigned char cs40l2x_bst_k1_table[4][5];
 extern const unsigned char cs40l2x_bst_k2_table[4][5];
 extern const unsigned char cs40l2x_bst_slope_table[4];
@@ -1081,6 +1090,6 @@ extern const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS];
 
 extern const struct cs40l2x_hw_err_desc cs40l2x_hw_errs[CS40L2X_NUM_HW_ERRS];
 
-extern const unsigned int cs40l2x_pll_refclk_freq[CS40L2X_NUM_PLL_REFCLK_FREQ];
+extern const struct cs40l2x_refclk_pair cs40l2x_refclks[CS40L2X_NUM_REFCLKS];
 
 #endif /*__CS40L2X_H__*/
