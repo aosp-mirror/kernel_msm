@@ -37,7 +37,6 @@
 #include <linux/ab-dram.h>
 #include <uapi/abc-pcie-dma.h>
 #include "../../mfd/abc-pcie-dma.h"
-#define OSCAR_DMA_CHAN 1
 
 #define DRIVER_NAME "abc-pcie-tpu"
 #define DRIVER_VERSION "0.3"
@@ -362,12 +361,12 @@ static int oscar_abc_sync_buffer(struct oscar_dev *oscar_dev,
 		return -EINVAL;
 	abc_dma_desc.local_buf_type = DMA_BUFFER_USER;
 	abc_dma_desc.local_buf = (void *)ibuf.host_address;
-	abc_dma_desc.local_buf_size = ibuf.len;
 	abc_dma_desc.remote_buf_type = DMA_BUFFER_DMA_BUF;
 	abc_dma_desc.remote_dma_buf_fd = ibuf.fd;
+	abc_dma_desc.remote_dma_buf_off = 0;
 	abc_dma_desc.dir = ibuf.cmd == OSCAR_SYNC_FROM_BUFFER ?
 		DMA_FROM_DEVICE : DMA_TO_DEVICE;
-	abc_dma_desc.chan = OSCAR_DMA_CHAN;
+	abc_dma_desc.size = ibuf.len;
 	ret = abc_pcie_issue_dma_xfer(&abc_dma_desc);
 
 	abc_put_buffer(abc_buffer);

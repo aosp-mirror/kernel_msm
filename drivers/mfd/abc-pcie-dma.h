@@ -140,6 +140,9 @@ int abc_pcie_sg_verify(struct abc_pcie_sg_entry *sg, size_t size,
  * API to build a scatter-gather list for multi-block DMA transfer for a
  * dma_buf
  * @param[in] fd   Handle of dma_buf passed from user
+ * @param[in] off  Offset within dma_buf to begin building scatter-gather list
+ *                 from.
+ * @param[in] size Size, in bytes, of transfer.
  * @param[out] sg  Array of maxsg pointers to struct abc_pcie_sg_entry,
  *                 allocated and filled out by this routine.
  * @param[out] sgl pointer of Scatter gather list which has information of
@@ -147,7 +150,8 @@ int abc_pcie_sg_verify(struct abc_pcie_sg_entry *sg, size_t size,
  * @return 0        on SUCCESS
  *         negative on failure
  */
-int abc_pcie_sg_retrieve_from_dma_buf(int fd, struct abc_pcie_sg_entry **sg,
+int abc_pcie_sg_retrieve_from_dma_buf(int fd, uint64_t off, uint64_t size,
+				      struct abc_pcie_sg_entry **sg,
 				      struct abc_pcie_sg_list *sgl);
 
 /**

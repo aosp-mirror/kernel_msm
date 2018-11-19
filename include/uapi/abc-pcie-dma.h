@@ -22,7 +22,7 @@ enum dma_buf_type {
 	DMA_BUFFER_DMA_BUF
 };
 
-struct abc_pcie_dma_desc {
+struct abc_pcie_dma_desc_legacy {
 	enum dma_buf_type local_buf_type; /* local buffer type (DMA/user) */
 	union {
 		void __user *local_buf; /* local buffer address */
@@ -44,7 +44,29 @@ struct abc_pcie_dma_desc {
 	uint8_t chan; /* dma channel to be used */
 };
 
-#define ABC_PCIE_DMA_IOC_POST_DMA_XFER					\
-	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 1, struct abc_pcie_dma_desc *)
+struct abc_pcie_dma_desc {
+	enum dma_buf_type local_buf_type; /* local buffer type (DMA/user) */
+	union {
+		void __user *local_buf; /* local buffer address */
+		int local_dma_buf_fd; /* local DMA buffer file descriptor */
+	};
+	uint64_t local_dma_buf_off; /* offset within dma buf to xfer from/to */
+
+	enum dma_buf_type remote_buf_type;
+	union {
+		uint64_t remote_buf; /* remote buffer virtual address */
+		int remote_dma_buf_fd; /* remote DMA buffer file descriptor */
+	};
+	uint64_t remote_dma_buf_off; /* offset within dma buf to xfer from/to */
+
+	uint64_t size; /* number of bytes to transfer */
+	enum dma_data_direction dir; /* direction of the DMA transfer */
+};
+
+#define ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY				\
+	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 1, struct abc_pcie_dma_desc_legacy *)
+
+#define ABC_PCIE_DMA_IOC_POST_DMA_XFER_SYNC				\
+	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 2, struct abc_pcie_dma_desc)
 
 #endif /* _UAPI__ABC_PCIE_DMA_H */

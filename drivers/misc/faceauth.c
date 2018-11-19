@@ -266,15 +266,14 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 	/* Transfer workload to target memory in Airbrush */
 	memset((void *)&dma_desc, 0, sizeof(dma_desc));
 	dma_desc.local_buf = buf;
-	dma_desc.local_buf_size = size;
 	dma_desc.local_buf_type = DMA_BUFFER_USER;
 	dma_desc.remote_buf = remote_addr;
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
+	dma_desc.size = size;
 	dma_desc.dir = dir;
-	dma_desc.chan = 1;
 	pr_info("MBLK AP src = %pK; AB dest = %pK; size = %d\n",
 		(unsigned long)dma_desc.local_buf,
-		(unsigned long)dma_desc.remote_buf, dma_desc.local_buf_size);
+		(unsigned long)dma_desc.remote_buf, dma_desc.size);
 	err = abc_pcie_issue_dma_xfer(&dma_desc);
 	return err;
 }
@@ -297,15 +296,14 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 	/* Transfer workload to target memory in Airbrush */
 	memset((void *)&dma_desc, 0, sizeof(dma_desc));
 	dma_desc.local_buf = buf;
-	dma_desc.local_buf_size = size;
 	dma_desc.local_buf_type = DMA_BUFFER_USER;
 	dma_desc.remote_buf = remote_addr;
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
+	dma_desc.size = size;
 	dma_desc.dir = dir;
-	dma_desc.chan = 1;
 	pr_info("MBLK AP src = %pK; AB dest = %pK; size = %d\n",
 		(unsigned long)dma_desc.local_buf,
-		(unsigned long)dma_desc.remote_buf, dma_desc.local_buf_size);
+		(unsigned long)dma_desc.remote_buf, dma_desc.size);
 	err = abc_pcie_issue_dma_xfer_vmalloc(&dma_desc);
 	return err;
 }
