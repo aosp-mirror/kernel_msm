@@ -959,6 +959,12 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 		dev_err(hba->dev, " queue_depth = %u\n",
 					hba->sdev_ufs_device->queue_depth);
 	}
+	dev_err(hba->dev, " pre_eol_info = 0x%x\n",
+		hba->dev_info.pre_eol_info);
+	dev_err(hba->dev, " LifeTimeA = 0x%x\n",
+		hba->dev_info.lifetime_a);
+	dev_err(hba->dev, " LifeTimeB = 0x%x\n",
+		hba->dev_info.lifetime_b);
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_tasks, hba->outstanding_reqs);
 	dev_err(hba->dev, "saved_err=0x%x, saved_uic_err=0x%x, saved_ce_err=0x%x\n",
@@ -5284,6 +5290,9 @@ static inline void ufshcd_get_lu_power_on_wp_status(struct ufs_hba *hba,
 static int ufshcd_slave_alloc(struct scsi_device *sdev)
 {
 	struct ufs_hba *hba;
+	int err;
+	int buff_len = QUERY_DESC_HEALTH_MAX_SIZE;
+	u8 desc_buf[QUERY_DESC_HEALTH_MAX_SIZE];
 
 	hba = shost_priv(sdev->host);
 
@@ -5302,6 +5311,13 @@ static int ufshcd_slave_alloc(struct scsi_device *sdev)
 	ufshcd_set_queue_depth(sdev);
 
 	ufshcd_get_lu_power_on_wp_status(hba, sdev);
+
+	err = ufshcd_read_health_desc(hba, desc_buf, buff_len);
+	if (!err) {
+		hba->dev_info.pre_eol_info = (u8)desc_buf[2];
+		hba->dev_info.lifetime_a = (u8)desc_buf[3];
+		hba->dev_info.lifetime_b = (u8)desc_buf[4];
+	}
 
 	return 0;
 }

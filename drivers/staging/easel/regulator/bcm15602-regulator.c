@@ -49,7 +49,7 @@
 /* defines the timeout in jiffies for ADC conversion completion */
 #define BCM15602_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
-#define BCM15602_PANIC_ON_RESETB_DEFAULT 1
+#define BCM15602_PANIC_ON_RESETB_DEFAULT 0
 
 static int bcm15602_chip_init(struct bcm15602_chip *ddata);
 static int bcm15602_regulator_set_voltage(struct regulator_dev *rdev,

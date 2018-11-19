@@ -2988,7 +2988,7 @@ static int msm_cpp_copy_from_ioctl_ptr(void *dst_ptr,
 	}
 
 	/* Some of the data is already in kernel space */
-	if ((uintptr_t)ioctl_ptr->ioctl_ptr >= USER_DS) {
+	if (untagged_addr((uintptr_t)ioctl_ptr->ioctl_ptr) >= USER_DS) {
 		memcpy(dst_ptr, ioctl_ptr->ioctl_ptr, ioctl_ptr->len);
 		ret = 0;
 	} else {
