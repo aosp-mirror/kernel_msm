@@ -437,6 +437,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if (!map)
 		return -EINVAL;
 
+	dev_info(sc->dev, "AB state changing to %d\n", to_chip_substate_id);
+
 	if ((sc->curr_chip_substate_id == CHIP_STATE_6_0 ||
 	   sc->curr_chip_substate_id == CHIP_STATE_5_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0) {
@@ -546,6 +548,33 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	mutex_unlock(&sc->async_fifo_lock);
 
 	complete_all(&sc->state_change_comp);
+
+	dev_info(sc->dev, "AB state changed to %d\n", to_chip_substate_id);
+	dev_dbg(sc->dev, "IPU clk -> %s %dHz",
+		sc->blocks[BLK_IPU].current_state->clk_status == on ?
+			"on" : "off",
+		sc->blocks[BLK_IPU].current_state->clk_frequency);
+	dev_dbg(sc->dev, "TPU clk -> %s %dHz",
+		sc->blocks[BLK_TPU].current_state->clk_status == on ?
+			"on" : "off",
+		sc->blocks[BLK_TPU].current_state->clk_frequency);
+	dev_dbg(sc->dev, "DRAM clk -> %s %dHz",
+		sc->blocks[DRAM].current_state->clk_status == on ?
+			"on" : "off",
+		sc->blocks[DRAM].current_state->clk_frequency);
+	dev_dbg(sc->dev, "MIF clk -> %s %dHz",
+		sc->blocks[BLK_MIF].current_state->clk_status == on ?
+			"on" : "off",
+		sc->blocks[BLK_MIF].current_state->clk_frequency);
+	dev_dbg(sc->dev, "FSYS clk -> %s %dHz",
+		sc->blocks[BLK_FSYS].current_state->clk_status == on ?
+			"on" : "off",
+		sc->blocks[BLK_FSYS].current_state->clk_frequency);
+	dev_dbg(sc->dev, "AON clk -> %s %dHz",
+		sc->blocks[BLK_AON].current_state->clk_status == on ?
+			"on" : "off",
+		sc->blocks[BLK_AON].current_state->clk_frequency);
+
 	return 0;
 }
 
