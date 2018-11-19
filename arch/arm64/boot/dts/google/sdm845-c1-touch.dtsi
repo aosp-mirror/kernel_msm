@@ -44,8 +44,8 @@
 		compatible = "sec,sec_ts";
 		reg = <0x48>;
 		pinctrl-names = "on_state", "off_state";
-		pinctrl-0 = <&ts_active &ts_reset_active>;
-		pinctrl-1 = <&ts_suspend>;
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend>;
 
 		sec,irq_gpio = <&tlmm 125 0>;	/* required */
 		sec,switch_gpio = <&tlmm 136 0>;

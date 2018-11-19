@@ -30,7 +30,7 @@
 		};
 	};
 	ts_mux {
-		ts_active: ts_active {
+		ts_int_active: ts_int_active {
 			mux {
 				pins = "gpio125";
 				function = "gpio";
@@ -38,10 +38,10 @@
 			config {
 				pins = "gpio125";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-disable;
 			};
 		};
-		ts_suspend: ts_suspend {
+		ts_int_suspend: ts_int_suspend {
 			mux {
 				pins = "gpio125";
 				function = "gpio";
@@ -49,7 +49,7 @@
 			config {
 				pins = "gpio125";
 				drive-strength = <2>;
-				bias-pull-up;
+				bias-disable;
 			};
 		};
 	};

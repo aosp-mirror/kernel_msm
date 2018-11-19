@@ -50,8 +50,8 @@
 		vdd-supply = <&pm8998_l14>; /* 1.8V */
 		avdd-supply = <&pm8998_l19>; /* 3.3V */
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_active &ts_reset_active>;
-		pinctrl-1 = <&ts_suspend>;
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend>;
 
 		st,irq-gpio = <&tlmm 125 0>;
 		st,reset-gpio = <&tlmm 99 0>;
