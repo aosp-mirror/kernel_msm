@@ -294,6 +294,10 @@ static void cmdq_dumpregs(struct cmdq_host *cq_host)
 	cmdq_dump_task_history(cq_host);
 	if (cq_host->ops->dump_vendor_regs)
 		cq_host->ops->dump_vendor_regs(mmc);
+
+#ifdef CONFIG_MMC_RING_BUFFER
+	mmc_dump_trace_buffer(mmc, NULL);
+#endif
 }
 
 /**
