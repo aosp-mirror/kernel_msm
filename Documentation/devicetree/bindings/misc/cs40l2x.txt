@@ -239,6 +239,24 @@ Optional properties:
     expressed in mV. Valid values range from 9000 to 12875 (inclusive) in steps
     of 125. If this value is omitted, the threshold remains at 12 V.
 
+  - cirrus,vpbr-enable : Boolean for enabling VP brownout prevention. If this
+    property is omitted, VP brownout prevention remains disabled.
+
+  - cirrus,vpbr-thld1-millivolt : Initial VP brownout prevention threshold,
+    expressed in mV. Valid values range from 2497 to 3874 (inclusive). The value
+    written to the device is quantized in steps of approximately 47.5 mV. If
+    this value is omitted, the threshold remains at 2.639 V.
+
+  - cirrus,vbbr-enable : Boolean for enabling VBST brownout prevention. If this
+    property is omitted, VBST brownout prevention remains disabled.
+
+  - cirrus,vbbr-thld1-millivolt : Initial VBST brownout prevention threshold,
+    expressed in mV. Valid values range from 109 to 1690 (inclusive). The value
+    written to the device is quantized in steps of approximately 54.5 mV. If
+    this value is omitted, the threshold remains at 0.273 V. This threshold is
+    interpreted as the difference between the target VBST level and the actual
+    measured VBST level.
+
 Examples:
 
   cs40l20: cs40l20@43 {
