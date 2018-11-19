@@ -1664,7 +1664,6 @@ bool bio_attempt_front_merge(struct request_queue *q, struct request *req,
 
 #ifdef CONFIG_PFK
 	req->__dun = bio->bi_iter.bi_dun;
-	WARN_ON(req->__dun || bio->bi_iter.bi_dun);
 #endif
 	req->__sector = bio->bi_iter.bi_sector;
 	req->__data_len += bio->bi_iter.bi_size;
