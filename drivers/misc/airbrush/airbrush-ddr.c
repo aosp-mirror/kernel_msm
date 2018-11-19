@@ -2059,8 +2059,10 @@ int ab_ddr_wait_for_ddr_init(struct ab_state_context *sc)
 
 int32_t ab_ddr_resume(struct ab_state_context *sc)
 {
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
 	/* Wait till the ddr init & training is completed */
-	if (__ab_ddr_wait_for_ddr_init((struct ab_ddr_context *)sc->ddr_data))
+	if (__ab_ddr_wait_for_ddr_init(ddr_ctx))
 		return DDR_FAIL;
 
 	if (IS_DDR_OTP_FLASHED() && (ab_get_chip_id(sc) == CHIP_ID_A0) &&
@@ -2068,9 +2070,9 @@ int32_t ab_ddr_resume(struct ab_state_context *sc)
 
 		/* IMPORTANT:
 		 * ------------------------------------------------------------
-		 *    This path should not be HIT as there are high changes
-		 * of data loss because of the below reasons. Please
-		 * avoid the below combination.
+		 * This path should not be HIT as there are high chances
+		 * of data loss because of the below reasons. Please avoid
+		 * the below combination.
 		 *  [A0 SAMPLE + DDR OTP Flashed + NORMAL BOOT + M0_DDR_INIT]
 		 *
 		 * 1] In A0 BootROM, self-refresh exit sequence is called way
@@ -2091,6 +2093,9 @@ int32_t ab_ddr_resume(struct ab_state_context *sc)
 	/* Disable the DDR_SR GPIO */
 	ab_gpio_disable_ddr_sr(sc);
 
+	/* during airbrush resume, the ddr clock is set to 1866MHz */
+	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
+
 #ifdef CONFIG_DDR_BOOT_TEST
 	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ(512));
 #endif
@@ -2100,17 +2105,21 @@ EXPORT_SYMBOL(ab_ddr_resume);
 
 int32_t ab_ddr_suspend(struct ab_state_context *sc)
 {
-#ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_TEST_MEMTESTER | DDR_BOOT_TEST_WRITE);
-#endif
-	/* Block AXI Before entering self-refresh */
-	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode()) {
+	if (ab_ddr_selfrefresh_enter(sc)) {
 		pr_err("%s: self-refresh entry failed\n", __func__);
 		goto ddr_suspend_fail;
 	}
+
+	/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not update the
+	 * MR registers specific to 1866MHz. As the ddr initialization happens
+	 * at 1866MHz, make sure the MR registers are udpated for 1866MHz before
+	 * entering to suspend state. Otherwise the read/write trainings will
+	 * fail during ddr initialization (during suspend -> resume) in BootROM
+	 */
+	ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
 
 	/* Enable the PMU Retention */
 	PMU_CONTROL_PHY_RET_ON();
@@ -2118,6 +2127,9 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 	/* Enable GPIOs to inform DDR is in suspend mode */
 	ab_gpio_enable_ddr_sr(sc);
 	ab_gpio_enable_ddr_iso(sc);
+
+	/* Airbrush will resume with 1866MHz */
+	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
 
 	return DDR_SUCCESS;
 
@@ -2201,12 +2213,43 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 }
 EXPORT_SYMBOL(ab_ddr_selfrefresh_enter);
 
+static int ddr_get_freq_idx(const struct block_property *prop_to)
+{
+	int freq_idx = 0;
+
+	switch (prop_to->clk_frequency) {
+	case 1867000000:
+		freq_idx = AB_DRAM_FREQ_MHZ_1866;
+		break;
+	case 1600000000:
+		freq_idx = AB_DRAM_FREQ_MHZ_1600;
+		break;
+	case 1200000000:
+		freq_idx = AB_DRAM_FREQ_MHZ_1200;
+		break;
+	case 934000000:
+		freq_idx = AB_DRAM_FREQ_MHZ_933;
+		break;
+	case 800000000:
+	case 200000000:
+		freq_idx = AB_DRAM_FREQ_MHZ_800;
+		break;
+	default:
+		pr_err("Invalid ddr frequency\n");
+		freq_idx = AB_DRAM_FREQ_MHZ_1866;
+		break;
+	}
+
+	return freq_idx;
+}
+
 static int ab_ddr_set_state(const struct block_property *prop_from,
 			const struct block_property *prop_to,
 			enum chip_state chip_state_id, void *data)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 	struct ab_ddr_context *ddr_ctx;
+	int freq_idx;
 
 	if (!sc || !prop_from || !prop_to)
 		return -EINVAL;
@@ -2239,7 +2282,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 	case CHIP_STATE_5_0:
 		/* ddr suspend functionality */
-		if (ddr_ctx->ddr_state == DDR_SUSPEND)
+		if ((ddr_ctx->ddr_state == DDR_SUSPEND) ||
+			(ddr_ctx->ddr_state == DDR_OFF))
 			return -EINVAL;
 		ab_ddr_suspend(sc);
 
@@ -2257,6 +2301,12 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 	default:
 		break;
+	}
+
+	if (ddr_ctx->ddr_state == DDR_ON) {
+		freq_idx = ddr_get_freq_idx(prop_to);
+		if (freq_idx != ddr_ctx->cur_freq)
+			ddr_set_mif_freq(sc, freq_idx);
 	}
 
 	/* Based on the state, call the corresponding DDR functionality */
@@ -2343,7 +2393,7 @@ int32_t ab_ddr_init(struct ab_state_context *sc)
 	}
 
 	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
-	ddr_ctx->ddr_state = DDR_ON;
+	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
 
 	ret = ab_ddr_init_internal_isolation(ddr_ctx);
 	if (ret)
