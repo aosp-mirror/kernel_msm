@@ -19,31 +19,28 @@
 
 #define MIF_PLL_CONTROL0	0x10510140
 
+struct ab_clk_context {
+	struct device *dev;
+
+	struct clk *ipu_pll;
+	struct clk *ipu_pll_mux;
+	struct clk *ipu_pll_div;
+	struct clk *ipu_switch_mux;
+	struct clk *tpu_pll;
+	struct clk *tpu_pll_mux;
+	struct clk *tpu_pll_div;
+	struct clk *tpu_switch_mux;
+	struct clk *osc_clk;
+	struct clk *shared_div_aon_pll;
+	struct clk *aon_pll;
+	struct clk *aon_pll_mux;
+};
+
 void abc_clk_aon_init(struct device_node *np);
 void abc_clk_core_init(struct device_node *np);
 void abc_clk_fsys_init(struct device_node *np);
 void abc_clk_mif_init(struct device_node *np);
 void abc_clk_ipu_init(struct device_node *np);
 void abc_clk_tpu_init(struct device_node *np);
-
-/* TODO: Move away from using state manager context
- * pointer. This is a temporary fix to kernel crashing.
- */
-int ipu_gate(void *ctx);
-int ipu_ungate(void *ctx);
-int ipu_pll_enable(struct ab_state_context *ab_ctx);
-void ipu_pll_disable(struct ab_state_context *ab_ctx);
-u64 ipu_set_rate(struct ab_state_context *ab_ctx, u64 rate);
-
-int tpu_gate(void *ctx);
-int tpu_ungate(void *ctx);
-int tpu_pll_enable(struct ab_state_context *ab_ctx);
-void tpu_pll_disable(struct ab_state_context *ab_ctx);
-u64 tpu_set_rate(struct ab_state_context *ab_ctx, u64 rate);
-
-u64 aon_set_rate(struct ab_state_context *sc, u64 rate);
-
-int attach_mif_clk_ref(void *ctx);
-int deattach_mif_clk_ref(void *ctx);
 
 #endif //_AIRBRUSH_CLK_H_

@@ -12,7 +12,6 @@
  * only version 2 as published by the Free Software Foundation.
  */
 
-#include <linux/airbrush-clk.h>
 #include <linux/airbrush-sm-ctrl.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
@@ -196,37 +195,33 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	switch (blk->name) {
 	case BLK_IPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
-			ipu_pll_enable(sc);
-		if (blk->current_state->clk_status == off && clk_status == on) {
+			ret = clk->ipu_pll_enable(clk->ctx);
+		if (blk->current_state->clk_status == off && clk_status == on)
 			ret = clk->ipu_ungate(clk->ctx);
-		}
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
-		ipu_set_rate(sc, frequency);
+		clk->ipu_set_rate(clk->ctx, frequency);
 
-		if (blk->current_state->clk_status == on && clk_status == off) {
+		if (blk->current_state->clk_status == on && clk_status == off)
 			ret = clk->ipu_gate(clk->ctx);
-		}
 		if (!clk_status && !frequency)
-			ipu_pll_disable(sc);
+			ret = clk->ipu_pll_disable(clk->ctx);
 		break;
 	case BLK_TPU:
 		if (blk->current_state->clk_frequency == 0 && frequency != 0)
-			tpu_pll_enable(sc);
-		if (blk->current_state->clk_status == off && clk_status == on) {
+			ret = clk->tpu_pll_enable(clk->ctx);
+		if (blk->current_state->clk_status == off && clk_status == on)
 			ret = clk->tpu_ungate(clk->ctx);
-		}
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
-		tpu_set_rate(sc, frequency);
+		clk->tpu_set_rate(clk->ctx, frequency);
 
-		if (blk->current_state->clk_status == on && clk_status == off) {
+		if (blk->current_state->clk_status == on && clk_status == off)
 			ret = clk->tpu_gate(clk->ctx);
-		}
 		if (!clk_status && !frequency)
-			tpu_pll_disable(sc);
+			ret = clk->tpu_pll_disable(clk->ctx);
 		break;
 	case BLK_MIF:
 		break;
@@ -235,7 +230,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	case BLK_AON:
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
-		aon_set_rate(sc, frequency);
+		clk->aon_set_rate(clk->ctx, frequency);
 		break;
 	case DRAM:
 		break;
@@ -285,11 +280,13 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* PMU settings */
 	if (power_control && blk->name == BLK_TPU) {
-		if (desired_state->id == BLOCK_STATE_1_2 && pwr->pmu_sleep(pwr->ctx)) {
+		if (desired_state->id == BLOCK_STATE_1_2 &&
+				pwr->pmu_sleep(pwr->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
-		if (desired_state->id == BLOCK_STATE_3_0 && pwr->pmu_deep_sleep(pwr->ctx)) {
+		if (desired_state->id == BLOCK_STATE_3_0 &&
+				pwr->pmu_deep_sleep(pwr->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
@@ -470,13 +467,15 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 */
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
-			map->ipu_block_state_id, (map->flags & IPU_POWER_CONTROL),
+			map->ipu_block_state_id,
+			(map->flags & IPU_POWER_CONTROL),
 			to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
-			map->tpu_block_state_id, (map->flags & TPU_POWER_CONTROL),
+			map->tpu_block_state_id,
+			(map->flags & TPU_POWER_CONTROL),
 			to_chip_substate_id)) {
 		return -EINVAL;
 	}
@@ -907,16 +906,6 @@ static void ab_sm_state_stats_init(struct ab_state_context *sc)
 	sc->state_stats[curr_stat_state].last_entry = ktime_get_boottime();
 }
 
-// TODO: Pull this out to clock driver
-static struct ab_sm_clk_ops clk_ops = {
-	.ipu_gate = &ipu_gate,
-	.ipu_ungate = &ipu_ungate,
-	.tpu_gate = &tpu_gate,
-	.tpu_ungate = &tpu_ungate,
-	.attach_mif_clk_ref = &attach_mif_clk_ref,
-	.deattach_mif_clk_ref = &deattach_mif_clk_ref,
-};
-
 //TODO: Pull this out to pmu driver
 static struct ab_sm_pwr_ops pwr_ops = {
 	.pmu_sleep = &ab_pmu_sleep,
@@ -1051,15 +1040,11 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	/* initialize state stats */
 	ab_sm_state_stats_init(ab_sm_ctx);
 
-	/* Initialize mfd ops */
+	/* Initialize stub ops */
 	ab_sm_register_pwr_ops(&pwr_ops_stub);
 	ab_sm_register_clk_ops(&clk_ops_stub);
 	ab_sm_register_dram_ops(&dram_ops_stub);
 	ab_sm_register_mfd_ops(&mfd_ops_stub);
-
-	// TODO: Pull this out to clock driver
-	clk_ops.ctx = ab_sm_ctx;
-	ab_sm_register_clk_ops(&clk_ops);
 
 	// TODO: Pull this out to pmu driver
 	pwr_ops.ctx = ab_sm_ctx;

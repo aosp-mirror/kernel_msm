@@ -66,13 +66,15 @@ enum states {
  * Read a register from the address,addr of ABC device and put it in to_addr,
  * all reads are currently happening through PCIe
  */
-#define ABC_READ(addr, to_addr) abc_pcie_config_read(addr & 0xffffff, 0x0, to_addr)
+#define ABC_READ(addr, to_addr) \
+	abc_pcie_config_read(addr & 0xffffff, 0x0, to_addr)
 
 /*
  * Write value to an ABC register address, addr
  * All writes are currently happening through PCIe
  */
-#define ABC_WRITE(addr, value) abc_pcie_config_write(addr & 0xffffff, 0x0, value)
+#define ABC_WRITE(addr, value) \
+	abc_pcie_config_write(addr & 0xffffff, 0x0, value)
 
 /*Should be in ascending order (for comparisons)*/
 enum logic_voltage {
@@ -161,13 +163,14 @@ enum stat_state {
 #define AON_POWER_CONTROL	bit(5)
 
 /**
- * struct block_property - stores the information of a soc block's operating state.
+ * struct block_property
+ * stores the information of a soc block's operating state.
  *
  * @id: The block state id of the SOC block.
  * @state_name: the name of the corresponing block state
  * @substate_name: the name of the corresponding substate.
  * @voltage_rate_status: status of the voltage rail, (on/off)
- * @logic_voltage: the voltage provoded to the block in volts(multiplied by 100).
+ * @logic_voltage: the voltage provoded to the block in volts (mult by 100).
  * @clock_status: status of the clock tree which provides the clock
  * @clk_frequency: frequency of the clock in Hz
  * @num_powered_cores: number of cores that are powered up.
@@ -289,28 +292,58 @@ static struct ab_sm_pwr_ops pwr_ops_stub = {
 struct ab_sm_clk_ops {
 	void *ctx;
 
+	int (*ipu_pll_enable)(void *ctx);
+	int (*ipu_pll_disable)(void *ctx);
 	int (*ipu_gate)(void *ctx);
 	int (*ipu_ungate)(void *ctx);
+	u64 (*ipu_set_rate)(void *ctx, u64 rate);
+
+	int (*tpu_pll_enable)(void *ctx);
+	int (*tpu_pll_disable)(void *ctx);
 	int (*tpu_gate)(void *ctx);
 	int (*tpu_ungate)(void *ctx);
+	u64 (*tpu_set_rate)(void *ctx, u64 rate);
+
+	u64 (*aon_set_rate)(void *ctx, u64 rate);
+
 	int (*attach_mif_clk_ref)(void *ctx);
 	int (*deattach_mif_clk_ref)(void *ctx);
 };
 
+static int ipu_pll_enable_stub(void *ctx)   { return -ENODEV; }
+static int ipu_pll_disable_stub(void *ctx)   { return -ENODEV; }
 static int ipu_gate_stub(void *ctx)   { return -ENODEV; }
 static int ipu_ungate_stub(void *ctx) { return -ENODEV; }
+static u64 ipu_set_rate_stub(void *ctx, u64 rate) { return 0; }
+
+static int tpu_pll_enable_stub(void *ctx)   { return -ENODEV; }
+static int tpu_pll_disable_stub(void *ctx)   { return -ENODEV; }
 static int tpu_gate_stub(void *ctx)   { return -ENODEV; }
 static int tpu_ungate_stub(void *ctx) { return -ENODEV; }
+static u64 tpu_set_rate_stub(void *ctx, u64 rate) { return 0; }
+
+static u64 aon_set_rate_stub(void *ctx, u64 rate) { return 0; }
+
 static int attach_mif_clk_ref_stub(void *ctx)   { return -ENODEV; }
 static int deattach_mif_clk_ref_stub(void *ctx) { return -ENODEV; }
 
 static struct ab_sm_clk_ops clk_ops_stub = {
 	.ctx = NULL,
 
+	.ipu_pll_enable = &ipu_pll_enable_stub,
+	.ipu_pll_disable = &ipu_pll_disable_stub,
 	.ipu_gate = &ipu_gate_stub,
 	.ipu_ungate = &ipu_ungate_stub,
+	.ipu_set_rate = &ipu_set_rate_stub,
+
+	.tpu_pll_enable = &tpu_pll_enable_stub,
+	.tpu_pll_disable = &tpu_pll_disable_stub,
 	.tpu_gate = &tpu_gate_stub,
 	.tpu_ungate = &tpu_ungate_stub,
+	.tpu_set_rate = &tpu_set_rate_stub,
+
+	.aon_set_rate = &aon_set_rate_stub,
+
 	.attach_mif_clk_ref = &attach_mif_clk_ref_stub,
 	.deattach_mif_clk_ref = &deattach_mif_clk_ref_stub,
 };
@@ -393,11 +426,15 @@ struct ab_state_context {
 
 	unsigned int ab_ready_irq;	/* ab_ready_gpio irq */
 
-	int otp_fw_patch_dis;		/* OTP info from Airbrush (DT property) */
-	int ab_alternate_boot;		/* Check for alternate boot */
+	/* OTP info from Airbrush (DT property) */
+	int otp_fw_patch_dis;
+	/* Check for alternate boot */
+	int ab_alternate_boot;
 
-	ab_sm_callback_t cb_event;	/* Event callback registered by the SM */
-	void *cb_cookie;		/* Private data sent by SM while registering event callback */
+	/* Event callback registered by the SM */
+	ab_sm_callback_t cb_event;
+	/* Private data sent by SM while registering event callback */
+	void *cb_cookie;
 
 	/* regulator descriptors */
 	struct regulator *smps1;
@@ -417,20 +454,6 @@ struct ab_state_context {
 	bool ldo3_state;
 	bool ldo4_state;
 	bool ldo5_state;
-
-	/* clk descriptors */
-	struct clk *ipu_pll;
-	struct clk *ipu_pll_mux;
-	struct clk *ipu_pll_div;
-	struct clk *ipu_switch_mux;
-	struct clk *tpu_pll;
-	struct clk *tpu_pll_mux;
-	struct clk *tpu_pll_div;
-	struct clk *tpu_switch_mux;
-	struct clk *osc_clk;
-	struct clk *shared_div_aon_pll;
-	struct clk *aon_pll;
-	struct clk *aon_pll_mux;
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
@@ -471,7 +494,8 @@ struct ab_sm_misc_session {
 };
 
 /*
- *  void ab_sm_register_blk_callback - register block specific state change callback
+ *  void ab_sm_register_blk_callback
+ *  register block specific state change callback
  *
  *  name: name of the block for which this callback should be called.
  *  callback: set_state callback function.

@@ -40,6 +40,15 @@
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 static struct abc_device *abc_dev;
 
+
+static const struct mfd_cell abc_mfd_devs[] = {
+	{
+		.name = "ab-clk",
+		.of_compatible = "abc,airbrush-clk",
+	},
+	// TODO: Add TMU, DDR, and PMU drivers
+};
+
 void __iomem *get_tpu_virt(void)
 {
 	return abc_dev->tpu_config;
@@ -1521,8 +1530,8 @@ int abc_get_chip_id(void *ctx, enum ab_chip_id *val)
 {
 	uint32_t data;
 	struct device *dev = (struct device *)ctx;
-
 	int ret = abc_pcie_config_read(OTP_CHIP_ID_ADDR & 0xffffff, 0x0, &data);
+
 	if (ret) {
 		dev_err(dev, "Unable to read ab chip id (err %d)\n", ret);
 		return ret;
@@ -1760,7 +1769,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	abc_dev = kzalloc(sizeof(struct abc_device), GFP_KERNEL);
 	if (abc_dev == NULL) {
 		err = -ENOMEM;
-		goto err1;
+		goto err_alloc_abc_dev;
 	}
 
 	abc_dev->pdev = pdev;
@@ -1773,13 +1782,13 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Cannot enable PCI device\n");
-		goto err2;
+		goto err_pci_enable_dev;
 	}
 
 	err = pci_request_regions(pdev, DRV_NAME_ABC_PCIE);
 	if (err) {
 		dev_err(dev, "Cannot obtain PCI resources\n");
-		goto err3;
+		goto err_pci_request_regions;
 	}
 
 	pci_set_master(pdev);
@@ -1873,7 +1882,7 @@ exit_loop:
 				NULL);
 	if (IS_ERR(abc->iatu_mappings.bar2_pool)) {
 		err = PTR_ERR(abc->iatu_mappings.bar2_pool);
-		goto err4;
+		goto err_pcie_init;
 	}
 
 	err = gen_pool_add(abc->iatu_mappings.bar2_pool,
@@ -1881,14 +1890,14 @@ exit_loop:
 			abc_dev->bar_base[BAR_2].end -
 			abc_dev->bar_base[BAR_2].start + 1, -1);
 	if (err < 0)
-		goto err4;
+		goto err_pcie_init;
 
 	/* IRQ handling */
 #if CONFIG_PCI_MSI
 	err = abc_pcie_irq_init(pdev);
 	if (err) {
 		dev_err(&pdev->dev, "abc_irq_init failed\n");
-		goto err4;
+		goto err_pcie_init;
 	}
 #endif
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM)
@@ -1905,27 +1914,35 @@ exit_loop:
 
 	err = abc_pcie_ipu_tpu_enable();
 	if (err < 0)
-		goto err5;
+		goto err_ipu_tpu_init;
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&abc_dev->intnc_notifier);
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
-		goto err5;
+		goto err_ipu_tpu_init;
+
+	err = mfd_add_devices(dev, -1, abc_mfd_devs, ARRAY_SIZE(abc_mfd_devs),
+			NULL, 0, NULL);
+	if (err < 0)
+		goto err_add_mfd_child;
 
 	/* Register state manager operations */
 	mfd_ops.ctx = dev;
 	ab_sm_register_mfd_ops(&mfd_ops);
 
 	return 0;
-err5:
+
+err_add_mfd_child:
+	mfd_remove_devices(dev);
+err_ipu_tpu_init:
 	abc_pcie_irq_free(pdev);
-err4:
+err_pcie_init:
 	pci_release_regions(pdev);
-err3:
+err_pci_request_regions:
 	pci_disable_device(pdev);
-err2:
+err_pci_enable_dev:
 	kfree(abc_dev);
-err1:
+err_alloc_abc_dev:
 	kfree(abc);
 
 	return err;

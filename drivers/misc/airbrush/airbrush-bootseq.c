@@ -105,8 +105,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		/* Setup the function pointer to read DDR OTPs */
 		ab_ddr_setup(ab_ctx);
 
-		abc_clk_register(ab_ctx);
-
 		return 0;
 	}
 
@@ -330,8 +328,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	 */
 	if (IS_HOST_DDR_INIT())
 		ab_ddr_init(ab_ctx);
-
-	abc_clk_register(ab_ctx);
 
 	/* Disable patching if ab is B0 */
 	if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
