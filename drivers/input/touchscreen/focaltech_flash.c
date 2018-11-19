@@ -100,11 +100,11 @@
 *******************************************************************************/
 
 static unsigned char CTPM_FW_TP_ID_T[] = {
-#include "FTS_FW/CEI_TULIP_FZW6_3267_0x98_V0x05_20180815_app.i"
+#include "FTS_FW/CEI_TULIP_FZW6_3267_0x98_V0x06_20181108_app.i"
 };
 
 static unsigned char CTPM_FW_TP_ID_T_AUO[] = {
-#include "FTS_FW/CEI_TULIP_FZW6_3267_0x9C_V0x01_20181018_app.i"
+#include "FTS_FW/CEI_TULIP_FZW6_3267_0x9C_V0x02_20181109_app.i"
 };
 
 static unsigned char CTPM_FW_TP_ID_S[] = {
