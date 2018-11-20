@@ -1534,7 +1534,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 {
 	struct reclaim_param *rp = walk->private;
 	struct vm_area_struct *vma = rp->vma;
-	pte_t *pte, ptent;
+	pte_t *start_pte, *pte, ptent;
 	spinlock_t *ptl;
 	struct page *page;
 	LIST_HEAD(page_list);
@@ -1546,8 +1546,8 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		return 0;
 cont:
 	isolated = 0;
-	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
-	for (; addr != end; pte++, addr += PAGE_SIZE) {
+	start_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+	for (; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
 		if (!pte_present(ptent))
 			continue;
@@ -1555,6 +1555,15 @@ cont:
 		page = vm_normal_page(vma, addr, ptent);
 		if (!page)
 			continue;
+
+		if (PageCompound(page)) {
+			unsigned int order = compound_order(page);
+			unsigned int nr_pages = (1 << order) - 1;
+
+			addr += (nr_pages * PAGE_SIZE);
+			pte += nr_pages;
+			continue;
+		}
 
 		if (isolate_lru_page(page))
 			continue;
@@ -1567,14 +1576,14 @@ cont:
 		if ((isolated >= SWAP_CLUSTER_MAX) || !rp->nr_to_reclaim)
 			break;
 	}
-	pte_unmap_unlock(pte - 1, ptl);
+	pte_unmap_unlock(start_pte, ptl);
 	reclaimed = reclaim_pages_from_list(&page_list, vma);
 	rp->nr_reclaimed += reclaimed;
 	rp->nr_to_reclaim -= reclaimed;
 	if (rp->nr_to_reclaim < 0)
 		rp->nr_to_reclaim = 0;
 
-	if (rp->nr_to_reclaim && (addr != end))
+	if (rp->nr_to_reclaim && addr < end)
 		goto cont;
 
 	cond_resched();
