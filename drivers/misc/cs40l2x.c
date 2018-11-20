@@ -2517,6 +2517,13 @@ static int cs40l2x_asp_switch(struct cs40l2x_private *cs40l2x, bool enable)
 	unsigned int val;
 	int ret;
 
+	if (!enable) {
+		ret = cs40l2x_user_ctrl_exec(cs40l2x,
+				CS40L2X_USER_CTRL_STOP, 0, NULL);
+		if (ret)
+			return ret;
+	}
+
 	ret = regmap_read(cs40l2x->regmap, CS40L2X_SP_ENABLES, &val);
 	if (ret)
 		return ret;
@@ -2532,10 +2539,14 @@ static int cs40l2x_asp_switch(struct cs40l2x_private *cs40l2x, bool enable)
 	if (ret)
 		return ret;
 
-	return cs40l2x_user_ctrl_exec(cs40l2x,
-			enable ? CS40L2X_USER_CTRL_PLAY
-				: CS40L2X_USER_CTRL_STOP,
-			0, NULL);
+	if (enable) {
+		ret = cs40l2x_user_ctrl_exec(cs40l2x,
+				CS40L2X_USER_CTRL_PLAY, 0, NULL);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static ssize_t cs40l2x_asp_enable_show(struct device *dev,
