@@ -25,6 +25,7 @@
 #include "tunny-dsi-panel-auo-400p-cmd.dtsi"
 #include "tunny-dsi-panel-edo-e1392amc-amoled-cmd.dtsi"
 #include "tunny-dsi-panel-truly-am013r-amoled-cmd.dtsi"
+#include "tunny-dsi-panel-auo-h1391b-amoled-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
