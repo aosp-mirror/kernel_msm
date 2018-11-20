@@ -139,7 +139,6 @@ static int scatterlist_to_abc_sg(struct scatterlist *sc_list, int count,
 		dev_dbg(&abc_dma.pdev->dev,
 			"sg[%d] : Address %pa , length %zu\n",
 			u, &sg[u].paddr, sg[u].size);
-#ifdef COMBINE_SG
 		if ((u > 0) && (sg[u-1].paddr + sg[u-1].size ==
 			sg[u].paddr)) {
 			sg[u-1].size = sg[u-1].size
@@ -148,9 +147,6 @@ static int scatterlist_to_abc_sg(struct scatterlist *sc_list, int count,
 		} else {
 			u++;
 		}
-#else
-		u++;
-#endif
 	}
 	/*
 	 * Zero out the list terminator entry.
