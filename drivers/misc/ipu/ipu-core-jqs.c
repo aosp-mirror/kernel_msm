@@ -166,11 +166,10 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	if (ret < 0)
 		return ret;
 
-	fw_binary_len_bytes = bus->jqs.fw->size -
-			sizeof(struct jqs_firmware_preamble);
+	fw_binary_len_bytes = bus->jqs.fw->size - preamble.size;
 
 	memcpy(bus->jqs.fw_shared_buffer.host_vaddr, bus->jqs.fw->data +
-			sizeof(struct jqs_firmware_preamble),
+			preamble.size,
 			fw_binary_len_bytes);
 
 	bus->ops->sync(bus->parent_dev, &bus->jqs.fw_shared_buffer, 0,
