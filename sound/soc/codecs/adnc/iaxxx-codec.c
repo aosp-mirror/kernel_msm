@@ -345,6 +345,11 @@ enum {
 	IAXXX_PDM_CDC_ADC_CLK_SRC_PORTD,/*CDC1_CLK*/
 };
 
+enum {
+	IAXXX_CODEC_STATE_UNKNOWN = -99,
+	IAXXX_CODEC_STATE_ONLINE = 0,
+};
+
 struct iaxxx_cic_deci_table {
 	u32 cic_dec;
 	u32 hb_dec;
@@ -6030,6 +6035,21 @@ static const struct of_device_id iaxxx_platform_dt_match[] = {
 	{}
 };
 
+static ssize_t iaxxx_codec_state_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev->parent);
+	int codec_state;
+
+	if (priv && test_bit(IAXXX_FLG_FW_READY, &priv->flags))
+		codec_state = IAXXX_CODEC_STATE_ONLINE;
+	else
+		codec_state = IAXXX_CODEC_STATE_UNKNOWN;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", codec_state);
+}
+static DEVICE_ATTR(codec_state, 0444, iaxxx_codec_state_show, NULL);
+
 static int iaxxx_codec_notify(struct notifier_block *nb,
 			unsigned long action, void *data)
 {
@@ -6160,6 +6180,11 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 
 	}
 
+	ret = device_create_file(&pdev->dev, &dev_attr_codec_state);
+	if (ret)
+		dev_err(&pdev->dev, "%s: failed to create codec state node\n",
+			__func__);
+
 	iaxxx->nb_core.notifier_call = iaxxx_codec_notify;
 	iaxxx_fw_notifier_register(priv->dev, &iaxxx->nb_core);
 
@@ -6170,6 +6195,7 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 
 static int iaxxx_codec_driver_remove(struct platform_device *pdev)
 {
+	device_remove_file(&pdev->dev, &dev_attr_codec_state);
 	snd_soc_unregister_codec(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 	return 0;
