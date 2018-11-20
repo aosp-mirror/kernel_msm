@@ -38,7 +38,7 @@
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <0x100>;
+		qcom,mdss-dsi-bl-min-level = <0x4>;
 		qcom,mdss-dsi-bl-max-level = <0x3ff>;
 
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 1>, <1 5>;
