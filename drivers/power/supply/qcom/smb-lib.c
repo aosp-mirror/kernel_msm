@@ -2248,6 +2248,8 @@ int smblib_set_prop_batt_status(struct smb_charger *chg,
 int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 				const union power_supply_propval *val)
 {
+	union power_supply_propval pval;
+
 	if (val->intval < 0)
 		return -EINVAL;
 
@@ -2259,13 +2261,22 @@ int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 
 	chg->system_temp_level = val->intval;
 
+	if (chg->wlc_thermal_mitigation && !chg->wlc_psy)
+		chg->wlc_psy = power_supply_get_by_name("wireless");
+
 	if (chg->system_temp_level == chg->thermal_levels) {
 		if (chg->thermal_mitigation)
 			vote(chg->chg_disable_votable,
 			     THERMAL_DAEMON_VOTER, true, 0);
-		if (chg->wlc_thermal_mitigation)
+		if (chg->wlc_thermal_mitigation) {
 			vote(chg->dc_icl_votable,
 			     THERMAL_DAEMON_VOTER, true, 0);
+			if (chg->wlc_psy) {
+				pval.intval = 0;
+				power_supply_set_property(chg->wlc_psy,
+					POWER_SUPPLY_PROP_ONLINE, &pval);
+			}
+		}
 		return 0;
 	}
 
@@ -2274,9 +2285,15 @@ int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 		if (chg->thermal_mitigation)
 			vote(chg->fcc_votable,
 			     THERMAL_DAEMON_VOTER, false, 0);
-		if (chg->wlc_thermal_mitigation)
+		if (chg->wlc_thermal_mitigation) {
+			if (chg->wlc_psy) {
+				pval.intval = 1;
+				power_supply_set_property(chg->wlc_psy,
+					POWER_SUPPLY_PROP_ONLINE, &pval);
+			}
 			vote(chg->dc_icl_votable,
 			     THERMAL_DAEMON_VOTER, false, 0);
+		}
 		return 0;
 	}
 
@@ -2284,10 +2301,15 @@ int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 		vote(chg->fcc_votable, THERMAL_DAEMON_VOTER, true,
 		     chg->thermal_mitigation[chg->system_temp_level]);
 
-	if (chg->wlc_thermal_mitigation)
+	if (chg->wlc_thermal_mitigation) {
+		if (chg->wlc_psy) {
+			pval.intval = 1;
+			power_supply_set_property(chg->wlc_psy,
+					POWER_SUPPLY_PROP_ONLINE, &pval);
+		}
 		vote(chg->dc_icl_votable, THERMAL_DAEMON_VOTER, true,
 		     chg->wlc_thermal_mitigation[chg->system_temp_level]);
-
+	}
 	return 0;
 }
 

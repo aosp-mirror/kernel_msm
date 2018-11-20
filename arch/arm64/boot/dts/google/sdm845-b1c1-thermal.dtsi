@@ -149,15 +149,27 @@
 	};
 };
 
+&low_vbat {
+	temperature = <3200>;
+	hysteresis = <100>;
+	type = "passive";
+};
+
+&low_soc {
+	temperature = <10>;
+	hysteresis = <0>;
+	type = "passive";
+};
+
+&ibat_high {
+	temperature = <5000>;
+	hysteresis = <200>;
+	type = "passive";
+};
+
 &thermal_zones {
 	vbat {
-		trips {
-			low_vbat {
-				temperature = <3200>;
-				hysteresis = <100>;
-				type = "passive";
-			};
-		};
+		polling-delay-passive = <100>;
 		cooling-maps {
 			vbat_cpu4 {
 				trip = <&low_vbat>;
@@ -182,19 +194,12 @@
 			mnh_thermal {
 				trip = <&low_vbat>;
 				cooling-device =
-					<&mnh_thermal 0 0>;
+					<&mnh_thermal 3 3>;
 			};
 		};
 	};
 	soc {
 		polling-delay-passive = <0>;
-		trips {
-			low_soc {
-				temperature = <10>;
-				hysteresis = <0>;
-				type = "passive";
-			};
-		};
 		cooling-maps {
 			soc_cpu4 {
 				trip = <&low_soc>;
@@ -216,21 +221,10 @@
 				cooling-device =
 					<&CPU7 18 18>;
 			};
-			mnh_thermal {
-				trip = <&low_soc>;
-				cooling-device =
-					<&mnh_thermal 0 0>;
-			};
 		};
 	};
 	ibat-high {
-		trips {
-			ibat_high {
-				temperature = <5000>;
-				hysteresis = <200>;
-				type = "passive";
-			};
-		};
+		polling-delay-passive = <100>;
 		cooling-maps {
 			ibat_cpu4 {
 				trip = <&ibat_high>;
@@ -251,11 +245,6 @@
 				trip = <&ibat_high>;
 				cooling-device =
 					<&CPU7 18 18>;
-			};
-			mnh_thermal {
-				trip = <&ibat_high>;
-				cooling-device =
-					<&mnh_thermal 0 0>;
 			};
 		};
 	};
@@ -329,6 +318,11 @@
 				hysteresis = <1000>;
 				type = "passive";
 			};
+			batt_charging_lv4: batt-charging_lv4 {
+				temperature = <48000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
 		};
 		cooling-maps {
 			charging_cdev_lv1 {
@@ -342,6 +336,10 @@
 			charging_cdev_lv3 {
 				trip = <&batt_charging_lv3>;
 				cooling-device = <&pmi8998_charger 3 3>;
+			};
+			charging_cdev_lv4 {
+				trip = <&batt_charging_lv4>;
+				cooling-device = <&pmi8998_charger 4 4>;
 			};
 		};
 	};

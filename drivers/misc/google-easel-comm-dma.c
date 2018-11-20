@@ -493,7 +493,8 @@ static int easelcomm_client_perform_dma_mblk(
 static int easelcomm_client_handle_dma_request(
 	struct easelcomm_service *service,
 	struct easelcomm_message_metadata *msg_metadata,
-	enum easelcomm_dma_direction dma_dir)
+	enum easelcomm_dma_direction dma_dir,
+	int timeout_ms)
 {
 	int ret, ret2;
 
@@ -508,9 +509,18 @@ static int easelcomm_client_handle_dma_request(
 		return 0;
 
 	/* Wait for server to return the DMA request info */
-	ret = wait_for_completion_interruptible(
-		&msg_metadata->dma_xfer.xfer_ready);
-	if (ret || msg_metadata->dma_xfer.aborting)
+	ret = wait_for_completion_interruptible_timeout(
+		&msg_metadata->dma_xfer.xfer_ready,
+		msecs_to_jiffies(timeout_ms));
+	if (ret == -ERESTARTSYS) {
+		dev_info(easelcomm_miscdev.this_device,
+				"Wait for DMA_XFER from server interrupted\n");
+		goto abort;
+	} else if (ret == 0) {
+		dev_err(easelcomm_miscdev.this_device,
+			"Wait for DMA_XFER from server timed out\n");
+		goto abort;
+	} else if (msg_metadata->dma_xfer.aborting)
 		goto abort;
 
 	/*
@@ -566,9 +576,10 @@ int easelcomm_receive_dma(
 	int ret = 0;
 
 	dev_dbg(easelcomm_miscdev.this_device,
-			"RECVDMA msg %u:r%llu buf_type=%d buf_size=%u dma_buf_fd=%d dma_buf_off=%u dma_buf_width=%u dma_buf_stride=%u\n",
+			"RECVDMA msg %u:r%llu buf_type=%d buf_size=%u timeout_ms=%d dma_buf_fd=%d dma_buf_off=%u dma_buf_width=%u dma_buf_stride=%u\n",
 			service->service_id, buf_desc->message_id,
 			buf_desc->buf_type, buf_desc->buf_size,
+			buf_desc->wait.timeout_ms,
 			buf_desc->dma_buf_fd,
 			buf_desc->dma_buf_off,
 			buf_desc->dma_buf_width,
@@ -631,7 +642,8 @@ int easelcomm_receive_dma(
 
 	if (easelcomm_is_client())
 		ret = easelcomm_client_handle_dma_request(
-			service, msg_metadata, dma_dir);
+			service, msg_metadata, dma_dir,
+			buf_desc->wait.timeout_ms);
 	else
 		ret = easelcomm_server_handle_dma_request(
 			service, msg_metadata, dma_dir);
@@ -659,9 +671,10 @@ int easelcomm_send_dma(
 	int ret = 0;
 
 	dev_dbg(easelcomm_miscdev.this_device,
-			"SENDDMA msg %u:l%llu buf_type=%d buf_size=%u dma_buf_fd=%d dma_buf_off=%u dma_buf_width=%u dma_buf_stride=%u\n",
+			"SENDDMA msg %u:l%llu buf_type=%d buf_size=%u timeout_ms=%d dma_buf_fd=%d dma_buf_off=%u dma_buf_width=%u dma_buf_stride=%u\n",
 			service->service_id, buf_desc->message_id,
 			buf_desc->buf_type, buf_desc->buf_size,
+			buf_desc->wait.timeout_ms,
 			buf_desc->dma_buf_fd, buf_desc->dma_buf_off,
 			buf_desc->dma_buf_width, buf_desc->dma_buf_stride);
 
@@ -717,7 +730,8 @@ int easelcomm_send_dma(
 	if (msg_metadata->msg->desc.dma_buf_size) {
 		if (easelcomm_is_client())
 			ret = easelcomm_client_handle_dma_request(
-				service, msg_metadata, dma_dir);
+				service, msg_metadata, dma_dir,
+				buf_desc->wait.timeout_ms);
 		else
 			ret = easelcomm_server_handle_dma_request(
 				service, msg_metadata, dma_dir);

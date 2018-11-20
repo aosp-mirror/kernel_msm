@@ -34,6 +34,9 @@
 			batt-charging_lv3 {
 				temperature = <46000>;
 			};
+			batt-charging_lv4 {
+				temperature = <50000>;
+			};
 		};
 	};
 	quiet-therm-adc {

@@ -36,6 +36,11 @@
 #define P9221R5_ILIM_MAX_UA		(1600 * 1000)
 #define P9221R5_OVER_CHECK_NUM		3
 
+#define OVC_LIMIT			1
+#define OVC_THRESHOLD			1400000
+#define OVC_BACKOFF_LIMIT		900000
+#define OVC_BACKOFF_AMOUNT		100000
+
 static const u32 p9221_ov_set_lut[] = {
 	17000000, 20000000, 15000000, 13000000,
 	11000000, 11000000, 11000000, 11000000};
@@ -733,7 +738,6 @@ static int p9221_send_ccreset(struct p9221_charger_data *charger)
 struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
 	/* property			register			g, s */
 	{POWER_SUPPLY_PROP_CURRENT_NOW,	P9221_RX_IOUT_REG,		1, 0},
-	{POWER_SUPPLY_PROP_CURRENT_MAX,	P9221_ILIM_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_VOLTAGE_NOW,	P9221_VOUT_ADC_REG,		1, 0},
 	{POWER_SUPPLY_PROP_VOLTAGE_MAX, P9221_VOUT_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_TEMP,	P9221_DIE_TEMP_ADC_REG,		1, 0},
@@ -743,11 +747,11 @@ struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
 struct p9221_prop_reg_map_entry p9221_prop_reg_map_r5[] = {
 	/* property			register			g, s */
 	{POWER_SUPPLY_PROP_CURRENT_NOW,	P9221R5_IOUT_REG,		1, 0},
-	{POWER_SUPPLY_PROP_CURRENT_MAX,	P9221R5_ILIM_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_VOLTAGE_NOW,	P9221R5_VOUT_REG,		1, 0},
 	{POWER_SUPPLY_PROP_VOLTAGE_MAX, P9221R5_VOUT_SET_REG,		1, 1},
 	{POWER_SUPPLY_PROP_TEMP,	P9221R5_DIE_TEMP_ADC_REG,	1, 0},
 	{POWER_SUPPLY_PROP_CAPACITY,	0,				1, 1},
+	{POWER_SUPPLY_PROP_ONLINE,	0,				1, 1},
 };
 
 static struct p9221_prop_reg_map_entry *p9221_get_map_entry(
@@ -836,10 +840,35 @@ static void p9221_abort_transfers(struct p9221_charger_data *charger)
 	sysfs_notify(&charger->dev->kobj, NULL, "rxdone");
 }
 
-static void p9221_set_offline(struct p9221_charger_data *charger)
+/*
+ * Put the default ICL back to BPP, reset OCP voter
+ * @pre charger && charger->dc_icl_votable && charger->client->dev
+ */
+static void p9221_vote_defaults(struct p9221_charger_data *charger)
 {
 	int ret;
 
+	if (!charger->dc_icl_votable) {
+		dev_err(&charger->client->dev,
+			"Could not vote DC_ICL - no votable\n");
+		return;
+	}
+
+	ret = vote(charger->dc_icl_votable, P9221_WLC_VOTER, true,
+			P9221_DC_ICL_BPP_UA);
+	if (ret)
+		dev_err(&charger->client->dev,
+			"Could not vote DC_ICL %d\n", ret);
+
+	ret = vote(charger->dc_icl_votable, P9221_OCP_VOTER, true,
+			P9221_DC_ICL_EPP_UA);
+	if (ret)
+		dev_err(&charger->client->dev,
+			"Could not reset OCP DC_ICL voter %d\n", ret);
+}
+
+static void p9221_set_offline(struct p9221_charger_data *charger)
+{
 	dev_info(&charger->client->dev, "Set offline\n");
 
 	charger->online = false;
@@ -851,14 +880,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	cancel_delayed_work(&charger->dcin_work);
 	del_timer(&charger->vrect_timer);
 
-	/* Put the default ICL back to BPP */
-	if (charger->dc_icl_votable) {
-		ret = vote(charger->dc_icl_votable, P9221_WLC_VOTER, true,
-			   P9221_DC_ICL_BPP_UA);
-		if (ret)
-			dev_err(&charger->client->dev,
-				"Could not vote DC_ICL %d\n", ret);
-	}
+	p9221_vote_defaults(charger);
 }
 
 static void p9221_tx_work(struct work_struct *work)
@@ -952,7 +974,7 @@ static int p9221_get_property(struct power_supply *psy,
 		val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = charger->online;
+		val->intval = charger->online && charger->enabled;
 		break;
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		val->strval = p9221_get_tx_id_str(charger);
@@ -964,6 +986,16 @@ static int p9221_get_property(struct power_supply *psy,
 			val->intval = charger->last_capacity;
 		else
 			val->intval = 0;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (!charger->dc_icl_votable)
+			return -EAGAIN;
+
+		ret = get_effective_result(charger->dc_icl_votable);
+		if (ret < 0)
+			break;
+
+		val->intval = ret;
 		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
@@ -982,28 +1014,78 @@ static int p9221_set_property(struct power_supply *psy,
 {
 	struct p9221_charger_data *charger = power_supply_get_drvdata(psy);
 	int ret = 0;
+	bool changed = false;
 
 	switch (prop) {
-	case POWER_SUPPLY_PROP_CAPACITY:
-		if (charger->last_capacity == val->intval)
+	case POWER_SUPPLY_PROP_ONLINE:
+		if ((val->intval < 0) || (val->intval > 1)) {
+			ret = -EINVAL;
 			break;
-		if (charger->online) {
-			charger->last_capacity = val->intval;
-			ret = p9221_send_csp(charger, charger->last_capacity);
-			if (ret)
-				dev_err(&charger->client->dev,
-					"Could send csp: %d\n", ret);
 		}
+
+		if (charger->enabled == val->intval)
+			break;
+
+		/*
+		 * Asserting the enable line will automatically take bring
+		 * us online if we are in field.  De-asserting the enable
+		 * line will automatically take us offline if we are in field.
+		 * This is due to the fact that DC in will change state
+		 * appropriately when we change the state of this line.
+		 */
+		charger->enabled = val->intval;
+
+		dev_warn(&charger->client->dev, "Set enable %d\n",
+			 charger->enabled);
+
+		gpio_set_value(charger->pdata->qien_gpio,
+			       charger->enabled ? 0 : 1);
+
+		changed = true;
 		break;
 
+	case POWER_SUPPLY_PROP_CAPACITY:
+		if (!charger->online || charger->last_capacity == val->intval)
+			break;
+
+		charger->last_capacity = val->intval;
+		ret = p9221_send_csp(charger, charger->last_capacity);
+		if (ret)
+			dev_err(&charger->client->dev,
+				"Could send csp: %d\n", ret);
+		changed = true;
+
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		if (val->intval < 0) {
+			ret = -EINVAL;
+			break;
+		}
+
+		if (!charger->dc_icl_votable) {
+			ret = -EAGAIN;
+			break;
+		}
+
+		ret = vote(charger->dc_icl_votable, P9221_USER_VOTER, true,
+			   val->intval);
+
+		changed = true;
+		break;
 	default:
 		ret = p9221_set_property_reg(charger, prop, val);
+		if (ret == 0)
+			changed = true;
 		break;
 	}
 
 	if (ret)
 		dev_dbg(&charger->client->dev,
 			"Couldn't set prop %d, ret=%d\n", prop, ret);
+
+	if (changed)
+		power_supply_changed(psy);
+
 	return ret;
 }
 
@@ -1853,6 +1935,19 @@ static void p9221_irq_handler(struct p9221_charger_data *charger,
 			"Failed to send EOP %d: %d\n", reason, ret);
 }
 
+static void print_current_samples(struct p9221_charger_data *charger,
+					u32 *iout_val, int count)
+{
+	int i;
+	char temp[P9221R5_OVER_CHECK_NUM * 9 + 1] = { 0 };
+
+	for (i = 0; i < count ; i++)
+		scnprintf(temp + i * 9, sizeof(temp) - i * 9,
+			  "%08x ", iout_val[i]);
+
+	dev_info(&charger->client->dev, "OVER IOUT_SAMPLES: %s\n", temp);
+}
+
 /*
  * Number of times to poll the status to see if the current limit condition
  * was transient or not.
@@ -1863,6 +1958,8 @@ static void p9221_over_handle_r5(struct p9221_charger_data *charger,
 	u8 reason = 0;
 	int i;
 	int ret;
+	int ovc_count = 0;
+	u32 iout_val[P9221R5_OVER_CHECK_NUM] = { 0 };
 
 	dev_err(&charger->client->dev, "Received OVER INT: %02x\n", irq_src);
 
@@ -1879,7 +1976,26 @@ static void p9221_over_handle_r5(struct p9221_charger_data *charger,
 	if ((irq_src & P9221R5_STAT_UV) && !(irq_src & P9221R5_STAT_OVC))
 		return;
 
-	/* Overcurrent, poll to absorb any transients */
+	/* Overcurrent, reduce ICL and poll to absorb any transients */
+
+	if (charger->dc_icl_votable) {
+		int icl;
+
+		icl = get_effective_result_locked(charger->dc_icl_votable);
+		if (icl < 0) {
+			dev_err(&charger->client->dev,
+				"Failed to read ICL (%d)\n", icl);
+		} else if (icl > OVC_BACKOFF_LIMIT) {
+			icl -= OVC_BACKOFF_AMOUNT;
+
+			ret = vote(charger->dc_icl_votable,
+				   P9221_OCP_VOTER, true,
+				   icl);
+			dev_err(&charger->client->dev,
+				"Reduced ICL to %d (%d)\n", icl, ret);
+		}
+	}
+
 	reason = P9221_EOP_OVER_CURRENT;
 	for (i = 0; i < P9221R5_OVER_CHECK_NUM; i++) {
 		ret = p9221_clear_interrupts(charger,
@@ -1887,6 +2003,16 @@ static void p9221_over_handle_r5(struct p9221_charger_data *charger,
 		msleep(50);
 		if (ret)
 			continue;
+
+		ret = p9221_reg_read_cooked(charger, P9221R5_IOUT_REG,
+			&iout_val[i]);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Failed to read IOUT[%d]: %d\n", i, ret);
+			continue;
+		} else if (iout_val[i] > OVC_THRESHOLD) {
+			ovc_count++;
+		}
 
 		ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &irq_src);
 		if (ret) {
@@ -1896,13 +2022,24 @@ static void p9221_over_handle_r5(struct p9221_charger_data *charger,
 		}
 
 		if ((irq_src & P9221R5_STAT_OVC) == 0) {
+			print_current_samples(charger, iout_val, i + 1);
 			dev_info(&charger->client->dev,
 				 "OVER condition %04x cleared after %d tries\n",
 				 irq_src, i);
 			return;
 		}
+
 		dev_err(&charger->client->dev,
 			"OVER status is still %04x, retry\n", irq_src);
+	}
+
+	if (ovc_count < OVC_LIMIT) {
+		print_current_samples(charger, iout_val,
+				      P9221R5_OVER_CHECK_NUM);
+		dev_info(&charger->client->dev,
+			 "ovc_threshold=%d, ovc_count=%d, ovc_limit=%d\n",
+			 OVC_THRESHOLD, ovc_count, OVC_LIMIT);
+		return;
 	}
 
 send_eop:
@@ -2063,11 +2200,18 @@ static int p9221_parse_dt(struct device *dev,
 	int ret = 0;
 	u32 data;
 	struct device_node *node = dev->of_node;
-	enum of_gpio_flags irq_gpio_flags;
-	enum of_gpio_flags irq_det_flags;
+
+	/* Enable */
+	ret = of_get_named_gpio(node, "idt,gpio_qien", 0);
+	if (ret < 0) {
+		dev_err(dev, "unable to read idt,gpio_qien from dt: %d\n", ret);
+		return ret;
+	}
+	pdata->qien_gpio = ret;
+	dev_info(dev, "enable gpio:%d", pdata->qien_gpio);
 
 	/* Main IRQ */
-	ret = of_get_named_gpio_flags(node, "idt,irq_gpio", 0, &irq_gpio_flags);
+	ret = of_get_named_gpio(node, "idt,irq_gpio", 0);
 	if (ret < 0) {
 		dev_err(dev, "unable to read idt,irq_gpio from dt: %d\n", ret);
 		return ret;
@@ -2078,8 +2222,7 @@ static int p9221_parse_dt(struct device *dev,
 		 pdata->irq_int);
 
 	/* Optional Detect IRQ */
-	ret = of_get_named_gpio_flags(node, "idt,irq_det_gpio", 0,
-				      &irq_det_flags);
+	ret = of_get_named_gpio(node, "idt,irq_det_gpio", 0);
 	pdata->irq_det_gpio = ret;
 	if (ret < 0) {
 		dev_warn(dev, "unable to read idt,irq_det_gpio from dt: %d\n",
@@ -2224,6 +2367,10 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
 
+	/* Default enable */
+	charger->enabled = true;
+	gpio_direction_output(charger->pdata->qien_gpio, 0);
+
 	/* Default to R5+ */
 	charger->cust_id = 5;
 
@@ -2237,6 +2384,14 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return PTR_ERR(charger->wc_psy);
 	}
 
+	/*
+	 * Find the DC_ICL votable, we use this to limit the current that
+	 * is taken from the wireless charger.
+	 */
+	charger->dc_icl_votable = find_votable("DC_ICL");
+	if (!charger->dc_icl_votable)
+		dev_warn(&charger->client->dev, "Could not find DC_ICL votable\n");
+
 	/* Test to see if the charger is online */
 	ret = p9221_reg_read_16(charger, P9221_CHIP_ID_REG, &chip_id);
 	if (ret == 0 && chip_id == P9221_CHIP_ID) {
@@ -2244,19 +2399,8 @@ static int p9221_charger_probe(struct i2c_client *client,
 		/* set charger->online=true, will ignore first VRECTON IRQ */
 		p9221_set_online(charger);
 	} else {
-		/* disconnected, vote for BPP */
-		charger->dc_icl_votable = find_votable("DC_ICL");
-		if (!charger->dc_icl_votable) {
-			ret = -ENODEV;
-		} else {
-			ret = vote(charger->dc_icl_votable,
-				P9221_WLC_VOTER, true,
-				P9221_DC_ICL_BPP_UA);
-		}
-		if (ret)
-			dev_err(&charger->client->dev,
-				"Could not vote for default DC_ICL votable=%d %d\n",
-					charger->dc_icl_votable != 0, ret);
+		/* disconnected, (likely err!=0) vote for BPP */
+		p9221_vote_defaults(charger);
 	}
 
 	ret = devm_request_threaded_irq(
@@ -2268,7 +2412,11 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return ret;
 	}
 	device_init_wakeup(charger->dev, true);
-	/* NOTE: will get a VRECTON when booting on a pad */
+
+	/*
+	 * We will receive a VRECTON after enabling IRQ if the device is
+	 * if the device is already in-field when the driver is probed.
+	 */
 	enable_irq_wake(charger->pdata->irq_int);
 
 	if (gpio_is_valid(charger->pdata->irq_det_gpio)) {

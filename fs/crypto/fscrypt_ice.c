@@ -118,8 +118,10 @@ bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 
 void fscrypt_set_ice_dun(const struct inode *inode, struct bio *bio, u64 dun)
 {
-	if (fscrypt_should_be_processed_by_ice(inode))
+	if (fscrypt_should_be_processed_by_ice(inode)) {
 		bio->bi_iter.bi_dun = dun;
+		bio->bi_opf |= REQ_NOMERGE_FLAGS;
+	}
 }
 EXPORT_SYMBOL(fscrypt_set_ice_dun);
 

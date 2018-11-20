@@ -1065,6 +1065,10 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 					hba->sdev_ufs_device->model);
 		dev_err(hba->dev, " rev = %.4s\n",
 					hba->sdev_ufs_device->rev);
+		dev_err(hba->dev, " nutrs = %d\n",
+					hba->nutrs);
+		dev_err(hba->dev, " queue_depth = %u\n",
+					hba->sdev_ufs_device->queue_depth);
 	}
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_reqs, hba->outstanding_tasks);
@@ -2562,7 +2566,19 @@ static void ufshcd_clk_scaling_update_busy(struct ufs_hba *hba)
 static inline
 int ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 {
-	int ret = 0;
+	if (hba->lrb[task_tag].cmd) {
+		u8 opcode = (u8)(*hba->lrb[task_tag].cmd->cmnd);
+
+		if (opcode == SECURITY_PROTOCOL_OUT && hba->security_in) {
+			hba->security_in--;
+		} else if (opcode == SECURITY_PROTOCOL_IN) {
+			if (hba->security_in) {
+				WARN_ON(1);
+				return -EINVAL;
+			}
+			hba->security_in++;
+		}
+	}
 
 	hba->lrb[task_tag].issue_time_stamp = ktime_get();
 	hba->lrb[task_tag].complete_time_stamp = ktime_set(0, 0);
@@ -2575,7 +2591,7 @@ int ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 			hba->lrb[task_tag].cmd ? "scsi_send" : "dev_cmd_send");
 	ufshcd_update_tag_stats(hba, task_tag);
 	update_io_stat(hba, task_tag, 1);
-	return ret;
+	return 0;
 }
 
 /**
@@ -3396,7 +3412,13 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		ufshcd_vops_crypto_engine_cfg_end(hba, lrbp, cmd->request);
 		dev_err(hba->dev, "%s: failed sending command, %d\n",
 							__func__, err);
-		err = DID_ERROR;
+		if (err == -EINVAL) {
+			set_host_byte(cmd, DID_ERROR);
+			if (has_read_lock)
+				ufshcd_put_read_lock(hba);
+			cmd->scsi_done(cmd);
+			return 0;
+		}
 		goto out;
 	}
 
@@ -5486,6 +5508,7 @@ static void ufshcd_set_queue_depth(struct scsi_device *sdev)
 	int ret = 0;
 	u8 lun_qdepth;
 	struct ufs_hba *hba;
+	bool fixable_qdepth = false;
 
 	hba = shost_priv(sdev->host);
 
@@ -5497,17 +5520,23 @@ static void ufshcd_set_queue_depth(struct scsi_device *sdev)
 			  sizeof(lun_qdepth));
 
 	/* Some WLUN doesn't support unit descriptor */
-	if (ret == -EOPNOTSUPP)
+	if (ret == -EOPNOTSUPP ||
+		(sdev->lun ==
+			ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_RPMB_WLUN))) {
 		lun_qdepth = 1;
-	else if (!lun_qdepth)
+	} else if (!lun_qdepth) {
 		/* eventually, we can figure out the real queue depth */
 		lun_qdepth = hba->nutrs;
-	else
+		fixable_qdepth = true;
+	} else {
 		lun_qdepth = min_t(int, lun_qdepth, hba->nutrs);
+	}
 
-	dev_dbg(hba->dev, "%s: activate tcq with queue depth %d\n",
+	dev_err(hba->dev, "%s: activate tcq with queue depth %d\n",
 			__func__, lun_qdepth);
 	scsi_change_queue_depth(sdev, lun_qdepth);
+	if (fixable_qdepth)
+		ufs_fix_qdepth_device(hba, sdev);
 }
 
 /*
@@ -5587,7 +5616,7 @@ static int ufshcd_slave_alloc(struct scsi_device *sdev)
 	/* REPORT SUPPORTED OPERATION CODES is not supported */
 	sdev->no_report_opcodes = 1;
 
-	/* WRITE_SAME command is not supported*/
+	/* WRITE_SAME command is not supported */
 	sdev->no_write_same = 1;
 
 	ufshcd_set_queue_depth(sdev);
@@ -5610,7 +5639,9 @@ static int ufshcd_change_queue_depth(struct scsi_device *sdev, int depth)
 
 	if (depth > hba->nutrs)
 		depth = hba->nutrs;
-	return scsi_change_queue_depth(sdev, depth);
+
+	scsi_change_queue_depth(sdev, depth);
+	return ufs_fix_qdepth_device(hba, sdev);
 }
 
 /**

@@ -16,6 +16,8 @@
 #define __P9221_CHARGER_H__
 
 #define P9221_WLC_VOTER				"WLC_VOTER"
+#define P9221_USER_VOTER			"WLC_USER_VOTER"
+#define P9221_OCP_VOTER				"OCP_VOTER"
 #define P9221_DC_ICL_BPP_UA			700000
 #define P9221_DC_ICL_EPP_UA			1100000
 #define P9221_EPP_THRESHOLD_UV			7000000
@@ -243,6 +245,7 @@ struct p9221_charger_platform_data {
 	int				irq_int;
 	int				irq_det_gpio;
 	int				irq_det_int;
+	int				qien_gpio;
 	int				max_vout_mv;
 	u8				fod[P9221_NUM_FOD];
 	u8				fod_epp[P9221_NUM_FOD];
@@ -266,7 +269,7 @@ struct p9221_charger_data {
 	struct timer_list		vrect_timer;
 	struct bin_attribute		bin;
 	int				online;
-	int				next_online;
+	bool				enabled;
 	u16				addr;
 	u8				count;
 	u8				cust_id;

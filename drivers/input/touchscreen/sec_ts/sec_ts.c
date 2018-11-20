@@ -2796,6 +2796,8 @@ static void sec_ts_suspend_work(struct work_struct *work)
 
 	ts->power_status = SEC_TS_STATE_SUSPEND;
 
+	sec_ts_pinctrl_configure(ts, false);
+
 	sec_set_switch_gpio(ts, SEC_SWITCH_GPIO_VALUE_SLPI_MASTER);
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
@@ -2822,6 +2824,8 @@ static void sec_ts_resume_work(struct work_struct *work)
 #endif
 
 	sec_set_switch_gpio(ts, SEC_SWITCH_GPIO_VALUE_AP_MASTER);
+
+	sec_ts_pinctrl_configure(ts, true);
 
 	if (ts->power_status == SEC_TS_STATE_POWER_ON) {
 		input_err(true, &ts->client->dev, "%s: already resumed.\n",
@@ -2982,7 +2986,7 @@ static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 
 	input_dbg(true, &ts->client->dev, "%s: enter.\n", __func__);
 
-	if (val != MSM_DRM_EVENT_BLANK)
+	if (val != MSM_DRM_EVENT_BLANK && val != MSM_DRM_EARLY_EVENT_BLANK)
 		return NOTIFY_DONE;
 
 	if (!ts || !evdata || !evdata->data) {
@@ -2996,14 +3000,18 @@ static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 	switch (blank) {
 	case MSM_DRM_BLANK_POWERDOWN:
 	case MSM_DRM_BLANK_LP:
-		input_dbg(true, &ts->client->dev,
-			  "%s: MSM_DRM_BLANK_POWERDOWN.\n", __func__);
-		sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, false);
+		if (val == MSM_DRM_EARLY_EVENT_BLANK) {
+			input_dbg(true, &ts->client->dev,
+				  "%s: MSM_DRM_BLANK_POWERDOWN.\n", __func__);
+			sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, false);
+		}
 		break;
 	case MSM_DRM_BLANK_UNBLANK:
-		input_dbg(true, &ts->client->dev,
-			  "%s: MSM_DRM_BLANK_UNBLANK.\n", __func__);
-		sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, true);
+		if (val == MSM_DRM_EVENT_BLANK) {
+			input_dbg(true, &ts->client->dev,
+				  "%s: MSM_DRM_BLANK_UNBLANK.\n", __func__);
+			sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SCREEN_ON, true);
+		}
 		break;
 	}
 
