@@ -12,6 +12,10 @@
 
 #include "dsi-panel-s6e3ha8-dsc-wqhd-cmd.dtsi"
 
+&pm8150l_l9 {
+	status = "okay";
+};
+
 &sde_dsi {
 	vci-supply = <&pm8150l_l9>;
 

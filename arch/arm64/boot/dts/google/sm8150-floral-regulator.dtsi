@@ -11,13 +11,41 @@
  */
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 
-/* VDDI = 1.8v, AVDD = 3.0v */
-&pm8150_l17 {
-	regulator-min-microvolt = <2856000>;
-	regulator-max-microvolt = <3008000>;
-	qcom,init-voltage = <2856000>;
+/** PM8150A  */
+
+&pm8150l_l4 {
+	regulator-max-microvolt = <3000000>;
+	qcom,init-voltage = <3000000>;
 	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 	status = "okay";
+};
+
+&pm8150l_l9 {
+	status = "disabled";
+};
+
+/** PM8150 */
+
+&pm8150_s5 {
+	regulator-min-microvolt = <2040000>;
+	qcom,init-voltage = <2040000>;
+};
+
+&pm8150_s6 {
+	regulator-max-microvolt = <1100000>;
+};
+
+&soc {
+	rpmh-regulator-ldoa9 {
+		qcom,supported-modes = <RPMH_REGULATOR_MODE_HPM>;
+		L9A: pm8150_l9: regulator-pm8150-l9 {
+			qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+};
+
+&pm8150_l13 {
+	status = "disabled";
 };
 
 &pm8150_l14 {
@@ -28,11 +56,15 @@
 	status = "okay";
 };
 
-&pm8150l_l4 {
-	regulator-max-microvolt = <3000000>;
-	qcom,init-voltage = <3000000>;
+&pm8150_l17 {
+	regulator-min-microvolt = <2856000>;
+	regulator-max-microvolt = <3008000>;
+	qcom,init-voltage = <2856000>;
 	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 	status = "okay";
 };
 
+&pm8150_l18 {
+	regulator-max-microvolt = <800000>;
+};
 
