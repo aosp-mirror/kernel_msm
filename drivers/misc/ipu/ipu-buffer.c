@@ -385,7 +385,7 @@ int ipu_buffer_dma_buf_bulk_register_ioctl(struct paintbox_data *pb,
 		goto unmap_and_cleanup;
 	}
 
-	if (copy_to_user(req.bufs, req_bufs, sizeof(req))) {
+	if (copy_to_user(req.bufs, req_bufs, len)) {
 		dev_err(pb->dev, "%s: Copy to user failed\n", __func__);
 		ret = -EFAULT;
 		goto unmap_and_cleanup;
