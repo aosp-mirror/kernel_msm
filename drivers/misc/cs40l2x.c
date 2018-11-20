@@ -5109,6 +5109,104 @@ static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
+static int cs40l2x_brownout_config(struct cs40l2x_private *cs40l2x)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	bool vpbr_enable = cs40l2x->pdata.vpbr_enable;
+	bool vbbr_enable = cs40l2x->pdata.vbbr_enable;
+	unsigned int vpbr_thld1 = cs40l2x->pdata.vpbr_thld1;
+	unsigned int vbbr_thld1 = cs40l2x->pdata.vbbr_thld1;
+	unsigned int vpbr_thld1_scaled, vbbr_thld1_scaled, val;
+	int ret;
+
+	if (!vpbr_enable && !vbbr_enable)
+		return 0;
+
+	ret = regmap_read(regmap, CS40L2X_PWR_CTRL3, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read VPBR/VBBR enable controls\n");
+		return ret;
+	}
+
+	val |= (vpbr_enable ? CS40L2X_VPBR_EN_MASK : 0);
+	val |= (vbbr_enable ? CS40L2X_VBBR_EN_MASK : 0);
+
+	ret = regmap_write(regmap, CS40L2X_PWR_CTRL3, val);
+	if (ret) {
+		dev_err(dev, "Failed to write VPBR/VBBR enable controls\n");
+		return ret;
+	}
+
+	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_PWR_CTRL3, val);
+	if (ret) {
+		dev_err(dev, "Failed to sequence VPBR/VBBR enable controls\n");
+		return ret;
+	}
+
+	if (vpbr_thld1) {
+		if ((vpbr_thld1 < 2497) || (vpbr_thld1 > 3874)) {
+			dev_err(dev, "Invalid VPBR threshold: %d mV\n",
+					vpbr_thld1);
+			return -EINVAL;
+		}
+		vpbr_thld1_scaled = ((vpbr_thld1 - 2497) * 10 / 475) + 0x02;
+
+		ret = regmap_read(regmap, CS40L2X_VPBR_CFG, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read VPBR configuration\n");
+			return ret;
+		}
+
+		val &= ~CS40L2X_VPBR_THLD1_MASK;
+		val |= (vpbr_thld1_scaled << CS40L2X_VPBR_THLD1_SHIFT);
+
+		ret = regmap_write(regmap, CS40L2X_VPBR_CFG, val);
+		if (ret) {
+			dev_err(dev, "Failed to write VPBR configuration\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_VPBR_CFG, val);
+		if (ret) {
+			dev_err(dev, "Failed to sequence VPBR configuration\n");
+			return ret;
+		}
+	}
+
+	if (vbbr_thld1) {
+		if ((vbbr_thld1 < 109) || (vbbr_thld1 > 1690)) {
+			dev_err(dev, "Invalid VBBR threshold: %d mV\n",
+					vbbr_thld1);
+			return -EINVAL;
+		}
+		vbbr_thld1_scaled = ((vbbr_thld1 - 109) * 10 / 545) + 0x02;
+
+		ret = regmap_read(regmap, CS40L2X_VBBR_CFG, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read VBBR configuration\n");
+			return ret;
+		}
+
+		val &= ~CS40L2X_VBBR_THLD1_MASK;
+		val |= (vbbr_thld1_scaled << CS40L2X_VBBR_THLD1_SHIFT);
+
+		ret = regmap_write(regmap, CS40L2X_VBBR_CFG, val);
+		if (ret) {
+			dev_err(dev, "Failed to write VBBR configuration\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_VBBR_CFG, val);
+		if (ret) {
+			dev_err(dev, "Failed to sequence VBBR configuration\n");
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static const struct reg_sequence cs40l2x_mpu_config[] = {
 	{CS40L2X_DSP1_MPU_LOCK_CONFIG,	CS40L2X_MPU_UNLOCK_CODE1},
 	{CS40L2X_DSP1_MPU_LOCK_CONFIG,	CS40L2X_MPU_UNLOCK_CODE2},
@@ -5271,7 +5369,7 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 			return ret;
 	}
 
-	return 0;
+	return cs40l2x_brownout_config(cs40l2x);
 }
 
 static int cs40l2x_otp_unpack(struct cs40l2x_private *cs40l2x)
@@ -5560,6 +5658,18 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 		else
 			pdata->asp_timeout = out_val;
 	}
+
+	pdata->vpbr_enable = of_property_read_bool(np, "cirrus,vpbr-enable");
+
+	pdata->vbbr_enable = of_property_read_bool(np, "cirrus,vbbr-enable");
+
+	ret = of_property_read_u32(np, "cirrus,vpbr-thld1-millivolt", &out_val);
+	if (!ret)
+		pdata->vpbr_thld1 = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,vbbr-thld1-millivolt", &out_val);
+	if (!ret)
+		pdata->vbbr_thld1 = out_val;
 
 	return 0;
 }

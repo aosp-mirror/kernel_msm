@@ -49,6 +49,10 @@ struct cs40l2x_platform_data {
 	unsigned int asp_slot_width;
 	unsigned int asp_samp_width;
 	unsigned int asp_timeout;
+	bool vpbr_enable;
+	bool vbbr_enable;
+	unsigned int vpbr_thld1;
+	unsigned int vbbr_thld1;
 };
 
 #endif /* __CS40L2X_H */
