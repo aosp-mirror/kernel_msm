@@ -2473,6 +2473,146 @@ static ssize_t cs40l2x_ipp_measured_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", cs40l2x->ipp_measured);
 }
 
+static ssize_t cs40l2x_vbatt_max_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VPMONMAX",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	if (val == CS40L2X_VPMONMAX_RESET) {
+		ret = -ENODATA;
+		goto err_mutex;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_vbatt_max_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VPMONMAX",
+					CS40L2X_XM_UNPACKED_TYPE),
+			CS40L2X_VPMONMAX_RESET);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_vbatt_min_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_read(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VPMONMIN",
+					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (ret)
+		goto err_mutex;
+
+	if (val == CS40L2X_VPMONMIN_RESET) {
+		ret = -ENODATA;
+		goto err_mutex;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_vbatt_min_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_write(cs40l2x->regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VPMONMIN",
+					CS40L2X_XM_UNPACKED_TYPE),
+			CS40L2X_VPMONMIN_RESET);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
 static int cs40l2x_refclk_switch(struct cs40l2x_private *cs40l2x,
 			unsigned int refclk_freq)
 {
@@ -2885,6 +3025,10 @@ static DEVICE_ATTR(heartbeat, 0660, cs40l2x_heartbeat_show, NULL);
 static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
 static DEVICE_ATTR(vpp_measured, 0660, cs40l2x_vpp_measured_show, NULL);
 static DEVICE_ATTR(ipp_measured, 0660, cs40l2x_ipp_measured_show, NULL);
+static DEVICE_ATTR(vbatt_max, 0660, cs40l2x_vbatt_max_show,
+		cs40l2x_vbatt_max_store);
+static DEVICE_ATTR(vbatt_min, 0660, cs40l2x_vbatt_min_show,
+		cs40l2x_vbatt_min_store);
 static DEVICE_ATTR(asp_enable, 0660, cs40l2x_asp_enable_show,
 		cs40l2x_asp_enable_store);
 static DEVICE_ATTR(asp_timeout, 0660, cs40l2x_asp_timeout_show,
@@ -2928,6 +3072,8 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_num_waves.attr,
 	&dev_attr_vpp_measured.attr,
 	&dev_attr_ipp_measured.attr,
+	&dev_attr_vbatt_max.attr,
+	&dev_attr_vbatt_min.attr,
 	&dev_attr_asp_enable.attr,
 	&dev_attr_asp_timeout.attr,
 	&dev_attr_exc_enable.attr,
