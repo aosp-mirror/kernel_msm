@@ -258,6 +258,7 @@ struct sdhci_msm_host {
 	int soc_min_rev;
 	struct workqueue_struct *pm_qos_wq;
 	bool need_dll_user_ctl;
+	struct device_attribute mmc_manual_gc_attr;
 };
 
 extern char *saved_command_line;
