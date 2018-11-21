@@ -68,7 +68,6 @@ struct cs40l2x_private {
 	unsigned int f0_measured;
 	unsigned int redc_measured;
 	unsigned int q_measured;
-	unsigned int q_index;
 	struct cs40l2x_pbq_pair pbq_pairs[CS40L2X_PBQ_DEPTH_MAX];
 	struct hrtimer pbq_timer;
 	unsigned int pbq_depth;
@@ -1892,36 +1891,6 @@ err_mutex:
 	return count;
 }
 
-static ssize_t cs40l2x_q_index_show(struct device *dev,
-			struct device_attribute *attr, char *buf)
-{
-	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-
-	if (!cs40l2x->q_index)
-		return -ENODATA;
-
-	return snprintf(buf, PAGE_SIZE, "%u\n", cs40l2x->q_index);
-}
-
-static ssize_t cs40l2x_q_index_store(struct device *dev,
-			struct device_attribute *attr,
-			const char *buf, size_t count)
-{
-	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
-	unsigned int q_index;
-
-	ret = kstrtou32(buf, 10, &q_index);
-	if (ret)
-		return -EINVAL;
-	if (q_index > CS40L2X_Q_INDEX_MAX)
-		return -EINVAL;
-
-	cs40l2x->q_index = q_index;
-
-	return count;
-}
-
 static ssize_t cs40l2x_q_measured_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -2763,7 +2732,6 @@ static DEVICE_ATTR(redc_stored, 0660, cs40l2x_redc_stored_show,
 static DEVICE_ATTR(q_measured, 0660, cs40l2x_q_measured_show, NULL);
 static DEVICE_ATTR(q_stored, 0660, cs40l2x_q_stored_show,
 		cs40l2x_q_stored_store);
-static DEVICE_ATTR(q_index, 0660, cs40l2x_q_index_show, cs40l2x_q_index_store);
 static DEVICE_ATTR(comp_enable, 0660, cs40l2x_comp_enable_show,
 		cs40l2x_comp_enable_store);
 static DEVICE_ATTR(redc_comp_enable, 0660, cs40l2x_redc_comp_enable_show,
@@ -2809,7 +2777,6 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_redc_stored.attr,
 	&dev_attr_q_measured.attr,
 	&dev_attr_q_stored.attr,
-	&dev_attr_q_index.attr,
 	&dev_attr_comp_enable.attr,
 	&dev_attr_redc_comp_enable.attr,
 	&dev_attr_dig_scale.attr,

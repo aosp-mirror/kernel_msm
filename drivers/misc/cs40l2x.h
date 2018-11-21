@@ -977,8 +977,6 @@
 #define CS40L2X_IRQMASKSEQ_SHIFTUP	16
 #define CS40L2X_IRQMASKSEQ_SHIFTDN	8
 
-#define CS40L2X_Q_INDEX_MAX 		18
-
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
 
