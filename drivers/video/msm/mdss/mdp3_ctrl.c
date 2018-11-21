@@ -153,10 +153,32 @@ int mdp3_ctrl_notify(struct mdp3_session_data *ses, int event)
 	return blocking_notifier_call_chain(&ses->notifier_head, event, ses);
 }
 
+static void __mdp3_dispatch_dma_done(struct mdp3_session_data *session)
+{
+	int cnt;
+
+	cnt = atomic_read(&session->dma_done_cnt);
+	MDSS_XLOG(cnt);
+	while (cnt > 0) {
+		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_DONE);
+		atomic_dec(&session->dma_done_cnt);
+		cnt--;
+	}
+}
+
+void mdp3_flush_dma_done(struct mdp3_session_data *session)
+{
+	if (!session)
+		return;
+
+	pr_debug("%s\n", __func__);
+
+	__mdp3_dispatch_dma_done(session);
+}
+
 static void mdp3_dispatch_dma_done(struct kthread_work *work)
 {
 	struct mdp3_session_data *session;
-	int cnt = 0;
 
 	pr_debug("%s\n", __func__);
 	session = container_of(work, struct mdp3_session_data,
@@ -164,14 +186,7 @@ static void mdp3_dispatch_dma_done(struct kthread_work *work)
 	if (!session)
 		return;
 
-	cnt = atomic_read(&session->dma_done_cnt);
-	MDSS_XLOG(cnt);
-	while (cnt > 0) {
-		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_DONE);
-		atomic_dec(&session->dma_done_cnt);
-		mdp3_ctrl_notify(session, MDP_NOTIFY_FRAME_CTX_DONE);
-		cnt--;
-	}
+	__mdp3_dispatch_dma_done(session);
 }
 
 static void mdp3_dispatch_clk_off(struct work_struct *work)
@@ -3203,6 +3218,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 		pr_err("fail to init dma\n");
 		goto init_done;
 	}
+	mdp3_session->dma->session = mdp3_session;
 
 	intf_type = mdp3_ctrl_get_intf_type(mfd);
 	mdp3_session->intf = mdp3_get_display_intf(intf_type);
