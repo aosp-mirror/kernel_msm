@@ -60,7 +60,6 @@ static struct block_property ipu_property_table[] = {
 	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 610, 0,  0,  0, 0),
 	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,   0,  0,  0, 0),
 	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,   0,  0,  0, 0),
-	BLK_ENTRY(DEF, Bootup,   NoClock,    on, 0_75, off, 0,   0,  0,  0, 0),
 };
 
 static struct block_property tpu_property_table[] = {
@@ -75,7 +74,6 @@ static struct block_property tpu_property_table[] = {
 	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 962, 0, 0, 0,  0),
 	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,   0, 0, 0,  0),
 	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,   0, 0, 0,  0),
-	BLK_ENTRY(DEF, Bootup,   NoClock,    on, 0_75, off, 0,   0, 0, 0,  0),
 };
 
 static struct block_property dram_property_table[] = {
@@ -90,7 +88,6 @@ static struct block_property dram_property_table[] = {
 	BLK_ENTRY(1_1, PowerDown, ClockOn,   on, 0_60, on, 1867, 0, 0, 0, 3733),
 	BLK_ENTRY(2_0, Retention, SelfRef,   off, 0_0, off, 0,   0, 0, 0, 0),
 	BLK_ENTRY(3_0, Disabled,  NoRail,    off, 0_0, off, 0,   0, 0, 0, 0),
-	BLK_ENTRY(DEF, Bootup,    MaxTran,   on, 0_60, on, 1867, 0, 0, 0, 3733),
 };
 
 static struct block_property mif_property_table[] = {
@@ -102,7 +99,6 @@ static struct block_property mif_property_table[] = {
 	BLK_ENTRY(0_5, Normal,   MidTran,     on, 0_85, on,  400, 0, 0, 0, 0),
 	BLK_ENTRY(0_6, Normal,   MaxTran,     on, 0_85, on,  467, 0, 0, 0, 0),
 	BLK_ENTRY(3_0, Disabled, NoRail,      off, 0_0, off, 0,   0, 0, 0, 0),
-	BLK_ENTRY(DEF, Bootup,   MaxTran,     on, 0_85, on,  467, 0, 0, 0, 0),
 };
 
 static struct block_property fsys_property_table[] = {
@@ -118,7 +114,6 @@ static struct block_property fsys_property_table[] = {
 	BLK_ENTRY(1_2, ElectricalIdle, L1.2, on, 0_85, on,  0,     0, 0, 0, 0),
 	BLK_ENTRY(2_0, Hibernate,      L2,  on,  0_85, on,  0,     0, 0, 0, 0),
 	BLK_ENTRY(3_0, Disabled,       L3,  off, 0_0,  off, 0,     0, 0, 0, 0),
-	BLK_ENTRY(DEF, Bootup,         L0,  on,  0_85, on,  4000,  0, 0, 0, 3),
 };
 
 static struct block_property aon_property_table[] = {
@@ -126,7 +121,6 @@ static struct block_property aon_property_table[] = {
 	BLK_ENTRY(0_1, PowerUp,  Boot,    on,  0_85, on,  19.2, 0, 0, 0, 0),
 	BLK_ENTRY(0_2, PowerUp,  Compute, on,  0_85, on,  934,  0, 0, 0, 0),
 	BLK_ENTRY(3_0, Disabled, NoRail,  off, 0_0,  off, 0,    0, 0, 0, 0),
-	BLK_ENTRY(DEF, Bootup,   Compute, on,  0_85, on,  934,  0, 0, 0, 0),
 };
 
 #define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon, core) \
@@ -171,7 +165,6 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(4_0, 3_0, 3_0, 2_0, 0_0, 1_2, 0_1, TPU),
 	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_0, 3_0, 3_0, 3_0, TPU),
 	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0, TPU),
-	CHIP_TO_BLOCK_MAP_INIT(DEF, DEF, DEF, DEF, DEF, DEF, DEF, IPU),
 };
 
 struct block_property *get_desired_state(struct block *blk,
