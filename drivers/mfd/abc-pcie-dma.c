@@ -112,6 +112,30 @@ static int dma_callback(uint8_t chan, enum dma_data_direction dir,
 	return 0;
 }
 
+struct abc_pcie_dma_mblk_desc {
+	size_t size;
+	dma_addr_t dma_paddr;
+	struct dma_buf *ab_dram_dma_buf;
+	struct bar_mapping mapping;
+};
+
+static int abc_pcie_dma_alloc_ab_dram(size_t size,
+		struct abc_pcie_dma_mblk_desc *mblk_xfer_desc)
+{
+	struct dma_buf *ab_dram_dmabuf;
+	ab_dram_dmabuf = ab_dram_alloc_dma_buf_kernel(size);
+	if (IS_ERR(ab_dram_dmabuf))
+		return PTR_ERR(ab_dram_dmabuf);
+
+	memset(mblk_xfer_desc, 0, sizeof(*mblk_xfer_desc));
+	mblk_xfer_desc->ab_dram_dma_buf = ab_dram_dmabuf;
+
+	mblk_xfer_desc->size = size;
+	mblk_xfer_desc->dma_paddr = ab_dram_get_dma_buf_paddr(ab_dram_dmabuf);
+
+	return 0;
+}
+
 /**
  * Convert Linux scatterlist to array of entries used by PCIe EP DMA engine
  * @param[in]  sc_list   Scatter gather list for DMA buffer
@@ -666,145 +690,111 @@ int abc_pcie_ll_destroy(struct abc_pcie_dma_ll *ll)
 	return 0;
 }
 
+int abc_pcie_ll_count_dma_element(struct abc_pcie_sg_entry *src_sg,
+			    struct abc_pcie_sg_entry *dst_sg)
+{
+	int entries =0;
+	int dst_size_left = dst_sg->size;
+	int src_size_left = src_sg->size;
+	while ((src_sg->paddr != 0x0) && (dst_sg->paddr != 0x0)) {
+		if (dst_size_left == src_size_left) {
+			src_sg++;
+			dst_sg++;
+			src_size_left = src_sg->size;
+			dst_size_left = dst_sg->size;
+		} else if (src_size_left> dst_size_left) {
+			src_size_left -= dst_size_left;
+			dst_sg++;
+			dst_size_left = dst_sg->size;
+		} else {
+			dst_size_left -= src_size_left;
+			src_sg++;
+			src_size_left = src_sg->size;
+
+		}
+		entries++;
+	}
+	return entries;
+}
+
+static void abc_pcie_dma_update_ll_element(struct abc_pcie_sg_entry *sg_src,
+	struct abc_pcie_sg_entry *sg_dst, int size,
+	struct abc_pcie_dma_ll_element *ll_element)
+{
+	ll_element->size = size;
+	ll_element->sar_low = LOWER(sg_src->paddr);
+	ll_element->sar_high = UPPER(sg_src->paddr);
+	ll_element->dar_low = LOWER(sg_dst->paddr);
+	ll_element->dar_high = UPPER(sg_dst->paddr);
+}
+
 /**
  * API to generate a linked list for DMA transfers from
  * source and destination scatterlists.
  * @src_sg[in] Scatterlist of the source buffer
  * @dst_sg[in] Scatterlist of the destination buffer
- * @ll[out]    returned linked list structure
+ * @mblk_xfer_desc[in] pre allocated bar buffer
+ * @ll_num_entries [in] - the number of entries in the link list
  */
-int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
+static int abc_pcie_dma_ll_setup(struct abc_pcie_sg_entry *src_sg,
 			    struct abc_pcie_sg_entry *dst_sg,
-			    struct abc_pcie_dma_ll *ll)
+			    struct abc_pcie_dma_mblk_desc *mblk_xfer_desc,
+			    int ll_num_entries)
 {
-	struct abc_pcie_dma_ll_element *ll_element, *tmp_element;
+	struct abc_pcie_dma_ll_element ll_element;
 	struct abc_pcie_sg_entry sg_dst, sg_src;
-	dma_addr_t dma;
-	int i, s, u;
-
-	dev_dbg(&abc_dma.pdev->dev,
-			"dst_sg[%d] : Address %pa , length %zu\n",
-			0, &dst_sg[0].paddr, dst_sg[0].size);
-	dev_dbg(&abc_dma.pdev->dev,
-			"src_sg[%d] : Address %pa , length %zu\n",
-			0, &src_sg[0].paddr, src_sg[0].size);
-
-	/* Memory allocation for linked list */
-	ll_element = abc_alloc_coherent(
-		DMA_LL_LENGTH * sizeof(struct abc_pcie_dma_ll_element), &dma);
-	ll->size = 0;
-	ll->ll_element[0] = ll_element;
-	ll->dma[0] = dma;
-	if (!ll_element) {
-		dev_err(&abc_dma.pdev->dev, "LL alloc failed\n");
-		return -EINVAL;
-	}
+	int i, s;
+	void *base_addr;
+	base_addr = mblk_xfer_desc->mapping.bar_vaddr;
+	ll_element.header = LL_DATA_ELEMENT;
 	i = 0; /* source buffer scatterlist index */
 	s = 0; /* destination buffer scatterlist index */
-	u = 0; /* linked list index */
-	sg_src = src_sg[i];
-	sg_dst = dst_sg[s];
-	if ((sg_src.paddr == 0x0) || (sg_dst.paddr == 0x0)) {
-		dev_err(&abc_dma.pdev->dev,
-			"Input lists invalid\n");
-		return -EINVAL;
-	}
-	while ((sg_src.paddr != 0x0) && (sg_dst.paddr != 0x0)) {
+	sg_dst = dst_sg[0];
+	sg_src = src_sg[0];
+	/* last element has a unique header */
+	for(; ll_num_entries > 1 &&
+			(sg_src.paddr != 0x0) &&
+			(sg_dst.paddr != 0x0); --ll_num_entries) {
 		if (sg_src.size == sg_dst.size) {
-			ll_element[u].header = LL_DATA_ELEMENT;
-			ll_element[u].size = sg_src.size;
-			ll_element[u].sar_low = LOWER(sg_src.paddr);
-			ll_element[u].sar_high = UPPER(sg_src.paddr);
-			ll_element[u].dar_low = LOWER(sg_dst.paddr);
-			ll_element[u].dar_high = UPPER(sg_dst.paddr);
+			abc_pcie_dma_update_ll_element(&sg_src,
+				&sg_dst, sg_src.size, &ll_element);
 			i++;
 			s++;
 			sg_src = src_sg[i];
 			sg_dst = dst_sg[s];
 		} else if (sg_src.size > sg_dst.size) {
-			ll_element[u].header = LL_DATA_ELEMENT;
-			ll_element[u].size = sg_dst.size;
-			ll_element[u].sar_low = LOWER(sg_src.paddr);
-			ll_element[u].sar_high = UPPER(sg_src.paddr);
-			ll_element[u].dar_low = LOWER(sg_dst.paddr);
-			ll_element[u].dar_high = UPPER(sg_dst.paddr);
+			abc_pcie_dma_update_ll_element(&sg_src,
+				&sg_dst, sg_dst.size, &ll_element);
 			sg_src.paddr = sg_src.paddr + sg_dst.size;
 			sg_src.size = sg_src.size - sg_dst.size;
 			s++;
 			sg_dst = dst_sg[s];
 		} else {
-			ll_element[u].header = LL_DATA_ELEMENT;
-			ll_element[u].size = sg_src.size;
-			ll_element[u].sar_low = LOWER(sg_src.paddr);
-			ll_element[u].sar_high = UPPER(sg_src.paddr);
-			ll_element[u].dar_low = LOWER(sg_dst.paddr);
-			ll_element[u].dar_high = UPPER(sg_dst.paddr);
+			abc_pcie_dma_update_ll_element(&sg_src,
+				&sg_dst, sg_src.size, &ll_element);
 			sg_dst.paddr = sg_dst.paddr + sg_src.size;
 			sg_dst.size = sg_dst.size - sg_src.size;
 			i++;
 			sg_src = src_sg[i];
 		}
-		u++;
-		if (u == DMA_LL_LENGTH - 1) {
-			dev_dbg(&abc_dma.pdev->dev,
-				"%s: reached DMA_LL_LENGTH u=%d\n",
-				__func__, u);
-			ll_element[u].header = LL_LINK_ELEMENT;
-			if ((sg_src.paddr == 0x0) || (sg_dst.paddr == 0x0)) {
-				ll_element[u-1].header = LL_IRQ_DATA_ELEMENT;
-				ll_element[u].header = LL_LAST_LINK_ELEMENT;
-				ll_element[u].sar_low =
-					LOWER((uint64_t) ll->dma[0]);
-				ll_element[u].sar_high =
-					UPPER((uint64_t) ll->dma[0]);
-				return 0;
-			}
-			if (ll->size >= (MAX_LL_ELEMENT-1)) {
-				dev_err(&abc_dma.pdev->dev,
-					"Out of dma elements\n");
-				ll_element[u-1].header = LL_IRQ_DATA_ELEMENT;
-				ll_element[u].header = LL_LAST_LINK_ELEMENT;
-				ll_element[u].sar_low =
-					LOWER((uint64_t) ll->dma[0]);
-				ll_element[u].sar_high =
-					UPPER((uint64_t) ll->dma[0]);
-				abc_pcie_ll_destroy(ll);
-				return -EINVAL;
-			}
-			tmp_element = abc_alloc_coherent(
-				DMA_LL_LENGTH
-				* sizeof(struct abc_pcie_dma_ll_element),
-				&dma);
-			if (!tmp_element) {
-				dev_err(&abc_dma.pdev->dev,
-					"Element allcation failed\n");
-				ll_element[u-1].header = LL_IRQ_DATA_ELEMENT;
-				ll_element[u].header = LL_LAST_LINK_ELEMENT;
-				ll_element[u].sar_low =
-					LOWER((uint64_t) ll->dma[0]);
-				ll_element[u].sar_high =
-					UPPER((uint64_t) ll->dma[0]);
-				abc_pcie_ll_destroy(ll);
-				return -EINVAL;
-			}
-			ll_element[u].sar_low =
-				LOWER((uint64_t) dma);
-			ll_element[u].sar_high =
-				UPPER((uint64_t) dma);
-			ll_element = tmp_element;
-			u = 0;
-			ll->size++;
-			ll->ll_element[ll->size] = ll_element;
-			ll->dma[ll->size] = dma;
-		}
+		if(ll_num_entries == 2)
+			ll_element.header = LL_IRQ_DATA_ELEMENT;
+		memcpy_toio((void *)base_addr, &ll_element, sizeof(ll_element));
+		base_addr += sizeof(ll_element);
 	}
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s: Created %d linked lists, last list size %d\n",
-		__func__, ll->size+1, u);
-	ll_element[u-1].header = LL_IRQ_DATA_ELEMENT;
-	ll_element[u].header = LL_LAST_LINK_ELEMENT;
-	ll_element[u].sar_low = LOWER((uint64_t) ll->dma[0]);
-	ll_element[u].sar_high = UPPER((uint64_t) ll->dma[0]);
+
+	// we didn't reach the end of the linked list - error in the count
+	if((sg_src.paddr != 0x0 && sg_dst.paddr != 0) || ll_num_entries >1) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s: did not reach the end of the Scatterlists \n",
+			__func__);
+		return -EINVAL;
+	}
+	/* last element */
+	ll_element.header = LL_LAST_LINK_ELEMENT;
+	ll_element.sar_low = LOWER(mblk_xfer_desc->dma_paddr);
+	ll_element.sar_high = UPPER(mblk_xfer_desc->dma_paddr);
+	memcpy_toio((void *)base_addr, &ll_element, sizeof(ll_element));
 	return 0;
 }
 
@@ -921,7 +911,7 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 	remote_sg_list->dir = dma_desc->dir;
 	remote_sg_entries = NULL;
 
-	/* TODO: local_buf_size will not work for DMA buffers! */
+	/* TODO: size will not work for DMA buffers! */
 	switch (dma_desc->remote_buf_type) {
 	case DMA_BUFFER_USER:
 		err = abc_pcie_user_remote_buf_sg_build(
@@ -1123,7 +1113,7 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	remote_sg_list->dir = dma_desc->dir;
 	remote_sg_entries = NULL;
 
-	/* TODO: local_buf_size will not work for DMA buffers! */
+	/* TODO: size will not work for DMA buffers! */
 	switch (dma_desc->remote_buf_type) {
 	case DMA_BUFFER_USER:
 		err = abc_pcie_user_remote_buf_sg_build(
@@ -1270,127 +1260,59 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 			     struct abc_pcie_dma_desc *dma_desc)
 /*			    enum dma_data_direction dir)*/
 {
-	struct abc_pcie_dma_ll *abc_pcie_ll = NULL;
-	struct dma_element_t dma_blk;
-	struct dma_buf *ll_dma_buf;
-	struct dma_buf_attachment *ll_dma_buf_attach;
-	struct sg_table *ll_sg_table;
-	size_t ll_len;
-	int i;
-	uint64_t ll_abaddr;
 	int dma_chan;
+	size_t ll_size;
+	int ll_num_entries;
+	struct abc_pcie_dma_mblk_desc mblk_xfer_desc;
 	int err = 0;
 	enum dma_data_direction dir = dma_desc->dir;
 
 	dma_chan = DMA_CHAN;
 
-	abc_pcie_ll = kmalloc(sizeof(struct abc_pcie_dma_ll), GFP_KERNEL);
-	if (!abc_pcie_ll) {
+	/* add one since we have an end of list marker in the end */
+	ll_num_entries = abc_pcie_ll_count_dma_element(src_sg, dst_sg) + 1;
+	if (ll_num_entries == 1) {
 		dev_err(&abc_dma.pdev->dev,
-			"%s: failed to kmalloc ch%d linked list buffer\n",
-			__func__, dma_chan);
+			"%s: Error with received scatter lists\n",
+			__func__);
 		return -ENOMEM;
 	}
+	ll_size = ll_num_entries * sizeof(struct abc_pcie_dma_ll_element);
 
-	/* generate linked list */
-	err = abc_pcie_ll_build(src_sg, dst_sg, abc_pcie_ll);
-	if (err) {
-		kfree(abc_pcie_ll);
+	err = abc_pcie_dma_alloc_ab_dram(ll_size, &mblk_xfer_desc);
+	if(err) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s: failed to alloc ch%d BAR size: %d error: %d\n",
+			__func__, dma_chan, ll_size, err);
 		return err;
 	}
-
-	/* Allocate AB-DRAM for the entire set of LLs */
-	ll_len = DMA_LL_LENGTH * sizeof(struct abc_pcie_dma_ll_element) *
-		(abc_pcie_ll->size + 1);
-	ll_dma_buf = ab_dram_alloc_dma_buf_kernel(ll_len);
-	if (IS_ERR(ll_dma_buf)) {
-		err = PTR_ERR(ll_dma_buf);
-		dev_err(&abc_dma.pdev->dev,
-			"%s: failed to alloc ch%d AB-DRAM LL buffer: %d\n",
-			__func__, dma_chan, err);
-		goto destroy_ll;
-	}
-	ll_dma_buf_attach = dma_buf_attach(ll_dma_buf, &abc_dma.pdev->dev);
-	if (IS_ERR(ll_dma_buf_attach)) {
-		err = PTR_ERR(ll_dma_buf_attach);
-		dev_err(&abc_dma.pdev->dev,
-			"%s: failed to attach to ch%d AB-DRAM LL buffer: %d\n",
-			__func__, dma_chan, err);
-		goto free_buf;
-	}
-	ll_sg_table = dma_buf_map_attachment(ll_dma_buf_attach, DMA_TO_DEVICE);
-	if (IS_ERR(ll_sg_table)) {
-		err = PTR_ERR(ll_sg_table);
-		dev_err(&abc_dma.pdev->dev,
-			"%s: failed to map ch%d AB-DRAM LL buffer: %d\n",
-			__func__, dma_chan, err);
-		goto detach_buf;
-	}
-
-	ll_abaddr = sg_dma_address(ll_sg_table->sgl);
-	dev_dbg(&abc_dma.pdev->dev,
-		"Allocated ch%d AB-DRAM LL buffer @0x%llx size %zu for"
-		" %d lists\n",
-		dma_chan, ll_abaddr, ll_len, abc_pcie_ll->size + 1);
 	mutex_lock(&dma_mutex);
+	err = abc_pcie_map_bar_region(abc_dma.dma_dev,
+		BAR_2, mblk_xfer_desc.size,
+			mblk_xfer_desc.dma_paddr, &mblk_xfer_desc.mapping);
+	if(err) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s: failed to map to BAR ch%d error: %d\n",
+			__func__, dma_chan, err);
+		goto unlock_unmap_buf;
+	}
 	err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
 	if (err) {
 		dev_err(&abc_dma.pdev->dev,
 			"%s: failed to register ch%d dma irq callback: %d\n",
 			__func__, dma_chan, err);
-		goto unlock_unmap_buf;
+		goto unmap_bar_buf;
 	}
-
-	/* Upload each LL in the list of LLs to the AB-DRAM buffer */
-	for (i = 0; i <= abc_pcie_ll->size; i++) {
-		dma_blk.src_addr   = LOWER((uint64_t)abc_pcie_ll->dma[i]);
-		dma_blk.src_u_addr = UPPER((uint64_t)abc_pcie_ll->dma[i]);
-		dma_blk.dst_addr   = LOWER(ll_abaddr);
-		dma_blk.dst_u_addr = UPPER(ll_abaddr);
-		dma_blk.len = DMA_LL_LENGTH *
-			sizeof(struct abc_pcie_dma_ll_element);
-
-		dev_dbg(&abc_dma.pdev->dev,
-			"Uploading ch%d LL #%d from %pK -> AB-DRAM 0x%llx"
-			" len %u\n",
-			dma_chan, i, abc_pcie_ll->ll_element[i],
-			ll_abaddr, dma_blk.len);
-
-		reinit_completion(&dma_done);
+	err = abc_pcie_dma_ll_setup(src_sg,
+			    dst_sg, &mblk_xfer_desc, ll_num_entries);
+	if(err)
+		goto unregister_dma_callback;
 #ifdef BENCHMARK_ENABLE
-		ll_dma_size[dma_chan] = sizeof(struct abc_pcie_dma_ll);
-		ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
-#endif
-		err = dma_sblk_start(dma_chan, DMA_TO_DEVICE, &dma_blk);
-		if (err) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: ch%d LL upload sblk dma failed: %d\b",
-				__func__, dma_chan, err);
-			goto unregister_dma_callback;
-		}
-		/* TODO: use wait_for_completion_interruptible_timeout? */
-		err = wait_for_completion_interruptible(&dma_done);
-		if (err) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: Wait for ch%d LL upload failed: %d\b",
-				__func__, dma_chan, err);
-			goto unregister_dma_callback;
-		}
-
-		ll_abaddr += dma_blk.len;
-	}
-
-	ll_abaddr = sg_dma_address(ll_sg_table->sgl); /* back to start */
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s: Starting ch%d mblk transfer\n",
-		__func__, dma_chan);
-#ifdef BENCHMARK_ENABLE
-	ll_dma_size[dma_chan] = dma_desc->local_buf_size;
+	ll_dma_size[dma_chan] = dma_desc->size;
 	ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
 #endif
 	reinit_completion(&dma_done);
-	/* start multi-block transfer */
-	err = dma_mblk_start(dma_chan, dir, ll_abaddr);
+	err = dma_mblk_start(dma_chan, dir, mblk_xfer_desc.dma_paddr);
 	if (err) {
 		dev_err(&abc_dma.pdev->dev,
 			"%s: start ch%d mblk dma xfer failed: %d\b",
@@ -1412,16 +1334,12 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 
 unregister_dma_callback:
 	abc_reg_dma_irq_callback(NULL, dma_chan);
-
+unmap_bar_buf:
+	abc_pcie_unmap_bar_region(abc_dma.dma_dev, &mblk_xfer_desc.mapping);
 unlock_unmap_buf:
 	mutex_unlock(&dma_mutex);
-	dma_buf_unmap_attachment(ll_dma_buf_attach, ll_sg_table, DMA_TO_DEVICE);
-detach_buf:
-	dma_buf_detach(ll_dma_buf, ll_dma_buf_attach);
-free_buf:
-	ab_dram_free_dma_buf_kernel(ll_dma_buf);
-destroy_ll:
-	abc_pcie_ll_destroy(abc_pcie_ll);
+	ab_dram_free_dma_buf_kernel(mblk_xfer_desc.ab_dram_dma_buf);
+
 	return err;
 }
 
