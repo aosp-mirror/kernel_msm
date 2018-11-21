@@ -298,6 +298,8 @@ static void cmdq_dumpregs(struct cmdq_host *cq_host)
 #ifdef CONFIG_MMC_RING_BUFFER
 	mmc_dump_trace_buffer(mmc, NULL);
 #endif
+
+	cmdq_dump_adma_mem(cq_host);
 }
 
 /**
@@ -1047,7 +1049,10 @@ ring_doorbell:
 		cmdq_dumpregs(cq_host);
 		BUG_ON(1);
 	}
-	MMC_TRACE(mmc, "%s: tag: %d\n", __func__, tag);
+	MMC_TRACE(mmc, "%s: tag: %d (data_task:0x%08x, general_task:0x%08x)\n",
+			  __func__, tag,
+			  mmc->cmdq_ctx.data_active_reqs,
+			  mmc->cmdq_ctx.active_reqs);
 	cmdq_writel(cq_host, 1 << tag, CQTDBR);
 	/* Commit the doorbell write immediately */
 	wmb();
@@ -1365,8 +1370,11 @@ skip_cqterri:
 				/* complete the corresponding mrq */
 				pr_debug("%s: completing tag -> %lu\n",
 					 mmc_hostname(mmc), tag);
-				MMC_TRACE(mmc, "%s: completing tag -> %lu\n",
-					__func__, tag);
+				MMC_TRACE(mmc, "%s: completing tag -> %lu "
+					"(data_task:0x%08x, general_task:0x%08x)\n",
+					__func__, tag,
+					mmc->cmdq_ctx.data_active_reqs,
+					mmc->cmdq_ctx.active_reqs);
 				cmdq_finish_data(mmc, tag);
 			}
 		}
