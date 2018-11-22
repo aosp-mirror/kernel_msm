@@ -41,6 +41,12 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
+#define PROXVALUE_SIZE 2
+#define PROXUSEFUL_REG 0x61
+#define PROXAVG_REG 0x63
+#define PROXDIFF_REG 0x65
+#define PROXOFFSET_REG 0x67
+
 enum SILEGO_GPIO {
 	IR_VCSEL_FAULT,
 	IR_VCSEL_TEST,
@@ -51,6 +57,14 @@ enum SILEGO_GPIO {
 enum CAP_SENSE_GPIO {
 	CSENSE_PROXAVG_READ,
 	CAP_SENSE_GPIO_MAX
+};
+
+enum CAP_SENSE_PROX_VALUE {
+	PROX_USEFUL,
+	PROX_AVG,
+	PROX_DIFF,
+	PROX_OFFSET,
+	PROX_VALUE_MAX
 };
 
 enum LASER_TYPE {
@@ -100,6 +114,7 @@ struct led_laser_ctrl_t {
 		uint32_t sid;
 		struct gpio *gpio_array;
 		unsigned int irq[CAP_SENSE_GPIO_MAX];
+		uint16_t proxvalue[PROX_VALUE_MAX];
 	} cap_sense;
 };
 
@@ -136,6 +151,86 @@ static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 		CAMERA_SENSOR_I2C_TYPE_BYTE);
 	if (rc < 0)
 		dev_err(ctrl->soc_info.dev, "clean up NIRQ failed");
+
+	io_release_rc = camera_io_release(&(ctrl->io_master_info));
+	if (io_release_rc < 0) {
+		dev_err(ctrl->soc_info.dev, "cap sense cci_release failed");
+		if (!rc)
+			rc = io_release_rc;
+	}
+	ctrl->io_master_info.cci_client->sid = old_sid;
+	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
+	return rc;
+}
+
+static int sx9320_read_proxvalue(struct led_laser_ctrl_t *ctrl, int proxtype)
+{
+	int rc, io_release_rc, i;
+	uint32_t old_sid, old_cci_master, data, addr;
+	uint16_t mask;
+
+	if (proxtype >= PROX_VALUE_MAX) {
+		dev_err(ctrl->soc_info.dev, "unknown proxvalue type");
+		return -EINVAL;
+	}
+
+	old_sid = ctrl->io_master_info.cci_client->sid;
+	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
+	ctrl->io_master_info.cci_client->sid = ctrl->cap_sense.sid;
+	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
+
+	rc = camera_io_init(&(ctrl->io_master_info));
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"cam io init for cap sense failed: rc: %d", rc);
+		ctrl->io_master_info.cci_client->sid = old_sid;
+		ctrl->io_master_info.cci_client->cci_i2c_master =
+			old_cci_master;
+		return rc;
+	}
+
+	switch (proxtype) {
+	case PROX_USEFUL:
+		addr = PROXUSEFUL_REG;
+		mask = 0xFFFF;
+		break;
+	case PROX_AVG:
+		addr = PROXAVG_REG;
+		mask = 0xFFFF;
+		break;
+	case PROX_DIFF:
+		addr = PROXDIFF_REG;
+		mask = 0xFFFF;
+		break;
+	case PROX_OFFSET:
+		addr = PROXOFFSET_REG;
+		mask = 0x3FFF;
+		break;
+	default:
+		break;
+	}
+
+	ctrl->cap_sense.proxvalue[proxtype] = 0;
+	for (i = 0; i < PROXVALUE_SIZE; i++) {
+		rc = camera_io_dev_read(
+			&ctrl->io_master_info,
+			addr+i,
+			&data,
+			CAMERA_SENSOR_I2C_TYPE_BYTE,
+			CAMERA_SENSOR_I2C_TYPE_BYTE);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"read proxvalue %d failed",
+				proxtype);
+			goto out;
+		}
+
+		ctrl->cap_sense.proxvalue[proxtype] =
+			(ctrl->cap_sense.proxvalue[proxtype] << 8) + data;
+	}
+	ctrl->cap_sense.proxvalue[proxtype] &= mask;
+
+out:
 
 	io_release_rc = camera_io_release(&(ctrl->io_master_info));
 	if (io_release_rc < 0) {
@@ -964,6 +1059,34 @@ static ssize_t is_cap_sense_validated_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->cap_sense.is_validated);
 }
 
+static ssize_t cap_sense_proxvalue_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc, i;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	if (!ctrl->cap_sense.is_power_up || !ctrl->is_power_up) {
+		dev_warn(dev, "try to enable laser first");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < PROX_VALUE_MAX; i++) {
+		rc = sx9320_read_proxvalue(ctrl, i);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = scnprintf(buf, PAGE_SIZE,
+		"PROXUSEFUL: %d\nPROXAVG: %d\nPROXOFFSET: %d\nPROXDIFF: %d\n",
+		ctrl->cap_sense.proxvalue[PROX_USEFUL],
+		ctrl->cap_sense.proxvalue[PROX_AVG],
+		ctrl->cap_sense.proxvalue[PROX_OFFSET],
+		ctrl->cap_sense.proxvalue[PROX_DIFF]);
+
+	return rc;
+}
+
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
 static DEVICE_ATTR_WO(led_laser_write_byte);
@@ -973,6 +1096,7 @@ static DEVICE_ATTR_RO(silego_vcsel_fault_count);
 static DEVICE_ATTR_RO(silego_is_cap_sense_halt);
 static DEVICE_ATTR_RO(is_certified);
 static DEVICE_ATTR_RO(is_cap_sense_validated);
+static DEVICE_ATTR_RO(cap_sense_proxvalue);
 
 static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_enable.attr,
@@ -984,6 +1108,7 @@ static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_silego_is_cap_sense_halt.attr,
 	&dev_attr_is_certified.attr,
 	&dev_attr_is_cap_sense_validated.attr,
+	&dev_attr_cap_sense_proxvalue.attr,
 	NULL
 };
 
