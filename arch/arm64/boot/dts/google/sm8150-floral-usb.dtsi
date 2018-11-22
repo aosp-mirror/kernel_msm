@@ -23,3 +23,9 @@
 &pm8150b_charger {
 	qcom,otg-cl-ua = <2000000>;
 };
+
+&usb0 {
+	dwc3@a600000 {
+		maximum-speed = "super-speed";
+	};
+};
