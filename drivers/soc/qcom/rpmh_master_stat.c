@@ -163,6 +163,10 @@ static ssize_t msm_rpmh_master_stats_show(struct kobject *kobj,
 static inline void msm_rpmh_apss_master_stats_update(
 				struct msm_rpmh_profile_unit *profile_unit)
 {
+	if (apss_master_stats.last_entered ==
+					profile_unit[POWER_DOWN_END].value)
+		return;
+
 	apss_master_stats.counts++;
 	apss_master_stats.last_entered = profile_unit[POWER_DOWN_END].value;
 	apss_master_stats.last_exited = profile_unit[POWER_UP_START].value;
