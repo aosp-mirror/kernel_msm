@@ -44,19 +44,19 @@
 };
 
 &pil_adsp_mem {
-	reg = <0 0x95800000 0 0x1e00000>;
+	reg = <0 0x95800000 0 0x2200000>;
 };
 
 &pil_ipa_fw_mem {
-	reg = <0 0x97600000 0 0x10000>;
+	reg = <0 0x97A00000 0 0x10000>;
 };
 
 &pil_ipa_gsi_mem {
-	reg = <0 0x97610000 0 0x5000>;
+	reg = <0 0x97A10000 0 0x5000>;
 };
 
 &pil_gpu_mem {
-	reg = <0 0x97615000 0 0x2000>;
+	reg = <0 0x97A15000 0 0x2000>;
 };
 
 &reserved_memory {
