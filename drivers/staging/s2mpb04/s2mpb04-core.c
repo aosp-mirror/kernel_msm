@@ -50,6 +50,8 @@
 /* defines the number of tries to recover chip */
 #define S2MPB04_RECOVER_RETRY_COUNT 3
 
+static int s2mpb04_pdn_seq_en(struct s2mpb04_core *ddata);
+static int s2mpb04_pdn_seq_dis(struct s2mpb04_core *ddata);
 static int s2mpb04_prepare_pon(struct s2mpb04_core *ddata);
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata);
 static int s2mpb04_core_fixup(struct s2mpb04_core *ddata);
@@ -82,6 +84,12 @@ int s2mpb04_toggle_pon(struct s2mpb04_core *ddata)
 	dev_info(ddata->dev, "%s: toggling PON\n", __func__);
 
 	reinit_completion(&ddata->init_complete);
+
+	/* disable hardware sequence when SW is initiating power-down.
+	 * hw-driven power-down sequence is required only in case of a
+	 * TSD event and has 4ms extra latency.
+	 */
+	s2mpb04_pdn_seq_dis(ddata);
 
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
 
@@ -696,6 +704,40 @@ static int s2mpb04_core_fixup(struct s2mpb04_core *ddata)
 
 	/* disable watchdog timer */
 	s2mpb04_write_byte(ddata, S2MPB04_REG_WTSR_CTRL, 0x1D);
+
+	/* enable hardware power-down sequence */
+	s2mpb04_pdn_seq_en(ddata);
+
+	return 0;
+}
+
+/* Enable hardware power down sequence.
+ * PMIC state machine locks up when BGROK drops low in Standby state.
+ * When hardware power down sequence is enabled, on TSD event,
+ * PMIC state machine will first go to power-down state before
+ * going to low-power state. This will make BGROK to drop low
+ * on power-down -> low-power state transition and will prevent
+ * the lockup.
+ */
+static int s2mpb04_pdn_seq_en(struct s2mpb04_core *ddata)
+{
+	dev_dbg(ddata->dev, "%s: enable power down sequence\n",
+		__func__);
+
+	s2mpb04_write_byte(ddata, S2MPB04_REG_OFF_SEQ_CTRL, 0x80);
+	s2mpb04_write_byte(ddata, S2MPB04_REG_SEQ1, 0x44);
+	s2mpb04_write_byte(ddata, S2MPB04_REG_SEQ2, 0x44);
+
+	return 0;
+}
+
+/* Disable hardware power down sequence */
+static int s2mpb04_pdn_seq_dis(struct s2mpb04_core *ddata)
+{
+	dev_dbg(ddata->dev, "%s: disable power down sequence\n",
+		__func__);
+
+	s2mpb04_write_byte(ddata, S2MPB04_REG_OFF_SEQ_CTRL, 0x0);
 
 	return 0;
 }
