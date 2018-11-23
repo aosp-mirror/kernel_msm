@@ -12,7 +12,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
 #include <linux/ab-dram.h>
+#include <linux/airbrush-sm-notifier.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
@@ -43,6 +45,8 @@ struct ipu_adapter_ab_mfd_data {
 
 	struct notifier_block low_priority_irq_nb;
 	struct atomic_notifier_head *low_priority_irq_nh;
+
+	struct notifier_block clk_change_nb;
 };
 
 /* Paintbox IO virtual address space bounds
@@ -361,6 +365,41 @@ static int ipu_adapter_ab_mfd_low_priority_irq_notify(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
+					  unsigned long action,
+					  void *data)
+{
+	/* TODO(b/120037131): implement listener as needed */
+	struct ab_clk_notifier_data *clk_data =
+			(struct ab_clk_notifier_data *)data;
+	struct ipu_adapter_ab_mfd_data *dev_data =
+			container_of(nb,
+				     struct ipu_adapter_ab_mfd_data,
+				     clk_change_nb);
+
+	switch (action) {
+	case AB_IPU_PRE_RATE_CHANGE:
+		dev_dbg(dev_data->dev,
+			"%s: IPU rate will change from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+		break;
+	case AB_IPU_POST_RATE_CHANGE:
+		dev_dbg(dev_data->dev,
+			"%s: IPU rate has changed from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+		break;
+	case AB_IPU_ABORT_RATE_CHANGE:
+		dev_warn(dev_data->dev,
+			 "%s: IPU rate aborted changing from %lu Hz to %lu Hz",
+			 __func__, clk_data->old_rate, clk_data->new_rate);
+		break;
+	default:
+		return NOTIFY_DONE;  /* Don't care */
+	}
+
+	return NOTIFY_OK;
+}
+
 static void ipu_adapter_ab_mfd_set_platform_data(struct platform_device *pdev,
 		struct paintbox_pdata *pdata)
 {
@@ -514,6 +553,14 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 		goto err_deinitialize_bus;
 	}
 
+	dev_data->clk_change_nb.notifier_call = ipu_adapter_ab_sm_clk_listener;
+	ret = ab_sm_register_clk_event(&dev_data->clk_change_nb);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"failed to subscribe to clk event, ret %d\n", ret);
+		goto err_deinitialize_bus;
+	}
+
 	return 0;
 
 err_deinitialize_bus:
@@ -529,6 +576,7 @@ static int ipu_adapter_ab_mfd_remove(struct platform_device *pdev)
 	struct ipu_adapter_ab_mfd_data *dev_data =
 			platform_get_drvdata(pdev);
 
+	ab_sm_unregister_clk_event(&dev_data->clk_change_nb);
 	ipu_bus_deinitialize(dev_data->bus);
 	dev_data->bus = NULL;
 	atomic_notifier_chain_unregister(dev_data->low_priority_irq_nh,
