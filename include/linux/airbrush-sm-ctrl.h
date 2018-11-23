@@ -15,6 +15,7 @@
 #ifndef _AIRBRUSH_SM_CTRL_H
 #define _AIRBRUSH_SM_CTRL_H
 
+#include <linux/airbrush-sm-notifier.h>
 #include <linux/atomic.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
@@ -24,6 +25,7 @@
 #include <linux/mfd/abc-pcie.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
@@ -340,6 +342,8 @@ struct ab_state_context {
 	atomic_t async_in_use;
 	struct mutex async_fifo_lock;
 	struct kfifo *async_entries;
+
+	struct blocking_notifier_head clk_subscribers;
 };
 
 struct ab_sm_misc_session {

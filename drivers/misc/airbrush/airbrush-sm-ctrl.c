@@ -547,6 +547,23 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 }
 EXPORT_SYMBOL(ab_sm_register_callback);
 
+int ab_sm_register_clk_event(struct notifier_block *nb)
+{
+	if (!ab_sm_ctx)
+		return -EAGAIN;
+
+	return blocking_notifier_chain_register(
+				&ab_sm_ctx->clk_subscribers, nb);
+}
+EXPORT_SYMBOL(ab_sm_register_clk_event);
+
+int ab_sm_unregister_clk_event(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(
+				&ab_sm_ctx->clk_subscribers, nb);
+}
+EXPORT_SYMBOL(ab_sm_unregister_clk_event);
+
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 {
 	uint32_t val;
@@ -894,6 +911,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 
 	ab_sm_create_debugfs(ab_sm_ctx);
 	ab_sm_create_sysfs(ab_sm_ctx);
+
+	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
 	return ab_sm_ctx;
 
 fail_fw_patch_en:
