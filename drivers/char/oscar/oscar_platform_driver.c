@@ -6,6 +6,7 @@
  */
 
 #include <asm/current.h>
+#include <linux/airbrush-sm-notifier.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/init.h>
@@ -178,6 +179,9 @@ struct oscar_dev {
 	/* List of all active ABC DRAM buffers, protected by abc_buffers_lock */
 	struct mutex abc_buffers_lock;
 	struct list_head abc_buffers;
+	struct mutex dev_avail_lock; /* protects clk_lockout */
+	bool clk_lockout; /* clock change in progress */
+	struct notifier_block clk_change_nb;
 };
 
 
@@ -185,8 +189,23 @@ struct oscar_dev {
 static int bypass_top_level;
 module_param(bypass_top_level, int, 0644);
 
+static bool check_dev_avail(struct oscar_dev *oscar_dev)
+{
+	bool ret;
+
+	mutex_lock(&oscar_dev->dev_avail_lock);
+	ret = !oscar_dev->clk_lockout;
+	mutex_unlock(&oscar_dev->dev_avail_lock);
+	return ret;
+}
+
 static int oscar_device_open_cb(struct gasket_dev *gasket_dev)
 {
+	struct oscar_dev *oscar_dev =
+		platform_get_drvdata(gasket_dev->platform_dev);
+
+	if (!check_dev_avail(oscar_dev))
+		return -EIO;
 	return gasket_reset_nolock(gasket_dev);
 }
 
@@ -924,6 +943,30 @@ static int oscar_lowprio_irq_notify(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int oscar_ab_sm_clk_listener(struct notifier_block *nb,
+				    unsigned long action, void *data)
+{
+	struct oscar_dev *oscar_dev =
+		container_of(nb, struct oscar_dev, clk_change_nb);
+
+	switch (action) {
+	case AB_TPU_PRE_RATE_CHANGE:
+		mutex_lock(&oscar_dev->dev_avail_lock);
+		oscar_dev->clk_lockout = true; /* dev unavail while changing */
+		mutex_unlock(&oscar_dev->dev_avail_lock);
+		break;
+	case AB_TPU_POST_RATE_CHANGE:
+	case AB_TPU_ABORT_RATE_CHANGE:
+		mutex_lock(&oscar_dev->dev_avail_lock);
+		oscar_dev->clk_lockout = false;
+		mutex_unlock(&oscar_dev->dev_avail_lock);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+	return NOTIFY_OK;
+}
+
 static void oscar_interrupt_cleanup(struct oscar_dev *oscar_dev)
 {
 	int ret;
@@ -1033,6 +1076,11 @@ static int oscar_setup_device(struct platform_device *pdev,
 			 "no intnc non-critical irq notifier supplied\n");
 	}
 
+	oscar_dev->clk_change_nb.notifier_call = oscar_ab_sm_clk_listener;
+	ret = ab_sm_register_clk_event(&oscar_dev->clk_change_nb);
+	if (ret)
+		dev_warn(dev, "failed to subscribe to clk event (%d)\n", ret);
+
 	oscar_reset(gasket_dev);
 
 	while (retries < OSCAR_RESET_RETRY) {
@@ -1076,6 +1124,8 @@ static int oscar_probe(struct platform_device *pdev)
 	oscar_dev->gasket_dev = gasket_dev;
 	INIT_LIST_HEAD(&oscar_dev->abc_buffers);
 	mutex_init(&oscar_dev->abc_buffers_lock);
+	mutex_init(&oscar_dev->dev_avail_lock);
+	oscar_dev->clk_lockout = false;
 
 	ret = oscar_setup_device(pdev, oscar_dev, gasket_dev);
 	if (ret) {
@@ -1109,6 +1159,7 @@ static int oscar_remove(struct platform_device *pdev)
 	struct oscar_dev *oscar_dev = platform_get_drvdata(pdev);
 	struct gasket_dev *gasket_dev = oscar_dev->gasket_dev;
 
+	ab_sm_unregister_clk_event(&oscar_dev->clk_change_nb);
 	gasket_disable_device(gasket_dev);
 	oscar_interrupt_cleanup(oscar_dev);
 	if (!oscar_dev->parent_ioremap)

@@ -12,7 +12,7 @@ config GASKET_FRAMEWORK
 
 config OSCAR_DRIVER
         tristate "Oscar Driver"
-        depends on GASKET_FRAMEWORK && MFD_ABC_PCIE && AIRBRUSH_DRAM
+        depends on GASKET_FRAMEWORK && MFD_ABC_PCIE && AIRBRUSH_DRAM && AIRBRUSH_SM
         help
           This driver supports the Oscar device.  Say Y if you want to
           include this driver in the kernel.
