@@ -12,6 +12,7 @@
 
 #include <linux/airbrush-clk.h>
 #include <linux/airbrush-sm-ctrl.h>
+#include <linux/airbrush-sm-notifier.h>
 #include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/mfd/abc-pcie.h>
@@ -49,8 +50,12 @@ static int ab_clk_ipu_gate_handler(void *ctx)
 {
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 	uint32_t val;
+	unsigned long old_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
+	unsigned long new_rate = 0;
 
 	dev_dbg(clk_ctx->dev, "%s: gate IPU clock\n", __func__);
+
+	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	/* NOTE: This is guarded against PCIE going down
 	 * since it is only called via ops structure. Ops structure is
@@ -61,6 +66,7 @@ static int ab_clk_ipu_gate_handler(void *ctx)
 	val &= ~(1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
 
+	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return 0;
 }
 
@@ -68,8 +74,12 @@ static int ab_clk_ipu_ungate_handler(void *ctx)
 {
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 	uint32_t val;
+	unsigned long old_rate = 0;
+	unsigned long new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 
 	dev_dbg(clk_ctx->dev, "%s: ungate IPU clock\n", __func__);
+
+	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	/* NOTE: This is guarded against PCIE going down
 	 * since it is only called via ops structure. Ops structure is
@@ -80,25 +90,35 @@ static int ab_clk_ipu_ungate_handler(void *ctx)
 	val |= (1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
 
+	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return 0;
 }
 
 static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
 {
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+	unsigned long old_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
+	unsigned long new_rate = rate;
 
-	if (rate == 0)
+	if (rate == 0) {
 		rate = OSC_RATE;
+		new_rate = rate;
+	}
 
 	dev_dbg(clk_ctx->dev,
 		"%s: set IPU clock rate to %llu\n", __func__, rate);
 
+	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
 		clk_set_rate(clk_ctx->ipu_pll_div, OSC_RATE);
 		clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->ipu_pll_div);
-		return clk_get_rate(clk_ctx->ipu_switch_mux);
+
+		new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
+		ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE,
+				 old_rate, new_rate);
+		return new_rate;
 	}
 
 	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
@@ -107,15 +127,21 @@ static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
 	clk_set_rate(clk_ctx->ipu_pll_div, rate);
 	clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->ipu_pll_div);
 
-	return clk_get_rate(clk_ctx->ipu_switch_mux);
+	new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
+	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
+	return new_rate;
 }
 
 static int ab_clk_tpu_gate_handler(void *ctx)
 {
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 	uint32_t val;
+	unsigned long old_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
+	unsigned long new_rate = 0;
 
 	dev_dbg(clk_ctx->dev, "%s: gate TPU clocks\n", __func__);
+
+	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	/* NOTE: This is guarded against PCIE going down
 	 * since it is only called via ops structure. Ops structure is
@@ -126,6 +152,7 @@ static int ab_clk_tpu_gate_handler(void *ctx)
 	val &= ~(1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
 
+	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return 0;
 }
 
@@ -133,8 +160,12 @@ static int ab_clk_tpu_ungate_handler(void *ctx)
 {
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 	uint32_t val;
+	unsigned long old_rate = 0;
+	unsigned long new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 
 	dev_dbg(clk_ctx->dev, "%s: ungate TPU clocks\n", __func__);
+
+	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	/* NOTE: This is guarded against PCIE going down
 	 * since it is only called via ops structure. Ops structure is
@@ -145,6 +176,7 @@ static int ab_clk_tpu_ungate_handler(void *ctx)
 	val |= (1 << 21);
 	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
 
+	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return 0;
 }
 
@@ -174,18 +206,28 @@ static int ab_clk_tpu_pll_disable_handler(void *ctx)
 static u64 ab_clk_tpu_set_rate_handler(void *ctx, u64 rate)
 {
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+	unsigned long old_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
+	unsigned long new_rate = rate;
 
-	if (rate == 0)
+	if (rate == 0) {
 		rate = OSC_RATE;
+		new_rate = rate;
+	}
 
 	dev_dbg(clk_ctx->dev,
 		"%s: set TPU clock rate to %llu\n", __func__, rate);
+
+	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 		clk_set_rate(clk_ctx->tpu_pll_div, OSC_RATE);
 		clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->tpu_pll_div);
-		return clk_get_rate(clk_ctx->tpu_switch_mux);
+
+		new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
+		ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE,
+				 old_rate, new_rate);
+		return new_rate;
 	}
 
 	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
@@ -194,7 +236,9 @@ static u64 ab_clk_tpu_set_rate_handler(void *ctx, u64 rate)
 	clk_set_rate(clk_ctx->tpu_pll_div, rate);
 	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->tpu_pll_div);
 
-	return clk_get_rate(clk_ctx->tpu_switch_mux);
+	new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
+	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
+	return new_rate;
 }
 
 static u64 ab_clk_aon_set_rate_handler(void *ctx, u64 rate)

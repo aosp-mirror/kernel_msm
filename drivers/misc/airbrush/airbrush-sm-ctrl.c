@@ -603,6 +603,35 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 }
 EXPORT_SYMBOL(ab_sm_register_callback);
 
+/**
+ * ab_sm_clk_notify - call Airbrush clk notifier chain
+ * @event: clk notifier type (see include/linux/airbrush-sm-notifier.h)
+ * @old_rate: old clk rate in Hz
+ * @new_rate: new clk rate in Hz
+ *
+ * Intended to be called by Airbrush clk provider only.
+ * Returns NOTIFY_DONE from the last driver called if all went well,
+ * or NOTIFY_STOP or NOTIFY_BAD immediately if a driver returns that,
+ * or -EAGAIN if ab_sm has not initialized.
+ */
+int ab_sm_clk_notify(unsigned long event,
+		     unsigned long old_rate,
+		     unsigned long new_rate)
+{
+	struct ab_clk_notifier_data clk_data;
+
+	if (!ab_sm_ctx)
+		return -EAGAIN;
+
+	clk_data.old_rate = old_rate;
+	clk_data.new_rate = new_rate;
+
+	return blocking_notifier_call_chain(&ab_sm_ctx->clk_subscribers,
+					    event,
+					    &clk_data);
+}
+EXPORT_SYMBOL(ab_sm_clk_notify);
+
 int ab_sm_register_clk_event(struct notifier_block *nb)
 {
 	if (!ab_sm_ctx)
@@ -615,6 +644,9 @@ EXPORT_SYMBOL(ab_sm_register_clk_event);
 
 int ab_sm_unregister_clk_event(struct notifier_block *nb)
 {
+	if (!ab_sm_ctx)
+		return -EAGAIN;
+
 	return blocking_notifier_chain_unregister(
 				&ab_sm_ctx->clk_subscribers, nb);
 }
