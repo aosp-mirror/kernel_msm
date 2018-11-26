@@ -139,6 +139,9 @@
 				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
 				qcom,display-topology = <2 2 1>;
 				qcom,default-topology-index = <0>;
+
+				qcom,panel-roi-alignment = <1080 20 1080 20 1080 20>;
+				qcom,partial-update-enabled = "single_roi";
 			};
 
 			timing@1 {
@@ -231,6 +234,9 @@
 				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
 				qcom,display-topology = <2 2 1>;
 				qcom,default-topology-index = <0>;
+
+				qcom,panel-roi-alignment = <1080 20 1080 20 1080 20>;
+				qcom,partial-update-enabled = "single_roi";
 			};
 		};
 
