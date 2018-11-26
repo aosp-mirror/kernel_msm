@@ -265,55 +265,63 @@ int hold_m3(void)
 	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
 			    ADDR_SYSTEM_RESET, cmd, 1);
 	if (ret < OK) {
-		pr_err("hold_m3: ERROR %08X\n", ret);
+		pr_err("%s: ERROR %08X\n", __func__, ret);
 		return ret;
 	}
 	pr_info("Hold M3 DONE!\n");
 
-#if !defined(I2C_INTERFACE) && defined(SPI4_WIRE)
-	/* configure manually SPI4 because when no fw is running the chip use
-	 * SPI3 by default */
-	pr_info("Setting SPI4 mode...\n");
-	cmd[0] = 0x10;
-	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
-			    ADDR_GPIO_DIRECTION, cmd, 1);
-	if (ret < OK) {
-		pr_err("hold_m3: can not set gpio dir ERROR %08X\n", ret);
-		return ret;
-	}
+#if !defined(I2C_INTERFACE)
+	if (getClient() &&
+		(getClient()->mode & SPI_3WIRE) == 0) {
+		/* configure manually SPI4 because when no fw is running the
+		 * chip use SPI3 by default */
+		pr_info("Setting SPI4 mode...\n");
+		cmd[0] = 0x10;
+		ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+				    ADDR_GPIO_DIRECTION, cmd, 1);
+		if (ret < OK) {
+			pr_err("%s: can not set gpio dir ERROR %08X\n",
+				__func__, ret);
+			return ret;
+		}
 
-	cmd[0] = 0x02;
-	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
-			    ADDR_GPIO_PULLUP, cmd, 1);
-	if (ret < OK) {
-		pr_err("hold_m3: can not set gpio pull-up ERROR %08X\n", ret);
-		return ret;
-	}
+		cmd[0] = 0x02;
+		ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+				    ADDR_GPIO_PULLUP, cmd, 1);
+		if (ret < OK) {
+			pr_err("%s: can not set gpio pull-up ERROR %08X\n",
+				__func__, ret);
+			return ret;
+		}
 
-	cmd[0] = 0x07;
-	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
-			    ADDR_GPIO_CONFIG_REG2, cmd, 1);
-	if (ret < OK) {
-		pr_err("hold_m3: can not set gpio config ERROR %08X\n", ret);
-		return ret;
-	}
+		cmd[0] = 0x07;
+		ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+				    ADDR_GPIO_CONFIG_REG2, cmd, 1);
+		if (ret < OK) {
+			pr_err("%s: can not set gpio config ERROR %08X\n",
+				__func__, ret);
+			return ret;
+		}
 
-	cmd[0] = 0x30;
-	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
-			    ADDR_GPIO_CONFIG_REG0, cmd, 1);
-	if (ret < OK) {
-		pr_err("hold_m3: can not set gpio config ERROR %08X\n", ret);
-		return ret;
-	}
+		cmd[0] = 0x30;
+		ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+				    ADDR_GPIO_CONFIG_REG0, cmd, 1);
+		if (ret < OK) {
+			pr_err("%s: can not set gpio config ERROR %08X\n",
+				__func__, ret);
+			return ret;
+		}
 
-	cmd[0] = SPI4_MASK;
-	ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG, ADDR_ICR, cmd,
-			    1);
-	if (ret < OK) {
-		pr_err("hold_m3: can not set spi4 mode ERROR %08X\n", ret);
-		return ret;
+		cmd[0] = SPI4_MASK;
+		ret = fts_writeU8UX(FTS_CMD_HW_REG_W, ADDR_SIZE_HW_REG,
+			ADDR_ICR, cmd, 1);
+		if (ret < OK) {
+			pr_err("%s: can not set spi4 mode ERROR %08X\n",
+				__func__, ret);
+			return ret;
+		}
+		mdelay(1);	/* wait for the GPIO to stabilize */
 	}
-	mdelay(1);	/* wait for the GPIO to stabilize */
 #endif
 
 	return OK;

@@ -989,9 +989,8 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			fileSize |= 0x00200000;
 #endif
 
-#ifdef SPI4_WIRE
-			fileSize |= 0x00400000;
-#endif
+			if (getClient() && (getClient()->mode & SPI_3WIRE) == 0)
+				fileSize |= 0x00400000;
 
 #ifdef PHONE_KEY	/* it is a feature enabled in the config of the chip */
 			fileSize |= 0x00000100;
