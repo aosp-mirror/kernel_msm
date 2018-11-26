@@ -325,12 +325,11 @@ static int sm8150_get_batt_status(const struct bms_dev *bms)
 	return ret;
 }
 
-static int
-sm8150_get_chg_chgr_state(const struct bms_dev *bms,
+static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 			  union gbms_charger_state *state)
 {
 	u8 val, chg_type;
-	int ivalue;
+	int vchrg;
 	int rc = 0;
 
 	state->v = 0;
@@ -365,12 +364,12 @@ sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 	if (state->f.chg_status == POWER_SUPPLY_STATUS_FULL)
 		state->f.flags |= GBMS_CS_FLAG_DONE;
 
-	rc = sm8150_get_battery_voltage(bms, &ivalue);
+	rc = sm8150_get_battery_voltage(bms, &vchrg);
 	if (rc < 0) {
 		pr_err("Couldn't read VOLTAGE_NOW rc=%d\n", rc);
 		state->f.vchrg = 0;
 	} else {
-		state->f.vchrg = ivalue;
+		state->f.vchrg = (vchrg / 1000);
 	}
 
 	return 0;
