@@ -31,10 +31,6 @@
 	qcom,init-voltage = <2040000>;
 };
 
-&pm8150_s6 {
-	regulator-max-microvolt = <1100000>;
-};
-
 &soc {
 	rpmh-regulator-ldoa9 {
 		qcom,supported-modes = <RPMH_REGULATOR_MODE_HPM>;
@@ -62,9 +58,5 @@
 	qcom,init-voltage = <2856000>;
 	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 	status = "okay";
-};
-
-&pm8150_l18 {
-	regulator-max-microvolt = <800000>;
 };
 
