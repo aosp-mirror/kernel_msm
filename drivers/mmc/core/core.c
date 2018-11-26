@@ -1866,6 +1866,14 @@ int mmc_cmdq_prepare_flush(struct mmc_command *cmd)
 }
 EXPORT_SYMBOL(mmc_cmdq_prepare_flush);
 
+int mmc_cmdq_prepare_cache_barrier(struct mmc_command *cmd)
+{
+	return   __mmc_switch_cmdq_mode(cmd, EXT_CSD_CMD_SET_NORMAL,
+				     EXT_CSD_FLUSH_CACHE, 2,
+				     0, true, true);
+}
+EXPORT_SYMBOL(mmc_cmdq_prepare_cache_barrier);
+
 /**
  *	mmc_start_req - start a non-blocking request
  *	@host: MMC host to start command
