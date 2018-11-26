@@ -60,10 +60,12 @@ static const struct mfd_cell s2mpb04_devs[] = {
 		.name = "s2mpb04-gpio",
 		.of_compatible = "samsung,s2mpb04-gpio",
 	},
+#if 0  /* STOPSHIP: b/120006694 */
 	{
 		.name = "s2mpb04-thermal",
 		.of_compatible = "samsung,s2mpb04-thermal",
 	},
+#endif
 };
 
 static const struct regmap_config s2mpb04_regmap_config = {
