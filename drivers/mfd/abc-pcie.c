@@ -2009,17 +2009,7 @@ static struct pci_driver abc_pcie_driver = {
 	.err_handler = &abc_err_handler,
 };
 
-static int __init abc_pcie_init(void)
-{
-	return pci_register_driver(&abc_pcie_driver);
-}
-
-static void __exit abc_pcie_exit(void)
-{
-	pci_unregister_driver(&abc_pcie_driver);
-}
-module_exit(abc_pcie_exit);
-module_init(abc_pcie_init);
+module_pci_driver(abc_pcie_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Sayanta Pattanayak <sayanta.p@samsung.com>");
