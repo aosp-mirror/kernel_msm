@@ -51,6 +51,9 @@
 /* On success will return 0, otherwise will return error < 0. */
 #define AB_SM_EXIT_EL2		_IO(AB_SM_IOCTL_MAGIC, 4)
 
+#define AB_CHIP_ID_UNKNOWN	-1
+#define AB_CHIP_ID_A0		0
+#define AB_CHIP_ID_B0		1
 
 
 #endif /* __UAPI_AB_SM_H__ */
