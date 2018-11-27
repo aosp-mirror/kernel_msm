@@ -103,6 +103,13 @@
 		reg-names = "bl_log", "bl_old_log";
 		memory-region = <&debug_info>;
 	};
+
+	keydebug {
+		compatible = "keydebug";
+		key_down_delay = <7000>;
+		keys_down = <116>;
+		dbg_fn_delay = <2500>;
+	};
 };
 
 &ufsphy_mem {
