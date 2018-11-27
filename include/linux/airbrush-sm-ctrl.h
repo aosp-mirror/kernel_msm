@@ -385,6 +385,12 @@ static struct ab_sm_mfd_ops mfd_ops_stub = {
 	.pcie_pre_disable = &pcie_pre_disable_stub,
 };
 
+struct ab_change_req {
+	u32 new_state;
+	int *ret_code;
+	struct completion *comp;
+};
+
 /**
  * struct ab_state_context - stores the context of airbrush soc
  *
@@ -403,6 +409,8 @@ struct ab_state_context {
 	struct device *dev;
 	struct miscdevice misc_dev;
 
+	struct task_struct *state_change_task;
+
 	struct block blocks[NUM_BLOCKS];
 	enum throttle_state throttle_state_id;
 	enum chip_state dest_chip_substate_id;
@@ -410,11 +418,13 @@ struct ab_state_context {
 	struct chip_to_block_map *chip_state_table;
 	u32 nr_chip_states;
 
+	struct kfifo state_change_reqs;
 	enum ab_chip_id chip_id;
 
 	/* Synchronization structs */
 	struct mutex pmic_lock;
 	struct mutex state_lock;
+	struct completion state_change_requested;
 	struct completion state_change_comp;
 
 	/* pins used in bootsequence */

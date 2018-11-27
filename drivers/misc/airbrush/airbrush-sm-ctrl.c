@@ -18,8 +18,10 @@
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
 #include <linux/kernel.h>
+#include <linux/kthread.h>
 #include <linux/msm_pcie.h>
 #include <uapi/ab-sm.h>
+#include <uapi/linux/sched/types.h>
 
 #include "airbrush-cooling.h"
 #include "airbrush-pmic-ctrl.h"
@@ -29,6 +31,8 @@
 #include "airbrush-spi.h"
 #include "airbrush-thermal.h"
 
+#define AB_MAX_TRANSITION_TIME_MS	10000
+#define AB_KFIFO_ENTRY_SIZE	32
 #define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 10)
 
 static struct ab_state_context *ab_sm_ctx;
@@ -598,14 +602,78 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 	return ab_sm_update_chip_state(sc);
 }
 
+static int state_change_task(void *ctx)
+{
+	struct ab_change_req req;
+	struct ab_state_context *sc = (struct ab_state_context *)ctx;
+	struct sched_param sp = {
+		.sched_priority = MAX_RT_PRIO - 1,
+	};
+	int ret = sched_setscheduler(current, SCHED_FIFO, &sp);
+
+	if (ret)
+		dev_warn(sc->dev,
+			"Unable to set FIFO scheduling of state change task (%d)\n",
+			ret);
+
+	while (!kthread_should_stop()) {
+		wait_for_completion(&sc->state_change_requested);
+
+		// Optimization: Perform only last state change in queue?
+		while (!kfifo_is_empty(&sc->state_change_reqs) &&
+				!kthread_should_stop()) {
+			kfifo_out(&sc->state_change_reqs, &req, sizeof(req));
+
+			mutex_lock(&sc->state_lock);
+			*req.ret_code = _ab_sm_set_state(sc, req.new_state);
+			mutex_unlock(&sc->state_lock);
+
+			complete(req.comp);
+		}
+
+		reinit_completion(&sc->state_change_requested);
+	}
+
+	return 0;
+}
+
 int ab_sm_set_state(struct ab_state_context *sc, u32 dest_chip_substate_id)
 {
 	int ret;
+	struct ab_change_req req;
+	int *req_ret;
+	struct completion *comp;
 
-	mutex_lock(&sc->state_lock);
-	ret = _ab_sm_set_state(sc, dest_chip_substate_id);
-	mutex_unlock(&sc->state_lock);
+	req_ret = kzalloc(sizeof(int), GFP_KERNEL);
+	comp = kzalloc(sizeof(struct completion), GFP_KERNEL);
+	if (!req_ret || !comp) {
+		ret = -ENOMEM;
+		goto cleanup;
+	}
 
+	req.new_state = dest_chip_substate_id;
+	req.ret_code = req_ret;
+	init_completion(comp);
+	req.comp = comp;
+
+	kfifo_in(&sc->state_change_reqs, &req,
+			sizeof(struct ab_change_req));
+	complete_all(&sc->state_change_requested);
+
+	ret = wait_for_completion_interruptible_timeout(comp,
+			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
+	if (ret < 0) {
+		dev_info(sc->dev, "State change interrupted\n");
+		goto cleanup;
+	} else if (ret == 0) {
+		dev_info(sc->dev, "State change timed out\n");
+		goto cleanup;
+	}
+	ret = *req_ret;
+
+cleanup:
+	kfree(req_ret);
+	kfree(comp);
 	return ret;
 }
 EXPORT_SYMBOL(ab_sm_set_state);
@@ -876,7 +944,8 @@ static int ab_sm_misc_open(struct inode *ip, struct file *fp)
 
 	sess->sc = sc;
 	sess->first_entry = true;
-	kfifo_alloc(&sess->async_entries, 32 * sizeof(int), GFP_KERNEL);
+	kfifo_alloc(&sess->async_entries,
+		AB_KFIFO_ENTRY_SIZE * sizeof(int), GFP_KERNEL);
 
 	fp->private_data = sess;
 
@@ -960,9 +1029,10 @@ static void ab_sm_thermal_throttle_state_updated(
 {
 	struct ab_state_context *ctx = op_data;
 
-	mutex_lock(&ctx->state_lock);
 	ctx->throttle_state_id = throttle_state_id;
 	dev_dbg(ctx->dev, "Throttle state updated to %lu", throttle_state_id);
+
+	mutex_lock(&ctx->state_lock);
 	ab_sm_update_chip_state(ctx);
 	mutex_unlock(&ctx->state_lock);
 }
@@ -990,7 +1060,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 
 	ab_sm_ctx = devm_kzalloc(dev, sizeof(struct ab_state_context),
 							GFP_KERNEL);
-	if(ab_sm_ctx == NULL)
+	if (ab_sm_ctx == NULL)
 		goto fail_mem_alloc;
 
 	ab_sm_ctx->pdev = pdev;
@@ -1091,7 +1161,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	mutex_init(&ab_sm_ctx->mfd_lock);
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	atomic_set(&ab_sm_ctx->async_in_use, 0);
+	init_completion(&ab_sm_ctx->state_change_requested);
 	init_completion(&ab_sm_ctx->state_change_comp);
+	kfifo_alloc(&ab_sm_ctx->state_change_reqs,
+		AB_KFIFO_ENTRY_SIZE * sizeof(struct ab_change_req), GFP_KERNEL);
 
 	ab_sm_ctx->chip_id = CHIP_ID_UNKNOWN;
 	ab_sm_ctx->cold_boot = true;
@@ -1111,6 +1184,9 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	 */
 	devm_ab_thermal_create(ab_sm_ctx->dev, &ab_sm_thermal_ops, ab_sm_ctx);
 	ab_sm_ctx->throttle_state_id = THROTTLE_NONE;
+
+	ab_sm_ctx->state_change_task =
+		kthread_run(&state_change_task, ab_sm_ctx, "ab-sm");
 
 	ab_sm_create_debugfs(ab_sm_ctx);
 	ab_sm_create_sysfs(ab_sm_ctx);
@@ -1132,6 +1208,8 @@ EXPORT_SYMBOL(ab_sm_init);
 
 void ab_sm_exit(struct platform_device *pdev)
 {
+	kthread_stop(ab_sm_ctx->state_change_task);
+	complete_all(&ab_sm_ctx->state_change_requested);
 	ab_sm_remove_sysfs(ab_sm_ctx);
 	ab_sm_remove_debugfs(ab_sm_ctx);
 }
