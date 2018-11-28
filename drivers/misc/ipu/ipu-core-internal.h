@@ -88,30 +88,8 @@ struct paintbox_jqs_msg_transport {
 	struct host_jqs_queue queues[JQS_TRANSPORT_MAX_QUEUE];
 	struct jqs_msg_transport_shared_state *jqs_shared_state;
 
-	/* paintbox_jqs_msg_transport::lock protects
-	 * a) all members below,
-	 * b) host_jqs_queue::waiter
-	 * c) writing over any queue
-	 */
-	struct mutex lock;
-
 	/* Bitmask of the available queue ids */
 	uint32_t free_queue_ids;
-
-	/* Only one thread is allowed to process messages from any queue.
-	 * paintbox_jqs_msg_transport::processing_queues is claimed by the
-	 * thread wants to process messages.
-	 */
-	bool processing_queues;
-
-	/* TODO(ahampson):  Evaluate if this is needed.
-	 *
-	 * If a thread wishes to process queues, but cannot claim
-	 * paintbox_jqs_msg_transport::processing_queues, process_queues_request
-	 * is set and the thread that is currently processing threads will
-	 * process these.
-	 */
-	uint32_t process_queues_request;
 };
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
@@ -163,6 +141,9 @@ struct paintbox_bus {
 	spinlock_t irq_lock;
 	struct work_struct recovery_work;
 	atomic_t state;
+
+	/* Protects jqs msg transport structure. */
+	struct mutex transport_lock;
 };
 
 struct paintbox_device {

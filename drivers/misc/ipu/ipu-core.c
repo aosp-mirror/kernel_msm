@@ -361,6 +361,7 @@ int ipu_bus_initialize(struct device *parent_dev,
 	bus->pdata = pdata;
 
 	spin_lock_init(&bus->irq_lock);
+	mutex_init(&bus->transport_lock);
 
 	atomic_set(&bus->state, IPU_STATE_LINK_READY);
 
