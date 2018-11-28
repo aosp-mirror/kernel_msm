@@ -18,6 +18,8 @@
 
 #include <linux/types.h>
 
+#define JQS_MAX_MESSAGE_SIZE 1024
+
 enum jqs_message_type {
 	/* Jqs <-> Host messages */
 
@@ -129,12 +131,15 @@ struct jqs_message_unregister_buffer {
 };
 
 struct buffer_registration {
-	uint32_t buffer_id;
 	uint64_t buffer_addr;
+	uint32_t buffer_id;
 	uint32_t buffer_size;
 };
 
-#define MAX_BUFFER_REGISTRATION 64
+#define MAX_BUFFER_REGISTRATION					\
+	((JQS_MAX_MESSAGE_SIZE - sizeof(struct jqs_message) -	\
+	  sizeof(uint32_t) - sizeof(uint32_t)) /		\
+	  sizeof(struct buffer_registration))
 
 struct jqs_message_register_buffers {
 	struct jqs_message header;

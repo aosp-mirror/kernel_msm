@@ -429,7 +429,7 @@ int ipu_buffer_dma_buf_bulk_unregister_ioctl(struct paintbox_data *pb,
 		return -EFAULT;
 
 	if (req.num_buffers > MAX_BUFFER_REGISTRATION || req.num_buffers == 0) {
-		dev_err(pb->dev, "%s: Invalid request to register %d buffers",
+		dev_err(pb->dev, "%s: Invalid request to unregister %d buffers",
 				__func__, req.num_buffers);
 		return -EINVAL;
 	}
