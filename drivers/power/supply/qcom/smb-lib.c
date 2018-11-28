@@ -3013,13 +3013,12 @@ static int smblib_handle_usb_current(struct smb_charger *chg,
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
 		if (usb_current == -ETIMEDOUT) {
 			/*
-			 * Valid FLOAT charger, report the current based
-			 * of Rp
+			 * Valid FLOAT charger, report the current as 500mA
 			 */
 			typec_mode = smblib_get_prop_typec_mode(chg);
 			rp_ua = get_rp_based_dcp_current(chg, typec_mode);
 			rc = vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER,
-								true, rp_ua);
+							true, 500000);
 			if (rc < 0)
 				return rc;
 		} else {
