@@ -70,6 +70,9 @@
 	(4 * (I) * IAXXX_IN_CH_GRP_REG_NUM))
 
 /* Output Channels */
+#define IAXXX_OUT_CH_GRP_REGS(I) \
+	(IAXXX_OUT_CH_GRP_REGS_ADDR + (4 * (I) * IAXXX_OUT_CH_GRP_REG_NUM))
+
 #define IAXXX_OUT_CH_GRP_CH_CTRL_REG(I) \
 	(IAXXX_OUT_CH_GRP_CH_CTRL_ADDR + (4 * (I) * IAXXX_OUT_CH_GRP_REG_NUM))
 
@@ -117,5 +120,11 @@
 #define IAXXX_OUT_CH_GRP_CH_DROP_CNT_REG(I) \
 	(IAXXX_OUT_CH_GRP_CH_DROP_CNT_ADDR + \
 	(4 * (I) * IAXXX_OUT_CH_GRP_REG_NUM))
+
+#define IAXXX_CH_HDR_REG_OFFSET(reg) \
+	(((reg) - IAXXX_CH_HDR_REGS_ADDR) / sizeof(uint32_t))
+
+#define IAXXX_OUT_CH_GRP_REG_OFFSET(reg) \
+	(((reg) - IAXXX_OUT_CH_GRP_REGS_ADDR) / sizeof(uint32_t))
 
 #endif /* __IAXXX_CHANNEL_REGISTER_H__ */

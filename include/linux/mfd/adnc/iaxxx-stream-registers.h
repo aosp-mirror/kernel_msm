@@ -19,6 +19,9 @@
 #include "iaxxx-register-defs-stream-header.h"
 #include "iaxxx-register-defs-stream-group.h"
 
+#define IAXXX_STR_GRP_REGS(I) \
+	(IAXXX_STR_GRP_REGS_ADDR + (4 * (I) * IAXXX_STR_GRP_REG_NUM))
+
 #define IAXXX_STR_GRP_STR_CTRL_REG(I) \
 	(IAXXX_STR_GRP_STR_CTRL_ADDR + (4 * (I) * IAXXX_STR_GRP_REG_NUM))
 
@@ -72,5 +75,11 @@
 #define IAXXX_STR_GRP_STR_AF_ERROR_ACCESS_CNT_REG(I)    \
 	(IAXXX_STR_GRP_STR_AF_ERR_ACCESS_CNT_ADDR +   \
 	(4 * (I) * IAXXX_STR_GRP_REG_NUM))
+
+#define IAXXX_STR_HDR_REG_OFFSET(reg) \
+	(((reg) - IAXXX_STR_HDR_REGS_ADDR) / sizeof(uint32_t))
+
+#define IAXXX_STR_GRP_REG_OFFSET(reg) \
+	(((reg) - IAXXX_STR_GRP_REGS_ADDR) / sizeof(uint32_t))
 
 #endif /* __IAXXX_STREAM_REGISTER_H__ */

@@ -26,6 +26,9 @@
 #define IAXXX_ARB_BLOCK_NUM     (IAXXX_ARB_REGS_NUM / 2)
 #define IAXXX_MAX_CIRC_BUFS          (3)
 #define IAXXX_MAX_REGS_NUM        (0xc00)
+#define IAXXX_TUNNEL_MAX       (32)
+#define IAXXX_CHANNEL_MAX      (32)
+#define IAXXX_STREAM_MAX       (16)
 
 struct iaxxx_srb_info {
 	uint32_t reg_start_addr;
@@ -161,8 +164,87 @@ enum iaxxx_debug_module_ids {
 	IAXXX_DBG_MODULE_ID_SCRIPTMGR_LOG,
 };
 
+struct iaxxx_tunnel_info_dump {
+	/* input */
+	uint32_t id;  /* [0, IAXXX_TUNNEL_MAX-1] */
+
+	/* output */
+	/* header */
+	uint32_t out_buf_size;
+	uint32_t out_buf_addr;
+	uint32_t out_buf_head;
+	uint32_t out_buf_tail;
+	uint32_t out_buf_threshold;
+	/* tunnel header configured by host and its status */
+	uint32_t en;
+	uint32_t st;
+	/* group */
+	uint32_t nframe_drops;
+	uint32_t nsent_to_host;
+	uint32_t nsent;
+	uint32_t nrecvd;
+	/* configuration registers */
+	uint32_t ctrl;
+	uint32_t format;
+};
+
+struct iaxxx_channel_info_dump {
+	/* input */
+	uint32_t id;  /* [0, IAXXX_CHANNEL_MAX-1] */
+
+	/* output */
+	/* header */
+	uint32_t st;
+	uint32_t direction;
+	uint32_t gain;
+	/* group */
+	uint32_t nsent;
+	uint32_t nrecvd;
+	uint32_t endpoint_state;
+	uint32_t intr_cnt;
+	uint32_t drop_cnt;
+	uint32_t gain_ctrl;
+	uint32_t gain_status;
+	union {
+		/* valid when channel direction is output */
+		uint32_t in_connect;
+
+		/* valid when channel direction is input */
+		uint32_t out_fmt;
+	};
+};
+
+struct iaxxx_stream_info_dump {
+	/* input */
+	uint32_t id;  /* [0, IAXXX_STREAM_MAX-1] */
+
+	/* output */
+	/* header */
+	uint32_t en;
+	uint32_t st;
+	/* group */
+	uint32_t af_error_afs_fifo_overflow_cnt;
+	uint32_t af_error_afs_fifo_underflow_cnt;
+	uint32_t af_error_tus_fifo_overflow_cnt;
+	uint32_t af_error_tus_fifo_underflow_cnt;
+	uint32_t af_error_tus_fifo_coherency_cnt;
+	uint32_t af_error_deadline_cnt;
+	uint32_t af_error_phy_cnt;
+	uint32_t af_error_timeout_cnt;
+	uint32_t af_error_access_cnt;
+	uint32_t ctrl;
+	uint32_t status;
+	uint32_t format;
+	uint32_t port;
+	uint32_t channel;
+	uint32_t sync;
+};
+
 #define IAXXX_BUS_CONFIG	_IO('R', 0x011)
-#define IAXXX_IOCTL_GET_REGISTERS_DUMP	_IO('R', 0x012)
+#define IAXXX_IOCTL_GET_REGISTERS_DUMP    _IO('R', 0x012)
+#define IAXXX_IOCTL_GET_TUNNEL_INFO_DUMP  _IO('R', 0x013)
+#define IAXXX_IOCTL_GET_CHANNEL_INFO_DUMP _IO('R', 0x014)
+#define IAXXX_IOCTL_GET_STREAM_INFO_DUMP  _IO('R', 0x015)
 #define IAXXX_SET_DBG_LOG_LEVEL	_IO('R', 0x021)
 #define IAXXX_GET_DBG_LOG_LEVEL	_IO('R', 0x022)
 #define IAXXX_SET_DBG_LOG_MODE	_IO('R', 0x023)

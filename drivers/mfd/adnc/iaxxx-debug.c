@@ -17,6 +17,9 @@
 #include <linux/regmap.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
+#include <linux/mfd/adnc/iaxxx-tunnel-registers.h>
+#include <linux/mfd/adnc/iaxxx-channel-registers.h>
+#include <linux/mfd/adnc/iaxxx-stream-registers.h>
 #include "iaxxx.h"
 #include "iaxxx-cdev.h"
 
@@ -251,6 +254,225 @@ static int get_registers_dump(struct iaxxx_priv *iaxxx,
 	return ret;
 }
 
+static int get_tunnel_info_dump(struct iaxxx_priv *iaxxx,
+			struct iaxxx_tunnel_info_dump *dump)
+{
+	int ret;
+	uint32_t id = dump->id;
+	uint32_t *tmp_buf;
+
+	if (id >= IAXXX_TUNNEL_MAX) {
+		pr_err("%s() Invalid tunnel id %u\n", __func__, id);
+		return -EINVAL;
+	}
+
+	tmp_buf = kzalloc(max(IAXXX_TNL_HDR_REG_NUM, IAXXX_OUT_TNL_GRP_REG_NUM)
+					* sizeof(uint32_t), GFP_KERNEL);
+	if (!tmp_buf)
+		return -ENOMEM;
+
+	ret = regmap_bulk_read(iaxxx->regmap,
+		IAXXX_TNL_HDR_REGS_ADDR, tmp_buf, IAXXX_TNL_HDR_REG_NUM);
+	if (ret) {
+		pr_err(
+		"%s() regmap_bulk_read IAXXX_TNL_HDR_REGS_ADDR failed %d\n",
+								__func__, ret);
+		goto exit;
+	}
+
+	dump->out_buf_size = tmp_buf[IAXXX_TNL_HDR_REG_OFFSET(
+					IAXXX_TNL_HDR_TNL_OUT_BUF_SIZE_ADDR)];
+	dump->out_buf_addr = tmp_buf[IAXXX_TNL_HDR_REG_OFFSET(
+					IAXXX_TNL_HDR_TNL_OUT_BUF_ADDR_ADDR)];
+	dump->out_buf_head = tmp_buf[IAXXX_TNL_HDR_REG_OFFSET(
+					IAXXX_TNL_HDR_TNL_OUT_BUF_HEAD_ADDR)];
+	dump->out_buf_tail = tmp_buf[IAXXX_TNL_HDR_REG_OFFSET(
+					IAXXX_TNL_HDR_TNL_OUT_BUF_TAIL_ADDR)];
+	dump->out_buf_threshold = tmp_buf[IAXXX_TNL_HDR_REG_OFFSET(
+				IAXXX_TNL_HDR_TNL_OUT_BUF_THRESHOLD_ADDR)];
+	dump->en = tmp_buf[IAXXX_TNL_HDR_REG_OFFSET(
+					IAXXX_TNL_HDR_TNL_ENABLE_ADDR)];
+	dump->st = tmp_buf[IAXXX_TNL_HDR_REG_OFFSET(
+					IAXXX_TNL_HDR_TNL_ST_ADDR)];
+
+	ret = regmap_bulk_read(iaxxx->regmap,
+		IAXXX_OUT_TNL_GRP_REGS(id), tmp_buf, IAXXX_OUT_TNL_GRP_REG_NUM);
+	if (ret) {
+		pr_err(
+		"%s() regmap_bulk_read from IAXXX_IN_TNL_GRP_REGS failed %d\n",
+								__func__, ret);
+		goto exit;
+	}
+
+	dump->nframe_drops = tmp_buf[IAXXX_OUT_TNL_GRP_REG_OFFSET(
+				IAXXX_OUT_TNL_GRP_TNL_NFRAME_DROPS_ADDR)];
+	dump->nsent_to_host = tmp_buf[IAXXX_OUT_TNL_GRP_REG_OFFSET(
+				IAXXX_OUT_TNL_GRP_TNL_NSENT_TO_HOST_ADDR)];
+	dump->nsent = tmp_buf[IAXXX_OUT_TNL_GRP_REG_OFFSET(
+				IAXXX_OUT_TNL_GRP_TNL_NSENT_ADDR)];
+	dump->nrecvd = tmp_buf[IAXXX_OUT_TNL_GRP_REG_OFFSET(
+				IAXXX_OUT_TNL_GRP_TNL_NRECVD_ADDR)];
+	dump->ctrl = tmp_buf[IAXXX_OUT_TNL_GRP_REG_OFFSET(
+				IAXXX_OUT_TNL_GRP_TNL_CTRL_ADDR)];
+	dump->format = tmp_buf[IAXXX_OUT_TNL_GRP_REG_OFFSET(
+				IAXXX_OUT_TNL_GRP_CONNECT_ADDR)];
+
+exit:
+	kfree(tmp_buf);
+	return ret;
+}
+
+static int get_channel_info_dump(struct iaxxx_priv *iaxxx,
+			struct iaxxx_channel_info_dump *dump)
+{
+	int ret;
+	uint32_t id = dump->id;
+	uint32_t *tmp_buf;
+
+	if (id >= IAXXX_CHANNEL_MAX) {
+		pr_err("%s() Invalid channel id %u\n", __func__, id);
+		return -EINVAL;
+	}
+
+	tmp_buf = kzalloc(max(IAXXX_CH_HDR_REG_NUM, IAXXX_IN_CH_GRP_REG_NUM)
+					* sizeof(uint32_t), GFP_KERNEL);
+	if (!tmp_buf)
+		return -ENOMEM;
+
+	ret = regmap_bulk_read(iaxxx->regmap,
+		IAXXX_CH_HDR_REGS_ADDR, tmp_buf, IAXXX_CH_HDR_REG_NUM);
+	if (ret) {
+		pr_err(
+	"%s() regmap_bulk_read from IAXXX_CH_HDR_REGS_ADDR failed %d\n",
+								__func__, ret);
+		goto exit;
+	}
+
+	dump->st = tmp_buf[IAXXX_CH_HDR_REG_OFFSET(IAXXX_CH_HDR_CH_ST_ADDR)];
+	dump->direction = tmp_buf[
+		IAXXX_CH_HDR_REG_OFFSET(IAXXX_CH_HDR_CH_DIR_ADDR)];
+	dump->gain = tmp_buf[
+		IAXXX_CH_HDR_REG_OFFSET(IAXXX_CH_HDR_CH_GAIN_ADDR)];
+
+	ret = regmap_bulk_read(iaxxx->regmap,
+		IAXXX_OUT_CH_GRP_REGS(id), tmp_buf, IAXXX_OUT_CH_GRP_REG_NUM);
+	if (ret) {
+		pr_err(
+		"%s() regmap_bulk_read from IAXXX_OUT_CH_GRP_REGS failed %d\n",
+								__func__, ret);
+		goto exit;
+	}
+
+	dump->nsent = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+					IAXXX_OUT_CH_GRP_CH_NSENT_ADDR)];
+	dump->nrecvd = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+					IAXXX_OUT_CH_GRP_CH_NRECVD_ADDR)];
+	dump->endpoint_state = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+				IAXXX_OUT_CH_GRP_CH_ENDPOINT_STATE_ADDR)];
+	dump->intr_cnt = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+					IAXXX_OUT_CH_GRP_CH_INTR_CNT_ADDR)];
+	dump->drop_cnt = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+					IAXXX_OUT_CH_GRP_CH_DROP_CNT_ADDR)];
+	dump->gain_ctrl = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+					IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_ADDR)];
+	dump->gain_status = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+					IAXXX_OUT_CH_GRP_CH_GAIN_STATUS_ADDR)];
+	dump->in_connect = tmp_buf[IAXXX_OUT_CH_GRP_REG_OFFSET(
+					IAXXX_OUT_CH_GRP_IN_CONNECT_ADDR)];
+
+exit:
+	kfree(tmp_buf);
+	return ret;
+}
+
+static int get_stream_info_dump(struct iaxxx_priv *iaxxx,
+			struct iaxxx_stream_info_dump *dump)
+{
+	int ret;
+	uint32_t id = dump->id;
+	uint32_t *tmp_buf;
+
+	if (id >= IAXXX_STREAM_MAX) {
+		pr_err("%s() Invalid stream id %u\n", __func__, id);
+		return -EINVAL;
+	}
+
+	tmp_buf = kzalloc(max(IAXXX_STR_HDR_REG_NUM, IAXXX_STR_GRP_REG_NUM)
+					* sizeof(uint32_t), GFP_KERNEL);
+	if (!tmp_buf)
+		return -ENOMEM;
+
+	/* Read the header */
+	ret = regmap_bulk_read(iaxxx->regmap,
+		IAXXX_STR_HDR_REGS_ADDR, tmp_buf, IAXXX_STR_HDR_REG_NUM);
+	if (ret) {
+		pr_err(
+	"%s() regmap_bulk_read from IAXXX_STR_HDR_REGS_ADDR failed %d\n",
+								__func__, ret);
+		goto exit;
+	}
+
+	/* Write values from buffer to structure */
+	dump->en =
+		tmp_buf[IAXXX_STR_HDR_REG_OFFSET(IAXXX_STR_HDR_STR_EN_ADDR)];
+	dump->st =
+		tmp_buf[IAXXX_STR_HDR_REG_OFFSET(IAXXX_STR_HDR_STR_ST_ADDR)];
+
+	/* Read the group */
+	ret = regmap_bulk_read(iaxxx->regmap,
+		IAXXX_STR_GRP_REGS(id), tmp_buf, IAXXX_STR_GRP_REG_NUM);
+	if (ret) {
+		pr_err(
+	"%s() regmap_bulk_read from IAXXX_STR_GRP_REGS(%u) failed %d\n",
+							__func__, id, ret);
+		goto exit;
+	}
+
+	dump->af_error_afs_fifo_overflow_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_AFS_FIFO_OVERFLOW_CNT_ADDR)];
+	dump->af_error_afs_fifo_underflow_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_AFS_FIFO_UNDERFLOW_CNT_ADDR)];
+	dump->af_error_tus_fifo_overflow_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_TUS_FIFO_OVERFLOW_CNT_ADDR)];
+	dump->af_error_tus_fifo_underflow_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_TUS_FIFO_UNDERFLOW_CNT_ADDR)];
+	dump->af_error_tus_fifo_coherency_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_TUS_FIFO_COHERENCY_CNT_ADDR)];
+	dump->af_error_deadline_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_DEADLINE_CNT_ADDR)];
+	dump->af_error_phy_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_PHY_CNT_ADDR)];
+	dump->af_error_timeout_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_TIMEOUT_CNT_ADDR)];
+	dump->af_error_access_cnt = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(
+			IAXXX_STR_GRP_STR_AF_ERR_ACCESS_CNT_ADDR)];
+
+	dump->ctrl = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(IAXXX_STR_GRP_STR_CTRL_ADDR)];
+	dump->status = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(IAXXX_STR_GRP_STR_STATUS_ADDR)];
+	dump->format = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(IAXXX_STR_GRP_STR_FORMAT_ADDR)];
+	dump->port = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(IAXXX_STR_GRP_STR_PORT_ADDR)];
+	dump->channel = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(IAXXX_STR_GRP_STR_CHN_ADDR)];
+	dump->sync = tmp_buf[
+		IAXXX_STR_GRP_REG_OFFSET(IAXXX_STR_GRP_STR_SYNC_ADDR)];
+exit:
+	kfree(tmp_buf);
+	return ret;
+}
+
 static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct iaxxx_priv *const iaxxx
@@ -305,6 +527,52 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				ret = -EFAULT;
 		}
 		kfree(dump);
+		break;
+	}
+	case IAXXX_IOCTL_GET_TUNNEL_INFO_DUMP: {
+		struct iaxxx_tunnel_info_dump dump;
+
+		if (copy_from_user(&dump, (void __user *)arg, sizeof(dump)))
+			return -EFAULT;
+		ret = get_tunnel_info_dump(iaxxx, &dump);
+		if (ret) {
+			pr_err("Failed to get_tunnel_info_dump ret=%d\n", ret);
+		} else {
+			if (copy_to_user((void __user *)arg,
+						&dump, sizeof(dump)))
+				ret = -EFAULT;
+		}
+		break;
+	}
+	case IAXXX_IOCTL_GET_CHANNEL_INFO_DUMP: {
+		struct iaxxx_channel_info_dump dump;
+
+		if (copy_from_user(&dump, (void __user *)arg, sizeof(dump)))
+			return -EFAULT;
+		ret = get_channel_info_dump(iaxxx, &dump);
+		if (ret) {
+			pr_err(
+			"Failed to get_channel_info_dump ret=%d\n", ret);
+		} else {
+			if (copy_to_user((void __user *)arg,
+						&dump, sizeof(dump)))
+				ret = -EFAULT;
+		}
+		break;
+	}
+	case IAXXX_IOCTL_GET_STREAM_INFO_DUMP: {
+		struct iaxxx_stream_info_dump dump;
+
+		if (copy_from_user(&dump, (void __user *)arg, sizeof(dump)))
+			return -EFAULT;
+		ret = get_stream_info_dump(iaxxx, &dump);
+		if (ret) {
+			pr_err("Failed to get_stream_info_dump ret=%d\n", ret);
+		} else {
+			if (copy_to_user((void __user *)arg,
+						&dump, sizeof(dump)))
+				ret = -EFAULT;
+		}
 		break;
 	}
 	case IAXXX_SET_DBG_LOG_LEVEL:

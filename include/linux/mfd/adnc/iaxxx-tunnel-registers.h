@@ -20,6 +20,10 @@
 #include "iaxxx-register-defs-in-tunnel-group.h"
 #include "iaxxx-register-defs-out-tunnel-group.h"
 
+#define IAXXX_IN_TNL_GRP_REGS(I)  \
+	(IAXXX_IN_TNL_GRP_REGS_ADDR + \
+	(4 * (I) * IAXXX_IN_TNL_GRP_REG_NUM))
+
 #define IAXXX_IN_TNL_GRP_TNL_CTRL_REG(I)  \
 	(IAXXX_IN_TNL_GRP_TNL_CTRL_ADDR + \
 	(4 * (I) * IAXXX_IN_TNL_GRP_REG_NUM))
@@ -44,6 +48,10 @@
 	(IAXXX_IN_TNL_GRP_TNL_NRECVD_ADDR + \
 	(4 * (I) * IAXXX_IN_TNL_GRP_REG_NUM))
 
+#define IAXXX_OUT_TNL_GRP_REGS(I)  \
+	(IAXXX_OUT_TNL_GRP_REGS_ADDR + \
+	(4 * (I) * IAXXX_OUT_TNL_GRP_REG_NUM))
+
 #define IAXXX_OUT_TNL_GRP_TNL_CTRL_REG(I)  \
 	(IAXXX_OUT_TNL_GRP_TNL_CTRL_ADDR + \
 	(4 * (I) * IAXXX_OUT_TNL_GRP_REG_NUM))
@@ -67,5 +75,11 @@
 #define IAXXX_OUT_TNL_GRP_TNL_NRECVD_REG(I)  \
 	(IAXXX_OUT_TNL_GRP_TNL_NRECVD_ADDR + \
 	(4 * (I) * IAXXX_OUT_TNL_GRP_REG_NUM))
+
+#define IAXXX_TNL_HDR_REG_OFFSET(reg) \
+	(((reg) - IAXXX_TNL_HDR_REGS_ADDR) / sizeof(uint32_t))
+
+#define IAXXX_OUT_TNL_GRP_REG_OFFSET(reg) \
+	(((reg) - IAXXX_OUT_TNL_GRP_REGS_ADDR) / sizeof(uint32_t))
 
 #endif /* __IAXXX_TUNNEL_REGISTER_H__ */
