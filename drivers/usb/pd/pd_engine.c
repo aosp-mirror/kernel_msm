@@ -835,6 +835,22 @@ static int tcpm_get_vbus(struct tcpc_dev *dev)
 	return ret;
 }
 
+#define cc_is_sink(cc) \
+	((cc) == TYPEC_CC_RP_DEF || (cc) == TYPEC_CC_RP_1_5 || \
+	 (cc) == TYPEC_CC_RP_3_0)
+
+#define port_is_sink(port) \
+	((cc_is_sink((port)->cc1) && !cc_is_sink((port)->cc2)) || \
+	 (cc_is_sink((port)->cc2) && !cc_is_sink((port)->cc1)))
+
+#define cc_is_source(cc) ((cc) == TYPEC_CC_RD)
+
+#define port_is_source(port) \
+	((cc_is_source((port)->cc1) && \
+	 !cc_is_source((port)->cc2)) || \
+	 (cc_is_source((port)->cc2) && \
+	  !cc_is_source((port)->cc1)))
+
 static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 {
 	union power_supply_propval val = {0};
@@ -879,6 +895,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 				      "Rp-def" : "Rp-1.5A");
 		}
 	}
+
+	if (port_is_source(pd) && cc_is_sink(cc))
+		goto unlock;
 
 	ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
