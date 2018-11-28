@@ -141,14 +141,13 @@ struct s2mpb04_core {
 	struct s2mpb04_platform_data *pdata;
 	u8 rev_id;
 
-	/* kernel thread for waiting for reset after shutdown */
+	/* kernel thread to notify regulator fail event and
+	 * clear any pending interrupt status
+	 */
 	struct work_struct reset_work;
 
 	/* completion used for initialization */
 	struct completion init_complete;
-
-	/* completion used for unexpected resets */
-	struct completion reset_complete;
 
 	/* flags used for serialization */
 	unsigned long adc_conv_busy;

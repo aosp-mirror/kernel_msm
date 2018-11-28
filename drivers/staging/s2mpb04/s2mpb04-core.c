@@ -460,12 +460,13 @@ static int s2mpb04_check_int_flags(struct s2mpb04_core *ddata)
 	return ret;
 }
 
-/* kernel thread for waiting for chip to come out of reset */
+/* kernel thread to notify regulator fail event and clear any pending
+ * interrupt status
+ */
 static void s2mpb04_reset_work(struct work_struct *data)
 {
 	struct s2mpb04_core *ddata = container_of(data, struct s2mpb04_core,
 						   reset_work);
-	unsigned long timeout;
 
 	/* notify regulators of shutdown event */
 	dev_err(ddata->dev,
@@ -475,37 +476,33 @@ static void s2mpb04_reset_work(struct work_struct *data)
 	NOTIFY(S2MPB04_ID_LDO1, REGULATOR_EVENT_FAIL);
 	NOTIFY(S2MPB04_ID_LDO2, REGULATOR_EVENT_FAIL);
 
-	dev_err(ddata->dev,
-		"%s: waiting for chip to come out of reset\n", __func__);
-
 	/* initialize chip */
 	s2mpb04_chip_init(ddata);
-
-	/* wait for chip to come out of reset, signaled by resetb interrupt */
-	timeout = wait_for_completion_timeout(&ddata->reset_complete,
-					      S2MPB04_SHUTDOWN_RESET_TIMEOUT);
-	if (!timeout)
-		dev_err(ddata->dev,
-			"%s: timeout waiting for device to return from reset\n",
-			__func__);
-	else
-		s2mpb04_core_fixup(ddata);
-
-	complete(&ddata->init_complete);
 }
 
-/* irq handler for resetb pin */
+/* irq handler for resetb pin.
+ * It may not catch falling edge. But, that will not be an issue as intb
+ * interrupt handler will notify regulator fail event.
+ */
 static irqreturn_t s2mpb04_resetb_irq_handler(int irq, void *cookie)
 {
 	struct s2mpb04_core *ddata = (struct s2mpb04_core *)cookie;
 
 	if (gpio_get_value(ddata->pdata->resetb_gpio)) {
 		dev_dbg(ddata->dev, "%s: completing reset\n", __func__);
-		complete(&ddata->reset_complete);
+
+		/* initialize chip */
+		s2mpb04_chip_init(ddata);
+
+		/* Fixup some chip settings that are different than
+		 * reset values.
+		 */
+		s2mpb04_core_fixup(ddata);
+
+		complete(&ddata->init_complete);
 	} else {
 		dev_err(ddata->dev, "%s: device reset\n", __func__);
 		reinit_completion(&ddata->init_complete);
-		reinit_completion(&ddata->reset_complete);
 		schedule_work(&ddata->reset_work);
 	}
 
@@ -659,7 +656,6 @@ static int s2mpb04_probe(struct i2c_client *client,
 
 	/* initialize completions */
 	init_completion(&ddata->init_complete);
-	init_completion(&ddata->reset_complete);
 	init_completion(&ddata->adc_conv_complete);
 
 	/* initialize regmap */
@@ -679,18 +675,10 @@ static int s2mpb04_probe(struct i2c_client *client,
 			      "S2MPB04 RESETB");
 	devm_gpio_request_one(dev, pdata->intb_gpio, GPIOF_IN,
 			      "S2MPB04 INTB");
-	ret = devm_request_threaded_irq(dev, pdata->resetb_irq, NULL,
-					s2mpb04_resetb_irq_handler,
-					IRQF_TRIGGER_FALLING |
-					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-					"s2mpb04-resetb", ddata);
 	ret = devm_request_threaded_irq(dev, pdata->intb_irq, NULL,
 					s2mpb04_intb_irq_handler,
 					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					"s2mpb04-intb", ddata);
-
-	/* disable the irq while doing initial power on */
-	disable_irq(pdata->resetb_irq);
 
 	/* initialize chip */
 	s2mpb04_chip_init(ddata);
@@ -732,8 +720,14 @@ static int s2mpb04_probe(struct i2c_client *client,
 	/* create sysfs attributes */
 	s2mpb04_config_sysfs(dev);
 
-	/* enable the irq after power on */
-	enable_irq(pdata->resetb_irq);
+	/* Register resetb irq handler after setting PON to avoid IRQ
+	 * firing unnecessarily.
+	 */
+	ret = devm_request_threaded_irq(dev, pdata->resetb_irq, NULL,
+					s2mpb04_resetb_irq_handler,
+					IRQF_TRIGGER_FALLING |
+					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					"s2mpb04-resetb", ddata);
 
 	/* fixup some chip settings that are different than reset values */
 	s2mpb04_core_fixup(ddata);
