@@ -179,7 +179,6 @@
 		interrupt = <0>;
 		status = "okay";
 		#thermal-sensor-cells = <0>;
-		ab-tmu-trimming = <0>;
 	};
 
 	abc-sm {
