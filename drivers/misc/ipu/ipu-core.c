@@ -433,6 +433,18 @@ void ipu_bus_notify_link_down(struct paintbox_bus *bus)
 	queue_work(system_wq, &bus->recovery_work);
 }
 
+
+void ipu_bus_notify_clock_enable(struct paintbox_bus *bus,
+		uint64_t clock_rate_hz)
+{
+	ipu_core_jqs_enable_clock(bus, clock_rate_hz);
+}
+
+void ipu_bus_notify_clock_disable(struct paintbox_bus *bus)
+{
+	ipu_core_jqs_disable_clock(bus);
+}
+
 /* The Linux IOMMU is designed around an IOMMU providing translation services to
  * all devices on a particular bus.  The Paintbox IOMMU is integrated into the
  * Paintbox IPU.  To make the Paintbox IOMMU fit within the Linux IOMMU

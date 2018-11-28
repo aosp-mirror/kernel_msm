@@ -26,6 +26,7 @@
 
 #include "ipu-adapter.h"
 #include "ipu-core-jqs-msg-transport.h"
+#include "ipu-core-jqs.h"
 #include "ipu-regs.h"
 
 struct ipu_adapter_ab_mfd_data {
@@ -365,6 +366,12 @@ static int ipu_adapter_ab_mfd_low_priority_irq_notify(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static inline bool ipu_clock_rate_is_active(uint64_t rate)
+{
+	return ((rate > 0) &&
+			(rate != IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND));
+}
+
 static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 					  unsigned long action,
 					  void *data)
@@ -376,6 +383,7 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 			container_of(nb,
 				     struct ipu_adapter_ab_mfd_data,
 				     clk_change_nb);
+	struct paintbox_bus *bus = dev_data->bus;
 
 	switch (action) {
 	case AB_IPU_PRE_RATE_CHANGE:
@@ -387,11 +395,21 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 		dev_dbg(dev_data->dev,
 			"%s: IPU rate has changed from %lu Hz to %lu Hz",
 			__func__, clk_data->old_rate, clk_data->new_rate);
+		if (ipu_clock_rate_is_active(clk_data->new_rate))
+			ipu_bus_notify_clock_enable(bus, clk_data->new_rate);
+		else
+			ipu_bus_notify_clock_disable(bus);
+
 		break;
 	case AB_IPU_ABORT_RATE_CHANGE:
 		dev_warn(dev_data->dev,
 			 "%s: IPU rate aborted changing from %lu Hz to %lu Hz",
 			 __func__, clk_data->old_rate, clk_data->new_rate);
+		if (ipu_clock_rate_is_active(clk_data->old_rate))
+			ipu_bus_notify_clock_enable(bus, clk_data->old_rate);
+		else
+			ipu_bus_notify_clock_disable(bus);
+
 		break;
 	default:
 		return NOTIFY_DONE;  /* Don't care */

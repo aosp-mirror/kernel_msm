@@ -47,6 +47,14 @@
 /* Delay for system to stabilize before sending real traffic */
 #define CORE_SYSTEM_STABLIZE_TIME 100 /* us */
 
+static inline bool ipu_core_jqs_is_hw_ready(struct paintbox_bus *bus)
+{
+	bool clock_is_on = bus->jqs.clock_rate_hz > 0;
+	bool clock_rate_ipu_inactive = bus->jqs.clock_rate_hz !=
+			IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND;
+	return (clock_is_on && clock_rate_ipu_inactive);
+}
+
 static int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
 		uint32_t clock_rate_hz)
 {
@@ -315,7 +323,7 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 
 	atomic_or(IPU_STATE_JQS_READY, &bus->state);
 
-	ret = ipu_core_jqs_send_clock_rate(bus, A0_IPU_DEFAULT_CLOCK_RATE);
+	ret = ipu_core_jqs_send_clock_rate(bus, bus->jqs.clock_rate_hz);
 	if (ret < 0)
 		goto err_disable_jqs;
 
@@ -369,6 +377,10 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	 * with the exception of OFF.
 	 */
 	if (bus->jqs.status == JQS_FW_STATUS_STAGED) {
+
+		if (!ipu_core_jqs_is_hw_ready(bus))
+			return -ECONNREFUSED;
+
 		ret = ipu_core_jqs_start_firmware(bus);
 		if (ret < 0)
 			goto unstage_firmware;
@@ -451,6 +463,28 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 	mutex_unlock(&bus->jqs.lock);
 
 	return 0;
+}
+
+void ipu_core_jqs_enable_clock(struct paintbox_bus *bus, uint64_t clock_rate_hz)
+{
+	mutex_lock(&bus->jqs.lock);
+
+	bus->jqs.clock_rate_hz = clock_rate_hz;
+	if (ipu_core_jqs_is_ready(bus))
+		ipu_core_jqs_send_clock_rate(bus, clock_rate_hz);
+
+	mutex_unlock(&bus->jqs.lock);
+}
+
+void ipu_core_jqs_disable_clock(struct paintbox_bus *bus)
+{
+	mutex_lock(&bus->jqs.lock);
+
+	bus->jqs.clock_rate_hz = 0;
+
+	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
+
+	mutex_unlock(&bus->jqs.lock);
 }
 
 int ipu_core_jqs_init(struct paintbox_bus *bus)

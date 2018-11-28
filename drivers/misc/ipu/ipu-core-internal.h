@@ -122,6 +122,7 @@ struct paintbox_jqs {
 	enum jqs_log_level log_trigger_level;
 	uint32_t log_sink_mask;
 	uint32_t uart_baud;
+	uint64_t clock_rate_hz;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 	struct dentry *jqs_dentry;
 	struct dentry *fw_state_dentry;
