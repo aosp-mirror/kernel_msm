@@ -598,7 +598,7 @@ static int oscar_quit_reset(struct gasket_dev *gasket_dev)
 	 *  - clock_enable = 1.
 	 *  - cb_idle_override = 0.
 	 */
-	gasket_dev_write_64(gasket_dev, 3, OSCAR_BAR_INDEX,
+	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
 
 	/* 6. Disable Clamp. */
