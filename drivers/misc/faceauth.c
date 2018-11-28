@@ -50,6 +50,9 @@
 #define DOT_IMAGE_RIGHT_ADDR 0x22900000
 #define FLOOD_IMAGE_ADDR 0x23000000
 
+#define DEBUG_PRINT_ADDR 0x23f00000
+#define DEBUG_PRINT_SIZE 0x00100000
+
 /* ABC FW and workload path */
 #define M0_FIRMWARE_PATH "m0_workload.fw"
 #define JQS_DEPTH_PATH "depth.fw"
@@ -70,6 +73,7 @@ static int dma_write_dw(struct file *file, const int remote_addr,
 static int dma_read_dw(struct file *file, const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
 static int dma_send_workloads(void);
+static int dma_gather_debug(struct faceauth_debug_data *data);
 
 struct faceauth_data {
 	int dma_dw_buf;
@@ -83,6 +87,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	int err = 0;
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_continue_data continue_step_data = { 0 };
+	struct faceauth_debug_data debug_step_data = { 0 };
 	unsigned long stop, ioctl_start;
 	uint32_t result;
 
@@ -186,6 +191,15 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	case FACEAUTH_DEV_IOC_CLEANUP:
 		/* TODO cleanup Airbrush DRAM */
 		pr_info("faceauth cleanup IOCTL\n");
+		break;
+	case FACEAUTH_DEV_IOC_DEBUG:
+		pr_info("faceauth debug IOCTL\n");
+		if (copy_from_user(&debug_step_data, (const void __user *)arg,
+				   sizeof(debug_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
+		err = dma_gather_debug(&debug_step_data);
 		break;
 	default:
 		err = -EFAULT;
@@ -446,6 +460,17 @@ static int dma_send_workloads(void)
 		pr_err("Error during M0 firmware transfer: %d\n", err);
 		return err;
 	}
+
+	return err;
+}
+
+static int dma_gather_debug(struct faceauth_debug_data *data)
+{
+	int err = 0;
+
+	err = dma_xfer((void *)data->print_buffer,
+		min((uint32_t)DEBUG_PRINT_SIZE, data->print_buffer_size),
+		DEBUG_PRINT_ADDR, DMA_FROM_DEVICE);
 
 	return err;
 }

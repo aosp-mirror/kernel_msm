@@ -51,13 +51,20 @@ struct faceauth_continue_data {
 	__u8 result; /* FACEAUTH_RESULT_* */
 } __attribute__((packed));
 
+/* This struct contains a user supplied buffer that is written by kernel */
+struct faceauth_debug_data {
+	__u8 __user *print_buffer;
+	__u32 print_buffer_size;
+} __attribute__((packed));
+
 /*
  * Prepare AP and AB for faceauth workflow. This step might include slow
- * operations like reading fiemware from filesystem and copying to AB memory.
+ * operations like reading firmware from filesystem and copying to AB memory.
  */
 #define FACEAUTH_DEV_IOC_INIT _IO('f', 1)
 #define FACEAUTH_DEV_IOC_START _IOW('f', 2, struct faceauth_start_data)
 #define FACEAUTH_DEV_IOC_CONTINUE _IOR('f', 3, struct faceauth_continue_data)
 #define FACEAUTH_DEV_IOC_CLEANUP _IO('f', 4)
+#define FACEAUTH_DEV_IOC_DEBUG _IOR('f', 5, struct faceauth_debug_data)
 
 #endif /* _UAPI_LINUX_FACEAUTH_H */
