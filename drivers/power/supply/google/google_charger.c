@@ -115,6 +115,8 @@ static char *psy_usbc_type_str[] = {
 
 static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 {
+	union gbms_charger_state chg_state = { .v = 0 };
+
 	chg_drv->fv_uv = -1;
 	chg_drv->cc_max = -1;
 	chg_drv->disable_charging = 0;
@@ -128,6 +130,9 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 		      POWER_SUPPLY_PROP_TAPER_CONTROL,
 		      POWER_SUPPLY_TAPER_CONTROL_OFF);
 
+	/* make sure the battery knows that it's disconnected */
+	GPSY_SET_INT64_PROP(chg_drv->bat_psy,
+		POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE, chg_state.v);
 }
 
 static void pr_info_usb_state(struct power_supply *usb_psy,
@@ -217,6 +222,22 @@ static int chg_set_charger(struct power_supply *chg_psy, int fv_uv, int cc_max)
 	return rc;
 }
 
+static uint8_t chg_work_gen_flags(int chg_status, int chg_type)
+{
+	uint8_t flags = 0;
+
+	if (chg_status != POWER_SUPPLY_STATUS_DISCHARGING)
+		flags |= GBMS_CS_FLAG_BUCK_EN;
+	if (chg_status == POWER_SUPPLY_STATUS_FULL)
+		flags |= GBMS_CS_FLAG_DONE;
+	if (chg_type == POWER_SUPPLY_CHARGE_TYPE_TAPER)
+		flags |= GBMS_CS_FLAG_CV;
+	if (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST)
+		flags |= GBMS_CS_FLAG_CC;
+
+	return flags;
+}
+
 static int chg_work_gen_state(union gbms_charger_state *chg_state,
 			       struct power_supply *chg_psy)
 {
@@ -238,15 +259,7 @@ static int chg_work_gen_state(union gbms_charger_state *chg_state,
 	chg_state->f.chg_type = chg_type;
 	chg_state->f.chg_status = chg_status;
 	chg_state->f.vchrg = vchrg / 1000; /* vchrg is in uA, f.vchrg us mA */
-
-	if (chg_status != POWER_SUPPLY_STATUS_DISCHARGING)
-		chg_state->f.flags |= GBMS_CS_FLAG_BUCK_EN;
-	if (chg_status == POWER_SUPPLY_STATUS_FULL)
-		chg_state->f.flags |= GBMS_CS_FLAG_DONE;
-	if (chg_type == POWER_SUPPLY_CHARGE_TYPE_TAPER)
-		chg_state->f.flags |= GBMS_CS_FLAG_CV;
-	if (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST)
-		chg_state->f.flags |= GBMS_CS_FLAG_CC;
+	chg_state->f.flags |= chg_work_gen_flags(chg_status, chg_type);
 
 	return 0;
 }
@@ -302,6 +315,10 @@ static int chg_work_roundtrip(const union gbms_charger_state *chg_state,
 		POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE);
 
 	/* ASSERT: (chg_state.f.flags&GBMS_CS_FLAG_DONE) && cc_max == 0 */
+
+	if (*cc_max == 0)
+		return 0;
+
 	if (*fv_uv < 0 || *cc_max < 0) {
 		pr_err("MSC_CHG error on fv_uv=%d cc_max=%d\n",
 		       *fv_uv, *cc_max);
@@ -375,6 +392,7 @@ static void chg_work(struct work_struct *work)
 	} else if (!usb_online && !wlc_online) {
 		pr_info("MSC_CHG no power source detected, disabling charging\n");
 		reset_chg_drv_state(chg_drv);
+
 		goto exit_chg_work;
 	} else if (chg_drv->stop_charging) {
 	/* might be disabled later due to is_charging_enabled */
@@ -437,8 +455,8 @@ static void chg_work(struct work_struct *work)
 			update_interval = chg_drv->cc_update_interval;
 			break;
 		case POWER_SUPPLY_STATUS_CHARGING:
-			/* use s interval ONLY when in CC */
-			if ((chg_state.f.flags & GBMS_CS_FLAG_CC) != 0)
+			/* use cc interval ONLY when in CC */
+			if ((chg_state.f.flags & GBMS_CS_FLAG_CC) == 0)
 				update_interval = chg_drv->cv_update_interval;
 			break;
 		case POWER_SUPPLY_STATUS_NOT_CHARGING:
@@ -461,17 +479,24 @@ static void chg_work(struct work_struct *work)
 
 		/* TODO: b/117949231, support for PSS */
 
+		/* sanity/termination */
+		if (fv_uv == -1)
+			fv_uv = chg_drv->fv_uv;
+		if  (cc_max == -1)
+			cc_max = 0;
+
 		/* apply charger tolerance (if it has to...) */
 		cc_max = ( cc_max / 1000 ) * (1000 - chg_drv->chg_cc_tolerance);
 
 		if (chg_drv->fv_uv != fv_uv || chg_drv->cc_max != cc_max) {
+
 			/* TAPER CONTROL is in the charger */
 			/* charge tolerance is applied in the charger. */
 			rc = chg_set_charger(chg_psy, fv_uv, cc_max);
 			if (rc != 0)
 				goto error_rerun;
 
-			pr_info("l=%d fv_uv=%d->%d cc_max=%d->%d ui=%d\n",
+			pr_info("MSC_CHG l=%d fv_uv=%d->%d cc_max=%d->%d ui=%d\n",
 				soc,
 				chg_drv->fv_uv, fv_uv,
 				chg_drv->cc_max, cc_max,
@@ -480,7 +505,7 @@ static void chg_work(struct work_struct *work)
 			chg_drv->cc_max = cc_max;
 			chg_drv->fv_uv = fv_uv;
 		} else {
-			pr_info("l=%d fv=%d cc_max=%d usb=%d wlc=%d ui=%d\n",
+			pr_info("MSC_CHG l=%d fv=%d cc_max=%d usb=%d wlc=%d ui=%d\n",
 				soc, fv_uv, cc_max,
 				usb_online, wlc_online,
 				update_interval);

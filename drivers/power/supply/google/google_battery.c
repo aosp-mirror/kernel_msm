@@ -76,6 +76,8 @@ struct batt_drv {
 
 	/* battery work */
 	u32 batt_update_interval;
+	/* triger for recharge logic next update from charger */
+	bool batt_full;
 	struct batt_ssoc_state ssoc_state;
 
 	/* props */
@@ -183,6 +185,8 @@ static void batt_rl_enter(struct batt_drv *batt_drv,
 {
 	const int rl_current = batt_drv->rl_status;
 
+	/* enter on discharge is a NO_OP because batt_rl_update_status takes
+	 * care of flipping betwee DISCHARGE and RECHARGE */
 	if (rl_current == rl_status || rl_current == BATT_RL_STATUS_DISCHARGE)
 		return;
 
@@ -238,7 +242,7 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
-static inline void reset_chg_drv_state(struct batt_drv *batt_drv)
+static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 {
 	batt_drv->temp_idx = -1;
 	batt_drv->vbatt_idx = -1;
@@ -270,7 +274,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		if (!batt_drv->msc_stop_charging) {
 			pr_info("batt. temp=%d off limits, disabling charging\n",
 				temp);
-			reset_chg_drv_state(batt_drv);
+			batt_reset_chg_drv_state(batt_drv);
 		}
 
 		return 0;
@@ -525,7 +529,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 /* called holding chg_lock */
 static int msc_logic(struct batt_drv *batt_drv)
 {
-	int err;
+	int err = 0;
 
 	if (!batt_drv->chg_profile.cccm_limits)
 		return -EINVAL;
@@ -539,11 +543,18 @@ static int msc_logic(struct batt_drv *batt_drv)
 		batt_drv->chg_state.f.vchrg,
 		(unsigned long)batt_drv->chg_state.v);
 
-	/* google_charger can trigger the recharge logic and get out of it. */
-	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0)
-		reset_chg_drv_state(batt_drv);
-	else if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0)
+	/* here google_charger trigger the recharge logic and get out of it. */
+	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
+		/* also reset recharge logic */
+		batt_reset_chg_drv_state(batt_drv);
+		goto exit_msc_logic;
+	} else if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
+		/* normal enter on full */
 		batt_rl_enter(batt_drv, BATT_RL_STATUS_DISCHARGE);
+	} else if (batt_drv->batt_full) {
+		/* will enter RL only when state is NONE */
+		batt_rl_enter(batt_drv, BATT_RL_STATUS_RECHARGE);
+	}
 
 	err = msc_logic_internal(batt_drv);
 	if (err == 0) {
@@ -561,6 +572,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 			batt_drv->msc_update_interval);
 	}
 
+exit_msc_logic:
 	__pm_relax(&batt_drv->batt_ws);
 	return err;
 }
@@ -597,33 +609,23 @@ static void google_battery_work(struct work_struct *work)
 	struct power_supply *fg_psy = batt_drv->fg_psy;
 	struct batt_ssoc_state *ssoc = &batt_drv->ssoc_state;
 	int update_interval = batt_drv->batt_update_interval;
-	int ret;
+	int fg_status, ret;
 
 	pr_debug("battery work item\n");
 
 	__pm_stay_awake(&batt_drv->batt_ws);
 
 	mutex_lock(&batt_drv->chg_lock);
-	if (batt_drv->rl_status == BATT_RL_STATUS_NONE) {
-		int fg_status;
+	fg_status = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS);
+	if (fg_status < 0)
+		goto reschedule;
 
-		fg_status = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS);
-		if (fg_status < 0)
-			goto reschedule;
-
-		/* fuel gauge triggered recharge logic */
-		if (fg_status == POWER_SUPPLY_STATUS_FULL) {
-			batt_rl_enter(batt_drv, BATT_RL_STATUS_RECHARGE);
-			pr_info("SSOC: enter RL\n");
-		}
-
-		/* NOTE: might enter recharge logic on BATT_RL_STATUS_RECHARGE
-		 * when UI% is 100% (move polling of fg before this)
-		 */
-	}
+	/* fuel gauge triggered recharge logic */
+	batt_drv->batt_full = (fg_status == POWER_SUPPLY_STATUS_FULL);
 
 	mutex_lock(&batt_drv->batt_lock);
 	ret = ssoc_work(ssoc, fg_psy);
+
 	pr_info("SSOC: [ssoc=%d%% gdf=%d, uic=%d, rl=%d] rls=%d\n",
 		ssoc_get_capacity(batt_drv),
 		ssoc->ssoc_gdf, ssoc->ssoc_uic, ssoc->ssoc_rl,
@@ -636,9 +638,9 @@ static void google_battery_work(struct work_struct *work)
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
 	} else {
+		/* handle charge/recharge */
 		batt_rl_update_status(batt_drv);
 	}
-
 
 reschedule:
 	mutex_unlock(&batt_drv->chg_lock);
@@ -906,7 +908,7 @@ static void google_battery_init_work(struct work_struct *work)
 	struct power_supply_config psy_cfg = { .drv_data = batt_drv };
 	int ret = 0;
 
-	reset_chg_drv_state(batt_drv);
+	batt_reset_chg_drv_state(batt_drv);
 	mutex_init(&batt_drv->chg_lock);
 	mutex_init(&batt_drv->batt_lock);
 
