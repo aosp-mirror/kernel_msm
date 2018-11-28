@@ -25,6 +25,7 @@
 
 /* Exynos generic registers */
 #define AIRBRUSH_TMU_REG_TRIMINFO	0x0
+#define AIRBRUSH_TMU_REG_TRIMINFO_P(n)	((0x0) + ((n)*4))
 #define AIRBRUSH_TMU_REG_CONTROL	0x20
 #define AIRBRUSH_TMU_REG_CONTROL1	0x24
 #define AIRBRUSH_TMU_REG_STATUS		0x28
@@ -53,13 +54,13 @@
 
 #define AIRBRUSH_TMU_INTEN_FALL0_SHIFT		16
 
+#define AIRBRUSH_TMU_CAL_MASK		0x3
 #define AIRBRUSH_TMU_TEMP_MASK		0x1ff
 #define AIRBRUSH_TMU_BUF_SLOPE_SEL_MASK	0xf
 #define AIRBRUSH_TMU_BUF_SLOPE_SEL_SHIFT	8
 #define AIRBRUSH_TMU_CORE_EN_SHIFT	0
 #define AIRBRUSH_TMU_EN_TRIP_SHIFT	12
 #define AIRBRUSH_TMU_TRIP_MODE_SHIFT	13
-
 
 #define AIRBRUSH_EMUL_CON		0x160
 #define AIRBRUSH_DEBUG_CURRENT_TEMP	0x164
@@ -89,9 +90,6 @@
 #define AIRBRUSH_ONE_POINT_TRIMMING	1
 #define AIRBRUSH_TWO_POINT_TRIMMING	2
 
-#define AIRBRUSH_TMU_NO_TRIMMING_ERROR1	285
-#define AIRBRUSH_TMU_NO_TRIMMING_ERROR2	345
-
 #define AIRBRUSH_TMU_BASE	0xB90000
 #define AIRBRUSH_TEMP_PROBE_MAIN		0
 #define AIRBRUSH_TEMP_PROBE_IPU0		1
@@ -102,9 +100,14 @@
 #define AIRBRUSH_TEMP_PROBE_TPU1		6
 #define AIRBRUSH_NUM_REMOTE_PROBE		0x6
 #define AIRBRUSH_REMOTE_PROBE_SHIFT		16
+#define AIRBRUSH_NUM_ALL_PROBE			7
+#define AIRBRUSH_TMU_CAL_SHIFT			18
 #define AIRBRUSH_TMU_TEMP_SHIFT			9
 
 #define MCELSIUS	1000
+
+static const u16 no_trimming_error1[] = {287, 286, 287, 287, 286, 286, 286};
+static const u16 no_trimming_error2[] = {346, 346, 347, 347, 347, 346, 346};
 
 static int tmu_read_enable;
 
@@ -134,6 +137,7 @@ u32 tmu_read(u32 offset)
  * @clk: pointer to the clock structure.
  * @clk_sec: pointer to the clock structure for accessing the base_second.
  * @sclk: pointer to the clock structure for accessing the tmu special clk.
+ * @cal_type: calibration type for temperature calculation
  * @temp_error1: fused value of the first point trim.
  * @temp_error2: fused value of the second point trim.
  * @regulator: pointer to the TMU regulator structure.
@@ -152,7 +156,9 @@ struct airbrush_tmu_data {
 	struct work_struct irq_work;
 	struct mutex lock;
 	struct clk *clk, *clk_sec, *sclk;
-	u16 temp_error1, temp_error2;
+	u8 cal_type[AIRBRUSH_NUM_ALL_PROBE];
+	u16 temp_error1[AIRBRUSH_NUM_ALL_PROBE];
+	u16 temp_error2[AIRBRUSH_NUM_ALL_PROBE];
 	struct regulator *regulator;
 	struct thermal_zone_device *tzd;
 };
@@ -171,7 +177,6 @@ struct airbrush_tmu_data {
  * @min_efuse_value: minimum valid trimming data
  * @max_efuse_value: maximum valid trimming data
  * @default_temp_offset: default temperature offset in case of no trimming
- * @cal_type: calibration type for temperature
  *
  * This structure is required for configuration of airbrush_tmu driver.
  */
@@ -183,11 +188,9 @@ struct airbrush_tmu_platform_data {
 	u32 efuse_value;
 	u32 min_efuse_value;
 	u32 max_efuse_value;
-	u8 first_point_trim;
-	u8 second_point_trim;
+	u16 first_point_trim;
+	u16 second_point_trim;
 	u8 default_temp_offset;
-
-	u32 cal_type;
 };
 
 static void airbrush_report_trigger(struct airbrush_tmu_data *p)
@@ -221,7 +224,7 @@ static void airbrush_tmu_clear_irqs(struct airbrush_tmu_data *data)
 {
 	unsigned int val_irq, i;
 
-	for (i = 0; i <= AIRBRUSH_NUM_REMOTE_PROBE; i++) {
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
 		val_irq = tmu_read(data->base + AIRBRUSH_TMU_REG_INTPEND_P(i));
 		tmu_write(val_irq, data->base + AIRBRUSH_TMU_REG_INTPEND_P(i));
 	}
@@ -271,21 +274,23 @@ static int tmu_irq_notify(struct notifier_block *nb,
  * TMU treats temperature as a mapped temperature code.
  * The temperature is converted differently depending on the calibration type.
  */
-static int temp_to_code(struct airbrush_tmu_data *data, u8 temp)
+static int temp_to_code(struct airbrush_tmu_data *data, u16 temp, u8 probe)
 {
 	struct airbrush_tmu_platform_data *pdata = data->pdata;
 	int temp_code;
 
-	switch (pdata->cal_type) {
+	switch (data->cal_type[probe]) {
 	case AIRBRUSH_NO_TRIMMING:
 	case AIRBRUSH_TWO_POINT_TRIMMING:
 		temp_code = (temp - pdata->first_point_trim) *
-			(data->temp_error2 - data->temp_error1) /
+			(data->temp_error2[probe] - data->temp_error1[probe]) /
 			(pdata->second_point_trim - pdata->first_point_trim) +
-			data->temp_error1;
+			data->temp_error1[probe];
 		break;
 	case AIRBRUSH_ONE_POINT_TRIMMING:
-		temp_code = temp + data->temp_error1 - pdata->first_point_trim;
+		temp_code = temp +
+			data->temp_error1[probe] -
+			pdata->first_point_trim;
 		break;
 	default:
 		temp_code = temp + pdata->default_temp_offset;
@@ -299,26 +304,31 @@ static int temp_to_code(struct airbrush_tmu_data *data, u8 temp)
  * Calculate a temperature value from a temperature code.
  * The unit of the temperature is degree Celsius.
  */
-static int code_to_temp(struct airbrush_tmu_data *data, u16 temp_code)
+static int code_to_temp(struct airbrush_tmu_data *data, u16 temp_code, u8 probe)
 {
 	struct airbrush_tmu_platform_data *pdata = data->pdata;
 	int temp;
 
-	switch (pdata->cal_type) {
+	switch (data->cal_type[probe]) {
 	case AIRBRUSH_NO_TRIMMING:
 	case AIRBRUSH_TWO_POINT_TRIMMING:
-		temp = (temp_code - data->temp_error1) *
+		temp = (temp_code - data->temp_error1[probe]) *
 			(pdata->second_point_trim - pdata->first_point_trim) /
-			(data->temp_error2 - data->temp_error1) +
+			(data->temp_error2[probe] - data->temp_error1[probe]) +
 			pdata->first_point_trim;
 		break;
 	case AIRBRUSH_ONE_POINT_TRIMMING:
-		temp = temp_code - data->temp_error1 + pdata->first_point_trim;
+		temp = temp_code -
+			data->temp_error1[probe] +
+			pdata->first_point_trim;
 		break;
 	default:
 		temp = temp_code - pdata->default_temp_offset;
 		break;
 	}
+	pr_debug("ab_tmu_calc: probe=%u val=%u err1=%u err2=%u\n",
+		probe, temp_code,
+		data->temp_error1[probe], data->temp_error2[probe]);
 
 	return temp;
 }
@@ -344,7 +354,6 @@ static void airbrush_tmu_core_enable(struct platform_device *pdev, bool enable)
 static int airbrush_tmu_initialize(struct platform_device *pdev)
 {
 	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
-	struct airbrush_tmu_platform_data *pdata = data->pdata;
 	unsigned int status, trim_info;
 	int ret = 0;
 	struct thermal_zone_device *tz = data->tzd;
@@ -359,17 +368,21 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 		goto out;
 	}
 
-	trim_info = tmu_read(data->base + AIRBRUSH_TMU_REG_TRIMINFO);
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
+		trim_info = tmu_read(data->base +
+				     AIRBRUSH_TMU_REG_TRIMINFO_P(i));
 
-	data->temp_error1 = trim_info & AIRBRUSH_TMU_TEMP_MASK;
-	if (!data->temp_error1 ||
-	    (pdata->min_efuse_value > data->temp_error1) ||
-	    (data->temp_error1 > pdata->max_efuse_value))
-		data->temp_error1 = pdata->efuse_value & AIRBRUSH_TMU_TEMP_MASK;
+		data->cal_type[i] = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
+				    (AIRBRUSH_TMU_CAL_MASK);
 
-	if (pdata->cal_type == AIRBRUSH_NO_TRIMMING) {
-		data->temp_error1 = AIRBRUSH_TMU_NO_TRIMMING_ERROR1;
-		data->temp_error2 = AIRBRUSH_TMU_NO_TRIMMING_ERROR2;
+		data->temp_error1[i] = trim_info & AIRBRUSH_TMU_TEMP_MASK;
+		data->temp_error2[i] = (trim_info >> AIRBRUSH_TMU_TEMP_SHIFT) &
+				       (AIRBRUSH_TMU_TEMP_MASK);
+
+		if (data->cal_type[i] == AIRBRUSH_NO_TRIMMING) {
+			data->temp_error1[i] = no_trimming_error1[i];
+			data->temp_error2[i] = no_trimming_error2[i];
+		}
 	}
 
 	for (i = (of_thermal_get_ntrips(tz) - 1); i >= 0; i--) {
@@ -383,22 +396,23 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 		tz->ops->get_trip_hyst(tz, i, &temp_hist);
 		temp_hist = temp - (temp_hist / MCELSIUS);
 
-		/* Set 9-bit temperature code for rising threshold levels */
-		threshold_code = temp_to_code(data, temp);
-		rising_threshold = tmu_read(data->base +
-			AIRBRUSH_THD_TEMP_RISE7_6_P(0) + reg_off);
-		rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK << (16 * bit_off));
-		rising_threshold |= threshold_code << (16 * bit_off);
+		for (j = 0; j < AIRBRUSH_NUM_ALL_PROBE; j++) {
+			/* Set 9-bit temp code for rising threshold levels */
+			threshold_code = temp_to_code(data, temp, j);
+			rising_threshold = tmu_read(data->base +
+				AIRBRUSH_THD_TEMP_RISE7_6_P(j) + reg_off);
+			rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
+				(16 * bit_off));
+			rising_threshold |= threshold_code << (16 * bit_off);
 
-		/* Set 9-bit temperature code for falling threshold levels */
-		threshold_code = temp_to_code(data, temp_hist);
-		tmu_read(data->base +
-			AIRBRUSH_THD_TEMP_FALL7_6_P(0) + reg_off);
-		falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
-			(16 * bit_off));
-		falling_threshold |= threshold_code << (16 * bit_off);
+			/* Set 9-bit temp code for falling threshold levels */
+			threshold_code = temp_to_code(data, temp_hist, j);
+			tmu_read(data->base +
+				AIRBRUSH_THD_TEMP_FALL7_6_P(j) + reg_off);
+			falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
+				(16 * bit_off));
+			falling_threshold |= threshold_code << (16 * bit_off);
 
-		for (j = 0; j <= AIRBRUSH_NUM_REMOTE_PROBE; j++) {
 			tmu_write(rising_threshold,
 				data->base + AIRBRUSH_THD_TEMP_RISE7_6_P(j) +
 				reg_off);
@@ -423,7 +437,7 @@ static void airbrush_tmu_control(struct platform_device *pdev, bool on)
 
 	interrupt_en = on ? AIRBRUSH_TMU_INT_EN : 0;
 
-	for (i = 0; i <= AIRBRUSH_NUM_REMOTE_PROBE; i++)
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
 		tmu_write(interrupt_en,
 			data->base + AIRBRUSH_TMU_REG_INTEN_P(i));
 
@@ -439,7 +453,7 @@ static int airbrush_get_temp(void *p, int *temp)
 		return -EINVAL;
 
 	*temp = tmu_read_enable ?
-		code_to_temp(data, airbrush_tmu_read(data)) * MCELSIUS : 0;
+		code_to_temp(data, airbrush_tmu_read(data), 0) * MCELSIUS : 0;
 	return 0;
 }
 
@@ -475,7 +489,7 @@ void tmu_set_emulate_data(struct airbrush_tmu_data *data,  u16 next_time,
 		next_time = 0x1;
 	uReg = (tmu_read(AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON) >> 0) & 0x1;
 	uReg |= (next_time << AIRBRUSH_EMUL_NEXTTIME_SHIFT) |
-		(temp_to_code(data, next_data) << AIRBRUSH_EMUL_DATA_SHIFT);
+		(temp_to_code(data, next_data, 0) << AIRBRUSH_EMUL_DATA_SHIFT);
 
 	tmu_write(uReg, AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON);
 }
@@ -551,12 +565,6 @@ static int airbrush_map_dt_data(struct platform_device *pdev)
 	pdata->min_efuse_value = AIRBRUSH_TMU_MIN_EFUSE_VAL;
 	pdata->max_efuse_value = AIRBRUSH_TMU_MAX_EFUSE_VAL;
 
-	if (of_property_read_u32(pdev->dev.of_node, "ab-tmu-trimming",
-			&pdata->cal_type)) {
-		pdata->cal_type = AIRBRUSH_NO_TRIMMING;
-		dev_dbg(&pdev->dev, "No ab-tmu-trimming property\n");
-	}
-
 	data->pdata = pdata;
 
 	return 0;
@@ -599,7 +607,7 @@ static inline int airbrush_tmu_get_current_temp(struct airbrush_tmu_data *data,
 
 	code = (tmu_read(data->base + reg_offset) >> reg_shift)
 			& AIRBRUSH_TMU_TEMP_MASK;
-	return code_to_temp(data, code);
+	return code_to_temp(data, code, id);
 }
 
 static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
@@ -693,11 +701,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 		goto err_thermal;
 	}
 
-	/*
-	 * set tmu contorl register
-	 * TODO(b/113226138): enable interrupts when tmu is fully calibrated
-	 */
-	airbrush_tmu_control(pdev, false);
+	airbrush_tmu_control(pdev, true);
 	tmu_read_enable = 1;
 
 	dev_dbg(&pdev->dev, "%s: done.\n", __func__);
