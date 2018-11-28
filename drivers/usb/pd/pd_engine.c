@@ -43,6 +43,10 @@
 #define EXT_VBUS_WORK_DELAY_MS 5000
 #define EXT_VBUS_OVERLAP_MS       5
 
+#define CHARING_TEST_BOOT_MODE "chargingtest"
+
+static char boot_mode_string[64];
+
 struct usbpd {
 	struct device		dev;
 
@@ -107,6 +111,8 @@ struct usbpd {
 
 	bool ext_vbus_supported;
 };
+
+static u8 always_enable_data;
 
 /*
  * Logging
@@ -232,6 +238,13 @@ static int pd_engine_debugfs_init(struct usbpd *pd)
 				 0444, pd->rootdir, pd,
 				 &pd_engine_debug_operations)) {
 		dev_err(&pd->dev, "Failed to create logbuffer");
+		return -EAGAIN;
+	}
+
+	if (!debugfs_create_u8("always_enable_data",
+				0600, pd->rootdir,
+				&always_enable_data)) {
+		dev_err(&pd->dev, "Failed to create data path debug");
 		return -EAGAIN;
 	}
 
@@ -490,7 +503,8 @@ static int update_usb_data_role(struct usbpd *pd)
 	 */
 	extcon_usb = pd->extcon_usb &&
 		     (psy_support_usb_data(pd->psy_type) ||
-		      pd->usb_comm_capable);
+		      pd->usb_comm_capable ||
+		      always_enable_data);
 
 	/*
 	 * EXTCON_USB_HOST and EXTCON_USB is mutually exlusive.
@@ -1463,7 +1477,7 @@ static int set_usb_data_role(struct usbpd *pd, bool attached,
 		      usb_comm_capable ? "Y" : "N");
 
 	if (attached && role == TYPEC_SINK &&
-	    !(pd->apsd_done || usb_comm_capable)) {
+	    !(pd->apsd_done || usb_comm_capable || always_enable_data)) {
 		/* wait for APSD done */
 		pd_engine_log(pd,
 			      "APSD is not done, delay update usb data role");
@@ -1950,6 +1964,10 @@ EXPORT_SYMBOL(usbpd_destroy);
 
 static int __init pd_engine_init(void)
 {
+	if (!strncmp(boot_mode_string, CHARING_TEST_BOOT_MODE,
+		     strlen(CHARING_TEST_BOOT_MODE)))
+		always_enable_data = 1;
+
 	return 0;
 }
 module_init(pd_engine_init);
@@ -1959,3 +1977,7 @@ module_exit(pd_engine_exit);
 
 MODULE_DESCRIPTION("USB PD Engine based on Type-C Port Manager");
 MODULE_LICENSE("GPL v2");
+
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "androidboot."
+module_param_string(mode, boot_mode_string, sizeof(boot_mode_string), 0);
