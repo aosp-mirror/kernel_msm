@@ -55,7 +55,7 @@ static struct block_property ipu_property_table[] = {
 	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  330, 14, 14, 0, 0),
 	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  440, 14, 14, 0, 0),
 	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  550, 14, 14, 0, 0),
-	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_75, on,  610, 14, 14, 0, 0),
+	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_75, on,  578, 14, 14, 0, 0),
 	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 550, 0,  0,  0, 0),
 	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 610, 0,  0,  0, 0),
 	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,   0,  0,  0, 0),
@@ -65,9 +65,9 @@ static struct block_property ipu_property_table[] = {
 static struct block_property tpu_property_table[] = {
 	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 766, 0, 0, 16, 0),
 	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  50,  0, 0, 16, 0),
-	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  307, 0, 0, 16, 0),
-	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  460, 0, 0, 16, 0),
-	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  613, 0, 0, 16, 0),
+	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  303, 0, 0, 16, 0),
+	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  454, 0, 0, 16, 0),
+	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  606, 0, 0, 16, 0),
 	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  766, 0, 0, 16, 0),
 	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_85, on,  962, 0, 0, 16, 0),
 	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 766, 0, 0, 0,  0),
@@ -78,7 +78,7 @@ static struct block_property tpu_property_table[] = {
 
 static struct block_property dram_property_table[] = {
 	BLK_ENTRY(0_0, PowerUp,   Standby,  on, 0_60, off, 1867, 0, 0, 0, 3733),
-	BLK_ENTRY(0_1, PowerUp,   AonTran,   on, 0_60, on,  200, 0, 0, 0, 400),
+	BLK_ENTRY(0_1, PowerUp,   AonTran,   on, 0_60, on,  800, 0, 0, 0, 1600),
 	BLK_ENTRY(0_2, PowerUp, HalfMidTran, on, 0_60, on, 800,  0, 0, 0, 1600),
 	BLK_ENTRY(0_3, PowerUp, HalfMaxTran, on, 0_60, on, 934,  0, 0, 0, 1867),
 	BLK_ENTRY(0_4, PowerUp,   LowTran,   on, 0_60, on, 1200, 0, 0, 0, 2400),
@@ -92,7 +92,7 @@ static struct block_property dram_property_table[] = {
 
 static struct block_property mif_property_table[] = {
 	BLK_ENTRY(0_0, Normal,   Ready,       on, 0_85, off, 933, 0, 0, 0, 0),
-	BLK_ENTRY(0_1, Normal,   AonTran,     on, 0_85, on,  50,  0, 0, 0, 0),
+	BLK_ENTRY(0_1, Normal,   AonTran,     on, 0_85, on,  200, 0, 0, 0, 0),
 	BLK_ENTRY(0_2, Normal,   HalfMidTran, on, 0_85, on,  200, 0, 0, 0, 0),
 	BLK_ENTRY(0_3, Normal,   HalfMaxTran, on, 0_85, on,  233, 0, 0, 0, 0),
 	BLK_ENTRY(0_4, Normal,   LowTran,     on, 0_85, on,  300, 0, 0, 0, 0),
