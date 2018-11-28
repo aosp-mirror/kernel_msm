@@ -534,35 +534,24 @@ static int s2mpg01_check_int_flags(struct s2mpg01_core *ddata)
 	return ret;
 }
 
-/* kernel thread for waiting for chip to come out of reset */
+/* kernel thread to notify regulator fail event and clear any pending
+ * interrupt status
+ */
 static void s2mpg01_reset_work(struct work_struct *data)
 {
 	struct s2mpg01_core *ddata = container_of(data, struct s2mpg01_core,
 						   reset_work);
-	unsigned long timeout;
 
 	/* notify regulators of shutdown event */
 	dev_err(ddata->dev,
 		"%s: Notifying regulators of shutdown event\n", __func__);
 	s2mpg01_notify_fail_all();
-
-	dev_err(ddata->dev,
-		"%s: waiting for chip to come out of reset\n", __func__);
-
-	/* wait for chip to come out of reset, signaled by resetb interrupt */
-	timeout = wait_for_completion_timeout(&ddata->reset_complete,
-					      S2MPG01_SHUTDOWN_RESET_TIMEOUT);
-	if (!timeout)
-		dev_err(ddata->dev,
-			"%s: timeout waiting for device to return from reset\n",
-			__func__);
-	else
-		s2mpg01_chip_init(ddata);
-
-	complete(&ddata->init_complete);
 }
 
-/* irq handler for resetb pin */
+/* irq handler for resetb pin.
+ * It may not catch falling edge. But, that will not be an issue as intb
+ * interrupt handler will notify regulator fail event.
+ */
 static irqreturn_t s2mpg01_resetb_irq_handler(int irq, void *cookie)
 {
 	struct s2mpg01_core *ddata = (struct s2mpg01_core *)cookie;
@@ -571,11 +560,12 @@ static irqreturn_t s2mpg01_resetb_irq_handler(int irq, void *cookie)
 
 	if (gpio_get_value(ddata->pdata->pmic_ready_gpio)) {
 		dev_info(ddata->dev, "%s: completing reset\n", __func__);
-		complete(&ddata->reset_complete);
+		/* initialize chip */
+		s2mpg01_chip_init(ddata);
+		complete(&ddata->init_complete);
 	} else {
 		dev_err(ddata->dev, "%s: device reset\n", __func__);
 		reinit_completion(&ddata->init_complete);
-		reinit_completion(&ddata->reset_complete);
 		schedule_work(&ddata->reset_work);
 	}
 
@@ -711,7 +701,6 @@ static int s2mpg01_probe(struct i2c_client *client,
 
 	/* initialize completions */
 	init_completion(&ddata->init_complete);
-	init_completion(&ddata->reset_complete);
 	init_completion(&ddata->adc_conv_complete);
 
 	/* initialize regmap */
