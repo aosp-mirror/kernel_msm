@@ -85,7 +85,7 @@ struct usbpd {
 	bool in_hard_reset;
 
 	/* debugfs logging */
-	struct dentry *dentry;
+	struct dentry *rootdir;
 	spinlock_t logbuffer_lock;	/* log buffer access lock */
 	int logbuffer_head;
 	int logbuffer_tail;
@@ -218,28 +218,29 @@ static const struct file_operations pd_engine_debug_operations = {
 	.release	= single_release,
 };
 
-static struct dentry *rootdir;
-
 static int pd_engine_debugfs_init(struct usbpd *pd)
 {
 	spin_lock_init(&pd->logbuffer_lock);
 	/* /sys/kernel/debug/pd_engine/usbpdX */
-	if (!rootdir) {
-		rootdir = debugfs_create_dir("pd_engine", NULL);
-		if (!rootdir)
+	if (!pd->rootdir) {
+		pd->rootdir = debugfs_create_dir("pd_engine", NULL);
+		if (!pd->rootdir)
 			return -ENOMEM;
 	}
 
-	pd->dentry = debugfs_create_file(dev_name(&pd->dev),
-					 S_IFREG | S_IRUGO, rootdir,
-					 pd, &pd_engine_debug_operations);
+	if (!debugfs_create_file(dev_name(&pd->dev),
+				 0444, pd->rootdir, pd,
+				 &pd_engine_debug_operations)) {
+		dev_err(&pd->dev, "Failed to create logbuffer");
+		return -EAGAIN;
+	}
 
 	return 0;
 }
 
 static void pd_engine_debugfs_exit(struct usbpd *pd)
 {
-	debugfs_remove(pd->dentry);
+	debugfs_remove_recursive(pd->rootdir);
 }
 
 static const char * const get_typec_mode_name(
