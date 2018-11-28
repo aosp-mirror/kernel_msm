@@ -345,6 +345,18 @@ static void ipu_bus_recovery_work(struct work_struct *work)
 	mutex_unlock(&bus->jqs.lock);
 }
 
+void ipu_request_reset(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_jqs_disable_firmware_error(bus);
+
+	mutex_unlock(&bus->jqs.lock);
+}
+
 int ipu_bus_initialize(struct device *parent_dev,
 		struct paintbox_bus_ops *ops, struct paintbox_pdata *pdata,
 		struct paintbox_bus **pb_bus)

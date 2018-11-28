@@ -348,16 +348,17 @@ int ipu_resource_session_release(struct paintbox_data *pb,
 
 	ret = ipu_resource_send_release(pb, session);
 
-	/* TODO(b/114760293):  A busy error and a comms error should be treated
-	 * differently here.  A comms error should be catastrophic and cause an
-	 * IPU reset.  A busy error should cause a retry.
-	 */
-	if (ret < 0)
-		return ret;
-
+	/* Always release the resources even if there is an error. */
 	ipu_resource_release_internal(pb, session);
 
-	return 0;
+	/* If the resource release fails either due to a communications issue
+	 * with the JQS or a failure to stop a DMA channel then the IPU will
+	 * need to be reset.
+	 */
+	if (ret < 0)
+		ipu_request_reset(pb->dev);
+
+	return ret;
 }
 
 int ipu_resource_allocate_ioctl(struct paintbox_data *pb,
@@ -453,17 +454,25 @@ int ipu_resource_allocate_ioctl(struct paintbox_data *pb,
 		goto err_exit;
 	}
 
+	/* If the JQS went down and was reset while the other session had the
+	 * resources then exit without allocating the resources.
+	 */
+	if (!ipu_is_jqs_ready(pb->dev)) {
+		mutex_unlock(&pb->lock);
+		dev_err(pb->dev,
+				"%s: unable to allocate resources, JQS is down\n",
+				__func__);
+		return -ENETDOWN;
+	}
+
 	ret = ipu_resource_allocate(pb, session, &req);
 	if (ret < 0) {
 		/* An error allocating the resources would indicate a comms
-		 * error which will require a reset of the IPU and JQS.  Just
-		 * clean up the AP side part of the allocation here.
+		 * error which will require a reset of the IPU and JQS.  Clean
+		 * up the allocated resources and request a reset.
 		 */
 		ipu_resource_release_internal(pb, session);
-
-		/* TODO(b/114760293):  This should go to the catastrophic error
-		 * path from here.
-		 */
+		ipu_request_reset(pb->dev);
 	}
 
 	mutex_unlock(&pb->lock);

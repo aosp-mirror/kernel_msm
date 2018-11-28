@@ -226,10 +226,12 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 
 	ipu_queue_session_release(pb, session);
 
-	ret = ipu_resource_session_release(pb, session);
-
-	/* TODO(b/115408270):  Handle errors will releasing resources */
-	WARN_ON(ret < 0);
+	/* If there was an error releasing the session then it it will trigger
+	 * an IPU reset and notify open sessions of the failure.  Since this
+	 * session is in the process of shutting down there is no need to
+	 * propagate the error further.
+	 */
+	(void)ipu_resource_session_release(pb, session);
 
 	ipu_resource_remove_session_from_wait_list(session);
 

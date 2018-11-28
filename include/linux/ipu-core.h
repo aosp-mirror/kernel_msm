@@ -146,4 +146,9 @@ struct dentry *ipu_get_debug_root(struct device *dev);
 /* Returns true if the JQS is ready, false if it is not. */
 bool ipu_is_jqs_ready(struct device *dev);
 
+/* Called by the client to request a JQS reset after a catastrophic error is
+ * detected.
+ */
+void ipu_request_reset(struct device *dev);
+
 #endif /* __IPU_CORE_H__ */
