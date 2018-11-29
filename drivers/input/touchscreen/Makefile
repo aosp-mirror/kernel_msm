@@ -110,3 +110,4 @@ obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= hxchipset/
 obj-$(CONFIG_TOUCHSCREEN_HEATMAP)	+= heatmap.o
 obj-$(CONFIG_TOUCHSCREEN_SEC_TS)	+= sec_ts/
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)»       += hxchipset/
+obj-$(CONFIG_TOUCHSCREEN_TBN)		+= qmi_tbn_v01.o touch_bus_negotiator.o
