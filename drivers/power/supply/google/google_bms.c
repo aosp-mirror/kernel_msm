@@ -35,15 +35,13 @@
 #define GBMS_DEFAULT_CV_TIER_SWITCH_CNT 3
 #define GBMS_DEFAULT_CV_OTV_MARGIN      0
 
-#define ARR_SIZE(a)	(sizeof(a)/sizeof(a[0]))
-
 static const char *psy_chgt_str[] = {
 	"Unknown", "None", "Trickle", "Fast", "Taper"
 };
 
 const char *gbms_chg_type_s(int cgh_type)
 {
-	if (cgh_type < 0 || cgh_type > ARR_SIZE(psy_chgt_str))
+	if (cgh_type < 0 || cgh_type > ARRAY_SIZE(psy_chgt_str))
 		return "<err>";
 	return psy_chgt_str[cgh_type];
 }
@@ -54,7 +52,7 @@ static const char *psy_chgs_str[] = {
 
 const char *gbms_chg_status_s(int chg_status)
 {
-	if (chg_status < 0 || chg_status > ARR_SIZE(psy_chgs_str))
+	if (chg_status < 0 || chg_status > ARRAY_SIZE(psy_chgs_str))
 		return "<err>";
 	return psy_chgs_str[chg_status];
 }

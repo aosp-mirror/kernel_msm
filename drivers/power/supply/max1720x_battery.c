@@ -220,45 +220,51 @@ enum max1720x_command_bits {
 	MAX1720X_READ_HISTORY_CMD_BASE = 0xE226,
 };
 
+
 /** Nonvolatile Register Memory Map */
 enum max1720x_nvram {
 	MAX1720X_NVRAM_START = 0x80,
-	MAX1720X_NUSER18C = 0x8C,
-	MAX1720X_NUSER18D = 0x8D,
-	MAX1720X_NODSCTH = 0x8E,
-	MAX1720X_NODSCCFG = 0x8F,
-	MAX1720X_NLEARNCFG = 0x9F,
-	MAX1720X_NMISCCFG = 0xB2,
-	MAX1720X_NHIBCFG = 0xB4,
-	MAX1720X_NCONVGCFG = 0xB7,
-	MAX1720X_NNVCFG0 = 0xB8,
-	MAX1720X_NUSER1C4 = 0xC4,
-	MAX1720X_NUSER1C5 = 0xC5,
-	MAX1720X_NCGAIN = 0xC8,
-	MAX1720X_NMANFCTRNAME0 = 0xCC,
-	MAX1720X_NMANFCTRNAME1 = 0xCD,
-	MAX1720X_NMANFCTRNAME2 = 0xCE,
-	MAX1720X_NRSENSE = 0xCF,
-	MAX1720X_NUSER1D0 = 0xD0,
-	MAX1720X_NUSER1D1 = 0xD1,
-	MAX1720X_NUSER1D4 = 0xD4,
-	MAX1720X_NMANFCTRDATE = 0xD6,
-	MAX1720X_NFIRSTUSED = 0xD7,
-	MAX1720X_NSERIALNUMBER0 = 0xD8,
-	MAX1720X_NSERIALNUMBER1 = 0xD9,
-	MAX1720X_NSERIALNUMBER2 = 0xDA,
-	MAX1720X_NDEVICENAME0 = 0xDB,
-	MAX1720X_NDEVICENAME1 = 0xDC,
-	MAX1720X_NDEVICENAME2 = 0xDD,
-	MAX1720X_NDEVICENAME3 = 0xDE,
-	MAX1720X_NDEVICENAME4 = 0xDF,
+	MAX1720X_NUSER18C = 0x8C,	/* QH Capacity */
+	MAX1720X_NUSER18D = 0x8D,	/* QH Capacity */
+	MAX1720X_NODSCTH = 0x8E,	/* CCLC */
+	MAX1720X_NODSCCFG = 0x8F,	/* CCLC */
+	MAX1720X_NLEARNCFG = 0x9F,	/* not referred here */
+	MAX1720X_NMISCCFG = 0xB2,	/* CCLC */
+	MAX1720X_NHIBCFG = 0xB4,	/* CCLC */
+	MAX1720X_NCONVGCFG = 0xB7,	/* convergence configuration */
+	MAX1720X_NNVCFG0 = 0xB8,	/* 'NCG0' with NCG1 */
+	MAX1720X_NUSER1C4 = 0xC4,	/* CCLC */
+	MAX1720X_NUSER1C5 = 0xC5,	/* CCLC */
+	MAX1720X_NCGAIN = 0xC8,		/* ....  */
+	MAX1720X_NMANFCTRNAME0 = 0xCC,	/* SNUM */
+	MAX1720X_NMANFCTRNAME1 = 0xCD,	/* CCLC */
+	MAX1720X_NMANFCTRNAME2 = 0xCE,	/* CCLC */
+	MAX1720X_NRSENSE = 0xCF,	/* value of sense resistor */
+	MAX1720X_NUSER1D0 = 0xD0,	/* SNUM */
+	MAX1720X_NUSER1D1 = 0xD1,	/* SNUM */
+	MAX1720X_NUSER1D4 = 0xD4,	/* URST */
+	MAX1720X_NMANFCTRDATE = 0xD6,	/* SNUM */
+	MAX1720X_NFIRSTUSED = 0xD7,	/* CCLC */
+	MAX1720X_NSERIALNUMBER0 = 0xD8,	/* SNUM */
+	MAX1720X_NSERIALNUMBER1 = 0xD9,	/* SNUM */
+	MAX1720X_NSERIALNUMBER2 = 0xDA,	/* SNUM */
+	MAX1720X_NDEVICENAME0 = 0xDB,	/* SNUM */
+	MAX1720X_NDEVICENAME1 = 0xDC,	/* SNUM */
+	MAX1720X_NDEVICENAME2 = 0xDD,	/* SNUM */
+	MAX1720X_NDEVICENAME3 = 0xDE,	/* SNUM */
+	MAX1720X_NDEVICENAME4 = 0xDF,	/* CCLC */
 	MAX1720X_NVRAM_END = 0xE0,
 	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START = 0xE1,
+	MAX1720X_NVRAM_HISTORY_VALID_STATUS_END = 0xE4,
 	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END = 0xEA,
 	MAX1720X_NVRAM_HISTORY_VALID_STATUS_START = 0xEB,
-	MAX1720X_NVRAM_HISTORY_VALID_STATUS_END = 0xE4,
 	MAX1720X_NVRAM_REMAINING_UPDATES = 0xED,
 	MAX1720X_NVRAM_HISTORY_END = 0xEF,
+};
+
+enum max1730x_nvram {
+	MAX1730X_NVRAM_START = 0x80,
+	MAX1730X_NVRAM_END = 0xF0,
 };
 
 enum max1730x_register {
@@ -280,11 +286,15 @@ enum max1730x_register {
 	MAX1730X_MINSYSVOLTAGE = 0xA8,
 	MAX1730X_MPPCURRENT = 0xA9,
 	MAX1730X_SPPCURRENT = 0xAA,
+	MAX1730X_CONFIG2 = 0xAB,
 	MAX1730X_IALRTTH = 0xAC,
 	MAX1730X_MINVOLT = 0xAD,
 	MAX1730X_MINCURR = 0xAE,
 };
 
+enum max1730x_command_bits {
+	MAX1730X_COMMAND_FUEL_GAUGE_RESET = 0x8000,
+};
 
 enum max17xxx_register {
 	MAX17XXX_MAXMINVOLT	= MAX1720X_MAXMINVOLT,
@@ -294,26 +304,8 @@ enum max17xxx_register {
 	MAX17XXX_AVGCURRENT	= MAX1720X_AVGCURRENT,
 	MAX17XXX_MIXCAP		= MAX1720X_MIXCAP,
 };
+
 #define BUCKET_COUNT 10
-
-const unsigned int max1720x_cycle_counter_addr[BUCKET_COUNT] = {
-	MAX1720X_NODSCTH,
-	MAX1720X_NODSCCFG,
-	MAX1720X_NMISCCFG,
-	MAX1720X_NHIBCFG,
-	MAX1720X_NMANFCTRNAME1,
-	MAX1720X_NMANFCTRNAME2,
-	MAX1720X_NFIRSTUSED,
-	MAX1720X_NDEVICENAME4,
-	MAX1720X_NUSER1C4,
-	MAX1720X_NUSER1C5,
-};
-
-#define NVRAM_U16_INDEX(reg) (reg - MAX1720X_NVRAM_START)
-#define NVRAM_BYTE_INDEX(reg) (NVRAM_U16_INDEX(reg) * sizeof(u16))
-#define NVRAM_BYTE_INDEX_FROM(reg, base) ((reg - base) * sizeof(u16))
-#define MAX1720X_NVRAM_U16_SIZE NVRAM_U16_INDEX(MAX1720X_NVRAM_END)
-#define MAX1720X_NVRAM_SIZE NVRAM_BYTE_INDEX(MAX1720X_NVRAM_END)
 
 #define MAX1720X_HISTORY_PAGE_SIZE \
 		(MAX1720X_NVRAM_HISTORY_END - MAX1720X_NVRAM_END + 1)
@@ -463,6 +455,269 @@ static inline int max1720x_regmap_write(struct regmap *map,
 #define REGMAP_WRITE(regmap, what, value) \
 	max1720x_regmap_write(regmap, what, value, #what)
 
+/* ------------------------------------------------------------------------- */
+
+enum max17x0x_reg_types {
+	GBMS_ATOM_TYPE_MAP = 0,
+	GBMS_ATOM_TYPE_REG = 1,
+	GBMS_ATOM_TYPE_ZONE = 2,
+};
+
+struct max17x0x_reg {
+	u32 tag;
+	int type;
+	int size;
+	union {
+		unsigned int base;
+		unsigned int reg;
+		const u8 *map;
+	};
+};
+
+/* this is a map for u16 registers */
+#define ATOM_INIT_MAP(...)			\
+	.type = GBMS_ATOM_TYPE_MAP,		\
+	.size = 2 * sizeof((u8[]){__VA_ARGS__}),\
+	.map = (u8[]){__VA_ARGS__}
+
+#define ATOM_INIT_REG16(r)		\
+	.type = GBMS_ATOM_TYPE_REG,	\
+	.size = 2,			\
+	.reg = r
+
+#define ATOM_INIT_ZONE(start, sz)	\
+	.type = GBMS_ATOM_TYPE_ZONE,	\
+	.size = sz,			\
+	.base = start
+
+/* the point of the '' constants is to avoid defines for tag names...
+ * so please don't add them ;-)
+ */
+static const struct max17x0x_reg max1720x[] = {
+	{ 'BCNT', ATOM_INIT_MAP(0x8e, 0x8f, 0xb2, 0xb4, 0xcd,
+				0xce, 0xd7, 0xdf, 0xc4, 0xc5) },
+	{ 'QHCA', ATOM_INIT_REG16(0x8c) },
+	{ 'QHQH', ATOM_INIT_REG16(0x8d) },
+	{ 'SNUM', ATOM_INIT_MAP(0xcc, 0xd8, 0xd9, 0xda, 0xd6,
+				0xdb, 0xdc, 0xdd, 0xde, 0xd1,
+				0xd0) },
+};
+
+/* see b/119416045 for layout */
+static const struct max17x0x_reg max1730x[] = {
+	{ 'BCNT', ATOM_INIT_MAP(0x8c, 0x8d, 0x8f, 0x8e, 0xb4,
+				0xc7, 0x9f, 0x9e, 0xb6, 0xb2)},
+	{ 'QHCA', ATOM_INIT_REG16(0xe2) },
+	{ 'QHQH', ATOM_INIT_REG16(0x9d) },
+	{ 'SNUM', ATOM_INIT_MAP(0xce, 0xe6, 0xe7, 0xe8, 0xe9,
+				0xea, 0xeb, 0xec, 0xed, 0xee,
+				0xef) },
+};
+
+struct max17x0x_device_info {
+	const struct max17x0x_reg *map;
+	unsigned int max;
+};
+
+static const struct max17x0x_device_info max17x0x[] = {
+	{ .map = max1720x, .max = ARRAY_SIZE(max1720x) },
+	{ .map = max1730x, .max = ARRAY_SIZE(max1730x) },
+};
+
+const struct max17x0x_reg *max17x0x_find_by_index(int index)
+{
+	if (max17xxx_gauge_type == -1)
+		return NULL;
+
+	if (index < 0 || index >= max17x0x[max17xxx_gauge_type].max)
+		return NULL;
+
+	return &max17x0x[max17xxx_gauge_type].map[index];
+}
+
+/* NOTE: could use switch() cases with fallthrough */
+const struct max17x0x_reg *max17x0x_find_by_id(u32 id)
+{
+	int i;
+
+	if (max17xxx_gauge_type == -1)
+		return NULL;
+
+	for (i = 0; i < max17x0x[max17xxx_gauge_type].max ; i++) {
+		if (max17x0x[max17xxx_gauge_type].map[i].tag == id)
+			return &max17x0x[max17xxx_gauge_type].map[i];
+	}
+
+	return NULL;
+}
+
+/* ------------------------------------------------------------------------- */
+
+/* offset of the register in this atom.
+ * NOTE: this is the byte offset regardless of the size of the register
+ */
+static int max17x0x_reg_offset_of(const struct max17x0x_reg *a,
+				  unsigned int reg)
+{
+	int i;
+
+	switch (a->type) {
+	case GBMS_ATOM_TYPE_REG:
+		return (reg == a->reg) ? 0 : -EINVAL;
+	case GBMS_ATOM_TYPE_ZONE:
+		if (reg >= a->base && reg < a->base + a->size)
+			return (reg - a->base) * 2;
+		break;
+	case GBMS_ATOM_TYPE_MAP:
+		for (i = 0 ; i < a->size ; i++)
+			if (a->map[i] == reg)
+				return i * 2;
+		break;
+	}
+
+	return -ERANGE;
+}
+
+static int max17x0x_reg_store_sz(struct regmap *regmap,
+				 const struct max17x0x_reg *a,
+				 const void *data,
+				 int size)
+{
+	int ret;
+
+	if (size > a->size)
+		size = a->size;
+
+	if (a->type == GBMS_ATOM_TYPE_MAP) {
+		int i;
+		const u16 *b = (u16 *)data;
+
+		if (size % 2)
+			return -ERANGE;
+
+		for (i = 0; i < size / 2 ; i++) {
+			ret = regmap_write(regmap, a->map[i], b[i]);
+			if (ret < 0)
+				break;
+		}
+	} else {
+		ret = regmap_raw_write(regmap, a->base, data, size);
+	}
+
+	return ret;
+}
+
+static int max17x0x_reg_load_sz(struct regmap *regmap,
+				const struct max17x0x_reg *a,
+				void *data,
+				int size)
+{
+	int ret;
+
+	if (size > a->size)
+		size = a->size;
+
+	if (a->type == GBMS_ATOM_TYPE_MAP) {
+		int i;
+		unsigned int tmp;
+		u16 *b = (u16 *)data;
+
+		if (size % 2)
+			return -ERANGE;
+
+		for (i = 0; i < size / 2 ; i++) {
+			ret = regmap_read(regmap,
+					  (unsigned int)a->map[i],
+					  &tmp);
+			if (ret < 0)
+				break;
+			b[i] = tmp;
+		}
+	} else {
+		ret = regmap_raw_read(regmap, a->base, data, size);
+	}
+
+	return ret;
+}
+
+#define max17x0x_reg_store(map, a, data) \
+	max17x0x_reg_store_sz(map, a, data, (a)->size)
+
+#define max17x0x_reg_load(map, a, data) \
+	max17x0x_reg_load_sz(map, a, data, (a)->size)
+
+/* CACHE ----------------------------------------------------------------- */
+
+struct max17x0x_cache_data {
+	struct max17x0x_reg atom;
+	u16 *cache_data;
+};
+
+static int max17x0x_cache_index_of(const struct max17x0x_cache_data *cache,
+				   unsigned int reg)
+{
+	const int offset = max17x0x_reg_offset_of(&cache->atom, reg);
+
+	return (offset < 0) ? offset : offset / 2;
+}
+
+#define max17x0x_cache_store(cache, regmap) \
+	max17x0x_reg_store(regmap, &(cache)->atom, (cache)->cache_data)
+
+#define max17x0x_cache_load(cache, regmap) \
+	max17x0x_reg_load(regmap, &(cache)->atom, (cache)->cache_data)
+
+#define max17x0x_cache_memcmp(src, dst) \
+	memcmp((src)->cache_data, (dst)->cache_data, (src)->atom.size)
+
+static void max17x0x_cache_free(struct max17x0x_cache_data *cache)
+{
+	kfree(cache->cache_data);
+	cache->cache_data = NULL;
+}
+
+static int max17x0x_cache_dup(struct max17x0x_cache_data *dst,
+			      const struct max17x0x_cache_data *src)
+{
+	memcpy(dst, src, sizeof(*dst));
+
+	dst->cache_data = (u16 *)kmalloc(src->atom.size, GFP_KERNEL);
+	if (!dst->cache_data)
+		return -ENOMEM;
+
+	memcpy(dst->cache_data, src->cache_data, src->atom.size);
+	return 0;
+}
+
+static int max17x0x_nvram_cache_init(struct max17x0x_cache_data *cache,
+				     u16 start, int end)
+{
+	const int count = end - start + 1; /* includes end */
+
+	memset(cache, 0, sizeof(*cache));
+
+	cache->cache_data = (u16 *)kmalloc_array(count, sizeof(u16),
+						 GFP_KERNEL);
+	if (!cache->cache_data)
+		return -ENOMEM;
+
+	cache->atom.type = GBMS_ATOM_TYPE_ZONE;
+	cache->atom.size = count * sizeof(u16);
+	cache->atom.base = start;
+	return 0;
+}
+
+#define max1720x_nvram_cache_init(cache) \
+	max17x0x_nvram_cache_init(cache, MAX1720X_NVRAM_START, \
+					 MAX1720X_NVRAM_END)
+#define max1730x_nvram_cache_init(cache) \
+	max17x0x_nvram_cache_init(cache, MAX1730X_NVRAM_START, \
+					 MAX1730X_NVRAM_END)
+
+
+/** ------------------------------------------------------------------------ */
+
+/* TODO: factor with the one in google_bms.c */
 static char *psy_status_str[] = {
 	"Unknown", "Charging", "Discharging", "NotCharging", "Full"
 };
@@ -504,8 +759,8 @@ static const struct regmap_config max1720x_regmap_cfg = {
 
 bool max1720x_is_nvram_reg(struct device *dev, unsigned int reg)
 {
-	return (reg >= MAX1720X_NVRAM_START
-		&& reg <= MAX1720X_NVRAM_HISTORY_END);
+	return (reg >= MAX1720X_NVRAM_START &&
+		reg <= MAX1720X_NVRAM_HISTORY_END);
 }
 
 static const struct regmap_config max1720x_regmap_nvram_cfg = {
@@ -778,16 +1033,21 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 };
 
-static void max1720x_cycle_count_work(struct work_struct *work)
+static void max17x0x_cycle_count_work(struct work_struct *work)
 {
-	int bucket, cnt, batt_soc;
 	u16 data;
+	int bucket, cnt, batt_soc;
+	const struct max17x0x_reg *bcnt;
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
 						  cycle_count_work);
 
 	if (REGMAP_READ(chip->regmap, MAX1720X_REPSOC, &data))
 		return;
 	batt_soc = reg_to_percentage(data);
+
+	bcnt = max17x0x_find_by_id('BCNT');
+	if (!bcnt)
+		return;
 
 	mutex_lock(&chip->cyc_ctr.lock);
 
@@ -800,41 +1060,35 @@ static void max1720x_cycle_count_work(struct work_struct *work)
 				bucket = BUCKET_COUNT - 1;
 			chip->cyc_ctr.count[bucket]++;
 			REGMAP_WRITE(chip->regmap_nvram,
-				     max1720x_cycle_counter_addr[bucket],
+				     bcnt->map[bucket],
 				     chip->cyc_ctr.count[bucket]);
 			pr_debug("Stored count: prev_soc=%d, soc=%d bucket=%d count=%d\n",
 				 chip->cyc_ctr.prev_soc, cnt, bucket,
 				 chip->cyc_ctr.count[bucket]);
 		}
 	}
+
 	chip->cyc_ctr.prev_soc = batt_soc;
 
 	mutex_unlock(&chip->cyc_ctr.lock);
 }
 
-static void max1720x_restore_cycle_counter(struct max1720x_chip *chip)
+static void max17x0x_restore_cycle_counter(struct max1720x_chip *chip)
 {
-	int i;
-	u16 data = 0;
+	int ret, i;
+	const struct max17x0x_reg *bcnt;
 
-	/* TODO: re-enable cycle counter if max1730x is POR */
-	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
-		dev_warn(chip->dev, "ignore restoring cycle_counter\n");
+	bcnt = max17x0x_find_by_id('BCNT');
+	if (!bcnt)
 		return;
-	}
 
 	mutex_lock(&chip->cyc_ctr.lock);
-
-	for (i = 0; i < BUCKET_COUNT; i++) {
-		if (!REGMAP_READ(chip->regmap_nvram,
-				 max1720x_cycle_counter_addr[i],
-				 &data)) {
-			chip->cyc_ctr.count[i] = data;
-			pr_debug("max1720x_cycle_counter[%d], addr=0x%02X, count=%d\n",
-				 i, max1720x_cycle_counter_addr[i],
-				 chip->cyc_ctr.count[i]);
-		}
+	ret = max17x0x_reg_load(chip->regmap_nvram, bcnt, chip->cyc_ctr.count);
+	for (i = 0; ret == 0 && i < BUCKET_COUNT ; i++) {
+		pr_debug("max1720x_cycle_counter[%d], addr=0x%02X, count=%d\n",
+				i, bcnt->map[i], chip->cyc_ctr.count[i]);
 	}
+
 	chip->cyc_ctr.prev_soc = -1;
 
 	mutex_unlock(&chip->cyc_ctr.lock);
@@ -869,39 +1123,57 @@ static ssize_t max1720x_get_cycle_counts_bins(struct device *dev,
 	return len;
 }
 
-static ssize_t max1720x_set_cycle_counts_bins(struct device *dev,
+static ssize_t max17x0x_set_cycle_counts_bins(struct device *dev,
 					      struct device_attribute *attr,
 					      const char *buf, size_t count)
 {
 	struct power_supply *psy;
 	struct max1720x_chip *chip;
-	int val[BUCKET_COUNT], i;
+	const struct max17x0x_reg *bcnt;
 
 	psy = container_of(dev, struct power_supply, dev);
 	chip = power_supply_get_drvdata(psy);
 
-	if (sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
-		   &val[0], &val[1], &val[2], &val[3], &val[4],
-		   &val[5], &val[6], &val[7], &val[8], &val[9]) != BUCKET_COUNT)
-		return -EINVAL;
+	bcnt = max17x0x_find_by_id('BCNT');
+	if (bcnt) {
+		u16 bincnt[BUCKET_COUNT];
+		int ret, i, val[BUCKET_COUNT];
+		const int bucket_count = bcnt->size / sizeof(u16);
 
-	mutex_lock(&chip->cyc_ctr.lock);
-	for (i = 0; i < BUCKET_COUNT; i++) {
-		if (val[i] >= 0 && val[i] < U16_MAX) {
-			chip->cyc_ctr.count[i] = val[i];
-			REGMAP_WRITE(chip->regmap_nvram,
-				     max1720x_cycle_counter_addr[i],
-				     chip->cyc_ctr.count[i]);
-		}
+		if (bucket_count != BUCKET_COUNT)
+			return -ENODATA;
+
+		if (sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
+				&val[0], &val[1], &val[2], &val[3], &val[4],
+				&val[5], &val[6], &val[7], &val[8], &val[9])
+				!= bucket_count)
+			return -EINVAL;
+
+		mutex_lock(&chip->cyc_ctr.lock);
+
+		for (i = 0; i < bucket_count ; i++)
+			if (val[i] >= 0 && val[i] < U16_MAX)
+				bincnt[i] = val[i];
+			else
+				bincnt[i] = chip->cyc_ctr.count[i];
+
+		ret = max17x0x_reg_store(chip->regmap_nvram, bcnt, bincnt);
+		if (ret < 0)
+			count = -EINVAL;
+		else
+			memcpy(chip->cyc_ctr.count, bincnt,
+				sizeof(chip->cyc_ctr.count));
+
+		mutex_unlock(&chip->cyc_ctr.lock);
 	}
-	mutex_unlock(&chip->cyc_ctr.lock);
 
 	return count;
 }
 
+
 static DEVICE_ATTR(cycle_counts_bins, 0660,
 		   max1720x_get_cycle_counts_bins,
-		   max1720x_set_cycle_counts_bins);
+		   max17x0x_set_cycle_counts_bins);
 
 static ssize_t max1720x_get_offmode_charger(struct device *dev,
 					    struct device_attribute *attr,
@@ -1293,10 +1565,16 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
  * hardware. This is useful for testing different configurations without writing
  * nonvolatile memory.
  */
-static void max1720x_fg_reset(struct max1720x_chip *chip)
+static void max17x0x_fg_reset(struct max1720x_chip *chip)
 {
-	REGMAP_WRITE(chip->regmap, MAX1720X_CONFIG2,
-		     MAX1720X_COMMAND_FUEL_GAUGE_RESET);
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		REGMAP_WRITE(chip->regmap, MAX1730X_CONFIG2,
+			     MAX1730X_COMMAND_FUEL_GAUGE_RESET);
+	} else {
+		REGMAP_WRITE(chip->regmap, MAX1720X_CONFIG2,
+			     MAX1720X_COMMAND_FUEL_GAUGE_RESET);
+	}
+
 	msleep(MAX1720X_TPOR_MS);
 }
 
@@ -1313,7 +1591,7 @@ static int max1720x_full_reset(struct max1720x_chip *chip)
 		 * start and max1730x to close the FETs. Never send a HW reset
 		 * to a 1730x while in system...
 		 */
-		dev_warn(chip->dev, "ignore reset of fuel gauge\n");
+		dev_warn(chip->dev, "ignore full reset of fuel gauge\n");
 		return 0;
 	}
 
@@ -1473,12 +1751,14 @@ static int max1720x_read_batt_id(const struct max1720x_chip *chip, int *batt_id)
 	/* POWER_SUPPLY_PROP_RESISTANCE_ID is in ohms */
 	rc = power_supply_get_property(batt_psy,
 				       POWER_SUPPLY_PROP_RESISTANCE_ID, &val);
-	if (rc == -EINVAL) {
+	if (rc == -EINVAL || ((rc == 0) && (val.intval == -EINVAL))) {
 		return -EPROBE_DEFER;
 	} else if (rc < 0) {
 		dev_err(chip->dev, "failed to get batt-id rc=%d\n", rc);
 		return -EINVAL;
 	}
+
+	*batt_id = val.intval;
 
 	return 0;
 }
@@ -1557,11 +1837,12 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 
 static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 					struct device_node *node,
-					u16 *nRAM, int nb)
+					struct max17x0x_cache_data *nRAM,
+					int nb)
 {
-	int ret, idx;
 	u16 *regs;
-	char *propname = NULL;
+	int ret, i;
+	const char *propname;
 
 	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
 		 "maxim,n_regval_1730x" : "maxim,n_regval_1720x";
@@ -1575,7 +1856,7 @@ static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 		return -EINVAL;
 	}
 
-	regs = kmalloc_array(nb, sizeof(u16), GFP_KERNEL);
+	regs = (u16 *)kmalloc_array(nb, sizeof(u16), GFP_KERNEL);
 	if (!regs)
 		return -ENOMEM;
 
@@ -1585,96 +1866,142 @@ static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 		goto shadow_out;
 	}
 
-	for (idx = 0; idx < nb; idx += 2) {
-		if ((regs[idx] >= MAX1720X_NVRAM_START) &&
-		    (regs[idx] < MAX1720X_NVRAM_END)) {
-			nRAM[regs[idx] - MAX1720X_NVRAM_START] = regs[idx + 1];
-		}
+	for (i = 0; i < nb; i += 2) {
+		const int idx = max17x0x_cache_index_of(nRAM, regs[i]);
+
+		if (idx >= 0)
+			nRAM->cache_data[idx] = regs[i + 1];
 	}
 shadow_out:
 	kfree(regs);
 	return ret;
 }
 
+/* support for initial batch of ill configured max1720x packs */
+static void max1720x_consistency_check(struct max17x0x_cache_data *cache)
+{
+	int nvcfg_idx = max17x0x_cache_index_of(cache, MAX1720X_NNVCFG0);
+	int ncgain_idx = max17x0x_cache_index_of(cache, MAX1720X_NCGAIN);
+	u16 *nRAM_updated = cache->cache_data;
+
+	if ((nRAM_updated[nvcfg_idx] & MAX1720X_NNVCFG0_ENCG) &&
+		((nRAM_updated[ncgain_idx] == 0) ||
+		(nRAM_updated[ncgain_idx] == 0x0400)))
+		nRAM_updated[ncgain_idx] = 0x4000;
+}
+
+static bool max17x0x_should_reset(struct max1720x_chip *chip,
+				  struct max17x0x_cache_data *nRAM_c,
+				  struct max17x0x_cache_data *nRAM_u)
+{
+	const char *propname;
+	int ret, idx = -1;
+	u32 nver_reg;
+
+	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
+		"maxim,n_regval_1730x_ver" : "maxim,n_regval_1720x_ver";
+
+	/* if n_regval_1730x_ver is present, reset fg only when ver changes */
+	ret = of_property_read_u32(chip->batt_node, propname, &nver_reg);
+	if (ret == 0)
+		idx = max17x0x_cache_index_of(nRAM_u, nver_reg);
+
+	if (idx < 0) {
+		/* nConvgCfg change take effect without resetting the gauge */
+		idx = max17x0x_cache_index_of(nRAM_u, MAX1720X_NCONVGCFG);
+		nRAM_c->cache_data[idx] = nRAM_u->cache_data[idx];
+
+		return max17x0x_cache_memcmp(nRAM_u, nRAM_c) != 0;
+	}
+
+	return nRAM_c->cache_data[idx] < nRAM_u->cache_data[idx];
+}
+
 static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 {
-	int ret = 0;
-	u16 *nRAM_current, *nRAM_updated;
-	int batt_cnt = 0, glob_cnt;
-	char *propname = NULL;
+	int ret, glob_cnt;
+	const char *propname = NULL;
+	struct max17x0x_cache_data nRAM_c;
+	struct max17x0x_cache_data nRAM_u;
 
 	ret = max1720x_handle_dt_batt_id(chip);
 	if (ret)
 		return ret;
 
+	/* for devices that don't support max1720x_fg_reset() */
 	if (!chip->shadow_override) {
 		dev_info(chip->dev, "ignore shadow override\n");
 		return 0;
 	}
 
-	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
-		 "maxim,n_regval_1730x" : "maxim,n_regval_1720x";
+	if (max17xxx_gauge_type == -1)
+		return -EINVAL;
 
-	if (chip->batt_node)
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		propname = "maxim,n_regval_1730x";
+		ret = max1730x_nvram_cache_init(&nRAM_c);
+	} else {
+		propname = "maxim,n_regval_1720x";
+		ret = max1720x_nvram_cache_init(&nRAM_c);
+	}
+
+	if (ret < 0)
+		return ret;
+
+	ret = max17x0x_cache_load(&nRAM_c, chip->regmap_nvram);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to read config from shadow RAM\n");
+		goto error_out;
+	}
+
+	ret = max17x0x_cache_dup(&nRAM_u, &nRAM_c);
+	if (ret < 0)
+		goto error_out;
+
+
+	/* apply overrides */
+	if (chip->batt_node) {
+		int batt_cnt;
+
 		batt_cnt = of_property_count_elems_of_size(chip->batt_node,
-					 propname, sizeof(u16));
-	glob_cnt = of_property_count_elems_of_size(chip->dev->of_node,
-				 propname, sizeof(u16));
-
-	nRAM_current = kmalloc_array(MAX1720X_NVRAM_U16_SIZE,
-				     sizeof(u16), GFP_KERNEL);
-	if (!nRAM_current)
-		return -ENOMEM;
-
-	nRAM_updated = kmalloc_array(MAX1720X_NVRAM_U16_SIZE,
-				     sizeof(u16), GFP_KERNEL);
-	if (!nRAM_updated) {
-		ret = -ENOMEM;
-		goto error_out;
-	}
-
-	ret = regmap_raw_read(chip->regmap_nvram, MAX1720X_NVRAM_START,
-			      nRAM_current, MAX1720X_NVRAM_SIZE);
-	if (ret) {
-		dev_err(chip->dev,
-			"Failed to read config from shadow RAM\n");
-		goto error_out;
-	}
-	memcpy(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE);
-	if (chip->batt_node)
+							   propname,
+							   sizeof(u16));
 		max17x0x_apply_regval_shadow(chip, chip->batt_node,
-					     nRAM_updated, batt_cnt);
+					     &nRAM_u,
+					     batt_cnt);
+	}
+
+	glob_cnt = of_property_count_elems_of_size(chip->dev->of_node,
+						   propname,
+						   sizeof(u16));
 	max17x0x_apply_regval_shadow(chip, chip->dev->of_node,
-				     nRAM_updated, glob_cnt);
+				     &nRAM_u,
+				     glob_cnt);
 
-	/* Ensure nCGain is not 0 if nNVCfg0.enCG is set */
-	if ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NNVCFG0)] &
-	     MAX1720X_NNVCFG0_ENCG) &&
-	    ((nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCGAIN)] == 0) ||
-	     (nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCGAIN)] == 0x0400)))
-		nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCGAIN)] = 0x4000;
+	if (max17xxx_gauge_type == MAX1720X_GAUGE_TYPE)
+		max1720x_consistency_check(&nRAM_u);
 
-	if (memcmp(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE)) {
-		ret = regmap_raw_write(chip->regmap_nvram, MAX1720X_NVRAM_START,
-				       nRAM_updated, MAX1720X_NVRAM_SIZE);
-		if (ret) {
+	if (max17x0x_cache_memcmp(&nRAM_c, &nRAM_u)) {
+		bool fg_reset;
+
+		ret = max17x0x_cache_store(&nRAM_u, chip->regmap_nvram);
+		if (ret < 0) {
 			dev_err(chip->dev,
 				"Failed to write config from shadow RAM\n");
 			goto error_out;
 		}
-		/* nConvgCfg change take effect without resetting the gauge */
-		nRAM_current[NVRAM_U16_INDEX(MAX1720X_NCONVGCFG)] =
-		    nRAM_updated[NVRAM_U16_INDEX(MAX1720X_NCONVGCFG)];
-		if (memcmp(nRAM_updated, nRAM_current, MAX1720X_NVRAM_SIZE)) {
+
+		fg_reset = max17x0x_should_reset(chip, &nRAM_c, &nRAM_u);
+		if (fg_reset) {
 			dev_info(chip->dev,
-				 "DT config differs from shadow, resetting\n");
-			max1720x_fg_reset(chip);
+				"DT config differs from shadow, resetting\n");
+			max17x0x_fg_reset(chip);
 		}
 	}
 
 error_out:
-	kfree(nRAM_current);
-	kfree(nRAM_updated);
+	max17x0x_cache_free(&nRAM_c);
+	max17x0x_cache_free(&nRAM_u);
 
 	return ret;
 }
@@ -1684,7 +2011,7 @@ static int max17x0x_apply_regval_register(struct max1720x_chip *chip,
 {
 	int cnt, ret = 0, idx, err;
 	u16 *regs, data;
-	char *propname = NULL;
+	const char *propname;
 
 	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
 		 "maxim,r_regval_1730x" : "maxim,r_regval_1720x";
@@ -1942,81 +2269,100 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	return 0;
 }
 
-static void max1720x_set_serial_number(struct max1720x_chip *chip)
+static int max1730x_decode_sn(char *serial_number,
+			      unsigned int max,
+			      const u16 *data)
 {
-	u16 data0 = 0, data1 = 0, data2 = 0;
-	int date, count = 0, shift, err = 0;
+	/* TODO: b/113300630 */
+	return 0;
+}
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, &data0);
-	if (data0 == 0x5357) /* "SW": SWD */
+static int max1720x_decode_sn(char *serial_number,
+			      unsigned int max,
+			      const u16 *data)
+{
+	int tmp, count = 0, shift;
+
+	if (data[0] == 0x5357) /* "SW": SWD */
 		shift = 0;
-	else if (data0 == 0x4257) /* "BW": DSY */
+	else if (data[0] == 0x4257) /* "BW": DSY */
 		shift = 8;
 	else
-		return;
+		return -EINVAL;
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER0, &data0);
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER1, &data1);
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NSERIALNUMBER2, &data2);
-	count += scnprintf(chip->serial_number + count,
-			   sizeof(chip->serial_number) - count,
-			   "%02X%02X%02X",
-			   data0 >> shift, data1 >> shift, data2 >> shift);
+	count += scnprintf(serial_number + count, max - count, "%02X%02X%02X",
+			   data[1] >> shift,
+			   data[2] >> shift,
+			   data[3] >> shift);
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRDATE, &data0);
-	date = (((((data0 >> 9) & 0x3f) + 1980) * 10000) +
-		((data0 >> 5) & 0xf) * 100 + (data0 & 0x1F));
-	count += scnprintf(chip->serial_number + count,
-		 sizeof(chip->serial_number) - count,
-		 "%d", date);
+	tmp = (((((data[4] >> 9) & 0x3f) + 1980) * 10000) +
+		((data[4] >> 5) & 0xf) * 100 + (data[4] & 0x1F));
+	count += scnprintf(serial_number + count, max - count, "%d",
+			   tmp);
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, &data0);
-	count += scnprintf(chip->serial_number + count,
-		 sizeof(chip->serial_number) - count,
-		 "%c%c", data0 >> 8, data0 & 0xFF);
+	count += scnprintf(serial_number + count, max - count, "%c%c",
+			   data[0] >> 8,
+			   data[0] & 0xFF);
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME0, &data0);
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME1, &data1);
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME2, &data2);
-	count += scnprintf(chip->serial_number + count,
-			   sizeof(chip->serial_number) - count,
-			   "%c%c%c",
-			   data0 >> shift, data1 >> shift, data2 >> shift);
+	count += scnprintf(serial_number + count, max - count, "%c%c%c",
+			   data[5] >> shift,
+			   data[6] >> shift,
+			   data[7] >> shift);
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NDEVICENAME3, &data0);
-	if (data0 >> 8 == 0)
-		data0 = ('?' << 8) | (data0 & 0xFF);
-	if ((data0 & 0xFF) == 0)
-		data0 = (data0 & 0xFF00) | '?';
-	count += scnprintf(chip->serial_number + count,
-		 sizeof(chip->serial_number) - count,
-		 "%c%c", data0 >> 8, data0 & 0xFF);
+	tmp = data[8];
+	if (tmp >> 8 == 0)
+		tmp = ('?' << 8) | (tmp & 0xFF);
+	if ((tmp & 0xFF) == 0)
+		tmp = (tmp & 0xFF00) | '?';
+	count += scnprintf(serial_number + count, max - count, "%c%c",
+			   tmp >> 8,
+			   tmp & 0xFF);
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D1, &data0);
-	count += scnprintf(chip->serial_number + count,
-		 sizeof(chip->serial_number) - count,
-		 "%c", data0 >> 8);
+	count += scnprintf(serial_number + count, max - count, "%c",
+			   data[9] >> 8);
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D0, &data0);
 	if (shift == 8) {
-		if (data0 >> 8 == 0xb1) {
-			count += scnprintf(chip->serial_number + count,
-					   sizeof(chip->serial_number) - count,
+		if (data[10] >> 8 == 0xb1) {
+			count += scnprintf(serial_number + count, max - count,
 					   "B1");
-		} else if (data0 >> 8 == 0xc1) {
-			count += scnprintf(chip->serial_number + count,
-					   sizeof(chip->serial_number) - count,
+		} else if (data[10] >> 8 == 0xc1) {
+			count += scnprintf(serial_number + count, max - count,
 					   "C1");
 		} else {
-			count += scnprintf(chip->serial_number + count,
-					   sizeof(chip->serial_number) - count,
+			count += scnprintf(serial_number + count, max - count,
 					   "??");
 		}
 	} else {
-		count += scnprintf(chip->serial_number + count,
-				   sizeof(chip->serial_number) - count,
-				   "%c%c", data0 >> 8, data0 & 0xFF);
+		count += scnprintf(serial_number + count, max - count, "%c%c",
+				   data[10] >> 8, data[10] & 0xFF);
 	}
+
+	return 0;
+}
+
+static void max17x0x_set_serial_number(struct max1720x_chip *chip)
+{
+	int err = -EINVAL;
+	const struct max17x0x_reg *snum;
+
+	snum = max17x0x_find_by_id('SNUM');
+	if (snum) {
+		char buff[snum->size];
+
+		err = max17x0x_reg_load(chip->regmap_nvram, snum, buff);
+		if (err < 0) {
+			err = -EIO;
+		} else if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+			err = max1730x_decode_sn(chip->serial_number,
+						 sizeof(chip->serial_number),
+						 (u16 *)buff);
+		} else {
+			err = max1720x_decode_sn(chip->serial_number,
+						 sizeof(chip->serial_number),
+						 (u16 *)buff);
+		}
+	}
+
 	if (err)
 		chip->serial_number[0] = '\0';
 }
@@ -2228,13 +2574,13 @@ static int max1720x_probe(struct i2c_client *client,
 	if (of_property_read_bool(dev->of_node, "maxim,max1730x-compat")) {
 		/* NOTE: NEED TO COME BEFORE REGISTER ACCESS */
 		max17xxx_gauge_type = max1720x_read_gauge_type(chip);
-		dev_warn(chip->dev, "device gauge_type: %d\n",
-			max17xxx_gauge_type);
+		dev_warn(chip->dev, "device gauge_type: %d override=%d\n",
+			max17xxx_gauge_type, chip->shadow_override);
 	} else {
 		max17xxx_gauge_type = MAX1720X_GAUGE_TYPE;
 	}
 
-	max1720x_restore_cycle_counter(chip);
+	max17x0x_restore_cycle_counter(chip);
 
 	if (chip->primary->irq) {
 		ret = request_threaded_irq(chip->primary->irq, NULL,
@@ -2273,9 +2619,9 @@ static int max1720x_probe(struct i2c_client *client,
 		goto psy_unregister;
 	}
 
-	max1720x_set_serial_number(chip);
+	max17x0x_set_serial_number(chip);
 
-	INIT_WORK(&chip->cycle_count_work, max1720x_cycle_count_work);
+	INIT_WORK(&chip->cycle_count_work, max17x0x_cycle_count_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
 	schedule_delayed_work(&chip->init_work,
 			      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
