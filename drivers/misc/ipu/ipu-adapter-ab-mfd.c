@@ -145,8 +145,9 @@ static int ipu_adapter_ab_mfd_map_to_bar(struct device *dev,
 		return -EINVAL;
 	}
 
-	ret = abc_pcie_map_bar_region(dev->parent, BAR_2, shared_buffer->size,
-			shared_buffer->jqs_paddr, &shared_buffer->mapping);
+	ret = abc_pcie_map_bar_region(dev->parent, dev, BAR_2,
+			shared_buffer->size, shared_buffer->jqs_paddr,
+			&shared_buffer->mapping);
 	if (ret < 0) {
 		dev_err(dev, "bar mapping failed\n");
 		return ret;
@@ -167,7 +168,8 @@ static int ipu_adapter_ab_mfd_unmap_from_bar(struct device *dev,
 		return -EINVAL;
 	}
 
-	ret = abc_pcie_unmap_bar_region(dev->parent, &shared_buffer->mapping);
+	ret = abc_pcie_unmap_bar_region(dev->parent, dev,
+			&shared_buffer->mapping);
 	if (ret < 0) {
 		dev_err(dev, "bar unmapping failed\n");
 		return ret;

@@ -38,6 +38,10 @@
 
 #define UPPER(address) ((unsigned int)((address & 0xFFFFFFFF00000000) >> 32))
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
+
+/* iATU region 0 is reserved for ABC configuration registers */
+#define ABC_CONFIG_IATU_REGION 1
+
 static struct abc_device *abc_dev;
 
 static void abc_pcie_enable_irqs(struct pci_dev *pdev);
@@ -294,7 +298,7 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 	struct bar_mapping mapping;
 	int bar = BAR_2;
 
-	ret = abc_pcie_map_bar_region(dev, bar, len, (uint64_t)offset,
+	ret = abc_pcie_map_bar_region(dev, dev, bar, len, (uint64_t)offset,
 			&mapping);
 	if (ret < 0) {
 		pr_err("%s: unable to map for bar region, ret=%d\n", __func__,
@@ -304,7 +308,7 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 
 	memcpy_fromio((void *)data, mapping.bar_vaddr, len);
 
-	ret = abc_pcie_unmap_bar_region(dev, &mapping);
+	ret = abc_pcie_unmap_bar_region(dev, dev, &mapping);
 	if (ret < 0) {
 		pr_err("%s: unable to unmap for bar region, ret=%d\n",
 				__func__, ret);
@@ -357,8 +361,8 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 	struct bar_mapping mapping;
 	int bar = BAR_2;
 
-	ret = abc_pcie_map_bar_region(dev, bar, len, (uint64_t)offset,
-			&mapping);
+	ret = abc_pcie_map_bar_region(dev, dev /* owner */, bar, len,
+			(uint64_t)offset, &mapping);
 	if (ret < 0) {
 		pr_err("%s: unable to map for bar region, ret=%d\n", __func__,
 				ret);
@@ -367,7 +371,7 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 
 	memcpy_toio(mapping.bar_vaddr, (void *)(&data), len);
 
-	ret = abc_pcie_unmap_bar_region(dev, &mapping);
+	ret = abc_pcie_unmap_bar_region(dev, dev /* owner */, &mapping);
 	if (ret < 0) {
 		pr_err("%s: unable to unmap for bar region, ret=%d\n",
 				__func__, ret);
@@ -1017,30 +1021,15 @@ static int free_bar_range(struct device *dev, uint32_t bar,
 	return 0;
 }
 
-int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
-		uint64_t ab_paddr, struct bar_mapping *mapping)
+int abc_pcie_get_inbound_iatu(struct device *dev, struct device *owner)
 {
 	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
-	int iatu_id = -1;
-	int ret;
-	int i;
-	size_t size_aligned;
-	uint32_t ab_paddr_aligned;
-	struct inb_region ir;
-	uint64_t bar_range_offset;
-	uint64_t host_addr;
 	struct iatu_status *iatu;
-	size_t requested_size = size;
+	int iatu_id = -1;
+	int i;
 
 	mutex_lock(&abc->mutex);
-
-	ab_paddr_aligned = ab_paddr & IATU_LWR_TARGET_ADDR_INBOUND_MASK;
-	size = size + (ab_paddr & ~IATU_LWR_TARGET_ADDR_INBOUND_MASK);
-
-	/* set size to be 4kB aligned */
-	size_aligned = ALIGN(size, IATU_REGION_ALIGNMENT);
-
-	/* Find first free iATU region. Skipping iATU0 for it is reserved for
+	/* Find first free iATU region. Skipping iATU1 for it is reserved for
 	 * BAR0 mapping
 	 */
 	for (i = 0; i < NUM_IATU_REGIONS; ++i) {
@@ -1057,6 +1046,93 @@ int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
 		return -EBUSY;
 	}
 
+	iatu = &abc->iatu_mappings.iatus[iatu_id];
+
+	iatu->is_used = true;
+	iatu->owner = owner;
+
+	mutex_unlock(&abc->mutex);
+	return iatu_id;
+}
+
+int abc_pcie_put_inbound_iatu(struct device *dev, struct device *owner,
+		int iatu_id)
+{
+	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+	struct iatu_status *iatu = &abc->iatu_mappings.iatus[iatu_id];
+
+	/* Check if valid iatu is selected */
+	if (iatu_id < 0 || iatu_id >= NUM_IATU_REGIONS ||
+			iatu_id == ABC_CONFIG_IATU_REGION) {
+		dev_err(dev, "Invalid iatu region id:%d\n", iatu_id);
+		return -EINVAL;
+	}
+
+	mutex_lock(&abc->mutex);
+
+	if (owner != iatu->owner) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "Error: attempt to put iATU owned by different component\n");
+		return -EACCES;
+	}
+
+	if (iatu->size != 0) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "Error: Attemp to put iATU without freeing mapping\n");
+		return -EBUSY;
+	}
+
+	iatu->is_used = false;
+	iatu->owner = NULL;
+	iatu->bar = 0;
+	iatu->bar_offset = 0;
+	iatu->ab_paddr = 0;
+	iatu->size = 0;
+
+	mutex_unlock(&abc->mutex);
+	return 0;
+}
+
+int abc_pcie_map_iatu(struct device *dev, struct device *owner, uint32_t bar,
+		size_t size, uint64_t ab_paddr, struct bar_mapping *mapping)
+{
+	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+	int iatu_id = mapping->iatu;
+	struct iatu_status *iatu = &abc->iatu_mappings.iatus[iatu_id];
+	struct inb_region ir;
+	uint64_t bar_range_offset;
+	uint64_t host_addr;
+	uint32_t ab_paddr_aligned;
+	size_t size_aligned;
+	size_t requested_size = size;
+	int ret;
+
+	if (size == 0) {
+		dev_err(dev, "Invalid argument: size is 0\n");
+		return -EINVAL;
+	}
+
+	/* Check if valid iatu is selected */
+	if (iatu_id < 0 || iatu_id >= NUM_IATU_REGIONS ||
+			iatu_id == ABC_CONFIG_IATU_REGION) {
+		dev_err(dev, "Invalid iatu region id:%d\n", iatu_id);
+		return -EINVAL;
+	}
+
+	ab_paddr_aligned = ab_paddr & IATU_LWR_TARGET_ADDR_INBOUND_MASK;
+	size = size + (ab_paddr & ~IATU_LWR_TARGET_ADDR_INBOUND_MASK);
+
+	/* set size to be 4kB aligned */
+	size_aligned = ALIGN(size, IATU_REGION_ALIGNMENT);
+
+	mutex_lock(&abc->mutex);
+
+	if (iatu->owner != owner) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "Error: attempt to modify iATU used by another component\n");
+		return -EACCES;
+	}
+
 	/* allocate a range in the target bar */
 	ret = allocate_bar_range(dev, bar, size_aligned, &bar_range_offset);
 	if (ret < 0) {
@@ -1064,12 +1140,12 @@ int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
 		dev_err(dev, "BAR range allocation failed.\n");
 		return ret;
 	}
-	iatu = &abc->iatu_mappings.iatus[iatu_id];
 
 	host_addr = abc->abc_dev->bar_base[bar].start +
 			bar_range_offset;
 
 	if (host_addr >> 32) {
+		free_bar_range(dev, bar, size_aligned, bar_range_offset);
 		mutex_unlock(&abc->mutex);
 		dev_err(dev, "Invalid host_addr: address higher than 4GB\n");
 		return -EINVAL;
@@ -1094,14 +1170,11 @@ int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
 		return ret;
 	}
 
-	iatu->is_used = true;
 	iatu->bar = bar;
 	iatu->bar_offset = bar_range_offset;
 	iatu->ab_paddr = ab_paddr_aligned;
 	iatu->size = size_aligned;
 
-	/* Set returning struct */
-	mapping->iatu = iatu_id;
 	mapping->bar = bar;
 	mapping->mapping_size = requested_size;
 	mapping->bar_vaddr = abc->bar[bar] + bar_range_offset +
@@ -1111,26 +1184,37 @@ int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
 	return 0;
 }
 
-int abc_pcie_unmap_bar_region(struct device *dev, struct bar_mapping *mapping)
+int abc_pcie_unmap_iatu(struct device *dev, struct device *owner,
+		struct bar_mapping *mapping)
 {
-	int iatu_id = mapping->iatu;
-	int ret;
 	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+	int iatu_id = mapping->iatu;
 	struct iatu_status *iatu = &abc->iatu_mappings.iatus[iatu_id];
+	int ret;
 
-	if (iatu_id >= NUM_IATU_REGIONS) {
+	if (iatu_id < 0 || iatu_id >= NUM_IATU_REGIONS ||
+			iatu_id == ABC_CONFIG_IATU_REGION) {
 		dev_err(dev, "%s: incorrect state: invalid iatu id: %d",
 				__func__, iatu_id);
 		return -EINVAL;
 	}
 
 	mutex_lock(&abc->mutex);
+
+	if (owner != iatu->owner) {
+		mutex_unlock(&abc->mutex);
+		dev_err(dev, "Error: attempt to put iATU owned by different component\n");
+		return -EACCES;
+	}
+
 	if (!iatu->is_used) {
 		mutex_unlock(&abc->mutex);
 		dev_err(dev, "%s: inconsistent state: select iatu is not used",
 				__func__);
 		return -EINVAL;
 	}
+
+	(void)disable_inbound_iatu_region(iatu_id);
 
 	ret = free_bar_range(dev, iatu->bar, iatu->size, iatu->bar_offset);
 	if (ret < 0) {
@@ -1139,15 +1223,59 @@ int abc_pcie_unmap_bar_region(struct device *dev, struct bar_mapping *mapping)
 		return ret;
 	}
 
-	iatu->is_used = false;
 	iatu->bar = 0;
 	iatu->bar_offset = 0;
 	iatu->ab_paddr = 0;
 	iatu->size = 0;
 
-	disable_inbound_iatu_region(iatu_id);
+	mapping->bar = 0;
+	mapping->mapping_size = 0;
+	mapping->bar_vaddr = NULL;
 
 	mutex_unlock(&abc->mutex);
+
+	return 0;
+}
+
+int abc_pcie_map_bar_region(struct device *dev, struct device *owner,
+		uint32_t bar, size_t size, uint64_t ab_paddr,
+		struct bar_mapping *mapping)
+{
+	int iatu_id = abc_pcie_get_inbound_iatu(dev, owner);
+	int ret;
+
+	if (iatu_id < 0)
+		return iatu_id;
+
+	mapping->iatu = iatu_id;
+
+	ret = abc_pcie_map_iatu(dev, owner, bar, size, ab_paddr, mapping);
+	if (ret < 0) {
+		(void)abc_pcie_put_inbound_iatu(dev, owner, iatu_id);
+		return ret;
+	}
+
+	return 0;
+}
+
+int abc_pcie_unmap_bar_region(struct device *dev, struct device *owner,
+		struct bar_mapping *mapping)
+{
+	int ret;
+
+	ret = abc_pcie_unmap_iatu(dev, owner, mapping);
+	if (ret < 0) {
+		dev_err(dev, "Error: unmap iatu failed\n");
+		return ret;
+	}
+
+	ret = abc_pcie_put_inbound_iatu(dev, owner, mapping->iatu);
+	if (ret < 0) {
+		dev_err(dev, "Error: fail to release iatu region:%d\n",
+				mapping->iatu);
+		return ret;
+	}
+
 	return 0;
 }
 

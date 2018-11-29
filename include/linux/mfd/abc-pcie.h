@@ -208,9 +208,28 @@ struct bar_mapping {
 	size_t mapping_size;
 	void __iomem *bar_vaddr;
 };
-int abc_pcie_map_bar_region(struct device *dev, uint32_t bar, size_t size,
-		uint64_t ab_paddr, struct bar_mapping *mapping);
-int abc_pcie_unmap_bar_region(struct device *dev, struct bar_mapping *mapping);
+/* Non-Preferred APIs: Do not use unless exception is granted by maintainer
+ * The get/put inbound_iatu interfaces request/release 1 free iATU without
+ * creating any bar mapping.
+ * The map/unmap iATU interfaces create the AB DRAM to BAR mapping on using
+ * the given iATU region specified in the bar_mapping struct.
+ */
+int abc_pcie_get_inbound_iatu(struct device *dev, struct device *owner);
+int abc_pcie_put_inbound_iatu(struct device *dev, struct device *owner,
+		int iatu_id);
+int abc_pcie_map_iatu(struct device *dev, struct device *owner, uint32_t bar,
+		size_t size, uint64_t ab_paddr, struct bar_mapping *mapping);
+int abc_pcie_unmap_iatu(struct device *dev, struct device *owner,
+		struct bar_mapping *mapping);
+
+/* Preferred API to map/unmap bar region: the APIs will automatically find
+ * a free iATU region and map the AB Dram region to the BAR region.
+ */
+int abc_pcie_map_bar_region(struct device *dev, struct device *owner,
+		uint32_t bar, size_t size, uint64_t ab_paddr,
+		struct bar_mapping *mapping);
+int abc_pcie_unmap_bar_region(struct device *dev, struct device *owner,
+		struct bar_mapping *mapping);
 
 struct config_write {
 	u32 offset;

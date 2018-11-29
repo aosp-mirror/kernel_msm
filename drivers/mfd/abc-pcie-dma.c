@@ -30,10 +30,6 @@
 #include "abc-pcie-dma.h"
 #include "abc-pcie-private.h"
 
-#if 0
-#define BENCHMARK_ENABLE    /* timing and throughput measurements */
-#endif
-
 #define UPPER(address) ((unsigned int)((address & 0xFFFFFFFF00000000) >> 32))
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 /* TODO(isca): b/120289070 */
@@ -123,6 +119,7 @@ static int abc_pcie_dma_alloc_ab_dram(size_t size,
 		struct abc_pcie_dma_mblk_desc *mblk_xfer_desc)
 {
 	struct dma_buf *ab_dram_dmabuf;
+
 	ab_dram_dmabuf = ab_dram_alloc_dma_buf_kernel(size);
 	if (IS_ERR(ab_dram_dmabuf))
 		return PTR_ERR(ab_dram_dmabuf);
@@ -531,13 +528,8 @@ int abc_pcie_user_local_buf_sg_build(void *dmadest, size_t size,
 
 	down_read(&current->mm->mmap_sem);
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 5, 7)
-	n_num = get_user_pages_fast((unsigned long)dmadest, p_num,
-				    0, sgl->mypage);
-#else
 	n_num = get_user_pages((unsigned long)dmadest, p_num,
 			       FOLL_WRITE | FOLL_FORCE, sgl->mypage, NULL);
-#endif
 
 	up_read(&current->mm->mmap_sem);
 	if (n_num < p_num) {
@@ -693,16 +685,17 @@ int abc_pcie_ll_destroy(struct abc_pcie_dma_ll *ll)
 int abc_pcie_ll_count_dma_element(struct abc_pcie_sg_entry *src_sg,
 			    struct abc_pcie_sg_entry *dst_sg)
 {
-	int entries =0;
+	int entries = 0;
 	int dst_size_left = dst_sg->size;
 	int src_size_left = src_sg->size;
+
 	while ((src_sg->paddr != 0x0) && (dst_sg->paddr != 0x0)) {
 		if (dst_size_left == src_size_left) {
 			src_sg++;
 			dst_sg++;
 			src_size_left = src_sg->size;
 			dst_size_left = dst_sg->size;
-		} else if (src_size_left> dst_size_left) {
+		} else if (src_size_left > dst_size_left) {
 			src_size_left -= dst_size_left;
 			dst_sg++;
 			dst_size_left = dst_sg->size;
@@ -745,6 +738,7 @@ static int abc_pcie_dma_ll_setup(struct abc_pcie_sg_entry *src_sg,
 	struct abc_pcie_sg_entry sg_dst, sg_src;
 	int i, s;
 	void *base_addr;
+
 	base_addr = mblk_xfer_desc->mapping.bar_vaddr;
 	ll_element.header = LL_DATA_ELEMENT;
 	i = 0; /* source buffer scatterlist index */
@@ -752,7 +746,7 @@ static int abc_pcie_dma_ll_setup(struct abc_pcie_sg_entry *src_sg,
 	sg_dst = dst_sg[0];
 	sg_src = src_sg[0];
 	/* last element has a unique header */
-	for(; ll_num_entries > 1 &&
+	for (; ll_num_entries > 1 &&
 			(sg_src.paddr != 0x0) &&
 			(sg_dst.paddr != 0x0); --ll_num_entries) {
 		if (sg_src.size == sg_dst.size) {
@@ -777,17 +771,19 @@ static int abc_pcie_dma_ll_setup(struct abc_pcie_sg_entry *src_sg,
 			i++;
 			sg_src = src_sg[i];
 		}
-		if(ll_num_entries == 2)
+
+		if (ll_num_entries == 2)
 			ll_element.header = LL_IRQ_DATA_ELEMENT;
+
 		memcpy_toio((void *)base_addr, &ll_element, sizeof(ll_element));
 		base_addr += sizeof(ll_element);
 	}
 
 	// we didn't reach the end of the linked list - error in the count
-	if((sg_src.paddr != 0x0 && sg_dst.paddr != 0) || ll_num_entries >1) {
+	if ((sg_src.paddr != 0x0 && sg_dst.paddr != 0) || ll_num_entries > 1) {
 		dev_err(&abc_dma.pdev->dev,
-			"%s: did not reach the end of the Scatterlists \n",
-			__func__);
+				"%s: did not reach the end of the Scatterlists\n",
+				__func__);
 		return -EINVAL;
 	}
 	/* last element */
@@ -947,10 +943,10 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 	/* Single block transfer */
 	if (remote_sg_size <= 2 && local_sg_size <= 2) {
 		dev_dbg(&abc_dma.pdev->dev,
-			"%s: SBLK transfer: ->local (%pK/%zu) \
-			->remote (%pa/%zu)\n", __func__,
-			&local_sg_entries[0].paddr, local_sg_entries[0].size,
-			&remote_sg_entries[0].paddr, remote_sg_entries[0].size);
+			"%s: SBLK transfer: ->local (%pK/%zu) ->remote (%pa/%zu)\n",
+			__func__, &local_sg_entries[0].paddr,
+			local_sg_entries[0].size, &remote_sg_entries[0].paddr,
+			remote_sg_entries[0].size);
 
 		dma_chan = DMA_CHAN;
 
@@ -1149,10 +1145,10 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 	/* Single block transfer */
 	if (remote_sg_size <= 2 && local_sg_size <= 2) {
 		dev_dbg(&abc_dma.pdev->dev,
-			"%s: SBLK transfer: ->local (%pa/%zu) \
-			->remote (%pa/%zu)\n", __func__,
-			&local_sg_entries[0].paddr, local_sg_entries[0].size,
-			&remote_sg_entries[0].paddr, remote_sg_entries[0].size);
+			"%s: SBLK transfer: ->local (%pa/%zu) ->remote (%pa/%zu)\n",
+			__func__, &local_sg_entries[0].paddr,
+			local_sg_entries[0].size, &remote_sg_entries[0].paddr,
+			remote_sg_entries[0].size);
 
 		dma_chan = DMA_CHAN;
 
@@ -1280,22 +1276,26 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 	ll_size = ll_num_entries * sizeof(struct abc_pcie_dma_ll_element);
 
 	err = abc_pcie_dma_alloc_ab_dram(ll_size, &mblk_xfer_desc);
-	if(err) {
+	if (err) {
 		dev_err(&abc_dma.pdev->dev,
 			"%s: failed to alloc ch%d BAR size: %d error: %d\n",
 			__func__, dma_chan, ll_size, err);
 		return err;
 	}
+
 	mutex_lock(&dma_mutex);
+
 	err = abc_pcie_map_bar_region(abc_dma.dma_dev,
-		BAR_2, mblk_xfer_desc.size,
-			mblk_xfer_desc.dma_paddr, &mblk_xfer_desc.mapping);
-	if(err) {
+			&abc_dma.pdev->dev /* owner */, BAR_2,
+			mblk_xfer_desc.size, mblk_xfer_desc.dma_paddr,
+			&mblk_xfer_desc.mapping);
+	if (err) {
 		dev_err(&abc_dma.pdev->dev,
 			"%s: failed to map to BAR ch%d error: %d\n",
 			__func__, dma_chan, err);
 		goto unlock_unmap_buf;
 	}
+
 	err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
 	if (err) {
 		dev_err(&abc_dma.pdev->dev,
@@ -1303,15 +1303,17 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 			__func__, dma_chan, err);
 		goto unmap_bar_buf;
 	}
+
 	err = abc_pcie_dma_ll_setup(src_sg,
 			    dst_sg, &mblk_xfer_desc, ll_num_entries);
-	if(err)
+	if (err)
 		goto unregister_dma_callback;
 #ifdef BENCHMARK_ENABLE
 	ll_dma_size[dma_chan] = dma_desc->size;
 	ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
 #endif
 	reinit_completion(&dma_done);
+
 	err = dma_mblk_start(dma_chan, dir, mblk_xfer_desc.dma_paddr);
 	if (err) {
 		dev_err(&abc_dma.pdev->dev,
@@ -1319,6 +1321,7 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 			__func__, dma_chan, err);
 		goto unregister_dma_callback;
 	}
+
 	err = wait_for_completion_interruptible(&dma_done);
 	if (err) {
 		dev_err(&abc_dma.pdev->dev,
@@ -1335,7 +1338,9 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 unregister_dma_callback:
 	abc_reg_dma_irq_callback(NULL, dma_chan);
 unmap_bar_buf:
-	abc_pcie_unmap_bar_region(abc_dma.dma_dev, &mblk_xfer_desc.mapping);
+	abc_pcie_unmap_bar_region(abc_dma.dma_dev,
+			&abc_dma.pdev->dev /* owner */,
+			&mblk_xfer_desc.mapping);
 unlock_unmap_buf:
 	mutex_unlock(&dma_mutex);
 	ab_dram_free_dma_buf_kernel(mblk_xfer_desc.ab_dram_dma_buf);
@@ -1378,6 +1383,7 @@ static long abc_pcie_dma_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY: {
 		struct abc_pcie_dma_desc_legacy dma_desc_legacy;
+
 		dev_dbg(&abc_dma.pdev->dev,
 			"%s: Received IOCTL for legacy DMA request\n",
 			__func__);

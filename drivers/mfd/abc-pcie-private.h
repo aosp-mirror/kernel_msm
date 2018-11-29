@@ -30,6 +30,7 @@
 
 struct iatu_status {
 	bool is_used;
+	struct device *owner;
 	uint32_t bar;
 	uint32_t bar_offset;
 	uint32_t ab_paddr;
