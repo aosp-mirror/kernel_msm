@@ -13,7 +13,7 @@
 #include <linux/sched.h>
 #include <asm/page.h>
 
-#define SCS_SIZE		512
+#define SCS_SIZE		1024
 #define SCS_GFP			(GFP_KERNEL | __GFP_ZERO)
 
 extern unsigned long init_shadow_call_stack[];
