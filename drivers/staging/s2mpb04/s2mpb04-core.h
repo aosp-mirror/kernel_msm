@@ -146,6 +146,11 @@ struct s2mpb04_core {
 	 */
 	struct work_struct reset_work;
 
+	/* kernel thread to detect if PMIC is hung and run the
+	 * recovery sequence
+	 */
+	struct work_struct recover_work;
+
 	/* completion used for initialization */
 	struct completion init_complete;
 
@@ -154,6 +159,9 @@ struct s2mpb04_core {
 
 	/* completion used for signaling end of adc conversion */
 	struct completion adc_conv_complete;
+
+	/* counter for recovery attempts */
+	unsigned long recover_count;
 };
 
 /* platform data structure */
@@ -170,6 +178,7 @@ int s2mpb04_write_byte(struct s2mpb04_core *ddata, u8 addr, u8 data);
 int s2mpb04_update_bits(struct s2mpb04_core *ddata, u8 addr, unsigned int mask,
 			u8 data);
 int s2mpb04_toggle_pon(struct s2mpb04_core *ddata);
+int s2mpb04_toggle_pon_no_resetb_wait(struct s2mpb04_core *ddata);
 int s2mpb04_dump_regs(struct s2mpb04_core *ddata);
 int s2mpb04_read_adc_chan(struct s2mpb04_core *ddata, int chan_num,
 			  u8 *chan_data);

@@ -47,6 +47,9 @@
 /* defines the timeout in jiffies for ADC conversion completion */
 #define S2MPB04_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
+/* defines the number of tries to recover chip */
+#define S2MPB04_RECOVER_RETRY_COUNT 3
+
 static int s2mpb04_prepare_pon(struct s2mpb04_core *ddata);
 static int s2mpb04_chip_init(struct s2mpb04_core *ddata);
 static int s2mpb04_core_fixup(struct s2mpb04_core *ddata);
@@ -99,6 +102,28 @@ int s2mpb04_toggle_pon(struct s2mpb04_core *ddata)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(s2mpb04_toggle_pon);
+
+/* When chip is hung resetb is stuck high. Function to toggle PON to recover
+ * the chip but don't wait for resetb transition
+ */
+int s2mpb04_toggle_pon_no_resetb_wait(struct s2mpb04_core *ddata)
+{
+	dev_dbg(ddata->dev, "%s: toggling PON\n", __func__);
+
+	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
+
+	/* force state machine in low power state */
+	s2mpb04_prepare_pon(ddata);
+
+	usleep_range(20, 25);
+	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
+
+	/* give the chip some time to power on */
+	msleep(S2MPB04_PON_RESET_DELAY);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(s2mpb04_toggle_pon_no_resetb_wait);
 
 int s2mpb04_dump_regs(struct s2mpb04_core *ddata)
 {
@@ -480,6 +505,71 @@ static void s2mpb04_reset_work(struct work_struct *data)
 	s2mpb04_chip_init(ddata);
 }
 
+/* kernel thread to detect if PMIC is hung and run the recovery sequence */
+static void s2mpb04_recover_work(struct work_struct *data)
+{
+	struct s2mpb04_core *ddata = container_of(data, struct s2mpb04_core,
+						  recover_work);
+	struct s2mpb04_platform_data *pdata = ddata->pdata;
+	struct device *dev = ddata->dev;
+	unsigned long timeout;
+
+	/* disable interrupts during recovery sequence */
+	disable_irq(pdata->resetb_irq);
+	disable_irq(pdata->intb_irq);
+
+	/* when chip is hung resetb is stuck high. Toggle PON to recover chip
+	 * but don't wait for resetb transition
+	 */
+	s2mpb04_toggle_pon_no_resetb_wait(ddata);
+
+	/* check if recovery sequence worked. resetb should now become low
+	 * when PON is low
+	 */
+	gpio_set_value_cansleep(pdata->pon_gpio, 0);
+	usleep_range(100, 105);
+
+	/* re-enable interrupts */
+	enable_irq(pdata->resetb_irq);
+	enable_irq(pdata->intb_irq);
+
+	if (gpio_get_value(pdata->resetb_gpio)) {
+		dev_err(dev, "%s: recovery sequence failed", __func__);
+		return;
+	}
+
+	dev_info(dev, "%s: recovery sequence success", __func__);
+
+	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
+
+	/* wait for chip to come out of reset and get initialized,
+	 * signaled by resetb interrupt handler
+	 */
+	timeout = wait_for_completion_timeout(&ddata->init_complete,
+					      S2MPB04_SHUTDOWN_RESET_TIMEOUT);
+	if (!timeout)
+		dev_err(ddata->dev,
+			"%s: timeout waiting for device to return from reset\n",
+			__func__);
+}
+
+/* check if chip is hung */
+static bool s2mpb04_is_chip_hung(struct s2mpb04_core *ddata)
+{
+	int ret;
+	u8 chan_data;
+
+	/* Detect if chip is hung by reading ADC */
+	ret = s2mpb04_read_adc_chan(ddata,
+				    S2MPB04_ADC_VBAT,
+				    &chan_data);
+
+	/* chip is hung if ADC read timesout or raw vbat data
+	 * is 0x10
+	 */
+	return ((ret == -ETIMEDOUT) || (chan_data == 0x10));
+}
+
 /* irq handler for resetb pin.
  * It may not catch falling edge. But, that will not be an issue as intb
  * interrupt handler will notify regulator fail event.
@@ -487,21 +577,41 @@ static void s2mpb04_reset_work(struct work_struct *data)
 static irqreturn_t s2mpb04_resetb_irq_handler(int irq, void *cookie)
 {
 	struct s2mpb04_core *ddata = (struct s2mpb04_core *)cookie;
+	struct device *dev = ddata->dev;
+	bool is_chip_hung;
 
 	if (gpio_get_value(ddata->pdata->resetb_gpio)) {
-		dev_dbg(ddata->dev, "%s: completing reset\n", __func__);
+		dev_dbg(dev, "%s: completing reset\n", __func__);
 
 		/* initialize chip */
 		s2mpb04_chip_init(ddata);
 
-		/* Fixup some chip settings that are different than
-		 * reset values.
-		 */
-		s2mpb04_core_fixup(ddata);
+		/* check if chip is hung */
+		is_chip_hung = s2mpb04_is_chip_hung(ddata);
 
-		complete(&ddata->init_complete);
+		if (!is_chip_hung) {
+			/* Fixup some chip settings that are different than
+			 * reset values.
+			 */
+			s2mpb04_core_fixup(ddata);
+
+			complete(&ddata->init_complete);
+
+			/* clear recovery attempt counter */
+			ddata->recover_count = 0;
+		} else if (ddata->recover_count < S2MPB04_RECOVER_RETRY_COUNT) {
+			dev_err(dev,
+				"%s: lockup detected, trying recovery: (%d/%d)",
+				__func__,
+				(int)++ddata->recover_count,
+				S2MPB04_RECOVER_RETRY_COUNT);
+			schedule_work(&ddata->recover_work);
+		} else {
+			dev_err(dev, "%s: max recovery attempts reached: %d",
+				__func__, S2MPB04_RECOVER_RETRY_COUNT);
+		}
 	} else {
-		dev_err(ddata->dev, "%s: device reset\n", __func__);
+		dev_err(dev, "%s: device reset\n", __func__);
 		reinit_completion(&ddata->init_complete);
 		schedule_work(&ddata->reset_work);
 	}
@@ -653,6 +763,7 @@ static int s2mpb04_probe(struct i2c_client *client,
 
 	/* initialize some structures */
 	INIT_WORK(&ddata->reset_work, s2mpb04_reset_work);
+	INIT_WORK(&ddata->recover_work, s2mpb04_recover_work);
 
 	/* initialize completions */
 	init_completion(&ddata->init_complete);
