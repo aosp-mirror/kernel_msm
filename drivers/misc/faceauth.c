@@ -16,6 +16,8 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/init.h>
+#include <linux/ctype.h>
+#include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/faceauth.h>
 #include <linux/firmware.h>
@@ -72,6 +74,8 @@ static int dma_send_workloads(void);
 struct faceauth_data {
 	int dma_dw_buf;
 };
+bool hypx_enable;
+struct dentry *faceauth_debugfs_root;
 
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
@@ -446,15 +450,90 @@ static int dma_send_workloads(void)
 	return err;
 }
 
+static int hypx_enable_debugfs_show(struct seq_file *m, void *data)
+{
+	seq_printf(m, "%s\n", hypx_enable ? "1" : "0");
+	return 0;
+}
+
+static int hypx_enable_debugfs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, hypx_enable_debugfs_show, inode->i_private);
+}
+
+static ssize_t hypx_enable_debugfs_write(struct file *file,
+					 const char __user *ubuf, size_t len,
+					 loff_t *offp)
+{
+	char buf[12];
+
+	if (len > sizeof(buf) - 1)
+		return -EINVAL;
+
+	if (copy_from_user(buf, ubuf, len))
+		return -EFAULT;
+
+	while (len > 0 && isspace(buf[len - 1]))
+		len--;
+	buf[len] = '\0';
+
+	if (!strcmp(buf, "0"))
+		hypx_enable = false;
+	else if (!strcmp(buf, "1"))
+		hypx_enable = true;
+	else
+		return -EINVAL;
+
+	pr_debug("Faceauth hypx enable flag is set to %d\n", hypx_enable);
+
+	return len;
+}
+
+static const struct file_operations hypx_enable_debugfs_fops = {
+	.owner = THIS_MODULE,
+	.open = hypx_enable_debugfs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = hypx_enable_debugfs_write,
+};
+
 static int __init faceauth_init(void)
 {
-	int res;
+	int err;
+	struct dentry *hypx;
 
 	pr_info("faceauth init\n");
 
-	res = misc_register(&faceauth_miscdevice);
+	err = misc_register(&faceauth_miscdevice);
+	if (err)
+		goto exit1;
 
-	return res;
+	faceauth_debugfs_root = debugfs_create_dir("faceauth", NULL);
+	if (IS_ERR_OR_NULL(faceauth_debugfs_root)) {
+		pr_err("Failed to create faceauth debugfs");
+		err = -EIO;
+		goto exit2;
+	}
+
+	hypx = debugfs_create_file("hypx_enable", 0400,
+				   faceauth_debugfs_root, NULL,
+				   &hypx_enable_debugfs_fops);
+	if (!hypx) {
+		err = -EIO;
+		goto exit3;
+	}
+
+	return 0;
+
+exit3:
+	debugfs_remove_recursive(faceauth_debugfs_root);
+
+exit2:
+	misc_deregister(&faceauth_miscdevice);
+
+exit1:
+	return err;
 }
 
 static void __exit faceauth_exit(void)
@@ -462,6 +541,7 @@ static void __exit faceauth_exit(void)
 	pr_debug("faceauth driver exit\n");
 
 	misc_deregister(&faceauth_miscdevice);
+	debugfs_remove_recursive(faceauth_debugfs_root);
 }
 
 module_init(faceauth_init);
