@@ -242,6 +242,41 @@ static void cmdq_dumpregs(struct cmdq_host *cq_host)
 		pr_err(DRV_NAME ": fwrev[%d] = 0x%x\n",i,
 		mmc->card->ext_csd.fwrev[i]);
 	}
+	// Host status dump
+	pr_err(DRV_NAME ": host->cap = 0x%08x\n",
+		mmc->caps);
+	pr_err(DRV_NAME ": host->cap2 = 0x%08x\n",
+		mmc->caps2);
+	pr_err(DRV_NAME ": host->clk_gated = %u\n",
+		mmc->clk_gated);
+	pr_err(DRV_NAME ": host->clk_requests = %d\n",
+		mmc->clk_requests);
+	pr_err(DRV_NAME ": host->claim_cnt = %d\n",
+		mmc->claim_cnt);
+	pr_err(DRV_NAME ": host->lock = %s\n",
+		(spin_is_locked(&mmc->lock)) ? "lock" : "unlock");
+	pr_err(DRV_NAME ": host->hold_retune = %d\n",
+		mmc->hold_retune);
+	pr_err(DRV_NAME ": host->bus_resume_flags = 0x%x\n",
+		mmc->bus_resume_flags);
+
+	// Card status dump
+	pr_err(DRV_NAME ": host->card->state = 0x%08x\n",
+		mmc->card->state);
+	pr_err(DRV_NAME ": host->card->quirks = 0x%08x\n",
+		mmc->card->quirks);
+	pr_err(DRV_NAME ": host->card->cmdq_init = %u\n",
+		mmc->card->cmdq_init);
+
+	// CQ status dump
+	pr_err(DRV_NAME ": host->cmdq_ctx.curr_state = 0x%lx\n",
+		mmc->cmdq_ctx.curr_state);
+	pr_err(DRV_NAME ": cq_host->enabled = %u\n",
+		cq_host->enabled);
+	pr_err(DRV_NAME ": cq_host->caps = 0x%08x\n",
+		cq_host->caps);
+	pr_err(DRV_NAME ": cq_host->quirks = 0x%08x\n",
+		cq_host->quirks);
 
 	MMC_TRACE(mmc,
 	"%s: 0x0C=0x%08x 0x10=0x%08x 0x14=0x%08x 0x18=0x%08x 0x28=0x%08x 0x2C=0x%08x 0x30=0x%08x 0x34=0x%08x 0x54=0x%08x 0x58=0x%08x 0x5C=0x%08x 0x48=0x%08x\n",

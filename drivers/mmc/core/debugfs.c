@@ -22,6 +22,7 @@
 
 #include "core.h"
 #include "mmc_ops.h"
+#include "../host/cmdq_hci.h"
 
 #ifdef CONFIG_FAIL_MMC_REQUEST
 
@@ -589,6 +590,62 @@ static const struct file_operations mmc_io_stats_desc = {
 	.release 	= single_release,
 };
 
+static int mmc_show_host_show(struct seq_file *file, void *data)
+{
+	struct mmc_host *host = (struct mmc_host *)file->private;
+	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(host);
+
+	// Host status dump
+	seq_printf(file, "host->cap = 0x%08x\n",
+		host->caps);
+	seq_printf(file, "host->cap2 = 0x%08x\n",
+		host->caps2);
+	seq_printf(file, "host->clk_gated = %u\n",
+		host->clk_gated);
+	seq_printf(file, "host->clk_requests = %d\n",
+		host->clk_requests);
+	seq_printf(file, "host->claim_cnt = %d\n",
+		host->claim_cnt);
+	seq_printf(file, "host->lock = %s\n",
+		(spin_is_locked(&host->lock)) ? "lock" : "unlock");
+	seq_printf(file, "host->hold_retune = %d\n",
+		host->hold_retune);
+	seq_printf(file, "host->bus_resume_flags = 0x%x\n",
+		host->bus_resume_flags);
+
+	// Card status dump
+	seq_printf(file, "host->card->state = 0x%08x\n",
+		host->card->state);
+	seq_printf(file, "host->card->quirks = 0x%08x\n",
+		host->card->quirks);
+	seq_printf(file, "host->card->cmdq_init = %u\n",
+		host->card->cmdq_init);
+
+	// CQ status dump
+	seq_printf(file, "host->cmdq_ctx.curr_state = 0x%lx\n",
+		host->cmdq_ctx.curr_state);
+	seq_printf(file, "cq_host->enabled = %u\n",
+		cq_host->enabled);
+	seq_printf(file, "cq_host->caps = 0x%08x\n",
+		cq_host->caps);
+	seq_printf(file, "cq_host->quirks = 0x%08x\n",
+		cq_host->quirks);
+
+	return 0;
+}
+
+static int mmc_show_host_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmc_show_host_show, inode->i_private);
+}
+
+static const struct file_operations mmc_show_host_fops = {
+	.open		= mmc_show_host_open,
+	.read		= seq_read,
+	.release	= single_release,
+};
+
+
 void mmc_add_host_debugfs(struct mmc_host *host)
 {
 	struct dentry *root;
@@ -666,6 +723,10 @@ void mmc_add_host_debugfs(struct mmc_host *host)
 #endif
 	if (!debugfs_create_file("force_error", S_IWUSR, root, host,
 		&mmc_force_err_fops))
+		goto err_node;
+
+	if (!debugfs_create_file("show_host", 0600, root, host,
+		&mmc_show_host_fops))
 		goto err_node;
 
 	return;
