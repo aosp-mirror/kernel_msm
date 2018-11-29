@@ -313,6 +313,11 @@ int s2mpb04_read_adc_chan(struct s2mpb04_core *ddata,
 	dev_dbg(ddata->dev, "%s: chan_data 0x%02x\n", __func__, *chan_data);
 
 adc_cleanup:
+
+	/* set ADC muxsel to 0 (no monitoring). This is a workaround to prevent
+	 * disabling ADC when it's connected to temperature sensor */
+	s2mpb04_write_byte(ddata, S2MPB04_REG_MUXSEL1, 0x0);
+
 	/*
 	 * Disable thermal shutdown when disabling the ADC. This is a workaround
 	 * for a silicon bug that causes thermal shutdown comparator input to be
@@ -704,6 +709,10 @@ static int s2mpb04_core_fixup(struct s2mpb04_core *ddata)
 
 	/* disable watchdog timer */
 	s2mpb04_write_byte(ddata, S2MPB04_REG_WTSR_CTRL, 0x1D);
+
+	/* Disable temprature compensation. This is a workaround to prevent
+	 * disabling ADC when it's connected to temperature sensor */
+	s2mpb04_write_byte(ddata, S2MPB04_REG_ADC_CTRL2, 0x5);
 
 	/* enable hardware power-down sequence */
 	s2mpb04_pdn_seq_en(ddata);
