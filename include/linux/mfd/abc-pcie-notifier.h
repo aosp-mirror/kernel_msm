@@ -35,4 +35,7 @@
 int abc_register_pcie_link_blocking_event(struct notifier_block *nb);
 int abc_unregister_pcie_link_blocking_event(struct notifier_block *nb);
 
+/* Provider functions */
+int abc_pcie_link_notify_blocking(unsigned long event);
+
 #endif /* _ABC_PCIE_NOTIFIER_H */

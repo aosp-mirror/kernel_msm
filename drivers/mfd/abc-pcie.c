@@ -1328,6 +1328,25 @@ int abc_unregister_pcie_link_blocking_event(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(abc_unregister_pcie_link_blocking_event);
 
+/**
+ * abc_pcie_link_notify_blocking - call PCIe link blocking notifier chain
+ * @event: PCIe link notifier type (see include/linux/mfd/abc-pcie-notifier.h)
+ *
+ * Intended to be called by abc-pcie mfd driver only.
+ * Returns NOTIFY_DONE from the last driver called if all went well,
+ * or NOTIFY_STOP or NOTIFY_BAD immediately if a driver returns that,
+ * or -EAGAIN if abc-pcie mfd driver has not initialized.
+ */
+int abc_pcie_link_notify_blocking(unsigned long event)
+{
+	if (!abc_dev)
+		return -EAGAIN;
+
+	return blocking_notifier_call_chain(&abc_dev->pcie_link_subscribers,
+					    event,
+					    NULL);
+}
+
 static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 {
 	u32 override_val;
@@ -1566,12 +1585,18 @@ static int abc_pcie_get_chip_id_handler(void *ctx, enum ab_chip_id *val)
 static int abc_pcie_enter_el2_handler(void *ctx)
 {
 	// TODO: Implement
+
+	/* Broadcast this event to subscribers */
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
 	return 0;
 }
 
 static int abc_pcie_exit_el2_handler(void *ctx)
 {
 	// TODO: Implement
+
+	/* Broadcast this event to subscribers */
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
 	return 0;
 }
 
@@ -1584,6 +1609,9 @@ static int abc_pcie_ab_ready_handler(void *ctx)
 		"%s: ab_ready is high; PCIe link is enabled by host\n",
 		__func__);
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
+
+	/* Broadcast this event to subscribers */
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
 	return 0;
 }
 
@@ -1595,6 +1623,9 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 		"%s: PCIe link will be disabled by host\n",
 		__func__);
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
+
+	/* Broadcast this event to subscribers */
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
 	return 0;
 }
 
