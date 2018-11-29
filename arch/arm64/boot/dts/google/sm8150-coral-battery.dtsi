@@ -26,6 +26,10 @@
 
 &max1720x_fg {
 
+	maxim,n_regval_1730x_ver = <0xcc>;
+	maxim,n_regval_1730x =  /bits/ 16 < >;
+
+	/* maxim,n_regval_1720x_ver = <0xd4>; */
 	maxim,n_regval_1720x =  /bits/ 16 <
 		0x9C 0x0380	 /* nIChgTerm Register */
 		0x9D 0x0EB4	 /* nFilterCfg Register */
