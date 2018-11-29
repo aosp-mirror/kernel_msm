@@ -1311,6 +1311,23 @@ int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan)
 	return 0;
 }
 
+int abc_register_pcie_link_blocking_event(struct notifier_block *nb)
+{
+	if (!abc_dev)
+		return -EAGAIN;
+
+	return blocking_notifier_chain_register(
+				&abc_dev->pcie_link_subscribers, nb);
+}
+EXPORT_SYMBOL(abc_register_pcie_link_blocking_event);
+
+int abc_unregister_pcie_link_blocking_event(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(
+				&abc_dev->pcie_link_subscribers, nb);
+}
+EXPORT_SYMBOL(abc_unregister_pcie_link_blocking_event);
+
 static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 {
 	u32 override_val;

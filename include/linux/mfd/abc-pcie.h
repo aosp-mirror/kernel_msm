@@ -17,6 +17,7 @@
 #include <linux/atomic.h>
 #include <linux/cdev.h>
 #include <linux/dma-direction.h>
+#include <linux/mfd/abc-pcie-notifier.h>
 #include <linux/notifier.h>
 #include <linux/pci.h>
 
@@ -167,6 +168,7 @@ struct abc_device {
 	spinlock_t lock;
 	spinlock_t fsys_reg_lock;
 	spinlock_t dma_callback_lock;
+	struct blocking_notifier_head pcie_link_subscribers;
 };
 
 enum {
