@@ -361,6 +361,8 @@ struct ab_sm_mfd_ops {
 	int (*exit_el2)(void *ctx);
 
 	int (*get_chip_id)(void *ctx, enum ab_chip_id *val);
+	int (*ab_ready)(void *ctx);
+	int (*pcie_pre_disable)(void *ctx);
 };
 
 static int enter_el2_stub(void *ctx) { return -ENODEV; }
@@ -370,12 +372,17 @@ static int get_chip_id_stub(void *ctx, enum ab_chip_id *val)
 	return -ENODEV;
 }
 
+static int ab_ready_stub(void *ctx)  { return -ENODEV; }
+static int pcie_pre_disable_stub(void *ctx)  { return -ENODEV; }
+
 static struct ab_sm_mfd_ops mfd_ops_stub = {
 	.ctx = NULL,
 
 	.enter_el2 = &enter_el2_stub,
 	.exit_el2 = &exit_el2_stub,
 	.get_chip_id = &get_chip_id_stub,
+	.ab_ready = &ab_ready_stub,
+	.pcie_pre_disable = &pcie_pre_disable_stub,
 };
 
 /**

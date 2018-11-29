@@ -513,6 +513,10 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if (((to_chip_substate_id == CHIP_STATE_5_0) ||
 			(to_chip_substate_id == CHIP_STATE_6_0)) &&
 			(sc->curr_chip_substate_id < CHIP_STATE_5_0)) {
+		mutex_lock(&sc->mfd_lock);
+		ret = sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
+
 		if (msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0, sc->pcie_dev, NULL,
 				MSM_PCIE_CONFIG_NO_CFG_RESTORE))
 			pr_err("PCIe failed to disable link\n");
@@ -1084,6 +1088,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	mutex_init(&ab_sm_ctx->state_lock);
 	mutex_init(&ab_sm_ctx->async_fifo_lock);
 	mutex_init(&ab_sm_ctx->op_lock);
+	mutex_init(&ab_sm_ctx->mfd_lock);
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	atomic_set(&ab_sm_ctx->async_in_use, 0);
 	init_completion(&ab_sm_ctx->state_change_comp);

@@ -301,6 +301,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		return -EIO;
 	}
 
+	mutex_lock(&ab_ctx->mfd_lock);
+	ret = ab_ctx->mfd_ops->ab_ready(ab_ctx->mfd_ops->ctx);
+	mutex_unlock(&ab_ctx->mfd_lock);
+
 	/* Setup the function pointer to read DDR OTPs */
 	ab_ddr_setup(ab_ctx);
 

@@ -1558,11 +1558,36 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	return 0;
 }
 
+/* ab_ready also implies that PCIe link is enable */
+static int abc_pcie_ab_ready_handler(void *ctx)
+{
+	struct device *dev = (struct device *)ctx;
+
+	dev_dbg(dev,
+		"%s: ab_ready is high; PCIe link is enabled by host\n",
+		__func__);
+	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
+	return 0;
+}
+
+static int abc_pcie_pre_disable_handler(void *ctx)
+{
+	struct device *dev = (struct device *)ctx;
+
+	dev_dbg(dev,
+		"%s: PCIe link will be disabled by host\n",
+		__func__);
+	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
+	return 0;
+}
+
 static struct ab_sm_mfd_ops mfd_ops = {
 	.enter_el2 = &abc_pcie_enter_el2_handler,
 	.exit_el2 = &abc_pcie_exit_el2_handler,
 
 	.get_chip_id = &abc_pcie_get_chip_id_handler,
+	.ab_ready = &abc_pcie_ab_ready_handler,
+	.pcie_pre_disable = &abc_pcie_pre_disable_handler,
 };
 
 uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
