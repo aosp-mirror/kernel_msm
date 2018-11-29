@@ -43,7 +43,7 @@ static struct abc_device *abc_dev;
 static void abc_pcie_enable_irqs(struct pci_dev *pdev);
 static void abc_pcie_disable_irqs(struct pci_dev *pdev);
 
-static const struct mfd_cell abc_mfd_devs[] = {
+static const struct mfd_cell abc_mfd_of_nommu_devs[] = {
 	{
 		.name = "ab-pmu",
 		.of_compatible = "abc,airbrush-pmu",
@@ -1994,14 +1994,20 @@ exit_loop:
 	pci_set_drvdata(pdev, abc);
 
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
+
+	/*
+	 * It is necessary to add children device binded to OF node before
+	 * setup_smmu. The dma_mask is shared between mfd parent and
+	 * children, and it would be overwritten to DMA_BIT_MASK(32) in
+	 * children's of_dma_configure() if children binded to OF node.
+	 */
+	err = mfd_add_devices(dev, PLATFORM_DEVID_NONE, abc_mfd_of_nommu_devs,
+			ARRAY_SIZE(abc_mfd_of_nommu_devs), NULL, 0, NULL);
+	if (err < 0)
+		goto err_add_mfd_child;
 #if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
 	setup_smmu(pdev);
 #endif
-
-	err = mfd_add_devices(dev, -1, abc_mfd_devs, ARRAY_SIZE(abc_mfd_devs),
-			NULL, 0, NULL);
-	if (err < 0)
-		goto err_add_mfd_child;
 
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
