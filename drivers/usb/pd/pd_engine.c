@@ -248,11 +248,11 @@ static const char * const get_typec_cc_status_name(
 	case TYPEC_CC_RD:
 		return "Rd";
 	case TYPEC_CC_RP_DEF:
-		return "Rd-def";
+		return "Rp-def";
 	case TYPEC_CC_RP_1_5:
-		return "Rd-1.5";
+		return "Rp-1.5";
 	case TYPEC_CC_RP_3_0:
-		return "Rd-3.0";
+		return "Rp-3.0";
 	default:
 		return "UNDEFINED";
 	}
@@ -999,6 +999,10 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
 		rp_val.intval = TYPEC_SRC_RP_1P5A;
 		break;
+	case TYPEC_CC_RP_3_0:
+		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
+		rp_val.intval = TYPEC_SRC_RP_3A;
+		break;
 	default:
 		logbuffer_log(pd->log, "%s: invalid cc %s", __func__,
 			      get_typec_cc_status_name(cc));
@@ -1006,7 +1010,9 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		goto unlock;
 	}
 
-	if (cc == TYPEC_CC_RP_DEF || cc == TYPEC_CC_RP_1_5) {
+	if (cc == TYPEC_CC_RP_DEF ||
+	    cc == TYPEC_CC_RP_1_5 ||
+	    cc == TYPEC_CC_RP_3_0) {
 		ret = power_supply_set_property(pd->usb_psy,
 						POWER_SUPPLY_PROP_TYPEC_SRC_RP,
 						&rp_val);
@@ -1015,8 +1021,7 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 				      ret);
 		} else {
 			logbuffer_log(pd->log, "set Rp to %s",
-				      rp_val.intval == TYPEC_SRC_RP_STD ?
-				      "Rp-def" : "Rp-1.5A");
+				      get_typec_cc_status_name(cc));
 		}
 	}
 
