@@ -4225,6 +4225,27 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
+static const struct reg_sequence cs40l2x_dsp_errata[] = {
+	{CS40L2X_DSP1_XM_ACCEL_PL0_PRI,	0x00000000},
+	{CS40L2X_DSP1_YM_ACCEL_PL0_PRI,	0x00000000},
+	{CS40L2X_DSP1_RX1_RATE,		0x00000001},
+	{CS40L2X_DSP1_RX2_RATE,		0x00000001},
+	{CS40L2X_DSP1_RX3_RATE,		0x00000001},
+	{CS40L2X_DSP1_RX4_RATE,		0x00000001},
+	{CS40L2X_DSP1_RX5_RATE,		0x00000001},
+	{CS40L2X_DSP1_RX6_RATE,		0x00000001},
+	{CS40L2X_DSP1_RX7_RATE,		0x00000001},
+	{CS40L2X_DSP1_RX8_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX1_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX2_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX3_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX4_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX5_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX6_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX7_RATE,		0x00000001},
+	{CS40L2X_DSP1_TX8_RATE,		0x00000001},
+};
+
 static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
@@ -4232,6 +4253,13 @@ static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 	unsigned int val;
 	int dsp_timeout = CS40L2X_DSP_TIMEOUT_COUNT;
 	int ret;
+
+	ret = regmap_multi_reg_write(regmap, cs40l2x_dsp_errata,
+			ARRAY_SIZE(cs40l2x_dsp_errata));
+	if (ret) {
+		dev_err(dev, "Failed to apply DSP-specific errata\n");
+		return ret;
+	}
 
 	switch (cs40l2x->revid) {
 	case CS40L2X_REVID_A0:
@@ -6130,6 +6158,14 @@ static const struct reg_sequence cs40l2x_rev_a0_errata[] = {
 	{CS40L2X_CTRL_ASYNC1,		0x00000004},
 	{CS40L2X_IRQ1_DB3,		0x00000000},
 	{CS40L2X_IRQ2_DB3,		0x00000000},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
+	{CS40L2X_SPKMON_RESYNC,		0x00000000},
+	{CS40L2X_TEMP_RESYNC,		0x00000000},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE2},
+	{CS40L2X_VPVBST_FS_SEL,		0x00000000},
+	{CS40L2X_ASP_CONTROL4,		0x01010000},
 };
 
 static const struct reg_sequence cs40l2x_rev_b0_errata[] = {
@@ -6139,8 +6175,12 @@ static const struct reg_sequence cs40l2x_rev_b0_errata[] = {
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
 	{CS40L2X_OTP_TRIM_12,		0x002F0065},
 	{CS40L2X_OTP_TRIM_13,		0x00002B4F},
+	{CS40L2X_SPKMON_RESYNC,		0x00000000},
+	{CS40L2X_TEMP_RESYNC,		0x00000000},
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE1},
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE2},
+	{CS40L2X_VPVBST_FS_SEL,		0x00000000},
+	{CS40L2X_ASP_CONTROL4,		0x01010000},
 };
 
 static const struct reg_sequence cs40l2x_basic_mode_revert[] = {
