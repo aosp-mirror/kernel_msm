@@ -233,7 +233,7 @@ struct p9221_charger_data {
 	struct delayed_work		notifier_work;
 	struct delayed_work		dcin_work;
 	struct delayed_work		tx_work;
-	struct work_struct		icl_ramp_work;
+	struct delayed_work		icl_ramp_work;
 	struct alarm			icl_ramp_alarm;
 	struct timer_list		vrect_timer;
 	struct bin_attribute		bin;
