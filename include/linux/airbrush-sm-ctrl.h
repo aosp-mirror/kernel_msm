@@ -262,10 +262,9 @@ struct ab_sm_state_stat {
 
 typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 
-struct ab_sm_pwr_ops {
+struct ab_sm_pmu_ops {
 	void *ctx;
 
-	// TODO: Define pwr ops
 	int (*pmu_sleep)(void *ctx);
 	int (*pmu_deep_sleep)(void *ctx);
 	int (*pmu_resume)(void *ctx);
@@ -275,10 +274,9 @@ static int pmu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
 static int pmu_resume_stub(void *ctx)     { return -ENODEV; }
 
-static struct ab_sm_pwr_ops pwr_ops_stub = {
+static struct ab_sm_pmu_ops pmu_ops_stub = {
 	.ctx = NULL,
 
-	// TODO: Fill in with pwr ops
 	.pmu_sleep = &pmu_sleep_stub,
 	.pmu_deep_sleep = &pmu_deep_sleep_stub,
 	.pmu_resume = &pmu_resume_stub,
@@ -367,7 +365,10 @@ struct ab_sm_mfd_ops {
 
 static int enter_el2_stub(void *ctx) { return -ENODEV; }
 static int exit_el2_stub(void *ctx)  { return -ENODEV; }
-static int get_chip_id_stub(void *ctx, enum ab_chip_id *val)  { return -ENODEV; }
+static int get_chip_id_stub(void *ctx, enum ab_chip_id *val)
+{
+	return -ENODEV;
+}
 
 static struct ab_sm_mfd_ops mfd_ops_stub = {
 	.ctx = NULL,
@@ -469,8 +470,8 @@ struct ab_state_context {
 	struct ab_sm_state_stat state_stats[STAT_STATE_SIZE];
 
 	// MFD child operations
-	struct mutex 		op_lock;
-	struct ab_sm_pwr_ops	*pwr_ops;
+	struct mutex		op_lock;
+	struct ab_sm_pmu_ops	*pmu_ops;
 	struct ab_sm_clk_ops	*clk_ops;
 	struct ab_sm_dram_ops	*dram_ops;
 
@@ -478,7 +479,7 @@ struct ab_state_context {
 	 * will likely cause mfd to call unregister methods for other ops.
 	 * Would deadlock if using op_lock.
 	 */
-	struct mutex 		mfd_lock;
+	struct mutex		mfd_lock;
 	struct ab_sm_mfd_ops	*mfd_ops;
 };
 
@@ -500,8 +501,8 @@ struct ab_sm_misc_session {
 void ab_sm_register_blk_callback(enum block_name name,
 		ab_sm_set_block_state_t callback, void *data);
 
-void ab_sm_register_pwr_ops(struct ab_sm_pwr_ops *ops);
-void ab_sm_unregister_pwr_ops(void);
+void ab_sm_register_pmu_ops(struct ab_sm_pmu_ops *ops);
+void ab_sm_unregister_pmu_ops(void);
 void ab_sm_register_clk_ops(struct ab_sm_clk_ops *ops);
 void ab_sm_unregister_clk_ops(void);
 void ab_sm_register_dram_ops(struct ab_sm_dram_ops *ops);

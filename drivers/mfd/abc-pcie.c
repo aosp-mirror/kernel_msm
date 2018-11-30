@@ -46,7 +46,11 @@ static const struct mfd_cell abc_mfd_devs[] = {
 		.name = "ab-clk",
 		.of_compatible = "abc,airbrush-clk",
 	},
-	// TODO: Add TMU, DDR, and PMU drivers
+	{
+		.name = "ab-pmu",
+		.of_compatible = "abc,airbrush-pmu",
+	},
+	// TODO: Add TMU, and DDR drivers
 };
 
 void __iomem *get_tpu_virt(void)

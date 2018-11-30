@@ -15,11 +15,8 @@
 #ifndef _AIRBRUSH_PMU_H_
 #define _AIRBRUSH_PMU_H_
 
-#include <linux/airbrush-sm-ctrl.h>
-
-int ab_pmu_sleep(void *ctx);
-int ab_pmu_deep_sleep(void *ctx);
-int ab_pmu_resume(void *ctx);
-void abc_ipu_tpu_enable(void);
+struct ab_pmu_context {
+	struct device *dev;
+};
 
 #endif //_AIRBRUSH_PMU_H_

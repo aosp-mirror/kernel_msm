@@ -244,7 +244,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	u32 to_block_state_id, bool power_control, u32 to_chip_substate_id)
 {
-	struct ab_sm_pwr_ops *pwr;
+	struct ab_sm_pmu_ops *pmu;
 	bool power_increasing;
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
@@ -258,13 +258,13 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 				< desired_state->logic_voltage);
 
 	mutex_lock(&sc->op_lock);
-	pwr = sc->pwr_ops;
+	pmu = sc->pmu_ops;
 	/* PMU settings */
 	if (power_control && blk->name == BLK_IPU) {
 		if (desired_state->id != BLOCK_STATE_1_2
 				&& desired_state->id != BLOCK_STATE_3_0
 				&& blk->current_state->id >= BLOCK_STATE_1_2) {
-			if (pwr->pmu_resume(pwr->ctx)) {
+			if (pmu->pmu_resume(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
@@ -282,12 +282,12 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	/* PMU settings */
 	if (power_control && blk->name == BLK_TPU) {
 		if (desired_state->id == BLOCK_STATE_1_2 &&
-				pwr->pmu_sleep(pwr->ctx)) {
+				pmu->pmu_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
 		if (desired_state->id == BLOCK_STATE_3_0 &&
-				pwr->pmu_deep_sleep(pwr->ctx)) {
+				pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
@@ -700,21 +700,21 @@ enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 	return sc->chip_id;
 }
 
-void ab_sm_register_pwr_ops(struct ab_sm_pwr_ops *ops)
+void ab_sm_register_pmu_ops(struct ab_sm_pmu_ops *ops)
 {
 	mutex_lock(&ab_sm_ctx->op_lock);
-	ab_sm_ctx->pwr_ops = ops;
+	ab_sm_ctx->pmu_ops = ops;
 	mutex_unlock(&ab_sm_ctx->op_lock);
 }
-EXPORT_SYMBOL(ab_sm_register_pwr_ops);
+EXPORT_SYMBOL(ab_sm_register_pmu_ops);
 
-void ab_sm_unregister_pwr_ops(void)
+void ab_sm_unregister_pmu_ops(void)
 {
 	mutex_lock(&ab_sm_ctx->op_lock);
-	ab_sm_ctx->pwr_ops = &pwr_ops_stub;
+	ab_sm_ctx->pmu_ops = &pmu_ops_stub;
 	mutex_unlock(&ab_sm_ctx->op_lock);
 }
-EXPORT_SYMBOL(ab_sm_unregister_pwr_ops);
+EXPORT_SYMBOL(ab_sm_unregister_pmu_ops);
 
 void ab_sm_register_clk_ops(struct ab_sm_clk_ops *ops)
 {
@@ -980,13 +980,6 @@ static void ab_sm_state_stats_init(struct ab_state_context *sc)
 	sc->state_stats[curr_stat_state].last_entry = ktime_get_boottime();
 }
 
-//TODO: Pull this out to pmu driver
-static struct ab_sm_pwr_ops pwr_ops = {
-	.pmu_sleep = &ab_pmu_sleep,
-	.pmu_deep_sleep = &ab_pmu_deep_sleep,
-	.pmu_resume = &ab_pmu_resume,
-};
-
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1115,14 +1108,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_state_stats_init(ab_sm_ctx);
 
 	/* Initialize stub ops */
-	ab_sm_register_pwr_ops(&pwr_ops_stub);
+	ab_sm_register_pmu_ops(&pmu_ops_stub);
 	ab_sm_register_clk_ops(&clk_ops_stub);
 	ab_sm_register_dram_ops(&dram_ops_stub);
 	ab_sm_register_mfd_ops(&mfd_ops_stub);
-
-	// TODO: Pull this out to pmu driver
-	pwr_ops.ctx = ab_sm_ctx;
-	ab_sm_register_pwr_ops(&pwr_ops);
 
 	/*
 	 * TODO error handle at airbrush-sm should return non-zero value to
