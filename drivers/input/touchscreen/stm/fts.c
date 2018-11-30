@@ -2789,8 +2789,6 @@ static void heatmap_enable(void)
 
 static bool read_heatmap_raw(struct v4l2_heatmap *v4l2, strength_t *data)
 {
-	unsigned char heatmap_read_command[] = {0xA6, 0x00, 0x00};
-
 	unsigned int num_elements;
 	/* index for looping through the heatmap buffer read over the bus */
 	unsigned int local_i;
@@ -2810,8 +2808,9 @@ static bool read_heatmap_raw(struct v4l2_heatmap *v4l2, strength_t *data)
 
 	struct heatmap_report report = {0};
 
-	result = fts_writeRead(heatmap_read_command, 3,
-		(uint8_t *) &report, sizeof(report));
+	result = fts_writeReadU8UX(FTS_CMD_FRAMEBUFFER_R, BITS_16,
+				   ADDR_FRAMEBUFFER, (uint8_t *)&report,
+				   sizeof(report), DUMMY_FRAMEBUFFER);
 	if (result != OK) {
 		pr_err("%s: i2c read failed, fts_writeRead returned %i",
 			__func__, result);
