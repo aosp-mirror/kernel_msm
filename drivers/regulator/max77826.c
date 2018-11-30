@@ -344,8 +344,7 @@ static int max77826_ldo_set_voltage(struct regulator_dev *rdev,
 	max77826_read_reg(max77826->i2c, reg, &val);
 	val = (val & mask) >> shift;
 
-	pr_debug("%s: id=%d, reg=0x%x,",
-		"mask=0x%x, val=0x%x, new=0x%x\n",
+	pr_debug("%s: id=%d, reg=0x%x,mask=0x%x, val=0x%x, new=0x%x\n",
 		__func__, rdev_get_id(rdev), reg, mask, val, i);
 
 	ret = max77826_update_reg(max77826->i2c,
@@ -417,6 +416,7 @@ static int max77826_setup_regulators(struct max77826_dev *max77826,
 {
 	int i, err;
 	struct regulator_config config = { };
+	int volt_range = 0;
 
 	max77826->rdev = kcalloc(MAX77826_REG_MAX,
 				sizeof(struct regulator_dev *), GFP_KERNEL);
@@ -430,7 +430,10 @@ static int max77826_setup_regulators(struct max77826_dev *max77826,
 
 	/* Register the regulators */
 	for (i = 0; i < MAX77826_REG_MAX; i++) {
-
+		volt_range =
+			reg_voltage_map[i]->max - reg_voltage_map[i]->min;
+		regulators[regulators[i].id].n_voltages =
+			volt_range / reg_voltage_map[i]->step;
 		max77826->rdev[i] = devm_regulator_register(max77826->dev,
 			&regulators[regulators[i].id], &config);
 		if (IS_ERR(max77826->rdev[i])) {
