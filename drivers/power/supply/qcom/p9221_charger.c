@@ -1033,12 +1033,12 @@ static enum alarmtimer_restart p9221_icl_ramp_alarm_cb(struct alarm *alarm,
 			container_of(alarm, struct p9221_charger_data,
 				     icl_ramp_alarm);
 
-	dev_info(&charger->client->dev, "ICL alarm, ramp=%d\n",
+	dev_info(&charger->client->dev, "ICL ramp alarm, ramp=%d\n",
 		 charger->icl_ramp);
 
 	/* Alarm is in atomic context, schedule work to complete the task */
 	pm_stay_awake(charger->dev);
-	schedule_work(&charger->icl_ramp_work);
+	schedule_delayed_work(&charger->icl_ramp_work, msecs_to_jiffies(100));
 
 	return ALARMTIMER_NORESTART;
 }
@@ -1046,19 +1046,20 @@ static enum alarmtimer_restart p9221_icl_ramp_alarm_cb(struct alarm *alarm,
 static void p9221_icl_ramp_work(struct work_struct *work)
 {
 	struct p9221_charger_data *charger = container_of(work,
-			struct p9221_charger_data, icl_ramp_work);
-
-	dev_info(&charger->client->dev, "ICL ramp, ramp=%d\n",
-		 charger->icl_ramp);
+			struct p9221_charger_data, icl_ramp_work.work);
 
 	pm_runtime_get_sync(charger->dev);
 	if (!charger->resume_complete) {
 		pm_runtime_put_sync(charger->dev);
-		schedule_work(&charger->icl_ramp_work);
-		dev_info(&charger->client->dev, "Ramp reschedule\n");
+		schedule_delayed_work(&charger->icl_ramp_work,
+				      msecs_to_jiffies(100));
+		dev_dbg(&charger->client->dev, "Ramp reschedule\n");
 		return;
 	}
 	pm_runtime_put_sync(charger->dev);
+
+	dev_info(&charger->client->dev, "ICL ramp work, ramp=%d\n",
+		 charger->icl_ramp);
 
 	charger->icl_ramp = true;
 	p9221_set_dc_icl(charger);
@@ -1075,7 +1076,7 @@ static void p9221_icl_ramp_reset(struct p9221_charger_data *charger)
 
 	if (alarm_try_to_cancel(&charger->icl_ramp_alarm) < 0)
 		dev_warn(&charger->client->dev, "Couldn't cancel icl_ramp_alarm\n");
-	cancel_work(&charger->icl_ramp_work);
+	cancel_delayed_work(&charger->icl_ramp_work);
 }
 
 static void p9221_icl_ramp_start(struct p9221_charger_data *charger)
@@ -2247,7 +2248,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		    (unsigned long)charger);
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
-	INIT_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
+	INIT_DELAYED_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
 		   p9221_icl_ramp_alarm_cb);
 
@@ -2363,7 +2364,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&charger->dcin_work);
 	cancel_delayed_work_sync(&charger->tx_work);
-	cancel_work_sync(&charger->icl_ramp_work);
+	cancel_delayed_work_sync(&charger->icl_ramp_work);
 	alarm_try_to_cancel(&charger->icl_ramp_alarm);
 	del_timer_sync(&charger->vrect_timer);
 	device_init_wakeup(charger->dev, false);
