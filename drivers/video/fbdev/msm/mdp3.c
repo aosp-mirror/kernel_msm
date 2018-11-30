@@ -1355,6 +1355,8 @@ int mdp3_put_img(struct mdp3_img_data *data, int client)
 			return -ENOMEM;
 		}
 		if (data->mapped) {
+			MDSS_XLOG(data->srcp_dma_buf, data->addr,
+					data->len, client);
 			if (client == MDP3_CLIENT_PPP ||
 						client == MDP3_CLIENT_DMA_P)
 				mdss_smmu_unmap_dma_buf(data->tab_clone,
@@ -1511,7 +1513,8 @@ done:
 	if (!ret && (img->offset < data->len)) {
 		data->addr += img->offset;
 		data->len -= img->offset;
-
+		MDSS_XLOG(img->memory_id, data->srcp_dma_buf, data->addr,
+				data->len, client);
 		pr_debug("mem=%d ihdl=%pK buf=0x%pa len=0x%lx\n",
 			img->memory_id, data->srcp_dma_buf,
 			&data->addr, data->len);
