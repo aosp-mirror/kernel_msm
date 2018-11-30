@@ -10,12 +10,13 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/airbrush-clk.h>
 #include <linux/airbrush-sm-ctrl.h>
 #include <linux/airbrush-sm-notifier.h>
 #include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/mfd/abc-pcie.h>
+
+#include "airbrush-clk.h"
 
 #define OSC_RATE 19200000
 
@@ -281,6 +282,7 @@ static int ab_clk_deattach_mif_clk_ref_handler(void *ctx)
 {
 	uint32_t val;
 	uint32_t timeout = MIF_PLL_TIMEOUT;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 
 	ABC_READ(MIF_PLL_CONTROL0, &val);
 	val |= (1 << 4);
@@ -291,7 +293,8 @@ static int ab_clk_deattach_mif_clk_ref_handler(void *ctx)
 	} while (!(val & 0x20000000) && --timeout > 0);
 
 	if (timeout == 0) {
-		pr_err("Timeout waiting for AIRBRUSH MIF PLL lock\n");
+		dev_err(clk_ctx->dev,
+			"Timeout waiting for AIRBRUSH MIF PLL lock\n");
 		return -E_STATUS_TIMEOUT;
 	}
 
@@ -324,7 +327,7 @@ static int ab_clk_probe(struct platform_device *pdev)
 	struct device_node *ab_clk_nd;
 	struct ab_clk_context *clk_ctx;
 
-	clk_ctx = kzalloc(sizeof(struct ab_clk_context), GFP_KERNEL);
+	clk_ctx = devm_kzalloc(dev, sizeof(struct ab_clk_context), GFP_KERNEL);
 	if (!clk_ctx)
 		return -ENOMEM;
 
@@ -450,7 +453,6 @@ static int ab_clk_remove(struct platform_device *pdev)
 	if (clk_ctx->aon_pll_mux)
 		clk_put(clk_ctx->aon_pll_mux);
 
-	kfree(clk_ctx);
 	return 0;
 }
 
