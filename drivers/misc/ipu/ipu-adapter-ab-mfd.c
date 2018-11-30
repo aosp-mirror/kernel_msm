@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
+#include <linux/mfd/abc-pcie-notifier.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
@@ -48,6 +49,7 @@ struct ipu_adapter_ab_mfd_data {
 	struct atomic_notifier_head *low_priority_irq_nh;
 
 	struct notifier_block clk_change_nb;
+	struct notifier_block pcie_link_blocking_nb;
 };
 
 /* Paintbox IO virtual address space bounds
@@ -418,6 +420,31 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
+					      unsigned long action,
+					      void *data)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data =
+			container_of(nb,
+				     struct ipu_adapter_ab_mfd_data,
+				     pcie_link_blocking_nb);
+
+	switch (action) {
+	case ABC_PCIE_LINK_POST_ENABLE:
+		dev_dbg(dev_data->dev,
+			"%s: may continue to use pcie\n", __func__);
+		break;
+	case ABC_PCIE_LINK_PRE_DISABLE:
+		dev_dbg(dev_data->dev,
+			"%s: should stop using pcie\n", __func__);
+		break;
+	default:
+		return NOTIFY_DONE;  /* Don't care */
+	}
+
+	return NOTIFY_OK;
+}
+
 static void ipu_adapter_ab_mfd_set_platform_data(struct platform_device *pdev,
 		struct paintbox_pdata *pdata)
 {
@@ -579,6 +606,17 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 		goto err_deinitialize_bus;
 	}
 
+	dev_data->pcie_link_blocking_nb.notifier_call =
+				ipu_adapter_pcie_blocking_listener;
+	ret = abc_register_pcie_link_blocking_event(
+				&dev_data->pcie_link_blocking_nb);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"failed to subscribe to PCIe blocking link event, ret %d\n",
+			ret);
+		goto err_deinitialize_bus;
+	}
+
 	return 0;
 
 err_deinitialize_bus:
@@ -594,6 +632,8 @@ static int ipu_adapter_ab_mfd_remove(struct platform_device *pdev)
 	struct ipu_adapter_ab_mfd_data *dev_data =
 			platform_get_drvdata(pdev);
 
+	abc_unregister_pcie_link_blocking_event(
+				&dev_data->pcie_link_blocking_nb);
 	ab_sm_unregister_clk_event(&dev_data->clk_change_nb);
 	ipu_bus_deinitialize(dev_data->bus);
 	dev_data->bus = NULL;
