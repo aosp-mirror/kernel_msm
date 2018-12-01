@@ -251,10 +251,10 @@ int abc_pcie_sg_retrieve_from_dma_buf(int fd, struct abc_pcie_sg_entry **sg,
 	/* Convert sc_list to a Synopsys compatible linked-list */
 	sgl->length = scatterlist_to_abc_sg(sgl->sc_list, sgl->n_num,
 					    *sg, maxsg);
-	if (IS_ERR(&sgl->length)) {
+	if (sgl->length < 0) {
 		vfree((*sg));
 		*sg = NULL;
-		ret = PTR_ERR(&sgl->length);
+		ret = sgl->length;
 		abc_pcie_sg_release_from_dma_buf(sgl);
 		return ret;
 	}
