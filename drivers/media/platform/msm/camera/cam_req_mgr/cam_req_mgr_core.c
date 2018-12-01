@@ -2941,8 +2941,18 @@ int cam_req_mgr_tag_laser(struct cam_req_mgr_message *msg)
 	struct cam_req_mgr_connected_device *dev = NULL;
 	int rc = 0, i;
 
+	if (!msg) {
+		CAM_ERR(CAM_CRM, "req mgr msg point is NULL");
+		return -EINVAL;
+	}
+
 	link = (struct cam_req_mgr_core_link *)
 		cam_get_device_priv(msg->u.frame_msg.link_hdl);
+
+	if (!link) {
+		CAM_ERR(CAM_CRM, "link ptr NULL %x", msg->u.frame_msg.link_hdl);
+		return -EINVAL;
+	}
 
 	/* Call to sensor strobe api */
 	for (i = 0; i < link->num_devs; i++) {
