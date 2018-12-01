@@ -484,6 +484,11 @@ void ipu_core_jqs_disable_clock(struct paintbox_bus *bus)
 
 	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
 
+	/* TODO(b/120103780):  In lieu of DRAM up/dn notifications use the
+	 * clock disable notifications as a proxy for DRAM down.
+	 */
+	ipu_core_jqs_unstage_firmware(bus);
+
 	mutex_unlock(&bus->jqs.lock);
 }
 
