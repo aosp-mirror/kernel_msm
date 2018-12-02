@@ -606,6 +606,7 @@ static const struct airbrush_pll_rate_table pll_ipu_tbl[] = {
 	PLL_F081XX_RATE(408000000, 340, 2, 3),
 	PLL_F081XX_RATE(272000000, 680, 3, 4),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
+	PLL_F081XX_RATE(19200000, 288, 9, 5),
 #endif
 #ifdef CONFIG_A0
 	PLL_F081XX_RATE(610000000, 254, 2, 2),
@@ -615,6 +616,7 @@ static const struct airbrush_pll_rate_table pll_ipu_tbl[] = {
 	PLL_F081XX_RATE(330000000, 275, 2, 3),
 	PLL_F081XX_RATE(220000000, 550, 3, 4),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
+	PLL_F081XX_RATE(19200000, 288, 9, 5),
 #endif
 };
 
@@ -904,6 +906,7 @@ static const struct airbrush_pll_rate_table pll_tpu_tbl[] = {
 	PLL_F081XX_RATE(468000000, 390, 2, 3),
 	PLL_F081XX_RATE(312000000, 260, 2, 3),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
+	PLL_F081XX_RATE(19200000, 288, 9, 5),
 #endif
 #ifdef CONFIG_A0
 	PLL_F081XX_RATE(962000000, 601, 3, 2),
@@ -912,6 +915,7 @@ static const struct airbrush_pll_rate_table pll_tpu_tbl[] = {
 	PLL_F081XX_RATE(454000000, 378, 2, 3),
 	PLL_F081XX_RATE(303000000, 505, 2, 4),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
+	PLL_F081XX_RATE(19200000, 288, 9, 5),
 #endif
 };
 

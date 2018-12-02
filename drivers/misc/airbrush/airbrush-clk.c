@@ -112,6 +112,7 @@ static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
+		clk_set_rate(clk_ctx->ipu_pll, OSC_RATE);
 		clk_set_rate(clk_ctx->ipu_pll_div, OSC_RATE);
 		clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->ipu_pll_div);
 
@@ -221,6 +222,7 @@ static u64 ab_clk_tpu_set_rate_handler(void *ctx, u64 rate)
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
+		clk_set_rate(clk_ctx->tpu_pll, OSC_RATE);
 		clk_set_rate(clk_ctx->tpu_pll_div, OSC_RATE);
 		clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->tpu_pll_div);
 
