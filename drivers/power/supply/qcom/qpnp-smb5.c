@@ -556,6 +556,7 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_SCOPE,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
 	POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE,
+	POWER_SUPPLY_PROP_MOISTURE_DETECTED,
 };
 
 static int smb5_usb_get_prop(struct power_supply *psy,
@@ -705,6 +706,11 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
 		rc = smblib_get_prop_input_current_max(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_MOISTURE_DETECTED:
+		val->intval = (chg->lpd_reason == LPD_MOISTURE_DETECTED
+			       && chg->lpd_stage == LPD_STAGE_COMMIT) ? 1 :
+			       0;
 		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);

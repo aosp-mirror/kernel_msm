@@ -4647,6 +4647,7 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 disable:
 	chg->lpd_stage = LPD_STAGE_NONE;
 	chg->lpd_reason = LPD_NONE;
+	power_supply_changed(chg->usb_psy);
 
 exit:
 	spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
@@ -4741,6 +4742,7 @@ static bool smblib_src_lpd(struct smb_charger *chg)
 		chg->lpd_reason = LPD_NONE;
 		chg->typec_mode = smblib_get_prop_typec_mode(chg);
 	}
+	power_supply_changed(chg->usb_psy);
 
 	spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
 	return lpd_flag;
@@ -5746,6 +5748,7 @@ static void smblib_lpd_ra_open_work(struct work_struct *work)
 		chg->lpd_reason = LPD_FLOATING_CABLE;
 	}
 
+	power_supply_changed(chg->usb_psy);
 	/* recheck in 60 seconds */
 	alarm_start_relative(&chg->lpd_recheck_timer, ms_to_ktime(60000));
 unlock:
