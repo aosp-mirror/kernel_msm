@@ -26,7 +26,7 @@
 #include <linux/regulator/machine.h>
 
 
-#include "s2mpb04-core.h"
+#include "s2mpg01-core.h"
 
 #define DRIVER_NAME "s2mpb04"
 
@@ -376,7 +376,9 @@ static struct s2mpb04_platform_data *s2mpb04_get_platform_data_from_dt
 		return ERR_PTR(-ENOMEM);
 
 	pdata->pon_gpio = of_get_named_gpio(np, "samsung,pon-gpio", 0);
-	pdata->pmic_ready_gpio = of_get_named_gpio(np, "samsung,pmic-ready-gpio", 0);
+	pdata->pmic_ready_gpio = of_get_named_gpio(np,
+						   "samsung,pmic-ready-gpio",
+						   0);
 	pdata->intb_gpio = of_get_named_gpio(np, "samsung,intb-gpio", 0);
 	pdata->resetb_irq = gpio_to_irq(pdata->pmic_ready_gpio);
 	pdata->intb_irq = gpio_to_irq(pdata->intb_gpio);

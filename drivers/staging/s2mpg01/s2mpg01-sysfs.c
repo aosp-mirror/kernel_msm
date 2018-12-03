@@ -17,7 +17,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 
-#include "s2mpb04-core.h"
+#include "s2mpg01-core.h"
 
 /* used for register access attributes */
 static u8 _reg_addr;

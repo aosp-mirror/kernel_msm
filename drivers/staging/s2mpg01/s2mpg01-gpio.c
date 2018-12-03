@@ -20,7 +20,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 
-#include "s2mpb04-core.h"
+#include "s2mpg01-core.h"
 
 #define DRIVER_NAME "s2mpb04-gpio"
 
@@ -79,10 +79,10 @@ static void s2mpb04_gpio_set(struct gpio_chip *gpio_chip, unsigned int offset,
 	struct s2mpb04_gpio *s2mpb04_gpio = to_s2mpb04_gpio(gpio_chip);
 	struct s2mpb04_core *s2mpb04_core = s2mpb04_gpio->s2mpb04_core;
 
-    s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_A,
-            (1 << offset), ((value ? 1 : 0) << offset));
-    s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_CTRL,
-            (0x40 << offset), (0x40 << offset));
+	s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_A,
+			    (1 << offset), ((value ? 1 : 0) << offset));
+	s2mpb04_update_bits(s2mpb04_core, S2MPB04_REG_GPIO_CTRL,
+			    (0x40 << offset), (0x40 << offset));
 }
 
 static int s2mpb04_gpio_direction_output(struct gpio_chip *gpio_chip,

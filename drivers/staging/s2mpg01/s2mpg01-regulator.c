@@ -21,7 +21,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 
-#include "s2mpb04-core.h"
+#include "s2mpg01-core.h"
 
 #define DRIVER_NAME "s2mpb04-regulator"
 

@@ -18,7 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/thermal.h>
 
-#include "s2mpb04-core.h"
+#include "s2mpg01-core.h"
 
 #define DRIVER_NAME "s2mpb04-thermal"
 
