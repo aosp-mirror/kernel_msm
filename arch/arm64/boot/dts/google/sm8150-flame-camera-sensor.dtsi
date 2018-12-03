@@ -177,7 +177,13 @@
 };
 
 &lm36011_dot {
-    sx9320_sid = <0x2c>;
+	sx9320_sid = <0x2c>;
+	pinctrl-names = "lm36011_init";
+	pinctrl-0 = <&ir_vcsel_fault &ir_vcsel_test &csense_irq>;
+	gpios = <&tlmm 124 0>,
+		<&pm8150l_gpios 4 0>,
+		<&pm8150l_gpios 5 0>,
+		<&tlmm 49 0>;
 };
 
 &cam_cci0 {

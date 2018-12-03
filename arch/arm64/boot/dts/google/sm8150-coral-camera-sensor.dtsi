@@ -176,6 +176,15 @@
 		<&tlmm 49 0>;
 };
 
+&lm36011_dot {
+	pinctrl-names = "lm36011_init";
+	pinctrl-0 = <&ir_vcsel_fault &ir_vcsel_test &csense_irq>;
+	gpios = <&tlmm 124 0>,
+		<&pm8150l_gpios 4 0>,
+		<&pm8150l_gpios 5 0>,
+		<&tlmm 49 0>;
+};
+
 &cam_cci0 {
 	qcom,cam-res-mgr {
 		compatible = "qcom,cam-res-mgr";
