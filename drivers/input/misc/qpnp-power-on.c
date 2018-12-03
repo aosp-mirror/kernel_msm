@@ -2118,7 +2118,8 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 					int *reason_index_offset)
 {
 	int rc;
-	int buf[2], reg;
+	int reg;
+	u8 buf[2];
 
 	rc = regmap_read(pon->regmap,
 			QPNP_PON_OFF_REASON(pon),
@@ -2132,7 +2133,7 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	if (reg & QPNP_GEN2_POFF_SEQ) {
 		rc = regmap_read(pon->regmap,
 				QPNP_POFF_REASON1(pon),
-				buf);
+				(u32 *)buf);
 		if (rc) {
 			dev_err(&pon->pdev->dev, "Unable to read POFF_REASON1 reg rc:%d\n",
 				rc);
@@ -2154,7 +2155,7 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	} else if (reg & QPNP_GEN2_S3_RESET_SEQ) {
 		rc = regmap_read(pon->regmap,
 				QPNP_S3_RESET_REASON(pon),
-				buf);
+				(u32 *)buf);
 		if (rc) {
 			dev_err(&pon->pdev->dev, "Unable to read S3_RESET_REASON reg rc:%d\n",
 				rc);
