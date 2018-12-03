@@ -77,6 +77,7 @@
 #define OSCAR_RESET_RETRY 120	/* check reset 120 times */
 #define OSCAR_RESET_DELAY 100	/* wait 100 ms between checks */
 				/* total 12 sec wait maximum */
+#define OSCAR_ACK_DELAY	  1     /* wait 1 ms between checking reg writes */
 
 /* enum sysfs_attribute_type: enumeration of the supported sysfs entries. */
 enum sysfs_attribute_type {
@@ -90,11 +91,9 @@ enum sysfs_attribute_type {
  * Only values necessary for driver implementation are defined.
  */
 enum oscar_bar_regs {
+	OSCAR_BAR_REG_SC_RUNCTRL = 0x4018,
 	OSCAR_BAR_REG_HIB_PAGE_TABLE_SIZE = 0x6000,
 	OSCAR_BAR_REG_KERNEL_HIB_EXTENDED_TABLE = 0x6008,
-	OSCAR_BAR_REG_KERNEL_HIB_TRANSLATION_ENABLE = 0x6010,
-	OSCAR_BAR_REG_KERNEL_HIB_DMA_PAUSE = 0x46050,
-	OSCAR_BAR_REG_KERNEL_HIB_DMA_PAUSE_MASK = 0x6058,
 	OSCAR_BAR_REG_HIB_PAGE_TABLE_INIT = 0x6078,
 	OSCAR_BAR_REG_USER_HIB_DMA_PAUSE = 0x86D8,
 	OSCAR_BAR_REG_USER_HIB_DMA_PAUSED = 0x86E0,
@@ -105,13 +104,20 @@ enum oscar_bar_regs {
 	OSCAR_BAR_REG_AON_CLOCK_ENABLE = 0x20008,
 	OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE = 0x00020010,
 	OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL = 0x00020018,
-	OSCAR_BAR_REG_AON_MEM_SHUTDOWN = 0x00020020,
-	OSCAR_BAR_REG_AON_MEM_POWERDOWN = 0x00020028,
+	OSCAR_BAR_REG_AON_TILEMEM_RETN = 0x00020020,
+	OSCAR_BAR_REG_AON_MEM_SHUTDOWN = 0x00020028,
+	OSCAR_BAR_REG_AON_MEM_SHUTDOWN_ACK = 0x00020030,
 	OSCAR_BAR_REG_AON_CLAMP_ENABLE = 0x00020038,
 	OSCAR_BAR_REG_AON_FORCE_QUIESCE = 0x00020040,
 	OSCAR_BAR_REG_AON_AXITIEOFFS = 0x00020048,
-	OSCAR_BAR_REG_AON_IDLE = 0x00020050,
 };
+
+/* AON_LOGIC_SHUTDOWN_* registers mask for logic_shutdown_*_ack field */
+#define MASK_AON_LOGIC_SHUTDOWN_ACK (0x1fffffull << 17)
+/* AON_MEM_SHUTDOWN_ACK register mask for memory_shutdown_ack field */
+#define MASK_AON_MEM_SHUTDOWN_ACK (0x1fffff)
+/* SC_RUNCTRL register mask for trigger field */
+#define MASK_SC_RUNCTRL_TRIGGER (0x3)
 
 /* For now map the entire BAR into user space. (This helps debugging when
  * running test vectors from user land)
@@ -538,9 +544,9 @@ static int oscar_enter_reset(struct gasket_dev *gasket_dev)
 
 	/* 6. Enable Memory shutdown. */
 	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
-			    OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
+			    OSCAR_BAR_REG_AON_TILEMEM_RETN);
 	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
-			    OSCAR_BAR_REG_AON_MEM_POWERDOWN);
+			    OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
 
 	/* 7. Enable Logic shutdown. */
 	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
@@ -564,53 +570,107 @@ static int oscar_quit_reset(struct gasket_dev *gasket_dev)
 	if (bypass_top_level)
 		return 0;
 
-	/* 1. Enable Logic shutdown. */
+	/* 1. Enable logic shutdown. */
+	/* 1a. Disable first pass switches, wait until ack matches. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE);
+	if (gasket_wait_with_reschedule(gasket_dev, OSCAR_BAR_INDEX,
+					OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE,
+					MASK_AON_LOGIC_SHUTDOWN_ACK, 0,
+					OSCAR_RESET_RETRY, OSCAR_ACK_DELAY)) {
+		dev_err(gasket_dev->dev,
+			"Logic shutdown pre failed after timeout (%d ms)\n",
+			OSCAR_RESET_RETRY * OSCAR_ACK_DELAY);
+		return -ETIMEDOUT;
+	}
+
+	/* 1b. Disable second pass switches, wait until ack matches. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL);
+	if (gasket_wait_with_reschedule(gasket_dev, OSCAR_BAR_INDEX,
+					OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL,
+					MASK_AON_LOGIC_SHUTDOWN_ACK, 0,
+					OSCAR_RESET_RETRY, OSCAR_ACK_DELAY)) {
+		dev_err(gasket_dev->dev,
+			"Logic shutdown all failed after timeout (%d ms)\n",
+			OSCAR_RESET_RETRY * OSCAR_ACK_DELAY);
+		return -ETIMEDOUT;
+	}
 
 	/*
 	 * 2. Enable Clock Enable, and set idle_override to force the clock on.
-	 * - clock_enable = 1.
+	 *  - clock_enable = 1.
 	 *  - cb_idle_override = 1.
 	 */
 	gasket_dev_write_64(gasket_dev, 3, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
 
+	/* 3. Read clock enable to force previous write to commit. */
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
 	/*
-	 * 3. Disable Clock Enable.
+	 * 4. Disable Clock Enable.
 	 *  - clock_enable = 0.
 	 *  - cb_idle_override = 1.
 	 */
 	gasket_dev_write_64(gasket_dev, 2, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
 
-	/* 4. Disable Memory shutdown. */
+	/* 5. Read clock enable to force previous write to commit. */
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/* 6. Disable memory shutdown, wait for ack. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
+	if (gasket_wait_with_reschedule(gasket_dev, OSCAR_BAR_INDEX,
+					OSCAR_BAR_REG_AON_MEM_SHUTDOWN_ACK,
+					MASK_AON_MEM_SHUTDOWN_ACK, 0,
+					OSCAR_RESET_RETRY, OSCAR_ACK_DELAY)) {
+		dev_err(gasket_dev->dev,
+			"Memory shutdown failed after timeout (%d ms)\n",
+			OSCAR_RESET_RETRY * OSCAR_ACK_DELAY);
+		return -ETIMEDOUT;
+	}
+
+	/* 7. Enable tile retention when memory powered down. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
-			    OSCAR_BAR_REG_AON_MEM_POWERDOWN);
+			    OSCAR_BAR_REG_AON_TILEMEM_RETN);
 
 	/*
-	 * 5. Enable Clock Enable, with dynamic activity based clock gating.
+	 * 8. Enable clock, with dynamic activity based clock gating.
 	 *  - clock_enable = 1.
 	 *  - cb_idle_override = 0.
 	 */
 	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
 
-	/* 6. Disable Clamp. */
+	/* 9. Disable Clamp. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLAMP_ENABLE);
 
-	/* 7. Disable Reset. */
+	/* 10. Disable Reset. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_RESET);
 
-	/* 8. Disable Quiesce. */
+	/* 11. Disable Quiesce. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_FORCE_QUIESCE);
+
+	/*
+	 * 12. Confirm moved out of reset by reading any CSR with a known
+	 * initial value.  Scalar core run control must be zero.
+	 */
+	if (gasket_wait_with_reschedule(gasket_dev, OSCAR_BAR_INDEX,
+					OSCAR_BAR_REG_SC_RUNCTRL,
+					MASK_SC_RUNCTRL_TRIGGER, 0,
+					OSCAR_RESET_RETRY, OSCAR_ACK_DELAY)) {
+		dev_err(gasket_dev->dev,
+			"Wait for reset confirm failed after timeout (%d ms)\n",
+			OSCAR_RESET_RETRY * OSCAR_ACK_DELAY);
+		return -ETIMEDOUT;
+	}
 
 	/*
 	 * Set tpu_aon register axiTieOffsReg fields arcache and awcache
