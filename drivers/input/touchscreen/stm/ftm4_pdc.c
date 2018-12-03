@@ -1883,7 +1883,7 @@ static void get_cx_all_data(void *device_data)
 		memset(&ReadData[j], 0x0, rx_num);
 		memset(pStr, 0x0, 4 * (rx_num + 1));
 		snprintf(pTmp, sizeof(pTmp), "Tx%02d | ", j);
-		strncat(pStr, pTmp, 4 * rx_num);
+		strlcat(pStr, pTmp, 4 * (rx_num + 1));
 
 		addr = comp_start_addr + (rx_num * j);
 		regAdd[0] = 0xD0;
@@ -1892,7 +1892,7 @@ static void get_cx_all_data(void *device_data)
 		info->fts_read_reg(info, regAdd, 3, &ReadData[j][0], rx_num + 1);
 		for (i = 0; i < rx_num; i++) {
 			snprintf(pTmp, sizeof(pTmp), "%3d", ReadData[j][i]);
-			strncat(pStr, pTmp, 4 * rx_num);
+			strlcat(pStr, pTmp, 4 * (rx_num + 1));
 		}
 		tsp_debug_info(&info->client->dev, "%s\n", pStr);
 	}
@@ -1904,7 +1904,7 @@ static void get_cx_all_data(void *device_data)
 					ReadData[j][i];
 				snprintf(buff, sizeof(buff),
 						"%d,", ReadData[j][i]);
-				strncat(all_strbuff, buff, sizeof(buff));
+				strlcat(all_strbuff, buff, sizeof(all_strbuff));
 			}
 		}
 	}
