@@ -1816,6 +1816,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	spin_lock_init(&abc_dev->lock);
 	spin_lock_init(&abc_dev->fsys_reg_lock);
 	spin_lock_init(&abc_dev->dma_callback_lock);
+	ATOMIC_INIT_NOTIFIER_HEAD(&abc_dev->intnc_notifier);
 
 	bar = 0;
 	/* Restricting till BAR4 mapping */
@@ -1935,7 +1936,6 @@ exit_loop:
 	if (err < 0)
 		goto err_ipu_tpu_init;
 
-	ATOMIC_INIT_NOTIFIER_HEAD(&abc_dev->intnc_notifier);
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
 		goto err_ipu_tpu_init;
