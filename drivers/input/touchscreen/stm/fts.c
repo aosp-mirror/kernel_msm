@@ -353,11 +353,10 @@ static ssize_t fts_status_show(struct device *dev,
 	int i;
 
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
-		res = ERROR_BUS_WR;
-		pr_err("%s: bus is not accessible.", __func__);
-		written += scnprintf(buf, PAGE_SIZE, "Bus is not accessible.");
-		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-		return written;
+		pr_err("%s: bus is not accessible.\n", __func__);
+		written += scnprintf(buf, PAGE_SIZE,
+				     "Bus is not accessible.\n");
+		goto exit;
 	}
 
 	written += scnprintf(buf + written, PAGE_SIZE - written,
@@ -375,11 +374,10 @@ static ssize_t fts_status_show(struct device *dev,
 	if (!dump) {
 		written += strlcat(buf + written, "Buffer allocation failed!\n",
 				   PAGE_SIZE - written);
-		res = -ENOMEM;
-	} else {
-		res = dumpErrorInfo(dump,
-				    ERROR_DUMP_ROW_SIZE * ERROR_DUMP_COL_SIZE);
+		goto exit;
 	}
+
+	res = dumpErrorInfo(dump, ERROR_DUMP_ROW_SIZE * ERROR_DUMP_COL_SIZE);
 	if (res >= 0) {
 		written += strlcat(buf + written, "Error dump:",
 				   PAGE_SIZE - written);
@@ -394,8 +392,9 @@ static ssize_t fts_status_show(struct device *dev,
 		}
 		written += strlcat(buf + written, "\n", PAGE_SIZE - written);
 	}
-	kfree(dump);
 
+exit:
+	kfree(dump);
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return written;
 }
