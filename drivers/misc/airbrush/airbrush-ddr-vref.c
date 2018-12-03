@@ -20,7 +20,7 @@
 
 #define DDR_DEFAULT_WRITE_VREF	0x5
 
-static uint32_t ddr_get_phy_vref(uint32_t idx)
+uint32_t ddr_get_phy_vref(uint32_t idx)
 {
 	/* for vref voltage of PHY (13.5% ~ 46.1% of VDD2) */
 	static const uint32_t phy_vref[PHY_VREF_LEVELS] = {
@@ -36,7 +36,7 @@ static uint32_t ddr_get_phy_vref(uint32_t idx)
 	return phy_vref[idx];
 }
 
-static uint32_t ddr_get_dram_vref(uint32_t idx)
+uint32_t ddr_get_dram_vref(uint32_t idx)
 {
 	/* for vref voltage of DRAM (10.0% ~ 30.0%  of VDD2) */
 	static const uint32_t dram_vref[DRAM_VREF_LEVELS] = {
@@ -51,7 +51,7 @@ static uint32_t ddr_get_dram_vref(uint32_t idx)
 	return dram_vref[idx];
 }
 
-static void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
+void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
 				enum vref_byte_t byte)
 {
 	union dphy_zq_con9_t zq_con9;
@@ -83,7 +83,7 @@ static void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
 	ddr_reg_wr(DPHY2_ZQ_CON9, zq_con9.n);
 }
 
-static void ddrphy_set_write_vref(uint32_t vref, enum vref_byte_t byte)
+void ddrphy_set_write_vref(uint32_t vref, enum vref_byte_t byte)
 {
 	/* issue MRW command for DRAM vref */
 	ddr_reg_wr(DREX_DIRECTCMD, (0x8c << 9) | (vref << 2));

@@ -263,6 +263,19 @@
 #define CTRL_PULLD_DQ			(0x3 << 16)
 
 #define DPHY_GATE_CON0			0x105b001c
+
+#define DPHY_OFFSETR_CON0		0x105b0020
+#define CTRL_OFFSETR0_MSK		(0x1ff << 0)
+#define CTRL_OFFSETR0(x)		(((x) & 0x1ff) << 0)
+#define CTRL_OFFSETR1_MSK		(0x1ff << 16)
+#define CTRL_OFFSETR1(x)		(((x) & 0x1ff) << 16)
+
+#define DPHY_OFFSETW_CON0		0x105b0030
+#define CTRL_OFFSETW0_MSK		(0x1ff << 0)
+#define CTRL_OFFSETW0(x)		(((x) & 0x1ff) << 0)
+#define CTRL_OFFSETW1_MSK		(0x1ff << 16)
+#define CTRL_OFFSETW1(x)		(((x) & 0x1ff) << 16)
+
 #define DPHY_OFFSETD_CON0		0x105b0050
 #define CTRL_RESYNC			(0x1 << 24)
 #define UPD_MODE			(0x1 << 28)
@@ -370,6 +383,8 @@
 #define DPHY2_CAL_CON4			0x105c0014
 #define DPHY2_LP_CON0			0x105c0018
 #define DPHY2_GATE_CON0			0x105c001c
+#define DPHY2_OFFSETR_CON0		0x105b0020
+#define DPHY2_OFFSETW_CON0		0x105b0030
 #define DPHY2_OFFSETD_CON0		0x105c0050
 #define DPHY2_CA_DESKEW_CON0		0x105c007c
 #define DPHY2_CA_DESKEW_CON1		0x105c0080
@@ -1176,5 +1191,10 @@ static inline void ddr_mem_wr(uint32_t addr, uint32_t data)
 
 void ddr_prbs_training_init(void);
 int32_t ddrphy_run_vref_training(struct ab_ddr_context *ctx);
+void ddrphy_set_write_vref(uint32_t vref, enum vref_byte_t byte);
+void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
+			  enum vref_byte_t byte);
+uint32_t ddr_get_phy_vref(uint32_t idx);
+uint32_t ddr_get_dram_vref(uint32_t idx);
 
 #endif /* _AIRBRUSH_DDR_INTERNAL_H_ */

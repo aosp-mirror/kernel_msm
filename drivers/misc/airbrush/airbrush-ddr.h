@@ -36,6 +36,7 @@
 #define DDR_TEST_NOPRINT		(0x1 << 31)
 /* size should be multiple of 1MB */
 #define DDR_TEST_PCIE_DMA_SIZE_MB(x)	(((x) & (0x3ff << 8)) >> 8)
+#define DDR_TEST_EYE_MARGIN_SAMPLES(x)	(((x) & (0xff << 20)) >> 20)
 #define DDR_BOOT_TEST_READ_WRITE (DDR_BOOT_TEST_READ | DDR_BOOT_TEST_WRITE)
 
 #define DDR_TEST_PCIE_DMA_READ(x)	\
