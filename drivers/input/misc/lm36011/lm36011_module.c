@@ -580,17 +580,26 @@ static int lm36011_set_up_silego_irq(
 	int gpio_index)
 {
 	int rc;
+	char *irq_name;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 
 	switch (gpio_index) {
 	case IR_VCSEL_FAULT:
 		dev_dbg(dev, "setup irq IR_VCSEL_FAULT");
+		irq_name = (ctrl->type == LASER_FLOOD) ?
+			"ir_vcsel_fault_flood" : "ir_vcsel_fault_dot";
 		rc = request_irq(irq, silego_ir_vcsel_fault_handler,
-			IRQF_TRIGGER_FALLING, "ir_vcsel_fault", dev);
+			IRQF_TRIGGER_FALLING | IRQF_SHARED, irq_name, dev);
 		break;
 	case IR_VCSEL_TEST:
 		dev_dbg(dev, "setup irq IR_VCSEL_TEST");
-		rc = request_irq(irq, silego_ir_vcsel_fault_count_handler,
-			IRQF_TRIGGER_RISING, "ir_vcsel_fault_count", dev);
+		irq_name = (ctrl->type == LASER_FLOOD) ?
+			"ir_vcsel_fault_count_flood" :
+			"ir_vcsel_fault_count_dot";
+		rc = request_irq(irq,
+			silego_ir_vcsel_fault_count_handler,
+			IRQF_TRIGGER_RISING | IRQF_SHARED,
+			irq_name, dev);
 		break;
 	default:
 		return -EINVAL;
@@ -605,12 +614,17 @@ static int lm36011_set_up_cap_sense_irq(
 	int gpio_index)
 {
 	int rc;
+	char *irq_name;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 
 	switch (gpio_index) {
 	case CSENSE_PROXAVG_READ:
 		dev_dbg(dev, "setup irq CSENSE_PROXAVG_READ");
+		irq_name = "cap_sense_irq";
+		irq_name = (ctrl->type == LASER_FLOOD) ?
+			"cap_sense_irq_flood" : "cap_sense_irq_dot";
 		rc = request_irq(irq, cap_sense_irq_handler,
-			IRQF_TRIGGER_RISING, "cap_sense_irq", dev);
+			IRQF_TRIGGER_RISING | IRQF_SHARED, irq_name, dev);
 		break;
 	default:
 		return -EINVAL;
@@ -679,6 +693,9 @@ static void lm36011_disable_gpio_irq(struct device *dev)
 static int lm36011_init_pinctrl(struct device *dev)
 {
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	if (ctrl->type == LASER_DOT)
+		return 0;
 
 	ctrl->pinctrl = devm_pinctrl_get(dev);
 	if (IS_ERR_OR_NULL(ctrl->pinctrl)) {
@@ -879,15 +896,11 @@ static ssize_t led_laser_enable_store(struct device *dev,
 			mutex_unlock(&ctrl->cam_sensor_mutex);
 			return rc;
 		}
-		if (ctrl->type == LASER_FLOOD)
-			lm36011_enable_gpio_irq(dev);
-
+		lm36011_enable_gpio_irq(dev);
 		rc = lm36011_write_data(ctrl,
 			ENABLE_REG, IR_ENABLE_MODE);
 	} else {
-		if (ctrl->type == LASER_FLOOD)
-			lm36011_disable_gpio_irq(dev);
-
+		lm36011_disable_gpio_irq(dev);
 		rc = lm36011_power_down(ctrl);
 	}
 	ctrl->silego.vcsel_fault_count = 0;
