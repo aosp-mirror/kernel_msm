@@ -42,7 +42,6 @@ function update_perf_config() {
     -d SLAB_FREELIST_RANDOM \
     -d SLAB_FREELIST_HARDENED \
     -d CMA_DEBUGFS \
-    -e UNMAP_KERNEL_AT_EL0 \
     -e HARDEN_BRANCH_PREDICTOR \
     -d EFI \
     -d L2TP_DEBUGFS \
