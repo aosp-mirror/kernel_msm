@@ -18,6 +18,7 @@
 #define DDR_SUCCESS	(0)
 #define DDR_FAIL	(-1)
 
+#define REG_DDR_TRAIN_STATUS		SYSREG_AON_IPU_REG31
 #define DDR_TRAIN_STARTED		(0x1 << 0)
 #define DDR_TRAIN_INIT_DONE		(0x1 << 1)
 #define DDR_TRAIN_VREF_DONE		(0x1 << 2)
@@ -28,6 +29,8 @@
 #define DDR_TRAIN_SAVE_STARTED		(0x1 << 7)
 #define DDR_TRAIN_SAVE_COMPLETE		(0x1 << 8)
 #define DDR_TRAIN_FAIL			(0x1 << 9)
+
+#define AB_DDR_INIT_TIMEOUT		msecs_to_jiffies(50)
 
 #define DDR_BOOT_TEST_WRITE		(0x1 << 0)
 #define DDR_BOOT_TEST_READ		(0x1 << 1)
@@ -52,6 +55,7 @@ int32_t ab_ddr_train_gpio(struct ab_state_context *sc);
 int32_t ab_ddr_train_sysreg(struct ab_state_context *sc);
 
 int ab_ddr_init(struct ab_state_context *sc);
+int ab_ddr_wait_for_ddr_init(struct ab_state_context *sc);
 int ab_ddr_suspend(struct ab_state_context *sc);
 int ab_ddr_resume(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);

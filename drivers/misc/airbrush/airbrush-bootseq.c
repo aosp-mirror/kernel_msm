@@ -49,8 +49,9 @@
 
 #define SRAM_BL_ADDR	0x20000
 
-#define SOC_PWRGOOD_WAIT_TIMEOUT	msecs_to_jiffies(100) /* TBD */
-#define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100) /* TBD */
+#define SOC_PWRGOOD_WAIT_TIMEOUT	msecs_to_jiffies(100)
+#define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100)
+#define POLL_USLEEP_MIN			(100)
 
 #define M0_FIRMWARE_PATH "ab.fw"
 
@@ -135,7 +136,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	/* Wait until soc_pwrgood is set by PMIC */
 	while (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood) &&
 			time_before(jiffies, timeout))
-		usleep_range(100, 105);
+		usleep_range(POLL_USLEEP_MIN, POLL_USLEEP_MIN + 1);
 
 	if (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood)) {
 		dev_err(&plat_dev->dev, "ABC PWRGOOD is not enabled");
@@ -166,7 +167,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		timeout = jiffies + AB_READY_WAIT_TIMEOUT;
 		while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
 				time_before(jiffies, timeout))
-			usleep_range(100, 105);
+			usleep_range(POLL_USLEEP_MIN, POLL_USLEEP_MIN + 1);
 
 		if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
 			dev_err(&plat_dev->dev,
@@ -297,7 +298,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	timeout = jiffies + AB_READY_WAIT_TIMEOUT;
 	while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
 			time_before(jiffies, timeout)) {
-		usleep_range(100, 105);
+		usleep_range(POLL_USLEEP_MIN, POLL_USLEEP_MIN + 1);
 	}
 
 	if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
@@ -312,6 +313,12 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 
 	/* Setup the function pointer to read DDR OTPs */
 	ab_ddr_setup(ab_ctx);
+
+	/* Wait till the ddr init & training is completed in case of ddr
+	 * initialization is done by BootROM
+	 */
+	if (ab_ddr_wait_for_ddr_init(ab_ctx))
+		return -EIO;
 
 	/* In case the M0_DDR_INIT (Renamed HOST_DDR_INIT) is 1,
 	 * perform the DDR Initialization here.

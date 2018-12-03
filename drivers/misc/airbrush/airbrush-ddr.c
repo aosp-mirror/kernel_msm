@@ -2008,24 +2008,84 @@ int32_t ab_ddr_train_sysreg(struct ab_state_context *sc)
 	return DDR_SUCCESS;
 }
 
+static int __ab_ddr_wait_for_ddr_init(struct ab_ddr_context *ddr_ctx)
+{
+	unsigned long timeout;
+
+	timeout = jiffies + AB_DDR_INIT_TIMEOUT;
+	while ((!(ddr_reg_rd(REG_DDR_TRAIN_STATUS) & DDR_TRAIN_COMPLETE)) &&
+			time_before(jiffies, timeout))
+		ddr_usleep(DDR_POLL_USLEEP_MIN);
+
+	/* check for the ddr training failure condition */
+	if (ddr_reg_rd(REG_DDR_TRAIN_STATUS) & DDR_TRAIN_FAIL) {
+		pr_err("%s: DDR Training failed during M0 boot\n",
+		       __func__);
+		return -EIO;
+	}
+
+	/* In A0 BootROM Auto Refresh setting is missing. To fix this issue,
+	 * set the Auto-Refresh enable immediately after DDR init.
+	 */
+	if (ab_get_chip_id(ddr_ctx->ab_state_ctx) == CHIP_ID_A0)
+		ddr_reg_set(DREX_CONCONTROL, AREF_EN);
+
+	/* DDR training is completed as part of bootrom code execution.
+	 * Copy the training results to the local array for future use.
+	 */
+	ddr_ctx->ddr_train_sram_location = ddr_reg_rd(SYSREG_REG_TRN_ADDR);
+	ddr_copy_train_results_from_sram(ddr_ctx);
+
+	/* Try to use latest training results from M0 resume sequence */
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1866] = 1;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1600] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1200] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_933] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_800] = 0;
+
+	return 0;
+}
+
+int ab_ddr_wait_for_ddr_init(struct ab_state_context *sc)
+{
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
+	/* wait is only required when M0 performs ddr init */
+	if (IS_HOST_DDR_INIT() || (ddr_ctx->ddr_state == DDR_SUSPEND))
+		return 0;
+
+	return __ab_ddr_wait_for_ddr_init(ddr_ctx);
+}
+
 int32_t ab_ddr_resume(struct ab_state_context *sc)
 {
-	/* TBD: HACK
-	 * Remove this after waiting for the DDR Initialization interrupts
-	 */
-	msleep(200);
+	/* Wait till the ddr init & training is completed */
+	if (__ab_ddr_wait_for_ddr_init((struct ab_ddr_context *)sc->ddr_data))
+		return DDR_FAIL;
 
-	if (!IS_HOST_DDR_INIT()) {
-		/* TBD: The below code is not part of ABC A0 BootROM.
-		 * For B0 BootROM, we can remove this code.
+	if (IS_DDR_OTP_FLASHED() && (ab_get_chip_id(sc) == CHIP_ID_A0) &&
+	    IS_M0_DDR_INIT() && !sc->alternate_boot) {
+
+		/* IMPORTANT:
+		 * ------------------------------------------------------------
+		 *    This path should not be HIT as there are high changes
+		 * of data loss because of the below reasons. Please
+		 * avoid the below combination.
+		 *  [A0 SAMPLE + DDR OTP Flashed + NORMAL BOOT + M0_DDR_INIT]
+		 *
+		 * 1] In A0 BootROM, self-refresh exit sequence is called way
+		 *    before Auto Refresh settings are enabled.
+		 * 2] From  Suspend -> Resume scenario,
+		 *    "AXI_Enable_After_All_training" sequence is skipped.
+		 *
+		 * Issue[1] can't be hadled. To fix Issue[2] call
+		 * "AXI_Enable_After_All_training" sequence here.
 		 */
-		/* Self-refresh exit sequence */
-		if (ddr_exit_self_refresh_mode()) {
-			pr_err("%s: self-refresh exit failed\n", __func__);
-			return DDR_FAIL;
-		}
-
 		ddr_axi_enable_after_all_training();
+
+		pr_err("%s: Error!! This path should not be used\n", __func__);
+		WARN_ON(1);
+		return DDR_FAIL;
 	}
 
 	/* Disable the DDR_SR GPIO */
@@ -2236,14 +2296,6 @@ int32_t ab_ddr_setup(struct ab_state_context *sc)
 
 		if (ab_get_chip_id(sc) == CHIP_ID_A0) {
 			dev_info(sc->dev, "Airbrush Revision: A0\n");
-
-			/* In A0 BootROM Auto Refresh setting is missing.
-			 * To fix this issue, set the Auto-Refresh enable during
-			 * the ddr setup
-			 */
-			if (IS_M0_DDR_INIT())
-				ddr_reg_set(DREX_CONCONTROL, AREF_EN);
-
 		} else if (ab_get_chip_id(sc) == CHIP_ID_B0) {
 			dev_info(sc->dev, "Airbrush Revision: B0\n");
 		} else {
@@ -2257,16 +2309,6 @@ int32_t ab_ddr_setup(struct ab_state_context *sc)
 		dev_warn(sc->dev, "%s: DDR OTPs NOT fused. Use local array.\n",
 			 __func__);
 		ddr_otp_rd = &read_otp_array;
-	}
-
-	/* DDR training is completed as part of bootrom code execution.
-	 * Copy the training results to the local array for future use.
-	 */
-	if (IS_M0_DDR_INIT()) {
-		ddr_ctx->ddr_train_sram_location =
-				ddr_reg_rd(SYSREG_REG_TRN_ADDR);
-		ddr_copy_train_results_from_sram(ddr_ctx);
-		ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1866] = 1;
 	}
 
 #ifdef DEBUG
