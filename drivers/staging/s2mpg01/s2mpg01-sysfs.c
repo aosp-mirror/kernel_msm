@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Google, Inc.
+ * Copyright (C) 2017-2018 Google, Inc.
  *
  * Author: Trevor Bunker <trevorbunker@google.com>
  *
@@ -23,97 +23,97 @@
 static u8 _reg_addr;
 
 /* smps1_volt is in uV */
-static int s2mpb04_get_smps1_volt(struct s2mpb04_core *ddata, int *smps1_volt)
+static int s2mpg01_get_smps1_volt(struct s2mpg01_core *ddata, int *smps1_volt)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_V_SMPS1, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_SMPS1, &chan_data);
 
-	*smps1_volt = chan_data * S2MPB04_ADC_SCALE_V_SMPS1;
+	*smps1_volt = chan_data * S2MPG01_ADC_SCALE_V_SMPS1;
 
 	return 0;
 }
 
 /* smps1_curr is in uA */
-static int s2mpb04_get_smps1_curr(struct s2mpb04_core *ddata, int *smps1_curr)
+static int s2mpg01_get_smps1_curr(struct s2mpg01_core *ddata, int *smps1_curr)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_I_SMPS1_SUM, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_SMPS1_SUM, &chan_data);
 
-	*smps1_curr = chan_data * S2MPB04_ADC_SCALE_I_SMPS1;
+	*smps1_curr = chan_data * S2MPG01_ADC_SCALE_I_SMPS1;
 
 	return 0;
 }
 
 /* smps2_volt is in uV */
-static int s2mpb04_get_smps2_volt(struct s2mpb04_core *ddata, int *smps2_volt)
+static int s2mpg01_get_smps2_volt(struct s2mpg01_core *ddata, int *smps2_volt)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_V_SMPS2, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_SMPS2, &chan_data);
 
-	*smps2_volt = chan_data * S2MPB04_ADC_SCALE_V_SMPS2;
+	*smps2_volt = chan_data * S2MPG01_ADC_SCALE_V_SMPS2;
 
 	return 0;
 }
 
 /* smps2_curr is in uA */
-static int s2mpb04_get_smps2_curr(struct s2mpb04_core *ddata, int *smps2_curr)
+static int s2mpg01_get_smps2_curr(struct s2mpg01_core *ddata, int *smps2_curr)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_I_SMPS2, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_SMPS2, &chan_data);
 
-	*smps2_curr = chan_data * S2MPB04_ADC_SCALE_I_SMPS2;
+	*smps2_curr = chan_data * S2MPG01_ADC_SCALE_I_SMPS2;
 
 	return 0;
 }
 
 /* ldo1_volt is in uV */
-static int s2mpb04_get_ldo1_volt(struct s2mpb04_core *ddata, int *ldo1_volt)
+static int s2mpg01_get_ldo1_volt(struct s2mpg01_core *ddata, int *ldo1_volt)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_V_LDO1, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_LDO1, &chan_data);
 
-	*ldo1_volt = chan_data * S2MPB04_ADC_SCALE_V_LDO;
+	*ldo1_volt = chan_data * S2MPG01_ADC_SCALE_V_LDO;
 
 	return 0;
 }
 
 /* ldo1_curr is in uA */
-static int s2mpb04_get_ldo1_curr(struct s2mpb04_core *ddata, int *ldo1_curr)
+static int s2mpg01_get_ldo1_curr(struct s2mpg01_core *ddata, int *ldo1_curr)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_I_LDO1, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_LDO1, &chan_data);
 
-	*ldo1_curr = chan_data * S2MPB04_ADC_SCALE_I_LDO;
+	*ldo1_curr = chan_data * S2MPG01_ADC_SCALE_I_LDO;
 
 	return 0;
 }
 
 /* ldo2_volt is in uV */
-static int s2mpb04_get_ldo2_volt(struct s2mpb04_core *ddata, int *ldo2_volt)
+static int s2mpg01_get_ldo2_volt(struct s2mpg01_core *ddata, int *ldo2_volt)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_V_LDO2, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_LDO2, &chan_data);
 
-	*ldo2_volt = chan_data * S2MPB04_ADC_SCALE_V_LDO;
+	*ldo2_volt = chan_data * S2MPG01_ADC_SCALE_V_LDO;
 
 	return 0;
 }
 
 /* ldo2_curr is in uA */
-static int s2mpb04_get_ldo2_curr(struct s2mpb04_core *ddata, int *ldo2_curr)
+static int s2mpg01_get_ldo2_curr(struct s2mpg01_core *ddata, int *ldo2_curr)
 {
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_I_LDO2, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_LDO2, &chan_data);
 
-	*ldo2_curr = chan_data * S2MPB04_ADC_SCALE_I_LDO;
+	*ldo2_curr = chan_data * S2MPG01_ADC_SCALE_I_LDO;
 
 	return 0;
 }
@@ -122,10 +122,10 @@ static ssize_t smps1_volt_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int smps1_volt;
 
-	s2mpb04_get_smps1_volt(ddata, &smps1_volt);
+	s2mpg01_get_smps1_volt(ddata, &smps1_volt);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", smps1_volt);
 }
@@ -135,10 +135,10 @@ static ssize_t smps1_curr_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int smps1_curr;
 
-	s2mpb04_get_smps1_curr(ddata, &smps1_curr);
+	s2mpg01_get_smps1_curr(ddata, &smps1_curr);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", smps1_curr);
 }
@@ -148,10 +148,10 @@ static ssize_t smps2_volt_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int smps2_volt;
 
-	s2mpb04_get_smps2_volt(ddata, &smps2_volt);
+	s2mpg01_get_smps2_volt(ddata, &smps2_volt);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", smps2_volt);
 }
@@ -161,10 +161,10 @@ static ssize_t smps2_curr_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int smps2_curr;
 
-	s2mpb04_get_smps2_curr(ddata, &smps2_curr);
+	s2mpg01_get_smps2_curr(ddata, &smps2_curr);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", smps2_curr);
 }
@@ -174,10 +174,10 @@ static ssize_t ldo1_volt_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int ldo1_volt;
 
-	s2mpb04_get_ldo1_volt(ddata, &ldo1_volt);
+	s2mpg01_get_ldo1_volt(ddata, &ldo1_volt);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", ldo1_volt);
 }
@@ -187,10 +187,10 @@ static ssize_t ldo1_curr_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int ldo1_curr;
 
-	s2mpb04_get_ldo1_curr(ddata, &ldo1_curr);
+	s2mpg01_get_ldo1_curr(ddata, &ldo1_curr);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", ldo1_curr);
 }
@@ -200,10 +200,10 @@ static ssize_t ldo2_volt_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int ldo2_volt;
 
-	s2mpb04_get_ldo2_volt(ddata, &ldo2_volt);
+	s2mpg01_get_ldo2_volt(ddata, &ldo2_volt);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", ldo2_volt);
 }
@@ -213,10 +213,10 @@ static ssize_t ldo2_curr_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int ldo2_curr;
 
-	s2mpb04_get_ldo2_curr(ddata, &ldo2_curr);
+	s2mpg01_get_ldo2_curr(ddata, &ldo2_curr);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", ldo2_curr);
 }
@@ -226,13 +226,13 @@ static ssize_t vbat_show(struct device *dev,
 			 struct device_attribute *mattr,
 			 char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_VBAT, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_VBAT, &chan_data);
 
 	return snprintf(data, PAGE_SIZE, "%d\n",
-			chan_data * S2MPB04_ADC_SCALE_VBAT);
+			chan_data * S2MPG01_ADC_SCALE_VBAT);
 }
 DEVICE_ATTR_RO(vbat);
 
@@ -240,10 +240,10 @@ static ssize_t temperature_show(struct device *dev,
 				struct device_attribute *mattr,
 				char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	u8 chan_data;
 
-	s2mpb04_read_adc_chan(ddata, S2MPB04_ADC_PTAT, &chan_data);
+	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_PTAT, &chan_data);
 
 	return snprintf(data, PAGE_SIZE, "%d\n", PTAT_CODE_TO_TEMP(chan_data));
 }
@@ -254,14 +254,14 @@ static ssize_t total_power_show(struct device *dev,
 				struct device_attribute *mattr,
 				char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int smps1_curr, smps2_curr, ldo2_curr, ldo1_curr;
 	long int total_power;
 
-	s2mpb04_get_smps1_curr(ddata, &smps1_curr);
-	s2mpb04_get_smps2_curr(ddata, &smps2_curr);
-	s2mpb04_get_ldo2_curr(ddata, &ldo2_curr);
-	s2mpb04_get_ldo1_curr(ddata, &ldo1_curr);
+	s2mpg01_get_smps1_curr(ddata, &smps1_curr);
+	s2mpg01_get_smps2_curr(ddata, &smps2_curr);
+	s2mpg01_get_ldo2_curr(ddata, &ldo2_curr);
+	s2mpg01_get_ldo1_curr(ddata, &ldo1_curr);
 
 	total_power = (((long int)smps1_curr) * 900 / 1000) +
 		(((long int)smps2_curr) * 1100 / 1000) +
@@ -276,9 +276,9 @@ static ssize_t dump_regs_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 
-	s2mpb04_dump_regs(ddata);
+	s2mpg01_dump_regs(ddata);
 
 	return snprintf(data, PAGE_SIZE, "ok\n");
 }
@@ -288,9 +288,9 @@ static ssize_t toggle_pon_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 
-	s2mpb04_toggle_pon(ddata);
+	s2mpg01_toggle_pon(ddata);
 
 	return snprintf(data, PAGE_SIZE, "ok\n");
 }
@@ -308,7 +308,7 @@ static ssize_t reg_addr_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int val = 0;
 	int ret;
 
@@ -331,10 +331,10 @@ static ssize_t reg_data_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	u8 reg_data;
 
-	s2mpb04_read_byte(ddata, _reg_addr, &reg_data);
+	s2mpg01_read_byte(ddata, _reg_addr, &reg_data);
 
 	return snprintf(buf, PAGE_SIZE, "0x%02x\n", reg_data);
 }
@@ -344,7 +344,7 @@ static ssize_t reg_data_store(struct device *dev,
 			      const char *buf,
 			      size_t count)
 {
-	struct s2mpb04_core *ddata = dev_get_drvdata(dev);
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
 	int val = 0;
 	int ret;
 
@@ -358,13 +358,13 @@ static ssize_t reg_data_store(struct device *dev,
 	dev_dbg(ddata->dev, "%s: reg 0x%02x, data 0x%02x\n", __func__,
 		_reg_addr, val);
 
-	s2mpb04_write_byte(ddata, _reg_addr, val);
+	s2mpg01_write_byte(ddata, _reg_addr, val);
 
 	return count;
 }
 DEVICE_ATTR_RW(reg_data);
 
-static struct attribute *s2mpb04_attrs[] = {
+static struct attribute *s2mpg01_attrs[] = {
 	&dev_attr_smps1_volt.attr,
 	&dev_attr_smps1_curr.attr,
 	&dev_attr_smps2_volt.attr,
@@ -383,19 +383,19 @@ static struct attribute *s2mpb04_attrs[] = {
 	NULL
 };
 
-static const struct attribute_group s2mpb04_attr_group = {
-	.attrs = s2mpb04_attrs,
+static const struct attribute_group s2mpg01_attr_group = {
+	.attrs = s2mpg01_attrs,
 };
 
-void s2mpb04_config_sysfs(struct device *dev)
+void s2mpg01_config_sysfs(struct device *dev)
 {
 	int ret;
 
-	ret = sysfs_create_group(&dev->kobj, &s2mpb04_attr_group);
+	ret = sysfs_create_group(&dev->kobj, &s2mpg01_attr_group);
 	if (ret < 0) {
 		dev_err(dev, "%s: could not create sysfs attributes (%d)\n",
 			__func__, ret);
 	}
 }
-EXPORT_SYMBOL_GPL(s2mpb04_config_sysfs);
+EXPORT_SYMBOL_GPL(s2mpg01_config_sysfs);
 

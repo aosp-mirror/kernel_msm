@@ -336,72 +336,72 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	}
 
 	if (!sc->smps1) {
-		sc->smps1 = devm_regulator_get(dev, "s2mpb04_smps1");
+		sc->smps1 = devm_regulator_get(dev, "s2mpg01_smps1");
 		if (IS_ERR(sc->smps1)) {
-			dev_err(dev, "%s: failed to get s2mpb04_smps1 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_smps1 supply (%ld)\n",
 					__func__, PTR_ERR(sc->smps1));
 			goto fail;
 		}
 	}
 
 	if (!sc->smps2) {
-		sc->smps2 = devm_regulator_get(dev, "s2mpb04_smps2");
+		sc->smps2 = devm_regulator_get(dev, "s2mpg01_smps2");
 		if (IS_ERR(sc->smps2)) {
-			dev_err(dev, "%s: failed to get s2mpb04_smps2 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_smps2 supply (%ld)\n",
 					__func__, PTR_ERR(sc->smps2));
 			goto fail;
 		}
 	}
 
 	if (!sc->smps3) {
-		sc->smps3 = devm_regulator_get(dev, "s2mpb04_smps3");
+		sc->smps3 = devm_regulator_get(dev, "s2mpg01_smps3");
 		if (IS_ERR(sc->smps3)) {
-			dev_err(dev, "%s: failed to get s2mpb04_smps3 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_smps3 supply (%ld)\n",
 					__func__, PTR_ERR(sc->smps3));
 			goto fail;
 		}
 	}
 
 	if (!sc->ldo1) {
-		sc->ldo1 = devm_regulator_get(dev, "s2mpb04_ldo1");
+		sc->ldo1 = devm_regulator_get(dev, "s2mpg01_ldo1");
 		if (IS_ERR(sc->ldo1)) {
-			dev_err(dev, "%s: failed to get s2mpb04_ldo1 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_ldo1 supply (%ld)\n",
 					__func__, PTR_ERR(sc->ldo1));
 			goto fail;
 		}
 	}
 
 	if (!sc->ldo2) {
-		sc->ldo2 = devm_regulator_get(dev, "s2mpb04_ldo2");
+		sc->ldo2 = devm_regulator_get(dev, "s2mpg01_ldo2");
 		if (IS_ERR(sc->ldo2)) {
-			dev_err(dev, "%s: failed to get s2mpb04_ldo2 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_ldo2 supply (%ld)\n",
 					__func__, PTR_ERR(sc->ldo2));
 			goto fail;
 		}
 	}
 
 	if (!sc->ldo3) {
-		sc->ldo3 = devm_regulator_get(dev, "s2mpb04_ldo3");
+		sc->ldo3 = devm_regulator_get(dev, "s2mpg01_ldo3");
 		if (IS_ERR(sc->ldo3)) {
-			dev_err(dev, "%s: failed to get s2mpb04_ldo3 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_ldo3 supply (%ld)\n",
 					__func__, PTR_ERR(sc->ldo3));
 			goto fail;
 		}
 	}
 
 	if (!sc->ldo4) {
-		sc->ldo4 = devm_regulator_get(dev, "s2mpb04_ldo4");
+		sc->ldo4 = devm_regulator_get(dev, "s2mpg01_ldo4");
 		if (IS_ERR(sc->ldo4)) {
-			dev_err(dev, "%s: failed to get s2mpb04_ldo4 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_ldo4 supply (%ld)\n",
 					__func__, PTR_ERR(sc->ldo4));
 			goto fail;
 		}
 	}
 
 	if (!sc->ldo5) {
-		sc->ldo5 = devm_regulator_get(dev, "s2mpb04_ldo5");
+		sc->ldo5 = devm_regulator_get(dev, "s2mpg01_ldo5");
 		if (IS_ERR(sc->ldo5)) {
-			dev_err(dev, "%s: failed to get s2mpb04_ldo5 supply (%ld)\n",
+			dev_err(dev, "%s: failed to get s2mpg01_ldo5 supply (%ld)\n",
 					__func__, PTR_ERR(sc->ldo5));
 			goto fail;
 		}
