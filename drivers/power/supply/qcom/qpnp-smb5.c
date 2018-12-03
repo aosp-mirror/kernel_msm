@@ -990,9 +990,6 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SMB_EN_REASON:
 		val->intval = chg->cp_reason;
 		break;
-	case POWER_SUPPLY_PROP_MOISTURE_DETECTED:
-		val->intval = chg->moisture_present;
-		break;
 	case POWER_SUPPLY_PROP_HVDCP_OPTI_ALLOWED:
 		val->intval = !chg->flash_active;
 		break;
@@ -1018,6 +1015,14 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
 		rc = smblib_get_prop_input_current_max(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_MOISTURE_DETECTED:
+		if (chg->uusb_moisture_protection_enabled)
+			val->intval = chg->moisture_present;
+		else
+			val->intval = (chg->lpd_reason == LPD_MOISTURE_DETECTED
+				       && chg->lpd_stage == LPD_STAGE_COMMIT) ? 1 :
+				       0;
 		break;
 	case POWER_SUPPLY_PROP_OTG_FASTROLESWAP:
 		rc = smblib_get_prop_otg_fastroleswap(chg, val);
