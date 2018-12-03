@@ -49,31 +49,31 @@ static struct ab_state_context *ab_sm_ctx;
 	}
 
 static struct block_property ipu_property_table[] = {
-	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 550, 14, 0,  0, 0),
-	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  50,  2,  2,  0, 0),
-	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  220, 14, 14, 0, 0),
-	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  330, 14, 14, 0, 0),
-	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  440, 14, 14, 0, 0),
-	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  550, 14, 14, 0, 0),
-	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_75, on,  578, 14, 14, 0, 0),
-	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 550, 0,  0,  0, 0),
-	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 610, 0,  0,  0, 0),
-	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,   0,  0,  0, 0),
-	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,   0,  0,  0, 0),
+	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 549.6, 14, 0, 0, 0),
+	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  50,   2,  2,  0, 0),
+	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  220,  14, 14, 0, 0),
+	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  330,  14, 14, 0, 0),
+	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  440,  14, 14, 0, 0),
+	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on, 549.6, 14, 14, 0, 0),
+	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_75, on, 577.6, 14, 14, 0, 0),
+	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 0,    0,  0,  0, 0),
+	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 0,    0,  0,  0, 0),
+	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,    0,  0,  0, 0),
+	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,    0,  0,  0, 0),
 };
 
 static struct block_property tpu_property_table[] = {
-	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 766, 0, 0, 16, 0),
-	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  50,  0, 0, 16, 0),
-	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  303, 0, 0, 16, 0),
-	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  454, 0, 0, 16, 0),
-	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  606, 0, 0, 16, 0),
-	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  766, 0, 0, 16, 0),
-	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_85, on,  962, 0, 0, 16, 0),
-	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 766, 0, 0, 0,  0),
-	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 962, 0, 0, 0,  0),
-	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,   0, 0, 0,  0),
-	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,   0, 0, 0,  0),
+	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 765.6, 0, 0, 16, 0),
+	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  50,    0, 0, 16, 0),
+	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  303,   0, 0, 16, 0),
+	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  453.6, 0, 0, 16, 0),
+	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  606,   0, 0, 16, 0),
+	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  765.6, 0, 0, 16, 0),
+	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_85, on,  961.6, 0, 0, 16, 0),
+	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 0,     0, 0, 0,  0),
+	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 0,     0, 0, 0,  0),
+	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,     0, 0, 0,  0),
+	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,     0, 0, 0,  0),
 };
 
 static struct block_property dram_property_table[] = {
@@ -117,10 +117,10 @@ static struct block_property fsys_property_table[] = {
 };
 
 static struct block_property aon_property_table[] = {
-	BLK_ENTRY(0_0, PowerUp,  WFI,     on,  0_85, off, 934,  0, 0, 0, 0),
-	BLK_ENTRY(0_1, PowerUp,  Boot,    on,  0_85, on,  19.2, 0, 0, 0, 0),
-	BLK_ENTRY(0_2, PowerUp,  Compute, on,  0_85, on,  934,  0, 0, 0, 0),
-	BLK_ENTRY(3_0, Disabled, NoRail,  off, 0_0,  off, 0,    0, 0, 0, 0),
+	BLK_ENTRY(0_0, PowerUp,  WFI,     on,  0_85, off, 933.12, 0, 0, 0, 0),
+	BLK_ENTRY(0_1, PowerUp,  Boot,    on,  0_85, on,  19.2,   0, 0, 0, 0),
+	BLK_ENTRY(0_2, PowerUp,  Compute, on,  0_85, on,  933.12, 0, 0, 0, 0),
+	BLK_ENTRY(3_0, Disabled, NoRail,  off, 0_0,  off, 0,      0, 0, 0, 0),
 };
 
 #define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon, core) \

@@ -129,14 +129,8 @@ static const unsigned long aon_clk_regs[] = {
 
 /* PLL rate table for CMU_AON */
 static const struct airbrush_pll_rate_table pll_aon_tbl[] = {
-#ifdef CONFIG_B0
-	PLL_F081XX_RATE(933000000, 146, 3, 0),
+	PLL_F081XX_RATE(933120000, 243, 5, 0),
 	PLL_F081XX_RATE(19200000, 288, 9, 5),
-#endif
-#ifdef CONFIG_A0
-	PLL_F081XX_RATE(933000000, 243, 5, 0),
-	PLL_F081XX_RATE(19200000, 288, 9, 5),
-#endif
 };
 
 /* List of PLL clocks in CMU_AON */
@@ -600,7 +594,7 @@ static const unsigned long ipu_clk_regs[] = {
 /* PLL rate table for CMU_IPU */
 static const struct airbrush_pll_rate_table pll_ipu_tbl[] = {
 #ifdef CONFIG_B0
-	PLL_F081XX_RATE(850000000, 354, 2, 2),
+	PLL_F081XX_RATE(849600000, 354, 2, 2),
 	PLL_F081XX_RATE(680000000, 425, 3, 2),
 	PLL_F081XX_RATE(544000000, 680, 3, 3),
 	PLL_F081XX_RATE(408000000, 340, 2, 3),
@@ -609,9 +603,8 @@ static const struct airbrush_pll_rate_table pll_ipu_tbl[] = {
 	PLL_F081XX_RATE(19200000, 288, 9, 5),
 #endif
 #ifdef CONFIG_A0
-	PLL_F081XX_RATE(610000000, 254, 2, 2),
-	PLL_F081XX_RATE(578000000, 361, 3, 2),
-	PLL_F081XX_RATE(550000000, 458, 2, 3),
+	PLL_F081XX_RATE(577600000, 361, 3, 2),
+	PLL_F081XX_RATE(549600000, 458, 2, 3),
 	PLL_F081XX_RATE(440000000, 550, 3, 3),
 	PLL_F081XX_RATE(330000000, 275, 2, 3),
 	PLL_F081XX_RATE(220000000, 550, 3, 4),
@@ -761,14 +754,8 @@ static const struct airbrush_fixed_rate_clock mif_fixed_clks[] = {
 
 /* PLL rate table for CMU_MIF */
 static const struct airbrush_pll_rate_table pll_mif_tbl[] = {
-#ifdef CONFIG_B0
-	PLL_F081XX_RATE(3733000000, 778, 4, 0),
-	PLL_F081XX_RATE(1866000000, 778, 4, 1),
-#endif
-#ifdef CONFIG_A0
-	PLL_F081XX_RATE(3733000000, 583, 3, 0),
-	PLL_F081XX_RATE(1864000000, 777, 4, 1),
-#endif
+	PLL_F081XX_RATE(3731200000, 583, 3, 0),
+	PLL_F081XX_RATE(1864800000, 777, 4, 1),
 };
 
 
@@ -901,18 +888,18 @@ static const unsigned long tpu_clk_regs[] = {
 static const struct airbrush_pll_rate_table pll_tpu_tbl[] = {
 #ifdef CONFIG_B0
 	PLL_F081XX_RATE(1000000000, 625, 3, 2),
-	PLL_F081XX_RATE(790000000, 329, 2, 2),
-	PLL_F081XX_RATE(625000000, 260, 2, 2),
+	PLL_F081XX_RATE(789600000, 329, 2, 2),
+	PLL_F081XX_RATE(624000000, 260, 2, 2),
 	PLL_F081XX_RATE(468000000, 390, 2, 3),
 	PLL_F081XX_RATE(312000000, 260, 2, 3),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
 	PLL_F081XX_RATE(19200000, 288, 9, 5),
 #endif
 #ifdef CONFIG_A0
-	PLL_F081XX_RATE(962000000, 601, 3, 2),
-	PLL_F081XX_RATE(766000000, 319, 2, 2),
+	PLL_F081XX_RATE(961600000, 601, 3, 2),
+	PLL_F081XX_RATE(765600000, 319, 2, 2),
 	PLL_F081XX_RATE(606000000, 505, 2, 3),
-	PLL_F081XX_RATE(454000000, 378, 2, 3),
+	PLL_F081XX_RATE(453600000, 378, 2, 3),
 	PLL_F081XX_RATE(303000000, 505, 2, 4),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
 	PLL_F081XX_RATE(19200000, 288, 9, 5),
