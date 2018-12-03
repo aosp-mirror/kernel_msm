@@ -6,7 +6,3 @@ ftm5-objs += \
 	fts_lib/ftsFrame.o fts_lib/ftsIO.o fts_lib/ftsTest.o fts_lib/ftsTime.o \
 	fts_lib/ftsTool.o fts_lib/ftsFlash.o fts_lib/ftsGesture.o
 
-# TODO: remove me b/62057517
-subdir-ccflags-y += \
-	-Wno-strncat-size \
-
