@@ -659,7 +659,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 
 	ret = devm_device_add_groups(&pdev->dev, airbrush_tmu_groups);
 	if (ret)
-		goto err;
+		return ret;
 
 	platform_set_drvdata(pdev, data);
 	mutex_init(&data->lock);
@@ -667,7 +667,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	/* TODO: See if this function can be remove */
 	ret = airbrush_map_dt_data(pdev);
 	if (ret)
-		goto err;
+		return ret;
 
 	INIT_WORK(&data->irq_work, airbrush_tmu_work);
 
@@ -678,12 +678,11 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	 * airbrush_tmu_initialize(), requesting irq and calling
 	 * airbrush_tmu_control().
 	 */
-	data->tzd = thermal_zone_of_sensor_register(&pdev->dev, 0, data,
+	data->tzd = devm_thermal_zone_of_sensor_register(&pdev->dev, 0, data,
 						    &airbrush_sensor_ops);
 	if (IS_ERR(data->tzd)) {
-		ret = PTR_ERR(data->tzd);
 		dev_err(&pdev->dev, "Failed to register sensor: %d\n", ret);
-		goto err_thermal;
+		return PTR_ERR(data->tzd);
 	}
 
 	/* register interrupt handler with PCIe subsystem */
@@ -698,32 +697,20 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	ret = airbrush_tmu_initialize(pdev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize TMU\n");
-		goto err_thermal;
+		return ret;
 	}
 
 	airbrush_tmu_control(pdev, true);
 	tmu_read_enable = 1;
 
 	dev_dbg(&pdev->dev, "%s: done.\n", __func__);
-
 	return 0;
-
-err_thermal:
-	thermal_zone_of_sensor_unregister(&pdev->dev, data->tzd);
-err:
-	/* do something here */
-	return ret;
 }
 
 static int airbrush_tmu_remove(struct platform_device *pdev)
 {
-	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
-	struct thermal_zone_device *tzd = data->tzd;
-
-	thermal_zone_of_sensor_unregister(&pdev->dev, tzd);
 	airbrush_tmu_control(pdev, false);
 	tmu_read_enable = 0;
-
 	return 0;
 }
 
