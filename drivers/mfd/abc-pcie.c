@@ -1932,6 +1932,11 @@ exit_loop:
 	setup_smmu(pdev);
 #endif
 
+	err = mfd_add_devices(dev, -1, abc_mfd_devs, ARRAY_SIZE(abc_mfd_devs),
+			NULL, 0, NULL);
+	if (err < 0)
+		goto err_add_mfd_child;
+
 	err = abc_pcie_ipu_tpu_enable();
 	if (err < 0)
 		goto err_ipu_tpu_init;
@@ -1940,20 +1945,15 @@ exit_loop:
 	if (err < 0)
 		goto err_ipu_tpu_init;
 
-	err = mfd_add_devices(dev, -1, abc_mfd_devs, ARRAY_SIZE(abc_mfd_devs),
-			NULL, 0, NULL);
-	if (err < 0)
-		goto err_add_mfd_child;
-
 	/* Register state manager operations */
 	mfd_ops.ctx = dev;
 	ab_sm_register_mfd_ops(&mfd_ops);
 
 	return 0;
 
-err_add_mfd_child:
-	mfd_remove_devices(dev);
 err_ipu_tpu_init:
+	mfd_remove_devices(dev);
+err_add_mfd_child:
 	abc_pcie_irq_free(pdev);
 err_pcie_init:
 	pci_release_regions(pdev);
