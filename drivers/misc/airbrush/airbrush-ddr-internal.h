@@ -24,6 +24,7 @@
 
 #define PLL_LOCKTIME_PLL_PHY_MIF	0x10510008
 #define PLL_CON0_PLL_PHY_MIF		0x10510140
+#define PLL_MUX_SEL_MSK			(0x1 << 4)
 #define PLL_MUX_SEL(x)			(x << 4)
 #define PLL_MUX_SEL_OSCCLK		(0x0)
 #define PLL_MUX_SEL_PLLOUT		(0x1)

@@ -647,6 +647,21 @@ static int ddr_config_cmu_mif_lowfreq(void)
 	return DDR_SUCCESS;
 }
 
+static void ddr_set_pll_to_oscillator(void)
+{
+	ddr_reg_set(DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
+
+	/* Select the oscillator clock from SYSREG_MIF */
+	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
+
+	/* Disable PLL and move PLL to oscillator clock */
+	ddr_reg_wr(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_OSCCLK));
+
+	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
+	ddr_reg_clr(DREX_MEMCONTROL, CLK_STOP_EN);
+}
+
 static int ddr_set_pll_freq(enum ddr_freq_t freq)
 {
 	static const struct airbrush_ddr_pll_t
@@ -680,6 +695,10 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	}
 
 	ddr_reg_set(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_PLLOUT));
+
+	/* Select the mif pll fout from SYSREG_MIF */
+	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
+
 	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
 	ddr_reg_clr(DREX_MEMCONTROL, CLK_STOP_EN);
 
@@ -2137,6 +2156,21 @@ EXPORT_SYMBOL(ab_ddr_suspend);
 
 int32_t ab_ddr_selfrefresh_exit(struct ab_state_context *sc)
 {
+	struct ab_ddr_context *ddr_ctx;
+
+	if (!sc || !sc->ddr_data) {
+		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
+		return DDR_FAIL;
+	}
+
+	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
+	/* Config MIF_PLL and move the MIF clock to PLL output */
+	if (ddr_set_pll_freq(ddr_ctx->cur_freq)) {
+		pr_err("%s: mif pll config failed.\n", __func__);
+		return DDR_FAIL;
+	}
+
 	/* Self-refresh exit sequence */
 	if (ddr_exit_self_refresh_mode()) {
 		pr_err("%s: self-refresh exit failed\n", __func__);
@@ -2163,6 +2197,11 @@ EXPORT_SYMBOL(ab_ddr_selfrefresh_exit);
 
 int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 {
+	if (!sc || !sc->ddr_data) {
+		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
+		return DDR_FAIL;
+	}
+
 #ifdef CONFIG_DDR_BOOT_TEST
 	ab_ddr_read_write_test(DDR_BOOT_TEST_WRITE);
 #endif
@@ -2182,6 +2221,9 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 		pr_err("%s: self-refresh entry failed\n", __func__);
 		return DDR_FAIL;
 	}
+
+	/* Move the MIF clock to oscillator */
+	ddr_set_pll_to_oscillator();
 
 	return DDR_SUCCESS;
 }
