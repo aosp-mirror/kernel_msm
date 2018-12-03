@@ -271,19 +271,26 @@ static ssize_t fts_fwupdate_show(struct device *dev,
 static ssize_t fts_appid_show(struct device *dev, struct device_attribute *attr,
 			      char *buf)
 {
-	int error;
-	char temp[100];
+	int written = 0;
+	char temp[35];
 
-	error = scnprintf(buf,
-			  PAGE_SIZE,
-			  "%s\n",
-			  printHex("ST-V",
-				   systemInfo.u8_releaseInfo,
-				   EXTERNAL_RELEASE_INFO_SIZE,
-				   temp,
-				   sizeof(temp)));
+	written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "REL: %s\n",
+			     printHex("",
+				      systemInfo.u8_releaseInfo,
+				      EXTERNAL_RELEASE_INFO_SIZE,
+				      temp,
+				      sizeof(temp)));
+	written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "FW: %04X\nCFG: %04X\nAFE: %02X\nProject: %04X\n",
+			     systemInfo.u16_fwVer, systemInfo.u16_cfgVer,
+			     systemInfo.u8_cfgAfeVer,
+			     systemInfo.u16_cfgProjectId);
+	written += scnprintf(buf + written, PAGE_SIZE - written,
+			     "MPFlag: %02X\n",
+			     systemInfo.u8_mpFlag);
 
-	return error;
+	return written;
 }
 
 /**
