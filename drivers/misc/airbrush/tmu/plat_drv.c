@@ -22,7 +22,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/mfd/abc-pcie.h>
 #include <linux/mfd/abc-pcie-notifier.h>
-#include "../../thermal/thermal_core.h"
+#include "../../../thermal/thermal_core.h"
 
 /* Exynos generic registers */
 #define AIRBRUSH_TMU_REG_TRIMINFO	0x0

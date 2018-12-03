@@ -1,4 +1,4 @@
-obj-$(CONFIG_AIRBRUSH_SM) += airbrush.o
+obj-$(CONFIG_AIRBRUSH_SM) += airbrush.o tmu/
 
 airbrush-y +=	\
 		airbrush-sm.o \
@@ -14,7 +14,6 @@ airbrush-y +=	\
 		airbrush-ppmu.o \
 		airbrush-cooling.o \
 		airbrush-thermal.o \
-		airbrush-tmu.o \
 		airbrush-sysfs.o
 
 airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS) += airbrush-debugfs.o
