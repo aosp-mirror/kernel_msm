@@ -526,33 +526,66 @@ static int oscar_enter_reset(struct gasket_dev *gasket_dev)
 	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_FORCE_QUIESCE);
 
-	/* 3. Enable Reset. */
-	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
-			    OSCAR_BAR_REG_AON_RESET);
-
 	/*
-	 *  4. Disable Clock Enable.
+	 *  3. Disable Clock Enable.
 	 *  - clock_enable = 0.
 	 *  - cb_idle_override = 1.
 	 */
 	gasket_dev_write_64(gasket_dev, 2, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
 
-	/* 5. Enable Clamp. */
+	/* 4. Enable memory shutdown, read reg to force write to commit. */
+	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
+
+	/*
+	 * 5. Enable clock, to allow reset to propagate, read to force commit.
+	 *  - clock_enable = 1.
+	 *  - cb_idle_override = 1.
+	 */
+	gasket_dev_write_64(gasket_dev, 3, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/* 6. Enable Reset. */
+	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_RESET);
+
+	/*
+	 *  7. Disable clock, read to force commit.
+	 *  - clock_enable = 0.
+	 *  - cb_idle_override = 1.
+	 */
+	gasket_dev_write_64(gasket_dev, 2, OSCAR_BAR_INDEX,
+			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/* 8. Enable Clamp. */
 	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLAMP_ENABLE);
 
-	/* 6. Enable Memory shutdown. */
-	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
+	/* 9. Disable tile control for deepsleep, read to force commit. */
+	gasket_dev_write_64(gasket_dev, 0xffff, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_TILEMEM_RETN);
-	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
-			    OSCAR_BAR_REG_AON_MEM_SHUTDOWN);
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_TILEMEM_RETN);
 
-	/* 7. Enable Logic shutdown. */
+	/* 10. Enable second pass logic shutdown, read to force commit. */
 	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL);
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_ALL);
+
+	/* 11. Enable first pass logic shutdown, read to force commit. */
+
 	gasket_dev_write_64(gasket_dev, 0x1ffff, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE);
+	gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
+			   OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE);
 	return 0;
 }
 
