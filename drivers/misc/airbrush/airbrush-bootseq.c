@@ -77,12 +77,11 @@ void parse_fw(uint32_t *image_dw_buf, const unsigned char *image_buf,
 }
 
 /* Caller must hold ab_ctx->state_lock */
-int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
+int ab_bootsequence(struct ab_state_context *ab_ctx)
 {
 	/* Number of attempts to flash SRAM bootcode when CRC error happens */
 	int num_attempts = 1;
-	int gpio_cke_in, gpio_ddr_sr, crc_ok = 1;
-	int state_suspend, state_off;
+	int crc_ok = 1;
 	unsigned int data;
 	struct airbrush_spi_packet spi_packet;
 	const struct firmware *fw_entry;
@@ -98,210 +97,64 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	if (!ab_ctx)
 		return -EINVAL;
 
-	if (!ab_ctx->ab_sm_ctrl_pmic) {
-		dev_dbg(ab_ctx->dev, "%s: No ABC booting by state manager\n",
-				__func__);
+	if (ab_ctx->cold_boot) {
+		ret = ab_get_pmic_resources(ab_ctx);
+		if (ret)
+			return ret;
 
-		/* Setup the function pointer to read DDR OTPs */
-		ab_ddr_setup(ab_ctx);
-
-		return 0;
-	}
-
-	ret = ab_get_pmic_resources(ab_ctx);
-	if (ret)
-		return ret;
-
-	/* Get the current state of CKE_IN, DDR_SR GPIOs */
-	gpio_cke_in = ab_gpio_get_ddr_iso(ab_ctx);
-	gpio_ddr_sr = ab_gpio_get_ddr_sr(ab_ctx);
-
-	state_off = (ab_ctx->curr_chip_substate_id == CHIP_STATE_6_0) ||
-			    ((gpio_cke_in == 0) && (gpio_ddr_sr == 0));
-	state_suspend = (ab_ctx->curr_chip_substate_id == CHIP_STATE_5_0);
-
-	if (state_suspend || state_off) {
 		ab_disable_pgood(ab_ctx);
 		msm_pcie_assert_perst(1);
+	}
 
-		ret = ab_pmic_on(ab_ctx);
-		if (ret) {
-			pr_err("ERROR!!! PMIC failure during ABC Boot\n");
-			return ret;
-		}
+	ret = ab_pmic_on(ab_ctx);
+	if (ret) {
+		dev_err(ab_ctx->dev, "ERROR!!! PMIC failure during ABC Boot");
+		return ret;
+	}
 
-		ret = enable_ref_clk(ab_ctx->dev);
-		if (ret) {
-			dev_err(ab_ctx->dev,
-				"Unable to enable reference clock (err %d)",
-				ret);
-			return ret;
-		}
+	ret = enable_ref_clk(ab_ctx->dev);
+	if (ret) {
+		dev_err(ab_ctx->dev,
+			"Unable to enable reference clock (err %d)",
+			ret);
+		return ret;
+	}
 
-		if (patch_fw && !ab_ctx->otp_fw_patch_dis) {
-			ab_gpio_enable_fw_patch(ab_ctx);
+	if (ab_ctx->curr_chip_substate_id == CHIP_STATE_5_0)
+		ab_gpio_enable_ddr_sr(ab_ctx);
 
-			fw_status =
-				request_firmware(&fw_entry,
-					M0_FIRMWARE_PATH, ab_ctx->dev);
-			if (fw_status != 0) {
-				pr_info("Airbrush Firmware Not Found: %d, %d\n",
-						fw_status, __LINE__);
-				return -EIO;
-			}
-			image_size_dw = fw_entry->size / 4;
-			image_dw_buf = vmalloc(image_size_dw *
-					sizeof(uint32_t));
-			parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
-			release_firmware(fw_entry);
-		}
+	if (ab_ctx->alternate_boot)
+		ab_gpio_enable_fw_patch(ab_ctx);
 
-		if (state_suspend)
-			ab_gpio_enable_ddr_sr(ab_ctx);
+	msm_pcie_deassert_perst(1);
+	ab_enable_pgood(ab_ctx);
 
-		msm_pcie_deassert_perst(1);
-		ab_enable_pgood(ab_ctx);
+	timeout = jiffies + SOC_PWRGOOD_WAIT_TIMEOUT;
+	/* Wait until soc_pwrgood is set by PMIC */
+	while (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood) &&
+			time_before(jiffies, timeout))
+		usleep_range(100, 105);
 
-		timeout = jiffies + SOC_PWRGOOD_WAIT_TIMEOUT;
-		/* Wait till the soc_pwrgood is put to high by PMIC */
-		while (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood) &&
-				time_before(jiffies, timeout))
-			usleep_range(100, 105);
+	if (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood)) {
+		dev_err(&plat_dev->dev, "ABC PWRGOOD is not enabled");
+		return -EIO;
+	}
 
-		if (!gpiod_get_value_cansleep(ab_ctx->soc_pwrgood)) {
-			dev_err(&plat_dev->dev,
-					"ABC PWRGOOD is not enabled");
+	if (ab_ctx->alternate_boot) {
+		fw_status =
+			request_firmware(&fw_entry,
+				M0_FIRMWARE_PATH, ab_ctx->dev);
+		if (fw_status != 0) {
+			dev_info(ab_ctx->dev,
+				 "Airbrush Firmware Not Found: %d, %d",
+				 fw_status, __LINE__);
 			return -EIO;
 		}
-
-		/* If Airbrush OTP is read OTP_FW_PATCH_DIS=1, we should not
-		 * go for secondary boot.
-		 */
-		if (patch_fw && !ab_ctx->otp_fw_patch_dis) {
-			/* Wait for AB_READY = 1,
-			 * this ensures the SPI FSM is initialized to flash the
-			 * alternate bootcode to SRAM.
-			 */
-			timeout = jiffies + AB_READY_WAIT_TIMEOUT;
-			while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
-					time_before(jiffies, timeout))
-				usleep_range(100, 105);
-
-			if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
-				dev_err(&plat_dev->dev,
-					"ab_ready is not High");
-				return -EIO;
-			}
-
-			/* Enable CRC via SPI-FSM */
-			while (num_attempts) {
-				/* [TBD] Reset CRC Register via SPI-FSM */
-
-				/* [TBD] Enable CRC */
-
-				/* Initiate FW patch upload via SPI-FSM */
-				spi_packet.command = AB_SPI_CMD_FSM_BURST_WRITE;
-				spi_packet.granularity = FOUR_BYTE;
-				spi_packet.base_address = SRAM_BL_ADDR;
-				spi_packet.data_length = image_size_dw;
-				spi_packet.data = image_dw_buf;
-
-				if (airbrush_spi_run_cmd(&spi_packet)) {
-					vfree(image_dw_buf);
-					return -EIO;
-				}
-
-				/* [TBD] Read CRC Register via SPI-FSM */
-
-				/* if CRC is OK, break the loop */
-				if (crc_ok)
-					break;
-
-				/* Decrement the number of attempts and retry */
-				num_attempts--;
-
-				if (!num_attempts) {
-					vfree(image_dw_buf);
-					return -EIO;
-				}
-			}
-
-			/* set REG_SRAM_ADDR=SRAM_BL_ADDR via SPI-FSM */
-			data = SRAM_BL_ADDR;
-			spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
-			spi_packet.granularity = FOUR_BYTE;
-			spi_packet.base_address = REG_SRAM_ADDR;
-			spi_packet.data_length = 1;
-			spi_packet.data = &data;
-
-			if (airbrush_spi_run_cmd(&spi_packet)) {
-				vfree(image_dw_buf);
-				return -EIO;
-			}
-
-			/* set REG_UPL_CMPL=1  via SPI-FSM */
-			data = 0x1; // used to write REG_UPL_CMPL = 0x1
-			spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
-			spi_packet.granularity = FOUR_BYTE;
-			spi_packet.base_address = REG_UPL_CMPL;
-			spi_packet.data_length = 1;
-			spi_packet.data = &data;
-
-			if (airbrush_spi_run_cmd(&spi_packet)) {
-				vfree(image_dw_buf);
-				return -EIO;
-			}
-
-			/* Read the REG_UPL_COMPL register to make sure the
-			 * AB_READY is deasserted by the Airbrush.
-			 * Note: Assumption is that, by the time host reads the
-			 * REG_UPL_CMPL register, Airbrush would have deasserted
-			 * the AB_READY gpio.
-			 */
-			spi_packet.command = AB_SPI_CMD_FSM_READ_SINGLE;
-			spi_packet.granularity = FOUR_BYTE;
-			spi_packet.base_address = REG_UPL_CMPL;
-			spi_packet.data_length = 1;
-			spi_packet.data = NULL;
-
-
-			if (airbrush_spi_run_cmd(&spi_packet)) {
-				vfree(image_dw_buf);
-				return -EIO;
-			}
-		}
-
-		if (!ab_ctx->pcie_enumerated) {
-			if (msm_pcie_enumerate(1)) {
-				pr_err("PCIe enumeration failed\n");
-				return -EIO;
-			}
-
-			ab_ctx->pcie_enumerated = true;
-
-			pbus = pci_find_bus(1, 1);
-			if (pbus) {
-				pdev = pbus->self;
-				while (!pci_is_root_bus(pbus)) {
-					pdev = pbus->self;
-					pbus = pbus->self->bus;
-				}
-				ab_ctx->pcie_dev = pdev;
-			}
-		} else {
-			ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
-				ab_ctx->pcie_dev, NULL,
-				MSM_PCIE_CONFIG_NO_CFG_RESTORE);
-			if (ret)
-				pr_err("PCIe failed to enable link\n");
-			else
-				msm_pcie_recover_config(ab_ctx->pcie_dev);
-		}
-
-		/* Enable schmitt trigger mode for SPI clk pad.
-		 * This is to filter out any noise on SPI clk line.
-		 */
-		ABC_WRITE(GPB0_DRV, 0x22222262);
+		image_size_dw = fw_entry->size / 4;
+		image_dw_buf = vmalloc(image_size_dw *
+				sizeof(uint32_t));
+		parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
+		release_firmware(fw_entry);
 
 		/* Wait for AB_READY = 1,
 		 * this ensures the SPI FSM is initialized to flash the
@@ -309,15 +162,143 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 		 */
 		timeout = jiffies + AB_READY_WAIT_TIMEOUT;
 		while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
-				time_before(jiffies, timeout)) {
+				time_before(jiffies, timeout))
 			usleep_range(100, 105);
-		}
 
 		if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
 			dev_err(&plat_dev->dev,
-				"ab_ready is not High");
+				"ab_ready is not high before fw load");
 			return -EIO;
 		}
+
+		/* Enable CRC via SPI-FSM */
+		while (num_attempts) {
+			/* [TBD] Reset CRC Register via SPI-FSM */
+
+			/* [TBD] Enable CRC */
+
+			/* Initiate FW patch upload via SPI-FSM */
+			spi_packet.command = AB_SPI_CMD_FSM_BURST_WRITE;
+			spi_packet.granularity = FOUR_BYTE;
+			spi_packet.base_address = SRAM_BL_ADDR;
+			spi_packet.data_length = image_size_dw;
+			spi_packet.data = image_dw_buf;
+
+			if (airbrush_spi_run_cmd(&spi_packet)) {
+				vfree(image_dw_buf);
+				return -EIO;
+			}
+
+			/* [TBD] Read CRC Register via SPI-FSM */
+
+			/* if CRC is OK, break the loop */
+			if (crc_ok)
+				break;
+
+			/* Decrement the number of attempts and retry */
+			num_attempts--;
+
+			if (!num_attempts) {
+				vfree(image_dw_buf);
+				return -EIO;
+			}
+		}
+
+		/* set REG_SRAM_ADDR=SRAM_BL_ADDR via SPI-FSM */
+		data = SRAM_BL_ADDR;
+		spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
+		spi_packet.granularity = FOUR_BYTE;
+		spi_packet.base_address = REG_SRAM_ADDR;
+		spi_packet.data_length = 1;
+		spi_packet.data = &data;
+
+		if (airbrush_spi_run_cmd(&spi_packet)) {
+			vfree(image_dw_buf);
+			return -EIO;
+		}
+
+		/* set REG_UPL_CMPL=1  via SPI-FSM */
+		data = 0x1; // used to write REG_UPL_CMPL = 0x1
+		spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
+		spi_packet.granularity = FOUR_BYTE;
+		spi_packet.base_address = REG_UPL_CMPL;
+		spi_packet.data_length = 1;
+		spi_packet.data = &data;
+
+		if (airbrush_spi_run_cmd(&spi_packet)) {
+			vfree(image_dw_buf);
+			return -EIO;
+		}
+
+		/* Read the REG_UPL_COMPL register to make sure the
+		 * AB_READY is deasserted by the Airbrush.
+		 * Note: Assumption is that, by the time host reads the
+		 * REG_UPL_CMPL register, Airbrush would have deasserted
+		 * the AB_READY gpio.
+		 */
+		spi_packet.command = AB_SPI_CMD_FSM_READ_SINGLE;
+		spi_packet.granularity = FOUR_BYTE;
+		spi_packet.base_address = REG_UPL_CMPL;
+		spi_packet.data_length = 1;
+		spi_packet.data = NULL;
+
+
+		if (airbrush_spi_run_cmd(&spi_packet)) {
+			vfree(image_dw_buf);
+			return -EIO;
+		}
+	}
+
+	if (ab_ctx->cold_boot) {
+		if (msm_pcie_enumerate(1)) {
+			dev_err(ab_ctx->dev, "PCIe enumeration failed");
+			return -EIO;
+		}
+
+		ab_ctx->cold_boot = false;
+
+		pbus = pci_find_bus(1, 1);
+		if (pbus) {
+			pdev = pbus->self;
+			while (!pci_is_root_bus(pbus)) {
+				pdev = pbus->self;
+				pbus = pbus->self->bus;
+			}
+			ab_ctx->pcie_dev = pdev;
+		}
+
+		/* Enable schmitt trigger mode for SPI clk pad.
+		 * This is to filter out any noise on SPI clk line.
+		 */
+		ABC_WRITE(GPB0_DRV, 0x22222262);
+
+		/* Disable patching if ab is B0 */
+		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
+			ab_ctx->alternate_boot = 0;
+	} else {
+		ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
+			ab_ctx->pcie_dev, NULL,
+			MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+		if (ret)
+			dev_err(ab_ctx->dev, "PCIe failed to enable link");
+		else
+			msm_pcie_recover_config(ab_ctx->pcie_dev);
+	}
+
+	/* Wait for AB_READY = 1,
+	 * this ensures the SPI FSM is initialized to flash the
+	 * alternate bootcode to SRAM.
+	 */
+	timeout = jiffies + AB_READY_WAIT_TIMEOUT;
+	while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
+			time_before(jiffies, timeout)) {
+		usleep_range(100, 105);
+	}
+
+	if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
+		dev_err(&plat_dev->dev,
+			"ab_ready is not high after fw load");
+		return -EIO;
 	}
 
 	/* Setup the function pointer to read DDR OTPs */
@@ -328,10 +309,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw)
 	 */
 	if (IS_HOST_DDR_INIT())
 		ab_ddr_init(ab_ctx);
-
-	/* Disable patching if ab is B0 */
-	if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
-		ab_ctx->otp_fw_patch_dis = 1;
 
 	return 0;
 }

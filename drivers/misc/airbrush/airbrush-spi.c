@@ -24,7 +24,8 @@
 
 #include "airbrush-spi.h"
 
-#define MAX_BURST_SIZE	0x2000
+#define AB_SPI_MAX_BURST_SIZE	0x2000
+#define AB_SPI_RESPONSE_TIMEOUT	1000
 
 //#define DEBUG
 #define WAIT_FOR_RESPONSE()	send_dummy_byte()
@@ -209,6 +210,7 @@ int airbrush_spi_run_cmd(struct airbrush_spi_packet *pkt)
 	uint8_t *tx_buff;
 	uint8_t *rx_buff;
 	uint32_t *result = pkt->data;
+	uint32_t timeout = AB_SPI_RESPONSE_TIMEOUT;
 
 	client = spi_get_drvdata(abc_spi_dev);
 	tx_buff = client->tx_buff_for_cmd;
@@ -220,7 +222,7 @@ int airbrush_spi_run_cmd(struct airbrush_spi_packet *pkt)
 
 	/* max size can be only of 32kb */
 	if (pkt->command == AB_SPI_CMD_FSM_BURST_WRITE &&
-			pkt->data_length > MAX_BURST_SIZE)
+			pkt->data_length > AB_SPI_MAX_BURST_SIZE)
 		return -EINVAL;
 
 	/*check if it FSM or non FSM */
@@ -234,9 +236,14 @@ int airbrush_spi_run_cmd(struct airbrush_spi_packet *pkt)
 
 	if (pkt->command == AB_SPI_CMD_FSM_READ_SINGLE) {
 
-		/* [TBD] Check for the infinite loop condition */
-		while (WAIT_FOR_RESPONSE() != 0x1)
+		while ((WAIT_FOR_RESPONSE() != 0x1) && (--timeout > 0))
 			;
+
+		if (timeout == 0) {
+			pr_err("%s: Timeout waiting for SPI response\n",
+					__func__);
+			return -EINVAL;
+		}
 
 		/* read response data */
 		rx_buff[0] = send_dummy_byte();

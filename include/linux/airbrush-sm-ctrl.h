@@ -422,10 +422,8 @@ struct ab_state_context {
 
 	unsigned int ab_ready_irq;	/* ab_ready_gpio irq */
 
-	/* OTP info from Airbrush (DT property) */
-	int otp_fw_patch_dis;
 	/* Check for alternate boot */
-	int ab_alternate_boot;
+	int alternate_boot;
 
 	/* Event callback registered by the SM */
 	ab_sm_callback_t cb_event;
@@ -454,11 +452,10 @@ struct ab_state_context {
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
 #endif
-	bool ab_sm_ctrl_pmic;
 	atomic_t clocks_registered;
 	enum ddr_state ddr_state;
 	struct pci_dev *pcie_dev;
-	bool pcie_enumerated;
+	bool cold_boot;
 
 	atomic_t async_in_use;
 	struct mutex async_fifo_lock;
@@ -517,8 +514,7 @@ int ab_sm_register_callback(struct ab_state_context *sc,
 int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id);
 enum chip_state ab_sm_get_state(struct ab_state_context *sc);
 
-int ab_bootsequence(struct ab_state_context *ab_ctx, bool patch_fw);
-void abc_clk_register(struct ab_state_context *ab_ctx);
+int ab_bootsequence(struct ab_state_context *ab_ctx);
 int ab_ddr_init(struct ab_state_context *sc);
 int ab_ddr_suspend(struct ab_state_context *sc);
 int ab_ddr_resume(struct ab_state_context *sc);

@@ -441,12 +441,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	if ((sc->curr_chip_substate_id == CHIP_STATE_6_0 ||
 	   sc->curr_chip_substate_id == CHIP_STATE_5_0) &&
-	   to_chip_substate_id < CHIP_STATE_3_0) {
-		if (sc->ab_alternate_boot)
-			ab_bootsequence(sc, 1);
-		else
-			ab_bootsequence(sc, 0);
-	}
+	   to_chip_substate_id < CHIP_STATE_3_0)
+		ab_bootsequence(sc);
 
 	if ((sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
 	   sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
@@ -988,10 +984,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	int ret;
 	u32 boot_time_block_state;
 
-	/* allocate device memory */
-	// TODO: Check return value is not NULL
 	ab_sm_ctx = devm_kzalloc(dev, sizeof(struct ab_state_context),
 							GFP_KERNEL);
+	if(ab_sm_ctx == NULL)
+		goto fail_mem_alloc;
 
 	ab_sm_ctx->pdev = pdev;
 	ab_sm_ctx->dev = &pdev->dev;
@@ -1008,7 +1004,6 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 		goto fail_misc_reg;
 	}
 
-
 	/* Get the gpio_desc for all the gpios used */
 	/* FW_PATCH_EN is used to inform Airbrush about host is interested in
 	 * secondary SRAM boot. This will help Airbrush to put SPI in FSM Mode.
@@ -1023,6 +1018,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	}
 
 	gpiod_set_value(ab_sm_ctx->fw_patch_en, __GPIO_DISABLE);
+
 	/* AB_READY is used by host to understand that Airbrush SPI is now in
 	 * FSM mode and host can start the SPI FSM commands to Airbrush.
 	 */
@@ -1034,22 +1030,12 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 		goto fail_ab_ready;
 	}
 
-	/* Get the otp-fw-patch-dis property from dt node. This property
-	 * provides the OTP information of Airbrush for allowing the
-	 * secondary boot via SRAM.
+	/* Get the alternate-boot property from dt node. This property
+	 * allows secondary boot via SPI.
 	 */
-	if (of_property_read_u32(np, "otp-fw-patch-dis",
-			&ab_sm_ctx->otp_fw_patch_dis))
-		dev_dbg(dev, "otp-fw-patch-dis property not found\n");
-
-	ab_sm_ctx->ab_sm_ctrl_pmic = true;
-
-	/* [TBD] Need DDR_SR, DDR_TRAIN, CKE_IN, CKE_IN_SENSE GPIOs for  */
-
-	/* Check for alternate boot */
-	if (of_property_read_u32(np, "ab-alternate-boot",
-			&ab_sm_ctx->ab_alternate_boot))
-		dev_dbg(dev, "ab-alternate-boot property not set\n");
+	if (of_property_read_u32(np, "alternate-boot",
+			&ab_sm_ctx->alternate_boot))
+		dev_dbg(dev, "alternate-boot property not found\n");
 
 	/* Intialize the default state of each block for state manager */
 	boot_time_block_state = ARRAY_SIZE(ipu_property_table)-1;
@@ -1103,6 +1089,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	init_completion(&ab_sm_ctx->state_change_comp);
 
 	ab_sm_ctx->chip_id = CHIP_ID_UNKNOWN;
+	ab_sm_ctx->cold_boot = true;
 
 	/* initialize state stats */
 	ab_sm_state_stats_init(ab_sm_ctx);
@@ -1133,6 +1120,7 @@ fail_misc_reg:
 	devm_kfree(dev, (void *)ab_sm_ctx);
 	ab_sm_ctx = NULL;
 
+fail_mem_alloc:
 	return NULL;
 }
 EXPORT_SYMBOL(ab_sm_init);

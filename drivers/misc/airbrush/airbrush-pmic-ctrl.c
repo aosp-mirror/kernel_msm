@@ -15,13 +15,6 @@
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
 			   enum block_name blk_name, u32 to_chip_substate_id)
 {
-	if (!sc->ab_sm_ctrl_pmic) {
-		dev_err(sc->dev,
-				"%s:No power rail controlled by state manager\n",
-				__func__);
-		return 0;
-	}
-
 	dev_dbg(sc->dev,
 			"%s: enabling rails for block %u chip substate id %u\n",
 			__func__, blk_name, to_chip_substate_id);
@@ -120,13 +113,6 @@ fail_regulator_enable:
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 			   enum block_name blk_name, u32 to_chip_substate_id)
 {
-	if (!sc->ab_sm_ctrl_pmic) {
-		dev_err(sc->dev,
-				"%s:No power rail controlled by state manager\n",
-				__func__);
-		return 0;
-	}
-
 	dev_dbg(sc->dev,
 			"%s: disabling rails for block %u chip substate id %u\n",
 			__func__, blk_name, to_chip_substate_id);
@@ -243,13 +229,6 @@ int ab_pmic_off(struct ab_state_context *sc)
 
 int ab_pmic_on(struct ab_state_context *sc)
 {
-	if (!sc->ab_sm_ctrl_pmic) {
-		dev_err(sc->dev,
-				"%s:No power rail controlled by state manager\n",
-				__func__);
-		return 0;
-	}
-
 	dev_dbg(sc->dev, "%s: setting rails to on\n", __func__);
 
 	if (!regulator_is_enabled(sc->smps2))
@@ -323,12 +302,6 @@ fail_regulator_enable:
 int ab_get_pmic_resources(struct ab_state_context *sc)
 {
 	struct device *dev = sc->dev;
-
-	if (!sc->ab_sm_ctrl_pmic) {
-		dev_err(dev, "%s:No power rail controlled by state manager\n",
-				__func__);
-		return 0;
-	}
 
 	mutex_lock(&sc->pmic_lock);
 
