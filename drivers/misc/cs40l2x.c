@@ -5577,12 +5577,12 @@ static int cs40l2x_brownout_config(struct cs40l2x_private *cs40l2x)
 	}
 
 	if (vbbr_thld1) {
-		if ((vbbr_thld1 < 109) || (vbbr_thld1 > 1690)) {
+		if ((vbbr_thld1 < 109) || (vbbr_thld1 > 3445)) {
 			dev_err(dev, "Invalid VBBR threshold: %d mV\n",
 					vbbr_thld1);
 			return -EINVAL;
 		}
-		vbbr_thld1_scaled = ((vbbr_thld1 - 109) * 10 / 545) + 0x02;
+		vbbr_thld1_scaled = ((vbbr_thld1 - 109) * 10 / 547) + 0x02;
 
 		ret = regmap_read(regmap, CS40L2X_VBBR_CFG, &val);
 		if (ret) {
