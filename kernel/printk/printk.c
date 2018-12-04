@@ -55,6 +55,16 @@
 #include "console_cmdline.h"
 #include "braille.h"
 
+#define CONFIG_MBV_DEBUG
+/* #define CONFIG_MBV_LAST_KMSG */
+
+#ifdef CONFIG_MBV_DEBUG
+#include <linux/io.h>
+#include <linux/proc_fs.h>
+#endif
+
+
+
 #ifdef CONFIG_EARLY_PRINTK_DIRECT
 extern void printascii(char *);
 #endif
@@ -244,6 +254,11 @@ __packed __aligned(4)
 static DEFINE_RAW_SPINLOCK(logbuf_lock);
 
 #ifdef CONFIG_PRINTK
+
+#ifdef CONFIG_MBV_DEBUG
+static void mbv_log_add(const struct printk_log *msg);
+#endif
+
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
 /* the next printk record to read by syslog(READ) or /proc/kmsg */
 static u64 syslog_seq;
@@ -270,6 +285,23 @@ static u32 clear_idx;
 
 #define PREFIX_MAX		32
 #define LOG_LINE_MAX		(1024 - PREFIX_MAX)
+
+
+#ifdef CONFIG_MBV_DEBUG
+#define MBV_LOG_MAGIC 0x12345678
+
+static unsigned int *mbv_log_idx_ptr;
+static char     *mbv_log_buf;
+static unsigned int mbv_log_size = 0x200000;
+
+static phys_addr_t mbv_log_buf_paddr = 0x84000000;
+
+#ifdef CONFIG_MBV_LAST_KMSG
+#define MBV_LAST_LOG_BUF_SHIFT 19
+static char *mbv_last_kmsg_buffer;
+static unsigned int mbv_last_kmsg_size;
+#endif
+#endif
 
 /* record buffer */
 #define LOG_ALIGN __alignof__(struct printk_log)
@@ -473,6 +505,10 @@ static int log_store(int facility, int level,
 		msg->ts_nsec = local_clock();
 	memset(log_dict(msg) + dict_len, 0, pad_len);
 	msg->len = size;
+
+	#ifdef CONFIG_MBV_DEBUG
+	mbv_log_add(msg);
+	#endif
 
 	/* insert message */
 	log_next_idx += msg->len;
@@ -1823,6 +1859,207 @@ asmlinkage int printk_emit(int facility, int level,
 }
 EXPORT_SYMBOL(printk_emit);
 
+
+#ifdef CONFIG_MBV_DEBUG
+unsigned int get_mbv_log_idx(void)
+{
+	return *mbv_log_idx_ptr;
+}
+EXPORT_SYMBOL(get_mbv_log_idx);
+
+static inline void mbv_log_output_char(char c)
+{
+	mbv_log_buf[*mbv_log_idx_ptr % mbv_log_size] = c;
+	(*mbv_log_idx_ptr)++;
+}
+
+static void mbv_log_add(const struct printk_log *msg)
+{
+	static char tmp[1024];
+	static unsigned char prev_flag;
+	int size = 0;
+	int i;
+
+	if (!mbv_log_buf || !mbv_log_idx_ptr)
+		return;
+
+	size = msg_print_text(msg, prev_flag, true, tmp, 1024);
+	prev_flag = msg->flags;
+	for (i = 0; i < size; i++)
+		mbv_log_output_char(tmp[i]);
+}
+
+static void mbv_log_add_on_bootup(void)
+{
+	u32 current_idx = log_first_idx;
+	struct printk_log *msg;
+
+	while (current_idx < log_next_idx) {
+		msg = log_from_idx(current_idx);
+		mbv_log_add(msg);
+		current_idx = log_next(current_idx);
+	}
+}
+
+#ifdef CONFIG_MBV_LAST_KMSG
+static int __init mbv_log_save_old(void)
+{
+	mbv_last_kmsg_size =
+	    min((unsigned)(1 << MBV_LAST_LOG_BUF_SHIFT), *mbv_log_idx_ptr);
+
+	mbv_last_kmsg_buffer = kmalloc(mbv_last_kmsg_size, GFP_KERNEL);
+
+	if (mbv_last_kmsg_size && mbv_last_kmsg_buffer && mbv_log_buf) {
+		unsigned int i;
+
+		for (i = 0; i < mbv_last_kmsg_size; i++)
+			mbv_last_kmsg_buffer[i] =
+			    mbv_log_buf[(*mbv_log_idx_ptr - mbv_last_kmsg_size +
+					 i) % mbv_log_size];
+		return 1;
+	} else {
+		return 0;
+	}
+}
+#else
+static int __init mbv_log_save_old(void)
+{
+	return 1;
+}
+#endif
+
+static int __init mbv_log_remap_log_memory(void)
+{
+	void __iomem *nocache_base = 0;
+	unsigned int *mbv_log_mag;
+	unsigned long flags;
+	int rc = 0;
+	int rc2 = 0;
+
+	nocache_base = ioremap_nocache((phys_addr_t)mbv_log_buf_paddr,
+					mbv_log_size);
+
+	if (!nocache_base) {
+		pr_err("remap log memory fail\n");
+		return rc;
+	}
+
+	pr_err("%s: remap log memory, vaddr=0x%lx phy=0x%x\n",
+		__func__, (unsigned long)nocache_base, mbv_log_buf_paddr);
+
+	mbv_log_buf = nocache_base + 0xC;
+	mbv_log_mag = nocache_base + 0x4;
+	mbv_log_idx_ptr = nocache_base + 0x8;
+	mbv_log_size -= 0xC;
+
+	if (*mbv_log_mag != MBV_LOG_MAGIC) {
+		pr_err("%s:mbv_log_magic is not valid : 0x%x at 0x%p\n"
+			, __func__, *mbv_log_mag, mbv_log_mag);
+		*mbv_log_idx_ptr = 0;
+		*mbv_log_mag = MBV_LOG_MAGIC;
+	} else {
+		rc2 = mbv_log_save_old();
+	}
+
+	raw_spin_lock_irqsave(&logbuf_lock, flags);
+
+	mbv_log_add_on_bootup();
+
+	raw_spin_unlock_irqrestore(&logbuf_lock, flags);
+
+#ifdef CONFIG_MBV_LAST_KMSG
+	if (rc2) {
+		pr_info("%s: saved last log at %d@%p\n",
+			__func__, mbv_last_kmsg_size, mbv_last_kmsg_buffer);
+	} else {
+		pr_err("%s: failed saving last log\n", __func__);
+	}
+#endif
+	return rc;
+}
+
+#ifdef CONFIG_MBV_LAST_KMSG
+static ssize_t mbv_last_klog_read(struct file *file, char __user *buf,
+				    size_t len, loff_t *offset)
+{
+	loff_t pos = *offset;
+	ssize_t count = 0;
+	size_t log_size = mbv_last_kmsg_size;
+	const char *log = mbv_last_kmsg_buffer;
+
+	if (pos < log_size) {
+		count = min(len, (size_t)(log_size - pos));
+		if (copy_to_user(buf, log + pos, count))
+			return -EFAULT;
+	}
+
+	*offset += count;
+	return count;
+}
+
+static const struct file_operations mbv_last_klog_file_ops = {
+	.owner = THIS_MODULE,
+	.read = mbv_last_klog_read,
+};
+#endif
+
+static ssize_t mbv_klog_read(struct file *file, char __user *buf,
+				    size_t len, loff_t *offset)
+{
+	loff_t pos = *offset;
+	ssize_t count = 0;
+	size_t log_size = mbv_log_size;
+	const char *log = mbv_log_buf;
+
+	if (pos < log_size) {
+		count = min(len, (size_t)(log_size - pos));
+		if (copy_to_user(buf, log + pos, count))
+			return -EFAULT;
+	}
+
+	*offset += count;
+	return count;
+}
+
+static const struct file_operations mbv_klog_file_ops = {
+	.owner = THIS_MODULE,
+	.read = mbv_klog_read,
+};
+
+static int __init mbv_log_late_init(void)
+{
+	struct proc_dir_entry *entry;
+
+	if (!mbv_log_buf)
+		return 0;
+
+#ifdef CONFIG_MBV_LAST_KMSG
+	entry = proc_create_data("mbv_last_kmsg", S_IFREG | S_IRUGO,
+			NULL, &mbv_last_klog_file_ops, NULL);
+	if (!entry) {
+		pr_err("%s: failed to create proc entry. ", __func__);
+		pr_err("ram console may be present.\n");
+		return 0;
+	}
+	proc_set_size(entry, mbv_last_kmsg_size);
+#endif
+
+	entry = proc_create_data("mbv_kmsg", S_IFREG | S_IRUGO,
+			NULL, &mbv_klog_file_ops, NULL);
+	if (!entry) {
+		pr_err("%s: failed to create proc entry. ", __func__);
+		pr_err("ram console may be present.\n");
+		return 0;
+	}
+	proc_set_size(entry, mbv_log_size);
+
+	return 0;
+}
+late_initcall(mbv_log_late_init);
+
+#endif
+
+
 /**
  * printk - print a kernel message
  * @fmt: format string
@@ -3126,5 +3363,8 @@ void show_regs_print_info(const char *log_lvl)
 	       log_lvl, current, current_thread_info(),
 	       task_thread_info(current));
 }
+
+
+subsys_initcall(mbv_log_remap_log_memory);
 
 #endif

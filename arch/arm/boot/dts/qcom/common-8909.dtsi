@@ -39,6 +39,11 @@
 			compatible = "removed-dma-pool";
 			no-map;
 		};
+		mbv_debug_region: mbv_debug_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0x0 0x84000000 0x0 0x00200000>;
+		};
 	};
 
 };
