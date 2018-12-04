@@ -22,6 +22,8 @@
 #include <linux/faceauth.h>
 #include <linux/firmware.h>
 
+#include <linux/mfd/abc-pcie.h>
+
 #include <linux/miscdevice.h>
 #include <linux/uio.h>
 #include <linux/uaccess.h>
@@ -39,6 +41,7 @@
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
+#define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
 #define COMPARE_RESULT_FLAG_ADDR 0x21fffff4
 #define OPERATION_FLAG_ADDR 0x21fffff8
 #define COMPLETION_FLAG_ADDR 0x21fffffc
@@ -74,12 +77,52 @@ static int dma_read_dw(struct file *file, const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
 static int dma_send_workloads(void);
 static int dma_gather_debug(struct faceauth_debug_data *data);
+static int pio_write_qw(const int remote_addr, const uint64_t val);
 
 struct faceauth_data {
 	int dma_dw_buf;
 };
 bool hypx_enable;
+uint64_t m0_verbosity_level;
 struct dentry *faceauth_debugfs_root;
+
+/* M0 Verbosity Level Encoding
+
+64 bits wide allocated as follows:
+	Bit  0   Errors
+	Bits 1-3 Performance
+	Bits 4-7 Scheduler
+	Bits 8-11 IPU
+	Bits 12-15 TPU
+	Bits 16-19 Post Process
+	Bits 20-63 Reserved
+
+In these slots, the debug levels are specified as follows:
+	Level 0: 0b0000
+	Level 1: 0b1000
+	Level 2: 0b0100
+	Level 3: 0b0010
+	Level 4: 0b0001
+
+Level 0 means errors only. The other levels yield increasingly more information.
+
+To set all these levels, you must write the number in either
+unsigned hexadecimal format or unisigned decimal format
+to a certain file: /d/faceauth/m0_verbosity_level
+If using hexadecimal, you need to put "0x" in front.
+For example:
+either
+adb shell "echo 0x108248 > /d/faceauth/m0_verbosity_level"
+or
+adb shell "echo 1081928 > /d/faceauth/m0_verbosity_level"
+will result in the following settings:
+	general errors level 0 (meaning ON)
+	performance level 2
+	scheduler level 3
+	IPU level 1
+	TPU level 0
+	post process level 4
+*/
 
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
@@ -102,6 +145,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("Error in sending M0 firmware\n");
 			goto exit;
 		}
+
+		pio_write_qw(M0_VERBOSITY_LEVEL_FLAG_ADDR, m0_verbosity_level);
 
 		break;
 	case FACEAUTH_DEV_IOC_START:
@@ -476,6 +521,41 @@ static int dma_gather_debug(struct faceauth_debug_data *data)
 	return err;
 }
 
+/*
+ * Local function to write a QW from user space memory to Airbrush via
+ * PCIE by PIO.
+ * @param[in] remote Airbrush physical address
+ * @param[in] QW data (64 bits) to write
+ * @return Status, zero if succeed, non-zero if fail
+ */
+static int pio_write_qw(const int remote_addr, const uint64_t val)
+{
+	// This has to be performed as two separate 32 bit writes because
+	// Lassen's driver has a bug. See drivers/mfd/abc_pcie.c line 368
+	uint32_t lower = (uint32_t) val;
+	uint32_t upper = (uint32_t) (val >> 32);
+
+	int err = 0;
+
+	err = memory_config_write(remote_addr, 4, lower);
+
+	if (err) {
+		pr_err("Error in writing data to Airbrush at address 0x%08x\n",
+			remote_addr);
+		return err;
+	}
+
+	err = memory_config_write(remote_addr + 4, 4, upper);
+
+	if (err) {
+		pr_err("Error in writing data to Airbrush at address 0x%08x\n",
+			remote_addr);
+		return err;
+	}
+
+	return 0;
+}
+
 static int hypx_enable_debugfs_show(struct seq_file *m, void *data)
 {
 	seq_printf(m, "%s\n", hypx_enable ? "1" : "0");
@@ -524,12 +604,71 @@ static const struct file_operations hypx_enable_debugfs_fops = {
 	.write = hypx_enable_debugfs_write,
 };
 
+static int m0_verbosity_level_debugfs_show(struct seq_file *m, void *data)
+{
+	seq_printf(m, "%u\n", m0_verbosity_level);
+	return 0;
+}
+
+static int m0_verbosity_level_debugfs_open(struct inode *inode,
+					   struct file *file)
+{
+	return single_open(file, m0_verbosity_level_debugfs_show,
+			   inode->i_private);
+}
+
+static ssize_t m0_verbosity_level_debugfs_write(struct file *file,
+						const char __user *ubuf,
+						size_t len, loff_t *offp)
+{
+	// Maximum possible uint64_t in decimal format (18446744073709551615)
+	// will fit, including  newline and null terminator.
+	// We also accept hex format. Remember to put "0x" in front.
+	// Example for the same number above: 0xffffffffffffffff
+	char buf[22];
+	uint64_t verbosity_level;
+	int ret;
+
+	if (len > sizeof(buf) - 1)
+		return -EINVAL;
+
+	if (copy_from_user(buf, ubuf, len))
+		return -EFAULT;
+
+	while (len > 0 && isspace(buf[len - 1]))
+		len--;
+	buf[len] = '\0';
+
+	ret = kstrtoull(buf, 0, &verbosity_level);
+	if (ret)
+		return -EINVAL;
+
+	m0_verbosity_level = verbosity_level;
+
+	pr_debug("Faceauth M0 verbosity level is set to %llu\n",
+		verbosity_level);
+
+	return len;
+}
+
+static const struct file_operations m0_verbosity_level_debugfs_fops = {
+	.owner = THIS_MODULE,
+	.open = m0_verbosity_level_debugfs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = m0_verbosity_level_debugfs_write,
+};
+
 static int __init faceauth_init(void)
 {
 	int err;
-	struct dentry *hypx;
+	struct dentry *hypx, *m0_verbosity_level;
 
 	pr_info("faceauth init\n");
+
+	hypx_enable = false;
+	m0_verbosity_level = 0;
 
 	err = misc_register(&faceauth_miscdevice);
 	if (err)
@@ -542,10 +681,18 @@ static int __init faceauth_init(void)
 		goto exit2;
 	}
 
-	hypx = debugfs_create_file("hypx_enable", 0400,
-				   faceauth_debugfs_root, NULL,
-				   &hypx_enable_debugfs_fops);
+	hypx = debugfs_create_file("hypx_enable", 0400, faceauth_debugfs_root,
+				   NULL, &hypx_enable_debugfs_fops);
 	if (!hypx) {
+		err = -EIO;
+		goto exit3;
+	}
+
+	m0_verbosity_level =
+		debugfs_create_file("m0_verbosity_level", 0400,
+				    faceauth_debugfs_root, NULL,
+				    &m0_verbosity_level_debugfs_fops);
+	if (!m0_verbosity_level) {
 		err = -EIO;
 		goto exit3;
 	}
