@@ -355,80 +355,82 @@ static void airbrush_tmu_core_enable(struct platform_device *pdev, bool enable)
 	}
 }
 
-static int airbrush_tmu_initialize(struct platform_device *pdev)
+static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
+		int i)
 {
-	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
-	unsigned int status, trim_info;
-	int ret = 0;
+	/* TODO We should have one tzd for each sensor instead. */
+	unsigned int trim_info;
 	struct thermal_zone_device *tz = data->tzd;
 	unsigned int rising_threshold = 0, falling_threshold = 0;
-	int threshold_code, i, j;
+	int j;
+	int threshold_code;
 	int temp, temp_hist;
 	unsigned int reg_off, bit_off;
 
-	status = tmu_read(data->base + AIRBRUSH_TMU_REG_STATUS);
-	if (!status) {
-		ret = -EBUSY;
-		goto out;
+	trim_info = tmu_read(data->base + AIRBRUSH_TMU_REG_TRIMINFO_P(i));
+
+	data->cal_type[i] = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
+			AIRBRUSH_TMU_CAL_MASK;
+
+	data->temp_error1[i] = trim_info & AIRBRUSH_TMU_TEMP_MASK;
+	data->temp_error2[i] = (trim_info >> AIRBRUSH_TMU_TEMP_SHIFT) &
+			AIRBRUSH_TMU_TEMP_MASK;
+
+	if (data->cal_type[i] == AIRBRUSH_NO_TRIMMING) {
+		data->temp_error1[i] = no_trimming_error1[i];
+		data->temp_error2[i] = no_trimming_error2[i];
 	}
 
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
-		trim_info = tmu_read(data->base +
-				     AIRBRUSH_TMU_REG_TRIMINFO_P(i));
+	// TODO different tz for each sensor
+	for (j = (of_thermal_get_ntrips(tz) - 1); j >= 0; j--) {
+		reg_off = ((7 - j) / 2) * 4;
+		bit_off = ((8 - j) % 2);
 
-		data->cal_type[i] = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
-				    (AIRBRUSH_TMU_CAL_MASK);
-
-		data->temp_error1[i] = trim_info & AIRBRUSH_TMU_TEMP_MASK;
-		data->temp_error2[i] = (trim_info >> AIRBRUSH_TMU_TEMP_SHIFT) &
-				       (AIRBRUSH_TMU_TEMP_MASK);
-
-		if (data->cal_type[i] == AIRBRUSH_NO_TRIMMING) {
-			data->temp_error1[i] = no_trimming_error1[i];
-			data->temp_error2[i] = no_trimming_error2[i];
-		}
-	}
-
-	for (i = (of_thermal_get_ntrips(tz) - 1); i >= 0; i--) {
-
-		reg_off = ((7 - i) / 2) * 4;
-		bit_off = ((8 - i) % 2);
-
-		tz->ops->get_trip_temp(tz, i, &temp);
+		tz->ops->get_trip_temp(tz, j, &temp);
 		temp /= MCELSIUS;
 
-		tz->ops->get_trip_hyst(tz, i, &temp_hist);
+		tz->ops->get_trip_hyst(tz, j, &temp_hist);
 		temp_hist = temp - (temp_hist / MCELSIUS);
 
-		for (j = 0; j < AIRBRUSH_NUM_ALL_PROBE; j++) {
-			/* Set 9-bit temp code for rising threshold levels */
-			threshold_code = temp_to_code(data, temp, j);
-			rising_threshold = tmu_read(data->base +
-				AIRBRUSH_THD_TEMP_RISE7_6_P(j) + reg_off);
-			rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
-				(16 * bit_off));
-			rising_threshold |= threshold_code << (16 * bit_off);
+		/* Set 9-bit temp code for rising threshold levels */
+		threshold_code = temp_to_code(data, temp, i);
+		rising_threshold = tmu_read(data->base +
+				AIRBRUSH_THD_TEMP_RISE7_6_P(i) + reg_off);
+		rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK << (16 * bit_off));
+		rising_threshold |= threshold_code << (16 * bit_off);
 
-			/* Set 9-bit temp code for falling threshold levels */
-			threshold_code = temp_to_code(data, temp_hist, j);
-			falling_threshold = tmu_read(data->base +
-				AIRBRUSH_THD_TEMP_FALL7_6_P(j) + reg_off);
-			falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
+		/* Set 9-bit temp code for falling threshold levels */
+		threshold_code = temp_to_code(data, temp_hist, i);
+		falling_threshold = tmu_read(data->base +
+				AIRBRUSH_THD_TEMP_FALL7_6_P(i) + reg_off);
+		falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
 				(16 * bit_off));
-			falling_threshold |= threshold_code << (16 * bit_off);
+		falling_threshold |= threshold_code << (16 * bit_off);
 
-			tmu_write(rising_threshold,
-				data->base + AIRBRUSH_THD_TEMP_RISE7_6_P(j) +
+		tmu_write(rising_threshold,
+				data->base + AIRBRUSH_THD_TEMP_RISE7_6_P(i) +
 				reg_off);
-			tmu_write(falling_threshold,
-				data->base + AIRBRUSH_THD_TEMP_FALL7_6_P(j) +
+		tmu_write(falling_threshold,
+				data->base + AIRBRUSH_THD_TEMP_FALL7_6_P(i) +
 				reg_off);
-		}
 	}
+}
+
+static int airbrush_tmu_initialize(struct platform_device *pdev)
+{
+	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
+	unsigned int status;
+	int i;
+
+	status = tmu_read(data->base + AIRBRUSH_TMU_REG_STATUS);
+	if (!status)
+		return -EBUSY;
+
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
+		airbrush_tmu_sensor_initialize(data, i);
 
 	airbrush_tmu_clear_irqs(data);
-out:
-	return ret;
+	return 0;
 }
 
 static void airbrush_tmu_control(struct platform_device *pdev, bool on)
