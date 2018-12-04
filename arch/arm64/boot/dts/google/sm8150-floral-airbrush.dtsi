@@ -197,19 +197,14 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&ab_ready_default &ab_fw_patch_en_default>;
 
-		host-gpio-ctrl = <1>;
-		otp-fw-patch-dis = <0>;
-		/* In case "otp-fw-patch-dis" is zero, user can try to boot ABC
-		 * in alternate boot mode (using spi-fsm). This property will
-		 * let the state manager know the current boot method to follow
-		 * is alternate boot when set to 1.
+		/* In case "alternate-boot" is set, user can boot ABC
+		 * in alternate boot mode using SPI.
 		 */
-		ab-alternate-boot = <1>;
+		alternate-boot = <1>;
 		/* OTP: if this bit is set, the DDR OTP values are already
 		 * updated in the OTP memory of ABC
 		 */
 		ddr-otp-flashed = <0>;
-
 	};
 
 	abc-clk {
