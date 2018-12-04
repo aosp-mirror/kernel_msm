@@ -29,6 +29,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/pm_wakeup.h>
+#include <linux/pmic-voter.h>
 #include "google_bms.h"
 #include "google_psy.h"
 
@@ -89,14 +90,19 @@ struct batt_drv {
 	u32 battery_capacity;
 
 	union gbms_charger_state chg_state;
+
 	int temp_idx;
 	int vbatt_idx;
 	int checked_cv_cnt;
 	int checked_ov_cnt;
 	int checked_tier_switch_cnt;
+
 	int fv_uv;
 	int cc_max;
 	int msc_update_interval;
+	struct votable	*msc_interval_votable;
+	struct votable	*fcc_votable;
+	struct votable	*fv_votable;
 
 	/* recharge logic */
 	enum batt_rl_status rl_status;
@@ -323,7 +329,6 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		 * NOTE: same vbat_idx will not change fv_uv
 		 */
 		vbatt_idx = gbms_msc_voltage_idx(profile, vbatt);
-		update_interval = profile->cv_update_interval;
 
 		pr_info("MSC_DSG vbatt_idx:%d->%d vbatt=%d ibatt=%d fv_uv=%d cv_cnt=%d ov_cnt=%d\n",
 			batt_drv->vbatt_idx, vbatt_idx,
@@ -496,52 +501,49 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	}
 
 	/* update fv or cc will change in last tier... */
-	if ((vbatt_idx != batt_drv->vbatt_idx)
-		|| (temp_idx != batt_drv->temp_idx)
-		|| (fv_uv != batt_drv->fv_uv)) {
-		const int cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
-						    vbatt_idx);
 
-		/* need a new fv_uv only on a new voltage tier */
-		if (vbatt_idx != batt_drv->vbatt_idx) {
-			fv_uv = profile->volt_limits[vbatt_idx];
-			batt_drv->checked_tier_switch_cnt = 0;
-			batt_drv->checked_ov_cnt = 0;
-		}
-
-		pr_info("MSC_SET cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
-			batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
-			batt_drv->temp_idx, temp_idx, batt_drv->vbatt_idx,
-			vbatt_idx, batt_drv->fv_uv, fv_uv, cc_max);
-
-		batt_drv->vbatt_idx = vbatt_idx;
-		batt_drv->temp_idx = temp_idx;
-		batt_drv->fv_uv = fv_uv;
-		batt_drv->cc_max = cc_max;
+	/* need a new fv_uv only on a new voltage tier */
+	if (vbatt_idx != batt_drv->vbatt_idx) {
+		fv_uv = profile->volt_limits[vbatt_idx];
+		batt_drv->checked_tier_switch_cnt = 0;
+		batt_drv->checked_ov_cnt = 0;
 	}
 
+	batt_drv->vbatt_idx = vbatt_idx;
+	batt_drv->temp_idx = temp_idx;
+	batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx);
+	batt_drv->fv_uv = fv_uv;
 	/* next update */
 	batt_drv->msc_update_interval = update_interval;
 
+	pr_info("MSC_SET cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
+		batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
+		batt_drv->temp_idx, temp_idx, batt_drv->vbatt_idx,
+		vbatt_idx, batt_drv->fv_uv, fv_uv,
+		batt_drv->cc_max);
+
 	return 0;
 }
+
+#define MSC_LOGIC_VOTER "msc_logic"
 
 /* called holding chg_lock */
 static int msc_logic(struct batt_drv *batt_drv)
 {
 	int err = 0;
+	union gbms_charger_state *chg_state = &batt_drv->chg_state;
 
 	if (!batt_drv->chg_profile.cccm_limits)
 		return -EINVAL;
 
 	__pm_stay_awake(&batt_drv->batt_ws);
 
-	pr_info("MSC_IN chg_state[%x:%x:%x:%x]:%lx\n",
-		batt_drv->chg_state.f.chg_type,
-		batt_drv->chg_state.f.chg_status,
-		batt_drv->chg_state.f.flags,
-		batt_drv->chg_state.f.vchrg,
-		(unsigned long)batt_drv->chg_state.v);
+	pr_info("MSC_DIN chg_state=%lx f=0x%x chg_s=%s chg_t=%s vchg=%d\n",
+		(unsigned long)chg_state->v,
+		chg_state->f.flags,
+		gbms_chg_status_s(chg_state->f.chg_status),
+		gbms_chg_type_s(chg_state->f.chg_type),
+		chg_state->f.vchrg);
 
 	/* here google_charger trigger the recharge logic and get out of it. */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
@@ -563,9 +565,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 			batt_drv->cc_max,
 			batt_drv->msc_update_interval);
 	} else {
-		/* NOTE: google charger will ask again on an error, rely on it
-		 * to poll more or less right away.
-		 */
+		/* NOTE: google charger will poll again. */
 		batt_drv->msc_update_interval = -1;
 		pr_err("MSC_OUT ERROR=%d fv_uv=%d cc_max=%d update_interval=%d\n",
 			err, batt_drv->fv_uv, batt_drv->cc_max,
@@ -573,10 +573,34 @@ static int msc_logic(struct batt_drv *batt_drv)
 	}
 
 exit_msc_logic:
+
+	if (!batt_drv->fv_votable)
+		batt_drv->fv_votable = find_votable(VOTABLE_MSC_FV);
+	if (batt_drv->fv_votable)
+		vote(batt_drv->fv_votable, MSC_LOGIC_VOTER,
+			batt_drv->fv_uv != -1,
+			batt_drv->fv_uv);
+	if (!batt_drv->fcc_votable)
+		batt_drv->fcc_votable = find_votable(VOTABLE_MSC_FCC);
+	if (batt_drv->fcc_votable)
+		vote(batt_drv->fcc_votable, MSC_LOGIC_VOTER,
+			batt_drv->cc_max != -1,
+			batt_drv->cc_max);
+
+	/* NOTE: might trigger google charger */
+	if (!batt_drv->msc_interval_votable)
+		batt_drv->msc_interval_votable =
+			find_votable(VOTABLE_MSC_INTERVAL);
+	if (batt_drv->msc_interval_votable)
+		vote(batt_drv->msc_interval_votable, MSC_LOGIC_VOTER,
+			 batt_drv->msc_update_interval != -1,
+			 batt_drv->msc_update_interval);
+
 	__pm_relax(&batt_drv->batt_ws);
 	return err;
 }
 
+	/* charge profile not in battery */
 static int batt_init_chg_profile(struct batt_drv *batt_drv)
 {
 	struct device_node *node = batt_drv->device->of_node;
@@ -594,7 +618,7 @@ static int batt_init_chg_profile(struct batt_drv *batt_drv)
 	ret = of_property_read_u32(node, "google,chg-battery-capacity",
 				   &batt_drv->battery_capacity);
 	if (ret < 0)
-		pr_warn("cannot read chg-battery-capacity, ret=%d\n", ret);
+		pr_warn("read chg-battery-capacity from gauge\n");
 
 	return 0;
 }
