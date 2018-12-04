@@ -407,7 +407,7 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 
 			/* Set 9-bit temp code for falling threshold levels */
 			threshold_code = temp_to_code(data, temp_hist, j);
-			tmu_read(data->base +
+			falling_threshold = tmu_read(data->base +
 				AIRBRUSH_THD_TEMP_FALL7_6_P(j) + reg_off);
 			falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
 				(16 * bit_off));
