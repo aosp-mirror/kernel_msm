@@ -23,14 +23,7 @@
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 void ipu_stp_debug_init(struct paintbox_data *pb, struct paintbox_stp *stp);
 void ipu_stp_debug_remove(struct paintbox_data *pb, struct paintbox_stp *stp);
-
-int ipu_stp_dump_registers(struct paintbox_debug *debug, char *buf, size_t len);
 #else
-static inline int ipu_stp_dump_registers(struct paintbox_debug *debug,
-		char *buf, size_t len)
-{
-	return 0;
-}
 static inline void ipu_stp_debug_init(struct paintbox_data *pb,
 		struct paintbox_stp *stp) {}
 static inline void ipu_stp_debug_remove(struct paintbox_data *pb,

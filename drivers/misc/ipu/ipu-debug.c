@@ -438,15 +438,6 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 		return ret;
 	}
 
-	for (i = 0; i < pb->stp.num_stps; i++) {
-		ret = ipu_stp_dump_registers(&pb->stp.stps[i].debug, buf +
-				written, len - written);
-		if (ret < 0)
-			goto err_exit;
-
-		written += ret;
-	}
-
 	for (i = 0; i < pb->lbp.num_lbps; i++) {
 		ret = ipu_lbp_dump_registers(&pb->lbp.lbps[i].debug,
 				buf + written, len - written);
@@ -492,7 +483,6 @@ static int ipu_debug_reg_dump_open(struct inode *inode, struct file *file)
 	len = IO_APB_NUM_REGS * REG_DEBUG_BUFFER_SIZE;
 	len += IO_AXI_NUM_REGS * REG_DEBUG_BUFFER_SIZE;
 	len += pb->dma.num_channels * DMA_DEBUG_BUFFER_SIZE;
-	len += pb->stp.num_stps * STP_NUM_REGS * REG_DEBUG_BUFFER_SIZE;
 	len += pb->lbp.num_lbps * LBP_NUM_REGS * REG_DEBUG_BUFFER_SIZE;
 	len += pb->lbp.num_lbps * pb->lbp.max_lbs * LB_NUM_REGS *
 			REG_DEBUG_BUFFER_SIZE;

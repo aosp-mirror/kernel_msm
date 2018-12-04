@@ -88,13 +88,26 @@ struct ipu_debug_register {
 	struct dentry *dentry;
 	unsigned int offset;
 };
+
 struct ipu_dma_channel_debug_register {
 	struct ipu_debug_register debug_register;
 	unsigned int channel_id;
 };
+
 struct ipu_dma_channel_debug_regs {
 	struct paintbox_data *pb;
 	struct paintbox_dma_channel *channel;
+	struct dentry *dentry;
+};
+
+struct ipu_stp_debug_register {
+	struct ipu_debug_register debug_register;
+	unsigned int stp_id;
+};
+
+struct ipu_stp_debug_regs {
+	struct paintbox_data *pb;
+	struct paintbox_stp *stp;
 	struct dentry *dentry;
 };
 #endif
@@ -212,12 +225,14 @@ struct paintbox_stp {
 	 * ioctls.
 	 */
 	struct list_head session_entry;
-#if IS_ENABLED(CONFIG_IPU_DEBUG)
-	struct paintbox_debug debug;
-#endif
 	struct paintbox_session *session;
 	unsigned int stp_id;
 	bool pm_enabled;
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	struct dentry *debug_dir;
+	struct ipu_stp_debug_regs debug_reg_dump;
+	struct ipu_stp_debug_register debug_registers[STP_NUM_REGS];
+#endif
 };
 
 struct paintbox_stp_common {
