@@ -18,11 +18,16 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/of_batterydata.h>
+#include <linux/of_irq.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include "google_bms.h"
+/* hackaroo... */
+#include "../qcom/smb5-reg.h"
+#include "../qcom/smb5-lib.h"
 
 #define BIAS_STS_READY	BIT(0)
 
@@ -34,7 +39,6 @@ struct bms_dev {
 	int				batt_id_ohms;
 	int				taper_control;
 	bool				fcc_stepper_enable;
-	union	gbms_charger_state	chg_chgr_state;
 };
 
 struct bias_config {
@@ -118,6 +122,234 @@ static int sm8150_write(struct regmap *pmic_regmap, int addr, u8 *val, int len)
 	return 0;
 }
 
+static int sm8150_masked_write(struct regmap *pmic_regmap,
+			       u16 addr, u8 mask, u8 val)
+{
+	return regmap_update_bits(pmic_regmap, addr, mask, val);
+}
+
+/* ------------------------------------------------------------------------- */
+
+static irqreturn_t sm8150_chg_state_change_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct bms_dev *chg = irq_data->parent_data;
+	u8 stat;
+	int rc;
+
+	dev_dbg(chg->dev, "IRQ: %s\n", irq_data->name);
+
+	rc = sm8150_read(chg->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
+				&stat, 1);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
+				rc);
+		return IRQ_HANDLED;
+	}
+
+	stat = stat & BATTERY_CHARGER_STATUS_MASK;
+	power_supply_changed(chg->psy);
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t sm8150_batt_temp_changed_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct bms_dev *chg = irq_data->parent_data;
+
+	/* TODO: handle software jeita ? */
+	dev_dbg(chg->dev, "IRQ: %s\n", irq_data->name);
+	power_supply_changed(chg->psy);
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t sm8150_batt_psy_changed_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct bms_dev *chg = irq_data->parent_data;
+
+	dev_dbg(chg->dev, "IRQ: %s\n", irq_data->name);
+	power_supply_changed(chg->psy);
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t sm8150_default_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+
+	dev_dbg(chg->dev, "IRQ: %s\n", irq_data->name);
+	return IRQ_HANDLED;
+}
+
+/* TODO: sparse, consider adding .irqno */
+static struct smb_irq_info sm8150_bms_irqs[] = {
+	/* CHARGER IRQs */
+	[CHGR_ERROR_IRQ] = {
+		.name		= "chgr-error",
+		.handler	= sm8150_default_irq_handler,
+	},
+	[CHG_STATE_CHANGE_IRQ] = {
+		.name		= "chg-state-change",
+		.handler	= sm8150_chg_state_change_irq_handler,
+		.wake		= true,
+	},
+	[STEP_CHG_STATE_CHANGE_IRQ] = {
+		.name		= "step-chg-state-change",
+	},
+	[STEP_CHG_SOC_UPDATE_FAIL_IRQ] = {
+		.name		= "step-chg-soc-update-fail",
+	},
+	[STEP_CHG_SOC_UPDATE_REQ_IRQ] = {
+		.name		= "step-chg-soc-update-req",
+	},
+	[FG_FVCAL_QUALIFIED_IRQ] = {
+		.name		= "fg-fvcal-qualified",
+	},
+	[VPH_ALARM_IRQ] = {
+		.name		= "vph-alarm",
+	},
+	[VPH_DROP_PRECHG_IRQ] = {
+		.name		= "vph-drop-prechg",
+	},
+	/* BATTERY IRQs */
+	[BAT_TEMP_IRQ] = {
+		.name		= "bat-temp",
+		.handler	= sm8150_batt_temp_changed_irq_handler,
+		.wake		= true,
+	},
+	[ALL_CHNL_CONV_DONE_IRQ] = {
+		.name		= "all-chnl-conv-done",
+	},
+	[BAT_OV_IRQ] = {
+		.name		= "bat-ov",
+		.handler	= sm8150_batt_psy_changed_irq_handler,
+	},
+	[BAT_LOW_IRQ] = {
+		.name		= "bat-low",
+		.handler	= batt_psy_changed_irq_handler,
+	},
+	[BAT_THERM_OR_ID_MISSING_IRQ] = {
+		.name		= "bat-therm-or-id-missing",
+		.handler	= sm8150_batt_psy_changed_irq_handler,
+	},
+	[BAT_TERMINAL_MISSING_IRQ] = {
+		.name		= "bat-terminal-missing",
+		.handler	= sm8150_batt_psy_changed_irq_handler,
+	},
+	[BUCK_OC_IRQ] = {
+		.name		= "buck-oc",
+	},
+	[VPH_OV_IRQ] = {
+		.name		= "vph-ov",
+	},
+};
+
+static int sm8150_get_irq_index_byname(const char *irq_name)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(sm8150_bms_irqs); i++) {
+		if (!sm8150_bms_irqs[i].name)
+			continue;
+
+		if (strcmp(sm8150_bms_irqs[i].name, irq_name) == 0)
+			return i;
+	}
+
+	return -ENOENT;
+}
+
+static int sm8150_request_interrupt(struct bms_dev *bms,
+				    struct device_node *node,
+				    const char *irq_name)
+{
+	int rc, irq, irq_index;
+	struct smb_irq_data *irq_data;
+
+	irq = of_irq_get_byname(node, irq_name);
+	if (irq < 0) {
+		pr_err("Couldn't get irq %s byname\n", irq_name);
+		return irq;
+	}
+
+	irq_index = sm8150_get_irq_index_byname(irq_name);
+	if (irq_index < 0) {
+		pr_err("%s is not a defined irq\n", irq_name);
+		return irq_index;
+	}
+
+	if (!sm8150_bms_irqs[irq_index].handler)
+		return 0;
+
+	irq_data = devm_kzalloc(bms->dev, sizeof(*irq_data), GFP_KERNEL);
+	if (!irq_data)
+		return -ENOMEM;
+
+	irq_data->parent_data = bms;
+	irq_data->name = irq_name;
+	irq_data->storm_data = sm8150_bms_irqs[irq_index].storm_data;
+	mutex_init(&irq_data->storm_data.storm_lock);
+
+	rc = devm_request_threaded_irq(bms->dev, irq, NULL,
+					sm8150_bms_irqs[irq_index].handler,
+					IRQF_ONESHOT, irq_name, irq_data);
+	if (rc < 0) {
+		pr_err("Couldn't request irq %d\n", irq);
+		return rc;
+	}
+
+	sm8150_bms_irqs[irq_index].irq = irq;
+	sm8150_bms_irqs[irq_index].irq_data = irq_data;
+	if (sm8150_bms_irqs[irq_index].wake)
+		enable_irq_wake(irq);
+
+	return rc;
+}
+
+static void sm8150_free_interrupts(struct bms_dev *bms)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(sm8150_bms_irqs); i++) {
+		if (sm8150_bms_irqs[i].irq > 0) {
+			if (sm8150_bms_irqs[i].wake)
+				disable_irq_wake(sm8150_bms_irqs[i].irq);
+
+			devm_free_irq(bms->dev, sm8150_bms_irqs[i].irq,
+						sm8150_bms_irqs[i].irq_data);
+		}
+	}
+}
+
+static void sm8150_disable_interrupts(struct bms_dev *bms)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(sm8150_bms_irqs); i++) {
+		if (sm8150_bms_irqs[i].irq > 0)
+			disable_irq(sm8150_bms_irqs[i].irq);
+	}
+}
+
+static int sm8150_request_interrupts(struct bms_dev *bms)
+{
+	struct device_node *node = bms->dev->of_node;
+	struct device_node *child;
+	int rc = 0;
+	const char *name;
+	struct property *prop;
+
+	for_each_available_child_of_node(node, child) {
+		of_property_for_each_string(child, "interrupt-names",
+					    prop, name) {
+			rc = sm8150_request_interrupt(bms, child, name);
+			if (rc < 0)
+				return rc;
+		}
+	}
+	return 0;
+}
 
 static struct bias_config batt_id_table[3] = {
 	{0x4265, 0x4266, 400},
@@ -251,6 +483,56 @@ static int sm8150_get_battery_voltage(const struct bms_dev *bms, int *val)
 	return 0;
 }
 
+
+#define SM8150_IS_ONLINE(stat)	\
+	(((stat) & (USE_DCIN_BIT | USE_USBIN_BIT)) && \
+	((stat) & VALID_INPUT_POWER_SOURCE_STS_BIT))
+
+/* charger online when connected */
+static bool sm8150_is_online(const struct bms_dev *bms)
+{
+	u8 stat;
+	const int rc = sm8150_read(bms->pmic_regmap,
+				   DCDC_POWER_PATH_STATUS_REG,
+				   &stat, 1);
+
+	return (rc == 0) && SM8150_IS_ONLINE(stat);
+}
+
+static int sm8150_is_limited(const struct bms_dev *bms)
+{
+	int rc;
+	u8 val;
+
+	rc = sm8150_read(bms->pmic_regmap, DCDC_AICL_STATUS_REG, &val, 1);
+	return (rc < 0) ? -EIO : ((val & DCDC_SOFT_ILIMIT_BIT) != 0);
+}
+
+int sm8150_rerun_aicl(const struct bms_dev *bms)
+{
+	int rc;
+	u8 stat;
+
+	rc = sm8150_read(bms->pmic_regmap, POWER_PATH_STATUS_REG, &stat, 1);
+	if (rc < 0) {
+		pr_err("Couldn't read POWER_PATH_STATUS rc=%d\n", rc);
+		return rc;
+	}
+
+	/* USB is suspended so skip re-running AICL */
+	if (stat & USBIN_SUSPEND_STS_BIT)
+		return rc;
+
+	pr_info("Re-running AICL\n");
+
+	rc = sm8150_masked_write(bms->pmic_regmap, AICL_CMD_REG,
+					RERUN_AICL_BIT, RERUN_AICL_BIT);
+	if (rc < 0)
+		pr_err("Couldn't write to AICL_CMD_REG rc=%d\n", rc);
+
+	return 0;
+}
+
 static int sm8150_get_batt_status(const struct bms_dev *bms)
 {
 	bool usb_online, dc_online;
@@ -259,9 +541,9 @@ static int sm8150_get_batt_status(const struct bms_dev *bms)
 
 	rc = sm8150_read(bms->pmic_regmap, DCDC_POWER_PATH_STATUS_REG,
 				&stat, 1);
-	if (rc < 0) {
+	if (rc < 0)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
-	}
+
 	dc_online = (stat & USE_DCIN_BIT) &&
 			(stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
 
@@ -270,9 +552,9 @@ static int sm8150_get_batt_status(const struct bms_dev *bms)
 
 	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
 				&stat, 1);
-	if (rc < 0) {
+	if (rc < 0)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
-	}
+
 	stat = stat & CHGR_BATTERY_CHARGER_STATUS_MASK;
 
 	if (!usb_online && !dc_online) {
@@ -313,9 +595,8 @@ static int sm8150_get_batt_status(const struct bms_dev *bms)
 
 	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_5_REG,
 				&stat, 1);
-	if (rc < 0) {
+	if (rc < 0)
 		return ret;
-	}
 
 	stat &= ENABLE_TRICKLE_BIT | ENABLE_PRE_CHARGING_BIT |
 					ENABLE_FULLON_MODE_BIT;
@@ -325,52 +606,64 @@ static int sm8150_get_batt_status(const struct bms_dev *bms)
 	return ret;
 }
 
-static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
-			  union gbms_charger_state *state)
+static int sm8150_get_chg_type(const struct bms_dev *bms)
 {
-	u8 val, chg_type;
-	int vchrg;
-	int rc = 0;
-
-	state->v = 0;
+	u8 val;
+	int chg_type, rc;
 
 	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
 				&val, 1);
-	if (rc < 0) {
-		chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
-		return -EINVAL;
-	} else {
-		switch (val & CHGR_BATTERY_CHARGER_STATUS_MASK) {
-		case SM8150_TRICKLE_CHARGE:
-		case SM8150_PRE_CHARGE:
-			chg_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
-			break;
-		case SM8150_FULLON_CHARGE:
-			chg_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
-			break;
-		case SM8150_TAPER_CHARGE:
-			chg_type = POWER_SUPPLY_CHARGE_TYPE_TAPER;
-			break;
-		default:
-			chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
-			break;
-		}
-	}
-	state->f.chg_type = chg_type;
+	if (rc < 0)
+		return POWER_SUPPLY_CHARGE_TYPE_UNKNOWN;
 
-	state->f.chg_status = sm8150_get_batt_status(bms);
-	if (state->f.chg_status != POWER_SUPPLY_STATUS_DISCHARGING)
-		state->f.flags |= GBMS_CS_FLAG_BUCK_EN;
-	if (state->f.chg_status == POWER_SUPPLY_STATUS_FULL)
-		state->f.flags |= GBMS_CS_FLAG_DONE;
+	switch (val & CHGR_BATTERY_CHARGER_STATUS_MASK) {
+	case SM8150_TRICKLE_CHARGE:
+	case SM8150_PRE_CHARGE:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
+		break;
+	case SM8150_FULLON_CHARGE:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
+		break;
+	case SM8150_TAPER_CHARGE:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_TAPER;
+		break;
+	default:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
+		break;
+	}
+
+	return chg_type;
+}
+
+static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
+			  union gbms_charger_state *chg_state)
+{
+	int vchrg, rc;
+
+	chg_state->v = 0;
+	chg_state->f.chg_status = sm8150_get_batt_status(bms);
+	chg_state->f.chg_type = sm8150_get_chg_type(bms);
+	chg_state->f.flags = gbms_gen_chg_flags(chg_state->f.chg_status,
+						chg_state->f.chg_type);
+
+	rc = sm8150_is_limited(bms);
+	if (rc > 0)
+		chg_state->f.flags |= GBMS_CS_FLAG_ILIM;
 
 	rc = sm8150_get_battery_voltage(bms, &vchrg);
 	if (rc < 0) {
 		pr_err("Couldn't read VOLTAGE_NOW rc=%d\n", rc);
-		state->f.vchrg = 0;
+		chg_state->f.vchrg = 0;
 	} else {
-		state->f.vchrg = (vchrg / 1000);
+		chg_state->f.vchrg = (vchrg / 1000);
 	}
+
+	pr_info("MSC_PCS chg_state=%lx [0x%x:%d:%d:%d]\n",
+		(unsigned long)chg_state->v,
+		chg_state->f.flags,
+		chg_state->f.chg_type,
+		chg_state->f.chg_status,
+		chg_state->f.vchrg);
 
 	return 0;
 }
@@ -380,20 +673,27 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 				       union power_supply_propval *pval)
 {
 	struct bms_dev *bms = (struct bms_dev *)power_supply_get_drvdata(psy);
+	union gbms_charger_state chg_state;
 	u8 val;
 	int ivalue = 0;
 	int rc = 0;
 
 	if (!bms->psy) {
-		pr_err("failed to get power supply\n");
+		pr_err("failed to register power supply\n");
 		return -ENODATA;
 	}
 
 	switch (psp) {
+	/* called from power_supply_update_leds(), not using it on this
+	 * platform. Could return the state of the charge buck (BUCKEN)
+	 */
+	case POWER_SUPPLY_PROP_ONLINE:
+		pval->intval = sm8150_is_online(bms);
+		break;
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		pval->intval = bms->batt_id_ohms;
 		break;
-	/*pixel battery management subsystem*/
+	/* pixel battery management subsystem */
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		/*CHGR_FAST_CHARGE_CURRENT_SETTING, 0x1061
 		 * 7 : 0 => FAST_CHARGE_CURRENT_SETTING:
@@ -419,33 +719,12 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
-		rc = sm8150_get_chg_chgr_state(bms, &bms->chg_chgr_state);
-		if (!rc) {
-			pval->int64val = bms->chg_chgr_state.v;
-		}
+		rc = sm8150_get_chg_chgr_state(bms, &chg_state);
+		if (!rc)
+			pval->int64val = chg_state.v;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
-		rc = sm8150_read(bms->pmic_regmap,
-				CHGR_BATTERY_CHARGER_STATUS_1_REG, &val, 1);
-		if (rc < 0) {
-			pval->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
-		} else {
-			switch (val & CHGR_BATTERY_CHARGER_STATUS_MASK) {
-			case SM8150_TRICKLE_CHARGE:
-			case SM8150_PRE_CHARGE:
-				pval->intval =
-					POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
-				break;
-			case SM8150_FULLON_CHARGE:
-				pval->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
-				break;
-			case SM8150_TAPER_CHARGE:
-				pval->intval = POWER_SUPPLY_CHARGE_TYPE_TAPER;
-				break;
-			default:
-				pval->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
-			}
-		}
+		pval->intval = sm8150_get_chg_type(bms);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_DONE:
 		rc = sm8150_read(bms->pmic_regmap,
@@ -458,17 +737,15 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		rc = sm8150_get_battery_current(bms, &ivalue);
-		if (!rc) {
+		if (!rc)
 			pval->intval = ivalue;
-		}
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
-		rc = sm8150_read(bms->pmic_regmap, DCDC_AICL_STATUS_REG,
-				&val, 1);
-		if (!rc) {
-			pr_info("AICL : %d\n", val);
-			pval->intval = (val & DCDC_SOFT_ILIMIT_BIT) ? 1 : 0;
-		}
+		rc = sm8150_is_limited(bms);
+		if (rc < 0)
+			break;
+		pr_info("AICL : %d\n", rc);
+		pval->intval = (rc > 0);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		/*CHGR_FLOAT_VOLTAGE_NOW 0x1009
@@ -484,9 +761,8 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		rc = sm8150_get_battery_voltage(bms, &ivalue);
-		if (!rc) {
+		if (!rc)
 			pval->intval = ivalue;
-		}
 		break;
 	case POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED:
 		rc = sm8150_read(bms->pmic_regmap,
@@ -504,11 +780,13 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		pval->intval = bms->taper_control;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
-		rc = sm8150_read(bms->pmic_regmap,CHGR_CHARGING_ENABLE_CMD,
+		rc = sm8150_read(bms->pmic_regmap, CHGR_CHARGING_ENABLE_CMD,
 				&val, 1);
-		if (!rc) {
+		if (!rc)
 			pval->intval = (val & CHARGING_ENABLE_CMD_BIT) ? 0 : 1;
-		}
+		break;
+	case POWER_SUPPLY_PROP_RERUN_AICL:
+		pval->intval = 0;
 		break;
 	default:
 		pr_err("getting unsupported property: %d\n", psp);
@@ -546,7 +824,10 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 				CHGR_FAST_CHARGE_CURRENT_SETTING, &val, 1);
 		if (rc < 0)
 			pr_err("Couldn't set CHARGE_CURRENT rc=%d\n", rc);
+		pr_info("CHARGE_CURRENT_NOW : ivalue=%d, val=%d\n",
+								ivalue, val);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
 		/*CHGR_FLOAT_VOLTAGE_SETTING  0x1070
 		 * 7 : 0 => FLOAT_VOLTAGE_SETTING:
@@ -562,6 +843,7 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 				&val, 1);
 		if (rc < 0)
 			pr_err("Couldn't set FLOAT_VOLTAGE rc=%d\n", rc);
+		pr_info("FLOAT_VOLTAGE_NOW : ivalue=%d, val=%d\n", ivalue, val);
 		break;
 	case POWER_SUPPLY_PROP_TAPER_CONTROL:
 		bms->taper_control = pval->intval;
@@ -570,9 +852,11 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 		val = (pval->intval)? 0 : CHARGING_ENABLE_CMD_BIT;
 		rc = sm8150_write(bms->pmic_regmap,CHGR_CHARGING_ENABLE_CMD,
 				&val, 1);
-		if(rc < 0) {
+		if (rc < 0)
 			pr_err("Couldn't set CHARGING_ENABLE rc=%d\n", rc);
-		}
+		break;
+	case POWER_SUPPLY_PROP_RERUN_AICL:
+		rc = sm8150_rerun_aicl(bms);
 		break;
 	default:
 		pr_err("setting unsupported property: %d\n", psp);
@@ -586,10 +870,12 @@ static int sm8150_property_is_writeable(struct power_supply *psy,
 					enum power_supply_property psp)
 {
 	switch (psp) {
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_TAPER_CONTROL:
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
+	case POWER_SUPPLY_PROP_RERUN_AICL:
 		return 1;
 	default:
 		break;
@@ -608,13 +894,14 @@ static enum power_supply_property sm8150_psy_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_DONE,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
-	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,	/* compat */
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	POWER_SUPPLY_PROP_CHARGE_DISABLE,
 	POWER_SUPPLY_PROP_TAPER_CONTROL,
-
+	POWER_SUPPLY_PROP_RERUN_AICL
 };
 
 static struct power_supply_desc sm8150_psy_desc = {
@@ -708,6 +995,12 @@ static int bms_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+	rc = sm8150_request_interrupts(bms);
+	if (rc < 0) {
+		pr_err("Couldn't register the interrupts rc = %d\n", rc);
+		goto exit;
+	}
+
 	pr_info("BMS driver probed successfully\n");
 	return 0;
 exit:
@@ -716,11 +1009,21 @@ exit:
 
 static int bms_remove(struct platform_device *pdev)
 {
+	struct bms_dev *bms = platform_get_drvdata(pdev);
+
+	sm8150_free_interrupts(bms);
+	platform_set_drvdata(pdev, NULL);
+
 	return 0;
 }
 
 static void bms_shutdown(struct platform_device *pdev)
 {
+	struct bms_dev *bms = platform_get_drvdata(pdev);
+
+	/* disable all interrupts */
+	sm8150_disable_interrupts(bms);
+
 	return;
 }
 
