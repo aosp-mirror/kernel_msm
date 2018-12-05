@@ -4773,7 +4773,8 @@ irqreturn_t chg_state_change_irq_handler(int irq, void *data)
 	if (chg->wa_flags & CHG_TERMINATION_WA)
 		smblib_eval_chg_termination(chg, stat);
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
 
@@ -4804,7 +4805,8 @@ irqreturn_t batt_psy_changed_irq_handler(int irq, void *data)
 	struct smb_charger *chg = irq_data->parent_data;
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
 
