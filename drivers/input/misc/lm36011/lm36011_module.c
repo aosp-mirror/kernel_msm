@@ -50,6 +50,17 @@
 #define PROXDIFF_REG 0x65
 #define PROXOFFSET_REG 0x67
 
+#define VIO_VOLTAGE_MIN 1800000
+#define VIO_VOLTAGE_MAX 1800000
+#define SLIEGO_VDD_VOlTAGE_MIN 2800000
+#define SLIEGO_VDD_VOlTAGE_MAX 2800000
+#define SX9320_VDD_VOlTAGE_MIN 1800000
+#define SX9320_VDD_VOlTAGE_MAX 1800000
+#define PMIC_BUCK1_VOlTAGE_MIN 1350000
+#define PMIC_BUCK1_VOlTAGE_MAX 1350000
+#define PMIC_BUCK2_VOlTAGE_MIN 4100000
+#define PMIC_BUCK2_VOlTAGE_MAX 4100000
+
 enum SILEGO_GPIO {
 	IR_VCSEL_FAULT,
 	IR_VCSEL_TEST,
@@ -91,6 +102,8 @@ struct led_laser_ctrl_t {
 	bool is_probed;
 	bool is_certified;
 	struct regulator *vio;
+	struct regulator *buck1;
+	struct regulator *buck2;
 	enum LASER_TYPE type;
 	uint32_t read_addr;
 	uint32_t read_data;
@@ -458,7 +471,59 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 {
 	int rc;
 
+	if (!ctrl->is_power_up) {
+		rc = regulator_set_voltage(ctrl->buck1,
+			PMIC_BUCK1_VOlTAGE_MIN, PMIC_BUCK1_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set pmic buck1 voltage failed: %d", rc);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->buck1);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"buck1 regulator_enable failed: rc: %d", rc);
+			return rc;
+		}
+
+		rc = regulator_set_voltage(ctrl->buck2,
+			PMIC_BUCK2_VOlTAGE_MIN, PMIC_BUCK2_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set pmic buck2 voltage failed: %d", rc);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->buck2);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"buck2 regulator_enable failed: rc: %d", rc);
+			return rc;
+		}
+
+		rc = regulator_set_voltage(ctrl->vio,
+			VIO_VOLTAGE_MIN, VIO_VOLTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set vio voltage failed: %d", rc);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->vio);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"vio regulator_enable failed: rc: %d", rc);
+			return rc;
+		}
+		ctrl->is_power_up = true;
+	}
+
 	if (!ctrl->cap_sense.is_power_up) {
+		rc = regulator_set_voltage(ctrl->cap_sense.vdd,
+			SX9320_VDD_VOlTAGE_MIN, SX9320_VDD_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set cap sense vdd voltage failed: %d", rc);
+			return rc;
+		}
 		rc = regulator_enable(ctrl->cap_sense.vdd);
 		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev,
@@ -470,6 +535,13 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	}
 
 	if (!ctrl->silego.is_power_up) {
+		rc = regulator_set_voltage(ctrl->silego.vdd,
+			SLIEGO_VDD_VOlTAGE_MIN, SLIEGO_VDD_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set silego vdd voltage failed: %d", rc);
+			return rc;
+		}
 		rc = regulator_enable(ctrl->silego.vdd);
 		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev,
@@ -477,16 +549,6 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 			return rc;
 		}
 		ctrl->silego.is_power_up = true;
-	}
-
-	if (!ctrl->is_power_up) {
-		rc = regulator_enable(ctrl->vio);
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"regulator_enable failed: rc: %d", rc);
-			return rc;
-		}
-		ctrl->is_power_up = true;
 	}
 
 	if (!ctrl->cap_sense.is_cci_init) {
@@ -560,16 +622,6 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 			ctrl->cap_sense.is_cci_init = false;
 	}
 
-	if (ctrl->is_power_up) {
-		is_error = regulator_disable(ctrl->vio);
-		if (is_error < 0) {
-			rc = is_error;
-			dev_err(ctrl->soc_info.dev,
-				"laser regulator_disable failed: rc: %d", rc);
-		} else
-			ctrl->is_power_up = false;
-	}
-
 	if (ctrl->silego.is_power_up) {
 		is_error = regulator_disable(ctrl->silego.vdd);
 		if (is_error < 0) {
@@ -589,6 +641,20 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 				rc);
 		} else
 			ctrl->cap_sense.is_power_up = false;
+	}
+
+	if (ctrl->is_power_up) {
+		is_error = regulator_disable(ctrl->vio) +
+			regulator_set_voltage(ctrl->buck2,
+				0, PMIC_BUCK2_VOlTAGE_MAX) +
+			regulator_disable(ctrl->buck2) +
+			regulator_disable(ctrl->buck1);
+		if (is_error < 0) {
+			rc = is_error;
+			dev_err(ctrl->soc_info.dev,
+				"laser regulator_disable failed: rc: %d", rc);
+		} else
+			ctrl->is_power_up = false;
 	}
 
 	return rc;
@@ -916,6 +982,20 @@ static int lm36011_parse_dt(struct device *dev)
 	if (IS_ERR(ctrl->cap_sense.vdd)) {
 		ctrl->cap_sense.vdd = NULL;
 		dev_err(dev, "unable to get cap sense vdd");
+		return -ENOENT;
+	}
+
+	ctrl->buck1 = devm_regulator_get(dev, "pmic_buck1");
+	if (IS_ERR(ctrl->buck1)) {
+		ctrl->buck1 = NULL;
+		dev_err(dev, "unable to get pmic buck1");
+		return -ENOENT;
+	}
+
+	ctrl->buck2 = devm_regulator_get(dev, "pmic_buck2");
+	if (IS_ERR(ctrl->buck2)) {
+		ctrl->buck2 = NULL;
+		dev_err(dev, "unable to get pmic buck2");
 		return -ENOENT;
 	}
 
