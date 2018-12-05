@@ -1911,7 +1911,7 @@ static void notify_adc_tm_fn(struct work_struct *work)
 			notify_clients(adc_tm);
 	}
 
-	atomic_dec(&chip->wq_cnt);
+	WARN_ON(atomic_dec_if_positive(&chip->wq_cnt) < 0);
 }
 
 static int qpnp_adc_tm_recalib_request_check(struct qpnp_adc_tm_chip *chip,
@@ -2158,7 +2158,7 @@ static int qpnp_adc_tm_disable_rearm_high_thresholds(
 	if (!queue_work(chip->sensor[sensor_num].req_wq,
 				&chip->sensor[sensor_num].work)) {
 		/* The item is already queued, reduce the count */
-		atomic_dec(&chip->wq_cnt);
+		WARN_ON(atomic_dec_if_positive(&chip->wq_cnt) < 0);
 	}
 
 	return rc;
@@ -2269,7 +2269,7 @@ static int qpnp_adc_tm_disable_rearm_low_thresholds(
 	if (!queue_work(chip->sensor[sensor_num].req_wq,
 				&chip->sensor[sensor_num].work)) {
 		/* The item is already queued, reduce the count */
-		atomic_dec(&chip->wq_cnt);
+		WARN_ON(atomic_dec_if_positive(&chip->wq_cnt) < 0);
 	}
 
 	return rc;
@@ -2390,7 +2390,7 @@ fail:
 
 	if (rc < 0 || (!chip->th_info.adc_tm_high_enable &&
 					!chip->th_info.adc_tm_low_enable))
-		atomic_dec(&chip->wq_cnt);
+		WARN_ON(atomic_dec_if_positive(&chip->wq_cnt) < 0);
 
 	return rc;
 }
@@ -3344,10 +3344,11 @@ static void qpnp_adc_tm_shutdown(struct platform_device *pdev)
 static int qpnp_adc_tm_suspend_noirq(struct device *dev)
 {
 	struct qpnp_adc_tm_chip *chip = dev_get_drvdata(dev);
+	int cnt = atomic_read(&chip->wq_cnt);
 
-	if (atomic_read(&chip->wq_cnt) != 0) {
-		pr_err(
-			"Aborting suspend, adc_tm notification running while suspending\n");
+	if (cnt != 0) {
+		pr_err("Aborting suspend, adc_tm notification "
+			"running while suspending cnt=%d\n", cnt);
 		return -EBUSY;
 	}
 	return 0;
