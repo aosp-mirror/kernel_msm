@@ -455,7 +455,7 @@
 		irq-gpio = <&tlmm 126 0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&rt5514_irq>;
-		spi-max-frequency = <20000000>;
+		spi-max-frequency = <10000000>;
 		spi-cpol;
 		spi-cpha;
 	};
