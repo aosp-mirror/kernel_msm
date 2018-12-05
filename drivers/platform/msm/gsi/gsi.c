@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -620,6 +620,8 @@ static irqreturn_t gsi_isr(int irq, void *ctxt)
 			gsi_handle_irq();
 			gsi_ctx->per.rel_clk_cb(gsi_ctx->per.user_data);
 		}
+	} else if (!gsi_ctx->per.clk_status_cb()) {
+		return IRQ_HANDLED;
 	} else {
 		gsi_handle_irq();
 	}
