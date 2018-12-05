@@ -3988,7 +3988,8 @@ irqreturn_t chg_state_change_irq_handler(int irq, void *data)
 	}
 
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
 
@@ -4006,7 +4007,8 @@ irqreturn_t batt_temp_changed_irq_handler(int irq, void *data)
 	}
 
 	rerun_election(chg->fcc_votable);
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
 
@@ -4016,7 +4018,8 @@ irqreturn_t batt_psy_changed_irq_handler(int irq, void *data)
 	struct smb_charger *chg = irq_data->parent_data;
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
 

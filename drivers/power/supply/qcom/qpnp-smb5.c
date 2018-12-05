@@ -198,6 +198,7 @@ struct smb_dt_props {
 	int			term_current_thresh_hi_ma;
 	int			term_current_thresh_lo_ma;
 	int			batt_psy_is_bms;
+	int			batt_psy_disable;
 	const char		*batt_psy_name;
 
 };
@@ -451,6 +452,8 @@ static int smb5_parse_dt(struct smb5 *chip)
 
 	chip->dt.batt_psy_is_bms =
 		of_property_read_bool(node, "google,batt_psy_is_bms");
+	chip->dt.batt_psy_disable =
+		of_property_read_bool(node, "google,batt_psy_disable");
 
 	(void)of_property_read_string(node, "google,batt_psy_name",
 				      &chip->dt.batt_psy_name);
@@ -1506,6 +1509,11 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
 
+	if (chip->dt.batt_psy_disable) {
+		pr_warn("Requested disable of battery power supply\n");
+		return 0;
+	}
+
 	batt_cfg.drv_data = chg;
 	batt_cfg.of_node = chg->dev->of_node;
 
@@ -1515,8 +1523,8 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 		batt_psy_desc.name = chip->dt.batt_psy_name;
 
 	chg->batt_psy = devm_power_supply_register(chg->dev,
-					   &batt_psy_desc,
-					   &batt_cfg);
+					&batt_psy_desc,
+					&batt_cfg);
 	if (IS_ERR(chg->batt_psy)) {
 		pr_err("Couldn't register battery power supply\n");
 		return PTR_ERR(chg->batt_psy);
@@ -2604,7 +2612,8 @@ static int force_batt_psy_update_write(void *data, u64 val)
 {
 	struct smb_charger *chg = data;
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(force_batt_psy_update_ops, NULL,
