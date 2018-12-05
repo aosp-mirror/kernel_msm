@@ -21,7 +21,10 @@
 		reg = <0x20>;
 		vio-supply = <&max77826_ldo13>;
 		vdd-supply = <&max77826_ldo15>;
-		regulator-names = "vio", "vdd";
+		pmic_buck1-supply = <&max77826_buck1>;
+		pmic_buck2-supply = <&max77826_buck2>;
+		regulator-names = "vio", "vdd", "pmic_buck1",
+			"pmic_buck2";
 		status = "ok";
 	};
 };
