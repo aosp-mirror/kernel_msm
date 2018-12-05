@@ -686,6 +686,11 @@ static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
 		if (ret)
 			goto err_mutex;
 
+		if (val == CS40L2X_TONE_DURATION_MS_NONE) {
+			ret = -ENODATA;
+			goto err_mutex;
+		}
+
 		val *= CS40L2X_QEST_SRATE;
 		break;
 	default:
