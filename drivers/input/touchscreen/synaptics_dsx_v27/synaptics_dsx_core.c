@@ -218,6 +218,9 @@ static ssize_t synaptics_rmi4_debug_level_show(struct device *dev,
 static ssize_t synaptics_rmi4_debug_level_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
+static ssize_t synaptics_rmi4_noise_state_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf);
 
@@ -761,6 +764,9 @@ static struct device_attribute attrs[] = {
 	__ATTR(debug_level, 0644,
 			synaptics_rmi4_debug_level_show,
 			synaptics_rmi4_debug_level_store),
+	__ATTR(noise_state, 0444,
+			synaptics_rmi4_noise_state_show,
+			synaptics_rmi4_store_error),
 };
 
 static struct kobj_attribute virtual_key_map_attr = {
@@ -1065,6 +1071,52 @@ static ssize_t synaptics_rmi4_debug_level_store(struct device *dev,
 	}
 
 	return count;
+}
+
+static ssize_t synaptics_rmi4_noise_state_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int retval;
+	uint8_t data[2] = {0};
+	struct synaptics_rmi4_noise_state noise_state;
+	struct synaptics_rmi4_data *rmi4_data = exp_data.rmi4_data;
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_im_address,
+			data, sizeof(data));
+	if (retval < 0)
+		return retval;
+
+	noise_state.im = (data[1] << 8) | data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_ns_address,
+			data, sizeof(data[0]));
+	if (retval < 0)
+		return retval;
+
+	noise_state.ns = data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_cidim_address,
+			data, sizeof(data));
+	if (retval < 0)
+		return retval;
+
+	noise_state.cidim = (data[1] << 8) | data[0];
+
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f54_freq_address,
+			data, sizeof(data[0]));
+	if (retval < 0)
+		return retval;
+
+	noise_state.freq = (data[0] & FREQ_MASK);
+
+	return snprintf(buf, PAGE_SIZE,
+			"IM=%hu, CIDIM=%hu, NS=%hhu, FREQ=%hhu\n",
+			noise_state.im, noise_state.cidim,
+			noise_state.ns, noise_state.freq);
 }
 
 static ssize_t synaptics_rmi4_virtual_key_map_show(struct kobject *kobj,
