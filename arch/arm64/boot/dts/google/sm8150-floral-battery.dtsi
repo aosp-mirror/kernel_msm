@@ -27,7 +27,7 @@
 			   "vph_voltage",
 			   "chg_temp";
 
-	google,batt_psy_is_bms;
+	google,batt_psy_disable;
 	qcom,hvdcp-disable;
 	google,usb-port-tz-name = "usbc-therm";
 	qcom,dc-icl-ua = <1100000>;
@@ -49,6 +49,7 @@
 	reg-names = "m5db", "nvram";
 	reg = <0x36 0x0b>;
 
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&fg_int_default>;
 
@@ -56,13 +57,14 @@
 	interrupt-names = "max1720x_fg";
 	interrupts = <0x2 0xc7 0x0 IRQ_TYPE_LEVEL_LOW>;
 
-	/* enable experimental max17301 support */
+	maxim,psy-type-unknown;
+
+	/* enable max1730x support */
 	maxim,max1730x-compat;
-
+	/* reset 1720x fuel gauge on start */
 	maxim,force-hard-reset;
-
-	/* FIXME: route to google_battery or charger when available */
-	maxim,bat-power-supply = "bms";
+	/* read resistorID from the charger */
+	maxim,bat-power-supply = "charger";
 
 	maxim,nconvgcfg-temp-hysteresis = <10>;
 	maxim,nconvgcfg-temp-limits = /bits/ 16
@@ -78,8 +80,8 @@
 &spmi_bus {
 	qcom,pm8150b@2 {
 		google_bms: google,bms {
-		compatible = "google,sm8150_bms";
-		google,psy-name = "charger";
+			compatible = "google,sm8150_bms";
+			google,psy-name = "charger";
 		};
 	};
 };
@@ -87,8 +89,6 @@
 &soc {
 	google_battery: google,battery {
 		compatible = "google,battery";
-
-		google,psy-name = "gbattery";
 		google,fg-psy-name = "maxfg";
 
 		/* chg-battery-capacity = <0> -> read FULL_DESIGN from FG */
@@ -123,8 +123,8 @@
 	google_charger: google,charger {
 		compatible = "google,charger";
 
-		google,chg-power-supply = "battery";
-		google,bat-power-supply = "gbattery";
+		google,chg-power-supply = "charger";
+		google,bat-power-supply = "battery";
 		google,wlc-power-supply = "wireless";
 		google,tcpm-power-supply = "tcpm-source-psy-usbpd0";
 
