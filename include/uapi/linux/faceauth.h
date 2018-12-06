@@ -43,6 +43,14 @@ struct faceauth_start_data {
 
 	__u8 __user *image_flood;
 	__u32 image_flood_size;
+
+	__u8 has_calib;  /* true if calib_{intrinsics,transform} exist */
+
+	void __user *calib_intrinsics;
+	__u32 calib_intrinsics_size;
+
+	void __user *calib_transform;
+	__u32 calib_transform_size;
 } __attribute__((packed));
 
 /* This struct is written by kernel */

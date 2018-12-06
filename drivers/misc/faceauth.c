@@ -127,7 +127,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 				err = -EINVAL;
 				goto exit;
 			}
-
+			/* TODO(kramm): This also needs to transfer the
+			 * calibration data, once we have a combined Halide
+			 * generator that includes rectification.
+			 */
 			pr_info("Send images\n");
 			err = dma_send_images(&start_step_data);
 			if (err) {
