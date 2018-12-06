@@ -20,10 +20,12 @@
 
 	io-channels = <&pm8150b_vadc ADC_MID_CHG_DIV6>,
 		      <&pm8150b_vadc ADC_USB_IN_I>,
+		      <&pm8150b_vadc ADC_SBUx>,
 		      <&pm8150b_vadc ADC_VPH_PWR>,
 		      <&pm8150b_vadc ADC_CHG_TEMP>;
 	io-channel-names = "mid_voltage",
 			   "usb_in_current",
+			   "sbux_res",
 			   "vph_voltage",
 			   "chg_temp";
 
