@@ -996,6 +996,12 @@ static void update_mmc_req_stats(struct mmc_request *mrq)
 	if (delta < mmc->mmc_req_stats[rq_type].min)
 		mmc->mmc_req_stats[rq_type].min = delta;
 
+	if (rq->bio && rq_type <= TS_URGENT_WRITE
+			&& rq_type >= TS_READ) {
+		mmc->mmc_req_stats[rq_type].size +=
+			rq->bio->bi_iter.bi_size >> 10;
+	}
+
 	mmc_log_slowio(mrq->host, mrq, delta);
 }
 

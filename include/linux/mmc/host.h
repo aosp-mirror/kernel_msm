@@ -425,6 +425,7 @@ struct mmc_req_stat {
 	u64 max;
 	u64 sum;
 	u64 count;
+	u64 size;
 };
 
 /**

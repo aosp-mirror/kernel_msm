@@ -503,6 +503,9 @@ static int mmc_req_stats_show(struct seq_file *file, void *data)
 	seq_printf(file, "\n%s:\t", "Count");
 	for (i = 0; i < TS_NUM_STATS; i++)
 		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].count);
+	seq_printf(file, "\n%s:\t", "Ttl_kb");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].size);
 	seq_puts(file, "\n");
 	spin_unlock_irqrestore(&host->stat_lock, flags);
 
