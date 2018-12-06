@@ -49,6 +49,8 @@
 #define DOT_IMAGE_LEFT_ADDR 0x22800000
 #define DOT_IMAGE_RIGHT_ADDR 0x22900000
 #define FLOOD_IMAGE_ADDR 0x23000000
+#define CALIBRATION_ADDR 0x22C00000
+#define CALIBRATION_SIZE 0x2000
 
 #define AB_INTERNAL_STATE_ADDR 0x23e00000
 
@@ -193,15 +195,31 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 				err = -EINVAL;
 				goto exit;
 			}
-			/* TODO(kramm): This also needs to transfer the
-			 * calibration data, once we have a combined Halide
-			 * generator that includes rectification.
-			 */
+			if (start_step_data.calibration) {
+				if (!start_step_data.calibration_size ||
+				    start_step_data.calibration_size >
+					    CALIBRATION_SIZE) {
+					err = -EINVAL;
+					goto exit;
+				}
+			}
+
 			pr_info("Send images\n");
 			err = dma_send_images(&start_step_data);
 			if (err) {
 				pr_err("Error in sending workload\n");
 				goto exit;
+			}
+
+			if (start_step_data.calibration) {
+				pr_info("Send calibration data\n");
+				err = dma_xfer(start_step_data.calibration,
+					       start_step_data.calibration_size,
+					       CALIBRATION_ADDR, DMA_TO_DEVICE);
+				if (err) {
+					pr_err("Error sending calibration data\n");
+					goto exit;
+				}
 			}
 		}
 
