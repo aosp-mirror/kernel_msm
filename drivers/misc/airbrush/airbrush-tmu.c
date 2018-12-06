@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/mfd/abc-pcie.h>
+#include <linux/mfd/abc-pcie-notifier.h>
 #include "../../thermal/thermal_core.h"
 
 /* Exynos generic registers */
@@ -154,13 +155,16 @@ struct airbrush_tmu_data {
 	int irq;
 	struct notifier_block  tmu_nb;
 	struct work_struct irq_work;
-	struct mutex lock;
 	struct clk *clk, *clk_sec, *sclk;
 	u8 cal_type[AIRBRUSH_NUM_ALL_PROBE];
 	u16 temp_error1[AIRBRUSH_NUM_ALL_PROBE];
 	u16 temp_error2[AIRBRUSH_NUM_ALL_PROBE];
 	struct regulator *regulator;
 	struct thermal_zone_device *tzd;
+
+	struct mutex pcie_link_lock;
+	bool pcie_link_ready;
+	struct notifier_block pcie_link_blocking_nb;
 };
 
 /**
@@ -452,8 +456,15 @@ static int airbrush_get_temp(void *p, int *temp)
 	if (!data)
 		return -EINVAL;
 
-	*temp = tmu_read_enable ?
-		code_to_temp(data, airbrush_tmu_read(data), 0) * MCELSIUS : 0;
+	mutex_lock(&data->pcie_link_lock);
+	/*
+	 * Return 0 degree Celsius while TMU is not ready to suppress the
+	 * error log while reading the temperature.
+	 */
+	*temp = (tmu_read_enable && data->pcie_link_ready) ?
+		code_to_temp(data, airbrush_tmu_read(data), 0) * MCELSIUS:
+		0;
+	mutex_unlock(&data->pcie_link_lock);
 	return 0;
 }
 
@@ -497,15 +508,23 @@ void tmu_set_emulate_data(struct airbrush_tmu_data *data,  u16 next_time,
 static int airbrush_tmu_set_emulation(void *drv_data, int temp)
 {
 	struct airbrush_tmu_data *data = drv_data;
+	int ret;
 
-	if (temp != 0) {
-		tmu_enable_emulate();
-		tmu_set_emulate_data(data, 1, temp / MCELSIUS);
+	mutex_lock(&data->pcie_link_lock);
+	if (data->pcie_link_ready) {
+		if (temp != 0) {
+			tmu_enable_emulate();
+			tmu_set_emulate_data(data, 1, temp / MCELSIUS);
+		} else {
+			tmu_disable_emulate();
+		}
+		ret = 0;
 	} else {
-		tmu_disable_emulate();
+		ret = -ENODEV;
 	}
+	mutex_unlock(&data->pcie_link_lock);
 
-	return 0;
+	return ret;
 }
 #else
 static int airbrush_tmu_set_emulation(void *drv_data, int temp)
@@ -647,6 +666,30 @@ static struct attribute *airbrush_tmu_attrs[] = {
 
 ATTRIBUTE_GROUPS(airbrush_tmu);
 
+static int airbrush_tmu_pcie_link_listener(struct notifier_block *nb,
+		unsigned long action, void *data)
+{
+	struct airbrush_tmu_data *dev_data = container_of(nb,
+			struct airbrush_tmu_data, pcie_link_blocking_nb);
+
+	switch (action) {
+	case ABC_PCIE_LINK_POST_ENABLE:
+		mutex_lock(&dev_data->pcie_link_lock);
+		dev_data->pcie_link_ready = true;
+		mutex_unlock(&dev_data->pcie_link_lock);
+		break;
+	case ABC_PCIE_LINK_PRE_DISABLE:
+		mutex_lock(&dev_data->pcie_link_lock);
+		dev_data->pcie_link_ready = false;
+		mutex_unlock(&dev_data->pcie_link_lock);
+		break;
+	default:
+		return NOTIFY_DONE;  /* Don't care */
+	}
+
+	return NOTIFY_OK;
+}
+
 static int airbrush_tmu_probe(struct platform_device *pdev)
 {
 	struct airbrush_tmu_data *data;
@@ -662,7 +705,6 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, data);
-	mutex_init(&data->lock);
 
 	/* TODO: See if this function can be remove */
 	ret = airbrush_map_dt_data(pdev);
@@ -693,11 +735,26 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	mutex_init(&data->pcie_link_lock);
+	mutex_lock(&data->pcie_link_lock);
+	data->pcie_link_ready = false;
+	data->pcie_link_blocking_nb.notifier_call =
+			airbrush_tmu_pcie_link_listener;
+	ret = abc_register_pcie_link_blocking_event(
+			&data->pcie_link_blocking_nb);
+	mutex_unlock(&data->pcie_link_lock);
+	if (ret) {
+		dev_err(&pdev->dev,
+				"failed to subscribe to PCIe blocking link event, ret %d\n",
+				ret);
+		return ret;
+	}
+
 	/* tmu initialization */
 	ret = airbrush_tmu_initialize(pdev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize TMU\n");
-		return ret;
+		goto err;
 	}
 
 	airbrush_tmu_control(pdev, true);
@@ -705,10 +762,17 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "%s: done.\n", __func__);
 	return 0;
+
+err:
+	abc_unregister_pcie_link_blocking_event(&data->pcie_link_blocking_nb);
+	return ret;
 }
 
 static int airbrush_tmu_remove(struct platform_device *pdev)
 {
+	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
+
+	abc_unregister_pcie_link_blocking_event(&data->pcie_link_blocking_nb);
 	airbrush_tmu_control(pdev, false);
 	tmu_read_enable = 0;
 	return 0;
