@@ -137,6 +137,7 @@ enum block_state {
 	BLOCK_STATE_1_2,
 	BLOCK_STATE_2_0 = 20,
 	BLOCK_STATE_3_0 = 30,
+	NUM_BLOCK_STATES,
 };
 
 enum stat_state {

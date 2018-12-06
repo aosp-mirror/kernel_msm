@@ -13,8 +13,6 @@
 #include "clk.h"
 #include <dt-bindings/clock/abc-clk.h>
 
-#define CONFIG_A0
-
 /*********************CMU_AON****************************/
 /* Register Offset definitions for CMU_AON (0x10B10000) */
 #define PLL_LOCKTIME_PLL_AON	0x0
@@ -593,24 +591,18 @@ static const unsigned long ipu_clk_regs[] = {
 
 /* PLL rate table for CMU_IPU */
 static const struct airbrush_pll_rate_table pll_ipu_tbl[] = {
-#ifdef CONFIG_B0
 	PLL_F081XX_RATE(849600000, 531, 3, 2),
 	PLL_F081XX_RATE(680000000, 425, 3, 2),
-	PLL_F081XX_RATE(543600000, 453, 2, 3),
-	PLL_F081XX_RATE(408000000, 340, 2, 3),
-	PLL_F081XX_RATE(271800000, 453, 2, 4),
-	PLL_F081XX_RATE(50000000, 500, 3, 6),
-	PLL_F081XX_RATE(19200000, 288, 9, 5),
-#endif
-#ifdef CONFIG_A0
 	PLL_F081XX_RATE(609600000, 381, 3, 2),
 	PLL_F081XX_RATE(549600000, 458, 2, 3),
+	PLL_F081XX_RATE(543600000, 453, 2, 3),
 	PLL_F081XX_RATE(440000000, 550, 3, 3),
+	PLL_F081XX_RATE(408000000, 340, 2, 3),
 	PLL_F081XX_RATE(330000000, 275, 2, 3),
+	PLL_F081XX_RATE(271800000, 453, 2, 4),
 	PLL_F081XX_RATE(220000000, 550, 3, 4),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
 	PLL_F081XX_RATE(19200000, 288, 9, 5),
-#endif
 };
 
 /* PLL Clocks */
@@ -886,24 +878,18 @@ static const unsigned long tpu_clk_regs[] = {
 
 /* PLL rate table for CMU_TPU */
 static const struct airbrush_pll_rate_table pll_tpu_tbl[] = {
-#ifdef CONFIG_B0
 	PLL_F081XX_RATE(1000000000, 625, 3, 2),
-	PLL_F081XX_RATE(789600000, 329, 2, 2),
-	PLL_F081XX_RATE(632000000, 395, 3, 2),
-	PLL_F081XX_RATE(474000000, 395, 2, 3),
-	PLL_F081XX_RATE(316000000, 395, 3, 3),
-	PLL_F081XX_RATE(50000000, 500, 3, 6),
-	PLL_F081XX_RATE(19200000, 288, 9, 5),
-#endif
-#ifdef CONFIG_A0
 	PLL_F081XX_RATE(961600000, 601, 3, 2),
+	PLL_F081XX_RATE(789600000, 329, 2, 2),
 	PLL_F081XX_RATE(765600000, 319, 2, 2),
+	PLL_F081XX_RATE(632000000, 395, 3, 2),
 	PLL_F081XX_RATE(612800000, 383, 3, 2),
+	PLL_F081XX_RATE(474000000, 395, 2, 3),
 	PLL_F081XX_RATE(459600000, 383, 2, 3),
+	PLL_F081XX_RATE(316000000, 395, 3, 3),
 	PLL_F081XX_RATE(306400000, 383, 3, 3),
 	PLL_F081XX_RATE(50000000, 500, 3, 6),
 	PLL_F081XX_RATE(19200000, 288, 9, 5),
-#endif
 };
 
 /* PLL Clocks*/

@@ -37,6 +37,40 @@
 
 static struct ab_state_context *ab_sm_ctx;
 
+/* Index 0 - A0 clk frequencies
+ * Index 1 - B0 clk frequencies
+ */
+static u64 blk_ipu_clk_tbl[NUM_BLOCK_STATES][2] = {
+	[BLOCK_STATE_0_0] = { 549600000, 680000000 },
+	[BLOCK_STATE_0_1] = { 50000000,  50000000  },
+	[BLOCK_STATE_0_2] = { 220000000, 271800000 },
+	[BLOCK_STATE_0_3] = { 330000000, 408000000 },
+	[BLOCK_STATE_0_4] = { 440000000, 543600000 },
+	[BLOCK_STATE_0_5] = { 549600000, 680000000 },
+	[BLOCK_STATE_0_6] = { 609600000, 849600000 },
+	[BLOCK_STATE_1_0] = { 0, 0 },
+	[BLOCK_STATE_1_1] = { 0, 0 },
+	[BLOCK_STATE_1_2] = { 0, 0 },
+	[BLOCK_STATE_3_0] = { 0, 0 },
+};
+
+/* Index 0 - A0 clk frequencies
+ * Index 1 - B0 clk frequencies
+ */
+static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
+	[BLOCK_STATE_0_0] = { 765600000, 1000000000 },
+	[BLOCK_STATE_0_1] = { 50000000,  50000000   },
+	[BLOCK_STATE_0_2] = { 306400000, 316000000  },
+	[BLOCK_STATE_0_3] = { 459600000, 474000000  },
+	[BLOCK_STATE_0_4] = { 612800000, 632000000  },
+	[BLOCK_STATE_0_5] = { 765600000, 789600000  },
+	[BLOCK_STATE_0_6] = { 961600000, 1000000000 },
+	[BLOCK_STATE_1_0] = { 0, 0 },
+	[BLOCK_STATE_1_1] = { 0, 0 },
+	[BLOCK_STATE_2_0] = { 0, 0 },
+	[BLOCK_STATE_3_0] = { 0, 0 },
+};
+
 #define BLK_ENTRY(num, state, sub, rail, v, clk, freq, pwr, used, tiles, dr) \
 	{\
 		BLOCK_STATE_ ## num, \
@@ -53,31 +87,31 @@ static struct ab_state_context *ab_sm_ctx;
 	}
 
 static struct block_property ipu_property_table[] = {
-	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 549.6, 14, 0, 0, 0),
-	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  50,   2,  2,  0, 0),
-	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  220,  14, 14, 0, 0),
-	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  330,  14, 14, 0, 0),
-	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  440,  14, 14, 0, 0),
-	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on, 549.6, 14, 14, 0, 0),
-	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_75, on, 609.6, 14, 14, 0, 0),
-	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 0,    0,  0,  0, 0),
-	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 0,    0,  0,  0, 0),
-	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,    0,  0,  0, 0),
-	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,    0,  0,  0, 0),
+	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 0, 14, 0, 0, 0),
+	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  0, 2,  2,  0, 0),
+	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  0, 14, 14, 0, 0),
+	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  0, 14, 14, 0, 0),
+	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  0, 14, 14, 0, 0),
+	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  0, 14, 14, 0, 0),
+	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_75, on,  0, 14, 14, 0, 0),
+	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 0, 0,  0,  0, 0),
+	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 0, 0,  0,  0, 0),
+	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0, 0,  0,  0, 0),
+	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0, 0,  0,  0, 0),
 };
 
 static struct block_property tpu_property_table[] = {
-	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 765.6, 0, 0, 16, 0),
-	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  50,    0, 0, 16, 0),
-	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  306.4, 0, 0, 16, 0),
-	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  459.6, 0, 0, 16, 0),
-	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  612.8, 0, 0, 16, 0),
-	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  765.6, 0, 0, 16, 0),
-	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_85, on,  961.6, 0, 0, 16, 0),
-	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 0,     0, 0, 0,  0),
-	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 0,     0, 0, 0,  0),
-	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0,     0, 0, 0,  0),
-	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0,     0, 0, 0,  0),
+	BLK_ENTRY(0_0, Normal,   Ready,      on, 0_75, off, 0, 0, 0, 16, 0),
+	BLK_ENTRY(0_1, Normal,   AonCompute, on, 0_75, on,  0, 0, 0, 16, 0),
+	BLK_ENTRY(0_2, Normal,   MinCompute, on, 0_75, on,  0, 0, 0, 16, 0),
+	BLK_ENTRY(0_3, Normal,   LowCompute, on, 0_75, on,  0, 0, 0, 16, 0),
+	BLK_ENTRY(0_4, Normal,   MidCompute, on, 0_75, on,  0, 0, 0, 16, 0),
+	BLK_ENTRY(0_5, Normal,   MaxCompute, on, 0_75, on,  0, 0, 0, 16, 0),
+	BLK_ENTRY(0_6, Boost,    MaxCompute, on, 0_85, on,  0, 0, 0, 16, 0),
+	BLK_ENTRY(1_0, Normal,   PowerGated, on, 0_75, off, 0, 0, 0, 0,  0),
+	BLK_ENTRY(1_1, Boost,    PowerGated, on, 0_85, off, 0, 0, 0, 0,  0),
+	BLK_ENTRY(1_2, Normal,   Sleep,      on, 0_75, off, 0, 0, 0, 0,  0),
+	BLK_ENTRY(3_0, Disabled, NoRail,     off, 0_0, off, 0, 0, 0, 0,  0),
 };
 
 static struct block_property dram_property_table[] = {
@@ -749,6 +783,30 @@ int ab_sm_unregister_clk_event(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(ab_sm_unregister_clk_event);
 
+static void set_ipu_tpu_clk_freq_table(struct ab_state_context *sc,
+		enum ab_chip_id chip_id)
+{
+	struct block_property *prop;
+	int blk_idx = 0;
+
+	if (chip_id == CHIP_ID_UNKNOWN) {
+		dev_err(sc->dev, "%s called with CHIP_ID_UNKNOWN\n", __func__);
+		return;
+	}
+
+	while (blk_idx < sc->blocks[BLK_IPU].nr_block_states) {
+		prop = &sc->blocks[BLK_IPU].block_property_table[blk_idx];
+		prop->clk_frequency = blk_ipu_clk_tbl[prop->id][chip_id];
+		blk_idx++;
+	}
+	blk_idx = 0;
+	while (blk_idx < sc->blocks[BLK_TPU].nr_block_states) {
+		prop = &sc->blocks[BLK_TPU].block_property_table[blk_idx];
+		prop->clk_frequency = blk_tpu_clk_tbl[prop->id][chip_id];
+		blk_idx++;
+	}
+}
+
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 {
 	uint32_t val;
@@ -759,10 +817,13 @@ enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 		ret = sc->mfd_ops->get_chip_id(sc->mfd_ops->ctx, &val);
 		mutex_unlock(&sc->mfd_lock);
 
-		if (ret < 0)
+		if (ret < 0) {
+			set_ipu_tpu_clk_freq_table(sc, CHIP_ID_UNKNOWN);
 			return CHIP_ID_UNKNOWN;
+		}
 
 		sc->chip_id = (enum ab_chip_id)val;
+		set_ipu_tpu_clk_freq_table(sc, sc->chip_id);
 	}
 
 	return sc->chip_id;
