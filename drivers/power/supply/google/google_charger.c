@@ -1102,14 +1102,19 @@ static int google_charger_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void chg_destroy_votables(struct chg_drv *chg_drv)
+{
+	destroy_votable(chg_drv->msc_interval_votable);
+	destroy_votable(chg_drv->msc_fv_votable);
+	destroy_votable(chg_drv->msc_fcc_votable);
+}
+
 static int google_charger_remove(struct platform_device *pdev)
 {
-	struct chg_drv *chg_drv = platform_get_drvdata(pdev);
+	struct chg_drv *chg_drv = (struct chg_drv *)platform_get_drvdata(pdev);
 
 	if (chg_drv) {
-		destroy_votable(chg_drv->msc_interval_votable);
-		destroy_votable(chg_drv->msc_fv_votable);
-		destroy_votable(chg_drv->msc_fcc_votable);
+		chg_destroy_votables(chg_drv);
 
 		if (chg_drv->chg_psy)
 			power_supply_put(chg_drv->chg_psy);
