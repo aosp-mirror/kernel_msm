@@ -1659,6 +1659,11 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	unsigned long end = 0;
 	struct reclaim_param rp;
 
+	if (!capable(CAP_SYS_NICE)) {
+		count = -EPERM;
+		goto out;
+	}
+
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)
 		count = sizeof(buffer) - 1;
