@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/ioport.h>
 #include <linux/list.h>
+#include <linux/mfd/abc-pcie-notifier.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -179,9 +180,11 @@ struct oscar_dev {
 	/* List of all active ABC DRAM buffers, protected by abc_buffers_lock */
 	struct mutex abc_buffers_lock;
 	struct list_head abc_buffers;
-	struct mutex dev_avail_lock; /* protects clk_lockout */
+	struct mutex dev_avail_lock; /* protects clk_lockout, pcie_lockout */
 	bool clk_lockout; /* clock change in progress */
+	bool pcie_lockout; /* PCIe link blocked */
 	struct notifier_block clk_change_nb;
+	struct notifier_block pcie_link_change_nb;
 };
 
 
@@ -194,7 +197,7 @@ static bool check_dev_avail(struct oscar_dev *oscar_dev)
 	bool ret;
 
 	mutex_lock(&oscar_dev->dev_avail_lock);
-	ret = !oscar_dev->clk_lockout;
+	ret = !oscar_dev->clk_lockout && !oscar_dev->pcie_lockout;
 	mutex_unlock(&oscar_dev->dev_avail_lock);
 	return ret;
 }
@@ -967,6 +970,30 @@ static int oscar_ab_sm_clk_listener(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int oscar_abc_pcie_link_change_listener(
+	struct notifier_block *nb, unsigned long action, void *data)
+{
+	struct oscar_dev *oscar_dev =
+		container_of(nb, struct oscar_dev, pcie_link_change_nb);
+
+	switch (action) {
+	case ABC_PCIE_LINK_PRE_DISABLE:
+		mutex_lock(&oscar_dev->dev_avail_lock);
+		oscar_dev->pcie_lockout = true; /* PCIe link unavailable */
+		mutex_unlock(&oscar_dev->dev_avail_lock);
+		return NOTIFY_OK;
+	case ABC_PCIE_LINK_POST_ENABLE:
+		mutex_lock(&oscar_dev->dev_avail_lock);
+		oscar_dev->pcie_lockout = false;
+		mutex_unlock(&oscar_dev->dev_avail_lock);
+		return NOTIFY_OK;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static void oscar_interrupt_cleanup(struct oscar_dev *oscar_dev)
 {
 	int ret;
@@ -1081,6 +1108,17 @@ static int oscar_setup_device(struct platform_device *pdev,
 	if (ret)
 		dev_warn(dev, "failed to subscribe to clk event (%d)\n", ret);
 
+	oscar_dev->pcie_link_change_nb.notifier_call =
+		oscar_abc_pcie_link_change_listener;
+	ret = abc_register_pcie_link_blocking_event(
+			&oscar_dev->pcie_link_change_nb);
+	if (ret) {
+		dev_warn(dev,
+			 "failed to subscribe to pcie link block event (%d)\n",
+			 ret);
+		oscar_dev->pcie_lockout = false; /* turn off link blocking */
+	}
+
 	oscar_reset(gasket_dev);
 
 	while (retries < OSCAR_RESET_RETRY) {
@@ -1126,6 +1164,7 @@ static int oscar_probe(struct platform_device *pdev)
 	mutex_init(&oscar_dev->abc_buffers_lock);
 	mutex_init(&oscar_dev->dev_avail_lock);
 	oscar_dev->clk_lockout = false;
+	oscar_dev->pcie_lockout = true;
 
 	ret = oscar_setup_device(pdev, oscar_dev, gasket_dev);
 	if (ret) {
@@ -1160,6 +1199,8 @@ static int oscar_remove(struct platform_device *pdev)
 	struct gasket_dev *gasket_dev = oscar_dev->gasket_dev;
 
 	ab_sm_unregister_clk_event(&oscar_dev->clk_change_nb);
+	abc_unregister_pcie_link_blocking_event(
+		&oscar_dev->pcie_link_change_nb);
 	gasket_disable_device(gasket_dev);
 	oscar_interrupt_cleanup(oscar_dev);
 	if (!oscar_dev->parent_ioremap)
