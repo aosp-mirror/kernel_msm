@@ -170,12 +170,52 @@ static ssize_t set_ir_slave_cci_store(struct device *dev,
 
 	return count;
 }
+
+static ssize_t sensor_write_byte_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = dev_get_drvdata(dev);
+	int rc, value;
+	uint32_t addr;
+	uint32_t data;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings;
+
+	rc = kstrtouint(buf, 0, &value);
+	if (rc < 0)
+		return rc;
+	if ((value & 0xFF000000) != 0) {
+		dev_err(dev, "value %x out of boundary", value);
+		return -EINVAL;
+	}
+
+	addr = (value >> 8) & 0xFFFF;
+	data = value & 0xFF;
+	reg_settings.reg_addr = addr;
+	reg_settings.reg_data = data;
+	reg_settings.delay = 0;
+	write_setting.reg_setting = &reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 0;
+
+	rc = camera_io_dev_write(&s_ctrl->io_master_info, &write_setting);
+	if (rc < 0)
+		return rc;
+
+	return count;
+}
+
 static DEVICE_ATTR_WO(set_strobe_type);
 static DEVICE_ATTR_WO(set_ir_slave_cci);
+static DEVICE_ATTR_WO(sensor_write_byte);
 
 static struct attribute *cam_sensor_dev_attrs[] = {
 	&dev_attr_set_strobe_type.attr,
 	&dev_attr_set_ir_slave_cci.attr,
+	&dev_attr_sensor_write_byte.attr,
 	NULL
 };
 
