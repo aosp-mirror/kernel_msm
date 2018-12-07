@@ -84,7 +84,6 @@
 #define QNOVO_OVERALL_VOTER	"QNOVO_OVERALL_VOTER"
 #define QNI_PT_VOTER		"QNI_PT_VOTER"
 
-#define HW_OK_TO_QNOVO_VOTER	"HW_OK_TO_QNOVO_VOTER"
 #define CHG_READY_VOTER		"CHG_READY_VOTER"
 #define USB_READY_VOTER		"USB_READY_VOTER"
 
@@ -227,6 +226,19 @@ static int pt_dis_votable_cb(struct votable *votable, void *data, int disable,
 {
 	struct qnovo *chip = data;
 	int rc;
+	u8 val = 0;
+
+	if (!disable) {
+		rc = qnovo5_write(chip, QNOVO_PHASE, &val, 1);
+		if (rc < 0)
+			dev_err(chip->dev, "Couldn't write to QNOVO_PHASE rc=%d\n",
+				rc);
+
+		rc = qnovo5_write(chip, QNOVO_P2_TICK, &val, 1);
+		if (rc < 0)
+			dev_err(chip->dev, "Couldn't write to QNOVO_P2_TICK rc=%d\n",
+				rc);
+	}
 
 	rc = qnovo5_masked_write(chip, QNOVO_PE_CTRL, QNOVO_PTRAIN_EN_BIT,
 				 (bool)disable ? 0 : QNOVO_PTRAIN_EN_BIT);
@@ -305,6 +317,7 @@ enum {
 	PE_CTRL_REG,
 	PTRAIN_STS_REG,
 	ERR_STS_REG,
+	ERROR_MASK_REG,
 	PREST1,
 	NREST1,
 	NPULS1,
@@ -368,6 +381,12 @@ static struct param_info params[] = {
 	[ERR_STS_REG] = {
 		.name			= "RAW_CHGR_ERR",
 		.start_addr		= QNOVO_ERROR_STS,
+		.num_regs		= 1,
+		.units_str		= "",
+	},
+	[ERROR_MASK_REG] = {
+		.name			= "ERROR_MASK",
+		.start_addr		= QNOVO_ERROR_MASK,
 		.num_regs		= 1,
 		.units_str		= "",
 	},
@@ -443,7 +462,7 @@ static struct param_info params[] = {
 		.name			= "PCURR1",
 		.start_addr		= QNOVO_PCURR1_LSB,
 		.num_regs		= 2,
-		.reg_to_unit_multiplier	= 305185, /* converts to nA */
+		.reg_to_unit_multiplier	= 488281, /* converts to nA */
 		.reg_to_unit_divider	= 1,
 		.units_str		= "uA",
 	},
@@ -451,7 +470,7 @@ static struct param_info params[] = {
 		.name			= "PCURR1_SUM",
 		.start_addr		= QNOVO_PCURR1_SUM_LSB,
 		.num_regs		= 2,
-		.reg_to_unit_multiplier	= 305185, /* converts to nA */
+		.reg_to_unit_multiplier	= 488281, /* converts to nA */
 		.reg_to_unit_divider	= 1,
 		.units_str		= "uA",
 	},
@@ -459,8 +478,10 @@ static struct param_info params[] = {
 		.name			= "PCURR1_TERMINAL",
 		.start_addr		= QNOVO_PCURR1_TERMINAL_LSB,
 		.num_regs		= 2,
-		.reg_to_unit_multiplier	= 305185, /* converts to nA */
+		.reg_to_unit_multiplier	= 488281, /* converts to nA */
 		.reg_to_unit_divider	= 1,
+		.min_val		= -10000000,
+		.max_val		= 10000000,
 		.units_str		= "uA",
 	},
 	[PTTIME] = {
@@ -477,6 +498,8 @@ static struct param_info params[] = {
 		.num_regs		= 2,
 		.reg_to_unit_multiplier	= 1,
 		.reg_to_unit_divider	= 1,
+		.min_val		= 0,
+		.max_val		= 65535,
 		.units_str		= "S",
 	},
 	[NREST2] = {
@@ -529,7 +552,7 @@ static struct param_info params[] = {
 		.name			= "PCURR2",
 		.start_addr		= QNOVO_PCURR2_LSB,
 		.num_regs		= 2,
-		.reg_to_unit_multiplier	= 305185, /* converts to nA */
+		.reg_to_unit_multiplier	= 488281, /* converts to nA */
 		.reg_to_unit_divider	= 1,
 		.units_str		= "uA",
 	},
@@ -875,7 +898,7 @@ static ssize_t current_store(struct class *c, struct class_attribute *attr,
 	if (i < 0)
 		return -EINVAL;
 
-	if (kstrtoul(ubuf, 0, &val_uA))
+	if (kstrtol(ubuf, 0, &val_uA))
 		return -EINVAL;
 
 	if (val_uA < params[i].min_val || val_uA > params[i].max_val) {
@@ -998,6 +1021,7 @@ CLASS_ATTR_IDX_RW(fcc_uA_request, val);
 CLASS_ATTR_IDX_RW(PE_CTRL_REG, reg);
 CLASS_ATTR_IDX_RO(PTRAIN_STS_REG, reg);
 CLASS_ATTR_IDX_RO(ERR_STS_REG, reg);
+CLASS_ATTR_IDX_RW(ERROR_MASK, reg);
 CLASS_ATTR_IDX_RW(PREST1_uS, time);
 CLASS_ATTR_IDX_RW(NREST1_uS, time);
 CLASS_ATTR_IDX_RW(NPULS1_uS, time);
@@ -1035,6 +1059,7 @@ static struct attribute *qnovo_class_attrs[] = {
 	[PE_CTRL_REG]		= &class_attr_PE_CTRL_REG.attr,
 	[PTRAIN_STS_REG]	= &class_attr_PTRAIN_STS_REG.attr,
 	[ERR_STS_REG]		= &class_attr_ERR_STS_REG.attr,
+	[ERROR_MASK_REG]	= &class_attr_ERROR_MASK.attr,
 	[PREST1]		= &class_attr_PREST1_uS.attr,
 	[NREST1]		= &class_attr_NREST1_uS.attr,
 	[NPULS1]		= &class_attr_NPULS1_uS.attr,
@@ -1064,30 +1089,6 @@ static struct attribute *qnovo_class_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(qnovo_class);
-
-static int qnovo5_update_status(struct qnovo *chip)
-{
-	u8 val = 0;
-	int rc;
-	bool hw_ok_to_qnovo;
-
-	rc = qnovo5_read(chip, QNOVO_ERROR_STS, &val, 1);
-	if (rc < 0) {
-		pr_err("Couldn't read error sts rc = %d\n", rc);
-		hw_ok_to_qnovo = false;
-	} else {
-		/*
-		 * For CV mode keep qnovo enabled, userspace is expected to
-		 * disable it after few runs
-		 */
-		hw_ok_to_qnovo = (val == ERR_CV_MODE || val == 0) ?
-			true : false;
-	}
-
-	vote(chip->not_ok_to_qnovo_votable, HW_OK_TO_QNOVO_VOTER,
-					!hw_ok_to_qnovo, 0);
-	return 0;
-}
 
 static void usb_debounce_work(struct work_struct *work)
 {
@@ -1126,8 +1127,6 @@ static void status_change_work(struct work_struct *work)
 		schedule_delayed_work(&chip->usb_debounce_work,
 				msecs_to_jiffies(DEBOUNCE_MS));
 	}
-
-	qnovo5_update_status(chip);
 }
 
 static int qnovo_notifier_call(struct notifier_block *nb,
@@ -1150,8 +1149,6 @@ static int qnovo_notifier_call(struct notifier_block *nb,
 static irqreturn_t handle_ptrain_done(int irq, void *data)
 {
 	struct qnovo *chip = data;
-
-	qnovo5_update_status(chip);
 
 	/*
 	 * hw resets pt_en bit once ptrain_done triggers.

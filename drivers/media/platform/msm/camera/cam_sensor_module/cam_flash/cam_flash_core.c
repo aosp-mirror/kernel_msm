@@ -15,6 +15,7 @@
 #include "cam_sensor_cmn_header.h"
 #include "cam_flash_core.h"
 #include "cam_res_mgr_api.h"
+#include "cam_common_util.h"
 
 static int cam_flash_prepare(struct cam_flash_ctrl *flash_ctrl,
 	bool regulator_enable)
@@ -394,6 +395,9 @@ int cam_flash_flush_request(struct cam_req_mgr_flush_request *flush)
 	}
 
 	mutex_lock(&fctrl->flash_mutex);
+	if (fctrl->flash_state == CAM_FLASH_STATE_INIT)
+		goto end;
+
 	if (flush->type == CAM_REQ_MGR_FLUSH_TYPE_ALL) {
 		fctrl->last_flush_req = flush->req_id;
 		CAM_DBG(CAM_FLASH, "last reqest to flush is %lld",
@@ -893,7 +897,7 @@ apply_setting_err:
 int cam_flash_i2c_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 {
 	int rc = 0, i = 0;
-	uint64_t generic_ptr;
+	uintptr_t generic_ptr;
 	uint32_t total_cmd_buf_in_bytes = 0;
 	uint32_t processed_cmd_buf_in_bytes = 0;
 	uint16_t cmd_length_in_bytes = 0;
@@ -926,7 +930,7 @@ int cam_flash_i2c_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 	}
 
 	rc = cam_mem_get_cpu_buf(config.packet_handle,
-		(uint64_t *)&generic_ptr, &len_of_buffer);
+		&generic_ptr, &len_of_buffer);
 	if (rc) {
 		CAM_ERR(CAM_FLASH, "Failed in getting the buffer : %d", rc);
 		return rc;
@@ -969,7 +973,7 @@ int cam_flash_i2c_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 			if (!total_cmd_buf_in_bytes)
 				continue;
 			rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
-				(uint64_t *)&generic_ptr, &len_of_buffer);
+				&generic_ptr, &len_of_buffer);
 			if (rc < 0) {
 				CAM_ERR(CAM_FLASH, "Failed to get cpu buf");
 				return rc;
@@ -1216,7 +1220,7 @@ update_req_mgr:
 int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 {
 	int rc = 0, i = 0;
-	uint64_t generic_ptr;
+	uintptr_t generic_ptr;
 	uint32_t *cmd_buf =  NULL;
 	uint32_t *offset = NULL;
 	uint32_t frm_offset = 0;
@@ -1245,7 +1249,8 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 	/* getting CSL Packet */
 	ioctl_ctrl = (struct cam_control *)arg;
 
-	if (copy_from_user((&config), (void __user *) ioctl_ctrl->handle,
+	if (copy_from_user((&config),
+		u64_to_user_ptr(ioctl_ctrl->handle),
 		sizeof(config))) {
 		CAM_ERR(CAM_FLASH, "Copy cmd handle from user failed");
 		rc = -EFAULT;
@@ -1253,7 +1258,7 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 	}
 
 	rc = cam_mem_get_cpu_buf(config.packet_handle,
-		(uint64_t *)&generic_ptr, &len_of_buffer);
+		&generic_ptr, &len_of_buffer);
 	if (rc) {
 		CAM_ERR(CAM_FLASH, "Failed in getting the buffer : %d", rc);
 		return rc;
@@ -1267,7 +1272,8 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 	}
 
 	/* Add offset to the flash csl header */
-	csl_packet = (struct cam_packet *)(generic_ptr + config.offset);
+	csl_packet =
+		(struct cam_packet *)(generic_ptr + (uint32_t)config.offset);
 
 	if ((csl_packet->header.op_code & 0xFFFFFF) !=
 		CAM_FLASH_PACKET_OPCODE_INIT &&
@@ -1289,7 +1295,7 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 			csl_packet->cmd_buf_offset);
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
-			(uint64_t *)&generic_ptr, &len_of_buffer);
+			&generic_ptr, &len_of_buffer);
 		cmd_buf = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
 		cam_flash_info = (struct cam_flash_init *)cmd_buf;
@@ -1367,7 +1373,7 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		flash_data->cmn_attr.is_settings_valid = true;
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
-			(uint64_t *)&generic_ptr, &len_of_buffer);
+			&generic_ptr, &len_of_buffer);
 		cmd_buf = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
 
@@ -1421,7 +1427,7 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		fctrl->nrt_info.cmn_attr.is_settings_valid = true;
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
-			(uint64_t *)&generic_ptr, &len_of_buffer);
+			&generic_ptr, &len_of_buffer);
 		cmd_buf = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
 		cmn_hdr = (struct common_header *)cmd_buf;

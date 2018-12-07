@@ -32,18 +32,6 @@
 
 #define MIN_HBB		13
 
-#define A6XX_LLC_NUM_GPU_SCIDS		5
-#define A6XX_GPU_LLC_SCID_NUM_BITS	5
-#define A6XX_GPU_LLC_SCID_MASK \
-	((1 << (A6XX_LLC_NUM_GPU_SCIDS * A6XX_GPU_LLC_SCID_NUM_BITS)) - 1)
-#define A6XX_GPUHTW_LLC_SCID_SHIFT	25
-#define A6XX_GPUHTW_LLC_SCID_MASK \
-	(((1 << A6XX_GPU_LLC_SCID_NUM_BITS) - 1) << A6XX_GPUHTW_LLC_SCID_SHIFT)
-
-#define A6XX_GPU_CX_REG_BASE		0x509E000
-#define A6XX_GPU_CX_REG_SIZE		0x1000
-
-
 static const struct adreno_vbif_data a630_vbif[] = {
 	{A6XX_VBIF_GATE_OFF_WRREQ_EN, 0x00000009},
 	{A6XX_RBBM_VBIF_CLIENT_QOS_CNTL, 0x3},
@@ -481,6 +469,10 @@ static struct reg_list_pair a615_pwrup_reglist[] = {
 	{ A6XX_UCHE_GBIF_GX_CONFIG, 0x0 },
 };
 
+static struct reg_list_pair a6xx_ifpc_perfctr_reglist[] = {
+	{ A6XX_RBBM_PERFCTR_CNTL, 0x0 },
+};
+
 static void _update_always_on_regs(struct adreno_device *adreno_dev)
 {
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
@@ -746,7 +738,7 @@ static void a6xx_patch_pwrup_reglist(struct adreno_device *adreno_dev)
 		+ sizeof(a6xx_ifpc_pwrup_reglist), a6xx_pwrup_reglist,
 		sizeof(a6xx_pwrup_reglist));
 
-	if (adreno_is_a615_family(adreno_dev) || adreno_is_a608(adreno_dev)) {
+	if (adreno_is_a615_family(adreno_dev)) {
 		for (i = 0; i < ARRAY_SIZE(a615_pwrup_reglist); i++) {
 			r = &a615_pwrup_reglist[i];
 			kgsl_regread(KGSL_DEVICE(adreno_dev),
@@ -758,7 +750,23 @@ static void a6xx_patch_pwrup_reglist(struct adreno_device *adreno_dev)
 			+ sizeof(a6xx_pwrup_reglist), a615_pwrup_reglist,
 			sizeof(a615_pwrup_reglist));
 
-		lock->list_length += sizeof(a615_pwrup_reglist);
+		lock->list_length += sizeof(a615_pwrup_reglist) >> 2;
+	}
+
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_PERFCTRL_RETAIN)) {
+		for (i = 0; i < ARRAY_SIZE(a6xx_ifpc_perfctr_reglist); i++) {
+			r = &a6xx_ifpc_perfctr_reglist[i];
+			kgsl_regread(KGSL_DEVICE(adreno_dev),
+				r->offset, &r->val);
+		}
+
+		memcpy(adreno_dev->pwrup_reglist.hostptr + sizeof(*lock)
+				+ sizeof(a6xx_ifpc_pwrup_reglist)
+				+ sizeof(a6xx_pwrup_reglist),
+				a6xx_ifpc_perfctr_reglist,
+				sizeof(a6xx_ifpc_perfctr_reglist));
+
+		lock->list_length += sizeof(a6xx_ifpc_perfctr_reglist) >> 2;
 	}
 }
 
@@ -1594,24 +1602,6 @@ static void a6xx_err_callback(struct adreno_device *adreno_dev, int bit)
 	}
 }
 
-/* GPU System Cache control registers */
-#define A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_0   0x4
-#define A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_1   0x8
-
-static inline void _reg_rmw(void __iomem *regaddr,
-	unsigned int mask, unsigned int bits)
-{
-	unsigned int val = 0;
-
-	val = __raw_readl(regaddr);
-	/* Make sure the above read completes before we proceed  */
-	rmb();
-	val &= ~mask;
-	__raw_writel(val | bits, regaddr);
-	/* Make sure the above write posts before we proceed*/
-	wmb();
-}
-
 /*
  * a6xx_llc_configure_gpu_scid() - Program the sub-cache ID for all GPU blocks
  * @adreno_dev: The adreno device pointer
@@ -1627,17 +1617,13 @@ static void a6xx_llc_configure_gpu_scid(struct adreno_device *adreno_dev)
 		gpu_cntl1_val = (gpu_cntl1_val << A6XX_GPU_LLC_SCID_NUM_BITS)
 			| gpu_scid;
 
-	if (adreno_is_a640(adreno_dev)) {
+	if (adreno_is_a640(adreno_dev) || adreno_is_a608(adreno_dev)) {
 		kgsl_regrmw(KGSL_DEVICE(adreno_dev), A6XX_GBIF_SCACHE_CNTL1,
 			A6XX_GPU_LLC_SCID_MASK, gpu_cntl1_val);
 	} else {
-		void __iomem *gpu_cx_reg;
-
-		gpu_cx_reg = ioremap(A6XX_GPU_CX_REG_BASE,
-			A6XX_GPU_CX_REG_SIZE);
-		_reg_rmw(gpu_cx_reg + A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_1,
-			A6XX_GPU_LLC_SCID_MASK, gpu_cntl1_val);
-		iounmap(gpu_cx_reg);
+		adreno_cx_misc_regrmw(adreno_dev,
+				A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_1,
+				A6XX_GPU_LLC_SCID_MASK, gpu_cntl1_val);
 	}
 }
 
@@ -1648,22 +1634,20 @@ static void a6xx_llc_configure_gpu_scid(struct adreno_device *adreno_dev)
 static void a6xx_llc_configure_gpuhtw_scid(struct adreno_device *adreno_dev)
 {
 	uint32_t gpuhtw_scid;
-	void __iomem *gpu_cx_reg;
 
 	/*
 	 * On A640, the GPUHTW SCID is configured via a NoC override in the
 	 * XBL image.
 	 */
-	if (adreno_is_a640(adreno_dev))
+	if (adreno_is_a640(adreno_dev) || adreno_is_a608(adreno_dev))
 		return;
 
 	gpuhtw_scid = adreno_llc_get_scid(adreno_dev->gpuhtw_llc_slice);
 
-	gpu_cx_reg = ioremap(A6XX_GPU_CX_REG_BASE, A6XX_GPU_CX_REG_SIZE);
-	_reg_rmw(gpu_cx_reg + A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_1,
+	adreno_cx_misc_regrmw(adreno_dev,
+			A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_1,
 			A6XX_GPUHTW_LLC_SCID_MASK,
 			gpuhtw_scid << A6XX_GPUHTW_LLC_SCID_SHIFT);
-	iounmap(gpu_cx_reg);
 }
 
 /*
@@ -1672,13 +1656,11 @@ static void a6xx_llc_configure_gpuhtw_scid(struct adreno_device *adreno_dev)
  */
 static void a6xx_llc_enable_overrides(struct adreno_device *adreno_dev)
 {
-	void __iomem *gpu_cx_reg;
-
 	/*
 	 * Attributes override through GBIF is not supported with MMU-500.
 	 * Attributes are used as configured through SMMU pagetable entries.
 	 */
-	if (adreno_is_a640(adreno_dev))
+	if (adreno_is_a640(adreno_dev) || adreno_is_a608(adreno_dev))
 		return;
 
 	/*
@@ -1687,11 +1669,8 @@ static void a6xx_llc_enable_overrides(struct adreno_device *adreno_dev)
 	 *      writenoallocoverrideen=1
 	 *      write-no-alloc=1 - Do not allocates lines on write miss
 	 */
-	gpu_cx_reg = ioremap(A6XX_GPU_CX_REG_BASE, A6XX_GPU_CX_REG_SIZE);
-	__raw_writel(0x3, gpu_cx_reg + A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_0);
-	/* Make sure the above write posts before we proceed*/
-	wmb();
-	iounmap(gpu_cx_reg);
+	adreno_cx_misc_regwrite(adreno_dev,
+			A6XX_GPU_CX_MISC_SYSTEM_CACHE_CNTL_0, 0x3);
 }
 
 static const char *fault_block[8] = {
@@ -2966,9 +2945,28 @@ static int a6xx_perfcounter_update(struct adreno_device *adreno_dev,
 	for (i = 0; i < lock->list_length >> 1; i++)
 		if (reg_pair[i].offset == reg->select)
 			break;
+	/*
+	 * If the perfcounter selct register is not present overwrite last entry
+	 * with new entry and add RBBM perf counter enable at the end.
+	 */
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_PERFCTRL_RETAIN) &&
+			(i == lock->list_length >> 1)) {
+		reg_pair[i-1].offset = reg->select;
+		reg_pair[i-1].val = reg->countable;
 
-	reg_pair[i].offset = reg->select;
-	reg_pair[i].val = reg->countable;
+		/* Enable perf counter after performance counter selections */
+		reg_pair[i].offset = A6XX_RBBM_PERFCTR_CNTL;
+		reg_pair[i].val = 1;
+
+	} else {
+		/*
+		 * If perf counter select register is already present in reglist
+		 * just update list without adding the RBBM perfcontrol enable.
+		 */
+		reg_pair[i].offset = reg->select;
+		reg_pair[i].val = reg->countable;
+	}
+
 	if (i == lock->list_length >> 1)
 		lock->list_length += 2;
 

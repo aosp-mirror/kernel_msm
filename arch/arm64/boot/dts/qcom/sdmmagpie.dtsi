@@ -666,7 +666,7 @@
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
 		#include "qg-batterydata-alium-3600mah.dtsi"
-		#include "qg-batterydata-mlp356477-2800mah.dtsi"
+		#include "qg-batterydata-mlp466076-3200mah.dtsi"
 	};
 };
 
@@ -1029,6 +1029,24 @@
 		status = "ok";
 	};
 
+	bluetooth: bt_wcn3990 {
+		compatible = "qca,wcn3990";
+		qca,bt-vdd-io-supply = <&pm6150_l10>;
+		qca,bt-vdd-core-supply = <&pm6150l_l2>;
+		qca,bt-vdd-pa-supply = <&pm6150l_l10>;
+		qca,bt-vdd-xtal-supply = <&pm6150l_l1>;
+
+		qca,bt-vdd-io-voltage-level = <1700000 1900000>; /* IO */
+		qca,bt-vdd-core-voltage-level = <1245000 1350000>; /* RFA */
+		qca,bt-vdd-pa-voltage-level =  <3200000 3400000>;  /*chain0 */
+		qca,bt-vdd-xtal-voltage-level = <1700000 1900000>; /* XO */
+
+		qca,bt-vdd-io-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-core-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-pa-current-level = <1>; /* LPM/PFM */
+		qca,bt-vdd-xtal-current-level = <1>; /* LPM/PFM */
+	};
+
 	slim_aud: slim@62dc0000 {
 		cell-index = <1>;
 		compatible = "qcom,slim-ngd";
@@ -1060,12 +1078,20 @@
 		reg-names = "slimbus_physical", "slimbus_bam_physical";
 		interrupts = <0 291 0>, <0 292 0>;
 		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
-		status = "disabled";
+		status = "ok";
 		qcom,iommu-s1-bypass;
 
 		iommu_slim_qca_ctrl_cb: qcom,iommu_slim_ctrl_cb {
 			compatible = "qcom,iommu-slim-ctrl-cb";
 			iommus = <&apps_smmu 0x1bf3 0x0>;
+		};
+
+		/* Slimbus Slave DT for WCN3990 */
+		btfmslim_codec: wcn3990 {
+			compatible = "qcom,btfmslim_slave";
+			elemental-addr = [00 01 20 02 17 02];
+			qcom,btfm-slim-ifd = "btfmslim_slave_ifd";
+			qcom,btfm-slim-ifd-elemental-addr = [00 00 20 02 17 02];
 		};
 	};
 
@@ -1087,8 +1113,10 @@
 		compatible = "qcom,msm-eud";
 		interrupt-names = "eud_irq";
 		interrupts = <GIC_SPI 492 IRQ_TYPE_LEVEL_HIGH>;
-		reg = <0x88e0000 0x2000>;
-		reg-names = "eud_base";
+		reg = <0x88e0000 0x2000>,
+		      <0x88e4000 0x1000>;
+		reg-names = "eud_base", "eud_mode_mgr2";
+		qcom,secure-eud-en;
 		status = "ok";
 	};
 
@@ -1436,9 +1464,9 @@
 		interrupts = <0 129 0>;
 		#mbox-cells = <1>;
 		qcom,drv-id = <0>;
-		qcom,tcs-config = <ACTIVE_TCS  2>,
-				  <SLEEP_TCS   1>,
+		qcom,tcs-config = <SLEEP_TCS   1>,
 				  <WAKE_TCS    1>,
+				  <ACTIVE_TCS  2>,
 				  <CONTROL_TCS 0>;
 	};
 
@@ -1502,42 +1530,47 @@
 		qcom,msm_fastrpc_compute_cb1 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1441 0x0>;
+			iommus = <&apps_smmu 0x1421 0x0>,
+				 <&apps_smmu 0x1441 0x0>;
 			dma-coherent;
 		};
 
 		qcom,msm_fastrpc_compute_cb2 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1442 0x0>;
+			iommus = <&apps_smmu 0x1422 0x0>,
+				 <&apps_smmu 0x1442 0x0>;
 			dma-coherent;
 		};
 
 		qcom,msm_fastrpc_compute_cb3 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1443 0x0>;
+			iommus = <&apps_smmu 0x1423 0x0>,
+				 <&apps_smmu 0x1443 0x0>;
 			dma-coherent;
 		};
 
 		qcom,msm_fastrpc_compute_cb4 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1444 0x0>;
+			iommus = <&apps_smmu 0x1424 0x0>,
+				 <&apps_smmu 0x1444 0x0>;
 			dma-coherent;
 		};
 
 		qcom,msm_fastrpc_compute_cb5 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1445 0x0>;
+			iommus = <&apps_smmu 0x1425 0x0>,
+				 <&apps_smmu 0x1445 0x0>;
 			dma-coherent;
 		};
 
 		qcom,msm_fastrpc_compute_cb6 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1446 0x0>;
+			iommus = <&apps_smmu 0x1406 0x0060>;
 			dma-coherent;
 		};
 
@@ -1545,7 +1578,7 @@
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
 			qcom,secure-context-bank;
-			iommus = <&apps_smmu 0x1449 0x0>;
+			iommus = <&apps_smmu 0x1409 0x0060>;
 			dma-coherent;
 		};
 
@@ -1860,6 +1893,13 @@
 			interrupt-controller;
 			#interrupt-cells = <2>;
 		};
+
+		smp2p_wlan_1_in: qcom,smp2p-wlan-1-in {
+			qcom,entry-name = "wlan";
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		};
+
 	};
 
 	qcom,smp2p-adsp {
@@ -2421,10 +2461,12 @@
 	};
 
 	icnss: qcom,icnss@18800000 {
-		status = "disabled";
 		compatible = "qcom,icnss";
-		reg = <0x18800000 0x800000>;
-		reg-names = "membase";
+		reg = <0x18800000 0x800000>,
+		      <0xa0000000 0x10000000>,
+		      <0xb0000000 0x10000>;
+		reg-names = "membase", "smmu_iova_base", "smmu_iova_ipa";
+		iommus = <&apps_smmu 0x0240 0x1>;
 		interrupts = <0 414 0 /* CE0 */ >,
 			     <0 415 0 /* CE1 */ >,
 			     <0 416 0 /* CE2 */ >,
@@ -2440,6 +2482,18 @@
 		qcom,smmu-s1-bypass;
 		qcom,wlan-msa-memory = <0x100000>;
 		qcom,wlan-msa-fixed-region = <&wlan_msa_mem>;
+		vdd-cx-mx-supply = <&pm6150_l9>;
+		vdd-1.8-xo-supply = <&pm6150l_l1>;
+		vdd-1.3-rfa-supply = <&pm6150l_l2>;
+		vdd-3.3-ch0-supply = <&pm6150l_l10>;
+		qcom,vdd-cx-mx-config = <640000 640000>;
+		qcom,smp2p_map_wlan_1_in {
+			interrupts-extended = <&smp2p_wlan_1_in 0 0>,
+					      <&smp2p_wlan_1_in 1 0>;
+			interrupt-names = "qcom,smp2p-force-fatal-error",
+					  "qcom,smp2p-early-crash-ind";
+		};
+
 	};
 
 	qcom,msm_gsi {
@@ -2829,6 +2883,27 @@
 		memory-region = <&pil_ipa_fw_mem>;
 	};
 
+	snoc_cnoc_keepalive: qcom,snoc_cnoc_keepalive {
+		compatible = "qcom,devbw";
+		governor = "powersave";
+		qcom,src-dst-ports = <161 627>;
+		qcom,active-only;
+		status = "ok";
+		qcom,bw-tbl = < 1 >;
+	};
+
+	bus_proxy_client: qcom,bus_proxy_client {
+		compatible = "qcom,bus-proxy-client";
+		qcom,msm-bus,name = "bus-proxy-client";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<MSM_BUS_MASTER_MDP_PORT0 MSM_BUS_SLAVE_EBI_CH0 0 0>,
+			<MSM_BUS_MASTER_MDP_PORT0
+			MSM_BUS_SLAVE_EBI_CH0 0 5000000>;
+		qcom,msm-bus,active-only;
+		status = "ok";
+	};
 };
 
 #include "sdmmagpie-gdsc.dtsi"
@@ -2840,10 +2915,6 @@
 #include "sdmmagpie-camera.dtsi"
 
 &pcie_0_gdsc {
-	status = "ok";
-};
-
-&pcie_tbu_gdsc {
 	status = "ok";
 };
 
@@ -2976,9 +3047,21 @@
 #include "sdmmagpie-pinctrl.dtsi"
 #include "pm8009.dtsi"
 #include "sdmmagpie-regulator.dtsi"
+#include "sdmmagpie-camera.dtsi"
 #include "sdmmagpie-coresight.dtsi"
 #include "sdmmagpie-usb.dtsi"
 #include "sdmmagpie-thermal.dtsi"
+
+&qupv3_se9_i2c {
+	status = "ok";
+	fsa4480: fsa4480@43 {
+		compatible = "qcom,fsa4480-i2c";
+		reg = <0x43>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fsa_usbc_ana_en>;
+	};
+};
+
 #include "sdmmagpie-audio.dtsi"
 
 &usb0 {

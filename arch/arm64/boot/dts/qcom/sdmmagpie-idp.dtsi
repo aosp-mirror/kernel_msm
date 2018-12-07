@@ -16,11 +16,16 @@
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <dt-bindings/input/input.h>
 #include "sdmmagpie-sde-display.dtsi"
+#include "sdmmagpie-camera-sensor-idp.dtsi"
 
 &soc {
 };
 
 &qupv3_se8_2uart {
+	status = "ok";
+};
+
+&qupv3_se3_4uart {
 	status = "ok";
 };
 
@@ -48,6 +53,28 @@
 	qcom,vddp-ref-clk-max-microamp = <100>;
 
 	status = "ok";
+};
+
+&qupv3_se2_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <1000000>;
+	nq@28 {
+		compatible = "qcom,nq-nci";
+		reg = <0x28>;
+		qcom,nq-irq = <&tlmm 37 0x00>;
+		qcom,nq-ven = <&tlmm 12 0x00>;
+		qcom,nq-firm = <&tlmm 36 0x00>;
+		qcom,nq-clkreq = <&tlmm 31 0x00>;
+		qcom,nq-esepwr = <&tlmm 94 0x00>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <37 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "nfc_active", "nfc_suspend";
+		pinctrl-0 = <&nfc_int_active &nfc_enable_active
+				&nfc_clk_req_active>;
+		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend
+				&nfc_clk_req_suspend>;
+	};
 };
 
 &sdhc_1 {

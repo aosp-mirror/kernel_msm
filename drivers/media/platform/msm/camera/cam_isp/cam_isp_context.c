@@ -25,6 +25,7 @@
 #include "cam_context_utils.h"
 #include "cam_cdm_util.h"
 #include "cam_isp_context.h"
+#include "cam_common_util.h"
 
 static const char isp_dev_name[] = "isp";
 
@@ -1137,6 +1138,7 @@ move_to_pending:
 		}
 	}
 
+end:
 	do {
 		if (list_empty(&ctx->pending_req_list)) {
 			error_request_id = ctx_isp->last_applied_req_id + 1;
@@ -1166,7 +1168,6 @@ move_to_pending:
 
 	} while (req->request_id < ctx_isp->last_applied_req_id);
 
-end:
 	if (ctx->ctx_crm_intf && ctx->ctx_crm_intf->notify_err) {
 		notify.link_hdl = ctx->link_hdl;
 		notify.dev_hdl = ctx->dev_hdl;
@@ -2193,7 +2194,7 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	int rc = 0, i;
 	struct cam_ctx_request           *req = NULL;
 	struct cam_isp_ctx_req           *req_isp;
-	uint64_t                          packet_addr;
+	uintptr_t                         packet_addr;
 	struct cam_packet                *packet;
 	size_t                            len = 0;
 	struct cam_hw_prepare_update_args cfg;
@@ -2223,16 +2224,16 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	/* for config dev, only memory handle is supported */
 	/* map packet from the memhandle */
 	rc = cam_mem_get_cpu_buf((int32_t) cmd->packet_handle,
-		(uint64_t *) &packet_addr, &len);
+		&packet_addr, &len);
 	if (rc != 0) {
 		CAM_ERR(CAM_ISP, "Can not get packet address");
 		rc = -EINVAL;
 		goto free_req;
 	}
 
-	packet = (struct cam_packet *) (packet_addr + cmd->offset);
+	packet = (struct cam_packet *)(packet_addr + (uint32_t)cmd->offset);
 	CAM_DBG(CAM_ISP, "pack_handle %llx", cmd->packet_handle);
-	CAM_DBG(CAM_ISP, "packet address is 0x%llx", packet_addr);
+	CAM_DBG(CAM_ISP, "packet address is 0x%zx", packet_addr);
 	CAM_DBG(CAM_ISP, "packet with length %zu, offset 0x%llx",
 		len, cmd->offset);
 	CAM_DBG(CAM_ISP, "Packet request id %lld",
@@ -2406,7 +2407,7 @@ static int __cam_isp_ctx_acquire_dev_in_available(struct cam_context *ctx,
 	CAM_DBG(CAM_ISP, "start copy %d resources from user",
 		 cmd->num_resources);
 
-	if (copy_from_user(isp_res, (void __user *)cmd->resource_hdl,
+	if (copy_from_user(isp_res, u64_to_user_ptr(cmd->resource_hdl),
 		sizeof(*isp_res)*cmd->num_resources)) {
 		rc = -EFAULT;
 		goto free_res;
@@ -2415,7 +2416,7 @@ static int __cam_isp_ctx_acquire_dev_in_available(struct cam_context *ctx,
 	param.context_data = ctx;
 	param.event_cb = ctx->irq_cb_intf;
 	param.num_acq = cmd->num_resources;
-	param.acquire_info = (uint64_t) isp_res;
+	param.acquire_info = (uintptr_t) isp_res;
 
 	/* call HW manager to reserve the resource */
 	rc = ctx->hw_mgr_intf->hw_acquire(ctx->hw_mgr_intf->hw_mgr_priv,
@@ -3203,6 +3204,26 @@ static int cam_isp_context_dump_active_request(void *data, unsigned long iova,
 
 	list_for_each_entry_safe(req, req_temp,
 		&ctx->active_req_list, list) {
+		req_isp = (struct cam_isp_ctx_req *) req->req_priv;
+		hw_update_data = &req_isp->hw_update_data;
+		pf_dbg_entry = &(req->pf_data);
+		CAM_INFO(CAM_ISP, "req_id : %lld ", req->request_id);
+
+		rc = cam_context_dump_pf_info_to_hw(ctx, pf_dbg_entry->packet,
+			iova, buf_info, &mem_found);
+		if (rc)
+			CAM_ERR(CAM_ISP, "Failed to dump pf info");
+
+		if (mem_found)
+			CAM_ERR(CAM_ISP, "Found page fault in req %lld %d",
+				req->request_id, rc);
+	}
+
+	CAM_INFO(CAM_ISP, "Iterating over wait_list of isp ctx %d state %d",
+			ctx->ctx_id, ctx->state);
+
+	list_for_each_entry_safe(req, req_temp,
+		&ctx->wait_req_list, list) {
 		req_isp = (struct cam_isp_ctx_req *) req->req_priv;
 		hw_update_data = &req_isp->hw_update_data;
 		pf_dbg_entry = &(req->pf_data);

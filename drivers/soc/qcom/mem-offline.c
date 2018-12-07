@@ -126,6 +126,14 @@ static int mem_event_callback(struct notifier_block *self,
 	start_addr = __pfn_to_phys(start);
 	end_addr = __pfn_to_phys(end);
 	sec_nr = pfn_to_section_nr(start);
+
+	if (sec_nr > end_section_nr || sec_nr < start_section_nr) {
+		if (action == MEM_ONLINE || action == MEM_OFFLINE)
+			pr_info("mem-offline: %s mem%d, but not our block. Not performing any action\n",
+				action == MEM_ONLINE ? "Onlined" : "Offlined",
+				sec_nr);
+		return NOTIFY_OK;
+	}
 	switch (action) {
 	case MEM_GOING_ONLINE:
 		pr_debug("mem-offline: MEM_GOING_ONLINE : start = 0x%lx end = 0x%lx",
@@ -188,8 +196,8 @@ static int mem_online_remaining_blocks(void)
 	start_section_nr = pfn_to_section_nr(memblock_end_pfn);
 	end_section_nr = pfn_to_section_nr(ram_end_pfn);
 
-	if (start_section_nr == end_section_nr) {
-		pr_err("mem-offline: System booted with no zone movable memory blocks. Cannot perform memory offlining\n");
+	if (start_section_nr >= end_section_nr) {
+		pr_info("mem-offline: System booted with no zone movable memory blocks. Cannot perform memory offlining\n");
 		return -EINVAL;
 	}
 	for (memblock = start_section_nr; memblock <= end_section_nr;
@@ -361,10 +369,16 @@ static struct notifier_block hotplug_memory_callback_nb = {
 
 static int mem_offline_driver_probe(struct platform_device *pdev)
 {
+	int ret;
+
 	if (mem_parse_dt(pdev))
 		return -ENODEV;
 
-	if (mem_online_remaining_blocks())
+	ret = mem_online_remaining_blocks();
+	if (ret < 0)
+		return -ENODEV;
+
+	if (ret > 0)
 		pr_err("mem-offline: !!ERROR!! Auto onlining some memory blocks failed. System could run with less RAM\n");
 
 	if (mem_sysfs_init())
