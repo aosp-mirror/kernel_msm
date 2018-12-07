@@ -25,6 +25,7 @@
 	/delete-property/ lab-supply;
 	/delete-property/ ibb-supply;
 
+	// update secure_display_memory carveout when adding a new display
 	qcom,dsi-display-list = <&dsi_nt37280_cmd_display
 				 &dsi_s6e3hc2_cmd_display
 				 &dsi_sim_vid_display>;
