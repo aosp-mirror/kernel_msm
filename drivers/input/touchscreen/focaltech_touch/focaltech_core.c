@@ -46,8 +46,8 @@
 * Private constant and macro definitions using #define
 *****************************************************************************/
 #define FTS_DRIVER_NAME                     "fts_ts"
-#define INTERVAL_READ_REG                   20  /*interval time per read:ms*/
-#define TIMEOUT_READ_REG                    300 /*timeout of read reg:ms*/
+#define INTERVAL_READ_REG                   50  /*interval time per read:ms*/
+#define TIMEOUT_READ_REG                    101 /*timeout of read reg:ms*/
 #if FTS_POWER_SOURCE_CUST_EN
 #define FTS_VTG_MIN_UV                      2600000
 #define FTS_VTG_MAX_UV                      3300000
@@ -1075,6 +1075,10 @@ int fts_ts_inputdev_open(struct input_dev *dev)
 
 	FTS_INFO("%s users = %d", __func__, dev->users);
 
+	if(data == NULL){
+		FTS_INFO("%s data is NULL, return ", __func__);
+		return -EIO;
+	}
 	if (data->inputdev_opened) {
 		FTS_INFO("%s input_dev already opened.", __func__);
 		return 0;
@@ -1244,8 +1248,6 @@ static int fts_ts_probe(struct i2c_client *client,
 	spin_lock_init(&fts_wq_data->irq_lock);
 	mutex_init(&fts_wq_data->report_mutex);
 
-	fts_input_dev_init(client, data, input_dev, pdata);
-
 	fts_ctpm_get_upgrade_array();
 
 #if FTS_POWER_SOURCE_CUST_EN
@@ -1272,6 +1274,7 @@ static int fts_ts_probe(struct i2c_client *client,
 		}
 	}
 
+	fts_input_dev_init(client, data, input_dev, pdata);
 	client->irq = gpio_to_irq(pdata->irq_gpio);
 
 	err = request_threaded_irq(client->irq, NULL, fts_ts_interrupt,
@@ -1350,8 +1353,8 @@ static int fts_ts_probe(struct i2c_client *client,
 
 exit_free_irq:
 	free_irq(data->client->irq, data->client);
-	i2c_set_clientdata(client, NULL);
 free_gpio:
+	i2c_set_clientdata(client, NULL);
 	if (gpio_is_valid(pdata->reset_gpio))
 		gpio_free(pdata->reset_gpio);
 	if (gpio_is_valid(pdata->irq_gpio))
@@ -1369,6 +1372,8 @@ free_gpio:
 
 	FTS_ERROR("[FTS]fts_ts_probe failed!");
 err_switch_gpio_req:
+	if (gpio_is_valid(pdata->switch_gpio))
+		gpio_free(pdata->switch_gpio);
 	return err;
 
 	return err;
