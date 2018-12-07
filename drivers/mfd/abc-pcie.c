@@ -40,6 +40,8 @@
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 static struct abc_device *abc_dev;
 
+static void abc_pcie_enable_irqs(struct pci_dev *pdev);
+static void abc_pcie_disable_irqs(struct pci_dev *pdev);
 
 static const struct mfd_cell abc_mfd_devs[] = {
 	{
@@ -1608,6 +1610,12 @@ static int abc_pcie_ab_ready_handler(void *ctx)
 	dev_dbg(dev,
 		"%s: ab_ready is high; PCIe link is enabled by host\n",
 		__func__);
+
+	/* TODO(b/120753172): clean up atomics usage */
+	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_ACTIVE)
+		return 0;
+
+	abc_pcie_enable_irqs(abc_dev->pdev);
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
 
 	/* Broadcast this event to subscribers */
@@ -1622,6 +1630,12 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 	dev_dbg(dev,
 		"%s: PCIe link will be disabled by host\n",
 		__func__);
+
+	/* TODO(b/120753172): clean up atomics usage */
+	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_NOT_ACTIVE)
+		return 0;
+
+	abc_pcie_disable_irqs(abc_dev->pdev);
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
 
 	/* Broadcast this event to subscribers */
@@ -1637,6 +1651,68 @@ static struct ab_sm_mfd_ops mfd_ops = {
 	.ab_ready = &abc_pcie_ab_ready_handler,
 	.pcie_pre_disable = &abc_pcie_pre_disable_handler,
 };
+
+static void abc_pcie_enable_irqs(struct pci_dev *pdev)
+{
+	int i;
+
+	dev_dbg(&pdev->dev, "%s: enter\n", __func__);
+
+	for (i = ABC_MSI_0_TMU_AON; i < ABC_MSI_RD_DMA_0; i++) {
+		/*
+		 * ABC_MSI_2_IPU_IRQ0 and ABC_MSI_3_IPU_IRQ1 are registered by
+		 * the paintbox IPU driver.
+		 */
+		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1)
+			continue;
+
+		if (i == ABC_MSI_4_TPU_IRQ0 || i == ABC_MSI_5_TPU_IRQ1) {
+			/*
+			 * TODO(b/120049047): move enable_irq decisions
+			 * to child drivers.
+			 */
+			enable_irq(pdev->irq + i);
+			continue;
+		}
+		enable_irq(pdev->irq + i);
+	}
+
+	for (i = ABC_MSI_RD_DMA_0; i <= ABC_MSI_WR_DMA_7; i++)
+		enable_irq(pdev->irq + i);
+
+	enable_irq(pdev->irq + ABC_MSI_AON_INTNC);
+}
+
+static void abc_pcie_disable_irqs(struct pci_dev *pdev)
+{
+	int i;
+
+	dev_dbg(&pdev->dev, "%s: enter\n", __func__);
+
+	disable_irq(pdev->irq + ABC_MSI_AON_INTNC);
+
+	for (i = ABC_MSI_RD_DMA_0; i <= ABC_MSI_WR_DMA_7; i++)
+		disable_irq(pdev->irq + i);
+
+	for (i = ABC_MSI_0_TMU_AON; i < ABC_MSI_RD_DMA_0; i++) {
+		/*
+		 * ABC_MSI_2_IPU_IRQ0 and ABC_MSI_3_IPU_IRQ1 are registered by
+		 * the paintbox IPU driver.
+		 */
+		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1)
+			continue;
+
+		if (i == ABC_MSI_4_TPU_IRQ0 || i == ABC_MSI_5_TPU_IRQ1) {
+			/*
+			 * TODO(b/120049047): move disable_irq decisions
+			 * to child drivers.
+			 */
+			disable_irq(pdev->irq + i);
+			continue;
+		}
+		disable_irq(pdev->irq + i);
+	}
+}
 
 uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
 {
