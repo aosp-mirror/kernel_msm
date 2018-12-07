@@ -153,4 +153,8 @@
 #define MSI_CAP_OFF_10H_REG				0x60
 
 #define MSI_CAP_MASK_31					(0x1 << 31)
+
+#define ABC_READY_ENTR_L23				0x68
+#define ENTR_L23_EN					0x1
+#define ENTR_L23_MASK					0x1
 #endif

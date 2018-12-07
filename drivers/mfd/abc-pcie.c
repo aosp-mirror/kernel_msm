@@ -443,6 +443,7 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 {
 	struct abc_pcie_pm_ctrl smctrl;
 	u32 current_linkstate;
+	u32 val;
 
 	smctrl.l0s_en = ABC_PCIE_PM_DISABLE;
 	smctrl.l1_en = ABC_PCIE_PM_DISABLE;
@@ -453,8 +454,15 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 	if (target_linkstate == current_linkstate)
 		return;
 
+	abc_pcie_config_read(ABC_PCIE_SUB_CTRL_BASE + ABC_READY_ENTR_L23,
+			     0x0, &val);
+
 	switch (target_linkstate) {
 	case PM_L2:
+		val |= ENTR_L23_EN;
+		abc_pcie_config_write(ABC_PCIE_SUB_CTRL_BASE +
+				      ABC_READY_ENTR_L23,
+				      0x4, val);
 		return;
 	case ASPM_L0s:
 		smctrl.l0s_en = ABC_PCIE_PM_ENABLE;
@@ -469,6 +477,10 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 		break;
 	case NOASPM:
 	default:
+		val &= ~(ENTR_L23_MASK);
+		abc_pcie_config_write(ABC_PCIE_SUB_CTRL_BASE +
+				      ABC_READY_ENTR_L23,
+				      0x4, val);
 		break;
 	}
 	abc_set_pcie_pm_ctrl(&smctrl);
@@ -494,7 +506,6 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 		const struct block_property *target_property,
 		enum chip_state chip_substate_id, void *data)
 {
-	struct pci_dev *pdev = (struct pci_dev *)data;
 	u32 target_linkstate;
 	u32 current_linkstate;
 	u32 target_linkspeed;
@@ -502,16 +513,6 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 
 	if (!target_property)
 		return -EINVAL;
-
-	/* TODO(aikhan):  Could you provide an explanation as to why the DISABLE
-	 * state is not supported for the PCIe driver.
-	 */
-	if (chip_substate_id == CHIP_STATE_5_0) {
-		dev_err(&pdev->dev,
-				"%s: Chip State 5 (Disabled) not supported\n",
-				__func__);
-		return -EINVAL;
-	}
 
 	target_linkstate = string_to_integer(target_property->substate_name);
 	target_linkspeed = target_property->data_rate;
