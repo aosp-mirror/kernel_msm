@@ -1377,6 +1377,7 @@ static int cam_fd_mgr_hw_flush_ctx(void *hw_mgr_priv,
 	struct cam_fd_hw_stop_args hw_stop_args;
 	struct cam_fd_hw_mgr_ctx *hw_ctx;
 	uint32_t i = 0;
+	bool is_list_empty;
 
 	hw_ctx = (struct cam_fd_hw_mgr_ctx *)flush_args->ctxt_to_hw_map;
 
@@ -1391,6 +1392,20 @@ static int cam_fd_mgr_hw_flush_ctx(void *hw_mgr_priv,
 	if (rc) {
 		CAM_ERR(CAM_FD, "Error in getting device %d", rc);
 		return rc;
+	}
+
+	/* Check and wait frame_processing_list to be empty */
+	for (i = 0; i < 20; i++) {
+		mutex_lock(&hw_mgr->frame_req_mutex);
+		is_list_empty = list_empty(&hw_mgr->frame_processing_list);
+		mutex_unlock(&hw_mgr->frame_req_mutex);
+		if (is_list_empty)
+			break;
+		msleep(1);
+	}
+	if (i >= 20) {
+		CAM_ERR(CAM_FD,
+			"Fail to wait frame_processing_list to be empty");
 	}
 
 	mutex_lock(&hw_mgr->frame_req_mutex);
