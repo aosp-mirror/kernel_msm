@@ -72,9 +72,7 @@
 
 #define IDLE_SHORT_TIMEOUT	1
 
-#define FAULT_TOLERENCE_DELTA_IN_MS 2
-
-#define FAULT_TOLERENCE_WAIT_IN_MS 5
+#define EVT_TIME_OUT_SPLIT 2
 
 /* Maximum number of VSYNC wait attempts for RSC state transition */
 #define MAX_RSC_WAIT	5
@@ -177,6 +175,7 @@ enum sde_enc_rc_states {
  * @hw_pp		Handle to the pingpong blocks used for the display. No.
  *			pingpong blocks can be different than num_phys_encs.
  * @hw_dsc:		Array of DSC block handles used for the display.
+ * @dirty_dsc_ids:	Cached dsc indexes for dirty DSC blocks needing flush
  * @intfs_swapped	Whether or not the phys_enc interfaces have been swapped
  *			for partial update right-only cases, such as pingpong
  *			split where virtual pingpong does not generate IRQs
@@ -236,6 +235,7 @@ struct sde_encoder_virt {
 	struct sde_encoder_phys *cur_master;
 	struct sde_hw_pingpong *hw_pp[MAX_CHANNELS_PER_ENC];
 	struct sde_hw_dsc *hw_dsc[MAX_CHANNELS_PER_ENC];
+	enum sde_dsc dirty_dsc_ids[MAX_CHANNELS_PER_ENC];
 
 	bool intfs_swapped;
 
@@ -413,6 +413,28 @@ static bool _sde_encoder_is_dsc_enabled(struct drm_encoder *drm_enc)
 	return (comp_info->comp_type == MSM_DISPLAY_COMPRESSION_DSC);
 }
 
+static int _sde_encoder_wait_timeout(int32_t drm_id, int32_t hw_id,
+	s64 timeout_ms, struct sde_encoder_wait_info *info)
+{
+	int rc = 0;
+	s64 wait_time_jiffies = msecs_to_jiffies(timeout_ms);
+	ktime_t cur_ktime;
+	ktime_t exp_ktime = ktime_add_ms(ktime_get(), timeout_ms);
+
+	do {
+		rc = wait_event_timeout(*(info->wq),
+			atomic_read(info->atomic_cnt) == 0, wait_time_jiffies);
+		cur_ktime = ktime_get();
+
+		SDE_EVT32(drm_id, hw_id, rc, ktime_to_ms(cur_ktime),
+			timeout_ms, atomic_read(info->atomic_cnt));
+	/* If we timed out, counter is valid and time is less, wait again */
+	} while (atomic_read(info->atomic_cnt) && (rc == 0) &&
+			(ktime_compare_safe(exp_ktime, cur_ktime) > 0));
+
+	return rc;
+}
+
 bool sde_encoder_is_dsc_merge(struct drm_encoder *drm_enc)
 {
 	enum sde_rm_topology_name topology;
@@ -435,14 +457,6 @@ bool sde_encoder_is_dsc_merge(struct drm_encoder *drm_enc)
 		return true;
 
 	return false;
-}
-
-int sde_encoder_in_clone_mode(struct drm_encoder *drm_enc)
-{
-	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
-
-	return sde_enc && sde_enc->cur_master &&
-		sde_enc->cur_master->in_clone_mode;
 }
 
 bool sde_encoder_is_primary_display(struct drm_encoder *drm_enc)
@@ -511,7 +525,7 @@ int sde_encoder_helper_wait_for_irq(struct sde_encoder_phys *phys_enc,
 {
 	struct sde_encoder_irq *irq;
 	u32 irq_status;
-	int ret;
+	int ret, i;
 
 	if (!phys_enc || !wait_info || intr_idx >= INTR_IDX_MAX) {
 		SDE_ERROR("invalid params\n");
@@ -543,10 +557,22 @@ int sde_encoder_helper_wait_for_irq(struct sde_encoder_phys *phys_enc,
 		irq->irq_idx, phys_enc->hw_pp->idx - PINGPONG_0,
 		atomic_read(wait_info->atomic_cnt), SDE_EVTLOG_FUNC_ENTRY);
 
-	ret = sde_encoder_helper_wait_event_timeout(
-			DRMID(phys_enc->parent),
-			irq->hw_idx,
-			wait_info);
+	/*
+	 * Some module X may disable interrupt for longer duration
+	 * and it may trigger all interrupts including timer interrupt
+	 * when module X again enable the interrupt.
+	 * That may cause interrupt wait timeout API in this API.
+	 * It is handled by split the wait timer in two halves.
+	 */
+
+	for (i = 0; i < EVT_TIME_OUT_SPLIT; i++) {
+		ret = _sde_encoder_wait_timeout(DRMID(phys_enc->parent),
+				irq->hw_idx,
+				(wait_info->timeout_ms/EVT_TIME_OUT_SPLIT),
+				wait_info);
+		if (ret)
+			break;
+	}
 
 	if (ret <= 0) {
 		irq_status = sde_core_irq_read(phys_enc->sde_kms,
@@ -904,6 +930,28 @@ void sde_encoder_helper_split_config(
 	}
 }
 
+bool sde_encoder_in_clone_mode(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc;
+	int i = 0;
+
+	if (!drm_enc)
+		return false;
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc)
+		return false;
+
+	for (i = 0; i < sde_enc->num_phys_encs; i++) {
+		struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
+
+		if (phys && phys->in_clone_mode)
+			return true;
+	}
+
+	return false;
+}
+
 static int sde_encoder_virt_atomic_check(
 		struct drm_encoder *drm_enc,
 		struct drm_crtc_state *crtc_state,
@@ -1139,25 +1187,37 @@ static void _sde_encoder_dsc_pclk_param_calc(struct msm_display_dsc_info *dsc,
 static int _sde_encoder_dsc_initial_line_calc(struct msm_display_dsc_info *dsc,
 		int enc_ip_width)
 {
-	int ssm_delay, total_pixels, soft_slice_per_enc;
+	int ssm_delay, total_pixels, soft_slice_per_enc, fifo_size;
+	int first_line_offset, tmp[3];
 
 	soft_slice_per_enc = enc_ip_width / dsc->slice_width;
 
 	/*
 	 * minimum number of initial line pixels is a sum of:
-	 * 1. sub-stream multiplexer delay (83 groups for 8bpc,
-	 *    91 for 10 bpc) * 3
+	 * 1. sub-stream multiplexer delay (84 groups for 8bpc,
+	 *    92 for 10 bpc) * 3
 	 * 2. for two soft slice cases, add extra sub-stream multiplexer * 3
 	 * 3. the initial xmit delay
 	 * 4. total pipeline delay through the "lock step" of encoder (47)
 	 * 5. 6 additional pixels as the output of the rate buffer is
 	 *    48 bits wide
 	 */
-	ssm_delay = ((dsc->bpc < 10) ? 84 : 92);
-	total_pixels = ssm_delay * 3 + dsc->initial_xmit_delay + 47;
-	if (soft_slice_per_enc > 1)
-		total_pixels += (ssm_delay * 3);
+	ssm_delay = 3 * ((dsc->bpc < 10) ? 84 : 92);
+	total_pixels = (soft_slice_per_enc * ssm_delay)
+				+ dsc->initial_xmit_delay + 47;
+	fifo_size = ((soft_slice_per_enc == 2) ? 5610 : 11610);
+	first_line_offset =
+		(dsc->first_line_bpg_offset * dsc->pic_width) / (3 * 8);
+
 	dsc->initial_lines = DIV_ROUND_UP(total_pixels, dsc->slice_width);
+
+	tmp[0] = dsc->initial_xmit_delay + first_line_offset;
+	tmp[1] = (2 + (0.75 * soft_slice_per_enc)) * dsc->chunk_size;
+	tmp[2] = (total_pixels % dsc->slice_width) * (dsc->bpp / 8);
+
+	if ((tmp[0] + tmp[1] - tmp[2]) < fifo_size)
+		dsc->initial_lines++;
+
 	return 0;
 }
 
@@ -1188,8 +1248,20 @@ static void _sde_encoder_dsc_pipe_cfg(struct sde_hw_dsc *hw_dsc,
 		u32 common_mode, bool ich_reset, bool enable)
 {
 	if (!enable) {
-		if (hw_pp->ops.disable_dsc)
+		if (hw_pp && hw_pp->ops.disable_dsc)
 			hw_pp->ops.disable_dsc(hw_pp);
+
+		if (hw_dsc && hw_dsc->ops.dsc_disable)
+			hw_dsc->ops.dsc_disable(hw_dsc);
+
+		if (hw_dsc && hw_dsc->ops.bind_pingpong_blk)
+			hw_dsc->ops.bind_pingpong_blk(hw_dsc, false,
+					PINGPONG_MAX);
+		return;
+	}
+
+	if (!dsc || !hw_dsc || !hw_pp) {
+		SDE_ERROR("invalid params %d %d %d\n", !dsc, !hw_dsc, !hw_pp);
 		return;
 	}
 
@@ -1279,10 +1351,6 @@ static int _sde_encoder_dsc_n_lm_1_enc_1_intf(struct sde_encoder_virt *sde_enc)
 
 	_sde_encoder_dsc_pipe_cfg(hw_dsc, hw_pp, dsc, dsc_common_mode,
 			ich_res, true);
-	if (cfg.dsc_count >= MAX_DSC_PER_CTL_V1) {
-		pr_err("Invalid dsc count:%d\n", cfg.dsc_count);
-		return -EINVAL;
-	}
 	cfg.dsc[cfg.dsc_count++] = hw_dsc->idx;
 
 	/* setup dsc active configuration in the control path */
@@ -1402,8 +1470,7 @@ static int _sde_encoder_dsc_2_lm_2_enc_2_intf(struct sde_encoder_virt *sde_enc,
 						cfg.dsc_count);
 				return -EINVAL;
 			}
-			cfg.dsc[i] = hw_dsc[i]->idx;
-			cfg.dsc_count++;
+			cfg.dsc[cfg.dsc_count++] = hw_dsc[i]->idx;
 
 			if (hw_ctl->ops.update_bitmask_dsc)
 				hw_ctl->ops.update_bitmask_dsc(hw_ctl,
@@ -1713,32 +1780,47 @@ static void _sde_encoder_update_vsync_source(struct sde_encoder_virt *sde_enc,
 	}
 }
 
-static int _sde_encoder_dsc_disable(struct sde_encoder_virt *sde_enc)
+static void _sde_encoder_dsc_disable(struct sde_encoder_virt *sde_enc)
 {
-	int i, ret = 0;
+	int i;
 	struct sde_hw_pingpong *hw_pp = NULL;
 	struct sde_hw_dsc *hw_dsc = NULL;
+	struct sde_hw_ctl *hw_ctl = NULL;
+	struct sde_ctl_dsc_cfg cfg;
 
 	if (!sde_enc || !sde_enc->phys_encs[0] ||
 			!sde_enc->phys_encs[0]->connector) {
 		SDE_ERROR("invalid params %d %d\n",
 			!sde_enc, sde_enc ? !sde_enc->phys_encs[0] : -1);
-		return -EINVAL;
+		return;
 	}
+
+	if (sde_enc->cur_master)
+		hw_ctl = sde_enc->cur_master->hw_ctl;
 
 	/* Disable DSC for all the pp's present in this topology */
 	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
 		hw_pp = sde_enc->hw_pp[i];
 		hw_dsc = sde_enc->hw_dsc[i];
 
-		if (hw_pp && hw_pp->ops.disable_dsc)
-			hw_pp->ops.disable_dsc(hw_pp);
+		_sde_encoder_dsc_pipe_cfg(hw_dsc, hw_pp, NULL, 0, 0, 0);
 
-		if (hw_dsc && hw_dsc->ops.dsc_disable)
-			hw_dsc->ops.dsc_disable(hw_dsc);
+		if (hw_dsc)
+			sde_enc->dirty_dsc_ids[i] = hw_dsc->idx;
 	}
 
-	return ret;
+	/* Clear the DSC ACTIVE config for this CTL */
+	if (hw_ctl && hw_ctl->ops.setup_dsc_cfg) {
+		memset(&cfg, 0, sizeof(cfg));
+		hw_ctl->ops.setup_dsc_cfg(hw_ctl, &cfg);
+	}
+
+	/**
+	 * Since pending flushes from previous commit get cleared
+	 * sometime after this point, setting DSC flush bits now
+	 * will have no effect. Therefore dirty_dsc_ids track which
+	 * DSC blocks must be flushed for the next trigger.
+	 */
 }
 
 static int _sde_encoder_switch_to_watchdog_vsync(struct drm_encoder *drm_enc)
@@ -3605,50 +3687,6 @@ void sde_encoder_helper_trigger_start(struct sde_encoder_phys *phys_enc)
 	}
 }
 
-static int _sde_encoder_wait_timeout(int32_t drm_id, int32_t hw_id,
-	s64 timeout_ms, struct sde_encoder_wait_info *info)
-{
-	int rc = 0;
-	s64 wait_time_jiffies = msecs_to_jiffies(timeout_ms);
-	ktime_t cur_ktime;
-	ktime_t exp_ktime = ktime_add_ms(ktime_get(), timeout_ms);
-
-	do {
-		rc = wait_event_timeout(*(info->wq),
-			atomic_read(info->atomic_cnt) == 0, wait_time_jiffies);
-		cur_ktime = ktime_get();
-
-		SDE_EVT32(drm_id, hw_id, rc, ktime_to_ms(cur_ktime),
-			timeout_ms, atomic_read(info->atomic_cnt));
-	/* If we timed out, counter is valid and time is less, wait again */
-	} while (atomic_read(info->atomic_cnt) && (rc == 0) &&
-			(ktime_compare_safe(exp_ktime, cur_ktime) > 0));
-
-	return rc;
-}
-
-int sde_encoder_helper_wait_event_timeout(int32_t drm_id, int32_t hw_id,
-	struct sde_encoder_wait_info *info)
-{
-	int rc;
-	ktime_t exp_ktime = ktime_add_ms(ktime_get(), info->timeout_ms);
-
-	rc = _sde_encoder_wait_timeout(drm_id, hw_id, info->timeout_ms, info);
-
-	/**
-	 * handle disabled irq case where timer irq is also delayed.
-	 * wait for additional timeout of FAULT_TOLERENCE_WAIT_IN_MS
-	 * if it event_timeout expired late detected.
-	 */
-	if (atomic_read(info->atomic_cnt) && (!rc) &&
-	    (ktime_compare_safe(ktime_get(), ktime_add_ms(exp_ktime,
-	     FAULT_TOLERENCE_DELTA_IN_MS)) > 0))
-		rc = _sde_encoder_wait_timeout(drm_id, hw_id,
-			FAULT_TOLERENCE_WAIT_IN_MS, info);
-
-	return rc;
-}
-
 void sde_encoder_helper_hw_reset(struct sde_encoder_phys *phys_enc)
 {
 	struct sde_encoder_virt *sde_enc;
@@ -4335,6 +4373,40 @@ static int _helper_flush_qsync(struct sde_encoder_phys *phys_enc)
 	return 0;
 }
 
+static bool _sde_encoder_dsc_is_dirty(struct sde_encoder_virt *sde_enc)
+{
+	int i;
+
+	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
+		/**
+		 * This dirty_dsc_hw field is set during DSC disable to
+		 * indicate which DSC blocks need to be flushed
+		 */
+		if (sde_enc->dirty_dsc_ids[i])
+			return true;
+	}
+
+	return false;
+}
+
+static void _helper_flush_dsc(struct sde_encoder_virt *sde_enc)
+{
+	int i;
+	struct sde_hw_ctl *hw_ctl = NULL;
+	enum sde_dsc dsc_idx;
+
+	if (sde_enc->cur_master)
+		hw_ctl = sde_enc->cur_master->hw_ctl;
+
+	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
+		dsc_idx = sde_enc->dirty_dsc_ids[i];
+		if (dsc_idx && hw_ctl && hw_ctl->ops.update_bitmask_dsc)
+			hw_ctl->ops.update_bitmask_dsc(hw_ctl, dsc_idx, 1);
+
+		sde_enc->dirty_dsc_ids[i] = DSC_NONE;
+	}
+}
+
 int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 		struct sde_encoder_kickoff_params *params)
 {
@@ -4444,6 +4516,8 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 			SDE_ERROR_ENC(sde_enc, "failed to setup DSC: %d\n", rc);
 			ret = rc;
 		}
+	} else if (_sde_encoder_dsc_is_dirty(sde_enc)) {
+		_helper_flush_dsc(sde_enc);
 	}
 
 end:
@@ -4521,7 +4595,6 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 	}
 
 	if (sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_DSI &&
-			sde_enc->disp_info.is_primary &&
 			!_sde_encoder_wakeup_time(drm_enc, &wakeup_time)) {
 		SDE_EVT32_VERBOSE(ktime_to_ms(wakeup_time));
 		mod_timer(&sde_enc->vsync_event_timer,
@@ -5119,8 +5192,7 @@ struct drm_encoder *sde_encoder_init(
 	drm_encoder_init(dev, drm_enc, &sde_encoder_funcs, drm_enc_mode, NULL);
 	drm_encoder_helper_add(drm_enc, &sde_encoder_helper_funcs);
 
-	if ((disp_info->intf_type == DRM_MODE_CONNECTOR_DSI) &&
-			disp_info->is_primary)
+	if (disp_info->intf_type == DRM_MODE_CONNECTOR_DSI)
 		setup_timer(&sde_enc->vsync_event_timer,
 				sde_encoder_vsync_event_handler,
 				(unsigned long)sde_enc);

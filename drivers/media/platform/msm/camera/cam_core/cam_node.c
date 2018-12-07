@@ -31,7 +31,7 @@ static void cam_node_print_ctx_state(
 	for (i = 0; i < node->ctx_size; i++) {
 		ctx = &node->ctx_list[i];
 
-		spin_lock(&ctx->lock);
+		spin_lock_bh(&ctx->lock);
 		CAM_INFO(CAM_CORE,
 			"[%s][%d] : state=%d, refcount=%d, active_req_list=%d, pending_req_list=%d, wait_req_list=%d, free_req_list=%d",
 			ctx->dev_name ? ctx->dev_name : "null",
@@ -41,7 +41,7 @@ static void cam_node_print_ctx_state(
 			list_empty(&ctx->pending_req_list),
 			list_empty(&ctx->wait_req_list),
 			list_empty(&ctx->free_req_list));
-		spin_unlock(&ctx->lock);
+		spin_unlock_bh(&ctx->lock);
 	}
 	mutex_unlock(&node->list_mutex);
 }
@@ -579,7 +579,7 @@ int cam_node_handle_ioctl(struct cam_node *node, struct cam_control *cmd)
 	case CAM_QUERY_CAP: {
 		struct cam_query_cap_cmd query;
 
-		if (copy_from_user(&query, (void __user *)cmd->handle,
+		if (copy_from_user(&query, u64_to_user_ptr(cmd->handle),
 			sizeof(query))) {
 			rc = -EFAULT;
 			break;
@@ -592,7 +592,7 @@ int cam_node_handle_ioctl(struct cam_node *node, struct cam_control *cmd)
 			break;
 		}
 
-		if (copy_to_user((void __user *)cmd->handle, &query,
+		if (copy_to_user(u64_to_user_ptr(cmd->handle), &query,
 			sizeof(query)))
 			rc = -EFAULT;
 
@@ -601,7 +601,7 @@ int cam_node_handle_ioctl(struct cam_node *node, struct cam_control *cmd)
 	case CAM_ACQUIRE_DEV: {
 		struct cam_acquire_dev_cmd acquire;
 
-		if (copy_from_user(&acquire, (void __user *)cmd->handle,
+		if (copy_from_user(&acquire, u64_to_user_ptr(cmd->handle),
 			sizeof(acquire))) {
 			rc = -EFAULT;
 			break;
@@ -612,7 +612,7 @@ int cam_node_handle_ioctl(struct cam_node *node, struct cam_control *cmd)
 				rc);
 			break;
 		}
-		if (copy_to_user((void __user *)cmd->handle, &acquire,
+		if (copy_to_user(u64_to_user_ptr(cmd->handle), &acquire,
 			sizeof(acquire)))
 			rc = -EFAULT;
 		break;
@@ -657,6 +657,7 @@ int cam_node_handle_ioctl(struct cam_node *node, struct cam_control *cmd)
 					"acquire device failed(rc = %d)", rc);
 				goto acquire_kfree;
 			}
+			CAM_INFO(CAM_CORE, "Acquire HW successful");
 		}
 
 		if (copy_to_user((void __user *)cmd->handle, acquire_ptr,
@@ -670,7 +671,7 @@ acquire_kfree:
 	case CAM_START_DEV: {
 		struct cam_start_stop_dev_cmd start;
 
-		if (copy_from_user(&start, (void __user *)cmd->handle,
+		if (copy_from_user(&start, u64_to_user_ptr(cmd->handle),
 			sizeof(start)))
 			rc = -EFAULT;
 		else {
@@ -684,7 +685,7 @@ acquire_kfree:
 	case CAM_STOP_DEV: {
 		struct cam_start_stop_dev_cmd stop;
 
-		if (copy_from_user(&stop, (void __user *)cmd->handle,
+		if (copy_from_user(&stop, u64_to_user_ptr(cmd->handle),
 			sizeof(stop)))
 			rc = -EFAULT;
 		else {
@@ -698,7 +699,7 @@ acquire_kfree:
 	case CAM_CONFIG_DEV: {
 		struct cam_config_dev_cmd config;
 
-		if (copy_from_user(&config, (void __user *)cmd->handle,
+		if (copy_from_user(&config, u64_to_user_ptr(cmd->handle),
 			sizeof(config)))
 			rc = -EFAULT;
 		else {
@@ -712,7 +713,7 @@ acquire_kfree:
 	case CAM_RELEASE_DEV: {
 		struct cam_release_dev_cmd release;
 
-		if (copy_from_user(&release, (void __user *)cmd->handle,
+		if (copy_from_user(&release, u64_to_user_ptr(cmd->handle),
 			sizeof(release)))
 			rc = -EFAULT;
 		else {
@@ -763,6 +764,8 @@ acquire_kfree:
 					"release device failed(rc = %d)", rc);
 		}
 
+		CAM_INFO(CAM_CORE, "Release HW done(rc = %d)", rc);
+
 release_kfree:
 		kfree(release_ptr);
 		break;
@@ -770,7 +773,7 @@ release_kfree:
 	case CAM_FLUSH_REQ: {
 		struct cam_flush_dev_cmd flush;
 
-		if (copy_from_user(&flush, (void __user *)cmd->handle,
+		if (copy_from_user(&flush, u64_to_user_ptr(cmd->handle),
 			sizeof(flush)))
 			rc = -EFAULT;
 		else {

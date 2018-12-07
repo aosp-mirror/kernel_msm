@@ -799,7 +799,7 @@
 			<&clock_camcc CAM_CC_IFE_LITE_CLK_SRC>,
 			<&clock_camcc CAM_CC_CAMNOC_AXI_CLK>;
 		clock-rates =
-			<0 0 0 0 0 0 320000000 0 0 0 432000000 0 0>,
+			<0 0 0 0 0 0 320000000 0 0 0 432000000 0>,
 			<0 0 0 0 0 0 540000000 0 0 0 600000000 0>;
 		clock-cntl-level = "svs_l1", "turbo";
 		src-clock-name = "ife_csid_clk_src";
@@ -850,6 +850,7 @@
 		num-a5 = <1>;
 		num-ipe = <1>;
 		num-bps = <1>;
+		icp_pc_en;
 		status = "ok";
 	};
 
@@ -987,9 +988,9 @@
 			<&clock_camcc CAM_CC_JPEG_CLK_SRC>,
 			<&clock_camcc CAM_CC_JPEG_CLK>;
 
-		clock-rates = <0 0 0 0 0 320000000 0>;
+		clock-rates = <0 0 0 0 0 600000000 0>;
 		src-clock-name = "jpegenc_clk_src";
-		clock-cntl-level = "nominal";
+		clock-cntl-level = "turbo";
 		status = "ok";
 	};
 
@@ -1018,9 +1019,9 @@
 			<&clock_camcc CAM_CC_JPEG_CLK_SRC>,
 			<&clock_camcc CAM_CC_JPEG_CLK>;
 
-		clock-rates = <0 0 0 0 0 320000000 0>;
+		clock-rates = <0 0 0 0 0 600000000 0>;
 		src-clock-name = "jpegdma_clk_src";
-		clock-cntl-level = "nominal";
+		clock-cntl-level = "turbo";
 		status = "ok";
 	};
 

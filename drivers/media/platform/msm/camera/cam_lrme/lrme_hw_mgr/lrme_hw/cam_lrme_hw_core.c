@@ -895,7 +895,7 @@ int cam_lrme_hw_stop(void *hw_priv, void *hw_stop_args, uint32_t arg_size)
 		lrme_core->state = CAM_LRME_CORE_STATE_INIT;
 	} else {
 		CAM_ERR(CAM_LRME, "HW in wrong state %d", lrme_core->state);
-		return -EINVAL;
+		rc = -EINVAL;
 	}
 
 unlock:
@@ -921,7 +921,7 @@ int cam_lrme_hw_submit_req(void *hw_priv, void *hw_submit_args,
 
 	if (sizeof(struct cam_lrme_hw_submit_args) != arg_size) {
 		CAM_ERR(CAM_LRME,
-			"size of args %lu, arg_size %d",
+			"size of args %zu, arg_size %d",
 			sizeof(struct cam_lrme_hw_submit_args), arg_size);
 		return -EINVAL;
 	}

@@ -402,7 +402,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 
 	chip->dt.hvdcp_disable = of_property_read_bool(node,
 						"qcom,hvdcp-disable");
-
+	chg->hvdcp_disable = chip->dt.hvdcp_disable;
 
 	rc = of_property_read_u32(node, "qcom,chg-inhibit-threshold-mv",
 				&chip->dt.chg_inhibit_thr_mv);
@@ -1179,7 +1179,9 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_QNOVO,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_QNOVO,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
 	POWER_SUPPLY_PROP_TEMP,
@@ -1257,9 +1259,17 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		val->intval = get_client_vote(chg->fv_votable,
 				BATT_PROFILE_VOTER);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
+		val->intval = get_client_vote_locked(chg->fv_votable,
+				QNOVO_VOTER);
+		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		rc = smblib_get_prop_from_bms(chg,
 				POWER_SUPPLY_PROP_CURRENT_NOW, val);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
+		val->intval = get_client_vote_locked(chg->fcc_votable,
+				QNOVO_VOTER);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		val->intval = get_client_vote(chg->fcc_votable,
@@ -1361,6 +1371,10 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 		chg->batt_profile_fv_uv = val->intval;
 		vote(chg->fv_votable, BATT_PROFILE_VOTER, true, val->intval);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
+		vote(chg->fv_votable, QNOVO_VOTER, (val->intval >= 0),
+			val->intval);
+		break;
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 		chg->step_chg_enabled = !!val->intval;
 		break;
@@ -1374,6 +1388,18 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		chg->batt_profile_fcc_ua = val->intval;
 		vote(chg->fcc_votable, BATT_PROFILE_VOTER, true, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
+		vote(chg->pl_disable_votable, PL_QNOVO_VOTER,
+			val->intval != -EINVAL && val->intval < 2000000, 0);
+		if (val->intval == -EINVAL) {
+			vote(chg->fcc_votable, BATT_PROFILE_VOTER,
+					true, chg->batt_profile_fcc_ua);
+			vote(chg->fcc_votable, QNOVO_VOTER, false, 0);
+		} else {
+			vote(chg->fcc_votable, QNOVO_VOTER, true, val->intval);
+			vote(chg->fcc_votable, BATT_PROFILE_VOTER, false, 0);
+		}
 		break;
 	case POWER_SUPPLY_PROP_SET_SHIP_MODE:
 		/* Not in ship mode as long as the device is active */
@@ -1408,6 +1434,9 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 			msleep(50);
 			vote(chg->chg_disable_votable, FORCE_RECHARGE_VOTER,
 					false, 0);
+		break;
+	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
+		chg->fcc_stepper_enable = val->intval;
 		break;
 	default:
 		rc = -EINVAL;
@@ -1562,10 +1591,15 @@ static int smb5_configure_typec(struct smb_charger *chg)
 {
 	int rc;
 
-	/* disable apsd */
-	rc = smblib_configure_hvdcp_apsd(chg, false);
+	smblib_apsd_enable(chg, true);
+	smblib_hvdcp_detect_enable(chg, false);
+
+	rc = smblib_masked_write(chg, TYPE_C_CFG_REG,
+				BC1P2_START_ON_CC_BIT, 0);
 	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't disable APSD rc=%d\n", rc);
+		dev_err(chg->dev, "failed to write TYPE_C_CFG_REG rc=%d\n",
+				rc);
+
 		return rc;
 	}
 
@@ -1631,16 +1665,6 @@ static int smb5_configure_micro_usb(struct smb_charger *chg)
 	if (rc < 0) {
 		dev_err(chg->dev,
 			"Couldn't configure Type-C interrupts rc=%d\n", rc);
-		return rc;
-	}
-
-	/* Enable HVDCP and BC 1.2 source detection */
-	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
-					HVDCP_EN_BIT | BC1P2_SRC_DETECT_BIT,
-					HVDCP_EN_BIT | BC1P2_SRC_DETECT_BIT);
-	if (rc < 0) {
-		dev_err(chg->dev,
-			"Couldn't enable HVDCP detection rc=%d\n", rc);
 		return rc;
 	}
 
@@ -1774,10 +1798,16 @@ static int smb5_init_hw(struct smb5 *chip)
 		}
 	}
 
-	/* Use SW based VBUS control, disable HW autonomous mode */
+	/*
+	 * Disable HVDCP autonomous mode operation by default. Additionally, if
+	 * specified in DT: disable HVDCP and HVDCP authentication algorithm.
+	 */
+	val = (chg->hvdcp_disable) ? 0 :
+		(HVDCP_AUTH_ALG_EN_CFG_BIT | HVDCP_EN_BIT);
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
-		HVDCP_AUTH_ALG_EN_CFG_BIT | HVDCP_AUTONOMOUS_MODE_EN_CFG_BIT,
-		HVDCP_AUTH_ALG_EN_CFG_BIT);
+			(HVDCP_AUTH_ALG_EN_CFG_BIT | HVDCP_EN_BIT |
+			 HVDCP_AUTONOMOUS_MODE_EN_CFG_BIT),
+			val);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't configure HVDCP rc=%d\n", rc);
 		return rc;
@@ -2857,9 +2887,9 @@ static void smb5_shutdown(struct platform_device *pdev)
 				HVDCP_AUTONOMOUS_MODE_EN_CFG_BIT, 0);
 	smblib_write(chg, CMD_HVDCP_2_REG, FORCE_5V_BIT);
 
-	/* force enable APSD */
-	smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
-				BC1P2_SRC_DETECT_BIT, BC1P2_SRC_DETECT_BIT);
+	/* force enable and rerun APSD */
+	smblib_apsd_enable(chg, true);
+	smblib_masked_write(chg, CMD_APSD_REG, APSD_RERUN_BIT, APSD_RERUN_BIT);
 }
 
 static const struct of_device_id match_table[] = {

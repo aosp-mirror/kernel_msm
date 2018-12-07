@@ -1048,8 +1048,12 @@ static int __ipa_wwan_close(struct net_device *dev)
  */
 static int ipa3_wwan_stop(struct net_device *dev)
 {
+	struct ipa3_wwan_private *wwan_ptr = netdev_priv(dev);
+
 	IPAWANDBG("[%s]\n", dev->name);
 	__ipa_wwan_close(dev);
+	if (ipa3_rmnet_res.ipa_napi_enable)
+		napi_disable(&(wwan_ptr->napi));
 	netif_stop_queue(dev);
 	return 0;
 }
@@ -1963,11 +1967,11 @@ int ipa3_wwan_set_modem_perf_profile(int throughput)
 	int ret;
 
 	if (ipa3_ctx->use_ipa_pm) {
-		ret = ipa_pm_set_perf_profile(rmnet_ipa3_ctx->q6_pm_hdl,
+		ret = ipa_pm_set_throughput(rmnet_ipa3_ctx->q6_pm_hdl,
 			throughput);
 		if (ret)
 			return ret;
-		ret = ipa_pm_set_perf_profile(rmnet_ipa3_ctx->q6_teth_pm_hdl,
+		ret = ipa_pm_set_throughput(rmnet_ipa3_ctx->q6_teth_pm_hdl,
 			throughput);
 	} else {
 		memset(&profile, 0, sizeof(profile));
@@ -3120,7 +3124,7 @@ static int rmnet_ipa3_query_tethering_stats_wifi(
 
 	rc = ipa3_get_wlan_stats(sap_stats);
 	if (rc) {
-		IPAWANERR("can't get ipa3_get_wlan_stats\n");
+		IPAWANERR_RL("can't get ipa3_get_wlan_stats\n");
 		kfree(sap_stats);
 		return rc;
 	} else if (data == NULL) {
@@ -3455,7 +3459,8 @@ int rmnet_ipa3_query_tethering_stats_all(
 		rc = rmnet_ipa3_query_tethering_stats_wifi(
 			&tether_stats, data->reset_stats);
 		if (rc) {
-			IPAWANERR("wlan WAN_IOC_QUERY_TETHER_STATS failed\n");
+			IPAWANERR_RL(
+				"wlan WAN_IOC_QUERY_TETHER_STATS failed\n");
 			return rc;
 		}
 		data->tx_bytes = tether_stats.ipv4_tx_bytes
@@ -3705,6 +3710,13 @@ static inline int rmnet_ipa3_delete_lan_client_info
 	struct ipa_lan_client *lan_client = NULL;
 	int i;
 	struct ipa_tether_device_info *teth_ptr = NULL;
+
+	/* Check if Device type is valid. */
+	if (device_type >= IPACM_MAX_CLIENT_DEVICE_TYPES ||
+		device_type < 0) {
+		IPAWANERR("Invalid Device type: %d\n", device_type);
+		return -EINVAL;
+	}
 
 	/* Check if the request is to clean up all clients. */
 	teth_ptr = &rmnet_ipa3_ctx->tether_device[device_type];
