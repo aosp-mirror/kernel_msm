@@ -166,6 +166,8 @@ static int ab_pmu_probe(struct platform_device *pdev)
 	pmu_ops.ctx = pmu_ctx;
 	ab_sm_register_pmu_ops(&pmu_ops);
 
+	ab_pmu_resume_handler(pmu_ctx);
+
 	return 0;
 }
 

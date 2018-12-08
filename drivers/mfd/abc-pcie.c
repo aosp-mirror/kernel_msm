@@ -45,12 +45,13 @@ static void abc_pcie_disable_irqs(struct pci_dev *pdev);
 
 static const struct mfd_cell abc_mfd_devs[] = {
 	{
-		.name = "ab-clk",
-		.of_compatible = "abc,airbrush-clk",
-	},
-	{
 		.name = "ab-pmu",
 		.of_compatible = "abc,airbrush-pmu",
+	},
+	/* NOTE: ab-pmu must be defined before ab-clk in list */
+	{
+		.name = "ab-clk",
+		.of_compatible = "abc,airbrush-clk",
 	},
 	// TODO: Add TMU, and DDR drivers
 };
