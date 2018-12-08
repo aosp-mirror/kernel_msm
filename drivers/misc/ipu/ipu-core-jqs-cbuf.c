@@ -134,7 +134,6 @@ static void ipu_core_jqs_cbuf_sync_data(struct paintbox_bus *bus,
 void ipu_core_jqs_cbuf_sync(struct paintbox_bus *bus,
 		struct host_jqs_cbuf *host_cbuf, enum dma_data_direction dir)
 {
-	struct jqs_cbuf *cbuf = get_jqs_buffer(host_cbuf);
 	bool update_data;
 
 	/* There are 4 cases to consider
@@ -151,19 +150,17 @@ void ipu_core_jqs_cbuf_sync(struct paintbox_bus *bus,
 
 	if (!update_data) {
 		/* case 2 and 3 */
-		ipu_core_sync(bus, host_cbuf->shared_buf_cbuf,
+		(void)ipu_core_atomic_sync32(bus, host_cbuf->shared_buf_cbuf,
 				host_cbuf->cbuf_offset +
-				offsetof(struct jqs_cbuf, bytes_read),
-				sizeof(cbuf->bytes_read), dir);
+				offsetof(struct jqs_cbuf, bytes_read), dir);
 		return;
 	}
 
 	if (!host_cbuf->to_device) {
 		/* case 4 */
-		ipu_core_sync(bus, host_cbuf->shared_buf_cbuf,
+		(void)ipu_core_atomic_sync32(bus, host_cbuf->shared_buf_cbuf,
 				host_cbuf->cbuf_offset +
-				offsetof(struct jqs_cbuf, bytes_written),
-				sizeof(cbuf->bytes_written), dir);
+				offsetof(struct jqs_cbuf, bytes_written), dir);
 	}
 
 	/* write data */
@@ -171,10 +168,9 @@ void ipu_core_jqs_cbuf_sync(struct paintbox_bus *bus,
 
 	if (host_cbuf->to_device) {
 		/* case 1 */
-		ipu_core_sync(bus, host_cbuf->shared_buf_cbuf,
+		(void)ipu_core_atomic_sync32(bus, host_cbuf->shared_buf_cbuf,
 				host_cbuf->cbuf_offset +
-				offsetof(struct jqs_cbuf, bytes_written),
-				sizeof(cbuf->bytes_written), dir);
+				offsetof(struct jqs_cbuf, bytes_written), dir);
 	}
 }
 

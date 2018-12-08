@@ -217,7 +217,8 @@ static inline int ipu_core_memory_alloc(struct paintbox_bus *bus, size_t size,
 }
 
 static inline void ipu_core_memory_free(struct paintbox_bus *bus,
-		struct paintbox_shared_buffer *shared_buffer) {
+		struct paintbox_shared_buffer *shared_buffer)
+{
 	if (shared_buffer->host_vaddr) {
 		bus->ops->free(bus->parent_dev, shared_buffer);
 		memset(shared_buffer, 0, sizeof(*shared_buffer));
@@ -226,8 +227,17 @@ static inline void ipu_core_memory_free(struct paintbox_bus *bus,
 
 static inline void ipu_core_sync(struct paintbox_bus *bus,
 		struct paintbox_shared_buffer *alloc, uint32_t offset,
-		size_t size, enum dma_data_direction direction) {
+		size_t size, enum dma_data_direction direction)
+{
 	bus->ops->sync(bus->parent_dev, alloc, offset, size, direction);
+}
+
+static inline int ipu_core_atomic_sync32(struct paintbox_bus *bus,
+		struct paintbox_shared_buffer *alloc, uint32_t offset,
+		enum dma_data_direction direction)
+{
+	return bus->ops->atomic_sync32(bus->parent_dev, alloc, offset,
+			direction);
 }
 
 static inline void ipu_core_memory_map_to_bar(struct paintbox_bus *bus,

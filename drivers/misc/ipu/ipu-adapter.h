@@ -57,6 +57,9 @@ struct paintbox_bus_ops {
 			struct paintbox_shared_buffer *shared_buffer,
 			uint32_t offset, size_t size,
 			enum dma_data_direction direction);
+	int (*atomic_sync32)(struct device *dev,
+			struct paintbox_shared_buffer *shared_buffer,
+			uint32_t offset, enum dma_data_direction direction);
 	int (*map_to_bar)(struct device *dev,
 			struct paintbox_shared_buffer *shared_buffer);
 	int (*unmap_from_bar)(struct device *dev,

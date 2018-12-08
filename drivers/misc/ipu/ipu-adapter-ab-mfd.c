@@ -368,6 +368,40 @@ static int ipu_adapter_ab_mfd_low_priority_irq_notify(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int ipu_adapter_ab_mfd_atomic_sync32(struct device *dev,
+			struct paintbox_shared_buffer *shared_buffer,
+			uint32_t offset, enum dma_data_direction direction)
+{
+	void __iomem *io_vaddr = shared_buffer->mapping.bar_vaddr + offset;
+	uint32_t *buffer_vaddr = shared_buffer->host_vaddr + offset;
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+	int wr_val;
+
+	if ((uint32_t)buffer_vaddr % sizeof(uint32_t) != 0) {
+		dev_err(dev, "%s: error: unaligned access\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&dev_data->sync_lock);
+
+	if (shared_buffer->mapped_to_bar) {
+		if (direction == DMA_TO_DEVICE) {
+			wr_val = *buffer_vaddr;
+			__iowmb();
+			writel_relaxed(wr_val, io_vaddr);
+		} else {
+			*buffer_vaddr = readl_relaxed(io_vaddr);
+			__iormb();
+		}
+	} else {
+		ipu_adapter_ab_mfd_sync_dma(dev, shared_buffer, offset,
+				sizeof(uint32_t), direction);
+	}
+
+	mutex_unlock(&dev_data->sync_lock);
+	return 0;
+}
+
 static inline bool ipu_clock_rate_is_active(uint64_t rate)
 {
 	return ((rate > 0) &&
@@ -473,6 +507,7 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->alloc = &ipu_adapter_ab_mfd_alloc;
 	ops->free = &ipu_adapter_ab_mfd_free;
 	ops->sync = &ipu_adapter_ab_mfd_sync;
+	ops->atomic_sync32 = &ipu_adapter_ab_mfd_atomic_sync32;
 	ops->map_to_bar = &ipu_adapter_ab_mfd_map_to_bar;
 	ops->unmap_from_bar = &ipu_adapter_ab_mfd_unmap_from_bar;
 	ops->get_dma_device = &ipu_adapter_ab_mfd_get_dma_device;
