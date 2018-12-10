@@ -34,7 +34,6 @@
 #include <linux/of_gpio.h>
 #include <linux/cdev.h>
 #include <linux/platform_device.h>
-#include <linux/string.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/sysmon.h>
@@ -55,9 +54,6 @@ module_param(enable_debug, int, 0644);
 /* The maximum shutdown timeout is the product of MAX_LOOPS and DELAY_MS. */
 #define SHUTDOWN_ACK_MAX_LOOPS	100
 #define SHUTDOWN_ACK_DELAY_MS	100
-
-/* SSR check timer 30sec */
-#define SSR_CHECK_TIMEOUT 30000
 
 /**
  * enum p_subsys_state - state of a subsystem (private)
@@ -167,7 +163,6 @@ struct subsys_device {
 	struct wakeup_source ssr_wlock;
 	char wlname[64];
 	struct work_struct device_restart_work;
-	struct delayed_work ssr_check_work;
 	struct subsys_tracking track;
 
 	void *notify;
@@ -1016,11 +1011,6 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 		return;
 	}
 
-	/* Set modem SSR check timer */
-	if (!strncmp(desc->name, "modem", strlen("modem")))
-		schedule_delayed_work(&dev->ssr_check_work,
-				msecs_to_jiffies(SSR_CHECK_TIMEOUT));
-
 	/*
 	 * It's necessary to take the registration lock because the subsystem
 	 * list in the SoC restart order will be traversed and it shouldn't be
@@ -1061,10 +1051,6 @@ err:
 	/* Reset subsys count */
 	if (ret)
 		dev->count = 0;
-
-	/* Clear modem SSR check timer */
-	if (!strncmp(desc->name, "modem", strlen("modem")))
-		cancel_delayed_work(&dev->ssr_check_work);
 
 	mutex_unlock(&soc_order_reg_lock);
 	mutex_unlock(&track->lock);
@@ -1119,20 +1105,6 @@ static void device_restart_work_hdlr(struct work_struct *work)
 	msleep(100);
 	panic("subsys-restart: Resetting the SoC - %s crashed.",
 							dev->desc->name);
-}
-
-static void ssr_check_hdlr(struct work_struct *work)
-{
-	struct subsys_device *dev = container_of((struct delayed_work *) work,
-			struct subsys_device, ssr_check_work);
-
-	notify_each_subsys_device(&dev, 1, SUBSYS_SOC_RESET, NULL);
-	msleep(100);
-	/*
-	 * Trigger panic for modem ssr hang issue, remove it before shipping
-	 * STOPSHIP: b/119145250
-	 */
-	panic("subsys-restart: %s SSR hang and trigger panic", dev->desc->name);
 }
 
 int subsystem_restart_dev(struct subsys_device *dev)
@@ -1777,7 +1749,6 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	wakeup_source_init(&subsys->ssr_wlock, subsys->wlname);
 	INIT_WORK(&subsys->work, subsystem_restart_wq_func);
 	INIT_WORK(&subsys->device_restart_work, device_restart_work_hdlr);
-	INIT_DELAYED_WORK(&subsys->ssr_check_work, ssr_check_hdlr);
 	spin_lock_init(&subsys->track.s_lock);
 
 	subsys->id = ida_simple_get(&subsys_ida, 0, 0, GFP_KERNEL);
