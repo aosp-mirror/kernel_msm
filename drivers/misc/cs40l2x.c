@@ -615,17 +615,13 @@ static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
 	switch (val) {
 	case CS40L2X_USER_CTRL_SUCCESS:
 		break;
-	case CS40L2X_USER_CTRL_UNKNOWN:
-		dev_err(dev, "Unrecognized user-control command\n");
-		return -EINVAL;
-	case CS40L2X_USER_CTRL_INVALID:
-		dev_err(dev, "Invalid user-control operation\n");
-		return -EINVAL;
-	case CS40L2X_USER_CTRL_ERROR:
-		dev_err(dev, "User-control output error\n");
+	case CS40L2X_USER_CTRL_ERR_MIN ... CS40L2X_USER_CTRL_ERR_MAX:
+		dev_err(dev, "Unexpected user-control response: %d\n",
+				val - (CS40L2X_USER_CTRL_ERR_MAX + 1));
 		return -EIO;
 	default:
-		dev_err(dev, "Unrecognized user-control response: %d\n", val);
+		dev_err(dev, "Unrecognized user-control response: 0x%06X\n",
+				val);
 		return -EINVAL;
 	}
 
@@ -701,6 +697,33 @@ static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
 	}
 
 	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_cp_trigger_q_sub_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = cs40l2x_user_ctrl_exec(cs40l2x, CS40L2X_USER_CTRL_Q_INDEX,
+			cs40l2x->cp_trigger_index, &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", val);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -3049,6 +3072,8 @@ static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
 		cs40l2x_cp_trigger_queue_store);
 static DEVICE_ATTR(cp_trigger_duration, 0660, cs40l2x_cp_trigger_duration_show,
 		NULL);
+static DEVICE_ATTR(cp_trigger_q_sub, 0660, cs40l2x_cp_trigger_q_sub_show,
+		NULL);
 static DEVICE_ATTR(hiber_cmd, 0660, NULL, cs40l2x_hiber_cmd_store);
 static DEVICE_ATTR(hiber_timeout, 0660, cs40l2x_hiber_timeout_show,
 		cs40l2x_hiber_timeout_store);
@@ -3120,6 +3145,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
 	&dev_attr_cp_trigger_queue.attr,
 	&dev_attr_cp_trigger_duration.attr,
+	&dev_attr_cp_trigger_q_sub.attr,
 	&dev_attr_hiber_cmd.attr,
 	&dev_attr_hiber_timeout.attr,
 	&dev_attr_gpio1_enable.attr,
