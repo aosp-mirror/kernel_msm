@@ -279,7 +279,7 @@ static long ipu_client_get_capabilities_ioctl(struct paintbox_data *pb,
 	caps.num_interrupts = pb->dma.num_channels + pb->stp.num_stps +
 			NUM_BIF_INTERRUPTS + NUM_MMU_INTERRUPTS;
 
-	version = ipu_readl(pb->dev, IPU_VERSION);
+	version = IPU_VERSION_DEF;
 	caps.version_major = (version & IPU_VERSION_MAJOR_MASK) >>
 			IPU_VERSION_MAJOR_SHIFT;
 	caps.version_minor = (version & IPU_VERSION_MINOR_MASK) >>
@@ -362,13 +362,13 @@ static void ipu_client_get_capabilities(struct paintbox_data *pb)
 	uint32_t val;
 	bool is_fpga;
 
-	val = ipu_readl(pb->dev, IPU_VERSION);
+	val = IPU_VERSION_DEF;
 	major = (val & IPU_VERSION_MAJOR_MASK) >> IPU_VERSION_MAJOR_SHIFT;
 	minor = (val & IPU_VERSION_MINOR_MASK) >> IPU_VERSION_MAJOR_SHIFT;
 	build = val & IPU_VERSION_INCR_MASK;
 	is_fpga = !!(val & IPU_VERSION_FPGA_BUILD_MASK);
 
-	val = ipu_readl(pb->dev, IPU_CAP);
+	val = IPU_CAP_DEF;
 	pb->stp.num_stps = val & IPU_CAP_NUM_STP_MASK;
 
 	/* STP ids start at 1. */
