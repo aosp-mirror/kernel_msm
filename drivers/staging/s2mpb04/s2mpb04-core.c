@@ -452,7 +452,6 @@ static int s2mpb04_handle_int(struct s2mpb04_core *ddata,
 		NOTIFY(S2MPB04_ID_SMPS2, REGULATOR_EVENT_FAIL);
 		NOTIFY(S2MPB04_ID_LDO2, REGULATOR_EVENT_FAIL);
 		NOTIFY(S2MPB04_ID_LDO1, REGULATOR_EVENT_FAIL);
-		s2mpb04_print_status(ddata);
 		break;
 
 	default:
@@ -513,9 +512,6 @@ static void s2mpb04_reset_work(struct work_struct *data)
 	NOTIFY(S2MPB04_ID_SMPS2, REGULATOR_EVENT_FAIL);
 	NOTIFY(S2MPB04_ID_LDO1, REGULATOR_EVENT_FAIL);
 	NOTIFY(S2MPB04_ID_LDO2, REGULATOR_EVENT_FAIL);
-
-	/* initialize chip */
-	s2mpb04_chip_init(ddata);
 }
 
 /* kernel thread to detect if PMIC is hung and run the recovery sequence */
