@@ -30,6 +30,8 @@
 #include "ipu-core-jqs.h"
 #include "ipu-regs.h"
 
+#define IPU_ADAPTER_AB_MFD_MAX_INTERRUPTS 2
+
 struct ipu_adapter_ab_mfd_data {
 	struct paintbox_bus *bus;
 	struct device *dev;
@@ -40,6 +42,7 @@ struct ipu_adapter_ab_mfd_data {
 	 * buffers.
 	 */
 	struct device *dma_dev;
+	struct platform_device *pdev;
 	struct paintbox_pdata pdata;
 	struct paintbox_bus_ops ops;
 	struct completion dma_completion;
@@ -50,6 +53,8 @@ struct ipu_adapter_ab_mfd_data {
 
 	struct notifier_block clk_change_nb;
 	struct notifier_block pcie_link_blocking_nb;
+
+	int irqs[IPU_ADAPTER_AB_MFD_MAX_INTERRUPTS];
 };
 
 /* Paintbox IO virtual address space bounds
@@ -463,16 +468,26 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 				     struct ipu_adapter_ab_mfd_data,
 				     pcie_link_blocking_nb);
 	struct paintbox_bus *bus = dev_data->bus;
+	struct platform_device *pdev = dev_data->pdev;
+	int irq_index;
 
 	switch (action) {
 	case ABC_PCIE_LINK_POST_ENABLE:
 		dev_dbg(dev_data->dev,
 			"%s: may continue to use pcie\n", __func__);
+		for (irq_index = 0; irq_index < platform_irq_count(pdev);
+				irq_index++) {
+			enable_irq(dev_data->irqs[irq_index]);
+		}
 		ipu_bus_notify_link_up(bus);
 		break;
 	case ABC_PCIE_LINK_PRE_DISABLE:
 		dev_dbg(dev_data->dev,
 			"%s: should stop using pcie\n", __func__);
+		for (irq_index = 0; irq_index < platform_irq_count(pdev);
+				irq_index++) {
+			disable_irq(dev_data->irqs[irq_index]);
+		}
 		ipu_bus_notify_link_down(bus);
 		break;
 	default:
@@ -563,6 +578,7 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev_data);
 
 	dev_data->dev = &pdev->dev;
+	dev_data->pdev = pdev;
 
 	ipu_adapter_ab_mfd_set_platform_data(pdev, &dev_data->pdata);
 	ipu_adapter_ab_mfd_set_bus_ops(&dev_data->ops);
@@ -575,6 +591,10 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 	g_dev_data = dev_data;
 
 	init_completion(&dev_data->dma_completion);
+
+	if (WARN_ON(platform_irq_count(pdev) >
+			IPU_ADAPTER_AB_MFD_MAX_INTERRUPTS))
+		return -EINVAL;
 
 	for (irq_index = 0; irq_index < platform_irq_count(pdev); irq_index++) {
 		int irq = platform_get_irq(pdev, irq_index);
@@ -595,6 +615,8 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 					__func__, ret);
 			return ret;
 		}
+
+		dev_data->irqs[irq_index] = irq;
 	}
 
 	ret = ipu_adapter_ab_mfd_register_low_priority_irq(dev_data);
