@@ -123,9 +123,6 @@ static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
 		return new_rate;
 	}
 
-	// FIXME: Workaround for b/120668171
-	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
-
 	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
 	clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->shared_div_aon_pll);
 	clk_set_rate(clk_ctx->ipu_pll, rate);
@@ -235,9 +232,6 @@ static u64 ab_clk_tpu_set_rate_handler(void *ctx, u64 rate)
 				 old_rate, new_rate);
 		return new_rate;
 	}
-
-	// FIXME: Workaround for b/120668171
-	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 
 	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
 	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->shared_div_aon_pll);
