@@ -109,7 +109,11 @@ static int ab_pmu_deep_sleep_handler(void *ctx)
 #define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x10041800
 #define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x10241800
 
-static void abc_ipu_tpu_enable(void)
+/*
+ * Reduce ipu/tpu apb clk rate from 933MHz to 233MHz on A0 samples
+ * TODO(b/120795157): Remove when A0 is obsolete
+ */
+static void abc_ipu_tpu_apb_clk_fix(void)
 {
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
 	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x3);
@@ -141,7 +145,7 @@ static int ab_pmu_resume_handler(void *ctx)
 		return E_STATUS_TIMEOUT;
 	}
 
-	abc_ipu_tpu_enable();
+	abc_ipu_tpu_apb_clk_fix();
 
 	return 0;
 }
