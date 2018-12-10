@@ -3617,10 +3617,15 @@ int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 	const union power_supply_propval *val)
 {
-	/* Check if power role switch is disabled */
-	if (!get_effective_result(chg->disable_power_role_switch))
-		return __smblib_set_prop_typec_power_role(chg, val);
+	unsigned long flags;
 
+	/* Check if power role switch is disabled */
+	spin_lock_irqsave(&chg->disable_pr_switch_lock, flags);
+	if (!get_effective_result_locked(chg->disable_power_role_switch)) {
+		spin_unlock_irqrestore(&chg->disable_pr_switch_lock, flags);
+		return __smblib_set_prop_typec_power_role(chg, val);
+	}
+	spin_unlock_irqrestore(&chg->disable_pr_switch_lock, flags);
 
 	smblib_err(chg, "Power role switch is disabled\n");
 	return -EINVAL;
@@ -5665,6 +5670,7 @@ int smblib_init(struct smb_charger *chg)
 	int rc = 0;
 
 	mutex_init(&chg->smb_lock);
+	spin_lock_init(&chg->disable_pr_switch_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->pl_update_work, pl_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);

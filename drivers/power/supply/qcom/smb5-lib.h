@@ -320,6 +320,7 @@ struct smb_charger {
 	/* locks */
 	struct mutex		smb_lock;
 	struct mutex		ps_change_lock;
+	spinlock_t		disable_pr_switch_lock;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
