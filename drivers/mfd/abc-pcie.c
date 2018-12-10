@@ -1480,90 +1480,6 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
-/* TODO(basso):  This is temporary code to enable power and clocks to the IPU
- * and TPU.  This should be replaced with proper regulator and clock control
- * interfaces.
- */
-#define CLK_CON_DIV_PLL_AON_CLK 0x00B1180C
-#define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x00041800
-#define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x00241800
-#define PLL_CON0_PLL_IPU 0x00240120
-#define CLK_CON_MUX_MOUT_AONCLK_PLLCLK1 0x00241000
-#define REG_PCIe_INIT 0x00B30388
-#define PMU_CONTROL 0x00BA0004
-#define PMU_CONTROL_PHY_RET_OFF (1 << 8)
-#define PMU_CONTROL_BLK_TPU_UP_REQ (1 << 1)
-#define PMU_CONTROL_BLK_IPU_UP_REQ (1 << 0)
-#define TIMEOUT_POWERSWITCH_HANDSHAKE_IPU 0x00BA3530
-#define TIMEOUT_POWERSWITCH_HANDSHAKE_TPU 0x00BA3534
-
-static int abc_pcie_ipu_tpu_enable(void)
-{
-	int err;
-
-	err = abc_pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_IPU, 4,
-			0x00000001);
-	if (WARN_ON(err < 0))
-		return err;
-
-	err = abc_pcie_config_write(TIMEOUT_POWERSWITCH_HANDSHAKE_TPU, 4,
-			0x00000001);
-	if (WARN_ON(err < 0))
-		return err;
-
-	err = abc_pcie_config_write(REG_PCIe_INIT, 4, 0x00000001);
-	if (WARN_ON(err < 0))
-		return err;
-
-	err = abc_pcie_config_write(PMU_CONTROL, 4, PMU_CONTROL_PHY_RET_OFF |
-			PMU_CONTROL_BLK_TPU_UP_REQ |
-			PMU_CONTROL_BLK_IPU_UP_REQ);
-	if (WARN_ON(err < 0))
-		return err;
-
-	/* TODO(basso):  Determine the proper timeout here. */
-	usleep_range(1000, 2000);
-
-	/* Reduce AON clk to 233MHz to safely make IPU/TPU APB clk changes */
-	err = abc_pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0x00000003);
-	if (WARN_ON(err < 0))
-		return err;
-
-	err = abc_pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_IPU, 4, 0x00000003);
-	if (WARN_ON(err < 0))
-		return err;
-
-	err = abc_pcie_config_write(CLK_CON_DIV_DIV4_PLLCLK_TPU, 4, 0x00000003);
-	if (WARN_ON(err < 0))
-		return err;
-
-	/* Configure IPU PLL for 549 MHz */
-	err = abc_pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0203);
-	if (WARN_ON(err < 0))
-		return err;
-
-	/* TODO(basso):  Determine the proper timeout here. */
-	usleep_range(1000, 2000);
-
-	err = abc_pcie_config_write(PLL_CON0_PLL_IPU, 4, 0x81CA0213);
-	if (WARN_ON(err < 0))
-		return err;
-
-	err = abc_pcie_config_write(CLK_CON_MUX_MOUT_AONCLK_PLLCLK1, 4, 0x1);
-	if (WARN_ON(err < 0))
-		return err;
-
-	/* Restore AON clk to 933MHz */
-	err = abc_pcie_config_write(CLK_CON_DIV_PLL_AON_CLK, 4, 0);
-	if (WARN_ON(err < 0))
-		return err;
-
-	/* TODO(basso):  Determine the proper timeout here. */
-	usleep_range(1000, 2000);
-
-	return 0;
-}
-
 #define ABC_BASE_OTP_WRAPPER		0x10BB0000
 #define OTP_CHIP_ID_ADDR		(ABC_BASE_OTP_WRAPPER + 0x10)
 #define OTP_CHIP_ID_SHIFT		20
@@ -2086,10 +2002,6 @@ exit_loop:
 			NULL, 0, NULL);
 	if (err < 0)
 		goto err_add_mfd_child;
-
-	err = abc_pcie_ipu_tpu_enable();
-	if (err < 0)
-		goto err_ipu_tpu_init;
 
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
