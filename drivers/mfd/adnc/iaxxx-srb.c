@@ -955,3 +955,31 @@ int iaxxx_send_update_block_no_wait(struct device *dev, int host_id)
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_no_wait);
+
+int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	int rc = 0, reg_addr, reg_val;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	/* To protect concurrent update blocks requests*/
+	mutex_lock(&priv->update_block_lock);
+
+	if (!host_id)
+		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_ADDR;
+	else
+		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_ADDR;
+	/* Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
+	 * in the SRB_UPDATE_CTRL register
+	 */
+	reg_val = IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK;
+
+	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t), &reg_val,
+			sizeof(uint32_t));
+	if (rc)
+		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
+	mutex_unlock(&priv->update_block_lock);
+	return rc;
+}
+EXPORT_SYMBOL(iaxxx_send_update_block_no_wait_no_pm);

@@ -63,7 +63,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 
 	if (!priv)
 		return -EINVAL;
-	if (!pm_runtime_enabled(priv->dev) || !pm_runtime_active(priv->dev))
+	if (!pm_runtime_enabled(priv->dev))
 		return -EINVAL;
 	if (!priv->iaxxx_state) {
 		dev_err(priv->dev, "Chip state NULL\n");
@@ -607,6 +607,7 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, odsp_dev_priv);
 	pr_info("ODSP device cdev initialized.\n");
 
+	odsp_dev_priv->dev = dev;
 	pm_runtime_enable(dev);
 
 	return 0;

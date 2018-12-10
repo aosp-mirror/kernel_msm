@@ -49,7 +49,7 @@ int iaxxx_core_evt_subscribe(struct device *dev, uint16_t src_id,
 		return ret;
 
 	dev_dbg(dev,
-		"src_id : 0x%x dst_id: 0x%x\n", src_id, dst_id);
+		"%s() src_id : 0x%x dst_id: 0x%x\n", __func__, src_id, dst_id);
 
 	if (src_id == IAXXX_SYSID_INVALID || dst_id == IAXXX_SYSID_INVALID) {
 		dev_err(dev, "Invalid System Ids %s()\n", __func__);

@@ -170,14 +170,6 @@ static bool iaxxx_readable_register(struct device *dev, unsigned int reg)
 	if (WARN_ON(!priv))
 		return false;	/* Something went wrong */
 
-	if (current == priv->worker.task) {
-		if (test_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags))
-			return false;
-	} else {
-		if (test_bit(IAXXX_FLG_BUS_BLOCK_CLIENTS, &priv->flags))
-			return false;
-	}
-
 	cfg = priv->regmap_config->ranges;
 
 	/* Virtual addresses are only supported when mapped */
@@ -198,15 +190,6 @@ static bool iaxxx_readable_register(struct device *dev, unsigned int reg)
 
 static bool iaxxx_writeable_register(struct device *dev, unsigned int reg)
 {
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-
-	if (current == priv->worker.task) {
-		if (test_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags))
-			return false;
-	} else {
-		if (test_bit(IAXXX_FLG_BUS_BLOCK_CLIENTS, &priv->flags))
-			return false;
-	}
 
 	return true;
 }

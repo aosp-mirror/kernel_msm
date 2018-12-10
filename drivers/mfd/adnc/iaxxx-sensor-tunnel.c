@@ -280,13 +280,19 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 
 static int sensor_tunnel_open(struct inode *inode, struct file *filp)
 {
-	return iaxxx_tunnel_open_common(inode, filp, TUNNEL_1);
+	int rc;
+
+	rc = iaxxx_tunnel_open_common(inode, filp, TUNNEL_1);
+	return rc;
 }
 
 
 static int sensor_tunnel_release(struct inode *inode, struct file *filp)
 {
-	return iaxxx_tunnel_release_common(inode, filp, TUNNEL_1);
+	int rc;
+
+	rc = iaxxx_tunnel_release_common(inode, filp, TUNNEL_1);
+	return rc;
 }
 
 static ssize_t sensor_tunnel_read(struct file *filp, char __user *buf,
@@ -315,12 +321,6 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 	if (!priv->iaxxx_state) {
 		dev_err(priv->dev, "Chip state NULL\n");
 		return -EINVAL;
-	}
-
-	if (!pm_runtime_enabled(t_intf_priv->dev) ||
-		!pm_runtime_active(t_intf_priv->dev)) {
-		dev_err(priv->dev, "FW state not valid %s()\n", __func__);
-		return -EIO;
 	}
 
 	if (arg != 0 && _IOC_DIR(cmd) == (_IOC_READ | _IOC_WRITE) &&

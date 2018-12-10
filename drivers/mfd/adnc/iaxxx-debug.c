@@ -14,6 +14,7 @@
 #include <linux/kdev_t.h>
 #include <linux/mfd/adnc/iaxxx-debug-intf.h>
 #include <linux/circ_buf.h>
+#include <linux/regmap.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include "iaxxx.h"
 #include "iaxxx-cdev.h"
@@ -111,10 +112,14 @@ raw_write_err:
 
 static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct iaxxx_priv * const iaxxx
-			= (struct iaxxx_priv *)file->private_data;
+	struct iaxxx_priv *const iaxxx
+		= (struct iaxxx_priv *)file->private_data;
+	struct iaxxx_log_level_info log_level_info;
+	struct iaxxx_log_mode_info log_mode_info;
 	int ret = 0;
 	u8 bus_config;
+	bool mode;
+	uint32_t log_level;
 
 	pr_debug("%s() called\n", __func__);
 
@@ -122,9 +127,6 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		pr_err("Invalid private pointer");
 		return -EINVAL;
 	}
-
-	if (!pm_runtime_active(iaxxx->dev))
-		return -ENXIO;
 
 	switch (cmd) {
 	case IAXXX_BUS_CONFIG:
@@ -140,6 +142,72 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			ret = -EIO;
 		}
 		break;
+
+	case IAXXX_SET_DBG_LOG_LEVEL:
+		if (copy_from_user(&log_level_info, (void __user *)arg,
+						sizeof(log_level_info)))
+			return -EFAULT;
+
+		ret = iaxxx_set_debug_log_level(iaxxx->dev,
+					log_level_info.module_id,
+					log_level_info.log_level);
+		if (ret) {
+			dev_err(iaxxx->dev, "%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+		break;
+	case IAXXX_GET_DBG_LOG_LEVEL:
+		if (copy_from_user(&log_level_info, (void __user *)arg,
+						sizeof(log_level_info)))
+			return -EFAULT;
+
+		ret = iaxxx_get_debug_log_level(iaxxx->dev,
+					log_level_info.module_id, &log_level);
+		if (ret) {
+			dev_err(iaxxx->dev, "%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+
+		log_level_info.log_level = log_level;
+		if (copy_to_user((void __user *)arg, &log_level_info,
+						sizeof(log_level_info)))
+			return -EFAULT;
+
+		break;
+	case IAXXX_SET_DBG_LOG_MODE:
+		if (copy_from_user(&log_mode_info, (void __user *)arg,
+						sizeof(log_mode_info)))
+			return -EFAULT;
+
+		ret = iaxxx_set_debug_log_mode(iaxxx->dev,
+			log_mode_info.mode, log_mode_info.proc_id);
+		if (ret) {
+			dev_err(iaxxx->dev,
+				"%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+		break;
+	case IAXXX_GET_DBG_LOG_MODE:
+		if (copy_from_user(&log_mode_info, (void __user *)arg,
+				sizeof(log_mode_info)))
+			return -EFAULT;
+
+		ret = iaxxx_get_debug_log_mode(iaxxx->dev,
+			&mode, log_mode_info.proc_id);
+		if (ret) {
+			dev_err(iaxxx->dev,
+				"%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+
+		log_mode_info.mode = mode;
+		if (copy_to_user((void __user *)arg, &log_mode_info,
+						sizeof(log_mode_info)))
+			return -EFAULT;
+
+		break;
+
+
 	default:
 		pr_err("Invalid ioctl command received %x", cmd);
 		ret = -EINVAL;

@@ -23,6 +23,8 @@
 #include <linux/mutex.h>
 #include <linux/kthread.h>
 #include <linux/pm_runtime.h>
+#include <linux/gpio.h>
+#include <linux/interrupt.h>
 
 typedef int (*iaxxx_cb_func_ptr_t)(struct device *dev);
 typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
@@ -184,6 +186,12 @@ struct iaxxx_priv {
 	int (*raw_write)(void *context,
 			const void *reg,
 			 const void *val, size_t val_len);
+	int (*read_no_pm)(void *context,
+			const void *reg, size_t reg_len,
+			void *val, size_t val_len);
+	int (*write_no_pm)(void *context,
+			const void *reg, size_t reg_len,
+			const void *val, size_t val_len);
 
 	uint32_t sys_rbdt[2*IAXXX_RBDT_NUM_ENTRIES];
 
@@ -223,6 +231,8 @@ struct iaxxx_priv {
 	struct kthread_work fw_crash_work;
 	struct kthread_work runtime_work;
 
+	wait_queue_head_t boot_wq;
+
 	void *tunnel_data;
 	/* Event Manager */
 	struct mutex event_lock;
@@ -248,6 +258,7 @@ struct iaxxx_priv {
 	void *intf_priv;
 	bool dump_log;
 	bool is_irq_enabled;
+	bool boot_completed;
 
 	void *dfs_node;
 
@@ -274,6 +285,10 @@ struct iaxxx_priv {
 	int try_count;
 	int package_version_package_index;
 	int plugin_version_plugin_index;
+	bool in_suspend;
+	bool in_resume;
+	struct mutex pm_mutex;
+	bool disable_chip_pm;
 };
 
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
@@ -284,26 +299,29 @@ static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
 int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id);
 int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
-			uint32_t param_id, uint32_t *param_val,
-			uint32_t block_id);
+			uint32_t param_id,
+			uint32_t *param_val, uint32_t block_id);
 int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
-			uint32_t param_id, uint32_t param_val,
-			uint32_t block_id);
+			uint32_t param_id,
+			uint32_t param_val, uint32_t block_id);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
 int iaxxx_send_update_block_no_wait(struct device *dev, int host_id);
+int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id);
 int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
-			uint32_t param_id, uint32_t *param_val,
-			uint32_t block_id);
+			uint32_t param_id,
+			uint32_t *param_val, uint32_t block_id);
 int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
-			uint32_t param_id, uint32_t param_val,
-			uint32_t block_id);
+			uint32_t param_id,
+			uint32_t param_val, uint32_t block_id);
 int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
 			uint32_t priority, uint32_t pkg_id,
 			uint32_t plg_idx, uint8_t block_id);
-int iaxxx_core_create_plg_static_package(struct device *dev, uint32_t inst_id,
+int iaxxx_core_create_plg_static_package(
+			struct device *dev, uint32_t inst_id,
 			uint32_t priority, uint32_t pkg_id,
 			uint32_t plg_idx, uint8_t block_id);
+
 int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id);
 int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
@@ -311,35 +329,46 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 int iaxxx_core_reset_plg(struct device *dev, uint32_t inst_id,
 			uint8_t block_id);
 int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
-			uint32_t param_id, uint32_t param_val,
-			uint32_t block_id);
+			uint32_t param_id,
+			uint32_t param_val, uint32_t block_id);
 int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 			uint32_t cfg_size, uint64_t cfg_val, uint32_t block_id,
 			char *file);
-int iaxxx_core_set_param_blk_common(struct device *dev, uint32_t inst_id,
-			uint32_t blk_size, const void *ptr_blk,
-			uint32_t block_id, uint32_t param_blk_id);
+int iaxxx_core_set_param_blk_common(
+			struct device *dev,
+			uint32_t inst_id, uint32_t blk_size,
+			const void *ptr_blk, uint32_t block_id,
+			uint32_t param_blk_id);
 int iaxxx_core_set_param_blk(struct device *dev, uint32_t inst_id,
 			uint32_t blk_size, const void *ptr_blk,
-			uint32_t block_id, uint32_t param_blk_id);
+			uint32_t block_id,
+			uint32_t param_blk_id);
 int iaxxx_core_set_param_blk_from_file(struct device *dev, uint32_t inst_id,
 			uint32_t block_id, uint32_t param_blk_id,
 			const char *file);
 int iaxxx_core_set_param_blk_with_ack(struct device *dev,
-			const uint32_t inst_id, const uint32_t param_blk_id,
-			const uint32_t block_id, const void *set_param_buf,
+			const uint32_t inst_id,
+			const uint32_t param_blk_id,
+			const uint32_t block_id,
+			const void *set_param_buf,
 			const uint32_t set_param_buf_sz,
-			uint32_t *response_data_buf,
+			uint32_t  *response_data_buf,
 			const uint32_t response_data_sz,
 			const uint32_t max_no_retries);
-int iaxxx_core_get_param_blk_common(struct device *dev, uint32_t inst_id,
-			uint32_t block_id, uint32_t param_blk_id,
+int iaxxx_core_get_param_blk_common(
+			struct device *dev,
+			uint32_t  inst_id,
+			uint32_t  block_id,
+			uint32_t  param_blk_id,
 			uint32_t *getparam_block_data,
-			uint32_t getparam_block_size_in_words);
-int iaxxx_core_get_param_blk(struct device *dev, uint32_t inst_id,
-			uint32_t block_id, uint32_t param_blk_id,
+			uint32_t  getparam_block_size_in_words);
+int iaxxx_core_get_param_blk(
+			struct device *dev,
+			uint32_t  inst_id,
+			uint32_t  block_id,
+			uint32_t  param_blk_id,
 			uint32_t *getparam_block_data,
-			uint32_t getparam_block_size_in_words);
+			uint32_t  getparam_block_size_in_words);
 int iaxxx_core_set_custom_cfg(struct device *dev, uint32_t inst_id,
 			uint32_t block_id, uint32_t param_blk_id,
 			uint32_t custom_config_id, char *file);
@@ -368,8 +397,11 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 			uint32_t pkg_id, uint32_t *proc_id);
 int iaxxx_package_unload(struct device *dev,
 			int32_t pkg_id);
-int iaxxx_core_read_plugin_error(struct device *dev, const uint32_t block_id,
-			uint32_t *error_code, uint8_t *error_instance);
+int iaxxx_core_read_plugin_error(
+			struct device  *dev,
+			const uint32_t  block_id,
+			uint32_t *error_code,
+			uint8_t  *error_instance);
 int iaxxx_core_script_load(struct device *dev,
 			const char *script_name,
 			uint32_t script_id);
@@ -380,4 +412,16 @@ int iaxxx_core_script_trigger(struct device *dev,
 int iaxxx_fw_notifier_register(struct device *dev, struct notifier_block *nb);
 int iaxxx_fw_notifier_unregister(struct device *dev, struct notifier_block *nb);
 int iaxxx_fw_notifier_call(struct device *dev, unsigned long val, void *v);
+int iaxxx_get_debug_log_level(struct device *dev,
+			uint32_t module_id, uint32_t *log_level);
+int iaxxx_set_debug_log_level(struct device *dev,
+			uint32_t module_id, uint32_t log_level);
+int iaxxx_set_debug_log_mode(struct device *dev,
+			bool mode, uint8_t proc_id);
+int iaxxx_get_debug_log_mode(struct device *dev,
+			bool *mode, uint8_t proc_id);
+int iaxxx_pm_get_sync(struct device *dev);
+int iaxxx_pm_put_autosuspend(struct device *dev);
+int iaxxx_pm_put_sync_suspend(struct device *dev);
+
 #endif /*__IAXXX_CORE_H__ */

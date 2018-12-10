@@ -1008,8 +1008,7 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 		return -ENODEV;
 	}
 
-	if (!pm_runtime_enabled(t_intf_priv->dev) ||
-		!pm_runtime_active(t_intf_priv->dev))
+	if (!pm_runtime_enabled(t_intf_priv->dev))
 		return -EIO;
 
 	client = kzalloc(sizeof(struct iaxxx_tunnel_client),
@@ -1027,6 +1026,12 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 
 	filp->private_data = client;
 
+	/* taking the sync for the device if open is going to return
+	 * successful. this means that a tunneling node is opened and the sync
+	 * would be held till the close is called. This would also take
+	 * care of the case of multiple clients as well
+	 */
+	pm_runtime_get_sync(t_intf_priv->dev);
 	set_bit(IAXXX_TFLG_ALLOW_TUNNELS, &t_intf_priv->flags);
 
 	return 0;
@@ -1060,8 +1065,7 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 		return -EINVAL;
 	}
 
-	if (!pm_runtime_enabled(t_intf_priv->dev) ||
-		!pm_runtime_active(t_intf_priv->dev)) {
+	if (!pm_runtime_enabled(t_intf_priv->dev)) {
 		dev_err(priv->dev, "FW state not valid %s()\n", __func__);
 		return -EIO;
 	}
@@ -1150,7 +1154,7 @@ int iaxxx_tunnel_release_common(struct inode *inode, struct file *filp, int id)
 	}
 	/* ignore threadfn return value */
 	pr_debug("stopping stream kthread");
-
+	pm_runtime_put_sync(t_intf_priv->dev);
 	kfree(client);
 	filp->private_data = NULL;
 
@@ -1457,10 +1461,6 @@ static int iaxxx_notifier_cb(struct notifier_block *nb,
 	int ret = 0;
 
 	switch (val) {
-	case IAXXX_EV_STARTUP:
-		pm_runtime_get(priv->dev);
-		break;
-
 	case IAXXX_EV_RECOVERY:
 		if (!test_and_set_bit(IAXXX_TFLG_ALLOW_TUNNELS, &priv->flags))
 			wake_up_process(priv->producer_thread);
@@ -1487,15 +1487,6 @@ static int iaxxx_tunnel_suspend_rt(struct device *dev)
 	struct iaxxx_priv *priv = dev_get_drvdata(dev);
 	struct iaxxx_tunnel_data *tpriv = priv->tunnel_data;
 
-	if (!pm_runtime_enabled(dev) && pm_runtime_active(dev)) {
-		/*
-		 * This indicate point where lower layer has problem and
-		 * all SPI transactions and works with lower layer must
-		 * be blocked because is forbidden.
-		 */
-		dev_warn(dev, "Forced suspend requested by HW!");
-	}
-
 	if (!test_bit(IAXXX_TFLG_FW_CRASH, &tpriv->flags)) {
 		set_bit(IAXXX_TFLG_DISABLE_ALL, &tpriv->flags);
 		set_bit(IAXXX_TFLG_ADJ_THREAD, &tpriv->flags);
@@ -1510,15 +1501,6 @@ static int iaxxx_tunnel_resume_rt(struct device *dev)
 {
 	struct iaxxx_priv *priv = dev_get_drvdata(dev);
 	struct iaxxx_tunnel_data *tpriv = priv->tunnel_data;
-
-	if (!pm_runtime_enabled(dev) && pm_runtime_active(dev)) {
-		/*
-		 * This indicate point where lower layer is already
-		 * recovered and ready to continue work.
-		 * Could be resumed all pending SPI transactions.
-		 */
-		dev_err(dev, "Forced resume requested by HW!");
-	}
 
 	if (test_bit(IAXXX_TFLG_FW_CRASH, &tpriv->flags)) {
 		clear_bit(IAXXX_TFLG_ALLOW_TUNNELS, &tpriv->flags);

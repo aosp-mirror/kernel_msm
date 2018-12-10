@@ -46,7 +46,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	if (!priv)
 		return -EINVAL;
 
-	if (!pm_runtime_enabled(priv->dev) || !pm_runtime_active(priv->dev))
+	if (!pm_runtime_enabled(priv->dev))
 		return -EINVAL;
 
 	if (!priv->iaxxx_state) {

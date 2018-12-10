@@ -44,6 +44,8 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-pad-ctrl.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-gpio.h>
 
+#define RUNTIME_PM_ENABLE 0
+
 #define IAXXX_MAX_RETRY 5
 #define IAXXX_MAX_PROC 3 /* Number of procs on D1400s */
 #define IAXXX_MAX_VAL 0xFFFFFFFF
@@ -2698,7 +2700,7 @@ static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 			IAXXX_I2S_TRIGGER_HIGH);
 
 	snd_soc_update_bits(codec, IAXXX_SRB_I2S_PORT_PWR_EN_ADDR,
-			(0x0 << port), (0x0 << port));
+			(0x1 << port), (0x0 << port));
 
 	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, &status,
 							IAXXX_BLOCK_0);
@@ -5175,7 +5177,7 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	port_do_val = port_do_val | IAXXX_IO_CTRL_DO;
 	/* TODO need to move to pm ops functions in future */
 	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
-			IAXXX_SRB_PCM_PORT_PWR_EN_MASK_VAL, (1 << id));
+			(1 << id), (1 << id));
 
 	ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
 					&status, IAXXX_BLOCK_0);
@@ -5703,6 +5705,8 @@ static int iaxxx_pcm_hw_free(struct snd_pcm_substream *substream,
 	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(dai->codec);
 	u32 cnr0_i2s_val = 0;
 	int id = dai->id;
+	uint32_t status = 0;
+	int ret = 0;
 
 	pr_debug("%s\n", __func__);
 
@@ -5744,12 +5748,32 @@ static int iaxxx_pcm_hw_free(struct snd_pcm_substream *substream,
 			IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
 			IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 			IAXXX_I2S_TRIGGER_HIGH);
+
+		snd_soc_update_bits(codec, IAXXX_SRB_I2S_PORT_PWR_EN_ADDR,
+			(0x1 << id), (0 << id));
+
+		ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
+				&status, IAXXX_BLOCK_0);
+		if (ret) {
+			pr_err("Update block fail %s()\n", __func__);
+			return ret;
+		}
 	}
 	/* Set cn0 pcm active reg */
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
 		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id),
 		IAXXX_CNR0_PCM_DISABLE <<
 			IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id));
+
+	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
+			(1 << id), (0 << id));
+
+	ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
+					&status, IAXXX_BLOCK_0);
+	if (ret) {
+		dev_err(codec->dev, "Update block fail %s()\n", __func__);
+		return ret;
+	}
 
 	return 0;
 }
@@ -5997,14 +6021,17 @@ static int iaxxx_codec_probe(struct snd_soc_codec *codec)
 	}
 #endif
 
-	dev_info(codec->dev, "%s\n", __func__);
-
+#if RUNTIME_PM_ENABLE
+	dev_info(codec->dev, "%s runtime_pm enabled\n", __func__);
 	pm_runtime_get_sync(codec->dev);
-
+#else
+	dev_info(codec->dev, "%s runtime_pm disabled\n", __func__);
+#endif
 	iaxxx_add_widgets(codec);
 
+#if RUNTIME_PM_ENABLE
 	pm_runtime_put(codec->dev);
-
+#endif
 	return 0;
 }
 
@@ -6064,6 +6091,9 @@ static int iaxxx_codec_notify(struct notifier_block *nb,
 		if (ret)
 			dev_err(iaxxx->dev,
 				"codec registration failed rc = %d\n", ret);
+#if RUNTIME_PM_ENABLE
+		pm_runtime_put(iaxxx->dev);
+#endif
 		break;
 	case IAXXX_EV_CRASH:
 		iaxxx_reset_codec_params(iaxxx);
@@ -6187,9 +6217,9 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 
 	iaxxx->nb_core.notifier_call = iaxxx_codec_notify;
 	iaxxx_fw_notifier_register(priv->dev, &iaxxx->nb_core);
-
+#if RUNTIME_PM_ENABLE
 	pm_runtime_enable(&pdev->dev);
-
+#endif
 	return 0;
 }
 
@@ -6197,10 +6227,13 @@ static int iaxxx_codec_driver_remove(struct platform_device *pdev)
 {
 	device_remove_file(&pdev->dev, &dev_attr_codec_state);
 	snd_soc_unregister_codec(&pdev->dev);
+#if RUNTIME_PM_ENABLE
 	pm_runtime_disable(&pdev->dev);
+#endif
 	return 0;
 }
 
+#if RUNTIME_PM_ENABLE
 static int iaxxx_codec_rt_suspend(struct device *dev)
 {
 	/* struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(dev); */
@@ -6218,7 +6251,7 @@ static int iaxxx_codec_rt_resume(struct device *dev)
 static const struct dev_pm_ops iaxxx_codec_pm_ops = {
 	SET_RUNTIME_PM_OPS(iaxxx_codec_rt_suspend, iaxxx_codec_rt_resume, NULL)
 };
-
+#endif
 
 static struct platform_driver iaxxx_codec_driver = {
 	.probe  = iaxxx_codec_driver_probe,
@@ -6226,7 +6259,9 @@ static struct platform_driver iaxxx_codec_driver = {
 	.driver = {
 		.name = "iaxxx-codec",
 		.of_match_table = iaxxx_platform_dt_match,
+#if RUNTIME_PM_ENABLE
 		.pm = &iaxxx_codec_pm_ops,
+#endif
 	},
 };
 

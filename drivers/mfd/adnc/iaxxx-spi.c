@@ -98,6 +98,7 @@ static int iaxxx_spi_write(struct spi_device *spi, const void *buf, int len)
 	return rc;
 }
 
+/* send command to firmware and read response */
 static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 {
 	int ret;
@@ -106,7 +107,7 @@ static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 		pr_err("%s: NULL input pointer(s)\n", __func__);
 		return -EINVAL;
 	}
-
+	iaxxx_pm_get_sync(&spi->dev);
 	cmd = cpu_to_be32(cmd);
 	dev_dbg(&spi->dev, "iaxxx: cmd = 0x%08x\n", cmd);
 
@@ -126,10 +127,11 @@ static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 		*resp = be32_to_cpu(*resp);
 	}
 
+	iaxxx_pm_put_autosuspend(&spi->dev);
 	return 0;
 }
 
-static int iaxxx_spi_write_endian(struct device *dev,
+static int iaxxx_copy_cpu_to_be32(struct device *dev,
 				void *data_buff, uint32_t len)
 {
 	int i;
@@ -152,107 +154,91 @@ static int iaxxx_spi_write_endian(struct device *dev,
 	return align_len;
 }
 
-static int iaxxx_regmap_spi_gather_raw_write(void *context,
-					 const void *reg, size_t reg_len,
-					 const void *val, size_t val_len)
+/* This is a common function used by all public spi write functions.
+ *
+ * This function sends data over SPI to firmware with the option to
+ * convert the data to BE32. The option says the data is NOT in Be32Fmt then
+ * data would converted before writing. Similarly, if the option is set, the
+ * register address is assumed to be in BE32 format.
+ *
+ */
+static int iaxxx_spi_write_common(void *context,
+				const void *reg, const size_t reg_len,
+				const void *val, const size_t val_len,
+				const bool data_in_be32_fmt,
+				bool pm_needed)
 {
 	int rc;
+	size_t reg_len_new;
+	size_t val_len_new = val_len;
 	struct device *dev = context;
 	struct spi_device *spi = to_spi_device(dev);
 	struct spi_message m;
 	struct spi_transfer t[1] = { };
 	uint8_t *padding;
-	void *tmp = (void *)val;
-
-	/* Device protocol requires address to be shifted by one bit */
 	uint32_t reg_addr = (*(uint32_t *)reg);
 
 	pr_debug("%s() Register address %x\n", __func__, reg_addr);
 
-	val_len = iaxxx_spi_write_endian(dev, tmp, val_len);
-	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
-	if (padding == NULL) {
-		pr_err("%s() failed to allocate memory\n", __func__);
+	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_KERNEL);
+	if (padding == NULL)
 		return -ENOMEM;
-	}
+
+	if (data_in_be32_fmt)
+		reg_addr = be32_to_cpu(reg_addr);
+
+	/* Device protocol requires address to be shifted by one bit */
 	reg_addr = cpu_to_be32(reg_addr >> 1);
+
 	spi_message_init(&m);
 
-	if (reg_len > IAXXX_REG_LEN) {
-		memset(padding, 0, IAXXX_REG_LEN_WITH_PADDING + val_len);
-		memcpy(padding, &reg_addr, IAXXX_REG_LEN);
-		memcpy(padding + IAXXX_REG_LEN_WITH_PADDING, tmp, val_len);
-		/* Register address */
-		t[0].len = IAXXX_REG_LEN_WITH_PADDING + val_len;
-		t[0].tx_buf = padding;
-		spi_message_add_tail(&t[0], &m);
-	} else {
-		memset(padding, 0, IAXXX_REG_LEN_WITH_PADDING + val_len);
-		memcpy(padding, &reg_addr, IAXXX_REG_LEN);
-		memcpy(padding + IAXXX_REG_LEN, tmp, val_len);
-		/* Register address */
-		t[0].len = sizeof(reg_addr) + val_len;
-		t[0].tx_buf = padding;
+	reg_len_new = (reg_len > IAXXX_REG_LEN) ? IAXXX_REG_LEN_WITH_PADDING :
+			IAXXX_REG_LEN;
 
-		spi_message_add_tail(&t[0], &m);
-	}
+	memcpy(padding, &reg_addr, IAXXX_REG_LEN);
+	memcpy(padding + reg_len_new, val, val_len);
+	if (!data_in_be32_fmt)
+		val_len_new = iaxxx_copy_cpu_to_be32(dev, padding +
+				reg_len_new, val_len);
+	/* Register address */
+	t[0].len = reg_len_new + val_len_new;
+	t[0].tx_buf = padding;
+	spi_message_add_tail(&t[0], &m);
+
+	if (pm_needed)
+		iaxxx_pm_get_sync(&spi->dev);
 	rc = spi_sync(spi, &m);
+	if (pm_needed)
+		iaxxx_pm_put_autosuspend(&spi->dev);
 
 	if (padding != NULL)
 		kfree(padding);
 
 	return rc;
-
 }
 
+/* This spi-write function is regmap interface function. It is called
+ * from regmap which is configured to send data in Big-Endian.
+ * Since SPI communication with firmware is Big-Endian, there is no
+ * conversion needed before sending data.
+ */
 static int iaxxx_regmap_spi_gather_write(void *context,
 					 const void *reg, size_t reg_len,
 					 const void *val, size_t val_len)
 {
-	int rc;
-	struct device *dev = context;
-	struct spi_device *spi = to_spi_device(dev);
-	struct spi_message m;
-	struct spi_transfer t[1] = {};
-	uint8_t *padding;
+	/* flag set to indicate data and reg-address are in BE32 format */
+	return iaxxx_spi_write_common(context,
+				 reg, reg_len,
+				 val, val_len,
+				 true, true);
 
-	/* Device protocol requires address to be shifted by one bit */
-	uint32_t reg_addr = be32_to_cpu(*(uint32_t *)reg);
-
-	pr_debug("%s() Register address %x\n", __func__, reg_addr);
-	reg_addr = cpu_to_be32(reg_addr >> 1);
-
-	padding = kmalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_DMA | GFP_KERNEL);
-	if (padding == NULL)
-		return -ENOMEM;
-
-	spi_message_init(&m);
-
-	if (reg_len > IAXXX_REG_LEN) {
-		memset(padding, 0, IAXXX_REG_LEN_WITH_PADDING + val_len);
-		memcpy(padding, &reg_addr, IAXXX_REG_LEN);
-		memcpy(padding + IAXXX_REG_LEN_WITH_PADDING, val, val_len);
-		/* Register address */
-		t[0].len = IAXXX_REG_LEN_WITH_PADDING + val_len;
-		t[0].tx_buf = padding;
-		spi_message_add_tail(&t[0], &m);
-	} else {
-		memcpy(padding, &reg_addr, IAXXX_REG_LEN);
-		memcpy(padding + IAXXX_REG_LEN, val, val_len);
-		/* Register address */
-		t[0].len = sizeof(reg_addr) + val_len;
-		t[0].tx_buf = padding;
-		spi_message_add_tail(&t[0], &m);
-	}
-
-	rc = spi_sync(spi, &m);
-
-	kfree(padding);
-
-	return rc;
 }
 
-/* regmap bus interface - write */
+/* This version of spi-write is called by regmap. Since regmap is configured
+ * for Big-endian, the data received here will be in Big-endian format.
+ * Since SPI communication with Firmware is Big-endian, no byte-order
+ * conversion is needed before sending data.
+ */
 static int iaxxx_regmap_spi_write(void *context, const void *data, size_t count)
 {
 	const void *val = data + sizeof(uint32_t);
@@ -271,18 +257,29 @@ static int iaxxx_regmap_spi_write(void *context, const void *data, size_t count)
 		pr_err("%s(), Error Input param put of range\n", __func__);
 		return -EINVAL;
 	}
-	rc = iaxxx_regmap_spi_gather_write(context,
-						data, reg_len, val, val_len);
+
+	/* flag set to indicate data and reg-address are in BE32 format */
+	rc = iaxxx_spi_write_common(context, data, reg_len,
+			val, val_len, true, true);
 	if (priv->dump_log) {
 		for (i = 0; i < words; i++)
 			register_transac_log(dev,
-					reg_addr + (sizeof(uint32_t) * i),
-					cpu_to_be32(writebuf[i]), IAXXX_WRITE);
+				reg_addr + (sizeof(uint32_t) * i),
+				be32_to_cpu(writebuf[i]), IAXXX_WRITE);
 	}
 	return rc;
 }
 
-/* regmap bus interface - write */
+/* This version of spi-write is used privately across the driver to write
+ * directly to firmware's memory. Since data received here will be in
+ * CPU byte order, the data would need to be converted to Big-endian
+ * before sending to firmware over SPI.
+ *
+ * Also this function splits big buffers into burst size defined by
+ * IAXXX_SPI_BURST_SIZE and sends to firmware due to limitations
+ * in some SPI master drivers handling big buffers size.
+ *
+ */
 static int iaxxx_spi_raw_write(void *context,
 			 const void *reg,
 			 const void *val, size_t val_len)
@@ -296,11 +293,15 @@ static int iaxxx_spi_raw_write(void *context,
 	int rc = 0;
 
 	for (val_index = 0; val_index < val_len; val_index += burst_size) {
-		rc = iaxxx_regmap_spi_gather_raw_write(context,
+		/* Flag is false to indicate data and reg-address are
+		 * not in BE32 (in CPU byte order)
+		 */
+		rc = iaxxx_spi_write_common(context,
 			&reg_addr, reg_len,
 			(val_addr + val_index),
 			(val_len - val_index) < burst_size ?
-			(val_len - val_index) : burst_size);
+			(val_len - val_index) : burst_size,
+			false, true);
 		if (rc)
 			break;
 		reg_addr += burst_size;
@@ -309,26 +310,25 @@ static int iaxxx_spi_raw_write(void *context,
 	return rc;
 }
 
-/* regmap bus interface - read */
-static int iaxxx_regmap_spi_read(void *context,
+/* This is the common function used by all public spi read functions.
+ * This function assumes that the register address in BE32 format.
+ * The data read in the buffer will be in BE32 format. It will be up to
+ * the caller to convert the data if needed to CPU byte order.
+ */
+static int iaxxx_spi_read_common(void *context,
 				 const void *reg, size_t reg_len,
-				 void *val, size_t val_len)
+				 void *val, size_t val_len, bool pm_needed)
 {
 	struct device *dev = context;
 	struct spi_device *spi = to_spi_device(dev);
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	struct spi_message m;
 	struct spi_transfer t[1] = { };
-	uint32_t *readbuf;
-	uint32_t words = val_len / sizeof(uint32_t);
 	uint32_t reg2[4] = {0};
 	uint8_t *rx_buf;
 	uint8_t *tx_buf;
-	int i = 0, rc = 0;
+	int rc = 0;
 
-	/* For reads, most significant bit is set after address shifted */
 	uint32_t reg_addr = be32_to_cpu(*(uint32_t *)reg);
-	uint32_t addr = reg_addr;
 	size_t msg_len = max(sizeof(reg2),
 			     val_len + IAXXX_REG_LEN_WITH_PADDING);
 
@@ -342,12 +342,15 @@ static int iaxxx_regmap_spi_read(void *context,
 		goto mem_alloc_fail;
 	}
 
+	/* For reads, most significant bit is set after address shifted */
 	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
 	reg2[0] = reg_addr;
 	memcpy(tx_buf, reg2, sizeof(reg2));
 
 	spi_message_init(&m);
 
+	if (pm_needed)
+		iaxxx_pm_get_sync(&spi->dev);
 	/* Register address */
 	t[0].len = msg_len;
 	t[0].tx_buf = tx_buf;
@@ -359,102 +362,52 @@ static int iaxxx_regmap_spi_read(void *context,
 		goto reg_read_err;
 
 	memcpy(val, rx_buf + IAXXX_REG_LEN_WITH_PADDING, val_len);
-	if (priv->dump_log) {
-		readbuf = (uint32_t *)val;
-		for (i = 0; i < words; i++)
-			register_transac_log(dev, addr + (sizeof(uint32_t) * i),
-					cpu_to_be32(readbuf[i]), IAXXX_READ);
-	}
-
 reg_read_err:
 	kfree(rx_buf);
 mem_alloc_fail:
 	kfree(tx_buf);
 
+	if (pm_needed)
+		iaxxx_pm_put_autosuspend(&spi->dev);
 	return rc;
 }
 
-static int iaxxx_spi_32bit_plat_endian(struct device *dev,
-				void *data_buff, uint32_t len)
-{
-	int i;
-	uint32_t *buff = data_buff;
 
-	if (len % 4) {
-		dev_warn(dev,
-			"buffer not aligned to word boundary: %d", len);
-		len -= (len % 4);
-	}
-
-	for (i = 0; i < len/sizeof(uint32_t); i++) {
-		u32 data = buff[i];
-
-		buff[i] = cpu_to_be32(data);
-	}
-
-	return len;
-}
-
-/* spi bus read will perform bulk spi data read
- * operation in bytes and we have to change the
- * register endianness and set MSB bit for FW
- * to understand this operation is for read
- * and pad 12bytes of zero to give FW setup
- * the transaction.
+/* This version of spi-read is called by regmap. Since SPI communication
+ * with firmware is in Big-endian and regmap is also configured for
+ * Big-endian, the data read here does not need to be altered.
+ * Also the register address received here is also in Big-endian format.
  */
-static int iaxxx_spi_bus_read(struct device *dev,
-				 uint32_t reg, size_t reg_len,
+static int iaxxx_regmap_spi_read(void *context,
+				 const void *reg, size_t reg_len,
 				 void *val, size_t val_len)
 {
-	int rc;
-	struct spi_device *spi = to_spi_device(dev);
-	struct spi_message m;
-	uint32_t be32_reg_addr[4] = {0};
-	struct spi_transfer t[1] = {};
-	uint8_t *rx_buf;
-	uint8_t *tx_buf;
-	size_t msg_len = max(sizeof(be32_reg_addr),
-			     IAXXX_REG_LEN_WITH_PADDING + val_len);
+	struct device *dev = context;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t *readbuf;
+	uint32_t words = val_len / sizeof(uint32_t);
+	int i = 0, rc = 0;
+	uint32_t addr = be32_to_cpu(*(uint32_t *)reg);
 
-	/* For reads, most significant bit is set after address shifted */
-	uint32_t reg_addr = reg;
-
-	tx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
-	if (tx_buf == NULL)
-		return -ENOMEM;
-
-	rx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
-	if (rx_buf == NULL) {
-		rc = -ENOMEM;
-		goto mem_alloc_fail;
-	}
-
-	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
-	be32_reg_addr[0] = reg_addr;
-	memcpy(tx_buf, be32_reg_addr, sizeof(be32_reg_addr));
-
-	spi_message_init(&m);
-
-	/* Register address */
-	t[0].len = msg_len;
-	t[0].tx_buf = tx_buf;
-	t[0].rx_buf = rx_buf;
-	spi_message_add_tail(&t[0], &m);
-
-	rc = spi_sync(spi, &m);
+	rc = iaxxx_spi_read_common(context, reg, reg_len, val, val_len, true);
 	if (rc)
-		goto bus_read_err;
+		goto reg_read_err;
 
-	memcpy(val, rx_buf + IAXXX_REG_LEN_WITH_PADDING, val_len);
-
-bus_read_err:
-	kfree(rx_buf);
-mem_alloc_fail:
-	kfree(tx_buf);
-
+	if (priv->dump_log) {
+		readbuf = (uint32_t *)val;
+		for (i = 0; i < words; i++)
+			register_transac_log(dev,
+					addr + (sizeof(uint32_t) * i),
+					be32_to_cpu(readbuf[i]), IAXXX_READ);
+	}
+reg_read_err:
 	return rc;
 }
 
+/* This spi-read function is raw data version. This function reads data
+ * from firmware using SPI functions and pass it to caller as it is
+ * without modifying any data.
+ */
 static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 {
 	struct device *dev = priv->dev;
@@ -491,6 +444,7 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	/* Fetch the Register address with padding */
 	memcpy(preg_addr, cbuf, IAXXX_REG_LEN_WITH_PADDING);
 
+	iaxxx_pm_get_sync(&spi->dev);
 	/* Add Register address write message */
 	t[0].len = len;
 	t[0].tx_buf = (void *)preg_addr;
@@ -508,34 +462,68 @@ err:
 	kfree(val);
 mem_alloc_fail:
 	kfree(preg_addr);
+	iaxxx_pm_put_autosuspend(&spi->dev);
 	return rc;
 }
 
+/* This spi-write function is raw data version. The caller of this function
+ * generates the whole data and this driver does not alter anything and just
+ * uses SPI functions to pass it to firmware.
+ */
 static int iaxxx_spi_bus_raw_write(struct iaxxx_priv *priv, const void *buf,
 								int len)
 {
 	struct device *dev = priv->dev;
 	struct spi_device *spi = to_spi_device(dev);
+	int rc;
 
 	if (len <= IAXXX_REG_LEN_WITH_PADDING) {
 		pr_err("%s() len parameter invalid\n", __func__);
 		return -EINVAL;
 	}
-	return iaxxx_spi_write(spi, buf, len);
+
+	iaxxx_pm_get_sync(dev);
+	rc =  spi_write(spi, buf, len);
+	iaxxx_pm_put_autosuspend(dev);
+	return rc;
 }
 
+static int iaxxx_copy_be32_to_cpu(struct device *dev,
+		void *data_buff, uint32_t len)
+{
+	int i;
+	uint32_t *buff = data_buff;
 
-/* spi bus bulk read public function
- * to add pad bit fields variable required
- * for spi read operation
+	if (len % 4) {
+		dev_warn(dev,
+			"buffer not aligned to word boundary: %d", len);
+		len -= (len % 4);
+	}
+
+	for (i = 0; i < len/sizeof(uint32_t); i++) {
+		u32 data = buff[i];
+
+		buff[i] = be32_to_cpu(data);
+	}
+	return len;
+}
+
+/* This spi-read function is used across driver code for reading directly
+ * from firmware's memory. Since SPI communication with firmware is in
+ * Big-Endian format, the data read here needs to be converted to CPU
+ * byte-order before passing it back. Also register address received here
+ * is in CPU byte-order and should be converted to Big-endian before
+ * sending for spi read.
+ *
+ * This function also reads from firmware in chunks defined by
+ * IAXXX_SPI_PACKET_LEN since some SPI master drivers have limitation on max
+ * amount of data that
+ * can be read.
  */
 static int iaxxx_spi_bulk_read(struct device *dev,
 			uint32_t address, void *read_buf, size_t words)
 {
-	/* 12 bytes of zero padding is required after
-	 * address is sent to chip before host
-	 * can start reading it
-	 */
+	uint32_t reg_addr;
 	size_t reg_len = sizeof(uint32_t) + 12;
 	uint32_t words_to_read;
 	int rc;
@@ -548,15 +536,24 @@ static int iaxxx_spi_bulk_read(struct device *dev,
 		dev_dbg(dev, "%s(): words_to_read %d\n",
 					__func__, words_to_read);
 
-		rc = iaxxx_spi_bus_read(dev, address, reg_len,
-					read_buf, (words_to_read * 4));
+		/*
+		 * The register address passed to iaxxx_spi_read_common
+		 * should be in Big-endian format.
+		 */
+		reg_addr = cpu_to_be32(address);
+		rc = iaxxx_spi_read_common(dev, &reg_addr, reg_len, read_buf,
+				(words_to_read * 4), true);
 		if (rc < 0) {
 			dev_err(dev,
 				"%s(): bulk read error %d\n",
 				__func__, rc);
 			return rc;
 		}
-		iaxxx_spi_32bit_plat_endian(dev,
+
+		/* Data from iaxxx_spi_read_common function is in BE32 format
+		 * so it should be converted back to CPU byte order.
+		 */
+		iaxxx_copy_be32_to_cpu(dev,
 					read_buf, (words_to_read << 2));
 		address += (words_to_read * sizeof(uint32_t));
 		read_buf = ((char *)read_buf) +
@@ -566,6 +563,54 @@ static int iaxxx_spi_bulk_read(struct device *dev,
 	}
 
 	return count;
+}
+
+/* This version of spi-write is executed without any power management
+ * functions called.
+ *
+ *  Note: Since this version is directly called by the driver, it's
+ *  up to the driver to ensure the register address passed is NOT
+ *  virtual address (for ARB) that is passed to regmap functions.
+ *  Only physical register address should be passed to this function.
+ */
+static int iaxxx_spi_write_no_pm(void *context,
+				 const void *reg, size_t reg_len,
+				 const void *val, size_t val_len)
+{
+	size_t reg_len_pad = IAXXX_REG_LEN_WITH_PADDING;
+
+	return iaxxx_spi_write_common(context,
+				 reg, reg_len_pad,
+				 val, val_len,
+				 false, false);
+
+}
+
+/* This version of spi-read is executed without any power management
+ * functions called.
+ *
+ *  Note: Since this version is directly called by the driver, it's
+ *  up to the driver to ensure the register address passed is NOT
+ *  virtual address (for ARB) that is passed to regmap functions.
+ *  Only physical register address should be passed to this function.
+ */
+static int iaxxx_spi_read_no_pm(void *context,
+				 const void *reg, size_t reg_len,
+				 void *val, size_t val_len)
+{
+	struct device *dev = context;
+	int rc = 0;
+	uint32_t reg_addr = *(uint32_t *)reg;
+
+	reg_addr = cpu_to_be32(reg_addr);
+	rc = iaxxx_spi_read_common(context, &reg_addr, reg_len, val,
+			val_len, false);
+	if (rc)
+		goto reg_read_err;
+	iaxxx_copy_be32_to_cpu(dev, val, val_len);
+
+reg_read_err:
+	return rc;
 }
 
 static int iaxxx_spi_populate_dt_data(struct device_node *node, u32 *tmp)
@@ -670,7 +715,7 @@ static int iaxxx_spi_sync(struct iaxxx_spi_priv *spi_priv)
 		/* The additional SPI testing is enabled only
 		 * with DEBUG flag
 		 */
-#ifdef IAXXX_SBL_DEBUG
+#ifdef DEBUG
 		sync_response = 0;
 		/* Send a SYNC command */
 		rc = iaxxx_spi_cmd(spi_priv->spi, SBL_SYNC_CMD_2,
@@ -721,10 +766,13 @@ static int iaxxx_spi_sync(struct iaxxx_spi_priv *spi_priv)
 
 		/* Switch the device into regmap mode */
 		rc = iaxxx_spi_cmd(spi_priv->spi, CMD_REGMAP_MODE, NULL);
-		if (rc == 0)
+		if (rc) {
+			dev_err(dev,
+				"%s REGMAP MODE CMD fail, err:%d\n",
+				__func__, rc);
+			continue;
+		} else
 			break;
-		dev_err(dev, "REGMAP MODE CMD fail, err:%d\n",
-			rc);
 	} while (retry);
 
 	return rc;
@@ -822,6 +870,8 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	spi_priv->priv.regmap_init_bus = iaxxx_spi_regmap_init;
 	spi_priv->priv.bulk_read = iaxxx_spi_bulk_read;
 	spi_priv->priv.raw_write = iaxxx_spi_raw_write;
+	spi_priv->priv.read_no_pm = iaxxx_spi_read_no_pm;
+	spi_priv->priv.write_no_pm = iaxxx_spi_write_no_pm;
 	spi_priv->priv.bus = IAXXX_SPI;
 	spi_priv->priv.ext_clk = iaxxx_clk;
 
@@ -884,6 +934,7 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 
 static const struct dev_pm_ops iaxxx_spi_pm_ops = {
 	SET_RUNTIME_PM_OPS(iaxxx_core_suspend_rt, iaxxx_core_resume_rt, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(iaxxx_core_dev_suspend, iaxxx_core_dev_resume)
 };
 
 static const struct spi_device_id iaxxx_spi_id[] = {

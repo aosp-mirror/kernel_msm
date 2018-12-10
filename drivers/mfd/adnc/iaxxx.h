@@ -24,6 +24,7 @@ struct iaxxx_evt_queue;
 #define IAXXX_BUF_MAX_LEN	2048
 #define IAXXX_CM4_CTRL_MGR_SRC_ID 0x2610
 #define IAXXX_CRASH_EVENT_ID 2
+#define IAXXX_BOOT_COMPLETE_EVENT_ID 0
 #define IAXXX_SPI_SBL_SPEED	4800000
 #define PLUGIN_INST_NONE	0xFF
 
@@ -37,6 +38,9 @@ struct iaxxx_evt_queue;
 
 #define IAXXX_READ_DELAY        10	/* 10 us delay before SPI read */
 #define IAXXX_READ_DELAY_RANGE  10	/* 10 us range */
+
+#define HOST_0 0
+#define HOST_1 1
 
 /* Checksum Calculation */
 #define CALC_FLETCHER16(DATA, SUM1, SUM2)	\
@@ -69,12 +73,9 @@ enum {
 	SYSRC_ERR_IO,
 };
 
-enum iaxxx_fw_recover_result {
+enum iaxxx_fw_crash_reasons {
 	IAXXX_FW_RECOVERY_FAIL = 0,
 	IAXXX_FW_RECOVERY_SUCCESS = 1,
-};
-
-enum iaxxx_fw_crash_reasons {
 	IAXXX_FW_CRASH_EVENT = 1,
 	IAXXX_FW_CRASH_ON_FLUSH_EVENTS = 2,
 	IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR = 3,

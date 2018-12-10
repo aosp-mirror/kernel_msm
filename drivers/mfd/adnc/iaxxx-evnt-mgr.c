@@ -78,7 +78,15 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 	/* Check for tunnel event and notify producer thread*/
 	if (evt->event_src == IAXXX_SYSID_TUNNEL_EVENT) {
 		iaxxx_tunnel_signal_event(priv);
-		return 0;
+		return ret;
+	}
+
+	if (evt->event_src == IAXXX_CM4_CTRL_MGR_SRC_ID
+			&& evt->event_id == IAXXX_BOOT_COMPLETE_EVENT_ID) {
+		dev_dbg(dev, "FW boot complete event %s: src:0x%.04x\n",
+						__func__, evt->event_src);
+		priv->boot_completed = true;
+		return ret;
 	}
 
 	if (evt->event_src == IAXXX_CM4_CTRL_MGR_SRC_ID
