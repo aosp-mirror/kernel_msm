@@ -1059,9 +1059,13 @@ static void max17x0x_cycle_count_work(struct work_struct *work)
 			if (bucket >= BUCKET_COUNT)
 				bucket = BUCKET_COUNT - 1;
 			chip->cyc_ctr.count[bucket]++;
+#if 0
+			/* Disable saving of bin cycle count to maxim NV storage
+			   since the NV layout is not finalized yet */
 			REGMAP_WRITE(chip->regmap_nvram,
 				     bcnt->map[bucket],
 				     chip->cyc_ctr.count[bucket]);
+#endif
 			pr_debug("Stored count: prev_soc=%d, soc=%d bucket=%d count=%d\n",
 				 chip->cyc_ctr.prev_soc, cnt, bucket,
 				 chip->cyc_ctr.count[bucket]);
