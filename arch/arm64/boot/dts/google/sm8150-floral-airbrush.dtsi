@@ -25,6 +25,13 @@
 	qcom,ep-latency = <1>;
 };
 
+&mhi_0 { /* of_node of abc pcie */
+	airbrush_tmu: airbrush_tmu {
+		compatible = "abc,airbrush-tmu";
+		#thermal-sensor-cells = <0>;
+	};
+};
+
 &tlmm {
 	s2mpb04_pins {
 		s2mpb04_pon_default: s2mpb04_pon_default {
@@ -171,14 +178,6 @@
 		reg = <0x0 0x41f80000 0x0 0x300>;
 		interrupt = <40>;
 		status = "okay";
-	};
-
-	airbrush_tmu: tmu@10b90000 {
-		compatible = "abc,airbrush-tmu";
-		reg = <0x0 0x10B90000 0x0 0x300>;
-		interrupt = <0>;
-		status = "okay";
-		#thermal-sensor-cells = <0>;
 	};
 
 	abc-sm {
