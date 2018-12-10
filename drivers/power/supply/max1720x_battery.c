@@ -2277,7 +2277,35 @@ static int max1730x_decode_sn(char *serial_number,
 			      unsigned int max,
 			      const u16 *data)
 {
-	/* TODO: b/113300630 */
+	int tmp, count = 0;
+
+	if (data[0] != 0x4257)	/* "BW": DSY */
+		return -EINVAL;
+
+	count += scnprintf(serial_number + count, max - count, "%02X%02X%02X",
+			   data[3] & 0xFF,
+			   data[4] & 0xFF,
+			   data[5] & 0xFF);
+
+	tmp = (((((data[1] >> 9) & 0x3f) + 1980) * 10000) +
+		((data[1] >> 5) & 0xf) * 100 + (data[1] & 0x1F));
+	count += scnprintf(serial_number + count, max - count, "%d",
+			   tmp);
+
+	count += scnprintf(serial_number + count, max - count, "%c%c",
+			   data[0] >> 8, data[0] & 0xFF);
+
+	count += scnprintf(serial_number + count, max - count, "%c%c%c%c",
+			   data[7] >> 8,
+			   data[8] >> 8,
+			   data[9] >> 8,
+			   data[9] & 0xFF);
+
+	count += scnprintf(serial_number + count, max - count, "%c",
+			   data[2] & 0xFF);
+
+	count += scnprintf(serial_number + count, max - count, "%c%c",
+			   data[6] >> 8, data[6] & 0xFF);
 	return 0;
 }
 
