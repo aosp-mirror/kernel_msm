@@ -573,9 +573,11 @@ static bool s2mpb04_is_chip_hung(struct s2mpb04_core *ddata)
 	u8 chan_data;
 
 	/* Detect if chip is hung by reading ADC */
-	ret = s2mpb04_read_adc_chan(ddata,
-				    S2MPB04_ADC_VBAT,
-				    &chan_data);
+	do {
+		ret = s2mpb04_read_adc_chan(ddata,
+					    S2MPB04_ADC_VBAT,
+					    &chan_data);
+	} while (ret == -EAGAIN);
 
 	/* chip is hung if ADC read timesout or raw vbat data
 	 * is 0x10
