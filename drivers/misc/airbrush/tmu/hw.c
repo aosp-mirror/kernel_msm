@@ -20,17 +20,65 @@
 struct ab_tmu_hw {
 	struct device *dev;
 	u32 base;
+
+	struct mutex pcie_link_lock;
+	bool pcie_link_ready;
+	struct notifier_block pcie_link_blocking_nb;
 };
+
+static int ab_tmu_hw_pcie_link_listener(struct notifier_block *nb,
+		unsigned long action, void *data)
+{
+	struct ab_tmu_hw *hw = container_of(nb,
+			struct ab_tmu_hw, pcie_link_blocking_nb);
+
+	switch (action) {
+	case ABC_PCIE_LINK_POST_ENABLE:
+		mutex_lock(&hw->pcie_link_lock);
+		hw->pcie_link_ready = true;
+		mutex_unlock(&hw->pcie_link_lock);
+		break;
+	case ABC_PCIE_LINK_PRE_DISABLE:
+		mutex_lock(&hw->pcie_link_lock);
+		hw->pcie_link_ready = false;
+		mutex_unlock(&hw->pcie_link_lock);
+		break;
+	default:
+		return NOTIFY_DONE;  /* Don't care */
+	}
+
+	return NOTIFY_OK;
+}
 
 static int ab_tmu_hw_init(struct ab_tmu_hw *hw, struct device *dev, u32 base)
 {
+	int ret;
+
 	hw->dev = dev;
 	hw->base = base;
+
+	mutex_init(&hw->pcie_link_lock);
+	mutex_lock(&hw->pcie_link_lock);
+	hw->pcie_link_ready = true;
+	hw->pcie_link_blocking_nb.notifier_call =
+			ab_tmu_hw_pcie_link_listener;
+	ret = abc_register_pcie_link_blocking_event(
+			&hw->pcie_link_blocking_nb);
+	mutex_unlock(&hw->pcie_link_lock);
+	if (ret) {
+		dev_err(dev,
+				"failed to subscribe to PCIe blocking link event, ret %d\n",
+				ret);
+		return ret;
+	}
+
 	return 0;
 }
 
 static void ab_tmu_hw_exit(struct ab_tmu_hw *hw)
-{}
+{
+	abc_unregister_pcie_link_blocking_event(&hw->pcie_link_blocking_nb);
+}
 
 static void devm_ab_tmu_hw_release(struct device *dev, void *res)
 {
@@ -69,6 +117,17 @@ void devm_ab_tmu_hw_destroy(struct ab_tmu_hw *hw)
 {
 	devres_release(hw->dev, devm_ab_tmu_hw_release, devm_ab_tmu_hw_match,
 		hw);
+}
+
+bool ab_tmu_hw_pcie_link_lock(struct ab_tmu_hw *hw)
+{
+	mutex_lock(&hw->pcie_link_lock);
+	return hw->pcie_link_ready;
+}
+
+void ab_tmu_hw_pcie_link_unlock(struct ab_tmu_hw *hw)
+{
+	mutex_unlock(&hw->pcie_link_lock);
 }
 
 u32 ab_tmu_hw_read(struct ab_tmu_hw *hw, u32 offset)

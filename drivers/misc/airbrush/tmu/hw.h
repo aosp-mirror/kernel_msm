@@ -23,6 +23,9 @@ struct device;
 struct ab_tmu_hw *devm_ab_tmu_hw_create(struct device *dev, u32 base);
 void devm_ab_tmu_hw_destroy(struct ab_tmu_hw *hw);
 
+bool ab_tmu_hw_pcie_link_lock(struct ab_tmu_hw *hw);
+void ab_tmu_hw_pcie_link_unlock(struct ab_tmu_hw *hw);
+
 u32 ab_tmu_hw_read(struct ab_tmu_hw *hw, u32 offset);
 void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value);
 
