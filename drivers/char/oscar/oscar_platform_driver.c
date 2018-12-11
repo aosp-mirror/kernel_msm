@@ -1112,12 +1112,10 @@ static int oscar_setup_device(struct platform_device *pdev,
 		oscar_abc_pcie_link_change_listener;
 	ret = abc_register_pcie_link_blocking_event(
 			&oscar_dev->pcie_link_change_nb);
-	if (ret) {
+	if (ret)
 		dev_warn(dev,
 			 "failed to subscribe to pcie link block event (%d)\n",
 			 ret);
-		oscar_dev->pcie_lockout = false; /* turn off link blocking */
-	}
 
 	oscar_reset(gasket_dev);
 
@@ -1164,7 +1162,7 @@ static int oscar_probe(struct platform_device *pdev)
 	mutex_init(&oscar_dev->abc_buffers_lock);
 	mutex_init(&oscar_dev->dev_avail_lock);
 	oscar_dev->clk_lockout = false;
-	oscar_dev->pcie_lockout = true;
+	oscar_dev->pcie_lockout = false;
 
 	ret = oscar_setup_device(pdev, oscar_dev, gasket_dev);
 	if (ret) {
