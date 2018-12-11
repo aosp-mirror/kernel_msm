@@ -2456,6 +2456,19 @@ static ssize_t cs40l2x_num_waves_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", num_waves);
 }
 
+static ssize_t cs40l2x_fw_rev_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	unsigned int fw_rev;
+
+	mutex_lock(&cs40l2x->lock);
+	fw_rev = cs40l2x->algo_info[0].rev;
+	mutex_unlock(&cs40l2x->lock);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", fw_rev);
+}
+
 static ssize_t cs40l2x_vpp_measured_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -3028,6 +3041,7 @@ static DEVICE_ATTR(cp_dig_scale, 0660, cs40l2x_cp_dig_scale_show,
 		cs40l2x_cp_dig_scale_store);
 static DEVICE_ATTR(heartbeat, 0660, cs40l2x_heartbeat_show, NULL);
 static DEVICE_ATTR(num_waves, 0660, cs40l2x_num_waves_show, NULL);
+static DEVICE_ATTR(fw_rev, 0660, cs40l2x_fw_rev_show, NULL);
 static DEVICE_ATTR(vpp_measured, 0660, cs40l2x_vpp_measured_show, NULL);
 static DEVICE_ATTR(ipp_measured, 0660, cs40l2x_ipp_measured_show, NULL);
 static DEVICE_ATTR(vbatt_max, 0660, cs40l2x_vbatt_max_show,
@@ -3075,6 +3089,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_dig_scale.attr,
 	&dev_attr_heartbeat.attr,
 	&dev_attr_num_waves.attr,
+	&dev_attr_fw_rev.attr,
 	&dev_attr_vpp_measured.attr,
 	&dev_attr_ipp_measured.attr,
 	&dev_attr_vbatt_max.attr,
