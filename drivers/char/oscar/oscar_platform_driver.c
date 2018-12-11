@@ -7,11 +7,13 @@
 
 #include <asm/current.h>
 #include <linux/airbrush-sm-notifier.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
+#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/mfd/abc-pcie-notifier.h>
 #include <linux/mm.h>
@@ -99,9 +101,12 @@ enum oscar_bar_regs {
 	OSCAR_BAR_REG_HIB_PAGE_TABLE_INIT = 0x6078,
 	OSCAR_BAR_REG_USER_HIB_DMA_PAUSE = 0x86D8,
 	OSCAR_BAR_REG_USER_HIB_DMA_PAUSED = 0x86E0,
+	OSCAR_BAR_REG_USER_HIB_ERROR_STATUS = 0x86F0,
+	OSCAR_BAR_REG_USER_HIB_FIRST_ERROR_STATUS = 0x8700,
+	OSCAR_BAR_REG_USER_HIB_PAGE_FAULT_ADDR = 0x8738,
 	OSCAR_BAR_REG_HIB_PAGE_TABLE = 0x10000,
 
-	/* Top Level Registers. */
+	/* AON Always On (Top Level) Registers. */
 	OSCAR_BAR_REG_AON_RESET = 0x20000,
 	OSCAR_BAR_REG_AON_CLOCK_ENABLE = 0x20008,
 	OSCAR_BAR_REG_AON_LOGIC_SHUTDOWN_PRE = 0x00020010,
@@ -112,6 +117,7 @@ enum oscar_bar_regs {
 	OSCAR_BAR_REG_AON_CLAMP_ENABLE = 0x00020038,
 	OSCAR_BAR_REG_AON_FORCE_QUIESCE = 0x00020040,
 	OSCAR_BAR_REG_AON_AXITIEOFFS = 0x00020048,
+	OSCAR_BAR_REG_AON_AXIBRIDGEDEBUG1 = 0x00020070,
 };
 
 /* AON_LOGIC_SHUTDOWN_* registers mask for logic_shutdown_*_ack field */
@@ -185,6 +191,7 @@ struct oscar_dev {
 	bool pcie_lockout; /* PCIe link blocked */
 	struct notifier_block clk_change_nb;
 	struct notifier_block pcie_link_change_nb;
+	struct dentry *d_entry; /* debugfs dir for this device */
 };
 
 
@@ -1005,6 +1012,74 @@ static void oscar_interrupt_cleanup(struct oscar_dev *oscar_dev)
 			 "Unregister lowprio irq notifier failed: %d\n", ret);
 }
 
+static struct dumpregs_range {
+	ulong firstreg;
+	ulong lastreg;
+} statusregs_ranges[] = {
+	{
+		.firstreg = OSCAR_BAR_REG_AON_RESET,
+		.lastreg = OSCAR_BAR_REG_AON_AXIBRIDGEDEBUG1,
+	},
+	{
+		.firstreg = OSCAR_BAR_REG_USER_HIB_DMA_PAUSED,
+		.lastreg = OSCAR_BAR_REG_USER_HIB_DMA_PAUSED,
+	},
+	{
+		.firstreg = OSCAR_BAR_REG_USER_HIB_ERROR_STATUS,
+		.lastreg = OSCAR_BAR_REG_USER_HIB_FIRST_ERROR_STATUS,
+	},
+	{
+		.firstreg = OSCAR_BAR_REG_USER_HIB_PAGE_FAULT_ADDR,
+		.lastreg = OSCAR_BAR_REG_USER_HIB_PAGE_FAULT_ADDR,
+	},
+};
+
+static int statusregs_show(struct seq_file *s, void *data)
+{
+	struct oscar_dev *oscar_dev = s->private;
+	int i;
+	ulong reg;
+	uint64_t val;
+
+	if (!check_dev_avail(oscar_dev))
+		return -EIO;
+
+	for (i = 0; i < ARRAY_SIZE(statusregs_ranges); i++) {
+		for (reg = statusregs_ranges[i].firstreg;
+		     reg <= statusregs_ranges[i].lastreg; reg += 8) {
+			val = gasket_dev_read_64(oscar_dev->gasket_dev,
+						 OSCAR_BAR_INDEX, reg);
+			seq_printf(s, "0x%08lx: 0x%016llx\n", reg, val);
+		}
+	}
+	return 0;
+}
+
+static int statusregs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, statusregs_show, inode->i_private);
+}
+
+static const struct file_operations statusregs_ops = {
+	.open = statusregs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.owner = THIS_MODULE,
+	.release = single_release,
+};
+
+static void oscar_setup_debugfs(struct oscar_dev *oscar_dev,
+				struct device *dev)
+{
+	oscar_dev->d_entry =
+		debugfs_create_dir(dev_name(dev), NULL);
+	if (!oscar_dev->d_entry)
+		return;
+
+	debugfs_create_file("statusregs", 0660, oscar_dev->d_entry, oscar_dev,
+			    &statusregs_ops);
+}
+
 static int oscar_setup_device(struct platform_device *pdev,
 			      struct oscar_dev *oscar_dev,
 			      struct gasket_dev *gasket_dev)
@@ -1134,6 +1209,7 @@ static int oscar_setup_device(struct platform_device *pdev,
 		return -ETIMEDOUT;
 	}
 
+	oscar_setup_debugfs(oscar_dev, &pdev->dev);
 	return 0;
 }
 
@@ -1199,6 +1275,7 @@ static int oscar_remove(struct platform_device *pdev)
 	ab_sm_unregister_clk_event(&oscar_dev->clk_change_nb);
 	abc_unregister_pcie_link_blocking_event(
 		&oscar_dev->pcie_link_change_nb);
+	debugfs_remove_recursive(oscar_dev->d_entry);
 	gasket_disable_device(gasket_dev);
 	oscar_interrupt_cleanup(oscar_dev);
 	if (!oscar_dev->parent_ioremap)
