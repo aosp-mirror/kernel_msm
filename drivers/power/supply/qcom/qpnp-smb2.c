@@ -1040,6 +1040,12 @@ static int smb2_init_dc_psy(struct smb2 *chip)
 		pr_err("Failed to set DCIN_AICL_REF_SEL_CFG_REG (%d)\n", rc);
 		return rc;
 	}
+	rc = smblib_masked_write(chg, DCIN_AICL_OPTIONS_CFG_REG,
+				 DCIN_AICL_ADC_EN_BIT, 0);
+	if (rc < 0) {
+		pr_err("Failed to set DCIN_AICL_OPTIONS_CFG_REG (%d)\n", rc);
+		return rc;
+	}
 #endif
 
 	return 0;
