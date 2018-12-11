@@ -9,6 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <dt-bindings/clock/qcom,gcc-sm8150.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
 
 // flame/coral battery i2c
 &qupv3_se0_i2c {
@@ -55,3 +57,40 @@
 	qcom,clk-freq-out = <1000000>;
 };
 
+&soc {
+	/* 2-wire UART on SE1*/
+	qupv3_se1_2uart: qcom,qup_uart@0x884000 {
+		compatible = "qcom,msm-geni-uart", "qcom,msm-geni-console";
+		reg = <0x884000 0x4000>;
+		reg-names = "se_phys";
+		clock-names = "se-clk", "m-ahb", "s-ahb";
+		clocks = <&clock_gcc GCC_QUPV3_WRAP0_S1_CLK>,
+		<&clock_gcc GCC_QUPV3_WRAP_0_M_AHB_CLK>,
+		<&clock_gcc GCC_QUPV3_WRAP_0_S_AHB_CLK>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&qupv3_se1_rx>, <&qupv3_se1_tx>;
+		pinctrl-1 = <&qupv3_se1_rx>, <&qupv3_se1_tx>;
+		interrupts-extended = <&pdc GIC_SPI 602 0>, <&tlmm 117 0>;
+		qcom,wrapper-core = <&qupv3_0>;
+		qcom,wakeup-byte = <0xFD>;
+		status = "disabled";
+	};
+
+	/* 2-wire UART SE19*/
+	qupv3_se19_2uart: qcom,qup_uart@0xc88000 {
+		compatible = "qcom,msm-geni-uart", "qcom,msm-geni-console";
+		reg = <0xc88000 0x4000>;
+		reg-names = "se_phys";
+		clock-names = "se-clk", "m-ahb", "s-ahb";
+		clocks = <&clock_gcc GCC_QUPV3_WRAP2_S2_CLK>,
+		<&clock_gcc GCC_QUPV3_WRAP_2_M_AHB_CLK>,
+		<&clock_gcc GCC_QUPV3_WRAP_2_S_AHB_CLK>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&qupv3_se19_rx>, <&qupv3_se19_tx>;
+		pinctrl-1 = <&qupv3_se19_rx>, <&qupv3_se19_tx>;
+		interrupts-extended = <&pdc GIC_SPI 584 0>, <&tlmm 56 0>;
+		qcom,wrapper-core = <&qupv3_2>;
+		qcom,wakeup-byte = <0xFD>;
+		status = "disabled";
+	};
+};
