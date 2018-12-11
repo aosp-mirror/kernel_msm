@@ -459,6 +459,45 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static void ipu_adapter_ab_mfd_enable_interrupts(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	struct platform_device *pdev = dev_data->pdev;
+	int irq_index, ret;
+
+	for (irq_index = 0; irq_index < platform_irq_count(pdev);
+			irq_index++)
+		enable_irq(dev_data->irqs[irq_index]);
+
+	ret = atomic_notifier_chain_register(dev_data->low_priority_irq_nh,
+			&dev_data->low_priority_irq_nb);
+
+	if (ret)
+		dev_err(dev_data->dev,
+				"Cannot register notifier for low priority irq, ret=%d\n",
+				ret);
+}
+
+
+static void ipu_adapter_ab_mfd_disable_interrupts(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	struct platform_device *pdev = dev_data->pdev;
+	int irq_index, ret;
+
+	for (irq_index = 0; irq_index < platform_irq_count(pdev);
+			irq_index++)
+		disable_irq(dev_data->irqs[irq_index]);
+
+	ret = atomic_notifier_chain_unregister(dev_data->low_priority_irq_nh,
+			&dev_data->low_priority_irq_nb);
+
+	if (ret)
+		dev_err(dev_data->dev,
+				"Cannot unregister notifier for low priority irq, ret=%d\n",
+				ret);
+}
+
 static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 					      unsigned long action,
 					      void *data)
@@ -468,26 +507,18 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 				     struct ipu_adapter_ab_mfd_data,
 				     pcie_link_blocking_nb);
 	struct paintbox_bus *bus = dev_data->bus;
-	struct platform_device *pdev = dev_data->pdev;
-	int irq_index;
 
 	switch (action) {
 	case ABC_PCIE_LINK_POST_ENABLE:
 		dev_dbg(dev_data->dev,
 			"%s: may continue to use pcie\n", __func__);
-		for (irq_index = 0; irq_index < platform_irq_count(pdev);
-				irq_index++) {
-			enable_irq(dev_data->irqs[irq_index]);
-		}
+		ipu_adapter_ab_mfd_enable_interrupts(dev_data);
 		ipu_bus_notify_link_up(bus);
 		break;
 	case ABC_PCIE_LINK_PRE_DISABLE:
 		dev_dbg(dev_data->dev,
 			"%s: should stop using pcie\n", __func__);
-		for (irq_index = 0; irq_index < platform_irq_count(pdev);
-				irq_index++) {
-			disable_irq(dev_data->irqs[irq_index]);
-		}
+		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
 		ipu_bus_notify_link_down(bus);
 		break;
 	default:
