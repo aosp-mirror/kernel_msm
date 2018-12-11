@@ -5557,7 +5557,7 @@ static int cs40l2x_brownout_config(struct cs40l2x_private *cs40l2x)
 					vpbr_thld1);
 			return -EINVAL;
 		}
-		vpbr_thld1_scaled = ((vpbr_thld1 - 2497) * 10 / 475) + 0x02;
+		vpbr_thld1_scaled = ((vpbr_thld1 - 2497) * 1000 / 47482) + 0x02;
 
 		ret = regmap_read(regmap, CS40L2X_VPBR_CFG, &val);
 		if (ret) {
@@ -5587,7 +5587,7 @@ static int cs40l2x_brownout_config(struct cs40l2x_private *cs40l2x)
 					vbbr_thld1);
 			return -EINVAL;
 		}
-		vbbr_thld1_scaled = ((vbbr_thld1 - 109) * 10 / 547) + 0x02;
+		vbbr_thld1_scaled = ((vbbr_thld1 - 109) * 1000 / 54688) + 0x02;
 
 		ret = regmap_read(regmap, CS40L2X_VBBR_CFG, &val);
 		if (ret) {
