@@ -428,7 +428,7 @@ static const enum stat_state chip_state_to_stat_state(
 	}
 }
 
-/* Caller must hold sc->state_lock */
+/* Caller must hold sc->set_state_lock */
 static void ab_sm_record_state_change(enum chip_state prev_state,
 		enum chip_state new_state,
 		struct ab_state_context *sc)
@@ -450,7 +450,6 @@ static void ab_sm_record_state_change(enum chip_state prev_state,
 			sc->state_stats[prev_stat_state].duration, time_diff);
 }
 
-/* Caller must hold sc->state_lock */
 static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
 	u32 to_chip_substate_id;
@@ -587,9 +586,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 	mutex_unlock(&sc->async_fifo_lock);
 
-	complete_all(&sc->state_change_comp);
-
-	dev_info(sc->dev, "AB state changed to %d\n", to_chip_substate_id);
 	dev_dbg(sc->dev, "IPU clk -> %s %dHz",
 		sc->blocks[BLK_IPU].current_state->clk_status == on ?
 			"on" : "off",
@@ -615,32 +611,16 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			"on" : "off",
 		sc->blocks[BLK_AON].current_state->clk_frequency);
 
+	dev_info(sc->dev, "AB state changed to %d\n", to_chip_substate_id);
+
+	complete_all(&sc->transition_comp);
+	complete_all(&sc->notify_comp);
+
 	return 0;
-}
-
-/* Caller must hold sc->state_lock */
-static int _ab_sm_set_state(struct ab_state_context *sc,
-		u32 dest_chip_substate_id)
-{
-	if (sc->dest_chip_substate_id == dest_chip_substate_id)
-		return 0;
-
-	if (!is_valid_transition(sc->curr_chip_substate_id,
-			dest_chip_substate_id)) {
-		dev_err(sc->dev,
-				"%s: invalid state change, current %u, requested %u\n",
-				__func__, sc->curr_chip_substate_id,
-				dest_chip_substate_id);
-		return -EINVAL;
-	}
-
-	sc->dest_chip_substate_id = dest_chip_substate_id;
-	return ab_sm_update_chip_state(sc);
 }
 
 static int state_change_task(void *ctx)
 {
-	struct ab_change_req req;
 	struct ab_state_context *sc = (struct ab_state_context *)ctx;
 	struct sched_param sp = {
 		.sched_priority = MAX_RT_PRIO - 1,
@@ -653,63 +633,67 @@ static int state_change_task(void *ctx)
 			ret);
 
 	while (!kthread_should_stop()) {
-		wait_for_completion(&sc->state_change_requested);
+		wait_for_completion(&sc->request_state_change_comp);
+		reinit_completion(&sc->request_state_change_comp);
 
-		// Optimization: Perform only last state change in queue?
-		while (!kfifo_is_empty(&sc->state_change_reqs) &&
-				!kthread_should_stop()) {
-			kfifo_out(&sc->state_change_reqs, &req, sizeof(req));
+		if (kthread_should_stop())
+			return 0;
 
-			mutex_lock(&sc->state_lock);
-			*req.ret_code = _ab_sm_set_state(sc, req.new_state);
-			mutex_unlock(&sc->state_lock);
-
-			complete(req.comp);
-		}
-
-		reinit_completion(&sc->state_change_requested);
+		mutex_lock(&sc->state_transitioning_lock);
+		sc->change_ret = ab_sm_update_chip_state(sc);
+		mutex_unlock(&sc->state_transitioning_lock);
 	}
 
 	return 0;
 }
 
+/* Caller must hold sc->set_state_lock */
+static int _ab_sm_set_state(struct ab_state_context *sc,
+		u32 dest_chip_substate_id)
+{
+	int ret;
+
+	if (sc->dest_chip_substate_id == dest_chip_substate_id)
+		return 0;
+
+	if (!is_valid_transition(sc->curr_chip_substate_id,
+			dest_chip_substate_id)) {
+		dev_err(sc->dev,
+				"%s: invalid state change, current %u, requested %u\n",
+				__func__, sc->curr_chip_substate_id,
+				dest_chip_substate_id);
+		return -EINVAL;
+	}
+
+	mutex_lock(&sc->state_transitioning_lock);
+	sc->dest_chip_substate_id = dest_chip_substate_id;
+	mutex_unlock(&sc->state_transitioning_lock);
+
+	complete_all(&sc->request_state_change_comp);
+
+	ret = wait_for_completion_timeout(
+			&sc->transition_comp,
+			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
+	reinit_completion(&sc->transition_comp);
+	if (ret == 0) {
+		dev_info(sc->dev, "State change timed out\n");
+		ret = -EAGAIN;
+	} else {
+		/* completion finished before timeout */
+		ret = sc->change_ret;
+	}
+
+	return ret;
+}
+
 int ab_sm_set_state(struct ab_state_context *sc, u32 dest_chip_substate_id)
 {
 	int ret;
-	struct ab_change_req req;
-	int *req_ret;
-	struct completion *comp;
 
-	req_ret = kzalloc(sizeof(int), GFP_KERNEL);
-	comp = kzalloc(sizeof(struct completion), GFP_KERNEL);
-	if (!req_ret || !comp) {
-		ret = -ENOMEM;
-		goto cleanup;
-	}
+	mutex_lock(&sc->set_state_lock);
+	ret = _ab_sm_set_state(sc, dest_chip_substate_id);
+	mutex_unlock(&sc->set_state_lock);
 
-	req.new_state = dest_chip_substate_id;
-	req.ret_code = req_ret;
-	init_completion(comp);
-	req.comp = comp;
-
-	kfifo_in(&sc->state_change_reqs, &req,
-			sizeof(struct ab_change_req));
-	complete_all(&sc->state_change_requested);
-
-	ret = wait_for_completion_interruptible_timeout(comp,
-			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
-	if (ret < 0) {
-		dev_info(sc->dev, "State change interrupted\n");
-		goto cleanup;
-	} else if (ret == 0) {
-		dev_info(sc->dev, "State change timed out\n");
-		goto cleanup;
-	}
-	ret = *req_ret;
-
-cleanup:
-	kfree(req_ret);
-	kfree(comp);
 	return ret;
 }
 EXPORT_SYMBOL(ab_sm_set_state);
@@ -718,9 +702,9 @@ enum chip_state ab_sm_get_state(struct ab_state_context *sc)
 {
 	enum chip_state ret;
 
-	mutex_lock(&sc->state_lock);
+	mutex_lock(&sc->state_transitioning_lock);
 	ret = sc->curr_chip_substate_id;
-	mutex_unlock(&sc->state_lock);
+	mutex_unlock(&sc->state_transitioning_lock);
 	return ret;
 }
 EXPORT_SYMBOL(ab_sm_get_state);
@@ -963,18 +947,18 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 					sizeof(chip_state)))
 				return -EFAULT;
 
-			reinit_completion(&sess->sc->state_change_comp);
+			reinit_completion(&sess->sc->notify_comp);
 			return 0;
 
 		} else {
 			ret = wait_for_completion_interruptible(
-					&sess->sc->state_change_comp);
+					&sess->sc->notify_comp);
 			if (ret < 0)
 				return ret;
 		}
 	}
 
-	reinit_completion(&sess->sc->state_change_comp);
+	reinit_completion(&sess->sc->notify_comp);
 
 	if (!kfifo_is_empty(&sess->async_entries)) {
 		kfifo_out(&sess->async_entries, &chip_state,
@@ -1020,7 +1004,7 @@ static int ab_sm_misc_release(struct inode *ip, struct file *fp)
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
 
-	complete_all(&sc->state_change_comp);
+	complete_all(&sc->notify_comp);
 
 	mutex_lock(&sc->async_fifo_lock);
 	if (&sess->async_entries == sc->async_entries)
@@ -1090,14 +1074,12 @@ static const struct file_operations ab_misc_fops = {
 static void ab_sm_thermal_throttle_state_updated(
 		enum throttle_state throttle_state_id, void *op_data)
 {
-	struct ab_state_context *ctx = op_data;
+	struct ab_state_context *sc = op_data;
 
-	ctx->throttle_state_id = throttle_state_id;
-	dev_dbg(ctx->dev, "Throttle state updated to %lu", throttle_state_id);
+	sc->throttle_state_id = throttle_state_id;
+	dev_dbg(sc->dev, "Throttle state updated to %lu", throttle_state_id);
 
-	mutex_lock(&ctx->state_lock);
-	ab_sm_update_chip_state(ctx);
-	mutex_unlock(&ctx->state_lock);
+	complete_all(&sc->request_state_change_comp);
 }
 
 static const struct ab_thermal_ops ab_sm_thermal_ops = {
@@ -1218,14 +1200,16 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->curr_chip_substate_id = CHIP_STATE_6_0;
 
 	mutex_init(&ab_sm_ctx->pmic_lock);
-	mutex_init(&ab_sm_ctx->state_lock);
+	mutex_init(&ab_sm_ctx->set_state_lock);
+	mutex_init(&ab_sm_ctx->state_transitioning_lock);
 	mutex_init(&ab_sm_ctx->async_fifo_lock);
 	mutex_init(&ab_sm_ctx->op_lock);
 	mutex_init(&ab_sm_ctx->mfd_lock);
 	atomic_set(&ab_sm_ctx->clocks_registered, 0);
 	atomic_set(&ab_sm_ctx->async_in_use, 0);
-	init_completion(&ab_sm_ctx->state_change_requested);
-	init_completion(&ab_sm_ctx->state_change_comp);
+	init_completion(&ab_sm_ctx->request_state_change_comp);
+	init_completion(&ab_sm_ctx->transition_comp);
+	init_completion(&ab_sm_ctx->notify_comp);
 	kfifo_alloc(&ab_sm_ctx->state_change_reqs,
 		AB_KFIFO_ENTRY_SIZE * sizeof(struct ab_change_req), GFP_KERNEL);
 
@@ -1272,7 +1256,9 @@ EXPORT_SYMBOL(ab_sm_init);
 void ab_sm_exit(struct platform_device *pdev)
 {
 	kthread_stop(ab_sm_ctx->state_change_task);
-	complete_all(&ab_sm_ctx->state_change_requested);
+	complete_all(&ab_sm_ctx->request_state_change_comp);
+	complete_all(&ab_sm_ctx->transition_comp);
+	complete_all(&ab_sm_ctx->notify_comp);
 	ab_sm_remove_sysfs(ab_sm_ctx);
 	ab_sm_remove_debugfs(ab_sm_ctx);
 }

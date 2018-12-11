@@ -404,6 +404,9 @@ struct ab_change_req {
  * @chip_state_table: Table which contains information about all chip states
  * @nr_chip_states: Number of possible chip states
  * @d_entry: debugfs entry directory
+ * @set_state_lock: locks calls to _ab_sm_set_state
+ * @state_transitioning_lock: locks dest_chip_substate_id and
+ *		curr_chip_substate_id during a transition
  */
 struct ab_state_context {
 	struct platform_device *pdev;
@@ -424,9 +427,13 @@ struct ab_state_context {
 
 	/* Synchronization structs */
 	struct mutex pmic_lock;
-	struct mutex state_lock;
-	struct completion state_change_requested;
-	struct completion state_change_comp;
+	struct mutex set_state_lock;
+	struct mutex state_transitioning_lock;
+	struct completion request_state_change_comp;
+	struct completion transition_comp;
+	struct completion notify_comp;
+
+	int change_ret;
 
 	/* pins used in bootsequence */
 	struct gpio_desc *soc_pwrgood;	/* output */

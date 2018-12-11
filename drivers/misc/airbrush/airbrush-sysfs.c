@@ -88,7 +88,7 @@ static ssize_t state_stats_show(struct device *dev,
 	pos += scnprintf(buf + pos, PAGE_SIZE - pos,
 			"Airbrush Subsystem Power Stats\n");
 
-	mutex_lock(&sc->state_lock);
+	mutex_lock(&sc->state_transitioning_lock);
 
 	for (i = 0; i < STAT_STATE_SIZE; i++) {
 		ktime_t adjusted_duration = sc->state_stats[i].duration;
@@ -115,7 +115,7 @@ static ssize_t state_stats_show(struct device *dev,
 				ktime_to_ms(last_exit));
 	}
 
-	mutex_unlock(&sc->state_lock);
+	mutex_unlock(&sc->state_transitioning_lock);
 
 	return pos;
 }
