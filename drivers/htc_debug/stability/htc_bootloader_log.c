@@ -39,9 +39,9 @@ struct bldr_log_header {
 };
 
 char *bl_last_log_buf, *bl_cur_log_buf;
-char *bl_last_tz_log_buf, *uart_status_buf;
+char *bl_last_tz_log_buf;
 unsigned long bl_last_log_buf_size, bl_cur_log_buf_size;
-size_t bl_last_tz_log_buf_size, uart_status_buf_size;
+size_t bl_last_tz_log_buf_size;
 
 static int bldr_log_check_header(struct bldr_log_header *header, unsigned long bldr_log_size)
 {
@@ -121,14 +121,6 @@ ssize_t bldr_log_read_once(char __user *userbuf, ssize_t klog_size)
 	return len;
 }
 
-static int __init uarton_status(char *str)
-{
-	uart_status_buf = "\nConsole is ENABLED";
-	uart_status_buf_size = strlen(uart_status_buf) + 1;
-	return 0;
-}
-__setup("uart=1", uarton_status);
-
 /**
  * Read last bootloader logs, current bootloader logs, kernel logs,
  * last bootloader TZ logs in that order.
@@ -151,8 +143,7 @@ ssize_t bldr_log_read(const void *lastk_buf, ssize_t lastk_size, char __user *us
 		{ .buf = bl_last_log_buf,    .size = bl_last_log_buf_size },
 		{ .buf = bl_cur_log_buf,     .size = bl_cur_log_buf_size, },
 		{ .buf = lastk_buf,	     .size = lastk_size },
-		{ .buf = bl_last_tz_log_buf, .size = bl_last_tz_log_buf_size },
-		{ .buf = uart_status_buf,    .size = uart_status_buf_size }
+		{ .buf = bl_last_tz_log_buf, .size = bl_last_tz_log_buf_size }
 	};
 
 	pos = *ppos;
