@@ -83,3 +83,40 @@ void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value)
 {
 	abc_pcie_config_write(hw->base + offset, 4, value);
 }
+
+u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id)
+{
+	/*
+	 * Current temperature register is grouped by 0~1, 2~4, 5~7, shown
+	 * as register macro AIRBRUSH_TMU_REG_CURRENT_TEMP*.
+	 * reg_id_min is the minimum id in the group.
+	 */
+	u32 reg_offset, reg_id_min, reg_shift;
+
+	switch (id) {
+	case 0:
+	case 1:
+		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP0_1;
+		reg_id_min = 0;
+		break;
+	case 2:
+	case 3:
+	case 4:
+		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP2_4;
+		reg_id_min = 2;
+		break;
+	case 5:
+	case 6:
+	case 7:
+		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP5_7;
+		reg_id_min = 5;
+		break;
+	default:
+		dev_warn(hw->dev, "Bug: bad sensor probe id %d", id);
+		return 0;
+	}
+	reg_shift = AIRBRUSH_TMU_TEMP_SHIFT * (id - reg_id_min);
+
+	return (ab_tmu_hw_read(hw, reg_offset) >> reg_shift)
+			& AIRBRUSH_TMU_TEMP_MASK;
+}

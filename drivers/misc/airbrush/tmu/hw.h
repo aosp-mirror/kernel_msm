@@ -26,6 +26,8 @@ void devm_ab_tmu_hw_destroy(struct ab_tmu_hw *hw);
 u32 ab_tmu_hw_read(struct ab_tmu_hw *hw, u32 offset);
 void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value);
 
+u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
+
 /* Exynos generic registers */
 #define AIRBRUSH_TMU_REG_TRIMINFO	0x0
 #define AIRBRUSH_TMU_REG_TRIMINFO_P(n)	((0x0) + ((n)*4))

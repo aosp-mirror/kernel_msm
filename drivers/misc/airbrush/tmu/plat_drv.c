@@ -142,12 +142,6 @@ static void airbrush_tmu_clear_irqs(struct airbrush_tmu_data *data)
 	}
 }
 
-static int airbrush_tmu_read(struct airbrush_tmu_data *data)
-{
-	return ab_tmu_hw_read(data->hw, AIRBRUSH_TMU_REG_CURRENT_TEMP0_1) &
-		AIRBRUSH_TMU_TEMP_MASK;
-}
-
 static void airbrush_tmu_work(struct work_struct *work)
 {
 	struct airbrush_tmu_data *data = container_of(work,
@@ -364,6 +358,8 @@ static void airbrush_tmu_control(struct platform_device *pdev, bool on)
 static int airbrush_get_temp(void *p, int *temp)
 {
 	struct airbrush_tmu_data *data = p;
+	struct ab_tmu_hw *hw = data->hw;
+	int code;
 
 	if (!data)
 		return -EINVAL;
@@ -373,9 +369,9 @@ static int airbrush_get_temp(void *p, int *temp)
 	 * Return 0 degree Celsius while TMU is not ready to suppress the
 	 * error log while reading the temperature.
 	 */
+	code = ab_tmu_hw_read_current_temp(hw, 0);
 	*temp = (tmu_read_enable && data->pcie_link_ready) ?
-		code_to_temp(data, airbrush_tmu_read(data), 0) * MCELSIUS:
-		0;
+			code_to_temp(data, code, 0) * MCELSIUS : 0;
 	mutex_unlock(&data->pcie_link_lock);
 	return 0;
 }
@@ -502,47 +498,14 @@ static struct thermal_zone_of_device_ops airbrush_sensor_ops = {
 	.set_emul_temp = airbrush_tmu_set_emulation,
 };
 
-static inline int airbrush_tmu_get_current_temp(struct airbrush_tmu_data *data,
-		int id)
-{
-	struct ab_tmu_hw *hw = data->hw;
-	u32 reg_offset, reg_id_min, reg_shift;
-	u32 code;
-
-	switch (id) {
-	case 0:
-	case 1:
-		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP0_1;
-		reg_id_min = 0;
-		break;
-	case 2:
-	case 3:
-	case 4:
-		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP2_4;
-		reg_id_min = 2;
-		break;
-	case 5:
-	case 6:
-	case 7:
-		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP5_7;
-		reg_id_min = 5;
-		break;
-	default:
-		pr_warn("Bug: bad sensor probe id %d", id);
-		return 0;
-	}
-	reg_shift = AIRBRUSH_TMU_TEMP_SHIFT * (id - reg_id_min);
-
-	code = (ab_tmu_hw_read(hw, reg_offset) >> reg_shift)
-			& AIRBRUSH_TMU_TEMP_MASK;
-	return code_to_temp(data, code, id);
-}
-
 static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
 {
 	struct airbrush_tmu_data *data = dev_get_drvdata(dev);
-	int temp = airbrush_tmu_get_current_temp(data, id);
+	struct ab_tmu_hw *hw = data->hw;
+	int code, temp;
 
+	code = ab_tmu_hw_read_current_temp(hw, id);
+	temp = code_to_temp(data, code, id);
 	return scnprintf(buf, PAGE_SIZE, "%d\n", temp);
 }
 
