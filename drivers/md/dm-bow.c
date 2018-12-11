@@ -6,7 +6,6 @@
 
 #include "dm.h"
 #include "dm-bufio.h"
-#include "dm-core.h"
 
 #include <linux/crc32.h>
 #include <linux/module.h>
@@ -846,7 +845,7 @@ static void bow_write(struct work_struct *work)
 
 	if (!ret) {
 		bio->bi_bdev = bc->dev->bdev;
-		submit_bio(bio);
+		submit_bio(WRITE, bio);
 	} else {
 		DMERR("Write failure with error %d", -ret);
 		bio->bi_error = ret;
@@ -891,7 +890,7 @@ static int handle_sector0(struct bow_context *bc, struct bio *bio)
 			if (ret == DM_MAPIO_SUBMITTED)
 				ret = DM_MAPIO_REMAPPED;
 		} else {
-			submit_bio(split);
+			submit_bio(READ, split);
 		}
 	}
 
@@ -916,7 +915,7 @@ static int dm_bow_map(struct dm_target *ti, struct bio *bio)
 
 		mutex_lock(&bc->ranges_lock);
 		state = atomic_read(&bc->state);
-		if (state == TRIM && bio_op(bio) == REQ_OP_DISCARD) {
+		if (state == TRIM && bio->bi_rw & REQ_DISCARD) {
 			struct bow_range *br;
 
 			DMDEBUG("Trim: %lu, %u",
