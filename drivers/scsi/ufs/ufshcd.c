@@ -172,12 +172,11 @@ static void ufshcd_update_tag_stats_completion(struct ufs_hba *hba,
 		hba->ufs_stats.q_depth--;
 }
 
-static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
+static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
+		s64 delta)
 {
 	int rq_type;
 	struct request *rq = lrbp->cmd ? lrbp->cmd->request : NULL;
-	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
-		lrbp->issue_time_stamp);
 
 	/* Log for slow I/O */
 	ufshcd_log_slowio(hba, lrbp, delta);
@@ -274,11 +273,8 @@ static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 }
 
 static inline
-void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
+void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp, s64 delta)
 {
-	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
-		lrbp->issue_time_stamp);
-
 	/* Log for slow I/O */
 	ufshcd_log_slowio(hba, lrbp, delta);
 }
@@ -755,6 +751,9 @@ static void __ufshcd_cmd_log(struct ufs_hba *hba, char *str, char *cmd_type,
 	entry->tag = tag;
 	entry->tstamp = ktime_get();
 	entry->outstanding_reqs = hba->outstanding_reqs;
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	entry->delayed_reqs = hba->delayed_reqs;
+#endif
 	entry->seq_num = hba->cmd_log.seq_num;
 	hba->cmd_log.seq_num++;
 	hba->cmd_log.pos =
@@ -794,13 +793,23 @@ static void ufshcd_print_cmd_log(struct ufs_hba *hba)
 		pos = (pos + 1) % UFSHCD_MAX_CMD_LOGGING;
 
 		if (ktime_to_us(p->tstamp)) {
+#ifndef CONFIG_SCSI_UFS_IMPAIRED
 			pr_err("%s: %s: seq_no=%u lun=0x%x cmd_id=0x%02x lba=0x%llx txfer_len=%u tag=%u, doorbell=0x%x outstanding=0x%x idn=%d time=%lld us\n",
 				p->cmd_type, p->str, p->seq_num,
 				p->lun, p->cmd_id, (unsigned long long)p->lba,
 				p->transfer_len, p->tag, p->doorbell,
 				p->outstanding_reqs, p->idn,
 				ktime_to_us(p->tstamp));
-				usleep_range(1000, 1100);
+#else
+			pr_err("%s: %s: seq_no=%u lun=0x%x cmd_id=0x%02x lba=0x%llx txfer_len=%u tag=%u, doorbell=0x%x outstanding=0x%x delayed=0x%x idn=%d time=%lld us\n",
+				p->cmd_type, p->str, p->seq_num,
+				p->lun, p->cmd_id, (unsigned long long)p->lba,
+				p->transfer_len, p->tag, p->doorbell,
+				p->outstanding_reqs, p->delayed_reqs, p->idn,
+				ktime_to_us(p->tstamp));
+#endif
+
+			usleep_range(1000, 1100);
 		}
 	}
 }
@@ -947,6 +956,9 @@ static inline void __ufshcd_print_host_regs(struct ufs_hba *hba, bool no_sleep)
 	dev_err(hba->dev,
 		"hba->outstanding_reqs = 0x%x, hba->outstanding_tasks = 0x%x",
 		(u32)hba->outstanding_reqs, (u32)hba->outstanding_tasks);
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	dev_err(hba->dev, "hba->delayed_reqs=0x%x", (u32)hba->delayed_reqs);
+#endif
 	dev_err(hba->dev,
 		"last_hibern8_exit_tstamp at %lld us, hibern8_exit_cnt = %d",
 		ktime_to_us(hba->ufs_stats.last_hibern8_exit_tstamp),
@@ -1076,6 +1088,9 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 		hba->dev_info.lifetime_c);
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_reqs, hba->outstanding_tasks);
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	dev_err(hba->dev, "delayed reqs=0x%lx\n", hba->delayed_reqs);
+#endif
 	dev_err(hba->dev, "saved_err=0x%x, saved_uic_err=0x%x, saved_ce_err=0x%x\n",
 		hba->saved_err, hba->saved_uic_err, hba->saved_ce_err);
 	dev_err(hba->dev, "Device power mode=%d, UIC link state=%d\n",
@@ -3338,15 +3353,6 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	/* Vote PM QoS for the request */
 	ufshcd_vops_pm_qos_req_start(hba, cmd->request);
 
-	/* IO svc time latency histogram */
-	if (hba->latency_hist_enabled &&
-	    (cmd->request->cmd_type == REQ_TYPE_FS)) {
-		cmd->request->lat_hist_io_start = ktime_get();
-		cmd->request->lat_hist_enabled = 1;
-	} else {
-		cmd->request->lat_hist_enabled = 0;
-	}
-
 	WARN_ON(hba->clk_gating.state != CLKS_ON);
 
 	lrbp = &hba->lrb[tag];
@@ -3360,6 +3366,10 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	lrbp->intr_cmd = !ufshcd_is_intr_aggr_allowed(hba) ? true : false;
 	lrbp->command_type = UTP_CMD_TYPE_SCSI;
 	lrbp->req_abort_skip = false;
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	INIT_LIST_HEAD(&lrbp->list);
+#endif
 
 	/* form UPIU before issuing the command */
 	err = ufshcd_compose_upiu(hba, lrbp);
@@ -5965,6 +5975,7 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 	u8 index;
 	struct ufshcd_lrb *lrbp;
 	struct scsi_cmnd *cmd;
+	s64 delta_us;
 
 	if (!hba->outstanding_reqs)
 		return;
@@ -5982,7 +5993,9 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 			ufshcd_clear_cmd(hba, index);
 			ufshcd_outstanding_req_clear(hba, index);
 			lrbp->complete_time_stamp = ktime_get();
-			update_req_stats(hba, lrbp);
+			delta_us = ktime_us_delta(lrbp->complete_time_stamp,
+					lrbp->issue_time_stamp);
+			update_req_stats(hba, lrbp, delta_us);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
 			clear_bit_unlock(index, &hba->lrb_in_use);
@@ -6014,64 +6027,77 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 }
 
 /**
+ * ufshcd_complete_lrb - complete a UFS command
+ * @hba: per adapter instance
+ * @lrbp: pointer to local reference block to complete
+ */
+void ufshcd_complete_lrb(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
+{
+	struct scsi_cmnd *cmd = lrbp->cmd;
+	int index = lrbp - hba->lrb;
+	s64 delta_us = ktime_us_delta(lrbp->complete_time_stamp,
+			lrbp->issue_time_stamp);
+
+	ufshcd_cond_add_cmd_trace(hba, index, "scsi_cmpl");
+	ufshcd_update_tag_stats_completion(hba, cmd);
+	update_io_stat(hba, index, 0);
+	update_req_stats(hba, lrbp, delta_us);
+
+	/* Update IO svc time latency histogram */
+	if (hba->latency_hist_enabled &&
+	    (cmd->request->cmd_type == REQ_TYPE_FS)) {
+		blk_update_latency_hist(
+				(rq_data_dir(cmd->request) ==
+				 READ)? &hba->io_lat_read:
+				&hba->io_lat_write, delta_us);
+	}
+
+	lrbp->cmd = NULL;
+
+	/* Do not touch lrbp after scsi done */
+	cmd->scsi_done(cmd);
+	clear_bit_unlock(index, &hba->lrb_in_use);
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	__clear_bit(index, &hba->delayed_reqs);
+#endif
+}
+
+/**
  * __ufshcd_transfer_req_compl - handle SCSI and query command completion
  * @hba: per adapter instance
  * @completed_reqs: requests to complete
  */
 static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
-					unsigned long completed_reqs)
+		unsigned long completed_reqs)
 {
 	struct ufshcd_lrb *lrbp;
 	struct scsi_cmnd *cmd;
-	int result;
 	int index;
 
 	for_each_set_bit(index, &completed_reqs, hba->nutrs) {
 		lrbp = &hba->lrb[index];
 		cmd = lrbp->cmd;
 		if (cmd) {
-			ufshcd_cond_add_cmd_trace(hba, index, "scsi_cmpl");
-			ufshcd_update_tag_stats_completion(hba, cmd);
-			update_io_stat(hba, index, 0);
-			result = ufshcd_transfer_rsp_status(hba, lrbp);
+			cmd->result = ufshcd_transfer_rsp_status(hba, lrbp);
 			scsi_dma_unmap(cmd);
-			cmd->result = result;
-			lrbp->complete_time_stamp = ktime_get();
-			update_req_stats(hba, lrbp);
-			/* Mark completed command as NULL in LRB */
-			lrbp->cmd = NULL;
-			clear_bit_unlock(index, &hba->lrb_in_use);
 			hba->ufs_stats.clk_rel.ctx = XFR_REQ_COMPL;
 			__ufshcd_release(hba, false);
 			__ufshcd_hibern8_release(hba, false);
 			if (cmd->request) {
-				/*
-				 * As we are accessing the "request" structure,
-				 * this must be called before calling
-				 * ->scsi_done() callback.
-				 */
-				ufshcd_vops_pm_qos_req_end(hba, cmd->request,
-					false);
-				ufshcd_vops_crypto_engine_cfg_end(hba,
-					lrbp, cmd->request);
-
-				/* Update IO svc time latency histogram */
-				if (cmd->request->lat_hist_enabled) {
-					ktime_t completion;
-					u_int64_t delta_us;
-
-					completion = ktime_get();
-					delta_us = ktime_us_delta(completion,
-						cmd->request->
-							lat_hist_io_start);
-					blk_update_latency_hist(
-						(rq_data_dir(cmd->request) ==
-						READ)? &hba->io_lat_read:
-						&hba->io_lat_write, delta_us);
-				}
+				ufshcd_vops_pm_qos_req_end(
+						hba, cmd->request, false);
+				ufshcd_vops_crypto_engine_cfg_end(
+						hba, lrbp, cmd->request);
 			}
-			/* Do not touch lrbp after scsi done */
-			cmd->scsi_done(cmd);
+
+			lrbp->complete_time_stamp = ktime_get();
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+			ufs_impaired_delay_completion(hba, lrbp);
+#else
+			ufshcd_complete_lrb(hba, lrbp);
+#endif
 		} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE) {
 			if (hba->dev_cmd.complete) {
 				ufshcd_cond_add_cmd_trace(hba, index,
@@ -10600,6 +10626,9 @@ static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 		dev_err(hba->dev, "Failed to create default sysfs group\n");
 	if (sysfs_create_group(&hba->dev->kobj, &ufshcd_health_attr_group))
 		dev_err(hba->dev, "Failed to create health sysfs group\n");
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	ufs_impaired_init_sysfs(hba);
+#endif
 }
 
 static void __ufshcd_shutdown_clkscaling(struct ufs_hba *hba)
@@ -10690,6 +10719,9 @@ EXPORT_SYMBOL(ufshcd_shutdown);
  */
 void ufshcd_remove(struct ufs_hba *hba)
 {
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	ufs_impaired_exit(hba);
+#endif
 	ufshpb_release(hba, HPB_NEED_INIT);
 	scsi_remove_host(hba->host);
 	/* disable interrupts */
@@ -11330,6 +11362,10 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	hba->slowio[UFSHCD_SLOWIO_SYNC][UFSHCD_SLOWIO_US] =
 		UFSHCD_DEFAULT_SLOWIO_SYNC_US;
 	ufshcd_update_slowio_min_us(hba);
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	ufs_impaired_init(hba);
+#endif
 
 	/* Initailize wait queue for task management */
 	init_waitqueue_head(&hba->tm_wq);

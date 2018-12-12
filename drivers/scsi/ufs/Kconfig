@@ -135,3 +135,17 @@ config SCSI_UFSHCD_HPB_ACTIVATE
 	default 1
 	help
 	  Activate or deactive UFSHPB v1.3.5 test driver
+
+config SCSI_UFS_IMPAIRED
+	bool "Impaired storage emulation support"
+	depends on SCSI_UFSHCD
+	---help---
+	This selects UFS driver to support impaired storage emulation.
+	Articificial delay will be added for each UFS command.
+
+config SCSI_UFS_IMPAIRED_FRAGFTL
+	bool "Impaired storage emulation support for fragmented FTL"
+	depends on SCSI_UFSHCD && SCSI_UFS_IMPAIRED
+	---help---
+	This selects UFS driver to support impaired storage emulation
+	with a latency model from fragmented FTL.
