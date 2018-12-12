@@ -292,36 +292,9 @@ static long ipu_client_get_capabilities_ioctl(struct paintbox_data *pb,
 		struct paintbox_session *session, unsigned long arg)
 {
 	struct paintbox_pdata *pdata = pb->dev->platform_data;
-	struct ipu_capabilities_rsp caps;
-	uint32_t version;
 
-	memset(&caps, 0, sizeof(caps));
-
-	caps.num_lbps = pb->lbp.num_lbps;
-	caps.num_stps = pb->stp.num_stps;
-	caps.num_dma_channels = pb->dma.num_channels;
-	caps.num_interrupts = pb->dma.num_channels + pb->stp.num_stps +
-			NUM_BIF_INTERRUPTS + NUM_MMU_INTERRUPTS;
-
-	version = IPU_VERSION_DEF;
-	caps.version_major = (version & IPU_VERSION_MAJOR_MASK) >>
-			IPU_VERSION_MAJOR_SHIFT;
-	caps.version_minor = (version & IPU_VERSION_MINOR_MASK) >>
-			IPU_VERSION_MAJOR_SHIFT;
-	caps.version_build = version & IPU_VERSION_INCR_MASK;
-	caps.is_fpga = !!(version & IPU_VERSION_FPGA_BUILD_MASK);
-
-#if IS_ENABLED(CONFIG_IPU_SIM_ADAPTER)
-	caps.is_simulator = true;
-#endif
-
-#if IS_ENABLED(CONFIG_PAINTBOX_AIRBRUSH_IOMMU)
-	caps.iommu_enabled = iommu_present(&ipu_bus_type);
-#endif
-
-	caps.hardware_id = pdata->hardware_id;
-
-	if (copy_to_user((void __user *)arg, &caps, sizeof(caps)))
+	if (copy_to_user((void __user *)arg, &pdata->capabilities,
+			sizeof(pdata->capabilities)))
 		return -EFAULT;
 
 	return 0;
@@ -382,41 +355,14 @@ static const struct file_operations ipu_client_fops = {
 static void ipu_client_get_capabilities(struct paintbox_data *pb)
 {
 	struct paintbox_pdata *pdata = pb->dev->platform_data;
-	uint8_t major, minor, build;
-	uint32_t val;
-	bool is_fpga;
-
-	val = IPU_VERSION_DEF;
-	major = (val & IPU_VERSION_MAJOR_MASK) >> IPU_VERSION_MAJOR_SHIFT;
-	minor = (val & IPU_VERSION_MINOR_MASK) >> IPU_VERSION_MAJOR_SHIFT;
-	build = val & IPU_VERSION_INCR_MASK;
-	is_fpga = !!(val & IPU_VERSION_FPGA_BUILD_MASK);
-
-	val = IPU_CAP_DEF;
-	pb->stp.num_stps = val & IPU_CAP_NUM_STP_MASK;
 
 	/* STP ids start at 1. */
+	pb->stp.num_stps =  pdata->capabilities.num_stps;
 	pb->stp.available_stp_mask = ((1ULL << pb->stp.num_stps) - 1) << 1;
-	pb->lbp.num_lbps = (val & IPU_CAP_NUM_LBP_MASK) >>
-		IPU_CAP_NUM_LBP_SHIFT;
+	pb->lbp.num_lbps =  pdata->capabilities.num_lbps;
 	pb->lbp.available_lbp_mask = (1ULL << pb->lbp.num_lbps) - 1;
-	pb->dma.num_channels = (val & IPU_CAP_NUM_DMA_CHAN_MASK) >>
-			IPU_CAP_NUM_DMA_CHAN_SHIFT;
+	pb->dma.num_channels =  pdata->capabilities.num_dma_channels;
 	pb->dma.available_channel_mask = (1ULL << pb->dma.num_channels) - 1;
-
-#if IS_ENABLED(CONFIG_IPU_SIM_ADAPTER)
-	dev_dbg(pb->dev,
-			"Paintbox IPU Version %u.%u.%u Simulator Hardware ID %u\n",
-			major, minor, build, pdata->hardware_id);
-#else
-	dev_dbg(pb->dev, "Paintbox IPU Version %u.%u.%u %s Hardware ID %u\n",
-			major, minor, build, is_fpga ? "FPGA" : "",
-			pdata->hardware_id);
-#endif
-	dev_dbg(pb->dev,
-			"STPs %u LBPs %u DMA Channels %u\n",
-			pb->stp.num_stps, pb->lbp.num_lbps,
-			pb->dma.num_channels);
 }
 
 static void ipu_client_firmware_down(struct device *dev)

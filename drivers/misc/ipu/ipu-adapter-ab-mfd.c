@@ -535,11 +535,49 @@ static void ipu_adapter_ab_mfd_set_platform_data(struct platform_device *pdev,
 	pdata->dma_base = PAINTBOX_IOVA_START;
 	pdata->dma_size = PAINTBOX_IOVA_SIZE;
 
+	pdata->capabilities.version_major =
+			(IPU_VERSION_DEF & IPU_VERSION_MAJOR_MASK) >>
+					IPU_VERSION_MAJOR_SHIFT;
+	pdata->capabilities.version_minor =
+			(IPU_VERSION_DEF & IPU_VERSION_MINOR_MASK) >>
+					IPU_VERSION_MAJOR_SHIFT;
+	pdata->capabilities.version_build =
+			IPU_VERSION_DEF & IPU_VERSION_INCR_MASK;
+	pdata->capabilities.is_fpga =
+			!!(IPU_VERSION_DEF & IPU_VERSION_FPGA_BUILD_MASK);
+
 	/* TODO(b/115434021):  Figure out how to get the hardware ID from the
 	 * MFD if it is possible.  Otherwise we will need a lookup table and
 	 * use the the IPU_VERSION register to reconcile it.
 	 */
-	pdata->hardware_id = 11;
+	pdata->capabilities.hardware_id = 11;
+
+	pdata->capabilities.is_simulator = false;
+	dev_dbg(&pdev->dev, "Paintbox IPU Version %u.%u.%u %s Hardware ID %u\n",
+			pdata->capabilities.version_major,
+			pdata->capabilities.version_minor,
+			pdata->capabilities.version_build,
+			pdata->capabilities.is_fpga ? "FPGA" : "",
+			pdata->capabilities.hardware_id);
+
+	pdata->capabilities.iommu_enabled = iommu_present(&ipu_bus_type);
+
+	pdata->capabilities.num_stps = IPU_CAP_DEF & IPU_CAP_NUM_STP_MASK;
+	pdata->capabilities.num_lbps = (IPU_CAP_DEF & IPU_CAP_NUM_LBP_MASK) >>
+			IPU_CAP_NUM_LBP_SHIFT;
+	pdata->capabilities.num_dma_channels =
+			(IPU_CAP_DEF & IPU_CAP_NUM_DMA_CHAN_MASK) >>
+					IPU_CAP_NUM_DMA_CHAN_SHIFT;
+	pdata->capabilities.num_interrupts =
+			pdata->capabilities.num_dma_channels +
+			pdata->capabilities.num_stps + NUM_BIF_INTERRUPTS +
+			NUM_MMU_INTERRUPTS;
+
+	dev_dbg(&pdev->dev,
+			"STPs %u LBPs %u DMA Channels %u\n",
+			pdata->capabilities.num_stps,
+			pdata->capabilities.num_lbps,
+			pdata->capabilities.num_dma_channels);
 }
 
 static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)

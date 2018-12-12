@@ -28,6 +28,7 @@
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
 
+#include <uapi/ipu.h>
 
 struct paintbox_pdata {
 	unsigned long page_size_bitmap;
@@ -35,7 +36,7 @@ struct paintbox_pdata {
 	unsigned int output_address_size;
 	uint64_t dma_base;
 	uint64_t dma_size;
-	uint32_t hardware_id;
+	struct ipu_capabilities_rsp capabilities;
 };
 
 /* Upcall interface between the common paintbox bus layer and the paintbox
@@ -128,7 +129,6 @@ void ipu_writel(struct device *dev, uint32_t val, unsigned int offset);
 void ipu_writeq(struct device *dev, uint64_t val, unsigned int offset);
 uint32_t ipu_readl(struct device *dev, unsigned int offset);
 uint64_t ipu_readq(struct device *dev, unsigned int offset);
-
 
 int ipu_alloc_memory(struct device *dev, size_t size,
 		struct paintbox_shared_buffer *shared_buffer);
