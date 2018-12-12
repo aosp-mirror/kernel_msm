@@ -410,6 +410,7 @@ struct smb_charger {
 	struct mutex		dpdm_lock;
 	struct mutex		dc_reset_lock;
 	struct mutex		typec_lock;
+	spinlock_t		moisture_detection_enable;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
@@ -645,6 +646,7 @@ struct smb_charger {
 	/* logging */
 	struct logbuffer *log;
 #endif
+	bool moisture_detection_enabled;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -878,4 +880,5 @@ int smblib_set_prop_otg_fastroleswap(struct smb_charger *chg,
 				     const union power_supply_propval *val);
 int smblib_get_prop_otg_fastroleswap(struct smb_charger *chg,
 				     union power_supply_propval *val);
+int enable_moisture_detection(struct smb_charger *chg, bool enable);
 #endif /* __SMB5_CHARGER_H */
