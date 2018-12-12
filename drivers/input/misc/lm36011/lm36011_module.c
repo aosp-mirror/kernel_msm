@@ -199,6 +199,32 @@ static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x00, 0x00},
 };
 
+static int sx9320_write_data(
+	struct led_laser_ctrl_t *ctrl,
+	uint32_t addr,
+	uint32_t data)
+{
+	int rc;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings;
+
+	reg_settings.reg_addr = addr;
+	reg_settings.reg_data = data;
+	reg_settings.delay = 0;
+	write_setting.reg_setting = &reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 0;
+	rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
+		&write_setting);
+	if (rc < 0)
+		dev_err(ctrl->soc_info.dev,
+			"write 0x%x to cap sense 0x%x failed", data, addr);
+
+	return rc;
+}
+
 int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 {
 	int rc, i;
@@ -228,7 +254,6 @@ int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 
 	return rc;
 }
-
 
 static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 {
@@ -1304,6 +1329,42 @@ static ssize_t cap_sense_proxvalue_show(struct device *dev,
 	return rc;
 }
 
+static ssize_t cap_sense_write_byte_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	uint32_t value = 0;
+	uint32_t addr;
+	uint32_t data;
+	int rc;
+
+	if (!ctrl->cap_sense.is_power_up || !ctrl->cap_sense.is_cci_init) {
+		dev_warn(dev, "try to enable laser first");
+		return -EINVAL;
+	}
+
+	rc = kstrtouint(buf, 0, &value);
+
+	if (rc < 0)
+		return -EFAULT;
+	if ((value & 0xFFFF0000) != 0) {
+		dev_err(dev, "value %x out of boundary", value);
+		return -EINVAL;
+	}
+
+	addr = (value >> 8) & 0xFF;
+	data = value & 0xFF;
+
+	rc = sx9320_write_data(ctrl, addr, data);
+	if (rc < 0) {
+		dev_err(dev, "%s i2c write failed: %d.", __func__, rc);
+		return -EFAULT;
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
 static DEVICE_ATTR_WO(led_laser_write_byte);
@@ -1314,6 +1375,7 @@ static DEVICE_ATTR_RO(silego_is_cap_sense_halt);
 static DEVICE_ATTR_RO(is_certified);
 static DEVICE_ATTR_RO(is_cap_sense_validated);
 static DEVICE_ATTR_RO(cap_sense_proxvalue);
+static DEVICE_ATTR_WO(cap_sense_write_byte);
 
 static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_enable.attr,
@@ -1326,6 +1388,7 @@ static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_is_certified.attr,
 	&dev_attr_is_cap_sense_validated.attr,
 	&dev_attr_cap_sense_proxvalue.attr,
+	&dev_attr_cap_sense_write_byte.attr,
 	NULL
 };
 
