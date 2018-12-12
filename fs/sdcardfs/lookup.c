@@ -18,7 +18,6 @@
  * General Public License.
  */
 
-#define __FS_HAS_ENCRYPTION IS_ENABLED(CONFIG_FS_ENCRYPTION)
 #include <linux/fscrypt.h>
 #include "sdcardfs.h"
 #include "linux/delay.h"
