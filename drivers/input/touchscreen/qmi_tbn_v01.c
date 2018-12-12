@@ -15,10 +15,9 @@
  *
  */
 
-#include <linux/qmi_encdec.h>
 #include "qmi_tbn_v01.h"
 
-struct elem_info tbn_kernel_request_bus_v01_ei[] = {
+struct qmi_elem_info tbn_kernel_request_bus_v01_ei[] = {
 	{
 		.data_type = QMI_EOTI,
 		.is_array = NO_ARRAY,
@@ -26,7 +25,7 @@ struct elem_info tbn_kernel_request_bus_v01_ei[] = {
 	},
 };
 
-struct elem_info tbn_kernel_release_bus_v01_ei[] = {
+struct qmi_elem_info tbn_kernel_release_bus_v01_ei[] = {
 	{
 		.data_type = QMI_EOTI,
 		.is_array = NO_ARRAY,
@@ -34,7 +33,7 @@ struct elem_info tbn_kernel_release_bus_v01_ei[] = {
 	},
 };
 
-struct elem_info tbn_ssc_release_bus_v01_ei[] = {
+struct qmi_elem_info tbn_ssc_release_bus_v01_ei[] = {
 	{
 		.data_type = QMI_STRUCT,
 		.elem_len = 1,
@@ -42,7 +41,7 @@ struct elem_info tbn_ssc_release_bus_v01_ei[] = {
 		.is_array = NO_ARRAY,
 		.tlv_type = 0x02,
 		.offset = offsetof(struct tbn_ssc_release_bus_v01, resp),
-		.ei_array = get_qmi_response_type_v01_ei(),
+		.ei_array = qmi_response_type_v01_ei,
 	},
 	{
 		.data_type = QMI_EOTI,
@@ -51,7 +50,7 @@ struct elem_info tbn_ssc_release_bus_v01_ei[] = {
 	},
 };
 
-struct elem_info tbn_ssc_acquire_bus_v01_ei[] = {
+struct qmi_elem_info tbn_ssc_acquire_bus_v01_ei[] = {
 	{
 		.data_type = QMI_STRUCT,
 		.elem_len = 1,
@@ -59,7 +58,7 @@ struct elem_info tbn_ssc_acquire_bus_v01_ei[] = {
 		.is_array = NO_ARRAY,
 		.tlv_type = 0x02,
 		.offset = offsetof(struct tbn_ssc_acquire_bus_v01, resp),
-		.ei_array = get_qmi_response_type_v01_ei(),
+		.ei_array = qmi_response_type_v01_ei,
 	},
 	{
 		.data_type = QMI_EOTI,

@@ -18,10 +18,10 @@ config TOUCHSCREEN_PROPERTIES
 	depends on INPUT
 
 config TOUCHSCREEN_TBN
-	tristate "Touch Bus Negotiator for Pixel 2018"
-	depends on MSM_QMI_INTERFACE
+	tristate "Touch Bus Negotiator for Pixel 2019"
+	depends on QCOM_QMI_HELPERS
 	help
-	  Say Y here if you have a Google Pixel 2018 device. This module enables
+	  Say Y here if you have a Google Pixel 2019 device. This module enables
 	  support for kernel touch drivers to coordinate bus access with remote
 	  processors (e.g. sensor DSP processor), which is required to enable
 	  low power touch gesture detection in processors other than AP.

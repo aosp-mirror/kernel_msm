@@ -18,7 +18,7 @@
 #ifndef QMI_TBN_V01_H
 #define QMI_TBN_V01_H
 
-#include <soc/qcom/msm_qmi_interface.h>
+#include <linux/soc/qcom/qmi.h>
 
 #define TBN_SERVICE_ID_V01 232
 #define TBN_SERVICE_VERS_V01 1
@@ -34,28 +34,28 @@ struct tbn_kernel_request_bus_v01 {
 	char placeholder;
 };
 #define TBN_KERNEL_REQUEST_BUS_V01_MAX_MSG_LEN 0
-extern struct elem_info tbn_kernel_request_bus_v01_ei[];
+extern struct qmi_elem_info tbn_kernel_request_bus_v01_ei[];
 
 
 struct tbn_kernel_release_bus_v01 {
 	char placeholder;
 };
 #define TBN_KERNEL_RELEASE_BUS_V01_MAX_MSG_LEN 0
-extern struct elem_info tbn_kernel_release_bus_v01_ei[];
+extern struct qmi_elem_info tbn_kernel_release_bus_v01_ei[];
 
 
 struct tbn_ssc_release_bus_v01 {
 	struct qmi_response_type_v01 resp;
 };
 #define TBN_SSC_RELEASE_BUS_V01_MAX_MSG_LEN 7
-extern struct elem_info tbn_ssc_release_bus_v01_ei[];
+extern struct qmi_elem_info tbn_ssc_release_bus_v01_ei[];
 
 
 struct tbn_ssc_acquire_bus_v01 {
 	struct qmi_response_type_v01 resp;
 };
 #define TBN_SSC_ACQUIRE_BUS_V01_MAX_MSG_LEN 7
-extern struct elem_info tbn_ssc_acquire_bus_v01_ei[];
+extern struct qmi_elem_info tbn_ssc_acquire_bus_v01_ei[];
 
 
 #endif // QMI_TBN_V01_H

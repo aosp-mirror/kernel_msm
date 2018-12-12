@@ -29,19 +29,15 @@
 
 struct tbn_context {
 	struct device *dev;
-	struct qmi_handle *qmi_handle;
-	struct notifier_block server_event_notifier;
-	struct workqueue_struct *event_processor;
-	struct work_struct on_server_arrive;
-	struct work_struct on_server_exit;
-	struct work_struct on_event;
+	struct qmi_handle qmi_handle;
 	struct mutex service_lock;
+	bool connected;
 };
 
 struct tbn_context *tbn_init(struct device *dev);
-void tbn_cleanup(struct tbn_context *);
-int tbn_request_bus(struct tbn_context *);
-int tbn_release_bus(struct tbn_context *);
+void tbn_cleanup(struct tbn_context *tbn);
+int tbn_request_bus(struct tbn_context *tbn);
+int tbn_release_bus(struct tbn_context *tbn);
 
 
 #endif /* TOUCHSCREEN_BUS_NEGOTIATOR_H */
