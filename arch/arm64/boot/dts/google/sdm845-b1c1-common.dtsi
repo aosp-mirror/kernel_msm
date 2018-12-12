@@ -196,37 +196,6 @@
 	status = "ok";
 };
 
-&firmware {
-	android {
-		boot_devices = "soc/1d84000.ufshc";
-	};
-};
-
-&android_fstab {
-	system {
-		compatible = "android,system";
-		dev = "system";
-		type = "ext4";
-		mnt_flags = "ro";
-		mnt_point = "/system";
-		fsmgr_flags = "wait,slotselect,avb,logical";
-	};
-	vendor {
-		compatible = "android,vendor";
-		dev = "vendor";
-		type = "ext4";
-		mnt_flags = "ro";
-		fsmgr_flags = "wait,slotselect,avb,logical";
-	};
-	product {
-		compatible = "android,product";
-		dev = "product";
-		type = "ext4";
-		mnt_flags = "ro";
-		fsmgr_flags = "wait,slotselect,avb,logical";
-	};
-};
-
 &qcom_ion {
 	qcom,ion-heap@30 {
 		reg = <30>;
