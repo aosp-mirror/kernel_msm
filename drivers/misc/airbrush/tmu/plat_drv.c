@@ -32,8 +32,6 @@
 static const u16 no_trimming_error1[] = {287, 286, 287, 287, 286, 286, 286};
 static const u16 no_trimming_error2[] = {346, 346, 347, 347, 347, 346, 346};
 
-static int tmu_read_enable;
-
 /**
  * struct airbrush_tmu_data : A structure to hold the private data of the TMU
 	driver
@@ -361,7 +359,7 @@ static int airbrush_get_temp(void *p, int *temp)
 		return -EINVAL;
 
 	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
-	if (pcie_link_ready && tmu_read_enable) {
+	if (pcie_link_ready) {
 		code = ab_tmu_hw_read_current_temp(hw, 0);
 		*temp = code_to_temp(data, code, 0) * MCELSIUS;
 	} else {
@@ -596,7 +594,6 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	}
 
 	airbrush_tmu_control(pdev, true);
-	tmu_read_enable = 1;
 
 	dev_dbg(&pdev->dev, "%s: done.\n", __func__);
 	return 0;
@@ -605,7 +602,6 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 static int airbrush_tmu_remove(struct platform_device *pdev)
 {
 	airbrush_tmu_control(pdev, false);
-	tmu_read_enable = 0;
 	return 0;
 }
 
