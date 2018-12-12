@@ -15,7 +15,7 @@
  *
  */
 
-#include "qmi_tbn_v01.h"
+#include <linux/input/qmi_tbn_v01.h>
 
 struct qmi_elem_info tbn_kernel_request_bus_v01_ei[] = {
 	{

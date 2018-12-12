@@ -1,4 +1,4 @@
-/* drivers/input/touchscreen/touch_bus_negotiator.h
+/* include/linux/input/touch_bus_negotiator.h
  *
  * Touch Bus Negotiator for Google Pixel devices.
  *

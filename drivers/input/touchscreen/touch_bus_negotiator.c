@@ -19,7 +19,7 @@
 #include <linux/net.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
-#include "touch_bus_negotiator.h"
+#include <linux/input/touch_bus_negotiator.h>
 
 static int send_request_wait(struct qmi_handle *handle,
 			     int req_id, size_t req_len,

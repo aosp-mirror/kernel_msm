@@ -49,7 +49,7 @@
 #endif
 
 #ifdef CONFIG_TOUCHSCREEN_TBN
-#include "../touch_bus_negotiator.h"
+#include <linux/input/touch_bus_negotiator.h>
 #endif
 
 #define SEC_TS_I2C_NAME		"sec_ts"
