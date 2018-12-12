@@ -339,6 +339,7 @@ struct smb_charger {
 	struct mutex		smb_lock;
 	struct mutex		ps_change_lock;
 	spinlock_t		disable_pr_switch_lock;
+	spinlock_t		moisture_detection_enable;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
@@ -493,6 +494,8 @@ struct smb_charger {
 
 	/* wireless */
 	int			wireless_vout;
+
+	bool moisture_detection_enabled;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -685,4 +688,5 @@ int smblib_get_prop_input_current_max(struct smb_charger *chg,
 				      union power_supply_propval *val);
 int smblib_set_prop_input_current_max(struct smb_charger *chg,
 				      const union power_supply_propval *val);
+int enable_moisture_detection(struct smb_charger *chg, bool enable);
 #endif /* __SMB5_CHARGER_H */
