@@ -46,6 +46,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/rwsem.h>
@@ -76,6 +77,9 @@
 #include "ufs.h"
 #include "ufshci.h"
 #include "ufshpb.h"
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+#include "ufs-impaired.h"
+#endif
 
 #define UFSHCD "ufshcd"
 #define UFSHCD_DRIVER_VERSION "0.3"
@@ -199,6 +203,11 @@ struct ufs_pm_lvl_states {
  * @issue_time_stamp: time stamp for debug purposes
  * @complete_time_stamp: time stamp for statistics
  * @req_abort_skip: skip request abort task flag
+ *
+ * impaired storage related
+ * @list_head: LRB list node head
+ * @complete_delay: target delay in us
+ * @target_complete_time: target completion time with delay emulation.
  */
 struct ufshcd_lrb {
 	struct utp_transfer_req_desc *utr_descriptor_ptr;
@@ -224,6 +233,12 @@ struct ufshcd_lrb {
 	ktime_t complete_time_stamp;
 
 	bool req_abort_skip;
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	struct list_head list;
+	int complete_delay;
+	ktime_t target_complete_time;
+#endif
 };
 
 /**
@@ -761,6 +776,9 @@ struct ufshcd_cmd_log_entry {
 	u8 idn;		/* used only for query idn */
 	u32 doorbell;
 	u32 outstanding_reqs;
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	u32 delayed_reqs;
+#endif
 	u32 seq_num;
 	unsigned int tag;
 	ktime_t tstamp;
@@ -794,6 +812,10 @@ enum ufshcd_slowio_systype {
 	UFSHCD_SLOWIO_CNT = 1,
 	UFSHCD_SLOWIO_SYS_MAX = 2,
 };
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+extern void ufshcd_complete_lrb(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
+#endif
 
 /**
  * struct ufs_hba - per adapter private structure
@@ -1147,6 +1169,14 @@ struct ufs_hba {
 
 	bool reinit_g4_rate_A;
 	bool force_g4;
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	struct kobject *impaired_kobj;
+	struct ufs_impaired_storage impaired;
+	struct task_struct *impaired_thread;
+	struct list_head impaired_list_head;
+	unsigned long delayed_reqs;
+	bool impaired_should_stop;
+#endif
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
