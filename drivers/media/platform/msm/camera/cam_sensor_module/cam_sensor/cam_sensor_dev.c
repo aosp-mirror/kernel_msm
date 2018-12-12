@@ -150,10 +150,32 @@ static ssize_t set_strobe_type_store(struct device *dev,
 
 	return count;
 }
+
+static ssize_t set_ir_slave_cci_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = dev_get_drvdata(dev);
+	int rc, value;
+
+	rc = kstrtouint(buf, 0, &value);
+	if (rc)
+		return rc;
+
+	if (value != 0 && value != 1)
+		return -EINVAL;
+
+	if (s_ctrl->soc_info.index == IR_SLAVE)
+		s_ctrl->cci_i2c_master = value;
+
+	return count;
+}
 static DEVICE_ATTR_WO(set_strobe_type);
+static DEVICE_ATTR_WO(set_ir_slave_cci);
 
 static struct attribute *cam_sensor_dev_attrs[] = {
 	&dev_attr_set_strobe_type.attr,
+	&dev_attr_set_ir_slave_cci.attr,
 	NULL
 };
 
