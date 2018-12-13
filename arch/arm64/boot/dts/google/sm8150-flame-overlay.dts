@@ -16,8 +16,8 @@
 #include "sm8150-flame.dtsi"
 
 / {
-	model = "Google Inc. MSM sm8150 Flame proto";
+	model = "Google Inc. MSM sm8150 Flame EVT1.1";
 	compatible = "google,floral-sm8150", "qcom,sm8150";
 	qcom,msm-id = <339 0x20000>;
-	qcom,board-id = <0x060105 0>;
+	qcom,board-id = <0x061105 0>;
 };

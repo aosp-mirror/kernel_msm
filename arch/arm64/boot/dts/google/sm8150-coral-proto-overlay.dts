@@ -11,12 +11,13 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-#include "../qcom/sm8150-v2.dtsi"
-#include "sm8150-flame.dtsi"
+#include "sm8150-coral-proto.dtsi"
 
 / {
-	model = "Google Inc. MSM sm8150 Flame EVT1.1";
+	model = "Google Inc. MSM sm8150 Coral proto";
 	compatible = "google,floral-sm8150", "qcom,sm8150";
-	qcom,board-id = <0x061005 0>;
+	qcom,msm-id = <339 0x20000>;
+	qcom,board-id = <0x050105 0>;
 };

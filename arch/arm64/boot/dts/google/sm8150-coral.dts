@@ -16,7 +16,7 @@
 #include "sm8150-coral.dtsi"
 
 / {
-	model = "Google Inc. MSM sm8150 Coral proto";
+	model = "Google Inc. MSM sm8150 Coral EVT1.1";
 	compatible = "google,floral-sm8150", "qcom,sm8150";
-	qcom,board-id = <0x050105 0>;
+	qcom,board-id = <0x051105 0>;
 };
