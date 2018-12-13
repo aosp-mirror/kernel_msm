@@ -981,6 +981,14 @@ const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
 		.fw_file = "cs40l20.wmfw",
 	},
 	{
+		.id = CS40L2X_FW_ID_B1ROM,
+		.min_rev = 0x010002,
+		.halo_state_run = 2,
+		.num_coeff_files = 0,
+		.coeff_files = NULL,
+		.fw_file = NULL,
+	},
+	{
 		.id = CS40L2X_FW_ID_REMAP,
 		.min_rev = 0x080100,
 		.halo_state_run = 203,

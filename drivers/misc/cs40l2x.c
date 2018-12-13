@@ -138,6 +138,8 @@ static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 static int cs40l2x_ack_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 			unsigned int val);
 
+static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x);
+
 static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 			unsigned int fw_id);
 
@@ -2987,6 +2989,60 @@ err_mutex:
 	return ret;
 }
 
+static ssize_t cs40l2x_hw_reset_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			gpiod_get_value_cansleep(cs40l2x->reset_gpio));
+}
+
+static ssize_t cs40l2x_hw_reset_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int val, fw_id;
+
+	if (cs40l2x->revid < CS40L2X_REVID_B1)
+		return -EPERM;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (val) {
+		gpiod_set_value_cansleep(cs40l2x->reset_gpio, 1);
+		usleep_range(1000, 1100);
+
+		fw_id = cs40l2x->fw_desc->id;
+		cs40l2x->fw_desc = cs40l2x_firmware_match(cs40l2x,
+				CS40L2X_FW_ID_B1ROM);
+		if (!cs40l2x->fw_desc) {
+			ret = -EINVAL;
+			goto err_mutex;
+		}
+
+		ret = cs40l2x_firmware_swap(cs40l2x, fw_id);
+		if (ret)
+			goto err_mutex;
+	} else {
+		gpiod_set_value_cansleep(cs40l2x->reset_gpio, 0);
+		usleep_range(2000, 2100);
+	}
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
@@ -3057,6 +3113,8 @@ static DEVICE_ATTR(exc_enable, 0660, cs40l2x_exc_enable_show,
 static DEVICE_ATTR(a2h_level, 0660, cs40l2x_a2h_level_show,
 		cs40l2x_a2h_level_store);
 static DEVICE_ATTR(num_a2h_levels, 0660, cs40l2x_num_a2h_levels_show, NULL);
+static DEVICE_ATTR(hw_reset, 0660, cs40l2x_hw_reset_show,
+		cs40l2x_hw_reset_store);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -3099,6 +3157,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_exc_enable.attr,
 	&dev_attr_a2h_level.attr,
 	&dev_attr_num_a2h_levels.attr,
+	&dev_attr_hw_reset.attr,
 	NULL,
 };
 
@@ -5078,6 +5137,12 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 	case CS40L2X_FW_ID_ORIG:
 		return -EPERM;
 
+	case CS40L2X_FW_ID_B1ROM:
+		ret = cs40l2x_basic_mode_exit(cs40l2x);
+		if (ret)
+			return ret;
+		break;
+
 	case CS40L2X_FW_ID_REMAP:
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
@@ -6096,6 +6161,17 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	return 0;
 }
 
+static const struct reg_sequence cs40l2x_basic_mode_revert[] = {
+	{CS40L2X_PWR_CTRL1,		0x00000000},
+	{CS40L2X_PWR_CTRL2,		0x00003321},
+	{CS40L2X_LRCK_PAD_CONTROL,	0x00000007},
+	{CS40L2X_SDIN_PAD_CONTROL,	0x00000007},
+	{CS40L2X_GPIO_PAD_CONTROL,	0x00000000},
+	{CS40L2X_AMP_DIG_VOL_CTRL,	0x00008000},
+	{CS40L2X_IRQ2_MASK1,		0xFFFFFFFF},
+	{CS40L2X_IRQ2_MASK2,		0xFFFFFFFF},
+};
+
 static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
@@ -6167,6 +6243,13 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 			return ret;
 	}
 
+	ret = regmap_multi_reg_write(regmap, cs40l2x_basic_mode_revert,
+			ARRAY_SIZE(cs40l2x_basic_mode_revert));
+	if (ret) {
+		dev_err(dev, "Failed to revert basic-mode fields\n");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -6201,17 +6284,6 @@ static const struct reg_sequence cs40l2x_rev_b0_errata[] = {
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE2},
 	{CS40L2X_VPVBST_FS_SEL,		0x00000000},
 	{CS40L2X_ASP_CONTROL4,		0x01010000},
-};
-
-static const struct reg_sequence cs40l2x_basic_mode_revert[] = {
-	{CS40L2X_PWR_CTRL1,		0x00000000},
-	{CS40L2X_PWR_CTRL2,		0x00003321},
-	{CS40L2X_LRCK_PAD_CONTROL,	0x00000007},
-	{CS40L2X_SDIN_PAD_CONTROL,	0x00000007},
-	{CS40L2X_GPIO_PAD_CONTROL,	0x00000000},
-	{CS40L2X_AMP_DIG_VOL_CTRL,	0x00008000},
-	{CS40L2X_IRQ2_MASK1,		0xFFFFFFFF},
-	{CS40L2X_IRQ2_MASK2,		0xFFFFFFFF},
 };
 
 static int cs40l2x_part_num_resolve(struct cs40l2x_private *cs40l2x)
@@ -6321,13 +6393,6 @@ static int cs40l2x_part_num_resolve(struct cs40l2x_private *cs40l2x)
 		ret = cs40l2x_basic_mode_exit(cs40l2x);
 		if (ret)
 			return ret;
-
-		ret = regmap_multi_reg_write(regmap, cs40l2x_basic_mode_revert,
-				ARRAY_SIZE(cs40l2x_basic_mode_revert));
-		if (ret) {
-			dev_err(dev, "Failed to revert basic-mode fields\n");
-			return ret;
-		}
 
 		ret = regmap_register_patch(regmap, cs40l2x_rev_b0_errata,
 				ARRAY_SIZE(cs40l2x_rev_b0_errata));
