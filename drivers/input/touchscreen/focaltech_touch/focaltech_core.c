@@ -719,6 +719,44 @@ static void fts_report_value(struct fts_ts_data *data)
 #endif
 }
 
+static int plam_detected_flag;
+static int wakeup_flag;
+static ktime_t last_touch_time;
+
+/*******************************************************************************
+*  Name: fts_touch_irq_work
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static void fts_touch_irq_work(struct work_struct *work)
+{
+	int ret = -1;
+
+	ret = fts_read_touchdata(fts_wq_data);
+	if (ret == 0) {
+#if FTS_PLAM_EN
+		if (fts_wq_data->event.au16_x[0] == 2000 &&
+			fts_wq_data->event.au16_y[0] == 2000) {
+			fts_wq_data->last_plam_time =  ktime_get_boottime();
+			last_touch_time = fts_wq_data->last_plam_time;
+			input_report_key(fts_input_dev, KEY_SLEEP, 1);
+			input_sync(fts_input_dev);
+			input_report_key(fts_input_dev, KEY_SLEEP, 0);
+			input_sync(fts_input_dev);
+			plam_detected_flag = 1;
+			printk(KERN_DEBUG "FTS: PLAM to Send KEY_SLEEP\n");
+			return;
+		}
+#endif
+
+	mutex_lock(&fts_wq_data->report_mutex);
+	fts_report_value(fts_wq_data);
+	mutex_unlock(&fts_wq_data->report_mutex);
+	}
+}
+
 /*****************************************************************************
 *  Name: fts_ts_interrupt
 *  Brief:
@@ -726,12 +764,8 @@ static void fts_report_value(struct fts_ts_data *data)
 *  Output:
 *  Return:
 *****************************************************************************/
-static int plam_detected_flag;
-static int wakeup_flag;
-static ktime_t last_touch_time;
 static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 {
-	int ret = -1;
 	ktime_t cur_time;
 
 	if (fts_wq_data->suspended) {
@@ -762,8 +796,9 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 		last_touch_time = cur_time;
 #if FTS_PLAM_EN
 		if (cur_time.tv64 - fts_wq_data->last_plam_time.tv64
-			< 1000000000)
+			< 1000000000){
 			return IRQ_HANDLED;
+		}
 #endif
 		input_report_key(fts_input_dev, KEY_WAKEUP, 1);
 		input_sync(fts_input_dev);
@@ -774,28 +809,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	ret = fts_read_touchdata(fts_wq_data);
-	if (ret == 0) {
-#if FTS_PLAM_EN
-		if (fts_wq_data->event.au16_x[0] == 2000 &&
-			fts_wq_data->event.au16_y[0] == 2000) {
-			fts_wq_data->last_plam_time =  ktime_get_boottime();
-			last_touch_time = fts_wq_data->last_plam_time;
-			input_report_key(fts_input_dev, KEY_SLEEP, 1);
-			input_sync(fts_input_dev);
-			input_report_key(fts_input_dev, KEY_SLEEP, 0);
-			input_sync(fts_input_dev);
-			plam_detected_flag = 1;
-			printk(KERN_DEBUG "FTS: PLAM to Send KEY_SLEEP\n");
-			return IRQ_HANDLED;
-		}
-#endif
-		fts_report_value(fts_wq_data);
-	}
-#if FTS_ESDCHECK_EN
-	fts_esdcheck_set_intr(0);
-#endif
-
+	queue_work(fts_wq_data->ts_workqueue,& fts_wq_data->touch_event_work);
 	return IRQ_HANDLED;
 }
 
@@ -1265,6 +1279,14 @@ static int fts_ts_probe(struct i2c_client *client,
 							   client->dev.driver->name, data);
 	if (err) {
 		FTS_ERROR("Request irq failed!");
+		goto exit_free_irq;
+	}
+
+
+	INIT_WORK(&data->touch_event_work, fts_touch_irq_work);
+	data->ts_workqueue = create_workqueue(FTS_WORKQUEUE_NAME);
+	if (!data->ts_workqueue) {
+		err = -ESRCH;
 		goto exit_free_irq;
 	}
 
