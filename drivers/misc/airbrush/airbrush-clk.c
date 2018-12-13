@@ -256,12 +256,10 @@ static u64 ab_clk_aon_set_rate_handler(void *ctx, u64 rate)
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
-		clk_set_rate(clk_ctx->aon_pll, rate);
 		return clk_get_rate(clk_ctx->aon_pll_mux);
 	}
 
 	clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
-	clk_set_rate(clk_ctx->aon_pll, rate);
 
 	return clk_get_rate(clk_ctx->aon_pll_mux);
 }
