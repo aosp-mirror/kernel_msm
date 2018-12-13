@@ -426,6 +426,8 @@ receive_buf(struct tty_struct *tty, struct tty_buffer *head, int count)
 			disc->ops->receive_buf(tty, p, f, count);
 	}
 	head->read += count;
+	if (count > 0)
+		memset(p, 0, count);
 	return count;
 }
 
