@@ -343,3 +343,39 @@ uint8_t gbms_gen_chg_flags(int chg_status, int chg_type)
 
 	return flags;
 }
+
+
+/* convert cycle counts array to string */
+int gbms_cycle_count_cstr_bc(char *buf, size_t size,
+				const u16 *ccount, int bcnt)
+{
+	int len = 0, i;
+
+	for (i = 0; i < bcnt; i++)
+		len += scnprintf(buf + len, size - len, "%d ", ccount[i]);
+	buf[len - 1] = '\n';
+
+	return len;
+}
+
+/* parse the result of gbms_cycle_count_cstr_bc() back to array */
+int gbms_cycle_count_sscan_bc(u16 *ccount, int bcnt, const char *buff)
+{
+	int i, val[bcnt];
+
+	/* sscanf has 10 fixed conversions */
+	if (bcnt != 10)
+		return -ERANGE;
+
+	if (sscanf(buff, "%d %d %d %d %d %d %d %d %d %d",
+			&val[0], &val[1], &val[2], &val[3], &val[4],
+			&val[5], &val[6], &val[7], &val[8], &val[9])
+			!= bcnt)
+		return -EINVAL;
+
+	for (i = 0; i < bcnt ; i++)
+		if (val[i] >= 0 && val[i] < U16_MAX)
+			ccount[i] = val[i];
+
+	return 0;
+}
