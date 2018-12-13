@@ -1038,8 +1038,9 @@ static int p9221_set_property(struct power_supply *psy,
 		dev_warn(&charger->client->dev, "Set enable %d\n",
 			 charger->enabled);
 
-		gpio_set_value(charger->pdata->qien_gpio,
-			       charger->enabled ? 0 : 1);
+		if (charger->pdata->qien_gpio >= 0)
+			gpio_set_value(charger->pdata->qien_gpio,
+				       charger->enabled ? 0 : 1);
 
 		changed = true;
 		break;
@@ -2203,12 +2204,12 @@ static int p9221_parse_dt(struct device *dev,
 
 	/* Enable */
 	ret = of_get_named_gpio(node, "idt,gpio_qien", 0);
-	if (ret < 0) {
-		dev_err(dev, "unable to read idt,gpio_qien from dt: %d\n", ret);
-		return ret;
-	}
 	pdata->qien_gpio = ret;
-	dev_info(dev, "enable gpio:%d", pdata->qien_gpio);
+	if (ret < 0)
+		dev_warn(dev, "unable to read idt,gpio_qien from dt: %d\n",
+			 ret);
+	else
+		dev_info(dev, "enable gpio:%d", pdata->qien_gpio);
 
 	/* Main IRQ */
 	ret = of_get_named_gpio(node, "idt,irq_gpio", 0);
@@ -2369,7 +2370,8 @@ static int p9221_charger_probe(struct i2c_client *client,
 
 	/* Default enable */
 	charger->enabled = true;
-	gpio_direction_output(charger->pdata->qien_gpio, 0);
+	if (charger->pdata->qien_gpio >= 0)
+		gpio_direction_output(charger->pdata->qien_gpio, 0);
 
 	/* Default to R5+ */
 	charger->cust_id = 5;
