@@ -503,6 +503,8 @@ struct ab_state_context {
 	 */
 	struct mutex		mfd_lock;
 	struct ab_sm_mfd_ops	*mfd_ops;
+
+	bool force_el2;
 };
 
 struct ab_sm_misc_session {

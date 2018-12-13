@@ -42,6 +42,37 @@ static int chip_state_get(void *sc, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_chip_state, chip_state_get,
 				chip_state_set, "%llu\n");
 
+static int ab_sm_force_el2_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+	int ret;
+
+	mutex_lock(&sc->mfd_lock);
+
+	sc->force_el2 = !!val;
+
+	if (sc->force_el2)
+		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
+	else
+		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
+
+	mutex_unlock(&sc->mfd_lock);
+
+	return ret;
+}
+
+static int ab_sm_force_el2_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	*val = (uint64_t)sc->force_el2;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(ab_sm_force_el2_fops, ab_sm_force_el2_get,
+		ab_sm_force_el2_set, "%llu\n");
+
 static int id_get(void *blk_passed, u64 *val)
 {
 	struct block *blk = (struct block *)blk_passed;
@@ -220,7 +251,7 @@ err_out:
 
 void ab_sm_create_debugfs(struct ab_state_context *sc)
 {
-	struct dentry *d_chip, *d_block, *d;
+	struct dentry *d_chip, *d_force_el2, *d_block, *d;
 
 	sc->d_entry = debugfs_create_dir("airbrush", NULL);
 	if (!sc->d_entry) {
@@ -245,6 +276,11 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	d = debugfs_create_file("chip_state", 0666, d_chip, sc,
 				&fops_chip_state);
 	if (!d)
+		goto err_out;
+
+	d_force_el2 = debugfs_create_file("force_el2", 0666, sc->d_entry, sc,
+				&ab_sm_force_el2_fops);
+	if (!d_force_el2)
 		goto err_out;
 
 	d_block = debugfs_create_dir("ipu", d_chip);
