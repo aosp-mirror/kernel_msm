@@ -22,6 +22,7 @@
 #include <linux/power_supply.h>
 #include <linux/pm_wakeup.h>
 #include <linux/pmic-voter.h>
+#include <linux/time.h>
 #include "google_bms.h"
 #include "google_psy.h"
 
@@ -48,7 +49,30 @@
 
 #define USER_VOTER			"USER_VOTER"	/* same as QCOM */
 #define MSC_CHG_VOTER			"msc_chg"
+#define CHG_PPS_VOTER			"pps_chg"
 #define MSC_USER_CHG_LEVEL_VOTER	"msc_user_chg_level"
+
+#define PD_T_PPS_TIMEOUT	9000	/* Maximum of 10 seconds */
+#define PD_T_PPS_DEADLINE_S	7
+
+enum tcpm_psy_online_states {
+	TCPM_PSY_OFFLINE = 0,
+	TCPM_PSY_FIXED_ONLINE,
+	TCPM_PSY_PROG_ONLINE,
+};
+
+struct pd_pps_data {
+	bool pps_avail;
+	bool pps_active;
+	int pd_online;
+	time_t last_update;
+
+	int min_uv;
+	int max_uv;
+	int max_ua;
+	int out_uv;
+	int op_ua;
+};
 
 struct chg_drv {
 	struct device *device;
@@ -80,12 +104,17 @@ struct chg_drv {
 	int cc_max;		/* newgen */
 	int chg_cc_tolerance;
 	int chg_mode;		/* debug */
-	bool stop_charging;
-	int disable_charging;
-	int disable_pwrsrc;
+	bool stop_charging;	/* no power source */
+
+	/* retail */
+	int disable_charging;	/* from retail */
+	int disable_pwrsrc;	/* from retail */
 	bool lowerdb_reached;	/* user charge level */
 	int charge_stop_level;	/* user charge level */
 	int charge_start_level;	/* user charge level */
+
+	/* pps charging */
+	struct pd_pps_data pps_data;
 };
 
 static int psy_changed(struct notifier_block *nb,
@@ -104,6 +133,7 @@ static int psy_changed(struct notifier_block *nb,
 	    (!strcmp(psy->desc->name, chg_drv->chg_psy_name) ||
 	     !strcmp(psy->desc->name, chg_drv->bat_psy_name) ||
 	     !strcmp(psy->desc->name, "usb") ||
+	     !strcmp(psy->desc->name, chg_drv->tcpm_psy_name) ||
 	     (chg_drv->wlc_psy_name &&
 	      !strcmp(psy->desc->name, chg_drv->wlc_psy_name)))) {
 		cancel_delayed_work(&chg_drv->chg_work);
@@ -129,19 +159,30 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 {
 	union gbms_charger_state chg_state = { .v = 0 };
 
-	chg_drv->fv_uv = -1;
-	chg_drv->cc_max = -1;
+	/* reset retail state */
 	chg_drv->disable_charging = 0;
 	chg_drv->disable_pwrsrc = 0;
 	chg_drv->lowerdb_reached = true;
 
+	/* reset charging parameters */
+	chg_drv->fv_uv = -1;
+	chg_drv->cc_max = -1;
+	vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, false, chg_drv->fv_uv);
+	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, false, chg_drv->cc_max);
+
+	/* PPS state */
+	chg_drv->pps_data.pd_online = TCPM_PSY_OFFLINE;
+	chg_drv->pps_data.pps_avail = false;
+	chg_drv->pps_data.pps_active = false;
+	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
+
+	/* normal when disconnected */
 	chg_drv->stop_charging = true;
 	GPSY_SET_PROP(chg_drv->chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 1);
-
+	/* when/if enabled */
 	GPSY_SET_PROP(chg_drv->chg_psy,
 		      POWER_SUPPLY_PROP_TAPER_CONTROL,
 		      POWER_SUPPLY_TAPER_CONTROL_OFF);
-
 	/* make sure the battery knows that it's disconnected */
 	GPSY_SET_INT64_PROP(chg_drv->bat_psy,
 		POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE, chg_state.v);
@@ -255,6 +296,205 @@ static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 	}
 
 	return disable_charging;
+}
+
+#define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
+
+/* false when not present or error (either way don't run) */
+static bool pps_is_avail(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
+{
+	pps->max_uv = GPSY_GET_PROP(tcpm_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_MAX);
+	pps->min_uv = GPSY_GET_PROP(tcpm_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_MIN);
+	pps->max_ua = GPSY_GET_PROP(tcpm_psy,
+					POWER_SUPPLY_PROP_CURRENT_MAX);
+	pps->out_uv = GPSY_GET_PROP(tcpm_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	pps->op_ua = GPSY_GET_PROP(tcpm_psy,
+					POWER_SUPPLY_PROP_CURRENT_NOW);
+	if (pps->max_uv < 0 || pps->min_uv < 0 || pps->max_ua < 0 ||
+		pps->out_uv < 0 || pps->op_ua < 0)
+		return false;
+
+	/* TODO: lower the loglevel after the development stage */
+	pr_info("max_v %d, min_v %d, max_c %d, out_v %d, op_c %d\n",
+		pps->max_uv,
+		pps->min_uv,
+		pps->max_ua,
+		pps->out_uv,
+		pps->op_ua);
+
+	/* FIXME: set interval to PD_T_PPS_TIMEOUT here may cause
+	 * timeout
+	 */
+	return true;
+}
+
+
+static int pps_ping(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
+{
+	int rc;
+
+	rc = GPSY_SET_PROP(tcpm_psy,
+			POWER_SUPPLY_PROP_ONLINE,
+			TCPM_PSY_PROG_ONLINE);
+	if (rc == 0)
+		pps->pd_online = TCPM_PSY_PROG_ONLINE;
+	else if (rc != -EAGAIN && rc != -EOPNOTSUPP)
+		pr_err("failed to set ONLINE, ret = %d\n", rc);
+
+	return rc;
+}
+
+
+/* return the update interval pps will vote for
+ * . 0 to disable the PPS update internval voter
+ * . <0 for error
+ */
+static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
+{
+	int pd_online, usbc_type;
+
+	/* 2) pps->pd_online == TCPM_PSY_PROG_ONLINE && !pps_avail
+	 *  If the source really support PPS (set in 1): set pps_avail
+	 *  and reschedule after PD_T_PPS_TIMEOUT
+	 */
+	if (pps->pd_online == TCPM_PSY_PROG_ONLINE && !pps->pps_avail) {
+		int rc;
+
+		pps->pps_avail = pps_is_avail(pps, tcpm_psy);
+		if (pps->pps_avail) {
+			rc = pps_ping(pps, tcpm_psy);
+			if (rc < 0) {
+				pps->pd_online = TCPM_PSY_FIXED_ONLINE;
+				return 0;
+			}
+
+			pps->last_update = get_boot_sec();
+		}
+
+		return PD_T_PPS_TIMEOUT;
+	}
+
+	/* no need to retry (error) when I cannot read POWER_SUPPLY_PROP_ONLINE.
+	 * The prop is set to TCPM_PSY_PROG_ONLINE (from TCPM_PSY_FIXED_ONLINE)
+	 * when usbc_type is POWER_SUPPLY_USB_TYPE_PD_PPS.
+	 */
+	pd_online = GPSY_GET_PROP(tcpm_psy, POWER_SUPPLY_PROP_ONLINE);
+	if (pd_online < 0)
+		return 0;
+
+	/* 3) pd_online == TCPM_PSY_PROG_ONLINE == pps->pd_online && pps_avail
+	 * pps_is active now, we are done here. pd_online will change to
+	 * if pd_online is !TCPM_PSY_PROG_ONLINE go back to 1) OR exit.
+	 */
+	pps->pps_active = (pd_online == pps->pd_online) &&
+			  (pd_online == TCPM_PSY_PROG_ONLINE) &&
+			  pps->pps_avail;
+	if (pps->pps_active)
+		return 0;
+
+	/* 1) !pps_avail && !pps_active && pps->pd_online!=TCPM_PSY_PROG_ONLINE
+	 *  If usbc_type is POWER_SUPPLY_USB_TYPE_PD_PPS and pd_online is
+	 *  TCPM_PSY_FIXED_ONLINE, enable PSPS (set POWER_SUPPLY_PROP_ONLINE to
+	 *  TCPM_PSY_PROG_ONLINE and reschedule in PD_T_PPS_TIMEOUT.
+	 */
+	pps->pps_avail = false;
+
+	usbc_type = GPSY_GET_PROP(tcpm_psy, POWER_SUPPLY_PROP_USB_TYPE);
+	if (pd_online == TCPM_PSY_FIXED_ONLINE &&
+	    usbc_type == POWER_SUPPLY_USB_TYPE_PD_PPS) {
+		int rc, pps_update_interval = 0;
+
+		rc = GPSY_SET_PROP(tcpm_psy,
+				   POWER_SUPPLY_PROP_ONLINE,
+				   TCPM_PSY_PROG_ONLINE);
+		if (rc == -EAGAIN) {
+			/* TODO: lower the loglevel */
+			pr_err("not in SNK_READY, rerun\n");
+			return -EAGAIN;
+		}
+
+		if (rc == -EOPNOTSUPP) {
+			/* pps_update_interval==0 disable the vote */
+			pr_err("PPS not supported\n");
+		} else if (rc != 0) {
+			pr_err("failed to set PROP_ONLINE, rc = %d\n", rc);
+		} else {
+			pps_update_interval = PD_T_PPS_TIMEOUT;
+			pps->pd_online = TCPM_PSY_PROG_ONLINE;
+			pps->last_update = get_boot_sec();
+		}
+
+		return pps_update_interval;
+	}
+
+	pps->pd_online = pd_online;
+	return 0;
+}
+
+/* 0 - success, <0 error  */
+static int pps_update_adapter(struct chg_drv *chg_drv,
+			      int pending_uv, int pending_ua)
+{
+	struct pd_pps_data *pps = &chg_drv->pps_data;
+	struct power_supply *tcpm_psy = chg_drv->tcpm_psy;
+	int interval = get_boot_sec() - pps->last_update;
+	int rc;
+
+	pps->out_uv = GPSY_GET_PROP(tcpm_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	pps->op_ua = GPSY_GET_PROP(tcpm_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
+	if (pps->out_uv < 0 || pps->op_ua < 0)
+		return -EIO;
+
+	/* TODO: lower the loglevel after the development stage */
+	pr_info("out_v %d, op_c %d, pend_v %d, pend_c %d\n",
+		pps->out_uv,
+		pps->op_ua,
+		pending_uv,
+		pending_ua);
+
+	if (pending_uv < 0)
+		pending_uv = pps->out_uv;
+	if (pending_ua < 0)
+		pending_ua = pps->op_ua;
+
+	/* voltage first
+	 * NOTE: why is this modified in 2 passes?
+	 */
+	if (pps->out_uv != pending_uv) {
+		rc = GPSY_SET_PROP(tcpm_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_NOW,
+					(int)pending_uv);
+		if (rc == 0)
+			pps->out_uv = pending_uv;
+		else if (rc != -EAGAIN && rc != -EOPNOTSUPP)
+			pr_err("failed to set VOLTAGE_NOW, ret = %d\n", rc);
+	} else if (pps->op_ua != pending_ua) {
+		rc = GPSY_SET_PROP(tcpm_psy,
+					POWER_SUPPLY_PROP_CURRENT_NOW,
+					(int)pending_ua);
+		if (rc == 0)
+			pps->op_ua = pending_ua;
+		else if (rc != -EAGAIN && rc != -EOPNOTSUPP)
+			pr_err("failed to set CURRENT_NOW, ret = %d\n", rc);
+
+	} else if (interval < PD_T_PPS_DEADLINE_S) {
+		/* TODO: tune this, now assume that PD_T_PPS_TIMEOUT >= 7s */
+		rc = 1;
+	} else {
+		rc = pps_ping(pps, tcpm_psy);
+		if (rc < 0)
+			pps->pd_online = TCPM_PSY_FIXED_ONLINE;
+	}
+
+	if (rc == -EOPNOTSUPP) {
+		pps->pd_online = TCPM_PSY_FIXED_ONLINE;
+		pr_err("PPS deactivated while updating\n");
+	}
+
+	return rc;
 }
 
 static int chg_work_gen_state(union gbms_charger_state *chg_state,
@@ -395,7 +635,7 @@ static void chg_work(struct work_struct *work)
 	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
 
-	/* prevent updates to votable to be applied */
+	/* cause msc_update_charger_cb to ignore updates */
 	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
 
 	usb_online = chg_usb_online(usb_psy);
@@ -486,23 +726,43 @@ static void chg_work(struct work_struct *work)
 		if  (cc_max == -1)
 			cc_max = 0;
 
-		/* NOTE: battery might have already voted on these */
+		/* NOTE: battery has already voted on these */
 		vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, true, fv_uv);
 		vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, cc_max);
 
-		/* TODO: b/117949231, support for PSS */
-
 		/* */
 		update_interval = chg_work_next_interval(chg_drv, &chg_state);
-	}
+		if (update_interval) {
 
-	if (update_interval) {
-		/* the callback will write to charger and reschedule */
-		vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER,
-			true, update_interval);
-	} else {
-		pr_info("MSC_CHG stop battery charging work\n");
-		reset_chg_drv_state(chg_drv);
+			if (tcpm_psy) {
+				int pps_ui;
+
+				pps_ui = pps_work(&chg_drv->pps_data,
+						  chg_drv->tcpm_psy);
+				if (pps_ui < 0)
+					pps_ui = MSEC_PER_SEC;
+
+				vote(chg_drv->msc_interval_votable,
+					CHG_PPS_VOTER,
+					(pps_ui != 0),
+					pps_ui);
+			}
+
+			/* update_interval is nonzero: so the callback
+			 * msc_update_charger_cb() will write to charger,
+			 * update PPS adapter and reschedule with the min
+			 * interval voted to msc_interval_votable
+			 */
+			vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER,
+				true, update_interval);
+		} else {
+			pr_info("MSC_CHG stop battery charging work\n");
+			rc = chg_set_charger(chg_psy, chg_drv->fv_uv, 0);
+			if (rc != 0)
+				goto error_rerun;
+
+			reset_chg_drv_state(chg_drv);
+		}
 	}
 
 	goto exit_chg_work;
@@ -782,6 +1042,46 @@ DEFINE_SIMPLE_ATTRIBUTE(chg_ui_fops, chg_get_update_interval,
 				     chg_set_update_interval, "%llu\n");
 
 
+static int debug_get_pps_out_uv(void *data, u64 *val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	*val = chg_drv->pps_data.out_uv;
+	return 0;
+}
+
+static int debug_set_pps_out_uv(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	/* TODO: use votable */
+	chg_drv->pps_data.out_uv = val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_pps_out_uv_fops,
+				debug_get_pps_out_uv,
+				debug_set_pps_out_uv, "%llu\n");
+
+
+static int debug_get_pps_op_ua(void *data, u64 *val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	*val = chg_drv->pps_data.op_ua;
+	return 0;
+}
+
+static int debug_set_pps_op_ua(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	/* TODO: use votable */
+	chg_drv->pps_data.op_ua = val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_pps_op_ua_fops,
+					debug_get_pps_op_ua,
+					debug_set_pps_op_ua, "%llu\n");
+
+
 #endif
 
 static int chg_init_fs(struct chg_drv *chg_drv)
@@ -814,20 +1114,21 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 				   chg_drv, &chg_cs_fops);
 		debugfs_create_file("update_interval", 0644, de,
 				   chg_drv, &chg_ui_fops);
+
+		debugfs_create_file("pps_out_uv", 0600, de,
+				   chg_drv, &debug_pps_out_uv_fops);
+		debugfs_create_file("pps_op_ua", 0600, de,
+				   chg_drv, &debug_pps_op_ua_fops);
 	}
 #endif
 
 	return 0;
-
 }
 
-static int chg_update_charger(struct chg_drv *chg_drv)
+static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 {
-	int rc, fv_uv, cc_max;
+	int rc;
 	struct power_supply *chg_psy = chg_drv->chg_psy;
-
-	fv_uv = get_effective_result_locked(chg_drv->msc_fv_votable);
-	cc_max = get_effective_result_locked(chg_drv->msc_fcc_votable);
 
 	/* when set cc_tolerance needs to be applied to everything */
 	cc_max = (cc_max / 1000) * (1000 - chg_drv->chg_cc_tolerance);
@@ -850,34 +1151,69 @@ static int chg_update_charger(struct chg_drv *chg_drv)
 	return rc;
 }
 
-static int msc_interval_cb(struct votable *votable, void *data, int interval,
-			const char *client)
+/* NOTE: chg_work() vote 0 at the beginning of each loop to gate the updates
+ * to the charger
+ */
+static int msc_update_charger_cb(struct votable *votable,
+				 void *data, int interval,
+				 const char *client)
 {
-	int  update_interval;
+	int rc, update_interval, fv_uv, cc_max;
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
-
 	update_interval =
 		get_effective_result_locked(chg_drv->msc_interval_votable);
-	if (update_interval) {
-		int rc;
+	if (!update_interval)
+		goto msc_done;
 
-		rc = chg_update_charger(chg_drv);
-		if (rc < 0) {
-			pr_info("MSC_CHG update error=%d rerun in %d ms\n",
-				rc, update_interval);
-			schedule_delayed_work(&chg_drv->chg_work,
-				msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
+	fv_uv = get_effective_result_locked(chg_drv->msc_fv_votable);
+	cc_max = get_effective_result_locked(chg_drv->msc_fcc_votable);
+
+	if (chg_drv->pps_data.pps_avail && chg_drv->pps_data.pps_active) {
+		int pps_update_interval = update_interval;
+		struct pd_pps_data *pps = &chg_drv->pps_data;
+
+		/* TODO: logic that determine the values to route to the pps
+		 * adapter to maximize efficiency. Now routing the current
+		 * ones...
+		 */
+
+		rc = pps_update_adapter(chg_drv, pps->out_uv, pps->op_ua);
+		if (rc == -EAGAIN) {
+			/* TODO: change the timeout */
+			pps_update_interval = CHG_WORK_ERROR_RETRY_MS;
+		} else if (rc == 0) {
+			pps_update_interval = PD_T_PPS_TIMEOUT;
+			pps->last_update = get_boot_sec();
 		} else {
-			pr_info("MSC_CHG rerun in %d ms\n", update_interval);
-			schedule_delayed_work(&chg_drv->chg_work,
-				msecs_to_jiffies(update_interval));
+			const time_t interval = get_boot_sec()
+							- pps->last_update;
+
+			/* TODO: change the criteria, PD_T_PPS_TIMEOUT >= 7 */
+			if (interval < PD_T_PPS_DEADLINE_S)
+				pps_update_interval = PD_T_PPS_TIMEOUT
+					- ((int)interval * MSEC_PER_SEC);
 		}
+
+		if (pps_update_interval < update_interval)
+			update_interval = pps_update_interval;
 	}
 
-	__pm_relax(&chg_drv->chg_ws);
+	rc = chg_update_charger(chg_drv, fv_uv, cc_max);
+	if (rc < 0) {
+		pr_info("MSC_CHG update error=%d rerun in %d ms\n",
+			rc, update_interval);
+		schedule_delayed_work(&chg_drv->chg_work,
+			msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
+	} else {
+		pr_info("MSC_CHG rerun in %d ms\n", update_interval);
+		schedule_delayed_work(&chg_drv->chg_work,
+			msecs_to_jiffies(update_interval));
+	}
 
+msc_done:
+	__pm_relax(&chg_drv->chg_ws);
 	return 0;
 }
 
@@ -902,7 +1238,7 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 	}
 
 	chg_drv->msc_interval_votable = create_votable(VOTABLE_MSC_INTERVAL,
-			VOTE_MIN, msc_interval_cb, chg_drv);
+			VOTE_MIN, msc_update_charger_cb, chg_drv);
 	if (IS_ERR(chg_drv->msc_interval_votable)) {
 		ret = PTR_ERR(chg_drv->msc_interval_votable);
 		chg_drv->msc_interval_votable = NULL;
@@ -1084,7 +1420,7 @@ static int google_charger_probe(struct platform_device *pdev)
 			return -ENOMEM;
 	}
 
-	/* NOTE: newgen charging table is configured in google_battery */
+	/* NOTE: newgen charging is configured in google_battery */
 	ret = chg_init_chg_profile(chg_drv);
 	if (ret < 0) {
 		pr_err("cannot read charging profile from dt, ret=%d\n", ret);
@@ -1183,4 +1519,5 @@ module_init(google_charger_init);
 module_exit(google_charger_exit);
 MODULE_DESCRIPTION("Multi-step battery charger driver");
 MODULE_AUTHOR("Thierry Strudel <tstrudel@google.com>");
+MODULE_AUTHOR("AleX Pelosi <apelosi@google.com>");
 MODULE_LICENSE("GPL");
