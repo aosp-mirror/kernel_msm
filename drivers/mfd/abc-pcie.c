@@ -877,9 +877,34 @@ int set_outbound_iatu(struct outb_region outreg)
 }
 
 #if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
-static void setup_smmu(struct pci_dev *pdev)
+static int abc_pcie_smmu_attach(struct device *dev)
 {
-	struct dma_iommu_mapping *mapping;
+	struct abc_pcie_devdata *abc = dev_get_drvdata(dev);
+	int ret;
+
+	if (WARN_ON(!abc->iommu_mapping))
+		return -EINVAL;
+
+	ret = arm_iommu_attach_device(dev, abc->iommu_mapping);
+	if (ret < 0) {
+		dev_err(dev, "%s: failed to attach device to IOMMU, ret%d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	/* mahdih: investigate why this was not needed in binder */
+	dma_set_mask(dev, DMA_BIT_MASK(64));
+
+	return 0;
+}
+
+static void abc_pcie_smmu_detach(struct device *dev)
+{
+	arm_iommu_detach_device(dev);
+}
+
+static int abc_pcie_smmu_setup(struct device *dev, struct abc_pcie_devdata *abc)
+{
 	int atomic_ctx = 1;
 	int bypass_enable = 1;
 	int ret;
@@ -888,41 +913,66 @@ static void setup_smmu(struct pci_dev *pdev)
 #define SMMU_BASE	0x10000000 /* Device address range base */
 #define SMMU_SIZE	0x40000000 /* Device address range size */
 
-	mapping = arm_iommu_create_mapping(&platform_bus_type,
-					SMMU_BASE, SMMU_SIZE);
-
-	if (IS_ERR_OR_NULL(mapping)) {
-		ret = PTR_ERR(mapping) ?: -ENODEV;
-		dev_err(&pdev->dev,
-			"Failed to create IOMMU mapping (%d)\n", ret);
-		return;
+	abc->iommu_mapping = arm_iommu_create_mapping(&platform_bus_type,
+			SMMU_BASE, SMMU_SIZE);
+	if (IS_ERR_OR_NULL(abc->iommu_mapping)) {
+		ret = PTR_ERR(abc->iommu_mapping) ?: -ENODEV;
+		abc->iommu_mapping = NULL;
+		dev_err(dev, "%s: Failed to create IOMMU mapping (%d)\n",
+				__func__, ret);
+		return ret;
 	}
 
-	ret = iommu_domain_set_attr(
-		mapping->domain, DOMAIN_ATTR_ATOMIC, &atomic_ctx);
-	if (ret) {
-		dev_err(&pdev->dev,
-			"Set atomic attribute to SMMU failed (%d)\n", ret);
+	ret = iommu_domain_set_attr(abc->iommu_mapping->domain,
+			DOMAIN_ATTR_ATOMIC, &atomic_ctx);
+	if (ret < 0) {
+		dev_err(dev, "%s: Set atomic attribute to SMMU failed (%d)\n",
+				__func__, ret);
+		goto release_mapping;
 	}
 
-	ret = iommu_domain_set_attr(mapping->domain,
-				   DOMAIN_ATTR_S1_BYPASS,
-				   &bypass_enable);
-	if (ret) {
-		dev_err(&pdev->dev,
-			"Set bypass attribute to SMMU failed (%d)\n", ret);
+	ret = iommu_domain_set_attr(abc->iommu_mapping->domain,
+			DOMAIN_ATTR_S1_BYPASS, &bypass_enable);
+	if (ret < 0) {
+		dev_err(dev, "%s: Set bypass attribute to SMMU failed (%d)\n",
+				__func__, ret);
+		goto release_mapping;
 	}
 
-	ret = arm_iommu_attach_device(&pdev->dev, mapping);
-	if (ret) {
-		dev_err(&pdev->dev,
-			"arm_iommu_attach_device failed (%d)\n", ret);
-		return;
-	}
-	/* mahdih: investigate why this was not needed in binder */
-	dma_set_mask(&pdev->dev, DMA_BIT_MASK(64));
-	dev_info(&pdev->dev, "attached to IOMMU\n");
+	ret = abc_pcie_smmu_attach(dev);
+	if (ret < 0)
+		goto release_mapping;
+
+	return 0;
+
+release_mapping:
+	arm_iommu_release_mapping(abc->iommu_mapping);
+	abc->iommu_mapping = NULL;
+
+	return ret;
 }
+
+static void abc_pcie_smmu_remove(struct device *dev,
+		struct abc_pcie_devdata *abc)
+{
+	abc_pcie_smmu_detach(dev);
+	arm_iommu_release_mapping(abc->iommu_mapping);
+}
+#else
+static inline int abc_pcie_smmu_attach(struct device *dev)
+{
+	return 0;
+}
+
+static inline void abc_pcie_smmu_detach(struct device *dev) { }
+
+static inline int abc_pcie_smmu_setup(struct device *dev)
+{
+	return 0;
+}
+
+static inline void abc_pcie_smmu_remove(struct device *dev,
+		struct abc_pcie_devdata *abc) { }
 #endif
 
 static int allocate_bar_range(struct device *dev, uint32_t bar,
@@ -1508,19 +1558,27 @@ static int abc_pcie_get_chip_id_handler(void *ctx, enum ab_chip_id *val)
 
 static int abc_pcie_enter_el2_handler(void *ctx)
 {
-	// TODO: Implement
-
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
+
+	/* Detach the PCIe EP device to the ARM sMMU */
+	abc_pcie_smmu_detach((struct device *)ctx);
+
 	return 0;
 }
 
 static int abc_pcie_exit_el2_handler(void *ctx)
 {
-	// TODO: Implement
+	int ret;
+
+	/* Re-attach the PCIe EP device to the ARM sMMU */
+	ret = abc_pcie_smmu_attach((struct device *)ctx);
+	if (ret < 0)
+		return ret;
 
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
+
 	return 0;
 }
 
@@ -2010,9 +2068,10 @@ exit_loop:
 			ARRAY_SIZE(abc_mfd_of_nommu_devs), NULL, 0, NULL);
 	if (err < 0)
 		goto err_add_mfd_child;
-#if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
-	setup_smmu(pdev);
-#endif
+
+	err = abc_pcie_smmu_setup(dev, abc);
+	if (err < 0)
+		goto err_smmu_setup;
 
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
@@ -2027,6 +2086,8 @@ exit_loop:
 err_ipu_tpu_init:
 	mfd_remove_devices(dev);
 err_add_mfd_child:
+	abc_pcie_smmu_remove(dev, abc);
+err_smmu_setup:
 	abc_pcie_irq_free(pdev);
 err_pcie_init:
 	pci_release_regions(pdev);
@@ -2046,6 +2107,7 @@ static void abc_pcie_remove(struct pci_dev *pdev)
 	struct abc_pcie_devdata *abc = pci_get_drvdata(pdev);
 
 	mfd_remove_devices(&pdev->dev);
+	abc_pcie_smmu_remove(&pdev->dev, abc);
 
 	for (bar = BAR_0; bar <= BAR_4; bar += 2) {
 		if (abc->bar[bar])

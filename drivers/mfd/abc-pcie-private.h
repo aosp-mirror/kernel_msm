@@ -42,12 +42,15 @@ struct iatu_bar_mapping {
 };
 
 struct abc_pcie_devdata {
-	struct abc_device   *abc_dev;
-	int		irq;
+	struct abc_device *abc_dev;
+#if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
+	struct dma_iommu_mapping *iommu_mapping;
+#endif
+	int irq;
 	struct cdev c_dev;
-	void __iomem	*bar[6];
-	uint32_t        msi;
-	struct mutex	mutex;
+	void __iomem *bar[6];
+	uint32_t msi;
+	struct mutex mutex;
 	struct iatu_bar_mapping iatu_mappings;
 };
 
