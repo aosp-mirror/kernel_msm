@@ -219,7 +219,6 @@ struct chip_to_block_map {
 	enum block_state mif_block_state_id;
 	enum block_state fsys_block_state_id;
 	enum block_state aon_block_state_id;
-	u32 flags;
 };
 
 enum ab_error_codes {
@@ -288,21 +287,27 @@ typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 struct ab_sm_pmu_ops {
 	void *ctx;
 
-	int (*pmu_sleep)(void *ctx);
+	int (*pmu_ipu_sleep)(void *ctx);
+	int (*pmu_tpu_sleep)(void *ctx);
 	int (*pmu_deep_sleep)(void *ctx);
-	int (*pmu_resume)(void *ctx);
+	int (*pmu_ipu_resume)(void *ctx);
+	int (*pmu_tpu_resume)(void *ctx);
 };
 
-static int pmu_sleep_stub(void *ctx)      { return -ENODEV; }
+static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
+static int pmu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
-static int pmu_resume_stub(void *ctx)     { return -ENODEV; }
+static int pmu_ipu_resume_stub(void *ctx)     { return -ENODEV; }
+static int pmu_tpu_resume_stub(void *ctx)     { return -ENODEV; }
 
 static struct ab_sm_pmu_ops pmu_ops_stub = {
 	.ctx = NULL,
 
-	.pmu_sleep = &pmu_sleep_stub,
+	.pmu_ipu_sleep = &pmu_ipu_sleep_stub,
+	.pmu_tpu_sleep = &pmu_tpu_sleep_stub,
 	.pmu_deep_sleep = &pmu_deep_sleep_stub,
-	.pmu_resume = &pmu_resume_stub,
+	.pmu_ipu_resume = &pmu_ipu_resume_stub,
+	.pmu_tpu_resume = &pmu_tpu_resume_stub,
 };
 
 struct ab_sm_clk_ops {
