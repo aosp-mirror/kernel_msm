@@ -152,6 +152,7 @@ struct airbrush_tmu_data {
 	int id;
 	struct airbrush_tmu_platform_data *pdata;
 	u32 base;
+	struct ab_tmu_hw *hw;
 	int irq;
 	struct notifier_block  tmu_nb;
 	struct work_struct irq_work;
@@ -707,6 +708,11 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, data);
+
+	/* TODO Probe from device tree instead of a hard coded base. */
+	data->hw = devm_ab_tmu_hw_create(&pdev->dev, AIRBRUSH_TMU_BASE);
+	if (IS_ERR(data->hw))
+		return PTR_ERR(data->hw);
 
 	/* TODO: See if this function can be remove */
 	ret = airbrush_map_dt_data(pdev);
