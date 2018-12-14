@@ -82,3 +82,10 @@ config FB_MSM_MDSS_FRC_DEBUG
 	frame rate control (FRC) debugging features to: Collect video frame
 	statistics and check whether its output pattern matches expected
 	cadence.
+
+config FB_MSM_TRIPLE_BUFFER
+        depends on FB_MSM_MDSS
+        bool "Enable MDSS Triple Buffer"
+        default n
+        ---help---
+        The MDSS Triple buffer make frame buffer 3 pages instead of 2 pages.
