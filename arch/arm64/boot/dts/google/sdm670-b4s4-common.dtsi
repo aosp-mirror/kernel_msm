@@ -46,6 +46,15 @@
 	vendor {
 		dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/vendor";
 	};
+
+	persist {
+		compatible = "android,persist";
+		dev = "/dev/block/platform/soc/7c4000.sdhci/by-name/persist";
+		mnt_point = "/mnt/vendor/persist";
+		type = "ext4";
+		mnt_flags = "nosuid,nodev,noatime,barrier=1";
+		fsmgr_flags = "wait";
+	};
 };
 
 &qupv3_se10_i2c {
