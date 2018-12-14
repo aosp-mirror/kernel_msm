@@ -30,6 +30,7 @@ static inline void task_set_scs(struct task_struct *tsk, void *s)
 
 extern void scs_set_init_magic(struct task_struct *tsk);
 extern void scs_task_init(struct task_struct *tsk);
+extern void scs_task_reset(struct task_struct *tsk);
 extern int scs_prepare(struct task_struct *tsk, int node);
 extern bool scs_corrupted(struct task_struct *tsk);
 extern void scs_release(struct task_struct *tsk);
@@ -50,6 +51,10 @@ static inline void scs_set_init_magic(struct task_struct *tsk)
 }
 
 static inline void scs_task_init(struct task_struct *tsk)
+{
+}
+
+static inline void scs_task_reset(struct task_struct *tsk)
 {
 }
 
