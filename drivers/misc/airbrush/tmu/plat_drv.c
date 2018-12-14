@@ -24,86 +24,9 @@
 #include <linux/mfd/abc-pcie-notifier.h>
 #include "../../../thermal/thermal_core.h"
 
-/* Exynos generic registers */
-#define AIRBRUSH_TMU_REG_TRIMINFO	0x0
-#define AIRBRUSH_TMU_REG_TRIMINFO_P(n)	((0x0) + ((n)*4))
-#define AIRBRUSH_TMU_REG_CONTROL	0x20
-#define AIRBRUSH_TMU_REG_CONTROL1	0x24
-#define AIRBRUSH_TMU_REG_STATUS		0x28
-#define AIRBRUSH_TMU_SAMPLING_INTERVAL	0x02c
-#define AIRBRUSH_TMU_COUNTER_VALUE0	0x030
-#define AIRBRUSH_TMU_COUNTER_VALUE1	0x034
-#define AIRBRUSH_TMU_AVG_CONTROL	0x034
-#define AIRBRUSH_TMU_REG_CURRENT_TEMP0_1	0x040
-#define AIRBRUSH_TMU_REG_CURRENT_TEMP2_4	0x044
-#define AIRBRUSH_TMU_REG_CURRENT_TEMP5_7	0x048
-#define AIRBRUSH_THD_TEMP_RISE7_6_P(n) \
-		((n == 0) ? (0x050) : (0x170+(n-1)*0x20))
-#define AIRBRUSH_THD_TEMP_RISE5_4		0x054
-#define AIRBRUSH_THD_TEMP_RISE3_2		0x058
-#define AIRBRUSH_THD_TEMP_RISE1_0		0x05C
-#define AIRBRUSH_THD_TEMP_FALL7_6_P(n) \
-		((n == 0) ? (0x060) : (0x180+(n-1)*0x20))
-#define AIRBRUSH_TMU_REG_INTEN_P(n) \
-		((n <= 4) ? (0x110+n*0x10) : (0x310+((n-5)*0x10)))
-#define AIRBRUSH_TMU_REG_INTSTAT_P(n) \
-		((n <= 4) ? (0x114+n*0x10) : (0x314+((n-5)*0x10)))
-#define AIRBRUSH_TMU_REG_INTPEND_P(n) \
-		((n <= 4) ? (0x118+n*0x10) : (0x318+((n-5)*0x10)))
-
-#define AIRBRUSH_TMU_INT_EN			0xff01ff
-
-#define AIRBRUSH_TMU_INTEN_FALL0_SHIFT		16
-
-#define AIRBRUSH_TMU_CAL_MASK		0x3
-#define AIRBRUSH_TMU_TEMP_MASK		0x1ff
-#define AIRBRUSH_TMU_BUF_SLOPE_SEL_MASK	0xf
-#define AIRBRUSH_TMU_BUF_SLOPE_SEL_SHIFT	8
-#define AIRBRUSH_TMU_CORE_EN_SHIFT	0
-#define AIRBRUSH_TMU_EN_TRIP_SHIFT	12
-#define AIRBRUSH_TMU_TRIP_MODE_SHIFT	13
-
-#define AIRBRUSH_EMUL_CON		0x160
-#define AIRBRUSH_DEBUG_CURRENT_TEMP	0x164
-#define AIRBRUSH_EMUL_DATA_SHIFT	7
-#define AIRBRUSH_EMUL_DATA_MASK		0x1ff
-#define AIRBRUSH_EMUL_NEXTTIME_SHIFT	16
-#define AIRBRUSH_EMUL_NEXTTIME_VAL	0x1
-#define AIRBRUSH_EMUL_ENABLE_SHIFT	0
-#define AIRBRUSH_EMUL_ENABLE	0x1
-
-#define AIRBRUSH_TRIMINFO_25_SHIFT	0
-#define AIRBRUSH_TRIMINFO_85_SHIFT	8
-#define AIRBRUSH_TMU_TRIP_MODE_SHIFT	13
-#define AIRBRUSH_TMU_TRIP_MODE_MASK	0x7
-#define AIRBRUSH_TMU_THERM_TRIP_EN_SHIFT	12
-
-#define AIRBRUSH_TMU_INTEN_RISE0_SHIFT		0
-#define AIRBRUSH_TMU_INTEN_RISE1_SHIFT		1
-#define AIRBRUSH_TMU_INTEN_RISE2_SHIFT		2
-#define AIRBRUSH_TMU_INTEN_RISE3_SHIFT		3
-#define AIRBRUSH_TMU_INTEN_RISE4_SHIFT		4
-#define AIRBRUSH_TMU_INTEN_RISE5_SHIFT		5
-#define AIRBRUSH_TMU_INTEN_RISE6_SHIFT		6
-#define AIRBRUSH_TMU_INTEN_RISE7_SHIFT		7
-
-#define AIRBRUSH_NO_TRIMMING	0
-#define AIRBRUSH_ONE_POINT_TRIMMING	1
-#define AIRBRUSH_TWO_POINT_TRIMMING	2
+#include "hw.h"
 
 #define AIRBRUSH_TMU_BASE	0xB90000
-#define AIRBRUSH_TEMP_PROBE_MAIN		0
-#define AIRBRUSH_TEMP_PROBE_IPU0		1
-#define AIRBRUSH_TEMP_PROBE_IPU1		2
-#define AIRBRUSH_TEMP_PROBE_IPU2		3
-#define AIRBRUSH_TEMP_PROBE_IPU_TPU		4
-#define AIRBRUSH_TEMP_PROBE_TPU0		5
-#define AIRBRUSH_TEMP_PROBE_TPU1		6
-#define AIRBRUSH_NUM_REMOTE_PROBE		0x6
-#define AIRBRUSH_REMOTE_PROBE_SHIFT		16
-#define AIRBRUSH_NUM_ALL_PROBE			7
-#define AIRBRUSH_TMU_CAL_SHIFT			18
-#define AIRBRUSH_TMU_TEMP_SHIFT			9
 
 #define MCELSIUS	1000
 
@@ -112,25 +35,11 @@ static const u16 no_trimming_error2[] = {346, 346, 347, 347, 347, 346, 346};
 
 static int tmu_read_enable;
 
-void tmu_write(u32 value, u32 offset)
-{
-	abc_pcie_config_write(offset, 4, value);
-}
-
-u32 tmu_read(u32 offset)
-{
-	u32 data;
-
-	abc_pcie_config_read(offset, 4, &data);
-	return data;
-}
-
 /**
  * struct airbrush_tmu_data : A structure to hold the private data of the TMU
 	driver
  * @id: identifier of the one instance of the TMU controller.
  * @pdata: pointer to the tmu platform/configuration data
- * @base: base address of the single instance of the TMU controller.
  * @irq: irq number of the TMU controller.
  * @soc: id of the SOC type.
  * @irq_work: pointer to the irq work structure.
@@ -151,7 +60,6 @@ u32 tmu_read(u32 offset)
 struct airbrush_tmu_data {
 	int id;
 	struct airbrush_tmu_platform_data *pdata;
-	u32 base;
 	struct ab_tmu_hw *hw;
 	int irq;
 	struct notifier_block  tmu_nb;
@@ -228,16 +136,17 @@ static void airbrush_report_trigger(struct airbrush_tmu_data *p)
 static void airbrush_tmu_clear_irqs(struct airbrush_tmu_data *data)
 {
 	unsigned int val_irq, i;
+	struct ab_tmu_hw *hw = data->hw;
 
 	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
-		val_irq = tmu_read(data->base + AIRBRUSH_TMU_REG_INTPEND_P(i));
-		tmu_write(val_irq, data->base + AIRBRUSH_TMU_REG_INTPEND_P(i));
+		val_irq = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_INTPEND_P(i));
+		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTPEND_P(i), val_irq);
 	}
 }
 
 static int airbrush_tmu_read(struct airbrush_tmu_data *data)
 {
-	return tmu_read(data->base + AIRBRUSH_TMU_REG_CURRENT_TEMP0_1) &
+	return ab_tmu_hw_read(data->hw, AIRBRUSH_TMU_REG_CURRENT_TEMP0_1) &
 		AIRBRUSH_TMU_TEMP_MASK;
 }
 
@@ -341,24 +250,26 @@ static int code_to_temp(struct airbrush_tmu_data *data, u16 temp_code, u8 probe)
 static void airbrush_tmu_core_enable(struct platform_device *pdev, bool enable)
 {
 	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
+	struct ab_tmu_hw *hw = data->hw;
 	unsigned int val;
 
-	val = tmu_read(data->base + AIRBRUSH_TMU_REG_CONTROL);
+	val = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL);
 
 	if (enable) {
 		val |= (1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
 		val |= (1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
-		tmu_write(val, data->base + AIRBRUSH_TMU_REG_CONTROL);
 	} else {
 		val &= ~(1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
 		val &= ~(1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
-		tmu_write(val, data->base + AIRBRUSH_TMU_REG_CONTROL);
 	}
+
+	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL, val);
 }
 
 static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
 		int i)
 {
+	struct ab_tmu_hw *hw = data->hw;
 	/* TODO We should have one tzd for each sensor instead. */
 	unsigned int trim_info;
 	struct thermal_zone_device *tz = data->tzd;
@@ -368,7 +279,7 @@ static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
 	int temp, temp_hist;
 	unsigned int reg_off, bit_off;
 
-	trim_info = tmu_read(data->base + AIRBRUSH_TMU_REG_TRIMINFO_P(i));
+	trim_info = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_TRIMINFO_P(i));
 
 	data->cal_type[i] = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
 			AIRBRUSH_TMU_CAL_MASK;
@@ -395,35 +306,34 @@ static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
 
 		/* Set 9-bit temp code for rising threshold levels */
 		threshold_code = temp_to_code(data, temp, i);
-		rising_threshold = tmu_read(data->base +
+		rising_threshold = ab_tmu_hw_read(hw,
 				AIRBRUSH_THD_TEMP_RISE7_6_P(i) + reg_off);
 		rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK << (16 * bit_off));
 		rising_threshold |= threshold_code << (16 * bit_off);
 
 		/* Set 9-bit temp code for falling threshold levels */
 		threshold_code = temp_to_code(data, temp_hist, i);
-		falling_threshold = tmu_read(data->base +
+		falling_threshold = ab_tmu_hw_read(hw,
 				AIRBRUSH_THD_TEMP_FALL7_6_P(i) + reg_off);
 		falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
 				(16 * bit_off));
 		falling_threshold |= threshold_code << (16 * bit_off);
 
-		tmu_write(rising_threshold,
-				data->base + AIRBRUSH_THD_TEMP_RISE7_6_P(i) +
-				reg_off);
-		tmu_write(falling_threshold,
-				data->base + AIRBRUSH_THD_TEMP_FALL7_6_P(i) +
-				reg_off);
+		ab_tmu_hw_write(hw, AIRBRUSH_THD_TEMP_RISE7_6_P(i) + reg_off,
+				rising_threshold);
+		ab_tmu_hw_write(hw, AIRBRUSH_THD_TEMP_FALL7_6_P(i) + reg_off,
+				falling_threshold);
 	}
 }
 
 static int airbrush_tmu_initialize(struct platform_device *pdev)
 {
 	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
+	struct ab_tmu_hw *hw = data->hw;
 	unsigned int status;
 	int i;
 
-	status = tmu_read(data->base + AIRBRUSH_TMU_REG_STATUS);
+	status = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_STATUS);
 	if (!status)
 		return -EBUSY;
 
@@ -438,17 +348,18 @@ static void airbrush_tmu_control(struct platform_device *pdev, bool on)
 {
 	unsigned int i, con1, interrupt_en;
 	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
+	struct ab_tmu_hw *hw = data->hw;
 
-	con1 = tmu_read(data->base + AIRBRUSH_TMU_REG_CONTROL1);
+	con1 = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL1);
 	con1 |= AIRBRUSH_NUM_REMOTE_PROBE << AIRBRUSH_REMOTE_PROBE_SHIFT;
 
 	interrupt_en = on ? AIRBRUSH_TMU_INT_EN : 0;
 
 	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
-		tmu_write(interrupt_en,
-			data->base + AIRBRUSH_TMU_REG_INTEN_P(i));
+		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTEN_P(i),
+				interrupt_en);
 
-	tmu_write(con1, data->base + AIRBRUSH_TMU_REG_CONTROL1);
+	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL1, con1);
 	airbrush_tmu_core_enable(pdev, on);
 }
 
@@ -472,54 +383,56 @@ static int airbrush_get_temp(void *p, int *temp)
 }
 
 #ifdef CONFIG_THERMAL_EMULATION
-void tmu_enable_emulate(void)
+void tmu_enable_emulate(struct ab_tmu_hw *hw)
 {
 	unsigned int emul_con;
 
-	emul_con = tmu_read(AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON);
+	emul_con = ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON);
 	emul_con |= (1 << AIRBRUSH_EMUL_ENABLE_SHIFT);
 
-	tmu_write(emul_con, AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON);
+	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, emul_con);
 }
 
-void tmu_disable_emulate(void)
+void tmu_disable_emulate(struct ab_tmu_hw *hw)
 {
 	unsigned int emul_con;
 
-	emul_con = tmu_read(AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON);
+	emul_con = ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON);
 	emul_con &= ~(1 << AIRBRUSH_EMUL_ENABLE_SHIFT);
 
-	tmu_write(emul_con, AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON);
+	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, emul_con);
 }
 
 void tmu_set_emulate_data(struct airbrush_tmu_data *data,  u16 next_time,
 								u16 next_data)
 {
+	struct ab_tmu_hw *hw = data->hw;
 	u32 uReg;
 
 	next_time &= 0xFFFF;
 	next_data &= 0x1FF;
 	if (next_time == 0x0)
 		next_time = 0x1;
-	uReg = (tmu_read(AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON) >> 0) & 0x1;
+	uReg = (ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON) >> 0) & 0x1;
 	uReg |= (next_time << AIRBRUSH_EMUL_NEXTTIME_SHIFT) |
 		(temp_to_code(data, next_data, 0) << AIRBRUSH_EMUL_DATA_SHIFT);
 
-	tmu_write(uReg, AIRBRUSH_TMU_BASE + AIRBRUSH_EMUL_CON);
+	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, uReg);
 }
 
 static int airbrush_tmu_set_emulation(void *drv_data, int temp)
 {
 	struct airbrush_tmu_data *data = drv_data;
+	struct ab_tmu_hw *hw = data->hw;
 	int ret;
 
 	mutex_lock(&data->pcie_link_lock);
 	if (data->pcie_link_ready) {
 		if (temp != 0) {
-			tmu_enable_emulate();
+			tmu_enable_emulate(hw);
 			tmu_set_emulate_data(data, 1, temp / MCELSIUS);
 		} else {
-			tmu_disable_emulate();
+			tmu_disable_emulate(hw);
 		}
 		ret = 0;
 	} else {
@@ -566,8 +479,6 @@ static int airbrush_map_dt_data(struct platform_device *pdev)
 
 	data->irq = 36;
 
-	data->base = AIRBRUSH_TMU_BASE;
-
 	pdata = devm_kzalloc(&pdev->dev,
 			     sizeof(struct airbrush_tmu_platform_data),
 			     GFP_KERNEL);
@@ -600,6 +511,7 @@ static struct thermal_zone_of_device_ops airbrush_sensor_ops = {
 static inline int airbrush_tmu_get_current_temp(struct airbrush_tmu_data *data,
 		int id)
 {
+	struct ab_tmu_hw *hw = data->hw;
 	u32 reg_offset, reg_id_min, reg_shift;
 	u32 code;
 
@@ -627,7 +539,7 @@ static inline int airbrush_tmu_get_current_temp(struct airbrush_tmu_data *data,
 	}
 	reg_shift = AIRBRUSH_TMU_TEMP_SHIFT * (id - reg_id_min);
 
-	code = (tmu_read(data->base + reg_offset) >> reg_shift)
+	code = (ab_tmu_hw_read(hw, reg_offset) >> reg_shift)
 			& AIRBRUSH_TMU_TEMP_MASK;
 	return code_to_temp(data, code, id);
 }

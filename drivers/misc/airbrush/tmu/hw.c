@@ -70,3 +70,16 @@ void devm_ab_tmu_hw_destroy(struct ab_tmu_hw *hw)
 	devres_release(hw->dev, devm_ab_tmu_hw_release, devm_ab_tmu_hw_match,
 		hw);
 }
+
+u32 ab_tmu_hw_read(struct ab_tmu_hw *hw, u32 offset)
+{
+	u32 data;
+
+	abc_pcie_config_read(hw->base + offset, 4, &data);
+	return data;
+}
+
+void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value)
+{
+	abc_pcie_config_write(hw->base + offset, 4, value);
+}
