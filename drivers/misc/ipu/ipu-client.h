@@ -334,4 +334,8 @@ struct paintbox_data {
 int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 		const struct jqs_message *req);
 
+/* Caller must hold pb->lock for this group of functions */
+int ipu_jqs_get(struct paintbox_data *pb);
+int ipu_jqs_put(struct paintbox_data *pb);
+
 #endif /* __IPU_CLIENT_H__ */

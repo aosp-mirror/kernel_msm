@@ -46,6 +46,32 @@
 #define JQS_STARTUP_LATENCY_US (10 * 1000)
 #define JQS_AUTO_SUSPEND_TIMEOUT_MS 250
 
+/* Caller must hold pb->lock */
+int ipu_jqs_get(struct paintbox_data *pb)
+{
+	int ret;
+
+	ret = pm_runtime_get_sync(pb->dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(pb->dev);
+
+		/* A pm_runtime_get_sync() failure will leave the device in the
+		 * suspended state but we need to call pm_runtime_set_suspended
+		 * to clear the power.runtime_error field.
+		 */
+		pm_runtime_set_suspended(pb->dev);
+	}
+
+	return ret;
+}
+
+/* Caller must hold pb->lock */
+int ipu_jqs_put(struct paintbox_data *pb)
+{
+	pm_runtime_mark_last_busy(pb->dev);
+	return pm_runtime_put_autosuspend(pb->dev);
+}
+
 /*
  * TODO(b/118694468): IPU Driver: Add management interface
  *
@@ -172,7 +198,7 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 
 	list_add_tail(&session->session_entry, &pb->session_list);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0)
 		goto free_session;
 
@@ -206,8 +232,7 @@ free_session_idr:
 free_buffer_table:
 	ipu_buffer_release_session(pb, session);
 put_runtime:
-	pm_runtime_mark_last_busy(pb->dev);
-	pm_runtime_put_autosuspend(pb->dev);
+	(void)ipu_jqs_put(pb);
 free_session:
 	list_del(&session->session_entry);
 	mutex_unlock(&pb->lock);
@@ -252,8 +277,7 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 	 */
 	ab_dram_free_dma_buf_kernel(session->buffer_id_table);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	list_del(&session->session_entry);
 

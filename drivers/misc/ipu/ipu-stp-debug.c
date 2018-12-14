@@ -316,11 +316,9 @@ int ipu_stp_debug_read_registers(struct seq_file *s, void *data)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
@@ -370,8 +368,7 @@ int ipu_stp_debug_read_registers(struct seq_file *s, void *data)
 	ipu_stp_dump_stp_pmon_cnt_1_sts(s,
 			stp_registers[REG_INDEX64(STP_PMON_CNT_1_STS)]);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -386,11 +383,9 @@ static int ipu_stp_debug_register_set(void *data, u64 val)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
@@ -398,8 +393,7 @@ static int ipu_stp_debug_register_set(void *data, u64 val)
 	ipu_stp_select(pb, reg->stp_id);
 	ipu_writeq(pb->dev, val, reg->debug_register.offset);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -414,11 +408,9 @@ static int ipu_stp_debug_register_get(void *data, u64 *val)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
@@ -426,8 +418,7 @@ static int ipu_stp_debug_register_get(void *data, u64 *val)
 	ipu_stp_select(pb, reg->stp_id);
 	*val = ipu_readq(pb->dev, reg->debug_register.offset);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -503,4 +494,3 @@ void ipu_stp_debug_remove(struct paintbox_data *pb, struct paintbox_stp *stp)
 {
 	debugfs_remove_recursive(stp->debug_dir);
 }
-

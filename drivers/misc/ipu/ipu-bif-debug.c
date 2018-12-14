@@ -87,11 +87,9 @@ static int ipu_bif_debug_read_registers(struct seq_file *s, void *data)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
@@ -108,8 +106,7 @@ static int ipu_bif_debug_read_registers(struct seq_file *s, void *data)
 				ipu_readq(pb->dev, offset));
 	}
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -124,18 +121,15 @@ static int ipu_bif_debug_register_set(void *data, u64 val)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
 	ipu_writeq(pb->dev, val, reg->offset);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -150,18 +144,15 @@ static int ipu_bif_debug_register_get(void *data, u64 *val)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
 	*val = ipu_readq(pb->dev, reg->offset);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 

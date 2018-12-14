@@ -188,18 +188,15 @@ static int ipu_debug_regs_show(struct seq_file *s, void *unused)
 
 	written = ret;
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
 	ret = debug->register_dump(debug, buf + written, len - written);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	pm_runtime_put_autosuspend(pb->dev);
+	(void)ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -291,18 +288,15 @@ static int ipu_debug_reg_entry_set(void *data, u64 val)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
 	reg_entry->write(reg_entry, val);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -318,18 +312,15 @@ static int ipu_debug_reg_entry_get(void *data, u64 *val)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
 	*val = reg_entry->read(reg_entry);
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -430,11 +421,9 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 
 	mutex_lock(&pb->lock);
 
-	ret = pm_runtime_get_sync(pb->dev);
+	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
 		mutex_unlock(&pb->lock);
-		dev_err(pb->dev, "%s: unable to start JQS, ret %d", __func__,
-				ret);
 		return ret;
 	}
 
@@ -457,8 +446,7 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 		}
 	}
 
-	pm_runtime_mark_last_busy(pb->dev);
-	ret = pm_runtime_put_autosuspend(pb->dev);
+	ret = ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 
@@ -467,8 +455,7 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 	return ret;
 
 err_exit:
-	pm_runtime_mark_last_busy(pb->dev);
-	pm_runtime_put_autosuspend(pb->dev);
+	(void)ipu_jqs_put(pb);
 
 	mutex_unlock(&pb->lock);
 	dev_err(pb->dev, "%s: register dump error, err = %d", __func__, ret);
