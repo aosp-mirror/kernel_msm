@@ -41,7 +41,10 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
+#define PHASENUM 3
+
 #define PROXVALUE_SIZE 2
+#define PHASE_SELECT_REG 0x60
 #define PROXUSEFUL_REG 0x61
 #define PROXAVG_REG 0x63
 #define PROXDIFF_REG 0x65
@@ -97,6 +100,8 @@ struct led_laser_ctrl_t {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *gpio_init_state;
 	int gpio_count;
+	struct work_struct work;
+	struct workqueue_struct *work_queue;
 	struct {
 		bool is_validated;
 		bool is_power_up;
@@ -114,7 +119,11 @@ struct led_laser_ctrl_t {
 		uint32_t sid;
 		struct gpio *gpio_array;
 		unsigned int irq[CAP_SENSE_GPIO_MAX];
-		uint16_t proxvalue[PROX_VALUE_MAX];
+		int16_t proxvalue[PROX_VALUE_MAX];
+		int16_t proxavg[PHASENUM];
+		int16_t proxoffset[PHASENUM];
+		struct camera_io_master io_master_info;
+		bool is_cci_init;
 	} cap_sense;
 };
 
@@ -123,28 +132,98 @@ static const struct reg_setting silego_reg_settings[] = {
 	{0xcc, 0x81}, {0xcd, 0x93}, {0xce, 0x83}, {0x92, 0x00}, {0x93, 0x00}
 };
 
-static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
+static const struct reg_setting cap_sense_init_reg_settings[] = {
+	{0x10, 0x0F},
+	{0x11, 0x27},
+	{0x14, 0x00},
+	{0x15, 0x00},
+	{0x20, 0x20},
+	{0x23, 0x01},
+	{0x24, 0x47},
+	{0x26, 0x01},
+	{0x27, 0x47},
+	{0x28, 0x3D},
+	{0x29, 0x37},
+	{0x2A, 0x1F},
+	{0x2B, 0x3D},
+	{0x2C, 0x12},
+	{0x2D, 0x0F},
+	{0x30, 0x09},
+	{0x31, 0x09},
+	{0x32, 0x3F},
+	{0x33, 0xC0},
+	{0x34, 0x00},
+	{0x35, 0x00},
+	{0x36, 0x69},
+	{0x37, 0x69},
+	{0x40, 0x00},
+	{0x41, 0x00},
+	{0x42, 0x01},
+	{0x43, 0x00},
+	{0x44, 0x00},
+	{0x45, 0x05},
+	{0x46, 0x00},
+	{0x47, 0x00},
+	{0x48, 0x00},
+	{0x49, 0x00},
+	{0x4A, 0x40},
+	{0x4B, 0x31},
+	{0x4C, 0x00},
+	{0x4D, 0x00},
+	{0x4E, 0x80},
+	{0x4F, 0x0C},
+	{0x50, 0x34},
+	{0x51, 0x77},
+	{0x52, 0x22},
+	{0x53, 0x00},
+	{0x54, 0x00},
+	{0x02, 0x00},
+	{0x03, 0x07},
+	{0x05, 0x08},
+	{0x06, 0x04},
+	{0x07, 0x80},
+	{0x08, 0x01},
+	{0x00, 0x00},
+};
+
+int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 {
-	int rc, io_release_rc;
-	uint32_t old_sid, old_cci_master, data;
+	int rc, i;
+	size_t settings_size = ARRAY_SIZE(cap_sense_init_reg_settings);
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings[settings_size];
 
-	old_sid = ctrl->io_master_info.cci_client->sid;
-	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
-	ctrl->io_master_info.cci_client->sid = ctrl->cap_sense.sid;
-	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
+	for (i = 0; i < settings_size; i++) {
+		reg_settings[i].reg_addr = cap_sense_init_reg_settings[i].addr;
+		reg_settings[i].reg_data = cap_sense_init_reg_settings[i].data;
+		reg_settings[i].delay = 0;
+		reg_settings[i].data_mask = 0;
+	}
+	write_setting.reg_setting = reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = settings_size;
+	write_setting.delay = 0;
 
-	rc = camera_io_init(&(ctrl->io_master_info));
+	rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
+		&write_setting);
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev,
-			"cam io init for cap sense failed: rc: %d", rc);
-		ctrl->io_master_info.cci_client->sid = old_sid;
-		ctrl->io_master_info.cci_client->cci_i2c_master =
-			old_cci_master;
-		return rc;
+			"%s: i2c write failed: rc: %d",
+			__func__, rc);
 	}
 
+	return rc;
+}
+
+
+static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
+{
+	int rc;
+	uint32_t data;
+
 	rc = camera_io_dev_read(
-		&ctrl->io_master_info,
+		&ctrl->cap_sense.io_master_info,
 		0x00,
 		&data,
 		CAMERA_SENSOR_I2C_TYPE_BYTE,
@@ -152,41 +231,18 @@ static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 	if (rc < 0)
 		dev_err(ctrl->soc_info.dev, "clean up NIRQ failed");
 
-	io_release_rc = camera_io_release(&(ctrl->io_master_info));
-	if (io_release_rc < 0) {
-		dev_err(ctrl->soc_info.dev, "cap sense cci_release failed");
-		if (!rc)
-			rc = io_release_rc;
-	}
-	ctrl->io_master_info.cci_client->sid = old_sid;
-	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
 	return rc;
 }
 
 static int sx9320_read_proxvalue(struct led_laser_ctrl_t *ctrl, int proxtype)
 {
-	int rc, io_release_rc, i;
-	uint32_t old_sid, old_cci_master, data, addr;
+	int rc, i;
+	uint32_t data, addr;
 	uint16_t mask;
 
 	if (proxtype >= PROX_VALUE_MAX) {
 		dev_err(ctrl->soc_info.dev, "unknown proxvalue type");
 		return -EINVAL;
-	}
-
-	old_sid = ctrl->io_master_info.cci_client->sid;
-	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
-	ctrl->io_master_info.cci_client->sid = ctrl->cap_sense.sid;
-	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
-
-	rc = camera_io_init(&(ctrl->io_master_info));
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"cam io init for cap sense failed: rc: %d", rc);
-		ctrl->io_master_info.cci_client->sid = old_sid;
-		ctrl->io_master_info.cci_client->cci_i2c_master =
-			old_cci_master;
-		return rc;
 	}
 
 	switch (proxtype) {
@@ -213,7 +269,7 @@ static int sx9320_read_proxvalue(struct led_laser_ctrl_t *ctrl, int proxtype)
 	ctrl->cap_sense.proxvalue[proxtype] = 0;
 	for (i = 0; i < PROXVALUE_SIZE; i++) {
 		rc = camera_io_dev_read(
-			&ctrl->io_master_info,
+			&ctrl->cap_sense.io_master_info,
 			addr+i,
 			&data,
 			CAMERA_SENSOR_I2C_TYPE_BYTE,
@@ -222,24 +278,13 @@ static int sx9320_read_proxvalue(struct led_laser_ctrl_t *ctrl, int proxtype)
 			dev_err(ctrl->soc_info.dev,
 				"read proxvalue %d failed",
 				proxtype);
-			goto out;
+			return rc;
 		}
-
 		ctrl->cap_sense.proxvalue[proxtype] =
 			(ctrl->cap_sense.proxvalue[proxtype] << 8) + data;
 	}
 	ctrl->cap_sense.proxvalue[proxtype] &= mask;
 
-out:
-
-	io_release_rc = camera_io_release(&(ctrl->io_master_info));
-	if (io_release_rc < 0) {
-		dev_err(ctrl->soc_info.dev, "cap sense cci_release failed");
-		if (!rc)
-			rc = io_release_rc;
-	}
-	ctrl->io_master_info.cci_client->sid = old_sid;
-	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
 	return rc;
 }
 
@@ -444,6 +489,17 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->is_power_up = true;
 	}
 
+	if (!ctrl->cap_sense.is_cci_init) {
+		rc = camera_io_init(&(ctrl->cap_sense.io_master_info));
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"cam io init for cap sense failed: rc: %d",
+				rc);
+			return rc;
+		}
+		ctrl->cap_sense.is_cci_init = true;
+	}
+
 	rc = sx9320_cleanup_nirq(ctrl);
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev,
@@ -492,6 +548,16 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 				"laser cci_release failed: rc: %d", rc);
 		} else
 			ctrl->is_cci_init = false;
+	}
+
+	if (ctrl->cap_sense.is_cci_init) {
+		is_error = camera_io_release(&(ctrl->cap_sense.io_master_info));
+		if (is_error < 0) {
+			rc = is_error;
+			dev_err(ctrl->soc_info.dev,
+				"laser cci_release failed: rc: %d", rc);
+		} else
+			ctrl->cap_sense.is_cci_init = false;
 	}
 
 	if (ctrl->is_power_up) {
@@ -567,11 +633,60 @@ static irqreturn_t cap_sense_irq_handler(int irq, void *dev_id)
 	if (!dev)
 		return IRQ_NONE;
 
-	dev_warn(dev, "received cap sense irq: %d, read PROXAVG now", irq);
-	/* TODO: Read cap sense PROXAVG and compare to AVGPOSTHRESH */
 	ctrl = dev_get_drvdata(dev);
 
+	queue_work(ctrl->work_queue, &ctrl->work);
+
 	return IRQ_HANDLED;
+}
+
+static void cap_sense_workq_job(struct work_struct *work)
+{
+	struct led_laser_ctrl_t *ctrl;
+	uint32_t data;
+	int rc;
+	uint32_t i;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings;
+
+	ctrl = container_of(work, struct led_laser_ctrl_t, work);
+	if (!ctrl) {
+		dev_err(ctrl->soc_info.dev, "failed to get driver struct");
+		return;
+	}
+
+	rc = sx9320_cleanup_nirq(ctrl);
+	if (rc < 0)
+		return;
+
+	reg_settings.reg_addr = PHASE_SELECT_REG;
+	reg_settings.reg_data = 0x00;
+	reg_settings.delay = 0;
+	write_setting.reg_setting = &reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 0;
+
+	for (i = 0; i < PHASENUM; i++) {
+		reg_settings.reg_data = i;
+
+		camera_io_dev_write(&ctrl->cap_sense.io_master_info,
+			&write_setting);
+		camera_io_dev_read(
+			&ctrl->cap_sense.io_master_info,
+			PROXAVG_REG,
+			&data,
+			CAMERA_SENSOR_I2C_TYPE_BYTE,
+			CAMERA_SENSOR_I2C_TYPE_WORD);
+
+		ctrl->cap_sense.proxavg[i] = data & 0xFFFF;
+	}
+
+	dev_dbg(ctrl->soc_info.dev, "proxavg PH0: %d, PH1: %d, PH2: %d",
+			ctrl->cap_sense.proxavg[0],
+			ctrl->cap_sense.proxavg[1],
+			ctrl->cap_sense.proxavg[2]);
 }
 
 static int lm36011_set_up_silego_irq(
@@ -619,12 +734,12 @@ static int lm36011_set_up_cap_sense_irq(
 
 	switch (gpio_index) {
 	case CSENSE_PROXAVG_READ:
-		dev_dbg(dev, "setup irq CSENSE_PROXAVG_READ");
+		dev_info(dev, "setup irq CSENSE_PROXAVG_READ as IRQF_TRIGGER_FALLING");
 		irq_name = "cap_sense_irq";
 		irq_name = (ctrl->type == LASER_FLOOD) ?
 			"cap_sense_irq_flood" : "cap_sense_irq_dot";
 		rc = request_irq(irq, cap_sense_irq_handler,
-			IRQF_TRIGGER_RISING | IRQF_SHARED, irq_name, dev);
+			IRQF_TRIGGER_FALLING | IRQF_SHARED, irq_name, dev);
 		break;
 	default:
 		return -EINVAL;
@@ -815,7 +930,6 @@ static int lm36011_parse_dt(struct device *dev)
 		return -ENOENT;
 	}
 	ctrl->cap_sense.sid = value;
-
 	if (lm36011_get_gpio_info(dev)) {
 		dev_err(dev, "failed to parse gpio and irq info");
 		return -EFAULT;
@@ -852,6 +966,16 @@ static int32_t lm36011_update_i2c_info(struct device *dev)
 	ctrl->io_master_info.cci_client->retries = 3;
 	ctrl->io_master_info.cci_client->id_map = 0;
 	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_MODE;
+
+	/* Fill up cap sense io info */
+	ctrl->cap_sense.io_master_info.cci_client->cci_device = value;
+	ctrl->cap_sense.io_master_info.cci_client->retries = 3;
+	ctrl->cap_sense.io_master_info.cci_client->id_map = 0;
+	ctrl->cap_sense.io_master_info.cci_client->i2c_freq_mode =
+		I2C_FAST_MODE;
+	ctrl->cap_sense.io_master_info.cci_client->sid = ctrl->cap_sense.sid;
+	ctrl->cap_sense.io_master_info.cci_client->cci_i2c_master = 0;
+	ctrl->cap_sense.io_master_info.master_type = CCI_MASTER;
 
 	return 0;
 }
@@ -1140,6 +1264,8 @@ static int32_t lm36011_platform_remove(struct platform_device *pdev)
 	if (!ctrl->is_probed)
 		return 0;
 
+	flush_workqueue(ctrl->work_queue);
+	destroy_workqueue(ctrl->work_queue);
 	class_destroy(ctrl->cl);
 	cdev_del(&ctrl->c_dev);
 	unregister_chrdev_region(ctrl->dev, 1);
@@ -1237,6 +1363,13 @@ static int32_t lm36011_driver_platform_probe(
 		return -ENOMEM;
 	}
 
+	ctrl->cap_sense.io_master_info.cci_client = devm_kzalloc(&pdev->dev,
+		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
+	if (!(ctrl->cap_sense.io_master_info.cci_client)) {
+		dev_err(&pdev->dev, "no memory for cap sense cci client");
+		return -ENOMEM;
+	}
+
 	platform_set_drvdata(pdev, ctrl);
 	dev_set_drvdata(&pdev->dev, ctrl);
 
@@ -1285,6 +1418,11 @@ static int32_t lm36011_driver_platform_probe(
 	rc = IS_ERR(dev_ret);
 	if (rc)
 		goto error_destroy_class;
+
+	INIT_WORK(&ctrl->work, cap_sense_workq_job);
+	device_name =
+		(ctrl->type == LASER_FLOOD ? "flood_workq" : "dot_workq");
+	ctrl->work_queue = create_workqueue(device_name);
 
 	/* Read device id */
 	rc = lm36011_power_up(ctrl);
