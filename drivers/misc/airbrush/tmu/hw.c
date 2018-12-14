@@ -167,6 +167,17 @@ void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
 	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL, con);
 }
 
+void ab_tmu_hw_clear_irqs(struct ab_tmu_hw *hw)
+{
+	int i;
+	u32 val_irq;
+
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
+		val_irq = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_INTPEND_P(i));
+		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTPEND_P(i), val_irq);
+	}
+}
+
 u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id)
 {
 	/*

@@ -124,17 +124,6 @@ static void airbrush_report_trigger(struct airbrush_tmu_data *p)
 	mutex_unlock(&tz->lock);
 }
 
-static void airbrush_tmu_clear_irqs(struct airbrush_tmu_data *data)
-{
-	unsigned int val_irq, i;
-	struct ab_tmu_hw *hw = data->hw;
-
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
-		val_irq = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_INTPEND_P(i));
-		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTPEND_P(i), val_irq);
-	}
-}
-
 static void airbrush_tmu_work(struct work_struct *work)
 {
 	struct airbrush_tmu_data *data = container_of(work,
@@ -142,7 +131,7 @@ static void airbrush_tmu_work(struct work_struct *work)
 
 	airbrush_report_trigger(data);
 
-	airbrush_tmu_clear_irqs(data);
+	ab_tmu_hw_clear_irqs(data->hw);
 
 	enable_irq(ABC_MSI_AON_INTNC);
 }
@@ -306,7 +295,7 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
 		airbrush_tmu_sensor_initialize(data, i);
 
-	airbrush_tmu_clear_irqs(data);
+	ab_tmu_hw_clear_irqs(hw);
 	return 0;
 }
 
