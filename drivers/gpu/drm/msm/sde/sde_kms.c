@@ -1013,6 +1013,8 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 
 			notifier_data.data = &new_mode;
 			notifier_data.id = connector->state->crtc->index;
+			notifier_data.refresh_rate =
+			    connector->state->crtc->state->mode.vrefresh;
 
 			msm_drm_notifier_call_chain(event, &notifier_data);
 		}
