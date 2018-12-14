@@ -38,7 +38,6 @@ static int tmu_read_enable;
 /**
  * struct airbrush_tmu_data : A structure to hold the private data of the TMU
 	driver
- * @id: identifier of the one instance of the TMU controller.
  * @pdata: pointer to the tmu platform/configuration data
  * @irq: irq number of the TMU controller.
  * @soc: id of the SOC type.
@@ -58,7 +57,6 @@ static int tmu_read_enable;
  * @tmu_set_emulation: SoC specific TMU emulation setting method
  */
 struct airbrush_tmu_data {
-	int id;
 	struct airbrush_tmu_platform_data *pdata;
 	struct ab_tmu_hw *hw;
 	int irq;
@@ -472,10 +470,6 @@ static int airbrush_map_dt_data(struct platform_device *pdev)
 
 	if (!data || !pdev->dev.of_node)
 		return -ENODEV;
-
-	data->id = of_alias_get_id(pdev->dev.of_node, "tmuctrl");
-	if (data->id < 0)
-		data->id = 0;
 
 	data->irq = 36;
 
