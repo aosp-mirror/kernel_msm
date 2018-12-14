@@ -103,10 +103,15 @@ int s2mpg01_dump_regs(struct s2mpg01_core *ddata)
 	u8 reg_data;
 	int i;
 
-	for (i = 0; i <= 64; i++) {
+	for (i = 0; i <= 0x40; i++) {
 		s2mpg01_read_byte(ddata, i, &reg_data);
 		dev_info(ddata->dev, "[0x%02x] = 0x%02x\n", i, reg_data);
 	}
+
+	s2mpg01_read_byte(ddata, S2MPG01_REG_TIME_CTRL2, &reg_data); /* 0x51 */
+	dev_info(ddata->dev,
+		 "[0x%02x] = 0x%02x\n",
+		 S2MPG01_REG_TIME_CTRL2, reg_data);
 
 	return 0;
 }

@@ -44,7 +44,7 @@
 #define S2MPG01_REG_LDO5_CTRL 0x17
 #define S2MPG01_REG_BUCK1_OUT_DVS 0x18
 #define S2MPG01_REG_LDO3_CTRL_DVS 0x19
-#define S2MPG01_REG_LDO3_DVS 0x1A
+#define S2MPG01_REG_BOOST_CTRL 0x1A
 #define S2MPG01_REG_NORM_THRES 0x1B
 #define S2MPG01_REG_BOOST_THRES 0x1C
 #define S2MPG01_REG_ADC_CTRL 0x1D
@@ -75,22 +75,34 @@
 #define S2MPG01_REG_GPIO_CTRL 0x36
 #define S2MPG01_REG_GPIO_A 0x37
 #define S2MPG01_REG_GPIO_Y 0x38
+#define S2MPG01_REG_TIME_CTRL1 0x39
+#define S2MPG01_REG_TIME_CTRL2 0x51
 
 /* adc inputs */
-#define S2MPG01_ADC_I_SMPS1_PH1     0x2
-#define S2MPG01_ADC_I_SMPS1_PH2     0x3
-#define S2MPG01_ADC_I_SMPS1_SUM     0x4
-#define S2MPG01_ADC_I_SMPS2         0x5
-#define S2MPG01_ADC_V_SMPS1         0x6
-#define S2MPG01_ADC_V_SMPS2         0x7
-#define S2MPG01_ADC_I_LDO1          0x8
-#define S2MPG01_ADC_I_LDO2          0x9
-#define S2MPG01_ADC_V_LDO1          0xA
-#define S2MPG01_ADC_V_LDO2          0xB
+#define S2MPG01_ADC_I_SMPS1_SUM  0x01
+#define S2MPG01_ADC_I_SMPS2  0x02
+#define S2MPG01_ADC_I_SMPS3  0x03
+#define S2MPG01_ADC_V_SMPS1  0x04
+#define S2MPG01_ADC_V_SMPS2  0x05
+#define S2MPG01_ADC_V_SMPS3  0x06
+#define S2MPG01_ADC_I_SMPS1_PH1  0x07
+#define S2MPG01_ADC_I_SMPS1_PH2  0x08
+#define S2MPG01_ADC_I_SMPS1_PH3  0x09
 #define S2MPG01_ADC_PTAT            0xC
 #define S2MPG01_ADC_VBAT            0xD
+#define S2MPG01_ADC_I_LDO1 0x11
+#define S2MPG01_ADC_I_LDO2 0x12
+#define S2MPG01_ADC_I_LDO3 0x13
+#define S2MPG01_ADC_I_LDO4 0x14
+#define S2MPG01_ADC_I_LDO5 0x15
+#define S2MPG01_ADC_V_LDO1 0x16
+#define S2MPG01_ADC_V_LDO2 0x17
+#define S2MPG01_ADC_V_LDO3 0x18
+#define S2MPG01_ADC_V_LDO4 0x19
+#define S2MPG01_ADC_V_LDO5 0x1A
 
 /* full scale of 8-bit adc slots */
+/* TODO(b/118704834): revisit the numbers and add channels */
 #define S2MPG01_ADC_SCALE_V_SMPS1   4688  /* in uV/lsb */
 #define S2MPG01_ADC_SCALE_V_SMPS2   6250  /* in uV/lsb */
 #define S2MPG01_ADC_SCALE_I_SMPS1   31250 /* in uA/lsb */
@@ -103,24 +115,33 @@
 #define TEMP_TO_PTAT_CODE(X)  ((238260 - (X)) / 1167)
 #define PTAT_CODE_TO_TEMP(X)  (238260 - ((X) * 1167))
 
-/* interrupt flags */
-#define S2MPG01_INT_PONR              0
-#define S2MPG01_INT_PONF              1
-#define S2MPG01_INT_ADC_CH0           2
-#define S2MPG01_INT_ADC_CH1           3
-#define S2MPG01_INT_ADC_CH2           4
-#define S2MPG01_INT_ADC_CH3           5
-#define S2MPG01_INT_ADC_DONE          6
-#define S2MPG01_INT_WATCHDOG          7
-#define S2MPG01_INT_SMPS1_OI          8
-#define S2MPG01_INT_SMPS2_OI          9
-#define S2MPG01_INT_SMPS1_UV          10
-#define S2MPG01_INT_LDO1_OI           11
-#define S2MPG01_INT_LDO2_OI           12
-#define S2MPG01_INT_TSD               13
-#define S2MPG01_INT_TH_TRIPR          14
-#define S2MPG01_INT_TH_TRIPF          15
-#define S2MPG01_INT_TH_TINT           23
+/* interrupt bits begin from INT1; mask bits are the same */
+#define S2MPG01_INT_PONR		0
+#define S2MPG01_INT_PONF		1
+#define S2MPG01_INT_ADC_CH0		2
+#define S2MPG01_INT_ADC_CH1		3
+#define S2MPG01_INT_ADC_CH2		4
+#define S2MPG01_INT_ADC_CH3		5
+#define S2MPG01_INT_ADC_DONE		6
+#define S2MPG01_INT_WATCHDOG		7
+#define S2MPG01_INT_T_ALARM		8
+#define S2MPG01_INT_NORM		9
+#define S2MPG01_INT_BOOST		10
+#define S2MPG01_INT_SMPS1_UV		11
+#define S2MPG01_INT_TINT_OUT		12
+#define S2MPG01_INT_TSD			13
+#define S2MPG01_INT_TH_TRIPR		14
+#define S2MPG01_INT_TH_TRIPF		15
+#define S2MPG01_INT_LDO1_OI		16
+#define S2MPG01_INT_LDO2_OI		17
+#define S2MPG01_INT_LDO3_OI		18
+#define S2MPG01_INT_LDO4_OI		19
+#define S2MPG01_INT_LDO5_OI		20
+#define S2MPG01_INT_SMPS3_OI		21
+#define S2MPG01_INT_SMPS2_OI		22
+#define S2MPG01_INT_SMPS1_OI		23
+#define S2MPG01_INT_LDO3_DVS_END	30
+#define S2MPG01_INT_SMPS1_DVS_END	31
 
 /* regulator names */
 #define S2MPG01_REGLTR_NAME_SMPS1 "s2mpg01_smps1"
@@ -133,9 +154,10 @@
 #define S2MPG01_REGLTR_NAME_LDO5  "s2mpg01_ldo5"
 
 /* silicon versions */
-#define S2MPG01_REV_ES 0
+#define S2MPG01_REV_ES 0xC
 
-#define S2MPG01_NUM_GPIOS 3
+#define S2MPG01_NUM_GPIOS 4
+#define S2MPG01_NUM_IRQ_REGS 4
 
 /* regulator id enum */
 enum s2mpg01_regulator_ids {
