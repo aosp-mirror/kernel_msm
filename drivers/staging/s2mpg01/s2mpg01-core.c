@@ -50,6 +50,8 @@
 
 static int s2mpg01_chip_init(struct s2mpg01_core *ddata);
 static void s2mpg01_print_status(struct s2mpg01_core *ddata);
+static void s2mpg01_mask_interrupts_all(struct s2mpg01_core *ddata);
+static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata);
 
 static const struct mfd_cell s2mpg01_devs[] = {
 	/* TODO(b118705469): change name to s2mpg01 with dts change */
@@ -256,8 +258,10 @@ int s2mpg01_update_bits(struct s2mpg01_core *ddata, u8 addr,
 }
 EXPORT_SYMBOL_GPL(s2mpg01_update_bits);
 
-int s2mpg01_read_adc_chan(struct s2mpg01_core *ddata,
-			  int chan_num, u8 *chan_data)
+int __s2mpg01_read_adc_chan(struct s2mpg01_core *ddata,
+			    int chan_num,
+			    u8 *chan_data,
+			    bool one_shot_mode)
 {
 	int ret = 0;
 	unsigned long timeout;
@@ -270,12 +274,18 @@ int s2mpg01_read_adc_chan(struct s2mpg01_core *ddata,
 	reinit_completion(&ddata->adc_conv_complete);
 
 	/* write the channel number */
-	ret = s2mpg01_write_byte(ddata, S2MPG01_REG_MUXSEL1, chan_num);
+	ret = s2mpg01_write_byte(ddata, S2MPG01_REG_MUXSEL0, chan_num);
+	if (ret)
+		goto adc_cleanup;
+
+	/* select one-shot mode _before_ enabling ADC */
+	ret = s2mpg01_write_byte(ddata, S2MPG01_REG_ADC_CTRL2,
+				 one_shot_mode ? 0x10 : 0x00);
 	if (ret)
 		goto adc_cleanup;
 
 	/* enable the clock at 125 kHz, 1 channel, and 8 samples */
-	ret = s2mpg01_write_byte(ddata, S2MPG01_REG_ADC_CTRL, 0xC2);
+	ret = s2mpg01_write_byte(ddata, S2MPG01_REG_ADC_CTRL, 0xC3);
 	if (ret)
 		goto adc_cleanup;
 
@@ -298,7 +308,20 @@ int s2mpg01_read_adc_chan(struct s2mpg01_core *ddata,
 	dev_dbg(ddata->dev, "%s: chan_data 0x%02x\n", __func__, *chan_data);
 
 adc_cleanup:
+	/* disable the ADC clock in continuous mode */
+	if (!one_shot_mode)
+		s2mpg01_write_byte(ddata, S2MPG01_REG_ADC_CTRL, 0x43);
+
+	/* release adc conversion */
+	clear_bit(0, &ddata->adc_conv_busy);
+
 	return ret;
+}
+
+int s2mpg01_read_adc_chan(struct s2mpg01_core *ddata,
+			  int chan_num, u8 *chan_data)
+{
+	return __s2mpg01_read_adc_chan(ddata, chan_num, chan_data, true);
 }
 EXPORT_SYMBOL_GPL(s2mpg01_read_adc_chan);
 
@@ -336,6 +359,184 @@ static void s2mpg01_print_status(struct s2mpg01_core *ddata)
 			status[0], status[1], status[2]);
 }
 
+static void s2mpg01_notify_fail_all(void)
+{
+	/*
+	 * Notify regulator clients of failures.
+	 * Use the same sequence as ABH power down.
+	 */
+	NOTIFY(S2MPG01_ID_LDO2, REGULATOR_EVENT_FAIL);
+	NOTIFY(S2MPG01_ID_LDO3, REGULATOR_EVENT_FAIL);
+	NOTIFY(S2MPG01_ID_SMPS1, REGULATOR_EVENT_FAIL);
+	NOTIFY(S2MPG01_ID_LDO5, REGULATOR_EVENT_FAIL);
+
+	NOTIFY(S2MPG01_ID_LDO4, REGULATOR_EVENT_FAIL);
+	NOTIFY(S2MPG01_ID_SMPS3, REGULATOR_EVENT_FAIL);
+	NOTIFY(S2MPG01_ID_LDO1, REGULATOR_EVENT_FAIL);
+	NOTIFY(S2MPG01_ID_SMPS2, REGULATOR_EVENT_FAIL);
+}
+
+/* handle an interrupt flag */
+static int s2mpg01_handle_int(struct s2mpg01_core *ddata,
+			      unsigned int flag_num)
+{
+	struct device *dev = ddata->dev;
+
+	dev_dbg(dev, "%s: flag %d\n", __func__, flag_num);
+
+	switch (flag_num) {
+	case S2MPG01_INT_PONR:
+		dev_dbg(dev, "%s: Observed PON rising edge\n", __func__);
+		break;
+	case S2MPG01_INT_PONF:
+		dev_dbg(dev, "%s: Observed PON falling edge\n", __func__);
+		break;
+	case S2MPG01_INT_ADC_CH0:
+		dev_dbg(dev, "%s: ADC channel0 over threshold\n", __func__);
+		break;
+	case S2MPG01_INT_ADC_CH1:
+		dev_dbg(dev, "%s: ADC channel1 over threshold1\n", __func__);
+		break;
+	case S2MPG01_INT_ADC_CH2:
+		dev_dbg(dev, "%s: ADC channel2 over threshold\n", __func__);
+		break;
+	case S2MPG01_INT_ADC_CH3:
+		dev_dbg(dev, "%s: ADC channel3 over threshold\n", __func__);
+		break;
+	case S2MPG01_INT_ADC_DONE:
+		dev_dbg(dev, "%s: completing adc conversion\n", __func__);
+		complete(&ddata->adc_conv_complete);
+		break;
+	case S2MPG01_INT_WATCHDOG:
+		dev_err(dev, "%s: Watchdog timer expired\n", __func__);
+		s2mpg01_notify_fail_all();
+		break;
+	case S2MPG01_INT_T_ALARM:
+		dev_warn(dev, "%s: Watchdog alarm event\n", __func__);
+		break;
+	case S2MPG01_INT_NORM:
+		dev_err(dev, "%s: Normal mode setting violation\n", __func__);
+		break;
+	case S2MPG01_INT_BOOST:
+		dev_err(dev, "%s: Boost mode setting violation\n", __func__);
+		break;
+	case S2MPG01_INT_SMPS1_UV:
+		dev_err(dev, "Detected SMPS1 under-voltage event\n");
+		NOTIFY(S2MPG01_ID_SMPS1,
+		       REGULATOR_EVENT_UNDER_VOLTAGE | REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_TINT_OUT:
+		dev_warn(dev, "%s: Thermal warm event\n", __func__);
+		break;
+	case S2MPG01_INT_TSD:
+		dev_err(dev, "%s: Thermal shutdown\n", __func__);
+		s2mpg01_notify_fail_all();
+		break;
+	case S2MPG01_INT_TH_TRIPR:
+		dev_err(dev, "%s: therm_trip asserted\n", __func__);
+		s2mpg01_notify_fail_all();
+		break;
+	case S2MPG01_INT_TH_TRIPF:
+		dev_info(dev, "%s: therm_trip has returned to normal\n",
+			 __func__);
+		break;
+	case S2MPG01_INT_LDO1_OI:
+		dev_err(dev, "Detected LDO1 over-current event\n");
+		NOTIFY(S2MPG01_ID_LDO1,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_LDO2_OI:
+		dev_err(dev, "Detected LDO2 over-current event\n");
+		NOTIFY(S2MPG01_ID_LDO2,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_LDO3_OI:
+		dev_err(dev, "Detected LDO3 over-current event\n");
+		NOTIFY(S2MPG01_ID_LDO3,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_LDO4_OI:
+		dev_err(dev, "Detected LDO4 over-current event\n");
+		NOTIFY(S2MPG01_ID_LDO4,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_LDO5_OI:
+		dev_err(dev, "Detected LDO5 over-current event\n");
+		NOTIFY(S2MPG01_ID_LDO5,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_SMPS3_OI:
+		dev_err(dev, "Detected SMPS3 over-current event\n");
+		NOTIFY(S2MPG01_ID_SMPS3,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		NOTIFY(S2MPG01_ID_LDO3, REGULATOR_EVENT_FAIL);
+		NOTIFY(S2MPG01_ID_LDO4, REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_SMPS2_OI:
+		dev_err(dev, "Detected SMPS2 over-current event\n");
+		NOTIFY(S2MPG01_ID_SMPS2,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		NOTIFY(S2MPG01_ID_LDO2, REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_SMPS1_OI:
+		dev_err(dev, "Detected SMPS1 over-current event\n");
+		NOTIFY(S2MPG01_ID_SMPS1,
+		       REGULATOR_EVENT_OVER_CURRENT | REGULATOR_EVENT_FAIL);
+		break;
+	case S2MPG01_INT_LDO3_DVS_END:
+		dev_info(dev, "%s: LDO3 boost mode DVS done\n", __func__);
+		break;
+	case S2MPG01_INT_SMPS1_DVS_END:
+		dev_info(dev, "%s: SMPS1 boost mode DVS done\n", __func__);
+		break;
+	default:
+		dev_dbg(dev, "%s: Reserved flag %d\n", __func__, flag_num);
+		break;
+	}
+
+	return 0;
+}
+
+/* find pending interrupt flags */
+static int s2mpg01_check_int_flags(struct s2mpg01_core *ddata)
+{
+	u8 flags[S2MPG01_NUM_IRQ_REGS], flag_mask;
+	unsigned int first_bit, flag_num;
+	int ret;
+	int i;
+
+	/* read interrupt status flags */
+	ret = s2mpg01_read_bytes(ddata, S2MPG01_REG_INT1,
+				 flags, S2MPG01_NUM_IRQ_REGS);
+	if (ret) {
+		dev_err(ddata->dev,
+			"%s: failed to read interrupt registers: %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	dev_dbg(ddata->dev,
+		"%s: [0] = 0x%02x, [1] = 0x%02x, [2] = 0x%02x, [3] = 0x%02x\n",
+		__func__, flags[0], flags[1], flags[2], flags[3]);
+
+	/* iterate through each interrupt */
+	for (i = 0; i < S2MPG01_NUM_IRQ_REGS; i++) {
+		while (flags[i]) {
+			/* find first set interrupt flag */
+			first_bit = ffs(flags[i]);
+			flag_mask = 1 << (first_bit - 1);
+			flag_num = (i * 8) + (first_bit - 1);
+
+			/* handle interrupt */
+			ret = s2mpg01_handle_int(ddata, flag_num);
+
+			flags[i] &= ~flag_mask;
+		}
+	}
+
+	return ret;
+}
+
 /* kernel thread for waiting for chip to come out of reset */
 static void s2mpg01_reset_work(struct work_struct *data)
 {
@@ -346,10 +547,7 @@ static void s2mpg01_reset_work(struct work_struct *data)
 	/* notify regulators of shutdown event */
 	dev_err(ddata->dev,
 		"%s: Notifying regulators of shutdown event\n", __func__);
-	NOTIFY(S2MPG01_ID_SMPS1, REGULATOR_EVENT_FAIL);
-	NOTIFY(S2MPG01_ID_SMPS2, REGULATOR_EVENT_FAIL);
-	NOTIFY(S2MPG01_ID_LDO1, REGULATOR_EVENT_FAIL);
-	NOTIFY(S2MPG01_ID_LDO2, REGULATOR_EVENT_FAIL);
+	s2mpg01_notify_fail_all();
 
 	dev_err(ddata->dev,
 		"%s: waiting for chip to come out of reset\n", __func__);
@@ -365,6 +563,40 @@ static void s2mpg01_reset_work(struct work_struct *data)
 		s2mpg01_chip_init(ddata);
 
 	complete(&ddata->init_complete);
+}
+
+/* irq handler for resetb pin */
+static irqreturn_t s2mpg01_resetb_irq_handler(int irq, void *cookie)
+{
+	struct s2mpg01_core *ddata = (struct s2mpg01_core *)cookie;
+
+	dev_info(ddata->dev, "%s: observed resetb, irq = %d\n", __func__, irq);
+
+	if (gpio_get_value(ddata->pdata->pmic_ready_gpio)) {
+		dev_info(ddata->dev, "%s: completing reset\n", __func__);
+		complete(&ddata->reset_complete);
+	} else {
+		dev_err(ddata->dev, "%s: device reset\n", __func__);
+		reinit_completion(&ddata->init_complete);
+		reinit_completion(&ddata->reset_complete);
+		schedule_work(&ddata->reset_work);
+	}
+
+	return IRQ_HANDLED;
+}
+
+/* threaded irq handler for intb pin */
+static irqreturn_t s2mpg01_intb_irq_handler(int irq, void *cookie)
+{
+	struct s2mpg01_core *ddata = (struct s2mpg01_core *)cookie;
+
+	dev_dbg(ddata->dev, "%s: observed irq %d\n", __func__, irq);
+
+	s2mpg01_check_int_flags(ddata);
+
+	dev_dbg(ddata->dev, "%s: handled irq %d\n", __func__, irq);
+
+	return IRQ_HANDLED;
 }
 
 /* get platform data from the device tree */
@@ -389,19 +621,49 @@ static struct s2mpg01_platform_data *s2mpg01_get_platform_data_from_dt
 	pdata->resetb_irq = gpio_to_irq(pdata->pmic_ready_gpio);
 	pdata->intb_irq = gpio_to_irq(pdata->intb_gpio);
 
+	dev_dbg(dev, "%s: pon_gpio: %d\n", __func__, pdata->pon_gpio);
+	dev_dbg(dev, "%s: pmic_ready_gpio: %d\n", __func__,
+		pdata->pmic_ready_gpio);
+	dev_dbg(dev, "%s: intb_gpio: %d\n", __func__, pdata->intb_gpio);
+	dev_dbg(dev, "%s: resetb_irq: %u\n", __func__, pdata->resetb_irq);
+	dev_dbg(dev, "%s: intb_irq: %u\n", __func__, pdata->intb_irq);
+
 	return pdata;
+}
+
+static void s2mpg01_clear_interrupts(struct s2mpg01_core *ddata)
+{
+	u8 bytes[S2MPG01_NUM_IRQ_REGS];
+
+	/* interrupt registers are read-clear */
+	s2mpg01_read_bytes(ddata, S2MPG01_REG_INT1,
+			   bytes, S2MPG01_NUM_IRQ_REGS);
+}
+
+__maybe_unused
+static void s2mpg01_mask_interrupts_all(struct s2mpg01_core *ddata)
+{
+	u8 bytes[S2MPG01_NUM_IRQ_REGS] = { 0xFF };
+
+	/* mask all interrupts */
+	s2mpg01_write_bytes(ddata, S2MPG01_REG_INT1M,
+			    bytes, S2MPG01_NUM_IRQ_REGS);
+}
+
+static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata)
+{
+	/* unmask all (non-reserved) interrupts */
+	s2mpg01_write_byte(ddata, S2MPG01_REG_INT1M, 0x00);
+	s2mpg01_write_byte(ddata, S2MPG01_REG_INT2M, 0x00);
+	s2mpg01_write_byte(ddata, S2MPG01_REG_INT3M, 0x00);
+	s2mpg01_write_byte(ddata, S2MPG01_REG_INT4M, 0x3F);
 }
 
 /* enable all of the interrupts */
 static void s2mpg01_config_ints(struct s2mpg01_core *ddata)
 {
-	u8 bytes[3];
-
-	/* clear any pending interrupts */
-	s2mpg01_read_bytes(ddata, S2MPG01_REG_INT1, bytes, 4);
-
-	/* unmask all (non-reserved) interrupts */
-	s2mpg01_write_byte(ddata, S2MPG01_REG_INT1M, 0xFF);
+	s2mpg01_clear_interrupts(ddata);
+	s2mpg01_unmask_interrupts_all(ddata);
 }
 
 /* initialize the chip */
@@ -466,12 +728,32 @@ static int s2mpg01_probe(struct i2c_client *client,
 	}
 
 	/* request GPIOs and IRQs */
-	devm_gpio_request_one(dev, pdata->pon_gpio, GPIOF_OUT_INIT_LOW,
-			      "S2MPG01 PON");
-	devm_gpio_request_one(dev, pdata->pmic_ready_gpio, GPIOF_IN,
-			      "S2MPG01 PMIC READY");
-	devm_gpio_request_one(dev, pdata->intb_gpio, GPIOF_IN,
-			      "S2MPG01 INTB");
+	ret = devm_gpio_request_one(dev, pdata->pon_gpio, GPIOF_OUT_INIT_LOW,
+				    "S2MPG01 PON");
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to request pon_gpio %u: %d\n",
+			__func__, pdata->pon_gpio, ret);
+		goto error_reset;
+	}
+
+	ret = devm_gpio_request_one(dev, pdata->pmic_ready_gpio, GPIOF_IN,
+				    "S2MPG01 PMIC READY");
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to request pmic_ready_gpio %u: %d\n",
+			__func__, pdata->pmic_ready_gpio, ret);
+		goto error_reset;
+	}
+
+	ret = devm_gpio_request_one(dev, pdata->intb_gpio, GPIOF_IN,
+				    "S2MPG01 INTB");
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to request intb_gpio %u: %d\n",
+			__func__, pdata->intb_gpio, ret);
+		goto error_reset;
+	}
 
 	for (i = 0; i < S2MPG01_PON_RETRY_CNT; i++) {
 		dev_dbg(dev, "%s: powering on s2mpg01\n", __func__);
@@ -514,11 +796,31 @@ static int s2mpg01_probe(struct i2c_client *client,
 	/* create sysfs attributes */
 	s2mpg01_config_sysfs(dev);
 
-	/* enable the irq after power on */
-	enable_irq(pdata->resetb_irq);
-
 	/* initialize chip */
 	s2mpg01_chip_init(ddata);
+
+	ret = devm_request_threaded_irq(dev, pdata->intb_irq, NULL,
+					s2mpg01_intb_irq_handler,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					"s2mpg01-intb", ddata);
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to request irq %u: %d\n",
+			__func__, pdata->intb_irq, ret);
+		goto error_reset;
+	}
+
+	ret = devm_request_threaded_irq(dev, pdata->resetb_irq, NULL,
+					s2mpg01_resetb_irq_handler,
+					IRQF_TRIGGER_FALLING |
+					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					"s2mpg01-resetb", ddata);
+	if (ret) {
+		dev_err(dev,
+			"%s: failed to request irq %u: %d\n",
+			__func__, pdata->resetb_irq, ret);
+		goto error_reset;
+	}
 
 	return mfd_add_devices(dev, -1, s2mpg01_devs, ARRAY_SIZE(s2mpg01_devs),
 			       NULL, 0, NULL);
