@@ -433,19 +433,30 @@ void ipu_bus_notify_watchdog(struct paintbox_bus *bus)
 }
 
 /* This function can be called in an atomic context */
-void ipu_bus_notify_link_up(struct paintbox_bus *bus)
-{
-	atomic_or(IPU_STATE_LINK_READY, &bus->state);
-}
-
-/* This function can be called in an atomic context */
-void ipu_bus_notify_link_down(struct paintbox_bus *bus)
+void ipu_bus_notify_link_failure(struct paintbox_bus *bus)
 {
 	atomic_andnot(IPU_STATE_JQS_READY | IPU_STATE_LINK_READY, &bus->state);
 
 	queue_work(system_wq, &bus->recovery_work);
 }
 
+void ipu_bus_notify_link_up(struct paintbox_bus *bus)
+{
+
+	atomic_or(IPU_STATE_LINK_READY, &bus->state);
+}
+
+void ipu_bus_notify_link_pre_down(struct paintbox_bus *bus)
+{
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_jqs_disable_firmware_error(bus);
+	ipu_core_jqs_unstage_firmware(bus);
+
+	atomic_andnot(IPU_STATE_LINK_READY, &bus->state);
+
+	mutex_unlock(&bus->jqs.lock);
+}
 
 void ipu_bus_notify_clock_enable(struct paintbox_bus *bus,
 		uint64_t clock_rate_hz)

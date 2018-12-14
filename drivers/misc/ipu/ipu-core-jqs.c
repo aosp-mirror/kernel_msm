@@ -47,12 +47,24 @@
 /* Delay for system to stabilize before sending real traffic */
 #define CORE_SYSTEM_STABLIZE_TIME 100 /* us */
 
-static inline bool ipu_core_jqs_is_hw_ready(struct paintbox_bus *bus)
+static inline bool ipu_core_jqs_is_clock_ready(struct paintbox_bus *bus)
 {
 	bool clock_is_on = bus->jqs.clock_rate_hz > 0;
 	bool clock_rate_ipu_inactive = bus->jqs.clock_rate_hz !=
 			IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND;
+
 	return (clock_is_on && clock_rate_ipu_inactive);
+}
+
+static inline bool ipu_core_jqs_is_hw_ready(struct paintbox_bus *bus)
+{
+	if (!ipu_core_link_is_ready(bus))
+		return false;
+
+	if (!ipu_core_jqs_is_clock_ready(bus))
+		return false;
+
+	return true;
 }
 
 static int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
@@ -143,6 +155,13 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 
 	if (WARN_ON(!bus->jqs.fw))
 		return -EINVAL;
+
+	if (!ipu_core_link_is_ready(bus)) {
+		dev_err(bus->parent_dev,
+				"%s: unable to stage JQS firmware, link down\n",
+				__func__);
+		return -ENETDOWN;
+	}
 
 	memcpy(&preamble, bus->jqs.fw->data, min(sizeof(preamble),
 			bus->jqs.fw->size));
@@ -305,6 +324,13 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 {
 	int ret;
 
+	if (!ipu_core_jqs_is_hw_ready(bus)) {
+		dev_err(bus->parent_dev,
+				"%s: unable to start JQS firmware, hardware not ready\n",
+				__func__);
+		return -ECONNREFUSED;
+	}
+
 	dev_dbg(bus->parent_dev, "%s: enabling firmware\n", __func__);
 
 	ret = ipu_core_jqs_msg_transport_init(bus);
@@ -377,10 +403,6 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	 * with the exception of OFF.
 	 */
 	if (bus->jqs.status == JQS_FW_STATUS_STAGED) {
-
-		if (!ipu_core_jqs_is_hw_ready(bus))
-			return -ECONNREFUSED;
-
 		ret = ipu_core_jqs_start_firmware(bus);
 		if (ret < 0)
 			goto unstage_firmware;
@@ -397,7 +419,8 @@ unload_firmware:
 }
 
 /* The caller to this function must hold bus->jqs.lock */
-void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus, int reason_code)
+static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus,
+		int reason_code)
 {
 	if (bus->jqs.status != JQS_FW_STATUS_RUNNING)
 		return;
@@ -422,6 +445,20 @@ void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus, int reason_code)
 	ipu_core_jqs_power_disable(bus);
 
 	bus->jqs.status = JQS_FW_STATUS_STAGED;
+}
+
+void ipu_core_jqs_disable_firmware_normal(struct paintbox_bus *bus)
+{
+	/* Firmware disable requests initiated by the AP are reported as aborts
+	 * on any queue that is still active when the disable request is made.
+	 */
+	ipu_core_jqs_disable_firmware(bus, -ECONNABORTED);
+}
+
+void ipu_core_jqs_disable_firmware_error(struct paintbox_bus *bus)
+{
+	/* JQS or PCIe link failures are reported as connection resets */
+	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
 }
 
 static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)

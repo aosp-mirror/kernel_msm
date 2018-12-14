@@ -510,16 +510,14 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 
 	switch (action) {
 	case ABC_PCIE_LINK_POST_ENABLE:
-		dev_dbg(dev_data->dev,
-			"%s: may continue to use pcie\n", __func__);
+		dev_dbg(dev_data->dev, "%s: PCIe link available\n", __func__);
 		ipu_adapter_ab_mfd_enable_interrupts(dev_data);
 		ipu_bus_notify_link_up(bus);
 		break;
 	case ABC_PCIE_LINK_PRE_DISABLE:
-		dev_dbg(dev_data->dev,
-			"%s: should stop using pcie\n", __func__);
+		dev_dbg(dev_data->dev, "%s: PCIe link going down\n", __func__);
+		ipu_bus_notify_link_pre_down(bus);
 		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
-		ipu_bus_notify_link_down(bus);
 		break;
 	default:
 		return NOTIFY_DONE;  /* Don't care */

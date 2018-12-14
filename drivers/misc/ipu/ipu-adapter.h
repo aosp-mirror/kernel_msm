@@ -69,9 +69,13 @@ struct paintbox_bus_ops {
 
 /* The following group of functions can be called in an atomic context */
 void ipu_bus_notify_watchdog(struct paintbox_bus *bus);
-void ipu_bus_notify_link_up(struct paintbox_bus *bus);
-void ipu_bus_notify_link_down(struct paintbox_bus *bus);
+void ipu_bus_notify_link_failure(struct paintbox_bus *bus);
 
+/* The following group of functions are called in the context of a blocking
+ * notifier.
+ */
+void ipu_bus_notify_link_up(struct paintbox_bus *bus);
+void ipu_bus_notify_link_pre_down(struct paintbox_bus *bus);
 void ipu_bus_notify_clock_enable(struct paintbox_bus *bus,
 		uint64_t clock_rate_hz);
 void ipu_bus_notify_clock_disable(struct paintbox_bus *bus);
