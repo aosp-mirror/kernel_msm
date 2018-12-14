@@ -24,6 +24,7 @@
 #include "../../../thermal/thermal_core.h"
 
 #include "hw.h"
+#include "trim.h"
 
 #define AIRBRUSH_TMU_BASE	0xB90000
 
@@ -60,9 +61,7 @@ struct airbrush_tmu_data {
 	struct notifier_block  tmu_nb;
 	struct work_struct irq_work;
 	struct clk *clk, *clk_sec, *sclk;
-	u8 cal_type[AIRBRUSH_NUM_ALL_PROBE];
-	u16 temp_error1[AIRBRUSH_NUM_ALL_PROBE];
-	u16 temp_error2[AIRBRUSH_NUM_ALL_PROBE];
+	struct ab_tmu_trim trim[AIRBRUSH_NUM_ALL_PROBE];
 	struct regulator *regulator;
 	struct thermal_zone_device *tzd;
 };
@@ -92,9 +91,6 @@ struct airbrush_tmu_platform_data {
 	u32 efuse_value;
 	u32 min_efuse_value;
 	u32 max_efuse_value;
-	u16 first_point_trim;
-	u16 second_point_trim;
-	u8 default_temp_offset;
 };
 
 static void airbrush_report_trigger(struct airbrush_tmu_data *p)
@@ -158,75 +154,12 @@ static int tmu_irq_notify(struct notifier_block *nb,
 	return 0;
 }
 
-/*
- * TMU treats temperature as a mapped temperature code.
- * The temperature is converted differently depending on the calibration type.
- */
-static int temp_to_code(struct airbrush_tmu_data *data, u16 temp, u8 probe)
-{
-	struct airbrush_tmu_platform_data *pdata = data->pdata;
-	int temp_code;
-
-	switch (data->cal_type[probe]) {
-	case AIRBRUSH_NO_TRIMMING:
-	case AIRBRUSH_TWO_POINT_TRIMMING:
-		temp_code = (temp - pdata->first_point_trim) *
-			(data->temp_error2[probe] - data->temp_error1[probe]) /
-			(pdata->second_point_trim - pdata->first_point_trim) +
-			data->temp_error1[probe];
-		break;
-	case AIRBRUSH_ONE_POINT_TRIMMING:
-		temp_code = temp +
-			data->temp_error1[probe] -
-			pdata->first_point_trim;
-		break;
-	default:
-		temp_code = temp + pdata->default_temp_offset;
-		break;
-	}
-
-	return temp_code;
-}
-
-/*
- * Calculate a temperature value from a temperature code.
- * The unit of the temperature is degree Celsius.
- */
-static int code_to_temp(struct airbrush_tmu_data *data, u16 temp_code, u8 probe)
-{
-	struct airbrush_tmu_platform_data *pdata = data->pdata;
-	int temp;
-
-	switch (data->cal_type[probe]) {
-	case AIRBRUSH_NO_TRIMMING:
-	case AIRBRUSH_TWO_POINT_TRIMMING:
-		temp = (temp_code - data->temp_error1[probe]) *
-			(pdata->second_point_trim - pdata->first_point_trim) /
-			(data->temp_error2[probe] - data->temp_error1[probe]) +
-			pdata->first_point_trim;
-		break;
-	case AIRBRUSH_ONE_POINT_TRIMMING:
-		temp = temp_code -
-			data->temp_error1[probe] +
-			pdata->first_point_trim;
-		break;
-	default:
-		temp = temp_code - pdata->default_temp_offset;
-		break;
-	}
-	pr_debug("ab_tmu_calc: probe=%u val=%u err1=%u err2=%u\n",
-		probe, temp_code,
-		data->temp_error1[probe], data->temp_error2[probe]);
-
-	return temp;
-}
-
 static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
 		int i)
 {
 	struct ab_tmu_hw *hw = data->hw;
 	/* TODO We should have one tzd for each sensor instead. */
-	unsigned int trim_info;
+	u32 trim_info;
 	struct thermal_zone_device *tz = data->tzd;
 	unsigned int rising_threshold = 0, falling_threshold = 0;
 	int j;
@@ -236,16 +169,16 @@ static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
 
 	trim_info = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_TRIMINFO_P(i));
 
-	data->cal_type[i] = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
+	data->trim[i].cal_type = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
 			AIRBRUSH_TMU_CAL_MASK;
 
-	data->temp_error1[i] = trim_info & AIRBRUSH_TMU_TEMP_MASK;
-	data->temp_error2[i] = (trim_info >> AIRBRUSH_TMU_TEMP_SHIFT) &
+	data->trim[i].error1 = trim_info & AIRBRUSH_TMU_TEMP_MASK;
+	data->trim[i].error2 = (trim_info >> AIRBRUSH_TMU_TEMP_SHIFT) &
 			AIRBRUSH_TMU_TEMP_MASK;
 
-	if (data->cal_type[i] == AIRBRUSH_NO_TRIMMING) {
-		data->temp_error1[i] = no_trimming_error1[i];
-		data->temp_error2[i] = no_trimming_error2[i];
+	if (data->trim[i].cal_type == AIRBRUSH_NO_TRIMMING) {
+		data->trim[i].error1 = no_trimming_error1[i];
+		data->trim[i].error2 = no_trimming_error2[i];
 	}
 
 	// TODO different tz for each sensor
@@ -260,14 +193,15 @@ static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
 		temp_hist = temp - (temp_hist / MCELSIUS);
 
 		/* Set 9-bit temp code for rising threshold levels */
-		threshold_code = temp_to_code(data, temp, i);
+		threshold_code = ab_tmu_trim_cel_to_raw(&data->trim[i], temp);
 		rising_threshold = ab_tmu_hw_read(hw,
 				AIRBRUSH_THD_TEMP_RISE7_6_P(i) + reg_off);
 		rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK << (16 * bit_off));
 		rising_threshold |= threshold_code << (16 * bit_off);
 
 		/* Set 9-bit temp code for falling threshold levels */
-		threshold_code = temp_to_code(data, temp_hist, i);
+		threshold_code = ab_tmu_trim_cel_to_raw(&data->trim[i],
+				temp_hist);
 		falling_threshold = ab_tmu_hw_read(hw,
 				AIRBRUSH_THD_TEMP_FALL7_6_P(i) + reg_off);
 		falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
@@ -312,7 +246,7 @@ static int airbrush_get_temp(void *p, int *temp)
 	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
 	if (pcie_link_ready) {
 		code = ab_tmu_hw_read_current_temp(hw, 0);
-		*temp = code_to_temp(data, code, 0) * MCELSIUS;
+		*temp = ab_tmu_trim_raw_to_cel(&data->trim[0], code) * MCELSIUS;
 	} else {
 		/*
 		 * Return 0 degree Celsius while TMU is not ready to
@@ -357,7 +291,8 @@ void tmu_set_emulate_data(struct airbrush_tmu_data *data,  u16 next_time,
 		next_time = 0x1;
 	uReg = (ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON) >> 0) & 0x1;
 	uReg |= (next_time << AIRBRUSH_EMUL_NEXTTIME_SHIFT) |
-		(temp_to_code(data, next_data, 0) << AIRBRUSH_EMUL_DATA_SHIFT);
+		(ab_tmu_trim_cel_to_raw(&data->trim[0], next_data) <<
+		AIRBRUSH_EMUL_DATA_SHIFT);
 
 	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, uReg);
 }
@@ -402,9 +337,6 @@ MODULE_DEVICE_TABLE(of, airbrush_tmu_match);
 #define AIRBRUSH_TMU_REF_VOLT			17
 #define AIRBRUSH_TMU_NOSIE_CANCEL_MODE		4
 #define AIRBRUSH_TMU_EFUSE_VAL			292
-#define AIRBRUSH_TMU_FIRST_POINT_TRIM		25
-#define AIRBRUSH_TMU_SECOND_POINT_TRIM		85
-#define AIRBRUSH_TMU_DEFAULT_TEMP_OFFSET	50
 #define AIRBRUSH_TMU_MIN_EFUSE_VAL		15
 #define AIRBRUSH_TMU_MAX_EFUSE_VAL		135
 
@@ -430,10 +362,6 @@ static int airbrush_map_dt_data(struct platform_device *pdev)
 
 	pdata->efuse_value = AIRBRUSH_TMU_EFUSE_VAL;
 
-	pdata->first_point_trim = AIRBRUSH_TMU_FIRST_POINT_TRIM;
-	pdata->second_point_trim = AIRBRUSH_TMU_SECOND_POINT_TRIM;
-	pdata->default_temp_offset = AIRBRUSH_TMU_DEFAULT_TEMP_OFFSET;
-
 	pdata->min_efuse_value = AIRBRUSH_TMU_MIN_EFUSE_VAL;
 	pdata->max_efuse_value = AIRBRUSH_TMU_MAX_EFUSE_VAL;
 
@@ -454,7 +382,7 @@ static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
 	int code, temp;
 
 	code = ab_tmu_hw_read_current_temp(hw, id);
-	temp = code_to_temp(data, code, id);
+	temp = ab_tmu_trim_raw_to_cel(&data->trim[id], code);
 	return scnprintf(buf, PAGE_SIZE, "%d\n", temp);
 }
 

@@ -2,4 +2,5 @@ obj-y += airbrush-tmu.o
 
 airbrush-tmu-y += \
 		hw.o \
-		plat_drv.o
+		plat_drv.o \
+		trim.o
