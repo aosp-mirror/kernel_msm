@@ -66,6 +66,7 @@
 		cirrus,gpio1-fall-index = <4>; /* 75% HEAVY_CLICK */
 		cirrus,gpio1-fall-timeout = <47278>; /* 985 ms */
 		cirrus,gpio1-mode = <2>; /* enabled only in suspend mode */
+		cirrus,hiber-enable;
 		cirrus,refclk-gpio2 = <1>; /* set GPIO2 as REFCLK  */
 		cirrus,asp-bclk-freq-hz = <12288000>;
 		cirrus,asp-bclk-inv;
