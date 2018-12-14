@@ -232,25 +232,6 @@ static int code_to_temp(struct airbrush_tmu_data *data, u16 temp_code, u8 probe)
 	return temp;
 }
 
-static void airbrush_tmu_core_enable(struct platform_device *pdev, bool enable)
-{
-	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
-	struct ab_tmu_hw *hw = data->hw;
-	unsigned int val;
-
-	val = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL);
-
-	if (enable) {
-		val |= (1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
-		val |= (1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
-	} else {
-		val &= ~(1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
-		val &= ~(1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
-	}
-
-	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL, val);
-}
-
 static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
 		int i)
 {
@@ -327,25 +308,6 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 
 	airbrush_tmu_clear_irqs(data);
 	return 0;
-}
-
-static void airbrush_tmu_control(struct platform_device *pdev, bool on)
-{
-	unsigned int i, con1, interrupt_en;
-	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
-	struct ab_tmu_hw *hw = data->hw;
-
-	con1 = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL1);
-	con1 |= AIRBRUSH_NUM_REMOTE_PROBE << AIRBRUSH_REMOTE_PROBE_SHIFT;
-
-	interrupt_en = on ? AIRBRUSH_TMU_INT_EN : 0;
-
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
-		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTEN_P(i),
-				interrupt_en);
-
-	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL1, con1);
-	airbrush_tmu_core_enable(pdev, on);
 }
 
 static int airbrush_get_temp(void *p, int *temp)
@@ -569,7 +531,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	/*
 	 * data->tzd must be registered before calling
 	 * airbrush_tmu_initialize(), requesting irq and calling
-	 * airbrush_tmu_control().
+	 * ab_tmu_hw_control().
 	 */
 	data->tzd = devm_thermal_zone_of_sensor_register(&pdev->dev, 0, data,
 						    &airbrush_sensor_ops);
@@ -593,7 +555,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	airbrush_tmu_control(pdev, true);
+	ab_tmu_hw_control(data->hw, true);
 
 	dev_dbg(&pdev->dev, "%s: done.\n", __func__);
 	return 0;
@@ -601,7 +563,9 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 
 static int airbrush_tmu_remove(struct platform_device *pdev)
 {
-	airbrush_tmu_control(pdev, false);
+	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
+
+	ab_tmu_hw_control(data->hw, false);
 	return 0;
 }
 

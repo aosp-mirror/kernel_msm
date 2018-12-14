@@ -143,6 +143,30 @@ void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value)
 	abc_pcie_config_write(hw->base + offset, 4, value);
 }
 
+void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
+{
+	int i;
+	u32 con, con1, int_en;
+
+	int_en = enable ? AIRBRUSH_TMU_INT_EN : 0;
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
+		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTEN_P(i), int_en);
+
+	con1 = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL1);
+	con1 |= AIRBRUSH_NUM_REMOTE_PROBE << AIRBRUSH_REMOTE_PROBE_SHIFT;
+	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL1, con1);
+
+	con = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL);
+	if (enable) {
+		con |= (1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
+		con |= (1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
+	} else {
+		con &= ~(1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
+		con &= ~(1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
+	}
+	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL, con);
+}
+
 u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id)
 {
 	/*

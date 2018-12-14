@@ -29,6 +29,9 @@ void ab_tmu_hw_pcie_link_unlock(struct ab_tmu_hw *hw);
 u32 ab_tmu_hw_read(struct ab_tmu_hw *hw, u32 offset);
 void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value);
 
+/* These should be hided after all dependents are moved to here. */
+void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool on);
+
 u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 
 /* Exynos generic registers */
