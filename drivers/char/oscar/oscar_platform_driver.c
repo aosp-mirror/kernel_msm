@@ -61,6 +61,8 @@
 
 /* The number of nodes in an Oscar chip. */
 #define NUM_NODES 1
+/* The number of TPU tiles in an Oscar chip */
+#define NTILES	15
 
 /* TPU logical interrupts handled by this driver */
 #define OSCAR_SCALAR_CORE_0_INT	0 /* signalled via an MSI IRQ */
@@ -95,6 +97,10 @@ enum sysfs_attribute_type {
  * Only values necessary for driver implementation are defined.
  */
 enum oscar_bar_regs {
+	OSCAR_BAR_REG_TILECONF1_DEEPSLEEP = 0x2020,
+	OSCAR_BAR_REG_TILECONF1_ERROR_TILE = 0x2370,
+	OSCAR_BAR_REG_TILECONF1_ERROR_MASK_TILE = 0x2378,
+	OSCAR_BAR_REG_TILECONF1_ERROR_INFO_TILE = 0x2390,
 	OSCAR_BAR_REG_SC_RUNCTRL = 0x4018,
 	OSCAR_BAR_REG_SC_RUNSTATUS = 0x4258,
 	OSCAR_BAR_REG_SC_ERROR_MASK = 0x4268,
@@ -107,6 +113,7 @@ enum oscar_bar_regs {
 	OSCAR_BAR_REG_USER_HIB_ERROR_STATUS = 0x86F0,
 	OSCAR_BAR_REG_USER_HIB_FIRST_ERROR_STATUS = 0x8700,
 	OSCAR_BAR_REG_USER_HIB_PAGE_FAULT_ADDR = 0x8738,
+	OSCAR_BAR_REG_USER_HIB_TILECONFIG1 = 0x8790,
 	OSCAR_BAR_REG_HIB_PAGE_TABLE = 0x10000,
 
 	/* AON Always On (Top Level) Registers. */
@@ -1016,9 +1023,9 @@ static void oscar_interrupt_cleanup(struct oscar_dev *oscar_dev)
 }
 
 static struct dumpregs_range {
-	ulong firstreg;
-	ulong lastreg;
-} statusregs_ranges[] = {
+	enum oscar_bar_regs firstreg;
+	enum oscar_bar_regs lastreg;
+} global_statusregs_ranges[] = {
 	{
 		.firstreg = OSCAR_BAR_REG_AON_RESET,
 		.lastreg = OSCAR_BAR_REG_AON_AXIBRIDGEDEBUG1,
@@ -1045,23 +1052,57 @@ static struct dumpregs_range {
 	},
 };
 
-static int statusregs_show(struct seq_file *s, void *data)
+static struct dumpregs_range tile_statusregs_ranges[] = {
+	{
+		.firstreg = OSCAR_BAR_REG_TILECONF1_DEEPSLEEP,
+		.lastreg = OSCAR_BAR_REG_TILECONF1_DEEPSLEEP,
+	},
+	{
+		.firstreg = OSCAR_BAR_REG_TILECONF1_ERROR_TILE,
+		.lastreg = OSCAR_BAR_REG_TILECONF1_ERROR_MASK_TILE,
+	},
+	{
+		.firstreg = OSCAR_BAR_REG_TILECONF1_ERROR_INFO_TILE,
+		.lastreg = OSCAR_BAR_REG_TILECONF1_ERROR_INFO_TILE,
+	},
+};
+
+static void dump_statusregs_ranges(struct seq_file *s,
+				   struct oscar_dev *oscar_dev,
+				   struct dumpregs_range *ranges,
+				   int nranges)
 {
-	struct oscar_dev *oscar_dev = s->private;
 	int i;
-	ulong reg;
+	enum oscar_bar_regs reg;
 	uint64_t val;
 
-	if (!check_dev_avail(oscar_dev))
-		return -EIO;
-
-	for (i = 0; i < ARRAY_SIZE(statusregs_ranges); i++) {
-		for (reg = statusregs_ranges[i].firstreg;
-		     reg <= statusregs_ranges[i].lastreg; reg += 8) {
+	for (i = 0; i < nranges; i++) {
+		for (reg = ranges[i].firstreg; reg <= ranges[i].lastreg;
+		     reg += sizeof(val)) {
 			val = gasket_dev_read_64(oscar_dev->gasket_dev,
 						 OSCAR_BAR_INDEX, reg);
 			seq_printf(s, "0x%08lx: 0x%016llx\n", reg, val);
 		}
+	}
+}
+
+static int statusregs_show(struct seq_file *s, void *data)
+{
+	struct oscar_dev *oscar_dev = s->private;
+	int tileid;
+
+	if (!check_dev_avail(oscar_dev))
+		return -EIO;
+
+	dump_statusregs_ranges(s, oscar_dev, global_statusregs_ranges,
+			       ARRAY_SIZE(global_statusregs_ranges));
+	for (tileid = 0; tileid <= NTILES; tileid++) {
+		gasket_dev_write_64(oscar_dev->gasket_dev, tileid,
+				    OSCAR_BAR_INDEX,
+				    OSCAR_BAR_REG_USER_HIB_TILECONFIG1);
+		seq_printf(s, "tile %d:\n", tileid);
+		dump_statusregs_ranges(s, oscar_dev, tile_statusregs_ranges,
+				       ARRAY_SIZE(tile_statusregs_ranges));
 	}
 	return 0;
 }
