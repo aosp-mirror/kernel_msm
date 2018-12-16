@@ -179,5 +179,6 @@ void tcpm_pd_hard_reset(struct tcpm_port *port);
 void tcpm_tcpc_reset(struct tcpm_port *port);
 int tcpm_get_partner_src_caps(struct tcpm_port *port, u32 **pdo);
 void tcpm_put_partner_src_caps(u32 **pdo);
+void tcpm_port_reset(struct tcpm_port *port);
 
 #endif /* __LINUX_USB_TCPM_H */
