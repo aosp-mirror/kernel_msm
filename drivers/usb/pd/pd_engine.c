@@ -131,6 +131,8 @@ struct usbpd {
 	/* alternate source capabilities */
 	struct work_struct update_pdo_work;
 	bool default_src_cap;
+	u32 src_pdo[PDO_MAX_OBJECTS];
+	unsigned int nr_src_pdo;
 };
 
 static u8 always_enable_data;
@@ -865,7 +867,6 @@ clear:
 static void update_src_caps(struct work_struct *work)
 {
 	struct usbpd *pd = container_of(work, struct usbpd, update_pdo_work);
-	struct tcpc_config *config = pd->tcpc_dev.config;
 	u32 pdo[1];
 
 	if (pd->wireless_online && pd->default_src_cap) {
@@ -878,8 +879,8 @@ static void update_src_caps(struct work_struct *work)
 		   !pd->default_src_cap) {
 		pd_engine_log(pd, "default src_cap");
 		tcpm_update_source_capabilities(pd->tcpm_port,
-						config->src_pdo,
-						config->nr_src_pdo);
+						pd->src_pdo,
+						pd->nr_src_pdo);
 		pd->default_src_cap = true;
 	}
 }
@@ -1950,6 +1951,7 @@ static int init_tcpc_dev(struct usbpd *pd,
 			 struct device *parent)
 {
 	struct tcpc_dev *pd_tcpc_dev = &pd->tcpc_dev;
+	int ret = 0;
 
 	pd_tcpc_dev->fwnode = device_get_named_child_node(parent,
 							  "connector");
@@ -1957,6 +1959,16 @@ static int init_tcpc_dev(struct usbpd *pd,
 		dev_err(&pd->dev, "Can't find connector node.\n");
 		return -EINVAL;
 	}
+
+	/* Get source pdos */
+	ret = fwnode_property_read_u32_array(pd_tcpc_dev->fwnode, "source-pdos",
+					     NULL, 0);
+	if (ret <= 0)
+		return -EINVAL;
+
+	pd->nr_src_pdo = min(ret, PDO_MAX_OBJECTS);
+	fwnode_property_read_u32_array(pd_tcpc_dev->fwnode, "source-pdos",
+				       pd->src_pdo, pd->nr_src_pdo);
 
 	pd_tcpc_dev->config = &pd_tcpc_config;
 	pd_tcpc_dev->init = tcpm_init;
