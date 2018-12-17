@@ -111,6 +111,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		dev_err(ab_ctx->dev, "ERROR!!! PMIC failure during ABC Boot");
 		return ret;
 	}
+	ab_sm_record_ts(ab_ctx, AB_SM_TS_PMIC_ON_56);
 
 	ret = enable_ref_clk(ab_ctx->dev);
 	if (ret) {
@@ -139,6 +140,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		dev_err(&plat_dev->dev, "ABC PWRGOOD is not enabled");
 		return -EIO;
 	}
+	ab_sm_record_ts(ab_ctx, AB_SM_TS_IO_ON);
 
 	if (ab_ctx->alternate_boot) {
 		fw_status =
@@ -248,6 +250,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 			return -EIO;
 		}
 	}
+	ab_sm_record_ts(ab_ctx, AB_SM_TS_ABOOT);
 
 	if (ab_ctx->cold_boot) {
 		if (msm_pcie_enumerate(1)) {
@@ -284,6 +287,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		else
 			msm_pcie_recover_config(ab_ctx->pcie_dev);
 	}
+	ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ON);
 
 	/* Wait for AB_READY = 1,
 	 * this ensures the SPI FSM is initialized to flash the
@@ -313,6 +317,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	 */
 	if (IS_HOST_DDR_INIT())
 		ab_ddr_init(ab_ctx);
+	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_ON);
 
 	return 0;
 }

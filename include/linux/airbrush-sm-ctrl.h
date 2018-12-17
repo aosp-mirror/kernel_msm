@@ -247,6 +247,28 @@ enum ab_sm_event {
 	// ...
 };
 
+enum ab_sm_time_stamps {
+	AB_SM_TS_START,
+	AB_SM_TS_PMIC_ON_56,
+	AB_SM_TS_IO_ON,
+	AB_SM_TS_ABOOT,
+	AB_SM_TS_PCIE_ON,
+	AB_SM_TS_DDR_ON,
+	AB_SM_TS_PMIC_ON_34,
+	AB_SM_TS_PMU_ON,
+	AB_SM_TS_IPU_CLK,
+	AB_SM_TS_TPU_CLK,
+	AB_SM_TS_PMU_OFF,
+	AB_SM_TS_DDR_STATE,
+	AB_SM_TS_FSYS_STATE,
+	AB_SM_TS_AON_CLK,
+	AB_SM_TS_PCIE_OFF,
+	AB_SM_TS_IO_OFF,
+	AB_SM_TS_PMIC_OFF,
+	AB_SM_TS_END,
+	NUM_AB_SM_TS,
+};
+
 enum ab_chip_id {
 	CHIP_ID_UNKNOWN = -1,
 	CHIP_ID_A0 = 0,
@@ -510,6 +532,12 @@ struct ab_state_context {
 	struct ab_sm_mfd_ops	*mfd_ops;
 
 	bool force_el2;
+
+#if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
+	/* time stamps */
+	bool ts_enabled;
+	u64 state_trans_ts[NUM_AB_SM_TS];
+#endif
 };
 
 struct ab_sm_misc_session {
@@ -571,9 +599,15 @@ void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx);
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 void ab_sm_create_debugfs(struct ab_state_context *sc);
 void ab_sm_remove_debugfs(struct ab_state_context *sc);
+void ab_sm_record_ts(struct ab_state_context *sc, int ts);
+void ab_sm_zero_ts(struct ab_state_context *sc);
+void ab_sm_print_ts(struct ab_state_context *sc);
 #else
 static inline void ab_sm_create_debugfs(struct ab_state_context *sc) {}
 static inline void ab_sm_remove_debugfs(struct ab_state_context *sc) {}
+static inline void ab_sm_record_ts(struct ab_state_context *sc, int ts) {}
+static inline void ab_sm_zero_ts(struct ab_state_context *sc) {}
+static inline void ab_sm_print_ts(struct ab_state_context *sc) {}
 #endif
 
 void ab_sm_create_sysfs(struct ab_state_context *sc);
