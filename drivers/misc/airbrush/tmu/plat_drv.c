@@ -16,66 +16,36 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/mfd/abc-pcie.h>
-#include "../../../thermal/thermal_core.h"
 
 #include "hw.h"
-#include "trim.h"
+#include "sensor.h"
 
 #define AIRBRUSH_TMU_BASE	0xB90000
-
-#define MCELSIUS	1000
-
-static const u16 no_trimming_error1[] = {287, 286, 287, 287, 286, 286, 286};
-static const u16 no_trimming_error2[] = {346, 346, 347, 347, 347, 346, 346};
 
 /**
  * struct airbrush_tmu_data : A structure to hold the private data of the TMU
 	driver
  * @irq_work: pointer to the irq work structure.
- * @trim: trim info for sensors.
+ * @sensor: handles to sensor operation, the id of sensor is the same as
+ * its index at this array.
  */
 struct airbrush_tmu_data {
 	struct ab_tmu_hw *hw;
 	int irq;
 	struct notifier_block tmu_nb;
 	struct work_struct irq_work;
-	struct ab_tmu_trim trim[AIRBRUSH_NUM_ALL_PROBE];
-	struct thermal_zone_device *tzd;
+	struct ab_tmu_sensor *sensor[AIRBRUSH_NUM_ALL_PROBE];
 };
-
-static void airbrush_report_trigger(struct airbrush_tmu_data *p)
-{
-	char data[11], *envp[] = { data, NULL };
-	struct thermal_zone_device *tz = p->tzd;
-	int temp;
-	unsigned int i;
-
-	if (!tz) {
-		pr_err("No thermal zone device defined\n");
-		return;
-	}
-
-	thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
-
-	mutex_lock(&tz->lock);
-	/* Find the level for which trip happened */
-	for (i = 0; i < of_thermal_get_ntrips(tz); i++) {
-		tz->ops->get_trip_temp(tz, i, &temp);
-		if (tz->last_temperature < temp)
-			break;
-	}
-
-	snprintf(data, sizeof(data), "%u", i);
-	kobject_uevent_env(&tz->device.kobj, KOBJ_CHANGE, envp);
-	mutex_unlock(&tz->lock);
-}
 
 static void airbrush_tmu_work(struct work_struct *work)
 {
 	struct airbrush_tmu_data *data = container_of(work,
 			struct airbrush_tmu_data, irq_work);
+	int i;
 
-	airbrush_report_trigger(data);
+	/* TODO trigger only the correct sensor */
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
+		ab_tmu_sensor_update(data->sensor[i]);
 
 	ab_tmu_hw_clear_irqs(data->hw);
 
@@ -104,67 +74,6 @@ static int tmu_irq_notify(struct notifier_block *nb,
 	return 0;
 }
 
-static void airbrush_tmu_sensor_initialize(struct airbrush_tmu_data *data,
-		int i)
-{
-	struct ab_tmu_hw *hw = data->hw;
-	/* TODO We should have one tzd for each sensor instead. */
-	u32 trim_info;
-	struct thermal_zone_device *tz = data->tzd;
-	unsigned int rising_threshold = 0, falling_threshold = 0;
-	int j;
-	int threshold_code;
-	int temp, temp_hist;
-	unsigned int reg_off, bit_off;
-
-	trim_info = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_TRIMINFO_P(i));
-
-	data->trim[i].cal_type = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
-			AIRBRUSH_TMU_CAL_MASK;
-
-	data->trim[i].error1 = trim_info & AIRBRUSH_TMU_TEMP_MASK;
-	data->trim[i].error2 = (trim_info >> AIRBRUSH_TMU_TEMP_SHIFT) &
-			AIRBRUSH_TMU_TEMP_MASK;
-
-	if (data->trim[i].cal_type == AIRBRUSH_NO_TRIMMING) {
-		data->trim[i].error1 = no_trimming_error1[i];
-		data->trim[i].error2 = no_trimming_error2[i];
-	}
-
-	// TODO different tz for each sensor
-	for (j = (of_thermal_get_ntrips(tz) - 1); j >= 0; j--) {
-		reg_off = ((7 - j) / 2) * 4;
-		bit_off = ((8 - j) % 2);
-
-		tz->ops->get_trip_temp(tz, j, &temp);
-		temp /= MCELSIUS;
-
-		tz->ops->get_trip_hyst(tz, j, &temp_hist);
-		temp_hist = temp - (temp_hist / MCELSIUS);
-
-		/* Set 9-bit temp code for rising threshold levels */
-		threshold_code = ab_tmu_trim_cel_to_raw(&data->trim[i], temp);
-		rising_threshold = ab_tmu_hw_read(hw,
-				AIRBRUSH_THD_TEMP_RISE7_6_P(i) + reg_off);
-		rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK << (16 * bit_off));
-		rising_threshold |= threshold_code << (16 * bit_off);
-
-		/* Set 9-bit temp code for falling threshold levels */
-		threshold_code = ab_tmu_trim_cel_to_raw(&data->trim[i],
-				temp_hist);
-		falling_threshold = ab_tmu_hw_read(hw,
-				AIRBRUSH_THD_TEMP_FALL7_6_P(i) + reg_off);
-		falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
-				(16 * bit_off));
-		falling_threshold |= threshold_code << (16 * bit_off);
-
-		ab_tmu_hw_write(hw, AIRBRUSH_THD_TEMP_RISE7_6_P(i) + reg_off,
-				rising_threshold);
-		ab_tmu_hw_write(hw, AIRBRUSH_THD_TEMP_FALL7_6_P(i) + reg_off,
-				falling_threshold);
-	}
-}
-
 static int airbrush_tmu_initialize(struct platform_device *pdev)
 {
 	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
@@ -176,117 +85,20 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 	if (!status)
 		return -EBUSY;
 
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
-		airbrush_tmu_sensor_initialize(data, i);
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
+		ab_tmu_sensor_load_trim_info(data->sensor[i]);
+		ab_tmu_sensor_save_threshold(data->sensor[i]);
+	}
 
 	ab_tmu_hw_clear_irqs(hw);
 	return 0;
 }
-
-static int airbrush_get_temp(void *p, int *temp)
-{
-	struct airbrush_tmu_data *data = p;
-	struct ab_tmu_hw *hw = data->hw;
-	bool pcie_link_ready;
-	int code;
-
-	if (!data)
-		return -EINVAL;
-
-	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
-	if (pcie_link_ready) {
-		code = ab_tmu_hw_read_current_temp(hw, 0);
-		*temp = ab_tmu_trim_raw_to_cel(&data->trim[0], code) * MCELSIUS;
-	} else {
-		/*
-		 * Return 0 degree Celsius while TMU is not ready to
-		 * suppress the error log while reading the temperature.
-		 */
-		*temp = 0;
-	}
-	ab_tmu_hw_pcie_link_unlock(hw);
-	return 0;
-}
-
-#ifdef CONFIG_THERMAL_EMULATION
-void tmu_enable_emulate(struct ab_tmu_hw *hw)
-{
-	unsigned int emul_con;
-
-	emul_con = ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON);
-	emul_con |= (1 << AIRBRUSH_EMUL_ENABLE_SHIFT);
-
-	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, emul_con);
-}
-
-void tmu_disable_emulate(struct ab_tmu_hw *hw)
-{
-	unsigned int emul_con;
-
-	emul_con = ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON);
-	emul_con &= ~(1 << AIRBRUSH_EMUL_ENABLE_SHIFT);
-
-	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, emul_con);
-}
-
-void tmu_set_emulate_data(struct airbrush_tmu_data *data,  u16 next_time,
-								u16 next_data)
-{
-	struct ab_tmu_hw *hw = data->hw;
-	u32 uReg;
-
-	next_time &= 0xFFFF;
-	next_data &= 0x1FF;
-	if (next_time == 0x0)
-		next_time = 0x1;
-	uReg = (ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON) >> 0) & 0x1;
-	uReg |= (next_time << AIRBRUSH_EMUL_NEXTTIME_SHIFT) |
-		(ab_tmu_trim_cel_to_raw(&data->trim[0], next_data) <<
-		AIRBRUSH_EMUL_DATA_SHIFT);
-
-	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, uReg);
-}
-
-static int airbrush_tmu_set_emulation(void *drv_data, int temp)
-{
-	struct airbrush_tmu_data *data = drv_data;
-	struct ab_tmu_hw *hw = data->hw;
-	bool pcie_link_ready;
-	int ret;
-
-	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
-	if (pcie_link_ready) {
-		if (temp != 0) {
-			tmu_enable_emulate(hw);
-			tmu_set_emulate_data(data, 1, temp / MCELSIUS);
-		} else {
-			tmu_disable_emulate(hw);
-		}
-		ret = 0;
-	} else {
-		ret = -ENODEV;
-	}
-	ab_tmu_hw_pcie_link_unlock(hw);
-
-	return ret;
-}
-#else
-static int airbrush_tmu_set_emulation(void *drv_data, int temp)
-{
-	return -EINVAL;
-}
-#endif /* CONFIG_THERMAL_EMULATION */
 
 static const struct of_device_id airbrush_tmu_match[] = {
 	{ .compatible = "abc,airbrush-tmu", },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, airbrush_tmu_match);
-
-static struct thermal_zone_of_device_ops airbrush_sensor_ops = {
-	.get_temp = airbrush_get_temp,
-	.set_emul_temp = airbrush_tmu_set_emulation,
-};
 
 static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
 {
@@ -295,7 +107,7 @@ static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
 	int code, temp;
 
 	code = ab_tmu_hw_read_current_temp(hw, id);
-	temp = ab_tmu_trim_raw_to_cel(&data->trim[id], code);
+	temp = ab_tmu_sensor_raw_to_cel(data->sensor[id], code);
 	return scnprintf(buf, PAGE_SIZE, "%d\n", temp);
 }
 
@@ -331,6 +143,7 @@ ATTRIBUTE_GROUPS(airbrush_tmu);
 static int airbrush_tmu_probe(struct platform_device *pdev)
 {
 	struct airbrush_tmu_data *data;
+	int i;
 	int ret;
 
 	data = devm_kzalloc(&pdev->dev, sizeof(struct airbrush_tmu_data),
@@ -353,15 +166,17 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	INIT_WORK(&data->irq_work, airbrush_tmu_work);
 
 	/*
-	 * data->tzd must be registered before calling
+	 * data->sensor must be created before calling
 	 * airbrush_tmu_initialize(), requesting irq and calling
 	 * ab_tmu_hw_control().
 	 */
-	data->tzd = devm_thermal_zone_of_sensor_register(&pdev->dev, 0, data,
-						    &airbrush_sensor_ops);
-	if (IS_ERR(data->tzd)) {
-		dev_err(&pdev->dev, "Failed to register sensor: %d\n", ret);
-		return PTR_ERR(data->tzd);
+	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
+		data->sensor[i] = devm_ab_tmu_sensor_create(&pdev->dev,
+				data->hw, i);
+		if (IS_ERR(data->sensor[i])) {
+			dev_err(&pdev->dev, "Failed to register sensor %d", i);
+			return PTR_ERR(data->sensor[i]);
+		}
 	}
 
 	/* register interrupt handler with PCIe subsystem */
