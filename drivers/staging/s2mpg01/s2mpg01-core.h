@@ -102,14 +102,26 @@
 #define S2MPG01_ADC_V_LDO5 0x1A
 
 /* full scale of 8-bit adc slots */
-/* TODO(b/118704834): revisit the numbers and add channels */
-#define S2MPG01_ADC_SCALE_V_SMPS1   4688  /* in uV/lsb */
-#define S2MPG01_ADC_SCALE_V_SMPS2   6250  /* in uV/lsb */
-#define S2MPG01_ADC_SCALE_I_SMPS1   31250 /* in uA/lsb */
-#define S2MPG01_ADC_SCALE_I_SMPS2   15625 /* in uA/lsb */
-#define S2MPG01_ADC_SCALE_V_LDO     9375  /* in uA/lsb */
-#define S2MPG01_ADC_SCALE_I_LDO     586   /* in uA/lsb */
-#define S2MPG01_ADC_SCALE_VBAT      23438 /* in uV/lsb */
+#define S2MPG01_ADC_SCALE_I_SMPS1	46875	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_SMPS1_PH1	15625	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_SMPS1_PH2	15625	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_SMPS1_PH3	15625	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_SMPS2	15625	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_SMPS3	15625	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_V_SMPS1	4688	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_V_SMPS2	4688	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_V_SMPS3	6250	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_I_LDO1	1172	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_LDO2	1758	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_LDO3	4688	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_LDO4	1758	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_I_LDO5	1172	/* in uA/lsb */
+#define S2MPG01_ADC_SCALE_V_LDO1	9375	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_V_LDO2	4688	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_V_LDO3	4688	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_V_LDO4	4688	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_V_LDO5	9375	/* in uV/lsb */
+#define S2MPG01_ADC_SCALE_VBAT		23438	/* in uV/lsb */
 
 /* macros for PTAT-to-temperature conversion */
 #define TEMP_TO_PTAT_CODE(X)  ((238260 - (X)) / 1167)

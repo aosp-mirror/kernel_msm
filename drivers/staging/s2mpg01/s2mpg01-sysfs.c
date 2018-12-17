@@ -22,230 +22,285 @@
 /* used for register access attributes */
 static u8 _reg_addr;
 
-/* smps1_volt is in uV */
-static int s2mpg01_get_smps1_volt(struct s2mpg01_core *ddata, int *smps1_volt)
+static int s2mpg01_adc_single_chan_wrapper(struct s2mpg01_core *ddata,
+					   unsigned int channel,
+					   int *measured_data)
 {
-	u8 chan_data;
+	u8 raw_data = 0xFF;
+	int scale = 0;
+	int ret;
 
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_SMPS1, &chan_data);
+	ret = s2mpg01_read_adc_chan(ddata, channel, &raw_data);
+	if (ret) {
+		dev_err(ddata->dev,
+			"%s: failed to read adc channel %u\n",
+			__func__, channel);
+		return ret;
+	}
 
-	*smps1_volt = chan_data * S2MPG01_ADC_SCALE_V_SMPS1;
+	switch (channel) {
+	case S2MPG01_ADC_I_SMPS1_SUM:
+		scale = S2MPG01_ADC_SCALE_I_SMPS1;
+		break;
+	case S2MPG01_ADC_I_SMPS2:
+		scale = S2MPG01_ADC_SCALE_I_SMPS2;
+		break;
+	case S2MPG01_ADC_I_SMPS3:
+		scale = S2MPG01_ADC_SCALE_I_SMPS3;
+		break;
+	case S2MPG01_ADC_V_SMPS1:
+		scale = S2MPG01_ADC_SCALE_V_SMPS1;
+		break;
+	case S2MPG01_ADC_V_SMPS2:
+		scale = S2MPG01_ADC_SCALE_V_SMPS2;
+		break;
+	case S2MPG01_ADC_V_SMPS3:
+		scale = S2MPG01_ADC_SCALE_V_SMPS3;
+		break;
+	case S2MPG01_ADC_I_SMPS1_PH1:
+		scale = S2MPG01_ADC_SCALE_I_SMPS1_PH1;
+		break;
+	case S2MPG01_ADC_I_SMPS1_PH2:
+		scale = S2MPG01_ADC_SCALE_I_SMPS1_PH2;
+		break;
+	case S2MPG01_ADC_I_SMPS1_PH3:
+		scale = S2MPG01_ADC_SCALE_I_SMPS1_PH3;
+		break;
+	case S2MPG01_ADC_VBAT:
+		scale = S2MPG01_ADC_SCALE_VBAT;
+		break;
+	case S2MPG01_ADC_I_LDO1:
+		scale = S2MPG01_ADC_SCALE_I_LDO1;
+		break;
+	case S2MPG01_ADC_I_LDO2:
+		scale = S2MPG01_ADC_SCALE_I_LDO2;
+		break;
+	case S2MPG01_ADC_I_LDO3:
+		scale = S2MPG01_ADC_SCALE_I_LDO3;
+		break;
+	case S2MPG01_ADC_I_LDO4:
+		scale = S2MPG01_ADC_SCALE_I_LDO4;
+		break;
+	case S2MPG01_ADC_I_LDO5:
+		scale = S2MPG01_ADC_SCALE_I_LDO5;
+		break;
+	case S2MPG01_ADC_V_LDO1:
+		scale = S2MPG01_ADC_SCALE_V_LDO1;
+		break;
+	case S2MPG01_ADC_V_LDO2:
+		scale = S2MPG01_ADC_SCALE_V_LDO2;
+		break;
+	case S2MPG01_ADC_V_LDO3:
+		scale = S2MPG01_ADC_SCALE_V_LDO3;
+		break;
+	case S2MPG01_ADC_V_LDO4:
+		scale = S2MPG01_ADC_SCALE_V_LDO4;
+		break;
+	case S2MPG01_ADC_V_LDO5:
+		scale = S2MPG01_ADC_SCALE_V_LDO5;
+		break;
+	case S2MPG01_ADC_PTAT:
+		/* temperature is a special case */
+		*measured_data = PTAT_CODE_TO_TEMP(raw_data);
+		return 0;
+	default:
+		dev_err(ddata->dev,
+			"%s: unrecognized channel %u\n",
+			__func__, channel);
+		break;
+	}
 
+	*measured_data = raw_data * scale;
 	return 0;
 }
 
-/* smps1_curr is in uA */
-static int s2mpg01_get_smps1_curr(struct s2mpg01_core *ddata, int *smps1_curr)
-{
-	u8 chan_data;
-
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_SMPS1_SUM, &chan_data);
-
-	*smps1_curr = chan_data * S2MPG01_ADC_SCALE_I_SMPS1;
-
-	return 0;
-}
-
-/* smps2_volt is in uV */
-static int s2mpg01_get_smps2_volt(struct s2mpg01_core *ddata, int *smps2_volt)
-{
-	u8 chan_data;
-
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_SMPS2, &chan_data);
-
-	*smps2_volt = chan_data * S2MPG01_ADC_SCALE_V_SMPS2;
-
-	return 0;
-}
-
-/* smps2_curr is in uA */
-static int s2mpg01_get_smps2_curr(struct s2mpg01_core *ddata, int *smps2_curr)
-{
-	u8 chan_data;
-
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_SMPS2, &chan_data);
-
-	*smps2_curr = chan_data * S2MPG01_ADC_SCALE_I_SMPS2;
-
-	return 0;
-}
-
-/* ldo1_volt is in uV */
-static int s2mpg01_get_ldo1_volt(struct s2mpg01_core *ddata, int *ldo1_volt)
-{
-	u8 chan_data;
-
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_LDO1, &chan_data);
-
-	*ldo1_volt = chan_data * S2MPG01_ADC_SCALE_V_LDO;
-
-	return 0;
-}
-
-/* ldo1_curr is in uA */
-static int s2mpg01_get_ldo1_curr(struct s2mpg01_core *ddata, int *ldo1_curr)
-{
-	u8 chan_data;
-
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_LDO1, &chan_data);
-
-	*ldo1_curr = chan_data * S2MPG01_ADC_SCALE_I_LDO;
-
-	return 0;
-}
-
-/* ldo2_volt is in uV */
-static int s2mpg01_get_ldo2_volt(struct s2mpg01_core *ddata, int *ldo2_volt)
-{
-	u8 chan_data;
-
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_V_LDO2, &chan_data);
-
-	*ldo2_volt = chan_data * S2MPG01_ADC_SCALE_V_LDO;
-
-	return 0;
-}
-
-/* ldo2_curr is in uA */
-static int s2mpg01_get_ldo2_curr(struct s2mpg01_core *ddata, int *ldo2_curr)
-{
-	u8 chan_data;
-
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_I_LDO2, &chan_data);
-
-	*ldo2_curr = chan_data * S2MPG01_ADC_SCALE_I_LDO;
-
-	return 0;
-}
-
+/* show smps1_volt in mV */
 static ssize_t smps1_volt_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int smps1_volt;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_smps1_volt(ddata, &smps1_volt);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_SMPS1,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", smps1_volt);
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(smps1_volt);
 
+/* show smps1_curr in mA */
 static ssize_t smps1_curr_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int smps1_curr;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_smps1_curr(ddata, &smps1_curr);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_SMPS1_SUM,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", smps1_curr);
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(smps1_curr);
 
+/* show smps2_volt in mV */
 static ssize_t smps2_volt_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int smps2_volt;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_smps2_volt(ddata, &smps2_volt);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_SMPS2,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", smps2_volt);
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(smps2_volt);
 
+/* show smps2_curr in mA */
 static ssize_t smps2_curr_show(struct device *dev,
 			       struct device_attribute *mattr,
 			       char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int smps2_curr;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_smps2_curr(ddata, &smps2_curr);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_SMPS2,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", smps2_curr);
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(smps2_curr);
 
+/* show ldo1_volt in mV */
 static ssize_t ldo1_volt_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int ldo1_volt;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_ldo1_volt(ddata, &ldo1_volt);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_LDO1,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", ldo1_volt);
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(ldo1_volt);
 
+/* show ldo1_curr in mA */
 static ssize_t ldo1_curr_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int ldo1_curr;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_ldo1_curr(ddata, &ldo1_curr);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_LDO1,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", ldo1_curr);
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(ldo1_curr);
 
+/* show ldo2_volt in mV */
 static ssize_t ldo2_volt_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int ldo2_volt;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_ldo2_volt(ddata, &ldo2_volt);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_LDO2,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", ldo2_volt);
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(ldo2_volt);
 
+/* show ldo2_curr in mA */
 static ssize_t ldo2_curr_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int ldo2_curr;
+	int measured_data;
+	int ret;
 
-	s2mpg01_get_ldo2_curr(ddata, &ldo2_curr);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_LDO2,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", ldo2_curr);
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(ldo2_curr);
 
+/* show vbat in mV */
 static ssize_t vbat_show(struct device *dev,
 			 struct device_attribute *mattr,
 			 char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	u8 chan_data;
+	int measured_data;
+	int ret;
 
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_VBAT, &chan_data);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_VBAT,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n",
-			chan_data * S2MPG01_ADC_SCALE_VBAT);
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(vbat);
 
+/* show temperature in degC */
 static ssize_t temperature_show(struct device *dev,
 				struct device_attribute *mattr,
 				char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	u8 chan_data;
+	int measured_data;
+	int ret;
 
-	s2mpg01_read_adc_chan(ddata, S2MPG01_ADC_PTAT, &chan_data);
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_PTAT,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%d\n", PTAT_CODE_TO_TEMP(chan_data));
+	return scnprintf(data, PAGE_SIZE, "%d degC\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(temperature);
 
@@ -255,20 +310,40 @@ static ssize_t total_power_show(struct device *dev,
 				char *data)
 {
 	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
-	int smps1_curr, smps2_curr, ldo2_curr, ldo1_curr;
-	long int total_power;
+	int ret;
+	int i;
+	long total_power = 0;
+	int measured_volt, measured_curr;
+	unsigned int iv_channels[][2] = {
+		/* current_channel, voltage_channel */
+		{ S2MPG01_ADC_I_SMPS1_SUM, S2MPG01_ADC_V_SMPS1 },
+		{ S2MPG01_ADC_I_SMPS2, S2MPG01_ADC_V_SMPS2 },
+		{ S2MPG01_ADC_I_SMPS3, S2MPG01_ADC_V_SMPS3 },
+		{ S2MPG01_ADC_I_LDO1, S2MPG01_ADC_V_LDO1 },
+		{ S2MPG01_ADC_I_LDO2, S2MPG01_ADC_V_LDO2 },
+		{ S2MPG01_ADC_I_LDO3, S2MPG01_ADC_V_LDO3 },
+		{ S2MPG01_ADC_I_LDO4, S2MPG01_ADC_V_LDO4 },
+		{ S2MPG01_ADC_I_LDO5, S2MPG01_ADC_V_LDO5 },
+	};
 
-	s2mpg01_get_smps1_curr(ddata, &smps1_curr);
-	s2mpg01_get_smps2_curr(ddata, &smps2_curr);
-	s2mpg01_get_ldo2_curr(ddata, &ldo2_curr);
-	s2mpg01_get_ldo1_curr(ddata, &ldo1_curr);
+	for (i = 0; i < ARRAY_SIZE(iv_channels); ++i) {
+		ret = s2mpg01_adc_single_chan_wrapper(ddata,
+						      iv_channels[i][0],
+						      &measured_curr);
+		if (ret)
+			return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	total_power = (((long int)smps1_curr) * 900 / 1000) +
-		(((long int)smps2_curr) * 1100 / 1000) +
-		(((long int)ldo2_curr) * 1800 / 1000) +
-		(((long int)ldo1_curr) * 1800 / 1000);
+		ret = s2mpg01_adc_single_chan_wrapper(ddata,
+						      iv_channels[i][1],
+						      &measured_volt);
+		if (ret)
+			return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
 
-	return snprintf(data, PAGE_SIZE, "%ld\n", total_power);
+		total_power += (long)measured_volt / 1000
+				* (long)measured_curr / 1000;
+	}
+
+	return scnprintf(data, PAGE_SIZE, "%ld mW\n", total_power / 1000);
 }
 DEVICE_ATTR_RO(total_power);
 
@@ -280,7 +355,7 @@ static ssize_t dump_regs_show(struct device *dev,
 
 	s2mpg01_dump_regs(ddata);
 
-	return snprintf(data, PAGE_SIZE, "ok\n");
+	return scnprintf(data, PAGE_SIZE, "ok\n");
 }
 DEVICE_ATTR_RO(dump_regs);
 
@@ -292,7 +367,7 @@ static ssize_t toggle_pon_show(struct device *dev,
 
 	s2mpg01_toggle_pon(ddata);
 
-	return snprintf(data, PAGE_SIZE, "ok\n");
+	return scnprintf(data, PAGE_SIZE, "ok\n");
 }
 DEVICE_ATTR_RO(toggle_pon);
 
@@ -300,7 +375,7 @@ static ssize_t reg_addr_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%02x\n", _reg_addr);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", _reg_addr);
 }
 
 static ssize_t reg_addr_store(struct device *dev,
@@ -336,7 +411,7 @@ static ssize_t reg_data_show(struct device *dev,
 
 	s2mpg01_read_byte(ddata, _reg_addr, &reg_data);
 
-	return snprintf(buf, PAGE_SIZE, "0x%02x\n", reg_data);
+	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", reg_data);
 }
 
 static ssize_t reg_data_store(struct device *dev,
