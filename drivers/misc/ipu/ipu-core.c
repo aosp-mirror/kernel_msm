@@ -143,6 +143,22 @@ void ipu_free_memory(struct device *dev,
 	ipu_core_memory_free(bus, shared_buffer);
 }
 
+struct ipu_jqs_buffer *ipu_alloc_jqs_memory(struct device *dev, size_t size)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	return ipu_core_alloc_jqs_memory(bus, size);
+}
+
+void ipu_free_jqs_memory(struct device *dev, struct ipu_jqs_buffer *buf)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	ipu_core_free_jqs_memory(bus, buf);
+}
+
 struct dentry *ipu_get_debug_root(struct device *dev)
 {
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
