@@ -14299,6 +14299,29 @@ enum hw_filter_mode {
 #define CFG_ENABLE_RTT_MAC_RANDOMIZATION_MAX     (1)
 #define CFG_ENABLE_RTT_MAC_RANDOMIZATION_DEFAULT (0)
 
+/*
+ * <ini>
+ * sae_enabled - Enable/Disable SAE support in driver
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable/disable SAE support in driver
+ * Driver will update config to supplicant based on this config.
+ *
+ * Related: None
+ *
+ * Supported Feature: SAE
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_IS_SAE_ENABLED_NAME    "sae_enabled"
+#define CFG_IS_SAE_ENABLED_DEFAULT (0)
+#define CFG_IS_SAE_ENABLED_MIN     (0)
+#define CFG_IS_SAE_ENABLED_MAX     (1)
+
 /*---------------------------------------------------------------------------
    Type declarations
    -------------------------------------------------------------------------*/
@@ -15205,6 +15228,9 @@ struct hdd_config {
 	uint32_t channel_select_logic_conc;
 	bool enable_dtim_selection_diversity;
 	bool enable_rtt_mac_randomization;
+#ifdef WLAN_FEATURE_SAE
+	bool is_sae_enabled;
+#endif
 };
 
 #define VAR_OFFSET(_Struct, _Var) (offsetof(_Struct, _Var))
