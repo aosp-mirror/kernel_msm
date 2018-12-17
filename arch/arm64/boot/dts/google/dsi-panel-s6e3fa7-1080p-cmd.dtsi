@@ -66,13 +66,13 @@
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-on-command = [
-					05 01 00 00 14 00 01 11
+					05 01 00 00 78 00 01 11
 					15 01 00 00 00 00 02 35 00
 					39 01 00 00 00 00 03 F0 5A 5A
 					39 01 00 00 00 00 0F F4 BB 23 19 3A 9F
 						0F 09 C0 00 B4 37 70 79 69
 					39 01 00 00 00 00 03 F0 A5 A5
-					15 01 00 00 7C 00 02 53 20
+					15 01 00 00 00 00 02 53 20
 					05 01 00 00 00 00 01 29
 				];
 				qcom,mdss-dsi-off-command = [
