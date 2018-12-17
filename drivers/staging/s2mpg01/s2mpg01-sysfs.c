@@ -152,6 +152,63 @@ static ssize_t smps1_curr_show(struct device *dev,
 }
 DEVICE_ATTR_RO(smps1_curr);
 
+/* show smps1_ph1_curr in mA */
+static ssize_t smps1_ph1_curr_show(struct device *dev,
+				   struct device_attribute *mattr,
+				   char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_SMPS1_PH1,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(smps1_ph1_curr);
+
+/* show smps1_ph2_curr in mA */
+static ssize_t smps1_ph2_curr_show(struct device *dev,
+				   struct device_attribute *mattr,
+				   char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_SMPS1_PH2,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(smps1_ph2_curr);
+
+/* show smps1_ph3_curr in mA */
+static ssize_t smps1_ph3_curr_show(struct device *dev,
+				   struct device_attribute *mattr,
+				   char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_SMPS1_PH3,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(smps1_ph3_curr);
+
 /* show smps2_volt in mV */
 static ssize_t smps2_volt_show(struct device *dev,
 			       struct device_attribute *mattr,
@@ -189,6 +246,44 @@ static ssize_t smps2_curr_show(struct device *dev,
 	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(smps2_curr);
+
+/* show smps3_volt in mV */
+static ssize_t smps3_volt_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_SMPS3,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(smps3_volt);
+
+/* show smps3_curr in mA */
+static ssize_t smps3_curr_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_SMPS3,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(smps3_curr);
 
 /* show ldo1_volt in mV */
 static ssize_t ldo1_volt_show(struct device *dev,
@@ -265,6 +360,120 @@ static ssize_t ldo2_curr_show(struct device *dev,
 	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
 }
 DEVICE_ATTR_RO(ldo2_curr);
+
+/* show ldo3_volt in mV */
+static ssize_t ldo3_volt_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_LDO3,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(ldo3_volt);
+
+/* show ldo3_curr in mA */
+static ssize_t ldo3_curr_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_LDO3,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(ldo3_curr);
+
+/* show ldo4_volt in mV */
+static ssize_t ldo4_volt_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_LDO4,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(ldo4_volt);
+
+/* show ldo4_curr in mA */
+static ssize_t ldo4_curr_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_LDO4,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(ldo4_curr);
+
+/* show ldo5_volt in mV */
+static ssize_t ldo5_volt_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_V_LDO5,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mV\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(ldo5_volt);
+
+/* show ldo5_curr in mA */
+static ssize_t ldo5_curr_show(struct device *dev,
+			      struct device_attribute *mattr,
+			      char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	int measured_data;
+	int ret;
+
+	ret = s2mpg01_adc_single_chan_wrapper(ddata,
+					      S2MPG01_ADC_I_LDO5,
+					      &measured_data);
+	if (ret)
+		return scnprintf(data, PAGE_SIZE, "Failed: %d\n", ret);
+
+	return scnprintf(data, PAGE_SIZE, "%d mA\n", measured_data / 1000);
+}
+DEVICE_ATTR_RO(ldo5_curr);
 
 /* show vbat in mV */
 static ssize_t vbat_show(struct device *dev,
@@ -442,12 +651,23 @@ DEVICE_ATTR_RW(reg_data);
 static struct attribute *s2mpg01_attrs[] = {
 	&dev_attr_smps1_volt.attr,
 	&dev_attr_smps1_curr.attr,
+	&dev_attr_smps1_ph1_curr.attr,
+	&dev_attr_smps1_ph2_curr.attr,
+	&dev_attr_smps1_ph3_curr.attr,
 	&dev_attr_smps2_volt.attr,
 	&dev_attr_smps2_curr.attr,
+	&dev_attr_smps3_volt.attr,
+	&dev_attr_smps3_curr.attr,
 	&dev_attr_ldo1_volt.attr,
 	&dev_attr_ldo1_curr.attr,
 	&dev_attr_ldo2_volt.attr,
 	&dev_attr_ldo2_curr.attr,
+	&dev_attr_ldo3_volt.attr,
+	&dev_attr_ldo3_curr.attr,
+	&dev_attr_ldo4_volt.attr,
+	&dev_attr_ldo4_curr.attr,
+	&dev_attr_ldo5_volt.attr,
+	&dev_attr_ldo5_curr.attr,
 	&dev_attr_vbat.attr,
 	&dev_attr_temperature.attr,
 	&dev_attr_total_power.attr,
