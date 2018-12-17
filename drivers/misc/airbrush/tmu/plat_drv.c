@@ -11,15 +11,10 @@
  * only version 2 as published by the Free Software Foundation.
  */
 
-#include <linux/clk.h>
-#include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
-#include <linux/of_irq.h>
 #include <linux/platform_device.h>
-#include <linux/regulator/consumer.h>
 #include <linux/mfd/abc-pcie.h>
 #include "../../../thermal/thermal_core.h"
 
@@ -36,61 +31,16 @@ static const u16 no_trimming_error2[] = {346, 346, 347, 347, 347, 346, 346};
 /**
  * struct airbrush_tmu_data : A structure to hold the private data of the TMU
 	driver
- * @pdata: pointer to the tmu platform/configuration data
- * @irq: irq number of the TMU controller.
- * @soc: id of the SOC type.
  * @irq_work: pointer to the irq work structure.
- * @lock: lock to implement synchronization.
- * @clk: pointer to the clock structure.
- * @clk_sec: pointer to the clock structure for accessing the base_second.
- * @sclk: pointer to the clock structure for accessing the tmu special clk.
- * @cal_type: calibration type for temperature calculation
- * @temp_error1: fused value of the first point trim.
- * @temp_error2: fused value of the second point trim.
- * @regulator: pointer to the TMU regulator structure.
- * @reg_conf: pointer to structure to register with core thermal.
- * @tmu_initialize: SoC specific TMU initialization method
- * @tmu_control: SoC specific TMU control method
- * @tmu_read: SoC specific TMU temperature read method
- * @tmu_set_emulation: SoC specific TMU emulation setting method
+ * @trim: trim info for sensors.
  */
 struct airbrush_tmu_data {
-	struct airbrush_tmu_platform_data *pdata;
 	struct ab_tmu_hw *hw;
 	int irq;
-	struct notifier_block  tmu_nb;
+	struct notifier_block tmu_nb;
 	struct work_struct irq_work;
-	struct clk *clk, *clk_sec, *sclk;
 	struct ab_tmu_trim trim[AIRBRUSH_NUM_ALL_PROBE];
-	struct regulator *regulator;
 	struct thermal_zone_device *tzd;
-};
-
-/**
- * struct airbrush_tmu_platform_data
- * @gain: gain of amplifier in the positive-TC generator block
- *	0 < gain <= 15
- * @reference_voltage: reference voltage of amplifier
- *	in the positive-TC generator block
- *	0 < reference_voltage <= 31
- * @noise_cancel_mode: noise cancellation mode
- *	000, 100, 101, 110 and 111 can be different modes
- * @type: determines the type of SOC
- * @efuse_value: platform defined fuse value
- * @min_efuse_value: minimum valid trimming data
- * @max_efuse_value: maximum valid trimming data
- * @default_temp_offset: default temperature offset in case of no trimming
- *
- * This structure is required for configuration of airbrush_tmu driver.
- */
-struct airbrush_tmu_platform_data {
-	u8 gain;
-	u8 reference_voltage;
-	u8 noise_cancel_mode;
-
-	u32 efuse_value;
-	u32 min_efuse_value;
-	u32 max_efuse_value;
 };
 
 static void airbrush_report_trigger(struct airbrush_tmu_data *p)
@@ -333,43 +283,6 @@ static const struct of_device_id airbrush_tmu_match[] = {
 };
 MODULE_DEVICE_TABLE(of, airbrush_tmu_match);
 
-#define	AIRBRUSH_TMU_GAIN			9
-#define AIRBRUSH_TMU_REF_VOLT			17
-#define AIRBRUSH_TMU_NOSIE_CANCEL_MODE		4
-#define AIRBRUSH_TMU_EFUSE_VAL			292
-#define AIRBRUSH_TMU_MIN_EFUSE_VAL		15
-#define AIRBRUSH_TMU_MAX_EFUSE_VAL		135
-
-static int airbrush_map_dt_data(struct platform_device *pdev)
-{
-	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
-	struct airbrush_tmu_platform_data *pdata;
-
-	if (!data || !pdev->dev.of_node)
-		return -ENODEV;
-
-	data->irq = 36;
-
-	pdata = devm_kzalloc(&pdev->dev,
-			     sizeof(struct airbrush_tmu_platform_data),
-			     GFP_KERNEL);
-	if (!pdata)
-		return -ENOMEM;
-
-	pdata->gain = AIRBRUSH_TMU_GAIN;
-	pdata->reference_voltage = AIRBRUSH_TMU_REF_VOLT;
-	pdata->noise_cancel_mode = AIRBRUSH_TMU_NOSIE_CANCEL_MODE;
-
-	pdata->efuse_value = AIRBRUSH_TMU_EFUSE_VAL;
-
-	pdata->min_efuse_value = AIRBRUSH_TMU_MIN_EFUSE_VAL;
-	pdata->max_efuse_value = AIRBRUSH_TMU_MAX_EFUSE_VAL;
-
-	data->pdata = pdata;
-
-	return 0;
-}
-
 static struct thermal_zone_of_device_ops airbrush_sensor_ops = {
 	.get_temp = airbrush_get_temp,
 	.set_emul_temp = airbrush_tmu_set_emulation,
@@ -436,14 +349,8 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	if (IS_ERR(data->hw))
 		return PTR_ERR(data->hw);
 
-	/* TODO: See if this function can be remove */
-	ret = airbrush_map_dt_data(pdev);
-	if (ret)
-		return ret;
-
+	data->irq = 36;
 	INIT_WORK(&data->irq_work, airbrush_tmu_work);
-
-	/* TODO: get clock from dt */
 
 	/*
 	 * data->tzd must be registered before calling
