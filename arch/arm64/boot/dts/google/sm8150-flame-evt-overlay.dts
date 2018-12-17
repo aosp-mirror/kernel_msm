@@ -19,5 +19,5 @@
 	model = "Google Inc. MSM sm8150 Flame EVT1.0";
 	compatible = "google,floral-sm8150", "qcom,sm8150";
 	qcom,msm-id = <339 0x20000>;
-	qcom,board-id = <0x061005 0>;
+	qcom,board-id = <0x060A05 0>;
 };

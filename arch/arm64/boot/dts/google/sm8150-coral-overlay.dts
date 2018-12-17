@@ -19,5 +19,5 @@
 	model = "Google Inc. MSM sm8150 Coral EVT1.1";
 	compatible = "google,floral-sm8150", "qcom,sm8150";
 	qcom,msm-id = <339 0x20000>;
-	qcom,board-id = <0x051105 0>;
+	qcom,board-id = <0x050B05 0>;
 };
