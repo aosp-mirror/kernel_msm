@@ -936,9 +936,9 @@ int mnh_sg_build(void *dmadest, size_t size, struct mnh_sg_entry **sg,
 	}
 
 	down_read(&current->mm->mmap_sem);
-	n_num = get_user_pages(current, current->mm,
-			(unsigned long) dmadest, p_num, 1, 1, sgl->mypage,
-				NULL);
+	n_num = get_user_pages(current, current->mm, (unsigned long) dmadest,
+			       p_num, FOLL_WRITE | FOLL_FORCE, sgl->mypage,
+			       NULL);
 	up_read(&current->mm->mmap_sem);
 	if (n_num < 0) {
 		dev_err(&mnh_dev->pdev->dev, "fail to get user_pages\n");
