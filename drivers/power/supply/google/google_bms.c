@@ -15,9 +15,13 @@
  */
 
 #define gbms_owner(p)	((p)->owner_name ? (p)->owner_name : "google_bms")
-#define gbms_info(p, fmt, ...)	pr_info("%s: "fmt, gbms_owner(p), ##__VA_ARGS__)
-#define gbms_warn(p, fmt, ...)	pr_warn("%s: "fmt, gbms_owner(p), ##__VA_ARGS__)
-#define gbms_err(p, fmt, ...)	pr_err("%s: "fmt, gbms_owner(p), ##__VA_ARGS__)
+
+#define gbms_info(p, fmt, ...)	\
+	pr_info("%s: " fmt, gbms_owner(p), ##__VA_ARGS__)
+#define gbms_warn(p, fmt, ...)	\
+	pr_warn("%s: " fmt, gbms_owner(p), ##__VA_ARGS__)
+#define gbms_err(p, fmt, ...)	\
+	pr_err("%s: " fmt, gbms_owner(p), ##__VA_ARGS__)
 
 #include <linux/kernel.h>
 #include <linux/printk.h>

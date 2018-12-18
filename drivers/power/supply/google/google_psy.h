@@ -33,20 +33,21 @@ static inline int gpsy_set_prop(struct power_supply *psy,
 	if (ret < 0) {
 		pr_err("failed to set %s for '%s', ret=%d\n",
 		       prop_name, psy->desc->name, ret);
-		return -EINVAL;
+		return ret;
 	}
 	return 0;
 }
 
 #define GPSY_SET_PROP(psy, psp, val) \
-	gpsy_set_prop(psy, psp, \
-		(union power_supply_propval){ .intval = (val) }, #psp)
+	gpsy_set_prop(psy, psp, (union power_supply_propval) \
+		{ .intval = (val) }, #psp)
 #define GPSY_SET_INT64_PROP(psy, psp, val) \
-	gpsy_set_prop(psy, psp, \
-		(union power_supply_propval){ .int64val = (val) }, #psp)
+	gpsy_set_prop(psy, psp, (union power_supply_propval) \
+		{ .int64val = (int64_t)(val) }, #psp)
 
 static inline int gpsy_get_prop(struct power_supply *psy,
-			       enum power_supply_property psp, char *prop_name)
+			       enum power_supply_property psp,
+			       const char *prop_name)
 {
 	union power_supply_propval val;
 	int ret = 0;
@@ -67,7 +68,7 @@ static inline int gpsy_get_prop(struct power_supply *psy,
 
 static inline int64_t gpsy_get_int64_prop(struct power_supply *psy,
 				      enum power_supply_property psp,
-				      char *prop_name)
+				      const char *prop_name)
 {
 	union power_supply_propval val;
 	int ret = 0;
