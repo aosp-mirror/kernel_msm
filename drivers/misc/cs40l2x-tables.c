@@ -37,6 +37,7 @@ bool cs40l2x_readable_reg(struct device *dev, unsigned int reg)
 	case CS40L2X_FABID:
 	case CS40L2X_RELID:
 	case CS40L2X_OTPID:
+	case CS40L2X_TEST_KEY_CTL:
 	case CS40L2X_CTRL_ASYNC1:
 	case CS40L2X_OTP_CTRL0:
 	case CS40L2X_OTP_CTRL3:
@@ -63,6 +64,7 @@ bool cs40l2x_readable_reg(struct device *dev, unsigned int reg)
 	case CS40L2X_DSP_CLK_CTRL:
 	case CS40L2X_GLOBAL_CLK_CTRL:
 	case CS40L2X_DATA_FS_SEL:
+	case CS40L2X_FS_MON_0:
 	case CS40L2X_PLL_LOOP_PARAM:
 	case CS40L2X_PLL_MISC_CTRL:
 	case CS40L2X_MDSYNC_EN:
@@ -87,9 +89,11 @@ bool cs40l2x_readable_reg(struct device *dev, unsigned int reg)
 	case CS40L2X_BSTCVRT_DCM_MODE_FORCE:
 	case CS40L2X_BSTCVRT_OVERVOLT_CTRL:
 	case CS40L2X_VI_VOL_POL:
+	case CS40L2X_SPKMON_RESYNC:
 	case CS40L2X_DTEMP_WARN_THLD:
 	case CS40L2X_DTEMP_CFG:
 	case CS40L2X_DTEMP_EN:
+	case CS40L2X_TEMP_RESYNC:
 	case CS40L2X_VPVBST_FS_SEL:
 	case CS40L2X_SP_ENABLES:
 	case CS40L2X_SP_RATE_CTRL:

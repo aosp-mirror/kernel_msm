@@ -6269,7 +6269,6 @@ static const struct reg_sequence cs40l2x_rev_a0_errata[] = {
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE1},
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE2},
 	{CS40L2X_VPVBST_FS_SEL,		0x00000000},
-	{CS40L2X_ASP_CONTROL4,		0x01010000},
 };
 
 static const struct reg_sequence cs40l2x_rev_b0_errata[] = {
@@ -6284,7 +6283,6 @@ static const struct reg_sequence cs40l2x_rev_b0_errata[] = {
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE1},
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE2},
 	{CS40L2X_VPVBST_FS_SEL,		0x00000000},
-	{CS40L2X_ASP_CONTROL4,		0x01010000},
 };
 
 static int cs40l2x_part_num_resolve(struct cs40l2x_private *cs40l2x)
