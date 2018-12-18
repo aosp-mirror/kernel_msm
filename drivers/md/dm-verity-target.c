@@ -1049,6 +1049,21 @@ int verity_ctr(struct dm_target *ti, unsigned argc, char **argv)
 			goto bad;
 	}
 
+	/* b/120776455: Force the "check_at_most_once" optional parameter here.
+	 * This change must be finalized for all devices in user space or must
+	 * be reverted based on what happens in the bug.
+	 */
+	if (!v->validated_blocks) {
+		r = verity_alloc_most_once(v);
+		/* make sure validated_blocks is still NULL so the rest of the
+		 * code continues to work as if 'check_at_most_once' was never
+		 * enabled */
+		if (r < 0) {
+			v->validated_blocks = NULL;
+			/* fall through */
+		}
+	}
+
 	v->hash_per_block_bits =
 		__fls((1 << v->hash_dev_block_bits) / v->digest_size);
 
