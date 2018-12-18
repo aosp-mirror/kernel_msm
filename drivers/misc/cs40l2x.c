@@ -4107,7 +4107,7 @@ static void cs40l2x_coeff_free(struct cs40l2x_private *cs40l2x)
 		coeff_desc = list_first_entry(&cs40l2x->coeff_desc_head,
 				struct cs40l2x_coeff_desc, list);
 		list_del(&coeff_desc->list);
-		kfree(coeff_desc);
+		devm_kfree(cs40l2x->dev, coeff_desc);
 	}
 }
 
@@ -4983,7 +4983,8 @@ static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
 				+ (*(data + pos + 3) << 24);
 		pos += CS40L2X_COEFF_LENGTH_SIZE;
 
-		coeff_desc = kzalloc(sizeof(*coeff_desc), GFP_KERNEL);
+		coeff_desc = devm_kzalloc(cs40l2x->dev,
+				sizeof(*coeff_desc), GFP_KERNEL);
 		if (!coeff_desc)
 			return -ENOMEM;
 
@@ -6708,8 +6709,6 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 	gpiod_set_value_cansleep(cs40l2x->reset_gpio, 0);
 
 	regulator_bulk_disable(cs40l2x->num_supplies, cs40l2x->supplies);
-
-	cs40l2x_coeff_free(cs40l2x);
 
 	mutex_destroy(&cs40l2x->lock);
 
