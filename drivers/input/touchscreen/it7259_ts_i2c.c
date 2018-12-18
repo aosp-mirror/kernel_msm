@@ -2938,8 +2938,8 @@ StageB = %d\r\n\r\n[Data]\r\n",\
 
 	strlcat(returnString,cur, sizeof(returnString));
 	for (i = 0; i< chanelNum*2; i=i+2) 	{
-		snprintf(cur, sizeof(cur), "%d\n",
-			(bufCselValue[i+1] * 256 + bufCselValue[i]));
+		snprintf(cur, sizeof(cur), "%02x%02x\r\n",
+			bufCselValue[i+1],bufCselValue[i]);
 		strlcat(returnString,cur, sizeof(returnString));
 
 	}
@@ -2947,9 +2947,8 @@ StageB = %d\r\n\r\n[Data]\r\n",\
 	strlcat(returnString,cur, sizeof(returnString));
 	if(COMPARE_NORMALIZE) {
 		for (i = 0; i< chanelNum*2; i=i+2) 	{
-		snprintf(cur, sizeof(cur), "%d\n",
-			(bufCselValue[i+1] * 256 +chanelNormalizeValue[i])
-			);
+		snprintf(cur, sizeof(cur),"%02x%02x\r\n",
+			bufCselValue[i+1],chanelNormalizeValue[i]);
 		strlcat(returnString,cur, sizeof(returnString));
 		}
 	}

@@ -11,7 +11,7 @@ struct prodcselinfo {
 
 /****** Test Parameter******/
 /*Please follow module test  and IC Config setting*/
-#define STAGE_NUM 16
+#define STAGE_NUM 22
 
 /*7259Q_24:  0x00   7259Q_13: 0x01
 7257Q_AX = 0x02     7257Q_BXQN = 0x03*/
@@ -22,7 +22,7 @@ struct prodcselinfo {
 
 #define ENGINE_CONTROL_MODE_STRING  "Ground"
 #define GAIN_SETTING  0x01
-#define TP_TYPE  "BUTTON_TYPE"
+#define TP_TYPE  "22CH_TYPE"
  #define FW_VERSION  "1.13.0.6"
 #define CFG_VERSION  "1.48.3.3"
 #define COMPARE_NORMALIZE  1
