@@ -43,11 +43,8 @@
 
 #define PHASENUM 3
 
-#define PROXVALUE_SIZE 2
 #define PHASE_SELECT_REG 0x60
-#define PROXUSEFUL_REG 0x61
 #define PROXAVG_REG 0x63
-#define PROXDIFF_REG 0x65
 #define PROXOFFSET_REG 0x67
 
 #define VIO_VOLTAGE_MIN 1800000
@@ -71,14 +68,6 @@ enum SILEGO_GPIO {
 enum CAP_SENSE_GPIO {
 	CSENSE_PROXAVG_READ,
 	CAP_SENSE_GPIO_MAX
-};
-
-enum CAP_SENSE_PROX_VALUE {
-	PROX_USEFUL,
-	PROX_AVG,
-	PROX_DIFF,
-	PROX_OFFSET,
-	PROX_VALUE_MAX
 };
 
 enum LASER_TYPE {
@@ -132,13 +121,15 @@ struct led_laser_ctrl_t {
 		uint32_t sid;
 		struct gpio *gpio_array;
 		unsigned int irq[CAP_SENSE_GPIO_MAX];
-		int16_t proxvalue[PROX_VALUE_MAX];
 		int16_t proxavg[PHASENUM];
-		int16_t proxoffset[PHASENUM];
+		uint16_t proxoffset[PHASENUM];
 		struct camera_io_master io_master_info;
 		bool is_cci_init;
 	} cap_sense;
 };
+
+static bool read_proxoffset;
+module_param(read_proxoffset, bool, 0644);
 
 static const struct reg_setting silego_reg_settings[] = {
 	{0xc0, 0x09}, {0xc1, 0x5b}, {0xc2, 0x09}, {0xc3, 0x5b}, {0xcb, 0x93},
@@ -268,60 +259,6 @@ static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 		CAMERA_SENSOR_I2C_TYPE_BYTE);
 	if (rc < 0)
 		dev_err(ctrl->soc_info.dev, "clean up NIRQ failed");
-
-	return rc;
-}
-
-static int sx9320_read_proxvalue(struct led_laser_ctrl_t *ctrl, int proxtype)
-{
-	int rc, i;
-	uint32_t data, addr;
-	uint16_t mask;
-
-	if (proxtype >= PROX_VALUE_MAX) {
-		dev_err(ctrl->soc_info.dev, "unknown proxvalue type");
-		return -EINVAL;
-	}
-
-	switch (proxtype) {
-	case PROX_USEFUL:
-		addr = PROXUSEFUL_REG;
-		mask = 0xFFFF;
-		break;
-	case PROX_AVG:
-		addr = PROXAVG_REG;
-		mask = 0xFFFF;
-		break;
-	case PROX_DIFF:
-		addr = PROXDIFF_REG;
-		mask = 0xFFFF;
-		break;
-	case PROX_OFFSET:
-		addr = PROXOFFSET_REG;
-		mask = 0x3FFF;
-		break;
-	default:
-		break;
-	}
-
-	ctrl->cap_sense.proxvalue[proxtype] = 0;
-	for (i = 0; i < PROXVALUE_SIZE; i++) {
-		rc = camera_io_dev_read(
-			&ctrl->cap_sense.io_master_info,
-			addr+i,
-			&data,
-			CAMERA_SENSOR_I2C_TYPE_BYTE,
-			CAMERA_SENSOR_I2C_TYPE_BYTE);
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"read proxvalue %d failed",
-				proxtype);
-			return rc;
-		}
-		ctrl->cap_sense.proxvalue[proxtype] =
-			(ctrl->cap_sense.proxvalue[proxtype] << 8) + data;
-	}
-	ctrl->cap_sense.proxvalue[proxtype] &= mask;
 
 	return rc;
 }
@@ -595,6 +532,7 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->cap_sense.is_validated = false;
 		return rc;
 	}
+
 	ctrl->cap_sense.is_validated = true;
 
 	/* Silego i2c need at least 1 ms after vdd is up */
@@ -764,6 +702,7 @@ static void cap_sense_workq_job(struct work_struct *work)
 
 		camera_io_dev_write(&ctrl->cap_sense.io_master_info,
 			&write_setting);
+
 		camera_io_dev_read(
 			&ctrl->cap_sense.io_master_info,
 			PROXAVG_REG,
@@ -772,12 +711,22 @@ static void cap_sense_workq_job(struct work_struct *work)
 			CAMERA_SENSOR_I2C_TYPE_WORD);
 
 		ctrl->cap_sense.proxavg[i] = data & 0xFFFF;
-	}
 
-	dev_dbg(ctrl->soc_info.dev, "proxavg PH0: %d, PH1: %d, PH2: %d",
-			ctrl->cap_sense.proxavg[0],
-			ctrl->cap_sense.proxavg[1],
-			ctrl->cap_sense.proxavg[2]);
+		if (read_proxoffset) {
+			camera_io_dev_read(
+				&ctrl->cap_sense.io_master_info,
+				PROXOFFSET_REG,
+				&data,
+				CAMERA_SENSOR_I2C_TYPE_BYTE,
+				CAMERA_SENSOR_I2C_TYPE_WORD);
+
+			ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
+			dev_info(ctrl->soc_info.dev, "proxoffset PH%d: %d",
+					i, ctrl->cap_sense.proxoffset[i]);
+			dev_info(ctrl->soc_info.dev, "proxavg PH%d: %d",
+					i, ctrl->cap_sense.proxavg[i]);
+		}
+	}
 }
 
 static int lm36011_set_up_silego_irq(
@@ -1305,7 +1254,7 @@ static ssize_t cap_sense_proxvalue_show(struct device *dev,
 	struct device_attribute *attr,
 	char *buf)
 {
-	int rc, i;
+	int rc;
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 
 	if (!ctrl->cap_sense.is_power_up || !ctrl->is_power_up) {
@@ -1313,18 +1262,14 @@ static ssize_t cap_sense_proxvalue_show(struct device *dev,
 		return -EINVAL;
 	}
 
-	for (i = 0; i < PROX_VALUE_MAX; i++) {
-		rc = sx9320_read_proxvalue(ctrl, i);
-		if (rc < 0)
-			return rc;
-	}
-
 	rc = scnprintf(buf, PAGE_SIZE,
-		"PROXUSEFUL: %d\nPROXAVG: %d\nPROXOFFSET: %d\nPROXDIFF: %d\n",
-		ctrl->cap_sense.proxvalue[PROX_USEFUL],
-		ctrl->cap_sense.proxvalue[PROX_AVG],
-		ctrl->cap_sense.proxvalue[PROX_OFFSET],
-		ctrl->cap_sense.proxvalue[PROX_DIFF]);
+		"proxoffset PH0: %d, PH1: %d, PH2: %d\nproxavg PH0: %d, PH1: %d, PH2: %d\n",
+			ctrl->cap_sense.proxoffset[0],
+			ctrl->cap_sense.proxoffset[1],
+			ctrl->cap_sense.proxoffset[2],
+			ctrl->cap_sense.proxavg[0],
+			ctrl->cap_sense.proxavg[1],
+			ctrl->cap_sense.proxavg[2]);
 
 	return rc;
 }
