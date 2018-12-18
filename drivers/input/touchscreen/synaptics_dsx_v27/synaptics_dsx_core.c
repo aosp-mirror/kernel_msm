@@ -909,16 +909,27 @@ static ssize_t synaptics_rmi4_suspend_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int input;
-
+	struct synaptics_rmi4_data *rmi4_data = dev_get_drvdata(dev);
 	if (sscanf(buf, "%u", &input) != 1)
 		return -EINVAL;
 
-	if (input == 1)
+	if (input == 1) {
+		mutex_lock(&(rmi4_data->rmi4_pm_mutex));
 		synaptics_rmi4_suspend(dev);
-	else if (input == 0)
+		mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
+	} else if (input == 0) {
+		mutex_lock(&(rmi4_data->rmi4_pm_mutex));
 		synaptics_rmi4_resume(dev);
-	else
+		rmi4_data->stay_awake = false;
+		mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
+	} else if (input == 2) {
+		mutex_lock(&(rmi4_data->rmi4_pm_mutex));
+		synaptics_rmi4_resume(dev);
+		rmi4_data->stay_awake = true;
+		mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
+	} else {
 		return -EINVAL;
+	}
 
 	return count;
 }
@@ -4768,6 +4779,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	mutex_init(&(rmi4_data->rmi4_io_ctrl_mutex));
 	mutex_init(&(rmi4_data->rmi4_exp_init_mutex));
 	mutex_init(&(rmi4_data->rmi4_irq_enable_mutex));
+	mutex_init(&(rmi4_data->rmi4_pm_mutex));
 
 	platform_set_drvdata(pdev, rmi4_data);
 
@@ -5087,7 +5099,9 @@ static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
 			pr_info("%s: DRM blank %d, event %ld\n",
 					__func__, transition, event);
 			if (transition == MSM_DRM_BLANK_UNBLANK) {
+				mutex_lock(&(rmi4_data->rmi4_pm_mutex));
 				synaptics_rmi4_resume(&rmi4_data->pdev->dev);
+				mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
 				rmi4_data->fb_ready = true;
 			}
 		} else if (event == MSM_DRM_EARLY_EVENT_BLANK) {
@@ -5096,7 +5110,9 @@ static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
 					__func__, transition, event);
 			if (transition == MSM_DRM_BLANK_POWERDOWN ||
 					transition == MSM_DRM_BLANK_LP) {
+				mutex_lock(&(rmi4_data->rmi4_pm_mutex));
 				synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
+				mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
 				rmi4_data->fb_ready = false;
 			}
 		}
@@ -5120,10 +5136,14 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		if (event == FB_EVENT_BLANK) {
 			transition = evdata->data;
 			if (*transition == FB_BLANK_POWERDOWN) {
+				mutex_lock(&(rmi4_data->rmi4_pm_mutex));
 				synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
+				mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
 				rmi4_data->fb_ready = false;
 			} else if (*transition == FB_BLANK_UNBLANK) {
+				mutex_lock(&(rmi4_data->rmi4_pm_mutex));
 				synaptics_rmi4_resume(&rmi4_data->pdev->dev);
+				mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
 				rmi4_data->fb_ready = true;
 			}
 		}

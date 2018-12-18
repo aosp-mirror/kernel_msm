@@ -415,6 +415,7 @@ struct synaptics_rmi4_data {
 	struct mutex rmi4_io_ctrl_mutex;
 	struct mutex rmi4_exp_init_mutex;
 	struct mutex rmi4_irq_enable_mutex;
+	struct mutex rmi4_pm_mutex;
 	struct delayed_work rb_work;
 	struct workqueue_struct *rb_workqueue;
 #ifdef CONFIG_DRM
