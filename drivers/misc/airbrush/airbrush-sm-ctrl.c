@@ -163,47 +163,48 @@ static struct block_property aon_property_table[] = {
 	BLK_ENTRY(3_0, Disabled, NoRail,  off, 0_0,  off, 0,      0, 0, 0, 0),
 };
 
-#define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon) \
-	{\
-		CHIP_STATE_ ## cs,		\
-		BLOCK_STATE_ ## ipu,	\
-		BLOCK_STATE_ ## tpu,	\
-		BLOCK_STATE_ ## dram,	\
-		BLOCK_STATE_ ## mif,	\
-		BLOCK_STATE_ ## fsys,	\
-		BLOCK_STATE_ ## aon,	\
+#define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon, core) \
+	{								\
+		CHIP_STATE_ ## cs,					\
+		BLOCK_STATE_ ## ipu,					\
+		BLOCK_STATE_ ## tpu,					\
+		BLOCK_STATE_ ## dram,					\
+		BLOCK_STATE_ ## mif,					\
+		BLOCK_STATE_ ## fsys,					\
+		BLOCK_STATE_ ## aon,					\
+		core ## _POWER_CONTROL,					\
 	}
 
 static struct chip_to_block_map chip_state_map[] = {
-	/*                     CS   IPU  TPU DRAM  MIF FSYS  AON */
-	CHIP_TO_BLOCK_MAP_INIT(0_0, 0_0, 0_0, 0_0, 0_0, 0_0, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_1, 0_1, 0_1, 0_1, 0_1, 0_1, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_2, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_5, 0_5, 0_2, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_6, 0_2, 0_5, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_7, 0_5, 0_3, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_8, 0_3, 0_5, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_9, 0_5, 0_5, 0_6, 0_6, 0_4, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_0, 0_0, 1_0, 0_0, 0_0, 0_0, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_1, 0_1, 1_0, 0_1, 0_1, 0_1, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_2, 0_2, 1_0, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_3, 0_3, 1_0, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_4, 0_4, 1_0, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_5, 0_5, 1_0, 0_6, 0_6, 0_4, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_6, 0_6, 1_1, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_0, 1_0, 0_0, 0_0, 0_0, 0_0, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_1, 1_0, 0_1, 0_6, 0_1, 0_1, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_2, 1_0, 0_2, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_3, 1_0, 0_3, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_4, 1_0, 0_4, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_4, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_1),
-	CHIP_TO_BLOCK_MAP_INIT(4_0, 3_0, 3_0, 2_0, 0_0, 1_2, 0_1),
-	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_0, 3_0, 3_0, 3_0),
-	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0),
+	/*                     CS   IPU  TPU DRAM  MIF FSYS  AON  PC */
+	CHIP_TO_BLOCK_MAP_INIT(0_0, 0_0, 0_0, 0_0, 0_0, 0_0, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_1, 0_1, 0_1, 0_1, 0_1, 0_1, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_2, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_5, 0_5, 0_2, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_6, 0_2, 0_5, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_7, 0_5, 0_3, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_8, 0_3, 0_5, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(0_9, 0_5, 0_5, 0_6, 0_6, 0_4, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_0, 0_0, 1_0, 0_0, 0_0, 0_0, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_1, 0_1, 1_0, 0_1, 0_1, 0_1, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_2, 0_2, 1_0, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_3, 0_3, 1_0, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_4, 0_4, 1_0, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_5, 0_5, 1_0, 0_6, 0_6, 0_4, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(1_6, 0_6, 1_1, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_0, 1_0, 0_0, 0_0, 0_0, 0_0, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_1, 1_0, 0_1, 0_6, 0_1, 0_1, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_2, 1_0, 0_2, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_3, 1_0, 0_3, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_4, 1_0, 0_4, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_4, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_0, IPU),
+	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_1, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(4_0, 3_0, 3_0, 2_0, 0_0, 1_2, 0_1, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_0, 3_0, 3_0, 3_0, TPU),
+	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0, TPU),
 };
 
 struct block_property *get_desired_state(struct block *blk,
@@ -284,7 +285,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 }
 
 int blk_set_state(struct ab_state_context *sc, struct block *blk,
-	u32 to_block_state_id, u32 to_chip_substate_id)
+	u32 to_block_state_id, bool power_control, u32 to_chip_substate_id)
 {
 	struct ab_sm_pmu_ops *pmu;
 	bool power_increasing;
@@ -301,18 +302,12 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	mutex_lock(&sc->op_lock);
 	pmu = sc->pmu_ops;
-
-	/* PMU settings - Resume */
-	if (desired_state->id < BLOCK_STATE_1_0
-			&& blk->current_state->id >= BLOCK_STATE_1_0) {
-		if (blk->name == BLK_IPU) {
-			if (pmu->pmu_ipu_resume(pmu->ctx)) {
-				mutex_unlock(&sc->op_lock);
-				return -EAGAIN;
-			}
-			ab_sm_record_ts(sc, AB_SM_TS_PMU_ON);
-		} else if (blk->name == BLK_TPU) {
-			if (pmu->pmu_tpu_resume(pmu->ctx)) {
+	/* PMU settings */
+	if (power_control && blk->name == BLK_IPU) {
+		if (desired_state->id != BLOCK_STATE_1_2
+				&& desired_state->id != BLOCK_STATE_3_0
+				&& blk->current_state->id >= BLOCK_STATE_1_2) {
+			if (pmu->pmu_resume(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
@@ -328,30 +323,15 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		blk->set_state(blk->current_state, desired_state,
 				   to_chip_substate_id, blk->data);
 
-	/* PMU settings - Sleep */
-	if ((desired_state->id >= BLOCK_STATE_1_0 &&
-			desired_state->id < BLOCK_STATE_3_0) &&
-			!(blk->current_state->id >= BLOCK_STATE_1_0 &&
-			blk->current_state->id < BLOCK_STATE_3_0)) {
-		if (blk->name == BLK_IPU) {
-			if (pmu->pmu_ipu_sleep(pmu->ctx)) {
-				mutex_unlock(&sc->op_lock);
-				return -EAGAIN;
-			}
-			ab_sm_record_ts(sc, AB_SM_TS_PMU_OFF);
-		} else if (blk->name == BLK_TPU) {
-			if (pmu->pmu_tpu_sleep(pmu->ctx)) {
-				mutex_unlock(&sc->op_lock);
-				return -EAGAIN;
-			}
-			ab_sm_record_ts(sc, AB_SM_TS_PMU_OFF);
+	/* PMU settings */
+	if (power_control && blk->name == BLK_TPU) {
+		if (desired_state->id == BLOCK_STATE_1_2 &&
+				pmu->pmu_sleep(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
 		}
-	}
-
-	/* PMU settings - Deep Sleep */
-	if (blk->name == BLK_TPU && desired_state->id == BLOCK_STATE_3_0 &&
-			!(blk->current_state->id == BLOCK_STATE_3_0)) {
-		if (pmu->pmu_deep_sleep(pmu->ctx)) {
+		if (desired_state->id == BLOCK_STATE_3_0 &&
+				pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
@@ -359,7 +339,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	}
 
 	/*Regulator Settings*/
-	if (!power_increasing) {
+	if (power_control && !power_increasing) {
 		/*TODO: change regulator voltage*/
 		if (desired_state->voltage_rail_status == off)
 			ab_blk_pw_rails_disable(sc, blk->name,
@@ -609,13 +589,13 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	ab_sm_record_ts(sc, AB_SM_TS_START);
 
 	if ((sc->curr_chip_substate_id == CHIP_STATE_6_0 ||
-			sc->curr_chip_substate_id == CHIP_STATE_5_0) &&
-			to_chip_substate_id < CHIP_STATE_3_0)
+	   sc->curr_chip_substate_id == CHIP_STATE_5_0) &&
+	   to_chip_substate_id < CHIP_STATE_3_0)
 		ab_bootsequence(sc);
 
 	if ((sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
-			sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
-			to_chip_substate_id < CHIP_STATE_3_0) {
+	   sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
+	   to_chip_substate_id < CHIP_STATE_3_0) {
 		ab_pmic_on(sc);
 		ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON_34);
 	}
@@ -638,35 +618,37 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 			map->ipu_block_state_id,
+			(map->flags & IPU_POWER_CONTROL),
 			to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
 			map->tpu_block_state_id,
+			(map->flags & TPU_POWER_CONTROL),
 			to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
-			map->dram_block_state_id, to_chip_substate_id)) {
+			map->dram_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_DDR_STATE);
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-			map->mif_block_state_id, to_chip_substate_id)) {
+			map->mif_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-			map->fsys_block_state_id, to_chip_substate_id)) {
+			map->fsys_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_FSYS_STATE);
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-			map->aon_block_state_id, to_chip_substate_id)) {
+			map->aon_block_state_id, true, to_chip_substate_id)) {
 		return -EINVAL;
 	}
 
