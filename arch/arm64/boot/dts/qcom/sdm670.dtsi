@@ -357,7 +357,7 @@
 				1708800   139
 			>;
 			idle-cost-data = <
-				12 10 8 6
+				12 10 8 6 4
 			>;
 		};
 		CPU_COST_1: core-cost1 {
@@ -383,12 +383,12 @@
 				2611200   1400
 			>;
 			idle-cost-data = <
-				100 80 60 40
+				100 80 60 40 20
 			>;
 		};
 		CLUSTER_COST_0: cluster-cost0 {
 			busy-cost-data = <
-				 300000    5
+				 300000    6
 				 576000    7
 				 748800    8
 				 998400    9
@@ -399,7 +399,7 @@
 				1708800   19
 			>;
 			idle-cost-data = <
-				4 3 2 1
+				5 4 3 2 1
 			>;
 		};
 		CLUSTER_COST_1: cluster-cost1 {
@@ -425,7 +425,7 @@
 				2611200   140
 			>;
 			idle-cost-data = <
-				4 3 2 1
+				5 4 3 2 1
 			>;
 		};
 	};
@@ -560,7 +560,15 @@
 			alloc-ranges = <0 0x00000000 0 0xffffffff>;
 			reusable;
 			alignment = <0 0x400000>;
-			size = <0 0xc00000>;
+			size = <0 0x800000>;
+		};
+
+		sdsp_mem: sdsp_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0 0x00000000 0 0xffffffff>;
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x400000>;
 		};
 
 		qseecom_ta_mem: qseecom_ta_region {
@@ -2967,6 +2975,7 @@
 };
 
 &gpu_cx_gdsc {
+	parent-supply = <&pm660l_s3_level>;
 	status = "ok";
 };
 

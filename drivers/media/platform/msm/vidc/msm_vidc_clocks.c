@@ -260,6 +260,16 @@ int msm_comm_vote_bus(struct msm_vidc_core *core)
 		else
 			vote_data[i].fps = inst->prop.fps;
 
+		if (inst->session_type == MSM_VIDC_ENCODER) {
+			vote_data[i].bitrate = inst->clk_data.bitrate;
+			/* scale bitrate if operating rate is larger than fps */
+			if (vote_data[i].fps > inst->prop.fps
+				&& inst->prop.fps) {
+				vote_data[i].bitrate = vote_data[i].bitrate /
+				inst->prop.fps * vote_data[i].fps;
+			}
+		}
+
 		vote_data[i].power_mode = 0;
 		if (!msm_vidc_clock_scaling || is_turbo ||
 			inst->clk_data.buffer_counter < DCVS_FTB_WINDOW)
@@ -932,6 +942,12 @@ int msm_comm_init_clocks_and_bus_data(struct msm_vidc_inst *inst)
 			break;
 		}
 	}
+
+	if (!inst->clk_data.entry) {
+		dprintk(VIDC_ERR, "%s No match found\n", __func__);
+		rc = -EINVAL;
+	}
+
 	return rc;
 }
 

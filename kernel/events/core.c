@@ -4300,7 +4300,7 @@ static int perf_event_release(struct perf_event *event)
 	 *  back online.
 	 */
 #if defined CONFIG_HOTPLUG_CPU || defined CONFIG_KEXEC_CORE
-	if (event->cpu != -1 && !cpu_online(event->cpu)) {
+	if (event->cpu != -1 && per_cpu(is_hotplugging, event->cpu)) {
 		if (event->state == PERF_EVENT_STATE_ZOMBIE)
 			return 0;
 
@@ -11164,6 +11164,7 @@ static int perf_event_start_swevents(unsigned int cpu)
 	struct perf_event *event;
 	int idx;
 
+	mutex_lock(&pmus_lock);
 	perf_event_zombie_cleanup(cpu);
 
 	idx = srcu_read_lock(&pmus_srcu);
@@ -11178,6 +11179,8 @@ static int perf_event_start_swevents(unsigned int cpu)
 	}
 	srcu_read_unlock(&pmus_srcu, idx);
 	per_cpu(is_hotplugging, cpu) = false;
+	mutex_unlock(&pmus_lock);
+
 	return 0;
 }
 
@@ -11239,8 +11242,10 @@ static void perf_event_exit_cpu_context(int cpu) { }
 
 int perf_event_exit_cpu(unsigned int cpu)
 {
+	mutex_lock(&pmus_lock);
 	per_cpu(is_hotplugging, cpu) = true;
 	perf_event_exit_cpu_context(cpu);
+	mutex_unlock(&pmus_lock);
 	return 0;
 }
 

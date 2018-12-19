@@ -335,6 +335,7 @@
 #define DWC3_GUCTL2_RST_ACTBITLATER		(1 << 14)
 #define DWC3_GUCTL2_HP_TIMER(n)			((n) << 21)
 #define DWC3_GUCTL2_HP_TIMER_MASK		DWC3_GUCTL2_HP_TIMER(0x1f)
+#define DWC3_GUCTL2_LC_TIMER			(1 << 19)
 
 /* Device Configuration Register */
 #define DWC3_DCFG_DEVADDR(addr)	((addr) << 3)
@@ -844,6 +845,7 @@ struct dwc3_scratchpad_array {
 #define DWC3_GSI_EVT_BUF_SETUP			11
 #define DWC3_GSI_EVT_BUF_CLEANUP		12
 #define DWC3_GSI_EVT_BUF_FREE			13
+#define DWC3_CONTROLLER_NOTIFY_CLEAR_DB		14
 
 #define MAX_INTR_STATS				10
 

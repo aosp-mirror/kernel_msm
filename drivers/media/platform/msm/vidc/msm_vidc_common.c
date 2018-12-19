@@ -2364,6 +2364,17 @@ int msm_comm_vb2_buffer_done(struct msm_vidc_inst *inst,
 	return 0;
 }
 
+static bool is_heic_encode_session(struct msm_vidc_inst *inst)
+{
+	if (inst->session_type == MSM_VIDC_ENCODER &&
+		(get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc) ==
+		HAL_VIDEO_CODEC_HEVC) &&
+		(inst->img_grid_dimension > 0))
+		return true;
+	else
+		return false;
+}
+
 static bool is_eos_buffer(struct msm_vidc_inst *inst, u32 device_addr)
 {
 	struct eos_buf *temp, *next;
@@ -2409,10 +2420,7 @@ static void handle_ebd(enum hal_command_response cmd, void *data)
 	}
 
 	empty_buf_done = (struct vidc_hal_ebd *)&response->input_done;
-	if (inst->session_type == MSM_VIDC_ENCODER &&
-		(get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc) ==
-			HAL_VIDEO_CODEC_HEVC) &&
-		(inst->img_grid_dimension > 0) &&
+	if (is_heic_encode_session(inst) &&
 		(empty_buf_done->input_tag < inst->tinfo.count - 1)) {
 		dprintk(VIDC_DBG, "Wait for last tile. Current tile no: %d\n",
 		empty_buf_done->input_tag);
@@ -3133,7 +3141,11 @@ static int msm_comm_session_init(int flipped_state,
 		return -EINVAL;
 	}
 
-	msm_comm_init_clocks_and_bus_data(inst);
+	rc = msm_comm_init_clocks_and_bus_data(inst);
+	if (rc) {
+		dprintk(VIDC_ERR, "Failed to initialize clocks and bus data\n");
+		goto exit;
+	}
 
 	dprintk(VIDC_DBG, "%s: inst %pK\n", __func__, inst);
 	rc = call_hfi_op(hdev, session_init, hdev->hfi_device_data,
@@ -4428,10 +4440,7 @@ int msm_comm_qbuf(struct msm_vidc_inst *inst, struct msm_vidc_buffer *mbuf)
 		for (c = 0; c < etbs.count; ++c) {
 			struct vidc_frame_data *frame_data = &etbs.data[c];
 
-			if (inst->session_type == MSM_VIDC_ENCODER &&
-				get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc)
-				 == HAL_VIDEO_CODEC_HEVC &&
-				(inst->img_grid_dimension > 0)) {
+			if (is_heic_encode_session(inst)) {
 				rc = msm_comm_qbuf_heic_tiles(inst, frame_data);
 				if (rc) {
 					dprintk(VIDC_ERR,
@@ -5508,6 +5517,11 @@ int msm_vidc_check_scaling_supported(struct msm_vidc_inst *inst)
 	u32 x_min, x_max, y_min, y_max;
 	u32 input_height, input_width, output_height, output_width;
 	u32 rotation;
+
+	if (is_heic_encode_session(inst)) {
+		dprintk(VIDC_DBG, "Skip downscale check for HEIC\n");
+		return 0;
+	}
 
 	input_height = inst->prop.height[OUTPUT_PORT];
 	input_width = inst->prop.width[OUTPUT_PORT];
