@@ -115,6 +115,13 @@ int cam_packet_util_get_kmd_buffer(struct cam_packet *packet,
 		return -EINVAL;
 	}
 
+	if ((packet->kmd_cmd_buf_index < 0) ||
+	    (packet->kmd_cmd_buf_index > packet->num_cmd_buf)) {
+		CAM_ERR(CAM_UTIL, "Invalid kmd buf index: %d",
+			packet->kmd_cmd_buf_index);
+		return -EINVAL;
+	}
+
 	/* Take first command descriptor and add offset to it for kmd*/
 	cmd_desc = (struct cam_cmd_buf_desc *) ((uint8_t *)
 		&packet->payload + packet->cmd_buf_offset);

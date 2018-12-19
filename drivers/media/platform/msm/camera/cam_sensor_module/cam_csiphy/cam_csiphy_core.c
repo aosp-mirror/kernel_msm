@@ -222,6 +222,14 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		goto rel_pkt_buf;
 	}
 
+	if ((len < sizeof(struct cam_csiphy_info)) ||
+	    (cmd_desc->offset > (len - sizeof(struct cam_csiphy_info)))) {
+		CAM_ERR(CAM_CSIPHY,
+			"Not enough buffer provided for cam_cisphy_info");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
 	cmd_buf = (uint32_t *)generic_ptr;
 	cmd_buf += cmd_desc->offset / 4;
 	cam_cmd_csiphy_info = (struct cam_csiphy_info *)cmd_buf;
