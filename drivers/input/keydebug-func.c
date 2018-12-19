@@ -17,7 +17,6 @@
 #include <linux/slab.h>
 #include <linux/kernel_stat.h>
 #include <linux/time.h>
-#include <linux/slab.h>
 #include <linux/tick.h>
 #include <linux/rtc.h>
 #include <linux/threads.h>
@@ -307,20 +306,19 @@ void kernel_top_init(void)
 	if (cxt->kernel_top_alloc_done == false) {
 
 		cxt->prev_tasktics_array =
-			kmalloc(sizeof(u64) * PID_MAX_DEFAULT, GFP_KERNEL);
+			vmalloc(sizeof(u64) * PID_MAX_DEFAULT);
 		if (cxt->prev_tasktics_array == NULL)
 			goto err_alloc_prev_tasktics;
 		cxt->frame_tasktics_array =
-			kmalloc(sizeof(u64) * PID_MAX_DEFAULT, GFP_KERNEL);
+			vmalloc(sizeof(u64) * PID_MAX_DEFAULT);
 		if (cxt->frame_tasktics_array == NULL)
 			goto err_alloc_frame_tasktics;
 		cxt->task_ptr_array =
-			kmalloc(sizeof(struct task_struct *) * PID_MAX_DEFAULT,
-				GFP_KERNEL);
+			vmalloc(sizeof(struct task_struct *) * PID_MAX_DEFAULT);
 		if (cxt->task_ptr_array == NULL)
 			goto err_alloc_task_ptr;
 		cxt->curr_task_pid_array =
-			kmalloc(sizeof(pid_t) * PID_MAX_DEFAULT, GFP_KERNEL);
+			vmalloc(sizeof(pid_t) * PID_MAX_DEFAULT);
 		if (cxt->curr_task_pid_array == NULL)
 			goto err_alloc_curr_task_pid;
 
@@ -357,13 +355,13 @@ void kernel_top_init(void)
 	goto done;
 
 err_alloc_curr_task_pid:
-	kfree(cxt->curr_task_pid_array);
+	vfree(cxt->curr_task_pid_array);
 err_alloc_task_ptr:
-	kfree(cxt->task_ptr_array);
+	vfree(cxt->task_ptr_array);
 err_alloc_frame_tasktics:
-	kfree(cxt->frame_tasktics_array);
+	vfree(cxt->frame_tasktics_array);
 err_alloc_prev_tasktics:
-	kfree(cxt->prev_tasktics_array);
+	vfree(cxt->prev_tasktics_array);
 
 	cxt->kernel_top_alloc_done = false;
 	pr_info("%s: memory allocate failed", __func__);
@@ -377,10 +375,10 @@ void kernel_top_exit(void)
 
 	mutex_lock(&kernel_top_mutex);
 	if (cxt->kernel_top_alloc_done) {
-		kfree(cxt->curr_task_pid_array);
-		kfree(cxt->task_ptr_array);
-		kfree(cxt->frame_tasktics_array);
-		kfree(cxt->prev_tasktics_array);
+		vfree(cxt->curr_task_pid_array);
+		vfree(cxt->task_ptr_array);
+		vfree(cxt->frame_tasktics_array);
+		vfree(cxt->prev_tasktics_array);
 		memset(cxt, 0, sizeof(*cxt));
 	}
 	mutex_unlock(&kernel_top_mutex);
