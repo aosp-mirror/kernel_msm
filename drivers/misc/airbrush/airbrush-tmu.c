@@ -737,7 +737,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 
 	mutex_init(&data->pcie_link_lock);
 	mutex_lock(&data->pcie_link_lock);
-	data->pcie_link_ready = false;
+	data->pcie_link_ready = true;
 	data->pcie_link_blocking_nb.notifier_call =
 			airbrush_tmu_pcie_link_listener;
 	ret = abc_register_pcie_link_blocking_event(
