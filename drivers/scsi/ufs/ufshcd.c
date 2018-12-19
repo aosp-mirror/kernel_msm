@@ -853,10 +853,11 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 
 	if (lrbp->cmd) { /* data phase exists */
 		opcode = (u8)(*lrbp->cmd->cmnd);
-		if (is_read_opcode(opcode) || is_write_opcode(opcode)) {
+		if (is_read_opcode(opcode) || is_write_opcode(opcode) ||
+				is_unmap_opcode(opcode)) {
 			/*
 			 * Currently we only fully trace read(10), write(10),
-			 * read(16), and write(16) commands
+			 * read(16), write(16), unmap commands
 			 */
 			if (lrbp->cmd->request && lrbp->cmd->request->bio) {
 				lba = scsi_get_lba(lrbp->cmd);
