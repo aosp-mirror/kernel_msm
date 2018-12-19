@@ -916,7 +916,7 @@ static void set_ipu_tpu_clk_freq_table(struct ab_state_context *sc,
 
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 {
-	uint32_t val;
+	enum ab_chip_id val;
 	int ret;
 
 	if (sc->chip_id == CHIP_ID_UNKNOWN) {
@@ -929,7 +929,7 @@ enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 			return CHIP_ID_UNKNOWN;
 		}
 
-		sc->chip_id = (enum ab_chip_id)val;
+		sc->chip_id = val;
 		set_ipu_tpu_clk_freq_table(sc, sc->chip_id);
 	}
 
