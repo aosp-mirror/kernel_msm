@@ -5,7 +5,7 @@ When a system is locked up and unresponsive, a user may long press key to force
 reset it. keydebug driver add debug function to collect more information in this
 path before system restart.
 
-Currently collect:
+Collects:
 -Top CPU usage tasks
 -Call stack of uninterruptible tasks
 -Call stack of each online core

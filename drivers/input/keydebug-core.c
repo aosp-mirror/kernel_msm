@@ -106,12 +106,11 @@ static int keydebug_parse_dt(struct device *dev,
 
 	/* Parse key_down_delay */
 	if (of_property_read_u32(dt, "key_down_delay", &pdata->key_down_delay))
-		pr_info("%s: DT:key_down_delay parser"
-			" gets nothing\n", __func__);
+		pr_info("%s: DT:key_down_delay property not found\n", __func__);
 
 	/* Parse dbg_delay */
 	if (of_property_read_u32(dt, "dbg_fn_delay", &pdata->dbg_fn_delay))
-		pr_info("%s: DT:dbg_fn_delay parser gets nothing\n", __func__);
+		pr_info("%s: DT:dbg_fn_delay property not found\n", __func__);
 
 	/* Must have keys_down property */
 	prop = of_find_property(dt, "keys_down", NULL);
