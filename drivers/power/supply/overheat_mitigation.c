@@ -327,8 +327,10 @@ static bool should_check_accessory(struct overheat_info *ovh_info)
 	return ret;
 }
 
+static void register_callback(struct overheat_info *ovh_info);
 static void port_overheat_work(struct work_struct *work)
 {
+	static bool is_init;
 	struct overheat_info *ovh_info =
 			container_of(work, struct overheat_info,
 				     port_overheat_work.work);
@@ -338,6 +340,11 @@ static void port_overheat_work(struct work_struct *work)
 	if (!ovh_info->overheat_work_running)
 		__pm_stay_awake(&ovh_info->overheat_ws);
 	ovh_info->overheat_work_running = true;
+
+	if (!is_init) {
+		register_callback(ovh_info);
+		is_init = true;
+	}
 
 	if (enable) {
 		temp = get_usb_port_temp(ovh_info);
@@ -433,6 +440,29 @@ static const struct thermal_cooling_device_ops usb_cooling_ops = {
 	.set_cur_state = usb_set_cur_state,
 };
 
+static void register_callback(struct overheat_info *ovh_info)
+{
+	int ret = 0;
+
+	// register power supply change notifier
+	ovh_info->psy_nb.notifier_call = psy_changed;
+	ret = power_supply_reg_notifier(&ovh_info->psy_nb);
+	if (ret < 0) {
+		dev_err(ovh_info->dev,
+			"Cannot register power supply notifer, ret=%d\n", ret);
+	}
+
+	// register cooling device
+	ovh_info->cooling_dev = thermal_of_cooling_device_register(
+				dev_of_node(ovh_info->dev), "usb",
+				ovh_info, &usb_cooling_ops);
+	if (IS_ERR(ovh_info->cooling_dev)) {
+		ret = PTR_ERR(ovh_info->cooling_dev);
+		dev_err(ovh_info->dev, "%s: failed to register cooling device: %d\n",
+				__func__, ret);
+	}
+}
+
 static int ovh_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -480,28 +510,7 @@ static int ovh_probe(struct platform_device *pdev)
 	vote(ovh_info->disable_power_role_switch,
 	     USB_OVERHEAT_MITIGATION_VOTER, false, 0);
 
-	// register power supply change notifier
-	ovh_info->psy_nb.notifier_call = psy_changed;
-	ret = power_supply_reg_notifier(&ovh_info->psy_nb);
-	if (ret < 0) {
-		dev_err(ovh_info->dev,
-			"Cannot register power supply notifer, ret=%d\n", ret);
-		return ret;
-	}
-
 	platform_set_drvdata(pdev, ovh_info);
-
-	/* Register cooling device */
-	ovh_info->cooling_dev = thermal_of_cooling_device_register(
-				dev_of_node(ovh_info->dev), "usb",
-				ovh_info, &usb_cooling_ops);
-
-	if (IS_ERR(ovh_info->cooling_dev)) {
-		ret = PTR_ERR(ovh_info->cooling_dev);
-		dev_err(ovh_info->dev, "%s: failed to register cooling device: %d\n",
-				__func__, ret);
-		return ret;
-	}
 
 	wakeup_source_init(&ovh_info->overheat_ws, "overheat_mitigation");
 	INIT_DELAYED_WORK(&ovh_info->port_overheat_work, port_overheat_work);
