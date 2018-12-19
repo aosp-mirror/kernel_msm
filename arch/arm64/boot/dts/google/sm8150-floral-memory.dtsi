@@ -98,4 +98,21 @@
 		console-size = <0x100000>;
 		pmsg-size = <0x80000>;
 	};
+
+	/* Took some free space from go/pixel-mem-layout */
+	pil_faceauth_fw_mem: pil_faceauth_fw_mem@a8800000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0x0 0xa8800000 0x0 0x4000000>;
+	};
+};
+
+&soc {
+	qcom,faceauth_fws {
+		compatible = "qcom,pil-tz-generic";
+		qcom,pas-id = <0x18>;
+		qcom,firmware-name = "faceauth";
+		qcom,pil-force-shutdown;
+		memory-region = <&pil_faceauth_fw_mem>;
+	};
 };
