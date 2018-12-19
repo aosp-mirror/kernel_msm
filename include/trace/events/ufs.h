@@ -227,7 +227,7 @@ DEFINE_EVENT(ufshcd_template, ufshcd_init,
 
 TRACE_EVENT(ufshcd_command,
 	TP_PROTO(const char *dev_name, const char *str, unsigned int tag,
-			u32 doorbell, int transfer_len, u32 intr, u64 lba,
+			u32 doorbell, u32 transfer_len, u32 intr, u64 lba,
 			u8 opcode),
 
 	TP_ARGS(dev_name, str, tag, doorbell, transfer_len, intr, lba, opcode),
@@ -237,7 +237,7 @@ TRACE_EVENT(ufshcd_command,
 		__string(str, str)
 		__field(unsigned int, tag)
 		__field(u32, doorbell)
-		__field(int, transfer_len)
+		__field(u32, transfer_len)
 		__field(u32, intr)
 		__field(u64, lba)
 		__field(u8, opcode)
@@ -255,7 +255,7 @@ TRACE_EVENT(ufshcd_command,
 	),
 
 	TP_printk(
-		"%s: %14s: tag: %-2u cmd: 0x%-2x lba: %-9llu size: %-7d DB: 0x%-8x IS: 0x%x",
+		"%s: %14s: tag: %-2u cmd: 0x%-2x lba: %-9llu size: %-7u DB: 0x%-8x IS: 0x%x",
 		__get_str(dev_name), __get_str(str), __entry->tag,
 		(u32)__entry->opcode, __entry->lba, __entry->transfer_len,
 		__entry->doorbell, __entry->intr
