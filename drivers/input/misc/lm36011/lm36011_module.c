@@ -524,6 +524,9 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->cap_sense.is_cci_init = true;
 	}
 
+	/* Cap sense need wait 1 ms for hw ready */
+	usleep_range(1000, 3000);
+
 	rc = sx9320_cleanup_nirq(ctrl);
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev,
@@ -535,7 +538,7 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 
 	ctrl->cap_sense.is_validated = true;
 
-	/* Silego i2c need at least 1 ms after vdd is up */
+	/* Silego i2c need at least 1 ms after NIRQ clean up */
 	usleep_range(1000, 3000);
 
 	rc = silego_verify_settings(ctrl);
