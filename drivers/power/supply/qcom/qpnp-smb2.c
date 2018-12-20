@@ -1094,6 +1094,7 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
 	int rc = 0;
 	union power_supply_propval pval = {0, };
+	u8 reg;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
@@ -1216,6 +1217,17 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		rc = smblib_get_prop_charge_full(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_CHARGER_STATUS_FAST:
+		rc = smblib_read(chg, BATTERY_CHARGER_STATUS_1_REG, &reg);
+		if (rc < 0) {
+			pr_err("Couldn't read charge status rc=%d\n", rc);
+			reg = 0;
+		}
+		if ((reg & BATTERY_CHARGER_STATUS_MASK) == FAST_CHARGE)
+			val->intval = true;
+		else
+			val->intval = false;
 		break;
 #ifndef CONFIG_QPNP_FG_GEN3_LEGACY_CYCLE_COUNT
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
