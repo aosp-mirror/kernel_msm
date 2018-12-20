@@ -442,6 +442,10 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(adapter_details),
 	POWER_SUPPLY_ATTR(otg_fastroleswap),
 	POWER_SUPPLY_ATTR(dc_reset),
+	/* Capacity Estimation */
+	POWER_SUPPLY_ATTR(delta_cc_sum),
+	POWER_SUPPLY_ATTR(delta_vfsoc_sum),
+	POWER_SUPPLY_ATTR(batt_ce_ctrl),
 	/* Charge pump properties */
 	POWER_SUPPLY_ATTR(cp_status1),
 	POWER_SUPPLY_ATTR(cp_status2),

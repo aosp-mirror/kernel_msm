@@ -124,7 +124,7 @@ struct batt_drv {
 	/* props */
 	int soh;
 	int fake_capacity;
-	bool buck_enabled;
+	int buck_enabled;
 
 	/* temp outside the charge table */
 	int jeita_stop_charging;
@@ -1127,9 +1127,10 @@ static int msc_logic(struct batt_drv *batt_drv)
 	/* disconnect: change the curve UNLESS already in discharge curve.
 	 * NOTE: rechage logic always run on a discharge curve
 	 */
+
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
 
-		if (!batt_drv->buck_enabled)
+		if (batt_drv->buck_enabled == 0)
 			goto msc_logic_exit;
 
 		batt_chg_stats_stop(batt_drv);
@@ -1139,7 +1140,13 @@ static int msc_logic(struct batt_drv *batt_drv)
 		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
 		batt_rl_reset(batt_drv);
 
-		batt_drv->buck_enabled = false;
+		err = GPSY_SET_PROP(batt_drv->fg_psy,
+				    POWER_SUPPLY_PROP_BATT_CE_CTRL,
+				    false);
+		if (err < 0)
+			pr_err("Cannot set the BATT_CE_CTRL.\n");
+
+		batt_drv->buck_enabled = 0;
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
 
@@ -1150,6 +1157,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 	 * DONE, set the charge curve (splice it) if not already running the
 	 * charge curve.
 	 */
+
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
 		/* enter RL on charger FULL */
 		bool changed;
@@ -1181,13 +1189,15 @@ static int msc_logic(struct batt_drv *batt_drv)
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
 		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
 
-		batt_drv->buck_enabled = true;
+		err = GPSY_SET_PROP(batt_drv->fg_psy,
+				    POWER_SUPPLY_PROP_BATT_CE_CTRL,
+				    true);
+		if (err < 0)
+			pr_err("Cannot set the BATT_CE_CTRL.\n");
+
+		batt_drv->buck_enabled = 1;
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
-	} else {
-		/* TODO: enter with dsg_curve when ssoc over the spoof point? */
-		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
-		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
 	}
 
 	err = msc_logic_internal(batt_drv);
@@ -2062,6 +2072,7 @@ static void google_battery_init_work(struct work_struct *work)
 	int ret = 0;
 
 	batt_rl_reset(batt_drv);
+	batt_drv->buck_enabled = -1;
 	batt_reset_chg_drv_state(batt_drv);
 	mutex_init(&batt_drv->chg_lock);
 	mutex_init(&batt_drv->batt_lock);
