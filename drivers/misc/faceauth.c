@@ -53,6 +53,8 @@
 #define DOT_IMAGE_RIGHT_ADDR 0x22900000
 #define FLOOD_IMAGE_ADDR 0x23000000
 
+#define AB_INTERNAL_STATE_ADDR 0x23e00000
+
 #define DEBUG_PRINT_ADDR 0x23f00000
 #define DEBUG_PRINT_SIZE 0x00100000
 
@@ -65,6 +67,11 @@
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
+
+struct airbrush_state {
+       uint32_t faceauth_version;
+       int32_t error_code;
+} __attribute__((packed));
 
 static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir);
@@ -132,7 +139,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	struct faceauth_continue_data continue_step_data = { 0 };
 	struct faceauth_debug_data debug_step_data = { 0 };
 	unsigned long stop, ioctl_start;
-	uint32_t result;
+	uint32_t dma_read_value;
 
 	ioctl_start = jiffies;
 
@@ -228,8 +235,22 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		continue_step_data.completed = 1;
 
 		pr_info("Read comparison result\n");
-		dma_read_dw(file, COMPARE_RESULT_FLAG_ADDR, &result);
-		continue_step_data.result = result;
+		dma_read_dw(file, COMPARE_RESULT_FLAG_ADDR, &dma_read_value);
+		continue_step_data.result = dma_read_value;
+
+		pr_info("Read ab error code\n");
+		dma_read_dw(file,
+			    AB_INTERNAL_STATE_ADDR +
+			    offsetof(struct airbrush_state, error_code),
+			    &dma_read_value);
+		continue_step_data.faceauth_error_code = dma_read_value;
+
+		pr_info("Read ab firmware version\n");
+		dma_read_dw(file,
+			    AB_INTERNAL_STATE_ADDR +
+			    offsetof(struct airbrush_state, faceauth_version),
+			    &dma_read_value);
+		continue_step_data.faceauth_fw_version = dma_read_value;
 
 		if (copy_to_user((void __user *)arg, &continue_step_data,
 				 sizeof(continue_step_data)))

@@ -28,6 +28,8 @@
 #define FACEAUTH_RESULT_SUCCESS 0
 #define FACEAUTH_RESULT_FAILURE 1
 
+#define FACEAUTH_ERROR_NO_ERROR 0
+
 /* This struct is written by userspace and read by kernel */
 struct faceauth_start_data {
 	/*
@@ -57,6 +59,8 @@ struct faceauth_start_data {
 struct faceauth_continue_data {
 	__u8 completed; /* is faceauth process completed? */
 	__u8 result; /* FACEAUTH_RESULT_* */
+	__s32 faceauth_error_code; /* ab-faceauth error code */
+	__u32 faceauth_fw_version; /* ab-faceauth firmware version */
 } __attribute__((packed));
 
 /* This struct contains a user supplied buffer that is written by kernel */
