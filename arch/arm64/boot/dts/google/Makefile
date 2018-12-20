@@ -51,7 +51,9 @@ dtbo-$(CONFIG_BOARD_BONITO) += \
 	sdm670-b4-evt.dtbo \
 	sdm670-s4-evt.dtbo \
 	sdm670-b4-dvt.dtbo \
-	sdm670-s4-dvt.dtbo
+	sdm670-s4-dvt.dtbo \
+	sdm670-b4-pvt.dtbo \
+	sdm670-s4-pvt.dtbo
 
 sdm670-b4-dev.dtbo-base		:= ../qcom/sdm670.dtb
 sdm670-s4-dev.dtbo-base		:= ../qcom/sdm670.dtb
@@ -61,6 +63,8 @@ sdm670-b4-evt.dtbo-base		:= ../qcom/sdm670.dtb
 sdm670-s4-evt.dtbo-base		:= ../qcom/sdm670.dtb
 sdm670-b4-dvt.dtbo-base		:= ../qcom/sdm670.dtb
 sdm670-s4-dvt.dtbo-base		:= ../qcom/sdm670.dtb
+sdm670-b4-pvt.dtbo-base		:= ../qcom/sdm670.dtb
+sdm670-s4-pvt.dtbo-base		:= ../qcom/sdm670.dtb
 
 endif
 endif #CONFIG_BOARD_BONITO
