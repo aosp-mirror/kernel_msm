@@ -40,7 +40,7 @@
 
 #define CAMX_FLASH_DEV_NAME "cam-flash-dev"
 
-#define CAM_FLASH_PIPELINE_DELAY 1
+#define CAM_FLASH_PIPELINE_DELAY 2
 
 #define FLASH_DRIVER_I2C "i2c_flash"
 
