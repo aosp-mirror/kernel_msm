@@ -114,14 +114,20 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sxr1120")
 #define early_machine_is_msm8953()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8953")
+#define early_machine_is_sdmnobelium()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdm670")
 #define early_machine_is_msm8937()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8937")
 #define early_machine_is_msm8917()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8917")
+#define early_machine_is_msm8940()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8940")
 #define early_machine_is_mdm9607()      \
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,mdm9607")
 #define early_machine_is_sdm450()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdm450")
+#define early_machine_is_sda450()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sda450")
 #define early_machine_is_sdm632()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdm632")
 #define early_machine_is_sdm439()	\
@@ -134,6 +140,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sda429")
 #define early_machine_is_mdm9650()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,mdm9650")
+#define early_machine_is_qm215()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,qm215")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -183,13 +191,17 @@
 #define early_machine_is_msm8953()	0
 #define early_machine_is_msm8937()	0
 #define early_machine_is_msm8917()	0
+#define early_machine_is_msm8940()	0
 #define early_machine_is_sdm450()	0
+#define early_machine_is_sda450()	0
 #define early_machine_is_sdm632()	0
 #define early_machine_is_sdm439()	0
 #define early_machine_is_sdm429()	0
 #define early_machine_is_sda439()	0
 #define early_machine_is_sda429()	0
 #define early_machine_is_mdm9650()     0
+#define early_machine_is_qm215()	0
+#define early_machine_is_sdmnobelium()	0
 #endif
 
 #define PLATFORM_SUBTYPE_MDM	1
@@ -259,16 +271,20 @@ enum msm_cpu {
 	MSM_CPU_SXR1120,
 	MSM_CPU_8953,
 	MSM_CPU_SDM450,
+	MSM_CPU_SDA450,
 	MSM_CPU_SDM632,
 	MSM_CPU_SDA632,
 	MSM_CPU_8937,
 	MSM_CPU_8917,
+	MSM_CPU_8940,
 	MSM_CPU_9607,
 	MSM_CPU_SDM439,
+	MSM_CPU_SDMNOBELIUM,
 	MSM_CPU_SDM429,
 	MSM_CPU_SDA439,
 	MSM_CPU_SDA429,
 	MSM_CPU_9650,
+	MSM_CPU_QM215,
 };
 
 struct msm_soc_info {

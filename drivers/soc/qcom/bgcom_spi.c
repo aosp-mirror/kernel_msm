@@ -927,10 +927,10 @@ static irqreturn_t bg_irq_tasklet_hndlr(int irq, void *device)
 	struct bg_spi_priv *bg_spi = device;
 	/* check if call-back exists */
 	if (!atomic_read(&bg_is_spi_active)) {
-		printk_ratelimited("Interrupt received in suspend state\n");
+		pr_debug("Interrupt received in suspend state\n");
 		return IRQ_HANDLED;
 	} else if (list_empty(&cb_head)) {
-		pr_err("No callback registered\n");
+		pr_debug("No callback registered\n");
 		return IRQ_HANDLED;
 	} else if (spi_state == BGCOM_SPI_BUSY) {
 		/* delay for SPI to be freed */
@@ -1077,11 +1077,9 @@ static int bgcom_pm_resume(struct device *dev)
 	clnt_handle.bg_spi = spi;
 	atomic_set(&bg_is_spi_active, 1);
 	ret = bgcom_resume(&clnt_handle);
-	if (ret == 0) {
-		pr_err("Bgcom resumed\n");
+	if (ret == 0)
 		enable_irq(bg_irq);
-	}
-	pr_err("Bgcom resumed with : %d\n", ret);
+	pr_info("Bgcom resumed with : %d\n", ret);
 	return ret;
 }
 
