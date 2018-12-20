@@ -28,7 +28,7 @@
 &mhi_0 { /* of_node of abc pcie */
 	airbrush_tmu: airbrush_tmu {
 		compatible = "abc,airbrush-tmu";
-		#thermal-sensor-cells = <0>;
+		#thermal-sensor-cells = <1>;
 	};
 };
 
