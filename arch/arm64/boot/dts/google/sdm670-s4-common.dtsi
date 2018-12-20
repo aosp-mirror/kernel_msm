@@ -2,6 +2,7 @@
 #include "sdm670-s4-touch.dtsi"
 #include "sdm670-s4-usb.dtsi"
 #include "sdm670-s4-battery.dtsi"
+#include "sdm670-s4-thermal.dtsi"
 #include "sdm670-s4-haptics.dtsi"
 
 &dsi_s6e3fa7_sdc_1080p_cmd_display {

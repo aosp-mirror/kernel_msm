@@ -2,6 +2,7 @@
 #include "sdm670-b4-touch.dtsi"
 #include "sdm670-b4-usb.dtsi"
 #include "sdm670-b4-battery.dtsi"
+#include "sdm670-b4-thermal.dtsi"
 
 &dsi_sofef00_sdc_1080p_cmd_display {
 	qcom,dsi-display-active;

@@ -1,0 +1,52 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&thermal_zones {
+	mb-therm-adc {
+		trips {
+			shutdown-config {
+				temperature = <57000>;
+				hysteresis = <1000>;
+				type = "critical";
+			};
+		};
+	};
+	backup-charge {
+		trips {
+			batt_charging_lv1: batt-charging_lv1 {
+				temperature = <35500>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv2: batt-charging_lv2 {
+				temperature = <37500>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv3: batt-charging_lv3 {
+				temperature = <41500>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv4: batt-charging_lv4 {
+				temperature = <42500>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv5: batt-charging_lv5 {
+				temperature = <44500>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
+};
