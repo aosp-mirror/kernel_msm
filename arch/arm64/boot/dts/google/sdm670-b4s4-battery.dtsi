@@ -34,6 +34,13 @@
 			 30   0   0
 		>;
 		google,cv-otv-margin = <15000>;
+
+		/* Taper WA */
+		google,chg-taper-wa;
+		google,chg-vtaper = <4150 4250 4400>;
+		google,chg-itaper = <1450 1400 0>;
+		google,chg-soctaper = <65 75 100>;
+		google,chg-taper-cnt-target = <2>;
 	};
 	google_overheat_mitigation: google,overheat_mitigation {
 		compatible = "google,overheat_mitigation";
