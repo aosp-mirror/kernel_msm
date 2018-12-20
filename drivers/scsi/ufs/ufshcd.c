@@ -249,7 +249,7 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 	if (!lrbp->cmd)
 		return;
 	opcode = (u8)(*lrbp->cmd->cmnd);
-	if (!is_read_opcode(opcode) && is_write_opcode(opcode))
+	if (!is_read_opcode(opcode) && !is_write_opcode(opcode))
 		return;
 
 	transfer_len = be32_to_cpu(lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
