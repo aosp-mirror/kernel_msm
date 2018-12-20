@@ -2947,6 +2947,8 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 							__func__, err);
 		if (err == -EINVAL) {
 			set_host_byte(cmd, DID_ERROR);
+			if (has_read_lock)
+				ufshcd_put_read_lock(hba);
 			cmd->scsi_done(cmd);
 			return 0;
 		}
