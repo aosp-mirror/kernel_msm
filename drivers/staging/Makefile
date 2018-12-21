@@ -45,9 +45,4 @@ obj-$(CONFIG_BCM2708_VCHIQ)	+= vc04_services/
 
 #Triggerfish audio modules
 obj-$(CONFIG_PRONTO_WLAN)	+= prima/
-obj-$(CONFIG_FOSSIL_AUDIO)	+= audio-kernel-8x09/
-obj-$(CONFIG_MSM_ADSP_LOADER)	+= audio-kernel-8x09/asoc/
-obj-$(CONFIG_ARCH_MSM8909)	+= audio-kernel-8x09/dsp/
-obj-$(CONFIG_ARCH_MSM8909)	+= audio-kernel-8x09/soc/
-obj-$(CONFIG_ARCH_MSM8909)	+= audio-kernel-8x09/ipc/
 #end triggerfish

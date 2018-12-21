@@ -110,6 +110,5 @@ source "drivers/staging/vc04_services/Kconfig"
 
 source "drivers/staging/prima/Kconfig"
 
-source "drivers/staging/audio-kernel-8x09/Kconfig"
 
 endif # STAGING
