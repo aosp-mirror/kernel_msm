@@ -22,10 +22,12 @@ struct ab_clk_context {
 	struct clk *ipu_pll_mux;
 	struct clk *ipu_pll_div;
 	struct clk *ipu_switch_mux;
+	struct clk *ipu_gate_clk;
 	struct clk *tpu_pll;
 	struct clk *tpu_pll_mux;
 	struct clk *tpu_pll_div;
 	struct clk *tpu_switch_mux;
+	struct clk *tpu_gate_clk;
 	struct clk *osc_clk;
 	struct clk *shared_div_aon_pll;
 	struct clk *aon_pll;
