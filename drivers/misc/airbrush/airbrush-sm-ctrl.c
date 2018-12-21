@@ -52,6 +52,7 @@ static u64 blk_ipu_clk_tbl[NUM_BLOCK_STATES][2] = {
 	[BLOCK_STATE_1_0] = { 0, 0 },
 	[BLOCK_STATE_1_1] = { 0, 0 },
 	[BLOCK_STATE_1_2] = { 0, 0 },
+	[BLOCK_STATE_2_0] = { 0, 0 },
 	[BLOCK_STATE_3_0] = { 0, 0 },
 };
 
@@ -68,6 +69,7 @@ static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
 	[BLOCK_STATE_0_6] = { 961600000, 1000000000 },
 	[BLOCK_STATE_1_0] = { 0, 0 },
 	[BLOCK_STATE_1_1] = { 0, 0 },
+	[BLOCK_STATE_1_2] = { 0, 0 },
 	[BLOCK_STATE_2_0] = { 0, 0 },
 	[BLOCK_STATE_3_0] = { 0, 0 },
 };
@@ -89,36 +91,38 @@ static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
 	}
 
 static struct block_property ipu_property_table[] = {
-	BLK_(0_0, Normal, Ready,      0, on, 0_75, off, 0, 14, 0, 0, 0),
-	BLK_(0_1, Normal, AonCompute, 0, on, 0_75, on,  0, 2,  2,  0, 0),
-	BLK_(0_2, Normal, MinCompute, 0, on, 0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_3, Normal, LowCompute, 0, on, 0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_4, Normal, MidCompute, 0, on, 0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_5, Normal, MaxCompute, 0, on, 0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_6, Boost,  MaxCompute, 0, on, 0_75, on,  0, 14, 14, 0, 0),
-	BLK_(1_0, Normal, PowerGated, 1, on, 0_75, off, 0, 0,  0,  0, 0),
-	BLK_(1_1, Boost,  PowerGated, 1, on, 0_85, off, 0, 0,  0,  0, 0),
-	BLK_(1_2, Normal, Sleep,      1, on, 0_75, off, 0, 0,  0,  0, 0),
-	BLK_(3_0, Disabled, NoRail,   2, off, 0_0, off, 0, 0,  0,  0, 0),
+	BLK_(0_0, Normal, Ready,      0,  on,  0_75, off, 0, 14, 0,  0, 0),
+	BLK_(0_1, Normal, AonCompute, 0,  on,  0_75, on,  0, 2,  2,  0, 0),
+	BLK_(0_2, Normal, MinCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(0_3, Normal, LowCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(0_4, Normal, MidCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(0_5, Normal, MaxCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(0_6, Boost,  MaxCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(1_0, Normal, PowerGated, 1,  on,  0_75, off, 0, 0,  0,  0, 0),
+	BLK_(1_1, Boost,  PowerGated, 1,  on,  0_85, off, 0, 0,  0,  0, 0),
+	BLK_(1_2, Normal, Sleep,      1,  on,  0_75, off, 0, 0,  0,  0, 0),
+	BLK_(2_0, Disabled, DeepSleep, 2, off, 0_0,  off, 0, 0,  0,  0, 0),
+	BLK_(3_0, Disabled, NoRail,    3, off, 0_0,  off, 0, 0,  0,  0, 0),
 };
 
 static struct block_property tpu_property_table[] = {
-	BLK_(0_0, Normal, Ready,      0, on, 0_75, off, 0, 0, 0, 16, 0),
-	BLK_(0_1, Normal, AonCompute, 0, on, 0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_2, Normal, MinCompute, 0, on, 0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_3, Normal, LowCompute, 0, on, 0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_4, Normal, MidCompute, 0, on, 0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_5, Normal, MaxCompute, 0, on, 0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_6, Boost,  MaxCompute, 0, on, 0_85, on,  0, 0, 0, 16, 0),
-	BLK_(1_0, Normal, PowerGated, 1, on, 0_75, off, 0, 0, 0, 0,  0),
-	BLK_(1_1, Boost,  PowerGated, 1, on, 0_85, off, 0, 0, 0, 0,  0),
-	BLK_(1_2, Normal, Sleep,      1, on, 0_75, off, 0, 0, 0, 0,  0),
-	BLK_(3_0, Disabled, NoRail,   2, off, 0_0, off, 0, 0, 0, 0,  0),
+	BLK_(0_0, Normal, Ready,      0,  on,  0_75, off, 0, 0, 0, 16, 0),
+	BLK_(0_1, Normal, AonCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(0_2, Normal, MinCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(0_3, Normal, LowCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(0_4, Normal, MidCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(0_5, Normal, MaxCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(0_6, Boost,  MaxCompute, 0,  on,  0_85, on,  0, 0, 0, 16, 0),
+	BLK_(1_0, Normal, PowerGated, 1,  on,  0_75, off, 0, 0, 0, 0,  0),
+	BLK_(1_1, Boost,  PowerGated, 1,  on,  0_85, off, 0, 0, 0, 0,  0),
+	BLK_(1_2, Normal, Sleep,      1,  on,  0_75, off, 0, 0, 0, 0,  0),
+	BLK_(2_0, Disabled, DeepSleep, 2, off, 0_0,  off, 0, 0, 0, 0,  0),
+	BLK_(3_0, Disabled, NoRail,    3, off, 0_0,  off, 0, 0, 0, 0,  0),
 };
 
 static struct block_property dram_property_table[] = {
 	BLK_(0_0, PowerUp,   Standby,  0, on, 0_60, off, 1867, 0, 0, 0, 3733),
-	BLK_(0_1, PowerUp,   AonTran,  0, on, 0_60, on,  800, 0, 0, 0, 1600),
+	BLK_(0_1, PowerUp,   AonTran,  0, on, 0_60, on,  800,  0, 0, 0, 1600),
 	BLK_(0_2, PowerUp, HalfMidTran, 0, on, 0_60, on, 800,  0, 0, 0, 1600),
 	BLK_(0_3, PowerUp, HalfMaxTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
 	BLK_(0_4, PowerUp,   LowTran,   0, on, 0_60, on, 1200, 0, 0, 0, 2400),
@@ -180,9 +184,9 @@ static struct chip_to_block_map chip_state_map[] = {
 	/*                     CS   IPU  TPU DRAM  MIF FSYS  AON */
 	CHIP_TO_BLOCK_MAP_INIT(0_0, 0_0, 0_0, 0_0, 0_0, 0_0, 0_0),
 	CHIP_TO_BLOCK_MAP_INIT(0_1, 0_1, 0_1, 0_1, 0_1, 0_1, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_2, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_6, 0_3, 0_0),
+	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_3, 0_3, 0_3, 0_0),
+	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_4, 0_3, 0_0),
+	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_5, 0_3, 0_0),
 	CHIP_TO_BLOCK_MAP_INIT(0_5, 0_5, 0_2, 0_6, 0_6, 0_3, 0_0),
 	CHIP_TO_BLOCK_MAP_INIT(0_6, 0_2, 0_5, 0_6, 0_6, 0_3, 0_0),
 	CHIP_TO_BLOCK_MAP_INIT(0_7, 0_5, 0_3, 0_6, 0_6, 0_3, 0_0),
@@ -203,7 +207,7 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_4, 0_0),
 	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_0),
 	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_1),
-	CHIP_TO_BLOCK_MAP_INIT(4_0, 3_0, 3_0, 2_0, 0_0, 1_2, 0_1),
+	CHIP_TO_BLOCK_MAP_INIT(4_0, 2_0, 2_0, 2_0, 0_0, 1_2, 0_1),
 	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_0, 3_0, 3_0, 3_0),
 	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0),
 };
@@ -311,14 +315,14 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
-			ab_sm_record_ts(sc, AB_SM_TS_PMU_ON);
+			ab_sm_record_ts(sc, AB_SM_TS_PMU_IPU_ON);
 		}
 		if (blk->name == BLK_TPU) {
 			if (pmu->pmu_tpu_resume(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
-			ab_sm_record_ts(sc, AB_SM_TS_PMU_ON);
+			ab_sm_record_ts(sc, AB_SM_TS_PMU_TPU_ON);
 		}
 	}
 
@@ -332,7 +336,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* PMU settings - Sleep */
 	if (desired_state->pmu == PMU_STATE_SLEEP &&
-			blk->current_state->pmu != PMU_STATE_SLEEP) {
+			blk->current_state->pmu == PMU_STATE_ON) {
 		if (blk->name == BLK_TPU) {
 			if (pmu->pmu_tpu_sleep(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
@@ -349,7 +353,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* PMU settings - Deep Sleep */
 	if (desired_state->pmu == PMU_STATE_DEEP_SLEEP &&
-			blk->current_state->pmu != PMU_STATE_DEEP_SLEEP &&
+			blk->current_state->pmu < PMU_STATE_DEEP_SLEEP &&
 			blk->name == BLK_TPU) {
 		if (pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
@@ -519,10 +523,10 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 			0 :
 			(sc->state_trans_ts[AB_SM_TS_PMIC_ON_34] -
 			sc->state_trans_ts[AB_SM_TS_START]));
-	dev_dbg(sc->dev, "latency pmu_on %lluns",
-		!sc->state_trans_ts[AB_SM_TS_PMU_ON] ?
+	dev_dbg(sc->dev, "latency pmu_ipu_on %lluns",
+		!sc->state_trans_ts[AB_SM_TS_PMU_IPU_ON] ?
 			0 :
-			(sc->state_trans_ts[AB_SM_TS_PMU_ON] -
+			(sc->state_trans_ts[AB_SM_TS_PMU_IPU_ON] -
 			(!sc->state_trans_ts[AB_SM_TS_PMIC_ON_34] ?
 				(!sc->state_trans_ts[AB_SM_TS_PMIC_ON_56] ?
 					sc->state_trans_ts[AB_SM_TS_START] :
@@ -530,16 +534,23 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 				sc->state_trans_ts[AB_SM_TS_PMIC_ON_34])));
 	dev_dbg(sc->dev, "latency ipu_clk %lluns",
 		sc->state_trans_ts[AB_SM_TS_IPU_CLK] -
-		(!sc->state_trans_ts[AB_SM_TS_PMU_ON] ?
+		(!sc->state_trans_ts[AB_SM_TS_PMU_IPU_ON] ?
 			(!sc->state_trans_ts[AB_SM_TS_PMIC_ON_34] ?
 				(!sc->state_trans_ts[AB_SM_TS_PMIC_ON_56] ?
 					sc->state_trans_ts[AB_SM_TS_START] :
 					sc->state_trans_ts[AB_SM_TS_DDR_ON]) :
 				sc->state_trans_ts[AB_SM_TS_PMIC_ON_34]) :
-			sc->state_trans_ts[AB_SM_TS_PMU_ON]));
+			sc->state_trans_ts[AB_SM_TS_PMU_IPU_ON]));
+	dev_dbg(sc->dev, "latency pmu_tpu_on %lluns",
+		!sc->state_trans_ts[AB_SM_TS_PMU_TPU_ON] ?
+			0 :
+			(sc->state_trans_ts[AB_SM_TS_PMU_TPU_ON] -
+			sc->state_trans_ts[AB_SM_TS_IPU_CLK]));
 	dev_dbg(sc->dev, "latency tpu_clk %lluns",
 		sc->state_trans_ts[AB_SM_TS_TPU_CLK] -
-		sc->state_trans_ts[AB_SM_TS_IPU_CLK]);
+		(!sc->state_trans_ts[AB_SM_TS_PMU_TPU_ON] ?
+			sc->state_trans_ts[AB_SM_TS_IPU_CLK] :
+			sc->state_trans_ts[AB_SM_TS_PMU_TPU_ON]));
 	dev_dbg(sc->dev, "latency pmu_off %lluns",
 		!sc->state_trans_ts[AB_SM_TS_PMU_OFF] ?
 			0 :
