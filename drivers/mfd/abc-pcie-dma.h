@@ -156,11 +156,14 @@ int abc_pcie_sg_retrieve_from_dma_buf(int fd, uint64_t off, uint64_t size,
 
 /**
  * API to release a scatter-gather list for a dma_buf
- * @param[in] *sgl pointer to the scatter gather list that was built during
- *		abc_pcie_sg_retrieve_from_dma_buf
+ * @param[in] sgl Pointer to the scatter gather list that was built during
+ *                abc_pcie_sg_retrieve_from_dma_buf.
+ * @param[in] sg  Pointer to array of struct abc_pcie_sg_entry that was
+ *                allocated by abc_pcie_sg_retrieve_from_dma_buf. May be NULL.
  * @return 0 for SUCCESS
  */
-int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl);
+int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl,
+					struct abc_pcie_sg_entry *sg);
 
 /**
  * API to get the current status of a specified channel

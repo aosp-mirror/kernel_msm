@@ -291,7 +291,7 @@ int abc_pcie_sg_retrieve_from_dma_buf(int fd, uint64_t off, uint64_t size,
 	maxsg = sgl->n_num + 1;
 	*sg = vmalloc(maxsg * sizeof(struct abc_pcie_sg_entry));
 	if (!(*sg)) {
-		abc_pcie_sg_release_from_dma_buf(sgl);
+		abc_pcie_sg_release_from_dma_buf(sgl, NULL);
 		return -ENOMEM;
 	}
 
@@ -302,23 +302,17 @@ int abc_pcie_sg_retrieve_from_dma_buf(int fd, uint64_t off, uint64_t size,
 	sgl->length = scatterlist_to_abc_sg(sgl->sc_list, sgl->n_num, off, size,
 					    *sg, maxsg);
 	if (sgl->length < 0) {
-		vfree((*sg));
-		*sg = NULL;
 		ret = sgl->length;
-		abc_pcie_sg_release_from_dma_buf(sgl);
+		abc_pcie_sg_release_from_dma_buf(sgl, *sg);
+		*sg = NULL;
 		return ret;
 	}
 
 	return 0;
 }
 
-/**
- * API to release a scatter-gather list for a dma_buf
- * @param[in] *sgl pointer to the scatter gather list that was built during
- *		abc_sg_retrieve_from_dma_buf
- * @return 0 for SUCCESS
- */
-int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl)
+int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl,
+					struct abc_pcie_sg_entry *sg)
 {
 	dma_buf_unmap_attachment(sgl->attach, sgl->sg_table, sgl->dir);
 	sgl->sc_list = NULL;
@@ -326,6 +320,9 @@ int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl)
 	sgl->length = 0;
 	dma_buf_detach(sgl->dma_buf, sgl->attach);
 	dma_buf_put(sgl->dma_buf);
+	if (sg)
+		vfree(sg);
+
 	return 0;
 }
 
@@ -1012,7 +1009,8 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 		abc_pcie_user_remote_buf_sg_destroy(&remote_sg_entries);
 		break;
 	case DMA_BUFFER_DMA_BUF:
-		abc_pcie_sg_release_from_dma_buf(remote_sg_list);
+		abc_pcie_sg_release_from_dma_buf(remote_sg_list,
+							remote_sg_entries);
 		break;
 	default:
 		break;
@@ -1214,7 +1212,8 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		abc_pcie_user_remote_buf_sg_destroy(&remote_sg_entries);
 		break;
 	case DMA_BUFFER_DMA_BUF:
-		abc_pcie_sg_release_from_dma_buf(remote_sg_list);
+		abc_pcie_sg_release_from_dma_buf(remote_sg_list,
+							remote_sg_entries);
 		break;
 	default:
 		break;
@@ -1230,7 +1229,8 @@ release_local_buf:
 							 local_sg_list);
 		break;
 	case DMA_BUFFER_DMA_BUF:
-		abc_pcie_sg_release_from_dma_buf(local_sg_list);
+		abc_pcie_sg_release_from_dma_buf(local_sg_list,
+							local_sg_entries);
 		break;
 	default:
 		break;
