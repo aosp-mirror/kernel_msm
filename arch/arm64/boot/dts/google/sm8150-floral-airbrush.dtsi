@@ -33,8 +33,8 @@
 };
 
 &tlmm {
-	s2mpb04_pins {
-		s2mpb04_pon_default: s2mpb04_pon_default {
+	s2mpg01_pins {
+		s2mpg01_pon_default: s2mpg01_pon_default {
 			mux {
 				pins = "gpio29";
 				function = "gpio";
@@ -47,7 +47,7 @@
 			};
 		};
 
-		s2mpb04_intb_default: s2mpb04_intb_default {
+		s2mpg01_intb_default: s2mpg01_intb_default {
 			mux {
 				pins = "gpio41";
 				function = "gpio";
@@ -94,35 +94,35 @@
 
 &qupv3_se18_i2c {
 	status = "okay";
-	airbrush_pmic: s2mpb04@66 {
-		compatible = "samsung,s2mpb04";
+	airbrush_pmic: s2mpg01@66 {
+		compatible = "samsung,s2mpg01";
 		reg = <0x66>;
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <41 IRQ_TYPE_EDGE_FALLING>;
-		interrupt-names = "s2mpb04_intb";
+		interrupt-names = "s2mpg01_intb";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&s2mpb04_pon_default
-					 &s2mpb04_intb_default
+		pinctrl-0 = <&s2mpg01_pon_default
+					 &s2mpg01_intb_default
 					 &ab_pmic_ready_default>;
 
 		samsung,pon-gpio = <&tlmm 29 0x00>;
 		samsung,intb-gpio = <&tlmm 41 0x00>;
 		samsung,pmic-ready-gpio = <&pm8150l_gpios 11 GPIO_ACTIVE_HIGH>;
 
-		s2mpb04_regulator: regulator {
-			compatible = "samsung,s2mpb04-regulator";
+		s2mpg01_regulator: regulator {
+			compatible = "samsung,s2mpg01-regulator";
 		};
 
-		s2mpb04_gpio: gpio {
-			compatible = "samsung,s2mpb04-gpio";
+		s2mpg01_gpio: gpio {
+			compatible = "samsung,s2mpg01-gpio";
 			gpio-controller;
 			#gpio-cells = <2>;
 		};
 
-		s2mpb04_thermal: sensor {
-			compatible = "samsung,s2mpb04-thermal";
+		s2mpg01_thermal: sensor {
+			compatible = "samsung,s2mpg01-thermal";
 			#thermal-sensor-cells = <0>;
 		};
 	};
@@ -189,9 +189,9 @@
 		/* Provide GPIOs used in Airbrush boot sequence */
 		ab-ready-gpio = <&pm8150l_gpios 10 GPIO_ACTIVE_HIGH>;
 		fw-patch-en-gpio = <&pm8150l_gpios 1 GPIO_ACTIVE_HIGH>;
-		soc-pwrgood-gpio = <&s2mpb04_gpio 0 GPIO_ACTIVE_HIGH>;
-		ddr-iso-gpio = <&s2mpb04_gpio 1 GPIO_ACTIVE_HIGH>;
-		ddr-sr-gpio = <&s2mpb04_gpio 2 GPIO_ACTIVE_HIGH>;
+		soc-pwrgood-gpio = <&s2mpg01_gpio 0 GPIO_ACTIVE_HIGH>;
+		ddr-iso-gpio = <&s2mpg01_gpio 1 GPIO_ACTIVE_HIGH>;
+		ddr-sr-gpio = <&s2mpg01_gpio 2 GPIO_ACTIVE_HIGH>;
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&ab_ready_default &ab_fw_patch_en_default>;
