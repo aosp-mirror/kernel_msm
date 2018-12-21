@@ -34,7 +34,6 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/thermal.h>
 #include <linux/platform_device.h>
-#include <linux/pm_wakeup.h>
 #include "thermal_core.h"
 
 /* QPNP VADC TM register definition */
@@ -221,7 +220,6 @@
 #define QPNP_BTM_CHANNELS			8
 
 /* QPNP ADC TM HC end */
-#define USBC_THERM_ACTIVITY_TIMEOUT_S		2
 
 struct qpnp_adc_thr_info {
 	u8		status_low;
@@ -1895,14 +1893,6 @@ static void notify_adc_tm_fn(struct work_struct *work)
 
 	if (adc_tm->thermal_node) {
 		pr_debug("notifying uspace client\n");
-		if (!strncmp(adc_tm->tz_dev->type, "usbc-therm-adc",
-					sizeof("usbc-therm-adc")-1)) {
-			pr_info("%s notify, hold %u seconds wakelock\n",
-					adc_tm->tz_dev->type,
-					USBC_THERM_ACTIVITY_TIMEOUT_S);
-			pm_wakeup_event(chip->dev,
-					USBC_THERM_ACTIVITY_TIMEOUT_S * 1000);
-		}
 		of_thermal_handle_trip(adc_tm->tz_dev);
 	} else {
 		if (adc_tm->scale_type == SCALE_RBATT_THERM)
@@ -3275,7 +3265,6 @@ static int qpnp_adc_tm_probe(struct platform_device *pdev)
 	spin_lock_init(&chip->th_info.adc_tm_low_lock);
 	spin_lock_init(&chip->th_info.adc_tm_high_lock);
 
-	device_init_wakeup(&pdev->dev, true);
 	pr_debug("OK\n");
 	return 0;
 fail:
@@ -3315,8 +3304,6 @@ static int qpnp_adc_tm_remove(struct platform_device *pdev)
 		destroy_workqueue(chip->low_thr_wq);
 	if (chip->adc->hkadc_ldo && chip->adc->hkadc_ldo_ok)
 		qpnp_adc_free_voltage_resource(chip->adc);
-
-	device_init_wakeup(&pdev->dev, false);
 	dev_set_drvdata(&pdev->dev, NULL);
 
 	return 0;
