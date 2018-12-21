@@ -34,6 +34,37 @@ struct ab_tmu_sensor {
 	struct thermal_zone_device *tzd;
 };
 
+static void ab_tmu_sensor_set_threshold(struct ab_tmu_sensor *sensor,
+		u32 thd_off, u32 thd_shift, int temp)
+{
+	struct ab_tmu_hw *hw = sensor->hw;
+	u32 code, thd_val;
+
+	code = ab_tmu_trim_cel_to_raw(&sensor->trim, temp);
+	thd_val = ab_tmu_hw_read(hw, thd_off);
+	thd_val &= ~(AB_TMU_TEMP_MASK << thd_shift);
+	thd_val |= code << thd_shift;
+	ab_tmu_hw_write(hw, thd_off, thd_val);
+}
+
+static void ab_tmu_sensor_set_threshold_rise(struct ab_tmu_sensor *sensor,
+		int trip, int temp)
+{
+	u32 thd_off = AB_TMU_THD_TEMP_RISE(sensor->id, trip);
+	u32 thd_shift = AB_TMU_THD_TEMP_RISE_SHIFT(sensor->id, trip);
+
+	ab_tmu_sensor_set_threshold(sensor, thd_off, thd_shift, temp);
+}
+
+static void ab_tmu_sensor_set_threshold_fall(struct ab_tmu_sensor *sensor,
+		int trip, int temp)
+{
+	u32 thd_off = AB_TMU_THD_TEMP_FALL(sensor->id, trip);
+	u32 thd_shift = AB_TMU_THD_TEMP_FALL_SHIFT(sensor->id, trip);
+
+	ab_tmu_sensor_set_threshold(sensor, thd_off, thd_shift, temp);
+}
+
 static int ab_tmu_sensor_get_temp(void *data, int *temp)
 {
 	struct ab_tmu_sensor *sensor = data;
@@ -176,46 +207,28 @@ void ab_tmu_sensor_load_trim_info(struct ab_tmu_sensor *sensor)
 void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 {
 	struct thermal_zone_device *tz = sensor->tzd;
-	struct ab_tmu_hw *hw = sensor->hw;
-	unsigned int reg_off, bit_off;
-	unsigned int rising_threshold = 0, falling_threshold = 0;
-	int temp, temp_hist;
-	int threshold_code;
-	int j;
+	const struct thermal_trip *trips;
+	int temp, hyst, temp_hyst;
+	int i, ntrips;
 
-	for (j = (of_thermal_get_ntrips(tz) - 1); j >= 0; j--) {
-		reg_off = ((7 - j) / 2) * 4;
-		bit_off = ((8 - j) % 2);
+	trips = of_thermal_get_trip_points(tz);
+	if (!trips) {
+		dev_warn(sensor->dev, "Failed to get trip points from OF");
+		return;
+	}
 
-		tz->ops->get_trip_temp(tz, j, &temp);
-		temp /= MCELSIUS;
+	ntrips = of_thermal_get_ntrips(tz);
+	if (ntrips < 0) {
+		dev_warn(sensor->dev, "Failed to get ntrip from OF");
+		return;
+	}
+	for (i = 0; i < ntrips; i++) {
+		temp = trips[i].temperature / MCELSIUS;
+		hyst = trips[i].hysteresis / MCELSIUS;
+		temp_hyst = temp - hyst;
 
-		tz->ops->get_trip_hyst(tz, j, &temp_hist);
-		temp_hist = temp - (temp_hist / MCELSIUS);
-
-		/* Set 9-bit temp code for rising threshold levels */
-		threshold_code = ab_tmu_trim_cel_to_raw(&sensor->trim, temp);
-		rising_threshold = ab_tmu_hw_read(hw,
-				AB_TMU_THD_TEMP_RISE7_6_P(sensor->id) +
-				reg_off);
-		rising_threshold &= ~(AB_TMU_TEMP_MASK <<
-				(16 * bit_off));
-		rising_threshold |= threshold_code << (16 * bit_off);
-
-		/* Set 9-bit temp code for falling threshold levels */
-		threshold_code = ab_tmu_trim_cel_to_raw(&sensor->trim,
-				temp_hist);
-		falling_threshold = ab_tmu_hw_read(hw,
-				AB_TMU_THD_TEMP_FALL7_6_P(sensor->id) +
-				reg_off);
-		falling_threshold &= ~(AB_TMU_TEMP_MASK <<
-				(16 * bit_off));
-		falling_threshold |= threshold_code << (16 * bit_off);
-
-		ab_tmu_hw_write(hw, AB_TMU_THD_TEMP_RISE7_6_P(sensor->id) +
-				reg_off, rising_threshold);
-		ab_tmu_hw_write(hw, AB_TMU_THD_TEMP_FALL7_6_P(sensor->id) +
-				reg_off, falling_threshold);
+		ab_tmu_sensor_set_threshold_rise(sensor, i, temp);
+		ab_tmu_sensor_set_threshold_fall(sensor, i, temp_hyst);
 	}
 }
 

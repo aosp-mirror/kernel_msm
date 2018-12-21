@@ -49,13 +49,33 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_CURRENT_TEMP0_1		0x040
 #define AB_TMU_CURRENT_TEMP2_4		0x044
 #define AB_TMU_CURRENT_TEMP5_7		0x048
-#define AB_TMU_THD_TEMP_RISE7_6_P(n) \
-	((n == 0) ? (0x050) : (0x170+(n-1)*0x20))
-#define AB_TMU_THD_TEMP_RISE5_4		0x054
-#define AB_TMU_THD_TEMP_RISE3_2		0x058
-#define AB_TMU_THD_TEMP_RISE1_0		0x05C
-#define AB_TMU_THD_TEMP_FALL7_6_P(n) \
-	((n == 0) ? (0x060) : (0x180+(n-1)*0x20))
+
+#define AB_TMU_THD_TEMP_STEP		0x020
+
+#define AB_TMU_THD0_TEMP_RISE7_6	0x050
+#define AB_TMU_THD0_TEMP_FALL7_6	0x060
+#define AB_TMU_THD1_TEMP_RISE7_6	0x170
+#define AB_TMU_THD1_TEMP_FALL7_6	0x180
+
+#define AB_TMU_THD_TEMP_X(x, n, trip) \
+({ \
+	const unsigned int _n = n, _trip = trip; \
+	const unsigned int reg_base = (_n == 0) ? \
+		AB_TMU_THD0_TEMP_##x##7_6 : \
+		AB_TMU_THD1_TEMP_##x##7_6 + (_n - 1) * AB_TMU_THD_TEMP_STEP; \
+	const unsigned int trip_offset = ((7 - _trip) / 2) * 4; \
+	reg_base + trip_offset; \
+})
+#define AB_TMU_THD_TEMP_RISE(n, trip) \
+	AB_TMU_THD_TEMP_X(RISE, n, trip)
+#define AB_TMU_THD_TEMP_FALL(n, trip) \
+	AB_TMU_THD_TEMP_X(FALL, n, trip)
+
+#define AB_TMU_THD_TEMP_X_SHIFT(trip) (16 * ((8 - trip) % 2))
+#define AB_TMU_THD_TEMP_RISE_SHIFT(_n, trip) \
+	AB_TMU_THD_TEMP_X_SHIFT(trip)
+#define AB_TMU_THD_TEMP_FALL_SHIFT(_n, trip) \
+	AB_TMU_THD_TEMP_X_SHIFT(trip)
 
 #define AB_TMU_INTEN0			0x110
 #define AB_TMU_INTSTAT0			0x114
