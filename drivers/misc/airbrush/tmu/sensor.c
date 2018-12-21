@@ -66,6 +66,13 @@ static void ab_tmu_sensor_set_threshold_fall(struct ab_tmu_sensor *sensor,
 	ab_tmu_sensor_set_threshold(sensor, thd_off, thd_shift, temp);
 }
 
+static void ab_tmu_sensor_set_thresholds(struct ab_tmu_sensor *sensor,
+		int trip, int temp, int hyst)
+{
+	ab_tmu_sensor_set_threshold_rise(sensor, trip, temp);
+	ab_tmu_sensor_set_threshold_fall(sensor, trip, temp - hyst);
+}
+
 static int ab_tmu_sensor_op_get_temp(void *data, int *temp)
 {
 	struct ab_tmu_sensor *sensor = data;
@@ -155,6 +162,54 @@ static int ab_tmu_sensor_op_set_emul_temp(void *data, int temp)
 	return ret;
 }
 
+static int ab_tmu_sensor_op_set_trip_temp(void *data, int trip, int temp)
+{
+	struct ab_tmu_sensor *sensor = data;
+	struct ab_tmu_hw *hw = sensor->hw;
+	struct thermal_zone_device *tzd = sensor->tzd;
+	bool pcie_link_ready;
+	int temp_cel, hyst, hyst_cel, ret;
+
+	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
+	if (pcie_link_ready) {
+		temp_cel = temp / MCELSIUS;
+		tzd->ops->get_trip_hyst(tzd, trip, &hyst);
+		hyst_cel = hyst / MCELSIUS;
+		ab_tmu_sensor_set_thresholds(sensor, trip, temp_cel, hyst_cel);
+		ret = 0;
+	} else {
+		ret = -ENODEV;
+	}
+	ab_tmu_hw_pcie_link_unlock(hw);
+
+	return ret;
+}
+
+static int ab_tmu_sensor_op_get_trip_temp(void *data, int trip, int *temp)
+{
+	struct ab_tmu_sensor *sensor = data;
+	struct ab_tmu_hw *hw = sensor->hw;
+	bool pcie_link_ready;
+	u32 thd_rise;
+	int ret;
+
+	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
+	if (pcie_link_ready) {
+		thd_rise = ab_tmu_hw_read(hw,
+				AB_TMU_THD_TEMP_RISE(sensor->id, trip));
+		thd_rise >>= AB_TMU_THD_TEMP_RISE_SHIFT(sensor->id, trip);
+		thd_rise &= AB_TMU_TEMP_MASK;
+		*temp = ab_tmu_trim_raw_to_cel(&sensor->trim, thd_rise) *
+				MCELSIUS;
+		ret = 0;
+	} else {
+		ret = -ENODEV;
+	}
+	ab_tmu_hw_pcie_link_unlock(hw);
+
+	return ret;
+}
+
 /*
  * All of the sensor ops should get pcie lock before accessing tmu
  * registers.
@@ -162,6 +217,8 @@ static int ab_tmu_sensor_op_set_emul_temp(void *data, int temp)
 static struct thermal_zone_of_device_ops ab_tmu_sensor_ops = {
 	.get_temp = ab_tmu_sensor_op_get_temp,
 	.set_emul_temp = ab_tmu_sensor_op_set_emul_temp,
+	.set_trip_temp = ab_tmu_sensor_op_set_trip_temp,
+	.get_trip_temp = ab_tmu_sensor_op_get_trip_temp,
 };
 
 struct ab_tmu_sensor *devm_ab_tmu_sensor_create(struct device *dev,
@@ -213,7 +270,7 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 {
 	struct thermal_zone_device *tz = sensor->tzd;
 	const struct thermal_trip *trips;
-	int temp, hyst, temp_hyst;
+	int temp, hyst;
 	int i, ntrips;
 
 	trips = of_thermal_get_trip_points(tz);
@@ -230,10 +287,7 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 	for (i = 0; i < ntrips; i++) {
 		temp = trips[i].temperature / MCELSIUS;
 		hyst = trips[i].hysteresis / MCELSIUS;
-		temp_hyst = temp - hyst;
-
-		ab_tmu_sensor_set_threshold_rise(sensor, i, temp);
-		ab_tmu_sensor_set_threshold_fall(sensor, i, temp_hyst);
+		ab_tmu_sensor_set_thresholds(sensor, i, temp, hyst);
 	}
 }
 
