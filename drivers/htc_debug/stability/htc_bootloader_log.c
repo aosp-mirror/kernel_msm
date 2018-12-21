@@ -39,9 +39,12 @@ struct bldr_log_header {
 };
 
 char *bl_last_log_buf, *bl_cur_log_buf;
-char *bl_last_tz_log_buf;
+char *bl_last_tz_log_buf, *uart_status_buf;
 unsigned long bl_last_log_buf_size, bl_cur_log_buf_size;
-size_t bl_last_tz_log_buf_size;
+size_t bl_last_tz_log_buf_size, uart_status_buf_size;
+bool uart_on = false;
+static const char *uart_on_str ="\nConsole is ENABLED";
+static const char *uart_off_str ="\nConsole is DISABLED";
 
 static int bldr_log_check_header(struct bldr_log_header *header, unsigned long bldr_log_size)
 {
@@ -122,8 +125,45 @@ ssize_t bldr_log_read_once(char __user *userbuf, ssize_t klog_size)
 }
 
 /**
+ * Update uart_on flag when finding "uart=1" in kernel command line
+ */
+static int __init uarton_status(char *str)
+{
+	uart_on = true;
+	return 1;
+}
+__setup("uart=1", uarton_status);
+
+/**
+ * Init the value of uart_status_buf.
+ *
+ * uart on, set "Console is ENABLED"
+ * uart off, set "Console is DISABLED"
+ */
+static int uart_status_setup(void)
+{
+	const char *uart_status_str;
+
+	if (uart_on) {
+		uart_status_str = uart_on_str;
+	} else {
+		uart_status_str = uart_off_str;
+	}
+
+	uart_status_buf_size = strlen(uart_status_str) + 1;
+	uart_status_buf = kmalloc(uart_status_buf_size, GFP_KERNEL);
+	if (!uart_status_buf) {
+		uart_status_buf_size = 0;
+		pr_warn("%s: failed to alloc uart status buffer\n", __func__);
+		return -ENOMEM;
+	}
+	memcpy(uart_status_buf, uart_status_str, uart_status_buf_size);
+	return 0;
+}
+
+/**
  * Read last bootloader logs, current bootloader logs, kernel logs,
- * last bootloader TZ logs in that order.
+ * last bootloader TZ logs, uart status in that order.
  *
  * Handle reads that overlap different regions so the file appears like one
  * file to the reader.
@@ -143,7 +183,8 @@ ssize_t bldr_log_read(const void *lastk_buf, ssize_t lastk_size, char __user *us
 		{ .buf = bl_last_log_buf,    .size = bl_last_log_buf_size },
 		{ .buf = bl_cur_log_buf,     .size = bl_cur_log_buf_size, },
 		{ .buf = lastk_buf,	     .size = lastk_size },
-		{ .buf = bl_last_tz_log_buf, .size = bl_last_tz_log_buf_size }
+		{ .buf = bl_last_tz_log_buf, .size = bl_last_tz_log_buf_size },
+		{ .buf = uart_status_buf,    .size = uart_status_buf_size }
 	};
 
 	pos = *ppos;
@@ -265,6 +306,8 @@ int bldr_log_init(void)
 		}
 		if (!num_reg)
 			pr_warn("%s: can't find address resource\n", __func__);
+
+		uart_status_setup();
 	} else
 		pr_warn("%s: can't find compatible '%s'\n", __func__, RAMLOG_COMPATIBLE_NAME);
 
@@ -278,4 +321,6 @@ void bldr_log_release(void)
 
 	if (bl_cur_log_buf)
 		kfree(bl_cur_log_buf);
+
+	kfree(uart_status_buf);
 }
