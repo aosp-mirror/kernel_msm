@@ -739,7 +739,7 @@ bool max1720x_is_reg(struct device *dev, unsigned int reg)
 
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
 		switch (reg) {
-		case MAX1730X_LEARNCFG:
+		case 0xA0 ... 0xAE:
 			return true;
 		}
 	}
