@@ -98,20 +98,10 @@ static int ab_clk_ipu_pll_disable_handler(void *ctx)
 /* Caller must hold clk_ctx->pcie_link_lock */
 static void __ab_clk_ipu_gate_handler(struct ab_clk_context *clk_ctx)
 {
-	uint32_t val;
 	unsigned long old_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 	unsigned long new_rate = 0;
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
-
-	/* NOTE: This is guarded against PCIE going down
-	 * since it is only called via ops structure. Ops structure is
-	 * unregistered by mfd when link goes down
-	 */
-	ABC_READ(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, &val);
-	val |= (1 << 20);
-	val &= ~(1 << 21);
-	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
-
+	clk_disable_unprepare(clk_ctx->ipu_gate_clk);
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
 }
 
@@ -137,24 +127,22 @@ static int ab_clk_ipu_gate_handler(void *ctx)
 }
 
 /* Caller must hold clk_ctx->pcie_link_lock */
-static void __ab_clk_ipu_ungate_handler(struct ab_clk_context *clk_ctx)
+static int __ab_clk_ipu_ungate_handler(struct ab_clk_context *clk_ctx)
 {
-	uint32_t val;
+	int ret;
 	unsigned long old_rate = 0;
 	unsigned long new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
-	/* NOTE: This is guarded against PCIE going down
-	 * since it is only called via ops structure. Ops structure is
-	 * unregistered by mfd when link goes down
-	 */
-	ABC_READ(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, &val);
-	val |= (1 << 20);
-	val |= (1 << 21);
-	ABC_WRITE(GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU, val);
+	ret = clk_prepare_enable(clk_ctx->ipu_gate_clk);
+	if (ret < 0)
+		dev_err(clk_ctx->dev,
+			"Unable to prepare_enable ipu_gate_clk (err %d)\n",
+			 ret);
 
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
+	return ret;
 }
 
 static int ab_clk_ipu_ungate_handler(void *ctx)
@@ -166,7 +154,7 @@ static int ab_clk_ipu_ungate_handler(void *ctx)
 
 	mutex_lock(&clk_ctx->pcie_link_lock);
 	if (clk_ctx->pcie_link_ready) {
-		__ab_clk_ipu_ungate_handler(clk_ctx);
+		ret = __ab_clk_ipu_ungate_handler(clk_ctx);
 	} else {
 		dev_err(clk_ctx->dev,
 				"%s: pcie link down during clk request\n",
@@ -238,21 +226,11 @@ static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
 /* Caller must hold clk_ctx->pcie_link_lock */
 static void __ab_clk_tpu_gate_handler(struct ab_clk_context *clk_ctx)
 {
-	uint32_t val;
 	unsigned long old_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 	unsigned long new_rate = 0;
 
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
-
-	/* NOTE: This is guarded against PCIE going down
-	 * since it is only called via ops structure. Ops structure is
-	 * unregistered by mfd when link goes down
-	 */
-	ABC_READ(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, &val);
-	val |= (1 << 20);
-	val &= ~(1 << 21);
-	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
-
+	clk_disable_unprepare(clk_ctx->tpu_gate_clk);
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
 }
 
@@ -278,24 +256,22 @@ static int ab_clk_tpu_gate_handler(void *ctx)
 }
 
 /* Caller must hold clk_ctx->pcie_link_lock */
-static void __ab_clk_tpu_ungate_handler(struct ab_clk_context *clk_ctx)
+static int __ab_clk_tpu_ungate_handler(struct ab_clk_context *clk_ctx)
 {
-	uint32_t val;
+	int ret = 0;
 	unsigned long old_rate = 0;
 	unsigned long new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
-	/* NOTE: This is guarded against PCIE going down
-	 * since it is only called via ops structure. Ops structure is
-	 * unregistered by mfd when link goes down
-	 */
-	ABC_READ(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, &val);
-	val |= (1 << 20);
-	val |= (1 << 21);
-	ABC_WRITE(GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU, val);
+	ret = clk_prepare_enable(clk_ctx->tpu_gate_clk);
+	if (ret < 0)
+		dev_err(clk_ctx->dev,
+			"Unable to prepare_enable tpu_gate_clk (err %d)\n",
+			 ret);
 
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
+	return ret;
 }
 
 static int ab_clk_tpu_ungate_handler(void *ctx)
@@ -307,7 +283,7 @@ static int ab_clk_tpu_ungate_handler(void *ctx)
 
 	mutex_lock(&clk_ctx->pcie_link_lock);
 	if (clk_ctx->pcie_link_ready) {
-		__ab_clk_tpu_ungate_handler(clk_ctx);
+		ret = __ab_clk_tpu_ungate_handler(clk_ctx);
 	} else {
 		dev_err(clk_ctx->dev,
 				"%s: pcie link down during clk request\n",
@@ -537,6 +513,8 @@ static int ab_clk_probe(struct platform_device *pdev)
 		of_clk_get_by_name(ab_clk_nd, "ipu_pll_div");
 	clk_ctx->ipu_switch_mux =
 		of_clk_get_by_name(ab_clk_nd, "ipu_switch_mux");
+	clk_ctx->ipu_gate_clk =
+		of_clk_get_by_name(ab_clk_nd, "ipu_gate_clk");
 
 	clk_ctx->tpu_pll =
 		of_clk_get_by_name(ab_clk_nd, "tpu_pll");
@@ -546,6 +524,8 @@ static int ab_clk_probe(struct platform_device *pdev)
 		of_clk_get_by_name(ab_clk_nd, "tpu_pll_div");
 	clk_ctx->tpu_switch_mux =
 		of_clk_get_by_name(ab_clk_nd, "tpu_switch_mux");
+	clk_ctx->tpu_gate_clk =
+		of_clk_get_by_name(ab_clk_nd, "tpu_gate_clk");
 
 	clk_ctx->osc_clk =
 		of_clk_get_by_name(ab_clk_nd, "osc_clk");
@@ -560,10 +540,12 @@ static int ab_clk_probe(struct platform_device *pdev)
 			IS_ERR(clk_ctx->ipu_pll_mux) ||
 			IS_ERR(clk_ctx->ipu_pll_div) ||
 			IS_ERR(clk_ctx->ipu_switch_mux) ||
+			IS_ERR(clk_ctx->ipu_gate_clk) ||
 			IS_ERR(clk_ctx->tpu_pll) ||
 			IS_ERR(clk_ctx->tpu_pll_mux) ||
 			IS_ERR(clk_ctx->tpu_pll_div) ||
 			IS_ERR(clk_ctx->tpu_switch_mux) ||
+			IS_ERR(clk_ctx->tpu_gate_clk) ||
 			IS_ERR(clk_ctx->osc_clk) ||
 			IS_ERR(clk_ctx->shared_div_aon_pll) ||
 			IS_ERR(clk_ctx->aon_pll) ||
@@ -610,6 +592,8 @@ static int ab_clk_remove(struct platform_device *pdev)
 		clk_put(clk_ctx->ipu_pll_div);
 	if (clk_ctx->ipu_switch_mux)
 		clk_put(clk_ctx->ipu_switch_mux);
+	if (clk_ctx->ipu_gate_clk)
+		clk_put(clk_ctx->ipu_gate_clk);
 
 	if (clk_ctx->tpu_pll)
 		clk_put(clk_ctx->tpu_pll);
@@ -619,6 +603,8 @@ static int ab_clk_remove(struct platform_device *pdev)
 		clk_put(clk_ctx->tpu_pll_div);
 	if (clk_ctx->tpu_switch_mux)
 		clk_put(clk_ctx->tpu_switch_mux);
+	if (clk_ctx->tpu_gate_clk)
+		clk_put(clk_ctx->tpu_gate_clk);
 
 	if (clk_ctx->osc_clk)
 		clk_put(clk_ctx->osc_clk);
