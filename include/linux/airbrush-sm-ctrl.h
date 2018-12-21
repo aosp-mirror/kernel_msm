@@ -147,14 +147,6 @@ enum stat_state {
 	STAT_STATE_SIZE,
 };
 
-#define bit(x) (1<<x)
-#define IPU_POWER_CONTROL	bit(0)
-#define TPU_POWER_CONTROL	bit(1)
-#define DRAM_POWER_CONTROL	bit(2)
-#define MIF_POWER_CONTROL	bit(3)
-#define FSYS_POWER_CONTROL	bit(4)
-#define AON_POWER_CONTROL	bit(5)
-
 /**
  * struct block_property
  * stores the information of a soc block's operating state.
@@ -216,7 +208,6 @@ struct chip_to_block_map {
 	enum block_state mif_block_state_id;
 	enum block_state fsys_block_state_id;
 	enum block_state aon_block_state_id;
-	u32 flags;
 };
 
 enum ab_error_codes {
