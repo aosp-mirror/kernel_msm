@@ -20,8 +20,7 @@
 
 #include "s2mpg01-core.h"
 
-/* TODO(b118705469): change name to s2mpg01 with dts change */
-#define DRIVER_NAME "s2mpb04-thermal"
+#define DRIVER_NAME "s2mpg01-thermal"
 
 #define S2MPG01_THERM_NUM_TRIPS 0
 #define S2MPG01_THERM_TRIPS_MASK ((1 << S2MPG01_THERM_NUM_TRIPS) - 1)
@@ -101,8 +100,7 @@ static int s2mpg01_thermal_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id s2mpg01_thermal_of_match[] = {
-	/* TODO(b118705469): change name to s2mpg01 with dts change */
-	{ .compatible = "brcm,s2mpb04-thermal", },
+	{ .compatible = "samsung,s2mpg01-thermal", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, s2mpg01_thermal_of_match);

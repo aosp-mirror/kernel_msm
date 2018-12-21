@@ -54,19 +54,18 @@ static void s2mpg01_mask_interrupts_all(struct s2mpg01_core *ddata);
 static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata);
 
 static const struct mfd_cell s2mpg01_devs[] = {
-	/* TODO(b118705469): change name to s2mpg01 with dts change */
 	{
-		.name = "s2mpb04-regulator",
-		.of_compatible = "samsung,s2mpb04-regulator",
+		.name = "s2mpg01-regulator",
+		.of_compatible = "samsung,s2mpg01-regulator",
 	},
 	{
-		.name = "s2mpb04-gpio",
-		.of_compatible = "samsung,s2mpb04-gpio",
+		.name = "s2mpg01-gpio",
+		.of_compatible = "samsung,s2mpg01-gpio",
 	},
 #if 0  /* STOPSHIP: b/120006694 */
 	{
-		.name = "s2mpb04-thermal",
-		.of_compatible = "samsung,s2mpb04-thermal",
+		.name = "s2mpg01-thermal",
+		.of_compatible = "samsung,s2mpg01-thermal",
 	},
 #endif
 };
@@ -857,8 +856,6 @@ static const struct dev_pm_ops s2mpg01_dev_pm_ops = {
 #endif
 
 static const struct of_device_id s2mpg01_dt_ids[] = {
-	/* TODO(b/118705469): Remove s2mpb04 once dts catches up */
-	{ .compatible = "samsung,s2mpb04", },
 	{ .compatible = "samsung,s2mpg01", },
 	{ },
 };

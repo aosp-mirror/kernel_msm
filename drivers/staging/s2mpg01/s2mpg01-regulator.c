@@ -23,8 +23,7 @@
 
 #include "s2mpg01-core.h"
 
-/* TODO(b118705469): change name to s2mpg01 with dts change */
-#define DRIVER_NAME "s2mpb04-regulator"
+#define DRIVER_NAME "s2mpg01-regulator"
 
 struct s2mpg01_regulator {
 	struct device *dev;
@@ -517,8 +516,7 @@ static int s2mpg01_regulator_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id s2mpg01_regulator_of_match[] = {
-	/* TODO(b118705469): change name to s2mpg01 with dts change */
-	{ .compatible = "samsung,s2mpb04-regulator", },
+	{ .compatible = "samsung,s2mpg01-regulator", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, s2mpg01_regulator_of_match);
