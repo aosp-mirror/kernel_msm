@@ -209,10 +209,10 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
-	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
-	clk_set_parent(clk_ctx->ipu_switch_mux,
-			clk_ctx->shared_div_aon_pll);
+	clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->shared_div_aon_pll);
+	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
 	clk_set_rate(clk_ctx->ipu_pll, rate);
+	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
 	clk_set_rate(clk_ctx->ipu_pll_div, rate);
 	clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->ipu_pll_div);
 
@@ -403,10 +403,10 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
-	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
-	clk_set_parent(clk_ctx->tpu_switch_mux,
-			clk_ctx->shared_div_aon_pll);
+	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->shared_div_aon_pll);
+	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 	clk_set_rate(clk_ctx->tpu_pll, rate);
+	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
 	clk_set_rate(clk_ctx->tpu_pll_div, rate);
 	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->tpu_pll_div);
 
