@@ -16,7 +16,7 @@
 		function = "normal";
 		qcom,drive-strength = <2>;
 		power-source = <1>;
-		bias-disable;
+		bias-pull-up;
 	};
 };
 
