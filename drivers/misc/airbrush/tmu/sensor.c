@@ -161,7 +161,7 @@ void ab_tmu_sensor_load_trim_info(struct ab_tmu_sensor *sensor)
 	struct ab_tmu_hw *hw = sensor->hw;
 	u32 trim_info;
 
-	trim_info = ab_tmu_hw_read(hw, AB_TMU_TRIMINFO_P(sensor->id));
+	trim_info = ab_tmu_hw_read(hw, AB_TMU_TRIMINFO(sensor->id));
 
 	sensor->trim.cal_type = (trim_info >> AB_TMU_CAL_SHIFT) &
 			AB_TMU_CAL_MASK;

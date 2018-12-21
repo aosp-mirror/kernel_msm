@@ -148,9 +148,9 @@ void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
 	int i;
 	u32 con, con1, int_en;
 
-	int_en = enable ? AB_TMU_INT_EN : 0;
+	int_en = enable ? AB_TMU_INTEN_ALL : 0;
 	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
-		ab_tmu_hw_write(hw, AB_TMU_INTEN_P(i), int_en);
+		ab_tmu_hw_write(hw, AB_TMU_INTEN(i), int_en);
 
 	con1 = ab_tmu_hw_read(hw, AB_TMU_CONTROL1);
 	con1 |= AB_TMU_NUM_REMOTE_PROBE << AB_TMU_REMOTE_PROBE_SHIFT;
@@ -173,8 +173,8 @@ void ab_tmu_hw_clear_irqs(struct ab_tmu_hw *hw)
 	u32 val_irq;
 
 	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
-		val_irq = ab_tmu_hw_read(hw, AB_TMU_INTPEND_P(i));
-		ab_tmu_hw_write(hw, AB_TMU_INTPEND_P(i), val_irq);
+		val_irq = ab_tmu_hw_read(hw, AB_TMU_INTPEND(i));
+		ab_tmu_hw_write(hw, AB_TMU_INTPEND(i), val_irq);
 	}
 }
 

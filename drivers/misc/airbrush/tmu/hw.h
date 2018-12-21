@@ -36,8 +36,8 @@ void ab_tmu_hw_clear_irqs(struct ab_tmu_hw *hw);
 u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 
 /* Airbrush TMU registers */
-#define AB_TMU_TRIMINFO			0x0
-#define AB_TMU_TRIMINFO_P(n)		((0x0) + ((n)*4))
+#define AB_TMU_TRIMINFO0		0x0
+#define AB_TMU_TRIMINFO(n)		(AB_TMU_TRIMINFO0 + ((n) * 4))
 #define AB_TMU_CONTROL			0x20
 #define AB_TMU_CONTROL1			0x24
 #define AB_TMU_STATUS			0x28
@@ -55,16 +55,29 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_THD_TEMP_RISE1_0		0x05C
 #define AB_TMU_THD_TEMP_FALL7_6_P(n) \
 	((n == 0) ? (0x060) : (0x180+(n-1)*0x20))
-#define AB_TMU_INTEN_P(n) \
-	((n <= 4) ? (0x110+n*0x10) : (0x310+((n-5)*0x10)))
-#define AB_TMU_INTSTAT_P(n) \
-	((n <= 4) ? (0x114+n*0x10) : (0x314+((n-5)*0x10)))
-#define AB_TMU_INTPEND_P(n) \
-	((n <= 4) ? (0x118+n*0x10) : (0x318+((n-5)*0x10)))
 
-#define AB_TMU_INT_EN			0xff01ff
+#define AB_TMU_INTEN0			0x110
+#define AB_TMU_INTSTAT0			0x114
+#define AB_TMU_INTPEND0			0x118
+#define AB_TMU_INTEN5			0x310
+#define AB_TMU_INTSTAT5			0x314
+#define AB_TMU_INTPEND5			0x318
 
-#define AB_TMU_INTEN_FALL0_SHIFT	16
+#define AB_TMU_INTX_STEP			0x10
+#define AB_TMU_INTX(x, n) \
+({ \
+	const unsigned int _n = (n); \
+	(_n <= 4) ? \
+		AB_TMU_INT##x##0 + _n * AB_TMU_INTX_STEP : \
+		AB_TMU_INT##x##5 + ((_n - 5) * AB_TMU_INTX_STEP); \
+})
+#define AB_TMU_INTEN(n)			AB_TMU_INTX(EN, n)
+#define AB_TMU_INTSTAT(n)		AB_TMU_INTX(STAT, n)
+#define AB_TMU_INTPEND(n)		AB_TMU_INTX(PEND, n)
+
+#define AB_TMU_INTX_RISE_SHIFT(n)	(n)
+#define AB_TMU_INTX_FALL_SHIFT(n)	((n) + 16)
+#define AB_TMU_INTEN_ALL		0xff01ff
 
 #define AB_TMU_CAL_MASK			0x3
 #define AB_TMU_TEMP_MASK		0x1ff
@@ -88,15 +101,6 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_TRIP_MODE_SHIFT		13
 #define AB_TMU_TRIP_MODE_MASK		0x7
 #define AB_TMU_THERM_TRIP_EN_SHIFT	12
-
-#define AB_TMU_INTEN_RISE0_SHIFT	0
-#define AB_TMU_INTEN_RISE1_SHIFT	1
-#define AB_TMU_INTEN_RISE2_SHIFT	2
-#define AB_TMU_INTEN_RISE3_SHIFT	3
-#define AB_TMU_INTEN_RISE4_SHIFT	4
-#define AB_TMU_INTEN_RISE5_SHIFT	5
-#define AB_TMU_INTEN_RISE6_SHIFT	6
-#define AB_TMU_INTEN_RISE7_SHIFT	7
 
 #define AB_TMU_NO_TRIMMING		0
 #define AB_TMU_ONE_POINT_TRIMMING	1
