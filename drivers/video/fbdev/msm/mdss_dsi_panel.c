@@ -36,7 +36,7 @@
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
-
+static int g_auo_pre_init = 0;
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -261,7 +261,7 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 						panel_data);
 
-	pr_info("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
+	pr_err("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
 
 	if (ctrl->idle == enable)
 		return;
@@ -371,6 +371,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return -EINVAL;
 	}
 
+	pr_err("%s: reset\n", __func__);
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
@@ -901,7 +902,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ndx=%d\n", __func__, ctrl->ndx);
+	pr_err("%s: ndx=%d\n", __func__, ctrl->ndx);
 
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
@@ -966,7 +967,7 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
+	pr_err("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
 	pinfo = &pdata->panel_info;
 	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
@@ -980,6 +981,15 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 
 	mdss_dsi_post_panel_on_hdmi(pinfo);
 
+	if (!g_auo_pre_init) {
+		g_auo_pre_init++;
+		mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL, ctrl->read_back_param, 1);
+		pr_err("%s: read_back_param[0] = 0x%02x\n", __func__, ctrl->read_back_param[0]);
+		mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL, ctrl->id3_code, 1);
+		pr_err("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
+		/* switch back to original page */
+		mdss_dsi_switch_page(ctrl, 0x00);
+	}
 end:
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -1017,7 +1027,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
+	pr_err("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
@@ -1051,7 +1061,7 @@ static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s: ctrl=%pK ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
+	pr_err("%s: ctrl=%pK ndx=%d enable=%d\n", __func__, ctrl, ctrl->ndx,
 		enable);
 
 	/* Any panel specific low power commands/config */
@@ -2170,6 +2180,12 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->lp_off_cmds,
 			"qcom,mdss-dsi-lp-mode-off", NULL);
 
+	pinfo->pwr_off_disable = of_property_read_bool(np,
+		"qcom,mdss-dsi-power-off-disable");
+
+	pinfo->tear_disable = of_property_read_bool(np,
+		"qcom,mdss-dsi-tear-disable");
+
 	return 0;
 }
 
@@ -2389,7 +2405,7 @@ int mdss_dsi_panel_timing_switch(struct mdss_dsi_ctrl_pdata *ctrl,
 		return 0; /* nothing to do */
 	}
 
-	pr_debug("%s: ndx=%d switching to panel timing \"%s\"\n", __func__,
+	pr_err("%s: ndx=%d switching to panel timing \"%s\"\n", __func__,
 			ctrl->ndx, timing->name);
 
 	mdss_panel_info_from_timing(timing, pinfo);
@@ -2917,6 +2933,13 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-idle-off-command",
 		"qcom,mdss-dsi-idle-off-command-state");
 
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm0_on_cmds,
+		"qcom,mdss-dsi-hbm0-on-command", NULL);
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm1_on_cmds,
+		"qcom,mdss-dsi-hbm1-on-command", NULL);
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm_off_cmds,
+		"qcom,mdss-dsi-hbm-off-command", NULL);
+
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
 	pinfo->mipi.frame_rate_idle = (!rc ? tmp : 60);
 
@@ -2961,7 +2984,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 
 	pinfo = &ctrl_pdata->panel_data.panel_info;
 
-	pr_debug("%s:%d\n", __func__, __LINE__);
+	pr_err("%s:%d\n", __func__, __LINE__);
 	pinfo->panel_name[0] = '\0';
 	panel_name = of_get_property(node, "qcom,mdss-dsi-panel-name", NULL);
 	if (!panel_name) {

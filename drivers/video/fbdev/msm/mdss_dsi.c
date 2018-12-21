@@ -39,6 +39,8 @@
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
 
+static int g_init_once;
+
 /* Master structure to hold all the information about the DSI/panel */
 static struct mdss_dsi_data *mdss_dsi_res;
 
@@ -546,7 +548,9 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 
 	switch (power_state) {
 	case MDSS_PANEL_POWER_OFF:
-		ret = mdss_dsi_panel_power_off(pdata);
+		if (!pinfo->pwr_off_disable) {
+			ret = mdss_dsi_panel_power_off(pdata);
+		}
 		break;
 	case MDSS_PANEL_POWER_ON:
 		if (mdss_dsi_is_panel_on_ulp(pdata)) {
@@ -556,7 +560,15 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 			ret = mdss_dsi_panel_power_lp(pdata, false);
 			goto end;
 		} else {
-			ret = mdss_dsi_panel_power_on(pdata);
+			if (!pinfo->pwr_off_disable) {
+				ret = mdss_dsi_panel_power_on(pdata);
+			} else {
+				if (!g_init_once) {
+					ret = mdss_dsi_panel_power_on(pdata);
+					if (!ret)
+						g_init_once = 1;
+				}
+			}
 		}
 		break;
 	case MDSS_PANEL_POWER_LP1:

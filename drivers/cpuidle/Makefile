@@ -32,3 +32,6 @@ obj-y += lpm-levels-legacy.o lpm-levels-of-legacy.o lpm-workarounds.o
 else
 obj-$(CONFIG_MSM_PM) += lpm-levels.o lpm-levels-of.o
 endif
+
+ccflags-y += -Idrivers/cpuidle
+

@@ -26,6 +26,7 @@
 #include <linux/of_gpio.h>
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
+#include <linux/spinlock.h>
 #include "bgcom.h"
 #include "bgrsb.h"
 #include "bgcom_interface.h"
@@ -107,7 +108,7 @@ static void send_input_events(struct work_struct *work);
 static struct list_head cb_head = LIST_HEAD_INIT(cb_head);
 static struct list_head pr_lst_hd = LIST_HEAD_INIT(pr_lst_hd);
 static enum bgcom_spi_state spi_state;
-
+static DEFINE_SPINLOCK(pr_lst_hd_lock);
 
 static struct workqueue_struct *wq;
 static DECLARE_WORK(input_work, send_input_events);
@@ -139,10 +140,11 @@ static void send_input_events(struct work_struct *work)
 	struct list_head *pos;
 	struct event_list *node;
 	struct event *evnt;
+	unsigned long flags;
 
 	if (list_empty(&pr_lst_hd))
 		return;
-
+	spin_lock_irqsave(&pr_lst_hd_lock, flags);
 	list_for_each_safe(pos, temp, &pr_lst_hd) {
 		node = list_entry(pos, struct event_list, list);
 		evnt = node->evnt;
@@ -151,6 +153,7 @@ static void send_input_events(struct work_struct *work)
 		list_del(&node->list);
 		kfree(node);
 	}
+	spin_unlock_irqrestore(&pr_lst_hd_lock, flags);
 }
 
 int bgcom_set_spi_state(enum bgcom_spi_state state)
@@ -302,6 +305,7 @@ static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 	void *evnt_data;
 	struct event *evnt;
 	struct event_list *data_list;
+	unsigned long flags;
 
 	while (*data != '\0') {
 
@@ -316,14 +320,24 @@ static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 			evnt_tm = *((uint32_t *)(data+1));
 
 			evnt = kmalloc(sizeof(*evnt), GFP_KERNEL);
+			if (!evnt) {
+				pr_err("Allocate Memory for evnt Failed\n");
+				break;
+			}
 			evnt->sub_id = sub_id;
 			evnt->evnt_tm = evnt_tm;
 			evnt->evnt_data =
 				*(int16_t *)(data + HED_EVENT_DATA_STRT_LEN);
 
 			data_list = kmalloc(sizeof(*data_list), GFP_KERNEL);
+			if (!data_list) {
+				pr_err("Allocate Memory for data_list Failed\n");
+				break;
+			}
 			data_list->evnt = evnt;
+			spin_lock_irqsave(&pr_lst_hd_lock, flags);
 			list_add_tail(&data_list->list, &pr_lst_hd);
+			spin_unlock_irqrestore(&pr_lst_hd_lock, flags);
 
 		} else if (event_id == 0x0001) {
 			evnt_data = kmalloc(p_len, GFP_KERNEL);

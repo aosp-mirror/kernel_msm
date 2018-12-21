@@ -1,0 +1,47 @@
+/*
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include "triggerfish-touch.dtsi"
+
+&pm660_fg {
+	qcom,fg-jeita-thresholds = <2 16 44 58>;
+	qcom,fg-jeita-hyst-temp = <2>;
+	qcom,fg-jeita-en = <1>;
+	qcom,fg-jeita-soft-hot-fv-cc = <4200 350>;
+	qcom,fg-jeita-soft-cold-fv-cc = <4000 100>;
+	qcom,battery-data = <&qrd_batterydata>;
+	qcom,fg-chg-term-current = <25>;
+	qcom,battery-thermal-coefficients = [d2 50 ff];
+	qcom,fg-rsense-sel = <1>;
+	qcom,fg-force-load-profile;
+	qcom,fg-recharge-soc-thr = <99>;
+	qcom,fg-cutoff-current = <40>;
+	qcom,fg-cutoff-voltage = <3000>;
+};
+
+/ {
+	/delete-node/ qcom,battery-data;
+	mtp_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "../common/fg-gen3-batterydata-itech-3000mah.dtsi"
+	};
+	qrd_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <60>;
+		#include "../common/fg-gen3-batterydata-apack-355mah.dtsi"
+	};
+};
+
+&pm660_pon {
+	qcom,pon_2 {
+		linux,code = <266>;
+	};
+};

@@ -1,0 +1,35 @@
+/*
+ * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	i2c@78b9000 {
+		raydium@39 {
+			compatible = "raydium,raydium-ts";
+			reg = <0x39>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <98 0x2008>;
+			vcc_i2c-supply = <&pm660_l13>;
+			raydium,reset-gpio = <&msm_gpio 16 0x00>;
+			raydium,irq-gpio =<&msm_gpio 98 0x2008>;
+			/* pins used by touchscreen */
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+			pinctrl-0 = <&ts_int_active &ts_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+			pinctrl-2 = <&ts_release>;
+			raydium,display-coords = <0 0 390 390>;
+			raydium,hard-reset-delay-ms = <5>;
+			raydium,soft-reset-delay-ms = <360>;
+			raydium,num-max-touches = <2>;
+		};
+	};
+};

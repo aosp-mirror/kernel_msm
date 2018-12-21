@@ -106,4 +106,10 @@ source "drivers/staging/greybus/Kconfig"
 
 source "drivers/staging/vc04_services/Kconfig"
 
+#Triggerfish customization
+
+source "drivers/staging/prima/Kconfig"
+
+source "drivers/staging/audio-kernel-8x09/Kconfig"
+
 endif # STAGING

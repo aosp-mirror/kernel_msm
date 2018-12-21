@@ -5,7 +5,7 @@
 # Each configuration option enables a list of files.
 
 wm97xx-ts-y := wm97xx-core.o
-
+ccflags-$(CONFIG_BUILD_TRIGGERFISH) += -DCONFIG_BUILD_TRIGGERFISH
 obj-$(CONFIG_TOUCHSCREEN_PROPERTIES)	+= of_touchscreen.o
 obj-$(CONFIG_TOUCHSCREEN_88PM860X)	+= 88pm860x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_AD7877)	+= ad7877.o
@@ -64,7 +64,6 @@ obj-$(CONFIG_TOUCHSCREEN_USB_COMPOSITE)	+= usbtouchscreen.o
 obj-$(CONFIG_TOUCHSCREEN_PCAP)		+= pcap_ts.o
 obj-$(CONFIG_TOUCHSCREEN_PENMOUNT)	+= penmount.o
 obj-$(CONFIG_TOUCHSCREEN_PIXCIR)	+= pixcir_i2c_ts.o
-obj-$(CONFIG_TOUCHSCREEN_RM_TS)		+= raydium_i2c_ts.o
 obj-$(CONFIG_TOUCHSCREEN_S3C2410)	+= s3c2410_ts.o
 obj-$(CONFIG_TOUCHSCREEN_SILEAD)	+= silead.o
 obj-$(CONFIG_TOUCHSCREEN_SIS_I2C)	+= sis_i2c.o
@@ -107,3 +106,11 @@ obj-$(CONFIG_TOUCHSCREEN_FTS)		+= focaltech_touch/
 obj-$(CONFIG_TOUCHSCREEN_GT9XX_v28)		+= gt9xx_v2.8/
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= hxchipset/
 obj-$(CONFIG_TOUCHSCREEN_EKTF3XXX_CHIPSET) += ektf3xxx/
+
+raydium_driver = ray-darter
+ifeq ($(CONFIG_BUILD_TRIGGERFISH),y)
+	raydium_driver=ray-titan
+endif
+
+obj-$(CONFIG_TOUCHSCREEN_RM_TS)		+= $(raydium_driver)/raydium_i2c_ts.o
+

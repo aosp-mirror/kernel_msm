@@ -1,0 +1,24 @@
+comment "Qualcomm audio modem"
+
+config SND_SOC_BG_8909
+
+	tristate "Qualcomm Audio BG"
+	default m
+	help
+	Add support for the Qualcomm Audio BG module
+
+config MSM_ADSP_LOADER
+
+	tristate "Qualcomm adsp loader"
+	default m
+	help
+	Add support for the Qualcomm ADSP loader module
+
+config SND_SOC_BG_CODEC
+
+	tristate "Qualcomm bg codec"
+	default m
+	help
+	Add support for the Qualcomm Blackghost codec
+
+#source "drivers/staging/audio-kernel-8x09/asoc"

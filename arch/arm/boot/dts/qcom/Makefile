@@ -25,17 +25,13 @@ dtb-$(CONFIG_ARCH_MDM9607) += mdm9607-mtp.dtb \
 
 targets += dtbs
 
-include $(srctree)/arch/arm64/boot/dts/qcom/Makefile
-$(obj)/%.dtb: $(src)/../../../../arm64/boot/dts/qcom/%.dts FORCE
-	$(call if_changed_dep,dtc)
-
-ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
-$(obj)/%.dtbo:$(src)/../../../../arm64/boot/dts/qcom/%.dts FORCE
-	$(call if_changed_dep,dtc)
-	$(call if_changed,dtbo_verify)
-
-dtbs: $(addprefix $(obj)/,$(dtb-y)) $(addprefix $(obj)/,$(dtbo-y))
-else
-dtbs: $(addprefix $(obj)/,$(dtb-y))
+8x09_dtb = msm8909w-darter
+ifeq ($(CONFIG_BUILD_TRIGGERFISH),y)
+	8x09_dtb = msm8909w-triggerfish
 endif
+include $(srctree)/arch/arm/boot/dts//8x09/$(8x09_dtb)/Makefile
+$(obj)/%.dtb: $(src)/../../../../arm/boot/dts/8x09/$(8x09_dtb)/%.dts FORCE
+	$(call if_changed_dep,dtc)
+	@echo "$< $@"
+dtbs: $(addprefix $(obj)/,$(dtb-y))
 clean-files := *.dtb
