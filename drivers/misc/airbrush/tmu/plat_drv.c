@@ -20,7 +20,7 @@
 #include "hw.h"
 #include "sensor.h"
 
-#define AIRBRUSH_TMU_BASE	0xB90000
+#define AB_TMU_BASE	0xB90000
 
 /**
  * struct airbrush_tmu_data : A structure to hold the private data of the TMU
@@ -34,7 +34,7 @@ struct airbrush_tmu_data {
 	int irq;
 	struct notifier_block tmu_nb;
 	struct work_struct irq_work;
-	struct ab_tmu_sensor *sensor[AIRBRUSH_NUM_ALL_PROBE];
+	struct ab_tmu_sensor *sensor[AB_TMU_NUM_ALL_PROBE];
 };
 
 static void airbrush_tmu_work(struct work_struct *work)
@@ -44,7 +44,7 @@ static void airbrush_tmu_work(struct work_struct *work)
 	int i;
 
 	/* TODO trigger only the correct sensor */
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
 		ab_tmu_sensor_update(data->sensor[i]);
 
 	ab_tmu_hw_clear_irqs(data->hw);
@@ -81,11 +81,11 @@ static int airbrush_tmu_initialize(struct platform_device *pdev)
 	unsigned int status;
 	int i;
 
-	status = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_STATUS);
+	status = ab_tmu_hw_read(hw, AB_TMU_STATUS);
 	if (!status)
 		return -EBUSY;
 
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
 		ab_tmu_sensor_load_trim_info(data->sensor[i]);
 		ab_tmu_sensor_save_threshold(data->sensor[i]);
 	}
@@ -119,13 +119,13 @@ static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
 	} \
 	static DEVICE_ATTR_RO(temp_probe_##name)
 
-AB_TMU_TEMP_PROBE_ATTR_RO(main, AIRBRUSH_TEMP_PROBE_MAIN);
-AB_TMU_TEMP_PROBE_ATTR_RO(ipu0, AIRBRUSH_TEMP_PROBE_IPU0);
-AB_TMU_TEMP_PROBE_ATTR_RO(ipu1, AIRBRUSH_TEMP_PROBE_IPU1);
-AB_TMU_TEMP_PROBE_ATTR_RO(ipu2, AIRBRUSH_TEMP_PROBE_IPU2);
-AB_TMU_TEMP_PROBE_ATTR_RO(ipu_tpu, AIRBRUSH_TEMP_PROBE_IPU_TPU);
-AB_TMU_TEMP_PROBE_ATTR_RO(tpu0, AIRBRUSH_TEMP_PROBE_TPU0);
-AB_TMU_TEMP_PROBE_ATTR_RO(tpu1, AIRBRUSH_TEMP_PROBE_TPU1);
+AB_TMU_TEMP_PROBE_ATTR_RO(main, AB_TMU_TEMP_PROBE_MAIN);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu0, AB_TMU_TEMP_PROBE_IPU0);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu1, AB_TMU_TEMP_PROBE_IPU1);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu2, AB_TMU_TEMP_PROBE_IPU2);
+AB_TMU_TEMP_PROBE_ATTR_RO(ipu_tpu, AB_TMU_TEMP_PROBE_IPU_TPU);
+AB_TMU_TEMP_PROBE_ATTR_RO(tpu0, AB_TMU_TEMP_PROBE_TPU0);
+AB_TMU_TEMP_PROBE_ATTR_RO(tpu1, AB_TMU_TEMP_PROBE_TPU1);
 
 static struct attribute *airbrush_tmu_attrs[] = {
 	&dev_attr_temp_probe_main.attr,
@@ -158,7 +158,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, data);
 
 	/* TODO Probe from device tree instead of a hard coded base. */
-	data->hw = devm_ab_tmu_hw_create(&pdev->dev, AIRBRUSH_TMU_BASE);
+	data->hw = devm_ab_tmu_hw_create(&pdev->dev, AB_TMU_BASE);
 	if (IS_ERR(data->hw))
 		return PTR_ERR(data->hw);
 
@@ -170,7 +170,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	 * airbrush_tmu_initialize(), requesting irq and calling
 	 * ab_tmu_hw_control().
 	 */
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
 		data->sensor[i] = devm_ab_tmu_sensor_create(&pdev->dev,
 				data->hw, i);
 		if (IS_ERR(data->sensor[i])) {

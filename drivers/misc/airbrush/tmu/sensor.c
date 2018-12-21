@@ -63,20 +63,20 @@ static void ab_tmu_enable_emulate(struct ab_tmu_hw *hw)
 {
 	u32 emul_con;
 
-	emul_con = ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON);
-	emul_con |= (1 << AIRBRUSH_EMUL_ENABLE_SHIFT);
+	emul_con = ab_tmu_hw_read(hw, AB_TMU_EMUL_CON);
+	emul_con |= (1 << AB_TMU_EMUL_ENABLE_SHIFT);
 
-	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, emul_con);
+	ab_tmu_hw_write(hw, AB_TMU_EMUL_CON, emul_con);
 }
 
 static void ab_tmu_disable_emulate(struct ab_tmu_hw *hw)
 {
 	u32 emul_con;
 
-	emul_con = ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON);
-	emul_con &= ~(1 << AIRBRUSH_EMUL_ENABLE_SHIFT);
+	emul_con = ab_tmu_hw_read(hw, AB_TMU_EMUL_CON);
+	emul_con &= ~(1 << AB_TMU_EMUL_ENABLE_SHIFT);
 
-	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, emul_con);
+	ab_tmu_hw_write(hw, AB_TMU_EMUL_CON, emul_con);
 }
 
 static void ab_tmu_set_emulate_data(struct ab_tmu_hw *hw, u16 next_time,
@@ -88,11 +88,11 @@ static void ab_tmu_set_emulate_data(struct ab_tmu_hw *hw, u16 next_time,
 	next_data &= 0x1FF;
 	if (next_time == 0x0)
 		next_time = 0x1;
-	emul_con = (ab_tmu_hw_read(hw, AIRBRUSH_EMUL_CON) >> 0) & 0x1;
-	emul_con |= (next_time << AIRBRUSH_EMUL_NEXTTIME_SHIFT) |
-		(next_data << AIRBRUSH_EMUL_DATA_SHIFT);
+	emul_con = (ab_tmu_hw_read(hw, AB_TMU_EMUL_CON) >> 0) & 0x1;
+	emul_con |= (next_time << AB_TMU_EMUL_NEXTTIME_SHIFT) |
+		(next_data << AB_TMU_EMUL_DATA_SHIFT);
 
-	ab_tmu_hw_write(hw, AIRBRUSH_EMUL_CON, emul_con);
+	ab_tmu_hw_write(hw, AB_TMU_EMUL_CON, emul_con);
 }
 
 static int ab_tmu_sensor_set_emul_temp(void *data, int temp)
@@ -133,7 +133,7 @@ struct ab_tmu_sensor *devm_ab_tmu_sensor_create(struct device *dev,
 	int err;
 	struct ab_tmu_sensor *sensor;
 
-	if (id < 0 || id >= AIRBRUSH_NUM_ALL_PROBE)
+	if (id < 0 || id >= AB_TMU_NUM_ALL_PROBE)
 		return ERR_PTR(-EINVAL);
 
 	sensor = devm_kzalloc(dev, sizeof(struct ab_tmu_sensor), GFP_KERNEL);
@@ -161,16 +161,16 @@ void ab_tmu_sensor_load_trim_info(struct ab_tmu_sensor *sensor)
 	struct ab_tmu_hw *hw = sensor->hw;
 	u32 trim_info;
 
-	trim_info = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_TRIMINFO_P(sensor->id));
+	trim_info = ab_tmu_hw_read(hw, AB_TMU_TRIMINFO_P(sensor->id));
 
-	sensor->trim.cal_type = (trim_info >> AIRBRUSH_TMU_CAL_SHIFT) &
-			AIRBRUSH_TMU_CAL_MASK;
-	if (sensor->trim.cal_type == AIRBRUSH_NO_TRIMMING)
+	sensor->trim.cal_type = (trim_info >> AB_TMU_CAL_SHIFT) &
+			AB_TMU_CAL_MASK;
+	if (sensor->trim.cal_type == AB_TMU_NO_TRIMMING)
 		return;
 
-	sensor->trim.error1 = trim_info & AIRBRUSH_TMU_TEMP_MASK;
-	sensor->trim.error2 = (trim_info >> AIRBRUSH_TMU_TEMP_SHIFT) &
-			AIRBRUSH_TMU_TEMP_MASK;
+	sensor->trim.error1 = trim_info & AB_TMU_TEMP_MASK;
+	sensor->trim.error2 = (trim_info >> AB_TMU_TEMP_SHIFT) &
+			AB_TMU_TEMP_MASK;
 }
 
 void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
@@ -196,9 +196,9 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 		/* Set 9-bit temp code for rising threshold levels */
 		threshold_code = ab_tmu_trim_cel_to_raw(&sensor->trim, temp);
 		rising_threshold = ab_tmu_hw_read(hw,
-				AIRBRUSH_THD_TEMP_RISE7_6_P(sensor->id) +
+				AB_TMU_THD_TEMP_RISE7_6_P(sensor->id) +
 				reg_off);
-		rising_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
+		rising_threshold &= ~(AB_TMU_TEMP_MASK <<
 				(16 * bit_off));
 		rising_threshold |= threshold_code << (16 * bit_off);
 
@@ -206,15 +206,15 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 		threshold_code = ab_tmu_trim_cel_to_raw(&sensor->trim,
 				temp_hist);
 		falling_threshold = ab_tmu_hw_read(hw,
-				AIRBRUSH_THD_TEMP_FALL7_6_P(sensor->id) +
+				AB_TMU_THD_TEMP_FALL7_6_P(sensor->id) +
 				reg_off);
-		falling_threshold &= ~(AIRBRUSH_TMU_TEMP_MASK <<
+		falling_threshold &= ~(AB_TMU_TEMP_MASK <<
 				(16 * bit_off));
 		falling_threshold |= threshold_code << (16 * bit_off);
 
-		ab_tmu_hw_write(hw, AIRBRUSH_THD_TEMP_RISE7_6_P(sensor->id) +
+		ab_tmu_hw_write(hw, AB_TMU_THD_TEMP_RISE7_6_P(sensor->id) +
 				reg_off, rising_threshold);
-		ab_tmu_hw_write(hw, AIRBRUSH_THD_TEMP_FALL7_6_P(sensor->id) +
+		ab_tmu_hw_write(hw, AB_TMU_THD_TEMP_FALL7_6_P(sensor->id) +
 				reg_off, falling_threshold);
 	}
 }

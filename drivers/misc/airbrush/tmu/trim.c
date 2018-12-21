@@ -16,30 +16,29 @@
 
 #include "hw.h"
 
-#define AIRBRUSH_TMU_FIRST_POINT_TRIM		25
-#define AIRBRUSH_TMU_SECOND_POINT_TRIM		85
-#define AIRBRUSH_TMU_DEFAULT_TEMP_OFFSET	50
+#define AB_TMU_FIRST_POINT_TRIM			25
+#define AB_TMU_SECOND_POINT_TRIM		85
+#define AB_TMU_DIFF_POINT_TRIM \
+	(AB_TMU_SECOND_POINT_TRIM - AB_TMU_FIRST_POINT_TRIM)
+#define AB_TMU_DEFAULT_TEMP_OFFSET		50
 
 int ab_tmu_trim_raw_to_cel(const struct ab_tmu_trim *trim, u16 raw)
 {
 	int diff_error, cel;
 
 	switch (trim->cal_type) {
-	case AIRBRUSH_NO_TRIMMING:
-	case AIRBRUSH_TWO_POINT_TRIMMING:
+	case AB_TMU_NO_TRIMMING:
+	case AB_TMU_TWO_POINT_TRIMMING:
 		diff_error = trim->error2 > trim->error1 ?
 			trim->error2 - trim->error1 : 1;
-		cel = (raw - trim->error1) *
-			(AIRBRUSH_TMU_SECOND_POINT_TRIM -
-			AIRBRUSH_TMU_FIRST_POINT_TRIM) / diff_error +
-			AIRBRUSH_TMU_FIRST_POINT_TRIM;
+		cel = (raw - trim->error1) * AB_TMU_DIFF_POINT_TRIM /
+			diff_error + AB_TMU_FIRST_POINT_TRIM;
 		break;
-	case AIRBRUSH_ONE_POINT_TRIMMING:
-		cel = raw - trim->error1 +
-			AIRBRUSH_TMU_FIRST_POINT_TRIM;
+	case AB_TMU_ONE_POINT_TRIMMING:
+		cel = raw - trim->error1 + AB_TMU_FIRST_POINT_TRIM;
 		break;
 	default:
-		cel = raw - AIRBRUSH_TMU_DEFAULT_TEMP_OFFSET;
+		cel = raw - AB_TMU_DEFAULT_TEMP_OFFSET;
 		break;
 	}
 
@@ -51,20 +50,17 @@ u16 ab_tmu_trim_cel_to_raw(const struct ab_tmu_trim *trim, int cel)
 	u16 raw;
 
 	switch (trim->cal_type) {
-	case AIRBRUSH_NO_TRIMMING:
-	case AIRBRUSH_TWO_POINT_TRIMMING:
-		raw = (cel - AIRBRUSH_TMU_FIRST_POINT_TRIM) *
+	case AB_TMU_NO_TRIMMING:
+	case AB_TMU_TWO_POINT_TRIMMING:
+		raw = (cel - AB_TMU_FIRST_POINT_TRIM) *
 			(trim->error2 - trim->error1) /
-			(AIRBRUSH_TMU_SECOND_POINT_TRIM -
-			AIRBRUSH_TMU_FIRST_POINT_TRIM) +
-			trim->error1;
+			AB_TMU_DIFF_POINT_TRIM + trim->error1;
 		break;
-	case AIRBRUSH_ONE_POINT_TRIMMING:
-		raw = cel + trim->error1 -
-			AIRBRUSH_TMU_FIRST_POINT_TRIM;
+	case AB_TMU_ONE_POINT_TRIMMING:
+		raw = cel + trim->error1 - AB_TMU_FIRST_POINT_TRIM;
 		break;
 	default:
-		raw = cel + AIRBRUSH_TMU_DEFAULT_TEMP_OFFSET;
+		raw = cel + AB_TMU_DEFAULT_TEMP_OFFSET;
 		break;
 	}
 

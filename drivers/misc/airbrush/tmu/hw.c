@@ -148,23 +148,23 @@ void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
 	int i;
 	u32 con, con1, int_en;
 
-	int_en = enable ? AIRBRUSH_TMU_INT_EN : 0;
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++)
-		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTEN_P(i), int_en);
+	int_en = enable ? AB_TMU_INT_EN : 0;
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
+		ab_tmu_hw_write(hw, AB_TMU_INTEN_P(i), int_en);
 
-	con1 = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL1);
-	con1 |= AIRBRUSH_NUM_REMOTE_PROBE << AIRBRUSH_REMOTE_PROBE_SHIFT;
-	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL1, con1);
+	con1 = ab_tmu_hw_read(hw, AB_TMU_CONTROL1);
+	con1 |= AB_TMU_NUM_REMOTE_PROBE << AB_TMU_REMOTE_PROBE_SHIFT;
+	ab_tmu_hw_write(hw, AB_TMU_CONTROL1, con1);
 
-	con = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_CONTROL);
+	con = ab_tmu_hw_read(hw, AB_TMU_CONTROL);
 	if (enable) {
-		con |= (1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
-		con |= (1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
+		con |= (1 << AB_TMU_EN_TRIP_SHIFT);
+		con |= (1 << AB_TMU_CORE_EN_SHIFT);
 	} else {
-		con &= ~(1 << AIRBRUSH_TMU_EN_TRIP_SHIFT);
-		con &= ~(1 << AIRBRUSH_TMU_CORE_EN_SHIFT);
+		con &= ~(1 << AB_TMU_EN_TRIP_SHIFT);
+		con &= ~(1 << AB_TMU_CORE_EN_SHIFT);
 	}
-	ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_CONTROL, con);
+	ab_tmu_hw_write(hw, AB_TMU_CONTROL, con);
 }
 
 void ab_tmu_hw_clear_irqs(struct ab_tmu_hw *hw)
@@ -172,9 +172,9 @@ void ab_tmu_hw_clear_irqs(struct ab_tmu_hw *hw)
 	int i;
 	u32 val_irq;
 
-	for (i = 0; i < AIRBRUSH_NUM_ALL_PROBE; i++) {
-		val_irq = ab_tmu_hw_read(hw, AIRBRUSH_TMU_REG_INTPEND_P(i));
-		ab_tmu_hw_write(hw, AIRBRUSH_TMU_REG_INTPEND_P(i), val_irq);
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
+		val_irq = ab_tmu_hw_read(hw, AB_TMU_INTPEND_P(i));
+		ab_tmu_hw_write(hw, AB_TMU_INTPEND_P(i), val_irq);
 	}
 }
 
@@ -182,7 +182,7 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id)
 {
 	/*
 	 * Current temperature register is grouped by 0~1, 2~4, 5~7, shown
-	 * as register macro AIRBRUSH_TMU_REG_CURRENT_TEMP*.
+	 * as register macro AB_TMU_CURRENT_TEMP*.
 	 * reg_id_min is the minimum id in the group.
 	 */
 	u32 reg_offset, reg_id_min, reg_shift;
@@ -190,27 +190,27 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id)
 	switch (id) {
 	case 0:
 	case 1:
-		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP0_1;
+		reg_offset = AB_TMU_CURRENT_TEMP0_1;
 		reg_id_min = 0;
 		break;
 	case 2:
 	case 3:
 	case 4:
-		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP2_4;
+		reg_offset = AB_TMU_CURRENT_TEMP2_4;
 		reg_id_min = 2;
 		break;
 	case 5:
 	case 6:
 	case 7:
-		reg_offset = AIRBRUSH_TMU_REG_CURRENT_TEMP5_7;
+		reg_offset = AB_TMU_CURRENT_TEMP5_7;
 		reg_id_min = 5;
 		break;
 	default:
 		dev_warn(hw->dev, "Bug: bad sensor probe id %d", id);
 		return 0;
 	}
-	reg_shift = AIRBRUSH_TMU_TEMP_SHIFT * (id - reg_id_min);
+	reg_shift = AB_TMU_TEMP_SHIFT * (id - reg_id_min);
 
 	return (ab_tmu_hw_read(hw, reg_offset) >> reg_shift)
-			& AIRBRUSH_TMU_TEMP_MASK;
+			& AB_TMU_TEMP_MASK;
 }
