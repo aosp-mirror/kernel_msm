@@ -237,6 +237,11 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	if (bl_lvl == bl->bl_actual && bl->last_state == bd->props.state)
 		goto done;
 
+	if (!bl->allow_bl_update) {
+		bl->bl_update_pending = true;
+		goto done;
+	}
+
 	if (dsi_panel_initialized(panel) && bl->update_bl) {
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
@@ -246,6 +251,7 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 			pr_err("unable to set backlight (%d)\n", rc);
 			goto done;
 		}
+		bl->bl_update_pending = false;
 	}
 	bl->bl_actual = bl_lvl;
 	bl->last_state = bd->props.state;
@@ -1032,6 +1038,7 @@ int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config
 	int rc = 0;
 	u32 val = 0;
 	const char *bl_type;
+	const char *data;
 	struct dsi_parser_utils *utils = &panel->utils;
 
 	bl_type = utils->get_property(utils->data,
@@ -1049,6 +1056,17 @@ int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config
 		pr_debug("[%s] bl-pmic-control-type unknown-%s\n",
 			 panel->name, bl_type);
 		bl->type = DSI_BACKLIGHT_UNKNOWN;
+	}
+
+	data = utils->get_property(utils->data, "qcom,bl-update-flag", NULL);
+	if (!data) {
+		bl->bl_update = BL_UPDATE_NONE;
+	} else if (!strcmp(data, "delay_until_first_frame")) {
+		bl->bl_update = BL_UPDATE_DELAY_UNTIL_FIRST_FRAME;
+	} else {
+		pr_debug("[%s] No valid bl-update-flag: %s\n",
+						panel->name, data);
+		bl->bl_update = BL_UPDATE_NONE;
 	}
 
 	bl->bl_scale = MAX_BL_SCALE_LEVEL;
