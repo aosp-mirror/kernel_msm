@@ -513,6 +513,16 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->silego.is_power_up = true;
 	}
 
+	if (!ctrl->is_cci_init) {
+		rc = camera_io_init(&(ctrl->io_master_info));
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"cam io init failed: rc: %d", rc);
+			return rc;
+		}
+		ctrl->is_cci_init = true;
+	}
+
 	if (!ctrl->cap_sense.is_cci_init) {
 		rc = camera_io_init(&(ctrl->cap_sense.io_master_info));
 		if (rc < 0) {
@@ -523,20 +533,6 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		}
 		ctrl->cap_sense.is_cci_init = true;
 	}
-
-	/* Cap sense need wait 1 ms for hw ready */
-	usleep_range(1000, 3000);
-
-	rc = sx9320_cleanup_nirq(ctrl);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"clean up cap sense irq failed: rc: %d", rc);
-		ctrl->silego.is_validated = false;
-		ctrl->cap_sense.is_validated = false;
-		return rc;
-	}
-
-	ctrl->cap_sense.is_validated = true;
 
 	/* Silego i2c need at least 1 ms after NIRQ clean up */
 	usleep_range(1000, 3000);
@@ -551,15 +547,17 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	}
 	ctrl->silego.is_validated = true;
 
-	if (!ctrl->is_cci_init) {
-		rc = camera_io_init(&(ctrl->io_master_info));
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"cam io init failed: rc: %d", rc);
-			return rc;
-		}
-		ctrl->is_cci_init = true;
+	/* Cap sense need wait 1 ms for hw ready */
+	usleep_range(1000, 3000);
+
+	rc = sx9320_cleanup_nirq(ctrl);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"clean up cap sense irq failed: rc: %d", rc);
+		ctrl->cap_sense.is_validated = false;
+		return rc;
 	}
+	ctrl->cap_sense.is_validated = true;
 
 	return rc;
 }
@@ -777,7 +775,7 @@ static int lm36011_set_up_cap_sense_irq(
 
 	switch (gpio_index) {
 	case CSENSE_PROXAVG_READ:
-		dev_info(dev, "setup irq CSENSE_PROXAVG_READ as IRQF_TRIGGER_FALLING");
+		dev_dbg(dev, "setup irq CSENSE_PROXAVG_READ as IRQF_TRIGGER_FALLING");
 		irq_name = "cap_sense_irq";
 		irq_name = (ctrl->type == LASER_FLOOD) ?
 			"cap_sense_irq_flood" : "cap_sense_irq_dot";
@@ -1060,6 +1058,13 @@ static ssize_t led_laser_enable_store(struct device *dev,
 	int rc;
 	bool value;
 
+	if (!ctrl->silego.is_validated || !ctrl->cap_sense.is_validated) {
+		dev_err(dev, "Safety ic not valid, silego:cap sense (%d, %d)",
+			ctrl->silego.is_validated,
+			ctrl->cap_sense.is_validated);
+		return -EINVAL;
+	}
+
 	if (!ctrl->is_certified) {
 		dev_err(dev, "Cannot enable laser due to uncertified");
 		return -EINVAL;
@@ -1080,9 +1085,13 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		lm36011_enable_gpio_irq(dev);
 		rc = lm36011_write_data(ctrl,
 			ENABLE_REG, IR_ENABLE_MODE);
+		if (rc == 0)
+			dev_info(dev, "Laser enabled");
 	} else {
 		lm36011_disable_gpio_irq(dev);
 		rc = lm36011_power_down(ctrl);
+		if (rc == 0)
+			dev_info(dev, "Laser disabled");
 	}
 	ctrl->silego.vcsel_fault_count = 0;
 	ctrl->silego.is_vcsel_fault = false;
@@ -1516,11 +1525,7 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->work_queue = create_workqueue(device_name);
 
 	/* Read device id */
-	rc = lm36011_power_up(ctrl);
-	if (rc != 0) {
-		lm36011_power_down(ctrl);
-		goto error_destroy_device;
-	}
+	lm36011_power_up(ctrl);
 
 	rc = lm36011_read_data(ctrl,
 		DEVICE_ID_REG, &device_id);
