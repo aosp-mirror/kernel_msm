@@ -1056,18 +1056,38 @@ config TOUCHSCREEN_PCAP
 	  To compile this driver as a module, choose M here: the
 	  module will be called pcap_ts.
 
-config TOUCHSCREEN_RM_TS
-	tristate "Raydium I2C Touchscreen"
+
+config TOUCHSCREEN_RM_TS_UB128BLX01
+	select TOUCHSCREEN_RM_TS
 	depends on I2C
 	depends on GPIOLIB || COMPILE_TEST
+	tristate "Raydium I2C Touchscreen UB128BLX01"
 	help
 	  Say Y here if you have Raydium series I2C touchscreen,
-	  such as RM32380, connected to your system.
+	  such as UB128BLX01, connected to your system.
 
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called raydium_i2c_ts.
+
+config TOUCHSCREEN_RM_TS_RAY_390P
+	select TOUCHSCREEN_RM_TS
+	depends on I2C
+	depends on GPIOLIB || COMPILE_TEST
+
+	tristate "Raydium I2C Touchscreen RAY_390P"
+	help
+	  Say Y here if you have Raydium series I2C touchscreen,
+	  such as RAY_390P, connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called raydium_i2c_ts.
+
+config TOUCHSCREEN_RM_TS
+	bool
 
 config TOUCHSCREEN_SILEAD
 	tristate "Silead I2C touchscreen"
@@ -1113,7 +1133,6 @@ config TOUCHSCREEN_STMPE
 	help
 	  Say Y here if you want support for STMicroelectronics
 	  STMPE touchscreen controllers.
-
 	  To compile this driver as a module, choose M here: the
 	  module will be called stmpe-ts.
 

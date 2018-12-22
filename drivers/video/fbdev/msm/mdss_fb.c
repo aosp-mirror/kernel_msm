@@ -91,7 +91,6 @@ static u32 mdss_fb_pseudo_palette[16] = {
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff
 };
-static int auo_dsi_boost_mode  = 0;
 static struct msm_mdp_interface *mdp_instance;
 
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
@@ -905,61 +904,6 @@ static ssize_t mdss_fb_get_persist_mode(struct device *dev,
 
 	return ret;
 }
-static ssize_t mdss_fb_get_boost_mode(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	int ret;
-
-	ret = scnprintf(buf, PAGE_SIZE, "%d\n", auo_dsi_boost_mode);
-
-	pr_err("%s: ret: %d\n", __func__, ret);
-	return ret;
-}
-
-static ssize_t mdss_fb_set_boost_mode(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	int rc = 0;
-	int boost_mode = 0;
-
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = fbi->par;
-	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
-
-	ctrl = container_of(dev_get_platdata(&mfd->pdev->dev),
-				struct mdss_dsi_ctrl_pdata, panel_data);
-	if (!ctrl) {
-		pr_err("%s: DSI ctrl not available\n", __func__);
-		return -EINVAL;
-	}
-
-	rc = kstrtoint(buf, 10, &boost_mode);
-	pr_err("%s buf=%s\n", __func__, buf);
-	if (rc) {
-		pr_err("kstrtoint failed. rc=%d\n", rc);
-		return rc;
-	}
-
-	if (mfd->panel_info->type !=  MIPI_CMD_PANEL) {
-		pr_err("support for command mode panel only\n");
-	} else {
-		if (boost_mode != 0) {
-			if (!auo_dsi_boost_mode) {
-				mdss_dsi_brightness_boost_on(ctrl);
-				auo_dsi_boost_mode = 1;
-			}
-		} else {
-			if (auo_dsi_boost_mode) {
-				mdss_dsi_brightness_boost_off(ctrl);
-				auo_dsi_boost_mode = 0;
-			}
-		}
-	}
-
-	return count;
-}
-
-
 static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -988,9 +932,10 @@ static DEVICE_ATTR(msm_fb_persist_mode, 0644,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, 0444, mdss_fb_idle_pc_notify, NULL);
 
+#ifdef TARGET_HAVE_AUO_HBM_MODE
 static DEVICE_ATTR(msm_fb_boost_mode, 0644,
-	mdss_fb_get_boost_mode, mdss_fb_set_boost_mode);
-
+		mdss_fb_get_boost_mode, mdss_fb_set_boost_mode);
+#endif
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
@@ -1005,7 +950,9 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
+#ifdef TARGET_HAVE_AUO_HBM_MODE
 	&dev_attr_msm_fb_boost_mode.attr,
+#endif
 	NULL,
 };
 

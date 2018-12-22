@@ -14,7 +14,7 @@
 &soc {
 	i2c@78b9000 {
 		raydium@39 {
-			compatible = "raydium,raydium-ts";
+			compatible = "raydium,raydium-ts-ray-390p";
 			reg = <0x39>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <98 0x2008>;
