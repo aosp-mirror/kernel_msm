@@ -12,7 +12,7 @@
 
 /dts-v1/;
 
-
+#include "sdxprairie.dtsi"
 #include "sdxprairie-rumi.dtsi"
 
 / {
@@ -20,4 +20,8 @@
 	compatible = "qcom,sdxprairie-rumi",
 		"qcom,sdxprairie", "qcom,rumi";
 	qcom,board-id = <15 0>;
+};
+
+&qnand_1 {
+	status = "ok";
 };

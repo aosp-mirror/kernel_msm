@@ -1841,7 +1841,9 @@ static int f2fs_quota_off(struct super_block *sb, int type)
 	if (!inode || !igrab(inode))
 		return dquot_quota_off(sb, type);
 
-	f2fs_quota_sync(sb, type);
+	err = f2fs_quota_sync(sb, type);
+	if (err)
+		goto out_put;
 
 	err = dquot_quota_off(sb, type);
 	if (err || f2fs_sb_has_quota_ino(sb))
@@ -1860,9 +1862,20 @@ out_put:
 void f2fs_quota_off_umount(struct super_block *sb)
 {
 	int type;
+	int err;
 
-	for (type = 0; type < MAXQUOTAS; type++)
-		f2fs_quota_off(sb, type);
+	for (type = 0; type < MAXQUOTAS; type++) {
+		err = f2fs_quota_off(sb, type);
+		if (err) {
+			int ret = dquot_quota_off(sb, type);
+
+			f2fs_msg(sb, KERN_ERR,
+				"Fail to turn off disk quota "
+				"(type: %d, err: %d, ret:%d), Please "
+				"run fsck to fix it.", type, err, ret);
+			set_sbi_flag(F2FS_SB(sb), SBI_NEED_FSCK);
+		}
+	}
 }
 
 static int f2fs_get_projid(struct inode *inode, kprojid_t *projid)
@@ -2637,6 +2650,16 @@ static void f2fs_tuning_parameters(struct f2fs_sb_info *sbi)
 	}
 }
 
+static void f2fs_cleanup_inodes(struct f2fs_sb_info *sbi)
+{
+	struct super_block *sb = sbi->sb;
+
+	sync_filesystem(sb);
+	shrink_dcache_sb(sb);
+	evict_inodes(sb);
+	f2fs_shrink_extent_tree(sbi, __count_extent_cache(sbi));
+}
+
 static int f2fs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct f2fs_sb_info *sbi;
@@ -3011,6 +3034,8 @@ free_meta:
 	 * falls into an infinite loop in sync_meta_pages().
 	 */
 	truncate_inode_pages_final(META_MAPPING(sbi));
+	/* cleanup recovery and quota inodes */
+	f2fs_cleanup_inodes(sbi);
 #ifdef CONFIG_QUOTA
 free_sysfs:
 #endif
@@ -3057,7 +3082,6 @@ free_sbi:
 	/* give only one another chance */
 	if (retry) {
 		retry = false;
-		shrink_dcache_sb(sb);
 		goto try_onemore;
 	}
 	return err;

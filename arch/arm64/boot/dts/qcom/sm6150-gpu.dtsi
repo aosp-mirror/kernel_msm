@@ -14,7 +14,7 @@
 	pil_gpu: qcom,kgsl-hyp {
 		compatible = "qcom,pil-tz-generic";
 		qcom,pas-id = <13>;
-		qcom,firmware-name = "a608_zap";
+		qcom,firmware-name = "a612_zap";
 	};
 
 	msm_bus: qcom,kgsl-busmon {
@@ -41,7 +41,7 @@
 		interrupt-names = "kgsl_3d0_irq";
 		qcom,id = <0>;
 
-		qcom,chipid = <0x06000800>;
+		qcom,chipid = <0x06010200>;
 
 		qcom,initial-pwrlevel = <5>;
 
@@ -57,7 +57,7 @@
 		qcom,snapshot-size = <1048576>;
 
 		/* base addr, size */
-		qcom,gpu-qdss-stm = <0x06900000 0x40000>;
+		qcom,gpu-qdss-stm = <0x16140000 0x40000>;
 		#cooling-cells = <2>;
 
 		clocks = <&clock_gpucc GPU_CC_GX_GFX3D_CLK>,

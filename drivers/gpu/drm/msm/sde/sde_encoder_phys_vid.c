@@ -113,6 +113,7 @@ static void drm_mode_to_intf_timing_params(
 	timing->underflow_clr = 0xff;
 	timing->hsync_skew = mode->hskew;
 	timing->v_front_porch_fixed = vid_enc->base.vfp_cached;
+	timing->compression_en = false;
 
 	/* DSI controller cannot handle active-low sync signals. */
 	if (phys_enc->hw_intf->cap->type == INTF_DSI) {
@@ -143,6 +144,16 @@ static void drm_mode_to_intf_timing_params(
 		timing->h_back_porch = timing->h_back_porch >> 1;
 		timing->h_front_porch = timing->h_front_porch >> 1;
 		timing->hsync_pulse_width = timing->hsync_pulse_width >> 1;
+
+		if (vid_enc->base.comp_type == MSM_DISPLAY_COMPRESSION_DSC &&
+				vid_enc->base.comp_ratio) {
+			timing->compression_en = true;
+			timing->extra_dto_cycles =
+				vid_enc->base.dsc_extra_pclk_cycle_cnt;
+			timing->width += vid_enc->base.dsc_extra_disp_width;
+			timing->h_back_porch +=
+				vid_enc->base.dsc_extra_disp_width;
+		}
 	}
 
 	/*
@@ -874,6 +885,11 @@ static void sde_encoder_phys_vid_enable(struct sde_encoder_phys *phys_enc)
 	if (ctl->ops.update_bitmask_merge3d && phys_enc->hw_pp->merge_3d)
 		ctl->ops.update_bitmask_merge3d(ctl,
 			phys_enc->hw_pp->merge_3d->idx, 1);
+
+	if (phys_enc->hw_intf->cap->type == INTF_DP &&
+		phys_enc->comp_type == MSM_DISPLAY_COMPRESSION_DSC &&
+		phys_enc->comp_ratio && ctl->ops.update_bitmask_periph)
+		ctl->ops.update_bitmask_periph(ctl, intf->idx, 1);
 
 skip_flush:
 	SDE_DEBUG_VIDENC(vid_enc, "update pending flush ctl %d intf %d\n",

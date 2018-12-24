@@ -220,6 +220,7 @@ enum sde_enc_rc_states {
  * @recovery_events_enabled:	status of hw recovery feature enable by client
  * @elevated_ahb_vote:		increase AHB bus speed for the first frame
  *				after power collapse
+ * @pm_qos_cpu_req:		pm_qos request for cpu frequency
  */
 struct sde_encoder_virt {
 	struct drm_encoder base;
@@ -275,77 +276,47 @@ struct sde_encoder_virt {
 
 	bool recovery_events_enabled;
 	bool elevated_ahb_vote;
+	struct pm_qos_request pm_qos_cpu_req;
 };
 
 #define to_sde_encoder_virt(x) container_of(x, struct sde_encoder_virt, base)
 
-static void _sde_encoder_pm_qos_add_request(struct drm_encoder *drm_enc)
+static void _sde_encoder_pm_qos_add_request(struct drm_encoder *drm_enc,
+	struct sde_kms *sde_kms)
 {
-	struct msm_drm_private *priv;
-	struct sde_kms *sde_kms;
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 	struct pm_qos_request *req;
 	u32 cpu_mask;
 	u32 cpu_dma_latency;
 	int cpu;
 
-	if (!drm_enc->dev || !drm_enc->dev->dev_private) {
-		SDE_ERROR("drm device invalid\n");
-		return;
-	}
-
-	priv = drm_enc->dev->dev_private;
-	if (!priv->kms) {
-		SDE_ERROR("invalid kms\n");
-		return;
-	}
-
-	sde_kms = to_sde_kms(priv->kms);
-	if (!sde_kms || !sde_kms->catalog)
+	if (!sde_kms->catalog || !sde_kms->catalog->perf.cpu_mask)
 		return;
 
 	cpu_mask = sde_kms->catalog->perf.cpu_mask;
 	cpu_dma_latency = sde_kms->catalog->perf.cpu_dma_latency;
-	if (!cpu_mask)
-		return;
 
-	if (atomic_inc_return(&sde_kms->pm_qos_counts) == 1) {
-		req = &sde_kms->pm_qos_cpu_req;
-		req->type = PM_QOS_REQ_AFFINE_CORES;
-		cpumask_empty(&req->cpus_affine);
-		for_each_possible_cpu(cpu) {
-			if ((1 << cpu) & cpu_mask)
-				cpumask_set_cpu(cpu, &req->cpus_affine);
-		}
-		pm_qos_add_request(req, PM_QOS_CPU_DMA_LATENCY,
-							cpu_dma_latency);
+	req = &sde_enc->pm_qos_cpu_req;
+	req->type = PM_QOS_REQ_AFFINE_CORES;
+	cpumask_empty(&req->cpus_affine);
+	for_each_possible_cpu(cpu) {
+		if ((1 << cpu) & cpu_mask)
+			cpumask_set_cpu(cpu, &req->cpus_affine);
 	}
+	pm_qos_add_request(req, PM_QOS_CPU_DMA_LATENCY, cpu_dma_latency);
 
 	SDE_EVT32_VERBOSE(DRMID(drm_enc), cpu_mask, cpu_dma_latency);
 }
 
-static void _sde_encoder_pm_qos_remove_request(struct drm_encoder *drm_enc)
+static void _sde_encoder_pm_qos_remove_request(struct drm_encoder *drm_enc,
+	struct sde_kms *sde_kms)
 {
-	struct msm_drm_private *priv;
-	struct sde_kms *sde_kms;
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 
-	if (!drm_enc->dev || !drm_enc->dev->dev_private) {
-		SDE_ERROR("drm device invalid\n");
-		return;
-	}
-
-	priv = drm_enc->dev->dev_private;
-	if (!priv->kms) {
-		SDE_ERROR("invalid kms\n");
-		return;
-	}
-
-	sde_kms = to_sde_kms(priv->kms);
-	if (!sde_kms || !sde_kms->catalog || !sde_kms->catalog->perf.cpu_mask)
+	if (!sde_kms->catalog || !sde_kms->catalog->perf.cpu_mask)
 		return;
 
-	atomic_add_unless(&sde_kms->pm_qos_counts, -1, 0);
-	if (atomic_read(&sde_kms->pm_qos_counts) == 0)
-		pm_qos_remove_request(&sde_kms->pm_qos_cpu_req);
+	pm_qos_remove_request(&sde_enc->pm_qos_cpu_req);
 }
 
 static struct drm_connector_state *_sde_encoder_get_conn_state(
@@ -2165,11 +2136,11 @@ static int _sde_encoder_resource_control_helper(struct drm_encoder *drm_enc,
 		_sde_encoder_irq_control(drm_enc, true);
 
 		if (is_cmd_mode)
-			_sde_encoder_pm_qos_add_request(drm_enc);
+			_sde_encoder_pm_qos_add_request(drm_enc, sde_kms);
 
 	} else {
 		if (is_cmd_mode)
-			_sde_encoder_pm_qos_remove_request(drm_enc);
+			_sde_encoder_pm_qos_remove_request(drm_enc, sde_kms);
 
 		/* disable all the irq */
 		_sde_encoder_irq_control(drm_enc, false);
@@ -3133,6 +3104,14 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 		phys->comp_type = comp_info->comp_type;
 		phys->comp_ratio = comp_info->comp_ratio;
 		phys->wide_bus_en = mode_info.wide_bus_en;
+
+		if (phys->comp_type == MSM_DISPLAY_COMPRESSION_DSC) {
+			phys->dsc_extra_pclk_cycle_cnt =
+				comp_info->dsc_info.pclk_per_line;
+			phys->dsc_extra_disp_width =
+				comp_info->dsc_info.extra_width;
+		}
+
 		if (phys != sde_enc->cur_master) {
 			/**
 			 * on DMS request, the encoder will be enabled
@@ -3547,6 +3526,7 @@ static inline void _sde_encoder_trigger_flush(struct drm_encoder *drm_enc,
 	unsigned long lock_flags;
 	struct sde_encoder_virt *sde_enc;
 	int pend_ret_fence_cnt;
+	struct sde_connector *c_conn;
 
 	if (!drm_enc || !phys) {
 		SDE_ERROR("invalid argument(s), drm_enc %d, phys_enc %d\n",
@@ -3555,6 +3535,7 @@ static inline void _sde_encoder_trigger_flush(struct drm_encoder *drm_enc,
 	}
 
 	sde_enc = to_sde_encoder_virt(drm_enc);
+	c_conn = to_sde_connector(phys->connector);
 
 	if (!phys->hw_pp) {
 		SDE_ERROR("invalid pingpong hw\n");
@@ -3582,6 +3563,15 @@ static inline void _sde_encoder_trigger_flush(struct drm_encoder *drm_enc,
 		atomic_inc(&phys->pending_retire_fence_cnt);
 
 	pend_ret_fence_cnt = atomic_read(&phys->pending_retire_fence_cnt);
+
+	/* perform peripheral flush on every frame update for dp dsc */
+	if (phys->hw_intf && phys->hw_intf->cap->type == INTF_DP &&
+			phys->comp_type == MSM_DISPLAY_COMPRESSION_DSC &&
+			phys->comp_ratio && ctl->ops.update_bitmask_periph &&
+			c_conn->ops.update_pps) {
+		c_conn->ops.update_pps(phys->connector, NULL, c_conn->display);
+		ctl->ops.update_bitmask_periph(ctl, phys->hw_intf->idx, 1);
+	}
 
 	if ((extra_flush && extra_flush->pending_flush_mask)
 			&& ctl->ops.update_pending_flush)

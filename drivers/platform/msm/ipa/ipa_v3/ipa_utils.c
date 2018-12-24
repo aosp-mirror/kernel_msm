@@ -2042,13 +2042,13 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 	[IPA_4_5][IPA_CLIENT_WLAN1_PROD]          = {
 			true, IPA_v4_5_GROUP_UL_DL_SRC,
 			true,
-			IPA_DPS_HPS_REP_SEQ_TYPE_2PKT_PROC_PASS_NO_DEC_UCP_DMAP,
+			IPA_DPS_HPS_SEQ_TYPE_2ND_PKT_PROCESS_PASS_NO_DEC_UCP,
 			QMB_MASTER_SELECT_DDR,
 			{ 9, 12, 8, 16, IPA_EE_AP, GSI_SMART_PRE_FETCH, 4 } },
 	[IPA_4_5][IPA_CLIENT_USB_PROD]            = {
 			true, IPA_v4_5_GROUP_UL_DL_SRC,
 			true,
-			IPA_DPS_HPS_REP_SEQ_TYPE_2PKT_PROC_PASS_NO_DEC_UCP_DMAP,
+			IPA_DPS_HPS_SEQ_TYPE_2ND_PKT_PROCESS_PASS_NO_DEC_UCP,
 			QMB_MASTER_SELECT_DDR,
 			{ 1, 0, 8, 16, IPA_EE_AP, GSI_ESCAPE_BUF_ONLY, 0 } },
 	[IPA_4_5][IPA_CLIENT_APPS_LAN_PROD]	  = {
@@ -2060,7 +2060,7 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 	[IPA_4_5][IPA_CLIENT_APPS_WAN_PROD]	  = {
 			true, IPA_v4_5_GROUP_UL_DL_SRC,
 			true,
-			IPA_DPS_HPS_REP_SEQ_TYPE_2PKT_PROC_PASS_NO_DEC_UCP_DMAP,
+			IPA_DPS_HPS_SEQ_TYPE_2ND_PKT_PROCESS_PASS_NO_DEC_UCP,
 			QMB_MASTER_SELECT_DDR,
 			{ 2, 7, 16, 32, IPA_EE_AP, GSI_SMART_PRE_FETCH, 8 } },
 	[IPA_4_5][IPA_CLIENT_APPS_CMD_PROD]	  = {
@@ -2072,13 +2072,13 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 	[IPA_4_5][IPA_CLIENT_ODU_PROD]            = {
 			true, IPA_v4_5_GROUP_UL_DL_SRC,
 			true,
-			IPA_DPS_HPS_REP_SEQ_TYPE_2PKT_PROC_PASS_NO_DEC_UCP_DMAP,
+			IPA_DPS_HPS_SEQ_TYPE_2ND_PKT_PROCESS_PASS_NO_DEC_UCP,
 			QMB_MASTER_SELECT_DDR,
 			{ 10, 13, 8, 19, IPA_EE_AP, GSI_ESCAPE_BUF_ONLY, 0 } },
 	[IPA_4_5][IPA_CLIENT_ETHERNET_PROD]	  = {
 			true, IPA_v4_5_GROUP_UL_DL_SRC,
 			true,
-			IPA_DPS_HPS_REP_SEQ_TYPE_2PKT_PROC_PASS_NO_DEC_UCP_DMAP,
+			IPA_DPS_HPS_SEQ_TYPE_2ND_PKT_PROCESS_PASS_NO_DEC_UCP,
 			QMB_MASTER_SELECT_DDR,
 			{ 12, 0, 8, 16, IPA_EE_UC, GSI_SMART_PRE_FETCH, 4 } },
 	[IPA_4_5][IPA_CLIENT_Q6_WAN_PROD]         = {
@@ -2161,6 +2161,12 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
 			{ 16, 10, 9, 9, IPA_EE_AP, GSI_ESCAPE_BUF_ONLY, 0 } },
+	[IPA_4_5][IPA_CLIENT_APPS_WAN_COAL_CONS]       = {
+			true, IPA_v4_5_GROUP_UL_DL_DST,
+			false,
+			IPA_DPS_HPS_SEQ_TYPE_INVALID,
+			QMB_MASTER_SELECT_DDR,
+			{ 13, 4, 8, 11, IPA_EE_AP, GSI_SMART_PRE_FETCH, 4 } },
 	[IPA_4_5][IPA_CLIENT_APPS_WAN_CONS]       = {
 			true, IPA_v4_5_GROUP_UL_DL_DST,
 			false,
@@ -4362,6 +4368,8 @@ const char *ipa3_get_aggr_type_str(enum ipa_aggr_type aggr_type)
 			return "GENERIC";
 	case (IPA_QCMAP):
 			return "QCMAP";
+	case (IPA_COALESCE):
+			return "COALESCE";
 	}
 	return "undefined";
 }
@@ -4503,6 +4511,19 @@ int ipa3_cfg_ep_aggr(u32 clnt_hdl, const struct ipa_ep_cfg_aggr *ep_aggr)
 			ipa_assert();
 			res = -EINVAL;
 			goto complete;
+		}
+		/*
+		 * HW bug on IPA4.5 where gran is used from pipe 0 instead of
+		 * coal pipe. Add this check to make sure that pipe 0 will
+		 * use gran 0 because that is what the coal pipe will use.
+		 */
+		if (ipa3_ctx->ipa_hw_type == IPA_HW_v4_5 &&
+		    ipa3_get_client_mapping(clnt_hdl) ==
+		    IPA_CLIENT_APPS_WAN_COAL_CONS &&
+		    ipa3_ctx->ep[clnt_hdl].cfg.aggr.pulse_generator != 0) {
+			IPAERR("coal pipe using GRAN_SEL = %d\n",
+			       ipa3_ctx->ep[clnt_hdl].cfg.aggr.pulse_generator);
+			ipa_assert();
 		}
 	} else {
 		/*
@@ -6162,7 +6183,6 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_get_ipc_logbuf = ipa3_get_ipc_logbuf;
 	api_ctrl->ipa_get_ipc_logbuf_low = ipa3_get_ipc_logbuf_low;
 	api_ctrl->ipa_rx_poll = ipa3_rx_poll;
-	api_ctrl->ipa_recycle_wan_skb = ipa3_recycle_wan_skb;
 	api_ctrl->ipa_setup_uc_ntn_pipes = ipa3_setup_uc_ntn_pipes;
 	api_ctrl->ipa_tear_down_uc_offload_pipes =
 		ipa3_tear_down_uc_offload_pipes;
