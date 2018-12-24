@@ -65,7 +65,7 @@ static void ab_tmu_sensor_set_threshold_fall(struct ab_tmu_sensor *sensor,
 	ab_tmu_sensor_set_threshold(sensor, thd_off, thd_shift, temp);
 }
 
-static int ab_tmu_sensor_get_temp(void *data, int *temp)
+static int ab_tmu_sensor_op_get_temp(void *data, int *temp)
 {
 	struct ab_tmu_sensor *sensor = data;
 	struct ab_tmu_hw *hw = sensor->hw;
@@ -126,7 +126,7 @@ static void ab_tmu_set_emulate_data(struct ab_tmu_hw *hw, u16 next_time,
 	ab_tmu_hw_write(hw, AB_TMU_EMUL_CON, emul_con);
 }
 
-static int ab_tmu_sensor_set_emul_temp(void *data, int temp)
+static int ab_tmu_sensor_op_set_emul_temp(void *data, int temp)
 {
 	struct ab_tmu_sensor *sensor = data;
 	struct ab_tmu_hw *hw = sensor->hw;
@@ -153,9 +153,13 @@ static int ab_tmu_sensor_set_emul_temp(void *data, int temp)
 	return ret;
 }
 
+/*
+ * All of the sensor ops should get pcie lock before accessing tmu
+ * registers.
+ */
 static struct thermal_zone_of_device_ops ab_tmu_sensor_ops = {
-	.get_temp = ab_tmu_sensor_get_temp,
-	.set_emul_temp = ab_tmu_sensor_set_emul_temp,
+	.get_temp = ab_tmu_sensor_op_get_temp,
+	.set_emul_temp = ab_tmu_sensor_op_set_emul_temp,
 };
 
 struct ab_tmu_sensor *devm_ab_tmu_sensor_create(struct device *dev,
