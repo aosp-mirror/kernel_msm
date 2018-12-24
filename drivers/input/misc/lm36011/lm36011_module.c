@@ -104,6 +104,7 @@ struct led_laser_ctrl_t {
 	int gpio_count;
 	struct work_struct work;
 	struct workqueue_struct *work_queue;
+	uint32_t hw_version;
 	struct {
 		bool is_validated;
 		bool is_power_up;
@@ -131,9 +132,18 @@ struct led_laser_ctrl_t {
 static bool read_proxoffset;
 module_param(read_proxoffset, bool, 0644);
 
-static const struct reg_setting silego_reg_settings[] = {
+static const struct reg_setting silego_reg_settings_ver1[] = {
 	{0xc0, 0x09}, {0xc1, 0x5b}, {0xc2, 0x09}, {0xc3, 0x5b}, {0xcb, 0x93},
 	{0xcc, 0x81}, {0xcd, 0x93}, {0xce, 0x83}, {0x92, 0x00}, {0x93, 0x00}
+};
+
+static const struct reg_setting silego_reg_settings_ver2[] = {
+	{0xc0, 0x09}, {0xc1, 0x5b}, {0xc2, 0x09}, {0xc3, 0x5b}, {0xcb, 0x00},
+	{0xcc, 0x9a}, {0xcd, 0x13}, {0xce, 0x9b}, {0x92, 0x00}, {0x93, 0x00},
+	{0xa0, 0x0e}, {0xa2, 0x0e}, {0x80, 0xb0}, {0x81, 0x24}, {0x82, 0x3c},
+	{0x83, 0x2c}, {0x84, 0x58}, {0x85, 0x80}, {0x86, 0x40}, {0x87, 0x40},
+	{0x88, 0x3e}, {0x89, 0x60}, {0x8a, 0x40}, {0x8b, 0x30}, {0x8c, 0x7c},
+	{0x8d, 0x24}, {0x8e, 0xa0}, {0x8f, 0xc0}, {0x90, 0x40}, {0x91, 0xa0},
 };
 
 static const struct reg_setting cap_sense_init_reg_settings[] = {
@@ -313,8 +323,9 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 {
 	uint32_t data;
 	int rc, io_release_rc;
-	size_t i, settings_size = ARRAY_SIZE(silego_reg_settings);
+	size_t i, settings_size;
 	uint32_t old_sid, old_cci_master;
+	const struct reg_setting *reg_map;
 
 	old_sid = ctrl->io_master_info.cci_client->sid;
 	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
@@ -332,31 +343,37 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 		return rc;
 	}
 
+	reg_map = ctrl->hw_version >= 2 ?
+		silego_reg_settings_ver2 : silego_reg_settings_ver1;
+	settings_size = ctrl->hw_version >= 2 ?
+		ARRAY_SIZE(silego_reg_settings_ver2) :
+		ARRAY_SIZE(silego_reg_settings_ver1);
+
 	for (i = 0; i < settings_size; i++) {
 		rc = camera_io_dev_read(
 			&ctrl->io_master_info,
-			silego_reg_settings[i].addr,
+			reg_map[i].addr,
 			&data,
 			CAMERA_SENSOR_I2C_TYPE_BYTE,
 			CAMERA_SENSOR_I2C_TYPE_BYTE);
 		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev, "%s failed on read 0x%x",
-				__func__, silego_reg_settings[i].addr);
+				__func__, reg_map[i].addr);
 			goto out;
 		}
 		/* Some of Silego part isn't store final version value. Need to
 		   overwrite to correct value to provide proper functionality.
 		*/
-		if (silego_reg_settings[i].addr == 0xcd && data == 0xb3) {
+		if (reg_map[i].addr == 0xcd && data == 0xb3) {
 			rc = silego_correct_setting(ctrl);
 			if (rc < 0)
 				goto out;
-		} else if (data != silego_reg_settings[i].data) {
+		} else if (data != reg_map[i].data) {
 			dev_err(ctrl->soc_info.dev,
 				"address 0x%x mismatch,"
 				" expected 0x%x but got 0x%x",
-				silego_reg_settings[i].addr,
-				silego_reg_settings[i].data,
+				reg_map[i].addr,
+				reg_map[i].data,
 				data);
 			rc = -EINVAL;
 			goto out;
@@ -549,6 +566,12 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 
 	/* Cap sense need wait 1 ms for hw ready */
 	usleep_range(1000, 3000);
+	if (ctrl->hw_version >= 2) {
+		rc = sx9320_init_setting(ctrl);
+		if (rc < 0)
+			dev_err(ctrl->soc_info.dev,
+				"initialize cap sense failed: rc: %d", rc);
+	}
 
 	rc = sx9320_cleanup_nirq(ctrl);
 	if (rc < 0) {
@@ -989,6 +1012,12 @@ static int lm36011_parse_dt(struct device *dev)
 		dev_err(dev, "failed to parse gpio and irq info");
 		return -EFAULT;
 	}
+
+	if (of_property_read_u32(dev->of_node, "hw-version", &value)) {
+		dev_warn(dev, "hw version not specified in dt");
+		ctrl->hw_version = 0;
+	} else
+		ctrl->hw_version = value;
 
 	return 0;
 }
