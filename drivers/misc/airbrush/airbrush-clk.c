@@ -49,7 +49,7 @@ static int ab_clk_pcie_link_listener(struct notifier_block *nb,
 
 static int ab_clk_ipu_pll_enable_handler(void *ctx)
 {
-	int ret;
+	int ret = 0;
 
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 
@@ -98,7 +98,7 @@ static int ab_clk_ipu_pll_disable_handler(void *ctx)
 /* Caller must hold clk_ctx->pcie_link_lock */
 static void __ab_clk_ipu_gate_handler(struct ab_clk_context *clk_ctx)
 {
-	unsigned long old_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
+	unsigned long old_rate = clk_get_rate(clk_ctx->ipu_gate_clk);
 	unsigned long new_rate = 0;
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 	clk_disable_unprepare(clk_ctx->ipu_gate_clk);
@@ -131,16 +131,18 @@ static int __ab_clk_ipu_ungate_handler(struct ab_clk_context *clk_ctx)
 {
 	int ret;
 	unsigned long old_rate = 0;
-	unsigned long new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
+	unsigned long new_rate = clk_get_rate(clk_ctx->ipu_gate_clk);
 
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	ret = clk_prepare_enable(clk_ctx->ipu_gate_clk);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(clk_ctx->dev,
 			"Unable to prepare_enable ipu_gate_clk (err %d)\n",
 			 ret);
-
+		ab_sm_clk_notify(AB_IPU_ABORT_RATE_CHANGE, old_rate, new_rate);
+		return ret;
+	}
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return ret;
 }
@@ -170,7 +172,8 @@ static int ab_clk_ipu_ungate_handler(void *ctx)
 static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		u64 rate)
 {
-	u64 old_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
+	int ret;
+	u64 old_rate = clk_get_rate(clk_ctx->ipu_gate_clk);
 	u64 new_rate = rate;
 
 	if (rate == 0) {
@@ -184,7 +187,13 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	if (rate == OSC_RATE) {
-		clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
+		ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
+		if (ret) {
+			dev_err(clk_ctx->dev,
+				"ipu_pll_mux: set_parent failed(err %d)\n",
+				ret);
+			goto error_abort;
+		}
 
 		new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 		ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE,
@@ -192,16 +201,37 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
-	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
+	ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"ipu_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
 	/* force calculate current rate */
 	clk_get_rate(clk_ctx->ipu_pll);
-	clk_set_rate(clk_ctx->ipu_pll, rate);
-	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
+
+	ret = clk_set_rate(clk_ctx->ipu_pll, rate);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"ipu_pll: set_rate failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
+	ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"ipu_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
 
 	new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
-
 	return new_rate;
+
+error_abort:
+	ab_sm_clk_notify(AB_IPU_ABORT_RATE_CHANGE, old_rate, new_rate);
+	return ret;
 }
 
 static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
@@ -226,7 +256,7 @@ static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
 /* Caller must hold clk_ctx->pcie_link_lock */
 static void __ab_clk_tpu_gate_handler(struct ab_clk_context *clk_ctx)
 {
-	unsigned long old_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
+	unsigned long old_rate = clk_get_rate(clk_ctx->tpu_gate_clk);
 	unsigned long new_rate = 0;
 
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
@@ -260,15 +290,18 @@ static int __ab_clk_tpu_ungate_handler(struct ab_clk_context *clk_ctx)
 {
 	int ret = 0;
 	unsigned long old_rate = 0;
-	unsigned long new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
+	unsigned long new_rate = clk_get_rate(clk_ctx->tpu_gate_clk);
 
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	ret = clk_prepare_enable(clk_ctx->tpu_gate_clk);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(clk_ctx->dev,
 			"Unable to prepare_enable tpu_gate_clk (err %d)\n",
 			 ret);
+		ab_sm_clk_notify(AB_TPU_ABORT_RATE_CHANGE, old_rate, new_rate);
+		return ret;
+	}
 
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return ret;
@@ -347,7 +380,8 @@ static int ab_clk_tpu_pll_disable_handler(void *ctx)
 static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		u64 rate)
 {
-	u64 old_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
+	int ret = 0;
+	u64 old_rate = clk_get_rate(clk_ctx->tpu_gate_clk);
 	u64 new_rate = rate;
 
 	if (rate == 0) {
@@ -361,7 +395,13 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	if (rate == OSC_RATE) {
-		clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
+		ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
+		if (ret) {
+			dev_err(clk_ctx->dev,
+				"tpu_pll_mux: set_parent failed(err %d)\n",
+				ret);
+			goto error_abort;
+		}
 
 		new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 		ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE,
@@ -369,16 +409,37 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
-	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
+	ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"tpu_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
 	/* force calculate current rate */
 	clk_get_rate(clk_ctx->tpu_pll);
-	clk_set_rate(clk_ctx->tpu_pll, rate);
-	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
+
+	ret = clk_set_rate(clk_ctx->tpu_pll, rate);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"tpu_pll: set_rate failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
+	ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"tpu_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
 
 	new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
-
 	return new_rate;
+
+error_abort:
+	ab_sm_clk_notify(AB_TPU_ABORT_RATE_CHANGE, old_rate, new_rate);
+	return ret;
 }
 
 static u64 ab_clk_tpu_set_rate_handler(void *ctx, u64 rate)
@@ -413,13 +474,27 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		"%s: set AON clock rate to %llu\n", __func__, rate);
 
 	if (rate == OSC_RATE) {
-		clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
+		ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
+		if (ret) {
+			dev_err(clk_ctx->dev,
+				"aon_pll_mux: set_parent failed(err %d)\n",
+				ret);
+			goto error_abort;
+		}
+
 		return clk_get_rate(clk_ctx->aon_pll_mux);
 	}
 
-	clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
-	ret = clk_get_rate(clk_ctx->aon_pll_mux);
+	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"aon_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
 
+	return clk_get_rate(clk_ctx->aon_pll_mux);
+
+error_abort:
 	return ret;
 }
 
@@ -460,7 +535,7 @@ static struct ab_sm_clk_ops clk_ops = {
 
 static int ab_clk_probe(struct platform_device *pdev)
 {
-	int ret;
+	int ret = 0;
 	struct device *dev = &pdev->dev;
 	struct device_node *child;
 	struct device_node *ab_clk_nd;
