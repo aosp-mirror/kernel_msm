@@ -109,6 +109,7 @@ enum pci_barno {
 	BAR_3,
 	BAR_4,
 	BAR_5,
+	NUM_BARS,
 };
 
 enum abc_address_map {
@@ -157,7 +158,7 @@ struct abc_device {
 	void __iomem	*base_config;
 	void __iomem	*bar2_base;
 	void __iomem	*bar4_base;
-	struct pci_bus_region bar_base[BAR_4];
+	struct pci_bus_region bar_base[NUM_BARS];
 	unsigned char *wr_buf;
 	dma_addr_t wr_buf_addr;
 	unsigned char *rd_buf;
