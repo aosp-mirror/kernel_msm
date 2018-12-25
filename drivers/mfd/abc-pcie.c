@@ -2195,6 +2195,8 @@ exit_loop:
 
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
 
+	BLOCKING_INIT_NOTIFIER_HEAD(&abc_dev->pcie_link_subscribers);
+
 	/*
 	 * It is necessary to add children device binded to OF node before
 	 * setup_smmu. The dma_mask is shared between mfd parent and
