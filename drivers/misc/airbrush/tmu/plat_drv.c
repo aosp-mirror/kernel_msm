@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/spinlock.h>
 #include <linux/mfd/abc-pcie.h>
 
 #include "hw.h"
@@ -34,6 +35,8 @@ struct airbrush_tmu_data {
 	int irq;
 	struct notifier_block tmu_nb;
 	struct work_struct irq_work;
+	spinlock_t sensor_irq_lock;
+	u32 sensor_irq[AB_TMU_NUM_ALL_PROBE];
 	struct ab_tmu_sensor *sensor[AB_TMU_NUM_ALL_PROBE];
 };
 
@@ -42,21 +45,33 @@ static void airbrush_tmu_work(struct work_struct *work)
 	struct airbrush_tmu_data *data = container_of(work,
 			struct airbrush_tmu_data, irq_work);
 	int i;
+	unsigned long flags;
 
-	/* TODO trigger only the correct sensor */
-	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
+	spin_lock_irqsave(&data->sensor_irq_lock, flags);
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
+		if (!data->sensor_irq[i])
+			continue;
 		ab_tmu_sensor_update(data->sensor[i]);
-
-	ab_tmu_hw_clear_irqs(data->hw);
-
-	enable_irq(ABC_MSI_AON_INTNC);
+		data->sensor_irq[i] = 0;
+	}
+	spin_unlock_irqrestore(&data->sensor_irq_lock, flags);
 }
 
 int airbrush_tmu_irq_handler(unsigned int irq, struct airbrush_tmu_data *data)
 {
-	disable_irq_nosync(ABC_MSI_AON_INTNC);
-	schedule_work(&data->irq_work);
+	struct ab_tmu_hw *hw = data->hw;
+	int i;
+	u32 val_irq;
 
+	spin_lock(&data->sensor_irq_lock);
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
+		val_irq = ab_tmu_hw_read(hw, AB_TMU_INTPEND(i));
+		data->sensor_irq[i] |= val_irq;
+		ab_tmu_hw_write(hw, AB_TMU_INTPEND(i), val_irq);
+	}
+	spin_unlock(&data->sensor_irq_lock);
+
+	schedule_work(&data->irq_work);
 	return IRQ_HANDLED;
 }
 
@@ -182,6 +197,9 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 
 	data->irq = 36;
 	INIT_WORK(&data->irq_work, airbrush_tmu_work);
+
+	spin_lock_init(&data->sensor_irq_lock);
+	memset(data->sensor_irq, 0, sizeof(data->sensor_irq));
 
 	/*
 	 * data->sensor must be created before calling
