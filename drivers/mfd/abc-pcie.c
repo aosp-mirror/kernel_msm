@@ -1560,7 +1560,7 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 	u32 dma_chan;
 	u32 dma_rd_stat;
 	u32 dma_wr_stat;
-	int pos;
+	struct abc_pcie_dma_irq_data *dma_irq_data = ptr;
 
 	spin_lock(&abc_dev->fsys_reg_lock);
 
@@ -1574,27 +1574,29 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 	writel_relaxed(override_set_val, abc_dev->fsys_config +
 					SYSREG_FSYS_DBI_OVERRIDE);
 
-	/* DMA Read Callback Implementation */
-	dma_rd_stat = readl_relaxed(
-		abc_dev->pcie_config + DMA_READ_INT_STATUS_OFF);
-	__iormb();
-	pos = 0;
-	pr_debug("---dma_rd_stat = 0x%x--\n", dma_rd_stat);
-	while ((pos = find_next_bit((unsigned long *) &dma_rd_stat, 32,
-					pos)) != 32) {
+	if (dma_irq_data->dma_type == ABC_PCIE_DMA_READ) {
+
+		/* DMA Read Callback Implementation */
+		dma_rd_stat = readl_relaxed(
+			abc_dev->pcie_config + DMA_READ_INT_STATUS_OFF);
+		__iormb();
+
+		dma_chan = dma_irq_data->dma_channel;
+		pr_debug("---dma_rd_stat = 0x%x--, channel: 0x%x\n",
+			 dma_rd_stat, dma_chan);
+
 		__iowmb();
-		writel_relaxed((0x1 << pos),
+		writel_relaxed((0x1 << dma_chan) | (0x1 << (dma_chan + 16)),
 				abc_dev->pcie_config + DMA_READ_INT_CLEAR_OFF);
 
 		spin_lock(&abc_dev->dma_callback_lock);
-
-		if (pos >= 0 && pos <= 7) {
-			dma_chan = pos;
+		if (dma_rd_stat & (1 << dma_chan)) {
 			if (abc_dev->dma_cb[dma_chan] != NULL)
 				abc_dev->dma_cb[dma_chan](dma_chan,
 						DMA_TO_DEVICE, DMA_DONE);
-		} else if (pos >= 16 && pos <= 23) {
-			dma_chan = pos - 16;
+		}
+
+		if (dma_rd_stat & (1 << (dma_chan + 16))) {
 			if (abc_dev->dma_cb[dma_chan] != NULL)
 				abc_dev->dma_cb[dma_chan](dma_chan,
 						DMA_TO_DEVICE, DMA_ABORT);
@@ -1602,38 +1604,35 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 
 		spin_unlock(&abc_dev->dma_callback_lock);
 
-		pos++;
-	}
+	} else if (dma_irq_data->dma_type == ABC_PCIE_DMA_WRITE) {
 
-	/* DMA Write Callback Implementation */
-	dma_wr_stat = readl_relaxed(
-		abc_dev->pcie_config + DMA_WRITE_INT_STATUS_OFF);
-	__iormb();
-	pos = 0;
-	pr_debug("---dma_wr_stat = 0x%x--\n", dma_wr_stat);
-	while ((pos = find_next_bit((unsigned long *) &dma_wr_stat, 32,
-					pos)) != 32) {
+		/* DMA Write Callback Implementation */
+		dma_wr_stat = readl_relaxed(
+			abc_dev->pcie_config + DMA_WRITE_INT_STATUS_OFF);
+		__iormb();
+
+		dma_chan = dma_irq_data->dma_channel;
+		pr_debug("---dma_wr_stat = 0x%x--, channel: 0x%x\n",
+			 dma_wr_stat, dma_chan);
+
 		__iowmb();
-		writel_relaxed((0x1 << pos),
+		writel_relaxed((0x1 << dma_chan) | (0x1 << (dma_chan + 16)),
 				abc_dev->pcie_config + DMA_WRITE_INT_CLEAR_OFF);
 
 		spin_lock(&abc_dev->dma_callback_lock);
-
-		if (pos >= 0 && pos <= 7) {
-			dma_chan = pos;
+		if (dma_wr_stat & (1 << dma_chan)) {
 			if (abc_dev->dma_cb[dma_chan] != NULL)
 				abc_dev->dma_cb[dma_chan](dma_chan,
 						DMA_FROM_DEVICE, DMA_DONE);
-		} else if (pos >= 16 && pos <= 23) {
-			dma_chan = pos - 16;
+		}
+
+		if (dma_wr_stat & (1 << (dma_chan + 16))) {
 			if (abc_dev->dma_cb[dma_chan] != NULL)
 				abc_dev->dma_cb[dma_chan](dma_chan,
 						DMA_FROM_DEVICE, DMA_ABORT);
 		}
 
 		spin_unlock(&abc_dev->dma_callback_lock);
-
-		pos++;
 	}
 
 	__iowmb();
@@ -1952,17 +1951,36 @@ uint32_t abc_pcie_irq_init(struct pci_dev *pdev)
 		dev_dbg(&pdev->dev, "request irq:%d\n", pdev->irq+i);
 	}
 
-	/* MSI IRQs request */
-	for (i = ABC_MSI_RD_DMA_0; i <= ABC_MSI_WR_DMA_7; i++) {
-		err = request_irq(pdev->irq + i,
-				abc_pcie_dma_irq_handler, 0,
-				DRV_NAME_ABC_PCIE, pdev);
+	/* MSI IRQs request for dma read & write channels */
+	for (i = 0; i < NUM_EP_DMA_CHANNELS; i++) {
+		abc->dma_irq_data_rd[i].pdev = pdev;
+		abc->dma_irq_data_rd[i].dma_channel = i;
+		abc->dma_irq_data_rd[i].dma_type = ABC_PCIE_DMA_READ;
 
+		abc->dma_irq_data_wr[i].pdev = pdev;
+		abc->dma_irq_data_wr[i].dma_channel = i;
+		abc->dma_irq_data_wr[i].dma_type = ABC_PCIE_DMA_WRITE;
+
+		err = request_irq(pdev->irq + ABC_MSI_RD_DMA_0 + i,
+				abc_pcie_dma_irq_handler, 0,
+				DRV_NAME_ABC_PCIE,
+				&abc->dma_irq_data_rd[i]);
 		if (err) {
 			dev_err(&pdev->dev, "failed to req MSI:%d, err:%d\n",
-					pdev->irq + i, err);
+				pdev->irq + ABC_MSI_RD_DMA_0 + i, err);
 			goto free_irq;
 		}
+
+		err = request_irq(pdev->irq + ABC_MSI_WR_DMA_0 + i,
+				abc_pcie_dma_irq_handler, 0,
+				DRV_NAME_ABC_PCIE,
+				&abc->dma_irq_data_wr[i]);
+		if (err) {
+			dev_err(&pdev->dev, "failed to req MSI:%d, err:%d\n",
+				pdev->irq + ABC_MSI_WR_DMA_0 + i, err);
+			goto free_irq;
+		}
+
 		dev_dbg(&pdev->dev, "request irq:%d\n", pdev->irq+i);
 	}
 
@@ -1993,13 +2011,25 @@ free_irq:
 static void abc_pcie_irq_free(struct pci_dev *pdev)
 {
 	unsigned int i;
+	struct abc_pcie_devdata *abc = dev_get_drvdata(&pdev->dev);
 
-	for (i = ABC_MSI_0_TMU_AON; i <= ABC_MSI_AON_INTNC; i++) {
+	for (i = ABC_MSI_0_TMU_AON; i <= ABC_MSI_14_FLUSH_DONE; i++) {
 		if (i == ABC_MSI_2_IPU_IRQ0 || i == ABC_MSI_3_IPU_IRQ1 ||
 		    i == ABC_MSI_4_TPU_IRQ0 || i == ABC_MSI_5_TPU_IRQ1)
 			continue;
 		free_irq(pdev->irq + i, pdev);
 	}
+
+	/* MSI IRQs request for dma read & write channels */
+	for (i = 0; i < NUM_EP_DMA_CHANNELS; i++) {
+		free_irq(pdev->irq + ABC_MSI_RD_DMA_0 + i,
+			 &abc->dma_irq_data_rd[i]);
+
+		free_irq(pdev->irq + ABC_MSI_WR_DMA_0 + i,
+			 &abc->dma_irq_data_wr[i]);
+	}
+
+	free_irq(pdev->irq + ABC_MSI_AON_INTNC, pdev);
 
 	pci_free_irq_vectors(pdev);
 }

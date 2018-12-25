@@ -42,6 +42,15 @@ struct iatu_bar_mapping {
 	struct gen_pool *bar2_pool;
 };
 
+#define ABC_PCIE_DMA_READ	(0x0)
+#define ABC_PCIE_DMA_WRITE	(0x1)
+
+struct abc_pcie_dma_irq_data {
+	struct pci_dev	*pdev;
+	unsigned int	dma_channel;
+	unsigned int	dma_type;
+};
+
 struct abc_pcie_devdata {
 	struct abc_device *abc_dev;
 #if IS_ENABLED(CONFIG_ARM64_DMA_USE_IOMMU)
@@ -61,6 +70,9 @@ struct abc_pcie_devdata {
 	 * ready for use.
 	 */
 	bool allow_el1_dma;
+
+	struct abc_pcie_dma_irq_data dma_irq_data_rd[NUM_EP_DMA_CHANNELS];
+	struct abc_pcie_dma_irq_data dma_irq_data_wr[NUM_EP_DMA_CHANNELS];
 };
 
 /* DISABLE for 0, ENABLE for 1 */
