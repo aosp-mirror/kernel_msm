@@ -1723,7 +1723,7 @@ out:
 static ssize_t reclaim_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *ppos)
 {
-	struct task_struct *task = NULL;
+	struct task_struct *task;
 	char buffer[200];
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
