@@ -171,7 +171,6 @@ int s2mpb04_read_byte(struct s2mpb04_core *ddata, u8 addr, u8 *data)
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -194,7 +193,6 @@ int s2mpb04_read_bytes(struct s2mpb04_core *ddata, u8 addr, u8 *data,
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -217,7 +215,6 @@ int s2mpb04_write_byte(struct s2mpb04_core *ddata, u8 addr, u8 data)
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -241,7 +238,6 @@ int s2mpb04_write_bytes(struct s2mpb04_core *ddata, u8 addr, u8 *data,
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
@@ -265,7 +261,6 @@ int s2mpb04_update_bits(struct s2mpb04_core *ddata, u8 addr,
 
 	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
 		__func__, S2MPB04_I2C_RETRY_COUNT);
-	s2mpb04_toggle_pon(ddata);
 
 	return -EIO;
 }
