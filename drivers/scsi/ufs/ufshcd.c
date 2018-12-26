@@ -3978,10 +3978,8 @@ int ufshcd_query_descriptor(struct ufs_hba *hba,
 	int retries;
 
 	for (retries = QUERY_REQ_RETRIES; retries > 0; retries--) {
-		err = -EAGAIN;
 		down_read(&hba->query_lock);
-		if (!ufshcd_is_link_hibern8(hba))
-			err = __ufshcd_query_descriptor(hba, opcode, idn, index,
+		err = __ufshcd_query_descriptor(hba, opcode, idn, index,
 						selector, desc_buf, buf_len);
 		up_read(&hba->query_lock);
 		if (!err || err == -EINVAL)
@@ -10307,7 +10305,7 @@ manual_gc_show(struct device *dev, struct device_attribute *attr, char *buf)
 	pm_runtime_get_sync(hba->dev);
 
 	down_read(&hba->query_lock);
-	if (!ufshcd_is_link_hibern8(hba) && hba->manual_gc.hagc_support) {
+	if (hba->manual_gc.hagc_support) {
 		int err = ufshcd_query_attr_retry(hba,
 				UPIU_QUERY_OPCODE_READ_ATTR,
 				QUERY_ATTR_IDN_MANUAL_GC_STATUS, 0, 0, &status);
@@ -10349,16 +10347,6 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 
 	pm_runtime_get_sync(hba->dev);
 
-	down_read(&hba->query_lock);
-	if (ufshcd_is_link_hibern8(hba)) {
-		up_read(&hba->query_lock);
-		pm_runtime_put_noidle(hba->dev);
-		return -EAGAIN;
-	}
-	up_read(&hba->query_lock);
-
-	ufshcd_hold(hba, false);
-
 	if (hba->manual_gc.hagc_support) {
 		opcode = (value == MANUAL_GC_ON) ? UPIU_QUERY_OPCODE_SET_FLAG:
 						UPIU_QUERY_OPCODE_CLEAR_FLAG;
@@ -10375,7 +10363,6 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 			err = -EAGAIN;
 	}
 
-	ufshcd_release(hba, false);
 	if (err || !ufshcd_is_auto_hibern8_supported(hba)) {
 		pm_runtime_mark_last_busy(hba->dev);
 		pm_runtime_put_noidle(hba->dev);
