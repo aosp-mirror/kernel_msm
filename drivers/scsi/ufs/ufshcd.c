@@ -4441,10 +4441,8 @@ int ufshcd_query_descriptor_retry(struct ufs_hba *hba,
 	int retries;
 
 	for (retries = QUERY_REQ_RETRIES; retries > 0; retries--) {
-		err = -EAGAIN;
 		down_read(&hba->query_lock);
-		if (!ufshcd_is_link_hibern8(hba))
-			err = __ufshcd_query_descriptor(hba, opcode, idn, index,
+		err = __ufshcd_query_descriptor(hba, opcode, idn, index,
 						selector, desc_buf, buf_len);
 		up_read(&hba->query_lock);
 		if (!err || err == -EINVAL)
