@@ -67,6 +67,8 @@
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
+#define M0_POLLING_PAUSE 400
+#define M0_POLLING_INTERVAL 12
 
 struct airbrush_state {
        uint32_t faceauth_version;
@@ -135,6 +137,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
 {
 	int err = 0;
+	int polling_interval = M0_POLLING_INTERVAL;
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_continue_data continue_step_data = { 0 };
 	struct faceauth_debug_data debug_step_data = { 0 };
@@ -212,6 +215,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
+		msleep(M0_POLLING_PAUSE);
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
 		for (;;) {
 			int done;
@@ -225,7 +229,9 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 				err = -ETIME;
 				goto exit;
 			}
-			msleep(1);
+			msleep(polling_interval);
+			polling_interval = polling_interval > 1 ?
+				polling_interval >> 1 : 1;
 		}
 
 		break;
