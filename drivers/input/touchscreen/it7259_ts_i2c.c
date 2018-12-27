@@ -174,12 +174,16 @@
 #define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
 #define PINCTRL_STATE_RELEASE	"pmx_ts_release"
 
+#define ITE_WORKQUEUE_NAME                  "ite_wq"
+
 int download;
 #define COMMAND_SUCCESS		 0x0000
 #define COMMAND_ERROR	 0x0200
 #define ERROR_QUERY_TIME_OUT	0x0800
 
 #define HOVER_Z_MAX (255)
+
+#define MAX_SUSPEND_IRQ 100
 
 struct finger_data {
 	u8 xLo;
@@ -229,6 +233,11 @@ struct it7259_ts_data {
 #endif
 	struct regulator *vdd;
 	struct regulator *avdd;
+	struct work_struct  touch_event_work;
+	struct workqueue_struct *ts_workqueue;
+	struct mutex report_mutex;
+	struct point_data pt_data;
+
 	bool in_low_power_mode;
 	bool suspended;
 	bool fw_upgrade_result;
@@ -260,6 +269,7 @@ static int plam_detected_flag;
 static int wakeup_flag;
 static ktime_t last_plam_time;
 static ktime_t last_wakeup_time;
+static int  irq_count_when_suspend;
 
 /* Function declarations */
 static int fb_notifier_callback(struct notifier_block *self,
@@ -3096,27 +3106,161 @@ static void it7259_ts_release_all(struct it7259_ts_data *ts_data)
 	input_sync(ts_data->input_dev);
 }
 
-static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
+
+static irqreturn_t it7259_report_value(struct it7259_ts_data *ts_data)
 {
-	struct point_data pt_data;
-	struct it7259_ts_data *ts_data = devid;
 	struct input_dev *input_dev = ts_data->input_dev;
-	u8 dev_status, finger, touch_count = 0, finger_status;
+	struct point_data *pt_data =  &(ts_data->pt_data);
+	u8  finger, touch_count = 0, finger_status;
 	u8 pressure = FD_PRESSURE_NONE;
 	u16 x, y;
 	bool palm_detected;
+	u8 dev_status;
 	int ret;
+
+	/* verify there is point data to read & it is readable and valid */
+	ret = it7259_i2c_read_no_ready_check(ts_data, BUF_QUERY, &dev_status,
+						sizeof(dev_status));
+	if (ret == IT_I2C_READ_RET)
+		if (!((dev_status & PT_INFO_BITS) & PT_INFO_YES)) {
+		ITE_INFO("IT7259 threaded_handler exit 3\n");
+			return IRQ_HANDLED;
+	}
+
+	ret = it7259_i2c_read_no_ready_check(ts_data, BUF_POINT_INFO,
+				(void *)pt_data, sizeof(*pt_data));
+	if (ret != IT_I2C_READ_RET) {
+		dev_err(&ts_data->client->dev,
+			"failed to read point data buffer\n");
+		printk("IT7259 threaded_handler exit 4\n");
+		return IRQ_HANDLED;
+	}
+
+	/* Check if controller moves from idle to active state */
+	if ((pt_data->flags & PD_FLAGS_DATA_TYPE_BITS) !=
+					PD_FLAGS_DATA_TYPE_TOUCH) {
+		/*
+		 * This code adds the touch-to-wake functionality to the ITE
+		 * tech driver. When user puts a finger on touch controller in
+		 * idle state, the controller moves to active state and driver
+		 * sends the KEY_WAKEUP event to wake the device. The
+		 * pm_stay_awake() call tells the pm core to stay awake until
+		 * the CPU cores are up already. The schedule_work() call
+		 * schedule a work that tells the pm core to relax once the CPU
+		 * cores are up.
+		 */
+
+		/*FW will only report wakeup package once*/
+		if ((pt_data->flags & PD_FLAGS_DATA_TYPE_BITS) ==
+				PD_FLAGS_IDLE_TO_ACTIVE &&
+				pt_data->gesture_id == 0) {
+			} else {
+				dev_err(&ts_data->client->dev,
+					"Ignore the touch data\n");
+		}
+		printk("IT7259 threaded_handler exit 2\n");
+		return IRQ_HANDLED;
+	}
+
+	/* return if input event disabled */
+	if (ts_data->event_disabled) {
+		printk("IT7259 event disabled\n");
+		return IRQ_HANDLED;
+	}
+
+	/*
+	 * Check if touch data also includes any palm gesture or not.
+	 * If palm gesture is detected, then send the keycode parsed
+	 * from the DT.
+	 */
+	palm_detected = pt_data->gesture_id & PD_PALM_FLAG_BIT;
+
+	if ((!plam_detected_flag) && palm_detected &&
+			ts_data->pdata->palm_detect_en) {
+		ts_data->last_plam_time =  ktime_get_boottime();
+		last_plam_time = ts_data->last_plam_time;
+
+		input_report_key(input_dev, KEY_SLEEP, 1);
+		input_sync(input_dev);
+		input_report_key(input_dev, KEY_SLEEP, 0);
+		input_sync(input_dev);
+		plam_detected_flag = 1;
+		printk(KERN_ERR "FTS: PLAM to Send KEY_SLEEP\n");
+		return IRQ_HANDLED;
+	}
+
+
+
+
+
+
+	for (finger = 0; finger < ts_data->pdata->num_of_fingers; finger++) {
+		finger_status = pt_data->flags & (0x01 << finger);
+
+		input_mt_slot(input_dev, finger);
+		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER,
+					finger_status != 0);
+
+		x = pt_data->fd[finger].xLo +
+			(((u16)(pt_data->fd[finger].hi & 0x0F)) << 8);
+		y = pt_data->fd[finger].yLo +
+			(((u16)(pt_data->fd[finger].hi & 0xF0)) << 4);
+
+		pressure = pt_data->fd[finger].pressure & FD_PRESSURE_BITS;
+
+		if (finger_status) {
+			if (pressure >= FD_PRESSURE_LIGHT) {
+				input_report_key(input_dev,
+					BTN_TOUCH, 1);
+				input_report_abs(input_dev,
+					ABS_MT_POSITION_X, x);
+				input_report_abs(input_dev,
+					ABS_MT_POSITION_Y, y);
+				touch_count++;
+			}
+		}
+	}
+
+	input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
+	input_sync(input_dev);
+	ITE_INFO("IT7259 threaded_handler BTN_TOUCH\n");
+
+	ITE_INFO("IT7259 threaded_handler exit 1\n");
+
+
+	return IRQ_HANDLED;
+
+}
+
+/*******************************************************************************
+*  Name: it7259_touch_irq_work
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+static void it7259_touch_irq_work(struct work_struct *work)
+{
+
+	mutex_lock(&gl_ts->report_mutex);
+	it7259_report_value(gl_ts);
+	mutex_unlock(&gl_ts->report_mutex);
+}
+
+static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
+{
+	struct it7259_ts_data *ts_data = devid;
+	struct input_dev *input_dev = ts_data->input_dev;
 	ktime_t cur_time;
 
-#ifdef	CONFIG_BEZEL_SUPPORT
-	u8 bezel_count = 0;
-	static u8 transit_from_disp_to_bezel;
-	u8 disp_radius = 0;
-	u16 x_center = 0, y_center = 0, x_position = 0, y_position = 0;
-	u16 x_thickness_center = 0, y_thickness_center = 0;
-	u32 virtual_radius = 0, panel_radius = 0, sq_rad_position = 0;
-	u32 sq_disp_position = 0;
-#endif
+	if (gl_ts->suspended) {
+		irq_count_when_suspend++;
+		if(irq_count_when_suspend > MAX_SUSPEND_IRQ){
+			it7259_reset(gl_ts);
+			printk(KERN_ERR "%s %d reset tp\n", __func__, __LINE__);
+			irq_count_when_suspend = 0;
+		}
+	}
 
 	/*debounce  from last palm*/
 	if (plam_detected_flag ) {
@@ -3140,56 +3284,6 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 		wakeup_flag = 0;
 	}
 
-
-	/* verify there is point data to read & it is readable and valid */
-	ret = it7259_i2c_read_no_ready_check(ts_data, BUF_QUERY, &dev_status,
-						sizeof(dev_status));
-	if (ret == IT_I2C_READ_RET)
-		if (!((dev_status & PT_INFO_BITS) & PT_INFO_YES)) {
-		ITE_INFO("IT7259 threaded_handler exit 3\n");
-			return IRQ_HANDLED;
-	}
-	ret = it7259_i2c_read_no_ready_check(ts_data, BUF_POINT_INFO,
-				(void *)&pt_data, sizeof(pt_data));
-	if (ret != IT_I2C_READ_RET) {
-		dev_err(&ts_data->client->dev,
-			"failed to read point data buffer\n");
-		printk("IT7259 threaded_handler exit 4\n");
-		return IRQ_HANDLED;
-	}
-
-	/* Check if controller moves from idle to active state */
-	if ((pt_data.flags & PD_FLAGS_DATA_TYPE_BITS) !=
-					PD_FLAGS_DATA_TYPE_TOUCH) {
-		/*
-		 * This code adds the touch-to-wake functionality to the ITE
-		 * tech driver. When user puts a finger on touch controller in
-		 * idle state, the controller moves to active state and driver
-		 * sends the KEY_WAKEUP event to wake the device. The
-		 * pm_stay_awake() call tells the pm core to stay awake until
-		 * the CPU cores are up already. The schedule_work() call
-		 * schedule a work that tells the pm core to relax once the CPU
-		 * cores are up.
-		 */
-
-		/*FW will only report wakeup package once*/
-		if ((pt_data.flags & PD_FLAGS_DATA_TYPE_BITS) ==
-				PD_FLAGS_IDLE_TO_ACTIVE &&
-				pt_data.gesture_id == 0) {
-			} else {
-				dev_err(&ts_data->client->dev,
-					"Ignore the touch data\n");
-		}
-		printk("IT7259 threaded_handler exit 2\n");
-		return IRQ_HANDLED;
-	}
-
-	/* return if input event disabled */
-	if (ts_data->event_disabled) {
-		printk("IT7259 event disabled\n");
-		return IRQ_HANDLED;
-	}
-
 	if (ts_data->suspended) {
 		cur_time = ktime_get_boottime();
 		last_wakeup_time = cur_time;
@@ -3209,126 +3303,7 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 		return IRQ_HANDLED;
 }
 
-	/*
-	 * Check if touch data also includes any palm gesture or not.
-	 * If palm gesture is detected, then send the keycode parsed
-	 * from the DT.
-	 */
-	palm_detected = pt_data.gesture_id & PD_PALM_FLAG_BIT;
-
-	if ((!plam_detected_flag) && palm_detected &&
-			ts_data->pdata->palm_detect_en) {
-		ts_data->last_plam_time =  ktime_get_boottime();
-		last_plam_time = ts_data->last_plam_time;
-
-		input_report_key(input_dev, KEY_SLEEP, 1);
-		input_sync(input_dev);
-		input_report_key(input_dev, KEY_SLEEP, 0);
-		input_sync(input_dev);
-		plam_detected_flag = 1;
-		printk(KERN_ERR "FTS: PLAM to Send KEY_SLEEP\n");
-		return IRQ_HANDLED;
-	}
-
-#ifdef	CONFIG_BEZEL_SUPPORT
-		/* Center co-odinate of panel */
-	x_center = ts_data->pdata->panel_maxx/2;
-	y_center = ts_data->pdata->panel_maxy/2;
-
-	x_thickness_center = x_center - ts_data->bdata->thickness;
-	y_thickness_center = y_center - ts_data->bdata->thickness;
-	/* Radius of the panel */
-	panel_radius = x_center;
-
-	/* Radius of the display */
-	disp_radius = (ts_data->pdata->disp_maxx - ts_data->pdata->disp_minx)/2;
-	virtual_radius = disp_radius;
-#endif
-
-	for (finger = 0; finger < ts_data->pdata->num_of_fingers; finger++) {
-		finger_status = pt_data.flags & (0x01 << finger);
-
-		input_mt_slot(input_dev, finger);
-		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER,
-					finger_status != 0);
-
-		x = pt_data.fd[finger].xLo +
-			(((u16)(pt_data.fd[finger].hi & 0x0F)) << 8);
-		y = pt_data.fd[finger].yLo +
-			(((u16)(pt_data.fd[finger].hi & 0xF0)) << 4);
-
-		pressure = pt_data.fd[finger].pressure & FD_PRESSURE_BITS;
-
-		if (finger_status) {
-			if (pressure >= FD_PRESSURE_LIGHT) {
-#ifdef	CONFIG_BEZEL_SUPPORT
-	/* Distance from present co-ordinate
-	to center co-ordinate */
-		x_position = ABS(x, x_center);
-		y_position = ABS(y, y_center);
-
-		sq_rad_position = (u32)((x_position * x_position)
-			+ (y_position * y_position));
-		ts_data->bdata->sq_rad_position = sq_rad_position;
-
-		if(ts_data->bdata->bezel_touch_status)
-			virtual_radius = disp_radius - ts_data->bdata->inset;
-
-		sq_disp_position = (u32)(virtual_radius * virtual_radius);
-
-		if(sq_rad_position > sq_disp_position) {
-			bezel_report_wheel(x, y, ts_data->bdata);
-			if(ts_data->bdata->step_threshold2 ==
-				ts_data->bdata->angular_dist_thresh)
-			ts_data->bdata->bezel_touch_status = true;
-			bezel_count++;
-		} else
-#endif
-			{
-				input_report_key(input_dev,
-					BTN_TOUCH, 1);
-				input_report_abs(input_dev,
-					ABS_MT_POSITION_X, x);
-				input_report_abs(input_dev,
-					ABS_MT_POSITION_Y, y);
-#ifdef CONFIG_BEZEL_SUPPORT
-				transit_from_disp_to_bezel = true;
-#endif
-				touch_count++;
-			}
-			}
-		}
-	}
-
-#ifdef CONFIG_BEZEL_SUPPORT
-	if(!ts_data->bdata->bezel_touch_status) {
-		input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
-		if (ts_data->palm_pressed && ts_data->pdata->palm_detect_en &&
-				(!palm_detected)) {
-			input_report_key(input_dev,
-					ts_data->pdata->palm_detect_keycode, 0);
-			ts_data->palm_pressed = false;
-		}
-		input_sync(input_dev);
-	} else if (transit_from_disp_to_bezel) {
-		transit_from_disp_to_bezel = false;
-		input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
-		input_sync(input_dev);
-	}
-#else
-	input_report_key(input_dev, BTN_TOUCH, touch_count > 0);
-	input_sync(input_dev);
-	ITE_INFO("IT7259 threaded_handler BTN_TOUCH\n");
-#endif
-#ifdef	CONFIG_BEZEL_SUPPORT
-	/*input_report_rel(input_dev, BTN_TOOL_FINGER, bezel_count > 0);*/
-	if(!(bezel_count > 0)) {
-		bezel_reset();
-		ts_data->bdata->bezel_touch_status = false;
-	}
-#endif
-
-	ITE_INFO("IT7259 threaded_handler exit 1\n");
+	queue_work(gl_ts->ts_workqueue,& gl_ts->touch_event_work);
 	return IRQ_HANDLED;
 }
 
@@ -3934,6 +3909,7 @@ static int it7259_ts_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
+	irq_count_when_suspend = 0;
 	ts_data = devm_kzalloc(&client->dev, sizeof(*ts_data), GFP_KERNEL);
 	if (!ts_data)
 		return -ENOMEM;
@@ -4126,6 +4102,15 @@ static int it7259_ts_probe(struct i2c_client *client,
 		goto err_irq_reg;
 	}
 
+	mutex_init(&gl_ts->report_mutex);
+
+	INIT_WORK(&ts_data->touch_event_work, it7259_touch_irq_work);
+	ts_data->ts_workqueue = create_workqueue(ITE_WORKQUEUE_NAME);
+	if (!ts_data->ts_workqueue) {
+		err = -ESRCH;
+		goto err_irq_reg;
+	}
+
 	if (sysfs_create_group(&(client->dev.kobj), &it7259_attr_group)) {
 		dev_err(&client->dev, "failed to register sysfs #2\n");
 		goto err_sysfs_grp_create;
@@ -4234,6 +4219,9 @@ static int it7259_ts_remove(struct i2c_client *client)
 	struct it7259_ts_data *ts_data = i2c_get_clientdata(client);
 	int ret;
 
+	cancel_work_sync(&ts_data->touch_event_work);
+	destroy_workqueue(ts_data->ts_workqueue);
+
 	debugfs_remove_recursive(ts_data->dir);
 #if defined(CONFIG_FB)
 	if (fb_unregister_client(&ts_data->fb_notif))
@@ -4309,6 +4297,8 @@ static int it7259_ts_resume(struct device *dev)
 {
 	struct it7259_ts_data *ts_data = dev_get_drvdata(dev);
 	int retval;
+
+	irq_count_when_suspend = 0;
 
 	if (!ts_data->suspended) {
 		printk("Already in awake state");
