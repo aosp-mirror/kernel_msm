@@ -162,7 +162,7 @@
 		qcom,msm-cpudai-tdm-invert-sync = <0>;
 	};
 
-	msm_cirrus_playback {
+	msm_cirrus_playback: msm_cirrus_playback {
 		compatible = "cirrus,msm-cirrus-playback";
 		usecase-names = "Playback";
 

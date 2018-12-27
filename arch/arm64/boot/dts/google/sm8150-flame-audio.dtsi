@@ -18,3 +18,29 @@
 &routing {
 	qcom,msm-pcm-config = "flame";
 };
+
+&msm_cirrus_playback {
+	/*
+	 * Mapping formula from audio hw
+	 *  ohm = imp / Qfactor * Amp_Constant
+	 *  ohm = imp / 8192 * 5.85714
+	 */
+
+	/* the resistance is 7.1 ohm */
+	cirrus,top-speaker-impedance = <9930>;
+
+	/* the percentage of tolerance is 21, ie 1.5ohm */
+	cirrus,top-speaker-tolerance = <21>;
+
+	/* the resistance is 7.1 ohm */
+	cirrus,top-speaker-mean = <9930>;
+
+	/* the resistance is 6.8 ohm */
+	cirrus,bottom-speaker-impedance = <9511>;
+
+	/* the percentage of tolerance is 22, ie 1.5ohm */
+	cirrus,bottom-speaker-tolerance = <22>;
+
+	/* the resistance is 6.8 ohm */
+	cirrus,bottom-speaker-mean = <9511>;
+};
