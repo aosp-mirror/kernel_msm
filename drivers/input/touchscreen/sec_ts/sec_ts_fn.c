@@ -694,6 +694,8 @@ static ssize_t status_show(struct device *dev,
 	unsigned char data[4] = { 0 };
 	int ret;
 
+	sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_SYSFS, true);
+
 	data[0] = 0;
 	ret = ts->sec_ts_i2c_read(ts, SEC_TS_READ_BOOT_STATUS, data, 1);
 	if (ret < 0) {
