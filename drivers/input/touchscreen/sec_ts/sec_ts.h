@@ -752,6 +752,8 @@ struct sec_ts_data {
 	struct work_struct work_fw_update;
 	struct work_struct suspend_work;
 	struct work_struct resume_work;
+	struct workqueue_struct *event_wq;	/* Used for event handler,
+						 * suspend, resume threads */
 	struct completion resume_done;
 	struct sec_cmd_data sec;
 	short *pFrame;

@@ -1119,8 +1119,8 @@ static irqreturn_t sec_ts_irq_thread(int irq, void *ptr)
 	if (sec_ts_set_bus_ref(ts, SEC_TS_BUS_REF_IRQ, true) < 0) {
 		/* Interrupt during bus suspend */
 		input_info(true, &ts->client->dev,
-			   "%s: Skipping stray interrupt since bus is suspended.\n",
-			   __func__);
+		   "%s: Skipping stray interrupt since bus is suspended(power_status: %d)\n",
+			   __func__, ts->power_status);
 		return IRQ_HANDLED;
 	}
 
@@ -2004,6 +2004,14 @@ static int sec_ts_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&ts->work_read_info, sec_ts_read_info_work);
 	INIT_WORK(&ts->suspend_work, sec_ts_suspend_work);
 	INIT_WORK(&ts->resume_work, sec_ts_resume_work);
+	ts->event_wq = alloc_workqueue("sec_ts-event-queue", WQ_UNBOUND |
+					 WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
+	if (!ts->event_wq) {
+		input_err(true, &ts->client->dev,
+			"%s: Cannot create work thread\n", __func__);
+		ret = -ENOMEM;
+		goto error_alloc_workqueue;
+	}
 
 	init_completion(&ts->bus_resumed);
 	complete_all(&ts->bus_resumed);
@@ -2246,6 +2254,10 @@ err_allocate_input_dev:
 	tbn_cleanup(ts->tbn);
 err_init_tbn:
 #endif
+
+	if (ts->event_wq)
+		destroy_workqueue(ts->event_wq);
+error_alloc_workqueue:
 	kfree(ts);
 
 error_allocate_mem:
@@ -2665,6 +2677,7 @@ static int sec_ts_remove(struct i2c_client *client)
 
 	cancel_work_sync(&ts->suspend_work);
 	cancel_work_sync(&ts->resume_work);
+	destroy_workqueue(ts->event_wq);
 
 #ifdef SEC_TS_FW_UPDATE_ON_PROBE
 	cancel_work_sync(&ts->work_fw_update);
@@ -3080,9 +3093,9 @@ static void sec_ts_aggregate_bus_state(struct sec_ts_data *ts)
 		return;
 
 	if (ts->bus_refmask == 0)
-		schedule_work(&ts->suspend_work);
+		queue_work(ts->event_wq, &ts->suspend_work);
 	else
-		schedule_work(&ts->resume_work);
+		queue_work(ts->event_wq, &ts->resume_work);
 }
 
 int sec_ts_set_bus_ref(struct sec_ts_data *ts, u16 ref, bool enable)
@@ -3153,6 +3166,9 @@ static int sec_ts_screen_state_chg_callback(struct notifier_block *nb,
 			  __func__);
 		return NOTIFY_DONE;
 	}
+
+	/* finish processing any events on queue */
+	flush_workqueue(ts->event_wq);
 
 	blank = *((unsigned int *)evdata->data);
 	switch (blank) {
