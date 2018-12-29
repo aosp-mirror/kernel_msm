@@ -179,7 +179,7 @@ struct smb2 {
 	bool			bad_part;
 };
 
-static int __debug_mask = 0xff;
+static int __debug_mask;
 module_param_named(
 	debug_mask, __debug_mask, int, 0600
 );
