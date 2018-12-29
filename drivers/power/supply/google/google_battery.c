@@ -33,6 +33,9 @@
 #include "google_bms.h"
 #include "google_psy.h"
 
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#endif
 
 #define BATT_DELAY_INIT_MS 250
 
@@ -56,6 +59,14 @@ enum batt_rl_status {
 	BATT_RL_STATUS_DISCHARGE = 1,
 	BATT_RL_STATUS_RECHARGE = 2,
 };
+
+struct gbatt_ccbin_data {
+	u16 count[GBMS_CCBIN_BUCKET_COUNT];
+	char cyc_ctr_cstr[GBMS_CCBIN_CSTR_SIZE];
+	struct mutex lock;
+	int prev_soc;
+};
+
 struct batt_drv {
 	struct device *device;
 	struct power_supply *psy;
@@ -80,6 +91,9 @@ struct batt_drv {
 	/* triger for recharge logic next update from charger */
 	bool batt_full;
 	struct batt_ssoc_state ssoc_state;
+	/* bin count */
+	struct gbatt_ccbin_data cc_data;
+	struct power_supply *ccbin_psy;
 
 	/* props */
 	int soh;
@@ -625,6 +639,190 @@ static int batt_init_chg_profile(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
+/* call holding mutex_unlock(&ccd->lock); */
+static int batt_cycle_count_store(struct gbatt_ccbin_data *ccd,
+				  struct power_supply *psy)
+{
+	union power_supply_propval val = { .strval = ccd->cyc_ctr_cstr };
+	int ret;
+
+	if (!psy)
+		return -ENODATA;
+
+	(void)gbms_cycle_count_cstr(ccd->cyc_ctr_cstr,
+				    sizeof(ccd->cyc_ctr_cstr),
+				    ccd->count);
+
+	ret = power_supply_set_property(psy,
+		POWER_SUPPLY_PROP_CYCLE_COUNTS, &val);
+	if (ret < 0) {
+		pr_err("failed to set cycle counts prop ret=%d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/* call holding mutex_unlock(&ccd->lock); */
+static int batt_cycle_count_load(struct gbatt_ccbin_data *ccd,
+				 struct power_supply *psy)
+{
+	union power_supply_propval val;
+	int ret = 0;
+
+	if (!psy)
+		return -ENODATA;
+
+	ret = power_supply_get_property(psy,
+		POWER_SUPPLY_PROP_CYCLE_COUNTS, &val);
+	if (ret < 0) {
+		pr_err("failed to get cycle counts prop ret=%d\n", ret);
+		return ret;
+	}
+
+	ccd->prev_soc = -1;
+
+	ret = gbms_cycle_count_sscan(ccd->count, val.strval);
+	if (ret < 0)
+		pr_err("invalid cycle count string ret=%d\n", ret);
+	else
+		strlcpy(ccd->cyc_ctr_cstr, val.strval,
+					sizeof(ccd->cyc_ctr_cstr));
+
+	return ret;
+}
+
+/* update only when SSOC is increasing, not need to check charging */
+static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
+{
+	const int batt_soc = soc / 10;
+	struct gbatt_ccbin_data *ccd = &batt_drv->cc_data;
+
+	if (soc < 0 || soc > 100)
+		return;
+
+	mutex_lock(&ccd->lock);
+
+	if (ccd->prev_soc != -1 && batt_soc > ccd->prev_soc) {
+		int bucket, cnt;
+
+		for (cnt = batt_soc ; cnt > ccd->prev_soc ; cnt--) {
+			bucket = cnt * GBMS_CCBIN_BUCKET_COUNT / 100;
+			if (bucket >= GBMS_CCBIN_BUCKET_COUNT)
+				bucket = GBMS_CCBIN_BUCKET_COUNT - 1;
+			ccd->count[bucket]++;
+		}
+
+		/* NOTE: could store on FULL or disconnect instead */
+		(void)batt_cycle_count_store(ccd, batt_drv->ccbin_psy);
+	}
+
+	ccd->prev_soc = batt_soc;
+
+	mutex_unlock(&ccd->lock);
+}
+
+/* ------------------------------------------------------------------------- */
+
+#define BATTERY_DEBUG_ATTRIBUTE(name, fn_read, fn_write) \
+static const struct file_operations name = {	\
+	.open	= simple_open,			\
+	.llseek	= no_llseek,			\
+	.read	= fn_read,			\
+	.write	= fn_write,			\
+}
+
+static ssize_t batt_cycle_count_set_bins(struct file *filp,
+					 const char __user *user_buf,
+					 size_t count, loff_t *ppos)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)filp->private_data;
+	char buf[GBMS_CCBIN_CSTR_SIZE];
+	int ret;
+
+	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
+	if (!ret)
+		return -EFAULT;
+
+	mutex_lock(&batt_drv->cc_data.lock);
+
+	ret = gbms_cycle_count_sscan(batt_drv->cc_data.count, buf);
+	if (ret == 0 && batt_drv->ccbin_psy) {
+		union power_supply_propval val = { .strval = buf };
+
+		ret = power_supply_set_property(batt_drv->ccbin_psy,
+						POWER_SUPPLY_PROP_CYCLE_COUNTS,
+						&val);
+		if (ret < 0)
+			pr_err("failed to write cycle counts (%d)\n", ret);
+	}
+
+	if (ret == 0)
+		ret = count;
+
+	mutex_unlock(&batt_drv->cc_data.lock);
+
+	return ret;
+}
+
+BATTERY_DEBUG_ATTRIBUTE(cycle_count_bins_fops,
+				NULL, batt_cycle_count_set_bins);
+
+
+static int cycle_count_bins_store(void *data, u64 val)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+	int ret;
+
+	mutex_lock(&batt_drv->cc_data.lock);
+	ret = batt_cycle_count_store(&batt_drv->cc_data, batt_drv->ccbin_psy);
+	if (ret < 0)
+		pr_err("cannot store bin count ret=%d\n", ret);
+	mutex_unlock(&batt_drv->cc_data.lock);
+
+	return ret;
+}
+
+static int cycle_count_bins_reload(void *data, u64 *val)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+	int ret;
+
+	mutex_lock(&batt_drv->cc_data.lock);
+	ret = batt_cycle_count_load(&batt_drv->cc_data, batt_drv->ccbin_psy);
+	if (ret < 0)
+		pr_err("cannot restore bin count ret=%d\n", ret);
+	mutex_unlock(&batt_drv->cc_data.lock);
+	*val = ret;
+
+	return ret;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(cycle_count_bins_sync_fops,
+				cycle_count_bins_reload,
+				cycle_count_bins_store, "%llu\n");
+
+
+static int batt_init_fs(struct batt_drv *batt_drv)
+{
+	struct dentry *de = NULL;
+	int ret;
+
+#ifdef CONFIG_DEBUG_FS
+	de = debugfs_create_dir("google_battery", 0);
+	if (de) {
+		debugfs_create_file("cycle_count_bins", 0400, de,
+				    batt_drv, &cycle_count_bins_fops);
+		debugfs_create_file("cycle_count_sync", 0600, de,
+				    batt_drv, &cycle_count_bins_sync_fops);
+	}
+#endif
+
+	return ret;
+}
+
+/* ------------------------------------------------------------------------- */
+
 /* poll the battery, run SOC% etc, scheduled from psy_changed and from timer */
 static void google_battery_work(struct work_struct *work)
 {
@@ -669,6 +867,7 @@ static void google_battery_work(struct work_struct *work)
 reschedule:
 	mutex_unlock(&batt_drv->chg_lock);
 
+	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc));
 	if (update_interval) {
 		pr_debug("rerun battery work in %d ms\n", update_interval);
 		schedule_delayed_work(&batt_drv->batt_work,
@@ -733,7 +932,12 @@ static int gbatt_get_property(struct power_supply *psy,
 	switch (psp) {
 
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
-		val->strval = NULL;
+		mutex_lock(&batt_drv->cc_data.lock);
+		(void)gbms_cycle_count_cstr(batt_drv->cc_data.cyc_ctr_cstr,
+				sizeof(batt_drv->cc_data.cyc_ctr_cstr),
+				batt_drv->cc_data.count);
+		val->strval = batt_drv->cc_data.cyc_ctr_cstr;
+		mutex_unlock(&batt_drv->cc_data.lock);
 		break;
 
 	case POWER_SUPPLY_PROP_CAPACITY:
@@ -944,6 +1148,9 @@ static void google_battery_init_work(struct work_struct *work)
 	}
 
 	batt_drv->fg_psy = fg_psy;
+	/* uncomment this to enable loading/storing data to maxfg
+	 *	batt_drv->ccbin_psy = batt_drv->fg_psy;
+	 */
 
 	ret = batt_init_chg_profile(batt_drv);
 	if (ret < 0) {
@@ -988,6 +1195,12 @@ static void google_battery_init_work(struct work_struct *work)
 
 	wakeup_source_init(&batt_drv->batt_ws, gbatt_psy_desc.name);
 
+	mutex_lock(&batt_drv->cc_data.lock);
+	ret = batt_cycle_count_load(&batt_drv->cc_data, batt_drv->ccbin_psy);
+	if (ret < 0)
+		pr_err("cannot restore bin count ret=%d\n", ret);
+	mutex_unlock(&batt_drv->cc_data.lock);
+
 	batt_drv->psy = devm_power_supply_register(batt_drv->device,
 					       &gbatt_psy_desc, &psy_cfg);
 	if (IS_ERR(batt_drv->psy)) {
@@ -996,7 +1209,8 @@ static void google_battery_init_work(struct work_struct *work)
 			"Couldn't register as power supply, ret=%d\n", ret);
 	}
 
-	pr_info("google_battery: init_work done\n");
+	(void)batt_init_fs(batt_drv);
+	pr_info("init_work done\n");
 
 	ret = of_property_read_u32(batt_drv->device->of_node,
 				   "google,update-interval",
@@ -1024,7 +1238,6 @@ static int google_battery_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	batt_drv->device = &pdev->dev;
-
 
 	ret = of_property_read_string(pdev->dev.of_node,
 				      "google,fg-psy-name", &fg_psy_name);
