@@ -234,6 +234,7 @@ struct it7259_ts_data {
 	struct regulator *vdd;
 	struct regulator *avdd;
 	struct work_struct  touch_event_work;
+	struct delayed_work  touch_upgrade_work;
 	struct workqueue_struct *ts_workqueue;
 	struct mutex report_mutex;
 	struct point_data pt_data;
@@ -269,7 +270,9 @@ static int plam_detected_flag;
 static int wakeup_flag;
 static ktime_t last_plam_time;
 static ktime_t last_wakeup_time;
-static int  irq_count_when_suspend;
+static int irq_count_when_suspend;
+
+static int check_upgrade_flag;
 
 /* Function declarations */
 static int fb_notifier_callback(struct notifier_block *self,
@@ -315,6 +318,8 @@ static bool fnTransferPackage24To13(unsigned char *chanelCselValue,
 static void gfnNormalizeCsel(unsigned char *arry,
 	unsigned char *arry1, int nSize);
 /* For module test --*/
+
+static void it7259_get_chip_versions(struct it7259_ts_data *ts_data);
 
 static int it7259_debug_suspend_set(void *_data, u64 val)
 {
@@ -1023,7 +1028,7 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data,
 
 	if((download == 1) || (download == 3)) {
 		/*download config*/
-		printk("###009 start to download config\n");
+		ITE_INFO("###009 start to download config\n");
 		unTmp = gfnIT7259_GetFWSize(ts_data);
 		nConfigSize = unConfigLength;
 
@@ -1147,6 +1152,7 @@ static bool gfnIT7259_FirmwareDownload(struct it7259_ts_data *ts_data,
 		return false;
 	}
 
+	ts_data->fw_cfg_uploading = false;
 	printk("###gfnIT7259_FirmwareDownload() end.\n");
 	enable_irq(ts_data->client->irq);
 	return true;
@@ -1270,6 +1276,9 @@ static int Upgrade_FW_CFG(struct it7259_ts_data *ts_data)
 			/*success*/
 			it7259_reset(ts_data);
 			ret = 0;
+
+			/*mark as suspend, so it can wake up after upgrade*/
+			gl_ts->suspended = true;
 			goto error_firmware;
 		}
 	}
@@ -3189,11 +3198,6 @@ static irqreturn_t it7259_report_value(struct it7259_ts_data *ts_data)
 		return IRQ_HANDLED;
 	}
 
-
-
-
-
-
 	for (finger = 0; finger < ts_data->pdata->num_of_fingers; finger++) {
 		finger_status = pt_data->flags & (0x01 << finger);
 
@@ -3241,10 +3245,43 @@ static irqreturn_t it7259_report_value(struct it7259_ts_data *ts_data)
 *******************************************************************************/
 static void it7259_touch_irq_work(struct work_struct *work)
 {
-
 	mutex_lock(&gl_ts->report_mutex);
 	it7259_report_value(gl_ts);
 	mutex_unlock(&gl_ts->report_mutex);
+}
+
+static void it7259_upgrade_work(struct work_struct *work)
+{
+	struct it7259_ts_data *ts_data = gl_ts;
+
+	printk("%s():\n", __func__);
+	if (ts_data->suspended) {
+		printk("Device is suspended, can't upgrade FW/CFG !!!\n");
+		return;
+	}
+
+	/* check upgrade only once per boot */
+	check_upgrade_flag = 0;
+
+	/* Reset the Chip before upgarde the firmware */
+	disable_irq(ts_data->client->irq);
+
+	mutex_lock(&ts_data->fw_cfg_mutex);
+	it7259_reset(ts_data);
+	enable_irq(ts_data->client->irq);
+
+	if(Upgrade_FW_CFG(ts_data)) {
+		printk("IT7259_upgrade_failed\n");
+		mutex_unlock(&ts_data->fw_cfg_mutex);
+		return;
+	} else {
+		printk("IT7259_upgrade_OK\n\n");
+		mutex_unlock(&ts_data->fw_cfg_mutex);
+
+		msleep(DELAY_I2C_TRANSATION);
+		it7259_get_chip_versions(ts_data);
+		return;
+	}
 }
 
 static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
@@ -3297,11 +3334,20 @@ static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
 		input_report_key(input_dev, KEY_WAKEUP, 0);
 		input_sync(input_dev);
 		ts_data->fw_active = true;
+
 		schedule_work(&ts_data->work_pm_relax);
 		printk("IT7259 threaded_handler KEY_WAKEUP \n");
 		wakeup_flag = 1;
-		return IRQ_HANDLED;
+#if ITE_AUTOUPGRADE
+		/* check and update only once, delay 1s */
+		if(check_upgrade_flag == 1) {
+		queue_delayed_work(gl_ts->ts_workqueue,
+			&gl_ts->touch_upgrade_work,
+			msecs_to_jiffies(1000));
 }
+#endif
+		return IRQ_HANDLED;
+	}
 
 	queue_work(gl_ts->ts_workqueue,& gl_ts->touch_event_work);
 	return IRQ_HANDLED;
@@ -3890,7 +3936,6 @@ static void it7259_get_chip_versions(struct it7259_ts_data *ts_data)
 		ts_data->cfg_ver[2], ts_data->cfg_ver[3]);
 }
 
-
 static int it7259_ts_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -3909,11 +3954,13 @@ static int it7259_ts_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
-	irq_count_when_suspend = 0;
 	ts_data = devm_kzalloc(&client->dev, sizeof(*ts_data), GFP_KERNEL);
 	if (!ts_data)
 		return -ENOMEM;
+
 	gl_ts = ts_data;
+	check_upgrade_flag = 1;
+	irq_count_when_suspend = 0;
 
 	ts_data->client = client;
 	i2c_set_clientdata(client, ts_data);
@@ -4023,21 +4070,6 @@ static int it7259_ts_probe(struct i2c_client *client,
 	msleep(DELAY_I2C_TRANSATION);
 	it7259_get_chip_versions(ts_data);
 
-#if ITE_AUTOUPGRADE
-	ret = Upgrade_FW_CFG(ts_data);
-#else
-	pr_debug("%s %d not upgrade during  bring up \n", __func__, __LINE__);
-	ret = 0;
-#endif
-
-	if (ret) {
-		dev_err(&client->dev, "failed to upgrade firmware\n");
-		 goto err_upgrade_fw;
-	} else {
-		msleep(DELAY_I2C_TRANSATION);
-		it7259_get_chip_versions(ts_data);
-	}
-
 	ts_data->input_dev = input_allocate_device();
 	if (!ts_data->input_dev) {
 		dev_err(&client->dev, "failed to allocate input device\n");
@@ -4105,11 +4137,13 @@ static int it7259_ts_probe(struct i2c_client *client,
 	mutex_init(&gl_ts->report_mutex);
 
 	INIT_WORK(&ts_data->touch_event_work, it7259_touch_irq_work);
+	INIT_DELAYED_WORK(&ts_data->touch_upgrade_work, it7259_upgrade_work);
 	ts_data->ts_workqueue = create_workqueue(ITE_WORKQUEUE_NAME);
 	if (!ts_data->ts_workqueue) {
 		err = -ESRCH;
 		goto err_irq_reg;
 	}
+
 
 	if (sysfs_create_group(&(client->dev.kobj), &it7259_attr_group)) {
 		dev_err(&client->dev, "failed to register sysfs #2\n");
@@ -4176,7 +4210,6 @@ err_input_register:
 		input_free_device(ts_data->input_dev);
 	ts_data->input_dev = NULL;
 
-err_upgrade_fw:
 err_input_alloc:
 err_identification_fail:
 	if (ts_data->ts_pinctrl) {
@@ -4271,20 +4304,23 @@ static int fb_notifier_callback(struct notifier_block *self,
 	int *blank;
 	if (evdata && evdata->data && ts_data && ts_data->client) {
 		if (event == FB_EVENT_BLANK) {
-			printk("IT7259 fb_notifier_callback ++++++\n");
+			ITE_INFO("IT7259 fb_notifier_callback ++++++\n");
 			blank = evdata->data;
 			if (*blank == FB_BLANK_UNBLANK) {
-				printk("IT7259 fb_notifier_callback FB_BLANK_UNBLANK\n");
+				ITE_INFO("IT7259 fb_notifier_callback \
+					FB_BLANK_UNBLANK\n");
 				it7259_ts_resume(&(ts_data->client->dev));
 			} else if (*blank == FB_BLANK_POWERDOWN ||
 					*blank == FB_BLANK_VSYNC_SUSPEND) {
 				if (*blank == FB_BLANK_POWERDOWN)
-					printk("IT7259 fb_notifier_callback FB_BLANK_POWERDOWN\n");
+					ITE_INFO("IT7259 fb_notifier_callback \
+						FB_BLANK_POWERDOWN\n");
 				else if (*blank == FB_BLANK_VSYNC_SUSPEND)
-					printk("IT7259 fb_notifier_callback FB_BLANK_VSYNC_SUSPEND\n");
+					ITE_INFO("IT7259 fb_notifier_callback \
+						FB_BLANK_VSYNC_SUSPEND\n");
 				it7259_ts_suspend(&(ts_data->client->dev));
 			}
-			printk("IT7259 fb_notifier_callback ------\n");
+			ITE_INFO("IT7259 fb_notifier_callback ------\n");
 		}
 	}
 
@@ -4305,7 +4341,7 @@ static int it7259_ts_resume(struct device *dev)
 		return -EPERM;
 	}
 
-	printk("IT7259 it7259_ts_resume enter\n");
+	ITE_INFO("IT7259 it7259_ts_resume enter\n");
 
 	if (device_may_wakeup(dev)) {
 		if (ts_data->in_low_power_mode) {
@@ -4337,7 +4373,7 @@ static int it7259_ts_resume(struct device *dev)
 						retval);
 				}
 			}
-			msleep(DELAY_I2C_TRANSATION);
+
 			ts_data->fw_active = true;
 
 			enable_irq(ts_data->client->irq);
@@ -4348,7 +4384,7 @@ static int it7259_ts_resume(struct device *dev)
 		}
 
 		ts_data->suspended = false;
-		printk("IT7259 it7259_ts_resume exit 1\n");
+		ITE_INFO("IT7259 it7259_ts_resume exit 1\n");
 		return 0;
 	}
 
@@ -4368,8 +4404,6 @@ static int it7259_ts_resume(struct device *dev)
 			goto err_pinctrl_select_suspend;
 		}
 	}
-
-	msleep(DELAY_I2C_TRANSATION);
 
 	enable_irq(ts_data->client->irq);
 	ts_data->suspended = false;
