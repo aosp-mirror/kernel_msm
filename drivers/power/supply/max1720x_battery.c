@@ -33,6 +33,7 @@
 #include <linux/fs.h> /* register_chrdev, unregister_chrdev */
 #include <linux/module.h>
 #include <linux/seq_file.h> /* seq_read, seq_lseek, single_release */
+#include <google/google_bms.h>
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -305,8 +306,6 @@ enum max17xxx_register {
 	MAX17XXX_MIXCAP		= MAX1720X_MIXCAP,
 };
 
-#define BUCKET_COUNT 10
-
 #define MAX1720X_HISTORY_PAGE_SIZE \
 		(MAX1720X_NVRAM_HISTORY_END - MAX1720X_NVRAM_END + 1)
 
@@ -318,11 +317,9 @@ enum max17xxx_register {
 #define MAX1720X_N_OF_QRTABLES 4
 
 struct max1720x_cyc_ctr_data {
-	u16 count[BUCKET_COUNT];
 	struct mutex lock;
-	int prev_soc;
+	char cyc_ctr_cstr[GBMS_CCBIN_CSTR_SIZE];
 };
-
 
 struct max1720x_history {
 	loff_t history_index;
@@ -336,12 +333,12 @@ struct max1720x_chip {
 	struct regmap *regmap;
 	struct power_supply *psy;
 	struct delayed_work init_work;
-	struct work_struct cycle_count_work;
 	struct i2c_client *primary;
 	struct i2c_client *secondary;
 	struct regmap *regmap_nvram;
 	struct device_node *batt_node;
 	struct iio_channel *iio_ch;
+
 	struct max1720x_cyc_ctr_data cyc_ctr;
 
 	/* history */
@@ -1018,6 +1015,7 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
+	/* POWER_SUPPLY_PROP_CYCLE_COUNTS: only available from kernel */
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	POWER_SUPPLY_PROP_RESISTANCE,
@@ -1033,151 +1031,98 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 };
 
-static void max17x0x_cycle_count_work(struct work_struct *work)
-{
-	u16 data;
-	int bucket, cnt, batt_soc;
-	const struct max17x0x_reg *bcnt;
-	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
-						  cycle_count_work);
+/* storage for cycle count --------------------------------------------------*/
 
-	if (REGMAP_READ(chip->regmap, MAX1720X_REPSOC, &data))
-		return;
-	batt_soc = reg_to_percentage(data);
+
+static void max17x0x_reg_dump(const struct max17x0x_reg *reg, u16 *data)
+{
+	int i, len;
+	const int count = reg->size / 2;
+	const int size = 6 + count * 8 + 1;
+	char buff[size];
+
+	len = snprintf(buff, size, "%c%c%c%c ",
+		(reg->tag >> 24 ) & 0xff,
+		(reg->tag >> 16 ) & 0xff,
+		(reg->tag >> 8 ) & 0xff,
+		(reg->tag >> 0 ) & 0xff);
+
+	for (i = 0; i < count ; i++)
+		len += snprintf(&buff[len], size - len, "%02X:%04X ",
+			reg->map[i], data[i]);
+	buff[len - 1] = 0;
+	pr_info(" %s\n", buff);
+}
+
+/* read from storage and convert to string */
+static int max17x0x_cycle_count_load(char *buff, int size,
+				     struct max1720x_chip *chip)
+{
+	u16 bcount[GBMS_CCBIN_BUCKET_COUNT];
+	const struct max17x0x_reg *bcnt;
+	int ret;
 
 	bcnt = max17x0x_find_by_id('BCNT');
 	if (!bcnt)
-		return;
+		return -EINVAL;
+
+	if (bcnt->size / sizeof(u16) != GBMS_CCBIN_BUCKET_COUNT)
+		return -ENODATA;
 
 	mutex_lock(&chip->cyc_ctr.lock);
 
-	if (chip->cyc_ctr.prev_soc != -1 &&
-	    batt_soc >= 0 && batt_soc <= 100 &&
-	    batt_soc > chip->cyc_ctr.prev_soc) {
-		for (cnt = batt_soc ; cnt > chip->cyc_ctr.prev_soc ; cnt--) {
-			bucket = cnt * BUCKET_COUNT / 100;
-			if (bucket >= BUCKET_COUNT)
-				bucket = BUCKET_COUNT - 1;
-			chip->cyc_ctr.count[bucket]++;
-#if 0
-			/* Disable saving of bin cycle count to maxim NV storage
-			   since the NV layout is not finalized yet */
-			REGMAP_WRITE(chip->regmap_nvram,
-				     bcnt->map[bucket],
-				     chip->cyc_ctr.count[bucket]);
-#endif
-			pr_debug("Stored count: prev_soc=%d, soc=%d bucket=%d count=%d\n",
-				 chip->cyc_ctr.prev_soc, cnt, bucket,
-				 chip->cyc_ctr.count[bucket]);
+	ret = max17x0x_reg_load(chip->regmap_nvram, bcnt, bcount);
+	if (ret == 0) {
+		(void)gbms_cycle_count_cstr(buff, PAGE_SIZE, bcount);
+		max17x0x_reg_dump(bcnt, bcount);
+	} else {
+		ret = -EIO;
+	}
+
+	mutex_unlock(&chip->cyc_ctr.lock);
+
+	return ret;
+}
+
+/* parse buffer and store to storage */
+static int max17x0x_cycle_count_store(struct max1720x_chip *chip,
+				      const char *buff)
+{
+	u16 bcount[GBMS_CCBIN_BUCKET_COUNT];
+	const struct max17x0x_reg *bcnt;
+	int ret;
+
+	bcnt = max17x0x_find_by_id('BCNT');
+	if (!bcnt)
+		return -EINVAL;
+
+	if (bcnt->size / sizeof(u16) != GBMS_CCBIN_BUCKET_COUNT)
+		return -ENODATA;
+
+	mutex_lock(&chip->cyc_ctr.lock);
+	ret = max17x0x_reg_load(chip->regmap_nvram, bcnt, bcount);
+	if (ret == 0) {
+		ret = gbms_cycle_count_sscan(bcount, buff);
+		if (ret < 0) {
+			pr_err("invalid bin count (%d)\n", ret);
+		} else {
+			ret = max17x0x_reg_store(chip->regmap_nvram, bcnt,
+							bcount);
+			if (ret < 0)
+				pr_err("cannot store bin count (%d)\n", ret);
+			else
+				max17x0x_reg_dump(bcnt, bcount);
 		}
 	}
-
-	chip->cyc_ctr.prev_soc = batt_soc;
-
-	mutex_unlock(&chip->cyc_ctr.lock);
-}
-
-static void max17x0x_restore_cycle_counter(struct max1720x_chip *chip)
-{
-	int ret, i;
-	const struct max17x0x_reg *bcnt;
-
-	bcnt = max17x0x_find_by_id('BCNT');
-	if (!bcnt)
-		return;
-
-	mutex_lock(&chip->cyc_ctr.lock);
-	ret = max17x0x_reg_load(chip->regmap_nvram, bcnt, chip->cyc_ctr.count);
-	for (i = 0; ret == 0 && i < BUCKET_COUNT ; i++) {
-		pr_debug("max1720x_cycle_counter[%d], addr=0x%02X, count=%d\n",
-				i, bcnt->map[i], chip->cyc_ctr.count[i]);
-	}
-
-	chip->cyc_ctr.prev_soc = -1;
-
-	mutex_unlock(&chip->cyc_ctr.lock);
-}
-
-static ssize_t max1720x_get_cycle_counts_bins(struct device *dev,
-					      struct device_attribute *attr,
-					      char *buf)
-{
-	struct power_supply *psy;
-	struct max1720x_chip *chip;
-	int len = 0, i;
-
-	psy = container_of(dev, struct power_supply, dev);
-	chip = power_supply_get_drvdata(psy);
-
-	mutex_lock(&chip->cyc_ctr.lock);
-
-	for (i = 0; i < BUCKET_COUNT; i++) {
-
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%d",
-				 chip->cyc_ctr.count[i]);
-
-		if (i == BUCKET_COUNT-1)
-			len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
-		else
-			len += scnprintf(buf + len, PAGE_SIZE - len, " ");
-	}
-
 	mutex_unlock(&chip->cyc_ctr.lock);
 
-	return len;
+	if (ret < 0)
+		ret = -EINVAL;
+
+	return ret;
 }
 
-static ssize_t max17x0x_set_cycle_counts_bins(struct device *dev,
-					      struct device_attribute *attr,
-					      const char *buf, size_t count)
-{
-	struct power_supply *psy;
-	struct max1720x_chip *chip;
-	const struct max17x0x_reg *bcnt;
-
-	psy = container_of(dev, struct power_supply, dev);
-	chip = power_supply_get_drvdata(psy);
-
-	bcnt = max17x0x_find_by_id('BCNT');
-	if (bcnt) {
-		u16 bincnt[BUCKET_COUNT];
-		int ret, i, val[BUCKET_COUNT];
-		const int bucket_count = bcnt->size / sizeof(u16);
-
-		if (bucket_count != BUCKET_COUNT)
-			return -ENODATA;
-
-		if (sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
-				&val[0], &val[1], &val[2], &val[3], &val[4],
-				&val[5], &val[6], &val[7], &val[8], &val[9])
-				!= bucket_count)
-			return -EINVAL;
-
-		mutex_lock(&chip->cyc_ctr.lock);
-
-		for (i = 0; i < bucket_count ; i++)
-			if (val[i] >= 0 && val[i] < U16_MAX)
-				bincnt[i] = val[i];
-			else
-				bincnt[i] = chip->cyc_ctr.count[i];
-
-		ret = max17x0x_reg_store(chip->regmap_nvram, bcnt, bincnt);
-		if (ret < 0)
-			count = -EINVAL;
-		else
-			memcpy(chip->cyc_ctr.count, bincnt,
-				sizeof(chip->cyc_ctr.count));
-
-		mutex_unlock(&chip->cyc_ctr.lock);
-	}
-
-	return count;
-}
-
-
-static DEVICE_ATTR(cycle_counts_bins, 0660,
-		   max1720x_get_cycle_counts_bins,
-		   max17x0x_set_cycle_counts_bins);
+/* ------------------------------------------------------------------------- */
 
 static ssize_t max1720x_get_offmode_charger(struct device *dev,
 					    struct device_attribute *attr,
@@ -1245,6 +1190,7 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 		 data, psy_status_str[status]);
 }
 
+/* NOTE: the gauge doesn't know if we are current limited to */
 static int max1720x_get_battery_status(struct max1720x_chip *chip)
 {
 	u16 data = 0;
@@ -1278,6 +1224,7 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 			max1720x_prime_battery_qh_capacity(chip, status);
 		chip->prev_charge_state = POWER_SUPPLY_STATUS_FULL;
 	} else {
+		/* discharging state is not recorded in prev_charge_state */
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
 		chip->prev_charge_state = POWER_SUPPLY_STATUS_DISCHARGING;
 	}
@@ -1466,6 +1413,13 @@ static int max1720x_get_property(struct power_supply *psy,
 		err = REGMAP_READ(map, MAX1720X_CYCLES, &data);
 		val->intval = reg_to_cycles(data);
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
+		err = max17x0x_cycle_count_load(chip->cyc_ctr.cyc_ctr_cstr,
+				sizeof(chip->cyc_ctr.cyc_ctr_cstr),
+				chip);
+		if (err == 0)
+			val->strval = chip->cyc_ctr.cyc_ctr_cstr;
+		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		err = REGMAP_READ(map, MAX1720X_STATUS, &data);
 		val->intval = (((u16) data) & MAX1720X_STATUS_BST) ? 0 : 1;
@@ -1544,9 +1498,15 @@ static int max1720x_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		rc = max1720x_set_battery_soc(chip, val);
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
+		rc = max17x0x_cycle_count_store(chip, val->strval);
+		break;
 	default:
 		return -EINVAL;
 	}
+
+	if (rc < 0)
+		return rc;
 
 	return 0;
 }
@@ -1609,7 +1569,7 @@ static int max1720x_full_reset(struct max1720x_chip *chip)
 
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 {
-	struct max1720x_chip *chip = obj;
+	struct max1720x_chip *chip = (struct max1720x_chip *)obj;
 	u16 fg_status, fg_status_clr;
 	int err = 0;
 
@@ -1623,10 +1583,13 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		pm_runtime_put_sync(chip->dev);
 		return -EAGAIN;
 	}
+
 	pm_runtime_put_sync(chip->dev);
+
 	err = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &fg_status);
 	if (err)
 		return IRQ_NONE;
+
 	if (fg_status == 0) {
 		chip->debug_irq_none_cnt++;
 		pr_debug("spurius: fg_status=0 cnt=%d\n",
@@ -1668,7 +1631,6 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	if (fg_status & MAX1720X_STATUS_DSOCI) {
 		fg_status_clr &= ~MAX1720X_STATUS_DSOCI;
 		pr_debug("DSOCI is set\n");
-		schedule_work(&chip->cycle_count_work);
 	}
 	if (fg_status & MAX1720X_STATUS_VMN) {
 		if (chip->RConfig & MAX1720X_CONFIG_VS)
@@ -2221,7 +2183,6 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	(void) max1720x_handle_dt_nconvgcfg(chip);
 
 	chip->fake_capacity = -EINVAL;
-	chip->init_complete = true;
 	chip->resume_complete = true;
 
 	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
@@ -2266,6 +2227,8 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	chip->prev_charge_state = POWER_SUPPLY_STATUS_UNKNOWN;
 
 	init_debugfs(chip);
+
+	chip->init_complete = true;
 
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
@@ -2612,8 +2575,6 @@ static int max1720x_probe(struct i2c_client *client,
 		max17xxx_gauge_type = MAX1720X_GAUGE_TYPE;
 	}
 
-	max17x0x_restore_cycle_counter(chip);
-
 	if (chip->primary->irq) {
 		ret = request_threaded_irq(chip->primary->irq, NULL,
 					   max1720x_fg_irq_thread_fn,
@@ -2639,12 +2600,6 @@ static int max1720x_probe(struct i2c_client *client,
 		goto irq_unregister;
 	}
 
-	ret = device_create_file(&chip->psy->dev, &dev_attr_cycle_counts_bins);
-	if (ret) {
-		dev_err(dev, "Failed to create cycle_counts_bins attribute\n");
-		goto psy_unregister;
-	}
-
 	ret = device_create_file(&chip->psy->dev, &dev_attr_offmode_charger);
 	if (ret) {
 		dev_err(dev, "Failed to create offmode_charger attribute\n");
@@ -2653,7 +2608,6 @@ static int max1720x_probe(struct i2c_client *client,
 
 	max17x0x_set_serial_number(chip);
 
-	INIT_WORK(&chip->cycle_count_work, max17x0x_cycle_count_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
 	schedule_delayed_work(&chip->init_work,
 			      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
