@@ -150,9 +150,9 @@ static const struct airbrush_mux_clock aon_mux_clks[] = {
 static const struct airbrush_div_clock aon_div_clks[] = {
 	DIV(0, "dout_aon_div4_pllclk", "mout_aon_pll_aon", CLK_CON_DIV_DIV4_PLLCLK, 0, 4),
 	DIV(0, "dout_aon_div_otp", "fin_pll_ab", CLK_CON_DIV_DIV_OTP, 0, 4),
-	DIV(DOUT_AON_SHARED_DIV_AON_PLL,
-			"dout_aon_shared_div_aon_pll", "mout_aon_pll_aon",
-			CLK_CON_DIV_SHARED_DIV_AON_PLL, 0, 4),
+	DIV_F(DOUT_AON_SHARED_DIV_AON_PLL, "dout_aon_shared_div_aon_pll",
+		"mout_aon_pll_aon", CLK_CON_DIV_SHARED_DIV_AON_PLL, 0, 4,
+		CLK_IS_CRITICAL, 0),
 	DIV(DOUT_AON_PLL_AON_CLK, "dout_aon_pll_aon_clk", "mout_aon_pll_aon", CLK_CON_DIV_PLL_AON_CLK, 0, 4),
 	DIV(DOUT_AON_SHARED_DIV_MIF, "dout_aon_shared_div_mif", "mout_aon_pll_aon", CLK_CON_DIV_SHARED_DIV_MIF, 0, 4),
 	DIV(0, "dout_aon_div_tmu", "fin_pll_ab", CLK_CON_DIV_DIV_TMU, 0, 4),
