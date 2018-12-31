@@ -234,6 +234,16 @@ void ab_sm_register_blk_callback(enum block_name name,
 	ab_sm_ctx->blocks[name].data = data;
 }
 
+void ipu_tpu_clock_resync(struct ab_state_context *sc)
+{
+	struct ab_sm_clk_ops *clk = sc->clk_ops;
+
+	clk->ipu_ungate(clk->ctx);
+	clk->ipu_gate(clk->ctx);
+	clk->tpu_ungate(clk->ctx);
+	clk->tpu_gate(clk->ctx);
+}
+
 /* Caller must hold sc->op_lock */
 int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 u64 frequency, enum states clk_status)
@@ -327,6 +337,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 			}
 			ab_sm_record_ts(sc, AB_SM_TS_PMU_TPU_ON);
 		}
+		ipu_tpu_clock_resync(sc);
 	}
 
 	clk_set_frequency(sc, blk, desired_state->clk_frequency,
