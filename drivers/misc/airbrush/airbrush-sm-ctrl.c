@@ -236,6 +236,22 @@ void ab_sm_register_blk_callback(enum block_name name,
 	ab_sm_ctx->blocks[name].data = data;
 }
 
+static void ipu_clock_resync(struct ab_state_context *sc)
+{
+	struct ab_sm_clk_ops *clk = sc->clk_ops;
+
+	clk->ipu_ungate(clk->ctx);
+	clk->ipu_gate(clk->ctx);
+}
+
+static void tpu_clock_resync(struct ab_state_context *sc)
+{
+	struct ab_sm_clk_ops *clk = sc->clk_ops;
+
+	clk->tpu_ungate(clk->ctx);
+	clk->tpu_gate(clk->ctx);
+}
+
 /* Caller must hold sc->op_lock */
 int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 u64 frequency, enum states clk_status)
@@ -330,6 +346,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 				return -EAGAIN;
 			}
 			ab_sm_record_ts(sc, AB_SM_TS_PMU_IPU_ON);
+			ipu_clock_resync(sc);
 		}
 		if (blk->name == BLK_TPU) {
 			if (pmu->pmu_tpu_resume(pmu->ctx)) {
@@ -337,6 +354,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 				return -EAGAIN;
 			}
 			ab_sm_record_ts(sc, AB_SM_TS_PMU_TPU_ON);
+			tpu_clock_resync(sc);
 		}
 	}
 
