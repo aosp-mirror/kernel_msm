@@ -2017,6 +2017,7 @@ static void do_sync_mmap_readahead(struct vm_area_struct *vma,
 				   pgoff_t offset)
 {
 	struct address_space *mapping = file->f_mapping;
+	unsigned long max;
 
 	/* If we don't want any read-ahead, don't bother */
 	if (vma->vm_flags & VM_RAND_READ)
@@ -2044,9 +2045,11 @@ static void do_sync_mmap_readahead(struct vm_area_struct *vma,
 	/*
 	 * mmap read-around
 	 */
-	ra->start = max_t(long, 0, offset - ra->ra_pages / 2);
-	ra->size = ra->ra_pages;
-	ra->async_size = ra->ra_pages / 4;
+	max = min((unsigned long)ra->ra_pages,
+		inode_to_bdi(mapping->host)->ra_pages);
+	ra->start = max_t(long, 0, offset - max / 2);
+	ra->size = max;
+	ra->async_size = max / 4;
 	ra_submit(ra, mapping, file);
 }
 
