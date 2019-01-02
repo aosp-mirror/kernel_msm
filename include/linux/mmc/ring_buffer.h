@@ -20,7 +20,7 @@
 
 #include "core.h"
 
-#define MMC_TRACE_RBUF_SZ_ORDER	2	/* 2^2 pages */
+#define MMC_TRACE_RBUF_SZ_ORDER	4	/* 2^4 pages */
 #define MMC_TRACE_RBUF_SZ	(PAGE_SIZE * (1 << MMC_TRACE_RBUF_SZ_ORDER))
 #define MMC_TRACE_EVENT_SZ	256
 #define MMC_TRACE_RBUF_NUM_EVENTS	(MMC_TRACE_RBUF_SZ / MMC_TRACE_EVENT_SZ)
