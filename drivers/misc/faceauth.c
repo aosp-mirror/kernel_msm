@@ -319,9 +319,6 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.size = size;
 	dma_desc.dir = dir;
-	pr_info("MBLK AP src = %pK; AB dest = %pK; size = %d\n",
-		(unsigned long)dma_desc.local_buf,
-		(unsigned long)dma_desc.remote_buf, dma_desc.size);
 	err = abc_pcie_issue_dma_xfer(&dma_desc);
 	return err;
 }
@@ -349,9 +346,6 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.size = size;
 	dma_desc.dir = dir;
-	pr_info("MBLK AP src = %pK; AB dest = %pK; size = %d\n",
-		(unsigned long)dma_desc.local_buf,
-		(unsigned long)dma_desc.remote_buf, dma_desc.size);
 	err = abc_pcie_issue_dma_xfer_vmalloc(&dma_desc);
 	return err;
 }
