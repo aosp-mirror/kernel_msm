@@ -38,13 +38,13 @@
 #define SYSREG_BASE 0x10B00000
 #define SYSREG_REG_GP_INT0_ADDR (SYSREG_BASE + SYSREG_REG_GP_INT0)
 #define SYSREG_AON_IPU_REG29_ADDR (SYSREG_BASE + SYSREG_AON_IPU_REG29)
+#define COMPLETION_FLAG_ADDR (SYSREG_AON + 0x3C4)
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
 #define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
 #define COMPARE_RESULT_FLAG_ADDR 0x21fffff4
 #define OPERATION_FLAG_ADDR 0x21fffff8
-#define COMPLETION_FLAG_ADDR 0x21fffffc
 #define JQS_DEPTH_ADDR 0x22000000
 #define JQS_AFFINE_16_ADDR 0x22100000
 #define JQS_AFFINE_RGB_ADDR 0x22200000
@@ -207,7 +207,11 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		/* Reset completion flag */
 		pr_info("Clearing completion flag at 0x%08x\n",
 			COMPLETION_FLAG_ADDR);
-		dma_write_dw(file, COMPLETION_FLAG_ADDR, 0);
+		err = aon_config_write(COMPLETION_FLAG_ADDR, 4, 0);
+		if (err) {
+			pr_err("Error clearing completion flag\n");
+			goto exit;
+		}
 
 		/* Trigger M0 Interrupt */
 		pr_info("Interrupting M0\n");
@@ -219,7 +223,12 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
 		for (;;) {
 			int done;
-			dma_read_dw(file, COMPLETION_FLAG_ADDR, &done);
+			err = aon_config_read(COMPLETION_FLAG_ADDR, 4, &done);
+			if (err) {
+				pr_err("Error reading completion flag\n");
+				goto exit;
+			}
+
 			if (done) {
 				pr_info("Faceauth workflow completes.\n");
 				break;
