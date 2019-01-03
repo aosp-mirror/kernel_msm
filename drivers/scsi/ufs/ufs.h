@@ -257,6 +257,7 @@ enum health_desc_param {
 	HEALTH_DESC_PARAM_EOL_INFO		= 0x2,
 	HEALTH_DESC_PARAM_LIFE_TIME_EST_A	= 0x3,
 	HEALTH_DESC_PARAM_LIFE_TIME_EST_B	= 0x4,
+	HEALTH_DESC_PARAM_LIFE_TIME_EST_C	= 0x24,
 };
 
 /*
@@ -575,6 +576,7 @@ struct ufs_dev_info {
 	unsigned int pre_eol_info;
 	unsigned int lifetime_a;
 	unsigned int lifetime_b;
+	unsigned int lifetime_c;
 };
 
 #define MAX_MODEL_LEN 16

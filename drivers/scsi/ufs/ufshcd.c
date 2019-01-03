@@ -1027,6 +1027,8 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 		hba->dev_info.lifetime_a);
 	dev_err(hba->dev, " LifeTimeB = 0x%x\n",
 		hba->dev_info.lifetime_b);
+	dev_err(hba->dev, " LifeTimeC = 0x%x\n",
+		hba->dev_info.lifetime_c);
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_reqs, hba->outstanding_tasks);
 	dev_err(hba->dev, "saved_err=0x%x, saved_uic_err=0x%x, saved_ce_err=0x%x\n",
@@ -6141,9 +6143,14 @@ static int ufshcd_slave_alloc(struct scsi_device *sdev)
 	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
 					desc_buf, buff_len);
 	if (!err) {
-		hba->dev_info.pre_eol_info = (u8)desc_buf[2];
-		hba->dev_info.lifetime_a = (u8)desc_buf[3];
-		hba->dev_info.lifetime_b = (u8)desc_buf[4];
+		hba->dev_info.pre_eol_info =
+			(u8)desc_buf[HEALTH_DESC_PARAM_EOL_INFO];
+		hba->dev_info.lifetime_a =
+			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_A];
+		hba->dev_info.lifetime_b =
+			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_B];
+		hba->dev_info.lifetime_c =
+			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_C];
 	}
 
 	return 0;
