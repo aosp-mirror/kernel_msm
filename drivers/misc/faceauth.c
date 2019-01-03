@@ -35,9 +35,6 @@
 #define SYSREG_AON 0x30000
 #define SYSREG_REG_GP_INT0 (SYSREG_AON + 0x37C)
 #define SYSREG_AON_IPU_REG29 (SYSREG_AON + 0x438)
-#define SYSREG_BASE 0x10B00000
-#define SYSREG_REG_GP_INT0_ADDR (SYSREG_BASE + SYSREG_REG_GP_INT0)
-#define SYSREG_AON_IPU_REG29_ADDR (SYSREG_BASE + SYSREG_AON_IPU_REG29)
 #define COMPLETION_FLAG_ADDR (SYSREG_AON + 0x3C4)
 
 /* ABC FW and workload binary offsets */
@@ -196,7 +193,14 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 		/* Set M0 firmware address */
 		pr_info("Set M0 firmware addr = 0x%08x\n", M0_FIRMWARE_ADDR);
-		dma_write_dw(file, SYSREG_AON_IPU_REG29_ADDR, M0_FIRMWARE_ADDR);
+		err = aon_config_write(SYSREG_AON_IPU_REG29, 4,
+				M0_FIRMWARE_ADDR);
+		if (err) {
+			pr_err("Error setting faceauth FW address\n");
+			goto exit;
+		}
+
+
 
 		/* Set operation flag */
 		pr_info("Set faceauth operation flag at 0x%08x\n",
@@ -215,7 +219,12 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 		/* Trigger M0 Interrupt */
 		pr_info("Interrupting M0\n");
-		dma_write_dw(file, SYSREG_REG_GP_INT0_ADDR, 1);
+		err = aon_config_write(SYSREG_REG_GP_INT0, 4, 1);
+		if (err) {
+			pr_err("Error interrupting AB\n");
+			goto exit;
+		}
+
 
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
