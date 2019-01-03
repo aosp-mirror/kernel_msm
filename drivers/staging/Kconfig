@@ -106,9 +106,5 @@ source "drivers/staging/greybus/Kconfig"
 
 source "drivers/staging/vc04_services/Kconfig"
 
-#Triggerfish customization
-
-source "drivers/staging/prima/Kconfig"
-
 
 endif # STAGING

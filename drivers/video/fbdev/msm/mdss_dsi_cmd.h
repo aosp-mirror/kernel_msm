@@ -16,6 +16,10 @@
 
 #include "mdss.h"
 
+#ifdef TARGET_HAVE_AUO_HBM_MODE
+#include "auo_dsi.h"
+#endif
+
 struct mdss_dsi_ctrl_pdata;
 
 #define DSI_HOST_HDR_SIZE	4
@@ -137,6 +141,4 @@ struct dcs_cmd_req *mdss_dsi_cmdlist_get(struct mdss_dsi_ctrl_pdata *ctrl,
 				int from_mdp);
 int mdss_dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
 				struct dcs_cmd_req *cmdreq);
-void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl);
-void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl);
 #endif

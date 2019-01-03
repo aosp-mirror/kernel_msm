@@ -36,7 +36,6 @@
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
-static int g_auo_pre_init = 0;
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -981,15 +980,9 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 
 	mdss_dsi_post_panel_on_hdmi(pinfo);
 
-	if (!g_auo_pre_init) {
-		g_auo_pre_init++;
-		mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL, ctrl->read_back_param, 1);
-		pr_err("%s: read_back_param[0] = 0x%02x\n", __func__, ctrl->read_back_param[0]);
-		mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL, ctrl->id3_code, 1);
-		pr_err("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
-		/* switch back to original page */
-		mdss_dsi_switch_page(ctrl, 0x00);
-	}
+#ifdef TARGET_HAVE_AUO_HBM_MODE
+	dsi_auo_read_id_code(ctrl);
+#endif
 end:
 	pr_debug("%s:-\n", __func__);
 	return 0;
@@ -1136,7 +1129,7 @@ static void mdss_dsi_parse_trigger(struct device_node *np, char *trigger,
 }
 
 
-static int mdss_dsi_parse_dcs_cmds(struct device_node *np,
+int mdss_dsi_parse_dcs_cmds(struct device_node *np,
 		struct dsi_panel_cmds *pcmds, char *cmd_key, char *link_key)
 {
 	const char *data;
@@ -2933,13 +2926,6 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-idle-off-command",
 		"qcom,mdss-dsi-idle-off-command-state");
 
-	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm0_on_cmds,
-		"qcom,mdss-dsi-hbm0-on-command", NULL);
-	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm1_on_cmds,
-		"qcom,mdss-dsi-hbm1-on-command", NULL);
-	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm_off_cmds,
-		"qcom,mdss-dsi-hbm-off-command", NULL);
-
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
 	pinfo->mipi.frame_rate_idle = (!rc ? tmp : 60);
 
@@ -2958,7 +2944,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_panel_horizintal_line_idle(np, ctrl_pdata);
 
 	mdss_dsi_parse_dfps_config(np, ctrl_pdata);
-
+#ifdef TARGET_HAVE_AUO_HBM_MODE
+	/*Parse auo hbm dsi*/
+	mdss_dsi_raydium_parse_dt(np, ctrl_pdata);
+#endif
 	rc = mdss_panel_parse_dt_hdmi(np, ctrl_pdata);
 	if (rc)
 		goto error;

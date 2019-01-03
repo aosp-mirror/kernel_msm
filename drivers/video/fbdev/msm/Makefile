@@ -77,3 +77,9 @@ obj-$(CONFIG_FB_MSM_QPIC_ILI_QVGA_PANEL) += qpic_panel_ili_qvga.o
 
 obj-$(CONFIG_FB_MSM_MDSS) += mdss_fb.o mdss_util.o
 obj-$(CONFIG_COMPAT) += mdss_compat_utils.o
+
+
+obj-$(CONFIG_TOUCHSCREEN_RM_TS) += auo_dsi.o
+
+ccflags-$(CONFIG_TOUCHSCREEN_RM_TS) += -DTARGET_HAVE_AUO_HBM_MODE
+ccflags-$(CONFIG_TOUCHSCREEN_RM_TS_UB128BLX01) += -DTARGET_HAVE_AUO_CONTROLLER_U128BLX

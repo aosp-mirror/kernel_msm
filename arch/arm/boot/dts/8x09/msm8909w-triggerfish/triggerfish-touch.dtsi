@@ -14,13 +14,13 @@
 &soc {
 	i2c@78b9000 {
 		raydium@39 {
-			compatible = "raydium,raydium-ts";
+			compatible = "raydium,raydium-ts-ub128blx01";
 			reg = <0x39>;
 			interrupt-parent = <&msm_gpio>;
-			interrupts = <98 0x2008>;
+			interrupts = <98 0x2002>;
 			vcc_i2c-supply = <&pm660_l13>;
 			raydium,reset-gpio = <&msm_gpio 16 0x00>;
-			raydium,irq-gpio =<&msm_gpio 98 0x2008>;
+			raydium,irq-gpio =<&msm_gpio 98 0x2002>;
 			/* pins used by touchscreen */
 			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;

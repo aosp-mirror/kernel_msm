@@ -477,10 +477,12 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds post_dms_on_cmds;
 	struct dsi_panel_cmds post_panel_on_cmds;
 	struct dsi_panel_cmds off_cmds;
+#ifdef TARGET_HAVE_AUO_HBM_MODE
 	/*Support hdm mode*/
 	struct dsi_panel_cmds hbm0_on_cmds;
 	struct dsi_panel_cmds hbm1_on_cmds;
 	struct dsi_panel_cmds hbm_off_cmds;
+#endif
 
 	struct dsi_panel_cmds lp_on_cmds;
 	struct dsi_panel_cmds lp_off_cmds;
