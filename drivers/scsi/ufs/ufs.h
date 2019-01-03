@@ -144,6 +144,8 @@ enum {
 	UPIU_QUERY_FUNC_STANDARD_WRITE_REQUEST          = 0x81,
 };
 
+#define UFSHCD_DEFAULT_PE_CYCLE		3000
+
 enum desc_header_offset {
 	QUERY_DESC_LENGTH_OFFSET	= 0x00,
 	QUERY_DESC_DESC_TYPE_OFFSET	= 0x01,
@@ -157,6 +159,17 @@ enum ufs_desc_def_size {
 	QUERY_DESC_GEOMETRY_DEF_SIZE		= 0x44,
 	QUERY_DESC_POWER_DEF_SIZE		= 0x62,
 	QUERY_DESC_HEALTH_DEF_SIZE		= 0x25,
+};
+
+enum ufs_health_offset {
+	UFSHCD_HEALTH_LEN_OFFSET	= 0x0,
+	UFSHCD_HEALTH_TYPE_OFFSET	= 0x1,
+	UFSHCD_HEALTH_EOL_OFFSET	= 0x2,
+	UFSHCD_HEALTH_LIFEA_OFFSET	= 0x3,
+	UFSHCD_HEALTH_LIFEB_OFFSET	= 0x4,
+	UFSHCD_HEALTH_ERASE_OFFSET	= 0x0D,
+	UFSHCD_HEALTH_WRITE_OFFSET	= 0x15,
+	UFSHCD_HEALTH_LIFEC_OFFSET	= 0x24,
 };
 
 /* Unit descriptor parameters offsets in bytes*/
@@ -536,6 +549,7 @@ struct ufs_dev_info {
 	unsigned int pre_eol_info;
 	unsigned int lifetime_a;
 	unsigned int lifetime_b;
+	unsigned int lifetime_c;
 };
 
 #endif /* End of Header */

@@ -1072,6 +1072,8 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 		hba->dev_info.lifetime_a);
 	dev_err(hba->dev, " LifeTimeB = 0x%x\n",
 		hba->dev_info.lifetime_b);
+	dev_err(hba->dev, " LifeTimeC = %u\n",
+		hba->dev_info.lifetime_c);
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_reqs, hba->outstanding_tasks);
 	dev_err(hba->dev, "saved_err=0x%x, saved_uic_err=0x%x, saved_ce_err=0x%x\n",
@@ -5629,9 +5631,14 @@ static int ufshcd_slave_alloc(struct scsi_device *sdev)
 	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
 					desc_buf, buff_len);
 	if (!err) {
-		hba->dev_info.pre_eol_info = (u8)desc_buf[2];
-		hba->dev_info.lifetime_a = (u8)desc_buf[3];
-		hba->dev_info.lifetime_b = (u8)desc_buf[4];
+		hba->dev_info.pre_eol_info =
+			(u8)desc_buf[UFSHCD_HEALTH_EOL_OFFSET];
+		hba->dev_info.lifetime_a =
+			(u8)desc_buf[UFSHCD_HEALTH_LIFEA_OFFSET];
+		hba->dev_info.lifetime_b =
+			(u8)desc_buf[UFSHCD_HEALTH_LIFEB_OFFSET];
+		hba->dev_info.lifetime_c =
+			(u8)desc_buf[UFSHCD_HEALTH_LIFEC_OFFSET];
 	}
 
 	return 0;
@@ -10493,6 +10500,28 @@ struct health_attr {
 	int len;
 };
 
+static u32 health_get_bytes(u8 *desc_buf, int bytes, int len)
+{
+	u32 value = 0;
+
+	switch (len) {
+	case 1:
+		value = desc_buf[bytes];
+		break;
+	case 2:
+		value = desc_buf[bytes] << 8;
+		value += desc_buf[bytes + 1];
+		break;
+	case 4:
+		value = desc_buf[bytes] << 24;
+		value += desc_buf[bytes + 1] << 16;
+		value += desc_buf[bytes + 2] << 8;
+		value += desc_buf[bytes + 3];
+		break;
+	}
+	return value;
+}
+
 static ssize_t health_attr_show(struct device *dev,
 				struct device_attribute *_attr, char *buf)
 {
@@ -10500,7 +10529,7 @@ static ssize_t health_attr_show(struct device *dev,
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	int buff_len = hba->desc_size.health_desc;
 	u8 desc_buf[hba->desc_size.health_desc];
-	u32 value = 0;
+	u32 value;
 	int err;
 
 	pm_runtime_get_sync(hba->dev);
@@ -10511,22 +10540,19 @@ static ssize_t health_attr_show(struct device *dev,
 	if (err || (attr->bytes + attr->len) > desc_buf[0])
 		return 0;
 
-	switch (attr->len) {
-	case 1:
-		return scnprintf(buf, PAGE_SIZE, "0x%02x\n",
-					desc_buf[attr->bytes]);
-	case 2:
-		value = desc_buf[attr->bytes] << 8;
-		value += desc_buf[attr->bytes + 1];
-		return scnprintf(buf, PAGE_SIZE, "%u\n", value);
-	case 4:
-		value = desc_buf[attr->bytes] << 24;
-		value += desc_buf[attr->bytes + 1] << 16;
-		value += desc_buf[attr->bytes + 2] << 8;
-		value += desc_buf[attr->bytes + 3];
-		return scnprintf(buf, PAGE_SIZE, "%u\n", value);
+	value = health_get_bytes(desc_buf, attr->bytes, attr->len);
+
+	if (attr->bytes == UFSHCD_HEALTH_LIFEC_OFFSET) {
+		if (!value) {
+			u32 erase = health_get_bytes(desc_buf,
+					UFSHCD_HEALTH_ERASE_OFFSET, 2);
+			if (erase)
+				value = erase * 100 / UFSHCD_DEFAULT_PE_CYCLE;
+		}
+		return scnprintf(buf, PAGE_SIZE, "%u\n",
+					value > 100 ? 100: value);
 	}
-	return 0;
+	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", value);
 }
 
 #define HEALTH_ATTR_RO(_name, _bytes, _len)				\
@@ -10542,13 +10568,14 @@ static struct health_attr ufs_health_##_name = {			\
 	.len = _len,							\
 }
 
-HEALTH_ATTR_RO(length, 0, 1);
-HEALTH_ATTR_RO(type, 1, 1);
-HEALTH_ATTR_RO(eol, 2, 1);
-HEALTH_ATTR_RO(lifetimeA, 3, 1);
-HEALTH_ATTR_RO(lifetimeB, 4, 1);
-HEALTH_ATTR_RO(erasecount, 13, 2);
-HEALTH_ATTR_RO(totalwrite, 21, 4);
+HEALTH_ATTR_RO(length, UFSHCD_HEALTH_LEN_OFFSET, 1);
+HEALTH_ATTR_RO(type, UFSHCD_HEALTH_TYPE_OFFSET, 1);
+HEALTH_ATTR_RO(eol, UFSHCD_HEALTH_EOL_OFFSET, 1);
+HEALTH_ATTR_RO(lifetimeA, UFSHCD_HEALTH_LIFEA_OFFSET, 1);
+HEALTH_ATTR_RO(lifetimeB, UFSHCD_HEALTH_LIFEB_OFFSET, 1);
+HEALTH_ATTR_RO(lifetimeC, UFSHCD_HEALTH_LIFEC_OFFSET, 1);
+HEALTH_ATTR_RO(erasecount, UFSHCD_HEALTH_ERASE_OFFSET, 2);
+HEALTH_ATTR_RO(totalwrite, UFSHCD_HEALTH_WRITE_OFFSET, 4);
 
 static struct attribute *ufshcd_health_attrs[] = {
 	&ufs_health_length.attr.attr,
@@ -10556,6 +10583,7 @@ static struct attribute *ufshcd_health_attrs[] = {
 	&ufs_health_eol.attr.attr,
 	&ufs_health_lifetimeA.attr.attr,
 	&ufs_health_lifetimeB.attr.attr,
+	&ufs_health_lifetimeC.attr.attr,
 	&ufs_health_erasecount.attr.attr,
 	&ufs_health_totalwrite.attr.attr,
 	NULL
