@@ -35,8 +35,8 @@
 #define BGRSB_MSG_SIZE 0x08
 #define TIMEOUT_MS 2000
 
-#define BGRSB_LDO15_VTG_MIN_UV 3300000
-#define BGRSB_LDO15_VTG_MAX_UV 3300000
+#define BGRSB_LDO15_VTG_MIN_UV_DEFAULT 3300000
+#define BGRSB_LDO15_VTG_MAX_UV_DEFAULT 3300000
 
 #define BGRSB_LDO11_VTG_MIN_UV 1800000
 #define BGRSB_LDO11_VTG_MAX_UV 1800000
@@ -54,6 +54,10 @@
 struct bgrsb_regulator {
 	struct regulator *regldo11;
 	struct regulator *regldo15;
+
+	/* VLD voltage config; optimal values can vary per RSB component */
+	uint32_t ldo15_vmax;
+	uint32_t ldo15_vmin;
 };
 
 enum ldo_task {
@@ -324,6 +328,13 @@ static int bgrsb_init_regulators(struct device *pdev)
 	struct regulator *reg15;
 	struct bgrsb_priv *dev = dev_get_drvdata(pdev);
 
+	char *reg15_vmax_node = "vtg-ldo2-max";
+	char *reg15_vmin_node = "vtg-ldo2-min";
+
+	int rc;
+	u32 reg15_vmax;
+	u32 reg15_vmin;
+
 	reg11 = regulator_get(pdev, "vdd-ldo1");
 	if (IS_ERR_OR_NULL(reg11)) {
 		pr_err("Unable to get regulator for LDO-11\n");
@@ -338,6 +349,22 @@ static int bgrsb_init_regulators(struct device *pdev)
 
 	dev->rgltr.regldo11 = reg11;
 	dev->rgltr.regldo15 = reg15;
+
+
+	rc = of_property_read_u32(pdev->of_node, reg15_vmax_node,
+			&reg15_vmax);
+	if (rc) {
+		reg15_vmax = BGRSB_LDO15_VTG_MAX_UV_DEFAULT;
+	}
+
+	rc = of_property_read_u32(pdev->of_node, reg15_vmin_node,
+			&reg15_vmin);
+	if (rc) {
+		reg15_vmin = BGRSB_LDO15_VTG_MIN_UV_DEFAULT;
+	}
+
+	dev->rgltr.ldo15_vmax = reg15_vmax;
+	dev->rgltr.ldo15_vmin = reg15_vmin;
 
 	return 0;
 }
@@ -363,7 +390,7 @@ static int bgrsb_ldo_work(struct bgrsb_priv *dev, enum ldo_task ldo_action)
 
 	case BGRSB_ENABLE_LDO15:
 		ret = regulator_set_voltage(dev->rgltr.regldo15,
-				BGRSB_LDO15_VTG_MIN_UV, BGRSB_LDO15_VTG_MAX_UV);
+				dev->rgltr.ldo15_vmin, dev->rgltr.ldo15_vmax);
 		if (ret) {
 			pr_err("Failed to request LDO-15 voltage.\n");
 			goto err_ret;
