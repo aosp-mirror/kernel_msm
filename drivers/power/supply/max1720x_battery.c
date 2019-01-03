@@ -341,6 +341,9 @@ struct max1720x_chip {
 
 	struct max1720x_cyc_ctr_data cyc_ctr;
 
+	/* config */
+	u16 reg_prop_capacity_raw;
+
 	/* history */
 	struct mutex history_lock;
 	int hcmajor;
@@ -1009,6 +1012,7 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CAPACITY_RAW,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
@@ -1150,6 +1154,12 @@ static ssize_t max1720x_set_offmode_charger(struct device *dev,
 static DEVICE_ATTR(offmode_charger, 0660,
 		   max1720x_get_offmode_charger,
 		   max1720x_set_offmode_charger);
+
+/* lsb 1/256 */
+static int max1720x_get_capacity_raw(struct max1720x_chip *chip, u16 *data)
+{
+	return REGMAP_READ(chip->regmap, chip->reg_prop_capacity_raw, data);
+}
 
 static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 {
@@ -1365,6 +1375,11 @@ static int max1720x_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = max1720x_get_battery_health(chip);
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
+		err = max1720x_get_capacity_raw(chip, &data);
+		if (err == 0)
+			val->intval = (int)data;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = max1720x_get_battery_soc(chip);
@@ -2606,6 +2621,8 @@ static int max1720x_probe(struct i2c_client *client,
 		goto psy_unregister;
 	}
 
+	/* NOTE: set to AvSOC and filter on google battery side */
+	chip->reg_prop_capacity_raw =  MAX1720X_REPSOC;
 	max17x0x_set_serial_number(chip);
 
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
