@@ -53,6 +53,7 @@ struct overheat_info {
 	struct thermal_cooling_device *cooling_dev;
 
 	bool usb_connected;
+	bool usb_online;
 	bool accessory_connected;
 	bool usb_replug;
 	bool overheat_mitigation;
@@ -239,6 +240,11 @@ static int update_usb_status(struct overheat_info *ovh_info)
 	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_ONLINE);
 	if (ret < 0)
 		return ret;
+	ovh_info->usb_online = ret;
+
+	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_PRESENT);
+	if (ret < 0)
+		return ret;
 	ovh_info->usb_connected = ret;
 
 	ret = PSY_GET_PROP(ovh_info->usb_psy, POWER_SUPPLY_PROP_TYPEC_MODE);
@@ -256,7 +262,7 @@ static int update_usb_status(struct overheat_info *ovh_info)
 			   USB_OVERHEAT_MITIGATION_VOTER, true, 0);
 		if (ret < 0) {
 			dev_err(ovh_info->dev,
-				"Couldn't un-vote for disable_power_role_switch ret=%d\n",
+				"Couldn't vote for disable_power_role_switch ret=%d\n",
 				ret);
 			return ret;
 		}
@@ -371,7 +377,7 @@ static void port_overheat_work(struct work_struct *work)
 		goto rerun;
 	}
 
-	if (ovh_info->overheat_mitigation || ovh_info->usb_connected ||
+	if (ovh_info->overheat_mitigation || ovh_info->usb_online ||
 	    should_check_accessory(ovh_info))
 		goto rerun;
 	if (ovh_info->throttle_state)
@@ -497,6 +503,7 @@ static int ovh_probe(struct platform_device *pdev)
 	ovh_info->usb_psy = usb_psy;
 	ovh_info->overheat_mitigation = false;
 	ovh_info->usb_replug = false;
+	ovh_info->usb_online = false;
 	ovh_info->usb_connected = false;
 	ovh_info->overheat_work_running = false;
 
