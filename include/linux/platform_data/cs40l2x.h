@@ -53,6 +53,7 @@ struct cs40l2x_platform_data {
 	bool vbbr_enable;
 	unsigned int vpbr_thld1;
 	unsigned int vbbr_thld1;
+	unsigned int fw_id_remap;
 };
 
 #endif /* __CS40L2X_H */
