@@ -271,6 +271,56 @@ static int ab_debugfs_ddr_eye_margin_plot(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_eye_margin_plot_fops, NULL,
 				ab_debugfs_ddr_eye_margin_plot, "%lli\n");
 
+static int ab_debugfs_clkout_sel(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_clkout_sel(sc, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_clkout_sel_fops, NULL,
+				ab_debugfs_clkout_sel, "%lli\n");
+
+static int ab_debugfs_clkout_blksel(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_clkout_blksel(sc, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_clkout_blksel_fops, NULL,
+				ab_debugfs_clkout_blksel, "%lli\n");
+
+static int ab_debugfs_clkout_clksel(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_clkout_clksel(sc, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_clkout_clksel_fops, NULL,
+				ab_debugfs_clkout_clksel, "%lli\n");
+
+static int ab_debugfs_clkout_enable(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_clkout_enable(sc, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_clkout_enable_fops, NULL,
+				ab_debugfs_clkout_enable, "%lli\n");
+
+static int ab_debugfs_clkout_freq(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_clkout_freq(sc, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_clkout_freq_fops, ab_debugfs_clkout_freq,
+				NULL, "%lli\n");
+
 void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 {
 	struct dentry *d;
@@ -358,6 +408,31 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("ddr_eye_margin_plot", 0200, sc->d_entry, sc,
 				&ab_ddr_eye_margin_plot_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("clkout_sel", 0200, sc->d_entry, sc,
+				&ab_clkout_sel_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("clkout_blksel", 0200, sc->d_entry, sc,
+				&ab_clkout_blksel_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("clkout_clksel", 0200, sc->d_entry, sc,
+				&ab_clkout_clksel_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("clkout_enable", 0200, sc->d_entry, sc,
+				&ab_clkout_enable_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("clkout_freq", 0400, sc->d_entry, sc,
+				&ab_clkout_freq_fops);
 	if (!d)
 		goto err_out;
 

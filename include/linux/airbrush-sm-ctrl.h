@@ -530,6 +530,9 @@ struct ab_state_context {
 	bool ts_enabled;
 	u64 state_trans_ts[NUM_AB_SM_TS];
 #endif
+	int clkout_idx;
+	int clkout_blk_idx;
+	int clkout_clk_idx;
 };
 
 struct ab_sm_misc_session {
@@ -580,6 +583,12 @@ void ab_gpio_disable_ddr_iso(struct ab_state_context *ab_ctx);
 int  ab_gpio_get_ddr_iso(struct ab_state_context *ab_ctx);
 void ab_gpio_enable_fw_patch(struct ab_state_context *ab_ctx);
 void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx);
+
+void ab_clkout_sel(struct ab_state_context *sc, unsigned int clkout_idx);
+void ab_clkout_blksel(struct ab_state_context *sc, unsigned int blk_idx);
+void ab_clkout_clksel(struct ab_state_context *sc, unsigned int clk_idx);
+int ab_clkout_enable(struct ab_state_context *sc, unsigned int enable);
+int ab_clkout_freq(struct ab_state_context *sc, u64 *val);
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 void ab_sm_create_debugfs(struct ab_state_context *sc);

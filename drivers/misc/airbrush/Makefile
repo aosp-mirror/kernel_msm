@@ -14,6 +14,7 @@ airbrush-y +=	\
 		airbrush-ddr-vref.o \
 		airbrush-ddr-test.o \
 		airbrush-ddr-eyemargin.o \
+		airbrush-clkout.o \
 		airbrush-ppmu.o \
 		airbrush-cooling.o \
 		airbrush-thermal.o \
