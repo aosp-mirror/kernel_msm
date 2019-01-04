@@ -197,6 +197,7 @@ struct smb_dt_props {
 	int			term_current_src;
 	int			term_current_thresh_hi_ma;
 	int			term_current_thresh_lo_ma;
+	int			disable_suspend_on_collapse;
 	int			batt_psy_is_bms;
 	int			batt_psy_disable;
 	const char		*batt_psy_name;
@@ -517,6 +518,8 @@ static int smb5_parse_dt(struct smb5 *chip)
 	if (rc < 0)
 		pr_err("cannot read usb-port-tz-name, rc=%d\n", rc);
 
+	chip->dt.disable_suspend_on_collapse = of_property_read_bool(node,
+					"qcom,disable-suspend-on-collapse");
 	return 0;
 }
 
@@ -534,7 +537,6 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_TYPEC_MODE,
 	POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
 	POWER_SUPPLY_PROP_TYPEC_CC_ORIENTATION,
-	POWER_SUPPLY_PROP_TYPEC_SRC_RP,
 	POWER_SUPPLY_PROP_LOW_POWER,
 	POWER_SUPPLY_PROP_PD_ACTIVE,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
@@ -544,10 +546,8 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_CTM_CURRENT_MAX,
 	POWER_SUPPLY_PROP_HW_CURRENT_MAX,
 	POWER_SUPPLY_PROP_REAL_TYPE,
-	POWER_SUPPLY_PROP_PR_SWAP,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN,
-	POWER_SUPPLY_PROP_SDP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONNECTOR_TYPE,
 	POWER_SUPPLY_PROP_CONNECTOR_HEALTH,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
@@ -1302,6 +1302,8 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		rc = smblib_get_prop_from_bms(chg,
 				POWER_SUPPLY_PROP_CURRENT_NOW, val);
+		if (!rc)
+			val->intval *= (-1);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_QNOVO:
 		val->intval = get_client_vote_locked(chg->fcc_votable,
@@ -1419,13 +1421,6 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 		chg->step_chg_enabled = !!val->intval;
 		break;
-	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
-		if (chg->sw_jeita_enabled != (!!val->intval)) {
-			rc = smblib_disable_hw_jeita(chg, !!val->intval);
-			if (rc == 0)
-				chg->sw_jeita_enabled = !!val->intval;
-		}
-		break;
 	case POWER_SUPPLY_PROP_TAPER_CONTROL:
 		chg->taper_control = val->intval;
 		break;
@@ -1508,7 +1503,6 @@ static int smb5_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
-	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 	case POWER_SUPPLY_PROP_TAPER_CONTROL:
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
@@ -1706,6 +1700,17 @@ static int smb5_configure_typec(struct smb_charger *chg)
 		return rc;
 	}
 
+	/* Enable detection of unoriented debug accessory in source mode */
+	rc = smblib_masked_write(chg, DEBUG_ACCESS_SRC_CFG_REG,
+				 EN_UNORIENTED_DEBUG_ACCESS_SRC_BIT,
+				 EN_UNORIENTED_DEBUG_ACCESS_SRC_BIT);
+	if (rc < 0) {
+		dev_err(chg->dev,
+			"Couldn't configure TYPE_C_DEBUG_ACCESS_SRC_CFG_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
 	rc = smblib_masked_write(chg, USBIN_LOAD_CFG_REG,
 		USBIN_IN_COLLAPSE_GF_SEL_MASK | USBIN_AICL_STEP_TIMING_SEL_MASK,
 		0);
@@ -1811,7 +1816,7 @@ static int smb5_init_hw(struct smb5 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
 	int rc, type = 0;
-	u8 val = 0;
+	u8 val = 0, mask = 0;
 	union power_supply_propval pval;
 
 	if (chip->dt.no_battery)
@@ -1839,15 +1844,6 @@ static int smb5_init_hw(struct smb5 *chip)
 		}
 	}
 
-	/* Disable SMB Temperature ADC INT */
-	rc = smblib_masked_write(chg, MISC_THERMREG_SRC_CFG_REG,
-					 THERMREG_SMB_ADC_SRC_EN_BIT, 0);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't configure SMB thermal regulation  rc=%d\n",
-				rc);
-		return rc;
-	}
-
 	/*
 	 * If SW thermal regulation WA is active then all the HW temperature
 	 * comparators need to be disabled to prevent HW thermal regulation,
@@ -1859,6 +1855,15 @@ static int smb5_init_hw(struct smb5 *chip)
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't disable HW thermal regulation rc=%d\n",
 				rc);
+			return rc;
+		}
+	} else {
+		/* Allows software thermal regulation only */
+		rc = smblib_write(chg, MISC_THERMREG_SRC_CFG_REG,
+					 THERMREG_SW_ICL_ADJUST_BIT);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't configure SMB thermal regulation rc=%d\n",
+					rc);
 			return rc;
 		}
 	}
@@ -1941,8 +1946,8 @@ static int smb5_init_hw(struct smb5 *chip)
 		smblib_rerun_apsd_if_required(chg);
 	}
 
-	/* clear the ICL override if it is set */
-	rc = smblib_icl_override(chg, false);
+	/* Use ICL results from HW */
+	rc = smblib_icl_override(chg, HW_AUTO_MODE);
 	if (rc < 0) {
 		pr_err("Couldn't disable ICL override rc=%d\n", rc);
 		return rc;
@@ -1987,11 +1992,14 @@ static int smb5_init_hw(struct smb5 *chip)
 	 * start from min and AICL ADC disable, and enable aicl rerun
 	 */
 	if (chg->smb_version != PMI632_SUBTYPE) {
+		mask = USBIN_AICL_PERIODIC_RERUN_EN_BIT | USBIN_AICL_ADC_EN_BIT
+			| USBIN_AICL_EN_BIT | SUSPEND_ON_COLLAPSE_USBIN_BIT;
+		val = USBIN_AICL_PERIODIC_RERUN_EN_BIT | USBIN_AICL_EN_BIT;
+		if (!chip->dt.disable_suspend_on_collapse)
+			val |= SUSPEND_ON_COLLAPSE_USBIN_BIT;
+
 		rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
-				USBIN_AICL_PERIODIC_RERUN_EN_BIT
-				| USBIN_AICL_ADC_EN_BIT | USBIN_AICL_EN_BIT,
-				USBIN_AICL_PERIODIC_RERUN_EN_BIT
-				| USBIN_AICL_EN_BIT);
+				mask, val);
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't config AICL rc=%d\n", rc);
 			return rc;
@@ -2192,12 +2200,10 @@ static int smb5_init_hw(struct smb5 *chip)
 		}
 	}
 
-	if (chg->sw_jeita_enabled) {
-		rc = smblib_disable_hw_jeita(chg, true);
-		if (rc < 0) {
-			dev_err(chg->dev, "Couldn't set hw jeita rc=%d\n", rc);
-			return rc;
-		}
+	rc = smblib_disable_hw_jeita(chg, true);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't set hw jeita rc=%d\n", rc);
+		return rc;
 	}
 
 	rc = smblib_masked_write(chg, DCDC_ENG_SDCDC_CFG5_REG,
@@ -2487,8 +2493,14 @@ static struct smb_irq_info smb5_irqs[] = {
 	[IMP_TRIGGER_IRQ] = {
 		.name		= "imp-trigger",
 	},
+	/*
+	 * triggered when DIE or SKIN or CONNECTOR temperature across
+	 * either of the _REG_L, _REG_H, _RST, or _SHDN thresholds
+	 */
 	[TEMP_CHANGE_IRQ] = {
 		.name		= "temp-change",
+		.handler	= temp_change_irq_handler,
+		.wake		= true,
 	},
 	[TEMP_CHANGE_SMB_IRQ] = {
 		.name		= "temp-change-smb",

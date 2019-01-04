@@ -48,6 +48,8 @@
 int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				       const union power_supply_propval *val);
 
+static void update_sw_icl_max(struct smb_charger *chg, int pst);
+
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val)
 {
 	unsigned int value;
@@ -166,15 +168,50 @@ int smblib_get_jeita_cc_delta(struct smb_charger *chg, int *cc_delta_ua)
 	return 0;
 }
 
-int smblib_icl_override(struct smb_charger *chg, bool override)
+int smblib_icl_override(struct smb_charger *chg, enum icl_override_mode  mode)
 {
 	int rc;
+	u8 usb51_mode, icl_override, apsd_override;
+
+	switch (mode) {
+	case SW_OVERRIDE_USB51_MODE:
+		usb51_mode = 0;
+		icl_override = ICL_OVERRIDE_BIT;
+		apsd_override = 0;
+		break;
+	case SW_OVERRIDE_HC_MODE:
+		usb51_mode = USBIN_MODE_CHG_BIT;
+		icl_override = 0;
+		apsd_override = ICL_OVERRIDE_AFTER_APSD_BIT;
+		break;
+	case HW_AUTO_MODE:
+	default:
+		usb51_mode = USBIN_MODE_CHG_BIT;
+		icl_override = 0;
+		apsd_override = 0;
+		break;
+	}
+
+	rc = smblib_masked_write(chg, USBIN_ICL_OPTIONS_REG,
+				USBIN_MODE_CHG_BIT, usb51_mode);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set USBIN_ICL_OPTIONS rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = smblib_masked_write(chg, CMD_ICL_OVERRIDE_REG,
+				ICL_OVERRIDE_BIT, icl_override);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't override ICL rc=%d\n", rc);
+		return rc;
+	}
 
 	rc = smblib_masked_write(chg, USBIN_LOAD_CFG_REG,
-				ICL_OVERRIDE_AFTER_APSD_BIT,
-				override ? ICL_OVERRIDE_AFTER_APSD_BIT : 0);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't override ICL rc=%d\n", rc);
+				ICL_OVERRIDE_AFTER_APSD_BIT, apsd_override);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't override ICL_AFTER_APSD rc=%d\n", rc);
+		return rc;
+	}
 
 	return rc;
 }
@@ -186,7 +223,7 @@ int smblib_icl_override(struct smb_charger *chg, bool override)
 static int smblib_select_sec_charger_locked(struct smb_charger *chg,
 					int sec_chg)
 {
-	int rc;
+	int rc = 0;
 
 	switch (sec_chg) {
 	case POWER_SUPPLY_CHARGER_SEC_CP:
@@ -201,12 +238,14 @@ static int smblib_select_sec_charger_locked(struct smb_charger *chg,
 			return rc;
 		}
 		/* Enable Charge Pump, under HW control */
-		rc = smblib_write(chg, MISC_SMB_EN_CMD_REG,  EN_CP_CMD_BIT);
+		rc = smblib_masked_write(chg, MISC_SMB_EN_CMD_REG,
+					EN_CP_CMD_BIT, EN_CP_CMD_BIT);
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't enable SMB charger rc=%d\n",
 						rc);
 			return rc;
 		}
+		vote(chg->smb_override_votable, PL_SMB_EN_VOTER, false, 0);
 		break;
 	case POWER_SUPPLY_CHARGER_SEC_PL:
 		/* select slave charger instead of Charge Pump */
@@ -218,12 +257,14 @@ static int smblib_select_sec_charger_locked(struct smb_charger *chg,
 			return rc;
 		}
 		/* Enable slave charger, under HW control */
-		rc = smblib_write(chg, MISC_SMB_EN_CMD_REG,  EN_STAT_CMD_BIT);
+		rc = smblib_masked_write(chg, MISC_SMB_EN_CMD_REG,
+					EN_STAT_CMD_BIT, EN_STAT_CMD_BIT);
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't enable SMB charger rc=%d\n",
 						rc);
 			return rc;
 		}
+		vote(chg->smb_override_votable, PL_SMB_EN_VOTER, false, 0);
 
 		vote(chg->pl_disable_votable, PL_SMB_EN_VOTER, false, 0);
 
@@ -233,13 +274,7 @@ static int smblib_select_sec_charger_locked(struct smb_charger *chg,
 		vote(chg->pl_disable_votable, PL_SMB_EN_VOTER, true, 0);
 
 		/* SW override, disabling secondary charger(s) */
-		rc = smblib_write(chg, MISC_SMB_EN_CMD_REG,
-						SMB_EN_OVERRIDE_BIT);
-		if (rc < 0) {
-			dev_err(chg->dev, "Couldn't disable charging rc=%d\n",
-						rc);
-			return rc;
-		}
+		vote(chg->smb_override_votable, PL_SMB_EN_VOTER, true, 0);
 		break;
 	}
 
@@ -918,7 +953,7 @@ static int smblib_notifier_call(struct notifier_block *nb,
 			schedule_work(&chg->bms_update_work);
 	}
 
-	if (!chg->jeita_configured)
+	if (chg->jeita_configured == JEITA_CFG_NONE)
 		schedule_work(&chg->jeita_update_work);
 
 	if (chg->sec_pl_present && !chg->pl.psy
@@ -1176,34 +1211,17 @@ static int set_sdp_current(struct smb_charger *chg, int icl_ua)
 	}
 
 	rc = smblib_masked_write(chg, USBIN_ICL_OPTIONS_REG,
-		CFG_USB3P0_SEL_BIT | USB51_MODE_BIT | USBIN_MODE_CHG_BIT,
-		icl_options);
+			CFG_USB3P0_SEL_BIT | USB51_MODE_BIT, icl_options);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't set ICL options rc=%d\n", rc);
 		return rc;
 	}
 
-	return rc;
-}
-
-static int get_sdp_current(struct smb_charger *chg, int *icl_ua)
-{
-	int rc;
-	u8 icl_options;
-	bool usb3 = false;
-
-	rc = smblib_read(chg, USBIN_ICL_OPTIONS_REG, &icl_options);
+	rc = smblib_icl_override(chg, SW_OVERRIDE_USB51_MODE);
 	if (rc < 0) {
-		smblib_err(chg, "Couldn't get ICL options rc=%d\n", rc);
+		smblib_err(chg, "Couldn't set ICL override rc=%d\n", rc);
 		return rc;
 	}
-
-	usb3 = (icl_options & CFG_USB3P0_SEL_BIT);
-
-	if (icl_options & USB51_MODE_BIT)
-		*icl_ua = usb3 ? USBIN_900MA : USBIN_500MA;
-	else
-		*icl_ua = usb3 ? USBIN_150MA : USBIN_100MA;
 
 	return rc;
 }
@@ -1211,7 +1229,7 @@ static int get_sdp_current(struct smb_charger *chg, int *icl_ua)
 int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 {
 	int rc = 0;
-	bool hc_mode = false, override = false;
+	enum icl_override_mode icl_override = HW_AUTO_MODE;
 	/* suspend if 25mA or less is requested */
 	bool suspend = (icl_ua <= USBIN_25MA);
 
@@ -1259,25 +1277,11 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 			smblib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
 			goto out;
 		}
-		hc_mode = true;
-
-		/*
-		 * Micro USB mode follows ICL register independent of override
-		 * bit, configure override only for typeC mode.
-		 */
-		if (chg->connector_type == POWER_SUPPLY_CONNECTOR_TYPEC)
-			override = true;
+		icl_override = SW_OVERRIDE_HC_MODE;
 	}
 
 set_mode:
-	rc = smblib_masked_write(chg, USBIN_ICL_OPTIONS_REG,
-		USBIN_MODE_CHG_BIT, hc_mode ? USBIN_MODE_CHG_BIT : 0);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't set USBIN_ICL_OPTIONS rc=%d\n", rc);
-		goto out;
-	}
-
-	rc = smblib_icl_override(chg, override);
+	rc = smblib_icl_override(chg, icl_override);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't set ICL override rc=%d\n", rc);
 		goto out;
@@ -1299,38 +1303,13 @@ out:
 
 int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua)
 {
-	int rc = 0;
-	u8 load_cfg;
-	bool override;
+	int rc;
 
-	if ((chg->typec_mode == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
-		|| chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
-		&& (chg->usb_psy->desc->type == POWER_SUPPLY_TYPE_USB)) {
-		rc = get_sdp_current(chg, icl_ua);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't get SDP ICL rc=%d\n", rc);
-			return rc;
-		}
-	} else {
-		rc = smblib_read(chg, USBIN_LOAD_CFG_REG, &load_cfg);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't get load cfg rc=%d\n", rc);
-			return rc;
-		}
-		override = load_cfg & ICL_OVERRIDE_AFTER_APSD_BIT;
-		if (!override)
-			return INT_MAX;
+	rc = smblib_get_charge_param(chg, &chg->param.icl_max_stat, icl_ua);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't get HC ICL rc=%d\n", rc);
 
-		/* override is set */
-		rc = smblib_get_charge_param(chg, &chg->param.icl_max_stat,
-					icl_ua);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't get HC ICL rc=%d\n", rc);
-			return rc;
-		}
-	}
-
-	return 0;
+	return rc;
 }
 
 int smblib_toggle_smb_en(struct smb_charger *chg, int toggle)
@@ -1349,6 +1328,21 @@ int smblib_toggle_smb_en(struct smb_charger *chg, int toggle)
 /*********************
  * VOTABLE CALLBACKS *
  *********************/
+static int smblib_smb_disable_override_vote_callback(struct votable *votable,
+			void *data, int disable_smb, const char *client)
+{
+	struct smb_charger *chg = data;
+	int rc = 0;
+
+	/* Enable/disable SMB_EN pin */
+	rc = smblib_masked_write(chg, MISC_SMB_EN_CMD_REG,
+			SMB_EN_OVERRIDE_BIT | SMB_EN_OVERRIDE_VALUE_BIT,
+			disable_smb ? SMB_EN_OVERRIDE_BIT : 0);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't configure SMB_EN, rc=%d\n", rc);
+
+	return rc;
+}
 
 static int smblib_dc_suspend_vote_callback(struct votable *votable, void *data,
 			int suspend, const char *client)
@@ -2366,6 +2360,7 @@ int smblib_disable_hw_jeita(struct smb_charger *chg, bool disable)
 				rc);
 		return rc;
 	}
+
 	return 0;
 }
 
@@ -2579,13 +2574,8 @@ out:
 		if (chg->thermal_status == TEMP_ALERT_LEVEL)
 			goto exit;
 
-		/* Enable/disable SMB_EN pin */
-		rc = smblib_masked_write(chg, MISC_SMB_EN_CMD_REG,
-			SMB_EN_OVERRIDE_BIT | SMB_EN_OVERRIDE_VALUE_BIT,
-			(disable_smb ? SMB_EN_OVERRIDE_BIT :
-			(SMB_EN_OVERRIDE_BIT | SMB_EN_OVERRIDE_VALUE_BIT)));
-		if (rc < 0)
-			smblib_err(chg, "Couldn't set SMB_EN, rc=%d\n", rc);
+		vote(chg->smb_override_votable, SW_THERM_REGULATION_VOTER,
+				disable_smb, 0);
 
 		/*
 		 * Enable/disable secondary charger through votables to ensure
@@ -2828,36 +2818,14 @@ int smblib_get_prop_usb_voltage_max(struct smb_charger *chg,
 	return 0;
 }
 
-static int smblib_estimate_hvdcp_voltage(struct smb_charger *chg,
-					 union power_supply_propval *val)
-{
-	int rc;
-	u8 stat;
-
-	rc = smblib_read(chg, QC_CHANGE_STATUS_REG, &stat);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read QC_CHANGE_STATUS_REG rc=%d\n",
-				rc);
-		return rc;
-	}
-
-	if (stat & QC_5V_BIT)
-		val->intval = MICRO_5V;
-	else if (stat & QC_9V_BIT)
-		val->intval = MICRO_9V;
-	else if (stat & QC_12V_BIT)
-		val->intval = MICRO_12V;
-
-	return 0;
-}
-
 #define HVDCP3_STEP_UV	200000
 static int smblib_estimate_adaptor_voltage(struct smb_charger *chg,
 					  union power_supply_propval *val)
 {
 	switch (chg->real_charger_type) {
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
-		return smblib_estimate_hvdcp_voltage(chg, val);
+		val->intval = MICRO_12V;
+		break;
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
 		val->intval = MICRO_5V + (HVDCP3_STEP_UV * chg->pulse_cnt);
 		break;
@@ -3742,12 +3710,16 @@ int smblib_set_prop_pd_voltage_max(struct smb_charger *chg,
 int smblib_set_prop_pd_active(struct smb_charger *chg,
 				const union power_supply_propval *val)
 {
+	const struct apsd_result *apsd = smblib_get_apsd_result(chg);
+
 	int rc = 0;
 	int sec_charger;
 
 	chg->pd_active = val->intval;
 
 	smblib_apsd_enable(chg, !chg->pd_active);
+
+	update_sw_icl_max(chg, apsd->pst);
 
 	if (chg->pd_active) {
 		vote(chg->usb_irq_enable_votable, PD_VOTER, true, 0);
@@ -3775,7 +3747,6 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 					rc);
 		}
 	} else {
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_100_MA);
 		vote(chg->usb_icl_votable, PD_VOTER, false, 0);
 		vote(chg->usb_irq_enable_votable, PD_VOTER, false, 0);
 
@@ -3836,49 +3807,153 @@ int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 	return rc;
 }
 
-static int smblib_recover_from_soft_jeita(struct smb_charger *chg)
+#define JEITA_SOFT			0
+#define JEITA_HARD			1
+static int smblib_update_jeita(struct smb_charger *chg, u32 *thresholds,
+								int type)
 {
-	u8 stat1, stat7;
 	int rc;
+	u16 temp, base;
 
-	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_1_REG, &stat1);
+	base = CHGR_JEITA_THRESHOLD_BASE_REG(type);
+
+	temp = thresholds[1] & 0xFFFF;
+	temp = ((temp & 0xFF00) >> 8) | ((temp & 0xFF) << 8);
+	rc = smblib_batch_write(chg, base, (u8 *)&temp, 2);
 	if (rc < 0) {
-		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
-				rc);
+		smblib_err(chg,
+			"Couldn't configure Jeita %s hot threshold rc=%d\n",
+			(type == JEITA_SOFT) ? "Soft" : "Hard", rc);
 		return rc;
 	}
 
-	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_7_REG, &stat7);
+	temp = thresholds[0] & 0xFFFF;
+	temp = ((temp & 0xFF00) >> 8) | ((temp & 0xFF) << 8);
+	rc = smblib_batch_write(chg, base + 2, (u8 *)&temp, 2);
 	if (rc < 0) {
-		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_2 rc=%d\n",
-				rc);
+		smblib_err(chg,
+			"Couldn't configure Jeita %s cold threshold rc=%d\n",
+			(type == JEITA_SOFT) ? "Soft" : "Hard", rc);
 		return rc;
 	}
 
-	if ((chg->jeita_status && !(stat7 & BAT_TEMP_STATUS_SOFT_LIMIT_MASK) &&
-		((stat1 & BATTERY_CHARGER_STATUS_MASK) == TERMINATE_CHARGE))) {
-		/*
-		 * We are moving from JEITA soft -> Normal and charging
-		 * is terminated
-		 */
-		rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG, 0);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't disable charging rc=%d\n",
-						rc);
-			return rc;
-		}
-		rc = smblib_write(chg, CHARGING_ENABLE_CMD_REG,
-						CHARGING_ENABLE_CMD_BIT);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't enable charging rc=%d\n",
-						rc);
-			return rc;
-		}
-	}
-
-	chg->jeita_status = stat7 & BAT_TEMP_STATUS_SOFT_LIMIT_MASK;
+	smblib_dbg(chg, PR_MISC, "%s Jeita threshold configured\n",
+				(type == JEITA_SOFT) ? "Soft" : "Hard");
 
 	return 0;
+}
+
+static int smblib_charge_inhibit_en(struct smb_charger *chg, bool enable)
+{
+	int rc;
+
+	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
+					CHARGER_INHIBIT_BIT,
+					enable ? CHARGER_INHIBIT_BIT : 0);
+	return rc;
+}
+
+static int smblib_soft_jeita_arb_wa(struct smb_charger *chg)
+{
+	union power_supply_propval pval;
+	int rc = 0;
+	bool soft_jeita;
+
+	rc = smblib_get_prop_batt_health(chg, &pval);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't get battery health rc=%d\n", rc);
+		return rc;
+	}
+
+	/* Do nothing on entering hard JEITA condition */
+	if (pval.intval == POWER_SUPPLY_HEALTH_COLD ||
+		pval.intval == POWER_SUPPLY_HEALTH_HOT)
+		return 0;
+
+	if (chg->jeita_soft_fcc[0] < 0 || chg->jeita_soft_fcc[1] < 0 ||
+		chg->jeita_soft_fv[0] < 0 || chg->jeita_soft_fv[1] < 0)
+		return 0;
+
+	soft_jeita = (pval.intval == POWER_SUPPLY_HEALTH_COOL) ||
+			(pval.intval == POWER_SUPPLY_HEALTH_WARM);
+
+	/* Do nothing on entering soft JEITA from hard JEITA */
+	if (chg->jeita_arb_flag && soft_jeita)
+		return 0;
+
+	/* Do nothing, initial to health condition */
+	if (!chg->jeita_arb_flag && !soft_jeita)
+		return 0;
+
+	if (!chg->cp_disable_votable)
+		chg->cp_disable_votable = find_votable("CP_DISABLE");
+
+	/* Entering soft JEITA from normal state */
+	if (!chg->jeita_arb_flag && soft_jeita) {
+		vote(chg->chg_disable_votable, JEITA_ARB_VOTER, true, 0);
+		/* Disable parallel charging */
+		if (chg->pl_disable_votable)
+			vote(chg->pl_disable_votable, JEITA_ARB_VOTER, true, 0);
+		if (chg->cp_disable_votable)
+			vote(chg->cp_disable_votable, JEITA_ARB_VOTER, true, 0);
+
+		rc = smblib_charge_inhibit_en(chg, true);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't enable charge inhibit rc=%d\n",
+					rc);
+
+		rc = smblib_update_jeita(chg, chg->jeita_soft_hys_thlds,
+					JEITA_SOFT);
+		if (rc < 0)
+			smblib_err(chg,
+				"Couldn't configure Jeita soft threshold rc=%d\n",
+				rc);
+
+		if (pval.intval == POWER_SUPPLY_HEALTH_COOL) {
+			vote(chg->fcc_votable, JEITA_ARB_VOTER, true,
+						chg->jeita_soft_fcc[0]);
+			vote(chg->fv_votable, JEITA_ARB_VOTER, true,
+						chg->jeita_soft_fv[0]);
+		} else {
+			vote(chg->fcc_votable, JEITA_ARB_VOTER, true,
+						chg->jeita_soft_fcc[1]);
+			vote(chg->fv_votable, JEITA_ARB_VOTER, true,
+						chg->jeita_soft_fv[1]);
+		}
+
+		vote(chg->chg_disable_votable, JEITA_ARB_VOTER, false, 0);
+		chg->jeita_arb_flag = true;
+	} else if (chg->jeita_arb_flag && !soft_jeita) {
+		/* Exit to health state from soft JEITA */
+
+		vote(chg->chg_disable_votable, JEITA_ARB_VOTER, true, 0);
+
+		rc = smblib_charge_inhibit_en(chg, false);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't disable charge inhibit rc=%d\n",
+					rc);
+
+		rc = smblib_update_jeita(chg, chg->jeita_soft_thlds,
+							JEITA_SOFT);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't configure Jeita soft threshold rc=%d\n",
+				rc);
+
+		vote(chg->fcc_votable, JEITA_ARB_VOTER, false, 0);
+		vote(chg->fv_votable, JEITA_ARB_VOTER, false, 0);
+		if (chg->pl_disable_votable)
+			vote(chg->pl_disable_votable, JEITA_ARB_VOTER, false,
+				0);
+		if (chg->cp_disable_votable)
+			vote(chg->cp_disable_votable, JEITA_ARB_VOTER, false,
+				0);
+		vote(chg->chg_disable_votable, JEITA_ARB_VOTER, false, 0);
+		chg->jeita_arb_flag = false;
+	}
+
+	smblib_dbg(chg, PR_MISC, "JEITA ARB status %d, soft JEITA status %d\n",
+			chg->jeita_arb_flag, soft_jeita);
+	return rc;
 }
 
 /************************
@@ -4037,16 +4112,18 @@ irqreturn_t batt_temp_changed_irq_handler(int irq, void *data)
 	struct smb_charger *chg = irq_data->parent_data;
 	int rc;
 
-	rc = smblib_recover_from_soft_jeita(chg);
+	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
+
+	if (chg->jeita_configured != JEITA_CFG_COMPLETE)
+		return IRQ_HANDLED;
+
+	rc = smblib_soft_jeita_arb_wa(chg);
 	if (rc < 0) {
-		smblib_err(chg, "Couldn't recover chg from soft jeita rc=%d\n",
+		smblib_err(chg, "Couldn't fix soft jeita arb rc=%d\n",
 				rc);
 		return IRQ_HANDLED;
 	}
 
-	rerun_election(chg->fcc_votable);
-	if (chg->batt_psy)
-		power_supply_changed(chg->batt_psy);
 	return IRQ_HANDLED;
 }
 
@@ -4384,10 +4461,8 @@ static void smblib_handle_hvdcp_detect_done(struct smb_charger *chg,
 
 static void update_sw_icl_max(struct smb_charger *chg, int pst)
 {
-	union power_supply_propval pval;
 	int typec_mode;
 	int rp_ua;
-	int rc;
 
 	/* while PD is active it should have complete ICL control */
 	if (chg->pd_active)
@@ -4439,15 +4514,8 @@ static void update_sw_icl_max(struct smb_charger *chg, int pst)
 		break;
 	case POWER_SUPPLY_TYPE_UNKNOWN:
 	default:
-		rc = smblib_get_prop_usb_present(chg, &pval);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't get usb present rc = %d\n",
-					rc);
-			return;
-		}
-
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-				pval.intval ? SDP_CURRENT_UA : SDP_100_MA);
+					SDP_100_MA);
 		break;
 	}
 }
@@ -4497,7 +4565,7 @@ irqreturn_t usb_source_change_irq_handler(int irq, void *data)
 		smblib_err(chg, "Couldn't read APSD_STATUS rc=%d\n", rc);
 		return IRQ_HANDLED;
 	}
-	smblib_dbg(chg, PR_REGISTER, "APSD_STATUS = 0x%02x\n", stat);
+	smblib_dbg(chg, PR_INTERRUPT, "APSD_STATUS = 0x%02x\n", stat);
 
 	if ((chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
 		&& (stat & APSD_DTC_STATUS_DONE_BIT)
@@ -4539,7 +4607,7 @@ irqreturn_t usb_source_change_irq_handler(int irq, void *data)
 		smblib_err(chg, "Couldn't read APSD_STATUS rc=%d\n", rc);
 		return IRQ_HANDLED;
 	}
-	smblib_dbg(chg, PR_REGISTER, "APSD_STATUS = 0x%02x\n", stat);
+	smblib_dbg(chg, PR_INTERRUPT, "APSD_STATUS = 0x%02x\n", stat);
 
 	return IRQ_HANDLED;
 }
@@ -4624,7 +4692,13 @@ static bool smblib_src_lpd(struct smb_charger *chg)
 
 static void typec_sink_insertion(struct smb_charger *chg)
 {
+	int rc;
+
 	vote(chg->usb_icl_votable, OTG_VOTER, true, 0);
+	rc = smblib_set_charge_param(chg, &chg->param.freq_switcher,
+					chg->chg_freq.freq_above_otg_threshold);
+	if (rc < 0)
+		dev_err(chg->dev, "Error in setting freq_boost rc=%d\n", rc);
 
 	if (chg->use_extcon) {
 		smblib_notify_usb_host(chg, true);
@@ -4662,7 +4736,13 @@ static void typec_src_insertion(struct smb_charger *chg)
 
 static void typec_sink_removal(struct smb_charger *chg)
 {
+	int rc;
+
 	vote(chg->usb_icl_votable, OTG_VOTER, false, 0);
+	rc = smblib_set_charge_param(chg, &chg->param.freq_switcher,
+					chg->chg_freq.freq_removal);
+	if (rc < 0)
+		dev_err(chg->dev, "Error in setting freq_removal rc=%d\n", rc);
 
 	if (chg->use_extcon) {
 		if (chg->otg_present)
@@ -5130,8 +5210,39 @@ irqreturn_t wdog_bark_irq_handler(int irq, void *data)
 	if (rc < 0)
 		smblib_err(chg, "Couldn't pet the dog rc=%d\n", rc);
 
-	if (chg->step_chg_enabled || chg->sw_jeita_enabled)
+	if (chg->step_chg_enabled)
 		power_supply_changed(chg->batt_psy);
+
+	return IRQ_HANDLED;
+}
+
+static void smblib_die_rst_icl_regulate(struct smb_charger *chg)
+{
+	int rc;
+	u8 temp;
+
+	rc = smblib_read(chg, DIE_TEMP_STATUS_REG, &temp);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read DIE_TEMP_STATUS_REG rc=%d\n",
+				rc);
+		return;
+	}
+
+	/* Regulate ICL on die temp crossing DIE_RST threshold */
+	vote(chg->usb_icl_votable, DIE_TEMP_VOTER,
+				temp & DIE_TEMP_RST_BIT, 500000);
+}
+
+/*
+ * triggered when DIE or SKIN or CONNECTOR temperature across
+ * either of the _REG_L, _REG_H, _RST, or _SHDN thresholds
+ */
+irqreturn_t temp_change_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+
+	smblib_die_rst_icl_regulate(chg);
 
 	return IRQ_HANDLED;
 }
@@ -5345,42 +5456,6 @@ static void smblib_thermal_regulation_work(struct work_struct *work)
 					rc);
 }
 
-#define JEITA_SOFT			0
-#define JEITA_HARD			1
-static int smblib_update_jeita(struct smb_charger *chg, u32 *thresholds,
-								int type)
-{
-	int rc;
-	u16 temp, base;
-
-	base = CHGR_JEITA_THRESHOLD_BASE_REG(type);
-
-	temp = thresholds[1] & 0xFFFF;
-	temp = ((temp & 0xFF00) >> 8) | ((temp & 0xFF) << 8);
-	rc = smblib_batch_write(chg, base, (u8 *)&temp, 2);
-	if (rc < 0) {
-		smblib_err(chg,
-			"Couldn't configure Jeita %s hot threshold rc=%d\n",
-			(type == JEITA_SOFT) ? "Soft" : "Hard", rc);
-		return rc;
-	}
-
-	temp = thresholds[0] & 0xFFFF;
-	temp = ((temp & 0xFF00) >> 8) | ((temp & 0xFF) << 8);
-	rc = smblib_batch_write(chg, base + 2, (u8 *)&temp, 2);
-	if (rc < 0) {
-		smblib_err(chg,
-			"Couldn't configure Jeita %s cold threshold rc=%d\n",
-			(type == JEITA_SOFT) ? "Soft" : "Hard", rc);
-		return rc;
-	}
-
-	smblib_dbg(chg, PR_MISC, "%s Jeita threshold configured\n",
-				(type == JEITA_SOFT) ? "Soft" : "Hard");
-
-	return 0;
-}
-
 static void jeita_update_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -5388,8 +5463,8 @@ static void jeita_update_work(struct work_struct *work)
 	struct device_node *node = chg->dev->of_node;
 	struct device_node *batt_node, *pnode;
 	union power_supply_propval val;
-	int rc;
-	u32 jeita_thresholds[2];
+	int rc, tmp[2], max_fcc_ma, max_fv_uv;
+	u32 jeita_hard_thresholds[2];
 
 	batt_node = of_find_node_by_name(node, "qcom,battery-data");
 	if (!batt_node) {
@@ -5422,9 +5497,10 @@ static void jeita_update_work(struct work_struct *work)
 	}
 
 	rc = of_property_read_u32_array(pnode, "qcom,jeita-hard-thresholds",
-				jeita_thresholds, 2);
+				jeita_hard_thresholds, 2);
 	if (!rc) {
-		rc = smblib_update_jeita(chg, jeita_thresholds, JEITA_HARD);
+		rc = smblib_update_jeita(chg, jeita_hard_thresholds,
+					JEITA_HARD);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't configure Hard Jeita rc=%d\n",
 					rc);
@@ -5433,18 +5509,83 @@ static void jeita_update_work(struct work_struct *work)
 	}
 
 	rc = of_property_read_u32_array(pnode, "qcom,jeita-soft-thresholds",
-				jeita_thresholds, 2);
+				chg->jeita_soft_thlds, 2);
 	if (!rc) {
-		rc = smblib_update_jeita(chg, jeita_thresholds, JEITA_SOFT);
+		rc = smblib_update_jeita(chg, chg->jeita_soft_thlds,
+					JEITA_SOFT);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't configure Soft Jeita rc=%d\n",
 					rc);
 			goto out;
 		}
+
+		rc = of_property_read_u32_array(pnode,
+					"qcom,jeita-soft-hys-thresholds",
+					chg->jeita_soft_hys_thlds, 2);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't get Soft Jeita hysteresis thresholds rc=%d\n",
+					rc);
+			goto out;
+		}
 	}
 
+	chg->jeita_soft_fcc[0] = chg->jeita_soft_fcc[1] = -EINVAL;
+	chg->jeita_soft_fv[0] = chg->jeita_soft_fv[1] = -EINVAL;
+	max_fcc_ma = max_fv_uv = -EINVAL;
+
+	of_property_read_u32(pnode, "qcom,fastchg-current-ma", &max_fcc_ma);
+	of_property_read_u32(pnode, "qcom,max-voltage-uv", &max_fv_uv);
+
+	if (max_fcc_ma <= 0 || max_fv_uv <= 0) {
+		smblib_err(chg, "Incorrect fastchg-current-ma or max-voltage-uv\n");
+		goto out;
+	}
+
+	rc = of_property_read_u32_array(pnode, "qcom,jeita-soft-fcc-ua",
+					tmp, 2);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't get fcc values for soft JEITA rc=%d\n",
+				rc);
+		goto out;
+	}
+
+	max_fcc_ma *= 1000;
+	if (tmp[0] > max_fcc_ma || tmp[1] > max_fcc_ma) {
+		smblib_err(chg, "Incorrect FCC value [%d %d] max: %d\n", tmp[0],
+			tmp[1], max_fcc_ma);
+		goto out;
+	}
+	chg->jeita_soft_fcc[0] = tmp[0];
+	chg->jeita_soft_fcc[1] = tmp[1];
+
+	rc = of_property_read_u32_array(pnode, "qcom,jeita-soft-fv-uv", tmp,
+					2);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't get fv values for soft JEITA rc=%d\n",
+				rc);
+		goto out;
+	}
+
+	if (tmp[0] > max_fv_uv || tmp[1] > max_fv_uv) {
+		smblib_err(chg, "Incorrect FV value [%d %d] max: %d\n", tmp[0],
+			tmp[1], max_fv_uv);
+		goto out;
+	}
+	chg->jeita_soft_fv[0] = tmp[0];
+	chg->jeita_soft_fv[1] = tmp[1];
+
+	rc = smblib_soft_jeita_arb_wa(chg);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't fix soft jeita arb rc=%d\n",
+				rc);
+		goto out;
+	}
+
+	chg->jeita_configured = JEITA_CFG_COMPLETE;
+	return;
+
 out:
-	chg->jeita_configured = true;
+	chg->jeita_configured = JEITA_CFG_FAILURE;
 }
 
 static void smblib_lpd_ra_open_work(struct work_struct *work)
@@ -5590,6 +5731,15 @@ static int smblib_create_votables(struct smb_charger *chg)
 
 	vote(chg->pl_disable_votable, PL_DELAY_VOTER, true, 0);
 
+	chg->smb_override_votable = create_votable("SMB_EN_OVERRIDE",
+				VOTE_SET_ANY,
+				smblib_smb_disable_override_vote_callback, chg);
+	if (IS_ERR(chg->smb_override_votable)) {
+		rc = PTR_ERR(chg->smb_override_votable);
+		chg->smb_override_votable = NULL;
+		return rc;
+	}
+
 	chg->dc_suspend_votable = create_votable("DC_SUSPEND", VOTE_SET_ANY,
 					smblib_dc_suspend_vote_callback,
 					chg);
@@ -5689,6 +5839,14 @@ static void smblib_iio_deinit(struct smb_charger *chg)
 		iio_channel_release(chg->iio.sbux_chan);
 	if (!IS_ERR_OR_NULL(chg->iio.vph_v_chan))
 		iio_channel_release(chg->iio.vph_v_chan);
+	if (!IS_ERR_OR_NULL(chg->iio.die_temp_chan))
+		iio_channel_release(chg->iio.die_temp_chan);
+	if (!IS_ERR_OR_NULL(chg->iio.connector_temp_chan))
+		iio_channel_release(chg->iio.connector_temp_chan);
+	if (!IS_ERR_OR_NULL(chg->iio.skin_temp_chan))
+		iio_channel_release(chg->iio.skin_temp_chan);
+	if (!IS_ERR_OR_NULL(chg->iio.smb_temp_chan))
+		iio_channel_release(chg->iio.smb_temp_chan);
 }
 
 int smblib_init(struct smb_charger *chg)
@@ -5717,6 +5875,7 @@ int smblib_init(struct smb_charger *chg)
 	chg->jeita_configured = false;
 	chg->sec_chg_selected = POWER_SUPPLY_CHARGER_SEC_NONE;
 	chg->cp_reason = POWER_SUPPLY_CP_NONE;
+	chg->thermal_status = TEMP_BELOW_RANGE;
 
 	switch (chg->mode) {
 	case PARALLEL_MASTER:
@@ -5728,7 +5887,7 @@ int smblib_init(struct smb_charger *chg)
 		}
 
 		rc = qcom_step_chg_init(chg->dev, chg->step_chg_enabled,
-						chg->sw_jeita_enabled);
+						chg->sw_jeita_enabled, false);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't init qcom_step_chg_init rc=%d\n",
 				rc);

@@ -70,8 +70,12 @@
 
 #define TXPREEMPAMPTUNE0(x)			(x << 6)
 #define TXPREEMPAMPTUNE0_MASK			(BIT(7) | BIT(6))
+#define USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0	0x6c
 #define USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1	0x70
+#define USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2	0x74
+#define USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X3	0x78
 #define TXVREFTUNE0_MASK			0xF
+#define PARAM_OVRD_MASK			0xFF
 
 #define USB_HSPHY_3P3_VOL_MIN			3050000 /* uV */
 #define USB_HSPHY_3P3_VOL_MAX			3300000 /* uV */
@@ -81,6 +85,8 @@
 #define USB_HSPHY_1P8_VOL_MIN			1704000 /* uV */
 #define USB_HSPHY_1P8_VOL_MAX			1800000 /* uV */
 #define USB_HSPHY_1P8_HPM_LOAD			19000	/* uA */
+
+#define USB_HSPHY_VDD_HPM_LOAD			30000	/* uA */
 
 struct msm_hsphy {
 	struct usb_phy		phy;
@@ -122,6 +128,10 @@ struct msm_hsphy {
 	struct dentry		*root;
 	u8			txvref_tune0;
 	u8			pre_emphasis;
+	u8			param_ovrd0;
+	u8			param_ovrd1;
+	u8			param_ovrd2;
+	u8			param_ovrd3;
 };
 
 static void msm_hsphy_enable_clocks(struct msm_hsphy *phy, bool on)
@@ -147,23 +157,6 @@ static void msm_hsphy_enable_clocks(struct msm_hsphy *phy, bool on)
 	}
 
 }
-static int msm_hsphy_config_vdd(struct msm_hsphy *phy, int high)
-{
-	int min, ret;
-
-	min = high ? 1 : 0; /* low or none? */
-	ret = regulator_set_voltage(phy->vdd, phy->vdd_levels[min],
-				    phy->vdd_levels[2]);
-	if (ret) {
-		dev_err(phy->phy.dev, "unable to set voltage for hsusb vdd\n");
-		return ret;
-	}
-
-	dev_dbg(phy->phy.dev, "%s: min_vol:%d max_vol:%d\n", __func__,
-		phy->vdd_levels[min], phy->vdd_levels[2]);
-
-	return ret;
-}
 
 static int msm_hsphy_enable_power(struct msm_hsphy *phy, bool on)
 {
@@ -180,11 +173,17 @@ static int msm_hsphy_enable_power(struct msm_hsphy *phy, bool on)
 	if (!on)
 		goto disable_vdda33;
 
-	ret = msm_hsphy_config_vdd(phy, true);
-	if (ret) {
-		dev_err(phy->phy.dev, "Unable to config VDD:%d\n",
-							ret);
+	ret = regulator_set_load(phy->vdd, USB_HSPHY_VDD_HPM_LOAD);
+	if (ret < 0) {
+		dev_err(phy->phy.dev, "Unable to set HPM of vdd:%d\n", ret);
 		goto err_vdd;
+	}
+
+	ret = regulator_set_voltage(phy->vdd, phy->vdd_levels[1],
+				    phy->vdd_levels[2]);
+	if (ret) {
+		dev_err(phy->phy.dev, "unable to set voltage for hsusb vdd\n");
+		goto put_vdd_lpm;
 	}
 
 	ret = regulator_enable(phy->vdd);
@@ -273,14 +272,18 @@ put_vdda18_lpm:
 disable_vdd:
 	ret = regulator_disable(phy->vdd);
 	if (ret)
-		dev_err(phy->phy.dev, "Unable to disable vdd:%d\n",
-								ret);
+		dev_err(phy->phy.dev, "Unable to disable vdd:%d\n", ret);
 
 unconfig_vdd:
-	ret = msm_hsphy_config_vdd(phy, false);
+	ret = regulator_set_voltage(phy->vdd, phy->vdd_levels[0],
+				    phy->vdd_levels[2]);
 	if (ret)
-		dev_err(phy->phy.dev, "Unable unconfig VDD:%d\n",
-								ret);
+		dev_err(phy->phy.dev, "unable to set voltage for hsusb vdd\n");
+
+put_vdd_lpm:
+	ret = regulator_set_load(phy->vdd, 0);
+	if (ret < 0)
+		dev_err(phy->phy.dev, "Unable to set LPM of vdd\n");
 err_vdd:
 	phy->power_enabled = false;
 	dev_dbg(phy->phy.dev, "HSUSB PHY's regulators are turned OFF.\n");
@@ -425,6 +428,36 @@ static int msm_hsphy_init(struct usb_phy *uphy)
 			USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1,
 			TXVREFTUNE0_MASK, val);
 	}
+
+	if (phy->param_ovrd0) {
+		msm_usb_write_readback(phy->base,
+			USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0,
+			PARAM_OVRD_MASK, phy->param_ovrd0);
+	}
+
+	if (phy->param_ovrd1) {
+		msm_usb_write_readback(phy->base,
+			USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1,
+			PARAM_OVRD_MASK, phy->param_ovrd1);
+	}
+
+	if (phy->param_ovrd2) {
+		msm_usb_write_readback(phy->base,
+			USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2,
+			PARAM_OVRD_MASK, phy->param_ovrd2);
+	}
+
+	if (phy->param_ovrd3) {
+		msm_usb_write_readback(phy->base,
+			USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X3,
+			PARAM_OVRD_MASK, phy->param_ovrd3);
+	}
+
+	dev_dbg(uphy->dev, "x0:%08x x1:%08x x2:%08x x3:%08x\n",
+	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0),
+	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1),
+	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2),
+	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X3));
 
 	if (phy->phy_rcal_reg) {
 		rcal_code = readl_relaxed(phy->phy_rcal_reg) & phy->rcal_mask;
@@ -626,6 +659,10 @@ static void msm_hsphy_create_debugfs(struct msm_hsphy *phy)
 	phy->root = debugfs_create_dir(dev_name(phy->phy.dev), NULL);
 	debugfs_create_x8("pre_emphasis", 0644, phy->root, &phy->pre_emphasis);
 	debugfs_create_x8("txvref_tune0", 0644, phy->root, &phy->txvref_tune0);
+	debugfs_create_x8("param_ovrd0", 0644, phy->root, &phy->param_ovrd0);
+	debugfs_create_x8("param_ovrd1", 0644, phy->root, &phy->param_ovrd1);
+	debugfs_create_x8("param_ovrd2", 0644, phy->root, &phy->param_ovrd2);
+	debugfs_create_x8("param_ovrd3", 0644, phy->root, &phy->param_ovrd3);
 }
 
 static int msm_hsphy_probe(struct platform_device *pdev)

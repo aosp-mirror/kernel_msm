@@ -827,6 +827,8 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 	smaps_walk.private = mss;
 
 #ifdef CONFIG_SHMEM
+	/* In case of smaps_rollup, reset the value from previous vma */
+	mss->check_shmem_swap = false;
 	if (vma->vm_file && shmem_mapping(vma->vm_file->f_mapping)) {
 		/*
 		 * For shared or readonly shmem mappings we know that all
@@ -842,7 +844,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 
 		if (!shmem_swapped || (vma->vm_flags & VM_SHARED) ||
 					!(vma->vm_flags & VM_WRITE)) {
-			mss->swap = shmem_swapped;
+			mss->swap += shmem_swapped;
 		} else {
 			mss->check_shmem_swap = true;
 			smaps_walk.pte_hole = smaps_pte_hole;
@@ -1684,6 +1686,18 @@ cont:
 
 		if (isolate_lru_page(page))
 			continue;
+
+		/* MADV_FREE clears pte dirty bit and then marks the page
+		 * lazyfree (clear SwapBacked). Inbetween if this lazyfreed page
+		 * is touched by user then it becomes dirty.  PPR in
+		 * shrink_page_list in try_to_unmap finds the page dirty, marks
+		 * it back as PageSwapBacked and skips reclaim. This can cause
+		 * isolated count mismatch.
+		 */
+		if (PageAnon(page) && !PageSwapBacked(page)) {
+			putback_lru_page(page);
+			continue;
+		}
 
 		list_add(&page->lru, &page_list);
 		inc_node_page_state(page, NR_ISOLATED_ANON +

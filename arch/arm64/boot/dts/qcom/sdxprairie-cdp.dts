@@ -12,6 +12,7 @@
 
 /dts-v1/;
 
+#include "sdxprairie.dtsi"
 #include "sdxprairie-cdp.dtsi"
 
 / {
@@ -19,4 +20,8 @@
 	compatible = "qcom,sdxprairie-cdp",
 		"qcom,sdxprairie", "qcom,cdp";
 	qcom,board-id = <1 0x102>;
+};
+
+&qnand_1 {
+	status = "ok";
 };

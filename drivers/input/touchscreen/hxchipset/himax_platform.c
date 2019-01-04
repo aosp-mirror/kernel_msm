@@ -17,9 +17,12 @@
 #include "himax_platform.h"
 #include "himax_common.h"
 #include "himax_ic_core.h"
+#include "linux/moduleparam.h"
 
 int i2c_error_count;
 int irq_enable_count;
+
+active_tp_setup(himax);
 
 int himax_dev_set(struct himax_ts_data *ts)
 {
@@ -787,9 +790,14 @@ int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_i
 {
 	int ret = 0;
 	struct himax_ts_data *ts;
+	struct device_node *dt = client->dev.of_node;
+	struct himax_i2c_platform_data *pdata;
 
 	D("%s:Enter\n", __func__);
 
+	if (himax_check_assigned_tp(dt, "compatible",
+		"qcom,i2c-touch-active") < 0)
+		goto err_dt_not_match;
 	/* Check I2C functionality */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		E("%s: i2c check functionality error\n", __func__);
@@ -837,14 +845,64 @@ int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_i
 	}
 	INIT_DELAYED_WORK(&ts->work_update, himax_update_register);
 #endif
+
+	D("PDATA START\n");
+	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
+	if (pdata == NULL) { /* Allocate Platform data space */
+		ret = -ENOMEM;
+		goto err_fb_notify_reg_failed;
+	}
+
+	if (himax_parse_dt(ts, pdata) < 0) {
+		E(" pdata is NULL for DT\n");
+		ret = -ECANCELED;
+		goto err_alloc_dt_pdata_failed;
+	}
+
+	if (pdata->virtual_key)
+		ts->button = pdata->virtual_key;
+
+	ts->pdata = pdata;
+
+#ifdef CONFIG_OF
+	pdata->cable_config[0] = 0xF0;
+	pdata->cable_config[1] = 0x00;
+
+	ts->pdata->abs_pressure_min = 0;
+	ts->pdata->abs_pressure_max = 200;
+	ts->pdata->abs_width_min = 0;
+	ts->pdata->abs_width_max = 200;
+#endif
+
+	ts->suspended = false;
+#if defined(HX_USB_DETECT_CALLBACK) || defined(HX_USB_DETECT_GLOBAL)
+	ts->usb_connected = 0x00;
+	ts->cable_config = pdata->cable_config;
+#endif
+#ifdef	HX_PROTOCOL_A
+	ts->protocol_type = PROTOCOL_TYPE_A;
+#else
+	ts->protocol_type = PROTOCOL_TYPE_B;
+#endif
+	D("%s: Use Protocol Type %c\n", __func__,
+	  ts->protocol_type == PROTOCOL_TYPE_A ? 'A' : 'B');
+
+	ret = himax_input_register(ts);
+	if (ret) {
+		E("%s: Unable to register %s input device\n",
+		  __func__, ts->input_dev->name);
+	}
 	return ret;
 
+err_alloc_dt_pdata_failed:
+	kfree(pdata);
 err_fb_notify_reg_failed:
 	kfree(ts->i2c_data);
 err_alloc_i2c_data:
 	kfree(ts);
 err_alloc_data_failed:
 err_check_functionality_failed:
+err_dt_not_match:
 
 	return ret;
 }

@@ -321,13 +321,13 @@ int cam_sensor_i2c_command_parser(
 
 		rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
 			&generic_ptr, &len_of_buff);
-		cmd_buf = (uint32_t *)generic_ptr;
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR,
 				"cmd hdl failed:%d, Err: %d, Buffer_len: %zd",
 				cmd_desc[i].mem_handle, rc, len_of_buff);
 			return rc;
 		}
+		cmd_buf = (uint32_t *)generic_ptr;
 		cmd_buf += cmd_desc[i].offset / sizeof(uint32_t);
 
 		while (byte_cnt < cmd_desc[i].length) {
@@ -347,7 +347,7 @@ int cam_sensor_i2c_command_parser(
 				if (rc < 0) {
 					CAM_ERR(CAM_SENSOR,
 					"Failed in random write %d", rc);
-					return rc;
+					goto rel_buf;
 				}
 
 				cmd_buf += cmd_length_in_bytes /
@@ -369,7 +369,7 @@ int cam_sensor_i2c_command_parser(
 				if (rc < 0) {
 					CAM_ERR(CAM_SENSOR,
 					"Failed in continuous write %d", rc);
-					return rc;
+					goto rel_buf;
 				}
 
 				cmd_buf += cmd_length_in_bytes /
@@ -391,7 +391,7 @@ int cam_sensor_i2c_command_parser(
 						CAM_ERR(CAM_SENSOR,
 							"delay hdl failed: %d",
 							rc);
-						return rc;
+						goto rel_buf;
 					}
 
 				} else if (generic_op_code ==
@@ -403,13 +403,14 @@ int cam_sensor_i2c_command_parser(
 						CAM_ERR(CAM_SENSOR,
 							"Random read fail: %d",
 							rc);
-						return rc;
+						goto rel_buf;
 					}
 				} else {
 					CAM_ERR(CAM_SENSOR,
 						"Wrong Wait Command: %d",
 						generic_op_code);
-					return -EINVAL;
+					rc = -EINVAL;
+					goto rel_buf;
 				}
 				break;
 			}
@@ -420,7 +421,7 @@ int cam_sensor_i2c_command_parser(
 					CAM_ERR(CAM_SENSOR,
 						"Handle slave info failed with rc: %d",
 						rc);
-					return rc;
+					goto rel_buf;
 				}
 				cmd_length_in_bytes =
 					sizeof(struct cam_cmd_i2c_info);
@@ -432,12 +433,22 @@ int cam_sensor_i2c_command_parser(
 			default:
 				CAM_ERR(CAM_SENSOR, "Invalid Command Type:%d",
 					 cmm_hdr->cmd_type);
-				return -EINVAL;
+				rc = -EINVAL;
+				goto rel_buf;
 			}
 		}
 		i2c_reg_settings->is_settings_valid = 1;
+		if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
+			CAM_WARN(CAM_SENSOR, "put failed for buffer :0x%x",
+				cmd_desc[i].mem_handle);
 	}
 
+	return rc;
+
+rel_buf:
+	if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
+		CAM_WARN(CAM_SENSOR, "put failed for buffer :0x%x",
+			cmd_desc[i].mem_handle);
 	return rc;
 }
 

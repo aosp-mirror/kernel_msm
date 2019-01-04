@@ -331,6 +331,7 @@ static irqreturn_t dsi_display_panel_te_irq_handler(int irq, void *data)
 	if (!display)
 		return IRQ_HANDLED;
 
+	SDE_EVT32(SDE_EVTLOG_FUNC_CASE1);
 	complete_all(&display->esd_te_gate);
 	return IRQ_HANDLED;
 }
@@ -1209,6 +1210,10 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 
 	if (!user_len || !user_buf)
 		return -EINVAL;
+
+	if (!display->panel ||
+		atomic_read(&display->panel->esd_recovery_pending))
+		return user_len;
 
 	buf = kzalloc(user_len, GFP_KERNEL);
 	if (!buf)
@@ -3819,7 +3824,7 @@ static int dsi_display_get_dfps_timing(struct dsi_display *display,
 		rc = dsi_display_dfps_calc_front_porch(
 				curr_refresh_rate,
 				timing->refresh_rate,
-				DSI_H_TOTAL(timing),
+				DSI_H_TOTAL_DSC(timing),
 				DSI_V_TOTAL(timing),
 				timing->v_front_porch,
 				&adj_mode->timing.v_front_porch);
@@ -3830,7 +3835,7 @@ static int dsi_display_get_dfps_timing(struct dsi_display *display,
 				curr_refresh_rate,
 				timing->refresh_rate,
 				DSI_V_TOTAL(timing),
-				DSI_H_TOTAL(timing),
+				DSI_H_TOTAL_DSC(timing),
 				timing->h_front_porch,
 				&adj_mode->timing.h_front_porch);
 		if (!rc)
@@ -5354,7 +5359,6 @@ int dsi_display_get_modes(struct dsi_display *display,
 	if (rc)
 		goto error;
 
-
 	display->modes = kcalloc(total_mode_count, sizeof(*display->modes),
 			GFP_KERNEL);
 	if (!display->modes) {
@@ -5432,7 +5436,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 					sub_mode, curr_refresh_rate);
 
 				sub_mode->pixel_clk_khz =
-					(DSI_H_TOTAL(&sub_mode->timing) *
+					(DSI_H_TOTAL_DSC(&sub_mode->timing) *
 					DSI_V_TOTAL(&sub_mode->timing) *
 					sub_mode->timing.refresh_rate) / 1000;
 			}
@@ -5617,8 +5621,8 @@ int dsi_display_validate_mode_vrr(struct dsi_display *display,
 			break;
 
 		case DSI_DFPS_IMMEDIATE_HFP:
-			if (abs(DSI_H_TOTAL(&cur_mode.timing) -
-				DSI_H_TOTAL(&adj_mode.timing)) > 5)
+			if (abs(DSI_H_TOTAL_DSC(&cur_mode.timing) -
+				DSI_H_TOTAL_DSC(&adj_mode.timing)) > 5)
 				pr_err("Mismatch hfp fps:%d new:%d given:%d\n",
 				adj_mode.timing.refresh_rate,
 				cur_mode.timing.h_front_porch,
