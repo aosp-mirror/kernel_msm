@@ -754,11 +754,15 @@ static int state_change_task(void *ctx)
 			ret);
 
 	while (!kthread_should_stop()) {
-		wait_for_completion(&sc->request_state_change_comp);
+		ret = wait_for_completion_interruptible(
+				&sc->request_state_change_comp);
 		reinit_completion(&sc->request_state_change_comp);
 
 		if (kthread_should_stop())
 			return 0;
+
+		if (ret)
+			continue;
 
 		mutex_lock(&sc->state_transitioning_lock);
 		sc->change_ret = ab_sm_update_chip_state(sc);
