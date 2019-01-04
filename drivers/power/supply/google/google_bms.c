@@ -344,6 +344,7 @@ uint8_t gbms_gen_chg_flags(int chg_status, int chg_type)
 	return flags;
 }
 
+/* ------------------------------------------------------------------------- */
 
 /* convert cycle counts array to string */
 int gbms_cycle_count_cstr_bc(char *buf, size_t size,

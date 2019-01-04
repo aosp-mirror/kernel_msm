@@ -32,6 +32,7 @@
 #include <linux/pmic-voter.h>
 #include "google_bms.h"
 #include "google_psy.h"
+#include "qmath.h"
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -47,17 +48,32 @@
 #define MSC_ERROR_UPDATE_INTERVAL		5000
 #define MSC_DEFAULT_UPDATE_INTERVAL		30000
 
-struct batt_ssoc_state {
-	int ssoc_gdf;	/* output of gauge data filter */
-	int ssoc_uic;	/* output of UI Curves */
-	int ssoc_rl;	/* output of rate limiter */
-	int ssoc;	/* level% */
+#define UICURVE_MAX	3
+
+struct ssoc_uicurve {
+	qnum_t real;
+	qnum_t ui;
 };
 
 enum batt_rl_status {
 	BATT_RL_STATUS_NONE = 0,
-	BATT_RL_STATUS_DISCHARGE = 1,
-	BATT_RL_STATUS_RECHARGE = 2,
+	BATT_RL_STATUS_DISCHARGE = -1,
+	BATT_RL_STATUS_RECHARGE = 1,
+};
+
+struct batt_ssoc_state {
+	/* output of gauge data filter */
+	qnum_t ssoc_gdf;
+	/*  UI Curves */
+	int ssoc_curve_type;    /*<0 dsg, >0 chg, 0? */
+	struct ssoc_uicurve ssoc_curve[UICURVE_MAX];
+	qnum_t ssoc_uic;
+	/* output of rate limiter */
+	qnum_t ssoc_rl;
+
+	/* recharge logic */
+	int rl_soc_threshold;
+	enum batt_rl_status rl_status;
 };
 
 struct gbatt_ccbin_data {
@@ -98,10 +114,12 @@ struct batt_drv {
 	/* props */
 	int soh;
 
+	/* temp outside the charge table */
+	int jeita_stop_charging;
+
 	/* MSC charging */
-	bool msc_stop_charging; /* temp outside the charge table */
-	struct gbms_chg_profile chg_profile;
 	u32 battery_capacity;
+	struct gbms_chg_profile chg_profile;
 
 	union gbms_charger_state chg_state;
 
@@ -114,13 +132,10 @@ struct batt_drv {
 	int fv_uv;
 	int cc_max;
 	int msc_update_interval;
+
 	struct votable	*msc_interval_votable;
 	struct votable	*fcc_votable;
 	struct votable	*fv_votable;
-
-	/* recharge logic */
-	enum batt_rl_status rl_status;
-	int batt_rl_soc_threshold;
 };
 
 static int psy_changed(struct notifier_block *nb,
@@ -146,94 +161,309 @@ static int psy_changed(struct notifier_block *nb,
 
 /* ------------------------------------------------------------------------- */
 
-static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
+#define UICURVE_BUF_SZ	(UICURVE_MAX * 15 + 1)
+
+enum ssoc_uic_type {
+	SSOC_UIC_TYPE_DSG  = -1,
+	SSOC_UIC_TYPE_NONE = 0,
+	SSOC_UIC_TYPE_CHG  = 1,
+};
+
+const qnum_t ssoc_point_true = qnum_rconst(15);
+const qnum_t ssoc_point_spoof = qnum_rconst(95);
+const qnum_t ssoc_point_full = qnum_rconst(100);
+
+static struct ssoc_uicurve chg_curve[UICURVE_MAX] = {
+	{ ssoc_point_true, ssoc_point_true },
+	{ ssoc_point_spoof, ssoc_point_spoof },
+	{ ssoc_point_full, ssoc_point_full },
+};
+
+static struct ssoc_uicurve dsg_curve[UICURVE_MAX] = {
+	{ ssoc_point_true, ssoc_point_true },
+	{ ssoc_point_spoof, ssoc_point_full },
+	{ ssoc_point_full, ssoc_point_full },
+};
+
+static char *ssoc_uicurve_cstr(char *buff, size_t size,
+			       struct ssoc_uicurve *curve)
 {
-	return ssoc->ssoc_gdf;
+	int i, len = 0;
+
+	for (i = 0; i < UICURVE_MAX ; i++) {
+		len += snprintf(&buff[len], size - len,
+				"[" QNUM_CSTR_FMT " " QNUM_CSTR_FMT "]",
+				qnum_toint(curve[i].real),
+				qnum_fracdgt(curve[i].real),
+				qnum_toint(curve[i].ui),
+				qnum_fracdgt(curve[i].ui));
+		if (len >= size)
+			break;
+	}
+
+	buff[len] = 0;
+	return buff;
 }
 
-/* TODO: b/111407333, apply UI curve to GDF */
-static int ssoc_apply_uic(struct batt_ssoc_state *ssoc)
+/* NOTE: no bounds checks on this one */
+static int ssoc_uicurve_find(qnum_t real, struct ssoc_uicurve *curve)
 {
-	return ssoc->ssoc_gdf;
+	int i;
+
+	for (i = 1; i < UICURVE_MAX ; i++) {
+		if (real == curve[i].real)
+			return i;
+		if (real > curve[i].real)
+			continue;
+		break;
+	}
+
+	return i-1;
 }
+
+static qnum_t ssoc_uicurve_map(qnum_t real, struct ssoc_uicurve *curve)
+{
+	qnum_t slope = 0, delta_ui, delta_re;
+	int i;
+
+	if (real < curve[0].real)
+		return real;
+	if (real >= curve[UICURVE_MAX - 1].ui)
+		return curve[UICURVE_MAX - 1].ui;
+
+	i = ssoc_uicurve_find(real, curve);
+	if (curve[i].real == real)
+		return curve[i].ui;
+
+	delta_ui = curve[i + 1].ui - curve[i].ui;
+	delta_re =  curve[i + 1].real - curve[i].real;
+	if (delta_re)
+		slope = qnum_div(delta_ui, delta_re);
+
+	return curve[i].ui + qnum_mul(slope, (real - curve[i].real));
+}
+
+/* "optimized" to work on 3 element curves */
+static void ssoc_uicurve_splice(struct ssoc_uicurve *curve, qnum_t real,
+				qnum_t ui)
+{
+	if (real < curve[0].real || real > curve[2].real)
+		return;
+
+#if UICURVE_MAX != 3
+#error ssoc_uicurve_splice() only support UICURVE_MAX == 3
+#endif
+
+	/* splice only when real is within the curve range */
+	curve[1].real = real;
+	curve[1].ui = ui;
+}
+
+static void ssoc_uicurve_dup(struct ssoc_uicurve *dst,
+			     struct ssoc_uicurve *curve)
+{
+	if (dst != curve)
+		memcpy(dst, curve, sizeof(*dst)*UICURVE_MAX);
+}
+
+
+/* ------------------------------------------------------------------------- */
 
 /* TODO: b/111407333, apply rate limiter to UIC */
-static int ssoc_apply_rl(struct batt_ssoc_state *ssoc)
+static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 {
 	return ssoc->ssoc_uic;
 }
 
-/* TODO: b/111407333, software state of charge
- * call while holding batt_lock
- */
-static int ssoc_work(struct batt_ssoc_state *ssoc, struct power_supply *fg_psy)
+/* ------------------------------------------------------------------------- */
+
+/* a statement :-) */
+static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
 {
-	int soc;
+	return qnum_toint(ssoc->ssoc_gdf);
+}
 
-	/* gauge data filter: make sense of gauge data */
-	soc = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CAPACITY);
-	if (soc < 0)
-		return -EINVAL;
+/* reported to userspace: call while holding batt_lock */
+static int ssoc_get_capacity(struct batt_ssoc_state *ssoc)
+{
+	return qnum_roundint(ssoc->ssoc_rl, 0.005);
+}
+
+/* ------------------------------------------------------------------------- */
+
+void dump_ssoc_state(struct batt_ssoc_state *ssoc_state)
+{
+	char buff[UICURVE_BUF_SZ] = { 0 };
+
+	ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve);
+	pr_info("SSOC: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d ct=%d curve:%s rls=%d\n",
+		ssoc_get_capacity(ssoc_state),
+		qnum_toint(ssoc_state->ssoc_gdf),
+		qnum_fracdgt(ssoc_state->ssoc_gdf),
+		qnum_toint(ssoc_state->ssoc_uic),
+		qnum_fracdgt(ssoc_state->ssoc_uic),
+		qnum_toint(ssoc_state->ssoc_rl),
+		qnum_fracdgt(ssoc_state->ssoc_rl),
+		ssoc_state->ssoc_curve_type, buff,
+		ssoc_state->rl_status);
+}
+
+/* ------------------------------------------------------------------------- */
+
+/* call while holding batt_lock
+ * NOTE: for Maxim could need:
+ *	1fh AvCap
+ *	10h FullCap
+ *	23h FullCapNom
+ */
+static void ssoc_update(struct batt_ssoc_state *ssoc, qnum_t soc)
+{
+	/* low pass filter */
 	ssoc->ssoc_gdf = soc;
-
-	/* apply UI curves: spoof UI @ EOC */
-	ssoc->ssoc_uic = ssoc_apply_uic(ssoc);
-	/* apply rate limiter: monotonicity and rate of change */
+	/* spoof UI @ EOC */
+	ssoc->ssoc_uic = ssoc_uicurve_map(ssoc->ssoc_gdf, ssoc->ssoc_curve);
+	/*  monotonicity and rate of change */
 	ssoc->ssoc_rl = ssoc_apply_rl(ssoc);
+}
 
+/* TODO: POWER_SUPPLY_PROP_CAPACITY_RAW should return a qnum_t */
+static int ssoc_get_raw_capacity(qnum_t *soc_raw, struct power_supply *fg_psy)
+{
+	int soc_q8_8;
+
+	soc_q8_8 = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CAPACITY_RAW);
+	if (soc_q8_8 < 0)
+		return -EINVAL;
+
+	*soc_raw = qnum_from_q8_8(soc_q8_8);
 	return 0;
 }
 
-/* reported to userspace
- * call while holding batt_lock
- */
-static int ssoc_get_capacity(const struct batt_drv *batt_drv)
+static int ssoc_work(struct batt_ssoc_state *ssoc_state,
+		     struct power_supply *fg_psy)
 {
-	/* FULL while in recharge logic, hack until b/111407333 */
-	if (batt_drv->rl_status != BATT_RL_STATUS_NONE)
-		return 100;
-	/* TODO: round to 1% */
-	return batt_drv->ssoc_state.ssoc_rl;
+	int ret;
+	qnum_t soc_raw;
+
+	ret = ssoc_get_raw_capacity(&soc_raw, fg_psy);
+	if (ret < 0)
+		return -EIO;
+
+	ssoc_update(ssoc_state, soc_raw);
+	return 0;
 }
 
-/* enter recharge logic on charger_DONE or Gauge FULL.
+/* change the current UI curve.
+ * - no op when type doesn't change
+ */
+void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
+		       enum ssoc_uic_type type)
+{
+	qnum_t ssoc_gdf = ssoc_state->ssoc_gdf;
+	qnum_t ssoc_rl = ssoc_state->ssoc_rl;
+	struct ssoc_uicurve *new_curve;
+
+	if (ssoc_state->ssoc_curve_type == type)
+		return;
+
+	/* force dsg when showing 100% (includes recharge logic) */
+	if (ssoc_rl >= ssoc_point_full)
+		type = SSOC_UIC_TYPE_DSG;
+
+	new_curve = (type == SSOC_UIC_TYPE_DSG) ? dsg_curve : chg_curve;
+	ssoc_uicurve_dup(ssoc_state->ssoc_curve, new_curve);
+	ssoc_state->ssoc_curve_type = type;
+
+	/* no splice in RL: ssoc_rl=100% and ssoc_gdf>=spoof */
+	if (ssoc_state->rl_status != BATT_RL_STATUS_NONE
+	    || ssoc_rl >= ssoc_point_full)
+		return;
+
+	/* splice at (->ssoc_gdf,->ssoc_rl) because past spoof */
+	ssoc_uicurve_splice(ssoc_state->ssoc_curve, ssoc_gdf, ssoc_rl);
+}
+
+/* ------------------------------------------------------------------------- */
+
+/* enter recharge logic in BATT_RL_STATUS_DISCHARGE on charger_DONE,
+ * enter BATT_RL_STATUS_RECHARGE on Fuel Gauge FULL
+ * NOTE: batt_rl_update_status() doesn't call this
  * NOTE: call holding chg_lock
  * @pre rl_status != BATT_RL_STATUS_NONE
  */
-static void batt_rl_enter(struct batt_drv *batt_drv,
+static void batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 			  enum batt_rl_status rl_status)
 {
-	const int rl_current = batt_drv->rl_status;
+	const int rl_current = ssoc_state->rl_status;
 
-	/* enter on discharge is a NO_OP because batt_rl_update_status takes
-	 * care of flipping betwee DISCHARGE and RECHARGE */
+	/* NOTE: enter RL when current state is BATT_RL_STATUS_DISCHARGE is a
+	 * NO_OP because batt_rl_update_status is the only one that takes
+	 * care of flipping between BATT_RL_STATUS_DISCHARGE and
+	 * BATT_RL_STATUS_RECHARGE
+	 */
 	if (rl_current == rl_status || rl_current == BATT_RL_STATUS_DISCHARGE)
 		return;
 
-	if (rl_current == BATT_RL_STATUS_NONE) {
-		/* TODO: modify UI curve for  SSOC=100% @ RAW=95%
-		 * NOTE: might need to adjust the curve depending on the entry
-		 * rl_status.
-		 */
-	} else if (rl_current == BATT_RL_STATUS_RECHARGE) {
-		/* RECHARGE->DISCHARGE if battery declared 100% before charger.
-		 * NOTE: might need to adjust UI curve if the UI curve for enter
-		 * on RECHARGE (from battery) is different from the cuve for
-		 * entering from charger (in DISCHARGE).
-		 */
-	}
+	pr_info("rl_enter: status:%d->%d", rl_current, rl_status);
 
-	batt_drv->rl_status = rl_status;
+	/* NOTE: rl_status transition from *->DISCHARGE on charger FULL (during
+	 * charge or at the end of recharge) and transition from
+	 * NONE->RECHARGE when battery is full before charger is.
+	 */
+
+	/* recharge logic always work with a discharge curve */
+	ssoc_uicurve_dup(ssoc_state->ssoc_curve, dsg_curve);
+	ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_DSG;
+	ssoc_update(ssoc_state, ssoc_state->ssoc_gdf);
+
+	ssoc_state->rl_status = rl_status;
 
 	/* TODO: should I trigger a ps change? */
+	dump_ssoc_state(ssoc_state);
 }
 
-/* just reset state, no PS notifications.
+/* NOTE: might need to use SOC from bootloader as starting point to avoid UI
+ * SSOC jumping around or taking long time to coverge. Could technically read
+ * charger voltage and estimate SOC% based on empty and full voltage.
+ */
+static int ssoc_init(struct batt_ssoc_state *ssoc_state,
+		     struct power_supply *fg_psy)
+{
+	int ret, capacity;
+
+	/* ssoc_work needs this, charge curve to start with... */
+	ssoc_uicurve_dup(ssoc_state->ssoc_curve, chg_curve);
+
+	ret = ssoc_work(ssoc_state, fg_psy);
+	if (ret < 0)
+		return -EIO;
+
+	capacity = ssoc_get_capacity(ssoc_state);
+	if (capacity >= ssoc_state->rl_soc_threshold) {
+	/* Recharge logic with discharge curve */
+		batt_rl_enter(ssoc_state, BATT_RL_STATUS_DISCHARGE);
+	} else {
+	/* charge curve in the default case */
+		ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_NONE;
+		ssoc_uicurve_splice(ssoc_state->ssoc_curve,
+						ssoc_state->ssoc_gdf,
+						ssoc_state->ssoc_rl);
+
+	}
+
+	dump_ssoc_state(ssoc_state);
+	return 0;
+}
+
+/* ------------------------------------------------------------------------- */
+
+/* just reset state, no PS notifications no changes in the UI curve. This is
+ * called on startup and on disconnect when the charge driver state is reset
  * NOTE: call holding chg_lock
  */
 static void batt_rl_reset(struct batt_drv *batt_drv)
 {
-	batt_drv->rl_status = BATT_RL_STATUS_NONE;
+	batt_drv->ssoc_state.rl_status = BATT_RL_STATUS_NONE;
 }
 
 /* RL recharge: after SSOC work, restart charging.
@@ -241,19 +471,20 @@ static void batt_rl_reset(struct batt_drv *batt_drv)
  */
 static void batt_rl_update_status(struct batt_drv *batt_drv)
 {
-	struct batt_ssoc_state *ssoc = &batt_drv->ssoc_state;
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 	int soc;
 
 	/* already in _RECHARGE or _NONE, done */
-	if (batt_drv->rl_status != BATT_RL_STATUS_DISCHARGE)
+	if (ssoc_state->rl_status != BATT_RL_STATUS_DISCHARGE)
 		return;
 
 	/* recharge logic work on real soc */
-	soc = ssoc_get_real(ssoc);
-	if (batt_drv->batt_rl_soc_threshold &&
-	    soc <= batt_drv->batt_rl_soc_threshold) {
+	soc = ssoc_get_real(ssoc_state);
+	if (ssoc_state->rl_soc_threshold &&
+	    soc <= ssoc_state->rl_soc_threshold) {
 
-		batt_drv->rl_status = BATT_RL_STATUS_RECHARGE;
+		/* change state (will restart charge) on trigger */
+		ssoc_state->rl_status = BATT_RL_STATUS_RECHARGE;
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
 	}
@@ -262,18 +493,49 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
+/* should not reset rl state */
 static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 {
+	/* algo */
 	batt_drv->temp_idx = -1;
 	batt_drv->vbatt_idx = -1;
 	batt_drv->fv_uv = -1;
 	batt_drv->cc_max = -1;
+	batt_drv->msc_update_interval = -1;
+	batt_drv->jeita_stop_charging = -1;
+	/* timers */
 	batt_drv->checked_cv_cnt = 0;
 	batt_drv->checked_ov_cnt = 0;
 	batt_drv->checked_tier_switch_cnt = 0;
-	batt_drv->msc_stop_charging = true;
-	batt_drv->msc_update_interval = -1;
-	batt_rl_reset(batt_drv);
+}
+
+/* software JEITA, disable charging when outside the charge table.
+ * TODO: need to be able to disable (leave to HW)
+ */
+static bool msc_logic_soft_jeita(struct batt_drv *batt_drv, int temp)
+{
+	struct gbms_chg_profile *profile = &batt_drv->chg_profile;
+
+	if (temp < profile->temp_limits[0] ||
+	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
+		if (batt_drv->jeita_stop_charging < 0) {
+			pr_info("sw_jeita temp=%d off limits, do not enable charging\n",
+				temp);
+		} else if (batt_drv->jeita_stop_charging == 0) {
+			pr_info("sw_jeita temp=%d off limits, disabling charging\n",
+				temp);
+			batt_reset_chg_drv_state(batt_drv);
+		}
+
+		return 1;
+	}
+
+	if (batt_drv->jeita_stop_charging) {
+		pr_info("batt. temp=%d ok, enabling charging\n", temp);
+		batt_drv->jeita_stop_charging = false;
+	}
+
+	return 0;
 }
 
 static int msc_logic_internal(struct batt_drv *batt_drv)
@@ -283,34 +545,22 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	int vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv, temp_idx;
 	int temp, ibatt, vbatt, vchrg, chg_type;
 	int update_interval = MSC_DEFAULT_UPDATE_INTERVAL;
+	bool sw_jeita;
 
 	temp = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP);
 	if (temp == -EINVAL)
 		return -EIO;
 
-	/* sort of software JEITA: need to be able to disable (leave to HW) */
-	if (temp < profile->temp_limits[0] ||
-	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
-		if (!batt_drv->msc_stop_charging) {
-			pr_info("batt. temp=%d off limits, disabling charging\n",
-				temp);
-			batt_reset_chg_drv_state(batt_drv);
-		}
-
+	sw_jeita = msc_logic_soft_jeita(batt_drv, temp);
+	if (sw_jeita)
 		return 0;
-	}
-
-	if (batt_drv->msc_stop_charging) {
-		pr_info("batt. temp=%d ok, enabling charging\n", temp);
-		batt_drv->msc_stop_charging = false;
-	}
 
 	ibatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
 	vbatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	if (ibatt == -EINVAL || vbatt == -EINVAL)
 		return -EIO;
 
-	/* invalid vchg disable IDROP compensation in FAST */
+	/* invalid or 0 vchg disable IDROP compensation in FAST */
 	chg_type = batt_drv->chg_state.f.chg_type;
 	vchrg = batt_drv->chg_state.f.vchrg;
 	if (vchrg <= 0)
@@ -559,17 +809,31 @@ static int msc_logic(struct batt_drv *batt_drv)
 		gbms_chg_type_s(chg_state->f.chg_type),
 		chg_state->f.vchrg);
 
-	/* here google_charger trigger the recharge logic and get out of it. */
+	/* disconnect: change the curve UNLESS already in discharge curve.
+	 * NOTE: rechage logic always run on a discharge curve
+	 */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
-		/* also reset recharge logic */
 		batt_reset_chg_drv_state(batt_drv);
+		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
+		dump_ssoc_state(&batt_drv->ssoc_state);
+		batt_rl_reset(batt_drv);
 		goto exit_msc_logic;
-	} else if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
-		/* normal enter on full */
-		batt_rl_enter(batt_drv, BATT_RL_STATUS_DISCHARGE);
+	}
+
+	/* connect: enter recharge logic (force discharge curve) when FULL or
+	 * DONE, set the charge curve (splice it) if not already running the
+	 * charge curve.
+	 */
+	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
+		/* enter RL on charger FULL */
+		batt_rl_enter(&batt_drv->ssoc_state, BATT_RL_STATUS_DISCHARGE);
 	} else if (batt_drv->batt_full) {
-		/* will enter RL only when state is NONE */
-		batt_rl_enter(batt_drv, BATT_RL_STATUS_RECHARGE);
+		/* enter RL because battery is FULL, NO op if in DISCHARGE */
+		batt_rl_enter(&batt_drv->ssoc_state, BATT_RL_STATUS_RECHARGE);
+	} else {
+		/* TODO: enter with dsg_curve when ssoc over the spoof point? */
+		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
+		dump_ssoc_state(&batt_drv->ssoc_state);
 	}
 
 	err = msc_logic_internal(batt_drv);
@@ -838,6 +1102,100 @@ DEFINE_SIMPLE_ATTRIBUTE(cycle_count_bins_sync_fops,
 				cycle_count_bins_store, "%llu\n");
 
 
+static int debug_get_ssoc_gdf(void *data, u64 *val)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+	*val = batt_drv->ssoc_state.ssoc_gdf;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_ssoc_gdf_fops, debug_get_ssoc_gdf, NULL, "%u\n");
+
+
+static int debug_get_ssoc_uic(void *data, u64 *val)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+	*val = batt_drv->ssoc_state.ssoc_uic;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_ssoc_uic_fops, debug_get_ssoc_uic, NULL, "%u\n");
+
+static int debug_get_ssoc_rls(void *data, u64 *val)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+
+	mutex_lock(&batt_drv->chg_lock);
+	*val = batt_drv->ssoc_state.rl_status;
+	mutex_unlock(&batt_drv->chg_lock);
+
+	return 0;
+}
+
+static int debug_set_ssoc_rls(void *data, u64 val)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+
+	if (val < 0 || val > 2)
+		return -EINVAL;
+
+	mutex_lock(&batt_drv->chg_lock);
+	batt_drv->ssoc_state.rl_status = val;
+	mutex_unlock(&batt_drv->chg_lock);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_ssoc_rls_fops,
+				debug_get_ssoc_rls, debug_set_ssoc_rls, "%u\n");
+
+static ssize_t debug_get_ssoc_uicurve(struct file *filp,
+					   char __user *buf,
+					   size_t count, loff_t *ppos)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)filp->private_data;
+	char tmp[UICURVE_BUF_SZ] = { 0 };
+
+	mutex_lock(&batt_drv->chg_lock);
+	ssoc_uicurve_cstr(tmp, sizeof(tmp), batt_drv->ssoc_state.ssoc_curve);
+	mutex_unlock(&batt_drv->chg_lock);
+
+	return simple_read_from_buffer(buf, count, ppos, tmp, strlen(tmp));
+}
+
+static ssize_t debug_set_ssoc_uicurve(struct file *filp,
+					 const char __user *user_buf,
+					 size_t count, loff_t *ppos)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)filp->private_data;
+	int ret, curve_type;
+	char buf[8];
+
+	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
+	if (!ret)
+		return -EFAULT;
+
+	mutex_lock(&batt_drv->chg_lock);
+
+	curve_type = (int)simple_strtoull(buf, NULL, 10);
+	if (curve_type >= -1 && curve_type <= 1)
+		ssoc_change_curve(&batt_drv->ssoc_state, curve_type);
+	else
+		ret = -EINVAL;
+
+	mutex_unlock(&batt_drv->chg_lock);
+
+	if (ret == 0)
+		ret = count;
+
+	return 0;
+}
+
+BATTERY_DEBUG_ATTRIBUTE(debug_ssoc_uicurve_cstr_fops,
+					debug_get_ssoc_uicurve,
+					debug_set_ssoc_uicurve);
+
+
 static int batt_init_fs(struct batt_drv *batt_drv)
 {
 	struct dentry *de = NULL;
@@ -850,6 +1208,14 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				    batt_drv, &cycle_count_bins_fops);
 		debugfs_create_file("cycle_count_sync", 0600, de,
 				    batt_drv, &cycle_count_bins_sync_fops);
+		debugfs_create_file("ssoc_gdf", 0600, de,
+				    batt_drv, &debug_ssoc_gdf_fops);
+		debugfs_create_file("ssoc_uic", 0600, de,
+				    batt_drv, &debug_ssoc_uic_fops);
+		debugfs_create_file("ssoc_rls", 0400, de,
+				    batt_drv, &debug_ssoc_rls_fops);
+		debugfs_create_file("ssoc_uicurve", 0600, de,
+				    batt_drv, &debug_ssoc_uicurve_cstr_fops);
 	}
 #endif
 
@@ -864,8 +1230,9 @@ static void google_battery_work(struct work_struct *work)
 	struct batt_drv *batt_drv =
 	    container_of(work, struct batt_drv, batt_work.work);
 	struct power_supply *fg_psy = batt_drv->fg_psy;
-	struct batt_ssoc_state *ssoc = &batt_drv->ssoc_state;
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 	int update_interval = batt_drv->batt_update_interval;
+	const int prev_ssoc = ssoc_get_capacity(ssoc_state);
 	int fg_status, ret;
 
 	pr_debug("battery work item\n");
@@ -877,32 +1244,31 @@ static void google_battery_work(struct work_struct *work)
 	if (fg_status < 0)
 		goto reschedule;
 
-	/* fuel gauge triggered recharge logic */
+	/* fuel gauge triggered recharge logic. */
 	batt_drv->batt_full = (fg_status == POWER_SUPPLY_STATUS_FULL);
 
 	mutex_lock(&batt_drv->batt_lock);
-	ret = ssoc_work(ssoc, fg_psy);
-
-	pr_info("SSOC: [ssoc=%d%% gdf=%d, uic=%d, rl=%d] rls=%d\n",
-		ssoc_get_capacity(batt_drv),
-		ssoc->ssoc_gdf, ssoc->ssoc_uic, ssoc->ssoc_rl,
-		batt_drv->rl_status);
-
-	/* TODO: poll other data here */
-
-	mutex_unlock(&batt_drv->batt_lock);
-
+	ret = ssoc_work(ssoc_state, fg_psy);
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
 	} else {
 		/* handle charge/recharge */
 		batt_rl_update_status(batt_drv);
+
+		if (prev_ssoc != ssoc_get_capacity(ssoc_state))
+			power_supply_changed(batt_drv->psy);
 	}
+
+	/* TODO: poll other data here if needed */
+
+	mutex_unlock(&batt_drv->batt_lock);
 
 reschedule:
 	mutex_unlock(&batt_drv->chg_lock);
 
-	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc));
+	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
+	dump_ssoc_state(ssoc_state);
+
 	if (update_interval) {
 		pr_debug("rerun battery work in %d ms\n", update_interval);
 		schedule_delayed_work(&batt_drv->batt_work,
@@ -955,6 +1321,7 @@ static int gbatt_get_property(struct power_supply *psy,
 	int err = 0;
 	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 
 #ifdef SUPPORT_PM_SLEEP
 	pm_runtime_get_sync(chip->device);
@@ -977,7 +1344,7 @@ static int gbatt_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_CAPACITY:
 		mutex_lock(&batt_drv->batt_lock);
-		val->intval = ssoc_get_capacity(batt_drv);
+		val->intval = ssoc_get_capacity(ssoc_state);
 		mutex_unlock(&batt_drv->batt_lock);
 		break;
 
@@ -991,8 +1358,8 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 		mutex_lock(&batt_drv->chg_lock);
-		if (batt_drv->msc_stop_charging ||
-		    batt_drv->rl_status == BATT_RL_STATUS_DISCHARGE) {
+		if (batt_drv->jeita_stop_charging ||
+		    ssoc_state->rl_status == BATT_RL_STATUS_DISCHARGE) {
 			val->intval = 0;
 		} else {
 			val->intval = batt_drv->cc_max;
@@ -1017,10 +1384,12 @@ static int gbatt_get_property(struct power_supply *psy,
 	/* POWER_SUPPLY_PROP_CHARGE_DONE comes from the charger BUT battery
 	 * has also an idea about it. Now using a software state: charge is
 	 * DONE when we are in the discharge phase of the recharge logic.
+	 * NOTE: might change to keep DONE while rl_status != NONE
 	 */
 	case POWER_SUPPLY_PROP_CHARGE_DONE:
 		mutex_lock(&batt_drv->chg_lock);
-		val->intval = (batt_drv->rl_status == BATT_RL_STATUS_DISCHARGE);
+		val->intval = (ssoc_state->rl_status ==
+					BATT_RL_STATUS_DISCHARGE);
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	/* POWER_SUPPLY_PROP_CHARGE_TYPE comes from the charger so using the
@@ -1034,7 +1403,7 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_RECHARGE_SOC:
-		val->intval = batt_drv->batt_rl_soc_threshold;
+		val->intval = ssoc_state->rl_soc_threshold;
 		break;
 
 	/* health */
@@ -1077,6 +1446,7 @@ static int gbatt_set_property(struct power_supply *psy,
 {
 	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 	int ret = 0;
 
 #ifdef SUPPORT_PM_SLEEP
@@ -1088,6 +1458,7 @@ static int gbatt_set_property(struct power_supply *psy,
 	pm_runtime_put_sync(chip->device);
 #endif
 	switch (psp) {
+
 	/* NG Charging, where it all begins */
 	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
 		mutex_lock(&batt_drv->chg_lock);
@@ -1117,8 +1488,8 @@ static int gbatt_set_property(struct power_supply *psy,
 		if (val->intval < 0 || val->intval > 100) {
 			pr_err("recharge-soc is incorrect\n");
 			ret = -EINVAL;
-		} else if (batt_drv->batt_rl_soc_threshold != val->intval) {
-			batt_drv->batt_rl_soc_threshold = val->intval;
+		} else if (ssoc_state->rl_soc_threshold != val->intval) {
+			ssoc_state->rl_soc_threshold = val->intval;
 			if (batt_drv->psy)
 				power_supply_changed(batt_drv->psy);
 		}
@@ -1141,9 +1512,10 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 					  enum power_supply_property psp)
 {
 	switch (psp) {
+	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
+	case POWER_SUPPLY_PROP_RECHARGE_SOC:
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
-	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
 		return 1;
 	default:
 		break;
@@ -1165,12 +1537,12 @@ static struct power_supply_desc gbatt_psy_desc = {
 static void google_battery_init_work(struct work_struct *work)
 {
 	struct power_supply *fg_psy;
-
 	struct batt_drv *batt_drv = container_of(work, struct batt_drv,
 						 init_work.work);
 	struct power_supply_config psy_cfg = { .drv_data = batt_drv };
 	int ret = 0;
 
+	batt_rl_reset(batt_drv);
 	batt_reset_chg_drv_state(batt_drv);
 	mutex_init(&batt_drv->chg_lock);
 	mutex_init(&batt_drv->batt_lock);
@@ -1187,6 +1559,18 @@ static void google_battery_init_work(struct work_struct *work)
 	 *	batt_drv->ccbin_psy = batt_drv->fg_psy;
 	 */
 
+	/* recharge logic, almost full */
+	ret = of_property_read_u32(batt_drv->device->of_node,
+			"google,recharge-soc-threshold",
+			&batt_drv->ssoc_state.rl_soc_threshold);
+	if (ret < 0)
+		batt_drv->ssoc_state.rl_soc_threshold =
+				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
+
+	ret = ssoc_init(&batt_drv->ssoc_state, fg_psy);
+	if (ret < 0)
+		goto retry_init_work;
+
 	ret = batt_init_chg_profile(batt_drv);
 	if (ret == -EPROBE_DEFER)
 		goto retry_init_work;
@@ -1197,18 +1581,10 @@ static void google_battery_init_work(struct work_struct *work)
 		gbms_dump_chg_profile(&batt_drv->chg_profile);
 	}
 
-	/* recharge logic */
-	ret = of_property_read_u32(batt_drv->device->of_node,
-				"google,recharge-soc-threshold",
-				&batt_drv->batt_rl_soc_threshold);
-	if (ret < 0)
-		batt_drv->batt_rl_soc_threshold =
-			DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
-
 	batt_drv->fg_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&batt_drv->fg_nb);
 	if (ret < 0)
-		pr_err("google_battery: cannot register power supply notifer, ret=%d\n",
+		pr_err("cannot register power supply notifer, ret=%d\n",
 			ret);
 
 	wakeup_source_init(&batt_drv->batt_ws, gbatt_psy_desc.name);

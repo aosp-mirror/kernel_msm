@@ -115,5 +115,4 @@ int gbms_cycle_count_cstr_bc(char *buff, size_t size,
 #define gbms_cycle_count_cstr(buff, size, cc)	\
 	gbms_cycle_count_cstr_bc(buff, size, cc, GBMS_CCBIN_BUCKET_COUNT)
 
-
 #endif  /* __GOOGLE_BMS_H_ */
