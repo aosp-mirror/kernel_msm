@@ -15,6 +15,7 @@
 
 #include <linux/mfd/abc-pcie.h>
 #include "airbrush-otp.h"
+#include "airbrush-ddr.h"
 
 /* ------------------------------------------------------------------------ */
 /* Depending on the usage, please comment/uncomment the below config macros */
@@ -183,6 +184,17 @@
 #define DREX_TIMINGDATA1		0x105800e8
 #define DREX_TIMINGPOWER1		0x105800ec
 
+#define DREX_PPCCLKCON			0x10580130
+#define PEREV_CLK_EN			(0x1 << 0)
+
+/* Performance Event Configuration Registers */
+#define DREX_PEREVCONFIG0		0x10580134
+#define DREX_PEREVCONFIG1		0x10580138
+#define DREX_PEREVCONFIG2		0x1058013c
+#define DREX_PEREVCONFIG3		0x10580140
+#define DREX_PEREVCONFIG(x)		(0x10580134 + ((x) * 4))
+#define PEREVx_SEL(evt)			(((evt) & 0xff) << 0)
+
 #define DREX_ALL_INIT_INDI		0x10580400
 #define ALL_INIT_DONE			(0x1 << 0)
 
@@ -204,6 +216,46 @@
 #define ACTIVATE_AXI_READY		(0x1 << 0)
 
 #define DREX_1CHIP_MASKING		0x1058076c
+
+#define DREX_PMNC_PCC			0x1058E000
+#define PPC_ENABLE			(0x1 << 0)
+#define PPC_COUNTER_RESET		(0x1 << 1)
+#define CYCLECNT_RESET			(0x1 << 2)
+#define CYCLECNT_DIVIDER		(0x1 << 3)
+#define PPC_START_MODE_MSK		(0x1 << 16)
+#define PPC_START_MODE_SW		(0x0 << 16)
+#define PPC_START_MODE_HW		(0x1 << 16)
+
+/* Count Enable Set Register */
+#define DREX_CNTENS_PCC			0x1058E010
+#define PPC_PMCNT_ENABLE(idx)		(0x1 << (idx))
+#define PPC_CCNT_ENABLE			(0x1 << 31)
+
+/* Count Enable Clear Register */
+#define DREX_CNTENC_PCC			0x1058E020
+#define PPC_PMCNT_DISABLE(idx)		(0x1 << (idx))
+#define PPC_CCNT_DISABLE		(0x1 << 31)
+
+/* Interrupt Enable Set Register */
+#define DREX_INTENS_PCC			0x1058E030
+#define PPC_PMCNT_INTSET(idx)		(0x1 << (idx))
+#define PPC_CCNT_INTSET			(0x1 << 31)
+
+/* Interrupt Enable Clear Register */
+#define DREX_INTENC_PCC			0x1058E040
+#define PPC_PMCNT_INTCLR(idx)		(0x1 << (idx))
+#define PPC_CCNT_INTCLR			(0x1 << 31)
+
+/* Overflow Flag Status Register */
+#define DREX_FLAG_PCC			0x1058E050
+#define PPC_PMCNT_FLAG(idx)		(0x1 << (idx))
+#define PPC_CCNT_FLAG			(0x1 << 31)
+
+/* Cycle Count Register */
+#define DREX_CCCNT_PPC			0x1058E100
+
+/* Performance Monitor Count0 Register */
+#define DREX_PMCNT_PPC(x)		(0x1058E110 + ((x) * 0x10))
 
 /* configure dram base as 0x20000000 and size as 512MB */
 #define DREX_ASP_MEMBASECONFIG0		0x10590f00
@@ -1118,6 +1170,11 @@ struct ddr_train_save_restore_t {
 	uint32_t reg_restore;
 };
 
+struct ddr_ppc_overflow_info {
+	uint32_t overflow_count_cycle_cnt;
+	uint32_t overflow_count_cnt[PPC_COUNTER_MAX];
+};
+
 struct ab_ddr_context {
 	struct ab_state_context *ab_state_ctx;
 	enum ddr_state ddr_state; /* keeps track of current ddr state */
@@ -1149,6 +1206,9 @@ struct ab_ddr_context {
 	char write_eye[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
 	unsigned int num_samples_read;
 	unsigned int num_samples_write;
+
+	int ddr_ppc_events[PPC_COUNTER_MAX];
+	struct ddr_ppc_overflow_info ddr_ppc_info;
 };
 
 static inline uint32_t ddr_reg_rd(uint32_t addr)

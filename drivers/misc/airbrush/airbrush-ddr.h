@@ -51,6 +51,47 @@
 #define DDR_TEST_PCIE_DMA_READ_WRITE(x)	\
 	(DDR_TEST_PCIE_DMA_READ(x) | DDR_TEST_PCIE_DMA_WRITE(x))
 
+/* DDR PPC driver related defines */
+#define PPC_COUNTER_0			(0)
+#define PPC_COUNTER_1			(1)
+#define PPC_COUNTER_2			(2)
+#define PPC_COUNTER_3			(3)
+#define PPC_COUNTER_MAX			(4)
+
+#define PPC_EVENT_WR_PORT0		(0x0)
+#define PPC_EVENT_RD_PORT0		(0x2)
+#define PPC_EVENT_WR_PORT1		(0x4)
+#define PPC_EVENT_RD_PORT1		(0x6)
+#define PPC_EVENT_WR_PORT2		(0x8)
+#define PPC_EVENT_RD_PORT2		(0xa)
+#define PPC_EVENT_WR_PORT3		(0xc)
+#define PPC_EVENT_RD_PORT3		(0xe)
+#define PPC_EVENT_WR2BANK0_PORT2	(0x38)
+#define PPC_EVENT_WR2BANK1_PORT2	(0x39)
+#define PPC_EVENT_WR2BANK2_PORT2	(0x3a)
+#define PPC_EVENT_WR2BANK3_PORT2	(0x3b)
+#define PPC_EVENT_WR_CAS		(0x64)
+#define PPC_EVENT_RD_CAS		(0x65)
+#define PPC_EVENT_RW_CAS		(0x66)
+#define PPC_EVENT_WR_SHED		(0x68)
+#define PPC_EVENT_RD_SHED		(0x69)
+#define PPC_EVENT_RW_SHED		(0x6a)
+#define PPC_EVENT_WR_XFER		(0x6c)
+#define PPC_EVENT_RD_XFER		(0x6d)
+#define PPC_EVENT_RW_XFER		(0x6e)
+#define PPC_EVENT_PD_CHIP0		(0x88)
+#define PPC_EVENT_PD_CHIP1		(0x89)
+#define PPC_EVENT_SREF_CHIP0		(0x8a)
+#define PPC_EVENT_SREF_CHIP1		(0x8b)
+#define PPC_EVENT_AXI_RD_REQ_PORT0	(0x90)
+#define PPC_EVENT_AXI_RD_REQ_PORT1	(0x91)
+#define PPC_EVENT_AXI_RD_REQ_PORT2	(0x92)
+#define PPC_EVENT_AXI_RD_REQ_PORT3	(0x93)
+#define PPC_EVENT_AXI_WR_REQ_PORT0	(0x94)
+#define PPC_EVENT_AXI_WR_REQ_PORT1	(0x95)
+#define PPC_EVENT_AXI_WR_REQ_PORT2	(0x96)
+#define PPC_EVENT_AXI_WR_REQ_PORT3	(0x97)
+
 int32_t ab_ddr_train_gpio(struct ab_state_context *sc);
 int32_t ab_ddr_train_sysreg(struct ab_state_context *sc);
 
@@ -66,5 +107,8 @@ int ab_ddr_read_write_test(struct ab_state_context *sc,
 int ab_ddr_freq_change(struct ab_state_context *sc, int val);
 int ab_ddr_eye_margin(struct ab_state_context *sc, unsigned int test_data);
 int ab_ddr_eye_margin_plot(struct ab_state_context *sc);
+int ab_ddr_ppc_set_event(struct ab_state_context *sc,
+			 unsigned int counter_idx, unsigned int event);
+void ab_ddr_ppc_ctrl(struct ab_state_context *sc, int is_start);
 
 #endif /* _AIRBRUSH_DDR_H_ */

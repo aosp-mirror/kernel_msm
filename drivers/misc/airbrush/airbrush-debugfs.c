@@ -453,6 +453,55 @@ static const struct file_operations fops_prop_table = {
 	.open = simple_open,
 	.read = ab_debugfs_read_prop_table,
 };
+static int ab_debugfs_ddr_ppc_event0(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_ddr_ppc_set_event(sc, 0, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event0_fops, NULL,
+				ab_debugfs_ddr_ppc_event0, "%lli\n");
+
+static int ab_debugfs_ddr_ppc_event1(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_ddr_ppc_set_event(sc, 1, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event1_fops, NULL,
+				ab_debugfs_ddr_ppc_event1, "%lli\n");
+
+static int ab_debugfs_ddr_ppc_event2(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_ddr_ppc_set_event(sc, 2, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event2_fops, NULL,
+				ab_debugfs_ddr_ppc_event2, "%lli\n");
+
+static int ab_debugfs_ddr_ppc_event3(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_ddr_ppc_set_event(sc, 3, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event3_fops, NULL,
+				ab_debugfs_ddr_ppc_event3, "%lli\n");
+
+static int ab_debugfs_ddr_ppc_ctrl(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_ddr_ppc_ctrl(sc, val);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_ctrl_fops, NULL,
+				ab_debugfs_ddr_ppc_ctrl, "%lli\n");
 
 void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 {
@@ -530,12 +579,12 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 		goto err_out;
 
 	d = debugfs_create_file("ab_ddr_ctrl", 0200, sc->d_entry, sc,
-					&ab_ddr_ctrl_fops);
+				&ab_ddr_ctrl_fops);
 	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("ab_ddr_test", 0200, sc->d_entry, sc,
-					&ab_ddr_test_fops);
+				&ab_ddr_test_fops);
 	if (!d)
 		goto err_out;
 
@@ -571,6 +620,31 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("clkout_freq", 0400, sc->d_entry, sc,
 				&ab_clkout_freq_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ddr_ppc_event0", 0200, sc->d_entry, sc,
+				&ab_ddr_ppc_event0_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ddr_ppc_event1", 0200, sc->d_entry, sc,
+				&ab_ddr_ppc_event1_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ddr_ppc_event2", 0200, sc->d_entry, sc,
+				&ab_ddr_ppc_event2_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ddr_ppc_event3", 0200, sc->d_entry, sc,
+				&ab_ddr_ppc_event3_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ddr_ppc_ctrl", 0200, sc->d_entry, sc,
+				&ab_ddr_ppc_ctrl_fops);
 	if (!d)
 		goto err_out;
 
