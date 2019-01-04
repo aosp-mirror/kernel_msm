@@ -15,6 +15,7 @@
 #ifndef _AIRBRUSH_TMU_HW_
 #define _AIRBRUSH_TMU_HW_
 
+#include <linux/bitops.h>
 #include <linux/types.h>
 
 struct ab_tmu_hw;
@@ -39,6 +40,10 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 /* Airbrush TMU registers */
 #define AB_TMU_TRIMINFO0		0x0
 #define AB_TMU_TRIMINFO(n)		(AB_TMU_TRIMINFO0 + ((n) * 4))
+#define AB_TMU_TRIMINFO_ERROR1_FIELD	GENMASK(8, 0)
+#define AB_TMU_TRIMINFO_ERROR2_FIELD	GENMASK(17, 9)
+#define AB_TMU_TRIMINFO_CAL_FIELD	GENMASK(19, 18)
+
 #define AB_TMU_CONTROL			0x20
 #define AB_TMU_CONTROL1			0x24
 #define AB_TMU_STATUS			0x28
@@ -100,28 +105,18 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_INTX_FALL_SHIFT(n)	((n) + 16)
 #define AB_TMU_INTEN_ALL		0xff01ff
 
-#define AB_TMU_CAL_MASK			0x3
 #define AB_TMU_TEMP_MASK		0x1ff
 #define AB_TMU_BUF_SLOPE_SEL_MASK	0xf
 #define AB_TMU_BUF_SLOPE_SEL_SHIFT	8
 #define AB_TMU_CORE_EN_SHIFT		0
 #define AB_TMU_EN_TRIP_SHIFT		12
-#define AB_TMU_TRIP_MODE_SHIFT		13
 
 #define AB_TMU_EMUL_CON			0x160
-#define AB_TMU_DEBUG_CURRENT_TEMP	0x164
-#define AB_TMU_EMUL_DATA_SHIFT		7
-#define AB_TMU_EMUL_DATA_MASK		0x1ff
-#define AB_TMU_EMUL_NEXTTIME_SHIFT	16
-#define AB_TMU_EMUL_NEXTTIME_VAL	0x1
-#define AB_TMU_EMUL_ENABLE_SHIFT	0
-#define AB_TMU_EMUL_ENABLE		0x1
+#define AB_TMU_EMUL_CON_ENABLE_FIELD	BIT_MASK(0)
+#define AB_TMU_EMUL_CON_NEXTDATA_FIELD	GENMASK(15, 7)
+#define AB_TMU_EMUL_CON_NEXTTIME_FIELD	GENMASK(31, 16)
 
-#define AB_TMU_TRIMINFO_25_SHIFT	0
-#define AB_TMU_TRIMINFO_85_SHIFT	8
-#define AB_TMU_TRIP_MODE_SHIFT		13
-#define AB_TMU_TRIP_MODE_MASK		0x7
-#define AB_TMU_THERM_TRIP_EN_SHIFT	12
+#define AB_TMU_DEBUG_CURRENT_TEMP	0x164
 
 #define AB_TMU_NO_TRIMMING		0
 #define AB_TMU_ONE_POINT_TRIMMING	1
@@ -137,7 +132,6 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_NUM_REMOTE_PROBE		0x6
 #define AB_TMU_REMOTE_PROBE_SHIFT	16
 #define AB_TMU_NUM_ALL_PROBE		7
-#define AB_TMU_CAL_SHIFT		18
 #define AB_TMU_TEMP_SHIFT		9
 
 #endif /* _AIRBRUSH_TMU_HW_ */

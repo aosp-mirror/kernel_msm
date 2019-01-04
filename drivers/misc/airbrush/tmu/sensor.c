@@ -14,6 +14,7 @@
  */
 #include "sensor.h"
 
+#include <linux/bitfield.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
 #include "../../../thermal/thermal_core.h"
@@ -95,7 +96,7 @@ static void ab_tmu_enable_emulate(struct ab_tmu_hw *hw)
 	u32 emul_con;
 
 	emul_con = ab_tmu_hw_read(hw, AB_TMU_EMUL_CON);
-	emul_con |= (1 << AB_TMU_EMUL_ENABLE_SHIFT);
+	emul_con |= FIELD_PREP(AB_TMU_EMUL_CON_ENABLE_FIELD, 1);
 
 	ab_tmu_hw_write(hw, AB_TMU_EMUL_CON, emul_con);
 }
@@ -105,7 +106,7 @@ static void ab_tmu_disable_emulate(struct ab_tmu_hw *hw)
 	u32 emul_con;
 
 	emul_con = ab_tmu_hw_read(hw, AB_TMU_EMUL_CON);
-	emul_con &= ~(1 << AB_TMU_EMUL_ENABLE_SHIFT);
+	emul_con &= ~AB_TMU_EMUL_CON_ENABLE_FIELD;
 
 	ab_tmu_hw_write(hw, AB_TMU_EMUL_CON, emul_con);
 }
@@ -115,13 +116,14 @@ static void ab_tmu_set_emulate_data(struct ab_tmu_hw *hw, u16 next_time,
 {
 	u32 emul_con;
 
-	next_time &= 0xFFFF;
-	next_data &= 0x1FF;
 	if (next_time == 0x0)
 		next_time = 0x1;
-	emul_con = (ab_tmu_hw_read(hw, AB_TMU_EMUL_CON) >> 0) & 0x1;
-	emul_con |= (next_time << AB_TMU_EMUL_NEXTTIME_SHIFT) |
-		(next_data << AB_TMU_EMUL_DATA_SHIFT);
+
+	emul_con = ab_tmu_hw_read(hw, AB_TMU_EMUL_CON);
+	emul_con &= ~(AB_TMU_EMUL_CON_NEXTTIME_FIELD |
+		AB_TMU_EMUL_CON_NEXTDATA_FIELD);
+	emul_con |= FIELD_PREP(AB_TMU_EMUL_CON_NEXTTIME_FIELD, next_time) |
+		FIELD_PREP(AB_TMU_EMUL_CON_NEXTDATA_FIELD, next_data);
 
 	ab_tmu_hw_write(hw, AB_TMU_EMUL_CON, emul_con);
 }
@@ -194,18 +196,17 @@ struct ab_tmu_sensor *devm_ab_tmu_sensor_create(struct device *dev,
 void ab_tmu_sensor_load_trim_info(struct ab_tmu_sensor *sensor)
 {
 	struct ab_tmu_hw *hw = sensor->hw;
+	struct ab_tmu_trim *trim = &sensor->trim;
 	u32 trim_info;
 
 	trim_info = ab_tmu_hw_read(hw, AB_TMU_TRIMINFO(sensor->id));
 
-	sensor->trim.cal_type = (trim_info >> AB_TMU_CAL_SHIFT) &
-			AB_TMU_CAL_MASK;
+	trim->cal_type = FIELD_GET(AB_TMU_TRIMINFO_CAL_FIELD, trim_info);
 	if (sensor->trim.cal_type == AB_TMU_NO_TRIMMING)
 		return;
 
-	sensor->trim.error1 = trim_info & AB_TMU_TEMP_MASK;
-	sensor->trim.error2 = (trim_info >> AB_TMU_TEMP_SHIFT) &
-			AB_TMU_TEMP_MASK;
+	trim->error1 = FIELD_GET(AB_TMU_TRIMINFO_ERROR1_FIELD, trim_info);
+	trim->error2 = FIELD_GET(AB_TMU_TRIMINFO_ERROR2_FIELD, trim_info);
 }
 
 void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
