@@ -534,8 +534,8 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->cap_sense.is_cci_init = true;
 	}
 
-	/* Silego i2c need at least 1 ms after NIRQ clean up */
-	usleep_range(1000, 3000);
+	/* Silego i2c need at least 3 ms after power up */
+	usleep_range(3000, 6000);
 
 	rc = silego_verify_settings(ctrl);
 	if (rc < 0) {
