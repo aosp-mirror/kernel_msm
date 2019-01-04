@@ -545,13 +545,14 @@ static void easelcomm_stop_local(void)
 	dev_dbg(easelcomm_miscdev.this_device, "stopping\n");
 	/* Set local shutdown flag, disallow further activity */
 	easelcomm_up = false;
-
+	mutex_lock(&service_mutex);
 	for (i = 0; i < EASELCOMM_SERVICE_COUNT; i++) {
 		struct easelcomm_service *service = easelcomm_service_list[i];
 
 		if (service != NULL)
 			easelcomm_handle_service_shutdown(service, true);
 	}
+	mutex_unlock(&service_mutex);
 }
 
 /*
@@ -844,6 +845,8 @@ static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 			cmdhdr->service_id);
 		return;
 	}
+
+	mutex_lock(&service_mutex);
 	service = easelcomm_service_list[cmdhdr->service_id];
 
 	/*
@@ -851,16 +854,15 @@ static void easelcomm_handle_command(struct easelcomm_cmd_header *cmdhdr)
 	 * initialize the service here without userspace ownership.
 	 * Userspace ownership could be claimed later.
 	 */
-	if (service == NULL) {
-		mutex_lock(&service_mutex);
+	if (service == NULL)
 		service = easelcomm_create_service(cmdhdr->service_id);
-		mutex_unlock(&service_mutex);
-		if (service == NULL) {
-			dev_err(easelcomm_miscdev.this_device,
-				"could not handle cmd %d for service %u\n",
-				cmdhdr->command_code, cmdhdr->service_id);
-			return;
-		}
+	mutex_unlock(&service_mutex);
+
+	if (service == NULL) {
+		dev_err(easelcomm_miscdev.this_device,
+			"could not handle cmd %d for service %u\n",
+			cmdhdr->command_code, cmdhdr->service_id);
+		return;
 	}
 
 	switch (cmdhdr->command_code) {
@@ -1819,6 +1821,7 @@ static int easelcomm_write_msgdata(
 	dev_dbg(easelcomm_miscdev.this_device,
 		"send cmd SEND_MSG msg %u:l%llu\n",
 		service->service_id, msg_metadata->msg->desc.message_id);
+
 	ret = easelcomm_start_cmd(
 		service, EASELCOMM_CMD_SEND_MSG,
 		sizeof(struct easelcomm_kmsg_desc) + buf_desc->buf_size);
