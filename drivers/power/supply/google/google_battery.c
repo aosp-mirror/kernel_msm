@@ -614,7 +614,7 @@ exit_msc_logic:
 	return err;
 }
 
-	/* charge profile not in battery */
+/* charge profile not in battery */
 static int batt_init_chg_profile(struct batt_drv *batt_drv)
 {
 	struct device_node *node = batt_drv->device->of_node;
@@ -622,17 +622,52 @@ static int batt_init_chg_profile(struct batt_drv *batt_drv)
 	int ret = 0;
 
 	/* handle retry */
-	if (profile->cccm_limits)
-		return 0;
-
-	ret = gbms_init_chg_profile(profile, node);
-	if (ret < 0)
-		return -EINVAL;
+	if (!profile->cccm_limits) {
+		ret = gbms_init_chg_profile(profile, node);
+		if (ret < 0)
+			return -EINVAL;
+	}
 
 	ret = of_property_read_u32(node, "google,chg-battery-capacity",
 				   &batt_drv->battery_capacity);
 	if (ret < 0)
 		pr_warn("read chg-battery-capacity from gauge\n");
+
+	/* use battery FULL design when is not specified in DT. When battery is
+	 * not present use default capacity from DT (if present) or disable
+	 * charging altogether.
+	 */
+	if (batt_drv->battery_capacity == 0) {
+		u32 fc = 0, present;
+		struct power_supply *fg_psy = batt_drv->fg_psy;
+
+		present = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
+		if (present) {
+			fc = GPSY_GET_PROP(fg_psy,
+					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN);
+			if (fc == -EINVAL)
+				return -EPROBE_DEFER;
+
+			pr_info("successfully read charging profile:\n");
+
+			/* convert uA to mAh*/
+			batt_drv->battery_capacity = fc / 1000;
+		} else {
+			struct device_node *node =
+					batt_drv->device->of_node;
+
+			ret = of_property_read_u32(node,
+					"google,chg-battery-default-capacity",
+						&batt_drv->battery_capacity);
+			if (ret < 0)
+				pr_warn("battery not present, no default capacity, zero charge table\n");
+			else
+				pr_warn("battery not present, using default capacity:\n");
+		}
+	}
+
+	/* NOTE: with NG charger tolerance is applied from "charger" */
+	gbms_init_chg_table(&batt_drv->chg_profile, batt_drv->battery_capacity);
 
 	return 0;
 }
@@ -1153,39 +1188,22 @@ static void google_battery_init_work(struct work_struct *work)
 	 */
 
 	ret = batt_init_chg_profile(batt_drv);
+	if (ret == -EPROBE_DEFER)
+		goto retry_init_work;
+
 	if (ret < 0) {
-		/* No support for charge table, legacy */
 		pr_err("charging profile disabled, ret=%d\n", ret);
-	} else {
-		struct gbms_chg_profile *profile = &batt_drv->chg_profile;
-
-		/* use battery FULL design when capacity is not specified */
-		if (batt_drv->battery_capacity == 0) {
-			u32 fc;
-
-			fc = GPSY_GET_PROP(fg_psy,
-					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN);
-			if (fc == -EINVAL)
-				goto retry_init_work;
-
-			/* convert uA to mAh*/
-			batt_drv->battery_capacity = fc / 1000;
-		}
-
-		/* NOTE: with NG charger tolerance is applied from "charger" */
-		gbms_init_chg_table(profile, batt_drv->battery_capacity);
-		pr_info("successfully read charging profile:\n");
-		gbms_dump_chg_profile(profile);
-
-		/* recharge logic */
-		ret = of_property_read_u32(batt_drv->device->of_node,
-					"google,recharge-soc-threshold",
-					&batt_drv->batt_rl_soc_threshold);
-		if (ret < 0)
-			batt_drv->batt_rl_soc_threshold =
-				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
-
+	} else if (batt_drv->battery_capacity) {
+		gbms_dump_chg_profile(&batt_drv->chg_profile);
 	}
+
+	/* recharge logic */
+	ret = of_property_read_u32(batt_drv->device->of_node,
+				"google,recharge-soc-threshold",
+				&batt_drv->batt_rl_soc_threshold);
+	if (ret < 0)
+		batt_drv->batt_rl_soc_threshold =
+			DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
 
 	batt_drv->fg_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&batt_drv->fg_nb);
@@ -1266,7 +1284,9 @@ static int google_battery_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&batt_drv->batt_work, google_battery_work);
 	platform_set_drvdata(pdev, batt_drv);
 
-	schedule_delayed_work(&batt_drv->init_work, 0);
+	/* give time to fg driver to start */
+	schedule_delayed_work(&batt_drv->init_work,
+					msecs_to_jiffies(BATT_DELAY_INIT_MS));
 
 	return 0;
 }
