@@ -1436,8 +1436,13 @@ static int max1720x_get_property(struct power_supply *psy,
 			val->strval = chip->cyc_ctr.cyc_ctr_cstr;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
-		err = REGMAP_READ(map, MAX1720X_STATUS, &data);
-		val->intval = (((u16) data) & MAX1720X_STATUS_BST) ? 0 : 1;
+		if (max17xxx_gauge_type == -1) {
+			val->intval = 0;
+		} else {
+			err = REGMAP_READ(map, MAX1720X_STATUS, &data);
+			val->intval = (((u16) data) & MAX1720X_STATUS_BST)
+						? 0 : 1;
+		}
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		val->intval = chip->batt_id;
@@ -1592,6 +1597,9 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		WARN_ON_ONCE(1);
 		return IRQ_NONE;
 	}
+
+	if (max17xxx_gauge_type == -1)
+		return IRQ_NONE;
 
 	pm_runtime_get_sync(chip->dev);
 	if (!chip->init_complete || !chip->resume_complete) {
@@ -1748,7 +1756,7 @@ static int max1720x_read_batt_id(const struct max1720x_chip *chip, int *batt_id)
 static int max1720x_read_gauge_type(struct max1720x_chip *chip)
 {
 	u16 devname;
-	int ret, gauge_type = MAX1720X_GAUGE_TYPE;
+	int ret, gauge_type = -1;
 
 	ret = REGMAP_READ(chip->regmap, MAX1720X_DEVNAME, &devname);
 	if (ret != 0) {
@@ -1764,6 +1772,7 @@ static int max1720x_read_gauge_type(struct max1720x_chip *chip)
 			gauge_type = MAX1730X_GAUGE_TYPE;
 			break;
 		default: /* default to max1720x */
+			gauge_type = MAX1720X_GAUGE_TYPE;
 			break;
 		}
 	}
@@ -2197,9 +2206,6 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 
 	(void) max1720x_handle_dt_nconvgcfg(chip);
 
-	chip->fake_capacity = -EINVAL;
-	chip->resume_complete = true;
-
 	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
 	if (!ret && data & MAX1720X_STATUS_BR) {
 		dev_info(chip->dev, "Clearing Battery Removal bit\n");
@@ -2238,15 +2244,6 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 						   POWER_SUPPLY_STATUS_UNKNOWN);
 	else
 		max1720x_restore_battery_qh_capacity(chip);
-
-	chip->prev_charge_state = POWER_SUPPLY_STATUS_UNKNOWN;
-
-	init_debugfs(chip);
-
-	chip->init_complete = true;
-
-	/* Handle any IRQ that might have been set before init */
-	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
 
 	return 0;
 }
@@ -2530,14 +2527,26 @@ static void max1720x_init_work(struct work_struct *work)
 {
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
 						  init_work.work);
-	int ret = max1720x_init_chip(chip);
+	int ret;
 
-	if (ret == -EPROBE_DEFER) {
-		schedule_delayed_work(&chip->init_work,
-				      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
-		return;
+	if (max17xxx_gauge_type != -1) {
+		ret = max1720x_init_chip(chip);
+		if (ret == -EPROBE_DEFER) {
+			schedule_delayed_work(&chip->init_work,
+				msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
+			return;
+		}
 	}
 
+	chip->prev_charge_state = POWER_SUPPLY_STATUS_UNKNOWN;
+	chip->fake_capacity = -EINVAL;
+	chip->resume_complete = true;
+	chip->init_complete = true;
+
+	init_debugfs(chip);
+
+	/* Handle any IRQ that might have been set before init */
+	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
 	(void)max1720x_init_history(chip);
 }
 
@@ -2584,12 +2593,15 @@ static int max1720x_probe(struct i2c_client *client,
 	if (of_property_read_bool(dev->of_node, "maxim,max1730x-compat")) {
 		/* NOTE: NEED TO COME BEFORE REGISTER ACCESS */
 		max17xxx_gauge_type = max1720x_read_gauge_type(chip);
-		dev_warn(chip->dev, "device gauge_type: %d override=%d\n",
+		dev_warn(chip->dev, "device gauge_type: %d shadow_override=%d\n",
 			max17xxx_gauge_type, chip->shadow_override);
 	} else {
 		max17xxx_gauge_type = MAX1720X_GAUGE_TYPE;
 	}
 
+	/* NOTE: should probably not request the interrupt when the gauge is
+	 * not present (i.e when max17xxx_gauge_type == -1)
+	 */
 	if (chip->primary->irq) {
 		ret = request_threaded_irq(chip->primary->irq, NULL,
 					   max1720x_fg_irq_thread_fn,
@@ -2626,8 +2638,7 @@ static int max1720x_probe(struct i2c_client *client,
 	max17x0x_set_serial_number(chip);
 
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
-	schedule_delayed_work(&chip->init_work,
-			      msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
+	schedule_delayed_work(&chip->init_work, 0);
 
 	return 0;
 
