@@ -549,15 +549,6 @@ static int iaxxx_config_regulators(struct iaxxx_priv *priv)
 		return rc;
 	}
 
-	/* check and config vdd-oslo */
-	rc = iaxxx_populate_dt_regulator(
-			priv, &priv->vdd_oslo, "adnc,vdd-oslo");
-	if (rc) {
-		dev_err(dev,
-			"Failed to configure regulator vdd_oslo, rc %d\n", rc);
-		return rc;
-	}
-
 	return 0;
 }
 /**
@@ -2570,11 +2561,6 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	if (priv->vdd_core) {
 		regulator_disable(priv->vdd_core);
 		devm_regulator_put(priv->vdd_core);
-	}
-
-	if (priv->vdd_oslo) {
-		regulator_disable(priv->vdd_oslo);
-		devm_regulator_put(priv->vdd_oslo);
 	}
 
 	/* Delete the work queue */

@@ -204,7 +204,6 @@ struct iaxxx_priv {
 	/* Regulators */
 	struct regulator *vdd_io;
 	struct regulator *vdd_core;
-	struct regulator *vdd_oslo;
 
 	/* External Clock */
 	struct clk *ext_clk;
