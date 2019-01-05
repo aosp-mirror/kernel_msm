@@ -248,11 +248,6 @@
 		adnc,vdd-core-voltage-uV = <1200000 1200000>;
 		adnc,vdd-core-maxload-uA = <385000>;
 
-		/* Regulator LDO_1C, 1.8V, max load 300mA */
-		adnc,vdd-oslo-supply = <&pm8150l_l1>;
-		adnc,vdd-oslo-voltage-uV = <1800000 1800000>;
-		adnc,vdd-oslo-maxload-uA = <300000>;
-
 		clock-names = "iaxxx_clk";
 		clocks = <&clock_audio_lnbb 0>;
 
