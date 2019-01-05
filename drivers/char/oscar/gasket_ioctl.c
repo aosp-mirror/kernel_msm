@@ -148,7 +148,7 @@ static int gasket_map_buffers_common(struct gasket_dev *gasket_dev,
 				     pibuf->base.host_address,
 				     pibuf->base.device_address,
 				     pibuf->base.size / PAGE_SIZE,
-				     pibuf->flags, true);
+				     pibuf->flags, true, false);
 }
 
 static int gasket_map_buffers(struct gasket_dev *gasket_dev,

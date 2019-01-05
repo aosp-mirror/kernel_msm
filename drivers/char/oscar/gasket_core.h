@@ -311,12 +311,37 @@ struct gasket_dev {
 	struct hlist_node legacy_hlist_node;
 };
 
+/* Device-managed page subtable callback actions */
+enum gasket_dev_subtable_action {
+	GASKET_DEV_SUBTABLE_ALLOC = 0,
+	GASKET_DEV_SUBTABLE_DEALLOC,
+	GASKET_DEV_SUBTABLE_MAP_TO_CPU,
+	GASKET_DEV_SUBTABLE_UNMAP_FROM_CPU,
+};
+
+/* Device-managed page subtable metadata */
+struct gasket_dev_subtable {
+	void *driver_data;	/* private data for device driver */
+};
+
 /* Type of the ioctl handler callback. */
 typedef long (*gasket_ioctl_handler_cb_t)(struct file *file, uint cmd,
 					  void __user *argp);
 /* Type of the ioctl permissions check callback. See below. */
 typedef int (*gasket_ioctl_permissions_cb_t)(struct file *filp, uint cmd,
 					     void __user *argp);
+/*
+ * gasket_subtable_manage_cb_t: Device page subtable management callback type
+ * @gasket_dev: gasket device for this TPU instance
+ * @action: action (allocate, map...) to be performed
+ * @devsubtable: device-managed page subtable info
+ *
+ * Returns zero for success or negative errno on error.
+ */
+typedef void *(*gasket_subtable_manage_cb_t)(
+		      struct gasket_dev *gasket_dev,
+		      enum gasket_dev_subtable_action action,
+		      struct gasket_dev_subtable *devsubtable);
 
 /*
  * Device type descriptor.
@@ -513,6 +538,11 @@ struct gasket_driver_desc {
 	 * and an error on failure.
 	 */
 	int (*device_reset_cb)(struct gasket_dev *dev);
+
+	/*
+	 * subtable_manage_cb: Manage on-device page subtables.
+	 */
+	gasket_subtable_manage_cb_t subtable_manage_cb;
 };
 
 /*
@@ -584,6 +614,13 @@ int gasket_mm_unmap_region(const struct gasket_dev *gasket_dev,
  */
 gasket_ioctl_permissions_cb_t
 gasket_get_ioctl_permissions_cb(struct gasket_dev *gasket_dev);
+
+/*
+ * Get the page subtable management callback.
+ * @gasket_dev: Gasket device structure.
+ */
+gasket_subtable_manage_cb_t
+gasket_get_subtable_manage_cb(struct gasket_dev *gasket_dev);
 
 /**
  * Lookup a name by number in a num_name table.

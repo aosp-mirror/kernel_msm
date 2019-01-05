@@ -1735,6 +1735,13 @@ gasket_get_ioctl_permissions_cb(struct gasket_dev *gasket_dev)
 }
 EXPORT_SYMBOL(gasket_get_ioctl_permissions_cb);
 
+gasket_subtable_manage_cb_t
+gasket_get_subtable_manage_cb(struct gasket_dev *gasket_dev)
+{
+	return gasket_dev->internal_desc->driver_desc->subtable_manage_cb;
+}
+EXPORT_SYMBOL(gasket_get_subtable_manage_cb);
+
 /* Get the driver structure for a given gasket_dev.
  * @dev: pointer to gasket_dev, implementing the requested driver.
  */

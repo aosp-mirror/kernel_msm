@@ -87,6 +87,7 @@ int gasket_page_table_partition(struct gasket_page_table *page_table,
  * @flags: Specifies attributes to apply to the pages.
  *         Internal structure matches gasket_page_table_ioctl_flags.flags.
  * @is_user_addr: host_addr is in userspace, needs pin and dma map.
+ * @dev_alloc_ptes: call device driver to alloc second-level PTEs for mapping.
  *
  * Description: Maps the "num_pages" pages of host memory pointed to by
  *              host_addr to the address "dev_addr" in device memory.
@@ -98,7 +99,7 @@ int gasket_page_table_partition(struct gasket_page_table *page_table,
  */
 int gasket_page_table_map(struct gasket_page_table *page_table, ulong host_addr,
 			  ulong dev_addr, uint num_pages, u32 flags,
-			  bool is_user_addr);
+			  bool is_user_addr, bool dev_alloc_ptes);
 
 /*
  * Un-map host pages from device memory.
