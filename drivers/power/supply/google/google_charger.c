@@ -701,7 +701,9 @@ static int chg_set_input_suspend(void *data, u64 val)
 		return rc;
 	}
 
-	power_supply_changed(chg_drv->chg_psy);
+	if (chg_drv->chg_psy)
+		power_supply_changed(chg_drv->chg_psy);
+
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(chg_is_fops, chg_get_input_suspend,
@@ -711,6 +713,9 @@ DEFINE_SIMPLE_ATTRIBUTE(chg_is_fops, chg_get_input_suspend,
 static int chg_get_chg_suspend(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	if (!chg_drv->msc_fcc_votable)
+		return -EINVAL;
 
 	/* can also set POWER_SUPPLY_PROP_CHARGE_DISABLE to charger */
 	*val = get_client_vote(chg_drv->msc_fcc_votable, USER_VOTER) == 0;
@@ -722,6 +727,9 @@ static int chg_set_chg_suspend(void *data, u64 val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 	int rc;
+
+	if (!chg_drv->msc_fcc_votable)
+		return -EINVAL;
 
 	/* can also set POWER_SUPPLY_PROP_CHARGE_DISABLE to charger */
 	rc = vote(chg_drv->msc_fcc_votable, USER_VOTER, val != 0, 0);
@@ -741,6 +749,9 @@ static int chg_get_update_interval(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 
+	if (!chg_drv->msc_interval_votable)
+		return -EINVAL;
+
 	/* can also set POWER_SUPPLY_PROP_CHARGE_DISABLE to charger */
 	*val = get_client_vote(chg_drv->msc_interval_votable, USER_VOTER) == 0;
 
@@ -753,6 +764,8 @@ static int chg_set_update_interval(void *data, u64 val)
 	int rc;
 
 	if (val < 0)
+		return -ERANGE;
+	if (!chg_drv->msc_interval_votable)
 		return -EINVAL;
 
 	/* can also set POWER_SUPPLY_PROP_CHARGE_DISABLE to charger */
