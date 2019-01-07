@@ -26,6 +26,22 @@ struct ab_tmu_hw {
 	struct notifier_block pcie_link_blocking_nb;
 };
 
+static void ab_tmu_hw_pcie_link_post_enable(struct ab_tmu_hw *hw)
+{
+	mutex_lock(&hw->pcie_link_lock);
+	hw->pcie_link_ready = true;
+	ab_tmu_hw_set_irqs(hw, true);
+	mutex_unlock(&hw->pcie_link_lock);
+}
+
+static void ab_tmu_hw_pcie_link_pre_disable(struct ab_tmu_hw *hw)
+{
+	mutex_lock(&hw->pcie_link_lock);
+	ab_tmu_hw_set_irqs(hw, false);
+	hw->pcie_link_ready = false;
+	mutex_unlock(&hw->pcie_link_lock);
+}
+
 static int ab_tmu_hw_pcie_link_listener(struct notifier_block *nb,
 		unsigned long action, void *data)
 {
@@ -34,14 +50,10 @@ static int ab_tmu_hw_pcie_link_listener(struct notifier_block *nb,
 
 	switch (action) {
 	case ABC_PCIE_LINK_POST_ENABLE:
-		mutex_lock(&hw->pcie_link_lock);
-		hw->pcie_link_ready = true;
-		mutex_unlock(&hw->pcie_link_lock);
+		ab_tmu_hw_pcie_link_post_enable(hw);
 		break;
 	case ABC_PCIE_LINK_PRE_DISABLE:
-		mutex_lock(&hw->pcie_link_lock);
-		hw->pcie_link_ready = false;
-		mutex_unlock(&hw->pcie_link_lock);
+		ab_tmu_hw_pcie_link_pre_disable(hw);
 		break;
 	default:
 		return NOTIFY_DONE;  /* Don't care */
@@ -145,12 +157,9 @@ void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value)
 
 void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
 {
-	int i;
-	u32 con, con1, int_en;
+	u32 con, con1;
 
-	int_en = enable ? AB_TMU_INTEN_ALL : 0;
-	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
-		ab_tmu_hw_write(hw, AB_TMU_INTEN(i), int_en);
+	ab_tmu_hw_set_irqs(hw, enable);
 
 	con1 = ab_tmu_hw_read(hw, AB_TMU_CONTROL1);
 	con1 |= AB_TMU_NUM_REMOTE_PROBE << AB_TMU_REMOTE_PROBE_SHIFT;
@@ -165,6 +174,16 @@ void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
 		con &= ~(1 << AB_TMU_CORE_EN_SHIFT);
 	}
 	ab_tmu_hw_write(hw, AB_TMU_CONTROL, con);
+}
+
+void ab_tmu_hw_set_irqs(struct ab_tmu_hw *hw, bool enable)
+{
+	int i;
+	u32 int_en;
+
+	int_en = enable ? AB_TMU_INTEN_ALL : 0;
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
+		ab_tmu_hw_write(hw, AB_TMU_INTEN(i), int_en);
 }
 
 void ab_tmu_hw_clear_irqs(struct ab_tmu_hw *hw)
