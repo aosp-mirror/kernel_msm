@@ -17,6 +17,10 @@
 
 struct ab_pmu_context {
 	struct device *dev;
+
+	struct mutex pcie_link_lock;
+	bool pcie_link_ready; /* Guarded by pcie_link_lock */
+	struct notifier_block pcie_link_blocking_nb;
 };
 
 #endif //_AIRBRUSH_PMU_H_
