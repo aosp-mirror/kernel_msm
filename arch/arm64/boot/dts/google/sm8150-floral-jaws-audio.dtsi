@@ -71,7 +71,7 @@
 
 		/* Regulator LDO_9A, 1.2V, max load 385mA */
 		adnc,vdd-core-supply = <&pm8150_l9>;
-		adnc,vdd-core-voltage-uV = <1200000 1200000>;
+		adnc,vdd-core-voltage-uV = <1224000 1224000>;
 		adnc,vdd-core-maxload-uA = <385000>;
 
 		/* Regulator LDO_1C, 1.8V, max load 300mA */
