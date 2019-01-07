@@ -2115,6 +2115,13 @@ static const unsigned int usbpd_extcon_cable[] = {
 /* EXTCON_USB and EXTCON_USB_HOST are mutually exclusive */
 static const u32 usbpd_extcon_exclusive[] = {0x3, 0};
 
+static void usbpd_release(struct device *dev)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+
+	kfree(pd);
+}
+
 static int num_pd_instances;
 /**
  * usbpd_create - Create a new instance of USB PD protocol/policy engine
@@ -2147,6 +2154,7 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	device_initialize(&pd->dev);
 	pd->dev.parent = parent;
+	pd->dev.release = usbpd_release;
 	dev_set_drvdata(&pd->dev, pd);
 
 	ret = dev_set_name(&pd->dev, "usbpd%d", num_pd_instances++);
@@ -2315,7 +2323,7 @@ del_pd:
 free_pd:
 	num_pd_instances--;
 	vfree(pd->logbuffer);
-	kfree(pd);
+	put_device(&pd->dev);
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(usbpd_create);
@@ -2338,10 +2346,9 @@ void usbpd_destroy(struct usbpd *pd)
 	power_supply_put(pd->usb_psy);
 	destroy_workqueue(pd->wq);
 	pd_engine_debugfs_exit(pd);
-	device_del(&pd->dev);
 	num_pd_instances--;
 	vfree(pd->logbuffer);
-	kfree(pd);
+	device_unregister(&pd->dev);
 }
 EXPORT_SYMBOL(usbpd_destroy);
 
