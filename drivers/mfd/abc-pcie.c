@@ -587,6 +587,25 @@ int abc_set_aspm_state(bool state)
 	return 0;
 }
 
+static void abc_l12_timeout_ctrl(bool enable)
+{
+	u32 val;
+
+	val = readl_relaxed(abc_dev->pcie_config
+			+ GEN3_RELATED_OFF_REG);
+	__iormb();
+
+	if (enable)
+		val |= GEN3_ZRXDC_NONCOMPL_EN;
+	else
+		val &= ~(GEN3_ZRXDC_NONCOMPL_MASK);
+
+	__iowmb();
+	writel_relaxed(val,
+			abc_dev->pcie_config + GEN3_RELATED_OFF_REG);
+
+}
+
 int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 {
 	u32 aspm_l11_l12;
@@ -621,6 +640,7 @@ int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 				+ LINK_CONTROL_LINK_STATUS_REG);
 	/* LTR Enable */
 	if (pmctrl->aspm_L12) {
+		abc_l12_timeout_ctrl(false);
 		val = readl_relaxed(
 			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
 		__iormb();
@@ -2259,6 +2279,7 @@ exit_loop:
 	mfd_ops.ctx = dev;
 	ab_sm_register_mfd_ops(&mfd_ops);
 
+	abc_l12_timeout_ctrl(false);
 	return 0;
 
 err_ipu_tpu_init:

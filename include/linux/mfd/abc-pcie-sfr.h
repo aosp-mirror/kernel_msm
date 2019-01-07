@@ -157,4 +157,9 @@
 #define ABC_READY_ENTR_L23				0x68
 #define ENTR_L23_EN					0x1
 #define ENTR_L23_MASK					0x1
+
+#define GEN3_RELATED_OFF_REG				0x890
+#define GEN3_ZRXDC_NONCOMPL_EN				0x1
+#define GEN3_ZRXDC_NONCOMPL_MASK			0x1
+
 #endif
