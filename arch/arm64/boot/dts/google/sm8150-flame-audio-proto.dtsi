@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-coral.dtsi"
-#include "sm8150-coral-audio-proto.dtsi"
-#include "sm8150-coral-camera-sensor-proto.dtsi"
+/* sound card */
+&snd_8150 {
+	qcom,model = "sm8150-iaxxx-f2proto-snd-card";
+};
