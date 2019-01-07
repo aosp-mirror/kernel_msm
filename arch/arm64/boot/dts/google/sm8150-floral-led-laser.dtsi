@@ -27,6 +27,7 @@
 		regulator-names = "vio", "silego_vdd", "sx9320_vdd",
 			"pmic_buck1", "pmic_buck2";
 		laser-type = <0>;
+		hw-version = <1>;
 		status = "ok";
 	};
 
@@ -44,6 +45,7 @@
 		regulator-names = "vio", "silego_vdd", "sx9320_vdd",
 			"pmic_buck1", "pmic_buck2";
 		laser-type = <1>;
+		hw-version = <1>;
 		status = "ok";
 	};
 

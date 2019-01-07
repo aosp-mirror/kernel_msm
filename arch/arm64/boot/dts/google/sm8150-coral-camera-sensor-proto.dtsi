@@ -18,10 +18,12 @@
 
 &lm36011_flood {
 	sx9320_vdd-supply = <&max77826_ldo14>;
+	hw-version = <1>;
 };
 
 &lm36011_dot {
 	sx9320_vdd-supply = <&max77826_ldo14>;
+	hw-version = <1>;
 };
 
 &cam_cci0 {
