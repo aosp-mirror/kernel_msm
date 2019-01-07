@@ -34,6 +34,10 @@ struct ab_clk_context {
 	struct clk *shared_div_aon_pll;
 	struct clk *aon_pll;
 	struct clk *aon_pll_mux;
+
+	struct mutex pcie_link_lock;
+	bool pcie_link_ready; /* Guarded by pcie_link_lock */
+	struct notifier_block pcie_link_blocking_nb;
 };
 
 void abc_clk_aon_init(struct device_node *np);
