@@ -257,6 +257,10 @@ Optional properties:
     interpreted as the difference between the target VBST level and the actual
     measured VBST level.
 
+  - cirrus,fw-id-remap : Alternative firmware build ID (silicon revision B1
+    only). If this value is omitted, an ID of 0x1400C3 (standard issue firmware)
+    is assumed.
+
 Examples:
 
   cs40l20: cs40l20@43 {
