@@ -127,7 +127,7 @@ static const unsigned long aon_clk_regs[] = {
 
 /* PLL rate table for CMU_AON */
 static const struct airbrush_pll_rate_table pll_aon_tbl[] = {
-	PLL_F081XX_RATE(933120000, 243, 5, 0),
+	PLL_F081XX_RATE(933000000, 243, 5, 0),
 	PLL_F081XX_RATE(19200000, 288, 9, 5),
 };
 
