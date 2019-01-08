@@ -4355,7 +4355,7 @@ static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	unsigned int val;
+	unsigned int dsp_status, dsp_scratch;
 	int dsp_timeout = CS40L2X_DSP_TIMEOUT_COUNT;
 	int ret;
 
@@ -4400,20 +4400,27 @@ static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 		usleep_range(10000, 10100);
 
 		ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "HALO_STATE",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
+				CS40L2X_XM_UNPACKED_TYPE), &dsp_status);
 		if (ret) {
 			dev_err(dev, "Failed to read DSP status\n");
 			return ret;
 		}
 
-		if (val == cs40l2x->fw_desc->halo_state_run)
+		if (dsp_status == cs40l2x->fw_desc->halo_state_run)
 			break;
 
 		dsp_timeout--;
 	}
 
-	if (dsp_timeout == 0) {
-		dev_err(dev, "Timed out with DSP status = %d\n", val);
+	ret = regmap_read(regmap, CS40L2X_DSP1_SCRATCH1, &dsp_scratch);
+	if (ret) {
+		dev_err(dev, "Failed to read DSP scratch contents\n");
+		return ret;
+	}
+
+	if (dsp_timeout == 0 || dsp_scratch != 0) {
+		dev_err(dev, "Timed out with DSP status, scratch = %u, %u\n",
+				dsp_status, dsp_scratch);
 		return -ETIME;
 	}
 
