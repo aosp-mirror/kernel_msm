@@ -490,6 +490,14 @@
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_truly>;
 };
 
+&dsi_tianma_rm69330_amoled_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	//qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
+	//qcom,mdss-dsi-bl-pmic-bank-select = <0>;
+	//qcom,mdss-dsi-pwm-gpio = <&pm8909_mpps 2 0>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_truly>;
+};
+
 &msm_gpio {
 	pmx_mdss {
 		mdss_dsi_active: mdss_dsi_active {

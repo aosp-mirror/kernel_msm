@@ -25,6 +25,7 @@
 #include "skipjack-dsi-panel-auo-400p-cmd.dtsi"
 #include "skipjack-dsi-panel-edo-e1392amc-amoled-cmd.dtsi"
 #include "skipjack-dsi-panel-truly-am013r-amoled-cmd.dtsi"
+#include "skipjack-dsi-panel-tianma-rm69330-amoled-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
