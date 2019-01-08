@@ -104,11 +104,21 @@ static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
 {
 	struct airbrush_tmu_data *data = dev_get_drvdata(dev);
 	struct ab_tmu_hw *hw = data->hw;
-	int code, temp;
+	bool pcie_link_ready;
+	u32 code;
+	int temp, ret;
 
-	code = ab_tmu_hw_read_current_temp(hw, id);
-	temp = ab_tmu_sensor_raw_to_cel(data->sensor[id], code);
-	return scnprintf(buf, PAGE_SIZE, "%d\n", temp);
+	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
+	if (pcie_link_ready) {
+		code = ab_tmu_hw_read_current_temp(hw, id);
+		temp = ab_tmu_sensor_raw_to_cel(data->sensor[id], code);
+		ret = scnprintf(buf, PAGE_SIZE, "code=%u, temp=%d\n", code,
+			temp);
+	} else {
+		ret = scnprintf(buf, PAGE_SIZE, "pcie link down\n");
+	}
+	ab_tmu_hw_pcie_link_unlock(hw);
+	return ret;
 }
 
 #define AB_TMU_TEMP_PROBE_ATTR_RO(name, id) \
