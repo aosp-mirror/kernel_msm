@@ -24,8 +24,10 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
+#include <linux/bitops.h>
 #include "google_bms.h"
 /* hackaroo... */
+#include <linux/qpnp/qpnp-revid.h>
 #include "../qcom/smb5-reg.h"
 #include "../qcom/smb5-lib.h"
 
@@ -39,6 +41,7 @@ struct bms_dev {
 	int				batt_id_ohms;
 	int				taper_control;
 	bool				fcc_stepper_enable;
+	u32				rradc_base;
 };
 
 struct bias_config {
@@ -484,6 +487,35 @@ static int sm8150_get_battery_voltage(const struct bms_dev *bms, int *val)
 }
 
 
+#define ADC_RR_BATT_TEMP_LSB(chip)		(chip->rradc_base + 0x88)
+#define ADC_RR_BATT_TEMP_MSB(chip)		(chip->rradc_base + 0x89)
+#define GEN4_BATT_TEMP_MSB_MASK			GENMASK(1, 0)
+
+static int sm8150_get_battery_temp(const struct bms_dev *bms, int *val)
+{
+	int rc = 0;
+	u8 buf;
+
+	if (!bms->rradc_base)
+		return -EIO;
+
+	rc = sm8150_read(bms->pmic_regmap, ADC_RR_BATT_TEMP_LSB(bms), &buf, 1);
+	if (rc < 0) {
+		pr_err("failed to read addr=0x%04x, rc=%d\n",
+			ADC_RR_BATT_TEMP_LSB(bms), rc);
+		return rc;
+	}
+
+	/* Only 8 bits are used. Bit 7 is sign bit */
+	*val = sign_extend32(buf, 7);
+
+	/* Value is in Celsius; Convert it to deciDegC */
+	*val *= 10;
+
+	return 0;
+}
+
+
 #define SM8150_IS_ONLINE(stat)	\
 	(((stat) & (USE_DCIN_BIT | USE_USBIN_BIT)) && \
 	((stat) & VALID_INPUT_POWER_SOURCE_STS_BIT))
@@ -747,6 +779,14 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		pr_info("AICL : %d\n", rc);
 		pval->intval = (rc > 0);
 		break;
+
+	case POWER_SUPPLY_PROP_TEMP:
+		rc = sm8150_get_battery_temp(bms, &ivalue);
+		if (rc < 0)
+			break;
+		pr_info("TEMP : %d\n", ivalue);
+		pval->intval = ivalue;
+		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		/*CHGR_FLOAT_VOLTAGE_NOW 0x1009
 		 * 7 : 0 => FLOAT_VOLTAGE:
@@ -886,7 +926,7 @@ static int sm8150_property_is_writeable(struct power_supply *psy,
 
 static enum power_supply_property sm8150_psy_props[] = {
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
-	//pixel battery management subsystem
+	/* pixel battery management subsystem */
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
@@ -895,12 +935,13 @@ static enum power_supply_property sm8150_psy_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
 	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_VOLTAGE_MAX,	/* compat */
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,		/* compat */
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
-	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
+	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,	/* compat */
 	POWER_SUPPLY_PROP_CHARGE_DISABLE,
-	POWER_SUPPLY_PROP_TAPER_CONTROL,
+	POWER_SUPPLY_PROP_TAPER_CONTROL,	/* compat */
 	POWER_SUPPLY_PROP_RERUN_AICL
 };
 
@@ -926,27 +967,108 @@ static int sm8150_notifier_cb(struct notifier_block *nb,
 }
 
 /* All init functions below this */
+#define PERPH_SUBTYPE_REG		0x05
+#define FG_BATT_SOC_PM8150B		0x10
+#define FG_BATT_INFO_PM8150B		0x11
+#define FG_MEM_IF_PM8150B		0x0D
+#define FG_ADC_RR_PM8150B		0x13
+
+static int sm8150_parse_dt_fg(struct bms_dev *bms, struct device_node *node)
+{
+	struct device_node *child, *revid_node;
+	struct pmic_revid_data *pmic_rev_id;
+	int ret = 0;
+	u8 subtype;
+	u32 base;
+
+	revid_node = of_parse_phandle(node, "qcom,pmic-revid", 0);
+	if (!revid_node) {
+		pr_err("node: %s no rev_id\n", node->name);
+		return -ENXIO;
+	}
+
+	pmic_rev_id = get_revid_data(revid_node);
+	of_node_put(revid_node);
+	if (IS_ERR_OR_NULL(pmic_rev_id)) {
+		pr_err("node %s pmic_revid error, defer??? rc=%ld\n",
+			node->name, PTR_ERR(pmic_rev_id));
+		/*
+		 * the revid peripheral must be registered, any failure
+		 * here only indicates that the rev-id module has not
+		 * probed yet.
+		 */
+		return -EPROBE_DEFER;
+	}
+
+	pr_info("node %s PMIC subtype %d Digital major %d\n",
+		node->name, pmic_rev_id->pmic_subtype, pmic_rev_id->rev4);
+
+	for_each_available_child_of_node(node, child) {
+
+		ret = of_property_read_u32(child, "reg", &base);
+		if (ret < 0) {
+			dev_err(bms->dev, "reg not specified in node %s, rc=%d\n",
+				child->full_name, ret);
+			return ret;
+		}
+
+		ret = sm8150_read(bms->pmic_regmap,
+					base + PERPH_SUBTYPE_REG, &subtype, 1);
+		if (ret < 0) {
+			dev_err(bms->dev, "Couldn't read subtype for base %d, rc=%d\n",
+				base, ret);
+			return ret;
+		}
+
+		switch (subtype) {
+		case FG_BATT_SOC_PM8150B:
+			break;
+		case FG_BATT_INFO_PM8150B:
+			break;
+		case FG_MEM_IF_PM8150B:
+			break;
+		case FG_ADC_RR_PM8150B:
+			bms->rradc_base = base;
+			break;
+		default:
+			dev_err(bms->dev, "Invalid peripheral subtype 0x%x\n",
+				subtype);
+			break;
+		}
+	}
+
+	return 0;
+}
+
 static int sm8150_parse_dt(struct bms_dev *bms)
 {
-	struct device_node *node = bms->dev->of_node;
+	struct device_node *fg_node, *node = bms->dev->of_node;
 	const char *psy_name = NULL;
-	int ret = 0;
+	int ret;
 
 	if (!node)  {
 		pr_err("device tree node missing\n");
 		return -ENXIO;
 	}
 
-	bms->taper_control= POWER_SUPPLY_TAPER_CONTROL_MODE_STEPPER;
+	fg_node = of_get_parent(node);
+	if (fg_node)
+		fg_node = of_get_child_by_name(fg_node, "qpnp,fg");
+	if (fg_node)
+		sm8150_parse_dt_fg(bms, fg_node);
+	else
+		pr_err("cannot find qpnp,fg, rradc not available\n");
 
-	ret = of_property_read_string(node, "google,psy-name",
-					&psy_name);
-	if (ret == 0) {
+	ret = of_property_read_string(node, "google,psy-name", &psy_name);
+	if (ret == 0)
 		sm8150_psy_desc.name =
 			devm_kstrdup(bms->dev, psy_name, GFP_KERNEL);
-	}
+
+	/* compat/fake */
+	bms->taper_control = POWER_SUPPLY_TAPER_CONTROL_MODE_STEPPER;
 	bms->fcc_stepper_enable = of_property_read_bool(node,
 						"qcom,fcc-stepping-enable");
+
 	return 0;
 }
 
