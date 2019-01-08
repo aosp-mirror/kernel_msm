@@ -331,8 +331,11 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
+		/* TODO (b/121378223):
+		 * Determine root cause of pmu deep_sleep timeouts
+		 */
 		if (desired_state->id == BLOCK_STATE_3_0 &&
-				pmu->pmu_deep_sleep(pmu->ctx)) {
+				pmu->pmu_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
