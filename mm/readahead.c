@@ -371,8 +371,7 @@ ondemand_readahead(struct address_space *mapping,
 		   bool hit_readahead_marker, pgoff_t offset,
 		   unsigned long req_size)
 {
-	unsigned long max = min((unsigned long)ra->ra_pages,
-		inode_to_bdi(mapping->host)->ra_pages);
+	unsigned long max = ra->ra_pages;
 	pgoff_t prev_offset;
 
 	/*
