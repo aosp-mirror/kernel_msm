@@ -6779,24 +6779,24 @@ static int __maybe_unused cs40l2x_resume(struct device *dev)
 
 	mutex_lock(&cs40l2x->lock);
 
+	if (cs40l2x->pdata.hiber_enable
+			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
+		ret = cs40l2x_hiber_cmd_send(cs40l2x,
+				CS40L2X_POWERCONTROL_WAKEUP);
+		if (ret) {
+			dev_err(dev, "Failed to wake up upon resume\n");
+			goto err_mutex;
+		}
+	}
+
 	if (cs40l2x->pdata.gpio1_mode == CS40L2X_GPIO1_MODE_AUTO
 			&& cs40l2x->fw_desc->id != CS40L2X_FW_ID_CAL) {
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
 						CS40L2X_XM_UNPACKED_TYPE),
 				CS40L2X_GPIO1_DISABLED);
-		if (ret) {
-			dev_err(dev, "Failed to disable GPIO1 upon resume\n");
-			goto err_mutex;
-		}
-	}
-
-	if (cs40l2x->pdata.hiber_enable
-			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
-		ret = cs40l2x_hiber_cmd_send(cs40l2x,
-				CS40L2X_POWERCONTROL_WAKEUP);
 		if (ret)
-			dev_err(dev, "Failed to wake up upon resume\n");
+			dev_err(dev, "Failed to disable GPIO1 upon resume\n");
 	}
 
 err_mutex:
