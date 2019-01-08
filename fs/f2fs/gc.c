@@ -758,9 +758,6 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	fio.page = page;
 	fio.new_blkaddr = fio.old_blkaddr = dn.data_blkaddr;
 
-	/* wait writeback before reading out */
-	f2fs_wait_on_block_writeback(inode, fio.old_blkaddr);
-
 	if (lfs_mode)
 		down_write(&fio.sbi->io_order_lock);
 

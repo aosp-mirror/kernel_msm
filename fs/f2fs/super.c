@@ -2692,18 +2692,6 @@ int f2fs_sanity_check_ckpt(struct f2fs_sb_info *sbi)
 		return 1;
 	}
 
-	sit_bitmap_size = le32_to_cpu(ckpt->sit_ver_bitmap_bytesize);
-	nat_bitmap_size = le32_to_cpu(ckpt->nat_ver_bitmap_bytesize);
-	log_blocks_per_seg = le32_to_cpu(raw_super->log_blocks_per_seg);
-
-	if (sit_bitmap_size != ((sit_segs / 2) << log_blocks_per_seg) / 8 ||
-		nat_bitmap_size != ((nat_segs / 2) << log_blocks_per_seg) / 8) {
-		f2fs_msg(sbi->sb, KERN_ERR,
-			"Wrong bitmap size: sit: %u, nat:%u",
-			sit_bitmap_size, nat_bitmap_size);
-		return 1;
-	}
-
 	if (unlikely(f2fs_cp_error(sbi))) {
 		f2fs_msg(sbi->sb, KERN_ERR, "A bug case: need to run fsck");
 		return 1;
@@ -3054,16 +3042,6 @@ static void f2fs_tuning_parameters(struct f2fs_sb_info *sbi)
 	}
 
 	sbi->readdir_ra = 1;
-}
-
-static void f2fs_cleanup_inodes(struct f2fs_sb_info *sbi)
-{
-	struct super_block *sb = sbi->sb;
-
-	sync_filesystem(sb);
-	shrink_dcache_sb(sb);
-	evict_inodes(sb);
-	f2fs_shrink_extent_tree(sbi, __count_extent_cache(sbi));
 }
 
 static int f2fs_fill_super(struct super_block *sb, void *data, int silent)
@@ -3451,8 +3429,6 @@ free_meta:
 	 * falls into an infinite loop in f2fs_sync_meta_pages().
 	 */
 	truncate_inode_pages_final(META_MAPPING(sbi));
-	/* cleanup recovery and quota inodes */
-	f2fs_cleanup_inodes(sbi);
 	f2fs_unregister_sysfs(sbi);
 free_root_inode:
 	dput(sb->s_root);
@@ -3496,6 +3472,7 @@ free_sbi:
 	/* give only one another chance */
 	if (retry) {
 		retry = false;
+		shrink_dcache_sb(sb);
 		goto try_onemore;
 	}
 	return err;
