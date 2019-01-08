@@ -35,6 +35,9 @@
 /* TODO(isca): b/120289070 */
 #define DMA_CHAN	1
 
+/* TODO(alexperez): Remove this, when we get async mods. */
+static struct abc_pcie_dma abc_dma;
+
 static DEFINE_MUTEX(dma_mutex);
 static DECLARE_COMPLETION(dma_done);
 static enum abc_dma_trans_status dma_status;
@@ -44,35 +47,6 @@ static uint64_t ll_dma_start_time_zero;
 static uint64_t ll_dma_start_time[DMA_MAX_CHAN];
 static uint64_t ll_dma_size[DMA_MAX_CHAN];
 #endif
-
-static int abc_pcie_dma_open(struct inode *inode, struct file *filp);
-static int abc_pcie_dma_release(struct inode *inode, struct file *filp);
-static long abc_pcie_dma_ioctl(struct file *file, unsigned int cmd,
-			       unsigned long arg);
-static long abc_pcie_dma_compat_ioctl(struct file *file, unsigned int cmd,
-				      unsigned long arg);
-
-struct abc_pcie_dma {
-	struct platform_device *pdev;
-	struct device *dma_dev;
-};
-
-struct abc_pcie_dma abc_dma;
-
-static const struct file_operations abc_dma_fops = {
-	.owner = THIS_MODULE,
-	.open = abc_pcie_dma_open,
-	.release = abc_pcie_dma_release,
-	.unlocked_ioctl = abc_pcie_dma_ioctl,
-	.compat_ioctl = abc_pcie_dma_compat_ioctl,
-	.llseek = no_llseek,
-};
-
-struct miscdevice abc_pcie_dma_miscdev = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name = DRV_NAME_ABC_PCIE_DMA,
-	.fops = &abc_dma_fops,
-};
 
 /* TODO: extend to include multiple concurrent dma channels */
 static int dma_callback(uint8_t chan, enum dma_data_direction dir,
@@ -1348,135 +1322,9 @@ unlock_unmap_buf:
 	return err;
 }
 
-static int abc_pcie_dma_open(struct inode *inode, struct file *filp)
+int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 {
-	return 0;
-}
-
-static int abc_pcie_dma_release(struct inode *inode, struct file *filp)
-{
-	return 0;
-}
-
-/* IOCTL interface */
-static long abc_pcie_dma_ioctl(struct file *file, unsigned int cmd,
-			  unsigned long arg)
-{
-	struct abc_pcie_dma_desc dma_desc;
 	int err = 0;
-
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE, (void __user *)arg,
-				  _IOC_SIZE(cmd));
-	else if (_IOC_DIR(cmd) & _IOC_WRITE)
-		err =  !access_ok(VERIFY_READ, (void __user *)arg,
-				  _IOC_SIZE(cmd));
-	if (err) {
-		dev_err(&abc_dma.pdev->dev,
-			"%s: access error!\n", __func__);
-		return -EFAULT;
-	}
-
-	if (_IOC_TYPE(cmd) != ABC_PCIE_DMA_IOC_MAGIC)
-		return -ENOTTY;
-
-	switch (cmd) {
-	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY: {
-		struct abc_pcie_dma_desc_legacy dma_desc_legacy;
-
-		dev_dbg(&abc_dma.pdev->dev,
-			"%s: Received IOCTL for legacy DMA request\n",
-			__func__);
-		err = copy_from_user(&dma_desc_legacy, (void __user *)arg,
-				     sizeof(dma_desc_legacy));
-		if (err) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: failed to copy from userspace (%d)\n",
-				__func__, err);
-			return err;
-		}
-		dma_desc.local_buf_type = dma_desc_legacy.local_buf_type;
-		/* abc_pcie_issue_dma_xfer will catch invalid buffer types */
-		if (dma_desc.local_buf_type == DMA_BUFFER_USER)
-			dma_desc.local_buf = dma_desc_legacy.local_buf;
-		else {
-			dma_desc.local_dma_buf_fd =
-				dma_desc_legacy.local_dma_buf_fd;
-			dma_desc.local_dma_buf_off = 0;
-		}
-		dma_desc.remote_buf_type = dma_desc_legacy.remote_buf_type;
-		if (dma_desc.remote_buf_type == DMA_BUFFER_USER)
-			dma_desc.remote_buf = dma_desc_legacy.remote_buf;
-		else {
-			dma_desc.remote_dma_buf_fd =
-				dma_desc_legacy.remote_dma_buf_fd;
-			dma_desc.remote_dma_buf_off = 0;
-		}
-		dma_desc.size = dma_desc_legacy.local_buf_size;
-		dma_desc.dir = dma_desc_legacy.dir;
-		err = abc_pcie_issue_dma_xfer(&dma_desc);
-		if (err) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: failed to perform DMA (%d)\n",
-				__func__, err);
-			return err;
-		}
-		break;
-	}
-	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_SYNC:
-		dev_dbg(&abc_dma.pdev->dev,
-			"%s: Received IOCTL for synchronous DMA request\n",
-			__func__);
-		err = copy_from_user(&dma_desc, (void __user *)arg,
-				     sizeof(dma_desc));
-		if (err) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: failed to copy from userspace (%d)\n",
-				__func__, err);
-			return err;
-		}
-		err = abc_pcie_issue_dma_xfer(&dma_desc);
-		if (err) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: failed to perform DMA (%d)\n",
-				__func__, err);
-			return err;
-		}
-		break;
-	default:
-		dev_err(&abc_dma.pdev->dev,
-			"%s: unknown ioctl %c, dir=%d, #%d (0x%08x)\n",
-			__func__, _IOC_TYPE(cmd), _IOC_DIR(cmd), _IOC_NR(cmd),
-			cmd);
-		break;
-	}
-
-	return err;
-}
-
-static long abc_pcie_dma_compat_ioctl(struct file *file, unsigned int cmd,
-				      unsigned long arg)
-{
-	int ret = 0;
-
-	switch (_IOC_NR(cmd)) {
-	case _IOC_NR(ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY):
-		cmd &= ~(_IOC_SIZEMASK << _IOC_SIZESHIFT);
-		cmd |= sizeof(void *) << _IOC_SIZESHIFT;
-		ret = abc_pcie_dma_ioctl(file, cmd,
-					 (unsigned long)compat_ptr(arg));
-		break;
-	default:
-		ret = abc_pcie_dma_ioctl(file, cmd, arg);
-		break;
-	}
-
-	return ret;
-}
-
-static int abc_pcie_dma_drv_probe(struct platform_device *pdev)
-{
-	int err;
 
 	abc_dma.pdev = pdev;
 
@@ -1493,20 +1341,15 @@ static int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 				false /* coherent */);
 		abc_dma.dma_dev = &pdev->dev;
 	}
+	abc_dma.uapi.mdev.parent = &pdev->dev;
+	err = init_abc_pcie_dma_uapi(&abc_dma.uapi);
 
-	err = misc_register(&abc_pcie_dma_miscdev);
-	if (err) {
-		dev_err(&abc_dma.pdev->dev,
-			"misc_register failed\n");
-		return err;
-	}
-
-	return 0;
+	return err;
 }
 
-static int abc_pcie_dma_drv_remove(struct platform_device *pdev)
+int abc_pcie_dma_drv_remove(struct platform_device *pdev)
 {
-	misc_deregister(&abc_pcie_dma_miscdev);
+	remove_abc_pcie_dma_uapi(&abc_dma.uapi);
 	return 0;
 }
 

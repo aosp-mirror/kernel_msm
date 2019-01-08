@@ -30,6 +30,17 @@
 /* SRAM Address where Linked List is located. */
 #define HW_ABC_PCIE_LL_BASE    	0x26000
 
+struct abc_pcie_dma_uapi {
+	struct miscdevice mdev;
+
+};
+
+struct abc_pcie_dma {
+	struct platform_device *pdev;
+	struct device *dma_dev;
+	struct abc_pcie_dma_uapi uapi;
+};
+
 /**
  * DMA Channel status type
  */
@@ -230,5 +241,8 @@ int abc_pcie_ll_build(struct abc_pcie_sg_entry *src_sg,
  */
 int abc_pcie_ll_destroy(struct abc_pcie_dma_ll *ll);
 
+
+int init_abc_pcie_dma_uapi(struct abc_pcie_dma_uapi *uapi);
+void remove_abc_pcie_dma_uapi(struct abc_pcie_dma_uapi *uapi);
 
 #endif /* __ABC_PCIE_DMA_H */
