@@ -37,6 +37,8 @@
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
+static int g_pre_init;
+
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (ctrl->pwm_pmi)
@@ -979,6 +981,24 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	}
 
 	mdss_dsi_post_panel_on_hdmi(pinfo);
+
+	/* check for readback only on panels using two-phase HBM */
+	if (ctrl->hbm1_on_cmds.blen > 0 && !g_pre_init) {
+		g_pre_init++;
+
+		mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL,
+			ctrl->read_back_param, 1);
+		pr_info("%s: read_back_param[0] = 0x%02x\n", __func__,
+				ctrl->read_back_param[0]);
+
+		mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL,
+			ctrl->id3_code, 1);
+		pr_info("%s: id3_code[0] = 0x%02x\n", __func__,
+				ctrl->id3_code[0]);
+
+		//switch back to original page
+		mdss_dsi_switch_page(ctrl, 0x00);
+	}
 
 end:
 	pr_debug("%s:-\n", __func__);
@@ -2167,10 +2187,10 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 			"qcom,mdss-dsi-lp-mode-off", NULL);
 
 	pinfo->pwr_off_disable = of_property_read_bool(np,
-			"qcom,mdss-dsi-power-off-disable");
+		"qcom,mdss-dsi-power-off-disable");
 
 	pinfo->tear_disable = of_property_read_bool(np,
-			"qcom,mdss-dsi-tear-disable");
+		"qcom,mdss-dsi-tear-disable");
 
 	return 0;
 }
@@ -2918,6 +2938,19 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->idle_off_cmds,
 		"qcom,mdss-dsi-idle-off-command",
 		"qcom,mdss-dsi-idle-off-command-state");
+
+	/* Current support is for panels with one or two HBM command states;
+	 * try to read for the first case, fall back to the second case */
+	rc = mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm_on_cmds,
+		"qcom,mdss-dsi-hbm-on-command", NULL);
+	if (rc == -ENOMEM) {
+		rc = mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm0_on_cmds,
+			"qcom,mdss-dsi-hbm0-on-command", NULL);
+		mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm1_on_cmds,
+			"qcom,mdss-dsi-hbm1-on-command", NULL);
+	}
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm_off_cmds,
+		"qcom,mdss-dsi-hbm-off-command", NULL);
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
 	pinfo->mipi.frame_rate_idle = (!rc ? tmp : 60);

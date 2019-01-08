@@ -52,6 +52,7 @@
 #include "mdss_debug.h"
 #include "mdss_smmu.h"
 #include "mdss_mdp.h"
+#include "mdss_dsi.h"
 #include "mdp3_ctrl.h"
 #include "mdss_sync.h"
 
@@ -92,6 +93,8 @@ static u32 mdss_fb_pseudo_palette[16] = {
 };
 
 static struct msm_mdp_interface *mdp_instance;
+
+static bool g_boost_mode;
 
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
@@ -911,6 +914,58 @@ static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "idle power collapsed\n");
 }
 
+static ssize_t mdss_fb_get_boost_mode(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int ret;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", g_boost_mode);
+
+	return ret;
+}
+
+static ssize_t mdss_fb_set_boost_mode(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int rc = 0;
+	int boost_mode = 0;
+
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	ctrl = container_of(dev_get_platdata(&mfd->pdev->dev),
+				struct mdss_dsi_ctrl_pdata, panel_data);
+	if (!ctrl) {
+		pr_err("%s: DSI ctrl not available\n", __func__);
+		return -EINVAL;
+	}
+
+	rc = kstrtoint(buf, 10, &boost_mode);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+
+	if (mfd->panel_info->type !=  MIPI_CMD_PANEL) {
+		pr_err("support for command mode panel only\n");
+	} else {
+		if (boost_mode != 0) {
+			if (!g_boost_mode) {
+				mdss_dsi_brightness_boost_on(ctrl);
+				g_boost_mode = 1;
+			}
+		} else {
+			if (g_boost_mode) {
+				mdss_dsi_brightness_boost_off(ctrl);
+				g_boost_mode = 0;
+			}
+		}
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR(msm_fb_type, 0444, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, 0644, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -932,6 +987,8 @@ static DEVICE_ATTR(measured_fps, 0664,
 static DEVICE_ATTR(msm_fb_persist_mode, 0644,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, 0444, mdss_fb_idle_pc_notify, NULL);
+static DEVICE_ATTR(msm_fb_boost_mode, 0644,
+	mdss_fb_get_boost_mode, mdss_fb_set_boost_mode);
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -947,6 +1004,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
+	&dev_attr_msm_fb_boost_mode.attr,
 	NULL,
 };
 
