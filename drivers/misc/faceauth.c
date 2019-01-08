@@ -36,11 +36,12 @@
 #define SYSREG_REG_GP_INT0 (SYSREG_AON + 0x37C)
 #define SYSREG_AON_IPU_REG29 (SYSREG_AON + 0x438)
 #define AB_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C4)
+#define BIN_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C8)
+#define INPUT_FLAG_ADDR (SYSREG_AON + 0x3CC)
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
 #define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
-#define OPERATION_FLAG_ADDR 0x21fffff8
 #define JQS_DEPTH_ADDR 0x22000000
 #define JQS_AFFINE_16_ADDR 0x22100000
 #define JQS_AFFINE_RGB_ADDR 0x22200000
@@ -99,6 +100,7 @@ struct faceauth_data {
 bool hypx_enable;
 uint64_t m0_verbosity_level;
 struct dentry *faceauth_debugfs_root;
+uint16_t session_id;
 
 /* M0 Verbosity Level Encoding
 
@@ -147,7 +149,9 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	struct faceauth_continue_data continue_step_data = { 0 };
 	struct faceauth_debug_data debug_step_data = { 0 };
 	unsigned long stop, ioctl_start;
+	uint32_t ab_input;
 	uint32_t ab_result;
+	uint32_t bin_result;
 	uint32_t dma_read_value;
 
 	ioctl_start = jiffies;
@@ -209,11 +213,16 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			goto exit;
 		}
 
-		/* Set operation flag */
-		pr_info("Set faceauth operation flag at 0x%08x\n",
-			OPERATION_FLAG_ADDR);
-		dma_write_dw(file, OPERATION_FLAG_ADDR,
-			     start_step_data.operation);
+		/* Set input flag */
+		ab_input = ((++session_id & 0xFFFF) << 16) |
+			   ((start_step_data.profile_id & 0xFF) << 8) |
+			   ((start_step_data.operation & 0xFF));
+		pr_info("Set faceauth input flag = 0x%08x\n", ab_input);
+		err = aon_config_write(INPUT_FLAG_ADDR, 4, ab_input);
+		if (err) {
+			pr_err("Error setting faceauth FW address\n");
+			goto exit;
+		}
 
 		/* Reset completion flag */
 		pr_info("Clearing completion flag at 0x%08x\n",
@@ -273,6 +282,13 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 				FACEAUTH_RESULT_SUCCESS :
 				FACEAUTH_RESULT_FAILURE;
 		continue_step_data.completed = 1;
+
+		err = aon_config_read(BIN_RESULT_FLAG_ADDR, 4, &bin_result);
+		if (err) {
+			pr_err("Error reading Bin result flag\n");
+			goto exit;
+		}
+		continue_step_data.bin_bitmap = bin_result;
 
 		pr_info("Read ab error code\n");
 		dma_read_dw(file,
@@ -442,6 +458,7 @@ static int dma_send_fw(const char *path, const int remote_addr)
  * @param[in] val DW value to write
  * @return Status, zero if succeed, non-zero if fail
  */
+__attribute__((unused))
 static int dma_write_dw(struct file *file, const int remote_addr, const int val)
 {
 	int err = 0;
