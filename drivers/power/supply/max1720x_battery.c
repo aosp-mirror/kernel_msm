@@ -739,6 +739,8 @@ bool max1720x_is_reg(struct device *dev, unsigned int reg)
 
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
 		switch (reg) {
+		case 0xF0:
+		case 0xF5:
 		case 0xA0 ... 0xAE:
 			return true;
 		}
@@ -1733,7 +1735,8 @@ static int max1720x_read_batt_id(const struct max1720x_chip *chip, int *batt_id)
 
 	batt_psy = power_supply_get_by_name(batt_psy_name);
 	if (!batt_psy) {
-		dev_warn(chip->dev, "failed to get battery power supply\n");
+		dev_warn(chip->dev, "failed to get \"%s\" power supply\n",
+			batt_psy_name);
 		return -EPROBE_DEFER;
 	}
 
