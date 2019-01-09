@@ -183,6 +183,13 @@ struct abc_buffer {
 	struct dma_buf_attachment *dma_buf_attachment;
 };
 
+/* Airbrush DRAM extended level-1 subtable metadata */
+struct abc_subtable {
+	struct dma_buf *dma_buf;
+	struct sg_table *sg_table;
+	struct dma_buf_attachment *dma_buf_attachment;
+	struct bar_mapping bar_mapping;
+};
 
 /* One of these per oscar device instance */
 struct oscar_dev {
@@ -470,7 +477,7 @@ static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 	ret = gasket_page_table_map(
 		    gasket_dev->page_table[ibuf.page_table_index],
 		    abdram_dma_addr, abc_buffer->device_address,
-		    len / PAGE_SIZE, DMA_TO_DEVICE << 1, false);
+		    len / PAGE_SIZE, DMA_TO_DEVICE << 1, false, true);
 
 unmap_sg:
 	if (ret) {
@@ -523,6 +530,117 @@ static int oscar_abc_dealloc_buffer(struct oscar_dev *oscar_dev, int dma_buf_fd)
 	oscar_abc_mark_buffer_for_release(abc_buffer);
 	mutex_unlock(&oscar_dev->abc_buffers_lock);
 	return 0;
+}
+
+static void *oscar_abc_subtable_alloc(struct gasket_dev *gasket_dev,
+				      struct gasket_dev_subtable *devsubtable)
+{
+	struct dma_buf *abc_dma_buf;
+	struct dma_buf_attachment *dma_buf_attachment;
+	struct abc_subtable *abc_subtable;
+	void *ret;
+
+	abc_dma_buf = ab_dram_alloc_dma_buf_kernel(PAGE_SIZE);
+	if (IS_ERR(abc_dma_buf))
+		return abc_dma_buf;
+
+	abc_subtable = kzalloc(sizeof(*abc_subtable), GFP_KERNEL);
+	if (!abc_subtable) {
+		ret = ERR_PTR(-ENOMEM);
+		goto free_dma_buf;
+	}
+
+	dma_buf_attachment =
+		dma_buf_attach(abc_dma_buf, gasket_dev->dev);
+	if (IS_ERR(dma_buf_attachment)) {
+		ret = dma_buf_attachment;
+		goto free_metadata;
+	}
+
+	abc_subtable->dma_buf = abc_dma_buf;
+	abc_subtable->dma_buf_attachment = dma_buf_attachment;
+	abc_subtable->sg_table =
+		dma_buf_map_attachment(dma_buf_attachment, DMA_TO_DEVICE);
+	if (IS_ERR(abc_subtable->sg_table)) {
+		ret = abc_subtable->sg_table;
+		goto detach_dma_buf;
+	}
+
+	devsubtable->driver_data = abc_subtable;
+	return (void *)sg_dma_address(abc_subtable->sg_table->sgl);
+
+detach_dma_buf:
+	dma_buf_detach(abc_dma_buf, dma_buf_attachment);
+free_metadata:
+	kfree(abc_subtable);
+free_dma_buf:
+	ab_dram_free_dma_buf_kernel(abc_dma_buf);
+	return ret;
+}
+
+static void oscar_abc_subtable_dealloc(struct gasket_dev *gasket_dev,
+				       struct gasket_dev_subtable *devsubtable)
+{
+	struct abc_subtable *abc_subtable = devsubtable->driver_data;
+
+	dma_buf_unmap_attachment(abc_subtable->dma_buf_attachment,
+				 abc_subtable->sg_table, DMA_TO_DEVICE);
+	dma_buf_detach(abc_subtable->dma_buf,
+		       abc_subtable->dma_buf_attachment);
+	ab_dram_free_dma_buf_kernel(abc_subtable->dma_buf);
+	kfree(abc_subtable);
+}
+
+static void *oscar_abc_subtable_map(struct gasket_dev *gasket_dev,
+				    struct gasket_dev_subtable *devsubtable)
+{
+	struct abc_subtable *abc_subtable = devsubtable->driver_data;
+	uint64_t ab_addr = sg_dma_address(abc_subtable->sg_table->sgl);
+	int ret;
+
+	ret = abc_pcie_map_bar_region(gasket_dev->dma_dev, gasket_dev->dev,
+				      BAR_2, PAGE_SIZE, ab_addr,
+				      &abc_subtable->bar_mapping);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return abc_subtable->bar_mapping.bar_vaddr;
+}
+
+static void oscar_abc_subtable_unmap(struct gasket_dev *gasket_dev,
+				     struct gasket_dev_subtable *devsubtable)
+{
+	struct abc_subtable *abc_subtable = devsubtable->driver_data;
+
+	abc_pcie_unmap_bar_region(gasket_dev->dma_dev, gasket_dev->dev,
+				  &abc_subtable->bar_mapping);
+}
+
+static void *oscar_subtable_manage_cb(struct gasket_dev *gasket_dev,
+				      enum gasket_dev_subtable_action action,
+				      struct gasket_dev_subtable *devsubtable)
+{
+	void *ret = NULL;
+
+	switch (action) {
+	case GASKET_DEV_SUBTABLE_ALLOC:
+		ret = oscar_abc_subtable_alloc(gasket_dev, devsubtable);
+		break;
+	case GASKET_DEV_SUBTABLE_DEALLOC:
+		oscar_abc_subtable_dealloc(gasket_dev, devsubtable);
+		break;
+	case GASKET_DEV_SUBTABLE_MAP_TO_CPU:
+		ret = oscar_abc_subtable_map(gasket_dev, devsubtable);
+		break;
+	case GASKET_DEV_SUBTABLE_UNMAP_FROM_CPU:
+		oscar_abc_subtable_unmap(gasket_dev, devsubtable);
+		break;
+	default:
+		ret = ERR_PTR(-ENOTTY);
+		break;
+	}
+
+	return ret;
 }
 
 /* Enters GCB reset state. */
@@ -928,6 +1046,7 @@ static struct gasket_driver_desc oscar_gasket_desc = {
 	.device_status_cb = oscar_get_status,
 	.hardware_revision_cb = NULL,
 	.device_reset_cb = oscar_reset,
+	.subtable_manage_cb = oscar_subtable_manage_cb,
 };
 
 static irqreturn_t oscar_interrupt_handler(int irq, void *arg)
