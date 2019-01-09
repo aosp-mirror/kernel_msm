@@ -26,6 +26,9 @@
 #define AB_TPU_PRE_RATE_CHANGE		BIT(3)
 #define AB_TPU_POST_RATE_CHANGE		BIT(4)
 #define AB_TPU_ABORT_RATE_CHANGE	BIT(5)
+#define AB_DRAM_PRE_RATE_CHANGE		BIT(6)
+#define AB_DRAM_POST_RATE_CHANGE	BIT(7)
+#define AB_DRAM_ABORT_RATE_CHANGE	BIT(8)
 
 /**
  * struct ab_clk_notifier_data - rate data to pass to the notifier callback
