@@ -195,16 +195,19 @@ static int is_bounding_fully_charged_level(void)
 		      /* Default 5% range, set 30% when 6 4000000 is set */
 		      (g_flag_force_ac_chg ? (upperbd-30) : (upperbd-5));
 
-	if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
-	    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
-		return 0;
+	/* return if upperbd/lowerbd is default value */
+	if (g_is_support_charge_stop_start_algorithm == true) {
+		if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
+		    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
+			return 0;
+	} else {
+		if (upperbd == DEFAULT_CHARGE_STOP_LEVEL)
+			return 0;
+	}
 
 	if ((upperbd > lowerbd) &&
 	    (upperbd <= DEFAULT_CHARGE_STOP_LEVEL) &&
 	    (lowerbd >= DEFAULT_CHARGE_START_LEVEL)) {
-		if (lowerbd < 0)
-			lowerbd = 0;
-
 		if (s_pingpong == 1 && upperbd <= current_level) {
 			BATT_LOG("%s: lowerbd=%d, upperbd=%d, current=%d,"
 					" pingpong:1->0 turn off\n", __func__, lowerbd, upperbd, current_level);
@@ -1373,7 +1376,7 @@ static void batt_worker(struct work_struct *work)
 	int pwrsrc_enabled = s_prev_pwrsrc_enabled;
 	int charging_enabled = gs_prev_charging_enabled;
 	int user_set_chg_curr = s_prev_user_set_chg_curr;
-	int src = 0;
+	int src = 0, online = 0;
 	int ibat_pmi = 0, ibat_smb = 0;
 	int ibat_total = 0, ibat_total_new = 0;
 	int aicl_now;
@@ -1404,6 +1407,14 @@ static void batt_worker(struct work_struct *work)
 
 	/* STEP 3: update charging_source */
 	htc_batt_info.prev.charging_source = htc_batt_info.rep.charging_source;
+	online = get_property(htc_batt_info.usb_psy,
+			      POWER_SUPPLY_PROP_ONLINE);
+	if (online)
+		g_latest_chg_src =
+				get_property(htc_batt_info.usb_psy,
+					     POWER_SUPPLY_PROP_TYPE);
+	else
+		g_latest_chg_src = POWER_SUPPLY_TYPE_UNKNOWN;
 	htc_batt_info.rep.charging_source = g_latest_chg_src;
 
 	/* STEP 4: fresh battery information from gauge/charger */
@@ -1444,9 +1455,18 @@ static void batt_worker(struct work_struct *work)
 			htc_batt_info.rep.batt_temp > 0) {
 		BATT_LOG("critical shutdown criteria: %dmV (set level=0 to force shutdown)",
 				htc_batt_info.force_shutdown_batt_vol);
-		htc_batt_info.rep.level = 0;
 		gs_update_PSY = true;
-		wake_lock(&htc_batt_info.batt_shutdown_lock);
+		/* If the cable is exist, system won't shutdown by 0.
+		 * So, remove the flag and unlock the batt_shutdown_lock
+		 * And only set the level to 0 when the cable is not exist.*/
+		if ((int)htc_batt_info.rep.charging_source >
+					POWER_SUPPLY_TYPE_BATTERY) {
+			g_critical_shutdown = false;
+			wake_unlock(&htc_batt_info.batt_shutdown_lock);
+		} else {
+			htc_batt_info.rep.level = 0;
+			wake_lock(&htc_batt_info.batt_shutdown_lock);
+		}
 	}
 
 	/* STEP 8: Update limited charge
