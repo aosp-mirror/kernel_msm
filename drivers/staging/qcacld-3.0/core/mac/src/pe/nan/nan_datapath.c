@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -160,9 +160,8 @@ static QDF_STATUS lim_handle_ndp_indication_event(tpAniSirGlobal mac_ctx,
 			goto ndp_indication_failed;
 		}
 	}
-	if (NDP_ROLE_RESPONDER == ndp_ind->role)
-		lim_send_ndp_event_to_sme(mac_ctx, eWNI_SME_NDP_INDICATION,
-			ndp_ind, sizeof(*ndp_ind), 0);
+	lim_send_ndp_event_to_sme(mac_ctx, eWNI_SME_NDP_INDICATION,
+		ndp_ind, sizeof(*ndp_ind), 0);
 	/*
 	 * With NDP indication if peer does not exists already add_sta is
 	 * executed resulting in new peer else no action is taken. Note that
@@ -172,13 +171,8 @@ static QDF_STATUS lim_handle_ndp_indication_event(tpAniSirGlobal mac_ctx,
 	 * used by service layer to identify failure.
 	 */
 ndp_indication_failed:
-	/*
-	 * Free config if failure or for NDP_ROLE_INITIATOR role
-	 * As for success responder case this info is sent till HDD
-	 * and will be freed in sme.
-	 */
-	if (status != QDF_STATUS_SUCCESS ||
-			NDP_ROLE_INITIATOR == ndp_ind->role) {
+	/* free config and app info if failure */
+	if (status != QDF_STATUS_SUCCESS) {
 		qdf_mem_free(ndp_ind->ndp_config.ndp_cfg);
 		qdf_mem_free(ndp_ind->ndp_info.ndp_app_info);
 		ndp_ind->ndp_config.ndp_cfg = NULL;
