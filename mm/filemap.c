@@ -2473,11 +2473,11 @@ int filemap_fault(struct vm_fault *vmf)
 			vmf->vma, vmf->flags, ra, file, page, offset);
 	} else if (!page) {
 		/* No page in the page cache at all */
-		fpin = do_sync_mmap_readahead(
-			vmf->vma, vmf->flags, ra, file, offset);
 		count_vm_event(PGMAJFAULT);
 		count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
 		ret = VM_FAULT_MAJOR;
+		fpin = do_sync_mmap_readahead(
+			vmf->vma, vmf->flags, ra, file, offset);
 retry_find:
 		page = pagecache_get_page(mapping, offset,
 					  FGP_CREAT|FGP_FOR_MMAP,
