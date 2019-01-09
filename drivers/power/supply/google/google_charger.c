@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+#include <linux/thermal.h>
 #include <linux/pm_wakeup.h>
 #include <linux/pmic-voter.h>
 #include <linux/time.h>
@@ -74,6 +75,23 @@ struct pd_pps_data {
 	int op_ua;
 };
 
+struct chg_drv;
+
+enum chg_thermal_devices {
+	CHG_TERMAL_DEVICES_COUNT = 2,
+	CHG_TERMAL_DEVICE_FCC = 0,
+	CHG_TERMAL_DEVICE_DC_IN = 1,
+};
+
+struct chg_thermal_device {
+	struct chg_drv *chg_drv;
+
+	struct thermal_cooling_device *tcd;
+	int *thermal_mitigation;
+	int thermal_levels;
+	int current_level;
+};
+
 struct chg_drv {
 	struct device *device;
 	struct power_supply *chg_psy;
@@ -91,14 +109,19 @@ struct chg_drv {
 	struct wakeup_source chg_ws;
 
 	/* */
+	struct chg_thermal_device thermal_devices[CHG_TERMAL_DEVICES_COUNT];
+
+	/* */
 	u32 cv_update_interval;
 	u32 cc_update_interval;
 	struct votable	*msc_interval_votable;
 	struct votable	*msc_fv_votable;
 	struct votable	*msc_fcc_votable;
+	struct votable	*msc_chg_disable_votable;
 
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
+	struct votable *dc_icl_votable;
 
 	int fv_uv;		/* newgen */
 	int cc_max;		/* newgen */
@@ -919,11 +942,15 @@ static int chg_find_votables(struct chg_drv *chg_drv)
 {
 	if (!chg_drv->usb_icl_votable)
 		chg_drv->usb_icl_votable = find_votable("USB_ICL");
+	if (!chg_drv->dc_icl_votable)
+		chg_drv->dc_icl_votable = find_votable("DC_ICL");
 	if (!chg_drv->dc_suspend_votable)
 		chg_drv->dc_suspend_votable = find_votable("DC_SUSPEND");
 
-	return (!chg_drv->usb_icl_votable || !chg_drv->dc_suspend_votable)
-		? -EINVAL : 0;
+	return (!chg_drv->usb_icl_votable ||
+		!chg_drv->dc_suspend_votable ||
+		!chg_drv->usb_icl_votable)
+			? -EINVAL : 0;
 }
 
 static int chg_get_input_suspend(void *data, u64 *val)
@@ -1217,6 +1244,30 @@ msc_done:
 	return 0;
 }
 
+/* NOTE: we need a single source of truth. Charging can be disabled via the
+ * votable and directy setting the property.
+ */
+static int msc_chg_disable_cb(struct votable *votable, void *data,
+			int chg_disable, const char *client)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	int rc;
+
+	if (!chg_drv->chg_psy)
+		return 0;
+
+	rc = GPSY_SET_PROP(chg_drv->chg_psy,
+			POWER_SUPPLY_PROP_CHARGE_DISABLE, chg_disable);
+	if (rc < 0) {
+		dev_err(chg_drv->device, "Couldn't %s charging rc=%d\n",
+				chg_disable ? "disable" : "enable", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+
 static int chg_create_votables(struct chg_drv *chg_drv)
 {
 	int ret;
@@ -1245,6 +1296,17 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 		goto error_exit;
 	}
 
+	chg_drv->msc_chg_disable_votable =
+		create_votable(VOTABLE_MSC_CHG_DISABLE,
+			VOTE_SET_ANY,
+			msc_chg_disable_cb,
+			chg_drv);
+	if (IS_ERR(chg_drv->msc_chg_disable_votable)) {
+		ret = PTR_ERR(chg_drv->msc_chg_disable_votable);
+		chg_drv->msc_chg_disable_votable = NULL;
+		goto error_exit;
+	}
+
 	/* TODO: qcom/battery.c mostly handles PL charging: we don't need it.
 	 * In order to remove and keep using QCOM code, create "USB_ICL",
 	 * "PL_DISABLE", "PL_AWAKE" and "PL_ENABLE_INDIRECT" in a new
@@ -1258,6 +1320,7 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, 0);
 	/* prevent all changes until chg_work run */
 	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
+	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, true, 0);
 
 	return 0;
 
@@ -1273,6 +1336,193 @@ error_exit:
 	return ret;
 }
 
+static int chg_get_max_charge_cntl_limit(struct thermal_cooling_device *tcd,
+					 unsigned long *lvl)
+{
+	struct chg_thermal_device *tdev =
+		(struct chg_thermal_device *)tcd->devdata;
+	*lvl = tdev->thermal_levels;
+	return 0;
+}
+
+static int chg_get_cur_charge_cntl_limit(struct thermal_cooling_device *tcd,
+					 unsigned long *lvl)
+{
+	struct chg_thermal_device *tdev =
+		(struct chg_thermal_device *)tcd->devdata;
+	*lvl = tdev->current_level;
+	return 0;
+}
+
+#define THERMAL_DAEMON_VOTER	"THERMAL_DAEMON_VOTER"
+
+static int
+chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
+			      unsigned long lvl)
+{
+	int ret = 0;
+	struct chg_thermal_device *tdev =
+		(struct chg_thermal_device *)tcd->devdata;
+	struct chg_drv *chg_drv = tdev->chg_drv;
+
+	if (lvl < 0 || tdev->thermal_levels <= 0 || lvl > tdev->thermal_levels)
+		return -EINVAL;
+
+	tdev->current_level = lvl;
+
+	if (tdev->current_level == tdev->thermal_levels)
+		return vote(chg_drv->msc_chg_disable_votable,
+					THERMAL_DAEMON_VOTER, true, 0);
+
+	vote(chg_drv->msc_chg_disable_votable, THERMAL_DAEMON_VOTER, false, 0);
+	if (lvl == 0)
+		return vote(chg_drv->msc_fcc_votable,
+					THERMAL_DAEMON_VOTER, false, 0);
+
+	vote(chg_drv->msc_fcc_votable, THERMAL_DAEMON_VOTER, true,
+			tdev->thermal_mitigation[tdev->current_level]);
+
+	return ret;
+}
+
+static int
+chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
+				unsigned long lvl)
+{
+	struct chg_thermal_device *tdev =
+			(struct chg_thermal_device *)tcd->devdata;
+	struct chg_drv *chg_drv = tdev->chg_drv;
+	union power_supply_propval pval;
+
+	if (lvl < 0 || tdev->thermal_levels <= 0 || lvl > tdev->thermal_levels)
+		return -EINVAL;
+
+	tdev->current_level = lvl;
+
+	if (tdev->current_level == tdev->thermal_levels) {
+		if (chg_drv->dc_icl_votable)
+			vote(chg_drv->dc_icl_votable,
+				THERMAL_DAEMON_VOTER, true, 0);
+
+		/* WLC set the wireless charger offline b/119501863 */
+		if (chg_drv->wlc_psy) {
+			pval.intval = 0;
+			power_supply_set_property(chg_drv->wlc_psy,
+				POWER_SUPPLY_PROP_ONLINE, &pval);
+		}
+
+		return 0;
+	}
+
+	if (chg_drv->wlc_psy) {
+		pval.intval = 1;
+		power_supply_set_property(chg_drv->wlc_psy,
+				POWER_SUPPLY_PROP_ONLINE, &pval);
+	}
+
+	if (!chg_drv->dc_icl_votable)
+		return 0;
+
+	if (tdev->current_level == 0) {
+		vote(chg_drv->dc_icl_votable,
+				THERMAL_DAEMON_VOTER, false, 0);
+	} else {
+		vote(chg_drv->dc_icl_votable,
+				THERMAL_DAEMON_VOTER, true,
+				tdev->thermal_mitigation[tdev->current_level]);
+	}
+
+	return 0;
+}
+
+int chg_tdev_init(struct chg_thermal_device *tdev,
+		  const char *name,
+		  struct chg_drv *chg_drv)
+{
+	int rc, byte_len;
+
+	if (!of_find_property(chg_drv->device->of_node, name, &byte_len)) {
+		dev_err(chg_drv->device,
+			"No cooling device for %s rc = %d\n", name, rc);
+		return -ENOENT;
+	}
+
+	tdev->thermal_mitigation = devm_kzalloc(chg_drv->device, byte_len,
+							GFP_KERNEL);
+	if (!tdev->thermal_mitigation)
+		return -ENOMEM;
+
+	tdev->thermal_levels = byte_len / sizeof(u32);
+
+	rc = of_property_read_u32_array(chg_drv->device->of_node,
+			name,
+			tdev->thermal_mitigation,
+			tdev->thermal_levels);
+	if (rc < 0) {
+		dev_err(chg_drv->device,
+			"Couldn't read limits for %s rc = %d\n", name, rc);
+		return -ENODATA;
+	}
+
+	tdev->chg_drv = chg_drv;
+
+	return 0;
+}
+
+static const struct thermal_cooling_device_ops chg_fcc_tcd_ops = {
+	.get_max_state = chg_get_max_charge_cntl_limit,
+	.get_cur_state = chg_get_cur_charge_cntl_limit,
+	.set_cur_state = chg_set_fcc_charge_cntl_limit,
+};
+
+static const struct thermal_cooling_device_ops chg_dc_icl_tcd_ops = {
+	.get_max_state = chg_get_max_charge_cntl_limit,
+	.get_cur_state = chg_get_cur_charge_cntl_limit,
+	.set_cur_state = chg_set_dc_in_charge_cntl_limit,
+};
+
+/* ls /sys/devices/virtual/thermal/cdev-by-name/ */
+int chg_thermal_device_init(struct chg_drv *chg_drv)
+{
+	int rc;
+
+	rc = chg_tdev_init(&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_FCC],
+				"google,thermal-mitigation", chg_drv);
+	if (rc == 0) {
+		struct chg_thermal_device *fcc =
+			&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_FCC];
+
+		fcc->tcd = thermal_cooling_device_register("fcc",
+						fcc,
+						&chg_fcc_tcd_ops);
+		if (!fcc->tcd) {
+			pr_err("error registering fcc cooling device\n");
+			return -EINVAL;
+		}
+	}
+
+	rc = chg_tdev_init(&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_DC_IN],
+				"google,wlc-thermal-mitigation", chg_drv);
+	if (rc == 0) {
+		struct chg_thermal_device *dc_icl =
+			&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_DC_IN];
+
+		dc_icl->tcd = thermal_cooling_device_register("dc_icl",
+						dc_icl,
+						&chg_dc_icl_tcd_ops);
+		if (!dc_icl->tcd)
+			goto error_exit;
+	}
+
+	return 0;
+
+error_exit:
+	pr_err("error registering dc_icl cooling device\n");
+	thermal_cooling_device_unregister(
+		chg_drv->thermal_devices[CHG_TERMAL_DEVICE_FCC].tcd);
+
+	return -EINVAL;
+}
 
 static void google_charger_init_work(struct work_struct *work)
 {
@@ -1336,6 +1586,10 @@ static void google_charger_init_work(struct work_struct *work)
 	chg_drv->usb_psy = usb_psy;
 	chg_drv->bat_psy = bat_psy;
 	chg_drv->tcpm_psy = tcpm_psy;
+
+	ret = chg_thermal_device_init(chg_drv);
+	if (ret < 0)
+		pr_err("Cannot register thermal devices, ret=%d\n", ret);
 
 	chg_drv->charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
 	chg_drv->charge_start_level = DEFAULT_CHARGE_START_LEVEL;
@@ -1456,6 +1710,7 @@ static void chg_destroy_votables(struct chg_drv *chg_drv)
 	destroy_votable(chg_drv->msc_interval_votable);
 	destroy_votable(chg_drv->msc_fv_votable);
 	destroy_votable(chg_drv->msc_fcc_votable);
+	destroy_votable(chg_drv->msc_chg_disable_votable);
 }
 
 static int google_charger_remove(struct platform_device *pdev)
