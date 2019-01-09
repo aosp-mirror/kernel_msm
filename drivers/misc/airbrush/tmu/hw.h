@@ -24,6 +24,14 @@ struct device;
 struct ab_tmu_hw *devm_ab_tmu_hw_create(struct device *dev, u32 base);
 void devm_ab_tmu_hw_destroy(struct ab_tmu_hw *hw);
 
+struct ab_tmu_hw_events {
+	void (*pcie_link_post_enable)(struct ab_tmu_hw *hw, void *data);
+	void (*pcie_link_pre_disable)(struct ab_tmu_hw *hw, void *data);
+};
+
+void ab_tmu_hw_register_events(struct ab_tmu_hw *hw,
+		const struct ab_tmu_hw_events *events, void *data);
+
 bool ab_tmu_hw_pcie_link_lock(struct ab_tmu_hw *hw);
 void ab_tmu_hw_pcie_link_unlock(struct ab_tmu_hw *hw);
 
@@ -31,6 +39,7 @@ u32 ab_tmu_hw_read(struct ab_tmu_hw *hw, u32 offset);
 void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value);
 
 /* These should be hided after all dependents are moved to here. */
+int ab_tmu_hw_initialize(struct ab_tmu_hw *hw);
 void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool on);
 void ab_tmu_hw_set_irqs(struct ab_tmu_hw *hw, bool enable);
 void ab_tmu_hw_clear_irqs(struct ab_tmu_hw *hw);

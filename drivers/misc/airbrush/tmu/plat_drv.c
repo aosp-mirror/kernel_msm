@@ -74,25 +74,33 @@ static int tmu_irq_notify(struct notifier_block *nb,
 	return 0;
 }
 
-static int airbrush_tmu_initialize(struct platform_device *pdev)
+static void airbrush_tmu_pcie_link_post_enable(struct ab_tmu_hw *hw,
+		void *data)
 {
-	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
-	struct ab_tmu_hw *hw = data->hw;
-	unsigned int status;
-	int i;
+	struct airbrush_tmu_data *tmu_data = data;
+	int i, ret;
 
-	status = ab_tmu_hw_read(hw, AB_TMU_STATUS);
-	if (!status)
-		return -EBUSY;
+	ret = ab_tmu_hw_initialize(hw);
+	if (ret)
+		return;
 
 	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
-		ab_tmu_sensor_load_trim_info(data->sensor[i]);
-		ab_tmu_sensor_save_threshold(data->sensor[i]);
+		ab_tmu_sensor_load_trim_info(tmu_data->sensor[i]);
+		ab_tmu_sensor_save_threshold(tmu_data->sensor[i]);
 	}
+	ab_tmu_hw_control(hw, true);
+};
 
-	ab_tmu_hw_clear_irqs(hw);
-	return 0;
-}
+static void airbrush_tmu_pcie_link_pre_disable(struct ab_tmu_hw *hw,
+		void *data)
+{
+	ab_tmu_hw_control(hw, false);
+};
+
+static const struct ab_tmu_hw_events airbrush_tmu_events = {
+	.pcie_link_post_enable = airbrush_tmu_pcie_link_post_enable,
+	.pcie_link_pre_disable = airbrush_tmu_pcie_link_pre_disable,
+};
 
 static const struct of_device_id airbrush_tmu_match[] = {
 	{ .compatible = "abc,airbrush-tmu", },
@@ -197,15 +205,9 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
-	/* tmu initialization */
-	ret = airbrush_tmu_initialize(pdev);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to initialize TMU\n");
-		return ret;
-	}
+	ab_tmu_hw_register_events(data->hw, &airbrush_tmu_events, data);
 
-	ab_tmu_hw_control(data->hw, true);
-
+	airbrush_tmu_pcie_link_post_enable(data->hw, data);
 	dev_dbg(&pdev->dev, "%s: done.\n", __func__);
 	return 0;
 }

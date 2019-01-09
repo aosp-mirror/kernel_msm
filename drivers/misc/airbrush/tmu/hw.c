@@ -20,6 +20,8 @@
 struct ab_tmu_hw {
 	struct device *dev;
 	u32 base;
+	const struct ab_tmu_hw_events *events;
+	void *events_data;
 
 	struct mutex pcie_link_lock;
 	bool pcie_link_ready;
@@ -30,14 +32,16 @@ static void ab_tmu_hw_pcie_link_post_enable(struct ab_tmu_hw *hw)
 {
 	mutex_lock(&hw->pcie_link_lock);
 	hw->pcie_link_ready = true;
-	ab_tmu_hw_set_irqs(hw, true);
+	if (hw->events && hw->events->pcie_link_post_enable)
+		hw->events->pcie_link_post_enable(hw, hw->events_data);
 	mutex_unlock(&hw->pcie_link_lock);
 }
 
 static void ab_tmu_hw_pcie_link_pre_disable(struct ab_tmu_hw *hw)
 {
 	mutex_lock(&hw->pcie_link_lock);
-	ab_tmu_hw_set_irqs(hw, false);
+	if (hw->events && hw->events->pcie_link_pre_disable)
+		hw->events->pcie_link_pre_disable(hw, hw->events_data);
 	hw->pcie_link_ready = false;
 	mutex_unlock(&hw->pcie_link_lock);
 }
@@ -68,6 +72,8 @@ static int ab_tmu_hw_init(struct ab_tmu_hw *hw, struct device *dev, u32 base)
 
 	hw->dev = dev;
 	hw->base = base;
+	hw->events = NULL;
+	hw->events_data = NULL;
 
 	mutex_init(&hw->pcie_link_lock);
 	mutex_lock(&hw->pcie_link_lock);
@@ -131,6 +137,13 @@ void devm_ab_tmu_hw_destroy(struct ab_tmu_hw *hw)
 		hw);
 }
 
+void ab_tmu_hw_register_events(struct ab_tmu_hw *hw,
+		const struct ab_tmu_hw_events *events, void *data)
+{
+	hw->events = events;
+	hw->events_data = data;
+}
+
 bool ab_tmu_hw_pcie_link_lock(struct ab_tmu_hw *hw)
 {
 	mutex_lock(&hw->pcie_link_lock);
@@ -153,6 +166,20 @@ u32 ab_tmu_hw_read(struct ab_tmu_hw *hw, u32 offset)
 void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value)
 {
 	abc_pcie_config_write(hw->base + offset, 4, value);
+}
+
+int ab_tmu_hw_initialize(struct ab_tmu_hw *hw)
+{
+	u32 status;
+
+	status = ab_tmu_hw_read(hw, AB_TMU_STATUS);
+	if (!status) {
+		dev_err(hw->dev, "Failed to initialize hw\n");
+		return -EBUSY;
+	}
+
+	ab_tmu_hw_clear_irqs(hw);
+	return 0;
 }
 
 void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
