@@ -47,7 +47,6 @@ struct thread_info {
 	int			preempt_count;	/* 0 => preemptable, <0 => bug */
 #ifdef CONFIG_SHADOW_CALL_STACK
 	void			*shadow_call_stack;
-	void			*shadow_call_stack_base;
 #endif
 };
 
