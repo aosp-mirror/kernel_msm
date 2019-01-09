@@ -11,6 +11,7 @@
  */
 
 #include <linux/airbrush-sm-ctrl.h>
+#include <linux/airbrush-sm-notifier.h>
 #include <linux/delay.h>
 #include <linux/pci.h>
 
@@ -2250,6 +2251,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 	struct ab_ddr_context *ddr_ctx;
 	int freq_idx;
+	unsigned long old_rate;
+	unsigned long new_rate;
 
 	if (!sc || !prop_from || !prop_to)
 		return -EINVAL;
@@ -2260,6 +2263,9 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	}
 
 	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+	old_rate = prop_from->clk_frequency;
+	new_rate = prop_to->clk_frequency;
+	ab_sm_clk_notify(AB_DRAM_PRE_RATE_CHANGE, old_rate, new_rate);
 
 	switch (chip_state_id) {
 	case CHIP_STATE_0_0 ... CHIP_STATE_2_6:
@@ -2272,8 +2278,11 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 	case CHIP_STATE_3_0 ... CHIP_STATE_4_0:
 		/* ddr sleep/deep-sleep functionality */
-		if (ddr_ctx->ddr_state != DDR_ON)
+		if (ddr_ctx->ddr_state != DDR_ON) {
+			ab_sm_clk_notify(AB_DRAM_ABORT_RATE_CHANGE,
+					 old_rate, new_rate);
 			return -EINVAL;
+		}
 
 		ab_ddr_selfrefresh_enter(sc);
 
@@ -2283,8 +2292,11 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	case CHIP_STATE_5_0:
 		/* ddr suspend functionality */
 		if ((ddr_ctx->ddr_state == DDR_SUSPEND) ||
-			(ddr_ctx->ddr_state == DDR_OFF))
+			(ddr_ctx->ddr_state == DDR_OFF)) {
+			ab_sm_clk_notify(AB_DRAM_ABORT_RATE_CHANGE,
+					 old_rate, new_rate);
 			return -EINVAL;
+		}
 		ab_ddr_suspend(sc);
 
 		ddr_ctx->ddr_state = DDR_SUSPEND;
@@ -2308,6 +2320,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		if (freq_idx != ddr_ctx->cur_freq)
 			ddr_set_mif_freq(sc, freq_idx);
 	}
+
+	ab_sm_clk_notify(AB_DRAM_POST_RATE_CHANGE, old_rate, new_rate);
 
 	/* Based on the state, call the corresponding DDR functionality */
 	return 0;
