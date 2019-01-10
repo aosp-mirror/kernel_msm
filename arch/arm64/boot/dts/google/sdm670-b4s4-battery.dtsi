@@ -34,6 +34,7 @@
 			 30   0   0
 		>;
 		google,cv-otv-margin = <15000>;
+		google,chg-cc-tolerance = <20>;
 
 		/* Taper WA */
 		google,chg-taper-wa;
