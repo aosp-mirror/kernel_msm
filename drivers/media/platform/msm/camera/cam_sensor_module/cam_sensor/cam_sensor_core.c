@@ -127,6 +127,84 @@ static void cam_sensor_release_per_frame_resource(
 	}
 }
 
+static int32_t cam_sensor_read_reg(
+	struct cam_sensor_ctrl_t *s_ctrl,
+	struct cam_packet *csl_packet)
+{
+	int32_t rc = 0;
+	uint8_t buf[8] = { 0 };
+	uint32_t addr = 0;
+	int32_t num_bytes = 0;
+	uint32_t total_cmd_buf_in_bytes = 0;
+	uintptr_t generic_ptr;
+	struct cam_cmd_buf_desc *cmd_desc = NULL;
+	size_t len_of_buff = 0;
+	uint32_t *offset = NULL;
+	struct cam_cmd_get_sensor_data *cmd_get_sensor = NULL;
+
+	if (csl_packet->num_cmd_buf != 1) {
+		CAM_ERR(CAM_SENSOR,
+			"More than one cmd buf found in sensor read");
+		return -EINVAL;
+	}
+
+	offset = (uint32_t *)&csl_packet->payload;
+	offset += csl_packet->cmd_buf_offset / sizeof(uint32_t);
+	cmd_desc = (struct cam_cmd_buf_desc *)(offset);
+	total_cmd_buf_in_bytes = cmd_desc->length;
+	if (!total_cmd_buf_in_bytes) {
+		CAM_ERR(CAM_SENSOR,
+			"Empty cmd buf found in sensor read");
+		return -EINVAL;
+	}
+
+	// To keep the pointer of reg_data
+	rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
+		&generic_ptr, &len_of_buff);
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR, "Failed to get cpu buf");
+		return rc;
+	}
+	if (!generic_ptr) {
+		CAM_ERR(CAM_SENSOR, "invalid generic_ptr");
+		return -EINVAL;
+	}
+	offset = (uint32_t *)((uint8_t *)generic_ptr +
+		cmd_desc->offset);
+	cmd_get_sensor = (struct cam_cmd_get_sensor_data *)offset;
+
+	addr = cmd_get_sensor->reg_addr;
+	num_bytes = cmd_get_sensor->reg_data;
+	if (addr <= 0 || addr > 0xFFFF) {
+		CAM_ERR(CAM_SENSOR,
+			"Invalid addr while read Sensor data: %x", addr);
+		return -EINVAL;
+	}
+
+	if (num_bytes <= 0 || num_bytes > 8) {
+		CAM_ERR(CAM_SENSOR,
+			"Invalid read size while read Sensor data: %d",
+			num_bytes);
+		return -EINVAL;
+	}
+
+	rc = camera_io_dev_read_seq(&s_ctrl->io_master_info,
+		addr, buf, CAMERA_SENSOR_I2C_TYPE_WORD,
+		CAMERA_SENSOR_I2C_TYPE_WORD, num_bytes);
+
+	if (rc) {
+		CAM_ERR(CAM_SENSOR, "camera_io_dev_read_seq failed!");
+		return rc;
+	}
+
+	if (copy_to_user((void __user *) cmd_get_sensor->query_data_handle,
+		buf, num_bytes)) {
+		CAM_ERR(CAM_SENSOR, "sensor_read_reg: copy to user failed!");
+	}
+
+	return rc;
+}
+
 static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	void *arg)
 {
@@ -264,6 +342,10 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 			goto rel_pkt_buf;
 		}
 		break;
+	}
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_READREG: {
+		rc = cam_sensor_read_reg(s_ctrl, csl_packet);
+		return rc;
 	}
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_NOP: {
 		if ((s_ctrl->sensor_state == CAM_SENSOR_INIT) ||
