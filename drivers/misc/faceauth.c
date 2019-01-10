@@ -68,8 +68,8 @@
 #define M0_POLLING_INTERVAL 12
 
 struct airbrush_state {
-       uint32_t faceauth_version;
-       int32_t error_code;
+	uint32_t faceauth_version;
+	int32_t error_code;
 } __attribute__((packed));
 
 static int dma_xfer(void *buf, int size, const int remote_addr,
@@ -194,13 +194,11 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		/* Set M0 firmware address */
 		pr_info("Set M0 firmware addr = 0x%08x\n", M0_FIRMWARE_ADDR);
 		err = aon_config_write(SYSREG_AON_IPU_REG29, 4,
-				M0_FIRMWARE_ADDR);
+				       M0_FIRMWARE_ADDR);
 		if (err) {
 			pr_err("Error setting faceauth FW address\n");
 			goto exit;
 		}
-
-
 
 		/* Set operation flag */
 		pr_info("Set faceauth operation flag at 0x%08x\n",
@@ -225,7 +223,6 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			goto exit;
 		}
 
-
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
 		msleep(M0_POLLING_PAUSE);
@@ -249,7 +246,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			}
 			msleep(polling_interval);
 			polling_interval = polling_interval > 1 ?
-				polling_interval >> 1 : 1;
+						   polling_interval >> 1 :
+						   1;
 		}
 
 		break;
@@ -265,14 +263,15 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		pr_info("Read ab error code\n");
 		dma_read_dw(file,
 			    AB_INTERNAL_STATE_ADDR +
-			    offsetof(struct airbrush_state, error_code),
+				    offsetof(struct airbrush_state, error_code),
 			    &dma_read_value);
 		continue_step_data.faceauth_error_code = dma_read_value;
 
 		pr_info("Read ab firmware version\n");
 		dma_read_dw(file,
 			    AB_INTERNAL_STATE_ADDR +
-			    offsetof(struct airbrush_state, faceauth_version),
+				    offsetof(struct airbrush_state,
+					     faceauth_version),
 			    &dma_read_value);
 		continue_step_data.faceauth_fw_version = dma_read_value;
 
@@ -554,8 +553,8 @@ static int dma_gather_debug(struct faceauth_debug_data *data)
 	int err = 0;
 
 	err = dma_xfer((void *)data->print_buffer,
-		min((uint32_t)DEBUG_PRINT_SIZE, data->print_buffer_size),
-		DEBUG_PRINT_ADDR, DMA_FROM_DEVICE);
+		       min((uint32_t)DEBUG_PRINT_SIZE, data->print_buffer_size),
+		       DEBUG_PRINT_ADDR, DMA_FROM_DEVICE);
 
 	return err;
 }
@@ -571,8 +570,8 @@ static int pio_write_qw(const int remote_addr, const uint64_t val)
 {
 	// This has to be performed as two separate 32 bit writes because
 	// Lassen's driver has a bug. See drivers/mfd/abc_pcie.c line 368
-	uint32_t lower = (uint32_t) val;
-	uint32_t upper = (uint32_t) (val >> 32);
+	uint32_t lower = (uint32_t)val;
+	uint32_t upper = (uint32_t)(val >> 32);
 
 	int err = 0;
 
@@ -580,7 +579,7 @@ static int pio_write_qw(const int remote_addr, const uint64_t val)
 
 	if (err) {
 		pr_err("Error in writing data to Airbrush at address 0x%08x\n",
-			remote_addr);
+		       remote_addr);
 		return err;
 	}
 
@@ -588,7 +587,7 @@ static int pio_write_qw(const int remote_addr, const uint64_t val)
 
 	if (err) {
 		pr_err("Error in writing data to Airbrush at address 0x%08x\n",
-			remote_addr);
+		       remote_addr);
 		return err;
 	}
 
@@ -685,7 +684,7 @@ static ssize_t m0_verbosity_level_debugfs_write(struct file *file,
 	m0_verbosity_level = verbosity_level;
 
 	pr_debug("Faceauth M0 verbosity level is set to %llu\n",
-		verbosity_level);
+		 verbosity_level);
 
 	return len;
 }
