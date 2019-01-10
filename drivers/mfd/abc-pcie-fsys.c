@@ -49,7 +49,7 @@ static int dma_callback(uint8_t chan, enum dma_data_direction dir,
 	return 0;
 }
 
-static int wdt_callback(uint32_t irq)
+static int wdt_callback(uint32_t irq, void *data)
 {
 	pr_info(" In Wdt_Callback for irq %d\n", irq);
 	return 0;
@@ -245,7 +245,7 @@ static int abc_pcie_fsys_drv_probe(struct platform_device *pdev)
 		abc_reg_dma_irq_callback(&dma_callback, dma_chan);
 
 	/* Register callback with callback function & MSI_IRQ Number */
-	abc_reg_irq_callback(&wdt_callback, ABC_MSI_9_WDT0);
+	abc_reg_irq_callback(&wdt_callback, ABC_MSI_9_WDT0, NULL);
 
 	return 0;
 }

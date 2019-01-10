@@ -139,7 +139,7 @@ enum abc_dma_trans_status {
 	DMA_ABORT,     /* ABORT: DMA ABORT interrupt */
 };
 
-typedef int (*irq_cb_t)(uint32_t irq);
+typedef int (*irq_cb_t)(uint32_t irq, void *data);
 typedef int (*irq_dma_cb_t)(uint8_t chan, enum dma_data_direction dir,
 				enum abc_dma_trans_status status);
 
@@ -168,6 +168,8 @@ struct abc_device {
 	dma_addr_t rd_buf_addr;
 	irq_dma_cb_t	dma_cb[MAX_DMA_INT];
 	irq_cb_t	sys_cb[ABC_MSI_COUNT];
+	void		*sys_cb_data[ABC_MSI_COUNT];
+
 	struct atomic_notifier_head intnc_notifier;
 	spinlock_t lock;
 	spinlock_t fsys_reg_lock;
@@ -296,7 +298,7 @@ int tpu_config_write(u32 offset, u32 len, u32 data);
 int memory_config_read(u32 offset, u32 len, u32 *data);
 int memory_config_write(u32 offset, u32 len, u32 data);
 int abc_reg_dma_irq_callback(irq_dma_cb_t dma_cb, int dma_chan);
-int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no);
+int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no, void *data);
 int abc_reg_notifier_callback(struct notifier_block *nb);
 void *abc_alloc_coherent(size_t size, dma_addr_t *dma_addr);
 void abc_free_coherent(size_t size, void *cpu_addr, dma_addr_t dma_addr);

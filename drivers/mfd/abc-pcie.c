@@ -1489,13 +1489,14 @@ int abc_reg_notifier_callback(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(abc_reg_notifier_callback);
 
-int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no)
+int abc_reg_irq_callback(irq_cb_t sys_cb, int irq_no, void *data)
 {
 	unsigned long flags;
 
 	if (irq_no >= ABC_MSI_0_TMU_AON && irq_no <= ABC_MSI_14_FLUSH_DONE) {
 		spin_lock_irqsave(&abc_dev->lock, flags);
 		abc_dev->sys_cb[irq_no] = sys_cb;
+		abc_dev->sys_cb_data[irq_no] = data;
 		spin_unlock_irqrestore(&abc_dev->lock, flags);
 		return 0;
 	}
@@ -1657,7 +1658,7 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 	if (irq >= ABC_MSI_0_TMU_AON && irq <= ABC_MSI_14_FLUSH_DONE) {
 		if (abc_dev->sys_cb[irq] != NULL) {
 			/* Callback respective handler */
-			abc_dev->sys_cb[irq](irq);
+			abc_dev->sys_cb[irq](irq, abc_dev->sys_cb_data[irq]);
 		}
 	} else if (irq == ABC_MSI_AON_INTNC) {
 		/* Mask 31st MSI during Interrupt handling period */
