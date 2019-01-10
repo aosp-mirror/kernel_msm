@@ -1689,21 +1689,30 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
 
+	/* TODO(b/122555739, b/122614252): Temporarily disable sMMU detach /
+	 * re-attach to allow for testing of EL2 software in EL1 context.
+	 */
+#if 0
 	/* Detach the PCIe EP device to the ARM sMMU */
 	abc_pcie_smmu_detach((struct device *)ctx);
+#endif
 
 	return 0;
 }
 
 static int abc_pcie_exit_el2_handler(void *ctx)
 {
+	/* TODO(b/122555739, b/122614252): Temporarily disable sMMU detach /
+	 * re-attach to allow for testing of EL2 software in EL1 context.
+	 */
+#if 0
 	int ret;
 
 	/* Re-attach the PCIe EP device to the ARM sMMU */
 	ret = abc_pcie_smmu_attach((struct device *)ctx);
 	if (ret < 0)
 		return ret;
-
+#endif
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
 
