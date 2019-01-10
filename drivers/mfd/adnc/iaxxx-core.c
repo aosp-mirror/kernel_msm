@@ -2524,6 +2524,10 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	priv->plugin_version_plugin_index = -EINVAL;
 	priv->package_version_package_index = -EINVAL;
 
+	priv->disable_chip_pm = true;
+	dev_err(priv->dev, "set disable_chip_pm = %s\n",
+		priv->disable_chip_pm ? "true" : "false");
+
 	iaxxx_work(priv, fw_update_work);
 	return 0;
 
