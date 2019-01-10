@@ -35,12 +35,11 @@
 #define SYSREG_AON 0x30000
 #define SYSREG_REG_GP_INT0 (SYSREG_AON + 0x37C)
 #define SYSREG_AON_IPU_REG29 (SYSREG_AON + 0x438)
-#define COMPLETION_FLAG_ADDR (SYSREG_AON + 0x3C4)
+#define AB_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C4)
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
 #define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
-#define COMPARE_RESULT_FLAG_ADDR 0x21fffff4
 #define OPERATION_FLAG_ADDR 0x21fffff8
 #define JQS_DEPTH_ADDR 0x22000000
 #define JQS_AFFINE_16_ADDR 0x22100000
@@ -66,6 +65,15 @@
 #define FACEAUTH_TIMEOUT 3000
 #define M0_POLLING_PAUSE 400
 #define M0_POLLING_INTERVAL 12
+
+/*
+ * Result codes from AB firmware
+ * Keep it in sync with fw/include/defines.h
+ */
+#define AB_WORKLOAD_STATUS_NO_STATUS 0
+#define AB_WORKLOAD_STATUS_PASS 1
+#define AB_WORKLOAD_STATUS_FAIL 2
+#define AB_WORKLOAD_STATUS_ERROR 3
 
 struct airbrush_state {
 	uint32_t faceauth_version;
@@ -139,6 +147,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	struct faceauth_continue_data continue_step_data = { 0 };
 	struct faceauth_debug_data debug_step_data = { 0 };
 	unsigned long stop, ioctl_start;
+	uint32_t ab_result;
 	uint32_t dma_read_value;
 
 	ioctl_start = jiffies;
@@ -208,8 +217,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 		/* Reset completion flag */
 		pr_info("Clearing completion flag at 0x%08x\n",
-			COMPLETION_FLAG_ADDR);
-		err = aon_config_write(COMPLETION_FLAG_ADDR, 4, 0);
+			AB_RESULT_FLAG_ADDR);
+		err = aon_config_write(AB_RESULT_FLAG_ADDR, 4, 0);
 		if (err) {
 			pr_err("Error clearing completion flag\n");
 			goto exit;
@@ -228,14 +237,14 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		msleep(M0_POLLING_PAUSE);
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
 		for (;;) {
-			int done;
-			err = aon_config_read(COMPLETION_FLAG_ADDR, 4, &done);
+			err = aon_config_read(AB_RESULT_FLAG_ADDR, 4,
+					      &ab_result);
 			if (err) {
 				pr_err("Error reading completion flag\n");
 				goto exit;
 			}
 
-			if (done) {
+			if (ab_result != AB_WORKLOAD_STATUS_NO_STATUS) {
 				pr_info("Faceauth workflow completes.\n");
 				break;
 			}
@@ -254,11 +263,16 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	case FACEAUTH_DEV_IOC_CONTINUE:
 		pr_info("faceauth continue IOCTL\n");
 
+		err = aon_config_read(AB_RESULT_FLAG_ADDR, 4, &ab_result);
+		if (err) {
+			pr_err("Error reading AB result flag\n");
+			goto exit;
+		}
+		continue_step_data.result =
+			ab_result == AB_WORKLOAD_STATUS_PASS ?
+				FACEAUTH_RESULT_SUCCESS :
+				FACEAUTH_RESULT_FAILURE;
 		continue_step_data.completed = 1;
-
-		pr_info("Read comparison result\n");
-		dma_read_dw(file, COMPARE_RESULT_FLAG_ADDR, &dma_read_value);
-		continue_step_data.result = dma_read_value;
 
 		pr_info("Read ab error code\n");
 		dma_read_dw(file,
