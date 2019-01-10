@@ -38,7 +38,6 @@
 		};
 
 		ch3: channel@2 {
-		     bi-dir;
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PP3300_L11C_WIFI";
 		     subsys-name = "wifi";
@@ -82,7 +81,6 @@
 		};
 
 		ch7: channel@2 {
-		     bi-dir;
 		     uohms-shunt-res = <10000>;
 		     rail-name = "PP800_L11A_MODEM";
 		     subsys-name = "cellular";

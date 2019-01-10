@@ -38,7 +38,6 @@
 		};
 
 		ch7: channel@2 {
-		     bi-dir;
 		     uohms-shunt-res = <100000>;
 		     rail-name = "NC";
 		};
