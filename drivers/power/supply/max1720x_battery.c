@@ -1828,6 +1828,22 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 	return 0;
 }
 
+static int max17x0x_nregval_ver_idx(struct max1720x_chip *chip,
+				    struct max17x0x_cache_data *nRAM_u)
+{
+	u32 nver_reg;
+	int ret, idx = -1;
+	const char *propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
+		"maxim,n_regval_1730x_ver" : "maxim,n_regval_1720x_ver";
+
+	ret = of_property_read_u32(chip->batt_node, propname, &nver_reg);
+	if (ret == 0)
+		idx = max17x0x_cache_index_of(nRAM_u, nver_reg);
+
+	return idx;
+}
+
+
 static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 					struct device_node *node,
 					struct max17x0x_cache_data *nRAM,
@@ -1835,9 +1851,8 @@ static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 {
 	u16 *regs;
 	int ret, i;
-	const char *propname;
-
-	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
+	const int regver_idx = max17x0x_nregval_ver_idx(chip, nRAM);
+	const char *propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
 		 "maxim,n_regval_1730x" : "maxim,n_regval_1720x";
 
 	if (!node || nb <= 0)
@@ -1862,8 +1877,15 @@ static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 	for (i = 0; i < nb; i += 2) {
 		const int idx = max17x0x_cache_index_of(nRAM, regs[i]);
 
-		if (idx >= 0)
+		if (idx < 0) {
+
+		} else if (idx == regver_idx) {
+			/* only one byte */
+			nRAM->cache_data[idx] &= 0xff00 ;
+			nRAM->cache_data[idx] |= regs[i + 1] & 0xff;
+		} else {
 			nRAM->cache_data[idx] = regs[i + 1];
+		}
 	}
 shadow_out:
 	kfree(regs);
@@ -1895,10 +1917,7 @@ static bool max17x0x_should_reset(struct max1720x_chip *chip,
 		"maxim,n_regval_1730x_ver" : "maxim,n_regval_1720x_ver";
 
 	/* if n_regval_1730x_ver is present, reset fg only when ver changes */
-	ret = of_property_read_u32(chip->batt_node, propname, &nver_reg);
-	if (ret == 0)
-		idx = max17x0x_cache_index_of(nRAM_u, nver_reg);
-
+	idx = max17x0x_nregval_ver_idx(chip, nRAM_u);
 	if (idx < 0) {
 		/* nConvgCfg change take effect without resetting the gauge */
 		idx = max17x0x_cache_index_of(nRAM_u, MAX1720X_NCONVGCFG);
@@ -1907,7 +1926,9 @@ static bool max17x0x_should_reset(struct max1720x_chip *chip,
 		return max17x0x_cache_memcmp(nRAM_u, nRAM_c) != 0;
 	}
 
-	return nRAM_c->cache_data[idx] < nRAM_u->cache_data[idx];
+	/* version is one byte */
+	return (nRAM_c->cache_data[idx] & 0xff)
+		< (nRAM_u->cache_data[idx] & 0xff);
 }
 
 static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
