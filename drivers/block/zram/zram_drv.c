@@ -683,7 +683,7 @@ static ssize_t writeback_store(struct device *dev,
 		bvec.bv_offset = 0;
 
 		spin_lock(&zram->wb_limit_lock);
-		if (!zram->wb_limit_enable || !zram->bd_wb_limit) {
+		if (zram->wb_limit_enable && !zram->bd_wb_limit) {
 			spin_unlock(&zram->wb_limit_lock);
 			ret = -EIO;
 			goto error;
