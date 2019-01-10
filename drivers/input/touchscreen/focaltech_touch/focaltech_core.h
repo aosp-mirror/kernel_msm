@@ -151,6 +151,7 @@ struct fts_ts_data {
 	struct regulator *vcc_i2c;
 	spinlock_t irq_lock;
 	struct mutex report_mutex;
+	struct mutex reset_mutex;
 	u16 addr;
 	bool suspended;
 	u8 fw_ver[3];
