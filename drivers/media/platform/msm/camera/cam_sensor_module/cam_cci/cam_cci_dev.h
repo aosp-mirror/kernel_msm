@@ -45,7 +45,7 @@
 #define CYCLES_PER_MICRO_SEC_DEFAULT 4915
 #define CCI_MAX_DELAY 1000000
 
-#define CCI_TIMEOUT msecs_to_jiffies(50)
+#define CCI_TIMEOUT msecs_to_jiffies(200)
 
 #define NUM_MASTERS 2
 #define NUM_QUEUES 2
