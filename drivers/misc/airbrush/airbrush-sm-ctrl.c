@@ -32,6 +32,9 @@
 #include "airbrush-spi.h"
 #include "airbrush-thermal.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/airbrush.h>
+
 #define AB_MAX_TRANSITION_TIME_MS	10000
 #define AB_KFIFO_ENTRY_SIZE	32
 #define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 10)
@@ -698,6 +701,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	/* record state change */
 	ab_sm_record_state_change(prev_state, sc->curr_chip_substate_id, sc);
+	trace_ab_state_change(sc->curr_chip_substate_id);
 
 	ab_sm_record_ts(sc, AB_SM_TS_END);
 
