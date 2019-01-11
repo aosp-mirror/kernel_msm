@@ -146,6 +146,9 @@ static int panic_prep_restart(struct notifier_block *this,
 {
 	char kernel_panic_msg[MAX_SZ_DIAG_ERR_MSG] = "Kernel Panic";
 
+	if (rst_msg_size <= 0)
+		goto out;
+
 	if (tombstone) { /* tamper the panic message for Oops */
 		char pc_symn[KSYM_NAME_LEN] = "<unknown>";
 		char lr_symn[KSYM_NAME_LEN] = "<unknown>";
@@ -158,14 +161,17 @@ static int panic_prep_restart(struct notifier_block *this,
 		sprint_symbol(lr_symn, tombstone->regs->regs[30]);
 #endif
 
-		if (rst_msg_size)
-			snprintf(kernel_panic_msg, rst_msg_size - 1,
-					"KP: %s PC:%s LR:%s",
-					current->comm, pc_symn, lr_symn);
-
-		set_restart_msg(kernel_panic_msg);
+		snprintf(kernel_panic_msg, rst_msg_size - 1,
+				"KP: %s PC:%s LR:%s",
+				current->comm, pc_symn, lr_symn);
+	} else {
+		snprintf(kernel_panic_msg, rst_msg_size - 1,
+				"KP: %s", (char *)ptr);
 	}
 
+	set_restart_msg(kernel_panic_msg);
+
+out:
 	in_panic = 1;
 	return NOTIFY_DONE;
 }
