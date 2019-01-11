@@ -29,7 +29,7 @@
 			pinctrl-0 = <&smb_stat_default>;
 			pinctrl-1 = <&smb_stat_suspend>;
 
-			qcom,float-voltage-mv = <4360>;
+			qcom,float-voltage-mv = <4320>;
 			qcom,recharge-thresh-mv = <80>;
 			qcom,aicl-disabled;
 			qcom,hot-bat-decidegc = <500>;
