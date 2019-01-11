@@ -35,9 +35,6 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#define __GPIO_ENABLE   0x1
-#define __GPIO_DISABLE   0x0
-
 #define NUM_BLOCKS 6
 
 #define __GPIO_ENABLE	0x1
