@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -552,8 +552,16 @@ ol_tx_completion_handler(
     trace_str = (status) ? "OT:C:F:" : "OT:C:S:";
     for (i = 0; i < num_msdus; i++) {
         tx_desc_id = desc_ids[i];
-        tx_desc = td_array[tx_desc_id].tx_desc;
-        tx_desc->status = status;
+	if (tx_desc_id >= pdev->tx_desc.pool_size) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
+			   "%s: drop due to invalid msdu id = %x\n",
+			   __func__, tx_desc_id);
+		continue;
+	}
+
+	tx_desc = td_array[tx_desc_id].tx_desc;
+	adf_os_assert(tx_desc);
+	tx_desc->status = status;
         netbuf = tx_desc->netbuf;
         NBUF_UPDATE_TX_PKT_COUNT(netbuf, NBUF_TX_PKT_FREE);
         DPTRACE(adf_dp_trace_ptr(netbuf,
@@ -816,8 +824,16 @@ ol_tx_inspect_handler(
 
     for (i = 0; i < num_msdus; i++) {
         tx_desc_id = desc_ids[i];
-        tx_desc = td_array[tx_desc_id].tx_desc;
-        netbuf = tx_desc->netbuf;
+	if (tx_desc_id >= pdev->tx_desc.pool_size) {
+		TXRX_PRINT(TXRX_PRINT_LEVEL_WARN,
+			   "%s: drop due to invalid msdu id = %x\n",
+			   __func__, tx_desc_id);
+		continue;
+	}
+
+	tx_desc = td_array[tx_desc_id].tx_desc;
+	adf_os_assert(tx_desc);
+	netbuf = tx_desc->netbuf;
 
         /* find the "vdev" this tx_desc belongs to */
         vdev_id = HTT_TX_DESC_VDEV_ID_GET(*((u_int32_t *)(tx_desc->htt_tx_desc)));
