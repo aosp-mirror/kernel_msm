@@ -171,8 +171,6 @@ static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_INTS];
 
 /* Airbrush-specific DRAM buffers plus PCIe DMA engine data transfers */
 struct abc_buffer {
-	int dma_buf_fd;
-	pid_t pid;
 	refcount_t refcount;
 	uint32_t map_flags;
 	uint32_t page_table_index;
@@ -240,14 +238,18 @@ static struct abc_buffer *abc_get_buffer_locked(struct oscar_dev *oscar_dev,
 						int fd)
 {
 	struct abc_buffer *abc_buffer;
+	struct dma_buf *dma_buf = dma_buf_get(fd);
+
+	if (IS_ERR(dma_buf))
+		return NULL;
+
+	dma_buf_put(dma_buf);
 
 	list_for_each_entry(abc_buffer, &oscar_dev->abc_buffers,
 			    abc_buffers_list) {
-		if (abc_buffer->dma_buf_fd == fd &&
-		    abc_buffer->pid == current->pid) {
+		if (abc_buffer->dma_buf == dma_buf) {
 			refcount_inc(&abc_buffer->refcount);
 			return abc_buffer;
-
 		}
 	}
 	return NULL;
@@ -360,8 +362,6 @@ static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
 		ret = -ENOMEM;
 		goto detach_buf;
 	}
-	abc_buffer->dma_buf_fd = fd;
-	abc_buffer->pid = current->pid;
 	abc_buffer->dma_buf = abc_dma_buf;
 	abc_buffer->dma_buf_attachment = dma_buf_attachment;
 	abc_buffer->oscar_dev = oscar_dev;
