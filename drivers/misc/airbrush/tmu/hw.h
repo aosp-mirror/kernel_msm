@@ -54,7 +54,14 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_TRIMINFO_CAL_FIELD	GENMASK(19, 18)
 
 #define AB_TMU_CONTROL			0x20
+#define AB_TMU_CONTROL_CORE_EN_FIELD	BIT_MASK(0)
+#define AB_TMU_CONTROL_TRIP_EN_FIELD	BIT_MASK(12)
+#define AB_TMU_CONTROL_EN_FIELDS \
+	(AB_TMU_CONTROL_CORE_EN_FIELD | AB_TMU_CONTROL_TRIP_EN_FIELD)
+
 #define AB_TMU_CONTROL1			0x24
+#define AB_TMU_CONTROL1_REMOTE_PROBE	GENMASK(19, 16)
+
 #define AB_TMU_STATUS			0x28
 #define AB_TMU_STATUS_IDLE_FIELD	BIT_MASK(0)
 
@@ -117,10 +124,6 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_INTEN_ALL		0xff01ff
 
 #define AB_TMU_TEMP_MASK		0x1ff
-#define AB_TMU_BUF_SLOPE_SEL_MASK	0xf
-#define AB_TMU_BUF_SLOPE_SEL_SHIFT	8
-#define AB_TMU_CORE_EN_SHIFT		0
-#define AB_TMU_EN_TRIP_SHIFT		12
 
 #define AB_TMU_EMUL_CON			0x160
 #define AB_TMU_EMUL_CON_ENABLE_FIELD	BIT_MASK(0)
@@ -141,7 +144,6 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_TEMP_PROBE_TPU0		5
 #define AB_TMU_TEMP_PROBE_TPU1		6
 #define AB_TMU_NUM_REMOTE_PROBE		0x6
-#define AB_TMU_REMOTE_PROBE_SHIFT	16
 #define AB_TMU_NUM_ALL_PROBE		7
 #define AB_TMU_TEMP_SHIFT		9
 

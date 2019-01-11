@@ -14,6 +14,7 @@
  */
 #include "hw.h"
 
+#include <linux/bitfield.h>
 #include <linux/device.h>
 #include <linux/mfd/abc-pcie.h>
 
@@ -189,17 +190,15 @@ void ab_tmu_hw_control(struct ab_tmu_hw *hw, bool enable)
 	ab_tmu_hw_set_irqs(hw, enable);
 
 	con1 = ab_tmu_hw_read(hw, AB_TMU_CONTROL1);
-	con1 |= AB_TMU_NUM_REMOTE_PROBE << AB_TMU_REMOTE_PROBE_SHIFT;
+	con1 |= FIELD_PREP(AB_TMU_CONTROL1_REMOTE_PROBE,
+		AB_TMU_NUM_REMOTE_PROBE);
 	ab_tmu_hw_write(hw, AB_TMU_CONTROL1, con1);
 
 	con = ab_tmu_hw_read(hw, AB_TMU_CONTROL);
-	if (enable) {
-		con |= (1 << AB_TMU_EN_TRIP_SHIFT);
-		con |= (1 << AB_TMU_CORE_EN_SHIFT);
-	} else {
-		con &= ~(1 << AB_TMU_EN_TRIP_SHIFT);
-		con &= ~(1 << AB_TMU_CORE_EN_SHIFT);
-	}
+	if (enable)
+		con |= AB_TMU_CONTROL_EN_FIELDS;
+	else
+		con &= ~(AB_TMU_CONTROL_EN_FIELDS);
 	ab_tmu_hw_write(hw, AB_TMU_CONTROL, con);
 }
 
