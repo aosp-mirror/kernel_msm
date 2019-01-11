@@ -264,8 +264,9 @@ enum max1720x_nvram {
 };
 
 enum max1730x_nvram {
-	MAX1730X_NVRAM_START = 0x80,
-	MAX1730X_NVRAM_END = 0xF0,
+	MAX1730X_NVRAM_START 	= 0x80,
+	MAX1730X_NVPRTTH1 	= 0xD0,
+	MAX1730X_NVRAM_END 	= 0xF0,
 };
 
 enum max1730x_register {
@@ -291,6 +292,7 @@ enum max1730x_register {
 	MAX1730X_IALRTTH = 0xAC,
 	MAX1730X_MINVOLT = 0xAD,
 	MAX1730X_MINCURR = 0xAE,
+	MAX1730X_NVPRTTH1BAK = 0xD6,
 };
 
 enum max1730x_command_bits {
@@ -739,9 +741,10 @@ bool max1720x_is_reg(struct device *dev, unsigned int reg)
 
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
 		switch (reg) {
+		case 0xA0 ... 0xAE:
+		case MAX1730X_NVPRTTH1BAK:
 		case 0xF0:
 		case 0xF5:
-		case 0xA0 ... 0xAE:
 			return true;
 		}
 	}
@@ -1910,8 +1913,7 @@ static bool max17x0x_should_reset(struct max1720x_chip *chip,
 				  struct max17x0x_cache_data *nRAM_u)
 {
 	const char *propname;
-	int ret, idx = -1;
-	u32 nver_reg;
+	int idx = -1;
 
 	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
 		"maxim,n_regval_1730x_ver" : "maxim,n_regval_1720x_ver";
@@ -1930,6 +1932,7 @@ static bool max17x0x_should_reset(struct max1720x_chip *chip,
 	return (nRAM_c->cache_data[idx] & 0xff)
 		< (nRAM_u->cache_data[idx] & 0xff);
 }
+
 
 static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 {
@@ -2212,6 +2215,62 @@ static u16 max1720x_read_rsense(const struct max1720x_chip *chip)
 	return rsense;
 }
 
+#define MAX1730X_NVPRTTH1_CHARGING	0x0008
+
+static int max17x0x_fixups(struct max1720x_chip *chip)
+{
+	int ret;
+
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		bool write_back = false, write_ndata = false;
+		const u16 val = 0x28AB;
+		u16 ndata = 0, bak = 0;
+
+		/* b/122605202 */
+		ret = REGMAP_READ(chip->regmap_nvram,
+						MAX1730X_NVPRTTH1, &ndata);
+		if (ret == 0)
+			ret = REGMAP_READ(chip->regmap,
+						MAX1730X_NVPRTTH1BAK, &bak);
+		if (ret < 0)
+			return -EIO;
+
+		if (ndata == MAX1730X_NVPRTTH1_CHARGING)
+			write_back = (bak != val);
+		else
+			write_ndata = (ndata != val);
+
+		if (write_back || write_ndata) {
+			ret = REGMAP_WRITE(chip->regmap,
+						MAX1730X_NVPRTTH1BAK, val);
+			if (ret == 0)
+				ret = REGMAP_WRITE(chip->regmap_nvram,
+						MAX1730X_NVPRTTH1, val);
+			if (ret == 0)
+				ret = REGMAP_WRITE(chip->regmap,
+						MAX1730X_NVPRTTH1BAK, val);
+		}
+
+		if (ret < 0) {
+			dev_info(chip->dev,
+				"failed to update 0x0D6=%x 0x1D0=%x to %x (%d)\n",
+				bak, ndata, val, ret);
+		} else if (write_back) {
+			dev_info(chip->dev,
+				"0x0D6=%x 0x1D0=%x updated to %x (%d)\n",
+				bak, ndata, val, ret);
+		} else if (write_ndata) {
+			dev_info(chip->dev,
+				"0x1D0=%x updated to %x (%d)\n",
+				ndata, val, ret);
+		}
+
+	}
+
+	return ret;
+}
+
+
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
 	u16 data = 0;
@@ -2219,6 +2278,10 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 
 	if (of_property_read_bool(chip->dev->of_node, "maxim,force-hard-reset"))
 		max1720x_full_reset(chip);
+
+	ret = max17x0x_fixups(chip);
+	if (ret == -EPROBE_DEFER)
+		return ret;
 
 	ret = max17x0x_handle_dt_shadow_config(chip);
 	if (ret == -EPROBE_DEFER)
