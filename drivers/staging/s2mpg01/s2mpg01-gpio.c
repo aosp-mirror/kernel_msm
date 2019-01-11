@@ -79,10 +79,12 @@ static void s2mpg01_gpio_set(struct gpio_chip *gpio_chip, unsigned int offset,
 	struct s2mpg01_gpio *s2mpg01_gpio = to_s2mpg01_gpio(gpio_chip);
 	struct s2mpg01_core *s2mpg01_core = s2mpg01_gpio->s2mpg01_core;
 
+	/* Set output value */
 	s2mpg01_update_bits(s2mpg01_core, S2MPG01_REG_GPIO_A,
 			    (1 << offset), ((value ? 1 : 0) << offset));
+	/* Enable output */
 	s2mpg01_update_bits(s2mpg01_core, S2MPG01_REG_GPIO_CTRL,
-			    (0x40 << offset), (0x40 << offset));
+			    (0x10 << offset), (0x10 << offset));
 }
 
 static int s2mpg01_gpio_direction_output(struct gpio_chip *gpio_chip,
