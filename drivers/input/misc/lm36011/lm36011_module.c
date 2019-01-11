@@ -226,6 +226,23 @@ static int sx9320_write_data(
 	return rc;
 }
 
+static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
+{
+	int rc;
+	uint32_t data;
+
+	rc = camera_io_dev_read(
+		&ctrl->cap_sense.io_master_info,
+		0x00,
+		&data,
+		CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_BYTE);
+	if (rc < 0)
+		dev_err(ctrl->soc_info.dev, "clean up NIRQ failed");
+
+	return rc;
+}
+
 int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 {
 	int rc, i;
@@ -252,23 +269,7 @@ int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 			"%s: i2c write failed: rc: %d",
 			__func__, rc);
 	}
-
-	return rc;
-}
-
-static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
-{
-	int rc;
-	uint32_t data;
-
-	rc = camera_io_dev_read(
-		&ctrl->cap_sense.io_master_info,
-		0x00,
-		&data,
-		CAMERA_SENSOR_I2C_TYPE_BYTE,
-		CAMERA_SENSOR_I2C_TYPE_BYTE);
-	if (rc < 0)
-		dev_err(ctrl->soc_info.dev, "clean up NIRQ failed");
+	sx9320_cleanup_nirq(ctrl);
 
 	return rc;
 }
@@ -566,13 +567,6 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 
 	/* Cap sense need wait 1 ms for hw ready */
 	usleep_range(1000, 3000);
-	if (ctrl->hw_version >= 2) {
-		rc = sx9320_init_setting(ctrl);
-		if (rc < 0)
-			dev_err(ctrl->soc_info.dev,
-				"initialize cap sense failed: rc: %d", rc);
-	}
-
 	rc = sx9320_cleanup_nirq(ctrl);
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev,
@@ -1110,6 +1104,18 @@ static ssize_t led_laser_enable_store(struct device *dev,
 			lm36011_power_down(ctrl);
 			mutex_unlock(&ctrl->cam_sensor_mutex);
 			return rc;
+		}
+		/* Cap sense initialize */
+		if (ctrl->hw_version >= 2 && ctrl->type == LASER_FLOOD) {
+			rc = sx9320_init_setting(ctrl);
+			if (rc < 0) {
+				dev_err(ctrl->soc_info.dev,
+					"initialize cap sense failed: rc: %d",
+					rc);
+				lm36011_power_down(ctrl);
+				mutex_unlock(&ctrl->cam_sensor_mutex);
+				return rc;
+			}
 		}
 		lm36011_enable_gpio_irq(dev);
 		rc = lm36011_write_data(ctrl,
