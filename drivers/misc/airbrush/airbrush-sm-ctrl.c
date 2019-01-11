@@ -573,8 +573,11 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			sc->dest_chip_substate_id,
 			sc->throttle_state_id);
 
-	if (sc->curr_chip_substate_id == to_chip_substate_id)
+	if (sc->curr_chip_substate_id == to_chip_substate_id) {
+		complete_all(&sc->transition_comp);
+		complete_all(&sc->notify_comp);
 		return 0;
+	}
 
 	for (i = 0; i < sc->nr_chip_states; i++) {
 		if (sc->chip_state_table[i].chip_substate_id ==
