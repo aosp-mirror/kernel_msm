@@ -56,6 +56,8 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_CONTROL			0x20
 #define AB_TMU_CONTROL1			0x24
 #define AB_TMU_STATUS			0x28
+#define AB_TMU_STATUS_IDLE_FIELD	BIT_MASK(0)
+
 #define AB_TMU_SAMPLING_INTERVAL	0x2c
 #define AB_TMU_COUNTER_VALUE0		0x30
 #define AB_TMU_COUNTER_VALUE1		0x34

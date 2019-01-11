@@ -173,7 +173,7 @@ int ab_tmu_hw_initialize(struct ab_tmu_hw *hw)
 	u32 status;
 
 	status = ab_tmu_hw_read(hw, AB_TMU_STATUS);
-	if (!status) {
+	if (!(status & AB_TMU_STATUS_IDLE_FIELD)) {
 		dev_err(hw->dev, "Failed to initialize hw\n");
 		return -EBUSY;
 	}
