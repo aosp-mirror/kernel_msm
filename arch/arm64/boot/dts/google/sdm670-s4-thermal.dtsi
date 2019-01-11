@@ -23,12 +23,12 @@
 	backup-charge {
 		trips {
 			batt_charging_lv1: batt-charging_lv1 {
-				temperature = <35500>;
+				temperature = <37500>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
 			batt_charging_lv2: batt-charging_lv2 {
-				temperature = <37500>;
+				temperature = <39500>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
