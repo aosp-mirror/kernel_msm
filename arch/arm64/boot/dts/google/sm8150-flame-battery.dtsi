@@ -29,7 +29,7 @@
 
 	maxim,n_regval_1730x_ver = <0xcc>;
 	maxim,n_regval_1730x =  /bits/ 16 <
-		0xD0 0x28AE	/* nVPrtTh1 register: UVP:2.4V UOCVP:2.8V UVShdn:2.32V */
+		0xCC 0x0000	/* default, only one byte used */
 	>;
 
 	/* maxim,n_regval_1720x_ver = <0xd4>; */
