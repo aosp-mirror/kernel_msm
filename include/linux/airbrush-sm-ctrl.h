@@ -147,6 +147,12 @@ enum stat_state {
 	STAT_STATE_SIZE,
 };
 
+enum pmu_states {
+	PMU_STATE_ON = 0,
+	PMU_STATE_SLEEP,
+	PMU_STATE_DEEP_SLEEP,
+};
+
 /**
  * struct block_property
  * stores the information of a soc block's operating state.
@@ -167,6 +173,7 @@ struct block_property {
 	enum block_state id;
 	char *state_name;
 	char *substate_name;
+	enum pmu_states pmu;
 	enum states voltage_rail_status;
 	enum logic_voltage logic_voltage;
 	enum states clk_status;
@@ -276,21 +283,27 @@ typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 struct ab_sm_pmu_ops {
 	void *ctx;
 
-	int (*pmu_sleep)(void *ctx);
+	int (*pmu_ipu_sleep)(void *ctx);
+	int (*pmu_tpu_sleep)(void *ctx);
 	int (*pmu_deep_sleep)(void *ctx);
-	int (*pmu_resume)(void *ctx);
+	int (*pmu_ipu_resume)(void *ctx);
+	int (*pmu_tpu_resume)(void *ctx);
 };
 
-static int pmu_sleep_stub(void *ctx)      { return -ENODEV; }
+static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
+static int pmu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
-static int pmu_resume_stub(void *ctx)     { return -ENODEV; }
+static int pmu_ipu_resume_stub(void *ctx)     { return -ENODEV; }
+static int pmu_tpu_resume_stub(void *ctx)     { return -ENODEV; }
 
 static struct ab_sm_pmu_ops pmu_ops_stub = {
 	.ctx = NULL,
 
-	.pmu_sleep = &pmu_sleep_stub,
+	.pmu_ipu_sleep = &pmu_ipu_sleep_stub,
+	.pmu_tpu_sleep = &pmu_tpu_sleep_stub,
 	.pmu_deep_sleep = &pmu_deep_sleep_stub,
-	.pmu_resume = &pmu_resume_stub,
+	.pmu_ipu_resume = &pmu_ipu_resume_stub,
+	.pmu_tpu_resume = &pmu_tpu_resume_stub,
 };
 
 struct ab_sm_clk_ops {
