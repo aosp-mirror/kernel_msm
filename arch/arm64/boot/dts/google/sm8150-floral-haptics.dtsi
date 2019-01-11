@@ -69,7 +69,7 @@
 		cirrus,gpio1-mode = <2>; /* enabled only in suspend mode */
 		cirrus,hiber-enable;
 		cirrus,refclk-gpio2 = <1>; /* set GPIO2 as REFCLK  */
-		cirrus,asp-bclk-freq-hz = <12288000>;
+		cirrus,asp-bclk-freq-hz = <6144000>;
 		cirrus,asp-bclk-inv;
 		cirrus,asp-fmt = <0>;
 		cirrus,asp-slot-num = <2>;
