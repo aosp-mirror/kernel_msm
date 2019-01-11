@@ -28,6 +28,10 @@
 #define MDP3_MAX_BUF_QUEUE 8
 #define MDP3_LUT_HIST_EN 0x001
 #define MDP3_LUT_GC_EN 0x002
+/*
+ * for MDP3, max value of CFG_HEIGHT is 0x7ff
+ * for MDP5, max value of CFG_HEIGHT is 0xffff
+ */
 #define MDP3_MAX_CFG_HEIGHT 0x7ff
 
 struct mdp3_buffer_queue {
