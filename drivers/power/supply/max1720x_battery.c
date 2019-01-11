@@ -46,6 +46,7 @@
 #define MAX1720X_N_OF_HISTORY_PAGES 203
 #define MAX1720X_DELAY_INIT_MS 1000
 #define FULLCAPNOM_STABILIZE_CYCLES 5
+#define CYCLE_LEVEL_SIZE 200
 
 #define HISTORY_DEVICENAME "maxfg_history"
 
@@ -392,7 +393,12 @@ struct max1720x_chip {
 	struct mutex convgcfg_lock;
 	unsigned int debug_irq_none_cnt;
 	bool shadow_override;
+	int nb_empty_voltage;
+	u16 *empty_voltage;
 };
+
+#define MAX1720_EMPTY_VOLTAGE(profile, temp, cycle) \
+	profile->empty_voltage[(temp * (profile->nb_empty_voltage/2)) + cycle]
 
 static int max1730x_regmap_map(int reg)
 {
@@ -1373,6 +1379,36 @@ static void max1720x_handle_update_nconvgcfg(struct max1720x_chip *chip,
 	mutex_unlock(&chip->convgcfg_lock);
 }
 
+static void max1720x_handle_update_empty_voltage(struct max1720x_chip *chip,
+						 int temp)
+{
+	int cycle, idx, ret = 0;
+	u16 empty_volt_cfg, reg, data = 0;
+
+	if (chip->empty_voltage == NULL)
+		return;
+
+	ret = REGMAP_READ(chip->regmap, MAX1720X_CYCLES, &data);
+	if (ret == 0) {
+		cycle = reg_to_cycles(data);
+		idx = cycle / CYCLE_LEVEL_SIZE;
+		if (idx > (chip->nb_empty_voltage/2 - 1))
+			idx = chip->nb_empty_voltage/2 - 1;
+		empty_volt_cfg = MAX1720_EMPTY_VOLTAGE(chip,
+						       temp < 0 ? 0:1,
+						       idx);
+		reg = (empty_volt_cfg / 10) << 7 | 0x61;
+		REGMAP_WRITE(chip->regmap,
+			     MAX1720X_VEMPTY,
+			     reg);
+
+		pr_debug("updating empty_voltage to %d(0x%04X), temp:%d(%d), cycle:%d(%d)\n",
+			 empty_volt_cfg, reg,
+			 temp, temp < 0 ? 0 : 1,
+			 cycle, idx);
+	}
+}
+
 static int max1720x_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
@@ -1477,6 +1513,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		REGMAP_READ(map, MAX17XXX_TEMP, &data);
 		val->intval = reg_to_deci_deg_cel(data);
 		max1720x_handle_update_nconvgcfg(chip, val->intval);
+		max1720x_handle_update_empty_voltage(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
 		err = REGMAP_READ(map, MAX1720X_TTE, &data);
@@ -2162,6 +2199,26 @@ static int max1720x_handle_dt_nconvgcfg(struct max1720x_chip *chip)
 		}
 	}
 
+	chip->nb_empty_voltage = of_property_count_elems_of_size(node,
+								 "maxim,empty-voltage",
+								 sizeof(u16));
+	if (chip->nb_empty_voltage > 0) {
+		chip->empty_voltage = devm_kmalloc_array(chip->dev,
+							 chip->nb_empty_voltage,
+							 sizeof(u16),
+							 GFP_KERNEL);
+		if (!chip->empty_voltage)
+			goto error;
+
+		ret = of_property_read_u16_array(node, "maxim,empty-voltage",
+						chip->empty_voltage,
+						chip->nb_empty_voltage);
+		if (ret) {
+			dev_warn(chip->dev,
+				 "failed to read maxim,empty-voltage: %d\n",
+				 ret);
+		}
+	}
 error:
 	if (ret) {
 		devm_kfree(chip->dev, chip->temp_convgcfg);
