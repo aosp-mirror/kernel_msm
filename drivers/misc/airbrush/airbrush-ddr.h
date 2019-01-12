@@ -61,7 +61,8 @@ int ab_ddr_resume(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);
 int ab_ddr_selfrefresh_exit(struct ab_state_context *sc);
 int ab_ddr_setup(struct ab_state_context *sc);
-int ab_ddr_read_write_test(unsigned int read_write);
+int ab_ddr_read_write_test(struct ab_state_context *sc,
+			   unsigned int read_write);
 int ab_ddr_freq_change(struct ab_state_context *sc, int val);
 int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int test_data);
 

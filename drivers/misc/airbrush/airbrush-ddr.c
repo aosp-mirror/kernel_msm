@@ -1841,7 +1841,7 @@ static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
 	ddr_ctx->cur_freq = freq;
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_WRITE(512));
+	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
@@ -1931,7 +1931,7 @@ static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
 
 #ifdef CONFIG_DDR_BOOT_TEST
 	/* Run MEMTESTER for the data integrity */
-	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ(512));
+	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 
@@ -2098,7 +2098,7 @@ int32_t ab_ddr_resume(struct ab_state_context *sc)
 	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ(512));
+	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 }
@@ -2174,7 +2174,7 @@ int32_t ab_ddr_selfrefresh_exit(struct ab_state_context *sc)
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x1);
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ(512));
+	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 }
@@ -2188,7 +2188,7 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 	}
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_WRITE(512));
+	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
@@ -2418,7 +2418,7 @@ int32_t ab_ddr_init(struct ab_state_context *sc)
 	ddr_sr = GPIO_DDR_SR();
 
 	if (!ddr_sr && !ret)
-		ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ_WRITE(512));
+		ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ_WRITE(512));
 #endif
 	return ret;
 }

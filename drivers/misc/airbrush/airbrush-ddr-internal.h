@@ -1135,10 +1135,9 @@ struct ab_ddr_context {
 	 */
 	unsigned int ddr_train_sram_location;
 
-	/* for vref voltage of PHY (13.5% ~ 46.1%) of VDD2 */
-	uint32_t phy_vref_lvl[PHY_VREF_LEVELS];
-	/* for vref voltage of DRAM (10.0% ~ 30.0%) of VDD2 */
-	uint32_t dram_vref_lvl[DRAM_VREF_LEVELS];
+	/* read/write test data */
+	ktime_t st_read, et_read;
+	ktime_t st_write, et_write;
 };
 
 static inline uint32_t ddr_reg_rd(uint32_t addr)

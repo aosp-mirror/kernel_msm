@@ -206,7 +206,7 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 		ab_ddr_setup(sc);
 		break;
 	case 6:
-		ab_ddr_read_write_test(DDR_TEST_PCIE_DMA_READ_WRITE(512));
+		ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ_WRITE(512));
 		break;
 	case 1866:
 	case 1600:
@@ -225,7 +225,9 @@ DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_ctrl_fops, NULL, ab_debugfs_ddr_ctrl, "%lli\n");
 
 static int ab_debugfs_ddr_test(void *data, u64 val)
 {
-	ab_ddr_read_write_test((unsigned int)val);
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_ddr_read_write_test(sc, (unsigned int)val);
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_test_fops, NULL, ab_debugfs_ddr_test, "%lli\n");

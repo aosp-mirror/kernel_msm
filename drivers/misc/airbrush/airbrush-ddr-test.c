@@ -195,7 +195,8 @@ static int ddr_rw_test_pcie_dma_read_compare(unsigned int test_data,
 	return DDR_SUCCESS;
 }
 
-static int ddr_rw_test_pcie_dma(unsigned int test_data)
+static int ddr_rw_test_pcie_dma(struct ab_ddr_context *ddr_ctx,
+				unsigned int test_data)
 {
 	char *host_vaddr;
 	dma_addr_t host_paddr;
@@ -215,13 +216,26 @@ static int ddr_rw_test_pcie_dma(unsigned int test_data)
 		/* Change the DMA write pattern every time */
 		test_iter++;
 
+		/* for time tracking get the write start time info */
+		ddr_ctx->st_write = ktime_get_boottime();
+
 		ret = ddr_rw_test_pcie_dma_write(test_data,
 				host_vaddr, host_paddr, test_iter);
+
+		/* for time tracking get the write end time info */
+		ddr_ctx->et_write = ktime_get_boottime();
 	}
 
-	if (DDR_BOOT_TEST_READ & test_data)
+	if (DDR_BOOT_TEST_READ & test_data) {
+		/* for time tracking get the read start time info */
+		ddr_ctx->st_read = ktime_get_boottime();
+
 		ret |= ddr_rw_test_pcie_dma_read_compare(test_data,
 				host_vaddr, host_paddr, test_iter);
+
+		/* for time tracking get the read end time info */
+		ddr_ctx->et_read = ktime_get_boottime();
+	}
 
 	(void)abc_reg_dma_irq_callback(NULL, DMA_CHANNEL);
 	abc_free_coherent(DMA_SZ, host_vaddr, host_paddr);
@@ -229,7 +243,8 @@ static int ddr_rw_test_pcie_dma(unsigned int test_data)
 	return ret;
 }
 
-static int ddr_rw_test_memtester(unsigned int test_data)
+static int ddr_rw_test_memtester(struct ab_ddr_context *ddr_ctx,
+				 unsigned int test_data)
 {
 	int i, data, fail_cnt = 0;
 	uint32_t ddr_addr[] = {
@@ -253,11 +268,20 @@ static int ddr_rw_test_memtester(unsigned int test_data)
 	uint32_t num_patterns = ARRAY_SIZE(ddr_data);
 
 	if (DDR_BOOT_TEST_WRITE & test_data) {
+		/* for time tracking get the write start time info */
+		ddr_ctx->st_write = ktime_get_boottime();
+
 		for (i = 0; i < num_patterns; i++)
 			ddr_mem_wr(ddr_addr[i], ddr_data[i]);
+
+		/* for time tracking get the write end time info */
+		ddr_ctx->et_write = ktime_get_boottime();
 	}
 
 	if (DDR_BOOT_TEST_READ & test_data) {
+		/* for time tracking get the read start time info */
+		ddr_ctx->st_read = ktime_get_boottime();
+
 		for (i = 0; i < num_patterns; i++) {
 			data = ddr_mem_rd(ddr_addr[i]);
 			if (ddr_data[i] == data) {
@@ -266,12 +290,18 @@ static int ddr_rw_test_memtester(unsigned int test_data)
 			}
 
 			fail_cnt++;
-			if (DDR_TEST_NOPRINT & test_data)
+			if (DDR_TEST_NOPRINT & test_data) {
+				/* get the read end time info */
+				ddr_ctx->et_read = ktime_get_boottime();
 				return DDR_FAIL;
+			}
 
 			pr_err("Mismatch!! 0x%x: CUR:0x%x, EXP:0x%x\n",
 					ddr_addr[i], data, ddr_data[i]);
 		}
+
+		/* for time tracking get the read end time info */
+		ddr_ctx->et_read = ktime_get_boottime();
 	} else {
 		return DDR_SUCCESS;
 	}
@@ -288,15 +318,24 @@ static int ddr_rw_test_memtester(unsigned int test_data)
 	return DDR_SUCCESS;
 }
 
-int ab_ddr_read_write_test(unsigned int test_data)
+int ab_ddr_read_write_test(struct ab_state_context *sc, unsigned int test_data)
 {
+	struct ab_ddr_context *ddr_ctx;
+
+	if (!sc || !sc->ddr_data) {
+		pr_err("%s, error: ab_ddr_setup() is not called\n", __func__);
+		return DDR_FAIL;
+	}
+
+	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
 	/* ddr_mem_rd/wr based test to check the ddr data integrity */
 	if (test_data & DDR_TEST_MEMTESTER)
-		return ddr_rw_test_memtester(test_data);
+		return ddr_rw_test_memtester(ddr_ctx, test_data);
 
 	/* DDR test based on PCIe DMA read/write */
 	if (test_data & DDR_TEST_PCIE_DMA)
-		return ddr_rw_test_pcie_dma(test_data);
+		return ddr_rw_test_pcie_dma(ddr_ctx, test_data);
 
 	pr_err("error!! undefined ddr r/w test\n");
 	return DDR_FAIL;

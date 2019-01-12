@@ -86,7 +86,8 @@ static void ddrphy_set_write_offset(int offset_phy)
 	ddr_reg_clr(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
 }
 
-static void ddrphy_measure_eye_read(int samples, uint32_t eye_data)
+static void ddrphy_measure_eye_read(struct ab_ddr_context *ddr_ctx,
+				    int samples, uint32_t eye_data)
 {
 	int vrefIdx;
 	int maxOffset;
@@ -105,7 +106,9 @@ static void ddrphy_measure_eye_read(int samples, uint32_t eye_data)
 		for (offsetIdx = (maxOffset * -1); offsetIdx <= maxOffset;
 							offsetIdx++) {
 			ddrphy_set_read_offset(offsetIdx);
-			if (!ab_ddr_read_write_test(eye_data))
+
+			if (!ab_ddr_read_write_test(ddr_ctx->ab_state_ctx,
+						    eye_data))
 				read_eye[vrefIdx][result_idx] = 'o';
 			else
 				read_eye[vrefIdx][result_idx] = '.';
@@ -125,7 +128,8 @@ static void ddrphy_measure_eye_read(int samples, uint32_t eye_data)
 					      read_eye[vrefIdx]);
 }
 
-static void ddrphy_measure_eye_write(int samples, uint32_t eye_data)
+static void ddrphy_measure_eye_write(struct ab_ddr_context *ddr_ctx,
+				     int samples, uint32_t eye_data)
 {
 	int vrefIdx;
 	int maxOffset;
@@ -144,7 +148,9 @@ static void ddrphy_measure_eye_write(int samples, uint32_t eye_data)
 		for (offsetIdx = (maxOffset * -1); offsetIdx <= maxOffset;
 							offsetIdx++) {
 			ddrphy_set_write_offset(offsetIdx);
-			if (!ab_ddr_read_write_test(eye_data))
+
+			if (!ab_ddr_read_write_test(ddr_ctx->ab_state_ctx,
+						    eye_data))
 				write_eye[vrefIdx][result_idx] = 'o';
 			else
 				write_eye[vrefIdx][result_idx] = '.';
@@ -170,12 +176,14 @@ int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
 	uint32_t write_vref;
 	uint32_t num_samples;
 	uint32_t eye_data;
+	struct ab_ddr_context *ddr_ctx;
 
 	if (!sc || !sc->ddr_data) {
 		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
 		return DDR_FAIL;
 	}
 
+	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 	/* Disable the PHY control logic clock gating for s/w margin
 	 * offset settings to work
 	 */
@@ -209,7 +217,7 @@ int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
 		ddr_get_phy_vref(PHY_VREF_LEVELS - 1));
 
 	/* sweep read vref to get the eye margin on READ */
-	ddrphy_measure_eye_read(num_samples, eye_data);
+	ddrphy_measure_eye_read(ddr_ctx, num_samples, eye_data);
 
 	/* Restore the working Read Vref & Offset */
 	ddrphy_set_read_vref(read_vref_phy0, read_vref_phy1, VREF_BYTE_ALL);
@@ -220,7 +228,7 @@ int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
 		ddr_get_dram_vref(DRAM_VREF_LEVELS - 1));
 
 	/* sweep write vref to get the eye margin on WRITE */
-	ddrphy_measure_eye_write(num_samples, eye_data);
+	ddrphy_measure_eye_write(ddr_ctx, num_samples, eye_data);
 
 	/* Restore the working write Vref & Offset */
 	ddrphy_set_write_vref(write_vref, VREF_BYTE_ALL);
