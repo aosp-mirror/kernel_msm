@@ -133,6 +133,9 @@
 		google,wlc-power-supply = "wireless";
 		google,tcpm-power-supply = "tcpm-source-psy-usbpd0";
 
+		google,thermal-mitigation = <3700000 1850000 925000 500000>;
+		google,wlc-thermal-mitigation = <1100000 500000 250000 110000>;
+
 		/* TODO: remove when using proper "charger" */
 		google,chg-cc-tolerance = <25>;
 	};
