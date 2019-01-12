@@ -51,6 +51,9 @@
 	reg-names = "m5db", "nvram";
 	reg = <0x36 0x0b>;
 
+	maxim,r_regval_1730x = /bits/ 16 <
+		0x29 0x0EB4 /* FilterCfg */
+	>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&fg_int_default>;
