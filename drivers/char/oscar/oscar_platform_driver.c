@@ -1247,6 +1247,30 @@ static const struct file_operations statusregs_ops = {
 	.release = single_release,
 };
 
+static int mmustatus_show(struct seq_file *s, void *data)
+{
+	struct oscar_dev *oscar_dev = s->private;
+
+	if (!check_dev_avail(oscar_dev))
+		return -EIO;
+
+	gasket_page_table_dump(oscar_dev->gasket_dev, s);
+	return 0;
+}
+
+static int mmustatus_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmustatus_show, inode->i_private);
+}
+
+static const struct file_operations mmustatus_ops = {
+	.open = mmustatus_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.owner = THIS_MODULE,
+	.release = single_release,
+};
+
 static void oscar_setup_debugfs(struct oscar_dev *oscar_dev,
 				struct device *dev)
 {
@@ -1257,6 +1281,8 @@ static void oscar_setup_debugfs(struct oscar_dev *oscar_dev,
 
 	debugfs_create_file("statusregs", 0660, oscar_dev->d_entry, oscar_dev,
 			    &statusregs_ops);
+	debugfs_create_file("mmustatus", 0660, oscar_dev->d_entry, oscar_dev,
+			    &mmustatus_ops);
 }
 
 static int oscar_setup_device(struct platform_device *pdev,

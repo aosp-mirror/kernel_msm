@@ -48,6 +48,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/pagemap.h>
+#include <linux/seq_file.h>
 #include <linux/vmalloc.h>
 
 #include "gasket_constants.h"
@@ -466,6 +467,20 @@ static int is_coherent(struct gasket_page_table *pg_tbl, ulong host_addr)
 	max = min + PAGE_SIZE * pg_tbl->num_coherent_pages;
 
 	return min <= host_addr && host_addr < max;
+}
+
+/* Does dma address fall within the coherent memory range? */
+static int is_coherent_dma(struct gasket_page_table *pg_tbl, ulong dma_addr)
+{
+	u64 min, max;
+
+	if (!pg_tbl->coherent_pages)
+		return 0;
+
+	min = (u64)pg_tbl->coherent_pages[0].paddr;
+	max = min + PAGE_SIZE * pg_tbl->num_coherent_pages;
+
+	return min <= dma_addr && dma_addr < max;
 }
 
 /*
@@ -1618,4 +1633,185 @@ void gasket_free_coherent_memory_all(
 	kfree(gasket_dev->page_table[index]->coherent_pages);
 	gasket_dev->page_table[index]->coherent_pages = NULL;
 	gasket_dev->page_table[index]->num_coherent_pages = 0;
+}
+
+/*
+ * Keep track of current contiguous mapping range as page tables traversed.
+ * If page_count is zero then no range has been started yet.
+ */
+struct mmu_dump_range {
+	/* starting TPU device address of range */
+	ulong dev_addr_start;
+	/* starting DMA address of range */
+	dma_addr_t dma_addr_start;
+	/* starting host physical address of range if user mapping, else 0 */
+	phys_addr_t phys_addr_start;
+	/* number of PAGE_SIZE pages in range so far, zero for none */
+	uint page_count;
+	/* is this a coherent memory mapping? */
+	bool coherent;
+};
+
+/* Stats kept by the MMU traverse code and dumped at the end */
+struct mmu_dump_stats {
+	uint total_pages;		/* # total pages mapped */
+	uint simple_pages;		/* # simple pages mapped */
+	uint ext_pages;			/* # extended pages mapped */
+	uint user_pages;		/* # userspace pages mapped */
+	uint nonuser_pages;		/* # non-user (dev+coherent) pages */
+	uint dev_subtables;		/* # on-device subtables in use */
+	uint coherent_pages;		/* # coherent memory pages mapped */
+	uint devpte_userpages;		/* # user pages in on-device ptes */
+	uint hostpte_nonuserpages;	/* # non-user pages in on-host ptes */
+};
+
+/* Dump the current accumulated range of mappings. */
+static void dump_range(struct seq_file *s, struct mmu_dump_range *range)
+{
+	seq_printf(s, "0x%016llx: 0x%016llx", range->dev_addr_start,
+		   range->dma_addr_start);
+	if (range->phys_addr_start)
+		seq_printf(s, " 0x%016llx", range->phys_addr_start);
+	seq_printf(s, " %u %c\n", range->page_count,
+		   range->coherent ? 'c' : range->phys_addr_start ? 'u' : 'd');
+}
+
+/*
+ * Add next PTE to current range, or dump previous and start a new one.
+ * If pte is NULL then there's no new range, just dump any accumulated range.
+ */
+static void dump_next_pte(struct seq_file *s, struct gasket_page_table *pg_tbl,
+			  ulong dev_addr, struct gasket_page_table_entry *pte,
+			  struct mmu_dump_range *range,
+			  struct mmu_dump_stats *stats)
+{
+	/* non-zero for userspace mapping physical address */
+	phys_addr_t this_physaddr = 0;
+
+	if (pte && pte->page)
+		this_physaddr = page_to_phys(pte->page);
+
+	/* Dump current range and/or start a new range? */
+	if (!range->page_count || !pte ||
+	    range->dev_addr_start + range->page_count * PAGE_SIZE != dev_addr ||
+	    range->dma_addr_start + range->page_count * PAGE_SIZE !=
+	    pte->dma_addr ||
+	    ((range->phys_addr_start || this_physaddr) &&
+	     range->phys_addr_start + range->page_count * PAGE_SIZE !=
+	     this_physaddr)) {
+		/* Dump current range, if any. */
+		if (range->page_count)
+			dump_range(s, range);
+
+		/* Start new range. */
+		range->dev_addr_start = dev_addr;
+		range->phys_addr_start = this_physaddr;
+		range->dma_addr_start = pte ? pte->dma_addr : 0;
+		range->page_count = pte ? 1 : 0;
+		range->coherent = pte ? is_coherent_dma(pg_tbl, pte->dma_addr)
+			: false;
+	} else {
+		/* Extend current range by one more page. */
+		range->page_count++;
+	}
+
+	if (pte) {
+		stats->total_pages++;
+
+		if (gasket_addr_is_simple(pg_tbl, dev_addr))
+			stats->simple_pages++;
+		else
+			stats->ext_pages++;
+
+		if (pte->page)
+			stats->user_pages++;
+		else
+			stats->nonuser_pages++;
+
+		if (is_coherent_dma(pg_tbl, pte->dma_addr))
+			stats->coherent_pages++;
+	}
+}
+
+static void dump_page_table(struct gasket_page_table *pg_tbl,
+			    struct seq_file *s)
+{
+	struct gasket_page_table_entry *ptes;
+	struct mmu_dump_range range;
+	struct mmu_dump_stats stats;
+	uint i, j;
+
+	ptes = pg_tbl ? pg_tbl->entries : NULL;
+	if (!ptes) {
+		seq_puts(s, "uninitialized\n");
+		return;
+	}
+
+	memset(&stats, 0, sizeof(stats));
+	range.page_count = 0;
+
+	for (i = 0; i < pg_tbl->num_simple_entries; i++) {
+		if (GET(FLAGS_STATUS, ptes[i].flags) != PTE_FREE)
+			dump_next_pte(s, pg_tbl, i * PAGE_SIZE, &ptes[i],
+				      &range, &stats);
+	}
+
+	for (i = pg_tbl->num_simple_entries; i < pg_tbl->config.total_entries;
+	     i++) {
+		if (GET(FLAGS_STATUS, ptes[i].flags) == PTE_FREE)
+			continue;
+
+		if (GET(FLAGS_DEV_SUBTABLE, ptes[i].flags))
+			stats.dev_subtables++;
+
+		for (j = 0; j < GASKET_PAGES_PER_SUBTABLE; j++) {
+			ulong dev_addr;
+
+			if (GET(FLAGS_STATUS, ptes[i].sublevel[j].flags) ==
+			    PTE_FREE)
+				continue;
+
+			dev_addr = (i - pg_tbl->num_simple_entries) *
+				GASKET_PAGES_PER_SUBTABLE * PAGE_SIZE +
+				j * PAGE_SIZE;
+			dev_addr |= pg_tbl->extended_flag;
+
+			/*
+			 * Count non-user pages (will be device, not coherent,
+			 * pages) mapped using on-host subtables.  Also count
+			 * user pages mapped using on-device subtables.  We
+			 * report these as potential performance problems.
+			 */
+			if (!GET(FLAGS_DEV_SUBTABLE, ptes[i].flags)) {
+				if (!ptes[i].sublevel[j].page)
+					stats.hostpte_nonuserpages++;
+			} else if (ptes[i].sublevel[j].page) {
+				stats.devpte_userpages++;
+			}
+
+			dump_next_pte(s, pg_tbl, dev_addr, &ptes[i].sublevel[j],
+				      &range, &stats);
+		}
+	}
+
+	dump_next_pte(s, pg_tbl, 0, NULL, &range, &stats);
+	seq_printf(s, "pages: %u simple: %u ext: %u user: %u dev: %u"
+		   " coherent: %d\n",
+		   stats.total_pages, stats.simple_pages, stats.ext_pages,
+		   stats.user_pages, stats.nonuser_pages - stats.coherent_pages,
+		   stats.coherent_pages);
+	seq_printf(s, "dev subtbl: %u devst-usrpg: %u hostst-nusrpg: %u\n",
+		   stats.dev_subtables, stats.devpte_userpages,
+		   stats.hostpte_nonuserpages);
+}
+
+void gasket_page_table_dump(struct gasket_dev *gasket_dev,
+			    struct seq_file *s)
+{
+	uint i;
+
+	for (i = 0; i < gasket_dev->num_page_tables; i++) {
+		seq_printf(s, "page table %u\n", i);
+		dump_page_table(gasket_dev->page_table[i], s);
+	}
 }
