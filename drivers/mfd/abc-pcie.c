@@ -1686,37 +1686,67 @@ static int abc_pcie_get_chip_id_handler(void *ctx, enum ab_chip_id *val)
 
 static int abc_pcie_enter_el2_handler(void *ctx)
 {
+	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
+
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
 
-	/* TODO(b/122555739, b/122614252): Temporarily disable sMMU detach /
-	 * re-attach to allow for testing of EL2 software in EL1 context.
+	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
+	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
+	 * both EL1 and EL2 based testing.  This should be removed and the sMMU
+	 * detach operation should be done unconditionally once EL2 based
+	 * software is ready for use.
 	 */
-#if 0
-	/* Detach the PCIe EP device to the ARM sMMU */
-	abc_pcie_smmu_detach((struct device *)ctx);
-#endif
+	if (!abc->allow_el1_dma) {
+		/* Detach the PCIe EP device to the ARM sMMU */
+		abc_pcie_smmu_detach((struct device *)ctx);
+	}
 
 	return 0;
 }
 
 static int abc_pcie_exit_el2_handler(void *ctx)
 {
-	/* TODO(b/122555739, b/122614252): Temporarily disable sMMU detach /
-	 * re-attach to allow for testing of EL2 software in EL1 context.
-	 */
-#if 0
-	int ret;
+	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 
-	/* Re-attach the PCIe EP device to the ARM sMMU */
-	ret = abc_pcie_smmu_attach((struct device *)ctx);
-	if (ret < 0)
-		return ret;
-#endif
+	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
+	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
+	 * both EL1 and EL2 based testing.  This should be removed and the sMMU
+	 * detach operation should be done unconditionally once EL2 based
+	 * software is ready for use.
+	 */
+	if (!abc->allow_el1_dma) {
+		int ret;
+
+		/* Re-attach the PCIe EP device to the ARM sMMU */
+		ret = abc_pcie_smmu_attach((struct device *)ctx);
+		if (ret < 0)
+			return ret;
+	}
+
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
 
 	return 0;
+}
+
+/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe DMA
+ * from EL1 after the enter EL2 ioctl or debugfs file has been invoked.  This is
+ * a temporary mechanism to allow testing from EL1 and EL2 contexts.  This
+ * should be removed once EL2 based software is ready for use.
+ */
+static void abc_pci_set_el2_dma_mode(void *ctx, bool allow_el1_dma)
+{
+	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
+
+	abc->allow_el1_dma = allow_el1_dma;
+}
+
+static bool abc_pci_get_el2_dma_mode(void *ctx)
+{
+	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
+
+	return abc->allow_el1_dma;
 }
 
 /* ab_ready also implies that PCIe link is enable */
@@ -1763,7 +1793,8 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 static struct ab_sm_mfd_ops mfd_ops = {
 	.enter_el2 = &abc_pcie_enter_el2_handler,
 	.exit_el2 = &abc_pcie_exit_el2_handler,
-
+	.set_el2_dma_mode = &abc_pci_set_el2_dma_mode,
+	.get_el2_dma_mode = &abc_pci_get_el2_dma_mode,
 	.get_chip_id = &abc_pcie_get_chip_id_handler,
 	.ab_ready = &abc_pcie_ab_ready_handler,
 	.pcie_pre_disable = &abc_pcie_pre_disable_handler,
@@ -2056,6 +2087,14 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 		err = -ENOMEM;
 		goto err_alloc_abc_dev;
 	}
+
+	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
+	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
+	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
+	 * EL2 contexts.  This should be removed once EL2 based software is
+	 * ready for use.
+	 */
+	abc->allow_el1_dma = true;
 
 	abc_dev->pdev = pdev;
 	abc_dev->dev  = dev;

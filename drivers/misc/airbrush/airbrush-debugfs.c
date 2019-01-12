@@ -114,6 +114,40 @@ static int ab_sm_force_el2_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(ab_sm_force_el2_fops, ab_sm_force_el2_get,
 		ab_sm_force_el2_set, "%llu\n");
 
+/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe DMA
+ * from EL1 after the enter EL2 ioctl or debugfs file has been invoked.  This is
+ * a temporary mechanism to allow testing from EL1 and EL2 contexts.  This
+ * should be removed once EL2 based software is ready for use.
+ */
+static int ab_sm_allow_el1_dma_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	mutex_lock(&sc->mfd_lock);
+
+	sc->mfd_ops->set_el2_dma_mode(sc->mfd_ops->ctx, !!val);
+
+	mutex_unlock(&sc->mfd_lock);
+
+	return 0;
+}
+
+static int ab_sm_allow_el1_dma_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	mutex_lock(&sc->mfd_lock);
+
+	*val = sc->mfd_ops->get_el2_dma_mode(sc->mfd_ops->ctx);
+
+	mutex_unlock(&sc->mfd_lock);
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(ab_sm_allow_el1_dma_fops, ab_sm_allow_el1_dma_get,
+		ab_sm_allow_el1_dma_set, "%llu\n");
+
 static int id_get(void *blk_passed, u64 *val)
 {
 	struct block *blk = (struct block *)blk_passed;
@@ -378,7 +412,7 @@ err_out:
 
 void ab_sm_create_debugfs(struct ab_state_context *sc)
 {
-	struct dentry *d_chip, *d_force_el2, *d_block, *d;
+	struct dentry *d_chip, *d_block, *d;
 
 	sc->d_entry = debugfs_create_dir("airbrush", NULL);
 	if (!sc->d_entry) {
@@ -455,9 +489,20 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d)
 		goto err_out;
 
-	d_force_el2 = debugfs_create_file("force_el2", 0666, sc->d_entry, sc,
+	d = debugfs_create_file("force_el2", 0666, sc->d_entry, sc,
 				&ab_sm_force_el2_fops);
-	if (!d_force_el2)
+	if (!d)
+		goto err_out;
+
+	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
+	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
+	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
+	 * EL2 contexts.  This should be removed once EL2 based software is
+	 * ready for use.
+	 */
+	d = debugfs_create_file("allow_el1_dma", 0666, sc->d_entry, sc,
+				&ab_sm_allow_el1_dma_fops);
+	if (!d)
 		goto err_out;
 
 	d_block = debugfs_create_dir("ipu", d_chip);
