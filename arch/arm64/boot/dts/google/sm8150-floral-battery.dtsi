@@ -116,9 +116,9 @@
 		/* battery poll rate */
 		google,update-interval = <30000>;
 		/* IRDrop Compensation */
-		google,fv-uv-resolution = <25>;
+		google,fv-uv-resolution = <25000>;
+		google,cv-range-accuracy = <10000>;
 		google,fv-uv-margin-dpct = <1020>;
-		google,cv-range-accuracy = <10>;
 		/* tier switch */
 		google,cv-debounce-cnt = <3>;
 		google,cv-tier-ov-cnt = <10>;
