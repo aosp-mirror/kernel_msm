@@ -19,9 +19,6 @@
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-regs.h"
 
-#define MAX_RW_OFFSETS		(512)
-#define MR_READ_DELAY_USEC	(100)
-
 static void ddrphy_set_read_offset(int offset_phy)
 {
 	uint32_t ctrl_offsetr;
@@ -86,14 +83,153 @@ static void ddrphy_set_write_offset(int offset_phy)
 	ddr_reg_clr(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
 }
 
-static void ddrphy_measure_eye_read(struct ab_ddr_context *ddr_ctx,
+void ddr_eye_print_termination_info(void)
+{
+	unsigned int zq_con0, zq_con3, zq_con6;
+
+	zq_con0 = ddr_reg_rd(DPHY_ZQ_CON0);
+	zq_con3 = ddr_reg_rd(DPHY_ZQ_CON3);
+	zq_con6 = ddr_reg_rd(DPHY_ZQ_CON6);
+	pr_info("----------------------------------------------------------\n");
+	pr_info("DataSlice_0 = DQ[7:0], DataSlice_1 = DQ[15:8]\n");
+	pr_info("ControlSlice = CA[5:0]\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("ODT Information for DPHY\n");
+	pr_info("	3'b100 : 60 Ohm Far end VSSQ termination\n");
+	pr_info("	3'b010 : 120 Ohm Far end VSSQ termination\n");
+	pr_info("	3'b001 : 240 Ohm Far end VSSQ termination\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("ODT Data Slice 0: ZQ_CON6[5:3](zq_ds0_term) 0x%x\n",
+		(zq_con6 >> 3) & 0x7);
+	pr_info("ODT Data Slice 0: ZQ_CON6[13:11](zq_ds1_term) 0x%x\n",
+		(zq_con6 >> 11) & 0x7);
+	pr_info("----------------------------------------------------------\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("Driver Strength Info for DPHY (Impedance output driver)\n");
+	pr_info("	3'b100 : 48 Ohm, 3'b101 : 40 Ohm\n");
+	pr_info("	3'b110 : 34 Ohm, 3'b111 : 30 Ohm\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("Pull-Down Data Slice 0: ZQ_CON3[2:0](zq_ds0_pdds) 0x%x\n",
+		(zq_con3 >> 0) & 0x7);
+	pr_info("Pull-Down Data Slice 1: ZQ_CON3[10:8](zq_ds1_pdds) 0x%x\n",
+		(zq_con3 >> 8) & 0x7);
+	pr_info("Pull-Down Control Slice: ZQ_CON0[30:28](zq_mode_pdds) 0x%x\n",
+		(zq_con0 >> 28) & 0x7);
+	pr_info("Pull-Up Data Slice 0: ZQ_CON3[5:3](zq_ds0_dds) 0x%x\n",
+		(zq_con3 >> 3) & 0x7);
+	pr_info("Pull-Up Data Slice 1: ZQ_CON3[13:11](zq_ds1_dds) 0x%x\n",
+		(zq_con3 >> 11) & 0x7);
+	pr_info("Pull-Up Control Slice: ZQ_CON0[26:24](zq_mode_dds) 0x%x\n",
+		(zq_con0 >> 24) & 0x7);
+	pr_info("----------------------------------------------------------\n");
+
+	zq_con0 = ddr_reg_rd(DPHY2_ZQ_CON0);
+	zq_con3 = ddr_reg_rd(DPHY2_ZQ_CON3);
+	zq_con6 = ddr_reg_rd(DPHY2_ZQ_CON6);
+	pr_info("----------------------------------------------------------\n");
+	pr_info("ODT Information for DPHY2\n");
+	pr_info("	3'b100 : 60 Ohm Far end VSSQ termination\n");
+	pr_info("	3'b010 : 120 Ohm Far end VSSQ termination\n");
+	pr_info("	3'b001 : 240 Ohm Far end VSSQ termination\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("ODT Data Slice 0: ZQ_CON6[5:3](zq_ds0_term) 0x%x\n",
+		(zq_con6 >> 3) & 0x7);
+	pr_info("ODT Data Slice 0: ZQ_CON6[13:11](zq_ds1_term) 0x%x\n",
+		(zq_con6 >> 11) & 0x7);
+	pr_info("----------------------------------------------------------\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("Driver Strength Info for DPHY2 (Impedance output driver)\n");
+	pr_info("	3'b100 : 48 Ohm, 3'b101 : 40 Ohm\n");
+	pr_info("	3'b110 : 34 Ohm, 3'b111 : 30 Ohm\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("Pull-Down Data Slice 0: ZQ_CON3[2:0](zq_ds0_pdds) 0x%x\n",
+		(zq_con3 >> 0) & 0x7);
+	pr_info("Pull-Down Data Slice 1: ZQ_CON3[10:8](zq_ds1_pdds) 0x%x\n",
+		(zq_con3 >> 8) & 0x7);
+	pr_info("Pull-Down Control Slice: ZQ_CON0[30:28](zq_mode_pdds) 0x%x\n",
+		(zq_con0 >> 28) & 0x7);
+	pr_info("Pull-Up Data Slice 0: ZQ_CON3[5:3](zq_ds0_dds) 0x%x\n",
+		(zq_con3 >> 3) & 0x7);
+	pr_info("Pull-Up Data Slice 1: ZQ_CON3[13:11](zq_ds1_dds) 0x%x\n",
+		(zq_con3 >> 11) & 0x7);
+	pr_info("Pull-Up Control Slice: ZQ_CON0[26:24](zq_mode_dds) 0x%x\n",
+		(zq_con0 >> 24) & 0x7);
+	pr_info("----------------------------------------------------------\n");
+
+	pr_info("----------------------------------------------------------\n");
+	pr_info("DRAM ODT[MR11] and Drive-Strength[MR3] details:\n");
+	pr_info("----------------------------------------------------------\n");
+	pr_info("MR11: 0x%x, MR3: 0x%x\n", 0x24, 0xf1);
+	pr_info("----------------------------------------------------------\n");
+}
+
+void ab_ddr_eye_margin_plot_read(struct ab_ddr_context *ddr_ctx)
+{
+	char (*read_eye)[MAX_RW_OFFSETS];
+	ktime_t (*eye_time)[MAX_RW_OFFSETS];
+	int vrefIdx, offsetIdx, maxOffset;
+
+	read_eye = &ddr_ctx->read_eye[0];
+	eye_time = &ddr_ctx->read_eye_time[0];
+	maxOffset = ddr_ctx->num_samples_read;
+
+	/* plot the pass fail information for each vref & delay offset */
+	for (vrefIdx = VREF_FROM; vrefIdx < PHY_VREF_LEVELS;
+				  vrefIdx += VREF_STEP)
+		pr_info("VREF_0x%02x : %s\n", ddr_get_phy_vref(vrefIdx),
+					      read_eye[vrefIdx]);
+
+	/* plot the time tracking information for read & compare */
+	for (vrefIdx = VREF_FROM; vrefIdx < PHY_VREF_LEVELS;
+				  vrefIdx += VREF_STEP) {
+		pr_cont("VREF_0x%02x : ", ddr_get_phy_vref(vrefIdx));
+
+		for (offsetIdx = 0; offsetIdx < maxOffset; offsetIdx++)
+			pr_cont("%10llu ",
+				ktime_to_us(eye_time[vrefIdx][offsetIdx]));
+
+		pr_cont("\n");
+	}
+}
+
+void ab_ddr_eye_margin_plot_write(struct ab_ddr_context *ddr_ctx)
+{
+	char (*write_eye)[MAX_RW_OFFSETS];
+	ktime_t (*eye_time)[MAX_RW_OFFSETS];
+	int vrefIdx, offsetIdx, maxOffset;
+
+	write_eye = &ddr_ctx->write_eye[0];
+	eye_time = &ddr_ctx->write_eye_time[0];
+	maxOffset = ddr_ctx->num_samples_write;
+
+	/* plot the pass fail information for each vref & delay offset */
+	for (vrefIdx = VREF_FROM; vrefIdx < DRAM_VREF_LEVELS;
+				  vrefIdx += VREF_STEP)
+		pr_info("VREF_0x%02x : %s\n", ddr_get_dram_vref(vrefIdx),
+					      write_eye[vrefIdx]);
+
+	/* plot the time tracking information for read & compare */
+	for (vrefIdx = VREF_FROM; vrefIdx < DRAM_VREF_LEVELS;
+				  vrefIdx += VREF_STEP) {
+		pr_cont("VREF_0x%02x : ", ddr_get_dram_vref(vrefIdx));
+
+		for (offsetIdx = 0; offsetIdx < maxOffset; offsetIdx++)
+			pr_cont("%10llu ",
+				ktime_to_us(eye_time[vrefIdx][offsetIdx]));
+
+		pr_cont("\n");
+	}
+}
+
+static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 				    int samples, uint32_t eye_data)
 {
 	int vrefIdx;
 	int maxOffset;
 	int offsetIdx, result_idx;
-	static char read_eye[PHY_VREF_LEVELS][MAX_RW_OFFSETS];
+	char (*read_eye)[MAX_RW_OFFSETS];
 
+	read_eye = &ddr_ctx->read_eye[0];
 	maxOffset = samples;
 
 	for (vrefIdx = VREF_FROM; vrefIdx < PHY_VREF_LEVELS;
@@ -113,29 +249,31 @@ static void ddrphy_measure_eye_read(struct ab_ddr_context *ddr_ctx,
 			else
 				read_eye[vrefIdx][result_idx] = '.';
 
+			ddr_ctx->read_eye_time[vrefIdx][result_idx] =
+				ktime_sub(ddr_ctx->et_read, ddr_ctx->st_read);
+
 			if (offsetIdx == 0)
 				read_eye[vrefIdx][result_idx] = '|';
 
 			result_idx++;
 		}
 
+		ddr_ctx->num_samples_read = result_idx;
 		read_eye[vrefIdx][result_idx] = '\0';
 	}
 
-	for (vrefIdx = VREF_FROM; vrefIdx < PHY_VREF_LEVELS;
-				  vrefIdx += VREF_STEP)
-		pr_info("VREF_0x%02x : %s\n", ddr_get_phy_vref(vrefIdx),
-					      read_eye[vrefIdx]);
+	ab_ddr_eye_margin_plot_read(ddr_ctx);
 }
 
-static void ddrphy_measure_eye_write(struct ab_ddr_context *ddr_ctx,
+static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 				     int samples, uint32_t eye_data)
 {
 	int vrefIdx;
 	int maxOffset;
 	int offsetIdx, result_idx;
-	static char write_eye[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
+	char (*write_eye)[MAX_RW_OFFSETS];
 
+	write_eye = &ddr_ctx->write_eye[0];
 	maxOffset = samples;
 
 	for (vrefIdx = VREF_FROM; vrefIdx < DRAM_VREF_LEVELS;
@@ -155,22 +293,47 @@ static void ddrphy_measure_eye_write(struct ab_ddr_context *ddr_ctx,
 			else
 				write_eye[vrefIdx][result_idx] = '.';
 
+			ddr_ctx->write_eye_time[vrefIdx][result_idx] =
+				ktime_sub(ddr_ctx->et_read, ddr_ctx->st_read);
+
 			if (offsetIdx == 0)
 				write_eye[vrefIdx][result_idx] = '|';
 
 			result_idx++;
 		}
 
+		ddr_ctx->num_samples_write = result_idx;
 		write_eye[vrefIdx][result_idx] = '\0';
 	}
 
-	for (vrefIdx = VREF_FROM; vrefIdx < DRAM_VREF_LEVELS;
-				  vrefIdx += VREF_STEP)
-		pr_info("VREF_0x%02x : %s\n", ddr_get_dram_vref(vrefIdx),
-							write_eye[vrefIdx]);
+	ab_ddr_eye_margin_plot_write(ddr_ctx);
 }
 
-int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
+int ab_ddr_eye_margin_plot(struct ab_state_context *sc)
+{
+	struct ab_ddr_context *ddr_ctx;
+
+	if (!sc || !sc->ddr_data) {
+		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
+		return DDR_FAIL;
+	}
+
+	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
+	if (!(ddr_ctx->num_samples_write && ddr_ctx->num_samples_read)) {
+		pr_err("%s, error!! measure the eye before plot\n", __func__);
+		return DDR_FAIL;
+	}
+
+	ddr_eye_print_termination_info();
+	ab_ddr_eye_margin_plot_read(ddr_ctx);
+	ab_ddr_eye_margin_plot_write(ddr_ctx);
+
+	return 0;
+}
+EXPORT_SYMBOL(ab_ddr_eye_margin_plot);
+
+int ab_ddr_eye_margin(struct ab_state_context *sc, unsigned int data)
 {
 	uint32_t read_vref_phy0, read_vref_phy1;
 	uint32_t write_vref;
@@ -184,6 +347,9 @@ int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
 	}
 
 	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
+	ddr_eye_print_termination_info();
+
 	/* Disable the PHY control logic clock gating for s/w margin
 	 * offset settings to work
 	 */
@@ -217,7 +383,7 @@ int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
 		ddr_get_phy_vref(PHY_VREF_LEVELS - 1));
 
 	/* sweep read vref to get the eye margin on READ */
-	ddrphy_measure_eye_read(ddr_ctx, num_samples, eye_data);
+	ddrphy_margin_eye_read(ddr_ctx, num_samples, eye_data);
 
 	/* Restore the working Read Vref & Offset */
 	ddrphy_set_read_vref(read_vref_phy0, read_vref_phy1, VREF_BYTE_ALL);
@@ -228,7 +394,7 @@ int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
 		ddr_get_dram_vref(DRAM_VREF_LEVELS - 1));
 
 	/* sweep write vref to get the eye margin on WRITE */
-	ddrphy_measure_eye_write(ddr_ctx, num_samples, eye_data);
+	ddrphy_margin_eye_write(ddr_ctx, num_samples, eye_data);
 
 	/* Restore the working write Vref & Offset */
 	ddrphy_set_write_vref(write_vref, VREF_BYTE_ALL);
@@ -240,4 +406,4 @@ int ab_ddr_measure_eye(struct ab_state_context *sc, unsigned int data)
 
 	return DDR_SUCCESS;
 }
-EXPORT_SYMBOL(ab_ddr_measure_eye);
+EXPORT_SYMBOL(ab_ddr_eye_margin);

@@ -761,6 +761,9 @@
 #define VREF_STEP			0x1
 #define VREF_PRBS_TIMEOUT_USEC		10000
 
+#define MAX_RW_OFFSETS		(512)
+#define MR_READ_DELAY_USEC	(100)
+
 enum ddr_freq_index {
 	f_DPHY_DVFS_CON,
 	f_DPHY_CAL_CON2,
@@ -1138,6 +1141,14 @@ struct ab_ddr_context {
 	/* read/write test data */
 	ktime_t st_read, et_read;
 	ktime_t st_write, et_write;
+
+	/* eye margin data */
+	ktime_t read_eye_time[PHY_VREF_LEVELS][MAX_RW_OFFSETS];
+	ktime_t write_eye_time[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
+	char read_eye[PHY_VREF_LEVELS][MAX_RW_OFFSETS];
+	char write_eye[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
+	unsigned int num_samples_read;
+	unsigned int num_samples_write;
 };
 
 static inline uint32_t ddr_reg_rd(uint32_t addr)

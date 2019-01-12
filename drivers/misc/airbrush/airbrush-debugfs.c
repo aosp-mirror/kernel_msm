@@ -234,13 +234,23 @@ DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_test_fops, NULL, ab_debugfs_ddr_test, "%lli\n");
 
 static int ab_debugfs_ddr_eye_margin(void *data, u64 val)
 {
-	struct ab_state_context *sc = (struct ab_state_context *) data;
+	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_measure_eye(sc, (unsigned int)val);
+	ab_ddr_eye_margin(sc, (unsigned int)val);
 	return 0;
 }
-DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_eye_margin_fops, NULL,
+DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_eye_margin_fops, NULL,
 				ab_debugfs_ddr_eye_margin, "%lli\n");
+
+static int ab_debugfs_ddr_eye_margin_plot(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	ab_ddr_eye_margin_plot(sc);
+	return 0;
+}
+DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_eye_margin_plot_fops, NULL,
+				ab_debugfs_ddr_eye_margin_plot, "%lli\n");
 
 void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 {
@@ -322,8 +332,13 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_file("ab_ddr_eye_margin", 0200, sc->d_entry, sc,
-					&ab_ddr_eye_margin_fops);
+	d = debugfs_create_file("ddr_eye_margin", 0200, sc->d_entry, sc,
+				&ab_ddr_eye_margin_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ddr_eye_margin_plot", 0200, sc->d_entry, sc,
+				&ab_ddr_eye_margin_plot_fops);
 	if (!d)
 		goto err_out;
 
