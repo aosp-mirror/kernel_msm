@@ -255,6 +255,15 @@ CONFIG_WLAN_SPECTRAL_SCAN := y
 # Flag to enable Android Packet Filtering
 CONFIG_WLAN_FEATURE_APF := y
 
+#Flag to enable OWE
+CONFIG_WLAN_FEATURE_OWE := y
+
+#Flag to enable GMAC
+CONFIG_WLAN_FEATURE_GMAC := y
+
+#Flag to enable SAE
+CONFIG_WLAN_FEATURE_SAE := y
+
 #Enable WLAN/Power debugfs feature only if debug_fs is enabled
 ifeq ($(CONFIG_DEBUG_FS), y)
        # Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
