@@ -318,11 +318,19 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 				      DDR_TEST_PCIE_DMA_READ_WRITE(512));
 		break;
 	case 1866:
+		sc->dram_ops->set_freq(sc->dram_ops->ctx, DRAM_CLK_1866MHZ);
+		break;
 	case 1600:
+		sc->dram_ops->set_freq(sc->dram_ops->ctx, DRAM_CLK_1600MHZ);
+		break;
 	case 1200:
+		sc->dram_ops->set_freq(sc->dram_ops->ctx, DRAM_CLK_1200MHZ);
+		break;
 	case 933:
+		sc->dram_ops->set_freq(sc->dram_ops->ctx, DRAM_CLK_933MHZ);
+		break;
 	case 800:
-		sc->dram_ops->set_freq(sc->dram_ops->ctx, val);
+		sc->dram_ops->set_freq(sc->dram_ops->ctx, DRAM_CLK_800MHZ);
 		break;
 	default:
 		pr_err("ERROR!! Invalid DDR Control\n");

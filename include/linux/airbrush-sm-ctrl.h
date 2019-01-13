@@ -367,6 +367,7 @@ struct ab_sm_dram_ops {
 	int (*setup)(void *ctx, void *ab_state_ctx);
 	int (*wait_for_init)(void *ctx);
 	int (*init)(void *ctx);
+	int (*get_freq)(void *ctx, u64 *val);
 	int (*set_freq)(void *ctx, u64 val);
 	int (*suspend)(void *ctx);
 	int (*resume)(void *ctx);
@@ -384,6 +385,7 @@ static int ddr_setup_stub(void *ctx, void *ab_state_ctx)
 		{ return -ENODEV; }
 static int ddr_wait_for_init_stub(void *ctx) { return -ENODEV; }
 static int ddr_init_stub(void *ctx) { return -ENODEV; }
+static int ddr_get_freq_stub(void *ctx, u64 *val) { return -ENODEV; }
 static int ddr_set_freq_stub(void *ctx, u64 val) { return -ENODEV; }
 static int ddr_suspend_stub(void *ctx) { return -ENODEV; }
 static int ddr_resume_stub(void *ctx) { return -ENODEV; }
@@ -405,6 +407,7 @@ static struct ab_sm_dram_ops __maybe_unused dram_ops_stub = {
 	.setup = &ddr_setup_stub,
 	.wait_for_init = &ddr_wait_for_init_stub,
 	.init = &ddr_init_stub,
+	.get_freq = &ddr_get_freq_stub,
 	.set_freq = &ddr_set_freq_stub,
 	.suspend = &ddr_suspend_stub,
 	.resume = &ddr_resume_stub,

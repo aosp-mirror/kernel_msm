@@ -1875,6 +1875,9 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
+	if (ddr_ctx->cur_freq == freq)
+		return DDR_SUCCESS;
+
 	ddr_ctx->cur_freq = freq;
 
 #ifdef CONFIG_DDR_BOOT_TEST
@@ -2384,34 +2387,82 @@ int32_t ab_ddr_selfrefresh_enter(void *ctx)
 	return DDR_SUCCESS;
 }
 
-static int ddr_get_freq_idx(const struct block_property *prop_to)
+static int ab_ddr_get_freq(void *ctx, u64 *val)
 {
-	int freq_idx = 0;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	u64 freq = 0;
+	int ret = DDR_SUCCESS;
 
-	switch (prop_to->clk_frequency) {
-	case 1867000000:
-		freq_idx = AB_DRAM_FREQ_MHZ_1866;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("get_freq: Error!! ddr setup is not called\n");
+		return -EAGAIN;
+	}
+
+	switch (ddr_ctx->cur_freq) {
+	case AB_DRAM_FREQ_MHZ_1866:
+		freq = DRAM_CLK_1866MHZ;
 		break;
-	case 1600000000:
-		freq_idx = AB_DRAM_FREQ_MHZ_1600;
+	case AB_DRAM_FREQ_MHZ_1600:
+		freq = DRAM_CLK_1600MHZ;
 		break;
-	case 1200000000:
-		freq_idx = AB_DRAM_FREQ_MHZ_1200;
+	case AB_DRAM_FREQ_MHZ_1200:
+		freq = DRAM_CLK_1200MHZ;
 		break;
-	case 934000000:
-		freq_idx = AB_DRAM_FREQ_MHZ_933;
+	case AB_DRAM_FREQ_MHZ_933:
+		freq = DRAM_CLK_933MHZ;
 		break;
-	case 800000000:
-	case 200000000:
-		freq_idx = AB_DRAM_FREQ_MHZ_800;
+	case AB_DRAM_FREQ_MHZ_800:
+		freq = DRAM_CLK_800MHZ;
 		break;
 	default:
-		pr_err("Invalid ddr frequency\n");
-		freq_idx = AB_DRAM_FREQ_MHZ_1866;
+		ret = DDR_FAIL;
 		break;
 	}
 
-	return freq_idx;
+	if ((ddr_ctx->ddr_state == DDR_SLEEP) ||
+	    (ddr_ctx->ddr_state == DDR_SUSPEND)) {
+		freq = DRAM_CLK_OSC;
+	} else if (ddr_ctx->ddr_state == DDR_OFF) {
+		freq = 0;
+	}
+
+	*val = freq;
+
+	return ret;
+}
+
+static int ab_ddr_set_freq(void *ctx, u64 val)
+{
+	int ret = DDR_FAIL;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("set_freq: Error!! ddr setup is not called\n");
+		return -EAGAIN;
+	}
+
+	switch (val) {
+	case DRAM_CLK_1866MHZ:
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1866);
+		break;
+	case DRAM_CLK_1600MHZ:
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1600);
+		break;
+	case DRAM_CLK_1200MHZ:
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1200);
+		break;
+	case DRAM_CLK_933MHZ:
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_933);
+		break;
+	case DRAM_CLK_800MHZ:
+	case DRAM_CLK_200MHZ:
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_800);
+		break;
+	default:
+		break;
+	}
+
+	return ret;
 }
 
 static int ab_ddr_set_state(const struct block_property *prop_from,
@@ -2419,7 +2470,6 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 			enum block_state block_state_id, void *data)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)data;
-	int freq_idx;
 	unsigned long old_rate;
 	unsigned long new_rate;
 
@@ -2489,11 +2539,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		break;
 	}
 
-	if (ddr_ctx->ddr_state == DDR_ON) {
-		freq_idx = ddr_get_freq_idx(prop_to);
-		if (freq_idx != ddr_ctx->cur_freq)
-			ddr_set_mif_freq(ddr_ctx, freq_idx);
-	}
+	if (ddr_ctx->ddr_state == DDR_ON)
+		ab_ddr_set_freq(ddr_ctx, prop_to->clk_frequency);
 
 	ab_sm_clk_notify(AB_DRAM_POST_RATE_CHANGE, old_rate, new_rate);
 
@@ -2588,39 +2635,13 @@ static int32_t ab_ddr_init(void *ctx)
 	return ret;
 }
 
-static int ab_ddr_set_freq(void *ctx, int val)
-{
-	int ret = DDR_FAIL;
-
-	switch (val) {
-	case 1866:
-		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1866);
-		break;
-	case 1600:
-		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1600);
-		break;
-	case 1200:
-		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1200);
-		break;
-	case 933:
-		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_933);
-		break;
-	case 800:
-		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_800);
-		break;
-	default:
-		break;
-	}
-
-	return ret;
-}
-
 static struct ab_sm_dram_ops dram_ops = {
 	.ctx = NULL,
 
 	.setup = &ab_ddr_setup,
 	.wait_for_init = &ab_ddr_wait_for_ddr_init,
 	.init = &ab_ddr_init,
+	.get_freq = &ab_ddr_get_freq,
 	.set_freq = &ab_ddr_set_freq,
 	.suspend = &ab_ddr_suspend,
 	.resume = &ab_ddr_resume,
