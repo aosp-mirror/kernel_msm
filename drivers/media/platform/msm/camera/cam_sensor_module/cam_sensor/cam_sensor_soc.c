@@ -108,6 +108,7 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 	uint32_t cam_snesor_slave_addr = 0;
 	uint32_t cam_sensor_id = 0;
 	uint32_t cam_power_aurora_v2 = 0;
+	uint32_t hw_version = 0;
 	struct cam_sensor_board_info *sensordata = NULL;
 	struct device_node *of_node = s_ctrl->of_node;
 	struct cam_hw_soc_info *soc_info = &s_ctrl->soc_info;
@@ -234,6 +235,11 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 			(uint8_t)cam_power_aurora_v2;
 		CAM_INFO(CAM_SENSOR, "Is front camera of aurora v2= %d",
 			s_ctrl->sensordata->power_info.cam_power_aurora_v2);
+	}
+
+	if (of_property_read_u32(of_node, "hw-version",
+			&hw_version) >= 0) {
+		s_ctrl->hw_version = hw_version;
 	}
 
 	return rc;

@@ -993,12 +993,13 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		}
 
 		/* Disable strobe when peer IR is streaming on */
-		if (((s_ctrl->soc_info.index == IR_MASTER) &&
+		if ((((s_ctrl->soc_info.index == IR_MASTER) &&
 			((sensor_status.streamon_mask &
 				IR_SLAVE_STREAMON_MASK) != 0)) ||
 			((s_ctrl->soc_info.index == IR_SLAVE) &&
 			((sensor_status.streamon_mask &
-				IR_MASTER_STREAMON_MASK) != 0))) {
+				IR_MASTER_STREAMON_MASK) != 0))) &&
+			s_ctrl->hw_version < 2) {
 			rc = cam_sensor_update_ir_cams_strobe(s_ctrl, false);
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,
@@ -1020,7 +1021,17 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 
 		sensor_status.streamon_mask |= (1 << s_ctrl->soc_info.index);
 		s_ctrl->strobeType = STROBE_NONE;
-		s_ctrl->first_strobe_frame = 0;
+		if (s_ctrl->hw_version >= 2 &&
+			(s_ctrl->soc_info.index == IR_MASTER ||
+			s_ctrl->soc_info.index == IR_SLAVE)) {
+			/* Set up static laser for
+			 * common slave address device
+			 */
+			s_ctrl->first_strobe_frame =
+				s_ctrl->soc_info.index == IR_MASTER ? 2 : 1;
+		} else
+			s_ctrl->first_strobe_frame = 0;
+
 		s_ctrl->sensor_state = CAM_SENSOR_START;
 		CAM_INFO(CAM_SENSOR,
 			"CAM_START_DEV Success, sensor_id:0x%x,"
@@ -1245,7 +1256,8 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
-	if (soc_info->index == IR_MASTER || soc_info->index == IR_SLAVE) {
+	if (s_ctrl->hw_version < 2 &&
+		(soc_info->index == IR_MASTER || soc_info->index == IR_SLAVE)) {
 		if (!s_ctrl->peer_ir_info.cci_client) {
 			CAM_ERR(CAM_SENSOR, "peer IR io info is empty");
 			return -EFAULT;
@@ -1328,7 +1340,8 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 
 	camera_io_release(&(s_ctrl->io_master_info));
 
-	if (soc_info->index == IR_MASTER || soc_info->index == IR_SLAVE) {
+	if (s_ctrl->hw_version < 2 &&
+		(soc_info->index == IR_MASTER || soc_info->index == IR_SLAVE)) {
 		if (!s_ctrl->peer_ir_info.cci_client)
 			return rc;
 		camera_io_release(&(s_ctrl->peer_ir_info));
@@ -1547,6 +1560,9 @@ int cam_sensor_set_strobe(struct cam_req_mgr_apply_request *apply, bool enable)
 		CAM_ERR(CAM_SENSOR, "Device data is NULL");
 		return -EINVAL;
 	}
+
+	if (s_ctrl->hw_version >= 2)
+		return 0;
 
 	if (s_ctrl->strobeType == STROBE_NONE)
 		return 0;

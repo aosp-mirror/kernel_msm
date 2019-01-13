@@ -152,6 +152,7 @@ struct cam_sensor_ctrl_t {
 	uint64_t first_strobe_frame;
 	uint16_t ois_fw_ver;
 	uint16_t vcm_fw_ver;
+	uint32_t hw_version;
 };
 
 struct sensor_status_t {
