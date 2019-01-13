@@ -358,6 +358,7 @@
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
+		hw-version = <2>;
 	};
 
 	qcom,cam-sensor@3 {
@@ -401,6 +402,7 @@
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
+		hw-version = <2>;
 	};
 
 	qcom,cam-sensor@4 {
@@ -444,6 +446,7 @@
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
+		hw-version = <2>;
 	};
 };
 
@@ -650,6 +653,7 @@
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
+		hw-version = <2>;
 	};
 
 	sensor_rear_aux: qcom,cam-sensor@1 {
@@ -700,5 +704,6 @@
 		clock-names = "cam_clk";
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
+		hw-version = <2>;
 	};
 };

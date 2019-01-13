@@ -29,11 +29,17 @@
 &cam_cci0 {
 	qcom,cam-sensor@2 {
 		cam_vana-supply = <&max77826_ldo8>;
+		hw-version = <1>;
+	};
+
+	qcom,cam-sensor@3 {
+		hw-version = <1>;
 	};
 
 	qcom,cam-sensor@4 {
 		cci-device = <0>;
 		cci-master = <1>;
+		hw-version = <1>;
 	};
 };
 
@@ -53,10 +59,12 @@
 		cam_vio-supply = <&max77826_ldo13>;
 		cam_vana-supply = <&max77826_ldo4>;
 		cam_v_custom1-supply = <&max77826_ldo9>;
+		hw-version = <1>;
 	};
 
 	qcom,cam-sensor@1 {
 		cam_vio-supply  = <&max77826_ldo13>;
 		cam_vana-supply = <&max77826_ldo5>;
+		hw-version = <1>;
 	};
 };
