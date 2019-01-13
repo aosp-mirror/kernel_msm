@@ -122,6 +122,7 @@ static void ddr_ppc_irq_deregister(void)
 	abc_reg_irq_callback(NULL, ABC_MSI_6_PPC_MIF, NULL);
 }
 
+/* Caller must hold ddr_ctx->ddr_lock */
 static void ab_ddr_ppc_start(struct ab_ddr_context *ddr_ctx)
 {
 	int i;
@@ -149,6 +150,7 @@ static void ab_ddr_ppc_start(struct ab_ddr_context *ddr_ctx)
 	ddr_reg_set(DREX_PMNC_PCC, PPC_ENABLE);
 }
 
+/* Caller must hold ddr_ctx->ddr_lock */
 static void ab_ddr_ppc_stop(struct ab_ddr_context *ddr_ctx)
 {
 	int i;
@@ -197,11 +199,13 @@ int ab_ddr_ppc_set_event(void *ctx, unsigned int counter_idx,
 		return -EINVAL;
 	}
 
+	mutex_lock(&ddr_ctx->ddr_lock);
 	/* set event counters */
 	if (!ddr_ppc_is_event_valid(event))
 		ddr_ctx->ddr_ppc_events[counter_idx] = -1;
 	else
 		ddr_ctx->ddr_ppc_events[counter_idx] = event;
+	mutex_unlock(&ddr_ctx->ddr_lock);
 
 	pr_info("[ddr ppc]: counter: %d, event: 0x%x\n", counter_idx, event);
 
@@ -224,10 +228,12 @@ void ab_ddr_ppc_ctrl(void *ctx, int ppc_start)
 		return;
 	}
 
+	mutex_lock(&ddr_ctx->ddr_lock);
 	if (ppc_start)
 		ab_ddr_ppc_start(ddr_ctx);
 	else
 		ab_ddr_ppc_stop(ddr_ctx);
+	mutex_unlock(&ddr_ctx->ddr_lock);
 
 	prev_ppc_start = ppc_start;
 }

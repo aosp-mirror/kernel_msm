@@ -1326,8 +1326,10 @@ void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
 			  enum vref_byte_t byte);
 uint32_t ddr_get_phy_vref(uint32_t idx);
 uint32_t ddr_get_dram_vref(uint32_t idx);
-int32_t ab_ddr_selfrefresh_enter(void *ctx);
-int32_t ab_ddr_selfrefresh_exit(void *ctx);
+int ddr_enter_self_refresh_mode(void);
+int ddr_exit_self_refresh_mode(void);
+int __ab_ddr_read_write_test(void *ctx, unsigned int read_write);
+
 int ab_ddr_eye_margin(void *ctx, unsigned int data);
 int ab_ddr_eye_margin_plot(void *ctx);
 int ab_ddr_read_write_test(void *ctx, unsigned int read_write);

@@ -242,6 +242,7 @@ void ab_ddr_eye_margin_plot_write(struct ab_ddr_context *ddr_ctx)
 	}
 }
 
+/* Caller must hold ddr_ctx->ddr_lock */
 static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 				    int samples, uint32_t eye_data)
 {
@@ -264,7 +265,7 @@ static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 							offsetIdx++) {
 			ddrphy_set_read_offset(offsetIdx);
 
-			if (!ab_ddr_read_write_test(ddr_ctx, eye_data))
+			if (!__ab_ddr_read_write_test(ddr_ctx, eye_data))
 				read_eye[vrefIdx][result_idx] = 'o';
 			else
 				read_eye[vrefIdx][result_idx] = '.';
@@ -285,6 +286,7 @@ static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 	ab_ddr_eye_margin_plot_read(ddr_ctx);
 }
 
+/* Caller must hold ddr_ctx->ddr_lock */
 static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 				     int samples, uint32_t eye_data)
 {
@@ -307,7 +309,7 @@ static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 							offsetIdx++) {
 			ddrphy_set_write_offset(offsetIdx);
 
-			if (!ab_ddr_read_write_test(ddr_ctx, eye_data))
+			if (!__ab_ddr_read_write_test(ddr_ctx, eye_data))
 				write_eye[vrefIdx][result_idx] = 'o';
 			else
 				write_eye[vrefIdx][result_idx] = '.';
@@ -380,6 +382,16 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 		return -ENOMEM;
 	}
 
+	mutex_lock(&ddr_ctx->ddr_lock);
+
+	/* Read the MR14 register to get the VREF(DQ) information.
+	 * Read the information while DDR is in self-refresh mode.
+	 */
+	ddr_enter_self_refresh_mode();
+	ddr_reg_wr(DREX_DIRECTCMD, MRR(14));
+	write_vref = ddr_read_mr_status() & 0x3f;
+	ddr_exit_self_refresh_mode();
+
 	ddr_eye_print_termination_info();
 
 	/* Disable the PHY control logic clock gating for s/w margin
@@ -390,15 +402,6 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 
 	read_vref_phy0 = ddr_reg_rd(DPHY_ZQ_CON9) & 0x3f;
 	read_vref_phy1 = ddr_reg_rd(DPHY2_ZQ_CON9) & 0x3f;
-
-	/* Read the MR14 register to get the VREF(DQ) information.
-	 * Read the information while DDR is in self-refresh mode.
-	 */
-	ab_ddr_selfrefresh_enter(ctx);
-	ddr_reg_wr(DREX_DIRECTCMD, 0x09011800);
-	ddr_usleep(MR_READ_DELAY_USEC);
-	write_vref = ddr_reg_rd(DREX_MRSTATUS) & 0x3f;
-	ab_ddr_selfrefresh_exit(ctx);
 
 	/* "data" provides the information about the type of test to be run
 	 * (memtester/pcie_dma) for checking ddr data integrity
@@ -436,5 +439,6 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 	ddr_reg_set(DPHY_LP_CON0, PCL_PD);
 	ddr_reg_set(DPHY2_LP_CON0, PCL_PD);
 
+	mutex_unlock(&ddr_ctx->ddr_lock);
 	return DDR_SUCCESS;
 }

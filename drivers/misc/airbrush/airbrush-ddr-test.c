@@ -336,9 +336,27 @@ static int ddr_rw_test_memtester(struct ab_ddr_context *ddr_ctx,
 	return DDR_SUCCESS;
 }
 
+/* Caller must hold ddr_ctx->ddr_lock */
+int __ab_ddr_read_write_test(void *ctx, unsigned int test_data)
+{
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	int ret = DDR_FAIL;
+
+	/* ddr_mem_rd/wr based test to check the ddr data integrity */
+	if (test_data & DDR_TEST_MEMTESTER)
+		ret = ddr_rw_test_memtester(ddr_ctx, test_data);
+	else if (test_data & DDR_TEST_PCIE_DMA) /* PCIe DMA read/write */
+		ret = ddr_rw_test_pcie_dma(ddr_ctx, test_data);
+	else
+		pr_err("error!! undefined ddr r/w test\n");
+
+	return ret;
+}
+
 int ab_ddr_read_write_test(void *ctx, unsigned int test_data)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	int ret = DDR_FAIL;
 
 	if (!ddr_ctx->is_setup_done) {
 		pr_err("ddr rw test: error!! ddr setup is not called\n");
@@ -358,15 +376,9 @@ int ab_ddr_read_write_test(void *ctx, unsigned int test_data)
 	if (ddr_ctx->prev_ddr_state == DDR_OFF)
 		test_data |= DDR_BOOT_TEST_WRITE;
 #endif
+	mutex_lock(&ddr_ctx->ddr_lock);
+	ret = __ab_ddr_read_write_test(ctx, test_data);
+	mutex_unlock(&ddr_ctx->ddr_lock);
 
-	/* ddr_mem_rd/wr based test to check the ddr data integrity */
-	if (test_data & DDR_TEST_MEMTESTER)
-		return ddr_rw_test_memtester(ddr_ctx, test_data);
-
-	/* DDR test based on PCIe DMA read/write */
-	if (test_data & DDR_TEST_PCIE_DMA)
-		return ddr_rw_test_pcie_dma(ddr_ctx, test_data);
-
-	pr_err("error!! undefined ddr r/w test\n");
-	return DDR_FAIL;
+	return ret;
 }
