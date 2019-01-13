@@ -1207,6 +1207,11 @@ struct ddr_ppc_overflow_info {
 };
 
 struct ab_ddr_context {
+	struct device *dev;
+	unsigned int is_setup_done;
+
+	struct mutex ddr_lock;
+
 	struct ab_state_context *ab_state_ctx;
 	enum ddr_state ddr_state; /* keeps track of current ddr state */
 	enum ddr_state prev_ddr_state; /* keeps track of previous ddr state */
@@ -1310,5 +1315,13 @@ void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
 			  enum vref_byte_t byte);
 uint32_t ddr_get_phy_vref(uint32_t idx);
 uint32_t ddr_get_dram_vref(uint32_t idx);
+int32_t ab_ddr_selfrefresh_enter(void *ctx);
+int32_t ab_ddr_selfrefresh_exit(void *ctx);
+int ab_ddr_eye_margin(void *ctx, unsigned int data);
+int ab_ddr_eye_margin_plot(void *ctx);
+int ab_ddr_read_write_test(void *ctx, unsigned int read_write);
+int ab_ddr_ppc_set_event(void *ctx, unsigned int counter_idx,
+			 unsigned int event);
+void ab_ddr_ppc_ctrl(void *ctx, int ppc_start);
 
 #endif /* _AIRBRUSH_DDR_INTERNAL_H_ */

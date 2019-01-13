@@ -296,32 +296,33 @@ static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 	switch (val) {
 	case 0:
 		if (IS_HOST_DDR_INIT())
-			ab_ddr_init(sc);
+			sc->dram_ops->init(sc->dram_ops->ctx);
 		break;
 	case 1:
-		ab_ddr_suspend(sc);
+		sc->dram_ops->suspend(sc->dram_ops->ctx);
 		break;
 	case 2:
-		ab_ddr_resume(sc);
+		sc->dram_ops->resume(sc->dram_ops->ctx);
 		break;
 	case 3:
-		ab_ddr_selfrefresh_enter(sc);
+		sc->dram_ops->sref_enter(sc->dram_ops->ctx);
 		break;
 	case 4:
-		ab_ddr_selfrefresh_exit(sc);
+		sc->dram_ops->sref_exit(sc->dram_ops->ctx);
 		break;
 	case 5:
-		ab_ddr_setup(sc);
+		sc->dram_ops->setup(sc->dram_ops->ctx, sc);
 		break;
 	case 6:
-		ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ_WRITE(512));
+		sc->dram_ops->rw_test(sc->dram_ops->ctx,
+				      DDR_TEST_PCIE_DMA_READ_WRITE(512));
 		break;
 	case 1866:
 	case 1600:
 	case 1200:
 	case 933:
 	case 800:
-		ab_ddr_freq_change(sc, val);
+		sc->dram_ops->set_freq(sc->dram_ops->ctx, val);
 		break;
 	default:
 		pr_err("ERROR!! Invalid DDR Control\n");
@@ -335,7 +336,7 @@ static int ab_debugfs_ddr_test(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_read_write_test(sc, (unsigned int)val);
+	sc->dram_ops->rw_test(sc->dram_ops->ctx, (unsigned int)val);
 	return 0;
 }
 DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_test_fops, NULL, ab_debugfs_ddr_test, "%lli\n");
@@ -344,7 +345,7 @@ static int ab_debugfs_ddr_eye_margin(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_eye_margin(sc, (unsigned int)val);
+	sc->dram_ops->eye_margin(sc->dram_ops->ctx, (unsigned int)val);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_eye_margin_fops, NULL,
@@ -354,7 +355,7 @@ static int ab_debugfs_ddr_eye_margin_plot(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_eye_margin_plot(sc);
+	sc->dram_ops->eye_margin_plot(sc->dram_ops->ctx);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_eye_margin_plot_fops, NULL,
@@ -457,7 +458,7 @@ static int ab_debugfs_ddr_ppc_event0(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_ppc_set_event(sc, 0, val);
+	sc->dram_ops->ppc_set_event(sc->dram_ops->ctx, 0, val);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event0_fops, NULL,
@@ -467,7 +468,7 @@ static int ab_debugfs_ddr_ppc_event1(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_ppc_set_event(sc, 1, val);
+	sc->dram_ops->ppc_set_event(sc->dram_ops->ctx, 1, val);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event1_fops, NULL,
@@ -477,7 +478,7 @@ static int ab_debugfs_ddr_ppc_event2(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_ppc_set_event(sc, 2, val);
+	sc->dram_ops->ppc_set_event(sc->dram_ops->ctx, 2, val);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event2_fops, NULL,
@@ -487,7 +488,7 @@ static int ab_debugfs_ddr_ppc_event3(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_ppc_set_event(sc, 3, val);
+	sc->dram_ops->ppc_set_event(sc->dram_ops->ctx, 3, val);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_event3_fops, NULL,
@@ -497,7 +498,7 @@ static int ab_debugfs_ddr_ppc_ctrl(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	ab_ddr_ppc_ctrl(sc, val);
+	sc->dram_ops->ppc_ctrl(sc->dram_ops->ctx, val);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_ctrl_fops, NULL,

@@ -61,7 +61,14 @@ static const struct mfd_cell abc_mfd_of_nommu_devs[] = {
 		.name = "airbrush-tmu",
 		.of_compatible = "abc,airbrush-tmu",
 	},
-	// TODO: Add DDR driver
+	{
+		.name = "ab-thermal",
+		.of_compatible = "abc,airbrush-thermal",
+	},
+	{
+		.name = "airbrush-ddr",
+		.of_compatible = "abc,airbrush-ddr",
+	},
 };
 
 void __iomem *get_tpu_virt(void)

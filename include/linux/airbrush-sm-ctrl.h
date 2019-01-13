@@ -364,13 +364,57 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 struct ab_sm_dram_ops {
 	void *ctx;
 
-	// TODO: Define dram ops
+	int (*setup)(void *ctx, void *ab_state_ctx);
+	int (*wait_for_init)(void *ctx);
+	int (*init)(void *ctx);
+	int (*set_freq)(void *ctx, u64 val);
+	int (*suspend)(void *ctx);
+	int (*resume)(void *ctx);
+	int (*sref_enter)(void *ctx);
+	int (*sref_exit)(void *ctx);
+	int (*rw_test)(void *ctx, unsigned int read_write);
+	int (*eye_margin)(void *ctx, unsigned int test_data);
+	int (*eye_margin_plot)(void *ctx);
+	int (*ppc_set_event)(void *ctx,
+			     unsigned int counter_idx, unsigned int event);
+	void (*ppc_ctrl)(void *ctx, int is_start);
 };
 
-static struct ab_sm_dram_ops dram_ops_stub = {
+static int ddr_setup_stub(void *ctx, void *ab_state_ctx)
+		{ return -ENODEV; }
+static int ddr_wait_for_init_stub(void *ctx) { return -ENODEV; }
+static int ddr_init_stub(void *ctx) { return -ENODEV; }
+static int ddr_set_freq_stub(void *ctx, u64 val) { return -ENODEV; }
+static int ddr_suspend_stub(void *ctx) { return -ENODEV; }
+static int ddr_resume_stub(void *ctx) { return -ENODEV; }
+static int ddr_sref_enter_stub(void *ctx) { return -ENODEV; }
+static int ddr_sref_exit_stub(void *ctx) { return -ENODEV; }
+static int ddr_read_write_test_stub(void *ctx, unsigned int read_write)
+		{ return -ENODEV; }
+static int ddr_eye_margin_stub(void *ctx, unsigned int test_data)
+		{ return -ENODEV; }
+static int ddr_eye_margin_plot_stub(void *ctx)
+		{ return -ENODEV; }
+static int ddr_ppc_set_event_stub(void *ctx, unsigned int counter_idx,
+				  unsigned int event) { return -ENODEV; }
+static void ddr_ppc_ctrl_stub(void *ctx, int is_start) { return; }
+
+static struct ab_sm_dram_ops __maybe_unused dram_ops_stub = {
 	.ctx = NULL,
 
-	// TODO: Fill in with dram ops
+	.setup = &ddr_setup_stub,
+	.wait_for_init = &ddr_wait_for_init_stub,
+	.init = &ddr_init_stub,
+	.set_freq = &ddr_set_freq_stub,
+	.suspend = &ddr_suspend_stub,
+	.resume = &ddr_resume_stub,
+	.sref_enter = &ddr_sref_enter_stub,
+	.sref_exit = &ddr_sref_exit_stub,
+	.rw_test = &ddr_read_write_test_stub,
+	.eye_margin = &ddr_eye_margin_stub,
+	.eye_margin_plot = &ddr_eye_margin_plot_stub,
+	.ppc_set_event = &ddr_ppc_set_event_stub,
+	.ppc_ctrl = &ddr_ppc_ctrl_stub,
 };
 
 struct ab_sm_mfd_ops {

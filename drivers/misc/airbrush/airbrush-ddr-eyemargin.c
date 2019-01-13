@@ -309,19 +309,17 @@ static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 	ab_ddr_eye_margin_plot_write(ddr_ctx);
 }
 
-int ab_ddr_eye_margin_plot(struct ab_state_context *sc)
+int ab_ddr_eye_margin_plot(void *ctx)
 {
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
-		return DDR_FAIL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("ddr eye margin: error!! ddr setup is not called\n");
+		return -EAGAIN;
 	}
 
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
-
 	if (!(ddr_ctx->num_samples_write && ddr_ctx->num_samples_read)) {
-		pr_err("%s, error!! measure the eye before plot\n", __func__);
+		pr_err("ddr eye margin: error!! measure the eye before plot\n");
 		return DDR_FAIL;
 	}
 
@@ -331,22 +329,19 @@ int ab_ddr_eye_margin_plot(struct ab_state_context *sc)
 
 	return 0;
 }
-EXPORT_SYMBOL(ab_ddr_eye_margin_plot);
 
-int ab_ddr_eye_margin(struct ab_state_context *sc, unsigned int data)
+int ab_ddr_eye_margin(void *ctx, unsigned int data)
 {
 	uint32_t read_vref_phy0, read_vref_phy1;
 	uint32_t write_vref;
 	uint32_t num_samples;
 	uint32_t eye_data;
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("[ddr eye margin] Error!! Invalid AB state/context\n");
-		return DDR_FAIL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("[ddr eye margin] Error!! ddr setup is not called\n");
+		return -EAGAIN;
 	}
-
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 	/* Allow the eye margin test only when ddr state is DDR_ON */
 	if (ddr_ctx->ddr_state != DDR_ON) {
@@ -369,11 +364,11 @@ int ab_ddr_eye_margin(struct ab_state_context *sc, unsigned int data)
 	/* Read the MR14 register to get the VREF(DQ) information.
 	 * Read the information while DDR is in self-refresh mode.
 	 */
-	ab_ddr_selfrefresh_enter(sc);
+	ab_ddr_selfrefresh_enter(ctx);
 	ddr_reg_wr(DREX_DIRECTCMD, 0x09011800);
 	ddr_usleep(MR_READ_DELAY_USEC);
 	write_vref = ddr_reg_rd(DREX_MRSTATUS) & 0x3f;
-	ab_ddr_selfrefresh_exit(sc);
+	ab_ddr_selfrefresh_exit(ctx);
 
 	/* "data" provides the information about the type of test to be run
 	 * (memtester/pcie_dma) for checking ddr data integrity
@@ -413,4 +408,3 @@ int ab_ddr_eye_margin(struct ab_state_context *sc, unsigned int data)
 
 	return DDR_SUCCESS;
 }
-EXPORT_SYMBOL(ab_ddr_eye_margin);

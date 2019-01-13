@@ -336,16 +336,14 @@ static int ddr_rw_test_memtester(struct ab_ddr_context *ddr_ctx,
 	return DDR_SUCCESS;
 }
 
-int ab_ddr_read_write_test(struct ab_state_context *sc, unsigned int test_data)
+int ab_ddr_read_write_test(void *ctx, unsigned int test_data)
 {
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("%s, error: ab_ddr_setup() is not called\n", __func__);
-		return DDR_FAIL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("ddr rw test: error!! ddr setup is not called\n");
+		return -EAGAIN;
 	}
-
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 #ifndef CONFIG_DDR_BOOT_TEST
 	if (ddr_ctx->ddr_state != DDR_ON) {
@@ -372,4 +370,3 @@ int ab_ddr_read_write_test(struct ab_state_context *sc, unsigned int test_data)
 	pr_err("error!! undefined ddr r/w test\n");
 	return DDR_FAIL;
 }
-EXPORT_SYMBOL(ab_ddr_read_write_test);

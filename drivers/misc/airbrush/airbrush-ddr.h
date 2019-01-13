@@ -92,23 +92,4 @@
 #define PPC_EVENT_AXI_WR_REQ_PORT2	(0x96)
 #define PPC_EVENT_AXI_WR_REQ_PORT3	(0x97)
 
-int32_t ab_ddr_train_gpio(struct ab_state_context *sc);
-int32_t ab_ddr_train_sysreg(struct ab_state_context *sc);
-
-int ab_ddr_init(struct ab_state_context *sc);
-int ab_ddr_wait_for_ddr_init(struct ab_state_context *sc);
-int ab_ddr_suspend(struct ab_state_context *sc);
-int ab_ddr_resume(struct ab_state_context *sc);
-int ab_ddr_selfrefresh_enter(struct ab_state_context *sc);
-int ab_ddr_selfrefresh_exit(struct ab_state_context *sc);
-int ab_ddr_setup(struct ab_state_context *sc);
-int ab_ddr_read_write_test(struct ab_state_context *sc,
-			   unsigned int read_write);
-int ab_ddr_freq_change(struct ab_state_context *sc, int val);
-int ab_ddr_eye_margin(struct ab_state_context *sc, unsigned int test_data);
-int ab_ddr_eye_margin_plot(struct ab_state_context *sc);
-int ab_ddr_ppc_set_event(struct ab_state_context *sc,
-			 unsigned int counter_idx, unsigned int event);
-void ab_ddr_ppc_ctrl(struct ab_state_context *sc, int is_start);
-
 #endif /* _AIRBRUSH_DDR_H_ */

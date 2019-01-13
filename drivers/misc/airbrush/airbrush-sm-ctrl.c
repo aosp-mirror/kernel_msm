@@ -1507,7 +1507,6 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
 	struct abc_pcie_pm_ctrl pmctrl = {0};
-	int val;
 	u32 clk_frequency;
 
 	switch (cmd) {
@@ -1562,11 +1561,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	case AB_SM_SET_DDR_STATE:
 		mutex_lock(&sc->op_lock);
 		if (arg == 0) {
-			ab_ddr_selfrefresh_enter(sc);
-			/* switch mif to osc_clk */
-			/* TODO(b/123695099): do this via ops struct */
-			ABC_READ(PLL_CON0_PLL_PHY_MIF, &val);
-			ABC_WRITE(PLL_CON0_PLL_PHY_MIF, val & ~(1 << 4));
+			sc->dram_ops->sref_enter(sc->dram_ops->ctx);
 			ret = regulator_disable(sc->ldo2);
 			/* divide pll_aon_clk by 4*/
 			/* TODO(b/123695099): do this via ops struct */
@@ -1582,11 +1577,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 			/* TODO(b/123695099): do this via ops struct */
 			ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
 			ret = regulator_enable(sc->ldo2);
-			/* switch mif to mif_pll */
-			/* TODO(b/123695099): do this via ops struct */
-			ABC_READ(PLL_CON0_PLL_PHY_MIF, &val);
-			ABC_WRITE(PLL_CON0_PLL_PHY_MIF, val | (1 << 4));
-			ab_ddr_selfrefresh_exit(sc);
+			sc->dram_ops->sref_exit(sc->dram_ops->ctx);
 		}
 		mutex_unlock(&sc->op_lock);
 		break;

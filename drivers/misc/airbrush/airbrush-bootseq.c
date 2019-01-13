@@ -322,23 +322,23 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	ABC_WRITE(SYSREG_AON_SPI0_AHB_ENABLE, 0x1);
 
 	/* Setup the function pointer to read DDR OTPs */
-	ret = ab_ddr_setup(ab_ctx);
+	ret = ab_ctx->dram_ops->setup(ab_ctx->dram_ops->ctx, ab_ctx);
 	if (ret) {
-		dev_err(ab_ctx->dev, "ab_ddr_setup failed\n");
+		dev_err(ab_ctx->dev, "ddr setup failed\n");
 		return ret;
 	}
 
 	/* Wait till the ddr init & training is completed in case of ddr
 	 * initialization is done by BootROM
 	 */
-	if (ab_ddr_wait_for_ddr_init(ab_ctx))
+	if (ab_ctx->dram_ops->wait_for_init(ab_ctx->dram_ops->ctx))
 		return -EIO;
 
 	/* In case the M0_DDR_INIT (Renamed HOST_DDR_INIT) is 1,
 	 * perform the DDR Initialization here.
 	 */
 	if (IS_HOST_DDR_INIT())
-		ab_ddr_init(ab_ctx);
+		ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_ON);
 
 	return 0;

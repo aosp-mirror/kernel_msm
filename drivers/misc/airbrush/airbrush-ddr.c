@@ -1871,14 +1871,14 @@ ddr_init_fail:
 	return DDR_FAIL;
 }
 
-static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
+static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 {
-	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
 	ddr_ctx->cur_freq = freq;
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
+	ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
 	if (ddr_block_axi_transactions())
@@ -1969,7 +1969,7 @@ static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
 
 #ifdef CONFIG_DDR_BOOT_TEST
 	/* Run MEMTESTER for the data integrity */
-	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ(512));
+	ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 
@@ -1979,18 +1979,16 @@ freq_change_fail:
 }
 
 /* Perform ddr re-training or train result restore */
-int32_t ab_ddr_train_gpio(struct ab_state_context *sc)
+int32_t ab_ddr_train_gpio(void *ctx)
 {
 	uint32_t ddr_sr;
-	struct ab_ddr_context *ddr_ctx;
 	unsigned long timeout;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("%s, error: ab_ddr_setup() is not called", __func__);
-		return DDR_FAIL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("error!! ddr setup is not called\n");
+		return -EAGAIN;
 	}
-
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 	ddr_sr = GPIO_DDR_SR();
 
@@ -1999,8 +1997,7 @@ int32_t ab_ddr_train_gpio(struct ab_state_context *sc)
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
 
 	if (GPIO_CKE_IN_SENSE()) {
-		pr_err("%s, error!! CLK_IN_SENSE transition timeout\n",
-			__func__);
+		pr_err("error!! CLK_IN_SENSE transition timeout\n");
 		return DDR_FAIL;
 	}
 
@@ -2019,17 +2016,15 @@ int32_t ab_ddr_train_gpio(struct ab_state_context *sc)
 }
 
 /* Perform ddr re-training */
-int32_t ab_ddr_train_sysreg(struct ab_state_context *sc)
+int32_t ab_ddr_train_sysreg(void *ctx)
 {
 	uint32_t ddr_sr;
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("%s, error: ab_ddr_setup() is not called", __func__);
-		return DDR_FAIL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("error: ddr setup is not called\n");
+		return -EAGAIN;
 	}
-
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 	/* Read the DDR_SR */
 	ddr_sr = GPIO_DDR_SR();
@@ -2040,7 +2035,7 @@ int32_t ab_ddr_train_sysreg(struct ab_state_context *sc)
 	SET_REG_TRN_ADDR(0);
 
 	if (ab_ddr_train(ddr_ctx, ddr_sr)) {
-		pr_err("%s: ddr training failed\n", __func__);
+		pr_err("train_sysreg: ddr training failed\n");
 		return DDR_FAIL;
 	}
 
@@ -2154,9 +2149,14 @@ static int __ab_ddr_wait_for_ddr_init(struct ab_ddr_context *ddr_ctx)
 	return 0;
 }
 
-int ab_ddr_wait_for_ddr_init(struct ab_state_context *sc)
+int ab_ddr_wait_for_ddr_init(void *ctx)
 {
-	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("wait_for_ddr_init: Error!! ddr setup is not called\n");
+		return -EAGAIN;
+	}
 
 	/* wait is only required when M0 performs ddr init */
 	if (IS_HOST_DDR_INIT() || (ddr_ctx->ddr_state == DDR_SUSPEND))
@@ -2165,9 +2165,15 @@ int ab_ddr_wait_for_ddr_init(struct ab_state_context *sc)
 	return __ab_ddr_wait_for_ddr_init(ddr_ctx);
 }
 
-int32_t ab_ddr_resume(struct ab_state_context *sc)
+static int32_t ab_ddr_resume(void *ctx)
 {
-	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	struct ab_state_context *sc = ddr_ctx->ab_state_ctx;
+
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("ddr_resume: Error!! ddr setup is not called\n");
+		return -EAGAIN;
+	}
 
 	/* Wait till the ddr init & training is completed */
 	if (__ab_ddr_wait_for_ddr_init(ddr_ctx))
@@ -2202,19 +2208,24 @@ int32_t ab_ddr_resume(struct ab_state_context *sc)
 	ab_gpio_disable_ddr_sr(sc);
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ(512));
+	ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 }
-EXPORT_SYMBOL(ab_ddr_resume);
 
-int32_t ab_ddr_suspend(struct ab_state_context *sc)
+static int32_t ab_ddr_suspend(void *ctx)
 {
-	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	struct ab_state_context *sc = ddr_ctx->ab_state_ctx;
+
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("ddr_suspend: Error!! ddr setup is not called\n");
+		return -EAGAIN;
+	}
 
 	if (ddr_ctx->ddr_state == DDR_ON) {
 #ifdef CONFIG_DDR_BOOT_TEST
-		ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
+		ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 		/* Block AXI Before entering self-refresh */
 		if (ddr_block_axi_transactions())
@@ -2298,18 +2309,15 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 ddr_suspend_fail:
 	return DDR_FAIL;
 }
-EXPORT_SYMBOL(ab_ddr_suspend);
 
-int32_t ab_ddr_selfrefresh_exit(struct ab_state_context *sc)
+int32_t ab_ddr_selfrefresh_exit(void *ctx)
 {
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
-		return DDR_FAIL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("SRX: Error!! ddr setup is not called\n");
+		return -EAGAIN;
 	}
-
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 	/* Config MIF_PLL and move the MIF clock to PLL output */
 	if (ddr_set_pll_freq(ddr_ctx->cur_freq)) {
@@ -2335,21 +2343,22 @@ int32_t ab_ddr_selfrefresh_exit(struct ab_state_context *sc)
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x1);
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ(512));
+	ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_READ(512));
 #endif
 	return DDR_SUCCESS;
 }
-EXPORT_SYMBOL(ab_ddr_selfrefresh_exit);
 
-int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
+int32_t ab_ddr_selfrefresh_enter(void *ctx)
 {
-	if (!sc || !sc->ddr_data) {
-		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
-		return DDR_FAIL;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("SRE: Error!! ddr setup is not called\n");
+		return -EAGAIN;
 	}
 
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
+	ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
 	if (ddr_block_axi_transactions())
@@ -2374,7 +2383,6 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 
 	return DDR_SUCCESS;
 }
-EXPORT_SYMBOL(ab_ddr_selfrefresh_enter);
 
 static int ddr_get_freq_idx(const struct block_property *prop_to)
 {
@@ -2410,21 +2418,19 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 			const struct block_property *prop_to,
 			enum block_state block_state_id, void *data)
 {
-	struct ab_state_context *sc = (struct ab_state_context *)data;
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)data;
 	int freq_idx;
 	unsigned long old_rate;
 	unsigned long new_rate;
 
-	if (!sc || !prop_from || !prop_to)
-		return -EINVAL;
-
-	if (!sc->ddr_data) {
-		pr_err("%s, error: ab_ddr_setup() is not called", __func__);
-		return -EINVAL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("set_state: Error!! ddr setup is not called\n");
+		return -EAGAIN;
 	}
 
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+	if (!prop_from || !prop_to)
+		return -EINVAL;
+
 	old_rate = prop_from->clk_frequency;
 	new_rate = prop_to->clk_frequency;
 	ab_sm_clk_notify(AB_DRAM_PRE_RATE_CHANGE, old_rate, new_rate);
@@ -2432,9 +2438,9 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	switch (block_state_id) {
 	case BLOCK_STATE_0_0 ... BLOCK_STATE_0_6:
 		if (ddr_ctx->ddr_state == DDR_SLEEP)
-			ab_ddr_selfrefresh_exit(sc);
+			ab_ddr_selfrefresh_exit(ddr_ctx);
 		else if (ddr_ctx->ddr_state == DDR_SUSPEND)
-			ab_ddr_resume(sc);
+			ab_ddr_resume(ddr_ctx);
 
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_ON;
@@ -2448,7 +2454,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 			return -EINVAL;
 		}
 
-		ab_ddr_selfrefresh_enter(sc);
+		ab_ddr_selfrefresh_enter(ddr_ctx);
 
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_SLEEP;
@@ -2462,7 +2468,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 					 old_rate, new_rate);
 			return -EINVAL;
 		}
-		ab_ddr_suspend(sc);
+
+		ab_ddr_suspend(ddr_ctx);
 
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_SUSPEND;
@@ -2470,8 +2477,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 	case BLOCK_STATE_3_0:
 		if (ddr_ctx->ddr_state == DDR_SUSPEND) {
-			ab_gpio_disable_ddr_sr(sc);
-			ab_gpio_disable_ddr_iso(sc);
+			ab_gpio_disable_ddr_sr(ddr_ctx->ab_state_ctx);
+			ab_gpio_disable_ddr_iso(ddr_ctx->ab_state_ctx);
 		}
 
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
@@ -2485,7 +2492,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	if (ddr_ctx->ddr_state == DDR_ON) {
 		freq_idx = ddr_get_freq_idx(prop_to);
 		if (freq_idx != ddr_ctx->cur_freq)
-			ddr_set_mif_freq(sc, freq_idx);
+			ddr_set_mif_freq(ddr_ctx, freq_idx);
 	}
 
 	ab_sm_clk_notify(AB_DRAM_POST_RATE_CHANGE, old_rate, new_rate);
@@ -2494,44 +2501,35 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	return 0;
 }
 
-int32_t ab_ddr_setup(struct ab_state_context *sc)
+static int32_t ab_ddr_setup(void *ctx, void *ab_ctx)
 {
 #ifdef DEBUG
 	int otp_idx;
 #endif
-	struct platform_device *pdev;
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	struct ab_state_context *sc = (struct ab_state_context *)ab_ctx;
 
-	if (!sc || !sc->pdev) {
-		pr_err("%s: Invalid arguments\n", __func__);
-		return -EFAULT;
+	if (!sc) {
+		pr_err("ddr_setup: Invalid state context\n");
+		return -EINVAL;
 	}
 
 	/* ab_ddr_setup is already called */
-	if (sc->ddr_data)
+	if (ddr_ctx->is_setup_done)
 		return DDR_SUCCESS;
-
-	ddr_ctx = kzalloc(sizeof(struct ab_ddr_context), GFP_KERNEL);
-	if (ddr_ctx == NULL)
-		return -ENOMEM;
-
-	/* initialize ddr state to off */
-	ddr_ctx->ddr_state = DDR_OFF;
-
-	pdev = sc->pdev;
 
 	/* Incase of OTPs are flashed, get all information from OTPs.
 	 * If ddr OTPs are not flashed, depend on dt properties
 	 */
 	if (IS_DDR_OTP_FLASHED()) {
 		/* DDR OTPs are flashed, use OTP wrapper to read ddr OTPs*/
-		dev_dbg(sc->dev, "%s: DDR OTPs fused\n", __func__);
+		dev_dbg(ddr_ctx->dev, "ddr_setup: DDR OTPs fused\n");
 		ddr_otp_rd = &read_otp_wrapper;
 
 		if (ab_get_chip_id(sc) == CHIP_ID_A0) {
-			dev_info(sc->dev, "Airbrush Revision: A0\n");
+			dev_info(ddr_ctx->dev, "Airbrush Revision: A0\n");
 		} else if (ab_get_chip_id(sc) == CHIP_ID_B0) {
-			dev_info(sc->dev, "Airbrush Revision: B0\n");
+			dev_info(ddr_ctx->dev, "Airbrush Revision: B0\n");
 		} else {
 			/* add support for other revisions */
 			pr_err("%s: Invalid version ID\n", __func__);
@@ -2540,43 +2538,40 @@ int32_t ab_ddr_setup(struct ab_state_context *sc)
 	} else {
 
 		/* If DDR OTP is not flashed, then use the OTP array instead */
-		dev_warn(sc->dev, "%s: DDR OTPs NOT fused. Use local array.\n",
+		dev_warn(ddr_ctx->dev,
+			 "%s: DDR OTPs NOT fused. Use local array.\n",
 			 __func__);
 		ddr_otp_rd = &read_otp_array;
 	}
 
 #ifdef DEBUG
 	for (otp_idx = 0; otp_idx < o_DDR_OTP_MAX; otp_idx++)
-		dev_dbg(sc->dev, "%d: 0x%x\n", otp_idx, ddr_otp_rd(otp_idx));
+		dev_dbg(ddr_ctx->dev,
+			"%d: 0x%x\n", otp_idx, ddr_otp_rd(otp_idx));
 #endif
 
-	/* Register the Airbrush State Manager (ASM) callback */
-	ab_sm_register_blk_callback(DRAM, &ab_ddr_set_state, sc);
-
-	/* ddr_ctx can be accessed outside this file with the help of
-	 * ab_state_context
+	/* Keeps track of setup call.
+	 * Should be checked in all other dram_ops callbacks
 	 */
+	ddr_ctx->is_setup_done = 1;
 	ddr_ctx->ab_state_ctx = sc;
-	sc->ddr_data = ddr_ctx;
 
 	return DDR_SUCCESS;
 }
-EXPORT_SYMBOL(ab_ddr_setup);
 
-int32_t ab_ddr_init(struct ab_state_context *sc)
+static int32_t ab_ddr_init(void *ctx)
 {
 	int32_t ret = 0;
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 #ifdef CONFIG_DDR_BOOT_TEST
 	uint32_t ddr_sr;
 #endif
 
-	if (!sc || !sc->ddr_data) {
+	if (!ddr_ctx->is_setup_done) {
 		pr_err("%s, error: ddr setup is not called", __func__);
-		return DDR_FAIL;
+		return -EAGAIN;
 	}
 
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
 
 	ret = ab_ddr_init_internal_isolation(ddr_ctx);
@@ -2588,31 +2583,30 @@ int32_t ab_ddr_init(struct ab_state_context *sc)
 	ddr_sr = GPIO_DDR_SR();
 
 	if (!ddr_sr && !ret)
-		ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ_WRITE(512));
+		ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_READ_WRITE(512));
 #endif
 	return ret;
 }
-EXPORT_SYMBOL(ab_ddr_init);
 
-int ab_ddr_freq_change(struct ab_state_context *sc, int val)
+static int ab_ddr_set_freq(void *ctx, int val)
 {
 	int ret = DDR_FAIL;
 
 	switch (val) {
 	case 1866:
-		ret = ddr_set_mif_freq(sc, AB_DRAM_FREQ_MHZ_1866);
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1866);
 		break;
 	case 1600:
-		ret = ddr_set_mif_freq(sc, AB_DRAM_FREQ_MHZ_1600);
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1600);
 		break;
 	case 1200:
-		ret = ddr_set_mif_freq(sc, AB_DRAM_FREQ_MHZ_1200);
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_1200);
 		break;
 	case 933:
-		ret = ddr_set_mif_freq(sc, AB_DRAM_FREQ_MHZ_933);
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_933);
 		break;
 	case 800:
-		ret = ddr_set_mif_freq(sc, AB_DRAM_FREQ_MHZ_800);
+		ret = ddr_set_mif_freq(ctx, AB_DRAM_FREQ_MHZ_800);
 		break;
 	default:
 		break;
@@ -2620,4 +2614,67 @@ int ab_ddr_freq_change(struct ab_state_context *sc, int val)
 
 	return ret;
 }
-EXPORT_SYMBOL(ab_ddr_freq_change);
+
+static struct ab_sm_dram_ops dram_ops = {
+	.ctx = NULL,
+
+	.setup = &ab_ddr_setup,
+	.wait_for_init = &ab_ddr_wait_for_ddr_init,
+	.init = &ab_ddr_init,
+	.set_freq = &ab_ddr_set_freq,
+	.suspend = &ab_ddr_suspend,
+	.resume = &ab_ddr_resume,
+	.sref_enter = &ab_ddr_selfrefresh_enter,
+	.sref_exit = &ab_ddr_selfrefresh_exit,
+	.rw_test = &ab_ddr_read_write_test,
+	.eye_margin = &ab_ddr_eye_margin,
+	.eye_margin_plot = &ab_ddr_eye_margin_plot,
+	.ppc_set_event = &ab_ddr_ppc_set_event,
+	.ppc_ctrl = &ab_ddr_ppc_ctrl,
+};
+
+static int ab_ddr_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct ab_ddr_context *ddr_ctx;
+
+	ddr_ctx = kzalloc(sizeof(struct ab_ddr_context), GFP_KERNEL);
+	if (ddr_ctx == NULL)
+		return -ENOMEM;
+
+	/* initialize ddr state to off */
+	ddr_ctx->ddr_state = DDR_OFF;
+
+	ddr_ctx->dev = dev;
+
+	mutex_init(&ddr_ctx->ddr_lock);
+
+	dram_ops.ctx = ddr_ctx;
+	ab_sm_register_dram_ops(&dram_ops);
+
+	/* Register the Airbrush State Manager (ASM) callback */
+	ab_sm_register_blk_callback(DRAM, &ab_ddr_set_state, ddr_ctx);
+
+	return 0;
+}
+
+static int ab_ddr_remove(struct platform_device *pdev)
+{
+	ab_sm_unregister_dram_ops();
+	return 0;
+}
+
+static const struct of_device_id ab_ddr_of_match[] = {
+		{ .compatible = "abc,airbrush-ddr", },
+		{ },
+};
+
+static struct platform_driver ab_ddr_driver = {
+	.probe = ab_ddr_probe,
+	.remove = ab_ddr_remove,
+	.driver = {
+		.name = "airbrush-ddr",
+		.of_match_table = ab_ddr_of_match,
+	},
+};
+module_platform_driver(ab_ddr_driver);

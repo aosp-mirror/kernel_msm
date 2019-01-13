@@ -182,17 +182,15 @@ static void ab_ddr_ppc_stop(struct ab_ddr_context *ddr_ctx)
 	ddr_reg_clr(DREX_PPCCLKCON, PEREV_CLK_EN);
 }
 
-int ab_ddr_ppc_set_event(struct ab_state_context *sc,
-			 unsigned int counter_idx, unsigned int event)
+int ab_ddr_ppc_set_event(void *ctx, unsigned int counter_idx,
+			 unsigned int event)
 {
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("ppc set event: error!! ab_ddr_setup() is not called\n");
-		return -EINVAL;
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("ppc set event: error!!  ddr setup is not called\n");
+		return -EAGAIN;
 	}
-
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 	if (counter_idx >= PPC_COUNTER_MAX) {
 		pr_err("ppc set event: Invalid DDR PPC counter\n");
@@ -210,13 +208,13 @@ int ab_ddr_ppc_set_event(struct ab_state_context *sc,
 	return 0;
 }
 
-void ab_ddr_ppc_ctrl(struct ab_state_context *sc, int ppc_start)
+void ab_ddr_ppc_ctrl(void *ctx, int ppc_start)
 {
-	struct ab_ddr_context *ddr_ctx;
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 	static int prev_ppc_start;
 
-	if (!sc || !sc->ddr_data) {
-		pr_err("ddr ppc ctrl: error!! ab_ddr_setup() is not called\n");
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("ddr ppc ctrl: error!! ddr setup is not called\n");
 		return;
 	}
 
@@ -225,8 +223,6 @@ void ab_ddr_ppc_ctrl(struct ab_state_context *sc, int ppc_start)
 		pr_err("ddr ppc ctrl: error!! ppc_start is not called\n");
 		return;
 	}
-
-	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
 	if (ppc_start)
 		ab_ddr_ppc_start(ddr_ctx);
