@@ -554,10 +554,13 @@ static u64 ab_clk_tpu_set_rate_handler(void *ctx, u64 rate)
 static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		u64 rate)
 {
-	u64 ret = 0;
+	int ret = 0;
+	u64 new_rate = rate;
 
-	if (rate == 0)
+	if (rate == 0) {
 		rate = OSC_RATE;
+		new_rate = rate;
+	}
 
 	dev_dbg(clk_ctx->dev,
 		"%s: set AON clock rate to %llu\n", __func__, rate);
@@ -579,10 +582,11 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 			goto error_abort;
 		}
 
-		return clk_get_rate(clk_ctx->aon_pll_mux);
+		new_rate = clk_get_rate(clk_ctx->aon_pll_mux);
+		return ret;
 	}
 
-	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
+	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
 	if (ret) {
 		dev_err(clk_ctx->dev,
 			"aon_pll_mux: set_parent failed(err %d)\n", ret);
@@ -592,11 +596,19 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ret = clk_set_rate(clk_ctx->aon_pll, rate);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"aon_pll: set_rate failed (err %d)\n", ret);
+			"aon_pll: set_rate failed(err %d)\n", ret);
 		goto error_abort;
 	}
 
-	return clk_get_rate(clk_ctx->aon_pll_mux);
+	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"aon_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
+	new_rate = clk_get_rate(clk_ctx->aon_pll_mux);
+	return new_rate;
 
 error_abort:
 	return ret;
