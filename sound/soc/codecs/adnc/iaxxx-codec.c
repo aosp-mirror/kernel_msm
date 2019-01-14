@@ -60,6 +60,19 @@ static int iaxxx_set_i2s_cfg(struct snd_soc_dai *dai, u32 sampling_rate,
 static int iaxxx_set_i2s_controller(struct snd_soc_codec *codec,
 			u32 sampling_rate, bool is_pseudo, int id);
 
+static int word_len_to_idx(uint32_t word_len);
+
+static int non_zero_bit_num(uint32_t x)
+{
+	int num = 0;
+
+	while (x) {
+		x &= (x - 1);
+		++num;
+	}
+	return num;
+}
+
 struct iaxxx_codec_priv {
 	int is_codec_master[IAXXX_MAX_PORTS];
 	int pcm_dai_fmt[IAXXX_MAX_PORTS];
@@ -3989,7 +4002,7 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 	u32 status = 0;
 	int clk_src = 0;
 	int pdm_mstr = 0;
-	int port_clk = 0;
+	int clk_port = 0;
 	u32 port_type = 0;
 
 	cic_rx_id = cic;
@@ -4001,43 +4014,40 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
-	port_clk = iaxxx_pdm_port_clk_src(iaxxx, port);
-	switch (port_clk) {
+	clk_port = iaxxx_pdm_port_clk_src(iaxxx, port);
+	switch (clk_port) {
 	case PDM_PORTC:
-		clk_src = 0;
-		pdm_mstr = 1;
+		clk_src = IAXXX_PDM_DMIC_PORT_CLK_SRC_PORTC;
 		break;
 	case PDM_PORTB:
-		clk_src = 2;
-		pdm_mstr = 1;
+		clk_src = IAXXX_PDM_DMIC_PORT_CLK_SRC_PORTB;
 		break;
 	case PDM_PORTD:
-		clk_src = 3;
-		pdm_mstr = 1;
+		clk_src = IAXXX_PDM_CDC_ADC_CLK_SRC_PORTD;
 		break;
 	case PDM_CDC:
-		clk_src = 1;
-		pdm_mstr = 1;
+		clk_src = IAXXX_PDM_CDC_ADC_CLK_SRC_CDC_MCLK;
 		break;
 	default:
-		if (port_clk < IAXXX_MAX_PDM_PORTS) {
+		if (clk_port < IAXXX_MAX_PDM_PORTS) {
 			dev_info(dev, "may be slave pdm %d",
-						port_clk);
+						clk_port);
 		} else {
 			dev_err(dev, "wrong port is requested %d",
-						port_clk);
+						clk_port);
 			return -EINVAL;
 		}
 	}
+	pdm_mstr = iaxxx->is_ip_port_master[clk_port];
 
-	dev_dbg(dev, "port_clk:%d clk_src:%d pdm_mstr=%d\n", port_clk,
+	dev_dbg(dev, "clk_port:%d clk_src:%d pdm_mstr=%d\n", clk_port,
 			clk_src, pdm_mstr);
 	io_ctrl_clk_reg = iaxxx_io_ctrl_clk[clk_src][0];
 	io_ctrl_clk_val = iaxxx_io_ctrl_clk[clk_src][pdm_mstr + 1];
 	snd_soc_write(codec, io_ctrl_clk_reg, io_ctrl_clk_val);
 
 #ifdef CONFIG_IAXXX_PORT_CLOCK_FORWARD
-	if (port_clk != port) {
+	if (clk_port != port) {
 		switch (port) {
 		case PDM_PORTC:
 			clk_src = 0;
@@ -4052,11 +4062,11 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 			clk_src = 1;
 			break;
 		default:
-			if (port_clk < IAXXX_MAX_PDM_PORTS)
-				dev_info(dev, "may be slave pdm %d", port_clk);
+			if (clk_port < IAXXX_MAX_PDM_PORTS)
+				dev_info(dev, "may be slave pdm %d", clk_port);
 			else {
 				dev_err(dev, "wrong port is requested %d",
-							port_clk);
+							clk_port);
 				return -EINVAL;
 			}
 		}
@@ -4128,7 +4138,7 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 		}
 
 		/* setup input clk source (base/alternative) & Bit Polarity*/
-		if (port_clk == PDM_PORTC || port_clk == PDM_CDC)
+		if (clk_port == PDM_PORTC || clk_port == PDM_CDC)
 			cic_ctrl = IAXXX_DMIC0_CLK << cic_rx_id;
 		else
 			cic_ctrl = IAXXX_DMIC1_CLK << cic_rx_id;
@@ -4212,7 +4222,7 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 				IAXXX_CNR0_CIC_TX_0_1_L_0_1_MASK, cic_dec);
 
 		/* setup input clk source (base/alternative) & Bit Polarity*/
-		if (port_clk == PDM_PORTC || port_clk == PDM_CDC)
+		if (clk_port == PDM_PORTC || clk_port == PDM_CDC)
 			cic_ctrl = IAXXX_DMIC0_CLK;
 		else
 			cic_ctrl = IAXXX_DMIC1_CLK;
@@ -4233,7 +4243,7 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 		snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
 			IAXXX_CNR0_CIC_TX_0_1_CLR_0_MASK, 0);
 
-		if (port_clk == PDM_PORTC || port_clk == PDM_CDC) {
+		if (clk_port == PDM_PORTC || clk_port == PDM_CDC) {
 			snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
 				IAXXX_AO_CLK_CFG_PORTC_DO_OE_MASK,
 				IAXXX_AO_CLK_CFG_PORTC_DO_OE_MASK);
@@ -5000,45 +5010,46 @@ static int iaxxx_pcm_port_start(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-	u32 word_len = 0;
-	u32 frame_len = 0;
-	u32 channel_val = 0;
+	u32 word_len;
+	u32 frame_len;
+	u32 ch_msk;
+	u32 clk_mstr;
 	u32 sampling_rate = 0;
 	u32 ao_bclk_val = 0;
 	u32 ao_fs_val = 0;
-	int count;
-
-	dev_dbg(codec->dev, "%s() port:%d mstrclk:%d\n",
-			__func__, port, iaxxx->is_ip_port_master[port]);
 
 	if (iaxxx->port_pcm_start[port] == ucontrol->value.integer.value[0])
 		return 0;
 
 	/* Parse input values */
-	word_len    = (ucontrol->value.integer.value[0] & 0x1F);
-	channel_val = (ucontrol->value.integer.value[0] & 0x1FE0) >> 5;
-	frame_len = channel_val;
+	word_len = (ucontrol->value.integer.value[0] & 0x1F);
+	ch_msk = (ucontrol->value.integer.value[0] & 0x1FE0) >> 5;
+	clk_mstr = iaxxx->is_ip_port_master[port];
+	frame_len = non_zero_bit_num(ch_msk);
 
-	for (count = 0; frame_len != 0; count++)
-		frame_len &= frame_len-1;
+	dev_dbg(codec->dev,
+	"%s() port=%d, clk_mstr=%u, ch_msk=0x%x, frame_len=%u, word_len=%u\n",
+		__func__, port, clk_mstr, ch_msk, frame_len, word_len);
 
-	frame_len = count - 1;
-	dev_dbg(codec->dev, "%s() word_len:%u channel_val:%u frame_len: %u\n",
-			__func__, word_len, channel_val, frame_len);
-
-	snd_soc_update_bits(codec, IAXXX_PCM_SWLR_ADDR(port),
-		IAXXX_PCM0_SWLR_WMASK_VAL, word_len);
+	if (word_len_to_idx(word_len + 1) > 0) {
+		iaxxx->pcm_port_word_len[port] = word_len + 1;
+		snd_soc_update_bits(codec, IAXXX_PCM_SWLR_ADDR(port),
+			IAXXX_PCM0_SWLR_WMASK_VAL, word_len);
+	} else {
+		dev_err(codec->dev, "%s() Invalid word_len %u\n",
+							__func__, word_len);
+	}
 
 	snd_soc_update_bits(codec, IAXXX_PCM_SRSA_ADDR(port),
-		IAXXX_PCM0_SRSA_WMASK_VAL, channel_val);
+		IAXXX_PCM0_SRSA_WMASK_VAL, ch_msk);
 
 	snd_soc_update_bits(codec, IAXXX_PCM_STSA_ADDR(port),
-		IAXXX_PCM0_STSA_WMASK_VAL, channel_val);
+		IAXXX_PCM0_STSA_WMASK_VAL, ch_msk);
 
 	snd_soc_update_bits(codec, IAXXX_PCM_SFLR_ADDR(port),
-		IAXXX_PCM0_SFLR_WMASK_VAL, frame_len);
+		IAXXX_PCM0_SFLR_WMASK_VAL, frame_len - 1);
 
-	if (iaxxx->is_ip_port_master[port]) {
+	if (clk_mstr) {
 		sampling_rate = 16000;
 		iaxxx_set_i2s_controller(codec, sampling_rate, false, port);
 		ao_bclk_val = IAXXX_AO_BCLK_ENABLE;
@@ -5067,7 +5078,7 @@ static int iaxxx_pcm_port_start(struct snd_kcontrol *kcontrol,
 		IAXXX_CNR0_PCM_ENABLE <<
 			IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(port));
 
-	if (iaxxx->is_ip_port_master[port]) {
+	if (clk_mstr) {
 		/* CNR0_I2S_Enable  - Enable I2S  */
 		snd_soc_update_bits(codec, IAXXX_CNR0_I2S_ENABLE_ADDR,
 			IAXXX_CNR0_I2S_ENABLE_MASK(port),
@@ -7554,7 +7565,7 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 				iaxxx->pcm_port_word_len, IAXXX_MAX_PORTS);
 		if (ret) {
 			dev_warn(dev,
-				"%s(): no adnc,pcm-port-word-len in DT node: %d\n",
+			"%s(): no adnc,pcm-port-word-len in DT node: %d\n",
 					__func__, ret);
 			for (count = 0; count < IAXXX_MAX_PORTS; count++)
 				iaxxx->pcm_port_word_len[count] = 0;
