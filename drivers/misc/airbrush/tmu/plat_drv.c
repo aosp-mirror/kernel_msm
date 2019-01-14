@@ -15,35 +15,18 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/spinlock.h>
 #include <linux/mfd/abc-pcie.h>
 
+#include "drvdata.h"
 #include "hw.h"
 #include "sensor.h"
 
 #define AB_TMU_BASE	0xB90000
 
-/**
- * struct airbrush_tmu_data : A structure to hold the private data of the TMU
-	driver
- * @irq_work: pointer to the irq work structure.
- * @sensor: handles to sensor operation, the id of sensor is the same as
- * its index at this array.
- */
-struct airbrush_tmu_data {
-	struct ab_tmu_hw *hw;
-	int irq;
-	struct notifier_block tmu_nb;
-	struct work_struct irq_work;
-	spinlock_t sensor_irq_lock;
-	u32 sensor_irq[AB_TMU_NUM_ALL_PROBE];
-	struct ab_tmu_sensor *sensor[AB_TMU_NUM_ALL_PROBE];
-};
-
 static void airbrush_tmu_work(struct work_struct *work)
 {
-	struct airbrush_tmu_data *data = container_of(work,
-			struct airbrush_tmu_data, irq_work);
+	struct ab_tmu_drvdata *data = container_of(work,
+			struct ab_tmu_drvdata, irq_work);
 	int i;
 	unsigned long flags;
 
@@ -57,7 +40,7 @@ static void airbrush_tmu_work(struct work_struct *work)
 	spin_unlock_irqrestore(&data->sensor_irq_lock, flags);
 }
 
-int airbrush_tmu_irq_handler(unsigned int irq, struct airbrush_tmu_data *data)
+int airbrush_tmu_irq_handler(unsigned int irq, struct ab_tmu_drvdata *data)
 {
 	struct ab_tmu_hw *hw = data->hw;
 	int i;
@@ -78,8 +61,8 @@ int airbrush_tmu_irq_handler(unsigned int irq, struct airbrush_tmu_data *data)
 static int tmu_irq_notify(struct notifier_block *nb,
 					unsigned long irq, void *data)
 {
-	struct airbrush_tmu_data *tmu_data =
-		container_of(nb, struct airbrush_tmu_data, tmu_nb);
+	struct ab_tmu_drvdata *tmu_data =
+		container_of(nb, struct ab_tmu_drvdata, tmu_nb);
 	u32 intnc_val = (u32)data;
 
 	if (irq == ABC_MSI_AON_INTNC &&
@@ -92,7 +75,7 @@ static int tmu_irq_notify(struct notifier_block *nb,
 static void airbrush_tmu_pcie_link_post_enable(struct ab_tmu_hw *hw,
 		void *data)
 {
-	struct airbrush_tmu_data *tmu_data = data;
+	struct ab_tmu_drvdata *tmu_data = data;
 	int i, ret;
 
 	ret = ab_tmu_hw_initialize(hw);
@@ -125,7 +108,7 @@ MODULE_DEVICE_TABLE(of, airbrush_tmu_match);
 
 static ssize_t temp_probe_show(struct device *dev, int id, char *buf)
 {
-	struct airbrush_tmu_data *data = dev_get_drvdata(dev);
+	struct ab_tmu_drvdata *data = dev_get_drvdata(dev);
 	struct ab_tmu_hw *hw = data->hw;
 	bool pcie_link_ready;
 	u32 code;
@@ -175,11 +158,11 @@ ATTRIBUTE_GROUPS(airbrush_tmu);
 
 static int airbrush_tmu_probe(struct platform_device *pdev)
 {
-	struct airbrush_tmu_data *data;
+	struct ab_tmu_drvdata *data;
 	int i;
 	int ret;
 
-	data = devm_kzalloc(&pdev->dev, sizeof(struct airbrush_tmu_data),
+	data = devm_kzalloc(&pdev->dev, sizeof(struct ab_tmu_drvdata),
 					GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
@@ -232,7 +215,7 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 
 static int airbrush_tmu_remove(struct platform_device *pdev)
 {
-	struct airbrush_tmu_data *data = platform_get_drvdata(pdev);
+	struct ab_tmu_drvdata *data = platform_get_drvdata(pdev);
 
 	ab_tmu_hw_control(data->hw, false);
 	return 0;
