@@ -756,7 +756,7 @@
 
 #define VREF_REF_NUM			0x05
 #define PHY_VREF_LEVELS			64
-#define DRAM_VREF_LEVELS		51
+#define DRAM_VREF_LEVELS		81
 #define VREF_FROM			0x0
 #define VREF_STEP			0x1
 #define VREF_PRBS_TIMEOUT_USEC		10000
