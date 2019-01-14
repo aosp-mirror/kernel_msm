@@ -15,12 +15,9 @@
 #ifndef _AIRBRUSH_TMU_DRVDATA_
 #define _AIRBRUSH_TMU_DRVDATA_
 
-#include <linux/notifier.h>
-#include <linux/spinlock.h>
-#include <linux/workqueue.h>
-
 #include "hw.h"
 
+struct ab_tmu_isr;
 struct ab_tmu_sensor;
 
 /**
@@ -32,12 +29,8 @@ struct ab_tmu_sensor;
  */
 struct ab_tmu_drvdata {
 	struct ab_tmu_hw *hw;
-	int irq;
-	struct notifier_block tmu_nb;
-	struct work_struct irq_work;
-	spinlock_t sensor_irq_lock;
-	u32 sensor_irq[AB_TMU_NUM_ALL_PROBE];
 	struct ab_tmu_sensor *sensor[AB_TMU_NUM_ALL_PROBE];
+	struct ab_tmu_isr *isr;
 };
 
 #endif /* _AIRBRUSH_TMU_DRVDATA_ */

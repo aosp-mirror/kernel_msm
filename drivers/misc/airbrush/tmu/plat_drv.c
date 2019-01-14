@@ -10,67 +10,16 @@
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
  */
-
-#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/mfd/abc-pcie.h>
 
 #include "drvdata.h"
 #include "hw.h"
+#include "isr.h"
 #include "sensor.h"
 
 #define AB_TMU_BASE	0xB90000
-
-static void airbrush_tmu_work(struct work_struct *work)
-{
-	struct ab_tmu_drvdata *data = container_of(work,
-			struct ab_tmu_drvdata, irq_work);
-	int i;
-	unsigned long flags;
-
-	spin_lock_irqsave(&data->sensor_irq_lock, flags);
-	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
-		if (!data->sensor_irq[i])
-			continue;
-		ab_tmu_sensor_update(data->sensor[i]);
-		data->sensor_irq[i] = 0;
-	}
-	spin_unlock_irqrestore(&data->sensor_irq_lock, flags);
-}
-
-int airbrush_tmu_irq_handler(unsigned int irq, struct ab_tmu_drvdata *data)
-{
-	struct ab_tmu_hw *hw = data->hw;
-	int i;
-	u32 val_irq;
-
-	spin_lock(&data->sensor_irq_lock);
-	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
-		val_irq = ab_tmu_hw_read(hw, AB_TMU_INTPEND(i));
-		data->sensor_irq[i] |= val_irq;
-		ab_tmu_hw_write(hw, AB_TMU_INTPEND(i), val_irq);
-	}
-	spin_unlock(&data->sensor_irq_lock);
-
-	schedule_work(&data->irq_work);
-	return IRQ_HANDLED;
-}
-
-static int tmu_irq_notify(struct notifier_block *nb,
-					unsigned long irq, void *data)
-{
-	struct ab_tmu_drvdata *tmu_data =
-		container_of(nb, struct ab_tmu_drvdata, tmu_nb);
-	u32 intnc_val = (u32)data;
-
-	if (irq == ABC_MSI_AON_INTNC &&
-			(intnc_val & (1 << (tmu_data->irq - ABC_MSI_COUNT))))
-		return airbrush_tmu_irq_handler(irq, tmu_data);
-
-	return 0;
-}
 
 static void airbrush_tmu_pcie_link_post_enable(struct ab_tmu_hw *hw,
 		void *data)
@@ -178,12 +127,6 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 	if (IS_ERR(data->hw))
 		return PTR_ERR(data->hw);
 
-	data->irq = 36;
-	INIT_WORK(&data->irq_work, airbrush_tmu_work);
-
-	spin_lock_init(&data->sensor_irq_lock);
-	memset(data->sensor_irq, 0, sizeof(data->sensor_irq));
-
 	/*
 	 * data->sensor must be created before calling
 	 * airbrush_tmu_initialize(), requesting irq and calling
@@ -198,13 +141,9 @@ static int airbrush_tmu_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* register interrupt handler with PCIe subsystem */
-	data->tmu_nb.notifier_call = tmu_irq_notify;
-	ret = abc_reg_notifier_callback(&data->tmu_nb);
-	if (ret) {
-		dev_err(&pdev->dev, "TMU probe is deffered\n");
-		return -EPROBE_DEFER;
-	}
+	data->isr = devm_ab_tmu_isr_request(&pdev->dev);
+	if (IS_ERR(data->isr))
+		return PTR_ERR(data->isr);
 
 	ab_tmu_hw_register_events(data->hw, &airbrush_tmu_events, data);
 
