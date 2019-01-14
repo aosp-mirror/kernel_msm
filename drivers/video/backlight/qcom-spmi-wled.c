@@ -1485,7 +1485,7 @@ static int get_property_from_fg(struct wled *wled,
 	union power_supply_propval pval = {0, };
 
 	if (!wled->bms_psy)
-		wled->bms_psy = power_supply_get_by_name("bms");
+		wled->bms_psy = power_supply_get_by_name("battery");
 
 	if (!wled->bms_psy)
 		return -ENODEV;
