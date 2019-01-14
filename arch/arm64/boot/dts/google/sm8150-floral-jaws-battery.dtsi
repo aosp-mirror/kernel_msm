@@ -24,8 +24,8 @@
 
 #include "sm8150-floral-jaws-wcharger.dtsi"
 
-&google_charger {
-	google,chg-battery-capacity = <3430>;
+&google_battery {
+	google,chg-battery-default-capacity = <3430>;
 };
 
 &max1720x_fg {
