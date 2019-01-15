@@ -454,6 +454,15 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 			ipu_bus_notify_clock_disable(bus);
 
 		break;
+	case AB_DRAM_PRE_RATE_CHANGE:
+		dev_dbg(dev_data->dev,
+			"%s: DRAM rate has changed from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+		if (ipu_clock_rate_is_active(clk_data->new_rate))
+			ipu_bus_notify_dram_up(bus);
+		else
+			ipu_bus_notify_dram_pre_down(bus);
+		break;
 	default:
 		return NOTIFY_DONE;  /* Don't care */
 	}

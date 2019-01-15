@@ -469,6 +469,17 @@ void ipu_bus_notify_clock_disable(struct paintbox_bus *bus)
 	ipu_core_jqs_disable_clock(bus);
 }
 
+void ipu_bus_notify_dram_up(struct paintbox_bus *bus)
+{
+	atomic_or(IPU_STATE_DRAM_READY, &bus->state);
+}
+
+void ipu_bus_notify_dram_pre_down(struct paintbox_bus *bus)
+{
+	ipu_core_jqs_dram_disabled(bus);
+	atomic_andnot(IPU_STATE_DRAM_READY, &bus->state);
+}
+
 /* The Linux IOMMU is designed around an IOMMU providing translation services to
  * all devices on a particular bus.  The Paintbox IOMMU is integrated into the
  * Paintbox IPU.  To make the Paintbox IOMMU fit within the Linux IOMMU

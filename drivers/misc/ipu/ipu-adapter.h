@@ -79,6 +79,8 @@ void ipu_bus_notify_link_pre_down(struct paintbox_bus *bus);
 void ipu_bus_notify_clock_enable(struct paintbox_bus *bus,
 		uint64_t clock_rate_hz);
 void ipu_bus_notify_clock_disable(struct paintbox_bus *bus);
+void ipu_bus_notify_dram_up(struct paintbox_bus *bus);
+void ipu_bus_notify_dram_pre_down(struct paintbox_bus *bus);
 
 int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 		enum paintbox_device_type type);

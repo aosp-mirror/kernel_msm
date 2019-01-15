@@ -30,6 +30,7 @@
 
 #define IPU_STATE_LINK_READY (1 << 0)
 #define IPU_STATE_JQS_READY  (1 << 1)
+#define IPU_STATE_DRAM_READY (1 << 2)
 
 /* Host-side only data associated with a jqs_circular_buffer */
 struct host_jqs_cbuf {
@@ -169,6 +170,11 @@ static inline bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
 static inline bool ipu_core_link_is_ready(struct paintbox_bus *bus)
 {
 	return !!(atomic_read(&bus->state) & IPU_STATE_LINK_READY);
+}
+
+static inline bool ipu_core_dram_is_ready(struct paintbox_bus *bus)
+{
+	return !!(atomic_read(&bus->state) & IPU_STATE_DRAM_READY);
 }
 
 static inline void ipu_core_writel(struct paintbox_bus *bus, uint32_t val,

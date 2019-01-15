@@ -64,6 +64,9 @@ static inline bool ipu_core_jqs_is_hw_ready(struct paintbox_bus *bus)
 	if (!ipu_core_jqs_is_clock_ready(bus))
 		return false;
 
+	if (!ipu_core_dram_is_ready(bus))
+		return false;
+
 	return true;
 }
 
@@ -159,6 +162,13 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	if (!ipu_core_link_is_ready(bus)) {
 		dev_err(bus->parent_dev,
 				"%s: unable to stage JQS firmware, link down\n",
+				__func__);
+		return -ENETDOWN;
+	}
+
+	if (!ipu_core_dram_is_ready(bus)) {
+		dev_err(bus->parent_dev,
+				"%s: unable to stage JQS firmware, DRAM down\n",
 				__func__);
 		return -ENETDOWN;
 	}
@@ -521,9 +531,14 @@ void ipu_core_jqs_disable_clock(struct paintbox_bus *bus)
 
 	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
 
-	/* TODO(b/120103780):  In lieu of DRAM up/dn notifications use the
-	 * clock disable notifications as a proxy for DRAM down.
-	 */
+	mutex_unlock(&bus->jqs.lock);
+}
+
+void ipu_core_jqs_dram_disabled(struct paintbox_bus *bus)
+{
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
 	ipu_core_jqs_unstage_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);
