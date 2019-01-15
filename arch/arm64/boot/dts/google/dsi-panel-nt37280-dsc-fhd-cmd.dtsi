@@ -94,10 +94,10 @@
 					15 01 00 00 00 00 02 FF 10
 
 					/* display off */
-					05 01 00 00 14 00 02 28 00
+					05 01 00 00 14 00 01 28
 
 					/* sleep in, Wait 100 ms */
-					05 01 00 00 64 00 02 10 00
+					05 01 00 00 64 00 01 10
 				];
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 
@@ -206,12 +206,12 @@
 					15 01 00 00 00 00 02 FF 10
 
 					/* display off */
-					05 01 00 00 00 00 02 28 00
+					05 01 00 00 14 00 01 28
 
 					/* sleep in, Wait 100 ms */
-					05 01 00 00 64 00 02 10 00
+					05 01 00 00 64 00 01 10
 				];
-				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-timing-switch-command = [
 					15 01 00 00 00 00 02 FF 2C
