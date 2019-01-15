@@ -71,7 +71,6 @@ struct paintbox_session {
 	struct completion bulk_alloc_completion;
 
 	int session_id;
-	int highest_core_id;
 
 	uint64_t stp_id_mask;
 	uint64_t lbp_id_mask;

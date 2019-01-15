@@ -82,9 +82,6 @@ static void ipu_resource_add_stp_to_session(struct paintbox_data *pb,
 	session->stp_id_mask |= 1 << stp->stp_id;
 	pb->stp.available_stp_mask &= ~(1ULL << stp_id);
 
-	if (stp_id > session->highest_core_id)
-		session->highest_core_id = stp_id;
-
 	dev_dbg(pb->dev, "stp%u allocated\n", stp_id);
 }
 
@@ -116,12 +113,6 @@ static void ipu_resource_add_lbp_to_session(struct paintbox_data *pb,
 	lbp->session = session;
 	lbp->pm_enabled = true;
 	session->lbp_id_mask |= 1 << lbp_id;
-
-	/* Only increase the core count for LBPs 1..14, LBP0 and LBP 15 are
-	 * powered by the I/O block.
-	 */
-	if (lbp_id > 0 && lbp_id < 15 && lbp_id > session->highest_core_id)
-		session->highest_core_id = lbp_id;
 
 	list_add_tail(&lbp->session_entry, &session->lbp_list);
 
@@ -254,9 +245,6 @@ static int ipu_resource_allocate(struct paintbox_data *pb,
 	/* Update the DMA channel power configuration */
 	ipu_writel(pb->dev, pb->power.regs.dma_chan_en,
 			IPU_CSR_AON_OFFSET + IPU_DMA_CHAN_EN);
-
-	/* Update the core power configuration */
-	ipu_power_enable_cores(pb, session->highest_core_id);
 
 	return ipu_resource_send_allocate(pb, session);
 }
