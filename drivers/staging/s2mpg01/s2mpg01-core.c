@@ -382,10 +382,12 @@ static int s2mpg01_handle_int(struct s2mpg01_core *ddata,
 
 	switch (flag_num) {
 	case S2MPG01_INT_PONR:
-		dev_dbg(dev, "%s: Observed PON rising edge\n", __func__);
+		dev_info(dev, "%s: Observed PON rising edge\n", __func__);
 		break;
 	case S2MPG01_INT_PONF:
-		dev_dbg(dev, "%s: Observed PON falling edge\n", __func__);
+		dev_warn(dev, "%s: Observed PON falling edge\n", __func__);
+		/* reset initiated during debug; notify regulator failures */
+		s2mpg01_notify_fail_all();
 		break;
 	case S2MPG01_INT_ADC_CH0:
 		dev_dbg(dev, "%s: ADC channel0 over threshold\n", __func__);
