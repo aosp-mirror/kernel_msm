@@ -18,6 +18,7 @@
 #include <linux/ipu-core.h>
 #include <linux/ipu-jqs-messages.h>
 #include <linux/pm_domain.h>
+#include <linux/pm_wakeup.h>
 #include <linux/types.h>
 
 #include "ipu-core-internal.h"
@@ -485,6 +486,8 @@ static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
 
 	mutex_lock(&bus->jqs.lock);
 
+	pm_stay_awake(bus->parent_dev);
+
 	ret = ipu_core_jqs_enable_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);
@@ -506,6 +509,8 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_disable_firmware_normal(bus);
+
+	pm_relax(bus->parent_dev);
 
 	mutex_unlock(&bus->jqs.lock);
 
