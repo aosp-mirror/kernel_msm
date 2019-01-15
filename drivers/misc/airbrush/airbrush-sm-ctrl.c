@@ -80,7 +80,7 @@ static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
 		rail, \
 		VOLTAGE_ ## v, \
 		clk, \
-		(u32)(1000000. * freq), \
+		(u64)(1000000. * freq), \
 		pwr, \
 		used, \
 		tiles, \
@@ -712,27 +712,27 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 	mutex_unlock(&sc->async_fifo_lock);
 
-	dev_dbg(sc->dev, "IPU clk -> %s %dHz",
+	dev_dbg(sc->dev, "IPU clk -> %s %lluHz",
 		sc->blocks[BLK_IPU].current_state->clk_status == on ?
 			"on" : "off",
 		sc->blocks[BLK_IPU].current_state->clk_frequency);
-	dev_dbg(sc->dev, "TPU clk -> %s %dHz",
+	dev_dbg(sc->dev, "TPU clk -> %s %lluHz",
 		sc->blocks[BLK_TPU].current_state->clk_status == on ?
 			"on" : "off",
 		sc->blocks[BLK_TPU].current_state->clk_frequency);
-	dev_dbg(sc->dev, "DRAM clk -> %s %dHz",
+	dev_dbg(sc->dev, "DRAM clk -> %s %lluHz",
 		sc->blocks[DRAM].current_state->clk_status == on ?
 			"on" : "off",
 		sc->blocks[DRAM].current_state->clk_frequency);
-	dev_dbg(sc->dev, "MIF clk -> %s %dHz",
+	dev_dbg(sc->dev, "MIF clk -> %s %lluHz",
 		sc->blocks[BLK_MIF].current_state->clk_status == on ?
 			"on" : "off",
 		sc->blocks[BLK_MIF].current_state->clk_frequency);
-	dev_dbg(sc->dev, "FSYS clk -> %s %dHz",
+	dev_dbg(sc->dev, "FSYS clk -> %s %lluHz",
 		sc->blocks[BLK_FSYS].current_state->clk_status == on ?
 			"on" : "off",
 		sc->blocks[BLK_FSYS].current_state->clk_frequency);
-	dev_dbg(sc->dev, "AON clk -> %s %dHz",
+	dev_dbg(sc->dev, "AON clk -> %s %lluHz",
 		sc->blocks[BLK_AON].current_state->clk_status == on ?
 			"on" : "off",
 		sc->blocks[BLK_AON].current_state->clk_frequency);
