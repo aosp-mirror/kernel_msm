@@ -33,7 +33,6 @@
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
-		qcom,mdss-dsi-bl-max-level = <1023>;
 		qcom,mdss-dsi-te-pin-select = <1>;
 		qcom,mdss-dsi-wr-mem-start = <0x2c>;
 		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
@@ -65,7 +64,7 @@
 				qcom,mdss-dsi-h-right-border = <0>;
 				qcom,mdss-dsi-v-top-border = <0>;
 				qcom,mdss-dsi-v-bottom-border = <0>;
-				qcom,mdss-dsi-panel-jitter = <0x1 0x1>;
+				qcom,mdss-dsi-panel-jitter = <0x3 0x1>;
 				qcom,mdss-dsi-on-command = [
 				  39 01 00 00 00 00 03 b0 a5 00
 				  07 01 00 00 00 00 02 01 00

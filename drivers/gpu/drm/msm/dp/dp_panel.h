@@ -62,6 +62,7 @@ struct dp_panel_info {
 	u32 bpp;
 	bool widebus_en;
 	struct msm_compression_info comp_info;
+	s64 dsc_overhead_fp;
 };
 
 struct dp_display_mode {
@@ -90,6 +91,8 @@ struct dp_dsc_caps {
 };
 
 struct dp_audio;
+
+#define DP_PANEL_CAPS_DSC	BIT(0)
 
 struct dp_panel {
 	/* dpcd raw data */
@@ -120,6 +123,7 @@ struct dp_panel {
 	u32 channel_total_slots;
 	u32 pbn;
 
+	u32 tot_dsc_blks_in_use;
 	/* DRM connector assosiated with this panel */
 	struct drm_connector *connector;
 

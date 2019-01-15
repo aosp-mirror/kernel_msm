@@ -61,8 +61,6 @@ enum MHI_DEBUG_LEVEL  mhi_ipc_log_lvl = MHI_MSG_LVL_ERROR;
 
 #endif
 
-extern void pm_runtime_init(struct device *dev);
-
 static int mhi_arch_set_bus_request(struct mhi_controller *mhi_cntrl, int index)
 {
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
@@ -114,7 +112,7 @@ static int mhi_arch_esoc_ops_power_on(void *priv, bool mdm_state)
 	MHI_LOG("Enter\n");
 
 	/* reset rpm state */
-	pm_runtime_init(&pci_dev->dev);
+	pm_runtime_set_active(&pci_dev->dev);
 	pm_runtime_enable(&pci_dev->dev);
 	mutex_unlock(&mhi_cntrl->pm_mutex);
 	pm_runtime_forbid(&pci_dev->dev);
@@ -366,25 +364,6 @@ static struct dma_iommu_mapping *mhi_arch_create_iommu_mapping(
 	return arm_iommu_create_mapping(&pci_bus_type, base, size);
 }
 
-static int mhi_arch_dma_mask(struct mhi_controller *mhi_cntrl)
-{
-	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
-	u32 smmu_cfg = mhi_dev->smmu_cfg;
-	int mask = 0;
-
-	if (!smmu_cfg) {
-		mask = 64;
-	} else {
-		unsigned long size = mhi_dev->iova_stop + 1;
-
-		/* for S1 bypass, iova not used set to max */
-		mask = (smmu_cfg & MHI_SMMU_S1_BYPASS) ?
-			64 : find_last_bit(&size, 64);
-	}
-
-	return dma_set_mask_and_coherent(mhi_cntrl->dev, DMA_BIT_MASK(mask));
-}
-
 int mhi_arch_iommu_init(struct mhi_controller *mhi_cntrl)
 {
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
@@ -458,7 +437,7 @@ int mhi_arch_iommu_init(struct mhi_controller *mhi_cntrl)
 
 	mhi_cntrl->dev = &mhi_dev->pci_dev->dev;
 
-	ret = mhi_arch_dma_mask(mhi_cntrl);
+	ret = dma_set_mask_and_coherent(mhi_cntrl->dev, DMA_BIT_MASK(64));
 	if (ret) {
 		MHI_ERR("Error setting dma mask, ret:%d\n", ret);
 		goto release_device;
@@ -499,6 +478,7 @@ int mhi_arch_link_off(struct mhi_controller *mhi_cntrl, bool graceful)
 	MHI_LOG("Entered\n");
 
 	if (graceful) {
+		pci_clear_master(pci_dev);
 		ret = pci_save_state(mhi_dev->pci_dev);
 		if (ret) {
 			MHI_ERR("Failed with pci_save_state, ret:%d\n", ret);

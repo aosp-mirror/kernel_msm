@@ -76,6 +76,9 @@ void mhi_deinit_pci_dev(struct mhi_controller *mhi_cntrl)
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
 	struct pci_dev *pci_dev = mhi_dev->pci_dev;
 
+	pm_runtime_mark_last_busy(&pci_dev->dev);
+	pm_runtime_dont_use_autosuspend(&pci_dev->dev);
+	pm_runtime_disable(&pci_dev->dev);
 	pci_free_irq_vectors(pci_dev);
 	kfree(mhi_cntrl->irq);
 	mhi_cntrl->irq = NULL;
@@ -613,7 +616,10 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 	mhi_cntrl->fw_image = firmware_info->fw_image;
 	mhi_cntrl->edl_image = firmware_info->edl_image;
 
-	sysfs_create_group(&mhi_cntrl->mhi_dev->dev.kobj, &mhi_qcom_group);
+	ret = sysfs_create_group(&mhi_cntrl->mhi_dev->dev.kobj,
+				 &mhi_qcom_group);
+	if (ret)
+		goto error_register;
 
 	return mhi_cntrl;
 

@@ -77,6 +77,9 @@ static const char * const iommu_ports[] = {
 #define SDE_DEBUGFS_DIR "msm_sde"
 #define SDE_DEBUGFS_HWMASKNAME "hw_log_mask"
 
+#define SDE_KMS_MODESET_LOCK_TIMEOUT_US 500
+#define SDE_KMS_MODESET_LOCK_MAX_TRIALS 20
+
 /**
  * sdecustom - enable certain driver customizations for sde clients
  *	Enabling this modifies the standard DRM behavior slightly and assumes
@@ -1052,9 +1055,6 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 {
 	struct msm_drm_private *priv;
 	struct sde_splash_display *splash_display;
-	struct drm_plane *plane;
-	enum sde_sspp plane_id;
-	bool is_virtual;
 	int i;
 
 	if (!sde_kms || !crtc)
@@ -1076,29 +1076,6 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 
 	if (i >= MAX_DSI_DISPLAYS)
 		return;
-
-	/*
-	 * For planes attached in continuous splash, reset the plane state
-	 * only if first commit is not using the plane for display.
-	 * Valid fb indicates client is using the plane.
-	 */
-	for (i = 0; i < splash_display->pipe_cnt; i++) {
-		drm_for_each_plane(plane, sde_kms->dev) {
-			plane_id = sde_plane_pipe(plane);
-			is_virtual = is_sde_plane_virtual(plane);
-
-			if ((plane_id != splash_display->pipes[i].sspp) ||
-				(splash_display->pipes[i].is_virtual !=
-					 is_virtual) || (plane->state->fb))
-				continue;
-
-			plane->crtc = NULL;
-			plane->state->crtc = NULL;
-			SDE_DEBUG("reset crtc plane:%d rect:%d\n",
-					plane_id, is_virtual);
-			break;
-		}
-	}
 
 	_sde_kms_splash_mem_put(sde_kms, splash_display->splash);
 
@@ -2466,8 +2443,6 @@ static int _sde_kms_update_planes_for_cont_splash(struct sde_kms *sde_kms,
 						plane_id, crtc->base.id);
 			}
 
-			plane->crtc = crtc;
-			plane->state->crtc = crtc;
 			SDE_DEBUG("set crtc:%d for plane:%d rect:%d\n",
 					crtc->base.id, plane_id, is_virtual);
 		}
@@ -2646,11 +2621,79 @@ static bool sde_kms_check_for_splash(struct msm_kms *kms)
 	return sde_kms->splash_data.num_splash_displays;
 }
 
+static void _sde_kms_null_commit(struct drm_device *dev,
+		struct drm_encoder *enc)
+{
+	struct drm_modeset_acquire_ctx ctx;
+	struct drm_connector *conn = NULL;
+	struct drm_connector *tmp_conn = NULL;
+	struct drm_connector_list_iter conn_iter;
+	struct drm_atomic_state *state = NULL;
+	struct drm_crtc_state *crtc_state = NULL;
+	struct drm_connector_state *conn_state = NULL;
+	int retry_cnt = 0;
+	int ret = 0;
+
+	drm_modeset_acquire_init(&ctx, 0);
+
+retry:
+	ret = drm_modeset_lock_all_ctx(dev, &ctx);
+	if (ret == -EDEADLK && retry_cnt < SDE_KMS_MODESET_LOCK_MAX_TRIALS) {
+		drm_modeset_backoff(&ctx);
+		retry_cnt++;
+		udelay(SDE_KMS_MODESET_LOCK_TIMEOUT_US);
+		goto retry;
+	} else if (WARN_ON(ret)) {
+		goto end;
+	}
+
+	state = drm_atomic_state_alloc(dev);
+	if (!state) {
+		DRM_ERROR("failed to allocate atomic state, %d\n", ret);
+		goto end;
+	}
+
+	state->acquire_ctx = &ctx;
+	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_for_each_connector_iter(tmp_conn, &conn_iter) {
+		if (enc == tmp_conn->state->best_encoder) {
+			conn = tmp_conn;
+			break;
+		}
+	}
+	drm_connector_list_iter_end(&conn_iter);
+
+	if (!conn) {
+		SDE_ERROR("error in finding conn for enc:%d\n", DRMID(enc));
+		goto end;
+	}
+
+	crtc_state = drm_atomic_get_crtc_state(state, enc->crtc);
+	conn_state = drm_atomic_get_connector_state(state, conn);
+	if (IS_ERR(conn_state)) {
+		SDE_ERROR("error %d getting connector %d state\n",
+				ret, DRMID(conn));
+		goto end;
+	}
+
+	crtc_state->active = true;
+	drm_atomic_set_crtc_for_connector(conn_state, enc->crtc);
+
+	drm_atomic_commit(state);
+end:
+	if (state)
+		drm_atomic_state_put(state);
+
+	drm_modeset_drop_locks(&ctx);
+	drm_modeset_acquire_fini(&ctx);
+}
+
 static int sde_kms_pm_suspend(struct device *dev)
 {
 	struct drm_device *ddev;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_connector *conn;
+	struct drm_encoder *enc;
 	struct drm_connector_list_iter conn_iter;
 	struct drm_atomic_state *state = NULL;
 	struct sde_kms *sde_kms;
@@ -2668,6 +2711,12 @@ static int sde_kms_pm_suspend(struct device *dev)
 
 	/* disable hot-plug polling */
 	drm_kms_helper_poll_disable(ddev);
+
+	/* if a display stuck in CS trigger a null commit to complete handoff */
+	drm_for_each_encoder(enc, ddev) {
+		if (sde_encoder_in_cont_splash(enc) && enc->crtc)
+			_sde_kms_null_commit(ddev, enc);
+	}
 
 	/* acquire modeset lock(s) */
 	drm_modeset_acquire_init(&ctx, 0);
