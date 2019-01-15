@@ -43,12 +43,6 @@ struct ipu_resource_allocate_request {
 	uint64_t timeout_ns;
 };
 
-struct ipu_dma_buf_register_req {
-	int dma_buf_fd; /* Input Parameter */
-	enum dma_data_direction dir; /* Input Parameter */
-	uint32_t buffer_id; /* Output Parameter */
-};
-
 struct ipu_dma_buf_register_entry {
 	int dma_buf_fd; /* Input Parameter */
 	enum dma_data_direction dir; /* Input Parameter */
@@ -77,18 +71,6 @@ struct ipu_dma_buf_bulk_unregister_req {
 
 /* On success will return 0, otherwise will return -1 with errno set. */
 #define IPU_RELEASE_RESOURCES _IO('i', 4)
-
-/* On success the return value will be zero and the buffer_id field will be set
- * to the buffer id for the buffer.  On error the return value will be set to -1
- * and errno will be set.
- */
-#define IPU_REGISTER_DMA_BUF _IOWR('i', 5, struct ipu_dma_buf_register_req)
-
-/* The parameter to the ioctl is the buffer id to be unregistered.  On success
- * the return value will be zero.  On error the return value will be set to -1
- * and errno will be set.
- */
-#define IPU_UNREGISTER_DMA_BUF _IOW('i', 6, unsigned int)
 
 /* On success the return value will be zero and the buffer_id field will be set
  * to the buffer id for the buffer.  On error the return value will be set to -1

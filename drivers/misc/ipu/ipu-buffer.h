@@ -20,12 +20,6 @@
 
 #include "ipu-client.h"
 
-int ipu_buffer_dma_buf_register_ioctl(struct paintbox_data *pb,
-		struct paintbox_session *session, unsigned long arg);
-
-int ipu_buffer_dma_buf_unregister_ioctl(struct paintbox_data *pb,
-		struct paintbox_session *session, unsigned long arg);
-
 int ipu_buffer_dma_buf_bulk_register_ioctl(struct paintbox_data *pb,
 		struct paintbox_session *session, unsigned long arg);
 
