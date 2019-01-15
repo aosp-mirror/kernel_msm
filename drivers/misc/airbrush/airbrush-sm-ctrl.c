@@ -329,16 +329,18 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
-		/* TODO (b/121378223):
-		 * Determine root cause of pmu deep_sleep timeouts
-		 */
-		if (to_chip_substate_id >= CHIP_STATE_4_0 &&
-				pmu->pmu_sleep(pmu->ctx)) {
+		ab_sm_record_ts(sc, AB_SM_TS_PMU_OFF);
+	}
+
+	/* PMU settings - Deep Sleep */
+	if (to_chip_substate_id >= CHIP_STATE_4_0 &&
+			blk->name == BLK_TPU) {
+		if (pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
 		}
-		ab_sm_record_ts(sc, AB_SM_TS_PMU_OFF);
 	}
+	ab_sm_record_ts(sc, AB_SM_TS_PMU_OFF);
 
 	/*Regulator Settings*/
 	if (!power_increasing) {
