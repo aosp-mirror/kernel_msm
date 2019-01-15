@@ -49,21 +49,17 @@ struct paintbox_bus_ops {
 			unsigned int offset);
 	uint32_t (*read32)(struct device *dev, unsigned int offset);
 	uint64_t (*read64)(struct device *dev, unsigned int offset);
-	int (*alloc)(struct device *dev, size_t size,
-			struct paintbox_shared_buffer *shared_buffer);
-	void (*free)(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer);
-	void (*sync)(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer,
+	struct ipu_shared_buffer *(*alloc_shared_memory)(struct device *dev,
+			size_t size);
+	void (*free_shared_memory)(struct device *dev,
+			struct ipu_shared_buffer *shared_buffer);
+	void (*sync_shared_memory)(struct device *dev,
+			struct ipu_shared_buffer *shared_buffer,
 			uint32_t offset, size_t size,
 			enum dma_data_direction direction);
-	int (*atomic_sync32)(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer,
-			uint32_t offset, enum dma_data_direction direction);
-	int (*map_to_bar)(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer);
-	int (*unmap_from_bar)(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer);
+	int (*atomic_sync32_shared_memory)(struct device *dev,
+			struct ipu_shared_buffer *buf, uint32_t offset,
+			enum dma_data_direction dir);
 	struct ipu_jqs_buffer *(*alloc_jqs_memory)(struct device *dev,
 			size_t size);
 	void (*free_jqs_memory)(struct device *dev, struct ipu_jqs_buffer *buf);

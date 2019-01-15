@@ -79,9 +79,9 @@ int ipu_core_jqs_cbus_copy_from_user(void *dst, const void __user *src,
 }
 
 void ipu_core_jqs_cbuf_init(struct host_jqs_cbuf *host_cbuf,
-		struct paintbox_shared_buffer *shared_buf_cbuf,
+		struct ipu_shared_buffer *shared_buf_cbuf,
 		uint32_t cbuf_offset,
-		struct paintbox_shared_buffer *shared_buf_data,
+		struct ipu_shared_buffer *shared_buf_data,
 		uint32_t data_offset,
 		size_t size, bool to_device)
 {
@@ -116,14 +116,14 @@ static void ipu_core_jqs_cbuf_sync_data(struct paintbox_bus *bus,
 	if (idx_last_sync > idx || (idx_last_sync == idx &&
 			host_cbuf->last_sync < cbuf->bytes_written)) {
 		/* sync to the end of the buffer */
-		ipu_core_sync(bus, host_cbuf->shared_buf_data,
+		ipu_core_sync_shared_memory(bus, host_cbuf->shared_buf_data,
 				host_cbuf->data_offset + idx_last_sync,
 				cbuf->size - idx_last_sync, dir);
 		idx_last_sync = 0;
 	}
 
 	if (idx_last_sync < idx) {
-		ipu_core_sync(bus, host_cbuf->shared_buf_data,
+		ipu_core_sync_shared_memory(bus, host_cbuf->shared_buf_data,
 				host_cbuf->data_offset + idx_last_sync,
 				idx - idx_last_sync, dir);
 	}
@@ -150,7 +150,8 @@ void ipu_core_jqs_cbuf_sync(struct paintbox_bus *bus,
 
 	if (!update_data) {
 		/* case 2 and 3 */
-		(void)ipu_core_atomic_sync32(bus, host_cbuf->shared_buf_cbuf,
+		ipu_core_atomic_sync32_shared_memory(bus,
+				host_cbuf->shared_buf_cbuf,
 				host_cbuf->cbuf_offset +
 				offsetof(struct jqs_cbuf, bytes_read), dir);
 		return;
@@ -158,7 +159,8 @@ void ipu_core_jqs_cbuf_sync(struct paintbox_bus *bus,
 
 	if (!host_cbuf->to_device) {
 		/* case 4 */
-		(void)ipu_core_atomic_sync32(bus, host_cbuf->shared_buf_cbuf,
+		ipu_core_atomic_sync32_shared_memory(bus,
+				host_cbuf->shared_buf_cbuf,
 				host_cbuf->cbuf_offset +
 				offsetof(struct jqs_cbuf, bytes_written), dir);
 	}
@@ -168,7 +170,8 @@ void ipu_core_jqs_cbuf_sync(struct paintbox_bus *bus,
 
 	if (host_cbuf->to_device) {
 		/* case 1 */
-		(void)ipu_core_atomic_sync32(bus, host_cbuf->shared_buf_cbuf,
+		ipu_core_atomic_sync32_shared_memory(bus,
+				host_cbuf->shared_buf_cbuf,
 				host_cbuf->cbuf_offset +
 				offsetof(struct jqs_cbuf, bytes_written), dir);
 	}

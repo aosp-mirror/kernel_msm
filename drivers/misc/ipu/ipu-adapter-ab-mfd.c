@@ -30,6 +30,14 @@
 #include "ipu-core-jqs.h"
 #include "ipu-regs.h"
 
+struct ipu_adapter_shared_buffer {
+	struct ipu_shared_buffer base;
+	struct dma_buf *ab_dram_dma_buf;
+	bool mapped_to_bar;
+	/* data in this struct only valid if mapped_to_bar is true */
+	struct bar_mapping mapping;
+};
+
 struct ipu_adapter_jqs_buffer {
 	struct ipu_jqs_buffer base;
 	struct dma_buf *ab_dram_dma_buf;
@@ -140,8 +148,9 @@ static uint64_t ipu_adapter_ab_mfd_readq(struct device *dev,
 }
 
 static int ipu_adapter_ab_mfd_map_to_bar(struct device *dev,
-		struct paintbox_shared_buffer *shared_buffer)
+		struct ipu_adapter_shared_buffer *shared_buffer)
 {
+	struct ipu_shared_buffer *shared_buffer_base = &shared_buffer->base;
 	int ret;
 
 	if (shared_buffer->mapped_to_bar) {
@@ -151,7 +160,8 @@ static int ipu_adapter_ab_mfd_map_to_bar(struct device *dev,
 	}
 
 	ret = abc_pcie_map_bar_region(dev->parent, dev, BAR_2,
-			shared_buffer->size, shared_buffer->jqs_paddr,
+			shared_buffer_base->size,
+			shared_buffer_base->jqs_paddr,
 			&shared_buffer->mapping);
 	if (ret < 0) {
 		dev_err(dev, "bar mapping failed\n");
@@ -163,7 +173,7 @@ static int ipu_adapter_ab_mfd_map_to_bar(struct device *dev,
 }
 
 static int ipu_adapter_ab_mfd_unmap_from_bar(struct device *dev,
-		struct paintbox_shared_buffer *shared_buffer)
+		struct ipu_adapter_shared_buffer *shared_buffer)
 {
 	int ret;
 
@@ -185,45 +195,170 @@ static int ipu_adapter_ab_mfd_unmap_from_bar(struct device *dev,
 	return 0;
 }
 
-static int ipu_adapter_ab_mfd_alloc(struct device *dev, size_t size,
-		struct paintbox_shared_buffer *shared_buffer)
+static struct ipu_shared_buffer *ipu_adapter_ab_mfd_alloc_shared_memory(
+		struct device *dev, size_t size)
 {
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+	struct ipu_adapter_shared_buffer *sbuf;
 	struct dma_buf *ab_dram_dmabuf;
+	int ret;
 
-	shared_buffer->host_vaddr = dma_alloc_coherent(dev_data->dma_dev, size,
-			&shared_buffer->host_dma_addr, GFP_KERNEL);
+	sbuf = kzalloc(sizeof(*sbuf), GFP_KERNEL);
+	if (sbuf == NULL)
+		return ERR_PTR(-ENOMEM);
 
-	if (!shared_buffer->host_vaddr)
-		return -ENOMEM;
+	sbuf->base.host_vaddr = dma_alloc_coherent(dev_data->dma_dev, size,
+			&sbuf->base.host_dma_addr, GFP_KERNEL);
+	if (!sbuf->base.host_vaddr) {
+		ret = -ENOMEM;
+		goto err_exit_free_shared_buffer;
+	}
 
 	ab_dram_dmabuf = ab_dram_alloc_dma_buf_kernel(size);
-	if (IS_ERR(ab_dram_dmabuf))
-		return PTR_ERR(ab_dram_dmabuf);
+	if (IS_ERR(ab_dram_dmabuf)) {
+		ret =  PTR_ERR(ab_dram_dmabuf);
+		goto err_exit_free_dma_coherent;
+	}
 
-	shared_buffer->ab_dram_dma_buf = ab_dram_dmabuf;
+	sbuf->ab_dram_dma_buf = ab_dram_dmabuf;
+	sbuf->base.size = size;
+	sbuf->base.jqs_paddr = ab_dram_get_dma_buf_paddr(ab_dram_dmabuf);
 
-	shared_buffer->size = size;
-	shared_buffer->jqs_paddr = ab_dram_get_dma_buf_paddr(ab_dram_dmabuf);
+	ret = ipu_adapter_ab_mfd_map_to_bar(dev, sbuf);
+	if (ret < 0)
+		goto err_exit_free_dma_buffer;
 
-	return 0;
+	return &sbuf->base;
+
+err_exit_free_dma_buffer:
+	ab_dram_free_dma_buf_kernel(ab_dram_dmabuf);
+err_exit_free_dma_coherent:
+	dma_free_coherent(dev_data->dma_dev, size, sbuf->base.host_vaddr,
+				sbuf->base.host_dma_addr);
+err_exit_free_shared_buffer:
+	kfree(sbuf);
+
+	return ERR_PTR(ret);
 }
 
-static void ipu_adapter_ab_mfd_free(struct device *dev,
-		struct paintbox_shared_buffer *shared_buffer)
+void ipu_adapter_ab_mfd_free_shared_memory(struct device *dev,
+			struct ipu_shared_buffer *shared_buffer_base)
 {
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+	struct ipu_adapter_shared_buffer *sbuf = container_of(
+			shared_buffer_base, struct ipu_adapter_shared_buffer,
+			base);
 
-	if (shared_buffer->mapped_to_bar)
-		ipu_adapter_ab_mfd_unmap_from_bar(dev, shared_buffer);
+	if (sbuf->mapped_to_bar)
+		ipu_adapter_ab_mfd_unmap_from_bar(dev, sbuf);
 
-	if (shared_buffer->ab_dram_dma_buf)
-		ab_dram_free_dma_buf_kernel(shared_buffer->ab_dram_dma_buf);
+	if (sbuf->ab_dram_dma_buf)
+		ab_dram_free_dma_buf_kernel(sbuf->ab_dram_dma_buf);
 
-	if (shared_buffer->host_vaddr)
-		dma_free_coherent(dev_data->dma_dev, shared_buffer->size,
-				shared_buffer->host_vaddr,
-				shared_buffer->host_dma_addr);
+	if (shared_buffer_base->host_vaddr)
+		dma_free_coherent(dev_data->dma_dev, shared_buffer_base->size,
+				shared_buffer_base->host_vaddr,
+				shared_buffer_base->host_dma_addr);
+}
+
+/* TODO(b/117619644): profile PIO vs DMA transfer speed to find the correct
+ * threshold value.
+ */
+#define MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE 1024
+
+static void ipu_adapter_ab_mfd_sync_dma(struct device *dev,
+		struct ipu_adapter_shared_buffer *shared_buffer,
+		uint32_t offset, size_t size,
+		enum dma_data_direction direction)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+	struct dma_element_t desc;
+	dma_addr_t dma_addr = offset + shared_buffer->base.host_dma_addr;
+	dma_addr_t jqs_addr = offset + shared_buffer->base.jqs_paddr;
+
+	desc.len = size;
+
+	/* TODO(b/115431813):  The Endpoint DMA interface needs to be
+	 * cleaned up so that it presents a synchronous interface to kernel
+	 * clients or there needs to be mechanism to reserve a DMA channel to
+	 * the IPU.
+	 */
+	abc_reg_dma_irq_callback(&ipu_adapter_ab_mfd_dma_callback, 0);
+
+	if (direction == DMA_TO_DEVICE) {
+		dev_dbg(dev, "%s: va %p da %pad -> airbrush pa %pad sz %zu\n",
+				__func__, shared_buffer->base.host_vaddr,
+				&shared_buffer->base.host_dma_addr,
+				&shared_buffer->base.jqs_paddr, size);
+
+		desc.src_addr = (uint32_t)(dma_addr & 0xFFFFFFFF);
+		desc.src_u_addr = (uint32_t)(dma_addr >> 32);
+
+		desc.dst_addr = (uint32_t)(jqs_addr & 0xFFFFFFFF);
+		desc.dst_u_addr = (uint32_t)(jqs_addr >> 32);
+	} else {
+		dev_dbg(dev, "%s: airbrush pa %pad -> va %p da %pad sz %zu\n",
+				__func__, &shared_buffer->base.jqs_paddr,
+				shared_buffer->base.host_vaddr,
+				&shared_buffer->base.host_dma_addr, size);
+
+		desc.dst_addr = (uint32_t)(dma_addr & 0xFFFFFFFF);
+		desc.dst_u_addr = (uint32_t)(dma_addr >> 32);
+
+		desc.src_addr = (uint32_t)(jqs_addr & 0xFFFFFFFF);
+		desc.src_u_addr = (uint32_t)(jqs_addr >> 32);
+	}
+
+	desc.chan = 0;
+
+	reinit_completion(&dev_data->dma_completion);
+
+	/* The DMA code in the ABC MFD driver currently does not fail. */
+	dma_sblk_start(0, direction, &desc);
+
+	wait_for_completion(&dev_data->dma_completion);
+
+	/* TODO(b/115431813):  Right now we are only holding the callback
+	 * for the duration of the sync.  This should be revisted once the DMA
+	 * driver interface is cleaned up.
+	 */
+	abc_reg_dma_irq_callback(NULL, 0);
+}
+
+static void ipu_adapter_ab_mfd_sync_pio(struct device *dev,
+		struct ipu_adapter_shared_buffer *shared_buffer,
+		uint32_t offset, size_t size,
+		enum dma_data_direction direction)
+{
+	void __iomem *io_vaddr = shared_buffer->mapping.bar_vaddr + offset;
+	void *buffer_vaddr = shared_buffer->base.host_vaddr + offset;
+
+	if (direction == DMA_TO_DEVICE)
+		memcpy_toio(io_vaddr, buffer_vaddr, size);
+	else
+		memcpy_fromio(buffer_vaddr, io_vaddr, size);
+}
+
+void ipu_adapter_ab_mfd_sync_shared_memory(struct device *dev,
+		struct ipu_shared_buffer *shared_buffer_base, uint32_t offset,
+		size_t size, enum dma_data_direction direction)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+	struct ipu_adapter_shared_buffer *shared_buffer = container_of(
+			shared_buffer_base, struct ipu_adapter_shared_buffer,
+			base);
+
+	mutex_lock(&dev_data->sync_lock);
+
+	if (size <= MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE &&
+			shared_buffer->mapped_to_bar)
+		ipu_adapter_ab_mfd_sync_pio(dev, shared_buffer, offset,
+				size, direction);
+	else
+		ipu_adapter_ab_mfd_sync_dma(dev, shared_buffer, offset,
+				size, direction);
+
+	mutex_unlock(&dev_data->sync_lock);
 }
 
 struct ipu_jqs_buffer *ipu_adapter_ab_mfd_alloc_jqs_memory(struct device *dev,
@@ -268,101 +403,6 @@ static struct device *ipu_adapter_ab_mfd_get_dma_device(struct device *dev)
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
 
 	return dev_data->dma_dev;
-}
-
-/* TODO(b/117619644): profile PIO vs DMA transfer speed to find the correct
- * threshold value.
- */
-#define MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE 1024
-
-static void ipu_adapter_ab_mfd_sync_dma(struct device *dev,
-		struct paintbox_shared_buffer *shared_buffer, uint32_t offset,
-		size_t size, enum dma_data_direction direction)
-{
-	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
-	struct dma_element_t desc;
-	dma_addr_t dma_addr = offset + shared_buffer->host_dma_addr;
-	dma_addr_t jqs_addr = offset + shared_buffer->jqs_paddr;
-
-	desc.len = size;
-
-	/* TODO(b/115431813):  The Endpoint DMA interface needs to be
-	 * cleaned up so that it presents a synchronous interface to kernel
-	 * clients or there needs to be mechanism to reserve a DMA channel to
-	 * the IPU.
-	 */
-	(void)abc_reg_dma_irq_callback(&ipu_adapter_ab_mfd_dma_callback, 0);
-
-	if (direction == DMA_TO_DEVICE) {
-		dev_dbg(dev, "%s: va %p da %pad -> airbrush pa %pad sz %zu\n",
-				__func__, shared_buffer->host_vaddr,
-				&shared_buffer->host_dma_addr,
-				&shared_buffer->jqs_paddr, size);
-
-		desc.src_addr = (uint32_t)(dma_addr & 0xFFFFFFFF);
-		desc.src_u_addr = (uint32_t)(dma_addr >> 32);
-
-		desc.dst_addr = (uint32_t)(jqs_addr & 0xFFFFFFFF);
-		desc.dst_u_addr = (uint32_t)(jqs_addr >> 32);
-	} else {
-		dev_dbg(dev, "%s: airbrush pa %pad -> va %p da %pad sz %zu\n",
-				__func__, &shared_buffer->jqs_paddr,
-				shared_buffer->host_vaddr,
-				&shared_buffer->host_dma_addr, size);
-
-		desc.dst_addr = (uint32_t)(dma_addr & 0xFFFFFFFF);
-		desc.dst_u_addr = (uint32_t)(dma_addr >> 32);
-
-		desc.src_addr = (uint32_t)(jqs_addr & 0xFFFFFFFF);
-		desc.src_u_addr = (uint32_t)(jqs_addr >> 32);
-	}
-
-	desc.chan = 0;
-
-	reinit_completion(&dev_data->dma_completion);
-
-	/* The DMA code in the ABC MFD driver currently does not fail. */
-	(void)dma_sblk_start(0, direction, &desc);
-
-	wait_for_completion(&dev_data->dma_completion);
-
-	/* TODO(b/115431813):  Right now we are only holding the callback
-	 * for the duration of the sync.  This should be revisted once the DMA
-	 * driver interface is cleaned up.
-	 */
-	(void)abc_reg_dma_irq_callback(NULL, 0);
-}
-
-static void ipu_adapter_ab_mfd_sync_pio(struct device *dev,
-		struct paintbox_shared_buffer *shared_buffer, uint32_t offset,
-		size_t size, enum dma_data_direction direction)
-{
-	void __iomem *io_vaddr = shared_buffer->mapping.bar_vaddr + offset;
-	void *buffer_vaddr = shared_buffer->host_vaddr + offset;
-
-	if (direction == DMA_TO_DEVICE)
-		memcpy_toio(io_vaddr, buffer_vaddr, size);
-	else
-		memcpy_fromio(buffer_vaddr, io_vaddr, size);
-}
-
-void ipu_adapter_ab_mfd_sync(struct device *dev,
-		struct paintbox_shared_buffer *shared_buffer, uint32_t offset,
-		size_t size, enum dma_data_direction direction)
-{
-	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
-
-	mutex_lock(&dev_data->sync_lock);
-
-	if (size <= MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE &&
-			shared_buffer->mapped_to_bar)
-		ipu_adapter_ab_mfd_sync_pio(dev, shared_buffer, offset,
-				size, direction);
-	else
-		ipu_adapter_ab_mfd_sync_dma(dev, shared_buffer, offset,
-				size, direction);
-
-	mutex_unlock(&dev_data->sync_lock);
 }
 
 /* TODO(b/115431813):  This can be eliminated once the DMA interface is
@@ -417,12 +457,15 @@ static int ipu_adapter_ab_mfd_low_priority_irq_notify(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static int ipu_adapter_ab_mfd_atomic_sync32(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer,
+static int ipu_adapter_ab_mfd_atomic_sync32_shared_memory(struct device *dev,
+			struct ipu_shared_buffer *shared_buffer_base,
 			uint32_t offset, enum dma_data_direction direction)
 {
-	void __iomem *io_vaddr = shared_buffer->mapping.bar_vaddr + offset;
-	uint32_t *buffer_vaddr = shared_buffer->host_vaddr + offset;
+	struct ipu_adapter_shared_buffer *sbuf = container_of(
+			shared_buffer_base, struct ipu_adapter_shared_buffer,
+			base);
+	void __iomem *io_vaddr = sbuf->mapping.bar_vaddr + offset;
+	uint32_t *buffer_vaddr = sbuf->base.host_vaddr + offset;
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
 	int wr_val;
 
@@ -433,7 +476,7 @@ static int ipu_adapter_ab_mfd_atomic_sync32(struct device *dev,
 
 	mutex_lock(&dev_data->sync_lock);
 
-	if (shared_buffer->mapped_to_bar) {
+	if (sbuf->mapped_to_bar) {
 		if (direction == DMA_TO_DEVICE) {
 			wr_val = *buffer_vaddr;
 			__iowmb();
@@ -443,7 +486,7 @@ static int ipu_adapter_ab_mfd_atomic_sync32(struct device *dev,
 			__iormb();
 		}
 	} else {
-		ipu_adapter_ab_mfd_sync_dma(dev, shared_buffer, offset,
+		ipu_adapter_ab_mfd_sync_dma(dev, sbuf, offset,
 				sizeof(uint32_t), direction);
 	}
 
@@ -649,12 +692,11 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->write64 = &ipu_adapter_ab_mfd_writeq;
 	ops->read32 = &ipu_adapter_ab_mfd_readl;
 	ops->read64 = &ipu_adapter_ab_mfd_readq;
-	ops->alloc = &ipu_adapter_ab_mfd_alloc;
-	ops->free = &ipu_adapter_ab_mfd_free;
-	ops->sync = &ipu_adapter_ab_mfd_sync;
-	ops->atomic_sync32 = &ipu_adapter_ab_mfd_atomic_sync32;
-	ops->map_to_bar = &ipu_adapter_ab_mfd_map_to_bar;
-	ops->unmap_from_bar = &ipu_adapter_ab_mfd_unmap_from_bar;
+	ops->alloc_shared_memory = &ipu_adapter_ab_mfd_alloc_shared_memory;
+	ops->free_shared_memory = &ipu_adapter_ab_mfd_free_shared_memory;
+	ops->sync_shared_memory = &ipu_adapter_ab_mfd_sync_shared_memory;
+	ops->atomic_sync32_shared_memory =
+			&ipu_adapter_ab_mfd_atomic_sync32_shared_memory;
 	ops->get_dma_device = &ipu_adapter_ab_mfd_get_dma_device;
 	ops->alloc_jqs_memory = &ipu_adapter_ab_mfd_alloc_jqs_memory;
 	ops->free_jqs_memory = &ipu_adapter_ab_mfd_free_jqs_memory;

@@ -125,22 +125,21 @@ struct device *ipu_get_dma_device(struct device *dev)
 	return bus->ops->get_dma_device(bus->parent_dev);
 }
 
-int ipu_alloc_memory(struct device *dev, size_t size,
-		struct paintbox_shared_buffer *shared_buffer)
+struct ipu_shared_buffer *ipu_alloc_shared_memory(struct device *dev,
+		size_t size)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 	struct paintbox_bus *bus = pb_dev->bus;
 
-	return ipu_core_memory_alloc(bus, size, shared_buffer);
+	return ipu_core_alloc_shared_buffer(bus, size);
 }
 
-void ipu_free_memory(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer)
+void ipu_free_shared_memory(struct device *dev, struct ipu_shared_buffer *buf)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 	struct paintbox_bus *bus = pb_dev->bus;
 
-	ipu_core_memory_free(bus, shared_buffer);
+	ipu_core_free_shared_memory(bus, buf);
 }
 
 struct ipu_jqs_buffer *ipu_alloc_jqs_memory(struct device *dev, size_t size)

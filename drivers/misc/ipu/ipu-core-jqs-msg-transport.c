@@ -316,31 +316,32 @@ static int ipu_core_jqs_msg_transport_setup_queue(struct paintbox_bus *bus,
 	cbuf_offset = offsetof(struct jqs_msg_transport_shared_state, queues) +
 			q_id * sizeof(trans->jqs_shared_state->queues[0]);
 
-	if (ipu_core_memory_alloc(bus, size, &host_q->shared_buf_data) < 0)
-		return -ENOMEM;
 
-	ipu_core_memory_map_to_bar(bus, &host_q->shared_buf_data);
+	host_q->shared_buf_data = ipu_core_alloc_shared_buffer(bus, size);
+
+	if (IS_ERR_OR_NULL(host_q->shared_buf_data))
+		return PTR_ERR(host_q->shared_buf_data);
 
 	memset(&host_q->waiter, 0, sizeof(struct host_jqs_queue_waiter));
 
 	ipu_core_jqs_cbuf_init(&host_q->host_jqs_sys_cbuf,
-			&trans->shared_buf,
+			trans->shared_buf,
 			cbuf_offset + offsetof(struct jqs_msg_transport_queue,
 			jqs_sys_cbuf),
-			&host_q->shared_buf_data, data_offset,
+			host_q->shared_buf_data, data_offset,
 			JQS_SYS_BUFFER_SIZE, false);
 
 	data_offset += JQS_SYS_BUFFER_SIZE + JQS_CACHE_LINE_SIZE;
 
 	ipu_core_jqs_cbuf_init(&host_q->host_sys_jqs_cbuf,
-			&trans->shared_buf,
+			trans->shared_buf,
 			cbuf_offset + offsetof(struct jqs_msg_transport_queue,
 			sys_jqs_cbuf),
-			&host_q->shared_buf_data, data_offset,
+			host_q->shared_buf_data, data_offset,
 			SYS_JQS_BUFFER_SIZE, true);
 
 	/* Write initial state to JQS */
-	ipu_core_sync(bus, &trans->shared_buf, cbuf_offset,
+	ipu_core_sync_shared_memory(bus, trans->shared_buf, cbuf_offset,
 			sizeof(struct jqs_msg_transport_queue),
 			DMA_TO_DEVICE);
 
@@ -357,16 +358,16 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	if (!trans)
 		return -ENOMEM;
 
-	ret = ipu_core_memory_alloc(bus,
-			sizeof(struct jqs_msg_transport_shared_state),
-			&trans->shared_buf);
-	if (ret < 0)
-		goto free_local_dram;
+	trans->shared_buf = ipu_core_alloc_shared_buffer(bus,
+			sizeof(struct jqs_msg_transport_shared_state));
 
-	ipu_core_memory_map_to_bar(bus, &trans->shared_buf);
+	if (IS_ERR_OR_NULL(trans->shared_buf)) {
+		ret = PTR_ERR(trans->shared_buf);
+		goto free_local_dram;
+	}
 
 	trans->jqs_shared_state = (struct jqs_msg_transport_shared_state *)
-		trans->shared_buf.host_vaddr;
+		trans->shared_buf->host_vaddr;
 	WARN_ON(bus->jqs_msg_transport);
 	bus->jqs_msg_transport = trans;
 
@@ -399,8 +400,7 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 	}
 	trans = bus->jqs_msg_transport;
 
-	ipu_core_memory_unmap_from_bar(bus, &trans->shared_buf);
-	ipu_core_memory_free(bus, &trans->shared_buf);
+	ipu_core_free_shared_memory(bus, trans->shared_buf);
 
 	kfree(bus->jqs_msg_transport);
 
@@ -550,8 +550,7 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 		complete(&waiter->completion);
 	}
 
-	ipu_core_memory_unmap_from_bar(bus, &host_q->shared_buf_data);
-	ipu_core_memory_free(bus, &host_q->shared_buf_data);
+	ipu_core_free_shared_memory(bus, host_q->shared_buf_data);
 
 	trans->free_queue_ids |= (1 << q_id);
 

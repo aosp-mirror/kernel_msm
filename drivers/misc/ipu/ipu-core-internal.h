@@ -35,11 +35,11 @@
 /* Host-side only data associated with a jqs_circular_buffer */
 struct host_jqs_cbuf {
 	/* Shared data of the circular buffer data structure, struct jqs_cbuf */
-	struct paintbox_shared_buffer *shared_buf_cbuf;
+	struct ipu_shared_buffer *shared_buf_cbuf;
 	uint32_t cbuf_offset;
 
 	/* Shared data of data backing the circular buffer jqs_cbuf -> data */
-	struct paintbox_shared_buffer *shared_buf_data;
+	struct ipu_shared_buffer *shared_buf_data;
 	uint32_t data_offset;
 
 	/* Value of buf->bytes_written at the time of the last data sync.
@@ -74,7 +74,7 @@ struct host_jqs_queue_waiter {
 
 struct host_jqs_queue {
 	/* shared_buf for the data that backs the queue */
-	struct paintbox_shared_buffer shared_buf_data;
+	struct ipu_shared_buffer *shared_buf_data;
 
 	struct host_jqs_cbuf host_jqs_sys_cbuf;
 	struct host_jqs_cbuf host_sys_jqs_cbuf;
@@ -84,7 +84,7 @@ struct host_jqs_queue {
 };
 
 struct paintbox_jqs_msg_transport {
-	struct paintbox_shared_buffer shared_buf;
+	struct ipu_shared_buffer *shared_buf;
 
 	struct host_jqs_queue queues[JQS_TRANSPORT_MAX_QUEUE];
 	struct jqs_msg_transport_shared_state *jqs_shared_state;
@@ -102,7 +102,7 @@ struct ipu_bus_debug_register {
 #endif
 
 struct paintbox_jqs {
-	struct paintbox_shared_buffer fw_shared_buffer;
+	struct ipu_shared_buffer *fw_shared_buffer;
 	struct mutex lock;
 	const struct firmware *fw;
 	enum paintbox_jqs_status status;
@@ -211,69 +211,45 @@ static inline uint64_t ipu_core_readq(struct paintbox_bus *bus,
 	return bus->ops->read64(bus->parent_dev, offset);
 }
 
-static inline int ipu_core_memory_alloc(struct paintbox_bus *bus, size_t size,
-		struct paintbox_shared_buffer *shared_buffer)
+static inline struct ipu_shared_buffer *ipu_core_alloc_shared_buffer(
+		struct paintbox_bus *bus, size_t size)
 {
-	memset(shared_buffer, 0, sizeof(*shared_buffer));
 	/*
 	 * JQS caches data JQS_CACHE_LINE_SIZE bytes at a time, and writes all
 	 * bytes back to memory if any byte in the line is modified.
 	 *
 	 * We need to round to the nearest cache line size to avoid a potential
-	 * memory consistency problem where ipu_core_memory_alloc is called
-	 * twice, memory is written from the AP on one of the allocations,
-	 * memory is written from JQS on the other allocation, and the
-	 * allocations share a cache line.
+	 * memory consistency problem where ipu_core_alloc_shared_buffer() is
+	 * called twice, memory is written from the AP on one of the
+	 * allocations, memory is written from JQS on the other allocation, and
+	 * the allocations share a cache line.
 	 *
 	 * Note: This logic should live in the Airbrush DRAM manager. But since
 	 * that component doesn't exist yet, it'll live here for now.
 	 */
 	size = ALIGN(size, JQS_CACHE_LINE_SIZE);
-	return bus->ops->alloc(bus->parent_dev, size, shared_buffer);
+	return bus->ops->alloc_shared_memory(bus->parent_dev, size);
 }
 
-static inline void ipu_core_memory_free(struct paintbox_bus *bus,
-		struct paintbox_shared_buffer *shared_buffer)
+static inline void ipu_core_free_shared_memory(struct paintbox_bus *bus,
+		struct ipu_shared_buffer *buf)
 {
-	if (shared_buffer->host_vaddr) {
-		bus->ops->free(bus->parent_dev, shared_buffer);
-		memset(shared_buffer, 0, sizeof(*shared_buffer));
-	}
+	bus->ops->free_shared_memory(bus->parent_dev, buf);
 }
 
-static inline void ipu_core_sync(struct paintbox_bus *bus,
-		struct paintbox_shared_buffer *alloc, uint32_t offset,
-		size_t size, enum dma_data_direction direction)
+static inline void ipu_core_sync_shared_memory(struct paintbox_bus *bus,
+		struct ipu_shared_buffer *buf, uint32_t offset, size_t size,
+		enum dma_data_direction dir)
 {
-	bus->ops->sync(bus->parent_dev, alloc, offset, size, direction);
+	bus->ops->sync_shared_memory(bus->parent_dev, buf, offset, size, dir);
 }
 
-static inline int ipu_core_atomic_sync32(struct paintbox_bus *bus,
-		struct paintbox_shared_buffer *alloc, uint32_t offset,
+static inline int ipu_core_atomic_sync32_shared_memory(struct paintbox_bus *bus,
+		struct ipu_shared_buffer *buf, uint32_t offset,
 		enum dma_data_direction direction)
 {
-	return bus->ops->atomic_sync32(bus->parent_dev, alloc, offset,
-			direction);
-}
-
-static inline void ipu_core_memory_map_to_bar(struct paintbox_bus *bus,
-		struct paintbox_shared_buffer *alloc)
-{
-	/* map_to_bar is only supported on PCI based platforms */
-	if (!bus->ops->map_to_bar)
-		return;
-
-	bus->ops->map_to_bar(bus->parent_dev, alloc);
-}
-
-static inline void ipu_core_memory_unmap_from_bar(struct paintbox_bus *bus,
-		struct paintbox_shared_buffer *alloc)
-{
-	/* unmap_from_bar is only supported on PCI based platforms */
-	if (!bus->ops->unmap_from_bar)
-		return;
-
-	bus->ops->unmap_from_bar(bus->parent_dev, alloc);
+	return bus->ops->atomic_sync32_shared_memory(bus->parent_dev, buf,
+			offset, direction);
 }
 
 static inline struct ipu_jqs_buffer *ipu_core_alloc_jqs_memory(

@@ -31,9 +31,9 @@ int ipu_core_jqs_cbus_copy_from_user(void *dst, const void __user *src,
 		size_t len_bytes);
 
 void ipu_core_jqs_cbuf_init(struct host_jqs_cbuf *host_cbuf,
-		struct paintbox_shared_buffer *shared_buf_cbuf,
+		struct ipu_shared_buffer *shared_buf_cbuf,
 		uint32_t cbuf_offset,
-		struct paintbox_shared_buffer *shared_buf_data,
+		struct ipu_shared_buffer *shared_buf_data,
 		uint32_t data_offset, size_t size, bool to_device);
 
 /* On systems in which the circular buffer does not reside in memory accessible

@@ -157,7 +157,6 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 {
 	struct jqs_firmware_preamble preamble;
 	size_t fw_binary_len_bytes;
-	int ret;
 
 	if (bus->jqs.status > JQS_FW_STATUS_STAGED)
 		return 0;
@@ -203,19 +202,20 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	 * in AB DRAM.  This will necessitate having a carveout region in AB
 	 * DRAM so we can guarantee the address.
 	 */
-	ret = bus->ops->alloc(bus->parent_dev,
-			preamble.fw_and_working_set_bytes,
-			&bus->jqs.fw_shared_buffer);
-	if (ret < 0)
-		return ret;
+	bus->jqs.fw_shared_buffer = bus->ops->alloc_shared_memory(
+			bus->parent_dev,
+			preamble.fw_and_working_set_bytes);
+	if (IS_ERR_OR_NULL(bus->jqs.fw_shared_buffer))
+		return PTR_ERR(bus->jqs.fw_shared_buffer);
 
 	fw_binary_len_bytes = bus->jqs.fw->size - preamble.size;
 
-	memcpy(bus->jqs.fw_shared_buffer.host_vaddr, bus->jqs.fw->data +
+	memcpy(bus->jqs.fw_shared_buffer->host_vaddr, bus->jqs.fw->data +
 			preamble.size,
 			fw_binary_len_bytes);
 
-	bus->ops->sync(bus->parent_dev, &bus->jqs.fw_shared_buffer, 0,
+	bus->ops->sync_shared_memory(bus->parent_dev,
+			bus->jqs.fw_shared_buffer, 0,
 			fw_binary_len_bytes, DMA_TO_DEVICE);
 
 	bus->jqs.status = JQS_FW_STATUS_STAGED;
@@ -236,7 +236,7 @@ void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
 
 	dev_dbg(bus->parent_dev, "%s: unstaging firmware\n", __func__);
 
-	ipu_core_memory_free(bus, &bus->jqs.fw_shared_buffer);
+	ipu_core_free_shared_memory(bus, bus->jqs.fw_shared_buffer);
 	bus->jqs.status = JQS_FW_STATUS_REQUESTED;
 }
 
@@ -363,8 +363,8 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 		goto err_shutdown_transport;
 
 	ret = ipu_core_jqs_power_enable(bus,
-			bus->jqs.fw_shared_buffer.jqs_paddr,
-			bus->jqs_msg_transport->shared_buf.jqs_paddr);
+			bus->jqs.fw_shared_buffer->jqs_paddr,
+			bus->jqs_msg_transport->shared_buf->jqs_paddr);
 	if (ret < 0)
 		goto err_free_kernel_queue;
 

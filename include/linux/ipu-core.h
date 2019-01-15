@@ -47,15 +47,11 @@ struct paintbox_device_ops {
 	void (*firmware_down)(struct device *dev);
 };
 
-struct paintbox_shared_buffer {
+struct ipu_shared_buffer {
 	void *host_vaddr;
-	size_t size;
 	dma_addr_t host_dma_addr;
 	dma_addr_t jqs_paddr;
-	struct dma_buf *ab_dram_dma_buf;
-	bool mapped_to_bar;
-	/* data in this struct only valid if mapped_to_bar is true */
-	struct bar_mapping mapping;
+	size_t size;
 };
 
 struct ipu_jqs_buffer {
@@ -135,10 +131,9 @@ void ipu_writeq(struct device *dev, uint64_t val, unsigned int offset);
 uint32_t ipu_readl(struct device *dev, unsigned int offset);
 uint64_t ipu_readq(struct device *dev, unsigned int offset);
 
-int ipu_alloc_memory(struct device *dev, size_t size,
-		struct paintbox_shared_buffer *shared_buffer);
-void ipu_free_memory(struct device *dev,
-			struct paintbox_shared_buffer *shared_buffer);
+struct ipu_shared_buffer *ipu_alloc_shared_memory(struct device *dev,
+		size_t size);
+void ipu_free_shared_memory(struct device *dev, struct ipu_shared_buffer *buf);
 
 struct ipu_jqs_buffer *ipu_alloc_jqs_memory(struct device *dev, size_t size);
 void ipu_free_jqs_memory(struct device *dev, struct ipu_jqs_buffer *buf);
