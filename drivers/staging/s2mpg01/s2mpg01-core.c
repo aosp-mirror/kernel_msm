@@ -48,7 +48,6 @@
 /* defines the timeout in jiffies for ADC conversion completion */
 #define S2MPG01_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
-static int s2mpg01_chip_init(struct s2mpg01_core *ddata);
 static void s2mpg01_print_status(struct s2mpg01_core *ddata);
 static void s2mpg01_mask_interrupts_all(struct s2mpg01_core *ddata);
 static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata);
@@ -560,8 +559,8 @@ static irqreturn_t s2mpg01_resetb_irq_handler(int irq, void *cookie)
 
 	if (gpio_get_value(ddata->pdata->pmic_ready_gpio)) {
 		dev_info(ddata->dev, "%s: completing reset\n", __func__);
-		/* initialize chip */
-		s2mpg01_chip_init(ddata);
+		/* read chip status */
+		s2mpg01_print_status(ddata);
 		complete(&ddata->init_complete);
 	} else {
 		dev_err(ddata->dev, "%s: device reset\n", __func__);
@@ -644,23 +643,6 @@ static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata)
 	s2mpg01_write_byte(ddata, S2MPG01_REG_INT2M, 0x00);
 	s2mpg01_write_byte(ddata, S2MPG01_REG_INT3M, 0x00);
 	s2mpg01_write_byte(ddata, S2MPG01_REG_INT4M, 0x3F);
-}
-
-/* enable all of the interrupts */
-static void s2mpg01_config_ints(struct s2mpg01_core *ddata)
-{
-	s2mpg01_clear_interrupts(ddata);
-	s2mpg01_unmask_interrupts_all(ddata);
-}
-
-/* initialize the chip */
-static int s2mpg01_chip_init(struct s2mpg01_core *ddata)
-{
-	s2mpg01_print_status(ddata);
-
-	s2mpg01_config_ints(ddata);
-
-	return 0;
 }
 
 static int s2mpg01_probe(struct i2c_client *client,
@@ -782,8 +764,12 @@ static int s2mpg01_probe(struct i2c_client *client,
 	/* create sysfs attributes */
 	s2mpg01_config_sysfs(dev);
 
-	/* initialize chip */
-	s2mpg01_chip_init(ddata);
+	/* print chip status */
+	s2mpg01_print_status(ddata);
+
+	/* enable all interrupts */
+	s2mpg01_clear_interrupts(ddata);
+	s2mpg01_unmask_interrupts_all(ddata);
 
 	ret = devm_request_threaded_irq(dev, pdata->intb_irq, NULL,
 					s2mpg01_intb_irq_handler,
