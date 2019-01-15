@@ -418,11 +418,6 @@
 		reg = <0x000b2000 0x1000>,
 		      <0x000bfc00 0x400>;
 
-		clk-enable;
-		clocks = <&clock_gcc GCC_DCC_CLK>,
-			<&clock_gcc GCC_DCC_XO_CLK>;
-		clock-names = "dcc_clk", "dcc_xo_clk";
-
 		reg-names = "dcc-base", "dcc-ram-base";
 		dcc-ram-offset = <0x400>;
 		qcom,curr-link-list = <1>;
@@ -1222,15 +1217,12 @@
 
 		/* VDD is an external regulator eLDO5 */
 		vdd-io-supply = <&pms405_l11>;
-		qcom,vdd-io-voltage-level = <2696000 3304000>;
-		qcom,vdd-io-current-level = <0 22000>;
+		qcom,vdd-io-voltage-level = <1800000 2950000>;
+		qcom,vdd-io-current-level = <0 24200>;
 
 		pinctrl-names = "active", "sleep";
-		pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on
-				&sdc2_cd_on>;
-		pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off
-				&sdc2_cd_off>;
-		cd-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
+		pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on>;
+		pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
 
 		status = "ok";
 	};

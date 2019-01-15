@@ -356,7 +356,8 @@ static int host_error_hdlr(struct npu_device *npu_dev, bool force)
 				if (npu_queue_event(network->client, &kevt))
 					pr_err("queue npu event failed\n");
 			} else {
-				pr_debug("complete network %x\n", network->id);
+				pr_debug("complete network %llx\n",
+					network->id);
 				complete(&network->cmd_done);
 			}
 		}
@@ -1284,6 +1285,7 @@ int32_t npu_host_load_network_v2(struct npu_client *client,
 
 	load_ioctl->network_hdl = network->network_hdl;
 	network->is_active = true;
+	kfree(load_packet);
 	network_put(network);
 	mutex_unlock(&host_ctx->lock);
 

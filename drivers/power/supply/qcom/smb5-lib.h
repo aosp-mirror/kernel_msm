@@ -69,6 +69,8 @@ enum print_reason {
 #define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
 #define SW_THERM_REGULATION_VOTER	"SW_THERM_REGULATION_VOTER"
 #define JEITA_ARB_VOTER			"JEITA_ARB_VOTER"
+#define MOISTURE_VOTER			"MOISTURE_VOTER"
+#define HVDCP2_ICL_VOTER		"HVDCP2_ICL_VOTER"
 
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
@@ -76,6 +78,15 @@ enum print_reason {
 #define VBAT_TO_VRAW_ADC(v)		div_u64((u64)v * 1000000UL, 194637UL)
 
 #define ADC_CHG_TERM_MASK	32767
+
+#define SDP_100_MA			100000
+#define SDP_CURRENT_UA			500000
+#define CDP_CURRENT_UA			1500000
+#define DCP_CURRENT_UA			1500000
+#define HVDCP_CURRENT_UA		3000000
+#define TYPEC_DEFAULT_CURRENT_UA	900000
+#define TYPEC_MEDIUM_CURRENT_UA		1500000
+#define TYPEC_HIGH_CURRENT_UA		3000000
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -376,13 +387,13 @@ struct smb_charger {
 	struct votable		*usb_irq_enable_votable;
 	struct votable		*disable_power_role_switch;
 	struct votable		*cp_disable_votable;
-	struct votable		*wdog_snarl_irq_en_votable;
 	struct votable		*smb_override_votable;
 
 	/* work */
 	struct work_struct	bms_update_work;
 	struct work_struct	pl_update_work;
 	struct work_struct	jeita_update_work;
+	struct work_struct	moisture_protection_work;
 	struct delayed_work	ps_change_timeout_work;
 	struct delayed_work	clear_hdc_work;
 	struct delayed_work	icl_change_work;
@@ -394,6 +405,7 @@ struct smb_charger {
 	struct delayed_work	thermal_regulation_work;
 
 	struct alarm		lpd_recheck_timer;
+	struct alarm		moisture_protection_alarm;
 
 	/* secondary charger config */
 	bool			sec_pl_present;
@@ -423,6 +435,7 @@ struct smb_charger {
 	bool			step_chg_enabled;
 	bool			sw_jeita_enabled;
 	int			taper_control;
+	bool			typec_legacy_use_rp_icl;
 	bool			is_hdc;
 	bool			chg_done;
 	int			connector_type;
@@ -461,6 +474,8 @@ struct smb_charger {
 	u32			jeita_soft_hys_thlds[2];
 	int			jeita_soft_fcc[2];
 	int			jeita_soft_fv[2];
+	bool			moisture_present;
+	bool			uusb_moisture_protection_enabled;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -680,6 +695,7 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 int smblib_toggle_smb_en(struct smb_charger *chg, int toggle);
 void smblib_hvdcp_detect_enable(struct smb_charger *chg, bool enable);
 void smblib_apsd_enable(struct smb_charger *chg, bool enable);
+int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val);
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);

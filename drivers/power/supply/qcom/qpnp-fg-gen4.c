@@ -123,6 +123,8 @@
 #define IBAT_FINAL_OFFSET		0
 #define VBAT_FINAL_WORD			321
 #define VBAT_FINAL_OFFSET		0
+#define BATT_TEMP_WORD			328
+#define BATT_TEMP_OFFSET		0
 #define ESR_WORD			331
 #define ESR_OFFSET			0
 #define ESR_MDL_WORD			335
@@ -175,6 +177,8 @@
 #define CC_SOC_v2_OFFSET		0
 #define MONOTONIC_SOC_v2_WORD		469
 #define MONOTONIC_SOC_v2_OFFSET		0
+#define FIRST_LOG_CURRENT_v2_WORD	471
+#define FIRST_LOG_CURRENT_v2_OFFSET	0
 
 static struct fg_irq_info fg_irqs[FG_GEN4_IRQ_MAX];
 
@@ -204,6 +208,7 @@ struct fg_dt_props {
 	int	batt_temp_hot_thresh;
 	int	batt_temp_hyst;
 	int	batt_temp_delta;
+	u32	batt_therm_freq;
 	int	esr_pulse_thresh_ma;
 	int	esr_meas_curr_ma;
 	int	slope_limit_temp;
@@ -243,6 +248,7 @@ struct fg_gen4_chip {
 	int			esr_actual;
 	int			esr_nominal;
 	int			soh;
+	int			esr_soh_cycle_count;
 	bool			first_profile_load;
 	bool			ki_coeff_dischg_en;
 	bool			slope_limit_en;
@@ -251,6 +257,7 @@ struct fg_gen4_chip {
 	bool			esr_fast_cal_timer_expired;
 	bool			esr_fast_calib_retry;
 	bool			esr_fcc_ctrl_en;
+	bool			esr_soh_notified;
 	bool			rslow_low;
 	bool			rapid_soc_dec_en;
 	bool			vbatt_low;
@@ -322,9 +329,9 @@ static struct fg_sram_param pm8150b_v1_sram_params[] = {
 	PARAM(SYS_TERM_CURR, SYS_TERM_CURR_WORD, SYS_TERM_CURR_OFFSET, 2,
 		100000, 48828, 0, fg_encode_current, NULL),
 	PARAM(DELTA_MSOC_THR, DELTA_MSOC_THR_WORD, DELTA_MSOC_THR_OFFSET,
-		1, 2048, 100, 0, fg_encode_default, NULL),
+		1, 2048, 1000, 0, fg_encode_default, NULL),
 	PARAM(DELTA_BSOC_THR, DELTA_BSOC_THR_WORD, DELTA_BSOC_THR_OFFSET,
-		1, 2048, 100, 0, fg_encode_default, NULL),
+		1, 2048, 1000, 0, fg_encode_default, NULL),
 	PARAM(ESR_TIMER_DISCHG_MAX, ESR_TIMER_DISCHG_MAX_WORD,
 		ESR_TIMER_DISCHG_MAX_OFFSET, 1, 1, 1, 0, fg_encode_default,
 		NULL),
@@ -414,9 +421,9 @@ static struct fg_sram_param pm8150b_v2_sram_params[] = {
 	PARAM(SYS_TERM_CURR, SYS_TERM_CURR_WORD, SYS_TERM_CURR_OFFSET, 2,
 		100000, 48828, 0, fg_encode_current, NULL),
 	PARAM(DELTA_MSOC_THR, DELTA_MSOC_THR_WORD, DELTA_MSOC_THR_OFFSET,
-		1, 2048, 100, 0, fg_encode_default, NULL),
+		1, 2048, 1000, 0, fg_encode_default, NULL),
 	PARAM(DELTA_BSOC_THR, DELTA_BSOC_THR_WORD, DELTA_BSOC_THR_OFFSET,
-		1, 2048, 100, 0, fg_encode_default, NULL),
+		1, 2048, 1000, 0, fg_encode_default, NULL),
 	PARAM(ESR_TIMER_DISCHG_MAX, ESR_TIMER_DISCHG_MAX_WORD,
 		ESR_TIMER_DISCHG_MAX_OFFSET, 1, 1, 1, 0, fg_encode_default,
 		NULL),
@@ -635,20 +642,20 @@ static int fg_gen4_get_charge_counter_shadow(struct fg_gen4_chip *chip,
 static int fg_gen4_get_battery_temp(struct fg_dev *fg, int *val)
 {
 	int rc = 0;
-	u8 buf;
+	u16 buf;
 
-	rc = fg_read(fg, ADC_RR_BATT_TEMP_LSB(fg), &buf, 1);
+	rc = fg_sram_read(fg, BATT_TEMP_WORD, BATT_TEMP_OFFSET, (u8 *)&buf,
+			2, FG_IMA_DEFAULT);
 	if (rc < 0) {
-		pr_err("failed to read addr=0x%04x, rc=%d\n",
-			ADC_RR_BATT_TEMP_LSB(fg), rc);
+		pr_err("Failed to read BATT_TEMP_WORD rc=%d\n", rc);
 		return rc;
 	}
 
-	/* Only 8 bits are used. Bit 7 is sign bit */
-	*val = sign_extend32(buf, 7);
-
-	/* Value is in Celsius; Convert it to deciDegC */
-	*val *= 10;
+	/*
+	 * 10 bits representing temperature from -128 to 127 and each LSB is
+	 * 0.25 C. Multiply by 10 to convert it to deci degrees C.
+	 */
+	*val = sign_extend32(buf, 9) * 100 / 40;
 
 	return 0;
 }
@@ -1006,7 +1013,7 @@ static int fg_gen4_store_count(void *data, u16 *buf, int id, int length)
 	rc = fg_sram_write(&chip->fg, CYCLE_COUNT_WORD + id, CYCLE_COUNT_OFFSET,
 			(u8 *)buf, length, FG_IMA_DEFAULT);
 	if (rc < 0)
-		pr_err("failed to write bucket %d rc=%d\n", rc);
+		pr_err("failed to write bucket rc=%d\n", rc);
 
 	return rc;
 }
@@ -1736,7 +1743,7 @@ static void profile_load_work(struct work_struct *work)
 	struct fg_gen4_chip *chip = container_of(fg,
 				struct fg_gen4_chip, fg);
 	int64_t nom_cap_uah;
-	u8 val, buf[2];
+	u8 val, mask, buf[2];
 	int rc;
 
 	vote(fg->awake_votable, PROFILE_LOAD, true, 0);
@@ -1779,6 +1786,24 @@ static void profile_load_work(struct work_struct *work)
 		goto out;
 	}
 
+	/* Enable side loading for voltage and current */
+	val = mask = BIT(0);
+	rc = fg_sram_masked_write(fg, SYS_CONFIG_WORD,
+			SYS_CONFIG_OFFSET, mask, val, FG_IMA_DEFAULT);
+	if (rc < 0) {
+		pr_err("Error in setting SYS_CONFIG_WORD[0], rc=%d\n", rc);
+		goto out;
+	}
+
+	/* Clear first logged main current ADC values */
+	buf[0] = buf[1] = 0;
+	rc = fg_sram_write(fg, FIRST_LOG_CURRENT_v2_WORD,
+			FIRST_LOG_CURRENT_v2_OFFSET, buf, 2, FG_IMA_DEFAULT);
+	if (rc < 0) {
+		pr_err("Error in clearing FIRST_LOG_CURRENT rc=%d\n", rc);
+		goto out;
+	}
+
 	/* Set the profile integrity bit */
 	val = HLOS_RESTART_BIT | PROFILE_LOAD_BIT;
 	rc = fg_sram_write(fg, PROFILE_INTEGRITY_WORD,
@@ -1791,6 +1816,16 @@ static void profile_load_work(struct work_struct *work)
 	rc = fg_restart(fg, SOC_READY_WAIT_TIME_MS);
 	if (rc < 0) {
 		pr_err("Error in restarting FG, rc=%d\n", rc);
+		goto out;
+	}
+
+	/* Clear side loading for voltage and current */
+	val = 0;
+	mask = BIT(0);
+	rc = fg_sram_masked_write(fg, SYS_CONFIG_WORD,
+			SYS_CONFIG_OFFSET, mask, val, FG_IMA_DEFAULT);
+	if (rc < 0) {
+		pr_err("Error in clearing SYS_CONFIG_WORD[0], rc=%d\n", rc);
 		goto out;
 	}
 
@@ -1915,7 +1950,7 @@ static void get_batt_psy_props(struct fg_dev *fg)
 static int fg_gen4_esr_soh_update(struct fg_dev *fg)
 {
 	struct fg_gen4_chip *chip = container_of(fg, struct fg_gen4_chip, fg);
-	int rc, msoc, esr_uohms;
+	int rc, msoc, esr_uohms, tmp;
 
 	if (!fg->soc_reporting_ready || fg->battery_missing) {
 		chip->esr_actual = -EINVAL;
@@ -1923,38 +1958,56 @@ static int fg_gen4_esr_soh_update(struct fg_dev *fg)
 		return 0;
 	}
 
-	if (fg->charge_status == POWER_SUPPLY_STATUS_CHARGING) {
-		rc = fg_get_msoc(fg, &msoc);
-		if (rc < 0) {
-			pr_err("Error in getting msoc, rc=%d\n", rc);
-			return rc;
-		}
+	rc = get_cycle_count(chip->counter, &tmp);
+	if (rc < 0)
+		pr_err("Couldn't get cycle count rc=%d\n", rc);
+	else if (tmp != chip->esr_soh_cycle_count)
+		chip->esr_soh_notified = false;
 
-		if (msoc == ESR_SOH_SOC) {
-			rc = fg_get_sram_prop(fg, FG_SRAM_ESR_ACT, &esr_uohms);
-			if (rc < 0) {
-				pr_err("Error in getting esr_actual, rc=%d\n",
-					rc);
-				return rc;
-			}
-			chip->esr_actual = esr_uohms;
+	if (fg->charge_status != POWER_SUPPLY_STATUS_CHARGING ||
+			chip->esr_soh_notified)
+		return 0;
 
-			rc = fg_get_sram_prop(fg, FG_SRAM_ESR_MDL, &esr_uohms);
-			if (rc < 0) {
-				pr_err("Error in getting esr_nominal, rc=%d\n",
-					rc);
-				chip->esr_actual = -EINVAL;
-				return rc;
-			}
-			chip->esr_nominal = esr_uohms;
-
-			fg_dbg(fg, FG_STATUS, "esr_actual: %d esr_nominal: %d\n",
-				chip->esr_actual, chip->esr_nominal);
-
-			if (fg->batt_psy)
-				power_supply_changed(fg->batt_psy);
-		}
+	rc = fg_get_msoc(fg, &msoc);
+	if (rc < 0) {
+		pr_err("Error in getting msoc, rc=%d\n", rc);
+		return rc;
 	}
+
+	if (msoc != ESR_SOH_SOC) {
+		fg_dbg(fg, FG_STATUS, "msoc: %d, not publishing ESR params\n",
+			msoc);
+		return 0;
+	}
+
+	rc = fg_get_sram_prop(fg, FG_SRAM_ESR_ACT, &esr_uohms);
+	if (rc < 0) {
+		pr_err("Error in getting esr_actual, rc=%d\n",
+			rc);
+		return rc;
+	}
+	chip->esr_actual = esr_uohms;
+
+	rc = fg_get_sram_prop(fg, FG_SRAM_ESR_MDL, &esr_uohms);
+	if (rc < 0) {
+		pr_err("Error in getting esr_nominal, rc=%d\n",
+			rc);
+		chip->esr_actual = -EINVAL;
+		return rc;
+	}
+	chip->esr_nominal = esr_uohms;
+
+	fg_dbg(fg, FG_STATUS, "esr_actual: %d esr_nominal: %d\n",
+		chip->esr_actual, chip->esr_nominal);
+
+	if (fg->batt_psy)
+		power_supply_changed(fg->batt_psy);
+
+	rc = get_cycle_count(chip->counter, &chip->esr_soh_cycle_count);
+	if (rc < 0)
+		pr_err("Couldn't get cycle count rc=%d\n", rc);
+
+	chip->esr_soh_notified = true;
 
 	return 0;
 }
@@ -2088,6 +2141,16 @@ static int fg_gen4_adjust_recharge_soc(struct fg_gen4_chip *chip)
 				fg->recharge_soc_adjusted = true;
 			} else {
 				/* adjusted already, do nothing */
+				if (fg->health != POWER_SUPPLY_HEALTH_GOOD)
+					return 0;
+
+				/*
+				 * Device is out of JEITA. Restore back default
+				 * threshold.
+				 */
+
+				new_recharge_soc = recharge_soc;
+				fg->recharge_soc_adjusted = false;
 				return 0;
 			}
 		} else {
@@ -2687,10 +2750,13 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 {
 	struct fg_dev *fg = data;
 	struct fg_gen4_chip *chip = container_of(fg, struct fg_gen4_chip, fg);
-	int rc, batt_soc, batt_temp;
+	int rc, batt_soc, batt_temp, msoc_raw;
 	bool input_present = is_input_present(fg);
 
-	fg_dbg(fg, FG_IRQ, "irq %d triggered\n", irq);
+	rc = fg_get_msoc_raw(fg, &msoc_raw);
+	if (!rc)
+		fg_dbg(fg, FG_IRQ, "irq %d triggered msoc_raw: %d\n", irq,
+			msoc_raw);
 
 	get_batt_psy_props(fg);
 
@@ -3039,6 +3105,7 @@ static void pl_current_en_work(struct work_struct *work)
 		return;
 
 	vote(chip->parallel_current_en_votable, FG_PARALLEL_EN_VOTER, en, 0);
+	vote(chip->mem_attn_irq_en_votable, MEM_ATTN_IRQ_VOTER, false, 0);
 }
 
 static void pl_enable_work(struct work_struct *work)
@@ -3678,7 +3745,6 @@ static int fg_parallel_current_en_cb(struct votable *votable, void *data,
 
 	fg_dbg(fg, FG_STATUS, "Parallel current summing: %d\n", enable);
 
-	vote(chip->mem_attn_irq_en_votable, MEM_ATTN_IRQ_VOTER, false, 0);
 	return rc;
 }
 
@@ -3877,7 +3943,7 @@ static int fg_gen4_hw_init(struct fg_gen4_chip *chip)
 		}
 	}
 
-	if (chip->dt.delta_soc_thr > 0 && chip->dt.delta_soc_thr < 100) {
+	if (chip->dt.delta_soc_thr > 0 && chip->dt.delta_soc_thr < 125) {
 		fg_encode(fg->sp, FG_SRAM_DELTA_MSOC_THR,
 			chip->dt.delta_soc_thr, buf);
 		rc = fg_sram_write(fg,
@@ -3954,6 +4020,14 @@ static int fg_gen4_hw_init(struct fg_gen4_chip *chip)
 			pr_err("Error in writing batt_temp_delta, rc=%d\n", rc);
 			return rc;
 		}
+	}
+
+	val = (u8)chip->dt.batt_therm_freq;
+	rc = fg_write(fg, ADC_RR_BATT_THERM_FREQ(fg), &val, 1);
+	if (rc < 0) {
+		pr_err("failed to write to 0x%04X, rc=%d\n",
+			 ADC_RR_BATT_THERM_FREQ(fg), rc);
+		return rc;
 	}
 
 	fg_encode(fg->sp, FG_SRAM_ESR_PULSE_THRESH,
@@ -4314,7 +4388,7 @@ static int fg_parse_esr_cal_params(struct fg_dev *fg)
 #define DEFAULT_EMPTY_VOLT_MV		2812
 #define DEFAULT_SYS_TERM_CURR_MA	-125
 #define DEFAULT_CUTOFF_CURR_MA		200
-#define DEFAULT_DELTA_SOC_THR		1
+#define DEFAULT_DELTA_SOC_THR		5	/* 0.5 % */
 #define DEFAULT_CL_START_SOC		15
 #define DEFAULT_CL_MIN_TEMP_DECIDEGC	150
 #define DEFAULT_CL_MAX_TEMP_DECIDEGC	500
@@ -4322,6 +4396,7 @@ static int fg_parse_esr_cal_params(struct fg_dev *fg)
 #define DEFAULT_CL_MAX_DEC_DECIPERC	100
 #define DEFAULT_CL_MIN_LIM_DECIPERC	0
 #define DEFAULT_CL_MAX_LIM_DECIPERC	0
+#define DEFAULT_CL_DELTA_BATT_SOC	10
 #define BTEMP_DELTA_LOW			0
 #define BTEMP_DELTA_HIGH		3
 #define DEFAULT_ESR_PULSE_THRESH_MA	47
@@ -4488,6 +4563,14 @@ static int fg_gen4_parse_dt(struct fg_gen4_chip *chip)
 	else
 		chip->cl->dt.max_start_soc = temp;
 
+	chip->cl->dt.min_delta_batt_soc = DEFAULT_CL_DELTA_BATT_SOC;
+	/* read from DT property and update, if value exists */
+	of_property_read_u32(node, "qcom,cl-min-delta-batt-soc",
+					&chip->cl->dt.min_delta_batt_soc);
+
+	chip->cl->dt.cl_wt_enable = of_property_read_bool(node,
+						"qcom,cl-wt-enable");
+
 	rc = of_property_read_u32(node, "qcom,cl-min-temp", &temp);
 	if (rc < 0)
 		chip->cl->dt.min_temp = DEFAULT_CL_MIN_TEMP_DECIDEGC;
@@ -4547,6 +4630,11 @@ static int fg_gen4_parse_dt(struct fg_gen4_chip *chip)
 		chip->dt.batt_temp_delta = -EINVAL;
 	else if (temp >= BTEMP_DELTA_LOW && temp <= BTEMP_DELTA_HIGH)
 		chip->dt.batt_temp_delta = temp;
+
+	chip->dt.batt_therm_freq = 8;
+	rc = of_property_read_u32(node, "qcom,fg-batt-therm-freq", &temp);
+	if (temp > 0 && temp <= 255)
+		chip->dt.batt_therm_freq = temp;
 
 	chip->dt.hold_soc_while_full = of_property_read_bool(node,
 					"qcom,hold-soc-while-full");
@@ -4648,6 +4736,7 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	fg->batt_id_ohms = -EINVAL;
 	chip->ki_coeff_full_soc[0] = -EINVAL;
 	chip->ki_coeff_full_soc[1] = -EINVAL;
+	chip->esr_soh_cycle_count = -EINVAL;
 	fg->regmap = dev_get_regmap(fg->dev->parent, NULL);
 	if (!fg->regmap) {
 		dev_err(fg->dev, "Parent regmap is unavailable\n");

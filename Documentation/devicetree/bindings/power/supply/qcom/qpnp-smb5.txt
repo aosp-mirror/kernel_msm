@@ -201,6 +201,12 @@ Charger specific properties:
   Value type: bool
   Definition: Boolean flag which when present enables step-charging.
 
+- qcom,typec-legacy-rp-icl
+  Usage:       optional
+  Value type:  bool
+  Definition:  Boolean property to enable setting ICL based on Rp for
+		Type-C non-compliant legacy cables.
+
 - qcom,wd-bark-time-secs
   Usage:      optional
   Value type: <u32>
@@ -256,6 +262,24 @@ Charger specific properties:
   Value type: bool
   Definition: Boolean flag which when present disables suspend on collapse
 		feature of charger hardware.
+
+- qcom,uusb-moisture-protection-enable
+	Usage:      optional
+	Value type: bool
+	Definition: Boolean flag which when present enables mositure protection
+		    feature for uUSB connector type.
+
+- qcom,hvdcp-autonomous-enable
+  Usage:      optional
+  Value type: bool
+  Definition: Boolean flag which when present enables hardware-controlled
+		operation of HVDCP.
+
+- qcom,usb-pd-disable
+  Usage:      optional
+  Value type: bool
+  Definition: Boolean flag which when present disables USB-PD operation. Not
+		applicable for PMI632, where PD is not supported.
 
 =============================================
 Second Level Nodes - SMB5 Charger Peripherals

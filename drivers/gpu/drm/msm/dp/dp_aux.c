@@ -499,7 +499,7 @@ static ssize_t dp_aux_transfer_debug(struct drm_dp_aux *drm_aux,
 	}
 
 	if ((msg->address + msg->size) > SZ_4K) {
-		pr_debug("invalid dpcd access: addr=0x%x, size=0x%x\n",
+		pr_debug("invalid dpcd access: addr=0x%x, size=0x%lx\n",
 				msg->address, msg->size);
 		goto address_error;
 	}
@@ -817,7 +817,9 @@ struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
 	struct dp_aux *dp_aux;
 
 	if (!catalog || !parser ||
-			(!parser->no_aux_switch && !aux_switch)) {
+			(!parser->no_aux_switch &&
+				!aux_switch &&
+				!parser->gpio_aux_switch)) {
 		pr_err("invalid input\n");
 		rc = -ENODEV;
 		goto error;
