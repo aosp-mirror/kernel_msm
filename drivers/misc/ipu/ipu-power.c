@@ -251,6 +251,155 @@ void ipu_power_disable_cores(struct paintbox_data *pb,
 	ipu_power_enable_mmu_bif_idle_clock_gating(pb);
 }
 
+int ipu_power_enable_cores_ioctl(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned long arg)
+{
+	int ret = 0;
+	unsigned int highest_core_id;
+	unsigned int highest_stp_id = 0;
+	unsigned int highest_lbp_id = 0;
+	unsigned int max_core;
+	struct ipu_power_core_enable_request __user *user_req;
+	struct ipu_power_core_enable_request req;
+	uint64_t masked_stp_enable, masked_lbp_enable;
+	struct paintbox_stp *stp;
+	struct paintbox_lbp *lbp;
+
+	user_req = (struct ipu_power_core_enable_request __user *)arg;
+	if (copy_from_user(&req, user_req, sizeof(req)))
+		return -EFAULT;
+
+	mutex_lock(&pb->lock);
+
+	/* The maximum number of cores is equal to the number of STPs. */
+	max_core = pb->stp.num_stps;
+
+	masked_stp_enable = session->stp_id_mask & req.stp_mask;
+	if (masked_stp_enable & 0x1) {
+		dev_err(pb->dev, "%s: invalid stp_id included in mask\n",
+				__func__);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	/* Mark every STP indicated in the masks as powered up and get
+	 * highest STP ID.
+	 */
+	while (true) {
+		if (masked_stp_enable & 0x1) {
+			stp = &pb->stp.stps[ipu_stp_id_to_index(
+					highest_stp_id)];
+			stp->pm_enabled = true;
+		}
+
+		masked_stp_enable = masked_stp_enable >> 1;
+
+		if (masked_stp_enable == 0)
+			break;
+
+		highest_stp_id++;
+	}
+
+	masked_lbp_enable = session->lbp_id_mask & req.lbp_mask;
+	/* Mark every LBP indicated in the masks as powered up and get
+	 * highest LBP ID.
+	 */
+	while (true) {
+		if (masked_lbp_enable & 0x1) {
+			lbp = &pb->lbp.lbps[highest_lbp_id];
+			lbp->pm_enabled = true;
+		}
+
+		masked_lbp_enable = masked_lbp_enable >> 1;
+
+		if (masked_lbp_enable == 0)
+			break;
+
+		highest_lbp_id++;
+	}
+
+	/* LBP with id higher than maximum number of cores is powered by I/O
+	 * block. If that id shows up, ignore it by setting the highest lbp id
+	 * to the maximum number of core (highest core id managed by core pm).
+	 */
+	highest_lbp_id = (highest_lbp_id > max_core) ? max_core :
+		highest_lbp_id;
+
+	/* If highest_stp_id is 0, means there is no STP to power up.
+	 * If highest_lbp_id is 0, either there is no lbp to power up or there
+	 * only LBP indicated is LBP 0. Since LBP 0 is powered by I/O, there is
+	 * nothing to be done in either case.
+	 * If no STP nor LBP needs to be powered up, exit.
+	 */
+	if (highest_stp_id == 0 && highest_lbp_id == 0)
+		goto exit;
+
+	highest_core_id = (highest_stp_id > highest_lbp_id) ? highest_stp_id :
+		highest_lbp_id;
+
+	ipu_power_enable_cores(pb, highest_core_id);
+
+exit:
+	mutex_unlock(&pb->lock);
+	return ret;
+}
+
+int ipu_power_disable_cores_ioctl(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned long arg)
+{
+	int ret = 0;
+	int stp_id = 0;
+	int lbp_id = 0;
+	struct ipu_power_core_disable_request __user *user_req;
+	struct ipu_power_core_disable_request req;
+	uint64_t masked_stp_disable, masked_lbp_disable;
+	struct paintbox_stp *stp;
+	struct paintbox_lbp *lbp;
+
+	user_req = (struct ipu_power_core_disable_request __user *)arg;
+	if (copy_from_user(&req, user_req, sizeof(req)))
+		return -EFAULT;
+
+	mutex_lock(&pb->lock);
+
+	masked_stp_disable = session->stp_id_mask & req.stp_mask;
+	if (masked_stp_disable & 0x1) {
+		dev_err(pb->dev, "%s: invalid stp_id included in mask\n",
+				__func__);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	/* Mark every STP indicated in the masks as powered down. */
+	while (masked_stp_disable) {
+		if (masked_stp_disable & 0x1) {
+			stp = &pb->stp.stps[ipu_stp_id_to_index(stp_id)];
+			stp->pm_enabled = false;
+		}
+
+		masked_stp_disable = masked_stp_disable >> 1;
+		stp_id++;
+	}
+
+	masked_lbp_disable = session->lbp_id_mask & req.lbp_mask;
+	/* Mark every LBP indicated in the masks as powered down. */
+	while (masked_lbp_disable) {
+		if (masked_lbp_disable & 0x1) {
+			lbp = &pb->lbp.lbps[lbp_id];
+			lbp->pm_enabled = false;
+		}
+
+		masked_lbp_disable = masked_lbp_disable >> 1;
+		lbp_id++;
+	}
+
+	ipu_power_core_power_walk_down(pb);
+
+exit:
+	mutex_unlock(&pb->lock);
+	return ret;
+}
+
 /* The caller to this function must hold pb->lock */
 void ipu_power_core_power_walk_down(struct paintbox_data *pb)
 {

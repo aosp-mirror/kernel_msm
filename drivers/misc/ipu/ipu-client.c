@@ -319,6 +319,12 @@ static long ipu_client_ioctl(struct file *fp, unsigned int cmd,
 	case IPU_RELEASE_RESOURCES:
 		ret = ipu_resource_release_ioctl(pb, session, arg);
 		break;
+	case IPU_POWER_ENABLE_CORES:
+		ret = ipu_power_enable_cores_ioctl(pb, session, arg);
+		break;
+	case IPU_POWER_DISABLE_CORES:
+		ret = ipu_power_disable_cores_ioctl(pb, session, arg);
+		break;
 	case IPU_BULK_REGISTER_DMA_BUF:
 		ret = ipu_buffer_dma_buf_bulk_register_ioctl(pb, session, arg);
 		break;

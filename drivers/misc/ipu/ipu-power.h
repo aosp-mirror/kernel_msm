@@ -23,6 +23,11 @@
 void ipu_power_enable_mmu_bif_idle_clock_gating(struct paintbox_data *pb);
 void ipu_power_disable_mmu_bif_idle_clock_gating(struct paintbox_data *pb);
 
+int ipu_power_enable_cores_ioctl(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned long arg);
+int ipu_power_disable_cores_ioctl(struct paintbox_data *pb,
+		struct paintbox_session *session, unsigned long arg);
+
 /* The caller to these functions must hold pb->lock */
 void ipu_power_enable_cores(struct paintbox_data *pb,
 		unsigned int requested_cores);

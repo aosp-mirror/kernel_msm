@@ -49,6 +49,16 @@ struct ipu_dma_buf_register_entry {
 	uint32_t buffer_id; /* Output Parameter */
 };
 
+struct ipu_power_core_enable_request {
+	uint64_t stp_mask;
+	uint64_t lbp_mask;
+};
+
+struct ipu_power_core_disable_request {
+	uint64_t stp_mask;
+	uint64_t lbp_mask;
+};
+
 struct ipu_dma_buf_bulk_register_req {
 	unsigned int num_buffers;
 	struct ipu_dma_buf_register_entry __user *bufs;
@@ -71,6 +81,14 @@ struct ipu_dma_buf_bulk_unregister_req {
 
 /* On success will return 0, otherwise will return -1 with errno set. */
 #define IPU_RELEASE_RESOURCES _IO('i', 4)
+
+/* On success will return 0, otherwise will return -1 with errno set. */
+#define IPU_POWER_ENABLE_CORES _IOW('i', 5, \
+		struct ipu_power_core_enable_request)
+
+/* On success will return 0, otherwise will return -1 with errno set. */
+#define IPU_POWER_DISABLE_CORES _IOW('i', 6, \
+		struct ipu_power_core_disable_request)
 
 /* On success the return value will be zero and the buffer_id field will be set
  * to the buffer id for the buffer.  On error the return value will be set to -1
