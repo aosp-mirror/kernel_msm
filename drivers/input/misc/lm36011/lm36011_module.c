@@ -100,7 +100,8 @@ struct led_laser_ctrl_t {
 	struct cdev c_dev;
 	struct class *cl;
 	struct pinctrl *pinctrl;
-	struct pinctrl_state *gpio_init_state;
+	struct pinctrl_state *gpio_active_state;
+	struct pinctrl_state *gpio_suspend_state;
 	int gpio_count;
 	struct work_struct work;
 	struct workqueue_struct *work_queue;
@@ -148,7 +149,7 @@ static const struct reg_setting silego_reg_settings_ver2[] = {
 
 static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x10, 0x0F},
-	{0x11, 0x27},
+	{0x11, 0x2E},
 	{0x14, 0x00},
 	{0x15, 0x00},
 	{0x20, 0x20},
@@ -159,7 +160,7 @@ static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x28, 0x3D},
 	{0x29, 0x37},
 	{0x2A, 0x1F},
-	{0x2B, 0x3D},
+	{0x2B, 0x40},
 	{0x2C, 0x12},
 	{0x2D, 0x0F},
 	{0x30, 0x09},
@@ -172,7 +173,7 @@ static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x37, 0x69},
 	{0x40, 0x00},
 	{0x41, 0x00},
-	{0x42, 0x01},
+	{0x42, 0x17},
 	{0x43, 0x00},
 	{0x44, 0x00},
 	{0x45, 0x05},
@@ -191,13 +192,13 @@ static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x52, 0x22},
 	{0x53, 0x00},
 	{0x54, 0x00},
-	{0x02, 0x00},
-	{0x03, 0x07},
+	{0x02, 0x02},
+	{0x03, 0x0F},
 	{0x05, 0x08},
 	{0x06, 0x04},
 	{0x07, 0x80},
 	{0x08, 0x01},
-	{0x00, 0x00},
+	{0x00, 0x08},
 };
 
 static int sx9320_write_data(
@@ -565,16 +566,14 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	}
 	ctrl->silego.is_validated = true;
 
-	/* Cap sense need wait 1 ms for hw ready */
-	usleep_range(1000, 3000);
-	rc = sx9320_cleanup_nirq(ctrl);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"clean up cap sense irq failed: rc: %d", rc);
-		ctrl->cap_sense.is_validated = false;
-		return rc;
+	if (ctrl->type == LASER_FLOOD &&
+		!IS_ERR_OR_NULL(ctrl->gpio_active_state)) {
+		rc = pinctrl_select_state(ctrl->pinctrl,
+			ctrl->gpio_active_state);
+		if (rc < 0)
+			dev_err(ctrl->soc_info.dev,
+				"failed to set pin ctrl to active");
 	}
-	ctrl->cap_sense.is_validated = true;
 
 	return rc;
 }
@@ -636,6 +635,15 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 				"laser regulator_disable failed: rc: %d", rc);
 		} else
 			ctrl->is_power_up = false;
+	}
+
+	if (ctrl->type == LASER_FLOOD &&
+		!IS_ERR_OR_NULL(ctrl->gpio_suspend_state)) {
+		rc = pinctrl_select_state(ctrl->pinctrl,
+			ctrl->gpio_suspend_state);
+		if (rc < 0)
+			dev_err(ctrl->soc_info.dev,
+				"failed to set pin ctrl to suspend");
 	}
 
 	return rc;
@@ -863,7 +871,7 @@ static void lm36011_disable_gpio_irq(struct device *dev)
 	}
 }
 
-static int lm36011_init_pinctrl(struct device *dev)
+static int lm36011_parse_pinctrl(struct device *dev)
 {
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 
@@ -876,20 +884,21 @@ static int lm36011_init_pinctrl(struct device *dev)
 		return -EINVAL;
 	}
 
-	ctrl->gpio_init_state =
+	ctrl->gpio_active_state =
 		pinctrl_lookup_state(ctrl->pinctrl,
-				"lm36011_init");
-	if (IS_ERR_OR_NULL(ctrl->gpio_init_state)) {
+				"lm36011_active");
+	if (IS_ERR_OR_NULL(ctrl->gpio_active_state)) {
 		dev_err(dev,
-			"failed to get the gpio init state pinctrl handle");
+			"failed to get the gpio active state pinctrl handle");
 		return -EINVAL;
 	}
 
-	if (pinctrl_select_state(
-		ctrl->pinctrl,
-		ctrl->gpio_init_state) < 0) {
+	ctrl->gpio_suspend_state =
+		pinctrl_lookup_state(ctrl->pinctrl,
+				"lm36011_suspend");
+	if (IS_ERR_OR_NULL(ctrl->gpio_suspend_state)) {
 		dev_err(dev,
-			"failed to set gpio state");
+			"failed to get the gpio suspend state pinctrl handle");
 		return -EINVAL;
 	}
 
@@ -927,7 +936,7 @@ static int lm36011_get_gpio_info(struct device *dev)
 		return -ENOMEM;
 	}
 
-	if (lm36011_init_pinctrl(dev) < 0) {
+	if (lm36011_parse_pinctrl(dev) < 0) {
 		dev_err(dev, "failed to init gpio state");
 		return -EFAULT;
 	}
@@ -1116,7 +1125,9 @@ static ssize_t led_laser_enable_store(struct device *dev,
 				mutex_unlock(&ctrl->cam_sensor_mutex);
 				return rc;
 			}
-		}
+		} else if (ctrl->hw_version < 2)
+			sx9320_cleanup_nirq(ctrl);
+
 		lm36011_enable_gpio_irq(dev);
 		rc = lm36011_write_data(ctrl,
 			ENABLE_REG, IR_ENABLE_MODE);
@@ -1561,6 +1572,14 @@ static int32_t lm36011_driver_platform_probe(
 
 	/* Read device id */
 	lm36011_power_up(ctrl);
+
+	rc = sx9320_cleanup_nirq(ctrl);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"clean up cap sense irq failed: rc: %d", rc);
+		ctrl->cap_sense.is_validated = false;
+	} else
+		ctrl->cap_sense.is_validated = true;
 
 	rc = lm36011_read_data(ctrl,
 		DEVICE_ID_REG, &device_id);
