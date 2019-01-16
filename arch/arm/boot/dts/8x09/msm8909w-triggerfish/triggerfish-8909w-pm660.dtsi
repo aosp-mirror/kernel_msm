@@ -36,7 +36,7 @@
 	};
 	qrd_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <60>;
-		#include "../common/fg-gen3-batterydata-apack-355mah.dtsi"
+		#include "../common/fg-gen3-batterydata-apack-310mah.dtsi"
 	};
 };
 

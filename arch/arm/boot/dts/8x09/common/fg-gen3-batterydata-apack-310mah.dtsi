@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2018, Compal Electronics.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,3769662_compal_efta_310mah_averaged_masterslave_jan4th2019 {
+	qcom, = <24>;
+	/* #3769662_Compal_EFTA_310mAh_averaged_MasterSlave_Jan4th2019*/
+	qcom,max-voltage-uv = <4395000>;
+	qcom,fg-cc-cv-threshold-mv = <4385>;
+	qcom,nom-batt-capacity-mah = <310>;
+	qcom,batt-id-kohm = <0>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "triggerfish_310mah_jan4th2019";
+	qcom,checksum = <0x9AD4>;
+	qcom,gui-version = "PM660GUI - 0.0.0.45";
+	qcom,fg-profile-data = [
+		10 21 F6 0D
+		A3 0B 4B 05
+		CB 1C F2 01
+		F7 0D 35 0A
+		F7 18 FE 1B
+		86 3D 24 4A
+		88 00 00 00
+		18 00 00 00
+		00 00 85 C5
+		16 C4 CB C2
+		33 00 08 00
+		34 E3 12 F5
+		A5 ED 63 D3
+		D5 0D BE 04
+		55 EA 82 42
+		16 06 09 20
+		27 00 14 00
+		39 20 F6 04
+		F3 0A D8 05
+		DB 1C 8E 02
+		C1 0C 81 0B
+		B4 18 47 23
+		DC 44 15 5A
+		73 00 00 00
+		10 00 00 00
+		00 00 B1 D5
+		76 9A 24 CA
+		35 00 00 00
+		89 FA 12 F5
+		E8 E5 3D E5
+		1A F2 0B 02
+		13 03 EA 1A
+		B7 33 CC FF
+		07 10 00 00
+		3A 01 51 46
+		35 00 40 00
+		64 05 0A FA
+		FF 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		00 00 00 00
+		];
+};
