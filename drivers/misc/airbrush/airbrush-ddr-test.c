@@ -95,7 +95,7 @@ static int ddr_rw_test_pcie_dma_write(unsigned int test_data, char *host_vaddr,
 
 		reinit_completion(&dma_completion);
 
-		(void)dma_sblk_start(0, DMA_TO_DEVICE, &desc);
+		(void)dma_sblk_start(DMA_CHANNEL, DMA_TO_DEVICE, &desc);
 
 		timeout = msecs_to_jiffies(DMA_COMPLETION_TIMEOUT_MSEC);
 		if (!wait_for_completion_timeout(&dma_completion, timeout)) {
@@ -135,7 +135,7 @@ static int ddr_rw_test_pcie_dma_read_compare(unsigned int test_data,
 
 		reinit_completion(&dma_completion);
 
-		(void)dma_sblk_start(0, DMA_FROM_DEVICE, &desc);
+		(void)dma_sblk_start(DMA_CHANNEL, DMA_FROM_DEVICE, &desc);
 
 		timeout = msecs_to_jiffies(DMA_COMPLETION_TIMEOUT_MSEC);
 		if (!wait_for_completion_timeout(&dma_completion, timeout)) {
