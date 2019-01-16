@@ -1269,17 +1269,6 @@ static int max1720x_get_battery_health(struct max1720x_chip *chip)
 	return POWER_SUPPLY_HEALTH_GOOD;
 }
 
-static int max1720x_set_battery_soc(struct max1720x_chip *chip,
-				    const union power_supply_propval *val)
-{
-	chip->fake_capacity = val->intval;
-
-	if (chip->psy)
-		power_supply_changed(chip->psy);
-
-	return 0;
-}
-
 static int max1720x_update_battery_qh_based_capacity(struct max1720x_chip *chip)
 {
 	u16 data;
@@ -1520,9 +1509,6 @@ static int max1720x_set_property(struct power_supply *psy,
 	pm_runtime_put_sync(chip->dev);
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CAPACITY:
-		rc = max1720x_set_battery_soc(chip, val);
-		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
 		rc = max17x0x_cycle_count_store(chip, val->strval);
 		break;
@@ -1540,8 +1526,6 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
 					  enum power_supply_property psp)
 {
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CAPACITY:
-		return 1;
 	default:
 		break;
 	}

@@ -114,6 +114,8 @@ struct batt_drv {
 	/* props */
 	int soh;
 
+	int fake_capacity;
+
 	/* temp outside the charge table */
 	int jeita_stop_charging;
 
@@ -1343,9 +1345,14 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CAPACITY:
-		mutex_lock(&batt_drv->batt_lock);
-		val->intval = ssoc_get_capacity(ssoc_state);
-		mutex_unlock(&batt_drv->batt_lock);
+		if (batt_drv->fake_capacity >= 0 &&
+				batt_drv->fake_capacity <= 100)
+			val->intval = batt_drv->fake_capacity;
+		else {
+			mutex_lock(&batt_drv->batt_lock);
+			val->intval = ssoc_get_capacity(ssoc_state);
+			mutex_unlock(&batt_drv->batt_lock);
+		}
 		break;
 
 	/* ng charging:
@@ -1494,6 +1501,11 @@ static int gbatt_set_property(struct power_supply *psy,
 				power_supply_changed(batt_drv->psy);
 		}
 		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+		batt_drv->fake_capacity = val->intval;
+		if (batt_drv->psy)
+			power_supply_changed(batt_drv->psy);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -1516,6 +1528,7 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_RECHARGE_SOC:
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
+	case POWER_SUPPLY_PROP_CAPACITY:
 		return 1;
 	default:
 		break;
@@ -1602,6 +1615,8 @@ static void google_battery_init_work(struct work_struct *work)
 		dev_err(batt_drv->device,
 			"Couldn't register as power supply, ret=%d\n", ret);
 	}
+
+	batt_drv->fake_capacity = -EINVAL;
 
 	(void)batt_init_fs(batt_drv);
 	pr_info("init_work done\n");
