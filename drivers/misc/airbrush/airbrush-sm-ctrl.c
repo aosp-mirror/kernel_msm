@@ -605,17 +605,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON_34);
 	}
 
-	if ((sc->curr_chip_substate_id == CHIP_STATE_5_0 ||
-			sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
-			sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
-			to_chip_substate_id < CHIP_STATE_3_0) {
-		mutex_lock(&sc->op_lock);
-		ret = sc->clk_ops->deattach_mif_clk_ref(sc->clk_ops->ctx);
-		mutex_unlock(&sc->op_lock);
-		if (ret)
-			return ret;
-	}
-
 	/*
 	 * TODO May need to roll-back the block states if only partial
 	 * blocks are set to destination state.
@@ -648,17 +637,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
 			map->aon_block_state_id, to_chip_substate_id))
 		return -EINVAL;
-
-	if ((to_chip_substate_id == CHIP_STATE_3_0 ||
-			to_chip_substate_id == CHIP_STATE_4_0 ||
-			to_chip_substate_id == CHIP_STATE_5_0) &&
-			sc->curr_chip_substate_id < CHIP_STATE_3_0) {
-		mutex_lock(&sc->op_lock);
-		ret = sc->clk_ops->attach_mif_clk_ref(sc->clk_ops->ctx);
-		mutex_unlock(&sc->op_lock);
-		if (ret)
-			return ret;
-	}
 
 	if (((to_chip_substate_id == CHIP_STATE_5_0) ||
 			(to_chip_substate_id == CHIP_STATE_6_0)) &&

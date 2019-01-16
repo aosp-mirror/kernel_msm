@@ -309,9 +309,6 @@ struct ab_sm_clk_ops {
 	u64 (*tpu_set_rate)(void *ctx, u64 rate);
 
 	u64 (*aon_set_rate)(void *ctx, u64 rate);
-
-	int (*attach_mif_clk_ref)(void *ctx);
-	int (*deattach_mif_clk_ref)(void *ctx);
 };
 
 static int ipu_pll_enable_stub(void *ctx)   { return -ENODEV; }
@@ -327,9 +324,6 @@ static int tpu_ungate_stub(void *ctx) { return -ENODEV; }
 static u64 tpu_set_rate_stub(void *ctx, u64 rate) { return 0; }
 
 static u64 aon_set_rate_stub(void *ctx, u64 rate) { return 0; }
-
-static int attach_mif_clk_ref_stub(void *ctx)   { return -ENODEV; }
-static int deattach_mif_clk_ref_stub(void *ctx) { return -ENODEV; }
 
 static struct ab_sm_clk_ops clk_ops_stub = {
 	.ctx = NULL,
@@ -347,9 +341,6 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 	.tpu_set_rate = &tpu_set_rate_stub,
 
 	.aon_set_rate = &aon_set_rate_stub,
-
-	.attach_mif_clk_ref = &attach_mif_clk_ref_stub,
-	.deattach_mif_clk_ref = &deattach_mif_clk_ref_stub,
 };
 
 struct ab_sm_dram_ops {

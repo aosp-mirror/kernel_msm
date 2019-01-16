@@ -479,66 +479,6 @@ static u64 ab_clk_aon_set_rate_handler(void *ctx, u64 rate)
 	return ret;
 }
 
-/* TODO(b/119189465): remove when clk framework method is available */
-static int ab_clk_attach_mif_clk_ref_handler(void *ctx)
-{
-	int ret = 0;
-	uint32_t val;
-	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
-
-	mutex_lock(&clk_ctx->pcie_link_lock);
-	if (clk_ctx->pcie_link_ready) {
-		ABC_READ(MIF_PLL_CONTROL0, &val);
-		val &= ~(1 << 4);
-		val &= ~(1 << 31);
-		ABC_WRITE(MIF_PLL_CONTROL0, val);
-
-	} else {
-		dev_err(clk_ctx->dev,
-				"%s: pcie link down during clk request\n",
-				__func__);
-		ret = -ENODEV;
-	}
-	mutex_unlock(&clk_ctx->pcie_link_lock);
-
-	return ret;
-}
-
-/* TODO(b/119189465): remove when clk framework method is available */
-static int ab_clk_deattach_mif_clk_ref_handler(void *ctx)
-{
-	int ret = 0;
-	uint32_t val;
-	uint32_t timeout = MIF_PLL_TIMEOUT;
-	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
-
-	mutex_lock(&clk_ctx->pcie_link_lock);
-	if (clk_ctx->pcie_link_ready) {
-		ABC_READ(MIF_PLL_CONTROL0, &val);
-		val |= (1 << 4);
-		val |= (1 << 31);
-		ABC_WRITE(MIF_PLL_CONTROL0, val);
-		do {
-			ABC_READ(MIF_PLL_CONTROL0, &val);
-		} while (!(val & 0x20000000) && --timeout > 0);
-
-		if (timeout == 0) {
-			dev_err(clk_ctx->dev,
-					"Timeout waiting for AIRBRUSH MIF PLL lock\n");
-			ret = -E_STATUS_TIMEOUT;
-		}
-
-	} else {
-		dev_err(clk_ctx->dev,
-				"%s: pcie link down during clk request\n",
-				__func__);
-		ret = -ENODEV;
-	}
-	mutex_unlock(&clk_ctx->pcie_link_lock);
-
-	return ret;
-}
-
 static struct ab_sm_clk_ops clk_ops = {
 	.ipu_pll_enable = &ab_clk_ipu_pll_enable_handler,
 	.ipu_pll_disable = &ab_clk_ipu_pll_disable_handler,
@@ -553,9 +493,6 @@ static struct ab_sm_clk_ops clk_ops = {
 	.tpu_set_rate = &ab_clk_tpu_set_rate_handler,
 
 	.aon_set_rate = &ab_clk_aon_set_rate_handler,
-
-	.attach_mif_clk_ref = &ab_clk_attach_mif_clk_ref_handler,
-	.deattach_mif_clk_ref = &ab_clk_deattach_mif_clk_ref_handler,
 };
 
 static int ab_clk_probe(struct platform_device *pdev)

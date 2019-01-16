@@ -15,10 +15,6 @@
 #include <linux/clk-provider.h>
 #include <linux/of.h>
 
-#define MIF_PLL_TIMEOUT		1000
-
-#define MIF_PLL_CONTROL0	0x10510140
-
 struct ab_clk_context {
 	struct device *dev;
 
