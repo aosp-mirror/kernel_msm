@@ -41,7 +41,7 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
-#define PHASENUM 3
+#define PHASENUM 4
 
 #define PHASE_SELECT_REG 0x60
 #define PROXAVG_REG 0x63
@@ -723,7 +723,7 @@ static void cap_sense_workq_job(struct work_struct *work)
 	write_setting.size = 1;
 	write_setting.delay = 0;
 
-	for (i = 0; i < PHASENUM; i++) {
+	for (i = 1; i < PHASENUM; i++) {
 		reg_settings.reg_data = i;
 
 		camera_io_dev_write(&ctrl->cap_sense.io_master_info,
@@ -1321,13 +1321,13 @@ static ssize_t cap_sense_proxvalue_show(struct device *dev,
 	}
 
 	rc = scnprintf(buf, PAGE_SIZE,
-		"proxoffset PH0: %d, PH1: %d, PH2: %d\nproxavg PH0: %d, PH1: %d, PH2: %d\n",
-			ctrl->cap_sense.proxoffset[0],
+		"proxoffset PH1: %d, PH2: %d, PH3: %d\nproxavg PH1: %d, PH2: %d, PH3: %d\n",
 			ctrl->cap_sense.proxoffset[1],
 			ctrl->cap_sense.proxoffset[2],
-			ctrl->cap_sense.proxavg[0],
+			ctrl->cap_sense.proxoffset[3],
 			ctrl->cap_sense.proxavg[1],
-			ctrl->cap_sense.proxavg[2]);
+			ctrl->cap_sense.proxavg[2],
+			ctrl->cap_sense.proxavg[3]);
 
 	return rc;
 }
