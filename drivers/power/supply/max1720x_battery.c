@@ -254,7 +254,9 @@ enum max1720x_nvram {
 	MAX1720X_NDEVICENAME2 = 0xDD,	/* SNUM */
 	MAX1720X_NDEVICENAME3 = 0xDE,	/* SNUM */
 	MAX1720X_NDEVICENAME4 = 0xDF,	/* CCLC */
-	MAX1720X_NVRAM_END = 0xE0,
+	MAX1720X_NVRAM_END = MAX1720X_NDEVICENAME4,
+
+	MAX1720X_HISTORY_START = 0xE0,
 	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START = 0xE1,
 	MAX1720X_NVRAM_HISTORY_VALID_STATUS_END = 0xE4,
 	MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END = 0xEA,
@@ -266,7 +268,9 @@ enum max1720x_nvram {
 enum max1730x_nvram {
 	MAX1730X_NVRAM_START 	= 0x80,
 	MAX1730X_NVPRTTH1 	= 0xD0,
-	MAX1730X_NVRAM_END 	= 0xF0,
+	MAX1730X_NVRAM_END 	= 0xEF,
+
+	MAX1730X_HISTORY_START 	= 0xF0,
 };
 
 enum max1730x_register {
@@ -309,13 +313,13 @@ enum max17xxx_register {
 };
 
 #define MAX1720X_HISTORY_PAGE_SIZE \
-		(MAX1720X_NVRAM_HISTORY_END - MAX1720X_NVRAM_END + 1)
+		(MAX1720X_NVRAM_HISTORY_END - MAX1720X_HISTORY_START + 1)
 
 #define MAX1720X_N_OF_HISTORY_FLAGS_REG				\
 	(MAX1720X_NVRAM_HISTORY_END -				\
 		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START + 1 + \
 		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END -	\
-		MAX1720X_NVRAM_END + 1)
+		MAX1720X_HISTORY_START + 1)
 #define MAX1720X_N_OF_QRTABLES 4
 
 struct max1720x_cyc_ctr_data {
@@ -848,7 +852,7 @@ static void max1720x_read_log_write_status(struct max1720x_chip *chip,
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_WRITE_1);
 	msleep(MAX1720X_TRECALL_MS);
-	for (i = MAX1720X_NVRAM_END;
+	for (i = MAX1720X_HISTORY_START;
 	     i <= MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END; i++) {
 		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
 		*buffer++ = data;
@@ -872,14 +876,15 @@ static void max1720x_read_log_valid_status(struct max1720x_chip *chip,
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_1);
 	msleep(MAX1720X_TRECALL_MS);
-	for (i = MAX1720X_NVRAM_END; i <= MAX1720X_NVRAM_HISTORY_END; i++) {
+	for (i = MAX1720X_HISTORY_START;
+	     i <= MAX1720X_NVRAM_HISTORY_END; i++) {
 		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
 		*buffer++ = data;
 	}
 	REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
 		     MAX1720X_COMMAND_HISTORY_RECALL_VALID_2);
 	msleep(MAX1720X_TRECALL_MS);
-	for (i = MAX1720X_NVRAM_END;
+	for (i = MAX1720X_HISTORY_START;
 	     i <= MAX1720X_NVRAM_HISTORY_VALID_STATUS_END; i++) {
 		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
 		*buffer++ = data;
@@ -942,7 +947,7 @@ static void get_battery_history(struct max1720x_chip *chip,
 		msleep(MAX1720X_TRECALL_MS);
 		for (j = 0; j < MAX1720X_HISTORY_PAGE_SIZE; j++) {
 			(void) REGMAP_READ(chip->regmap_nvram,
-					   MAX1720X_NVRAM_END + j,
+					   MAX1720X_HISTORY_START + j,
 					   &data);
 			history[index * MAX1720X_HISTORY_PAGE_SIZE + j] = data;
 		}
