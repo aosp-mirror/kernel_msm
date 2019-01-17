@@ -2618,7 +2618,8 @@ static void max1720x_init_work(struct work_struct *work)
 
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
-	(void)max1720x_init_history(chip);
+	if (max17xxx_gauge_type != MAX1730X_GAUGE_TYPE)
+		(void)max1720x_init_history(chip);
 }
 
 static int max1720x_probe(struct i2c_client *client,
