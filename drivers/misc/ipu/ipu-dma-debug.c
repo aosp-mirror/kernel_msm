@@ -805,8 +805,7 @@ void ipu_dma_channel_debug_remove(struct paintbox_data *pb,
 
 static int ipu_dma_debug_enable_set(void *data, u64 val)
 {
-	struct ipu_debug_register *reg = (struct ipu_debug_register *)data;
-	struct paintbox_data *pb = reg->pb;
+	struct paintbox_data *pb = data;
 	uint32_t reg_val;
 	int ret;
 
@@ -839,8 +838,7 @@ static int ipu_dma_debug_enable_set(void *data, u64 val)
 
 static int ipu_dma_debug_enable_get(void *data, u64 *val)
 {
-	struct ipu_debug_register *reg = (struct ipu_debug_register *)data;
-	struct paintbox_data *pb = reg->pb;
+	struct paintbox_data *pb = data;
 	uint32_t reg_val;
 	int ret;
 
