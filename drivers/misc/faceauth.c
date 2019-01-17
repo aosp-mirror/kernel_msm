@@ -625,53 +625,20 @@ static int pio_write_qw(const int remote_addr, const uint64_t val)
 	return 0;
 }
 
-static int hypx_enable_debugfs_show(struct seq_file *m, void *data)
+static int hypx_enable_set(void *data, u64 val)
 {
-	seq_printf(m, "%s\n", hypx_enable ? "1" : "0");
+	hypx_enable = !!val;
 	return 0;
 }
 
-static int hypx_enable_debugfs_open(struct inode *inode, struct file *file)
+static int hypx_enable_get(void *data, u64 *val)
 {
-	return single_open(file, hypx_enable_debugfs_show, inode->i_private);
+	*val = hypx_enable;
+	return 0;
 }
 
-static ssize_t hypx_enable_debugfs_write(struct file *file,
-					 const char __user *ubuf, size_t len,
-					 loff_t *offp)
-{
-	char buf[12];
-
-	if (len > sizeof(buf) - 1)
-		return -EINVAL;
-
-	if (copy_from_user(buf, ubuf, len))
-		return -EFAULT;
-
-	while (len > 0 && isspace(buf[len - 1]))
-		len--;
-	buf[len] = '\0';
-
-	if (!strcmp(buf, "0"))
-		hypx_enable = false;
-	else if (!strcmp(buf, "1"))
-		hypx_enable = true;
-	else
-		return -EINVAL;
-
-	pr_debug("Faceauth hypx enable flag is set to %d\n", hypx_enable);
-
-	return len;
-}
-
-static const struct file_operations hypx_enable_debugfs_fops = {
-	.owner = THIS_MODULE,
-	.open = hypx_enable_debugfs_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-	.write = hypx_enable_debugfs_write,
-};
+DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, hypx_enable_get, hypx_enable_set,
+			 "%llu\n");
 
 static int m0_verbosity_level_debugfs_show(struct seq_file *m, void *data)
 {
@@ -751,7 +718,7 @@ static int __init faceauth_init(void)
 	}
 
 	hypx = debugfs_create_file("hypx_enable", 0400, faceauth_debugfs_root,
-				   NULL, &hypx_enable_debugfs_fops);
+				   NULL, &fops_hypx_enable);
 	if (!hypx) {
 		err = -EIO;
 		goto exit3;
