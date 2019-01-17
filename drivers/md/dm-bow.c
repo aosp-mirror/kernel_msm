@@ -22,6 +22,7 @@ struct log_entry {
 
 struct log_sector {
 	u32 magic;
+	u32 block_size;
 	u32 count;
 	u32 sequence;
 	sector_t sector0;
@@ -73,6 +74,8 @@ enum state {
 
 struct bow_context {
 	struct dm_dev *dev;
+	u32 block_size;
+	u32 block_shift;
 	struct workqueue_struct *workqueue;
 	struct dm_bufio_client *bufio;
 	struct mutex ranges_lock; /* Hold to access this struct and/or ranges */
@@ -80,10 +83,7 @@ struct bow_context {
 	struct dm_kobject_holder kobj_holder;	/* for sysfs attributes */
 	atomic_t state; /* One of the enum state values above */
 	u64 trims_total;
-	union {
-		u8			raw_log_sector[PAGE_SIZE];
-		struct log_sector	log_sector;
-	};
+	struct log_sector *log_sector;
 };
 
 sector_t range_top(struct bow_range *br)
@@ -237,14 +237,15 @@ static struct bow_range *find_free_range(struct rb_root *ranges)
 	return NULL;
 }
 
-static sector_t sector_to_page(sector_t sector)
+static sector_t sector_to_page(struct bow_context const *bc, sector_t sector)
 {
-	WARN_ON(sector % (PAGE_SIZE / SECTOR_SIZE) != 0);
-	return sector >> (PAGE_SHIFT - SECTOR_SHIFT);
+	WARN_ON(sector % (bc->block_size / SECTOR_SIZE) != 0);
+	return sector >> (bc->block_shift - SECTOR_SHIFT);
 }
 
-static int copy_data(struct dm_bufio_client *bufio, struct bow_range *source,
-		     struct bow_range *dest, u32 *checksum)
+static int copy_data(struct bow_context const *bc,
+		     struct bow_range *source, struct bow_range *dest,
+		     u32 *checksum)
 {
 	int i;
 
@@ -254,25 +255,26 @@ static int copy_data(struct dm_bufio_client *bufio, struct bow_range *source,
 	}
 
 	if (checksum)
-		*checksum = sector_to_page(source->sector);
+		*checksum = sector_to_page(bc, source->sector);
 
-	for (i = 0; i < range_size(source) / PAGE_SIZE; ++i) {
+	for (i = 0; i < range_size(source) >> bc->block_shift; ++i) {
 		struct dm_buffer *read_buffer, *write_buffer;
 		u8 *read, *write;
+		sector_t page = sector_to_page(bc, source->sector) + i;
 
-		read = dm_bufio_read(bufio, sector_to_page(source->sector) + i,
-				     &read_buffer);
+		read = dm_bufio_read(bc->bufio, page, &read_buffer);
 		if (IS_ERR(read)) {
-			DMERR("Cannot read sector");
+			DMERR("Cannot read page %lu", page);
 			dm_bufio_release(read_buffer);
 			return PTR_ERR(read);
 		}
 
 		if (checksum)
-			*checksum = crc32(*checksum, read, PAGE_SIZE);
+			*checksum = crc32(*checksum, read, bc->block_size);
 
-		write = dm_bufio_new(bufio, sector_to_page(dest->sector) + i,
-				      &write_buffer);
+		write = dm_bufio_new(bc->bufio,
+				     sector_to_page(bc, dest->sector) + i,
+				     &write_buffer);
 		if (IS_ERR(write)) {
 			DMERR("Cannot write sector");
 			dm_bufio_release(write_buffer);
@@ -280,14 +282,14 @@ static int copy_data(struct dm_bufio_client *bufio, struct bow_range *source,
 			return PTR_ERR(write);
 		}
 
-		memcpy(write, read, PAGE_SIZE);
+		memcpy(write, read, bc->block_size);
 
 		dm_bufio_mark_buffer_dirty(write_buffer);
 		dm_bufio_release(write_buffer);
 		dm_bufio_release(read_buffer);
 	}
 
-	dm_bufio_write_dirty_buffers(bufio);
+	dm_bufio_write_dirty_buffers(bc->bufio);
 	return 0;
 }
 
@@ -310,7 +312,7 @@ static int backup_log_sector(struct bow_context *bc)
 		return -EIO;
 	}
 
-	if (range_size(first_br) != PAGE_SIZE) {
+	if (range_size(first_br) != bc->block_size) {
 		WARN_ON(1);
 		return -EIO;
 	}
@@ -320,21 +322,21 @@ static int backup_log_sector(struct bow_context *bc)
 	if (!free_br)
 		return -ENOSPC;
 	bi_iter.bi_sector = free_br->sector;
-	bi_iter.bi_size = PAGE_SIZE;
+	bi_iter.bi_size = bc->block_size;
 	ret = split_range(&bc->ranges, &free_br, &bi_iter);
 	if (ret)
 		return ret;
-	if (bi_iter.bi_size != PAGE_SIZE) {
+	if (bi_iter.bi_size != bc->block_size) {
 		WARN_ON(1);
 		return -EIO;
 	}
 
-	ret = copy_data(bc->bufio, first_br, free_br, &checksum);
+	ret = copy_data(bc, first_br, free_br, &checksum);
 	if (ret)
 		return ret;
 
-	bc->log_sector.count = 0;
-	bc->log_sector.sequence++;
+	bc->log_sector->count = 0;
+	bc->log_sector->sequence++;
 	ret = add_log_entry(bc, first_br->sector, free_br->sector,
 			    range_size(first_br), checksum);
 	if (ret)
@@ -351,8 +353,8 @@ static int add_log_entry(struct bow_context *bc, sector_t source, sector_t dest,
 	u8 *sector;
 
 	if (sizeof(struct log_sector)
-			+ sizeof(struct log_entry) * (bc->log_sector.count + 1)
-		   > sizeof(bc->raw_log_sector)) {
+	    + sizeof(struct log_entry) * (bc->log_sector->count + 1)
+		> bc->block_size) {
 		int ret = backup_log_sector(bc);
 
 		if (ret)
@@ -372,7 +374,7 @@ static int add_log_entry(struct bow_context *bc, sector_t source, sector_t dest,
 	bc->log_sector->entries[bc->log_sector->count].checksum = checksum;
 	bc->log_sector->count++;
 
-	memcpy(sector, bc->raw_log_sector, PAGE_SIZE);
+	memcpy(sector, bc->log_sector, bc->block_size);
 	dm_bufio_mark_buffer_dirty(sector_buffer);
 	dm_bufio_release(sector_buffer);
 	dm_bufio_write_dirty_buffers(bc->bufio);
@@ -392,17 +394,17 @@ static int prepare_log(struct bow_context *bc)
 		WARN_ON(1);
 		return -EIO;
 	}
-	if (range_size(first_br) < PAGE_SIZE) {
+	if (range_size(first_br) < bc->block_size) {
 		WARN_ON(1);
 		return -EIO;
 	}
 	bi_iter.bi_sector = 0;
-	bi_iter.bi_size = PAGE_SIZE;
+	bi_iter.bi_size = bc->block_size;
 	ret = split_range(&bc->ranges, &first_br, &bi_iter);
 	if (ret)
 		return ret;
 	first_br->type = SECTOR0;
-	if (range_size(first_br) != PAGE_SIZE) {
+	if (range_size(first_br) != bc->block_size) {
 		WARN_ON(1);
 		return -EIO;
 	}
@@ -412,31 +414,31 @@ static int prepare_log(struct bow_context *bc)
 	if (!free_br)
 		return -ENOSPC;
 	bi_iter.bi_sector = free_br->sector;
-	bi_iter.bi_size = PAGE_SIZE;
+	bi_iter.bi_size = bc->block_size;
 	ret = split_range(&bc->ranges, &free_br, &bi_iter);
 	if (ret)
 		return ret;
 	free_br->type = SECTOR0_CURRENT;
 
 	/* Copy data */
-	ret = copy_data(bc->bufio, first_br, free_br, NULL);
+	ret = copy_data(bc, first_br, free_br, NULL);
 	if (ret)
 		return ret;
 
-	bc->log_sector.sector0 = free_br->sector;
+	bc->log_sector->sector0 = free_br->sector;
 
 	/* Find free sector to back up original sector zero */
 	free_br = find_free_range(&bc->ranges);
 	if (!free_br)
 		return -ENOSPC;
 	bi_iter.bi_sector = free_br->sector;
-	bi_iter.bi_size = PAGE_SIZE;
+	bi_iter.bi_size = bc->block_size;
 	ret = split_range(&bc->ranges, &free_br, &bi_iter);
 	if (ret)
 		return ret;
 
 	/* Back up */
-	ret = copy_data(bc->bufio, first_br, free_br, &checksum);
+	ret = copy_data(bc, first_br, free_br, &checksum);
 	if (ret)
 		return ret;
 
@@ -444,9 +446,10 @@ static int prepare_log(struct bow_context *bc)
 	 * Set up our replacement boot sector - it will get written when we
 	 * add the first log entry, which we do immediately
 	 */
-	bc->log_sector.magic = MAGIC;
-	bc->log_sector.count = 0;
-	bc->log_sector.sequence = 0;
+	bc->log_sector->magic = MAGIC;
+	bc->log_sector->block_size = bc->block_size;
+	bc->log_sector->count = 0;
+	bc->log_sector->sequence = 0;
 
 	/* Add log entry */
 	ret = add_log_entry(bc, first_br->sector, free_br->sector,
@@ -462,8 +465,8 @@ static struct bow_range *find_sector0_current(struct bow_context *bc)
 {
 	struct bvec_iter bi_iter;
 
-	bi_iter.bi_sector = bc->log_sector.sector0;
-	bi_iter.bi_size = PAGE_SIZE;
+	bi_iter.bi_sector = bc->log_sector->sector0;
+	bi_iter.bi_size = bc->block_size;
 	return find_first_overlapping_range(&bc->ranges, &bi_iter);
 }
 
@@ -516,7 +519,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 			container_of(rb_first(&bc->ranges), struct bow_range,
 				     node);
 
-		ret = copy_data(bc->bufio, br, sector0_br, 0);
+		ret = copy_data(bc, br, sector0_br, 0);
 		if (ret) {
 			DMERR("Failed to switch to committed state");
 			goto bad;
@@ -583,6 +586,8 @@ static void dm_bow_dtr(struct dm_target *ti)
 		kobject_put(kobj);
 		wait_for_completion(dm_get_completion_from_kobject(kobj));
 	}
+
+	kfree(bc->log_sector);
 	kfree(bc);
 }
 
@@ -616,6 +621,14 @@ static int dm_bow_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad;
 	}
 
+	bc->block_size = bc->dev->bdev->bd_queue->limits.logical_block_size;
+	bc->block_shift = ilog2(bc->block_size);
+	bc->log_sector = kzalloc(bc->block_size, GFP_KERNEL);
+	if (!bc->log_sector) {
+		ti->error = "Cannot allocate log sector";
+		goto bad;
+	}
+
 	init_completion(&bc->kobj_holder.completion);
 	ret = kobject_init_and_add(&bc->kobj_holder.kobj, &bow_ktype,
 				   &disk_to_dev(dm_disk(md))->kobj, "%s",
@@ -627,7 +640,7 @@ static int dm_bow_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 
 	mutex_init(&bc->ranges_lock);
 	bc->ranges = RB_ROOT;
-	bc->bufio = dm_bufio_client_create(bc->dev->bdev, PAGE_SIZE, 1, 0,
+	bc->bufio = dm_bufio_client_create(bc->dev->bdev, bc->block_size, 1, 0,
 					   NULL, NULL);
 	if (IS_ERR(bc->bufio)) {
 		ti->error = "Cannot initialize dm-bufio";
@@ -721,8 +734,7 @@ static int prepare_unchanged_range(struct bow_context *bc, struct bow_range *br,
 
 
 	/* Copy data over */
-	ret = copy_data(bc->bufio, br, backup_br,
-			record_checksum ? &checksum : NULL);
+	ret = copy_data(bc, br, backup_br, record_checksum ? &checksum : NULL);
 	if (ret)
 		return ret;
 
@@ -755,7 +767,7 @@ static int prepare_unchanged_range(struct bow_context *bc, struct bow_range *br,
 
 	/* Now it is safe to mark this backup successful */
 	if (original_type == SECTOR0_CURRENT)
-		bc->log_sector.sector0 = sector0;
+		bc->log_sector->sector0 = sector0;
 
 	set_type(bc, &br, br->type);
 	return ret;
@@ -873,11 +885,13 @@ static int handle_sector0(struct bow_context *bc, struct bio *bio)
 {
 	int ret = DM_MAPIO_REMAPPED;
 
-	if (bio->bi_iter.bi_size > PAGE_SIZE) {
-		struct bio *split = bio_split(bio,
-					      1 << (PAGE_SHIFT - SECTOR_SHIFT),
-					      GFP_NOIO, fs_bio_set);
-		if (!bio_split) {
+	if (bio->bi_iter.bi_size > bc->block_size) {
+		struct bio *split;
+
+		split = bio_split(bio,
+				  1 << (bc->block_shift	- SECTOR_SHIFT),
+				  GFP_NOIO, fs_bio_set);
+		if (!split) {
 			DMERR("Failed to split bio");
 			bio->bi_error = -ENOMEM;
 			bio_endio(bio);
@@ -885,16 +899,16 @@ static int handle_sector0(struct bow_context *bc, struct bio *bio)
 		}
 
 		bio_chain(split, bio);
-		if (bio_data_dir(split) == WRITE) {
-			ret = queue_write(bc, split);
-			if (ret == DM_MAPIO_SUBMITTED)
-				ret = DM_MAPIO_REMAPPED;
-		} else {
-			submit_bio(READ, split);
-		}
+		split->bi_iter.bi_sector = bc->log_sector->sector0;
+		split->bi_bdev = bc->dev->bdev;
+		submit_bio(bio_data_dir(split), split);
+
+		if (bio_data_dir(bio) == WRITE)
+			ret = queue_write(bc, bio);
+	} else {
+		bio->bi_iter.bi_sector = bc->log_sector->sector0;
 	}
 
-	bio->bi_iter.bi_sector = bc->log_sector->sector0;
 	return ret;
 }
 
