@@ -19,6 +19,7 @@
 #include <linux/irqreturn.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/gpio.h>
+#include <linux/wakelock.h>
 
 #include "mdss_panel.h"
 #include "mdss_dsi_cmd.h"
@@ -556,6 +557,7 @@ struct mdss_dsi_ctrl_pdata {
 	bool timing_db_mode;
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 	struct delayed_work idle_work;
+	struct wake_lock idle_wlock;
 
 	bool phy_power_off;
 };

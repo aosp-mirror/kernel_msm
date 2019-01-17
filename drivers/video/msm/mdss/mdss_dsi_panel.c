@@ -255,6 +255,11 @@ void mdss_dsi_idle_work(struct work_struct *work)
     pr_info("%s: start to send idle command\n", __func__);
     mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
         CMD_REQ_COMMIT);
+
+    if (wake_lock_active(&ctrl->idle_wlock)) {
+        wake_unlock(&ctrl->idle_wlock);
+        pr_info("idle_wake_unlock\n");
+    }
 }
 
 static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
@@ -278,12 +283,21 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
+			if (!wake_lock_active(&ctrl->idle_wlock)) {
+				wake_lock(&ctrl->idle_wlock);
+				pr_info("idle_wake_lock\n");
+			}
 			schedule_delayed_work(&ctrl->idle_work, msecs_to_jiffies(400));
 			ctrl->idle = true;
 			pr_debug("Idle on\n");
 		}
 	} else {
 		cancel_delayed_work_sync(&ctrl->idle_work);
+		if (wake_lock_active(&ctrl->idle_wlock)) {
+			wake_unlock(&ctrl->idle_wlock);
+			pr_info("idle_wake_unlock\n");
+		}
+
 		if (ctrl->idle_off_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds,
 					CMD_REQ_COMMIT);
@@ -2902,6 +2916,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
 
 	INIT_DELAYED_WORK(&ctrl_pdata->idle_work, mdss_dsi_idle_work);
+	wake_lock_init(&ctrl_pdata->idle_wlock, WAKE_LOCK_SUSPEND, "mdss");
 
 	return 0;
 }
