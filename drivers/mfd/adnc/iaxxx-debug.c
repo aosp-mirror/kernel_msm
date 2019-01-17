@@ -505,13 +505,17 @@ static ssize_t regdump_read(struct file *filp, char __user *buf,
 				PAGE_SIZE, "R:\t[%lu.%03lu]\t0x%08x\t0x%08x\n",
 				log.timestamp.tv_sec,
 				log.timestamp.tv_nsec / (1000*1000),
-				log.addr, log.val);
+				iaxxx_conv_physical_to_virtual_register_address
+				(iaxxx, log.addr),
+				log.val);
 		else
 			bytes_written += scnprintf(kbuf + bytes_written,
 				PAGE_SIZE, "W:\t[%lu.%03lu]\t0x%08x\t0x%08x\n",
 				log.timestamp.tv_sec,
 				log.timestamp.tv_nsec / (1000*1000),
-				log.addr, log.val);
+				iaxxx_conv_physical_to_virtual_register_address
+				(iaxxx, log.addr),
+				log.val);
 		/* Increment read index and align with ring buffer boundary */
 		r_index++;
 		r_index %= IAXXX_BUF_MAX_LEN;

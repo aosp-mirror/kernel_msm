@@ -559,6 +559,46 @@ static int iaxxx_update_relocatable_blocks(struct iaxxx_priv *priv)
 }
 
 /**
+ * iaxxx_conv_physical_to_virtual_register_address
+ *   - Converts register physical address to its virtual address
+ *
+ * @priv: iaxxx private data
+ * @phy_addr: register physical address
+ *
+ * Loops through all configured regmap ranges and see where
+ * the physical address falls in. If so, calculate the virtual
+ * address using range start address and offset from start address.
+ *
+ */
+uint32_t iaxxx_conv_physical_to_virtual_register_address(
+		struct iaxxx_priv *priv,
+		const uint32_t phy_addr)
+{
+	int i;
+	uint32_t virt_addr;
+
+	if (!priv->is_application_mode)
+		return phy_addr;
+
+	for (i = 0 ; i < priv->regmap_config->num_ranges; i++) {
+		if ((phy_addr >=
+			priv->regmap_config->ranges[i].window_start) &&
+			(phy_addr <=
+			priv->regmap_config->ranges[i].window_start+
+			priv->regmap_config->ranges[i].window_len)) {
+
+			virt_addr = phy_addr -
+				priv->regmap_config->ranges[i].window_start;
+			virt_addr += priv->regmap_config->ranges[i].range_min;
+			return virt_addr;
+		}
+
+	}
+
+	return phy_addr;
+}
+
+/**
  * iaxxx_update_rbdt - updates the cached copy of the RBDT
  *
  * @priv: iaxxx private data

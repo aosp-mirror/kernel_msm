@@ -54,6 +54,28 @@ static inline struct iaxxx_spi_priv *to_spi_priv(struct iaxxx_priv *priv)
 	return priv ? container_of(priv, struct iaxxx_spi_priv, priv) : NULL;
 }
 
+/* Register address passed to this function is in BE order.
+ * The array of data in valaddr can be in BE or CPU order based
+ * on the flag passed.
+ */
+static void register_dump_log(struct device *dev,
+			const uint32_t st_regaddr, const uint32_t *st_valaddr,
+			const bool data_in_be32_fmt,
+			const uint32_t no_words, bool op)
+{
+	int i;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t st_regaddr_cpuorder = be32_to_cpu(st_regaddr);
+
+	if (priv->dump_log) {
+		for (i = 0; i < no_words; i++)
+			register_transac_log(dev,
+				st_regaddr_cpuorder + (sizeof(uint32_t) * i),
+				data_in_be32_fmt ? be32_to_cpu(st_valaddr[i]) :
+				st_valaddr[i], op);
+	}
+}
+
 static int iaxxx_spi_read(struct spi_device *spi, void *buf, int len)
 {
 	int rc;
@@ -248,10 +270,8 @@ static int iaxxx_regmap_spi_write(void *context, const void *data, size_t count)
 	size_t val_len = count - reg_len;
 	struct device *dev = context;
 	uint32_t *writebuf = (uint32_t *)((uint8_t *)val + IAXXX_REG_PADDING);
-	uint32_t reg_addr = be32_to_cpu(*(uint32_t *)data);
+	uint32_t reg_addr = *(uint32_t *)data;
 	uint32_t words = (val_len - IAXXX_REG_PADDING) / sizeof(uint32_t);
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int i;
 	int rc;
 
 	if (WARN_ON(count <= sizeof(uint32_t))
@@ -263,12 +283,8 @@ static int iaxxx_regmap_spi_write(void *context, const void *data, size_t count)
 	/* flag set to indicate data and reg-address are in BE32 format */
 	rc = iaxxx_spi_write_common(context, data, reg_len,
 			val, val_len, true, true);
-	if (priv->dump_log) {
-		for (i = 0; i < words; i++)
-			register_transac_log(dev,
-				reg_addr + (sizeof(uint32_t) * i),
-				be32_to_cpu(writebuf[i]), IAXXX_WRITE);
-	}
+
+	register_dump_log(dev, reg_addr, writebuf, true, words, IAXXX_WRITE);
 	return rc;
 }
 
@@ -385,23 +401,16 @@ static int iaxxx_regmap_spi_read(void *context,
 				 void *val, size_t val_len)
 {
 	struct device *dev = context;
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	uint32_t *readbuf;
 	uint32_t words = val_len / sizeof(uint32_t);
-	int i = 0, rc = 0;
-	uint32_t addr = be32_to_cpu(*(uint32_t *)reg);
+	int rc = 0;
+	uint32_t reg_addr = *(uint32_t *) reg;
 
 	rc = iaxxx_spi_read_common(context, reg, reg_len, val, val_len, true);
 	if (rc)
 		goto reg_read_err;
 
-	if (priv->dump_log) {
-		readbuf = (uint32_t *)val;
-		for (i = 0; i < words; i++)
-			register_transac_log(dev,
-					addr + (sizeof(uint32_t) * i),
-					be32_to_cpu(readbuf[i]), IAXXX_READ);
-	}
+	register_dump_log(dev, reg_addr, val, true, words, IAXXX_READ);
+
 reg_read_err:
 	return rc;
 }
@@ -579,13 +588,20 @@ static int iaxxx_spi_write_no_pm(void *context,
 				 const void *reg, size_t reg_len,
 				 const void *val, size_t val_len)
 {
+	struct device *dev = context;
+	uint32_t reg_addr = cpu_to_be32(*(uint32_t *)reg);
+	uint32_t words = val_len / sizeof(uint32_t);
 	size_t reg_len_pad = IAXXX_REG_LEN_WITH_PADDING;
+	int rc;
 
-	return iaxxx_spi_write_common(context,
+	rc = iaxxx_spi_write_common(context,
 				 reg, reg_len_pad,
 				 val, val_len,
 				 false, false);
 
+	register_dump_log(dev, reg_addr, val, false, words, IAXXX_WRITE);
+
+	return rc;
 }
 
 /* This version of spi-read is executed without any power management
@@ -602,14 +618,15 @@ static int iaxxx_spi_read_no_pm(void *context,
 {
 	struct device *dev = context;
 	int rc = 0;
-	uint32_t reg_addr = *(uint32_t *)reg;
+	uint32_t reg_addr = cpu_to_be32(*(uint32_t *)reg);
+	uint32_t words = val_len / sizeof(uint32_t);
 
-	reg_addr = cpu_to_be32(reg_addr);
 	rc = iaxxx_spi_read_common(context, &reg_addr, reg_len, val,
 			val_len, false);
 	if (rc)
 		goto reg_read_err;
 	iaxxx_copy_be32_to_cpu(dev, val, val_len);
+	register_dump_log(dev, reg_addr, val, false, words, IAXXX_READ);
 
 reg_read_err:
 	return rc;
