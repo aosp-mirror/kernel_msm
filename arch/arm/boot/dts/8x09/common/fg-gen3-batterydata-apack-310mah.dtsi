@@ -17,7 +17,7 @@ qcom,3769662_compal_efta_310mah_averaged_masterslave_jan4th2019 {
 	qcom,max-voltage-uv = <4395000>;
 	qcom,fg-cc-cv-threshold-mv = <4385>;
 	qcom,nom-batt-capacity-mah = <310>;
-	qcom,batt-id-kohm = <0>;
+	qcom,batt-id-kohm = <60>;
 	qcom,battery-beta = <3435>;
 	qcom,battery-type = "triggerfish_310mah_jan4th2019";
 	qcom,checksum = <0x9AD4>;
