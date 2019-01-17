@@ -66,10 +66,16 @@ static const struct mfd_cell s2mpb04_devs[] = {
 		.name = "s2mpb04-gpio",
 		.of_compatible = "samsung,s2mpb04-gpio",
 	},
+	/*
+	 * Disable s2mpb04 thermal zone to reduce overall i2c xfer.
+	 * See b/122984225.
+	 */
+#if 0
 	{
 		.name = "s2mpb04-thermal",
 		.of_compatible = "samsung,s2mpb04-thermal",
 	},
+#endif
 };
 
 static const struct regmap_config s2mpb04_regmap_config = {
