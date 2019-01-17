@@ -10,14 +10,14 @@
  * GNU General Public License for more details.
  */
 
-/* Since b4s4 proto device have usbc-therm-adc HW issue
+/* Since b4s4 proto device have usbc-therm HW issue
  * (always report extremely high value)
  * To prevent usb overheat mitigation from being triggered permanently,
  * default disable it and change reading channel to key-therm(0x4e).
  */
 
 &thermal_zones {
-	usbc-therm-adc {
+	usbc-therm-monitor {
 		thermal-sensors = <&pm660_adc_tm 0x4e>;
 		disable-thermal-zone;
 	};
