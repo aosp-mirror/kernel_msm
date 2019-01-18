@@ -22,6 +22,8 @@ struct log_entry {
 
 struct log_sector {
 	u32 magic;
+	u16 header_version;
+	u16 header_size;
 	u32 block_size;
 	u32 count;
 	u32 sequence;
@@ -33,6 +35,7 @@ struct log_sector {
  * MAGIC is BOW in ascii
  */
 #define MAGIC 0x00574f42
+#define HEADER_VERSION 0x0100
 
 /*
  * A sorted set of ranges representing the state of the data on the device.
@@ -447,6 +450,8 @@ static int prepare_log(struct bow_context *bc)
 	 * add the first log entry, which we do immediately
 	 */
 	bc->log_sector->magic = MAGIC;
+	bc->log_sector->header_version = HEADER_VERSION;
+	bc->log_sector->header_size = sizeof(*bc->log_sector);
 	bc->log_sector->block_size = bc->block_size;
 	bc->log_sector->count = 0;
 	bc->log_sector->sequence = 0;
