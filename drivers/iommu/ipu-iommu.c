@@ -216,17 +216,24 @@ static void ipu_iommu_dram_down(struct device *dev)
 		iommu_get_domain_for_dev(dev);
 	struct ipu_domain *pb_domain;
 	struct ipu_iommu_data *iommu_data;
+	struct io_pgtable_ops *ops;
 
 	if (domain == NULL) {
-		dev_err(dev, "%s domain no initialized", __func__);
+		dev_err(dev, "%s domain not initialized", __func__);
 		return;
 	}
 	pb_domain = to_ipu_domain(domain);
 	iommu_data = pb_domain->iommu_data;
+	ops = pb_domain->pgtbl_ops;
 
 	if (iommu_data)
 		iommu_data->iommu_up = false;
 	ipu_iommu_shutdown_mmu(domain, dev);
+	if (ops) {
+		mutex_lock(&pb_domain->pgtbl_mutex);
+		ipu_iommu_pgtable_mem_down(ops);
+		mutex_unlock(&pb_domain->pgtbl_mutex);
+	}
 }
 
 static void ipu_iommu_tlb_sync(void *priv)
@@ -465,6 +472,10 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 	dev->archdata.iommu = pb_domain;
 	iommu_data->page_table_base_address = ipu_iommu_pg_table_get_dma_address
 		(pb_domain->pgtbl_ops);
+
+	mutex_lock(&pb_domain->pgtbl_mutex);
+	ipu_iommu_pgtable_mem_up(pb_domain->pgtbl_ops);
+	mutex_unlock(&pb_domain->pgtbl_mutex);
 	mutex_unlock(&pb_domain->init_mutex);
 	/* identity map first Gb - due to iommu hw bug
 	 * TODO(b/123649740)

@@ -37,4 +37,12 @@ config IPU_IOMMU_ENABLED
 	---help---
 	This option enables support for IPU IOMMU in IPU driver.
 
+config IPU_IOMMU_PAGE_TABLE_ON_AB
+	bool "store IPU IOMMU page table in AB dram"
+	depends on IPU
+	depends on IPU_IOMMU
+	default n
+	---help---
+	this option stores the IPU IOMMU page table in AB memory instead of host memory.
+
 endmenu
