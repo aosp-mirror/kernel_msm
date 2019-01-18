@@ -625,20 +625,20 @@ static int pio_write_qw(const int remote_addr, const uint64_t val)
 	return 0;
 }
 
-static int hypx_enable_set(void *data, u64 val)
+static int faceauth_hypx_enable_set(void *data, u64 val)
 {
 	hypx_enable = !!val;
 	return 0;
 }
 
-static int hypx_enable_get(void *data, u64 *val)
+static int faceauth_hypx_enable_get(void *data, u64 *val)
 {
 	*val = hypx_enable;
 	return 0;
 }
 
-DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, hypx_enable_get, hypx_enable_set,
-			 "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, faceauth_hypx_enable_get,
+			 faceauth_hypx_enable_set, "%llu\n");
 
 static int faceauth_m0_verbosity_set(void *data, u64 val)
 {
