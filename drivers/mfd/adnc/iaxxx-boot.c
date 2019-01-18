@@ -56,8 +56,8 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 {
 	int rc, i = 0;
 	struct device *dev = priv->dev;
-	int rem_bytes = section->length % chunk_size;
-	int temp_len = section->length / chunk_size;
+	int rem_bytes = section->length % (chunk_size);
+	int temp_len = section->length / (chunk_size);
 	int chunk_word_size = chunk_size * 4;
 
 	dev_err(dev, "Writing section at 0x%.08X, %d words(s)\n",
@@ -70,8 +70,8 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 			data + (i * chunk_word_size), chunk_size);
 		if (rc) {
 			dev_err(dev,
-				"regmap bulk write section chunk failed, rc=%d\n",
-				rc);
+				"%s: regmap bulk write section chunk failed, rc=%d\n",
+				__func__, rc);
 			return rc;
 		}
 	}
@@ -81,8 +81,8 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 			data + (i * chunk_word_size), rem_bytes);
 		if (rc) {
 			dev_err(dev,
-				"regmap bulk write rem_bytes failed, rc=%d\n",
-				rc);
+				"%s: regmap bulk write rem_bytes failed, rc=%d\n",
+				__func__, rc);
 			return rc;
 		}
 	}
@@ -111,20 +111,21 @@ int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 		iaxxx_chunk_size = (priv->bus == IAXXX_I2C)
 					? IAXXX_REDUCED_CHUNK_SIZE / 64 :
 					IAXXX_REDUCED_CHUNK_SIZE;
-		dev_err(dev, "retry section download with reduced chunk size\n");
+		dev_err(dev,
+			"retry section download with reduced chunk size\n");
 		rc = iaxxx_download_section_chunks(priv, data,
 						iaxxx_chunk_size, section);
 		if (rc == -ENOMEM) {
 			dev_err(dev,
-				"retry failed: %d, with reduced chunk size: %d",
-				rc, IAXXX_REDUCED_CHUNK_SIZE);
+				"%s: failed: %d, with reduced chunk size: %d",
+				__func__, rc, IAXXX_REDUCED_CHUNK_SIZE);
 			return rc;
 		}
 	}
 	if (rc)
 		dev_err(dev,
-			"regmap bulk write section failed, rc=%d\n",
-			rc);
+			"%s: regmap bulk write section failed, rc=%d\n",
+			__func__, rc);
 	else
 		dev_dbg(dev,
 			"download section at 0x%.08X, %d words(s) successful\n",
@@ -244,8 +245,9 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 
 		if (checksum != file_section.start_address) {
 			rc = -EINVAL;
-			dev_err(dev, "Checksum mismatch 0x%.08X != 0x%.08X\n",
-				checksum, file_section.start_address);
+			dev_err(dev,
+				"%s(): Checksum mismatch 0x%.08X != 0x%.08X\n",
+				__func__, checksum, file_section.start_address);
 		}
 	}
 

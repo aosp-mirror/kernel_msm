@@ -13,6 +13,7 @@
 #define __MFD_IAXXX_H__
 
 #include <linux/device.h>
+#include <linux/kthread.h>
 
 struct iaxxx_priv;
 struct regmap;
@@ -38,6 +39,23 @@ struct iaxxx_evt_queue;
 
 #define IAXXX_READ_DELAY        10	/* 10 us delay before SPI read */
 #define IAXXX_READ_DELAY_RANGE  10	/* 10 us range */
+
+/* Linux kthread APIs have changes in version 4.9 */
+#if defined(init_kthread_worker)
+#define iaxxx_work_flush(priv, work)    flush_kthread_work(&priv->work)
+#define iaxxx_work(priv, work) queue_kthread_work(&priv->worker, &priv->work)
+#define iaxxx_flush_kthread_worker(worker) flush_kthread_worker(worker)
+#define iaxxx_init_kthread_worker(worker)  init_kthread_worker(worker)
+#define iaxxx_init_kthread_work(work, fn)  init_kthread_work(work, fn)
+#elif defined(kthread_init_worker)
+#define iaxxx_work_flush(priv, work)    kthread_flush_work(&priv->work)
+#define iaxxx_work(priv, work) kthread_queue_work(&priv->worker, &priv->work)
+#define iaxxx_flush_kthread_worker(worker) kthread_flush_worker(worker)
+#define iaxxx_init_kthread_worker(worker)  kthread_init_worker(worker)
+#define iaxxx_init_kthread_work(work, fn)  kthread_init_work(work, fn)
+#else
+#error kthread functions not defined
+#endif
 
 #define HOST_0 0
 #define HOST_1 1
@@ -160,5 +178,9 @@ int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				const struct firmware_section_header *section);
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes);
 int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons);
+int iaxxx_get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
+								uint32_t len);
+int iaxxx_abort_fw_recovery(struct iaxxx_priv *priv);
+int iaxxx_reset_to_sbl(struct iaxxx_priv *priv);
 
 #endif /* __MFD_IAXXX_H__ */

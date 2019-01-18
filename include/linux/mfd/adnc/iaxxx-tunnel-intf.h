@@ -76,5 +76,6 @@ enum iaxxx_tunnel_dir_type {
 					struct iaxxx_tnl_evt_info)
 #define TUNNEL_EVENT_UNSUBSCRIBE	_IOWR('K', 0x01e, \
 					struct iaxxx_tnl_evt_info)
+#define TUNNEL_SET_EVENT_THRESHOLD	_IOW('K', 0x021, uint32_t)
 
 #endif

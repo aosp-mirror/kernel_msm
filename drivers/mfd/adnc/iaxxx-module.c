@@ -26,6 +26,94 @@
 
 
 /*****************************************************************************
+ * iaxxx_core_sensor_is_valid_script_id()
+ * @brief validate the sensor script id
+ *
+ * @id              sensor script id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_sensor_is_valid_script_id(uint32_t script_id)
+{
+	bool ret = true;
+
+	if (script_id > IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_MASK
+				>> IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_POS)
+		ret = false;
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_script_id);
+
+/*****************************************************************************
+ * iaxxx_core_sensor_is_valid_inst_id()
+ * @brief validate the sensor instance id
+ *
+ * @id              Sensor Instance Id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_sensor_is_valid_inst_id(uint32_t inst_id)
+{
+	bool ret = true;
+
+	if (inst_id > IAXXX_SENSR_ID_MASK)
+		ret = false;
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_inst_id);
+
+/*****************************************************************************
+ * iaxxx_core_sensor_is_valid_block_id()
+ * @brief validate the sensor block id
+ *
+ * @id              Sensor block id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_sensor_is_valid_block_id(uint32_t block_id)
+{
+	bool ret = true;
+
+	if (block_id <= IAXXX_NO_PROC || block_id >= IAXXX_PROC_ID_NUM)
+		ret = false;
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_block_id);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_param_id()
+ * @brief validate the sensor param id
+ *
+ * @id              sensor param id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_sensor_is_valid_param_id(uint32_t param_id)
+{
+	bool ret = true;
+
+	if (param_id > (IAXXX_SENSOR_GRP_PARAM_ID_REG_MASK
+				>> IAXXX_SENSOR_GRP_PARAM_ID_REG_POS))
+		ret = false;
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_param_id);
+
+/*****************************************************************************
+ * iaxxx_core_sensor_is_valid_param_val()
+ * @brief validate the sensor param value
+ *
+ * @id              sensor param value
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_sensor_is_valid_param_val(uint32_t param_val)
+{
+	bool ret = true;
+
+	if (param_val > (IAXXX_SENSOR_GRP_PARAM_VAL_MASK
+					>> IAXXX_SENSOR_GRP_PARAM_VAL_POS))
+		ret = false;
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_param_val);
+
+/*****************************************************************************
  * iaxxx_core_change_sensor_state()
  * @brief Change sensor state to enable/disable
  *
@@ -343,28 +431,30 @@ int iaxxx_core_script_load(struct device *dev, const char *script_name,
 	dev_dbg(dev, "%s()\n", __func__);
 
 	if (!script_name) {
-		dev_err(dev, "%s() Script name is NULL\n", __func__);
+		dev_err(dev, "%s() Script name is NULL: %s\n",
+			__func__, script_name);
 		return -EINVAL;
 	}
-	dev_dbg(dev, "%s() Download script %s\n", __func__, script_name);
+	dev_dbg(dev, "%s() Download Script %s\n",
+				__func__, script_name);
 
 	/* protect this plugin operation */
 	mutex_lock(&priv->module_lock);
 
 	rc = request_firmware(&fw, script_name, priv->dev);
 	if (rc || !fw) {
-		dev_err(dev, "%s() request firmware %s image failed rc = %d\n",
+		dev_err(dev,
+			"%s() request firmware %s image failed rc = %d\n",
 			__func__, script_name, rc);
 		goto out;
 	}
 
 	rc = iaxxx_download_script(priv, fw, script_id);
 	if (rc) {
-		dev_err(dev, "%s() script %d(%s) load fail %d\n",
-			__func__, script_id, script_name, rc);
+		dev_err(dev, "%s() script load fail %d\n", __func__, rc);
 		goto out;
 	}
-	dev_info(dev, "%s() script %d load success\n", __func__, script_id);
+	dev_info(dev, "%s() script load success\n", __func__);
 out:
 	release_firmware(fw);
 	mutex_unlock(&priv->module_lock);
@@ -419,7 +509,7 @@ int iaxxx_core_script_unload(struct device *dev, uint32_t script_id)
 			__func__, status, rc);
 		goto out;
 	}
-	dev_info(dev, "%s() script %d unload success\n", __func__, script_id);
+	dev_info(dev, "%s() script unload success\n", __func__);
 out:
 	mutex_unlock(&priv->module_lock);
 	return rc;
@@ -473,7 +563,7 @@ int iaxxx_core_script_trigger(struct device *dev, uint32_t script_id)
 			__func__, status, rc);
 		goto out;
 	}
-	dev_info(dev, "%s() script %d execute success\n", __func__, script_id);
+	dev_info(dev, "%s() script execute success\n", __func__);
 out:
 	mutex_unlock(&priv->module_lock);
 	return rc;

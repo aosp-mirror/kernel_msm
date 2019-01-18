@@ -20,17 +20,33 @@
 #include <linux/platform_device.h>
 #include <linux/mfd/adnc/iaxxx-odsp.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
+#include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-system-identifiers.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-debug.h>
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-
 #include "iaxxx-odsp-celldrv.h"
 
 static struct odsp_cell_params odsp_cell_priv;
 
+static int get_execution_status(struct device *dev,
+					uint8_t proc_id, uint32_t *status)
+{
+	int ret;
+	uint8_t block_id = IAXXX_PROC_ID_TO_BLOCK_ID(proc_id);
 
+	ret = regmap_read(to_iaxxx_priv(dev)->regmap,
+			IAXXX_DEBUG_BLOCK_0_EXEC_STATUS_ADDR
+			+ (block_id * sizeof(uint32_t)), status);
+	if (ret)
+		dev_err(dev, "%s() read EXEC_STATUS failed %d\n",
+							__func__, ret);
+
+	return ret;
+}
 
 static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 							unsigned long arg)
@@ -54,17 +70,22 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_plugin_status_data plugin_status_data;
 	struct iaxxx_plugin_endpoint_status_info plugin_ep_status_info;
 	struct iaxxx_plugin_endpoint_status_data plugin_ep_status_data;
+	struct iaxxx_pll_clk_data pll_clk_data;
+
 	uint32_t *get_param_blk_buf = NULL;
 	void __user *blk_buff = NULL;
 	int ret = -EINVAL;
-	unsigned long file_name_size = 0;
 
 	pr_debug("%s() cmd %d\n", __func__, cmd);
 
 	if (!priv)
 		return -EINVAL;
-	if (!pm_runtime_enabled(priv->dev))
-		return -EINVAL;
+
+	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags)) {
+		dev_err(priv->dev, "%s FW  is not in App mode\n", __func__);
+		return -EIO;
+	}
+
 	if (!priv->iaxxx_state) {
 		dev_err(priv->dev, "Chip state NULL\n");
 		return -EINVAL;
@@ -76,10 +97,23 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 						sizeof(plg_info)))
 			return -EFAULT;
 
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(plg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_pkg_id(plg_info.pkg_id)
+			&& iaxxx_core_plg_is_valid_priority(plg_info.priority)
+			&& iaxxx_core_plg_is_valid_plg_idx(plg_info.plg_idx)
+			&& iaxxx_core_plg_is_valid_block_id(plg_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_create_plg(odsp_dev_priv->parent,
 					plg_info.inst_id,
 					plg_info.priority, plg_info.pkg_id,
-					plg_info.plg_idx, plg_info.block_id);
+					plg_info.plg_idx, plg_info.block_id,
+					plg_info.config_id);
 		if (ret) {
 			pr_err("%s() Plugin create fail\n", __func__);
 			return ret;
@@ -91,11 +125,24 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 				sizeof(plg_info)))
 			return -EFAULT;
 
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(plg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_pkg_id(plg_info.pkg_id)
+			&& iaxxx_core_plg_is_valid_priority(plg_info.priority)
+			&& iaxxx_core_plg_is_valid_plg_idx(plg_info.plg_idx)
+			&& iaxxx_core_plg_is_valid_block_id(plg_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_create_plg_static_package(
 				odsp_dev_priv->parent,
 				plg_info.inst_id,
 				plg_info.priority, plg_info.pkg_id,
-				plg_info.plg_idx, plg_info.block_id);
+				plg_info.plg_idx, plg_info.block_id,
+				plg_info.config_id);
 		if (ret) {
 			pr_err("%s() Plugin create fail\n", __func__);
 			return ret;
@@ -106,27 +153,70 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&plg_info, (void __user *)arg,
 						sizeof(plg_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(plg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_block_id(plg_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		iaxxx_core_destroy_plg(odsp_dev_priv->parent, plg_info.inst_id,
 						plg_info.block_id);
 		break;
+
 	case ODSP_PLG_ENABLE:
 		if (copy_from_user(&plg_info, (void __user *)arg,
 						sizeof(plg_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(plg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_block_id(plg_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		iaxxx_core_change_plg_state(odsp_dev_priv->parent,
 				plg_info.inst_id, 1, plg_info.block_id);
 		break;
+
 	case ODSP_PLG_DISABLE:
 		if (copy_from_user(&plg_info, (void __user *)arg,
 						sizeof(plg_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(plg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_block_id(plg_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		iaxxx_core_change_plg_state(odsp_dev_priv->parent,
 				plg_info.inst_id, 0, plg_info.block_id);
 		break;
+
 	case ODSP_PLG_RESET:
 		if (copy_from_user(&plg_info, (void __user *)arg,
 						sizeof(plg_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(plg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_block_id(plg_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_reset_plg(odsp_dev_priv->parent,
 						plg_info.inst_id,
 						plg_info.block_id);
@@ -135,10 +225,25 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
 	case ODSP_PLG_SET_PARAM:
 		if (copy_from_user(&param_info, (void __user *)arg,
 						sizeof(param_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(param_info.inst_id)
+			&& iaxxx_core_plg_is_valid_param_id(param_info.param_id)
+			&& iaxxx_core_plg_is_valid_param_val(
+							param_info.param_val)
+			&& iaxxx_core_plg_is_valid_block_id(
+							param_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_plg_set_param_by_inst(odsp_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
 				param_info.param_val, param_info.block_id);
@@ -150,10 +255,24 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
 	case ODSP_PLG_GET_PARAM:
 		if (copy_from_user(&param_info, (void __user *)arg,
 						sizeof(param_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(param_info.inst_id)
+			&& iaxxx_core_plg_is_valid_param_id(
+							param_info.param_id)
+			&& iaxxx_core_plg_is_valid_block_id(
+							param_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_plg_get_param_by_inst(odsp_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
 				&param_info.param_val, param_info.block_id);
@@ -163,16 +282,31 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 				param_info.inst_id, param_info.param_id);
 			return ret;
 		}
-		/*After read copy back the data to user space */
+		/* After read copy back the data to user space */
 		if (copy_to_user((void __user *)arg, &param_info,
 						sizeof(param_info)))
 			return -EFAULT;
 
 		break;
+
 	case ODSP_PLG_SET_PARAM_BLK:
 		if (copy_from_user(&param_blk_info, (void __user *)arg,
 				sizeof(struct iaxxx_plugin_param_blk)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(param_blk_info.inst_id)
+			&& iaxxx_core_plg_is_valid_block_id(
+							param_blk_info.block_id)
+			&& iaxxx_core_plg_is_valid_param_blk_size(
+						param_blk_info.param_size)
+			&& iaxxx_core_plg_is_valid_param_blk_id(
+							param_blk_info.id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
 
 		param_blk_info.file_name[sizeof(param_blk_info.file_name) - 1]
 			 = '\0';
@@ -209,13 +343,29 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
 	case ODSP_PLG_GET_PARAM_BLK:
 		if (copy_from_user(&param_blk_info, (void __user *)arg,
 				sizeof(struct iaxxx_plugin_param_blk)))
 			return -EFAULT;
 
-		get_param_blk_buf = kcalloc(param_blk_info.param_size,
-					    sizeof(uint32_t), GFP_KERNEL);
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(param_blk_info.inst_id)
+			&& iaxxx_core_plg_is_valid_param_id(param_blk_info.id)
+			&& iaxxx_core_plg_is_valid_param_blk_size(
+						param_blk_info.param_size)
+			&& iaxxx_core_plg_is_valid_block_id(
+						param_blk_info.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
+		get_param_blk_buf = kzalloc(param_blk_info.param_size*
+				sizeof(uint32_t), GFP_KERNEL);
+		if (!get_param_blk_buf)
+			return -ENOMEM;
 
 		ret = iaxxx_core_get_param_blk(odsp_dev_priv->parent,
 			param_blk_info.inst_id, param_blk_info.block_id,
@@ -236,16 +386,24 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
-	case ODSP_PLG_SET_CUSTOM_CFG:
 
+	case ODSP_PLG_SET_CUSTOM_CFG:
 #ifdef CONFIG_MFD_IAXXX_CUSTOM_CONFIG_ALGO
 		if (copy_from_user(&custom_cfg_info, (void __user *)arg,
 				sizeof(custom_cfg_info)))
 			return -EFAULT;
 
-		file_name_size = sizeof(custom_cfg_info.file_name);
-		custom_cfg_info.file_name[file_name_size - 1] = '\0';
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(custom_cfg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_param_blk_id(
+						custom_cfg_info.param_blk_id)
+			&& iaxxx_core_plg_is_valid_block_id(
+						custom_cfg_info.block_id))
+			) {
 
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
 		ret = iaxxx_core_set_custom_cfg(odsp_dev_priv->parent,
 				custom_cfg_info.inst_id,
 				custom_cfg_info.block_id,
@@ -268,11 +426,28 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&param_blk_with_ack, (void __user *)arg,
 				sizeof(param_blk_with_ack)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(
+						param_blk_with_ack.inst_id)
+			&& iaxxx_core_plg_is_valid_param_blk_id(
+						param_blk_with_ack.param_blk_id)
+			&& iaxxx_core_plg_is_valid_param_blk_size(
+					param_blk_with_ack.response_buf_size)
+			&& iaxxx_core_plg_is_valid_block_id(
+						param_blk_with_ack.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		blk_buff = (void __user *)
 			(uintptr_t)param_blk_with_ack.set_param_blk_buffer;
 		blk_buff = memdup_user(blk_buff,
 				param_blk_with_ack.set_param_blk_size);
-		param_blk_with_ack.set_param_blk_buffer = (uintptr_t)blk_buff;
+		param_blk_with_ack.set_param_blk_buffer
+			= (uintptr_t)blk_buff;
 		if (IS_ERR(blk_buff)) {
 			ret = PTR_ERR(blk_buff);
 			pr_err("%s memdup failed %d\n", __func__, ret);
@@ -316,9 +491,17 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 						sizeof(cfg_info)))
 			return -EFAULT;
 
-		file_name_size = sizeof(cfg_info.file_name);
-		cfg_info.file_name[file_name_size - 1] = '\0';
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(cfg_info.inst_id)
+			&& iaxxx_core_plg_is_valid_cfg_size(cfg_info.cfg_size)
+			&& iaxxx_core_plg_is_valid_block_id(cfg_info.block_id))
+			) {
 
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
+		cfg_info.file_name[sizeof(cfg_info.file_name) - 1] = '\0';
 		ret = iaxxx_core_set_create_cfg(odsp_dev_priv->parent,
 				cfg_info.inst_id, cfg_info.cfg_size,
 				cfg_info.cfg_val, cfg_info.block_id,
@@ -328,10 +511,21 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
 	case ODSP_PLG_SET_EVENT:
 		if (copy_from_user(&set_event, (void __user *)arg,
 						sizeof(set_event)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_plg_is_valid_inst_id(set_event.inst_id)
+			&& iaxxx_core_plg_is_valid_block_id(set_event.block_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_set_event(odsp_dev_priv->parent,
 					set_event.inst_id,
 					set_event.event_enable_mask,
@@ -341,10 +535,83 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
+	case ODSP_EVENT_TRIGGER: {
+		struct iaxxx_evt_trigger et;
+
+		if (copy_from_user(&et, (void __user *)arg, sizeof(et)))
+			return -EFAULT;
+
+		ret = iaxxx_core_evt_trigger(odsp_dev_priv->parent,
+					et.src_id, et.evt_id, et.src_opaque);
+		if (ret) {
+			pr_err("%s() iaxxx_core_evt_trigger fail\n", __func__);
+			return ret;
+		}
+		break;
+	}
+
+	case ODSP_EVENT_READ_SUBSCRIPTION: {
+		struct iaxxx_evt_read_subscription ers;
+
+		ret = iaxxx_core_evt_read_subscription(odsp_dev_priv->parent,
+						&ers.src_id, &ers.evt_id,
+						&ers.dst_id, &ers.dst_opaque);
+		if (ret) {
+			pr_err("%s() iaxxx_core_evt_read_subscription fail\n",
+								__func__);
+			return ret;
+		}
+		if (copy_to_user((void __user *)arg, &ers, sizeof(ers)))
+			return -EFAULT;
+		break;
+	}
+
+	case ODSP_EVENT_RETRIEVE_NOTIFICATION: {
+		struct iaxxx_evt_retrieve_notification ern;
+
+		ret = iaxxx_core_evt_retrieve_notification(
+					odsp_dev_priv->parent,
+					&ern.src_id, &ern.evt_id,
+					&ern.src_opaque, &ern.dst_opaque);
+		if (ret) {
+			pr_err(
+			"%s() iaxxx_core_evt_retrieve_notification fail\n",
+								__func__);
+			return ret;
+		}
+		if (copy_to_user((void __user *)arg, &ern, sizeof(ern)))
+			return -EFAULT;
+		break;
+	}
+
+	case ODSP_EVENT_RESET_READ_INDEX:
+		ret = iaxxx_core_evt_reset_read_index(odsp_dev_priv->parent);
+		if (ret) {
+			pr_err("%s() iaxxx_core_evt_reset_read_index fail\n",
+								__func__);
+			return ret;
+		}
+		break;
+
 	case ODSP_EVENT_SUBSCRIBE:
 		if (copy_from_user(&event_info, (void __user *)arg,
 						sizeof(event_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_evt_is_valid_src_id(event_info.src_id)
+			&& iaxxx_core_evt_is_valid_dst_id(event_info.dst_id)
+			&& iaxxx_core_evt_is_valid_event_id(
+							event_info.event_id)
+			&& iaxxx_core_evt_is_valid_dst_opaque(
+							event_info.dst_opaque))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_evt_subscribe(odsp_dev_priv->parent,
 					event_info.src_id,
 					event_info.event_id,
@@ -355,6 +622,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
 	case ODSP_GET_EVENT:
 		if (copy_from_user(&get_event, (void __user *)arg,
 						sizeof(get_event)))
@@ -371,10 +639,23 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 						sizeof(get_event)))
 			return -EFAULT;
 		break;
+
 	case ODSP_EVENT_UNSUBSCRIBE:
 		if (copy_from_user(&event_info, (void __user *)arg,
 						sizeof(event_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!(iaxxx_core_evt_is_valid_src_id(event_info.src_id)
+			&& iaxxx_core_evt_is_valid_dst_id(event_info.dst_id)
+			&& iaxxx_core_evt_is_valid_event_id(
+							event_info.event_id))
+			) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_evt_unsubscribe(odsp_dev_priv->parent,
 					event_info.src_id,
 					event_info.event_id,
@@ -384,12 +665,28 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		break;
+
+	case ODSP_SET_MPLL_SRC:
+		if  (copy_from_user(&pll_clk_data, (void __user *)arg,
+					sizeof(struct iaxxx_pll_clk_data)))
+			return -EFAULT;
+		ret = iaxxx_set_mpll_source(priv, pll_clk_data.clk_src);
+		if (ret) {
+			pr_err("%s() Failed to set MPLL Clk Src\n", __func__);
+			return ret;
+		}
+		break;
+
 	case ODSP_LOAD_PACKAGE:
 		if (copy_from_user(&pkg_info, (void __user *)arg,
 						sizeof(pkg_info)))
 			return -EFAULT;
 
-		pkg_info.pkg_name[sizeof(pkg_info.pkg_name) - 1] = '\0';
+		/* validate the plugin parameters */
+		if (!iaxxx_core_plg_is_valid_pkg_id(pkg_info.pkg_id)) {
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
 
 		ret = iaxxx_package_load(odsp_dev_priv->parent,
 			pkg_info.pkg_name, pkg_info.pkg_id,
@@ -416,7 +713,11 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 						sizeof(pkg_info)))
 			return -EFAULT;
 
-		pkg_info.pkg_name[sizeof(pkg_info.pkg_name) - 1] = '\0';
+		/* validate the plugin parameters */
+		if (!iaxxx_core_plg_is_valid_pkg_id(pkg_info.pkg_id)) {
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
 
 		ret = iaxxx_package_unload(odsp_dev_priv->parent,
 					pkg_info.pkg_id);
@@ -427,10 +728,74 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 
+	case ODSP_PLG_GET_PACKAGE_VERSION: {
+		struct iaxxx_plugin_get_package_version v;
+
+		if (copy_from_user(&v, (void __user *)arg, sizeof(v)))
+			return -EFAULT;
+		if (!iaxxx_core_plg_is_valid_inst_id(v.inst_id)) {
+			pr_err("%s() Invalid plugin parameter received\n",
+								__func__);
+			return -EINVAL;
+		}
+		if (v.len > sizeof(v.version)) {
+			pr_warn(
+			"%s() Too large len %u when get package version\n",
+			__func__, v.len);
+			v.len = sizeof(v.version);
+		}
+
+		ret = iaxxx_core_plg_get_package_version(odsp_dev_priv->parent,
+						v.inst_id, v.version, v.len);
+		if (ret) {
+			pr_err("%s() Get package version failed\n", __func__);
+			return ret;
+		}
+		if (copy_to_user((void __user *)arg, &v, sizeof(v)))
+			return -EFAULT;
+		break;
+	}
+
+	case ODSP_PLG_GET_PLUGIN_VERSION: {
+		struct iaxxx_plugin_get_plugin_version v;
+
+		if (copy_from_user(&v, (void __user *)arg, sizeof(v)))
+			return -EFAULT;
+		if (!iaxxx_core_plg_is_valid_inst_id(v.inst_id)) {
+			pr_err("%s() Invalid plugin parameter received\n",
+								__func__);
+			return -EINVAL;
+		}
+		if (v.len > sizeof(v.version)) {
+			pr_warn(
+			"%s() Too large len %u when get plugin version\n",
+			__func__, v.len);
+			v.len = sizeof(v.version);
+		}
+
+		ret = iaxxx_core_plg_get_plugin_version(odsp_dev_priv->parent,
+						v.inst_id, v.version, v.len);
+		if (ret) {
+			pr_err("%s() Get plugin version failed\n", __func__);
+			return ret;
+		}
+		if (copy_to_user((void __user *)arg, &v, sizeof(v)))
+			return -EFAULT;
+		break;
+	}
+
 	case ODSP_PLG_READ_PLUGIN_ERROR:
 		if (copy_from_user(&plugin_error_info, (void __user *)arg,
 				sizeof(plugin_error_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!iaxxx_core_plg_is_valid_block_id(
+					plugin_error_info.block_id)) {
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_read_plugin_error(odsp_dev_priv->parent,
 				plugin_error_info.block_id,
 				&plugin_error_info.error_code,
@@ -449,6 +814,15 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&plugin_status_info, (void __user *)arg,
 				sizeof(plugin_status_info)))
 			return -EFAULT;
+
+		/* validate the plugin parameters */
+		if (!iaxxx_core_plg_is_valid_inst_id(
+						plugin_status_info.inst_id)) {
+
+			pr_err("invalid plugin parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_plg_get_status_info(odsp_dev_priv->parent,
 						plugin_status_info.inst_id,
 						&plugin_status_data);
@@ -524,6 +898,109 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 
 		break;
 
+	case ODSP_PLG_GET_ENDPOINT_TIMESTAMPS: {
+		struct iaxxx_plugin_endpoint_timestamps t;
+
+		if (copy_from_user(&t, (void __user *)arg, sizeof(t)))
+			return -EFAULT;
+		ret = iaxxx_core_plg_get_endpoint_timestamps(
+				odsp_dev_priv->parent, t.timestamps,
+				IAXXX_MAX_PLUGIN_ENDPOINTS, t.proc_id);
+		if (ret) {
+			pr_err("%s() Plugin endpoint timestamps fail\n",
+								__func__);
+			return ret;
+		}
+		if (copy_to_user((void __user *)arg, &t, sizeof(t)))
+			return -EFAULT;
+		break;
+	}
+
+	case ODSP_GET_PROC_EXECUTION_STATUS: {
+		struct iaxxx_proc_execution_status s;
+
+		if (copy_from_user(&s, (void __user *)arg, sizeof(s)))
+			return -EFAULT;
+		ret = get_execution_status(odsp_dev_priv->parent,
+							s.proc_id, &s.status);
+		if (ret) {
+			pr_err("%s() get_execution_status failed %d\n",
+								__func__, ret);
+			return ret;
+		}
+		if (copy_to_user((void __user *)arg, &s, sizeof(s)))
+			return -EFAULT;
+		break;
+	}
+
+	case ODSP_GET_SYS_VERSIONS: {
+		struct iaxxx_sys_versions v;
+		int err;
+
+		if (copy_from_user(&v, (void __user *)arg, sizeof(v)))
+			return -EFAULT;
+
+		if (v.app_ver_str_len > sizeof(v.app_ver_str)) {
+			pr_warn("Too large app_ver_str_len %u\n",
+						v.app_ver_str_len);
+			v.app_ver_str_len = sizeof(v.app_ver_str);
+		}
+		err = iaxxx_get_firmware_version(odsp_dev_priv->parent,
+					v.app_ver_str, v.app_ver_str_len);
+		if (err) {
+			pr_err("Failed to iaxxx_get_firmware_version err=%d\n",
+									err);
+			v.app_ver_str[0] = '\0';
+			v.app_ver_str_len = 1;
+		}
+		err = iaxxx_get_application_ver_num(odsp_dev_priv->parent,
+							&v.app_ver_num);
+		if (err) {
+			pr_err(
+		"Failed to iaxxx_get_application_ver_num err=%d\n", err);
+			ret = -EINVAL;
+		}
+
+		if (v.rom_ver_str_len > sizeof(v.rom_ver_str)) {
+			pr_warn("Too large rom_ver_str_len %u\n",
+						v.app_ver_str_len);
+			v.rom_ver_str_len = sizeof(v.rom_ver_str);
+		}
+		err = iaxxx_get_rom_version(odsp_dev_priv->parent,
+					v.rom_ver_str, v.rom_ver_str_len);
+		if (err) {
+			pr_err("Failed to iaxxx_get_rom_version err=%d\n",
+									err);
+			v.rom_ver_str[0] = '\0';
+			v.rom_ver_str_len = 1;
+		}
+		err = iaxxx_get_rom_ver_num(odsp_dev_priv->parent,
+							&v.rom_ver_num);
+		if (err) {
+			pr_err("Failed to iaxxx_get_rom_ver_num err=%d\n",
+									err);
+			ret = -EINVAL;
+		}
+
+		if (copy_to_user((void __user *)arg, &v, sizeof(v)))
+			ret = -EFAULT;
+		break;
+	}
+
+	case ODSP_GET_SYS_DEVICE_ID: {
+		uint32_t device_id = 0;
+
+		ret = iaxxx_get_device_id(odsp_dev_priv->parent, &device_id);
+		if (ret) {
+			pr_err("Failed to iaxxx_get_device_id ret=%d\n", ret);
+		} else {
+			if (copy_to_user((void __user *)arg, &device_id,
+							sizeof(device_id)))
+				ret = -EFAULT;
+		}
+		break;
+	}
+
 	default:
 		break;
 	}
@@ -571,15 +1048,15 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev->parent);
 	int ret;
 
-	pr_info("Enter :%s\n", __func__);
+	dev_info(dev, "Enter :%s\n", __func__);
 	if (odsp_cell_priv.cdev_minor == ODSP_CDEV_MAX_DEVICES) {
-		pr_err("Minor nos exhausted. Increase CVQ_CDEV_MAX_DEVICES\n");
+		dev_err(dev,
+			"Minor nos exhausted. Increase CVQ_CDEV_MAX_DEVICES\n");
 		return -ENOBUFS;
 	}
 
 	odsp_dev_priv = kzalloc(sizeof(*odsp_dev_priv), GFP_KERNEL);
 	if (!odsp_dev_priv) {
-
 		ret = -ENOMEM;
 		goto out_err;
 	}
@@ -592,23 +1069,22 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 	cdev_init(&odsp_dev_priv->cdev, &odsp_dev_fops);
 	ret = cdev_add(&odsp_dev_priv->cdev, odsp_dev_priv->dev_num, 1);
 	if (ret) {
-		pr_err("failed to add cdev error: %d", ret);
+		dev_err(dev, "failed to add cdev error: %d", ret);
 		goto free_odsp;
 	}
 
 	odsp_dev_priv->dev = device_create(odsp_cell_priv.cdev_class, dev,
 			odsp_dev_priv->dev_num, odsp_dev_priv, dev_name(dev));
 	if (IS_ERR(odsp_dev_priv->dev)) {
-		ret = PTR_ERR(dev);
-		pr_err("Failed (%d) to create cdev device\n", ret);
+		ret = PTR_ERR(odsp_dev_priv->dev);
+		dev_err(dev, "Failed (%d) to create cdev device\n", ret);
 		goto err_device_create;
 	}
 
 	dev_set_drvdata(dev, odsp_dev_priv);
-	pr_info("ODSP device cdev initialized.\n");
+	dev_info(dev, "ODSP device cdev initialized.\n");
 
 	odsp_dev_priv->dev = dev;
-	pm_runtime_enable(dev);
 
 	return 0;
 
@@ -617,7 +1093,7 @@ err_device_create:
 free_odsp:
 	kfree(odsp_dev_priv);
 out_err:
-	pr_err("cdev setup failure: no cdevs available!\n");
+	dev_err(dev, "cdev setup failure: no cdevs available!\n");
 
 	return ret;
 

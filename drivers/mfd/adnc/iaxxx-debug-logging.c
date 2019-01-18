@@ -17,10 +17,10 @@
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-debug-intf.h>
 #include "iaxxx.h"
-#include <linux/mfd/adnc/iaxxx-register-defs-debuglog.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-debug.h>
 
-#define IAXXX_DEBUGLOG_DEBUG_LEVEL_ADDR(I) \
-	(IAXXX_DEBUGLOG_DEBUG_LEVEL_0_ADDR + (4 * (I)))
+#define IAXXX_DEBUG_DEBUG_LEVEL_ADDR(I) \
+	(IAXXX_DEBUG_DEBUG_LEVEL_0_ADDR + (4 * (I)))
 
 #define IAXXX_DBG_LVL_NUM_BITS	0x4
 #define IAXXX_NO_OF_MODULES_IN_EACH_REGISTER \
@@ -49,12 +49,12 @@ int iaxxx_set_debug_log_level(struct device *dev,
 	mod_id = module_id / IAXXX_NO_OF_MODULES_IN_EACH_REGISTER;
 	mod_id_pos = module_id % IAXXX_NO_OF_MODULES_IN_EACH_REGISTER;
 	mod_mask =
-		(IAXXX_DEBUGLOG_DEBUG_LEVEL_0_MOD_0_DEBUG_LEVEL_MASK <<
+		(IAXXX_DEBUG_DEBUG_LEVEL_0_MOD_0_DEBUG_LEVEL_MASK <<
 		(mod_id_pos * IAXXX_DBG_LVL_NUM_BITS));
 	mod_log_val = (log_level << (mod_id_pos * IAXXX_DBG_LVL_NUM_BITS));
 
 	ret = regmap_update_bits(priv->regmap,
-			IAXXX_DEBUGLOG_DEBUG_LEVEL_ADDR(mod_id),
+			IAXXX_DEBUG_DEBUG_LEVEL_ADDR(mod_id),
 			mod_mask, mod_log_val);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
@@ -90,7 +90,7 @@ int iaxxx_get_debug_log_level(struct device *dev,
 	mod_id = module_id / IAXXX_NO_OF_MODULES_IN_EACH_REGISTER;
 
 	ret = regmap_read(priv->regmap,
-			IAXXX_DEBUGLOG_DEBUG_LEVEL_ADDR(mod_id),
+			IAXXX_DEBUG_DEBUG_LEVEL_ADDR(mod_id),
 			&mod_log_val);
 	if (ret) {
 		dev_err(dev, "%s() failed %d\n", __func__, ret);
@@ -100,7 +100,7 @@ int iaxxx_get_debug_log_level(struct device *dev,
 	mod_id_pos = module_id % IAXXX_NO_OF_MODULES_IN_EACH_REGISTER;
 	*log_level = ((mod_log_val >>
 		(mod_id_pos * IAXXX_DBG_LVL_NUM_BITS)) &
-		IAXXX_DEBUGLOG_DEBUG_LEVEL_0_MOD_0_DEBUG_LEVEL_MASK);
+		IAXXX_DEBUG_DEBUG_LEVEL_0_MOD_0_DEBUG_LEVEL_MASK);
 
 	return ret;
 }
@@ -123,7 +123,7 @@ int iaxxx_set_debug_log_mode(struct device *dev,
 	uint32_t status;
 
 	ret = regmap_update_bits(priv->regmap,
-				IAXXX_DEBUGLOG_DEBUG_LOG_MODE_ADDR,
+				IAXXX_DEBUG_DEBUG_LOG_MODE_ADDR,
 				1 << proc_id, mode << proc_id);
 	if (ret) {
 		dev_err(dev, "write set dbg log mode failed %s()\n", __func__);
@@ -156,7 +156,7 @@ int iaxxx_get_debug_log_mode(struct device *dev,
 	int ret = 0;
 
 	ret = regmap_read(priv->regmap,
-			IAXXX_DEBUGLOG_DEBUG_LOG_MODE_ADDR, &read_mode);
+			IAXXX_DEBUG_DEBUG_LOG_MODE_ADDR, &read_mode);
 	if (ret) {
 		dev_err(dev, "%s() failed %d\n", __func__, ret);
 		return ret;

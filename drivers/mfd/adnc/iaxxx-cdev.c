@@ -52,7 +52,6 @@ int iaxxx_cdev_create(struct iaxxx_cdev *cdev,
 	const struct file_operations *fops,
 	void *drvdata, enum iaxxx_cdev_types type)
 {
-	struct device *dev;
 	dev_t devno;
 	char *name;
 	int idx, err = -EINVAL;
@@ -75,7 +74,7 @@ int iaxxx_cdev_create(struct iaxxx_cdev *cdev,
 	cdev->dev = device_create(iaxxx_cdev_class, parent, devno,
 				drvdata, name, idx);
 	if (IS_ERR(cdev->dev)) {
-		err = PTR_ERR(dev);
+		err = PTR_ERR(cdev->dev);
 		pr_err("device_create cdev=%04x failed: %d\n", devno, err);
 		goto exit_dev_create;
 	}

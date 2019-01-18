@@ -59,18 +59,6 @@
 #define PRODUCER_MAX_WAIT_TIME_US 100000 /* 100ms interval */
 #define TNL_SRC_Q 0x00010000	/* For defining new tunnel id with Q format */
 
-#define IAXXX_TUNNEL_TERMINATE_TIMEOUT	1000
-
-enum {
-	IAXXX_TFLG_FW_CRASH,
-	IAXXX_TFLG_RUN_THREAD,
-	IAXXX_TFLG_ADJ_CLIENT,
-	IAXXX_TFLG_ADJ_THREAD,
-	IAXXX_TFLG_THRESHOLD,
-	IAXXX_TFLG_DRAIN_BIT,
-	IAXXX_TFLG_ALLOW_TUNNELS,
-	IAXXX_TFLG_DISABLE_ALL
-};
 
 #define IAXXX_DEBUG_LAUNCH_DELAY 60000 /* 60 seconds */
 
@@ -248,19 +236,6 @@ static inline int parse_header(struct iaxxx_tunnel_header *header, u16 *tid)
 	return header->size;
 }
 
-static unsigned long adjust_tunnels_new(struct iaxxx_tunnel_data *t_intf_priv)
-{
-	struct iaxxx_tunnel_client *client;
-	unsigned long new = 0;
-
-	spin_lock(&t_intf_priv->lock);
-	list_for_each_entry_rcu(client, &t_intf_priv->list, node)
-		new |= client->tid_flag;
-	spin_unlock(&t_intf_priv->lock);
-
-	return new;
-}
-
 /*
  * Request to subscribe the tunnel events with a threshold
  */
@@ -334,29 +309,17 @@ static int tunnel_event_unsubscribe(struct iaxxx_tunnel_data *t_intf_priv,
 /*
  * Adjust tunnel settings by comparing new & old flags
  */
-static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv)
+static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
+				unsigned long new, unsigned long *old)
 {
 	struct iaxxx_priv * const priv =
 			(struct iaxxx_priv *)t_intf_priv->priv;
 	struct iaxxx_tunnel_ep *tnl_src_node = NULL;
+	int	changes = (*old ^ new) & ((1 << TNLMAX) - 1);
 	struct list_head *position, *tmp;
+	int id;
+	int pos;
 	int tnl_count = 0;
-	unsigned long *flags = &t_intf_priv->flags;
-	unsigned long changes, old, new = 0;
-	int id, pos;
-
-	if (!test_and_clear_bit(IAXXX_TFLG_ADJ_THREAD, flags))
-		return;
-
-	old = tunnel_flags;
-
-	if (!test_and_clear_bit(IAXXX_TFLG_DISABLE_ALL, flags))
-		new = adjust_tunnels_new(t_intf_priv);
-
-	if (new == old)
-		return;
-
-	changes = (old ^ new) & ((1 << TNLMAX) - 1);
 
 	while (changes) {
 		id = ffs(changes) - 1;
@@ -449,19 +412,8 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv)
 		}
 		changes &= ~pos;
 
-		old ^= pos;
+		*old ^= pos;
 	}
-	tunnel_flags = old;
-}
-
-static void adjust_tunnels_do(struct iaxxx_tunnel_data *tpriv,
-				struct iaxxx_tunnel_client *client)
-{
-	if (client && test_and_clear_bit(IAXXX_TFLG_ADJ_CLIENT, &tpriv->flags))
-		set_bit(IAXXX_TFLG_ADJ_THREAD, &tpriv->flags);
-
-	if (test_bit(IAXXX_TFLG_ADJ_THREAD, &tpriv->flags))
-		wake_up(&tpriv->producer_wq);
 }
 
 /*
@@ -475,44 +427,25 @@ static int producer_thread(void *arg)
 	int size;
 	int bytes, bytes_remaining;
 	void *buf;
+	unsigned long flags;
 	int wait_time_us = PRODUCER_WAIT_TIME_US;
 
 	while (1) {
 		/* Get a free contiguous buffer */
 		if (kthread_should_stop()) {
-			set_bit(IAXXX_TFLG_DISABLE_ALL, &t_intf_priv->flags);
-			set_bit(IAXXX_TFLG_ADJ_THREAD, &t_intf_priv->flags);
 			pr_debug("thread should stop\n");
 			break;
 		}
 
 		if (kthread_should_park()) {
 			pr_debug("parking producer thread\n");
-			adjust_tunnels(t_intf_priv);
 			kthread_parkme();
 			continue;
 		}
 
-		if (!test_bit(IAXXX_TFLG_ALLOW_TUNNELS, &t_intf_priv->flags)) {
-			dev_info(t_intf_priv->dev,
-				"Waiting until tunnels is allowed...\n");
-			wait_event(t_intf_priv->producer_wq,
-				kthread_should_stop() ||
-				kthread_should_park() ||
-				test_bit(IAXXX_TFLG_ALLOW_TUNNELS,
-					&t_intf_priv->flags));
-			dev_info(t_intf_priv->dev, "Tunnels allowed!\n");
-
-			/* Check for reasons stop, park or other */
-			if (!test_bit(IAXXX_TFLG_ALLOW_TUNNELS,
-				&t_intf_priv->flags))
-				continue;
-
-			set_bit(IAXXX_TFLG_ADJ_THREAD, &t_intf_priv->flags);
-		}
-
-		if (test_bit(IAXXX_TFLG_ADJ_THREAD, &t_intf_priv->flags))
-			adjust_tunnels(t_intf_priv);
+		flags = t_intf_priv->flags;
+		if (flags != tunnel_flags)
+			adjust_tunnels(t_intf_priv, flags, &tunnel_flags);
 
 		size = circ_get_free_buffer(circ, &buf);
 
@@ -569,8 +502,8 @@ static int producer_thread(void *arg)
 					atomic_read(
 						&t_intf_priv->event_occurred)
 					|| kthread_should_stop() ||
-					test_bit(IAXXX_TFLG_ADJ_THREAD,
-						&t_intf_priv->flags));
+					t_intf_priv->flags !=
+					tunnel_flags);
 				continue;
 			}
 		}
@@ -588,12 +521,15 @@ static int producer_thread(void *arg)
 		}
 		pr_info("%s: producer thread wait for start\n", __func__);
 		wait_event(t_intf_priv->producer_wq,
+			t_intf_priv->flags ||
 			kthread_should_stop() ||
-			kthread_should_park() ||
-			test_bit(IAXXX_TFLG_ADJ_THREAD, &t_intf_priv->flags));
+			t_intf_priv->flags != tunnel_flags);
 	}
 
-	adjust_tunnels(t_intf_priv);
+	flags = t_intf_priv->flags;
+	if (flags != tunnel_flags)
+		adjust_tunnels(t_intf_priv, flags, &tunnel_flags);
+
 	return 0;
 }
 
@@ -765,11 +701,6 @@ static int consumer_thread(void *arg)
 		if (kthread_should_stop())
 			break;
 
-		if (kthread_should_park()) {
-			kthread_parkme();
-			continue;
-		}
-
 		size = 0;
 		sz_used = circ_cnt(circ) << 2;
 		if (sz_used >= hdr_size) {
@@ -808,15 +739,13 @@ static int consumer_thread(void *arg)
 		if (sz_used == 0) {
 			wait_event(t_intf_priv->consumer_wq,
 				(circ_cnt(circ) > 0) ||
-				kthread_should_stop() ||
-				kthread_should_park());
+				kthread_should_stop());
 			continue;
 		}
 
 		/* We got some data but not enough */
 		rc = wait_event_timeout(t_intf_priv->consumer_wq,
 			((circ_cnt(circ) << 2) > sz_used) ||
-			kthread_should_park() ||
 			kthread_should_stop(),
 			HZ);
 
@@ -866,21 +795,20 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 		atomic_set(&t_intf_priv->src_enable_id[id], 1);
 	}
 
-	if (!test_and_set_bit(id, &client->tid_flag))
-		set_bit(IAXXX_TFLG_ADJ_CLIENT, &t_intf_priv->flags);
-
+	set_bit(id, &client->tid_flag);
 	if (atomic_inc_return(&t_intf_priv->tunnel_ref_cnt[id]) == 1) {
 		pr_err("%s id found %d ref count :%d\n",
 			__func__, id,
 			atomic_read(&t_intf_priv->tunnel_ref_cnt[id]));
+		set_bit(id, &t_intf_priv->flags);
 		/* Set flag if this tunnel id is in sync mode */
 		if (mode == TNL_SYNC_MODE)
 			set_bit(id, &t_intf_priv->flags_sync_mode);
+		wake_up(&t_intf_priv->producer_wq);
 	}
 
-	adjust_tunnels_do(t_intf_priv, client);
-	pr_debug("%s: tid: %x src: %x client flag: %lx\n",
-		__func__, id, src, client->tid_flag);
+	pr_debug("%s: tid: %x src: %x client flag: %lx global flag: %lx\n",
+		__func__, id, src, client->tid_flag, t_intf_priv->flags);
 
 	return rc;
 }
@@ -904,9 +832,8 @@ int iaxxx_tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 		!atomic_read(&t_intf_priv->tunnel_ref_cnt[id]))
 		return -EINVAL;
 
-	set_bit(IAXXX_TFLG_ADJ_CLIENT, &t_intf_priv->flags);
-
 	if (atomic_dec_return(&t_intf_priv->tunnel_ref_cnt[id]) == 0) {
+		clear_bit(id, &t_intf_priv->flags);
 		if (mode == TNL_SYNC_MODE)
 			clear_bit(id, &t_intf_priv->flags_sync_mode);
 	}
@@ -914,7 +841,6 @@ int iaxxx_tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 	pr_debug("%s: tid: %x src: %x client flag: %lx global flag: %lx\n",
 		__func__, id, src, client->tid_flag, t_intf_priv->flags);
 
-	adjust_tunnels_do(t_intf_priv, client);
 	return rc;
 }
 
@@ -951,6 +877,7 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 	struct iaxxx_tunnel_data *t_intf_priv = NULL;
 	struct iaxxx_tunnel_client *client;
 	int rc;
+	struct iaxxx_priv *priv;
 
 	pr_debug("tunneling device open called");
 
@@ -972,7 +899,8 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 		return -ENODEV;
 	}
 
-	if (!pm_runtime_enabled(t_intf_priv->dev))
+	priv = (struct iaxxx_priv *)t_intf_priv->priv;
+	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags))
 		return -EIO;
 
 	client = kzalloc(sizeof(struct iaxxx_tunnel_client),
@@ -990,15 +918,8 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 
 	filp->private_data = client;
 
-	/* taking the sync for the device if open is going to return
-	 * successful. this means that a tunneling node is opened and the sync
-	 * would be held till the close is called. This would also take
-	 * care of the case of multiple clients as well
-	 */
-	pm_runtime_get_sync(t_intf_priv->dev);
-	set_bit(IAXXX_TFLG_ALLOW_TUNNELS, &t_intf_priv->flags);
-
 	return 0;
+
 }
 
 static int tunnel_open(struct inode *inode, struct file *filp)
@@ -1029,7 +950,7 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 		return -EINVAL;
 	}
 
-	if (!pm_runtime_enabled(t_intf_priv->dev)) {
+	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags)) {
 		dev_err(priv->dev, "FW state not valid %s()\n", __func__);
 		return -EIO;
 	}
@@ -1042,8 +963,20 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		}
 
-		pr_debug("cmd: %x, TunlSrc: %x, tunlMode: %x, tunlEncode: %x",
-			cmd, (uint32_t)msg.tunlSrc, (uint32_t)msg.tunlMode,
+		/* validate the tunnel parameters */
+		if (msg.tunlSrc > (IAXXX_OUT_TNL_GRP_CONNECT_SOURCE_ID_MASK >>
+				IAXXX_OUT_TNL_GRP_CONNECT_SOURCE_ID_POS) ||
+			msg.tunlEncode >
+			(IAXXX_OUT_TNL_GRP_TNL_CTRL_OUTPUT_ENCODING_MASK >>
+			IAXXX_OUT_TNL_GRP_TNL_CTRL_OUTPUT_ENCODING_POS) ||
+			msg.tunlMode > (IAXXX_OUT_TNL_GRP_TNL_CTRL_MODE_MASK >>
+					IAXXX_OUT_TNL_GRP_TNL_CTRL_MODE_POS)) {
+			pr_err("invalid parameter received\n");
+			return -EINVAL;
+		}
+
+		pr_debug("cmd: %x, TunlSrc: %x, tunlMode: %x, tunlEncode: %x\n"
+			, cmd, (uint32_t)msg.tunlSrc, (uint32_t)msg.tunlMode,
 			(uint32_t)msg.tunlEncode);
 	}
 
@@ -1052,7 +985,7 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 		ret = iaxxx_tunnel_setup(client, msg.tunlSrc, msg.tunlMode,
 					msg.tunlEncode);
 		if (ret) {
-			pr_err("Unable to setup tunnel");
+			pr_err("Unable to setup tunnel\n");
 			return	-EINVAL;
 		}
 		break;
@@ -1060,13 +993,22 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 		ret = iaxxx_tunnel_term(client, msg.tunlSrc, msg.tunlMode,
 					msg.tunlEncode);
 		if (ret) {
-			pr_err("Unable to terminate tunnel");
+			pr_err("Unable to terminate tunnel\n");
+			ret = -EINVAL;
+		}
+		break;
+	case TUNNEL_SET_EVENT_THRESHOLD:
+		ret = iaxxx_set_tunnel_event_threshold(priv, (uint32_t)arg);
+		if (ret) {
+			pr_err("Unable set tunnel event threshold(%u) ret=%d\n"
+							, (uint32_t)arg, ret);
 			ret = -EINVAL;
 		}
 		break;
 	default:
-		pr_err("Invalid ioctl command received %x", cmd);
+		pr_err("Invalid ioctl command received %x\n", cmd);
 		ret = -EINVAL;
+		break;
 	}
 
 	return ret;
@@ -1111,14 +1053,11 @@ int iaxxx_tunnel_release_common(struct inode *inode, struct file *filp, int id)
 	}
 
 	client = filp->private_data;
-	if (client) {
+	if (client)
 		tunneling_detach_client(t_intf_priv, client);
-		set_bit(IAXXX_TFLG_ADJ_THREAD, &t_intf_priv->flags);
-		adjust_tunnels_do(t_intf_priv, NULL);
-	}
 	/* ignore threadfn return value */
 	pr_debug("stopping stream kthread");
-	pm_runtime_put_sync(t_intf_priv->dev);
+
 	kfree(client);
 	filp->private_data = NULL;
 
@@ -1383,11 +1322,14 @@ static void iaxxx_tunnel_stop(struct iaxxx_tunnel_data *t_intf_priv)
 	struct iaxxx_circ_buf *circ = &t_intf_priv->stream_circ;
 	int i;
 
-	if (!test_and_clear_bit(IAXXX_TFLG_RUN_THREAD, &t_intf_priv->flags))
-		return;
-
-	kthread_park(t_intf_priv->producer_thread);
-	kthread_park(t_intf_priv->consumer_thread);
+	if (t_intf_priv->producer_thread) {
+		kthread_stop(t_intf_priv->producer_thread);
+		t_intf_priv->producer_thread = NULL;
+	}
+	if (t_intf_priv->consumer_thread) {
+		kthread_stop(t_intf_priv->consumer_thread);
+		t_intf_priv->consumer_thread = NULL;
+	}
 
 	circ_init(circ);
 	atomic_set(&t_intf_priv->event_occurred, 0);
@@ -1401,19 +1343,37 @@ static void iaxxx_tunnel_stop(struct iaxxx_tunnel_data *t_intf_priv)
 	t_intf_priv->tunnel_magic_errcnt = 0;
 }
 
-static int iaxxx_tunnel_start(struct iaxxx_tunnel_data *priv)
+static int iaxxx_tunnel_recovery(struct iaxxx_tunnel_data *t_intf_priv)
 {
 	int err = 0;
 
-	if (test_and_set_bit(IAXXX_TFLG_RUN_THREAD, &priv->flags))
-		return -EEXIST;
+	tunnel_flags = 0;
 
-	clear_bit(IAXXX_TFLG_DISABLE_ALL, &priv->flags);
-	set_bit(IAXXX_TFLG_ADJ_THREAD, &priv->flags);
+	if (t_intf_priv->event_registered) {
+		err = tunnel_event_subscribe(t_intf_priv,
+				IAXXX_SYSID_TUNNEL_EVENT, 0,
+				IAXXX_SYSID_HOST, 0, IAXXX_TUNNEL_THRESHOLD);
+		if (err) {
+			pr_err("iaxxx not able to subscribe\n");
+			return err;
+		}
+	}
 
-	kthread_unpark(priv->producer_thread);
-	kthread_unpark(priv->consumer_thread);
+	t_intf_priv->producer_thread = kthread_run(producer_thread,
+			t_intf_priv, "iaxxx tunnel producer thread");
+	if (IS_ERR(t_intf_priv->producer_thread)) {
+		pr_err("Cannot create producer thread\n");
+		err = PTR_ERR(t_intf_priv->producer_thread);
+		return err;
+	}
 
+	t_intf_priv->consumer_thread = kthread_run(consumer_thread,
+			t_intf_priv, "iaxxx tunnel consumer thread");
+	if (IS_ERR(t_intf_priv->consumer_thread)) {
+		pr_err("Cannot create consumer thread\n");
+		err = PTR_ERR(t_intf_priv->consumer_thread);
+		return err;
+	}
 	return err;
 }
 
@@ -1426,68 +1386,17 @@ static int iaxxx_notifier_cb(struct notifier_block *nb,
 
 	switch (val) {
 	case IAXXX_EV_RECOVERY:
-		if (!test_and_set_bit(IAXXX_TFLG_ALLOW_TUNNELS, &priv->flags))
-			wake_up_process(priv->producer_thread);
+		iaxxx_tunnel_recovery(priv);
 		break;
 
 	case IAXXX_EV_CRASH:
-		set_bit(IAXXX_TFLG_FW_CRASH, &priv->flags);
+		iaxxx_tunnel_stop(priv);
 		break;
 
-	case IAXXX_EV_ROUTE_ACTIVE:
-		if (!test_and_set_bit(IAXXX_TFLG_ALLOW_TUNNELS, &priv->flags))
-			wake_up_process(priv->producer_thread);
-		break;
-
-	default:
-		ret = -EINVAL;
 	}
 
 	return ret;
 }
-
-static int iaxxx_tunnel_suspend_rt(struct device *dev)
-{
-	struct iaxxx_priv *priv = dev_get_drvdata(dev);
-	struct iaxxx_tunnel_data *tpriv = priv->tunnel_data;
-
-	if (!test_bit(IAXXX_TFLG_FW_CRASH, &tpriv->flags)) {
-		set_bit(IAXXX_TFLG_DISABLE_ALL, &tpriv->flags);
-		set_bit(IAXXX_TFLG_ADJ_THREAD, &tpriv->flags);
-	}
-
-	iaxxx_tunnel_stop(tpriv);
-
-	return 0;
-}
-
-static int iaxxx_tunnel_resume_rt(struct device *dev)
-{
-	struct iaxxx_priv *priv = dev_get_drvdata(dev);
-	struct iaxxx_tunnel_data *tpriv = priv->tunnel_data;
-
-	if (test_bit(IAXXX_TFLG_FW_CRASH, &tpriv->flags)) {
-		clear_bit(IAXXX_TFLG_ALLOW_TUNNELS, &tpriv->flags);
-		clear_bit(IAXXX_TFLG_THRESHOLD, &tpriv->flags);
-	}
-
-	iaxxx_tunnel_start(tpriv);
-
-	clear_bit(IAXXX_TFLG_FW_CRASH, &tpriv->flags);
-
-	return 0;
-}
-
-static int iaxxx_tunnel_dev_suspend(struct device *dev)
-{
-	return iaxxx_tunnel_suspend_rt(dev);
-}
-
-static int iaxxx_tunnel_dev_resume(struct device *dev)
-{
-	return iaxxx_tunnel_resume_rt(dev);
-}
-
 
 /*
  * Init remaining stuffs
@@ -1577,15 +1486,14 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 	pr_debug("streaming cdev initialized.\n");
 
 	t_intf_priv->crash_notifier.notifier_call = iaxxx_notifier_cb;
-	err = iaxxx_fw_notifier_register(priv->dev,
-					&t_intf_priv->crash_notifier);
+	err = iaxxx_fw_notifier_register
+		(priv->dev, &t_intf_priv->crash_notifier);
 	if (err) {
 		dev_err(dev, "%s: failed to register for fw notifier\n",
 				__func__);
 		goto error_consumer_thread;
 	}
 
-	pm_runtime_enable(dev);
 	return 0;
 
 error_consumer_thread:
@@ -1662,15 +1570,6 @@ static int __init iaxxx_reserve_audio_buffer(char *p)
 	return 0;
 }
 
-static const struct dev_pm_ops iaxxx_tunnel_pm_ops = {
-	SET_RUNTIME_PM_OPS(iaxxx_tunnel_suspend_rt,
-			iaxxx_tunnel_resume_rt,
-			NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(iaxxx_tunnel_dev_suspend,
-				iaxxx_tunnel_dev_resume)
-
-};
-
 static const struct of_device_id iaxxx_tunnel_dt_match[] = {
 	{.compatible = "knowles,iaxxx-tunnel-celldrv"},
 	{}
@@ -1683,7 +1582,6 @@ static struct platform_driver iaxxx_tunnel_driver = {
 		.name = "iaxxx-tunnel-celldrv",
 		.owner = THIS_MODULE,
 		.of_match_table = iaxxx_tunnel_dt_match,
-		.pm = &iaxxx_tunnel_pm_ops,
 	},
 };
 

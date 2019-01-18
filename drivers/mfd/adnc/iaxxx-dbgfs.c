@@ -609,9 +609,9 @@ int iaxxx_dfs_add_regmap(struct device *dev,
 		goto err_create_dir_failed;
 	}
 
-	node_data->cnt  = 1;
-	node_data->dir  = dir;
-	node_data->map  = map;
+	node_data->cnt = 1;
+	node_data->dir = dir;
+	node_data->map = map;
 
 	/* Return node_data for future regmap change */
 	if (dfs_node)

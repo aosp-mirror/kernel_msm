@@ -35,12 +35,10 @@
 #include <linux/mfd/adnc/iaxxx-stream-registers.h>
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-tunnel-registers.h>
-#include <linux/mfd/adnc/iaxxx-register-defs-sidetone-grp.h>
-#include <linux/mfd/adnc/iaxxx-register-defs-sidetone-hdr.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pkg-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-in-endpoint-group.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-out-endpoint-group.h>
-#include <linux/mfd/adnc/iaxxx-register-defs-debuglog.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-debug.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-script-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pwr-mgmt.h>
@@ -188,12 +186,6 @@ static bool iaxxx_readable_register(struct device *dev, unsigned int reg)
 	return iaxxx_is_physical_address(reg);
 }
 
-static bool iaxxx_writeable_register(struct device *dev, unsigned int reg)
-{
-
-	return true;
-}
-
 static bool iaxxx_volatile_register(struct device *dev, unsigned int reg)
 {
 		return true;
@@ -233,9 +225,6 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	case IAXXX_PKG_MGMT_PKG_ERROR_ADDR:
 	case IAXXX_PKG_MGMT_PKG_IADDR_P_ADDR:
 	case IAXXX_PKG_MGMT_PKG_DADDR_P_ADDR:
-	/* SideTone ARB regs */
-	case IAXXX_SIDETONE_HDR_ST_CNT_ADDR:
-	case IAXXX_SIDETONE_GRP_ST_STATUS_ADDR:
 	/* Tunnel ARB Regs */
 	case IAXXX_TNL_HDR_TNL_COUNT_ADDR:
 	/* Endpoints ARB Regs */
@@ -355,12 +344,12 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	if (reg == IAXXX_SCRIPT_MGMT_SCRIPT_ADDR_ADDR)
 		return true;
 
-	if (reg >= IAXXX_DEBUGLOG_REGS_ADDR &&
-		reg <= IAXXX_DEBUGLOG_BLOCK_2_CRASHLOG_SIZE_ADDR)
+	if (reg >= IAXXX_DEBUG_REGS_ADDR && reg <=
+			IAXXX_DEBUG_BLOCK_2_CRASHLOG_SIZE_ADDR)
 		return true;
 
-	if (reg >= IAXXX_PWR_MGMT_REGS_ADDR &&
-		reg <= IAXXX_PWR_MGMT_MAX_UART1_MASTER_SPEED_REQ_ADDR)
+	if (reg >= IAXXX_PWR_MGMT_REGS_ADDR && reg <=
+			IAXXX_PWR_MGMT_MAX_UART1_MASTER_SPEED_REQ_ADDR)
 		return true;
 	return false;
 }
@@ -450,7 +439,6 @@ static struct regmap_config iaxxx_regmap_config = {
 	.reg_format_endian = REGMAP_ENDIAN_BIG,
 	.val_format_endian = REGMAP_ENDIAN_BIG,
 	.volatile_reg = iaxxx_volatile_register,
-	.writeable_reg = iaxxx_writeable_register,
 	.cache_type = REGCACHE_RBTREE,
 
 	/* These will be set before the second regmap_init() */

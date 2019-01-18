@@ -427,6 +427,19 @@
  * 0xa: SWRM2 Soundwire Master (SoundWire Master IP ports 3 (TX) and 8 (RX)).
  * (NOT USED IN D4100s)
  * 0xb - 0xf: Reserved
+ *
+ Field encoding values:
+ *   0x0: pcm0
+ *   0x1: pcm1
+ *   0x2: pcm2
+ *   0x3: pcm3
+ *   0x4: pcm4
+ *   0x5: pcm5
+ *   0x6: ssmm
+ *   0x7: cic_combo
+ *   0x8: swrm0
+ *   0x9: swrm1
+ *   0xa: swrm2
  */
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_MASK 0x000001e0
 #define IAXXX_AF_LS_MAP_0_PHY_STR_TYPE_0_RESET_VAL 0x0
@@ -12541,11 +12554,17 @@
  * The fields should be programmed according to this table:
  * 00 - Wall Clock is greater than or equal to 24.576 MHz.
  * 01 - Wall Clock is less than 24.546 MHz, but greater than or equal to 12.288
- *      MHz.
+ * MHz.
  * 10 - Wall Clock is less than 12.288 MHz, but greater than or equal to 6.144
- *      MHz.
+ * MHz.
  * 11 - Wall Clock is less than 6.144  MHz, but greater than or equal to 3.0732
- *      MHz.
+ * MHz.
+ *
+ * Field encoding values:
+ *   0x0: grtr_or_eq_to_24_576
+ *   0x1: grtr_or_eq_to_12_288
+ *   0x2: grtr_or_eq_to_6_144
+ *   0x3: grtr_or_eq_to_3_072
  */
 #define IAXXX_AF_WCPT_SCALE_VAL_GRTR_OR_EQ_TO_24_576_VAL 0x0
 #define IAXXX_AF_WCPT_SCALE_VAL_GRTR_OR_EQ_TO_12_288_VAL 0x1

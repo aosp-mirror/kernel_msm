@@ -348,9 +348,9 @@ int iaxxx_tunnel_setup_hw(struct iaxxx_priv *priv,
 		goto error;
 	}
 
-	pr_debug("Tunnel endpoint setup: %x", tunlEP);
+	dev_dbg(dev, "Tunnel endpoint setup: %x", tunlEP);
 	if (tunlEP < 0 || tunlEP > 31) {
-		pr_err("Invalid Tunnel EP provided to setup\n");
+		dev_err(dev, "Invalid Tunnel EP provided to setup\n");
 		goto error;
 	}
 
@@ -418,11 +418,11 @@ int iaxxx_tunnel_terminate_hw(struct iaxxx_priv *priv, uint32_t tunlEP)
 	int rc = -EINVAL;
 
 	if (dev == NULL) {
-		dev_err(dev, "Invalid device pointer\n");
+		pr_err("Invalid device pointer\n");
 		goto error;
 	}
 
-	pr_debug("Terminate for tunnel endpoint: %x", tunlEP);
+	dev_dbg(dev, "Terminate for tunnel endpoint: %x", tunlEP);
 	if (tunlEP < 0 || tunlEP > 31) {
 		dev_err(dev, "Invalid Tunnel EP provided to terminate\n");
 		goto error;

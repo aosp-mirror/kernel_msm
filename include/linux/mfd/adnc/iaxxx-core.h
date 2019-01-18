@@ -48,8 +48,6 @@ enum {
 					 */
 	IAXXX_FLG_FW_CRASH,		/* FW has crashed */
 	IAXXX_FLG_PM_SUSPEND,		/* Suspend state */
-	IAXXX_FLG_BUS_BLOCK_CLIENTS,	/* Block client node access to bus */
-	IAXXX_FLG_BUS_BLOCK_CORE,	/* Block core node access (CM4 Crash) */
 	IAXXX_FLG_RESUME_BY_STARTUP,	/* System boot up */
 	IAXXX_FLG_RESUME_BY_RECOVERY,	/* FW update and resume
 					 * after fw crash
@@ -96,9 +94,11 @@ enum iaxxx_pkg_state {
 	IAXXX_PKG_LOADED,
 };
 
-struct iaxxx_plug_inst_data {
-	int proc_id;
-	enum iaxxx_plugin_state plugin_inst_state;
+enum iaxxx_power_state {
+	IAXXX_NOCHANGE     = 0,
+	IAXXX_OPTIMAL_MODE = 1,
+	IAXXX_SLEEP_MODE   = 2,
+	IAXXX_NORMAL_MODE  = 4,
 };
 
 struct iaxxx_plugin_status_data {
@@ -126,9 +126,18 @@ struct iaxxx_plugin_endpoint_status_data {
 	uint16_t op_frame_length;
 };
 
+struct iaxxx_plugin_data {
+	uint32_t proc_id;
+	uint32_t inst_id;
+	enum iaxxx_plugin_state plugin_state;
+	struct list_head plugin_node;
+};
+
 struct iaxxx_pkg_data {
-	int proc_id;
+	uint32_t proc_id;
+	uint32_t pkg_id;
 	enum iaxxx_pkg_state pkg_state;
+	struct list_head pkg_node;
 };
 
 struct iaxxx_block_err {
@@ -137,8 +146,9 @@ struct iaxxx_block_err {
 };
 
 struct iaxxx_system_state {
-	struct iaxxx_plug_inst_data plgin[IAXXX_PLGIN_ID_MASK + 1];
-	struct iaxxx_pkg_data pkg[IAXXX_PKG_ID_MASK + 1];
+	struct list_head plugin_head_list;
+	struct list_head pkg_head_list;
+	enum iaxxx_power_state power_state;
 	struct iaxxx_block_err err;
 };
 
@@ -206,7 +216,9 @@ struct iaxxx_priv {
 	struct regulator *vdd_core;
 
 	/* External Clock */
+	bool mclk_en;
 	struct clk *ext_clk;
+	int (*iaxxx_mclk_cb)(struct iaxxx_priv *, bool);
 
 	/* Update block lock */
 	struct mutex update_block_lock;
@@ -276,18 +288,20 @@ struct iaxxx_priv {
 	bool route_status;
 	struct iaxxx_crashlog *crashlog;
 	struct mutex crashdump_lock;
-	bool debug_isr_disable;
 
 	/* FW Crash info */
 	int fw_crash_reasons;
 	int recovery_try_count;
 	int try_count;
-	int package_version_package_index;
-	int plugin_version_plugin_index;
 	bool in_suspend;
 	bool in_resume;
 	struct mutex pm_mutex;
-	bool disable_chip_pm;
+
+	/* Debug flags */
+	bool debug_isr_disable;
+	bool debug_fwcrash_handling_disable;
+	bool debug_runtime_pm_disable;
+	struct mutex debug_mutex;
 };
 
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
@@ -307,6 +321,15 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
 int iaxxx_send_update_block_no_wait(struct device *dev, int host_id);
 int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id);
+int iaxxx_get_firmware_version(struct device *dev, char *ver, uint32_t len);
+int iaxxx_get_application_ver_num(struct device *dev, uint32_t *app_ver_num);
+int iaxxx_get_rom_ver_num(struct device *dev, uint32_t *rom_ver_num);
+int iaxxx_get_rom_version(struct device *dev, char *ver, uint32_t len);
+int iaxxx_get_device_id(struct device *dev, uint32_t *device_id);
+int iaxxx_core_plg_get_package_version(struct device *dev,
+			uint8_t inst_id, char *ver, uint32_t len);
+int iaxxx_core_plg_get_plugin_version(struct device *dev,
+			uint8_t inst_id, char *ver, uint32_t len);
 int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
 			uint32_t param_id,
 			uint32_t *param_val, uint32_t block_id);
@@ -315,11 +338,13 @@ int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
 			uint32_t param_val, uint32_t block_id);
 int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
 			uint32_t priority, uint32_t pkg_id,
-			uint32_t plg_idx, uint8_t block_id);
+			uint32_t plg_idx, uint8_t block_id,
+			uint32_t config_id);
 int iaxxx_core_create_plg_static_package(
 			struct device *dev, uint32_t inst_id,
 			uint32_t priority, uint32_t pkg_id,
-			uint32_t plg_idx, uint8_t block_id);
+			uint32_t plg_idx, uint8_t block_id,
+			uint32_t config_id);
 
 int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id);
@@ -372,10 +397,22 @@ int iaxxx_core_set_custom_cfg(struct device *dev, uint32_t inst_id,
 			uint32_t block_id, uint32_t param_blk_id,
 			uint32_t custom_config_id, char *file);
 int iaxxx_core_evt_subscribe(struct device *dev, uint16_t src_id,
-			uint16_t event_id, uint16_t dst_id,
-			uint32_t dst_opaque);
+		uint16_t event_id, uint16_t dst_id, uint32_t dst_opaque);
 int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,
 			uint16_t event_id, uint16_t dst_id);
+int iaxxx_core_evt_read_subscription(struct device *dev,
+			uint16_t *src_id,
+			uint16_t *evt_id,
+			uint16_t *dst_id,
+			uint32_t *dst_opaque);
+int iaxxx_core_evt_retrieve_notification(struct device *dev,
+			uint16_t *src_id,
+			uint16_t *evt_id,
+			uint32_t *src_opaque,
+			uint32_t *dst_opaque);
+int iaxxx_core_evt_reset_read_index(struct device *dev);
+int iaxxx_core_evt_trigger(struct device *dev,
+			uint16_t src_id, uint16_t evt_id, uint32_t src_opaque);
 int iaxxx_core_retrieve_event(struct device *dev, uint16_t *event_id,
 			uint32_t *data);
 int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
@@ -386,7 +423,8 @@ int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
 int iaxxx_core_plg_get_endpoint_status(struct device *dev,
 	uint32_t inst_id, uint8_t ep_index, uint8_t direction,
 	struct iaxxx_plugin_endpoint_status_data *plugin_ep_status_data);
-
+int iaxxx_core_plg_get_endpoint_timestamps(struct device *dev,
+			uint64_t *timestamps, int ep_num, uint8_t proc_id);
 int iaxxx_core_resume_rt(struct device *dev);
 int iaxxx_core_suspend_rt(struct device *dev);
 int iaxxx_core_dev_resume(struct device *dev);
@@ -396,6 +434,7 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 			uint32_t pkg_id, uint32_t *proc_id);
 int iaxxx_package_unload(struct device *dev,
 			int32_t pkg_id);
+int iaxxx_clr_pkg_plg_list(struct iaxxx_priv *priv);
 int iaxxx_core_read_plugin_error(
 			struct device  *dev,
 			const uint32_t  block_id,
@@ -419,8 +458,24 @@ int iaxxx_set_debug_log_mode(struct device *dev,
 			bool mode, uint8_t proc_id);
 int iaxxx_get_debug_log_mode(struct device *dev,
 			bool *mode, uint8_t proc_id);
-int iaxxx_pm_get_sync(struct device *dev);
-int iaxxx_pm_put_autosuspend(struct device *dev);
-int iaxxx_pm_put_sync_suspend(struct device *dev);
+bool iaxxx_core_plg_is_valid_inst_id(uint32_t inst_id);
+bool iaxxx_core_plg_is_valid_pkg_id(uint32_t pkg_id);
+bool iaxxx_core_plg_is_valid_priority(uint32_t priority);
+bool iaxxx_core_plg_is_valid_block_id(uint32_t block_id);
+bool iaxxx_core_plg_is_valid_plg_idx(uint32_t plg_idx);
+bool iaxxx_core_plg_is_valid_param_id(uint32_t param_id);
+bool iaxxx_core_plg_is_valid_param_val(uint32_t param_val);
+bool iaxxx_core_plg_is_valid_param_blk_id(uint32_t param_id);
+bool iaxxx_core_plg_is_valid_param_blk_size(uint32_t param_size);
+bool iaxxx_core_plg_is_valid_cfg_size(uint32_t cfg_size);
+bool iaxxx_core_evt_is_valid_src_id(uint32_t src_id);
+bool iaxxx_core_evt_is_valid_dst_id(uint32_t dst_id);
+bool iaxxx_core_evt_is_valid_event_id(uint32_t event_id);
+bool iaxxx_core_evt_is_valid_dst_opaque(uint32_t dst_opaque);
+bool iaxxx_core_sensor_is_valid_script_id(uint32_t script_id);
+bool iaxxx_core_sensor_is_valid_inst_id(uint32_t inst_id);
+bool iaxxx_core_sensor_is_valid_block_id(uint32_t block_id);
+bool iaxxx_core_sensor_is_valid_param_id(uint32_t param_id);
+bool iaxxx_core_sensor_is_valid_param_val(uint32_t param_val);
 
 #endif /*__IAXXX_CORE_H__ */

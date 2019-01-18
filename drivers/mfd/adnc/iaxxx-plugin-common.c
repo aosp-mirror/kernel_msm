@@ -22,19 +22,21 @@
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include "iaxxx.h"
+#include "iaxxx-plugin-common.h"
 
 /* Set Param Block Common code without mutex protection
  * to be shared by code using plugin mutex
  */
-int iaxxx_core_set_param_blk_common(struct device *dev,
-				uint32_t inst_id, uint32_t blk_size,
-				const void *ptr_blk, uint32_t block_id,
-				uint32_t param_blk_id)
+int iaxxx_core_set_param_blk_common(
+			struct device *dev,
+			uint32_t inst_id, uint32_t blk_size,
+			const void *ptr_blk, uint32_t block_id,
+			uint32_t param_blk_id)
 {
 	int ret = -EINVAL;
 	uint32_t status = 0;
 	int rc;
-	uint32_t reg_addr;
+	uint32_t reg_addr, reg_addr2;
 	uint32_t reg_val;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
@@ -45,7 +47,7 @@ int iaxxx_core_set_param_blk_common(struct device *dev,
 	dev_dbg(dev, "%s() inst_id=%u blk_size=%u blk_id=%u id=%u\n",
 		__func__, inst_id, blk_size, block_id, param_blk_id);
 	/* Plugin instance exists or not */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
 			inst_id, __func__);
 		goto set_param_blk_err;
@@ -66,7 +68,7 @@ int iaxxx_core_set_param_blk_common(struct device *dev,
 			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
 			reg_val);
 	if (ret) {
-		dev_err(dev, "write ctrl block failed\n");
+		dev_err(dev, "write ctrl block failed %s()\n", __func__);
 		goto set_param_blk_err;
 	}
 
@@ -74,43 +76,49 @@ int iaxxx_core_set_param_blk_common(struct device *dev,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id),
 		param_blk_id);
 	if (ret) {
-		dev_err(dev, "write HDR block failed\n");
+		dev_err(dev, "write HDR block failed %s()\n", __func__);
 		goto set_param_blk_err;
 	}
 
 	ret = iaxxx_send_update_block_request(dev, &status, block_id);
-	if (ret) {
-		dev_err(dev, "Update blk failed after id (%u) config\n",
-			param_blk_id);
-		if (status == 0)
-			return ret;
-		rc = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
+
+	reg_val = IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_REQ_MASK,
-		0);
-		if (rc)
-			dev_err(dev, "clear failed %d\n",
-				rc);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_REQ_MASK;
+
+	if (ret) {
+		dev_err(dev, "Update blk failed after id (%u) config %s()\n",
+				param_blk_id, __func__);
+		if (status) {
+			rc = regmap_update_bits(priv->regmap,
+			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
+			reg_val,
+			0);
+			if (rc) {
+				dev_err(dev, "clear failed %s() %d\n",
+					__func__, rc);
+				goto set_param_blk_err;
+			}
+		}
 		goto set_param_blk_err;
 	}
 	ret = regmap_read(priv->regmap,
 			IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id),
 			&reg_addr);
 	if (ret) {
-		dev_err(dev, "read block address failed\n");
+		dev_err(dev, "read failed %s()\n", __func__);
 		goto set_param_blk_err;
 	}
 
-	if (!priv->raw_write) {
-		dev_err(dev, "Raw blk write not supported\n");
-		goto set_param_blk_err;
-	}
-
-	ret = priv->raw_write(dev, &reg_addr, ptr_blk, blk_size);
-	if (ret) {
-		dev_err(dev, "Raw blk write failed %s()\n", __func__);
+	if (priv->raw_write) {
+		ret = priv->raw_write(dev, &reg_addr, ptr_blk,
+				blk_size);
+		if (ret) {
+			dev_err(dev, "Raw blk write failed %s()\n", __func__);
+			goto set_param_blk_err;
+		}
+	} else {
+		dev_err(dev, "Raw blk write not supported  %s()\n", __func__);
 		goto set_param_blk_err;
 	}
 
@@ -128,21 +136,25 @@ int iaxxx_core_set_param_blk_common(struct device *dev,
 			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
 			reg_val);
 
+	reg_addr2 = IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id);
+	reg_val = IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK |
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_DONE_MASK;
+
 	ret = iaxxx_send_update_block_request(dev, &status, block_id);
 	if (ret) {
 		dev_err(dev,
-			"Update blk failed after plugin ctrl block config\n");
-		if (status == 0)
-			return ret;
-		rc = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_DONE_MASK,
-		0);
-		if (rc)
-			dev_err(dev, "clear failed %d\n",
-				rc);
+		"Update blk failed after plugin ctrl block config %s()\n",
+		__func__);
+		if (status) {
+			rc = regmap_update_bits(priv->regmap,
+				reg_addr2,
+				reg_val,
+				0);
+			if (rc)
+				dev_err(dev, "clear failed %s() %d\n",
+					__func__, rc);
+		}
 	}
 set_param_blk_err:
 	return ret;
@@ -152,12 +164,13 @@ set_param_blk_err:
 /* Get Param Block Common code without mutex protection
  * to be shared by code using plugin mutex
  */
-int iaxxx_core_get_param_blk_common(struct device *dev,
-				uint32_t inst_id,
-				uint32_t block_id,
-				uint32_t param_blk_id,
-				uint32_t *getparam_block_data,
-				uint32_t getparam_block_size_in_words)
+int iaxxx_core_get_param_blk_common(
+		struct device *dev,
+		uint32_t  inst_id,
+		uint32_t  block_id,
+		uint32_t  param_blk_id,
+		uint32_t *getparam_block_data,
+		uint32_t  getparam_block_size_in_words)
 {
 	int ret;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
@@ -174,9 +187,9 @@ int iaxxx_core_get_param_blk_common(struct device *dev,
 	inst_id &= IAXXX_PLGIN_ID_MASK;
 
 	/* Check if plugin exists */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
-			inst_id, __func__);
+				inst_id, __func__);
 		ret = -EEXIST;
 		goto iaxxx_core_get_param_error;
 	}
@@ -192,6 +205,7 @@ int iaxxx_core_get_param_blk_common(struct device *dev,
 	ret = regmap_write(priv->regmap,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
 		write_val);
+
 	if (ret) {
 		dev_err(dev, "getparamblk request failed %s()\n", __func__);
 		goto iaxxx_core_get_param_error;
@@ -224,6 +238,7 @@ int iaxxx_core_get_param_blk_common(struct device *dev,
 	getparam_block_size = (read_val &
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK)
 		>> IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS;
+
 	if (!getparam_block_size ||
 		getparam_block_size > getparam_block_size_in_words) {
 		dev_err(dev, "invalid getparam blocksize %s()\n", __func__);
@@ -243,6 +258,7 @@ int iaxxx_core_get_param_blk_common(struct device *dev,
 	ret = priv->bulk_read(priv->dev,
 		read_val, getparam_block_data,
 		getparam_block_size_in_words);
+
 	if (ret != getparam_block_size_in_words) {
 		dev_err(dev, "getparamblk read failed %s()\n", __func__);
 		goto iaxxx_core_get_param_error;
@@ -258,6 +274,7 @@ int iaxxx_core_get_param_blk_common(struct device *dev,
 	ret = regmap_write(priv->regmap,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
 		write_val);
+
 	if (ret) {
 		dev_err(dev, "getparamblk done failed %s()\n", __func__);
 		goto iaxxx_core_get_param_error;
@@ -278,17 +295,19 @@ iaxxx_core_get_param_error:
 /* Read Plugin Error Common code without mutex protection
  * to be shared by code using plugin mutex
  */
-int iaxxx_core_read_plugin_error_common(struct device *dev,
-					const uint32_t block_id,
-					uint32_t *error,
-					uint8_t *error_instance)
+int iaxxx_core_read_plugin_error_common(
+	struct device  *dev,
+	const uint32_t  block_id,
+	uint32_t *error,
+	uint8_t  *error_instance)
 {
 	int ret;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint32_t reg_val;
 
 	ret = regmap_read(priv->regmap,
-		IAXXX_PLUGIN_HDR_ERROR_BLOCK_ADDR(block_id), &reg_val);
+		IAXXX_PLUGIN_HDR_ERROR_BLOCK_ADDR(block_id),
+		&reg_val);
 	if (ret) {
 		dev_err(dev, "read plugin error failed %s()\n", __func__);
 		goto read_plugin_error_err;
@@ -314,13 +333,14 @@ read_plugin_error_err:
 /* Set Param Block with ack Common code without mutex protection
  * to be shared by code using plugin mutex
  */
-int iaxxx_core_set_param_blk_with_ack_common(struct device *dev,
+int iaxxx_core_set_param_blk_with_ack_common(
+					struct device *dev,
 					const uint32_t inst_id,
 					const uint32_t param_blk_id,
 					const uint32_t block_id,
 					const void *set_param_buf,
 					const uint32_t set_param_buf_sz,
-					uint32_t *response_data_buf,
+					uint32_t  *response_data_buf,
 					const uint32_t response_data_sz,
 					const uint32_t max_no_retries)
 {
@@ -330,7 +350,8 @@ int iaxxx_core_set_param_blk_with_ack_common(struct device *dev,
 	uint8_t error_instance;
 
 
-	ret = iaxxx_core_set_param_blk_common(dev, inst_id, set_param_buf_sz,
+	ret = iaxxx_core_set_param_blk_common(dev, inst_id,
+			set_param_buf_sz,
 			set_param_buf, block_id, param_blk_id);
 	if (ret) {
 		dev_err(dev, "Error sending set_param_buf! %s()\n",
@@ -344,18 +365,21 @@ int iaxxx_core_set_param_blk_with_ack_common(struct device *dev,
 		ret = iaxxx_core_get_param_blk_common(dev, inst_id,
 				block_id, param_blk_id, response_data_buf,
 				response_data_sz);
-		if (ret == 0)
-			break;
-		ret = iaxxx_core_read_plugin_error_common(dev,
-				block_id, &error, &error_instance);
-		if (!ret && error == SYSRC_ERR_BUSY) {
-			dev_err(dev,
+		if (ret) {
+			ret = iaxxx_core_read_plugin_error_common(dev,
+					block_id, &error, &error_instance);
+
+			if (!ret && error == SYSRC_ERR_BUSY) {
+
+				dev_err(dev,
 				"Getparamblk busy..retry after delay\n");
-			usleep_range(10000, 10005);
-		} else {
-			dev_err(dev, "Getparamblk error\n");
-			return -EINVAL;
-		}
+				usleep_range(10000, 10005);
+			} else {
+				dev_err(dev, "Getparamblk error\n");
+				return -EINVAL;
+			}
+		} else
+			break;
 	}
 	return ret;
 }

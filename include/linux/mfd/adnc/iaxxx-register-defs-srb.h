@@ -61,12 +61,13 @@
 /*
  * Index of block that failed the latest block update.
  * Block update always aborts as soon as a block update fails.
- * 0x00 - no block update failure (success).
- * 0x01 - SRB block update failure.
- * 0x80 - ARB 0 block update failure.
- * 0x81 - ARB 1 block update failure.
- * 0x82 - ARB 2 block update failure.
- * 0x9F - ARB 31 block update failure.
+ * 0xFF - No block update failure (success).
+ * 0x00 - ARB 0 block update failure.
+ * 0x01 - ARB 1 block update failure.
+ * 0x02 - ARB 2 block update failure.
+ * ...
+ * 0x1F - ARB 31 block update failure.
+ * 0x80 - SRB block update failure.
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK 0x0000ff00
 #define IAXXX_SRB_SYS_BLK_UPDATE_RES_RESET_VAL 0x0
@@ -126,12 +127,13 @@
 /*
  * Index of block that failed the latest block update.
  * Block update always aborts as soon as a block update fails.
- * 0x00 - no block update failure (success).
- * 0x01 - SRB block update failure.
- * 0x80 - ARB 0 block update failure.
- * 0x81 - ARB 1 block update failure.
- * 0x82 - ARB 2 block update failure.
- * 0x9F - ARB 31 block update failure.
+ * 0xFF - No block update failure (success).
+ * 0x00 - ARB 0 block update failure.
+ * 0x01 - ARB 1 block update failure.
+ * 0x02 - ARB 2 block update failure.
+ * ...
+ * 0x1F - ARB 31 block update failure.
+ * 0x80 - SRB block update failure.
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_RES_MASK 0x0000ff00
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_RES_RESET_VAL 0x0
@@ -191,12 +193,13 @@
 /*
  * Index of block that failed the latest block update.
  * Block update always aborts as soon as a block update fails.
- * 0x00 - no block update failure (success).
- * 0x01 - SRB block update failure.
- * 0x80 - ARB 0 block update failure.
- * 0x81 - ARB 1 block update failure.
- * 0x82 - ARB 2 block update failure.
- * 0x9F - ARB 31 block update failure.
+ * 0xFF - No block update failure (success).
+ * 0x00 - ARB 0 block update failure.
+ * 0x01 - ARB 1 block update failure.
+ * 0x02 - ARB 2 block update failure.
+ * ...
+ * 0x1F - ARB 31 block update failure.
+ * 0x80 - SRB block update failure.
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_RES_MASK 0x0000ff00
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_RES_RESET_VAL 0x0
@@ -266,12 +269,13 @@
 /*
  * Index of block that failed the latest block update.
  * Block update always aborts as soon as a block update fails.
- * 0x00 - no block update failure (success).
- * 0x01 - SRB block update failure.
- * 0x80 - ARB 0 block update failure.
- * 0x81 - ARB 1 block update failure.
- * 0x82 - ARB 2 block update failure.
- * 0x9F - ARB 31 block update failure.
+ * 0xFF - No block update failure (success).
+ * 0x00 - ARB 0 block update failure.
+ * 0x01 - ARB 1 block update failure.
+ * 0x02 - ARB 2 block update failure.
+ * ...
+ * 0x1F - ARB 31 block update failure.
+ * 0x80 - SRB block update failure.
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_RES_MASK 0x0000ff00
 #define IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_RES_RESET_VAL 0x0
@@ -331,12 +335,13 @@
 /*
  * Index of block that failed the latest block update.
  * Block update always aborts as soon as a block update fails.
- * 0x00 - no block update failure (success).
- * 0x01 - SRB block update failure.
- * 0x80 - ARB 0 block update failure.
- * 0x81 - ARB 1 block update failure.
- * 0x82 - ARB 2 block update failure.
- * 0x9F - ARB 31 block update failure.
+ * 0xFF - No block update failure (success).
+ * 0x00 - ARB 0 block update failure.
+ * 0x01 - ARB 1 block update failure.
+ * 0x02 - ARB 2 block update failure.
+ * ...
+ * 0x1F - ARB 31 block update failure.
+ * 0x80 - SRB block update failure.
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_HOST_1_RES_MASK 0x0000ff00
 #define IAXXX_SRB_SYS_BLK_UPDATE_1_HOST_1_RES_RESET_VAL 0x0
@@ -396,12 +401,13 @@
 /*
  * Index of block that failed the latest block update.
  * Block update always aborts as soon as a block update fails.
- * 0x00 - no block update failure (success).
- * 0x01 - SRB block update failure.
- * 0x80 - ARB 0 block update failure.
- * 0x81 - ARB 1 block update failure.
- * 0x82 - ARB 2 block update failure.
- * 0x9F - ARB 31 block update failure.
+ * 0xFF - No block update failure (success).
+ * 0x00 - ARB 0 block update failure.
+ * 0x01 - ARB 1 block update failure.
+ * 0x02 - ARB 2 block update failure.
+ * ...
+ * 0x1F - ARB 31 block update failure.
+ * 0x80 - SRB block update failure.
  */
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_HOST_1_RES_MASK 0x0000ff00
 #define IAXXX_SRB_SYS_BLK_UPDATE_2_HOST_1_RES_RESET_VAL 0x0
@@ -530,15 +536,34 @@
 #define IAXXX_SRB_SYS_FEATURE_SUPPORT_BULK_TRANSFER_POS 0
 #define IAXXX_SRB_SYS_FEATURE_SUPPORT_BULK_TRANSFER_SIZE 1
 
-/*** SRB_SYS_RESERVED_11 (0x58000030) ***/
+/*** SRB_SYS_SPI_CONFIG (0x58000030) ***/
 /*
- * Reserved register space for future use
+ * Contains SPI sonfigurations.
  */
-#define IAXXX_SRB_SYS_RESERVED_11_ADDR (0x58000030)
-#define IAXXX_SRB_SYS_RESERVED_11_MASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_11_RMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_11_WMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_11_RESET_VAL 0x00000000
+#define IAXXX_SRB_SYS_SPI_CONFIG_ADDR (0x58000030)
+#define IAXXX_SRB_SYS_SPI_CONFIG_MASK_VAL 0x0000003f
+#define IAXXX_SRB_SYS_SPI_CONFIG_RMASK_VAL 0x0000003f
+#define IAXXX_SRB_SYS_SPI_CONFIG_WMASK_VAL 0x0000003f
+#define IAXXX_SRB_SYS_SPI_CONFIG_RESET_VAL 0x00000033
+
+/*
+ * Determines the number of padding zeros in RegMap mode.
+ */
+#define IAXXX_SRB_SYS_SPI_CONFIG_PADDING_ZEROS_MASK 0x0000000f
+#define IAXXX_SRB_SYS_SPI_CONFIG_PADDING_ZEROS_RESET_VAL 0x3
+#define IAXXX_SRB_SYS_SPI_CONFIG_PADDING_ZEROS_POS 0
+#define IAXXX_SRB_SYS_SPI_CONFIG_PADDING_ZEROS_SIZE 4
+
+/*
+ * SPI sample config.
+ * 0x0: Hardware
+ * 0x1: Normal Launch Mode
+ * 0x3: Early Launch Mode (Default)
+ */
+#define IAXXX_SRB_SYS_SPI_CONFIG_SAMP_CFG_MASK 0x00000030
+#define IAXXX_SRB_SYS_SPI_CONFIG_SAMP_CFG_RESET_VAL 0x3
+#define IAXXX_SRB_SYS_SPI_CONFIG_SAMP_CFG_POS 4
+#define IAXXX_SRB_SYS_SPI_CONFIG_SAMP_CFG_SIZE 2
 
 /*** SRB_SYS_DEVICE_ID (0x58000034) ***/
 /*
@@ -722,70 +747,70 @@
 #define IAXXX_SRB_PROC_ACTIVE_STATUS_RESET_VAL 0x00000000
 
 /*
- * Status of the Boss core
+ * Status of the PROC-1 core
  * 0 - Powered down
  * 1 - Powered up
  */
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_BOSS_MASK 0x00000002
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_BOSS_RESET_VAL 0x0
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_BOSS_POS 1
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_BOSS_SIZE 1
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_1_MASK 0x00000002
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_1_RESET_VAL 0x0
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_1_POS 1
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_1_SIZE 1
 
 /*
- * Status of the SSP core(Not a supported feature now)
+ * Status of the PROC-2 core(Not a supported feature now)
  * 0 - Powered down
  * 1 - Powered up
  */
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_SSP_MASK 0x00000004
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_SSP_RESET_VAL 0x0
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_SSP_POS 2
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_SSP_SIZE 1
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_2_MASK 0x00000004
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_2_RESET_VAL 0x0
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_2_POS 2
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_2_SIZE 1
 
 /*
- * Status of the CM4 core
+ * Status of the PROC-3 core
  * 0 - Powered down
  * 1 - Powered up
  */
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_CM4_MASK 0x00000008
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_CM4_RESET_VAL 0x0
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_CM4_POS 3
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_CM4_SIZE 1
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_3_MASK 0x00000008
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_3_RESET_VAL 0x0
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_3_POS 3
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_3_SIZE 1
 
 /*
- * Status of the HMD core
+ * Status of the PROC-4 core
  * 0 - Powered down
  * 1 - Powered up
  */
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_HMD_MASK 0x00000010
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_HMD_RESET_VAL 0x0
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_HMD_POS 4
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_HMD_SIZE 1
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_4_MASK 0x00000010
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_4_RESET_VAL 0x0
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_4_POS 4
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_4_SIZE 1
 
 /*
- * Status of the DMX core
+ * Status of the PROC-5 core
  * 0 - Powered down
  * 1 - Powered up
  */
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_DMX_MASK 0x00000020
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_DMX_RESET_VAL 0x0
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_DMX_POS 5
-#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_DMX_SIZE 1
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_5_MASK 0x00000020
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_5_RESET_VAL 0x0
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_5_POS 5
+#define IAXXX_SRB_PROC_ACTIVE_STATUS_PROC_STATUS_PROC_5_SIZE 1
 
 /*** SRB_SYS_POWER_CTRL (0x5800005c) ***/
 /*
  * System Power control Register
  */
 #define IAXXX_SRB_SYS_POWER_CTRL_ADDR (0x5800005c)
-#define IAXXX_SRB_SYS_POWER_CTRL_MASK_VAL 0x0000001f
-#define IAXXX_SRB_SYS_POWER_CTRL_RMASK_VAL 0x0000001f
-#define IAXXX_SRB_SYS_POWER_CTRL_WMASK_VAL 0x0000001f
+#define IAXXX_SRB_SYS_POWER_CTRL_MASK_VAL 0x0000007f
+#define IAXXX_SRB_SYS_POWER_CTRL_RMASK_VAL 0x0000007f
+#define IAXXX_SRB_SYS_POWER_CTRL_WMASK_VAL 0x0000007f
 #define IAXXX_SRB_SYS_POWER_CTRL_RESET_VAL 0x00000000
 
 /*
  * Host sets this bit to request
  * firmware to switch to an optimal power
  * mode for the current use case. In a multi
- * host system, this request is honoured if
+ * host system, this request is honoured iff
  * all the other HOSTs are inactive(their
  * control interfaces are in powered down
  * mode).
@@ -803,16 +828,16 @@
 #define IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_SIZE 3
 
 /*
- * Host sets this bit to request
- * firmware to apply the APLL settings
- * in SYS_CLK_CTRL SRB register.
- * 0 - No Audio Power mode switch required
+ * Host sets this bit to request firmware to
+ * apply the APLL_SRC and APLL_OUT_FREQ settings
+ * specified in SYS_CLK_CTRL PWR_MGMT ARB register.
+ * 0 - No Change
  * 1 - Apply the APLL settings from SYS_CLK_CTRL.
  */
-#define IAXXX_SRB_SYS_POWER_CTRL_SET_AUDIO_POWER_MODE_MASK 0x00000008
-#define IAXXX_SRB_SYS_POWER_CTRL_SET_AUDIO_POWER_MODE_RESET_VAL 0x0
-#define IAXXX_SRB_SYS_POWER_CTRL_SET_AUDIO_POWER_MODE_POS 3
-#define IAXXX_SRB_SYS_POWER_CTRL_SET_AUDIO_POWER_MODE_SIZE 1
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_APLL_MASK 0x00000008
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_APLL_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_APLL_POS 3
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_APLL_SIZE 1
 
 /*
  * Host sets this bit to request
@@ -826,14 +851,37 @@
 #define IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_POS 4
 #define IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_SIZE 1
 
+/*
+ * Host sets this bit to request firmware
+ * to apply the MPLL_SRC setting specified
+ * in SYS_CLK_CTRL PWR_MGMT ARB register.
+ * 0 - No Change
+ * 1 - Apply the APLL settings from SYS_CLK_CTRL.
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK 0x00000020
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_POS 5
+#define IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_SIZE 1
+
+/*
+ * Host sets this bit to request firmware
+ * to trim the internal oscillator frequency.
+ * 0 - No Change
+ * 1 - Trim internal oscillator frequency.
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_FREQ_MASK 0x00000040
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_FREQ_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_FREQ_POS 6
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_FREQ_SIZE 1
+
 /*** SRB_SYS_POWER_CTRL_1 (0x58000060) ***/
 /*
  * System Power control Register for Second Host
  */
 #define IAXXX_SRB_SYS_POWER_CTRL_1_ADDR (0x58000060)
-#define IAXXX_SRB_SYS_POWER_CTRL_1_MASK_VAL 0x0000001f
-#define IAXXX_SRB_SYS_POWER_CTRL_1_RMASK_VAL 0x0000001f
-#define IAXXX_SRB_SYS_POWER_CTRL_1_WMASK_VAL 0x00000017
+#define IAXXX_SRB_SYS_POWER_CTRL_1_MASK_VAL 0x0000007f
+#define IAXXX_SRB_SYS_POWER_CTRL_1_RMASK_VAL 0x0000007f
+#define IAXXX_SRB_SYS_POWER_CTRL_1_WMASK_VAL 0x00000057
 #define IAXXX_SRB_SYS_POWER_CTRL_1_RESET_VAL 0x00000000
 
 /*
@@ -860,10 +908,10 @@
 /*
  * Currently not supported for the second host.
  */
-#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_MASK 0x00000008
-#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_RESET_VAL 0x0
-#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_POS 3
-#define IAXXX_SRB_SYS_POWER_CTRL_1_SET_AUDIO_POWER_MODE_SIZE 1
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_APLL_MASK 0x00000008
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_APLL_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_APLL_POS 3
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_APLL_SIZE 1
 
 /*
  * Host sets this bit to request
@@ -877,15 +925,41 @@
 #define IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS 4
 #define IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_SIZE 1
 
-/*** SRB_SYS_RESERVED_12 (0x58000064) ***/
 /*
- * Reserved register space for future use
+ * Currently not supported for the second host.
  */
-#define IAXXX_SRB_SYS_RESERVED_12_ADDR (0x58000064)
-#define IAXXX_SRB_SYS_RESERVED_12_MASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_12_RMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_12_WMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_12_RESET_VAL 0x00000000
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_MPLL_MASK 0x00000020
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_MPLL_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_MPLL_POS 5
+#define IAXXX_SRB_SYS_POWER_CTRL_1_CONFIG_MPLL_SIZE 1
+
+/*
+ * Currently not supported for the second host.
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_FREQ_MASK 0x00000040
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_FREQ_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_FREQ_POS 6
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_FREQ_SIZE 1
+
+/*** SRB_SYSTEM_ERROR (0x58000064) ***/
+/*
+ * Indicates system errors. If any of the bits in this register is set, it
+ * indicates an error condition.
+ */
+#define IAXXX_SRB_SYSTEM_ERROR_ADDR (0x58000064)
+#define IAXXX_SRB_SYSTEM_ERROR_MASK_VAL 0x00000001
+#define IAXXX_SRB_SYSTEM_ERROR_RMASK_VAL 0x00000001
+#define IAXXX_SRB_SYSTEM_ERROR_WMASK_VAL 0x00000001
+#define IAXXX_SRB_SYSTEM_ERROR_RESET_VAL 0x00000000
+
+/*
+ * This bit is set if host tries to access an address which is not multiples
+ * of 4 bytes.
+ */
+#define IAXXX_SRB_SYSTEM_ERROR_UNALIGNED_ACCESS_MASK 0x00000001
+#define IAXXX_SRB_SYSTEM_ERROR_UNALIGNED_ACCESS_RESET_VAL 0x0
+#define IAXXX_SRB_SYSTEM_ERROR_UNALIGNED_ACCESS_POS 0
+#define IAXXX_SRB_SYSTEM_ERROR_UNALIGNED_ACCESS_SIZE 1
 
 /*** SRB_PROCESSOR_CRASH_STATUS (0x58000068) ***/
 /*
@@ -898,24 +972,24 @@
 #define IAXXX_SRB_PROCESSOR_CRASH_STATUS_RESET_VAL 0x00000000
 
 /*
- * Crash Status of the HMD core
+ * Crash Status of the PROC-4 core
  * 0 - Active (No Crash)
  * 1 - Crashed
  */
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_HMD_CRASH_MASK 0x00000010
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_HMD_CRASH_RESET_VAL 0x0
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_HMD_CRASH_POS 4
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_HMD_CRASH_SIZE 1
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_4_CRASH_MASK 0x00000010
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_4_CRASH_RESET_VAL 0x0
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_4_CRASH_POS 4
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_4_CRASH_SIZE 1
 
 /*
- * Crash Status of the DMX core
+ * Crash Status of the PROC-5 core
  * 0 - Active (No Crash)
  * 1 - Crashed
  */
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_DMX_CRASH_MASK 0x00000020
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_DMX_CRASH_RESET_VAL 0x0
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_DMX_CRASH_POS 5
-#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_DMX_CRASH_SIZE 1
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_5_CRASH_MASK 0x00000020
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_5_CRASH_RESET_VAL 0x0
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_5_CRASH_POS 5
+#define IAXXX_SRB_PROCESSOR_CRASH_STATUS_PROC_5_CRASH_SIZE 1
 
 /*** SRB_BOOT_REQ (0x5800006c) ***/
 /*
@@ -1250,71 +1324,45 @@
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BUF_REQ_SIZE 1
 
 /*
- * Host sets this bit to initiate full flash chip erase. All data on flash is
- * erased.
- */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CHIP_ERASE_MASK 0x00000002
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CHIP_ERASE_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CHIP_ERASE_POS 1
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CHIP_ERASE_SIZE 1
-
-/*
- * Host sets this bit to initiate full flash chip program.
- */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FACTORY_PROG_MASK 0x00000004
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FACTORY_PROG_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FACTORY_PROG_POS 2
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FACTORY_PROG_SIZE 1
-
-/*
  * Host sets this bit after transferring new flash image to update Boot
  * image.
  */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FIELD_UPD_MASK 0x00000008
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FIELD_UPD_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FIELD_UPD_POS 3
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_FIELD_UPD_SIZE 1
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BOOT_IMG_UPD_MASK 0x00000010
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BOOT_IMG_UPD_RESET_VAL 0x0
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BOOT_IMG_UPD_POS 4
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BOOT_IMG_UPD_SIZE 1
 
 /*
  * Host sets this bit to indicate flash program continue (next block)
  */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CONT_NEXT_BLK_MASK 0x00000010
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CONT_NEXT_BLK_MASK 0x00000020
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CONT_NEXT_BLK_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CONT_NEXT_BLK_POS 4
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CONT_NEXT_BLK_POS 5
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_CONT_NEXT_BLK_SIZE 1
 
 /*
  * Host sets this bit to indicate user partition segment write
  */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_WRITE_MASK 0x00000020
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_WRITE_MASK 0x00000040
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_WRITE_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_WRITE_POS 5
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_WRITE_POS 6
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_WRITE_SIZE 1
 
 /*
  * Host sets this bit to indicate user partition segment read
  */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_READ_MASK 0x00000040
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_READ_MASK 0x00000080
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_READ_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_READ_POS 6
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_READ_POS 7
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_USER_SEG_READ_SIZE 1
 
 /*
  * Host sets this bit to indicate flash buffer free
  */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BUF_RELEASE_MASK 0x00000080
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BUF_RELEASE_MASK 0x00000100
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BUF_RELEASE_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BUF_RELEASE_POS 7
+#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BUF_RELEASE_POS 8
 #define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_BUF_RELEASE_SIZE 1
-
-/*
- * Host sets this bit to indicate boot partition erase (user partition is
- * left intact)
- */
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_ERASE_BOOT_MASK 0x00000100
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_ERASE_BOOT_RESET_VAL 0x0
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_ERASE_BOOT_POS 8
-#define IAXXX_SRB_FLASHUPD_REQUEST_FLASH_ERASE_BOOT_SIZE 1
 
 /*** SRB_FLASHUPD_STATUS (0x580000c0) ***/
 /*

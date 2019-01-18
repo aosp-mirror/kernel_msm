@@ -22,6 +22,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#include <linux/circ_buf.h>
+#include <linux/clk.h>
 #include <linux/mfd/adnc/iaxxx-evnt-mgr.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-af.h>
@@ -35,16 +37,17 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-cnr0.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-ao.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
-#include <linux/mfd/adnc/iaxxx-register-defs-debuglog.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-debug.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pwr-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include "iaxxx.h"
 #include "iaxxx-dbgfs.h"
+#include "iaxxx-sysfs.h"
 #include "iaxxx-tunnel.h"
 #include "iaxxx-debug.h"
 #include "iaxxx-cdev.h"
 #include "iaxxx-build-info.h"
-#include <linux/circ_buf.h>
-#include <linux/clk.h>
+
 
 #define IAXXX_RESET_RETRIES		5		/* retry attempts */
 #define IAXXX_RESET_HOLD_TIME		(20*1000)	/* 20 ms */
@@ -54,38 +57,15 @@
 #define IAXXX_RESET_PWR_VLD_DELAY		(3*1000)
 #define IAXXX_RESET_PWR_VLD_RANGE_INTERVAL	100
 
-#define IAXXX_FW_RETRY_COUNT		5		/* 5 retry if failed */
-#define IAXXX_FW_DOWNLOAD_TIMEOUT	10000		/* 10 secs */
-#define IAXXX_VER_STR_SIZE		60
+/* 2 retries if failed */
+#define IAXXX_FW_RETRY_COUNT		2
 #define IAXXX_BYTES_IN_A_WORD		4
-#define IAXXX_MAX_PLUGIN		(IAXXX_PLGIN_ID_MASK+1)
-#define IAXXX_MAX_PACKAGE		(IAXXX_PKG_ID_MASK+1)
 
 #define IAXXX_BYPASS_ON_VAL 0x00C199BB
 #define IAXXX_BYPASS_OFF_VAL 0x0C099BB
-#define IAXXX_PWR_DWN_VAL 0x01C00050
-#define IAXXX_PWR_ON_VAL 0x845
-#define IAXXX_PWR_STATE_RETRY	0x5
 
-#define IAXXX_PM_AUTOSUSPEND_DELAY 3000
 #define iaxxx_ptr2priv(ptr, item) container_of(ptr, struct iaxxx_priv, item)
 
-/* Linux kthread APIs have changes in version 4.9 */
-#if defined(init_kthread_worker)
-#define iaxxx_work_flush(priv, work)	flush_kthread_work(&priv->work)
-#define iaxxx_work(priv, work) queue_kthread_work(&priv->worker, &priv->work)
-#define iaxxx_flush_kthread_worker(worker) flush_kthread_worker(worker)
-#define iaxxx_init_kthread_worker(worker)  init_kthread_worker(worker)
-#define iaxxx_init_kthread_work(work, fn)  init_kthread_work(work, fn)
-#elif defined(kthread_init_worker)
-#define iaxxx_work_flush(priv, work)	kthread_flush_work(&priv->work)
-#define iaxxx_work(priv, work) kthread_queue_work(&priv->worker, &priv->work)
-#define iaxxx_flush_kthread_worker(worker) kthread_flush_worker(worker)
-#define iaxxx_init_kthread_worker(worker)  kthread_init_worker(worker)
-#define iaxxx_init_kthread_work(work, fn)  kthread_init_work(work, fn)
-#else
-#error kthread functions not defined
-#endif
 struct iaxxx_port_clk_settings clk;
 static const u32 iaxxx_port_clk_addr[] = {
 	IAXXX_IO_CTRL_PORTA_CLK_ADDR,
@@ -166,7 +146,21 @@ static const char *iaxxx_crash_err2str(int error)
 	}
 }
 
-static int iaxxx_send_uevent(struct iaxxx_priv *priv, char *type);
+/**
+ * iaxxx_send_uevent - Send uevent KOBJ_CHANGE
+ *
+ * @priv	: iaxxx private data
+ * @type	  Type of event
+ *
+ * Returns 0 on success, <0 on failure.
+ */
+static int iaxxx_send_uevent(struct iaxxx_priv *priv, char *type)
+{
+	char *event[2] = {type, NULL};
+
+	/* Send recovery event to HAL */
+	return kobject_uevent_env(&priv->dev->kobj, KOBJ_CHANGE, event);
+}
 
 static int iaxxx_fw_bootup_regmap_init(struct iaxxx_priv *priv)
 {
@@ -206,66 +200,37 @@ static int iaxxx_fw_recovery_regmap_init(struct iaxxx_priv *priv)
 		regcache_cache_bypass(priv->regmap, true);
 	}
 
+	iaxxx_clr_pkg_plg_list(priv);
+
 	/* Clear system state */
 	memset(priv->iaxxx_state, 0, sizeof(struct iaxxx_system_state));
 
+	INIT_LIST_HEAD(&priv->iaxxx_state->plugin_head_list);
+	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
+
+	/* Reset route status */
+	priv->route_status = 0;
+	priv->is_application_mode = true;
 	dev_info(priv->dev, "%s: Recovery done\n", __func__);
 
 	return 0;
 }
 
-static int iaxxx_cell_force_resume(struct device *dev, void *data)
-{
-	pm_runtime_force_resume(dev);
-	return 0;
-}
-
-static int iaxxx_cell_force_suspend(struct device *dev, void *data)
-{
-	pm_runtime_force_suspend(dev);
-	return 0;
-}
-
-static void iaxxx_pm_enable(struct iaxxx_priv *priv)
-{
-	int ret = 0;
-
-	priv->in_suspend = 0;
-	priv->in_resume = 0;
-	ret = pm_runtime_set_active(priv->dev);
-	if (ret < 0)
-		pr_err("pm_runtime_set_active fail %d\n", ret);
-	pm_runtime_enable(priv->dev);
-
-	pm_runtime_set_autosuspend_delay(priv->dev, IAXXX_PM_AUTOSUSPEND_DELAY);
-	pm_runtime_use_autosuspend(priv->dev);
-	pm_runtime_mark_last_busy(priv->dev);
-
-}
 
 static int iaxxx_do_suspend(struct iaxxx_priv *priv,
-			bool is_fw_crash)
+	bool is_fw_crash)
 {
-	struct device *dev = priv->dev;
-	unsigned long *flags = &priv->flags;
 	bool suspended = false;
+
 
 	/* Send broadcast event to all device children for crash */
 	if (is_fw_crash)
 		iaxxx_fw_notifier_call(priv->dev, IAXXX_EV_CRASH, NULL);
 
-	/* This means suspend is forced, for eg: pm_enable attribute */
-	if (!(test_and_set_bit(IAXXX_FLG_PM_SUSPEND, flags))) {
-		device_for_each_child(dev, priv, iaxxx_cell_force_suspend);
-		pm_runtime_force_suspend(dev);
-		suspended = true;
-	}
-
 	/* Start FW recovery if pending and is allowed, otherwise remember */
 	if (is_fw_crash)
 		iaxxx_work(priv, fw_crash_work);
 
-	/* Send suspend event to user space */
 	if (suspended)
 		iaxxx_send_uevent(priv, "ACTION=IAXXX_SUSPEND_EVENT");
 
@@ -274,15 +239,8 @@ static int iaxxx_do_suspend(struct iaxxx_priv *priv,
 
 static int iaxxx_do_resume(struct iaxxx_priv *priv)
 {
-	struct device *dev = priv->dev;
 	unsigned long *flags = &priv->flags;
 	bool resumed = false;
-
-	if (test_and_clear_bit(IAXXX_FLG_PM_SUSPEND, flags)) {
-		pm_runtime_force_resume(dev);
-		device_for_each_child(dev, priv, iaxxx_cell_force_resume);
-		resumed = true;
-	}
 
 	if (test_and_clear_bit(IAXXX_FLG_RESUME_BY_STARTUP, flags)) {
 		iaxxx_fw_notifier_call(priv->dev, IAXXX_EV_STARTUP, NULL);
@@ -304,78 +262,6 @@ static int iaxxx_do_resume(struct iaxxx_priv *priv)
 	return 0;
 }
 
-int iaxxx_pm_get_sync(struct device *dev)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int ret = 0;
-
-	if (priv == NULL) {
-		dev_err(dev, "%s dev is NULL here\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!pm_runtime_enabled(dev))
-		return 0;
-	if (priv->in_suspend || priv->in_resume)
-		return 0;
-	if (mutex_trylock(&priv->pm_mutex))
-		ret = pm_runtime_get_sync(dev);
-	if (ret < 0)
-		dev_err(dev, "%s() Fail. %d\n", __func__, ret);
-
-	mutex_unlock(&priv->pm_mutex);
-
-	return ret;
-}
-
-int iaxxx_pm_put_autosuspend(struct device *dev)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int ret = 0;
-
-	if (priv == NULL) {
-		dev_err(dev, "%s dev is NULL here\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!pm_runtime_enabled(dev))
-		return 0;
-	if (priv->in_suspend || priv->in_resume)
-		return 0;
-	if (mutex_trylock(&priv->pm_mutex)) {
-		pm_runtime_mark_last_busy(dev);
-		ret = pm_runtime_put_sync_autosuspend(dev);
-		if (ret && ret != -EBUSY)
-			dev_err(dev, "%s(): fail %d\n", __func__, ret);
-	}
-	mutex_unlock(&priv->pm_mutex);
-	if (ret == -EBUSY)
-		ret = 0;
-	return ret;
-}
-
-int iaxxx_pm_put_sync_suspend(struct device *dev)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int ret = 0;
-
-	if (priv == NULL) {
-		dev_err(dev, "%s dev is NULL here\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!pm_runtime_enabled(dev))
-		return 0;
-
-	if (mutex_trylock(&priv->pm_mutex)) {
-		pm_runtime_mark_last_busy(dev);
-		ret = pm_runtime_put_sync_suspend(dev);
-		if (ret)
-			dev_err(dev, "%s(): fail %d\n", __func__, ret);
-		mutex_unlock(&priv->pm_mutex);
-	}
-	return ret;
-}
 /**
  * iaxxx_gpio_free - free a gpio for a managed device
  * @dev: device to free the gpio for
@@ -551,6 +437,34 @@ static int iaxxx_config_regulators(struct iaxxx_priv *priv)
 
 	return 0;
 }
+
+/**
+ * iaxxx_ext_clk_ctl - external clock control callback function
+ */
+static int iaxxx_ext_clk_ctl(struct iaxxx_priv *priv, bool clock_en)
+{
+	int ret = 0;
+	struct device *dev = priv->dev;
+
+	dev_dbg(dev, "%s: clock_en = %d\n", __func__, clock_en);
+
+	if (clock_en == priv->mclk_en)
+		return 0;
+
+	if (clock_en) {
+		clk_set_rate(priv->ext_clk, 19200000);
+		ret = clk_prepare_enable(priv->ext_clk);
+	} else {
+		clk_disable_unprepare(priv->ext_clk);
+	}
+
+	if (ret == 0)
+		priv->mclk_en = clock_en;
+
+	dev_info(dev, "%s: mclk_en %d\n", __func__, priv->mclk_en);
+	return ret;
+}
+
 /**
  * iaxxx_populate_dt_pdata - populate platform data from device tree
  */
@@ -570,6 +484,26 @@ static int iaxxx_populate_dt_pdata(struct iaxxx_priv *priv)
 	if (rc) {
 		dev_err(dev, "Failed to read GPIO data, rc = %d\n", rc);
 		return rc;
+	}
+
+	priv->ext_clk = devm_clk_get(dev, "iaxxx_clk");
+	if (IS_ERR(priv->ext_clk) &&
+		(PTR_ERR(priv->ext_clk) == -EPROBE_DEFER)) {
+		dev_warn(dev, "%s: iaxxx mclk is not ready yet %ld\n",
+			__func__, PTR_ERR(priv->ext_clk));
+		priv->iaxxx_mclk_cb = NULL;
+		return -EPROBE_DEFER;
+	} else if (IS_ERR(priv->ext_clk)) {
+		dev_err(dev, "%s: Failed to get iaxxx mclk from pmic %ld\n",
+			__func__, PTR_ERR(priv->ext_clk));
+		priv->iaxxx_mclk_cb = NULL;
+	} else {
+		dev_info(dev, "%s: Got iaxxx_clk from pmic %ld\n",
+			__func__, PTR_ERR(priv->ext_clk));
+
+		priv->iaxxx_mclk_cb = iaxxx_ext_clk_ctl;
+		/* Enable mclock here if internal OSC not ON by default */
+		priv->iaxxx_mclk_cb(priv, 1);
 	}
 
 	return 0;
@@ -643,14 +577,68 @@ void register_transac_log(struct device *dev, uint32_t reg, uint32_t val,
 
 	if (!priv->reg_dump)
 		return;
-	if (!pm_runtime_active(dev))
-		return;
+
 	log.val = val;
 	log.addr = reg;
 	log.op = op;
 	get_monotonic_boottime(&log.timestamp);
 	/* Add the log into circular buffer */
 	dump_to_log(dev, reg_dump, &log);
+}
+
+int iaxxx_get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
+								uint32_t len)
+{
+	struct device *dev = priv->dev;
+	int rc;
+	uint32_t addr;
+	uint32_t i = 0;
+	const uint32_t size = len;
+
+	/* Read the version string address */
+	rc = regmap_read(priv->regmap, reg, &addr);
+	if (rc) {
+		dev_err(dev, "%s() String address read failed %d\n",
+			__func__, rc);
+		return rc;
+	}
+	dev_dbg(dev, "%s() String address 0x%x\n", __func__, addr);
+
+	if (!len || (len % IAXXX_BYTES_IN_A_WORD)) {
+		dev_err(dev, "%s() Invalid len %d\n", __func__, len);
+		return -EINVAL;
+	}
+
+	/* Read the FW string from address read above */
+	while (len > 0) {
+		rc = priv->bulk_read(dev, addr + i, &verbuf[i], 1);
+		if (rc != 1) {
+			dev_err(dev, "String Read fail addr 0x%x:%d\n",
+				addr + i, rc);
+			return -EIO;
+		}
+		/* Reached NULL character, FW version string ends here */
+		if ((!verbuf[i]) || (!verbuf[i + 1]) ||
+				(!verbuf[i + 2]) || (!verbuf[i + 3])) {
+			dev_dbg(dev, "%s() String ends here\n", __func__);
+			i += IAXXX_BYTES_IN_A_WORD;
+			break;
+		}
+		/* 4 characters read, go for next 4 bytes to read */
+		len -= IAXXX_BYTES_IN_A_WORD;
+		i += IAXXX_BYTES_IN_A_WORD;
+	}
+
+	verbuf[size - 1] = '\0';
+	print_hex_dump(KERN_INFO, "Version: ", DUMP_PREFIX_OFFSET, 32, 4,
+			(void *)verbuf, i, true);
+	/*
+	 * If not reached end of buffer and buffer is not empty,
+	 * then the Firmware version string is valid.
+	 */
+	if (len > 0 && verbuf[0] != '\0')
+		return 0;
+	return -EIO;
 }
 
 /**
@@ -697,7 +685,7 @@ static int iaxxx_reset(struct iaxxx_priv *priv)
  *
  * Reset iaxxx device to sbl mode through reset_gpio
  */
-static int iaxxx_reset_to_sbl(struct iaxxx_priv *priv)
+int iaxxx_reset_to_sbl(struct iaxxx_priv *priv)
 {
 	int rc = 0;
 	struct device *dev = priv->dev;
@@ -732,7 +720,7 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 	if (priv->debug_isr_disable)
 		return IRQ_HANDLED;
 
-	dev_dbg(priv->dev, "%s: IRQ %d\n", __func__, irq);
+	dev_info(priv->dev, "%s: IRQ %d\n", __func__, irq);
 
 	if (!priv->boot_completed) {
 		is_startup = !test_and_set_bit(IAXXX_FLG_STARTUP,
@@ -782,49 +770,6 @@ out:
 }
 
 /**
- * Sysfs save isr_disable option
- */
-static ssize_t iaxxx_debug_isr_disable_save(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 0 && val != 1)
-		return -EINVAL;
-
-	if (val) {
-		dev_info(dev, "%s() ISR Disabled\n", __func__);
-		priv->debug_isr_disable  = true;
-	} else {
-		priv->debug_isr_disable = false;
-		dev_info(dev, "%s() ISR Enabled\n", __func__);
-	}
-	return count;
-}
-
-/**
- * sysfs show isr disable option
- */
-static ssize_t iaxxx_debug_isr_disable_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-
-	return scnprintf(buf, PAGE_SIZE, "%s\n",
-		priv->debug_isr_disable?"ISR Event Handling Disabled\n" :
-		"ISR Event Handling Enabled\n");
-}
-
-static DEVICE_ATTR(debug_isr_disable, 0600,
-		iaxxx_debug_isr_disable_show, iaxxx_debug_isr_disable_save);
-
-
-/**
  * iaxxx_irq_init - Initialize interrupt handling
  *
  * @priv : iaxxx private data
@@ -837,9 +782,8 @@ static int iaxxx_irq_init(struct iaxxx_priv *priv)
 		return -ENXIO;
 
 	rc = request_threaded_irq(gpio_to_irq(priv->event_gpio), NULL,
-			iaxxx_event_isr,
-			IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_NO_SUSPEND,
-			"iaxxx-event-irq", priv);
+		iaxxx_event_isr, IRQF_TRIGGER_RISING | IRQF_ONESHOT |
+		IRQF_NO_SUSPEND, "iaxxx-event-irq", priv);
 	if (rc)
 		return rc;
 	rc = enable_irq_wake(gpio_to_irq(priv->event_gpio));
@@ -919,7 +863,8 @@ static int iaxxx_reset_check_sbl_mode(struct iaxxx_priv *priv)
 			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 	} while (!mode && mode_retry--);
 
-	priv->boot_completed =  false;
+	priv->boot_completed = false;
+	priv->is_application_mode = false;
 	if (!mode && !mode_retry) {
 		dev_err(priv->dev,
 			"SBL SYS MODE retry expired in crash dump\n");
@@ -927,22 +872,6 @@ static int iaxxx_reset_check_sbl_mode(struct iaxxx_priv *priv)
 	}
 
 	return ret;
-}
-
-/**
- * iaxxx_send_uevent - Send uevent KOBJ_CHANGE
- *
- * @priv	: iaxxx private data
- * @type	  Type of event
- *
- * Returns 0 on success, <0 on failure.
- */
-static int iaxxx_send_uevent(struct iaxxx_priv *priv, char *type)
-{
-	char *event[2] = {type, NULL};
-
-	/* Send recovery event to HAL */
-	return kobject_uevent_env(&priv->dev->kobj, KOBJ_CHANGE, event);
 }
 
 /**
@@ -1084,7 +1013,7 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv)
 	for (i = 0; i < IAXXX_MAX_LOG / 2 ; i++) {
 		priv->crashlog->header[i].log_type = i;
 		ret = regmap_bulk_read(priv->regmap,
-			IAXXX_DEBUGLOG_BLOCK_0_DEBUGLOG_ADDR_ADDR + i * 8,
+			IAXXX_DEBUG_BLOCK_0_DEBUGLOG_ADDR_ADDR + i * 8,
 			&priv->crashlog->header[i].log_addr, 2);
 		if (ret) {
 			dev_err(priv->dev, "Log %d address fail %d\n", i, ret);
@@ -1096,7 +1025,7 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv)
 	for (i = IAXXX_CRASHLOG_CM4; i < IAXXX_MAX_LOG; i++) {
 		priv->crashlog->header[i].log_type = i;
 		ret = regmap_bulk_read(priv->regmap,
-			IAXXX_DEBUGLOG_BLOCK_0_CRASHLOG_ADDR_ADDR + j * 8,
+			IAXXX_DEBUG_BLOCK_0_CRASHLOG_ADDR_ADDR + j * 8,
 			&priv->crashlog->header[i].log_addr, 2);
 		j++;
 		if (ret) {
@@ -1111,30 +1040,28 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv)
 				priv->crashlog->header[i].log_size);
 }
 
-
 /**
  * iaxxx_fw_update_work - worker thread to download firmware.
  *
  * @work : used to retrieve private structure
  *
  * Firmware download and switch to application mode of firmware.
- *
  */
-
 static void iaxxx_fw_update_work(struct kthread_work *work)
 {
 	struct iaxxx_priv *priv = iaxxx_ptr2priv(work, fw_update_work);
 	struct device *dev = priv->dev;
 	bool is_startup;
 	int rc;
+	uint32_t efuse_trim_value;
 
 	clear_bit(IAXXX_FLG_FW_READY, &priv->flags);
-	clear_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags);
 
 	rc = iaxxx_do_fw_update(priv);
 	if (rc == E_IAXXX_REGMAP_ERROR) {
 		goto exit_fw_fail;
 	} else if (rc == E_IAXXX_BOOTUP_ERROR) {
+
 		/* If there's device reset cb, retry */
 		if (!priv->reset_cb) {
 			dev_err(dev, "%s: Chip failed to boot up\n", __func__);
@@ -1169,7 +1096,6 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	iaxxx_send_uevent(priv, "ACTION=IAXXX_FW_READY_EVENT");
 
 	iaxxx_crashlog_header_read(priv);
-
 	/* Subscribing for FW crash event */
 	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
 				IAXXX_CRASH_EVENT_ID, IAXXX_SYSID_HOST, 0);
@@ -1181,7 +1107,10 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 
 	set_bit(IAXXX_FLG_FW_READY, &priv->flags);
 
+	priv->iaxxx_state->power_state = IAXXX_NORMAL_MODE;
+
 	iaxxx_fw_notifier_call(dev, IAXXX_EV_APP_MODE, NULL);
+
 
 	if (test_and_clear_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
 		set_bit(IAXXX_FLG_RESUME_BY_RECOVERY, &priv->flags);
@@ -1190,10 +1119,22 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 
 	dev_info(dev, "%s: done\n", __func__);
 	iaxxx_work(priv, runtime_work);
+	regmap_read(priv->regmap, IAXXX_AO_EFUSE_BOOT_ADDR, &efuse_trim_value);
+	if (!efuse_trim_value) {
+		dev_err(dev, "efuse_trim_value programmed by host\n");
+		rc = regmap_update_bits(priv->regmap, IAXXX_AO_OSC_CTRL_ADDR,
+			IAXXX_AO_OSC_CTRL_ADJ_MASK, 0x68);
+	}
+	regmap_read(priv->regmap, IAXXX_AO_OSC_CTRL_ADDR, &efuse_trim_value);
+	dev_err(dev, "IAXXX_AO_OSC_CTRL_ADDR: 0x%x\n", efuse_trim_value);
+#ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
 	iaxxx_pm_enable(priv);
+#endif
+
 	return;
 
 exit_fw_fail:
+
 	/* Send firmware fail uevent to HAL */
 	iaxxx_send_uevent(priv, "ACTION=IAXXX_FW_FAIL_EVENT");
 
@@ -1212,6 +1153,12 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	dev_info(priv->dev, "iaxxx %d time crashed\n",
 			priv->crash_count);
 
+#ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
+	/* Disable runtime pm*/
+	if (pm_runtime_enabled(priv->dev))
+		pm_runtime_disable(priv->dev);
+#endif
+
 	/* Clear event queue */
 	if (gpio_is_valid(priv->event_gpio) && priv->is_irq_enabled) {
 		disable_irq(gpio_to_irq(priv->event_gpio));
@@ -1222,8 +1169,6 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	priv->event_queue->w_index = -1;
 	priv->event_queue->r_index = -1;
 	mutex_unlock(&priv->event_queue_lock);
-
-	priv->route_status = 0;
 
 	if (priv->cm4_crashed) {
 		dev_info(priv->dev, "CM4 Core crashed\n");
@@ -1312,6 +1257,11 @@ int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons)
 	dev_err(priv->dev, "FW Crash occurred, reasons %d (%s)\n",
 		reasons, iaxxx_crash_err2str(reasons));
 
+	if (priv->debug_fwcrash_handling_disable) {
+		dev_err(priv->dev, "FW Crash Handling Skipped!\n");
+		return 0;
+	}
+
 	/* Avoid second times if currently is handled */
 	if (test_and_set_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
 		return -EBUSY;
@@ -1330,8 +1280,11 @@ int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons)
  * we block the notifier call chain for the entire suspend time. Current
  * FW load procedure must be aborted. And started again when privacy complete
  *
+ * TODO: This function is currently not being use and should be
+ * removed.
+ *
  */
-static int iaxxx_abort_fw_recovery(struct iaxxx_priv *priv)
+int iaxxx_abort_fw_recovery(struct iaxxx_priv *priv)
 {
 	struct device *dev = priv->dev;
 
@@ -1344,11 +1297,9 @@ static int iaxxx_abort_fw_recovery(struct iaxxx_priv *priv)
 
 	dev_info(dev, "Aborting FW recovery...\n");
 
-	set_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags);
 	iaxxx_work_flush(priv, runtime_work);
 	iaxxx_work_flush(priv, fw_crash_work);
 	iaxxx_work_flush(priv, fw_update_work);
-	clear_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags);
 
 	dev_info(dev, "FW recovery aborted!\n");
 
@@ -1378,7 +1329,7 @@ static void iaxxx_cmem_test_work(struct work_struct *work)
 /**
  * iaxxx_test_init - initialize work items and mutex for test environment
  *
- * @priv        : iaxxx private data
+ * @priv	: iaxxx private data
  *
  */
 static void iaxxx_test_init(struct iaxxx_priv *priv)
@@ -1389,463 +1340,6 @@ static void iaxxx_test_init(struct iaxxx_priv *priv)
 	init_completion(&priv->bootup_done);
 	init_completion(&priv->cmem_done);
 }
-
-static int get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
-								uint32_t len)
-{
-	int rc;
-	uint32_t addr;
-	uint32_t i = 0;
-
-	if (priv == NULL || priv->regmap == NULL) {
-		dev_err(priv->dev, "%s() regmap is not initialized yet.\n",
-			__func__);
-		return -EIO;
-	}
-
-	/* Read the version string address */
-	rc = regmap_read(priv->regmap, reg, &addr);
-	if (rc) {
-		dev_err(priv->dev, "%s() String address read failed %d\n",
-							__func__, rc);
-		return rc;
-	}
-	pr_debug("%s() String address 0x%x\n", __func__, addr);
-
-	/* Read the FW string from address read above */
-	while (len > 0) {
-		rc = priv->bulk_read(priv->dev, addr + i, &verbuf[i], 1);
-		if (rc != 1) {
-			dev_err(priv->dev, "String Read fail addr 0x%x:%d\n",
-							addr + i, rc);
-			return -EIO;
-		}
-		/* Reached NULL character, FW version string ends here */
-		if ((!verbuf[i]) || (!verbuf[i + 1]) ||
-				(!verbuf[i + 2]) || (!verbuf[i + 3])) {
-			pr_debug("%s() String ends here\n", __func__);
-			i += IAXXX_BYTES_IN_A_WORD;
-			break;
-		}
-		/* 4 characters read, go for next 4 bytes to read */
-		len -= IAXXX_BYTES_IN_A_WORD;
-		i += IAXXX_BYTES_IN_A_WORD;
-	}
-
-	verbuf[IAXXX_VER_STR_SIZE - 1] = '\0';
-	print_hex_dump(KERN_INFO, "Version: ", DUMP_PREFIX_OFFSET, 32, 4,
-			(void *)verbuf, i, true);
-	/*
-	 * If not reached end of buffer and buffer is not empty,
-	 * then print Firmware version.
-	 */
-	if (len > 0 && verbuf[0] != '\0')
-		return 0;
-	return -EIO;
-}
-
-/**
- * iaxxx_firmware_version_show - sys node show function for firmware version
- */
-static ssize_t iaxxx_firmware_version_show(struct device *dev,
-				struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int rc;
-	int32_t len = IAXXX_VER_STR_SIZE;
-	char verbuf[IAXXX_VER_STR_SIZE];
-
-	if (!priv) {
-		dev_err(dev, "%s() Device's priv data is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	rc = get_version_str(priv, IAXXX_SRB_SYS_APP_VER_STR_ADDR, verbuf,
-									len);
-	if (rc) {
-		dev_err(dev, "%s() FW version read fail\n", __func__);
-		return -EIO;
-	}
-	return scnprintf(buf, PAGE_SIZE, "%s\n", verbuf);
-}
-static DEVICE_ATTR(fw_version, 0400, iaxxx_firmware_version_show, NULL);
-
-
-/**
- * iaxxx_host_version_show - sys node show function hsw veriso
- * and fw version built with
- */
-static ssize_t iaxxx_host_version_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE,
-			"HSW v%s built with Firmware v%s\n",
-			HOST_SOFTWARE_VERSION_STR, FW_VERSION_IN_HOST_STR);
-}
-static DEVICE_ATTR(host_version, 0400, iaxxx_host_version_show, NULL);
-
-/*
- * Sysfs - firmware update
- */
-static ssize_t iaxxx_fw_update(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-
-	/* Kick work queue for firmware loading */
-	iaxxx_work(priv, fw_update_work);
-	return count;
-}
-static DEVICE_ATTR(fw_update, 0200, NULL, iaxxx_fw_update);
-
-
-static ssize_t iaxxx_plugin_version_plugin_index_store(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val >= IAXXX_MAX_PLUGIN)
-		return -EINVAL;
-
-	priv->plugin_version_plugin_index = val;
-	dev_info(dev, "%s() plugin_version_plugin_index:%d\n",
-		__func__, priv->plugin_version_plugin_index);
-
-	return count;
-}
-
-/**
- * iaxxx_plugin_version_show - sys node show function for plugin version
- */
-static ssize_t iaxxx_plugin_version_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int rc;
-	int32_t len = IAXXX_VER_STR_SIZE;
-	char verbuf[IAXXX_VER_STR_SIZE];
-	uint32_t buf_len = 0;
-
-	if (!priv) {
-		dev_err(dev, "%s() Device's priv data is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	if (priv->plugin_version_plugin_index != -EINVAL) {
-		rc = get_version_str(
-				priv,
-				IAXXX_PLUGIN_INS_GRP_PLUGIN_VER_STR_REG(
-					priv->plugin_version_plugin_index),
-				verbuf, len);
-		if (rc) {
-			dev_err(dev, "%s() Plugin version read fail\n",
-				__func__);
-			return -EIO;
-		}
-		buf_len += scnprintf(buf + buf_len, PAGE_SIZE,
-				"plugin-%d:\t%s\n",
-				priv->plugin_version_plugin_index, verbuf);
-		priv->plugin_version_plugin_index = -EINVAL;
-	}
-	return buf_len;
-}
-static DEVICE_ATTR(plugin_version, 0600, iaxxx_plugin_version_show,
-		iaxxx_plugin_version_plugin_index_store);
-
-static ssize_t iaxxx_package_version_package_index_store(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val >= IAXXX_MAX_PACKAGE)
-		return -EINVAL;
-
-	priv->package_version_package_index = val;
-	dev_info(dev, "%s() package_version_package_index:%d\n",
-			__func__, priv->package_version_package_index);
-
-	return count;
-}
-
-/**
- * iaxxx_package_version_show - sys node show function for package version
- */
-static ssize_t iaxxx_package_version_show(struct device *dev,
-				struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int rc;
-	int32_t len = IAXXX_VER_STR_SIZE;
-	char verbuf[IAXXX_VER_STR_SIZE];
-	uint32_t buf_len = 0;
-
-	if (!priv) {
-		dev_err(dev, "%s() Device's priv data is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	if (priv->package_version_package_index != -EINVAL) {
-		rc = get_version_str(
-			priv, IAXXX_PLUGIN_INS_GRP_PACKAGE_VER_STR_REG(
-				priv->package_version_package_index),
-			verbuf, len);
-		if (rc) {
-			dev_err(dev, "%s() Package version read fail\n",
-						__func__);
-			return -EIO;
-		}
-		buf_len += scnprintf(buf + buf_len, PAGE_SIZE,
-				"package-%d:\t%s\n",
-				priv->package_version_package_index, verbuf);
-		priv->package_version_package_index = -EINVAL;
-	}
-	return buf_len;
-}
-static DEVICE_ATTR(package_version, 0600, iaxxx_package_version_show,
-		iaxxx_package_version_package_index_store);
-
-/**
- * iaxxx_firmware_timestamp_show - sys node show function for firmware timestamp
- */
-static ssize_t iaxxx_firmware_timestamp_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int rc;
-	uint32_t fw_clk_rd[2];
-	uint64_t timestamp;
-
-	if (!priv)
-		return scnprintf(buf, PAGE_SIZE, "Invalid device\n");
-
-	/* Read Firmware wall clock timestamp */
-	rc = regmap_bulk_read(priv->regmap,
-			IAXXX_AF_WCPT_WALL_CLOCK_RD_0_ADDR,
-			fw_clk_rd, ARRAY_SIZE(fw_clk_rd));
-	if (rc) {
-		dev_err(dev,
-			"Failed IAXXX_AF_WCPT_WALL_CLOCK_RD, rc:%d\n", rc);
-		return rc;
-	}
-	timestamp = (((long)((fw_clk_rd[1] & 0xFFFF)) << 32) | fw_clk_rd[0]);
-
-	return scnprintf(buf, PAGE_SIZE, "0x%llx\n", timestamp);
-}
-static DEVICE_ATTR(fw_timestamp, 0400, iaxxx_firmware_timestamp_show, NULL);
-
-/**
- * iaxxx_firmware_update_test_show - sys node show function for firmware test
- *
- * Trigger firmware update test work and return results
- *
- */
-static ssize_t iaxxx_firmware_update_test_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	long rc;
-	ssize_t count;
-
-	if (!priv)
-		return scnprintf(buf, PAGE_SIZE, "ERROR, invalid device\n");
-
-	mutex_lock(&priv->test_mutex);
-
-	cancel_work_sync(&priv->dev_fw_update_test_work);
-	init_completion(&priv->bootup_done);
-	schedule_work(&priv->dev_fw_update_test_work);
-
-	rc = wait_for_completion_interruptible_timeout(&priv->bootup_done,
-			msecs_to_jiffies(IAXXX_FW_DOWNLOAD_TIMEOUT));
-
-	if (rc > 0 && priv->test_result)
-		count = scnprintf(buf, PAGE_SIZE, "SUCCESS\n");
-	else
-		count = scnprintf(buf, PAGE_SIZE, "FAIL\n");
-
-	mutex_unlock(&priv->test_mutex);
-
-	return count;
-}
-static DEVICE_ATTR(fw_update_test, 0400, iaxxx_firmware_update_test_show,
-			NULL);
-
-/**
- * iaxxx_cmem_test_show - sys node show function for memory test
- *
- * Trigger firmware update test work and return results
- *
- */
-static ssize_t iaxxx_cmem_test_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	long rc;
-	ssize_t count;
-
-	if (!priv)
-		return scnprintf(buf, PAGE_SIZE, "ERROR, invalid device\n");
-
-	mutex_lock(&priv->test_mutex);
-
-	cancel_work_sync(&priv->dev_cmem_test_work);
-	init_completion(&priv->cmem_done);
-	schedule_work(&priv->dev_cmem_test_work);
-
-	rc = wait_for_completion_interruptible_timeout(&priv->cmem_done,
-			msecs_to_jiffies(IAXXX_FW_DOWNLOAD_TIMEOUT));
-	if (rc > 0)
-		count = scnprintf(buf, PAGE_SIZE, "SUCCESS\n");
-	else
-		count = scnprintf(buf, PAGE_SIZE, "FAIL\n");
-
-	mutex_unlock(&priv->test_mutex);
-
-	return count;
-}
-static DEVICE_ATTR(cmem_test, 0400, iaxxx_cmem_test_show, NULL);
-
-static int iaxxx_event_flush_and_enable(struct iaxxx_priv *priv)
-{
-	mutex_lock(&priv->event_queue_lock);
-	/* Clear event queue */
-	priv->event_queue->w_index = -1;
-	priv->event_queue->r_index = -1;
-	mutex_unlock(&priv->event_queue_lock);
-
-	if (gpio_is_valid(priv->event_gpio) && !priv->is_irq_enabled) {
-		enable_irq(gpio_to_irq(priv->event_gpio));
-		priv->is_irq_enabled = true;
-	}
-
-	/* Clients regmap access must be enabled here */
-	queue_work(priv->event_workq, &priv->event_work_struct);
-
-	return 0;
-}
-
-static int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
-{
-	int rc, reg_val, reg_addr;
-
-	if (priv->disable_chip_pm) {
-		dev_err(priv->dev, "%s chip pm disabled\n", __func__);
-		return 0;
-	}
-
-	/* SPI_CS is being would act as wake up source. So making an
-	 * SPI transaction to wake up the chip and then wait for 20ms
-	 */
-	reg_addr = IAXXX_SRB_SYS_STATUS_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
-	msleep(40);
-
-	reg_addr = IAXXX_SRB_SYS_POWER_CTRL_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
-
-	reg_addr = IAXXX_SRB_SYS_STATUS_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
-
-	/* if read failed or SYS mode is not in APP mode, flag error*/
-	reg_val &= IAXXX_SRB_SYS_STATUS_MODE_MASK;
-	dev_err(priv->dev, "%s chip wake up reg_val%d\n", __func__, reg_val);
-	if (rc || (reg_val != SYSTEM_STATUS_MODE_APPS)) {
-		dev_err(priv->dev, "%s chip wake up failed %d rc %d\n",
-				__func__, reg_val, rc);
-		return -EIO;
-	}
-
-	/*setting up the normal  power mode*/
-	reg_addr = IAXXX_SRB_SYS_POWER_CTRL_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t), &reg_val,
-			sizeof(uint32_t));
-	reg_val &= ~IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK;
-	reg_val |= (0x4 << IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_POS) &
-			IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK;
-
-	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
-	if (rc) {
-		dev_err(priv->dev, "%s() Fail\n", __func__);
-		/*return rc; */
-	}
-
-	iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_0);
-	msleep(40);
-	return 0;
-}
-
-static int iaxxx_suspend_chip(struct iaxxx_priv *priv)
-{
-	int rc, reg_addr, reg_val;
-
-	if (priv->disable_chip_pm) {
-		dev_err(priv->dev, "%s chip pm disabled\n", __func__);
-		return 0;
-	}
-
-	/* system should go to sleep if there are no route active. But dynamic
-	 * load/unload of plugins is not been verified yet. So for the time
-	 * beging suspend would only moves to optimal low power mode
-	 * (after disabling the control interface by both hosts)
-	 */
-	reg_addr = IAXXX_SRB_ARB_14_BASE_ADDR_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t), &reg_val,
-			sizeof(uint32_t));
-
-	if (rc) {
-		dev_err(priv->dev, "%s() Fail\n", __func__);
-		return rc;
-	}
-	/* set up the SPI speed thats expected when the system is wake up */
-	reg_addr = reg_val + (IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_ADDR & 0xffffff);
-	reg_val =  priv->spi_app_speed;
-	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
-	if (rc) {
-		dev_err(priv->dev,
-			"Failed to set Max SPI speed in %s\n", __func__);
-		return rc;
-	}
-
-	/* Disable the control interface */
-	reg_addr = IAXXX_SRB_SYS_POWER_CTRL_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t), &reg_val,
-			sizeof(uint32_t));
-	reg_val &= ~IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_MASK;
-	reg_val |= (0x1 <<
-			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_POS) &
-			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_MASK;
-	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
-
-	if (rc) {
-		dev_err(priv->dev, "%s() Fail\n", __func__);
-		return rc;
-	}
-
-	iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_0);
-	msleep(20);
-	dev_info(priv->dev, "%s() Success\n", __func__);
-
-	return 0;
-}
-
 
 int iaxxx_core_suspend_rt(struct device *dev)
 {
@@ -1860,10 +1354,6 @@ int iaxxx_core_suspend_rt(struct device *dev)
 		dev_err(dev, "RT suspend requested while PM is not enabled\n");
 		return -EINVAL;
 	}
-	/* this flag is to ensure that resume is not invoked from inside
-	 * the suspend call back. Or it would cause a deadlock
-	 */
-	priv->in_suspend = 1;
 	/* Chip suspend/optimal power switch happens here
 	 * and they shouldn't be done in case of fw_crash
 	 */
@@ -1875,11 +1365,7 @@ int iaxxx_core_suspend_rt(struct device *dev)
 		priv->in_suspend = 0;
 		return rc;
 	}
-	set_bit(IAXXX_FLG_BUS_BLOCK_CLIENTS, &priv->flags);
 
-	/* Block SPI transaction for iaxxx-core while being suspended */
-	set_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags);
-	priv->in_suspend = 0;
 	return 0;
 }
 
@@ -1892,12 +1378,7 @@ int iaxxx_core_resume_rt(struct device *dev)
 		/*return -EBUSY;*/
 		return 0;
 
-	priv->in_resume = 1;
 	/* Regmap access must be enabled before enable event interrupt */
-	clear_bit(IAXXX_FLG_BUS_BLOCK_CORE, &priv->flags);
-	clear_bit(IAXXX_FLG_BUS_BLOCK_CLIENTS, &priv->flags);
-
-	iaxxx_event_flush_and_enable(priv);
 
 	rc = iaxxx_wakeup_chip(priv);
 	if  (rc) {
@@ -1931,388 +1412,6 @@ int iaxxx_core_dev_resume(struct device *dev)
 	return iaxxx_core_resume_rt(dev);
 }
 
-/*
- * iaxxx_pm_enable_attr - store function for suspend and resume
- */
-static ssize_t iaxxx_pm_enable_attr(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 0 && val != 1)
-		return -EINVAL;
-
-	if (val) {
-		dev_dbg(dev, "%s() PM Resume\n", __func__);
-		clear_bit(IAXXX_FLG_PM_SUSPEND, &priv->flags);
-		/* Async trying to resume */
-		iaxxx_work(priv, runtime_work);
-	} else {
-		dev_dbg(dev, "%s() PM Suspend\n", __func__);
-		set_bit(IAXXX_FLG_PM_SUSPEND, &priv->flags);
-
-		/* Abort current FW recovery procedure */
-		iaxxx_abort_fw_recovery(priv);
-
-		/* Start suspending and block until complete */
-		iaxxx_work(priv, runtime_work);
-		iaxxx_work_flush(priv, runtime_work);
-	}
-
-	return count;
-}
-static DEVICE_ATTR(pm_enable, 0600, NULL, iaxxx_pm_enable_attr);
-
-/*
- * iaxxx_set_spi_speed
- */
-static ssize_t iaxxx_set_spi_speed(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val > priv->spi_app_speed)
-		return -EINVAL;
-	if (priv->spi_speed_setup)
-		priv->spi_speed_setup(dev, val);
-	priv->spi_app_speed = val;
-
-	dev_info(dev, "%s() Success\n", __func__);
-	return count;
-}
-static DEVICE_ATTR(set_spi_speed, 0200, NULL, iaxxx_set_spi_speed);
-
-/*
- * iaxxx_set_speed_spi2
- */
-static ssize_t iaxxx_set_speed_spi2(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val, rc, status;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-
-	mutex_lock(&priv->test_mutex);
-
-	/* Write speed for SPI2 interface */
-	rc = regmap_write(priv->regmap,
-			IAXXX_PWR_MGMT_MAX_SPI2_MASTER_SPEED_REQ_ADDR,
-			val);
-
-	if (rc) {
-		dev_info(dev, "%s() Fail\n", __func__);
-		return count;
-	}
-
-	rc = iaxxx_send_update_block_request(dev, &status,
-			IAXXX_BLOCK_0);
-
-	mutex_unlock(&priv->test_mutex);
-
-	dev_info(dev, "%s() Success\n", __func__);
-	return count;
-}
-static DEVICE_ATTR(set_speed_spi2, 0200, NULL, iaxxx_set_speed_spi2);
-
-/*
- * iaxxx_pm_wakeup_chip
- */
-static ssize_t iaxxx_pm_wakeup_chip(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val, rc;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 1)
-		return -EINVAL;
-
-	/* SPI transcation should wake up the chip
-	 * reading SYS_STATUS reg
-	 */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_STATUS_ADDR, &val);
-	msleep(50);
-	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_STATUS_ADDR, &val);
-	if (rc)
-		dev_info(dev, "%s() Fail\n", __func__);
-	else
-		dev_info(dev, "%s() Success\n", __func__);
-	return rc;
-}
-static DEVICE_ATTR(pm_wakeup_chip, 0200, NULL, iaxxx_pm_wakeup_chip);
-
-/*
- * iaxxx_pm_set_aclk, input value as follows.
- * 0 - 3.072 MHz
- * 1 - 6.144 MHz
- * 2 - 12.288 MHz
- * 3 - 24.576 MHz
- * 4 - 49.152 MHz
- * 5 - 98.304 MHz
- * 6 - 368.640 MHz
- * otherwise - Invalid
- */
-static ssize_t iaxxx_pm_set_aclk(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val, rc = -1, status;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val > 6)
-		return -EINVAL;
-
-	mutex_lock(&priv->test_mutex);
-	rc = regmap_update_bits(priv->regmap,
-			IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR,
-			IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_OUT_FREQ_MASK,
-			val << IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_OUT_FREQ_POS);
-	if (!rc)
-		rc = regmap_update_bits(priv->regmap,
-			IAXXX_SRB_SYS_POWER_CTRL_ADDR,
-			IAXXX_SRB_SYS_POWER_CTRL_SET_AUDIO_POWER_MODE_MASK,
-			IAXXX_SRB_SYS_POWER_CTRL_SET_AUDIO_POWER_MODE_MASK);
-
-	if (!rc)
-		rc = iaxxx_send_update_block_request(dev, &status,
-							IAXXX_BLOCK_0);
-	mutex_unlock(&priv->test_mutex);
-
-	if (rc)
-		dev_info(dev, "%s() Fail\n", __func__);
-	else
-		dev_info(dev, "%s() Success\n", __func__);
-	return rc;
-}
-static DEVICE_ATTR(pm_set_aclk, 0200, NULL, iaxxx_pm_set_aclk);
-
-/*
- * iaxxx_pm_set_optimal_power_mode (host0)
- * Need to do wake up to come out
- */
-static ssize_t iaxxx_pm_set_optimal_power_mode_host0(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val, rc;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 1)
-		return -EINVAL;
-
-	mutex_lock(&priv->test_mutex);
-	/* Disable both the control interfaces and the chip will go to
-	 * optimal power mode
-	 */
-	rc = regmap_write(priv->regmap, IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_ADDR,
-			priv->spi_app_speed);
-
-
-	rc = regmap_update_bits(priv->regmap,
-			IAXXX_SRB_SYS_POWER_CTRL_ADDR,
-			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_MASK,
-			0x1 <<
-			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_POS);
-	if (rc) {
-		dev_info(dev, "%s() Fail\n", __func__);
-		return rc;
-	}
-
-	iaxxx_send_update_block_no_wait(dev, HOST_0);
-
-	msleep(20);
-	dev_info(dev, "%s() Success\n", __func__);
-	mutex_unlock(&priv->test_mutex);
-	return count;
-}
-static DEVICE_ATTR(pm_set_optimal_power_mode_host0, 0200, NULL,
-		iaxxx_pm_set_optimal_power_mode_host0);
-/*
- * iaxxx_pm_set_optimal_power_mode (host1)
- * Need to do wake up to come out
- */
-static ssize_t iaxxx_pm_set_optimal_power_mode_host1(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val, rc;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 1)
-		return -EINVAL;
-
-	mutex_lock(&priv->test_mutex);
-	/* Disable both the control interfaces and the chip will go to
-	 * optimal power mode
-	 */
-	rc = regmap_write(priv->regmap, IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_1_ADDR,
-	    priv->spi_app_speed);
-	if (!rc)
-		rc = regmap_update_bits(priv->regmap,
-			IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
-			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
-			0x1 <<
-			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS);
-	if (rc) {
-		dev_info(dev, "%s() Fail\n", __func__);
-		return count;
-	}
-
-	iaxxx_send_update_block_no_wait(dev, HOST_1);
-	msleep(20);
-	dev_info(dev, "%s() Success\n", __func__);
-	mutex_unlock(&priv->test_mutex);
-	return count;
-}
-static DEVICE_ATTR(pm_set_optimal_power_mode_host1, 0200, NULL,
-		iaxxx_pm_set_optimal_power_mode_host1);
-
-/*
- * Set power mode to sleep
- */
-static ssize_t iaxxx_pm_set_sleep_mode(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val, rc;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 1)
-		return -EINVAL;
-
-	mutex_lock(&priv->test_mutex);
-
-	/*setting up the sleep mode*/
-	rc = regmap_update_bits(priv->regmap,
-		IAXXX_SRB_SYS_POWER_CTRL_ADDR,
-		IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK,
-		0x2 <<
-		IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_POS);
-
-	iaxxx_send_update_block_no_wait(dev, HOST_0);
-
-	msleep(40);
-	dev_info(dev, "%s() Success\n", __func__);
-	mutex_unlock(&priv->test_mutex);
-	return count;
-}
-static DEVICE_ATTR(pm_set_sleep_mode, 0200, NULL,
-		iaxxx_pm_set_sleep_mode);
-
-/*
- * Disable chip power management
- */
-static ssize_t iaxxx_pm_disable_chip_pm(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 0 && val != 1)
-		return -EINVAL;
-
-	if (val) {
-		iaxxx_wakeup_chip(priv);
-		priv->disable_chip_pm = true;
-	} else
-		priv->disable_chip_pm = false;
-	dev_info(dev, "%s() chip_pm is %s\n", __func__,
-			priv->disable_chip_pm ? "disabled" : "enabled");
-	return count;
-}
-static DEVICE_ATTR(pm_disable_chip_pm, 0200, NULL, iaxxx_pm_disable_chip_pm);
-
-/* sysfs chip_reset function
- */
-static ssize_t iaxxx_chip_reset_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-	if (val != 1)
-		return -EINVAL;
-	iaxxx_reset_to_sbl(priv);
-	return count;
-}
-static DEVICE_ATTR(chip_reset, 0200, NULL, iaxxx_chip_reset_store);
-
-/*
- * sysfs attr info
- */
-static struct attribute *iaxxx_attrs[] = {
-	&dev_attr_fw_update_test.attr,
-	&dev_attr_cmem_test.attr,
-	&dev_attr_fw_version.attr,
-	&dev_attr_host_version.attr,
-	&dev_attr_fw_timestamp.attr,
-	&dev_attr_fw_update.attr,
-	&dev_attr_plugin_version.attr,
-	&dev_attr_package_version.attr,
-	&dev_attr_debug_isr_disable.attr,
-	&dev_attr_pm_enable.attr,
-	&dev_attr_pm_wakeup_chip.attr,
-	&dev_attr_pm_set_aclk.attr,
-	&dev_attr_pm_set_optimal_power_mode_host0.attr,
-	&dev_attr_pm_set_optimal_power_mode_host1.attr,
-	&dev_attr_pm_set_sleep_mode.attr,
-	&dev_attr_pm_disable_chip_pm.attr,
-	&dev_attr_set_spi_speed.attr,
-	&dev_attr_set_speed_spi2.attr,
-	&dev_attr_chip_reset.attr,
-	NULL,
-};
-
-/*
- * sysfs attr group info
- */
-static const struct attribute_group iaxxx_attr_group = {
-	.attrs = iaxxx_attrs,
-	.name	= "iaxxx"
-};
 
 /**
  * iaxxx_device_power_init - init power
@@ -2413,6 +1512,18 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 {
 	int rc;
 
+	/*
+	 * Make the device power up the chip first so that
+	 * the knowles chip won't cause any i2c communication error
+	 * for other devices on the same bus
+	 */
+	rc = iaxxx_device_power_init(priv);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to power up device: %d\n", rc);
+		goto err_power_init;
+	}
+
 	/* Init mutexes */
 	mutex_init(&priv->update_block_lock);
 	mutex_init(&priv->event_work_lock);
@@ -2421,6 +1532,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->module_lock);
 	mutex_init(&priv->crashdump_lock);
 	mutex_init(&priv->pm_mutex);
+	mutex_init(&priv->debug_mutex);
 
 	iaxxx_init_kthread_worker(&priv->worker);
 	init_waitqueue_head(&priv->boot_wq);
@@ -2436,6 +1548,9 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	iaxxx_init_kthread_work(&priv->fw_crash_work, iaxxx_fw_crash_work);
 	iaxxx_init_kthread_work(&priv->runtime_work, iaxxx_runtime_work);
 
+	INIT_LIST_HEAD(&priv->iaxxx_state->plugin_head_list);
+	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
+
 	/* Initialize regmap for SBL */
 	rc = iaxxx_regmap_init(priv);
 	if (rc)
@@ -2448,8 +1563,8 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 
 
 	/* Create sysfs */
-
-	if (sysfs_create_group(&priv->dev->kobj, &iaxxx_attr_group)) {
+	rc = iaxxx_init_sysfs(priv);
+	if (rc) {
 		dev_err(priv->dev,
 			"%s [ERROR] sysfs_create_group\n", __func__);
 	}
@@ -2497,19 +1612,6 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 		goto err_event_init;
 	}
 
-
-	/*
-	 * Make the device power up the chip first so that
-	 * the knowles chip won't cause any i2c communication error
-	 * for other devices on the same bus
-	 */
-	rc = iaxxx_device_power_init(priv);
-	if (rc) {
-		dev_err(priv->dev,
-			"Failed to power up device: %d\n", rc);
-		goto err_power_init;
-	}
-
 	rc = mfd_add_devices(priv->dev, -1, iaxxx_devices,
 			ARRAY_SIZE(iaxxx_devices), NULL, 0, NULL);
 	if (rc) {
@@ -2517,25 +1619,14 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 		goto err_add_devices;
 	}
 
-
-	/* Initialize indexes uses for dumping
-	 * plugin version and package versions
-	 */
-	priv->plugin_version_plugin_index = -EINVAL;
-	priv->package_version_package_index = -EINVAL;
-
-	priv->disable_chip_pm = true;
-	dev_err(priv->dev, "set disable_chip_pm = %s\n",
-		priv->disable_chip_pm ? "true" : "false");
-
 	iaxxx_work(priv, fw_update_work);
 	return 0;
 
 err_add_devices:
-err_power_init:
 	iaxxx_event_exit(priv);
 err_event_init:
 err_debug_init:
+	iaxxx_remove_sysfs(priv);
 	iaxxx_regdump_exit(priv);
 err_regdump_init:
 	if (priv->regmap) {
@@ -2548,12 +1639,17 @@ err_regdump_init:
 	mutex_destroy(&priv->plugin_lock);
 	mutex_destroy(&priv->module_lock);
 	mutex_destroy(&priv->crashdump_lock);
-	return -EINVAL;
+	mutex_destroy(&priv->pm_mutex);
+	mutex_destroy(&priv->debug_mutex);
+err_power_init:
+	return rc;
 }
 
 void iaxxx_device_exit(struct iaxxx_priv *priv)
 {
+#ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
 	pm_runtime_disable(priv->dev);
+#endif
 	if (test_and_clear_bit(IAXXX_FLG_STARTUP, &priv->flags))
 		mfd_remove_devices(priv->dev);
 
@@ -2581,7 +1677,9 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	mutex_destroy(&priv->module_lock);
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
+	mutex_destroy(&priv->debug_mutex);
 
+	iaxxx_remove_sysfs(priv);
 	iaxxx_regdump_exit(priv);
 	iaxxx_irq_exit(priv);
 	iaxxx_debug_exit(priv);

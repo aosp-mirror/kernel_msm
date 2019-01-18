@@ -44,8 +44,7 @@
 #define PROXY_FUNCTION_ID_3RDPARTY_CHUNK  112
 #define MAX_STATUS_RETRIES 5
 #define CHUNK_RESPONSE_SIZE_IN_WORDS 4
-#define CHUNK_RESPONSE_ERRORCODE1 1
-#define CHUNK_RESPONSE_ERRORCODE2 2
+#define CHUNK_RESPONSE_ERRORCODE_INDEX 1
 #define FW_ERROR_CODE_BUSY 4
 
 static uint32_t calculate_crc(const uint32_t *pBuf, const uint32_t nLen)
@@ -96,13 +95,14 @@ static int send_chunk_to_plugin(
 			__func__);
 		return ret;
 	}
-	if (get_param_data[CHUNK_RESPONSE_ERRORCODE1]) {
-		dev_err(dev, "Chunk write returned errcode=%x %u\n",
-			get_param_data[CHUNK_RESPONSE_ERRORCODE1],
-			get_param_data[CHUNK_RESPONSE_ERRORCODE2]);
-		ret = -EINVAL;
-	}
-	return ret;
+	if (get_param_data[CHUNK_RESPONSE_ERRORCODE_INDEX]) {
+		dev_err(dev,
+		"Chunk write returned errcode=%x %u\n",
+		get_param_data[1], get_param_data[2]);
+		return -EINVAL;
+	} else
+		return 0;
+	return -EINVAL;
 }
 
 
@@ -122,8 +122,8 @@ static int parse_config_filedata_send_as_chunks(
 	uint32_t  chunk_data_free = 0;
 	uint32_t  chunk_data_used = 0;
 
-	chunk_data_buffer = kcalloc(CHUNK_SIZE_IN_WORDS, sizeof(uint32_t),
-				    GFP_KERNEL);
+	chunk_data_buffer = kzalloc(CHUNK_SIZE_IN_WORDS*sizeof(uint32_t),
+			GFP_KERNEL);
 
 	if (!chunk_data_buffer)
 		return -ENOMEM;
@@ -179,7 +179,8 @@ static int parse_config_filedata_send_as_chunks(
 			/* Chunk data buffer is cleared to ensure
 			 * words at the end of chunk are 0.
 			 */
-			memset(chunk_data_buffer, 0, sizeof(chunk_data_buffer));
+			memset(chunk_data_buffer, 0,
+				sizeof(uint32_t) * CHUNK_SIZE_IN_WORDS);
 		}
 
 		/* Copy chunk data to the chunk buffer */
@@ -239,7 +240,7 @@ int iaxxx_core_set_custom_cfg(
 	inst_id &= IAXXX_PLGIN_ID_MASK;
 
 	/* Check if plugin exists */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		mutex_unlock(&priv->plugin_lock);
 		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
 				inst_id, __func__);
@@ -260,21 +261,8 @@ int iaxxx_core_set_custom_cfg(
 		ret = -EINVAL;
 		goto set_custom_cfg_err;
 	}
+	data = (uint32_t *) fw->data;
 
-	if (fw->size & 0x3) {
-		dev_err(dev, "Custom config file %s not 4 bytes aligned\n",
-				file);
-		ret = -EINVAL;
-		goto set_custom_cfg_err;
-	}
-
-	data = kmalloc(fw->size, GFP_KERNEL);
-	if (!data) {
-		ret = -ENOMEM;
-		goto set_custom_cfg_err;
-	}
-
-	iaxxx_copy_le32_to_cpu(data, fw->data, fw->size);
 
 	dev_dbg(dev, "Custom config file %s read. Size %lu words\n",
 			file, fw->size/4);
@@ -285,8 +273,6 @@ int iaxxx_core_set_custom_cfg(
 	 */
 	ret = parse_config_filedata_send_as_chunks(dev, inst_id, block_id,
 		param_blk_id, data, fw->size/4);
-
-	kfree(data);
 
 set_custom_cfg_err:
 	if (fw)

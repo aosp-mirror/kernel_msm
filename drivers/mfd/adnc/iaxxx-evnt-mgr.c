@@ -33,24 +33,26 @@ struct iaxxx_event_subscription {
 static void iaxxx_add_event(struct iaxxx_priv *priv,
 		const struct iaxxx_event *evt)
 {
+	struct device *dev = priv->dev;
+	struct iaxxx_evt_queue *eq = priv->event_queue;
 	int w_index;
 
-	priv->event_queue->w_index++;
-	w_index = priv->event_queue->w_index;
+	eq->w_index++;
+	w_index = eq->w_index;
 	if (w_index == IAXXX_MAX_EVENTS) {
-		pr_info("%s Event Index reach last\n", __func__);
+		dev_info(dev, "%s Event Index reach last\n", __func__);
 		w_index = 0;
-		priv->event_queue->w_index = w_index;
+		eq->w_index = w_index;
 	}
-	if (priv->event_queue->w_index == priv->event_queue->r_index) {
-		pr_info("%s Event buffer is full\n", __func__);
-		priv->event_queue->r_index++;
+	if (eq->w_index == eq->r_index) {
+		dev_info(dev, "%s Event buffer is full\n", __func__);
+		eq->r_index++;
 	}
-	priv->event_queue->event_info[w_index].event_id = evt->event_id;
-	priv->event_queue->event_info[w_index].data = evt->src_opaque;
-	if (priv->event_queue->r_index == IAXXX_MAX_EVENTS)
-		priv->event_queue->r_index = 0;
-	pr_debug("%s written index %d\n", __func__, priv->event_queue->w_index);
+	eq->event_info[w_index].event_id = evt->event_id;
+	eq->event_info[w_index].data = evt->src_opaque;
+	if (eq->r_index == IAXXX_MAX_EVENTS)
+		eq->r_index = 0;
+	dev_dbg(dev, "%s written index %d\n", __func__, eq->w_index);
 }
 
 /*
@@ -71,7 +73,7 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 	if (WARN_ON(!evt) || WARN_ON(!priv->tunnel_data))
 		return -EINVAL;
 
-	dev_dbg(dev, "%s: src:0x%04x, id:0x%04x src_opq=0x%08x dst_opq=0x%08x\n",
+	dev_dbg(dev, "%s:src:0x%04x id:0x%04x src_opq=0x%08x dst_opq=0x%08x\n",
 			__func__, evt->event_src, evt->event_id,
 			evt->src_opaque, evt->dst_opaque);
 
@@ -83,7 +85,7 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 
 	if (evt->event_src == IAXXX_CM4_CTRL_MGR_SRC_ID
 			&& evt->event_id == IAXXX_BOOT_COMPLETE_EVENT_ID) {
-		dev_dbg(dev, "FW boot complete event %s: src:0x%.04x\n",
+		dev_info(dev, "FW boot complete event %s: src:0x%.04x\n",
 						__func__, evt->event_src);
 		priv->boot_completed = true;
 		return ret;
@@ -97,19 +99,10 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 		return ret;
 	}
 
-	/*
-	 * If its KW detection event and event is for slot id. If KW is in
-	 * recognize state continue, else return. Discard the other
-	 * KW detection events also for that particular KW if its in
-	 * un-recognize state.
-	 */
-	if (evt->event_id == EVENT_ID_KW_ID
-		|| evt->event_id == EVENT_ID_TRUE_CONFIRMATAION) {
-
-		dev_err(dev, "%s: KW EVENT (id=%d, src_opq=%x)\n",
-			__func__, evt->event_id, evt->src_opaque);
-
-	}
+	dev_info(dev,
+		"%s:EVENT src:0x%04x id:0x%04x src_opq=0x%08x dst_opq=0x%08x\n",
+		__func__, evt->event_src, evt->event_id,
+		evt->src_opaque, evt->dst_opaque);
 
 	snprintf(eid, sizeof(eid), "EVENT_ID=%hx", evt->event_id);
 	snprintf(edata, sizeof(edata), "EVENT_DATA=%x", evt->src_opaque);

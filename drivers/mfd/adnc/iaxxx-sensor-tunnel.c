@@ -323,12 +323,28 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 		return -EINVAL;
 	}
 
+	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags)) {
+		dev_err(priv->dev, "%s FW  is not in App mode\n", __func__);
+		return -EIO;
+	}
 	if (arg != 0 && _IOC_DIR(cmd) == (_IOC_READ | _IOC_WRITE) &&
 		_IOC_SIZE(cmd) == sizeof(struct tunlMsg)) {
 		if (copy_from_user(&msg, (void __user *)arg,
 					sizeof(struct tunlMsg))) {
 			pr_err("parameter copy from user failed\n");
 			return -EFAULT;
+		}
+
+		/* validate the tunnel parameters */
+		if (msg.tunlSrc > (IAXXX_OUT_TNL_GRP_CONNECT_SOURCE_ID_MASK >>
+				IAXXX_OUT_TNL_GRP_CONNECT_SOURCE_ID_POS) ||
+			msg.tunlEncode >
+			(IAXXX_OUT_TNL_GRP_TNL_CTRL_OUTPUT_ENCODING_MASK >>
+			IAXXX_OUT_TNL_GRP_TNL_CTRL_OUTPUT_ENCODING_POS) ||
+			msg.tunlMode > (IAXXX_OUT_TNL_GRP_TNL_CTRL_MODE_MASK >>
+					IAXXX_OUT_TNL_GRP_TNL_CTRL_MODE_POS)) {
+			pr_err("invalid tunnel parameter received\n");
+			return -EINVAL;
 		}
 
 		pr_debug("cmd: %x, TunlSrc: %x, tunlMode: %x, tunlEncode: %x",

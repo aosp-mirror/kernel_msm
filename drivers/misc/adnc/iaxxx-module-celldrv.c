@@ -46,8 +46,10 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	if (!priv)
 		return -EINVAL;
 
-	if (!pm_runtime_enabled(priv->dev))
-		return -EINVAL;
+	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags)) {
+		dev_err(priv->dev, "%s FW  is not in App mode\n", __func__);
+		return -EIO;
+	}
 
 	if (!priv->iaxxx_state) {
 		dev_err(priv->dev, "Chip state NULL\n");
@@ -59,6 +61,13 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&script_info, (void __user *)arg,
 					sizeof(script_info)))
 			return -EFAULT;
+
+		/* validate the scrip load parameters */
+		if (!iaxxx_core_sensor_is_valid_script_id(
+						script_info.script_id)) {
+			pr_err("invalid scrip parameter received\n");
+			return -EINVAL;
+		}
 		ret = iaxxx_core_script_load(module_dev_priv->parent,
 				script_info.script_name, script_info.script_id);
 		break;
@@ -66,6 +75,12 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&script_id, (void __user *)arg,
 					sizeof(uint16_t)))
 			return -EFAULT;
+
+		/* validate the scrip parameters */
+		if (!iaxxx_core_sensor_is_valid_script_id(script_id)) {
+			pr_err("invalid scrip parameter received\n");
+			return -EINVAL;
+		}
 		ret = iaxxx_core_script_unload(
 				module_dev_priv->parent, script_id);
 		break;
@@ -73,6 +88,12 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&script_id, (void __user *)arg,
 					sizeof(uint16_t)))
 			return -EFAULT;
+
+		/* validate the scrip parameters */
+		if (!iaxxx_core_sensor_is_valid_script_id(script_id)) {
+			pr_err("invalid scrip parameter received\n");
+			return -EINVAL;
+		}
 		ret = iaxxx_core_script_trigger(
 				module_dev_priv->parent, script_id);
 		break;
@@ -80,6 +101,15 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&sensor_info, (void __user *)arg,
 				   sizeof(sensor_info)))
 			return -EFAULT;
+
+		/* validate the sensor parameters */
+		if (!(iaxxx_core_sensor_is_valid_script_id(sensor_info.inst_id)
+			&& iaxxx_core_sensor_is_valid_block_id(
+						sensor_info.block_id))
+			) {
+			pr_err("invalid scrip parameter received\n");
+			return -EINVAL;
+		}
 		ret = iaxxx_core_sensor_change_state(
 				module_dev_priv->parent,
 				sensor_info.inst_id, 1, sensor_info.block_id);
@@ -88,6 +118,15 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&sensor_info, (void __user *)arg,
 				   sizeof(sensor_info)))
 			return -EFAULT;
+
+		/* validate the sensor parameters */
+		if (!(iaxxx_core_sensor_is_valid_script_id(sensor_info.inst_id)
+			&& iaxxx_core_sensor_is_valid_block_id(
+						sensor_info.block_id))
+			) {
+			pr_err("invalid sensor parameter received\n");
+			return -EINVAL;
+		}
 		ret = iaxxx_core_sensor_change_state(
 				module_dev_priv->parent,
 				sensor_info.inst_id, 0, sensor_info.block_id);
@@ -96,6 +135,20 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&param_info, (void __user *)arg,
 				   sizeof(param_info)))
 			return -EFAULT;
+
+		/* validate the sensor parameters */
+		if (!(iaxxx_core_sensor_is_valid_script_id(param_info.inst_id)
+			&& iaxxx_core_sensor_is_valid_block_id(
+							param_info.block_id)
+			&& iaxxx_core_sensor_is_valid_param_id(
+							param_info.param_id)
+			&& iaxxx_core_sensor_is_valid_param_val(
+							param_info.param_val))
+			) {
+			pr_err("invalid sensor parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_sensor_set_param_by_inst(
 				module_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
@@ -112,6 +165,18 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&param_info, (void __user *)arg,
 				   sizeof(param_info)))
 			return -EFAULT;
+
+		/* validate the sensor parameters */
+		if (!(iaxxx_core_sensor_is_valid_script_id(param_info.inst_id)
+			&& iaxxx_core_sensor_is_valid_block_id(
+							param_info.block_id)
+			&& iaxxx_core_sensor_is_valid_param_id(
+							param_info.param_id))
+			) {
+			pr_err("invalid sensor parameter received\n");
+			return -EINVAL;
+		}
+
 		ret = iaxxx_core_sensor_get_param_by_inst(
 				module_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
@@ -175,14 +240,15 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev->parent);
 	int ret;
 
-	pr_debug("Enter :%s\n", __func__);
+	dev_dbg(dev, "Enter :%s\n", __func__);
 	if (module_cell_priv.cdev_minor == MODULE_CDEV_MAX_DEVICES) {
-		pr_err("Minor nos exhausted. Increase CVQ_CDEV_MAX_DEVICES\n");
+		dev_err(dev,
+			"Minor nos exhausted. Increase CVQ_CDEV_MAX_DEVICES\n");
 		return -ENOBUFS;
 	}
 
 	module_dev_priv = devm_kzalloc(dev, sizeof(struct module_device_priv),
-				       GFP_KERNEL);
+					GFP_KERNEL);
 	if (!module_dev_priv) {
 		ret = -ENOMEM;
 		goto out_err;
@@ -192,12 +258,11 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 	module_dev_priv->parent = dev->parent;
 	module_dev_priv->cdev.owner = THIS_MODULE;
 	module_dev_priv->dev_num = MKDEV(MAJOR(module_cell_priv.dev_num),
-					 module_cell_priv.cdev_minor);
+					module_cell_priv.cdev_minor);
 	cdev_init(&module_dev_priv->cdev, &module_dev_fops);
-
 	ret = cdev_add(&module_dev_priv->cdev, module_dev_priv->dev_num, 1);
 	if (ret) {
-		pr_err("failed to add cdev error: %d", ret);
+		dev_err(dev, "failed to add cdev error: %d", ret);
 		goto free_module;
 	}
 
@@ -205,14 +270,14 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 					NULL, module_dev_priv->dev_num,
 					module_dev_priv, dev_name(dev));
 	if (IS_ERR(module_dev_priv->dev)) {
-		ret = PTR_ERR(dev);
-		pr_err("Failed (%d) to create cdev device\n", ret);
+		ret = PTR_ERR(module_dev_priv->dev);
+		dev_dbg(dev, "Failed (%d) to create cdev device\n", ret);
 		goto err_device_create;
 	}
 
 	dev_set_drvdata(dev, module_dev_priv);
 	pr_debug("MODULE device cdev initialized.\n");
-	pm_runtime_enable(dev);
+
 	return 0;
 
 err_device_create:
@@ -220,7 +285,7 @@ err_device_create:
 free_module:
 	devm_kfree(dev, module_dev_priv);
 out_err:
-	pr_err("cdev setup failure: no cdevs available!\n");
+	dev_err(dev, "cdev setup failure: no cdevs available!\n");
 
 	return ret;
 
@@ -293,7 +358,7 @@ static int __init iaxxx_module_init(void)
 	pr_info("Allocated Major device number %d\n",
 				MAJOR(module_cell_priv.dev_num));
 
-	ret =  platform_driver_register(&iaxxx_module_driver);
+	ret = platform_driver_register(&iaxxx_module_driver);
 	if (ret)
 		goto err_plat_register;
 
@@ -312,7 +377,6 @@ out_err:
 
 static void __exit iaxxx_module_exit(void)
 {
-
 	platform_driver_unregister(&iaxxx_module_driver);
 
 	unregister_chrdev_region(module_cell_priv.dev_num,

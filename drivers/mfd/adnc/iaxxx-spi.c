@@ -17,10 +17,12 @@
 #include <linux/delay.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
-#include "iaxxx.h"
 #include <linux/of.h>
-#include <linux/clk.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
+#include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
+#include "iaxxx.h"
+
+
 #define IAXXX_SYNC_RETRY	15
 
 /* spi large reads are failing and currently
@@ -421,7 +423,7 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	uint8_t *preg_addr;
 
 	if (len <= IAXXX_REG_LEN_WITH_PADDING) {
-		pr_err("%s() len parameter invalid\n", __func__);
+		dev_err(dev, "%s() len parameter invalid\n", __func__);
 		return -EINVAL;
 	}
 
@@ -683,7 +685,7 @@ static int iaxxx_spi_sync(struct iaxxx_spi_priv *spi_priv)
 	const uint32_t SBL_SYNC_CMD_RESPONSE = 0x8000FFFF;
 	const uint32_t CMD_REGMAP_MODE = 0x80040000;
 
-#ifdef IAXXX_SBL_DEBUG
+#ifdef DEBUG
 	const uint32_t SBL_SYNC_CMD_2 = 0x80720080;
 	const uint32_t SBL_SYNC_CMD_3 = 0x80735001;
 	const uint32_t SBL_SYNC_CMD_4 = 0x80740000;
@@ -829,7 +831,6 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	struct iaxxx_spi_priv *spi_priv;
 	struct device *dev = &spi->dev;
 	struct device_node *node = dev->of_node;
-	struct clk *iaxxx_clk;
 	u32 tmp = 0;
 
 	dev_dbg(dev, "%s:%d\n", __func__, __LINE__);
@@ -853,18 +854,6 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 		goto crash_mem_failed;
 	}
 
-	iaxxx_clk = devm_clk_get(dev, "iaxxx_clk");
-
-	if (!IS_ERR(iaxxx_clk)) {
-		dev_info(dev, "iaxxx_clk set rate to 19200000\n");
-		clk_set_rate(iaxxx_clk, 19200000);
-		clk_prepare_enable(iaxxx_clk);
-	} else {
-		rc = PTR_ERR(iaxxx_clk);
-		dev_err(dev, "cannot get iaxxx_clk, errno=%d\n", rc);
-		goto probe_failed;
-	}
-
 	spi_priv->spi = spi;
 	spi_priv->priv.dev = dev;
 	spi_priv->priv.regmap_init_bus = iaxxx_spi_regmap_init;
@@ -873,7 +862,6 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	spi_priv->priv.read_no_pm = iaxxx_spi_read_no_pm;
 	spi_priv->priv.write_no_pm = iaxxx_spi_write_no_pm;
 	spi_priv->priv.bus = IAXXX_SPI;
-	spi_priv->priv.ext_clk = iaxxx_clk;
 
 	spi_set_drvdata(spi, spi_priv);
 
@@ -917,11 +905,6 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 
 	if (spi_priv) {
 		iaxxx_device_exit(&spi_priv->priv);
-		if (spi_priv->priv.ext_clk) {
-			clk_disable_unprepare(spi_priv->priv.ext_clk);
-			devm_clk_put(spi_priv->priv.dev, spi_priv->priv.ext_clk);
-		}
-
 		devm_kfree(&spi->dev, spi_priv->priv.iaxxx_state);
 		kfree(spi_priv->priv.crashlog->log_buffer);
 		devm_kfree(&spi->dev, spi_priv->priv.crashlog);
@@ -932,10 +915,12 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 	return 0;
 }
 
+#ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
 static const struct dev_pm_ops iaxxx_spi_pm_ops = {
 	SET_RUNTIME_PM_OPS(iaxxx_core_suspend_rt, iaxxx_core_resume_rt, NULL)
 	SET_SYSTEM_SLEEP_PM_OPS(iaxxx_core_dev_suspend, iaxxx_core_dev_resume)
 };
+#endif
 
 static const struct spi_device_id iaxxx_spi_id[] = {
 	{ "iaxxx-spi", 0 },
@@ -954,7 +939,9 @@ static struct spi_driver iaxxx_spi_driver = {
 	.driver = {
 		.name = "iaxxx-spi",
 		.owner = THIS_MODULE,
+#ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
 		.pm = &iaxxx_spi_pm_ops,
+#endif
 		.of_match_table = iaxxx_spi_dt_match,
 	},
 	.probe = iaxxx_spi_probe,

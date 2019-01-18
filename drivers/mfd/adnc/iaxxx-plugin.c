@@ -71,6 +71,288 @@ struct pkg_mgmt_info {
 };
 
 /*****************************************************************************
+ * iaxxx_core_plg_is_valid_inst_id()
+ * @brief validate the plugin instance id
+ *
+ * @id              Plugin Instance Id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_inst_id(uint32_t inst_id)
+{
+	bool ret = true;
+
+	if (inst_id > IAXXX_PLGIN_ID_MASK) {
+		pr_err("%s Invalid inst id %d\n", __func__, inst_id);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_inst_id);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_pkg_id()
+ * @brief validate the plugin package id
+ *
+ * @id              Plugin package Id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_pkg_id(uint32_t pkg_id)
+{
+	bool ret = true;
+
+	if (pkg_id > IAXXX_PKG_ID_MASK) {
+		pr_err("%s Invalid pkg id %d\n", __func__, pkg_id);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_pkg_id);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_priority()
+ * @brief validate the plugin priority
+ *
+ * @id              Plugin priority
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_priority(uint32_t priority)
+{
+	bool ret = true;
+
+	if (priority > (IAXXX_PLUGIN_INS_GRP_CTRL_PRIORITY_MASK
+				>> IAXXX_PLUGIN_INS_GRP_CTRL_PRIORITY_POS)) {
+		pr_err("%s Invalid priority %d\n", __func__, priority);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_priority);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_block_id()
+ * @brief validate the plugin block id
+ *
+ * @id              Plugin block id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_block_id(uint32_t block_id)
+{
+	bool ret = true;
+
+	if (block_id <= IAXXX_NO_PROC || block_id >= IAXXX_PROC_ID_NUM) {
+		pr_err("%s Invalid block id %d\n", __func__, block_id);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_block_id);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_plg_idx()
+ * @brief validate the plugin idx
+ *
+ * @id              Plugin index
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_plg_idx(uint32_t plg_idx)
+{
+	bool ret = true;
+
+	if (plg_idx > (IAXXX_PLUGIN_INS_GRP_ORIGIN_PLUGIN_INDEX_MASK
+			>> IAXXX_PLUGIN_INS_GRP_ORIGIN_PLUGIN_INDEX_POS)) {
+		pr_err("%s Invalid plugin idx %d\n", __func__, plg_idx);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_plg_idx);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_param_id()
+ * @brief validate the plugin param id
+ *
+ * @id              Plugin param id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_param_id(uint32_t param_id)
+{
+	bool ret = true;
+
+	if (param_id > (IAXXX_PLUGIN_INS_GRP_PARAM_ID_REG_MASK
+			>> IAXXX_PLUGIN_INS_GRP_PARAM_ID_REG_POS)) {
+		pr_err("%s Invalid param id %d\n", __func__, param_id);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_param_id);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_param_val()
+ * @brief validate the plugin idx
+ *
+ * @id              Plugin param value
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_param_val(uint32_t param_val)
+{
+	bool ret = true;
+
+	if (param_val > (IAXXX_PLUGIN_INS_GRP_PARAM_VAL_MASK
+			>> IAXXX_PLUGIN_INS_GRP_PARAM_VAL_POS)) {
+		pr_err("%s Invalid param val %d\n", __func__, param_val);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_param_val);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_param_blk_id()
+ * @brief validate the plugin param blk id
+ *
+ * @id              Plugin param blk id
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_param_blk_id(uint32_t param_id)
+{
+	bool ret = true;
+
+	if (param_id > (IAXXX_PLUGIN_INS_GRP_PARAM_ID_REG_MASK
+			>> IAXXX_PLUGIN_INS_GRP_PARAM_ID_REG_POS)) {
+		pr_err("%s Invalid param block id %d\n", __func__, param_id);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_param_blk_id);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_param_blk_size()
+ * @brief validate the plugin param blk size
+ *
+ * @id              Plugin param blk size
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_param_blk_size(uint32_t param_size)
+{
+	bool ret = true;
+
+	if (param_size > (IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK
+		>> IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS)) {
+		pr_err("%s Invalid param blk size %d\n", __func__, param_size);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_param_blk_size);
+
+/*****************************************************************************
+ * iaxxx_core_plg_is_valid_cfg_size()
+ * @brief validate the plugin create cfg size
+ *
+ * @id              Plugin cfg size
+ * @ret true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_plg_is_valid_cfg_size(uint32_t cfg_size)
+{
+	bool ret = true;
+
+	if (cfg_size > (IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK
+		>> IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_POS)) {
+		pr_err("%s Invalid config size %d\n", __func__, cfg_size);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_is_valid_cfg_size);
+
+/*****************************************************************************
+ * iaxxx_core_plugin_exist()
+ * @brief check if plugin exists or not
+ *
+ * @priv  Pointer to iaxxx privata data structure
+ * @inst_id  Instance id of a plugin
+ * @ret pointer to plugin if exists, NULL otherwise
+ ****************************************************************************/
+struct iaxxx_plugin_data *iaxxx_core_plugin_exist(struct iaxxx_priv *priv,
+							uint32_t inst_id)
+{
+	struct iaxxx_plugin_data *plugin_data;
+	struct list_head *node, *tmp;
+
+	if (!list_empty_careful(&priv->iaxxx_state->plugin_head_list)) {
+		list_for_each_safe(node, tmp,
+			&priv->iaxxx_state->plugin_head_list) {
+			plugin_data = list_entry(node,
+					struct iaxxx_plugin_data,
+					plugin_node);
+			if (plugin_data->inst_id == inst_id)
+				return plugin_data;
+		}
+	}
+	return NULL;
+}
+EXPORT_SYMBOL(iaxxx_core_plugin_exist);
+
+/*****************************************************************************
+ * iaxxx_core_pkg_exist()
+ * @brief check if pkg exists or not
+ *
+ * @priv  Pointer to iaxxx privata data structure
+ * @pkg_id  Package id of package
+ * @ret pointer to package if exists, NULL otherwise
+ ****************************************************************************/
+struct iaxxx_pkg_data *iaxxx_core_pkg_exist(struct iaxxx_priv *priv,
+						uint32_t pkg_id)
+{
+	struct iaxxx_pkg_data *pkg_data;
+	struct list_head *node, *tmp;
+
+	if (!list_empty_careful(&priv->iaxxx_state->pkg_head_list)) {
+		list_for_each_safe(node, tmp,
+			&priv->iaxxx_state->pkg_head_list) {
+			pkg_data = list_entry(node,
+				struct iaxxx_pkg_data, pkg_node);
+			if (pkg_data->pkg_id == pkg_id)
+				return pkg_data;
+		}
+	}
+	return NULL;
+}
+EXPORT_SYMBOL(iaxxx_core_pkg_exist);
+
+
+/*****************************************************************************
+ * iaxxx_clr_pkg_plg_list()
+ * @brief del, destroy and unload all plugins and packages from list.
+ *
+ * @priv  Pointer to iaxxx privata data structure
+ *
+ * @ret  SUCCESS or FAIL
+ ****************************************************************************/
+int iaxxx_clr_pkg_plg_list(struct iaxxx_priv *priv)
+{
+	struct iaxxx_pkg_data *pkg_data;
+	struct iaxxx_plugin_data *plugin_data;
+	struct list_head *node, *tmp;
+
+	list_for_each_safe(node, tmp, &priv->iaxxx_state->plugin_head_list) {
+		plugin_data = list_entry(node, struct iaxxx_plugin_data,
+							plugin_node);
+		list_del(&plugin_data->plugin_node);
+		kfree(plugin_data);
+	}
+
+	list_for_each_safe(node, tmp, &priv->iaxxx_state->pkg_head_list) {
+		pkg_data = list_entry(node, struct iaxxx_pkg_data, pkg_node);
+		list_del(&pkg_data->pkg_node);
+		kfree(pkg_data);
+	}
+	return 0;
+}
+EXPORT_SYMBOL(iaxxx_clr_pkg_plg_list);
+/*****************************************************************************
  * iaxxx_core_create_plg_common()
  * @brief Create plugin instance
  *
@@ -85,21 +367,23 @@ static int iaxxx_core_create_plg_common(
 		struct device *dev, uint32_t inst_id,
 		uint32_t priority, uint32_t pkg_id,
 		uint32_t plg_idx, uint8_t block_id,
+		uint32_t config_id,
 		bool static_package)
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint32_t status;
 	uint32_t package;
-	uint8_t proc_id;
+	uint8_t  proc_id;
+	struct iaxxx_plugin_data *plugin_data;
 
 	if (!priv)
 		return ret;
 
 	dev_dbg(dev,
-		"%s() inst_id=%u prio=%u pkg_id=%u plg_idx=%u blk_id=%u\n",
+		"%s() inst_id=%u prio=%u pkg_id=%u plg_idx=%u blk_id=%u cfg_id=%u\n",
 		__func__, inst_id, priority, pkg_id, plg_idx,
-		block_id);
+		block_id, config_id);
 
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
@@ -112,14 +396,14 @@ static int iaxxx_core_create_plg_common(
 	 * statically loaded packages
 	 */
 	if (!static_package) {
-		if (!(priv->iaxxx_state->pkg[package].pkg_state)) {
+		if (!iaxxx_core_pkg_exist(priv, package)) {
 			dev_err(dev, "Package 0x%x is not created %s()\n",
 				pkg_id, __func__);
 			goto core_create_plugin_err;
 		}
 	}
-	/* Check if Plugin exist */
-	if (priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	/* Check if plugin exists */
+	if (iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x exist %s()\n",
 			inst_id, __func__);
 		ret = -EEXIST;
@@ -163,10 +447,22 @@ static int iaxxx_core_create_plg_common(
 		goto core_create_plugin_err;
 	}
 
+	/* Update Config_id of plugin to be created */
+	ret = regmap_update_bits(priv->regmap,
+	IAXXX_PLUGIN_INS_GRP_ORIGIN_REG(inst_id),
+	IAXXX_PLUGIN_INS_GRP_ORIGIN_CONFIG_ID_MASK,
+	config_id << IAXXX_PLUGIN_INS_GRP_ORIGIN_CONFIG_ID_POS);
+
+	if (ret) {
+		dev_err(dev, "write failed %s()\n", __func__);
+		goto core_create_plugin_err;
+	}
+
 	/* Update Plugin instance id in plg inst header */
 	ret = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id),
-		1 << inst_id, 1 << inst_id);
+		1 << inst_id,
+		1 << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_create_plugin_err;
@@ -177,10 +473,17 @@ static int iaxxx_core_create_plg_common(
 		goto core_create_plugin_err;
 	}
 
-	priv->iaxxx_state->plgin[inst_id].plugin_inst_state =
-		IAXXX_PLUGIN_LOADED;
-
-	priv->iaxxx_state->plgin[inst_id].proc_id = proc_id;
+	/* Insert plugin node to the list */
+	plugin_data = kzalloc(sizeof(*plugin_data), GFP_KERNEL);
+	if (!plugin_data) {
+		ret = -ENOMEM;
+		goto core_create_plugin_err;
+	}
+	plugin_data->plugin_state = IAXXX_PLUGIN_LOADED;
+	plugin_data->inst_id = inst_id;
+	plugin_data->proc_id = proc_id;
+	list_add_tail(&plugin_data->plugin_node,
+				&priv->iaxxx_state->plugin_head_list);
 
 core_create_plugin_err:
 	mutex_unlock(&priv->plugin_lock);
@@ -201,10 +504,11 @@ core_create_plugin_err:
  ****************************************************************************/
 int iaxxx_core_create_plg(struct device *dev, uint32_t inst_id,
 			uint32_t priority, uint32_t pkg_id,
-			uint32_t plg_idx, uint8_t block_id)
+			uint32_t plg_idx, uint8_t block_id,
+			uint32_t config_id)
 {
 	return iaxxx_core_create_plg_common(dev, inst_id, priority,
-			pkg_id, plg_idx, block_id, false);
+			pkg_id, plg_idx, block_id, config_id, false);
 }
 EXPORT_SYMBOL(iaxxx_core_create_plg);
 
@@ -216,13 +520,15 @@ EXPORT_SYMBOL(iaxxx_core_create_plg);
  * @param_id    Param Id
  * @param_val   Param value
  * @block_id    Update block id
+ * @config_id   Config_id
  *
  * @ret 0 on success, -EINVAL in case of error
  ****************************************************************************/
 int iaxxx_core_create_plg_static_package(
 		struct device *dev, uint32_t inst_id,
 		uint32_t priority, uint32_t pkg_id,
-		uint32_t plg_idx, uint8_t block_id)
+		uint32_t plg_idx, uint8_t block_id,
+		uint32_t config_id)
 {
 	/* Generate package id using package index and
 	 * block_id
@@ -231,7 +537,7 @@ int iaxxx_core_create_plg_static_package(
 
 	pkg_id = GEN_PKG_ID(pkg_id, proc_id);
 	return iaxxx_core_create_plg_common(dev, inst_id, priority,
-			pkg_id, plg_idx, block_id, true);
+			pkg_id, plg_idx, block_id, config_id, true);
 }
 EXPORT_SYMBOL(iaxxx_core_create_plg_static_package);
 
@@ -262,7 +568,7 @@ int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Check plugin instance is created */
-	if (!(priv->iaxxx_state->plgin[inst_id].plugin_inst_state)) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
 				inst_id, __func__);
 		ret = -EEXIST;
@@ -303,6 +609,7 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 	int ret = -EINVAL;
 	uint32_t status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	struct iaxxx_plugin_data *plugin_data;
 
 	if (!priv)
 		return ret;
@@ -313,10 +620,11 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Check plugin instance is created */
-	if (!(priv->iaxxx_state->plgin[inst_id].plugin_inst_state)) {
+	plugin_data = iaxxx_core_plugin_exist(priv, inst_id);
+	if (!plugin_data) {
 		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
 				inst_id, __func__);
-		ret = -EEXIST;
+		ret = -ENOENT;
 		goto core_destroy_plg_err;
 	}
 
@@ -333,9 +641,12 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 	ret = iaxxx_send_update_block_request(dev, &status, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
-	} else
-		priv->iaxxx_state->plgin[inst_id].plugin_inst_state =
-				    IAXXX_PLUGIN_UNLOADED;
+		goto core_destroy_plg_err;
+	}
+
+	/* Remove plugin node from list */
+	list_del(&plugin_data->plugin_node);
+	kfree(plugin_data);
 
 core_destroy_plg_err:
 	mutex_unlock(&priv->plugin_lock);
@@ -368,12 +679,14 @@ int iaxxx_core_reset_plg(struct device *dev, uint32_t inst_id,
 			inst_id, block_id);
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
+
 	/* Check plugin instance is created */
-	if (!(priv->iaxxx_state->plgin[inst_id].plugin_inst_state)) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
 				inst_id, __func__);
 		goto core_reset_plg_err;
 	}
+
 	/* Clear bit in plugin instance header */
 	ret = regmap_update_bits(priv->regmap,
 		IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(block_id),
@@ -437,7 +750,7 @@ int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Plugin instance exists or not */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
 				inst_id, __func__);
 		goto plg_set_param_inst_err;
@@ -518,7 +831,7 @@ int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Plugin instance exists or not */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
 				inst_id, __func__);
 		goto plg_get_param_inst_err;
@@ -601,7 +914,7 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 	/* If plugin instance already exist */
-	if (priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	if (iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x already exist %s()\n",
 				inst_id, __func__);
 		ret = -EEXIST;
@@ -640,7 +953,7 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_POS) &
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK) |
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_REQ_MASK |
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_IS_CREATION_CFG_MASK;
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_IS_CREATE_CFG_MASK;
 
 		ret = regmap_write(priv->regmap,
 			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
@@ -821,7 +1134,7 @@ int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 	/* Plugin instance exists or not */
-	if (!priv->iaxxx_state->plgin[inst_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x is not created %s()\n",
 				inst_id, __func__);
 		goto set_event_err;
@@ -1128,6 +1441,7 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	const struct firmware *fw = NULL;
+	struct iaxxx_pkg_data *pkg_data;
 	int rc = -EINVAL;
 
 	dev_info(dev, "%s()\n", __func__);
@@ -1141,14 +1455,17 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 	pkg_id &= IAXXX_PKG_ID_MASK;
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
+
 	/* If package already exist */
-	if (priv->iaxxx_state->pkg[pkg_id].pkg_state) {
+	pkg_data = iaxxx_core_pkg_exist(priv, pkg_id);
+	if (pkg_data) {
 		dev_err(dev, "Package 0x%x already exist %s()\n",
 				pkg_id, __func__);
-		*proc_id = priv->iaxxx_state->pkg[pkg_id].proc_id;
+		*proc_id = pkg_data->proc_id;
 		rc = -EEXIST;
 		goto out;
 	}
+
 	rc = request_firmware(&fw, pkg_name, priv->dev);
 	if (rc) {
 		dev_err(dev, "Firmware file %s not found rc = %d\n",
@@ -1161,8 +1478,18 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 		rc = -EINVAL;
 		goto out;
 	}
-	priv->iaxxx_state->pkg[pkg_id].pkg_state = IAXXX_PKG_LOADED;
-	priv->iaxxx_state->pkg[pkg_id].proc_id = *proc_id;
+
+	/* Insert package node to the list */
+	pkg_data = kzalloc(sizeof(*pkg_data), GFP_KERNEL);
+	if (!pkg_data) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	pkg_data->proc_id = *proc_id;
+	pkg_data->pkg_id = pkg_id;
+	pkg_data->pkg_state = IAXXX_PKG_LOADED;
+	list_add_tail(&pkg_data->pkg_node, &priv->iaxxx_state->pkg_head_list);
+
 out:
 	release_firmware(fw);
 	mutex_unlock(&priv->plugin_lock);
@@ -1184,34 +1511,57 @@ int iaxxx_package_unload(struct device *dev,
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = -EINVAL;
 	uint32_t proc_id;
+	struct iaxxx_pkg_data *pkg_data;
 
 	/* protect this plugin operation */
 	mutex_lock(&priv->plugin_lock);
 
 	pkg_id &= IAXXX_PKG_ID_MASK;
-	if (priv->iaxxx_state->pkg[pkg_id].pkg_state != IAXXX_PKG_LOADED) {
+
+	pkg_data = iaxxx_core_pkg_exist(priv, pkg_id);
+	if (!pkg_data) {
 		dev_err(dev, "%s() pkg not loaded already %d\n",
 			__func__, pkg_id);
+		rc = -ENOENT;
 		goto out;
 	}
+	proc_id = GET_PROC_ID_FROM_PKG_ID(pkg_data->proc_id);
 
-	proc_id = GET_PROC_ID_FROM_PKG_ID(
-				priv->iaxxx_state->pkg[pkg_id].proc_id);
-
-	dev_info(dev, "%s() pkg_id:0x%x proc_id:%u\n", __func__,
-		pkg_id, proc_id);
 	rc = iaxxx_unload_pkg(priv, pkg_id, proc_id);
 	if (rc) {
 		dev_err(dev, "%s() pkg unload fail %d\n", __func__, rc);
 		goto out;
 	}
-	priv->iaxxx_state->pkg[pkg_id].pkg_state = IAXXX_PKG_UNLOADED;
-	dev_info(dev, "Package %d unloaded.\n", pkg_id);
+
+	/* Remove package node from the list */
+	dev_info(dev, "%s() pkg_id:0x%x proc_id:%u\n", __func__,
+							pkg_id, proc_id);
+	list_del(&pkg_data->pkg_node);
+	kfree(pkg_data);
+
 out:
 	mutex_unlock(&priv->plugin_lock);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_package_unload);
+
+int iaxxx_core_plg_get_package_version(struct device *dev,
+			uint8_t inst_id, char *ver, uint32_t len)
+{
+	return iaxxx_get_version_str(to_iaxxx_priv(dev),
+		IAXXX_PLUGIN_INS_GRP_PACKAGE_VER_STR_REG(inst_id),
+		ver, len);
+}
+EXPORT_SYMBOL(iaxxx_core_plg_get_package_version);
+
+int iaxxx_core_plg_get_plugin_version(struct device *dev,
+			uint8_t inst_id, char *ver, uint32_t len)
+{
+	return iaxxx_get_version_str(to_iaxxx_priv(dev),
+		IAXXX_PLUGIN_INS_GRP_PLUGIN_VER_STR_REG(inst_id),
+		ver, len);
+}
+EXPORT_SYMBOL(iaxxx_core_plg_get_plugin_version);
 
 /**************************************************************************
  *  iaxxx_core_get_param_blk
@@ -1289,7 +1639,8 @@ int iaxxx_core_set_param_blk_with_ack(struct device *dev,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Check if plugin exists */
-	if (!priv->iaxxx_state->plgin[plugin_instance_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, inst_id)) {
+		mutex_unlock(&priv->plugin_lock);
 		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
 			inst_id, __func__);
 		ret = -EEXIST;
@@ -1342,10 +1693,11 @@ int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	uint32_t plugin_instance_id = inst_id & IAXXX_PLGIN_ID_MASK;
+	uint32_t plugin_inst_id = inst_id & IAXXX_PLGIN_ID_MASK;
 	uint32_t block_id;
 	uint32_t reg_val;
-	uint8_t  proc_id;
+	uint8_t proc_id;
+	struct iaxxx_plugin_data *plugin_data;
 
 	if (!priv)
 		return ret;
@@ -1354,14 +1706,15 @@ int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Check if plugin exists */
-	if (!priv->iaxxx_state->plgin[plugin_instance_id].plugin_inst_state) {
+	plugin_data = iaxxx_core_plugin_exist(priv, plugin_inst_id);
+	if (!plugin_data) {
 		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
 			inst_id, __func__);
 		ret = -EEXIST;
 		goto get_plugin_status_info_err;
 	}
 
-	proc_id  = priv->iaxxx_state->plgin[plugin_instance_id].proc_id;
+	proc_id = plugin_data->proc_id;
 	block_id = IAXXX_PROC_ID_TO_BLOCK_ID(proc_id);
 
 	plugin_status_data->block_id = block_id;
@@ -1462,7 +1815,7 @@ int iaxxx_core_plg_get_endpoint_status(struct device *dev,
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	uint32_t plugin_instance_id = inst_id & IAXXX_PLGIN_ID_MASK;
+	uint32_t plugin_inst_id = inst_id & IAXXX_PLGIN_ID_MASK;
 	uint32_t reg_val;
 
 	if (!priv)
@@ -1472,7 +1825,7 @@ int iaxxx_core_plg_get_endpoint_status(struct device *dev,
 	mutex_lock(&priv->plugin_lock);
 
 	/* Check if plugin exists */
-	if (!priv->iaxxx_state->plgin[plugin_instance_id].plugin_inst_state) {
+	if (!iaxxx_core_plugin_exist(priv, plugin_inst_id)) {
 		dev_err(dev, "Plugin instance 0x%x does not exist! %s()\n",
 			inst_id, __func__);
 		ret = -EEXIST;
@@ -1511,9 +1864,8 @@ int iaxxx_core_plg_get_endpoint_status(struct device *dev,
 			IAXXX_PLUGIN_INS_GRP_OUT_0_STATUS_COUNTER_POS;
 
 		ret = regmap_read(priv->regmap,
-				IAXXX_PLUGIN_INS_GRP_OUT_EP_FORMAT_REG(
-							inst_id, ep_index),
-				&reg_val);
+			IAXXX_PLUGIN_INS_GRP_OUT_EP_FORMAT_REG(
+			inst_id, ep_index), &reg_val);
 		if (ret) {
 			dev_err(dev,
 				"plugin endpoint format read failed %s()\n",
@@ -1532,9 +1884,8 @@ int iaxxx_core_plg_get_endpoint_status(struct device *dev,
 			IAXXX_PLUGIN_INS_GRP_OUT_0_FORMAT_LENGTH_POS;
 	} else {
 		ret = regmap_read(priv->regmap,
-				IAXXX_PLUGIN_INS_GRP_IN_EP_STATUS_REG(
-							inst_id, ep_index),
-				&reg_val);
+			IAXXX_PLUGIN_INS_GRP_IN_EP_STATUS_REG(
+			inst_id, ep_index), &reg_val);
 		if (ret) {
 			dev_err(dev,
 				"plugin endpoint status read failed %s()\n",
@@ -1566,3 +1917,48 @@ get_plugin_ep_status_info_err:
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_plg_get_endpoint_status);
+
+int iaxxx_core_plg_get_endpoint_timestamps(struct device *dev,
+		uint64_t *timestamps, int max_timestamps, uint8_t proc_id)
+{
+	uint32_t val = 0;
+	uint32_t block_id;
+	int ep_idx;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+
+	block_id = IAXXX_PROC_ID_TO_BLOCK_ID(proc_id);
+
+	/* Check arguments */
+	if (!timestamps) {
+		dev_err(dev, "%s() Error in input parameters\n", __func__);
+		return -EINVAL;
+	}
+
+	for (ep_idx = 0; ep_idx < max_timestamps; ++ep_idx) {
+		int ret;
+		uint32_t reg = IAXXX_PLUGIN_HDR_TIMESTAMP_LOW_EP_BLOCK_ADDR(
+							block_id, ep_idx);
+
+		ret = regmap_read(priv->regmap, reg, &val);
+		if (ret) {
+			dev_err(dev,
+		"Reading the Timestamp register low for endpoint %d failed\n",
+								ep_idx);
+			return ret;
+		}
+		timestamps[ep_idx] = val; /* Copy to lower 32 bit */
+
+		ret = regmap_read(priv->regmap, reg + 4, &val);
+		if (ret) {
+			dev_err(dev,
+		"Reading the Timestamp register high for endpoint %d failed\n",
+								ep_idx);
+			return ret;
+		}
+		/* Copy to upper 32 bit */
+		timestamps[ep_idx] |= (((uint64_t)(val)) << 32);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(iaxxx_core_plg_get_endpoint_timestamps);

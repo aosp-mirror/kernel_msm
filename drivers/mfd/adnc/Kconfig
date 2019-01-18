@@ -55,4 +55,8 @@ config MFD_IAXXX_CUSTOM_CONFIG_ALGO
 	bool "Custom configuration for plugins"
 config MFD_IAXXX_SENSOR_TUNNEL
 	bool "Custom tunnel node for sensor"
+
+config MFD_IAXXX_DISABLE_RUNTIME_PM
+	bool "Disable runtime pm"
+
 endif

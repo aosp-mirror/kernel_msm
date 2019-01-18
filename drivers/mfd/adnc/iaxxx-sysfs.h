@@ -1,7 +1,7 @@
 /*
- * iaxxx-build-info.h -- iaxxx Build data
+ * iaxxx-sysfs.h -- iaxxx sysfs attributes
  *
- * Copyright (c) 2018 Knowles Corporation
+ * Copyright 2018 Knowles Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,11 +13,10 @@
  * GNU General Public License for more details.
  */
 
-#ifndef _IAXXX_BUILD_INFO_H
-#define _IAXXX_BUILD_INFO_H
+#ifndef _IAXXX_SYSFS_H
+#define _IAXXX_SYSFS_H
 
-#define HOST_SOFTWARE_VERSION_STR "1.3.0"
+int iaxxx_init_sysfs(struct iaxxx_priv *priv);
+void iaxxx_remove_sysfs(struct iaxxx_priv *priv);
 
-#define FW_VERSION_IN_HOST_STR "2.1.0"
-
-#endif
+#endif /* _IAXXX_SYSFS_H */

@@ -1,7 +1,7 @@
 /*
  * iaxxx-debug.c  --  iaxxx debug support
  *
- * Copyright 2017 Audience, Inc.
+ * Copyright 2018 Audience, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,6 +16,7 @@
 #include <linux/circ_buf.h>
 #include <linux/regmap.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include "iaxxx.h"
 #include "iaxxx-cdev.h"
 
@@ -33,7 +34,7 @@ struct iaxxx_debug_data {
 };
 
 static ssize_t raw_read(struct file *filp, char __user *buf,
-					size_t count, loff_t *f_pos)
+			size_t count, loff_t *f_pos)
 {
 	struct iaxxx_priv *iaxxx = (struct iaxxx_priv *)filp->private_data;
 	int rc = 0;
@@ -75,7 +76,7 @@ raw_read_err:
 }
 
 static ssize_t raw_write(struct file *filp, const char __user *buf,
-				size_t count, loff_t *f_pos)
+			 size_t count, loff_t *f_pos)
 {
 	struct iaxxx_priv *iaxxx = (struct iaxxx_priv *)filp->private_data;
 	int rc = 0;
@@ -110,6 +111,146 @@ raw_write_err:
 	return rc;
 }
 
+static int get_srb_info(struct iaxxx_priv *iaxxx, struct iaxxx_srb_info *srb)
+{
+	int ret;
+
+	ret = iaxxx->bulk_read(iaxxx->dev,
+			IAXXX_SRB_REGS_ADDR, srb->reg_vals, IAXXX_SRB_REGS_NUM);
+	if (ret < 0) {
+		pr_err("Can't get SRB register (ret=%d)\n", ret);
+	} else {
+		srb->reg_start_addr = IAXXX_SRB_REGS_ADDR;
+		srb->reg_num = IAXXX_SRB_REGS_NUM;
+	}
+
+	return ret;
+}
+
+static int get_arb_info(struct iaxxx_priv *iaxxx, struct iaxxx_arb_info *arb)
+{
+	int ret;
+	int i;
+
+	/* ARB */
+	ret = iaxxx->bulk_read(iaxxx->dev, IAXXX_SRB_ARB_0_BASE_ADDR_ADDR,
+					arb->reg_vals, IAXXX_ARB_REGS_NUM);
+	if (ret < 0) {
+		pr_err("Can't get ARB register (ret=%d)\n", ret);
+		return ret;
+	}
+
+	arb->reg_start_addr = IAXXX_SRB_ARB_0_BASE_ADDR_ADDR;
+	arb->reg_num = IAXXX_ARB_REGS_NUM;
+	for (i = 0; i < IAXXX_ARB_BLOCK_NUM; ++i) {
+		uint32_t addr = arb->reg_vals[2 * i + 0];
+		uint32_t reg_num =
+			arb->reg_vals[2 * i + 1] / sizeof(uint32_t);
+		struct iaxxx_arb_block *block = &arb->blocks[i];
+
+		block->reg_start_addr = addr;
+		block->reg_num = reg_num;
+		if (addr == 0 || reg_num == 0) {
+			block->reg_start_addr = 0;
+			block->reg_num = 0;
+			continue;
+		}
+		block->reg_start_addr = addr;
+		block->reg_num = reg_num;
+		if (reg_num > IAXXX_MAX_REGS_NUM) {
+			pr_err("Too large reg_num(%u)\n", reg_num);
+			continue;
+		}
+
+		ret = iaxxx->bulk_read(iaxxx->dev,
+					addr, block->reg_vals, reg_num);
+		if (ret < 0) {
+			pr_err("Can't get ARB Block %d (ret=%d)\n", i, ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+static int get_circ_buffer_info(struct iaxxx_priv *iaxxx,
+			 struct iaxxx_circ_buffer_info *circ_buffer_info)
+{
+	int ret;
+	uint32_t arb10_phy_addr;
+	int i;
+	static uint32_t reg_vals[IAXXX_MAX_CIRC_BUFS * 2];
+
+	/* First get the address for the ARB10 block */
+	ret = iaxxx->bulk_read(iaxxx->dev,
+		IAXXX_SRB_ARB_10_BASE_ADDR_ADDR, &arb10_phy_addr, 1);
+	if (ret < 0) {
+		pr_err("Failed to find physical address for ARB10\n");
+		return ret;
+	}
+
+	/* We need to read only NUM_CIRC_BUFS*2 words from ARB10 */
+	ret = iaxxx->bulk_read(iaxxx->dev,
+			arb10_phy_addr, reg_vals, IAXXX_MAX_CIRC_BUFS * 2);
+	if (ret < 0) {
+		pr_err(
+		"Failed to read Circular buffer register information\n");
+		return ret;
+	}
+
+	circ_buffer_info->buf_num = IAXXX_MAX_CIRC_BUFS;
+	for (i = 0; i < circ_buffer_info->buf_num; ++i) {
+		uint32_t phy_addr, words;
+		struct iaxxx_circ_buffer *buf;
+
+		/*
+		 * Get the physical address and size for
+		 * each of the circular buffers
+		 */
+		phy_addr = reg_vals[2 * i + 0];
+		words = reg_vals[2 * i + 1] / sizeof(uint32_t);
+		if (phy_addr == 0 || words == 0) {
+			pr_err("Couldn't find physical address and size\n");
+			continue;
+		}
+		if (words > IAXXX_MAX_REGS_NUM) {
+			pr_err("Too large words(%u)\n", words);
+			continue;
+		}
+
+		buf = circ_buffer_info->bufs + i;
+		ret = iaxxx->bulk_read(iaxxx->dev,
+					phy_addr, buf->reg_vals, words);
+		if (ret < 0) {
+			pr_err("Failed to get the circ buf(%d) data\n", i);
+			buf->reg_start_addr = 0;
+			buf->reg_num = 0;
+		} else {
+			buf->reg_start_addr = phy_addr;
+			buf->reg_num = words;
+		}
+	}
+
+	return ret;
+}
+
+static int get_registers_dump(struct iaxxx_priv *iaxxx,
+			  struct iaxxx_registers_dump *info)
+{
+	int ret = 0;
+
+	if (get_srb_info(iaxxx, &info->srb_info) < 0)
+		ret = -EIO;
+
+	if (get_arb_info(iaxxx, &info->arb_info) < 0)
+		ret = -EIO;
+
+	if (get_circ_buffer_info(iaxxx, &info->circ_buffer_info) < 0)
+		ret = -EIO;
+
+	return ret;
+}
+
 static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct iaxxx_priv *const iaxxx
@@ -124,7 +265,7 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	pr_debug("%s() called\n", __func__);
 
 	if (iaxxx == NULL) {
-		pr_err("Invalid private pointer");
+		pr_err("Invalid private pointer\n");
 		return -EINVAL;
 	}
 
@@ -136,21 +277,43 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		bus_config = IAXXX_I2C;
 #endif
 		ret = copy_to_user((void __user *)arg, &bus_config,
-								sizeof(u8));
+				   sizeof(u8));
 		if (ret) {
-			pr_err("failed to copy response to userspace %d", ret);
-			ret = -EIO;
+			pr_err("Failed to copy response to userspace %d\n",
+									ret);
+			ret = -EFAULT;
 		}
 		break;
+	case IAXXX_IOCTL_GET_REGISTERS_DUMP: {
+		struct iaxxx_registers_dump *dump;
 
+		dump = kzalloc(sizeof(struct iaxxx_registers_dump), GFP_KERNEL);
+		if (!dump)
+			return -ENOMEM;
+
+		mutex_lock(&iaxxx->debug_mutex);
+		ret = get_registers_dump(iaxxx, dump);
+		mutex_unlock(&iaxxx->debug_mutex);
+		if (ret) {
+			pr_err("Failed to get_registers_dump ret=%d\n", ret);
+		} else {
+			if (copy_to_user((void __user *)arg, dump,
+					sizeof(struct iaxxx_registers_dump)))
+				ret = -EFAULT;
+		}
+		kfree(dump);
+		break;
+	}
 	case IAXXX_SET_DBG_LOG_LEVEL:
 		if (copy_from_user(&log_level_info, (void __user *)arg,
 						sizeof(log_level_info)))
 			return -EFAULT;
 
+		mutex_lock(&iaxxx->debug_mutex);
 		ret = iaxxx_set_debug_log_level(iaxxx->dev,
 					log_level_info.module_id,
 					log_level_info.log_level);
+		mutex_unlock(&iaxxx->debug_mutex);
 		if (ret) {
 			dev_err(iaxxx->dev, "%s(): failed %d\n", __func__, ret);
 			return ret;
@@ -161,8 +324,10 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						sizeof(log_level_info)))
 			return -EFAULT;
 
+		mutex_lock(&iaxxx->debug_mutex);
 		ret = iaxxx_get_debug_log_level(iaxxx->dev,
 					log_level_info.module_id, &log_level);
+		mutex_unlock(&iaxxx->debug_mutex);
 		if (ret) {
 			dev_err(iaxxx->dev, "%s(): failed %d\n", __func__, ret);
 			return ret;
@@ -179,8 +344,10 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						sizeof(log_mode_info)))
 			return -EFAULT;
 
+		mutex_lock(&iaxxx->debug_mutex);
 		ret = iaxxx_set_debug_log_mode(iaxxx->dev,
 			log_mode_info.mode, log_mode_info.proc_id);
+		mutex_unlock(&iaxxx->debug_mutex);
 		if (ret) {
 			dev_err(iaxxx->dev,
 				"%s(): failed %d\n", __func__, ret);
@@ -192,8 +359,10 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				sizeof(log_mode_info)))
 			return -EFAULT;
 
+		mutex_lock(&iaxxx->debug_mutex);
 		ret = iaxxx_get_debug_log_mode(iaxxx->dev,
 			&mode, log_mode_info.proc_id);
+		mutex_unlock(&iaxxx->debug_mutex);
 		if (ret) {
 			dev_err(iaxxx->dev,
 				"%s(): failed %d\n", __func__, ret);
@@ -206,11 +375,10 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 
 		break;
-
-
 	default:
-		pr_err("Invalid ioctl command received %x", cmd);
+		pr_err("Invalid ioctl command received 0x%x\n", cmd);
 		ret = -EINVAL;
+		break;
 	}
 
 	return ret;
@@ -218,7 +386,7 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 #ifdef CONFIG_COMPAT
 static long raw_compat_ioctl(struct file *filp, unsigned int cmd,
-						unsigned long arg)
+			     unsigned long arg)
 {
 	return raw_ioctl(filp, cmd, (unsigned long)compat_ptr(arg));
 }
@@ -232,7 +400,7 @@ static int raw_open(struct inode *inode, struct file *filp)
 	pr_debug("raw device open called\n");
 
 	if ((inode)->i_cdev == NULL) {
-		pr_err("Failed to retrieve cdev from inode");
+		pr_err("Failed to retrieve cdev from inode\n");
 		return -ENODEV;
 	}
 
@@ -240,7 +408,7 @@ static int raw_open(struct inode *inode, struct file *filp)
 			struct iaxxx_debug_data, raw_cdev.cdev);
 
 	if (intf_priv == NULL) {
-		pr_err("Unable to fetch tunnel private data");
+		pr_err("Unable to fetch tunnel private data\n");
 		return -ENODEV;
 	}
 
@@ -371,7 +539,7 @@ static int regdump_open(struct inode *inode, struct file *filp)
 	pr_debug("%s()\n", __func__);
 
 	if ((inode)->i_cdev == NULL) {
-		pr_err("Failed to retrieve cdev from inode");
+		pr_err("Failed to retrieve cdev from inode\n");
 		return -ENODEV;
 	}
 
@@ -379,7 +547,7 @@ static int regdump_open(struct inode *inode, struct file *filp)
 			struct iaxxx_debug_data, regdump_cdev.cdev);
 
 	if (intf_priv == NULL) {
-		pr_err("Unable to fetch register dump private data");
+		pr_err("Unable to fetch register dump private data\n");
 		return -ENODEV;
 	}
 
@@ -404,14 +572,14 @@ static int crashdump_open(struct inode *inode, struct file *filp)
 	pr_debug("%s()\n", __func__);
 
 	if ((inode)->i_cdev == NULL) {
-		pr_err("Failed to retrieve cdev from inode");
+		pr_err("Failed to retrieve cdev from inode\n");
 		return -ENODEV;
 	}
 	intf_priv = container_of((inode)->i_cdev,
 			struct iaxxx_debug_data, crashdump_cdev.cdev);
 
 	if (intf_priv == NULL) {
-		pr_err("Unable to fetch crash dump private data");
+		pr_err("Unable to fetch crash dump private data\n");
 		return -ENODEV;
 	}
 
@@ -499,10 +667,10 @@ int iaxxx_debug_init(struct iaxxx_priv *priv)
 	struct iaxxx_debug_data *intf_priv = NULL;
 	int err;
 
-	pr_debug("%s: initializing debug interface", __func__);
+	pr_debug("%s: initializing debug interface\n", __func__);
 
 	if (priv == NULL) {
-		pr_err("Invalid iaxxx private data pointer");
+		pr_err("Invalid iaxxx private data pointer\n");
 		return -EINVAL;
 	}
 
@@ -525,7 +693,7 @@ int iaxxx_debug_init(struct iaxxx_priv *priv)
 	err = iaxxx_cdev_create(&intf_priv->regdump_cdev, priv->dev,
 		&regdump_fops, intf_priv, IAXXX_CDEV_REGDUMP);
 	if (err) {
-		pr_err("error in creating the char device");
+		pr_err("error in creating the char device\n");
 		err = -EIO;
 		goto regdump_cdev_err;
 	}
@@ -533,7 +701,7 @@ int iaxxx_debug_init(struct iaxxx_priv *priv)
 	err = iaxxx_cdev_create(&intf_priv->crashdump_cdev, priv->dev,
 		&crashdump_fops, intf_priv, IAXXX_CDEV_CRASHDUMP);
 	if (err) {
-		pr_err("error in creating the char device");
+		pr_err("error in creating the char device\n");
 		err = -EIO;
 		goto crashdump_cdev_err;
 	}
@@ -563,7 +731,7 @@ int iaxxx_debug_exit(struct iaxxx_priv *priv)
 	struct iaxxx_debug_data *intf_priv = NULL;
 
 	if (priv == NULL) {
-		pr_err("Invalid iaxxx private data pointer");
+		pr_err("Invalid iaxxx private data pointer\n");
 		return -EINVAL;
 	}
 	intf_priv = (struct iaxxx_debug_data *) priv->intf_priv;

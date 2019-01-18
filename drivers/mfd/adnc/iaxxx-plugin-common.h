@@ -24,23 +24,42 @@
 #include <linux/mutex.h>
 #include <linux/kthread.h>
 
-int iaxxx_core_set_param_blk_common(struct device *dev, uint32_t inst_id,
-				uint32_t blk_size, const void *ptr_blk,
-				uint32_t block_id, uint32_t param_blk_id);
-int iaxxx_core_get_param_blk_common(struct device *dev, uint32_t inst_id,
-				uint32_t block_id, uint32_t param_blk_id,
-				uint32_t *getparam_block_data,
-				uint32_t getparam_block_size_in_words);
-int iaxxx_core_read_plugin_error_common(struct device *dev,
-				const uint32_t block_id, uint32_t *error,
-				uint8_t *error_instance);
-int iaxxx_core_set_param_blk_with_ack_common(struct device *dev,
-				const uint32_t inst_id,
-				const uint32_t param_blk_id,
-				const uint32_t block_id,
-				const void *set_param_buf,
-				const uint32_t set_param_buf_sz,
-				uint32_t *response_data_buf,
-				const uint32_t response_data_sz,
-				const uint32_t max_no_retries);
+int iaxxx_core_set_param_blk_common(
+			struct device *dev,
+			uint32_t inst_id, uint32_t blk_size,
+			const void *ptr_blk, uint32_t block_id,
+			uint32_t param_blk_id);
+int iaxxx_core_get_param_blk_common(
+		struct device *dev,
+		uint32_t  inst_id,
+		uint32_t  block_id,
+		uint32_t  param_blk_id,
+		uint32_t *getparam_block_data,
+		uint32_t  getparam_block_size_in_words);
+
+int iaxxx_core_read_plugin_error_common(
+	struct device  *dev,
+	const uint32_t  block_id,
+	uint32_t *error,
+	uint8_t  *error_instance);
+
+int iaxxx_core_set_param_blk_with_ack_common(
+					struct device *dev,
+					const uint32_t inst_id,
+					const uint32_t param_blk_id,
+					const uint32_t block_id,
+					const void *set_param_buf,
+					const uint32_t set_param_buf_sz,
+					uint32_t  *response_data_buf,
+					const uint32_t response_data_sz,
+					const uint32_t max_no_retries);
+
+struct iaxxx_plugin_data *iaxxx_core_plugin_exist(
+				struct iaxxx_priv *priv,
+				uint32_t inst_id);
+
+struct iaxxx_pkg_data *iaxxx_core_pkg_exist(
+				struct iaxxx_priv *priv,
+				uint32_t pkg_id);
+
 #endif /*__IAXXX_PLUGIN_COMMON_H__ */

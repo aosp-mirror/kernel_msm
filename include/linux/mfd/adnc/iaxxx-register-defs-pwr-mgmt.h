@@ -1,5 +1,5 @@
 /*
- * *.h
+ * iaxxx-register-defs-pwr-mgmt.h
  *
  * Copyright (c) 2018 Knowles, inc.
  *
@@ -157,7 +157,7 @@
 #define IAXXX_PWR_MGMT_SYS_CLK_CTRL_INT_OSC_DIS_SIZE 1
 
 /*
- * Selects PLL Source for both APLL and MPLL
+ * Selects APLL Source
  * 0 - System Clock
  * 1 - 8 - RESERVED
  * 9 - Internal Oscillator
@@ -165,10 +165,10 @@
  * 11 - External Clock
  * otherwise - Invalid
  */
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_PLL_SRC_MASK 0x0000001e
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_PLL_SRC_RESET_VAL 0x0
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_PLL_SRC_POS 1
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_PLL_SRC_SIZE 4
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_SRC_MASK 0x0000001e
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_SRC_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_SRC_POS 1
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_SRC_SIZE 4
 
 /*
  * Selects APLL Output frequency
@@ -187,28 +187,18 @@
 #define IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_OUT_FREQ_SIZE 4
 
 /*
- * Selects X_CLK source
- * 0 - MPLL Out
- * 1 - APLL Out
- * 2 - Internal Oscillator
+ * Selects MPLL Source
+ * 0 - System Clock
+ * 1 - 8 - RESERVED
+ * 9 - Internal Oscillator
+ * 10 - RESERVED
+ * 11 - External Clock
  * otherwise - Invalid
  */
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_X_CLK_SRC_MASK 0x00000600
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_X_CLK_SRC_RESET_VAL 0x0
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_X_CLK_SRC_POS 9
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_X_CLK_SRC_SIZE 2
-
-/*
- * Selects A_CLK source
- * 0 - APLL Out
- * 1 - MPLL Out
- * 2 - Internal Oscillator
- * otherwise - Invalid
- */
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_A_CLK_SRC_MASK 0x00001800
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_A_CLK_SRC_RESET_VAL 0x0
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_A_CLK_SRC_POS 11
-#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_A_CLK_SRC_SIZE 2
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_MASK 0x00001e00
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_POS 9
+#define IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_SIZE 4
 
 /*** PWR_MGMT_MAX_I2C_SPEED_REQ_1 (0x0e00001c) ***/
 /*
@@ -444,7 +434,43 @@
 #define IAXXX_PWR_MGMT_MAX_UART1_MASTER_SPEED_REQ_REG_POS 0
 #define IAXXX_PWR_MGMT_MAX_UART1_MASTER_SPEED_REQ_REG_SIZE 32
 
+/*** PWR_MGMT_PWR_MGMT_STATS_PTR (0x0e000050) ***/
+/*
+ * Pointer to power management statistics
+ */
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_ADDR (0x0e000050)
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_MASK_VAL 0xffffffff
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_RMASK_VAL 0xffffffff
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_WMASK_VAL 0x00000000
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_RESET_VAL 0x00000000
+
+/*
+ * Pointer to power management statistics
+ */
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_REG_MASK 0xffffffff
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_REG_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_REG_POS 0
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_REG_SIZE 32
+
+/*** PWR_MGMT_PWR_MGMT_STATS_SIZE (0x0e000054) ***/
+/*
+ * Size of power management statistics in words
+ */
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_ADDR (0x0e000054)
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_MASK_VAL 0xffffffff
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_RMASK_VAL 0xffffffff
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_WMASK_VAL 0x00000000
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_RESET_VAL 0x00000000
+
+/*
+ * Size of power management statistics in words
+ */
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_REG_MASK 0xffffffff
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_REG_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_REG_POS 0
+#define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_REG_SIZE 32
+
 /* Number of registers in the module */
-#define IAXXX_PWR_MGMT_REG_NUM 20
+#define IAXXX_PWR_MGMT_REG_NUM 22
 
 #endif /* __IAXXX_REGISTER_DEFS_PWR_MGMT_H__ */

@@ -16,6 +16,59 @@
 #ifndef _IAXXX_DEBUG_INTF_H
 #define _IAXXX_DEBUG_INTF_H
 
+#include <linux/types.h>
+#include <linux/ioctl.h>
+
+#define IAXXX_SRB_SZ_TO_ARB      (0x16c)
+#define IAXXX_SRB_REGS_NUM    (IAXXX_SRB_SZ_TO_ARB / sizeof(uint32_t))
+#define IAXXX_ARB_SZ             (0x100)
+#define IAXXX_ARB_REGS_NUM    (IAXXX_ARB_SZ / sizeof(uint32_t))
+#define IAXXX_ARB_BLOCK_NUM     (IAXXX_ARB_REGS_NUM / 2)
+#define IAXXX_MAX_CIRC_BUFS          (3)
+#define IAXXX_MAX_REGS_NUM        (0xc00)
+
+struct iaxxx_srb_info {
+	uint32_t reg_start_addr;
+	int reg_num;
+	uint32_t reg_vals[IAXXX_SRB_REGS_NUM];
+};
+
+struct iaxxx_arb_block {
+	uint32_t reg_start_addr;
+	int reg_num;
+	uint32_t reg_vals[IAXXX_MAX_REGS_NUM];
+
+	/* For pretty formatted display */
+	char     name[15];       /* name of this arb block */
+};
+
+struct iaxxx_arb_info {
+	uint32_t reg_start_addr;
+	int reg_num;
+	uint32_t reg_vals[IAXXX_ARB_REGS_NUM];
+	struct iaxxx_arb_block blocks[IAXXX_ARB_BLOCK_NUM];
+};
+
+struct iaxxx_circ_buffer {
+	uint32_t reg_start_addr;
+	int reg_num;
+	uint32_t reg_vals[IAXXX_MAX_REGS_NUM];
+
+	/* For pretty formatted display */
+	char     name[15];       /* name of this circular buffer */
+};
+
+struct iaxxx_circ_buffer_info {
+	int buf_num;
+	struct iaxxx_circ_buffer bufs[IAXXX_MAX_CIRC_BUFS];
+};
+
+struct iaxxx_registers_dump {
+	struct iaxxx_srb_info srb_info;
+	struct iaxxx_arb_info arb_info;
+	struct iaxxx_circ_buffer_info circ_buffer_info;
+};
+
 struct iaxxx_log_level_info {
 	uint32_t module_id;
 	uint32_t log_level;
