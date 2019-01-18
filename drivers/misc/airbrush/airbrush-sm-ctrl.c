@@ -1134,6 +1134,25 @@ void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx)
 	gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_DISABLE);
 }
 
+static int ab_regulator_listener(struct notifier_block *nb,
+				 unsigned long event, void *cookie)
+{
+	struct ab_state_context *sc =
+			container_of(nb,
+				     struct ab_state_context,
+				     regulator_nb);
+
+	dev_dbg(sc->dev, "received event 0x%lx\n", event);
+
+	if (event & REGULATOR_EVENT_FAIL) {
+		dev_err(sc->dev, "received regulator failure 0x%lx\n", event);
+		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+		/* TODO(b/122619299): force emergency shutdown in driver */
+	}
+
+	return 0;
+}
+
 static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 		unsigned long arg)
 {
@@ -1563,6 +1582,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_create_sysfs(ab_sm_ctx);
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
+
+	ab_sm_ctx->regulator_nb.notifier_call = ab_regulator_listener;
 
 	ab_sm_ctx->smps2_delay = SMPS2_DEFAULT_DELAY;
 	ab_sm_ctx->ldo4_delay = LDO4_DEFAULT_DELAY;

@@ -120,10 +120,31 @@ static ssize_t state_stats_show(struct device *dev,
 	return pos;
 }
 
+/* Trigger an error event for testing purpose; input is ignored */
+static ssize_t gen_error_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
+{
+	dev_warn(dev, "Triggering an error event for testing.\n");
+	sysfs_notify(&dev->kobj, NULL, "error_event");
+	return count;
+}
+
+/* Supposed to be polled by userspace daemon. */
+static ssize_t error_event_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	/* Return fixed string "1" */
+	return scnprintf(buf, PAGE_SIZE, "%d\n", 1);
+}
+
 static struct device_attribute ab_sm_attrs[] = {
 	__ATTR_RW(chip_state),
 	__ATTR_RO(version),
 	__ATTR_RO(state_stats),
+	__ATTR_RO(error_event),
+	__ATTR_WO(gen_error),
 };
 
 void ab_sm_create_sysfs(struct ab_state_context *sc)

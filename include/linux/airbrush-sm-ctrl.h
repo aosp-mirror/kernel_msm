@@ -517,6 +517,8 @@ struct ab_state_context {
 	u64 ldo5_delay;
 	u64 s60_delay;
 
+	struct notifier_block regulator_nb; /* single notifier */
+
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
 #endif

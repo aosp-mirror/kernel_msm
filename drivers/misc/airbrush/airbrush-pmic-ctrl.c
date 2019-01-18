@@ -342,6 +342,27 @@ fail_regulator_enable:
 	return -ENODEV;
 }
 
+static int ab_register_notifier(struct ab_state_context *sc)
+{
+	struct device *dev = sc->dev;
+	int ret = 0;
+
+	ret |= devm_regulator_register_notifier(sc->smps1, &sc->regulator_nb);
+	ret |= devm_regulator_register_notifier(sc->smps2, &sc->regulator_nb);
+	ret |= devm_regulator_register_notifier(sc->smps3, &sc->regulator_nb);
+	ret |= devm_regulator_register_notifier(sc->ldo1, &sc->regulator_nb);
+	ret |= devm_regulator_register_notifier(sc->ldo2, &sc->regulator_nb);
+	ret |= devm_regulator_register_notifier(sc->ldo3, &sc->regulator_nb);
+	ret |= devm_regulator_register_notifier(sc->ldo4, &sc->regulator_nb);
+	ret |= devm_regulator_register_notifier(sc->ldo5, &sc->regulator_nb);
+	if (ret) {
+		dev_err(dev, "failed to register notifier block\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 int ab_get_pmic_resources(struct ab_state_context *sc)
 {
 	struct device *dev = sc->dev;
@@ -467,6 +488,9 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 			goto fail;
 		}
 	}
+
+	if (ab_register_notifier(sc))
+		goto fail;
 
 	return 0;
 
