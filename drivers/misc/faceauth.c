@@ -101,6 +101,7 @@ bool hypx_enable;
 uint64_t m0_verbosity_level;
 struct dentry *faceauth_debugfs_root;
 uint16_t session_id;
+struct platform_device *faceauth_pdev;
 
 /* M0 Verbosity Level Encoding
 
@@ -655,12 +656,10 @@ static int faceauth_m0_verbosity_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_m0_verbosity, faceauth_m0_verbosity_get,
 			 faceauth_m0_verbosity_set, "0x%016llx\n");
 
-static int __init faceauth_init(void)
+static int faceauth_probe(struct platform_device *pdev)
 {
 	int err;
 	struct dentry *hypx, *m0_verbosity_level;
-
-	pr_info("faceauth init\n");
 
 	hypx_enable = false;
 	m0_verbosity_level = 0;
@@ -703,15 +702,44 @@ exit1:
 	return err;
 }
 
-static void __exit faceauth_exit(void)
+static int faceauth_remove(struct platform_device *pdev)
 {
-	pr_debug("faceauth driver exit\n");
-
 	misc_deregister(&faceauth_miscdevice);
 	debugfs_remove_recursive(faceauth_debugfs_root);
+	return 0;
 }
 
+static struct platform_driver faceauth_driver = {
+    .probe = faceauth_probe,
+    .remove = faceauth_remove,
+	.driver = {
+		.name = "faceauth",
+		.owner = THIS_MODULE,
+	},
+};
+
+static int __init faceauth_init(void)
+{
+	int ret;
+
+	faceauth_pdev =
+		platform_device_register_simple("faceauth", -1, NULL, 0);
+	if (IS_ERR(faceauth_pdev))
+		return PTR_ERR(faceauth_pdev);
+
+	ret = platform_driver_register(&faceauth_driver);
+	if (ret)
+		platform_device_unregister(faceauth_pdev);
+
+	return 0;
+}
 module_init(faceauth_init);
+
+static void __exit faceauth_exit(void)
+{
+	platform_driver_unregister(&faceauth_driver);
+	platform_device_unregister(faceauth_pdev);
+}
 module_exit(faceauth_exit);
 
 MODULE_AUTHOR("Anatol Pomazau <anatol@google.com>, Lei Liu <leliu@google.com>");
