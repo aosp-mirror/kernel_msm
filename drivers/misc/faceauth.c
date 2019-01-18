@@ -640,61 +640,20 @@ static int hypx_enable_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, hypx_enable_get, hypx_enable_set,
 			 "%llu\n");
 
-static int m0_verbosity_level_debugfs_show(struct seq_file *m, void *data)
+static int faceauth_m0_verbosity_set(void *data, u64 val)
 {
-	seq_printf(m, "%u\n", m0_verbosity_level);
+	m0_verbosity_level = val;
 	return 0;
 }
 
-static int m0_verbosity_level_debugfs_open(struct inode *inode,
-					   struct file *file)
+static int faceauth_m0_verbosity_get(void *data, u64 *val)
 {
-	return single_open(file, m0_verbosity_level_debugfs_show,
-			   inode->i_private);
+	*val = m0_verbosity_level;
+	return 0;
 }
 
-static ssize_t m0_verbosity_level_debugfs_write(struct file *file,
-						const char __user *ubuf,
-						size_t len, loff_t *offp)
-{
-	// Maximum possible uint64_t in decimal format (18446744073709551615)
-	// will fit, including  newline and null terminator.
-	// We also accept hex format. Remember to put "0x" in front.
-	// Example for the same number above: 0xffffffffffffffff
-	char buf[22];
-	uint64_t verbosity_level;
-	int ret;
-
-	if (len > sizeof(buf) - 1)
-		return -EINVAL;
-
-	if (copy_from_user(buf, ubuf, len))
-		return -EFAULT;
-
-	while (len > 0 && isspace(buf[len - 1]))
-		len--;
-	buf[len] = '\0';
-
-	ret = kstrtoull(buf, 0, &verbosity_level);
-	if (ret)
-		return -EINVAL;
-
-	m0_verbosity_level = verbosity_level;
-
-	pr_debug("Faceauth M0 verbosity level is set to %llu\n",
-		 verbosity_level);
-
-	return len;
-}
-
-static const struct file_operations m0_verbosity_level_debugfs_fops = {
-	.owner = THIS_MODULE,
-	.open = m0_verbosity_level_debugfs_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-	.write = m0_verbosity_level_debugfs_write,
-};
+DEFINE_DEBUGFS_ATTRIBUTE(fops_m0_verbosity, faceauth_m0_verbosity_get,
+			 faceauth_m0_verbosity_set, "0x%016llx\n");
 
 static int __init faceauth_init(void)
 {
@@ -724,10 +683,9 @@ static int __init faceauth_init(void)
 		goto exit3;
 	}
 
-	m0_verbosity_level =
-		debugfs_create_file("m0_verbosity_level", 0400,
-				    faceauth_debugfs_root, NULL,
-				    &m0_verbosity_level_debugfs_fops);
+	m0_verbosity_level = debugfs_create_file("m0_verbosity_level", 0400,
+						 faceauth_debugfs_root, NULL,
+						 &fops_m0_verbosity);
 	if (!m0_verbosity_level) {
 		err = -EIO;
 		goto exit3;
