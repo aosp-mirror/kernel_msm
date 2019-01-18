@@ -20,7 +20,7 @@
 	google,boost_to_5_1V;
 	qcom,dc-icl-ua = <1100000>;
 	google,batt_psy_is_bms;
-	google,usb-port-tz-name = "usbc-therm-adc";
+	google,usb-port-tz-name = "usbc-therm-monitor";
 	google,wlc-thermal-mitigation = <1100000 500000 250000 110000>;
 	google,low-batt-threshold = <2>;
 	qcom,hvdcp-disable;
