@@ -230,8 +230,8 @@ enum max1720x_command_bits {
 /** Nonvolatile Register Memory Map */
 enum max1720x_nvram {
 	MAX1720X_NVRAM_START = 0x80,
-	MAX1720X_NUSER18C = 0x8C,	/* QH Capacity */
-	MAX1720X_NUSER18D = 0x8D,	/* QH Capacity */
+	MAX1720X_NUSER18C = 0x8C,	/* reserved for QH capacity */
+	MAX1720X_NUSER18D = 0x8D,	/* reserved for QH QH  */
 	MAX1720X_NODSCTH = 0x8E,	/* CCLC */
 	MAX1720X_NODSCCFG = 0x8F,	/* CCLC */
 	MAX1720X_NLEARNCFG = 0x9F,	/* not referred here */
@@ -274,7 +274,6 @@ enum max1730x_nvram {
 	MAX1730X_NVRAM_START 	= 0x80,
 	MAX1730X_NVPRTTH1 	= 0xD0,
 	MAX1730X_NVRAM_END 	= 0xEF,
-
 	MAX1730X_HISTORY_START 	= 0xF0,
 };
 
@@ -318,6 +317,11 @@ enum max17xxx_register {
 	MAX17XXX_CURRENT	= MAX1720X_CURRENT,
 	MAX17XXX_AVGCURRENT	= MAX1720X_AVGCURRENT,
 	MAX17XXX_MIXCAP		= MAX1720X_MIXCAP,
+};
+
+enum max17xxx_nvram {
+	MAX17XXX_QHCA = MAX1720X_NUSER18C,
+	MAX17XXX_QHQH = MAX1720X_NUSER18D,
 };
 
 #define MAX1720X_HISTORY_PAGE_SIZE \
@@ -512,8 +516,6 @@ struct max17x0x_reg {
 static const struct max17x0x_reg max1720x[] = {
 	{ 'BCNT', ATOM_INIT_MAP(0x8e, 0x8f, 0xb2, 0xb4, 0xcd,
 				0xce, 0xd7, 0xdf, 0xc4, 0xc5) },
-	{ 'QHCA', ATOM_INIT_REG16(0x8c) },
-	{ 'QHQH', ATOM_INIT_REG16(0x8d) },
 	{ 'SNUM', ATOM_INIT_MAP(0xcc, 0xd8, 0xd9, 0xda, 0xd6,
 				0xdb, 0xdc, 0xdd, 0xde, 0xd1,
 				0xd0) },
@@ -521,10 +523,8 @@ static const struct max17x0x_reg max1720x[] = {
 
 /* see b/119416045 for layout */
 static const struct max17x0x_reg max1730x[] = {
-	{ 'BCNT', ATOM_INIT_MAP(0x8c, 0x8d, 0x8e, 0x8f, 0x9e,
-				0x9f, 0xb2, 0xb4, 0xb6, 0xb7)},
-	{ 'QHCA', ATOM_INIT_REG16(0xe2) },
-	{ 'QHQH', ATOM_INIT_REG16(0x9d) },
+	{ 'BCNT', ATOM_INIT_MAP(0x8e, 0x8f, 0x9d, 0x9e, 0x9f,
+				0xb2, 0xb4, 0xb6, 0xc7, 0xe2)},
 	{ 'SNUM', ATOM_INIT_MAP(0xce, 0xe6, 0xe7, 0xe8, 0xe9,
 				0xea, 0xeb, 0xec, 0xed, 0xee,
 				0xef) },
@@ -1213,14 +1213,14 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 	(void) REGMAP_READ(chip->regmap, MAX17XXX_MIXCAP, &data);
 	chip->current_capacity = data;
 
-	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18C, ~data);
+	REGMAP_WRITE(chip->regmap_nvram, MAX17XXX_QHCA, ~data);
 	dev_info(chip->dev, "Capacity primed to %d on %s\n",
 		 data, psy_status_str[status]);
 
 	(void) REGMAP_READ(chip->regmap, MAX1720X_QH, &data);
 	chip->previous_qh = reg_to_twos_comp_int(data);
 
-	REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NUSER18D, data);
+	REGMAP_WRITE(chip->regmap_nvram, MAX17XXX_QHQH, data);
 	dev_info(chip->dev, "QH primed to %d on %s\n",
 		 data, psy_status_str[status]);
 }
@@ -1311,10 +1311,10 @@ static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
 	u16 data = 0, nvram_capacity;
 	int current_qh, nvram_qh;
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, &data);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX17XXX_QHCA, &data);
 	nvram_capacity = ~data;
 
-	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18D, &data);
+	(void) REGMAP_READ(chip->regmap_nvram, MAX17XXX_QHQH, &data);
 	nvram_qh = reg_to_twos_comp_int(data);
 
 	(void) REGMAP_READ(chip->regmap, MAX1720X_QH, &data);
@@ -2396,7 +2396,7 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	 * Capacity data is stored as complement so it will not be zero. Using
 	 * zero case to detect new un-primed pack
 	 */
-	ret = REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER18C, &data);
+	ret = REGMAP_READ(chip->regmap_nvram, MAX17XXX_QHCA, &data);
 	if (!ret && data == 0)
 		max1720x_prime_battery_qh_capacity(chip,
 						   POWER_SUPPLY_STATUS_UNKNOWN);
