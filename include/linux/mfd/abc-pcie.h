@@ -99,6 +99,8 @@ enum abc_intnc_ints {
 
 #define MAX_DMA_INT	16
 
+#define NUM_EP_DMA_CHANNELS    8
+
 /* todo..add platform specific data */
 struct abc_pcie_devdata;
 
