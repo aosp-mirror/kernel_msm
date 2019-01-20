@@ -68,6 +68,9 @@
 	maxim,max1730x-compat;
 	/* reset 1720x fuel gauge on start */
 	maxim,force-hard-reset;
+	/* check for NV integrity */
+	maxim,enable-nv-check;
+
 	/* read resistorID from the charger */
 	maxim,bat-power-supply = "charger";
 
