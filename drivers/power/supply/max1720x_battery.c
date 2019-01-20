@@ -51,6 +51,11 @@
 
 #define MAX1720X_GAUGE_TYPE	0
 #define MAX1730X_GAUGE_TYPE	1
+#define MAX1730X_GAUGE_PASS1	0x404
+
+#define MAX1730X_NVPRTTH1_CHARGING	0x0008
+#define MAX1730X_NPROTCFG_PASS1		0x6EA3
+#define MAX1730X_NPROTCFG_PASS2		0x0A04
 
 enum max1720x_register {
 	/* ModelGauge m5 Register */
@@ -297,10 +302,13 @@ enum max1730x_register {
 	MAX1730X_MINVOLT = 0xAD,
 	MAX1730X_MINCURR = 0xAE,
 	MAX1730X_NVPRTTH1BAK = 0xD6,
+	MAX1730X_NPROTCFG = 0xD7,
+
 };
 
 enum max1730x_command_bits {
 	MAX1730X_COMMAND_FUEL_GAUGE_RESET = 0x8000,
+	MAX1730X_COMMAND_NV_RECALL 	  = 0xE001,
 };
 
 enum max17xxx_register {
@@ -344,6 +352,8 @@ struct max1720x_chip {
 	struct regmap *regmap_nvram;
 	struct device_node *batt_node;
 	struct iio_channel *iio_ch;
+
+	u16 devname;
 
 	struct max1720x_cyc_ctr_data cyc_ctr;
 
@@ -710,6 +720,7 @@ static int max17x0x_nvram_cache_init(struct max17x0x_cache_data *cache,
 	cache->atom.type = GBMS_ATOM_TYPE_ZONE;
 	cache->atom.size = count * sizeof(u16);
 	cache->atom.base = start;
+
 	return 0;
 }
 
@@ -1050,20 +1061,24 @@ static enum power_supply_property max1720x_battery_props[] = {
 
 static void max17x0x_reg_dump(const struct max17x0x_reg *reg, u16 *data)
 {
-	int i, len;
+	int i, len = 0;
 	const int count = reg->size / 2;
 	const int size = 6 + count * 8 + 1;
 	char buff[size];
 
-	len = snprintf(buff, size, "%c%c%c%c ",
-		(reg->tag >> 24 ) & 0xff,
-		(reg->tag >> 16 ) & 0xff,
-		(reg->tag >> 8 ) & 0xff,
-		(reg->tag >> 0 ) & 0xff);
+	if ( reg->tag )
+		len = snprintf(buff, size, "%c%c%c%c ",
+			(reg->tag >> 24 ) & 0xff,
+			(reg->tag >> 16 ) & 0xff,
+			(reg->tag >> 8 ) & 0xff,
+			(reg->tag >> 0 ) & 0xff);
 
-	for (i = 0; i < count ; i++)
+	for (i = 0; i < count ; i++) {
+		int addr = (reg->type == GBMS_ATOM_TYPE_MAP) ?
+						reg->map[i] : reg->base + i;
 		len += snprintf(&buff[len], size - len, "%02X:%04X ",
-			reg->map[i], data[i]);
+			addr, data[i]);
+	}
 	buff[len - 1] = 0;
 	pr_info(" %s\n", buff);
 }
@@ -1750,14 +1765,13 @@ static int max1720x_read_batt_id(const struct max1720x_chip *chip, int *batt_id)
 /* TODO: fix detection of 17301 for non samples looking at FW version too */
 static int max1720x_read_gauge_type(struct max1720x_chip *chip)
 {
-	u16 devname;
 	int ret, gauge_type = -1;
 
-	ret = REGMAP_READ(chip->regmap, MAX1720X_DEVNAME, &devname);
+	ret = REGMAP_READ(chip->regmap, MAX1720X_DEVNAME, &chip->devname);
 	if (ret != 0) {
 		dev_err(chip->dev, "cannot read device name %d\n", ret);
 	} else {
-		switch (devname >> 4) {
+		switch (chip->devname >> 4) {
 		case 0x406:  /* max1730x pass2 silicon */
 		case 0x405:  /* max1730x pass2 silicon initial samples */
 			gauge_type = MAX1730X_GAUGE_TYPE;
@@ -2204,16 +2218,84 @@ static u16 max1720x_read_rsense(const struct max1720x_chip *chip)
 	return rsense;
 }
 
-#define MAX1730X_NVPRTTH1_CHARGING	0x0008
+/* The BCNT, QHQH and QHCA for 17202 modify these common registers
+ * 0x18C, 0x18D, 0x18E, 0x18F, 0x1B2, 0x1B4 which will default to 0 after
+ * the recovery procedure. The map changes the content of 0x1C4, 0x1C5 which
+ * are not used (and should be 0 unless used by a future version of SW) as well
+ * as 0x1CD, 0x1CE used for nManfctrName1/2 which might change. 0x1DF is the
+ * INI checksum that will change with updates and cannot be used for this test.
+ * The only register left is 0x1D7 (MAX1730X_NPROTCFG), that is the register
+ * that the code will used to determine the corruption.
+ */
+static int max1730x_needs_recall(struct max1720x_chip *chip, u16 devname)
+{
+	int needs_recall = 0;
+	u16 nprotcfg;
+	int ret;
+
+	/* check protection registers */
+	ret = REGMAP_READ(chip->regmap_nvram, MAX1730X_NPROTCFG, &nprotcfg);
+	if (ret < 0)
+		return -EIO;
+
+	if (devname == MAX1730X_GAUGE_PASS1) {
+		needs_recall = (nprotcfg != MAX1730X_NPROTCFG_PASS1);
+	} else /* pass2 */ {
+		needs_recall = (nprotcfg != MAX1730X_NPROTCFG_PASS2);
+	}
+
+	return needs_recall;
+}
+
 
 static int max17x0x_fixups(struct max1720x_chip *chip)
 {
 	int ret;
 
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		struct device_node *node = chip->dev->of_node;
 		bool write_back = false, write_ndata = false;
 		const u16 val = 0x28AB;
 		u16 ndata = 0, bak = 0;
+
+		/* b/123026365 */
+		if (of_property_read_bool(node, "maxim,enable-nv-check")) {
+			const u16 devname = (chip->devname >> 4);
+			bool needs_recall;
+
+			needs_recall = max1730x_needs_recall(chip, devname);
+			if (needs_recall < 0) {
+				dev_err(chip->dev,
+					"error reading fg NV configuration\n");
+			} else if (needs_recall == 0) {
+				/* all good.. */
+			} else if (devname == MAX1730X_GAUGE_PASS1) {
+				dev_err(chip->dev, "***********************************************\n");
+				dev_err(chip->dev, "WARNING: need to restore FG NV configuration to\n");
+				dev_err(chip->dev, "default values. THE DEVICE WILL LOOSE POWER.\n");
+				dev_err(chip->dev, "*******************************************\n");
+				msleep(MSEC_PER_SEC);
+				REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
+					MAX1720X_COMMAND_HARDWARE_RESET);
+				msleep(MAX1720X_TPOR_MS);
+			} else {
+				dev_err(chip->dev, "Restoring FG NV configuration to sane values\n");
+
+				/* recall, force & reset SW */
+				REGMAP_WRITE(chip->regmap,
+						MAX1720X_COMMAND,
+						MAX1730X_COMMAND_NV_RECALL);
+
+				msleep(MAX1720X_TPOR_MS);
+
+				REGMAP_WRITE(chip->regmap_nvram,
+						MAX1730X_NPROTCFG,
+						MAX1730X_NPROTCFG_PASS2);
+				max17x0x_fg_reset(chip);
+			}
+		} else {
+			pr_info("nv-check disabled");
+		}
 
 		/* b/122605202 */
 		ret = REGMAP_READ(chip->regmap_nvram,
