@@ -53,6 +53,7 @@
 
 #define IPA_WWAN_DEV_NAME "rmnet_ipa%d"
 #define IPA_UPSTEAM_WLAN_IFACE_NAME "wlan0"
+#define IPA_UPSTEAM_WLAN1_IFACE_NAME "wlan1"
 
 #define IPA_WWAN_RX_SOFTIRQ_THRESH 16
 
@@ -820,7 +821,8 @@ static enum ipa_upstream_type find_upstream_type(const char *upstreamIface)
 			return IPA_UPSTEAM_MODEM;
 	}
 
-	if (strcmp(IPA_UPSTEAM_WLAN_IFACE_NAME, upstreamIface) == 0)
+	if ((strcmp(IPA_UPSTEAM_WLAN_IFACE_NAME, upstreamIface) == 0) ||
+		(strcmp(IPA_UPSTEAM_WLAN1_IFACE_NAME, upstreamIface) == 0))
 		return IPA_UPSTEAM_WLAN;
 	else
 		return MAX_NUM_OF_MUX_CHANNEL;
@@ -1073,8 +1075,12 @@ static int __ipa_wwan_close(struct net_device *dev)
  */
 static int ipa3_wwan_stop(struct net_device *dev)
 {
+	struct ipa3_wwan_private *wwan_ptr = netdev_priv(dev);
+
 	IPAWANDBG("[%s] ipa3_wwan_stop()\n", dev->name);
 	__ipa_wwan_close(dev);
+	if (ipa3_rmnet_res.ipa_napi_enable)
+		napi_disable(&(wwan_ptr->napi));
 	netif_stop_queue(dev);
 	return 0;
 }
@@ -2596,6 +2602,9 @@ static int rmnet_ipa_ap_suspend(struct device *dev)
 
 	/* Make sure that there is no Tx operation ongoing */
 	netif_stop_queue(netdev);
+	/* Stoppig Watch dog timer when pipe was in suspend state */
+	if (del_timer(&netdev->watchdog_timer))
+		dev_put(netdev);
 	netif_tx_unlock_bh(netdev);
 	if (ipa3_ctx->use_ipa_pm)
 		ipa_pm_deactivate_sync(rmnet_ipa3_ctx->pm_hdl);
@@ -2622,8 +2631,12 @@ static int rmnet_ipa_ap_resume(struct device *dev)
 	struct net_device *netdev = IPA_NETDEV();
 
 	IPAWANDBG("Enter...\n");
-	if (netdev)
+	if (netdev) {
 		netif_wake_queue(netdev);
+		/* Starting Watch dog timer, pipe was changes to resume state */
+		if (netif_running(netdev) && netdev->watchdog_timeo <= 0)
+			__netdev_watchdog_up(netdev);
+	}
 	IPAWANDBG("Exit\n");
 
 	return 0;

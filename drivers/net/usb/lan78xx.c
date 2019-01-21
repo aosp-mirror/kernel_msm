@@ -869,7 +869,7 @@ static int lan78xx_read_otp(struct lan78xx_net *dev, u32 offset,
 
 	if (ret == 0) {
 		if (sig == OTP_INDICATOR_1)
-			offset = offset;
+			offset = (u32)offset;
 		else if (sig == OTP_INDICATOR_2)
 			offset += 0x100;
 		else

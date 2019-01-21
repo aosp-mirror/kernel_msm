@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,6 +17,7 @@
 #include "cam_eeprom_core.h"
 #include "cam_eeprom_soc.h"
 #include "cam_debug_util.h"
+#include "cam_sensor_util_fatp.h"
 
 /**
  * cam_eeprom_read_memory() - read map data into buffer
@@ -138,6 +139,8 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 			}
 		}
 	}
+	if (emap != NULL && block->mapdata != NULL)
+		export_eeprom_data(emap[0].saddr, block->mapdata);
 	return rc;
 }
 
@@ -711,11 +714,6 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 
 	ioctl_ctrl = (struct cam_control *)arg;
 
-	if (ioctl_ctrl->handle_type != CAM_HANDLE_USER_POINTER) {
-		CAM_ERR(CAM_EEPROM, "Invalid Handle Type");
-		return -EINVAL;
-	}
-
 	if (copy_from_user(&dev_config, (void __user *) ioctl_ctrl->handle,
 		sizeof(dev_config)))
 		return -EFAULT;
@@ -789,6 +787,12 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 		vfree(e_ctrl->cal_data.mapdata);
 		vfree(e_ctrl->cal_data.map);
+		kfree(power_info->power_setting);
+		kfree(power_info->power_down_setting);
+		power_info->power_setting = NULL;
+		power_info->power_down_setting = NULL;
+		power_info->power_setting_size = 0;
+		power_info->power_down_setting_size = 0;
 		e_ctrl->cal_data.num_data = 0;
 		e_ctrl->cal_data.num_map = 0;
 		break;
@@ -803,6 +807,8 @@ memdata_free:
 error:
 	kfree(power_info->power_setting);
 	kfree(power_info->power_down_setting);
+	power_info->power_setting = NULL;
+	power_info->power_down_setting = NULL;
 	vfree(e_ctrl->cal_data.map);
 	e_ctrl->cal_data.num_data = 0;
 	e_ctrl->cal_data.num_map = 0;
@@ -838,6 +844,10 @@ void cam_eeprom_shutdown(struct cam_eeprom_ctrl_t *e_ctrl)
 
 		kfree(power_info->power_setting);
 		kfree(power_info->power_down_setting);
+		power_info->power_setting = NULL;
+		power_info->power_down_setting = NULL;
+		power_info->power_setting_size = 0;
+		power_info->power_down_setting_size = 0;
 	}
 
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_INIT;
@@ -856,8 +866,14 @@ int32_t cam_eeprom_driver_cmd(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 	struct cam_eeprom_query_cap_t  eeprom_cap = {0};
 	struct cam_control            *cmd = (struct cam_control *)arg;
 
-	if (!e_ctrl) {
-		CAM_ERR(CAM_EEPROM, "e_ctrl is NULL");
+	if (!e_ctrl || !cmd) {
+		CAM_ERR(CAM_EEPROM, "Invalid Arguments");
+		return -EINVAL;
+	}
+
+	if (cmd->handle_type != CAM_HANDLE_USER_POINTER) {
+		CAM_ERR(CAM_EEPROM, "Invalid handle type: %d",
+			cmd->handle_type);
 		return -EINVAL;
 	}
 

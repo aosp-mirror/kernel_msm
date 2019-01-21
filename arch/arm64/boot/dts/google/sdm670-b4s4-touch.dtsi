@@ -1,0 +1,116 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
+&pm660_gpios {
+	touch_power_default: touch_power_default {
+		pins = "gpio12";
+		function = "normal";
+		qcom,drive-strength = <2>;
+		power-source = <0>;
+		output-high;
+		bias-disable;
+	};
+};
+
+&tlmm {
+	touch_irq_default: touch_irq_default {
+		mux {
+			pins = "gpio125";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio125";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+
+	touch_reset_default: touch_reset_default {
+		mux {
+			pins = "gpio99";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio99";
+			drive-strength = <2>;
+			output-high;
+			bias-disable;
+		};
+	};
+
+	touch_switch_default: touch_switch_default {
+		mux {
+			pins = "gpio135";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio135";
+			drive-strength = <2>;
+			output-low;
+			bias-disable;
+		};
+	};
+};
+
+&qupv3_se9_i2c_active {
+	mux {
+		pins = "gpio6", "gpio7";
+		function = "qup9";
+	};
+
+	config {
+		pins = "gpio6", "gpio7";
+		drive-strength = <8>;
+		bias-disable;
+	};
+};
+
+&qupv3_se9_i2c_sleep {
+	mux {
+		pins = "gpio6", "gpio7";
+		function = "gpio";
+	};
+
+	config {
+		pins = "gpio6", "gpio7";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+};
+
+&qupv3_se9_i2c {
+	status = "ok";
+	synaptics_dsx@20 {
+		compatible = "synaptics,dsx-i2c";
+		reg = <0x20>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <125 0x2008>;
+		synaptics,irq-gpio = <&tlmm 125 0x2008>;
+				/* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
+		synaptics,reset-gpio = <&tlmm 99 0>;
+		synaptics,switch-gpio= <&tlmm 135 0>;
+		synaptics,switch-ssc-state= <1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touch_power_default &touch_irq_default
+				&touch_reset_default &touch_switch_default>;
+		synaptics,irq-on-state = <0>;
+		synaptics,reset-delay-ms = <20>;
+		synaptics,reset-on-state = <0>;
+		synaptics,reset-active-ms = <1>;
+		synaptics,tp-pin-mask = <0x6>;
+		synaptics,tp-src-id = <0x0 0x2>;
+		synaptics,tp-src-img = "synaptics_0.img", "synaptics_2.img";
+	};
+};

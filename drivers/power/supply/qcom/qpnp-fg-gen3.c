@@ -897,9 +897,14 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 		return 0;
 	}
 
-	if (chip->battery_missing || !chip->soc_reporting_ready) {
+	if (chip->battery_missing) {
 		*val = BATT_MISS_SOC;
 		return 0;
+	}
+
+	if (!chip->soc_reporting_ready) {
+		*val = BATT_MISS_SOC;
+		return -EBUSY;
 	}
 
 	if (is_batt_empty(chip)) {
@@ -1846,7 +1851,9 @@ static int fg_charge_full_update(struct fg_chip *chip)
 		msoc, bsoc, chip->health, chip->charge_status,
 		chip->charge_full);
 	if (chip->charge_done && !chip->charge_full) {
-		if (msoc >= 99 && chip->health == POWER_SUPPLY_HEALTH_GOOD) {
+		if (msoc >= 99 && (chip->health == POWER_SUPPLY_HEALTH_GOOD
+				|| chip->health == POWER_SUPPLY_HEALTH_COOL
+				|| chip->health == POWER_SUPPLY_HEALTH_WARM)) {
 			fg_dbg(chip, FG_STATUS, "Setting charge_full to true\n");
 			chip->charge_full = true;
 			/*
@@ -4776,8 +4783,24 @@ static irqreturn_t fg_empty_soc_irq_handler(int irq, void *data)
 static irqreturn_t fg_soc_irq_handler(int irq, void *data)
 {
 	struct fg_chip *chip = data;
+	int rc = 0;
+	u8 val = 0;
 
 	fg_dbg(chip, FG_IRQ, "irq %d triggered\n", irq);
+	if (!chip->dt.batt_psy_is_bms) {
+		/* the criterion is met when using QCOM FG */
+		rc = fg_read(chip, BATT_SOC_INT_RT_STS(chip), &val, 1);
+		if (rc < 0) {
+			fg_dbg(chip, FG_STATUS,
+			    "Error in reading SOC_INT_RT_STS, rc=%d\n", rc);
+		}
+
+		if (val & MSOC_FULL_BIT) {
+			fg_dbg(chip, FG_IRQ, "msoc-full triggered\n");
+			if (batt_psy_initialized(chip))
+				power_supply_changed(chip->batt_psy);
+		}
+	}
 	return IRQ_HANDLED;
 }
 
@@ -5448,6 +5471,9 @@ static int fg_parse_dt(struct fg_chip *chip)
 
 	chip->dt.soc_irq_disable =
 		of_property_read_bool(node, "google,fg-soc-irq-disable");
+
+	chip->dt.batt_psy_is_bms =
+		of_property_read_bool(node, "google,batt_psy_is_bms");
 
 	return 0;
 }

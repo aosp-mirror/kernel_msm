@@ -237,6 +237,7 @@ struct qpnp_pon {
 	ktime_t			kpdpwr_last_release_time;
 	struct notifier_block   pon_nb;
 	bool			legacy_hard_reset_offset;
+	u8			pmic_pon_reg[12];
 };
 
 static int pon_ship_mode_en;
@@ -2024,6 +2025,55 @@ static int qpnp_pon_debugfs_uvlo_set(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(qpnp_pon_debugfs_uvlo_fops, qpnp_pon_debugfs_uvlo_get,
 			qpnp_pon_debugfs_uvlo_set, "0x%02llx\n");
 
+static ssize_t debugfs_pon_regs_read(struct file *file, char __user *ubuf,
+				     size_t count, loff_t *ppos)
+{
+	struct qpnp_pon *pon = file->private_data;
+	char *buf;
+	int i, msg_len = 0;
+	ssize_t ret = 0;
+
+	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	msg_len = snprintf(buf, PAGE_SIZE,
+			   "PMIC@SID%d: ",
+			to_spmi_device(pon->pdev->dev.parent)->usid);
+
+	for (i = 0; i < sizeof(pon->pmic_pon_reg); i++) {
+		if (msg_len < PAGE_SIZE) {
+			msg_len += snprintf(buf + msg_len, PAGE_SIZE - msg_len,
+				"%02X ", pon->pmic_pon_reg[i]);
+		}
+	}
+
+	if (msg_len < PAGE_SIZE)
+		msg_len += snprintf(buf + msg_len, PAGE_SIZE - msg_len, "\n");
+
+	ret = simple_read_from_buffer(ubuf, count, ppos, buf, msg_len);
+	if (ret < 0) {
+		dev_err(&pon->pdev->dev,
+			"debugfs_pon_regs_read failed %zd\n", ret);
+	}
+
+	kfree(buf);
+
+	return ret;
+}
+
+static int debugfs_pon_regs_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static const struct file_operations debugfs_pon_regs_fops = {
+	.owner	= THIS_MODULE,
+	.open   = debugfs_pon_regs_open,
+	.read	= debugfs_pon_regs_read,
+};
+
 static void qpnp_pon_debugfs_init(struct platform_device *pdev)
 {
 	struct qpnp_pon *pon = dev_get_drvdata(&pdev->dev);
@@ -2040,6 +2090,12 @@ static void qpnp_pon_debugfs_init(struct platform_device *pdev)
 			dev_err(&pon->pdev->dev,
 				"Unable to create uvlo_panic debugfs file.\n");
 	}
+
+	ent = debugfs_create_file("pmic_pon_dump", 0644,
+				  pon->debugfs, pon, &debugfs_pon_regs_fops);
+	if (!ent)
+		dev_err(&pon->pdev->dev,
+			"Unable to create pmic_pon_dump debugfs file\n");
 }
 
 static void qpnp_pon_debugfs_remove(struct platform_device *pdev)
@@ -2062,7 +2118,9 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 					int *reason_index_offset)
 {
 	int rc;
-	int buf[2], reg;
+	int reg;
+	int data;
+	u8 buf[2];
 
 	rc = regmap_read(pon->regmap,
 			QPNP_PON_OFF_REASON(pon),
@@ -2076,13 +2134,13 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	if (reg & QPNP_GEN2_POFF_SEQ) {
 		rc = regmap_read(pon->regmap,
 				QPNP_POFF_REASON1(pon),
-				buf);
+				&data);
 		if (rc) {
 			dev_err(&pon->pdev->dev, "Unable to read POFF_REASON1 reg rc:%d\n",
 				rc);
 			return rc;
 		}
-		*reason = (u8)buf[0];
+		*reason = data;
 		*reason_index_offset = 0;
 	} else if (reg & QPNP_GEN2_FAULT_SEQ) {
 		rc = regmap_bulk_read(pon->regmap,
@@ -2098,13 +2156,13 @@ static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 	} else if (reg & QPNP_GEN2_S3_RESET_SEQ) {
 		rc = regmap_read(pon->regmap,
 				QPNP_S3_RESET_REASON(pon),
-				buf);
+				&data);
 		if (rc) {
 			dev_err(&pon->pdev->dev, "Unable to read S3_RESET_REASON reg rc:%d\n",
 				rc);
 			return rc;
 		}
-		*reason = (u8)buf[0];
+		*reason = data;
 		*reason_index_offset = POFF_REASON_S3_RESET_OFFSET;
 	}
 
@@ -2140,6 +2198,17 @@ static int pon_register_twm_notifier(struct qpnp_pon *pon)
 	return rc;
 }
 
+extern bool is_charger_bootmode(void);
+static bool is_ramdump_enable;
+static int __init is_ramdump_en(char *str)
+{
+	if (!strcmp(str, "enabled"))
+		is_ramdump_enable = true;
+
+	return 1;
+}
+__setup("androidboot.ramdump=", is_ramdump_en);
+
 static int qpnp_pon_probe(struct platform_device *pdev)
 {
 	struct qpnp_pon *pon;
@@ -2155,6 +2224,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	u8 s3_src_reg;
 	unsigned long flags;
 	uint temp = 0;
+	int data;
 
 	pon = devm_kzalloc(&pdev->dev, sizeof(struct qpnp_pon), GFP_KERNEL);
 	if (!pon)
@@ -2331,6 +2401,39 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		if (of_property_read_bool(pdev->dev.of_node,
 						"qcom,uvlo-panic"))
 			panic("An UVLO was occurred.");
+	}
+
+	memset(pon->pmic_pon_reg, 0, sizeof(pon->pmic_pon_reg));
+
+	if (is_ramdump_enable && is_charger_bootmode()) {
+		rc = regmap_read(pon->regmap,
+			QPNP_PON_OFF_REASON(pon),
+			&data);
+		if (!rc && (data & QPNP_GEN2_FAULT_SEQ)) {
+			/* ps_hold is needed to set to WARM for a panic */
+			pon->warm_reset_poff_type = PON_POWER_OFF_WARM_RESET;
+			panic("An PMIC Fault %s was occurred.",
+				qpnp_poff_reason[index]);
+		}
+	}
+
+	/* Print PON registers */
+	rc = regmap_bulk_read(pon->regmap, QPNP_PON_REASON1(pon),
+			pon->pmic_pon_reg, sizeof(pon->pmic_pon_reg));
+	if (rc) {
+		dev_err(&pon->pdev->dev,
+			"Unable to read QPNP_PON_RESASON1 reg rc: %d\n", rc);
+	} else {
+		dev_info(&pon->pdev->dev,
+			"PMIC@SID%d: Reg dump: %04X: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n",
+			to_spmi_device(pon->pdev->dev.parent)->usid,
+			QPNP_PON_REASON1(pon),
+			pon->pmic_pon_reg[0], pon->pmic_pon_reg[1],
+			pon->pmic_pon_reg[2], pon->pmic_pon_reg[3],
+			pon->pmic_pon_reg[4], pon->pmic_pon_reg[5],
+			pon->pmic_pon_reg[6], pon->pmic_pon_reg[7],
+			pon->pmic_pon_reg[8], pon->pmic_pon_reg[9],
+			pon->pmic_pon_reg[10], pon->pmic_pon_reg[11]);
 	}
 
 	/* program s3 debounce */

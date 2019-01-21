@@ -220,10 +220,63 @@ static void cmdq_dump_adma_mem(struct cmdq_host *cq_host)
 static void cmdq_dumpregs(struct cmdq_host *cq_host)
 {
 	struct mmc_host *mmc = cq_host->mmc;
-	int offset = 0;
+	int offset = 0, i;
 
 	if (cq_host->offset_changed)
 		offset = CQ_V5_VENDOR_CFG;
+
+	pr_err(DRV_NAME ": ========== MMC DUMP (%s)==========\n",
+		mmc_hostname(mmc));
+	pr_err(DRV_NAME ": manfid = %u\n", mmc->card->cid.manfid);
+	pr_err(DRV_NAME ": part = %s\n", mmc->card->cid.prod_name);
+	pr_err(DRV_NAME ": prv = 0x%x\n", mmc->card->cid.prv);
+	pr_err(DRV_NAME ": fwrev = 0x%x\n", mmc->card->cid.fwrev);
+	pr_err(DRV_NAME ": pre_eol_info = 0x%x\n",
+		mmc->card->ext_csd.pre_eol_info);
+	pr_err(DRV_NAME ": lifetime_a = 0x%x\n",
+		mmc->card->ext_csd.device_life_time_est_typ_a);
+	pr_err(DRV_NAME ": lifetime_b = 0x%x\n",
+		mmc->card->ext_csd.device_life_time_est_typ_b);
+	pr_err(DRV_NAME ": fw_version = 0x%x\n", mmc->card->ext_csd.fw_version);
+	for (i = 0; i< MMC_FIRMWARE_LEN; i++) {
+		pr_err(DRV_NAME ": fwrev[%d] = 0x%x\n",i,
+		mmc->card->ext_csd.fwrev[i]);
+	}
+	// Host status dump
+	pr_err(DRV_NAME ": host->cap = 0x%08x\n",
+		mmc->caps);
+	pr_err(DRV_NAME ": host->cap2 = 0x%08x\n",
+		mmc->caps2);
+	pr_err(DRV_NAME ": host->clk_gated = %u\n",
+		mmc->clk_gated);
+	pr_err(DRV_NAME ": host->clk_requests = %d\n",
+		mmc->clk_requests);
+	pr_err(DRV_NAME ": host->claim_cnt = %d\n",
+		mmc->claim_cnt);
+	pr_err(DRV_NAME ": host->lock = %s\n",
+		(spin_is_locked(&mmc->lock)) ? "lock" : "unlock");
+	pr_err(DRV_NAME ": host->hold_retune = %d\n",
+		mmc->hold_retune);
+	pr_err(DRV_NAME ": host->bus_resume_flags = 0x%x\n",
+		mmc->bus_resume_flags);
+
+	// Card status dump
+	pr_err(DRV_NAME ": host->card->state = 0x%08x\n",
+		mmc->card->state);
+	pr_err(DRV_NAME ": host->card->quirks = 0x%08x\n",
+		mmc->card->quirks);
+	pr_err(DRV_NAME ": host->card->cmdq_init = %u\n",
+		mmc->card->cmdq_init);
+
+	// CQ status dump
+	pr_err(DRV_NAME ": host->cmdq_ctx.curr_state = 0x%lx\n",
+		mmc->cmdq_ctx.curr_state);
+	pr_err(DRV_NAME ": cq_host->enabled = %u\n",
+		cq_host->enabled);
+	pr_err(DRV_NAME ": cq_host->caps = 0x%08x\n",
+		cq_host->caps);
+	pr_err(DRV_NAME ": cq_host->quirks = 0x%08x\n",
+		cq_host->quirks);
 
 	MMC_TRACE(mmc,
 	"%s: 0x0C=0x%08x 0x10=0x%08x 0x14=0x%08x 0x18=0x%08x 0x28=0x%08x 0x2C=0x%08x 0x30=0x%08x 0x34=0x%08x 0x54=0x%08x 0x58=0x%08x 0x5C=0x%08x 0x48=0x%08x\n",
@@ -276,6 +329,12 @@ static void cmdq_dumpregs(struct cmdq_host *cq_host)
 	cmdq_dump_task_history(cq_host);
 	if (cq_host->ops->dump_vendor_regs)
 		cq_host->ops->dump_vendor_regs(mmc);
+
+#ifdef CONFIG_MMC_RING_BUFFER
+	mmc_dump_trace_buffer(mmc, NULL);
+#endif
+
+	cmdq_dump_adma_mem(cq_host);
 }
 
 /**
@@ -773,6 +832,191 @@ static void cmdq_pm_qos_unvote(struct sdhci_host *host, struct mmc_request *mrq)
 	sdhci_msm_pm_qos_cpu_unvote(host, mrq->req->cpu, true);
 }
 
+#ifdef CONFIG_DEBUG_FS
+static void
+__update_io_stat(struct mmc_host *mmc, struct mmc_io_stat *io_stat,
+		int transfer_len, int is_start)
+{
+	if (is_start) {
+		u64 diff;
+		io_stat->req_count_started++;
+		io_stat->total_bytes_started += transfer_len;
+		diff = io_stat->req_count_started -
+			io_stat->req_count_completed;
+		if (diff > io_stat->max_diff_req_count) {
+			io_stat->max_diff_req_count = diff;
+		}
+		diff = io_stat->total_bytes_started -
+			io_stat->total_bytes_completed;
+		if (diff > io_stat->max_diff_total_bytes) {
+			io_stat->max_diff_total_bytes = diff;
+		}
+	} else {
+		io_stat->req_count_completed++;
+		io_stat->total_bytes_completed += transfer_len;
+	}
+}
+
+static void
+update_io_stat(struct mmc_request *mrq, int is_start)
+{
+	struct mmc_host *mmc = mrq->host;
+	struct mmc_cmdq_req *cmdq_req = mrq->cmdq_req;
+	int transfer_len;
+
+	if (!(cmdq_req->data.flags & MMC_DATA_READ)
+			&& !(cmdq_req->data.flags & MMC_DATA_WRITE))
+		return;
+
+	transfer_len = cmdq_req->data.blocks * cmdq_req->data.blksz;
+
+	__update_io_stat(mmc, &mmc->mmc_stats.io_readwrite, transfer_len,
+			is_start);
+	if (cmdq_req->data.flags & MMC_DATA_READ) {
+		__update_io_stat(mmc, &mmc->mmc_stats.io_read, transfer_len,
+				is_start);
+	} else {
+		__update_io_stat(mmc, &mmc->mmc_stats.io_write, transfer_len,
+				is_start);
+	}
+}
+
+static inline char *mmc_parse_optype(u8 optype)
+{
+	/* string should be less than 16 byte-long */
+	switch (optype) {
+	case TS_READ:
+		return "READ";
+	case TS_WRITE:
+		return "WRITE";
+	case TS_URGENT_READ:
+		return "URGENT_READ";
+	case TS_URGENT_WRITE:
+		return "URGENT_WRITE";
+	case TS_FLUSH:
+		return "FLUSH";
+	case TS_DISCARD:
+		return "DISCARD";
+	}
+	return NULL;
+}
+
+static int mmc_tag_req_type(struct request *rq)
+{
+	int rq_type = TS_WRITE;
+
+	if (!rq || !(rq->cmd_type & REQ_TYPE_FS))
+		rq_type = TS_NOT_SUPPORTED;
+	else if ((rq->cmd_flags & REQ_PREFLUSH) ||
+		 (req_op(rq) == REQ_OP_FLUSH))
+		rq_type = TS_FLUSH;
+	else if (req_op(rq) == REQ_OP_DISCARD)
+		rq_type = TS_DISCARD;
+	else if (rq_data_dir(rq) == READ)
+		rq_type = (rq->cmd_flags & REQ_URGENT) ?
+			TS_URGENT_READ : TS_READ;
+	else if (rq->cmd_flags & REQ_URGENT)
+		rq_type = TS_URGENT_WRITE;
+
+	return rq_type;
+}
+
+static void mmc_log_slowio(struct mmc_host *mmc,
+		struct mmc_request *mrq, s64 iotime_us)
+{
+	sector_t lba = -1;
+	int transfer_len = -1;
+	char opcode_str[16];
+	u64 slowio_cnt = 0;
+	enum ts_types optype = 0;
+	struct request *rq = mrq->req;
+
+	/* For common case */
+	if (likely(iotime_us < mmc->slowio_min_us))
+		return;
+
+	if (rq) {
+		optype = mmc_tag_req_type(rq);
+		if (optype < TS_NUM_STATS) {
+			if (iotime_us < mmc->slowio[optype][MMC_SLOWIO_US])
+				return;
+			slowio_cnt = ++mmc->slowio[optype][MMC_SLOWIO_CNT];
+		}
+		if ((optype == TS_READ)
+				|| (optype == TS_WRITE)
+				|| (optype == TS_URGENT_READ)
+				|| (optype == TS_URGENT_WRITE)
+				|| (optype == TS_DISCARD)) {
+			if (rq->bio) {
+				lba = rq->bio->bi_iter.bi_sector;
+				transfer_len = rq->bio->bi_iter.bi_size;
+			}
+		}
+	}
+	snprintf(opcode_str, 16, "%s", mmc_parse_optype(optype));
+	pr_err_ratelimited(
+		"%s: Slow MMC (%lld): time = %lld us, opcode = %s, lba = %ld, len = %d\n",
+		rq->rq_disk->disk_name,
+		slowio_cnt,
+		iotime_us,
+		opcode_str,
+		lba,
+		transfer_len);
+}
+
+static void update_mmc_req_stats(struct mmc_request *mrq)
+{
+	int rq_type;
+	struct mmc_host *mmc = mrq->host;
+	struct request *rq = mrq->req;
+	s64 delta = ktime_us_delta(mrq->complete_time_stamp,
+		mrq->issue_time_stamp);
+
+	/* update general request statistics */
+	if (mmc->mmc_req_stats[TS_TAG].count == 0)
+		mmc->mmc_req_stats[TS_TAG].min = delta;
+	mmc->mmc_req_stats[TS_TAG].count++;
+	mmc->mmc_req_stats[TS_TAG].sum += delta;
+	if (delta > mmc->mmc_req_stats[TS_TAG].max)
+		mmc->mmc_req_stats[TS_TAG].max = delta;
+	if (delta < mmc->mmc_req_stats[TS_TAG].min)
+		mmc->mmc_req_stats[TS_TAG].min = delta;
+
+	rq_type = mmc_tag_req_type(rq);
+	if (rq_type == TS_NOT_SUPPORTED)
+		return;
+
+	/* update request type specific statistics */
+	if (mmc->mmc_req_stats[rq_type].count == 0)
+		mmc->mmc_req_stats[rq_type].min = delta;
+	mmc->mmc_req_stats[rq_type].count++;
+	mmc->mmc_req_stats[rq_type].sum += delta;
+	if (delta > mmc->mmc_req_stats[rq_type].max)
+		mmc->mmc_req_stats[rq_type].max = delta;
+	if (delta < mmc->mmc_req_stats[rq_type].min)
+		mmc->mmc_req_stats[rq_type].min = delta;
+
+	if (rq->bio && rq_type <= TS_URGENT_WRITE
+			&& rq_type >= TS_READ) {
+		mmc->mmc_req_stats[rq_type].size +=
+			rq->bio->bi_iter.bi_size >> 10;
+	}
+
+	mmc_log_slowio(mrq->host, mrq, delta);
+}
+
+#else
+static void
+update_io_stat(struct mmc_request *mrq, int is_start)
+{
+}
+
+static void
+update_mmc_req_stats(struct mmc_request *mrq)
+{
+}
+#endif
+
 static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	int err = 0;
@@ -829,20 +1073,32 @@ static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	cq_host->mrq_slot[tag] = mrq;
 
+
 	/* PM QoS */
 	sdhci_msm_pm_qos_irq_vote(host);
 	cmdq_pm_qos_vote(host, mrq);
 ring_doorbell:
+
+#ifdef CONFIG_DEBUG_FS
+	cq_host->mrq_slot[tag]->issue_time_stamp = ktime_get();
+	cq_host->mrq_slot[tag]->complete_time_stamp = ktime_set(0, 0);
+#endif
+
 	/* Ensure the task descriptor list is flushed before ringing doorbell */
 	wmb();
 	if (cmdq_readl(cq_host, CQTDBR) & (1 << tag)) {
 		cmdq_dumpregs(cq_host);
 		BUG_ON(1);
 	}
-	MMC_TRACE(mmc, "%s: tag: %d\n", __func__, tag);
+	MMC_TRACE(mmc, "%s: tag: %d (data_task:0x%08x, general_task:0x%08x)\n",
+			  __func__, tag,
+			  mmc->cmdq_ctx.data_active_reqs,
+			  mmc->cmdq_ctx.active_reqs);
 	cmdq_writel(cq_host, 1 << tag, CQTDBR);
 	/* Commit the doorbell write immediately */
 	wmb();
+
+	update_io_stat(mrq, 1);
 
 	return err;
 
@@ -862,6 +1118,33 @@ ice_err:
 		cmdq_runtime_pm_put(cq_host);
 out:
 	return err;
+}
+
+static int cmdq_get_first_valid_tag(struct cmdq_host *cq_host)
+{
+	u32 dbr_set = 0, tag = 0;
+
+	dbr_set = cmdq_readl(cq_host, CQTDBR);
+	if (!dbr_set) {
+		pr_err("%s: spurious/force error interrupt\n",
+				mmc_hostname(cq_host->mmc));
+		cmdq_halt_poll(cq_host->mmc, false);
+		mmc_host_clr_halt(cq_host->mmc);
+		return -EINVAL;
+	}
+
+	tag = ffs(dbr_set) - 1;
+	pr_err("%s: error tag selected: tag = %d\n",
+		mmc_hostname(cq_host->mmc), tag);
+	return tag;
+}
+
+static bool cmdq_is_valid_tag(struct mmc_host *mmc, unsigned int tag)
+{
+	struct mmc_cmdq_context_info *ctx_info = &mmc->cmdq_ctx;
+
+	return
+	(!!(ctx_info->data_active_reqs & (1 << tag)) || tag == DCMD_SLOT);
 }
 
 static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
@@ -884,20 +1167,46 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 
 	cmdq_runtime_pm_put(cq_host);
 
-	if (cq_host->ops->crypto_cfg_end) {
-		err = cq_host->ops->crypto_cfg_end(mmc, mrq);
-		if (err) {
-			pr_err("%s: failed to end ice config: err %d tag %d\n",
-					mmc_hostname(mmc), err, tag);
+	if (!(mrq->cmdq_req->cmdq_req_flags & DCMD)) {
+		if (cq_host->ops->crypto_cfg_end) {
+			err = cq_host->ops->crypto_cfg_end(mmc, mrq);
+			if (err) {
+				pr_err("%s: failed to end ice config: err %d tag %d\n",
+						mmc_hostname(mmc), err, tag);
+			}
 		}
 	}
 	if (!(cq_host->caps & CMDQ_CAP_CRYPTO_SUPPORT) &&
 			cq_host->ops->crypto_cfg_reset)
 		cq_host->ops->crypto_cfg_reset(mmc, tag);
+
+	update_io_stat(mrq, 0);
+
+#ifdef CONFIG_DEBUG_FS
+	mrq->complete_time_stamp = ktime_get();
+#endif
+	update_mmc_req_stats(mrq);
+
+#ifdef CONFIG_BLOCK
+	if (mrq->data) {
+		if (mrq->lat_hist_enabled) {
+			ktime_t completion;
+			u_int64_t delta_us;
+
+			completion = ktime_get();
+			delta_us = ktime_us_delta(completion,
+							 mrq->io_start);
+			blk_update_latency_hist(
+				(mrq->data->flags & MMC_DATA_READ) ?
+				&mmc->io_lat_read :
+				&mmc->io_lat_write, delta_us);
+		}
+	}
+#endif
 	mrq->done(mrq);
 }
 
-irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
+irqreturn_t cmdq_irq(struct mmc_host *mmc, int err, bool is_cmd_err)
 {
 	u32 status;
 	unsigned long tag = 0, comp_status;
@@ -922,6 +1231,8 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 		err_info = cmdq_readl(cq_host, CQTERRI);
 		pr_err("%s: err: %d status: 0x%08x task-err-info (0x%08lx)\n",
 		       mmc_hostname(mmc), err, status, err_info);
+		/* Dump the registers before clearing Interrupt */
+		cmdq_dumpregs(cq_host);
 
 		/*
 		 * Need to halt CQE in case of error in interrupt context itself
@@ -945,7 +1256,6 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 		 */
 		cmdq_writel(cq_host, status, CQIS);
 
-		cmdq_dumpregs(cq_host);
 
 		if (!err_info) {
 			/*
@@ -958,18 +1268,10 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 			 *   have caused such error, so check for any first
 			 *   bit set in doorbell and proceed with an error.
 			 */
-			dbr_set = cmdq_readl(cq_host, CQTDBR);
-			if (!dbr_set) {
-				pr_err("%s: spurious/force error interrupt\n",
-						mmc_hostname(mmc));
-				cmdq_halt_poll(mmc, false);
-				mmc_host_clr_halt(mmc);
-				return IRQ_HANDLED;
-			}
+			tag = cmdq_get_first_valid_tag(cq_host);
+			if (tag == -EINVAL)
+				goto hac;
 
-			tag = ffs(dbr_set) - 1;
-			pr_err("%s: error tag selected: tag = %lu\n",
-					mmc_hostname(mmc), tag);
 			mrq = get_req_by_tag(cq_host, tag);
 			if (mrq->data)
 				mrq->data->error = err;
@@ -984,9 +1286,23 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 			goto skip_cqterri;
 		}
 
-		if (err_info & CQ_RMEFV) {
+		if (is_cmd_err && (err_info & CQ_RMEFV)) {
 			tag = GET_CMD_ERR_TAG(err_info);
 			pr_err("%s: CMD err tag: %lu\n", __func__, tag);
+
+			/*
+			 * In some cases CQTERRI is not providing reliable tag
+			 * info. If the tag is not valid, complete the request
+			 * with any valid tag so that all tags will get
+			 * requeued.
+			 */
+			if (!cmdq_is_valid_tag(mmc, tag)) {
+				pr_err("%s: CMD err tag is invalid: %lu\n",
+						__func__, tag);
+				tag = cmdq_get_first_valid_tag(cq_host);
+				if (tag == -EINVAL)
+					goto hac;
+			}
 
 			mrq = get_req_by_tag(cq_host, tag);
 			/* CMD44/45/46/47 will not have a valid cmd */
@@ -997,8 +1313,26 @@ irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 		} else {
 			tag = GET_DAT_ERR_TAG(err_info);
 			pr_err("%s: Dat err  tag: %lu\n", __func__, tag);
+
+			/*
+			 * In some cases CQTERRI is not providing reliable tag
+			 * info. If the tag is not valid, complete the request
+			 * with any valid tag so that all tags will get
+			 * requeued.
+			 */
+			if (!cmdq_is_valid_tag(mmc, tag)) {
+				pr_err("%s: CMD err tag is invalid: %lu\n",
+						__func__, tag);
+				tag = cmdq_get_first_valid_tag(cq_host);
+				if (tag == -EINVAL)
+					goto hac;
+			}
 			mrq = get_req_by_tag(cq_host, tag);
-			mrq->data->error = err;
+
+			if (mrq->data)
+				mrq->data->error = err;
+			else
+				mrq->cmd->error = err;
 		}
 
 skip_cqterri:
@@ -1100,6 +1434,7 @@ skip_cqterri:
 			}
 		}
 		cmdq_finish_data(mmc, tag);
+		goto hac;
 	} else {
 		cmdq_writel(cq_host, status, CQIS);
 	}
@@ -1108,7 +1443,7 @@ skip_cqterri:
 		/* read CQTCN and complete the request */
 		comp_status = cmdq_readl(cq_host, CQTCN);
 		if (!comp_status)
-			goto out;
+			goto hac;
 		/*
 		 * The CQTCN must be cleared before notifying req completion
 		 * to upper layers to avoid missing completion notification
@@ -1129,13 +1464,16 @@ skip_cqterri:
 				/* complete the corresponding mrq */
 				pr_debug("%s: completing tag -> %lu\n",
 					 mmc_hostname(mmc), tag);
-				MMC_TRACE(mmc, "%s: completing tag -> %lu\n",
-					__func__, tag);
+				MMC_TRACE(mmc, "%s: completing tag -> %lu "
+					"(data_task:0x%08x, general_task:0x%08x)\n",
+					__func__, tag,
+					mmc->cmdq_ctx.data_active_reqs,
+					mmc->cmdq_ctx.active_reqs);
 				cmdq_finish_data(mmc, tag);
 			}
 		}
 	}
-
+hac:
 	if (status & CQIS_HAC) {
 		if (cq_host->ops->post_cqe_halt)
 			cq_host->ops->post_cqe_halt(mmc);
@@ -1146,7 +1484,6 @@ skip_cqterri:
 		complete(&cq_host->halt_comp);
 	}
 
-out:
 	return IRQ_HANDLED;
 }
 EXPORT_SYMBOL(cmdq_irq);

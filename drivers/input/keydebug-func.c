@@ -260,7 +260,8 @@ static void kernel_top_show(void)
 					cxt->frame_cpustat_total,
 				top_n_pid,
 				cxt->task_ptr_array[top_n_pid]->comm,
-				cxt->frame_tasktics_array[top_n_pid]);
+				cputime64_to_clock_t(cxt->frame_tasktics_array
+					[top_n_pid]));
 		}
 	}
 

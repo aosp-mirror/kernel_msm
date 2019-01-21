@@ -67,8 +67,15 @@ $(obj)/Image.gz-dtb: $(obj)/Image.gz $(DTB_OBJS) FORCE
 $(obj)/Image.lz4-dtb: $(obj)/Image.lz4 $(DTB_OBJS) FORCE
 	$(call if_changed,cat)
 
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+ifeq ($(CONFIG_BOARD_B1C1),y)
 $(obj)/dtbo.img: $(obj)/dts/dtboimg.cfg $(DTBO_OBJS) FORCE
 	$(call if_changed,mkdtimg,4096) # align dtbo.img to 4kB
+else
+$(obj)/dtbo.img: $(obj)/dts/dtboimg-sdm670.cfg $(DTBO_OBJS) FORCE
+	$(call if_changed,mkdtimg,4096) # align dtbo.img to 4kB
+endif
+endif
 
 install:
 	$(CONFIG_SHELL) $(srctree)/$(src)/install.sh $(KERNELRELEASE) \

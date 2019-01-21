@@ -1,0 +1,182 @@
+What:		/sys/class/leds/vibrator/device/autocal
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Reading it to obtain the COMP, BEMF and GAIN values
+		after running the auto-calibration.
+
+		Writing to it would restore the COMP, BEMF and GAIN registers.
+		The format is "COMP BEMF GAIN" with space as delimiter.
+
+		For example,
+
+		$ echo "17 190 1" > autocal
+
+		The above would restore COMP to 17, BEMF to 190 and GAIN to 1.
+
+What:		/sys/class/leds/vibrator/device/loop
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Set the main loop for waveform playback:
+
+		0 - No loop, play the identifier sequence only once.
+		1 - Loop once.
+		2 - Loop twice.
+		3 - Loop 3 times.
+		4 - Loop 4 times.
+		5 - Loop 5 times.
+		6 - Loop 6 times.
+		7 - Inifinite loops. (stop with trigger or GO bit).
+
+What:		/sys/class/leds/vibrator/device/diag_result
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Reading it to obtain the DIAG_K and DIAG_Z results
+		after running the diagnostics routine.
+
+What:		/sys/class/leds/vibrator/device/interval
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Sets the internal memory playback interval to
+		either 5 ms or 1 ms.
+
+		0 - 5 ms.
+		1 - 1 ms.
+
+What:		/sys/class/leds/vibrator/device/ctrl_loop
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Selects either closed loop or open loop mode.
+		This applies to both ERM and LRA actuators.
+
+		0 - Closed Loop.
+		1 - Open Loop.
+
+What:		/sys/class/leds/vibrator/device/mode
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Set to select the mode of operation. If the mode is
+		changed during process execution, the device will
+		immediately go into standby.
+
+		rtp - RTP Mode
+		waveform - Waveform Sequencer Mode
+		diag - Diagnostics Routine
+		autocal - Automatic Level Calibration Routine
+
+What:		/sys/class/leds/vibrator/device/od_clamp
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Set to limit the maximum voltage defined automatic
+		overdrive and automatic braking periods.
+
+What:		/sys/class/leds/vibrator/device/rtp_input
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Set to change the playback amplitude of the haptic
+		waveforms in RTP mode. The input value is interpreted
+		as an 8bit signed number with a negative number indicates
+		braking.
+
+What:		/sys/class/leds/vibrator/device/scale
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		This parameter allows for proportionally scaling
+		down (attenuating) the effects stored in the internal
+		library to simplify the customization of haptics.
+		This parameter is ignored in RTP mode.
+
+		0 - Play effect with 100% strength.
+		1 - Play effect with 75% strength.
+		2 - Play effect with 50% strength.
+		3 - Play effect with 25% strength.
+
+What:		/sys/class/leds/vibrator/device/set_sequencer
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Setup the waveform sequencer by writing effect index
+		and loop pairs.
+
+		For example,
+		$ echo "12 0 3 2" > set_sequencer
+
+		The above will set up the first sequencer to play effect#12
+		with no looping and the second sequencer to play effect#3 with
+		two loops.
+
+		0 - No loop, play only once.
+		1 - Loop once (play twice).
+		2 - Loop twice (play 3 times).
+		3 - Loop 3 times (play 4 times).
+
+What:		/sys/class/leds/vibrator/device/lra_period
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		This parameter reports the resonance frequency of the LRA
+		in real time.
+
+What:		/sys/class/leds/vibrator/device/status
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		This parameter reports the status of the driver IC.
+		The following bits are set to indicate the corresponding
+                error types. The status returns 0 to indicate there's no error.
+
+		BIT 7 - DIAG_RESULT
+		BIT 2 - UVLO
+		BIT 1 - OVER_TEMP
+		BIT 0 - OC_DETECT
+
+What:		/sys/class/leds/vibrator/device/ol_lra_period
+Date:		Mar 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		This parameter sets and gets the frequency that will be used
+		to drive the LRA in open loop.
+
+What:		/sys/class/leds/vibrator/device/lra_wave_shape
+Date:		May 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		Selects which shape to use for driving the LRA when in open
+		loop mode.
+
+		0 - Square Wave
+		1 - Sine Wave
+
+What:		/sys/class/leds/vibrator/device/lp_trigger_effect
+Date:		Jul 2017
+KernelVersion:	4.4
+Contact:	David Lin <dtwlin@google.com>
+Description:
+		This parameter selects the effect and enables drv2624 to be
+		triggered by an external pin when the kernel is suspended.
+
+		0 - Low-power trigger mode disabled
+		1 or above - Index to the waveform sequencer to be used when
+		low-power playback is triggered.

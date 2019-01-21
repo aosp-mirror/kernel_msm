@@ -56,6 +56,18 @@ struct chg_profile {
 	u32 cv_tier_switch_cnt;
 };
 
+/* Taper WA */
+struct taper_wa_struct {
+	bool taper_wa_en;
+	u32 v_taper[CHG_VOLT_NB_LIMITS_MAX];
+	s32 i_taper[CHG_VOLT_NB_LIMITS_MAX];
+	u32 soc_taper[CHG_VOLT_NB_LIMITS_MAX];
+	int taper_cnt_target;
+
+	int taper_wa_cnt;
+	unsigned long last_taper_wa_cnt_time;
+};
+
 struct chg_drv {
 	struct device *device;
 	struct power_supply *chg_psy;
@@ -86,6 +98,9 @@ struct chg_drv {
 	bool lowerdb_reached;
 	int charge_stop_level;
 	int charge_start_level;
+	unsigned long last_cnt_time;
+
+	struct taper_wa_struct taper;
 };
 
 /* Used as left operand also */
@@ -180,6 +195,9 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->disable_pwrsrc = 0;
 	chg_drv->lowerdb_reached = true;
 	chg_drv->stop_charging = true;
+	chg_drv->last_cnt_time = 0;
+	chg_drv->taper.taper_wa_cnt = 0;
+	chg_drv->taper.last_taper_wa_cnt_time = 0;
 	PSY_SET_PROP(chg_drv->chg_psy,
 		     POWER_SUPPLY_PROP_TAPER_CONTROL,
 		     POWER_SUPPLY_TAPER_CONTROL_OFF);
@@ -466,6 +484,13 @@ static void chg_work(struct work_struct *work)
 		const int switch_cnt = profile->cv_tier_switch_cnt;
 		const int cc_next_max = CCCM_LIMITS(profile, temp_idx,
 						    vbatt_idx + 1);
+		unsigned long cur_time, last_cnt_interval;
+		bool skip_cnt = false;
+
+		cur_time = jiffies_to_msecs(jiffies);
+		last_cnt_interval = cur_time - chg_drv->last_cnt_time;
+		skip_cnt = (last_cnt_interval <
+			      profile->cv_update_interval) ? true : false;
 
 		if ((vbatt - vtier) > otv_margin) {
 		/* OVER: vbatt over vtier for more than margin (usually 0) */
@@ -550,16 +575,19 @@ static void chg_work(struct work_struct *work)
 		/* TAPER_COUNTDOWN: countdown to raise fv_uv and/or check
 		 * for tier switch, will keep steady...
 		 */
-			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d\n",
+			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d, skip_cnt=%d\n",
 				vtier, vbatt, fv_uv, profile->cv_range_accuracy,
 				chg_drv->checked_cv_cnt,
-				chg_drv->checked_ov_cnt);
+				chg_drv->checked_ov_cnt, skip_cnt);
 
 			update_interval = profile->cv_update_interval;
-			if (chg_drv->checked_cv_cnt)
-				chg_drv->checked_cv_cnt -= 1;
-			if (chg_drv->checked_ov_cnt)
-				chg_drv->checked_ov_cnt -= 1;
+			if (!skip_cnt) {
+				if (chg_drv->checked_cv_cnt)
+					chg_drv->checked_cv_cnt -= 1;
+				if (chg_drv->checked_ov_cnt)
+					chg_drv->checked_ov_cnt -= 1;
+				chg_drv->last_cnt_time = cur_time;
+			}
 
 		} else if ((vtier - vbatt) < utv_margin) {
 		/* TAPER_STEADY: close enough to tier, don't need to adjust */
@@ -604,13 +632,65 @@ static void chg_work(struct work_struct *work)
 				vbatt, ibatt, chg_drv->vbatt_idx, vbatt_idx);
 		} else {
 		/* current under next tier, increase tier switch count */
-			chg_drv->checked_tier_switch_cnt++;
+			if (!skip_cnt) {
+				chg_drv->checked_tier_switch_cnt++;
+				chg_drv->last_cnt_time = cur_time;
+			}
 
-			pr_info("MSC_NYET ibatt=%d cc_next_max=%d t_cnt=%d\n",
+			pr_info("MSC_NYET ibatt=%d cc_next_max=%d t_cnt=%d, skip_cnt=%d\n",
 				ibatt, cc_next_max,
-				chg_drv->checked_tier_switch_cnt);
+				chg_drv->checked_tier_switch_cnt, skip_cnt);
 		}
 
+		if (skip_cnt &&
+		    (update_interval == profile->cv_update_interval)) {
+			update_interval -= last_cnt_interval;
+		}
+	}
+
+	/* TAPER WA */
+	if (chg_drv->taper.taper_wa_en &&
+	    (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST) &&
+	    (vbatt_idx != profile->volt_nb_limits - 1)) {
+		struct taper_wa_struct *taper = &chg_drv->taper;
+		int chg_status_fast;
+		unsigned long curr_time, last_cnt_interval;
+		bool skip_cnt = true;
+
+		chg_status_fast =
+		    PSY_GET_PROP(chg_psy,
+				 POWER_SUPPLY_PROP_CHARGER_STATUS_FAST);
+
+		curr_time = jiffies_to_msecs(jiffies);
+		last_cnt_interval = curr_time - taper->last_taper_wa_cnt_time;
+		skip_cnt = (update_interval != profile->update_interval) ||
+			    (update_interval > last_cnt_interval);
+
+		if (((vbatt / 1000) > taper->v_taper[vbatt_idx]) &&
+		    ((-ibatt / 1000) < taper->i_taper[vbatt_idx]) &&
+		    (soc > taper->soc_taper[vbatt_idx]) &&
+		    chg_status_fast) {
+			if (!skip_cnt) {
+				taper->taper_wa_cnt++;
+				taper->last_taper_wa_cnt_time = curr_time;
+				pr_info("MSC_TAPER ibatt=%d, vbat=%d, soc=%d, taper_cnt=%d, chg_status_fast=%d\n",
+					vbatt, ibatt, soc, taper->taper_wa_cnt,
+					chg_status_fast);
+			}
+			if (taper->taper_wa_cnt > taper->taper_cnt_target) {
+				vbatt_idx++;
+				taper->taper_wa_cnt = 0;
+				taper->last_taper_wa_cnt_time = 0;
+				pr_info("MSC_TAPER next vbatt_idx=%d->%d\n",
+					chg_drv->vbatt_idx, vbatt_idx);
+			}
+		} else {
+			taper->taper_wa_cnt = 0;
+			taper->last_taper_wa_cnt_time = 0;
+		}
+	} else {
+		chg_drv->taper.taper_wa_cnt = 0;
+		chg_drv->taper.last_taper_wa_cnt_time = 0;
 	}
 
 	/* update fv or cc will change in last tier... */
@@ -729,8 +809,10 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	struct device *dev = chg_drv->device;
 	struct device_node *node = dev->of_node;
 	struct chg_profile *profile = &chg_drv->chg_profile;
+	struct taper_wa_struct *taper = &chg_drv->taper;
 	u32 cccm_array_size, ccm;
 	int ret = 0, vi, ti;
+	int taper_tmp;
 
 	ret = of_property_read_u32(node, "google,chg-update-interval",
 				   &profile->update_interval);
@@ -869,6 +951,61 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 					* profile->cc_hw_resolution;
 			CCCM_LIMITS(profile, ti, vi) = ccm;
 		}
+	}
+
+	/* Taper WA */
+	taper->taper_wa_en = of_property_read_bool(node, "google,chg-taper-wa");
+
+	taper_tmp = of_property_count_elems_of_size(node, "google,chg-vtaper",
+						    sizeof(u32));
+	if (taper_tmp != profile->volt_nb_limits) {
+		pr_err("wrong vtaper size\n");
+		taper->taper_wa_en = false;
+	} else {
+		ret = of_property_read_u32_array(node, "google,chg-vtaper",
+						 taper->v_taper,
+						 profile->volt_nb_limits);
+		if (ret < 0) {
+			pr_err("can't read vtaper, ret=%d\n", ret);
+			taper->taper_wa_en = false;
+		}
+	}
+
+	taper_tmp = of_property_count_elems_of_size(node, "google,chg-itaper",
+						    sizeof(u32));
+	if (taper_tmp != profile->volt_nb_limits) {
+		pr_err("wrong itaper size\n");
+		taper->taper_wa_en = false;
+	} else {
+		ret = of_property_read_u32_array(node, "google,chg-itaper",
+						 taper->i_taper,
+						 profile->volt_nb_limits);
+		if (ret < 0) {
+			pr_err("can't read itaper, ret=%d\n", ret);
+			taper->taper_wa_en = false;
+		}
+	}
+
+	taper_tmp = of_property_count_elems_of_size(node, "google,chg-soctaper",
+						    sizeof(u32));
+	if (taper_tmp != profile->volt_nb_limits) {
+		pr_err("wrong soctaper size\n");
+		taper->taper_wa_en = false;
+	} else {
+		ret = of_property_read_u32_array(node, "google,chg-soctaper",
+						 taper->soc_taper,
+						 profile->volt_nb_limits);
+		if (ret < 0) {
+			pr_err("can't read soctaper, ret=%d\n", ret);
+			taper->taper_wa_en = false;
+		}
+	}
+
+	ret = of_property_read_u32(node, "google,chg-taper-cnt-target",
+				   &taper->taper_cnt_target);
+	if (ret < 0) {
+		pr_err("can't read taper-cnt-target, ret=%d\n", ret);
+		taper->taper_wa_en = false;
 	}
 
 	pr_info("successfully read charging profile:\n");

@@ -1,0 +1,7 @@
+#include "sdm670-b4s4-touch.dtsi"
+
+&qupv3_se9_i2c {
+	synaptics_dsx@20 {
+		synaptics,display-coords = <1080 2220>;
+	};
+};

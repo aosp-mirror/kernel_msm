@@ -1,0 +1,73 @@
+
+&pm660_charger {
+	google,boost_to_5_1V;
+	google,usb-port-tz-name = "usbc-therm-adc";
+	google,low-batt-threshold = <2>;
+	qcom,hvdcp-disable;
+};
+
+&pm660_fg {
+	qcom,battery-thermal-coefficients = [d8 50 ff];
+	/delete-property/ qcom,hold-soc-while-full;
+	qcom,fg-cutoff-voltage = <3300>;
+	qcom,fg-empty-voltage = <2600>;
+	qcom,fg-jeita-hyst-temp = <1>;
+	qcom,fg-jeita-thresholds = <0 0 55 55>;
+	qcom,fg-force-load-profile;
+	qcom,fg-rsense-sel = <0>;
+};
+
+&soc {
+	google_charger: google,charger {
+		compatible = "google,charger";
+		google,chg-power-supply = "battery";
+		google,bat-power-supply = "bms";
+		google,chg-update-interval = <30000>;
+		google,chg-cv-limits = <4200000 4300000 4400000>;
+		google,chg-temp-limits = <0 100 200 420 460 480 550>;
+		google,chg-cc-limits = <
+			 30  10   0
+			 50  30  30
+			100  70  50
+			 80  50  50
+			 50  50   0
+			 30   0   0
+		>;
+		google,cv-otv-margin = <15000>;
+		google,chg-cc-tolerance = <20>;
+
+		/* Taper WA */
+		google,chg-taper-wa;
+		google,chg-vtaper = <4150 4250 4400>;
+		google,chg-itaper = <1450 1400 0>;
+		google,chg-soctaper = <65 75 100>;
+		google,chg-taper-cnt-target = <2>;
+	};
+	google_overheat_mitigation: google,overheat_mitigation {
+		compatible = "google,overheat_mitigation";
+		google,port-overheat-work-interval = <1000>;
+		google,accessory-monitoring-period = <150>;
+		/* Must maintain < 1/15 duty cycle */
+		google,polling-freq = <3>;
+		#cooling-cells = <2>;
+	};
+};
+
+&tlmm {
+	vbus_ovp_int: vbus_ovp_int_default {
+		mux {
+			pins = "gpio5";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio5";
+			drive-strength = <2>;
+			bias-pull-down;
+			input-enable;
+		};
+	};
+};
+
+&bcl_sensor {
+	google,bat-power-supply = "bms";
+};

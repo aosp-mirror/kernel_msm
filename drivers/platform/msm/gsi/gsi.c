@@ -23,7 +23,7 @@
 #include "gsi_emulation.h"
 
 #define GSI_CMD_TIMEOUT (5*HZ)
-#define GSI_STOP_CMD_TIMEOUT_MS 20
+#define GSI_STOP_CMD_TIMEOUT_MS 50
 #define GSI_MAX_CH_LOW_WEIGHT 15
 
 #define GSI_RESET_WA_MIN_SLEEP 1000
@@ -1292,6 +1292,7 @@ int gsi_alloc_evt_ring(struct gsi_evt_ring_props *props, unsigned long dev_hdl,
 		if (!props->evchid_valid)
 			clear_bit(evt_id, &gsi_ctx->evt_bmap);
 		mutex_unlock(&gsi_ctx->mlock);
+		BUG();
 		return -GSI_STATUS_RES_ALLOC_FAILURE;
 	}
 

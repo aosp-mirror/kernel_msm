@@ -155,6 +155,7 @@ static void mmc_host_clk_gate_delayed(struct mmc_host *host)
 		mmc_gate_clock(host);
 		spin_lock_irqsave(&host->clk_lock, flags);
 		pr_debug("%s: gated MCI clock\n", mmc_hostname(host));
+		MMC_TRACE(host, "clocks are gated\n");
 	}
 	spin_unlock_irqrestore(&host->clk_lock, flags);
 	mutex_unlock(&host->clk_gate_mutex);
@@ -193,6 +194,7 @@ void mmc_host_clk_hold(struct mmc_host *host)
 
 		spin_lock_irqsave(&host->clk_lock, flags);
 		pr_debug("%s: ungated MCI clock\n", mmc_hostname(host));
+		MMC_TRACE(host, "clocks are ungated\n");
 	}
 	host->clk_requests++;
 	spin_unlock_irqrestore(&host->clk_lock, flags);
@@ -713,6 +715,9 @@ again:
 	mmc_host_clk_init(host);
 
 	spin_lock_init(&host->lock);
+#ifdef CONFIG_DEBUG_FS
+	spin_lock_init(&host->stat_lock);
+#endif
 	init_waitqueue_head(&host->wq);
 	INIT_DELAYED_WORK(&host->detect, mmc_rescan);
 	setup_timer(&host->retune_timer, mmc_retune_timer, (unsigned long)host);
@@ -734,6 +739,83 @@ again:
 }
 
 EXPORT_SYMBOL(mmc_alloc_host);
+
+static void mmc_update_slowio_min_us(struct mmc_host *mmc)
+{
+	enum ts_types i;
+	u64 us;
+
+	mmc->slowio_min_us = mmc->slowio[TS_READ][MMC_SLOWIO_US];
+	for (i = TS_WRITE; i < TS_NUM_STATS; i++) {
+		us = mmc->slowio[i][MMC_SLOWIO_US];
+		if (us < mmc->slowio_min_us)
+			mmc->slowio_min_us = us;
+	}
+}
+
+struct mmc_slowio_attr {
+	struct device_attribute attr;
+	enum ts_types optype;
+	enum mmc_slowio_systype systype;
+};
+
+static ssize_t
+slowio_store(struct device *dev, struct device_attribute *_attr,
+		const char *buf, size_t count)
+{
+	struct mmc_slowio_attr *attr = (struct mmc_slowio_attr *)_attr;
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+	unsigned long flags, value;
+
+	if (kstrtol(buf, 0, &value))
+		return -EINVAL;
+
+	if (attr->systype == MMC_SLOWIO_CNT)
+		value = 0;
+	else if (value < MMC_MIN_SLOWIO_US)
+		return -EINVAL;
+
+	spin_lock_irqsave(&host->lock, flags);
+	host->slowio[attr->optype][attr->systype] = value;
+	spin_unlock_irqrestore(&host->lock, flags);
+
+	if (attr->systype == MMC_SLOWIO_US)
+		mmc_update_slowio_min_us(host);
+	return count;
+}
+
+static ssize_t
+slowio_show(struct device *dev, struct device_attribute *_attr, char *buf)
+{
+	struct mmc_slowio_attr *attr = (struct mmc_slowio_attr *)_attr;
+	struct mmc_host *host = cls_dev_to_mmc_host(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%lld\n",
+			host->slowio[attr->optype][attr->systype]);
+}
+
+#define __SLOWIO_ATTR(_name)                                    \
+	__ATTR(slowio_##_name, 0644, slowio_show, slowio_store)
+
+#define SLOWIO_ATTR_RW(_name, _optype)                          \
+static struct mmc_slowio_attr mmc_slowio_##_name##_us = {		\
+	.attr = __SLOWIO_ATTR(_name##_us),			\
+	.optype = _optype,					\
+	.systype = MMC_SLOWIO_US,				\
+};								\
+								\
+static struct mmc_slowio_attr mmc_slowio_##_name##_cnt = {		\
+	.attr = __SLOWIO_ATTR(_name##_cnt),			\
+	.optype = _optype,					\
+	.systype = MMC_SLOWIO_CNT,				\
+}
+
+SLOWIO_ATTR_RW(read, TS_READ);
+SLOWIO_ATTR_RW(write, TS_WRITE);
+SLOWIO_ATTR_RW(urgent_read, TS_URGENT_READ);
+SLOWIO_ATTR_RW(urgent_write, TS_URGENT_WRITE);
+SLOWIO_ATTR_RW(flush, TS_FLUSH);
+SLOWIO_ATTR_RW(discard, TS_DISCARD);
 
 static ssize_t show_enable(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -765,7 +847,7 @@ static ssize_t store_enable(struct device *dev,
 		host->clk_scaling.state = MMC_LOAD_HIGH;
 		/* Set to max. frequency when disabling */
 		mmc_clk_update_freq(host, host->card->clk_scaling_highest,
-					host->clk_scaling.state);
+					host->clk_scaling.state, 0);
 	} else if (value) {
 		/* Unmask host capability and resume scaling */
 		host->caps2 |= MMC_CAP2_CLK_SCALE;
@@ -940,6 +1022,18 @@ static struct attribute *dev_attrs[] = {
 #ifdef CONFIG_MMC_PERF_PROFILING
 	&dev_attr_perf.attr,
 #endif
+	&mmc_slowio_read_us.attr.attr,
+	&mmc_slowio_read_cnt.attr.attr,
+	&mmc_slowio_write_us.attr.attr,
+	&mmc_slowio_write_cnt.attr.attr,
+	&mmc_slowio_urgent_read_us.attr.attr,
+	&mmc_slowio_urgent_read_cnt.attr.attr,
+	&mmc_slowio_urgent_write_us.attr.attr,
+	&mmc_slowio_urgent_write_cnt.attr.attr,
+	&mmc_slowio_flush_us.attr.attr,
+	&mmc_slowio_flush_cnt.attr.attr,
+	&mmc_slowio_discard_us.attr.attr,
+	&mmc_slowio_discard_cnt.attr.attr,
 	NULL,
 };
 static struct attribute_group dev_attr_grp = {
@@ -995,6 +1089,21 @@ int mmc_add_host(struct mmc_host *host)
 	mmc_start_host(host);
 	if (!(host->pm_flags & MMC_PM_IGNORE_PM_NOTIFY))
 		mmc_register_pm_notifier(host);
+
+	/* Slow IO init */
+	host->slowio[TS_READ][MMC_SLOWIO_US]
+		= MMC_DEFAULT_SLOWIO_READ_US;
+	host->slowio[TS_WRITE][MMC_SLOWIO_US]
+		= MMC_DEFAULT_SLOWIO_WRITE_US;
+	host->slowio[TS_URGENT_READ][MMC_SLOWIO_US]
+		= MMC_DEFAULT_SLOWIO_URGENT_READ_US;
+	host->slowio[TS_URGENT_WRITE][MMC_SLOWIO_US]
+		= MMC_DEFAULT_SLOWIO_URGENT_WRITE_US;
+	host->slowio[TS_FLUSH][MMC_SLOWIO_US]
+		= MMC_DEFAULT_SLOWIO_FLUSH_US;
+	host->slowio[TS_DISCARD][MMC_SLOWIO_US]
+		= MMC_DEFAULT_SLOWIO_DISCARD_US;
+	mmc_update_slowio_min_us(host);
 
 	return 0;
 }

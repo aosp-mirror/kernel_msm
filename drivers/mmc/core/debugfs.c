@@ -22,6 +22,7 @@
 
 #include "core.h"
 #include "mmc_ops.h"
+#include "../host/cmdq_hci.h"
 
 #ifdef CONFIG_FAIL_MMC_REQUEST
 
@@ -275,7 +276,7 @@ static int mmc_scale_set(void *data, u64 val)
 	mmc_host_clk_hold(host);
 
 	/* change frequency from sysfs manually */
-	err = mmc_clk_update_freq(host, val, host->clk_scaling.state);
+	err = mmc_clk_update_freq(host, val, host->clk_scaling.state, 0);
 	if (err == -EAGAIN)
 		err = 0;
 	else if (err)
@@ -454,6 +455,200 @@ static const struct file_operations mmc_err_stats_fops = {
 	.write	= mmc_err_stats_write,
 };
 
+static ssize_t mmc_req_stats_write(struct file *filp,
+		const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	struct mmc_host *host = filp->f_mapping->host->i_private;
+	int val;
+	int ret;
+	unsigned long flags;
+
+	ret = kstrtoint_from_user(ubuf, cnt, 0, &val);
+	if (ret) {
+		dev_err(&host->class_dev, "%s: Invalid argument\n", __func__);
+		return ret;
+	}
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+	mmc_init_req_stats(host);
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return cnt;
+}
+
+static int mmc_req_stats_show(struct seq_file *file, void *data)
+{
+	struct mmc_host *host = (struct mmc_host *)file->private;
+	int i;
+	unsigned long flags;
+
+	/* Header */
+	seq_printf(file, "\t%-10s %-10s %-10s %-10s %-10s %-10s %-10s",
+		"All", "Read", "Write", "Read(urg)", "Write(urg)", "Flush",
+		"Discard");
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+
+	seq_printf(file, "\n%s:\t", "Min");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].min);
+	seq_printf(file, "\n%s:\t", "Max");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].max);
+	seq_printf(file, "\n%s:\t", "Avg.");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ",
+			div64_u64(host->mmc_req_stats[i].sum,
+				host->mmc_req_stats[i].count));
+	seq_printf(file, "\n%s:\t", "Count");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].count);
+	seq_printf(file, "\n%s:\t", "Ttl_kb");
+	for (i = 0; i < TS_NUM_STATS; i++)
+		seq_printf(file, "%-10llu ", host->mmc_req_stats[i].size);
+	seq_puts(file, "\n");
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return 0;
+}
+
+static int mmc_req_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmc_req_stats_show, inode->i_private);
+}
+
+static const struct file_operations mmc_req_stats_desc = {
+	.open		= mmc_req_stats_open,
+	.read		= seq_read,
+	.write		= mmc_req_stats_write,
+	.release        = single_release,
+};
+
+static ssize_t mmc_io_stats_write(struct file *filp,
+		const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	struct mmc_host *host = filp->f_mapping->host->i_private;
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+	host->mmc_stats.io_read.max_diff_req_count = 0;
+	host->mmc_stats.io_read.max_diff_total_bytes = 0;
+	host->mmc_stats.io_readwrite.max_diff_req_count = 0;
+	host->mmc_stats.io_readwrite.max_diff_total_bytes = 0;
+	host->mmc_stats.io_write.max_diff_req_count = 0;
+	host->mmc_stats.io_write.max_diff_total_bytes = 0;
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return cnt;
+}
+
+static int mmc_io_stats_show(struct seq_file *file, void *data)
+{
+	struct mmc_host *host = (struct mmc_host *)file->private;
+	unsigned long flags;
+
+	seq_printf(file, "\t\t%-10s %-10s %-10s %-10s %-10s %-10s\n",
+		"ReadCnt", "ReadBytes", "WriteCnt", "WriteBytes", "RWCnt",
+		"RWBytes");
+
+	spin_lock_irqsave(&host->stat_lock, flags);
+	seq_printf(file,
+		"Started: \t%-10llu %-10llu %-10llu %-10llu %-10llu %-10llu\n",
+		host->mmc_stats.io_read.req_count_started,
+		host->mmc_stats.io_read.total_bytes_started,
+		host->mmc_stats.io_write.req_count_started,
+		host->mmc_stats.io_write.total_bytes_started,
+		host->mmc_stats.io_readwrite.req_count_started,
+		host->mmc_stats.io_readwrite.total_bytes_started);
+	seq_printf(file,
+		"Completed: \t%-10llu %-10llu %-10llu %-10llu %-10llu %-10llu\n",
+		host->mmc_stats.io_read.req_count_completed,
+		host->mmc_stats.io_read.total_bytes_completed,
+		host->mmc_stats.io_write.req_count_completed,
+		host->mmc_stats.io_write.total_bytes_completed,
+		host->mmc_stats.io_readwrite.req_count_completed,
+		host->mmc_stats.io_readwrite.total_bytes_completed);
+	seq_printf(file,
+		"MaxDiff: \t%-10llu %-10llu %-10llu %-10llu %-10llu %-10llu\n",
+		host->mmc_stats.io_read.max_diff_req_count,
+		host->mmc_stats.io_read.max_diff_total_bytes,
+		host->mmc_stats.io_write.max_diff_req_count,
+		host->mmc_stats.io_write.max_diff_total_bytes,
+		host->mmc_stats.io_readwrite.max_diff_req_count,
+		host->mmc_stats.io_readwrite.max_diff_total_bytes);
+	spin_unlock_irqrestore(&host->stat_lock, flags);
+
+	return 0;
+}
+
+static int mmc_io_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmc_io_stats_show, inode->i_private);
+}
+
+static const struct file_operations mmc_io_stats_desc = {
+	.open		= mmc_io_stats_open,
+	.read		= seq_read,
+	.write		= mmc_io_stats_write,
+	.release 	= single_release,
+};
+
+static int mmc_show_host_show(struct seq_file *file, void *data)
+{
+	struct mmc_host *host = (struct mmc_host *)file->private;
+	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(host);
+
+	// Host status dump
+	seq_printf(file, "host->cap = 0x%08x\n",
+		host->caps);
+	seq_printf(file, "host->cap2 = 0x%08x\n",
+		host->caps2);
+	seq_printf(file, "host->clk_gated = %u\n",
+		host->clk_gated);
+	seq_printf(file, "host->clk_requests = %d\n",
+		host->clk_requests);
+	seq_printf(file, "host->claim_cnt = %d\n",
+		host->claim_cnt);
+	seq_printf(file, "host->lock = %s\n",
+		(spin_is_locked(&host->lock)) ? "lock" : "unlock");
+	seq_printf(file, "host->hold_retune = %d\n",
+		host->hold_retune);
+	seq_printf(file, "host->bus_resume_flags = 0x%x\n",
+		host->bus_resume_flags);
+
+	// Card status dump
+	seq_printf(file, "host->card->state = 0x%08x\n",
+		host->card->state);
+	seq_printf(file, "host->card->quirks = 0x%08x\n",
+		host->card->quirks);
+	seq_printf(file, "host->card->cmdq_init = %u\n",
+		host->card->cmdq_init);
+
+	// CQ status dump
+	seq_printf(file, "host->cmdq_ctx.curr_state = 0x%lx\n",
+		host->cmdq_ctx.curr_state);
+	seq_printf(file, "cq_host->enabled = %u\n",
+		cq_host->enabled);
+	seq_printf(file, "cq_host->caps = 0x%08x\n",
+		cq_host->caps);
+	seq_printf(file, "cq_host->quirks = 0x%08x\n",
+		cq_host->quirks);
+
+	return 0;
+}
+
+static int mmc_show_host_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, mmc_show_host_show, inode->i_private);
+}
+
+static const struct file_operations mmc_show_host_fops = {
+	.open		= mmc_show_host_open,
+	.read		= seq_read,
+	.release	= single_release,
+};
+
+
 void mmc_add_host_debugfs(struct mmc_host *host)
 {
 	struct dentry *root;
@@ -507,6 +702,14 @@ void mmc_add_host_debugfs(struct mmc_host *host)
 		&mmc_err_stats_fops))
 		goto err_node;
 
+	if (!debugfs_create_file("io_stats", 0600, root, host,
+		&mmc_io_stats_desc))
+		goto err_node;
+
+	if (!debugfs_create_file("req_stats", 0600, root, host,
+		&mmc_req_stats_desc))
+		goto err_node;
+
 #ifdef CONFIG_MMC_CLKGATE
 	if (!debugfs_create_u32("clk_delay", (S_IRUSR | S_IWUSR),
 				root, &host->clk_delay))
@@ -523,6 +726,10 @@ void mmc_add_host_debugfs(struct mmc_host *host)
 #endif
 	if (!debugfs_create_file("force_error", S_IWUSR, root, host,
 		&mmc_force_err_fops))
+		goto err_node;
+
+	if (!debugfs_create_file("show_host", 0600, root, host,
+		&mmc_show_host_fops))
 		goto err_node;
 
 	return;
@@ -547,7 +754,7 @@ static int mmc_dbg_card_status_get(void *data, u64 *val)
 
 	mmc_get_card(card);
 	if (mmc_card_cmdq(card)) {
-		ret = mmc_cmdq_halt_on_empty_queue(card->host);
+		ret = mmc_cmdq_halt_on_empty_queue(card->host, 0);
 		if (ret) {
 			pr_err("%s: halt failed while doing %s err (%d)\n",
 					mmc_hostname(card->host), __func__,
@@ -589,7 +796,7 @@ static int mmc_ext_csd_open(struct inode *inode, struct file *filp)
 
 	mmc_get_card(card);
 	if (mmc_card_cmdq(card)) {
-		err = mmc_cmdq_halt_on_empty_queue(card->host);
+		err = mmc_cmdq_halt_on_empty_queue(card->host, 0);
 		if (err) {
 			pr_err("%s: halt failed while doing %s err (%d)\n",
 					mmc_hostname(card->host), __func__,

@@ -218,8 +218,6 @@ static int pd_engine_seq_show(struct seq_file *s, void *v)
 			   (tail * LOG_BUFFER_ENTRY_SIZE));
 		tail = (tail + 1) % LOG_BUFFER_ENTRIES;
 	}
-	if (!seq_has_overflowed(s))
-		pd->logbuffer_tail = tail;
 	spin_unlock(&pd->logbuffer_lock);
 
 	return 0;

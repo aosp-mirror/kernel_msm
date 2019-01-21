@@ -1124,7 +1124,7 @@ static ssize_t debugfs_misr_setup(struct file *file,
 		return -ENODEV;
 
 	if (*ppos)
-		return 0;
+		return -EINVAL;
 
 	buf = kzalloc(MISR_BUFF_SIZE, GFP_KERNEL);
 	if (!buf)
@@ -1195,7 +1195,7 @@ static ssize_t debugfs_misr_read(struct file *file,
 		return 0;
 
 	buf = kzalloc(max_len, GFP_KERNEL);
-	if (!buf)
+	if (ZERO_OR_NULL_PTR(buf))
 		return -ENOMEM;
 
 	mutex_lock(&display->display_lock);
@@ -1226,7 +1226,7 @@ static ssize_t debugfs_misr_read(struct file *file,
 		goto error;
 	}
 
-	if (copy_to_user(user_buf, buf, len)) {
+	if (copy_to_user(user_buf, buf, max_len)) {
 		rc = -EFAULT;
 		goto error;
 	}
@@ -1253,9 +1253,12 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 		return -ENODEV;
 
 	if (*ppos)
-		return 0;
+		return -EINVAL;
 
 	if (user_len > sizeof(u32))
+		return -EINVAL;
+
+	if (!user_len || !user_buf)
 		return -EINVAL;
 
 	buf = kzalloc(user_len, GFP_KERNEL);
@@ -1285,7 +1288,7 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 		rc = dsi_panel_trigger_esd_attack(display->panel);
 		if (rc) {
 			pr_err("Failed to trigger ESD attack\n");
-			return rc;
+			goto error;
 		}
 	}
 
@@ -1310,10 +1313,10 @@ static ssize_t debugfs_alter_esd_check_mode(struct file *file,
 		return -ENODEV;
 
 	if (*ppos)
-		return 0;
+		return -EINVAL;
 
 	buf = kzalloc(len, GFP_KERNEL);
-	if (!buf)
+	if (ZERO_OR_NULL_PTR(buf))
 		return -ENOMEM;
 
 	if (copy_from_user(buf, user_buf, user_len)) {
@@ -1334,8 +1337,11 @@ static ssize_t debugfs_alter_esd_check_mode(struct file *file,
 		goto error;
 	}
 
-	if (!esd_config->esd_enabled)
+	if (!esd_config->esd_enabled) {
+		pr_warn("esd check didn't enable\n");
+		rc = -EINVAL;
 		goto error;
+	}
 
 	if (!strcmp(buf, "te_signal_check\n")) {
 		dsi_display_esd_irq_mode_switch(display, false);
@@ -1400,7 +1406,7 @@ static ssize_t debugfs_read_esd_check_mode(struct file *file,
 	}
 
 	buf = kzalloc(len, GFP_KERNEL);
-	if (!buf)
+	if (ZERO_OR_NULL_PTR(buf))
 		return -ENOMEM;
 
 	esd_config = &display->panel->esd_config;
@@ -3292,9 +3298,6 @@ int dsi_post_clkon_cb(void *priv,
 				__func__, rc);
 			goto error;
 		}
-
-		/* enable dsi to serve irqs */
-		dsi_display_ctrl_irq_update(display, true);
 	}
 
 	if ((clk & DSI_LINK_CLK) && (l_type & DSI_LINK_HS_CLK)) {
@@ -3316,6 +3319,11 @@ int dsi_post_clkon_cb(void *priv,
 			}
 		}
 	}
+
+	/* enable dsi to serve irqs */
+	if (clk & DSI_CORE_CLK)
+		dsi_display_ctrl_irq_update(display, true);
+
 error:
 	return rc;
 }

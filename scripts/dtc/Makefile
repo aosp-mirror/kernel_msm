@@ -1,7 +1,12 @@
 # scripts/dtc makefile
 
+BUILD_DTC_PATH = $(subst $\",,$(CONFIG_BUILD_ARM64_DTC))
+ifeq ($(BUILD_DTC_PATH),)
 hostprogs-y	:= dtc
+ifeq ($(DTC_EXT),)
 always		:= $(hostprogs-y)
+endif
+endif
 
 dtc-objs	:= dtc.o flattree.o fstree.o data.o livetree.o treesource.o \
 		   srcpos.o checks.o util.o

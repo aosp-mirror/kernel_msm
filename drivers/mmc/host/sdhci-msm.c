@@ -4062,6 +4062,113 @@ out:
 	return count;
 }
 
+static ssize_t
+mmc_manual_gc_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (mmc_card_support_auto_bkops(host->mmc->card))
+		return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
+
+	return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
+}
+
+static ssize_t
+mmc_manual_gc_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	uint32_t value;
+	bool enable;
+	int ret;
+
+	ret = kstrtou32(buf, 0, &value);
+	if (ret)
+		goto out;
+	enable = !!value;
+
+	if (mmc_card_support_auto_bkops(host->mmc->card))
+		return count;
+
+out:
+	return count;
+}
+
+static ssize_t
+eol_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (!host->mmc || !host->mmc->card)
+		return snprintf(buf, PAGE_SIZE, "0x0\n");
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
+		host->mmc->card->ext_csd.pre_eol_info);
+}
+
+static ssize_t
+length_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0x25\n");
+}
+
+static ssize_t
+type_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "0x9\n");
+}
+
+static ssize_t
+lifetimeA_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (!host->mmc || !host->mmc->card)
+		return snprintf(buf, PAGE_SIZE, "0x0\n");
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
+		host->mmc->card->ext_csd.device_life_time_est_typ_a);
+}
+
+static ssize_t
+lifetimeB_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (!host->mmc || !host->mmc->card)
+		return snprintf(buf, PAGE_SIZE, "0x0\n");
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x\n",
+		host->mmc->card->ext_csd.device_life_time_est_typ_b);
+}
+
+DEVICE_ATTR_RO(eol);
+DEVICE_ATTR_RO(length);
+DEVICE_ATTR_RO(type);
+DEVICE_ATTR_RO(lifetimeA);
+DEVICE_ATTR_RO(lifetimeB);
+
+static struct attribute *mmc_health_attrs[] = {
+	&dev_attr_eol.attr,
+	&dev_attr_length.attr,
+	&dev_attr_type.attr,
+	&dev_attr_lifetimeA.attr,
+	&dev_attr_lifetimeB.attr,
+	NULL,
+};
+
+static struct attribute_group mmc_health_attr_grp = {
+	.name = "health",
+	.attrs = mmc_health_attrs,
+};
+
 #ifdef CONFIG_SMP
 static inline void set_affine_irq(struct sdhci_msm_host *msm_host,
 				struct sdhci_host *host)
@@ -4676,6 +4783,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	void __iomem *tlmm_mem;
 	unsigned long flags;
 	bool force_probe;
+	int err;
 
 	pr_debug("%s: Enter %s\n", dev_name(&pdev->dev), __func__);
 	msm_host = devm_kzalloc(&pdev->dev, sizeof(struct sdhci_msm_host),
@@ -5051,8 +5159,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	msm_host->mmc->caps2 |= msm_host->pdata->caps2;
 	msm_host->mmc->caps2 |= MMC_CAP2_BOOTPART_NOACC;
 	msm_host->mmc->caps2 |= MMC_CAP2_HS400_POST_TUNING;
-	msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
-	msm_host->mmc->caps2 |= MMC_CAP2_SANITIZE;
 	msm_host->mmc->caps2 |= MMC_CAP2_MAX_DISCARD_SIZE;
 	msm_host->mmc->caps2 |= MMC_CAP2_SLEEP_AWAKE;
 	msm_host->mmc->pm_caps |= MMC_PM_KEEP_POWER | MMC_PM_WAKE_SDIO_IRQ;
@@ -5075,6 +5181,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			goto vreg_deinit;
 		}
 		host->is_crypto_en = true;
+		msm_host->mmc->inlinecrypt_support = true;
 		/* Packed commands cannot be encrypted/decrypted using ICE */
 		msm_host->mmc->caps2 &= ~(MMC_CAP2_PACKED_WR |
 				MMC_CAP2_PACKED_WR_CONTROL);
@@ -5190,6 +5297,25 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	if (sdhci_msm_is_bootdevice(&pdev->dev))
 		mmc_flush_detect_work(host->mmc);
 
+	err = sysfs_create_group(&pdev->dev.kobj, &mmc_health_attr_grp);
+	if (err)
+		pr_err("%s: failed to create sysfs group with err %d\n",
+							 __func__, err);
+
+	msm_host->mmc_manual_gc_attr.show =
+			mmc_manual_gc_show;
+	msm_host->mmc_manual_gc_attr.store =
+			mmc_manual_gc_store;
+	sysfs_attr_init(&msm_host->mmc_manual_gc_attr.attr);
+	msm_host->mmc_manual_gc_attr.attr.name =
+			"manual_gc";
+	msm_host->mmc_manual_gc_attr.attr.mode = 0664;
+	ret = device_create_file(&msm_host->pdev->dev,
+			&msm_host->mmc_manual_gc_attr);
+	if (ret)
+		dev_err(&msm_host->pdev->dev, "%s: fail to create mmc_manual_gc_attr (%d)\n",
+			__func__, ret);
+
 	/* Successful initialization */
 	goto out;
 
@@ -5238,19 +5364,50 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
 	struct sdhci_msm_pltfm_data *pdata = msm_host->pdata;
+	int nr_groups = msm_host->pdata->pm_qos_data.cpu_group_map.nr_groups;
+	int i;
 	int dead = (readl_relaxed(host->ioaddr + SDHCI_INT_STATUS) ==
 			0xffffffff);
 
-	pr_debug("%s: %s\n", dev_name(&pdev->dev), __func__);
+	pr_debug("%s: %s Enter\n", dev_name(&pdev->dev), __func__);
 	if (!gpio_is_valid(msm_host->pdata->status_gpio))
 		device_remove_file(&pdev->dev, &msm_host->polling);
+
+	device_remove_file(&pdev->dev, &msm_host->auto_cmd21_attr);
 	device_remove_file(&pdev->dev, &msm_host->msm_bus_vote.max_bus_bw);
 	pm_runtime_disable(&pdev->dev);
 
+	if (msm_host->pm_qos_group_enable) {
+		struct sdhci_msm_pm_qos_group *group;
+
+		for (i = 0; i < nr_groups; i++)
+			cancel_delayed_work_sync(
+					&msm_host->pm_qos[i].unvote_work);
+
+		device_remove_file(&msm_host->pdev->dev,
+			&msm_host->pm_qos_group_enable_attr);
+		device_remove_file(&msm_host->pdev->dev,
+			&msm_host->pm_qos_group_status_attr);
+
+		for (i = 0; i < nr_groups; i++) {
+			group = &msm_host->pm_qos[i];
+			pm_qos_remove_request(&group->req);
+		}
+	}
+
+	if (msm_host->pm_qos_irq.enabled) {
+		cancel_delayed_work_sync(&msm_host->pm_qos_irq.unvote_work);
+		device_remove_file(&pdev->dev,
+				&msm_host->pm_qos_irq.enable_attr);
+		device_remove_file(&pdev->dev,
+				&msm_host->pm_qos_irq.status_attr);
+		pm_qos_remove_request(&msm_host->pm_qos_irq.req);
+	}
+
 	if (msm_host->pm_qos_wq)
 		destroy_workqueue(msm_host->pm_qos_wq);
+
 	sdhci_remove_host(host, dead);
-	sdhci_pltfm_free(pdev);
 
 	sdhci_msm_vreg_init(&pdev->dev, msm_host->pdata, false);
 
@@ -5261,6 +5418,9 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 		sdhci_msm_bus_cancel_work_and_set_vote(host, 0);
 		sdhci_msm_bus_unregister(msm_host);
 	}
+
+	sdhci_pltfm_free(pdev);
+
 	return 0;
 }
 

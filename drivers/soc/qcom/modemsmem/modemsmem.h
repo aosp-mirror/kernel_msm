@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2018 Google Inc.
  *
- *     @file   /kernel/drivers/modemsmem/modemsmem.h
+ *     @file   /kernel/drivers/soc/qcom/modemsmem/modemsmem.h
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,12 +24,12 @@
 
 struct modem_smem_type {
 	uint32_t	version;
-	uint32_t	reserved_1;
+	uint32_t	modem_flag;
 	uint32_t	major_id;
 	uint32_t	minor_id;
 	uint32_t	subtype;
 	uint32_t	platform;
-	uint32_t	reserved_2;
+	uint32_t	efs_magic;
 	uint32_t	ftm_magic;
 };
 

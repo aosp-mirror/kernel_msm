@@ -1,0 +1,42 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&vendor {
+	s4_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <10>;
+		/* NVT using ATL cell - 10k
+		 * Deasy using ATL cell - 22k
+		 * Deasy using COS cell - 47k
+		 */
+		#include "batterydata-qcom-s4-10k.dtsi"
+		#include "batterydata-qcom-s4-22k.dtsi"
+		#include "batterydata-qcom-s4-47k.dtsi"
+	};
+};
+
+&pm660_fg {
+	qcom,battery-data = <&s4_batterydata>;
+	qcom,fg-chg-term-current = <150>;
+	qcom,fg-sys-term-current = <(-450)>;
+	qcom,fastchg-current-ma = <3000>;
+};
+
+&google_charger {
+	google,chg-battery-capacity = <3000>;
+};
+
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <580>;
+		google,end-mitigation-temp = <450>;
+	};
+};

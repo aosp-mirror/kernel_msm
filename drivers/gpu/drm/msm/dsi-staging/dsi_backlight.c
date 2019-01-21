@@ -14,6 +14,7 @@
 
 #define pr_fmt(fmt)	"%s:%d: " fmt, __func__, __LINE__
 #include <linux/backlight.h>
+#include <linux/debugfs.h>
 #include <linux/of_gpio.h>
 #include <linux/sysfs.h>
 #include <linux/list.h>
@@ -828,6 +829,7 @@ struct binned_lp_node {
 	const char *name;
 	u32 bl_threshold;
 	struct dsi_panel_cmd_set dsi_cmd;
+	struct dentry *mode_dir;
 };
 
 enum lp_comp_state {
@@ -967,6 +969,36 @@ static int _dsi_panel_binned_bl_cmp(void *priv, struct list_head *lha,
 	return a->bl_threshold - b->bl_threshold;
 }
 
+void dsi_panel_debugfs_create_binned_bl(struct dentry *parent,
+					struct dsi_backlight_config *bl)
+{
+	struct dentry *r;
+	struct binned_lp_data *lp_data;
+	struct binned_lp_node *tmp;
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+
+	r = debugfs_create_dir("lp_modes", parent);
+	if (IS_ERR(r))
+		return;
+
+	lp_data = bl->priv;
+
+	list_for_each_entry(tmp, &lp_data->mode_list, head) {
+		tmp->mode_dir = debugfs_create_dir(tmp->name, r);
+		if (IS_ERR(tmp->mode_dir)) {
+			pr_err("create debugfs binned_bl failed\n");
+			return;
+		}
+
+		debugfs_create_u32("threshold", 0600,
+				   tmp->mode_dir,
+				   &tmp->bl_threshold);
+
+		dsi_panel_debugfs_create_cmdset(tmp->mode_dir, "cmd",
+						panel, &tmp->dsi_cmd);
+	}
+}
+
 static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 {
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
@@ -1025,6 +1057,7 @@ static int dsi_panel_binned_lp_register(struct dsi_backlight_config *bl)
 
 	bl->update_bl = dsi_panel_binned_bl_update;
 	bl->unregister = dsi_panel_bl_free_unregister;
+	bl->debugfs_init = dsi_panel_debugfs_create_binned_bl;
 	bl->priv = lp_data;
 
 exit:
@@ -1042,6 +1075,14 @@ static const struct of_device_id dsi_backlight_dt_match[] = {
 	},
 	{}
 };
+
+void dsi_panel_bl_debugfs_init(struct dentry *parent, struct dsi_panel *panel)
+{
+	struct dsi_backlight_config *bl = &panel->bl_config;
+
+	if (bl->debugfs_init)
+		bl->debugfs_init(parent, bl);
+}
 
 static int dsi_panel_bl_parse_hbm_node(struct device *parent,
 	struct dsi_backlight_config *bl, struct device_node *np,

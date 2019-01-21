@@ -1,4 +1,4 @@
-/* Copyright (c) 2012,2014-2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012,2014-2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,6 +16,7 @@
 #include <linux/stacktrace.h>
 #include <linux/spinlock.h>
 #include <linux/debugfs.h>
+#include <net/cnss_prealloc.h>
 #ifdef	CONFIG_WCNSS_SKB_PRE_ALLOC
 #include <linux/skbuff.h>
 #endif
@@ -33,7 +34,7 @@ static struct dentry *debug_base;
 
 struct wcnss_prealloc {
 	int occupied;
-	unsigned int size;
+	size_t size;
 	void *ptr;
 #ifdef CONFIG_SLUB_DEBUG
 	unsigned long stack_trace[WCNSS_MAX_STACK_TRACE];
@@ -153,7 +154,7 @@ static inline
 void wcnss_prealloc_save_stack_trace(struct wcnss_prealloc *entry) {}
 #endif
 
-void *wcnss_prealloc_get(unsigned int size)
+void *wcnss_prealloc_get(size_t size)
 {
 	int i = 0;
 	unsigned long flags;
@@ -173,7 +174,7 @@ void *wcnss_prealloc_get(unsigned int size)
 	}
 	spin_unlock_irqrestore(&alloc_lock, flags);
 
-	WARN(1, "wcnss_prealloc not available for size %d\n", size);
+	WARN(1, "wcnss_prealloc not available for size %zu\n", size);
 
 	return NULL;
 }
@@ -212,7 +213,7 @@ void wcnss_prealloc_check_memory_leak(void)
 			j++;
 		}
 
-		pr_err("Size: %u, addr: %pK, backtrace:\n",
+		pr_err("Size: %zu, addr: %pK, backtrace:\n",
 		       wcnss_allocs[i].size, wcnss_allocs[i].ptr);
 		print_stack_trace(&wcnss_allocs[i].trace, 1);
 	}

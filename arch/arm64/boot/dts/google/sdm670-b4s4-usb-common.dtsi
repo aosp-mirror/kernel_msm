@@ -1,0 +1,99 @@
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+#include <dt-bindings/usb/typec.h>
+
+&tlmm {
+	cc_sbu_ovp_intr {
+		cc_sbu_ovp_intr_default: cc_sbu_ovp_intr_default {
+			mux {
+				pins = "gpio21";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio21";
+				bias-disable;
+			};
+		};
+	};
+};
+
+&pm660_gpios {
+	usb2_ext_5v_boost {
+		usb2_ext_5v_boost_default: usb2_ext_5v_boost_default {
+			pins = "gpio6";
+			function = PMIC_GPIO_FUNC_NORMAL;
+			output-low;
+			power-source = <0>;
+		};
+	};
+};
+
+&vendor {
+	ext_5v_boost: ext_5v_boost {
+		compatible = "regulator-fixed";
+		regulator-name = "ext_5v_boost";
+		gpio = <&pm660_gpios 6 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		regulator-enable-ramp-delay = <1600>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_ext_5v_boost_default>;
+	};
+};
+
+&qusb_phy0 {
+	qcom,qusb-phy-reg-offset =
+		<0x240 /* QUSB2PHY_PORT_TUNE1 */
+		 0x1a0 /* QUSB2PHY_PLL_COMMON_STATUS_ONE */
+		 0x210 /* QUSB2PHY_PWR_CTRL1 */
+		 0x230 /* QUSB2PHY_INTR_CTRL */
+		 0x0a8 /* QUSB2PHY_PLL_CORE_INPUT_OVERRIDE */
+		 0x254 /* QUSB2PHY_TEST1 */
+		 0x194 /* PLL_BIAS_CONTROL_1 */
+		 0x198 /* PLL_BIAS_CONTROL_2 */
+		 0x228 /* QUSB2PHY_SQ_CTRL1 */
+		 0x22c /* QUSB2PHY_SQ_CTRL2 */
+		 0x27c>; /* QUSB2PHY_DEBUG_CTRL1 */
+};
+
+&usb0 {
+	google,switch-vbus = <250>;
+
+	dwc3@a600000 {
+		maximum-speed = "high-speed";
+		usb-phy = <&qusb_phy0>, <&usb_nop_phy>;
+	};
+};
+
+&pm660_pdphy {
+	goog,src-pdo = <PDO_TYPE_FIXED 5000 900 0>;     /* 5V @ 0.9A */
+	goog,snk-pdo = <PDO_TYPE_FIXED 5000 3000 0>,    /* 5V @ 3A */
+		       <PDO_TYPE_FIXED 9000 3000 0>;    /* 9V @ 3A */
+	goog,max-snk-mv = <9000>;
+	goog,max-snk-ma = <3000>;
+	goog,max-snk-mw = <27000>;
+	goog,op-snk-mw = <7600>;
+	goog,port-type = <TYPEC_PORT_DRP>;
+	goog,default-role = <TYPEC_SINK>;
+	goog,try-role-hw;
+
+	ext-vbus-supply = <&ext_5v_boost>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&cc_sbu_ovp_intr_default>;
+};
+
+&usb_qmp_dp_phy {
+	status = "disabled";
+};

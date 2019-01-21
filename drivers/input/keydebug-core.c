@@ -90,8 +90,9 @@ static void keydebug_event(void *priv)
 		if (kernel_top_enable)
 			kernel_top_init();
 
-		queue_delayed_work(kdbg_wq, &pdata->delayed_work,
-							msecs_to_jiffies(msecs));
+		queue_delayed_work(kdbg_wq,
+			&pdata->delayed_work, msecs_to_jiffies(msecs));
+
 		pdata->keydebug_requested = true;
 	}
 }
@@ -138,11 +139,12 @@ static int keydebug_parse_dt(struct device *dev,
 	}
 
 	pr_info("%s: DT:key_down_delay=%d dbg_fn_delay=%d"
-			" keys_down num_keys=%d\n", __func__, pdata->key_down_delay,
-			pdata->dbg_fn_delay, num_keys);
+		" keys_down num_keys=%d\n", __func__, pdata->key_down_delay,
+		pdata->dbg_fn_delay, num_keys);
 
 	for (cnt = 0; cnt < num_keys; cnt++)
-		pr_info("%s: DT:keys_down=%d\n", __func__, pdata->keys_down[cnt]);
+		pr_info("%s: DT:keys_down=%d\n", __func__,
+			pdata->keys_down[cnt]);
 
 	return 0;
 

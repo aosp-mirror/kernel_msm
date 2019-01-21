@@ -23,7 +23,7 @@ static inline int fscrypt_should_be_processed_by_ice(const struct inode *inode)
 		return 0;
 
 	if (!IS_ENCRYPTED((struct inode *)inode))
-		return 0;
+	return 0;
 
 	return fscrypt_using_hardware_encryption(inode);
 }

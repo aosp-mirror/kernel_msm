@@ -441,7 +441,7 @@ static void qusb_phy_get_tune1_param(struct qusb_phy *qphy)
 	u8 reg;
 	u32 bit_mask = 1;
 
-	pr_debug("%s(): num_of_bits:%d bit_pos:%d\n", __func__,
+	pr_info("%s(): num_of_bits:%d bit_pos:%d\n", __func__,
 				qphy->efuse_num_of_bits,
 				qphy->efuse_bit_pos);
 
@@ -465,6 +465,7 @@ static void qusb_phy_get_tune1_param(struct qusb_phy *qphy)
 	}
 
 	qphy->tune_val = reg;
+	pr_info("%s(): final tune1 value: %d\n", __func__, qphy->tune_val);
 }
 
 static void qusb_phy_write_seq(void __iomem *base, u32 *seq, int cnt,

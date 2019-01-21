@@ -647,7 +647,7 @@ static void dev_init_platform_data(struct drv2624_data *drv2624)
 		    5 * (1000 - actuator.lra_freq) / actuator.lra_freq;
 		unsigned short open_loop_period =
 		    (unsigned short)((unsigned int)1000000000 /
-				     (24619 * actuator.lra_freq));
+				     (24615 * actuator.lra_freq));
 
 		if (actuator.lra_freq < 125)
 			drive_time |= (MINFREQ_SEL_45HZ << MINFREQ_SEL_SHIFT);
@@ -659,7 +659,7 @@ static void dev_init_platform_data(struct drv2624_data *drv2624)
 		if (actuator.ol_lra_freq > -1)
 			open_loop_period =
 				(unsigned short)((unsigned int)1000000000 /
-				     (24619 * actuator.ol_lra_freq));
+				     (24615 * actuator.ol_lra_freq));
 
 		drv2624_set_bits(drv2624,
 				 DRV2624_REG_OL_PERIOD_H, 0x03,
@@ -689,6 +689,11 @@ static void dev_init_platform_data(struct drv2624_data *drv2624)
 	if (actuator.bemf_gain > -1)
 		drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
 				 BEMFGAIN_MASK, actuator.bemf_gain);
+
+	if (actuator.fb_brake_factor > -1)
+		drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
+				 FB_BRAKE_FACTOR_MASK,
+				 actuator.fb_brake_factor);
 
 	if (actuator.blanking_time > -1)
 		drv2624_set_bits(drv2624, DRV2624_REG_BLK_IDISS_TIME,
@@ -844,6 +849,14 @@ static int drv2624_parse_dt(struct device *dev, struct drv2624_data *drv2624)
 
 	dev_dbg(drv2624->dev, "ti,ol-lra-frequency=%d\n",
 		pdata->actuator.ol_lra_freq);
+
+	if (!of_property_read_u32(np, "ti,fb-brake-factor", &value))
+		pdata->actuator.fb_brake_factor = value;
+	else
+		pdata->actuator.fb_brake_factor = -1;
+
+	dev_dbg(drv2624->dev, "ti,fb-brake-factor=%d\n",
+		pdata->actuator.fb_brake_factor);
 
 	if (!of_property_read_u32(np, "ti,bemf-factor", &value))
 		pdata->actuator.bemf_factor = value;
@@ -1457,6 +1470,67 @@ static ssize_t lra_wave_shape_store(struct device *dev,
 	return count;
 }
 
+static ssize_t lp_trigger_effect_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", drv2624->lp_trigger_effect);
+}
+
+static ssize_t lp_trigger_effect_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	int ret;
+
+	ret = kstrtou8(buf, 10, &drv2624->lp_trigger_effect);
+	if (ret) {
+		dev_err(dev,
+			"Invalid input for lp_trigger_effect: ret = %d\n", ret);
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t dump_reg_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	unsigned char i;
+	ssize_t ret = 0;
+
+	mutex_lock(&drv2624->lock);
+	for (i = 0; i < 0x31; i++) {
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret,
+				 "reg(0x%x) = 0x%x\n", (unsigned int)i,
+				 (unsigned int)drv2624_reg_read(drv2624, i));
+	}
+	mutex_unlock(&drv2624->lock);
+
+	return ret;
+}
+
+static ssize_t dump_reg_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	u32 reg = 0, value = 0;
+	int n;
+
+	n = sscanf(buf, "%x %x", &reg, &value);
+
+	if (n != 2)
+		return -EINVAL;
+
+	drv2624_reg_write(drv2624, reg, value);
+
+	return count;
+}
+
 static DEVICE_ATTR(rtp_input, 0660, rtp_input_show, rtp_input_store);
 static DEVICE_ATTR(mode, 0660, mode_show, mode_store);
 static DEVICE_ATTR(loop, 0660, loop_show, loop_store);
@@ -1473,6 +1547,9 @@ static DEVICE_ATTR(ol_lra_period, 0660, ol_lra_period_show,
 		   ol_lra_period_store);
 static DEVICE_ATTR(lra_wave_shape, 0660, lra_wave_shape_show,
 		   lra_wave_shape_store);
+static DEVICE_ATTR(lp_trigger_effect, 0660, lp_trigger_effect_show,
+		   lp_trigger_effect_store);
+static DEVICE_ATTR(dump_reg, 0660, dump_reg_show, dump_reg_store);
 
 static struct attribute *drv2624_fs_attrs[] = {
 	&dev_attr_rtp_input.attr,
@@ -1489,6 +1566,8 @@ static struct attribute *drv2624_fs_attrs[] = {
 	&dev_attr_status.attr,
 	&dev_attr_ol_lra_period.attr,
 	&dev_attr_lra_wave_shape.attr,
+	&dev_attr_lp_trigger_effect.attr,
+	&dev_attr_dump_reg.attr,
 	NULL,
 };
 
@@ -1665,21 +1744,45 @@ static const struct of_device_id drv2624_of_match[] = {
 MODULE_DEVICE_TABLE(of, drv2624_of_match);
 #endif
 
+void drv2624_trigger_mode(struct drv2624_data *drv2624, int mode)
+{
+	drv2624_set_bits(drv2624, DRV2624_REG_MODE, PINFUNC_MASK,
+			 (mode << PINFUNC_SHIFT));
+}
+
 #ifdef CONFIG_PM
 static int drv2624_suspend(struct device *dev)
 {
 	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	struct drv2624_waveform_sequencer sequencer;
+
+	memset(&sequencer, 0, sizeof(sequencer));
 
 	cancel_work_sync(&drv2624->vibrator_work);
 	cancel_work_sync(&drv2624->work);
 	cancel_work_sync(&drv2624->stop_work);
 	drv2624_stop(drv2624);
 
+	if (drv2624->lp_trigger_effect) {
+		sequencer.waveform[0].effect = drv2624->lp_trigger_effect;
+		drv2624_set_waveform(drv2624, &sequencer);
+
+		drv2624_change_mode(drv2624, MODE_WAVEFORM_SEQUENCER);
+		drv2624_set_bits(drv2624, DRV2624_REG_CONTROL1, LOOP_MASK,
+				 0 << LOOP_SHIFT);
+
+		drv2624_trigger_mode(drv2624, PINFUNC_TRIG_PULSE);
+	}
+
 	return 0;
 }
 
 static int drv2624_resume(struct device *dev)
 {
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+
+	drv2624_trigger_mode(drv2624, PINFUNC_INT);
+
 	return 0;
 }
 

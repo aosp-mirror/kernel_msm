@@ -1,5 +1,6 @@
-# Do not include QC default DTBs for B1C1 builds.
+# Do not include QC default DTBs for B1C1 and BONITO builds.
 ifneq ($(CONFIG_BOARD_B1C1),y)
+ifneq ($(CONFIG_BOARD_BONITO),y)
 
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb msm8916-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-mtp.dtb
@@ -498,6 +499,7 @@ dtb-$(CONFIG_ARCH_SDM429) += sdm429-mtp.dtb \
 
 endif
 
+endif #CONFIG_BOARD_BONITO
 endif #CONFIG_BOARD_B1C1
 
 always		:= $(dtb-y)

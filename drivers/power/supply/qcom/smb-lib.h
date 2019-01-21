@@ -319,6 +319,7 @@ struct smb_charger {
 	struct work_struct	legacy_detection_work;
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
+	struct delayed_work	aicl_rerun_work;
 
 	/* cached status */
 	int			voltage_min_uv;
@@ -464,6 +465,8 @@ int smblib_get_prop_batt_current_now(struct smb_charger *chg,
 int smblib_get_prop_batt_temp(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_get_prop_charge_full(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_set_prop_input_suspend(struct smb_charger *chg,
 				const union power_supply_propval *val);

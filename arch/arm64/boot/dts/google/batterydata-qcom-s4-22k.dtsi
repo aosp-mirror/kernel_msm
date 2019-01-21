@@ -1,0 +1,71 @@
+
+qcom,s4-22k {
+	qcom, = <24>;
+	/* #3583200_Google_S4atl_3000mAh_averaged_MasterSlave_Aug21st2018*/
+	qcom,max-voltage-uv = <4400000>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,nom-batt-capacity-mah = <3000>;
+	qcom,batt-id-kohm = <22>;
+	qcom,battery-beta = <4360>;
+	qcom,battery-type = "s4-22k";
+	qcom,checksum = <0x9BD2>;
+	qcom,gui-version = "PM660GUI - 0.0.0.45";
+	qcom,fg-profile-data = [
+		 4D 21 F0 0D
+		 91 0B 6A 05
+		 07 1D C3 FA
+		 AC 05 D6 02
+		 EE 17 95 23
+		 CC 44 E6 53
+		 95 00 00 00
+		 11 00 00 00
+		 00 00 64 BD
+		 16 C4 9D BA
+		 1C 00 08 00
+		 95 DB 27 E4
+		 01 F4 86 00
+		 25 FB 9F 12
+		 11 FC 12 32
+		 1B 06 09 20
+		 27 00 14 00
+		 BF 1F 8A 05
+		 87 0A 73 FC
+		 BE 1C 1D 03
+		 D2 15 66 12
+		 8A 18 EF 23
+		 C5 4D 81 5B
+		 67 00 00 00
+		 0D 00 00 00
+		 00 00 6E CC
+		 02 00 41 C3
+		 18 00 00 00
+		 F6 EA 27 E4
+		 DA F4 1F EB
+		 0A F3 D0 0A
+		 C2 E2 7C 1A
+		 AA 33 CC FF
+		 07 10 00 00
+		 F9 0B 66 46
+		 18 00 40 00
+		 C7 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

@@ -304,6 +304,7 @@
 
 	audio_apr: qcom,msm-audio-apr {
 		compatible = "qcom,msm-audio-apr";
+		qcom,subsys-name = "apr_adsp";
 	};
 
 	dai_pri_auxpcm: qcom,msm-pri-auxpcm {
@@ -413,7 +414,7 @@
 		};
 	};
 
-	qcom,msm-dai-tdm-pri-tx {
+	msm_dai_tdm_pri_tx: qcom,msm-dai-tdm-pri-tx {
 		compatible = "qcom,msm-dai-tdm";
 		qcom,msm-cpudai-tdm-group-id = <37121>;
 		qcom,msm-cpudai-tdm-group-num-ports = <1>;
@@ -432,7 +433,7 @@
 		};
 	};
 
-	qcom,msm-dai-tdm-sec-rx {
+	msm_dai_tdm_sec_rx: com,msm-dai-tdm-sec-rx {
 		compatible = "qcom,msm-dai-tdm";
 		qcom,msm-cpudai-tdm-group-id = <37136>;
 		qcom,msm-cpudai-tdm-group-num-ports = <1>;
@@ -451,7 +452,7 @@
 		};
 	};
 
-	qcom,msm-dai-tdm-sec-tx {
+	msm_dai_tdm_sec_tx: qcom,msm-dai-tdm-sec-tx {
 		compatible = "qcom,msm-dai-tdm";
 		qcom,msm-cpudai-tdm-group-id = <37137>;
 		qcom,msm-cpudai-tdm-group-num-ports = <1>;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -391,13 +391,14 @@ static int cam_lrme_mgr_util_submit_req(void *priv, void *data)
 	work_data = (struct cam_lrme_mgr_work_data *)data;
 	hw_device = work_data->hw_device;
 
-	rc = cam_lrme_mgr_util_get_frame_req(&hw_device->
-		frame_pending_list_high, &frame_req, &hw_device->high_req_lock);
+	rc = cam_lrme_mgr_util_get_frame_req(
+		&hw_device->frame_pending_list_high, &frame_req,
+		&hw_device->high_req_lock);
 
 	if (!frame_req) {
-		rc = cam_lrme_mgr_util_get_frame_req(&hw_device->
-				frame_pending_list_normal, &frame_req,
-				&hw_device->normal_req_lock);
+		rc = cam_lrme_mgr_util_get_frame_req(
+			&hw_device->frame_pending_list_normal, &frame_req,
+			&hw_device->normal_req_lock);
 		if (frame_req)
 			req_prio = 1;
 	}
@@ -681,6 +682,12 @@ static int cam_lrme_mgr_hw_flush(void *hw_mgr_priv, void *hw_flush_args)
 	req_list = (struct cam_lrme_frame_request **)args->flush_req_pending;
 	for (i = 0; i < args->num_req_pending; i++) {
 		frame_req = req_list[i];
+		if (!frame_req) {
+			CAM_ERR(CAM_LRME,
+			"Can not get flush pending request at %d/%d",
+			i, args->num_req_pending);
+			return -EINVAL;
+		}
 		memset(frame_req, 0x0, sizeof(*frame_req));
 		cam_lrme_mgr_util_put_frame_req(&hw_mgr->frame_free_list,
 			&frame_req->frame_list, &hw_mgr->free_req_lock);
@@ -689,6 +696,12 @@ static int cam_lrme_mgr_hw_flush(void *hw_mgr_priv, void *hw_flush_args)
 	req_list = (struct cam_lrme_frame_request **)args->flush_req_active;
 	for (i = 0; i < args->num_req_active; i++) {
 		frame_req = req_list[i];
+		if (!frame_req) {
+			CAM_ERR(CAM_LRME,
+			"Can not get flush active request at %d/%d",
+			i, args->num_req_active);
+			return -EINVAL;
+		}
 		priority = CAM_LRME_DECODE_PRIORITY(args->ctxt_to_hw_map);
 		spin_lock((priority == CAM_LRME_PRIORITY_HIGH) ?
 			&hw_device->high_req_lock :
@@ -878,6 +891,7 @@ static int cam_lrme_mgr_hw_prepare_update(void *hw_mgr_priv,
 	if (args->num_in_map_entries == 0 || args->num_out_map_entries == 0) {
 		CAM_ERR(CAM_LRME, "Error in port number in %d, out %d",
 			args->num_in_map_entries, args->num_out_map_entries);
+		rc = -EINVAL;
 		goto error;
 	}
 

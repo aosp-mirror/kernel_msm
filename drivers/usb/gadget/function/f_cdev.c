@@ -1256,6 +1256,7 @@ ssize_t f_cdev_write(struct file *file,
 		ret = -EFAULT;
 	} else {
 		req->length = xfer_size;
+		req->zero = 1;
 		ret = usb_ep_queue(in, req, GFP_KERNEL);
 		if (ret) {
 			pr_err("EP QUEUE failed:%d\n", ret);
@@ -1487,8 +1488,10 @@ int usb_cser_connect(struct f_cdev *port)
 
 void usb_cser_disconnect(struct f_cdev *port)
 {
+	struct cserial *cser;
 	unsigned long flags;
 
+	cser = &port->port_usb;
 	usb_cser_stop_io(port);
 
 	/* lower DTR to modem */
@@ -1496,6 +1499,7 @@ void usb_cser_disconnect(struct f_cdev *port)
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	port->is_connected = false;
+	cser->notify_modem = NULL;
 	port->nbytes_from_host = port->nbytes_to_host = 0;
 	port->nbytes_to_port_bridge = 0;
 	spin_unlock_irqrestore(&port->port_lock, flags);

@@ -1,0 +1,34 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+
+/dts-v1/;
+
+#include "sdm670-s4-common.dtsi"
+#include "sdm670-b4s4-key-dev-proto.dtsi"
+#include "sdm670-b4s4-touch-dev-proto.dtsi"
+#include "sdm670-b4s4-thermal-proto.dtsi"
+#include "sdm670-camera-sensor.dtsi"
+#include "sdm670-s4-usb-v2.dtsi"
+
+/* TODO: Add dev board display and touch includes here */
+/* TODO: Fix model/compatible/board-id */
+
+/ {
+	model = "Google Inc. MSM sdm670 S4 Proto v1.0";
+	compatible = "google,b4s4-sdm670", "qcom,sdm670";
+	qcom,board-id = <0x00040305 0>;
+};
+
+&int_codec {
+	qcom,model = "sdm670-intcodec-s4-snd-card";
+};

@@ -122,6 +122,12 @@ static int mmc_cmdq_thread(void *d)
 
 	struct mmc_host *host = card->host;
 
+	struct sched_param scheduler_params = {0};
+
+	scheduler_params.sched_priority = 1;
+
+	sched_setscheduler(current, SCHED_FIFO, &scheduler_params);
+
 	current->flags |= PF_MEMALLOC;
 	if (card->host->wakeup_on_idle)
 		set_wake_up_idle(true);
@@ -133,7 +139,14 @@ static int mmc_cmdq_thread(void *d)
 		if (kthread_should_stop())
 			break;
 
+		ret = mmc_cmdq_down_rwsem(host, mq->cmdq_req_peeked);
+		if (ret) {
+			mmc_cmdq_up_rwsem(host);
+			continue;
+		}
 		ret = mq->cmdq_issue_fn(mq, mq->cmdq_req_peeked);
+		mmc_cmdq_up_rwsem(host);
+
 		/*
 		 * Don't requeue if issue_fn fails.
 		 * Recovery will be come by completion softirq
@@ -314,6 +327,8 @@ void mmc_cmdq_setup_queue(struct mmc_queue *mq, struct mmc_card *card)
 						host->max_req_size / 512));
 	blk_queue_max_segment_size(mq->queue, host->max_seg_size);
 	blk_queue_max_segments(mq->queue, host->max_segs);
+	if (host->inlinecrypt_support)
+		queue_flag_set_unlocked(QUEUE_FLAG_INLINECRYPT, mq->queue);
 }
 
 /**
@@ -483,6 +498,9 @@ cur_sg_alloc_failed:
 success:
 	sema_init(&mq->thread_sem, 1);
 
+	if (host->inlinecrypt_support)
+		queue_flag_set_unlocked(QUEUE_FLAG_INLINECRYPT, mq->queue);
+
 	/* hook for pm qos legacy init */
 	if (card->host->ops->init)
 		card->host->ops->init(card->host);
@@ -640,6 +658,7 @@ int mmc_cmdq_init(struct mmc_queue *mq, struct mmc_card *card)
 
 	init_waitqueue_head(&card->host->cmdq_ctx.queue_empty_wq);
 	init_waitqueue_head(&card->host->cmdq_ctx.wait);
+	init_rwsem(&card->host->cmdq_ctx.err_rwsem);
 
 	mq->mqrq_cmdq = kzalloc(
 			sizeof(struct mmc_queue_req) * q_depth, GFP_KERNEL);

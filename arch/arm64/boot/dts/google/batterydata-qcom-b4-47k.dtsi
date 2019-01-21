@@ -1,0 +1,72 @@
+
+qcom,b4-47k {
+	qcom, = <24>;
+	// #3633603_Google_B4DSYLSN
+	// 3700mAh_averaged_MasterSlave_Oct2nd2018
+	qcom,max-voltage-uv = <4400000>;
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,nom-batt-capacity-mah = <3700>;
+	qcom,batt-id-kohm = <47>;
+	qcom,battery-beta = <4360>;
+	qcom,battery-type = "b4-47k";
+	qcom,checksum = <0x900F>;
+	qcom,gui-version = "PM660GUI - 0.0.0.45";
+	qcom,fg-profile-data = [
+		 08 20 35 05
+		 A8 0A 73 FC
+		 F6 1C A0 01
+		 D7 04 A4 03
+		 04 18 98 23
+		 B5 44 10 5A
+		 85 00 00 00
+		 11 00 00 00
+		 00 00 54 CD
+		 0F BC 44 CA
+		 18 00 08 00
+		 47 DB 4F E5
+		 D7 FD AF 00
+		 12 01 5E 12
+		 D8 05 90 2B
+		 1B 06 09 20
+		 27 00 14 00
+		 89 1F D9 05
+		 41 0A 09 FD
+		 CA 1C FE 02
+		 EB 15 4E 12
+		 8D 18 0D 2A
+		 94 4D F5 5B
+		 66 00 00 00
+		 0D 00 00 00
+		 00 00 D2 D5
+		 0A CA BE C2
+		 16 00 00 00
+		 C1 E3 4F E5
+		 33 07 83 00
+		 41 C3 F6 03
+		 64 E3 9B 1A
+		 B3 33 CC FF
+		 07 10 00 00
+		 EC 0E 66 46
+		 16 00 40 00
+		 8C 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

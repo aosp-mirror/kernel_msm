@@ -671,7 +671,7 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			 * see JEDEC JESD84-B51 section 7.4.19
 			 */
 			card->ext_csd.cmdq_depth =
-				ext_csd[EXT_CSD_CMDQ_DEPTH] + 1;
+				min(ext_csd[EXT_CSD_CMDQ_DEPTH] + 1, 16);
 			pr_info("%s: CMDQ supported: depth: %d\n",
 				mmc_hostname(card->host),
 				card->ext_csd.cmdq_depth);
@@ -3090,7 +3090,7 @@ static int mmc_pre_hibernate(struct mmc_host *host)
 	host->caps2 &= ~MMC_CAP2_CLK_SCALE;
 	host->clk_scaling.state = MMC_LOAD_HIGH;
 	ret = mmc_clk_update_freq(host, host->card->clk_scaling_highest,
-				host->clk_scaling.state);
+				host->clk_scaling.state, 0);
 	if (ret)
 		pr_err("%s: %s: Setting clk frequency to max failed: %d\n",
 				mmc_hostname(host), __func__, ret);

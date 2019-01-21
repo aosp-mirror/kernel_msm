@@ -19,3 +19,100 @@ Description:
 		is enabled, this attribute will indicate the size of enhanced
 		data area. If not, this attribute will be -EINVAL.
 		Unit KByte. Format decimal.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_read_us
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		MMC read I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_read_cnt
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains the number of MMC read I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_write_us
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		MMC write I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_write_cnt
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains the number of MMC write I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_urgent_read_us
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		MMC urgent read I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_urgent_read_cnt
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains the number of MMC urgent read I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_urgent_write_us
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		MMC urgent write I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_urgent_write_cnt
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains the number of MMC urgent write I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_flush_us
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		MMC flush I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_flush_cnt
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains the number of MMC flush I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_discard_us
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		MMC discard I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/.../mmc_host/mmcX/slowio_discard_cnt
+Date:		Oct, 2018
+Contact:	"Leo Liou" <leoliou@google.com>
+Description:
+		Contains the number of MMC discard I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.

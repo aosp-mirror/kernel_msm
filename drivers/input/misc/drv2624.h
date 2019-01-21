@@ -63,6 +63,8 @@
 #define	MODE_CALIBRATION			0x03
 #define	PINFUNC_MASK				0x0c
 #define	PINFUNC_INT				0x02
+#define	PINFUNC_TRIG_LEVEL			0x01
+#define	PINFUNC_TRIG_PULSE			0x00
 #define	PINFUNC_SHIFT				0x02
 
 #define DRV2624_REG_LRA_PERIOD_H		0x05
@@ -108,6 +110,7 @@
 
 #define	DRV2624_REG_LOOP_CONTROL		0x23
 #define	BEMFGAIN_MASK				0x03
+#define	FB_BRAKE_FACTOR_MASK			0x70
 
 #define	DRV2624_REG_DRIVE_TIME			0x27
 #define	DRIVE_TIME_MASK				0x1f
@@ -202,6 +205,7 @@ struct actuator_data {
 	int zc_det_time;
 	int lra_wave_shape;
 	int waveform_interval;
+	int fb_brake_factor;
 };
 
 enum wave_seq_loop {
@@ -314,6 +318,7 @@ struct drv2624_data {
 	struct drv2624_fw_header fw_header;
 	unsigned char ram_lsb;
 	unsigned char ram_msb;
+	unsigned char lp_trigger_effect;
 };
 
 #define	DRV2624_MAGIC_NUMBER	0x32363234	/* '2624' */

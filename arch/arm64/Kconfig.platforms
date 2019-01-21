@@ -327,4 +327,9 @@ config BOARD_B1C1
 	depends on ARCH_QCOM
 	select ARCH_SDM845
 
+config BOARD_BONITO
+	bool "Google BONITO Family"
+	depends on ARCH_QCOM
+	select ARCH_SDM670
+
 endmenu

@@ -56,9 +56,6 @@
 #define MAX_SZ_DIAG_ERR_MSG     100
 
 struct reboot_params {
-	u32 abnrst;
-	u32 xbl_log_addr;
-	u32 ddr_vendor;
 	u8 msg[0];
 };
 

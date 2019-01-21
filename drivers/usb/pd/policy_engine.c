@@ -530,6 +530,10 @@ static inline void start_usb_peripheral(struct usbpd *pd)
 	val.intval = 1;
 	extcon_set_property(pd->extcon, EXTCON_USB, EXTCON_PROP_USB_SS, val);
 
+	val.intval =
+		pd->typec_mode > POWER_SUPPLY_TYPEC_SOURCE_DEFAULT ? 1 : 0;
+	extcon_set_property(pd->extcon, EXTCON_USB,
+			EXTCON_PROP_USB_PD_CONTRACT, val);
 	extcon_set_state_sync(pd->extcon, EXTCON_USB, 1);
 }
 
@@ -1922,6 +1926,22 @@ enable_reg:
 	else
 		pd->vbus_enabled = true;
 
+	count = 10;
+	/*
+	 * Check to make sure VBUS voltage reaches above Vsafe5Vmin (4.75v)
+	 * before proceeding.
+	 */
+	while (count--) {
+		ret = power_supply_get_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &val);
+		if (ret || val.intval >= 4750000) /*vsafe5Vmin*/
+			break;
+		usleep_range(10000, 12000); /* Delay between two reads */
+	}
+
+	if (ret)
+		msleep(100); /* Delay to wait for VBUS ramp up if read fails */
+
 	return ret;
 }
 
@@ -2835,7 +2855,6 @@ static void usbpd_sm(struct work_struct *w)
 
 	case PE_PRS_SNK_SRC_SOURCE_ON:
 		enable_vbus(pd);
-		msleep(200); /* allow time VBUS ramp-up, must be < tNewSrc */
 
 		ret = pd_send_msg(pd, MSG_PS_RDY, NULL, 0, SOP_MSG);
 		if (ret) {
@@ -3960,6 +3979,8 @@ struct usbpd *usbpd_create(struct device *parent)
 	/* Support reporting polarity and speed via properties */
 	extcon_set_property_capability(pd->extcon, EXTCON_USB,
 			EXTCON_PROP_USB_TYPEC_POLARITY);
+	extcon_set_property_capability(pd->extcon, EXTCON_USB,
+			EXTCON_PROP_USB_PD_CONTRACT);
 	extcon_set_property_capability(pd->extcon, EXTCON_USB,
 			EXTCON_PROP_USB_SS);
 	extcon_set_property_capability(pd->extcon, EXTCON_USB_HOST,
