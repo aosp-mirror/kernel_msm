@@ -7198,7 +7198,7 @@ static int iaxxx_codec_remove(struct snd_soc_codec *codec)
 
 static struct regmap *iaxxx_get_regmap(struct device *dev)
 {
-	return dev_get_regmap(dev->parent, NULL);
+	return dev_get_regmap(dev->parent, IAXXX_REGMAP_NAME);
 }
 
 static struct snd_soc_codec_driver soc_codec_iaxxx = {

@@ -14,6 +14,7 @@
 
 #include <linux/device.h>
 #include <linux/kthread.h>
+#include <linux/mfd/adnc/iaxxx-core.h>
 
 struct iaxxx_priv;
 struct regmap;
@@ -57,8 +58,8 @@ struct iaxxx_evt_queue;
 #error kthread functions not defined
 #endif
 
-#define HOST_0 0
-#define HOST_1 1
+#define IAXXX_HOST_0 0
+#define IAXXX_HOST_1 1
 
 /* Checksum Calculation */
 #define CALC_FLETCHER16(DATA, SUM1, SUM2)	\
@@ -135,6 +136,22 @@ struct iaxxx_raw_bus_ops {
 	int (*write)(struct iaxxx_priv *priv, const void *buf, int len);
 };
 
+
+static inline bool iaxxx_is_firmware_ready(struct iaxxx_priv *priv)
+{
+	return test_bit(IAXXX_FLG_FW_READY, &priv->flags);
+}
+
+/* If the firmware is not booted yet, use the no_pm regmap
+ * to read the events, otherwise use default regmap.
+ */
+static inline struct regmap *iaxxx_get_current_regmap(
+		struct iaxxx_priv *priv)
+{
+	return !iaxxx_is_firmware_ready(priv) ?
+			priv->regmap_no_pm : priv->regmap;
+}
+
 int iaxxx_device_reset(struct iaxxx_priv *priv);
 int iaxxx_device_init(struct iaxxx_priv *priv);
 void iaxxx_device_exit(struct iaxxx_priv *priv);
@@ -159,14 +176,8 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 			uint32_t length, uint32_t *sum1, uint32_t *sum2);
 
 /* Event manager */
-int iaxxx_next_event_request(struct iaxxx_priv *priv, struct iaxxx_event *evt);
 int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt);
 
-int iaxxx_subscribe_request(struct iaxxx_priv *priv, u16 event_id,
-				u16 event_src, u16 event_dst, u32 opaque_data);
-
-int iaxxx_unsubscribe_request(struct iaxxx_priv *priv,
-				u16 event_id, u16 event_src, u16 event_dst);
 int iaxxx_event_init(struct iaxxx_priv *priv);
 void iaxxx_event_exit(struct iaxxx_priv *priv);
 int iaxxx_get_event_flush(struct iaxxx_priv *priv);

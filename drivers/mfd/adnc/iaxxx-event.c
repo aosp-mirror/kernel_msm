@@ -13,7 +13,6 @@
  *  General Public License for more details.
  */
 
-#define DEBUG
 #include <linux/kernel.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
@@ -25,6 +24,8 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
 #include "iaxxx.h"
 
+#define BIT_FNAME(N, T)  N ## _ ## T
+#define GET_BITS(R, N)	(((R) & BIT_FNAME(N, MASK)) >> BIT_FNAME(N, POS))
 
 /*****************************************************************************
  * iaxxx_core_evt_is_valid_src_id()
@@ -254,6 +255,7 @@ int iaxxx_core_evt_read_subscription(struct device *dev,
 	"Setting the SUB_RET_REQ bit in EVT register failed %s()\n", __func__);
 		return ret;
 	}
+
 	/*
 	 * 2. Set the REQ bit in the SYS_BLK_UPDATE register.
 	 * 3. Wait for the REQ bit to clear. The device will also clear the
@@ -570,6 +572,69 @@ int iaxxx_core_retrieve_event(struct device *dev, uint16_t *event_id,
 }
 EXPORT_SYMBOL(iaxxx_core_retrieve_event);
 
+/*===========================================================================
+ * Event Notification
+ *===========================================================================
+ */
+
+static int iaxxx_next_event_request(struct device *dev,
+		struct regmap *regmap,
+		struct iaxxx_event *ev)
+{
+	int rc;
+	uint32_t status, data[3];
+
+	/* Set the next event notification request */
+	rc = regmap_update_bits(regmap,
+			IAXXX_EVT_MGMT_EVT_NEXT_REQ_ADDR,
+			IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_MASK,
+			0x1 << IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_POS);
+	if (rc) {
+		dev_err(dev, "Failed to set EVT_NEXT_REQ, rc = %d\n", rc);
+		goto out;
+	}
+
+	/* Wait for the request to complete */
+	rc = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
+	if (rc) {
+		dev_err(dev, "EVT_NEXT_REQ failed, rc = %d\n", rc);
+
+		/* Clear the request bit */
+		regmap_update_bits(regmap,
+				IAXXX_EVT_MGMT_EVT_NEXT_REQ_ADDR,
+				IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_MASK, 0);
+
+		goto out;
+	}
+
+	/* The EVT_NEXT_REQ bit should have been cleared by firmware */
+	rc = regmap_read(regmap, IAXXX_EVT_MGMT_EVT_NEXT_REQ_ADDR,
+			&status);
+	if (rc) {
+		dev_err(dev, "Failed to read EVT_NEXT_REQ, rc = %d\n", rc);
+		goto out;
+	}
+
+	WARN_ON(status & IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_MASK);
+	rc = regmap_bulk_read(regmap,
+			IAXXX_EVT_MGMT_EVT_SRC_INFO_ADDR, data,
+			ARRAY_SIZE(data));
+	if (rc) {
+		dev_err(dev, "Failed to read EVENT_INFO, rc = %d\n", rc);
+		goto out;
+	}
+
+	ev->event_src = GET_BITS(data[0],
+			IAXXX_EVT_MGMT_EVT_SRC_INFO_SYS_ID);
+	ev->event_id  = GET_BITS(data[0],
+			IAXXX_EVT_MGMT_EVT_SRC_INFO_EVT_ID);
+	ev->src_opaque = data[1];
+	ev->dst_opaque = data[2];
+
+out:
+	return rc;
+}
+
 /**
  * iaxxx_get_event_work - Work function to read events from the event queue
  *
@@ -590,6 +655,9 @@ static void iaxxx_get_event_work(struct work_struct *work)
 							event_work_struct);
 	struct device *dev = priv->dev;
 
+	/* Get current regmap based on boot status */
+	struct regmap *regmap = iaxxx_get_current_regmap(priv);
+
 	mutex_lock(&priv->event_work_lock);
 
 	if (priv->cm4_crashed) {
@@ -600,7 +668,7 @@ static void iaxxx_get_event_work(struct work_struct *work)
 	}
 
 	/* Read the count of available events */
-	rc = regmap_read(priv->regmap, IAXXX_EVT_MGMT_EVT_COUNT_ADDR,
+	rc = regmap_read(regmap, IAXXX_EVT_MGMT_EVT_COUNT_ADDR,
 			&count);
 	if (rc) {
 		dev_err(dev, "Failed to read EVENT_COUNT, rc = %d\n", rc);
@@ -608,7 +676,7 @@ static void iaxxx_get_event_work(struct work_struct *work)
 	}
 
 	while (count) {
-		rc = iaxxx_next_event_request(priv, &event);
+		rc = iaxxx_next_event_request(dev, regmap, &event);
 		if (rc) {
 			dev_err(dev, "Failed to read event, rc = %d\n", rc);
 			goto out;
@@ -620,7 +688,7 @@ static void iaxxx_get_event_work(struct work_struct *work)
 			goto out;
 		}
 		/* Read the count of available events */
-		rc = regmap_read(priv->regmap,
+		rc = regmap_read(regmap,
 				IAXXX_EVT_MGMT_EVT_COUNT_ADDR,
 				&count);
 		if (rc) {

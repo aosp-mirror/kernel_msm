@@ -900,7 +900,7 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 	}
 
 	priv = (struct iaxxx_priv *)t_intf_priv->priv;
-	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags))
+	if (!iaxxx_is_firmware_ready(priv))
 		return -EIO;
 
 	client = kzalloc(sizeof(struct iaxxx_tunnel_client),
@@ -950,7 +950,7 @@ static long tunnel_ioctl(struct file *filp, unsigned int cmd,
 		return -EINVAL;
 	}
 
-	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags)) {
+	if (!iaxxx_is_firmware_ready(priv)) {
 		dev_err(priv->dev, "FW state not valid %s()\n", __func__);
 		return -EIO;
 	}

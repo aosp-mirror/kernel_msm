@@ -25,18 +25,6 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
 #include "iaxxx.h"
 
-#define BIT_FNAME(N, T)  N ## _ ## T
-#define GET_BITS(R, N)	(((R) & BIT_FNAME(N, MASK)) >> BIT_FNAME(N, POS))
-
-#define SET_BITS(R, N, V) ((R) = (((R) & ~(BIT_FNAME(N, MASK))) | \
-	((V) << (BIT_FNAME(N, POS)) & (BIT_FNAME(N, MASK)))))
-
-#define GET_SYS_STATUS_BLK_UPDATE_CODE(S) \
-	GET_BITS(S, IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE)
-
-#define GET_SYS_STATUS_BLK_UPDATE_RESULT(S) \
-	GET_BITS(S, IAXXX_SRB_SYS_BLK_UPDATE_RES)
-
 #define IAXXX_MAX_CORES	3
 
 /* The reserved bits in Update block register used to
@@ -50,6 +38,13 @@
  */
 #define UPDATE_BLOCK_FAIL_RETRIES 200
 
+#define IAXXX_UPDATE_BLOCK_NO_WAIT    (true)
+#define IAXXX_UPDATE_BLOCK_WITH_WAIT  (false)
+
+#define IAXXX_UPDATE_BLOCK_NO_PM      (true)
+#define IAXXX_UPDATE_BLOCK_WITH_PM    (false)
+
+
 /**
  * iaxxx_regmap_wait_match - waits for register read value
  * to match the given value. This is a dual test to check
@@ -59,13 +54,15 @@
  * success.
  *
  * @priv: iaxxx private data
+ * @regmap: regmap to use
  * @reg : the register to be monitored
  * @match: the value to be matched
  *
  * Returns 0 on success or -ETIMEDOUT if the bits didn't clear.
  */
 static int
-iaxxx_regmap_wait_match(struct iaxxx_priv *priv, uint32_t reg, uint32_t match)
+iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
+		uint32_t reg, uint32_t match)
 {
 	uint32_t req;
 	int rc, retries;
@@ -80,7 +77,7 @@ iaxxx_regmap_wait_match(struct iaxxx_priv *priv, uint32_t reg, uint32_t match)
 			usleep_range(IAXXX_READ_DELAY,
 				IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 
-		rc = regmap_read(priv->regmap, reg, &req);
+		rc = regmap_read(regmap, reg, &req);
 		if (rc) {
 			/* We should not return here until we are done
 			 * with our retries
@@ -118,19 +115,20 @@ iaxxx_regmap_clear_bits(struct iaxxx_priv *priv, uint32_t reg, uint32_t mask)
 	return regmap_update_bits(priv->regmap, reg, mask, 0);
 }
 
-static int iaxxx_read_error_register(struct iaxxx_priv *priv)
+static int iaxxx_read_error_register(struct iaxxx_priv *priv,
+		struct regmap *regmap)
 {
 	int rc;
 	int i;
 
-	rc = regmap_read(priv->regmap, IAXXX_PLUGIN_HDR_ERROR_BLOCK_0_ADDR,
+	rc = regmap_read(regmap, IAXXX_PLUGIN_HDR_ERROR_BLOCK_0_ADDR,
 			&priv->iaxxx_state->err.error[IAXXX_BLOCK_0]);
 	if (rc) {
 		dev_err(priv->dev,
 				"Read Error Block 0 addr fail %d\n", rc);
 		goto out;
 	}
-	rc = regmap_read(priv->regmap,
+	rc = regmap_read(regmap,
 			IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_0_ADDR,
 			&priv->iaxxx_state->err.plg_inst_id[IAXXX_BLOCK_0]);
 	if (rc) {
@@ -138,14 +136,14 @@ static int iaxxx_read_error_register(struct iaxxx_priv *priv)
 				"Read Inst id Block 0 addr fail %d\n", rc);
 		goto out;
 	}
-	rc = regmap_read(priv->regmap, IAXXX_PLUGIN_HDR_ERROR_BLOCK_1_ADDR,
+	rc = regmap_read(regmap, IAXXX_PLUGIN_HDR_ERROR_BLOCK_1_ADDR,
 			&priv->iaxxx_state->err.error[IAXXX_BLOCK_1]);
 	if (rc) {
 		dev_err(priv->dev,
 				"Read Error Block 1 addr fail %d\n", rc);
 		goto out;
 	}
-	rc = regmap_read(priv->regmap,
+	rc = regmap_read(regmap,
 			IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_1_ADDR,
 			&priv->iaxxx_state->err.plg_inst_id[IAXXX_BLOCK_1]);
 	if (rc) {
@@ -153,14 +151,14 @@ static int iaxxx_read_error_register(struct iaxxx_priv *priv)
 				"Read Inst id Block 1 addr fail %d\n", rc);
 		goto out;
 	}
-	rc = regmap_read(priv->regmap, IAXXX_PLUGIN_HDR_ERROR_BLOCK_2_ADDR,
+	rc = regmap_read(regmap, IAXXX_PLUGIN_HDR_ERROR_BLOCK_2_ADDR,
 			&priv->iaxxx_state->err.error[IAXXX_BLOCK_2]);
 	if (rc) {
 		dev_err(priv->dev,
 				"Read Error Block 2 addr fail %d\n", rc);
 		goto out;
 	}
-	rc = regmap_read(priv->regmap,
+	rc = regmap_read(regmap,
 			IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_2_ADDR,
 			&priv->iaxxx_state->err.plg_inst_id[IAXXX_BLOCK_2]);
 	if (rc) {
@@ -180,8 +178,12 @@ out:
 /**
  * iaxxx_update_block_request - sends Update Block Request & waits for response
  *
- * @priv   : iaxxx private data
- * @status : pointer for the returned system status
+ * @priv     : iaxxx private data
+ * @block_id : block id of the processor
+ * @host_id  : id of the Host
+ * @no_pm    : if main regmap or no_pm regmap
+ * @no_wait  : if wait needed after update block
+ * @status   : pointer for the returned system status
  *
  * Core lock must be held by the caller.
  *
@@ -191,11 +193,15 @@ out:
 
 static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		int  block_id,
+		int  host_id,
+		bool no_pm,
+		bool no_wait,
 		uint32_t *status)
 {
 	int rc;
 	int ret;
 	struct device *dev = priv->dev;
+	struct regmap *regmap;
 	uint32_t sys_blk_update_addr;
 	uint32_t reserved_bits_mask = 0;
 	uint32_t result_bits_mask = 0;
@@ -205,19 +211,31 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 
 	dev_dbg(dev, "%s() block_id:%d\n", __func__, block_id);
 
-	/* Choose update block register address based on block id */
+	/* Choose regmap based on no_pm flag */
+	regmap = (no_pm) ? priv->regmap_no_pm : priv->regmap;
+
+	/* Choose update block register address based on block id
+	 * and host_id
+	 */
 	switch (block_id) {
 	case IAXXX_BLOCK_0:
-		sys_blk_update_addr = IAXXX_SRB_SYS_BLK_UPDATE_ADDR;
+		sys_blk_update_addr = (host_id == IAXXX_HOST_1) ?
+				IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_ADDR :
+				IAXXX_SRB_SYS_BLK_UPDATE_ADDR;
 		break;
 
 	case IAXXX_BLOCK_1:
-		sys_blk_update_addr = IAXXX_SRB_SYS_BLK_UPDATE_1_ADDR;
+		sys_blk_update_addr = (host_id == IAXXX_HOST_1) ?
+				IAXXX_SRB_SYS_BLK_UPDATE_1_HOST_1_ADDR :
+				IAXXX_SRB_SYS_BLK_UPDATE_1_ADDR;
 		break;
 
 	case IAXXX_BLOCK_2:
-		sys_blk_update_addr = IAXXX_SRB_SYS_BLK_UPDATE_2_ADDR;
+		sys_blk_update_addr = (host_id == IAXXX_HOST_1) ?
+				IAXXX_SRB_SYS_BLK_UPDATE_2_HOST_1_ADDR :
+				IAXXX_SRB_SYS_BLK_UPDATE_2_ADDR;
 		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -233,7 +251,10 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	 * for no error.
 	 *
 	 */
-	if (priv->is_application_mode)
+	if (no_wait) {
+		result_bits_mask	= 0;
+		reserved_bits_mask	= 0;
+	} else if (priv->is_application_mode)
 		result_bits_mask = IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK;
 	else
 		reserved_bits_mask =
@@ -242,13 +263,17 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	/* Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
 	 * in the SRB_UPDATE_CTRL register
 	 */
-	rc = regmap_write(priv->regmap, sys_blk_update_addr,
+	rc = regmap_write(regmap, sys_blk_update_addr,
 			       IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK |
 			       reserved_bits_mask);
 	if (rc) {
 		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
 		goto out;
 	}
+
+	/* If no wait is needed after update block just return */
+	if (no_wait)
+		goto out;
 
 	/*
 	 * Note that in application mode, events can be used instead of polling.
@@ -259,7 +284,7 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	/* Poll waiting for the UPDATE_BLOCK_REQUEST bit to clear
 	 * and reserved bits to match the value written
 	 */
-	rc = iaxxx_regmap_wait_match(priv, sys_blk_update_addr,
+	rc = iaxxx_regmap_wait_match(priv, regmap, sys_blk_update_addr,
 			reserved_bits_mask | result_bits_mask);
 	if (rc) {
 		dev_err(dev, "Update Block Failed, rc = %d\n", rc);
@@ -271,7 +296,7 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 
 	/* Read SYSTEM_STATUS to check for any errors */
-	rc = regmap_read(priv->regmap, sys_blk_update_addr, status);
+	rc = regmap_read(regmap, sys_blk_update_addr, status);
 	if (rc) {
 		dev_err(dev, "Failed to read SYSTEM_STATUS, rc = %d\n", rc);
 		goto out;
@@ -293,7 +318,7 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 out:
 	mutex_unlock(&priv->update_block_lock);
 	if (rc) {
-		ret = iaxxx_read_error_register(priv);
+		ret = iaxxx_read_error_register(priv, regmap);
 		if (ret)
 			dev_err(dev, "Read error register failed %d\n", ret);
 	}
@@ -313,7 +338,7 @@ static int iaxxx_bootloader_request(struct iaxxx_priv *priv, u32 mask, u32 val)
 	struct device *dev = priv->dev;
 
 	/* Set the request bit in BOOTLOADER_REQUEST register */
-	rc = regmap_update_bits(priv->regmap,
+	rc = regmap_update_bits(priv->regmap_no_pm,
 				IAXXX_SRB_BOOT_REQ_ADDR, mask, val);
 	if (rc) {
 		dev_err(dev, "Failed to set BOOTLOADER_REQUEST, rc = %d\n", rc);
@@ -326,7 +351,8 @@ static int iaxxx_bootloader_request(struct iaxxx_priv *priv, u32 mask, u32 val)
 	 * status to avoid spi-reads that could return invalid data.
 	 *
 	 */
-	rc = regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
+	rc = regmap_write(priv->regmap_no_pm,
+			IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
 			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
 	if (rc) {
 		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
@@ -337,7 +363,8 @@ static int iaxxx_bootloader_request(struct iaxxx_priv *priv, u32 mask, u32 val)
 	msleep(200);
 
 	/* The bit should have been cleared by firmware */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_BOOT_REQ_ADDR, &status);
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_SRB_BOOT_REQ_ADDR, &status);
 	if (rc) {
 		dev_err(dev, "Failed to read BOOTLOADR_REQUEST, rc = %d\n", rc);
 		goto out;
@@ -345,7 +372,8 @@ static int iaxxx_bootloader_request(struct iaxxx_priv *priv, u32 mask, u32 val)
 
 	if (WARN_ON(status & mask)) {
 		/* Clear the request bit */
-		iaxxx_regmap_clear_bits(priv, IAXXX_SRB_BOOT_REQ_ADDR, mask);
+		regmap_update_bits(priv->regmap_no_pm,
+				IAXXX_SRB_BOOT_REQ_ADDR, mask, 0);
 	}
 
 out:
@@ -358,7 +386,8 @@ int iaxxx_jump_to_request(struct iaxxx_priv *priv, uint32_t address)
 	struct device *dev = priv->dev;
 
 	/* Program BOOTLOADER_JUMP_ADDRESS with the start address */
-	rc = regmap_write(priv->regmap, IAXXX_SRB_BOOT_JUMP_ADDR_ADDR, address);
+	rc = regmap_write(priv->regmap_no_pm,
+			IAXXX_SRB_BOOT_JUMP_ADDR_ADDR, address);
 	if (rc) {
 		dev_err(dev, "Failed to set JUMP_ADDRESS, rc = %d\n", rc);
 		goto out;
@@ -394,33 +423,42 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 	uint32_t status;
 	uint32_t request = 0;
 	struct device *dev = priv->dev;
+	/* Get current regmap based on boot status */
+	struct regmap *regmap = iaxxx_get_current_regmap(priv);
+
+	/* no_pm is forced when booting is not complete */
+	bool no_pm = !iaxxx_is_firmware_ready(priv) ?
+			IAXXX_UPDATE_BLOCK_NO_PM :
+			IAXXX_UPDATE_BLOCK_WITH_PM;
 
 	if (!sum1 || !sum2)
 		return -EINVAL;
 
 	/* Set the CHECKSUM_VALUE */
-	rc = regmap_write(priv->regmap, IAXXX_SRB_CHKSUM_VAL1_ADDR, *sum1);
+	rc = regmap_write(regmap,
+			IAXXX_SRB_CHKSUM_VAL1_ADDR, *sum1);
 	if (rc) {
 		dev_err(dev, "Unable to clear CHECKSUM_VALUE1, rc = %d\n", rc);
 		goto out;
 	}
 
-	rc = regmap_write(priv->regmap, IAXXX_SRB_CHKSUM_VAL2_ADDR, *sum2);
+	rc = regmap_write(regmap,
+			IAXXX_SRB_CHKSUM_VAL2_ADDR, *sum2);
 	if (rc) {
 		dev_err(dev, "Unable to clear CHECKSUM_VALUE2, rc = %d\n", rc);
 		goto out;
 	}
 
 	/* Program the CHECKSUM_ADDRESS with first memory address */
-	rc = regmap_write(priv->regmap,
-			  IAXXX_SRB_CHKSUM_BUFFER_ADDR_ADDR, address);
+	rc = regmap_write(regmap,
+			IAXXX_SRB_CHKSUM_BUFFER_ADDR_ADDR, address);
 	if (rc) {
 		dev_err(dev, "Failed to set CHECKSUM_ADDRESS, rc = %d\n", rc);
 		goto out;
 	}
 
 	/* Program the CHECKSUM_LENGTH with the buffer length (in bytes) */
-	rc = regmap_write(priv->regmap,
+	rc = regmap_write(regmap,
 			  IAXXX_SRB_CHKSUM_LENGTH_ADDR, length);
 	if (rc) {
 		dev_err(dev, "Failed to set CHECKSUM_LENGTH, rc = %d\n", rc);
@@ -432,7 +470,7 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 
 	/* Set the CHECKSUM_REQUEST bit in CHECKSUM_REQUEST */
-	rc = regmap_update_bits(priv->regmap, IAXXX_SRB_CHKSUM_ADDR,
+	rc = regmap_update_bits(regmap, IAXXX_SRB_CHKSUM_ADDR,
 				IAXXX_SRB_CHKSUM_REQ_MASK,
 				0x1 << IAXXX_SRB_CHKSUM_REQ_POS);
 	if (rc) {
@@ -441,7 +479,9 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 	}
 
 	/* Wait for the request to complete */
-	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0, &status);
+	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
+			IAXXX_HOST_0, no_pm,
+			IAXXX_UPDATE_BLOCK_WITH_WAIT, &status);
 	if (rc) {
 		dev_err(dev, "CHECKSUM_REQUEST failed, rc = %d\n", rc);
 		goto out;
@@ -452,7 +492,7 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 
 	/* The CHECKSUM_REQUEST bit should have been cleared by firmware */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_CHKSUM_ADDR, &request);
+	rc = regmap_read(regmap, IAXXX_SRB_CHKSUM_ADDR, &request);
 	if (rc) {
 		dev_err(dev, "Failed to read CHECKSUM_REQUEST, rc = %d\n", rc);
 		goto out;
@@ -465,7 +505,7 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 
 	/* Read the checksum from CHECKSUM_VALUE */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_CHKSUM_VAL1_ADDR, sum1);
+	rc = regmap_read(regmap, IAXXX_SRB_CHKSUM_VAL1_ADDR, sum1);
 	if (rc) {
 		dev_err(dev, "Failed to read CHECKSUM_VALUE1, rc = %d\n", rc);
 		goto out;
@@ -475,246 +515,11 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 	usleep_range(IAXXX_READ_DELAY,
 			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 
-	rc = regmap_read(priv->regmap, IAXXX_SRB_CHKSUM_VAL2_ADDR, sum2);
+	rc = regmap_read(regmap, IAXXX_SRB_CHKSUM_VAL2_ADDR, sum2);
 	if (rc) {
 		dev_err(dev, "Failed to read CHECKSUM_VALUE2, rc = %d\n", rc);
 		goto out;
 	}
-
-out:
-	return rc;
-}
-
-/*===========================================================================
- * Event Subscription
- *===========================================================================
- */
-
-static int iaxxx_set_event_identification(struct iaxxx_priv *priv,
-				u16 event_id, u16 event_src, u16 event_dst)
-{
-	int rc;
-	struct device *dev = priv->dev;
-
-	/* Set the system IDs of the source in EVENT_SUB_SRC_DST */
-	rc = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_SUB_ADDR,
-			IAXXX_EVT_MGMT_EVT_SUB_SRC_ID_MASK,
-			event_src << IAXXX_EVT_MGMT_EVT_SUB_SRC_ID_POS);
-	if (rc) {
-		dev_err(dev, "Failed to set EVENT_SUB_SRC, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Set the system IDs of the destination in EVENT_SUB_SRC_DST */
-	rc = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_SUB_ADDR,
-			IAXXX_EVT_MGMT_EVT_SUB_DST_ID_MASK,
-			event_dst << IAXXX_EVT_MGMT_EVT_SUB_DST_ID_POS);
-	if (rc) {
-		dev_err(dev, "Failed to set EVENT_SUB_DST, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Set the EVENT_ID field of the EVENT_SUB_ID register */
-	rc = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_ID_ADDR,
-			IAXXX_EVT_MGMT_EVT_ID_REG_MASK,
-			event_id << IAXXX_EVT_MGMT_EVT_ID_REG_POS);
-	if (rc) {
-		dev_err(dev, "Failed to EVENT_ID, rc = %d\n", rc);
-		goto out;
-	}
-
-out:
-	return rc;
-}
-
-/**
- * iaxxx_subscribe_request - Sends an event subscription request to the device
- *
- * @priv	: iaxxx private data
- * @event_id	:
- * @event_src	:
- * @event_dst	:
- * @action_id	:
- * @opaque_data	:
- */
-int iaxxx_subscribe_request(struct iaxxx_priv *priv, u16 event_id,
-				u16 event_src, u16 event_dst, u32 opaque_data)
-{
-	int rc;
-	uint32_t status;
-	struct device *dev = priv->dev;
-
-	rc = iaxxx_set_event_identification(priv,
-					    event_id, event_src, event_dst);
-	if (rc) {
-		dev_err(dev, "Failed to set event ident, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Set the EVENT_DST_OPAQUE in the EVENT_SUB_DST_OPAQUE register */
-	rc = regmap_write(priv->regmap,
-			IAXXX_EVT_MGMT_EVT_SUB_DST_OPAQUE_ADDR, opaque_data);
-	if (rc) {
-		dev_err(dev, "Failed to set EVENT_DST_OPAQUE, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Set the EVENT_SUB_REQUEST bit in EVENT_SUB_REQUEST */
-	rc = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR,
-			IAXXX_EVT_MGMT_EVT_SUB_REQ_MASK,
-			0x1 << IAXXX_EVT_MGMT_EVT_SUB_REQ_POS);
-	if (rc) {
-		dev_err(dev, "Failed to EVENT_SUB_REQUEST, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Wait for the request to complete */
-	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0, &status);
-	if (rc) {
-		dev_err(dev, "EVENT_SUB_REQUEST failed, rc = %d\n", rc);
-
-		/* Request is serialized so the error code should match */
-		WARN_ON(GET_SYS_STATUS_BLK_UPDATE_CODE(status) != 0x08);
-		WARN_ON(GET_SYS_STATUS_BLK_UPDATE_RESULT(status) != 0x01);
-
-		/* Clear the request bit */
-		iaxxx_regmap_clear_bits(priv, IAXXX_EVT_MGMT_EVT_ADDR,
-				IAXXX_EVT_MGMT_EVT_SUB_REQ_MASK);
-
-		goto out;
-	}
-
-	/* The EVENT_SUB_REQUEST bit should have been cleared by firmware */
-	rc = regmap_read(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR, &status);
-	if (rc) {
-		dev_err(dev, "Failed to read EVENT_SUB_REQUEST, rc = %d\n", rc);
-		goto out;
-	}
-
-	WARN_ON(status & IAXXX_EVT_MGMT_EVT_SUB_REQ_MASK);
-
-out:
-	return rc;
-}
-
-/**
- * iaxxx_unsubscribe_request - Sends an event unsubscribe request to the device
- *
- * @priv	: iaxxx private data
- * @event_id	:
- * @event_src	:
- * @event_dst	:
- * @action_id	:
- */
-int iaxxx_unsubscribe_request(struct iaxxx_priv *priv,
-				u16 event_id, u16 event_src, u16 event_dst)
-{
-	int rc;
-	uint32_t status;
-	struct device *dev = priv->dev;
-
-	rc = iaxxx_set_event_identification(priv,
-					    event_id, event_src, event_dst);
-	if (rc) {
-		dev_err(dev, "Failed to set event ident, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Set the EVENT_UNSUB_REQUEST bit in EVENT_SUB_REQUEST */
-	rc = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR,
-			IAXXX_EVT_MGMT_EVT_UNSUB_REQ_MASK,
-			0x1 << IAXXX_EVT_MGMT_EVT_UNSUB_REQ_POS);
-	if (rc) {
-		dev_err(dev, "Failed to EVENT_SUB_REQUEST, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Wait for the request to complete */
-	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0, &status);
-	if (rc) {
-		dev_err(dev, "EVENT_UNSUB_REQUEST failed, rc = %d\n", rc);
-
-		/* Request is serialized so the error code should match */
-		WARN_ON(GET_SYS_STATUS_BLK_UPDATE_CODE(status) != 0x0A);
-		WARN_ON(GET_SYS_STATUS_BLK_UPDATE_RESULT(status) != 0x01);
-
-		/* Clear the request bit */
-		iaxxx_regmap_clear_bits(priv, IAXXX_EVT_MGMT_EVT_ADDR,
-				IAXXX_EVT_MGMT_EVT_UNSUB_REQ_MASK);
-
-		goto out;
-	}
-
-	/* The EVENT_UNSUB_REQUEST bit should have been cleared by firmware */
-	rc = regmap_read(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR, &status);
-	if (rc) {
-		dev_err(dev, "Failed to read EVENT_SUB_REQUEST, rc = %d\n", rc);
-		goto out;
-	}
-
-	WARN_ON(status & IAXXX_EVT_MGMT_EVT_UNSUB_REQ_MASK);
-
-out:
-	return rc;
-}
-
-/*===========================================================================
- * Event Notification
- *===========================================================================
- */
-
-int iaxxx_next_event_request(struct iaxxx_priv *priv, struct iaxxx_event *ev)
-{
-	int rc;
-	uint32_t status, data[3];
-	struct device *dev = priv->dev;
-
-	/* Set the next event notification request */
-	rc = regmap_update_bits(priv->regmap,
-			IAXXX_EVT_MGMT_EVT_NEXT_REQ_ADDR,
-			IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_MASK,
-			0x1 << IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_POS);
-	if (rc) {
-		dev_err(dev, "Failed to set EVT_NEXT_REQ, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Wait for the request to complete */
-	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0, &status);
-	if (rc) {
-		dev_err(dev, "EVT_NEXT_REQ failed, rc = %d\n", rc);
-
-		/* Clear the request bit */
-		iaxxx_regmap_clear_bits(priv,
-				IAXXX_EVT_MGMT_EVT_NEXT_REQ_ADDR,
-				IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_MASK);
-
-		goto out;
-	}
-
-	/* The EVT_NEXT_REQ bit should have been cleared by firmware */
-	rc = regmap_read(priv->regmap, IAXXX_EVT_MGMT_EVT_NEXT_REQ_ADDR,
-			&status);
-	if (rc) {
-		dev_err(dev, "Failed to read EVT_NEXT_REQ, rc = %d\n", rc);
-		goto out;
-	}
-
-	WARN_ON(status & IAXXX_EVT_MGMT_EVT_NEXT_REQ_NOT_MASK);
-	rc = regmap_bulk_read(priv->regmap,
-			IAXXX_EVT_MGMT_EVT_SRC_INFO_ADDR, data,
-			ARRAY_SIZE(data));
-	if (rc) {
-		dev_err(dev, "Failed to read EVENT_INFO, rc = %d\n", rc);
-		goto out;
-	}
-
-	ev->event_src = GET_BITS(data[0],
-			IAXXX_EVT_MGMT_EVT_SRC_INFO_SYS_ID);
-	ev->event_id  = GET_BITS(data[0],
-			IAXXX_EVT_MGMT_EVT_SRC_INFO_EVT_ID);
-	ev->src_opaque = data[1];
-	ev->dst_opaque = data[2];
 
 out:
 	return rc;
@@ -747,12 +552,19 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 	int rc = 0;
 	uint32_t err = 0;
 
+	/* no_pm is forced when booting is not complete */
+	bool no_pm = !iaxxx_is_firmware_ready(priv) ?
+			IAXXX_UPDATE_BLOCK_NO_PM :
+			IAXXX_UPDATE_BLOCK_WITH_PM;
+
 	/* WARN_ON(!mutex_is_locked(&priv->srb_lock)); */
 
 	if (!priv)
 		return -EINVAL;
 
-	rc = iaxxx_update_block_request(priv, id, status);
+	rc = iaxxx_update_block_request(priv, id,
+			IAXXX_HOST_0, no_pm, IAXXX_UPDATE_BLOCK_WITH_WAIT,
+			status);
 
 	if (rc == -ETIMEDOUT) {
 		dev_err(dev, "%s:Update block timed out\n", __func__);
@@ -790,27 +602,15 @@ EXPORT_SYMBOL(iaxxx_send_update_block_request);
 int iaxxx_send_update_block_no_wait(struct device *dev, int host_id)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int rc = 0, reg_addr;
+	int rc = 0;
+	uint32_t status;
 
 	dev_dbg(dev, "%s()\n", __func__);
 
-	/* To protect concurrent update blocks requests*/
-	mutex_lock(&priv->update_block_lock);
+	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
+			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
+			IAXXX_UPDATE_BLOCK_NO_WAIT, &status);
 
-	if (!host_id)
-		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_ADDR;
-	else
-		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_ADDR;
-
-	/* Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
-	 * in the SRB_UPDATE_CTRL register
-	 */
-	rc = regmap_write(priv->regmap, reg_addr,
-			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
-	if (rc)
-		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit %d\n", rc);
-
-	mutex_unlock(&priv->update_block_lock);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_no_wait);
@@ -818,27 +618,15 @@ EXPORT_SYMBOL(iaxxx_send_update_block_no_wait);
 int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int rc = 0, reg_addr, reg_val;
+	int rc = 0;
+	uint32_t status;
 
 	dev_dbg(dev, "%s()\n", __func__);
 
-	/* To protect concurrent update blocks requests*/
-	mutex_lock(&priv->update_block_lock);
+	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
+			host_id, IAXXX_UPDATE_BLOCK_NO_PM,
+			IAXXX_UPDATE_BLOCK_NO_WAIT, &status);
 
-	if (!host_id)
-		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_ADDR;
-	else
-		reg_addr = IAXXX_SRB_SYS_BLK_UPDATE_HOST_1_ADDR;
-	/* Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
-	 * in the SRB_UPDATE_CTRL register
-	 */
-	reg_val = IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK;
-
-	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t), &reg_val,
-			sizeof(uint32_t));
-	if (rc)
-		dev_err(dev, "Failed to set UPDATE_BLOCK_REQUEST bit\n");
-	mutex_unlock(&priv->update_block_lock);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_no_wait_no_pm);

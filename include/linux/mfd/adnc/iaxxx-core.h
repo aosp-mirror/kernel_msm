@@ -31,6 +31,10 @@ typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
 struct workqueue_struct;
 /* SRB is at the end of the memory map */
 #define IAXXX_RBDT_NUM_ENTRIES	32
+
+#define IAXXX_REGMAP_NAME  "regmap_main"
+#define IAXXX_REGMAP_NO_PM_NAME  "regmap_no_pm"
+
 #define IAXXX_BLOCK_0 0 /* Update for CM4 PROC */
 #define IAXXX_BLOCK_1 1 /* Update for HMD PROC */
 #define IAXXX_BLOCK_2 2 /* Update for DMX PROC */
@@ -190,18 +194,14 @@ struct iaxxx_priv {
 	struct device *codec_dev;
 	struct regmap *regmap;
 	struct regmap_config *regmap_config;
+	struct regmap *regmap_no_pm;
+	struct regmap_config *regmap_no_pm_config;
 	int (*regmap_init_bus)(struct iaxxx_priv *priv);
 	int (*bulk_read)(struct device *dev, uint32_t address,
 				void *buf, size_t len);
 	int (*raw_write)(void *context,
 			const void *reg,
 			 const void *val, size_t val_len);
-	int (*read_no_pm)(void *context,
-			const void *reg, size_t reg_len,
-			void *val, size_t val_len);
-	int (*write_no_pm)(void *context,
-			const void *reg, size_t reg_len,
-			const void *val, size_t val_len);
 
 	uint32_t sys_rbdt[2*IAXXX_RBDT_NUM_ENTRIES];
 

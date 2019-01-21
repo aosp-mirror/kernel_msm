@@ -174,7 +174,7 @@ static int iaxxx_fw_bootup_regmap_init(struct iaxxx_priv *priv)
 	/* Add debugfs node for regmap */
 	rc = iaxxx_dfs_switch_regmap(dev, priv->regmap, priv->dfs_node);
 	if (rc)
-		dev_err(dev, "Failed to create debugfs entry\n");
+		dev_err(dev, "%s: Failed to create debugfs entry\n", __func__);
 	else
 		dev_info(dev, "%s: done\n", __func__);
 	return rc;
@@ -185,6 +185,11 @@ err_regmap:
 		regmap_exit(priv->regmap);
 		priv->regmap = NULL;
 	}
+	if (priv->regmap_no_pm) {
+		regmap_exit(priv->regmap_no_pm);
+		priv->regmap_no_pm = NULL;
+	}
+
 	return rc;
 }
 
@@ -198,6 +203,15 @@ static int iaxxx_fw_recovery_regmap_init(struct iaxxx_priv *priv)
 		dev_err(priv->dev,
 			"regmap cache can not be reinitialized %d\n", rc);
 		regcache_cache_bypass(priv->regmap, true);
+	}
+
+	/* Reinitialize the regmap cache for second regmap*/
+	rc = regmap_reinit_cache(priv->regmap_no_pm,
+			priv->regmap_no_pm_config);
+	if (rc) {
+		dev_err(priv->dev,
+		    "regmap-2 cache can not be reinitialized %d\n", rc);
+		regcache_cache_bypass(priv->regmap_no_pm, true);
 	}
 
 	iaxxx_clr_pkg_plg_list(priv);
@@ -729,6 +743,7 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 	bool handled = false;
 	bool is_startup;
 	struct iaxxx_priv *priv = (struct iaxxx_priv *)data;
+	struct regmap *regmap;
 
 	/* If ISR is disabled, return as handled */
 	if (priv->debug_isr_disable)
@@ -745,8 +760,10 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 			goto out;
 	}
 
+	/* Get current regmap based on boot status */
+	regmap = iaxxx_get_current_regmap(priv);
 	/* Any events in the event queue? */
-	rc = regmap_read(priv->regmap, IAXXX_EVT_MGMT_EVT_COUNT_ADDR,
+	rc = regmap_read(regmap, IAXXX_EVT_MGMT_EVT_COUNT_ADDR,
 			&count);
 	if (rc) {
 		dev_err(priv->dev,
@@ -761,7 +778,7 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 		handled = true;
 	} else {
 		/* Read SYSTEM_STATUS to ensure that device is in App Mode */
-		rc = regmap_read(priv->regmap,
+		rc = regmap_read(regmap,
 					IAXXX_SRB_SYS_STATUS_ADDR, &status);
 		if (rc)
 			dev_err(priv->dev,
@@ -861,7 +878,7 @@ static int iaxxx_reset_check_sbl_mode(struct iaxxx_priv *priv)
 
 	do {
 		/* Verify that the device is in bootloader mode */
-		ret = regmap_read(priv->regmap,
+		ret = regmap_read(priv->regmap_no_pm,
 				IAXXX_SRB_SYS_STATUS_ADDR, &status);
 		if (ret)
 			dev_err(priv->dev,
@@ -911,7 +928,8 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	}
 
 	/* Get and log the Device ID */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_DEVICE_ID_ADDR, &reg);
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_DEVICE_ID_ADDR,
+			&reg);
 	if (rc) {
 		dev_err(dev, "regmap_read failed, rc = %d\n", rc);
 		return E_IAXXX_REGMAP_ERROR;
@@ -919,7 +937,8 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	dev_dbg(dev, "Device ID: 0x%.08X\n", reg);
 
 	/* Get and log the ROM version */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_ROM_VER_NUM_ADDR, &reg);
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_ROM_VER_NUM_ADDR,
+			&reg);
 	if (rc) {
 		dev_err(dev, "regmap_read failed, rc = %d\n", rc);
 		return E_IAXXX_REGMAP_ERROR;
@@ -946,7 +965,7 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 		((8 << IAXXX_AO_MEM_ELEC_CTRL_PD8_BTRIM_POS) &
 		IAXXX_AO_MEM_ELEC_CTRL_PD8_BTRIM_MASK);
 
-	rc = regmap_write(priv->regmap, IAXXX_AO_MEM_ELEC_CTRL_ADDR,
+	rc = regmap_write(priv->regmap_no_pm, IAXXX_AO_MEM_ELEC_CTRL_ADDR,
 			mem_elec_ctrl_val);
 	if (rc) {
 		dev_err(dev, "Electrical control register failed, rc = %d\n",
@@ -1109,27 +1128,26 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	/* Send firmware ready event to HAL */
 	iaxxx_send_uevent(priv, "ACTION=IAXXX_FW_READY_EVENT");
 
-	iaxxx_crashlog_header_read(priv);
-	/* Subscribing for FW crash event */
-	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
-				IAXXX_CRASH_EVENT_ID, IAXXX_SYSID_HOST, 0);
-	if (rc) {
-		dev_err(dev, "%s: failed to subscribe for crash event\n",
-			__func__);
-		goto exit_fw_fail;
-	}
-
 	set_bit(IAXXX_FLG_FW_READY, &priv->flags);
-
 	priv->iaxxx_state->power_state = IAXXX_NORMAL_MODE;
 
-	iaxxx_fw_notifier_call(dev, IAXXX_EV_APP_MODE, NULL);
+	iaxxx_crashlog_header_read(priv);
 
+	iaxxx_fw_notifier_call(dev, IAXXX_EV_APP_MODE, NULL);
 
 	if (test_and_clear_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
 		set_bit(IAXXX_FLG_RESUME_BY_RECOVERY, &priv->flags);
 	else
 		set_bit(IAXXX_FLG_RESUME_BY_STARTUP, &priv->flags);
+
+	/* Subscribing for FW crash event */
+	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
+			IAXXX_CRASH_EVENT_ID, IAXXX_SYSID_HOST, 0);
+	if (rc) {
+		dev_err(dev, "%s: failed to subscribe for crash event\n",
+				__func__);
+		goto exit_fw_fail;
+	}
 
 	dev_info(dev, "%s: done\n", __func__);
 	iaxxx_work(priv, runtime_work);
@@ -1360,7 +1378,7 @@ int iaxxx_core_suspend_rt(struct device *dev)
 	int rc = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
-	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags))
+	if (!iaxxx_is_firmware_ready(priv))
 		/* return -EBUSY; */
 		return 0;
 	if (!pm_runtime_enabled(dev) && !test_bit(IAXXX_FLG_FW_CRASH,
@@ -1388,7 +1406,7 @@ int iaxxx_core_resume_rt(struct device *dev)
 	int rc;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
-	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags))
+	if (!iaxxx_is_firmware_ready(priv))
 		/*return -EBUSY;*/
 		return 0;
 
@@ -1647,6 +1665,9 @@ err_regdump_init:
 		iaxxx_dfs_del_regmap(priv->dev, priv->regmap);
 		regmap_exit(priv->regmap);
 	}
+	if (priv->regmap_no_pm)
+		regmap_exit(priv->regmap_no_pm);
+
 	mutex_destroy(&priv->update_block_lock);
 	mutex_destroy(&priv->event_work_lock);
 	mutex_destroy(&priv->event_queue_lock);
@@ -1705,9 +1726,20 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 		priv->regmap_config->ranges = NULL;
 	}
 
+	if (priv->regmap_no_pm_config->ranges) {
+		devm_kfree(priv->dev,
+				(void *)priv->regmap_no_pm_config->ranges);
+		priv->regmap_no_pm_config->ranges = NULL;
+	}
+
 	if (priv->regmap) {
 		iaxxx_dfs_del_regmap(priv->dev, priv->regmap);
 		regmap_exit(priv->regmap);
 		priv->regmap = NULL;
+	}
+
+	if (priv->regmap_no_pm) {
+		regmap_exit(priv->regmap_no_pm);
+		priv->regmap_no_pm = NULL;
 	}
 }

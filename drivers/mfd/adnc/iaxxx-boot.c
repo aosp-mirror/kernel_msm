@@ -59,13 +59,16 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 	int rem_bytes = section->length % (chunk_size);
 	int temp_len = section->length / (chunk_size);
 	int chunk_word_size = chunk_size * 4;
+	/* Get current regmap based on boot status */
+	struct regmap *regmap = iaxxx_get_current_regmap(priv);
+
 
 	dev_err(dev, "Writing section at 0x%.08X, %d words(s)\n",
 				section->start_address, section->length);
 
 	/* Write the section data directly to the device memory */
 	for (i = 0; i < temp_len; i++) {
-		rc = regmap_bulk_write(priv->regmap,
+		rc = regmap_bulk_write(regmap,
 			(section->start_address + ((i * chunk_word_size))),
 			data + (i * chunk_word_size), chunk_size);
 		if (rc) {
@@ -76,7 +79,7 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 		}
 	}
 	if (rem_bytes) {
-		rc = regmap_bulk_write(priv->regmap,
+		rc = regmap_bulk_write(regmap,
 			(section->start_address + ((i * chunk_word_size))),
 			data + (i * chunk_word_size), rem_bytes);
 		if (rc) {
@@ -287,8 +290,8 @@ static int iaxxx_wait_apps_ready(struct iaxxx_priv *priv)
 	/* Apps mode is expected to be ready within 50 msecs */
 	for (i = 0; i < count; ++i) {
 		/* In absence of events, poll SYSTEM_STATUS for App Mode */
-		rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_STATUS_ADDR,
-								&status);
+		rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_STATUS_ADDR,
+				&status);
 		if (rc) {
 			dev_err(dev,
 				"Failed to read SYSTEM_STATUS, rc = %d\n", rc);
@@ -343,14 +346,16 @@ int iaxxx_bootup(struct iaxxx_priv *priv)
 
 #ifdef DEBUG
 	/* Get and log the Device ID */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_DEVICE_ID_ADDR, &reg);
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_DEVICE_ID_ADDR,
+			&reg);
 	if (rc)
 		dev_err(dev, "regmap_read failed, rc = %d\n", rc);
 
 	dev_dbg(dev, "Device ID before jump to ram: 0x%.08X\n", reg);
 
 	/* Get and log the ROM version */
-	rc = regmap_read(priv->regmap, IAXXX_SRB_SYS_ROM_VER_NUM_ADDR, &reg);
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_ROM_VER_NUM_ADDR,
+			&reg);
 	if (rc)
 		dev_err(dev, "regmap_read failed, rc = %d\n", rc);
 

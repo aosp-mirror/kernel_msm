@@ -116,7 +116,7 @@ int iaxxx_pm_put_autosuspend(struct device *dev)
 
 int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 {
-	int rc, reg_val, reg_addr;
+	int rc, reg_val;
 
 	/* Enable external clock */
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
@@ -127,16 +127,15 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 	/* SPI_CS would act as wake up source. So making an
 	 * SPI transaction to wake up the chip and then wait for 40ms
 	 */
-	reg_addr = IAXXX_SRB_SYS_STATUS_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_STATUS_ADDR,
+			&reg_val);
+
 	msleep(40);
 
-	reg_addr = IAXXX_SRB_SYS_STATUS_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_STATUS_ADDR,
+			&reg_val);
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_STATUS_ADDR,
+			&reg_val);
 
 	/* if read failed or SYS mode is not in APP mode, flag error*/
 	reg_val &= IAXXX_SRB_SYS_STATUS_MODE_MASK;
@@ -160,24 +159,15 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 {
 	int rc;
-	uint32_t reg_addr, reg_val;
 
-	reg_addr = IAXXX_SRB_ARB_14_BASE_ADDR_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t), &reg_val,
-			sizeof(uint32_t));
-
-	if (rc) {
-		dev_err(priv->dev, "%s() Fail\n", __func__);
-		return rc;
-	}
 	/* set up the SPI speed thats expected when the system is wake up
 	 * Set the SPI Speed to maximum so system will be awake with max
 	 * clock speed.
 	 */
-	reg_addr = reg_val + (IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_ADDR & 0xffffff);
-	reg_val = IAXXX_PWR_MAX_SPI_SPEED;
-	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
+	rc = regmap_write(priv->regmap_no_pm,
+			IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_ADDR,
+			IAXXX_PWR_MAX_SPI_SPEED);
+
 	if (rc) {
 		dev_err(priv->dev,
 			"Failed to set Max SPI speed in %s\n", __func__);
@@ -203,25 +193,18 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 			return rc;
 		}
 
-		/* Read power control register value */
-		reg_addr = IAXXX_SRB_SYS_POWER_CTRL_ADDR;
-		rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-					&reg_val, sizeof(uint32_t));
-
 		/* Issue sleep power mode command */
-		reg_val &= ~IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK;
-		reg_val |= (IAXXX_SLEEP_MODE <<
-			IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_POS) &
-			IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK;
-
-		rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
+		rc = regmap_update_bits(priv->regmap_no_pm,
+				IAXXX_SRB_SYS_POWER_CTRL_ADDR,
+				IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK,
+				(IAXXX_SLEEP_MODE <<
+				IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_POS));
 
 		if (rc) {
 			dev_err(priv->dev, "%s() Fail\n", __func__);
 			return rc;
 		}
-		iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_0);
+		iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_0);
 		msleep(20);
 
 		/* Disable external clock */
@@ -234,27 +217,19 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 	} else {
 	/* OPTIMAL MODE: If plugin count is not zero or route is still active */
 
-		/* Read power control register value */
-		reg_addr = IAXXX_SRB_SYS_POWER_CTRL_ADDR;
-		rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-					&reg_val, sizeof(uint32_t));
-
 		/* Issue optimal power mode command */
-		reg_val &=
-			~IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_MASK;
-		reg_val |= (IAXXX_OPTIMAL_MODE <<
-			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_POS) &
-			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_MASK;
-
-		rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-			&reg_val, sizeof(uint32_t));
+		rc = regmap_update_bits(priv->regmap_no_pm,
+			IAXXX_SRB_SYS_POWER_CTRL_ADDR,
+			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_MASK,
+			(IAXXX_OPTIMAL_MODE <<
+			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_POS));
 
 		if (rc) {
 			dev_err(priv->dev, "%s() Fail\n", __func__);
 			return rc;
 		}
 
-		iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_0);
+		iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_0);
 		msleep(20);
 
 		priv->iaxxx_state->power_state = IAXXX_OPTIMAL_MODE;
@@ -328,7 +303,7 @@ int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev)
 		return rc;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, HOST_0);
+	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_0);
 
 	msleep(20);
 	priv->iaxxx_state->power_state = IAXXX_OPTIMAL_MODE;
@@ -360,7 +335,7 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
 		return rc;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, HOST_1);
+	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_1);
 	msleep(20);
 	return rc;
 }
@@ -403,7 +378,8 @@ int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 			IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK);
 
 	if (!rc)
-		rc = iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_0);
+		rc = iaxxx_send_update_block_no_wait_no_pm(priv->dev,
+				IAXXX_HOST_0);
 
 	if (rc) {
 		dev_err(priv->dev, "%s failed error code = %d\n", __func__, rc);
@@ -416,20 +392,14 @@ int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 
 int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 {
-	int rc, reg_addr, reg_val, reg_addr1, reg_val1;
+	int rc;
 
 	/* Disable control interface 1 */
-	reg_addr1 = IAXXX_SRB_SYS_POWER_CTRL_1_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr1, sizeof(uint32_t),
-			&reg_val1, sizeof(uint32_t));
-	reg_val1 &=
-		~IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK;
-	reg_val1 |= (1 <<
-		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS) &
-		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK;
-
-	rc = priv->write_no_pm(priv->dev, &reg_addr1, sizeof(uint32_t),
-		&reg_val1, sizeof(uint32_t));
+	rc = regmap_update_bits(priv->regmap_no_pm,
+		IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
+		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
+		(1 <<
+		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS));
 
 	if (rc) {
 		dev_err(priv->dev,
@@ -437,53 +407,32 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 			return rc;
 	}
 
-	iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_1);
+	iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_1);
 
 	msleep(20);
-	reg_addr = IAXXX_SRB_ARB_14_BASE_ADDR_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-				&reg_val, sizeof(uint32_t));
-	if (rc) {
-		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
-		return rc;
-	}
-	reg_addr = reg_val + (IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR & 0xffffff);
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-				&reg_val, sizeof(uint32_t));
-	if (rc) {
-		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
-		return rc;
-	}
-	reg_val |= (source << IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_POS) &
-				IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_MASK;
-	dev_info(priv->dev, "%s() reg_addr = %x , reg_val = %x\n",
-					__func__, reg_addr, reg_val);
-	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-					&reg_val, sizeof(uint32_t));
+
+	rc = regmap_update_bits(priv->regmap_no_pm,
+		IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR,
+		IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_MASK,
+		(source << IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_POS));
+
 	if (rc) {
 		dev_err(priv->dev, "%s() Failed to set MPLL err = %d\n",
 							__func__, rc);
 		return rc;
 	}
 
-	reg_addr = IAXXX_SRB_SYS_POWER_CTRL_ADDR;
-	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-					&reg_val, sizeof(uint32_t));
-	if (rc) {
-		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
-		return rc;
-	}
-	reg_val |= IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK;
-	dev_dbg(priv->dev, "%s() reg_addr = %x , reg_val = %x\n",
-					__func__, reg_addr, reg_val);
-	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-				&reg_val, sizeof(uint32_t));
+	rc = regmap_update_bits(priv->regmap_no_pm,
+		IAXXX_SRB_SYS_POWER_CTRL_ADDR,
+		IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK,
+		(1 << IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_POS));
+
 	if (rc) {
 		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
 		return rc;
 	}
 
-	rc = iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_0);
+	rc = iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_0);
 	if (rc) {
 		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
 		return rc;

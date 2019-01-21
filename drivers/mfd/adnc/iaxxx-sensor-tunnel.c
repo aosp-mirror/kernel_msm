@@ -323,7 +323,7 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 		return -EINVAL;
 	}
 
-	if (!test_bit(IAXXX_FLG_FW_READY, &priv->flags)) {
+	if (!iaxxx_is_firmware_ready(priv)) {
 		dev_err(priv->dev, "%s FW  is not in App mode\n", __func__);
 		return -EIO;
 	}

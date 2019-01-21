@@ -57,7 +57,7 @@
 #define IAXXX_SRB_ARB_N_BASE_ADDRESS(N)	(IAXXX_SRB_ARB_0_BASE_ADDR_ADDR+(N*8))
 
 #define IAXXX_MAX_REGISTER	  (IAXXX_SRB_ARB_N_SIZE(31))
-#define IAXXX_SRB_SIZE		  ((IAXXX_MAX_REGISTER+4) - IAXXX_SRB_REGS_ADDR)
+#define IAXXX_SRB_SIZE		  (IAXXX_SRB_REG_NUM*4)
 
 #define IAXXX_BLOCK_CHANNEL				1
 #define IAXXX_BLOCK_STREAM				2
@@ -84,6 +84,7 @@
 #define SRB_BLOCK_SELECT_MASK	0x1F
 #define SRB_BLOCK_SELECT_SHIFT	0
 
+#define IAXXX_REGMAP_NO_PM_NUM_ARBS     2
 
 #define IAXXX_PHYSICAL_ADDRESS_BASE	0x50000000
 #define IAXXX_I2S_SIZE			0x00001000
@@ -168,6 +169,10 @@ static bool iaxxx_readable_register(struct device *dev, unsigned int reg)
 	if (WARN_ON(!priv))
 		return false;	/* Something went wrong */
 
+	/* ONLY if FW is booted, allow reads to this regmap */
+	if (!iaxxx_is_firmware_ready(priv))
+		return false;
+
 	cfg = priv->regmap_config->ranges;
 
 	/* Virtual addresses are only supported when mapped */
@@ -184,6 +189,20 @@ static bool iaxxx_readable_register(struct device *dev, unsigned int reg)
 
 	/* Support physical address */
 	return iaxxx_is_physical_address(reg);
+}
+
+static bool iaxxx_writeable_register(struct device *dev, unsigned int reg)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+
+	if (WARN_ON(!priv))
+		return false;	/* Something went wrong */
+
+	/* ONLY if FW is booted allow writes to this regmap */
+	if (!iaxxx_is_firmware_ready(priv))
+		return false;
+
+	return true;
 }
 
 static bool iaxxx_volatile_register(struct device *dev, unsigned int reg)
@@ -208,13 +227,6 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	/* Wall clock registers */
 	case IAXXX_AF_WCPT_WALL_CLOCK_RD_0_ADDR:
 	case IAXXX_AF_WCPT_WALL_CLOCK_RD_1_ADDR:
-	/* SRB registers */
-	case IAXXX_SRB_SYS_BLK_UPDATE_ADDR:
-	case IAXXX_SRB_SYS_BLK_UPDATE_1_ADDR:
-	case IAXXX_SRB_SYS_BLK_UPDATE_2_ADDR:
-	case IAXXX_SRB_SYS_STATUS_ADDR:
-	case IAXXX_SRB_FLASHUPD_STATUS_ADDR:
-	case IAXXX_SRB_SYS_APP_VER_STR_ADDR:
 	/* Channel ARB Regs */
 	case IAXXX_CH_HDR_CH_CNT_ADDR:
 	case IAXXX_CH_HDR_CH_GAIN_ADDR:
@@ -229,13 +241,22 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	case IAXXX_TNL_HDR_TNL_COUNT_ADDR:
 	/* Endpoints ARB Regs */
 	case IAXXX_IN_EP_GRP_STATUS_ADDR:
-	case IAXXX_SRB_CHKSUM_ADDR:
-	case IAXXX_SRB_CHKSUM_VAL1_ADDR:
-	case IAXXX_SRB_CHKSUM_VAL2_ADDR:
-	case IAXXX_SRB_SYS_POWER_CTRL_ADDR:
-	case IAXXX_SRB_SYS_POWER_CTRL_1_ADDR:
 		return true;
 	}
+
+	/* All SRB Registers */
+	if (reg >= IAXXX_SRB_BASE && reg < (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
+		return true;
+
+	/* All Power Management Registers */
+	if (reg >= IAXXX_PWR_MGMT_REGS_ADDR && reg <
+		(IAXXX_PWR_MGMT_REGS_ADDR + (IAXXX_PWR_MGMT_REG_NUM*4)))
+		return true;
+
+	/* All event Management Registers */
+	if (reg >= IAXXX_EVT_MGMT_EVT_ADDR &&
+		reg < (IAXXX_EVT_MGMT_EVT_ADDR + (IAXXX_EVT_MGMT_REG_NUM*4)))
+		return true;
 
 	/* PCM Registers */
 	if (reg >= IAXXX_PCM_BASE_ADDR(0) && reg < IAXXX_PCM_REGS_END_ADDR(0))
@@ -255,10 +276,7 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	if (reg >= IAXXX_I2S_I2S0_HL_ADDR &&
 			reg <= IAXXX_I2S_I2S_TRIGGER_GEN_ADDR)
 		return true;
-	/* SRB event registers */
-	if (reg >= IAXXX_EVT_MGMT_EVT_ADDR &&
-		reg <= IAXXX_EVT_MGMT_EVT_DST_OPAQUE_ADDR)
-		return true;
+
 	/* AO registers */
 	if (reg >= IAXXX_AO_REGS_ADDR && reg <= IAXXX_AO_REGS_END_ADDR)
 		return true;
@@ -348,11 +366,62 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 			IAXXX_DEBUG_BLOCK_2_CRASHLOG_SIZE_ADDR)
 		return true;
 
-	if (reg >= IAXXX_PWR_MGMT_REGS_ADDR && reg <=
-			IAXXX_PWR_MGMT_MAX_UART1_MASTER_SPEED_REQ_ADDR)
-		return true;
 	return false;
 }
+
+static bool iaxxx_application_volatile_reg_no_pm
+		(struct device *dev, unsigned int reg)
+{
+
+	/* All SRB Registers */
+	if (reg >= IAXXX_SRB_BASE && reg < (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
+		return true;
+
+	/* All Power Management Registers */
+	if (reg >= IAXXX_PWR_MGMT_REGS_ADDR && reg <
+		(IAXXX_PWR_MGMT_REGS_ADDR + IAXXX_PWR_MGMT_REG_NUM*4))
+		return true;
+
+	/* All event Management Registers */
+	if (reg >= IAXXX_EVT_MGMT_EVT_ADDR &&
+		reg < (IAXXX_EVT_MGMT_EVT_ADDR + (IAXXX_EVT_MGMT_REG_NUM*4)))
+		return true;
+
+	return false;
+}
+
+/*
+ * readable_register needed to optimize access and bus usage
+ */
+static bool iaxxx_readable_register_no_pm(struct device *dev, unsigned int reg)
+{
+
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+
+	if (WARN_ON(!priv))
+		return false;	/* Something went wrong */
+
+	/* All SRB Registers */
+	if (reg >= IAXXX_SRB_BASE && reg < (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
+		return true;
+
+	/* All Power Management Registers */
+	if (reg >= IAXXX_PWR_MGMT_REGS_ADDR && reg <=
+		(IAXXX_PWR_MGMT_REGS_ADDR + IAXXX_PWR_MGMT_REG_NUM*4))
+		return true;
+
+	/* All event Management Registers */
+	if (reg >= IAXXX_EVT_MGMT_EVT_ADDR &&
+		reg < (IAXXX_EVT_MGMT_EVT_ADDR + (IAXXX_EVT_MGMT_REG_NUM*4)))
+		return true;
+
+	/* Electrical control register used during boot */
+	if (reg == IAXXX_AO_MEM_ELEC_CTRL_ADDR)
+		return true;
+
+	return false;
+}
+
 /*
  * Use ranges to define the Application Register Blocks
  * This needs to be populated at boot-time after firmware download.
@@ -432,10 +501,12 @@ static const struct regmap_range_cfg iaxxx_ranges[] = {
 };
 
 static struct regmap_config iaxxx_regmap_config = {
+	.name = IAXXX_REGMAP_NAME,
 	.reg_bits = 32,		/* 32-bit register offsets */
 	.val_bits = 32,		/* 32-bit register values */
 	.max_register = IAXXX_MAX_REGISTER,
 	.readable_reg = iaxxx_readable_register,
+	.writeable_reg = iaxxx_writeable_register,
 	.reg_format_endian = REGMAP_ENDIAN_BIG,
 	.val_format_endian = REGMAP_ENDIAN_BIG,
 	.volatile_reg = iaxxx_volatile_register,
@@ -445,6 +516,19 @@ static struct regmap_config iaxxx_regmap_config = {
 	/*.ranges = iaxxx_ranges,
 	 * .num_ranges = ARRAY_SIZE(iaxxx_ranges),
 	 */
+};
+
+static struct regmap_config iaxxx_regmap_no_pm_config = {
+	.name = IAXXX_REGMAP_NO_PM_NAME,
+	.reg_bits = 32,		/* 32-bit register offsets */
+	.val_bits = 32,		/* 32-bit register values */
+	.max_register = IAXXX_MAX_REGISTER,
+	.readable_reg = iaxxx_readable_register_no_pm,
+	.reg_format_endian = REGMAP_ENDIAN_BIG,
+	.val_format_endian = REGMAP_ENDIAN_BIG,
+	.volatile_reg = iaxxx_volatile_register,
+	.cache_type = REGCACHE_RBTREE,
+
 };
 
 /**
@@ -510,7 +594,9 @@ static int iaxxx_update_relocatable_blocks(struct iaxxx_priv *priv)
 
 	struct device *dev = priv->dev;
 	struct regmap_range_cfg *range_cfg;
+	struct regmap_range_cfg *range_cfg_1;
 	struct regmap_range_cfg *curr_range_cfg;
+	struct regmap_range_cfg *curr_range_cfg_1;
 	const struct regmap_range_cfg *def_range_cfg;
 
 	/* Get the count of the number of valid RBDT entries */
@@ -525,8 +611,19 @@ static int iaxxx_update_relocatable_blocks(struct iaxxx_priv *priv)
 	if (!range_cfg)
 		return -ENOMEM;
 
+	/* Allocate a range configuration for second regmap */
+	range_cfg_1 = devm_kzalloc(dev,
+			IAXXX_REGMAP_NO_PM_NUM_ARBS * sizeof(*range_cfg),
+			GFP_KERNEL);
+	if (!range_cfg_1) {
+		devm_kfree(priv->dev, range_cfg_1);
+		return -ENOMEM;
+	}
+
 	/* Build the range configuration table */
-	curr_range_cfg = range_cfg;
+	curr_range_cfg   = range_cfg;
+	curr_range_cfg_1 = range_cfg_1;
+
 	for (i = 0; i < ARRAY_SIZE(iaxxx_ranges); ++i) {
 		def_range_cfg = &iaxxx_ranges[i];
 		blk_index = IAXXX_INDEX_FROM_VIRTUAL(def_range_cfg->range_min);
@@ -548,6 +645,20 @@ static int iaxxx_update_relocatable_blocks(struct iaxxx_priv *priv)
 			curr_range_cfg->range_min + size - sizeof(u32);
 
 			++curr_range_cfg;
+
+			/* Second regmap only has range for Power Management
+			 * registers.
+			 */
+			if ((blk_index == IAXXX_BLOCK_POWER) ||
+				(blk_index == IAXXX_BLOCK_EVENT)) {
+				*curr_range_cfg_1 = *def_range_cfg;
+				curr_range_cfg_1->window_len   = size;
+				curr_range_cfg_1->window_start = addr;
+				curr_range_cfg_1->range_max    =
+						curr_range_cfg_1->range_min +
+						size - sizeof(u32);
+				++curr_range_cfg_1;
+			}
 		}
 	}
 
@@ -555,6 +666,10 @@ static int iaxxx_update_relocatable_blocks(struct iaxxx_priv *priv)
 	priv->regmap_config->num_ranges = nblks;
 	WARN_ON((curr_range_cfg - range_cfg) != nblks);
 
+	priv->regmap_no_pm_config->ranges = range_cfg_1;
+	priv->regmap_no_pm_config->num_ranges = IAXXX_REGMAP_NO_PM_NUM_ARBS;
+	WARN_ON((curr_range_cfg_1 - range_cfg_1) !=
+			IAXXX_REGMAP_NO_PM_NUM_ARBS);
 	return 0;
 }
 
@@ -611,8 +726,9 @@ static int iaxxx_update_rbdt(struct iaxxx_priv *priv)
 	int rc;
 	struct device *dev = priv->dev;
 
-	rc = regmap_bulk_read(priv->regmap, IAXXX_SRB_ARB_0_BASE_ADDR_ADDR,
-				&priv->sys_rbdt, ARRAY_SIZE(priv->sys_rbdt));
+	rc = regmap_bulk_read(priv->regmap_no_pm,
+			IAXXX_SRB_ARB_0_BASE_ADDR_ADDR,
+			&priv->sys_rbdt, ARRAY_SIZE(priv->sys_rbdt));
 	if (rc)
 		dev_err(dev, "%s: regmap_read failed, rc = %d\n", __func__, rc);
 
@@ -632,19 +748,27 @@ int iaxxx_regmap_init(struct iaxxx_priv *priv)
 	}
 
 	priv->regmap_config = &iaxxx_regmap_config;
+	priv->regmap_no_pm_config = &iaxxx_regmap_no_pm_config;
 
 	return priv->regmap_init_bus(priv);
 }
 
 int iaxxx_sbl_regmap_init(struct iaxxx_priv *priv)
 {
-	/* Free the existing regmap */
+	/* Free the existing regmaps */
 	if (priv->regmap) {
 		regmap_exit(priv->regmap);
 		priv->regmap = NULL;
 	}
 
+	if (priv->regmap_no_pm) {
+		regmap_exit(priv->regmap_no_pm);
+		priv->regmap_no_pm = NULL;
+	}
+
+
 	priv->regmap_config->volatile_reg = iaxxx_volatile_register;
+	priv->regmap_no_pm_config->volatile_reg = iaxxx_volatile_register;
 
 	priv->is_application_mode = false;
 
@@ -680,9 +804,16 @@ int iaxxx_application_regmap_init(struct iaxxx_priv *priv)
 		goto err;
 	}
 
-	/* Free the existing regmap */
-	regmap_exit(priv->regmap);
-	priv->regmap = NULL;
+	/* Free the existing regmaps */
+	if (priv->regmap) {
+		regmap_exit(priv->regmap);
+		priv->regmap = NULL;
+	}
+
+	if (priv->regmap_no_pm) {
+		regmap_exit(priv->regmap_no_pm);
+		priv->regmap_no_pm = NULL;
+	}
 
 	/* Update regmap configuration for the relocatable blocks */
 	rc = iaxxx_update_relocatable_blocks(priv);
@@ -692,6 +823,8 @@ int iaxxx_application_regmap_init(struct iaxxx_priv *priv)
 	}
 
 	priv->regmap_config->volatile_reg = iaxxx_application_volatile_reg;
+	priv->regmap_no_pm_config->volatile_reg =
+			iaxxx_application_volatile_reg_no_pm;
 
 	priv->is_application_mode = true;
 
@@ -701,6 +834,9 @@ int iaxxx_application_regmap_init(struct iaxxx_priv *priv)
 		devm_kfree(dev, (void *)priv->regmap_config->ranges);
 		priv->regmap_config->ranges = &iaxxx_ranges[0];
 		priv->regmap_config->num_ranges = 0;
+		devm_kfree(priv->dev,
+				(void *)priv->regmap_no_pm_config->ranges);
+		priv->regmap_no_pm_config->ranges = NULL;
 	}
 
 err:

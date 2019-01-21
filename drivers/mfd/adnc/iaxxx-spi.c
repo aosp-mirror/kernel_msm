@@ -576,60 +576,86 @@ static int iaxxx_spi_bulk_read(struct device *dev,
 	return count;
 }
 
-/* This version of spi-write is executed without any power management
- * functions called.
+/* This version of spi-write is called by second regmap for no_pm calls.
+ * Since regmap is configured for Big-endian, the data received here will be
+ * in Big-endian format. Since SPI communication with Firmware is Big-endian,
+ * no byte-order conversion is needed before sending data.
  *
- *  Note: Since this version is directly called by the driver, it's
- *  up to the driver to ensure the register address passed is NOT
- *  virtual address (for ARB) that is passed to regmap functions.
- *  Only physical register address should be passed to this function.
+ * This version does not trigger any power-management related calls.
  */
-static int iaxxx_spi_write_no_pm(void *context,
-				 const void *reg, size_t reg_len,
-				 const void *val, size_t val_len)
+static int iaxxx_regmap_spi_write_no_pm(void *context,
+		const void *data, size_t count)
 {
+	const void *val = data + sizeof(uint32_t);
+	size_t reg_len = sizeof(uint32_t);
+	size_t val_len = count - reg_len;
 	struct device *dev = context;
-	uint32_t reg_addr = cpu_to_be32(*(uint32_t *)reg);
-	uint32_t words = val_len / sizeof(uint32_t);
-	size_t reg_len_pad = IAXXX_REG_LEN_WITH_PADDING;
+	uint32_t *writebuf = (uint32_t *)((uint8_t *)val + IAXXX_REG_PADDING);
+	uint32_t reg_addr = *(uint32_t *)data;
+	uint32_t words = (val_len - IAXXX_REG_PADDING) / sizeof(uint32_t);
 	int rc;
 
-	rc = iaxxx_spi_write_common(context,
-				 reg, reg_len_pad,
-				 val, val_len,
-				 false, false);
+	if (WARN_ON(count <= sizeof(uint32_t))
+		|| WARN_ON(val_len <= IAXXX_REG_PADDING)) {
+		pr_err("%s(), Error Input param put of range\n", __func__);
+		return -EINVAL;
+	}
 
-	register_dump_log(dev, reg_addr, val, false, words, IAXXX_WRITE);
+	/* flag set to indicate data and reg-address are in BE32 format */
+	rc = iaxxx_spi_write_common(context, data, reg_len,
+			val, val_len, true, false);
 
+	register_dump_log(dev, reg_addr, writebuf, true, words, IAXXX_WRITE);
 	return rc;
 }
 
-/* This version of spi-read is executed without any power management
- * functions called.
- *
- *  Note: Since this version is directly called by the driver, it's
- *  up to the driver to ensure the register address passed is NOT
- *  virtual address (for ARB) that is passed to regmap functions.
- *  Only physical register address should be passed to this function.
+/* This version of spi-read is called by second regmap for no-pm calls.
+ * Since SPI communication with firmware is in Big-endian and regmap
+ * is also configured for Big-endian, the data read here does not
+ * need to be altered.
+ * Also the register address received here is also in Big-endian format.
+ * This function would execute without calling any power-management
+ * functions.
  */
-static int iaxxx_spi_read_no_pm(void *context,
+static int iaxxx_regmap_spi_read_no_pm(void *context,
 				 const void *reg, size_t reg_len,
 				 void *val, size_t val_len)
 {
 	struct device *dev = context;
-	int rc = 0;
-	uint32_t reg_addr = cpu_to_be32(*(uint32_t *)reg);
 	uint32_t words = val_len / sizeof(uint32_t);
+	int rc = 0;
+	uint32_t reg_addr = *(uint32_t *) reg;
 
-	rc = iaxxx_spi_read_common(context, &reg_addr, reg_len, val,
-			val_len, false);
+	rc = iaxxx_spi_read_common(context, reg, reg_len, val, val_len, false);
 	if (rc)
 		goto reg_read_err;
-	iaxxx_copy_be32_to_cpu(dev, val, val_len);
-	register_dump_log(dev, reg_addr, val, false, words, IAXXX_READ);
+
+	register_dump_log(dev, reg_addr, val, true, words, IAXXX_READ);
 
 reg_read_err:
 	return rc;
+}
+
+
+/* This spi-write function is regmap interface function for second
+ * no_pm regmap. It is called from regmap which is configured to send
+ * data in Big-Endian.
+ * Since SPI communication with firmware is Big-Endian, there is no
+ * conversion needed before sending data.
+ *
+ * This function does not trigger any power-management related calls.
+ */
+static int iaxxx_regmap_spi_gather_write_no_pm(void *context,
+					 const void *reg, size_t reg_len,
+					 const void *val, size_t val_len)
+{
+	/* flag set to indicate data and reg-address are in BE32 format
+	 * and no pm.
+	 */
+	return iaxxx_spi_write_common(context,
+				 reg, reg_len,
+				 val, val_len,
+				 true, false);
 }
 
 static int iaxxx_spi_populate_dt_data(struct device_node *node, u32 *tmp)
@@ -660,6 +686,15 @@ static struct regmap_bus regmap_spi = {
 	.val_format_endian_default = REGMAP_ENDIAN_BIG,
 };
 
+static struct regmap_bus regmap_no_pm_spi = {
+	.write = iaxxx_regmap_spi_write_no_pm,
+	.gather_write = iaxxx_regmap_spi_gather_write_no_pm,
+	.read = iaxxx_regmap_spi_read_no_pm,
+	.reg_format_endian_default = REGMAP_ENDIAN_BIG,
+	.val_format_endian_default = REGMAP_ENDIAN_BIG,
+};
+
+
 /* Register map initialization */
 static int iaxxx_spi_regmap_init(struct iaxxx_priv *priv)
 {
@@ -668,7 +703,7 @@ static int iaxxx_spi_regmap_init(struct iaxxx_priv *priv)
 	struct regmap *regmap;
 	struct iaxxx_spi_priv *spi_priv = to_spi_priv(priv);
 
-	if (!spi_priv || !priv->regmap_config) {
+	if (!spi_priv || !priv->regmap_config || !priv->regmap_no_pm_config) {
 		pr_err("%s: NULL input pointer(s)\n", __func__);
 		return -EINVAL;
 	}
@@ -678,7 +713,8 @@ static int iaxxx_spi_regmap_init(struct iaxxx_priv *priv)
 	/* spi controller requires 12 bytes of zero padding between
 	 * address and data
 	 */
-	priv->regmap_config->pad_bits = 96;
+	priv->regmap_config->pad_bits       = 96;
+	priv->regmap_no_pm_config->pad_bits = 96;
 
 	regmap = regmap_init(dev, &regmap_spi,
 					spi_priv->spi, priv->regmap_config);
@@ -687,8 +723,16 @@ static int iaxxx_spi_regmap_init(struct iaxxx_priv *priv)
 		dev_err(dev, "Failed to allocate register map: %d\n", ret);
 		return ret;
 	}
-
 	priv->regmap = regmap;
+
+	regmap = regmap_init(dev, &regmap_no_pm_spi,
+			spi_priv->spi, priv->regmap_no_pm_config);
+	if (IS_ERR(regmap)) {
+		ret = PTR_ERR(regmap);
+		dev_err(dev, "Failed to allocate register map: %d\n", ret);
+		return ret;
+	}
+	priv->regmap_no_pm = regmap;
 	return 0;
 }
 
@@ -876,8 +920,6 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	spi_priv->priv.regmap_init_bus = iaxxx_spi_regmap_init;
 	spi_priv->priv.bulk_read = iaxxx_spi_bulk_read;
 	spi_priv->priv.raw_write = iaxxx_spi_raw_write;
-	spi_priv->priv.read_no_pm = iaxxx_spi_read_no_pm;
-	spi_priv->priv.write_no_pm = iaxxx_spi_write_no_pm;
 	spi_priv->priv.bus = IAXXX_SPI;
 
 	spi_set_drvdata(spi, spi_priv);

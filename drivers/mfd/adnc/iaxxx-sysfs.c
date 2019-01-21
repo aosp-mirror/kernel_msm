@@ -479,7 +479,7 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host0(struct device *dev,
 		return count;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, HOST_0);
+	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_0);
 
 	msleep(20);
 	dev_info(dev, "%s() Success\n", __func__);
@@ -517,7 +517,7 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host1(struct device *dev,
 		return count;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, HOST_1);
+	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_1);
 	msleep(20);
 	dev_info(dev, "%s() Success\n", __func__);
 	mutex_unlock(&priv->test_mutex);
