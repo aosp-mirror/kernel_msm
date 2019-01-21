@@ -28939,6 +28939,18 @@ static VOS_STATUS wma_nan_req(void *wda_handle, tpNanRequest nan_req)
 	nan_data_len = nan_req->request_data_len;
 	nan_data_len_aligned = roundup(nan_req->request_data_len,
 				sizeof(u_int32_t));
+	if (nan_data_len_aligned < nan_req->request_data_len) {
+		WMA_LOGE("%s: integer overflow while rounding up data_len",
+			 __func__);
+		return VOS_STATUS_E_NOMEM;
+	}
+
+	if (nan_data_len_aligned > WMA_SVC_MSG_MAX_SIZE - WMI_TLV_HDR_SIZE) {
+		WMA_LOGE("%s: wmi_max_msg_size overflow for given datalen",
+			 __func__);
+		return VOS_STATUS_E_NOMEM;
+	}
+
 	len += WMI_TLV_HDR_SIZE + nan_data_len_aligned;
 	buf = wmi_buf_alloc(wma_handle->wmi_handle, len);
 	if (!buf) {
