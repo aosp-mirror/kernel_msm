@@ -637,8 +637,6 @@ void gasket_disable_device(struct gasket_dev *gasket_dev)
 	if (gasket_dev->dev_info.cdev_added)
 		cdev_del(&gasket_dev->dev_info.cdev);
 
-	gasket_dev->status = GASKET_STATUS_DEAD;
-
 	gasket_interrupt_cleanup(gasket_dev);
 
 	for (i = 0; i < driver_desc->num_page_tables; ++i) {

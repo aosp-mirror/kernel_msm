@@ -338,14 +338,10 @@ static bool gasket_is_pte_range_free(struct gasket_page_table_entry *ptes,
  * The page table mutex must be held before this call.
  */
 static void gasket_free_extended_subtable(struct gasket_page_table *pg_tbl,
-					  struct gasket_page_table_entry *pte,
-					  u64 __iomem *slot)
+					  struct gasket_page_table_entry *pte)
 {
 	/* Release the page table from the driver */
 	pte->flags = SET(FLAGS_STATUS, pte->flags, PTE_FREE);
-
-	/* Release the page table from the device */
-	writeq(0, slot);
 
 	vfree(pte->sublevel);
 
@@ -379,18 +375,21 @@ gasket_page_table_garbage_collect_nolock(struct gasket_page_table *pg_tbl)
 	struct gasket_page_table_entry *pte;
 	u64 __iomem *slot;
 
-	/* XXX FIX ME XXX -- more efficient to keep a usage count */
-	/* rather than scanning the second level page tables */
+	gasket_update_hw_status(pg_tbl->gasket_dev);
 
 	for (pte = pg_tbl->entries + pg_tbl->num_simple_entries,
 	     slot = pg_tbl->base_slot + pg_tbl->num_simple_entries;
 	     pte < pg_tbl->entries + pg_tbl->config.total_entries;
 	     pte++, slot++) {
-		if (GET(FLAGS_STATUS, pte->flags) == PTE_INUSE) {
-			if (gasket_is_pte_range_free(pte->sublevel,
-						     GASKET_PAGES_PER_SUBTABLE))
-				gasket_free_extended_subtable(pg_tbl, pte,
-							      slot);
+		if (GET(FLAGS_STATUS, pte->flags) == PTE_INUSE &&
+		    gasket_is_pte_range_free(pte->sublevel,
+					     GASKET_PAGES_PER_SUBTABLE)) {
+
+			if (pg_tbl->gasket_dev->status != GASKET_STATUS_DEAD)
+				/* Release the page table from the device */
+				writeq(0, slot);
+
+			gasket_free_extended_subtable(pg_tbl, pte);
 		}
 	}
 }
@@ -408,8 +407,6 @@ void gasket_page_table_cleanup(struct gasket_page_table *pg_tbl)
 {
 	/* Deallocate free second-level tables. */
 	gasket_page_table_garbage_collect(pg_tbl);
-
-	/* TODO: Check that all PTEs have been freed? */
 
 	vfree(pg_tbl->entries);
 	pg_tbl->entries = NULL;
@@ -1308,12 +1305,55 @@ void gasket_page_table_unmap_all(struct gasket_page_table *pg_tbl)
 }
 EXPORT_SYMBOL(gasket_page_table_unmap_all);
 
+/*
+ * Device unreachable, cleanup local state without touching chip.
+ * Caller must hold pg_tbl->mutex.
+ */
+static void gasket_page_table_reset_local(struct gasket_page_table *pg_tbl)
+{
+	struct gasket_page_table_entry *ptes = pg_tbl->entries;
+	uint i, j;
+
+	/* Release the simple entries. */
+	for (i = 0; i < pg_tbl->num_simple_entries; i++)
+		gasket_release_entry(pg_tbl, &ptes[i]);
+
+	/* Release the extended entries. */
+	for (i = pg_tbl->num_simple_entries; i < pg_tbl->config.total_entries;
+	     i++) {
+		u64 __iomem *slot_base;
+
+		if (GET(FLAGS_STATUS, ptes[i].flags) == PTE_FREE)
+			continue;
+
+		for (j = 0; j < GASKET_PAGES_PER_SUBTABLE; j++)
+			gasket_release_entry(pg_tbl, &ptes[i].sublevel[j]);
+
+		if (GET(FLAGS_DEV_SUBTABLE, ptes[i].flags))
+			continue;
+
+		/* Invalidate all entries of host-resident subtable. */
+		slot_base = (u64 __iomem *)(page_address(ptes[i].page) +
+					    ptes[i].offset);
+		memset(slot_base, 0,
+		       GASKET_PAGES_PER_SUBTABLE * sizeof(u64));
+	}
+}
+
 /* See gasket_page_table.h for description. */
 void gasket_page_table_reset(struct gasket_page_table *pg_tbl)
 {
 	mutex_lock(&pg_tbl->mutex);
-	gasket_page_table_unmap_all_nolock(pg_tbl);
-	writeq(pg_tbl->config.total_entries, pg_tbl->extended_offset_reg);
+	gasket_update_hw_status(pg_tbl->gasket_dev);
+
+	if (pg_tbl->gasket_dev->status == GASKET_STATUS_DEAD) {
+		gasket_page_table_reset_local(pg_tbl);
+	} else {
+		gasket_page_table_unmap_all_nolock(pg_tbl);
+		writeq(pg_tbl->config.total_entries,
+		       pg_tbl->extended_offset_reg);
+	}
+
 	mutex_unlock(&pg_tbl->mutex);
 }
 
