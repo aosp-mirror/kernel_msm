@@ -1259,6 +1259,34 @@ static int gasket_open(struct inode *inode, struct file *filp)
 }
 
 /*
+ * Reset device and page tables on close.  Don't touch device if it's dead.
+ * Caller must hold gasket_dev->mutex (for the close callback).
+ */
+static void gasket_release_reset_device(struct gasket_dev *gasket_dev)
+{
+	const struct gasket_driver_desc *driver_desc =
+		gasket_dev->internal_desc->driver_desc;
+	int i;
+
+	gasket_update_hw_status(gasket_dev);
+
+	if (gasket_dev->status != GASKET_STATUS_DEAD) {
+		/* Forces chip reset before we unmap the page tables. */
+		driver_desc->device_reset_cb(gasket_dev);
+	}
+
+	for (i = 0; i < driver_desc->num_page_tables; ++i) {
+		gasket_page_table_reset(gasket_dev->page_table[i]);
+		gasket_page_table_garbage_collect(gasket_dev->page_table[i]);
+		gasket_free_coherent_memory_all(gasket_dev, i);
+	}
+
+	/* Closes device, enters power save. */
+	gasket_check_and_invoke_callback_nolock(gasket_dev,
+						driver_desc->device_close_cb);
+}
+
+/*
  * Called on a close of the device file.  If this process is the owner,
  * decrement the open count.  On last close by the owner, free up buffers and
  * eventfd contexts, and release ownership.
@@ -1267,10 +1295,8 @@ static int gasket_open(struct inode *inode, struct file *filp)
  */
 static int gasket_release(struct inode *inode, struct file *file)
 {
-	int i;
 	struct gasket_dev *gasket_dev;
 	struct gasket_ownership *ownership;
-	const struct gasket_driver_desc *driver_desc;
 	char task_name[TASK_COMM_LEN];
 	struct gasket_cdev_info *dev_info =
 		container_of(inode->i_cdev, struct gasket_cdev_info, cdev);
@@ -1278,7 +1304,6 @@ static int gasket_release(struct inode *inode, struct file *file)
 	bool is_root = ns_capable(pid_ns->user_ns, CAP_SYS_ADMIN);
 
 	gasket_dev = dev_info->gasket_dev_ptr;
-	driver_desc = gasket_dev->internal_desc->driver_desc;
 	ownership = &dev_info->ownership;
 	get_task_comm(task_name, current);
 	mutex_lock(&gasket_dev->mutex);
@@ -1297,19 +1322,7 @@ static int gasket_release(struct inode *inode, struct file *file)
 			dev_dbg(gasket_dev->dev, "Device is now free\n");
 			ownership->is_owned = 0;
 			ownership->owner = 0;
-
-			/* Forces chip reset before we unmap the page tables. */
-			driver_desc->device_reset_cb(gasket_dev);
-
-			for (i = 0; i < driver_desc->num_page_tables; ++i) {
-				gasket_page_table_unmap_all(gasket_dev->page_table[i]);
-				gasket_page_table_garbage_collect(gasket_dev->page_table[i]);
-				gasket_free_coherent_memory_all(gasket_dev, i);
-			}
-
-			/* Closes device, enters power save. */
-			gasket_check_and_invoke_callback_nolock(gasket_dev,
-								driver_desc->device_close_cb);
+			gasket_release_reset_device(gasket_dev);
 		}
 	}
 
