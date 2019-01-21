@@ -236,8 +236,11 @@ static int oscar_device_open_cb(struct gasket_dev *gasket_dev)
 
 static int oscar_get_status(struct gasket_dev *gasket_dev)
 {
-	/* Always returns ALIVE for now */
-	return GASKET_STATUS_ALIVE;
+	struct oscar_dev *oscar_dev =
+		platform_get_drvdata(gasket_dev->platform_dev);
+
+	return check_dev_avail(oscar_dev) ? GASKET_STATUS_ALIVE :
+		GASKET_STATUS_DEAD;
 }
 
 /* Caller must hold abc_buffers_lock */
