@@ -18,8 +18,6 @@
 #include "clk.h"
 #include "clk-pll.h"
 
-#define PLL_TIMEOUT_MS		10
-
 struct airbrush_clk_pll {
 	struct clk_hw		hw;
 	void __iomem		*lock_reg;
@@ -78,6 +76,8 @@ static long airbrush_pll_round_rate(struct clk_hw *hw,
 #define PLLF081XX_LOCK_STAT_SHIFT	(29)
 #define PLLF081XX_ENABLE_SHIFT		(31)
 
+#define PLL_TIMEOUT 1000
+
 static unsigned long airbrush_pllf081xx_recalc_rate(struct clk_hw *hw,
 				unsigned long parent_rate)
 {
@@ -112,7 +112,9 @@ static inline bool airbrush_pllf081xx_mp_change(
 static int airbrush_pllf081xx_enable(struct clk_hw *hw)
 {
 	struct airbrush_clk_pll *pll = to_clk_pll(hw);
-	u32 tmp;
+	u32 tmp, timeout;
+
+	timeout = PLL_TIMEOUT;
 
 	airbrush_clk_readl(pll->con_reg, &tmp);
 	tmp |= BIT(PLLF081XX_ENABLE_SHIFT);
@@ -123,8 +125,14 @@ static int airbrush_pllf081xx_enable(struct clk_hw *hw)
 		cpu_relax();
 		if (airbrush_clk_readl(pll->con_reg, &tmp))
 			return -ENODEV;
-	} while (!(tmp & (PLLF081XX_LOCK_STAT_MASK
-				<< PLLF081XX_LOCK_STAT_SHIFT)));
+	} while (!(tmp &
+			(PLLF081XX_LOCK_STAT_MASK << PLLF081XX_LOCK_STAT_SHIFT))
+			&& --timeout);
+
+	if (!timeout) {
+		pr_err("%s: waiting for PLL stable bit timed out\n", __func__);
+		return -EBUSY;
+	}
 
 	return 0;
 }
