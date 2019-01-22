@@ -88,8 +88,6 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 			    enum dma_data_direction dir);
 static int dma_send_fw(const char *path, const int remote_addr);
-static int dma_write_dw(struct file *file, const int remote_addr,
-			const int val);
 static int dma_read_dw(struct file *file, const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
 static int dma_send_workloads(void);
@@ -405,7 +403,7 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 	int err = 0;
 
 	/* Transfer workload to target memory in Airbrush */
-	memset((void *)&dma_desc, 0, sizeof(dma_desc));
+	memset(&dma_desc, 0, sizeof(dma_desc));
 	dma_desc.local_buf = buf;
 	dma_desc.local_buf_type = DMA_BUFFER_USER;
 	dma_desc.remote_buf = remote_addr;
@@ -432,7 +430,7 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 	int err = 0;
 
 	/* Transfer workload to target memory in Airbrush */
-	memset((void *)&dma_desc, 0, sizeof(dma_desc));
+	memset(&dma_desc, 0, sizeof(dma_desc));
 	dma_desc.local_buf = buf;
 	dma_desc.local_buf_type = DMA_BUFFER_USER;
 	dma_desc.remote_buf = remote_addr;
@@ -462,32 +460,11 @@ static int dma_send_fw(const char *path, const int remote_addr)
 		return -EIO;
 	}
 
-	err = dma_xfer_vmalloc((void *)(fw_entry->data), fw_entry->size,
+	err = dma_xfer_vmalloc((void *)fw_entry->data, fw_entry->size,
 			       remote_addr, DMA_TO_DEVICE);
 	if (err)
 		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
 	release_firmware(fw_entry);
-	return err;
-}
-
-/**
- * Local function to write one DW to Airbrush memory via PCIE
- * @param[in] file File struct of this module
- * @param[in] remote_addr Address of Airbrush memory
- * @param[in] val DW value to write
- * @return Status, zero if succeed, non-zero if fail
- */
-__attribute__((unused))
-static int dma_write_dw(struct file *file, const int remote_addr, const int val)
-{
-	int err = 0;
-	struct faceauth_data *data = file->private_data;
-
-	data->dma_dw_buf = val;
-	err = dma_xfer_vmalloc((void *)&(data->dma_dw_buf), sizeof(val),
-			       remote_addr, DMA_TO_DEVICE);
-	if (err)
-		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
 	return err;
 }
 
@@ -503,8 +480,8 @@ static int dma_read_dw(struct file *file, const int remote_addr, int *val)
 	int err = 0;
 	struct faceauth_data *data = file->private_data;
 
-	err = dma_xfer_vmalloc((void *)&(data->dma_dw_buf), sizeof(*val),
-			       remote_addr, DMA_FROM_DEVICE);
+	err = dma_xfer_vmalloc(&data->dma_dw_buf, sizeof(*val), remote_addr,
+			       DMA_FROM_DEVICE);
 	if (err) {
 		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
 		return err;
@@ -602,7 +579,7 @@ static int dma_gather_debug(struct faceauth_debug_data *data)
 {
 	int err = 0;
 
-	err = dma_xfer((void *)data->print_buffer,
+	err = dma_xfer(data->print_buffer,
 		       min((uint32_t)DEBUG_PRINT_SIZE, data->print_buffer_size),
 		       DEBUG_PRINT_ADDR, DMA_FROM_DEVICE);
 
