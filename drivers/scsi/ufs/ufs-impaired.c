@@ -281,7 +281,7 @@ impaired_show_delay(struct kobject *obj, struct attribute *_attr, char *buf)
 #ifdef CONFIG_SCSI_UFS_IMPAIRED_FRAGFTL
 	if (attr->delaytype == UFS_IMPAIRED_DELAYTYPE_MODEL) {
 		return snprintf(buf, PAGE_SIZE,
-				(value) ? "ftlfrag\n" : "none\n");
+				(value) ? "fragftl\n" : "none\n");
 	}
 #endif
 	return snprintf(buf, PAGE_SIZE, "%d\n", value);
@@ -299,7 +299,7 @@ impaired_store_delay(struct kobject *obj, struct attribute *_attr, char *buf,
 	if (attr->delaytype == UFS_IMPAIRED_DELAYTYPE_MODEL) {
 		if (strncmp(buf, "none", 4) == 0)
 			value = 0;
-		else if (strncmp(buf, "ftlfrag", 7) == 0)
+		else if (strncmp(buf, "fragftl", 7) == 0)
 			value = 1;
 		else
 			return -EINVAL;

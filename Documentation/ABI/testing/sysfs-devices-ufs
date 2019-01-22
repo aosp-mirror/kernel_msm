@@ -86,7 +86,7 @@ Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
 		Degraded UFS performance model is applied for read requests.
-		It could be set with 'ftlfrag' or 'none'; the former enables
+		It could be set with 'fragftl' or 'none'; the former enables
 		model based delay emulation and the later disables the feature.
 
 What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_delay_percent
@@ -114,7 +114,7 @@ Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
 		Degraded UFS performance model is applied for write requests.
-		It could be set with 'ftlfrag' or 'none'; the former enables
+		It could be set with 'fragftl' or 'none'; the former enables
 		model based delay emulation and the later disables the feature.
 
 What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_delay_percent
