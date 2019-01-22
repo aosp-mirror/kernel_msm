@@ -4980,7 +4980,7 @@ err_rls_fw:
 static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 {
 	struct cs40l2x_private *cs40l2x = (struct cs40l2x_private *)context;
-	unsigned int num_coeff_files;
+	unsigned int num_coeff_files = 0;
 	int ret = 0;
 
 	mutex_lock(&cs40l2x->lock);
