@@ -311,6 +311,9 @@ static int ipu_core_jqs_fw_state_set(void *data, u64 val)
 
 	mutex_lock(&bus->jqs.lock);
 
+	/* Store the value as the minimum state */
+	bus->jqs.status_min = val;
+
 	/* Check if a higher readiness state was requested. */
 	while (val > bus->jqs.status && !ret) {
 		switch (bus->jqs.status) {

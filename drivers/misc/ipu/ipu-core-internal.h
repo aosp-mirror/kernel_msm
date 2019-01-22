@@ -115,6 +115,7 @@ struct paintbox_jqs {
 	/* pm_recovery_requested is set/read in suspend/resume contexts */
 	bool pm_recovery_requested;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
+	enum paintbox_jqs_status status_min;
 	struct dentry *debug_dir;
 	struct dentry *fw_state_dentry;
 	struct dentry *log_level_dentry;

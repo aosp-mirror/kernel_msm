@@ -137,6 +137,11 @@ void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus)
 	if (bus->jqs.status != JQS_FW_STATUS_REQUESTED)
 		return;
 
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	if (bus->jqs.status_min >= JQS_FW_STATUS_REQUESTED)
+		return;
+#endif
+
 	dev_dbg(bus->parent_dev, "%s: unloading firmware\n", __func__);
 
 	if (bus->jqs.fw) {
@@ -223,6 +228,11 @@ void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
 {
 	if (bus->jqs.status != JQS_FW_STATUS_STAGED)
 		return;
+
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	if (bus->jqs.status_min >= JQS_FW_STATUS_STAGED)
+		return;
+#endif
 
 	dev_dbg(bus->parent_dev, "%s: unstaging firmware\n", __func__);
 
@@ -436,6 +446,11 @@ static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus,
 	if (bus->jqs.status != JQS_FW_STATUS_RUNNING)
 		return;
 
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	if (bus->jqs.status_min >= JQS_FW_STATUS_RUNNING)
+		return;
+#endif
+
 	dev_dbg(bus->parent_dev, "%s: disabling firmware, reason %d\n",
 			__func__, reason_code);
 
@@ -634,6 +649,10 @@ int ipu_core_jqs_init(struct paintbox_bus *bus)
 	bus->jqs.log_trigger_level = JQS_LOG_TRIGGER_LEVEL_DEF;
 	bus->jqs.log_sink_mask = JQS_LOG_SINK_DEF;
 	bus->jqs.uart_baud = JQS_LOG_UART_BAUD_DEF;
+
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	bus->jqs.status_min = JQS_FW_STATUS_INIT;
+#endif
 
 	return 0;
 }
