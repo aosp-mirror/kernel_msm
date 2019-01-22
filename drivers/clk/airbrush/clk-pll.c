@@ -109,59 +109,6 @@ static inline bool airbrush_pllf081xx_mp_change(
 	return (rate->mdiv != old_mdiv || rate->pdiv != old_pdiv);
 }
 
-static int airbrush_pllf081xx_set_rate(struct clk_hw *hw, unsigned long drate,
-					unsigned long prate)
-{
-	struct airbrush_clk_pll *pll = to_clk_pll(hw);
-	const struct airbrush_pll_rate_table *rate;
-	u32 tmp;
-
-	/* Get required rate settings from table */
-	rate = airbrush_get_pll_settings(pll, drate);
-	if (!rate) {
-		pr_err("%s: Invalid rate : %lu for pll clk %s\n", __func__,
-			drate, clk_hw_get_name(hw));
-		return -EINVAL;
-	}
-
-	if (airbrush_clk_readl(pll->con_reg, &tmp))
-		return -ENODEV;
-
-	if (!(airbrush_pllf081xx_mp_change(rate, tmp))) {
-		/* If only s change, change just s value only*/
-		tmp &= ~(PLLF081XX_SDIV_MASK << PLLF081XX_SDIV_SHIFT);
-		tmp |= rate->sdiv << PLLF081XX_SDIV_SHIFT;
-		if (airbrush_clk_writel(tmp, pll->con_reg))
-			return -ENODEV;
-
-		return 0;
-	}
-
-	/* Set PLL lock time. */
-	if (airbrush_clk_writel(rate->pdiv * PLLF081XX_LOCK_FACTOR,
-						pll->lock_reg))
-			return -ENODEV;
-
-	/* Change PLL PMS values */
-	tmp &= ~((PLLF081XX_MDIV_MASK << PLLF081XX_MDIV_SHIFT) |
-			(PLLF081XX_PDIV_MASK << PLLF081XX_PDIV_SHIFT) |
-			(PLLF081XX_SDIV_MASK << PLLF081XX_SDIV_SHIFT));
-	tmp |= (rate->mdiv << PLLF081XX_MDIV_SHIFT) |
-			(rate->pdiv << PLLF081XX_PDIV_SHIFT) |
-			(rate->sdiv << PLLF081XX_SDIV_SHIFT);
-	if (airbrush_clk_writel(tmp, pll->con_reg))
-		return -ENODEV;
-
-	/* wait_lock_time */
-	do {
-		cpu_relax();
-		if (airbrush_clk_readl(pll->con_reg, &tmp))
-			return -ENODEV;
-	} while (!(tmp & (PLLF081XX_LOCK_STAT_MASK
-				<< PLLF081XX_LOCK_STAT_SHIFT)));
-	return 0;
-}
-
 static int airbrush_pllf081xx_enable(struct clk_hw *hw)
 {
 	struct airbrush_clk_pll *pll = to_clk_pll(hw);
@@ -192,6 +139,53 @@ static void airbrush_pllf081xx_disable(struct clk_hw *hw)
 	airbrush_clk_writel(tmp, pll->con_reg);
 }
 
+static int airbrush_pllf081xx_set_rate(struct clk_hw *hw, unsigned long drate,
+					unsigned long prate)
+{
+	struct airbrush_clk_pll *pll = to_clk_pll(hw);
+	const struct airbrush_pll_rate_table *rate;
+	u32 tmp;
+
+	/* Get required rate settings from table */
+	rate = airbrush_get_pll_settings(pll, drate);
+	if (!rate) {
+		pr_err("%s: Invalid rate : %lu for pll clk %s\n", __func__,
+			drate, clk_hw_get_name(hw));
+		return -EINVAL;
+	}
+
+	airbrush_pllf081xx_disable(hw);
+
+	if (airbrush_clk_readl(pll->con_reg, &tmp))
+		return -ENODEV;
+
+	if (!(airbrush_pllf081xx_mp_change(rate, tmp))) {
+		/* If only s change, change just s value only*/
+		tmp &= ~(PLLF081XX_SDIV_MASK << PLLF081XX_SDIV_SHIFT);
+		tmp |= rate->sdiv << PLLF081XX_SDIV_SHIFT;
+		if (airbrush_clk_writel(tmp, pll->con_reg))
+			return -ENODEV;
+
+		return airbrush_pllf081xx_enable(hw);
+	}
+
+	/* Set PLL lock time. */
+	if (airbrush_clk_writel(rate->pdiv * PLLF081XX_LOCK_FACTOR,
+						pll->lock_reg))
+			return -ENODEV;
+
+	/* Change PLL PMS values */
+	tmp &= ~((PLLF081XX_MDIV_MASK << PLLF081XX_MDIV_SHIFT) |
+			(PLLF081XX_PDIV_MASK << PLLF081XX_PDIV_SHIFT) |
+			(PLLF081XX_SDIV_MASK << PLLF081XX_SDIV_SHIFT));
+	tmp |= (rate->mdiv << PLLF081XX_MDIV_SHIFT) |
+			(rate->pdiv << PLLF081XX_PDIV_SHIFT) |
+			(rate->sdiv << PLLF081XX_SDIV_SHIFT);
+	if (airbrush_clk_writel(tmp, pll->con_reg))
+		return -ENODEV;
+
+	return airbrush_pllf081xx_enable(hw);
+}
 
 static const struct clk_ops airbrush_pllf081xx_clk_ops = {
 	.recalc_rate = airbrush_pllf081xx_recalc_rate,
