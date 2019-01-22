@@ -147,7 +147,6 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	int err = 0;
 	int polling_interval = M0_POLLING_INTERVAL;
 	struct faceauth_start_data start_step_data = { 0 };
-	struct faceauth_continue_data continue_step_data = { 0 };
 	struct faceauth_debug_data debug_step_data = { 0 };
 	unsigned long stop, ioctl_start;
 	uint32_t ab_input;
@@ -178,6 +177,9 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			err = -EFAULT;
 			goto exit;
 		}
+
+		start_step_data.result = 0;
+		start_step_data.error_code = 0;
 
 		if (start_step_data.operation == FACEAUTH_OP_ENROLL ||
 		    start_step_data.operation == FACEAUTH_OP_VALIDATE) {
@@ -285,45 +287,30 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 						   1;
 		}
 
-		break;
-	case FACEAUTH_DEV_IOC_CONTINUE:
-		pr_info("faceauth continue IOCTL\n");
-
-		err = aon_config_read(AB_RESULT_FLAG_ADDR, 4, &ab_result);
-		if (err) {
-			pr_err("Error reading AB result flag\n");
-			goto exit;
-		}
-		continue_step_data.result =
-			ab_result == AB_WORKLOAD_STATUS_PASS ?
-				FACEAUTH_RESULT_SUCCESS :
-				FACEAUTH_RESULT_FAILURE;
-		continue_step_data.completed = 1;
+		start_step_data.result = ab_result;
 
 		err = aon_config_read(BIN_RESULT_FLAG_ADDR, 4, &bin_result);
 		if (err) {
 			pr_err("Error reading Bin result flag\n");
 			goto exit;
 		}
-		continue_step_data.bin_bitmap = bin_result;
+		start_step_data.bin_bitmap = bin_result;
 
-		pr_info("Read ab error code\n");
 		dma_read_dw(file,
 			    AB_INTERNAL_STATE_ADDR +
 				    offsetof(struct airbrush_state, error_code),
 			    &dma_read_value);
-		continue_step_data.faceauth_error_code = dma_read_value;
+		start_step_data.error_code = dma_read_value;
 
-		pr_info("Read ab firmware version\n");
 		dma_read_dw(file,
 			    AB_INTERNAL_STATE_ADDR +
 				    offsetof(struct airbrush_state,
 					     faceauth_version),
 			    &dma_read_value);
-		continue_step_data.faceauth_fw_version = dma_read_value;
+		start_step_data.fw_version = dma_read_value;
 
-		if (copy_to_user((void __user *)arg, &continue_step_data,
-				 sizeof(continue_step_data)))
+		if (copy_to_user((void __user *)arg, &start_step_data,
+				 sizeof(start_step_data)))
 			err = -EFAULT;
 		goto exit;
 		break;
