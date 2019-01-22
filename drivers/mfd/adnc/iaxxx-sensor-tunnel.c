@@ -35,7 +35,9 @@
 #include <linux/mfd/adnc/iaxxx-register-internal.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pad-ctrl.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-gpio.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-sensor-header.h>
 #include <linux/mfd/adnc/iaxxx-tunnel-intf.h>
+#include <linux/mfd/adnc/iaxxx-sensor-tunnel.h>
 #include <linux/uaccess.h>
 #include "iaxxx.h"
 #include "iaxxx-cdev.h"
@@ -221,6 +223,19 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			dev_err(priv->dev, "Error in setting up PDM route\n");
 			return -EIO;
 		}
+		/* Setup VSYNC Sensor route */
+		regmap_update_bits(priv->regmap,
+				IAXXX_SENSOR_HDR_SENSOR_ENABLE_ADDR,
+				IAXXX_SENSOR_HDR_SENSOR_ENABLE_1_REG_MASK,
+				(0x1
+				 << IAXXX_SENSOR_HDR_SENSOR_ENABLE_1_REG_POS));
+		ret = iaxxx_send_update_block_request(priv->dev, &status,
+				IAXXX_BLOCK_0);
+		if (ret) {
+			dev_err(priv->dev, "Error in setting up VYSNC Sensor  route\n");
+			return -EIO;
+		}
+
 	} else {
 		regmap_update_bits(priv->regmap, IAXXX_GPIO_SWPORTB_DDR_ADDR,
 				IAXXX_GPIO_SWPORTB_DDR_COMMF_2_MASK,
@@ -271,6 +286,18 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error tearing up PDM  route\n");
+			return -EIO;
+		}
+
+		regmap_update_bits(priv->regmap,
+				IAXXX_SENSOR_HDR_SENSOR_ENABLE_ADDR,
+				IAXXX_SENSOR_HDR_SENSOR_ENABLE_1_REG_MASK,
+				(0x0
+				 << IAXXX_SENSOR_HDR_SENSOR_ENABLE_1_REG_POS));
+		ret = iaxxx_send_update_block_request(priv->dev, &status,
+				IAXXX_BLOCK_0);
+		if (ret) {
+			dev_err(priv->dev, "Error in tearing VYSNC Sensor  route\n");
 			return -EIO;
 		}
 	}
@@ -353,12 +380,17 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 	}
 
 	switch (cmd) {
-	case TUNNEL_SETUP:
+
+	case FLICKER_ROUTE_SETUP:
 		ret = sensor_tunnel_route_setup(priv, true);
 		if (ret) {
 			pr_err("Unable to setup sensor route\n");
-				return -EIO;
+			return -EIO;
 		}
+		break;
+
+	case FLICKER_TUNNEL_SETUP:
+
 		ret = iaxxx_tunnel_setup(client, msg.tunlSrc, msg.tunlMode,
 					msg.tunlEncode);
 		if (ret) {
@@ -366,19 +398,26 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 			return	-EINVAL;
 		}
 		break;
-	case TUNNEL_TERMINATE:
+
+	case FLICKER_TUNNEL_TERMINATE:
+
 		ret = iaxxx_tunnel_term(client, msg.tunlSrc, msg.tunlMode,
 					msg.tunlEncode);
 		if (ret) {
 			pr_err("Unable to terminate tunnel");
 			ret = -EINVAL;
 		}
+
+		break;
+
+	case FLICKER_ROUTE_TERMINATE:
 		ret = sensor_tunnel_route_setup(priv, false);
 		if (ret) {
 			pr_err("Unable to setup sensor route\n");
-				return -EIO;
+			return -EIO;
 		}
 		break;
+
 	default:
 		pr_err("Invalid ioctl command received %x", cmd);
 		ret = -EINVAL;
