@@ -996,7 +996,7 @@ static int batt_cycle_count_load(struct gbatt_ccbin_data *ccd,
 /* update only when SSOC is increasing, not need to check charging */
 static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 {
-	const int batt_soc = soc / 10;
+	const int normed_soc = soc * GBMS_CCBIN_BUCKET_COUNT / 100;
 	struct gbatt_ccbin_data *ccd = &batt_drv->cc_data;
 
 	if (soc < 0 || soc > 100)
@@ -1004,11 +1004,10 @@ static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 
 	mutex_lock(&ccd->lock);
 
-	if (ccd->prev_soc != -1 && batt_soc > ccd->prev_soc) {
-		int bucket, cnt;
+	if (ccd->prev_soc != -1 && normed_soc > ccd->prev_soc) {
+		int bucket;
 
-		for (cnt = batt_soc ; cnt > ccd->prev_soc ; cnt--) {
-			bucket = cnt * GBMS_CCBIN_BUCKET_COUNT / 100;
+		for (bucket = normed_soc ; bucket > ccd->prev_soc ; bucket--) {
 			if (bucket >= GBMS_CCBIN_BUCKET_COUNT)
 				bucket = GBMS_CCBIN_BUCKET_COUNT - 1;
 			ccd->count[bucket]++;
@@ -1018,7 +1017,7 @@ static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 		(void)batt_cycle_count_store(ccd, batt_drv->ccbin_psy);
 	}
 
-	ccd->prev_soc = batt_soc;
+	ccd->prev_soc = normed_soc;
 
 	mutex_unlock(&ccd->lock);
 }
