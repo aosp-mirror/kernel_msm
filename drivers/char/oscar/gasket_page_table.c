@@ -1394,52 +1394,6 @@ void gasket_page_table_reset(struct gasket_page_table *pg_tbl,
 }
 
 /* See gasket_page_table.h for description. */
-int gasket_page_table_lookup_page(
-	struct gasket_page_table *pg_tbl, ulong dev_addr, struct page **ppage,
-	ulong *poffset)
-{
-	uint page_num;
-	struct gasket_page_table_entry *pte;
-
-	mutex_lock(&pg_tbl->mutex);
-	if (gasket_addr_is_simple(pg_tbl, dev_addr)) {
-		page_num = gasket_simple_page_idx(pg_tbl, dev_addr);
-		if (page_num >= pg_tbl->num_simple_entries)
-			goto fail;
-
-		pte = pg_tbl->entries + page_num;
-		if (GET(FLAGS_STATUS, pte->flags) != PTE_INUSE)
-			goto fail;
-	} else {
-		/* Find the level 0 entry, */
-		page_num = gasket_extended_lvl0_page_idx(pg_tbl, dev_addr);
-		if (page_num >= pg_tbl->num_extended_entries)
-			goto fail;
-
-		pte = pg_tbl->entries + pg_tbl->num_simple_entries + page_num;
-		if (GET(FLAGS_STATUS, pte->flags) != PTE_INUSE)
-			goto fail;
-
-		/* and its contained level 1 entry. */
-		page_num = gasket_extended_lvl1_page_idx(pg_tbl, dev_addr);
-		pte = pte->sublevel + page_num;
-		if (GET(FLAGS_STATUS, pte->flags) != PTE_INUSE)
-			goto fail;
-	}
-
-	*ppage = pte->page;
-	*poffset = pte->offset;
-	mutex_unlock(&pg_tbl->mutex);
-	return 0;
-
-fail:
-	*ppage = NULL;
-	*poffset = 0;
-	mutex_unlock(&pg_tbl->mutex);
-	return -EINVAL;
-}
-
-/* See gasket_page_table.h for description. */
 bool gasket_page_table_are_addrs_bad(
 	struct gasket_page_table *pg_tbl, ulong host_addr, ulong dev_addr,
 	ulong bytes)

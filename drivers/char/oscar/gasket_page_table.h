@@ -136,25 +136,6 @@ void gasket_page_table_reset(struct gasket_page_table *page_table,
 void gasket_page_table_garbage_collect(struct gasket_page_table *page_table);
 
 /*
- * Retrieve the backing page for a device address.
- * @page_table: Gasket page table pointer.
- * @dev_addr: Gasket device address.
- * @ppage: Pointer to a page pointer for the returned page.
- * @poffset: Pointer to an unsigned long for the returned offset.
- *
- * Description: Interprets the address and looks up the corresponding page
- *              in the page table and the offset in that page.  (We need an
- *              offset because the host page may be larger than the Gasket chip
- *              page it contains.)
- *
- *              Returns 0 if successful, -1 for an error.  The page pointer
- *              and offset are returned through the pointers, if successful.
- */
-int gasket_page_table_lookup_page(struct gasket_page_table *page_table,
-				  ulong dev_addr, struct page **page,
-				  ulong *poffset);
-
-/*
  * Checks validity for input addrs and size.
  * @page_table: Gasket page table pointer.
  * @host_addr: Host address to check.
