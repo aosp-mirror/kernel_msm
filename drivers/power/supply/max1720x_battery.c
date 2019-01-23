@@ -1229,8 +1229,13 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 static int max1720x_get_battery_status(struct max1720x_chip *chip)
 {
 	u16 data = 0;
-	int current_avg, ichgterm, fullsocthr;
+	int current_now, current_avg, ichgterm, fullsocthr;
 	int status = POWER_SUPPLY_STATUS_UNKNOWN, err;
+
+	err = REGMAP_READ(chip->regmap, MAX17XXX_CURRENT, &data);
+	if (err)
+		return err;
+	current_now = -reg_to_micro_amp(data, chip->RSense);
 
 	err = REGMAP_READ(chip->regmap, MAX17XXX_AVGCURRENT, &data);
 	if (err)
@@ -1247,21 +1252,24 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 		return err;
 	fullsocthr = reg_to_percentage(data);
 
-	if (current_avg < -ichgterm) {
-		status = POWER_SUPPLY_STATUS_CHARGING;
-		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_DISCHARGING)
-			max1720x_prime_battery_qh_capacity(chip, status);
-		chip->prev_charge_state = POWER_SUPPLY_STATUS_CHARGING;
-	} else if (current_avg <= 0 &&
-		 max1720x_get_battery_soc(chip) >= fullsocthr) {
+	if (current_avg <= 0 && max1720x_get_battery_soc(chip) >= fullsocthr) {
 		status = POWER_SUPPLY_STATUS_FULL;
-		if (chip->prev_charge_state != POWER_SUPPLY_STATUS_FULL)
+		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_CHARGING)
 			max1720x_prime_battery_qh_capacity(chip, status);
 		chip->prev_charge_state = POWER_SUPPLY_STATUS_FULL;
-	} else {
+	} else if (current_avg > -ichgterm && current_avg <=0 ) {
+		status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		chip->prev_charge_state = POWER_SUPPLY_STATUS_NOT_CHARGING;
+	} else if (current_now >= -ichgterm)  {
 		/* discharging state is not recorded in prev_charge_state */
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
 		chip->prev_charge_state = POWER_SUPPLY_STATUS_DISCHARGING;
+	} else {
+		status = POWER_SUPPLY_STATUS_CHARGING;
+		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_DISCHARGING
+		    && current_avg  < -ichgterm)
+			max1720x_prime_battery_qh_capacity(chip, status);
+		chip->prev_charge_state = POWER_SUPPLY_STATUS_CHARGING;
 	}
 
 	return status;
