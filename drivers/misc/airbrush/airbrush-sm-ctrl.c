@@ -438,14 +438,14 @@ static u32 ab_sm_throttled_chip_substate_id(
 	return min(chip_substate_id, throttler_substate_id);
 }
 
-static const enum stat_state chip_state_to_stat_state(
-		enum chip_state chip_state_id)
+const enum stat_state ab_chip_state_to_stat_state(
+		enum chip_state id)
 {
-	if ((chip_state_id >= CHIP_STATE_0_0) &&
-			(chip_state_id < CHIP_STATE_3_0)) {
+	if ((id >= CHIP_STATE_0_0)
+			&& (id < CHIP_STATE_3_0)) {
 		return STAT_STATE_ACTIVE;
 	}
-	switch (chip_state_id) {
+	switch (id) {
 	case CHIP_STATE_3_0:
 		return STAT_STATE_SLEEP;
 	case CHIP_STATE_4_0:
@@ -465,21 +465,21 @@ static void ab_sm_record_state_change(enum chip_state prev_state,
 		enum chip_state new_state,
 		struct ab_state_context *sc)
 {
-	enum stat_state prev_stat_state = chip_state_to_stat_state(prev_state);
-	enum stat_state new_stat_state = chip_state_to_stat_state(new_state);
+	enum stat_state prev = ab_chip_state_to_stat_state(prev_state);
+	enum stat_state new = ab_chip_state_to_stat_state(new_state);
 	ktime_t time, time_diff;
 
-	if (new_stat_state == prev_stat_state)
+	if (new == prev)
 		return;
 
 	time = ktime_get_boottime();
-	sc->state_stats[new_stat_state].counter++;
-	sc->state_stats[new_stat_state].last_entry = time;
-	sc->state_stats[prev_stat_state].last_exit = time;
-	time_diff = ktime_sub(sc->state_stats[prev_stat_state].last_exit,
-			sc->state_stats[prev_stat_state].last_entry);
-	sc->state_stats[prev_stat_state].duration = ktime_add(
-			sc->state_stats[prev_stat_state].duration, time_diff);
+	sc->state_stats[new].counter++;
+	sc->state_stats[new].last_entry = time;
+	sc->state_stats[prev].last_exit = time;
+	time_diff = ktime_sub(sc->state_stats[prev].last_exit,
+			sc->state_stats[prev].last_entry);
+	sc->state_stats[prev].duration = ktime_add(
+			sc->state_stats[prev].duration, time_diff);
 }
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
@@ -1222,7 +1222,7 @@ static const struct ab_thermal_ops ab_sm_thermal_ops = {
 static void ab_sm_state_stats_init(struct ab_state_context *sc)
 {
 	enum stat_state curr_stat_state =
-		chip_state_to_stat_state(sc->curr_chip_substate_id);
+		ab_chip_state_to_stat_state(sc->curr_chip_substate_id);
 
 	sc->state_stats[curr_stat_state].counter++;
 	sc->state_stats[curr_stat_state].last_entry = ktime_get_boottime();

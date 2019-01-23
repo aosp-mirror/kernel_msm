@@ -567,6 +567,7 @@ enum chip_state ab_sm_get_state(struct ab_state_context *sc);
 
 int ab_bootsequence(struct ab_state_context *ab_ctx);
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);
+const enum stat_state ab_chip_state_to_stat_state(enum chip_state id);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);

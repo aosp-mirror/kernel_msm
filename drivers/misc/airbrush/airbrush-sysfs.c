@@ -96,8 +96,8 @@ static ssize_t state_stats_show(struct device *dev,
 		ktime_t last_exit = sc->state_stats[i].last_exit;
 
 		/* adjust duration for current state */
-		if (sc->curr_chip_substate_id == i &&
-				ktime_after(last_entry, last_exit)) {
+		if (ab_chip_state_to_stat_state(sc->curr_chip_substate_id) == i
+				&& ktime_after(last_entry, last_exit)) {
 			ktime_t partial_duration = ktime_sub(
 					ktime_get_boottime(), last_entry);
 			adjusted_duration = ktime_add(adjusted_duration,
