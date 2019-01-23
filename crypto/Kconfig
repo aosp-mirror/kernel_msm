@@ -31,6 +31,16 @@ config CRYPTO_FIPS
 	  certification.  You should say no unless you know what
 	  this is.
 
+config CRYPTO_NIAP_FPT_TST_EXT_11
+	tristate "NIAP FPT_TST_EXT.1.1 compliance"
+	depends on CRYPTO_SHA512 && CRYPTO_HMAC
+	depends on CRYPTO_SHA256
+	depends on CRYPTO_AES && CRYPTO_CBC
+	help
+	  This option enables a suite of self-tests during initial start-up to
+	  demonstrate the correct operation of cryptographic functionality, as
+	  required in NIAP FPT_TST_EXT.1.1.
+
 config CRYPTO_ALGAPI
 	tristate
 	select CRYPTO_ALGAPI2

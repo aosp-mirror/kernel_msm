@@ -9,6 +9,7 @@ obj-$(CONFIG_CRYPTO_WORKQUEUE) += crypto_wq.o
 
 obj-$(CONFIG_CRYPTO_ENGINE) += crypto_engine.o
 obj-$(CONFIG_CRYPTO_FIPS) += fips.o
+obj-$(CONFIG_CRYPTO_NIAP_FPT_TST_EXT_11) += niap.o
 
 crypto_algapi-$(CONFIG_PROC_FS) += proc.o
 crypto_algapi-y := algapi.o scatterwalk.o $(crypto_algapi-y)
