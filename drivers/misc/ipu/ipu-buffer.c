@@ -13,6 +13,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/ab-dram.h>
 #include <linux/ipu-core.h>
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
@@ -443,7 +444,7 @@ err_exit:
 int ipu_buffer_init_session(struct paintbox_data *pb,
 		struct paintbox_session *session)
 {
-	session->buffer_id_table = ipu_alloc_jqs_memory(pb->dev,
+	session->buffer_id_table = ab_dram_alloc_dma_buf_kernel(
 			JQS_SESSION_MEMORY_SIZE);
 	if (!session->buffer_id_table)
 		return PTR_ERR(session->buffer_id_table);
@@ -463,6 +464,7 @@ void ipu_buffer_release_session(struct paintbox_data *pb,
 	idr_for_each_entry(&session->buffer_idr, buffer, buffer_id)
 		ipu_buffer_unmap_and_release_buffer(pb, session, buffer);
 
-	ipu_free_jqs_memory(pb->dev, session->buffer_id_table);
+	ab_dram_free_dma_buf_kernel(session->buffer_id_table);
+
 	idr_destroy(&session->buffer_idr);
 }
