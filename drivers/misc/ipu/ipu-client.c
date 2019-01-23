@@ -13,7 +13,6 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/ab-dram.h>
 #include <linux/completion.h>
 #include <linux/ipu-core.h>
 #include <linux/ipu-jqs-messages.h>
@@ -130,20 +129,17 @@ static int ipu_jqs_send_open_session(struct paintbox_data *pb,
 		struct paintbox_session *session)
 {
 	struct jqs_message_open_session req;
-	dma_addr_t buffer_id_table_ab_paddr = ab_dram_get_dma_buf_paddr(
-				session->buffer_id_table);
 
 	dev_dbg(pb->dev,
 			"%s: session_id %u buffer table jqs addr %pad sz %zu\n",
 			__func__, session->session_id,
-			&buffer_id_table_ab_paddr,
+			&session->buffer_id_table->jqs_paddr,
 			session->buffer_id_table->size);
 
 	INIT_JQS_MSG(req, JQS_MESSAGE_TYPE_OPEN_SESSION);
 
 	req.session_id = session->session_id;
-	req.session_memory_addr = ab_dram_get_dma_buf_paddr(
-			session->buffer_id_table);
+	req.session_memory_addr = session->buffer_id_table->jqs_paddr;
 	req.session_memory_bytes = session->buffer_id_table->size;
 
 	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&req);
@@ -275,11 +271,6 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 	 */
 
 	idr_remove(&pb->session_idr, session->session_id);
-
-	/* Release the buffer table for the session after the close session
-	 * JQS message has been sent and acknowledged.
-	 */
-	ab_dram_free_dma_buf_kernel(session->buffer_id_table);
 
 	ret = ipu_jqs_put(pb);
 

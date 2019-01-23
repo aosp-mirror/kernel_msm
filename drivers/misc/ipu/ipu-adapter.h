@@ -64,6 +64,9 @@ struct paintbox_bus_ops {
 			struct paintbox_shared_buffer *shared_buffer);
 	int (*unmap_from_bar)(struct device *dev,
 			struct paintbox_shared_buffer *shared_buffer);
+	struct ipu_jqs_buffer *(*alloc_jqs_memory)(struct device *dev,
+			size_t size);
+	void (*free_jqs_memory)(struct device *dev, struct ipu_jqs_buffer *buf);
 	struct device *(*get_dma_device)(struct device *dev);
 };
 

@@ -78,7 +78,7 @@ struct paintbox_session {
 
 	/* The fields below are protected by pb->lock*/
 	struct idr buffer_idr;
-	struct dma_buf *buffer_id_table;
+	struct ipu_jqs_buffer *buffer_id_table;
 };
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)

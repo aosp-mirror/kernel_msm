@@ -276,6 +276,29 @@ static inline void ipu_core_memory_unmap_from_bar(struct paintbox_bus *bus,
 	bus->ops->unmap_from_bar(bus->parent_dev, alloc);
 }
 
+static inline struct ipu_jqs_buffer *ipu_core_alloc_jqs_memory(
+		struct paintbox_bus *bus, size_t size)
+{
+	/*
+	 * JQS caches data JQS_CACHE_LINE_SIZE bytes at a time, and writes all
+	 * bytes back to memory if any byte in the line is modified.
+	 *
+	 * We need to round to the nearest cache line size to avoid a potential
+	 * memory consistency problem where ipu_core_alloc_jqs_memory is called
+	 * twice, memory is written from the AP on one of the allocations,
+	 * memory is written from JQS on the other allocation, and the
+	 * allocations share a cache line.
+	 */
+	size = ALIGN(size, JQS_CACHE_LINE_SIZE);
+	return bus->ops->alloc_jqs_memory(bus->parent_dev, size);
+}
+
+static inline void ipu_core_free_jqs_memory(struct paintbox_bus *bus,
+		struct ipu_jqs_buffer *buf)
+{
+	bus->ops->free_jqs_memory(bus->parent_dev, buf);
+}
+
 void ipu_core_notify_firmware_up(struct paintbox_bus *bus);
 void ipu_core_notify_firmware_down(struct paintbox_bus *bus);
 

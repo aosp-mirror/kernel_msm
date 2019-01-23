@@ -58,6 +58,11 @@ struct paintbox_shared_buffer {
 	struct bar_mapping mapping;
 };
 
+struct ipu_jqs_buffer {
+	dma_addr_t jqs_paddr;
+	size_t size;
+};
+
 extern struct bus_type ipu_bus_type;
 
 /* Allocate an application queue.
@@ -134,6 +139,9 @@ int ipu_alloc_memory(struct device *dev, size_t size,
 		struct paintbox_shared_buffer *shared_buffer);
 void ipu_free_memory(struct device *dev,
 			struct paintbox_shared_buffer *shared_buffer);
+
+struct ipu_jqs_buffer *ipu_alloc_jqs_memory(struct device *dev, size_t size);
+void ipu_free_jqs_memory(struct device *dev, struct ipu_jqs_buffer *buf);
 
 void ipu_set_device_ops(struct device *dev,
 		const struct paintbox_device_ops *dev_ops);

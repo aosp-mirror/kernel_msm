@@ -30,6 +30,11 @@
 #include "ipu-core-jqs.h"
 #include "ipu-regs.h"
 
+struct ipu_adapter_jqs_buffer {
+	struct ipu_jqs_buffer base;
+	struct dma_buf *ab_dram_dma_buf;
+};
+
 #define IPU_ADAPTER_AB_MFD_MAX_INTERRUPTS 2
 
 struct ipu_adapter_ab_mfd_data {
@@ -219,6 +224,43 @@ static void ipu_adapter_ab_mfd_free(struct device *dev,
 		dma_free_coherent(dev_data->dma_dev, shared_buffer->size,
 				shared_buffer->host_vaddr,
 				shared_buffer->host_dma_addr);
+}
+
+struct ipu_jqs_buffer *ipu_adapter_ab_mfd_alloc_jqs_memory(struct device *dev,
+			size_t size)
+{
+	struct ipu_adapter_jqs_buffer *jqs_buf;
+	struct dma_buf *dma_buf;
+
+	jqs_buf = kzalloc(sizeof(*jqs_buf), GFP_KERNEL);
+	if (jqs_buf == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	dma_buf = ab_dram_alloc_dma_buf_kernel(size);
+	if (IS_ERR(dma_buf)) {
+		kfree(jqs_buf);
+		return (struct ipu_jqs_buffer *)dma_buf;
+	}
+
+	jqs_buf->base.jqs_paddr = ab_dram_get_dma_buf_paddr(dma_buf);
+	jqs_buf->base.size = size;
+	jqs_buf->ab_dram_dma_buf = dma_buf;
+
+	return &jqs_buf->base;
+}
+
+void ipu_adapter_ab_mfd_free_jqs_memory(struct device *dev,
+		struct ipu_jqs_buffer *buf)
+{
+	struct ipu_adapter_jqs_buffer *jqs_buf;
+
+	if (!buf)
+		return;
+
+	jqs_buf = container_of(buf, struct ipu_adapter_jqs_buffer, base);
+
+	ab_dram_free_dma_buf_kernel(jqs_buf->ab_dram_dma_buf);
+	kfree(jqs_buf);
 }
 
 static struct device *ipu_adapter_ab_mfd_get_dma_device(struct device *dev)
@@ -614,6 +656,8 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->map_to_bar = &ipu_adapter_ab_mfd_map_to_bar;
 	ops->unmap_from_bar = &ipu_adapter_ab_mfd_unmap_from_bar;
 	ops->get_dma_device = &ipu_adapter_ab_mfd_get_dma_device;
+	ops->alloc_jqs_memory = &ipu_adapter_ab_mfd_alloc_jqs_memory;
+	ops->free_jqs_memory = &ipu_adapter_ab_mfd_free_jqs_memory;
 }
 
 static int ipu_adapter_ab_mfd_register_low_priority_irq(
