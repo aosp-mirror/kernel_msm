@@ -490,6 +490,8 @@ struct ab_state_context {
 	bool ldo4_state;
 	bool ldo5_state;
 
+	u64 ldo5_delay;
+
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
 #endif

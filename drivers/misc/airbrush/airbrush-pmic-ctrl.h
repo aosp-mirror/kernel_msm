@@ -13,6 +13,8 @@
 #ifndef _AIRBRUSH_PMIC_CTRL_H_
 #define _AIRBRUSH_PMIC_CTRL_H_
 
+#define LDO5_LDO4_SMPS2_DEFAULT_DELAY	8000
+
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
 		enum block_name blk_name, u32 to_chip_substate_id);
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,

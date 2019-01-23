@@ -1372,6 +1372,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_create_sysfs(ab_sm_ctx);
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
+
+	ab_sm_ctx->ldo5_delay = LDO5_LDO4_SMPS2_DEFAULT_DELAY;
 	return ab_sm_ctx;
 
 fail_fw_patch_en:

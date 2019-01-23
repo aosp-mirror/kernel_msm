@@ -189,7 +189,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 
 		/* NOTE: delay required by b/120785608 */
 		if (!sc->ldo4_state || !sc->smps2_state)
-			usleep_range(8000, 8001);
+			usleep_range(sc->ldo5_delay, sc->ldo5_delay + 1);
 	}
 
 	if (!sc->ldo4_state && regulator_is_enabled(sc->ldo4)) {

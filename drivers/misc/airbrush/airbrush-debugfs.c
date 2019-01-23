@@ -64,6 +64,25 @@ static int time_stamps_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_time_stamps, time_stamps_get,
 		time_stamps_set, "%llu\n");
 
+static int ldo5_delay_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	sc->ldo5_delay = val;
+	return 0;
+}
+
+static int ldo5_delay_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	*val = sc->ldo5_delay;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_ldo5_delay, ldo5_delay_get,
+	ldo5_delay_set, "%llu\n");
+
 static int ab_sm_force_el2_set(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
@@ -348,6 +367,11 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("chip_state", 0666, d_chip, sc,
 				&fops_chip_state);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ldo5_delay", 0664, d_chip, sc,
+			&fops_ldo5_delay);
 	if (!d)
 		goto err_out;
 
