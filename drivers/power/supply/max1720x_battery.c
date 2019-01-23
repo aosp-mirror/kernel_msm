@@ -1879,22 +1879,6 @@ static int max1720x_handle_dt_batt_id(struct max1720x_chip *chip)
 	return 0;
 }
 
-static int max17x0x_nregval_ver_idx(struct max1720x_chip *chip,
-				    struct max17x0x_cache_data *nRAM_u)
-{
-	u32 nver_reg;
-	int ret, idx = -1;
-	const char *propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
-		"maxim,n_regval_1730x_ver" : "maxim,n_regval_1720x_ver";
-
-	ret = of_property_read_u32(chip->batt_node, propname, &nver_reg);
-	if (ret == 0)
-		idx = max17x0x_cache_index_of(nRAM_u, nver_reg);
-
-	return idx;
-}
-
-
 static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 					struct device_node *node,
 					struct max17x0x_cache_data *nRAM,
@@ -1902,7 +1886,6 @@ static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 {
 	u16 *regs;
 	int ret, i;
-	const int regver_idx = max17x0x_nregval_ver_idx(chip, nRAM);
 	const char *propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
 		 "maxim,n_regval_1730x" : "maxim,n_regval_1720x";
 
@@ -1927,17 +1910,9 @@ static int max17x0x_apply_regval_shadow(struct max1720x_chip *chip,
 
 	for (i = 0; i < nb; i += 2) {
 		const int idx = max17x0x_cache_index_of(nRAM, regs[i]);
-
-		if (idx < 0) {
-
-		} else if (idx == regver_idx) {
-			/* only one byte */
-			nRAM->cache_data[idx] &= 0xff00 ;
-			nRAM->cache_data[idx] |= regs[i + 1] & 0xff;
-		} else {
-			nRAM->cache_data[idx] = regs[i + 1];
-		}
+		nRAM->cache_data[idx] = regs[i + 1];
 	}
+
 shadow_out:
 	kfree(regs);
 	return ret;
@@ -1956,31 +1931,28 @@ static void max1720x_consistency_check(struct max17x0x_cache_data *cache)
 		nRAM_updated[ncgain_idx] = 0x4000;
 }
 
-static bool max17x0x_should_reset(struct max1720x_chip *chip,
-				  struct max17x0x_cache_data *nRAM_c,
-				  struct max17x0x_cache_data *nRAM_u)
+static int max17x0x_read_dt_version(struct device_node *node, u8 *reg, u8 *val)
 {
+	int ret;
 	const char *propname;
-	int idx = -1;
+	u8 version[2];
 
-	propname = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) ?
-		"maxim,n_regval_1730x_ver" : "maxim,n_regval_1720x_ver";
-
-	/* if n_regval_1730x_ver is present, reset fg only when ver changes */
-	idx = max17x0x_nregval_ver_idx(chip, nRAM_u);
-	if (idx < 0) {
-		/* nConvgCfg change take effect without resetting the gauge */
-		idx = max17x0x_cache_index_of(nRAM_u, MAX1720X_NCONVGCFG);
-		nRAM_c->cache_data[idx] = nRAM_u->cache_data[idx];
-
-		return max17x0x_cache_memcmp(nRAM_u, nRAM_c) != 0;
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		propname = "maxim,n_regval_1730x_ver";
+	} else {
+		propname = "maxim,n_regval_1720x_ver";
 	}
 
-	/* version is one byte */
-	return (nRAM_c->cache_data[idx] & 0xff)
-		< (nRAM_u->cache_data[idx] & 0xff);
-}
+	ret = of_property_read_u8_array(node, propname,
+					version,
+					sizeof(version));
+	if (ret < 0)
+		return -ENODATA;
 
+	*reg = version[0];
+	*val = version[1];
+	return 0;
+}
 
 static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 {
@@ -1988,6 +1960,9 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	const char *propname = NULL;
 	struct max17x0x_cache_data nRAM_c;
 	struct max17x0x_cache_data nRAM_u;
+	int ver_idx = -1;
+	bool fg_reset = false;
+	u8 vreg, vval;
 
 	ret = max1720x_handle_dt_batt_id(chip);
 	if (ret)
@@ -2013,6 +1988,8 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	if (ret < 0)
 		return ret;
 
+
+
 	ret = max17x0x_cache_load(&nRAM_c, chip->regmap_nvram);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to read config from shadow RAM\n");
@@ -2022,7 +1999,6 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	ret = max17x0x_cache_dup(&nRAM_u, &nRAM_c);
 	if (ret < 0)
 		goto error_out;
-
 
 	/* apply overrides */
 	if (chip->batt_node) {
@@ -2046,8 +2022,38 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	if (max17xxx_gauge_type == MAX1720X_GAUGE_TYPE)
 		max1720x_consistency_check(&nRAM_u);
 
+
+	ret = max17x0x_read_dt_version(chip->dev->of_node, &vreg, &vval);
+	if (ret == 0) {
+		/* Versioning enforced: reset the gauge (and overwrite
+		 * version) only if the version in device tree is
+		 * greater than the version in the gauge.
+		 */
+		ver_idx = max17x0x_cache_index_of(&nRAM_u, vreg);
+		if (ver_idx < 0) {
+			dev_err(chip->dev, "version register %x is not mapped\n",
+					vreg);
+		} else if ((nRAM_u.cache_data[ver_idx] & 0xff) < vval) {
+			/* force version in dt, will write (and reset fg)
+			 * only when different from nRAM_c
+			 */
+			nRAM_u.cache_data[ver_idx] &= 0xff00;
+			nRAM_u.cache_data[ver_idx] |= vval;
+			fg_reset = true;
+		}
+	}
+
 	if (max17x0x_cache_memcmp(&nRAM_c, &nRAM_u)) {
-		bool fg_reset;
+
+		if (ver_idx < 0) {
+			/* Versioning not enforced: nConvgCfg take effect
+			 * without resetting the gauge
+			 */
+			const int idx = max17x0x_cache_index_of(&nRAM_u,
+							MAX1720X_NCONVGCFG);
+			nRAM_c.cache_data[idx] = nRAM_u.cache_data[idx];
+			fg_reset = max17x0x_cache_memcmp(&nRAM_u, &nRAM_c) != 0;
+		}
 
 		ret = max17x0x_cache_store(&nRAM_u, chip->regmap_nvram);
 		if (ret < 0) {
@@ -2056,7 +2062,6 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 			goto error_out;
 		}
 
-		fg_reset = max17x0x_should_reset(chip, &nRAM_c, &nRAM_u);
 		if (fg_reset) {
 			dev_info(chip->dev,
 				"DT config differs from shadow, resetting\n");
