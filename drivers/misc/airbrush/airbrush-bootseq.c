@@ -272,11 +272,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 			ab_ctx->pcie_dev = pdev;
 		}
 
-		/* Enable schmitt trigger mode for SPI clk pad.
-		 * This is to filter out any noise on SPI clk line.
-		 */
-		ABC_WRITE(GPB0_DRV, 0x22222262);
-
 		/* Disable patching if ab is B0 */
 		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
 			ab_ctx->alternate_boot = 0;
@@ -290,6 +285,11 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 			msm_pcie_recover_config(ab_ctx->pcie_dev);
 	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ON);
+
+	/* Enable schmitt trigger mode for SPI clk pad.
+	 * This is to filter out any noise on SPI clk line.
+	 */
+	ABC_WRITE(GPB0_DRV, 0x22222262);
 
 	/* Wait for AB_READY = 1,
 	 * this ensures the SPI FSM is initialized to flash the
