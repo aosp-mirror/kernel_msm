@@ -148,12 +148,10 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 int ab_pmic_off(struct ab_state_context *sc)
 {
 	int ret1, ret2 = 0;
-	bool has_regulators_turned_off = false;
 
-	dev_dbg(sc->dev, "%s: Turning OFF all the PMIC rails\n", __func__);
+	dev_dbg(sc->dev, "%s: Turning OFF PMIC rails\n", __func__);
 
 	if (!sc->ldo2_state && regulator_is_enabled(sc->ldo2)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->ldo2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -163,7 +161,6 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->ldo3_state && regulator_is_enabled(sc->ldo3)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->ldo3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -174,7 +171,6 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->smps1_state && regulator_is_enabled(sc->smps1)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->smps1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -184,17 +180,19 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->ldo5_state && regulator_is_enabled(sc->ldo5)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->ldo5);
 		if (ret1 < 0)
 			dev_err(sc->dev,
 					"%s: failed to disable LDO5, ret %d\n",
 					__func__, ret1);
 		ret2 = ret2 ? ret2 : ret1;
+
+		/* NOTE: delay required by b/120785608 */
+		if (!sc->ldo4_state || !sc->smps2_state)
+			usleep_range(8000, 8001);
 	}
 
 	if (!sc->ldo4_state && regulator_is_enabled(sc->ldo4)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->ldo4);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -204,7 +202,6 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->smps3_state && regulator_is_enabled(sc->smps3)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->smps3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -214,7 +211,6 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->ldo1_state && regulator_is_enabled(sc->ldo1)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->ldo1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -224,7 +220,6 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->smps2_state && regulator_is_enabled(sc->smps2)) {
-		has_regulators_turned_off = true;
 		ret1 = regulator_disable(sc->smps2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -233,12 +228,16 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
-	if (has_regulators_turned_off) {
-		dev_dbg(sc->dev,
-			"%s: WR to b/120785608: fixed delay 40 ms\n",
-			__func__);
+	/* NOTE: delay required by b/120785608 */
+	if (!sc->smps2_state &&
+			!sc->ldo1_state &&
+			!sc->smps3_state &&
+			!sc->ldo4_state &&
+			!sc->ldo5_state &&
+			!sc->smps1_state &&
+			!sc->ldo3_state &&
+			!sc->ldo2_state)
 		msleep(40);
-	}
 
 	return ret2;
 }
