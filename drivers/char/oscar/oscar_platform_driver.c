@@ -664,6 +664,9 @@ static int oscar_enter_reset(struct gasket_dev *gasket_dev)
 	if (bypass_top_level)
 		return 0;
 
+	if (!check_dev_avail(oscar_dev))
+		return -EIO;
+
 	/* 1. Check whether we are already in reset to guard HIB access. */
 	if (gasket_dev_read_64(gasket_dev, OSCAR_BAR_INDEX,
 			       OSCAR_BAR_REG_AON_RESET) == 0) {
