@@ -17,6 +17,7 @@
 #include <linux/extcon.h>
 #include <linux/reset.h>
 #include <linux/hrtimer.h>
+#include <linux/debugfs.h>
 
 enum core_ldo_levels {
 	CORE_LEVEL_NONE = 0,
@@ -75,6 +76,19 @@ enum core_ldo_levels {
 
 /* USB3 Gen2 link training indicator */
 #define RX_EQUALIZATION_IN_PROGRESS	BIT(3)
+
+#define USB3_DP_QSERDES_TXA_TX_DRV_LVL	0x1214
+#define USB3_DP_QSERDES_TXA_PRE_EMPH	0x1308
+#define USB3_DP_QSERDES_TXB_TX_DRV_LVL	0x1614
+#define USB3_DP_QSERDES_TXB_PRE_EMPH	0x1708
+#define USB3_DP_QSERDES_TXA_TX_EMP_POST1_LVL	0x120C
+#define USB3_DP_QSERDES_TXB_TX_EMP_POST1_LVL	0x160C
+#define USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2	0x14EC
+#define USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3	0x14F0
+#define USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4	0x14F4
+#define USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2	0x18EC
+#define USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3	0x18F0
+#define USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4	0x18F4
 
 enum qmp_phy_rev_reg {
 	USB3_PHY_PCS_STATUS,
@@ -144,6 +158,21 @@ struct msm_ssphy_qmp {
 	u32			*qmp_phy_init_seq;
 	int			init_seq_len;
 	struct hrtimer		timer;
+
+	/*  debugfs entries */
+	struct dentry           *root;
+	u8			txa_tx_drv_lvl;
+	u8			txa_pre_emph;
+	u8			txa_post1_lvl;
+	u8			txb_tx_drv_lvl;
+	u8			txb_pre_emph;
+	u8			txb_post1_lvl;
+	u8			rxa_equ_adaptor_cntrl2;
+	u8			rxa_equ_adaptor_cntrl3;
+	u8			rxa_equ_adaptor_cntrl4;
+	u8			rxb_equ_adaptor_cntrl2;
+	u8			rxb_equ_adaptor_cntrl3;
+	u8			rxb_equ_adaptor_cntrl4;
 };
 
 static const struct of_device_id msm_usb_id_table[] = {
@@ -490,6 +519,135 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		return ret;
 	}
 
+	dev_info(uphy->dev, "current setting for txa_tx_drv_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXA_TX_DRV_LVL));
+	dev_info(uphy->dev, "current setting for txa_pre_emph:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXA_PRE_EMPH));
+	dev_info(uphy->dev, "current setting for txa_post1_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXA_TX_EMP_POST1_LVL));
+	dev_info(uphy->dev, "current setting for txb_tx_drv_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXB_TX_DRV_LVL));
+	dev_info(uphy->dev, "current setting for txb_pre_emph:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXB_PRE_EMPH));
+	dev_info(uphy->dev, "current setting for txb_post1_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_TXB_TX_EMP_POST1_LVL));
+	dev_info(uphy->dev, "current setting for rxa_equ_adaptor_cntrl2:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2));
+	dev_info(uphy->dev, "current setting for rxa_equ_adaptor_cntrl3:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3));
+	dev_info(uphy->dev, "current setting for rxa_equ_adaptor_cntrl4:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4));
+	dev_info(uphy->dev, "current setting for rxb_equ_adaptor_cntrl2:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2));
+	dev_info(uphy->dev, "current setting for rxb_equ_adaptor_cntrl3:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3));
+	dev_info(uphy->dev, "current setting for rxb_equ_adaptor_cntrl4:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4));
+
+	if (phy->txa_tx_drv_lvl) {
+		writel_relaxed(phy->txa_tx_drv_lvl,
+			       phy->base + USB3_DP_QSERDES_TXA_TX_DRV_LVL);
+		dev_info(uphy->dev, "override TXA_TX_DRV_LVL: 0x%02x\n",
+			phy->txa_tx_drv_lvl);
+	}
+
+	if (phy->txa_pre_emph) {
+		writel_relaxed(phy->txa_pre_emph,
+			       phy->base + USB3_DP_QSERDES_TXA_PRE_EMPH);
+		dev_info(uphy->dev, "override TXA_PRE_EMPH: 0x%02x\n",
+			phy->txa_pre_emph);
+	}
+
+	if (phy->txa_post1_lvl) {
+		writel_relaxed(phy->txa_post1_lvl,
+			       phy->base +
+			       USB3_DP_QSERDES_TXA_TX_EMP_POST1_LVL);
+		dev_info(uphy->dev, "override TXA_TX_EMP_POST1_LVL: 0x%02x\n",
+			phy->txa_post1_lvl);
+	}
+
+	if (phy->txb_tx_drv_lvl) {
+		writel_relaxed(phy->txb_tx_drv_lvl,
+			       phy->base + USB3_DP_QSERDES_TXB_TX_DRV_LVL);
+		dev_info(uphy->dev, "override TXB_TX_DRV_LVL: 0x%02x\n",
+			phy->txb_tx_drv_lvl);
+	}
+
+	if (phy->txb_pre_emph) {
+		writel_relaxed(phy->txb_pre_emph,
+			       phy->base + USB3_DP_QSERDES_TXB_PRE_EMPH);
+		dev_info(uphy->dev, "override TXB_PRE_EMPH: 0x%02x\n",
+			phy->txb_pre_emph);
+	}
+
+	if (phy->txb_post1_lvl) {
+		writel_relaxed(phy->txb_post1_lvl,
+			       phy->base +
+			       USB3_DP_QSERDES_TXB_TX_EMP_POST1_LVL);
+		dev_info(uphy->dev, "override TXB_TX_EMP_POST1_LVL: 0x%02x\n",
+			phy->txb_post1_lvl);
+	}
+
+	if (phy->rxa_equ_adaptor_cntrl2) {
+		writel_relaxed(phy->rxa_equ_adaptor_cntrl2,
+			       phy->base +
+			       USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2);
+		dev_info(uphy->dev, "override RXA_RX_EQU_ADAPTOR_CNTRL2: 0x%02x\n",
+			phy->rxa_equ_adaptor_cntrl2);
+	}
+
+	if (phy->rxa_equ_adaptor_cntrl3) {
+		writel_relaxed(phy->rxa_equ_adaptor_cntrl3,
+			       phy->base +
+			       USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3);
+		dev_info(uphy->dev, "override RXA_RX_EQU_ADAPTOR_CNTRL3: 0x%02x\n",
+			phy->rxa_equ_adaptor_cntrl3);
+	}
+
+	if (phy->rxa_equ_adaptor_cntrl4) {
+		writel_relaxed(phy->rxa_equ_adaptor_cntrl4,
+			       phy->base +
+			       USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4);
+		dev_info(uphy->dev, "override RXA_RX_EQU_ADAPTOR_CNTRL4: 0x%02x\n",
+			phy->rxa_equ_adaptor_cntrl4);
+	}
+
+	if (phy->rxb_equ_adaptor_cntrl2) {
+		writel_relaxed(phy->rxb_equ_adaptor_cntrl2,
+			       phy->base +
+			       USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2);
+		dev_info(uphy->dev, "override RXB_RX_EQU_ADAPTOR_CNTRL2: 0x%02x\n",
+			phy->rxb_equ_adaptor_cntrl2);
+	}
+
+	if (phy->rxb_equ_adaptor_cntrl3) {
+		writel_relaxed(phy->rxb_equ_adaptor_cntrl3,
+			       phy->base +
+			       USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3);
+		dev_info(uphy->dev, "override RXB_RX_EQU_ADAPTOR_CNTRL3: 0x%02x\n",
+			phy->rxb_equ_adaptor_cntrl3);
+	}
+
+	if (phy->rxb_equ_adaptor_cntrl4) {
+		writel_relaxed(phy->rxb_equ_adaptor_cntrl4,
+			       phy->base +
+			       USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4);
+		dev_info(uphy->dev, "override RXB_RX_EQU_ADAPTOR_CNTRL4: 0x%02x\n",
+			phy->rxb_equ_adaptor_cntrl4);
+	}
+
 	/* perform software reset of PHY common logic */
 	if (phy->phy.type == USB_PHY_TYPE_USB3_AND_DP &&
 				!(phy->phy.flags & PHY_USB_DP_CONCURRENT_MODE))
@@ -503,6 +661,85 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 
 	/* Make sure above write completed to bring PHY out of reset */
 	mb();
+
+
+	if (phy->txa_tx_drv_lvl) {
+		dev_info(uphy->dev, "new setting for txa_tx_drv_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXA_TX_DRV_LVL));
+	}
+
+	if (phy->txa_pre_emph) {
+		dev_info(uphy->dev, "new setting for txa_pre_emph:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXA_PRE_EMPH));
+	}
+
+	if (phy->txa_post1_lvl) {
+		dev_info(uphy->dev, "new setting for txa_post1_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXA_TX_EMP_POST1_LVL));
+	}
+
+	if (phy->txb_tx_drv_lvl) {
+		dev_info(uphy->dev, "new setting for txb_tx_drv_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXB_TX_DRV_LVL));
+	}
+
+	if (phy->txb_pre_emph) {
+		dev_info(uphy->dev, "new setting for txb_pre_emph:0x%02x\n",
+			readl_relaxed(phy->base +
+				      USB3_DP_QSERDES_TXB_PRE_EMPH));
+	}
+
+	if (phy->txb_post1_lvl) {
+		dev_info(uphy->dev, "new setting for txb_post1_lvl:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_TXB_TX_EMP_POST1_LVL));
+	}
+
+	if (phy->rxa_equ_adaptor_cntrl2) {
+		dev_info(uphy->dev,
+		 "new setting for rxa_equ_adaptor_cntrl2:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2));
+	}
+
+	if (phy->rxa_equ_adaptor_cntrl3) {
+		dev_info(uphy->dev,
+		 "new setting for rxa_equ_adaptor_cntrl3:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3));
+	}
+
+	if (phy->rxa_equ_adaptor_cntrl4) {
+		dev_info(uphy->dev,
+		 "new setting for rxa_equ_adaptor_cntrl4:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4));
+	}
+
+	if (phy->rxb_equ_adaptor_cntrl2) {
+		dev_info(uphy->dev,
+		 "new setting for rxb_equ_adaptor_cntrl2:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2));
+	}
+
+	if (phy->rxb_equ_adaptor_cntrl3) {
+		dev_info(uphy->dev,
+		 "new setting for rxb_equ_adaptor_cntrl3:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3));
+	}
+
+	if (phy->rxb_equ_adaptor_cntrl4) {
+		dev_info(uphy->dev,
+		 "new setting for rxb_equ_adaptor_cntrl4:0x%02x\n",
+			readl_relaxed(phy->base +
+				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4));
+	}
 
 	/* Wait for PHY initialization to be done */
 	do {
@@ -980,6 +1217,35 @@ static void msm_ssphy_qmp_enable_clks(struct msm_ssphy_qmp *phy, bool on)
 	}
 }
 
+static void msm_ssphy_qmp_create_debugfs(struct msm_ssphy_qmp *phy)
+{
+	phy->root = debugfs_create_dir(dev_name(phy->phy.dev), NULL);
+	debugfs_create_x8("txa_tx_drv_lvl", 0644, phy->root,
+			  &phy->txa_tx_drv_lvl);
+	debugfs_create_x8("txa_pre_emph", 0644, phy->root,
+			  &phy->txa_pre_emph);
+	debugfs_create_x8("txa_post1_lvl", 0644, phy->root,
+			  &phy->txa_post1_lvl);
+	debugfs_create_x8("txb_tx_drv_lvl", 0644, phy->root,
+			  &phy->txb_tx_drv_lvl);
+	debugfs_create_x8("txb_pre_emph", 0644, phy->root,
+			  &phy->txb_pre_emph);
+	debugfs_create_x8("txb_post1_lvl", 0644, phy->root,
+			  &phy->txb_post1_lvl);
+	debugfs_create_x8("rxa_equ_adaptor_cntrl2", 0644, phy->root,
+			  &phy->rxa_equ_adaptor_cntrl2);
+	debugfs_create_x8("rxa_equ_adaptor_cntrl3", 0644, phy->root,
+			  &phy->rxa_equ_adaptor_cntrl3);
+	debugfs_create_x8("rxa_equ_adaptor_cntrl4", 0644, phy->root,
+			  &phy->rxa_equ_adaptor_cntrl4);
+	debugfs_create_x8("rxb_equ_adaptor_cntrl2", 0644, phy->root,
+			  &phy->rxb_equ_adaptor_cntrl2);
+	debugfs_create_x8("rxb_equ_adaptor_cntrl3", 0644, phy->root,
+			  &phy->rxb_equ_adaptor_cntrl3);
+	debugfs_create_x8("rxb_equ_adaptor_cntrl4", 0644, phy->root,
+			  &phy->rxb_equ_adaptor_cntrl4);
+}
+
 static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 {
 	struct msm_ssphy_qmp *phy;
@@ -1203,6 +1469,8 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 
 	ret = usb_add_phy_dev(&phy->phy);
 
+	msm_ssphy_qmp_create_debugfs(phy);
+
 err:
 	return ret;
 }
@@ -1213,6 +1481,8 @@ static int msm_ssphy_qmp_remove(struct platform_device *pdev)
 
 	if (!phy)
 		return 0;
+
+	debugfs_remove_recursive(phy->root);
 
 	usb_remove_phy(&phy->phy);
 	msm_ssphy_qmp_enable_clks(phy, false);
