@@ -427,11 +427,19 @@ static int disable_ref_clk(struct device *dev)
 		return PTR_ERR(ref_clk);
 }
 
+#define THROTTLER_MAP_INIT(cs0, cs1, cs2, cs3) \
+	{ \
+		CHIP_STATE_ ## cs0, \
+		CHIP_STATE_ ## cs1, \
+		CHIP_STATE_ ## cs2, \
+		CHIP_STATE_ ## cs3, \
+	}
+
 static const u32 chip_substate_throttler_map
 		[][AIRBRUSH_COOLING_STATE_MAX + 1] = {
-	{CHIP_STATE_0_9, CHIP_STATE_0_4, CHIP_STATE_0_3, CHIP_STATE_0_2},
-	{CHIP_STATE_1_6, CHIP_STATE_1_4, CHIP_STATE_1_3, CHIP_STATE_1_2},
-	{CHIP_STATE_2_6, CHIP_STATE_2_4, CHIP_STATE_2_3, CHIP_STATE_2_2},
+	THROTTLER_MAP_INIT(0_9, 0_4, 0_3, 0_2),
+	THROTTLER_MAP_INIT(1_6, 1_4, 1_3, 1_2),
+	THROTTLER_MAP_INIT(2_6, 2_4, 2_3, 2_2),
 };
 
 static u32 ab_sm_throttled_chip_substate_id(
