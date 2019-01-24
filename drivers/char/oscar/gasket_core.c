@@ -401,39 +401,40 @@ static void gasket_cleanup_pci(struct gasket_dev *gasket_dev)
 }
 
 /* Determine the health of the Gasket device. */
-static int gasket_get_hw_status(struct gasket_dev *gasket_dev)
+void gasket_update_hw_status(struct gasket_dev *gasket_dev)
 {
-	int status;
 	int i;
 	const struct gasket_driver_desc *driver_desc =
 		gasket_dev->internal_desc->driver_desc;
 
-	status = gasket_check_and_invoke_callback_nolock(gasket_dev,
-							 driver_desc->device_status_cb);
-	if (status != GASKET_STATUS_ALIVE) {
+	gasket_dev->status =
+		gasket_check_and_invoke_callback_nolock(
+			gasket_dev, driver_desc->device_status_cb);
+	if (gasket_dev->status != GASKET_STATUS_ALIVE) {
 		dev_dbg(gasket_dev->dev, "Hardware reported status %d.\n",
-			status);
-		return status;
+			gasket_dev->status);
+		return;
 	}
 
-	status = gasket_interrupt_system_status(gasket_dev);
-	if (status != GASKET_STATUS_ALIVE) {
+	gasket_dev->status = gasket_interrupt_system_status(gasket_dev);
+	if (gasket_dev->status != GASKET_STATUS_ALIVE) {
 		dev_dbg(gasket_dev->dev,
-			"Interrupt system reported status %d.\n", status);
-		return status;
+			"Interrupt system reported status %d.\n",
+			gasket_dev->status);
+		return;
 	}
 
 	for (i = 0; i < driver_desc->num_page_tables; ++i) {
-		status = gasket_page_table_system_status(gasket_dev->page_table[i]);
-		if (status != GASKET_STATUS_ALIVE) {
+		gasket_dev->status =
+			gasket_page_table_system_status(
+				gasket_dev->page_table[i]);
+		if (gasket_dev->status != GASKET_STATUS_ALIVE) {
 			dev_dbg(gasket_dev->dev,
 				"Page table %d reported status %d.\n",
-				i, status);
-			return status;
+				i, gasket_dev->status);
+			return;
 		}
 	}
-
-	return GASKET_STATUS_ALIVE;
 }
 
 static ssize_t
@@ -1418,8 +1419,7 @@ int gasket_enable_device(struct gasket_dev *gasket_dev)
 	}
 	gasket_dev->hardware_revision = ret;
 
-	/* device_status_cb returns a device status, not an error code. */
-	gasket_dev->status = gasket_get_hw_status(gasket_dev);
+	gasket_update_hw_status(gasket_dev);
 	if (gasket_dev->status == GASKET_STATUS_DEAD)
 		dev_err(gasket_dev->dev, "Device reported as unhealthy.\n");
 
@@ -1718,7 +1718,7 @@ int gasket_reset_nolock(struct gasket_dev *gasket_dev)
 	}
 
 	/* Get current device health. */
-	gasket_dev->status = gasket_get_hw_status(gasket_dev);
+	gasket_update_hw_status(gasket_dev);
 	if (gasket_dev->status == GASKET_STATUS_DEAD) {
 		dev_dbg(gasket_dev->dev, "Device reported as dead.\n");
 		return -EINVAL;

@@ -683,6 +683,9 @@ static inline void gasket_read_modify_write_32(struct gasket_dev *dev, int bar,
 /* Get the Gasket driver structure for a given device. */
 const struct gasket_driver_desc *gasket_get_driver_desc(struct gasket_dev *dev);
 
+/* Update the status field indicating health of the Gasket device. */
+void gasket_update_hw_status(struct gasket_dev *gasket_dev);
+
 /* Helper function, Asynchronous waits on a given set of bits. */
 int gasket_wait_with_reschedule(struct gasket_dev *gasket_dev, int bar,
 				u64 offset, u64 mask, u64 val,
