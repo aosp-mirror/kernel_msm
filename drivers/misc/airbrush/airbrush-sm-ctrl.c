@@ -602,12 +602,27 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 }
 #endif
 
+static struct chip_to_block_map *ab_sm_get_block_map(
+		struct ab_state_context *sc, int state)
+{
+	struct chip_to_block_map *map = NULL;
+	int i;
+
+	for (i = 0; i < sc->nr_chip_states; i++) {
+		if (sc->chip_state_table[i].chip_substate_id == state) {
+			map = &(sc->chip_state_table[i]);
+			break;
+		}
+	}
+
+	return map;
+}
+
 static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
 	u32 to_chip_substate_id;
-	int i;
 	int ret;
-	struct chip_to_block_map *map = NULL;
+	struct chip_to_block_map *map;
 	enum chip_state prev_state = sc->curr_chip_substate_id;
 
 	to_chip_substate_id = ab_sm_throttled_chip_substate_id(
@@ -620,16 +635,14 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		return 0;
 	}
 
-	for (i = 0; i < sc->nr_chip_states; i++) {
-		if (sc->chip_state_table[i].chip_substate_id ==
-				to_chip_substate_id) {
-			map = &(sc->chip_state_table[i]);
-			break;
-		}
-	}
-
-	if (!map)
+	map = ab_sm_get_block_map(sc, to_chip_substate_id);
+	if (!map) {
+		dev_err(sc->dev,
+			"Entered %s with invalid destination state\n",
+			__func__);
+		WARN_ON(1);
 		return -EINVAL;
+	}
 
 	dev_info(sc->dev, "AB state changing to %d\n", to_chip_substate_id);
 
@@ -796,12 +809,16 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 		u32 dest_chip_substate_id)
 {
 	int ret;
+	struct chip_to_block_map *map;
 
 	if (sc->dest_chip_substate_id == dest_chip_substate_id)
 		return 0;
 
+	map = ab_sm_get_block_map(sc, dest_chip_substate_id);
+
 	if (!is_valid_transition(sc->curr_chip_substate_id,
-			dest_chip_substate_id)) {
+			dest_chip_substate_id) ||
+			!map) {
 		dev_err(sc->dev,
 				"%s: invalid state change, current %u, requested %u\n",
 				__func__, sc->curr_chip_substate_id,
