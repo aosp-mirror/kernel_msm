@@ -286,11 +286,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ON);
 
-	/* Enable schmitt trigger mode for SPI clk pad.
-	 * This is to filter out any noise on SPI clk line.
-	 */
-	ABC_WRITE(GPB0_DRV, 0x22222262);
-
 	/* Wait for AB_READY = 1,
 	 * this ensures the SPI FSM is initialized to flash the
 	 * alternate bootcode to SRAM.
@@ -310,6 +305,15 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	mutex_lock(&ab_ctx->mfd_lock);
 	ret = ab_ctx->mfd_ops->ab_ready(ab_ctx->mfd_ops->ctx);
 	mutex_unlock(&ab_ctx->mfd_lock);
+
+	/* Enable schmitt trigger mode for SPI clk pad.
+	 * This is to filter out any noise on SPI clk line.
+	 * Also reset the SPI controller in case it's already
+	 * in a glitched state.
+	 */
+	ABC_WRITE(GPB0_DRV, 0x22222262);
+	ABC_WRITE(SYSREG_AON_SPI0_AHB_ENABLE, 0x0);
+	ABC_WRITE(SYSREG_AON_SPI0_AHB_ENABLE, 0x1);
 
 	/* Setup the function pointer to read DDR OTPs */
 	ab_ddr_setup(ab_ctx);
