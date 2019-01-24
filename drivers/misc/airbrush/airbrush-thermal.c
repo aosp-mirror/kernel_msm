@@ -16,6 +16,7 @@
 
 #include <linux/device.h>
 #include <linux/gfp.h>
+#include <linux/printk.h>
 #include <linux/thermal.h>
 
 static enum throttle_state to_throttle_state(unsigned long state)
@@ -27,8 +28,13 @@ static enum throttle_state to_throttle_state(unsigned long state)
 		return THROTTLE_TO_MID;
 	case 2:
 		return THROTTLE_TO_LOW;
-	default:
+	case 3:
 		return THROTTLE_TO_MIN;
+	case 4:
+		return THROTTLE_NOCOMPUTE;
+	default:
+		pr_warn("Bad throttle state, defaulting to THROTTLE_NOCOMPUTE\n");
+		return THROTTLE_NOCOMPUTE;
 	}
 }
 

@@ -98,6 +98,7 @@ enum throttle_state {
 	THROTTLE_TO_MID,
 	THROTTLE_TO_LOW,
 	THROTTLE_TO_MIN,
+	THROTTLE_NOCOMPUTE,
 };
 
 enum chip_state {

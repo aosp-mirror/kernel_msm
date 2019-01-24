@@ -14,7 +14,7 @@
 #ifndef _AIRBRUSH_COOLING_H
 #define _AIRBRUSH_COOLING_H
 
-#define AIRBRUSH_COOLING_STATE_MAX 3
+#define AIRBRUSH_COOLING_STATE_MAX 4
 
 #include <linux/types.h>
 

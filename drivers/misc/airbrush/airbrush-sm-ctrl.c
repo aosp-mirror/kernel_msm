@@ -708,20 +708,21 @@ static int disable_ref_clk(struct device *dev)
 		return PTR_ERR(ref_clk);
 }
 
-#define THROTTLER_MAP_INIT(cs0, cs1, cs2, cs3) \
+#define THROTTLER_MAP_INIT(cs0, cs1, cs2, cs3, cs4) \
 	{ \
 		CHIP_STATE_ ## cs0, \
 		CHIP_STATE_ ## cs1, \
 		CHIP_STATE_ ## cs2, \
 		CHIP_STATE_ ## cs3, \
+		CHIP_STATE_ ## cs4, \
 	}
 
 static const u32 chip_substate_throttler_map
 		[][AIRBRUSH_COOLING_STATE_MAX + 1] = {
-	[4] = THROTTLER_MAP_INIT(409, 404, 403, 402),
-	[5] = THROTTLER_MAP_INIT(505, 504, 503, 502),
-	[6] = THROTTLER_MAP_INIT(605, 604, 603, 602),
-	[7] = THROTTLER_MAP_INIT(705, 704, 703, 702),
+	[4] = THROTTLER_MAP_INIT(409, 404, 403, 402, 100),
+	[5] = THROTTLER_MAP_INIT(505, 504, 503, 502, 100),
+	[6] = THROTTLER_MAP_INIT(605, 604, 603, 602, 100),
+	[7] = THROTTLER_MAP_INIT(705, 704, 703, 702, 100),
 };
 
 static u32 ab_sm_throttled_chip_substate_id(
@@ -736,6 +737,8 @@ static u32 ab_sm_throttled_chip_substate_id(
 	substate_category = to_chip_substate_category(chip_substate_id);
 	throttler_substate_id = chip_substate_throttler_map
 			[substate_category][throttle_state_id];
+	if (throttler_substate_id < CHIP_STATE_400)
+		return throttler_substate_id;
 	return min(chip_substate_id, throttler_substate_id);
 }
 
@@ -1150,12 +1153,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if (((to_chip_substate_id == CHIP_STATE_100) ||
 			(to_chip_substate_id == CHIP_STATE_0)) &&
 			(prev_state >= CHIP_STATE_200)) {
-		/*
-		 * Disable thermal before all pcie subscribers getting
-		 * disabled.
-		 */
-		ab_thermal_disable(sc->thermal);
-
 		mutex_lock(&sc->mfd_lock);
 		ret = sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
