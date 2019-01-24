@@ -2325,7 +2325,7 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
 		struct device_node *node = chip->dev->of_node;
 		bool write_back = false, write_ndata = false;
-		const u16 val = 0x28AB;
+		const u16 val = 0x280B;
 		u16 ndata = 0, bak = 0;
 
 		/* b/123026365 */
