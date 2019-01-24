@@ -117,8 +117,8 @@ struct batt_drv {
 
 	/* props */
 	int soh;
-
 	int fake_capacity;
+	bool buck_enabled;
 
 	/* temp outside the charge table */
 	int jeita_stop_charging;
@@ -819,11 +819,21 @@ static int msc_logic(struct batt_drv *batt_drv)
 	 * NOTE: rechage logic always run on a discharge curve
 	 */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
+
+		if (!batt_drv->buck_enabled)
+			goto msc_logic_exit;
+
 		batt_reset_chg_drv_state(batt_drv);
-		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
+		ssoc_change_curve(&batt_drv->ssoc_state,
+						SSOC_UIC_TYPE_DSG);
 		dump_ssoc_state(&batt_drv->ssoc_state);
 		batt_rl_reset(batt_drv);
-		goto exit_msc_logic;
+
+		batt_drv->buck_enabled = false;
+		if (batt_drv->psy)
+			power_supply_changed(batt_drv->psy);
+
+		goto msc_logic_done;
 	}
 
 	/* connect: enter recharge logic (force discharge curve) when FULL or
@@ -836,10 +846,14 @@ static int msc_logic(struct batt_drv *batt_drv)
 	} else if (batt_drv->batt_full) {
 		/* enter RL because battery is FULL, NO op if in DISCHARGE */
 		batt_rl_enter(&batt_drv->ssoc_state, BATT_RL_STATUS_RECHARGE);
-	} else {
+	} else if (!batt_drv->buck_enabled) {
 		/* TODO: enter with dsg_curve when ssoc over the spoof point? */
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
 		dump_ssoc_state(&batt_drv->ssoc_state);
+
+		batt_drv->buck_enabled = true;
+		if (batt_drv->psy)
+			power_supply_changed(batt_drv->psy);
 	}
 
 	err = msc_logic_internal(batt_drv);
@@ -856,8 +870,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 			batt_drv->msc_update_interval);
 	}
 
-exit_msc_logic:
-
+msc_logic_done:
 	if (!batt_drv->fv_votable)
 		batt_drv->fv_votable = find_votable(VOTABLE_MSC_FV);
 	if (batt_drv->fv_votable)
@@ -880,6 +893,7 @@ exit_msc_logic:
 			 batt_drv->msc_update_interval != -1,
 			 batt_drv->msc_update_interval);
 
+msc_logic_exit:
 	__pm_relax(&batt_drv->batt_ws);
 	return err;
 }
