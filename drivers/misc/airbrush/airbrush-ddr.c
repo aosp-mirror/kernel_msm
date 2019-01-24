@@ -2108,11 +2108,12 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
-	/* Self-refresh entry sequence */
-	if (ab_ddr_selfrefresh_enter(sc)) {
-		pr_err("%s: self-refresh entry failed\n", __func__);
-		goto ddr_suspend_fail;
-	}
+#ifdef CONFIG_DDR_BOOT_TEST
+	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
+#endif
+
+	/* Block AXI Before entering self-refresh */
+	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
 
 	/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not update the
 	 * MR registers specific to 1866MHz. As the ddr initialization happens
@@ -2121,6 +2122,18 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 	 * fail during ddr initialization (during suspend -> resume) in BootROM
 	 */
 	ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
+
+	/* Disable PB Refresh & Auto Refresh */
+	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+
+	/* safe to send a manual all bank refresh command */
+	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+
+	/* Self-refresh entry sequence */
+	if (ddr_enter_self_refresh_mode())
+		goto ddr_suspend_fail;
 
 	/* Enable the PMU Retention */
 	PMU_CONTROL_PHY_RET_ON();
