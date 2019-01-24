@@ -471,19 +471,6 @@ static int is_coherent(struct gasket_page_table *pg_tbl, ulong host_addr)
 	return min <= host_addr && host_addr < max;
 }
 
-/* Safely return a page to the OS. */
-static bool gasket_release_page(struct page *page)
-{
-	if (!page)
-		return false;
-
-	if (!PageReserved(page))
-		SetPageDirty(page);
-	put_page(page);
-
-	return true;
-}
-
 /*
  * Get and map last level page table buffers.
  *
@@ -650,6 +637,35 @@ static int gasket_alloc_simple_entries(struct gasket_page_table *pg_tbl,
 }
 
 /*
+ * Release host state associated with a page table entry. Unmapping the
+ * associated entry from the device happens separately, if the device is
+ * reachable.
+ *
+ * The page table mutex must be held by the caller.
+ */
+static void gasket_release_entry(struct gasket_page_table *pg_tbl,
+				 struct gasket_page_table_entry *pte)
+{
+	if (GET(FLAGS_STATUS, pte->flags) == PTE_FREE)
+		return;
+
+	if (pte->page) {
+		dma_unmap_page(pg_tbl->gasket_dev->dma_dev, pte->dma_addr,
+			       PAGE_SIZE,
+			       GET(FLAGS_DMA_DIRECTION, pte->flags));
+
+		if (!PageReserved(pte->page))
+			SetPageDirty(pte->page);
+
+		put_page(pte->page);
+		--pg_tbl->num_active_pages;
+	}
+
+	/* and clear the PTE. */
+	memset(pte, 0, sizeof(*pte));
+}
+
+/*
  * Unmap and release mapped pages.
  * The page table mutex must be held by the caller.
  */
@@ -674,20 +690,7 @@ static void gasket_perform_unmapping(struct gasket_page_table *pg_tbl,
 			wmb();
 		}
 
-		/* release the address from the driver, */
-		if (GET(FLAGS_STATUS, ptes[i].flags) == PTE_INUSE) {
-			if (ptes[i].page && ptes[i].dma_addr) {
-				dma_unmap_page(pg_tbl->gasket_dev->dma_dev,
-					       ptes[i].dma_addr, PAGE_SIZE,
-					        GET(FLAGS_DMA_DIRECTION,
-						   ptes[i].flags));
-			}
-			if (gasket_release_page(ptes[i].page))
-				--pg_tbl->num_active_pages;
-		}
-
-		/* and clear the PTE. */
-		memset(&ptes[i], 0, sizeof(struct gasket_page_table_entry));
+		gasket_release_entry(pg_tbl, &ptes[i]);
 	}
 }
 
