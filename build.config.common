@@ -15,6 +15,8 @@ LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
 FILES="
 arch/arm64/boot/dtbo.img
 arch/arm64/boot/Image.lz4-dtb
+arch/arm64/boot/dts/google/qcom-base/sm8150-v2.dtb
+arch/arm64/boot/dts/google/qcom-base/sm8150.dtb
 vmlinux
 System.map
 .config
