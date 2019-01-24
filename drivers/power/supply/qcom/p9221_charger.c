@@ -351,6 +351,9 @@ static bool p9221_is_epp(struct p9221_charger_data *charger)
 	u32 vout_uv;
 	uint8_t reg;
 
+	if (charger->fake_force_epp > 0)
+		return true;
+
 	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
 	if (ret == 0)
 		return (reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) > 0;
@@ -1751,6 +1754,37 @@ static ssize_t p9221_store_txlen(struct device *dev,
 
 static DEVICE_ATTR(txlen, 0200, NULL, p9221_store_txlen);
 
+static ssize_t p9221_show_force_epp(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	buf[0] = charger->fake_force_epp ? '1' : '0';
+	buf[1] = 0;
+	return 1;
+}
+
+static ssize_t p9221_force_epp(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret;
+	u16 val;
+
+	ret = kstrtou16(buf, 16, &val);
+	if (ret < 0)
+		return ret;
+
+	charger->fake_force_epp = (val != 0);
+	return count;
+}
+
+static DEVICE_ATTR(force_epp, 0600, p9221_show_force_epp, p9221_force_epp);
+
 static struct attribute *p9221_attributes[] = {
 	&dev_attr_version.attr,
 	&dev_attr_status.attr,
@@ -1765,6 +1799,7 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_rxdone.attr,
 	&dev_attr_icl_ramp_ua.attr,
 	&dev_attr_icl_ramp_delay_ms.attr,
+	&dev_attr_force_epp.attr,
 	NULL
 };
 
