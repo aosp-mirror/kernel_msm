@@ -50,8 +50,11 @@ static void ab_thermal_cooling_op_state_updated(
 	case 2:
 		state = THROTTLE_TO_LOW;
 		break;
-	default:
+	case 3:
 		state = THROTTLE_TO_MIN;
+		break;
+	default:
+		state = THROTTLE_TO_SUSPEND;
 		break;
 	}
 	thermal->ops.throttle_state_updated(state, thermal->op_data);

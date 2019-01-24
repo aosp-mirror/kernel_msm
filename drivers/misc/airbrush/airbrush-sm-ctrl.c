@@ -427,19 +427,20 @@ static int disable_ref_clk(struct device *dev)
 		return PTR_ERR(ref_clk);
 }
 
-#define THROTTLER_MAP_INIT(cs0, cs1, cs2, cs3) \
+#define THROTTLER_MAP_INIT(cs0, cs1, cs2, cs3, cs4) \
 	{ \
 		CHIP_STATE_ ## cs0, \
 		CHIP_STATE_ ## cs1, \
 		CHIP_STATE_ ## cs2, \
 		CHIP_STATE_ ## cs3, \
+		CHIP_STATE_ ## cs4, \
 	}
 
 static const u32 chip_substate_throttler_map
 		[][AIRBRUSH_COOLING_STATE_MAX + 1] = {
-	THROTTLER_MAP_INIT(0_9, 0_4, 0_3, 0_2),
-	THROTTLER_MAP_INIT(1_6, 1_4, 1_3, 1_2),
-	THROTTLER_MAP_INIT(2_6, 2_4, 2_3, 2_2),
+	THROTTLER_MAP_INIT(0_9, 0_4, 0_3, 0_2, 5_0),
+	THROTTLER_MAP_INIT(1_6, 1_4, 1_3, 1_2, 5_0),
+	THROTTLER_MAP_INIT(2_6, 2_4, 2_3, 2_2, 5_0),
 };
 
 static u32 ab_sm_throttled_chip_substate_id(
@@ -454,6 +455,8 @@ static u32 ab_sm_throttled_chip_substate_id(
 	substate_category = to_chip_substate_category(chip_substate_id);
 	throttler_substate_id = chip_substate_throttler_map
 			[substate_category][throttle_state_id];
+	if (throttler_substate_id >= CHIP_STATE_3_0)
+		return throttler_substate_id;
 	return min(chip_substate_id, throttler_substate_id);
 }
 
