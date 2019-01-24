@@ -1216,6 +1216,18 @@ static void p9221_notifier_work(struct work_struct *work)
 	dev_info(&charger->client->dev, "Notifier work: on:%d dc:%d det:%d\n",
 		 charger->online, charger->check_dc, charger->check_det);
 
+	if (charger->pdata->q_value != -1) {
+		int ret;
+
+		ret = p9221_reg_write_8(charger,
+					P9221R5_EPP_Q_FACTOR_REG,
+					charger->pdata->q_value);
+		if (ret < 0)
+			dev_err(&charger->client->dev,
+				"cannot write Q=%d (%d)\n",
+				 charger->pdata->q_value, ret);
+	}
+
 	if (charger->check_det)
 		relax = p9221_notifier_check_det(charger);
 
@@ -2172,6 +2184,14 @@ static int p9221_parse_dt(struct device *dev,
 			dev_info(dev, "dt fod_epp: %s (%d)\n", buf,
 				 pdata->fod_epp_num);
 		}
+	}
+
+	ret = of_property_read_u32(node, "q_value", &data);
+	if (ret < 0) {
+		pdata->q_value = -1;
+	} else {
+		pdata->q_value = data;
+		dev_info(dev, "dt q_value:%d\n", pdata->q_value);
 	}
 
 	return 0;

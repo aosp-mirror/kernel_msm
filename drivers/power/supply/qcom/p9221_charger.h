@@ -218,6 +218,7 @@ struct p9221_charger_platform_data {
 	u8				fod_epp[P9221R5_NUM_FOD];
 	int				fod_num;
 	int				fod_epp_num;
+	int 				q_value;
 };
 
 struct p9221_charger_data {
