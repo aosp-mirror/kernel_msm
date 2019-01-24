@@ -63,10 +63,40 @@ struct abc_pcie_dma_desc {
 	enum dma_data_direction dir; /* direction of the DMA transfer */
 };
 
+struct abc_pcie_dma_desc_async {
+	struct abc_pcie_dma_desc dma_desc;
+	uint64_t id; /* Transaction id after returning from create ioctl */
+};
+
+struct abc_pcie_dma_desc_start {
+	uint64_t id;
+	uint32_t start_id; /* ID of start if multiply re-started (out) */
+};
+
+struct abc_pcie_dma_desc_wait {
+	uint64_t id;
+	int timeout; /* In usecs, 0:zero wait, < 0: infinite */
+	int error; /* Error code if transfer state is error (out) */
+	uint32_t start_id; /* ID of start if multiply re-started (out) */
+};
+
 #define ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY				\
 	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 1, struct abc_pcie_dma_desc_legacy *)
 
 #define ABC_PCIE_DMA_IOC_POST_DMA_XFER_SYNC				\
 	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 2, struct abc_pcie_dma_desc)
+
+#define ABC_PCIE_DMA_IOC_POST_DMA_XFER_CREATE				\
+	_IOWR(ABC_PCIE_DMA_IOC_MAGIC, 3, struct abc_pcie_dma_desc_async)
+
+#define ABC_PCIE_DMA_IOC_POST_DMA_XFER_START				\
+	_IOWR(ABC_PCIE_DMA_IOC_MAGIC, 4, struct abc_pcie_dma_desc_start)
+
+#define ABC_PCIE_DMA_IOC_POST_DMA_XFER_WAIT				\
+	_IOWR(ABC_PCIE_DMA_IOC_MAGIC, 5, struct abc_pcie_dma_desc_wait)
+
+#define ABC_PCIE_DMA_IOC_POST_DMA_XFER_CLEAN				\
+	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 6, uint64_t)
+
 
 #endif /* _UAPI__ABC_PCIE_DMA_H */

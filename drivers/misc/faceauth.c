@@ -36,7 +36,7 @@
 #include <linux/workqueue.h>
 
 #include <abc-pcie-dma.h>
-#include "../mfd/abc-pcie-dma.h"
+#include <linux/mfd/abc-pcie-dma.h>
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
@@ -776,17 +776,17 @@ static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size)
 static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir)
 {
-	struct abc_pcie_dma_desc dma_desc;
+	struct abc_pcie_kernel_dma_desc desc;
 
 	/* Transfer workload to target memory in Airbrush */
-	memset(&dma_desc, 0, sizeof(dma_desc));
-	dma_desc.local_buf = buf;
-	dma_desc.local_buf_type = DMA_BUFFER_USER;
-	dma_desc.remote_buf = remote_addr;
-	dma_desc.remote_buf_type = DMA_BUFFER_USER;
-	dma_desc.size = size;
-	dma_desc.dir = dir;
-	return abc_pcie_issue_dma_xfer(&dma_desc);
+	memset((void *)&desc, 0, sizeof(desc));
+	desc.local_buf = buf;
+	desc.local_buf_kind = DMA_BUFFER_KIND_USER;
+	desc.remote_buf = remote_addr;
+	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
+	desc.dir = dir;
+	desc.size = size;
+	return abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
 }
 
 /**
@@ -801,17 +801,17 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 			    enum dma_data_direction dir)
 {
-	struct abc_pcie_dma_desc dma_desc;
+	struct abc_pcie_kernel_dma_desc desc;
 
 	/* Transfer workload to target memory in Airbrush */
-	memset(&dma_desc, 0, sizeof(dma_desc));
-	dma_desc.local_buf = buf;
-	dma_desc.local_buf_type = DMA_BUFFER_USER;
-	dma_desc.remote_buf = remote_addr;
-	dma_desc.remote_buf_type = DMA_BUFFER_USER;
-	dma_desc.size = size;
-	dma_desc.dir = dir;
-	return abc_pcie_issue_dma_xfer_vmalloc(&dma_desc);
+	memset((void *)&desc, 0, sizeof(desc));
+	desc.local_buf = buf;
+	desc.local_buf_kind = DMA_BUFFER_KIND_VMALLOC;
+	desc.remote_buf = remote_addr;
+	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
+	desc.size = size;
+	desc.dir = dir;
+	return abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
 }
 
 /**
@@ -826,17 +826,20 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 static int dma_xfer_dmabuf(int fd, int size, const int remote_addr,
 			   enum dma_data_direction dir)
 {
-	struct abc_pcie_dma_desc dma_desc;
+	struct abc_pcie_kernel_dma_desc desc;
+	int err = 0;
 
 	/* Transfer workload to target memory in Airbrush */
-	memset(&dma_desc, 0, sizeof(dma_desc));
-	dma_desc.local_dma_buf_fd = fd;
-	dma_desc.local_buf_type = DMA_BUFFER_DMA_BUF;
-	dma_desc.remote_buf = remote_addr;
-	dma_desc.remote_buf_type = DMA_BUFFER_USER;
-	dma_desc.size = size;
-	dma_desc.dir = dir;
-	return abc_pcie_issue_dma_xfer(&dma_desc);
+	memset((void *)&desc, 0, sizeof(desc));
+	desc.local_dma_buf_fd = fd;
+	desc.local_dma_buf_off = 0;
+	desc.local_buf_kind = DMA_BUFFER_KIND_DMA_BUF;
+	desc.remote_buf = remote_addr;
+	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
+	desc.size = size;
+	desc.dir = dir;
+	err = abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
+	return err;
 }
 
 /**

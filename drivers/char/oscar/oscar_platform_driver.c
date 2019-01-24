@@ -28,7 +28,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#include "linux/mfd/abc-pcie.h"
+#include <linux/mfd/abc-pcie.h>
 #include "oscar.h"
 
 #include "gasket_core.h"
@@ -40,7 +40,7 @@
 #include <linux/dma-buf.h>
 #include <linux/ab-dram.h>
 #include <uapi/abc-pcie-dma.h>
-#include "../../mfd/abc-pcie-dma.h"
+#include <linux/mfd/abc-pcie-dma.h>
 
 #define DRIVER_NAME "abc-pcie-tpu"
 #define DRIVER_VERSION "0.3"
@@ -417,20 +417,23 @@ static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
 static int oscar_abc_sync_buffer(struct oscar_abdram_sync_ioctl __user *argp)
 {
 	struct oscar_abdram_sync_ioctl ibuf;
-	struct abc_pcie_dma_desc abc_dma_desc;
+	struct abc_pcie_kernel_dma_desc desc;
+	int ret;
 
 	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
 		return -EFAULT;
 
-	abc_dma_desc.local_buf_type = DMA_BUFFER_USER;
-	abc_dma_desc.local_buf = (void *)ibuf.host_address;
-	abc_dma_desc.remote_buf_type = DMA_BUFFER_DMA_BUF;
-	abc_dma_desc.remote_dma_buf_fd = ibuf.fd;
-	abc_dma_desc.remote_dma_buf_off = 0;
-	abc_dma_desc.dir = ibuf.cmd == OSCAR_SYNC_FROM_BUFFER ?
+	desc.local_buf_kind = DMA_BUFFER_KIND_USER;
+	desc.local_buf = (void *)ibuf.host_address;
+	desc.remote_buf_kind = DMA_BUFFER_KIND_DMA_BUF;
+	desc.remote_dma_buf_fd = ibuf.fd;
+	desc.remote_dma_buf_off = 0;
+	desc.size = ibuf.len;
+	desc.dir = ibuf.cmd == OSCAR_SYNC_FROM_BUFFER ?
 		DMA_FROM_DEVICE : DMA_TO_DEVICE;
-	abc_dma_desc.size = ibuf.len;
-	return abc_pcie_issue_dma_xfer(&abc_dma_desc);
+	ret = abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
+
+	return ret;
 }
 
 static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,

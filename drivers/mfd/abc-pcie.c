@@ -1378,6 +1378,14 @@ void abc_free_coherent(size_t size, void *cpu_addr, dma_addr_t dma_addr)
 	dma_free_coherent(&abc_dev->pdev->dev, size, cpu_addr, dma_addr);
 }
 
+/**
+ *  dma_mblk_start
+ *    Perform a link-list multi-block DMA Access.
+ *    IMPORTANT: DMA driver assumes that this function will always return
+ *               zero.
+ *               If this is no longer the case abc-pcie-dma.c::dma_callback()
+ *               must be modified.
+ */
 int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 			    phys_addr_t start_addr)
 {
@@ -1443,6 +1451,14 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 	return 0;
 }
 
+/**
+ *  dma_sblk_start
+ *    Perform a single block DMA Access.
+ *    IMPORTANT: DMA driver assumes that this function will always return
+ *               zero (the first check below is not expected to fail).
+ *               If this is no longer the case abc-pcie-dma.c::dma_callback()
+ *               must be modified.
+ */
 int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 					struct dma_element_t *blk)
 {

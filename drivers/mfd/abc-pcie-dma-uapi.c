@@ -13,20 +13,275 @@
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
 #include <uapi/abc-pcie-dma.h>
-#include "abc-pcie-dma.h"
+#include <linux/mfd/abc-pcie-dma.h>
+
+/**
+ * Converts and validates a user dma descriptor into a kernel
+ * abc_dma_xfer structure.
+ */
+static int abc_pcie_convert_user_to_kernel_desc(struct device *dev,
+					struct abc_pcie_dma_desc *udesc,
+					struct abc_pcie_kernel_dma_desc *kdesc)
+{
+	kdesc->size = udesc->size;
+	kdesc->dir = udesc->dir;
+
+	if (udesc->local_buf_type == DMA_BUFFER_USER) {
+		kdesc->local_buf_kind = DMA_BUFFER_KIND_USER;
+		kdesc->local_buf = udesc->local_buf;
+	} else if (udesc->local_buf_type == DMA_BUFFER_DMA_BUF) {
+		kdesc->local_buf_kind = DMA_BUFFER_KIND_DMA_BUF;
+		kdesc->local_dma_buf_fd = udesc->local_dma_buf_fd;
+		kdesc->local_dma_buf_off = udesc->local_dma_buf_off;
+	} else {
+		dev_err(dev, "%s: Unable to convert descriptor\n", __func__);
+		return -EINVAL;
+	}
+
+	if (udesc->remote_buf_type == DMA_BUFFER_USER) {
+		dev_err(dev, "%s: Operation not allowed\n", __func__);
+		return -EINVAL;
+	} else if (udesc->remote_buf_type == DMA_BUFFER_DMA_BUF) {
+		kdesc->remote_buf_kind = DMA_BUFFER_KIND_DMA_BUF;
+		kdesc->remote_dma_buf_fd = udesc->remote_dma_buf_fd;
+		kdesc->remote_dma_buf_off = udesc->remote_dma_buf_off;
+	} else {
+		dev_err(dev, "%s: Unable to convert descriptor\n", __func__);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int abc_prepare_and_send_usr_sync_xfer(struct device *dev,
+				struct abc_pcie_dma_session *session,
+				struct abc_pcie_dma_desc *user_desc)
+{
+	int err = 0;
+	struct abc_pcie_kernel_dma_desc kernel_desc;
+
+	err = abc_pcie_convert_user_to_kernel_desc(dev, user_desc,
+							&kernel_desc);
+	if (err)
+		return err;
+
+	err = abc_pcie_issue_dma_xfer_sync(session, &kernel_desc);
+	if (err)
+		dev_err(dev, "%s: failed to perform DMA (%d)\n", __func__, err);
+
+	return err;
+}
+
+static void dma_legacy_desc_conversion(
+				struct abc_pcie_dma_desc_legacy *legacy_desc,
+				struct abc_pcie_dma_desc *desc)
+{
+	desc->local_buf_type = legacy_desc->local_buf_type;
+	/* abc_pcie_issue_dma_xfer will catch invalid buffer types */
+	if (desc->local_buf_type == DMA_BUFFER_USER)
+		desc->local_buf = legacy_desc->local_buf;
+	else {
+		desc->local_dma_buf_fd = legacy_desc->local_dma_buf_fd;
+		desc->local_dma_buf_off = 0;
+	}
+	desc->remote_buf_type = legacy_desc->remote_buf_type;
+	if (desc->remote_buf_type == DMA_BUFFER_USER)
+		desc->remote_buf = legacy_desc->remote_buf;
+	else {
+		desc->remote_dma_buf_fd = legacy_desc->remote_dma_buf_fd;
+		desc->remote_dma_buf_off = 0;
+	}
+	desc->size = legacy_desc->local_buf_size;
+	desc->dir = legacy_desc->dir;
+}
+
+static int abc_pcie_dma_user_xfer_legacy(struct device *dev,
+					struct abc_pcie_dma_session *session,
+					unsigned long arg)
+{
+	struct abc_pcie_dma_desc_legacy dma_desc_legacy;
+	struct abc_pcie_dma_desc dma_desc;
+
+	dev_dbg(dev, "%s: Received IOCTL for legacy synchronous DMA request\n",
+		 __func__);
+	if (copy_from_user(&dma_desc_legacy, (void __user *)arg,
+		sizeof(dma_desc_legacy))) {
+		dev_err(dev, "%s: failed to copy from userspace\n", __func__);
+		return -EFAULT;
+	}
+	dma_legacy_desc_conversion(&dma_desc_legacy, &dma_desc);
+	return abc_prepare_and_send_usr_sync_xfer(dev, session, &dma_desc);
+}
+
+static int abc_pcie_dma_user_xfer_sync(struct device *dev,
+					struct abc_pcie_dma_session *session,
+					unsigned long arg)
+{
+	struct abc_pcie_dma_desc dma_desc;
+	dev_dbg(dev, "%s: Received IOCTL for synchronous DMA request\n",
+		__func__);
+
+	if (copy_from_user(&dma_desc, (void __user *)arg, sizeof(dma_desc))) {
+		dev_err(dev, "%s: failed to copy from userspace\n", __func__);
+		return -EFAULT;
+	}
+	return abc_prepare_and_send_usr_sync_xfer(dev, session, &dma_desc);
+}
+
+static int abc_pcie_dma_user_xfer_create(struct device *dev,
+					struct abc_pcie_dma_session *session,
+					unsigned long arg)
+{
+	int err = 0;
+	struct abc_dma_xfer *xfer;
+	struct abc_pcie_dma_desc_async async_desc;
+	struct abc_pcie_kernel_dma_desc kernel_desc;
+
+	dev_dbg(dev, "%s: Received IOCTL for async create request\n", __func__);
+	if (copy_from_user(&async_desc, (void __user *)arg,
+				sizeof(async_desc))) {
+		dev_err(dev, "%s: failed to copy from userspace\n", __func__);
+		return -EFAULT;
+	}
+
+	err = abc_pcie_convert_user_to_kernel_desc(dev, &async_desc.dma_desc,
+							&kernel_desc);
+	if (err)
+		return err;
+
+	err = abc_pcie_create_dma_xfer(session, &kernel_desc, &xfer);
+	if (err)
+		return err;
+
+	async_desc.id = xfer->id;
+
+	if (copy_to_user((void __user *)arg, &async_desc, sizeof(async_desc))) {
+		abc_pcie_clean_dma_xfer(xfer);
+		dev_err(dev, "%s: failed to copy to userspace\n", __func__);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int abc_pcie_dma_user_xfer_start(struct device *dev,
+					struct abc_pcie_dma_session *session,
+					unsigned long arg)
+{
+	int err = 0;
+	struct abc_dma_xfer *xfer = NULL;
+	struct abc_pcie_dma_desc_start desc;
+
+	dev_dbg(dev, "%s: Received IOCTL for start request\n", __func__);
+	if (copy_from_user(&desc, (void __user *)arg, sizeof(desc))) {
+		dev_err(dev, "%s: failed to copy from user space\n", __func__);
+		return -EFAULT;
+	}
+
+	mutex_lock(&session->lock);
+	xfer = abc_pcie_dma_find_xfer(session, desc.id);
+	if (!xfer) {
+		err = -EINVAL;
+		dev_err(dev, "%s: Could not find xfer id:%0llu\n", __func__,
+			desc.id);
+	} else {
+		err = abc_pcie_start_dma_xfer_locked(xfer, &desc.start_id);
+	}
+	mutex_unlock(&session->lock);
+
+	if (err)
+		return err;
+
+	if (copy_to_user((void __user *)arg, &desc, sizeof(desc))) {
+		dev_err(dev, "%s: failed to copy to userspace\n", __func__);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int abc_pcie_dma_user_xfer_wait(struct device *dev,
+					struct abc_pcie_dma_session *session,
+					unsigned long arg)
+{
+	int err = 0;
+	struct abc_pcie_dma_desc_wait wait_desc;
+	struct abc_dma_wait_info *wait_info;
+
+
+	dev_dbg(dev, "%s: Received IOCTL for wait request\n", __func__);
+	if (copy_from_user(&wait_desc, (void __user *)arg, sizeof(wait_desc))) {
+		dev_err(dev, "%s: failed to copy from user space\n", __func__);
+		return -EFAULT;
+	}
+
+	err = abc_pcie_dma_get_user_wait(wait_desc.id, session, &wait_info);
+	if (err)
+		return err;
+
+	err = abc_pcie_dma_do_wait(session, wait_info, wait_desc.timeout,
+					&wait_desc.error, &wait_desc.start_id);
+
+	if (copy_to_user((void __user *)arg, &wait_desc, sizeof(wait_desc))) {
+		dev_err(dev, "%s: failed to copy to userspace\n", __func__);
+		return -EFAULT;
+	}
+
+	return err;
+}
+
+static int abc_pcie_dma_user_xfer_clean(struct device *dev,
+					struct abc_pcie_dma_session *session,
+					unsigned long arg)
+{
+	int err = 0;
+	uint64_t id = (uint64_t)arg;
+	struct abc_dma_xfer *xfer = NULL;
+
+	dev_dbg(dev, "%s: Received IOCTL for clean request\n", __func__);
+
+	mutex_lock(&session->lock);
+	xfer = abc_pcie_dma_find_xfer(session, id);
+	if (!xfer) {
+		err = -EINVAL;
+		dev_err(dev, "%s: Could not find xfer id:%0llu\n", __func__,
+			id);
+	} else {
+		abc_pcie_clean_dma_xfer_locked(xfer);
+	}
+	mutex_unlock(&session->lock);
+
+	return err;
+}
 
 int abc_pcie_dma_open(struct inode *inode, struct file *filp)
 {
-	/* TODO(alexperez): Retrieve file->private_data, use container_of
-	 *                  to get to abc_pcie_dma struct, store session_id,
-	 *                  replace file->private_data with
-	 *                  abc_pcie_dma_struct.
-	 */
+	int err = 0;
+	struct abc_pcie_dma_session *session;
+	struct abc_pcie_dma_uapi *uapi;
+	struct miscdevice *mdev;
+
+	mdev = (struct miscdevice *)filp->private_data;
+	uapi = container_of(mdev, struct abc_pcie_dma_uapi, mdev);
+
+	session = kzalloc(sizeof(struct abc_pcie_dma_session), GFP_KERNEL);
+	if (!session)
+		return -ENOMEM;
+
+	err = abc_pcie_dma_open_session(session);
+	if (err)
+		return err;
+	session->uapi = uapi;
+	filp->private_data = session;
 	return 0;
 }
 
 int abc_pcie_dma_release(struct inode *inode, struct file *filp)
 {
+	struct abc_pcie_dma_session *session;
+
+	session = (struct  abc_pcie_dma_session *)filp->private_data;
+	abc_pcie_dma_close_session(session);
+	kfree(session);
 	return 0;
 }
 
@@ -34,78 +289,35 @@ int abc_pcie_dma_release(struct inode *inode, struct file *filp)
 long abc_pcie_dma_ioctl(struct file *file, unsigned int cmd,
 			  unsigned long arg)
 {
-	struct abc_pcie_dma_desc dma_desc;
-	struct device *dev;
 	int err = 0;
-	struct miscdevice *mdev = (struct miscdevice *)file->private_data;
+	struct device *dev;
+	struct abc_pcie_dma_session *session;
 
-	dev = mdev->parent;
+	session = (struct abc_pcie_dma_session *)file->private_data;
+	dev = (session->uapi)->mdev.parent;
+
 
 	if (_IOC_TYPE(cmd) != ABC_PCIE_DMA_IOC_MAGIC)
 		return -ENOTTY;
 
 	switch (cmd) {
-	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY: {
-		struct abc_pcie_dma_desc_legacy dma_desc_legacy;
-
-		dev_dbg(dev,
-			"%s: Received IOCTL for legacy DMA request\n",
-			__func__);
-		err = copy_from_user(&dma_desc_legacy, (void __user *)arg,
-				     sizeof(dma_desc_legacy));
-		if (err) {
-			dev_err(dev,
-				"%s: failed to copy from userspace (%d)\n",
-				__func__, err);
-			return err;
-		}
-		dma_desc.local_buf_type = dma_desc_legacy.local_buf_type;
-		/* abc_pcie_issue_dma_xfer will catch invalid buffer types */
-		if (dma_desc.local_buf_type == DMA_BUFFER_USER)
-			dma_desc.local_buf = dma_desc_legacy.local_buf;
-		else {
-			dma_desc.local_dma_buf_fd =
-				dma_desc_legacy.local_dma_buf_fd;
-			dma_desc.local_dma_buf_off = 0;
-		}
-		dma_desc.remote_buf_type = dma_desc_legacy.remote_buf_type;
-		if (dma_desc.remote_buf_type == DMA_BUFFER_USER)
-			dma_desc.remote_buf = dma_desc_legacy.remote_buf;
-		else {
-			dma_desc.remote_dma_buf_fd =
-				dma_desc_legacy.remote_dma_buf_fd;
-			dma_desc.remote_dma_buf_off = 0;
-		}
-		dma_desc.size = dma_desc_legacy.local_buf_size;
-		dma_desc.dir = dma_desc_legacy.dir;
-		err = abc_pcie_issue_dma_xfer(&dma_desc);
-		if (err) {
-			dev_err(dev,
-				"%s: failed to perform DMA (%d)\n",
-				__func__, err);
-			return err;
-		}
+	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY:
+		err = abc_pcie_dma_user_xfer_legacy(dev, session, arg);
 		break;
-	}
 	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_SYNC:
-		dev_dbg(dev,
-			"%s: Received IOCTL for synchronous DMA request\n",
-			__func__);
-		err = copy_from_user(&dma_desc, (void __user *)arg,
-				     sizeof(dma_desc));
-		if (err) {
-			dev_err(dev,
-				"%s: failed to copy from userspace (%d)\n",
-				__func__, err);
-			return err;
-		}
-		err = abc_pcie_issue_dma_xfer(&dma_desc);
-		if (err) {
-			dev_err(dev,
-				"%s: failed to perform DMA (%d)\n",
-				__func__, err);
-			return err;
-		}
+		err = abc_pcie_dma_user_xfer_sync(dev, session, arg);
+		break;
+	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_CREATE:
+		err = abc_pcie_dma_user_xfer_create(dev, session, arg);
+		break;
+	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_START:
+		err = abc_pcie_dma_user_xfer_start(dev, session, arg);
+		break;
+	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_WAIT:
+		err = abc_pcie_dma_user_xfer_wait(dev, session, arg);
+		break;
+	case ABC_PCIE_DMA_IOC_POST_DMA_XFER_CLEAN:
+		err = abc_pcie_dma_user_xfer_clean(dev, session, arg);
 		break;
 	default:
 		dev_err(dev,
@@ -133,6 +345,7 @@ int init_abc_pcie_dma_uapi(struct abc_pcie_dma_uapi *uapi)
 	uapi->mdev.minor = MISC_DYNAMIC_MINOR;
 	uapi->mdev.name = DRV_NAME_ABC_PCIE_DMA;
 	uapi->mdev.fops = &abc_dma_fops;
+
 	err = misc_register(&uapi->mdev);
 	if (err) {
 		dev_err((uapi->mdev).parent, "misc_register failed\n");

@@ -14,6 +14,7 @@
  */
 
 #include <linux/ab-dram.h>
+#include <linux/mfd/abc-pcie-dma.h>
 #include <linux/airbrush-sm-notifier.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
@@ -25,7 +26,6 @@
 #include <linux/mfd/abc-pcie-notifier.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-
 #include "ipu-adapter.h"
 #include "ipu-core-jqs-msg-transport.h"
 #include "ipu-core-jqs.h"
@@ -96,9 +96,6 @@ struct ipu_adapter_ab_mfd_data {
 
 /* Android APs usually use 4K pages.  This may change in future versions. */
 #define IPU_PAGE_SIZE_BITMAP	(SZ_4K | SZ_2M | SZ_1G)
-
-static int ipu_adapter_ab_mfd_dma_callback(uint8_t chan,
-		enum dma_data_direction dir, enum abc_dma_trans_status status);
 
 static void ipu_adapter_ab_mfd_writel(struct device *dev, uint32_t val,
 		unsigned int offset)
@@ -329,58 +326,20 @@ static void ipu_adapter_ab_mfd_sync_dma(struct device *dev,
 		uint32_t offset, size_t size,
 		enum dma_data_direction direction)
 {
-	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
-	struct dma_element_t desc;
-	dma_addr_t dma_addr = offset + shared_buffer->base.host_dma_addr;
-	dma_addr_t jqs_addr = offset + shared_buffer->base.jqs_paddr;
+	int err = 0;
+	struct abc_pcie_kernel_dma_desc desc;
 
-	desc.len = size;
-
-	/* TODO(b/115431813):  The Endpoint DMA interface needs to be
-	 * cleaned up so that it presents a synchronous interface to kernel
-	 * clients or there needs to be mechanism to reserve a DMA channel to
-	 * the IPU.
-	 */
-	abc_reg_dma_irq_callback(&ipu_adapter_ab_mfd_dma_callback, 0);
-
-	if (direction == DMA_TO_DEVICE) {
-		dev_dbg(dev, "%s: va %p da %pad -> airbrush pa %pad sz %zu\n",
-				__func__, shared_buffer->base.host_vaddr,
-				&shared_buffer->base.host_dma_addr,
-				&shared_buffer->base.jqs_paddr, size);
-
-		desc.src_addr = (uint32_t)(dma_addr & 0xFFFFFFFF);
-		desc.src_u_addr = (uint32_t)(dma_addr >> 32);
-
-		desc.dst_addr = (uint32_t)(jqs_addr & 0xFFFFFFFF);
-		desc.dst_u_addr = (uint32_t)(jqs_addr >> 32);
-	} else {
-		dev_dbg(dev, "%s: airbrush pa %pad -> va %p da %pad sz %zu\n",
-				__func__, &shared_buffer->base.jqs_paddr,
-				shared_buffer->base.host_vaddr,
-				&shared_buffer->base.host_dma_addr, size);
-
-		desc.dst_addr = (uint32_t)(dma_addr & 0xFFFFFFFF);
-		desc.dst_u_addr = (uint32_t)(dma_addr >> 32);
-
-		desc.src_addr = (uint32_t)(jqs_addr & 0xFFFFFFFF);
-		desc.src_u_addr = (uint32_t)(jqs_addr >> 32);
-	}
-
-	desc.chan = 0;
-
-	reinit_completion(&dev_data->dma_completion);
-
-	/* The DMA code in the ABC MFD driver currently does not fail. */
-	dma_sblk_start(0, direction, &desc);
-
-	wait_for_completion(&dev_data->dma_completion);
-
-	/* TODO(b/115431813):  Right now we are only holding the callback
-	 * for the duration of the sync.  This should be revisted once the DMA
-	 * driver interface is cleaned up.
-	 */
-	abc_reg_dma_irq_callback(NULL, 0);
+	memset((void *)&desc, 0, sizeof(desc));
+	desc.local_buf = (void *)shared_buffer->base.host_dma_addr + offset;
+	desc.local_buf_kind = DMA_BUFFER_KIND_CMA;
+	desc.remote_buf = (uint64_t)shared_buffer->base.jqs_paddr+offset;
+	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
+	desc.size = size;
+	desc.dir = direction;
+	err = abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
+	if (err)
+		dev_warn(dev, "%s: DMA transfer failed\n",
+			__func__);
 }
 
 static void ipu_adapter_ab_mfd_sync_pio(struct device *dev,
@@ -461,21 +420,6 @@ static struct device *ipu_adapter_ab_mfd_get_dma_device(struct device *dev)
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
 
 	return dev_data->dma_dev;
-}
-
-/* TODO(b/115431813):  This can be eliminated once the DMA interface is
- * cleaned up
- */
-static struct ipu_adapter_ab_mfd_data *g_dev_data;
-
-static int ipu_adapter_ab_mfd_dma_callback(uint8_t chan,
-		enum dma_data_direction dir, enum abc_dma_trans_status status)
-{
-	struct ipu_adapter_ab_mfd_data *dev_data = g_dev_data;
-
-	complete(&dev_data->dma_completion);
-
-	return 0;
 }
 
 static irqreturn_t ipu_adapter_ab_mfd_interrupt(int irq, void *arg)
@@ -955,11 +899,6 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 	mutex_init(&dev_data->sync_lock);
 
 	INIT_LIST_HEAD(&dev_data->sbuf_list);
-
-	/* TODO(b/115431813):  This can be removed once the DMA interface
-	 * clean up is done.
-	 */
-	g_dev_data = dev_data;
 
 	init_completion(&dev_data->dma_completion);
 
