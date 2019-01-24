@@ -2326,7 +2326,7 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 		/* b/123026365 */
 		if (of_property_read_bool(node, "maxim,enable-nv-check")) {
 			const u16 devname = (chip->devname >> 4);
-			bool needs_recall;
+			int needs_recall;
 
 			needs_recall = max1730x_needs_recall(chip, devname);
 			if (needs_recall < 0) {
@@ -2359,7 +2359,7 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 				max17x0x_fg_reset(chip);
 			}
 		} else {
-			pr_info("nv-check disabled");
+			dev_err(chip->dev, "nv-check disabled\n");
 		}
 
 		/* b/122605202 */
