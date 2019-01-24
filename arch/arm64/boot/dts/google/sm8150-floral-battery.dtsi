@@ -140,6 +140,8 @@
 
 		/* TODO: remove when using proper "charger" */
 		google,chg-cc-tolerance = <25>;
+
+		google,pps-cc-tolerance-pct = <5>;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {
