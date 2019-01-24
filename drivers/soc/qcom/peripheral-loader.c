@@ -845,6 +845,12 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 			(pil_retry_count < PERIPHERAL_LOADER_MAX_RETRY)) {
 			pil_err(desc, "Failed to locate blob %s, retry: %d\n",
 				fw_name, pil_retry_count++);
+			firmware_buf = desc->map_fw_mem(seg->paddr, seg->filesz,
+							map_data);
+			if (!firmware_buf) {
+				pil_err(desc, "Failed to map memory for firmware buffer\n");
+				return -ENOMEM;
+			}
 			ret = request_firmware_into_buf(&fw, fw_name, desc->dev,
 						firmware_buf, seg->filesz);
 			desc->unmap_fw_mem(firmware_buf, seg->filesz, map_data);
