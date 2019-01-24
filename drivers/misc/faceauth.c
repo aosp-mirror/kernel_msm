@@ -43,10 +43,6 @@
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
 #define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
-#define JQS_DEPTH_ADDR 0x22000000
-#define JQS_AFFINE_16_ADDR 0x22100000
-#define JQS_AFFINE_RGB_ADDR 0x22200000
-#define JQS_AFFINE_8_ADDR 0x22300000
 #define DOT_IMAGE_LEFT_ADDR 0x22800000
 #define DOT_IMAGE_RIGHT_ADDR 0x22900000
 #define FLOOD_IMAGE_ADDR 0x23000000
@@ -68,10 +64,6 @@
 
 /* ABC FW and workload path */
 #define M0_FIRMWARE_PATH "m0_workload.fw"
-#define JQS_DEPTH_PATH "depth.fw"
-#define JQS_AFFINE_8_PATH "affine_8.fw"
-#define JQS_AFFINE_16_PATH "affine_16.fw"
-#define JQS_AFFINE_RGB_PATH "affine_rgb.fw"
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
@@ -97,7 +89,6 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 static int dma_send_fw(const char *path, const int remote_addr);
 static int dma_read_dw(struct file *file, const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
-static int dma_send_workloads(void);
 static int pio_write_qw(const int remote_addr, const uint64_t val);
 #if ENABLE_AIRBRUSH_DEBUG
 static int dma_gather_debug_log(struct faceauth_debug_data *data);
@@ -186,10 +177,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	case FACEAUTH_DEV_IOC_INIT:
 		pr_info("faceauth init IOCTL\nSend faceauth workloads\n");
 
-		err = dma_send_workloads();
+		err = dma_send_fw(M0_FIRMWARE_PATH, M0_FIRMWARE_ADDR);
 		if (err) {
-			pr_err("Error in sending M0 firmware\n");
-			goto exit;
+			pr_err("Error during M0 firmware transfer: %d\n", err);
+			return err;
 		}
 
 		pio_write_qw(M0_VERBOSITY_LEVEL_FLAG_ADDR, m0_verbosity_level);
@@ -405,8 +396,8 @@ exit:
 
 	if (save_debug_jiffies > 0) {
 		pr_info("Faceauth action took %dus, debug data save took %dus\n",
-			jiffies_to_usecs(jiffies - ioctl_start
-					 - save_debug_jiffies),
+			jiffies_to_usecs(jiffies - ioctl_start -
+					 save_debug_jiffies),
 			jiffies_to_usecs(save_debug_jiffies));
 	} else {
 		pr_info("Faceauth action took %dus\n",
@@ -586,54 +577,6 @@ static int dma_send_images(struct faceauth_start_data *data)
 		       FLOOD_IMAGE_ADDR, DMA_TO_DEVICE);
 	if (err) {
 		pr_err("Error sending flood image\n");
-		return err;
-	}
-
-	return err;
-}
-
-/**
- * Local function to send all FaceAuth firmwares to Airbrush memory via PCIE
- * @return Status, zero if succeed, non-zero if fail
- */
-static int dma_send_workloads(void)
-{
-	int err = 0;
-
-	/* Send IPU workload */
-	pr_info("Set JQS Depth addr = 0x%08x\n", JQS_DEPTH_ADDR);
-	err = dma_send_fw(JQS_DEPTH_PATH, JQS_DEPTH_ADDR);
-	if (err) {
-		pr_err("Error during JQS binary transfer: %d\n", err);
-		return err;
-	}
-
-	pr_info("Set JQS Affine16 addr = 0x%08x\n", JQS_AFFINE_16_ADDR);
-	err = dma_send_fw(JQS_AFFINE_16_PATH, JQS_AFFINE_16_ADDR);
-	if (err) {
-		pr_err("Error during JQS binary transfer: %d\n", err);
-		return err;
-	}
-
-	pr_info("Set JQS Affine RGB addr = 0x%08x\n", JQS_AFFINE_RGB_ADDR);
-	err = dma_send_fw(JQS_AFFINE_RGB_PATH, JQS_AFFINE_RGB_ADDR);
-	if (err) {
-		pr_err("Error during JQS binary transfer: %d\n", err);
-		return err;
-	}
-
-	pr_info("Set JQS Affine8 addr = 0x%08x\n", JQS_AFFINE_8_ADDR);
-	err = dma_send_fw(JQS_AFFINE_8_PATH, JQS_AFFINE_8_ADDR);
-	if (err) {
-		pr_err("Error during JQS binary transfer: %d\n", err);
-		return err;
-	}
-
-	/* Send M0 firmware */
-	pr_info("Send M0 firmware to addr 0x%08x\n", M0_FIRMWARE_ADDR);
-	err = dma_send_fw(M0_FIRMWARE_PATH, M0_FIRMWARE_ADDR);
-	if (err) {
-		pr_err("Error during M0 firmware transfer: %d\n", err);
 		return err;
 	}
 
