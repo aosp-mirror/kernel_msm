@@ -2108,32 +2108,75 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
 
+	if (ddr_ctx->ddr_state == DDR_ON) {
 #ifdef CONFIG_DDR_BOOT_TEST
-	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
+		ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
+		/* Block AXI Before entering self-refresh */
+		ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
 
-	/* Block AXI Before entering self-refresh */
-	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
+		/* Disable PB Refresh & Auto Refresh */
+		ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
+		ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
+		ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
 
-	/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not update the
-	 * MR registers specific to 1866MHz. As the ddr initialization happens
-	 * at 1866MHz, make sure the MR registers are udpated for 1866MHz before
-	 * entering to suspend state. Otherwise the read/write trainings will
-	 * fail during ddr initialization (during suspend -> resume) in BootROM
+		/* safe to send a manual all bank refresh command */
+		ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+
+		/* Self-refresh entry sequence */
+		if (ddr_enter_self_refresh_mode())
+			goto ddr_suspend_fail;
+
+	} else if ((ddr_ctx->ddr_state == DDR_SLEEP) &&
+		   (ddr_ctx->cur_freq != AB_DRAM_FREQ_MHZ_1866)) {
+
+		/* This sections handles the case, when ddr suspend is requested
+		 * from the sleep state. During sleep state, MIF clock is set to
+		 * Oscillator. But to configure the MR settings, we need to move
+		 * the MIF clock to PLL. Configuring MR registers may fail when
+		 * MIF clock is set to lower frequencies like Oscillator clock.
+		 */
+
+		/* Move MIF clock to PLL to configure MR registers @1866MHz */
+		if (ddr_set_pll_freq(ddr_ctx->cur_freq)) {
+			pr_err("ddr suspend: mif pll config failed.\n");
+			return DDR_FAIL;
+		}
+	}
+
+	/* No need to configure MR registers if current frequency is already
+	 * set to 1866MHz.
 	 */
-	ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
+	if (ddr_ctx->cur_freq != AB_DRAM_FREQ_MHZ_1866) {
+		/* MR Register configuration is not allowed when DRAM is in
+		 * Power Down Entry mode. But during self-refresh entry command,
+		 * DREX sends both Self-Refresh and Power Down Entry commands
+		 * to DRAM.
+		 *
+		 * For the above reason, we need to bring the DRAM out of Power
+		 * Down Entry mode.
+		 */
+		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
 
-	/* Disable PB Refresh & Auto Refresh */
-	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+		/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not
+		 * update the MR registers specific to 1866MHz. As the ddr
+		 * initialization happens at 1866MHz, make sure the MR registers
+		 * are udpated for 1866MHz before entering to suspend state.
+		 * Otherwise the read/write trainings will fail during ddr
+		 * initialization (during suspend -> resume) in BootROM
+		 */
+		ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
 
-	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+		/* As we are going to suspend state, keep the DRAM in
+		 * Power Down Entry Mode.
+		 */
+		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
+	}
 
-	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode())
-		goto ddr_suspend_fail;
+	/* Move the MIF clock to oscillator and switch off the PLL for
+	 * better power savings.
+	 */
+	ddr_set_pll_to_oscillator();
 
 	/* Enable the PMU Retention */
 	PMU_CONTROL_PHY_RET_ON();
