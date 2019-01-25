@@ -324,6 +324,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("Error reading Bin result flag\n");
 			goto exit;
 		}
+		start_step_data.result = ab_result;
 		start_step_data.bin_bitmap = bin_result;
 
 		dma_read_dw(file,
