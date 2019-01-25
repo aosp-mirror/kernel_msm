@@ -1269,16 +1269,6 @@ static int dpcm_be_connect(struct snd_soc_pcm_runtime *fe,
 			stream ? "capture" : "playback",  fe->dai_link->name,
 			stream ? "<-" : "->", be->dai_link->name);
 
-#ifdef CONFIG_DEBUG_FS
-	if (fe->debugfs_dpcm_root) {
-		pr_debug("%s: debugfs create on '%s'\n",
-			__func__, be->dai_link->name);
-		dpcm->debugfs_state = debugfs_create_u32(be->dai_link->name, 0644,
-				fe->debugfs_dpcm_root, &dpcm->state);
-	} else {
-		pr_debug("%s: debugfs nop\n", __func__);
-	}
-#endif
 	return 1;
 }
 
@@ -1330,10 +1320,6 @@ void dpcm_be_disconnect(struct snd_soc_pcm_runtime *fe, int stream)
 		/* BEs still alive need new FE */
 		dpcm_be_reparent(fe, dpcm->be, stream);
 
-#ifdef CONFIG_DEBUG_FS
-		if (fe->debugfs_dpcm_root)
-			debugfs_remove(dpcm->debugfs_state);
-#endif
 		list_del(&dpcm->list_be);
 		list_del(&dpcm->list_fe);
 		kfree(dpcm);
