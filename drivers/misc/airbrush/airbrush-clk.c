@@ -235,19 +235,6 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	/* Resync CCF with hardware state
-	 * Needed when coming out of reset
-	 */
-	ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
-	if (ret) {
-		dev_err(clk_ctx->dev,
-			"ipu_pll_mux: set_parent failed(err %d)\n", ret);
-		goto error_abort;
-	}
-
-	/* Switch to osc_clk during rate change so that
-	 * change doesn't propagate to children
-	 */
 	ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
 	if (ret) {
 		dev_err(clk_ctx->dev,
@@ -492,7 +479,6 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 				old_rate, new_rate);
 		return new_rate;
 	}
-
 	ret = clk_set_parent(clk_ctx->tpu_switch_mux,
 			     clk_ctx->shared_div_aon_pll);
 	if (ret) {
@@ -501,19 +487,6 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	/* Resync CCF with hardware state
-	 * Needed when coming out of reset
-	 */
-	ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
-	if (ret) {
-		dev_err(clk_ctx->dev,
-			"tpu_pll_mux: set_parent failed(err %d)\n", ret);
-		goto error_abort;
-	}
-
-	/* Switch to osc_clk during rate change so that
-	 * change doesn't propagate to children
-	 */
 	ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 	if (ret) {
 		dev_err(clk_ctx->dev,
@@ -613,15 +586,6 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return ret;
 	}
 
-	/*resync software with hardware in case chip is coming out of reset*/
-	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
-	if (ret) {
-		dev_err(clk_ctx->dev,
-			"aon_pll_mux: set_parent failed(err %d)\n", ret);
-		goto error_abort;
-	}
-
-	/*switch to osc_clk so that rate change doesn't propagate to children*/
 	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
 	if (ret) {
 		dev_err(clk_ctx->dev,
@@ -629,7 +593,6 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	/*change the rate of pll while it is isolated*/
 	ret = clk_set_rate(clk_ctx->aon_pll, rate);
 	if (ret) {
 		dev_err(clk_ctx->dev,
@@ -637,7 +600,6 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	/*switch to pll clock*/
 	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
 	if (ret) {
 		dev_err(clk_ctx->dev,
