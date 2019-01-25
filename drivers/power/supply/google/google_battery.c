@@ -50,6 +50,10 @@
 
 #define UICURVE_MAX	3
 
+#if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
+#error "GBMS_CCBIN_BUCKET_COUNT needs to be a value from 1-100"
+#endif
+
 struct ssoc_uicurve {
 	qnum_t real;
 	qnum_t ui;
@@ -996,7 +1000,6 @@ static int batt_cycle_count_load(struct gbatt_ccbin_data *ccd,
 /* update only when SSOC is increasing, not need to check charging */
 static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 {
-	const int normed_soc = soc * GBMS_CCBIN_BUCKET_COUNT / 100;
 	struct gbatt_ccbin_data *ccd = &batt_drv->cc_data;
 
 	if (soc < 0 || soc > 100)
@@ -1004,12 +1007,12 @@ static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 
 	mutex_lock(&ccd->lock);
 
-	if (ccd->prev_soc != -1 && normed_soc > ccd->prev_soc) {
-		int bucket;
+	if (ccd->prev_soc != -1 && soc > ccd->prev_soc) {
+		int bucket, cnt;
 
-		for (bucket = normed_soc ; bucket > ccd->prev_soc ; bucket--) {
-			if (bucket >= GBMS_CCBIN_BUCKET_COUNT)
-				bucket = GBMS_CCBIN_BUCKET_COUNT - 1;
+		for (cnt = soc ; cnt > ccd->prev_soc ; cnt--) {
+			/* cnt decremented by 1 for bucket symmetry */
+			bucket = (cnt - 1) * GBMS_CCBIN_BUCKET_COUNT / 100;
 			ccd->count[bucket]++;
 		}
 
@@ -1017,7 +1020,7 @@ static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 		(void)batt_cycle_count_store(ccd, batt_drv->ccbin_psy);
 	}
 
-	ccd->prev_soc = normed_soc;
+	ccd->prev_soc = soc;
 
 	mutex_unlock(&ccd->lock);
 }
