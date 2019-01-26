@@ -1181,6 +1181,7 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 	long ret;
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
+	u32 clk_frequency;
 
 	switch (cmd) {
 	case AB_SM_ASYNC_NOTIFY:
@@ -1214,6 +1215,30 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		mutex_lock(&sc->mfd_lock);
 		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
+		break;
+
+	case AB_SM_SET_IPU_FREQUENCY:
+		clk_frequency = (u32)arg;
+		mutex_lock(&sc->op_lock);
+		ret = clk_set_frequency(sc, &(sc->blocks[BLK_IPU]),
+				clk_frequency, on);
+		mutex_unlock(&sc->op_lock);
+		break;
+
+	case AB_SM_SET_TPU_FREQUENCY:
+		clk_frequency = (u32)arg;
+		mutex_lock(&sc->op_lock);
+		ret = clk_set_frequency(sc, &(sc->blocks[BLK_TPU]),
+				clk_frequency, on);
+		mutex_unlock(&sc->op_lock);
+		break;
+
+	case AB_SM_SET_AON_FREQUENCY:
+		clk_frequency = (u32)arg;
+		mutex_lock(&sc->op_lock);
+		ret = clk_set_frequency(sc, &(sc->blocks[BLK_AON]),
+				clk_frequency, on);
+		mutex_unlock(&sc->op_lock);
 		break;
 
 	default:

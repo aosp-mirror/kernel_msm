@@ -51,6 +51,27 @@
 /* On success will return 0, otherwise will return error < 0. */
 #define AB_SM_EXIT_EL2		_IO(AB_SM_IOCTL_MAGIC, 4)
 
+/*
+ * Parameter int:
+ *	Pass new frequency value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_IPU_FREQUENCY	_IO(AB_SM_IOCTL_MAGIC, 5)
+
+/*
+ * Parameter int:
+ *	Pass new frequency value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_TPU_FREQUENCY	_IO(AB_SM_IOCTL_MAGIC, 6)
+
+/*
+ * Parameter int:
+ *	Pass new frequency value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_AON_FREQUENCY	_IO(AB_SM_IOCTL_MAGIC, 7)
+
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0
 #define AB_CHIP_ID_B0		1
