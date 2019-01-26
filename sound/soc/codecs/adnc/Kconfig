@@ -7,20 +7,16 @@ config SND_SOC_IAXXX
 	---help---
 	  Enable codec driver for IAxxx
 
-config IAXXX_ACLK_338640
-	bool "Enable for ACLK 338640"
-	---help---
-	This config enables IAXXX ACLK 338640
-
-config IAXXX_PCM_DAI_FORMAT_DSP_A
-	bool "Set Default PCM DAI Format"
-	---help---
-	This config sets default PCM DAI
-	Format to DSP_A instead of I2S.
-
 config IAXXX_PORT_CLOCK_FORWARD
 	bool "Enable Port clock forwarding"
 	---help---
 	This config enables Port Clock
 	forwarding for PDM Port clocks.
+
+config IAXXX_TO_MAX_PLUGIN_IP_EP
+	bool "Enables to max plugin input endpoints"
+	---help---
+	This kcontrol is used to define to max
+	plugin input endpoints based on usecase
+	requirement.
 endif

@@ -47,10 +47,6 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-gpio.h>
 
 #define IAXXX_MAX_RETRY 5
-#define IAXXX_MAX_PROC 3 /* Number of procs on D1400s */
-#define IAXXX_MAX_VAL 0xFFFFFFFF
-
-#define PCM_PORT_I2S 1
 #define IAXXX_MAX_PORTS		6
 #define IAXXX_MAX_PDM_PORTS	7
 #define IAXXX_MAX_SENSOR	4
@@ -64,16 +60,6 @@ static int iaxxx_set_i2s_cfg(struct snd_soc_dai *dai, u32 sampling_rate,
 static int iaxxx_set_i2s_controller(struct snd_soc_codec *codec,
 			u32 sampling_rate, bool is_pseudo, int id);
 
-/* Plugin struct to store param id and val
- * Param ID and Param VAL registers are set as pair
- */
-struct plg_param {
-	u32 param_id;
-	u32 param_val;
-	u32 param_id_reg;
-	u32 param_val_reg;
-};
-
 struct iaxxx_codec_priv {
 	int is_codec_master[IAXXX_MAX_PORTS];
 	int pcm_dai_fmt[IAXXX_MAX_PORTS];
@@ -82,10 +68,7 @@ struct iaxxx_codec_priv {
 	struct device *dev;
 	struct device *dev_parent;
 	struct notifier_block nb_core;	/* Core notifier */
-	/* Add entry for plg_param struct for each proc
-	 * param id and param val registers are set as pair
-	 */
-	struct plg_param plugin_param[IAXXX_MAX_PROC];
+
 	u32 is_ip_port_master[IAXXX_MAX_PDM_PORTS];
 	u32 pcm_port_fmt[IAXXX_MAX_PORTS];
 	/* pcm port word length configuration
@@ -2849,306 +2832,546 @@ IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_13, "Tx13");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_14, "Tx14");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_15, "Tx15");
 
-/* FIXME , this should be just integer value */
-static const unsigned int plugin_ctrl_opt_value[] = {
-	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, };
 
-static const char * const plugin_ctrl_opt_text[] = {
-	"none", "PkgPlgin1", "PkgPlgin2", "PkgPlgin3", "PkgPlgin4",
-	"PkgPlgin5", "PkgPlgin6", "PkgPlgin7", "PkgPlgin8", };
-
-static const unsigned int plugin_origin_idx_values[] = {
-	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, };
-
-static const char * const plugin_origin_idx_texts[] = {
-	"none", "PkgPlgin1", "PkgPlgin2", "PkgPlgin3", "PkgPlgin4",
-	"PkgPlgin5", "PkgPlgin6", "PkgPlgin7", "PkgPlgin8", };
-
-static const char * const pkg_id_texts[] = {
-	"none", "pkg1", "pkg2", "pkg3", "pkg4", "pkg5", "pkg6",
-	"pkg7", "pkg8", "pkg9", "pkg10", "pkg11", "pkg12",
-	"pkg13", "pkg14", "pkg15", "pkg16",
-};
-
-static const unsigned int pkg_id_values[] = {
-	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA,
-	0xB, 0xC, 0xD, 0xE, 0xF,
-};
-
-static const char * const priority_texts[] = {
-	"pri0", "pri1", "pri2", "pri3", "pri4", "pri5", "pri6", "pri7",
-	"pri8", "pri9", "pri10", "pri11", "pri12", "pri13", "pri14", "pri15",
-};
-
-static const unsigned int priority_values[] = {
-	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xF,
-};
-
-
-static int iaxxxcore_blk0_get_param_id(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->plugin_param[0].param_id;
-	dev_dbg(codec->dev, "%s\n", __func__);
-	return 0;
-}
-
-static int iaxxxcore_blk0_put_param_id(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct soc_mixer_control *mc =
-			(struct soc_mixer_control *)kcontrol->private_value;
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-	unsigned int reg = mc->reg;
-
-	iaxxx->plugin_param[0].param_id = ucontrol->value.integer.value[0];
-	iaxxx->plugin_param[0].param_id_reg = reg;
-
-	return 0;
-}
-
-static int iaxxxcore_blk1_get_param_id(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->plugin_param[1].param_id;
-	dev_dbg(codec->dev, "%s\n", __func__);
-	return 0;
-}
-
-static int iaxxxcore_blk1_put_param_id(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct soc_mixer_control *mc =
-			(struct soc_mixer_control *)kcontrol->private_value;
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-	unsigned int reg = mc->reg;
-
-	iaxxx->plugin_param[1].param_id = ucontrol->value.integer.value[0];
-	iaxxx->plugin_param[1].param_id_reg = reg;
-
-	dev_dbg(codec->dev, "%s\n", __func__);
-	return 0;
-}
-
-static int iaxxxcore_blk2_get_param_id(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-
-	ucontrol->value.integer.value[0] = iaxxx->plugin_param[2].param_id;
-	dev_dbg(codec->dev, "%s\n", __func__);
-	return 0;
-}
-
-static int iaxxxcore_blk2_put_param_id(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct soc_mixer_control *mc =
-			(struct soc_mixer_control *)kcontrol->private_value;
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-	unsigned int reg = mc->reg;
-
-	iaxxx->plugin_param[2].param_id = ucontrol->value.integer.value[0];
-	iaxxx->plugin_param[2].param_id_reg = reg;
-
-	dev_dbg(codec->dev, "%s\n", __func__);
-	return 0;
-}
-
-#define IAXXXCORE_PLUGIN_ENUM(plugin, plugin_name) \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ctrl_pri_enum, \
-			IAXXX_PLUGIN_INS_GRP_CTRL_REG(plugin), \
-			IAXXX_PLUGIN_INS_GRP_CTRL_PRIORITY_POS, \
-			(IAXXX_PLUGIN_INS_GRP_CTRL_PRIORITY_MASK >> \
-			IAXXX_PLUGIN_INS_GRP_CTRL_PRIORITY_POS), \
-			priority_texts, priority_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_inst_pkgid_enum, \
-			IAXXX_PLUGIN_INS_GRP_ORIGIN_REG(plugin), \
-			IAXXX_PLUGIN_INS_GRP_ORIGIN_PKG_ID_POS, \
-			(IAXXX_PLUGIN_INS_GRP_ORIGIN_PKG_ID_MASK >> \
-			IAXXX_PLUGIN_INS_GRP_ORIGIN_PKG_ID_POS), \
-			pkg_id_texts, pkg_id_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_origin_idx_enum, \
-			IAXXX_PLUGIN_INS_GRP_ORIGIN_REG(plugin), \
-			IAXXX_PLUGIN_INS_GRP_ORIGIN_PLUGIN_INDEX_POS, \
-			(IAXXX_PLUGIN_INS_GRP_ORIGIN_PLUGIN_INDEX_MASK >> \
-			IAXXX_PLUGIN_INS_GRP_ORIGIN_PLUGIN_INDEX_POS), \
-			plugin_origin_idx_texts, plugin_origin_idx_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep0_enum, \
+#define IAXXXCORE_PLUGIN_ENUM_EP0(plugin)  \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep0_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_0_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_0_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_0_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_0_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep1_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_EP1(plugin)  \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep1_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_1_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_1_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_1_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_1_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep2_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_EP2(plugin)  \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep2_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_2_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_2_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_2_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_2_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep3_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_EP3(plugin)  \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep3_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_3_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_3_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_3_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_3_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep4_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_EP4(plugin)  \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep4_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_4_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_4_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_4_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_4_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep5_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_EP5(plugin)  \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep5_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_5_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_5_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_5_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_5_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep6_enum, \
+			ip_ep_texts, ip_ep_values)
+
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN15);
+
+
+#ifdef CONFIG_IAXXX_TO_MAX_PLUGIN_IP_EP
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep6_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_6_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_6_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_6_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_6_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep7_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep7_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_7_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_7_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_7_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_7_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep8_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep8_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_8_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_8_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_8_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_8_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep9_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep9_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_9_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_9_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_9_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_9_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep10_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep10_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_10_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_10_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_10_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_10_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep11_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep11_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_11_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_11_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_11_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_11_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep12_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep12_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_12_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_12_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_12_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_12_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep13_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep13_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_13_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_13_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_13_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_13_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep14_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep14_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_14_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_14_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_14_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_14_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep15_enum, \
+			ip_ep_texts, ip_ep_values)
+
+#define IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(plugin) \
+SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep15_enum, \
 			IAXXX_PLUGIN_INS_GRP_IN_15_CONNECT_REG(plugin), \
 			IAXXX_PLUGIN_INS_GRP_IN_15_CONNECT_SOURCEID_POS, \
 			(IAXXX_PLUGIN_INS_GRP_IN_15_CONNECT_SOURCEID_MASK >> \
 			IAXXX_PLUGIN_INS_GRP_IN_15_CONNECT_SOURCEID_POS), \
-			ip_ep_texts, ip_ep_values); \
-static SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ctrl_option_enum, \
-			IAXXX_PLUGIN_INS_GRP_CREATION_CFG_REG(plugin), 0, \
-			IAXXX_PLUGIN_INS_GRP_CREATION_CFG_MASK_VAL, \
-			plugin_ctrl_opt_text, plugin_ctrl_opt_value)
+			ip_ep_texts, ip_ep_values)
+
+
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP7_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP8_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP9_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP10_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP11_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP12_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP13_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP14_TO_MAX(PLUGIN15);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN0);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN1);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN2);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN3);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN4);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN5);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN6);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN7);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN8);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN9);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN10);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN11);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN12);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN13);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN14);
+static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN15);
+#endif
+
 
 #define IAXXXCORE_PLUGIN_KCTRL(plugin, plugin_name) \
-	SOC_SINGLE(plugin_name "Create0", \
-			IAXXX_PLUGIN_HDR_CREATE_BLOCK_0_ADDR, plugin, 1, 0), \
-	SOC_SINGLE(plugin_name "Create1", \
-			IAXXX_PLUGIN_HDR_CREATE_BLOCK_1_ADDR, plugin, 1, 0), \
-	SOC_SINGLE(plugin_name "Create2", \
-			IAXXX_PLUGIN_HDR_CREATE_BLOCK_2_ADDR, plugin, 1, 0), \
-	SOC_SINGLE(plugin_name "Reset0", \
-			IAXXX_PLUGIN_HDR_RESET_BLOCK_0_ADDR, plugin, 1, 0), \
-	SOC_SINGLE(plugin_name "Reset1", \
-			IAXXX_PLUGIN_HDR_RESET_BLOCK_1_ADDR, plugin, 1, 0), \
-	SOC_SINGLE(plugin_name "Reset2", \
-			IAXXX_PLUGIN_HDR_RESET_BLOCK_2_ADDR, plugin, 1, 0), \
-	SOC_ENUM(plugin_name "Origin Plugin Idx", plugin##_origin_idx_enum), \
-	SOC_ENUM(plugin_name "Pkg ID", plugin##_inst_pkgid_enum), \
-	SOC_ENUM(plugin_name "inst priority", plugin##_ctrl_pri_enum), \
-	SOC_SINGLE_EXT(plugin_name "Blk0 Param Id", \
-			IAXXX_PLUGIN_INS_GRP_PARAM_ID_REG(plugin), 0, \
-			IAXXX_MAX_VAL, 0, iaxxxcore_blk0_get_param_id, \
-			iaxxxcore_blk0_put_param_id), \
-	SOC_SINGLE_EXT(plugin_name "Blk1 Param Id", \
-			IAXXX_PLUGIN_INS_GRP_PARAM_ID_REG(plugin), 0, \
-			IAXXX_MAX_VAL, 0, iaxxxcore_blk1_get_param_id, \
-			iaxxxcore_blk1_put_param_id), \
-	SOC_SINGLE_EXT(plugin_name "Blk2 Param Id", \
-			IAXXX_PLUGIN_INS_GRP_PARAM_ID_REG(plugin), 0, \
-			IAXXX_MAX_VAL, 0, iaxxxcore_blk2_get_param_id, \
-			iaxxxcore_blk2_put_param_id), \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP6_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP7_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP8_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP9_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP10_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP11_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP12_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP13_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP14_TO_MAX(plugin, plugin_name) \
+	IAXXXCORE_PLUGIN_KCTRL_IP_EP15_TO_MAX(plugin, plugin_name) \
 	SOC_ENUM(plugin_name "Ip Ep0 Conf", plugin##_ip_ep0_enum), \
 	SOC_ENUM(plugin_name "Ip Ep1 Conf", plugin##_ip_ep1_enum), \
 	SOC_ENUM(plugin_name "Ip Ep2 Conf", plugin##_ip_ep2_enum), \
 	SOC_ENUM(plugin_name "Ip Ep3 Conf", plugin##_ip_ep3_enum),\
 	SOC_ENUM(plugin_name "Ip Ep4 Conf", plugin##_ip_ep4_enum), \
-	SOC_ENUM(plugin_name "Ip Ep5 Conf", plugin##_ip_ep5_enum), \
-	SOC_ENUM(plugin_name "Ip Ep6 Conf", plugin##_ip_ep6_enum), \
-	SOC_ENUM(plugin_name "Ip Ep7 Conf", plugin##_ip_ep7_enum), \
-	SOC_ENUM(plugin_name "Ip Ep8 Conf", plugin##_ip_ep8_enum), \
-	SOC_ENUM(plugin_name "Ip Ep9 Conf", plugin##_ip_ep9_enum), \
-	SOC_ENUM(plugin_name "Ip Ep10 Conf", plugin##_ip_ep10_enum), \
-	SOC_ENUM(plugin_name "Ip Ep11 Conf", plugin##_ip_ep11_enum),\
-	SOC_ENUM(plugin_name "Ip Ep12 Conf", plugin##_ip_ep12_enum), \
-	SOC_ENUM(plugin_name "Ip Ep13 Conf", plugin##_ip_ep13_enum), \
-	SOC_ENUM(plugin_name "Ip Ep14 Conf", plugin##_ip_ep14_enum), \
-	SOC_ENUM(plugin_name "Ip Ep15 Conf", plugin##_ip_ep15_enum), \
-	SOC_ENUM(plugin_name "Cr Conf", plugin##_ctrl_option_enum)
+	SOC_ENUM(plugin_name "Ip Ep5 Conf", plugin##_ip_ep5_enum)
 
+#ifdef CONFIG_IAXXX_TO_MAX_PLUGIN_IP_EP
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP6_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep6 Conf", plugin##_ip_ep6_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP7_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep7 Conf", plugin##_ip_ep7_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP8_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep8 Conf", plugin##_ip_ep8_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP9_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep9 Conf", plugin##_ip_ep9_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP10_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep10 Conf", plugin##_ip_ep10_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP11_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep11 Conf", plugin##_ip_ep11_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP12_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep12 Conf", plugin##_ip_ep12_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP13_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep13 Conf", plugin##_ip_ep13_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP14_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep14 Conf", plugin##_ip_ep14_enum),
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP15_TO_MAX(plugin, plugin_name) \
+	SOC_ENUM(plugin_name "Ip Ep15 Conf", plugin##_ip_ep15_enum),
 
-IAXXXCORE_PLUGIN_ENUM(PLUGIN0, "Plgin0");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN1, "Plgin1");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN2, "Plgin2");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN3, "Plgin3");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN4, "Plgin4");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN5, "Plgin5");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN6, "Plgin6");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN7, "Plgin7");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN8, "Plgin8");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN9, "Plgin9");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN10, "Plgin10");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN11, "Plgin11");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN12, "Plgin12");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN13, "Plgin13");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN14, "Plgin14");
-IAXXXCORE_PLUGIN_ENUM(PLUGIN15, "Plgin15");
-
+#else
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP6_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP7_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP8_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP9_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP10_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP11_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP12_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP13_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP14_TO_MAX(plugin, plugin_name)
+#define IAXXXCORE_PLUGIN_KCTRL_IP_EP15_TO_MAX(plugin, plugin_name)
+#endif
 
 #define IAXXXCORE_PLUGIN_ON_OFF_TEXTS(plugin, plugin_name) \
 static const char * const plugin##_off_on_texts[] = { \
@@ -5313,7 +5536,6 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN14, "Plgin14"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN15, "Plgin15"),
 
-
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN0, "Plgin0"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN1, "Plgin1"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN2, "Plgin2"),
@@ -7301,9 +7523,6 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 	iaxxx->regmap = priv->regmap;
 	iaxxx->dev = dev;
 	iaxxx->dev_parent = dev->parent;
-	iaxxx->plugin_param[0].param_id = IAXXX_MAX_VAL;
-	iaxxx->plugin_param[1].param_id = IAXXX_MAX_VAL;
-	iaxxx->plugin_param[2].param_id = IAXXX_MAX_VAL;
 	iaxxx->cdc_dmic_enable = 0;
 	platform_set_drvdata(pdev, iaxxx);
 	if (pdev->dev.of_node)
