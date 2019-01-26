@@ -79,6 +79,18 @@ struct iaxxx_log_mode_info {
 	uint8_t proc_id;
 };
 
+struct iaxxx_plgin_log_mode_info {
+	bool mode;
+	uint32_t inst_id;
+	uint8_t block_id;
+};
+
+struct iaxxx_plgin_log_state_info {
+	bool state;
+	uint32_t inst_id;
+	uint8_t block_id;
+};
+
 enum iaxxx_fw_debug_log_mode {
 	IAXXX_FROM_MEMORY,
 	IAXXX_FROM_ENDPOINT,
@@ -155,4 +167,8 @@ enum iaxxx_debug_module_ids {
 #define IAXXX_GET_DBG_LOG_LEVEL	_IO('R', 0x022)
 #define IAXXX_SET_DBG_LOG_MODE	_IO('R', 0x023)
 #define IAXXX_GET_DBG_LOG_MODE	_IO('R', 0x024)
+#define IAXXX_SET_PLUGIN_LOG_MODE	_IO('R', 0x031)
+#define IAXXX_GET_PLUGIN_LOG_MODE	_IO('R', 0x032)
+#define IAXXX_SET_PLUGIN_LOG_STATE	_IO('R', 0x033)
+#define IAXXX_GET_PLUGIN_LOG_STATE	_IO('R', 0x034)
 #endif

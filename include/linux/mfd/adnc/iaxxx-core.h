@@ -477,5 +477,13 @@ bool iaxxx_core_sensor_is_valid_inst_id(uint32_t inst_id);
 bool iaxxx_core_sensor_is_valid_block_id(uint32_t block_id);
 bool iaxxx_core_sensor_is_valid_param_id(uint32_t param_id);
 bool iaxxx_core_sensor_is_valid_param_val(uint32_t param_val);
+int iaxxx_set_plugin_log_mode(struct device *dev,
+				bool mode, uint32_t inst_id, uint8_t block_id);
+int iaxxx_get_plugin_log_mode(struct device *dev,
+				bool *mode, uint32_t inst_id, uint8_t block_id);
+int iaxxx_set_update_plugin_log_state(struct device *dev,
+				bool mode, uint32_t inst_id, uint8_t block_id);
+int iaxxx_get_plugin_log_state(struct device *dev,
+				bool *mode, uint32_t inst_id, uint8_t block_id);
 
 #endif /*__IAXXX_CORE_H__ */

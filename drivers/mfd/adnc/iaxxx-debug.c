@@ -257,9 +257,12 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		= (struct iaxxx_priv *)file->private_data;
 	struct iaxxx_log_level_info log_level_info;
 	struct iaxxx_log_mode_info log_mode_info;
+	struct iaxxx_plgin_log_mode_info plgin_log_mode;
+	struct iaxxx_plgin_log_state_info plgin_log_state;
 	int ret = 0;
 	u8 bus_config;
 	bool mode;
+	bool state;
 	uint32_t log_level;
 
 	pr_debug("%s() called\n", __func__);
@@ -372,6 +375,72 @@ static long raw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		log_mode_info.mode = mode;
 		if (copy_to_user((void __user *)arg, &log_mode_info,
 						sizeof(log_mode_info)))
+			return -EFAULT;
+
+		break;
+	case IAXXX_SET_PLUGIN_LOG_MODE:
+		if (copy_from_user(&plgin_log_mode, (void __user *)arg,
+						sizeof(plgin_log_mode)))
+			return -EFAULT;
+
+		ret = iaxxx_set_plugin_log_mode(iaxxx->dev,
+				plgin_log_mode.mode, plgin_log_mode.inst_id,
+				plgin_log_mode.block_id);
+		if (ret) {
+			dev_err(iaxxx->dev,
+				"%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+		break;
+	case IAXXX_GET_PLUGIN_LOG_MODE:
+		if (copy_from_user(&plgin_log_mode, (void __user *)arg,
+				sizeof(plgin_log_mode)))
+			return -EFAULT;
+
+		ret = iaxxx_get_plugin_log_mode(iaxxx->dev,
+			&mode, plgin_log_mode.inst_id, plgin_log_mode.block_id);
+		if (ret) {
+			dev_err(iaxxx->dev,
+				"%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+
+		plgin_log_mode.mode = mode;
+		if (copy_to_user((void __user *)arg, &plgin_log_mode,
+						sizeof(plgin_log_mode)))
+			return -EFAULT;
+
+		break;
+	case IAXXX_SET_PLUGIN_LOG_STATE:
+		if (copy_from_user(&plgin_log_state, (void __user *)arg,
+						sizeof(plgin_log_state)))
+			return -EFAULT;
+
+		ret = iaxxx_set_update_plugin_log_state(iaxxx->dev,
+				plgin_log_state.state, plgin_log_state.inst_id,
+				plgin_log_state.block_id);
+		if (ret) {
+			dev_err(iaxxx->dev,
+				"%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+		break;
+	case IAXXX_GET_PLUGIN_LOG_STATE:
+		if (copy_from_user(&plgin_log_state, (void __user *)arg,
+				sizeof(plgin_log_state)))
+			return -EFAULT;
+
+		ret = iaxxx_get_plugin_log_state(iaxxx->dev,
+		&state, plgin_log_state.inst_id, plgin_log_state.block_id);
+		if (ret) {
+			dev_err(iaxxx->dev,
+				"%s(): failed %d\n", __func__, ret);
+			return ret;
+		}
+
+		plgin_log_state.state = state;
+		if (copy_to_user((void __user *)arg, &plgin_log_state,
+						sizeof(plgin_log_state)))
 			return -EFAULT;
 
 		break;

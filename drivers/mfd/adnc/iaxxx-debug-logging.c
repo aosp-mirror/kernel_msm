@@ -18,6 +18,7 @@
 #include <linux/mfd/adnc/iaxxx-debug-intf.h>
 #include "iaxxx.h"
 #include <linux/mfd/adnc/iaxxx-register-defs-debug.h>
+#include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 
 #define IAXXX_DEBUG_DEBUG_LEVEL_ADDR(I) \
 	(IAXXX_DEBUG_DEBUG_LEVEL_0_ADDR + (4 * (I)))
@@ -87,6 +88,11 @@ int iaxxx_get_debug_log_level(struct device *dev,
 	uint32_t mod_log_val;
 	int ret = 0;
 
+	if (!log_level) {
+		dev_err(dev, "%s() log_level pointer NULL\n", __func__);
+		return -EINVAL;
+	}
+
 	mod_id = module_id / IAXXX_NO_OF_MODULES_IN_EACH_REGISTER;
 
 	ret = regmap_read(priv->regmap,
@@ -155,6 +161,11 @@ int iaxxx_get_debug_log_mode(struct device *dev,
 	uint32_t read_mode = 0;
 	int ret = 0;
 
+	if (!mode) {
+		dev_err(dev, "%s() Mode pointer NULL\n", __func__);
+		return -EINVAL;
+	}
+
 	ret = regmap_read(priv->regmap,
 			IAXXX_DEBUG_DEBUG_LOG_MODE_ADDR, &read_mode);
 	if (ret) {
@@ -166,3 +177,143 @@ int iaxxx_get_debug_log_mode(struct device *dev,
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_get_debug_log_mode);
+
+/*****************************************************************************
+ * iaxxx_set_plugin_log_mode()
+ * @brief set plugin log mode for instance and processor id
+ *
+ * @mode debug from memory or endpoint
+ * @inst_id plugin instance id
+ * @block_id processor block id
+ *
+ * @ret 0 on success, ret in case of error
+ ****************************************************************************/
+int iaxxx_set_plugin_log_mode(struct device *dev,
+				bool mode, uint32_t inst_id, uint8_t block_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	int ret = 0;
+	uint32_t status;
+
+	ret = regmap_update_bits(priv->regmap,
+			IAXXX_PLUGIN_HDR_PLUGINLOG_MODE_BLOCK_ADDR(block_id),
+			1 << inst_id, mode << inst_id);
+	if (ret) {
+		dev_err(dev,
+			"write set plgin log mode failed %s()\n", __func__);
+		goto out;
+	}
+
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret)
+		dev_err(dev, "%s() Update blk failed %d\n", __func__, ret);
+
+out:
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_set_plugin_log_mode);
+
+/*****************************************************************************
+ * iaxxx_get_plugin_log_mode()
+ * @brief get plugin log mode for instance and processor id
+ *
+ * @mode return mode read from chip
+ * @inst_id plugin instance id
+ * @block_id processor block id
+ *
+ * @ret 0 on success, ret in case of error
+ ****************************************************************************/
+int iaxxx_get_plugin_log_mode(struct device *dev,
+				bool *mode, uint32_t inst_id, uint8_t block_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t read_mode = 0;
+	int ret = 0;
+
+	if (!mode) {
+		dev_err(dev, "%s() Mode pointer NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_HDR_PLUGINLOG_MODE_BLOCK_ADDR(block_id),
+			&read_mode);
+	if (ret) {
+		dev_err(dev, "%s() failed %d\n", __func__, ret);
+		return ret;
+	}
+
+	*mode = (read_mode & (1 << inst_id));
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_get_plugin_log_mode);
+
+/*****************************************************************************
+ * iaxxx_set_update_plugin_log_state()
+ * @brief set plugin log state for instance and processor id
+ *
+ * @state enable and disable of log
+ * @inst_id plugin instance id
+ * @block_id processor block id
+ *
+ * @ret 0 on success, ret in case of error
+ ****************************************************************************/
+int iaxxx_set_update_plugin_log_state(struct device *dev,
+				bool state, uint32_t inst_id, uint8_t block_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	int ret = 0;
+	uint32_t status;
+
+	ret = regmap_update_bits(priv->regmap,
+		IAXXX_PLUGIN_HDR_PLUGINLOG_ENABLE_BLOCK_ADDR(block_id),
+		1 << inst_id, state << inst_id);
+	if (ret) {
+		dev_err(dev,
+			"write set plgin log mode failed %s()\n", __func__);
+		goto out;
+	}
+
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret)
+		dev_err(dev, "%s() Update blk failed %d\n", __func__, ret);
+
+out:
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_set_update_plugin_log_state);
+
+/*****************************************************************************
+ * iaxxx_get_plugin_log_state()
+ * @brief get plugin log state for instance and processor id
+ *
+ * @state return state read from chip
+ * @inst_id plugin instance id
+ * @block_id processor block id
+ *
+ * @ret 0 on success, ret in case of error
+ ****************************************************************************/
+int iaxxx_get_plugin_log_state(struct device *dev,
+				bool *state, uint32_t inst_id, uint8_t block_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t read_mode = 0;
+	int ret = 0;
+
+	if (!state) {
+		dev_err(dev, "%s() state pointer NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_PLUGIN_HDR_PLUGINLOG_ENABLE_BLOCK_ADDR(block_id),
+			&read_mode);
+	if (ret) {
+		dev_err(dev, "%s() failed %d\n", __func__, ret);
+		return ret;
+	}
+
+	*state = (read_mode & (1 << inst_id));
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_get_plugin_log_state);
