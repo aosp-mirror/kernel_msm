@@ -63,6 +63,7 @@
 				  "stm_fts_production_limits_pid00f2.csv";
 		st,panel_map = <&dsi_s6e3hc2_dsc_wqhd_cmd 0>,
 			       <&dsi_nt37280_dsc_fhd_cmd 1>;
+		st,sensor_inverted = <0>, <1>;
 	};
 };
 
