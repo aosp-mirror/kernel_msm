@@ -38,7 +38,7 @@
 	floral_spitouch: touchscreen@0 {
 		status = "ok";
 		compatible = "st,fts";
-		spi-max-frequency = <3000000>;
+		spi-max-frequency = <10000000>;
 
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
