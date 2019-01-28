@@ -188,11 +188,7 @@ void tbn_cleanup(struct tbn_context *tbn)
 	if (!tbn)
 		return;
 
-	mutex_lock(&tbn->service_lock);
-
 	qmi_handle_release(&tbn->qmi_handle);
-
-	mutex_unlock(&tbn->service_lock);
 
 	kfree(tbn);
 }
