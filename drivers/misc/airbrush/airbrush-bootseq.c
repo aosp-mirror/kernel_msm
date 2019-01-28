@@ -113,7 +113,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		dev_err(ab_ctx->dev, "ERROR!!! PMIC failure during ABC Boot");
 		return ret;
 	}
-	ab_sm_record_ts(ab_ctx, AB_SM_TS_PMIC_ON_56);
 
 	ret = enable_ref_clk(ab_ctx->dev);
 	if (ret) {
@@ -142,8 +141,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		dev_err(&plat_dev->dev, "ABC PWRGOOD is not enabled");
 		return -EIO;
 	}
-	ab_sm_record_ts(ab_ctx, AB_SM_TS_IO_ON);
 
+	ab_sm_start_ts(ab_ctx, AB_SM_TS_ALT_BOOT);
 	if (ab_ctx->alternate_boot) {
 		fw_status =
 			request_firmware(&fw_entry,
@@ -246,7 +245,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		spi_packet.data_length = 1;
 		spi_packet.data = NULL;
 
-
 		if (airbrush_spi_run_cmd(&spi_packet)) {
 			vfree(image_dw_buf);
 			return -EIO;
@@ -254,9 +252,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 
 		vfree(image_dw_buf);
 	}
-	ab_sm_record_ts(ab_ctx, AB_SM_TS_ABOOT);
+	ab_sm_record_ts(ab_ctx, AB_SM_TS_ALT_BOOT);
 
 	if (ab_ctx->cold_boot) {
+		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 		if (msm_pcie_enumerate(1)) {
 			dev_err(ab_ctx->dev, "PCIe enumeration failed\n");
 			return -EIO;
@@ -273,11 +272,13 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 			}
 			ab_ctx->pcie_dev = pdev;
 		}
+		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 
 		/* Disable patching if ab is B0 */
 		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
 			ab_ctx->alternate_boot = 0;
 	} else {
+		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 		ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
 			ab_ctx->pcie_dev, NULL,
 			MSM_PCIE_CONFIG_NO_CFG_RESTORE);
@@ -291,8 +292,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 			dev_err(ab_ctx->dev, "PCIe failed to recover config\n");
 			return ret;
 		}
+		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 	}
-	ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ON);
 
 	/* Wait for AB_READY = 1,
 	 * this ensures the SPI FSM is initialized to flash the
@@ -339,9 +340,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	/* In case the M0_DDR_INIT (Renamed HOST_DDR_INIT) is 1,
 	 * perform the DDR Initialization here.
 	 */
+	ab_sm_start_ts(ab_ctx, AB_SM_TS_DDR_INIT);
 	if (IS_HOST_DDR_INIT())
 		ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
-	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_ON);
+	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_INIT);
 
 	return 0;
 }

@@ -636,6 +636,13 @@ config TEST_IRQ_REQUESTER
 
 	  If in doubt, say N.
 
+config AIRBRUSH_SM_PROFILE
+	depends on AIRBRUSH_SM && AIRBRUSH_SM_DEBUGFS
+	bool "Profiling support for Airbrush State Manager"
+	default "y"
+	---help---
+	  This option enables profiling support for airbrush state manager.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

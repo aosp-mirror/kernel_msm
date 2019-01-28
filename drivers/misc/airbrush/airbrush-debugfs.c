@@ -41,8 +41,9 @@ static int chip_state_get(void *sc, u64 *val)
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_chip_state, chip_state_get,
-				chip_state_set, "%llu\n");
+		chip_state_set, "%llu\n");
 
+#if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
 static int time_stamps_set(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
@@ -63,6 +64,7 @@ static int time_stamps_get(void *data, u64 *val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_time_stamps, time_stamps_get,
 		time_stamps_set, "%llu\n");
+#endif
 
 static int ldo5_delay_set(void *data, u64 val)
 {
@@ -686,10 +688,12 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d)
 		goto err_out;
 
+#if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
 	d = debugfs_create_file("time_stamps", 0666, d_chip, sc,
-				&fops_time_stamps);
+			&fops_time_stamps);
 	if (!d)
 		goto err_out;
+#endif
 
 	d = debugfs_create_file("force_el2", 0666, sc->d_entry, sc,
 				&ab_sm_force_el2_fops);
