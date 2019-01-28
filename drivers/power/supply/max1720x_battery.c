@@ -40,10 +40,12 @@
 #endif
 
 #define MAX1720X_TRECALL_MS 5
+#define MAX1730X_TRECALL_MS 5
 #define MAX1720X_TPOR_MS 150
 #define MAX1720X_TICLR_MS 500
 #define MAX1720X_I2C_DRIVER_NAME "max1720x_fg_irq"
 #define MAX1720X_N_OF_HISTORY_PAGES 203
+#define MAX1730X_N_OF_HISTORY_PAGES 100
 #define MAX1720X_DELAY_INIT_MS 1000
 #define FULLCAPNOM_STABILIZE_CYCLES 5
 #define CYCLE_LEVEL_SIZE 200
@@ -276,6 +278,10 @@ enum max1730x_nvram {
 	MAX1730X_NVPRTTH1 	= 0xD0,
 	MAX1730X_NVRAM_END 	= 0xEF,
 	MAX1730X_HISTORY_START 	= 0xF0,
+	MAX1730X_HISTORY_WRITE_STATUS_START = 0xF2,
+	MAX1730X_HISTORY_VALID_STATUS_END = 0xFB,
+	MAX1730X_HISTORY_WRITE_STATUS_END = 0xFE,
+	MAX1730X_HISTORY_END	= 0xFF,
 };
 
 enum max1730x_register {
@@ -309,6 +315,10 @@ enum max1730x_register {
 enum max1730x_command_bits {
 	MAX1730X_COMMAND_FUEL_GAUGE_RESET = 0x8000,
 	MAX1730X_COMMAND_NV_RECALL 	  = 0xE001,
+	MAX1730X_READ_HISTORY_CMD_BASE = 0xE22E,
+	MAX1730X_COMMAND_HISTORY_RECALL_WRITE_0 = 0xE29C,
+	MAX1730X_COMMAND_HISTORY_RECALL_VALID_0 = 0xE29C,
+	MAX1730X_COMMAND_HISTORY_RECALL_VALID_1 = 0xE29D,
 };
 
 enum max17xxx_register {
@@ -318,6 +328,7 @@ enum max17xxx_register {
 	MAX17XXX_CURRENT	= MAX1720X_CURRENT,
 	MAX17XXX_AVGCURRENT	= MAX1720X_AVGCURRENT,
 	MAX17XXX_MIXCAP		= MAX1720X_MIXCAP,
+	MAX17XXX_COMMAND	= MAX1720X_COMMAND,
 };
 
 enum max17xxx_nvram {
@@ -333,7 +344,17 @@ enum max17xxx_nvram {
 		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_START + 1 + \
 		MAX1720X_NVRAM_HISTORY_WRITE_STATUS_END -	\
 		MAX1720X_HISTORY_START + 1)
+
 #define MAX1720X_N_OF_QRTABLES 4
+
+#define MAX1730X_HISTORY_PAGE_SIZE \
+	(MAX1730X_HISTORY_END - MAX1730X_HISTORY_START + 1)
+
+#define MAX1730X_N_OF_HISTORY_FLAGS_REG \
+	(MAX1730X_HISTORY_END - \
+		MAX1730X_HISTORY_END + 1 + \
+		MAX1730X_HISTORY_VALID_STATUS_END - \
+		MAX1730X_HISTORY_START + 1)
 
 struct max1720x_cyc_ctr_data {
 	struct mutex lock;
@@ -372,6 +393,9 @@ struct max1720x_chip {
 	struct class *hcclass;
 	bool history_available;
 	bool history_added;
+	int history_page_size;
+	int nb_history_pages;
+	int nb_history_flag_reg;
 
 	u16 RSense;
 	u16 RConfig;
@@ -487,6 +511,7 @@ enum max17x0x_reg_types {
 	GBMS_ATOM_TYPE_MAP = 0,
 	GBMS_ATOM_TYPE_REG = 1,
 	GBMS_ATOM_TYPE_ZONE = 2,
+	GBMS_ATOM_TYPE_SET = 3,
 };
 
 struct max17x0x_reg {
@@ -516,6 +541,11 @@ struct max17x0x_reg {
 	.size = sz,			\
 	.base = start
 
+#define ATOM_INIT_SET(...)			\
+	.type = GBMS_ATOM_TYPE_SET,		\
+	.size = 2 * sizeof((u8[]){__VA_ARGS__}),\
+	.map = (u8[]){__VA_ARGS__}
+
 /* the point of the '' constants is to avoid defines for tag names...
  * so please don't add them ;-)
  */
@@ -525,6 +555,8 @@ static const struct max17x0x_reg max1720x[] = {
 	{ 'SNUM', ATOM_INIT_MAP(0xcc, 0xd8, 0xd9, 0xda, 0xd6,
 				0xdb, 0xdc, 0xdd, 0xde, 0xd1,
 				0xd0) },
+	{ 'HSTY', ATOM_INIT_SET(0xe0, 0xe1, 0xe4, 0xea, 0xeb,
+				0xed, 0xef) },
 };
 
 /* see b/119416045 for layout */
@@ -534,6 +566,7 @@ static const struct max17x0x_reg max1730x[] = {
 	{ 'SNUM', ATOM_INIT_MAP(0xce, 0xe6, 0xe7, 0xe8, 0xe9,
 				0xea, 0xeb, 0xec, 0xed, 0xee,
 				0xef) },
+	{ 'HSTY', ATOM_INIT_SET(0xf0, 0xf2, 0xfb, 0xfe, 0xff) },
 };
 
 struct max17x0x_device_info {
@@ -785,8 +818,12 @@ static const struct regmap_config max1720x_regmap_cfg = {
 
 bool max1720x_is_nvram_reg(struct device *dev, unsigned int reg)
 {
-	return (reg >= MAX1720X_NVRAM_START &&
-		reg <= MAX1720X_NVRAM_HISTORY_END);
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
+		return (reg >= MAX1730X_NVRAM_START &&
+			reg <= MAX1730X_HISTORY_END);
+	else
+		return (reg >= MAX1720X_NVRAM_START &&
+			reg <= MAX1720X_NVRAM_HISTORY_END);
 }
 
 static const struct regmap_config max1720x_regmap_nvram_cfg = {
@@ -794,6 +831,15 @@ static const struct regmap_config max1720x_regmap_nvram_cfg = {
 	.val_bits = 16,
 	.val_format_endian = REGMAP_ENDIAN_NATIVE,
 	.max_register = MAX1720X_NVRAM_HISTORY_END,
+	.readable_reg = max1720x_is_nvram_reg,
+	.volatile_reg = max1720x_is_nvram_reg,
+};
+
+static const struct regmap_config max1730x_regmap_nvram_cfg = {
+	.reg_bits = 8,
+	.val_bits = 16,
+	.val_format_endian = REGMAP_ENDIAN_NATIVE,
+	.max_register = MAX1730X_HISTORY_END,
 	.readable_reg = max1720x_is_nvram_reg,
 	.volatile_reg = max1720x_is_nvram_reg,
 };
@@ -850,6 +896,54 @@ static inline int reg_to_seconds(s16 val)
 {
 	/* LSB: 5.625 seconds */
 	return DIV_ROUND_CLOSEST((int) val * 5625, 1000);
+}
+
+static void max1730x_read_log_write_status(struct max1720x_chip *chip,
+					   u16 *buffer)
+{
+	u16 i;
+	u16 data = 0;
+	const struct max17x0x_reg *hsty;
+
+	hsty = max17x0x_find_by_id('HSTY');
+
+	if (!hsty)
+		return;
+
+	REGMAP_WRITE(chip->regmap, MAX17XXX_COMMAND,
+		     MAX1730X_COMMAND_HISTORY_RECALL_WRITE_0);
+	msleep(MAX1730X_TRECALL_MS);
+	for (i = hsty->map[1]; i <= hsty->map[3]; i++) {
+		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
+		*buffer++ = data;
+	}
+}
+
+static void max1730x_read_log_valid_status(struct max1720x_chip *chip,
+					   u16 *buffer)
+{
+	u16 i;
+	u16 data = 0;
+	const struct max17x0x_reg *hsty;
+
+	hsty = max17x0x_find_by_id('HSTY');
+
+	if (!hsty)
+		return;
+
+	REGMAP_WRITE(chip->regmap, MAX17XXX_COMMAND,
+		     MAX1730X_COMMAND_HISTORY_RECALL_VALID_0);
+	msleep(MAX1730X_TRECALL_MS);
+	(void) REGMAP_READ(chip->regmap_nvram, hsty->map[4], &data);
+	*buffer++ = data;
+
+	REGMAP_WRITE(chip->regmap, MAX17XXX_COMMAND,
+		     MAX1730X_COMMAND_HISTORY_RECALL_VALID_1);
+	msleep(MAX1730X_TRECALL_MS);
+	for (i = hsty->map[0]; i <= hsty->map[2]; i++) {
+		(void) REGMAP_READ(chip->regmap_nvram, i, &data);
+		*buffer++ = data;
+	}
 }
 
 static void max1720x_read_log_write_status(struct max1720x_chip *chip,
@@ -913,26 +1007,33 @@ static int get_battery_history_status(struct max1720x_chip *chip,
 				      bool *page_status)
 {
 	u16 *write_status, *valid_status;
-	int i, addr_offset, bit_offset;
+	int i, addr_offset, bit_offset, nb_history_pages;
 	int valid_history_entry_count = 0;
 
-	write_status = kmalloc_array(MAX1720X_N_OF_HISTORY_FLAGS_REG,
+	write_status = kmalloc_array(chip->nb_history_flag_reg,
 				     sizeof(u16), GFP_KERNEL);
 	if (!write_status)
 		return -ENOMEM;
 
-	valid_status = kmalloc_array(MAX1720X_N_OF_HISTORY_FLAGS_REG,
+	valid_status = kmalloc_array(chip->nb_history_flag_reg,
 				     sizeof(u16), GFP_KERNEL);
 	if (!valid_status) {
 		kfree(write_status);
 		return -ENOMEM;
 	}
 
-	max1720x_read_log_write_status(chip, write_status);
-	max1720x_read_log_valid_status(chip, valid_status);
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		max1730x_read_log_write_status(chip, write_status);
+		max1730x_read_log_valid_status(chip, valid_status);
+		nb_history_pages = MAX1730X_N_OF_HISTORY_PAGES;
+	} else {
+		max1720x_read_log_write_status(chip, write_status);
+		max1720x_read_log_valid_status(chip, valid_status);
+		nb_history_pages = MAX1720X_N_OF_HISTORY_PAGES;
+	}
 
 	/* Figure out the pages with valid history entry */
-	for (i = 0; i < MAX1720X_N_OF_HISTORY_PAGES; i++) {
+	for (i = 0; i < nb_history_pages; i++) {
 		addr_offset = i / 8;
 		bit_offset = i % 8;
 		page_status[i] =
@@ -955,18 +1056,26 @@ static void get_battery_history(struct max1720x_chip *chip,
 {
 	int i, j, index = 0;
 	u16 data = 0;
+	const struct max17x0x_reg *hsty;
+	u16 command_base = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
+	    ? MAX1730X_READ_HISTORY_CMD_BASE : MAX1720X_READ_HISTORY_CMD_BASE;
 
-	for (i = 0; i < MAX1720X_N_OF_HISTORY_PAGES; i++) {
+	hsty = max17x0x_find_by_id('HSTY');
+
+	if (!hsty)
+		return;
+
+	for (i = 0; i < chip->nb_history_pages; i++) {
 		if (!page_status[i])
 			continue;
-		REGMAP_WRITE(chip->regmap, MAX1720X_COMMAND,
-			     MAX1720X_READ_HISTORY_CMD_BASE + i);
+		REGMAP_WRITE(chip->regmap, MAX17XXX_COMMAND,
+			     command_base + i);
 		msleep(MAX1720X_TRECALL_MS);
-		for (j = 0; j < MAX1720X_HISTORY_PAGE_SIZE; j++) {
+		for (j = 0; j < chip->history_page_size; j++) {
 			(void) REGMAP_READ(chip->regmap_nvram,
-					   MAX1720X_HISTORY_START + j,
+					   (unsigned int)hsty->map[0] + j,
 					   &data);
-			history[index * MAX1720X_HISTORY_PAGE_SIZE + j] = data;
+			history[index * chip->history_page_size + j] = data;
 		}
 		index++;
 	}
@@ -975,8 +1084,10 @@ static void get_battery_history(struct max1720x_chip *chip,
 static int format_battery_history_entry(char *temp, int size, u16 *line)
 {
 	int length = 0, i;
+	int history_page_size = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
+	    ? MAX1730X_HISTORY_PAGE_SIZE : MAX1720X_HISTORY_PAGE_SIZE;
 
-	for (i = 0; i < MAX1720X_HISTORY_PAGE_SIZE; i++) {
+	for (i = 0; i < history_page_size; i++) {
 		length += scnprintf(temp + length,
 			size - length, "%04x ",
 			line[i]);
@@ -993,7 +1104,7 @@ static int max1720x_history_read(struct max1720x_chip *chip,
 {
 	memset(hi, 0, sizeof(*hi));
 
-	hi->page_status = kcalloc(MAX1720X_N_OF_HISTORY_PAGES,
+	hi->page_status = kcalloc(chip->nb_history_pages,
 				sizeof(bool), GFP_KERNEL);
 	if (!hi->page_status)
 		return -ENOMEM;
@@ -1004,7 +1115,7 @@ static int max1720x_history_read(struct max1720x_chip *chip,
 	if (hi->history_count < 0) {
 		goto error_exit;
 	} else if (hi->history_count != 0) {
-		const int size = hi->history_count * MAX1720X_HISTORY_PAGE_SIZE;
+		const int size = hi->history_count * chip->history_page_size;
 
 		hi->history = kmalloc_array(size, sizeof(u16), GFP_KERNEL);
 		if (!hi->history) {
@@ -2649,7 +2760,9 @@ static int ct_seq_show(struct seq_file *s, void *v)
 	loff_t *spos = (loff_t *)v;
 	struct max1720x_history *hi =
 		(struct max1720x_history *)s->private;
-	const size_t offset = *spos * MAX1720X_HISTORY_PAGE_SIZE;
+	int history_page_size = (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
+	    ? MAX1730X_HISTORY_PAGE_SIZE : MAX1720X_HISTORY_PAGE_SIZE;
+	const size_t offset = *spos * history_page_size;
 
 	format_battery_history_entry(temp, sizeof(temp), &hi->history[offset]);
 	seq_printf(s, "%s\n", temp);
@@ -2775,8 +2888,17 @@ static void max1720x_init_work(struct work_struct *work)
 
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
-	if (max17xxx_gauge_type != MAX1730X_GAUGE_TYPE)
-		(void)max1720x_init_history(chip);
+
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		chip->nb_history_pages = MAX1730X_N_OF_HISTORY_PAGES;
+		chip->history_page_size = MAX1730X_HISTORY_PAGE_SIZE;
+		chip->nb_history_flag_reg = MAX1730X_N_OF_HISTORY_FLAGS_REG;
+	} else {
+		chip->nb_history_pages = MAX1720X_N_OF_HISTORY_PAGES;
+		chip->history_page_size = MAX1720X_HISTORY_PAGE_SIZE;
+		chip->nb_history_flag_reg = MAX1720X_N_OF_HISTORY_FLAGS_REG;
+	}
+	(void)max1720x_init_history(chip);
 }
 
 static int max1720x_probe(struct i2c_client *client,
@@ -2808,14 +2930,6 @@ static int max1720x_probe(struct i2c_client *client,
 		goto i2c_unregister;
 	}
 
-	chip->regmap_nvram =
-	    devm_regmap_init_i2c(chip->secondary, &max1720x_regmap_nvram_cfg);
-	if (IS_ERR(chip->regmap_nvram)) {
-		dev_err(dev, "Failed to initialize nvram regmap\n");
-		ret = -EINVAL;
-		goto i2c_unregister;
-	}
-
 	mutex_init(&chip->cyc_ctr.lock);
 
 	chip->shadow_override = true;
@@ -2826,6 +2940,21 @@ static int max1720x_probe(struct i2c_client *client,
 			max17xxx_gauge_type, chip->shadow_override);
 	} else {
 		max17xxx_gauge_type = MAX1720X_GAUGE_TYPE;
+	}
+
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
+		chip->regmap_nvram =
+		    devm_regmap_init_i2c(chip->secondary,
+					 &max1730x_regmap_nvram_cfg);
+	else
+		chip->regmap_nvram =
+		    devm_regmap_init_i2c(chip->secondary,
+					 &max1720x_regmap_nvram_cfg);
+
+	if (IS_ERR(chip->regmap_nvram)) {
+		dev_err(dev, "Failed to initialize nvram regmap\n");
+		ret = -EINVAL;
+		goto i2c_unregister;
 	}
 
 	/* NOTE: should probably not request the interrupt when the gauge is
