@@ -3746,6 +3746,8 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3 *dwc)
 	u32 reg;
 
 	evt = dwc->ev_buf;
+	if (!evt)
+		return IRQ_NONE;
 
 	/*
 	 * With PCIe legacy interrupt, test shows that top-half irq handler can
