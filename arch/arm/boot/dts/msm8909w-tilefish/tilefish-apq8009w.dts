@@ -132,6 +132,8 @@
 		compatible = "qcom,bg-rsb";
 		vdd-ldo1-supply = <&pm660_l11>;
 		vdd-ldo2-supply = <&pm660_l15>;
+		vtg-ldo2-max = <3000000>;
+		vtg-ldo2-min = <3000000>;
 	};
 
 	qcom,bg-daemon {
