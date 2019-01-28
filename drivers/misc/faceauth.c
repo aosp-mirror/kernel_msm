@@ -39,13 +39,14 @@
 #define SYSREG_REG_GP_INT0 (SYSREG_AON + 0x37C)
 #define SYSREG_AON_IPU_REG29 (SYSREG_AON + 0x438)
 #define AB_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C4)
-#define BIN_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C8)
+#define ANGLE_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C8)
 #define INPUT_FLAG_ADDR (SYSREG_AON + 0x3CC)
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
 #define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
 #define FEATURES_FLAG_ADDR 0x21fffff8
+#define CACHE_FLUSH_INDEXES_ADDR 0x22700000
 #define DOT_IMAGE_LEFT_ADDR 0x22800000
 #define DOT_IMAGE_RIGHT_ADDR 0x22900000
 #define FLOOD_IMAGE_ADDR 0x23000000
@@ -75,6 +76,9 @@
 
 #define INPUT_IMAGE_WIDTH 480
 #define INPUT_IMAGE_HEIGHT 640
+
+/* Citadel */
+#define MAX_CACHE_SIZE 512
 
 static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir);
@@ -178,9 +182,10 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	unsigned long save_debug_end = 0;
 	uint32_t ab_input;
 	uint32_t ab_result;
-	uint32_t bin_result;
+	uint32_t angles;
 	uint32_t dma_read_value;
 	struct faceauth_data *data = file->private_data;
+	int i;
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data = { { 0 } };
 #endif
@@ -263,6 +268,40 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
+		if (start_step_data.operation == FACEAUTH_OP_ENROLL_COMPLETE) {
+			int16_t *flush_idxs =
+					   start_step_data.cache_flush_indexes;
+			uint32_t flush_size = start_step_data.cache_flush_size;
+
+			if (flush_size > FACEAUTH_MAX_CACHE_FLUSH_SIZE) {
+				pr_err("Wrong cache flush size\n");
+				err = -EINVAL;
+				goto exit;
+			}
+
+			if (flush_size < FACEAUTH_MAX_CACHE_FLUSH_SIZE) {
+				flush_idxs[flush_size] = -1;
+			}
+
+			for (i = 0; i < flush_size; ++i) {
+				if (flush_idxs[i] < 0 ||
+				    flush_idxs[i] >= MAX_CACHE_SIZE) {
+					pr_err("Wrong cache flush index\n");
+					err = -EINVAL;
+					goto exit;
+				}
+			}
+
+			err = dma_xfer_vmalloc(flush_idxs,
+					2 * FACEAUTH_MAX_CACHE_FLUSH_SIZE,
+					CACHE_FLUSH_INDEXES_ADDR,
+					DMA_TO_DEVICE);
+			if (err) {
+				pr_err("Error sending flush indexes\n");
+				return err;
+			}
+		}
+
 		/* Set M0 firmware address */
 		pr_info("Set M0 firmware addr = 0x%08x\n", M0_FIRMWARE_ADDR);
 		err = aon_config_write(SYSREG_AON_IPU_REG29, 4,
@@ -333,13 +372,13 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		save_debug_end = jiffies;
 #endif
 
-		err = aon_config_read(BIN_RESULT_FLAG_ADDR, 4, &bin_result);
+		err = aon_config_read(ANGLE_RESULT_FLAG_ADDR, 4, &angles);
 		if (err) {
-			pr_err("Error reading Bin result flag\n");
+			pr_err("Error reading angle result flag\n");
 			goto exit;
 		}
 		start_step_data.result = ab_result;
-		start_step_data.bin_bitmap = bin_result;
+		start_step_data.angles = angles;
 
 		dma_read_dw(AB_INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,

@@ -41,6 +41,8 @@ struct faceauth_init_data {
   __u64 features;
 } __attribute__((packed));
 
+#define FACEAUTH_MAX_CACHE_FLUSH_SIZE 20
+
 /* This struct is written by userspace and read by kernel */
 struct faceauth_start_data {
 	/*
@@ -61,9 +63,13 @@ struct faceauth_start_data {
 	void __user *calibration;
 	__u32 calibration_size;
 
+	__s16 cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];
+	__u32 cache_flush_size;
+
 	/* Output parameters */
 	__u8 result; /* result code from AB */
 	__u32 bin_bitmap;
+	__u32 angles;
 	__s32 error_code; /* ab-faceauth error code */
 	__u32 fw_version; /* ab-faceauth firmware version */
 } __attribute__((packed));
