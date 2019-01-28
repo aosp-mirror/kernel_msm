@@ -574,21 +574,6 @@ config CS40L2X_HAPTIC
 
 	  To compile this driver as a module, choose M here.
 
-config AIRBRUSH_SM
-	bool "Device driver for Airbrush State Manager"
-	default "n"
-	---help---
-	  This option enables device driver support for airbrush state manager.
-	  This includes the support for CLK, LPDDR, UART, SPI and other IP
-	  configurations which can be controlled through the PCIe interface.
-
-config AIRBRUSH_SM_DEBUGFS
-	bool "Debugfs api for Airbrush State Manager"
-	depends on AIRBRUSH_SM
-	default "n"
-	---help---
-	  This option enables debugfs api for Airbrush State Manager.
-
 config AIRBRUSH_DRAM
 	bool "Airbrush DRAM Manager"
 	default "n"
@@ -636,13 +621,6 @@ config TEST_IRQ_REQUESTER
 
 	  If in doubt, say N.
 
-config AIRBRUSH_SM_PROFILE
-	depends on AIRBRUSH_SM && AIRBRUSH_SM_DEBUGFS
-	bool "Profiling support for Airbrush State Manager"
-	default "y"
-	---help---
-	  This option enables profiling support for airbrush state manager.
-
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -657,6 +635,7 @@ source "drivers/misc/echo/Kconfig"
 source "drivers/misc/cxl/Kconfig"
 source "drivers/misc/ipu/Kconfig"
 source "drivers/misc/fpr_FingerprintCard/Kconfig"
+source "drivers/misc/airbrush/Kconfig"
 endmenu
 
 config OKL4_USER_VIPC

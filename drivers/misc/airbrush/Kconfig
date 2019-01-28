@@ -1,0 +1,29 @@
+#
+# Airbrush
+#
+
+menu "Airbrush"
+
+config AIRBRUSH_SM
+	bool "Device driver for Airbrush State Manager"
+	default "n"
+	---help---
+	  This option enables device driver support for airbrush state manager.
+	  This includes the support for CLK, LPDDR, UART, SPI and other IP
+	  configurations which can be controlled through the PCIe interface.
+
+config AIRBRUSH_SM_DEBUGFS
+	depends on AIRBRUSH_SM
+	bool "Debugfs entries for Airbrush State Manager"
+	default "n"
+	---help---
+	  This option enables Debugfs entries for airbrush state manager.
+
+config AIRBRUSH_SM_PROFILE
+	depends on AIRBRUSH_SM && AIRBRUSH_SM_DEBUGFS
+	bool "Profiling support for Airbrush State Manager"
+	default "y"
+	---help---
+	  This option enables profiling support for airbrush state manager.
+
+endmenu
