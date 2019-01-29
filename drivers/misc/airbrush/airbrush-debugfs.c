@@ -143,6 +143,27 @@ static int smps2_delay_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_smps2_delay, smps2_delay_get,
 	smps2_delay_set, "%llu\n");
 
+static int alternate_boot_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	sc->alternate_boot = !!val;
+
+	return 0;
+}
+
+static int alternate_boot_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	*val = (uint64_t)sc->alternate_boot;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_alternate_boot, alternate_boot_get,
+		alternate_boot_set, "%llu\n");
+
 static int ab_sm_force_el2_set(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
@@ -697,6 +718,11 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("force_el2", 0666, sc->d_entry, sc,
 				&ab_sm_force_el2_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("alternate_boot", 0666, d_chip, sc,
+				&fops_alternate_boot);
 	if (!d)
 		goto err_out;
 
