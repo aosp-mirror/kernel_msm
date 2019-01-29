@@ -863,7 +863,7 @@ static int diag_cmd_set_all_msg_mask(unsigned char *src_buf, int src_len,
 	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
 		mutex_lock(&mask->lock);
 		memset(mask->ptr, req->rt_mask,
-		       mask->range * sizeof(uint32_t));
+		       mask->range_tools * sizeof(uint32_t));
 		mutex_unlock(&mask->lock);
 	}
 	mutex_unlock(&driver->msg_mask_lock);
