@@ -381,6 +381,11 @@ struct fts_ts_info {
 	struct tbn_context	*tbn;
 #endif
 
+	/* Allow only one thread to execute diag command code*/
+	struct mutex diag_cmd_lock;
+	/* Allow one process to open procfs node */
+	bool diag_node_open;
+
 	/* Preallocated i/o read buffer */
 	u8 io_read_buf[READ_CHUNK + DUMMY_FIFO];
 	/* Preallocated i/o write buffer */

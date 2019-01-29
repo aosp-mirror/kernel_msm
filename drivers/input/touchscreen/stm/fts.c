@@ -1422,10 +1422,22 @@ static ssize_t stm_fts_cmd_store(struct device *dev,
 {
 	int n;
 	char *p = (char *)buf;
+	struct fts_ts_info *info = dev_get_drvdata(dev);
 
 	memset(typeOfComand, 0, CMD_STR_LEN * sizeof(u32));
 
 	pr_info("%s:\n", __func__);
+
+	if (!info) {
+		pr_err("%s: Unable to access driver data\n", __func__);
+		return  -EINVAL;
+	}
+
+	if (!mutex_trylock(&info->diag_cmd_lock)) {
+		pr_err("%s: Blocking concurrent access\n", __func__);
+		return -EBUSY;
+	}
+
 	for (n = 0; n < (count + 1) / 3; n++) {
 		sscanf(p, "%02X ", &typeOfComand[n]);
 		p += 3;
@@ -1434,6 +1446,9 @@ static ssize_t stm_fts_cmd_store(struct device *dev,
 
 	numberParameters = n;
 	pr_info("Number of Parameters = %d\n", numberParameters);
+
+	mutex_unlock(&info->diag_cmd_lock);
+
 	return count;
 }
 
@@ -1452,11 +1467,22 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	MutualSenseFrame frameMS;
 	SelfSenseFrame frameSS;
 
+	if (!info) {
+		pr_err("%s: Unable to access driver data\n", __func__);
+		return  -EINVAL;
+	}
+
+	if (!mutex_trylock(&info->diag_cmd_lock)) {
+		pr_err("%s: Blocking concurrent access\n", __func__);
+		return -EBUSY;
+	}
+
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
 		scnprintf(buf, PAGE_SIZE, "{ %08X }\n", res);
 		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
+		mutex_unlock(&info->diag_cmd_lock);
 		return 0;
 	}
 
@@ -1959,6 +1985,8 @@ END:
 	/* pr_err("numberParameters = %d\n", numberParameters); */
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
+	mutex_unlock(&info->diag_cmd_lock);
+
 	return index;
 }
 
@@ -4160,6 +4188,8 @@ static int fts_probe(struct spi_device *client)
 	input_set_capability(info->input_dev, EV_KEY, KEY_BACK);
 	input_set_capability(info->input_dev, EV_KEY, KEY_MENU);
 #endif
+
+	mutex_init(&info->diag_cmd_lock);
 
 	mutex_init(&(info->input_report_mutex));
 	mutex_init(&info->bus_mutex);
