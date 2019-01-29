@@ -175,6 +175,7 @@
 #define TP_ID_0 0x90
 #define TP_ID_1 0x91
 #define TP_ID_2 0x92
+#define TP_ID_3 0x93
 #define TP_INI_FILE_0x90 "FT3207_HOST_Default_F02_V01_OnlyTest_0x90.ini"
 #define FTS_GESTURE_SETTING_ADRESS	0xD0
 #define FTS_GESTURE_OUTPUT_ADRESS	0xD3
