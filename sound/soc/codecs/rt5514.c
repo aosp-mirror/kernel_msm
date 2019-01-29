@@ -588,7 +588,7 @@ watchdog:
 		if (fw) {
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 			rt5514_spi_burst_write(rt5514->fw_addr[0], fw->data,
-				((fw->size/8)+1)*8);
+				fw->size);
 #else
 			dev_err(codec->dev, "There is no SPI driver for"
 				" loading the firmware\n");
@@ -601,7 +601,7 @@ watchdog:
 		if (fw) {
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 			rt5514_spi_burst_write(rt5514->fw_addr[1], fw->data,
-				((fw->size/8)+1)*8);
+				fw->size);
 #else
 			dev_err(codec->dev, "There is no SPI driver for"
 				" loading the firmware\n");
@@ -616,7 +616,7 @@ watchdog:
 
 			ret = rt5514_spi_burst_write(rt5514->fw_addr[2],
 				rt5514->hotword_model_buf,
-				((rt5514->hotword_model_len / 8) + 1) * 8);
+				rt5514->hotword_model_len);
 			if (ret) {
 				dev_err(codec->dev,
 					"Model load failed %d\n", ret);
@@ -633,7 +633,7 @@ watchdog:
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 				rt5514_spi_burst_write(rt5514->fw_addr[2],
 					fw->data,
-					((fw->size/8)+1)*8);
+					fw->size);
 #else
 				dev_err(codec->dev,
 					"No SPI driver to load fw\n");
@@ -649,7 +649,7 @@ watchdog:
 
 			ret = rt5514_spi_burst_write(rt5514->fw_addr[3],
 				rt5514->musdet_model_buf,
-				((rt5514->musdet_model_len / 8) + 1) * 8);
+				rt5514->musdet_model_len);
 			if (ret) {
 				dev_err(codec->dev,
 					"Model load failed %d\n", ret);
@@ -666,7 +666,7 @@ watchdog:
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 				rt5514_spi_burst_write(rt5514->fw_addr[3],
 					fw->data,
-					((fw->size/8)+1)*8);
+					fw->size);
 #else
 				dev_err(codec->dev,
 					"No SPI driver to load fw\n");

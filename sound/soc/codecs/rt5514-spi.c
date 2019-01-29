@@ -1246,7 +1246,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 {
 	u8 spi_cmd = RT5514_SPI_CMD_BURST_WRITE;
 	u8 *write_buf;
-	unsigned int i, end, offset = 0;
+	unsigned int i, j, end, offset = 0;
 
 	write_buf = kzalloc(RT5514_SPI_BUF_LEN + 6, GFP_DMA | GFP_KERNEL);
 
@@ -1269,15 +1269,18 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 		write_buf[4] = ((addr + offset) & 0x000000ff) >> 0;
 
 		for (i = 0; i < end; i += 8) {
-			write_buf[i + 12] = txbuf[offset + i + 0];
-			write_buf[i + 11] = txbuf[offset + i + 1];
-			write_buf[i + 10] = txbuf[offset + i + 2];
-			write_buf[i +  9] = txbuf[offset + i + 3];
-			write_buf[i +  8] = txbuf[offset + i + 4];
-			write_buf[i +  7] = txbuf[offset + i + 5];
-			write_buf[i +  6] = txbuf[offset + i + 6];
-			write_buf[i +  5] = txbuf[offset + i + 7];
+			for (j = 0; j < 8; j++) {
+				if ((offset + i + j) < len) {
+					write_buf[i + 12 - j] =
+						txbuf[offset + i + j];
+				} else {
+					break;
+				}
+			}
 		}
+
+		if (end % 8)
+			end = (end / 8 + 1) * 8;
 
 		write_buf[end + 5] = spi_cmd;
 
