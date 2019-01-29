@@ -16,6 +16,8 @@ FILES="
 arch/arm64/boot/dtbo.img
 arch/arm64/boot/Image.lz4-dtb
 arch/arm64/boot/Image.gz-dtb
+arch/arm64/boot/Image.lz4
+arch/arm64/boot/Image.gz
 arch/arm64/boot/dts/qcom/sdm670.dtb
 vmlinux
 System.map
