@@ -342,11 +342,18 @@ int ab_ddr_eye_margin(struct ab_state_context *sc, unsigned int data)
 	struct ab_ddr_context *ddr_ctx;
 
 	if (!sc || !sc->ddr_data) {
-		pr_err("%s, error!! Invalid AB state/ddr context\n", __func__);
+		pr_err("[ddr eye margin] Error!! Invalid AB state/context\n");
 		return DDR_FAIL;
 	}
 
 	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
+	/* Allow the eye margin test only when ddr state is DDR_ON */
+	if (ddr_ctx->ddr_state != DDR_ON) {
+		pr_err("ddr_eye_margin: Invalid ddr state: %d\n",
+			ddr_ctx->ddr_state);
+		return DDR_FAIL;
+	}
 
 	ddr_eye_print_termination_info();
 
