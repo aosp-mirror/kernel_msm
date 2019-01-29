@@ -966,7 +966,7 @@ static int diag_cmd_set_all_msg_mask(unsigned char *src_buf, int src_len,
 		if (mask && mask->ptr) {
 			mutex_lock(&mask->lock);
 			memset(mask->ptr, req->rt_mask,
-			       mask->range * sizeof(uint32_t));
+			       mask->range_tools * sizeof(uint32_t));
 			mutex_unlock(&mask->lock);
 		}
 	}
