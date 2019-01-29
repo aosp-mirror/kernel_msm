@@ -465,7 +465,8 @@ err_mutex:
 }
 
 static unsigned int cs40l2x_dsp_reg(struct cs40l2x_private *cs40l2x,
-			const char *coeff_name, const unsigned char block_type)
+			const char *coeff_name, const unsigned int block_type,
+			const unsigned int algo_id)
 {
 	struct cs40l2x_coeff_desc *coeff_desc;
 
@@ -474,12 +475,13 @@ static unsigned int cs40l2x_dsp_reg(struct cs40l2x_private *cs40l2x,
 			continue;
 		if (coeff_desc->block_type != block_type)
 			continue;
+		if (coeff_desc->parent_id != algo_id)
+			continue;
 
 		return coeff_desc->reg;
 	}
 
-	/* return an identifiable register that is known to be read-only */
-	return CS40L2X_DEVID;
+	return 0;
 }
 
 static int cs40l2x_wseq_add_reg(struct cs40l2x_private *cs40l2x,
@@ -512,8 +514,12 @@ static int cs40l2x_wseq_write(struct cs40l2x_private *cs40l2x, unsigned int pos,
 			unsigned int reg, unsigned int val)
 {
 	unsigned int wseq_base = cs40l2x_dsp_reg(cs40l2x, "POWERONSEQUENCE",
-			CS40L2X_XM_UNPACKED_TYPE);
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
 	int ret;
+
+	/* missing write sequencer simply means there is nothing to do here */
+	if (!wseq_base)
+		return 0;
 
 	/* upper half */
 	ret = regmap_write(cs40l2x->regmap,
@@ -534,8 +540,11 @@ static int cs40l2x_wseq_write(struct cs40l2x_private *cs40l2x, unsigned int pos,
 static int cs40l2x_wseq_init(struct cs40l2x_private *cs40l2x)
 {
 	unsigned int wseq_base = cs40l2x_dsp_reg(cs40l2x, "POWERONSEQUENCE",
-			CS40L2X_XM_UNPACKED_TYPE);
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
 	int ret, i;
+
+	if (!wseq_base)
+		return 0;
 
 	for (i = 0; i < cs40l2x->wseq_length; i++) {
 		ret = cs40l2x_wseq_write(cs40l2x, i,
@@ -564,9 +573,6 @@ static int cs40l2x_wseq_replace(struct cs40l2x_private *cs40l2x,
 
 	cs40l2x->wseq_table[i].val = val;
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP)
-		return 0;
-
 	return cs40l2x_wseq_write(cs40l2x, i, reg, val);
 }
 
@@ -577,12 +583,15 @@ static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int val;
+	unsigned int user_ctrl_reg = cs40l2x_dsp_reg(cs40l2x,
+			"USER_CONTROL_IPDATA",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
 	int ret, i;
 
-	ret = regmap_write(regmap,
-			cs40l2x_dsp_reg(cs40l2x, "USER_CONTROL_IPDATA",
-					CS40L2X_XM_UNPACKED_TYPE),
-			user_ctrl_data);
+	if (!user_ctrl_reg)
+		return -EPERM;
+
+	ret = regmap_write(regmap, user_ctrl_reg, user_ctrl_data);
 	if (ret) {
 		dev_err(dev, "Failed to write user-control data\n");
 		return ret;
@@ -630,7 +639,8 @@ static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
 
 	ret = regmap_read(regmap,
 			cs40l2x_dsp_reg(cs40l2x, "USER_CONTROL_RESPONSE",
-					CS40L2X_XM_UNPACKED_TYPE),
+					CS40L2X_XM_UNPACKED_TYPE,
+					cs40l2x->fw_desc->id),
 			&val);
 	if (ret) {
 		dev_err(dev, "Failed to read user-control response\n");
@@ -679,7 +689,8 @@ static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
 
 		ret = regmap_read(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "TONE_DURATION_MS",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_QEST),
 				&val);
 		if (ret)
 			goto err_mutex;
@@ -712,11 +723,6 @@ static ssize_t cs40l2x_cp_trigger_q_sub_show(struct device *dev,
 	unsigned int val;
 
 	mutex_lock(&cs40l2x->lock);
-
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
 
 	ret = cs40l2x_user_ctrl_exec(cs40l2x, CS40L2X_USER_CTRL_Q_INDEX,
 			cs40l2x->cp_trigger_index, &val);
@@ -766,7 +772,8 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 
 			ret = regmap_read(cs40l2x->regmap,
 					cs40l2x_dsp_reg(cs40l2x, "POWERSTATE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 					&val);
 			if (ret)
 				return ret;
@@ -838,18 +845,18 @@ static ssize_t cs40l2x_hiber_timeout_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -867,7 +874,7 @@ static ssize_t cs40l2x_hiber_timeout_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -881,14 +888,14 @@ static ssize_t cs40l2x_hiber_timeout_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "FALSEI2CTIMEOUT",
-					CS40L2X_XM_UNPACKED_TYPE), val);
+	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret)
 		goto err_mutex;
 
@@ -905,18 +912,18 @@ static ssize_t cs40l2x_gpio1_enable_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -934,7 +941,7 @@ static ssize_t cs40l2x_gpio1_enable_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -942,14 +949,14 @@ static ssize_t cs40l2x_gpio1_enable_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-					CS40L2X_XM_UNPACKED_TYPE),
+	ret = regmap_write(cs40l2x->regmap, reg,
 			val ? CS40L2X_GPIO1_ENABLED : CS40L2X_GPIO1_DISABLED);
 	if (ret)
 		goto err_mutex;
@@ -967,20 +974,19 @@ static ssize_t cs40l2x_gpio1_rise_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS1,
-			&index);
+			reg + CS40L2X_INDEXBUTTONPRESS1, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -998,7 +1004,7 @@ static ssize_t cs40l2x_gpio1_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1011,16 +1017,15 @@ static ssize_t cs40l2x_gpio1_rise_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS1,
-			index);
+			reg + CS40L2X_INDEXBUTTONPRESS1, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1037,20 +1042,19 @@ static ssize_t cs40l2x_gpio1_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE1,
-			&index);
+			reg + CS40L2X_INDEXBUTTONRELEASE1, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -1068,7 +1072,7 @@ static ssize_t cs40l2x_gpio1_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1081,16 +1085,15 @@ static ssize_t cs40l2x_gpio1_fall_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE1,
-			index);
+			reg + CS40L2X_INDEXBUTTONRELEASE1, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1107,18 +1110,18 @@ static ssize_t cs40l2x_gpio1_fall_timeout_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -1136,7 +1139,7 @@ static ssize_t cs40l2x_gpio1_fall_timeout_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -1147,14 +1150,14 @@ static ssize_t cs40l2x_gpio1_fall_timeout_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "PRESS_RELEASE_TIMEOUT",
-					CS40L2X_XM_UNPACKED_TYPE), val);
+	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret)
 		goto err_mutex;
 
@@ -1171,23 +1174,22 @@ static ssize_t cs40l2x_gpio2_rise_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS2,
-			&index);
+			reg + CS40L2X_INDEXBUTTONPRESS2, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -1205,7 +1207,7 @@ static ssize_t cs40l2x_gpio2_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
@@ -1221,16 +1223,15 @@ static ssize_t cs40l2x_gpio2_rise_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS2,
-			index);
+			reg + CS40L2X_INDEXBUTTONPRESS2, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1247,23 +1248,22 @@ static ssize_t cs40l2x_gpio2_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE2,
-			&index);
+			reg + CS40L2X_INDEXBUTTONRELEASE2, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -1281,7 +1281,7 @@ static ssize_t cs40l2x_gpio2_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
@@ -1297,16 +1297,15 @@ static ssize_t cs40l2x_gpio2_fall_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE2,
-			index);
+			reg + CS40L2X_INDEXBUTTONRELEASE2, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1323,23 +1322,22 @@ static ssize_t cs40l2x_gpio3_rise_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS3,
-			&index);
+			reg + CS40L2X_INDEXBUTTONPRESS3, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -1357,7 +1355,7 @@ static ssize_t cs40l2x_gpio3_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
@@ -1373,16 +1371,15 @@ static ssize_t cs40l2x_gpio3_rise_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS3,
-			index);
+			reg + CS40L2X_INDEXBUTTONPRESS3, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1399,23 +1396,22 @@ static ssize_t cs40l2x_gpio3_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE3,
-			&index);
+			reg + CS40L2X_INDEXBUTTONRELEASE3, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -1433,7 +1429,7 @@ static ssize_t cs40l2x_gpio3_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
@@ -1449,16 +1445,15 @@ static ssize_t cs40l2x_gpio3_fall_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE3,
-			index);
+			reg + CS40L2X_INDEXBUTTONRELEASE3, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1475,23 +1470,22 @@ static ssize_t cs40l2x_gpio4_rise_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS4,
-			&index);
+			reg + CS40L2X_INDEXBUTTONPRESS4, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -1509,7 +1503,7 @@ static ssize_t cs40l2x_gpio4_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
@@ -1525,16 +1519,15 @@ static ssize_t cs40l2x_gpio4_rise_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONPRESS4,
-			index);
+			reg + CS40L2X_INDEXBUTTONPRESS4, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1551,23 +1544,22 @@ static ssize_t cs40l2x_gpio4_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE4,
-			&index);
+			reg + CS40L2X_INDEXBUTTONRELEASE4, &index);
 	if (ret)
 		goto err_mutex;
 
@@ -1585,7 +1577,7 @@ static ssize_t cs40l2x_gpio4_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int index;
+	unsigned int reg, index;
 
 	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
 		return -EPERM;
@@ -1601,16 +1593,15 @@ static ssize_t cs40l2x_gpio4_fall_index_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-					CS40L2X_XM_UNPACKED_TYPE)
-						+ CS40L2X_INDEXBUTTONRELEASE4,
-			index);
+			reg + CS40L2X_INDEXBUTTONRELEASE4, index);
 	if (ret)
 		goto err_mutex;
 
@@ -1627,18 +1618,18 @@ static ssize_t cs40l2x_standby_timeout_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -1656,7 +1647,7 @@ static ssize_t cs40l2x_standby_timeout_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -1667,14 +1658,14 @@ static ssize_t cs40l2x_standby_timeout_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "EVENT_TIMEOUT",
-					CS40L2X_XM_UNPACKED_TYPE), val);
+	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret)
 		goto err_mutex;
 
@@ -1712,18 +1703,20 @@ static ssize_t cs40l2x_f0_stored_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
+			CS40L2X_XM_UNPACKED_TYPE,
+			cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG ?
+				CS40L2X_ALGO_ID_F0 : cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -1741,7 +1734,7 @@ static ssize_t cs40l2x_f0_stored_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -1755,14 +1748,16 @@ static ssize_t cs40l2x_f0_stored_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
+			CS40L2X_XM_UNPACKED_TYPE,
+			cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG ?
+				CS40L2X_ALGO_ID_F0 : cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
-					CS40L2X_XM_UNPACKED_TYPE), val);
+	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret)
 		goto err_mutex;
 
@@ -1779,18 +1774,18 @@ static ssize_t cs40l2x_f0_offset_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "F0_OFFSET",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "F0_OFFSET",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -1808,7 +1803,7 @@ static ssize_t cs40l2x_f0_offset_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -1822,14 +1817,14 @@ static ssize_t cs40l2x_f0_offset_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "F0_OFFSET",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "F0_OFFSET",
-					CS40L2X_XM_UNPACKED_TYPE), val);
+	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret)
 		goto err_mutex;
 
@@ -1867,18 +1862,20 @@ static ssize_t cs40l2x_redc_stored_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
+			CS40L2X_XM_UNPACKED_TYPE,
+			cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG ?
+				CS40L2X_ALGO_ID_F0 : cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -1896,7 +1893,7 @@ static ssize_t cs40l2x_redc_stored_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -1910,14 +1907,16 @@ static ssize_t cs40l2x_redc_stored_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
+			CS40L2X_XM_UNPACKED_TYPE,
+			cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG ?
+				CS40L2X_ALGO_ID_F0 : cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
-					CS40L2X_XM_UNPACKED_TYPE), val);
+	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret) {
 		pr_err("Failed to store ReDC\n");
 		goto err_mutex;
@@ -1962,18 +1961,18 @@ static ssize_t cs40l2x_q_stored_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "Q_STORED",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "Q_STORED",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -1991,7 +1990,7 @@ static ssize_t cs40l2x_q_stored_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -2005,14 +2004,14 @@ static ssize_t cs40l2x_q_stored_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "Q_STORED",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "Q_STORED",
-					CS40L2X_XM_UNPACKED_TYPE), val);
+	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret)
 		goto err_mutex;
 
@@ -2071,13 +2070,15 @@ static ssize_t cs40l2x_comp_enable_store(struct device *dev,
 	case CS40L2X_FW_ID_ORIG:
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE),
 				cs40l2x->comp_enable);
 		break;
 	case CS40L2X_FW_ID_REMAP:
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE),
 				(cs40l2x->comp_enable
 					& cs40l2x->comp_enable_redc)
 					<< CS40L2X_COMP_EN_REDC_SHIFT |
@@ -2148,7 +2149,8 @@ static ssize_t cs40l2x_redc_comp_enable_store(struct device *dev,
 	case CS40L2X_FW_ID_REMAP:
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE),
 				(cs40l2x->comp_enable
 					& cs40l2x->comp_enable_redc)
 					<< CS40L2X_COMP_EN_REDC_SHIFT |
@@ -2266,12 +2268,15 @@ err_mutex:
 static int cs40l2x_gpio1_dig_scale_get(struct cs40l2x_private *cs40l2x,
 			unsigned int *dig_scale)
 {
-	int ret;
 	unsigned int val;
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	int ret;
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (!reg)
+		return -EPERM;
+
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		return ret;
 
@@ -2284,12 +2289,15 @@ static int cs40l2x_gpio1_dig_scale_get(struct cs40l2x_private *cs40l2x,
 static int cs40l2x_gpio1_dig_scale_set(struct cs40l2x_private *cs40l2x,
 			unsigned int dig_scale)
 {
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg)
+		return -EPERM;
+
 	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
 		return -EINVAL;
 
-	return regmap_update_bits(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
-					CS40L2X_XM_UNPACKED_TYPE),
+	return regmap_update_bits(cs40l2x->regmap, reg,
 			CS40L2X_GAIN_CTRL_GPIO_MASK,
 			dig_scale << CS40L2X_GAIN_CTRL_GPIO_SHIFT);
 }
@@ -2302,11 +2310,6 @@ static ssize_t cs40l2x_gpio1_dig_scale_show(struct device *dev,
 	unsigned int dig_scale;
 
 	mutex_lock(&cs40l2x->lock);
-
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
 
 	ret = cs40l2x_gpio1_dig_scale_get(cs40l2x, &dig_scale);
 	if (ret)
@@ -2337,11 +2340,6 @@ static ssize_t cs40l2x_gpio1_dig_scale_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
 	ret = cs40l2x_gpio1_dig_scale_set(cs40l2x, dig_scale);
 	if (ret)
 		goto err_mutex;
@@ -2357,12 +2355,15 @@ err_mutex:
 static int cs40l2x_cp_dig_scale_get(struct cs40l2x_private *cs40l2x,
 			unsigned int *dig_scale)
 {
-	int ret;
 	unsigned int val;
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	int ret;
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	if (!reg)
+		return -EPERM;
+
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		return ret;
 
@@ -2375,12 +2376,15 @@ static int cs40l2x_cp_dig_scale_get(struct cs40l2x_private *cs40l2x,
 static int cs40l2x_cp_dig_scale_set(struct cs40l2x_private *cs40l2x,
 			unsigned int dig_scale)
 {
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg)
+		return -EPERM;
+
 	if (dig_scale == CS40L2X_DIG_SCALE_RESET)
 		return -EINVAL;
 
-	return regmap_update_bits(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "GAIN_CONTROL",
-					CS40L2X_XM_UNPACKED_TYPE),
+	return regmap_update_bits(cs40l2x->regmap, reg,
 			CS40L2X_GAIN_CTRL_TRIG_MASK,
 			dig_scale << CS40L2X_GAIN_CTRL_TRIG_SHIFT);
 }
@@ -2393,11 +2397,6 @@ static ssize_t cs40l2x_cp_dig_scale_show(struct device *dev,
 	unsigned int dig_scale;
 
 	mutex_lock(&cs40l2x->lock);
-
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
 
 	ret = cs40l2x_cp_dig_scale_get(cs40l2x, &dig_scale);
 	if (ret)
@@ -2428,11 +2427,6 @@ static ssize_t cs40l2x_cp_dig_scale_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
 	ret = cs40l2x_cp_dig_scale_set(cs40l2x, dig_scale);
 	if (ret)
 		goto err_mutex;
@@ -2456,7 +2450,9 @@ static ssize_t cs40l2x_heartbeat_show(struct device *dev,
 
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "HALO_HEARTBEAT",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+					CS40L2X_XM_UNPACKED_TYPE,
+					cs40l2x->fw_desc->id),
+			&val);
 	if (ret)
 		goto err_mutex;
 
@@ -2521,18 +2517,18 @@ static ssize_t cs40l2x_vbatt_max_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "VPMONMAX",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "VPMONMAX",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -2555,7 +2551,7 @@ static ssize_t cs40l2x_vbatt_max_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -2566,15 +2562,14 @@ static ssize_t cs40l2x_vbatt_max_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "VPMONMAX",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "VPMONMAX",
-					CS40L2X_XM_UNPACKED_TYPE),
-			CS40L2X_VPMONMAX_RESET);
+	ret = regmap_write(cs40l2x->regmap, reg, CS40L2X_VPMONMAX_RESET);
 	if (ret)
 		goto err_mutex;
 
@@ -2591,18 +2586,18 @@ static ssize_t cs40l2x_vbatt_min_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "VPMONMIN",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "VPMONMIN",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -2625,7 +2620,7 @@ static ssize_t cs40l2x_vbatt_min_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -2636,15 +2631,14 @@ static ssize_t cs40l2x_vbatt_min_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "VPMONMIN",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "VPMONMIN",
-					CS40L2X_XM_UNPACKED_TYPE),
-			CS40L2X_VPMONMIN_RESET);
+	ret = regmap_write(cs40l2x->regmap, reg, CS40L2X_VPMONMIN_RESET);
 	if (ret)
 		goto err_mutex;
 
@@ -2837,18 +2831,18 @@ static ssize_t cs40l2x_exc_enable_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
+			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_EXC);
+	if (!reg) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
-					CS40L2X_XM_UNPACKED_TYPE), &val);
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
 	if (ret)
 		goto err_mutex;
 
@@ -2866,7 +2860,7 @@ static ssize_t cs40l2x_exc_enable_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val;
+	unsigned int reg, val;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -2874,16 +2868,15 @@ static ssize_t cs40l2x_exc_enable_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP
-			|| !cs40l2x->exc_available || cs40l2x->a2h_level) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
+			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_EXC);
+	if (!reg || !cs40l2x->exc_available || cs40l2x->a2h_level) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
 	ret = regmap_write(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
-					CS40L2X_XM_UNPACKED_TYPE),
-			val ? CS40L2X_EXC_ENABLED : CS40L2X_EXC_DISABLED);
+			reg, val ? CS40L2X_EXC_ENABLED : CS40L2X_EXC_DISABLED);
 	if (ret)
 		goto err_mutex;
 
@@ -2927,7 +2920,7 @@ static ssize_t cs40l2x_a2h_level_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int val, algo_state;
+	unsigned int reg, val, algo_state;
 
 	ret = kstrtou32(buf, 10, &val);
 	if (ret)
@@ -2940,15 +2933,14 @@ static ssize_t cs40l2x_a2h_level_store(struct device *dev,
 		goto err_mutex;
 	}
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP
-			|| !cs40l2x->exc_available) {
+	reg = cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
+			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_EXC);
+	if (!reg || !cs40l2x->exc_available) {
 		ret = -EPERM;
 		goto err_mutex;
 	}
 
-	ret = regmap_read(cs40l2x->regmap,
-			cs40l2x_dsp_reg(cs40l2x, "EX_PROTECT_ENABLED",
-					CS40L2X_XM_UNPACKED_TYPE), &algo_state);
+	ret = regmap_read(cs40l2x->regmap, reg, &algo_state);
 	if (ret)
 		goto err_mutex;
 
@@ -2959,7 +2951,9 @@ static ssize_t cs40l2x_a2h_level_store(struct device *dev,
 
 	ret = regmap_read(cs40l2x->regmap,
 			cs40l2x_dsp_reg(cs40l2x, "PRE_FILTER_ENABLED",
-					CS40L2X_YM_UNPACKED_TYPE), &algo_state);
+					CS40L2X_YM_UNPACKED_TYPE,
+					CS40L2X_ALGO_ID_PRE),
+			&algo_state);
 	if (ret)
 		goto err_mutex;
 
@@ -3206,7 +3200,7 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 	mutex_lock(&cs40l2x->lock);
 
 	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "STATUS",
-			CS40L2X_XM_UNPACKED_TYPE), &val);
+			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_VIBE), &val);
 	if (ret) {
 		dev_err(dev, "Failed to capture playback status\n");
 		goto err_mutex;
@@ -3237,7 +3231,8 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 		/* resume audio mode */
 		ret = regmap_read(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "I2S_ENABLED",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				&val);
 		if (ret) {
 			dev_err(dev, "Failed to capture pause status\n");
@@ -3291,7 +3286,8 @@ static int cs40l2x_stop_playback(struct cs40l2x_private *cs40l2x)
 	for (i = 0; i < CS40L2X_ENDPLAYBACK_RETRIES; i++) {
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "ENDPLAYBACK",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				CS40L2X_ENDPLAYBACK_REQ);
 		if (!ret)
 			return 0;
@@ -3427,8 +3423,11 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 		if (cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED)
 			break;
 
-		ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "STATUS",
-				CS40L2X_XM_UNPACKED_TYPE), &val);
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "STATUS",
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE),
+				&val);
 		if (ret) {
 			dev_err(dev, "Failed to capture playback status\n");
 			goto err_mutex;
@@ -3480,7 +3479,8 @@ static int cs40l2x_diag_enable(struct cs40l2x_private *cs40l2x,
 	case CS40L2X_FW_ID_CAL:
 		return regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "F0_TRACKING_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE), val);
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_F0), val);
 	default:
 		return -EPERM;
 	}
@@ -3496,14 +3496,16 @@ static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 	case CS40L2X_DIAG_STATE_RUN1:
 		ret = regmap_read(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "F0",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_F0),
 				&cs40l2x->f0_measured);
 		if (ret)
 			return ret;
 
 		ret = regmap_read(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "REDC",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_F0),
 				&cs40l2x->redc_measured);
 		if (ret)
 			return ret;
@@ -3514,7 +3516,8 @@ static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 	case CS40L2X_DIAG_STATE_RUN2:
 		ret = regmap_read(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "F0_TRACKING_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_F0),
 				&val);
 		if (ret)
 			return ret;
@@ -3524,7 +3527,8 @@ static int cs40l2x_diag_capture(struct cs40l2x_private *cs40l2x)
 
 		ret = regmap_read(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "Q_EST",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_QEST),
 				&val);
 		if (ret)
 			return ret;
@@ -3548,30 +3552,42 @@ static int cs40l2x_peak_capture(struct cs40l2x_private *cs40l2x)
 	int ret;
 
 	/* VMON min and max are returned as 24-bit two's-complement values */
-	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
-			CS40L2X_XM_UNPACKED_TYPE), &vmon_max);
+	ret = regmap_read(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
+					CS40L2X_XM_UNPACKED_TYPE,
+					cs40l2x->fw_desc->id),
+			&vmon_max);
 	if (ret)
 		return ret;
 	if (vmon_max > CS40L2X_VMON_POSFS)
 		vmon_max = ((vmon_max ^ CS40L2X_VMON_MASK) + 1) * -1;
 
-	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMIN",
-			CS40L2X_XM_UNPACKED_TYPE), &vmon_min);
+	ret = regmap_read(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "VMONMIN",
+					CS40L2X_XM_UNPACKED_TYPE,
+					cs40l2x->fw_desc->id),
+			&vmon_min);
 	if (ret)
 		return ret;
 	if (vmon_min > CS40L2X_VMON_POSFS)
 		vmon_min = ((vmon_min ^ CS40L2X_VMON_MASK) + 1) * -1;
 
 	/* IMON min and max are returned as 24-bit two's-complement values */
-	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMAX",
-			CS40L2X_XM_UNPACKED_TYPE), &imon_max);
+	ret = regmap_read(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "IMONMAX",
+					CS40L2X_XM_UNPACKED_TYPE,
+					cs40l2x->fw_desc->id),
+			&imon_max);
 	if (ret)
 		return ret;
 	if (imon_max > CS40L2X_IMON_POSFS)
 		imon_max = ((imon_max ^ CS40L2X_IMON_MASK) + 1) * -1;
 
-	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMIN",
-			CS40L2X_XM_UNPACKED_TYPE), &imon_min);
+	ret = regmap_read(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "IMONMIN",
+					CS40L2X_XM_UNPACKED_TYPE,
+					cs40l2x->fw_desc->id),
+			&imon_min);
 	if (ret)
 		return ret;
 	if (imon_min > CS40L2X_IMON_POSFS)
@@ -3639,7 +3655,8 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 		ret = regmap_read(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				&cs40l2x->peak_gpio1_enable);
 		if (ret) {
 			dev_err(dev, "Failed to read GPIO1 configuration\n");
@@ -3648,7 +3665,8 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				CS40L2X_GPIO1_DISABLED);
 		if (ret) {
 			dev_err(dev, "Failed to disable GPIO1\n");
@@ -3664,29 +3682,41 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 		msleep(CS40L2X_PEAK_DELAY_MS);
 
-		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
-				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_VMON_NEGFS);
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "VMONMAX",
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
+				CS40L2X_VMON_NEGFS);
 		if (ret) {
 			dev_err(dev, "Failed to reset maximum VMON\n");
 			goto err_mutex;
 		}
 
-		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "VMONMIN",
-				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_VMON_POSFS);
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "VMONMIN",
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
+				CS40L2X_VMON_POSFS);
 		if (ret) {
 			dev_err(dev, "Failed to reset minimum VMON\n");
 			goto err_mutex;
 		}
 
-		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMAX",
-				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_IMON_NEGFS);
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "IMONMAX",
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
+				CS40L2X_IMON_NEGFS);
 		if (ret) {
 			dev_err(dev, "Failed to reset maximum IMON\n");
 			goto err_mutex;
 		}
 
-		ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "IMONMIN",
-				CS40L2X_XM_UNPACKED_TYPE), CS40L2X_IMON_POSFS);
+		ret = regmap_write(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "IMONMIN",
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
+				CS40L2X_IMON_POSFS);
 		if (ret)
 			dev_err(dev, "Failed to reset minimum IMON\n");
 		break;
@@ -3747,7 +3777,9 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "CLOSED_LOOP",
-					CS40L2X_XM_UNPACKED_TYPE), 0);
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_F0),
+				0);
 		if (ret) {
 			dev_err(dev, "Failed to disable closed-loop mode\n");
 			goto err_mutex;
@@ -3763,7 +3795,9 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "CLOSED_LOOP",
-					CS40L2X_XM_UNPACKED_TYPE), 1);
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_F0),
+				1);
 		if (ret) {
 			dev_err(dev, "Failed to enable closed-loop mode\n");
 			goto err_mutex;
@@ -3845,7 +3879,8 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				cs40l2x->peak_gpio1_enable);
 		if (ret)
 			dev_err(dev, "Failed to restore GPIO1 configuration\n");
@@ -4248,8 +4283,11 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 				| CS40L2X_GPIO_BTNDETECT_GPIO3
 				| CS40L2X_GPIO_BTNDETECT_GPIO4);
 
-	ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "GPIO_BUTTONDETECT",
-			CS40L2X_XM_UNPACKED_TYPE), gpio_btndetect);
+	ret = regmap_write(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "GPIO_BUTTONDETECT",
+					CS40L2X_XM_UNPACKED_TYPE,
+					cs40l2x->fw_desc->id),
+			gpio_btndetect);
 	if (ret) {
 		dev_err(dev, "Failed to enable GPIO detection\n");
 		return ret;
@@ -4258,7 +4296,8 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio1_mode != CS40L2X_GPIO1_MODE_DEF_ON) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				CS40L2X_GPIO1_DISABLED);
 		if (ret) {
 			dev_err(dev, "Failed to pre-configure GPIO1\n");
@@ -4275,7 +4314,8 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				cs40l2x->event_control);
 		if (ret) {
 			dev_err(dev, "Failed to configure event controls\n");
@@ -4292,7 +4332,8 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 			ret = regmap_write(regmap,
 					cs40l2x_dsp_reg(cs40l2x,
 						"IRQMASKSEQUENCE",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ i * CS40L2X_IRQMASKSEQ_STRIDE,
 					(val & CS40L2X_IRQMASKSEQ_MASK1)
 						<< CS40L2X_IRQMASKSEQ_SHIFTUP);
@@ -4306,7 +4347,8 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 			ret = regmap_write(regmap,
 					cs40l2x_dsp_reg(cs40l2x,
 						"IRQMASKSEQUENCE",
-						CS40L2X_XM_UNPACKED_TYPE) + 4
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id) + 4
 						+ i * CS40L2X_IRQMASKSEQ_STRIDE,
 					(val & CS40L2X_IRQMASKSEQ_MASK2)
 						>> CS40L2X_IRQMASKSEQ_SHIFTDN);
@@ -4320,7 +4362,9 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x,
 						"IRQMASKSEQUENCE_VALID",
-						CS40L2X_XM_UNPACKED_TYPE), 1);
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
+				1);
 		if (ret) {
 			dev_err(dev, "Failed to enable IRQMASKSEQ\n");
 			return ret;
@@ -4399,8 +4443,11 @@ static int cs40l2x_dsp_start(struct cs40l2x_private *cs40l2x)
 	while (dsp_timeout > 0) {
 		usleep_range(10000, 10100);
 
-		ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "HALO_STATE",
-				CS40L2X_XM_UNPACKED_TYPE), &dsp_status);
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "HALO_STATE",
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
+				&dsp_status);
 		if (ret) {
 			dev_err(dev, "Failed to read DSP status\n");
 			return ret;
@@ -4436,15 +4483,21 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL)
 		return 0;
 
-	ret = regmap_write(regmap, cs40l2x_dsp_reg(cs40l2x, "TIMEOUT_MS",
-			CS40L2X_XM_UNPACKED_TYPE), CS40L2X_TIMEOUT_MS_MAX);
+	ret = regmap_write(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "TIMEOUT_MS",
+					CS40L2X_XM_UNPACKED_TYPE,
+					CS40L2X_ALGO_ID_VIBE),
+			CS40L2X_TIMEOUT_MS_MAX);
 	if (ret) {
 		dev_err(dev, "Failed to extend playback timeout\n");
 		return ret;
 	}
 
-	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "NUMBEROFWAVES",
-			CS40L2X_XM_UNPACKED_TYPE), &cs40l2x->num_waves);
+	ret = regmap_read(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "NUMBEROFWAVES",
+					CS40L2X_XM_UNPACKED_TYPE,
+					CS40L2X_ALGO_ID_VIBE),
+			&cs40l2x->num_waves);
 	if (ret) {
 		dev_err(dev, "Failed to count wavetable entries\n");
 		return ret;
@@ -4459,13 +4512,15 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	case CS40L2X_FW_ID_ORIG:
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE),
 				cs40l2x->comp_enable);
 		break;
 	case CS40L2X_FW_ID_REMAP:
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "COMPENSATION_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE),
 				(cs40l2x->comp_enable
 					& cs40l2x->comp_enable_redc)
 					<< CS40L2X_COMP_EN_REDC_SHIFT |
@@ -4485,7 +4540,11 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.f0_default) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "F0_STORED",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id ==
+							CS40L2X_FW_ID_ORIG ?
+							CS40L2X_ALGO_ID_F0 :
+							cs40l2x->fw_desc->id),
 				cs40l2x->pdata.f0_default);
 		if (ret) {
 			dev_err(dev, "Failed to write default f0\n");
@@ -4496,7 +4555,11 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.redc_default) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "REDC_STORED",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id ==
+							CS40L2X_FW_ID_ORIG ?
+							CS40L2X_ALGO_ID_F0 :
+							cs40l2x->fw_desc->id),
 				cs40l2x->pdata.redc_default);
 		if (ret) {
 			dev_err(dev, "Failed to write default ReDC\n");
@@ -4508,7 +4571,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			&& cs40l2x->fw_desc->id == CS40L2X_FW_ID_REMAP) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "Q_STORED",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				cs40l2x->pdata.q_default);
 		if (ret) {
 			dev_err(dev, "Failed to write default Q\n");
@@ -4521,7 +4585,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 				< cs40l2x->num_waves) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONPRESS1,
 				cs40l2x->pdata.gpio1_rise_index);
 		if (ret) {
@@ -4538,7 +4603,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 				< cs40l2x->num_waves) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONRELEASE1,
 				cs40l2x->pdata.gpio1_fall_index);
 		if (ret) {
@@ -4557,7 +4623,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x,
 						"PRESS_RELEASE_TIMEOUT",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				cs40l2x->pdata.gpio1_fall_timeout
 					& CS40L2X_PDATA_MASK);
 		if (ret) {
@@ -4575,7 +4642,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONPRESS2,
 				cs40l2x->pdata.gpio2_rise_index);
 		if (ret) {
@@ -4595,7 +4663,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONRELEASE2,
 				cs40l2x->pdata.gpio2_fall_index);
 		if (ret) {
@@ -4615,7 +4684,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONPRESS3,
 				cs40l2x->pdata.gpio3_rise_index);
 		if (ret) {
@@ -4635,7 +4705,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONRELEASE3,
 				cs40l2x->pdata.gpio3_fall_index);
 		if (ret) {
@@ -4655,7 +4726,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONPRESS4,
 				cs40l2x->pdata.gpio4_rise_index);
 		if (ret) {
@@ -4675,7 +4747,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE)
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
 						+ CS40L2X_INDEXBUTTONRELEASE4,
 				cs40l2x->pdata.gpio4_fall_index);
 		if (ret) {
@@ -4840,7 +4913,8 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 			if (block_length > cs40l2x->wt_limit_xm
 					&& reg == cs40l2x_dsp_reg(cs40l2x,
 						"WAVETABLE",
-						CS40L2X_XM_UNPACKED_TYPE)) {
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE)) {
 				dev_err(dev,
 					"Wavetable too large: %d bytes (XM)\n",
 					block_length / 4 * 3);
@@ -4855,7 +4929,8 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 			if (block_length > cs40l2x->wt_limit_ym
 					&& reg == cs40l2x_dsp_reg(cs40l2x,
 						"WAVETABLEYM",
-						CS40L2X_YM_UNPACKED_TYPE)) {
+						CS40L2X_YM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE)) {
 				dev_err(dev,
 					"Wavetable too large: %d bytes (YM)\n",
 					block_length / 4 * 3);
@@ -5180,7 +5255,8 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 	case CS40L2X_FW_ID_REMAP:
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				CS40L2X_EVENT_DISABLED);
 		if (ret) {
 			dev_err(dev, "Failed to disable event controls\n");
@@ -5212,7 +5288,9 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 
 		ret = cs40l2x_ack_write(cs40l2x,
 				cs40l2x_dsp_reg(cs40l2x, "SHUTDOWNREQUEST",
-						CS40L2X_XM_UNPACKED_TYPE), 1);
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
+				1);
 		if (ret) {
 			dev_err(dev, "Failed to administer shutdown request\n");
 			return ret;
@@ -6470,7 +6548,7 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int asp_timeout = cs40l2x->pdata.asp_timeout;
-	unsigned int val;
+	unsigned int event_reg, val;
 	int event_count = 0;
 	int ret, i;
 	irqreturn_t ret_irq = IRQ_NONE;
@@ -6480,19 +6558,17 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (cs40l2x->fw_desc->id != CS40L2X_FW_ID_REMAP)
-		goto err_mutex;
-
 	for (i = 0; i < ARRAY_SIZE(cs40l2x_event_regs); i++) {
 		/* skip disabled event notifiers */
 		if (!(cs40l2x->event_control & cs40l2x_event_masks[i]))
 			continue;
 
-		ret = regmap_read(regmap,
-				cs40l2x_dsp_reg(cs40l2x,
-						cs40l2x_event_regs[i],
-						CS40L2X_XM_UNPACKED_TYPE),
-				&val);
+		event_reg = cs40l2x_dsp_reg(cs40l2x, cs40l2x_event_regs[i],
+				CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+		if (!event_reg)
+			goto err_mutex;
+
+		ret = regmap_read(regmap, event_reg, &val);
 		if (ret) {
 			dev_err(dev, "Failed to read %s\n",
 					cs40l2x_event_regs[i]);
@@ -6537,11 +6613,7 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 			goto err_mutex;
 		}
 
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x,
-						cs40l2x_event_regs[i],
-						CS40L2X_XM_UNPACKED_TYPE),
-				CS40L2X_EVENT_CTRL_NONE);
+		ret = regmap_write(regmap, event_reg, CS40L2X_EVENT_CTRL_NONE);
 		if (ret) {
 			dev_err(dev, "Failed to acknowledge %s\n",
 					cs40l2x_event_regs[i]);
@@ -6757,7 +6829,8 @@ static int __maybe_unused cs40l2x_suspend(struct device *dev)
 			&& cs40l2x->fw_desc->id != CS40L2X_FW_ID_CAL) {
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				CS40L2X_GPIO1_ENABLED);
 		if (ret) {
 			dev_err(dev, "Failed to enable GPIO1 upon suspend\n");
@@ -6800,7 +6873,8 @@ static int __maybe_unused cs40l2x_resume(struct device *dev)
 			&& cs40l2x->fw_desc->id != CS40L2X_FW_ID_CAL) {
 		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x_dsp_reg(cs40l2x, "GPIO_ENABLE",
-						CS40L2X_XM_UNPACKED_TYPE),
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id),
 				CS40L2X_GPIO1_DISABLED);
 		if (ret)
 			dev_err(dev, "Failed to disable GPIO1 upon resume\n");
