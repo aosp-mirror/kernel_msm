@@ -1018,7 +1018,7 @@ enum sysid_dir_e {
 /** Get the stream number from the stream system id
  */
 #define IAXXX_SYSID_GET_STREAM_ID(sysId)                       \
-	(((sysId) & IAXXX_SYSID_MASK_STREAM_ID) >> IAXXX_SYSID_POS_STREAM_ID)
+(((sysId) & IAXXX_SYSID_MASK_STREAM_ID) >> IAXXX_SYSID_POS_STREAM_ID)
 
 
 /** Generate the device system id
@@ -1039,8 +1039,7 @@ enum sysid_dir_e {
 /** Get the device instance number from the device system id
  */
 #define IAXXX_SYSID_GET_DEVICE_INST(sysId)                        \
-	(((sysId) & IAXXX_SYSID_MASK_DEVICE_INST) >>		\
-	IAXXX_SYSID_POS_DEVICE_INST)
+(((sysId) & IAXXX_SYSID_MASK_DEVICE_INST) >> IAXXX_SYSID_POS_DEVICE_INST)
 
 
 /************************************************************************//**

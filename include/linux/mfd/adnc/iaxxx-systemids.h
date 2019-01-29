@@ -36,6 +36,10 @@
 /* Defines instance number for single instance drivers */
 #define IAXXX_DEV_SINGLE_INSTANCE (0)
 
+/***************************************************************************//**
+ * @defgroup res_mgr_enum_types Resource Mgr enums
+ * @{
+ ******************************************************************************/
 
 /****************************************************************************
  * Types
@@ -149,11 +153,11 @@ enum iaxxx_device_instance_uart_e {
 /* Enum defining the instances of SPI devices
  */
 enum IAXXX_DEV_instance_spi_e {
-	IAXXX_DEV_INSTANCE_SPI0 = 0,
-	IAXXX_DEV_INSTANCE_SPI1,
-	IAXXX_DEV_INSTANCE_SPI2,
+	IAXXX_DEV_INSTANCE_SPI0 = 0,		/*< SPI Device Instance 0*/
+	IAXXX_DEV_INSTANCE_SPI1,		/*< SPI Device Instance 1*/
+	IAXXX_DEV_INSTANCE_SPI2,		/*< SPI Device Instance 2*/
 
-	IAXXX_DEV_NUM_INSTANCE_SPI,
+	IAXXX_DEV_NUM_INSTANCE_SPI,		/* No SPI Instances */
 
 	/* Force enums to be of size int */
 	IAXXX_DEV_INSTANCE_SPI_FORCE_SIZE = INT_MAX,
