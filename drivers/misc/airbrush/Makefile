@@ -8,7 +8,6 @@ airbrush-y +=	\
 		airbrush-M0-interrupt.o \
 		airbrush-spi.o \
 		airbrush-pmu.o \
-		airbrush-power-gating.o \
 		airbrush-pmic-ctrl.o \
 		airbrush-ddr.o \
 		airbrush-ddr-vref.o \

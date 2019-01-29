@@ -28,7 +28,6 @@
 #include "airbrush-ddr.h"
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-pmu.h"
-#include "airbrush-power-gating.h"
 #include "airbrush-regs.h"
 #include "airbrush-spi.h"
 #include "airbrush-thermal.h"
