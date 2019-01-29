@@ -17,6 +17,41 @@
 
 #define MAX_FILE_CHAR_SIZE	256
 
+enum {
+	MPLL_CLK_3000,      /*!< 3  MHz   */
+	MPLL_CLK_5000,      /*!< 5  MHz  */
+	MPLL_CLK_6000,      /*!< 6  MHz  */
+	MPLL_CLK_8000,      /*!< 8  MHz  */
+	MPLL_CLK_10000,     /*!< 10 MHz  */
+	MPLL_CLK_15000,     /*!< 15 MHz  */
+	MPLL_CLK_30000,     /*!< 30 MHz  */
+	MPLL_CLK_60000,     /*!< 60 MHz  */
+	MPLL_CLK_80000,     /*!< 80 MHz  */
+	MPLL_CLK_120000,    /*!< 120 MHz */
+#ifdef EXTENDED_FREQ_SUPPORT
+	MPLL_CLK_150000,    /*!< 150 MHz */
+	MPLL_CLK_180000,    /*!< 180 MHz */
+	MPLL_CLK_200000,    /*!< 200 MHz */
+#endif /* EXTENDED_FREQ_SUPPORT */
+	NUM_MPLL_CLK_FREQ,
+};
+
+enum {
+	APLL_CLK_3072,      /*!< 3.072  MHz */
+	APLL_CLK_6144,      /*!< 6.144  MHz */
+	APLL_CLK_12288,     /*!< 12.288  MHz */
+	APLL_CLK_24576,     /*!< 24.576  MHz */
+	APLL_CLK_49152,     /*!< 49.152  MHz */
+	APLL_CLK_98304,     /*!< 98.304  MHz */
+	APLL_CLK_368640,    /*!< 368.640 MHz */
+	NUM_APLL_CLK_FREQ,
+};
+
+struct iaxxx_pwr_stats {
+	uint32_t mpll_cumulative_cnts[NUM_MPLL_CLK_FREQ];
+	uint32_t apll_cumulative_cnts[NUM_APLL_CLK_FREQ];
+};
+
 struct iaxxx_sensor_info {
 	uint32_t block_id;
 	uint32_t inst_id;
@@ -46,4 +81,6 @@ struct iaxxx_script_info {
 #define SCRIPT_LOAD _IO(IAXXX_IOCTL_MAGIC, 0x61)
 #define SCRIPT_UNLOAD _IO(IAXXX_IOCTL_MAGIC, 0x62)
 #define SCRIPT_TRIGGER _IO(IAXXX_IOCTL_MAGIC, 0x63)
+
+#define IAXXX_POWER_STATS_COUNT _IO(IAXXX_IOCTL_MAGIC, 0x71)
 #endif /* __IAXXX_MODULE_H__ */

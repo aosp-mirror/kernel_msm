@@ -39,7 +39,6 @@
 
 void iaxxx_pm_enable(struct iaxxx_priv *priv)
 {
-
 #ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
 	int ret = 0;
 
@@ -496,3 +495,57 @@ int iaxxx_get_max_spi_speed(struct device *dev, uint32_t *max_spi_speed)
 
 	return rc;
 }
+
+/*****************************************************************************
+ * iaxxx_core_get_pwr_stats()
+ * @brief get power transition count for each xclk and aclk values.
+ *
+ * @pwr_stats power statistics for mpll and apll values
+ *
+ * @ret n number of words read, ret in case of error
+ ****************************************************************************/
+int iaxxx_core_get_pwr_stats(struct device *dev,
+			struct iaxxx_pwr_stats *pwr_stats)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t pwr_stats_addr = 0;
+	uint32_t pwr_stats_size = 0;
+	int ret = 0;
+
+	ret = regmap_read(priv->regmap,
+		IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_ADDR, &pwr_stats_addr);
+	if (ret) {
+		dev_err(dev, "%s() failed %d\n", __func__, ret);
+		goto exit;
+	}
+
+	ret = regmap_read(priv->regmap,
+		IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_ADDR, &pwr_stats_size);
+	if (ret) {
+		dev_err(dev, "%s() failed %d\n", __func__, ret);
+		goto exit;
+	}
+
+	if (pwr_stats_size != (sizeof(struct iaxxx_pwr_stats) >> 2)) {
+		dev_err(dev,
+			"%s() pwr_stats_size %d != struct size %zu\n",
+			__func__, pwr_stats_size,
+			sizeof(struct iaxxx_pwr_stats) >> 2);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	ret = priv->bulk_read(priv->dev,
+		pwr_stats_addr, pwr_stats, pwr_stats_size);
+	if (ret != pwr_stats_size) {
+		dev_err(priv->dev, "Not able to read pwr stats %d\n",
+				ret);
+		goto exit;
+	}
+
+	dev_dbg(priv->dev, "read pwr stats successfully in words %u\n",
+			pwr_stats_size);
+exit:
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_get_pwr_stats);

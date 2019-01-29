@@ -38,6 +38,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_sensor_info sensor_info;
 	struct iaxxx_script_info script_info;
 	struct iaxxx_sensor_param param_info;
+	struct iaxxx_pwr_stats pwr_stats_count;
 	uint16_t script_id;
 	int ret = -EINVAL;
 
@@ -187,6 +188,23 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 
 		break;
+	case IAXXX_POWER_STATS_COUNT:
+		if (copy_from_user(&pwr_stats_count, (void __user *)arg,
+					sizeof(pwr_stats_count)))
+			return -EFAULT;
+
+		/* Get Power Statistics */
+		if (iaxxx_core_get_pwr_stats(module_dev_priv->parent,
+					&pwr_stats_count) <= 0) {
+			pr_err("Error in reading power statistics\n");
+			return -EINVAL;
+		}
+
+		if (copy_to_user((void __user *)arg, &pwr_stats_count,
+					sizeof(pwr_stats_count)))
+			return -EFAULT;
+
+		return 0;
 	default:
 		break;
 	}

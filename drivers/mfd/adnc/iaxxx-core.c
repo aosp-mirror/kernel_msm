@@ -37,6 +37,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-cnr0.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-ao.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
+#include <linux/mfd/adnc/iaxxx-module.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-debug.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pwr-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>

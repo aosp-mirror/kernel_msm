@@ -25,6 +25,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
+#include <linux/mfd/adnc/iaxxx-module.h>
 
 typedef int (*iaxxx_cb_func_ptr_t)(struct device *dev);
 typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
@@ -302,6 +303,9 @@ struct iaxxx_priv {
 	bool debug_fwcrash_handling_disable;
 	bool debug_runtime_pm_disable;
 	struct mutex debug_mutex;
+
+	/* Power transition Statistcis */
+	struct iaxxx_pwr_stats *pwr_stats;
 };
 
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
@@ -485,5 +489,7 @@ int iaxxx_set_update_plugin_log_state(struct device *dev,
 				bool mode, uint32_t inst_id, uint8_t block_id);
 int iaxxx_get_plugin_log_state(struct device *dev,
 				bool *mode, uint32_t inst_id, uint8_t block_id);
+int iaxxx_core_get_pwr_stats(struct device *dev,
+			struct iaxxx_pwr_stats *pwr_stats);
 
 #endif /*__IAXXX_CORE_H__ */
