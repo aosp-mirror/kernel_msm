@@ -721,6 +721,27 @@ static void ddr_deassert_phy_reset_while_phy_is_gated(void)
 	ddr_reg_set(PHY1_RST_CTRL_REG, RST_N | DIV_RST_N);
 }
 
+static int ddr_block_axi_transactions(void)
+{
+	unsigned long timeout;
+
+	timeout = jiffies + usecs_to_jiffies(DDR_AXI_BLOCK_TIMEOUT);
+	ddr_reg_clr(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+
+	while (((ddr_reg_rd(DREX_EMPTY_STATE) & IDLE_STATE_MASK) !=
+	       IDLE_STATE_MASK) && time_before(jiffies, timeout))
+		ddr_usleep(DDR_POLL_USLEEP_MIN);
+
+	/* check for the ddr empty state */
+	if ((ddr_reg_rd(DREX_EMPTY_STATE) & IDLE_STATE_MASK) !=
+	    IDLE_STATE_MASK) {
+		pr_err("Block AXI: Error!! DDR AXI Block timeout\n");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
 static void ddr_initialize_phy_pre(void)
 {
 	ddr_reg_clr(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
@@ -1844,7 +1865,8 @@ static int ddr_set_mif_freq(struct ab_state_context *sc, enum ddr_freq_t freq)
 	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
-	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
+	if (ddr_block_axi_transactions())
+		return -ETIMEDOUT;
 
 	/* Disable PB Refresh & Auto Refresh */
 	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
@@ -2113,7 +2135,8 @@ int32_t ab_ddr_suspend(struct ab_state_context *sc)
 		ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 		/* Block AXI Before entering self-refresh */
-		ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
+		if (ddr_block_axi_transactions())
+			return -ETIMEDOUT;
 
 		/* Disable PB Refresh & Auto Refresh */
 		ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
@@ -2247,7 +2270,8 @@ int32_t ab_ddr_selfrefresh_enter(struct ab_state_context *sc)
 	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_WRITE(512));
 #endif
 	/* Block AXI Before entering self-refresh */
-	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x0);
+	if (ddr_block_axi_transactions())
+		return -ETIMEDOUT;
 
 	/* Disable PB Refresh & Auto Refresh */
 	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);

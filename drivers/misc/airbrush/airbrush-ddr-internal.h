@@ -208,6 +208,8 @@
 #define DREX_WRTRA_PATTERN0		0x10580460
 #define DREX_WRTRA_PATTERN1		0x10580464
 #define DREX_WRTRA_PATTERN2		0x10580468
+#define DREX_EMPTY_STATE		0x10580504
+#define IDLE_STATE_MASK			(0x7fff)
 #define DREX_DFIRSTCONTROL		0x10580708
 #define DFI_RESET_CONTROL		(0x1 << 0)
 #define PB_WA_EN			(0x1 << 8)
@@ -796,6 +798,7 @@
 #define POLL_TIMEOUT_USEC		10000
 #define DDR_POLL_USLEEP_MIN		100
 #define DDR_CLK_IN_SENSE_TIMEOUT	5000
+#define DDR_AXI_BLOCK_TIMEOUT		5000
 /* Minimum RESET_n LOW time after completion of voltage ramp */
 #define DDR_INIT_TIMING_tINIT1_USEC	400
 /* Minimum CKE low time after RESET_n high */
