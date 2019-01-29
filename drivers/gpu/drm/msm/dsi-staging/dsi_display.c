@@ -6859,6 +6859,14 @@ int dsi_display_prepare(struct dsi_display *display)
 					display->name, rc);
 			goto error_ctrl_link_off;
 		}
+	} else {
+		/* Keep the screen brightness for continuous splash. */
+		rc = dsi_panel_bl_brightness_handoff(display->panel);
+		if (rc) {
+			pr_warn("[%s] failed to handoff brightness, rc = %d\n",
+					display->panel->name, rc);
+			/* Ignore error and use default brightness */
+		}
 	}
 	goto error;
 

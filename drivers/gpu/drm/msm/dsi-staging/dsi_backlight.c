@@ -23,6 +23,7 @@
 #include "dsi_panel.h"
 
 #define BL_NODE_NAME_SIZE 32
+#define BL_BRIGHTNESS_BUF_SIZE 2
 
 #define BL_STATE_LP		BL_CORE_DRIVER1
 #define BL_STATE_LP2		BL_CORE_DRIVER2
@@ -1124,5 +1125,65 @@ int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config
 	}
 
 error:
+	return rc;
+}
+
+static int dsi_panel_bl_read_brightness(struct dsi_panel *panel,
+		struct dsi_backlight_config *bl_cfg, int *lvl)
+{
+	u32 rc;
+	u8 buf[BL_BRIGHTNESS_BUF_SIZE];
+
+	rc = mipi_dsi_dcs_read(&panel->mipi_device,
+		MIPI_DCS_GET_DISPLAY_BRIGHTNESS, buf, BL_BRIGHTNESS_BUF_SIZE);
+
+	if (rc <= 0 || rc > BL_BRIGHTNESS_BUF_SIZE) {
+		pr_err("mipi_dsi_dcs_read error: %d\n", rc);
+		return -EIO;
+	}
+
+	if (rc == 1)
+		*lvl = buf[0];
+	else if (rc == 2)
+		*lvl = be16_to_cpu(*(const __be16 *)buf);
+	else {
+		pr_err("unexpected buffer size: %d\n", rc);
+		return -EIO;
+	}
+
+	/* Some panels may not clear non-functional bits. */
+	*lvl &= (1 << fls(bl_cfg->bl_max_level)) - 1;
+
+	return 0;
+}
+
+int dsi_panel_bl_brightness_handoff(struct dsi_panel *panel)
+{
+	struct dsi_backlight_config *bl_cfg;
+	struct backlight_device *bl_device;
+	int bl_lvl = 0, brightness, rc;
+
+	if (!panel || !panel->bl_config.bl_device)
+		return -EINVAL;
+
+	bl_cfg = &panel->bl_config;
+	bl_device = bl_cfg->bl_device;
+
+	rc = dsi_panel_bl_read_brightness(panel, bl_cfg, &bl_lvl);
+	if (rc) {
+		pr_err("Failed to read brightness from panel.\n");
+		return rc;
+	}
+
+	rc = dsi_backlight_lerp(bl_cfg->bl_min_level, bl_cfg->bl_max_level, 1,
+		bl_cfg->brightness_max_level, bl_lvl, &brightness);
+	if (rc) {
+		pr_err("Failed to map brightness to user space.\n");
+		return rc;
+	}
+
+	pr_debug("brightness 0x%x to user space %d\n", bl_lvl, brightness);
+	bl_device->props.brightness = brightness;
+
 	return rc;
 }

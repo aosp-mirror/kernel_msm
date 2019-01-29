@@ -398,6 +398,7 @@ int dsi_panel_bl_register(struct dsi_panel *panel);
 int dsi_panel_bl_unregister(struct dsi_panel *panel);
 int dsi_panel_bl_parse_config(struct device *parent,
 			      struct dsi_backlight_config *bl);
+int dsi_panel_bl_brightness_handoff(struct dsi_panel *panel);
 
 int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable);
 bool dsi_panel_get_vr_mode(struct dsi_panel *panel);
