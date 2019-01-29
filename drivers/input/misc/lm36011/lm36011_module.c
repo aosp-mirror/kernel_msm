@@ -770,7 +770,7 @@ static int lm36011_set_up_silego_irq(
 		irq_name = (ctrl->type == LASER_FLOOD) ?
 			"ir_vcsel_fault_flood" : "ir_vcsel_fault_dot";
 		rc = request_irq(irq, silego_ir_vcsel_fault_handler,
-			IRQF_TRIGGER_FALLING | IRQF_SHARED, irq_name, dev);
+			IRQF_TRIGGER_FALLING, irq_name, dev);
 		break;
 	case IR_VCSEL_TEST:
 		dev_dbg(dev, "setup irq IR_VCSEL_TEST");
@@ -779,7 +779,7 @@ static int lm36011_set_up_silego_irq(
 			"ir_vcsel_fault_count_dot";
 		rc = request_irq(irq,
 			silego_ir_vcsel_fault_count_handler,
-			IRQF_TRIGGER_RISING | IRQF_SHARED,
+			IRQF_TRIGGER_RISING,
 			irq_name, dev);
 		break;
 	default:
@@ -805,7 +805,7 @@ static int lm36011_set_up_cap_sense_irq(
 		irq_name = (ctrl->type == LASER_FLOOD) ?
 			"cap_sense_irq_flood" : "cap_sense_irq_dot";
 		rc = request_irq(irq, cap_sense_irq_handler,
-			IRQF_TRIGGER_FALLING | IRQF_SHARED, irq_name, dev);
+			IRQF_TRIGGER_FALLING, irq_name, dev);
 		break;
 	default:
 		return -EINVAL;
@@ -1114,27 +1114,32 @@ static ssize_t led_laser_enable_store(struct device *dev,
 			mutex_unlock(&ctrl->cam_sensor_mutex);
 			return rc;
 		}
-		/* Cap sense initialize */
-		if (ctrl->hw_version >= 2 && ctrl->type == LASER_FLOOD) {
-			rc = sx9320_init_setting(ctrl);
-			if (rc < 0) {
-				dev_err(ctrl->soc_info.dev,
-					"initialize cap sense failed: rc: %d",
-					rc);
-				lm36011_power_down(ctrl);
-				mutex_unlock(&ctrl->cam_sensor_mutex);
-				return rc;
+		/* Prepare safety ic IRQ */
+		if (ctrl->type == LASER_FLOOD) {
+			if (ctrl->hw_version >= 2) {
+				rc = sx9320_init_setting(ctrl);
+				if (rc < 0) {
+					dev_err(ctrl->soc_info.dev,
+						"initialize cap sense failed");
+					lm36011_power_down(ctrl);
+					mutex_unlock(&ctrl->cam_sensor_mutex);
+					return rc;
+				}
 			}
-		} else if (ctrl->hw_version < 2)
+			lm36011_enable_gpio_irq(dev);
+		}
+
+		/* Clean up IRQ for PROTO and DEV device */
+		if (ctrl->hw_version < 2)
 			sx9320_cleanup_nirq(ctrl);
 
-		lm36011_enable_gpio_irq(dev);
 		rc = lm36011_write_data(ctrl,
 			ENABLE_REG, IR_ENABLE_MODE);
 		if (rc == 0)
 			dev_info(dev, "Laser enabled");
 	} else {
-		lm36011_disable_gpio_irq(dev);
+		if (ctrl->type == LASER_FLOOD)
+			lm36011_disable_gpio_irq(dev);
 		rc = lm36011_power_down(ctrl);
 		if (rc == 0)
 			dev_info(dev, "Laser disabled");
