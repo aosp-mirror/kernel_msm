@@ -2031,6 +2031,55 @@ int32_t ab_ddr_train_sysreg(struct ab_state_context *sc)
 	return DDR_SUCCESS;
 }
 
+static int ddr_enable_power_features(void)
+{
+	/* Block AXI Before entering self-refresh */
+	if (ddr_block_axi_transactions())
+		return -ETIMEDOUT;
+
+	/* Disable PB Refresh & Auto Refresh */
+	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+
+	/* safe to send a manual all bank refresh command */
+	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+
+	/* Self-refresh entry sequence */
+	if (ddr_enter_self_refresh_mode()) {
+		pr_err("self-refresh entry fail during pwr features enable\n");
+		ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+		return -ETIMEDOUT;
+	}
+
+	/* Enabling DDR Power features */
+	ddr_reg_set(DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_set(DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_set(DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_clr_set(DREX_MEMCONTROL, DPWRDN_TYPE_MSK,
+			DPWRDN_TYPE(FORCED_PRECHARGE_PD) | DPWRDN_EN);
+	ddr_reg_set(DREX_MEMCONTROL, CLK_STOP_EN);
+
+	/* Self-refresh exit sequence */
+	if (ddr_exit_self_refresh_mode()) {
+		pr_err("self-refresh exit fail during power features enable\n");
+		ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+		return -ETIMEDOUT;
+	}
+
+	/* safe to send a manual all bank refresh command */
+	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+
+	/* Enable PB Refresh & Auto Refresh */
+	ddr_reg_set(DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_set(DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_set(DREX_CONCONTROL, AREF_EN);
+
+	ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+
+	return 0;
+}
+
 static int __ab_ddr_wait_for_ddr_init(struct ab_ddr_context *ddr_ctx)
 {
 	unsigned long timeout;
@@ -2046,6 +2095,10 @@ static int __ab_ddr_wait_for_ddr_init(struct ab_ddr_context *ddr_ctx)
 		       __func__);
 		return -EIO;
 	}
+
+	/* enable the ddr power features */
+	if (ddr_enable_power_features())
+		return -ETIMEDOUT;
 
 	/* In A0 BootROM Auto Refresh setting is missing. To fix this issue,
 	 * set the Auto-Refresh enable immediately after DDR init.
