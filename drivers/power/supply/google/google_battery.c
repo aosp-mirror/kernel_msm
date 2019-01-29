@@ -1327,14 +1327,13 @@ static int gbatt_get_property(struct power_supply *psy,
 					power_supply_get_drvdata(psy);
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 
-#ifdef SUPPORT_PM_SLEEP
-	pm_runtime_get_sync(chip->device);
-	if (!chip->init_complete || !chip->resume_complete) {
-		pm_runtime_put_sync(chip->device);
+	pm_runtime_get_sync(batt_drv->device);
+	if (!batt_drv->init_complete || !batt_drv->resume_complete) {
+		pm_runtime_put_sync(batt_drv->device);
 		return -EAGAIN;
 	}
-	pm_runtime_put_sync(chip->device);
-#endif
+	pm_runtime_put_sync(batt_drv->device);
+
 	switch (psp) {
 
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
@@ -1458,14 +1457,13 @@ static int gbatt_set_property(struct power_supply *psy,
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 	int ret = 0;
 
-#ifdef SUPPORT_PM_SLEEP
-	pm_runtime_get_sync(chip->device);
-	if (!chip->init_complete || !chip->resume_power_supply_get_by_name) {
-		pm_runtime_put_sync(chip->device);
+	pm_runtime_get_sync(batt_drv->device);
+	if (!batt_drv->init_complete || !batt_drv->resume_complete) {
+		pm_runtime_put_sync(batt_drv->device);
 		return -EAGAIN;
 	}
-	pm_runtime_put_sync(chip->device);
-#endif
+	pm_runtime_put_sync(batt_drv->device);
+
 	switch (psp) {
 
 	/* NG Charging, where it all begins */
@@ -1554,7 +1552,6 @@ static void google_battery_init_work(struct work_struct *work)
 	struct power_supply *fg_psy;
 	struct batt_drv *batt_drv = container_of(work, struct batt_drv,
 						 init_work.work);
-	struct power_supply_config psy_cfg = { .drv_data = batt_drv };
 	int ret = 0;
 
 	batt_rl_reset(batt_drv);
@@ -1610,14 +1607,6 @@ static void google_battery_init_work(struct work_struct *work)
 		pr_err("cannot restore bin count ret=%d\n", ret);
 	mutex_unlock(&batt_drv->cc_data.lock);
 
-	batt_drv->psy = devm_power_supply_register(batt_drv->device,
-					       &gbatt_psy_desc, &psy_cfg);
-	if (IS_ERR(batt_drv->psy)) {
-		ret = PTR_ERR(batt_drv->psy);
-		dev_err(batt_drv->device,
-			"Couldn't register as power supply, ret=%d\n", ret);
-	}
-
 	batt_drv->fake_capacity = -EINVAL;
 
 	(void)batt_init_fs(batt_drv);
@@ -1628,6 +1617,9 @@ static void google_battery_init_work(struct work_struct *work)
 				   &batt_drv->batt_update_interval);
 	if (ret < 0)
 		batt_drv->batt_update_interval = DEFAULT_BATT_UPDATE_INTERVAL;
+
+	batt_drv->init_complete = true;
+	batt_drv->resume_complete = true;
 
 	schedule_delayed_work(&batt_drv->batt_work, 0);
 
@@ -1643,6 +1635,7 @@ static int google_battery_probe(struct platform_device *pdev)
 	const char *fg_psy_name, *psy_name = NULL;
 	struct batt_drv *batt_drv;
 	int ret;
+	struct power_supply_config psy_cfg = {};
 
 	batt_drv = devm_kzalloc(&pdev->dev, sizeof(*batt_drv), GFP_KERNEL);
 	if (!batt_drv)
@@ -1676,6 +1669,16 @@ static int google_battery_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&batt_drv->init_work, google_battery_init_work);
 	INIT_DELAYED_WORK(&batt_drv->batt_work, google_battery_work);
 	platform_set_drvdata(pdev, batt_drv);
+
+	psy_cfg.drv_data = batt_drv;
+
+	batt_drv->psy = devm_power_supply_register(batt_drv->device,
+						   &gbatt_psy_desc, &psy_cfg);
+	if (IS_ERR(batt_drv->psy)) {
+		ret = PTR_ERR(batt_drv->psy);
+		dev_err(batt_drv->device,
+			"Couldn't register as power supply, ret=%d\n", ret);
+	}
 
 	/* give time to fg driver to start */
 	schedule_delayed_work(&batt_drv->init_work,
