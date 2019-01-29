@@ -141,6 +141,7 @@ static int synaptics_rmi4_reinit_device(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 		bool rebuild);
 static int synaptics_rmi4_hw_reset(struct synaptics_rmi4_data *rmi4_data);
+static int synaptics_rmi4_sw_reset(struct synaptics_rmi4_data *rmi4_data);
 
 #ifdef CONFIG_DRM
 static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
@@ -3443,6 +3444,7 @@ static void synaptics_rmi4_empty_fn_list(struct synaptics_rmi4_data *rmi4_data)
 
 	rmi4_data->f11_wakeup_gesture = false;
 	rmi4_data->f12_wakeup_gesture = false;
+	rmi4_data->f12_handler_exist = false;
 
 	return;
 }
@@ -3677,6 +3679,7 @@ rescan_pdt:
 						fhandler, &rmi_fd, intr_count);
 				if (retval < 0)
 					return retval;
+				rmi4_data->f12_handler_exist = true;
 				break;
 			case SYNAPTICS_RMI4_F1A:
 				if (rmi_fd.intr_src_count == 0)
@@ -3980,7 +3983,7 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 
 static int synaptics_rmi4_set_input_dev(struct synaptics_rmi4_data *rmi4_data)
 {
-	int retval;
+	int retval, retry;
 	const struct synaptics_dsx_board_data *bdata =
 				rmi4_data->hw_if->board_data;
 
@@ -3993,12 +3996,19 @@ static int synaptics_rmi4_set_input_dev(struct synaptics_rmi4_data *rmi4_data)
 		goto err_input_device;
 	}
 
-	retval = synaptics_rmi4_query_device(rmi4_data);
-	if (retval < 0) {
-		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Failed to query device\n",
-				__func__);
-		goto err_query_device;
+	for (retry = 0; retry <= F12_HANDLER_QUERY_RETRY; retry++) {
+		retval = synaptics_rmi4_query_device(rmi4_data);
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to query device\n",
+					__func__);
+			goto err_query_device;
+		}
+		if (rmi4_data->f12_handler_exist)
+			break;
+		pr_err("%s: missing f12_handler, retry=%d", __func__, retry);
+		synaptics_rmi4_sw_reset(rmi4_data);
+		synaptics_rmi4_empty_fn_list(rmi4_data);
 	}
 
 	rmi4_data->input_dev->name = PLATFORM_DRIVER_NAME;
@@ -4531,7 +4541,7 @@ exit:
 static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 		bool rebuild)
 {
-	int retval;
+	int retval, retry;
 	struct synaptics_rmi4_exp_fhandler *exp_fhandler;
 
 	pr_info("%s from %pS, rebuild = %d\n", __func__,
@@ -4553,12 +4563,19 @@ static int synaptics_rmi4_reset_device(struct synaptics_rmi4_data *rmi4_data,
 
 	synaptics_rmi4_empty_fn_list(rmi4_data);
 
-	retval = synaptics_rmi4_query_device(rmi4_data);
-	if (retval < 0) {
-		dev_err(rmi4_data->pdev->dev.parent,
-				"%s: Failed to query device\n",
-				__func__);
-		goto exit;
+	for (retry = 0; retry <= F12_HANDLER_QUERY_RETRY; retry++) {
+		retval = synaptics_rmi4_query_device(rmi4_data);
+		if (retval < 0) {
+			dev_err(rmi4_data->pdev->dev.parent,
+					"%s: Failed to query device\n",
+					__func__);
+			goto exit;
+		}
+		if (rmi4_data->f12_handler_exist)
+			break;
+		pr_err("%s: missing f12_handler, retry=%d", __func__, retry);
+		synaptics_rmi4_sw_reset(rmi4_data);
+		synaptics_rmi4_empty_fn_list(rmi4_data);
 	}
 
 	mutex_lock(&exp_data.mutex);

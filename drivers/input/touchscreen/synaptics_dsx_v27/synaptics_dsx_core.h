@@ -105,6 +105,8 @@
 #define SYNAPTICS_RMI4_F55 (0x55)
 #define SYNAPTICS_RMI4_FDB (0xDB)
 
+#define F12_HANDLER_QUERY_RETRY 3
+
 #define PRODUCT_INFO_SIZE 2
 #define PRODUCT_ID_SIZE 10
 #define BUILD_ID_SIZE 3
@@ -490,6 +492,7 @@ struct synaptics_rmi4_data {
 	bool fb_ready;
 	bool f11_wakeup_gesture;
 	bool f12_wakeup_gesture;
+	bool f12_handler_exist;
 	bool enable_wakeup_gesture;
 	bool wedge_sensor;
 	bool report_pressure;
