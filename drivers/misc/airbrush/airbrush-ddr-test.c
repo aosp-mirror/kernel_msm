@@ -25,6 +25,7 @@
 #define DMA_CHANNEL	(0)
 #define AB_DDR_BASE	(0x20000000)
 #define DMA_COMPLETION_TIMEOUT_MSEC (DMA_SZ_MB * 50)
+#define DMA_TEST_MAX_MISMATCH_PRINTS (500)
 
 static DECLARE_COMPLETION(dma_completion);
 
@@ -74,6 +75,11 @@ static int ddr_rw_test_pcie_dma_write(unsigned int test_data, char *host_vaddr,
 	uint32_t num_patterns = ARRAY_SIZE(dma_patterns);
 	int num_dma_transfers;
 	unsigned long timeout;
+	static int num_timeouts;
+
+	if (num_timeouts)
+		pr_err("pcie dma write: Error!! write num_timeouts[%d]\n",
+			num_timeouts);
 
 	__get_pcie_dma_size_info(test_data, &dma_size, &num_dma_transfers);
 
@@ -102,6 +108,7 @@ static int ddr_rw_test_pcie_dma_write(unsigned int test_data, char *host_vaddr,
 			pr_err("%s: error!!! pcie dma interrupt timedout\n",
 				__func__);
 			WARN_ON(1);
+			num_timeouts++;
 			return DDR_FAIL;
 		}
 
@@ -121,6 +128,11 @@ static int ddr_rw_test_pcie_dma_read_compare(unsigned int test_data,
 	uint32_t num_patterns = ARRAY_SIZE(dma_patterns);
 	int num_dma_transfers;
 	unsigned long timeout;
+	static int num_failures, num_timeouts;
+
+	if (num_failures || num_timeouts)
+		pr_err("[ddr rw test] Error!! read fails[%d] timeouts[%d]\n",
+			num_failures, num_timeouts);
 
 	__get_pcie_dma_size_info(test_data, &dma_size, &num_dma_transfers);
 
@@ -142,6 +154,7 @@ static int ddr_rw_test_pcie_dma_read_compare(unsigned int test_data,
 			pr_err("%s: error!!! pcie dma interrupt timedout\n",
 				__func__);
 			WARN_ON(1);
+			num_timeouts++;
 			return DDR_FAIL;
 		}
 
@@ -162,6 +175,10 @@ static int ddr_rw_test_pcie_dma_read_compare(unsigned int test_data,
 					host_vaddr[i],
 					dma_patterns[(i + test_iter) %
 						num_patterns]);
+
+				/* Limit the error prints */
+				if (fail_cnt > DMA_TEST_MAX_MISMATCH_PRINTS)
+					break;
 			}
 #else
 			if (host_vaddr[i] != ((i + test_iter) & 0xff)) {
@@ -188,6 +205,7 @@ static int ddr_rw_test_pcie_dma_read_compare(unsigned int test_data,
 	if (fail_cnt) {
 		pr_err("ddr pcie dma r/w test fail. mismatch count :0x%x\n",
 				fail_cnt);
+		num_failures++;
 		return DDR_FAIL;
 	}
 
@@ -328,6 +346,20 @@ int ab_ddr_read_write_test(struct ab_state_context *sc, unsigned int test_data)
 	}
 
 	ddr_ctx = (struct ab_ddr_context *)sc->ddr_data;
+
+#ifndef CONFIG_DDR_BOOT_TEST
+	if (ddr_ctx->ddr_state != DDR_ON) {
+		pr_err("ddr_read_write_test: Invalid ddr state: %d\n",
+			ddr_ctx->ddr_state);
+		return DDR_FAIL;
+	}
+
+	/* Make sure to write the pattern before reading it back when the
+	 * previous ddr state is DDR_OFF
+	 */
+	if (ddr_ctx->prev_ddr_state == DDR_OFF)
+		test_data |= DDR_BOOT_TEST_WRITE;
+#endif
 
 	/* ddr_mem_rd/wr based test to check the ddr data integrity */
 	if (test_data & DDR_TEST_MEMTESTER)

@@ -2353,6 +2353,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 			ab_ddr_selfrefresh_exit(sc);
 		else if (ddr_ctx->ddr_state == DDR_SUSPEND)
 			ab_ddr_resume(sc);
+
+		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_ON;
 		break;
 
@@ -2366,6 +2368,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 		ab_ddr_selfrefresh_enter(sc);
 
+		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_SLEEP;
 		break;
 
@@ -2379,6 +2382,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		}
 		ab_ddr_suspend(sc);
 
+		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_SUSPEND;
 		break;
 
@@ -2388,6 +2392,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 			ab_gpio_disable_ddr_iso(sc);
 		}
 
+		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_OFF;
 		break;
 

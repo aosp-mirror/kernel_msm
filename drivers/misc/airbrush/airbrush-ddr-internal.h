@@ -1181,6 +1181,7 @@ struct ddr_ppc_overflow_info {
 struct ab_ddr_context {
 	struct ab_state_context *ab_state_ctx;
 	enum ddr_state ddr_state; /* keeps track of current ddr state */
+	enum ddr_state prev_ddr_state; /* keeps track of previous ddr state */
 
 	enum ddr_freq_t cur_freq; /* current frequency */
 
