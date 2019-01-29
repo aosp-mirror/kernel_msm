@@ -7459,16 +7459,8 @@ static int iaxxx_codec_notify(struct notifier_block *nb,
 {
 	struct iaxxx_codec_priv *iaxxx =
 		container_of(nb, struct iaxxx_codec_priv, nb_core);
-	int ret;
 
 	switch (action) {
-	case IAXXX_EV_STARTUP:
-		ret = snd_soc_register_codec(iaxxx->dev, &soc_codec_iaxxx,
-					iaxxx_dai, ARRAY_SIZE(iaxxx_dai));
-		if (ret)
-			dev_err(iaxxx->dev,
-				"codec registration failed rc = %d\n", ret);
-		break;
 	case IAXXX_EV_CRASH:
 		iaxxx_reset_codec_params(iaxxx);
 		break;
@@ -7600,6 +7592,11 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 	iaxxx->nb_core.notifier_call = iaxxx_codec_notify;
 	iaxxx_fw_notifier_register(priv->dev, &iaxxx->nb_core);
 
+	ret = snd_soc_register_codec(iaxxx->dev, &soc_codec_iaxxx,
+				iaxxx_dai, ARRAY_SIZE(iaxxx_dai));
+	if (ret)
+		dev_err(iaxxx->dev,
+			"codec registration failed rc = %d\n", ret);
 	return 0;
 }
 

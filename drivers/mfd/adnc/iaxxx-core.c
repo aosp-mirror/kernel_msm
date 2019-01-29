@@ -1149,6 +1149,13 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 		goto exit_fw_fail;
 	}
 
+	rc = mfd_add_devices(priv->dev, -1, iaxxx_devices,
+		ARRAY_SIZE(iaxxx_devices), NULL, 0, NULL);
+	if (rc) {
+		dev_err(priv->dev, "Failed to add cell devices\n");
+		goto exit_fw_fail;
+	}
+
 	dev_info(dev, "%s: done\n", __func__);
 	iaxxx_work(priv, runtime_work);
 	regmap_read(priv->regmap, IAXXX_AO_EFUSE_BOOT_ADDR, &efuse_trim_value);
@@ -1644,19 +1651,11 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 		goto err_event_init;
 	}
 
-	rc = mfd_add_devices(priv->dev, -1, iaxxx_devices,
-			ARRAY_SIZE(iaxxx_devices), NULL, 0, NULL);
-	if (rc) {
-		dev_err(priv->dev, "Failed to add cell devices\n");
-		goto err_add_devices;
-	}
-
 	iaxxx_work(priv, fw_update_work);
 	return 0;
 
-err_add_devices:
-	iaxxx_event_exit(priv);
 err_event_init:
+	iaxxx_event_exit(priv);
 err_debug_init:
 	iaxxx_remove_sysfs(priv);
 	iaxxx_regdump_exit(priv);
