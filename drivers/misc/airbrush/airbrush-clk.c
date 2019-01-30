@@ -197,10 +197,6 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
-		clk_set_rate(clk_ctx->ipu_pll, OSC_RATE);
-		clk_set_rate(clk_ctx->ipu_pll_div, OSC_RATE);
-		clk_set_parent(clk_ctx->ipu_switch_mux,
-				clk_ctx->ipu_pll_div);
 
 		new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 		ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE,
@@ -208,12 +204,11 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
-	clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->shared_div_aon_pll);
 	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
+	/* force calculate current rate */
+	clk_get_rate(clk_ctx->ipu_pll);
 	clk_set_rate(clk_ctx->ipu_pll, rate);
 	clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
-	clk_set_rate(clk_ctx->ipu_pll_div, rate);
-	clk_set_parent(clk_ctx->ipu_switch_mux, clk_ctx->ipu_pll_div);
 
 	new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
@@ -391,10 +386,6 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
-		clk_set_rate(clk_ctx->tpu_pll, OSC_RATE);
-		clk_set_rate(clk_ctx->tpu_pll_div, OSC_RATE);
-		clk_set_parent(clk_ctx->tpu_switch_mux,
-				clk_ctx->tpu_pll_div);
 
 		new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 		ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE,
@@ -402,12 +393,11 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
-	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->shared_div_aon_pll);
 	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
+	/* force calculate current rate */
+	clk_get_rate(clk_ctx->tpu_pll);
 	clk_set_rate(clk_ctx->tpu_pll, rate);
 	clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
-	clk_set_rate(clk_ctx->tpu_pll_div, rate);
-	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->tpu_pll_div);
 
 	new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
@@ -448,12 +438,10 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	if (rate == OSC_RATE) {
 		clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
-		clk_set_rate(clk_ctx->aon_pll, rate);
 		return clk_get_rate(clk_ctx->aon_pll_mux);
 	}
 
 	clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
-	clk_set_rate(clk_ctx->aon_pll, rate);
 	ret = clk_get_rate(clk_ctx->aon_pll_mux);
 
 	return ret;

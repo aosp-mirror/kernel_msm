@@ -899,7 +899,7 @@ static const struct airbrush_pll_clock tpu_pll_clks[] = {
 	PLL(pll_f0816x, FOUT_PLL_TPU, "fout_pll_tpu", "fin_pll_ab", PLL_LOCKTIME_PLL_TPU, PLL_CON0_PLL_TPU, pll_tpu_tbl),
 };
 
-/* list of parent clocks for muxes in cmu_mif */
+/* list of parent clocks for muxes in cmu_tpu */
 PNAME(mout_tpu_tpu_pll_p) = { "fin_pll_ab", "fout_pll_tpu" };
 PNAME(mout_tpu_aonclk_pllclk_p) = { "dout_aon_shared_div_aon_pll", "dout_tpu_tpu_pll_div_clk_1" };
 
