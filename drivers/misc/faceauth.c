@@ -20,6 +20,7 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/faceauth.h>
+#include <linux/faceauth_shared.h>
 #include <linux/firmware.h>
 #include <misc/faceauth_hypx.h>
 
@@ -70,15 +71,6 @@
 #define FACEAUTH_TIMEOUT 3000
 #define M0_POLLING_PAUSE 100
 #define M0_POLLING_INTERVAL 12
-
-/*
- * Result codes from AB firmware
- * Keep it in sync with fw/include/defines.h
- */
-#define AB_WORKLOAD_STATUS_NO_STATUS 0
-#define AB_WORKLOAD_STATUS_PASS 1
-#define AB_WORKLOAD_STATUS_FAIL 2
-#define AB_WORKLOAD_STATUS_ERROR 3
 
 #define INPUT_IMAGE_WIDTH 480
 #define INPUT_IMAGE_HEIGHT 640
@@ -304,7 +296,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				goto exit;
 			}
 
-			if (ab_result != AB_WORKLOAD_STATUS_NO_STATUS) {
+			if (ab_result != WORKLOAD_STATUS_NO_STATUS) {
 				pr_info("Faceauth workflow completes.\n");
 				break;
 			}
@@ -492,7 +484,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 			}
 
 			if (start_step_data.result !=
-			    AB_WORKLOAD_STATUS_NO_STATUS) {
+			    WORKLOAD_STATUS_NO_STATUS) {
 				/* We've got a non-zero status from AB executor
 				 * Faceauth processing is completed
 				 */
