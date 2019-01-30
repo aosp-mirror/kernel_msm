@@ -31,11 +31,11 @@
 
 #define smblib_dbg(chg, reason, fmt, ...)			\
 	do {							\
-		if (1)		\
-			pr_err("%s: %s: " fmt, chg->name,	\
+		if (*chg->debug_mask & (reason))		\
+			pr_info("%s: %s: " fmt, chg->name,	\
 				__func__, ##__VA_ARGS__);	\
 		else						\
-			pr_err("%s: %s: " fmt, chg->name,	\
+			pr_debug("%s: %s: " fmt, chg->name,	\
 				__func__, ##__VA_ARGS__);	\
 	} while (0)
 
@@ -3928,7 +3928,6 @@ static void smblib_notify_extcon_props(struct smb_charger *chg, int id)
 
 static void smblib_notify_device_mode(struct smb_charger *chg, bool enable)
 {
-	pr_err("%s === enable %d\n", __func__, enable);
 	if (enable)
 		smblib_notify_extcon_props(chg, EXTCON_USB);
 
@@ -3937,7 +3936,6 @@ static void smblib_notify_device_mode(struct smb_charger *chg, bool enable)
 
 static void smblib_notify_usb_host(struct smb_charger *chg, bool enable)
 {
-	pr_err("%s === enable %d\n", __func__, enable);
 	if (enable)
 		smblib_notify_extcon_props(chg, EXTCON_USB_HOST);
 
