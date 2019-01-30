@@ -636,7 +636,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	map = ab_sm_get_block_map(sc, to_chip_substate_id);
-	if (!map) {
+	if (!is_valid_transition(sc->curr_chip_substate_id,
+			to_chip_substate_id) ||
+			!map) {
 		dev_err(sc->dev,
 			"Entered %s with invalid destination state\n",
 			__func__);
@@ -1263,9 +1265,10 @@ static void ab_sm_thermal_throttle_state_updated(
 	struct ab_state_context *sc = op_data;
 
 	sc->throttle_state_id = throttle_state_id;
-	dev_dbg(sc->dev, "Throttle state updated to %lu", throttle_state_id);
+	dev_info(sc->dev, "Throttle state updated to %lu", throttle_state_id);
 
-	complete_all(&sc->request_state_change_comp);
+	if (!sc->cold_boot)
+		complete_all(&sc->request_state_change_comp);
 }
 
 static const struct ab_thermal_ops ab_sm_thermal_ops = {
