@@ -1,7 +1,5 @@
 PERF_CONFIG=y
 KERNEL_DIR=private/msm-google
-DTC_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/dtc/dtc
-DTC_OVERLAY_TEST_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/libufdt/ufdt_apply_overlay
 UNSTRIPPED_MODULES="
 wlan.ko
 "

@@ -12,6 +12,10 @@ LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linu
 LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
 DTC_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/dtc
 LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
+DTC_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/dtc/dtc
+export DTC_EXT
+DTC_OVERLAY_TEST_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/libufdt/ufdt_apply_overlay
+export DTC_OVERLAY_TEST_EXT
 FILES="
 arch/arm64/boot/dtbo.img
 arch/arm64/boot/Image.lz4-dtb
