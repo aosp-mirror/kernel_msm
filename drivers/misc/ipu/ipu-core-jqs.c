@@ -18,8 +18,8 @@
 #include <linux/ipu-core.h>
 #include <linux/ipu-jqs-messages.h>
 #include <linux/pm_domain.h>
-#include <linux/pm_wakeup.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 #include "ipu-core-internal.h"
 #include "ipu-core-jqs.h"
@@ -472,29 +472,34 @@ void ipu_core_jqs_disable_firmware_error(struct paintbox_bus *bus)
 	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
 }
 
+/* Called for runtime pm and for device pm */
 static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
 {
 	struct paintbox_bus *bus;
-	int ret;
 
 	bus = container_of(genpd, struct paintbox_bus, gpd);
 	if (WARN_ON(!bus))
 		return -EINVAL;
 
-	dev_dbg(bus->parent_dev, "%s: runtime request to power up JQS\n",
-			__func__);
+	/* Runtime PM will call the power_on hook before invoking the start hook
+	 * so in the runtime pm case this will be a nop and the JQS will be
+	 * powered up in the start hook.
+	 *
+	 * Device PM will call the power on hook when resuming from device
+	 * suspend.  If the JQS was running when the device went into suspend
+	 * (This should not normally happen) then we will need to invoke the
+	 * recovery path on resume.
+	 */
+	if (bus->jqs.pm_recovery_requested) {
+		bus->jqs.pm_recovery_requested = false;
+		atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
+		queue_work(system_wq, &bus->recovery_work);
+	}
 
-	mutex_lock(&bus->jqs.lock);
-
-	pm_stay_awake(bus->parent_dev);
-
-	ret = ipu_core_jqs_enable_firmware(bus);
-
-	mutex_unlock(&bus->jqs.lock);
-
-	return ret;
+	return 0;
 }
 
+/* Called for runtime pm and for device pm */
 static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 {
 	struct paintbox_bus *bus;
@@ -503,14 +508,55 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 	if (WARN_ON(!bus))
 		return -EINVAL;
 
+	/* Runtime PM will call the stop hook before calling the power off hook
+	 * so the JQS should already be powered down when the power_off is
+	 * invoked in that path.
+	 *
+	 * Device PM will call the power off hook when going into device
+	 * suspend.  The IPU client will hold a wakelock so the JQS should not
+	 * be running when the power off hook is invoked by DPM.  If the JQS
+	 * is running when DPM calls power off then we will treat it like a
+	 * fatal JQS error on the resume and invoke the recovery path.
+	 */
+	if (bus->jqs.status == JQS_FW_STATUS_RUNNING) {
+		bus->jqs.pm_recovery_requested = true;
+		ipu_core_jqs_power_disable(bus);
+	}
+
+	return 0;
+}
+
+/* Called for runtime pm */
+static int ipu_core_jqs_start(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+	int ret;
+
+	dev_dbg(bus->parent_dev, "%s: runtime request to power up JQS\n",
+			__func__);
+
+	mutex_lock(&bus->jqs.lock);
+
+	ret = ipu_core_jqs_enable_firmware(bus);
+
+	mutex_unlock(&bus->jqs.lock);
+
+	return ret;
+}
+
+/* Called for runtime pm */
+static int ipu_core_jqs_stop(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
 	dev_dbg(bus->parent_dev, "%s: runtime request to power down JQS\n",
 			__func__);
 
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_disable_firmware_normal(bus);
-
-	pm_relax(bus->parent_dev);
 
 	mutex_unlock(&bus->jqs.lock);
 
@@ -556,6 +602,8 @@ int ipu_core_jqs_init(struct paintbox_bus *bus)
 	mutex_init(&bus->jqs.lock);
 
 	bus->gpd.name = "ipu_jqs";
+	bus->gpd.dev_ops.start = ipu_core_jqs_start;
+	bus->gpd.dev_ops.stop = ipu_core_jqs_stop;
 	bus->gpd.power_off = ipu_core_jqs_power_off;
 	bus->gpd.power_on = ipu_core_jqs_power_on;
 

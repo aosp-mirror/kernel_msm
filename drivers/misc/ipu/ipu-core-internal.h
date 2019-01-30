@@ -111,6 +111,9 @@ struct paintbox_jqs {
 	uint32_t log_sink_mask;
 	uint32_t uart_baud;
 	uint64_t clock_rate_hz;
+
+	/* pm_recovery_requested is set/read in suspend/resume contexts */
+	bool pm_recovery_requested;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
 	struct dentry *debug_dir;
 	struct dentry *fw_state_dentry;

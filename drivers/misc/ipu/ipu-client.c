@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
+#include <linux/pm_wakeup.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -198,6 +199,8 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 
 	list_add_tail(&session->session_entry, &pb->session_list);
 
+	pm_stay_awake(pb->dev);
+
 	ret = ipu_jqs_get(pb);
 	if (ret < 0)
 		goto free_session;
@@ -234,6 +237,7 @@ free_buffer_table:
 put_runtime:
 	(void)ipu_jqs_put(pb);
 free_session:
+	pm_relax(pb->dev);
 	list_del(&session->session_entry);
 	mutex_unlock(&pb->lock);
 	kfree(session);
@@ -278,6 +282,8 @@ static int ipu_client_release(struct inode *ip, struct file *fp)
 	ab_dram_free_dma_buf_kernel(session->buffer_id_table);
 
 	ret = ipu_jqs_put(pb);
+
+	pm_relax(pb->dev);
 
 	list_del(&session->session_entry);
 
