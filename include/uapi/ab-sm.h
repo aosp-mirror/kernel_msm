@@ -56,21 +56,63 @@
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
  */
-#define AB_SM_SET_IPU_FREQUENCY	_IO(AB_SM_IOCTL_MAGIC, 5)
+#define AB_SM_SET_IPU_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 5, int)
 
 /*
  * Parameter int:
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
  */
-#define AB_SM_SET_TPU_FREQUENCY	_IO(AB_SM_IOCTL_MAGIC, 6)
+#define AB_SM_SET_TPU_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 6, int)
 
 /*
  * Parameter int:
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
  */
-#define AB_SM_SET_AON_FREQUENCY	_IO(AB_SM_IOCTL_MAGIC, 7)
+#define AB_SM_SET_DDR_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 7, int)
+
+/*
+ * Parameter int:
+ *	Pass new frequency value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_PCIE_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 8, int)
+
+/*
+ * Parameter int:
+ *	Pass new frequency value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_AON_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 9, int)
+
+/*
+ * Parameter int:
+ *	Pass new low power state value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_IPU_STATE	_IOW(AB_SM_IOCTL_MAGIC, 10, int)
+
+/*
+ * Parameter int:
+ *	Pass new low power state value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_TPU_STATE	_IOW(AB_SM_IOCTL_MAGIC, 11, int)
+
+/*
+ * Parameter int:
+ *	Pass new low power state value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_DDR_STATE	_IOW(AB_SM_IOCTL_MAGIC, 12, int)
+
+/*
+ * Parameter int:
+ *	Pass new low power state value to set
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_PCIE_STATE	_IOW(AB_SM_IOCTL_MAGIC, 13, int)
 
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0

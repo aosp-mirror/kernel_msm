@@ -19,6 +19,7 @@
 #include <linux/gpio/machine.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
+#include <linux/mfd/abc-pcie.h>
 #include <linux/msm_pcie.h>
 #include <uapi/ab-sm.h>
 #include <uapi/linux/sched/types.h>
@@ -1183,6 +1184,8 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 	long ret;
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
+	struct abc_pcie_pm_ctrl pmctrl = {0};
+	int val;
 	u32 clk_frequency;
 
 	switch (cmd) {
@@ -1235,11 +1238,92 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		mutex_unlock(&sc->op_lock);
 		break;
 
+	case AB_SM_SET_DDR_FREQUENCY:
+	case AB_SM_SET_PCIE_FREQUENCY:
+		dev_info(sc->dev,
+			"%s: Unimplemented ioctl cmd 0x%X\n", __func__, cmd);
+		break;
+
 	case AB_SM_SET_AON_FREQUENCY:
 		clk_frequency = (u32)arg;
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_AON]),
 				clk_frequency, on);
+		mutex_unlock(&sc->op_lock);
+		break;
+
+	case AB_SM_SET_IPU_STATE:
+		mutex_lock(&sc->op_lock);
+		if (arg == 0)
+			ret = sc->pmu_ops->pmu_ipu_sleep(sc->pmu_ops->ctx);
+		else
+			ret = sc->pmu_ops->pmu_ipu_resume(sc->pmu_ops->ctx);
+		mutex_unlock(&sc->op_lock);
+		break;
+
+	case AB_SM_SET_TPU_STATE:
+		mutex_lock(&sc->op_lock);
+		if (arg == 0)
+			ret = sc->pmu_ops->pmu_tpu_sleep(sc->pmu_ops->ctx);
+		else
+			ret = sc->pmu_ops->pmu_tpu_resume(sc->pmu_ops->ctx);
+		mutex_unlock(&sc->op_lock);
+		break;
+
+	case AB_SM_SET_DDR_STATE:
+		mutex_lock(&sc->op_lock);
+		if (arg == 0) {
+			ab_ddr_selfrefresh_enter(sc);
+			/* switch mif to osc_clk */
+			/* TODO(b/123695099): do this via ops struct */
+			ABC_READ(PLL_CON0_PLL_PHY_MIF, &val);
+			ABC_WRITE(PLL_CON0_PLL_PHY_MIF, val & ~(1 << 4));
+			ret = regulator_disable(sc->ldo2);
+			/* divide pll_aon_clk by 4*/
+			/* TODO(b/123695099): do this via ops struct */
+			ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
+			/* divide aon_pclk by 16*/
+			/* TODO(b/123695099): do this via ops struct */
+			ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK, 0xf);
+		} else {
+			/* divide aon_pclk by 4*/
+			/* TODO(b/123695099): do this via ops struct */
+			ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK, 0x3);
+			/* divide pll_aon_clk by 1*/
+			/* TODO(b/123695099): do this via ops struct */
+			ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
+			ret = regulator_enable(sc->ldo2);
+			/* switch mif to mif_pll */
+			/* TODO(b/123695099): do this via ops struct */
+			ABC_READ(PLL_CON0_PLL_PHY_MIF, &val);
+			ABC_WRITE(PLL_CON0_PLL_PHY_MIF, val | (1 << 4));
+			ab_ddr_selfrefresh_exit(sc);
+		}
+		mutex_unlock(&sc->op_lock);
+		break;
+
+	case AB_SM_SET_PCIE_STATE:
+		mutex_lock(&sc->op_lock);
+		switch (arg) {
+		case 0:
+			pmctrl.l1_en = 1;
+			pmctrl.aspm_L12 = 1;
+			break;
+		case 1:
+			pmctrl.l1_en = 1;
+			pmctrl.aspm_L11 = 1;
+			break;
+		case 2:
+			pmctrl.l1_en = 1;
+			break;
+		case 3:
+			pmctrl.l0s_en = 1;
+			break;
+		default:
+			break;
+		}
+		/* TODO(b/123695099): do this via ops struct */
+		ret = abc_set_pcie_pm_ctrl(&pmctrl);
 		mutex_unlock(&sc->op_lock);
 		break;
 

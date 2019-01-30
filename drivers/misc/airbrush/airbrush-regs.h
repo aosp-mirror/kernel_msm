@@ -39,6 +39,10 @@ static inline void WR_REG(uint32_t addr, uint32_t data)
 #define ABC_BASE_SYSREG_CENTRAL_PMU	0x10BA0000
 #define ABC_BASE_OTP_WRAPPER		0x10BB0000
 
+#define PLL_CON0_PLL_PHY_MIF		0x10510140
+#define CLK_CON_DIV_DIV4_PLLCLK		0x10b11800
+#define CLK_CON_DIV_PLL_AON_CLK		0x10b1180c
+
 /* --------------------------------------------------
  * 1.7.1.65 AP_HW_OPTION_1
  *    Base Address: 0x10BB_0000
