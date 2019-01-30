@@ -2361,6 +2361,9 @@ int32_t ab_ddr_setup(struct ab_state_context *sc)
 	if (ddr_ctx == NULL)
 		return -ENOMEM;
 
+	/* initialize ddr state to off */
+	ddr_ctx->ddr_state = DDR_OFF;
+
 	pdev = sc->pdev;
 
 	/* Incase of OTPs are flashed, get all information from OTPs.
