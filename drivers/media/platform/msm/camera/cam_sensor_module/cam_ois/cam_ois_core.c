@@ -1088,9 +1088,11 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		goto rel_pkt;
 
 rel_cmd_buf:
-	if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-		CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
-			cmd_desc[i].mem_handle);
+	if (cmd_desc) {
+		if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
+			CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
+				cmd_desc[i].mem_handle);
+	}
 pwr_dwn:
 	cam_ois_power_down(o_ctrl);
 rel_pkt:
