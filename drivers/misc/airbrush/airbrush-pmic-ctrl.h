@@ -15,6 +15,9 @@
 
 #define LDO5_LDO4_SMPS2_DEFAULT_DELAY	8000
 
+void ab_pmic_enable_boost(struct ab_state_context *sc);
+void ab_pmic_disable_boost(struct ab_state_context *sc);
+
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
 		enum block_name blk_name, u32 to_chip_substate_id);
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,

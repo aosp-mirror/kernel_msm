@@ -101,7 +101,7 @@ static struct block_property ipu_property_table[] = {
 	BLK_(0_3, Normal, LowCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
 	BLK_(0_4, Normal, MidCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
 	BLK_(0_5, Normal, MaxCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_6, Boost,  MaxCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(0_6, Boost,  MaxCompute, 0,  on,  0_85, on,  0, 14, 14, 0, 0),
 	BLK_(1_0, Normal, PowerGated, 1,  on,  0_75, off, 0, 0,  0,  0, 0),
 	BLK_(1_1, Boost,  PowerGated, 1,  on,  0_85, off, 0, 0,  0,  0, 0),
 	BLK_(1_2, Normal, Sleep,      1,  on,  0_75, off, 0, 0,  0,  0, 0),
@@ -309,6 +309,15 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	power_increasing = (blk->current_state->logic_voltage
 				< desired_state->logic_voltage);
 
+	/* Raise boost voltage if necessary before frequency change */
+	if (blk->name == BLK_IPU || blk->name == BLK_TPU) {
+		if (blk->current_state->logic_voltage != VOLTAGE_0_85 &&
+			desired_state->logic_voltage == VOLTAGE_0_85) {
+			dev_info(sc->dev, "Enabling boost mode\n");
+			ab_pmic_enable_boost(sc);
+		}
+	}
+
 	mutex_lock(&sc->op_lock);
 	pmu = sc->pmu_ops;
 	/* PMU settings - Resume */
@@ -366,9 +375,17 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_PMU_OFF);
 
-	/*Regulator Settings*/
+	/* Disable boost voltage if necessary after frequency change */
+	if (blk->name == BLK_IPU || blk->name == BLK_TPU) {
+		if (blk->current_state->logic_voltage == VOLTAGE_0_85 &&
+			desired_state->logic_voltage != VOLTAGE_0_85) {
+			dev_info(sc->dev, "Disabling boost mode\n");
+			ab_pmic_disable_boost(sc);
+		}
+	}
+
+	/* Regulator Settings */
 	if (!power_increasing) {
-		/*TODO: change regulator voltage*/
 		if (desired_state->voltage_rail_status == off)
 			ab_blk_pw_rails_disable(sc, blk->name,
 			to_chip_substate_id);
