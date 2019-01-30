@@ -363,7 +363,6 @@ int ab_ddr_read_write_test(void *ctx, unsigned int test_data)
 		return -EAGAIN;
 	}
 
-#ifndef CONFIG_DDR_BOOT_TEST
 	if (ddr_ctx->ddr_state != DDR_ON) {
 		pr_err("ddr_read_write_test: Invalid ddr state: %d\n",
 			ddr_ctx->ddr_state);
@@ -375,7 +374,7 @@ int ab_ddr_read_write_test(void *ctx, unsigned int test_data)
 	 */
 	if (ddr_ctx->prev_ddr_state == DDR_OFF)
 		test_data |= DDR_BOOT_TEST_WRITE;
-#endif
+
 	mutex_lock(&ddr_ctx->ddr_lock);
 	ret = __ab_ddr_read_write_test(ctx, test_data);
 	mutex_unlock(&ddr_ctx->ddr_lock);

@@ -17,12 +17,6 @@
 #include "airbrush-otp.h"
 #include "airbrush-ddr.h"
 
-/* ------------------------------------------------------------------------ */
-/* Depending on the usage, please comment/uncomment the below config macros */
-/* ------------------------------------------------------------------------ */
-//#define CONFIG_DDR_BOOT_TEST
-/* ------------------------------------------------------------------------ */
-
 #define PLL_LOCKTIME_PLL_PHY_MIF	0x10510008
 #define PLL_CON0_PLL_PHY_MIF		0x10510140
 #define PLL_MUX_SEL_MSK			(0x1 << 4)
@@ -95,9 +89,6 @@
 #define OP2CMD(op)			(((op) & 0xff) << 2)
 #define MRR(mr)				(CMD_TYPE_MRR | MR2CMD(mr))
 #define MRW(mr, op)			(CMD_TYPE_MRW | MR2CMD(mr) | OP2CMD(op))
-
-/* This config will be moved as part of Kconfig file later */
-//#define CONFIG_AB_DDR_MR13_RRO_ENABLE
 
 /* MR13 register configurations */
 #define MR13_VRCG_NORMAL		(0x0 << 3)
@@ -1249,14 +1240,20 @@ struct ab_ddr_context {
 	 */
 	unsigned int ddr_train_sram_location;
 
+#ifdef CONFIG_AB_DDR_RW_TEST
 	/* read/write test data */
 	ktime_t st_read, et_read;
 	ktime_t st_write, et_write;
+#endif
 
+#ifdef CONFIG_AB_DDR_EYE_MARGIN
 	struct ddr_eyemargin_data *eye_data;
+#endif
 
+#ifdef CONFIG_AB_DDR_PPC
 	int ddr_ppc_events[PPC_COUNTER_MAX];
 	struct ddr_ppc_overflow_info ddr_ppc_info;
+#endif
 };
 
 static inline uint32_t ddr_reg_rd(uint32_t addr)
@@ -1328,13 +1325,21 @@ uint32_t ddr_get_phy_vref(uint32_t idx);
 uint32_t ddr_get_dram_vref(uint32_t idx);
 int ddr_enter_self_refresh_mode(void);
 int ddr_exit_self_refresh_mode(void);
-int __ab_ddr_read_write_test(void *ctx, unsigned int read_write);
 
-int ab_ddr_eye_margin(void *ctx, unsigned int data);
-int ab_ddr_eye_margin_plot(void *ctx);
+#ifdef CONFIG_AB_DDR_RW_TEST
+int __ab_ddr_read_write_test(void *ctx, unsigned int read_write);
 int ab_ddr_read_write_test(void *ctx, unsigned int read_write);
+#endif
+
+#ifdef CONFIG_AB_DDR_EYE_MARGIN
+int ab_ddr_eye_margin(void *ctx, unsigned int test_data);
+int ab_ddr_eye_margin_plot(void *ctx);
+#endif
+
+#ifdef CONFIG_AB_DDR_PPC
 void ab_ddr_ppc_ctrl(void *ctx, int ppc_start);
 int ab_ddr_ppc_set_event(void *ctx, unsigned int counter_idx,
 			 unsigned int event);
+#endif
 
 #endif /* _AIRBRUSH_DDR_INTERNAL_H_ */

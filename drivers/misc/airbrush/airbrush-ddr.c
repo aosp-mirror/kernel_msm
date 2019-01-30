@@ -1891,6 +1891,24 @@ ddr_init_fail:
 	return DDR_FAIL;
 }
 
+static void ddr_sanity_test(void *ctx, unsigned int test_data)
+{
+#ifdef CONFIG_AB_DDR_SANITY_TEST
+	/* only consider read & write bits. clear all other fields. */
+	test_data &= (DDR_BOOT_TEST_READ | DDR_BOOT_TEST_WRITE);
+
+	if (test_data & DDR_BOOT_TEST_READ)
+		test_data |= DDR_TEST_PCIE_DMA_READ(
+				CONFIG_AB_DDR_SANITY_SZ_MBYTES);
+
+	if (test_data & DDR_BOOT_TEST_WRITE)
+		test_data |= DDR_TEST_PCIE_DMA_WRITE(
+				CONFIG_AB_DDR_SANITY_SZ_MBYTES);
+
+	__ab_ddr_read_write_test(ctx, test_data);
+#endif
+}
+
 /* Caller must hold ddr_ctx->ddr_lock */
 static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 {
@@ -1901,9 +1919,8 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 
 	ddr_ctx->cur_freq = freq;
 
-#ifdef CONFIG_DDR_BOOT_TEST
-	__ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_WRITE(512));
-#endif
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
+
 	/* Block AXI Before entering self-refresh */
 	if (ddr_block_axi_transactions())
 		return -ETIMEDOUT;
@@ -1991,10 +2008,8 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 
 	ddr_ctx->ddr_train_completed[freq] = 1;
 
-#ifdef CONFIG_DDR_BOOT_TEST
-	/* Run MEMTESTER for the data integrity */
-	__ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_READ(512));
-#endif
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
+
 	return DDR_SUCCESS;
 
 freq_change_fail:
@@ -2234,9 +2249,8 @@ static int32_t __ab_ddr_resume(void *ctx)
 	/* Disable the DDR_SR GPIO */
 	ab_gpio_disable_ddr_sr(sc);
 
-#ifdef CONFIG_DDR_BOOT_TEST
-	__ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_READ(512));
-#endif
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
+
 	return DDR_SUCCESS;
 
 ddr_resume_fail:
@@ -2268,9 +2282,8 @@ static int32_t __ab_ddr_suspend(void *ctx)
 	struct ab_state_context *sc = ddr_ctx->ab_state_ctx;
 
 	if (ddr_ctx->ddr_state == DDR_ON) {
-#ifdef CONFIG_DDR_BOOT_TEST
-		__ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_WRITE(512));
-#endif
+		ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
+
 		/* Block AXI Before entering self-refresh */
 		if (ddr_block_axi_transactions())
 			return -ETIMEDOUT;
@@ -2421,9 +2434,8 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 	/* Allow AXI after exiting from self-refresh */
 	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x1);
 
-#ifdef CONFIG_DDR_BOOT_TEST
-	__ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_READ(512));
-#endif
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
+
 	return DDR_SUCCESS;
 }
 
@@ -2447,9 +2459,8 @@ static int32_t ab_ddr_selfrefresh_exit(void *ctx)
 /* Caller must hold ddr_ctx->ddr_lock */
 static int32_t __ab_ddr_selfrefresh_enter(void *ctx)
 {
-#ifdef CONFIG_DDR_BOOT_TEST
-	__ab_ddr_read_write_test(ctx, DDR_TEST_PCIE_DMA_WRITE(512));
-#endif
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
+
 	/* Block AXI Before entering self-refresh */
 	if (ddr_block_axi_transactions())
 		return -ETIMEDOUT;
@@ -2747,9 +2758,7 @@ static int32_t ab_ddr_init(void *ctx)
 {
 	int32_t ret = 0;
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
-#ifdef CONFIG_DDR_BOOT_TEST
 	uint32_t ddr_sr;
-#endif
 
 	if (!ddr_ctx->is_setup_done) {
 		pr_err("%s, error: ddr setup is not called", __func__);
@@ -2763,17 +2772,46 @@ static int32_t ab_ddr_init(void *ctx)
 	if (ret)
 		pr_err("%s: error!! ddr initialization failed\n", __func__);
 
-#ifdef CONFIG_DDR_BOOT_TEST
 	/* Read the DDR_SR */
 	ddr_sr = GPIO_DDR_SR();
 
 	if (!ddr_sr && !ret)
-		__ab_ddr_read_write_test(ctx,
-					 DDR_TEST_PCIE_DMA_READ_WRITE(512));
-#endif
+		ddr_sanity_test(ctx, DDR_BOOT_TEST_READ_WRITE);
+
 	mutex_unlock(&ddr_ctx->ddr_lock);
 	return ret;
 }
+
+#ifndef CONFIG_AB_DDR_RW_TEST
+static int ab_ddr_read_write_test(void *ctx, unsigned int read_write)
+{
+	return -ENODEV;
+}
+#endif
+
+#ifndef CONFIG_AB_DDR_EYE_MARGIN
+static int ab_ddr_eye_margin(void *ctx, unsigned int test_data)
+{
+	return -ENODEV;
+}
+
+static int ab_ddr_eye_margin_plot(void *ctx)
+{
+	return -ENODEV;
+}
+#endif
+
+#ifndef CONFIG_AB_DDR_PPC
+static int ab_ddr_ppc_set_event(void *ctx, unsigned int counter_idx,
+				  unsigned int event)
+{
+	return -ENODEV;
+}
+
+static void ab_ddr_ppc_ctrl(void *ctx, int ppc_start)
+{
+}
+#endif
 
 static struct ab_sm_dram_ops dram_ops = {
 	.ctx = NULL,
@@ -2803,9 +2841,11 @@ static int ab_ddr_probe(struct platform_device *pdev)
 	if (ddr_ctx == NULL)
 		return -ENOMEM;
 
+#ifdef CONFIG_AB_DDR_EYE_MARGIN
 	ddr_ctx->eye_data = vmalloc(sizeof(struct ddr_eyemargin_data));
 	if (ddr_ctx->eye_data == NULL)
 		pr_err("ab_ddr: memory alloc for eyemargin data failed\n");
+#endif
 
 	/* initialize ddr state to off */
 	ddr_ctx->ddr_state = DDR_OFF;

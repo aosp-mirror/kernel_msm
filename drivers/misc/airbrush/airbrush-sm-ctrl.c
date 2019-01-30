@@ -35,7 +35,12 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/airbrush.h>
 
+#ifdef CONFIG_AB_DDR_SANITY_TEST
+#define AB_MAX_TRANSITION_TIME_MS	\
+	(10000 + (150 * CONFIG_AB_DDR_SANITY_SZ_MBYTES))
+#else
 #define AB_MAX_TRANSITION_TIME_MS	10000
+#endif
 #define AB_KFIFO_ENTRY_SIZE	32
 #define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 100)
 

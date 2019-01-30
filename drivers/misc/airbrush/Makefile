@@ -11,14 +11,14 @@ airbrush-y +=	\
 		airbrush-pmic-ctrl.o \
 		airbrush-ddr.o \
 		airbrush-ddr-vref.o \
-		airbrush-ddr-test.o \
-		airbrush-ddr-eyemargin.o \
 		airbrush-clkout.o \
-		airbrush-ddr-ppc.o \
 		airbrush-ppmu.o \
 		airbrush-cooling.o \
 		airbrush-thermal.o \
 		airbrush-sysfs.o \
 		airbrush-lvcc.o
 
-airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS) += airbrush-debugfs.o
+airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS)	+= airbrush-debugfs.o
+airbrush-$(CONFIG_AB_DDR_RW_TEST)	+= airbrush-ddr-test.o
+airbrush-$(CONFIG_AB_DDR_EYE_MARGIN)	+= airbrush-ddr-eyemargin.o
+airbrush-$(CONFIG_AB_DDR_PPC)		+= airbrush-ddr-ppc.o
