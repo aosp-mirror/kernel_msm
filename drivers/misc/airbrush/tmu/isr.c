@@ -39,15 +39,18 @@ static void ab_tmu_isr_work(struct work_struct *work)
 	struct ab_tmu_drvdata *data = dev_get_drvdata(isr->dev);
 	int i;
 	unsigned long flags;
+	u32 sensor_irq[AB_TMU_NUM_ALL_PROBE];
 
 	spin_lock_irqsave(&isr->sensor_irq_lock, flags);
+	memcpy(sensor_irq, isr->sensor_irq, sizeof(sensor_irq));
+	memset(isr->sensor_irq, 0, sizeof(isr->sensor_irq));
+	spin_unlock_irqrestore(&isr->sensor_irq_lock, flags);
+
 	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++) {
-		if (!isr->sensor_irq[i])
+		if (!sensor_irq[i])
 			continue;
 		ab_tmu_sensor_update(data->sensor[i]);
-		isr->sensor_irq[i] = 0;
 	}
-	spin_unlock_irqrestore(&isr->sensor_irq_lock, flags);
 }
 
 static void ab_tmu_isr_handler(struct ab_tmu_isr *isr)
