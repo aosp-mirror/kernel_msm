@@ -68,7 +68,7 @@
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
-#define M0_POLLING_PAUSE 400
+#define M0_POLLING_PAUSE 100
 #define M0_POLLING_INTERVAL 12
 
 /*
