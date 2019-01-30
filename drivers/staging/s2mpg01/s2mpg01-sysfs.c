@@ -556,6 +556,43 @@ static ssize_t total_power_show(struct device *dev,
 }
 DEVICE_ATTR_RO(total_power);
 
+static ssize_t boost_mode_store(struct device *dev,
+				struct device_attribute *mattr,
+				const char *buf,
+				size_t count)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+
+	int val = 0;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val == 0)
+		s2mpg01_disable_boost(ddata);
+	else
+		s2mpg01_enable_boost(ddata);
+
+	return count;
+}
+
+static ssize_t boost_mode_show(struct device *dev,
+			       struct device_attribute *mattr,
+			       char *data)
+{
+	bool boost_mode_status;
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+
+	boost_mode_status = s2mpg01_boost_mode_status(ddata);
+
+	return scnprintf(data, PAGE_SIZE,
+			 boost_mode_status ?
+			 "Boost mode enabled\n" : "Boost mode disabled\n");
+}
+DEVICE_ATTR_RW(boost_mode);
+
 static ssize_t dump_regs_show(struct device *dev,
 			      struct device_attribute *mattr,
 			      char *data)
@@ -671,6 +708,7 @@ static struct attribute *s2mpg01_attrs[] = {
 	&dev_attr_vbat.attr,
 	&dev_attr_temperature.attr,
 	&dev_attr_total_power.attr,
+	&dev_attr_boost_mode.attr,
 	&dev_attr_dump_regs.attr,
 	&dev_attr_toggle_pon.attr,
 	&dev_attr_reg_addr.attr,

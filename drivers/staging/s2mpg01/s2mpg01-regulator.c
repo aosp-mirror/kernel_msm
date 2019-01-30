@@ -59,6 +59,8 @@ static const unsigned int s2mpg01_ldo5_vtbl[] = { 1800000 };
 static const unsigned int s2mpg01_smps1_vtbl[] = { 750000 };
 static const unsigned int s2mpg01_smps2_vtbl[] = { 850000 };
 static const unsigned int s2mpg01_smps3_vtbl[] = { 1100000 };
+static const unsigned int s2mpg01_boost_smps1_vtbl[] = { 850000 };
+static const unsigned int s2mpg01_boost_ldo3_vtbl[] = { 850000 };
 
 static struct regulator_desc
 	s2mpg01_regulator_desc[S2MPG01_NUM_REGULATORS] = {
@@ -142,6 +144,26 @@ static struct regulator_desc
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
 	},
+	[S2MPG01_ID_BOOST_SMPS1] = {
+		.name = S2MPG01_REGLTR_NAME_BOOST_SMPS1,
+		.id = S2MPG01_ID_BOOST_SMPS1,
+		.ops = &s2mpg01_regulator_ops,
+		.n_voltages = ARRAY_SIZE(s2mpg01_boost_smps1_vtbl),
+		.volt_table = s2mpg01_boost_smps1_vtbl,
+		.enable_time = 200,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+	},
+	[S2MPG01_ID_BOOST_LDO3] = {
+		.name = S2MPG01_REGLTR_NAME_BOOST_LDO3,
+		.id = S2MPG01_ID_BOOST_LDO3,
+		.ops = &s2mpg01_regulator_ops,
+		.n_voltages = ARRAY_SIZE(s2mpg01_boost_ldo3_vtbl),
+		.volt_table = s2mpg01_boost_ldo3_vtbl,
+		.enable_time = 200,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+	},
 };
 
 static struct regulator_init_data
@@ -210,6 +232,22 @@ static struct regulator_init_data
 			.max_uV = 1800000,
 		},
 	},
+	[S2MPG01_ID_BOOST_SMPS1] = {
+		.constraints = {
+			.name = "s2mpg01_boost_smps1",
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+			.min_uV = 850000,
+			.max_uV = 850000,
+		},
+	},
+	[S2MPG01_ID_BOOST_LDO3] = {
+		.constraints = {
+			.name = "s2mpg01_boost_ldo3",
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+			.min_uV = 850000,
+			.max_uV = 850000,
+		},
+	},
 };
 
 /* get the current voltage of the regulator in microvolts */
@@ -232,7 +270,7 @@ static int s2mpg01_regulator_get_voltage(struct regulator_dev *rdev)
 			return ret;
 		vbase = 300000;
 		vstep = 6250;
-		vsel = reg_data;
+		vsel = reg_data & 0x7F;
 		break;
 	case S2MPG01_ID_SMPS2:
 		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_BUCK2_OUT,
@@ -297,6 +335,24 @@ static int s2mpg01_regulator_get_voltage(struct regulator_dev *rdev)
 		vstep = 25000;
 		vsel = reg_data & 0x3F;
 		break;
+	case S2MPG01_ID_BOOST_SMPS1:
+		ret = s2mpg01_read_byte(s2mpg01_core,
+					S2MPG01_REG_BUCK1_OUT_DVS, &reg_data);
+		if (ret)
+			return ret;
+		vbase = 300000;
+		vstep = 6250;
+		vsel = reg_data & 0x7F;
+		break;
+	case S2MPG01_ID_BOOST_LDO3:
+		ret = s2mpg01_read_byte(s2mpg01_core,
+					S2MPG01_REG_LDO3_CTRL_DVS, &reg_data);
+		if (ret)
+			return ret;
+		vbase = 300000;
+		vstep = 12500;
+		vsel = reg_data & 0x3F;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -350,6 +406,20 @@ static int s2mpg01_regulator_enable(struct regulator_dev *rdev)
 		ret = s2mpg01_write_byte(s2mpg01_core, S2MPG01_REG_LDO5_CTRL,
 					 0xEC);
 		break;
+	case S2MPG01_ID_BOOST_SMPS1:
+	case S2MPG01_ID_BOOST_LDO3:
+		ret = s2mpg01_enable_boost(s2mpg01_core);
+		if (!ret) {
+			/*
+			 * Both smps1 and ldo3 are applied boost mode at the
+			 * same time.
+			 */
+			set_bit(S2MPG01_ID_BOOST_SMPS1,
+				&s2mpg01_regulator->reg_enabled_mask);
+			set_bit(S2MPG01_ID_BOOST_LDO3,
+				&s2mpg01_regulator->reg_enabled_mask);
+		}
+		return ret;
 	default:
 		return -EINVAL;
 	}
@@ -403,6 +473,20 @@ static int s2mpg01_regulator_disable(struct regulator_dev *rdev)
 		ret = s2mpg01_write_byte(s2mpg01_core, S2MPG01_REG_LDO5_CTRL,
 					 0x2C);
 		break;
+	case S2MPG01_ID_BOOST_SMPS1:
+	case S2MPG01_ID_BOOST_LDO3:
+		ret = s2mpg01_disable_boost(s2mpg01_core);
+		if (!ret) {
+			/*
+			 * Both smps1 and ldo3 are applied boost mode at the
+			 * same time.
+			 */
+			clear_bit(S2MPG01_ID_BOOST_SMPS1,
+				  &s2mpg01_regulator->reg_enabled_mask);
+			clear_bit(S2MPG01_ID_BOOST_LDO3,
+				  &s2mpg01_regulator->reg_enabled_mask);
+		}
+		return ret;
 	default:
 		return -EINVAL;
 	}

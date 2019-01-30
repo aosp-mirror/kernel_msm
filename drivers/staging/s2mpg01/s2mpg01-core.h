@@ -164,6 +164,8 @@
 #define S2MPG01_REGLTR_NAME_LDO3  "s2mpg01_ldo3"
 #define S2MPG01_REGLTR_NAME_LDO4  "s2mpg01_ldo4"
 #define S2MPG01_REGLTR_NAME_LDO5  "s2mpg01_ldo5"
+#define S2MPG01_REGLTR_NAME_BOOST_SMPS1 "s2mpg01_boost_smps1"
+#define S2MPG01_REGLTR_NAME_BOOST_LDO3 "s2mpg01_boost_ldo3"
 
 /* silicon versions */
 #define S2MPG01_REV_ES 0xC
@@ -181,6 +183,8 @@ enum s2mpg01_regulator_ids {
 	S2MPG01_ID_LDO3,
 	S2MPG01_ID_LDO4,
 	S2MPG01_ID_LDO5,
+	S2MPG01_ID_BOOST_SMPS1,
+	S2MPG01_ID_BOOST_LDO3,
 	S2MPG01_ID_ALL,
 	S2MPG01_NUM_REGULATORS = S2MPG01_ID_ALL,
 };
@@ -224,6 +228,9 @@ int s2mpg01_toggle_pon(struct s2mpg01_core *ddata);
 int s2mpg01_dump_regs(struct s2mpg01_core *ddata);
 int s2mpg01_read_adc_chan(struct s2mpg01_core *ddata, int chan_num,
 			  u8 *chan_data);
+int s2mpg01_enable_boost(struct s2mpg01_core *ddata);
+int s2mpg01_disable_boost(struct s2mpg01_core *ddata);
+bool s2mpg01_boost_mode_status(struct s2mpg01_core *ddata);
 
 /* s2mpg01-sysfs.c */
 void s2mpg01_config_sysfs(struct device *dev);

@@ -49,6 +49,7 @@
 #define S2MPG01_ADC_CONV_TIMEOUT  msecs_to_jiffies(100)
 
 static void s2mpg01_print_status(struct s2mpg01_core *ddata);
+static int s2mpg01_core_fixup(struct s2mpg01_core *ddata);
 static void s2mpg01_mask_interrupts_all(struct s2mpg01_core *ddata);
 static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata);
 
@@ -321,6 +322,37 @@ int s2mpg01_read_adc_chan(struct s2mpg01_core *ddata,
 }
 EXPORT_SYMBOL_GPL(s2mpg01_read_adc_chan);
 
+bool s2mpg01_boost_mode_status(struct s2mpg01_core *ddata)
+{
+	u8 reg_data;
+	int offset = 7; /* bit[7]: SYNC_L3_EN*/
+
+	s2mpg01_read_byte(ddata, S2MPG01_REG_BOOST_CTRL, &reg_data);
+	return !!(reg_data & (1 << offset));
+}
+
+static int __s2mpg01_set_boost_mode(struct s2mpg01_core *ddata, bool enable)
+{
+	int offset = 7; /* bit[7]: SYNC_L3_EN*/
+
+	return s2mpg01_update_bits(ddata,
+				   S2MPG01_REG_BOOST_CTRL,
+				   (1 << offset),
+				   ((enable ? 1 : 0) << offset));
+}
+
+int s2mpg01_enable_boost(struct s2mpg01_core *ddata)
+{
+	dev_dbg(ddata->dev, "%s: Enabling boost mode\n", __func__);
+	return __s2mpg01_set_boost_mode(ddata, true);
+}
+
+int s2mpg01_disable_boost(struct s2mpg01_core *ddata)
+{
+	dev_dbg(ddata->dev, "%s: Disabling boost mode\n", __func__);
+	return __s2mpg01_set_boost_mode(ddata, false);
+}
+
 #define NOTIFY(id, event) s2mpg01_regulator_notify(id, event)
 
 /* print the device id */
@@ -563,6 +595,7 @@ static irqreturn_t s2mpg01_resetb_irq_handler(int irq, void *cookie)
 		dev_info(ddata->dev, "%s: completing reset\n", __func__);
 		/* read chip status */
 		s2mpg01_print_status(ddata);
+		s2mpg01_core_fixup(ddata);
 		complete(&ddata->init_complete);
 	} else {
 		dev_err(ddata->dev, "%s: device reset\n", __func__);
@@ -585,6 +618,18 @@ static irqreturn_t s2mpg01_intb_irq_handler(int irq, void *cookie)
 	dev_dbg(ddata->dev, "%s: handled irq %d\n", __func__, irq);
 
 	return IRQ_HANDLED;
+}
+
+/* some changes to register reset values */
+static int s2mpg01_core_fixup(struct s2mpg01_core *ddata)
+{
+	/* set SMPS1 boost voltage to 0.85V; reset value is 0.75V */
+	s2mpg01_write_byte(ddata, S2MPG01_REG_BUCK1_OUT_DVS, 0x58);
+
+	/* set boost mode threshold to 0.5V; reset value is max */
+	s2mpg01_write_byte(ddata, S2MPG01_REG_BOOST_THRES, 0x28);
+
+	return 0;
 }
 
 /* get platform data from the device tree */
@@ -768,6 +813,9 @@ static int s2mpg01_probe(struct i2c_client *client,
 
 	/* print chip status */
 	s2mpg01_print_status(ddata);
+
+	/* apply fixup */
+	s2mpg01_core_fixup(ddata);
 
 	/* enable all interrupts */
 	s2mpg01_clear_interrupts(ddata);
