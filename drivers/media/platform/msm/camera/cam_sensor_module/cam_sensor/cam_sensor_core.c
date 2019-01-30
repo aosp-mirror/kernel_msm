@@ -1335,6 +1335,7 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	rc = camera_io_init(&(s_ctrl->io_master_info));
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "cci_init failed: rc: %d", rc);
+		cam_sensor_power_down(s_ctrl);
 		return rc;
 	}
 
@@ -1342,12 +1343,16 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 		(soc_info->index == IR_MASTER || soc_info->index == IR_SLAVE)) {
 		if (!s_ctrl->peer_ir_info.cci_client) {
 			CAM_ERR(CAM_SENSOR, "peer IR io info is empty");
+			cam_sensor_power_down(s_ctrl);
 			return -EFAULT;
 		}
 		rc = camera_io_init(&(s_ctrl->peer_ir_info));
-		if (rc < 0)
+		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR,
 				"cci_init for peer ir failed: rc: %d", rc);
+			cam_sensor_power_down(s_ctrl);
+			return rc;
+		}
 	}
 
 	if (s_ctrl->soc_info.index != IR_MASTER)
@@ -1376,6 +1381,7 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 		CAM_ERR(CAM_SENSOR,
 			"Reprogram IR_MASTER slave address failed rc = %d",
 			rc);
+		cam_sensor_power_down(s_ctrl);
 		return rc;
 	} else {
 		CAM_DBG(CAM_SENSOR,
