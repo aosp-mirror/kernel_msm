@@ -14,6 +14,7 @@
 #define _AIRBRUSH_PMIC_CTRL_H_
 
 #define LDO5_LDO4_SMPS2_DEFAULT_DELAY	8000
+#define S60_DEFAULT_DELAY	40000
 
 void ab_pmic_enable_boost(struct ab_state_context *sc);
 void ab_pmic_disable_boost(struct ab_state_context *sc);

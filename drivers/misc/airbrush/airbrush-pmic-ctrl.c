@@ -265,7 +265,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 			!sc->smps1_state &&
 			!sc->ldo3_state &&
 			!sc->ldo2_state)
-		msleep(40);
+		usleep_range(sc->s60_delay, sc->s60_delay + 1);
 
 	return ret2;
 }
