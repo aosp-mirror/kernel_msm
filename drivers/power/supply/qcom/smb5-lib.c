@@ -6218,6 +6218,8 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 disable:
 	chg->lpd_stage = LPD_STAGE_NONE;
 	chg->lpd_reason = LPD_NONE;
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n", __func__,
+		 chg->lpd_stage, chg->lpd_reason);
 
 exit:
 	spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
@@ -6258,6 +6260,8 @@ int enable_moisture_detection(struct smb_charger *chg, bool enable)
 
 		chg->lpd_stage = LPD_STAGE_NONE;
 		chg->lpd_reason = LPD_NONE;
+		dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+			 __func__, chg->lpd_stage, chg->lpd_reason);
 		vote(chg->awake_votable, LPD_VOTER, false, 0);
 		power_supply_changed(chg->usb_psy);
 	}
@@ -6319,6 +6323,8 @@ static bool smblib_src_lpd(struct smb_charger *chg)
 		chg->lpd_reason = LPD_NONE;
 		chg->typec_mode = smblib_get_prop_typec_mode(chg);
 	}
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 
 	spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
 	return lpd_flag;
@@ -6835,6 +6841,8 @@ static void smblib_lpd_launch_ra_open_work(struct smb_charger *chg)
 			chg->lpd_stage = LPD_STAGE_NONE;
 		}
 		spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
+		dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+			 __func__, chg->lpd_stage, chg->lpd_reason);
 	}
 }
 
@@ -7017,6 +7025,9 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 	if (rc < 0)
 		smblib_err(chg, "Couldn't configure pulldown on USB_IN rc=%d\n",
 				rc);
+
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 
 	power_supply_changed(chg->usb_psy);
 
@@ -8321,6 +8332,9 @@ unlock:
 	spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
 out:
 	vote(chg->awake_votable, LPD_VOTER, false, 0);
+
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 }
 
 static void smblib_lpd_detach_work(struct work_struct *work)
@@ -8330,6 +8344,9 @@ static void smblib_lpd_detach_work(struct work_struct *work)
 
 	if (chg->lpd_stage == LPD_STAGE_FLOAT_CANCEL)
 		chg->lpd_stage = LPD_STAGE_NONE;
+
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 }
 
 static void smblib_cp_status_change_work(struct work_struct *work)
