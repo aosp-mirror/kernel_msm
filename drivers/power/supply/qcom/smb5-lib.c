@@ -4753,6 +4753,8 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 disable:
 	chg->lpd_stage = LPD_STAGE_NONE;
 	chg->lpd_reason = LPD_NONE;
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n", __func__,
+		 chg->lpd_stage, chg->lpd_reason);
 	power_supply_changed(chg->usb_psy);
 
 exit:
@@ -4793,6 +4795,8 @@ int enable_moisture_detection(struct smb_charger *chg, bool enable)
 
 		chg->lpd_stage = LPD_STAGE_NONE;
 		chg->lpd_reason = LPD_NONE;
+		dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+			 __func__, chg->lpd_stage, chg->lpd_reason);
 		vote(chg->awake_votable, LPD_VOTER, false, 0);
 		power_supply_changed(chg->usb_psy);
 	}
@@ -4849,6 +4853,8 @@ static bool smblib_src_lpd(struct smb_charger *chg)
 		chg->typec_mode = smblib_get_prop_typec_mode(chg);
 	}
 	power_supply_changed(chg->usb_psy);
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 
 	spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
 	return lpd_flag;
@@ -5112,6 +5118,8 @@ irqreturn_t typec_or_rid_detection_change_irq_handler(int irq, void *data)
 			chg->lpd_stage = LPD_STAGE_NONE;
 		}
 		spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
+		dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+			 __func__, chg->lpd_stage, chg->lpd_reason);
 	}
 
 	if (chg->usb_psy)
@@ -5212,6 +5220,9 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 			schedule_delayed_work(&chg->lpd_detach_work,
 					msecs_to_jiffies(1000));
 	}
+
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 
 	power_supply_changed(chg->usb_psy);
 
@@ -5970,6 +5981,9 @@ unlock:
 	spin_unlock_irqrestore(&chg->moisture_detection_enable, flags);
 out:
 	vote(chg->awake_votable, LPD_VOTER, false, 0);
+
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 }
 
 static void smblib_lpd_detach_work(struct work_struct *work)
@@ -5979,6 +5993,9 @@ static void smblib_lpd_detach_work(struct work_struct *work)
 
 	if (chg->lpd_stage == LPD_STAGE_FLOAT_CANCEL)
 		chg->lpd_stage = LPD_STAGE_NONE;
+
+	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
+		 __func__, chg->lpd_stage, chg->lpd_reason);
 }
 
 static int smblib_create_votables(struct smb_charger *chg)

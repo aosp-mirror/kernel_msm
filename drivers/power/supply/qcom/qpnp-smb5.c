@@ -722,6 +722,7 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		val->intval = (chg->lpd_reason == LPD_MOISTURE_DETECTED
 			       && chg->lpd_stage == LPD_STAGE_COMMIT) ? 1 :
 			       0;
+		break;
 	case POWER_SUPPLY_PROP_HVDCP_OPTI_ALLOWED:
 		val->intval = !chg->flash_active;
 		break;
