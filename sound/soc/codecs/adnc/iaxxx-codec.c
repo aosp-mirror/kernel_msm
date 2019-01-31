@@ -4038,7 +4038,7 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 			return -EINVAL;
 		}
 	}
-	pdm_mstr = iaxxx->is_ip_port_master[clk_port];
+	pdm_mstr = iaxxx->ip_pdm_clk_src[clk_port];
 
 	dev_dbg(dev, "clk_port:%d clk_src:%d pdm_mstr=%d\n", clk_port,
 			clk_src, pdm_mstr);
@@ -6497,14 +6497,13 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 {
 	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(dai->codec);
 	struct snd_soc_codec *codec = dai->codec;
-	u32 reg_srdd_val = 0;
 	u32 port_clk_val = 0;
 	u32 port_di_val = 0;
 	u32 port_do_val = 0;
 	u32 port_fs_val = 0;
 	int id = dai->id;
 
-	dev_dbg(codec->dev, "%s\n", __func__);
+	dev_dbg(codec->dev, "%s fmt=%x\n", __func__, fmt);
 
 	if (dai->id >= IAXXX_NUM_CODEC_DAIS) {
 		dev_err(codec->dev, "Unsupported dai id:%d\n", dai->id);
@@ -6530,15 +6529,12 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
-		reg_srdd_val = 1;
 		iaxxx->pcm_dai_fmt[id] = SND_SOC_DAIFMT_I2S;
 		break;
 	case SND_SOC_DAIFMT_DSP_A:
-		reg_srdd_val = 1;
 		iaxxx->pcm_dai_fmt[id] = SND_SOC_DAIFMT_DSP_A;
 		break;
 	default:
-		reg_srdd_val = 0;
 		iaxxx->pcm_dai_fmt[id] = 0;
 		dev_dbg(codec->dev, "default settings\n");
 		break;
@@ -6547,8 +6543,6 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	port_di_val = port_di_val | IAXXX_IO_CTRL_DI;
 	port_do_val = port_do_val | IAXXX_IO_CTRL_DO;
 
-	snd_soc_update_bits(codec, IAXXX_PCM_SRDD_ADDR(id),
-			IAXXX_PCM0_SRDD_WMASK_VAL, reg_srdd_val);
 
 	snd_soc_update_bits(codec, port_clk_addr[id],
 		IAXXX_IO_CTRL_PORTA_CLK_MUX_SEL_MASK |
@@ -6804,6 +6798,7 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 	u32 frame_length;
 	int id = dai->id;
 	int ret = 0;
+	u32 reg_srdd_val = 0;
 	u32 status = 0;
 
 	if (dai->id >= IAXXX_NUM_CODEC_DAIS) {
@@ -6905,15 +6900,21 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 
 	if (iaxxx->pcm_dai_fmt[id] == SND_SOC_DAIFMT_I2S) {
 		mode = IAXXX_PCM_CTRL_DEFAULT_I2SFMT;
+		reg_srdd_val = 1;
 	} else if (iaxxx->pcm_dai_fmt[id] == SND_SOC_DAIFMT_DSP_A) {
 		mode = IAXXX_PCM_CTRL_DEFAULT_DSPFMT;
+		reg_srdd_val = 0;
 	} else if (iaxxx->pcm_port_fmt[id]) {
 		mode = IAXXX_PCM_CTRL_DEFAULT_TDMFMT;
+		reg_srdd_val = 0;
 	} else {
 		dev_err(codec->dev, "%s(): DAI FMT configuration is missing\n",
 					__func__);
 		return -EINVAL;
 	}
+
+	snd_soc_update_bits(codec, IAXXX_PCM_SRDD_ADDR(id),
+			IAXXX_PCM0_SRDD_WMASK_VAL, reg_srdd_val);
 
 	snd_soc_update_bits(codec, IAXXX_PCM_MC_ADDR(id),
 			IAXXX_PCM0_MC_WMASK_VAL, mode);
@@ -6997,6 +6998,8 @@ static int iaxxx_pcm_startup(struct snd_pcm_substream *substream,
 					__func__);
 		return -EINVAL;
 	}
+
+	dev_dbg(codec->dev, "%s dai_fmt:%x\n", __func__, dai_fmt);
 
 	ret = iaxxx_pcm_set_fmt(dai, dai_fmt);
 	if (ret < 0) {
@@ -7534,7 +7537,7 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 	if (priv->dev->of_node) {
 		ret = of_property_read_u32_array(priv->dev->of_node,
 				"adnc,ip-port-master",
-				ip_port_master_slave, IAXXX_MAX_PDM_PORTS);
+				ip_port_master_slave, IAXXX_MAX_PORTS);
 		if (ret) {
 			dev_err(dev,
 				"%s(): no adnc,ip-port-master in DT node: %d\n",
