@@ -26,7 +26,6 @@
 #include <linux/of_gpio.h>
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
-#include <linux/spinlock.h>
 #include "bgcom.h"
 #include "bgrsb.h"
 #include "bgcom_interface.h"
@@ -108,7 +107,7 @@ static void send_input_events(struct work_struct *work);
 static struct list_head cb_head = LIST_HEAD_INIT(cb_head);
 static struct list_head pr_lst_hd = LIST_HEAD_INIT(pr_lst_hd);
 static enum bgcom_spi_state spi_state;
-static DEFINE_SPINLOCK(pr_lst_hd_lock);
+
 
 static struct workqueue_struct *wq;
 static DECLARE_WORK(input_work, send_input_events);
@@ -140,11 +139,10 @@ static void send_input_events(struct work_struct *work)
 	struct list_head *pos;
 	struct event_list *node;
 	struct event *evnt;
-	unsigned long flags;
 
 	if (list_empty(&pr_lst_hd))
 		return;
-	spin_lock_irqsave(&pr_lst_hd_lock, flags);
+
 	list_for_each_safe(pos, temp, &pr_lst_hd) {
 		node = list_entry(pos, struct event_list, list);
 		evnt = node->evnt;
@@ -153,7 +151,6 @@ static void send_input_events(struct work_struct *work)
 		list_del(&node->list);
 		kfree(node);
 	}
-	spin_unlock_irqrestore(&pr_lst_hd_lock, flags);
 }
 
 int bgcom_set_spi_state(enum bgcom_spi_state state)
@@ -305,7 +302,6 @@ static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 	void *evnt_data;
 	struct event *evnt;
 	struct event_list *data_list;
-	unsigned long flags;
 
 	while (*data != '\0') {
 
@@ -320,24 +316,14 @@ static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 			evnt_tm = *((uint32_t *)(data+1));
 
 			evnt = kmalloc(sizeof(*evnt), GFP_KERNEL);
-			if (!evnt) {
-				pr_err("Allocate Memory for evnt Failed\n");
-				break;
-			}
 			evnt->sub_id = sub_id;
 			evnt->evnt_tm = evnt_tm;
 			evnt->evnt_data =
 				*(int16_t *)(data + HED_EVENT_DATA_STRT_LEN);
 
 			data_list = kmalloc(sizeof(*data_list), GFP_KERNEL);
-			if (!data_list) {
-				pr_err("Allocate Memory for data_list Failed\n");
-				break;
-			}
 			data_list->evnt = evnt;
-			spin_lock_irqsave(&pr_lst_hd_lock, flags);
 			list_add_tail(&data_list->list, &pr_lst_hd);
-			spin_unlock_irqrestore(&pr_lst_hd_lock, flags);
 
 		} else if (event_id == 0x0001) {
 			evnt_data = kmalloc(p_len, GFP_KERNEL);
@@ -478,7 +464,6 @@ static void bg_irq_tasklet_hndlr_l(void)
 int bgcom_ahb_read(void *handle, uint32_t ahb_start_addr,
 	uint32_t num_words, void *read_buf)
 {
-	dma_addr_t dma_hndl_tx, dma_hndl_rx;
 	uint32_t txn_len;
 	uint8_t *tx_buf;
 	uint8_t *rx_buf;
@@ -486,7 +471,6 @@ int bgcom_ahb_read(void *handle, uint32_t ahb_start_addr,
 	int ret;
 	uint8_t cmnd = 0;
 	uint32_t ahb_addr = 0;
-	struct spi_device *spi = get_spi_device();
 
 	if (!handle || !read_buf || num_words == 0
 		|| num_words > BG_SPI_MAX_WORDS) {
@@ -509,16 +493,13 @@ int bgcom_ahb_read(void *handle, uint32_t ahb_start_addr,
 	size = num_words*BG_SPI_WORD_SIZE;
 	txn_len = BG_SPI_AHB_READ_CMD_LEN + size;
 
-
-	tx_buf = dma_zalloc_coherent(&spi->dev, txn_len,
-					&dma_hndl_tx, GFP_KERNEL);
+	tx_buf = kzalloc(txn_len, GFP_KERNEL | GFP_ATOMIC);
 	if (!tx_buf)
 		return -ENOMEM;
 
-	rx_buf = dma_zalloc_coherent(&spi->dev, txn_len,
-					&dma_hndl_rx, GFP_KERNEL);
+	rx_buf = kzalloc(txn_len, GFP_KERNEL | GFP_ATOMIC);
 	if (!rx_buf) {
-		dma_free_coherent(&spi->dev, txn_len, tx_buf, dma_hndl_tx);
+		kfree(tx_buf);
 		return -ENOMEM;
 	}
 
@@ -533,8 +514,8 @@ int bgcom_ahb_read(void *handle, uint32_t ahb_start_addr,
 	if (!ret)
 		memcpy(read_buf, rx_buf+BG_SPI_AHB_READ_CMD_LEN, size);
 
-	dma_free_coherent(&spi->dev, txn_len, tx_buf, dma_hndl_tx);
-	dma_free_coherent(&spi->dev, txn_len, rx_buf, dma_hndl_rx);
+	kfree(tx_buf);
+	kfree(rx_buf);
 	return ret;
 }
 EXPORT_SYMBOL(bgcom_ahb_read);
@@ -570,7 +551,6 @@ int bgcom_ahb_write(void *handle, uint32_t ahb_start_addr,
 		pr_err("Failed to resume\n");
 		return -EBUSY;
 	}
-
 
 	mutex_lock(&cma_buffer_lock);
 	size = num_words*BG_SPI_WORD_SIZE;

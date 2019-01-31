@@ -298,7 +298,6 @@ struct msm_otg {
 	struct extcon_dev       *extcon_id;
 	struct notifier_block   vbus_nb;
 	struct notifier_block   id_nb;
-	bool			extcon_registered;
 	struct regulator_desc	dpdm_rdesc;
 	struct regulator_dev	*dpdm_rdev;
 /* Maximum debug message length */
