@@ -531,7 +531,7 @@ static void cam_ois_read_work(struct work_struct *work)
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
 		CAM_ERR(CAM_OIS, "read seq fail. cnt = %d",
-			++ois_timer_in->i2c_fail_count);
+			ois_timer_in->i2c_fail_count);
 		if (ois_timer_in->i2c_fail_count >= MAX_FAIL_CNT) {
 			CAM_ERR(CAM_OIS, "Too many i2c failed. Stop timer.");
 			ois_timer_in->ois_timer_state = CAM_OIS_TIME_ERROR;
@@ -1007,18 +1007,30 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		break;
 	case CAM_OIS_PACKET_OPCODE_SHIFT_READER_START:
 		rc = cam_ois_start_shift_reader(o_ctrl);
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS,
+				"Failed start shift reader, rc: %d", rc);
+			goto rel_pkt;
+		}
 		break;
 	case CAM_OIS_PACKET_OPCODE_SHIFT_READER_STOP:
 		rc = cam_ois_stop_shift_reader(o_ctrl);
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS,
+				"Failed stop shift reader, rc: %d", rc);
+			goto rel_pkt;
+		}
 		break;
 	case CAM_OIS_PACKET_OPCODE_SHIFT_GET:
 	case CAM_OIS_PACKET_OPCODE_READ:
-		if (cam_ois_util_validate_packet(csl_packet))
-			return -EINVAL;
+		rc = cam_ois_util_validate_packet(csl_packet);
+		if (rc < 0)
+			goto rel_pkt;
 		if (csl_packet->num_cmd_buf != 1) {
 			CAM_ERR(CAM_OIS,
 				"More than one cmd buf found in shift_get");
-			return -EINVAL;
+			rc = -EINVAL;
+			goto rel_pkt;
 		}
 
 		offset = (uint32_t *)((uint8_t *)&csl_packet->payload +
@@ -1028,18 +1040,23 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		if (!total_cmd_buf_in_bytes) {
 			CAM_ERR(CAM_OIS,
 				"Empty cmd buf found in shift_get");
-			return -EINVAL;
+			rc = -EINVAL;
+			goto rel_pkt;
 		}
 
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
 			&generic_ptr, &len_of_buff);
 		if (rc < 0) {
 			CAM_ERR(CAM_OIS, "Failed to get cpu buf");
-			return rc;
+			goto rel_pkt;
 		}
 		if (!generic_ptr) {
 			CAM_ERR(CAM_OIS, "invalid generic_ptr");
-			return -EINVAL;
+			if (cam_mem_put_cpu_buf(cmd_desc->mem_handle))
+				CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
+					cmd_desc[i].mem_handle);
+			rc = -EINVAL;
+			goto rel_pkt;
 		}
 		offset = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
@@ -1054,10 +1071,20 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			CAM_OIS_PACKET_OPCODE_READ) {
 			rc = cam_ois_read_reg(o_ctrl, cmd_get_ois);
 		}
+
+		if (cam_mem_put_cpu_buf(cmd_desc->mem_handle))
+			CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
+				cmd_desc[i].mem_handle);
+
+		if (rc < 0) {
+			CAM_ERR(CAM_OIS, "Failed to get ois data");
+			goto rel_pkt;
+		}
 		break;
 	case CAM_OIS_PACKET_OPCODE_CALIBRATION:
-		if (cam_ois_util_validate_packet(csl_packet))
-			return -EINVAL;
+		rc = cam_ois_util_validate_packet(csl_packet);
+		if (rc < 0)
+			goto rel_pkt;
 		offset = (uint32_t *)((uint8_t *)&csl_packet->payload +
 			csl_packet->cmd_buf_offset);
 		cmd_desc = (struct cam_cmd_buf_desc *)offset;
@@ -1065,17 +1092,24 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			&generic_ptr, &len_of_buff);
 		if (rc < 0) {
 			CAM_ERR(CAM_OIS, "Failed to get cpu buf");
-			return rc;
+			goto rel_pkt;
 		}
 		if (!generic_ptr) {
 			CAM_ERR(CAM_OIS, "invalid generic_ptr");
-			return -EINVAL;
+			if (cam_mem_put_cpu_buf(cmd_desc[0].mem_handle))
+				CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
+					cmd_desc[i].mem_handle);
+			rc = -EINVAL;
+			goto rel_pkt;
 		}
 		offset = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
 		cal_rc = (int32_t *)offset;
 		cal_result = (stReCalib *)(offset + 1);
 		*cal_rc = cam_ois_calibration(o_ctrl, cal_result);
+		if (cam_mem_put_cpu_buf(cmd_desc[0].mem_handle))
+			CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
+				cmd_desc[i].mem_handle);
 		break;
 	default:
 		CAM_ERR(CAM_OIS, "Invalid Opcode: %d",
