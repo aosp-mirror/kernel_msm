@@ -3611,6 +3611,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 	case CS40L2X_INDEX_PEAK:
 	case CS40L2X_INDEX_DIAG:
 		pm_stay_awake(dev);
+		break;
 	}
 
 	switch (cs40l2x->cp_trailer_index) {
