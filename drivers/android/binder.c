@@ -5091,7 +5091,7 @@ static void binder_deferred_release(struct binder_proc *proc)
 	struct rb_node *n;
 	int threads, nodes, incoming_refs, outgoing_refs, active_transactions;
 
-	BUG_ON(proc->files);
+	WARN_ON(proc->files);
 
 	mutex_lock(&binder_procs_lock);
 	hlist_del(&proc->proc_node);

@@ -931,8 +931,20 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 			goto enable_icl_changed_interrupt;
 		}
 	} else {
-		/*set correct icl current for usb*/
-		set_sdp_current(chg, icl_ua);
+		/* set correct icl current for usb */
+		int icl_ua_correct;
+
+
+		if (icl_ua >= USBIN_900MA)
+			icl_ua_correct = USBIN_900MA;
+		else if (icl_ua >= USBIN_500MA)
+			icl_ua_correct = USBIN_500MA;
+		else if (icl_ua >= USBIN_150MA)
+			icl_ua_correct = USBIN_150MA;
+		else
+			icl_ua_correct = USBIN_100MA;
+
+		set_sdp_current(chg, icl_ua_correct);
 		rc = smblib_set_charge_param(chg, &chg->param.usb_icl, icl_ua);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
