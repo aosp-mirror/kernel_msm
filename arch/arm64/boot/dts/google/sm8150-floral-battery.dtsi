@@ -66,8 +66,6 @@
 
 	/* enable max1730x support */
 	maxim,max1730x-compat;
-	/* reset 1720x fuel gauge on start */
-	maxim,force-hard-reset;
 	/* check for NV integrity */
 	maxim,enable-nv-check;
 
