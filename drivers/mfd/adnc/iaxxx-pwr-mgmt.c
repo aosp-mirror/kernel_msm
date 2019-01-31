@@ -35,6 +35,8 @@
 
 #define IAXXX_PM_AUTOSUSPEND_DELAY 3000
 
+#define IAXXX_PWR_MAX_SPI_SPEED   25000000
+
 void iaxxx_pm_enable(struct iaxxx_priv *priv)
 {
 
@@ -146,28 +148,9 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 	}
 
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
-		/*setting up the normal power mode*/
-		reg_addr = IAXXX_SRB_SYS_POWER_CTRL_ADDR;
-		rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-					&reg_val, sizeof(uint32_t));
-		reg_val &= ~IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK;
-		reg_val |= (IAXXX_NORMAL_MODE <<
-				IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_POS) &
-				IAXXX_SRB_SYS_POWER_CTRL_SET_POWER_MODE_MASK;
-
-		rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
-				&reg_val, sizeof(uint32_t));
-		if (rc) {
-			dev_err(priv->dev, "%s() Fail\n", __func__);
-			return rc;
-		}
-
-		iaxxx_send_update_block_no_wait_no_pm(priv->dev, HOST_0);
-
-		/* TODO: Switch to wakeup notification event */
-		msleep(20);
-
 		priv->iaxxx_state->power_state = IAXXX_NORMAL_MODE;
+		dev_info(priv->dev, "%s set to normal power mode done\n",
+			__func__);
 	}
 
 	dev_info(priv->dev, "%s() Success\n", __func__);
@@ -187,9 +170,12 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 		dev_err(priv->dev, "%s() Fail\n", __func__);
 		return rc;
 	}
-	/* set up the SPI speed thats expected when the system is wake up */
+	/* set up the SPI speed thats expected when the system is wake up
+	 * Set the SPI Speed to maximum so system will be awake with max
+	 * clock speed.
+	 */
 	reg_addr = reg_val + (IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_ADDR & 0xffffff);
-	reg_val =  priv->spi_app_speed;
+	reg_val = IAXXX_PWR_MAX_SPI_SPEED;
 	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
 			&reg_val, sizeof(uint32_t));
 	if (rc) {
