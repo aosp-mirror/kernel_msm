@@ -6165,7 +6165,6 @@ static int iaxxx_tdm3_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	u32 portd_fs_val = 0;
 	u32 port_do_val = 0;
 	u32 port_di_val = 0;
-	u32 status = 0;
 	int id = PCM_PORTD;
 
 	dev_dbg(codec->dev, "%s\n", __func__);
@@ -6199,12 +6198,6 @@ static int iaxxx_tdm3_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	port_di_val = IAXXX_IO_CTRL_DI;
 	port_do_val = IAXXX_IO_CTRL_DO;
-	/* TODO need to move to pm ops functions in future */
-	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
-		0x18, 0x18); /* enable PortD and E */
-
-	iaxxx_send_update_block_request(iaxxx->dev_parent, &status,
-						    IAXXX_BLOCK_0);
 
 	/* BCLK IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_clk_addr[id],
@@ -6276,8 +6269,6 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	u32 port_di_val = 0;
 	u32 port_do_val = 0;
 	u32 port_fs_val = 0;
-	u32 status = 0;
-	int ret;
 	int id = dai->id;
 
 	dev_dbg(codec->dev, "%s\n", __func__);
@@ -6322,16 +6313,6 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	port_di_val = port_di_val | IAXXX_IO_CTRL_DI;
 	port_do_val = port_do_val | IAXXX_IO_CTRL_DO;
-	/* TODO need to move to pm ops functions in future */
-	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
-			(1 << id), (1 << id));
-
-	ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
-					&status, IAXXX_BLOCK_0);
-	if (ret) {
-		dev_err(codec->dev, "Update block fail %s()\n", __func__);
-		return ret;
-	}
 
 	snd_soc_update_bits(codec, IAXXX_PCM_SRDD_ADDR(id),
 			IAXXX_PCM0_SRDD_WMASK_VAL, reg_srdd_val);
@@ -6399,6 +6380,8 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 	u32 word_len;
 	u32 frame_length;
 	int id = PCM_PORTD;
+	u32 status = 0;
+	int ret = 0;
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 	switch (iaxxx->pcm_port_word_len[id] ?
@@ -6463,6 +6446,15 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
+	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
+		0x18, 0x18); /* enable PortD and E */
+
+	ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
+				&status, IAXXX_BLOCK_0);
+	if (ret) {
+		dev_err(codec->dev, "Update block fail %s()\n", __func__);
+		return ret;
+	}
 
 	snd_soc_update_bits(codec, IAXXX_PCM_SWLR_ADDR(id),
 		IAXXX_PCM0_SWLR_WMASK_VAL, word_len);
@@ -6578,6 +6570,8 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 	u32 ch_val;
 	u32 frame_length;
 	int id = dai->id;
+	int ret = 0;
+	u32 status = 0;
 
 	if (dai->id >= IAXXX_NUM_CODEC_DAIS) {
 		dev_err(codec->dev, "Unsupported dai id:%d\n", dai->id);
@@ -6643,6 +6637,16 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 	dev_dbg(codec->dev, "Supported channels:%d rx:%d tx:%d\n",
 			params_channels(params), channel_port_rx,
 			channel_port_tx);
+
+	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
+			(1 << id), (1 << id));
+
+	ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
+					&status, IAXXX_BLOCK_0);
+	if (ret) {
+		dev_err(codec->dev, "Update block fail %s()\n", __func__);
+		return ret;
+	}
 
 	snd_soc_update_bits(codec, IAXXX_PCM_SWLR_ADDR(id),
 		IAXXX_PCM0_SWLR_WMASK_VAL, word_len);
@@ -6729,7 +6733,7 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 	else
 		iaxxx->is_stream_in_use[id][1] = true;
 
-	return 0;
+	return ret;
 }
 
 static int iaxxx_pcm_startup(struct snd_pcm_substream *substream,
