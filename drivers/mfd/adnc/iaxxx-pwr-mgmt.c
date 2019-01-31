@@ -450,9 +450,13 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 	reg_addr = reg_val + (IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR & 0xffffff);
 	rc = priv->read_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
 				&reg_val, sizeof(uint32_t));
+	if (rc) {
+		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
+		return rc;
+	}
 	reg_val |= (source << IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_POS) &
 				IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_MASK;
-	dev_dbg(priv->dev, "%s() reg_addr = %x , reg_val = %x\n",
+	dev_info(priv->dev, "%s() reg_addr = %x , reg_val = %x\n",
 					__func__, reg_addr, reg_val);
 	rc = priv->write_no_pm(priv->dev, &reg_addr, sizeof(uint32_t),
 					&reg_val, sizeof(uint32_t));
