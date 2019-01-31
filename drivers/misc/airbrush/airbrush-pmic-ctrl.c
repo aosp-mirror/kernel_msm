@@ -346,8 +346,6 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 {
 	struct device *dev = sc->dev;
 
-	mutex_lock(&sc->pmic_lock);
-
 	if (!sc->soc_pwrgood) {
 		sc->soc_pwrgood =
 			devm_gpiod_get(dev, "soc-pwrgood", GPIOD_OUT_LOW);
@@ -470,13 +468,9 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		}
 	}
 
-	mutex_unlock(&sc->pmic_lock);
-
 	return 0;
 
 fail:
-	mutex_unlock(&sc->pmic_lock);
 	return -ENODEV;
 }
-
 

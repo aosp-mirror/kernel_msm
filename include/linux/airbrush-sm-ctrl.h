@@ -463,7 +463,6 @@ struct ab_state_context {
 	enum ab_chip_id chip_id;
 
 	/* Synchronization structs */
-	struct mutex pmic_lock;
 	struct mutex set_state_lock;
 	struct mutex state_transitioning_lock;
 	struct completion request_state_change_comp;

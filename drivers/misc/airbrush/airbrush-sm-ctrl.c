@@ -1489,7 +1489,6 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->dest_chip_substate_id = CHIP_STATE_6_0;
 	ab_sm_ctx->curr_chip_substate_id = CHIP_STATE_6_0;
 
-	mutex_init(&ab_sm_ctx->pmic_lock);
 	mutex_init(&ab_sm_ctx->set_state_lock);
 	mutex_init(&ab_sm_ctx->state_transitioning_lock);
 	mutex_init(&ab_sm_ctx->async_fifo_lock);
