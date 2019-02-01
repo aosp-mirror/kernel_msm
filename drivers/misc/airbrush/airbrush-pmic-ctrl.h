@@ -20,9 +20,11 @@ void ab_pmic_enable_boost(struct ab_state_context *sc);
 void ab_pmic_disable_boost(struct ab_state_context *sc);
 
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
-		enum block_name blk_name, u32 to_chip_substate_id);
+		enum block_name blk_name,
+		enum block_state to_block_substate_id);
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,
-		enum block_name blk_name, u32 to_chip_substate_id);
+		enum block_name blk_name,
+		enum block_state to_block_substate_id);
 
 int ab_pmic_on(struct ab_state_context *ab_ctx);
 int ab_pmic_off(struct ab_state_context *ab_ctx);

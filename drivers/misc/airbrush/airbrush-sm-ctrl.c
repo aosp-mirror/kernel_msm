@@ -135,6 +135,7 @@ static struct block_property dram_property_table[] = {
 	BLK_(1_0, PowerDown, ClockOff, 0, on, 0_60, off, 1867, 0, 0, 0, 3733),
 	BLK_(1_1, PowerDown, ClockOn,   0, on, 0_60, on, 1867, 0, 0, 0, 3733),
 	BLK_(2_0, Retention, SelfRef,   0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(2_1, Retention, Suspend,   0, off, 0_0, off, 0,   0, 0, 0, 0),
 	BLK_(3_0, Disabled,  NoRail,    0, off, 0_0, off, 0,   0, 0, 0, 0),
 };
 
@@ -212,7 +213,7 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_0),
 	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_1),
 	CHIP_TO_BLOCK_MAP_INIT(4_0, 2_0, 2_0, 2_0, 0_0, 1_2, 0_1),
-	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_0, 3_0, 3_0, 3_0),
+	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_1, 3_0, 3_0, 3_0),
 	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0),
 };
 
@@ -294,7 +295,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 }
 
 int blk_set_state(struct ab_state_context *sc, struct block *blk,
-	u32 to_block_state_id, u32 to_chip_substate_id)
+	enum block_state to_block_state_id)
 {
 	struct ab_sm_pmu_ops *pmu;
 	bool power_increasing;
@@ -345,7 +346,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	/* Block specific hooks */
 	if (blk->set_state)
 		blk->set_state(blk->current_state, desired_state,
-				   to_chip_substate_id, blk->data);
+				   to_block_state_id, blk->data);
 
 	/* PMU settings - Sleep */
 	if (desired_state->pmu == PMU_STATE_SLEEP &&
@@ -388,7 +389,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	if (!power_increasing) {
 		if (desired_state->voltage_rail_status == off)
 			ab_blk_pw_rails_disable(sc, blk->name,
-			to_chip_substate_id);
+			to_block_state_id);
 	}
 
 	blk->current_state = desired_state;
@@ -692,32 +693,27 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 * blocks are set to destination state.
 	 */
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
-			map->ipu_block_state_id, to_chip_substate_id))
+	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]), map->ipu_block_state_id))
 		return -EINVAL;
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
-			map->tpu_block_state_id, to_chip_substate_id))
+	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]), map->tpu_block_state_id))
 		return -EINVAL;
 
-	if (blk_set_state(sc, &(sc->blocks[DRAM]),
-			map->dram_block_state_id, to_chip_substate_id))
+	if (blk_set_state(sc, &(sc->blocks[DRAM]), map->dram_block_state_id))
 		return -EINVAL;
 
 	ab_sm_record_ts(sc, AB_SM_TS_DDR_STATE);
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-			map->mif_block_state_id, to_chip_substate_id))
+	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]), map->mif_block_state_id))
 		return -EINVAL;
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-			map->fsys_block_state_id, to_chip_substate_id))
+			map->fsys_block_state_id))
 		return -EINVAL;
 
 	ab_sm_record_ts(sc, AB_SM_TS_FSYS_STATE);
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-			map->aon_block_state_id, to_chip_substate_id))
+	if (blk_set_state(sc, &(sc->blocks[BLK_AON]), map->aon_block_state_id))
 		return -EINVAL;
 
 	if (((to_chip_substate_id == CHIP_STATE_5_0) ||

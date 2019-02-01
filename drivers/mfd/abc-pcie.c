@@ -508,7 +508,7 @@ u32 string_to_integer(char *string)
 
 int abc_pcie_state_manager(const struct block_property *current_property,
 		const struct block_property *target_property,
-		enum chip_state chip_substate_id, void *data)
+		enum block_state block_substate_id, void *data)
 {
 	u32 target_linkstate;
 	u32 current_linkstate;

@@ -41,11 +41,12 @@ void ab_pmic_disable_boost(struct ab_state_context *sc)
 }
 
 int ab_blk_pw_rails_enable(struct ab_state_context *sc,
-			   enum block_name blk_name, u32 to_chip_substate_id)
+			   enum block_name blk_name,
+			   enum block_state to_block_substate_id)
 {
 	dev_dbg(sc->dev,
-			"%s: enabling rails for block %u chip substate id %u\n",
-			__func__, blk_name, to_chip_substate_id);
+			"enabling rails for block %u block substate id %u\n",
+			blk_name, to_block_substate_id);
 
 	switch (blk_name) {
 	case BLK_IPU:
@@ -133,17 +134,18 @@ fail_regulator_enable:
 		regulator_disable(sc->smps2);
 		sc->smps2_state = false;
 	}
-	dev_err(sc->dev, "%s: PMIC power up failure\n", __func__);
+	dev_err(sc->dev, "PMIC power up failure\n");
 
 	return -ENODEV;
 }
 
 int ab_blk_pw_rails_disable(struct ab_state_context *sc,
-			   enum block_name blk_name, u32 to_chip_substate_id)
+			   enum block_name blk_name,
+			   enum block_state to_block_substate_id)
 {
 	dev_dbg(sc->dev,
-			"%s: disabling rails for block %u chip substate id %u\n",
-			__func__, blk_name, to_chip_substate_id);
+			"disabling rails for block %u block substate id %u\n",
+			blk_name, to_block_substate_id);
 
 	switch (blk_name) {
 	case BLK_IPU:
@@ -158,7 +160,7 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 		break;
 	case DRAM:
 		sc->ldo2_state = false;
-		if (to_chip_substate_id == CHIP_STATE_6_0) {
+		if (to_block_substate_id == BLOCK_STATE_3_0) {
 			sc->ldo1_state = false;
 			sc->smps3_state = false;
 		}
@@ -177,14 +179,13 @@ int ab_pmic_off(struct ab_state_context *sc)
 {
 	int ret1, ret2 = 0;
 
-	dev_dbg(sc->dev, "%s: Turning OFF PMIC rails\n", __func__);
+	dev_dbg(sc->dev, "Turning OFF PMIC rails\n");
 
 	if (!sc->ldo2_state && regulator_is_enabled(sc->ldo2)) {
 		ret1 = regulator_disable(sc->ldo2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable LDO2, ret %d\n",
-					__func__, ret1);
+				"failed to disable LDO2, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
@@ -192,8 +193,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret1 = regulator_disable(sc->ldo3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable LDO3, ret %d\n",
-					__func__, ret1);
+				"failed to disable LDO3, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 		usleep_range(2000, 3000);
 	}
@@ -202,8 +202,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret1 = regulator_disable(sc->smps1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable SMPS1, ret %d\n",
-					__func__, ret1);
+				"failed to disable SMPS1, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
@@ -211,8 +210,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret1 = regulator_disable(sc->ldo5);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable LDO5, ret %d\n",
-					__func__, ret1);
+				"failed to disable LDO5, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 
 		/* NOTE: delay required by b/120785608 */
@@ -224,8 +222,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret1 = regulator_disable(sc->ldo4);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable LDO4, ret %d\n",
-					__func__, ret1);
+				"failed to disable LDO4, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
@@ -233,8 +230,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret1 = regulator_disable(sc->smps3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable SMPS3, ret %d\n",
-					__func__, ret1);
+				"failed to disable SMPS3, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
@@ -242,8 +238,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret1 = regulator_disable(sc->ldo1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable LDO1, ret %d\n",
-					__func__, ret1);
+				"failed to disable LDO1, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
@@ -251,8 +246,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 		ret1 = regulator_disable(sc->smps2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
-					"%s: failed to disable SMPS2, ret %d\n",
-					__func__, ret1);
+				"failed to disable SMPS2, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 	}
 
@@ -272,7 +266,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 
 int ab_pmic_on(struct ab_state_context *sc)
 {
-	dev_dbg(sc->dev, "%s: setting rails to on\n", __func__);
+	dev_dbg(sc->dev, "setting rails to on\n");
 
 	if (!regulator_is_enabled(sc->smps2))
 		if (regulator_enable(sc->smps2))
@@ -338,7 +332,7 @@ fail_regulator_enable:
 	if (regulator_is_enabled(sc->smps2))
 		regulator_disable(sc->smps2);
 	sc->smps2_state = false;
-	dev_err(sc->dev, "%s: PMIC power up failure\n", __func__);
+	dev_err(sc->dev, "PMIC power up failure\n");
 	return -ENODEV;
 }
 
@@ -350,8 +344,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		sc->soc_pwrgood =
 			devm_gpiod_get(dev, "soc-pwrgood", GPIOD_OUT_LOW);
 		if (IS_ERR(sc->soc_pwrgood)) {
-			dev_err(dev, "%s: Could not get pmic_soc_pwrgood gpio (%ld)\n",
-					__func__, PTR_ERR(sc->soc_pwrgood));
+			dev_err(dev, "Could not get pmic_soc_pwrgood gpio (%ld)\n",
+					PTR_ERR(sc->soc_pwrgood));
 			goto fail;
 		}
 	}
@@ -360,8 +354,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		sc->ddr_sr =
 			devm_gpiod_get(dev, "ddr-sr", GPIOD_OUT_LOW);
 		if (IS_ERR(sc->ddr_sr)) {
-			dev_err(dev, "%s: Could not get pmic_ddr_sr gpio (%ld)\n",
-					__func__, PTR_ERR(sc->ddr_sr));
+			dev_err(dev, "Could not get pmic_ddr_sr gpio (%ld)\n",
+					PTR_ERR(sc->ddr_sr));
 			goto fail;
 		}
 	}
@@ -370,8 +364,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		sc->ddr_iso =
 			devm_gpiod_get(dev, "ddr-iso", GPIOD_OUT_LOW);
 		if (IS_ERR(sc->ddr_iso)) {
-			dev_err(dev, "%s: Could not get pmic_ddr_iso gpio (%ld)\n",
-					__func__, PTR_ERR(sc->ddr_iso));
+			dev_err(dev, "Could not get pmic_ddr_iso gpio (%ld)\n",
+					PTR_ERR(sc->ddr_iso));
 			goto fail;
 		}
 	}
@@ -379,8 +373,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->smps1) {
 		sc->smps1 = devm_regulator_get(dev, "s2mpg01_smps1");
 		if (IS_ERR(sc->smps1)) {
-			dev_err(dev, "%s: failed to get s2mpg01_smps1 supply (%ld)\n",
-					__func__, PTR_ERR(sc->smps1));
+			dev_err(dev, "failed to get s2mpg01_smps1 supply (%ld)\n",
+					PTR_ERR(sc->smps1));
 			goto fail;
 		}
 	}
@@ -388,8 +382,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->smps2) {
 		sc->smps2 = devm_regulator_get(dev, "s2mpg01_smps2");
 		if (IS_ERR(sc->smps2)) {
-			dev_err(dev, "%s: failed to get s2mpg01_smps2 supply (%ld)\n",
-					__func__, PTR_ERR(sc->smps2));
+			dev_err(dev, "failed to get s2mpg01_smps2 supply (%ld)\n",
+					PTR_ERR(sc->smps2));
 			goto fail;
 		}
 	}
@@ -397,8 +391,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->smps3) {
 		sc->smps3 = devm_regulator_get(dev, "s2mpg01_smps3");
 		if (IS_ERR(sc->smps3)) {
-			dev_err(dev, "%s: failed to get s2mpg01_smps3 supply (%ld)\n",
-					__func__, PTR_ERR(sc->smps3));
+			dev_err(dev, "failed to get s2mpg01_smps3 supply (%ld)\n",
+					PTR_ERR(sc->smps3));
 			goto fail;
 		}
 	}
@@ -406,8 +400,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->ldo1) {
 		sc->ldo1 = devm_regulator_get(dev, "s2mpg01_ldo1");
 		if (IS_ERR(sc->ldo1)) {
-			dev_err(dev, "%s: failed to get s2mpg01_ldo1 supply (%ld)\n",
-					__func__, PTR_ERR(sc->ldo1));
+			dev_err(dev, "failed to get s2mpg01_ldo1 supply (%ld)\n",
+					PTR_ERR(sc->ldo1));
 			goto fail;
 		}
 	}
@@ -415,8 +409,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->ldo2) {
 		sc->ldo2 = devm_regulator_get(dev, "s2mpg01_ldo2");
 		if (IS_ERR(sc->ldo2)) {
-			dev_err(dev, "%s: failed to get s2mpg01_ldo2 supply (%ld)\n",
-					__func__, PTR_ERR(sc->ldo2));
+			dev_err(dev, "failed to get s2mpg01_ldo2 supply (%ld)\n",
+					PTR_ERR(sc->ldo2));
 			goto fail;
 		}
 	}
@@ -424,8 +418,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->ldo3) {
 		sc->ldo3 = devm_regulator_get(dev, "s2mpg01_ldo3");
 		if (IS_ERR(sc->ldo3)) {
-			dev_err(dev, "%s: failed to get s2mpg01_ldo3 supply (%ld)\n",
-					__func__, PTR_ERR(sc->ldo3));
+			dev_err(dev, "failed to get s2mpg01_ldo3 supply (%ld)\n",
+					PTR_ERR(sc->ldo3));
 			goto fail;
 		}
 	}
@@ -433,8 +427,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->ldo4) {
 		sc->ldo4 = devm_regulator_get(dev, "s2mpg01_ldo4");
 		if (IS_ERR(sc->ldo4)) {
-			dev_err(dev, "%s: failed to get s2mpg01_ldo4 supply (%ld)\n",
-					__func__, PTR_ERR(sc->ldo4));
+			dev_err(dev, "failed to get s2mpg01_ldo4 supply (%ld)\n",
+					PTR_ERR(sc->ldo4));
 			goto fail;
 		}
 	}
@@ -442,8 +436,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 	if (!sc->ldo5) {
 		sc->ldo5 = devm_regulator_get(dev, "s2mpg01_ldo5");
 		if (IS_ERR(sc->ldo5)) {
-			dev_err(dev, "%s: failed to get s2mpg01_ldo5 supply (%ld)\n",
-					__func__, PTR_ERR(sc->ldo5));
+			dev_err(dev, "failed to get s2mpg01_ldo5 supply (%ld)\n",
+					PTR_ERR(sc->ldo5));
 			goto fail;
 		}
 	}
@@ -452,8 +446,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		sc->boost_smps1 =
 			devm_regulator_get(dev, "s2mpg01_boost_smps1");
 		if (IS_ERR(sc->boost_smps1)) {
-			dev_err(dev, "%s: failed to get s2mpg01_boost_smps1 supply (%ld)\n",
-					__func__, PTR_ERR(sc->boost_smps1));
+			dev_err(dev, "failed to get s2mpg01_boost_smps1 supply (%ld)\n",
+					PTR_ERR(sc->boost_smps1));
 			goto fail;
 		}
 	}
@@ -462,8 +456,8 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		sc->boost_ldo3 =
 			devm_regulator_get(dev, "s2mpg01_boost_ldo3");
 		if (IS_ERR(sc->boost_ldo3)) {
-			dev_err(dev, "%s: failed to get s2mpg01_boost_ldo3 supply (%ld)\n",
-					__func__, PTR_ERR(sc->boost_ldo3));
+			dev_err(dev, "failed to get s2mpg01_boost_ldo3 supply (%ld)\n",
+					PTR_ERR(sc->boost_ldo3));
 			goto fail;
 		}
 	}

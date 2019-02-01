@@ -133,6 +133,7 @@ enum block_state {
 	BLOCK_STATE_1_1,
 	BLOCK_STATE_1_2,
 	BLOCK_STATE_2_0 = 20,
+	BLOCK_STATE_2_1,
 	BLOCK_STATE_3_0 = 30,
 	NUM_BLOCK_STATES,
 };
@@ -188,7 +189,7 @@ struct block_property {
 typedef int (*ab_sm_set_block_state_t)(
 		const struct block_property *current_property,
 		const struct block_property *desired_property,
-		enum chip_state chip_substate_id, void *data);
+		enum block_state block_substate_id, void *data);
 
 /**
  * struct block - stores the information about a SOC block

@@ -2259,7 +2259,7 @@ static int ddr_get_freq_idx(const struct block_property *prop_to)
 
 static int ab_ddr_set_state(const struct block_property *prop_from,
 			const struct block_property *prop_to,
-			enum chip_state chip_state_id, void *data)
+			enum block_state block_state_id, void *data)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 	struct ab_ddr_context *ddr_ctx;
@@ -2280,8 +2280,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	new_rate = prop_to->clk_frequency;
 	ab_sm_clk_notify(AB_DRAM_PRE_RATE_CHANGE, old_rate, new_rate);
 
-	switch (chip_state_id) {
-	case CHIP_STATE_0_0 ... CHIP_STATE_2_6:
+	switch (block_state_id) {
+	case BLOCK_STATE_0_0 ... BLOCK_STATE_0_6:
 		if (ddr_ctx->ddr_state == DDR_SLEEP)
 			ab_ddr_selfrefresh_exit(sc);
 		else if (ddr_ctx->ddr_state == DDR_SUSPEND)
@@ -2289,7 +2289,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		ddr_ctx->ddr_state = DDR_ON;
 		break;
 
-	case CHIP_STATE_3_0 ... CHIP_STATE_4_0:
+	case BLOCK_STATE_2_0:
 		/* ddr sleep/deep-sleep functionality */
 		if (ddr_ctx->ddr_state != DDR_ON) {
 			ab_sm_clk_notify(AB_DRAM_ABORT_RATE_CHANGE,
@@ -2302,7 +2302,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		ddr_ctx->ddr_state = DDR_SLEEP;
 		break;
 
-	case CHIP_STATE_5_0:
+	case BLOCK_STATE_2_1:
 		/* ddr suspend functionality */
 		if ((ddr_ctx->ddr_state == DDR_SUSPEND) ||
 			(ddr_ctx->ddr_state == DDR_OFF)) {
@@ -2315,7 +2315,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		ddr_ctx->ddr_state = DDR_SUSPEND;
 		break;
 
-	case CHIP_STATE_6_0:
+	case BLOCK_STATE_3_0:
 		if (ddr_ctx->ddr_state == DDR_SUSPEND) {
 			ab_gpio_disable_ddr_sr(sc);
 			ab_gpio_disable_ddr_iso(sc);
