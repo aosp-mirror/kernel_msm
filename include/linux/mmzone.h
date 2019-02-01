@@ -199,6 +199,7 @@ enum node_stat_item {
 	 * is NR_ION_HEAP - (NR_INDIRECTLY_RECLAIMABLE_BYTES / PAGE_SIZE).
 	 */
 	NR_ION_HEAP,
+	NR_GPU_HEAP,
 	NR_VM_NODE_STAT_ITEMS
 };
 
