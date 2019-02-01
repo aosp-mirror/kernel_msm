@@ -82,11 +82,19 @@
 #define PHY_CG_EN			(0x1 << 4)
 
 #define DREX_DIRECTCMD			0x10580010
+#define CMD_TYPE_MRW			(0x0 << 24)
 #define CMD_TYPE_NOP			(0x3 << 24)
 #define CMD_TYPE_SREF_ENTR		(0x4 << 24)
 #define CMD_TYPE_CKEL			(0x6 << 24)
 #define CMD_TYPE_PD_EXIT		(0x7 << 24)
 #define CMD_TYPE_SREF_EXIT		(0x8 << 24)
+#define CMD_TYPE_MRR			(0x9 << 24)
+
+#define MR2CMD(mr)			\
+((((mr) & 0x7) << 10) | ((((mr) >> 3) & 0x7) << 16) | (((mr) >> 6) & 0x3))
+#define OP2CMD(op)			(((op) & 0xff) << 2)
+#define MRR(mr)				(CMD_TYPE_MRR | MR2CMD(mr))
+#define MRW(mr, op)			(CMD_TYPE_MRW | MR2CMD(mr) | OP2CMD(op))
 
 #define DREX_PRECHCONFIG0		0x10580014
 #define PORT_POLICY_MSK			(0xf << 16)
@@ -1261,6 +1269,18 @@ static inline void ddr_mem_wr(uint32_t addr, uint32_t data)
 {
 	/* TODO(b/121225073): Add synchronization and fail check */
 	WARN_ON(memory_config_write(addr, 0x4, data));
+}
+
+static inline int ddr_read_mr_status(void)
+{
+	/* This function is called after the MR read command is sent to the
+	 * DRAM device. As the response from DRAM device may take some time,
+	 * please wait for "MR_READ_DELAY_USEC" time before continuing to
+	 * read the MR read response from DREX_MRSTATUS register.
+	 */
+	ddr_usleep(MR_READ_DELAY_USEC);
+
+	return ddr_reg_rd(DREX_MRSTATUS);
 }
 
 void ddr_prbs_training_init(void);
