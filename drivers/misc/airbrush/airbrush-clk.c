@@ -590,6 +590,83 @@ static int64_t ab_clk_aon_set_rate_direct_handler(void *ctx,
 	return ret;
 }
 
+#define CLK_CON_DIV_DIV2_PLLCLK_MIF 0x10511804
+#define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x10041800
+#define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x10241800
+#define CLK_CON_DIV_DIV4_PLLCLK_FSYS 0x10711804
+#define CLK_CON_DIV_DIV4_PLLCLK_CORE 0x10f11804
+#define CLK_CON_DIV_PLL_AON_CLK 0x10b1180c
+
+void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx)
+{
+	dev_dbg(ctx->dev, "Reduce PLL_AON_CLK 2x\n");
+
+	/* Multiply sub clocks by 2x to compensate /2 */
+	ABC_WRITE(CLK_CON_DIV_DIV2_PLLCLK_MIF, 0x0);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_FSYS, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_CORE, 0x0);
+
+	/* Divide PLL_AON_CLK by 2 */
+	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x1);
+}
+
+static int ab_clk_reduce_mainclk_freq(void *ctx)
+{
+	int ret;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	mutex_lock(&clk_ctx->pcie_link_lock);
+	if (clk_ctx->pcie_link_ready) {
+		__ab_clk_reduce_mainclk_freq(clk_ctx);
+		ret = 0;
+	} else {
+		dev_err(clk_ctx->dev,
+				"%s: pcie link down during clk request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&clk_ctx->pcie_link_lock);
+
+	return ret;
+}
+
+void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
+{
+	dev_dbg(ctx->dev, "Restore PLL_AON_CLK\n");
+
+	/* Undo 2x multiply */
+	ABC_WRITE(CLK_CON_DIV_DIV2_PLLCLK_MIF, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x2);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x2);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_FSYS, 0x2);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_CORE, 0x1);
+
+	/* Undo /2 */
+	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
+}
+
+static int ab_clk_restore_mainclk_freq(void *ctx)
+{
+	int ret;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	mutex_lock(&clk_ctx->pcie_link_lock);
+	if (clk_ctx->pcie_link_ready) {
+		__ab_clk_restore_mainclk_freq(clk_ctx);
+		ret = 0;
+	} else {
+		dev_err(clk_ctx->dev,
+				"%s: pcie link down during clk request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&clk_ctx->pcie_link_lock);
+
+	return ret;
+}
+
 static struct ab_sm_clk_ops clk_ops = {
 	.ipu_pll_enable = &ab_clk_ipu_pll_enable_handler,
 	.ipu_pll_disable = &ab_clk_ipu_pll_disable_handler,
@@ -606,6 +683,9 @@ static struct ab_sm_clk_ops clk_ops = {
 
 	.aon_set_rate = &ab_clk_aon_set_rate_handler,
 	.aon_set_rate_direct = &ab_clk_aon_set_rate_direct_handler,
+
+	.reduce_mainclk_freq = &ab_clk_reduce_mainclk_freq,
+	.restore_mainclk_freq = &ab_clk_restore_mainclk_freq,
 };
 
 static int ab_clk_probe(struct platform_device *pdev)

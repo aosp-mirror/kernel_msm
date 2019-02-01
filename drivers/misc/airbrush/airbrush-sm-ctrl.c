@@ -41,6 +41,8 @@
 
 static struct ab_state_context *ab_sm_ctx;
 
+#define MAX_AON_FREQ 934000000
+
 /* Index 0 - A0 clk frequencies
  * Index 1 - B0 clk frequencies
  */
@@ -488,6 +490,19 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 			ab_sm_record_ts(sc, AB_SM_TS_DDR_CB);
 		if (blk->name == BLK_FSYS)
 			ab_sm_record_ts(sc, AB_SM_TS_PCIE_CB);
+	}
+
+	/* TODO: Once b/124905658 is done, make this decision
+	 * based on AON block state
+	 */
+	if (blk->name == DRAM && desired_state->clk_status == on) {
+		if ((last_state->clk_frequency > MAX_AON_FREQ ||
+				last_state->clk_status == off) &&
+				desired_state->clk_frequency <= MAX_AON_FREQ)
+			sc->clk_ops->reduce_mainclk_freq(sc->clk_ops->ctx);
+		else if (last_state->clk_frequency <= MAX_AON_FREQ &&
+				desired_state->clk_frequency > MAX_AON_FREQ)
+			sc->clk_ops->restore_mainclk_freq(sc->clk_ops->ctx);
 	}
 
 	/* PMU settings - Sleep */
