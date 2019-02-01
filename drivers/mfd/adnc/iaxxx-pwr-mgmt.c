@@ -27,6 +27,7 @@
 #include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-ao.h>
 #include <linux/mfd/adnc/iaxxx-odsp.h>
+#include <linux/mfd/adnc/iaxxx-module.h>
 #include "iaxxx.h"
 
 #define IAXXX_PWR_DWN_VAL 0x01C00050

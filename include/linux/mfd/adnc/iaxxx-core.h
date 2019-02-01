@@ -25,7 +25,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
-#include <linux/mfd/adnc/iaxxx-module.h>
 
 typedef int (*iaxxx_cb_func_ptr_t)(struct device *dev);
 typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
