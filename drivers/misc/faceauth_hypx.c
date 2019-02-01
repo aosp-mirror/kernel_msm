@@ -231,7 +231,7 @@ int el2_faceauth_init(struct device *dev, uint64_t verbosity_level)
 					 GFP_KERNEL);
 	hypx_data->bounce_buff = bounce_buff_bus_addr;
 
-	ret = hyp_assign_phys(hypx_data->bounce_buff, PAGE_SIZE, source_vm,
+	ret = hyp_assign_phys(bounce_buff_bus_addr, PAGE_SIZE, source_vm,
 			      ARRAY_SIZE(source_vm), dest_vm, dest_perm,
 			      ARRAY_SIZE(dest_vm));
 	if (ret) {
@@ -267,13 +267,15 @@ int el2_faceauth_cleanup(struct device *dev)
 	if (ret)
 		pr_err("Failed scm_call %d\n", ret);
 
-	ret = hyp_assign_phys(virt_to_phys(bounce_buff), PAGE_SIZE, source_vm,
+	ret = hyp_assign_phys(bounce_buff_bus_addr, PAGE_SIZE, source_vm,
 			      ARRAY_SIZE(source_vm), dest_vm, dest_perm,
 			      ARRAY_SIZE(dest_vm));
 	if (ret)
 		pr_err("hyp_assign_phys returned an error %d\n", ret);
 
 	dma_free_coherent(dev, PAGE_SIZE, bounce_buff, bounce_buff_bus_addr);
+	bounce_buff = NULL;
+	bounce_buff_bus_addr = 0;
 
 	return ret;
 }
