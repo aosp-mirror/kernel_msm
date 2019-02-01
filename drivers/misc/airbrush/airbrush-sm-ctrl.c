@@ -1955,8 +1955,8 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	long ret;
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
-	struct abc_pcie_pm_ctrl pmctrl = {0};
 	struct new_block_props props;
+	int aspm_val;
 	u32 clk_frequency;
 
 	switch (cmd) {
@@ -2052,24 +2052,24 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		mutex_lock(&sc->op_lock);
 		switch (arg) {
 		case 0:
-			pmctrl.l1_en = 1;
-			pmctrl.aspm_L12 = 1;
+			aspm_val = ASPM_L12;
 			break;
 		case 1:
-			pmctrl.l1_en = 1;
-			pmctrl.aspm_L11 = 1;
+			aspm_val = ASPM_L11;
 			break;
 		case 2:
-			pmctrl.l1_en = 1;
+			aspm_val = ASPM_L10;
 			break;
 		case 3:
-			pmctrl.l0s_en = 1;
+			aspm_val = ASPM_L0s;
 			break;
 		default:
+			aspm_val = NOASPM;
 			break;
 		}
 		/* TODO(b/123695099): do this via ops struct */
-		ret = abc_set_pcie_pm_ctrl(&pmctrl);
+		ret = 0;
+		abc_pcie_set_linkstate(aspm_val);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
 		break;

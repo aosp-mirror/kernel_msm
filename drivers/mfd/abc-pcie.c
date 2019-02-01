@@ -400,17 +400,23 @@ u32 abc_pcie_get_linkspeed(void)
 u32 abc_pcie_get_linkstate(void)
 {
 	u32 link_state;
-	u32 l1_substate;
+	u32 l1_substate, val;
 
 	abc_pcie_config_read(ABC_PCIE_DBI_BASE + LINK_CONTROL_LINK_STATUS_REG,
 			 0x0, &link_state);
 	abc_pcie_config_read(ABC_PCIE_DBI_BASE + L1SUB_CONTROL1_REG,
 			 0x0, &l1_substate);
 	if (link_state & ASPM_L1_ENABLE) {
-		if (l1_substate & ASPM_L1_1_ENABLE)
-			return ASPM_L11;
+		val = readl_relaxed(
+			abc_dev->fsys_config + CLOCK_REQ_EN);
+		__iormb();
+		if ((val & 0x1) == 0)
+			return ASPM_L10;
 		if (l1_substate & ASPM_L1_2_ENABLE)
 			return ASPM_L12;
+		if (l1_substate & ASPM_L1_1_ENABLE)
+			return ASPM_L11;
+		return ASPM_L10;
 	}
 	if (link_state & ASPM_L0s_ENABLE)
 		return ASPM_L0s;
@@ -449,6 +455,92 @@ void abc_pcie_set_linkspeed(u32 target_linkspeed)
 			  0x0, val);
 }
 
+static void abc_l12_timeout_ctrl(bool enable)
+{
+	u32 val;
+
+	val = readl_relaxed(abc_dev->pcie_config
+			+ GEN3_RELATED_OFF_REG);
+	__iormb();
+
+	if (enable)
+		val |= GEN3_ZRXDC_NONCOMPL_EN;
+	else
+		val &= ~(GEN3_ZRXDC_NONCOMPL_MASK);
+
+	__iowmb();
+	writel_relaxed(val,
+			abc_dev->pcie_config + GEN3_RELATED_OFF_REG);
+
+}
+
+static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
+{
+	u32 aspm_l11_l12;
+	u32 l1_l0s_enable;
+	u32 val;
+
+	if (pmctrl == NULL)
+		return -EINVAL;
+
+	aspm_l11_l12 = readl_relaxed(abc_dev->pcie_config
+				+ L1SUB_CONTROL1_REG);
+	__iormb();
+	aspm_l11_l12 &= ~(0xC);
+	aspm_l11_l12 |= (pmctrl->aspm_L11 << 3);
+	aspm_l11_l12 |= (pmctrl->aspm_L12 << 2);
+
+	l1_l0s_enable = readl_relaxed(abc_dev->pcie_config
+				+ LINK_CONTROL_LINK_STATUS_REG);
+	__iormb();
+	l1_l0s_enable &= ~(0x3);
+	l1_l0s_enable |= (pmctrl->l0s_en << 0);
+	l1_l0s_enable |= (pmctrl->l1_en << 1);
+
+	__iowmb();
+
+	/* Enabling ASPM L11 & L12, PCI_PM L11 & L12 */
+	writel_relaxed(aspm_l11_l12,
+		abc_dev->pcie_config + L1SUB_CONTROL1_REG);
+
+	/* Enabling L1 or L0s or both */
+	writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
+				+ LINK_CONTROL_LINK_STATUS_REG);
+
+#if IS_ENABLED(CONFIG_PCI_MSM)
+	/* set rc l1ss state to match ep's */
+	msm_pcie_set_l1ss_state(abc_dev->pdev,
+		pmctrl->aspm_L12 ? MSM_PCIE_PM_L1SS_L12 :
+		pmctrl->aspm_L11 ? MSM_PCIE_PM_L1SS_L11 :
+		MSM_PCIE_PM_L1SS_DISABLE);
+#endif
+
+	/* LTR Enable */
+	if (pmctrl->aspm_L12) {
+		abc_l12_timeout_ctrl(false);
+		val = readl_relaxed(
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		__iormb();
+		val |= LTR_ENABLE;
+		__iowmb();
+		writel_relaxed(val,
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+	} else {
+		/* Clearing LTR Enable bit */
+		val = readl_relaxed(
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		__iormb();
+		val &= ~(LTR_ENABLE);
+		__iowmb();
+		writel_relaxed(val,
+			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+	}
+
+	/* Clock Request Enable*/
+	writel_relaxed(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
+	return 0;
+}
+
 void abc_pcie_set_linkstate(u32 target_linkstate)
 {
 	struct abc_pcie_pm_ctrl smctrl;
@@ -474,16 +566,17 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 				      ABC_READY_ENTR_L23,
 				      0x4, val);
 		return;
+	case ASPM_L12:
+		smctrl.aspm_L12 = ABC_PCIE_PM_ENABLE;
+		/* FALLTHROUGH */
+	case ASPM_L11:
+		smctrl.aspm_L11 = ABC_PCIE_PM_ENABLE;
+		/* FALLTHROUGH */
+	case ASPM_L10:
+		smctrl.l1_en = ABC_PCIE_PM_ENABLE;
+		break;
 	case ASPM_L0s:
 		smctrl.l0s_en = ABC_PCIE_PM_ENABLE;
-		break;
-	case ASPM_L11:
-		smctrl.l1_en = ABC_PCIE_PM_ENABLE;
-		smctrl.aspm_L11 = ABC_PCIE_PM_ENABLE;
-		break;
-	case ASPM_L12:
-		smctrl.l1_en = ABC_PCIE_PM_ENABLE;
-		smctrl.aspm_L12 = ABC_PCIE_PM_ENABLE;
 		break;
 	case NOASPM:
 	default:
@@ -506,6 +599,8 @@ u32 string_to_integer(char *string)
 		return ASPM_L11;
 	else if (!strcmp(string, "L1.2"))
 		return ASPM_L12;
+	else if (!strcmp(string, "L1"))
+		return ASPM_L10;
 	else if (!strcmp(string, "L3") || !strcmp(string, "L2"))
 		return PM_L2;
 	else
@@ -590,92 +685,6 @@ int abc_set_aspm_state(bool state)
 		       L1SUB_CONTROL1_REG);
 	}
 
-	return 0;
-}
-
-static void abc_l12_timeout_ctrl(bool enable)
-{
-	u32 val;
-
-	val = readl_relaxed(abc_dev->pcie_config
-			+ GEN3_RELATED_OFF_REG);
-	__iormb();
-
-	if (enable)
-		val |= GEN3_ZRXDC_NONCOMPL_EN;
-	else
-		val &= ~(GEN3_ZRXDC_NONCOMPL_MASK);
-
-	__iowmb();
-	writel_relaxed(val,
-			abc_dev->pcie_config + GEN3_RELATED_OFF_REG);
-
-}
-
-int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
-{
-	u32 aspm_l11_l12;
-	u32 l1_l0s_enable;
-	u32 val;
-
-	if (pmctrl == NULL)
-		return -EINVAL;
-
-	aspm_l11_l12 = readl_relaxed(abc_dev->pcie_config
-				+ L1SUB_CONTROL1_REG);
-	__iormb();
-	aspm_l11_l12 &= ~(0xC);
-	aspm_l11_l12 |= (pmctrl->aspm_L11 << 3);
-	aspm_l11_l12 |= (pmctrl->aspm_L12 << 2);
-
-	l1_l0s_enable = readl_relaxed(abc_dev->pcie_config
-				+ LINK_CONTROL_LINK_STATUS_REG);
-	__iormb();
-	l1_l0s_enable &= ~(0x3);
-	l1_l0s_enable |= (pmctrl->l0s_en << 0);
-	l1_l0s_enable |= (pmctrl->l1_en << 1);
-
-	__iowmb();
-
-	/* Enabling ASPM L11 & L12, PCI_PM L11 & L12 */
-	writel_relaxed(aspm_l11_l12,
-		abc_dev->pcie_config + L1SUB_CONTROL1_REG);
-
-	/* Enabling L1 or L0s or both */
-	writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
-				+ LINK_CONTROL_LINK_STATUS_REG);
-
-#if IS_ENABLED(CONFIG_PCI_MSM)
-	/* set rc l1ss state to match ep's */
-	msm_pcie_set_l1ss_state(abc_dev->pdev,
-		pmctrl->aspm_L12 ? MSM_PCIE_PM_L1SS_L12 :
-		pmctrl->aspm_L11 ? MSM_PCIE_PM_L1SS_L11 :
-		MSM_PCIE_PM_L1SS_DISABLE);
-#endif
-
-	/* LTR Enable */
-	if (pmctrl->aspm_L12) {
-		abc_l12_timeout_ctrl(false);
-		val = readl_relaxed(
-			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
-		__iormb();
-		val |= LTR_ENABLE;
-		__iowmb();
-		writel_relaxed(val,
-			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
-	} else {
-		/* Clearing LTR Enable bit */
-		val = readl_relaxed(
-			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
-		__iormb();
-		val &= ~(LTR_ENABLE);
-		__iowmb();
-		writel_relaxed(val,
-			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
-	}
-
-	/* Clock Request Enable*/
-	writel_relaxed(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
 	return 0;
 }
 

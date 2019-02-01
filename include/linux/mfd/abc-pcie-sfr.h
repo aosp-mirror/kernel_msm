@@ -141,11 +141,6 @@
 #define ASPM_L1_ENABLE					(0x1 << 1)
 #define ASPM_L1_2_ENABLE				(0x1 << 2)
 #define ASPM_L1_1_ENABLE				(0x1 << 3)
-#define ASPM_L0s					0x0
-#define ASPM_L11					0x1
-#define ASPM_L12					0x2
-#define NOASPM						0x3
-#define PM_L2						0x4
 #define LINK_SPEED					0xF
 #define TARGET_LINK_SPEED				0xF
 #define DIRECTED_SPEED_CHANGE				(0x1 << 17)

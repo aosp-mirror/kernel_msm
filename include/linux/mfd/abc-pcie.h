@@ -286,6 +286,13 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 #define ABC_PCIE_SET_RD_DMA         _IOW('P', 0x6, struct abc_dma_desc)
 #define ABC_PCIE_SET_WR_DMA         _IOW('P', 0x7, struct abc_dma_desc)
 
+#define ASPM_L0s					0x0
+#define ASPM_L10					0x1
+#define ASPM_L11					0x2
+#define ASPM_L12					0x3
+#define NOASPM						0x4
+#define PM_L2						0x5
+
 int abc_pcie_config_read(u32 offset, u32 len, u32 *data);
 int abc_pcie_config_write(u32 offset, u32 len, u32 data);
 int aon_config_read(u32 offset, u32 len, u32 *data);
@@ -309,7 +316,7 @@ void abc_dma_unmap_page(dma_addr_t addr,  size_t size,
 		enum dma_data_direction dir);
 void abc_dma_unmap_single(dma_addr_t addr,  size_t size,
 		enum dma_data_direction dir);
-int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl);
+void abc_pcie_set_linkstate(u32 target_linkstate);
 int abc_set_pcie_link_l1(bool enabled);
 bool abc_pcie_enumerated(void);
 #endif
