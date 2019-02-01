@@ -1138,8 +1138,15 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 
 	if (test_and_clear_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
 		set_bit(IAXXX_FLG_RESUME_BY_RECOVERY, &priv->flags);
-	else
+	else {
 		set_bit(IAXXX_FLG_RESUME_BY_STARTUP, &priv->flags);
+		rc = mfd_add_devices(priv->dev, -1, iaxxx_devices,
+			ARRAY_SIZE(iaxxx_devices), NULL, 0, NULL);
+		if (rc) {
+			dev_err(priv->dev, "Failed to add cell devices\n");
+			goto exit_fw_fail;
+		}
+	}
 
 	/* Subscribing for FW crash event */
 	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
@@ -1147,13 +1154,6 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	if (rc) {
 		dev_err(dev, "%s: failed to subscribe for crash event\n",
 				__func__);
-		goto exit_fw_fail;
-	}
-
-	rc = mfd_add_devices(priv->dev, -1, iaxxx_devices,
-		ARRAY_SIZE(iaxxx_devices), NULL, 0, NULL);
-	if (rc) {
-		dev_err(priv->dev, "Failed to add cell devices\n");
 		goto exit_fw_fail;
 	}
 
