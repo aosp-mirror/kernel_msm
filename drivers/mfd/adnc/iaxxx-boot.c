@@ -279,13 +279,13 @@ static int iaxxx_wait_apps_ready(struct iaxxx_priv *priv)
 		IAXXX_APPS_MODE_WAIT_MSEC / IAXXX_APPS_MODE_POLL_MSEC;
 
 	/* wait for fw boot to app mode success event */
-	wait_event_timeout(priv->boot_wq, priv->boot_completed, HZ);
-	if (!priv->boot_completed)
+	rc = wait_event_timeout(priv->boot_wq, priv->boot_completed, HZ);
+	if (!priv->boot_completed && rc == 0)
 		dev_err(priv->dev,
 			"Timedout in wait for boot completion event, "
 			"try polling\n");
 	else
-		return rc;
+		return 0;
 
 	/* Apps mode is expected to be ready within 50 msecs */
 	for (i = 0; i < count; ++i) {

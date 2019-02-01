@@ -124,28 +124,42 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 			priv->iaxxx_mclk_cb(priv, 1);
 	}
 
-	/* SPI_CS would act as wake up source. So making an
-	 * SPI transaction to wake up the chip and then wait for 40ms
-	 */
-	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_STATUS_ADDR,
-			&reg_val);
+	if (!test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+						&priv->flags)) {
+		rc = regmap_read(priv->regmap_no_pm,
+				IAXXX_SRB_SYS_STATUS_ADDR, &reg_val);
 
-	msleep(40);
+		rc = wait_event_timeout(priv->wakeup_wq,
+				test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+						&priv->flags), HZ / 10);
+		if (!test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+						&priv->flags) && rc == 0)
+			dev_err(priv->dev,
+			"Timeout for wakeup event rc :%d wake flag :%d\n",
+				rc, test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+				&priv->flags));
+		else
+			goto chip_woken_up;
 
-	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_STATUS_ADDR,
-			&reg_val);
-	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_SYS_STATUS_ADDR,
-			&reg_val);
+		rc = regmap_read(priv->regmap_no_pm,
+				IAXXX_SRB_SYS_STATUS_ADDR, &reg_val);
 
-	/* if read failed or SYS mode is not in APP mode, flag error*/
-	reg_val &= IAXXX_SRB_SYS_STATUS_MODE_MASK;
-	dev_dbg(priv->dev, "%s chip wake up reg_val%d\n", __func__, reg_val);
-	if (rc || (reg_val != SYSTEM_STATUS_MODE_APPS)) {
-		dev_err(priv->dev, "%s chip wake up failed %d rc %d\n",
+		/* if read failed or SYS mode is not in APP mode,
+		 * flag error
+		 */
+		reg_val &= IAXXX_SRB_SYS_STATUS_MODE_MASK;
+		dev_dbg(priv->dev,
+			"%s chip wake up reg_val%d\n", __func__, reg_val);
+		if (rc || (reg_val != SYSTEM_STATUS_MODE_APPS)) {
+			dev_err(priv->dev,
+				"%s chip wake up failed %d rc %d\n",
 				__func__, reg_val, rc);
-		return -EIO;
+			return -EIO;
+		}
+		test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+								&priv->flags);
 	}
-
+chip_woken_up:
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
 		priv->iaxxx_state->power_state = IAXXX_NORMAL_MODE;
 		dev_info(priv->dev, "%s set to normal power mode done\n",
@@ -236,6 +250,8 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 		dev_info(priv->dev, "%s() chip put into optimal power mode\n",
 								__func__);
 	}
+	test_and_clear_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+						&priv->flags);
 	dev_info(priv->dev, "%s() Success\n", __func__);
 
 	return 0;

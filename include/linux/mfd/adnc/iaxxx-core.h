@@ -56,13 +56,7 @@ enum {
 	IAXXX_FLG_RESUME_BY_RECOVERY,	/* FW update and resume
 					 * after fw crash
 					 */
-};
-
-enum {
-	IAXXX_NORMAL,
-	IAXXX_SUSPEND,
-	IAXXX_POWER_TRANSITION,
-	IAXXX_RESUME_FAIL
+	IAXXX_FLG_CHIP_WAKEUP_HOST0, /* chip Wakeup event for HOST0 */
 };
 
 struct iaxxx_client {
@@ -243,6 +237,7 @@ struct iaxxx_priv {
 	struct kthread_work runtime_work;
 
 	wait_queue_head_t boot_wq;
+	wait_queue_head_t wakeup_wq;
 
 	void *tunnel_data;
 	/* Event Manager */
@@ -270,6 +265,7 @@ struct iaxxx_priv {
 	bool dump_log;
 	bool is_irq_enabled;
 	bool boot_completed;
+	bool is_chip_wokenup;
 
 	void *dfs_node;
 

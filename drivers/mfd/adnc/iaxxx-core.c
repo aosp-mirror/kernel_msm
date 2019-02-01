@@ -764,8 +764,8 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 	/* Get current regmap based on boot status */
 	regmap = iaxxx_get_current_regmap(priv);
 	/* Any events in the event queue? */
-	rc = regmap_read(regmap, IAXXX_EVT_MGMT_EVT_COUNT_ADDR,
-			&count);
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_EVT_MGMT_EVT_COUNT_ADDR, &count);
 	if (rc) {
 		dev_err(priv->dev,
 			"Failed to read EVENT_COUNT, rc = %d\n", rc);
@@ -775,6 +775,13 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 
 	if (count > 0 && priv->event_workq) {
 		dev_dbg(priv->dev, "%s: %d event(s) avail\n", __func__, count);
+		if (!test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+						&priv->flags)) {
+			/* On any event always assume chip is awake */
+			wake_up(&priv->wakeup_wq);
+			dev_dbg(priv->dev,
+			"%s: FW is expected to be in wakeup state\n", __func__);
+		}
 		queue_work(priv->event_workq, &priv->event_work_struct);
 		handled = true;
 	} else {
@@ -897,6 +904,8 @@ static int iaxxx_reset_check_sbl_mode(struct iaxxx_priv *priv)
 
 	priv->boot_completed = false;
 	priv->is_application_mode = false;
+	test_and_clear_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+			   &priv->flags);
 	if (!mode && !mode_retry) {
 		dev_err(priv->dev,
 			"SBL SYS MODE retry expired in crash dump\n");
@@ -1168,6 +1177,15 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	regmap_read(priv->regmap, IAXXX_AO_OSC_CTRL_ADDR, &efuse_trim_value);
 	dev_err(dev, "IAXXX_AO_OSC_CTRL_ADDR: 0x%x\n", efuse_trim_value);
 #ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
+	/* Subscribing for FW wakeup event */
+	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
+			IAXXX_HOST0_WAKEUP_EVENT_ID, IAXXX_SYSID_HOST, 0);
+	if (rc) {
+		dev_err(dev,
+			"%s: failed to subscribe for wakeup event\n",
+			__func__);
+		goto exit_fw_fail;
+	}
 	iaxxx_pm_enable(priv);
 #endif
 
@@ -1576,6 +1594,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 
 	iaxxx_init_kthread_worker(&priv->worker);
 	init_waitqueue_head(&priv->boot_wq);
+	init_waitqueue_head(&priv->wakeup_wq);
 	priv->thread = kthread_run(kthread_worker_fn, &priv->worker,
 				   "iaxxx-core");
 	if (IS_ERR(priv->thread)) {
