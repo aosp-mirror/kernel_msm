@@ -256,7 +256,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 
 	if (ab_ctx->cold_boot) {
 		if (msm_pcie_enumerate(1)) {
-			dev_err(ab_ctx->dev, "PCIe enumeration failed");
+			dev_err(ab_ctx->dev, "PCIe enumeration failed\n");
 			return -EIO;
 		}
 
@@ -279,10 +279,16 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
 			ab_ctx->pcie_dev, NULL,
 			MSM_PCIE_CONFIG_NO_CFG_RESTORE);
-		if (ret)
-			dev_err(ab_ctx->dev, "PCIe failed to enable link");
-		else
-			msm_pcie_recover_config(ab_ctx->pcie_dev);
+		if (ret) {
+			dev_err(ab_ctx->dev, "PCIe failed to enable link\n");
+			return ret;
+		}
+
+		ret = msm_pcie_recover_config(ab_ctx->pcie_dev);
+		if (ret) {
+			dev_err(ab_ctx->dev, "PCIe failed to recover config\n");
+			return ret;
+		}
 	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ON);
 
@@ -298,7 +304,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 
 	if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
 		dev_err(&plat_dev->dev,
-			"ab_ready is not high after fw load");
+			"ab_ready is not high after fw load\n");
 		return -EIO;
 	}
 
@@ -316,7 +322,11 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	ABC_WRITE(SYSREG_AON_SPI0_AHB_ENABLE, 0x1);
 
 	/* Setup the function pointer to read DDR OTPs */
-	ab_ddr_setup(ab_ctx);
+	ret = ab_ddr_setup(ab_ctx);
+	if (ret) {
+		dev_err(ab_ctx->dev, "ab_ddr_setup failed\n");
+		return ret;
+	}
 
 	/* Wait till the ddr init & training is completed in case of ddr
 	 * initialization is done by BootROM

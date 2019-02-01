@@ -668,13 +668,22 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	if ((sc->curr_chip_substate_id == CHIP_STATE_6_0 ||
 	   sc->curr_chip_substate_id == CHIP_STATE_5_0) &&
-	   to_chip_substate_id < CHIP_STATE_3_0)
-		ab_bootsequence(sc);
+	   to_chip_substate_id < CHIP_STATE_3_0) {
+		ret = ab_bootsequence(sc);
+		if (ret) {
+			dev_err(sc->dev, "ab_bootsequence failed (%d)\n", ret);
+			return ret;
+		}
+	}
 
 	if ((sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
 	   sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0) {
-		ab_pmic_on(sc);
+		ret = ab_pmic_on(sc);
+		if (ret) {
+			dev_err(sc->dev, "ab_pmic_on failed (%d)\n", ret);
+			return ret;
+		}
 		ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON_34);
 	}
 
@@ -718,9 +727,13 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ret = sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
 
-		if (msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0, sc->pcie_dev, NULL,
-				MSM_PCIE_CONFIG_NO_CFG_RESTORE))
-			pr_err("PCIe failed to disable link\n");
+		ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0,
+					  sc->pcie_dev, NULL,
+					  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+		if (ret) {
+			dev_err(sc->dev, "PCIe failed to disable link\n");
+			return ret;
+		}
 		ab_sm_record_ts(sc, AB_SM_TS_PCIE_OFF);
 
 		ab_disable_pgood(sc);
