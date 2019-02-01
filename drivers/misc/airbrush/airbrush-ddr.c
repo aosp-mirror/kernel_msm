@@ -829,15 +829,15 @@ static void ddr_mrw_set_vref_odt_etc(int freq)
 	static const struct airbrush_ddr_mrw_set_t
 				ab_ddr_mrw_set_table[AB_DRAM_FREQ_MAX] = {
 		[AB_DRAM_FREQ_MHZ_1866] = { 0x5b8, 0x8d8, 0xfc4, 0x10c90,
-						0x11420, 0x21850, 0x9010000},
+					    MRW13_DEFAULT, 0x21850, 0x9010000},
 		[AB_DRAM_FREQ_MHZ_1600] = { 0x578, 0x8b4, 0xfc4, 0x10c90,
-						0x11420, 0x21850, 0x9010000},
+					    MRW13_DEFAULT, 0x21850, 0x9010000},
 		[AB_DRAM_FREQ_MHZ_1200] = { 0x538, 0x890, 0xfc4, 0x10c90,
-						0x11420, 0x21850, 0x9010000},
+					    MRW13_DEFAULT, 0x21850, 0x9010000},
 		[AB_DRAM_FREQ_MHZ_933]  = { 0x4d8, 0x86c, 0xfc4, 0x10c90,
-						0x11420, 0x21850, 0x9010000 },
+					    MRW13_DEFAULT, 0x21850, 0x9010000 },
 		[AB_DRAM_FREQ_MHZ_800]  = { 0x498, 0x848, 0xfc4, 0x10c90,
-						0x11420, 0x21850, 0x9010000 },
+					    MRW13_DEFAULT, 0x21850, 0x9010000 },
 	};
 
 	/* LPDDR4_chip_Init */
@@ -2051,6 +2051,16 @@ static int ddr_enable_power_features(void)
 		ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 		return -ETIMEDOUT;
 	}
+
+	/* Set MR13 register to control below fields for power optimization
+	 * VRCG (VREF Current Generator) OP[3]
+	 *       0B: Normal Operation (default)
+	 *       1B: VREF Fast Response (high current) mode 3
+	 * RRO Refresh rate option OP[4]
+	 *       0B: Disable codes 001 and 010 in MR4 OP[2:0]
+	 *       1B: Enable all codes in MR4 OP[2:0]
+	 */
+	ddr_reg_wr(DREX_DIRECTCMD, MRW13_DEFAULT);
 
 	/* Enabling DDR Power features */
 	ddr_reg_set(DREX_CGCONTROL, PHY_CG_EN);

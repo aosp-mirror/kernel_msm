@@ -96,6 +96,21 @@
 #define MRR(mr)				(CMD_TYPE_MRR | MR2CMD(mr))
 #define MRW(mr, op)			(CMD_TYPE_MRW | MR2CMD(mr) | OP2CMD(op))
 
+/* This config will be moved as part of Kconfig file later */
+//#define CONFIG_AB_DDR_MR13_RRO_ENABLE
+
+/* MR13 register configurations */
+#define MR13_VRCG_NORMAL		(0x0 << 3)
+#define MR13_VRCG_FAST_RESP		(0x1 << 3)
+#define MR13_RRO_DISABLE		(0x0 << 4)
+#define MR13_RRO_EN_2x_4x		(0x1 << 4)
+#ifdef CONFIG_AB_DDR_MR13_RRO_ENABLE
+#define MRW13_DEFAULT_OP		(MR13_VRCG_NORMAL | MR13_RRO_EN_2x_4x)
+#else
+#define MRW13_DEFAULT_OP		(MR13_VRCG_NORMAL)
+#endif
+#define MRW13_DEFAULT			(MRW(13, MRW13_DEFAULT_OP))
+
 #define DREX_PRECHCONFIG0		0x10580014
 #define PORT_POLICY_MSK			(0xf << 16)
 #define PORT_POLICY(x)			(((x) & 0xf) << 16)
