@@ -35,6 +35,10 @@
 #define FACEAUTH_MAX_TASKS 32
 #define FACEAUTH_DEBUG_REGISTER_COUNT (24)
 
+struct faceauth_init_data {
+  __u64 features;
+} __attribute__((packed));
+
 /* This struct is written by userspace and read by kernel */
 struct faceauth_start_data {
 	/*
@@ -121,7 +125,7 @@ struct faceauth_debug_entry {
  * Prepare AP and AB for faceauth workflow. This step might include slow
  * operations like reading firmware from filesystem and copying to AB memory.
  */
-#define FACEAUTH_DEV_IOC_INIT _IO('f', 1)
+#define FACEAUTH_DEV_IOC_INIT _IOR('f', 1, struct faceauth_init_data)
 #define FACEAUTH_DEV_IOC_START _IOWR('f', 2, struct faceauth_start_data)
 #define FACEAUTH_DEV_IOC_CLEANUP _IO('f', 4)
 #define FACEAUTH_DEV_IOC_DEBUG _IOR('f', 5, struct faceauth_debug_data)

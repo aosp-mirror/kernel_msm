@@ -45,6 +45,7 @@
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
 #define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
+#define FEATURES_FLAG_ADDR 0x21fffff8
 #define DOT_IMAGE_LEFT_ADDR 0x22800000
 #define DOT_IMAGE_RIGHT_ADDR 0x22900000
 #define FLOOD_IMAGE_ADDR 0x23000000
@@ -164,6 +165,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 {
 	int err = 0;
 	int polling_interval = M0_POLLING_INTERVAL;
+	struct faceauth_init_data init_step_data = { 0 };
 	struct faceauth_start_data start_step_data = { 0 };
 	unsigned long stop, ioctl_start, save_debug_jiffies;
 	unsigned long save_debug_start = 0;
@@ -184,6 +186,12 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	case FACEAUTH_DEV_IOC_INIT:
 		pr_info("faceauth init IOCTL\n");
 
+		if (copy_from_user(&init_step_data, (const void __user *)arg,
+				   sizeof(init_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
+
 		err = dma_send_fw(M0_FIRMWARE_PATH, M0_FIRMWARE_ADDR);
 		if (err) {
 			pr_err("Error during M0 firmware transfer: %d\n", err);
@@ -191,6 +199,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		}
 
 		pio_write_qw(M0_VERBOSITY_LEVEL_FLAG_ADDR, m0_verbosity_level);
+		pio_write_qw(FEATURES_FLAG_ADDR, init_step_data.features);
 
 		break;
 	case FACEAUTH_DEV_IOC_START:
@@ -420,6 +429,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	int err = 0;
 	int polling_interval = M0_POLLING_INTERVAL;
 	struct faceauth_start_data start_step_data = { 0 };
+	struct faceauth_init_data init_step_data = { 0 };
 	unsigned long stop, ioctl_start;
 	bool send_images_data;
 
@@ -429,11 +439,17 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	case FACEAUTH_DEV_IOC_INIT:
 		pr_info("el2: faceauth init IOCTL\n");
 
+		if (copy_from_user(&init_step_data, (const void __user *)arg,
+				   sizeof(init_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
+
 		err = el2_faceauth_wait_pil_dma_over();
 		if (err < 0)
 			goto exit;
 
-		err = el2_faceauth_init(&faceauth_pdev->dev,
+		err = el2_faceauth_init(&faceauth_pdev->dev, &init_step_data,
 					m0_verbosity_level);
 		if (err < 0)
 			goto exit;

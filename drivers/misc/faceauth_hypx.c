@@ -42,6 +42,7 @@ struct hypx_fa_init {
 	uint64_t verbosity_level;
 	/* phy address for 4KiB temporary buffer used by EL2 DMA engine */
 	uint64_t bounce_buff;
+	uint64_t features;
 } __packed;
 
 struct hypx_fa_process {
@@ -215,7 +216,8 @@ int el2_faceauth_wait_pil_dma_over(void)
 static void *bounce_buff;
 static dma_addr_t bounce_buff_bus_addr;
 
-int el2_faceauth_init(struct device *dev, uint64_t verbosity_level)
+int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
+		      uint64_t verbosity_level)
 {
 	int ret;
 	struct scm_desc desc = { 0 };
@@ -226,6 +228,7 @@ int el2_faceauth_init(struct device *dev, uint64_t verbosity_level)
 
 	hypx_data = (void *)get_zeroed_page(0);
 	hypx_data->verbosity_level = verbosity_level;
+	hypx_data->features = data->features;
 
 	bounce_buff = dma_alloc_coherent(dev, PAGE_SIZE, &bounce_buff_bus_addr,
 					 GFP_KERNEL);
