@@ -1627,20 +1627,6 @@ static void ddr_train_restore_configuration(struct ab_ddr_context *ddr_ctx,
 
 	ddr_reg_wr(DPHY_ZQ_CON9, ddr_train_save_value[s_DPHY_ZQ_CON9]);
 	ddr_reg_wr(DPHY2_ZQ_CON9, ddr_train_save_value[s_DPHY2_ZQ_CON9]);
-
-	/* Enabling lock_value_init_override */
-	ddr_reg_set(DPHY_MDLL_CON1, LOCK_VALUE_INIT_OVERRIDE);
-	ddr_reg_set(DPHY2_MDLL_CON1, LOCK_VALUE_INIT_OVERRIDE);
-
-	/* Restore ctrl_lock_value_init after restoring training result */
-	ddr_reg_clr_set(DPHY_MDLL_CON1, CTRL_LOCK_VALUE_INIT_MSK,
-		CTRL_LOCK_VALUE_INIT(ddr_train_save_value[s_DPHY_MDLL_CON1]));
-	ddr_reg_clr_set(DPHY2_MDLL_CON1, CTRL_LOCK_VALUE_INIT_MSK,
-		CTRL_LOCK_VALUE_INIT(ddr_train_save_value[s_DPHY2_MDLL_CON1]));
-
-	/* Disabling lock_value_init_override */
-	ddr_reg_clr(DPHY_MDLL_CON1, LOCK_VALUE_INIT_OVERRIDE);
-	ddr_reg_clr(DPHY2_MDLL_CON1, LOCK_VALUE_INIT_OVERRIDE);
 }
 
 static int ab_ddr_initial_trainings(struct ab_ddr_context *ddr_ctx)
