@@ -547,7 +547,7 @@ static unsigned int ddr_freq_param(enum ddr_freq_t freq, unsigned int index)
 	    /* f_DPHY_CAL_CON2 : TODO(b/122059867) remove all magic numbers */
 	    { 0x84070000, 0x84070000, 0x84070000, 0x04050000, 0x04050000 },
 	    /* f_DPHY_GNR_CON0_NODBI */
-	    { 0x43005020, 0x4300501c, 0x43005018, 0x43005012, 0x4300500c },
+	    { 0x43005024, 0x43005020, 0x4300501c, 0x43005016, 0x43005010 },
 	    /* f_DPHY_GNR_CON0_DBI */
 	    { 0x47106024, 0x47106020, 0x4710601c, 0x47106016, 0x47106010 },
 	    /* f_DREX_TIMINGRFCPB */
@@ -1138,6 +1138,11 @@ static int ddr_set_drex_address_parameters(enum ddr_freq_t freq)
 	ddr_reg_wr(DREX_ASP_MEMBASECONFIG0, CHUNK_START_END);
 	ddr_reg_wr_otp(DREX_ASP_MEMCONFIG0, o_Reserved_DDR_INIT_11);
 	ddr_reg_wr(DREX_ASP_CHIP0SIZECONFIG, CHIP_SIZE_512MB);
+
+	/* Enable dbi_en at controller side. MR3 is already updated with
+	 * read and write DBI enable
+	 */
+	ddr_reg_set(DREX_MEMCONTROL, DBI_EN);
 
 	return DDR_SUCCESS;
 }
