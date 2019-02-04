@@ -860,12 +860,12 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 	sc->dest_chip_substate_id = dest_chip_substate_id;
 	mutex_unlock(&sc->state_transitioning_lock);
 
+	reinit_completion(&sc->transition_comp);
 	complete_all(&sc->request_state_change_comp);
 
 	ret = wait_for_completion_timeout(
 			&sc->transition_comp,
 			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
-	reinit_completion(&sc->transition_comp);
 	if (ret == 0) {
 		dev_info(sc->dev, "State change timed out\n");
 		ret = -EAGAIN;
