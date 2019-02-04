@@ -16,11 +16,6 @@ mount code would create the dm_bow device, mount the file system, call the
 FITRIM ioctl on the file system then switch to state 1. These trims are not
 propagated to the underlying device.
 
-TODO: There are some race conditions if there are writes in state 0. Test
-mounting the drive ro and see if trims are still allowed. If that fails, test
-holding all writes in a queue until we switch to state 1. If that fails,
-consider implementing a ram disk type affair, which will be complex and risky.
-
 State 1: All writes to the device cause the underlying data to be backed up to
 the free (trimmed) area as needed in such a way as they can be restored.
 However, the writes, with one exception, then happen exactly as they would

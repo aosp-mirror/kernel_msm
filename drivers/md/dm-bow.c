@@ -105,26 +105,39 @@ static sector_t bvec_top(struct bvec_iter *bi_iter)
 	return bi_iter->bi_sector + bi_iter->bi_size / SECTOR_SIZE;
 }
 
+/*
+ * Find the first range that overlaps with bi_iter
+ * bi_iter is set to the size of the overlapping sub-range
+ */
 static struct bow_range *find_first_overlapping_range(struct rb_root *ranges,
 						      struct bvec_iter *bi_iter)
 {
 	struct rb_node *node = ranges->rb_node;
+	struct bow_range *br;
 
 	while (node) {
-		struct bow_range *br;
-
 		br = container_of(node, struct bow_range, node);
+
 		if (br->sector <= bi_iter->bi_sector
 		    && bi_iter->bi_sector < range_top(br))
-			return br;
+			break;
+
 		if (bi_iter->bi_sector < br->sector)
 			node = node->rb_left;
 		else
 			node = node->rb_right;
 	}
 
-	WARN_ON(1);
-	return NULL;
+	WARN_ON(!node);
+	if (!node)
+		return NULL;
+
+	if (range_top(br) - bi_iter->bi_sector
+	    < bi_iter->bi_size >> SECTOR_SHIFT)
+		bi_iter->bi_size = (range_top(br) - bi_iter->bi_sector)
+			<< SECTOR_SHIFT;
+
+	return br;
 }
 
 void add_before(struct rb_root *ranges, struct bow_range *new_br,
@@ -143,13 +156,12 @@ void add_before(struct rb_root *ranges, struct bow_range *new_br,
 }
 
 /*
- * Given a range br returned by find_first_overlapping_range, split br
- * into a leading range, a range matching the bio and a trailing range.
+ * Given a range br returned by find_first_overlapping_range, split br into a
+ * leading range, a range matching the bi_iter and a trailing range.
  * Leading and trailing may end up size 0 and will then be deleted. The
- * new range matching the bio is then returned and should have its type
+ * new range matching the bi_iter is then returned and should have its type
  * and type specific fields populated.
- * If the bio runs off the end of the range, the bio is truncated
- * accordingly
+ * If bi_iter runs off the end of the range, bi_iter is truncated accordingly
  */
 static int split_range(struct rb_root *ranges, struct bow_range **br,
 		       struct bvec_iter *bi_iter)
@@ -802,11 +814,6 @@ static int prepare_one_range(struct bow_context *bc,
 {
 	struct bow_range *br = find_first_overlapping_range(&bc->ranges,
 							    bi_iter);
-	bi_iter->bi_size = min(bi_iter->bi_size,
-			       (unsigned int)(range_top(br)
-					      - bi_iter->bi_sector)
-				* SECTOR_SIZE);
-
 	switch (br->type) {
 	case CHANGED:
 		return prepare_changed_range(bc, br, bi_iter);
@@ -917,6 +924,81 @@ static int handle_sector0(struct bow_context *bc, struct bio *bio)
 	return ret;
 }
 
+static int add_trim(struct bow_context *bc, struct bio *bio)
+{
+	struct bow_range *br;
+	struct bvec_iter bi_iter = bio->bi_iter;
+
+	DMDEBUG("add_trim: %lu, %u",
+		bio->bi_iter.bi_sector, bio->bi_iter.bi_size);
+
+	do {
+		br = find_first_overlapping_range(&bc->ranges, &bi_iter);
+
+		switch (br->type) {
+		case UNCHANGED:
+			if (!split_range(&bc->ranges, &br, &bi_iter))
+				set_type(bc, &br, TRIMMED);
+			break;
+
+		case TRIMMED:
+			/* Nothing to do */
+			break;
+
+		default:
+			/* No other case is legal in TRIM state */
+			WARN_ON(true);
+			break;
+		}
+
+		bi_iter.bi_sector += bi_iter.bi_size / SECTOR_SIZE;
+		bi_iter.bi_size = bio->bi_iter.bi_size
+			- (bi_iter.bi_sector - bio->bi_iter.bi_sector)
+			  * SECTOR_SIZE;
+
+	} while (bi_iter.bi_size);
+
+	bio_endio(bio);
+	return DM_MAPIO_SUBMITTED;
+}
+
+static int remove_trim(struct bow_context *bc, struct bio *bio)
+{
+	struct bow_range *br;
+	struct bvec_iter bi_iter = bio->bi_iter;
+
+	DMDEBUG("remove_trim: %lu, %u",
+		bio->bi_iter.bi_sector, bio->bi_iter.bi_size);
+
+	do {
+		br = find_first_overlapping_range(&bc->ranges, &bi_iter);
+
+		switch (br->type) {
+		case UNCHANGED:
+			/* Nothing to do */
+			break;
+
+		case TRIMMED:
+			if (!split_range(&bc->ranges, &br, &bi_iter))
+				set_type(bc, &br, UNCHANGED);
+			break;
+
+		default:
+			/* No other case is legal in TRIM state */
+			WARN_ON(true);
+			break;
+		}
+
+		bi_iter.bi_sector += bi_iter.bi_size / SECTOR_SIZE;
+		bi_iter.bi_size = bio->bi_iter.bi_size
+			- (bi_iter.bi_sector - bio->bi_iter.bi_sector)
+			  * SECTOR_SIZE;
+
+	} while (bi_iter.bi_size);
+
+	return DM_MAPIO_REMAPPED;
+}
+
 /****** dm interface ******/
 
 static int dm_bow_map(struct dm_target *ti, struct bio *bio)
@@ -934,25 +1016,13 @@ static int dm_bow_map(struct dm_target *ti, struct bio *bio)
 
 		mutex_lock(&bc->ranges_lock);
 		state = atomic_read(&bc->state);
-		if (state == TRIM && bio->bi_rw & REQ_DISCARD) {
-			struct bow_range *br;
-
-			DMDEBUG("Trim: %lu, %u",
-			       bio->bi_iter.bi_sector,
-			       bio->bi_iter.bi_size);
-
-			br = find_first_overlapping_range(&bc->ranges,
-							  &bio->bi_iter);
-
-			/*
-			 * TODO - we assume this will always be an unmapped
-			 * block containing the whole bio
-			 */
-			WARN_ON(br->type != UNCHANGED);
-			if (!split_range(&bc->ranges, &br, &bio->bi_iter))
-				set_type(bc, &br, TRIMMED);
-			bio_endio(bio);
-			ret = DM_MAPIO_SUBMITTED;
+		if (state == TRIM) {
+			if (bio->bi_rw & REQ_DISCARD)
+				ret = add_trim(bc, bio);
+			else if (bio_data_dir(bio) == WRITE)
+				ret = remove_trim(bc, bio);
+			else
+				/* passthrough */;
 		} else if (state == CHECKPOINT) {
 			if (bio->bi_iter.bi_sector == 0)
 				ret = handle_sector0(bc, bio);
