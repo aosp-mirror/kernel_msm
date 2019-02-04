@@ -94,3 +94,15 @@
 		status = "disabled";
 	};
 };
+
+/ {
+	aliases {
+		/* This alias is expected by msm_geni_serial. */
+		serial1 = &qupv3_se1_2uart;
+	};
+};
+
+/* Enable Airbrush uart node on coral/flame by default. */
+&qupv3_se1_2uart {
+	status = "okay";
+};
