@@ -40,8 +40,14 @@
 #include <linux/iio/kfifo_buf.h>
 #include <linux/regulator/consumer.h>
 
-#define PAC193X_MAX_RFSH_LIMIT						60000
-/*(17 * 60 * 1000) //around 17 minutes@1024 sps */
+#define PAC193X_MAX_RFSH_LIMIT						3600000
+/* Overflow time = 248/(2n * SPS) secs
+ * Where n is the number of bits in VPOWER.
+ * n = 28 for Full Range minimum
+ * n = 26 for Realistic minimum
+ * VACCUM @ 1024Hz, Realistic min = 68.26 mins ~ 3600 secs
+ */
+
 #define PAC193X_MIN_POLLING_TIME					50
 /* 50msec is the timeout for validity of the cached registers */
 
