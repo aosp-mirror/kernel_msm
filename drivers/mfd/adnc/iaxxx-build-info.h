@@ -18,6 +18,6 @@
 
 #define HOST_SOFTWARE_VERSION_STR "1.5.0"
 
-#define FW_VERSION_IN_HOST_STR "2.5.0"
+#define FW_VERSION_IN_HOST_STR "2.5.1"
 
 #endif
