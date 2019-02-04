@@ -403,7 +403,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 #endif // #if ENABLE_AIRBRUSH_DEBUG
 		break;
 	default:
-		err = -EFAULT;
+		err = -EOPNOTSUPP;
 		goto exit;
 	}
 
