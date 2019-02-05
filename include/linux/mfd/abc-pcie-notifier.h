@@ -21,16 +21,25 @@
 #include <linux/notifier.h>
 
 /**
- * Notifier types for Airbrush PCIe blocking events
+ * Notifier types for Airbrush PCIe blocking events.
+ * These types can be OR'ed together when being notified.
  *
  * PCIE_LINK_POST_ENABLE - called when PCIe link is enabled; also
  *     called after PCIe is unmapped from EL2 and back to EL1 control.
  *
  * PCIE_LINK_PRE_DISABLE - called when PCIe link will disable; also
  *     called before PCIe will be unmapped from EL1 and entering EL2.
+ *
+ * PCIE_LINK_ENTER_EL2 - called before PCIe will be unmapped from EL1
+ *     and entering EL2.
+ *
+ *  PCIE_LINK_EXIT_EL2 - called after PCIe is unmapped from EL2 and
+ *     back to EL1 control.
  */
 #define ABC_PCIE_LINK_POST_ENABLE	BIT(0)
 #define ABC_PCIE_LINK_PRE_DISABLE	BIT(1)
+#define ABC_PCIE_LINK_ENTER_EL2		BIT(2)
+#define ABC_PCIE_LINK_EXIT_EL2		BIT(3)
 
 int abc_register_pcie_link_blocking_event(struct notifier_block *nb);
 int abc_unregister_pcie_link_blocking_event(struct notifier_block *nb);
