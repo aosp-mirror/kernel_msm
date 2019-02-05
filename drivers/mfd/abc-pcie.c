@@ -1707,6 +1707,19 @@ static int abc_pcie_get_chip_id_handler(void *ctx, enum ab_chip_id *val)
 static int abc_pcie_enter_el2_handler(void *ctx)
 {
 	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
+	struct device *dev = (struct device *)ctx;
+
+	/* TODO(b/120753172): clean up atomics usage */
+	if (atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE) {
+		dev_err(dev,
+			"PCIe link is not enabled; should not enter EL2\n");
+		return -EINVAL;
+	}
+
+	if (abc_dev->el2_state) {
+		dev_err(dev, "PCIe is already under EL2 control.\n");
+		return -EINVAL;
+	}
 
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE |
@@ -1723,12 +1736,27 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 		abc_pcie_smmu_detach((struct device *)ctx);
 	}
 
+	abc_dev->el2_state = true;
+
 	return 0;
 }
 
 static int abc_pcie_exit_el2_handler(void *ctx)
 {
 	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
+	struct device *dev = (struct device *)ctx;
+
+	/* TODO(b/120753172): clean up atomics usage */
+	if (atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE) {
+		dev_err(dev,
+			"PCIe link is already disabled; was PCIe link unexpectedly down during EL2?\n");
+		return -EINVAL;
+	}
+
+	if (!abc_dev->el2_state) {
+		dev_err(dev, "PCIe is already under EL1 control.\n");
+		return -EINVAL;
+	}
 
 	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
 	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
@@ -1744,6 +1772,8 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 		if (ret < 0)
 			return ret;
 	}
+
+	abc_dev->el2_state = false;
 
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE |
@@ -2124,6 +2154,9 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
 	/* Assigning abc_pcie_devdata as driver data to abc_pcie driver */
 	dev_set_drvdata(&pdev->dev, abc);
+
+	/* Assume at probe PCIe is under EL1 control */
+	abc_dev->el2_state = false;
 
 	err = pci_enable_device(pdev);
 	if (err) {
