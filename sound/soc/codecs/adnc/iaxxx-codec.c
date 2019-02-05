@@ -3847,10 +3847,10 @@ static int iaxxx_set_i2s_controller(struct snd_soc_codec *codec,
 {
 	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
 	u32 bits_per_frame = 0, pcm_words_per_frame = 0;
-	u32 is_i2s_mode = 0;
 	u32 apll_clk = iaxxx->apll_clk;
 	u32 period = 0, div_val = 0, nr_val = 0, status = 0;
 	u32 clk_ctrl_val = 0, pcm_word_len = 0;
+	u32 mask = 0, value = 0;
 
 	if (is_pseudo) {
 		dev_err(codec->dev, "Pseudo mode not supported\n");
@@ -3874,42 +3874,8 @@ static int iaxxx_set_i2s_controller(struct snd_soc_codec *codec,
 		IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 		IAXXX_I2S_TRIGGER_HIGH);
 
-	/*Bit 0 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-		IAXXX_I2S_I2S0_GEN_CFG_PCM_FS_POL_MASK,
-		IAXXX_I2S_GEN_CFG_FS_POL_LOW);
-	/* Bit 1 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-		IAXXX_I2S_I2S0_GEN_CFG_I2S_CLK_POL_MASK,
-		IAXXX_I2S_GEN_CFG_CLK_POL_HIGH);
-
-	is_i2s_mode = snd_soc_read(codec, IAXXX_PCM_MC_ADDR(id));
-	is_i2s_mode &= IAXXX_PCM0_MC_FSP_MASK;
-
 	pcm_word_len = snd_soc_read(codec, IAXXX_PCM_SWLR_ADDR(id));
 	pcm_word_len &= IAXXX_PCM0_SWLR_RMASK_VAL;
-
-	/* Bit 2*/
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-		IAXXX_I2S_I2S0_GEN_CFG_I2S_FS_POL_MASK,
-		IAXXX_I2S_GEN_CFG_FS_POL_I2S_MODE);
-
-	if (id == 4) {
-		/* Bit 19:12 */
-		snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-			IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_MASK,
-			(1 << IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_POS));
-	} else {
-		/* Bit 19:12 */
-		snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-			IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_MASK,
-			((pcm_word_len + 1) <<
-			IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_POS));
-	}
-	/* Bit 3 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-		IAXXX_I2S_I2S0_GEN_CFG_ABORT_ON_SYNC_MASK,
-		IAXXX_I2S_GEN_CFG_ABORT_ON_SYNC_DISABLE);
 
 	/* Bit 11:4 */
 	pcm_words_per_frame = snd_soc_read(codec, IAXXX_PCM_SFLR_ADDR(id));
@@ -3918,19 +3884,37 @@ static int iaxxx_set_i2s_controller(struct snd_soc_codec *codec,
 	bits_per_frame = (((pcm_word_len + 1) *
 				(pcm_words_per_frame + 1)) - 1);
 
+	dev_dbg(codec->dev,
+		"bits_per_frame :%d  pcm_words_per_frame: %d\n",
+		bits_per_frame, pcm_words_per_frame);
 
-	dev_dbg(codec->dev, "bits_per_frame :%d  pcm_words_per_frame: %d\n",
-				bits_per_frame, pcm_words_per_frame);
+	mask = IAXXX_I2S_I2S0_GEN_CFG_PCM_FS_POL_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLK_POL_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_ABORT_ON_SYNC_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_GEN_MASTER_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_FS_POL_MASK;
 
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_MASK,
+	value = IAXXX_I2S_GEN_CFG_FS_POL_LOW |
+			IAXXX_I2S_GEN_CFG_CLK_POL_HIGH |
+			IAXXX_I2S_GEN_CFG_ABORT_ON_SYNC_DISABLE |
 			(bits_per_frame <<
-			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_POS));
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_POS) |
+			IAXXX_I2S_GEN_CFG_GEN_MASTER_MODE |
+			IAXXX_I2S_GEN_CFG_FS_POL_I2S_MODE;
 
-	/* Bit 20 */
+	if (id == 4) {
+		/* Bit 19:12 */
+		value |= (1 << IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_POS);
+	} else {
+		/* Bit 19:12 */
+		value |= ((pcm_word_len + 1) <<
+				IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_POS);
+	}
+
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(id),
-		IAXXX_I2S_I2S0_GEN_CFG_GEN_MASTER_MASK,
-		IAXXX_I2S_GEN_CFG_GEN_MASTER_MODE);
+			mask, value);
 
 	/* FS Align */
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_FS_ALIGN_ADDR(id),
@@ -3946,27 +3930,20 @@ static int iaxxx_set_i2s_controller(struct snd_soc_codec *codec,
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_HL_ADDR(id),
 		IAXXX_I2S_I2S0_HL_EN_MASK,
 		IAXXX_I2S_I2S0_HL_DISABLE);
-	/* Set HL value */
+	/* Set HL value and enable hl divider*/
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_HL_ADDR(id),
-		IAXXX_I2S_I2S0_HL_P_MASK,
-		div_val);
-	/* enable hl divider */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_HL_ADDR(id),
-		IAXXX_I2S_I2S0_HL_EN_MASK,
-		IAXXX_I2S_I2S0_HL_ENABLE);
+		IAXXX_I2S_I2S0_HL_P_MASK | IAXXX_I2S_I2S0_HL_EN_MASK,
+		div_val | IAXXX_I2S_I2S0_HL_ENABLE);
 
 	/* disable NR divider */
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_NR_ADDR(id),
 		IAXXX_I2S_I2S0_NR_EN_MASK,
 		IAXXX_I2S_I2S0_NR_DISABLE);
-	/* Set NR value */
+	/* Set NR value and enable NR divider*/
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_NR_ADDR(id),
-		IAXXX_I2S_I2S0_NR_MASK_VAL,
-		nr_val);
-	/* enable NR divider */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_NR_ADDR(id),
-		IAXXX_I2S_I2S0_NR_EN_MASK,
-		IAXXX_I2S_I2S0_NR_ENABLE);
+		IAXXX_I2S_I2S0_NR_MASK_VAL | IAXXX_I2S_I2S0_NR_EN_MASK,
+		nr_val | IAXXX_I2S_I2S0_NR_ENABLE);
+
 	/* Clk control */
 	clk_ctrl_val = (clk_ctrl_val | ((period/2 - 1) <<
 			IAXXX_I2S_I2S0_CLK_CTRL_I2S_CLK_LOW_POS) |
@@ -4124,17 +4101,17 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 		if ((cic_rx_id & 0x1) != 0) {
 			/* we are in the 'odd' channel : 1/3/5/7 */
 			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
-				IAXXX_CNR0_CIC_RX_0_1_CLR_1_MASK,
+				IAXXX_CNR0_CIC_RX_0_1_CLR_1_MASK |
+				IAXXX_CNR0_CIC_RX_0_1_M_1_MASK,
+				cic_dec |
 				(1 << IAXXX_CNR0_CIC_RX_0_1_CLR_1_POS));
-			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
-				IAXXX_CNR0_CIC_RX_0_1_M_1_MASK, cic_dec);
 		} else {
 			/* we are in even channels : 0/2/4/6 */
 			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
-				IAXXX_CNR0_CIC_RX_0_1_CLR_0_MASK,
+				IAXXX_CNR0_CIC_RX_0_1_CLR_0_MASK |
+				IAXXX_CNR0_CIC_RX_0_1_M_0_MASK,
+				cic_dec |
 				(1 << IAXXX_CNR0_CIC_RX_0_1_CLR_0_POS));
-			snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
-				IAXXX_CNR0_CIC_RX_0_1_M_0_MASK, cic_dec);
 		}
 
 		/* setup input clk source (base/alternative) & Bit Polarity*/
@@ -4512,13 +4489,14 @@ static int iaxxx_pdm_port_setup(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
-	u32 period = 0, div_val = 0, nr_val = 0, fs_sync_active = 0;
+	u32 period = 0, div_val = 0, nr_val = 0;
 	u32 pdm_bclk = 0, port_sample_rate = 0, port_bits_per_frame = 0;
 	u32 apll_clk = 0;
 	u32 word_len = 0, words_per_frm = 0;
 	u32 clk_ctrl_val = 0;
 	u32 ao_clk_cfg_val = 0;
 	u32 ao_clk_cfg_mask = 0, status = 0;
+	u32 mask = 0, value = 0;
 	int ret;
 
 	if (iaxxx->port_filter[port] == ucontrol->value.integer.value[0])
@@ -4594,54 +4572,39 @@ static int iaxxx_pdm_port_setup(struct snd_kcontrol *kcontrol,
 	/* disable hl divider */
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_HL_ADDR(port),
 		IAXXX_I2S_I2S0_HL_EN_MASK, IAXXX_I2S_I2S0_HL_DISABLE);
-	/* Set HL value */
+	/* Set HL value and enable the divider */
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_HL_ADDR(port),
-		IAXXX_I2S_I2S0_HL_P_MASK,
-		div_val);
-	/* enable hl divider */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_HL_ADDR(port),
-		IAXXX_I2S_I2S0_HL_EN_MASK, IAXXX_I2S_I2S0_HL_ENABLE);
+		IAXXX_I2S_I2S0_HL_P_MASK | IAXXX_I2S_I2S0_HL_EN_MASK,
+		div_val | IAXXX_I2S_I2S0_HL_ENABLE);
+
 	/* disable NR divider */
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_NR_ADDR(port),
 		IAXXX_I2S_I2S0_NR_EN_MASK, IAXXX_I2S_I2S0_NR_DISABLE);
-	/* Set NR value */
+	/* Set NR value and enable the divider */
 	snd_soc_update_bits(codec, IAXXX_I2S_I2S_NR_ADDR(port),
-		IAXXX_I2S_I2S0_NR_WMASK_VAL, nr_val);
-	/* enable NR divider */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_NR_ADDR(port),
-		IAXXX_I2S_I2S0_NR_EN_MASK, IAXXX_I2S_I2S0_NR_ENABLE);
+		IAXXX_I2S_I2S0_NR_WMASK_VAL | IAXXX_I2S_I2S0_NR_EN_MASK,
+		nr_val | IAXXX_I2S_I2S0_NR_ENABLE);
 
+	mask = IAXXX_I2S_I2S2_GEN_CFG_PCM_FS_POL_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLK_POL_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_FS_POL_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_ABORT_ON_SYNC_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_MASK |
+			IAXXX_I2S_I2S0_GEN_CFG_GEN_MASTER_MASK;
 
-	/*Bit 0 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(port),
-		IAXXX_I2S_I2S2_GEN_CFG_PCM_FS_POL_MASK,
-		IAXXX_I2S_GEN_CFG_FS_POL_LOW);
-	/* Bit 1 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(port),
-		IAXXX_I2S_I2S0_GEN_CFG_I2S_CLK_POL_MASK,
-		IAXXX_I2S_GEN_CFG_CLK_POL_LOW);
-	/* Bit 2*/
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(port),
-		IAXXX_I2S_I2S0_GEN_CFG_I2S_FS_POL_MASK,
-		IAXXX_I2S_GEN_CFG_FS_POL_LOW);
-	/* Bit 3 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(port),
-		IAXXX_I2S_I2S0_GEN_CFG_ABORT_ON_SYNC_MASK,
-		IAXXX_I2S_GEN_CFG_ABORT_ON_SYNC_DISABLE);
-	/* Bit 11:4 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(port),
-		IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_MASK,
-		((port_bits_per_frame) <<
-		IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_POS));
-	/* For PDM FS is assumed 0 */
-	fs_sync_active = (0 << IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_POS);
-	/* Bit 19:12 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(port),
-		IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_MASK, fs_sync_active);
-	/* Bit 20 */
-	snd_soc_update_bits(codec, IAXXX_I2S_I2S_GEN_CFG_ADDR(port),
-		IAXXX_I2S_I2S0_GEN_CFG_GEN_MASTER_MASK,
-		IAXXX_I2S_GEN_CFG_GEN_MASTER_MODE);
+	value = IAXXX_I2S_GEN_CFG_FS_POL_LOW |
+			IAXXX_I2S_GEN_CFG_CLK_POL_LOW |
+			IAXXX_I2S_GEN_CFG_FS_POL_LOW |
+			IAXXX_I2S_GEN_CFG_ABORT_ON_SYNC_DISABLE |
+			(port_bits_per_frame <<
+			IAXXX_I2S_I2S0_GEN_CFG_I2S_CLKS_PER_FS_POS) |
+			(0 << IAXXX_I2S_I2S0_GEN_CFG_FS_VALID_POS) |
+			IAXXX_I2S_GEN_CFG_GEN_MASTER_MODE;
+
+	/*Bit 0, 1, 2, 3, 11:4, 19:12, 20 */
+	snd_soc_update_bits(codec,
+		IAXXX_I2S_I2S_GEN_CFG_ADDR(port), mask, value);
 
 	/* Clk control */
 	clk_ctrl_val = (clk_ctrl_val | ((period/2 - 1) <<
@@ -4949,19 +4912,15 @@ static int iaxxx_pcm_port_stop(struct snd_kcontrol *kcontrol,
 			IAXXX_PCM0_STSA_WMASK_VAL, 0);
 
 	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-			IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(port),
-			IAXXX_AO_BCLK_DISABLE <<
-			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(port));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(port),
-			IAXXX_AO_FS_DISABLE <<
-			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(port));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(port) |
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(port) |
 			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(port),
-			IAXXX_AO_DO_DISABLE <<
-			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(port));
+			(IAXXX_AO_BCLK_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(port)) |
+			(IAXXX_AO_FS_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(port)) |
+			(IAXXX_AO_DO_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(port)));
 
 	if (iaxxx->is_ip_port_master[port]) {
 		/* CNR0_I2S_Enable  - Disable I2S  */
@@ -5060,17 +5019,13 @@ static int iaxxx_pcm_port_start(struct snd_kcontrol *kcontrol,
 	}
 	/* Set Port  clk, FS, DO reg */
 	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(port),
-		ao_bclk_val << IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(port));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(port),
-		ao_fs_val << IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(port));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
+		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(port) |
+		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(port) |
 		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(port),
-		IAXXX_AO_DO_ENABLE <<
-			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(port));
+		(ao_bclk_val << IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(port)) |
+		(ao_fs_val << IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(port)) |
+		(IAXXX_AO_DO_ENABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(port)));
 
 	/* Set cnr0 pcm active reg */
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
@@ -6361,18 +6316,10 @@ static int iaxxx_digital_mute(struct snd_soc_dai *dai, int mute)
 	while (ch_mask & 1 << active) {
 		if (iaxxx->op_channels_active & 1 << active) {
 			/* Update the Gain ramp rate for TX Channel REG */
-			snd_soc_update_bits(codec,
-				IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_REG(
-				(active + TX_0)),
-				IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_GAIN_RAMP_MASK,
-				STEP_INST);
-
 			/* Update the gain based on mute unmute */
-			snd_soc_update_bits(codec,
-				IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_REG(
-				(active + TX_0)),
-				IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_GAIN_TARGET_MASK,
-				gain);
+			snd_soc_write(codec,
+			IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_REG((active + TX_0)),
+			STEP_INST | gain);
 		}
 		active++;
 	}
@@ -6396,8 +6343,6 @@ static int iaxxx_tdm3_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	u32 porte_fs_val = 0;
 	u32 portd_clk_val = 0;
 	u32 portd_fs_val = 0;
-	u32 port_do_val = 0;
-	u32 port_di_val = 0;
 	int id = PCM_PORTD;
 
 	dev_dbg(codec->dev, "%s\n", __func__);
@@ -6429,9 +6374,6 @@ static int iaxxx_tdm3_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		return -EINVAL;
 	}
 
-	port_di_val = IAXXX_IO_CTRL_DI;
-	port_do_val = IAXXX_IO_CTRL_DO;
-
 	/* BCLK IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_clk_addr[id],
 		IAXXX_IO_CTRL_PORTA_CLK_MUX_SEL_MASK |
@@ -6450,15 +6392,15 @@ static int iaxxx_tdm3_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	/* Data IN IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_di_addr[id],
-		IAXXX_IO_CTRL_PORTA_DI_PCM0_DR_AND_SEL_MASK, port_di_val);
+		IAXXX_IO_CTRL_PORTA_DI_PCM0_DR_AND_SEL_MASK, IAXXX_IO_CTRL_DI);
 	snd_soc_update_bits(codec, port_di_addr[id + 1],
-		IAXXX_IO_CTRL_PORTA_DI_PCM0_DR_AND_SEL_MASK, port_di_val);
+		IAXXX_IO_CTRL_PORTA_DI_PCM0_DR_AND_SEL_MASK, IAXXX_IO_CTRL_DI);
 
 	/* Data out IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_do_addr[id],
-		 IAXXX_IO_CTRL_PORTA_DO_MUX_SEL_MASK, port_do_val);
+		 IAXXX_IO_CTRL_PORTA_DO_MUX_SEL_MASK, IAXXX_IO_CTRL_DO);
 	snd_soc_update_bits(codec, port_do_addr[id + 1],
-		 IAXXX_IO_CTRL_PORTA_DO_MUX_SEL_MASK, port_do_val);
+		 IAXXX_IO_CTRL_PORTA_DO_MUX_SEL_MASK, IAXXX_IO_CTRL_DO);
 
 
 	return 0;
@@ -6596,13 +6538,11 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 	u32 sampling_rate = 0;
 	u32 ao_bclk_val = 0;
 	u32 ao_fs_val = 0;
-	u32 ao_do_val = IAXXX_AO_DO_ENABLE;
-	u32 cnr0_pcm_val = 0;
-	u32 cnr0_i2s_val = 0;
-	u32 channel_portd_rx;
-	u32 channel_portd_tx;
-	u32 channel_porte_rx;
-	u32 channel_porte_tx;
+	u32 ch_portd_rx;
+	u32 ch_portd_tx;
+	u32 ch_porte_rx;
+	u32 ch_porte_tx;
+	u32 mask = 0, value = 0;
 	u32 misc_ctrl_value;
 	u32 word_len;
 	u32 frame_length;
@@ -6633,38 +6573,38 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 
 	switch (params_channels(params)) {
 	case 12:
-		channel_portd_rx = 0;
-		channel_portd_tx = 0xFF; /* 8 channels */
-		channel_porte_rx = 0;
-		channel_porte_tx = 0xF00;  /* 4 channels */
+		ch_portd_rx = 0;
+		ch_portd_tx = 0xFF; /* 8 channels */
+		ch_porte_rx = 0;
+		ch_porte_tx = 0xF00;  /* 4 channels */
 		frame_length = 11; /*words per frame - 1 is 10-1 */
 		break;
 	case 10:
-		channel_portd_rx = 0;
-		channel_portd_tx = 0xFF; /* 8 channels */
-		channel_porte_rx = 0;
-		channel_porte_tx = 0x300;  /* 2 channels */
+		ch_portd_rx = 0;
+		ch_portd_tx = 0xFF; /* 8 channels */
+		ch_porte_rx = 0;
+		ch_porte_tx = 0x300;  /* 2 channels */
 		frame_length = 9; /*words per frame - 1 is 10-1 */
 		break;
 	case 8:
-		channel_portd_rx = 0;
-		channel_portd_tx = 0xFF; /* 8 channels */
-		channel_porte_rx = 0;
-		channel_porte_tx = 0x00;  /* 2 channels */
+		ch_portd_rx = 0;
+		ch_portd_tx = 0xFF; /* 8 channels */
+		ch_porte_rx = 0;
+		ch_porte_tx = 0x00;  /* 2 channels */
 		frame_length = 7; /*words per frame - 1 is 10-1 */
 		break;
 	case 2:
-		channel_portd_rx = 0;
-		channel_portd_tx = 0x03;
-		channel_porte_rx = 0;
-		channel_porte_tx = 0x00;
+		ch_portd_rx = 0;
+		ch_portd_tx = 0x03;
+		ch_porte_rx = 0;
+		ch_porte_tx = 0x00;
 		frame_length = 1; /*words per frame - 1 is 10-1 */
 		break;
 	case 1:
-		channel_portd_rx = 0;
-		channel_portd_tx = 0x01;
-		channel_porte_rx = 0;
-		channel_porte_tx = 0x00;
+		ch_portd_rx = 0;
+		ch_portd_tx = 0x01;
+		ch_porte_rx = 0;
+		ch_porte_tx = 0x00;
 		frame_length = 0; /*words per frame - 1 is 10-1 */
 		break;
 	default:
@@ -6683,82 +6623,62 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	snd_soc_update_bits(codec, IAXXX_PCM_SWLR_ADDR(id),
-		IAXXX_PCM0_SWLR_WMASK_VAL, word_len);
-	snd_soc_update_bits(codec, IAXXX_PCM_SWLR_ADDR(id + 1),
-		IAXXX_PCM0_SWLR_WMASK_VAL, word_len);
-	snd_soc_update_bits(codec, IAXXX_PCM_SFLR_ADDR(id),
-		IAXXX_PCM3_SFLR_WMASK_VAL, frame_length);
-	snd_soc_update_bits(codec, IAXXX_PCM_SFLR_ADDR(id + 1),
-		IAXXX_PCM3_SFLR_WMASK_VAL, frame_length);
+	snd_soc_write(codec, IAXXX_PCM_SWLR_ADDR(id), word_len);
+	snd_soc_write(codec, IAXXX_PCM_SWLR_ADDR(id + 1), word_len);
+	snd_soc_write(codec, IAXXX_PCM_SFLR_ADDR(id), frame_length);
+	snd_soc_write(codec, IAXXX_PCM_SFLR_ADDR(id + 1), frame_length);
 
-	snd_soc_update_bits(codec, IAXXX_PCM_SRSA_ADDR(id),
-		IAXXX_PCM0_SRSA_WMASK_VAL, channel_portd_rx);
-	snd_soc_update_bits(codec, IAXXX_PCM_STSA_ADDR(id),
-		IAXXX_PCM0_STSA_WMASK_VAL, channel_portd_tx);
-	snd_soc_update_bits(codec, IAXXX_PCM_SRSA_ADDR(id + 1),
-		IAXXX_PCM0_SRSA_WMASK_VAL, channel_porte_rx);
-	snd_soc_update_bits(codec, IAXXX_PCM_STSA_ADDR(id + 1),
-		IAXXX_PCM0_STSA_WMASK_VAL, channel_porte_tx);
+	snd_soc_write(codec, IAXXX_PCM_SRSA_ADDR(id), ch_portd_rx);
+	snd_soc_write(codec, IAXXX_PCM_STSA_ADDR(id), ch_portd_tx);
+	snd_soc_write(codec, IAXXX_PCM_SRSA_ADDR(id + 1), ch_porte_rx);
+	snd_soc_write(codec, IAXXX_PCM_STSA_ADDR(id + 1), ch_porte_tx);
 
 
 	misc_ctrl_value = IAXXX_PCM3_MC_FSE_MASK | IAXXX_PCM3_MC_RCP_MASK |
 			IAXXX_PCM3_MC_END_MASK | IAXXX_PCM3_MC_TRI_MASK |
 			IAXXX_PCM3_MC_LEFTJUST_MASK;
 
-	snd_soc_update_bits(codec, IAXXX_PCM_MC_ADDR(id),
-			IAXXX_PCM3_MC_MASK_VAL, misc_ctrl_value);
-	snd_soc_update_bits(codec, IAXXX_PCM_MC_ADDR(id + 1),
-			IAXXX_PCM3_MC_MASK_VAL, misc_ctrl_value);
+	snd_soc_write(codec, IAXXX_PCM_MC_ADDR(id), misc_ctrl_value);
+	snd_soc_write(codec, IAXXX_PCM_MC_ADDR(id + 1), misc_ctrl_value);
 
-	ao_do_val = IAXXX_AO_DO_ENABLE;
 	if (iaxxx->is_codec_master[id]) {
 		sampling_rate = params_rate(params);
 		iaxxx_set_i2s_cfg(dai, sampling_rate, false, id + 1);
 		ao_bclk_val = IAXXX_AO_BCLK_ENABLE;
 		ao_fs_val = IAXXX_AO_FS_ENABLE;
-		cnr0_i2s_val = IAXXX_CNR0_I2S_ENABLE_HIGH;
 	} else {
 		ao_bclk_val = IAXXX_AO_BCLK_DISABLE;
 		ao_fs_val = IAXXX_AO_FS_DISABLE;
 	}
-	cnr0_pcm_val = IAXXX_CNR0_PCM_ENABLE;
-	/* Port D configuration */
+
+	/* Port D and E configuration */
+	mask = IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id + 1) |
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id + 1) |
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id + 1);
+	value = (IAXXX_AO_BCLK_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id)) |
+			(IAXXX_AO_FS_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id)) |
+			(IAXXX_AO_DO_ENABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id)) |
+			(IAXXX_AO_DO_ENABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id + 1)) |
+			(ao_bclk_val <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id + 1)) |
+			(ao_fs_val <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id + 1));
+
 	/* Set Port  clk, FS, DO reg */
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id),
-		IAXXX_AO_BCLK_DISABLE <<
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id),
-		IAXXX_AO_FS_DISABLE <<
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id),
-		ao_do_val << IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id));
-
-	/* Port E configuration */
-	/* Set Port  clk, FS, DO reg */
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id + 1),
-		ao_bclk_val << IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id + 1));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id + 1),
-		ao_fs_val << IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id + 1));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id + 1),
-		ao_do_val << IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id + 1));
-
+	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR, mask, value);
 
 	if (iaxxx->is_codec_master[id]) {
 		/* CNR0_I2S_Enable  - Enable I2S  */
 		snd_soc_update_bits(codec, IAXXX_CNR0_I2S_ENABLE_ADDR,
 			IAXXX_CNR0_I2S_ENABLE_MASK((id + 1)),
-			cnr0_i2s_val << (id + 1));
+			IAXXX_CNR0_I2S_ENABLE_HIGH << (id + 1));
 
 		/* I2S Trigger - Enable */
 		snd_soc_update_bits(codec,
@@ -6767,14 +6687,14 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 			IAXXX_I2S_TRIGGER_HIGH);
 	}
 
-	/* Set cn0 pcm active reg PortD*/
+	/* Set cnr0 pcm active reg PortD and portE*/
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
-		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id),
-		cnr0_pcm_val << IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id));
-	/* Set cn0 pcm active reg portE*/
-	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
+		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id) |
 		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id + 1),
-		cnr0_pcm_val << IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id + 1));
+		(IAXXX_CNR0_PCM_ENABLE <<
+		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id)) |
+		(IAXXX_CNR0_PCM_ENABLE <<
+		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id + 1)));
 
 	return 0;
 
@@ -6793,9 +6713,8 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 	u32 sampling_rate = 0;
 	u32 ao_bclk_val = 0;
 	u32 ao_fs_val = 0;
-	u32 cnr0_i2s_val = 0;
-	u32 ch_val;
 	u32 frame_length;
+	u32 mask, value;
 	int id = dai->id;
 	int ret = 0;
 	u32 reg_srdd_val = 0;
@@ -6876,27 +6795,23 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	snd_soc_update_bits(codec, IAXXX_PCM_SWLR_ADDR(id),
-		IAXXX_PCM0_SWLR_WMASK_VAL, word_len);
+	snd_soc_write(codec, IAXXX_PCM_SWLR_ADDR(id), word_len);
 
-	snd_soc_update_bits(codec, IAXXX_PCM_SRSA_ADDR(id),
-		IAXXX_PCM0_SRSA_WMASK_VAL, channel_port_rx);
+	snd_soc_write(codec, IAXXX_PCM_SRSA_ADDR(id), channel_port_rx);
 
 	/* Allow extra cycles for HW to set the value
 	 * by doing a read of the same register.
 	 */
-	ch_val = snd_soc_read(codec, IAXXX_PCM_SRSA_ADDR(id));
+	snd_soc_read(codec, IAXXX_PCM_SRSA_ADDR(id));
 
-	snd_soc_update_bits(codec, IAXXX_PCM_STSA_ADDR(id),
-		IAXXX_PCM0_STSA_WMASK_VAL, channel_port_tx);
+	snd_soc_write(codec, IAXXX_PCM_STSA_ADDR(id), channel_port_tx);
 
 	/* Allow extra cycles for HW to set the value
 	 * by doing a read of the same register.
 	 */
-	ch_val = snd_soc_read(codec, IAXXX_PCM_STSA_ADDR(id));
+	snd_soc_read(codec, IAXXX_PCM_STSA_ADDR(id));
 
-	snd_soc_update_bits(codec, IAXXX_PCM_SFLR_ADDR(id),
-		IAXXX_PCM0_SFLR_WMASK_VAL, frame_length);
+	snd_soc_write(codec, IAXXX_PCM_SFLR_ADDR(id), frame_length);
 
 	if (iaxxx->pcm_dai_fmt[id] == SND_SOC_DAIFMT_I2S) {
 		mode = IAXXX_PCM_CTRL_DEFAULT_I2SFMT;
@@ -6913,36 +6828,32 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	snd_soc_update_bits(codec, IAXXX_PCM_SRDD_ADDR(id),
-			IAXXX_PCM0_SRDD_WMASK_VAL, reg_srdd_val);
+	snd_soc_write(codec, IAXXX_PCM_SRDD_ADDR(id), reg_srdd_val);
 
-	snd_soc_update_bits(codec, IAXXX_PCM_MC_ADDR(id),
-			IAXXX_PCM0_MC_WMASK_VAL, mode);
+	snd_soc_write(codec, IAXXX_PCM_MC_ADDR(id), mode);
 
 	if (iaxxx->is_codec_master[id]) {
 		sampling_rate = params_rate(params);
 		iaxxx_set_i2s_cfg(dai, sampling_rate, false, id);
 		ao_bclk_val = IAXXX_AO_BCLK_ENABLE;
 		ao_fs_val = IAXXX_AO_FS_ENABLE;
-		cnr0_i2s_val = IAXXX_CNR0_I2S_ENABLE_HIGH;
 	} else {
 		ao_bclk_val = IAXXX_AO_BCLK_DISABLE;
 		ao_fs_val = IAXXX_AO_FS_DISABLE;
 	}
 
+	mask = IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id);
+	value = ao_bclk_val <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id) |
+			ao_fs_val <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id) |
+			IAXXX_AO_DO_ENABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id);
 	/* Set Port  clk, FS, DO reg */
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id),
-		ao_bclk_val << IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id),
-		ao_fs_val << IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id),
-		IAXXX_AO_DO_ENABLE <<
-			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id));
+	snd_soc_update_bits(codec,
+			IAXXX_AO_CLK_CFG_ADDR, mask, value);
 	/* Set cn0 pcm active reg */
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
 		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id),
@@ -6953,7 +6864,7 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 		/* CNR0_I2S_Enable  - Enable I2S  */
 		snd_soc_update_bits(codec, IAXXX_CNR0_I2S_ENABLE_ADDR,
 			IAXXX_CNR0_I2S_ENABLE_MASK(id),
-			cnr0_i2s_val << id);
+			IAXXX_CNR0_I2S_ENABLE_HIGH << id);
 
 		/* I2S Trigger - Enable */
 		snd_soc_update_bits(codec,
@@ -7033,41 +6944,30 @@ static int iaxxx_tdm3_hw_free(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_codec *codec = dai->codec;
 	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	u32 ao_bclk_val = IAXXX_AO_BCLK_DISABLE;
-	u32 ao_fs_val = IAXXX_AO_FS_DISABLE;
-	u32 ao_do_val = IAXXX_AO_DO_DISABLE;
-	u32 cnr0_pcm_val = IAXXX_CNR0_PCM_DISABLE;
+	u32 mask = 0, value = 0;
 	int id = PCM_PORTD;
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id),
-		ao_bclk_val <<
-			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id),
-		ao_fs_val <<
-			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id),
-		ao_do_val << IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id + 1),
-		ao_bclk_val <<
-			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id + 1));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id + 1),
-		ao_fs_val <<
-			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id + 1));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id + 1),
-		ao_do_val << IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id + 1));
+	mask = IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id + 1) |
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id + 1) |
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id + 1);
+	value = (IAXXX_AO_BCLK_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id)) |
+			(IAXXX_AO_FS_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id)) |
+			(IAXXX_AO_DO_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id)) |
+			(IAXXX_AO_BCLK_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id + 1)) |
+			(IAXXX_AO_FS_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id + 1)) |
+			(IAXXX_AO_DO_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id + 1));
+	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR, mask, value);
 
 	if (iaxxx->is_codec_master[id]) {
 		/* CNR0_I2S_Enable  - Disable I2S  */
@@ -7081,15 +6981,14 @@ static int iaxxx_tdm3_hw_free(struct snd_pcm_substream *substream,
 			IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 			IAXXX_I2S_TRIGGER_HIGH);
 	}
-	/* Set cn0 pcm active reg */
+	/* clear cnr0 pcm active reg */
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
-		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id),
-		cnr0_pcm_val <<
-			IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id));
-	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
+		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id) |
 		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_MASK(id + 1),
-		cnr0_pcm_val <<
-			IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id + 1));
+		(IAXXX_CNR0_PCM_DISABLE <<
+		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id)) |
+		(IAXXX_CNR0_PCM_DISABLE <<
+		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id + 1)));
 
 	return 0;
 }
@@ -7099,15 +6998,12 @@ static int iaxxx_pcm_hw_free(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_codec *codec = dai->codec;
 	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
-	u32 cnr0_i2s_val = 0;
 	int id = dai->id;
 	uint32_t status = 0;
+	u32 mask = 0, value = 0;
 	int ret = 0;
 
 	dev_dbg(codec->dev, "%s\n", __func__);
-
-	if (iaxxx->is_codec_master[id])
-		cnr0_i2s_val = IAXXX_CNR0_I2S_ENABLE_LOW;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		iaxxx->is_stream_in_use[id][0] = false;
@@ -7121,24 +7017,23 @@ static int iaxxx_pcm_hw_free(struct snd_pcm_substream *substream,
 		return 0;
 	}
 
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id),
-		IAXXX_AO_BCLK_DISABLE <<
-			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id),
-		IAXXX_AO_FS_DISABLE << IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id));
-
-	snd_soc_update_bits(codec, IAXXX_AO_CLK_CFG_ADDR,
-		IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id),
-		IAXXX_AO_DO_DISABLE << IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id));
+	mask = IAXXX_AO_CLK_CFG_PORT_CLK_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_MASK(id) |
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_MASK(id);
+	value = (IAXXX_AO_BCLK_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_CLK_OE_POS(id)) |
+			(IAXXX_AO_FS_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_FS_OE_POS(id)) |
+			(IAXXX_AO_DO_DISABLE <<
+			IAXXX_AO_CLK_CFG_PORT_DO_OE_POS(id));
+	snd_soc_update_bits(codec,
+			IAXXX_AO_CLK_CFG_ADDR, mask, value);
 
 	if (iaxxx->is_codec_master[id]) {
 		/* CNR0_I2S_Enable  - Disable I2S  */
 		snd_soc_update_bits(codec, IAXXX_CNR0_I2S_ENABLE_ADDR,
 			IAXXX_CNR0_I2S_ENABLE_MASK(id),
-			cnr0_i2s_val << id);
+			IAXXX_CNR0_I2S_ENABLE_LOW << id);
 
 		/* I2S Trigger - Enable */
 		snd_soc_update_bits(codec,
