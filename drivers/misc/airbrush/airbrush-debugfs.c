@@ -109,14 +109,15 @@ static int ab_sm_force_el2_set(void *data, u64 val)
 
 	mutex_lock(&sc->mfd_lock);
 
-	sc->force_el2 = !!val;
-
-	if (sc->force_el2)
+	if (!!val)
 		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
 	else
 		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
 
 	mutex_unlock(&sc->mfd_lock);
+
+	if (!ret)
+		sc->force_el2 = !!val;
 
 	return ret;
 }
