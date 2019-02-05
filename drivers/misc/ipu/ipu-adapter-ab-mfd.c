@@ -76,6 +76,7 @@ struct ipu_adapter_ab_mfd_data {
 	struct notifier_block pcie_link_blocking_nb;
 
 	int irqs[IPU_ADAPTER_AB_MFD_MAX_INTERRUPTS];
+	bool interrupts_enabled;
 };
 
 /* Paintbox IO virtual address space bounds
@@ -753,19 +754,22 @@ static void ipu_adapter_ab_mfd_enable_interrupts(
 	struct platform_device *pdev = dev_data->pdev;
 	int irq_index, ret;
 
+	if (dev_data->interrupts_enabled)
+		return;
+
 	for (irq_index = 0; irq_index < platform_irq_count(pdev);
 			irq_index++)
 		enable_irq(dev_data->irqs[irq_index]);
 
 	ret = atomic_notifier_chain_register(dev_data->low_priority_irq_nh,
 			&dev_data->low_priority_irq_nb);
-
-	if (ret)
+	if (ret < 0)
 		dev_err(dev_data->dev,
 				"Cannot register notifier for low priority irq, ret=%d\n",
 				ret);
-}
 
+	dev_data->interrupts_enabled = true;
+}
 
 static void ipu_adapter_ab_mfd_disable_interrupts(
 		struct ipu_adapter_ab_mfd_data *dev_data)
@@ -773,17 +777,21 @@ static void ipu_adapter_ab_mfd_disable_interrupts(
 	struct platform_device *pdev = dev_data->pdev;
 	int irq_index, ret;
 
+	if (!dev_data->interrupts_enabled)
+		return;
+
 	for (irq_index = 0; irq_index < platform_irq_count(pdev);
 			irq_index++)
 		disable_irq(dev_data->irqs[irq_index]);
 
 	ret = atomic_notifier_chain_unregister(dev_data->low_priority_irq_nh,
 			&dev_data->low_priority_irq_nb);
-
-	if (ret)
+	if (ret < 0)
 		dev_err(dev_data->dev,
 				"Cannot unregister notifier for low priority irq, ret=%d\n",
 				ret);
+
+	dev_data->interrupts_enabled = false;
 }
 
 static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
@@ -990,6 +998,8 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 				__func__, ret);
 		return ret;
 	}
+
+	dev_data->interrupts_enabled = true;
 
 	if (iommu_present(pdev->dev.parent->bus)) {
 		dev_data->dma_dev = pdev->dev.parent;
