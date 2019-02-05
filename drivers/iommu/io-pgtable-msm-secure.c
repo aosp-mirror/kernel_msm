@@ -7,6 +7,7 @@
 
 #include <linux/iommu.h>
 #include <linux/kernel.h>
+#include <linux/io-pgtable.h>
 #include <linux/scatterlist.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
@@ -14,8 +15,6 @@
 #include <soc/qcom/scm.h>
 #include <linux/dma-mapping.h>
 #include <asm/cacheflush.h>
-
-#include "io-pgtable.h"
 
 #define IOMMU_SECURE_PTBL_SIZE  3
 #define IOMMU_SECURE_PTBL_INIT  4

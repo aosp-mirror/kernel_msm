@@ -41,7 +41,7 @@ enum tz_smmu_device_id {
 	TZ_DEVICE_MAX,
 };
 
-#ifdef CONFIG_MSM_TZ_SMMU
+#if IS_ENABLED(CONFIG_MSM_TZ_SMMU)
 
 int msm_tz_smmu_atos_start(struct device *dev, int cb_num);
 int msm_tz_smmu_atos_end(struct device *dev, int cb_num);
@@ -81,6 +81,8 @@ static inline int register_iommu_sec_ptbl(void)
 {
 	return -EINVAL;
 }
+
+struct iommu_domain;
 
 static inline size_t msm_secure_smmu_unmap(struct iommu_domain *domain,
 					   unsigned long iova,

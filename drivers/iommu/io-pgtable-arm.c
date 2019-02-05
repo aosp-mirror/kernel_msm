@@ -21,6 +21,7 @@
 #define pr_fmt(fmt)	"arm-lpae io-pgtable: " fmt
 
 #include <linux/atomic.h>
+#include <linux/io-pgtable.h>
 #include <linux/iommu.h>
 #include <linux/kernel.h>
 #include <linux/scatterlist.h>
@@ -30,8 +31,6 @@
 #include <linux/dma-mapping.h>
 
 #include <asm/barrier.h>
-
-#include "io-pgtable.h"
 
 #define ARM_LPAE_MAX_ADDR_BITS		48
 #define ARM_LPAE_S2_MAX_CONCAT_PAGES	16
