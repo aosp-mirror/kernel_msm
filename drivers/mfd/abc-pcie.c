@@ -1709,7 +1709,8 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 
 	/* Broadcast this event to subscribers */
-	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE |
+					ABC_PCIE_LINK_ENTER_EL2);
 
 	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
 	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
@@ -1745,7 +1746,8 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	}
 
 	/* Broadcast this event to subscribers */
-	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE |
+					ABC_PCIE_LINK_EXIT_EL2);
 
 	return 0;
 }
