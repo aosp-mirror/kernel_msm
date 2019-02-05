@@ -392,7 +392,8 @@ static int pps_ping(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 static int pps_get_src_cap(struct pd_pps_data *pps,
 			   struct power_supply *tcpm_psy)
 {
-	struct tcpm_port *port = power_supply_get_drvdata(tcpm_psy);
+	struct tcpm_port *port = (struct tcpm_port *)
+					power_supply_get_drvdata(tcpm_psy);
 
 	if (!pps || !port)
 		return -EINVAL;
@@ -406,7 +407,8 @@ static int pps_get_src_cap(struct pd_pps_data *pps,
 	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 static int pps_update_capability(struct power_supply *tcpm_psy, u32 pps_cap)
 {
-	struct tcpm_port *port = power_supply_get_drvdata(tcpm_psy);
+	struct tcpm_port *port = (struct tcpm_port *)
+					power_supply_get_drvdata(tcpm_psy);
 	int ret;
 	u32 pdo[3];
 
