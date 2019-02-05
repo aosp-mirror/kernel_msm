@@ -519,22 +519,21 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 				     pcie_link_blocking_nb);
 	struct paintbox_bus *bus = dev_data->bus;
 
-	switch (action) {
-	case ABC_PCIE_LINK_POST_ENABLE:
+	if (action & ABC_PCIE_LINK_POST_ENABLE) {
 		dev_dbg(dev_data->dev, "%s: PCIe link available\n", __func__);
 		ipu_adapter_ab_mfd_enable_interrupts(dev_data);
 		ipu_bus_notify_link_up(bus);
-		break;
-	case ABC_PCIE_LINK_PRE_DISABLE:
+		return NOTIFY_OK;
+	}
+
+	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
 		dev_dbg(dev_data->dev, "%s: PCIe link going down\n", __func__);
 		ipu_bus_notify_link_pre_down(bus);
 		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
-		break;
-	default:
-		return NOTIFY_DONE;  /* Don't care */
+		return NOTIFY_OK;
 	}
 
-	return NOTIFY_OK;
+	return NOTIFY_DONE;
 }
 
 static void ipu_adapter_ab_mfd_set_platform_data(struct platform_device *pdev,

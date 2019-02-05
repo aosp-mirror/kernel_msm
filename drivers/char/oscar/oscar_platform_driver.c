@@ -1118,19 +1118,18 @@ static int oscar_abc_pcie_link_change_listener(
 	struct oscar_dev *oscar_dev =
 		container_of(nb, struct oscar_dev, pcie_link_change_nb);
 
-	switch (action) {
-	case ABC_PCIE_LINK_PRE_DISABLE:
+	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
 		mutex_lock(&oscar_dev->dev_avail_lock);
 		oscar_dev->pcie_lockout = true; /* PCIe link unavailable */
 		mutex_unlock(&oscar_dev->dev_avail_lock);
 		return NOTIFY_OK;
-	case ABC_PCIE_LINK_POST_ENABLE:
+	}
+
+	if (action & ABC_PCIE_LINK_POST_ENABLE) {
 		mutex_lock(&oscar_dev->dev_avail_lock);
 		oscar_dev->pcie_lockout = false;
 		mutex_unlock(&oscar_dev->dev_avail_lock);
 		return NOTIFY_OK;
-	default:
-		break;
 	}
 
 	return NOTIFY_DONE;

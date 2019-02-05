@@ -53,18 +53,17 @@ static int ab_tmu_hw_pcie_link_listener(struct notifier_block *nb,
 	struct ab_tmu_hw *hw = container_of(nb,
 			struct ab_tmu_hw, pcie_link_blocking_nb);
 
-	switch (action) {
-	case ABC_PCIE_LINK_POST_ENABLE:
+	if (action & ABC_PCIE_LINK_POST_ENABLE) {
 		ab_tmu_hw_pcie_link_post_enable(hw);
-		break;
-	case ABC_PCIE_LINK_PRE_DISABLE:
-		ab_tmu_hw_pcie_link_pre_disable(hw);
-		break;
-	default:
-		return NOTIFY_DONE;  /* Don't care */
+		return NOTIFY_OK;
 	}
 
-	return NOTIFY_OK;
+	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
+		ab_tmu_hw_pcie_link_pre_disable(hw);
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;  /* Don't care */
 }
 
 static int ab_tmu_hw_init(struct ab_tmu_hw *hw, struct device *dev, u32 base)

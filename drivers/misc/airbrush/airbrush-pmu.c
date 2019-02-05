@@ -31,22 +31,21 @@ static int ab_pmu_pcie_link_listener(struct notifier_block *nb,
 	struct ab_pmu_context *pmu_ctx = container_of(nb,
 			struct ab_pmu_context, pcie_link_blocking_nb);
 
-	switch (action) {
-	case ABC_PCIE_LINK_POST_ENABLE:
+	if (action & ABC_PCIE_LINK_POST_ENABLE) {
 		mutex_lock(&pmu_ctx->pcie_link_lock);
 		pmu_ctx->pcie_link_ready = true;
 		mutex_unlock(&pmu_ctx->pcie_link_lock);
-		break;
-	case ABC_PCIE_LINK_PRE_DISABLE:
+		return NOTIFY_OK;
+	}
+
+	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
 		mutex_lock(&pmu_ctx->pcie_link_lock);
 		pmu_ctx->pcie_link_ready = false;
 		mutex_unlock(&pmu_ctx->pcie_link_lock);
-		break;
-	default:
-		return NOTIFY_DONE;  /* Don't care */
+		return NOTIFY_OK;
 	}
 
-	return NOTIFY_OK;
+	return NOTIFY_DONE;  /* Don't care */
 }
 
 /* Caller must hold pmu_ctx->pcie_link_lock */
