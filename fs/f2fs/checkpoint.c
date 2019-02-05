@@ -306,8 +306,9 @@ static int f2fs_write_meta_pages(struct address_space *mapping,
 		goto skip_write;
 
 	/* collect a number of dirty meta pages and write together */
-	if (wbc->for_kupdate ||
-		get_pages(sbi, F2FS_DIRTY_META) < nr_pages_to_skip(sbi, META))
+	if (wbc->sync_mode != WB_SYNC_ALL &&
+			get_pages(sbi, F2FS_DIRTY_META) <
+					nr_pages_to_skip(sbi, META))
 		goto skip_write;
 
 	/* if locked failed, cp will flush dirty pages instead */
@@ -1258,6 +1259,11 @@ static void update_ckpt_flags(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		__set_ckpt_flags(ckpt, CP_DISABLED_FLAG);
 	else
 		__clear_ckpt_flags(ckpt, CP_DISABLED_FLAG);
+
+	if (is_sbi_flag_set(sbi, SBI_CP_DISABLED_QUICK))
+		__set_ckpt_flags(ckpt, CP_DISABLED_QUICK_FLAG);
+	else
+		__clear_ckpt_flags(ckpt, CP_DISABLED_QUICK_FLAG);
 
 	if (is_sbi_flag_set(sbi, SBI_QUOTA_SKIP_FLUSH))
 		__set_ckpt_flags(ckpt, CP_QUOTA_NEED_FSCK_FLAG);
