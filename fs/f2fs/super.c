@@ -269,7 +269,7 @@ static int f2fs_set_qf_name(struct super_block *sb, int qtype,
 	if (!qname) {
 		f2fs_msg(sb, KERN_ERR,
 			"Not enough memory for storing quotafile name");
-		return -EINVAL;
+		return -ENOMEM;
 	}
 	if (F2FS_OPTION(sbi).s_qf_names[qtype]) {
 		if (strcmp(F2FS_OPTION(sbi).s_qf_names[qtype], qname) == 0)
@@ -835,11 +835,11 @@ static int parse_options(struct super_block *sb, char *options)
 			return -EINVAL;
 		}
 		if (!F2FS_OPTION(sbi).inline_xattr_size ||
-			F2FS_OPTION(sbi).inline_xattr_size >=
-					DEF_ADDRS_PER_INODE -
-					F2FS_TOTAL_EXTRA_ATTR_SIZE -
-					DEF_INLINE_RESERVED_SIZE -
-					DEF_MIN_INLINE_SIZE) {
+			F2FS_OPTION(sbi).inline_xattr_size >
+				DEF_ADDRS_PER_INODE -
+				F2FS_TOTAL_EXTRA_ATTR_SIZE / sizeof(__le32) -
+				DEF_INLINE_RESERVED_SIZE -
+				MIN_INLINE_DENTRY_SIZE / sizeof(__le32)) {
 			f2fs_msg(sb, KERN_ERR,
 					"inline xattr size is out of range");
 			return -EINVAL;
@@ -914,6 +914,10 @@ static int f2fs_drop_inode(struct inode *inode)
 
 			sb_start_intwrite(inode->i_sb);
 			f2fs_i_size_write(inode, 0);
+
+			f2fs_submit_merged_write_cond(F2FS_I_SB(inode),
+					inode, NULL, 0, DATA);
+			truncate_inode_pages_final(inode->i_mapping);
 
 			if (F2FS_HAS_BLOCKS(inode))
 				f2fs_truncate(inode);
@@ -1075,7 +1079,7 @@ static void f2fs_put_super(struct super_block *sb)
 	}
 
 	/* be sure to wait for any on-going discard commands */
-	dropped = f2fs_wait_discard_bios(sbi);
+	dropped = f2fs_issue_discard_timeout(sbi);
 
 	if ((f2fs_hw_support_discard(sbi) || f2fs_hw_should_discard(sbi)) &&
 					!sbi->discard_blks && !dropped) {
@@ -1485,9 +1489,16 @@ static int f2fs_enable_quotas(struct super_block *sb);
 
 static int f2fs_disable_checkpoint(struct f2fs_sb_info *sbi)
 {
+	unsigned int s_flags = sbi->sb->s_flags;
 	struct cp_control cpc;
-	int err;
+	int err = 0;
+	int ret;
 
+	if (s_flags & MS_RDONLY) {
+		f2fs_msg(sbi->sb, KERN_ERR,
+				"checkpoint=disable on readonly fs");
+		return -EINVAL;
+	}
 	sbi->sb->s_flags |= MS_ACTIVE;
 
 	f2fs_update_time(sbi, DISABLE_TIME);
@@ -1495,18 +1506,24 @@ static int f2fs_disable_checkpoint(struct f2fs_sb_info *sbi)
 	while (!f2fs_time_over(sbi, DISABLE_TIME)) {
 		mutex_lock(&sbi->gc_mutex);
 		err = f2fs_gc(sbi, true, false, NULL_SEGNO);
-		if (err == -ENODATA)
+		if (err == -ENODATA) {
+			err = 0;
 			break;
+		}
 		if (err && err != -EAGAIN)
-			return err;
+			break;
 	}
 
-	err = sync_filesystem(sbi->sb);
-	if (err)
-		return err;
+	ret = sync_filesystem(sbi->sb);
+	if (ret || err) {
+		err = ret ? ret: err;
+		goto restore_flag;
+	}
 
-	if (f2fs_disable_cp_again(sbi))
-		return -EAGAIN;
+	if (f2fs_disable_cp_again(sbi)) {
+		err = -EAGAIN;
+		goto restore_flag;
+	}
 
 	mutex_lock(&sbi->gc_mutex);
 	cpc.reason = CP_PAUSE;
@@ -1515,7 +1532,9 @@ static int f2fs_disable_checkpoint(struct f2fs_sb_info *sbi)
 
 	sbi->unusable_block_count = 0;
 	mutex_unlock(&sbi->gc_mutex);
-	return 0;
+restore_flag:
+	sbi->sb->s_flags = s_flags;	/* Restore MS_RDONLY status */
+	return err;
 }
 
 static void f2fs_enable_checkpoint(struct f2fs_sb_info *sbi)
@@ -2053,6 +2072,12 @@ void f2fs_quota_off_umount(struct super_block *sb)
 			set_sbi_flag(F2FS_SB(sb), SBI_QUOTA_NEED_REPAIR);
 		}
 	}
+	/*
+	 * In case of checkpoint=disable, we must flush quota blocks.
+	 * This can cause NULL exception for node_inode in end_io, since
+	 * put_super already dropped it.
+	 */
+	sync_filesystem(sb);
 }
 
 static void f2fs_truncate_quota_inode_pages(struct super_block *sb)
@@ -2768,6 +2793,8 @@ static void init_sb_info(struct f2fs_sb_info *sbi)
 	sbi->interval_time[DISCARD_TIME] = DEF_IDLE_INTERVAL;
 	sbi->interval_time[GC_TIME] = DEF_IDLE_INTERVAL;
 	sbi->interval_time[DISABLE_TIME] = DEF_DISABLE_INTERVAL;
+	sbi->interval_time[UMOUNT_DISCARD_TIMEOUT] =
+				DEF_UMOUNT_DISCARD_TIMEOUT;
 	clear_sbi_flag(sbi, SBI_NEED_FSCK);
 
 	for (i = 0; i < NR_COUNT_TYPE; i++)
@@ -3272,6 +3299,10 @@ try_onemore:
 
 	if (__is_set_ckpt_flags(F2FS_CKPT(sbi), CP_QUOTA_NEED_FSCK_FLAG))
 		set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
+	if (__is_set_ckpt_flags(F2FS_CKPT(sbi), CP_DISABLED_QUICK_FLAG)) {
+		set_sbi_flag(sbi, SBI_CP_DISABLED_QUICK);
+		sbi->interval_time[DISABLE_TIME] = DEF_DISABLE_QUICK_INTERVAL;
+	}
 
 	/* Initialize device list */
 	err = f2fs_scan_devices(sbi);
@@ -3359,7 +3390,7 @@ try_onemore:
 	sb->s_root = d_make_root(root); /* allocate root dentry */
 	if (!sb->s_root) {
 		err = -ENOMEM;
-		goto free_root_inode;
+		goto free_node_inode;
 	}
 
 	err = f2fs_register_sysfs(sbi);
@@ -3425,7 +3456,7 @@ skip_recovery:
 	if (test_opt(sbi, DISABLE_CHECKPOINT)) {
 		err = f2fs_disable_checkpoint(sbi);
 		if (err)
-			goto free_meta;
+			goto sync_free_meta;
 	} else if (is_set_ckpt_flags(sbi, CP_DISABLED_FLAG)) {
 		f2fs_enable_checkpoint(sbi);
 	}
@@ -3438,7 +3469,7 @@ skip_recovery:
 		/* After POR, we can run background GC thread.*/
 		err = f2fs_start_gc_thread(sbi);
 		if (err)
-			goto free_meta;
+			goto sync_free_meta;
 	}
 	kvfree(options);
 
@@ -3458,7 +3489,13 @@ skip_recovery:
 				cur_cp_version(F2FS_CKPT(sbi)));
 	f2fs_update_time(sbi, CP_TIME);
 	f2fs_update_time(sbi, REQ_TIME);
+	clear_sbi_flag(sbi, SBI_CP_DISABLED_QUICK);
 	return 0;
+
+sync_free_meta:
+	/* safe to flush all the data */
+	sync_filesystem(sbi->sb);
+	retry = false;
 
 free_meta:
 #ifdef CONFIG_QUOTA
@@ -3473,6 +3510,8 @@ free_meta:
 	 * falls into an infinite loop in f2fs_sync_meta_pages().
 	 */
 	truncate_inode_pages_final(META_MAPPING(sbi));
+	/* evict some inodes being cached by GC */
+	evict_inodes(sb);
 	f2fs_unregister_sysfs(sbi);
 free_root_inode:
 	dput(sb->s_root);
@@ -3618,9 +3657,7 @@ static int __init init_f2fs_fs(void)
 	err = register_filesystem(&f2fs_fs_type);
 	if (err)
 		goto free_shrinker;
-	err = f2fs_create_root_stats();
-	if (err)
-		goto free_filesystem;
+	f2fs_create_root_stats();
 	err = f2fs_init_post_read_processing();
 	if (err)
 		goto free_root_stats;
@@ -3628,7 +3665,6 @@ static int __init init_f2fs_fs(void)
 
 free_root_stats:
 	f2fs_destroy_root_stats();
-free_filesystem:
 	unregister_filesystem(&f2fs_fs_type);
 free_shrinker:
 	unregister_shrinker(&f2fs_shrinker_info);
