@@ -31,6 +31,9 @@
 #include <linux/types.h>
 
 #include <linux/airbrush-sm-ctrl.h>
+#if IS_ENABLED(CONFIG_PCI_MSM)
+#include <linux/msm_pcie.h>
+#endif
 #include <linux/mfd/abc-pcie.h>
 #include <linux/mfd/abc-pcie-sfr.h>
 
@@ -641,6 +644,15 @@ int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	/* Enabling L1 or L0s or both */
 	writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
+
+#if IS_ENABLED(CONFIG_PCI_MSM)
+	/* set rc l1ss state to match ep's */
+	msm_pcie_set_l1ss_state(abc_dev->pdev,
+		pmctrl->aspm_L12 ? MSM_PCIE_PM_L1SS_L12 :
+		pmctrl->aspm_L11 ? MSM_PCIE_PM_L1SS_L11 :
+		MSM_PCIE_PM_L1SS_DISABLE);
+#endif
+
 	/* LTR Enable */
 	if (pmctrl->aspm_L12) {
 		abc_l12_timeout_ctrl(false);
