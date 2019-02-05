@@ -2830,7 +2830,7 @@ static void max1720x_cleanup_history(struct max1720x_chip *chip)
 		unregister_chrdev_region(chip->hcmajor, 1);
 }
 
-static int max1720x_init_history(struct max1720x_chip *chip)
+static int max1720x_init_history_device(struct max1720x_chip *chip)
 {
 	struct device *hcdev;
 
@@ -2864,6 +2864,20 @@ no_history:
 	return -ENODEV;
 }
 
+static int max1720x_init_history(struct max1720x_chip *chip, int gauge_type)
+{
+	if (gauge_type == MAX1730X_GAUGE_TYPE) {
+		chip->nb_history_pages = MAX1730X_N_OF_HISTORY_PAGES;
+		chip->history_page_size = MAX1730X_HISTORY_PAGE_SIZE;
+		chip->nb_history_flag_reg = MAX1730X_N_OF_HISTORY_FLAGS_REG;
+	} else {
+		chip->nb_history_pages = MAX1720X_N_OF_HISTORY_PAGES;
+		chip->history_page_size = MAX1720X_HISTORY_PAGE_SIZE;
+		chip->nb_history_flag_reg = MAX1720X_N_OF_HISTORY_FLAGS_REG;
+	}
+	return 0;
+}
+
 static void max1720x_init_work(struct work_struct *work)
 {
 	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
@@ -2889,16 +2903,9 @@ static void max1720x_init_work(struct work_struct *work)
 	/* Handle any IRQ that might have been set before init */
 	max1720x_fg_irq_thread_fn(chip->primary->irq, chip);
 
-	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
-		chip->nb_history_pages = MAX1730X_N_OF_HISTORY_PAGES;
-		chip->history_page_size = MAX1730X_HISTORY_PAGE_SIZE;
-		chip->nb_history_flag_reg = MAX1730X_N_OF_HISTORY_FLAGS_REG;
-	} else {
-		chip->nb_history_pages = MAX1720X_N_OF_HISTORY_PAGES;
-		chip->history_page_size = MAX1720X_HISTORY_PAGE_SIZE;
-		chip->nb_history_flag_reg = MAX1720X_N_OF_HISTORY_FLAGS_REG;
-	}
-	(void)max1720x_init_history(chip);
+	ret = max1720x_init_history(chip, max17xxx_gauge_type);
+	if (ret == 0)
+		(void)max1720x_init_history_device(chip);
 }
 
 static int max1720x_probe(struct i2c_client *client,
