@@ -512,6 +512,8 @@ struct ab_state_context {
 	bool ldo4_state;
 	bool ldo5_state;
 
+	u64 smps2_delay;
+	u64 ldo4_delay;
 	u64 ldo5_delay;
 	u64 s60_delay;
 

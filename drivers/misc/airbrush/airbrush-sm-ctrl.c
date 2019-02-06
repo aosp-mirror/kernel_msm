@@ -1546,6 +1546,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
 
+	ab_sm_ctx->smps2_delay = SMPS2_DEFAULT_DELAY;
+	ab_sm_ctx->ldo4_delay = LDO4_DEFAULT_DELAY;
 	ab_sm_ctx->ldo5_delay = LDO5_LDO4_SMPS2_DEFAULT_DELAY;
 	ab_sm_ctx->s60_delay = S60_DEFAULT_DELAY;
 	return ab_sm_ctx;

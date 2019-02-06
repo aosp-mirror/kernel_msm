@@ -102,6 +102,45 @@ static int s60_delay_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_s60_delay, s60_delay_get,
 	s60_delay_set, "%llu\n");
 
+static int ldo4_delay_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	sc->ldo4_delay = val;
+	return 0;
+}
+
+static int ldo4_delay_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	*val = sc->ldo4_delay;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_ldo4_delay, ldo4_delay_get,
+	ldo4_delay_set, "%llu\n");
+
+
+static int smps2_delay_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	sc->smps2_delay = val;
+	return 0;
+}
+
+static int smps2_delay_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	*val = sc->smps2_delay;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_smps2_delay, smps2_delay_get,
+	smps2_delay_set, "%llu\n");
+
 static int ab_sm_force_el2_set(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
@@ -496,6 +535,16 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("chip_state", 0666, d_chip, sc,
 				&fops_chip_state);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("smps2_delay", 0664, d_chip, sc,
+			&fops_smps2_delay);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("ldo4_delay", 0664, d_chip, sc,
+			&fops_ldo4_delay);
 	if (!d)
 		goto err_out;
 

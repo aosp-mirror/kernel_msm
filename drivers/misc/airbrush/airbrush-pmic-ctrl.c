@@ -224,6 +224,9 @@ int ab_pmic_off(struct ab_state_context *sc)
 			dev_err(sc->dev,
 				"failed to disable LDO4, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
+
+		if (sc->ldo4_delay)
+			usleep_range(sc->ldo4_delay, sc->ldo4_delay + 1);
 	}
 
 	if (!sc->smps3_state && regulator_is_enabled(sc->smps3)) {
@@ -248,6 +251,9 @@ int ab_pmic_off(struct ab_state_context *sc)
 			dev_err(sc->dev,
 				"failed to disable SMPS2, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
+
+		if (sc->smps2_delay)
+			usleep_range(sc->smps2_delay, sc->smps2_delay + 1);
 	}
 
 	/* NOTE: delay required by b/120785608 */
