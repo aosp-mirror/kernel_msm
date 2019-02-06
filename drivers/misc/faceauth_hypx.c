@@ -131,8 +131,10 @@ static phys_addr_t hypx_create_blob(void __user *buffer, size_t size)
 		int dest_perm[] = { PERM_READ | PERM_WRITE,
 				    PERM_READ | PERM_WRITE };
 
-		if (tocopy == 0)
+		if (tocopy == 0) {
+			kfree(out_buffer);
 			break;
+		}
 
 		while (!out_buffer) {
 			if (page_order == 0) {
