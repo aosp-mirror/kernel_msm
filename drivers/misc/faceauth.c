@@ -87,9 +87,11 @@ static int dma_send_images(struct faceauth_start_data *data);
 static int pio_write_qw(const int remote_addr, const uint64_t val);
 #if ENABLE_AIRBRUSH_DEBUG
 static int dma_gather_debug_log(struct faceauth_debug_data *data);
-static int dma_gather_debug_data(struct file *file, void *destination_buffer,
-				 uint32_t buffer_size, uint32_t user_buffer);
-static void enqueue_debug_data(struct file *file);
+static int dma_gather_debug_data(void *destination_buffer,
+				 uint32_t buffer_size);
+static void clear_debug_data(void);
+static void move_debug_data_to_tail(void);
+static void enqueue_debug_data(void);
 static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data);
 
 struct {
@@ -181,8 +183,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	struct faceauth_data *data = file->private_data;
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data = { { 0 } };
-	struct timeval timestamp;
-	struct faceauth_debug_entry *debug_entry_ptr;
 #endif
 
 	ioctl_start = jiffies;
@@ -329,7 +329,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 #if ENABLE_AIRBRUSH_DEBUG
 		save_debug_start = jiffies;
-		enqueue_debug_data(file);
+		enqueue_debug_data();
 		save_debug_end = jiffies;
 #endif
 
@@ -390,18 +390,22 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			goto exit;
 		}
 
-		if (debug_step_data.flags == GET_DEBUG_DATA_FROM_AB_DRAM) {
-			do_gettimeofday(&timestamp);
-			debug_entry_ptr = (struct faceauth_debug_entry *)
-						  debug_step_data.debug_buffer;
-			copy_to_user(&(debug_entry_ptr->timestamp), &timestamp,
-				     sizeof(struct timeval));
-
-			err = dma_gather_debug_data(
-				file, debug_step_data.debug_buffer,
-				debug_step_data.debug_buffer_size, 1);
-		} else {
+		switch (debug_step_data.flags) {
+		case FACEAUTH_GET_DEBUG_DATA_FROM_FIFO:
 			err = dequeue_debug_data(&debug_step_data);
+			break;
+		case FACEAUTH_GET_DEBUG_DATA_MOST_RECENT:
+			move_debug_data_to_tail();
+			err = dequeue_debug_data(&debug_step_data);
+			break;
+		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
+			clear_debug_data();
+			enqueue_debug_data();
+			err = dequeue_debug_data(&debug_step_data);
+			break;
+		default:
+			err = -EINVAL;
+			break;
 		}
 #else
 		err = -EOPNOTSUPP;
@@ -716,14 +720,14 @@ static int dma_gather_debug_log(struct faceauth_debug_data *data)
 	return err;
 }
 
-static void enqueue_debug_data(struct file *file)
+static void enqueue_debug_data(void)
 {
 	void *bin_addr;
 	int err;
 
 	bin_addr = debug_data_queue.data_buffer +
 		   (DEBUG_DATA_BIN_SIZE * debug_data_queue.head_idx);
-	err = dma_gather_debug_data(file, bin_addr, DEBUG_DATA_BIN_SIZE, 0);
+	err = dma_gather_debug_data(bin_addr, DEBUG_DATA_BIN_SIZE);
 	if (err) {
 		return;
 	}
@@ -740,6 +744,26 @@ static void enqueue_debug_data(struct file *file)
 
 	do_gettimeofday(
 		&(((struct faceauth_debug_entry *)bin_addr)->timestamp));
+}
+
+static void move_debug_data_to_tail(void)
+{
+	int delta;
+
+	if (debug_data_queue.count <= 1)
+		return;
+
+	delta = debug_data_queue.count - 1;
+	debug_data_queue.count -= delta;
+	debug_data_queue.tail_idx =
+		(debug_data_queue.tail_idx + delta) % DEBUG_DATA_NUM_BINS;
+}
+
+static void clear_debug_data(void)
+{
+	debug_data_queue.count = 0;
+	debug_data_queue.head_idx = 0;
+	debug_data_queue.tail_idx = 0;
 }
 
 static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data)
@@ -768,15 +792,16 @@ static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data)
 	return 0;
 }
 
-static int dma_gather_debug_data(struct file *file, void *destination_buffer,
-				 uint32_t buffer_size, uint32_t user_buffer)
+static int dma_gather_debug_data(void *destination_buffer,
+				 uint32_t buffer_size)
 {
 	int err = 0;
 	uint32_t internal_state_struct_size;
-	uint32_t command;
 	struct faceauth_debug_entry *debug_entry = destination_buffer;
 	uint32_t current_offset;
-	struct faceauth_debug_image input_image;
+	struct faceauth_buffer_list *output_buffers;
+	int buffer_idx;
+	int buffer_list_size;
 
 	dma_read_dw(AB_INTERNAL_STATE_ADDR +
 			    offsetof(struct faceauth_airbrush_state,
@@ -793,153 +818,80 @@ static int dma_gather_debug_data(struct file *file, void *destination_buffer,
 		return err;
 	}
 
-	if (user_buffer) {
-		// save the AB internal state
-		err = dma_xfer(&(debug_entry->ab_state),
+	err = dma_xfer_vmalloc(&(debug_entry->ab_state),
 			       internal_state_struct_size,
 			       AB_INTERNAL_STATE_ADDR, DMA_FROM_DEVICE);
-		if (err) {
-			pr_err("failed to gather debug data, err %d\n", err);
-			return err;
-		}
+	if (err) {
+		pr_err("failed to gather debug data, err %d\n", err);
+		return err;
+	}
 
-		dma_read_dw(AB_INTERNAL_STATE_ADDR +
-				    offsetof(struct faceauth_airbrush_state,
-					     command),
-			    &command);
-
-		if (command == FACEAUTH_OP_ENROLL ||
-		    command == FACEAUTH_OP_VALIDATE) {
-			// save left dot image
-			err = dma_xfer(((uint8_t *)debug_entry) +
+	if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
+	    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
+		err = dma_xfer_vmalloc((uint8_t *)debug_entry +
 					       current_offset,
 				       (INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
 				       DOT_IMAGE_LEFT_ADDR, DMA_FROM_DEVICE);
-			input_image.offset_to_image = current_offset;
-			input_image.image_size =
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-			current_offset += input_image.image_size;
-
-			if (copy_to_user(&(debug_entry->left_dot), &input_image,
-					 sizeof(input_image))) {
-				err = -EFAULT;
-			}
-
-			if (err) {
-				pr_err("Error saving left dot image\n");
-				return err;
-			}
-
-			// save right dot image
-			err = dma_xfer(((uint8_t *)debug_entry) +
-					       current_offset,
-				       (INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
-				       DOT_IMAGE_RIGHT_ADDR, DMA_FROM_DEVICE);
-			input_image.offset_to_image = current_offset;
-			current_offset +=
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-
-			if (copy_to_user(&(debug_entry->right_dot),
-					 &input_image, sizeof(input_image))) {
-				err = -EFAULT;
-			}
-
-			if (err) {
-				pr_err("Error saving right dot image\n");
-				return err;
-			}
-
-			// save the flood image
-			err = dma_xfer(((uint8_t *)debug_entry) +
-					       current_offset,
-				       (INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
-				       FLOOD_IMAGE_ADDR, DMA_FROM_DEVICE);
-			input_image.offset_to_image = current_offset;
-			current_offset +=
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-
-			if (copy_to_user(&(debug_entry->flood), &input_image,
-					 sizeof(input_image))) {
-				err = -EFAULT;
-			}
-
-			if (err) {
-				pr_err("Error saving flood image\n");
-				return err;
-			}
-		} else {
-			input_image.offset_to_image = 0;
-			input_image.image_size = 0;
-			if (copy_to_user(&(debug_entry->left_dot), &input_image,
-					 sizeof(input_image)) ||
-			    copy_to_user(&(debug_entry->right_dot),
-					 &input_image, sizeof(input_image)) ||
-			    copy_to_user(&(debug_entry->flood), &input_image,
-					 sizeof(input_image))) {
-				pr_err("Error saving input image data\n");
-				return -EFAULT;
-			}
-		}
-	} else {
-		err = dma_xfer_vmalloc(&(debug_entry->ab_state),
-				       internal_state_struct_size,
-				       AB_INTERNAL_STATE_ADDR, DMA_FROM_DEVICE);
+		debug_entry->left_dot.offset_to_image = current_offset;
+		debug_entry->left_dot.image_size =
+			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
 		if (err) {
-			pr_err("failed to gather debug data, err %d\n", err);
+			pr_err("Error saving left dot image\n");
 			return err;
 		}
 
-		if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
-		    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
-			err = dma_xfer_vmalloc(
-				((uint8_t *)debug_entry) + current_offset,
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
-				DOT_IMAGE_LEFT_ADDR, DMA_FROM_DEVICE);
-			debug_entry->left_dot.offset_to_image = current_offset;
-			debug_entry->left_dot.image_size =
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-			current_offset +=
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-			if (err) {
-				pr_err("Error saving left dot image\n");
-				return err;
-			}
-
-			err = dma_xfer_vmalloc(
-				((uint8_t *)debug_entry) + current_offset,
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
-				DOT_IMAGE_RIGHT_ADDR, DMA_FROM_DEVICE);
-			debug_entry->right_dot.offset_to_image = current_offset;
-			debug_entry->right_dot.image_size =
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-			current_offset +=
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-			if (err) {
-				pr_err("Error saving right dot image\n");
-				return err;
-			}
-
-			err = dma_xfer_vmalloc(
-				((uint8_t *)debug_entry) + current_offset,
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
-				FLOOD_IMAGE_ADDR, DMA_FROM_DEVICE);
-			debug_entry->flood.offset_to_image = current_offset;
-			debug_entry->flood.image_size =
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-			current_offset +=
-				(INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT);
-			if (err) {
-				pr_err("Error saving flood image\n");
-				return err;
-			}
-		} else {
-			debug_entry->left_dot.offset_to_image = 0;
-			debug_entry->left_dot.image_size = 0;
-			debug_entry->right_dot.offset_to_image = 0;
-			debug_entry->right_dot.image_size = 0;
-			debug_entry->flood.offset_to_image = 0;
-			debug_entry->flood.image_size = 0;
+		err = dma_xfer_vmalloc((uint8_t *)debug_entry +
+					       current_offset,
+				       INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT,
+				       DOT_IMAGE_RIGHT_ADDR, DMA_FROM_DEVICE);
+		debug_entry->right_dot.offset_to_image = current_offset;
+		debug_entry->right_dot.image_size =
+			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		if (err) {
+			pr_err("Error saving right dot image\n");
+			return err;
 		}
+
+		err = dma_xfer_vmalloc((uint8_t *)debug_entry +
+					       current_offset,
+				       INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT,
+				       FLOOD_IMAGE_ADDR, DMA_FROM_DEVICE);
+		debug_entry->flood.offset_to_image = current_offset;
+		debug_entry->flood.image_size =
+			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		if (err) {
+			pr_err("Error saving flood image\n");
+			return err;
+		}
+	} else {
+		debug_entry->left_dot.offset_to_image = 0;
+		debug_entry->left_dot.image_size = 0;
+		debug_entry->right_dot.offset_to_image = 0;
+		debug_entry->right_dot.image_size = 0;
+		debug_entry->flood.offset_to_image = 0;
+		debug_entry->flood.image_size = 0;
+	}
+
+	output_buffers = &(debug_entry->ab_state.output_buffers);
+	buffer_idx = output_buffers->buffer_count - 1;
+	buffer_list_size =
+		output_buffers->buffers[buffer_idx].offset_to_buffer +
+		output_buffers->buffers[buffer_idx].size;
+
+	if (buffer_list_size + current_offset > DEBUG_DATA_BIN_SIZE) {
+		err = -EMSGSIZE;
+		return err;
+	}
+
+	if (output_buffers->buffer_base != 0 && buffer_list_size > 0) {
+		dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
+				 buffer_list_size, output_buffers->buffer_base,
+				 DMA_FROM_DEVICE);
+		output_buffers->buffer_base = current_offset;
+		current_offset += buffer_list_size;
 	}
 
 	return err;
@@ -1063,9 +1015,7 @@ static int faceauth_probe(struct platform_device *pdev)
 	}
 
 #if ENABLE_AIRBRUSH_DEBUG
-	debug_data_queue.count = 0;
-	debug_data_queue.head_idx = 0;
-	debug_data_queue.tail_idx = 0;
+	clear_debug_data();
 	debug_data_queue.data_buffer =
 		vmalloc(DEBUG_DATA_BIN_SIZE * DEBUG_DATA_NUM_BINS);
 
@@ -1100,9 +1050,7 @@ static int faceauth_remove(struct platform_device *pdev)
 	debugfs_remove_recursive(data->debugfs_root);
 
 #if ENABLE_AIRBRUSH_DEBUG
-	debug_data_queue.count = 0;
-	debug_data_queue.head_idx = 0;
-	debug_data_queue.tail_idx = 0;
+	clear_debug_data();
 	vfree(debug_data_queue.data_buffer);
 #endif
 

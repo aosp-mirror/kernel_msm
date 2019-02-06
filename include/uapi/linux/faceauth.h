@@ -33,7 +33,9 @@
 #define FACEAUTH_ERROR_NO_ERROR 0
 
 #define FACEAUTH_MAX_TASKS 32
-#define FACEAUTH_DEBUG_REGISTER_COUNT (24)
+#define FACEAUTH_DEBUG_REGISTER_COUNT 24
+#define FACEAUTH_BUFFER_TAG_LENGTH 16
+#define FACEAUTH_BUFFER_LIST_LENGTH 16
 
 struct faceauth_init_data {
   __u64 features;
@@ -66,9 +68,6 @@ struct faceauth_start_data {
 	__u32 fw_version; /* ab-faceauth firmware version */
 } __attribute__((packed));
 
-#define GET_DEBUG_DATA_FROM_CACHE (0)
-#define GET_DEBUG_DATA_FROM_AB_DRAM (1)
-
 /* This struct contains a user supplied buffer that is written by kernel */
 struct faceauth_debug_data {
 	union {
@@ -95,6 +94,38 @@ struct faceauth_debug_register {
 	__u64 value;
 } __attribute__((packed));
 
+enum faceauth_buffer_type {
+	OUTPUT_NONE,
+	OUTPUT_DEPTH_EMBEDDING,
+	OUTPUT_FACENET_EMBEDDING,
+	OUTPUT_QUANTIZED_EMBEDDINGS,
+	OUTPUT_BINARY_BLOB,
+	OUTPUT_8BIT_GRAYSCALE_320x320,
+	OUTPUT_16BIT_GRAYSCALE_128x128,
+	OUTPUT_16BIT_GRAYSCALE_480x640,
+	OUTPUT_8BITRGB_128x128,
+
+	/* used to extend enum size to 4 bytes */
+	OUTPUT_INTMAX = 0xffffffff,
+};
+
+struct faceauth_buffer_descriptor {
+	/* offset of the buffer from the buffer_base_address */
+	__u32 offset_to_buffer;
+	__u32 size;
+	__u32 type; /* cast to enum faceauth_buffer_type */
+	char buffer_tag[FACEAUTH_BUFFER_TAG_LENGTH];
+} __attribute__((packed));
+
+struct faceauth_buffer_list {
+	/* ab stores the buffer base address, the kernel replaces this with
+	 * the offset into the debug_entry
+	 */
+	__u32 buffer_base;
+	__u32 buffer_count;
+	struct faceauth_buffer_descriptor buffers[FACEAUTH_BUFFER_LIST_LENGTH];
+} __attribute__((packed));
+
 struct faceauth_airbrush_state {
 	__u32 faceauth_version;
 	__s32 error_code;
@@ -106,6 +137,8 @@ struct faceauth_airbrush_state {
 	struct faceauth_workload_control control_list[FACEAUTH_MAX_TASKS];
 	struct faceauth_debug_register
 		debug_registers[FACEAUTH_DEBUG_REGISTER_COUNT];
+	struct faceauth_buffer_list output_buffers;
+	struct faceauth_buffer_list scratch_buffers;
 } __attribute__((packed));
 
 struct faceauth_debug_image {
@@ -131,7 +164,19 @@ struct faceauth_debug_entry {
 #define FACEAUTH_DEV_IOC_DEBUG _IOR('f', 5, struct faceauth_debug_data)
 #define FACEAUTH_DEV_IOC_DEBUG_DATA _IOR('f', 6, struct faceauth_debug_data)
 
-//TODO: might be useful to be able to pull debug data either from the circular
-//log, or from ab_dram directly
+/* Get debug data flags:
+ *  - Data from fifo is the default option, this returns debug data in first-in
+ *    first-out order. When all data has been returned the ENODATA status is
+ *    returned.
+ *  - Data from most recent, returns the most recent set of debug data and
+ *    then clears the fifo. If the fifo is empty then ENODATA will be returned.
+ *  - From AB dram clears the fifo, and then copies the data from ab dram. Data
+ *    is always returned. This is intended to be primarily a debug tool.
+ */
+#define FACEAUTH_GET_DEBUG_DATA_FROM_FIFO (0)
+#define FACEAUTH_GET_DEBUG_DATA_MOST_RECENT (1)
+#define FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM (2)
+
+#define FACEAUTH_DEBUG_DATA_PAYLOAD_SIZE (2 * 1024 * 1024)
 
 #endif /* _UAPI_LINUX_FACEAUTH_H */
