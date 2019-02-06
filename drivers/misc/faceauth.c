@@ -1048,14 +1048,14 @@ static int faceauth_probe(struct platform_device *pdev)
 		goto exit2;
 	}
 
-	hypx = debugfs_create_file("hypx_enable", 0400, faceauth_debugfs_root,
+	hypx = debugfs_create_file("hypx_enable", 0660, faceauth_debugfs_root,
 				   NULL, &fops_hypx_enable);
 	if (!hypx) {
 		err = -EIO;
 		goto exit3;
 	}
 
-	m0_verbosity_level = debugfs_create_file("m0_verbosity_level", 0400,
+	m0_verbosity_level = debugfs_create_file("m0_verbosity_level", 0660,
 						 faceauth_debugfs_root, NULL,
 						 &fops_m0_verbosity);
 	if (!m0_verbosity_level) {
