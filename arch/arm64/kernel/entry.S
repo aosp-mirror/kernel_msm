@@ -407,13 +407,6 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	ldr_this_cpu x18, irq_shadow_call_stack_ptr, x26
 #endif
 
-	/*
-	 * Add a dummy stack frame, this non-standard format is fixed up
-	 * by unwind_frame()
-	 */
-	stp     x29, x19, [sp, #-16]!
-	mov	x29, sp
-
 9998:
 	.endm
 
