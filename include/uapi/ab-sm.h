@@ -114,9 +114,50 @@
  */
 #define AB_SM_SET_PCIE_STATE	_IOW(AB_SM_IOCTL_MAGIC, 13, int)
 
+/*
+ * Parameter struct new_ipu_state_props *:
+ *	Pass new ipu state properties
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_UPDATE_IPU_STATE_PROPERTIES	_IOW(AB_SM_IOCTL_MAGIC, 14, \
+		struct new_ipu_state_props *)
+
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0
 #define AB_CHIP_ID_B0		1
+
+/* Keep in sync with length of ipu_property_table, in airbrush-sm-ctrl.c */
+#define NUM_IPU_STATES 12
+
+/* Keep in sync with enum block_state in airbrush-sm-ctrl.h. */
+enum uapi_block_state {
+	UAPI_BLOCK_STATE_0_0 = 0,
+	UAPI_BLOCK_STATE_0_1,
+	UAPI_BLOCK_STATE_0_2,
+	UAPI_BLOCK_STATE_0_3,
+	UAPI_BLOCK_STATE_0_4,
+	UAPI_BLOCK_STATE_0_5,
+	UAPI_BLOCK_STATE_0_6,
+	UAPI_BLOCK_STATE_1_0 = 10,
+	UAPI_BLOCK_STATE_1_1,
+	UAPI_BLOCK_STATE_1_2,
+	UAPI_BLOCK_STATE_2_0 = 20,
+	UAPI_BLOCK_STATE_3_0 = 30,
+	UAPI_NUM_BLOCK_STATES,
+};
+
+/**
+ * Stores information of the soc block's operating state.
+ * Similar to struct block_property in airbrush-sm-ctrl.h.
+ */
+struct new_block_props {
+	enum uapi_block_state id;
+	__u64 clk_frequency;
+};
+
+struct new_ipu_state_props {
+	struct new_block_props table[NUM_IPU_STATES];
+};
 
 
 #endif /* __UAPI_AB_SM_H__ */

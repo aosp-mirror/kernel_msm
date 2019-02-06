@@ -414,6 +414,50 @@ static int ab_debugfs_clkout_freq(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(ab_clkout_freq_fops, ab_debugfs_clkout_freq,
 				NULL, "%lli\n");
 
+static ssize_t ab_debugfs_read_prop_table(struct file *file, char __user *ubuf,
+		size_t len, loff_t *ppos)
+{
+	struct block *blk = file->private_data;
+	char *buf;
+	int pos = 0;
+	int i, ret;
+
+	buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	/* Keep legend in sync with struct block_property. */
+	pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+			"{id, state_name, substate_name, pmu, voltage_rail_status, logic_voltage, clk_status, clk_frequency, num_powered_cores, num_computing_cores, num_powered_tiles, data_rate}\n");
+
+	for (i = 0; i < blk->nr_block_states; i++) {
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+			"{%d, %s, %s, %d, %d, %d, %d, %llu, %u, %u, %u, %u}\n",
+			blk->block_property_table[i].id,
+			blk->block_property_table[i].state_name,
+			blk->block_property_table[i].substate_name,
+			blk->block_property_table[i].pmu,
+			blk->block_property_table[i].voltage_rail_status,
+			blk->block_property_table[i].logic_voltage,
+			blk->block_property_table[i].clk_status,
+			blk->block_property_table[i].clk_frequency,
+			blk->block_property_table[i].num_powered_cores,
+			blk->block_property_table[i].num_computing_cores,
+			blk->block_property_table[i].num_powered_tiles,
+			blk->block_property_table[i].data_rate);
+	}
+
+	ret = simple_read_from_buffer(ubuf, len, ppos, buf, pos);
+	kfree(buf);
+
+	return ret;
+}
+
+static const struct file_operations fops_prop_table = {
+	.open = simple_open,
+	.read = ab_debugfs_read_prop_table,
+};
+
 void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 {
 	struct dentry *d;
@@ -460,6 +504,11 @@ void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 
 	d = debugfs_create_file("data_rate", 0444, parent_dir,
 			       blk, &fops_data_rate);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("prop_table", 0444, parent_dir,
+				blk, &fops_prop_table);
 	if (!d)
 		goto err_out;
 

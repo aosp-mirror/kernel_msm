@@ -217,6 +217,22 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0),
 };
 
+static int ab_update_ipu_prop_table(struct new_ipu_state_props *props)
+{
+	int i;
+	int rows = ARRAY_SIZE(props->table);
+
+	for (i = 0; i < rows; i++) {
+		if ((int)ipu_property_table[i].id != (int)props->table[i].id)
+			return -EINVAL;
+		ipu_property_table[i].clk_frequency =
+			props->table[i].clk_frequency;
+		/* TODO: add the ability to change other block properties. */
+	}
+
+	return 0;
+}
+
 struct block_property *get_desired_state(struct block *blk,
 					 u32 to_block_state_id)
 {
@@ -1259,7 +1275,7 @@ static int ab_sm_misc_release(struct inode *ip, struct file *fp)
 	return 0;
 }
 
-static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
+static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		unsigned long arg)
 {
 	long ret;
@@ -1270,39 +1286,6 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 	u32 clk_frequency;
 
 	switch (cmd) {
-	case AB_SM_ASYNC_NOTIFY:
-		if (!atomic_cmpxchg(&sc->async_in_use, 0, 1)) {
-			ret = ab_sm_async_notify(sess, arg);
-			atomic_set(&sc->async_in_use, 0);
-		} else {
-			dev_dbg(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
-			ret = -EBUSY;
-		}
-		break;
-
-	case AB_SM_SET_STATE:
-		ret = ab_sm_set_state(sc, (u32)arg);
-		break;
-
-	case AB_SM_GET_STATE:
-		ret = ab_sm_get_state(sess->sc);
-		if (copy_to_user((void __user *)arg, &ret, sizeof(int)))
-			return -EFAULT;
-		ret = 0;
-		break;
-
-	case AB_SM_ENTER_EL2:
-		mutex_lock(&sc->mfd_lock);
-		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
-		mutex_unlock(&sc->mfd_lock);
-		break;
-
-	case AB_SM_EXIT_EL2:
-		mutex_lock(&sc->mfd_lock);
-		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
-		mutex_unlock(&sc->mfd_lock);
-		break;
-
 	case AB_SM_SET_IPU_FREQUENCY:
 		clk_frequency = (u32)arg;
 		mutex_lock(&sc->op_lock);
@@ -1406,6 +1389,72 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		/* TODO(b/123695099): do this via ops struct */
 		ret = abc_set_pcie_pm_ctrl(&pmctrl);
 		mutex_unlock(&sc->op_lock);
+		break;
+
+	case AB_SM_UPDATE_IPU_STATE_PROPERTIES:
+	{
+		struct new_ipu_state_props props;
+
+		if (copy_from_user(&props, (void __user *)arg,
+					sizeof(struct new_ipu_state_props))) {
+			return -EINVAL;
+		}
+		ret = ab_update_ipu_prop_table(&props);
+		dev_warn(sc->dev,
+			"IPU property table has been changed! Airbrush may behave unexpectedly.\n");
+		break;
+	}
+
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
+		unsigned long arg)
+{
+	long ret;
+	struct ab_sm_misc_session *sess = fp->private_data;
+	struct ab_state_context *sc = sess->sc;
+
+	ret = ab_sm_misc_ioctl_debug(fp, cmd, arg);
+	if (ret != -EINVAL)
+		return ret;
+
+	switch (cmd) {
+	case AB_SM_ASYNC_NOTIFY:
+		if (!atomic_cmpxchg(&sc->async_in_use, 0, 1)) {
+			ret = ab_sm_async_notify(sess, arg);
+			atomic_set(&sc->async_in_use, 0);
+		} else {
+			dev_dbg(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
+			ret = -EBUSY;
+		}
+		break;
+
+	case AB_SM_SET_STATE:
+		ret = ab_sm_set_state(sc, (u32)arg);
+		break;
+
+	case AB_SM_GET_STATE:
+		ret = ab_sm_get_state(sess->sc);
+		if (copy_to_user((void __user *)arg, &ret, sizeof(int)))
+			return -EFAULT;
+		ret = 0;
+		break;
+
+	case AB_SM_ENTER_EL2:
+		mutex_lock(&sc->mfd_lock);
+		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
+		break;
+
+	case AB_SM_EXIT_EL2:
+		mutex_lock(&sc->mfd_lock);
+		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
 		break;
 
 	default:
