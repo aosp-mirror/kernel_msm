@@ -142,6 +142,7 @@ static phys_addr_t hypx_create_blob(void __user *buffer, size_t size)
 			page_order--;
 			size = (1ULL << page_order) * PAGE_SIZE;
 			out_buffer = kmalloc(size, 0);
+			tocopy = MIN(buffer_iter_remaining, size);
 		}
 
 		copy_from_user(out_buffer, buffer_iter, tocopy);
