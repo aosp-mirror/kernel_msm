@@ -655,6 +655,8 @@ static int max17x0x_reg_store_sz(struct regmap *regmap,
 			if (ret < 0)
 				break;
 		}
+	} else if (a->type == GBMS_ATOM_TYPE_SET) {
+		ret = -EINVAL;
 	} else {
 		ret = regmap_raw_write(regmap, a->base, data, size);
 	}
@@ -688,6 +690,8 @@ static int max17x0x_reg_load_sz(struct regmap *regmap,
 				break;
 			b[i] = tmp;
 		}
+	} else if (a->type == GBMS_ATOM_TYPE_SET) {
+		ret = -EINVAL;
 	} else {
 		ret = regmap_raw_read(regmap, a->base, data, size);
 	}
