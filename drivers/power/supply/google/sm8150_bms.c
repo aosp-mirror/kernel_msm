@@ -889,8 +889,8 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 		bms->taper_control = pval->intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
-		val = (pval->intval)? 0 : CHARGING_ENABLE_CMD_BIT;
-		rc = sm8150_write(bms->pmic_regmap,CHGR_CHARGING_ENABLE_CMD,
+		val = (pval->intval) ? 0 : CHARGING_ENABLE_CMD_BIT;
+		rc = sm8150_write(bms->pmic_regmap, CHGR_CHARGING_ENABLE_CMD,
 				&val, 1);
 		if (rc < 0)
 			pr_err("Couldn't set CHARGING_ENABLE rc=%d\n", rc);
