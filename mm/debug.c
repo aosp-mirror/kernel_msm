@@ -85,7 +85,7 @@ static void dump_flags(unsigned long flags,
 void dump_page_badflags(struct page *page, const char *reason,
 		unsigned long badflags)
 {
-	pr_emerg("page:%p count:%d mapcount:%d mapping:%p index:%#lx\n",
+	pr_emerg("page:%pP count:%d mapcount:%d mapping:%pP index:%#lx\n",
 		  page, atomic_read(&page->_count), page_mapcount(page),
 		  page->mapping, page->index);
 	BUILD_BUG_ON(ARRAY_SIZE(pageflag_names) != __NR_PAGEFLAGS);
@@ -99,7 +99,7 @@ void dump_page_badflags(struct page *page, const char *reason,
 	}
 #ifdef CONFIG_MEMCG
 	if (page->mem_cgroup)
-		pr_alert("page->mem_cgroup:%p\n", page->mem_cgroup);
+		pr_alert("page->mem_cgroup:%pP\n", page->mem_cgroup);
 #endif
 }
 
@@ -156,10 +156,10 @@ static const struct trace_print_flags vmaflags_names[] = {
 
 void dump_vma(const struct vm_area_struct *vma)
 {
-	pr_emerg("vma %p start %p end %p\n"
-		"next %p prev %p mm %p\n"
-		"prot %lx anon_vma %p vm_ops %p\n"
-		"pgoff %lx file %p private_data %p\n",
+	pr_emerg("vma %pP start %pP end %pP\n"
+		"next %pP prev %pP mm %pP\n"
+		"prot %lx anon_vma %pP vm_ops %pP\n"
+		"pgoff %lx file %pP private_data %pP\n",
 		vma, (void *)vma->vm_start, (void *)vma->vm_end, vma->vm_next,
 		vma->vm_prev, vma->vm_mm,
 		(unsigned long)pgprot_val(vma->vm_page_prot),
@@ -171,27 +171,27 @@ EXPORT_SYMBOL(dump_vma);
 
 void dump_mm(const struct mm_struct *mm)
 {
-	pr_emerg("mm %p mmap %p seqnum %llu task_size %lu\n"
+	pr_emerg("mm %pP mmap %pP seqnum %llu task_size %lu\n"
 #ifdef CONFIG_MMU
-		"get_unmapped_area %p\n"
+		"get_unmapped_area %pP\n"
 #endif
 		"mmap_base %lu mmap_legacy_base %lu highest_vm_end %lu\n"
-		"pgd %p mm_users %d mm_count %d nr_ptes %lu nr_pmds %lu map_count %d\n"
+		"pgd %pP mm_users %d mm_count %d nr_ptes %lu nr_pmds %lu map_count %d\n"
 		"hiwater_rss %lx hiwater_vm %lx total_vm %lx locked_vm %lx\n"
 		"pinned_vm %lx shared_vm %lx exec_vm %lx stack_vm %lx\n"
 		"start_code %lx end_code %lx start_data %lx end_data %lx\n"
 		"start_brk %lx brk %lx start_stack %lx\n"
 		"arg_start %lx arg_end %lx env_start %lx env_end %lx\n"
-		"binfmt %p flags %lx core_state %p\n"
+		"binfmt %pP flags %lx core_state %pP\n"
 #ifdef CONFIG_AIO
-		"ioctx_table %p\n"
+		"ioctx_table %pP\n"
 #endif
 #ifdef CONFIG_MEMCG
-		"owner %p "
+		"owner %pP "
 #endif
-		"exe_file %p\n"
+		"exe_file %pP\n"
 #ifdef CONFIG_MMU_NOTIFIER
-		"mmu_notifier_mm %p\n"
+		"mmu_notifier_mm %pP\n"
 #endif
 #ifdef CONFIG_NUMA_BALANCING
 		"numa_next_scan %lu numa_scan_offset %lu numa_scan_seq %d\n"
