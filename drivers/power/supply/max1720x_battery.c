@@ -314,7 +314,6 @@ enum max1730x_register {
 
 enum max1730x_command_bits {
 	MAX1730X_COMMAND_FUEL_GAUGE_RESET = 0x8000,
-	MAX1730X_COMMAND_NV_RECALL 	  = 0xE001,
 	MAX1730X_READ_HISTORY_CMD_BASE = 0xE22E,
 	MAX1730X_COMMAND_HISTORY_RECALL_WRITE_0 = 0xE29C,
 	MAX1730X_COMMAND_HISTORY_RECALL_VALID_0 = 0xE29C,
@@ -336,6 +335,10 @@ enum max17xxx_nvram {
 	MAX17XXX_QHQH = MAX1720X_NUSER18D,
 };
 
+enum max17xxx_command_bits {
+	MAX17XXX_COMMAND_NV_RECALL 	  = 0xE001,
+};
+
 #define MAX1720X_HISTORY_PAGE_SIZE \
 		(MAX1720X_NVRAM_HISTORY_END - MAX1720X_HISTORY_START + 1)
 
@@ -355,6 +358,29 @@ enum max17xxx_nvram {
 		MAX1730X_HISTORY_END + 1 + \
 		MAX1730X_HISTORY_VALID_STATUS_END - \
 		MAX1730X_HISTORY_START + 1)
+
+enum max17x0x_reg_types {
+	GBMS_ATOM_TYPE_MAP = 0,
+	GBMS_ATOM_TYPE_REG = 1,
+	GBMS_ATOM_TYPE_ZONE = 2,
+	GBMS_ATOM_TYPE_SET = 3,
+};
+
+struct max17x0x_reg {
+	u32 tag;
+	int type;
+	int size;
+	union {
+		unsigned int base;
+		unsigned int reg;
+		const u8 *map;
+	};
+};
+
+struct max17x0x_cache_data {
+	struct max17x0x_reg atom;
+	u16 *cache_data;
+};
 
 struct max1720x_cyc_ctr_data {
 	struct mutex lock;
@@ -380,6 +406,8 @@ struct max1720x_chip {
 	struct iio_channel *iio_ch;
 
 	u16 devname;
+	struct max17x0x_cache_data nRAM_por;
+	bool needs_reset;
 
 	struct max1720x_cyc_ctr_data cyc_ctr;
 
@@ -506,24 +534,6 @@ static inline int max1720x_regmap_write(struct regmap *map,
 	max1720x_regmap_write(regmap, what, value, #what)
 
 /* ------------------------------------------------------------------------- */
-
-enum max17x0x_reg_types {
-	GBMS_ATOM_TYPE_MAP = 0,
-	GBMS_ATOM_TYPE_REG = 1,
-	GBMS_ATOM_TYPE_ZONE = 2,
-	GBMS_ATOM_TYPE_SET = 3,
-};
-
-struct max17x0x_reg {
-	u32 tag;
-	int type;
-	int size;
-	union {
-		unsigned int base;
-		unsigned int reg;
-		const u8 *map;
-	};
-};
 
 /* this is a map for u16 registers */
 #define ATOM_INIT_MAP(...)			\
@@ -707,11 +717,6 @@ static int max17x0x_reg_load_sz(struct regmap *regmap,
 
 /* CACHE ----------------------------------------------------------------- */
 
-struct max17x0x_cache_data {
-	struct max17x0x_reg atom;
-	u16 *cache_data;
-};
-
 static int max17x0x_cache_index_of(const struct max17x0x_cache_data *cache,
 				   unsigned int reg)
 {
@@ -748,7 +753,7 @@ static int max17x0x_cache_dup(struct max17x0x_cache_data *dst,
 	return 0;
 }
 
-static int max17x0x_nvram_cache_init(struct max17x0x_cache_data *cache,
+static int max17x0x_cache_init(struct max17x0x_cache_data *cache,
 				     u16 start, int end)
 {
 	const int count = end - start + 1; /* includes end */
@@ -767,13 +772,23 @@ static int max17x0x_nvram_cache_init(struct max17x0x_cache_data *cache,
 	return 0;
 }
 
-#define max1720x_nvram_cache_init(cache) \
-	max17x0x_nvram_cache_init(cache, MAX1720X_NVRAM_START, \
-					 MAX1720X_NVRAM_END)
-#define max1730x_nvram_cache_init(cache) \
-	max17x0x_nvram_cache_init(cache, MAX1730X_NVRAM_START, \
-					 MAX1730X_NVRAM_END)
+static int max17x0x_nvram_cache_init(struct max17x0x_cache_data *cache,
+				     int gauge_type)
+{
+	int ret;
 
+	if (gauge_type == MAX1730X_GAUGE_TYPE) {
+		ret = max17x0x_cache_init(cache,
+					  MAX1730X_NVRAM_START,
+					  MAX1730X_NVRAM_END);
+	} else {
+		ret = max17x0x_cache_init(cache,
+					  MAX1720X_NVRAM_START,
+					  MAX1720X_NVRAM_END);
+	}
+
+	return ret;
+}
 
 /** ------------------------------------------------------------------------ */
 
@@ -2076,7 +2091,6 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	struct max17x0x_cache_data nRAM_c;
 	struct max17x0x_cache_data nRAM_u;
 	int ver_idx = -1;
-	bool fg_reset = false;
 	u8 vreg, vval;
 
 	ret = max1720x_handle_dt_batt_id(chip);
@@ -2091,19 +2105,14 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 
 	if (max17xxx_gauge_type == -1)
 		return -EINVAL;
-
-	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+	else if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
 		propname = "maxim,n_regval_1730x";
-		ret = max1730x_nvram_cache_init(&nRAM_c);
-	} else {
+	else
 		propname = "maxim,n_regval_1720x";
-		ret = max1720x_nvram_cache_init(&nRAM_c);
-	}
 
+	ret = max17x0x_nvram_cache_init(&nRAM_c, max17xxx_gauge_type);
 	if (ret < 0)
 		return ret;
-
-
 
 	ret = max17x0x_cache_load(&nRAM_c, chip->regmap_nvram);
 	if (ret < 0) {
@@ -2114,6 +2123,7 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	ret = max17x0x_cache_dup(&nRAM_u, &nRAM_c);
 	if (ret < 0)
 		goto error_out;
+
 
 	/* apply overrides */
 	if (chip->batt_node) {
@@ -2148,15 +2158,21 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 					vreg);
 		} else if ((nRAM_u.cache_data[ver_idx] & 0xff) < vval) {
 			/* force version in dt, will write (and reset fg)
-			 * only when different from nRAM_c
+			 * only when less than the version in nRAM_c
 			 */
+			dev_info(chip->dev,
+				"DT version updated %d -> %d\n",
+				nRAM_u.cache_data[ver_idx] & 0xff,
+				vval);
+
 			nRAM_u.cache_data[ver_idx] &= 0xff00;
 			nRAM_u.cache_data[ver_idx] |= vval;
-			fg_reset = true;
+			chip->needs_reset = true;
 		}
 	}
 
 	if (max17x0x_cache_memcmp(&nRAM_c, &nRAM_u)) {
+		bool fg_reset = false;
 
 		if (ver_idx < 0) {
 			/* Versioning not enforced: nConvgCfg take effect
@@ -2175,10 +2191,11 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 			goto error_out;
 		}
 
+		/* different reason for reset */
 		if (fg_reset) {
+			chip->needs_reset = true;
 			dev_info(chip->dev,
 				"DT config differs from shadow, resetting\n");
-			max17x0x_fg_reset(chip);
 		}
 	}
 
@@ -2367,6 +2384,38 @@ static int set_irq_none_cnt(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(irq_none_cnt_fops, get_irq_none_cnt,
 	set_irq_none_cnt, "%llu\n");
+
+#define BATTERY_DEBUG_ATTRIBUTE(name, fn_read, fn_write) \
+static const struct file_operations name = {	\
+	.open	= simple_open,			\
+	.llseek	= no_llseek,			\
+	.read	= fn_read,			\
+	.write	= fn_write,			\
+}
+
+/* dump with "cat /d/max1720x/nvram_por | xxd"
+ * NOTE: for testing add a setter that initialize chip->nRAM_por (if not
+ * initialized) and use _load() to read NVRAM.
+ */
+static ssize_t debug_get_nvram_por(struct file *filp,
+				   char __user *buf,
+				   size_t count, loff_t *ppos)
+{
+	struct max1720x_chip *chip = (struct max1720x_chip *)filp->private_data;
+	int size;
+
+	if (!chip || !chip->nRAM_por.cache_data)
+		return -ENODATA;
+
+	size = chip->nRAM_por.atom.size > count ?
+			count : chip->nRAM_por.atom.size;
+
+	return simple_read_from_buffer(buf, count, ppos,
+		chip->nRAM_por.cache_data,
+		size);
+}
+
+BATTERY_DEBUG_ATTRIBUTE(debug_nvram_por_fops, debug_get_nvram_por, NULL);
 #endif
 
 static int init_debugfs(struct max1720x_chip *chip)
@@ -2375,9 +2424,12 @@ static int init_debugfs(struct max1720x_chip *chip)
 	struct dentry *de;
 
 	de = debugfs_create_dir("max1720x", 0);
-	if (de)
+	if (de) {
 		debugfs_create_file("irq_none_cnt", 0644, de,
 				   chip, &irq_none_cnt_fops);
+		debugfs_create_file("nvram_por", 0440, de,
+				   chip, &debug_nvram_por_fops);
+	}
 #endif
 	return 0;
 }
@@ -2410,7 +2462,7 @@ static u16 max1720x_read_rsense(const struct max1720x_chip *chip)
  * The only register left is 0x1D7 (MAX1730X_NPROTCFG), that is the register
  * that the code will used to determine the corruption.
  */
-static int max1730x_needs_recall(struct max1720x_chip *chip, u16 devname)
+static int max1730x_check_prot(struct max1720x_chip *chip, u16 devname)
 {
 	int needs_recall = 0;
 	u16 nprotcfg;
@@ -2430,6 +2482,14 @@ static int max1730x_needs_recall(struct max1720x_chip *chip, u16 devname)
 	return needs_recall;
 }
 
+static int max17x0x_nvram_recall(struct max1720x_chip *chip)
+{
+	REGMAP_WRITE(chip->regmap,
+			MAX1720X_COMMAND,
+			MAX17XXX_COMMAND_NV_RECALL);
+	msleep(MAX1720X_TPOR_MS);
+	return 0;
+}
 
 static int max17x0x_fixups(struct max1720x_chip *chip)
 {
@@ -2446,7 +2506,7 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 			const u16 devname = (chip->devname >> 4);
 			int needs_recall;
 
-			needs_recall = max1730x_needs_recall(chip, devname);
+			needs_recall = max1730x_check_prot(chip, devname);
 			if (needs_recall < 0) {
 				dev_err(chip->dev,
 					"error reading fg NV configuration\n");
@@ -2464,17 +2524,15 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 			} else {
 				dev_err(chip->dev, "Restoring FG NV configuration to sane values\n");
 
-				/* recall, force & reset SW */
-				REGMAP_WRITE(chip->regmap,
-						MAX1720X_COMMAND,
-						MAX1730X_COMMAND_NV_RECALL);
-
-				msleep(MAX1720X_TPOR_MS);
+				if (!chip->needs_reset) {
+					ret = max17x0x_nvram_recall(chip);
+					if (ret == 0)
+						chip->needs_reset = true;
+				}
 
 				REGMAP_WRITE(chip->regmap_nvram,
 						MAX1730X_NPROTCFG,
 						MAX1730X_NPROTCFG_PASS2);
-				max17x0x_fg_reset(chip);
 			}
 		} else {
 			dev_err(chip->dev, "nv-check disabled\n");
@@ -2518,12 +2576,10 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 				"0x1D0=%x updated to %x (%d)\n",
 				ndata, val, ret);
 		}
-
 	}
 
 	return ret;
 }
-
 
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
@@ -2533,8 +2589,31 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	if (of_property_read_bool(chip->dev->of_node, "maxim,force-hard-reset"))
 		max1720x_full_reset(chip);
 
+	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
+	if (ret < 0)
+		return -EPROBE_DEFER;
+
+	if (data & MAX1720X_STATUS_POR) {
+
+		ret = max17x0x_nvram_cache_init(&chip->nRAM_por,
+							max17xxx_gauge_type);
+		if (ret == 0)
+			ret = max17x0x_cache_load(&chip->nRAM_por,
+							chip->regmap_nvram);
+		if (ret < 0) {
+			dev_err(chip->dev, "POR: Failed to backup config\n");
+			return -EPROBE_DEFER;
+		}
+
+		dev_info(chip->dev, "POR recall NVRAM\n");
+		ret = max17x0x_nvram_recall(chip);
+		if (ret == 0)
+			chip->needs_reset = true;
+
+	}
+
 	ret = max17x0x_fixups(chip);
-	if (ret == -EPROBE_DEFER)
+	if (ret < 0)
 		return ret;
 
 	ret = max17x0x_handle_dt_shadow_config(chip);
@@ -2546,6 +2625,10 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 		return ret;
 
 	(void) max1720x_handle_dt_nconvgcfg(chip);
+
+	/* recall, force & reset SW */
+	if (chip->needs_reset)
+		max17x0x_fg_reset(chip);
 
 	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
 	if (!ret && data & MAX1720X_STATUS_BR) {
@@ -2575,8 +2658,7 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
 		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
 
-	/*
-	 * Capacity data is stored as complement so it will not be zero. Using
+	/* Capacity data is stored as complement so it will not be zero. Using
 	 * zero case to detect new un-primed pack
 	 */
 	ret = REGMAP_READ(chip->regmap_nvram, MAX17XXX_QHCA, &data);
