@@ -2137,9 +2137,7 @@ static int max17x0x_handle_dt_shadow_config(struct max1720x_chip *chip)
 	if (max17xxx_gauge_type == MAX1720X_GAUGE_TYPE)
 		max1720x_consistency_check(&nRAM_u);
 
-
-	ret = max17x0x_read_dt_version(chip->dev->of_node, &vreg, &vval);
-	if (ret == 0) {
+	if (max17x0x_read_dt_version(chip->dev->of_node, &vreg, &vval) == 0) {
 		/* Versioning enforced: reset the gauge (and overwrite
 		 * version) only if the version in device tree is
 		 * greater than the version in the gauge.
