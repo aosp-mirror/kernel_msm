@@ -51,6 +51,7 @@
 #define DRV_DEFAULTCC_UPDATE_INTERVAL	30000
 #define DRV_DEFAULTCV_UPDATE_INTERVAL	2000
 
+#define THERMAL_DAEMON_VOTER		"THERMAL_DAEMON_VOTER"
 #define USER_VOTER			"USER_VOTER"	/* same as QCOM */
 #define MSC_CHG_VOTER			"msc_chg"
 #define CHG_PPS_VOTER			"pps_chg"
@@ -220,7 +221,7 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 
 	/* normal when disconnected */
 	chg_drv->stop_charging = true;
-	GPSY_SET_PROP(chg_drv->chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 1);
+	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, true, 0);
 	/* when/if enabled */
 	GPSY_SET_PROP(chg_drv->chg_psy,
 		      POWER_SUPPLY_PROP_TAPER_CONTROL,
@@ -756,7 +757,7 @@ static void chg_work(struct work_struct *work)
 	} else if (chg_drv->stop_charging) {
 	/* might be disabled later due to is_charging_enabled */
 		pr_info("MSC_CHG power source detected, enabling charging\n");
-		GPSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 0);
+		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, false, 0);
 		chg_drv->stop_charging = false;
 	}
 
@@ -780,8 +781,8 @@ static void chg_work(struct work_struct *work)
 
 	if (disable_charging != chg_drv->disable_charging) {
 		pr_info("MSC_CHG set disable_charging(%d)", disable_charging);
-		GPSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE,
-			     disable_charging);
+		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER,
+				disable_charging != 0, 0);
 		vote(chg_drv->msc_fcc_votable,
 			MSC_USER_CHG_LEVEL_VOTER, disable_charging, 0);
 	}
@@ -1564,7 +1565,7 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, 0);
 	/* prevent all changes until chg_work run */
 	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
-	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, true, 0);
+	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, false, 0);
 
 	return 0;
 
@@ -1597,8 +1598,6 @@ static int chg_get_cur_charge_cntl_limit(struct thermal_cooling_device *tcd,
 	*lvl = tdev->current_level;
 	return 0;
 }
-
-#define THERMAL_DAEMON_VOTER	"THERMAL_DAEMON_VOTER"
 
 static int
 chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
