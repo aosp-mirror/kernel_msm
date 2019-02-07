@@ -1513,12 +1513,13 @@ static void max1720x_handle_update_empty_voltage(struct max1720x_chip *chip,
 						 int temp)
 {
 	int cycle, idx, ret = 0;
-	u16 empty_volt_cfg, reg, data = 0;
+	u16 empty_volt_cfg, reg, data, vempty = 0;
 
 	if (chip->empty_voltage == NULL)
 		return;
 
 	ret = REGMAP_READ(chip->regmap, MAX1720X_CYCLES, &data);
+	ret |= REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, &vempty);
 	if (ret == 0) {
 		cycle = reg_to_cycles(data);
 		idx = cycle / CYCLE_LEVEL_SIZE;
@@ -1528,14 +1529,14 @@ static void max1720x_handle_update_empty_voltage(struct max1720x_chip *chip,
 						       temp < 0 ? 0:1,
 						       idx);
 		reg = (empty_volt_cfg / 10) << 7 | 0x61;
-		REGMAP_WRITE(chip->regmap,
-			     MAX1720X_VEMPTY,
-			     reg);
+		if (reg != vempty) {
+			REGMAP_WRITE(chip->regmap, MAX1720X_VEMPTY,  reg);
 
-		pr_debug("updating empty_voltage to %d(0x%04X), temp:%d(%d), cycle:%d(%d)\n",
-			 empty_volt_cfg, reg,
-			 temp, temp < 0 ? 0 : 1,
-			 cycle, idx);
+			pr_debug("updating empty_voltage to %d(0x%04X), temp:%d(%d), cycle:%d(%d)\n",
+				 empty_volt_cfg, reg,
+				 temp, temp < 0 ? 0 : 1,
+				 cycle, idx);
+		}
 	}
 }
 
