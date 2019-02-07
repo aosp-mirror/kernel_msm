@@ -346,6 +346,7 @@ struct iaxxx_priv {
 
 	/* Power transition Statistcis */
 	struct iaxxx_pwr_stats *pwr_stats;
+	int int_osc_trim_period;
 };
 
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)

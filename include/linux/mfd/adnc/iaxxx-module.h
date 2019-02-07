@@ -52,6 +52,10 @@ struct iaxxx_pwr_stats {
 	uint32_t apll_cumulative_cnts[NUM_APLL_CLK_FREQ];
 };
 
+struct iaxxx_osc_trim_period {
+	int period;
+};
+
 struct iaxxx_sensor_info {
 	uint32_t block_id;
 	uint32_t inst_id;
@@ -83,4 +87,5 @@ struct iaxxx_script_info {
 #define SCRIPT_TRIGGER _IO(IAXXX_IOCTL_MAGIC, 0x63)
 
 #define IAXXX_POWER_STATS_COUNT _IO(IAXXX_IOCTL_MAGIC, 0x71)
+#define IAXXX_SET_OSC_TRIM_PERIOD _IO(IAXXX_IOCTL_MAGIC, 0x72)
 #endif /* __IAXXX_MODULE_H__ */

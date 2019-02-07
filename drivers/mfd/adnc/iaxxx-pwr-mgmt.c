@@ -855,3 +855,34 @@ exit:
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_get_pwr_stats);
+
+/* iaxxx_set_osc_trim_period
+ * Non zero values would enable trimming and set the period in seconds.
+ * Zero would disable the feature. Ensure that 32.56 Khz ext clock is been
+ * provided
+ */
+int iaxxx_set_osc_trim_period(struct iaxxx_priv *priv, int period)
+{
+	int rc;
+
+	rc = regmap_update_bits(priv->regmap,
+		IAXXX_SRB_SYS_POWER_CTRL_ADDR,
+		IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_FREQ_MASK |
+		IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_PERIOD_MASK,
+		IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_FREQ_MASK |
+		(period << IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_PERIOD_POS));
+
+	if (rc) {
+		dev_err(priv->dev, "%s Failed to set Osc Trim period\n",
+				__func__);
+		return rc;
+	}
+
+	rc = iaxxx_send_update_block_no_wait(priv->dev, IAXXX_HOST_0);
+
+	if (rc)
+		dev_err(priv->dev, "Update block failed in %s\n", __func__);
+
+	msleep(20);
+	return rc;
+}

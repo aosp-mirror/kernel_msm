@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/mfd/adnc/iaxxx-module.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
+#include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
@@ -39,6 +40,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_script_info script_info;
 	struct iaxxx_sensor_param param_info;
 	struct iaxxx_pwr_stats pwr_stats_count;
+	struct iaxxx_osc_trim_period osc_trim_period;
 	uint16_t script_id;
 	int ret = -EINVAL;
 
@@ -205,6 +207,27 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 
 		return 0;
+
+	case IAXXX_SET_OSC_TRIM_PERIOD:
+		if  (copy_from_user(&osc_trim_period, (void __user *)arg,
+					sizeof(struct iaxxx_osc_trim_period)))
+			return -EFAULT;
+		if (osc_trim_period.period < 0)
+			return -EINVAL;
+
+		if (osc_trim_period.period != priv->int_osc_trim_period) {
+			ret = iaxxx_set_osc_trim_period(priv,
+					osc_trim_period.period);
+			if (ret) {
+				pr_err("%s() Failed to set Osc trim period\n",
+						__func__);
+				return ret;
+			}
+
+			priv->int_osc_trim_period = osc_trim_period.period;
+		}
+		break;
+
 	default:
 		break;
 	}

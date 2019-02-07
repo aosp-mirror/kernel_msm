@@ -639,6 +639,32 @@ static ssize_t iaxxx_fwcrash_handling_disable(struct device *dev,
 static DEVICE_ATTR(fwcrash_handling_disable, 0200, NULL,
 		iaxxx_fwcrash_handling_disable);
 
+static ssize_t iaxxx_sysfs_set_osc_trim_period(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
+	int val, rc = -1;
+
+	if (!buf)
+		return -EINVAL;
+	if (kstrtoint(buf, 0, &val))
+		return -EINVAL;
+	if (val < 0)
+		return -EINVAL;
+
+	mutex_lock(&priv->test_mutex);
+	rc = iaxxx_set_osc_trim_period(priv, val);
+	mutex_unlock(&priv->test_mutex);
+
+	if (rc)
+		dev_info(dev, "%s() Fail\n", __func__);
+	else
+		dev_info(dev, "%s() Success\n", __func__);
+	return count;
+}
+static DEVICE_ATTR(osc_trim_period, 0200, NULL,
+		iaxxx_sysfs_set_osc_trim_period);
+
 /*
  * sysfs attr info
  */
@@ -663,6 +689,7 @@ static struct attribute *iaxxx_attrs[] = {
 	&dev_attr_simulate_fwcrash.attr,
 	&dev_attr_runtime_pm_disable.attr,
 	&dev_attr_fwcrash_handling_disable.attr,
+	&dev_attr_osc_trim_period.attr,
 	NULL,
 };
 
