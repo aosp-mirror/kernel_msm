@@ -47,6 +47,16 @@
 
 static struct abc_device *abc_dev;
 
+enum l1_entry_delay_value {
+	delay_1us,
+	delay_2us,
+	delay_4us,
+	delay_8us,
+	delay_16us,
+	delay_32us,
+	delay_64us
+};
+
 static void abc_pcie_enable_irqs(struct pci_dev *pdev);
 static void abc_pcie_disable_irqs(struct pci_dev *pdev);
 
@@ -474,6 +484,26 @@ static void abc_l12_timeout_ctrl(bool enable)
 
 }
 
+static void abc_set_l1_entry_delay(enum l1_entry_delay_value delay,
+	bool use_l0s_for_entry)
+{
+	u32 val = readl_relaxed(abc_dev->pcie_config
+				+ ACK_F_ASPM_CTRL_OFF);
+	__iormb();
+	val &= ~ACK_F_ASPM_CTRL_OFF_L1_DELAY_MASK;
+	val |= ((delay << ACK_F_ASPM_CTRL_OFF_L1_DELAY_POS)
+		& ACK_F_ASPM_CTRL_OFF_L1_DELAY_MASK);
+
+	if (use_l0s_for_entry)
+		val &= (~ACK_F_ASPM_CTRL_OFF_N_L0S_ENTRY_MASK);
+	else
+		val |= ACK_F_ASPM_CTRL_OFF_N_L0S_ENTRY_MASK;
+
+	__iowmb();
+	writel_relaxed(val,
+		abc_dev->pcie_config + ACK_F_ASPM_CTRL_OFF);
+}
+
 static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 {
 	u32 aspm_l11_l12;
@@ -536,8 +566,13 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
 	}
 
-	/* Clock Request Enable*/
-	writel_relaxed(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
+	if (pmctrl->l1_en) {
+		/* Clock Request Enable*/
+		writel_relaxed(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
+		/* 32us delay was selected after testing */
+		abc_set_l1_entry_delay(delay_32us, pmctrl->l0s_en);
+	}
+
 	return 0;
 }
 
