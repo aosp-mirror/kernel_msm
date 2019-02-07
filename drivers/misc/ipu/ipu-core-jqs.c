@@ -302,6 +302,9 @@ static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 	ipu_core_writel(bus, JQS_CONTROL_CORE_FETCH_EN_MASK,
 			IPU_CSR_AON_OFFSET + JQS_CONTROL);
 
+	/* Enable automatic idle clock gating for MMU, BIF, SSP, and DMA */
+	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + CLK_GATE_CONTROL);
+
 	return 0;
 }
 
@@ -310,6 +313,13 @@ static void ipu_core_jqs_power_disable(struct paintbox_bus *bus)
 	/* If the PCIe link is down then there is nothing to be done. */
 	if (!ipu_core_is_ready(bus))
 		return;
+
+	/* Disable automatic idle clock gating for MMU, BIF, SSP, and DMA */
+	ipu_core_writel(bus, CLK_GATE_CONTROL_MMU_IDLE_GATE_DIS_MASK |
+			CLK_GATE_CONTROL_BIF_IDLE_GATE_DIS_MASK |
+			CLK_GATE_CONTROL_SSP_IDLE_GATE_DIS_MASK |
+			CLK_GATE_CONTROL_DMA_IDLE_GATE_DIS_MASK,
+			IPU_CSR_AON_OFFSET + CLK_GATE_CONTROL);
 
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
 

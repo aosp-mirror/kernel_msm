@@ -32,6 +32,29 @@
 /* Delay for system to stabilize before sending real traffic */
 #define CORE_SYSTEM_STABLIZE_TIME 100 /* us */
 
+static inline void ipu_power_enable_core_idle_clock_gating(
+		struct paintbox_data *pb)
+{
+	ipu_writel(pb->dev, ~pb->power.stp_active_mask &
+			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS_DEF,
+			IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS);
+	ipu_writel(pb->dev, ~pb->power.lbp_active_mask &
+			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS_DEF,
+			IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS);
+}
+
+static void ipu_power_disable_core_idle_clock_gating(struct paintbox_data *pb)
+{
+	ipu_writel(pb->dev, CLK_GATE_CONTROL_STP_IDLE_GATE_DIS_DEF,
+			IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS);
+	ipu_writel(pb->dev, CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS_DEF,
+			IPU_CSR_AON_OFFSET +
+			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS);
+}
+
 void ipu_power_enable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 {
 	if (WARN_ON(--pb->power.bif_mmu_clock_idle_disable_ref_count < 0))
@@ -47,7 +70,8 @@ void ipu_power_enable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 				CLK_GATE_CONTROL);
 		val &= ~(CLK_GATE_CONTROL_MMU_IDLE_GATE_DIS_MASK |
 				CLK_GATE_CONTROL_BIF_IDLE_GATE_DIS_MASK |
-				CLK_GATE_CONTROL_SSP_IDLE_GATE_DIS_MASK);
+				CLK_GATE_CONTROL_SSP_IDLE_GATE_DIS_MASK |
+				CLK_GATE_CONTROL_DMA_IDLE_GATE_DIS_MASK);
 		ipu_writel(pb->dev, val, IPU_CSR_AON_OFFSET +
 				CLK_GATE_CONTROL);
 	}
@@ -65,13 +89,13 @@ void ipu_power_disable_mmu_bif_idle_clock_gating(struct paintbox_data *pb)
 				CLK_GATE_CONTROL);
 		val |= CLK_GATE_CONTROL_MMU_IDLE_GATE_DIS_MASK |
 			CLK_GATE_CONTROL_BIF_IDLE_GATE_DIS_MASK |
-			CLK_GATE_CONTROL_SSP_IDLE_GATE_DIS_MASK;
+			CLK_GATE_CONTROL_SSP_IDLE_GATE_DIS_MASK |
+			CLK_GATE_CONTROL_DMA_IDLE_GATE_DIS_MASK;
 		ipu_writel(pb->dev, val, IPU_CSR_AON_OFFSET +
 				CLK_GATE_CONTROL);
 	}
 
 	pb->power.bif_mmu_clock_idle_disable_ref_count++;
-
 }
 
 /* The caller to this function must hold pb->lock */
@@ -80,7 +104,6 @@ void ipu_power_enable_cores(struct paintbox_data *pb,
 {
 	uint32_t max_core_mask, active_core_mask;
 	unsigned int active_cores;
-	uint32_t reg;
 
 	/* If the active core count is already at our requested core count then
 	 * there is nothing to do.
@@ -90,18 +113,9 @@ void ipu_power_enable_cores(struct paintbox_data *pb,
 
 	/* The maximum number of cores is equal to the number of STPs. */
 	max_core_mask = (1 << pb->stp.num_stps) - 1;
-
 	active_core_mask = (1 << requested_cores) - 1;
 
-	/* Disable STP idle clock gating */
-	ipu_writel(pb->dev, active_core_mask, IPU_CSR_AON_OFFSET +
-			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS);
-
-	/* Disable LBP idle clock gating */
-	ipu_writel(pb->dev, (active_core_mask << 1) | 0x1,
-			IPU_CSR_AON_OFFSET +
-			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS);
-
+	ipu_power_disable_core_idle_clock_gating(pb);
 	ipu_power_disable_mmu_bif_idle_clock_gating(pb);
 
 	/* IPU cores need to be enabled in sequence in pairs */
@@ -169,19 +183,8 @@ void ipu_power_enable_cores(struct paintbox_data *pb,
 
 	ipu_power_enable_mmu_bif_idle_clock_gating(pb);
 
-	/* Enable STP idle clock gating */
-	reg = ipu_readl(pb->dev, IPU_CSR_AON_OFFSET +
-			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS);
-	reg &= ~active_core_mask;
-	ipu_writel(pb->dev, reg, IPU_CSR_AON_OFFSET +
-			CLK_GATE_CONTROL_STP_IDLE_GATE_DIS);
-
-	/* Enable LBP idle clock gating */
-	reg = ipu_readl(pb->dev, IPU_CSR_AON_OFFSET +
-			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS);
-	reg &= ~((active_core_mask << 1) | 0x1);
-	ipu_writel(pb->dev, reg, IPU_CSR_AON_OFFSET +
-			CLK_GATE_CONTROL_LBP_IDLE_GATE_DIS);
+	/* Re-enable LBP and STP idle clock gating for active cores. */
+	ipu_power_enable_core_idle_clock_gating(pb);
 
 	pb->power.active_core_count = requested_cores;
 }
@@ -206,6 +209,7 @@ void ipu_power_disable_cores(struct paintbox_data *pb,
 	/* The maximum number of cores is equal to the number of STPs. */
 	max_core_mask = (1 << pb->stp.num_stps) - 1;
 
+	ipu_power_disable_core_idle_clock_gating(pb);
 	ipu_power_disable_mmu_bif_idle_clock_gating(pb);
 
 	do {
@@ -243,12 +247,19 @@ void ipu_power_disable_cores(struct paintbox_data *pb,
 		ipu_writel(pb->dev, new_core_mask_n,
 				IPU_CSR_AON_OFFSET + CORE_POWER_ON_N);
 
+		/* Make sure the PRE bits for core power are turned off. */
+		ipu_writel(pb->dev, new_core_mask_n,
+				IPU_CSR_AON_OFFSET + CORE_POWER_ON_N + 4);
+
 		pb->power.active_core_count = new_active_cores;
 	} while (pb->power.active_core_count > requested_cores);
 
 	udelay(CORE_SYSTEM_STABLIZE_TIME);
 
 	ipu_power_enable_mmu_bif_idle_clock_gating(pb);
+
+	/* Re-enable LBP and STP idle clock gating for active cores. */
+	ipu_power_enable_core_idle_clock_gating(pb);
 }
 
 int ipu_power_enable_cores_ioctl(struct paintbox_data *pb,
@@ -282,6 +293,8 @@ int ipu_power_enable_cores_ioctl(struct paintbox_data *pb,
 		goto exit;
 	}
 
+	pb->power.stp_active_mask |= masked_stp_enable >> 1;
+
 	/* Mark every STP indicated in the masks as powered up and get
 	 * highest STP ID.
 	 */
@@ -301,6 +314,8 @@ int ipu_power_enable_cores_ioctl(struct paintbox_data *pb,
 	}
 
 	masked_lbp_enable = session->lbp_id_mask & req.lbp_mask;
+	pb->power.lbp_active_mask |= masked_lbp_enable;
+
 	/* Mark every LBP indicated in the masks as powered up and get
 	 * highest LBP ID.
 	 */
@@ -370,6 +385,8 @@ int ipu_power_disable_cores_ioctl(struct paintbox_data *pb,
 		goto exit;
 	}
 
+	pb->power.stp_active_mask &= ~(masked_stp_disable >> 1);
+
 	/* Mark every STP indicated in the masks as powered down. */
 	while (masked_stp_disable) {
 		if (masked_stp_disable & 0x1) {
@@ -382,6 +399,9 @@ int ipu_power_disable_cores_ioctl(struct paintbox_data *pb,
 	}
 
 	masked_lbp_disable = session->lbp_id_mask & req.lbp_mask;
+
+	pb->power.lbp_active_mask &= ~masked_lbp_disable;
+
 	/* Mark every LBP indicated in the masks as powered down. */
 	while (masked_lbp_disable) {
 		if (masked_lbp_disable & 0x1) {

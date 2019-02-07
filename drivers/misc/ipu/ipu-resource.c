@@ -49,6 +49,11 @@ static int ipu_resource_send_allocate(struct paintbox_data *pb,
 	req.lbp_id_mask = session->lbp_id_mask;
 	req.dma_channel_id_mask = session->dma_channel_id_mask;
 
+	dev_dbg(pb->dev,
+			"%s: session id %u stp mask: 0x%08x lbp mask: 0x%08x dma mask: 0x%08x\n",
+			__func__, req.session_id, req.stp_id_mask,
+			req.lbp_id_mask, req.dma_channel_id_mask);
+
 	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&req);
 }
 
@@ -64,6 +69,11 @@ static int ipu_resource_send_release(struct paintbox_data *pb,
 	req.stp_id_mask = session->stp_id_mask;
 	req.lbp_id_mask = session->lbp_id_mask;
 	req.dma_channel_id_mask = session->dma_channel_id_mask;
+
+	dev_dbg(pb->dev,
+			"%s: session id %u stp mask: 0x%08x lbp mask: 0x%08x dma mask: 0x%08x\n",
+			__func__,req.session_id, req.stp_id_mask,
+			req.lbp_id_mask, req.dma_channel_id_mask);
 
 	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&req);
 }
@@ -100,8 +110,8 @@ static void ipu_resource_remove_stps_from_session(struct paintbox_data *pb,
 		session->stp_id_mask &= ~(1 << stp->stp_id);
 
 		pb->stp.available_stp_mask |= 1ULL << stp->stp_id;
-
-		dev_dbg(pb->dev, "stp%u release\n", stp->stp_id);
+		pb->power.stp_active_mask &= ~(1 <<
+				ipu_stp_id_to_index(stp->stp_id));
 	}
 }
 
@@ -137,6 +147,7 @@ static void ipu_resource_remove_lbps_from_session(struct paintbox_data *pb,
 		session->lbp_id_mask &= ~(1 << lbp->pool_id);
 
 		pb->lbp.available_lbp_mask |= 1ULL << lbp->pool_id;
+		pb->power.lbp_active_mask &= ~(1 << lbp->pool_id);
 
 		dev_dbg(pb->dev, "lbp%u release\n", lbp->pool_id);
 	}
