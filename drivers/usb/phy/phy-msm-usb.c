@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  *
  */
-#define DEBUG
 
 #include <linux/module.h>
 #include <linux/device.h>
@@ -3656,9 +3655,6 @@ static DEVICE_ATTR(dpdm_pulldown_enable, 0644,
 static int msm_otg_vbus_notifier(struct notifier_block *nb, unsigned long event,
 				void *ptr)
 {
-	pr_err("%s: extcon vbus notify\n", __func__);
-	dump_stack();
-
 	msm_otg_set_vbus_state(!!event);
 
 	return NOTIFY_DONE;
@@ -3684,11 +3680,6 @@ static int msm_otg_extcon_register(struct msm_otg *motg)
 	struct device_node *node = motg->pdev->dev.of_node;
 	struct extcon_dev *edev;
 	int ret = 0;
-
-	if (motg->extcon_registered) {
-		dev_info(&motg->pdev->dev, "extcon_nb already registered\n");
-		return 0;
-	}
 
 	if (!of_property_read_bool(node, "extcon"))
 		return 0;
@@ -3726,7 +3717,6 @@ static int msm_otg_extcon_register(struct msm_otg *motg)
 			goto err;
 		}
 	}
-	motg->extcon_registered = true;
 
 	return 0;
 err:
@@ -3739,8 +3729,6 @@ err:
 
 static void msm_otg_handle_initial_extcon(struct msm_otg *motg)
 {
-	pr_err("%s: extcon initial\n", __func__);
-
 	if (motg->extcon_vbus && extcon_get_cable_state_(motg->extcon_vbus,
 							EXTCON_USB))
 		msm_otg_vbus_notifier(&motg->vbus_nb, true, motg->extcon_vbus);
@@ -3755,7 +3743,6 @@ static void msm_otg_extcon_register_work(struct work_struct *w)
 	struct msm_otg *motg = container_of(w, struct msm_otg,
 						extcon_register_work);
 
-	pr_err("%s: extcon work entry, unregister\n", __func__);
 	power_supply_unreg_notifier(&motg->psy_nb);
 
 	if (msm_otg_extcon_register(motg)) {
@@ -3764,7 +3751,6 @@ static void msm_otg_extcon_register_work(struct work_struct *w)
 	}
 
 	msm_otg_handle_initial_extcon(motg);
-	pr_err("%s: extcon work exit\n", __func__);
 }
 
 static int msm_otg_psy_changed(struct notifier_block *nb, unsigned long evt,
@@ -3776,7 +3762,6 @@ static int msm_otg_psy_changed(struct notifier_block *nb, unsigned long evt,
 						evt != PSY_EVENT_PROP_CHANGED)
 		return 0;
 
-	pr_err("%s: psy_changed notify. queue_work\n", __func__);
 	queue_work(motg->otg_wq, &motg->extcon_register_work);
 
 	return 0;
@@ -4548,7 +4533,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 	 */
 	ret = msm_otg_extcon_register(motg);
 	if (ret) {
-		dev_err(&pdev->dev, "Registering PSY notifier for extcon\n");
+		dev_dbg(&pdev->dev, "Registering PSY notifier for extcon\n");
 		motg->psy_nb.notifier_call = msm_otg_psy_changed;
 		power_supply_reg_notifier(&motg->psy_nb);
 	} else {
