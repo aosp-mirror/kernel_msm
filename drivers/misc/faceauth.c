@@ -81,7 +81,7 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 			    enum dma_data_direction dir);
 static int dma_send_fw(const char *path, const int remote_addr);
-static int dma_read_dw(struct file *file, const int remote_addr, int *val);
+static int dma_read_dw(const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
 static int pio_write_qw(const int remote_addr, const uint64_t val);
 #if ENABLE_AIRBRUSH_DEBUG
@@ -104,9 +104,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				   unsigned long arg);
 
-struct faceauth_data {
-	int dma_dw_buf;
-};
 bool hypx_enable;
 uint64_t m0_verbosity_level;
 struct dentry *faceauth_debugfs_root;
@@ -334,15 +331,13 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		start_step_data.result = ab_result;
 		start_step_data.bin_bitmap = bin_result;
 
-		dma_read_dw(file,
-			    AB_INTERNAL_STATE_ADDR +
+		dma_read_dw(AB_INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,
 					     error_code),
 			    &dma_read_value);
 		start_step_data.error_code = dma_read_value;
 
-		dma_read_dw(file,
-			    AB_INTERNAL_STATE_ADDR +
+		dma_read_dw(AB_INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,
 					     faceauth_version),
 			    &dma_read_value);
@@ -543,23 +538,11 @@ exit:
 
 static int faceauth_open(struct inode *inode, struct file *file)
 {
-	struct faceauth_data *data;
-
-	data = vmalloc(sizeof(*data));
-	if (!data) {
-		pr_err("Failed to vmalloc DW buffer\n");
-		return -ENOMEM;
-	}
-	file->private_data = (void *)data;
-
 	return 0;
 }
 
-static int faceauth_free(struct inode *inode, struct file *file)
+static int faceauth_release(struct inode *inode, struct file *file)
 {
-	struct faceauth_data *data = file->private_data;
-
-	vfree(data);
 	return 0;
 }
 
@@ -568,7 +551,7 @@ static const struct file_operations faceauth_dev_operations = {
 	.unlocked_ioctl = faceauth_dev_ioctl,
 	.compat_ioctl = faceauth_dev_ioctl,
 	.open = faceauth_open,
-	.release = faceauth_free,
+	.release = faceauth_release,
 };
 
 static struct miscdevice faceauth_miscdevice = {
@@ -590,7 +573,6 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir)
 {
 	struct abc_pcie_dma_desc dma_desc;
-	int err = 0;
 
 	/* Transfer workload to target memory in Airbrush */
 	memset(&dma_desc, 0, sizeof(dma_desc));
@@ -600,8 +582,7 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.size = size;
 	dma_desc.dir = dir;
-	err = abc_pcie_issue_dma_xfer(&dma_desc);
-	return err;
+	return abc_pcie_issue_dma_xfer(&dma_desc);
 }
 
 /**
@@ -617,7 +598,6 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 			    enum dma_data_direction dir)
 {
 	struct abc_pcie_dma_desc dma_desc;
-	int err = 0;
 
 	/* Transfer workload to target memory in Airbrush */
 	memset(&dma_desc, 0, sizeof(dma_desc));
@@ -627,8 +607,7 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 	dma_desc.remote_buf_type = DMA_BUFFER_USER;
 	dma_desc.size = size;
 	dma_desc.dir = dir;
-	err = abc_pcie_issue_dma_xfer_vmalloc(&dma_desc);
-	return err;
+	return abc_pcie_issue_dma_xfer_vmalloc(&dma_desc);
 }
 
 /**
@@ -665,18 +644,15 @@ static int dma_send_fw(const char *path, const int remote_addr)
  * @param[in] val Variable to store read-back DW
  * @return Status, zero if succeed, non-zero if fail
  */
-static int dma_read_dw(struct file *file, const int remote_addr, int *val)
+static int dma_read_dw(const int remote_addr, int *val)
 {
 	int err = 0;
-	struct faceauth_data *data = file->private_data;
 
-	err = dma_xfer_vmalloc(&data->dma_dw_buf, sizeof(*val), remote_addr,
-			       DMA_FROM_DEVICE);
+	err = dma_xfer_vmalloc(val, sizeof(*val), remote_addr, DMA_FROM_DEVICE);
 	if (err) {
 		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
 		return err;
 	}
-	*val = data->dma_dw_buf;
 	return 0;
 }
 
@@ -791,8 +767,7 @@ static int dma_gather_debug_data(struct file *file, void *destination_buffer,
 	uint32_t current_offset;
 	struct faceauth_debug_image input_image;
 
-	dma_read_dw(file,
-		    AB_INTERNAL_STATE_ADDR +
+	dma_read_dw(AB_INTERNAL_STATE_ADDR +
 			    offsetof(struct faceauth_airbrush_state,
 				     internal_state_size),
 		    &internal_state_struct_size);
@@ -817,8 +792,7 @@ static int dma_gather_debug_data(struct file *file, void *destination_buffer,
 			return err;
 		}
 
-		dma_read_dw(file,
-			    AB_INTERNAL_STATE_ADDR +
+		dma_read_dw(AB_INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,
 					     command),
 			    &command);
