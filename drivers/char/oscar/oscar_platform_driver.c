@@ -72,6 +72,9 @@
 #define OSCAR_N_IRQS		2 /* logical interrupts 0 and 1 are IRQs */
 #define OSCAR_N_INTS		3 /* 3 logical interrupts including mux'ed */
 
+#define SC_0_IRQ_NAME		"tpu-scalar-core-0-irq"
+#define INST_QUEUE_IRQ_NAME	"tpu-instr-queue-irq"
+
 /*
  * The total number of entries in the page table. Should match the value read
  * from the register OSCAR_BAR_REG_HIB_PAGE_TABLE_SIZE.
@@ -1311,27 +1314,27 @@ static int oscar_setup_device(struct platform_device *pdev,
 	gasket_dev->bar_data[OSCAR_BAR_INDEX].length_bytes = mem_size;
 	gasket_dev->bar_data[OSCAR_BAR_INDEX].virt_base = mem_virt;
 
-	irq = platform_get_irq_byname(pdev, "tpu-scalar-core-0-irq");
+	irq = platform_get_irq_byname(pdev, SC_0_IRQ_NAME);
 	if (irq < 0) {
-		dev_err(dev, "cannot get scalar core 0 irq\n");
+		dev_err(dev, "cannot get %s\n", SC_0_IRQ_NAME);
 		return -ENODEV;
 	}
 	oscar_dev->irqs[OSCAR_SCALAR_CORE_0_INT] = irq;
 	ret = devm_request_irq(dev, irq, oscar_interrupt_handler, IRQF_ONESHOT,
-			       dev_name(dev), oscar_dev);
+			       SC_0_IRQ_NAME, oscar_dev);
 	if (ret) {
 		dev_err(dev, "failed to request irq %d\n", irq);
 		return ret;
 	}
 
-	irq = platform_get_irq_byname(pdev, "tpu-instr-queue-irq");
+	irq = platform_get_irq_byname(pdev, INST_QUEUE_IRQ_NAME);
 	if (irq < 0) {
-		dev_err(dev, "cannot get instruction queue irq\n");
+		dev_err(dev, "cannot get %s\n", INST_QUEUE_IRQ_NAME);
 		return -ENODEV;
 	}
 	oscar_dev->irqs[OSCAR_INSTR_QUEUE_INT] = irq;
 	ret = devm_request_irq(dev, irq, oscar_interrupt_handler, IRQF_ONESHOT,
-			       dev_name(dev), oscar_dev);
+			       INST_QUEUE_IRQ_NAME, oscar_dev);
 	if (ret) {
 		dev_err(dev, "failed to request irq %d\n", irq);
 		return -ENODEV;
