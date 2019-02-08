@@ -6054,13 +6054,15 @@ void ufshcd_complete_lrb(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 
 	lrbp->cmd = NULL;
 
-	/* Do not touch lrbp after scsi done */
-	cmd->scsi_done(cmd);
 	clear_bit_unlock(index, &hba->lrb_in_use);
-
 #ifdef CONFIG_SCSI_UFS_IMPAIRED
 	__clear_bit(index, &hba->delayed_reqs);
 #endif
+	__ufshcd_release(hba, false);
+	__ufshcd_hibern8_release(hba, false);
+
+	/* Do not touch lrbp after scsi done */
+	cmd->scsi_done(cmd);
 }
 
 /**
@@ -6082,8 +6084,6 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			cmd->result = ufshcd_transfer_rsp_status(hba, lrbp);
 			scsi_dma_unmap(cmd);
 			hba->ufs_stats.clk_rel.ctx = XFR_REQ_COMPL;
-			__ufshcd_release(hba, false);
-			__ufshcd_hibern8_release(hba, false);
 			if (cmd->request) {
 				ufshcd_vops_pm_qos_req_end(
 						hba, cmd->request, false);
