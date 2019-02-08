@@ -137,7 +137,7 @@ struct chg_drv {
 
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
-	struct votable *dc_icl_votable;
+	struct votable	*dc_icl_votable;
 
 	int fv_uv;		/* newgen */
 	int cc_max;		/* newgen */
@@ -1028,20 +1028,16 @@ static int set_chg_mode(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(chg_mode_fops, get_chg_mode, set_chg_mode, "%llu\n");
 
-/* NOTE: these are now created in qcom code, will later create hre */
+/* TODO: now created in qcom code, create in chg_create_votables() */
 static int chg_find_votables(struct chg_drv *chg_drv)
 {
 	if (!chg_drv->usb_icl_votable)
 		chg_drv->usb_icl_votable = find_votable("USB_ICL");
-	if (!chg_drv->dc_icl_votable)
-		chg_drv->dc_icl_votable = find_votable("DC_ICL");
 	if (!chg_drv->dc_suspend_votable)
 		chg_drv->dc_suspend_votable = find_votable("DC_SUSPEND");
 
-	return (!chg_drv->usb_icl_votable ||
-		!chg_drv->dc_suspend_votable ||
-		!chg_drv->usb_icl_votable)
-			? -EINVAL : 0;
+	return (!chg_drv->usb_icl_votable || !chg_drv->dc_suspend_votable)
+		? -EINVAL : 0;
 }
 
 static int chg_get_input_suspend(void *data, u64 *val)
@@ -1512,7 +1508,6 @@ static int msc_chg_disable_cb(struct votable *votable, void *data,
 	return 0;
 }
 
-
 static int chg_create_votables(struct chg_drv *chg_drv)
 {
 	int ret;
@@ -1639,6 +1634,9 @@ chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 
 	if (lvl < 0 || tdev->thermal_levels <= 0 || lvl > tdev->thermal_levels)
 		return -EINVAL;
+
+	if (!chg_drv->dc_icl_votable)
+		chg_drv->dc_icl_votable = find_votable("DC_ICL");
 
 	tdev->current_level = lvl;
 
@@ -1941,6 +1939,11 @@ static int google_charger_probe(struct platform_device *pdev)
 	if (ret < 0)
 		pr_err("Failed to create votables, ret=%d\n", ret);
 
+	/* will create in chg_create_votables() */
+	if (!chg_drv->dc_icl_votable)
+		chg_drv->dc_icl_votable = find_votable("DC_ICL");
+	if (!chg_drv->dc_icl_votable)
+		pr_err("Failed to find dc_icl_votable\n");
 
 	schedule_delayed_work(&chg_drv->init_work,
 			      msecs_to_jiffies(CHG_DELAY_INIT_MS));
