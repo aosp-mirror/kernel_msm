@@ -764,15 +764,6 @@ static int ab_clk_probe(struct platform_device *pdev)
 					"diablo,abc-clock-aon")) {
 			abc_clk_aon_init(child);
 		} else if (of_device_is_compatible(child,
-					"diablo,abc-clock-core")) {
-			abc_clk_core_init(child);
-		} else if (of_device_is_compatible(child,
-					"diablo,abc-clock-fsys")) {
-			abc_clk_fsys_init(child);
-		} else if (of_device_is_compatible(child,
-					"diablo,abc-clock-mif")) {
-			abc_clk_mif_init(child);
-		} else if (of_device_is_compatible(child,
 					"diablo,abc-clock-ipu")) {
 			abc_clk_ipu_init(child);
 		} else if (of_device_is_compatible(child,
