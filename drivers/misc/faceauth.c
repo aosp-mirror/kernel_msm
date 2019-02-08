@@ -439,6 +439,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	int polling_interval = M0_POLLING_INTERVAL;
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_init_data init_step_data = { 0 };
+	struct faceauth_debug_data debug_step_data;
 	unsigned long stop, ioctl_start;
 	bool send_images_data;
 	struct faceauth_data *data = file->private_data;
@@ -539,6 +540,15 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		/* TODO cleanup Airbrush DRAM */
 		pr_info("el2: faceauth cleanup IOCTL\n");
 		el2_faceauth_cleanup(data->device);
+		break;
+	case FACEAUTH_DEV_IOC_DEBUG:
+		pr_info("el2: faceauth debug log IOCTL\n");
+		if (copy_from_user(&debug_step_data, (const void __user *)arg,
+				   sizeof(debug_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
+		err = el2_faceauth_gather_debug_log(&debug_step_data);
 		break;
 	default:
 		err = -EOPNOTSUPP;

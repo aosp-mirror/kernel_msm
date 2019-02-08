@@ -1,13 +1,13 @@
-#include <misc/faceauth_hypx.h>
-#include <linux/ctype.h>
-#include <linux/types.h>
-#include <linux/slab.h>
-#include <linux/dma-mapping.h>
 #include <asm/cacheflush.h>
 #include <asm/compiler.h>
-#include <soc/qcom/scm.h>
-#include <linux/uaccess.h>
+#include <linux/ctype.h>
 #include <linux/delay.h>
+#include <linux/dma-mapping.h>
+#include <linux/slab.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
+#include <misc/faceauth_hypx.h>
+#include <soc/qcom/scm.h>
 #include <soc/qcom/secure_buffer.h>
 
 #define HYPX_SMC_ID(func) (0x43DEAD00 | func)
@@ -16,6 +16,7 @@
 #define HYPX_SMC_FUNC_PROCESS HYPX_SMC_ID(0x3)
 #define HYPX_SMC_FUNC_CHECK_PROCESS_RESULT HYPX_SMC_ID(0x4)
 #define HYPX_SMC_FUNC_CLEANUP HYPX_SMC_ID(0x5)
+#define HYPX_SMC_FUNC_GET_DEBUG_RESULT HYPX_SMC_ID(0x6)
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
@@ -65,6 +66,8 @@ struct hypx_fa_process_results {
 	uint32_t bin_result;
 	uint32_t fw_version;
 	int32_t error_code;
+	uint64_t debug_buffer; /* PHY addr*/
+	uint32_t debug_buffer_size;
 } __packed;
 
 static void hypx_free_blob(phys_addr_t blob_phy)
@@ -96,6 +99,48 @@ static void hypx_free_blob(phys_addr_t blob_phy)
 	}
 
 	free_page((unsigned long)blob);
+}
+
+static int hypx_copy_from_blob(void __user *buffer, phys_addr_t blob_phy,
+				size_t size)
+{
+	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int dest_vm[] = { VMID_HLOS };
+	int dest_perm[] = { PERM_READ | PERM_WRITE };
+	struct hypx_blob *blob = phys_to_virt(blob_phy);
+	void __user *buffer_iter = buffer;
+	uint64_t buffer_iter_remaining = size;
+	uint64_t tocopy;
+	int i;
+	int lret, ret = 0;
+
+	for (i = 0; i < HYPX_MEMSEGS_NUM; i++) {
+		uint64_t phy_addr;
+		void *virt_addr;
+
+		if (!blob->segments[i].addr)
+			break;
+		tocopy = MIN(buffer_iter_remaining,
+			     blob->segments[i].pages * PAGE_SIZE);
+		phy_addr = (uint64_t)blob->segments[i].addr * PAGE_SIZE;
+		virt_addr = phys_to_virt(phy_addr);
+
+		lret = hyp_assign_phys(phy_addr,
+				      blob->segments[i].pages * PAGE_SIZE,
+				      source_vm, ARRAY_SIZE(source_vm), dest_vm,
+				      dest_perm, ARRAY_SIZE(dest_vm));
+		if (lret) {
+			ret = lret;
+			pr_err("hyp_assign_phys returned an error %d\n", ret);
+		}
+
+		if (copy_to_user(buffer_iter, virt_addr, tocopy)) {
+			return -EFAULT;
+		}
+		buffer_iter += tocopy;
+		buffer_iter_remaining -= tocopy;
+	}
+	return ret;
 }
 
 /* Returns PHY address for the allocated buffer */
@@ -169,7 +214,8 @@ static phys_addr_t hypx_create_blob(void __user *buffer, size_t size)
 	}
 
 	if (buffer_iter_remaining) {
-		pr_err("Memory allocator is fragmented so we were not able to fit %d into segments header\n",
+		pr_err("Memory allocator is fragmented so we were not able to "
+			     "fit %d into segments header\n",
 		       size);
 		goto exit;
 	}
@@ -365,6 +411,46 @@ int el2_faceauth_get_process_result(struct faceauth_start_data *data)
 	data->error_code = hypx_data->error_code;
 
 exit:
+	free_page((unsigned long)hypx_data);
+	return ret;
+}
+
+int el2_faceauth_gather_debug_log(struct faceauth_debug_data *data)
+{
+	int ret;
+	struct scm_desc desc = { 0 };
+	struct hypx_fa_process_results *hypx_data;
+
+	hypx_data = (struct hypx_fa_process_results *)get_zeroed_page(0);
+
+	hypx_data->debug_buffer =
+		hypx_create_blob(data->debug_buffer, data->debug_buffer_size);
+	hypx_data->debug_buffer_size = data->debug_buffer_size;
+
+	if (!hypx_data->debug_buffer) {
+		pr_err("Fail to alloc mem for debug_buffer");
+		goto exit2;
+	}
+
+	desc.arginfo = SCM_ARGS(1);
+	desc.args[0] = virt_to_phys(hypx_data);
+
+	flush_cache_all();
+	ret = scm_call2(HYPX_SMC_FUNC_GET_DEBUG_RESULT, &desc);
+	if (ret) {
+		pr_err("Failed scm_call %d\n", ret);
+		goto exit1;
+	}
+	ret = hypx_copy_from_blob(data->debug_buffer, hypx_data->debug_buffer,
+			    data->debug_buffer_size);
+	if (ret) {
+		pr_err("Failed hypx_copy_from_blob %d\n", ret);
+		goto exit1;
+	}
+
+exit1:
+	hypx_free_blob(hypx_data->debug_buffer);
+exit2:
 	free_page((unsigned long)hypx_data);
 	return ret;
 }
