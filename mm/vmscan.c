@@ -969,7 +969,6 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			goto keep;
 
 		VM_BUG_ON_PAGE(PageActive(page), page);
-		VM_BUG_ON_PAGE(page_zone(page) != zone, page);
 
 		sc->nr_scanned++;
 
@@ -1048,7 +1047,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			/* Case 1 above */
 			if (current_is_kswapd() &&
 			    PageReclaim(page) &&
-			    test_bit(ZONE_WRITEBACK, &zone->flags)) {
+			    (zone && test_bit(ZONE_WRITEBACK, &zone->flags))) {
 				nr_immediate++;
 				goto keep_locked;
 
@@ -1133,8 +1132,9 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			 * if many dirty pages have been encountered.
 			 */
 			if (page_is_file_cache(page) &&
-					(!current_is_kswapd() ||
-					 !test_bit(ZONE_DIRTY, &zone->flags))) {
+				(!current_is_kswapd() ||
+				!(zone &&
+					test_bit(ZONE_DIRTY, &zone->flags)))) {
 				/*
 				 * Immediately reclaim when written back.
 				 * Similar in principal to deactivate_page()
@@ -1349,12 +1349,9 @@ unsigned long reclaim_pages(struct list_head *page_list)
 		mod_zone_page_state(zone, NR_ISOLATED_FILE, nr_isolated[1][i]);
 	}
 
-	for (i = 0; i < MAX_NR_ZONES; i++) {
-		zone = pgdat->node_zones + i;
-		nr_reclaimed += shrink_page_list(page_list, zone, &sc,
+	nr_reclaimed = shrink_page_list(page_list, NULL, &sc,
 			TTU_UNMAP|TTU_IGNORE_ACCESS,
 			&dummy1, &dummy2, &dummy3, &dummy4, &dummy5, true);
-	}
 
 	while (!list_empty(page_list)) {
 		page = lru_to_page(page_list);
