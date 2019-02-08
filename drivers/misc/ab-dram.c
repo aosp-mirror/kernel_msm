@@ -22,7 +22,6 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
-#include <linux/uaccess.h>
 #include <uapi/ab-dram.h>
 
 /* TODO(b/116617722): Add carveout support */
@@ -473,17 +472,11 @@ static long ab_dram_ioctl(struct file *filp, unsigned int cmd,
 		unsigned long arg)
 {
 	struct ab_dram_session *session = filp->private_data;
-	struct ab_dram_alloc_request __user *user_req;
-	struct ab_dram_alloc_request req;
 	int ret = 0;
-
-	user_req = (struct ab_dram_alloc_request __user *)arg;
-	if (copy_from_user(&req, user_req, sizeof(req)))
-		return -EFAULT;
 
 	switch (cmd) {
 	case AB_DRAM_ALLOCATE_MEMORY:
-		ret = ab_dram_allocate_memory_fd(session, req.size);
+		ret = ab_dram_allocate_memory_fd(session, (size_t)arg);
 		break;
 	default:
 		pr_err("Invalid ioctl command.\n");
