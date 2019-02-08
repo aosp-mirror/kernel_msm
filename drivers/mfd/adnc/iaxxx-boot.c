@@ -28,6 +28,26 @@
 /* Firmware and hardware configuration files */
 static const char *iaxxx_fw_filename = "RomeApp.bin";
 
+static bool iaxxx_sect_valid_proc_mask(
+			uint32_t sect_addr, uint32_t proc_mask)
+{
+	if (((sect_addr >= GLOBAL_DRAM_START) &&
+		(sect_addr <= GLOBAL_DRAM_END) &&
+		(proc_mask & IAXXX_NO_PROC)) ||
+		((sect_addr >= SSP_DMEM0_SYS_START) &&
+		(sect_addr <= SSP_DMEM1_SYS_END) &&
+		(proc_mask & IAXXX_SSP_ID)) ||
+		((sect_addr >= HMD_DMEM_SYS_START) &&
+		(sect_addr <= HMD_IMEM_SYS_END) &&
+		(proc_mask & IAXXX_HMD_ID)) ||
+		((sect_addr >= DMX_DMEM_SYS_START) &&
+		(sect_addr <= DMX_IMEM_SYS_END) &&
+		(proc_mask & IAXXX_DMX_ID)))
+		return true;
+	else
+		return false;
+}
+
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes)
 {
 	int i;
@@ -255,6 +275,118 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 	}
 
 out:
+	return rc;
+}
+
+static int iaxxx_download_per_core_fw(struct iaxxx_priv *priv,
+		const struct firmware *fw, u32 proc_id_mask)
+{
+	int i, rc = 0;
+	int retries = 0;
+	const int max_retries = 5;
+	const uint8_t *data;
+	struct device *dev = priv->dev;
+
+	/* Checksum variable */
+	uint32_t devicesum1 = 0xffff;
+	uint32_t devicesum2 = 0xffff;
+
+	size_t file_section_bytes;
+	struct firmware_file_header header;
+	struct firmware_section_header file_section = { 0x0, 0x0 };
+
+	/* File header */
+	if (sizeof(header) > fw->size) {
+		dev_err(dev, "Bad Firmware image file (too small)\n");
+		goto out;
+	}
+	iaxxx_copy_le32_to_cpu(&header, fw->data, sizeof(header));
+	data = fw->data + sizeof(header);
+
+	/* Verify the file header */
+	rc = iaxxx_verify_fw_header(dev, &header);
+	if (rc) {
+		dev_err(dev, "Bad firmware image file\n");
+		goto out;
+	}
+
+	if (header.number_of_sections <= 1) {
+		dev_err(dev, "No sections available to download\n");
+		rc = -EINVAL;
+		goto out;
+	}
+
+	/* Download each memory section */
+	for (i = 0; i < header.number_of_sections; ++i) {
+		/* Load the next data section */
+		iaxxx_copy_le32_to_cpu
+			(&file_section, data, sizeof(file_section));
+		data += sizeof(file_section);
+
+		dev_dbg(dev, "file_section.start_address: 0x%.08X\n",
+				file_section.start_address);
+		if (iaxxx_sect_valid_proc_mask(file_section.start_address,
+			proc_id_mask) && file_section.length) {
+			file_section_bytes = file_section.length * sizeof(u32);
+
+			do {
+				rc = iaxxx_download_section(priv, data,
+								&file_section);
+			} while (rc && ++retries < max_retries);
+
+			if (rc) {
+				dev_err(dev, "Failed to load firmware section\n");
+				goto out;
+			}
+
+			/* Include checksum for this section */
+			rc = iaxxx_checksum_request(priv,
+				file_section.start_address, file_section.length,
+				&devicesum1, &devicesum2);
+			if (rc) {
+				dev_err(dev, "Checksum request error\n");
+				goto out;
+			}
+			dev_dbg(dev, "%s(): section(%d) Checksum 0x%04X%04x\n",
+				__func__, i, devicesum2, devicesum1);
+		}
+		/* Next section */
+		data += file_section.length * sizeof(u32);
+		WARN_ON((data - fw->data) > fw->size);
+	}
+
+	dev_info(dev, "Proc (%d) download success\n", proc_id_mask);
+out:
+	return rc;
+}
+
+int iaxxx_boot_core(struct iaxxx_priv *priv, u32 proc_id_mask)
+{
+	const struct firmware *fw;
+	struct device *dev = priv->dev;
+	int rc;
+
+	/* Request the firmware image */
+	rc = request_firmware(&fw, iaxxx_fw_filename, dev);
+	if (rc) {
+		dev_err(dev, "Firmware file %s not found rc = %d\n",
+						iaxxx_fw_filename, rc);
+		return rc;
+	}
+	/* Download the firmware to device memory */
+	rc = iaxxx_download_per_core_fw(priv, fw, proc_id_mask);
+	if (rc) {
+		dev_err(dev,
+			"core(%d) firmware download failed, rc = %d\n",
+			proc_id_mask, rc);
+		goto out;
+	}
+	/* core is up and running */
+	dev_dbg(dev,
+		"Processor core(%d) Firmware is loaded\n", proc_id_mask);
+
+out:
+	release_firmware(fw);
 	return rc;
 }
 

@@ -60,7 +60,7 @@
  *
  * Returns 0 on success or -ETIMEDOUT if the bits didn't clear.
  */
-static int
+int
 iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
 		uint32_t reg, uint32_t match)
 {

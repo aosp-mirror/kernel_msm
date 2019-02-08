@@ -660,6 +660,14 @@ enum iaxxx_proc_id_e {
 	IAXXX_PROC_ID_FORCE_SIZE = INT_MAX,
 };
 
+#define GLBL_MEM_ID_MASK	(1 << IAXXX_NO_PROC)
+#define BOSS_ID_MASK		(1 << IAXXX_BOSS_ID)
+#define SSP_ID_MASK			(1 << IAXXX_SSP_ID)
+#define CM4_ID_MASK			(1 << IAXXX_CM4_ID)
+#define HMD_ID_MASK			(1 << IAXXX_HMD_ID)
+#define DMX_ID_MASK			(1 << IAXXX_DMX_ID)
+#define ALL_PROC_ID_MASK \
+(SSP_ID_MASK | CM4_ID_MASK | HMD_ID_MASK | DMX_ID_MASK)
 
 /* Tunnel Event System ID*/
 #define IAXXX_MODULE_TYPE_TUNNEL_MANAGER  (7)

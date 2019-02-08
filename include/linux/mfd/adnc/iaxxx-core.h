@@ -25,6 +25,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
+#include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 
 typedef int (*iaxxx_cb_func_ptr_t)(struct device *dev);
 typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
@@ -43,6 +44,50 @@ struct workqueue_struct;
 #define IAXXX_PKG_ID_MASK	0x000F
 #define IAXXX_PLGIN_ID_MASK	0x001F
 #define IAXXX_SENSR_ID_MASK	0x0003
+
+/*********************/
+/*   GLOBAL MEMORY   */
+/*********************/
+#define GLOBAL_DRAM_START             0x58000000
+#define GLOBAL_DRAM_END               0x58020000
+/*  GLOBAL MEMORY END  */
+
+/*********************/
+/*   SSP Processor   */
+/*********************/
+#define SSP_SYS_OFFSET	0x82000000
+/********* SSP DATA MEMORY START *********/
+#define SSP_DMEM0_LCL_START	0x20000000
+#define SSP_DMEM0_SYS_START	(SSP_DMEM0_LCL_START + SSP_SYS_OFFSET)
+
+#define SSP_DRAM1_DED_END	0x21020000
+#define SSP_DMEM1_LCL_END	SSP_DRAM1_DED_END
+#define SSP_DMEM1_SYS_END	(SSP_DMEM1_LCL_END + SSP_SYS_OFFSET)
+/**************** SSP PROCESSOR MEMORY END *****************/
+
+/*********************/
+/*   HMD Processor   */
+/*********************/
+#define HMD_SYS_OFFSET	0x86000000
+/********* HMD DATA MEMORY START *********/
+#define HMD_DMEM_LCL_START	0x20000000
+#define HMD_DMEM_SYS_START	(HMD_DMEM_LCL_START + HMD_SYS_OFFSET)
+
+#define HMD_IMEM_LCL_END	0x20800000
+#define HMD_IMEM_SYS_END	(HMD_IMEM_LCL_END + HMD_SYS_OFFSET)
+/**************** HMD PROCESSOR MEMORY END *****************/
+
+/*********************/
+/*   DMX Processor   */
+/*********************/
+#define DMX_SYS_OFFSET	0x88000000
+/********* DMX DATA MEMORY START *********/
+#define DMX_DMEM_LCL_START	0x20000000
+#define DMX_DMEM_SYS_START	(DMX_DMEM_LCL_START + DMX_SYS_OFFSET)
+
+#define DMX_IMEM_LCL_END	0x20800000
+#define DMX_IMEM_SYS_END	(DMX_IMEM_LCL_END + DMX_SYS_OFFSET)
+/**************** DMX PROCESSOR MEMORY END *****************/
 
 /* Flags denoting various states of FW and events */
 enum {
@@ -318,6 +363,8 @@ int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
 			uint32_t param_val, uint32_t block_id);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
+int iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
+		uint32_t reg, uint32_t match);
 int iaxxx_send_update_block_no_wait(struct device *dev, int host_id);
 int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id);
 int iaxxx_get_firmware_version(struct device *dev, char *ver, uint32_t len);
@@ -486,5 +533,7 @@ int iaxxx_get_plugin_log_state(struct device *dev,
 				bool *mode, uint32_t inst_id, uint8_t block_id);
 int iaxxx_core_get_pwr_stats(struct device *dev,
 			struct iaxxx_pwr_stats *pwr_stats);
+/* Boots up the core based on proc id mask */
+int iaxxx_boot_core(struct iaxxx_priv *priv, u32 proc_id_mask);
 
 #endif /*__IAXXX_CORE_H__ */

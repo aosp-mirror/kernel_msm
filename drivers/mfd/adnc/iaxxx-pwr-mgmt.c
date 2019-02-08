@@ -26,6 +26,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-pwr-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-ao.h>
+#include <linux/mfd/adnc/iaxxx-stream-registers.h>
 #include <linux/mfd/adnc/iaxxx-odsp.h>
 #include <linux/mfd/adnc/iaxxx-module.h>
 #include "iaxxx.h"
@@ -37,6 +38,7 @@
 #define IAXXX_PM_AUTOSUSPEND_DELAY 3000
 
 #define IAXXX_PWR_MAX_SPI_SPEED   25000000
+#define IAXXX_STRM_STATUS_INIT	 0
 
 void iaxxx_pm_enable(struct iaxxx_priv *priv)
 {
@@ -487,6 +489,293 @@ int iaxxx_set_apll_source(struct iaxxx_priv *priv, int source)
 	if (rc)
 		pr_err("%s failed to set up apll source err = %0x\n",
 					__func__, rc);
+	return rc;
+
+}
+
+static uint32_t proc_id_to_proc_state_mask(
+		uint32_t proc_id, uint32_t proc_state)
+{
+	uint32_t proc_pwr_ctrl_val = 0;
+	uint32_t proc_mask;
+	uint32_t stall_mask;
+
+	switch (proc_id) {
+	case IAXXX_SSP_ID:
+		proc_mask =
+		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_SSP_MASK;
+		stall_mask =
+		IAXXX_SRB_PROC_PWR_CTRL_STALL_SSP_MASK;
+	break;
+	case IAXXX_HMD_ID:
+		proc_mask =
+		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_HMD_MASK;
+		stall_mask =
+		IAXXX_SRB_PROC_PWR_CTRL_STALL_HMD_MASK;
+		break;
+	case IAXXX_DMX_ID:
+		proc_mask =
+		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_DMX_MASK;
+		stall_mask =
+		IAXXX_SRB_PROC_PWR_CTRL_STALL_DMX_MASK;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (proc_state == PROC_RUNNING) {
+		proc_pwr_ctrl_val |= proc_mask;
+		proc_pwr_ctrl_val &= ~stall_mask;
+	} else if (proc_state == PROC_STALL) {
+		proc_pwr_ctrl_val |= proc_mask;
+		proc_pwr_ctrl_val |= stall_mask;
+	} else if (proc_state == PROC_OFF) {
+		proc_pwr_ctrl_val &= ~proc_mask;
+		proc_pwr_ctrl_val |= stall_mask;
+	} else
+		return -EINVAL;
+
+	return proc_pwr_ctrl_val;
+}
+
+int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
+			uint32_t proc_id, uint32_t proc_state)
+{
+	uint32_t proc_pwr_ctrl_val = 0;
+	uint32_t strm_cnt = 0;
+	uint32_t strm_status = 0;
+	uint32_t strm_id = 0;
+	int rc;
+
+	/* Make sure update block bit is in cleared state */
+	rc = iaxxx_regmap_wait_match(priv, priv->regmap,
+			IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
+			IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK);
+	if (rc) {
+		pr_err("Update Block bit not cleared, rc = %d\n", rc);
+		goto exit;
+	}
+
+	rc = regmap_read(priv->regmap, IAXXX_SRB_PROC_PWR_CTRL_ADDR,
+				&proc_pwr_ctrl_val);
+	if (rc) {
+		pr_err("%s failed srb proc power ctrl reg read err = %0x\n",
+					__func__, rc);
+		goto exit;
+	}
+
+	if (proc_state == PROC_OFF) {
+		if (proc_id == IAXXX_SSP_ID) {
+			/* Read the no of streams count */
+			rc = regmap_read(priv->regmap,
+					IAXXX_STR_HDR_STR_CNT_ADDR, &strm_cnt);
+			if (rc) {
+				pr_err("%s IAXXX_STR_HDR_STR_CNT read err = %0x\n",
+							__func__, rc);
+				goto exit;
+			}
+			/* Read the stream status for each stream group
+			 * to confirm stream is not in use before disabling
+			 * the SSP core.
+			 */
+			while (strm_id < strm_cnt) {
+				rc = regmap_read(priv->regmap,
+					IAXXX_STR_GRP_STR_STATUS_REG(strm_id),
+					&strm_status);
+				if (rc) {
+					pr_err(
+					"%s STR_GRP_STR_STATUS(%d) read err = %0x\n",
+					__func__, strm_id, rc);
+					goto exit;
+				} else if (strm_status !=
+						IAXXX_STRM_STATUS_INIT) {
+					pr_err(
+					"%s strm_id(%d) stream is still active\n",
+					__func__, strm_id);
+					rc = -EBUSY;
+					goto exit;
+				}
+				strm_id++;
+			}
+		}
+	}
+	proc_pwr_ctrl_val =
+		proc_id_to_proc_state_mask(proc_id, proc_state);
+	if (proc_pwr_ctrl_val == -EINVAL)
+		goto exit;
+
+	/* set the processor bits */
+	rc = regmap_update_bits(priv->regmap,
+				IAXXX_SRB_PROC_PWR_CTRL_ADDR,
+				IAXXX_SRB_PROC_PWR_CTRL_WMASK_VAL,
+				proc_pwr_ctrl_val);
+	if (rc) {
+		pr_err("%s SRB_PROC_PWR_CTRL_ADDR write err = %0x\n",
+					__func__, rc);
+		goto exit;
+	}
+
+	rc = regmap_update_bits(priv->regmap,
+			IAXXX_SRB_SYS_POWER_CTRL_ADDR,
+			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK,
+			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK);
+	if (rc) {
+		pr_err("%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
+					__func__, rc);
+		goto exit;
+	}
+
+	rc = iaxxx_send_update_block_no_wait(priv->dev, IAXXX_HOST_0);
+	if (rc)
+		pr_err("%s failed to set update block err = %0x\n",
+					__func__, rc);
+
+exit:
+	return rc;
+
+}
+
+static uint32_t proc_id_to_mem_state_mask(
+		uint32_t proc_id, uint32_t mem_state)
+{
+	uint32_t mem_pwr_ctrl_val = 0;
+	uint32_t proc_mask;
+	uint32_t mem_retn_mask;
+
+	switch (proc_id) {
+	case IAXXX_SSP_ID:
+		proc_mask =
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_SSP_MASK;
+		mem_retn_mask =
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_SSP_MASK;
+	break;
+	case IAXXX_HMD_ID:
+		proc_mask =
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_HMD_MASK;
+		mem_retn_mask =
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_HMD_MASK;
+		break;
+	case IAXXX_DMX_ID:
+		proc_mask =
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_DMX_MASK;
+		mem_retn_mask =
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_DMX_MASK;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (mem_state == MEM_OFF) {
+		mem_pwr_ctrl_val &= ~proc_mask;
+	} else if (mem_state == MEM_ON_RETN_OFF) {
+		mem_pwr_ctrl_val |= proc_mask;
+		mem_pwr_ctrl_val &= ~mem_retn_mask;
+	} else if (mem_state == MEM_ON_RETN_ON) {
+		mem_pwr_ctrl_val |= proc_mask;
+		mem_pwr_ctrl_val |= mem_retn_mask;
+	} else
+		return -EINVAL;
+
+	return mem_pwr_ctrl_val;
+}
+
+int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
+			uint32_t proc_id, uint32_t mem_state)
+{
+	uint32_t mem_pwr_ctrl_val = 0;
+	int rc;
+
+	rc = regmap_read(priv->regmap,
+		IAXXX_SRB_DED_MEM_PWR_CTRL_ADDR, &mem_pwr_ctrl_val);
+	if (rc) {
+		pr_err("%s failed SRB_DED_MEM_PWR_CTRL read err = %0x\n",
+					__func__, rc);
+		goto exit;
+	}
+
+	mem_pwr_ctrl_val =
+		proc_id_to_mem_state_mask(proc_id, mem_state);
+	if (mem_pwr_ctrl_val == -EINVAL)
+		goto exit;
+
+	/* set the processor bits */
+	rc = regmap_update_bits(priv->regmap,
+				IAXXX_SRB_DED_MEM_PWR_CTRL_ADDR,
+				IAXXX_SRB_DED_MEM_PWR_CTRL_WMASK_VAL,
+				mem_pwr_ctrl_val);
+	if (rc)
+		pr_err("%s failed SRB_DED_MEM_PWR_CTRL write err = %0x\n",
+					__func__, rc);
+
+exit:
+	return rc;
+
+}
+
+int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv,
+				uint32_t proc_id)
+{
+	int rc;
+	uint32_t proc_mask;
+
+	if (proc_id != IAXXX_CM4_ID) {
+		pr_err("%s wrong proc_id requested\n", __func__);
+		rc = -EINVAL;
+		goto exit;
+	}
+
+	/* Make sure update block bit is in cleared state */
+	rc = iaxxx_regmap_wait_match(priv, priv->regmap,
+			IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
+			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	if (rc) {
+		pr_err("Update Block bit not cleared, rc = %d\n", rc);
+		goto exit;
+	}
+
+	switch (proc_id) {
+	case IAXXX_SSP_ID:
+		proc_mask =
+		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_SSP_MASK;
+		break;
+	case IAXXX_HMD_ID:
+		proc_mask =
+		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_HMD_MASK;
+		break;
+	case IAXXX_DMX_ID:
+		proc_mask =
+		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_DMX_MASK;
+		break;
+	default:
+		return -EINVAL;
+	}
+	/* set the processor bits */
+	rc = regmap_update_bits(priv->regmap,
+				IAXXX_SRB_PROC_HWSLEEP_CTRL_ADDR,
+				IAXXX_SRB_PROC_HWSLEEP_CTRL_WMASK_VAL,
+				proc_mask);
+	if (rc) {
+		pr_err("%s failed SRB_PROC_HWSLEEP_CTRL write err = %0x\n",
+					__func__, rc);
+		goto exit;
+	}
+
+	rc = regmap_update_bits(priv->regmap,
+			IAXXX_SRB_SYS_POWER_CTRL_ADDR,
+			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_HWSLEEP_REQ_MASK,
+			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_HWSLEEP_REQ_MASK);
+	if (rc) {
+		pr_err("%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
+					__func__, rc);
+		goto exit;
+	}
+
+	rc = iaxxx_send_update_block_no_wait(priv->dev, IAXXX_HOST_0);
+	if (rc)
+		pr_err("%s failed to set update block err = %0x\n",
+					__func__, rc);
+
+exit:
 	return rc;
 
 }
