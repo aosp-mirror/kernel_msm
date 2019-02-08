@@ -108,6 +108,7 @@ bool hypx_enable;
 uint64_t m0_verbosity_level;
 struct dentry *faceauth_debugfs_root;
 uint16_t session_id;
+atomic_t in_use;
 struct platform_device *faceauth_pdev;
 
 /* M0 Verbosity Level Encoding
@@ -538,11 +539,14 @@ exit:
 
 static int faceauth_open(struct inode *inode, struct file *file)
 {
+	if (atomic_cmpxchg(&in_use, 0, 1))
+		return -EBUSY;
 	return 0;
 }
 
 static int faceauth_release(struct inode *inode, struct file *file)
 {
+	atomic_set(&in_use, 0);
 	return 0;
 }
 
@@ -1094,6 +1098,8 @@ static struct platform_driver faceauth_driver = {
 static int __init faceauth_init(void)
 {
 	int ret;
+
+	atomic_set(&in_use, 0);
 
 	faceauth_pdev =
 		platform_device_register_simple("faceauth", -1, NULL, 0);
