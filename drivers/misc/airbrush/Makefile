@@ -18,6 +18,7 @@ airbrush-y +=	\
 		airbrush-ppmu.o \
 		airbrush-cooling.o \
 		airbrush-thermal.o \
-		airbrush-sysfs.o
+		airbrush-sysfs.o \
+		airbrush-lvcc.o
 
 airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS) += airbrush-debugfs.o

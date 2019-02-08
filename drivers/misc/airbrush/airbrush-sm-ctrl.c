@@ -858,6 +858,14 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		}
 	}
 
+	if (to_chip_substate_id >= CHIP_STATE_400) {
+		ret = ab_lvcc(sc, to_chip_substate_id);
+		if (ret) {
+			dev_err(sc->dev, "ab_lvcc failed (%d)\n", ret);
+			return ret;
+		}
+	}
+
 	ab_sm_start_ts(sc, AB_SM_TS_IPU);
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 			dest_map->ipu_block_state_id)) {

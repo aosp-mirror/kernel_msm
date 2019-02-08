@@ -187,6 +187,17 @@ static int alternate_boot_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_alternate_boot, alternate_boot_get,
 		alternate_boot_set, "%llu\n");
 
+static int asv_version_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	set_asv_version(&sc->asv_info, val);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_asv_version_override, NULL,
+		asv_version_set, "%llu\n");
+
 static int ab_sm_force_el2_set(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
@@ -750,6 +761,12 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 				&fops_alternate_boot);
 	if (!d)
 		goto err_out;
+
+	d = debugfs_create_file("asv_version", 0222, d_chip, NULL,
+				&fops_asv_version_override);
+	if (!d)
+		goto err_out;
+
 
 	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
 	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been

@@ -42,6 +42,9 @@
 
 #define AB_SM_OSC_RATE 19200000
 
+#define AB_SM_STATE_IN_RANGE(chip_state, state_range) \
+	((chip_state / 100) == (state_range / 100))
+
 enum block_name {
 	BLK_IPU,
 	BLK_TPU,
@@ -537,6 +540,13 @@ struct ab_change_req {
 	struct completion *comp;
 };
 
+struct ab_asv_info {
+	bool fusing_done;
+	int asv_version;
+	u32 ipu_volt;
+	u32 tpu_volt;
+};
+
 /**
  * struct ab_state_context - stores the context of airbrush soc
  *
@@ -598,6 +608,8 @@ struct ab_state_context {
 	ab_sm_callback_t cb_event;
 	/* Private data sent by SM while registering event callback */
 	void *cb_cookie;
+
+	struct ab_asv_info asv_info;
 
 	/* regulator descriptors */
 	struct regulator *smps1;
@@ -755,4 +767,7 @@ static inline void ab_sm_print_ts(struct ab_state_context *sc) {}
 void ab_sm_create_sysfs(struct ab_state_context *sc);
 void ab_sm_remove_sysfs(struct ab_state_context *sc);
 
+void ab_lvcc_init(struct ab_asv_info *info);
+void set_asv_version(struct ab_asv_info *info, int asv_version);
+int ab_lvcc(struct ab_state_context *sc, int chip_state);
 #endif /* _AIRBRUSH_SM_CTRL_H */

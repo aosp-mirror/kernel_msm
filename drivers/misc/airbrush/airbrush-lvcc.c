@@ -1,0 +1,164 @@
+/*
+ * Copyright (C) 2019 Samsung Electronics Co., Ltd.
+ *
+ * Authors:
+ *	Raman Kumar Banka <raman.k2@samsung.com>
+ *	Pankaj Kumar Dubey <pankaj.dubey@samsung.com>
+ *
+ * LVCC settings for airbrush
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ */
+
+
+#include <linux/airbrush-sm-ctrl.h>
+
+#include "airbrush-regs.h"
+
+#define ASV_INFO_REG_ADDR 0x8
+#define ASV_TABLE_VERSION_MASK 0xFE0000
+#define ASV_TABLE_VERSION_SHIFT 17
+#define DVFS_DONE BIT(16)
+#define MIN_ASV_VERSION 0
+#define MAX_ASV_VERSION 0
+#define NUM_GROUPS 9
+
+#define IPU_RO_ADDR 0x3010
+#define IPU_RO_MASK 0xFFFF
+#define IPU_RO_SHIFT 0
+#define IPU_SIGNOFF_VOLTAGE 750000
+
+#define TPU_RO_ADDR 0x3018
+#define TPU_RO_MASK 0xFFFF0000
+#define TPU_RO_SHIFT 16
+#define TPU_SIGNOFF_VOLTAGE 750000
+
+#define REGULATOR_STEP 6250
+
+static u32 ipu_ro_table[MAX_ASV_VERSION + 1][NUM_GROUPS + 1] = {
+	{ 6420, 6584, 6821, 7057, 7293,
+	  7529, 7765, 8002, 8238, 8420 },
+};
+
+static u32 ipu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
+	{ 775000, 768750, 756250, 743750, 731250,
+	  712500, 700000, 687500, 675000 },
+};
+
+static u32 tpu_ro_table[MAX_ASV_VERSION + 1][NUM_GROUPS + 1] = {
+	{ 5130, 5255, 5434, 5614, 5794,
+	  5973, 6152, 6331, 6512, 6772 },
+};
+
+static u32 tpu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
+	{ 793750, 781250, 768750, 756250, 743750,
+	  731250, 712500, 700000, 687500 },
+};
+
+static u32 get_ipu_ro(void)
+{
+	u32 addr = ABC_BASE_OTP_WRAPPER + IPU_RO_ADDR;
+	u32 val;
+
+	ABC_READ(addr, &val);
+	val = (val & IPU_RO_MASK) >> IPU_RO_SHIFT;
+	return val;
+}
+
+static u32 get_ipu_volt(struct ab_asv_info *info)
+{
+	u32 i;
+	u32 ipu_ro = get_ipu_ro();
+	int asv_version = info->asv_version;
+
+	for (i = 0; i < NUM_GROUPS; i++) {
+		if (ipu_ro >= ipu_ro_table[asv_version][i] &&
+				ipu_ro < ipu_ro_table[asv_version][i + 1])
+			return ipu_volt_table[asv_version][i];
+	}
+	return IPU_SIGNOFF_VOLTAGE;
+}
+
+static u32 get_tpu_ro(void)
+{
+	u32 addr = ABC_BASE_OTP_WRAPPER + TPU_RO_ADDR;
+	u32 val;
+
+	ABC_READ(addr, &val);
+	val = (val & TPU_RO_MASK) >> TPU_RO_SHIFT;
+	return val;
+}
+
+static u32 get_tpu_volt(struct ab_asv_info *info)
+{
+	u32 i;
+	u32 tpu_ro = get_tpu_ro();
+	int asv_version = info->asv_version;
+
+	for (i = 0; i < NUM_GROUPS; i++) {
+		if (tpu_ro >= tpu_ro_table[asv_version][i] &&
+				tpu_ro < tpu_ro_table[asv_version][i + 1])
+			return tpu_volt_table[asv_version][i];
+	}
+	return TPU_SIGNOFF_VOLTAGE;
+}
+
+static void find_asv_version(struct ab_asv_info *info)
+{
+	u32 addr = ABC_BASE_OTP_WRAPPER + ASV_INFO_REG_ADDR;
+	u32 val;
+
+	ABC_READ(addr, &val);
+
+	info->fusing_done = val & DVFS_DONE;
+
+	if (info->fusing_done)
+		info->asv_version = (val & ASV_TABLE_VERSION_MASK) >>
+			ASV_TABLE_VERSION_SHIFT;
+	else
+		info->asv_version = -1;
+}
+
+static void update_asv_voltage(struct ab_asv_info *info)
+{
+	if (info->asv_version < MIN_ASV_VERSION ||
+			info->asv_version > MAX_ASV_VERSION) {
+		info->ipu_volt = IPU_SIGNOFF_VOLTAGE;
+		info->tpu_volt = TPU_SIGNOFF_VOLTAGE;
+	} else {
+		info->ipu_volt = get_ipu_volt(info);
+		info->tpu_volt = get_tpu_volt(info);
+	}
+}
+
+void ab_lvcc_init(struct ab_asv_info *info)
+{
+	find_asv_version(info);
+	update_asv_voltage(info);
+}
+
+void set_asv_version(struct ab_asv_info *info, int asv_version)
+{
+	info->asv_version = asv_version;
+	update_asv_voltage(info);
+}
+
+int ab_lvcc(struct ab_state_context *sc, int chip_state)
+{
+	int smps_volt;
+	struct ab_asv_info *info = &sc->asv_info;
+
+	if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_500))
+		smps_volt = info->ipu_volt;
+	else if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_600))
+		smps_volt = info->tpu_volt;
+	else
+		smps_volt = max(info->ipu_volt, info->tpu_volt);
+
+	dev_info(sc->dev, "ipu_volt:%d, tpu_volt:%d, final:%d\n",
+			info->ipu_volt, info->tpu_volt, smps_volt);
+	return regulator_set_voltage(sc->smps1, smps_volt,
+				smps_volt + REGULATOR_STEP);
+}

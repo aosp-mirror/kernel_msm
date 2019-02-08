@@ -274,6 +274,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		}
 		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 
+		ab_lvcc_init(&ab_ctx->asv_info);
+
 		/* Disable patching if ab is B0 */
 		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
 			ab_ctx->alternate_boot = 0;
