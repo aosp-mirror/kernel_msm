@@ -10318,6 +10318,14 @@ version_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "0x%x\n", hba->ufs_version);
 }
 
+static ssize_t
+link_hibern8ed_cnt_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%u\n", hba->link_hibern8ed_cnt);
+}
+
 enum {
 	MANUAL_GC_OFF = 0,
 	MANUAL_GC_ON,
@@ -10491,6 +10499,7 @@ static DEVICE_ATTR_RO(vendor);
 static DEVICE_ATTR_RO(model);
 static DEVICE_ATTR_RO(rev);
 static DEVICE_ATTR_RO(version);
+static DEVICE_ATTR_RO(link_hibern8ed_cnt);
 static DEVICE_ATTR_RW(manual_gc);
 static DEVICE_ATTR_RW(manual_gc_hold);
 
@@ -10503,6 +10512,7 @@ static struct attribute *ufshcd_attrs[] = {
 	&dev_attr_model.attr,
 	&dev_attr_rev.attr,
 	&dev_attr_version.attr,
+	&dev_attr_link_hibern8ed_cnt.attr,
 	&dev_attr_manual_gc.attr,
 	&dev_attr_manual_gc_hold.attr,
 	&ufs_slowio_read_us.attr.attr,

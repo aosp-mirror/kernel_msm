@@ -139,8 +139,11 @@ enum uic_link_state {
 #define ufshcd_set_link_off(hba) ((hba)->uic_link_state = UIC_LINK_OFF_STATE)
 #define ufshcd_set_link_active(hba) ((hba)->uic_link_state = \
 				    UIC_LINK_ACTIVE_STATE)
-#define ufshcd_set_link_hibern8(hba) ((hba)->uic_link_state = \
-				    UIC_LINK_HIBERN8_STATE)
+#define ufshcd_set_link_hibern8(hba)					\
+	do {								\
+		((hba)->uic_link_state = UIC_LINK_HIBERN8_STATE);	\
+		(hba)->link_hibern8ed_cnt++;				\
+	} while (0)
 
 enum {
 	/* errors which require the host controller reset for recovery */
@@ -911,6 +914,7 @@ struct ufs_hba {
 	int nutrs;
 	int nutmrs;
 	u32 ufs_version;
+	u32 link_hibern8ed_cnt;
 	struct ufs_hba_variant *var;
 	void *priv;
 	unsigned int irq;
