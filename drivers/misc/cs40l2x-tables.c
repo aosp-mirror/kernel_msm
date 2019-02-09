@@ -131,6 +131,7 @@ bool cs40l2x_readable_reg(struct device *dev, unsigned int reg)
 	case CS40L2X_NG_CFG:
 	case CS40L2X_AMP_GAIN_CTRL:
 	case CS40L2X_DAC_MSM_CFG:
+	case CS40L2X_SPK_FORCE_TST_1:
 	case CS40L2X_IRQ1_CFG:
 	case CS40L2X_IRQ1_STATUS:
 	case CS40L2X_IRQ1_STATUS1:

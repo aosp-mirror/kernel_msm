@@ -102,6 +102,7 @@ struct cs40l2x_private {
 	bool comp_enable;
 	bool comp_enable_redc;
 	bool comp_enable_f0;
+	bool amp_gnd_stby;
 #ifdef CONFIG_ANDROID_TIMED_OUTPUT
 	struct timed_output_dev timed_dev;
 	struct hrtimer vibe_timer;
@@ -2719,6 +2720,14 @@ static int cs40l2x_asp_switch(struct cs40l2x_private *cs40l2x, bool enable)
 				CS40L2X_USER_CTRL_STOP, 0, NULL);
 		if (ret)
 			return ret;
+
+		if (cs40l2x->amp_gnd_stby) {
+			ret = regmap_write(cs40l2x->regmap,
+					CS40L2X_SPK_FORCE_TST_1,
+					CS40L2X_FORCE_SPK_GND);
+			if (ret)
+				return ret;
+		}
 	}
 
 	ret = regmap_read(cs40l2x->regmap, CS40L2X_SP_ENABLES, &val);
@@ -2737,6 +2746,14 @@ static int cs40l2x_asp_switch(struct cs40l2x_private *cs40l2x, bool enable)
 		return ret;
 
 	if (enable) {
+		if (cs40l2x->amp_gnd_stby) {
+			ret = regmap_write(cs40l2x->regmap,
+					CS40L2X_SPK_FORCE_TST_1,
+					CS40L2X_FORCE_SPK_FREE);
+			if (ret)
+				return ret;
+		}
+
 		ret = cs40l2x_user_ctrl_exec(cs40l2x,
 				CS40L2X_USER_CTRL_PLAY, 0, NULL);
 		if (ret)
@@ -3336,6 +3353,14 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 
 		switch (tag) {
 		case CS40L2X_PBQ_TAG_SILENCE:
+			if (cs40l2x->amp_gnd_stby) {
+				ret = regmap_write(cs40l2x->regmap,
+						CS40L2X_SPK_FORCE_TST_1,
+						CS40L2X_FORCE_SPK_GND);
+				if (ret)
+					return ret;
+			}
+
 			hrtimer_start(&cs40l2x->pbq_timer,
 					ktime_set(mag / 1000,
 							(mag % 1000) * 1000000),
@@ -3363,6 +3388,14 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 			ret = cs40l2x_cp_dig_scale_set(cs40l2x, cp_dig_scale);
 			if (ret)
 				return ret;
+
+			if (cs40l2x->amp_gnd_stby) {
+				ret = regmap_write(cs40l2x->regmap,
+						CS40L2X_SPK_FORCE_TST_1,
+						CS40L2X_FORCE_SPK_FREE);
+				if (ret)
+					return ret;
+			}
 
 			ret = regmap_write(cs40l2x->regmap,
 					CS40L2X_MBOX_TRIGGERINDEX, tag);
@@ -3399,6 +3432,32 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 	switch (cs40l2x->pbq_state) {
 	case CS40L2X_PBQ_STATE_IDLE:
 		/* queue may have been canceled */
+		if (!cs40l2x->amp_gnd_stby)
+			goto err_mutex;
+
+		/* leave amplifier alone if ASP playback is in flight */
+		if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO)
+			goto err_mutex;
+
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "STATUS",
+						CS40L2X_XM_UNPACKED_TYPE,
+						CS40L2X_ALGO_ID_VIBE),
+				&val);
+		if (ret) {
+			dev_err(dev, "Failed to capture playback status\n");
+			goto err_mutex;
+		}
+
+		/* leave amplifier alone if playback has already restarted */
+		if (val != CS40L2X_STATUS_IDLE)
+			goto err_mutex;
+
+		ret = regmap_write(regmap, CS40L2X_SPK_FORCE_TST_1,
+				CS40L2X_FORCE_SPK_GND);
+		if (ret)
+			dev_err(dev, "Failed to ground amplifier outputs\n");
+
 		goto err_mutex;
 
 	case CS40L2X_PBQ_STATE_PLAYING:
@@ -3636,6 +3695,16 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				HRTIMER_MODE_REL);
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 		break;
+	}
+
+	if (cs40l2x->amp_gnd_stby
+			&& cs40l2x->cp_trailer_index != CS40L2X_INDEX_PBQ) {
+		ret = regmap_write(regmap, CS40L2X_SPK_FORCE_TST_1,
+				CS40L2X_FORCE_SPK_FREE);
+		if (ret) {
+			dev_err(dev, "Failed to free amplifier outputs\n");
+			goto err_mutex;
+		}
 	}
 
 	switch (cs40l2x->cp_trailer_index) {
@@ -5895,6 +5964,12 @@ static const struct reg_sequence cs40l2x_pcm_routing[] = {
 	{CS40L2X_DSP1_RX4_SRC,		CS40L2X_DSP1_RXn_SRC_VPMON},
 };
 
+static const struct reg_sequence cs40l2x_amp_gnd_setup[] = {
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
+	{CS40L2X_SPK_FORCE_TST_1,	CS40L2X_FORCE_SPK_GND},
+};
+
 static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
@@ -6027,6 +6102,22 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 		ret = cs40l2x_asp_config(cs40l2x);
 		if (ret)
 			return ret;
+	}
+
+	if (cs40l2x->amp_gnd_stby) {
+		ret = regmap_multi_reg_write(regmap, cs40l2x_amp_gnd_setup,
+				ARRAY_SIZE(cs40l2x_amp_gnd_setup));
+		if (ret) {
+			dev_err(dev, "Failed to ground amplifier outputs\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_seq(cs40l2x, cs40l2x_amp_gnd_setup,
+				ARRAY_SIZE(cs40l2x_amp_gnd_setup));
+		if (ret) {
+			dev_err(dev, "Failed to sequence amplifier outputs\n");
+			return ret;
+		}
 	}
 
 	return cs40l2x_brownout_config(cs40l2x);
@@ -6334,6 +6425,8 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	ret = of_property_read_u32(np, "cirrus,fw-id-remap", &out_val);
 	if (!ret)
 		pdata->fw_id_remap = out_val;
+
+	pdata->amp_gnd_stby = of_property_read_bool(np, "cirrus,amp-gnd-stby");
 
 	return 0;
 }
@@ -6841,6 +6934,9 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	} else {
 		cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
 	}
+
+	if (cs40l2x->event_control != CS40L2X_EVENT_DISABLED)
+		cs40l2x->amp_gnd_stby = pdata->amp_gnd_stby;
 
 	ret = cs40l2x_init(cs40l2x);
 	if (ret)
