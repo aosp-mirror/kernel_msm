@@ -1134,6 +1134,27 @@ void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx)
 	gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_DISABLE);
 }
 
+static void ab_sm_shutdown_work(struct work_struct *data)
+{
+	struct ab_state_context *sc =
+			container_of(data,
+				     struct ab_state_context,
+				     shutdown_work);
+
+	mutex_lock(&sc->state_transitioning_lock);
+	if (sc->curr_chip_substate_id == CHIP_STATE_6_0) {
+		/* No need to emergency shutdown if already powered off */
+		dev_info(sc->dev, "already shutdown; skip emergency shutdown work\n");
+		mutex_unlock(&sc->state_transitioning_lock);
+		return;
+	}
+
+	dev_warn(sc->dev, "begin emergency shutdown work\n");
+	sc->dest_chip_substate_id = CHIP_STATE_6_0;
+	sc->change_ret = ab_sm_update_chip_state(sc);
+	mutex_unlock(&sc->state_transitioning_lock);
+}
+
 static int ab_regulator_listener(struct notifier_block *nb,
 				 unsigned long event, void *cookie)
 {
@@ -1146,8 +1167,8 @@ static int ab_regulator_listener(struct notifier_block *nb,
 
 	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(sc->dev, "received regulator failure 0x%lx\n", event);
+		schedule_work(&sc->shutdown_work);
 		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
-		/* TODO(b/122619299): force emergency shutdown in driver */
 	}
 
 	return 0;
@@ -1581,6 +1602,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_create_debugfs(ab_sm_ctx);
 	ab_sm_create_sysfs(ab_sm_ctx);
 
+	INIT_WORK(&ab_sm_ctx->shutdown_work, ab_sm_shutdown_work);
 	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
 
 	ab_sm_ctx->regulator_nb.notifier_call = ab_regulator_listener;

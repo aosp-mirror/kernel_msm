@@ -518,6 +518,7 @@ struct ab_state_context {
 	u64 s60_delay;
 
 	struct notifier_block regulator_nb; /* single notifier */
+	struct work_struct shutdown_work; /* emergency shutdown work */
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	struct dentry *d_entry;
