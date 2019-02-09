@@ -80,7 +80,8 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir);
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 			    enum dma_data_direction dir);
-static int dma_send_fw(const char *path, const int remote_addr);
+static int dma_send_fw(struct device *device, const char *path,
+		       const int remote_addr);
 static int dma_read_dw(const int remote_addr, int *val);
 static int dma_send_images(struct faceauth_start_data *data);
 static int pio_write_qw(const int remote_addr, const uint64_t val);
@@ -104,12 +105,15 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				   unsigned long arg);
 
-bool hypx_enable;
-uint64_t m0_verbosity_level;
-struct dentry *faceauth_debugfs_root;
-uint16_t session_id;
-atomic_t in_use;
-struct platform_device *faceauth_pdev;
+struct faceauth_data {
+	bool hypx_enable;
+	uint64_t m0_verbosity_level;
+	struct dentry *debugfs_root;
+	uint16_t session_id;
+	atomic_t in_use;
+	struct miscdevice misc_dev;
+	struct device *device;
+};
 
 /* M0 Verbosity Level Encoding
 
@@ -152,7 +156,9 @@ will result in the following settings:
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
 {
-	if (hypx_enable)
+	struct faceauth_data *data = file->private_data;
+
+	if (data->hypx_enable)
 		return faceauth_dev_ioctl_el2(file, cmd, arg);
 	else
 		return faceauth_dev_ioctl_el1(file, cmd, arg);
@@ -172,6 +178,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	uint32_t ab_result;
 	uint32_t bin_result;
 	uint32_t dma_read_value;
+	struct faceauth_data *data = file->private_data;
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data = { { 0 } };
 	struct timeval timestamp;
@@ -190,13 +197,15 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			goto exit;
 		}
 
-		err = dma_send_fw(M0_FIRMWARE_PATH, M0_FIRMWARE_ADDR);
+		err = dma_send_fw(data->device, M0_FIRMWARE_PATH,
+				  M0_FIRMWARE_ADDR);
 		if (err) {
 			pr_err("Error during M0 firmware transfer: %d\n", err);
 			goto exit;
 		}
 
-		pio_write_qw(M0_VERBOSITY_LEVEL_FLAG_ADDR, m0_verbosity_level);
+		pio_write_qw(M0_VERBOSITY_LEVEL_FLAG_ADDR,
+			     data->m0_verbosity_level);
 		pio_write_qw(FEATURES_FLAG_ADDR, init_step_data.features);
 
 		break;
@@ -264,7 +273,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		}
 
 		/* Set input flag */
-		ab_input = ((++session_id & 0xFFFF) << 16) |
+		ab_input = ((++data->session_id & 0xFFFF) << 16) |
 			   ((start_step_data.profile_id & 0xFF) << 8) |
 			   ((start_step_data.operation & 0xFF));
 		pr_info("Set faceauth input flag = 0x%08x\n", ab_input);
@@ -428,6 +437,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	struct faceauth_init_data init_step_data = { 0 };
 	unsigned long stop, ioctl_start;
 	bool send_images_data;
+	struct faceauth_data *data = file->private_data;
 
 	ioctl_start = jiffies;
 
@@ -445,8 +455,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		if (err < 0)
 			goto exit;
 
-		err = el2_faceauth_init(&faceauth_pdev->dev, &init_step_data,
-					m0_verbosity_level);
+		err = el2_faceauth_init(data->device, &init_step_data,
+					data->m0_verbosity_level);
 		if (err < 0)
 			goto exit;
 
@@ -524,7 +534,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		/* In case of EL2 cleanup happens in PIL callback */
 		/* TODO cleanup Airbrush DRAM */
 		pr_info("el2: faceauth cleanup IOCTL\n");
-		el2_faceauth_cleanup(&faceauth_pdev->dev);
+		el2_faceauth_cleanup(data->device);
 		break;
 	default:
 		err = -EOPNOTSUPP;
@@ -539,14 +549,20 @@ exit:
 
 static int faceauth_open(struct inode *inode, struct file *file)
 {
-	if (atomic_cmpxchg(&in_use, 0, 1))
+	struct miscdevice *m = file->private_data;
+	struct faceauth_data *data =
+		container_of(m, struct faceauth_data, misc_dev);
+
+	file->private_data = data;
+	if (atomic_cmpxchg(&data->in_use, 0, 1))
 		return -EBUSY;
 	return 0;
 }
 
 static int faceauth_release(struct inode *inode, struct file *file)
 {
-	atomic_set(&in_use, 0);
+	struct faceauth_data *data = file->private_data;
+	atomic_set(&data->in_use, 0);
 	return 0;
 }
 
@@ -556,12 +572,6 @@ static const struct file_operations faceauth_dev_operations = {
 	.compat_ioctl = faceauth_dev_ioctl,
 	.open = faceauth_open,
 	.release = faceauth_release,
-};
-
-static struct miscdevice faceauth_miscdevice = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name = "faceauth",
-	.fops = &faceauth_dev_operations,
 };
 
 /**
@@ -620,14 +630,14 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
  * @param[in] remote_addr Address of Airbrush memory
  * @return Status, zero if succeed, non-zero if fail
  */
-static int dma_send_fw(const char *path, const int remote_addr)
+static int dma_send_fw(struct device *device, const char *path,
+		       const int remote_addr)
 {
 	int err = 0;
 	const struct firmware *fw_entry;
 	int fw_status;
 
-	fw_status = request_firmware(&fw_entry, path,
-				     faceauth_miscdevice.this_device);
+	fw_status = request_firmware(&fw_entry, path, device);
 	if (fw_status != 0) {
 		pr_err("Firmware Not Found: %d\n", fw_status);
 		return -EIO;
@@ -974,30 +984,34 @@ static int pio_write_qw(const int remote_addr, const uint64_t val)
 	return 0;
 }
 
-static int faceauth_hypx_enable_set(void *data, u64 val)
+static int faceauth_hypx_enable_set(void *ptr, u64 val)
 {
-	hypx_enable = !!val;
+	struct faceauth_data *data = ptr;
+	data->hypx_enable = !!val;
 	return 0;
 }
 
-static int faceauth_hypx_enable_get(void *data, u64 *val)
+static int faceauth_hypx_enable_get(void *ptr, u64 *val)
 {
-	*val = hypx_enable;
+	struct faceauth_data *data = ptr;
+	*val = data->hypx_enable;
 	return 0;
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, faceauth_hypx_enable_get,
 			 faceauth_hypx_enable_set, "%llu\n");
 
-static int faceauth_m0_verbosity_set(void *data, u64 val)
+static int faceauth_m0_verbosity_set(void *ptr, u64 val)
 {
-	m0_verbosity_level = val;
+	struct faceauth_data *data = ptr;
+	data->m0_verbosity_level = val;
 	return 0;
 }
 
-static int faceauth_m0_verbosity_get(void *data, u64 *val)
+static int faceauth_m0_verbosity_get(void *ptr, u64 *val)
 {
-	*val = m0_verbosity_level;
+	struct faceauth_data *data = ptr;
+	*val = data->m0_verbosity_level;
 	return 0;
 }
 
@@ -1008,34 +1022,44 @@ static int faceauth_probe(struct platform_device *pdev)
 {
 	int err;
 	struct dentry *hypx, *m0_verbosity_level;
+	struct faceauth_data *data;
+	struct dentry *debugfs_root;
 #if ENABLE_AIRBRUSH_DEBUG
 	int i;
 #endif
 
-	hypx_enable = false;
-	m0_verbosity_level = 0;
+	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+	platform_set_drvdata(pdev, data);
+	data->device = &pdev->dev;
 
-	err = misc_register(&faceauth_miscdevice);
+	data->misc_dev.minor = MISC_DYNAMIC_MINOR,
+	data->misc_dev.name = "faceauth",
+	data->misc_dev.fops = &faceauth_dev_operations,
+
+	err = misc_register(&data->misc_dev);
 	if (err)
 		goto exit1;
 
-	faceauth_debugfs_root = debugfs_create_dir("faceauth", NULL);
-	if (IS_ERR_OR_NULL(faceauth_debugfs_root)) {
+	debugfs_root = debugfs_create_dir("faceauth", NULL);
+	if (IS_ERR_OR_NULL(debugfs_root)) {
 		pr_err("Failed to create faceauth debugfs");
 		err = -EIO;
 		goto exit2;
 	}
+	data->debugfs_root = debugfs_root;
 
-	hypx = debugfs_create_file("hypx_enable", 0660, faceauth_debugfs_root,
-				   NULL, &fops_hypx_enable);
+	hypx = debugfs_create_file("hypx_enable", 0660, debugfs_root, data,
+				   &fops_hypx_enable);
 	if (!hypx) {
 		err = -EIO;
 		goto exit3;
 	}
 
-	m0_verbosity_level = debugfs_create_file("m0_verbosity_level", 0660,
-						 faceauth_debugfs_root, NULL,
-						 &fops_m0_verbosity);
+	m0_verbosity_level =
+		debugfs_create_file("m0_verbosity_level", 0660, debugfs_root,
+				    data, &fops_m0_verbosity);
 	if (!m0_verbosity_level) {
 		err = -EIO;
 		goto exit3;
@@ -1062,10 +1086,10 @@ static int faceauth_probe(struct platform_device *pdev)
 	return 0;
 
 exit3:
-	debugfs_remove_recursive(faceauth_debugfs_root);
+	debugfs_remove_recursive(debugfs_root);
 
 exit2:
-	misc_deregister(&faceauth_miscdevice);
+	misc_deregister(&data->misc_dev);
 
 exit1:
 	return err;
@@ -1073,8 +1097,10 @@ exit1:
 
 static int faceauth_remove(struct platform_device *pdev)
 {
-	misc_deregister(&faceauth_miscdevice);
-	debugfs_remove_recursive(faceauth_debugfs_root);
+	struct faceauth_data *data = platform_get_drvdata(pdev);
+
+	misc_deregister(&data->misc_dev);
+	debugfs_remove_recursive(data->debugfs_root);
 
 #if ENABLE_AIRBRUSH_DEBUG
 	debug_data_queue.count = 0;
@@ -1094,12 +1120,11 @@ static struct platform_driver faceauth_driver = {
 		.owner = THIS_MODULE,
 	},
 };
+struct platform_device *faceauth_pdev;
 
 static int __init faceauth_init(void)
 {
 	int ret;
-
-	atomic_set(&in_use, 0);
 
 	faceauth_pdev =
 		platform_device_register_simple("faceauth", -1, NULL, 0);
