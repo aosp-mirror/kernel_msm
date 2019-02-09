@@ -2501,7 +2501,7 @@ static u16 max1720x_read_rsense(const struct max1720x_chip *chip)
 		&rsense_default);
 
 	ret = REGMAP_READ(chip->regmap_nvram, MAX1720X_NRSENSE, &rsense);
-	if (rsense_default && (ret || rsense != rsense_default)) {
+	if (rsense_default && (ret < 0 || rsense != rsense_default)) {
 		rsense = rsense_default;
 		dev_warn(chip->dev, "RSense, forcing %d micro Ohm (%d)\n",
 			rsense * 10, ret);
@@ -2640,8 +2640,8 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
-	u16 data = 0;
 	int ret;
+	u16 data = 0;
 
 	if (of_property_read_bool(chip->dev->of_node, "maxim,force-hard-reset"))
 		max1720x_full_reset(chip);
@@ -2650,7 +2650,11 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	if (ret < 0)
 		return -EPROBE_DEFER;
 
-	if (data & MAX1720X_STATUS_POR) {
+	chip->RSense = max1720x_read_rsense(chip);
+	if (chip->RSense == 0)
+		dev_err(chip->dev, "RSense value 0 micro Ohm\n");
+
+	if (data & MAX1720X_STATUS_POR || chip->RSense == 0) {
 
 		ret = max17x0x_nvram_cache_init(&chip->nRAM_por,
 							max17xxx_gauge_type);
@@ -2662,7 +2666,7 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 			return -EPROBE_DEFER;
 		}
 
-		dev_info(chip->dev, "POR recall NVRAM\n");
+		dev_info(chip->dev, "Recall Battery NVRAM\n");
 		ret = max17x0x_nvram_recall(chip);
 		if (ret == 0)
 			chip->needs_reset = true;
@@ -2684,8 +2688,12 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	(void) max1720x_handle_dt_nconvgcfg(chip);
 
 	/* recall, force & reset SW */
-	if (chip->needs_reset)
+	if (chip->needs_reset) {
 		max17x0x_fg_reset(chip);
+
+		if (chip->RSense == 0)
+			chip->RSense = max1720x_read_rsense(chip);
+	}
 
 	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
 	if (!ret && data & MAX1720X_STATUS_BR) {
@@ -2704,7 +2712,6 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 				   MAX1720X_STATUS_POR, 0x0);
 	}
 
-	chip->RSense = max1720x_read_rsense(chip);
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
 	(void) REGMAP_READ(chip->regmap, MAX1720X_CONFIG, &chip->RConfig);
 	dev_info(chip->dev, "Config: 0x%04x\n", chip->RConfig);
