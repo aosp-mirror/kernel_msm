@@ -373,6 +373,7 @@ struct max17x0x_reg {
 	union {
 		unsigned int base;
 		unsigned int reg;
+		const u16 *map16;
 		const u8 *map;
 	};
 };
@@ -551,10 +552,16 @@ static inline int max1720x_regmap_write(struct regmap *map,
 	.size = sz,			\
 	.base = start
 
-#define ATOM_INIT_SET(...)			\
-	.type = GBMS_ATOM_TYPE_SET,		\
-	.size = 2 * sizeof((u8[]){__VA_ARGS__}),\
+/* a set has no storage and cannot be used in load/store */
+#define ATOM_INIT_SET(...)		\
+	.type = GBMS_ATOM_TYPE_SET,	\
+	.size = 0,			\
 	.map = (u8[]){__VA_ARGS__}
+
+#define ATOM_INIT_SET16(...)		\
+	.type = GBMS_ATOM_TYPE_SET,	\
+	.size = 0,			\
+	.map16 = (u16[]){__VA_ARGS__}
 
 /* the point of the '' constants is to avoid defines for tag names...
  * so please don't add them ;-)
@@ -565,8 +572,12 @@ static const struct max17x0x_reg max1720x[] = {
 	{ 'SNUM', ATOM_INIT_MAP(0xcc, 0xd8, 0xd9, 0xda, 0xd6,
 				0xdb, 0xdc, 0xdd, 0xde, 0xd1,
 				0xd0) },
+
 	{ 'HSTY', ATOM_INIT_SET(0xe0, 0xe1, 0xe4, 0xea, 0xeb,
 				0xed, 0xef) },
+	{ 'rset', ATOM_INIT_SET16(MAX1720X_CONFIG2,
+				MAX1720X_COMMAND_FUEL_GAUGE_RESET,
+				700)},
 };
 
 /* see b/119416045 for layout */
@@ -576,7 +587,11 @@ static const struct max17x0x_reg max1730x[] = {
 	{ 'SNUM', ATOM_INIT_MAP(0xce, 0xe6, 0xe7, 0xe8, 0xe9,
 				0xea, 0xeb, 0xec, 0xed, 0xee,
 				0xef) },
+
 	{ 'HSTY', ATOM_INIT_SET(0xf0, 0xf2, 0xfb, 0xfe, 0xff) },
+	{ 'rset', ATOM_INIT_SET16(MAX1730X_CONFIG2,
+				MAX1730X_COMMAND_FUEL_GAUGE_RESET,
+				700)},
 };
 
 struct max17x0x_device_info {
@@ -1733,18 +1748,47 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
  * A fuel gauge reset resets only the fuel gauge operation without resetting IC
  * hardware. This is useful for testing different configurations without writing
  * nonvolatile memory.
+ * TODO: add a lock around fg_reet to prevent SW from access the gauge until the
+ * volatile delay (rset->map[2]) expires. Need a lock only if using this after
+ * _init()
  */
 static void max17x0x_fg_reset(struct max1720x_chip *chip)
 {
-	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
-		REGMAP_WRITE(chip->regmap, MAX1730X_CONFIG2,
-			     MAX1730X_COMMAND_FUEL_GAUGE_RESET);
+	const struct max17x0x_reg *rset;
+	bool done = false;
+	int err;
+
+	rset = max17x0x_find_by_id('rset');
+	if (!rset)
+		return;
+
+	dev_info(chip->dev, "FG_RESET addr=%x value=%x delay=%d\n",
+			    rset->map16[0], rset->map16[1], rset->map16[2]);
+
+	err = REGMAP_WRITE(chip->regmap, rset->map16[0], rset->map16[1]);
+	if (err < 0) {
+		dev_err(chip->dev, "FG_RESET error writing Config2 (%d)\n",
+				   err);
 	} else {
-		REGMAP_WRITE(chip->regmap, MAX1720X_CONFIG2,
-			     MAX1720X_COMMAND_FUEL_GAUGE_RESET);
+		int loops = 10; /* 10 * MAX1720X_TPOR_MS = 1.5 secs */
+		u16 cfg2 = 0;
+
+		for ( ; loops ; loops--) {
+			msleep(MAX1720X_TPOR_MS);
+
+			err = REGMAP_READ(chip->regmap, rset->map16[0], &cfg2);
+			done = (err == 0) && !(cfg2 & rset->map[1]);
+			if (done) {
+				msleep(rset->map[2]);
+				break;
+			}
+		}
+
+		if (!done)
+			dev_err(chip->dev, "FG_RESET error rst not clearing\n");
+
 	}
 
-	msleep(MAX1720X_TPOR_MS);
 }
 
 /*
@@ -2386,6 +2430,16 @@ static int set_irq_none_cnt(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(irq_none_cnt_fops, get_irq_none_cnt,
 	set_irq_none_cnt, "%llu\n");
 
+
+static int debug_fg_reset(void *data, u64 val)
+{
+	max17x0x_fg_reset((struct max1720x_chip *)data);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_fg_reset_fops, NULL, debug_fg_reset, "%llu\n");
+
+
 #define BATTERY_DEBUG_ATTRIBUTE(name, fn_read, fn_write) \
 static const struct file_operations name = {	\
 	.open	= simple_open,			\
@@ -2430,6 +2484,8 @@ static int init_debugfs(struct max1720x_chip *chip)
 				   chip, &irq_none_cnt_fops);
 		debugfs_create_file("nvram_por", 0440, de,
 				   chip, &debug_nvram_por_fops);
+		debugfs_create_file("fg_reset", 0400, de,
+				   chip, &debug_fg_reset_fops);
 	}
 #endif
 	return 0;
