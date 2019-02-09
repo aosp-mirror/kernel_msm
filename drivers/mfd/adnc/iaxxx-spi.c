@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
+#include "ia8508a-memory-map.h"
 #include "iaxxx.h"
 
 
@@ -299,14 +300,13 @@ static int iaxxx_regmap_spi_write(void *context, const void *data, size_t count)
  *
  */
 static int iaxxx_spi_raw_write(void *context,
-			 const void *reg,
+			 uint32_t reg_addr,
 			 const void *val, size_t val_len)
 {
 	size_t reg_len = IAXXX_REG_LEN_WITH_PADDING;
 	size_t val_index;
 	size_t burst_size = val_len > IAXXX_SPI_BURST_SIZE ?
 			IAXXX_SPI_BURST_SIZE : val_len;
-	uint32_t reg_addr = (*(uint32_t *)reg);
 	uint8_t *val_addr = (uint8_t *)val;
 	int rc = 0;
 
@@ -322,8 +322,40 @@ static int iaxxx_spi_raw_write(void *context,
 			false, true);
 		if (rc)
 			break;
-		reg_addr += burst_size;
+		if (val_len-val_index < burst_size)
+			reg_addr += val_len - val_index;
+		else
+			reg_addr += burst_size;
 	}
+	return rc;
+}
+
+/* This function checks for FW ROM range section overlap
+ * case before starting burst writes. if range check falls into
+ * any ROM address range then driver will split and send the data
+ * other wise it sends data in one shot.
+ *
+ */
+static int iaxxx_spi_raw_write_with_rom_range_check(
+		void *context, const void *reg,
+		const void *val, size_t val_len)
+{
+	int rc = 0;
+	uint32_t phy_size_range1;
+	uint32_t phy_addr_range2, phy_size_range2;
+	uint32_t phy_addr_range1 = (*(uint32_t *)reg);
+
+	if (rom_phy_address_range_check(phy_addr_range1, val_len,
+	&phy_size_range1, &phy_addr_range2, &phy_size_range2)) {
+		rc = iaxxx_spi_raw_write(context, phy_addr_range1,
+			val, phy_size_range1);
+		if (rc)
+			return rc;
+		rc = iaxxx_spi_raw_write(context, phy_addr_range2,
+			val+phy_size_range1, phy_size_range2);
+	} else
+		rc = iaxxx_spi_raw_write(context, phy_addr_range1,
+			val, phy_size_range1);
 
 	return rc;
 }
@@ -919,7 +951,7 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	spi_priv->priv.dev = dev;
 	spi_priv->priv.regmap_init_bus = iaxxx_spi_regmap_init;
 	spi_priv->priv.bulk_read = iaxxx_spi_bulk_read;
-	spi_priv->priv.raw_write = iaxxx_spi_raw_write;
+	spi_priv->priv.raw_write = iaxxx_spi_raw_write_with_rom_range_check;
 	spi_priv->priv.bus = IAXXX_SPI;
 
 	spi_set_drvdata(spi, spi_priv);
