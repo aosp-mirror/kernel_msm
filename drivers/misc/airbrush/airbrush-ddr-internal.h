@@ -132,6 +132,11 @@
 #define TMGPBR_800			(t_rfcpb0(0x1c) | t_rfcpb1(0x1c))
 
 #define DREX_PWRDNCONFIG		0x10580028
+#define DREX_TIMINGARE			0x10580030
+#define T_REFI(x)			(((x) & 0xffff) << 0)
+#define T_REFIPB(x)			(((x) & 0xffff) << 16)
+#define T_REFI_DEFAULT			T_REFI(0x49)
+#define T_REFIPB_DEFAULT		T_REFIPB(0x9)
 
 #define DREX_TIMINGROW0			0x10580034
 #define t_ras(x)			(((x) & 0x3f) << 0)

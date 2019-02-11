@@ -1092,6 +1092,9 @@ static void ddr_set_drex_timing_parameters(enum ddr_freq_t freq)
 	ddr_reg_wr(DREX_TIMINGPOWER0, ddr_freq_param(freq, f_DREX_TIMINGPOWER));
 	ddr_reg_wr(DREX_TIMINGPOWER1, ddr_freq_param(freq, f_DREX_TIMINGPOWER));
 
+	/* Set the all-bank and per-bank auto refresh timings */
+	ddr_reg_wr(DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
+
 	ddr_reg_wr_otp(DREX_ETCTIMING, o_Reserved_DDR_INIT_7);
 	ddr_reg_wr_otp(DREX_RDFETCH0, o_Reserved_DDR_INIT_8);
 	ddr_reg_wr_otp(DREX_RDFETCH1, o_Reserved_DDR_INIT_9);
@@ -2066,6 +2069,9 @@ static int ddr_enable_power_features(void)
 	 *       1B: Enable all codes in MR4 OP[2:0]
 	 */
 	ddr_reg_wr(DREX_DIRECTCMD, MRW13_DEFAULT);
+
+	/* Set the all-bank and per-bank auto refresh timings */
+	ddr_reg_wr(DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
 
 	/* Enabling DDR Power features */
 	ddr_reg_set(DREX_CGCONTROL, PHY_CG_EN);
