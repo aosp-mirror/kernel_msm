@@ -633,15 +633,12 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 static int dma_send_fw(struct device *device, const char *path,
 		       const int remote_addr)
 {
-	int err = 0;
+	int err;
 	const struct firmware *fw_entry;
-	int fw_status;
 
-	fw_status = request_firmware(&fw_entry, path, device);
-	if (fw_status != 0) {
-		pr_err("Firmware Not Found: %d\n", fw_status);
-		return -EIO;
-	}
+	err = request_firmware(&fw_entry, path, device);
+	if (err)
+		return err;
 
 	err = dma_xfer_vmalloc((void *)fw_entry->data, fw_entry->size,
 			       remote_addr, DMA_TO_DEVICE);
