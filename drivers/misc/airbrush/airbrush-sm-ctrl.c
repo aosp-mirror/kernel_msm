@@ -46,7 +46,7 @@ static struct ab_state_context *ab_sm_ctx;
  * Index 1 - B0 clk frequencies
  */
 static u64 blk_ipu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_0_0] = { 549600000, 680000000 },
+	[BLOCK_STATE_0_0] = { 19200000, 19200000 },
 	[BLOCK_STATE_0_1] = { 50000000,  50000000  },
 	[BLOCK_STATE_0_2] = { 220000000, 271800000 },
 	[BLOCK_STATE_0_3] = { 330000000, 408000000 },
@@ -64,7 +64,7 @@ static u64 blk_ipu_clk_tbl[NUM_BLOCK_STATES][2] = {
  * Index 1 - B0 clk frequencies
  */
 static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_0_0] = { 765600000, 1000000000 },
+	[BLOCK_STATE_0_0] = { 19200000,  19200000 },
 	[BLOCK_STATE_0_1] = { 50000000,  50000000   },
 	[BLOCK_STATE_0_2] = { 306400000, 316000000  },
 	[BLOCK_STATE_0_3] = { 459600000, 474000000  },
