@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -6332,8 +6332,8 @@ int msm_comm_qbuf_cache_operations(struct msm_vidc_inst *inst,
 					V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 				if (!i) { /* yuv */
 					skip = false;
-					offset = 0;
-					size = vb->planes[i].length;
+					offset = vb->planes[i].data_offset;
+					size = vb->planes[i].bytesused;
 					cache_op = SMEM_CACHE_INVALIDATE;
 				}
 			}
@@ -6349,8 +6349,8 @@ int msm_comm_qbuf_cache_operations(struct msm_vidc_inst *inst,
 					V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 				if (!i) { /* bitstream */
 					skip = false;
-					offset = 0;
-					size = vb->planes[i].length;
+					offset = vb->planes[i].data_offset;
+					size = vb->planes[i].bytesused;
 					cache_op = SMEM_CACHE_INVALIDATE;
 				}
 			}
@@ -6966,4 +6966,27 @@ exit:
 	if (!pconstraint)
 		kfree(pconstraint);
 	return rc;
+}
+
+bool msm_comm_check_for_inst_overload(struct msm_vidc_core *core)
+{
+	u32 instance_count = 0;
+	u32 secure_instance_count = 0;
+	struct msm_vidc_inst *inst = NULL;
+	bool overload = false;
+
+	mutex_lock(&core->lock);
+	list_for_each_entry(inst, &core->instances, list) {
+		instance_count++;
+		if (inst->flags & VIDC_SECURE)
+			secure_instance_count++;
+	}
+	mutex_unlock(&core->lock);
+
+	/* Instance count includes current instance as well. */
+
+	if ((instance_count > core->resources.max_inst_count) ||
+		(secure_instance_count > core->resources.max_secure_inst_count))
+		overload = true;
+	return overload;
 }

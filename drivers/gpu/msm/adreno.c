@@ -1241,6 +1241,26 @@ static void adreno_cx_misc_probe(struct kgsl_device *device)
 					res->start, adreno_dev->cx_misc_len);
 }
 
+static void adreno_qdss_dbg_probe(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct resource *res;
+
+	res = platform_get_resource_byname(device->pdev, IORESOURCE_MEM,
+					   "qdss_gfx");
+
+	if (res == NULL)
+		return;
+
+	adreno_dev->qdss_gfx_base = res->start - device->reg_phys;
+	adreno_dev->qdss_gfx_len = resource_size(res);
+	adreno_dev->qdss_gfx_virt = devm_ioremap(device->dev, res->start,
+						resource_size(res));
+
+	if (adreno_dev->qdss_gfx_virt == NULL)
+		KGSL_DRV_WARN(device, "qdss_gfx ioremap failed\n");
+}
+
 static void adreno_efuse_read_soc_hw_rev(struct adreno_device *adreno_dev)
 {
 	unsigned int val;
@@ -1375,6 +1395,9 @@ static int adreno_probe(struct platform_device *pdev)
 
 	/* Probe for the optional CX_MISC block */
 	adreno_cx_misc_probe(device);
+
+	/*Probe for the optional QDSS_GFX_DBG block*/
+	adreno_qdss_dbg_probe(device);
 
 	/*
 	 * qcom,iommu-secure-id is used to identify MMUs that can handle secure
@@ -2257,11 +2280,13 @@ static inline bool adreno_try_soft_reset(struct kgsl_device *device, int fault)
 
 	/*
 	 * Do not do soft reset for a IOMMU fault (because the IOMMU hardware
-	 * needs a reset too) or for the A304 because it can't do SMMU
-	 * programming of any kind after a soft reset
+	 * needs a reset too) and also for below gpu
+	 * A304: It can't do SMMU programming of any kind after a soft reset
+	 * A612: IPC protocol between RGMU and CP will not restart after reset
 	 */
 
-	if ((fault & ADRENO_IOMMU_PAGE_FAULT) || adreno_is_a304(adreno_dev))
+	if ((fault & ADRENO_IOMMU_PAGE_FAULT) || adreno_is_a304(adreno_dev) ||
+			adreno_is_a612(adreno_dev))
 		return false;
 
 	return true;
@@ -3097,6 +3122,9 @@ int adreno_spin_idle(struct adreno_device *adreno_dev, unsigned int timeout)
 
 		if (adreno_isidle(KGSL_DEVICE(adreno_dev)))
 			return 0;
+
+		/* relax tight loop */
+		cond_resched();
 
 	} while (time_before(jiffies, wait));
 

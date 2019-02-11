@@ -2096,6 +2096,11 @@
 			interrupt-controller;
 			#interrupt-cells = <2>;
 		};
+
+		smp2p_qvrexternal5_out: qcom,smp2p-qvrexternal5-out {
+			qcom,entry-name = "qvrexternal";
+			#qcom,smem-state-cells = <1>;
+		};
 	};
 
 	sdcc1_ice: sdcc1ice@7C8000 {
@@ -2205,11 +2210,11 @@
 		qcom,large-address-bus;
 
 		qcom,clk-rates = <400000 20000000 25000000
-				50000000 100000000 208000000>;
+				50000000 100000000 202000000>;
 		qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50",
 				      "SDR104";
 
-		qcom,devfreq,freq-table = <50000000 208000000>;
+		qcom,devfreq,freq-table = <50000000 202000000>;
 
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
@@ -2495,6 +2500,10 @@
 		qcom,no-clock-support;
 		iommus = <&apps_smmu 0x0506 0x0011>,
 			 <&apps_smmu 0x0516 0x0011>;
+	};
+
+	qcom_msmhdcp: qcom,msm_hdcp {
+		compatible = "qcom,msm-hdcp";
 	};
 
 	qcom_crypto: qcrypto@1de0000 {
@@ -3154,6 +3163,7 @@
 #include "sdmmagpie-sde.dtsi"
 #include "sdmmagpie-camera.dtsi"
 #include "msm-rdbg.dtsi"
+#include "msm-qvr-external.dtsi"
 
 &pcie_0_gdsc {
 	status = "ok";

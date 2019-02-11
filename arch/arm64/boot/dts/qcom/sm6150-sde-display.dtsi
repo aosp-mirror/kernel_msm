@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,6 +17,9 @@
 #include "dsi-panel-td4328-1080p-cmd.dtsi"
 #include "dsi-panel-rm69298-truly-amoled-fhd-plus-video.dtsi"
 #include "dsi-panel-rm69298-truly-amoled-fhd-plus-cmd.dtsi"
+#include "dsi-panel-td4330-truly-singlemipi-fhd-cmd.dtsi"
+#include "dsi-panel-td4330-truly-singlemipi-fhd-video.dtsi"
+#include "dsi-panel-sharp-split-link-wuxga-video.dtsi"
 #include <dt-bindings/clock/mdss-14nm-pll-clk.h>
 
 &soc {
@@ -99,7 +102,7 @@
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,dsi-panel = <&dsi_sim_vid>;
 	};
@@ -110,7 +113,7 @@
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,dsi-panel = <&dsi_sim_cmd>;
 	};
@@ -121,7 +124,7 @@
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,dsi-panel = <&dsi_hx83112a_truly_video>;
 	};
@@ -132,7 +135,7 @@
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,dsi-panel = <&dsi_td4328_truly_video>;
 	};
@@ -143,7 +146,7 @@
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,dsi-panel = <&dsi_td4328_truly_cmd>;
 	};
@@ -154,7 +157,7 @@
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,dsi-panel = <&dsi_rm69298_truly_amoled_video>;
 	};
@@ -165,9 +168,42 @@
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,dsi-panel = <&dsi_rm69298_truly_amoled_cmd>;
+	};
+
+	dsi_td4330_truly_vid_display: qcom,dsi-display@7 {
+		label = "dsi_td4330_truly_vid_display";
+		qcom,display-type = "primary";
+
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+
+		qcom,dsi-panel = <&dsi_td4330_truly_video>;
+	};
+
+	dsi_td4330_truly_cmd_display: qcom,dsi-display@8 {
+		label = "dsi_td4330_truly_cmd_display";
+		qcom,display-type = "primary";
+
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+
+		qcom,dsi-panel = <&dsi_td4330_truly_cmd>;
+	};
+
+	dsi_sharp_split_link_wuxga_vid_display: qcom,dsi-display@9 {
+		label = "dsi_sharp_split_link_wuxga_vid_display";
+		qcom,display-type = "primary";
+
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "src_byte_clk0", "src_pixel_clk0";
+
+		qcom,dsi-panel = <&dsi_sharp_split_link_wuxga_video>;
 	};
 
 	sde_dsi: qcom,dsi-display {
@@ -178,7 +214,7 @@
 
 		clocks = <&mdss_dsi0_pll BYTE0_MUX_CLK>,
 			 <&mdss_dsi0_pll PIX0_MUX_CLK>;
-		clock-names = "src_byte_clk0", "src_pixel_clk0";
+		clock-names = "mux_byte_clk0", "mux_pixel_clk0";
 		pinctrl-names = "panel_active", "panel_suspend";
 		pinctrl-0 = <&sde_dsi_active &sde_te_active>;
 		pinctrl-1 = <&sde_dsi_suspend &sde_te_suspend>;
@@ -197,7 +233,10 @@
 			&dsi_td4328_truly_vid_display
 			&dsi_td4328_truly_cmd_display
 			&dsi_rm69298_truly_amoled_vid_display
-			&dsi_rm69298_truly_amoled_cmd_display>;
+			&dsi_rm69298_truly_amoled_cmd_display
+			&dsi_td4330_truly_vid_display
+			&dsi_td4330_truly_cmd_display
+			&dsi_sharp_split_link_wuxga_vid_display>;
 	};
 
 	sde_wb: qcom,wb-display@0 {
@@ -210,6 +249,27 @@
 
 &sde_dp {
 	qcom,dp-usbpd-detection = <&pm6150_pdphy>;
+	hpd-pwr-supply = <&pm6150_l17>;
+	qcom,phy-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		qcom,phy-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vdda-0p9";
+			qcom,supply-min-voltage = <880000>;
+			qcom,supply-max-voltage = <975000>;
+			qcom,supply-enable-load = <36000>;
+			qcom,supply-disable-load = <0>;
+		};
+		qcom,phy-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "hpd-pwr";
+			qcom,supply-min-voltage = <3000000>;
+			qcom,supply-max-voltage = <3230000>;
+			qcom,supply-enable-load = <30000>;
+			qcom,supply-disable-load = <0>;
+		};
+	};
 };
 
 &mdss_mdp {
@@ -287,8 +347,7 @@
 &dsi_hx83112a_truly_video {
 	qcom,mdss-dsi-t-clk-post = <0x0e>;
 	qcom,mdss-dsi-t-clk-pre = <0x31>;
-	qcom,mdss-dsi-min-refresh-rate = <48>;
-	qcom,mdss-dsi-max-refresh-rate = <60>;
+	qcom,dsi-supported-dfps-list = <60 55 53 43>;
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update =
 		"dfps_immediate_porch_mode_vfp";
@@ -342,6 +401,7 @@
 &dsi_td4328_truly_cmd {
 	qcom,mdss-dsi-t-clk-post = <0x0e>;
 	qcom,mdss-dsi-t-clk-pre = <0x32>;
+	qcom,ulps-enabled;
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
 	qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
@@ -396,6 +456,60 @@
 				23 1E 07 08 05 02 04 a0
 				23 1E 07 08 05 02 04 a0
 				23 19 07 08 05 02 04 a0];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_td4330_truly_cmd {
+	qcom,mdss-dsi-t-clk-post = <0x0e>;
+	qcom,mdss-dsi-t-clk-pre = <0x36>;
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings =
+				[26 20 09 0B 06 02 04 a0
+				26 20 09 0B 06 02 04 a0
+				26 20 09 0B 06 02 04 a0
+				26 20 09 0B 06 02 04 a0
+				26 1F 09 0B 06 02 04 a0];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_td4330_truly_video {
+	qcom,mdss-dsi-t-clk-post = <0x0e>;
+	qcom,mdss-dsi-t-clk-pre = <0x36>;
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings =
+				[26 20 09 0B 06 02 04 a0
+				26 20 09 0B 06 02 04 a0
+				26 20 09 0B 06 02 04 a0
+				26 20 09 0B 06 02 04 a0
+				26 1F 09 0B 06 02 04 a0];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_sharp_split_link_wuxga_video {
+	qcom,mdss-dsi-t-clk-post = <0x0E>;
+	qcom,mdss-dsi-t-clk-pre = <0x35>;
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings =
+				[25 1f 09 0a 06 03 04 a0
+				25 1f 09 0a 06 03 04 a0
+				25 1f 09 0a 06 03 04 a0
+				25 1f 09 0a 06 03 04 a0
+				25 1f 08 0a 06 03 04 a0];
 
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;

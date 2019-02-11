@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -830,6 +830,30 @@ static void dp_catalog_ctrl_lane_mapping(struct dp_catalog_ctrl *ctrl,
 			0xe4);
 }
 
+static void dp_catalog_ctrl_lane_pnswap(struct dp_catalog_ctrl *ctrl,
+						u8 ln_pnswap)
+{
+	struct dp_catalog_private *catalog;
+	struct dp_io_data *io_data;
+	u32 cfg0, cfg1;
+
+	catalog = dp_catalog_get_priv(ctrl);
+
+	cfg0 = 0x0a;
+	cfg1 = 0x0a;
+
+	cfg0 |= ((ln_pnswap >> 0) & 0x1) << 0;
+	cfg0 |= ((ln_pnswap >> 1) & 0x1) << 2;
+	cfg1 |= ((ln_pnswap >> 2) & 0x1) << 0;
+	cfg1 |= ((ln_pnswap >> 3) & 0x1) << 2;
+
+	io_data = catalog->io.dp_ln_tx0;
+	dp_write(catalog->exe_mode, io_data, TXn_TX_POL_INV, cfg0);
+
+	io_data = catalog->io.dp_ln_tx1;
+	dp_write(catalog->exe_mode, io_data, TXn_TX_POL_INV, cfg1);
+}
+
 static void dp_catalog_ctrl_mainlink_ctrl(struct dp_catalog_ctrl *ctrl,
 						bool enable)
 {
@@ -1308,37 +1332,6 @@ static void dp_catalog_ctrl_enable_irq(struct dp_catalog_ctrl *ctrl,
 		dp_write(catalog->exe_mode, io_data, DP_INTR_STATUS, 0x00);
 		dp_write(catalog->exe_mode, io_data, DP_INTR_STATUS2, 0x00);
 		dp_write(catalog->exe_mode, io_data, DP_INTR_STATUS5, 0x00);
-	}
-}
-
-static void dp_catalog_ctrl_hpd_config(struct dp_catalog_ctrl *ctrl, bool en)
-{
-	struct dp_catalog_private *catalog;
-	struct dp_io_data *io_data;
-
-	if (!ctrl) {
-		pr_err("invalid input\n");
-		return;
-	}
-
-	catalog = dp_catalog_get_priv(ctrl);
-	io_data = catalog->io.dp_aux;
-
-	if (en) {
-		u32 reftimer = dp_read(catalog->exe_mode, io_data,
-						DP_DP_HPD_REFTIMER);
-
-		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_INT_ACK, 0xF);
-		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_INT_MASK, 0xF);
-		/* Enabling REFTIMER */
-		reftimer |= BIT(16);
-		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_REFTIMER,
-				reftimer);
-		/* Enable HPD */
-		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_CTRL, 0x1);
-	} else {
-		/*Disable HPD */
-		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_CTRL, 0x0);
 	}
 }
 
@@ -1954,6 +1947,67 @@ end:
 	return 0;
 }
 
+static void dp_catalog_hpd_config_hpd(struct dp_catalog_hpd *hpd, bool en)
+{
+	struct dp_catalog_private *catalog;
+	struct dp_io_data *io_data;
+
+	if (!hpd) {
+		pr_err("invalid input\n");
+		return;
+	}
+
+	catalog = dp_catalog_get_priv(hpd);
+	io_data = catalog->io.dp_aux;
+
+	if (en) {
+		u32 reftimer = dp_read(catalog->exe_mode, io_data,
+						DP_DP_HPD_REFTIMER);
+
+		/* Arm only the UNPLUG and HPD_IRQ interrupts */
+		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_INT_ACK, 0xF);
+		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_INT_MASK, 0xA);
+
+		/* Enable REFTIMER to count 1ms */
+		reftimer |= BIT(16);
+		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_REFTIMER,
+				reftimer);
+
+		 /* Connect_time is 250us & disconnect_time is 2ms */
+		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_EVENT_TIME_0,
+				0x3E800FA);
+		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_EVENT_TIME_1,
+				0x1F407D0);
+
+		/* Enable HPD */
+		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_CTRL, 0x1);
+
+	} else {
+		/* Disable HPD */
+		dp_write(catalog->exe_mode, io_data, DP_DP_HPD_CTRL, 0x0);
+	}
+}
+
+static u32 dp_catalog_hpd_get_interrupt(struct dp_catalog_hpd *hpd)
+{
+	u32 isr = 0;
+	struct dp_catalog_private *catalog;
+	struct dp_io_data *io_data;
+
+	if (!hpd) {
+		pr_err("invalid input\n");
+		return isr;
+	}
+
+	catalog = dp_catalog_get_priv(hpd);
+
+	io_data = catalog->io.dp_aux;
+	isr = dp_read(catalog->exe_mode, io_data, DP_DP_HPD_INT_STATUS);
+	dp_write(catalog->exe_mode, io_data, DP_DP_HPD_INT_ACK, (isr & 0xf));
+
+	return isr;
+}
+
 static void dp_catalog_audio_init(struct dp_catalog_audio *audio)
 {
 	struct dp_catalog_private *catalog;
@@ -2411,13 +2465,13 @@ struct dp_catalog *dp_catalog_get(struct device *dev, struct dp_parser *parser)
 		.state_ctrl     = dp_catalog_ctrl_state_ctrl,
 		.config_ctrl    = dp_catalog_ctrl_config_ctrl,
 		.lane_mapping   = dp_catalog_ctrl_lane_mapping,
+		.lane_pnswap    = dp_catalog_ctrl_lane_pnswap,
 		.mainlink_ctrl  = dp_catalog_ctrl_mainlink_ctrl,
 		.set_pattern    = dp_catalog_ctrl_set_pattern,
 		.reset          = dp_catalog_ctrl_reset,
 		.usb_reset      = dp_catalog_ctrl_usb_reset,
 		.mainlink_ready = dp_catalog_ctrl_mainlink_ready,
 		.enable_irq     = dp_catalog_ctrl_enable_irq,
-		.hpd_config     = dp_catalog_ctrl_hpd_config,
 		.phy_reset      = dp_catalog_ctrl_phy_reset,
 		.phy_lane_cfg   = dp_catalog_ctrl_phy_lane_cfg,
 		.update_vx_px   = dp_catalog_ctrl_update_vx_px,
@@ -2433,6 +2487,10 @@ struct dp_catalog *dp_catalog_get(struct device *dev, struct dp_parser *parser)
 		.channel_dealloc = dp_catalog_ctrl_channel_dealloc,
 		.fec_config = dp_catalog_ctrl_fec_config,
 		.mainlink_levels = dp_catalog_ctrl_mainlink_levels,
+	};
+	struct dp_catalog_hpd hpd = {
+		.config_hpd	= dp_catalog_hpd_config_hpd,
+		.get_interrupt	= dp_catalog_hpd_get_interrupt,
 	};
 	struct dp_catalog_audio audio = {
 		.init       = dp_catalog_audio_init,
@@ -2479,6 +2537,7 @@ struct dp_catalog *dp_catalog_get(struct device *dev, struct dp_parser *parser)
 
 	dp_catalog->aux   = aux;
 	dp_catalog->ctrl  = ctrl;
+	dp_catalog->hpd   = hpd;
 	dp_catalog->audio = audio;
 	dp_catalog->panel = panel;
 

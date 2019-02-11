@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,6 +20,7 @@
 #define DP_LABEL "MDSS DP DISPLAY"
 #define AUX_CFG_LEN	10
 #define DP_MAX_PIXEL_CLK_KHZ	675000
+#define DP_MAX_LINK_CLK_KHZ	810000
 
 enum dp_pm_type {
 	DP_CORE_PM,
@@ -95,6 +96,8 @@ struct dp_pinctrl {
 	struct pinctrl *pin;
 	struct pinctrl_state *state_active;
 	struct pinctrl_state *state_hpd_active;
+	struct pinctrl_state *state_hpd_tlmm;
+	struct pinctrl_state *state_hpd_ctrl;
 	struct pinctrl_state *state_suspend;
 };
 
@@ -188,6 +191,9 @@ static inline char *dp_phy_aux_config_type_to_string(u32 cfg_type)
  * @mp: gpio, regulator and clock related data
  * @pinctrl: pin-control related data
  * @disp_data: controller's display related data
+ * @l_pnswap: P/N swap status on each lane
+ * @max_pclk_khz: maximum pixel clock supported for the platform
+ * @max_lclk_khz: maximum link clock supported for the platform
  * @hw_cfg: DP HW specific settings
  * @has_mst: MST feature enable status
  * @has_mst_sideband: MST sideband feature enable status
@@ -212,8 +218,10 @@ struct dp_parser {
 	struct dp_display_data disp_data;
 
 	u8 l_map[4];
+	u8 l_pnswap;
 	struct dp_aux_cfg aux_cfg[AUX_CFG_LEN];
 	u32 max_pclk_khz;
+	u32 max_lclk_khz;
 	struct dp_hw_cfg hw_cfg;
 	bool has_mst;
 	bool has_mst_sideband;
@@ -224,6 +232,7 @@ struct dp_parser {
 	bool gpio_aux_switch;
 	u32 max_dp_dsc_blks;
 	u32 max_dp_dsc_input_width_pixs;
+	bool lphw_hpd;
 
 	int (*parse)(struct dp_parser *parser);
 	struct dp_io_data *(*get_io)(struct dp_parser *parser, char *name);

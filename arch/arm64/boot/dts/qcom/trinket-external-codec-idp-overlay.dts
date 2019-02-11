@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,13 +11,18 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-#include "sa8155p-v2.dtsi"
-#include "sa8155-adp-common.dtsi"
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+#include "trinket-idp.dtsi"
+#include "trinket-tasha-codec-audio-overlay.dtsi"
+#include "trinket-tasha-codec.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. SA8155P ADP QDRIVE";
-	compatible = "qcom,sa8155p-adp-qdrive", "qcom,sa8155p",
-			"qcom,adp-qdrive";
-	qcom,board-id = <0x02000019 0>;
+	model = "Ext Audio Codec IDP";
+	compatible = "qcom,trinket-idp", "qcom,trinket", "qcom,idp";
+	qcom,msm-id = <394 0x10000>;
+	qcom,board-id = <34 1>;
 };
+

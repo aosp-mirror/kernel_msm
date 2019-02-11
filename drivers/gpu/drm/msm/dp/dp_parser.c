@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -160,10 +160,21 @@ static int dp_parser_misc(struct dp_parser *parser)
 			parser->l_map[i] = data[i];
 	}
 
+	data = of_get_property(of_node, "qcom,pn-swap-lane-map", &len);
+	if (data && (len == DP_MAX_PHY_LN)) {
+		for (i = 0; i < len; i++)
+			parser->l_pnswap |= (data[i] & 0x01) << i;
+	}
+
 	rc = of_property_read_u32(of_node,
 		"qcom,max-pclk-frequency-khz", &parser->max_pclk_khz);
 	if (rc)
 		parser->max_pclk_khz = DP_MAX_PIXEL_CLK_KHZ;
+
+	rc = of_property_read_u32(of_node,
+		"qcom,max-lclk-frequency-khz", &parser->max_lclk_khz);
+	if (rc)
+		parser->max_lclk_khz = DP_MAX_LINK_CLK_KHZ;
 
 	return 0;
 }
@@ -200,9 +211,25 @@ static int dp_parser_pinctrl(struct dp_parser *parser)
 	pinctrl->pin = devm_pinctrl_get(&parser->pdev->dev);
 
 	if (IS_ERR_OR_NULL(pinctrl->pin)) {
-		rc = PTR_ERR(pinctrl->pin);
-		pr_err("failed to get pinctrl, rc=%d\n", rc);
+		pr_debug("failed to get pinctrl, rc=%d\n", rc);
 		goto error;
+	}
+
+	if (parser->no_aux_switch && parser->lphw_hpd) {
+		pinctrl->state_hpd_tlmm = pinctrl->state_hpd_ctrl = NULL;
+
+		pinctrl->state_hpd_tlmm = pinctrl_lookup_state(pinctrl->pin,
+					"mdss_dp_hpd_tlmm");
+		if (!IS_ERR_OR_NULL(pinctrl->state_hpd_tlmm)) {
+			pinctrl->state_hpd_ctrl = pinctrl_lookup_state(
+				pinctrl->pin, "mdss_dp_hpd_ctrl");
+		}
+
+		if (!pinctrl->state_hpd_tlmm || !pinctrl->state_hpd_ctrl) {
+			pinctrl->state_hpd_tlmm = NULL;
+			pinctrl->state_hpd_ctrl = NULL;
+			pr_debug("tlmm or ctrl pinctrl state does not exist\n");
+		}
 	}
 
 	pinctrl->state_active = pinctrl_lookup_state(pinctrl->pin,
@@ -238,6 +265,8 @@ static int dp_parser_gpio(struct dp_parser *parser)
 
 	if (of_find_property(of_node, "qcom,dp-hpd-gpio", NULL)) {
 		parser->no_aux_switch = true;
+		parser->lphw_hpd = of_find_property(of_node,
+				"qcom,dp-low-power-hw-hpd", NULL);
 		return 0;
 	}
 

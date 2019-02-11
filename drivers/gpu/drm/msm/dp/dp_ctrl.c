@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -170,6 +170,8 @@ static void dp_ctrl_configure_source_link_params(struct dp_ctrl_private *ctrl,
 	if (enable) {
 		ctrl->catalog->lane_mapping(ctrl->catalog, ctrl->orientation,
 						ctrl->parser->l_map);
+		ctrl->catalog->lane_pnswap(ctrl->catalog,
+						ctrl->parser->l_pnswap);
 		ctrl->catalog->mst_config(ctrl->catalog, ctrl->mst_mode);
 		ctrl->catalog->config_ctrl(ctrl->catalog,
 				ctrl->link->link_params.lane_count);
@@ -579,7 +581,6 @@ static int dp_ctrl_link_setup(struct dp_ctrl_private *ctrl, bool shallow)
 	catalog = ctrl->catalog;
 	link_params = &ctrl->link->link_params;
 
-	catalog->hpd_config(catalog, true);
 	catalog->phy_lane_cfg(catalog, ctrl->orientation,
 				link_params->lane_count);
 
