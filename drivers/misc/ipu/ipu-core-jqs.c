@@ -71,7 +71,7 @@ static inline bool ipu_core_jqs_is_hw_ready(struct paintbox_bus *bus)
 	return true;
 }
 
-static int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
+int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
 		uint32_t clock_rate_hz)
 {
 	struct jqs_message_clock_rate req;
@@ -553,6 +553,7 @@ static int ipu_core_jqs_start(struct device *dev)
 
 	mutex_lock(&bus->jqs.lock);
 
+	bus->jqs.runtime_requested = true;
 	ret = ipu_core_jqs_enable_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);
@@ -571,6 +572,7 @@ static int ipu_core_jqs_stop(struct device *dev)
 
 	mutex_lock(&bus->jqs.lock);
 
+	bus->jqs.runtime_requested = false;
 	ipu_core_jqs_disable_firmware_normal(bus);
 
 	mutex_unlock(&bus->jqs.lock);
@@ -578,36 +580,22 @@ static int ipu_core_jqs_stop(struct device *dev)
 	return 0;
 }
 
-void ipu_core_jqs_enable_clock(struct paintbox_bus *bus, uint64_t clock_rate_hz)
+/* The caller to this function must hold bus->jqs.lock */
+void ipu_core_resume_firmware(struct paintbox_bus *bus)
 {
-	mutex_lock(&bus->jqs.lock);
+	int ret;
 
-	bus->jqs.clock_rate_hz = clock_rate_hz;
-	if (ipu_core_jqs_is_ready(bus))
-		ipu_core_jqs_send_clock_rate(bus, clock_rate_hz);
+	if (!bus->jqs.runtime_requested)
+		return;
 
-	mutex_unlock(&bus->jqs.lock);
-}
+	if (!ipu_core_jqs_is_hw_ready(bus))
+		return;
 
-void ipu_core_jqs_disable_clock(struct paintbox_bus *bus)
-{
-	mutex_lock(&bus->jqs.lock);
-
-	bus->jqs.clock_rate_hz = 0;
-
-	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
-
-	mutex_unlock(&bus->jqs.lock);
-}
-
-void ipu_core_jqs_dram_disabled(struct paintbox_bus *bus)
-{
-	mutex_lock(&bus->jqs.lock);
-
-	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
-	ipu_core_jqs_unstage_firmware(bus);
-
-	mutex_unlock(&bus->jqs.lock);
+	ret = ipu_core_jqs_enable_firmware(bus);
+	if (ret < 0)
+		dev_err(bus->parent_dev,
+			"%s: failed to resume firmware, err %d\n",
+			__func__, ret);
 }
 
 int ipu_core_jqs_init(struct paintbox_bus *bus)

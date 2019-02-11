@@ -112,6 +112,12 @@ struct paintbox_jqs {
 	uint32_t uart_baud;
 	uint64_t clock_rate_hz;
 
+	/* runtime_requested ensures the firmware is only enabled after clock
+	 * rate changes indicate the hardware is ready and theruntime has
+	 * requested the jqs started
+	 */
+	bool runtime_requested;
+
 	/* pm_recovery_requested is set/read in suspend/resume contexts */
 	bool pm_recovery_requested;
 #if IS_ENABLED(CONFIG_IPU_DEBUG)

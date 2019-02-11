@@ -415,6 +415,13 @@ static inline bool ipu_clock_rate_is_active(uint64_t rate)
 			(rate != IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND));
 }
 
+static inline bool ipu_clock_rate_changed_to_inactive(
+		struct ab_clk_notifier_data *clk_data)
+{
+	return ((!ipu_clock_rate_is_active(clk_data->new_rate)) &&
+			(ipu_clock_rate_is_active(clk_data->old_rate)));
+}
+
 static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 					  unsigned long action,
 					  void *data)
@@ -433,6 +440,8 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 		dev_dbg(dev_data->dev,
 			"%s: IPU rate will change from %lu Hz to %lu Hz",
 			__func__, clk_data->old_rate, clk_data->new_rate);
+		if (ipu_clock_rate_changed_to_inactive(clk_data))
+			ipu_bus_notify_clock_disable(bus);
 		break;
 	case AB_IPU_POST_RATE_CHANGE:
 		dev_dbg(dev_data->dev,
@@ -440,9 +449,6 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 			__func__, clk_data->old_rate, clk_data->new_rate);
 		if (ipu_clock_rate_is_active(clk_data->new_rate))
 			ipu_bus_notify_clock_enable(bus, clk_data->new_rate);
-		else
-			ipu_bus_notify_clock_disable(bus);
-
 		break;
 	case AB_IPU_ABORT_RATE_CHANGE:
 		dev_warn(dev_data->dev,
@@ -456,12 +462,17 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 		break;
 	case AB_DRAM_PRE_RATE_CHANGE:
 		dev_dbg(dev_data->dev,
+			"%s: DRAM rate will change from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+		if (ipu_clock_rate_changed_to_inactive(clk_data))
+			ipu_bus_notify_dram_pre_down(bus);
+		break;
+	case AB_DRAM_POST_RATE_CHANGE:
+		dev_dbg(dev_data->dev,
 			"%s: DRAM rate has changed from %lu Hz to %lu Hz",
 			__func__, clk_data->old_rate, clk_data->new_rate);
 		if (ipu_clock_rate_is_active(clk_data->new_rate))
 			ipu_bus_notify_dram_up(bus);
-		else
-			ipu_bus_notify_dram_pre_down(bus);
 		break;
 	default:
 		return NOTIFY_DONE;  /* Don't care */

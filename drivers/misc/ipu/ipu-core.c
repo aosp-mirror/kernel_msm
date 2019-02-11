@@ -442,8 +442,13 @@ void ipu_bus_notify_link_failure(struct paintbox_bus *bus)
 
 void ipu_bus_notify_link_up(struct paintbox_bus *bus)
 {
-
 	atomic_or(IPU_STATE_LINK_READY, &bus->state);
+
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_resume_firmware(bus);
+
+	mutex_unlock(&bus->jqs.lock);
 }
 
 void ipu_bus_notify_link_pre_down(struct paintbox_bus *bus)
@@ -461,23 +466,53 @@ void ipu_bus_notify_link_pre_down(struct paintbox_bus *bus)
 void ipu_bus_notify_clock_enable(struct paintbox_bus *bus,
 		uint64_t clock_rate_hz)
 {
-	ipu_core_jqs_enable_clock(bus, clock_rate_hz);
+	mutex_lock(&bus->jqs.lock);
+
+	bus->jqs.clock_rate_hz = clock_rate_hz;
+
+	/* If the JQS is not up then resume the JQS, otherwise notify the JQS of
+	 * the new clock rate.
+	 */
+	if (!ipu_core_jqs_is_ready(bus))
+		ipu_core_resume_firmware(bus);
+	else
+		ipu_core_jqs_send_clock_rate(bus, clock_rate_hz);
+
+	mutex_unlock(&bus->jqs.lock);
 }
 
 void ipu_bus_notify_clock_disable(struct paintbox_bus *bus)
 {
-	ipu_core_jqs_disable_clock(bus);
+	mutex_lock(&bus->jqs.lock);
+
+	bus->jqs.clock_rate_hz = 0;
+
+	ipu_core_jqs_disable_firmware_error(bus);
+
+	mutex_unlock(&bus->jqs.lock);
 }
 
 void ipu_bus_notify_dram_up(struct paintbox_bus *bus)
 {
 	atomic_or(IPU_STATE_DRAM_READY, &bus->state);
+
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_resume_firmware(bus);
+
+	mutex_unlock(&bus->jqs.lock);
 }
 
 void ipu_bus_notify_dram_pre_down(struct paintbox_bus *bus)
 {
-	ipu_core_jqs_dram_disabled(bus);
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_jqs_disable_firmware_error(bus);
+	ipu_core_jqs_unstage_firmware(bus);
+
 	atomic_andnot(IPU_STATE_DRAM_READY, &bus->state);
+
+	mutex_unlock(&bus->jqs.lock);
 }
 
 /* The Linux IOMMU is designed around an IOMMU providing translation services to
