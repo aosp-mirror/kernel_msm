@@ -699,6 +699,20 @@ static int arm_smmu_arch_device_group(struct device *dev,
 	return smmu->arch_ops->device_group(dev, group);
 }
 
+static void arm_smmu_arch_write_sync(struct arm_smmu_device *smmu)
+{
+	u32 id;
+
+	if (!smmu)
+		return;
+
+	/* Read to complete prior write transcations */
+	id = readl_relaxed(ARM_SMMU_GR0(smmu) + ARM_SMMU_GR0_ID0);
+
+	/* Wait for read to complete before off */
+	rmb();
+}
+
 static struct device_node *dev_get_dev_node(struct device *dev)
 {
 	if (dev_is_pci(dev)) {
@@ -946,6 +960,9 @@ static int arm_smmu_power_on_atomic(struct arm_smmu_power_resources *pwr)
 static void arm_smmu_power_off_atomic(struct arm_smmu_power_resources *pwr)
 {
 	unsigned long flags;
+	struct arm_smmu_device *smmu = pwr->dev->driver_data;
+
+	arm_smmu_arch_write_sync(smmu);
 
 	spin_lock_irqsave(&pwr->clock_refs_lock, flags);
 	if (pwr->clock_refs_count == 0) {
@@ -4311,7 +4328,7 @@ static int arm_smmu_init_bus_scaling(struct arm_smmu_power_resources *pwr)
 	pwr->bus_client = msm_bus_scale_register_client(pwr->bus_dt_data);
 	if (!pwr->bus_client) {
 		dev_err(dev, "Bus client registration failed\n");
-		return -EINVAL;
+		return -EPROBE_DEFER;
 	}
 
 	return 0;
@@ -5377,6 +5394,12 @@ out_resume:
 	qsmmuv500_tbu_resume(tbu);
 
 out_power_off:
+	/* Read to complete prior write transcations */
+	val = readl_relaxed(tbu->base + DEBUG_SR_HALT_ACK_REG);
+
+	/* Wait for read to complete before off */
+	rmb();
+
 	arm_smmu_power_off(tbu->pwr);
 
 	return phys;

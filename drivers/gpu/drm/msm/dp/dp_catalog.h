@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -102,13 +102,13 @@ struct dp_catalog_ctrl {
 	void (*config_ctrl)(struct dp_catalog_ctrl *ctrl, u8 ln_cnt);
 	void (*lane_mapping)(struct dp_catalog_ctrl *ctrl, bool flipped,
 				char *lane_map);
+	void (*lane_pnswap)(struct dp_catalog_ctrl *ctrl, u8 ln_pnswap);
 	void (*mainlink_ctrl)(struct dp_catalog_ctrl *ctrl, bool enable);
 	void (*set_pattern)(struct dp_catalog_ctrl *ctrl, u32 pattern);
 	void (*reset)(struct dp_catalog_ctrl *ctrl);
 	void (*usb_reset)(struct dp_catalog_ctrl *ctrl, bool flip);
 	bool (*mainlink_ready)(struct dp_catalog_ctrl *ctrl);
 	void (*enable_irq)(struct dp_catalog_ctrl *ctrl, bool enable);
-	void (*hpd_config)(struct dp_catalog_ctrl *ctrl, bool enable);
 	void (*phy_reset)(struct dp_catalog_ctrl *ctrl);
 	void (*phy_lane_cfg)(struct dp_catalog_ctrl *ctrl, bool flipped,
 				u8 lane_cnt);
@@ -130,6 +130,11 @@ struct dp_catalog_ctrl {
 			u32 ch, u32 ch_start_timeslot, u32 tot_ch_cnt);
 	void (*fec_config)(struct dp_catalog_ctrl *ctrl, bool enable);
 	void (*mainlink_levels)(struct dp_catalog_ctrl *ctrl, u8 lane_cnt);
+};
+
+struct dp_catalog_hpd {
+	void (*config_hpd)(struct dp_catalog_hpd *hpd, bool en);
+	u32 (*get_interrupt)(struct dp_catalog_hpd *hpd);
 };
 
 #define HEADER_BYTE_2_BIT	 0
@@ -249,6 +254,7 @@ struct dp_catalog {
 	struct dp_catalog_audio audio;
 	struct dp_catalog_panel panel;
 	struct dp_catalog_priv priv;
+	struct dp_catalog_hpd hpd;
 
 	void (*set_exe_mode)(struct dp_catalog *dp_catalog, char *mode);
 	int (*get_reg_dump)(struct dp_catalog *dp_catalog,

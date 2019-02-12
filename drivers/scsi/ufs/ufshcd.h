@@ -1144,6 +1144,9 @@ struct ufs_hba {
 	struct work_struct ufshpb_eh_work;
 
 	struct ufs_manual_gc manual_gc;
+
+	bool reinit_g4_rate_A;
+	bool force_g4;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)

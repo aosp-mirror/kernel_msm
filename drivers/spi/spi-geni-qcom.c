@@ -160,6 +160,7 @@ struct spi_geni_master {
 	bool shared_se;
 	bool dis_autosuspend;
 	bool pinctrl_sleep_at_probe;
+	bool cmd_done;
 };
 
 static void spi_slv_setup(struct spi_geni_master *mas);
@@ -1366,7 +1367,7 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 
 		if ((m_irq & M_CMD_DONE_EN) || (m_irq & M_CMD_CANCEL_EN) ||
 			(m_irq & M_CMD_ABORT_EN)) {
-			complete(&mas->xfer_done);
+			mas->cmd_done = true;
 			/*
 			 * If this happens, then a CMD_DONE came before all the
 			 * buffer bytes were sent out. This is unusual, log this
@@ -1406,12 +1407,16 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 		if (dma_rx_status & RX_DMA_DONE)
 			mas->rx_rem_bytes = 0;
 		if (!mas->tx_rem_bytes && !mas->rx_rem_bytes)
-			complete(&mas->xfer_done);
+			mas->cmd_done = true;
 		if ((m_irq & M_CMD_CANCEL_EN) || (m_irq & M_CMD_ABORT_EN))
-			complete(&mas->xfer_done);
+			mas->cmd_done = true;
 	}
 exit_geni_spi_irq:
 	geni_write_reg(m_irq, mas->base, SE_GENI_M_IRQ_CLEAR);
+	if (mas->cmd_done) {
+		mas->cmd_done = false;
+		complete(&mas->xfer_done);
+	}
 	return IRQ_HANDLED;
 }
 

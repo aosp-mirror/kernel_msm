@@ -375,6 +375,7 @@ static void _sde_encoder_phys_cmd_setup_irq_hw_idx(
 		struct sde_encoder_phys *phys_enc)
 {
 	struct sde_encoder_irq *irq;
+	int ret = 0;
 
 	if (!phys_enc || !phys_enc->hw_pp || !phys_enc->hw_ctl) {
 		SDE_ERROR("invalid args %d %d\n", !phys_enc,
@@ -386,6 +387,22 @@ static void _sde_encoder_phys_cmd_setup_irq_hw_idx(
 		SDE_ERROR("invalid intf configuration\n");
 		return;
 	}
+
+	mutex_lock(phys_enc->vblank_ctl_lock);
+
+	if (atomic_read(&phys_enc->vblank_refcount)) {
+		SDE_ERROR(
+		"vblank_refcount mismatch detected, try to reset %d\n",
+				atomic_read(&phys_enc->vblank_refcount));
+		ret = sde_encoder_helper_unregister_irq(phys_enc,
+				INTR_IDX_RDPTR);
+		if (ret)
+			SDE_ERROR(
+			"control vblank irq registration error %d\n",
+				ret);
+	}
+
+	atomic_set(&phys_enc->vblank_refcount, 0);
 
 	irq = &phys_enc->irq[INTR_IDX_CTL_START];
 	irq->hw_idx = phys_enc->hw_ctl->idx;
@@ -412,6 +429,8 @@ static void _sde_encoder_phys_cmd_setup_irq_hw_idx(
 		irq->hw_idx = phys_enc->hw_intf->idx;
 	else
 		irq->hw_idx = phys_enc->hw_pp->idx;
+
+	mutex_unlock(phys_enc->vblank_ctl_lock);
 }
 
 static void sde_encoder_phys_cmd_cont_splash_mode_set(
@@ -561,7 +580,10 @@ static int _sde_encoder_phys_cmd_handle_ppdone_timeout(
 
 		SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FATAL);
 		sde_encoder_helper_unregister_irq(phys_enc, INTR_IDX_RDPTR);
-		SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus");
+		if (sde_kms_is_secure_session_inprogress(phys_enc->sde_kms))
+			SDE_DBG_DUMP("secure");
+		else
+			SDE_DBG_DUMP("all", "dbg_bus", "vbif_dbg_bus");
 		sde_encoder_helper_register_irq(phys_enc, INTR_IDX_RDPTR);
 	}
 
@@ -825,11 +847,17 @@ static int sde_encoder_phys_cmd_control_vblank_irq(
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
 			enable, refcount);
 
-	if (enable && atomic_inc_return(&phys_enc->vblank_refcount) == 1)
+	if (enable && atomic_inc_return(&phys_enc->vblank_refcount) == 1) {
 		ret = sde_encoder_helper_register_irq(phys_enc, INTR_IDX_RDPTR);
-	else if (!enable && atomic_dec_return(&phys_enc->vblank_refcount) == 0)
+		if (ret)
+			atomic_dec_return(&phys_enc->vblank_refcount);
+	} else if (!enable &&
+			atomic_dec_return(&phys_enc->vblank_refcount) == 0) {
 		ret = sde_encoder_helper_unregister_irq(phys_enc,
 				INTR_IDX_RDPTR);
+		if (ret)
+			atomic_inc_return(&phys_enc->vblank_refcount);
+	}
 
 end:
 	if (ret) {
@@ -1425,6 +1453,25 @@ static int _sde_encoder_phys_cmd_wait_for_ctl_start(
 					"ctl start interrupt wait failed\n");
 		else
 			ret = 0;
+
+		if (sde_encoder_phys_cmd_is_master(phys_enc)) {
+			/*
+			 * Signaling the retire fence at ctl start timeout
+			 * to allow the next commit and avoid device freeze.
+			 * As ctl start timeout can occurs due to no read ptr,
+			 * updating pending_rd_ptr_cnt here may not cover all
+			 * cases. Hence signaling the retire fence.
+			 */
+			if (atomic_add_unless(
+			 &phys_enc->pending_retire_fence_cnt, -1, 0))
+				phys_enc->parent_ops.handle_frame_done(
+				 phys_enc->parent,
+				 phys_enc,
+				 SDE_ENCODER_FRAME_EVENT_SIGNAL_RETIRE_FENCE);
+			atomic_add_unless(
+				&phys_enc->pending_ctlstart_cnt, -1, 0);
+		}
+
 	}
 
 	return ret;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,11 +12,16 @@
 
 /dts-v1/;
 
-#include "sa8155-v2.dtsi"
-#include "sa8155-adp-common.dtsi"
+#include "sdxprairie.dtsi"
+#include "sdxprairie-mtp-256.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. SA8155 ADP QDRIVE";
-	compatible = "qcom,sa8155-adp-qdrive", "qcom,sa8155", "qcom,adp-qdrive";
-	qcom,board-id = <0x02000019 0>;
+	model = "Qualcomm Technologies, Inc. SDXPRAIRIE MTP(256MB)";
+	compatible = "qcom,sdxprairie-mtp",
+		"qcom,sdxprairie", "qcom,mtp";
+	qcom,board-id = <0x10008 0x0>;
+};
+
+&qnand_1 {
+	status = "ok";
 };

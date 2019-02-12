@@ -1,4 +1,4 @@
-/* Copyright (c) 2018 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -71,13 +71,18 @@ enum print_reason {
 #define JEITA_ARB_VOTER			"JEITA_ARB_VOTER"
 #define MOISTURE_VOTER			"MOISTURE_VOTER"
 #define HVDCP2_ICL_VOTER		"HVDCP2_ICL_VOTER"
+#define AICL_THRESHOLD_VOTER		"AICL_THRESHOLD_VOTER"
+#define USBOV_DBC_VOTER			"USBOV_DBC_VOTER"
+#define CHG_TERMINATION_VOTER		"CHG_TERMINATION_VOTER"
 
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
 
 #define VBAT_TO_VRAW_ADC(v)		div_u64((u64)v * 1000000UL, 194637UL)
 
-#define ADC_CHG_TERM_MASK	32767
+#define ITERM_LIMITS_PMI632_MA		5000
+#define ITERM_LIMITS_PM8150B_MA		10000
+#define ADC_CHG_ITERM_MASK		32767
 
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
@@ -109,12 +114,20 @@ enum qc2_non_comp_voltage {
 enum {
 	BOOST_BACK_WA			= BIT(0),
 	SW_THERM_REGULATION_WA		= BIT(1),
+	WEAK_ADAPTER_WA			= BIT(2),
+	USBIN_OV_WA			= BIT(3),
+	CHG_TERMINATION_WA		= BIT(4),
 };
 
 enum jeita_cfg_stat {
 	JEITA_CFG_NONE = 0,
 	JEITA_CFG_FAILURE,
 	JEITA_CFG_COMPLETE,
+};
+
+enum {
+	RERUN_AICL = 0,
+	RESTART_AICL,
 };
 
 enum smb_irq_index {
@@ -310,6 +323,8 @@ struct smb_params {
 	struct smb_chg_param	jeita_cc_comp_hot;
 	struct smb_chg_param	jeita_cc_comp_cold;
 	struct smb_chg_param	freq_switcher;
+	struct smb_chg_param	aicl_5v_threshold;
+	struct smb_chg_param	aicl_cont_threshold;
 };
 
 struct parallel_params {
@@ -394,6 +409,7 @@ struct smb_charger {
 	struct work_struct	pl_update_work;
 	struct work_struct	jeita_update_work;
 	struct work_struct	moisture_protection_work;
+	struct work_struct	chg_termination_work;
 	struct delayed_work	ps_change_timeout_work;
 	struct delayed_work	clear_hdc_work;
 	struct delayed_work	icl_change_work;
@@ -403,9 +419,11 @@ struct smb_charger {
 	struct delayed_work	lpd_ra_open_work;
 	struct delayed_work	lpd_detach_work;
 	struct delayed_work	thermal_regulation_work;
+	struct delayed_work	usbov_dbc_work;
 
 	struct alarm		lpd_recheck_timer;
 	struct alarm		moisture_protection_alarm;
+	struct alarm		chg_termination_alarm;
 
 	/* secondary charger config */
 	bool			sec_pl_present;
@@ -462,6 +480,7 @@ struct smb_charger {
 	int			smb_temp_max;
 	u8			typec_try_mode;
 	enum lpd_stage		lpd_stage;
+	bool			lpd_disabled;
 	enum lpd_reason		lpd_reason;
 	bool			fcc_stepper_enable;
 	int			die_temp;
@@ -476,12 +495,24 @@ struct smb_charger {
 	int			jeita_soft_fv[2];
 	bool			moisture_present;
 	bool			uusb_moisture_protection_enabled;
+	bool			hw_die_temp_mitigation;
+	bool			hw_connector_mitigation;
+	bool			hw_skin_temp_mitigation;
+	int			connector_pull_up;
+	int			aicl_5v_threshold_mv;
+	int			default_aicl_5v_threshold_mv;
+	int			aicl_cont_threshold_mv;
+	int			default_aicl_cont_threshold_mv;
+	bool			aicl_max_reached;
+	int			charge_full_cc;
+	int			cc_soc_ref;
 
 	/* workaround flag */
 	u32			wa_flags;
 	int			boost_current_ua;
 	int                     qc2_max_pulses;
 	enum qc2_non_comp_voltage qc2_unsupported_voltage;
+	bool			dbc_usbov;
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
@@ -522,7 +553,7 @@ int smblib_batch_read(struct smb_charger *chg, u16 addr, u8 *val, int count);
 int smblib_get_charge_param(struct smb_charger *chg,
 			    struct smb_chg_param *param, int *val_u);
 int smblib_get_usb_suspend(struct smb_charger *chg, int *suspend);
-
+int smblib_get_aicl_cont_threshold(struct smb_chg_param *param, u8 val_raw);
 int smblib_enable_charging(struct smb_charger *chg, bool enable);
 int smblib_set_charge_param(struct smb_charger *chg,
 			    struct smb_chg_param *param, int val_u);
@@ -539,6 +570,8 @@ int smblib_set_chg_freq(struct smb_chg_param *param,
 				int val_u, u8 *val_raw);
 int smblib_set_prop_boost_current(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblib_set_aicl_cont_threshold(struct smb_chg_param *param,
+				int val_u, u8 *val_raw);
 int smblib_vbus_regulator_enable(struct regulator_dev *rdev);
 int smblib_vbus_regulator_disable(struct regulator_dev *rdev);
 int smblib_vbus_regulator_is_enabled(struct regulator_dev *rdev);
@@ -564,6 +597,7 @@ irqreturn_t wdog_snarl_irq_handler(int irq, void *data);
 irqreturn_t wdog_bark_irq_handler(int irq, void *data);
 irqreturn_t typec_or_rid_detection_change_irq_handler(int irq, void *data);
 irqreturn_t temp_change_irq_handler(int irq, void *data);
+irqreturn_t usbin_ov_irq_handler(int irq, void *data);
 
 int smblib_get_prop_input_suspend(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -646,6 +680,8 @@ int smblib_get_prop_charger_temp(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_die_health(struct smb_charger *chg);
 int smblib_get_prop_connector_health(struct smb_charger *chg);
+int smblib_get_prop_vph_voltage_now(struct smb_charger *chg,
+				union power_supply_propval *val);
 int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
@@ -673,7 +709,7 @@ int smblib_get_prop_fcc_delta(struct smb_charger *chg,
 int smblib_get_thermal_threshold(struct smb_charger *chg, u16 addr, int *val);
 int smblib_dp_dm(struct smb_charger *chg, int val);
 int smblib_disable_hw_jeita(struct smb_charger *chg, bool disable);
-int smblib_rerun_aicl(struct smb_charger *chg);
+int smblib_run_aicl(struct smb_charger *chg, int type);
 int smblib_set_icl_current(struct smb_charger *chg, int icl_ua);
 int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua);
 int smblib_get_charge_current(struct smb_charger *chg, int *total_current_ua);

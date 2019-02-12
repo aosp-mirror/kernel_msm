@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -38,8 +38,10 @@
 #define MSM_MODE_FLAG_SEAMLESS_DMS			(1<<2)
 /* Request to switch the fps */
 #define MSM_MODE_FLAG_SEAMLESS_VRR			(1<<3)
+/* Request to switch the bit clk */
+#define MSM_MODE_FLAG_SEAMLESS_DYN_CLK			(1<<4)
 /* Request to switch the connector mode, fps only */
-#define MSM_MODE_FLAG_SEAMLESS_DMS_FPS			(1<<4)
+#define MSM_MODE_FLAG_SEAMLESS_DMS_FPS			(1<<5)
 
 /* As there are different display controller blocks depending on the
  * snapdragon version, the kms support is split out and the appropriate
@@ -217,6 +219,13 @@ static inline bool msm_is_mode_dynamic_fps(const struct drm_display_mode *mode)
 static inline bool msm_is_mode_seamless_vrr(const struct drm_display_mode *mode)
 {
 	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_VRR)
+		: false;
+}
+
+static inline bool msm_is_mode_seamless_dyn_clk(
+					const struct drm_display_mode *mode)
+{
+	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_DYN_CLK)
 		: false;
 }
 

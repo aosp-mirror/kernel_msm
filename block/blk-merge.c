@@ -847,10 +847,10 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 enum elv_merge blk_try_merge(struct request *rq, struct bio *bio)
 {
 	if (req_op(rq) == REQ_OP_DISCARD &&
-	    queue_max_discard_segments(rq->q) > 1)
+	    queue_max_discard_segments(rq->q) > 1) {
 		return ELEVATOR_DISCARD_MERGE;
-
-	if (blk_rq_pos(rq) + blk_rq_sectors(rq) == bio->bi_iter.bi_sector) {
+	} else if (blk_rq_pos(rq) + blk_rq_sectors(rq) ==
+						bio->bi_iter.bi_sector) {
 		if (crypto_not_mergeable(rq->bio, bio))
 			return ELEVATOR_NO_MERGE;
 		return ELEVATOR_BACK_MERGE;

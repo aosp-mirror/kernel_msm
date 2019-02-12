@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,7 @@
 
 #include "skeleton.dtsi"
 #include <dt-bindings/clock/qcom,gcc-sdxprairie.h>
+#include <dt-bindings/clock/qcom,cpu-sdxprairie.h>
 #include <dt-bindings/clock/qcom,rpmh.h>
 #include <dt-bindings/clock/qcom,aop-qmp.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -20,11 +21,18 @@
 #include <dt-bindings/msm/msm-bus-ids.h>
 #include <dt-bindings/soc/qcom,tcs-mbox.h>
 
+#define MHZ_TO_MBPS(mhz, w) ((mhz * 1000000 * w) / (1024 * 1024))
+#define BW_OPP_ENTRY(mhz, w) opp-mhz {opp-hz = /bits/ 64 <MHZ_TO_MBPS(mhz, w)>;}
+
 / {
 	model = "Qualcomm Technologies, Inc. SDXPRAIRIE";
 	compatible = "qcom,sdxprairie";
 	qcom,msm-id = <357 0x10000>, <368 0x10000>;
 	interrupt-parent = <&pdc>;
+
+	aliases {
+		pci-domain0 = &pcie0; /* PCIe0 domain */
+	};
 
 	reserved-memory {
 		#address-cells = <1>;
@@ -217,12 +225,32 @@
 		};
 	};
 
+	qcom,mpm2-sleep-counter@c221000 {
+		compatible = "qcom,mpm2-sleep-counter";
+		reg = <0xc221000 0x1000>;
+		clock-frequency = <32768>;
+	};
+
 	restart@c264000 {
 		compatible = "qcom,pshold";
 		reg = <0xc264000 0x4>,
 		      <0x1fd3000 0x4>;
 		reg-names = "pshold-base", "tcsr-boot-misc-detect";
-		qcom,force-warm-reboot;
+	};
+
+	qcom,wdt@17817000 {
+		compatible = "qcom,msm-watchdog";
+		reg = <0x17817000 0x1000>;
+		reg-names = "wdt-base";
+		interrupts = <1 3 0>, <1 2 0>;
+		qcom,bark-time = <11000>;
+		qcom,pet-time = <10000>;
+		qcom,wakeup-enable;
+	};
+
+	qcom,msm-rtb {
+		compatible = "qcom,msm-rtb";
+		qcom,rtb-size = <0x100000>;
 	};
 
 	keepalive_opp_table: keepalive-opp-table {
@@ -245,6 +273,15 @@
 		compatible = "qcom,devbw";
 		governor = "powersave";
 		qcom,src-dst-ports = <1 512>;
+		qcom,active-only;
+		status = "ok";
+		operating-points-v2 = <&keepalive_opp_table>;
+	};
+
+	ipa_keepalive: qcom,ipa_keepalive {
+		compatible = "qcom,devbw";
+		governor = "powersave";
+		qcom,src-dst-ports = <143 777>;
 		qcom,active-only;
 		status = "ok";
 		operating-points-v2 = <&keepalive_opp_table>;
@@ -288,8 +325,9 @@
 
 	clock_cpu: qcom,clock-cpu@17808100 {
 		compatible = "qcom,cpu-sdxprairie";
-		clocks = <&clock_rpmh RPMH_CXO_CLK>;
-		clock-names = "bi_tcxo";
+		clocks = <&clock_rpmh RPMH_CXO_CLK>,
+			 <&clock_gcc GPLL0>;
+		clock-names = "bi_tcxo", "gpll0";
 		reg = <0x17810008 0x8>,
 			<0x17808100 0x44>;
 		reg-names = "apcs_cmd" , "apcs_pll";
@@ -300,9 +338,8 @@
 			<  345600000 RPMH_REGULATOR_LEVEL_LOW_SVS>,
 			<  576000000 RPMH_REGULATOR_LEVEL_SVS>,
 			< 1094400000 RPMH_REGULATOR_LEVEL_NOM>,
-			< 1555200000 RPMH_REGULATOR_LEVEL_TURBO>;
+			< 1497600000 RPMH_REGULATOR_LEVEL_TURBO>;
 		#clock-cells = <1>;
-		status = "disabled";
 	};
 
 	spmi_bus: qcom,spmi@c440000 {
@@ -409,6 +446,21 @@
 		status = "ok";
 	};
 
+	qcom,llcc@9200000 {
+		compatible = "qcom,llcc-core", "syscon", "simple-mfd";
+		reg = <0x9200000 0x50000>;
+		reg-names = "llcc_base";
+		qcom,llcc-banks-off = <0x0>;
+		qcom,llcc-broadcast-off = <0x0>;
+
+		llcc: qcom,sdxprairie-llcc {
+			compatible = "qcom,sdxprairie-llcc";
+			#cache-cells = <1>;
+			max-slices = <32>;
+			cap-based-alloc-and-pwr-collapse;
+		};
+	};
+
 	qcom,msm_gsi {
 		compatible = "qcom,msm_gsi";
 	};
@@ -506,7 +558,6 @@
 				/* modem tables in IMEM */
 				<0x14688000 0x14688000 0x3000>;
 			qcom,ipa-q6-smem-size = <16384>;
-			dma-coherent;
 		};
 
 		ipa_smmu_wlan: ipa_smmu_wlan {
@@ -566,9 +617,9 @@
 		glink_modem: modem {
 			qcom,remote-pid = <1>;
 			transport = "smem";
-			mboxes = <&apcs_glb 12>;
+			mboxes = <&apcs_glb 15>;
 			mbox-names = "mpss_smem";
-			interrupts = <GIC_SPI 111 IRQ_TYPE_EDGE_RISING>;
+			interrupts = <GIC_SPI 114 IRQ_TYPE_EDGE_RISING>;
 
 			label = "modem";
 			qcom,glink-label = "mpss";
@@ -621,7 +672,7 @@
 		reg = <0xc310000 0x1000>, <0x17811008 0x4>;
 		reg-names = "msgram", "irq-reg-base";
 		qcom,irq-mask = <0x1>;
-		interrupts = <GIC_SPI 147 IRQ_TYPE_EDGE_RISING>;
+		interrupts = <GIC_SPI 221 IRQ_TYPE_EDGE_RISING>;
 
 		label = "aop";
 		qcom,early-boot;
@@ -656,7 +707,7 @@
 	qcom,smp2p-modem@1799000c {
 		compatible = "qcom,smp2p";
 		qcom,smem = <435>, <428>;
-		interrupts = <GIC_SPI 112 IRQ_TYPE_EDGE_RISING>;
+		interrupts = <GIC_SPI 113 IRQ_TYPE_EDGE_RISING>;
 		mboxes = <&apcs_glb 14>;
 		qcom,local-pid = <0>;
 		qcom,remote-pid = <1>;
@@ -775,6 +826,12 @@
 		qcom,qsee-reentrancy-support = <2>;
 	};
 
+	qcom_smcinvoke: smcinvoke@90000000{
+		compatible = "qcom,smcinvoke";
+		reg = <0x90000000 0xc00000>;
+		reg-names = "secapp-region";
+	};
+
 	qnand_1: nand@1b00000 {
 		compatible = "qcom,msm-nand";
 		reg =   <0x01b00000 0x1000>,
@@ -808,6 +865,162 @@
 		interrupt-names = "tsens-upper-lower", "tsens-critical";
 		#thermal-sensor-cells = <1>;
 	};
+
+	msm_cpufreq: qcom,msm-cpufreq {
+		compatible = "qcom,msm-cpufreq";
+		clocks = <&clock_cpu APCS_MUX_CLK>;
+		clock-names = "cpu0_clk";
+
+		qcom,cpufreq-table-0 =
+				<  153600 >,
+				<  300000 >,
+				<  345600 >,
+				<  576000 >,
+				< 1094400 >,
+				< 1497600 >;
+	};
+
+	ddr_bw_opp_table: ddr-bw-opp-table {
+		compatible = "operating-points-v2";
+		BW_OPP_ENTRY( 100, 4); /*  381 MB/s */
+		BW_OPP_ENTRY( 200, 4); /*  762 MB/s */
+		BW_OPP_ENTRY( 300, 4); /* 1144 MB/s */
+		BW_OPP_ENTRY( 451, 4); /* 1720 MB/s */
+		BW_OPP_ENTRY( 547, 4); /* 2086 MB/s */
+		BW_OPP_ENTRY( 681, 4); /* 2597 MB/s */
+		BW_OPP_ENTRY( 768, 4); /* 2929 MB/s */
+		BW_OPP_ENTRY(1017, 4); /* 3879 MB/s */
+		BW_OPP_ENTRY(1353, 4); /* 5161 MB/s */
+		BW_OPP_ENTRY(1555, 4); /* 5931 MB/s */
+		BW_OPP_ENTRY(1804, 4); /* 6881 MB/s */
+	};
+
+	cpubw: qcom,cpubw {
+		compatible = "qcom,devbw";
+		governor = "performance";
+		qcom,src-dst-ports = <1 512>;
+		qcom,active-only;
+		operating-points-v2 = <&ddr_bw_opp_table>;
+	};
+
+	devfreq_compute: qcom,devfreq-compute {
+		compatible = "qcom,arm-cpu-mon";
+		qcom,cpulist = <&CPU0>;
+		qcom,target-dev = <&cpubw>;
+		qcom,core-dev-table =
+				<  153600 MHZ_TO_MBPS( 300, 4) >,
+				<  576000 MHZ_TO_MBPS(1017, 4) >,
+				< 1497600 MHZ_TO_MBPS(1804, 4)>;
+	};
+
+	qcom,cnss-qca6390@a0000000 {
+		compatible = "qcom,cnss-qca6390";
+		reg = <0xa0000000 0x10000000>,
+		      <0xb0000000 0x10000>;
+		reg-names = "smmu_iova_base", "smmu_iova_ipa";
+		wlan-en-gpio = <&tlmm 52 0>;
+		pinctrl-names = "wlan_en_active", "wlan_en_sleep";
+		pinctrl-0 = <&cnss_wlan_en_active>;
+		pinctrl-1 = <&cnss_wlan_en_sleep>;
+		qcom,wlan-rc-num = <0>;
+		qcom,wlan-ramdump-dynamic = <0x400000>;
+
+		mhi,max-channels = <30>;
+		mhi,timeout = <10000>;
+
+		mhi_channels {
+			mhi_chan@0 {
+				reg = <0>;
+				label = "LOOPBACK";
+				mhi,num-elements = <32>;
+				mhi,event-ring = <1>;
+				mhi,chan-dir = <1>;
+				mhi,data-type = <0>;
+				mhi,doorbell-mode = <2>;
+				mhi,ee = <0x14>;
+			};
+
+			mhi_chan@1 {
+				reg = <1>;
+				label = "LOOPBACK";
+				mhi,num-elements = <32>;
+				mhi,event-ring = <1>;
+				mhi,chan-dir = <2>;
+				mhi,data-type = <0>;
+				mhi,doorbell-mode = <2>;
+				mhi,ee = <0x14>;
+			};
+
+			mhi_chan@4 {
+				reg = <4>;
+				label = "DIAG";
+				mhi,num-elements = <32>;
+				mhi,event-ring = <1>;
+				mhi,chan-dir = <1>;
+				mhi,data-type = <0>;
+				mhi,doorbell-mode = <2>;
+				mhi,ee = <0x14>;
+			};
+
+			mhi_chan@5 {
+				reg = <5>;
+				label = "DIAG";
+				mhi,num-elements = <32>;
+				mhi,event-ring = <1>;
+				mhi,chan-dir = <2>;
+				mhi,data-type = <0>;
+				mhi,doorbell-mode = <2>;
+				mhi,ee = <0x14>;
+			};
+
+			mhi_chan@20 {
+				reg = <20>;
+				label = "IPCR";
+				mhi,num-elements = <32>;
+				mhi,event-ring = <1>;
+				mhi,chan-dir = <1>;
+				mhi,data-type = <1>;
+				mhi,doorbell-mode = <2>;
+				mhi,ee = <0x14>;
+				mhi,auto-start;
+			};
+
+			mhi_chan@21 {
+				reg = <21>;
+				label = "IPCR";
+				mhi,num-elements = <32>;
+				mhi,event-ring = <1>;
+				mhi,chan-dir = <2>;
+				mhi,data-type = <0>;
+				mhi,doorbell-mode = <2>;
+				mhi,ee = <0x14>;
+				mhi,auto-queue;
+				mhi,auto-start;
+			};
+		};
+
+		mhi_events {
+			mhi_event@0 {
+				mhi,num-elements = <32>;
+				mhi,intmod = <1>;
+				mhi,msi = <1>;
+				mhi,priority = <1>;
+				mhi,brstmode = <2>;
+				mhi,data-type = <1>;
+			};
+
+			mhi_event@1 {
+				mhi,num-elements = <256>;
+				mhi,intmod = <1>;
+				mhi,msi = <2>;
+				mhi,priority = <1>;
+				mhi,brstmode = <2>;
+			};
+		};
+
+		mhi_devices {
+		};
+	};
 };
 
 #include "sdxprairie-pm.dtsi"
@@ -819,6 +1032,8 @@
 #include "sdxprairie-usb.dtsi"
 #include "sdxprairie-blsp.dtsi"
 #include "sdxprairie-audio.dtsi"
+#include "sdxprairie-pcie.dtsi"
+#include "sdxprairie-coresight.dtsi"
 
 &gdsc_usb30 {
 	status = "ok";

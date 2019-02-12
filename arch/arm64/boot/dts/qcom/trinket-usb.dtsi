@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,11 +21,12 @@
 		reg = <0x4e00000 0x100000>;
 		reg-names = "core_base";
 
+		iommus = <&apps_smmu 0x100 0x0>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
 
-		interrupts = <0 302 0>, <0 422 0>, <0 254 0>;
+		interrupts = <0 302 0>, <0 422 0>, <0 260 0>;
 		interrupt-names = "pwr_event_irq", "ss_phy_irq", "hs_phy_irq";
 
 		USB3_GDSC-supply = <&usb30_prim_gdsc>;
@@ -42,7 +43,7 @@
 		resets = <&clock_gcc GCC_USB30_PRIM_BCR>;
 		reset-names = "core_reset";
 
-		qcom,core-clk-rate = <200000000>;
+		qcom,core-clk-rate = <133333333>;
 		qcom,core-clk-rate-hs = <66666667>;
 		qcom,num-gsi-evt-buffs = <0x3>;
 		qcom,gsi-reg-offset =
@@ -65,7 +66,7 @@
 
 			/*  nominal vote */
 			<MSM_BUS_MASTER_USB3
-				MSM_BUS_SLAVE_EBI_CH0 1000000 2500000>,
+				MSM_BUS_SLAVE_EBI_CH0 240000 700000>,
 			<MSM_BUS_MASTER_USB3 MSM_BUS_SLAVE_IPA_CFG 0 2400>,
 			<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_USB3 0 40000>,
 
@@ -171,8 +172,10 @@
 	/* Primary USB port related QMP USB PHY */
 	usb_qmp_phy: ssphy@1615000 {
 		compatible = "qcom,usb-ssphy-qmp-usb3-or-dp";
-		reg = <0x01615000 0x1000>;
-		reg-names = "qmp_phy_base";
+		reg = <0x01615000 0x1000>,
+			<0x03cb244 0x4>;
+		reg-names = "qmp_phy_base",
+			"vls_clamp-reg";
 
 		vdd-supply = <&pm6125_l7>;
 		core-supply = <&pm6125_l10>;
