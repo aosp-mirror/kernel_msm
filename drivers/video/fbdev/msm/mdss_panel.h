@@ -777,6 +777,7 @@ struct mdss_panel_info {
 
 	bool tear_disable;
 	bool pwr_off_disable;
+	bool buck_boost_disable;
 };
 
 struct mdss_panel_timing {

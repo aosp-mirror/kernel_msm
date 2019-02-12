@@ -22,6 +22,7 @@
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 	qcom,platform-tsresout-gpio = <&msm_gpio 16 0>;
 	qcom,platform-enable-gpio = <&msm_gpio 59 0>;
+	qcom,platform-avdden-gpio = <&pm660_gpios 12 0>;
 	/delete-property/ qcom,platform-bklight-en-gpio;
 };
 &mdss_mdp {
@@ -42,4 +43,5 @@
 	qcom,panel-supply-entries = <&dsi_pm660_panel_pwr_supply>;
 	qcom,mdss-dsi-power-off-disable;
 	qcom,mdss-dsi-tear-disable;
+	qcom,mdss-dsi-buck-boost-disable;
 };

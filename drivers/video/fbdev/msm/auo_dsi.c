@@ -240,6 +240,18 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 	}
 }
 
+void mdss_dsi_buck_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
+{
+	if (gpio_is_valid(ctrl->disp_avdden_gpio)) {
+		gpio_set_value((ctrl->disp_avdden_gpio), enable);
+
+		pr_info("%s: AVDDEN (%d)\n", __func__,
+			gpio_get_value(ctrl->disp_avdden_gpio));
+	} else {
+		pr_err("AVDDEN gpio is invalid\n");
+	}
+}
+
 #endif /*AUO_DSI_C */
 
 
