@@ -36,31 +36,55 @@ struct s2mpg01_regulator {
 
 static struct s2mpg01_regulator *_s2mpg01_regulator;
 
-static int s2mpg01_regulator_get_voltage(struct regulator_dev *rdev);
 static int s2mpg01_regulator_enable(struct regulator_dev *rdev);
 static int s2mpg01_regulator_disable(struct regulator_dev *rdev);
 static int s2mpg01_regulator_is_enabled(struct regulator_dev *rdev);
 
 static struct regulator_ops s2mpg01_regulator_ops = {
-	.list_voltage = regulator_list_voltage_table,
-	.map_voltage = regulator_map_voltage_ascend,
-	.get_voltage = s2mpg01_regulator_get_voltage,
+	.list_voltage = regulator_list_voltage_linear_range,
+	.map_voltage = regulator_map_voltage_linear_range,
+	.get_voltage_sel = regulator_get_voltage_sel_regmap,
+	.set_voltage_sel = regulator_set_voltage_sel_regmap,
 	.enable = s2mpg01_regulator_enable,
 	.disable = s2mpg01_regulator_disable,
 	.is_enabled = s2mpg01_regulator_is_enabled,
 };
 
-/* No support for DVS so just a single voltage level */
-static const unsigned int s2mpg01_ldo1_vtbl[] = { 1800000 };
-static const unsigned int s2mpg01_ldo2_vtbl[] = { 600000 };
-static const unsigned int s2mpg01_ldo3_vtbl[] = { 750000 };
-static const unsigned int s2mpg01_ldo4_vtbl[] = { 850000 };
-static const unsigned int s2mpg01_ldo5_vtbl[] = { 1800000 };
-static const unsigned int s2mpg01_smps1_vtbl[] = { 750000 };
-static const unsigned int s2mpg01_smps2_vtbl[] = { 850000 };
-static const unsigned int s2mpg01_smps3_vtbl[] = { 1100000 };
-static const unsigned int s2mpg01_boost_smps1_vtbl[] = { 850000 };
-static const unsigned int s2mpg01_boost_ldo3_vtbl[] = { 850000 };
+/* Voltage Table for SMPS1 */
+static const struct regulator_linear_range smsp1_volt_range[] = {
+	REGULATOR_LINEAR_RANGE(550000, 0x28, 0x70, 6250),
+};
+
+/* Voltage Table for SMPS2 */
+static const struct regulator_linear_range smsp2_volt_range[] = {
+	REGULATOR_LINEAR_RANGE(650000, 0x38, 0x70, 6250),
+};
+
+/* Voltage Table for SMPS3 */
+static const struct regulator_linear_range smsp3_volt_range[] = {
+	REGULATOR_LINEAR_RANGE(900000, 0x60, 0xB0, 6250),
+};
+
+/* Voltage Table for LDO1/LDO5 */
+static const struct regulator_linear_range ldo1_ldo5_volt_range[] = {
+	REGULATOR_LINEAR_RANGE(1500000, 0x20, 0x38, 25000),
+};
+
+/* Voltage Table for LDO2 */
+static const struct regulator_linear_range ldo2_volt_range[] = {
+	REGULATOR_LINEAR_RANGE(550000, 0x0C, 0x18, 12500),
+};
+
+/* Voltage Table for LDO3 */
+static const struct regulator_linear_range ldo3_volt_range[] = {
+	REGULATOR_LINEAR_RANGE(650000, 0x1C, 0x38, 12500),
+};
+
+/* Voltage Table for LDO4 */
+static const struct regulator_linear_range ldo4_volt_range[] = {
+	REGULATOR_LINEAR_RANGE(650000, 0x14, 0x30, 12500),
+};
+
 
 static struct regulator_desc
 	s2mpg01_regulator_desc[S2MPG01_NUM_REGULATORS] = {
@@ -68,8 +92,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_SMPS1,
 		.id = S2MPG01_ID_SMPS1,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_smps1_vtbl),
-		.volt_table = s2mpg01_smps1_vtbl,
+		.n_voltages = (0x7F + 1),
+		.linear_ranges = smsp1_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(smsp1_volt_range),
+		.vsel_reg = S2MPG01_REG_BUCK1_OUT,
+		.vsel_mask = 0x7F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -78,8 +105,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_SMPS2,
 		.id = S2MPG01_ID_SMPS2,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_smps2_vtbl),
-		.volt_table = s2mpg01_smps2_vtbl,
+		.n_voltages = (0xFF + 1),
+		.linear_ranges = smsp2_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(smsp2_volt_range),
+		.vsel_reg = S2MPG01_REG_BUCK2_OUT,
+		.vsel_mask = 0xFF,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -88,8 +118,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_SMPS3,
 		.id = S2MPG01_ID_SMPS3,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_smps3_vtbl),
-		.volt_table = s2mpg01_smps3_vtbl,
+		.n_voltages = (0xFF + 1),
+		.linear_ranges = smsp3_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(smsp3_volt_range),
+		.vsel_reg = S2MPG01_REG_BUCK3_OUT,
+		.vsel_mask = 0xFF,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -98,8 +131,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_LDO1,
 		.id = S2MPG01_ID_LDO1,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_ldo1_vtbl),
-		.volt_table = s2mpg01_ldo1_vtbl,
+		.n_voltages = (0x3F + 1),
+		.linear_ranges = ldo1_ldo5_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(ldo1_ldo5_volt_range),
+		.vsel_reg = S2MPG01_REG_LDO1_CTRL,
+		.vsel_mask = 0x3F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -108,8 +144,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_LDO2,
 		.id = S2MPG01_ID_LDO2,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_ldo2_vtbl),
-		.volt_table = s2mpg01_ldo2_vtbl,
+		.n_voltages = (0x3F + 1),
+		.linear_ranges = ldo2_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(ldo2_volt_range),
+		.vsel_reg = S2MPG01_REG_LDO2_CTRL,
+		.vsel_mask = 0x3F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -118,8 +157,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_LDO3,
 		.id = S2MPG01_ID_LDO3,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_ldo3_vtbl),
-		.volt_table = s2mpg01_ldo3_vtbl,
+		.n_voltages = (0x3F + 1),
+		.linear_ranges = ldo3_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(ldo3_volt_range),
+		.vsel_reg = S2MPG01_REG_LDO3_CTRL,
+		.vsel_mask = 0x3F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -128,8 +170,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_LDO4,
 		.id = S2MPG01_ID_LDO4,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_ldo4_vtbl),
-		.volt_table = s2mpg01_ldo4_vtbl,
+		.n_voltages = (0x3F + 1),
+		.linear_ranges = ldo4_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(ldo4_volt_range),
+		.vsel_reg = S2MPG01_REG_LDO4_CTRL,
+		.vsel_mask = 0x3F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -138,8 +183,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_LDO5,
 		.id = S2MPG01_ID_LDO5,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_ldo5_vtbl),
-		.volt_table = s2mpg01_ldo5_vtbl,
+		.n_voltages = (0x3F + 1),
+		.linear_ranges = ldo1_ldo5_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(ldo1_ldo5_volt_range),
+		.vsel_reg = S2MPG01_REG_LDO5_CTRL,
+		.vsel_mask = 0x3F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -148,8 +196,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_BOOST_SMPS1,
 		.id = S2MPG01_ID_BOOST_SMPS1,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_boost_smps1_vtbl),
-		.volt_table = s2mpg01_boost_smps1_vtbl,
+		.n_voltages = (0x7F + 1),
+		.linear_ranges = smsp1_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(smsp1_volt_range),
+		.vsel_reg = S2MPG01_REG_BUCK1_OUT_DVS,
+		.vsel_mask = 0x7F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -158,8 +209,11 @@ static struct regulator_desc
 		.name = S2MPG01_REGLTR_NAME_BOOST_LDO3,
 		.id = S2MPG01_ID_BOOST_LDO3,
 		.ops = &s2mpg01_regulator_ops,
-		.n_voltages = ARRAY_SIZE(s2mpg01_boost_ldo3_vtbl),
-		.volt_table = s2mpg01_boost_ldo3_vtbl,
+		.n_voltages = (0x3F + 1),
+		.linear_ranges = ldo3_volt_range,
+		.n_linear_ranges = ARRAY_SIZE(ldo3_volt_range),
+		.vsel_reg = S2MPG01_REG_LDO3_CTRL_DVS,
+		.vsel_mask = 0x3F,
 		.enable_time = 200,
 		.type = REGULATOR_VOLTAGE,
 		.owner = THIS_MODULE,
@@ -170,198 +224,95 @@ static struct regulator_init_data
 	s2mpg01_regulator_init_data[S2MPG01_NUM_REGULATORS] = {
 	[S2MPG01_ID_SMPS1] = {
 		.constraints = {
-			.name = "s2mpg01_smps1",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 750000,
-			.max_uV = 750000,
+			.name = S2MPG01_REGLTR_NAME_SMPS1,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 700000,
+			.max_uV = 800000,
 		},
 	},
 	[S2MPG01_ID_SMPS2] = {
 		.constraints = {
-			.name = "s2mpg01_smps2",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 850000,
-			.max_uV = 850000,
+			.name = S2MPG01_REGLTR_NAME_SMPS2,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 800000,
+			.max_uV = 900000,
 		},
 	},
 	[S2MPG01_ID_SMPS3] = {
 		.constraints = {
-			.name = "s2mpg01_smps3",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 1100000,
-			.max_uV = 1100000,
+			.name = S2MPG01_REGLTR_NAME_SMPS3,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 1050000,
+			.max_uV = 1150000,
 		},
 	},
 	[S2MPG01_ID_LDO1] = {
 		.constraints = {
-			.name = "s2mpg01_ldo1",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 1800000,
-			.max_uV = 1800000,
+			.name = S2MPG01_REGLTR_NAME_LDO1,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 1750000,
+			.max_uV = 1850000,
 		},
 	},
 	[S2MPG01_ID_LDO2] = {
 		.constraints = {
-			.name = "s2mpg01_ldo2",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 600000,
-			.max_uV = 600000,
+			.name = S2MPG01_REGLTR_NAME_LDO2,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 550000,
+			.max_uV = 650000,
 		},
 	},
 	[S2MPG01_ID_LDO3] = {
 		.constraints = {
-			.name = "s2mpg01_ldo3",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 750000,
-			.max_uV = 750000,
+			.name = S2MPG01_REGLTR_NAME_LDO3,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 700000,
+			.max_uV = 800000,
 		},
 	},
 	[S2MPG01_ID_LDO4] = {
 		.constraints = {
-			.name = "s2mpg01_ldo4",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 850000,
-			.max_uV = 850000,
+			.name = S2MPG01_REGLTR_NAME_LDO4,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 800000,
+			.max_uV = 900000,
 		},
 	},
 	[S2MPG01_ID_LDO5] = {
 		.constraints = {
-			.name = "s2mpg01_ldo5",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 1800000,
-			.max_uV = 1800000,
+			.name = S2MPG01_REGLTR_NAME_LDO5,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 1750000,
+			.max_uV = 1850000,
 		},
 	},
 	[S2MPG01_ID_BOOST_SMPS1] = {
 		.constraints = {
-			.name = "s2mpg01_boost_smps1",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 850000,
-			.max_uV = 850000,
+			.name = S2MPG01_REGLTR_NAME_BOOST_SMPS1,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 800000,
+			.max_uV = 900000,
 		},
 	},
 	[S2MPG01_ID_BOOST_LDO3] = {
 		.constraints = {
-			.name = "s2mpg01_boost_ldo3",
-			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
-			.min_uV = 850000,
-			.max_uV = 850000,
+			.name = S2MPG01_REGLTR_NAME_BOOST_LDO3,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+					  REGULATOR_CHANGE_STATUS,
+			.min_uV = 800000,
+			.max_uV = 900000,
 		},
 	},
 };
-
-/* get the current voltage of the regulator in microvolts */
-static int s2mpg01_regulator_get_voltage(struct regulator_dev *rdev)
-{
-	struct s2mpg01_regulator *s2mpg01_regulator = rdev_get_drvdata(rdev);
-	struct s2mpg01_core *s2mpg01_core = s2mpg01_regulator->s2mpg01_core;
-	enum s2mpg01_regulator_ids rid = rdev_get_id(rdev);
-	u8 reg_data;
-	int vsel, vstep, vbase;
-	int ret;
-
-	dev_dbg(s2mpg01_regulator->dev, "%s: rid %d\n", __func__, rid);
-
-	switch (rid) {
-	case S2MPG01_ID_SMPS1:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_BUCK1_OUT,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 300000;
-		vstep = 6250;
-		vsel = reg_data & 0x7F;
-		break;
-	case S2MPG01_ID_SMPS2:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_BUCK2_OUT,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 300000;
-		vstep = 6250;
-		vsel = reg_data;
-		break;
-	case S2MPG01_ID_SMPS3:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_BUCK3_OUT,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 300000;
-		vstep = 6250;
-		vsel = reg_data;
-		break;
-	case S2MPG01_ID_LDO1:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_LDO1_CTRL,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 700000;
-		vstep = 25000;
-		vsel = reg_data & 0x3F;
-		break;
-	case S2MPG01_ID_LDO2:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_LDO2_CTRL,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 400000;
-		vstep = 12500;
-		vsel = reg_data & 0x3F;
-		break;
-	case S2MPG01_ID_LDO3:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_LDO3_CTRL,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 300000;
-		vstep = 12500;
-		vsel = reg_data & 0x3F;
-		break;
-	case S2MPG01_ID_LDO4:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_LDO4_CTRL,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 400000;
-		vstep = 12500;
-		vsel = reg_data & 0x3F;
-		break;
-	case S2MPG01_ID_LDO5:
-		ret = s2mpg01_read_byte(s2mpg01_core, S2MPG01_REG_LDO5_CTRL,
-					&reg_data);
-		if (ret)
-			return ret;
-		vbase = 700000;
-		vstep = 25000;
-		vsel = reg_data & 0x3F;
-		break;
-	case S2MPG01_ID_BOOST_SMPS1:
-		ret = s2mpg01_read_byte(s2mpg01_core,
-					S2MPG01_REG_BUCK1_OUT_DVS, &reg_data);
-		if (ret)
-			return ret;
-		vbase = 300000;
-		vstep = 6250;
-		vsel = reg_data & 0x7F;
-		break;
-	case S2MPG01_ID_BOOST_LDO3:
-		ret = s2mpg01_read_byte(s2mpg01_core,
-					S2MPG01_REG_LDO3_CTRL_DVS, &reg_data);
-		if (ret)
-			return ret;
-		vbase = 300000;
-		vstep = 12500;
-		vsel = reg_data & 0x3F;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	dev_dbg(s2mpg01_regulator->dev, "%s: rid %d, returning voltage %d\n",
-		__func__, rid, vbase + vsel * vstep);
-
-	return vbase + vsel * vstep;
-}
 
 /* enable the regulator */
 static int s2mpg01_regulator_enable(struct regulator_dev *rdev)
