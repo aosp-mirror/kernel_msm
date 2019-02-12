@@ -39,6 +39,9 @@
 #define M0_FIRMWARE_ADDR 0x20000000
 #define CALIBRATION_SIZE 0x2000
 
+/* This is to enable latency measurement */
+#define ENABLE_LATENCY_MEASUREMENT (1)
+
 /* This is to be enabled for dog food only */
 #define ENABLE_AIRBRUSH_DEBUG (1)
 
@@ -52,17 +55,25 @@
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
-#define M0_POLLING_PAUSE 100
-#define M0_POLLING_INTERVAL 12
+#define M0_POLLING_PAUSE 80
+#define M0_POLLING_INTERVAL 6
+#define CONTEXT_SWITCH_TO_FACEAUTH_US 6000
+
 
 /* Citadel */
 #define MAX_CACHE_SIZE 512
 
 struct faceauth_data {
 	bool hypx_enable;
+	/* This is to dynamically set the level of debugging in faceauth fw */
 	uint64_t m0_verbosity_level;
 	struct dentry *debugfs_root;
 	uint16_t session_id;
+	/* This counter holds the number of interaction between driver and
+	 * firmware, using which, faceauth firmware detects a missed command and
+	 * returns an error
+	 */
+	uint32_t session_counter;
 	atomic_t in_use;
 	struct miscdevice misc_dev;
 	struct device *device;
@@ -163,8 +174,15 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	uint32_t ab_result;
 	uint32_t angles;
 	uint32_t dma_read_value;
-	struct faceauth_data *data = file->private_data;
 	int i;
+	uint32_t fw_execution_status;
+	struct faceauth_data *data = file->private_data;
+#if ENABLE_LATENCY_MEASUREMENT
+	unsigned long faceauth_cntx_start, faceauth_cntx_complete,
+		      faceauth_img_transfer_start,
+		      faceauth_img_transfer_complete, faceauth_process_start,
+		      faceauth_process_complete;
+#endif
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data = { 0 };
 #endif
@@ -192,6 +210,31 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				data->m0_verbosity_level);
 		pio_write_qw(DISABLE_FEATURES_ADDR, init_step_data.features);
 
+		data->session_counter = 0x0;
+		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_NONE);
+		aon_config_write(SYSREG_AON_IPU_REG29, 4,
+				       M0_FIRMWARE_ADDR);
+		aon_config_write(SYSREG_REG_GP_INT0, 4, 1);
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_cntx_start = jiffies;
+#endif
+		usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
+				CONTEXT_SWITCH_TO_FACEAUTH_US + 1);
+
+		for (;;) {
+			err = aon_config_read(ACK_TO_HOST_ADDR, 4,
+					      &fw_execution_status);
+			if (err) {
+				pr_err("Error reading completion flag\n");
+				goto exit;
+			}
+			if (fw_execution_status == STATUS_READY)
+				break;
+			usleep_range(100, 1000);
+		}
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_cntx_complete = jiffies;
+#endif
 		break;
 	case FACEAUTH_DEV_IOC_START:
 		pr_info("faceauth start IOCTL\n");
@@ -205,8 +248,8 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		start_step_data.result = 0;
 		start_step_data.error_code = 0;
 
-		if (start_step_data.operation == FACEAUTH_OP_ENROLL ||
-		    start_step_data.operation == FACEAUTH_OP_VALIDATE) {
+		if (start_step_data.operation == COMMAND_ENROLL ||
+		    start_step_data.operation == COMMAND_VALIDATE) {
 			if (!start_step_data.image_dot_left_size) {
 				err = -EINVAL;
 				goto exit;
@@ -229,12 +272,17 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 
 			pr_info("Send images\n");
+#if ENABLE_LATENCY_MEASUREMENT
+			faceauth_img_transfer_start = jiffies;
+#endif
 			err = dma_send_images(&start_step_data);
 			if (err) {
 				pr_err("Error in sending workload\n");
 				goto exit;
 			}
-
+#if ENABLE_LATENCY_MEASUREMENT
+			faceauth_img_transfer_complete = jiffies;
+#endif
 			if (start_step_data.calibration) {
 				pr_info("Send calibration data\n");
 				err = dma_xfer(start_step_data.calibration,
@@ -248,7 +296,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
-		if (start_step_data.operation == FACEAUTH_OP_ENROLL_COMPLETE) {
+		if (start_step_data.operation == COMMAND_ENROLL_COMPLETE) {
 			int16_t *flush_idxs =
 				start_step_data.cache_flush_indexes;
 			uint32_t flush_size = start_step_data.cache_flush_size;
@@ -281,15 +329,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
-		/* Set M0 firmware address */
-		pr_info("Set M0 firmware addr = 0x%08x\n", M0_FIRMWARE_ADDR);
-		err = aon_config_write(SYSREG_AON_IPU_REG29, 4,
-				       M0_FIRMWARE_ADDR);
-		if (err) {
-			pr_err("Error setting faceauth FW address\n");
-			goto exit;
-		}
-
 		/* Set input flag */
 		ab_input = ((++data->session_id & 0xFFFF) << 16) |
 			   ((start_step_data.profile_id & 0xFF) << 8) |
@@ -300,25 +339,15 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			pr_err("Error setting faceauth FW address\n");
 			goto exit;
 		}
-
-		/* Reset completion flag */
-		pr_info("Clearing completion flag at 0x%08x\n",
-			RESULT_FLAG_ADDR);
-		err = aon_config_write(RESULT_FLAG_ADDR, 4, 0);
-		if (err) {
-			pr_err("Error clearing completion flag\n");
-			goto exit;
-		}
-
-		/* Trigger M0 Interrupt */
-		pr_info("Interrupting M0\n");
-		err = aon_config_write(SYSREG_REG_GP_INT0, 4, 1);
-		if (err) {
-			pr_err("Error interrupting AB\n");
-			goto exit;
-		}
-
+		aon_config_write(RESULT_FLAG_ADDR, 4, 0);
+		aon_config_write(INPUT_COUNTER_ADDR, 4,
+				data->session_counter++);
 		/* Check completion flag */
+		aon_config_write(INPUT_COMMAND_ADDR, 4,
+				start_step_data.operation);
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_process_start = jiffies;
+#endif
 		pr_info("Waiting for completion.\n");
 		msleep(M0_POLLING_PAUSE);
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
@@ -344,7 +373,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 						   polling_interval >> 1 :
 						   1;
 		}
-
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_process_complete = jiffies;
+#endif
 #if ENABLE_AIRBRUSH_DEBUG
 		save_debug_start = jiffies;
 		enqueue_debug_data(data, false);
@@ -377,6 +408,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		goto exit;
 		break;
 	case FACEAUTH_DEV_IOC_CLEANUP:
+		aon_config_write(INPUT_COUNTER_ADDR, 4,
+				data->session_counter++);
+		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_EXIT);
 		/* TODO cleanup Airbrush DRAM */
 		pr_info("faceauth cleanup IOCTL\n");
 		break;
@@ -446,7 +480,22 @@ exit:
 		pr_info("Faceauth action took %dus\n",
 			jiffies_to_usecs(jiffies - ioctl_start));
 	}
-
+#if ENABLE_LATENCY_MEASUREMENT
+	pr_info("Faceauth latency report\n");
+	pr_info("Faceauth to reach img took %dms\n", jiffies_to_usecs(
+		faceauth_img_transfer_start - ioctl_start) / 1000);
+	pr_info("Faceauth image transfer took %dms\n", jiffies_to_usecs(
+		faceauth_img_transfer_complete -
+			faceauth_img_transfer_start) / 1000);
+	pr_info("Faceauth firmware process took %dms\n",
+		jiffies_to_usecs(faceauth_process_complete -
+			faceauth_process_start) / 1000);
+	pr_info("Faceauth start to took completion flag %dms\n",
+		jiffies_to_usecs(faceauth_process_complete - ioctl_start)
+		/ 1000);
+	pr_info("Faceauth end-to-end took %dms\n",
+		jiffies_to_usecs(jiffies - ioctl_start) / 1000);
+#endif
 	return err;
 }
 
@@ -497,8 +546,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		}
 
 		send_images_data =
-			start_step_data.operation == FACEAUTH_OP_ENROLL ||
-			start_step_data.operation == FACEAUTH_OP_VALIDATE;
+			start_step_data.operation == COMMAND_ENROLL ||
+			start_step_data.operation == COMMAND_VALIDATE;
 		if (send_images_data) {
 			if (!start_step_data.image_dot_left_size) {
 				err = -EINVAL;
@@ -915,8 +964,8 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 		return err;
 	}
 
-	if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
-	    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
+	if (debug_entry->ab_state.command == COMMAND_ENROLL ||
+	    debug_entry->ab_state.command == COMMAND_VALIDATE) {
 		err = dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
 				       (INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
 				       DOT_LEFT_IMAGE_ADDR, DMA_FROM_DEVICE);
