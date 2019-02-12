@@ -1403,14 +1403,23 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 		return err;
 	fullsocthr = reg_to_percentage(data);
 
-	if (current_avg <= 0 && max1720x_get_battery_soc(chip) >= fullsocthr) {
-		status = POWER_SUPPLY_STATUS_FULL;
-		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_CHARGING)
-			max1720x_prime_battery_qh_capacity(chip, status);
-		chip->prev_charge_state = POWER_SUPPLY_STATUS_FULL;
-	} else if (current_avg > -ichgterm && current_avg <=0 ) {
-		status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		chip->prev_charge_state = POWER_SUPPLY_STATUS_NOT_CHARGING;
+	if (current_avg > -ichgterm && current_avg <=0) {
+
+		if (max1720x_get_battery_soc(chip) >= fullsocthr) {
+			const bool needs_prime = (chip->prev_charge_state ==
+						  POWER_SUPPLY_STATUS_CHARGING);
+
+			status = POWER_SUPPLY_STATUS_FULL;
+			if (needs_prime)
+				max1720x_prime_battery_qh_capacity(chip,
+								   status);
+			chip->prev_charge_state = POWER_SUPPLY_STATUS_FULL;
+		} else {
+			status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+			chip->prev_charge_state =
+				POWER_SUPPLY_STATUS_NOT_CHARGING;
+		}
+
 	} else if (current_now >= -ichgterm)  {
 		/* discharging state is not recorded in prev_charge_state */
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
