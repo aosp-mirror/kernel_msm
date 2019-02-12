@@ -45,6 +45,7 @@
 &pm8150b_charger {
 	qcom,otg-cl-ua = <2000000>;
 	qcom,typec-legacy-rp-icl;
+	google,otg-out-uv = <5100000>;
 };
 
 &usb0 {
