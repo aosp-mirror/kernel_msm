@@ -61,3 +61,7 @@
 		google,end-mitigation-temp = <450>;
 	};
 };
+
+&p9221 {
+	q_value = <45>;
+};
