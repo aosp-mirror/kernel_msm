@@ -217,6 +217,7 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->pps_data.chg_flags = 0;
 	chg_drv->pps_data.keep_alive_cnt = 0;
 	kfree(chg_drv->pps_data.src_caps);
+	chg_drv->pps_data.src_caps = NULL;
 	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
 
 	/* normal when disconnected */
