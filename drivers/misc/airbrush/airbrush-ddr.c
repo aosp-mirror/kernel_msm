@@ -2148,6 +2148,9 @@ static int __ab_ddr_wait_for_ddr_init(struct ab_ddr_context *ddr_ctx)
 	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_933] = 0;
 	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_800] = 0;
 
+	/* set 1866MHz ddr clock during airbrush normal and resume boot */
+	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
+
 	return 0;
 }
 
@@ -2197,9 +2200,6 @@ int32_t ab_ddr_resume(struct ab_state_context *sc)
 
 	/* Disable the DDR_SR GPIO */
 	ab_gpio_disable_ddr_sr(sc);
-
-	/* during airbrush resume, the ddr clock is set to 1866MHz */
-	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
 
 #ifdef CONFIG_DDR_BOOT_TEST
 	ab_ddr_read_write_test(sc, DDR_TEST_PCIE_DMA_READ(512));
