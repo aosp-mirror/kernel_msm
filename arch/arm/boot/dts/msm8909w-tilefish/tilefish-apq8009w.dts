@@ -19,6 +19,8 @@
 #include "../../../../arm64/boot/dts/qcom/8909w-pm660.dtsi"
 #include "../../../../arm64/boot/dts/qcom/apq8009w-bg-memory.dtsi"
 #include "../../../../arm64/boot/dts/qcom/msm8909-audio-bg_codec.dtsi"
+#include "tilefish-msm8909-mtp.dtsi"
+#include "tilefish-8909w-pm660.dtsi"
 
 / {
 	model = "Compal Electronics IncCompal Electronics Inc, Tilefish, based on Qualcomm Snapdragon Wear 3100";
