@@ -610,6 +610,7 @@ static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
 
 	const struct ddr_reg_poll_t *poll = &ddr_reg_poll_array[poll_idx];
 	uint32_t poll_multiplier;
+	uint32_t reg_val;
 	unsigned long timeout;
 
 	poll_multiplier = ddr_otp_rd(o_SECURE_JTAG2) + 1;
@@ -617,13 +618,17 @@ static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
 	timeout = jiffies +
 		  usecs_to_jiffies(poll->usec_timeout * poll_multiplier);
 
-	while (((ddr_reg_rd(reg) & poll->mask) != poll->val) &&
-			time_before(jiffies, timeout))
+	reg_val = ddr_reg_rd(reg);
+	while (((reg_val & poll->mask) != poll->val) &&
+			time_before(jiffies, timeout)) {
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
+		reg_val = ddr_reg_rd(reg);
+	}
 
-	if ((ddr_reg_rd(reg) & poll->mask) != poll->val) {
-		pr_err("%s, status poll failed for reg: 0x%x, idx: 0x%x\n",
-		       __func__, reg, poll_idx);
+	if ((reg_val & poll->mask) != poll->val) {
+		pr_err("ddr status poll failed for idx: 0x%x\n", poll_idx);
+		pr_err("reg: 0x%x, val: 0x%x, poll_msk: 0x%x, poll_val: 0x%x\n",
+			reg, reg_val, poll->mask, poll->val);
 		return DDR_FAIL;
 	}
 
