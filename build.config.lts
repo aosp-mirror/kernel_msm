@@ -1,0 +1,46 @@
+function pre_defconfig() {
+  # Watch KERNEL_DIR recursively, record all files opened during the build
+  rm -f ${OUT_DIR}/kernel-files.tmp1
+  inotifywait -m -r -e open --format '%w%f' ${KERNEL_DIR} -o ${OUT_DIR}/kernel-files.tmp1 &
+  PID_INOTIFYWAIT=$!
+  sleep 5
+}
+
+function post_kernel_build() {
+  # Stop watching KERNEL_DIR
+  kill ${PID_INOTIFYWAIT}
+  # Generate list of touched files and merge commit message
+  cat ${OUT_DIR}/kernel-files.tmp1 | sed "s,${KERNEL_DIR}/,,g" | sort -u > ${OUT_DIR}/kernel-files.tmp2
+  (set +x; for f in $(cat ${OUT_DIR}/kernel-files.tmp2); do [ -f "${KERNEL_DIR}/${f}" ] && echo "${f}"; done > ${OUT_DIR}/kernel-files.txt)
+  (cd ${KERNEL_DIR} && ${ROOT_DIR}/build/buildinfo/generate-merge-commit-msg.py HEAD~1..HEAD ${OUT_DIR}/kernel-files.txt > ${OUT_DIR}/merge-commit-msg.txt)
+}
+
+ARCH=arm64
+BRANCH=android-msm-wahoo-4.4
+CC=clang
+CLANG_TRIPLE=aarch64-linux-gnu-
+CROSS_COMPILE=aarch64-linux-android-
+CROSS_COMPILE_ARM32=arm-linux-androideabi-
+DEFCONFIG=wahoo_defconfig
+EXTRA_CMDS=''
+KERNEL_DIR=private/msm-google
+PRE_DEFCONFIG_CMDS="pre_defconfig"
+POST_DEFCONFIG_CMDS='check_defconfig'
+POST_KERNEL_BUILD_CMDS="post_kernel_build"
+CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r346389b/bin/
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
+LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
+LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
+DTC_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/dtc
+LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
+FILES="
+arch/arm64/boot/dtbo.img
+arch/arm64/boot/Image.lz4-dtb
+vmlinux
+System.map
+"
+IN_KERNEL_MODULES=1
+STOP_SHIP_TRACEPRINTK=1
+UNSTRIPPED_MODULES="
+wlan.ko
+"
