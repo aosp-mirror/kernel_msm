@@ -1,0 +1,22 @@
+KERNEL_DIR=private/msm-google
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
+PRE_DEFCONFIG_CMDS="pre_defconfig"
+POST_DEFCONFIG_CMDS="check_defconfig && compression_tool_and_files lz4"
+POST_KERNEL_BUILD_CMDS="post_kernel_build"
+
+function pre_defconfig() {
+  # Watch KERNEL_DIR recursively, record all files opened during the build
+  rm -f ${OUT_DIR}/kernel-files.tmp1
+  inotifywait -m -r -e open --format '%w%f' ${KERNEL_DIR} -o ${OUT_DIR}/kernel-files.tmp1 &
+  PID_INOTIFYWAIT=$!
+  sleep 5
+}
+
+function post_kernel_build() {
+  # Stop watching KERNEL_DIR
+  kill ${PID_INOTIFYWAIT}
+  # Generate list of touched files and merge commit message
+  cat ${OUT_DIR}/kernel-files.tmp1 | sed "s,${KERNEL_DIR}/,,g" | sort -u > ${OUT_DIR}/kernel-files.tmp2
+  (set +x; for f in $(cat ${OUT_DIR}/kernel-files.tmp2); do [ -f "${KERNEL_DIR}/${f}" ] && echo "${f}"; done > ${OUT_DIR}/kernel-files.txt)
+  (cd ${KERNEL_DIR} && ${ROOT_DIR}/build/buildinfo/generate-merge-commit-msg.py HEAD~1..HEAD ${OUT_DIR}/kernel-files.txt > ${OUT_DIR}/merge-commit-msg.txt)
+}
