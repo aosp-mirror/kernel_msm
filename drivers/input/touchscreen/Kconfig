@@ -1056,6 +1056,19 @@ config TOUCHSCREEN_PCAP
 	  To compile this driver as a module, choose M here: the
 	  module will be called pcap_ts.
 
+config TOUCHSCREEN_RM_INCELL
+  tristate "Raydium I2C In-cell Touchscreen"
+  depends on I2C
+  depends on GPIOLIB || COMPILE_TEST
+  help
+    Say Y here if you have Raydium series in-cell I2C touchscreen
+    connected to your system.
+
+    If unsure, say N.
+
+    To compile this driver as a module, choose M here: the
+    module will be called raydium_incell.
+
 config TOUCHSCREEN_RM_TS
 	tristate "Raydium I2C Touchscreen"
 	depends on I2C
