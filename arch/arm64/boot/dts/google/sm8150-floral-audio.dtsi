@@ -265,8 +265,16 @@
 		 * 2 is DSP_A mode
 		 */
 		adnc,pcm-port-fmt =  <2>, <0>, <0>, <0>, <2>, <0>;
-		/* input pcm port acting as master or slave */
-		adnc,ip-port-master = <0>, <0>, <0>, <0>, <0>, <0>, <0>;
+		/* pcm port word length configuration
+		 *  0: auto (according to application)
+		 * 16: 16 bits per sample
+		 * 20: 20 bits per sample
+		 * 24: 24 bits per sample
+		 * 32: 32 bits per sample
+		 */
+		adnc,pcm-port-word-len = <32>, <0>, <0>, <0>, <32>, <0>;
+		/* input pdm port acting as master or slave */
+		adnc,ip-port-master = <0>, <0>, <0>, <0>, <0>, <0>, <1>;
 		/* Input pdm clock source for all microphones are defined
 		 * here.
 		 * Each MIC from same port can act as master clock source
