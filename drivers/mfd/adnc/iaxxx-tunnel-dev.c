@@ -206,58 +206,22 @@ static int circ_copy_to_user(struct iaxxx_circ_buf *circ,
 }
 
 /*
- * If user buffer is greater then circular queue data size,
- * then copy all data to user buffer.
- * If user buffer is less than circular queue data size,
- * then check each packet and copy only whole packet can
- * fit into user buffer so that there's no split packet
- * stored in user buffer.
+ * Copy whatever the size of tunnel buffer that
+ * user has requested regardless of whether
+ * it is frame-aligned or not. If the amount
+ * of data request is not available return
+ * the available data.
+ *
  */
 static int circ_to_user(struct iaxxx_circ_buf *circ, char __user *buf,
 		size_t count, unsigned int *copied)
 {
-	struct iaxxx_tunnel_header header;
-	int hdr_size = sizeof(struct iaxxx_tunnel_header);
-	int size;
-	unsigned int sum = 0;
 	int cnt = min_t(int, circ_cnt(circ) << 2, count);
 
-	if (count > cnt) {
-		/*
-		 * If user buffer is big enough, copy all
-		 * since the circular buffer has already
-		 * packet aligned
-		 */
-		if (circ_copy_to_user(circ, buf, cnt))
-			return -EFAULT;
-
-		*copied = cnt;
-		return 0;
-	}
-
-	/* User buffer is small, so check the packet one by one */
-	while (1) {
-		size = circ_peek_data(circ, &header, hdr_size);
-		if (size < hdr_size)
-			break;
-
-		size += header.size;
-		if ((circ_cnt(circ) << 2) < size)
-			break;
-
-		if (count < (sum + size))
-			break;
-
-		if (circ_copy_to_user(circ, buf + sum, size))
-			break;
-
-		sum += size;
-	}
-
-	if (sum == 0)
+	if (circ_copy_to_user(circ, buf, cnt))
 		return -EFAULT;
 
-	*copied = sum;
+	*copied = cnt;
 	return 0;
 }
 
