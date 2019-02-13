@@ -58,6 +58,7 @@ enum jqs_message_type {
 	JQS_MESSAGE_TYPE_ACK                = 0x80002001,
 	JQS_MESSAGE_TYPE_LOG                = 0x80002002,
 	JQS_MESSAGE_TYPE_ERROR              = 0x80002003,
+	JQS_MESSAGE_TYPE_IPU_REG_VALUES     = 0x80002004,
 
 	JQS_MESSAGE_TYPE_FORCE_32_BIT       = 0xFFFFFFFF,
 };
@@ -184,6 +185,24 @@ struct jqs_message_clock_rate {
 	uint32_t clock_rate;
 };
 
+#define MAX_REG_ACCESS 128
+
+struct jqs_ipu_reg_value {
+	uint32_t address;
+	uint64_t value;
+};
+
+struct jqs_ipu_reg_access {
+	uint32_t /*bool */ read;
+	struct jqs_ipu_reg_value val;
+};
+
+struct jqs_message_ipu_reg_access {
+	struct jqs_message header;
+	uint32_t num_regs;
+	struct jqs_ipu_reg_access regs[MAX_REG_ACCESS];
+};
+
 /* Jqs -> Host */
 
 enum jqs_error {
@@ -218,5 +237,11 @@ struct jqs_message_error {
 		} assertion;
 	} data;
 };
+
+struct jqs_message_ipu_reg_values {
+	struct jqs_message header;
+	uint32_t num_regs;
+	struct jqs_ipu_reg_value regs[MAX_REG_ACCESS];
+} ;
 
 #endif /* __IPU_JQS_MESSAGES_H__ */

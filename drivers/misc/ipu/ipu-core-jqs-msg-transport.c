@@ -231,7 +231,14 @@ static void ipu_core_jqs_msg_process_kernel_message(struct paintbox_bus *bus,
 	case JQS_MESSAGE_TYPE_ERROR:
 		ipu_core_jqs_msg_process_error_message(bus, jqs_msg);
 		break;
+	case JQS_MESSAGE_TYPE_IPU_REG_VALUES:
+		/* same logic as ack message */
+		ipu_core_jqs_msg_process_ack_message(bus, trans, jqs_msg);
+		break;
 	default:
+		dev_err(bus->parent_dev,
+			"JQS: error unexpected response message type was received %d\n",
+				jqs_msg->type);
 		break;
 	}
 }

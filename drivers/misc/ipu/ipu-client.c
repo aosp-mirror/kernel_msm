@@ -79,6 +79,38 @@ int ipu_jqs_put(struct paintbox_data *pb)
  * ipu_session files
  *
  */
+int ipu_jqs_send_sync_reg_message(struct paintbox_data *pb,
+		const struct jqs_message *req,
+		struct jqs_message_ipu_reg_values *rsp)
+{
+	int ret;
+
+	if (req->type != JQS_MESSAGE_TYPE_IPU_REG_ACCESS) {
+		dev_err(pb->dev,
+			"%s error: unexpected message type 0x%lx\n",
+			__func__, req->type);
+		return -EIO;
+	}
+	ret = ipu_kernel_write_sync(pb->dev, req, (struct jqs_message *)rsp,
+			sizeof(*rsp));
+	if (ret < 0) {
+		dev_err(pb->dev,
+			"%s: error sending message type 0x%08x, err = %d\n",
+			__func__, req->type, ret);
+		return ret;
+	}
+
+	if (rsp->header.type != JQS_MESSAGE_TYPE_IPU_REG_VALUES) {
+		dev_err(pb->dev,
+			"%s: protocol error rsp type 0x%08x expected 0x%08x\n",
+			__func__, rsp->header.type,
+			JQS_MESSAGE_TYPE_IPU_REG_VALUES);
+		return -EPROTO;
+	}
+
+	return 0;
+}
+
 int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 		const struct jqs_message *req)
 {
