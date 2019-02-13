@@ -1397,7 +1397,7 @@ static ssize_t iommu_debug_virt_addr_read(struct file *file, char __user *ubuf,
 	else
 		snprintf(buf, 100, "0x%pK\n", virt_addr);
 
-	buflen = min(count, strlen(buf)+1);
+	buflen = min(count, strlen(buf));
 	if (copy_to_user(ubuf, buf, buflen)) {
 		pr_err("Couldn't copy_to_user\n");
 		retval = -EFAULT;
@@ -1521,7 +1521,7 @@ static ssize_t iommu_debug_pte_read(struct file *file, char __user *ubuf,
 	else
 		snprintf(buf, 100, "pte=%016llx\n", pte);
 
-	buflen = min(count, strlen(buf)+1);
+	buflen = min(count, strlen(buf));
 	if (copy_to_user(ubuf, buf, buflen)) {
 		pr_err("Couldn't copy_to_user\n");
 		retval = -EFAULT;
@@ -1590,7 +1590,7 @@ static ssize_t iommu_debug_atos_read(struct file *file, char __user *ubuf,
 		snprintf(buf, 100, "%pa\n", &phys);
 	}
 
-	buflen = min(count, strlen(buf)+1);
+	buflen = min(count, strlen(buf));
 	if (copy_to_user(ubuf, buf, buflen)) {
 		pr_err("Couldn't copy_to_user\n");
 		retval = -EFAULT;
@@ -1643,7 +1643,7 @@ static ssize_t iommu_debug_dma_atos_read(struct file *file, char __user *ubuf,
 	else
 		snprintf(buf, 100, "%pa\n", &phys);
 
-	buflen = min(count, strlen(buf)+1);
+	buflen = min(count, strlen(buf));
 	if (copy_to_user(ubuf, buf, buflen)) {
 		pr_err("Couldn't copy_to_user\n");
 		retval = -EFAULT;
@@ -1869,7 +1869,7 @@ static ssize_t iommu_debug_dma_map_read(struct file *file, char __user *ubuf,
 	iova = ddev->iova;
 	snprintf(buf, 100, "%pa\n", &iova);
 
-	buflen = min(count, strlen(buf)+1);
+	buflen = min(count, strlen(buf));
 	if (copy_to_user(ubuf, buf, buflen)) {
 		pr_err("Couldn't copy_to_user\n");
 		retval = -EFAULT;
