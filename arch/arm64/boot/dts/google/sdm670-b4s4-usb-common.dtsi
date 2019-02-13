@@ -83,7 +83,7 @@
 	goog,max-snk-mv = <9000>;
 	goog,max-snk-ma = <3000>;
 	goog,max-snk-mw = <27000>;
-	goog,op-snk-mw = <7600>;
+	goog,op-snk-mw = <2500>;
 	goog,port-type = <TYPEC_PORT_DRP>;
 	goog,default-role = <TYPEC_SINK>;
 	goog,try-role-hw;
