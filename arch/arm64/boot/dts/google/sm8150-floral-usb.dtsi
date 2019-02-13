@@ -46,6 +46,7 @@
 	qcom,otg-cl-ua = <2000000>;
 	qcom,typec-legacy-rp-icl;
 	google,otg-out-uv = <5100000>;
+	ext-vbus-supply = <&ext_5v_boost>;
 };
 
 &usb0 {
