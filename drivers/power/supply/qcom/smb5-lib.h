@@ -546,6 +546,8 @@ struct smb_charger {
 	int			wireless_vout;
 
 	bool moisture_detection_enabled;
+
+	struct regulator *ext_vbus;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);

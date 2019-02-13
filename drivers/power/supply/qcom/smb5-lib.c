@@ -4892,6 +4892,16 @@ irqreturn_t usb_plugin_irq_handler(int irq, void *data)
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
 
+	if (IS_ERR_OR_NULL(chg->ext_vbus)) {
+		chg->ext_vbus = devm_regulator_get(chg->dev, "ext-vbus");
+		if (IS_ERR_OR_NULL(chg->ext_vbus))
+			smblib_err(chg, "Can't find ext-vbus-supply\n");
+	}
+
+	if (!IS_ERR_OR_NULL(chg->ext_vbus)
+	    && regulator_is_enabled(chg->ext_vbus))
+		return IRQ_HANDLED;
+
 	if (chg->pd_hard_reset)
 		smblib_usb_plugin_hard_reset_locked(chg);
 	else
