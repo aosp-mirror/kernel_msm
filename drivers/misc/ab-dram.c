@@ -101,6 +101,7 @@ static int ab_dram_alloc(struct ab_dram_data *dev_data,
 
 	sg_dma_address(table->sgl) = paddr;
 	sg_dma_len(table->sgl) = len;
+	table->sgl->length = len;
 
 	return 0;
 err:
