@@ -49,7 +49,9 @@
 #define MAX1730X_N_OF_HISTORY_PAGES 100
 #define MAX1720X_DELAY_INIT_MS 1000
 #define FULLCAPNOM_STABILIZE_CYCLES 5
-#define CYCLE_LEVEL_SIZE 200
+#define CYCLE_BUCKET_SIZE 200
+#define TEMP_BUCKET_SIZE 5		/* unit is 0.1 degree C */
+#define NB_CYCLE_BUCKETS 4
 
 #define HISTORY_DEVICENAME "maxfg_history"
 
@@ -465,7 +467,7 @@ struct max1720x_chip {
 };
 
 #define MAX1720_EMPTY_VOLTAGE(profile, temp, cycle) \
-	profile->empty_voltage[(temp * (profile->nb_empty_voltage/2)) + cycle]
+	profile->empty_voltage[temp * NB_CYCLE_BUCKETS + cycle]
 
 /* when 1 use max17301 features */
 static int max17xxx_gauge_type = -1;
@@ -939,6 +941,16 @@ static inline int reg_to_seconds(s16 val)
 {
 	/* LSB: 5.625 seconds */
 	return DIV_ROUND_CLOSEST((int) val * 5625, 1000);
+}
+
+static inline int reg_to_vempty(u16 val)
+{
+	return ((val >> 7) & 0x1FF) * 10;
+}
+
+static inline int reg_to_vrecovery(u16 val)
+{
+	return (val & 0x7F) * 40;
 }
 
 static void max1730x_read_log_write_status(struct max1720x_chip *chip,
@@ -1558,30 +1570,41 @@ static void max1720x_handle_update_nconvgcfg(struct max1720x_chip *chip,
 static void max1720x_handle_update_empty_voltage(struct max1720x_chip *chip,
 						 int temp)
 {
-	int cycle, idx, ret = 0;
+	int cycle, cycle_idx, temp_idx, chg_st, ret = 0, nb_temp_buckets = 0;
 	u16 empty_volt_cfg, reg, data, vempty = 0;
 
 	if (chip->empty_voltage == NULL)
 		return;
 
+	chg_st = max1720x_get_battery_status(chip);
+
 	ret = REGMAP_READ(chip->regmap, MAX1720X_CYCLES, &data);
 	ret |= REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, &vempty);
-	if (ret == 0) {
+	if (ret == 0 && chg_st >= 0) {
 		cycle = reg_to_cycles(data);
-		idx = cycle / CYCLE_LEVEL_SIZE;
-		if (idx > (chip->nb_empty_voltage/2 - 1))
-			idx = chip->nb_empty_voltage/2 - 1;
+		cycle_idx = cycle / CYCLE_BUCKET_SIZE;
+		if (cycle_idx > (NB_CYCLE_BUCKETS - 1))
+			cycle_idx = NB_CYCLE_BUCKETS - 1;
+		nb_temp_buckets = chip->nb_empty_voltage/NB_CYCLE_BUCKETS;
+		if (temp < 0)
+			temp_idx = 0;
+		else
+			temp_idx =
+			    (temp/TEMP_BUCKET_SIZE+1) < (nb_temp_buckets-1) ?
+			    (temp/TEMP_BUCKET_SIZE+1) : (nb_temp_buckets-1);
 		empty_volt_cfg = MAX1720_EMPTY_VOLTAGE(chip,
-						       temp < 0 ? 0:1,
-						       idx);
-		reg = (empty_volt_cfg / 10) << 7 | 0x61;
-		if (reg != vempty) {
-			REGMAP_WRITE(chip->regmap, MAX1720X_VEMPTY,  reg);
+						       temp_idx,
+						       cycle_idx);
+		reg = (empty_volt_cfg / 10) << 7 | (vempty & 0x7F);
+		if ((reg > vempty) ||
+		    (reg < vempty &&
+		     chg_st != POWER_SUPPLY_STATUS_DISCHARGING)) {
+			REGMAP_WRITE(chip->regmap, MAX1720X_VEMPTY, reg);
 
 			pr_debug("updating empty_voltage to %d(0x%04X), temp:%d(%d), cycle:%d(%d)\n",
 				 empty_volt_cfg, reg,
-				 temp, temp < 0 ? 0 : 1,
-				 cycle, idx);
+				 temp, temp_idx,
+				 cycle, cycle_idx);
 		}
 	}
 }
@@ -2443,7 +2466,8 @@ static int max1720x_handle_dt_nconvgcfg(struct max1720x_chip *chip)
 	chip->nb_empty_voltage = of_property_count_elems_of_size(node,
 								 "maxim,empty-voltage",
 								 sizeof(u16));
-	if (chip->nb_empty_voltage > 0) {
+	if (chip->nb_empty_voltage > 0 &&
+	    chip->nb_empty_voltage % NB_CYCLE_BUCKETS == 0) {
 		chip->empty_voltage = (u16 *)devm_kmalloc_array(chip->dev,
 							chip->nb_empty_voltage,
 							sizeof(u16),
@@ -2459,7 +2483,10 @@ static int max1720x_handle_dt_nconvgcfg(struct max1720x_chip *chip)
 				 "failed to read maxim,empty-voltage: %d\n",
 				 ret);
 		}
-	}
+	} else
+		dev_warn(chip->dev,
+			 "maxim,empty-voltage is missmatching the number of elements, nb = %d\n",
+			 chip->nb_empty_voltage);
 error:
 	if (ret) {
 		devm_kfree(chip->dev, chip->temp_convgcfg);
@@ -2790,7 +2817,7 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 		 reg_to_micro_amp(data, chip->RSense));
 	(void) REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, &data);
 	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
-		 ((data >> 7) & 0x1ff) * 10, (data & 0x7f) * 40);
+		 reg_to_vempty(data), reg_to_vrecovery(data));
 
 	/* Capacity data is stored as complement so it will not be zero. Using
 	 * zero case to detect new un-primed pack
