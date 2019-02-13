@@ -113,6 +113,9 @@
 #define LB_STAT_EMPTY1        (1 << 2)
 #define LB_STAT_EMPTY2        (1 << 3)
 
+/* MMU_ERR_LOG */
+#define MMU_IOVA_SHIFT        12
+
 /* MMU_ISR / MMU_IMR */
 #define NUM_MMU_INTERRUPTS 1
 

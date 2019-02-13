@@ -37,6 +37,7 @@
 #include "ipu-debug.h"
 #include "ipu-dma.h"
 #include "ipu-lbp.h"
+#include "ipu-mmu.h"
 #include "ipu-power.h"
 #include "ipu-queue.h"
 #include "ipu-regs.h"
@@ -469,6 +470,10 @@ static int ipu_client_probe(struct device *dev)
 	if (ret < 0)
 		return ret;
 
+	ret = ipu_mmu_debug_init(pb);
+	if (ret < 0)
+		return ret;
+
 	/* register the misc device */
 	pb->misc_device.minor = MISC_DYNAMIC_MINOR,
 	pb->misc_device.name  = "ipu",
@@ -522,6 +527,7 @@ static int ipu_client_remove(struct device *dev)
 	ipu_apb_debug_remove(pb);
 	ipu_bif_debug_remove(pb);
 	ipu_lbp_remove(pb);
+	ipu_mmu_remove(pb);
 	ipu_stp_remove(pb);
 	ipu_dma_remove(pb);
 

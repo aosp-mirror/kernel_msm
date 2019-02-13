@@ -278,6 +278,12 @@ struct paintbox_lbp {
 	bool pm_enabled;
 };
 
+struct paintbox_mmu {
+#if IS_ENABLED(CONFIG_IPU_DEBUG)
+	struct paintbox_debug debug;
+#endif
+};
+
 struct paintbox_lbp_common {
 	struct paintbox_lbp *lbps;
 	unsigned int num_lbps;
@@ -307,6 +313,7 @@ struct paintbox_data {
 	struct device *dma_dev;
 
 	struct paintbox_lbp_common lbp;
+	struct paintbox_mmu mmu;
 	struct paintbox_stp_common stp;
 	struct paintbox_power power;
 	struct paintbox_dma dma;

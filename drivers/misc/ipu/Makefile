@@ -17,6 +17,7 @@ obj-$(CONFIG_IPU)			+= ipu-dma.o
 obj-$(CONFIG_IPU_DEBUG)			+= ipu-dma-debug.o
 obj-$(CONFIG_IPU)			+= ipu-lbp.o
 obj-$(CONFIG_IPU_DEBUG)			+= ipu-lbp-debug.o
+obj-$(CONFIG_IPU_DEBUG) 		+= ipu-mmu.o
 obj-$(CONFIG_IPU)			+= ipu-power.o
 obj-$(CONFIG_IPU)			+= ipu-queue.o
 obj-$(CONFIG_IPU)			+= ipu-resource.o
