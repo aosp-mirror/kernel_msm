@@ -435,7 +435,7 @@ struct max1720x_chip {
 	int fake_capacity;
 	int previous_qh;
 	int current_capacity;
-	int prev_charge_state;
+	int prev_charge_status;
 	char serial_number[25];
 	bool offmode_charger;
 	u32 convgcfg_hysteresis;
@@ -1356,6 +1356,19 @@ static int max1720x_get_battery_soc(struct max1720x_chip *chip)
 	return capacity;
 }
 
+static int max1720x_get_battery_vfsoc(struct max1720x_chip *chip)
+{
+	u16 data;
+	int capacity, err;
+
+	err = REGMAP_READ(chip->regmap, MAX1720X_VFSOC, &data);
+	if (err)
+		return err;
+	capacity = reg_to_percentage(data);
+
+	return capacity;
+}
+
 static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 					       int status)
 {
@@ -1380,14 +1393,16 @@ static void max1720x_prime_battery_qh_capacity(struct max1720x_chip *chip,
 static int max1720x_get_battery_status(struct max1720x_chip *chip)
 {
 	u16 data = 0;
-	int current_now, current_avg, ichgterm, fullsocthr;
+	int current_now, current_avg, ichgterm, vfsoc, soc, fullsocthr;
 	int status = POWER_SUPPLY_STATUS_UNKNOWN, err;
 
+	/* negative is charging */
 	err = REGMAP_READ(chip->regmap, MAX17XXX_CURRENT, &data);
 	if (err)
 		return err;
 	current_now = -reg_to_micro_amp(data, chip->RSense);
 
+	/* negative is charging */
 	err = REGMAP_READ(chip->regmap, MAX17XXX_AVGCURRENT, &data);
 	if (err)
 		return err;
@@ -1403,34 +1418,42 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 		return err;
 	fullsocthr = reg_to_percentage(data);
 
-	if (current_avg > -ichgterm && current_avg <=0) {
+	soc = max1720x_get_battery_soc(chip);
+	if (soc < 0)
+		return -EIO;
 
-		if (max1720x_get_battery_soc(chip) >= fullsocthr) {
-			const bool needs_prime = (chip->prev_charge_state ==
+	vfsoc = max1720x_get_battery_vfsoc(chip);
+	if (vfsoc < 0)
+		return -EIO;
+
+	if (current_avg > -ichgterm && current_avg <= 0) {
+
+		if (soc >= fullsocthr) {
+			const bool needs_prime = (chip->prev_charge_status ==
 						  POWER_SUPPLY_STATUS_CHARGING);
 
 			status = POWER_SUPPLY_STATUS_FULL;
 			if (needs_prime)
 				max1720x_prime_battery_qh_capacity(chip,
 								   status);
-			chip->prev_charge_state = POWER_SUPPLY_STATUS_FULL;
 		} else {
 			status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-			chip->prev_charge_state =
-				POWER_SUPPLY_STATUS_NOT_CHARGING;
 		}
 
 	} else if (current_now >= -ichgterm)  {
-		/* discharging state is not recorded in prev_charge_state */
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
-		chip->prev_charge_state = POWER_SUPPLY_STATUS_DISCHARGING;
 	} else {
 		status = POWER_SUPPLY_STATUS_CHARGING;
-		if (chip->prev_charge_state == POWER_SUPPLY_STATUS_DISCHARGING
+		if (chip->prev_charge_status == POWER_SUPPLY_STATUS_DISCHARGING
 		    && current_avg  < -ichgterm)
 			max1720x_prime_battery_qh_capacity(chip, status);
-		chip->prev_charge_state = POWER_SUPPLY_STATUS_CHARGING;
 	}
+
+	dev_info(chip->dev, "s=%d->%d c=%d avg_c=%d ichgt=%d vfsoc=%d soc=%d fullsocthr=%d\n",
+		 chip->prev_charge_status, status, current_now, current_avg,
+		 ichgterm, vfsoc, soc, fullsocthr);
+
+	chip->prev_charge_status = status;
 
 	return status;
 }
@@ -3050,7 +3073,7 @@ static void max1720x_init_work(struct work_struct *work)
 		}
 	}
 
-	chip->prev_charge_state = POWER_SUPPLY_STATUS_UNKNOWN;
+	chip->prev_charge_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	chip->fake_capacity = -EINVAL;
 	chip->resume_complete = true;
 	chip->init_complete = true;
