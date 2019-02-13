@@ -26,8 +26,7 @@ struct ab_thermal_ops {
 			enum throttle_state throttle_state_id, void *op_data);
 };
 
-struct ab_thermal *devm_ab_thermal_create(struct device *dev,
+void ab_thermal_set_ops(struct ab_thermal *thermal,
 		const struct ab_thermal_ops *ops, void *op_data);
-void devm_ab_thermal_destroy(struct ab_thermal *thermal);
 
 #endif /* _AIRBRUSH_THERMAL_H */
