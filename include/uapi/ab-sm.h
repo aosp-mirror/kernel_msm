@@ -115,19 +115,70 @@
 #define AB_SM_SET_PCIE_STATE	_IOW(AB_SM_IOCTL_MAGIC, 13, int)
 
 /*
- * Parameter struct new_ipu_state_props *:
+ * Parameter struct new_block_props *:
  *	Pass new ipu state properties
  * On success will return 0, otherwise will return error < 0.
  */
 #define AB_SM_UPDATE_IPU_STATE_PROPERTIES	_IOW(AB_SM_IOCTL_MAGIC, 14, \
-		struct new_ipu_state_props *)
+		struct new_block_props *)
+
+/*
+ * Parameter struct new_block_props *:
+ *	Pass new tpu state properties
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_UPDATE_TPU_STATE_PROPERTIES	_IOW(AB_SM_IOCTL_MAGIC, 15, \
+		struct new_block_props *)
+
+/*
+ * Parameter struct new_block_props *:
+ *	Pass new dram state properties
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_UPDATE_DRAM_STATE_PROPERTIES	_IOW(AB_SM_IOCTL_MAGIC, 16, \
+		struct new_block_props *)
+
+/*
+ * Parameter struct new_block_props *:
+ *	Pass new mif state properties
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_UPDATE_MIF_STATE_PROPERTIES	_IOW(AB_SM_IOCTL_MAGIC, 17, \
+		struct new_block_props *)
+
+/*
+ * Parameter struct new_block_props *:
+ *	Pass new fsys state properties
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_UPDATE_FSYS_STATE_PROPERTIES	_IOW(AB_SM_IOCTL_MAGIC, 18, \
+		struct new_block_props *)
+
+/*
+ * Parameter struct new_block_props *:
+ *	Pass new aon state properties
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_UPDATE_AON_STATE_PROPERTIES	_IOW(AB_SM_IOCTL_MAGIC, 19, \
+		struct new_block_props *)
 
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0
 #define AB_CHIP_ID_B0		1
 
-/* Keep in sync with length of ipu_property_table, in airbrush-sm-ctrl.c */
-#define NUM_IPU_STATES 12
+#define UAPI_BLK_(num, pmu, rail, v, clk, freq, pwr, used, tiles, dr) \
+	{					\
+		UAPI_BLOCK_STATE_ ## num,	\
+		(enum uapi_pmu_state)pmu,	\
+		uapi_ ## rail,			\
+		UAPI_VOLTAGE_ ## v,		\
+		uapi_ ## clk,			\
+		(__u64)(1000000. * freq),	\
+		pwr,				\
+		used,				\
+		tiles,				\
+		dr,				\
+	}
 
 /* Keep in sync with enum block_state in airbrush-sm-ctrl.h. */
 enum uapi_block_state {
@@ -142,21 +193,52 @@ enum uapi_block_state {
 	UAPI_BLOCK_STATE_1_1,
 	UAPI_BLOCK_STATE_1_2,
 	UAPI_BLOCK_STATE_2_0 = 20,
+	UAPI_BLOCK_STATE_2_1,
 	UAPI_BLOCK_STATE_3_0 = 30,
 	UAPI_NUM_BLOCK_STATES,
+};
+
+/* Keep in sync with enum pmu_states in airbrush_sm_ctrl.h. */
+enum uapi_pmu_state {
+	UAPI_PMU_STATE_ON = 0,
+	UAPI_PMU_STATE_SLEEP,
+	UAPI_PMU_STATE_DEEP_SLEEP,
+	UAPI_PMU_STATE_OFF
+};
+
+/* Keep in sync with enum states in airbrush-sm-ctrl.h. */
+enum uapi_state {
+	uapi_off = 0,
+	uapi_on = 1,
+};
+
+/* Keep in sync with enum logic_voltage in airbrush-sm-ctrl.h. */
+enum uapi_logic_voltage {
+	UAPI_VOLTAGE_0_0,
+	UAPI_VOLTAGE_0_60,
+	UAPI_VOLTAGE_0_75,
+	UAPI_VOLTAGE_0_85,
 };
 
 /**
  * Stores information of the soc block's operating state.
  * Similar to struct block_property in airbrush-sm-ctrl.h.
  */
-struct new_block_props {
+struct uapi_block_properties {
 	enum uapi_block_state id;
+	enum uapi_pmu_state pmu;
+	enum uapi_state voltage_rail_status;
+	enum uapi_logic_voltage logic_voltage;
+	enum uapi_state clk_status;
 	__u64 clk_frequency;
+	__u32 num_powered_cores;
+	__u32 num_computing_cores;
+	__u32 num_powered_tiles;
+	__u32 data_rate;
 };
 
-struct new_ipu_state_props {
-	struct new_block_props table[NUM_IPU_STATES];
+struct new_block_props {
+	struct uapi_block_properties table[UAPI_NUM_BLOCK_STATES];
 };
 
 

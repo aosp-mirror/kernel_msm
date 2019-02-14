@@ -218,18 +218,71 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0),
 };
 
-static int ab_update_ipu_prop_table(struct new_ipu_state_props *props)
+static int ab_update_block_prop_table(struct new_block_props *props,
+		enum block_name block, struct ab_state_context *sc)
 {
 	int i;
-	int rows = ARRAY_SIZE(props->table);
+	int rows;
+	struct block_property *prop_table;
 
-	for (i = 0; i < rows; i++) {
-		if ((int)ipu_property_table[i].id != (int)props->table[i].id)
-			return -EINVAL;
-		ipu_property_table[i].clk_frequency =
-			props->table[i].clk_frequency;
-		/* TODO: add the ability to change other block properties. */
+	switch (block) {
+	case BLK_IPU:
+		prop_table = ipu_property_table;
+		rows = ARRAY_SIZE(ipu_property_table);
+		break;
+	case BLK_TPU:
+		prop_table = tpu_property_table;
+		rows = ARRAY_SIZE(tpu_property_table);
+		break;
+	case DRAM:
+		prop_table = dram_property_table;
+		rows = ARRAY_SIZE(dram_property_table);
+		break;
+	case BLK_MIF:
+		prop_table = mif_property_table;
+		rows = ARRAY_SIZE(mif_property_table);
+		break;
+	case BLK_FSYS:
+		prop_table = fsys_property_table;
+		rows = ARRAY_SIZE(fsys_property_table);
+		break;
+	case BLK_AON:
+		prop_table = aon_property_table;
+		rows = ARRAY_SIZE(aon_property_table);
+		break;
+	default:
+		dev_warn(sc->dev,
+			"%s: Should never reach default case!\n", __func__);
+		return -EINVAL;
 	}
+
+	mutex_lock(&sc->state_transitioning_lock);
+	for (i = 0; i < rows; i++) {
+		if ((int)prop_table[i].id != (int)props->table[i].id) {
+			mutex_unlock(&sc->state_transitioning_lock);
+			return -EINVAL;
+		}
+
+		prop_table[i].pmu =
+			(int)props->table[i].pmu;
+		prop_table[i].voltage_rail_status =
+			(int)props->table[i].voltage_rail_status;
+		prop_table[i].logic_voltage =
+			(int)props->table[i].logic_voltage;
+		prop_table[i].clk_status =
+			(int)props->table[i].clk_status;
+		prop_table[i].clk_frequency =
+			props->table[i].clk_frequency;
+		prop_table[i].num_powered_cores =
+			props->table[i].num_powered_cores;
+		prop_table[i].num_computing_cores =
+			props->table[i].num_computing_cores;
+		prop_table[i].num_powered_tiles =
+			props->table[i].num_powered_tiles;
+		prop_table[i].data_rate =
+			props->table[i].data_rate;
+	}
+	mutex_unlock(&sc->state_transitioning_lock);
 
 	return 0;
 }
@@ -1473,22 +1526,26 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
 	struct abc_pcie_pm_ctrl pmctrl = {0};
+	struct new_block_props props;
 	u32 clk_frequency;
 
 	switch (cmd) {
 	case AB_SM_SET_IPU_FREQUENCY:
 		clk_frequency = (u32)arg;
+		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_IPU]),
 			sc->blocks[BLK_IPU].current_state, clk_frequency, on);
-		mutex_unlock(&sc->op_lock);
 		sc->blocks[BLK_IPU].current_state->clk_frequency =
 			clk_frequency;
 		sc->blocks[BLK_IPU].current_state->clk_status = on;
+		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
 	case AB_SM_SET_TPU_FREQUENCY:
 		clk_frequency = (u32)arg;
+		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_TPU]),
 			sc->blocks[BLK_TPU].current_state, clk_frequency, on);
@@ -1496,6 +1553,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 			clk_frequency;
 		sc->blocks[BLK_TPU].current_state->clk_status = on;
 		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
 	case AB_SM_SET_DDR_FREQUENCY:
@@ -1506,6 +1564,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 
 	case AB_SM_SET_AON_FREQUENCY:
 		clk_frequency = (u32)arg;
+		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_AON]),
 			sc->blocks[BLK_AON].current_state, clk_frequency, on);
@@ -1513,27 +1572,33 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 			clk_frequency;
 		sc->blocks[BLK_AON].current_state->clk_status = on;
 		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
 	case AB_SM_SET_IPU_STATE:
+		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
 		if (arg == 0)
 			ret = sc->pmu_ops->pmu_ipu_sleep(sc->pmu_ops->ctx);
 		else
 			ret = sc->pmu_ops->pmu_ipu_resume(sc->pmu_ops->ctx);
 		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
 	case AB_SM_SET_TPU_STATE:
+		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
 		if (arg == 0)
 			ret = sc->pmu_ops->pmu_tpu_sleep(sc->pmu_ops->ctx);
 		else
 			ret = sc->pmu_ops->pmu_tpu_resume(sc->pmu_ops->ctx);
 		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
 	case AB_SM_SET_DDR_STATE:
+		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
 		if (arg == 0) {
 			sc->dram_ops->sref_enter(sc->dram_ops->ctx);
@@ -1555,9 +1620,11 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 			sc->dram_ops->sref_exit(sc->dram_ops->ctx);
 		}
 		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
 	case AB_SM_SET_PCIE_STATE:
+		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
 		switch (arg) {
 		case 0:
@@ -1580,21 +1647,68 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		/* TODO(b/123695099): do this via ops struct */
 		ret = abc_set_pcie_pm_ctrl(&pmctrl);
 		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
 	case AB_SM_UPDATE_IPU_STATE_PROPERTIES:
-	{
-		struct new_ipu_state_props props;
-
 		if (copy_from_user(&props, (void __user *)arg,
-					sizeof(struct new_ipu_state_props))) {
+					sizeof(struct new_block_props))) {
 			return -EINVAL;
 		}
-		ret = ab_update_ipu_prop_table(&props);
+		ret = ab_update_block_prop_table(&props, BLK_IPU, sc);
 		dev_warn(sc->dev,
 			"IPU property table has been changed! Airbrush may behave unexpectedly.\n");
 		break;
-	}
+
+	case AB_SM_UPDATE_TPU_STATE_PROPERTIES:
+		if (copy_from_user(&props, (void __user *)arg,
+					sizeof(struct new_block_props))) {
+			return -EINVAL;
+		}
+		ret = ab_update_block_prop_table(&props, BLK_TPU, sc);
+		dev_warn(sc->dev,
+			"TPU property table has been changed! Airbrush may behave unexpectedly.\n");
+		break;
+
+	case AB_SM_UPDATE_DRAM_STATE_PROPERTIES:
+		if (copy_from_user(&props, (void __user *)arg,
+					sizeof(struct new_block_props))) {
+			return -EINVAL;
+		}
+		ret = ab_update_block_prop_table(&props, DRAM, sc);
+		dev_warn(sc->dev,
+			"DRAM property table has been changed! Airbrush may behave unexpectedly.\n");
+		break;
+
+	case AB_SM_UPDATE_MIF_STATE_PROPERTIES:
+		if (copy_from_user(&props, (void __user *)arg,
+					sizeof(struct new_block_props))) {
+			return -EINVAL;
+		}
+		ret = ab_update_block_prop_table(&props, BLK_MIF, sc);
+		dev_warn(sc->dev,
+			"MIF property table has been changed! Airbrush may behave unexpectedly.\n");
+		break;
+
+	case AB_SM_UPDATE_FSYS_STATE_PROPERTIES:
+		if (copy_from_user(&props, (void __user *)arg,
+					sizeof(struct new_block_props))) {
+			return -EINVAL;
+		}
+		ret = ab_update_block_prop_table(&props, BLK_FSYS, sc);
+		dev_warn(sc->dev,
+			"FSYS property table has been changed! Airbrush may behave unexpectedly.\n");
+		break;
+
+	case AB_SM_UPDATE_AON_STATE_PROPERTIES:
+		if (copy_from_user(&props, (void __user *)arg,
+					sizeof(struct new_block_props))) {
+			return -EINVAL;
+		}
+		ret = ab_update_block_prop_table(&props, BLK_AON, sc);
+		dev_warn(sc->dev,
+			"AON property table has been changed! Airbrush may behave unexpectedly.\n");
+		break;
 
 	default:
 		return -EINVAL;
