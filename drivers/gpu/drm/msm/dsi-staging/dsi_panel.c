@@ -1072,6 +1072,213 @@ error:
 	return rc;
 }
 
+int dsi_panel_get_vendor_extinfo(struct dsi_panel *panel)
+{
+	struct dsi_panel_vendor_info *const vendor_info = &panel->vendor_info;
+	char buffer[128];
+	size_t bytes = 0;
+	u32 read_addr, read_start, read_len, dsi_read_len;
+	int i, rc = 0;
+
+	mutex_lock(&panel->panel_lock);
+
+	/* Transmit the commands as specified. */
+	for (i = 0; i < vendor_info->extinfo_loc_length; i += 3) {
+		read_addr  = vendor_info->extinfo_loc[i];
+		read_start = vendor_info->extinfo_loc[i + 1];
+		read_len   = vendor_info->extinfo_loc[i + 2];
+
+		/* Compute size of entire DSI read, starting from byte zero. */
+		dsi_read_len = read_start + read_len;
+
+		if (dsi_read_len > sizeof(buffer)) {
+			pr_err("Read is too large for buffer.\n");
+			rc = -EINVAL;
+			goto error;
+		} else if (read_len > vendor_info->extinfo_length - bytes) {
+			pr_err("Ran out of space reading extinfo data.\n");
+			rc = -EINVAL;
+			goto error;
+		}
+
+		rc = mipi_dsi_dcs_read(&panel->mipi_device,
+				       read_addr,
+				       buffer,
+				       dsi_read_len);
+		if (rc < 0) {
+			pr_err("mipi_dsi_dcs_read failed with rc=%d.\n", rc);
+			goto error;
+		}
+
+		/* Copy only the the specified portion of the DSI read, which is
+		 * read_len bytes starting at read_start.
+		 */
+		memcpy(&vendor_info->extinfo[bytes], &buffer[read_start],
+		       read_len);
+		bytes += read_len;
+	}
+
+	vendor_info->extinfo_read = bytes;
+	rc = 0;
+
+error:
+
+	if (rc < 0) {
+		pr_err("Failed to read vendor extinfo. Freeing extinfo memory.\n");
+
+		vendor_info->extinfo_loc_length = 0;
+		vendor_info->extinfo_length = 0;
+		vendor_info->extinfo_read = 0;
+
+		kfree(vendor_info->extinfo_loc);
+		vendor_info->extinfo_loc = NULL;
+
+		kfree(vendor_info->extinfo);
+		vendor_info->extinfo = NULL;
+	}
+
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+static int dsi_panel_release_vendor_extinfo(struct dsi_panel *panel)
+{
+	struct dsi_panel_vendor_info *const vendor_info = &panel->vendor_info;
+
+	mutex_lock(&panel->panel_lock);
+
+	vendor_info->extinfo_loc_length = 0;
+	vendor_info->extinfo_length = 0;
+	vendor_info->extinfo_read = 0;
+
+	kfree(vendor_info->extinfo_loc);
+	vendor_info->extinfo_loc = NULL;
+
+	kfree(vendor_info->extinfo);
+	vendor_info->extinfo = NULL;
+
+	mutex_unlock(&panel->panel_lock);
+	return 0;
+}
+
+static int dsi_panel_parse_vendor_extinfo_location(struct dsi_panel *panel,
+						   struct device_node *of_node)
+{
+	u32 extinfo_location[24];
+	int size_bytes, loc_length;
+	int extinfo_length = 0;
+	int i, rc = 0;
+
+	if (!of_property_read_bool(
+			of_node, "google,mdss-dsi-panel-vendor-extinfo-loc")) {
+		pr_info("Could not find optional vendor extinfo.\n");
+		rc = 0;
+		goto error;
+	}
+
+	if (IS_ERR(of_get_property(of_node,
+				   "google,mdss-dsi-panel-vendor-extinfo-loc",
+				   &size_bytes))) {
+		pr_err("Failed to read google,mdss-dsi-panel-vendor-extinfo-loc.\n");
+		goto error;
+	}
+	loc_length = size_bytes / 4;
+
+	if (size_bytes > sizeof(extinfo_location)) {
+		pr_err("Length (%d) is larger than allocated (%d).\n",
+		       size_bytes, sizeof(extinfo_location));
+		rc = -EINVAL;
+		goto error;
+	} else if (size_bytes % 4 != 0 || loc_length % 3 != 0) {
+		pr_err("Size (%d) is not 32-bit aligned and/or the length (%d) is not divisible by 3.\n",
+		       size_bytes, loc_length);
+		rc = -EINVAL;
+		goto error;
+	}
+
+	rc = of_property_read_u32_array(
+			of_node, "google,mdss-dsi-panel-vendor-extinfo-loc",
+			extinfo_location, loc_length);
+	if (rc) {
+		pr_err("Error (%d) reading extinfo location.\n", rc);
+		goto error;
+	}
+
+	/* Compute expected length of extinfo */
+	for (i = 0; i < loc_length; i += 3) {
+		/* Each register read consists of three u32 values specifying
+		 * the register address, start byte of the target range, and the
+		 * length of the target range. Length is the 3rd u32.
+		 */
+		extinfo_length += extinfo_location[i + 2];
+	}
+
+	panel->vendor_info.extinfo_loc = kzalloc(size_bytes, GFP_KERNEL);
+	panel->vendor_info.extinfo = kzalloc(extinfo_length, GFP_KERNEL);
+	if (!panel->vendor_info.extinfo_loc || !panel->vendor_info.extinfo) {
+		pr_err("Failed to allocate extinfo buffer memory.\n");
+
+		kfree(panel->vendor_info.extinfo_loc);
+		panel->vendor_info.extinfo_loc = NULL;
+
+		kfree(panel->vendor_info.extinfo);
+		panel->vendor_info.extinfo = NULL;
+
+		rc = -ENOMEM;
+		goto error;
+	}
+	memcpy(panel->vendor_info.extinfo_loc, extinfo_location, size_bytes);
+	panel->vendor_info.extinfo_loc_length = loc_length;
+	panel->vendor_info.extinfo_length = extinfo_length;
+	rc = 0;
+
+error:
+	return rc;
+}
+
+/*
+ * Copy the display panel extended info to a buffer provided by the caller.
+ *
+ * panel  - pointer to a drm_panel
+ * buffer - destination for extinfo data
+ * len    - size of destination buffer
+ *
+ * If there is no extinfo to read, returns 0
+ * If provided buffer is NULL, returns the size of the extinfo in bytes
+ * If len is less than the extinfo length, returns -ENOSPC
+ * If there is extinfo pending read, returns -EBUSY
+ * Otherwise, copies extinfo to buffer and returns the number of bytes copied
+ */
+int dsi_panel_read_vendor_extinfo(struct drm_panel *panel, char *buffer,
+				  size_t len)
+{
+	struct dsi_panel *p = container_of(panel, struct dsi_panel, drm_panel);
+	struct dsi_panel_vendor_info *const vendor_info = &p->vendor_info;
+
+	if (!panel)
+		return -EINVAL;
+
+	/* Return zero if there is no extinfo to read */
+	if (vendor_info->extinfo_loc_length == 0)
+		return 0;
+
+	/* If buffer is null, this is a request for the length of extinfo */
+	if (!buffer)
+		return vendor_info->extinfo_length;
+
+	/* Verify adequate buffer space */
+	if (len < vendor_info->extinfo_length)
+		return -ENOSPC;
+
+	/* Return -EBUSY if there is extinfo to read, but read is pending */
+	if (vendor_info->extinfo_read == 0)
+		return -EBUSY;
+
+	memcpy(buffer, vendor_info->extinfo, vendor_info->extinfo_length);
+	return vendor_info->extinfo_length;
+}
+EXPORT_SYMBOL(dsi_panel_read_vendor_extinfo);
+
 static int dsi_panel_parse_vendor_info(struct dsi_panel *panel,
 				       struct device_node *of_node)
 {
@@ -1092,6 +1299,11 @@ static int dsi_panel_parse_vendor_info(struct dsi_panel *panel,
 	rc = dsi_panel_parse_sn_location(panel, of_node);
 	if (rc) {
 		pr_err("[%s] failed to parse the parameter for SN, rc=%d\n",
+			panel->name, rc);
+	}
+	rc = dsi_panel_parse_vendor_extinfo_location(panel, of_node);
+	if (rc) {
+		pr_err("[%s] failed to parse the extended panel info, rc=%d\n",
 			panel->name, rc);
 	}
 error:
@@ -1882,7 +2094,8 @@ static int dsi_panel_parse_reset_sequence(struct dsi_panel *panel)
 	rc = utils->read_u32_array(utils->data, "qcom,mdss-dsi-reset-sequence",
 					arr_32, length);
 	if (rc) {
-		pr_err("[%s] cannot read dso-reset-seqience\n", panel->name);
+		pr_err("[%s] cannot read qcom,mdss-dsi-reset-sequence\n",
+		       panel->name);
 		goto error_free_arr_32;
 	}
 
@@ -3148,6 +3361,8 @@ error:
 void dsi_panel_put(struct dsi_panel *panel)
 {
 	dsi_panel_release_sn_buf(panel);
+
+	dsi_panel_release_vendor_extinfo(panel);
 
 	drm_panel_remove(&panel->drm_panel);
 

@@ -212,6 +212,11 @@ struct dsi_panel_vendor_info {
 	bool is_sn;
 	u8 *sn;
 	const char *name;
+	u8 extinfo_loc_length;
+	u32 *extinfo_loc;
+	u8 extinfo_length;
+	u8 extinfo_read;
+	u8 *extinfo;
 };
 
 struct dsi_panel {
@@ -398,6 +403,7 @@ int dsi_panel_update_vr_mode(struct dsi_panel *panel, bool enable);
 bool dsi_panel_get_vr_mode(struct dsi_panel *panel);
 
 int dsi_panel_get_sn(struct dsi_panel *panel);
+int dsi_panel_get_vendor_extinfo(struct dsi_panel *panel);
 
 /* Set/get high brightness mode */
 int dsi_panel_update_hbm(struct dsi_panel *panel, bool enable);
