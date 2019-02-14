@@ -1,4 +1,5 @@
-/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2014-2016,2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,21 +11,4 @@
  * GNU General Public License for more details.
  */
 
-#include "tilefish-msm8909-mdss.dtsi"
-
-&soc {
-	gpio_keys {
-		label = "gpio-keys";
-		/delete-node/ camera_focus;
-		/delete-node/ camera_snapshot;
-		/delete-node/ vol_up;
-		stem_1 {
-			label = "STEM_1";
-			gpios = <&msm_gpio 90 0x1>;
-			linux,input-type = <1>;
-			linux,code = <265>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
-	};
-};
+#include "tilefish-msm8909-mdss-panels.dtsi"
