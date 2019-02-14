@@ -13,6 +13,10 @@
 #include "tilefish-msm8909-mdss.dtsi"
 
 &soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		/delete-node/ synaptics@20;
+	};
+
 	gpio_keys {
 		label = "gpio-keys";
 		/delete-node/ camera_focus;
