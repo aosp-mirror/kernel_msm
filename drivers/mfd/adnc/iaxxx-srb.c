@@ -498,7 +498,8 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 		goto out;
 	}
 
-	WARN_ON(request & IAXXX_SRB_CHKSUM_REQ_MASK);
+	if (request & IAXXX_SRB_CHKSUM_REQ_MASK)
+		goto out;
 
 	/* Give some time to device before read */
 	usleep_range(IAXXX_READ_DELAY,
