@@ -64,3 +64,9 @@
 		};
 	};
 };
+
+&mdss_dsi{
+	qcom,mdss_dsi_ctrl0@1ac8000 {
+		/delete-property/ vdd-supply;
+	};
+};

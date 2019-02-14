@@ -10,25 +10,15 @@
  * GNU General Public License for more details.
  */
 
-#include "tilefish-msm8909-mdss.dtsi"
+#include "tilefish-dsi-panel-auo-x120-amoled-cmd.dtsi"
 
-&soc {
-	i2c@78b9000 { /* BLSP1 QUP5 */
-		/delete-node/ synaptics@20;
-	};
+&mdss_mdp {
+	/delete-node/ qcom,mdss_dsi_auo_390p_cmd;
+};
 
-	gpio_keys {
-		label = "gpio-keys";
-		/delete-node/ camera_focus;
-		/delete-node/ camera_snapshot;
-		/delete-node/ vol_up;
-		stem_1 {
-			label = "STEM_1";
-			gpios = <&msm_gpio 90 0x1>;
-			linux,input-type = <1>;
-			linux,code = <265>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
-	};
+&dsi_auo_x120_amoled_cmd {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,panel-supply-entries = <&dsi_pm660_panel_pwr_supply>;
+	qcom,mdss-dsi-power-off-disable;
+	qcom,mdss-dsi-tear-disable;
 };
