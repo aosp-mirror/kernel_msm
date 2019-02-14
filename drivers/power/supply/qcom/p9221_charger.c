@@ -975,7 +975,7 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 	dev_dbg(&charger->client->dev, "Enable interrupts\n");
 
 	mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
-	       P9221_STAT_VRECT;
+	       P9221_STAT_VRECT | P9221R5_STAT_VOUTCHANGED;
 
 	ret = p9221_clear_interrupts(charger, mask);
 	if (ret)
@@ -1990,6 +1990,33 @@ send_eop:
 static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 {
 	int res;
+
+	if (irq_src & P9221R5_STAT_VOUTCHANGED) {
+		u16 status_reg = 0;
+
+		res = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+		if (res) {
+			dev_err(&charger->client->dev,
+				"Failed to read P9221_STATUS_REG reg: %d\n",
+				res);
+		} else {
+			union power_supply_propval val;
+
+			dev_info(&charger->client->dev, "status reg: %04x\n",
+				 status_reg);
+			/* Signal DC_RESET when wireless removal is sensed. */
+			if (!(status_reg & P9221_STAT_VOUT)) {
+				val.intval = 1;
+				res = power_supply_set_property(charger->dc_psy,
+						POWER_SUPPLY_PROP_DC_RESET,
+						&val);
+				if (res < 0)
+					dev_err(&charger->client->dev,
+						"unable to set DC_RESET, ret=%d",
+						res);
+			}
+		}
+	}
 
 	if (irq_src & P9221R5_STAT_LIMIT_MASK)
 		p9221_over_handle(charger, irq_src);
