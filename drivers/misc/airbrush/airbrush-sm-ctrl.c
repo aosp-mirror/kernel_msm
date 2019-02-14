@@ -167,10 +167,11 @@ static struct block_property fsys_property_table[] = {
 	BLK_(3_0, Disabled,       L3,  0, off, 0_0,  off, 0,     0, 0, 0, 0),
 };
 
+/* TODO: (b/124472417) set clock rate to 933.12*/
 static struct block_property aon_property_table[] = {
-	BLK_(0_0, PowerUp,  WFI,     0, on,  0_85, off, 933.12, 0, 0, 0, 0),
+	BLK_(0_0, PowerUp,  WFI,     0, on,  0_85, off, 921.6, 0, 0, 0, 0),
 	BLK_(0_1, PowerUp,  Boot,    0, on,  0_85, on,  19.2,   0, 0, 0, 0),
-	BLK_(0_2, PowerUp,  Compute, 0, on,  0_85, on,  933.12, 0, 0, 0, 0),
+	BLK_(0_2, PowerUp,  Compute, 0, on,  0_85, on,  921.6, 0, 0, 0, 0),
 	BLK_(3_0, Disabled, NoRail,  0, off, 0_0,  off, 0,      0, 0, 0, 0),
 };
 
@@ -273,41 +274,86 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 u64 frequency, enum states clk_status)
 {
 	int ret = 0;
+	u64 ret_freq;
 	struct ab_sm_clk_ops *clk = sc->clk_ops;
 
 	switch (blk->name) {
 	case BLK_IPU:
-		if (blk->current_state->clk_frequency == 0 && frequency != 0)
+		if (blk->current_state->clk_frequency == 0 && frequency != 0) {
 			ret = clk->ipu_pll_enable(clk->ctx);
-		if (blk->current_state->clk_status == off && clk_status == on)
+			if (ret)
+				return ret;
+		}
+
+		if (blk->current_state->clk_status == off && clk_status == on) {
 			ret = clk->ipu_ungate(clk->ctx);
+			if (ret)
+				return ret;
+		}
+
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
-		clk->ipu_set_rate(clk->ctx, frequency);
+		ret_freq = clk->ipu_set_rate(clk->ctx, frequency);
+		if (ret_freq != frequency) {
+			dev_err(sc->dev, "Tried to set ipu freq to %lld but got %lld",
+					frequency, ret_freq);
+			return -ENODEV;
+		}
 
-		if (blk->current_state->clk_status == on && clk_status == off)
+		if (blk->current_state->clk_status == on && clk_status == off) {
 			ret = clk->ipu_gate(clk->ctx);
-		if (!clk_status && !frequency)
+			if (ret)
+				return ret;
+		}
+
+		if (!clk_status && !frequency) {
 			ret = clk->ipu_pll_disable(clk->ctx);
+			if (ret)
+				return ret;
+		}
+
 		ab_sm_record_ts(sc, AB_SM_TS_IPU_CLK);
 		break;
+
 	case BLK_TPU:
-		if (blk->current_state->clk_frequency == 0 && frequency != 0)
+		if (blk->current_state->clk_frequency == 0 && frequency != 0) {
 			ret = clk->tpu_pll_enable(clk->ctx);
-		if (blk->current_state->clk_status == off && clk_status == on)
+			if (ret)
+				return ret;
+		}
+
+		if (blk->current_state->clk_status == off && clk_status == on) {
 			ret = clk->tpu_ungate(clk->ctx);
+			if (ret)
+				return ret;
+		}
+
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
 
-		clk->tpu_set_rate(clk->ctx, frequency);
+		ret_freq = clk->tpu_set_rate(clk->ctx, frequency);
+		if (ret_freq != frequency) {
+			dev_err(sc->dev, "Tried to set tpu freq to %lld but got %lld",
+					frequency, ret_freq);
+			return -ENODEV;
+		}
 
-		if (blk->current_state->clk_status == on && clk_status == off)
+		if (blk->current_state->clk_status == on && clk_status == off) {
 			ret = clk->tpu_gate(clk->ctx);
-		if (!clk_status && !frequency)
+			if (ret)
+				return ret;
+		}
+
+		if (!clk_status && !frequency) {
 			ret = clk->tpu_pll_disable(clk->ctx);
+			if (ret)
+				return ret;
+		}
+
 		ab_sm_record_ts(sc, AB_SM_TS_TPU_CLK);
 		break;
+
 	case BLK_MIF:
 		break;
 	case BLK_FSYS:
@@ -315,7 +361,14 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	case BLK_AON:
 		if (blk->current_state->clk_frequency == 0 && !frequency)
 			break;
-		clk->aon_set_rate(clk->ctx, frequency);
+
+		ret_freq = clk->aon_set_rate(clk->ctx, frequency);
+		if (ret_freq != frequency) {
+			dev_err(sc->dev, "Tried to set aon freq to %lld but got %lld",
+				frequency, ret_freq);
+			return -ENODEV;
+		}
+
 		ab_sm_record_ts(sc, AB_SM_TS_AON_CLK);
 		break;
 	case DRAM:
@@ -333,18 +386,30 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	bool power_increasing;
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
+	struct block_property *last_state = blk->current_state;
+
 	if (!desired_state)
 		return -EINVAL;
 
-	if (blk->current_state->id == desired_state->id)
+	if (last_state->id == desired_state->id)
 		return 0;
 
-	power_increasing = (blk->current_state->logic_voltage
+	/* Mark block as new state early in case rollback is needed */
+	blk->current_state = desired_state;
+
+	power_increasing = (last_state->logic_voltage
 				< desired_state->logic_voltage);
+
+	/* Regulator Settings */
+	if (!power_increasing) {
+		if (desired_state->voltage_rail_status == off)
+			ab_blk_pw_rails_disable(sc, blk->name,
+			to_block_state_id);
+	}
 
 	/* Raise boost voltage if necessary before frequency change */
 	if (blk->name == BLK_IPU || blk->name == BLK_TPU) {
-		if (blk->current_state->logic_voltage != VOLTAGE_0_85 &&
+		if (last_state->logic_voltage != VOLTAGE_0_85 &&
 			desired_state->logic_voltage == VOLTAGE_0_85) {
 			dev_info(sc->dev, "Enabling boost mode\n");
 			ab_pmic_enable_boost(sc);
@@ -355,7 +420,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	pmu = sc->pmu_ops;
 	/* PMU settings - Resume */
 	if (desired_state->pmu == PMU_STATE_ON &&
-			blk->current_state->pmu != PMU_STATE_ON) {
+			last_state->pmu != PMU_STATE_ON) {
 		if (blk->name == BLK_IPU) {
 			if (pmu->pmu_ipu_resume(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
@@ -374,17 +439,20 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		}
 	}
 
-	clk_set_frequency(sc, blk, desired_state->clk_frequency,
-			desired_state->clk_status);
+	if (clk_set_frequency(sc, blk, desired_state->clk_frequency,
+			desired_state->clk_status)) {
+		mutex_unlock(&sc->op_lock);
+		return -EAGAIN;
+	}
 
 	/* Block specific hooks */
 	if (blk->set_state)
-		blk->set_state(blk->current_state, desired_state,
+		blk->set_state(last_state, desired_state,
 				   to_block_state_id, blk->data);
 
 	/* PMU settings - Sleep */
 	if (desired_state->pmu == PMU_STATE_SLEEP &&
-			blk->current_state->pmu == PMU_STATE_ON) {
+			last_state->pmu == PMU_STATE_ON) {
 		if (blk->name == BLK_TPU) {
 			if (pmu->pmu_tpu_sleep(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
@@ -401,7 +469,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* PMU settings - Deep Sleep */
 	if (desired_state->pmu == PMU_STATE_DEEP_SLEEP &&
-			blk->current_state->pmu < PMU_STATE_DEEP_SLEEP &&
+			last_state->pmu < PMU_STATE_DEEP_SLEEP &&
 			blk->name == BLK_TPU) {
 		if (pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
@@ -412,23 +480,15 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* Disable boost voltage if necessary after frequency change */
 	if (blk->name == BLK_IPU || blk->name == BLK_TPU) {
-		if (blk->current_state->logic_voltage == VOLTAGE_0_85 &&
+		if (last_state->logic_voltage == VOLTAGE_0_85 &&
 			desired_state->logic_voltage != VOLTAGE_0_85) {
 			dev_info(sc->dev, "Disabling boost mode\n");
 			ab_pmic_disable_boost(sc);
 		}
 	}
 
-	/* Regulator Settings */
-	if (!power_increasing) {
-		if (desired_state->voltage_rail_status == off)
-			ab_blk_pw_rails_disable(sc, blk->name,
-			to_block_state_id);
-	}
-
-	blk->current_state = desired_state;
-
 	mutex_unlock(&sc->op_lock);
+
 	return 0;
 }
 
@@ -668,6 +728,45 @@ static struct chip_to_block_map *ab_sm_get_block_map(
 	return map;
 }
 
+/* Attempt to get airbrush into a known state
+ * Ignore errors and set to CHIP_STATE_6_0 (off)
+ * Caller must hold sc->state_transitioning_lock
+ */
+static void ab_cleanup_state(struct ab_state_context *sc)
+{
+	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_6_0);
+
+	dev_err(sc->dev, "Cleaning AB state\n");
+	blk_set_state(sc, &(sc->blocks[BLK_IPU]), map->ipu_block_state_id);
+	blk_set_state(sc, &(sc->blocks[BLK_TPU]), map->tpu_block_state_id);
+	blk_set_state(sc, &(sc->blocks[DRAM]), map->dram_block_state_id);
+	blk_set_state(sc, &(sc->blocks[BLK_MIF]), map->mif_block_state_id);
+	blk_set_state(sc, &(sc->blocks[BLK_FSYS]), map->fsys_block_state_id);
+	blk_set_state(sc, &(sc->blocks[BLK_AON]), map->aon_block_state_id);
+
+	dev_err(sc->dev, "AB block states cleaned\n");
+
+	mutex_lock(&sc->mfd_lock);
+	sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
+	mutex_unlock(&sc->mfd_lock);
+
+	msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0,
+		  sc->pcie_dev, NULL,
+		  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+	dev_err(sc->dev, "AB PCIE suspended\n");
+
+	ab_disable_pgood(sc);
+	msm_pcie_assert_perst(1);
+	ab_gpio_disable_fw_patch(sc);
+	disable_ref_clk(sc->dev);
+	dev_err(sc->dev, "AB refclks disabled\n");
+
+	ab_pmic_off(sc);
+	dev_err(sc->dev, "AB PMIC off\n");
+
+	sc->curr_chip_substate_id = CHIP_STATE_6_0;
+}
+
 static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
 	u32 to_chip_substate_id;
@@ -679,14 +778,14 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			sc->dest_chip_substate_id,
 			sc->throttle_state_id);
 
-	if (sc->curr_chip_substate_id == to_chip_substate_id) {
+	if (prev_state == to_chip_substate_id) {
 		complete_all(&sc->transition_comp);
 		complete_all(&sc->notify_comp);
 		return 0;
 	}
 
 	map = ab_sm_get_block_map(sc, to_chip_substate_id);
-	if (!is_valid_transition(sc->curr_chip_substate_id,
+	if (!is_valid_transition(prev_state,
 			to_chip_substate_id) ||
 			!map) {
 		dev_err(sc->dev,
@@ -697,12 +796,14 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	dev_info(sc->dev, "AB state changing to %d\n", to_chip_substate_id);
+	/* Mark as new state early in case rollback is needed */
+	sc->curr_chip_substate_id = to_chip_substate_id;
 
 	ab_sm_zero_ts(sc);
 	ab_sm_record_ts(sc, AB_SM_TS_START);
 
-	if ((sc->curr_chip_substate_id == CHIP_STATE_6_0 ||
-	   sc->curr_chip_substate_id == CHIP_STATE_5_0) &&
+	if ((prev_state == CHIP_STATE_6_0 ||
+	   prev_state == CHIP_STATE_5_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0) {
 		ret = ab_bootsequence(sc);
 		if (ret) {
@@ -711,8 +812,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		}
 	}
 
-	if ((sc->curr_chip_substate_id == CHIP_STATE_4_0 ||
-	   sc->curr_chip_substate_id == CHIP_STATE_3_0) &&
+	if ((prev_state == CHIP_STATE_4_0 ||
+	   prev_state == CHIP_STATE_3_0) &&
 	   to_chip_substate_id < CHIP_STATE_3_0) {
 		ret = ab_pmic_on(sc);
 		if (ret) {
@@ -722,37 +823,60 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON_34);
 	}
 
-	/*
-	 * TODO May need to roll-back the block states if only partial
-	 * blocks are set to destination state.
-	 */
+	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
+			map->ipu_block_state_id)) {
+		ret = -EINVAL;
+		dev_err(sc->dev, "blk_set_state failed for IPU\n");
+		if (to_chip_substate_id != CHIP_STATE_6_0)
+			goto cleanup_state;
+	}
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]), map->ipu_block_state_id))
-		return -EINVAL;
+	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
+			map->tpu_block_state_id)) {
+		ret = -EINVAL;
+		dev_err(sc->dev, "blk_set_state failed for TPU\n");
+		if (to_chip_substate_id != CHIP_STATE_6_0)
+			goto cleanup_state;
+	}
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]), map->tpu_block_state_id))
-		return -EINVAL;
-
-	if (blk_set_state(sc, &(sc->blocks[DRAM]), map->dram_block_state_id))
-		return -EINVAL;
+	if (blk_set_state(sc, &(sc->blocks[DRAM]),
+			map->dram_block_state_id)) {
+		ret = -EINVAL;
+		dev_err(sc->dev, "blk_set_state failed for DRAM\n");
+		if (to_chip_substate_id != CHIP_STATE_6_0)
+			goto cleanup_state;
+	}
 
 	ab_sm_record_ts(sc, AB_SM_TS_DDR_STATE);
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]), map->mif_block_state_id))
-		return -EINVAL;
+	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
+			map->mif_block_state_id)) {
+		ret = -EINVAL;
+		dev_err(sc->dev, "blk_set_state failed for MIF\n");
+		if (to_chip_substate_id != CHIP_STATE_6_0)
+			goto cleanup_state;
+	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-			map->fsys_block_state_id))
-		return -EINVAL;
+			map->fsys_block_state_id)) {
+		ret = -EINVAL;
+		dev_err(sc->dev, "blk_set_state failed for FSYS\n");
+		if (to_chip_substate_id != CHIP_STATE_6_0)
+			goto cleanup_state;
+	}
 
 	ab_sm_record_ts(sc, AB_SM_TS_FSYS_STATE);
 
-	if (blk_set_state(sc, &(sc->blocks[BLK_AON]), map->aon_block_state_id))
-		return -EINVAL;
+	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
+			map->aon_block_state_id)) {
+		ret = -EINVAL;
+		if (to_chip_substate_id != CHIP_STATE_6_0)
+			goto cleanup_state;
+	}
 
 	if (((to_chip_substate_id == CHIP_STATE_5_0) ||
 			(to_chip_substate_id == CHIP_STATE_6_0)) &&
-			(sc->curr_chip_substate_id < CHIP_STATE_5_0)) {
+			(prev_state < CHIP_STATE_5_0)) {
 		mutex_lock(&sc->mfd_lock);
 		ret = sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
@@ -762,7 +886,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 					  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
 		if (ret) {
 			dev_err(sc->dev, "PCIe failed to disable link\n");
-			return ret;
+			if (to_chip_substate_id != CHIP_STATE_6_0)
+				goto cleanup_state;
 		}
 		ab_sm_record_ts(sc, AB_SM_TS_PCIE_OFF);
 
@@ -780,8 +905,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ab_gpio_disable_ddr_iso(sc);
 		ab_gpio_disable_ddr_sr(sc);
 	}
-
-	sc->curr_chip_substate_id = to_chip_substate_id;
 
 	/* record state change */
 	ab_sm_record_state_change(prev_state, sc->curr_chip_substate_id, sc);
@@ -824,12 +947,34 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	ab_sm_print_ts(sc);
 
-	dev_info(sc->dev, "AB state changed to %d\n", to_chip_substate_id);
+	dev_info(sc->dev, "AB state changed to %d\n",
+		sc->curr_chip_substate_id);
 
 	complete_all(&sc->transition_comp);
 	complete_all(&sc->notify_comp);
 
 	return 0;
+
+cleanup_state:
+	ab_cleanup_state(sc);
+
+	/* record state change */
+	ab_sm_record_state_change(prev_state, sc->curr_chip_substate_id, sc);
+	trace_ab_state_change(sc->curr_chip_substate_id);
+
+	mutex_lock(&sc->async_fifo_lock);
+	if (sc->async_entries) {
+		kfifo_in(sc->async_entries,
+			&sc->curr_chip_substate_id,
+			sizeof(sc->curr_chip_substate_id));
+	}
+	mutex_unlock(&sc->async_fifo_lock);
+
+	dev_err(sc->dev, "AB state reverted to %d\n",
+		sc->curr_chip_substate_id);
+	complete_all(&sc->transition_comp);
+	complete_all(&sc->notify_comp);
+	return ret;
 }
 
 static int state_change_task(void *ctx)
