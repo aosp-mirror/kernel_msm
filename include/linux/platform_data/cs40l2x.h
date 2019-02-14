@@ -55,6 +55,7 @@ struct cs40l2x_platform_data {
 	unsigned int vbbr_thld1;
 	unsigned int fw_id_remap;
 	bool amp_gnd_stby;
+	bool auto_recovery;
 };
 
 #endif /* __CS40L2X_H */

@@ -1023,6 +1023,8 @@
 
 #define CS40L2X_MAX_A2H_LEVELS		10
 
+#define CS40L2X_DSP_CACHE_MAX		64
+
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);
 
