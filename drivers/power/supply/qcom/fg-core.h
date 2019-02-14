@@ -276,6 +276,18 @@ enum ttf_mode {
 	TTF_MODE_QNOVO,
 };
 
+enum jeita_model {
+	MODEL_DISABLE = 0,
+	MODEL_COLD,
+	MODEL_HOT,
+};
+
+enum jeita_comp_parameter {
+	JEITA_FV = 0,
+	JEITA_CC,
+	JEITA_FV_CC_COUNT,
+};
+
 /* DT parameters for FG device */
 struct fg_dt_props {
 	bool	force_load_profile;
@@ -310,6 +322,10 @@ struct fg_dt_props {
 	int	cl_max_cap_limit;
 	int	cl_min_cap_limit;
 	int	jeita_hyst_temp;
+	u8	jeita_en;
+	u8	jeita_dynamic_model;
+	int	jeita_soft_cold_fv_cc[JEITA_FV_CC_COUNT];
+	int	jeita_soft_hot_fv_cc[JEITA_FV_CC_COUNT];
 	int	batt_temp_delta;
 	int	esr_flt_switch_temp;
 	int	esr_tight_flt_upct;
@@ -478,6 +494,7 @@ struct fg_chip {
 	int			charge_type;
 	int			online_status;
 	int			last_soc;
+	int			twm_soc_value;
 	int			last_batt_temp;
 	int			health;
 	int			maint_soc;
@@ -493,6 +510,7 @@ struct fg_chip {
 	enum prof_load_status	profile_load_status;
 	bool			battery_missing;
 	bool			fg_restarting;
+	bool			fg_can_restart_flag;
 	bool			charge_full;
 	bool			recharge_soc_adjusted;
 	bool			ki_coeff_dischg_en;
@@ -514,6 +532,7 @@ struct fg_chip {
 	struct delayed_work	ttf_work;
 	struct delayed_work	sram_dump_work;
 	struct delayed_work	pl_enable_work;
+	struct delayed_work	fg_restart_work;
 	struct work_struct	esr_filter_work;
 	struct alarm		esr_filter_alarm;
 	ktime_t			last_delta_temp_time;
