@@ -187,6 +187,10 @@ Optional property:
 			2000mW, while on a 10'' tablet is around
 			4500mW.
 
+- wake-capable-sensor:	Set to true if thermal zone sensor is wake up capable
+  Type: bool		and cooling devices binded to this thermal zone are not
+  Size: none		affected during suspend.
+
 - disable-thermal-zone: Disable the thermal zone monitoring by default. These
   Type:bool		thermal zones will be enabled by userspace daemons
 			based on usecase.
