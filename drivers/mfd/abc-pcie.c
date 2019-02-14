@@ -1721,6 +1721,8 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 		return -EINVAL;
 	}
 
+	dev_info(dev, "Broadcast Enter EL2 notification\n");
+
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE |
 					ABC_PCIE_LINK_ENTER_EL2);
@@ -1757,6 +1759,8 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 		dev_err(dev, "PCIe is already under EL1 control.\n");
 		return -EINVAL;
 	}
+
+	dev_info(dev, "Broadcast Exit EL2 notification\n");
 
 	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
 	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
