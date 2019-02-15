@@ -105,13 +105,6 @@
 					15 01 00 00 00 00 02 53 20 /* write ctl 60hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
-				qcom,mdss-dsi-lp1-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 A8 B1
-					15 01 00 00 14 00 02 B1 00
-					39 01 00 00 00 00 03 F0 A5 A5
-				];
-
 				qcom,mdss-dsi-nolp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A
 					15 01 00 00 00 00 02 53 00 /* HLPM OFF */
@@ -189,12 +182,6 @@
 					15 01 00 00 00 00 02 53 30 /* write ctl 90hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
-				qcom,mdss-dsi-lp1-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 B0 A8 B1
-					15 01 00 00 14 00 02 B1 00
-					39 01 00 00 00 00 03 F0 A5 A5
-				];
 				qcom,mdss-dsi-nolp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A
 					15 01 00 00 00 00 02 53 00 /* HLPM OFF */
@@ -239,6 +226,8 @@
 				google,dsi-lp-brightness-threshold = <10>;
 				google,dsi-lp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 00
 					39 01 00 00 00 00 03 BB 05 0C
 					39 01 00 00 00 00 03 B0 05 BB
 					15 01 00 00 00 00 02 BB 80
@@ -254,6 +243,8 @@
 				google,dsi-lp-brightness-threshold = <255>;
 				google,dsi-lp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 00
 					39 01 00 00 00 00 03 BB 05 0C
 					39 01 00 00 00 00 03 B0 05 BB
 					15 01 00 00 00 00 02 BB 00
