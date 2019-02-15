@@ -436,6 +436,9 @@ static int32_t cam_sensor_driver_platform_probe(
 	if (rc < 0)
 		goto unreg_subdev;
 
+	for (i = 0; i < CAM_SENSOR_GPIO_IRQ_MAX; i++)
+		s_ctrl->cam_sensor_irq[i] = 0;
+
 	s_ctrl->sensor_state = CAM_SENSOR_INIT;
 
 	return rc;

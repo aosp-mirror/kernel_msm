@@ -25,6 +25,77 @@
 #endif
 
 static struct sensor_status_t sensor_status;
+static enum laser_tag_type laser_tag_indicator;
+
+static irqreturn_t cam_dot_flood_irq_handler(int irq, void *dev_id)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = (struct cam_sensor_ctrl_t *)dev_id;
+	struct cam_soc_gpio_data *gpio_conf;
+	int gpio_level;
+	uint8_t gpio_count;
+	uint8_t gpio_idx;
+
+	if (!s_ctrl) {
+		CAM_ERR(CAM_SENSOR, "can not get sensor control structure");
+		return IRQ_HANDLED;
+	}
+	gpio_conf = s_ctrl->soc_info.gpio_data;
+	gpio_count = gpio_conf->cam_gpio_req_tbl_size;
+	gpio_idx = s_ctrl->cam_safety_gpio_idx[LASER_STATUS];
+	gpio_level =
+		gpio_get_value(gpio_conf->cam_gpio_req_tbl[gpio_idx].gpio);
+	laser_tag_indicator = (gpio_level == 1 ?
+		LASER_TAG_DOT : LASER_TAG_FLOOD);
+
+	return IRQ_HANDLED;
+}
+
+static void cam_register_laser_irq(struct cam_sensor_ctrl_t *s_ctrl,
+	enum cam_sensor_gpio_irq type)
+{
+	if (s_ctrl->cam_sensor_irq[type] == 0)
+		return;
+	switch (type) {
+	case LASER_STATUS:
+		request_irq(s_ctrl->cam_sensor_irq[type],
+			cam_dot_flood_irq_handler,
+			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+			"laser_tag", s_ctrl);
+		break;
+	default:
+		CAM_WARN(CAM_SENSOR, "unsupported irq type: %d", type);
+	}
+}
+
+static void cam_release_laser_irq(struct cam_sensor_ctrl_t *s_ctrl,
+	enum cam_sensor_gpio_irq type)
+{
+	if (s_ctrl->cam_sensor_irq[type] == 0)
+		return;
+	free_irq(s_ctrl->cam_sensor_irq[type], s_ctrl);
+}
+
+static void cam_find_laser_irq(struct cam_sensor_ctrl_t *s_ctrl)
+{
+	int i;
+	struct cam_soc_gpio_data *gpio_conf = s_ctrl->soc_info.gpio_data;
+	uint8_t gpio_count = gpio_conf->cam_gpio_req_tbl_size;
+
+	for (i = 0; i < gpio_count; i++) {
+		if (strcmp(gpio_conf->cam_gpio_req_tbl[i].label,
+			"DOT_FLOOD_STATUS") == 0) {
+			s_ctrl->cam_sensor_irq[LASER_STATUS] =
+				gpio_to_irq(
+				gpio_conf->cam_gpio_req_tbl[i].gpio);
+			s_ctrl->cam_safety_gpio_idx[LASER_STATUS] = i;
+			break;
+		}
+	}
+	if (s_ctrl->cam_sensor_irq[LASER_STATUS] == 0)
+		CAM_INFO(CAM_SENSOR,
+			"no valid IRQ found for laser status");
+}
+
 
 static ssize_t ois_fw_ver_show(struct device *dev,
 	struct device_attribute *attr,
@@ -949,6 +1020,11 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto free_power_settings;
 		}
 
+		/* Find laser status irq for EVT or later build */
+		if (s_ctrl->soc_info.index == IR_MASTER &&
+			s_ctrl->hw_version >= 2)
+			cam_find_laser_irq(s_ctrl);
+
 		CAM_INFO(CAM_SENSOR,
 			"Probe success,slot:%d,slave_addr:0x%x,sensor_id:0x%x",
 			s_ctrl->soc_info.index,
@@ -1045,6 +1121,10 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			goto release_mutex;
 		}
 
+		if (s_ctrl->soc_info.index == IR_MASTER &&
+			s_ctrl->hw_version >= 2)
+			cam_register_laser_irq(s_ctrl, LASER_STATUS);
+
 		s_ctrl->sensor_state = CAM_SENSOR_ACQUIRE;
 		s_ctrl->last_flush_req = 0;
 		CAM_INFO(CAM_SENSOR,
@@ -1092,11 +1172,17 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		if (rc < 0)
 			CAM_ERR(CAM_SENSOR,
 				"failed in destroying the device hdl");
+
+		if (s_ctrl->soc_info.index == IR_MASTER &&
+			s_ctrl->hw_version >= 2)
+			cam_release_laser_irq(s_ctrl, LASER_STATUS);
+
 		s_ctrl->bridge_intf.device_hdl = -1;
 		s_ctrl->bridge_intf.link_hdl = -1;
 		s_ctrl->bridge_intf.session_hdl = -1;
 
 		s_ctrl->sensor_state = CAM_SENSOR_INIT;
+
 		CAM_INFO(CAM_SENSOR,
 			"CAM_RELEASE_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
 			s_ctrl->sensordata->slave_info.sensor_id,
@@ -1775,38 +1861,37 @@ int cam_sensor_tag_laser_type(
 		goto out;
 
 	if (is_ir_camera && is_both_ir_streamon) {
-		/* Tagging laser by strobe frame count after reset */
-		if (s_ctrl->soc_info.index == IR_MASTER) {
-			laserTag = ((msg->u.frame_msg.frame_id -
-				s_ctrl->first_strobe_frame) % 2) ?
-				LASER_TAG_DOT : LASER_TAG_FLOOD;
+		if (s_ctrl->hw_version < 2) {
+			/* Tagging laser by strobe frame count after reset */
+			if (s_ctrl->soc_info.index == IR_MASTER) {
+				laserTag = ((msg->u.frame_msg.frame_id -
+					s_ctrl->first_strobe_frame) % 2) ?
+					LASER_TAG_DOT : LASER_TAG_FLOOD;
+			} else
+				laserTag = ((msg->u.frame_msg.frame_id -
+					s_ctrl->first_strobe_frame) % 2) ?
+					LASER_TAG_FLOOD : LASER_TAG_DOT;
 		} else
-			laserTag = ((msg->u.frame_msg.frame_id -
-				s_ctrl->first_strobe_frame) % 2) ?
-				LASER_TAG_FLOOD : LASER_TAG_DOT;
+			/* Tagging laser by IRQ signal */
+			laserTag = laser_tag_indicator;
 	} else if (is_ir_camera && !is_both_ir_streamon) {
 		/* Static tagging for single IR case */
-		if (s_ctrl->first_strobe_frame == 0) {
-			if (s_ctrl->soc_info.index == IR_MASTER) {
-				laserTag =
-					(msg->u.frame_msg.frame_id % 2) ?
-					LASER_TAG_NONE : LASER_TAG_FLOOD;
-			} else
-				laserTag = (msg->u.frame_msg.frame_id % 2) ?
-					LASER_TAG_DOT : LASER_TAG_NONE;
-		} else {
-			if (s_ctrl->soc_info.index == IR_MASTER) {
-				laserTag = ((msg->u.frame_msg.frame_id -
-				s_ctrl->first_strobe_frame) % 2) ?
-					LASER_TAG_NONE : LASER_TAG_FLOOD;
-			} else
-				laserTag = ((msg->u.frame_msg.frame_id -
-				s_ctrl->first_strobe_frame) % 2) ?
-					LASER_TAG_NONE : LASER_TAG_DOT;
-
-		}
+		if (s_ctrl->soc_info.index == IR_MASTER) {
+			laserTag = ((msg->u.frame_msg.frame_id -
+			s_ctrl->first_strobe_frame) % 2) ?
+				LASER_TAG_NONE : LASER_TAG_FLOOD;
+		} else
+			laserTag = ((msg->u.frame_msg.frame_id -
+			s_ctrl->first_strobe_frame) % 2) ?
+				LASER_TAG_NONE : LASER_TAG_DOT;
 	}
 out:
+	CAM_DBG(CAM_SENSOR,
+		"sensor: %d frame_count: %d requestId: %d laserTag: %d",
+		s_ctrl->soc_info.index,
+		msg->u.frame_msg.frame_id,
+		msg->u.frame_msg.request_id,
+		laserTag);
 	msg->u.frame_msg.laser_tag = laserTag;
 
 	return 0;

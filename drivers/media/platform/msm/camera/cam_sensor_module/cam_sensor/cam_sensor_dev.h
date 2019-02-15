@@ -74,6 +74,12 @@ enum cam_sensor_state_t {
 	CAM_SENSOR_START,
 };
 
+enum cam_sensor_gpio_irq {
+	LASER_STATUS,
+	SILEGO_FAULT,
+	CAM_SENSOR_GPIO_IRQ_MAX,
+};
+
 /**
  * struct intf_params
  * @device_hdl: Device Handle
@@ -153,6 +159,8 @@ struct cam_sensor_ctrl_t {
 	uint16_t ois_fw_ver;
 	uint16_t vcm_fw_ver;
 	uint32_t hw_version;
+	uint8_t cam_sensor_irq[CAM_SENSOR_GPIO_IRQ_MAX];
+	uint8_t cam_safety_gpio_idx[CAM_SENSOR_GPIO_IRQ_MAX];
 };
 
 struct sensor_status_t {
