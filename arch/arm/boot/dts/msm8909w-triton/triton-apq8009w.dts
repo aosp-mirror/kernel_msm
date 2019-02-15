@@ -19,6 +19,7 @@
 #include "../../../../arm64/boot/dts/qcom/8909w-pm660.dtsi"
 #include "../../../../arm64/boot/dts/qcom/apq8009w-bg-memory.dtsi"
 #include "../../../../arm64/boot/dts/qcom/msm8909-audio-bg_codec.dtsi"
+#include "triton-msm8909w.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009W-PM660 BLACKGHOST WTP";
