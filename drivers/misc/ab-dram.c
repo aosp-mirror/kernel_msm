@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
+#include <linux/uaccess.h>
 #include <uapi/ab-dram.h>
 
 /* TODO(b/116617722): Add carveout support */
@@ -407,7 +408,7 @@ dma_addr_t ab_dram_get_dma_buf_paddr(struct dma_buf *dmabuf)
 }
 EXPORT_SYMBOL(ab_dram_get_dma_buf_paddr);
 
-static int ab_dram_allocate_memory_fd(struct ab_dram_session *session,
+static int ab_dram_allocate_memory_fd_legacy(struct ab_dram_session *session,
 		size_t len)
 {
 	int fd;
@@ -422,6 +423,19 @@ static int ab_dram_allocate_memory_fd(struct ab_dram_session *session,
 		dma_buf_put(dmabuf);
 
 	return fd;
+}
+
+static int ab_dram_allocate_memory_fd(struct ab_dram_session *session,
+		unsigned long arg)
+{
+	struct ab_dram_alloc_request __user *user_req;
+	struct ab_dram_alloc_request req;
+
+	user_req = (struct ab_dram_alloc_request __user *)arg;
+	if (copy_from_user(&req, user_req, sizeof(req)))
+		return -EFAULT;
+
+	return ab_dram_allocate_memory_fd_legacy(session, req.size);
 }
 
 static int ab_dram_open(struct inode *ip, struct file *fp)
@@ -475,8 +489,11 @@ static long ab_dram_ioctl(struct file *filp, unsigned int cmd,
 	int ret = 0;
 
 	switch (cmd) {
+	case AB_DRAM_ALLOCATE_MEMORY_LEGACY:
+		ret = ab_dram_allocate_memory_fd_legacy(session, (size_t)arg);
+		break;
 	case AB_DRAM_ALLOCATE_MEMORY:
-		ret = ab_dram_allocate_memory_fd(session, (size_t)arg);
+		ret = ab_dram_allocate_memory_fd(session, arg);
 		break;
 	default:
 		pr_err("Invalid ioctl command.\n");

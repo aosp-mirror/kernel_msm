@@ -19,6 +19,18 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-#define AB_DRAM_ALLOCATE_MEMORY		_IOW('a', 1, size_t)
+enum ab_dram_alloc_flag {
+	ABD_ALLOC_NON_CONTIGUOUS,
+	ABD_ALLOC_CONTIGUOUS,
+};
+
+struct ab_dram_alloc_request {
+	size_t size;
+	enum ab_dram_alloc_flag flag;
+};
+
+#define AB_DRAM_ALLOCATE_MEMORY_LEGACY	_IOW('a', 1, size_t)
+#define AB_DRAM_ALLOCATE_MEMORY		_IOW('a', 2, \
+		struct ab_dram_alloc_request)
 
 #endif /* __AB_DRAM_UAPI_H__ */
