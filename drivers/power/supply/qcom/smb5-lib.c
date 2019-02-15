@@ -1772,7 +1772,7 @@ int smblib_set_prop_input_current_max(struct smb_charger *chg,
 				 USBIN_MODE_CHG_BIT,
 				 override ? USBIN_MODE_CHG_BIT : 0);
 
-	rc = smblib_icl_override(chg, override);
+	rc = smblib_icl_override(chg, SW_OVERRIDE_HC_MODE);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't set ICL override rc=%d\n", rc);
 		return rc;
