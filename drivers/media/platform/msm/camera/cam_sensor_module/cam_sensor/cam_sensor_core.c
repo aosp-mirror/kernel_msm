@@ -972,6 +972,8 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				if (rc < 0) {
 					CAM_ERR(CAM_SENSOR,
 						"failed to create sysfs");
+					cam_sensor_power_down(s_ctrl);
+					msleep(20);
 					goto free_power_settings;
 				}
 			}
