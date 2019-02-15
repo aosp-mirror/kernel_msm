@@ -12,6 +12,10 @@
  */
 
 
+&thermal_zones {
+	/delete-node/ case-therm-step;
+};
+
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_auo_x120_amoled_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
