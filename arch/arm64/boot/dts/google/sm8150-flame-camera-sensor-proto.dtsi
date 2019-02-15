@@ -61,8 +61,16 @@
 	};
 
 	qcom,cam-sensor@3 {
+		pinctrl-0 = <&cam_sensor_mclk1_active
+				&cam_sensor_active_ircam1>;
+		pinctrl-1 = <&cam_sensor_mclk1_suspend
+				&cam_sensor_suspend_ircam1>;
 		gpios = <&tlmm 14 0>,
 			<&pm8150l_gpios 12 0>;
+		gpio-req-tbl-num = <0 1>;
+		gpio-req-tbl-flags = <1 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK3",
+			"CAM_RESET3";
 		hw-version = <1>;
 	};
 

@@ -132,7 +132,7 @@
 	ir_vcsel_fault_active: ir_vcsel_fault_active {
 		mux {
 			pins = "gpio124";
-			function = "normal";
+			function = "gpio";
 		};
 		config {
 			pins = "gpio124";
@@ -144,7 +144,7 @@
 	ir_vcsel_fault_suspend: ir_vcsel_fault_suspend {
 		mux {
 			pins = "gpio124";
-			function = "normal";
+			function = "gpio";
 		};
 		config {
 			pins = "gpio124";
@@ -156,7 +156,7 @@
 	csense_irq_active: csense_irq_active {
 		mux {
 			pins = "gpio49";
-			function = "normal";
+			function = "gpio";
 		};
 		config {
 			pins = "gpio49";
@@ -168,10 +168,34 @@
 	csense_irq_suspend: csense_irq_suspend {
 		mux {
 			pins = "gpio49";
-			function = "normal";
+			function = "gpio";
 		};
 		config {
 			pins = "gpio49";
+			bias-pull-down;
+			input-enable;
+		};
+	};
+
+	dot_flood_status_active: dot_flood_status_active {
+		mux {
+			pins = "gpio60";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio60";
+			bias-pull-up;
+			input-enable;
+		};
+	};
+
+	dot_flood_status_suspend: dot_flood_status_suspend {
+		mux {
+			pins = "gpio60";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio60";
 			bias-pull-down;
 			input-enable;
 		};
@@ -423,16 +447,20 @@
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk1_active
-				&cam_sensor_active_ircam1>;
+				&cam_sensor_active_ircam1
+				&dot_flood_status_active>;
 		pinctrl-1 = <&cam_sensor_mclk1_suspend
-				&cam_sensor_suspend_ircam1>;
+				&cam_sensor_suspend_ircam1
+				&dot_flood_status_suspend>;
 		gpios = <&tlmm 14 0>,
-			<&pm8150l_gpios 12 0>;
+			<&pm8150l_gpios 12 0>,
+			<&tlmm 60 0>;
 		gpio-reset = <1>;
-		gpio-req-tbl-num = <0 1>;
-		gpio-req-tbl-flags = <1 0>;
+		gpio-req-tbl-num = <0 1 2>;
+		gpio-req-tbl-flags = <1 0 0>;
 		gpio-req-tbl-label = "CAMIF_MCLK3",
-			"CAM_RESET3";
+			"CAM_RESET3",
+			"DOT_FLOOD_STATUS";
 		sensor-mode = <0>;
 		cci-device = <0>;
 		cci-master = <0>;
