@@ -102,7 +102,7 @@
  */
 
 #define JQS_SYS_BUFFER_SIZE		SZ_8K
-#define SYS_JQS_BUFFER_SIZE		SZ_32K
+#define SYS_JQS_BUFFER_SIZE		SZ_128K
 
 static struct paintbox_jqs_msg_transport *ipu_core_get_jqs_transport(
 		struct paintbox_bus *bus)
