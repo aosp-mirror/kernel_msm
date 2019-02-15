@@ -2,7 +2,6 @@ ARCH=arm64
 BRANCH=android-msm-pixel-4.9
 CROSS_COMPILE=aarch64-linux-android-
 CROSS_COMPILE_ARM32=arm-linux-androideabi-
-DEFCONFIG=b1c1_defconfig
 EXTRA_CMDS=''
 CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r346389b/bin/
 LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-r346389b/lib64:$LD_LIBRARY_PATH
