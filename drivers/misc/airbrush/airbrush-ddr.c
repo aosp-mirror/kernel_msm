@@ -691,6 +691,9 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	ddr_reg_set(DREX_MEMCONTROL, CLK_STOP_EN);
 	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
 
+	/* Select the oscillator clock from SYSREG_MIF */
+	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
+
 	ddr_reg_wr(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_OSCCLK));
 	ddr_reg_clr_set(PLL_CON0_PLL_PHY_MIF, PLL_PMS_MSK,
 			PLL_PMS(pms->p, pms->m, pms->s) | PLL_ENABLE);
