@@ -17,6 +17,7 @@
 #include <linux/airbrush-sm-ctrl.h>
 
 #define AB_CDEV_NAME "ab"
+#define AB_CDEV_INTERNAL_NAME "ab-internal"
 
 struct ab_thermal;
 struct device;
