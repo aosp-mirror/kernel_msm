@@ -28,11 +28,15 @@
 	};
 };
 
-/* Airbrush uart node is different on Jaws. */
+/*
+ * qupv3_se19_2uart is for Airbrush uart on Jaws, therefore qupv3_se1_2uart
+ * should be disabled.
+ */
 &qupv3_se1_2uart {
 	status = "disabled";
 };
 
+/* Enabling this can cause backdrive issue on Airbrush prior to EVT1.1. */
 &qupv3_se19_2uart {
-	status = "okay";
+	status = "disabled";
 };

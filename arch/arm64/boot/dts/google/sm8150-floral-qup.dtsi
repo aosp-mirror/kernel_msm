@@ -102,7 +102,10 @@
 	};
 };
 
-/* Enable Airbrush uart node on coral/flame by default. */
+/*
+ * qupv3_se1_2uart is for Airbrush uart on coral/flame.
+ * Enabling this can cause backdrive issue on Airbrush prior to EVT1.1.
+ */
 &qupv3_se1_2uart {
-	status = "okay";
+	status = "disabled";
 };
