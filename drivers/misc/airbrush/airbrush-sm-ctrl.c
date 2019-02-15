@@ -775,11 +775,19 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	struct chip_to_block_map *active_map;
 	enum chip_state prev_state = sc->curr_chip_substate_id;
 
+	if (sc->el2_mode) {
+		dev_err(sc->dev, "Cannot change state while in EL2 mode\n");
+		complete_all(&sc->transition_comp);
+		complete_all(&sc->notify_comp);
+		return -ENODEV;
+	}
+
 	to_chip_substate_id = ab_sm_throttled_chip_substate_id(
 			sc->dest_chip_substate_id,
 			sc->throttle_state_id);
 
 	if (prev_state == to_chip_substate_id) {
+		dev_dbg(sc->dev, "Ignore state change, already at destination\n");
 		complete_all(&sc->transition_comp);
 		complete_all(&sc->notify_comp);
 		return 0;
@@ -1041,12 +1049,8 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 		u32 dest_chip_substate_id)
 {
 	int ret;
-	struct chip_to_block_map *map;
-
-	if (sc->dest_chip_substate_id == dest_chip_substate_id)
-		return 0;
-
-	map = ab_sm_get_block_map(sc, dest_chip_substate_id);
+	struct chip_to_block_map *map =
+		ab_sm_get_block_map(sc, dest_chip_substate_id);
 
 	if (!is_valid_transition(sc->curr_chip_substate_id,
 			dest_chip_substate_id) ||
@@ -1450,6 +1454,46 @@ static int ab_sm_misc_release(struct inode *ip, struct file *fp)
 	return 0;
 }
 
+int ab_sm_enter_el2(struct ab_state_context *sc)
+{
+	int ret;
+
+	mutex_lock(&sc->state_transitioning_lock);
+	mutex_lock(&sc->mfd_lock);
+	if (!sc->el2_mode) {
+		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
+		if (!ret)
+			sc->el2_mode = true;
+	} else {
+		ret = -EINVAL;
+		dev_warn(sc->dev, "Already in el2 mode\n");
+	}
+	mutex_unlock(&sc->mfd_lock);
+	mutex_unlock(&sc->state_transitioning_lock);
+
+	return ret;
+}
+
+int ab_sm_exit_el2(struct ab_state_context *sc)
+{
+	int ret;
+
+	mutex_lock(&sc->state_transitioning_lock);
+	mutex_lock(&sc->mfd_lock);
+	if (sc->el2_mode) {
+		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
+		if (!ret)
+			sc->el2_mode = false;
+	} else {
+		ret = -EINVAL;
+		dev_warn(sc->dev, "Not in el2 mode\n");
+	}
+	mutex_unlock(&sc->mfd_lock);
+	mutex_unlock(&sc->state_transitioning_lock);
+
+	return ret;
+}
+
 static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		unsigned long arg)
 {
@@ -1621,15 +1665,11 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		break;
 
 	case AB_SM_ENTER_EL2:
-		mutex_lock(&sc->mfd_lock);
-		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
-		mutex_unlock(&sc->mfd_lock);
+		ret = ab_sm_enter_el2(sc);
 		break;
 
 	case AB_SM_EXIT_EL2:
-		mutex_lock(&sc->mfd_lock);
-		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
-		mutex_unlock(&sc->mfd_lock);
+		ret = ab_sm_exit_el2(sc);
 		break;
 
 	default:
@@ -1803,6 +1843,7 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 
 	ab_sm_ctx->chip_id = CHIP_ID_UNKNOWN;
 	ab_sm_ctx->cold_boot = true;
+	ab_sm_ctx->el2_mode = false;
 
 	/* initialize state stats */
 	ab_sm_state_stats_init(ab_sm_ctx);

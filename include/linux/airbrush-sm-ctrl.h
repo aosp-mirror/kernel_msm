@@ -551,6 +551,7 @@ struct ab_state_context {
 	struct ab_sm_mfd_ops	*mfd_ops;
 
 	bool force_el2;
+	bool el2_mode; /* Guarded by state_transitioning_lock */
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_DEBUGFS)
 	/* time stamps */
@@ -599,6 +600,9 @@ enum chip_state ab_sm_get_state(struct ab_state_context *sc);
 int ab_bootsequence(struct ab_state_context *ab_ctx);
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);
 const enum stat_state ab_chip_state_to_stat_state(enum chip_state id);
+
+int ab_sm_enter_el2(struct ab_state_context *sc);
+int ab_sm_exit_el2(struct ab_state_context *sc);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);

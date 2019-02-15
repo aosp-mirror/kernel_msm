@@ -146,14 +146,10 @@ static int ab_sm_force_el2_set(void *data, u64 val)
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 	int ret;
 
-	mutex_lock(&sc->mfd_lock);
-
-	if (!!val)
-		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
+	if (val)
+		ret = ab_sm_enter_el2(sc);
 	else
-		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
-
-	mutex_unlock(&sc->mfd_lock);
+		ret = ab_sm_exit_el2(sc);
 
 	if (!ret)
 		sc->force_el2 = !!val;
