@@ -159,6 +159,7 @@
 
 	actuator_rear: qcom,actuator@0 {
 		cell-index = <0>;
+		param-index = <5>;
 		reg = <0x0>;
 		compatible = "qcom,actuator";
 		cci-master = <0>;
