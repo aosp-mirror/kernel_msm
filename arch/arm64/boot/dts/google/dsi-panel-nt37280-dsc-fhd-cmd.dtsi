@@ -312,6 +312,16 @@
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 		};
+
+		google,hbm-ranges {
+			hbm-range@0 {
+				google,dsi-hbm-range-brightness-threshold = <1>;
+
+				google,dsi-hbm-range-bl-min-level = <0x1>;
+				google,dsi-hbm-range-bl-max-level = <0xfff>;
+
+			};
+		};
 	};
 };
 
