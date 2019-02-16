@@ -983,7 +983,7 @@ static int dsi_panel_bl_parse_hbm(struct device *parent,
 		return -EINVAL;
 	}
 
-	bl->hbm = devm_kmalloc(parent, sizeof(struct hbm_data), GFP_KERNEL);
+	bl->hbm = devm_kzalloc(parent, sizeof(struct hbm_data), GFP_KERNEL);
 	if (bl->hbm == NULL) {
 		pr_err("Failed to allocate memory for HBM data\n");
 		return -ENOMEM;
