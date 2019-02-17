@@ -79,6 +79,7 @@
 #include <linux/cpufreq_times.h>
 #include <linux/sched/loadavg.h>
 #include <linux/scs.h>
+#include <linux/cgroup-defs.h>
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
@@ -9074,6 +9075,17 @@ int sched_updown_migrate_handler(struct ctl_table *table, int write,
 inline struct task_group *css_tg(struct cgroup_subsys_state *css)
 {
 	return css ? container_of(css, struct task_group, css) : NULL;
+}
+
+void threadgroup_change_begin(struct task_struct *tsk)
+{
+	might_sleep();
+	cgroup_threadgroup_change_begin(tsk);
+}
+
+void threadgroup_change_end(struct task_struct *tsk)
+{
+	cgroup_threadgroup_change_end(tsk);
 }
 
 static struct cgroup_subsys_state *

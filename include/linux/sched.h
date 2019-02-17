@@ -52,7 +52,6 @@ struct sched_param {
 #include <linux/timer.h>
 #include <linux/hrtimer.h>
 #include <linux/kcov.h>
-#include <linux/psi_types.h>
 #include <linux/task_io_accounting.h>
 #include <linux/latencytop.h>
 #include <linux/cred.h>
@@ -60,7 +59,6 @@ struct sched_param {
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
 #include <linux/magic.h>
-#include <linux/cgroup-defs.h>
 
 #include <asm/processor.h>
 
@@ -3447,11 +3445,7 @@ static inline void unlock_task_sighand(struct task_struct *tsk,
  * subsystems needing threadgroup stability can hook into for
  * synchronization.
  */
-static inline void threadgroup_change_begin(struct task_struct *tsk)
-{
-	might_sleep();
-	cgroup_threadgroup_change_begin(tsk);
-}
+extern void threadgroup_change_begin(struct task_struct *tsk);
 
 /**
  * threadgroup_change_end - mark the end of changes to a threadgroup
@@ -3459,10 +3453,7 @@ static inline void threadgroup_change_begin(struct task_struct *tsk)
  *
  * See threadgroup_change_begin().
  */
-static inline void threadgroup_change_end(struct task_struct *tsk)
-{
-	cgroup_threadgroup_change_end(tsk);
-}
+extern void threadgroup_change_end(struct task_struct *tsk);
 
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 
