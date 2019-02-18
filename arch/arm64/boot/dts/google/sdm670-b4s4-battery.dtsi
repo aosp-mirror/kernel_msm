@@ -1,7 +1,7 @@
 
 &pm660_charger {
 	google,boost_to_5_1V;
-	google,usb-port-tz-name = "usbc-therm-adc";
+	google,usb-port-tz-name = "usbc-therm-monitor";
 	google,low-batt-threshold = <2>;
 	qcom,hvdcp-disable;
 };
