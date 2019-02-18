@@ -21,7 +21,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x8002
+#define RAYDIUM_VER     0x0006
 
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
@@ -69,6 +69,7 @@
 
 #define RAYDIUM_PALM_MODE_DISABLE    0x00
 #define RAYDIUM_PALM_MODE_ENABLE     0x01
+#define RAYDIUM_WAKE_UP              0x02
 
 #define RAYDIUM_TEST_FW	0x80
 #define RAYDIUM_TEST_PARA	0x40
@@ -127,14 +128,9 @@
 #define MAX_TOUCH_NUM                 2
 
 
-#if NEW_PALM
 #define MAX_REPORT_PACKAGE_SIZE        35
 #define MAX_TCH_STATUS_PACKAGE_SIZE    4
 
-#else
-#define MAX_REPORT_PACKAGE_SIZE        35
-#define MAX_TCH_STATUS_PACKAGE_SIZE    2
-#endif
 #define MAX_GESTURERESULT_SIZE        4
 #define PRESS_MAX                     0xFFFF
 #define WIDTH_MAX                     0xFFFF
