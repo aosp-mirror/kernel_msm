@@ -1195,47 +1195,50 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 {
 	int ret;
 	int chip_state;
+	struct ab_state_context *sc;
 
 	mutex_lock(&sess->sc->async_fifo_lock);
-	sess->sc->async_entries = &sess->async_entries;
-	mutex_unlock(&sess->sc->async_fifo_lock);
+	sc = sess->sc;
+	sc->async_entries = &sess->async_entries;
 
-	if (kfifo_is_empty(&sess->async_entries)) {
+	while (kfifo_is_empty(sc->async_entries)) {
+		mutex_unlock(&sc->async_fifo_lock);
 		if (sess->first_entry) {
 			sess->first_entry = false;
 			if (copy_to_user((void __user *)arg,
-					&sess->sc->curr_chip_substate_id,
+					&sc->curr_chip_substate_id,
 					sizeof(chip_state)))
 				return -EFAULT;
 
-			reinit_completion(&sess->sc->notify_comp);
+			reinit_completion(&sc->notify_comp);
 			return 0;
 
 		} else {
 			ret = wait_for_completion_interruptible(
-					&sess->sc->notify_comp);
+					&sc->notify_comp);
 			if (ret < 0)
 				return ret;
+
+			mutex_lock(&sc->async_fifo_lock);
+			if (sc->async_entries == NULL) {
+				dev_warn(sc->dev,
+					"Ioctl session closed during wait for notification");
+				mutex_unlock(&sc->async_fifo_lock);
+				return -ENODEV;
+			}
 		}
+		reinit_completion(&sc->notify_comp);
 	}
 
-	reinit_completion(&sess->sc->notify_comp);
-
-	if (!kfifo_is_empty(&sess->async_entries)) {
-		kfifo_out(&sess->async_entries, &chip_state,
-				sizeof(chip_state));
-		if (copy_to_user((void __user *)arg,
-				&chip_state,
-				sizeof(chip_state)))
-			return -EFAULT;
-	} else {
-		/* Another ioctl may have closed causing a completion,
-		 * can safely ignore
-		 */
-		return -EAGAIN;
+	kfifo_out(sc->async_entries, &chip_state, sizeof(chip_state));
+	if (copy_to_user((void __user *)arg,
+			&chip_state, sizeof(chip_state))) {
+		mutex_unlock(&sc->async_fifo_lock);
+		return -EFAULT;
 	}
 
 	sess->first_entry = false;
+	mutex_unlock(&sc->async_fifo_lock);
 	return 0;
 }
 
@@ -1429,7 +1432,7 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 			ret = ab_sm_async_notify(sess, arg);
 			atomic_set(&sc->async_in_use, 0);
 		} else {
-			dev_dbg(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
+			dev_warn(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
 			ret = -EBUSY;
 		}
 		break;
