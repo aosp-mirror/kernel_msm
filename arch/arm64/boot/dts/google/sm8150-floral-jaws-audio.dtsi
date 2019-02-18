@@ -80,7 +80,7 @@
 		adnc,vdd-oslo-maxload-uA = <300000>;
 
 		clock-names = "iaxxx_clk";
-		clocks = <&clock_audio_lnbb 0>;
+		clocks = <&clock_rpmh RPMH_LN_BB_CLK3>;
 
 		adnc,reset-gpio = <&tlmm 143 0>;
 		adnc,event-gpio = <&tlmm 123 0>;

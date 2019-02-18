@@ -226,11 +226,6 @@
 	};
 };
 
-/* knowles clock source */
-&clock_audio_lnbb {
-	clocks = <&clock_rpmh RPMH_LN_BB_CLK3>;
-};
-
 /* knowles IA8508 SPI1 */
 &qupv3_se11_spi {
 	status = "ok";
@@ -249,7 +244,7 @@
 		adnc,vdd-core-maxload-uA = <385000>;
 
 		clock-names = "iaxxx_clk";
-		clocks = <&clock_audio_lnbb 0>;
+		clocks = <&clock_rpmh RPMH_LN_BB_CLK3>;
 
 		adnc,reset-gpio = <&tlmm 143 0>;
 		adnc,event-gpio = <&tlmm 123 0>;
@@ -422,3 +417,6 @@
 	status = "disabled";
 };
 
+&clock_audio_lnbb {
+	status = "disabled";
+};
