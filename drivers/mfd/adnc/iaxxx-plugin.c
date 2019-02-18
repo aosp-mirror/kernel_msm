@@ -138,8 +138,10 @@ EXPORT_SYMBOL(iaxxx_core_plg_is_valid_priority);
 bool iaxxx_core_plg_is_valid_block_id(uint32_t block_id)
 {
 	bool ret = true;
+	uint32_t proc_id;
 
-	if (block_id <= IAXXX_NO_PROC || block_id >= IAXXX_PROC_ID_NUM) {
+	proc_id = IAXXX_BLOCK_ID_TO_PROC_ID(block_id);
+	if (proc_id <= IAXXX_NO_PROC || proc_id >= IAXXX_PROC_ID_NUM) {
 		pr_err("%s Invalid block id %d\n", __func__, block_id);
 		ret = false;
 	}

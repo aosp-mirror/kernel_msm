@@ -135,10 +135,8 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&param_info, (void __user *)arg,
 				   sizeof(param_info)))
 			return -EFAULT;
-
 		/* validate the sensor parameters */
-		if (!(iaxxx_core_sensor_is_valid_script_id(param_info.inst_id)
-			&& iaxxx_core_sensor_is_valid_block_id(
+		if (!(iaxxx_core_sensor_is_valid_block_id(
 							param_info.block_id)
 			&& iaxxx_core_sensor_is_valid_param_id(
 							param_info.param_id)
@@ -148,7 +146,6 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid sensor parameter received\n");
 			return -EINVAL;
 		}
-
 		ret = iaxxx_core_sensor_set_param_by_inst(
 				module_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
@@ -165,10 +162,8 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&param_info, (void __user *)arg,
 				   sizeof(param_info)))
 			return -EFAULT;
-
 		/* validate the sensor parameters */
-		if (!(iaxxx_core_sensor_is_valid_script_id(param_info.inst_id)
-			&& iaxxx_core_sensor_is_valid_block_id(
+		if (!(iaxxx_core_sensor_is_valid_block_id(
 							param_info.block_id)
 			&& iaxxx_core_sensor_is_valid_param_id(
 							param_info.param_id))
@@ -176,7 +171,6 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid sensor parameter received\n");
 			return -EINVAL;
 		}
-
 		ret = iaxxx_core_sensor_get_param_by_inst(
 				module_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
