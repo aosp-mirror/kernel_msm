@@ -466,6 +466,39 @@ static int iaxxx_ext_clk_ctl(struct iaxxx_priv *priv, bool clock_en)
 }
 
 /**
+ * iaxxx_populate_ext_clock_pdata - populate clock data from device tree
+ */
+static int iaxxx_populate_ext_clock_pdata(struct iaxxx_priv *priv)
+{
+	int rc = 0;
+	struct device *dev = priv->dev;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	priv->ext_clk = devm_clk_get(dev, "iaxxx_clk");
+	if (IS_ERR(priv->ext_clk) &&
+		(PTR_ERR(priv->ext_clk) == -EPROBE_DEFER)) {
+		dev_info(dev, "%s: iaxxx_clk is not ready yet %ld\n",
+			__func__, PTR_ERR(priv->ext_clk));
+		priv->iaxxx_mclk_cb = NULL;
+		rc = -EPROBE_DEFER;
+	} else if (IS_ERR(priv->ext_clk)) {
+		dev_err(dev, "%s: Failed to get iaxxx mclk from pmic %ld\n",
+			__func__, PTR_ERR(priv->ext_clk));
+		priv->iaxxx_mclk_cb = NULL;
+		rc = PTR_ERR(priv->ext_clk);
+	} else {
+		dev_info(dev, "%s: Got iaxxx_clk from pmic %ld\n",
+			__func__, PTR_ERR(priv->ext_clk));
+
+		priv->iaxxx_mclk_cb = iaxxx_ext_clk_ctl;
+		/* Enable mclock here if internal OSC not ON by default */
+		priv->iaxxx_mclk_cb(priv, 1);
+	}
+	return rc;
+}
+
+/**
  * iaxxx_populate_dt_pdata - populate platform data from device tree
  */
 static int iaxxx_populate_dt_pdata(struct iaxxx_priv *priv)
@@ -486,27 +519,8 @@ static int iaxxx_populate_dt_pdata(struct iaxxx_priv *priv)
 		return rc;
 	}
 
-	priv->ext_clk = devm_clk_get(dev, "iaxxx_clk");
-	if (IS_ERR(priv->ext_clk) &&
-		(PTR_ERR(priv->ext_clk) == -EPROBE_DEFER)) {
-		dev_warn(dev, "%s: iaxxx mclk is not ready yet %ld\n",
-			__func__, PTR_ERR(priv->ext_clk));
-		priv->iaxxx_mclk_cb = NULL;
-		return -EPROBE_DEFER;
-	} else if (IS_ERR(priv->ext_clk)) {
-		dev_err(dev, "%s: Failed to get iaxxx mclk from pmic %ld\n",
-			__func__, PTR_ERR(priv->ext_clk));
-		priv->iaxxx_mclk_cb = NULL;
-	} else {
-		dev_info(dev, "%s: Got iaxxx_clk from pmic %ld\n",
-			__func__, PTR_ERR(priv->ext_clk));
-
-		priv->iaxxx_mclk_cb = iaxxx_ext_clk_ctl;
-		/* Enable mclock here if internal OSC not ON by default */
-		priv->iaxxx_mclk_cb(priv, 1);
-	}
-
-	return 0;
+	rc = iaxxx_populate_ext_clock_pdata(priv);
+	return rc;
 }
 
 /**
