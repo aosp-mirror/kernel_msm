@@ -82,6 +82,7 @@ static char *wdsp_get_cmpnt_type_string(enum wdsp_cmpnt_type);
 #define WDSP_SSR_STATUS_READY         \
 	(WDSP_SSR_STATUS_WDSP_READY | WDSP_SSR_STATUS_CDC_READY)
 #define WDSP_SSR_READY_WAIT_TIMEOUT   (10 * HZ)
+#define WDSP_FW_LOAD_RETRY_COUNT	3
 
 enum wdsp_ssr_type {
 
@@ -376,7 +377,8 @@ static int wdsp_download_segments(struct wdsp_mgr_priv *wdsp,
 	struct wdsp_img_segment *seg = NULL;
 	enum wdsp_event_type pre, post;
 	long status;
-	int ret;
+	int ret = 0;
+	int retry_cnt = WDSP_FW_LOAD_RETRY_COUNT;
 
 	ctl = WDSP_GET_COMPONENT(wdsp, WDSP_CMPNT_CONTROL);
 
@@ -393,12 +395,21 @@ static int wdsp_download_segments(struct wdsp_mgr_priv *wdsp,
 		return -EINVAL;
 	}
 
-	ret = wdsp_get_segment_list(ctl->cdev, wdsp->img_fname,
-				    type, wdsp->seg_list, &wdsp->base_addr);
-	if (IS_ERR_VALUE(ret) ||
-	    list_empty(wdsp->seg_list)) {
-		WDSP_ERR(wdsp, "Error %d to get image segments for type %d",
+	do {
+		ret = wdsp_get_segment_list(ctl->cdev, wdsp->img_fname,
+					    type, wdsp->seg_list,
+					    &wdsp->base_addr);
+		if (ret == -EAGAIN)
+			WDSP_ERR(wdsp,
+				 "Retrying, retry_cnt %d error %d type %d",
+				 retry_cnt, ret, type);
+	} while (ret == -EAGAIN && retry_cnt-- > 0);
+
+	if (ret < 0 || list_empty(wdsp->seg_list)) {
+		WDSP_ERR(wdsp,
+			"Failed to load image, error %d, segment-type %d",
 			 ret, type);
+
 		wdsp_broadcast_event_downseq(wdsp, WDSP_EVENT_DLOAD_FAILED,
 					     NULL);
 		goto done;
@@ -407,11 +418,23 @@ static int wdsp_download_segments(struct wdsp_mgr_priv *wdsp,
 	/* Notify all components that image is about to be downloaded */
 	wdsp_broadcast_event_upseq(wdsp, pre, NULL);
 
-	/* Go through the list of segments and download one by one */
+	/*
+	 * Go through the list of segments and download one by one.
+	 * For each segment that fails to dlownload retry for
+	 * WDSP_FW_LOAD_RETRY_COUNT times
+	 */
 	list_for_each_entry(seg, wdsp->seg_list, list) {
-		ret = wdsp_load_each_segment(wdsp, seg);
-		if (ret)
+		retry_cnt = WDSP_FW_LOAD_RETRY_COUNT;
+		do {
+			ret = wdsp_load_each_segment(wdsp, seg);
+		} while (ret < 0 && --retry_cnt > 0);
+
+		if (ret < 0) {
+			WDSP_ERR(wdsp,
+				"Failed to download, error %d\n",
+				ret);
 			goto dload_error;
+		}
 	}
 
 	/* Flush the list before setting status and notifying components */
@@ -687,7 +710,7 @@ static void wdsp_ssr_work_fn(struct work_struct *work)
 		pr_err("%s: Invalid private_data\n", __func__);
 		return;
 	}
-
+	pm_stay_awake(wdsp->mdev);
 	WDSP_MGR_MUTEX_LOCK(wdsp, wdsp->ssr_mutex);
 
 	/* Issue ramdumps and shutdown only if DSP is currently booted */
@@ -740,6 +763,7 @@ static void wdsp_ssr_work_fn(struct work_struct *work)
 	wdsp->ssr_type = WDSP_SSR_TYPE_NO_SSR;
 done:
 	WDSP_MGR_MUTEX_UNLOCK(wdsp, wdsp->ssr_mutex);
+	pm_relax(wdsp->mdev);
 }
 
 static int wdsp_ssr_handler(struct wdsp_mgr_priv *wdsp, void *arg,
@@ -1149,6 +1173,11 @@ static int wdsp_mgr_probe(struct platform_device *pdev)
 		goto err_master_add;
 	}
 
+	ret = device_init_wakeup(wdsp->mdev, true);
+
+	if (ret)
+		dev_err(wdsp->mdev, "wakeup init failed: %d\n", ret);
+
 	return 0;
 
 err_master_add:
@@ -1166,6 +1195,8 @@ static int wdsp_mgr_remove(struct platform_device *pdev)
 {
 	struct device *mdev = &pdev->dev;
 	struct wdsp_mgr_priv *wdsp = dev_get_drvdata(mdev);
+
+	device_init_wakeup(mdev, false);
 
 	component_master_del(mdev, &wdsp_master_ops);
 

@@ -666,9 +666,15 @@ static int wcd_spi_clk_ctrl(struct spi_device *spi,
 		 */
 		if (test_bit(WCD_SPI_CLK_STATE_ENABLED, &wcd_spi->status_mask))
 			goto done;
-		else if (wcd_spi->clk_users == 1)
+		else if (wcd_spi->clk_users == 1) {
 			ret = wcd_spi_clk_enable(spi);
-
+			if (ret < 0) {
+				dev_err(&spi->dev,
+					"%s: Failed to enable clk err = %d\n",
+					__func__, ret);
+				wcd_spi->clk_users--;
+			}
+		}
 	} else {
 		wcd_spi->clk_users--;
 
