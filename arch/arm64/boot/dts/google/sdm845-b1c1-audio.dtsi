@@ -193,7 +193,7 @@
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-ctl-select = <0x01>;
 		cirrus,boost-ctl-millivolt = <10000>;
-		cirrus,boost-peak-milliamp = <4500>;
+		cirrus,boost-peak-milliamp = <3700>;
 		cirrus,amp-gain-zc;
 		cirrus,ldm-mode-select = <0x01>;
 		cirrus,pdm-ldm-exit;
@@ -226,7 +226,7 @@
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-ctl-select = <0x01>;
 		cirrus,boost-ctl-millivolt = <10000>;
-		cirrus,boost-peak-milliamp = <4500>;
+		cirrus,boost-peak-milliamp = <3700>;
 		cirrus,amp-gain-zc;
 		cirrus,ldm-mode-select = <0x01>;
 		cirrus,pdm-ldm-exit;
