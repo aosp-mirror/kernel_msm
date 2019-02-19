@@ -257,7 +257,7 @@ struct device_link *device_link_add(struct device *consumer,
 				link->flags |= DL_FLAG_PM_RUNTIME;
 			}
 			if (flags & DL_FLAG_RPM_ACTIVE)
-				pm_runtime_active_link(link, supplier);
+				refcount_inc(&link->rpm_active);
 		}
 
 		kref_get(&link->kref);
@@ -272,7 +272,7 @@ struct device_link *device_link_add(struct device *consumer,
 
 	if (flags & DL_FLAG_PM_RUNTIME) {
 		if (flags & DL_FLAG_RPM_ACTIVE)
-			pm_runtime_active_link(link, supplier);
+			refcount_inc(&link->rpm_active);
 
 		pm_runtime_new_link(consumer);
 	}
