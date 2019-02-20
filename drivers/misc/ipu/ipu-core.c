@@ -441,17 +441,9 @@ void ipu_bus_deinitialize(struct paintbox_bus *bus)
 }
 
 /* This function can be called in an atomic context */
-void ipu_bus_notify_watchdog(struct paintbox_bus *bus)
+void ipu_bus_notify_fatal_error(struct paintbox_bus *bus)
 {
 	atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
-
-	queue_work(system_wq, &bus->recovery_work);
-}
-
-/* This function can be called in an atomic context */
-void ipu_bus_notify_link_failure(struct paintbox_bus *bus)
-{
-	atomic_andnot(IPU_STATE_JQS_READY | IPU_STATE_LINK_READY, &bus->state);
 
 	queue_work(system_wq, &bus->recovery_work);
 }

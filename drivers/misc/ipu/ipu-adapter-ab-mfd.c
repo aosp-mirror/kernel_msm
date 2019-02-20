@@ -406,7 +406,7 @@ static int ipu_adapter_ab_mfd_low_priority_irq_notify(struct notifier_block *nb,
 
 	if (intnc_val & 1 << INTNC_IPU_ERR) {
 		dev_err(dev_data->dev, "%s: JQS watchdog tripped", __func__);
-		ipu_bus_notify_watchdog(dev_data->bus);
+		ipu_bus_notify_fatal_error(dev_data->bus);
 	}
 
 	if (intnc_val & 1 << INTNC_PPMU_IPU)
