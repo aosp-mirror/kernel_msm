@@ -3630,7 +3630,7 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
 	 * or disable state so cannot receive any completion of
 	 * other requests.
 	 */
-	BUG_ON(test_bit(CMDQ_STATE_ERR, &ctx_info->curr_state));
+	WARN_ON(test_bit(CMDQ_STATE_ERR, &ctx_info->curr_state));
 
 	/* clear pending request */
 	BUG_ON(!test_and_clear_bit(cmdq_req->tag,
@@ -3664,7 +3664,7 @@ void mmc_blk_cmdq_complete_rq(struct request *rq)
 out:
 
 	mmc_cmdq_clk_scaling_stop_busy(host, true, is_dcmd);
-	if (!test_bit(CMDQ_STATE_ERR, &ctx_info->curr_state)) {
+	if (!(err || cmdq_req->resp_err)) {
 		mmc_host_clk_release(host);
 		wake_up(&ctx_info->wait);
 		mmc_put_card(host->card);
@@ -4099,6 +4099,13 @@ static int mmc_blk_cmdq_issue_rq(struct mmc_queue *mq, struct request *req)
 			if (ret == -EBUSY || ret == -EAGAIN) {
 				mmc_blk_cmdq_requeue_rw_rq(mq, req);
 				mmc_put_card(host->card);
+			} else if (ret == -ENOMEM) {
+				/*
+				 * Elaborate error handling is not needed for
+				 * system errors. Let the higher layer decide
+				 * on the next steps.
+				 */
+				goto out;
 			}
 		}
 	}
