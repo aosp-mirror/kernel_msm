@@ -411,6 +411,13 @@ static void ipu_client_firmware_down(struct device *dev)
 	mutex_unlock(&pb->lock);
 }
 
+static void ipu_client_firmware_suspended(struct device *dev)
+{
+	struct paintbox_data *pb = dev_get_drvdata(dev);
+
+	dev_dbg(pb->dev, "JQS firmware is suspended\n");
+}
+
 static void ipu_client_firmware_up(struct device *dev)
 {
 	struct paintbox_data *pb = dev_get_drvdata(dev);
@@ -420,6 +427,7 @@ static void ipu_client_firmware_up(struct device *dev)
 
 static const struct paintbox_device_ops ipu_client_dev_ops = {
 	.firmware_up = ipu_client_firmware_up,
+	.firmware_suspended = ipu_client_firmware_suspended,
 	.firmware_down = ipu_client_firmware_down,
 };
 

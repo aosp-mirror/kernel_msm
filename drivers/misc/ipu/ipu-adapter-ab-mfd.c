@@ -30,6 +30,9 @@
 #include "ipu-core-jqs.h"
 #include "ipu-regs.h"
 
+#define IPU_ADAPTER_STATE_PCIE_READY (1 << 0)
+#define IPU_ADAPTER_STATE_DRAM_READY (1 << 1)
+
 struct ipu_adapter_shared_buffer {
 	struct ipu_shared_buffer base;
 	struct dma_buf *ab_dram_dma_buf;
@@ -48,6 +51,8 @@ struct ipu_adapter_jqs_buffer {
 struct ipu_adapter_ab_mfd_data {
 	struct paintbox_bus *bus;
 	struct device *dev;
+	atomic_t state;
+	uint64_t ipu_clock_rate_hz;
 
 	/* Depending on the IOMMU configuration the board the IPU may need
 	 * to use MFD parent's device for mapping DMA buffers.  Otherwise, the
@@ -507,6 +512,138 @@ static inline bool ipu_clock_rate_changed_to_inactive(
 			(ipu_clock_rate_is_active(clk_data->old_rate)));
 }
 
+static inline bool ipu_adapter_link_is_ready(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	return !!(atomic_read(&dev_data->state) & IPU_ADAPTER_STATE_PCIE_READY);
+}
+
+static inline bool ipu_adapter_dram_is_ready(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	return !!(atomic_read(&dev_data->state) & IPU_ADAPTER_STATE_DRAM_READY);
+}
+
+bool ipu_adapter_is_ready(struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	return (ipu_adapter_link_is_ready(dev_data) &&
+			ipu_adapter_dram_is_ready(dev_data));
+}
+
+bool ipu_adapter_ab_mfd_is_ready(struct device *dev)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+
+	return ipu_adapter_is_ready(dev_data);
+}
+
+
+void ipu_adapter_ipu_pre_rate_change(
+		struct ipu_adapter_ab_mfd_data *dev_data,
+		struct ab_clk_notifier_data *clk_data)
+{
+	struct paintbox_bus *bus = dev_data->bus;
+
+	dev_dbg(dev_data->dev,
+			"%s: IPU rate will change from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+
+	/* If the new rate is active the post rate change will handle
+	 * any adapter changes or bus notifications
+	 */
+	if (ipu_clock_rate_is_active(clk_data->new_rate))
+		return;
+
+	dev_data->ipu_clock_rate_hz = clk_data->new_rate;
+
+	/* If the old rate was already inactive no further processing is needed
+	 */
+	if (ipu_clock_rate_changed_to_inactive(clk_data))
+		ipu_bus_notify_suspend(bus);
+}
+
+void ipu_adapter_ipu_post_rate_change(
+		struct ipu_adapter_ab_mfd_data *dev_data,
+		struct ab_clk_notifier_data *clk_data)
+{
+	struct paintbox_bus *bus = dev_data->bus;
+
+	dev_dbg(dev_data->dev,
+			"%s: IPU rate has changed from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+
+	/* If the new rate is inactive the pre rate change already
+	 * handled any adapter changes or bus notifications
+	 */
+	if (!ipu_clock_rate_is_active(clk_data->new_rate))
+		return;
+
+	dev_data->ipu_clock_rate_hz = clk_data->new_rate;
+
+	if (ipu_adapter_is_ready(dev_data))
+		ipu_bus_notify_ready(bus, dev_data->ipu_clock_rate_hz);
+}
+
+void ipu_adapter_ipu_abort_rate_change(
+		struct ipu_adapter_ab_mfd_data *dev_data,
+		struct ab_clk_notifier_data *clk_data)
+{
+	struct paintbox_bus *bus = dev_data->bus;
+
+	dev_err(dev_data->dev,
+			"%s: IPU rate has aborted change %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+
+	/* Treat this as a clock going down
+	 */
+	dev_data->ipu_clock_rate_hz = 0;
+	ipu_bus_notify_suspend(bus);
+}
+
+void ipu_adapter_dram_pre_rate_change(
+		struct ipu_adapter_ab_mfd_data *dev_data,
+		struct ab_clk_notifier_data *clk_data)
+{
+	struct paintbox_bus *bus = dev_data->bus;
+
+	dev_dbg(dev_data->dev,
+			"%s: DRAM rate will change from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+
+	/* If the new rate is active the post rate change will handle
+	 * any adapter changes or bus notifications
+	 */
+	if (clk_data->new_rate)
+		return;
+
+	/* If the old rate was already inactive no further processing is needed
+	 */
+	if (!ipu_clock_rate_changed_to_inactive(clk_data)) {
+		ipu_bus_notify_shutdown(bus);
+		atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
+	}
+}
+
+void ipu_adapter_dram_post_rate_change(
+		struct ipu_adapter_ab_mfd_data *dev_data,
+		struct ab_clk_notifier_data *clk_data)
+{
+	struct paintbox_bus *bus = dev_data->bus;
+
+	dev_dbg(dev_data->dev,
+			"%s: DRAM rate has changed from %lu Hz to %lu Hz",
+			__func__, clk_data->old_rate, clk_data->new_rate);
+
+	/* If the new rate is inactive the pre rate change already
+	 * handled any adapter changes or bus notifications
+	 */
+	if (!clk_data->new_rate)
+		return;
+
+	atomic_or(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
+	ipu_bus_notify_ready(bus, dev_data->ipu_clock_rate_hz);
+}
+
 static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 					  unsigned long action,
 					  void *data)
@@ -518,46 +655,22 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 			container_of(nb,
 				     struct ipu_adapter_ab_mfd_data,
 				     clk_change_nb);
-	struct paintbox_bus *bus = dev_data->bus;
 
 	switch (action) {
 	case AB_IPU_PRE_RATE_CHANGE:
-		dev_dbg(dev_data->dev,
-			"%s: IPU rate will change from %lu Hz to %lu Hz",
-			__func__, clk_data->old_rate, clk_data->new_rate);
-		if (ipu_clock_rate_changed_to_inactive(clk_data))
-			ipu_bus_notify_clock_disable(bus);
+		ipu_adapter_ipu_pre_rate_change(dev_data, clk_data);
 		break;
 	case AB_IPU_POST_RATE_CHANGE:
-		dev_dbg(dev_data->dev,
-			"%s: IPU rate has changed from %lu Hz to %lu Hz",
-			__func__, clk_data->old_rate, clk_data->new_rate);
-		if (ipu_clock_rate_is_active(clk_data->new_rate))
-			ipu_bus_notify_clock_enable(bus, clk_data->new_rate);
+		ipu_adapter_ipu_post_rate_change(dev_data, clk_data);
 		break;
 	case AB_IPU_ABORT_RATE_CHANGE:
-		dev_warn(dev_data->dev,
-			 "%s: IPU rate aborted changing from %lu Hz to %lu Hz",
-			 __func__, clk_data->old_rate, clk_data->new_rate);
-		if (ipu_clock_rate_is_active(clk_data->old_rate))
-			ipu_bus_notify_clock_enable(bus, clk_data->old_rate);
-		else
-			ipu_bus_notify_clock_disable(bus);
-
+		ipu_adapter_ipu_abort_rate_change(dev_data, clk_data);
 		break;
 	case AB_DRAM_PRE_RATE_CHANGE:
-		dev_dbg(dev_data->dev,
-			"%s: DRAM rate will change from %lu Hz to %lu Hz",
-			__func__, clk_data->old_rate, clk_data->new_rate);
-		if (ipu_clock_rate_changed_to_inactive(clk_data))
-			ipu_bus_notify_dram_pre_down(bus);
+		ipu_adapter_dram_pre_rate_change(dev_data, clk_data);
 		break;
 	case AB_DRAM_POST_RATE_CHANGE:
-		dev_dbg(dev_data->dev,
-			"%s: DRAM rate has changed from %lu Hz to %lu Hz",
-			__func__, clk_data->old_rate, clk_data->new_rate);
-		if (ipu_clock_rate_is_active(clk_data->new_rate))
-			ipu_bus_notify_dram_up(bus);
+		ipu_adapter_dram_post_rate_change(dev_data, clk_data);
 		break;
 	default:
 		return NOTIFY_DONE;  /* Don't care */
@@ -615,16 +728,20 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 				     pcie_link_blocking_nb);
 	struct paintbox_bus *bus = dev_data->bus;
 
-	if (action & ABC_PCIE_LINK_POST_ENABLE) {
+	if ((action & ABC_PCIE_LINK_POST_ENABLE) &&
+			!ipu_adapter_link_is_ready(dev_data)) {
 		dev_dbg(dev_data->dev, "%s: PCIe link available\n", __func__);
 		ipu_adapter_ab_mfd_enable_interrupts(dev_data);
-		ipu_bus_notify_link_up(bus);
+		atomic_or(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
+		ipu_bus_notify_ready(bus, dev_data->ipu_clock_rate_hz);
 		return NOTIFY_OK;
 	}
 
-	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
+	if ((action & ABC_PCIE_LINK_PRE_DISABLE) &&
+			ipu_adapter_link_is_ready(dev_data)) {
 		dev_dbg(dev_data->dev, "%s: PCIe link going down\n", __func__);
-		ipu_bus_notify_link_pre_down(bus);
+		ipu_bus_notify_shutdown(bus);
+		atomic_andnot(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
 		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
 		return NOTIFY_OK;
 	}
@@ -700,6 +817,7 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->get_dma_device = &ipu_adapter_ab_mfd_get_dma_device;
 	ops->alloc_jqs_memory = &ipu_adapter_ab_mfd_alloc_jqs_memory;
 	ops->free_jqs_memory = &ipu_adapter_ab_mfd_free_jqs_memory;
+	ops->is_ready = &ipu_adapter_ab_mfd_is_ready;
 }
 
 static int ipu_adapter_ab_mfd_register_low_priority_irq(
@@ -808,6 +926,8 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 				false /* coherent */);
 		dev_data->dma_dev = &pdev->dev;
 	}
+
+	atomic_or(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
 
 	ret = ipu_bus_initialize(&pdev->dev, &dev_data->ops,
 			&dev_data->pdata, &dev_data->bus);

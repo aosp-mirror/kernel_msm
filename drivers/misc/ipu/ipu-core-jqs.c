@@ -57,20 +57,6 @@ static inline bool ipu_core_jqs_is_clock_ready(struct paintbox_bus *bus)
 	return (clock_is_on && clock_rate_ipu_inactive);
 }
 
-static inline bool ipu_core_jqs_is_hw_ready(struct paintbox_bus *bus)
-{
-	if (!ipu_core_link_is_ready(bus))
-		return false;
-
-	if (!ipu_core_jqs_is_clock_ready(bus))
-		return false;
-
-	if (!ipu_core_dram_is_ready(bus))
-		return false;
-
-	return true;
-}
-
 int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
 		uint32_t clock_rate_hz)
 {
@@ -164,16 +150,9 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 	if (WARN_ON(!bus->jqs.fw))
 		return -EINVAL;
 
-	if (!ipu_core_link_is_ready(bus)) {
+	if (!ipu_core_is_ready(bus)) {
 		dev_err(bus->parent_dev,
-				"%s: unable to stage JQS firmware, link down\n",
-				__func__);
-		return -ENETDOWN;
-	}
-
-	if (!ipu_core_dram_is_ready(bus)) {
-		dev_err(bus->parent_dev,
-				"%s: unable to stage JQS firmware, DRAM down\n",
+				"%s: unable to stage JQS firmware, hw not ready\n",
 				__func__);
 		return -ENETDOWN;
 	}
@@ -244,9 +223,9 @@ static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 		dma_addr_t boot_ab_paddr, dma_addr_t smem_ab_paddr)
 {
 	/* If the PCIe link is down then we are not ready */
-	if (!ipu_core_link_is_ready(bus)) {
+	if (!ipu_core_is_ready(bus)) {
 		dev_err(bus->parent_dev,
-				"%s: unable to enable JQS, link not ready\n",
+				"%s: unable to enable JQS, hw not ready\n",
 				__func__);
 		return -ENETDOWN;
 	}
@@ -309,7 +288,7 @@ static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 static void ipu_core_jqs_power_disable(struct paintbox_bus *bus)
 {
 	/* If the PCIe link is down then there is nothing to be done. */
-	if (!ipu_core_link_is_ready(bus))
+	if (!ipu_core_is_ready(bus))
 		return;
 
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
@@ -345,7 +324,7 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus)
 {
 	int ret;
 
-	if (!ipu_core_jqs_is_hw_ready(bus)) {
+	if ((!ipu_core_is_ready(bus)) || (!ipu_core_jqs_is_clock_ready(bus))) {
 		dev_err(bus->parent_dev,
 				"%s: unable to start JQS firmware, hardware not ready\n",
 				__func__);
@@ -455,6 +434,7 @@ static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus,
 			__func__, reason_code);
 
 	atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
+	bus->jqs.clock_rate_hz = 0;
 
 	/* Free the kernel queue, this will unblock any thread waiting on a
 	 * kernel queue message.
@@ -581,14 +561,19 @@ static int ipu_core_jqs_stop(struct device *dev)
 }
 
 /* The caller to this function must hold bus->jqs.lock */
-void ipu_core_resume_firmware(struct paintbox_bus *bus)
+void ipu_core_jqs_resume_firmware(struct paintbox_bus *bus,
+		uint64_t ipu_clock_rate_hz)
 {
 	int ret;
 
-	if (!bus->jqs.runtime_requested)
+	bus->jqs.clock_rate_hz = ipu_clock_rate_hz;
+
+	if (!ipu_core_is_ready(bus))
 		return;
 
-	if (!ipu_core_jqs_is_hw_ready(bus))
+	ipu_core_jqs_send_clock_rate(bus, ipu_clock_rate_hz);
+
+	if (!bus->jqs.runtime_requested)
 		return;
 
 	ret = ipu_core_jqs_enable_firmware(bus);

@@ -64,6 +64,7 @@ struct paintbox_bus_ops {
 			size_t size);
 	void (*free_jqs_memory)(struct device *dev, struct ipu_jqs_buffer *buf);
 	struct device *(*get_dma_device)(struct device *dev);
+	bool (*is_ready)(struct device *dev);
 };
 
 /* The following group of functions can be called in an atomic context */
@@ -72,13 +73,9 @@ void ipu_bus_notify_fatal_error(struct paintbox_bus *bus);
 /* The following group of functions are called in the context of a blocking
  * notifier.
  */
-void ipu_bus_notify_link_up(struct paintbox_bus *bus);
-void ipu_bus_notify_link_pre_down(struct paintbox_bus *bus);
-void ipu_bus_notify_clock_enable(struct paintbox_bus *bus,
-		uint64_t clock_rate_hz);
-void ipu_bus_notify_clock_disable(struct paintbox_bus *bus);
-void ipu_bus_notify_dram_up(struct paintbox_bus *bus);
-void ipu_bus_notify_dram_pre_down(struct paintbox_bus *bus);
+void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz);
+void ipu_bus_notify_suspend(struct paintbox_bus *bus);
+void ipu_bus_notify_shutdown(struct paintbox_bus *bus);
 
 int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 		enum paintbox_device_type type);

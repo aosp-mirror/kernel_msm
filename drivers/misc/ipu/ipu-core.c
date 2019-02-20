@@ -333,6 +333,21 @@ void ipu_core_notify_firmware_up(struct paintbox_bus *bus)
 	}
 }
 
+void ipu_core_notify_firmware_suspended(struct paintbox_bus *bus)
+{
+	unsigned int i;
+
+	for (i = 0; i < PAINTBOX_DEVICE_TYPE_COUNT; i++) {
+		struct paintbox_device *pb_dev = bus->devices[i];
+
+		if (!pb_dev || !pb_dev->dev_ops ||
+				!pb_dev->dev_ops->firmware_up)
+			continue;
+
+		pb_dev->dev_ops->firmware_suspended(&pb_dev->dev);
+	}
+}
+
 void ipu_core_notify_firmware_down(struct paintbox_bus *bus)
 {
 	unsigned int i;
@@ -353,11 +368,7 @@ static void ipu_bus_recovery_work(struct work_struct *work)
 	struct paintbox_bus *bus = container_of(work, struct paintbox_bus,
 			recovery_work);
 
-	mutex_lock(&bus->jqs.lock);
-
-	ipu_core_jqs_disable_firmware_error(bus);
-
-	mutex_unlock(&bus->jqs.lock);
+	ipu_bus_notify_shutdown(bus);
 }
 
 void ipu_request_reset(struct device *dev)
@@ -389,8 +400,6 @@ int ipu_bus_initialize(struct device *parent_dev,
 
 	spin_lock_init(&bus->irq_lock);
 	mutex_init(&bus->transport_lock);
-
-	atomic_set(&bus->state, IPU_STATE_LINK_READY);
 
 	INIT_WORK(&bus->recovery_work, ipu_bus_recovery_work);
 
@@ -447,77 +456,30 @@ void ipu_bus_notify_fatal_error(struct paintbox_bus *bus)
 	queue_work(system_wq, &bus->recovery_work);
 }
 
-void ipu_bus_notify_link_up(struct paintbox_bus *bus)
+void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz)
 {
-	atomic_or(IPU_STATE_LINK_READY, &bus->state);
-
 	mutex_lock(&bus->jqs.lock);
 
-	ipu_core_resume_firmware(bus);
+	ipu_core_jqs_resume_firmware(bus, ipu_clock_rate_hz);
 
 	mutex_unlock(&bus->jqs.lock);
 }
 
-void ipu_bus_notify_link_pre_down(struct paintbox_bus *bus)
+void ipu_bus_notify_suspend(struct paintbox_bus *bus)
+{
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_jqs_disable_firmware_error(bus);
+
+	mutex_unlock(&bus->jqs.lock);
+}
+
+void ipu_bus_notify_shutdown(struct paintbox_bus *bus)
 {
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_disable_firmware_error(bus);
 	ipu_core_jqs_unstage_firmware(bus);
-
-	atomic_andnot(IPU_STATE_LINK_READY, &bus->state);
-
-	mutex_unlock(&bus->jqs.lock);
-}
-
-void ipu_bus_notify_clock_enable(struct paintbox_bus *bus,
-		uint64_t clock_rate_hz)
-{
-	mutex_lock(&bus->jqs.lock);
-
-	bus->jqs.clock_rate_hz = clock_rate_hz;
-
-	/* If the JQS is not up then resume the JQS, otherwise notify the JQS of
-	 * the new clock rate.
-	 */
-	if (!ipu_core_jqs_is_ready(bus))
-		ipu_core_resume_firmware(bus);
-	else
-		ipu_core_jqs_send_clock_rate(bus, clock_rate_hz);
-
-	mutex_unlock(&bus->jqs.lock);
-}
-
-void ipu_bus_notify_clock_disable(struct paintbox_bus *bus)
-{
-	mutex_lock(&bus->jqs.lock);
-
-	bus->jqs.clock_rate_hz = 0;
-
-	ipu_core_jqs_disable_firmware_error(bus);
-
-	mutex_unlock(&bus->jqs.lock);
-}
-
-void ipu_bus_notify_dram_up(struct paintbox_bus *bus)
-{
-	atomic_or(IPU_STATE_DRAM_READY, &bus->state);
-
-	mutex_lock(&bus->jqs.lock);
-
-	ipu_core_resume_firmware(bus);
-
-	mutex_unlock(&bus->jqs.lock);
-}
-
-void ipu_bus_notify_dram_pre_down(struct paintbox_bus *bus)
-{
-	mutex_lock(&bus->jqs.lock);
-
-	ipu_core_jqs_disable_firmware_error(bus);
-	ipu_core_jqs_unstage_firmware(bus);
-
-	atomic_andnot(IPU_STATE_DRAM_READY, &bus->state);
 
 	mutex_unlock(&bus->jqs.lock);
 }

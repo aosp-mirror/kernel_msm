@@ -27,7 +27,8 @@ int ipu_core_jqs_load_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus);
 int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus);
-void ipu_core_resume_firmware(struct paintbox_bus *bus);
+void ipu_core_jqs_resume_firmware(struct paintbox_bus *bus,
+		uint64_t ipu_clock_rate_hz);
 
 /* The caller to these functions must hold bus->jqs.lock */
 int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
@@ -36,8 +37,6 @@ int ipu_core_jqs_send_set_log_info(struct paintbox_bus *bus);
 
 int ipu_core_jqs_init(struct paintbox_bus *bus);
 void ipu_core_jqs_remove(struct paintbox_bus *bus);
-
-bool ipu_core_jqs_is_ready(struct paintbox_bus *bus);
 
 #define IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND 19200000 /* Hz */
 

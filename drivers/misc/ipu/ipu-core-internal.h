@@ -28,9 +28,7 @@
 #include "ipu-adapter.h"
 #include "ipu-core-jqs-structs.h"
 
-#define IPU_STATE_LINK_READY (1 << 0)
-#define IPU_STATE_JQS_READY  (1 << 1)
-#define IPU_STATE_DRAM_READY (1 << 2)
+#define IPU_STATE_JQS_READY  (1 << 0)
 
 /* Host-side only data associated with a jqs_circular_buffer */
 struct host_jqs_cbuf {
@@ -177,14 +175,9 @@ static inline bool ipu_core_jqs_is_ready(struct paintbox_bus *bus)
 	return !!(atomic_read(&bus->state) & IPU_STATE_JQS_READY);
 }
 
-static inline bool ipu_core_link_is_ready(struct paintbox_bus *bus)
+static inline bool ipu_core_is_ready(struct paintbox_bus *bus)
 {
-	return !!(atomic_read(&bus->state) & IPU_STATE_LINK_READY);
-}
-
-static inline bool ipu_core_dram_is_ready(struct paintbox_bus *bus)
-{
-	return !!(atomic_read(&bus->state) & IPU_STATE_DRAM_READY);
+	return bus->ops->is_ready(bus->parent_dev);
 }
 
 static inline void ipu_core_writel(struct paintbox_bus *bus, uint32_t val,
@@ -276,6 +269,7 @@ static inline void ipu_core_free_jqs_memory(struct paintbox_bus *bus,
 }
 
 void ipu_core_notify_firmware_up(struct paintbox_bus *bus);
+void ipu_core_notify_firmware_suspended(struct paintbox_bus *bus);
 void ipu_core_notify_firmware_down(struct paintbox_bus *bus);
 
 #endif /* __IPU_CORE_INTERNAL_H__ */

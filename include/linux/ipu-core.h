@@ -44,6 +44,7 @@ struct paintbox_pdata {
  */
 struct paintbox_device_ops {
 	void (*firmware_up)(struct device *dev);
+	void (*firmware_suspended)(struct device *dev);
 	void (*firmware_down)(struct device *dev);
 };
 
