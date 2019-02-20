@@ -2494,6 +2494,465 @@ err_mutex:
 	return ret;
 }
 
+static int cs40l2x_gpio_edge_dig_scale_get(struct cs40l2x_private *cs40l2x,
+			unsigned int *dig_scale,
+			unsigned int gpio_offs, bool gpio_rise)
+{
+	unsigned int val;
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GPIO_GAIN",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	int ret;
+
+	if (!reg)
+		return -EPERM;
+	reg += gpio_offs;
+
+	if (!(cs40l2x->gpio_mask & (1 << (gpio_offs >> 2))))
+		return -EPERM;
+
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
+	if (ret)
+		return ret;
+
+	*dig_scale = (val & (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_MASK :
+			CS40L2X_GPIO_GAIN_FALL_MASK))
+				>> (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_SHIFT :
+						CS40L2X_GPIO_GAIN_FALL_SHIFT);
+
+	return 0;
+}
+
+static int cs40l2x_gpio_edge_dig_scale_set(struct cs40l2x_private *cs40l2x,
+			unsigned int dig_scale,
+			unsigned int gpio_offs, bool gpio_rise)
+{
+	unsigned int val;
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GPIO_GAIN",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	int ret;
+
+	if (!reg)
+		return -EPERM;
+	reg += gpio_offs;
+
+	if (!(cs40l2x->gpio_mask & (1 << (gpio_offs >> 2))))
+		return -EPERM;
+
+	if (dig_scale == CS40L2X_DIG_SCALE_RESET
+			|| dig_scale > CS40L2X_DIG_SCALE_MAX)
+		return -EINVAL;
+
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
+	if (ret)
+		return ret;
+
+	val &= ~(gpio_rise ? CS40L2X_GPIO_GAIN_RISE_MASK :
+			CS40L2X_GPIO_GAIN_FALL_MASK);
+
+	val |= (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_MASK :
+			CS40L2X_GPIO_GAIN_FALL_MASK) & (dig_scale
+				<< (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_SHIFT :
+						CS40L2X_GPIO_GAIN_FALL_SHIFT));
+
+	ret = regmap_write(cs40l2x->regmap, reg, val);
+	if (ret)
+		return ret;
+
+	return cs40l2x_dsp_cache(cs40l2x, reg, val);
+}
+
+static ssize_t cs40l2x_gpio1_rise_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONPRESS1, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio1_rise_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONPRESS1, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio1_fall_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE1, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio1_fall_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE1, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio2_rise_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONPRESS2, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio2_rise_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONPRESS2, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio2_fall_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE2, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio2_fall_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE2, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio3_rise_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONPRESS3, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio3_rise_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONPRESS3, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio3_fall_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE3, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio3_fall_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE3, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio4_rise_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONPRESS4, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio4_rise_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONPRESS4, CS40L2X_GPIO_RISE);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio4_fall_dig_scale_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_get(cs40l2x, &dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE4, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", dig_scale);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_gpio4_fall_dig_scale_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int dig_scale;
+
+	ret = kstrtou32(buf, 10, &dig_scale);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	ret = cs40l2x_gpio_edge_dig_scale_set(cs40l2x, dig_scale,
+			CS40L2X_INDEXBUTTONRELEASE4, CS40L2X_GPIO_FALL);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
 static int cs40l2x_cp_dig_scale_get(struct cs40l2x_private *cs40l2x,
 			unsigned int *dig_scale)
 {
@@ -3251,6 +3710,30 @@ static DEVICE_ATTR(dig_scale, 0660, cs40l2x_dig_scale_show,
 		cs40l2x_dig_scale_store);
 static DEVICE_ATTR(gpio1_dig_scale, 0660, cs40l2x_gpio1_dig_scale_show,
 		cs40l2x_gpio1_dig_scale_store);
+static DEVICE_ATTR(gpio1_rise_dig_scale, 0660,
+		cs40l2x_gpio1_rise_dig_scale_show,
+		cs40l2x_gpio1_rise_dig_scale_store);
+static DEVICE_ATTR(gpio1_fall_dig_scale, 0660,
+		cs40l2x_gpio1_fall_dig_scale_show,
+		cs40l2x_gpio1_fall_dig_scale_store);
+static DEVICE_ATTR(gpio2_rise_dig_scale, 0660,
+		cs40l2x_gpio2_rise_dig_scale_show,
+		cs40l2x_gpio2_rise_dig_scale_store);
+static DEVICE_ATTR(gpio2_fall_dig_scale, 0660,
+		cs40l2x_gpio2_fall_dig_scale_show,
+		cs40l2x_gpio2_fall_dig_scale_store);
+static DEVICE_ATTR(gpio3_rise_dig_scale, 0660,
+		cs40l2x_gpio3_rise_dig_scale_show,
+		cs40l2x_gpio3_rise_dig_scale_store);
+static DEVICE_ATTR(gpio3_fall_dig_scale, 0660,
+		cs40l2x_gpio3_fall_dig_scale_show,
+		cs40l2x_gpio3_fall_dig_scale_store);
+static DEVICE_ATTR(gpio4_rise_dig_scale, 0660,
+		cs40l2x_gpio4_rise_dig_scale_show,
+		cs40l2x_gpio4_rise_dig_scale_store);
+static DEVICE_ATTR(gpio4_fall_dig_scale, 0660,
+		cs40l2x_gpio4_fall_dig_scale_show,
+		cs40l2x_gpio4_fall_dig_scale_store);
 static DEVICE_ATTR(cp_dig_scale, 0660, cs40l2x_cp_dig_scale_show,
 		cs40l2x_cp_dig_scale_store);
 static DEVICE_ATTR(heartbeat, 0660, cs40l2x_heartbeat_show, NULL);
@@ -3303,6 +3786,14 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_redc_comp_enable.attr,
 	&dev_attr_dig_scale.attr,
 	&dev_attr_gpio1_dig_scale.attr,
+	&dev_attr_gpio1_rise_dig_scale.attr,
+	&dev_attr_gpio1_fall_dig_scale.attr,
+	&dev_attr_gpio2_rise_dig_scale.attr,
+	&dev_attr_gpio2_fall_dig_scale.attr,
+	&dev_attr_gpio3_rise_dig_scale.attr,
+	&dev_attr_gpio3_fall_dig_scale.attr,
+	&dev_attr_gpio4_rise_dig_scale.attr,
+	&dev_attr_gpio4_fall_dig_scale.attr,
 	&dev_attr_cp_dig_scale.attr,
 	&dev_attr_heartbeat.attr,
 	&dev_attr_num_waves.attr,
