@@ -26,6 +26,8 @@
 };
 
 &max1720x_fg {
+	maxim,n_regval_1730x_ver_por = /bits/ 8 <0xcc 0x01>;
+	maxim,n_regval_1720x_ver_por = /bits/ 8 <0xd4 0x01>;
 
 	maxim,n_regval_1730x_ver = /bits/ 8 <0xcc 0x00>;
 	maxim,n_regval_1730x =  /bits/ 16 <
