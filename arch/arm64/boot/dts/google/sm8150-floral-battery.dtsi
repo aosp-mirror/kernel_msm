@@ -31,7 +31,7 @@
 
 	google,batt_psy_disable;
 	qcom,hvdcp-disable;
-	google,usb-port-tz-name = "usbc-therm";
+	google,usb-port-tz-name = "usbc-therm-monitor";
 	qcom,dc-icl-ua = <1100000>;
 };
 
