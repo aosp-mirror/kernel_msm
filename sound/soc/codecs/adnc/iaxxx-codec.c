@@ -2174,6 +2174,7 @@ static const unsigned int strm_xfer_mode_value[] = {
 
 static const char * const strm_xfer_mode_texts[] = {
 	ENUM_NAME(SSP), ENUM_NAME(DMA), ENUM_NAME(CPU),
+	ENUM_NAME(SSP_Low_Lat_PT),
 	ENUM_NAME(NOT_USED), };
 
 static const unsigned int str_state_value[] = {
@@ -2224,6 +2225,12 @@ static SOC_VALUE_ENUM_SINGLE_DECL(stream##_xfer_mode_enum, \
 			(IAXXX_STR_GRP_STR_CTRL_XFER_MODE_MASK >> \
 			IAXXX_STR_GRP_STR_CTRL_XFER_MODE_POS), \
 			strm_xfer_mode_texts, strm_xfer_mode_value); \
+static SOC_VALUE_ENUM_SINGLE_DECL(stream##_low_latency_ip_str_id_enum, \
+			IAXXX_STR_GRP_STR_CTRL_REG(stream), \
+			IAXXX_STR_GRP_STR_CTRL_LOW_LATENCY_SRC_STR_ID_POS, \
+			(IAXXX_STR_GRP_STR_CTRL_LOW_LATENCY_SRC_STR_ID_MASK >> \
+			IAXXX_STR_GRP_STR_CTRL_LOW_LATENCY_SRC_STR_ID_POS), \
+			str_mstr_id_texts, str_mstr_id_values); \
 static SOC_VALUE_ENUM_SINGLE_DECL(stream##_str_state_enum, \
 			IAXXX_STR_GRP_STR_STATUS_REG(stream), \
 			IAXXX_STR_GRP_STR_STATUS_STR_STATE_POS, \
@@ -2347,6 +2354,8 @@ IAXXX_STREAM_EN_SET_GET(STREAM15)
 	SOC_ENUM(strm_name" Format FrLn", stream##_frm_len_enum), \
 	SOC_ENUM(strm_name" ASRC Mode", stream##_asrc_mode_enum), \
 	SOC_ENUM(strm_name" Xfer Mode", stream##_xfer_mode_enum), \
+	SOC_ENUM(strm_name" Low Latency IpStr Id",\
+			stream##_low_latency_ip_str_id_enum), \
 	SOC_SINGLE(strm_name" Enable Status", \
 			IAXXX_STR_HDR_STR_ST_ADDR, stream, 1, 0), \
 	SOC_ENUM(strm_name" Str Status Str State", stream##_str_state_enum), \
