@@ -801,8 +801,8 @@
  * System Power control Register
  */
 #define IAXXX_SRB_SYS_POWER_CTRL_ADDR (0x5800005c)
-#define IAXXX_SRB_SYS_POWER_CTRL_MASK_VAL 0x0001ffff
-#define IAXXX_SRB_SYS_POWER_CTRL_RMASK_VAL 0x0001ffff
+#define IAXXX_SRB_SYS_POWER_CTRL_MASK_VAL 0x0003ffff
+#define IAXXX_SRB_SYS_POWER_CTRL_RMASK_VAL 0x0003ffff
 #define IAXXX_SRB_SYS_POWER_CTRL_WMASK_VAL 0x0001ffff
 #define IAXXX_SRB_SYS_POWER_CTRL_RESET_VAL 0x00000000
 
@@ -893,22 +893,34 @@
 #define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_FREQ_SIZE 1
 
 /*
- * Trim Oscillator period in seconds
- * For every TRIM_OSC_PERIOD seconds Internal Oscillator is trimmed to target
- * clock.
+ * Trim Oscillator period in seconds.
+ * For every TRIM_OSC_PERIOD seconds Internal Oscillator is probed and
+ * trimmed to target clock if deviation is more than +/- 1%.
+ * User can disable Trim Oscillator functionality by setting TRIM_OSC_PERIOD
+ * to 0.
  */
 #define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_PERIOD_MASK 0x0001fe00
 #define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_PERIOD_RESET_VAL 0x0
 #define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_PERIOD_POS 9
 #define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_PERIOD_SIZE 8
 
+/*
+ * Trim Oscillator functionality status
+ * 0 - Stopped
+ * 1 - Running
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_STATUS_MASK 0x00020000
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_STATUS_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_STATUS_POS 17
+#define IAXXX_SRB_SYS_POWER_CTRL_TRIM_OSC_STATUS_SIZE 1
+
 /*** SRB_SYS_POWER_CTRL_1 (0x58000060) ***/
 /*
  * System Power control Register for Second Host
  */
 #define IAXXX_SRB_SYS_POWER_CTRL_1_ADDR (0x58000060)
-#define IAXXX_SRB_SYS_POWER_CTRL_1_MASK_VAL 0x0001ffff
-#define IAXXX_SRB_SYS_POWER_CTRL_1_RMASK_VAL 0x0001ffff
+#define IAXXX_SRB_SYS_POWER_CTRL_1_MASK_VAL 0x0003ffff
+#define IAXXX_SRB_SYS_POWER_CTRL_1_RMASK_VAL 0x0003ffff
 #define IAXXX_SRB_SYS_POWER_CTRL_1_WMASK_VAL 0x00000017
 #define IAXXX_SRB_SYS_POWER_CTRL_1_RESET_VAL 0x00000000
 
@@ -992,6 +1004,14 @@
 #define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_PERIOD_RESET_VAL 0x0
 #define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_PERIOD_POS 9
 #define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_PERIOD_SIZE 8
+
+/*
+ * Currently not supported for the second host.
+ */
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_STATUS_MASK 0x00020000
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_STATUS_RESET_VAL 0x0
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_STATUS_POS 17
+#define IAXXX_SRB_SYS_POWER_CTRL_1_TRIM_OSC_STATUS_SIZE 1
 
 /*** SRB_SYSTEM_ERROR (0x58000064) ***/
 /*
