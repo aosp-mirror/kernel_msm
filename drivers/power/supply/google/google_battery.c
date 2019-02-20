@@ -1315,6 +1315,8 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CYCLE_COUNTS,
+	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,		/* compat */
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,	/* compat */
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_RECHARGE_SOC,
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
@@ -1422,6 +1424,14 @@ static int gbatt_get_property(struct power_supply *psy,
 		mutex_lock(&batt_drv->chg_lock);
 		val->intval = batt_drv->chg_state.f.chg_type;
 		mutex_unlock(&batt_drv->chg_lock);
+		break;
+
+	/* compat, for *_CURRENT_LIMITED could return this one:
+	 * 	(batt_drv->chg_state.f.flags & GBMS_CS_FLAG_ILIM)
+	 */
+	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
+		val->intval = 0;
 		break;
 
 	case POWER_SUPPLY_PROP_RECHARGE_SOC:
