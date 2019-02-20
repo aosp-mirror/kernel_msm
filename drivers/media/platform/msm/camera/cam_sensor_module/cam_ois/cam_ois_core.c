@@ -467,8 +467,7 @@ static int cam_ois_shift_data_enqueue(struct cam_ois_shift *o_shift_data,
 		pb->time_readout = o_shift_data->time_readout;
 		pb->ois_shift_x = o_shift_data->ois_shift_x;
 		pb->ois_shift_y = o_shift_data->ois_shift_y;
-		pb->af_shift_z = o_shift_data->af_shift_z;
-		pb->af_ois_xtalk_z = o_shift_data->af_ois_xtalk_z;
+		pb->af_lop1 = o_shift_data->af_lop1;
 		o_ctrl->buf.write_pos++;
 		if (o_ctrl->buf.write_pos == CAM_OIS_SHIFT_DATA_BUFFER_SIZE) {
 			o_ctrl->buf.write_pos = 0;
@@ -525,19 +524,10 @@ static void cam_ois_read_work(struct work_struct *work)
 			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 	}
 
-	// For AF position readout lower the frequency to 10Hz.
-	ois_timer_in->o_ctrl->buf.af_read_times++;
-	if (!(ois_timer_in->o_ctrl->buf.af_read_times % 20)) {
-		rc = camera_io_dev_read_seq(
-			&ois_timer_in->o_ctrl->io_master_info,
-			0x0758, &buf[8], CAMERA_SENSOR_I2C_TYPE_WORD,
-			CAMERA_SENSOR_I2C_TYPE_WORD, 2);
-		rc = camera_io_dev_read_seq(
-			&ois_timer_in->o_ctrl->io_master_info,
-			0x0764, &buf[10], CAMERA_SENSOR_I2C_TYPE_WORD,
-			CAMERA_SENSOR_I2C_TYPE_WORD, 2);
-		ois_timer_in->o_ctrl->buf.af_read_times = 0;
-	}
+	rc = camera_io_dev_read_seq(
+		&ois_timer_in->o_ctrl->io_master_info,
+		0x0764, &buf[8], CAMERA_SENSOR_I2C_TYPE_WORD,
+		CAMERA_SENSOR_I2C_TYPE_WORD, 2);
 
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
@@ -557,10 +547,8 @@ static void cam_ois_read_work(struct work_struct *work)
 		(int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
 	ois_shift_data.ois_shift_y =
 		(int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
-	ois_shift_data.af_shift_z =
+	ois_shift_data.af_lop1 =
 		(int16_t)(((uint16_t)buf[8] << 8) + (uint16_t)buf[9]);
-	ois_shift_data.af_ois_xtalk_z =
-		(int16_t)(((uint16_t)buf[10] << 8) + (uint16_t)buf[11]);
 
 	rc = cam_ois_shift_data_enqueue(&ois_shift_data, ois_timer_in->o_ctrl);
 	if (rc != 0)
@@ -643,7 +631,7 @@ static int cam_ois_start_shift_reader(struct cam_ois_ctrl_t *o_ctrl)
 
 	// set worker function and work queue
 	INIT_WORK(&o_ctrl->timer.g_work, cam_ois_read_work);
-	o_ctrl->timer.ois_wq = create_workqueue("ois_wq");
+	o_ctrl->timer.ois_wq = alloc_workqueue("ois_wq", WQ_HIGHPRI, 1);
 	if (!o_ctrl->timer.ois_wq) {
 		CAM_ERR(CAM_OIS, "ois_wq create failed.");
 		return -EFAULT;
@@ -660,7 +648,6 @@ static int cam_ois_start_shift_reader(struct cam_ois_ctrl_t *o_ctrl)
 
 	mutex_lock(&o_ctrl->ois_shift_mutex);
 	o_ctrl->buf.write_pos = 0;
-	o_ctrl->buf.af_read_times = 0;
 	o_ctrl->buf.is_full = false;
 	mutex_unlock(&o_ctrl->ois_shift_mutex);
 
