@@ -271,6 +271,16 @@ Optional properties:
     only). If this value is omitted, an ID of 0x1400C3 (standard issue firmware)
     is assumed.
 
+  - cirrus,auto-recovery : Boolean for enabling auto-recovery mode, wherein the
+    driver checks for inadvertent device reset prior to administering I2C-
+    triggered playback. If the driver determines the device's register map has
+    been compromised, the driver issues a full device reset and restores the
+    device to its previous state.
+
+    Auto-recovery mode increases the latency of I2C-triggered playback by that
+    of a single I2C read transaction. If this property is omitted, auto-recovery
+    mode remains disabled and I2C-triggered playback is unaffected.
+
 Examples:
 
   cs40l20: cs40l20@43 {
