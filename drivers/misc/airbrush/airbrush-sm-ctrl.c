@@ -771,7 +771,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 {
 	u32 to_chip_substate_id;
 	int ret;
-	struct chip_to_block_map *map;
+	struct chip_to_block_map *dest_map;
+	struct chip_to_block_map *active_map;
 	enum chip_state prev_state = sc->curr_chip_substate_id;
 
 	to_chip_substate_id = ab_sm_throttled_chip_substate_id(
@@ -784,10 +785,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		return 0;
 	}
 
-	map = ab_sm_get_block_map(sc, to_chip_substate_id);
-	if (!is_valid_transition(prev_state,
-			to_chip_substate_id) ||
-			!map) {
+	dest_map = ab_sm_get_block_map(sc, to_chip_substate_id);
+	if (!is_valid_transition(prev_state, to_chip_substate_id) ||
+			!dest_map) {
 		dev_err(sc->dev,
 			"Entered %s with invalid destination state\n",
 			__func__);
@@ -810,6 +810,33 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			dev_err(sc->dev, "ab_bootsequence failed (%d)\n", ret);
 			return ret;
 		}
+
+		/* If we are going to a partially active state, first place
+		 * IPU, TPU, and DRAM into fully active states
+		 */
+		if (to_chip_substate_id > CHIP_STATE_1_0) {
+			active_map = ab_sm_get_block_map(sc, CHIP_STATE_0_1);
+			if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
+					active_map->ipu_block_state_id)) {
+				ret = -EINVAL;
+				dev_err(sc->dev, "blk_set_state failed for IPU\n");
+				goto cleanup_state;
+			}
+
+			if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
+					active_map->tpu_block_state_id)) {
+				ret = -EINVAL;
+				dev_err(sc->dev, "blk_set_state failed for TPU\n");
+				goto cleanup_state;
+			}
+
+			if (blk_set_state(sc, &(sc->blocks[DRAM]),
+					active_map->dram_block_state_id)) {
+				ret = -EINVAL;
+				dev_err(sc->dev, "blk_set_state failed for DRAM\n");
+				goto cleanup_state;
+			}
+		}
 	}
 
 	if ((prev_state == CHIP_STATE_4_0 ||
@@ -824,7 +851,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
-			map->ipu_block_state_id)) {
+			dest_map->ipu_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for IPU\n");
 		if (to_chip_substate_id != CHIP_STATE_6_0)
@@ -832,7 +859,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
-			map->tpu_block_state_id)) {
+			dest_map->tpu_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for TPU\n");
 		if (to_chip_substate_id != CHIP_STATE_6_0)
@@ -840,7 +867,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
-			map->dram_block_state_id)) {
+			dest_map->dram_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for DRAM\n");
 		if (to_chip_substate_id != CHIP_STATE_6_0)
@@ -850,7 +877,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	ab_sm_record_ts(sc, AB_SM_TS_DDR_STATE);
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-			map->mif_block_state_id)) {
+			dest_map->mif_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for MIF\n");
 		if (to_chip_substate_id != CHIP_STATE_6_0)
@@ -858,7 +885,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-			map->fsys_block_state_id)) {
+			dest_map->fsys_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for FSYS\n");
 		if (to_chip_substate_id != CHIP_STATE_6_0)
@@ -868,7 +895,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	ab_sm_record_ts(sc, AB_SM_TS_FSYS_STATE);
 
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-			map->aon_block_state_id)) {
+			dest_map->aon_block_state_id)) {
 		ret = -EINVAL;
 		if (to_chip_substate_id != CHIP_STATE_6_0)
 			goto cleanup_state;
