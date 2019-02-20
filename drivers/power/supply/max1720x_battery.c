@@ -2157,6 +2157,32 @@ static int max17x0x_read_dt_version(struct device_node *node, u8 *reg, u8 *val)
 
 	*reg = version[0];
 	*val = version[1];
+
+	return 0;
+}
+
+static int max17x0x_read_dt_version_por(struct device_node *node,
+					u8 *reg, u8 *val)
+{
+	int ret;
+	const char *propname;
+	u8 version[2];
+
+	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
+		propname = "maxim,n_regval_1730x_ver_por";
+	} else {
+		propname = "maxim,n_regval_1720x_ver_por";
+	}
+
+	ret = of_property_read_u8_array(node, propname,
+					version,
+					sizeof(version));
+	if (ret < 0)
+		return -ENODATA;
+
+	*reg = version[0];
+	*val = version[1];
+
 	return 0;
 }
 
@@ -2676,7 +2702,9 @@ static int max17x0x_fixups(struct max1720x_chip *chip)
 static int max1720x_init_chip(struct max1720x_chip *chip)
 {
 	int ret;
-	u16 data = 0;
+	u16 data = 0, tmp;
+	u8 vreg, vpor;
+	bool force_recall = false;
 
 	if (of_property_read_bool(chip->dev->of_node, "maxim,force-hard-reset"))
 		max1720x_full_reset(chip);
@@ -2689,8 +2717,14 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	if (chip->RSense == 0)
 		dev_err(chip->dev, "RSense value 0 micro Ohm\n");
 
-	if (data & MAX1720X_STATUS_POR || chip->RSense == 0) {
+	/* read por version from dt (new function) */
+	ret = max17x0x_read_dt_version_por(chip->dev->of_node, &vreg, &vpor);
+	if (ret == 0) {
+		ret = REGMAP_READ(chip->regmap_nvram, vreg, &tmp);
+		force_recall = ((ret == 0) && (vpor == (tmp & 0x00ff)));
+	}
 
+	if (data & MAX1720X_STATUS_POR || chip->RSense == 0 || force_recall) {
 		ret = max17x0x_nvram_cache_init(&chip->nRAM_por,
 							max17xxx_gauge_type);
 		if (ret == 0)
