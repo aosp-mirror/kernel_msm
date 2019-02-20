@@ -193,18 +193,18 @@ int iaxxx_set_plugin_log_mode(struct device *dev,
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int ret = 0;
-	uint32_t status;
+	bool host_id = find_host_id(priv, inst_id);
 
 	ret = regmap_update_bits(priv->regmap,
-			IAXXX_PLUGIN_HDR_PLUGINLOG_MODE_BLOCK_ADDR(block_id),
-			1 << inst_id, mode << inst_id);
+	IAXXX_PLUGIN_HDR_PLUGINLOG_MODE_BLOCK_ADDR(
+		block_id, host_id), 1 << inst_id, mode << inst_id);
 	if (ret) {
 		dev_err(dev,
 			"write set plgin log mode failed %s()\n", __func__);
 		goto out;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret)
 		dev_err(dev, "%s() Update blk failed %d\n", __func__, ret);
 
@@ -228,6 +228,7 @@ int iaxxx_get_plugin_log_mode(struct device *dev,
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint32_t read_mode = 0;
+	bool host_id = find_host_id(priv, inst_id);
 	int ret = 0;
 
 	if (!mode) {
@@ -236,8 +237,8 @@ int iaxxx_get_plugin_log_mode(struct device *dev,
 	}
 
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PLUGINLOG_MODE_BLOCK_ADDR(block_id),
-			&read_mode);
+	IAXXX_PLUGIN_HDR_PLUGINLOG_MODE_BLOCK_ADDR(
+		block_id, host_id), &read_mode);
 	if (ret) {
 		dev_err(dev, "%s() failed %d\n", __func__, ret);
 		return ret;
@@ -262,19 +263,19 @@ int iaxxx_set_update_plugin_log_state(struct device *dev,
 				bool state, uint32_t inst_id, uint8_t block_id)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	bool host_id = find_host_id(priv, inst_id);
 	int ret = 0;
-	uint32_t status;
 
 	ret = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_PLUGINLOG_ENABLE_BLOCK_ADDR(block_id),
-		1 << inst_id, state << inst_id);
+	IAXXX_PLUGIN_HDR_PLUGINLOG_ENABLE_BLOCK_ADDR(
+		block_id, host_id), 1 << inst_id, state << inst_id);
 	if (ret) {
 		dev_err(dev,
 			"write set plgin log mode failed %s()\n", __func__);
 		goto out;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret)
 		dev_err(dev, "%s() Update blk failed %d\n", __func__, ret);
 
@@ -298,6 +299,7 @@ int iaxxx_get_plugin_log_state(struct device *dev,
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint32_t read_mode = 0;
+	bool host_id = find_host_id(priv, inst_id);
 	int ret = 0;
 
 	if (!state) {
@@ -306,8 +308,8 @@ int iaxxx_get_plugin_log_state(struct device *dev,
 	}
 
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PLUGINLOG_ENABLE_BLOCK_ADDR(block_id),
-			&read_mode);
+		IAXXX_PLUGIN_HDR_PLUGINLOG_ENABLE_BLOCK_ADDR(
+		block_id, host_id), &read_mode);
 	if (ret) {
 		dev_err(dev, "%s() failed %d\n", __func__, ret);
 		return ret;

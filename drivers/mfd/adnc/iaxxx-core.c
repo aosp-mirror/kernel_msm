@@ -1157,6 +1157,14 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 		}
 	}
 
+	rc = regmap_read(priv->regmap, IAXXX_PLUGIN_HDR_COUNT_ADDR,
+			&priv->plugin_inst_count);
+	if (rc) {
+		dev_err(dev, "%s: failed to read the plugin count\n",
+				__func__);
+		goto exit_fw_fail;
+	}
+
 	/* Subscribing for FW crash event */
 	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
 			IAXXX_CRASH_EVENT_ID, IAXXX_SYSID_HOST, 0);

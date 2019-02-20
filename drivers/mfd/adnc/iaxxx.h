@@ -60,9 +60,6 @@ struct iaxxx_evt_queue;
 #error kthread functions not defined
 #endif
 
-#define IAXXX_HOST_0 0
-#define IAXXX_HOST_1 1
-
 /* Checksum Calculation */
 #define CALC_FLETCHER16(DATA, SUM1, SUM2)	\
 do {						\

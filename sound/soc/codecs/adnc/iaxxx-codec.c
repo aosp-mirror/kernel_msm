@@ -333,6 +333,14 @@ enum {
 	PLUGIN13,
 	PLUGIN14,
 	PLUGIN15,
+	PLUGIN16,
+	PLUGIN17,
+	PLUGIN18,
+	PLUGIN19,
+	PLUGIN20,
+	PLUGIN21,
+	PLUGIN22,
+	PLUGIN23,
 };
 
 enum {
@@ -3500,25 +3508,25 @@ static int iaxxxcore_set_plgin##plugin##_Blk0En( \
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
 	struct iaxxx_priv *priv = to_iaxxx_priv(iaxxx->dev_parent); \
-	u32 status = 0; \
+	uint32_t reg_addr; \
+	bool host_id = find_host_id(priv, plugin); \
 	int ret = 0; \
 	dev_dbg(codec->dev, "enter %s connection\n", __func__); \
+	reg_addr = IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(0, host_id); \
 	if (ucontrol->value.enumerated.item[0]) { \
-		snd_soc_update_bits(codec, \
-					IAXXX_PLUGIN_HDR_ENABLE_BLOCK_0_ADDR, \
+		snd_soc_update_bits(codec, reg_addr, \
 					1 << plugin, 1 << plugin); \
 		iaxxx->plugin_blk_en[plugin] = 1; \
 	} else { \
-		snd_soc_update_bits(codec, \
-					IAXXX_PLUGIN_HDR_ENABLE_BLOCK_0_ADDR, \
+		snd_soc_update_bits(codec, reg_addr, \
 					1 << plugin, 0 << plugin); \
 		iaxxx->plugin_blk_en[plugin] = 0; \
 	} \
-	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, \
-			 &status, IAXXX_BLOCK_0); \
+	ret = iaxxx_send_update_block_hostid(iaxxx->dev_parent, \
+		host_id, IAXXX_BLOCK_0); \
 	if (ret) \
-		dev_err(priv->dev, "Update blk failed %s():%u\n", \
-					__func__, status); \
+		dev_err(priv->dev, "Update blk failed %s()\n", \
+					__func__); \
 	return ret;\
 } \
 static int iaxxxcore_get_plgin##plugin##_Blk0En( \
@@ -3537,25 +3545,25 @@ static int iaxxxcore_set_plgin##plugin##_Blk1En( \
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
 	struct iaxxx_priv *priv = to_iaxxx_priv(iaxxx->dev_parent); \
-	u32 status = 0; \
+	uint32_t reg_addr; \
 	int ret = 0; \
+	bool host_id = find_host_id(priv, plugin); \
 	dev_dbg(codec->dev, "enter %s connection\n", __func__); \
+	reg_addr = IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(1, host_id); \
 	if (ucontrol->value.enumerated.item[0]) { \
-		snd_soc_update_bits(codec, \
-					IAXXX_PLUGIN_HDR_ENABLE_BLOCK_1_ADDR, \
+		snd_soc_update_bits(codec, reg_addr, \
 					1 << plugin, 1 << plugin); \
 		iaxxx->plugin_blk_en[plugin] = 1; \
 	} else { \
-		snd_soc_update_bits(codec, \
-					IAXXX_PLUGIN_HDR_ENABLE_BLOCK_1_ADDR, \
+		snd_soc_update_bits(codec, reg_addr, \
 					1 << plugin, 0 << plugin); \
 		iaxxx->plugin_blk_en[plugin] = 0; \
 	} \
-	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, \
-			 &status, IAXXX_BLOCK_1); \
+	ret = iaxxx_send_update_block_hostid(iaxxx->dev_parent, \
+		host_id, IAXXX_BLOCK_1); \
 	if (ret) \
-		dev_err(priv->dev, "Update blk failed %s():%u\n", \
-					__func__, status); \
+		dev_err(priv->dev, "Update blk failed %s()\n", \
+					__func__); \
 	return ret;\
 } \
 static int iaxxxcore_get_plgin##plugin##_Blk1En( \
@@ -3574,25 +3582,25 @@ static int iaxxxcore_set_plgin##plugin##_Blk2En( \
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
 	struct iaxxx_priv *priv = to_iaxxx_priv(iaxxx->dev_parent); \
-	u32 status = 0; \
+	uint32_t reg_addr; \
 	int ret = 0; \
+	bool host_id = find_host_id(priv, plugin); \
 	dev_dbg(codec->dev, "enter %s connection\n", __func__); \
+	reg_addr = IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(2, host_id); \
 	if (ucontrol->value.enumerated.item[0]) { \
-		snd_soc_update_bits(codec, \
-					IAXXX_PLUGIN_HDR_ENABLE_BLOCK_2_ADDR, \
+		snd_soc_update_bits(codec, reg_addr, \
 					1 << plugin, 1 << plugin); \
 		iaxxx->plugin_blk_en[plugin] = 1; \
 	} else { \
-		snd_soc_update_bits(codec, \
-					IAXXX_PLUGIN_HDR_ENABLE_BLOCK_2_ADDR, \
+		snd_soc_update_bits(codec, reg_addr, \
 					1 << plugin, 0 << plugin); \
 		iaxxx->plugin_blk_en[plugin] = 0; \
 	} \
-	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, \
-			 &status, IAXXX_BLOCK_2); \
+	ret = iaxxx_send_update_block_hostid(iaxxx->dev_parent, \
+		host_id, IAXXX_BLOCK_2); \
 	if (ret) \
-		dev_err(priv->dev, "Update blk failed %s():%u\n", \
-					__func__, status); \
+		dev_err(priv->dev, "Update blk failed %s()\n", \
+					__func__); \
 	return ret; \
 } \
 static int iaxxxcore_get_plgin##plugin##_Blk2En( \

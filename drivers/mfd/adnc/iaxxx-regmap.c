@@ -52,6 +52,7 @@
 #define IAXXX_STRM_MAX 16
 #define IAXXX_TNL_MAX 32
 #define IAXXX_SENSOR_MAX  4
+#define IAXXX_MAX_MULTI_PLUGIN_HDRS 2
 
 #define IAXXX_SRB_ARB_N_SIZE(N)		(IAXXX_SRB_ARB_0_SIZE_ADDR+(N*8))
 #define IAXXX_SRB_ARB_N_BASE_ADDRESS(N)	(IAXXX_SRB_ARB_0_BASE_ADDR_ADDR+(N*8))
@@ -213,6 +214,7 @@ static bool iaxxx_volatile_register(struct device *dev, unsigned int reg)
 static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 {
 	int i;
+	int j;
 
 	switch (reg) {
 	/* I2S Registers */
@@ -329,9 +331,13 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 
 	/* Plugin Header registers*/
 	for (i = 0; i < IAXXX_PLUGIN_UPDATE_BLOCKS_MAX; i++) {
-		if (reg >= IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(i) &&
-			reg <= IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_ADDR(i))
-			return true;
+		for (j = 0; j < IAXXX_MAX_MULTI_PLUGIN_HDRS; j++) {
+			if (reg >=
+				IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(i, j) &&
+				reg <=
+				IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_ADDR(i, j))
+				return true;
+		}
 	}
 
 	/* Channel group registers */

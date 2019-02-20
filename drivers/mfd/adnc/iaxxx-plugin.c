@@ -374,10 +374,10 @@ static int iaxxx_core_create_plg_common(
 {
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	uint32_t status;
 	uint32_t package;
 	uint8_t  proc_id;
 	struct iaxxx_plugin_data *plugin_data;
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -462,14 +462,13 @@ static int iaxxx_core_create_plg_common(
 
 	/* Update Plugin instance id in plg inst header */
 	ret = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id),
-		1 << inst_id,
-		1 << inst_id);
+		IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id, host_id),
+		1 << inst_id, 1 << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_create_plugin_err;
 	}
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
 		goto core_create_plugin_err;
@@ -558,8 +557,8 @@ int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id)
 {
 	int ret = -EINVAL;
-	uint32_t status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -579,14 +578,13 @@ int iaxxx_core_change_plg_state(struct device *dev, uint32_t inst_id,
 
 	/* Set enable bit in plugin inst enable header */
 	ret = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(block_id),
-		1 << inst_id,
-		is_enable << inst_id);
+		IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(block_id,
+		host_id), 1 << inst_id, is_enable << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_change_plg_state_err;
 	}
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret)
 		dev_err(dev, "Update blk failed %s()\n", __func__);
 
@@ -609,9 +607,9 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 				uint8_t block_id)
 {
 	int ret = -EINVAL;
-	uint32_t status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	struct iaxxx_plugin_data *plugin_data;
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -632,15 +630,14 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 
 	/* Clear bit in plugin instance header */
 	ret = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id),
-		1 << inst_id,
-		0 << inst_id);
+		IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id, host_id),
+		1 << inst_id, 0 << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_destroy_plg_err;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
 		goto core_destroy_plg_err;
@@ -672,6 +669,7 @@ int iaxxx_core_reset_plg(struct device *dev, uint32_t inst_id,
 	int rc;
 	int status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -691,21 +689,20 @@ int iaxxx_core_reset_plg(struct device *dev, uint32_t inst_id,
 
 	/* Clear bit in plugin instance header */
 	ret = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(block_id),
-		1 << inst_id,
-		1 << inst_id);
+		IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(block_id, host_id),
+		1 << inst_id, 1 << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto core_reset_plg_err;
 	}
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
 		if (status) {
 			/* Clear bit in plugin instance header */
 			rc = regmap_update_bits(priv->regmap,
-				IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(block_id),
-				1 << inst_id, 0);
+				IAXXX_PLUGIN_HDR_RESET_BLOCK_ADDR(block_id,
+				host_id), 1 << inst_id, 0);
 			if (rc) {
 				dev_err(dev, "clear failed %s() %d\n",
 						__func__, rc);
@@ -740,6 +737,7 @@ int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
 	uint32_t status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc;
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -772,21 +770,20 @@ int iaxxx_core_plg_set_param_by_inst(struct device *dev, uint32_t inst_id,
 	}
 
 	ret = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_SET_PARAM_REQ_BLOCK_ADDR(block_id),
-		1 << inst_id, 1 << inst_id);
+		IAXXX_PLUGIN_HDR_SET_PARAM_REQ_BLOCK_ADDR(block_id,
+		host_id), 1 << inst_id, 1 << inst_id);
 	if (ret) {
 		dev_err(dev, "update bit failed %s()\n", __func__);
 		goto plg_set_param_inst_err;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
 		if (status) {
 			rc = regmap_update_bits(priv->regmap,
-				IAXXX_PLUGIN_HDR_SET_PARAM_REQ_BLOCK_ADDR
-				(block_id),
-				1 << inst_id, 0);
+				IAXXX_PLUGIN_HDR_SET_PARAM_REQ_BLOCK_ADDR(
+				block_id, host_id), 1 << inst_id, 0);
 			if (rc)
 				dev_err(dev, "clear bit failed %s() %d\n",
 						__func__, rc);
@@ -820,6 +817,7 @@ int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
 	int rc;
 	uint32_t status = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -846,21 +844,20 @@ int iaxxx_core_plg_get_param_by_inst(struct device *dev, uint32_t inst_id,
 	}
 
 	ret = regmap_update_bits(priv->regmap,
-			IAXXX_PLUGIN_HDR_GET_PARAM_REQ_BLOCK_ADDR(block_id),
-			1 << inst_id, 1 << inst_id);
+		IAXXX_PLUGIN_HDR_GET_PARAM_REQ_BLOCK_ADDR(
+		block_id, host_id), 1 << inst_id, 1 << inst_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto plg_get_param_inst_err;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
 		if (status) {
 			rc = regmap_update_bits(priv->regmap,
-				IAXXX_PLUGIN_HDR_GET_PARAM_REQ_BLOCK_ADDR
-				(block_id),
-				1 << inst_id, 0);
+				IAXXX_PLUGIN_HDR_GET_PARAM_REQ_BLOCK_ADDR(
+				block_id, host_id), 1 << inst_id, 0);
 			if (rc)
 				dev_err(dev, "clear bit failed %s() %d\n",
 						__func__, rc);
@@ -897,13 +894,13 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 			char *file)
 {
 	int ret = -EINVAL;
-	int status;
 	uint32_t reg_addr;
 	uint32_t val;
 	uint32_t reg_val;
 	const struct firmware *fw = NULL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint8_t *data = NULL;
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -958,22 +955,22 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_IS_CREATE_CFG_MASK;
 
 		ret = regmap_write(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-			val);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id, host_id),
+		val);
 		if (ret) {
 			dev_err(dev, "write failed %s()\n", __func__);
 			goto set_create_cfg_err;
 		}
 
-		ret = iaxxx_send_update_block_request(dev, &status, block_id);
+		ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 		if (ret) {
 			dev_err(dev, "Update blk failed %s()\n", __func__);
 			goto set_create_cfg_err;
 		}
 
 		ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id),
-			&reg_addr);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id, host_id),
+		&reg_addr);
 		if (ret) {
 			dev_err(dev, "read failed %s()\n", __func__);
 			goto set_create_cfg_err;
@@ -1125,6 +1122,7 @@ int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 	int ret = -EINVAL;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint32_t status = 0;
+	bool host_id = find_host_id(priv, inst_id);
 	int rc;
 
 	if (!priv)
@@ -1149,19 +1147,18 @@ int iaxxx_core_set_event(struct device *dev, uint8_t inst_id,
 		goto set_event_err;
 	}
 	ret = regmap_update_bits(priv->regmap,
-		IAXXX_PLUGIN_HDR_EVT_UPDATE_BLOCK_ADDR(block_id),
-		1 << inst_id, 1 << inst_id);
+		IAXXX_PLUGIN_HDR_EVT_UPDATE_BLOCK_ADDR(block_id,
+		host_id), 1 << inst_id, 1 << inst_id);
 	if (ret)
 		dev_err(dev, "update bit failed %s()\n", __func__);
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
 		if (status) {
 			rc = regmap_update_bits(priv->regmap,
-				IAXXX_PLUGIN_HDR_EVT_UPDATE_BLOCK_ADDR
-				(block_id),
-				1 << inst_id, 0);
+			IAXXX_PLUGIN_HDR_EVT_UPDATE_BLOCK_ADDR(block_id,
+			host_id), 1 << inst_id, 0);
 			if (rc)
 				dev_err(dev, "clear failed %s() %d\n",
 						__func__, rc);
@@ -1700,6 +1697,7 @@ int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
 	uint32_t reg_val;
 	uint8_t proc_id;
 	struct iaxxx_plugin_data *plugin_data;
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -1721,8 +1719,8 @@ int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
 
 	plugin_status_data->block_id = block_id;
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(block_id),
-			&reg_val);
+			IAXXX_PLUGIN_HDR_CREATE_BLOCK_ADDR(
+			block_id, host_id), &reg_val);
 	if (ret) {
 		dev_err(dev, "plugin create status read failed %s()\n",
 			__func__);
@@ -1731,8 +1729,8 @@ int iaxxx_core_plg_get_status_info(struct device *dev, uint32_t inst_id,
 	plugin_status_data->create_status = (reg_val & (1 << inst_id)) ? 1 : 0;
 
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(block_id),
-			&reg_val);
+			IAXXX_PLUGIN_HDR_ENABLE_BLOCK_ADDR(
+			block_id, host_id), &reg_val);
 	if (ret) {
 		dev_err(dev, "plugin enable status read failed %s()\n",
 			__func__);
@@ -1938,8 +1936,9 @@ int iaxxx_core_plg_get_endpoint_timestamps(struct device *dev,
 
 	for (ep_idx = 0; ep_idx < max_timestamps; ++ep_idx) {
 		int ret;
-		uint32_t reg = IAXXX_PLUGIN_HDR_TIMESTAMP_LOW_EP_BLOCK_ADDR(
-							block_id, ep_idx);
+		uint32_t reg =
+		IAXXX_PLUGIN_HDR_TIMESTAMP_LOW_EP_BLOCK_ADDR(
+					block_id, ep_idx, IAXXX_HOST_0);
 
 		ret = regmap_read(priv->regmap, reg, &val);
 		if (ret) {

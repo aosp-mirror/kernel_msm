@@ -45,6 +45,8 @@ struct workqueue_struct;
 #define IAXXX_PLGIN_ID_MASK	0x001F
 #define IAXXX_SENSR_ID_MASK	0x0003
 
+#define IAXXX_HOST_0 0
+#define IAXXX_HOST_1 1
 /*********************/
 /*   GLOBAL MEMORY   */
 /*********************/
@@ -343,7 +345,8 @@ struct iaxxx_priv {
 	bool debug_fwcrash_handling_disable;
 	bool debug_runtime_pm_disable;
 	struct mutex debug_mutex;
-
+	/* Max plugin instances supported */
+	uint32_t plugin_inst_count;
 	/* Power transition Statistcis */
 	struct iaxxx_pwr_stats *pwr_stats;
 	int int_osc_trim_period;
@@ -352,6 +355,11 @@ struct iaxxx_priv {
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
 {
 	return dev ? dev_get_drvdata(dev) : NULL;
+}
+
+static inline bool find_host_id(struct iaxxx_priv *priv, uint32_t inst_id)
+{
+	return (inst_id >= priv->plugin_inst_count)?IAXXX_HOST_1:IAXXX_HOST_0;
 }
 
 int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
@@ -368,6 +376,8 @@ int iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
 		uint32_t reg, uint32_t match);
 int iaxxx_send_update_block_no_wait(struct device *dev, int host_id);
 int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id);
+int iaxxx_send_update_block_hostid(struct device *dev,
+		int host_id, int block_id);
 int iaxxx_get_firmware_version(struct device *dev, char *ver, uint32_t len);
 int iaxxx_get_application_ver_num(struct device *dev, uint32_t *app_ver_num);
 int iaxxx_get_rom_ver_num(struct device *dev, uint32_t *rom_ver_num);

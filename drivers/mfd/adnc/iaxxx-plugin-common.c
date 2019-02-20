@@ -39,6 +39,7 @@ int iaxxx_core_set_param_blk_common(
 	uint32_t reg_addr, reg_addr2;
 	uint32_t reg_val;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv)
 		return ret;
@@ -65,22 +66,22 @@ int iaxxx_core_set_param_blk_common(
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
 	reg_val |= IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_REQ_MASK;
 	ret = regmap_write(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-			reg_val);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id, host_id),
+		reg_val);
 	if (ret) {
 		dev_err(dev, "write ctrl block failed %s()\n", __func__);
 		goto set_param_blk_err;
 	}
 
 	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id),
-		param_blk_id);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id,
+		host_id), param_blk_id);
 	if (ret) {
 		dev_err(dev, "write HDR block failed %s()\n", __func__);
 		goto set_param_blk_err;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 
 	reg_val = IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK |
@@ -91,7 +92,8 @@ int iaxxx_core_set_param_blk_common(
 				param_blk_id, __func__);
 		if (status) {
 			rc = regmap_update_bits(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
+			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(
+			block_id, host_id),
 			reg_val,
 			0);
 			if (rc) {
@@ -103,8 +105,8 @@ int iaxxx_core_set_param_blk_common(
 		goto set_param_blk_err;
 	}
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id),
-			&reg_addr);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(
+		block_id, host_id), &reg_addr);
 	if (ret) {
 		dev_err(dev, "read failed %s()\n", __func__);
 		goto set_param_blk_err;
@@ -133,15 +135,16 @@ int iaxxx_core_set_param_blk_common(
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK);
 	reg_val |= IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_DONE_MASK;
 	ret = regmap_write(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-			reg_val);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id,
+		host_id), reg_val);
 
-	reg_addr2 = IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id);
+	reg_addr2 = IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id,
+		host_id);
 	reg_val = IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_BLK_SIZE_MASK |
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_INSTANCE_ID_MASK |
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_SET_BLK_DONE_MASK;
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev,
 		"Update blk failed after plugin ctrl block config %s()\n",
@@ -176,6 +179,7 @@ int iaxxx_core_get_param_blk_common(
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	uint32_t write_val, read_val, getparam_block_size;
 	uint32_t status = 0;
+	bool host_id = find_host_id(priv, inst_id);
 
 	if (!priv || !getparam_block_data || !getparam_block_size_in_words)
 		return -EINVAL;
@@ -203,7 +207,8 @@ int iaxxx_core_get_param_blk_common(
 	write_val |= IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_GET_BLK_REQ_MASK;
 
 	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(
+		block_id, host_id),
 		write_val);
 
 	if (ret) {
@@ -212,14 +217,14 @@ int iaxxx_core_get_param_blk_common(
 	}
 
 	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(block_id),
-		param_blk_id);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_HDR_BLOCK_ADDR(
+		block_id, host_id), param_blk_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
 		goto iaxxx_core_get_param_error;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed(%x) after GET_BLK_REQ %s()\n",
 				status, __func__);
@@ -228,8 +233,8 @@ int iaxxx_core_get_param_blk_common(
 
 	/* Get block size of parameter block to read and validate it */
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
-			&read_val);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(
+		block_id, host_id), &read_val);
 	if (ret) {
 		dev_err(dev, "getparamblk blksize failed %s()\n", __func__);
 		goto iaxxx_core_get_param_error;
@@ -247,8 +252,8 @@ int iaxxx_core_get_param_blk_common(
 
 	/* Get parameter block address to read */
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id),
-			&read_val);
+		IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(
+		block_id, host_id), &read_val);
 	if (ret) {
 		dev_err(dev, "getparamblk addr failed %s()\n", __func__);
 		goto iaxxx_core_get_param_error;
@@ -272,7 +277,7 @@ int iaxxx_core_get_param_blk_common(
 		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_0_GET_BLK_DONE_MASK;
 
 	ret = regmap_write(priv->regmap,
-		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id),
+		IAXXX_PLUGIN_HDR_PARAM_BLK_CTRL_BLOCK_ADDR(block_id, host_id),
 		write_val);
 
 	if (ret) {
@@ -280,7 +285,7 @@ int iaxxx_core_get_param_blk_common(
 		goto iaxxx_core_get_param_error;
 	}
 
-	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	ret = iaxxx_send_update_block_hostid(dev, host_id, block_id);
 	if (ret) {
 		dev_err(dev, "Update blk failed(%x) after GET_BLK_DONE %s()\n",
 			status, __func__);
@@ -306,7 +311,7 @@ int iaxxx_core_read_plugin_error_common(
 	uint32_t reg_val;
 
 	ret = regmap_read(priv->regmap,
-		IAXXX_PLUGIN_HDR_ERROR_BLOCK_ADDR(block_id),
+		IAXXX_PLUGIN_HDR_ERROR_BLOCK_ADDR(block_id, 0),
 		&reg_val);
 	if (ret) {
 		dev_err(dev, "read plugin error failed %s()\n", __func__);
@@ -316,7 +321,7 @@ int iaxxx_core_read_plugin_error_common(
 	*error = reg_val;
 
 	ret = regmap_read(priv->regmap,
-			IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_ADDR(block_id),
+			IAXXX_PLUGIN_HDR_ERROR_INS_ID_BLOCK_ADDR(block_id, 0),
 			&reg_val);
 	if (ret) {
 		dev_err(dev, "read plugin error instance failed %s()\n",

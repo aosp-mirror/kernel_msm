@@ -632,6 +632,23 @@ int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id)
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_no_wait_no_pm);
 
+int iaxxx_send_update_block_hostid(struct device *dev,
+		int host_id, int block_id)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	int rc = 0;
+	uint32_t status;
+
+	dev_dbg(dev, "%s()\n", __func__);
+
+	rc = iaxxx_update_block_request(priv, block_id,
+			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
+			IAXXX_UPDATE_BLOCK_WITH_WAIT, &status);
+
+	return rc;
+}
+EXPORT_SYMBOL(iaxxx_send_update_block_hostid);
+
 int iaxxx_get_firmware_version(struct device *dev, char *ver, uint32_t len)
 {
 	return iaxxx_get_version_str(to_iaxxx_priv(dev),
