@@ -1103,6 +1103,7 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group,
 	t->event = 0;
 	t->last_event_time = 0;
 	init_waitqueue_head(&t->event_wait);
+	kref_init(&t->refcount);
 
 	mutex_lock(&group->update_lock);
 
@@ -1117,14 +1118,22 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group,
 	return t;
 }
 
-void psi_trigger_destroy(struct psi_trigger *t)
+static void psi_trigger_destroy(struct kref *ref)
 {
+	struct psi_trigger *t = container_of(ref, struct psi_trigger, refcount);
 	struct psi_group *group = t->group;
 
 	if (static_branch_likely(&psi_disabled))
 		return;
 
+	/*
+	 * Wakeup waiters to stop polling. Can happen if cgroup is deleted
+	 * from under a polling process.
+	 */
+	wake_up_interruptible(&t->event_wait);
+
 	mutex_lock(&group->update_lock);
+
 	if (!list_empty(&t->node)) {
 		struct psi_trigger *tmp;
 		u64 period = ULLONG_MAX;
@@ -1139,30 +1148,57 @@ void psi_trigger_destroy(struct psi_trigger *t)
 					UPDATES_PER_WINDOW));
 		}
 		group->trigger_min_period = period;
-		/*
-		 * Wakeup waiters to stop polling.
-		 * Can happen if cgroup is deleted from under
-		 * a polling process.
-		 */
-		wake_up_interruptible(&t->event_wait);
-		kfree(t);
 	}
+
 	mutex_unlock(&group->update_lock);
+	/*
+	 * Wait for RCU to complete its read-side critical section before
+	 * destroying the trigger
+	 */
+	synchronize_rcu();
+	kfree(t);
 }
 
-unsigned int psi_trigger_poll(struct psi_trigger *t,
-				struct file *file, poll_table *wait)
+void psi_trigger_replace(void **trigger_ptr, struct psi_trigger *new)
 {
+	struct psi_trigger *old = *trigger_ptr;
+
+	if (static_branch_likely(&psi_disabled))
+		return;
+
+	rcu_assign_pointer(*trigger_ptr, new);
+	if (old)
+		kref_put(&old->refcount, psi_trigger_destroy);
+}
+
+unsigned int psi_trigger_poll(void **trigger_ptr, struct file *file,
+			      poll_table *wait)
+{
+	unsigned int ret = DEFAULT_POLLMASK;
+	struct psi_trigger *t;
+
 	if (static_branch_likely(&psi_disabled))
 		return DEFAULT_POLLMASK | POLLERR | POLLPRI;
+
+	rcu_read_lock();
+
+	t = rcu_dereference(*(void __rcu __force **)trigger_ptr);
+	if (!t) {
+		rcu_read_unlock();
+		return DEFAULT_POLLMASK | POLLERR | POLLPRI;
+	}
+	kref_get(&t->refcount);
+
+	rcu_read_unlock();
 
 	poll_wait(file, &t->event_wait, wait);
 
 	if (cmpxchg(&t->event, 1, 0) == 1)
-		return DEFAULT_POLLMASK | POLLPRI;
+		ret |= POLLPRI;
 
-	/* Wait */
-	return DEFAULT_POLLMASK;
+	kref_put(&t->refcount, psi_trigger_destroy);
+
+	return ret;
 }
 
 static ssize_t psi_write(struct file *file, const char __user *user_buf,
@@ -1171,7 +1207,6 @@ static ssize_t psi_write(struct file *file, const char __user *user_buf,
 	char buf[32];
 	size_t buf_size;
 	struct seq_file *seq;
-	struct psi_trigger *old;
 	struct psi_trigger *new;
 
 	if (static_branch_likely(&psi_disabled))
@@ -1190,14 +1225,8 @@ static ssize_t psi_write(struct file *file, const char __user *user_buf,
 	seq = file->private_data;
 	/* Take seq->lock to protect seq->private from concurrent writes */
 	mutex_lock(&seq->lock);
-	old = seq->private;
-	rcu_assign_pointer(seq->private, new);
+	psi_trigger_replace(&seq->private, new);
 	mutex_unlock(&seq->lock);
-
-	if (old) {
-		synchronize_rcu();
-		psi_trigger_destroy(old);
-	}
 
 	return nbytes;
 }
@@ -1223,33 +1252,15 @@ static ssize_t psi_cpu_write(struct file *file,
 static unsigned int psi_fop_poll(struct file *file, poll_table *wait)
 {
 	struct seq_file *seq = file->private_data;
-	struct psi_trigger *t;
-	unsigned int ret;
 
-	rcu_read_lock();
-	t = rcu_dereference(seq->private);
-	if (t)
-		ret = psi_trigger_poll(t, file, wait);
-	else
-		ret = DEFAULT_POLLMASK | POLLERR | POLLPRI;
-	rcu_read_unlock();
-
-	return ret;
-
+	return psi_trigger_poll(&seq->private, file, wait);
 }
 
 static int psi_fop_release(struct inode *inode, struct file *file)
 {
 	struct seq_file *seq = file->private_data;
-	struct psi_trigger *t = seq->private;
 
-	if (static_branch_likely(&psi_disabled) || !t)
-		goto out;
-
-	rcu_assign_pointer(seq->private, NULL);
-	synchronize_rcu();
-	psi_trigger_destroy(t);
-out:
+	psi_trigger_replace(&seq->private, NULL);
 	return single_release(inode, file);
 }
 
