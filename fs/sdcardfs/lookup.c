@@ -372,12 +372,15 @@ put_name:
 	/* See if the low-level filesystem might want
 	 * to use its own hash
 	 */
-	lower_dentry = lookup_one_len_unlocked(dname.name, lower_dir_dentry,
-					       dname.len);
+	lower_dentry = d_hash_and_lookup(lower_dir_dentry, &dname);
 	if (IS_ERR(lower_dentry))
 		return lower_dentry;
 
-	if (d_really_is_negative(lower_dentry)){
+	if (!lower_dentry) {
+		/* We called vfs_path_lookup earlier, and did not get a negative
+		 * dentry then. Don't confuse the lower filesystem by forcing
+		 * one on it now...
+		 */
 		struct inode *lower_dir = d_inode(lower_dir_dentry);
 
 		if (IS_ENCRYPTED(lower_dir) &&
