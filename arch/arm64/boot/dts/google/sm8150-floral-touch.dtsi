@@ -57,13 +57,21 @@
 		st,regulator_dvdd = "vdd";
 		st,regulator_avdd = "avdd";
 
-		st,firmware_names = "ftm5_fw_pid00c2.ftb",
-				    "ftm5_fw_pid00f2.ftb";
-		st,limits_names = "stm_fts_production_limits_pid00c2.csv",
-				  "stm_fts_production_limits_pid00f2.csv";
 		st,panel_map = <&dsi_s6e3hc2_dsc_wqhd_cmd 0>,
 			       <&dsi_nt37280_dsc_fhd_cmd 1>;
-		st,sensor_inverted = <0>, <1>;
+
+		// Override table format:
+		// panel number, extinfo index, mask, value, firmware index
+		st,extinfo_override_table = <1  1 0xF0 0x00 2>,
+					    <1  1 0xF0 0x10 2>;
+
+		st,firmware_names = "ftm5_fw_c2.ftb",
+				    "ftm5_fw_f2.ftb",
+				    "ftm5_fw_f2_p2.ftb";
+		st,limits_names = "stm_fts_production_limits_c2.csv",
+				  "stm_fts_production_limits_f2.csv",
+				  "stm_fts_production_limits_f2_p2.csv";
+		st,sensor_inverted = <0>, <1>, <1>;
 	};
 };
 
