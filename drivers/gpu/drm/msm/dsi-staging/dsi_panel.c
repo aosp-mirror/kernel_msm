@@ -3311,6 +3311,8 @@ struct {
 	{ "no_lp",		DSI_CMD_SET_NOLP },
 	{ "vr",			DSI_CMD_SET_VR },
 	{ "novr",		DSI_CMD_SET_NOVR },
+	{ "switch",		DSI_CMD_SET_TIMING_SWITCH },
+	{ "post_switch",	DSI_CMD_SET_POST_TIMING_SWITCH },
 };
 
 static inline ssize_t parse_cmdset(struct dsi_panel_cmd_set *set, char *buf,
