@@ -95,7 +95,7 @@ static int dma_gather_debug_data(void *destination_buffer,
 				 uint32_t buffer_size);
 static void clear_debug_data(void);
 static void move_debug_data_to_tail(void);
-static void enqueue_debug_data(void);
+static void enqueue_debug_data(bool el2);
 static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data);
 
 struct {
@@ -368,7 +368,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 #if ENABLE_AIRBRUSH_DEBUG
 		save_debug_start = jiffies;
-		enqueue_debug_data();
+		enqueue_debug_data(false);
 		save_debug_end = jiffies;
 #endif
 
@@ -439,7 +439,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			break;
 		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
 			clear_debug_data();
-			enqueue_debug_data();
+			enqueue_debug_data(false);
 			err = dequeue_debug_data(&debug_step_data);
 			break;
 		default:
@@ -479,7 +479,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_init_data init_step_data = { 0 };
 	struct faceauth_debug_data debug_step_data;
-	unsigned long stop, ioctl_start;
+	unsigned long stop, ioctl_start, save_debug_jiffies;
+	unsigned long save_debug_start = 0;
 	bool send_images_data;
 	struct faceauth_data *data = file->private_data;
 
@@ -567,6 +568,10 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 						   1;
 		}
 
+		save_debug_start = jiffies;
+		enqueue_debug_data(true);
+		save_debug_jiffies = jiffies - save_debug_start;
+
 		if (copy_to_user((void __user *)arg, &start_step_data,
 				 sizeof(start_step_data))) {
 			err = -EFAULT;
@@ -589,14 +594,54 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		}
 		err = el2_faceauth_gather_debug_log(&debug_step_data);
 		break;
+
+	case FACEAUTH_DEV_IOC_DEBUG_DATA:
+		pr_info("el2: faceauth debug data IOCTL\n");
+
+		if (copy_from_user(&debug_step_data, (const void __user *)arg,
+				   sizeof(debug_step_data))) {
+			err = -EFAULT;
+			goto exit;
+		}
+
+		if (debug_step_data.debug_buffer_size < DEBUG_DATA_BIN_SIZE) {
+			err = -EINVAL;
+			goto exit;
+		}
+
+		switch (debug_step_data.flags) {
+		case FACEAUTH_GET_DEBUG_DATA_FROM_FIFO:
+			err = dequeue_debug_data(&debug_step_data);
+			break;
+		case FACEAUTH_GET_DEBUG_DATA_MOST_RECENT:
+			move_debug_data_to_tail();
+			err = dequeue_debug_data(&debug_step_data);
+			break;
+		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
+			clear_debug_data();
+			enqueue_debug_data(true);
+			err = dequeue_debug_data(&debug_step_data);
+			break;
+		default:
+			err = -EINVAL;
+			break;
+		}
+		break;
 	default:
 		err = -EOPNOTSUPP;
 		goto exit;
 	}
 
 exit:
-	pr_info("Faceauth action took %d us\n",
-		jiffies_to_usecs(jiffies - ioctl_start));
+	if (save_debug_jiffies > 0) {
+		pr_info("Faceauth action took %dus, debug data save took %dus\n",
+			jiffies_to_usecs(jiffies - ioctl_start -
+					 save_debug_jiffies),
+			jiffies_to_usecs(save_debug_jiffies));
+	} else {
+		pr_info("Faceauth action took %dus\n",
+			jiffies_to_usecs(jiffies - ioctl_start));
+	}
 	return err;
 }
 
@@ -769,15 +814,20 @@ static int dma_gather_debug_log(struct faceauth_debug_data *data)
 	return err;
 }
 
-static void enqueue_debug_data(void)
+static void enqueue_debug_data(bool el2)
 {
 	void *bin_addr;
 	int err;
 
 	bin_addr = debug_data_queue.data_buffer +
 		   (DEBUG_DATA_BIN_SIZE * debug_data_queue.head_idx);
-	err = dma_gather_debug_data(bin_addr, DEBUG_DATA_BIN_SIZE);
+	if (el2)
+		err = el2_gather_debug_data(bin_addr, DEBUG_DATA_BIN_SIZE);
+	else
+		err = dma_gather_debug_data(bin_addr, DEBUG_DATA_BIN_SIZE);
+
 	if (err) {
+		pr_err("Debug data gathering failed: %d\n", err);
 		return;
 	}
 
@@ -841,8 +891,7 @@ static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data)
 	return 0;
 }
 
-static int dma_gather_debug_data(void *destination_buffer,
-				 uint32_t buffer_size)
+static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 {
 	int err = 0;
 	uint32_t internal_state_struct_size;
@@ -877,8 +926,7 @@ static int dma_gather_debug_data(void *destination_buffer,
 
 	if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
 	    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
-		err = dma_xfer_vmalloc((uint8_t *)debug_entry +
-					       current_offset,
+		err = dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
 				       (INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
 				       DOT_IMAGE_LEFT_ADDR, DMA_FROM_DEVICE);
 		debug_entry->left_dot.offset_to_image = current_offset;
@@ -890,8 +938,7 @@ static int dma_gather_debug_data(void *destination_buffer,
 			return err;
 		}
 
-		err = dma_xfer_vmalloc((uint8_t *)debug_entry +
-					       current_offset,
+		err = dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
 				       INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT,
 				       DOT_IMAGE_RIGHT_ADDR, DMA_FROM_DEVICE);
 		debug_entry->right_dot.offset_to_image = current_offset;
@@ -903,8 +950,7 @@ static int dma_gather_debug_data(void *destination_buffer,
 			return err;
 		}
 
-		err = dma_xfer_vmalloc((uint8_t *)debug_entry +
-					       current_offset,
+		err = dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
 				       INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT,
 				       FLOOD_IMAGE_ADDR, DMA_FROM_DEVICE);
 		debug_entry->flood.offset_to_image = current_offset;

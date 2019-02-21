@@ -26,5 +26,6 @@ int el2_faceauth_process(struct faceauth_start_data *data);
 int el2_faceauth_get_process_result(struct faceauth_start_data *data);
 int el2_faceauth_cleanup(struct device *dev);
 int el2_faceauth_gather_debug_log(struct faceauth_debug_data *data);
+int el2_gather_debug_data(void *destination_buffer, uint32_t buffer_size);
 
 #endif /* _FACEAUTH_HYPX_H */

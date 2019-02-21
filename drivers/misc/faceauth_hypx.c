@@ -17,10 +17,15 @@
 #define HYPX_SMC_FUNC_CHECK_PROCESS_RESULT HYPX_SMC_ID(0x4)
 #define HYPX_SMC_FUNC_CLEANUP HYPX_SMC_ID(0x5)
 #define HYPX_SMC_FUNC_GET_DEBUG_RESULT HYPX_SMC_ID(0x6)
+#define HYPX_SMC_FUNC_GET_DEBUG_DATA HYPX_SMC_ID(0x7)
+#define HYPX_SMC_FUNC_GET_DEBUG_BUFFER HYPX_SMC_ID(0x8)
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 #define PIL_DMA_TIMEOUT 3000
+#define INPUT_IMAGE_WIDTH 480
+#define INPUT_IMAGE_HEIGHT 640
+#define DEBUG_DATA_BIN_SIZE (2 * 1024 * 1024)
 
 struct hypx_mem_segment {
 	/* address of the segment begin */
@@ -70,6 +75,22 @@ struct hypx_fa_process_results {
 	uint32_t debug_buffer_size;
 } __packed;
 
+struct hypx_fa_debug_data {
+	uint64_t image_left;
+	uint64_t image_right;
+	uint64_t image_flood;
+	uint64_t ab_state; /* PHY addr */
+	uint64_t output_buffers;
+	uint32_t offset_int_state;
+	uint32_t offset_ab_state;
+	uint32_t image_left_size;
+	uint32_t image_right_size;
+	uint32_t image_flood_size;
+	uint32_t internal_state_struct_size;
+	uint32_t buffer_list_size;
+	uint32_t buffer_base;
+} __packed;
+
 static void hypx_free_blob(phys_addr_t blob_phy)
 {
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
@@ -102,7 +123,7 @@ static void hypx_free_blob(phys_addr_t blob_phy)
 }
 
 static int hypx_copy_from_blob(void __user *buffer, phys_addr_t blob_phy,
-				size_t size)
+			       size_t size, bool copy_user)
 {
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
@@ -126,17 +147,23 @@ static int hypx_copy_from_blob(void __user *buffer, phys_addr_t blob_phy,
 		virt_addr = phys_to_virt(phy_addr);
 
 		lret = hyp_assign_phys(phy_addr,
-				      blob->segments[i].pages * PAGE_SIZE,
-				      source_vm, ARRAY_SIZE(source_vm), dest_vm,
-				      dest_perm, ARRAY_SIZE(dest_vm));
+				       blob->segments[i].pages * PAGE_SIZE,
+				       source_vm, ARRAY_SIZE(source_vm),
+				       dest_vm, dest_perm, ARRAY_SIZE(dest_vm));
 		if (lret) {
 			ret = lret;
 			pr_err("hyp_assign_phys returned an error %d\n", ret);
 		}
-
-		if (copy_to_user(buffer_iter, virt_addr, tocopy)) {
-			return -EFAULT;
+		if (copy_user) {
+			ret = copy_to_user(buffer_iter, virt_addr, tocopy);
+			if (ret) {
+				pr_err("copy from blob cp failed: %d", ret);
+				return -EFAULT;
+			}
+		} else {
+			memcpy(buffer_iter, virt_addr, tocopy);
 		}
+
 		buffer_iter += tocopy;
 		buffer_iter_remaining -= tocopy;
 	}
@@ -214,8 +241,7 @@ static phys_addr_t hypx_create_blob(void __user *buffer, size_t size)
 	}
 
 	if (buffer_iter_remaining) {
-		pr_err("Memory allocator is fragmented so we were not able to "
-			     "fit %d into segments header\n",
+		pr_err("Memory allocator is fragmented so we were not able to fit %d into segments header\n",
 		       size);
 		goto exit;
 	}
@@ -442,7 +468,7 @@ int el2_faceauth_gather_debug_log(struct faceauth_debug_data *data)
 		goto exit1;
 	}
 	ret = hypx_copy_from_blob(data->debug_buffer, hypx_data->debug_buffer,
-			    data->debug_buffer_size);
+				  data->debug_buffer_size, true);
 	if (ret) {
 		pr_err("Failed hypx_copy_from_blob %d\n", ret);
 		goto exit1;
@@ -453,4 +479,171 @@ exit1:
 exit2:
 	free_page((unsigned long)hypx_data);
 	return ret;
+}
+
+int el2_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
+{
+	int err = 0;
+
+	struct faceauth_debug_entry *debug_entry = destination_buffer;
+	uint32_t current_offset;
+	struct faceauth_buffer_list *output_buffers;
+	int buffer_idx;
+	int buffer_list_size;
+	struct hypx_fa_debug_data *hypx_data;
+	struct scm_desc desc = { 0 };
+
+	hypx_data = (struct hypx_fa_debug_data *)get_zeroed_page(0);
+	hypx_data->offset_int_state =
+		offsetof(struct faceauth_airbrush_state, internal_state_size);
+	hypx_data->offset_ab_state =
+		offsetof(struct faceauth_debug_entry, ab_state);
+
+	/*
+	 * We are going to copy things into these blobs,
+	 * so we don't care their content. Re-using debug
+	 * entry to reduce alloc mem. This works base on
+	 * the fact that debug_entry is larger than image
+	 * size.
+	 */
+	hypx_data->image_left_size = INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+	hypx_data->image_left =
+		hypx_create_blob(debug_entry, hypx_data->image_left_size);
+	if (!hypx_data->image_left)
+		goto exit1;
+
+	hypx_data->image_right_size = INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+	hypx_data->image_right =
+		hypx_create_blob(debug_entry, hypx_data->image_right_size);
+	if (!hypx_data->image_right)
+		goto exit2;
+
+	hypx_data->image_flood_size = INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+	hypx_data->image_flood =
+		hypx_create_blob(debug_entry, hypx_data->image_flood_size);
+	if (!hypx_data->image_flood)
+		goto exit3;
+	/*
+	 * NOT sure the exact size, using a more than necessary size
+	 */
+	hypx_data->ab_state =
+		hypx_create_blob(debug_entry, hypx_data->image_flood_size);
+	if (!hypx_data->ab_state)
+		goto exit;
+
+	desc.arginfo = SCM_ARGS(1);
+	desc.args[0] = virt_to_phys(hypx_data);
+
+	flush_cache_all();
+	err = scm_call2(HYPX_SMC_FUNC_GET_DEBUG_DATA, &desc);
+	if (err) {
+		pr_err("Failed scm_call %d\n", err);
+		goto exit;
+	}
+
+	err = hypx_copy_from_blob(&(debug_entry->ab_state), hypx_data->ab_state,
+				  hypx_data->internal_state_struct_size, false);
+	if (err) {
+		pr_err("Failed hypx_copy_from_blob internal_state %d\n", err);
+		goto exit;
+	}
+
+	current_offset = offsetof(struct faceauth_debug_entry, ab_state) +
+			 hypx_data->internal_state_struct_size;
+
+	if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
+	    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
+		err = hypx_copy_from_blob((uint8_t *)debug_entry +
+						  current_offset,
+					  hypx_data->image_left,
+					  hypx_data->image_left_size, false);
+
+		debug_entry->left_dot.offset_to_image = current_offset;
+		debug_entry->left_dot.image_size =
+			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+
+		if (err) {
+			pr_err("Error saving left dot image\n");
+			goto exit;
+		}
+
+		err = hypx_copy_from_blob((uint8_t *)debug_entry +
+						  current_offset,
+					  hypx_data->image_right,
+					  hypx_data->image_right_size, false);
+
+		debug_entry->right_dot.offset_to_image = current_offset;
+		debug_entry->right_dot.image_size =
+			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		if (err) {
+			pr_err("Error saving right dot image\n");
+			goto exit;
+		}
+		err = hypx_copy_from_blob((uint8_t *)debug_entry +
+						  current_offset,
+					  hypx_data->image_flood,
+					  hypx_data->image_flood_size, false);
+
+		debug_entry->flood.offset_to_image = current_offset;
+		debug_entry->flood.image_size =
+			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
+		if (err) {
+			pr_err("Error saving flood image\n");
+			goto exit;
+		}
+	} else {
+		debug_entry->left_dot.offset_to_image = 0;
+		debug_entry->left_dot.image_size = 0;
+		debug_entry->right_dot.offset_to_image = 0;
+		debug_entry->right_dot.image_size = 0;
+		debug_entry->flood.offset_to_image = 0;
+		debug_entry->flood.image_size = 0;
+	}
+
+	output_buffers = &(debug_entry->ab_state.output_buffers);
+	buffer_idx = output_buffers->buffer_count - 1;
+	buffer_list_size =
+		output_buffers->buffers[buffer_idx].offset_to_buffer +
+		output_buffers->buffers[buffer_idx].size;
+
+	if (buffer_list_size + current_offset > DEBUG_DATA_BIN_SIZE) {
+		err = -EMSGSIZE;
+		pr_err("Wrong output buffer size\n");
+		goto exit;
+	}
+
+	if (output_buffers->buffer_base != 0 && buffer_list_size > 0) {
+		hypx_data->output_buffers =
+			hypx_create_blob(debug_entry, buffer_list_size);
+		hypx_data->buffer_list_size = buffer_list_size;
+		hypx_data->buffer_base = output_buffers->buffer_base;
+
+		flush_cache_all();
+		err = scm_call2(HYPX_SMC_FUNC_GET_DEBUG_BUFFER, &desc);
+		if (err)
+			pr_err("Failed scm_call %d\n", err);
+
+		err = hypx_copy_from_blob(
+			(uint8_t *)debug_entry + current_offset,
+			hypx_data->output_buffers, buffer_list_size, false);
+
+		output_buffers->buffer_base = current_offset;
+		current_offset += buffer_list_size;
+		hypx_free_blob(hypx_data->output_buffers);
+	}
+
+exit:
+	hypx_free_blob(hypx_data->ab_state);
+exit3:
+	hypx_free_blob(hypx_data->image_flood);
+exit2:
+	hypx_free_blob(hypx_data->image_right);
+exit1:
+	hypx_free_blob(hypx_data->image_left);
+
+	free_page((unsigned long)hypx_data);
+	return err;
 }
