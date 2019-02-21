@@ -1278,13 +1278,12 @@ void *msm_vidc_open(int core_id, int session_type)
 
 	return inst;
 fail_init:
+	mutex_lock(&core->lock);
 	v4l2_fh_del(&inst->event_handler);
 	v4l2_fh_exit(&inst->event_handler);
-	vb2_queue_release(&inst->bufq[OUTPUT_PORT].vb2_bufq);
-
-	mutex_lock(&core->lock);
 	list_del(&inst->list);
 	mutex_unlock(&core->lock);
+	vb2_queue_release(&inst->bufq[OUTPUT_PORT].vb2_bufq);
 
 fail_bufq_output:
 	vb2_queue_release(&inst->bufq[CAPTURE_PORT].vb2_bufq);
