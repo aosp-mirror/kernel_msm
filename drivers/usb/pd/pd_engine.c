@@ -1733,13 +1733,6 @@ static void pd_phy_message_rx(struct usbpd *pd, enum pd_sop_type sop,
 		return;
 	}
 
-	if (sop != SOP_MSG) {
-		logbuffer_log(pd->log,
-			      "invalid msg type (%d) received; only SOP supported\n",
-			      sop);
-		return;
-	}
-
 	msg.header = cpu_to_le16(*((u16 *)buf));
 	buf += sizeof(u16);
 	len -= sizeof(u16);
@@ -1754,7 +1747,7 @@ static void pd_phy_message_rx(struct usbpd *pd, enum pd_sop_type sop,
 	}
 	memcpy(msg.payload, buf, len);
 	logbuffer_log(pd->log, "pd rx header [%#x]", msg.header);
-	tcpm_pd_receive(pd->tcpm_port, &msg);
+	tcpm_pd_receive(pd->tcpm_port, &msg, (enum usb_pd_sop_type) sop);
 }
 
 static void set_in_hard_reset_locked(struct tcpc_dev *dev, bool status)
@@ -1925,7 +1918,8 @@ static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
 	pdphy_params->data_role = DR_UFP;
 	pdphy_params->power_role = PR_SINK;
 	pdphy_params->frame_filter_val = FRAME_FILTER_EN_SOP |
-					 FRAME_FILTER_EN_HARD_RESET;
+					 FRAME_FILTER_EN_HARD_RESET |
+					 FRAME_FILTER_EN_SOPI;
 }
 
 static int update_ext_vbus(struct notifier_block *self, unsigned long action,
