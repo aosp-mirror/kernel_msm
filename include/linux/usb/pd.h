@@ -107,6 +107,16 @@ enum pd_ext_msg_type {
 #define PD_HEADER_LE(type, pwr, data, rev, id, cnt) \
 	cpu_to_le16(PD_HEADER((type), (pwr), (data), (rev), (id), (cnt), (0)))
 
+#define PD_HEADER_SOP_PRIME(type, id, cnt, rev)				\
+	  ((((type) & PD_HEADER_TYPE_MASK) << PD_HEADER_TYPE_SHIFT) |	\
+	  (rev << PD_HEADER_REV_SHIFT) |				\
+	  (((id) & PD_HEADER_ID_MASK) << PD_HEADER_ID_SHIFT) |		\
+	  (((cnt) & PD_HEADER_CNT_MASK) << PD_HEADER_CNT_SHIFT))
+
+#define PD_HEADER_SOP_PRIME_LE(type, id, cnt, rev) \
+	cpu_to_le16(PD_HEADER_SOP_PRIME((type), (id), (cnt), (rev)))
+
+
 static inline unsigned int pd_header_cnt(u16 header)
 {
 	return (header >> PD_HEADER_CNT_SHIFT) & PD_HEADER_CNT_MASK;

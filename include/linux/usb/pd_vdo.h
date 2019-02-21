@@ -98,7 +98,7 @@
  * [2] :: Cert Stat VDO
  * [3] :: (Product | Cable) VDO
  * [4] :: AMA VDO
- *
+ * [4] :: VPD VDO
  */
 #define VDO_INDEX_HDR		0
 #define VDO_INDEX_IDH		1
@@ -106,6 +106,7 @@
 #define VDO_INDEX_CABLE		3
 #define VDO_INDEX_PRODUCT	3
 #define VDO_INDEX_AMA		4
+#define VDO_INDEX_VPD		4
 
 /*
  * SVDM Identity Header
@@ -123,6 +124,7 @@
 #define IDH_PTYPE_PCABLE	3
 #define IDH_PTYPE_ACABLE	4
 #define IDH_PTYPE_AMA		5
+#define IDH_PTYPE_VPD		6
 
 #define VDO_IDH(usbh, usbd, ptype, is_modal, vid)		\
 	((usbh) << 31 | (usbd) << 30 | ((ptype) & 0x7) << 27	\

@@ -59,6 +59,12 @@ enum tcpm_transmit_type {
 	TCPC_TX_BIST_MODE_2 = 7
 };
 
+enum usb_pd_sop_type {
+	SOP = 0,
+	SOP_PRIME = 1,
+	SOP_PRIME_PRIME = 2,
+};
+
 /**
  * struct tcpc_config - Port configuration
  * @src_pdo:	PDO parameters sent to port partner as response to
@@ -184,7 +190,8 @@ int tcpm_update_sink_capabilities(struct tcpm_port *port, const u32 *pdo,
 void tcpm_vbus_change(struct tcpm_port *port);
 void tcpm_cc_change(struct tcpm_port *port);
 void tcpm_pd_receive(struct tcpm_port *port,
-		     const struct pd_message *msg);
+		     const struct pd_message *msg,
+		     enum usb_pd_sop_type packet);
 void tcpm_pd_transmit_complete(struct tcpm_port *port,
 			       enum tcpm_transmit_status status);
 void tcpm_pd_hard_reset(struct tcpm_port *port);

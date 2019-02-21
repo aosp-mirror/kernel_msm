@@ -40,6 +40,7 @@
 	S(SRC_NEGOTIATE_CAPABILITIES),		\
 	S(SRC_TRANSITION_SUPPLY),		\
 	S(SRC_READY),				\
+	S(SRC_VPD_READY),			\
 	S(SRC_WAIT_NEW_CAPABILITIES),		\
 						\
 	S(SNK_UNATTACHED),			\
@@ -260,6 +261,8 @@ struct tcpm_port {
 	struct typec_partner_desc partner_desc;
 	struct typec_partner *partner;
 
+	enum tcpm_transmit_type vdo_receiver;
+
 	enum typec_cc_status cc_req;
 
 	enum typec_cc_status cc1;
@@ -376,6 +379,7 @@ struct tcpm_port {
 	enum tcpm_ams ams;
 	bool in_ams;
 
+	bool vpd_connected;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dentry;
 	struct mutex logbuffer_lock;	/* log buffer access lock */
@@ -389,6 +393,7 @@ struct pd_rx_event {
 	struct work_struct work;
 	struct tcpm_port *port;
 	struct pd_message msg;
+	enum usb_pd_sop_type packet;
 };
 
 #define tcpm_cc_is_sink(cc) \
@@ -1198,10 +1203,12 @@ static int tcpm_ams_start(struct tcpm_port *port, enum tcpm_ams ams)
  * VDM/VDO handling functions
  */
 static void tcpm_queue_vdm(struct tcpm_port *port, const u32 header,
-			   const u32 *data, int cnt)
+			   const u32 *data, int cnt,
+			   enum tcpm_transmit_type receiver)
 {
 	port->vdo_count = cnt + 1;
 	port->vdo_data[0] = header;
+	port->vdo_receiver = receiver;
 	memcpy(&port->vdo_data[1], data, sizeof(u32) * cnt);
 	/* Set ready, vdm state machine will actually send */
 	port->vdm_retries = 0;
@@ -1219,6 +1226,10 @@ static void svdm_consume_identity(struct tcpm_port *port, const __le32 *payload,
 	port->partner_ident.id_header = vdo;
 	port->partner_ident.cert_stat = le32_to_cpu(payload[VDO_INDEX_CSTAT]);
 	port->partner_ident.product = product;
+
+	if (PD_IDH_PTYPE(vdo) == IDH_PTYPE_VPD)
+		port->partner_ident.product_type =
+			le32_to_cpu(payload[VDO_INDEX_VPD]);
 
 	typec_partner_set_identity(port->partner);
 
@@ -1384,8 +1395,17 @@ static int tcpm_pd_svdm(struct tcpm_port *port, const __le32 *payload, int cnt,
 		case CMD_DISCOVER_IDENT:
 			/* 6.4.4.3.1 */
 			svdm_consume_identity(port, payload, cnt);
-			response[0] = VDO(USB_SID_PD, 1, CMD_DISCOVER_SVID);
-			rlen = 1;
+			if (PD_IDH_PTYPE(port->partner_ident.id_header)
+				   == IDH_PTYPE_VPD) {
+				tcpm_set_state(port, SRC_VPD_READY, 0);
+				break;
+			}
+
+			if (port->vdo_receiver == TCPC_TX_SOP) {
+				response[0] = VDO(USB_SID_PD, 1,
+						  CMD_DISCOVER_SVID);
+				rlen = 1;
+			}
 			break;
 		case CMD_DISCOVER_SVID:
 			/* 6.4.4.3.2 */
@@ -1478,13 +1498,15 @@ static void tcpm_handle_vdm_request(struct tcpm_port *port,
 		rlen = tcpm_pd_svdm(port, payload, cnt, response);
 
 	if (rlen > 0) {
-		tcpm_queue_vdm(port, response[0], &response[1], rlen - 1);
+		tcpm_queue_vdm(port, response[0], &response[1], rlen - 1,
+			       TCPC_TX_SOP);
 		mod_delayed_work(port->wq, &port->vdm_state_machine, 0);
 	}
 }
 
 static void tcpm_send_vdm(struct tcpm_port *port, u32 vid, int cmd,
-			  const u32 *data, int count)
+			  const u32 *data, int count,
+			  enum tcpm_transmit_type dest)
 {
 	u32 header;
 
@@ -1494,7 +1516,7 @@ static void tcpm_send_vdm(struct tcpm_port *port, u32 vid, int cmd,
 	/* set VDM header with VID & CMD */
 	header = VDO(vid, ((vid & USB_SID_PD) == USB_SID_PD) ?
 			1 : (PD_VDO_CMD(cmd) <= CMD_ATTENTION), cmd);
-	tcpm_queue_vdm(port, header, data, count);
+	tcpm_queue_vdm(port, header, data, count, dest);
 
 	mod_delayed_work(port->wq, &port->vdm_state_machine, 0);
 }
@@ -1540,9 +1562,10 @@ static void vdm_run_state_machine(struct tcpm_port *port)
 
 		/*
 		 * if there's traffic or we're not in PDO ready state don't send
-		 * a VDM.
+		 * a VDM. Only exception being discover_identity.
 		 */
-		if (port->state != SRC_READY && port->state != SNK_READY)
+		if (port->vdo_receiver == TCPC_TX_SOP &&
+		    !(port->state == SRC_READY || port->state == SNK_READY))
 			break;
 
 		if (PD_VDO_CMDT(port->vdo_data[0]) == CMDT_INIT) {
@@ -1610,14 +1633,24 @@ static void vdm_run_state_machine(struct tcpm_port *port)
 	case VDM_STATE_SEND_MESSAGE:
 		/* Prepare and send VDM */
 		memset(&msg, 0, sizeof(msg));
-		msg.header = PD_HEADER_LE(PD_DATA_VENDOR_DEF,
-					  port->pwr_role,
-					  port->data_role,
-					  port->negotiated_rev,
-					  port->message_id, port->vdo_count);
+		if (port->vdo_receiver == TCPC_TX_SOP) {
+			msg.header = PD_HEADER_LE(PD_DATA_VENDOR_DEF,
+					port->pwr_role,
+					port->data_role,
+					port->negotiated_rev,
+					port->message_id,
+					port->vdo_count);
+		} else if (port->vdo_receiver == TCPC_TX_SOP_PRIME) {
+			msg.header = PD_HEADER_SOP_PRIME_LE(
+					PD_DATA_VENDOR_DEF,
+					port->message_id,
+					port->vdo_count,
+					PD_MAX_REV);
+		}
+
 		for (i = 0; i < port->vdo_count; i++)
 			msg.payload[i] = cpu_to_le32(port->vdo_data[i]);
-		res = tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
+		res = tcpm_pd_transmit(port, port->vdo_receiver, &msg);
 		if (res < 0) {
 			port->vdm_state = VDM_STATE_ERR_SEND;
 		} else {
@@ -1786,7 +1819,7 @@ static int tcpm_altmode_enter(struct typec_altmode *altmode)
 	header = VDO(altmode->svid, 1, CMD_ENTER_MODE);
 	header |= VDO_OPOS(altmode->mode);
 
-	tcpm_queue_vdm(port, header, NULL, 0);
+	tcpm_queue_vdm(port, header, NULL, 0, TCPC_TX_SOP);
 	mod_delayed_work(port->wq, &port->vdm_state_machine, 0);
 	mutex_unlock(&port->lock);
 
@@ -1802,7 +1835,7 @@ static int tcpm_altmode_exit(struct typec_altmode *altmode)
 	header = VDO(altmode->svid, 1, CMD_EXIT_MODE);
 	header |= VDO_OPOS(altmode->mode);
 
-	tcpm_queue_vdm(port, header, NULL, 0);
+	tcpm_queue_vdm(port, header, NULL, 0, TCPC_TX_SOP);
 	mod_delayed_work(port->wq, &port->vdm_state_machine, 0);
 	mutex_unlock(&port->lock);
 
@@ -1815,7 +1848,7 @@ static int tcpm_altmode_vdm(struct typec_altmode *altmode,
 	struct tcpm_port *port = typec_altmode_get_drvdata(altmode);
 
 	mutex_lock(&port->lock);
-	tcpm_queue_vdm(port, header, data, count - 1);
+	tcpm_queue_vdm(port, header, data, count - 1, TCPC_TX_SOP);
 	mod_delayed_work(port->wq, &port->vdm_state_machine, 0);
 	mutex_unlock(&port->lock);
 
@@ -2282,8 +2315,8 @@ static void tcpm_pd_rx_handler(struct work_struct *work)
 		 * If both ends believe to be DFP/host, we have a data role
 		 * mismatch.
 		 */
-		if (!!(le16_to_cpu(msg->header) & PD_HEADER_DATA_ROLE) ==
-		    (port->data_role == TYPEC_HOST)) {
+		if (event->packet == SOP && !!(le16_to_cpu(msg->header) &
+		    PD_HEADER_DATA_ROLE) == (port->data_role == TYPEC_HOST)) {
 			tcpm_log(port,
 				 "Data role mismatch, initiating error recovery");
 			tcpm_set_state(port, ERROR_RECOVERY, 0);
@@ -2302,7 +2335,8 @@ done:
 	kfree(event);
 }
 
-void tcpm_pd_receive(struct tcpm_port *port, const struct pd_message *msg)
+void tcpm_pd_receive(struct tcpm_port *port, const struct pd_message *msg,
+		     enum usb_pd_sop_type packet)
 {
 	struct pd_rx_event *event;
 
@@ -2312,6 +2346,7 @@ void tcpm_pd_receive(struct tcpm_port *port, const struct pd_message *msg)
 
 	INIT_WORK(&event->work, tcpm_pd_rx_handler);
 	event->port = port;
+	event->packet = packet;
 	memcpy(&event->msg, msg, sizeof(*msg));
 	queue_work(port->wq, &event->work);
 }
@@ -3041,6 +3076,7 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	port->try_src_count = 0;
 	port->try_snk_count = 0;
 	port->usb_type = POWER_SUPPLY_USB_TYPE_C;
+	port->vpd_connected = false;
 
 	power_supply_changed(port->psy);
 }
@@ -3151,7 +3187,20 @@ static void tcpm_check_send_discover(struct tcpm_port *port)
 {
 	if (port->data_role == TYPEC_HOST && port->send_discover &&
 	    port->pd_capable) {
-		tcpm_send_vdm(port, USB_SID_PD, CMD_DISCOVER_IDENT, NULL, 0);
+		tcpm_send_vdm(port, USB_SID_PD, CMD_DISCOVER_IDENT, NULL, 0,
+			      TCPC_TX_SOP);
+		port->send_discover = false;
+	/*
+	 * From: 4.10.2 VCONN-Powered USB Devices (VPDs)
+	 * A VCONN-powered USB Device shall only respond to USB PD messaging
+	 * on SOP’.
+	 */
+	} else if (!port->pd_capable && port->vconn_role == TYPEC_SOURCE &&
+		   port->data_role == TYPEC_HOST &&
+		   port->pwr_role == TYPEC_SOURCE) {
+		/* PD 3.0 discover identity */
+		tcpm_send_vdm(port, USB_SID_PD, CMD_DISCOVER_IDENT,
+			      NULL, 0, TCPC_TX_SOP_PRIME);
 		port->send_discover = false;
 	}
 }
@@ -3388,6 +3437,10 @@ static void run_state_machine(struct tcpm_port *port)
 		 * port type-c and the spec does not clearly say whether PD is
 		 * possible when type-c is connected to Type-A/B
 		 */
+		break;
+	case SRC_VPD_READY:
+		tcpm_set_vbus(port, false);
+		port->vpd_connected = true;
 		break;
 	case SRC_WAIT_NEW_CAPABILITIES:
 		/* Nothing to do... */
@@ -4083,6 +4136,7 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 	case SRC_ATTACHED:
 	case SRC_SEND_CAPABILITIES:
 	case SRC_READY:
+	case SRC_VPD_READY:
 		if (tcpm_port_is_disconnected(port) ||
 		    !tcpm_port_is_source(port))
 			tcpm_set_state(port, SRC_UNATTACHED, 0);
@@ -4202,7 +4256,6 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 		 * Ignore CC changes here.
 		*/
 		break;
-
 	default:
 		if (tcpm_port_is_disconnected(port))
 			tcpm_set_state(port, unattached_state(port), 0);
@@ -4272,7 +4325,6 @@ static void _tcpm_pd_vbus_on(struct tcpm_port *port)
 		 * Ignore vbus changes here.
 		 */
 		break;
-
 	default:
 		break;
 	}
@@ -4340,7 +4392,6 @@ static void _tcpm_pd_vbus_off(struct tcpm_port *port)
 		 * Ignore vbus changes here.
 		 */
 		break;
-
 	default:
 		if (port->pwr_role == TYPEC_SINK &&
 		    port->attached)
@@ -4448,7 +4499,7 @@ static int tcpm_dr_set(const struct typec_capability *cap,
 	mutex_lock(&port->swap_lock);
 	mutex_lock(&port->lock);
 
-	if (port->port_type != TYPEC_PORT_DRP) {
+	if (port->port_type != TYPEC_PORT_DRP || port->vpd_connected) {
 		ret = -EINVAL;
 		goto port_unlock;
 	}
@@ -4524,7 +4575,7 @@ static int tcpm_pr_set(const struct typec_capability *cap,
 	mutex_lock(&port->swap_lock);
 	mutex_lock(&port->lock);
 
-	if (port->port_type != TYPEC_PORT_DRP) {
+	if (port->port_type != TYPEC_PORT_DRP || port->vpd_connected) {
 		ret = -EINVAL;
 		goto port_unlock;
 	}
@@ -4576,6 +4627,11 @@ static int tcpm_vconn_set(const struct typec_capability *cap,
 
 	mutex_lock(&port->swap_lock);
 	mutex_lock(&port->lock);
+
+	if (port->vpd_connected) {
+		ret = -EINVAL;
+		goto port_unlock;
+	}
 
 	if (port->state != SRC_READY && port->state != SNK_READY) {
 		ret = -EAGAIN;
