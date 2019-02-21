@@ -482,17 +482,16 @@ release_lock:
 	return pos;
 }
 
-static int lp5569_led_brightness(struct lp55xx_led *led)
+static void lp5569_led_brightness_work(struct work_struct *work)
 {
+	struct lp55xx_led *led = container_of(work, struct lp55xx_led,
+					      brightness_work);
 	struct lp55xx_chip *chip = led->chip;
-	int ret;
 
 	mutex_lock(&chip->lock);
-	ret = lp55xx_write(chip, LP5569_REG_LED_PWM_BASE + led->chan_nr,
+	lp55xx_write(chip, LP5569_REG_LED_PWM_BASE + led->chan_nr,
 		     led->brightness);
 	mutex_unlock(&chip->lock);
-
-	return ret;
 }
 
 static LP55XX_DEV_ATTR_WO(firmware_load, lp5569_firmware_load);
@@ -528,7 +527,7 @@ static struct lp55xx_device_config lp5569_cfg = {
 	},
 	.max_channel  	    = LP5569_MAX_LEDS,
 	.post_init_device   = lp5569_post_init_device,
-	.brightness_fn	    = lp5569_led_brightness,
+	.brightness_work_fn = lp5569_led_brightness_work,
 	.set_led_current    = lp5569_set_led_current,
 	.dev_attr_group     = &lp5569_group,
 };
