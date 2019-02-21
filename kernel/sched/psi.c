@@ -356,7 +356,7 @@ static u64 update_averages(struct psi_group *group, u64 now)
 
 	/* avgX= */
 	expires = group->avg_next_update;
-	if (now - expires > psi_period)
+	if (now - expires >= psi_period)
 		missed_periods = div_u64(now - expires, psi_period);
 
 	/*
