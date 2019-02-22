@@ -3071,13 +3071,13 @@ static void msm_otg_set_vbus_state(int online)
 		return;
 
 	if (online) {
-		pr_debug("PMIC: BSV set\n");
+		pr_info("PMIC: BSV set\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV SET",
 				init, motg->inputs);
 		if (test_and_set_bit(B_SESS_VLD, &motg->inputs) && init)
 			return;
 	} else {
-		pr_debug("PMIC: BSV clear\n");
+		pr_info("PMIC: BSV clear\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV CLEAR",
 				init, motg->inputs);
 		motg->is_ext_chg_dcp = false;
