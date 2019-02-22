@@ -251,6 +251,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 			vfree(image_dw_buf);
 			return -EIO;
 		}
+
+		vfree(image_dw_buf);
 	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_ABOOT);
 
