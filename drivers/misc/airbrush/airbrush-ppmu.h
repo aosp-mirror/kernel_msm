@@ -20,22 +20,23 @@ struct airbrush_ppmu_data {
 	unsigned long long clk_freq;
 };
 
-/**
-* struct airbrush_ppmu_state: structure to hold the state of ppmu device
-* @conf_events: number of currently configured events
-* @over_flow: array to hold overflow values
-*/
+/*
+ * struct airbrush_ppmu_state: structure to hold the state of ppmu device
+ * @conf_events: number of currently configured events
+ * @over_flow: array to hold overflow values
+ */
 struct airbrush_ppmu_state {
 	int conf_events;
+	int bmp;
 	int over_flow[MAX_COUNTER];
 };
 
-/**
-* struct airbrush_ppmu: airbrush_ppmu device structure
-* @dev: device linked to this structure
-* @ppmu: structure holding data realated to airbrush_ppmu
-* @state: structure holding the current state of ppmu device
-*/
+/*
+ * struct airbrush_ppmu: airbrush_ppmu device structure
+ * @dev: device linked to this structure
+ * @ppmu: structure holding data realated to airbrush_ppmu
+ * @state: structure holding the current state of ppmu device
+ */
 struct airbrush_ppmu {
 	struct device dev;
 	u32 base;
@@ -95,7 +96,7 @@ enum {
 	PPMU25_PMCNT6           = (0xbc),
 	PPMU25_PMCNT7           = (0xc0),
 	PPMU25_PMCNT7_HIGH      = (0xc4),
-	PPMU25_CONFIG_INFO_SET_1        = (0xdc),  //TODO: to be edited
+	PPMU25_CONFIG_INFO_SET_1        = (0xdc),
 	PPMU25_EVENT_EV0_TYPE           = (0x200),
 	PPMU25_EVENT_EV1_TYPE   = (0x204),
 	PPMU25_EVENT_EV2_TYPE   = (0x208),
@@ -164,7 +165,14 @@ enum {
 #define PPMU_PMNC_COUNTER_RESET_MASK	BIT(1)
 #define PPMU_PMNC_ENABLE_MASK		BIT(0)
 
-#define PPMU25_PMNCT(x)		(PPMU25_PMCNT0 + (0x4 * x))
-#define PPMU25_EVENT_EVx_TYPE(x)		(PPMU25_EVENT_EV0_TYPE + (0x4 * x))
+#define PPMU25_PMNCT(x)			(PPMU25_PMCNT0 + (0x4 * x))
+#define PPMU25_EVENT_EVx_TYPE(x)	(PPMU25_EVENT_EV0_TYPE + (0x4 * x))
+
+#define PPMU_PMCNT(x)			BIT(x)
+#define PPMU_PMCNT_ALL			0xff
+#define PPMU_CNT_CC			BIT(31)
+#define PPMU_CIG_UP_INT			BIT(4)
+#define PPMU_CIG_LW_INT			BIT(0)
+#define PPMU_RESET_VAL			0
 
 #endif /* __AIRBRUSH_PPMU_H__ */
