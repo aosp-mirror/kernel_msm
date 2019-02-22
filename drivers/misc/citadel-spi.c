@@ -428,8 +428,7 @@ static int citadel_probe(struct spi_device *spi)
 	ret = devm_request_irq(&citadel->spi->dev,
 			       gpio_to_irq(citadel->ctdl_ap_irq),
 			       citadel_irq_handler,
-			       IRQF_NO_SUSPEND | IRQF_TRIGGER_RISING |
-			       IRQF_ONESHOT,
+			       IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 			       dev_name(&spi->dev),
 			       citadel);
 	if (ret) {
