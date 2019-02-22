@@ -43,12 +43,12 @@
 #endif
 #include "it7259_ts_i2c.h"
 
-#define ITE_AUTOUPGRADE 0
+#define ITE_AUTOUPGRADE 1
 
 #define ITE_DEBUG_EN 0
 #if ITE_DEBUG_EN
 #define ITE_INFO(fmt, args...) do { \
-	 printk(KERN_ERR "[it7259][Info]"fmt"\n", ##args); \
+	 printk(KERN_INFO "[it7259][Info]"fmt"\n", ##args); \
 }  while (0)
 
 #else
@@ -3273,15 +3273,15 @@ static void it7259_upgrade_work(struct work_struct *work)
 	if(Upgrade_FW_CFG(ts_data)) {
 		printk("IT7259_upgrade_failed\n");
 		mutex_unlock(&ts_data->fw_cfg_mutex);
-		return;
 	} else {
 		printk("IT7259_upgrade_OK\n\n");
 		mutex_unlock(&ts_data->fw_cfg_mutex);
 
 		msleep(DELAY_I2C_TRANSATION);
 		it7259_get_chip_versions(ts_data);
-		return;
 	}
+	ts_data->suspended = false;
+	return;
 }
 
 static irqreturn_t it7259_ts_threaded_handler(int irq, void *devid)
