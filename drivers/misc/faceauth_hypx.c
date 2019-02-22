@@ -74,7 +74,7 @@ static void hypx_free_blob(phys_addr_t blob_phy)
 {
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
-	int dest_perm[] = { PERM_READ | PERM_WRITE };
+	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 	struct hypx_blob *blob = phys_to_virt(blob_phy);
 	int i;
 
@@ -106,7 +106,7 @@ static int hypx_copy_from_blob(void __user *buffer, phys_addr_t blob_phy,
 {
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
-	int dest_perm[] = { PERM_READ | PERM_WRITE };
+	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 	struct hypx_blob *blob = phys_to_virt(blob_phy);
 	void __user *buffer_iter = buffer;
 	uint64_t buffer_iter_remaining = size;
@@ -312,7 +312,7 @@ int el2_faceauth_cleanup(struct device *dev)
 	struct scm_desc desc = { 0 };
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
-	int dest_perm[] = { PERM_READ | PERM_WRITE };
+	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 
 	desc.arginfo = SCM_ARGS(0);
 	ret = scm_call2(HYPX_SMC_FUNC_CLEANUP, &desc);
