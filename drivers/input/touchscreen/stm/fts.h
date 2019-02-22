@@ -287,6 +287,23 @@ typedef bool (*event_dispatch_handler_t)
 	(struct fts_ts_info *info, unsigned char *data);
 
 /**
+  * Driver touch simulation details
+  */
+struct fts_touchsim{
+	/* touch simulation coordinates */
+	int x, y, x_step, y_step;
+
+	/* timer to run the touch simulation code */
+	struct hrtimer hr_timer;
+
+	struct work_struct work;
+	struct workqueue_struct *wq;
+
+	/* True if the touch simulation is currently running */
+	bool is_running;
+};
+
+/**
   * FTS capacitive touch screen device information
   * - dev             Pointer to the structure device \n
   * - client          client structure \n
@@ -385,6 +402,9 @@ struct fts_ts_info {
 	struct mutex diag_cmd_lock;
 	/* Allow one process to open procfs node */
 	bool diag_node_open;
+
+	/* Touch simulation details */
+	struct fts_touchsim touchsim;
 
 	/* Preallocated i/o read buffer */
 	u8 io_read_buf[READ_CHUNK + DUMMY_FIFO];
