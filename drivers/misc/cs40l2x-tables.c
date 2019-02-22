@@ -964,11 +964,11 @@ const unsigned int cs40l2x_pbq_dig_scale[CS40L2X_PBQ_SCALE_MAX + 1] = {
 };
 
 static const char * const cs40l2x_coeff_files_orig[] = {
-	"cs40l20.bin",
+	CS40L2X_WT_FILE_NAME_DEFAULT,
 };
 
 static const char * const cs40l2x_coeff_files_remap[] = {
-	"cs40l20.bin",
+	CS40L2X_WT_FILE_NAME_DEFAULT,
 	"cs40l25a_exc.bin",
 };
 

@@ -60,6 +60,8 @@ struct cs40l2x_private {
 	unsigned int num_waves;
 	unsigned int wt_limit_xm;
 	unsigned int wt_limit_ym;
+	char wt_file[CS40L2X_WT_FILE_NAME_LEN_MAX];
+	char wt_date[CS40L2X_WT_FILE_DATE_LEN_MAX];
 	bool exc_available;
 	struct cs40l2x_dblk_desc pre_dblks[CS40L2X_MAX_A2H_LEVELS];
 	struct cs40l2x_dblk_desc a2h_dblks[CS40L2X_MAX_A2H_LEVELS];
@@ -158,6 +160,9 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x);
 
 static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 			unsigned int fw_id);
+static int cs40l2x_wavetable_swap(struct cs40l2x_private *cs40l2x,
+			const char *wt_file);
+static int cs40l2x_wavetable_sync(struct cs40l2x_private *cs40l2x);
 
 static const struct cs40l2x_fw_desc *cs40l2x_firmware_match(
 			struct cs40l2x_private *cs40l2x, unsigned int fw_id)
@@ -3658,6 +3663,102 @@ err_mutex:
 	return ret;
 }
 
+static ssize_t cs40l2x_wt_file_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (!strncmp(cs40l2x->wt_file,
+			CS40L2X_WT_FILE_NAME_MISSING,
+			CS40L2X_WT_FILE_NAME_LEN_MAX)) {
+		ret = -ENODATA;
+		goto err_mutex;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%s\n", cs40l2x->wt_file);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_wt_file_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	char wt_file[CS40L2X_WT_FILE_NAME_LEN_MAX];
+	unsigned int len = count;
+	int ret;
+
+	if (!len)
+		return -EINVAL;
+
+	if (buf[len - 1] == '\n')
+		len--;
+
+	if (len + 1 > CS40L2X_WT_FILE_NAME_LEN_MAX)
+		return -EINVAL;
+
+	memcpy(wt_file, buf, len);
+	wt_file[len] = '\0';
+
+	if (!strncmp(wt_file,
+			CS40L2X_WT_FILE_NAME_MISSING,
+			CS40L2X_WT_FILE_NAME_LEN_MAX))
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL
+			|| cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = cs40l2x_wavetable_swap(cs40l2x, wt_file);
+	if (ret)
+		goto err_mutex;
+
+	ret = cs40l2x_wavetable_sync(cs40l2x);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_wt_date_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (!strncmp(cs40l2x->wt_date,
+			CS40L2X_WT_FILE_DATE_MISSING,
+			CS40L2X_WT_FILE_DATE_LEN_MAX)) {
+		ret = -ENODATA;
+		goto err_mutex;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%s\n", cs40l2x->wt_date);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
@@ -3756,6 +3857,8 @@ static DEVICE_ATTR(a2h_level, 0660, cs40l2x_a2h_level_show,
 static DEVICE_ATTR(num_a2h_levels, 0660, cs40l2x_num_a2h_levels_show, NULL);
 static DEVICE_ATTR(hw_reset, 0660, cs40l2x_hw_reset_show,
 		cs40l2x_hw_reset_store);
+static DEVICE_ATTR(wt_file, 0660, cs40l2x_wt_file_show, cs40l2x_wt_file_store);
+static DEVICE_ATTR(wt_date, 0660, cs40l2x_wt_date_show, NULL);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -3808,6 +3911,8 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_a2h_level.attr,
 	&dev_attr_num_a2h_levels.attr,
 	&dev_attr_hw_reset.attr,
+	&dev_attr_wt_file.attr,
+	&dev_attr_wt_date.attr,
 	NULL,
 };
 
@@ -5310,20 +5415,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 		return ret;
 	}
 
-	ret = regmap_read(regmap,
-			cs40l2x_dsp_reg(cs40l2x, "NUMBEROFWAVES",
-					CS40L2X_XM_UNPACKED_TYPE,
-					CS40L2X_ALGO_ID_VIBE),
-			&cs40l2x->num_waves);
-	if (ret) {
-		dev_err(dev, "Failed to count wavetable entries\n");
+	ret = cs40l2x_wavetable_sync(cs40l2x);
+	if (ret)
 		return ret;
-	}
-
-	if (cs40l2x->num_waves == 0) {
-		dev_err(dev, "Wavetable is empty\n");
-		return -EINVAL;
-	}
 
 	switch (cs40l2x->fw_desc->id) {
 	case CS40L2X_FW_ID_ORIG:
@@ -5641,6 +5735,8 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 	struct cs40l2x_dblk_desc dblk, *dblk_base;
 	struct cs40l2x_dblk_desc pre_dblks[CS40L2X_MAX_A2H_LEVELS];
 	struct cs40l2x_dblk_desc a2h_dblks[CS40L2X_MAX_A2H_LEVELS];
+	char wt_date[CS40L2X_WT_FILE_DATE_LEN_MAX];
+	bool wt_found = false;
 	unsigned int *dblk_index;
 	unsigned int pre_index = 0;
 	unsigned int a2h_index = 0;
@@ -5649,6 +5745,8 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 	unsigned int algo_id, algo_rev, reg;
 	int ret = -EINVAL;
 	int i;
+
+	*wt_date = '\0';
 
 	if (memcmp(fw->data, "WMDR", 4)) {
 		dev_err(dev, "Failed to recognize coefficient file\n");
@@ -5690,7 +5788,8 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 				+ (fw->data[pos + 3] << 24);
 		pos += CS40L2X_WT_DBLK_LENGTH_SIZE;
 
-		if (block_type != CS40L2X_WMDR_NAME_TYPE) {
+		if (block_type != CS40L2X_WMDR_NAME_TYPE
+				&& block_type != CS40L2X_WMDR_INFO_TYPE) {
 			for (i = 0; i < cs40l2x->num_algos; i++)
 				if (algo_id == cs40l2x->algo_info[i].id)
 					break;
@@ -5723,6 +5822,10 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 				break;
 			case CS40L2X_ALGO_ID_EXC:
 				cs40l2x->exc_available = true;
+				dblk_index = NULL;
+				break;
+			case CS40L2X_ALGO_ID_VIBE:
+				wt_found = true;
 				/* intentionally fall through */
 			default:
 				dblk_index = NULL;
@@ -5730,6 +5833,20 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 		}
 
 		switch (block_type) {
+		case CS40L2X_WMDR_INFO_TYPE:
+			reg = 0;
+			dblk_index = NULL;
+
+			if (block_length < CS40L2X_WT_FILE_DATE_LEN_MAX)
+				break;
+
+			if (memcmp(&fw->data[pos], "Date: ", 6))
+				break;
+
+			memcpy(wt_date, &fw->data[pos + 6],
+					CS40L2X_WT_FILE_DATE_LEN_MAX - 6);
+			wt_date[CS40L2X_WT_FILE_DATE_LEN_MAX - 6] = '\0';
+			break;
 		case CS40L2X_WMDR_NAME_TYPE:
 			reg = 0;
 			dblk_index = NULL;
@@ -5830,6 +5947,23 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 	} else {
 		for (i = 0; i < pre_index; i++)
 			devm_kfree(dev, pre_dblks[i].data);
+	}
+
+	if (wt_found) {
+		if (!strncmp(cs40l2x->wt_file,
+				CS40L2X_WT_FILE_NAME_MISSING,
+				CS40L2X_WT_FILE_NAME_LEN_MAX))
+			strncpy(cs40l2x->wt_file,
+					CS40L2X_WT_FILE_NAME_DEFAULT,
+					CS40L2X_WT_FILE_NAME_LEN_MAX);
+
+		if (*wt_date != '\0')
+			strncpy(cs40l2x->wt_date, wt_date,
+					CS40L2X_WT_FILE_DATE_LEN_MAX);
+		else
+			strncpy(cs40l2x->wt_date,
+					CS40L2X_WT_FILE_DATE_MISSING,
+					CS40L2X_WT_FILE_DATE_LEN_MAX);
 	}
 
 err_rls_fw:
@@ -6177,10 +6311,22 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 		return ret;
 
 	for (i = 0; i < cs40l2x->fw_desc->num_coeff_files; i++) {
-		ret = request_firmware(&fw, cs40l2x->fw_desc->coeff_files[i],
-				dev);
-		if (ret)
-			continue;
+		/* load alternate wavetable if one has been specified */
+		if (!strncmp(cs40l2x->fw_desc->coeff_files[i],
+				CS40L2X_WT_FILE_NAME_DEFAULT,
+				CS40L2X_WT_FILE_NAME_LEN_MAX)
+			&& strncmp(cs40l2x->wt_file,
+				CS40L2X_WT_FILE_NAME_MISSING,
+				CS40L2X_WT_FILE_NAME_LEN_MAX)) {
+			ret = request_firmware(&fw, cs40l2x->wt_file, dev);
+			if (ret)
+				return ret;
+		} else {
+			ret = request_firmware(&fw,
+					cs40l2x->fw_desc->coeff_files[i], dev);
+			if (ret)
+				continue;
+		}
 
 		ret = cs40l2x_coeff_file_parse(cs40l2x, fw);
 		if (ret)
@@ -6196,6 +6342,131 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 		return ret;
 
 	return cs40l2x_dsp_post_config(cs40l2x);
+}
+
+static int cs40l2x_wavetable_swap(struct cs40l2x_private *cs40l2x,
+			const char *wt_file)
+{
+	const struct firmware *fw;
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	int ret1, ret2;
+
+	ret1 = cs40l2x_hiber_cmd_send(cs40l2x, CS40L2X_POWERCONTROL_FRC_STDBY);
+	if (ret1) {
+		dev_err(dev, "Failed to force standby\n");
+		return ret1;
+	}
+
+	ret1 = request_firmware(&fw, wt_file, dev);
+	if (ret1) {
+		dev_err(dev, "Failed to request wavetable file\n");
+		goto err_wakeup;
+	}
+
+	ret1 = cs40l2x_coeff_file_parse(cs40l2x, fw);
+	if (ret1)
+		return ret1;
+
+	strncpy(cs40l2x->wt_file, wt_file, CS40L2X_WT_FILE_NAME_LEN_MAX);
+
+	ret1 = regmap_write(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "NUMBEROFWAVES",
+					CS40L2X_XM_UNPACKED_TYPE,
+					CS40L2X_ALGO_ID_VIBE),
+			0);
+	if (ret1) {
+		dev_err(dev, "Failed to reset wavetable\n");
+		return ret1;
+	}
+
+err_wakeup:
+	ret2 = cs40l2x_hiber_cmd_send(cs40l2x, CS40L2X_POWERCONTROL_WAKEUP);
+	if (ret2) {
+		dev_err(dev, "Failed to wake device\n");
+		return ret2;
+	}
+
+	ret2 = regmap_write(regmap, CS40L2X_MBOX_TRIGGERINDEX,
+			CS40L2X_INDEX_CONT_MIN);
+	if (ret2) {
+		dev_err(dev, "Failed to issue dummy trigger\n");
+		return ret2;
+	}
+
+	return ret1;
+}
+
+static int cs40l2x_wavetable_sync(struct cs40l2x_private *cs40l2x)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	unsigned int cp_trigger_index = cs40l2x->cp_trigger_index;
+	unsigned int tag, val;
+	int ret, i;
+
+	ret = regmap_read(regmap,
+			cs40l2x_dsp_reg(cs40l2x, "NUMBEROFWAVES",
+					CS40L2X_XM_UNPACKED_TYPE,
+					CS40L2X_ALGO_ID_VIBE),
+			&cs40l2x->num_waves);
+	if (ret) {
+		dev_err(dev, "Failed to count wavetable entries\n");
+		return ret;
+	}
+
+	if (!cs40l2x->num_waves) {
+		dev_err(dev, "Wavetable is empty\n");
+		return -EINVAL;
+	}
+
+	dev_info(dev, "Loaded %u waveforms from %s, last modified on %s\n",
+			cs40l2x->num_waves, cs40l2x->wt_file, cs40l2x->wt_date);
+
+	if ((cp_trigger_index & CS40L2X_INDEX_MASK) >= cs40l2x->num_waves
+			&& cp_trigger_index != CS40L2X_INDEX_PEAK
+			&& cp_trigger_index != CS40L2X_INDEX_PBQ)
+		dev_warn(dev, "Invalid cp_trigger_index\n");
+
+	for (i = 0; i < cs40l2x->pbq_depth; i++) {
+		tag = cs40l2x->pbq_pairs[i].tag;
+
+		if (tag >= cs40l2x->num_waves
+				&& tag != CS40L2X_PBQ_TAG_SILENCE
+				&& tag != CS40L2X_PBQ_TAG_START
+				&& tag != CS40L2X_PBQ_TAG_STOP)
+			dev_warn(dev, "Invalid cp_trigger_queue\n");
+
+	}
+
+	for (i = 0; i < CS40L2X_NUM_GPIO; i++) {
+		if (!(cs40l2x->gpio_mask & (1 << i)))
+			continue;
+
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
+						+ (i << 2),
+				&val);
+		if (ret)
+			return ret;
+		if (val >= cs40l2x->num_waves)
+			dev_warn(dev, "Invalid gpio%d_rise_index\n", i + 1);
+
+		ret = regmap_read(regmap,
+				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
+						CS40L2X_XM_UNPACKED_TYPE,
+						cs40l2x->fw_desc->id)
+						+ (i << 2),
+				&val);
+		if (ret)
+			return ret;
+		if (val >= cs40l2x->num_waves)
+			dev_warn(dev, "Invalid gpio%d_fall_index\n", i + 1);
+	}
+
+	return 0;
 }
 
 static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
@@ -7602,6 +7873,13 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	cs40l2x->comp_enable = !pdata->comp_disable;
 	cs40l2x->comp_enable_redc = !pdata->redc_comp_disable;
 	cs40l2x->comp_enable_f0 = true;
+
+	strncpy(cs40l2x->wt_file,
+			CS40L2X_WT_FILE_NAME_MISSING,
+			CS40L2X_WT_FILE_NAME_LEN_MAX);
+	strncpy(cs40l2x->wt_date,
+			CS40L2X_WT_FILE_DATE_MISSING,
+			CS40L2X_WT_FILE_DATE_LEN_MAX);
 
 	switch (pdata->fw_id_remap) {
 	case CS40L2X_FW_ID_ORIG:
