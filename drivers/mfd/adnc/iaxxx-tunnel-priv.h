@@ -104,6 +104,7 @@ struct iaxxx_tunnel_data {
 	wait_queue_head_t producer_wq;
 	struct notifier_block crash_notifier;
 	bool event_registered;
+	unsigned long tunnel_state;
 };
 
 struct iaxxx_tunnel_client {

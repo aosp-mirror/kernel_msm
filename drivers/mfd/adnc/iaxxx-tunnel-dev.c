@@ -62,6 +62,8 @@
 
 #define IAXXX_DEBUG_LAUNCH_DELAY 60000 /* 60 seconds */
 
+#define IAXXX_TFLG_FW_CRASH		0
+
 struct iaxxx_tunnel_ep {
 	struct tunlMsg tnl_ep;
 	struct list_head src_head_list;
@@ -1349,6 +1351,15 @@ static int iaxxx_tunnel_recovery(struct iaxxx_tunnel_data *t_intf_priv)
 
 	tunnel_flags = 0;
 
+	/* Recovery is to be done  only if recovery event is preceded by
+	 * a crash event. This would prevent multiple calls to recovery
+	 */
+
+	if (!test_bit(IAXXX_TFLG_FW_CRASH, &t_intf_priv->tunnel_state)) {
+		pr_err("%s Spurious recovery event, returning\n", __func__);
+		return 0;
+	}
+
 	if (t_intf_priv->event_registered) {
 		err = tunnel_event_subscribe(t_intf_priv,
 				IAXXX_SYSID_TUNNEL_EVENT, 0,
@@ -1359,21 +1370,38 @@ static int iaxxx_tunnel_recovery(struct iaxxx_tunnel_data *t_intf_priv)
 		}
 	}
 
+	if (t_intf_priv->producer_thread != NULL) {
+		kthread_stop(t_intf_priv->producer_thread);
+		pr_err("t_intf_priv->producer_thread is not NULL in %s\n",
+				__func__);
+		t_intf_priv->producer_thread = NULL;
+	}
+
 	t_intf_priv->producer_thread = kthread_run(producer_thread,
 			t_intf_priv, "iaxxx tunnel producer thread");
+
 	if (IS_ERR(t_intf_priv->producer_thread)) {
 		pr_err("Cannot create producer thread\n");
 		err = PTR_ERR(t_intf_priv->producer_thread);
 		return err;
 	}
 
+	if (t_intf_priv->consumer_thread != NULL) {
+		pr_err("t_intf_priv->consumer_thread is not NULL in %s\n",
+				__func__);
+		kthread_stop(t_intf_priv->consumer_thread);
+		t_intf_priv->consumer_thread = NULL;
+	}
+
 	t_intf_priv->consumer_thread = kthread_run(consumer_thread,
 			t_intf_priv, "iaxxx tunnel consumer thread");
+
 	if (IS_ERR(t_intf_priv->consumer_thread)) {
 		pr_err("Cannot create consumer thread\n");
 		err = PTR_ERR(t_intf_priv->consumer_thread);
 		return err;
 	}
+
 	return err;
 }
 
@@ -1386,10 +1414,14 @@ static int iaxxx_notifier_cb(struct notifier_block *nb,
 
 	switch (val) {
 	case IAXXX_EV_RECOVERY:
-		iaxxx_tunnel_recovery(priv);
+		ret = iaxxx_tunnel_recovery(priv);
+		if (!ret)
+			clear_bit(IAXXX_TFLG_FW_CRASH,
+				&priv->tunnel_state);
 		break;
 
 	case IAXXX_EV_CRASH:
+		set_bit(IAXXX_TFLG_FW_CRASH, &priv->tunnel_state);
 		iaxxx_tunnel_stop(priv);
 		break;
 
