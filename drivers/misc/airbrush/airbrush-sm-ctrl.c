@@ -95,7 +95,7 @@ static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
 	}
 
 static struct block_property ipu_property_table[] = {
-	BLK_(0_0, Normal, Ready,      0,  on,  0_75, off, 0, 14, 0,  0, 0),
+	BLK_(0_0, Normal, Ready,      0,  on,  0_75, on,  0, 14, 0,  0, 0),
 	BLK_(0_1, Normal, AonCompute, 0,  on,  0_75, on,  0, 2,  2,  0, 0),
 	BLK_(0_2, Normal, MinCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
 	BLK_(0_3, Normal, LowCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
@@ -110,7 +110,7 @@ static struct block_property ipu_property_table[] = {
 };
 
 static struct block_property tpu_property_table[] = {
-	BLK_(0_0, Normal, Ready,      0,  on,  0_75, off, 0, 0, 0, 16, 0),
+	BLK_(0_0, Normal, Ready,      0,  on,  0_75, on,  0, 0, 0, 16, 0),
 	BLK_(0_1, Normal, AonCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
 	BLK_(0_2, Normal, MinCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
 	BLK_(0_3, Normal, LowCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
@@ -188,30 +188,30 @@ static struct block_property aon_property_table[] = {
 
 static struct chip_to_block_map chip_state_map[] = {
 	/*                     CS   IPU  TPU DRAM  MIF FSYS  AON */
-	CHIP_TO_BLOCK_MAP_INIT(0_0, 0_0, 0_0, 0_0, 0_0, 0_0, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_1, 0_1, 0_1, 0_1, 0_1, 0_1, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_3, 0_3, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_4, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_5, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_5, 0_5, 0_2, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_6, 0_2, 0_5, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_7, 0_5, 0_3, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_8, 0_3, 0_5, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(0_9, 0_5, 0_5, 0_6, 0_6, 0_4, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_0, 0_0, 1_0, 0_0, 0_0, 0_0, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_1, 0_1, 1_0, 0_1, 0_1, 0_1, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_2, 0_2, 1_0, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_3, 0_3, 1_0, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_4, 0_4, 1_0, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_5, 0_5, 1_0, 0_6, 0_6, 0_4, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(1_6, 0_6, 1_1, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_0, 1_0, 0_0, 0_0, 0_0, 0_0, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_1, 1_0, 0_1, 0_6, 0_1, 0_1, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_2, 1_0, 0_2, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_3, 1_0, 0_3, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_4, 1_0, 0_4, 0_6, 0_6, 0_3, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_4, 0_0),
-	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_0),
+	CHIP_TO_BLOCK_MAP_INIT(0_0, 0_0, 0_0, 0_0, 0_0, 0_0, 0_1),
+	CHIP_TO_BLOCK_MAP_INIT(0_1, 0_1, 0_1, 0_1, 0_1, 0_1, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_3, 0_3, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_4, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_5, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_5, 0_5, 0_2, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_6, 0_2, 0_5, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_7, 0_5, 0_3, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_8, 0_3, 0_5, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(0_9, 0_5, 0_5, 0_6, 0_6, 0_4, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(1_0, 0_0, 1_0, 0_0, 0_0, 0_0, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(1_1, 0_1, 1_0, 0_1, 0_1, 0_1, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(1_2, 0_2, 1_0, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(1_3, 0_3, 1_0, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(1_4, 0_4, 1_0, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(1_5, 0_5, 1_0, 0_6, 0_6, 0_4, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(1_6, 0_6, 1_1, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(2_0, 1_0, 0_0, 0_0, 0_0, 0_0, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(2_1, 1_0, 0_1, 0_6, 0_1, 0_1, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(2_2, 1_0, 0_2, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(2_3, 1_0, 0_3, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(2_4, 1_0, 0_4, 0_6, 0_6, 0_3, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_4, 0_2),
+	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_2),
 	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_1),
 	CHIP_TO_BLOCK_MAP_INIT(4_0, 2_0, 2_0, 2_0, 0_0, 1_2, 0_1),
 	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_1, 3_0, 3_0, 3_0),
@@ -272,88 +272,53 @@ static void tpu_clock_resync(struct ab_state_context *sc)
 /* Caller must hold sc->op_lock */
 int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 struct block_property *last_state,
-			 u64 frequency, enum states clk_status)
+			 u64 new_freq, enum states clk_status)
 {
 	int ret = 0;
-	u64 ret_freq;
+	u64 old_freq = last_state->clk_frequency;
+	int64_t ret_freq;
 	struct ab_sm_clk_ops *clk = sc->clk_ops;
 
 	switch (blk->name) {
 	case BLK_IPU:
-		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
-				frequency != AB_SM_OSC_RATE) {
+		if (clk_status == off || old_freq == new_freq) {
+			ab_sm_record_ts(sc, AB_SM_TS_IPU_CLK);
+			break;
+		}
+
+		if (last_state->clk_status == off && clk_status == on) {
 			ret = clk->ipu_pll_enable(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (last_state->clk_status == off && clk_status == on) {
-			ret = clk->ipu_ungate(clk->ctx);
-			if (ret)
-				return ret;
-		}
-
-		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
-				frequency == AB_SM_OSC_RATE)
-			break;
-
-		ret_freq = clk->ipu_set_rate(clk->ctx, frequency);
-		if (ret_freq != frequency) {
+		ret_freq = clk->ipu_set_rate(clk->ctx, old_freq, new_freq);
+		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set ipu freq to %lld but got %lld",
-					frequency, ret_freq);
+					new_freq, ret_freq);
 			return -ENODEV;
-		}
-
-		if (last_state->clk_status == on && clk_status == off) {
-			ret = clk->ipu_gate(clk->ctx);
-			if (ret)
-				return ret;
-		}
-
-		if (!clk_status && frequency == AB_SM_OSC_RATE) {
-			ret = clk->ipu_pll_disable(clk->ctx);
-			if (ret)
-				return ret;
 		}
 
 		ab_sm_record_ts(sc, AB_SM_TS_IPU_CLK);
 		break;
 
 	case BLK_TPU:
-		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
-				frequency != AB_SM_OSC_RATE) {
+		if (clk_status == off || old_freq == new_freq) {
+			ab_sm_record_ts(sc, AB_SM_TS_TPU_CLK);
+			break;
+		}
+
+		if (last_state->clk_status == off && clk_status == on) {
 			ret = clk->tpu_pll_enable(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (last_state->clk_status == off && clk_status == on) {
-			ret = clk->tpu_ungate(clk->ctx);
-			if (ret)
-				return ret;
-		}
-
-		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
-				frequency == AB_SM_OSC_RATE)
-			break;
-
-		ret_freq = clk->tpu_set_rate(clk->ctx, frequency);
-		if (ret_freq != frequency) {
+		ret_freq = clk->tpu_set_rate(clk->ctx, old_freq, new_freq);
+		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set tpu freq to %lld but got %lld",
-					frequency, ret_freq);
+					new_freq, ret_freq);
 			return -ENODEV;
-		}
-
-		if (last_state->clk_status == on && clk_status == off) {
-			ret = clk->tpu_gate(clk->ctx);
-			if (ret)
-				return ret;
-		}
-
-		if (!clk_status && frequency == AB_SM_OSC_RATE) {
-			ret = clk->tpu_pll_disable(clk->ctx);
-			if (ret)
-				return ret;
 		}
 
 		ab_sm_record_ts(sc, AB_SM_TS_TPU_CLK);
@@ -364,14 +329,15 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	case BLK_FSYS:
 		break;
 	case BLK_AON:
-		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
-				frequency == AB_SM_OSC_RATE)
+		if (clk_status == off || old_freq == new_freq) {
+			ab_sm_record_ts(sc, AB_SM_TS_AON_CLK);
 			break;
+		}
 
-		ret_freq = clk->aon_set_rate(clk->ctx, frequency);
-		if (ret_freq != frequency) {
+		ret_freq = clk->aon_set_rate(clk->ctx, old_freq, new_freq);
+		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set aon freq to %lld but got %lld",
-				frequency, ret_freq);
+					new_freq, ret_freq);
 			return -ENODEV;
 		}
 
@@ -1516,6 +1482,9 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_IPU]),
 			sc->blocks[BLK_IPU].current_state, clk_frequency, on);
 		mutex_unlock(&sc->op_lock);
+		sc->blocks[BLK_IPU].current_state->clk_frequency =
+			clk_frequency;
+		sc->blocks[BLK_IPU].current_state->clk_status = on;
 		break;
 
 	case AB_SM_SET_TPU_FREQUENCY:
@@ -1523,6 +1492,9 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_TPU]),
 			sc->blocks[BLK_TPU].current_state, clk_frequency, on);
+		sc->blocks[BLK_TPU].current_state->clk_frequency =
+			clk_frequency;
+		sc->blocks[BLK_TPU].current_state->clk_status = on;
 		mutex_unlock(&sc->op_lock);
 		break;
 
@@ -1537,6 +1509,9 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_AON]),
 			sc->blocks[BLK_AON].current_state, clk_frequency, on);
+		sc->blocks[BLK_AON].current_state->clk_frequency =
+			clk_frequency;
+		sc->blocks[BLK_AON].current_state->clk_status = on;
 		mutex_unlock(&sc->op_lock);
 		break;
 

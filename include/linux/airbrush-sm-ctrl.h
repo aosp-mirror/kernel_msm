@@ -318,30 +318,39 @@ struct ab_sm_clk_ops {
 	int (*ipu_pll_disable)(void *ctx);
 	int (*ipu_gate)(void *ctx);
 	int (*ipu_ungate)(void *ctx);
-	u64 (*ipu_set_rate)(void *ctx, u64 rate);
+	int64_t (*ipu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
 
 	int (*tpu_pll_enable)(void *ctx);
 	int (*tpu_pll_disable)(void *ctx);
 	int (*tpu_gate)(void *ctx);
 	int (*tpu_ungate)(void *ctx);
-	u64 (*tpu_set_rate)(void *ctx, u64 rate);
+	int64_t (*tpu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
 
-	u64 (*aon_set_rate)(void *ctx, u64 rate);
+	int64_t (*aon_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
 };
 
 static int ipu_pll_enable_stub(void *ctx)   { return -ENODEV; }
 static int ipu_pll_disable_stub(void *ctx)   { return -ENODEV; }
 static int ipu_gate_stub(void *ctx)   { return -ENODEV; }
 static int ipu_ungate_stub(void *ctx) { return -ENODEV; }
-static u64 ipu_set_rate_stub(void *ctx, u64 rate) { return 0; }
+static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
+{
+	return 0;
+}
 
 static int tpu_pll_enable_stub(void *ctx)   { return -ENODEV; }
 static int tpu_pll_disable_stub(void *ctx)   { return -ENODEV; }
 static int tpu_gate_stub(void *ctx)   { return -ENODEV; }
 static int tpu_ungate_stub(void *ctx) { return -ENODEV; }
-static u64 tpu_set_rate_stub(void *ctx, u64 rate) { return 0; }
+static int64_t tpu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
+{
+	return 0;
+}
 
-static u64 aon_set_rate_stub(void *ctx, u64 rate) { return 0; }
+static int64_t aon_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
+{
+	return 0;
+}
 
 static struct ab_sm_clk_ops clk_ops_stub = {
 	.ctx = NULL,

@@ -167,24 +167,17 @@ static int ab_clk_ipu_ungate_handler(void *ctx)
 }
 
 /* Caller must hold clk_ctx->pcie_link_lock */
-static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
-		u64 rate)
+static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
+		u64 old_rate, u64 new_rate)
 {
-	int ret;
-	u64 old_rate = clk_get_rate(clk_ctx->ipu_gate_clk);
-	u64 new_rate = rate;
-
-	if (rate == 0) {
-		rate = AB_SM_OSC_RATE;
-		new_rate = rate;
-	}
+	int64_t ret;
 
 	dev_dbg(clk_ctx->dev,
-		"%s: set IPU clock rate to %llu\n", __func__, rate);
+		"%s: set IPU clock rate to %llu\n", __func__, new_rate);
 
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
-	if (rate == AB_SM_OSC_RATE) {
+	if (new_rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
@@ -193,20 +186,9 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 			goto error_abort;
 		}
 
-		new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 		ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE,
 				old_rate, new_rate);
 		return new_rate;
-	}
-
-	/* Resync CCF with hardware state
-	 * Needed when coming out of reset
-	 */
-	ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
-	if (ret) {
-		dev_err(clk_ctx->dev,
-			"ipu_pll_mux: set_parent failed(err %d)\n", ret);
-		goto error_abort;
 	}
 
 	/* Switch to osc_clk during rate change so that
@@ -222,7 +204,7 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	/* force calculate current rate */
 	clk_get_rate(clk_ctx->ipu_pll);
 
-	ret = clk_set_rate(clk_ctx->ipu_pll, rate);
+	ret = clk_set_rate(clk_ctx->ipu_pll, new_rate);
 	if (ret) {
 		dev_err(clk_ctx->dev,
 			"ipu_pll: set_rate failed(err %d)\n", ret);
@@ -236,7 +218,6 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	new_rate = clk_get_rate(clk_ctx->ipu_switch_mux);
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return new_rate;
 
@@ -245,23 +226,25 @@ error_abort:
 	return ret;
 }
 
-static u64 ab_clk_ipu_set_rate_handler(void *ctx, u64 rate)
+static int64_t ab_clk_ipu_set_rate_handler(void *ctx,
+		u64 old_rate, u64 new_rate)
 {
-	u64 new_rate = rate;
+	int64_t ret;
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 
 	mutex_lock(&clk_ctx->pcie_link_lock);
 	if (clk_ctx->pcie_link_ready) {
-		new_rate = __ab_clk_ipu_set_rate_handler(clk_ctx, new_rate);
+		ret = __ab_clk_ipu_set_rate_handler(clk_ctx,
+				old_rate, new_rate);
 	} else {
 		dev_err(clk_ctx->dev,
 				"%s: pcie link down during clk request\n",
 				__func__);
-		new_rate = 0;
+		ret = -ENODEV;
 	}
 	mutex_unlock(&clk_ctx->pcie_link_lock);
 
-	return new_rate;
+	return ret;
 }
 
 /* Caller must hold clk_ctx->pcie_link_lock */
@@ -388,24 +371,17 @@ static int ab_clk_tpu_pll_disable_handler(void *ctx)
 }
 
 /* Caller must hold clk_ctx->pcie_link_lock */
-static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
-		u64 rate)
+static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
+		u64 old_rate, u64 new_rate)
 {
-	int ret = 0;
-	u64 old_rate = clk_get_rate(clk_ctx->tpu_gate_clk);
-	u64 new_rate = rate;
-
-	if (rate == 0) {
-		rate = AB_SM_OSC_RATE;
-		new_rate = rate;
-	}
+	int64_t ret;
 
 	dev_dbg(clk_ctx->dev,
-		"%s: set TPU clock rate to %llu\n", __func__, rate);
+		"%s: set TPU clock rate to %llu\n", __func__, new_rate);
 
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
-	if (rate == AB_SM_OSC_RATE) {
+	if (new_rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
@@ -414,20 +390,9 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 			goto error_abort;
 		}
 
-		new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 		ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE,
 				old_rate, new_rate);
 		return new_rate;
-	}
-
-	/* Resync CCF with hardware state
-	 * Needed when coming out of reset
-	 */
-	ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
-	if (ret) {
-		dev_err(clk_ctx->dev,
-			"tpu_pll_mux: set_parent failed(err %d)\n", ret);
-		goto error_abort;
 	}
 
 	/* Switch to osc_clk during rate change so that
@@ -443,7 +408,7 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	/* force calculate current rate */
 	clk_get_rate(clk_ctx->tpu_pll);
 
-	ret = clk_set_rate(clk_ctx->tpu_pll, rate);
+	ret = clk_set_rate(clk_ctx->tpu_pll, new_rate);
 	if (ret) {
 		dev_err(clk_ctx->dev,
 			"tpu_pll: set_rate failed(err %d)\n", ret);
@@ -457,7 +422,6 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	new_rate = clk_get_rate(clk_ctx->tpu_switch_mux);
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
 	return new_rate;
 
@@ -466,41 +430,37 @@ error_abort:
 	return ret;
 }
 
-static u64 ab_clk_tpu_set_rate_handler(void *ctx, u64 rate)
+static int64_t ab_clk_tpu_set_rate_handler(void *ctx,
+		u64 old_rate, u64 new_rate)
 {
-	u64 new_rate;
+	int64_t ret;
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 
 	mutex_lock(&clk_ctx->pcie_link_lock);
 	if (clk_ctx->pcie_link_ready) {
-		new_rate = __ab_clk_tpu_set_rate_handler(clk_ctx, rate);
+		ret = __ab_clk_tpu_set_rate_handler(clk_ctx,
+				old_rate, new_rate);
 	} else {
 		dev_err(clk_ctx->dev,
 				"%s: pcie link down during clk request\n",
 				__func__);
-		new_rate = 0;
+		ret = -ENODEV;
 	}
 	mutex_unlock(&clk_ctx->pcie_link_lock);
 
-	return new_rate;
+	return ret;
 }
 
 /* Caller must hold clk_ctx->pcie_link_lock */
-static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
-		u64 rate)
+static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
+		u64 old_rate, u64 new_rate)
 {
-	int ret = 0;
-	u64 new_rate = rate;
-
-	if (rate == 0) {
-		rate = AB_SM_OSC_RATE;
-		new_rate = rate;
-	}
+	int64_t ret;
 
 	dev_dbg(clk_ctx->dev,
-		"%s: set AON clock rate to %llu\n", __func__, rate);
+		"%s: set AON clock rate to %llu\n", __func__, new_rate);
 
-	if (rate == AB_SM_OSC_RATE) {
+	if (new_rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
@@ -509,10 +469,9 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 			goto error_abort;
 		}
 
-		return clk_get_rate(clk_ctx->aon_pll_mux);
+		return new_rate;
 	}
 
-	/*resync software with hardware in case chip is coming out of reset*/
 	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
 	if (ret) {
 		dev_err(clk_ctx->dev,
@@ -520,25 +479,27 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	return clk_get_rate(clk_ctx->aon_pll_mux);
+	return new_rate;
 
 error_abort:
 	return ret;
 }
 
-static u64 ab_clk_aon_set_rate_handler(void *ctx, u64 rate)
+static int64_t ab_clk_aon_set_rate_handler(void *ctx,
+		u64 old_rate, u64 new_rate)
 {
-	u64 ret;
+	int64_t ret;
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 
 	mutex_lock(&clk_ctx->pcie_link_lock);
 	if (clk_ctx->pcie_link_ready) {
-		ret = __ab_clk_aon_set_rate_handler(clk_ctx, rate);
+		ret = __ab_clk_aon_set_rate_handler(clk_ctx,
+				old_rate, new_rate);
 	} else {
 		dev_err(clk_ctx->dev,
 				"%s: pcie link down during clk request\n",
 				__func__);
-		ret = 0;
+		ret = -ENODEV;
 	}
 	mutex_unlock(&clk_ctx->pcie_link_lock);
 
@@ -616,8 +577,6 @@ static int ab_clk_probe(struct platform_device *pdev)
 		of_clk_get_by_name(ab_clk_nd, "ipu_pll_div");
 	clk_ctx->ipu_switch_mux =
 		of_clk_get_by_name(ab_clk_nd, "ipu_switch_mux");
-	clk_ctx->ipu_gate_clk =
-		of_clk_get_by_name(ab_clk_nd, "ipu_gate_clk");
 
 	clk_ctx->tpu_pll =
 		of_clk_get_by_name(ab_clk_nd, "tpu_pll");
@@ -627,8 +586,6 @@ static int ab_clk_probe(struct platform_device *pdev)
 		of_clk_get_by_name(ab_clk_nd, "tpu_pll_div");
 	clk_ctx->tpu_switch_mux =
 		of_clk_get_by_name(ab_clk_nd, "tpu_switch_mux");
-	clk_ctx->tpu_gate_clk =
-		of_clk_get_by_name(ab_clk_nd, "tpu_gate_clk");
 
 	clk_ctx->osc_clk =
 		of_clk_get_by_name(ab_clk_nd, "osc_clk");
@@ -643,12 +600,10 @@ static int ab_clk_probe(struct platform_device *pdev)
 			IS_ERR(clk_ctx->ipu_pll_mux) ||
 			IS_ERR(clk_ctx->ipu_pll_div) ||
 			IS_ERR(clk_ctx->ipu_switch_mux) ||
-			IS_ERR(clk_ctx->ipu_gate_clk) ||
 			IS_ERR(clk_ctx->tpu_pll) ||
 			IS_ERR(clk_ctx->tpu_pll_mux) ||
 			IS_ERR(clk_ctx->tpu_pll_div) ||
 			IS_ERR(clk_ctx->tpu_switch_mux) ||
-			IS_ERR(clk_ctx->tpu_gate_clk) ||
 			IS_ERR(clk_ctx->osc_clk) ||
 			IS_ERR(clk_ctx->shared_div_aon_pll) ||
 			IS_ERR(clk_ctx->aon_pll) ||
@@ -695,8 +650,6 @@ static int ab_clk_remove(struct platform_device *pdev)
 		clk_put(clk_ctx->ipu_pll_div);
 	if (clk_ctx->ipu_switch_mux)
 		clk_put(clk_ctx->ipu_switch_mux);
-	if (clk_ctx->ipu_gate_clk)
-		clk_put(clk_ctx->ipu_gate_clk);
 
 	if (clk_ctx->tpu_pll)
 		clk_put(clk_ctx->tpu_pll);
@@ -706,8 +659,6 @@ static int ab_clk_remove(struct platform_device *pdev)
 		clk_put(clk_ctx->tpu_pll_div);
 	if (clk_ctx->tpu_switch_mux)
 		clk_put(clk_ctx->tpu_switch_mux);
-	if (clk_ctx->tpu_gate_clk)
-		clk_put(clk_ctx->tpu_gate_clk);
 
 	if (clk_ctx->osc_clk)
 		clk_put(clk_ctx->osc_clk);
