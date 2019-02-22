@@ -293,7 +293,7 @@ Once writeback_limit_enable is set, zram doesn't allow any writeback
 until admin set the budget via /sys/block/zramX/writeback_limit.
 
 (If admin doesn't enable writeback_limit_enable, writeback_limit's value
-assigned via /sys/block/zramX/writeback_limit is meaningless.)
+assigned via /sys/block/zramX/writeback_limit is meaninless.)
 
 If admin want to limit writeback as per-day 400M, he could do it
 like below.

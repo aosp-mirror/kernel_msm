@@ -430,8 +430,8 @@
 			 0x228 /* QUSB2PHY_SQ_CTRL1 */
 			 0x22c /* QUSB2PHY_SQ_CTRL2 */
 			 0x27c>; /* QUSB2PHY_DEBUG_CTRL1 */
-		qcom,qusb-bias-ctrl2-default = <0x20>;
 
+		qcom,qusb-bias-ctrl2-default = <0x20>;
 		qcom,qusb-phy-init-seq =
 			/* <value reg_offset> */
 			   <0x23 0x210 /* PWR_CTRL1 */

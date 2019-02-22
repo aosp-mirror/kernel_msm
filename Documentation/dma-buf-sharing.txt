@@ -439,6 +439,25 @@ Other Interfaces Exposed to Userspace on the dma-buf FD
   cases. Userspace can use this to detect support for discovering the dma-buf
   size using llseek.
 
+Dma-buf memory usage tracking
+----------------------------
+- To provide methods for userspace to track the dma-buf usage across different
+  processes, dma-buf provides several interfaces to read the allocation detail of
+  dma-bufs and the process that own them. First of all, a mini-filesystem in
+  dma-buf will assign a unique inode to each dma-buf. By Calling stat(2) on
+  each entry, the caller can get a unique ID (st_ino), the buffer's size
+  (st_size)  and the number of pages assigned to each dma-buffer. The inode
+  information is also exposed in /sys/kernel/debug/dma_buf/bufinfo so in the case
+  where a buffer is mmap()ed into a process’s address space but all remaining
+  fds have been closed, we can still get the dma-buf information and try to
+  accociate it with the process by searching the proc/pid/maps and looking for
+  the corresponding inode number exposed in dma-buf debug fs. Additionally,
+  dma-buf support assigning names to dma-bufs from userspace. This information
+  can be helpful for tracking and accounting shared buffers based on their usage
+  and original purpose. Last but not least, the show_fdinfo() handler in
+  dma_buf_file_operations can print the file_count and name of each buffer in
+  /proc/pid/fdinfo/fd.
+
 Miscellaneous notes
 -------------------
 

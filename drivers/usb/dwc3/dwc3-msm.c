@@ -3332,7 +3332,6 @@ static ssize_t xhci_link_compliance_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
-
 	if (mdwc->xhci_ss_compliance_enable)
 		return snprintf(buf, PAGE_SIZE, "y\n");
 	else
@@ -3356,6 +3355,9 @@ static ssize_t xhci_link_compliance_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(xhci_link_compliance);
+
+
+
 
 static int dwc3_msm_probe(struct platform_device *pdev)
 {

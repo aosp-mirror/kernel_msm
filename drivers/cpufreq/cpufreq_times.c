@@ -431,11 +431,13 @@ static int concurrent_time_text_seq_show(struct seq_file *m, void *v,
 
 	hlist_for_each_entry_rcu(uid_entry, (struct hlist_head *)v, hash) {
 		atomic64_t *times = get_times(uid_entry->concurrent_times);
+
 		seq_put_decimal_ull(m, "", (u64)uid_entry->uid);
 		seq_putc(m, ':');
 
 		for (i = 0; i < num_possible_cpus; ++i) {
 			u64 time = cputime_to_clock_t(atomic64_read(&times[i]));
+
 			seq_put_decimal_ull(m, " ", time);
 		}
 		seq_putc(m, '\n');
@@ -535,6 +537,7 @@ static ssize_t uid_cpupower_enable_write(struct file *file,
 void cpufreq_task_times_init(struct task_struct *p)
 {
 	unsigned long flags;
+
 	spin_lock_irqsave(&task_time_in_state_lock, flags);
 	p->time_in_state = NULL;
 	spin_unlock_irqrestore(&task_time_in_state_lock, flags);
@@ -722,7 +725,7 @@ void cpufreq_acct_update_power(struct task_struct *p, cputime_t cputime)
 	uid_t uid = from_kuid_munged(current_user_ns(), task_uid(p));
 	int cpu = 0;
 
-	if (!freqs || p->flags & PF_EXITING)
+	if (!freqs || is_idle_task(p) || p->flags & PF_EXITING)
 		return;
 
 	state = freqs->offset + READ_ONCE(freqs->last_index);

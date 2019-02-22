@@ -413,7 +413,7 @@ int cam_node_deinit(struct cam_node *node)
 int cam_node_shutdown(struct cam_node *node)
 {
 	int i = 0;
-	int rc = 0;
+        int rc = 0;
 
 	if (!node)
 		return -EINVAL;
@@ -423,6 +423,7 @@ int cam_node_shutdown(struct cam_node *node)
 			rc = cam_context_shutdown(&(node->ctx_list[i]));
 			if (rc)
 				continue;
+			cam_destroy_device_hdl(node->ctx_list[i].dev_hdl);
 			cam_context_putref(&(node->ctx_list[i]));
 		}
 	}

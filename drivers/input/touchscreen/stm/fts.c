@@ -754,15 +754,14 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 				const char *buf, size_t count)
 {
 	char *p = (char *)buf;
-	unsigned int temp;
+	unsigned int temp = FEAT_DISABLE;
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	ssize_t retval = count;
 
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
-		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.", __func__);
-		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-		return count;
+		goto exit;
 	}
 
 	/* in case of a different elaboration of the input, just modify
@@ -771,8 +770,13 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
+		res = sscanf(p, "%02X ", &temp);
+		if ((res != 1) || (temp > FEAT_ENABLE)) {
+			pr_err("%s: Missing or invalid grip mode(%u)\n",
+				__func__, temp);
+			retval = -EINVAL;
+			goto exit;
+		}
 
 /* standard code that should be always used when a feature is enabled! */
 /* first step : check if the wanted feature can be enabled */
@@ -788,8 +792,9 @@ static ssize_t fts_grip_mode_store(struct device *dev,
 		}
 	}
 
+exit:
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-	return count;
+	return retval;
 }
 #endif
 
@@ -829,25 +834,30 @@ static ssize_t fts_charger_mode_store(struct device *dev,
 				const char *buf, size_t count)
 {
 	char *p = (char *)buf;
-	unsigned int temp;
+	unsigned int temp = FEAT_DISABLE;
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	ssize_t retval = count;
 
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
-		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
-		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-		return count;
+		goto exit;
 	}
 
 /* in case of a different elaboration of the input, just modify this
   * initial part of the code according to customer needs */
-	if ((count + 1) / 3 != 1)
+	if ((count + 1) / 3 != 1) {
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
-	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
+		retval = -EINVAL;
+	} else {
+		res = sscanf(p, "%02X ", &temp);
+		if ((res != 1) || (temp > FEAT_ENABLE)) {
+			pr_err("%s: Missing or invalid charger mode (%u)\n",
+				__func__, temp);
+			retval = -EINVAL;
+			goto exit;
+		}
 
 /** standard code that should be always used when a feature is enabled!
   * first step : check if the wanted feature can be enabled
@@ -864,8 +874,9 @@ static ssize_t fts_charger_mode_store(struct device *dev,
 		}
 	}
 
+exit:
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-	return count;
+	return retval;
 }
 #endif
 
@@ -903,25 +914,30 @@ static ssize_t fts_glove_mode_store(struct device *dev,
 				size_t count)
 {
 	char *p = (char *)buf;
-	unsigned int temp;
+	unsigned int temp = FEAT_DISABLE;
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	ssize_t retval = count;
 
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
-		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
-		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-		return count;
+		goto exit;
 	}
 
 /* in case of a different elaboration of the input, just modify this
   * initial part of the code according to customer needs */
-	if ((count + 1) / 3 != 1)
+	if ((count + 1) / 3 != 1) {
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
-	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
+		retval = -EINVAL;
+	} else {
+		res = sscanf(p, "%02X ", &temp);
+		if ((res != 1) || (temp > FEAT_ENABLE)) {
+			pr_err("%s: Missing or invalid glove mode(%u)\n",
+				__func__, temp);
+			retval = -EINVAL;
+			goto exit;
+		}
 
 /* standard code that should be always used when a feature is enabled! */
 /* first step : check if the wanted feature can be enabled */
@@ -937,8 +953,9 @@ static ssize_t fts_glove_mode_store(struct device *dev,
 		}
 	}
 
+exit:
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-	return count;
+	return retval;
 }
 #endif
 
@@ -987,15 +1004,14 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 				size_t count)
 {
 	char *p = (char *)buf;
-	unsigned int temp;
+	unsigned int temp = FEAT_DISABLE;
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	ssize_t retval = count;
 
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
-		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
-		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-		return count;
+		goto exit;
 	}
 
 /* in case of a different elaboration of the input, just modify this
@@ -1004,7 +1020,14 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
+		res = sscanf(p, "%02X ", &temp);
+		if ((res != 1) || (temp > FEAT_ENABLE)) {
+			pr_err("%s: Missing or invalid cover mode(%u)\n",
+				__func__, temp);
+			retval = -EINVAL;
+			goto exit;
+		}
+
 		p += 3;
 
 /* standard code that should be always used when a feature is enabled! */
@@ -1021,8 +1044,9 @@ static ssize_t fts_cover_mode_store(struct device *dev,
 		}
 	}
 
+exit:
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-	return count;
+	return retval;
 }
 #endif
 
@@ -1060,8 +1084,10 @@ static ssize_t fts_stylus_mode_store(struct device *dev,
 				size_t count)
 {
 	char *p = (char *)buf;
-	unsigned int temp;
+	unsigned int temp = FEAT_DISABLE;
+	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	ssize_t retval = count;
 
 
 /* in case of a different elaboration of the input, just modify this
@@ -1070,14 +1096,19 @@ static ssize_t fts_stylus_mode_store(struct device *dev,
 		pr_err("%s: Number of bytes of parameter wrong! %zu != 1 byte\n",
 			__func__, (count + 1) / 3);
 	else {
-		sscanf(p, "%02X ", &temp);
-		p += 3;
-
+		res = sscanf(p, "%02X ", &temp);
+		if ((res != 1) || (temp > FEAT_ENABLE)) {
+			pr_err("%s: Missing or invalid stylus mode(%u)\n",
+				__func__, temp);
+			retval = -EINVAL;
+			goto exit;
+		}
 
 		info->stylus_enabled = temp;
 	}
 
-	return count;
+exit:
+	return retval;
 }
 #endif
 
@@ -1136,8 +1167,7 @@ static ssize_t fts_gesture_mask_show(struct device *dev,
 		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
 		scnprintf(buf, PAGE_SIZE, "{ %08X }\n", res);
-		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-		return count;
+		goto exit;
 	}
 
 	if (mask[0] == 0) {
@@ -1165,6 +1195,7 @@ static ssize_t fts_gesture_mask_show(struct device *dev,
 			   PAGE_SIZE - count, "{ %08X }\n", res);
 	mask[0] = 0;
 
+exit:
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
 	return count;
 }
@@ -1175,8 +1206,9 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 				size_t count)
 {
 	char *p = (char *)buf;
-	int n;
-	unsigned int temp;
+	int n, res;
+	unsigned int temp = 0;
+	ssize_t retval = count;
 
 	if ((count + 1) / 3 > GESTURE_MASK_SIZE + 1) {
 		pr_err("fts_gesture_mask_store: Number of bytes of parameter wrong! %zu > (enable/disable + %d )\n",
@@ -1185,14 +1217,20 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 	} else {
 		mask[0] = ((count + 1) / 3) - 1;
 		for (n = 1; n <= (count + 1) / 3; n++) {
-			sscanf(p, "%02X ", &temp);
+			res = sscanf(p, "%02X ", &temp);
+			if (res != 1) {
+				pr_err("%s: Invalid input\n", __func__);
+				retval = -EINVAL;
+				goto exit;
+			}
+
 			p += 3;
 			mask[n] = (u8)temp;
 			pr_info("mask[%d] = %02X\n", n, mask[n]);
 		}
 	}
-
-	return count;
+exit:
+	return retval;
 }
 
 #else	/* if this define is not used, to select the gestures to enable/disable
@@ -1253,29 +1291,43 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 {
 	char *p = (char *)buf;
 	int n;
-	unsigned int temp;
+	unsigned int temp = 0;
 	int res;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	ssize_t retval = count;
 
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
-		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
-		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-		return count;
+		goto exit;
 	}
 
 	if ((count + 1) / 3 < 2 || (count + 1) / 3 > GESTURE_MASK_SIZE + 1) {
 		pr_err("fts_gesture_mask_store: Number of bytes of parameter wrong! %d < or > (enable/disable + at least one gestureID or max %d bytes)\n",
 			(count + 1) / 3, GESTURE_MASK_SIZE);
 		mask[0] = 0;
+		retval = -EINVAL;
 	} else {
 		memset(mask, 0, GESTURE_MASK_SIZE + 2);
 		mask[0] = ((count + 1) / 3) - 1;
-		sscanf(p, "%02X ", &temp);
+		res = sscanf(p, "%02X ", &temp);
+		if (res != 1) {
+			pr_err("%s: Invalid input(%u)\n",__func__, temp);
+			mask[0] = 0;
+			retval = -EINVAL;
+			goto bad_param;
+		}
+
 		p += 3;
 		mask[1] = (u8)temp;
 		for (n = 1; n < (count + 1) / 3; n++) {
-			sscanf(p, "%02X ", &temp);
+			res = sscanf(p, "%02X ", &temp);
+			if (res != 1) {
+				pr_err("%s: Invalid input\n", __func__);
+				mask[0] = 0;
+				retval = -EINVAL;
+				goto bad_param;
+			}
+
 			p += 3;
 			fromIDtoMask((u8)temp, &mask[2], GESTURE_MASK_SIZE);
 		}
@@ -1284,20 +1336,22 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 			pr_info("mask[%d] = %02X\n", n, mask[n]);
 	}
 
-
+bad_param;
 	if (mask[0] == 0) {
 		res = ERROR_OP_NOT_ALLOW;
 		pr_err("%s: Call before echo enable/disable xx xx .... > gesture_mask with a correct number of parameters! ERROR %08X\n",
 			__func__, res);
-	} else {
-		if (mask[1] == FEAT_ENABLE || mask[1] == FEAT_DISABLE)
-			res = updateGestureMask(&mask[2], mask[0], mask[1]);
-		else
-			res = ERROR_OP_NOT_ALLOW;
 
-		if (res < OK)
-			pr_err("fts_gesture_mask_store: ERROR %08X\n", res);
+		goto exit;
 	}
+
+	if (mask[1] == FEAT_ENABLE || mask[1] == FEAT_DISABLE)
+		res = updateGestureMask(&mask[2], mask[0], mask[1]);
+	else
+		res = ERROR_OP_NOT_ALLOW;
+
+	if (res < OK)
+		pr_err("fts_gesture_mask_store: ERROR %08X\n", res);
 
 	res = check_feature_feasibility(info, FEAT_SEL_GESTURE);
 	temp = isAnyGestureActive();
@@ -1305,8 +1359,9 @@ static ssize_t fts_gesture_mask_store(struct device *dev,
 		info->gesture_enabled = temp;
 	res = fts_mode_handler(info, 0);
 
+exit:
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
-	return count;
+	return retval;
 }
 
 
@@ -1422,10 +1477,22 @@ static ssize_t stm_fts_cmd_store(struct device *dev,
 {
 	int n;
 	char *p = (char *)buf;
+	struct fts_ts_info *info = dev_get_drvdata(dev);
 
 	memset(typeOfComand, 0, CMD_STR_LEN * sizeof(u32));
 
 	pr_info("%s:\n", __func__);
+
+	if (!info) {
+		pr_err("%s: Unable to access driver data\n", __func__);
+		return  -EINVAL;
+	}
+
+	if (!mutex_trylock(&info->diag_cmd_lock)) {
+		pr_err("%s: Blocking concurrent access\n", __func__);
+		return -EBUSY;
+	}
+
 	for (n = 0; n < (count + 1) / 3; n++) {
 		sscanf(p, "%02X ", &typeOfComand[n]);
 		p += 3;
@@ -1434,6 +1501,9 @@ static ssize_t stm_fts_cmd_store(struct device *dev,
 
 	numberParameters = n;
 	pr_info("Number of Parameters = %d\n", numberParameters);
+
+	mutex_unlock(&info->diag_cmd_lock);
+
 	return count;
 }
 
@@ -1452,11 +1522,22 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 	MutualSenseFrame frameMS;
 	SelfSenseFrame frameSS;
 
+	if (!info) {
+		pr_err("%s: Unable to access driver data\n", __func__);
+		return  -EINVAL;
+	}
+
+	if (!mutex_trylock(&info->diag_cmd_lock)) {
+		pr_err("%s: Blocking concurrent access\n", __func__);
+		return -EBUSY;
+	}
+
 	if (fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, true) < 0) {
 		res = ERROR_BUS_WR;
 		pr_err("%s: bus is not accessible.\n", __func__);
 		scnprintf(buf, PAGE_SIZE, "{ %08X }\n", res);
 		fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
+		mutex_unlock(&info->diag_cmd_lock);
 		return 0;
 	}
 
@@ -1959,6 +2040,8 @@ END:
 	/* pr_err("numberParameters = %d\n", numberParameters); */
 
 	fts_set_bus_ref(info, FTS_BUS_REF_SYSFS, false);
+	mutex_unlock(&info->diag_cmd_lock);
+
 	return index;
 }
 
@@ -4160,6 +4243,8 @@ static int fts_probe(struct spi_device *client)
 	input_set_capability(info->input_dev, EV_KEY, KEY_BACK);
 	input_set_capability(info->input_dev, EV_KEY, KEY_MENU);
 #endif
+
+	mutex_init(&info->diag_cmd_lock);
 
 	mutex_init(&(info->input_report_mutex));
 	mutex_init(&info->bus_mutex);

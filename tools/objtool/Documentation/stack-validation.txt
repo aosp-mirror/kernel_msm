@@ -289,21 +289,6 @@ they mean, and suggestions for how to fix them.
       might be corrupt due to a gcc bug.  For more details, see:
       https://gcc.gnu.org/bugzilla/show_bug.cgi?id=70646
 
-2. If you're getting any other objtool error in a compiled .c file, it
-   may be because the file uses an asm() statement which has a "call"
-   instruction.  An asm() statement with a call instruction must declare
-   the use of the stack pointer in its output operand.  On x86_64, this
-   means adding the ASM_CALL_CONSTRAINT as an output constraint:
-
-     asm volatile("call func" : ASM_CALL_CONSTRAINT);
-
-   Otherwise the stack frame may not get created before the call.
-
-3. Another possible cause for errors in C code is if the Makefile removes
-   -fno-omit-frame-pointer or adds -fomit-frame-pointer to the gcc options.
-
-Also see the above section for .S file errors for more information what
-the individual error messages mean.
 
 If the error doesn't seem to make sense, it could be a bug in objtool.
 Feel free to ask the objtool maintainer for help.

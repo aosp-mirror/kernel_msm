@@ -50,6 +50,11 @@ static const char *default_compressor = "lzo";
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
+/*
+ * Pages that compress to sizes equals or greater than this are stored
+ * uncompressed in memory.
+ */
+static size_t huge_class_size;
 
 static void zram_free_page(struct zram *zram, size_t index);
 static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
@@ -686,7 +691,7 @@ static ssize_t writeback_store(struct device *dev,
 		if (zram->wb_limit_enable && !zram->bd_wb_limit) {
 			spin_unlock(&zram->wb_limit_lock);
 			ret = -EIO;
-			goto error;
+			break;
 		}
 		spin_unlock(&zram->wb_limit_lock);
 
@@ -694,7 +699,7 @@ static ssize_t writeback_store(struct device *dev,
 			blk_idx = alloc_block_bdev(zram);
 			if (!blk_idx) {
 				ret = -ENOSPC;
-				goto error;
+				break;
 			}
 		}
 
@@ -710,7 +715,6 @@ static ssize_t writeback_store(struct device *dev,
 		if (mode == IDLE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_IDLE))
 			goto next;
-
 		if (mode == HUGE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_HUGE))
 			goto next;
@@ -739,7 +743,7 @@ static ssize_t writeback_store(struct device *dev,
 		bio.bi_iter.bi_sector = blk_idx * (PAGE_SIZE >> 9);
 		bio_set_op_attrs(&bio, REQ_OP_WRITE, REQ_SYNC);
 		bio_add_page(&bio, bvec.bv_page, bvec.bv_len,
-					bvec.bv_offset);
+				bvec.bv_offset);
 		/*
 		 * XXX: A single page IO would be inefficient for write
 		 * but it would be not bad as starter.
@@ -777,7 +781,6 @@ static ssize_t writeback_store(struct device *dev,
 		zram_set_element(zram, index, blk_idx);
 		blk_idx = 0;
 		atomic64_inc(&zram->stats.pages_stored);
-
 		spin_lock(&zram->wb_limit_lock);
 		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
 			zram->bd_wb_limit -=  min_t(u64,
@@ -787,10 +790,9 @@ next:
 		zram_slot_unlock(zram, index);
 	}
 
-	ret = len;
-error:
 	if (blk_idx)
 		free_block_bdev(zram, blk_idx);
+	ret = len;
 	__free_page(page);
 release_init_lock:
 	up_read(&zram->init_lock);
@@ -1188,6 +1190,8 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 		return false;
 	}
 
+	if (!huge_class_size)
+		huge_class_size = zs_huge_class_size(zram->mem_pool);
 	return true;
 }
 
@@ -1373,7 +1377,7 @@ compress_again:
 		return ret;
 	}
 
-	if (comp_len > max_zpage_size)
+	if (comp_len >= huge_class_size)
 		comp_len = PAGE_SIZE;
 	/*
 	 * handle allocation has 2 paths:

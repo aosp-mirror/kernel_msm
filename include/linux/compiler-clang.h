@@ -24,6 +24,14 @@
 #undef inline
 #define inline inline __attribute__((unused)) notrace
 
+#undef __no_sanitize_address
+#define __no_sanitize_address __attribute__((no_sanitize("address")))
+
+/* Clang doesn't have a way to turn it off per-function, yet. */
+#ifdef __noretpoline
+#undef __noretpoline
+#endif
+
 #ifdef CONFIG_LTO_CLANG
 #ifdef CONFIG_FTRACE_MCOUNT_RECORD
 #define __norecordmcount \
@@ -43,14 +51,16 @@
 #define __SANITIZE_ADDRESS__
 #endif
 
-#undef __no_sanitize_address
-#if __has_feature(address_sanitizer)
-#define __no_sanitize_address __attribute__((no_sanitize("kernel-address")))
-#else
-#define __no_sanitize_address
-#endif
-
-/* Clang doesn't have a way to turn it off per-function, yet. */
-#ifdef __noretpoline
-#undef __noretpoline
+/*
+ * Not all versions of clang implement the the type-generic versions
+ * of the builtin overflow checkers. Fortunately, clang implements
+ * __has_builtin allowing us to avoid awkward version
+ * checks. Unfortunately, we don't know which version of gcc clang
+ * pretends to be, so the macro may or may not be defined.
+ */
+#undef COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW
+#if __has_builtin(__builtin_mul_overflow) && \
+    __has_builtin(__builtin_add_overflow) && \
+    __has_builtin(__builtin_sub_overflow)
+#define COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW 1
 #endif

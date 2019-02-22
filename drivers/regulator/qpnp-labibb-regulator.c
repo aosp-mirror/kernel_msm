@@ -632,7 +632,7 @@ struct qpnp_labibb {
 	bool				notify_lab_vreg_ok_sts;
 	bool				detect_lab_sc;
 	bool				sc_detected;
-	 /* Tracks the secure UI mode entry/exit */
+	/* Tracks the secure UI mode entry/exit */
 	bool				secure_mode;
 	bool				aod_mode;
 	u32				swire_2nd_cmd_delay;

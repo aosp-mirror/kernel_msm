@@ -3266,9 +3266,9 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 			single_line, single_line, single_line);
 		hlist_for_each_entry_safe(ictx, n, &fl->clst.pending, hn) {
 			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
-					"0x%-18X|%-10d|%-10d|%-10zu|0x%-20llX\n\n",
-					ictx->sc, ictx->pid, ictx->tgid,
-					ictx->used, ictx->ctxid);
+				"0x%-18X|%-10d|%-10d|%-10zu|0x%-20llX\n\n",
+				ictx->sc, ictx->pid, ictx->tgid,
+				ictx->used, ictx->ctxid);
 		}
 
 		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,

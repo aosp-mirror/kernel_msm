@@ -85,16 +85,18 @@ static int scsi_dev_type_resume(struct device *dev,
 		err = pm_runtime_set_active(dev);
 		pm_runtime_enable(dev);
 
+		/*
+		 * Forcibly set runtime PM status of request queue to "active"
+		 * to make sure we can again get requests from the queue
+		 * (see also blk_pm_peek_request()).
+		 *
+		 * The resume hook will correct runtime PM status of the disk.
+		 */
 		if (!err && scsi_is_sdev_device(dev)) {
 			struct scsi_device *sdev = to_scsi_device(dev);
 
-			/*
-			 * If scsi device runtime PM is managed by block layer
-			 * then we should update request queue's runtime status
-			 * as well.
-			 */
 			if (sdev->request_queue->dev)
-				blk_post_runtime_resume(sdev->request_queue, 0);
+				blk_set_runtime_active(sdev->request_queue);
 		}
 	}
 

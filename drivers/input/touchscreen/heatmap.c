@@ -21,7 +21,7 @@ static const unsigned int NUM_BUFFERS_BEFORE_DROP = 3;
 static unsigned int consecutive_frames_dropped;
 
 struct heatmap_vb2_buffer {
-	struct vb2_buffer vb;
+	struct vb2_v4l2_buffer v4l2_vb;
 	struct list_head list;
 };
 
@@ -56,7 +56,8 @@ static int heatmap_set_input(
 static inline struct heatmap_vb2_buffer *to_heatmap_vb2_buffer(
 		struct vb2_buffer *vb2)
 {
-	return container_of(vb2, struct heatmap_vb2_buffer, vb);
+	return container_of(to_vb2_v4l2_buffer(vb2), struct heatmap_vb2_buffer,
+			    v4l2_vb);
 }
 
 static const struct v4l2_file_operations heatmap_video_fops = {
@@ -72,6 +73,7 @@ static const struct v4l2_file_operations heatmap_video_fops = {
 void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp)
 {
 	struct heatmap_vb2_buffer *new_buf;
+	struct vb2_buffer *vb2_buf;
 	strength_t *data;
 	int total_bytes = v4l2->format.sizeimage;
 	strength_t temp_buffer[total_bytes];
@@ -124,18 +126,19 @@ void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp)
 		struct heatmap_vb2_buffer, list);
 	list_del(&new_buf->list);
 
-	data = vb2_plane_vaddr(&new_buf->vb, 0);
+	vb2_buf = &new_buf->v4l2_vb.vb2_buf;
+	data = vb2_plane_vaddr(vb2_buf, 0);
 	if (!data) {
 		dev_err(v4l2->parent_dev, "heatmap: Error acquiring frame pointer\n");
-		vb2_buffer_done(&new_buf->vb, VB2_BUF_STATE_ERROR);
+		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 		spin_unlock(&v4l2->heatmap_lock);
 		return;
 	}
 
 	memcpy(data, temp_buffer, total_bytes);
-	vb2_set_plane_payload(&new_buf->vb, /* plane number */ 0, total_bytes);
-	new_buf->vb.timestamp = timestamp;
-	vb2_buffer_done(&new_buf->vb, VB2_BUF_STATE_DONE);
+	vb2_set_plane_payload(vb2_buf, /* plane number */ 0, total_bytes);
+	vb2_buf->timestamp = timestamp;
+	vb2_buffer_done(vb2_buf, VB2_BUF_STATE_DONE);
 	spin_unlock(&v4l2->heatmap_lock);
 }
 EXPORT_SYMBOL(heatmap_read);
@@ -172,7 +175,7 @@ static void return_all_buffers(struct v4l2_heatmap *v4l2,
 
 	spin_lock(&v4l2->heatmap_lock);
 	list_for_each_entry_safe(buf, node, &v4l2->heatmap_buffer_list, list) {
-		vb2_buffer_done(&buf->vb, state);
+		vb2_buffer_done(&buf->v4l2_vb.vb2_buf, state);
 		list_del(&buf->list);
 	}
 	spin_unlock(&v4l2->heatmap_lock);

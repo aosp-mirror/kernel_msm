@@ -2857,7 +2857,6 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 		input_unregister_handler(sde_enc->input_handler);
 
 	kthread_cancel_work_sync(&sde_enc->input_event_work);
-
 	/*
 	 * For primary command mode encoders, execute the resource control
 	 * pre-stop operations before the physical encoders are disabled, to

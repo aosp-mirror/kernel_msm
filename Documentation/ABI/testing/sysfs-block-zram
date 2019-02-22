@@ -127,7 +127,7 @@ Date:		November 2018
 Contact:	Minchan Kim <minchan@kernel.org>
 Description:
 		The writeback_limit_enable file is read-write and specifies
-		eable of writeback_limit feature. "1" means enable the feature.
+		eanbe of writeback_limit feature. "1" means eable the feature.
 		No limit "0" is the initial state.
 
 What:		/sys/block/zram<id>/writeback_limit

@@ -547,6 +547,11 @@ static int persistent_ram_post_init(struct persistent_ram_zone *prz, u32 sig,
 	sig ^= PERSISTENT_RAM_SIG;
 
 	if (prz->buffer->sig == sig) {
+		if (buffer_size(buffer) == 0) {
+			pr_debug("found existing empty buffer\n");
+			return 0;
+		}
+
 		if (buffer_size(buffer) > prz->buffer_size ||
 		    buffer_start(buffer) > buffer_size(buffer))
 			pr_info("found existing invalid buffer, size %zu, start %zu\n",
