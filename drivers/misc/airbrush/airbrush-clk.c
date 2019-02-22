@@ -18,8 +18,6 @@
 
 #include "airbrush-clk.h"
 
-#define OSC_RATE 19200000
-
 #define GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU	0x1024202c
 #define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
 
@@ -177,7 +175,7 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	u64 new_rate = rate;
 
 	if (rate == 0) {
-		rate = OSC_RATE;
+		rate = AB_SM_OSC_RATE;
 		new_rate = rate;
 	}
 
@@ -186,7 +184,7 @@ static u64 __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
-	if (rate == OSC_RATE) {
+	if (rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
@@ -398,7 +396,7 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	u64 new_rate = rate;
 
 	if (rate == 0) {
-		rate = OSC_RATE;
+		rate = AB_SM_OSC_RATE;
 		new_rate = rate;
 	}
 
@@ -407,7 +405,7 @@ static u64 __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 
-	if (rate == OSC_RATE) {
+	if (rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
@@ -495,14 +493,14 @@ static u64 __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 	u64 new_rate = rate;
 
 	if (rate == 0) {
-		rate = OSC_RATE;
+		rate = AB_SM_OSC_RATE;
 		new_rate = rate;
 	}
 
 	dev_dbg(clk_ctx->dev,
 		"%s: set AON clock rate to %llu\n", __func__, rate);
 
-	if (rate == OSC_RATE) {
+	if (rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,

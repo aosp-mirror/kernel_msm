@@ -46,36 +46,36 @@ static struct ab_state_context *ab_sm_ctx;
  * Index 1 - B0 clk frequencies
  */
 static u64 blk_ipu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_0_0] = { 19200000, 19200000 },
+	[BLOCK_STATE_0_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 	[BLOCK_STATE_0_1] = { 50000000,  50000000  },
 	[BLOCK_STATE_0_2] = { 220000000, 271800000 },
 	[BLOCK_STATE_0_3] = { 330000000, 408000000 },
 	[BLOCK_STATE_0_4] = { 440000000, 543600000 },
 	[BLOCK_STATE_0_5] = { 549600000, 680000000 },
 	[BLOCK_STATE_0_6] = { 609600000, 849600000 },
-	[BLOCK_STATE_1_0] = { 0, 0 },
-	[BLOCK_STATE_1_1] = { 0, 0 },
-	[BLOCK_STATE_1_2] = { 0, 0 },
-	[BLOCK_STATE_2_0] = { 0, 0 },
-	[BLOCK_STATE_3_0] = { 0, 0 },
+	[BLOCK_STATE_1_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_1_1] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_1_2] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_2_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_3_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 };
 
 /* Index 0 - A0 clk frequencies
  * Index 1 - B0 clk frequencies
  */
 static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_0_0] = { 19200000,  19200000 },
+	[BLOCK_STATE_0_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 	[BLOCK_STATE_0_1] = { 50000000,  50000000   },
 	[BLOCK_STATE_0_2] = { 306400000, 316000000  },
 	[BLOCK_STATE_0_3] = { 459600000, 474000000  },
 	[BLOCK_STATE_0_4] = { 612800000, 632000000  },
 	[BLOCK_STATE_0_5] = { 765600000, 789600000  },
 	[BLOCK_STATE_0_6] = { 961600000, 1000000000 },
-	[BLOCK_STATE_1_0] = { 0, 0 },
-	[BLOCK_STATE_1_1] = { 0, 0 },
-	[BLOCK_STATE_1_2] = { 0, 0 },
-	[BLOCK_STATE_2_0] = { 0, 0 },
-	[BLOCK_STATE_3_0] = { 0, 0 },
+	[BLOCK_STATE_1_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_1_1] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_1_2] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_2_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_3_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 };
 
 #define BLK_(num, state, sub, pmu, rail, v, clk, freq, pwr, used, tiles, dr) \
@@ -170,9 +170,9 @@ static struct block_property fsys_property_table[] = {
 /* TODO: (b/124472417) set clock rate to 933.12*/
 static struct block_property aon_property_table[] = {
 	BLK_(0_0, PowerUp,  WFI,     0, on,  0_85, off, 921.6, 0, 0, 0, 0),
-	BLK_(0_1, PowerUp,  Boot,    0, on,  0_85, on,  19.2,   0, 0, 0, 0),
+	BLK_(0_1, PowerUp,  Boot,    0, on,  0_85, on,  19.2,  0, 0, 0, 0),
 	BLK_(0_2, PowerUp,  Compute, 0, on,  0_85, on,  921.6, 0, 0, 0, 0),
-	BLK_(3_0, Disabled, NoRail,  0, off, 0_0,  off, 0,      0, 0, 0, 0),
+	BLK_(3_0, Disabled, NoRail,  0, off, 0_0,  off, 19.2,  0, 0, 0, 0),
 };
 
 #define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon) \
@@ -271,6 +271,7 @@ static void tpu_clock_resync(struct ab_state_context *sc)
 
 /* Caller must hold sc->op_lock */
 int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
+			 struct block_property *last_state,
 			 u64 frequency, enum states clk_status)
 {
 	int ret = 0;
@@ -279,19 +280,21 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 
 	switch (blk->name) {
 	case BLK_IPU:
-		if (blk->current_state->clk_frequency == 0 && frequency != 0) {
+		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
+				frequency != AB_SM_OSC_RATE) {
 			ret = clk->ipu_pll_enable(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (blk->current_state->clk_status == off && clk_status == on) {
+		if (last_state->clk_status == off && clk_status == on) {
 			ret = clk->ipu_ungate(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (blk->current_state->clk_frequency == 0 && !frequency)
+		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
+				frequency == AB_SM_OSC_RATE)
 			break;
 
 		ret_freq = clk->ipu_set_rate(clk->ctx, frequency);
@@ -301,13 +304,13 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			return -ENODEV;
 		}
 
-		if (blk->current_state->clk_status == on && clk_status == off) {
+		if (last_state->clk_status == on && clk_status == off) {
 			ret = clk->ipu_gate(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (!clk_status && !frequency) {
+		if (!clk_status && frequency == AB_SM_OSC_RATE) {
 			ret = clk->ipu_pll_disable(clk->ctx);
 			if (ret)
 				return ret;
@@ -317,19 +320,21 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 		break;
 
 	case BLK_TPU:
-		if (blk->current_state->clk_frequency == 0 && frequency != 0) {
+		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
+				frequency != AB_SM_OSC_RATE) {
 			ret = clk->tpu_pll_enable(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (blk->current_state->clk_status == off && clk_status == on) {
+		if (last_state->clk_status == off && clk_status == on) {
 			ret = clk->tpu_ungate(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (blk->current_state->clk_frequency == 0 && !frequency)
+		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
+				frequency == AB_SM_OSC_RATE)
 			break;
 
 		ret_freq = clk->tpu_set_rate(clk->ctx, frequency);
@@ -339,13 +344,13 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			return -ENODEV;
 		}
 
-		if (blk->current_state->clk_status == on && clk_status == off) {
+		if (last_state->clk_status == on && clk_status == off) {
 			ret = clk->tpu_gate(clk->ctx);
 			if (ret)
 				return ret;
 		}
 
-		if (!clk_status && !frequency) {
+		if (!clk_status && frequency == AB_SM_OSC_RATE) {
 			ret = clk->tpu_pll_disable(clk->ctx);
 			if (ret)
 				return ret;
@@ -359,7 +364,8 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	case BLK_FSYS:
 		break;
 	case BLK_AON:
-		if (blk->current_state->clk_frequency == 0 && !frequency)
+		if (last_state->clk_frequency == AB_SM_OSC_RATE &&
+				frequency == AB_SM_OSC_RATE)
 			break;
 
 		ret_freq = clk->aon_set_rate(clk->ctx, frequency);
@@ -439,7 +445,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		}
 	}
 
-	if (clk_set_frequency(sc, blk, desired_state->clk_frequency,
+	if (clk_set_frequency(sc, blk, last_state, desired_state->clk_frequency,
 			desired_state->clk_status)) {
 		mutex_unlock(&sc->op_lock);
 		return -EAGAIN;
@@ -1509,7 +1515,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		clk_frequency = (u32)arg;
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_IPU]),
-				clk_frequency, on);
+			sc->blocks[BLK_IPU].current_state, clk_frequency, on);
 		mutex_unlock(&sc->op_lock);
 		break;
 
@@ -1517,7 +1523,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		clk_frequency = (u32)arg;
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_TPU]),
-				clk_frequency, on);
+			sc->blocks[BLK_TPU].current_state, clk_frequency, on);
 		mutex_unlock(&sc->op_lock);
 		break;
 
@@ -1531,7 +1537,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		clk_frequency = (u32)arg;
 		mutex_lock(&sc->op_lock);
 		ret = clk_set_frequency(sc, &(sc->blocks[BLK_AON]),
-				clk_frequency, on);
+			sc->blocks[BLK_AON].current_state, clk_frequency, on);
 		mutex_unlock(&sc->op_lock);
 		break;
 

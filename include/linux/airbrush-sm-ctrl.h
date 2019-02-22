@@ -40,6 +40,8 @@
 #define __GPIO_ENABLE	0x1
 #define __GPIO_DISABLE	0x0
 
+#define AB_SM_OSC_RATE 19200000
+
 enum block_name {
 	BLK_IPU,
 	BLK_TPU,
