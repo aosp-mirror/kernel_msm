@@ -310,4 +310,8 @@
 	abc_cooling: abc-cooling {
 		#cooling-cells = <2>;
 	};
+
+	abc_cooling_internal: abc-cooling-internal {
+		#cooling-cells = <2>;
+	};
 };

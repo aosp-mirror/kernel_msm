@@ -48,15 +48,18 @@
 			cooling-maps {
 				map4 {
 					trip = <&airbrush_tmu_trip4>;
-					cooling-device = <&abc_cooling 1 1>;
+					cooling-device =
+						<&abc_cooling_internal 1 1>;
 				};
 				map5 {
 					trip = <&airbrush_tmu_trip5>;
-					cooling-device = <&abc_cooling 2 2>;
+					cooling-device =
+						<&abc_cooling_internal 2 2>;
 				};
 				map6 {
 					trip = <&airbrush_tmu_trip6>;
-					cooling-device = <&abc_cooling 3 3>;
+					cooling-device =
+						<&abc_cooling_internal 3 3>;
 				};
 			};
 		};
