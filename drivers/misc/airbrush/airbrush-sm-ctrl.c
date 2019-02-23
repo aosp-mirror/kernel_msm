@@ -1329,9 +1329,10 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 			container_of(data,
 				     struct ab_state_context,
 				     shutdown_work);
+	enum chip_state prev_state = sc->curr_chip_substate_id;
 
 	mutex_lock(&sc->state_transitioning_lock);
-	if (sc->curr_chip_substate_id == CHIP_STATE_6_0) {
+	if (prev_state == CHIP_STATE_6_0) {
 		/* No need to emergency shutdown if already powered off */
 		dev_info(sc->dev, "already shutdown; skip emergency shutdown work\n");
 		mutex_unlock(&sc->state_transitioning_lock);
@@ -1339,8 +1340,29 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	}
 
 	dev_warn(sc->dev, "begin emergency shutdown work\n");
-	sc->dest_chip_substate_id = CHIP_STATE_6_0;
-	sc->change_ret = ab_sm_update_chip_state(sc);
+
+	/* Force reset el2_mode (b/122619299#comment10) */
+	sc->el2_mode = false;
+
+	ab_cleanup_state(sc);
+
+	/* record state change */
+	ab_sm_record_state_change(prev_state, sc->curr_chip_substate_id, sc);
+	trace_ab_state_change(sc->curr_chip_substate_id);
+
+	mutex_lock(&sc->async_fifo_lock);
+	if (sc->async_entries) {
+		kfifo_in(sc->async_entries,
+			&sc->curr_chip_substate_id,
+			sizeof(sc->curr_chip_substate_id));
+	}
+	mutex_unlock(&sc->async_fifo_lock);
+
+	/*
+	 * Intentionally skip complete_all(&sc->transition_comp) because
+	 * this is not initiated by a state transition request.
+	 */
+	complete_all(&sc->notify_comp);
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	complete_all(&sc->transition_comp);
