@@ -47,6 +47,43 @@ struct gbms_chg_profile {
 	u32 cv_otv_margin;
 };
 
+#define FOREACH_CHG_EV_ADAPTER(S)		\
+	S(UNKNOWN), 	\
+	S(USB),		\
+	S(USB_SDP),	\
+	S(USB_DCP),	\
+	S(USB_CDP),	\
+	S(USB_ACA),	\
+	S(USB_C),	\
+	S(USB_PD),	\
+	S(USB_PD_DRP),	\
+	S(USB_PD_PPS),	\
+	S(USB_BRICKID),	\
+	S(USB_HVDCP),	\
+	S(USB_HVDCP3),	\
+	S(USB_FLOAT),	\
+	S(WLC),		\
+	S(WLC_EPP),	\
+	S(WLC_SPP),	\
+
+#define CHG_EV_ADAPTER_STRING(s)	#s
+#define _CHG_EV_ADAPTER_PRIMITIVE_CAT(a, ...) a ## __VA_ARGS__
+#define CHG_EV_ADAPTER_ENUM(e)	\
+			_CHG_EV_ADAPTER_PRIMITIVE_CAT(CHG_EV_ADAPTER_TYPE_,e)
+
+enum chg_ev_adapter_type_t {
+	FOREACH_CHG_EV_ADAPTER(CHG_EV_ADAPTER_ENUM)
+};
+
+union gbms_ce_adapter_details {
+	uint32_t	v;
+	struct {
+		uint8_t		ad_type;
+		uint8_t		pad;
+		uint8_t 	ad_voltage;
+		uint8_t 	ad_amperage;
+	};
+};
 
 #define GBMS_CCCM_LIMITS(profile, ti, vi) \
 	profile->cccm_limits[(ti * profile->volt_nb_limits) + vi]
@@ -94,6 +131,7 @@ uint8_t gbms_gen_chg_flags(int chg_status, int chg_type);
 /* debug/print */
 const char *gbms_chg_type_s(int chg_type);
 const char *gbms_chg_status_s(int chg_status);
+const char *gbms_chg_ev_adapter_s(int adapter);
 
 
 /* Votables */

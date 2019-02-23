@@ -130,11 +130,12 @@ struct chg_drv {
 	/* */
 	u32 cv_update_interval;
 	u32 cc_update_interval;
+	union gbms_ce_adapter_details adapter_details;
+
 	struct votable	*msc_interval_votable;
 	struct votable	*msc_fv_votable;
 	struct votable	*msc_fcc_votable;
 	struct votable	*msc_chg_disable_votable;
-
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
 	struct votable	*dc_icl_votable;
@@ -233,32 +234,54 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 		POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE, chg_state.v);
 }
 
-static void pr_info_usb_state(struct power_supply *usb_psy,
-			      struct power_supply *tcpm_psy)
+static int info_usb_state(union gbms_ce_adapter_details *ad,
+			  struct power_supply *usb_psy,
+			  struct power_supply *tcpm_psy)
 {
-	int usb_type, usbc_type;
+	int usb_type, usbc_type, voltage_max, amperage_max;
 
 	usb_type = GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_REAL_TYPE);
 	if (tcpm_psy)
 		usbc_type = GPSY_GET_PROP(tcpm_psy, POWER_SUPPLY_PROP_USB_TYPE);
+
+	voltage_max = GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX);
+	amperage_max = GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
 
 	pr_info("usbchg=%s typec=%s usbv=%d usbc=%d usbMv=%d usbMc=%d\n",
 		psy_usb_type_str[usb_type],
 		tcpm_psy ? psy_usbc_type_str[usbc_type] : "null",
 		GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW) / 1000,
 		GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_NOW)/1000,
-		GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX) / 1000,
-		GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_CURRENT_MAX) / 1000);
+		voltage_max / 1000,
+		amperage_max / 1000);
+
+	ad->ad_type = CHG_EV_ADAPTER_TYPE_USB; /* TODO all types */
+	ad->ad_voltage = voltage_max / 100000;
+	ad->ad_amperage = amperage_max / 100000;
+
+	return 0;
 }
 
-static void pr_info_wlc_state(struct power_supply *wlc_psy)
+static int info_wlc_state(union gbms_ce_adapter_details *ad,
+			  struct power_supply *wlc_psy)
 {
+	int voltage_max, amperage_max;
+
+	voltage_max = GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX);
+	amperage_max = GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_CURRENT_MAX);
+
 	pr_info("wlcv=%d wlcc=%d wlcMv=%d wlcMc=%d wlct=%d\n",
 		GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW) / 1000,
 		GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_CURRENT_NOW) / 1000,
-		GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX) / 1000,
-		GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_CURRENT_MAX) / 1000,
+		voltage_max / 1000,
+		amperage_max / 1000,
 		GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_TEMP));
+
+	ad->ad_type = CHG_EV_ADAPTER_TYPE_WLC; /* TODO BPP/EPP/XPP */
+	ad->ad_voltage = voltage_max / 100000;
+	ad->ad_amperage = amperage_max / 100000;
+
+	return 0;
 }
 
 
@@ -722,6 +745,29 @@ static int chg_work_next_interval(const struct chg_drv *chg_drv,
 	return update_interval;
 }
 
+static void chg_work_adapter_details(struct chg_drv *chg_drv,
+				     int usb_online, int wlc_online)
+{
+	union gbms_ce_adapter_details ad = { };
+
+	if (wlc_online)
+		info_wlc_state(&ad, chg_drv->wlc_psy);
+	if (usb_online)
+		info_usb_state(&ad, chg_drv->usb_psy, chg_drv->tcpm_psy);
+
+	/* google battery needs adapter details for stats */
+	if (ad.v != chg_drv->adapter_details.v) {
+		int rc;
+
+		rc = GPSY_SET_PROP(chg_drv->bat_psy,
+				   POWER_SUPPLY_PROP_ADAPTER_DETAILS, ad.v);
+		if (rc < 0)
+			pr_info("MSC_CHG cannot set adapter details (%d)\n");
+		else
+			chg_drv->adapter_details.v = ad.v;
+	}
+}
+
 static void chg_work(struct work_struct *work)
 {
 	struct chg_drv *chg_drv =
@@ -746,10 +792,10 @@ static void chg_work(struct work_struct *work)
 	if (wlc_psy)
 		wlc_online = GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
 
-	/* If no power source, stop charging and exit */
+	/* If no power source, stop charging immediately and exit */
 	if (usb_online  < 0 || wlc_online < 0) {
-		pr_err("error reading usb=%d wlc=%d\n",
-			usb_online, wlc_online);
+		pr_err("MSC_CHG error reading usb=%d wlc=%d\n",
+						usb_online, wlc_online);
 		goto error_rerun;
 	} else if (!usb_online && !wlc_online) {
 		pr_info("MSC_CHG no power source detected, disabling charging\n");
@@ -763,10 +809,8 @@ static void chg_work(struct work_struct *work)
 		chg_drv->stop_charging = false;
 	}
 
-	if (usb_online)
-		pr_info_usb_state(usb_psy, tcpm_psy);
-	if (wlc_online)
-		pr_info_wlc_state(wlc_psy);
+	/* update adapter details */
+	chg_work_adapter_details(chg_drv, usb_online, wlc_online);
 
 	soc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
 	if (soc == -EINVAL)
@@ -834,7 +878,7 @@ static void chg_work(struct work_struct *work)
 		vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, true, fv_uv);
 		vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, cc_max);
 
-		/* */
+		/* zero update_interval means stop charging */
 		update_interval = chg_work_next_interval(chg_drv, &chg_state);
 		if (update_interval) {
 

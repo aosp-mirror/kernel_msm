@@ -62,6 +62,18 @@ const char *gbms_chg_status_s(int chg_status)
 	return psy_chgs_str[chg_status];
 }
 
+
+const char *gbms_chg_ev_adapter_s(int adapter)
+{
+	static char *chg_ev_adapter_type_str[] = {
+		FOREACH_CHG_EV_ADAPTER(CHG_EV_ADAPTER_STRING)
+	};
+
+	if (adapter < 0 || adapter > ARRAY_SIZE(chg_ev_adapter_type_str))
+		return "<err>";
+	return chg_ev_adapter_type_str[adapter];
+}
+
 /* convert C rates to current. Caller can account for tolerances reducing
  * battery_capacity. fv_uv_resolution is used to create discrete steps.
  * NOTE: the call covert C rates to chanrge currents IN PLACE, ie you cannot
