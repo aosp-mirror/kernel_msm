@@ -355,8 +355,10 @@ static bool p9221_is_epp(struct p9221_charger_data *charger)
 		return true;
 
 	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
-	if (ret == 0)
+	if (ret == 0) {
+		dev_info(&charger->client->dev, "System mode reg: %x\n", reg);
 		return (reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) > 0;
+	}
 
 	dev_err(&charger->client->dev, "Could not read mode: %d\n",
 		ret);
