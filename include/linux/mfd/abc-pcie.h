@@ -150,7 +150,6 @@ struct abc_device {
 	struct cdev c_dev;
 	u32 memory_map;
 	atomic_t link_state;
-	bool el2_state;
 	void __iomem	*pcie_config;
 	void __iomem	*ipu_config;
 	void __iomem	*tpu_config;
