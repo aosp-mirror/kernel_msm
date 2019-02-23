@@ -66,7 +66,7 @@ union gbms_charger_state {
 		uint8_t chg_status;
 		uint8_t chg_type;
 		uint16_t vchrg;
-		uint8_t pad1[2];
+		uint16_t icl;
 	} f;
 };
 

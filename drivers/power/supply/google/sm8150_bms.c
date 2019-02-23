@@ -67,6 +67,7 @@ struct bias_config {
 #define CHGR_FAST_CHARGE_CURRENT_SETTING	0x1061
 #define CHGR_FLOAT_VOLTAGE_SETTING		0x1070
 
+#define DCDC_AICL_ICL_STATUS_REG		0x1108
 #define DCDC_AICL_STATUS_REG			0x110A
 #define DCDC_SOFT_ILIMIT_BIT			BIT(6)
 
@@ -670,6 +671,7 @@ static int sm8150_get_chg_type(const struct bms_dev *bms)
 static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 			  union gbms_charger_state *chg_state)
 {
+	u8 icl = -1;
 	int vchrg, rc;
 
 	chg_state->v = 0;
@@ -683,19 +685,21 @@ static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 		chg_state->f.flags |= GBMS_CS_FLAG_ILIM;
 
 	rc = sm8150_get_battery_voltage(bms, &vchrg);
-	if (rc < 0) {
-		pr_err("Couldn't read VOLTAGE_NOW rc=%d\n", rc);
-		chg_state->f.vchrg = 0;
-	} else {
+	if (rc == 0)
 		chg_state->f.vchrg = (vchrg / 1000);
-	}
 
-	pr_info("MSC_PCS chg_state=%lx [0x%x:%d:%d:%d]\n",
+	/* todo input current limit */
+	rc = sm8150_read(bms->pmic_regmap, DCDC_AICL_ICL_STATUS_REG, &icl, 1);
+	if (rc == 0)
+		chg_state->f.icl = (icl * 50);
+
+	pr_info("MSC_PCS chg_state=%lx [0x%x:%d:%d:%d:%d]\n",
 		(unsigned long)chg_state->v,
 		chg_state->f.flags,
 		chg_state->f.chg_type,
 		chg_state->f.chg_status,
-		chg_state->f.vchrg);
+		chg_state->f.vchrg,
+		chg_state->f.icl);
 
 	return 0;
 }
