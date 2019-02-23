@@ -262,6 +262,7 @@ struct p9221_charger_data {
 	u32				icl_ramp_ua;
 	u32				icl_ramp_delay_ms;
 	bool				fake_force_epp;
+	u32				dc_icl_bpp;
 };
 
 struct p9221_prop_reg_map_entry {
