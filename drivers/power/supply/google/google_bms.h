@@ -47,6 +47,9 @@ struct gbms_chg_profile {
 	u32 cv_otv_margin;
 };
 
+#define WLC_BPP_THRESHOLD_UV	700000
+#define WLC_EPP_THRESHOLD_UV	1100000
+
 #define FOREACH_CHG_EV_ADAPTER(S)		\
 	S(UNKNOWN), 	\
 	S(USB),		\
@@ -68,11 +71,33 @@ struct gbms_chg_profile {
 
 #define CHG_EV_ADAPTER_STRING(s)	#s
 #define _CHG_EV_ADAPTER_PRIMITIVE_CAT(a, ...) a ## __VA_ARGS__
+
+/* Enums will start with CHG_EV_ADAPTER_TYPE_ */
 #define CHG_EV_ADAPTER_ENUM(e)	\
 			_CHG_EV_ADAPTER_PRIMITIVE_CAT(CHG_EV_ADAPTER_TYPE_,e)
 
 enum chg_ev_adapter_type_t {
 	FOREACH_CHG_EV_ADAPTER(CHG_EV_ADAPTER_ENUM)
+};
+
+enum gbms_msc_states_t {
+	MSC_NONE = 0,
+	MSC_SEED,
+	MSC_DSG,
+	MSC_LAST,
+	MSC_VSWITCH,
+	MSC_VOVER,
+	MSC_PULLBACK,
+	MSC_FAST,
+	MSC_TYPE,
+	MSC_DLY,	/* in taper */
+	MSC_STEADY,	/* in taper */
+	MSC_RAISE,	/* in taper */
+	MSC_WAIT,	/* in taper */
+	MSC_RSTC,	/* in taper */
+	MSC_NEXT,	/* in taper */
+	MSC_NYET,	/* in taper */
+	MSC_STATES_COUNT,
 };
 
 union gbms_ce_adapter_details {
@@ -83,6 +108,47 @@ union gbms_ce_adapter_details {
 		uint8_t 	ad_voltage;
 		uint8_t 	ad_amperage;
 	};
+};
+
+struct gbms_ce_stats {
+	uint16_t 	voltage_in;
+	uint16_t	ssoc_in;
+	uint16_t 	voltage_out;
+	uint16_t 	ssoc_out;
+};
+
+struct gbms_ce_tier_stats {
+	uint8_t		voltage_tier_idx;
+	uint16_t	time_fast;
+	uint16_t	time_taper;
+	uint16_t	time_other;
+	int16_t		soc_in;
+	int16_t		temp_in;
+	int16_t		temp_min;
+	int16_t		temp_max;
+	int16_t		ibatt_min;
+	int16_t		ibatt_max;
+	uint16_t	icl_min;
+	uint16_t	icl_max;
+	uint16_t	cc_in;
+
+	int64_t		icl_sum;
+	int64_t		temp_sum;
+	int64_t		ibatt_sum;
+	uint32_t 	sample_count;
+	uint16_t 	msc_cnt[MSC_STATES_COUNT];
+	uint32_t 	msc_elap[MSC_STATES_COUNT];
+};
+
+#define GBMS_STATS_TIER_COUNT 3
+
+struct gbms_charging_event {
+	union gbms_ce_adapter_details	adapter_details;
+	struct gbms_ce_stats		charging_stats;
+	struct gbms_ce_tier_stats	tier_stats[GBMS_STATS_TIER_COUNT];
+
+	time_t first_update;
+	time_t last_update;
 };
 
 #define GBMS_CCCM_LIMITS(profile, ti, vi) \
@@ -132,7 +198,6 @@ uint8_t gbms_gen_chg_flags(int chg_status, int chg_type);
 const char *gbms_chg_type_s(int chg_type);
 const char *gbms_chg_status_s(int chg_status);
 const char *gbms_chg_ev_adapter_s(int adapter);
-
 
 /* Votables */
 #define VOTABLE_MSC_CHG_DISABLE	"MSC_CHG_DISABLE"

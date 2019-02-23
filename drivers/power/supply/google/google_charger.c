@@ -255,7 +255,14 @@ static int info_usb_state(union gbms_ce_adapter_details *ad,
 		voltage_max / 1000,
 		amperage_max / 1000);
 
-	ad->ad_type = CHG_EV_ADAPTER_TYPE_USB; /* TODO all types */
+	if (voltage_max < 0 || amperage_max < 0) {
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_UNKNOWN;
+		ad->ad_voltage = voltage_max;
+		ad->ad_amperage = amperage_max;
+		return -EINVAL;
+	}
+
+	ad->ad_type = CHG_EV_ADAPTER_TYPE_USB; /* TODO: b/127334513 */
 	ad->ad_voltage = voltage_max / 100000;
 	ad->ad_amperage = amperage_max / 100000;
 
@@ -277,7 +284,19 @@ static int info_wlc_state(union gbms_ce_adapter_details *ad,
 		amperage_max / 1000,
 		GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_TEMP));
 
-	ad->ad_type = CHG_EV_ADAPTER_TYPE_WLC; /* TODO BPP/EPP/XPP */
+	if (voltage_max < 0 || amperage_max < 0) {
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_UNKNOWN;
+		ad->ad_voltage = voltage_max;
+		ad->ad_amperage = amperage_max;
+		return -EINVAL;
+	}
+
+	if (amperage_max >= WLC_BPP_THRESHOLD_UV) {
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_WLC_EPP;
+	} else if (amperage_max >= WLC_BPP_THRESHOLD_UV) {
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_WLC_SPP;
+	}
+
 	ad->ad_voltage = voltage_max / 100000;
 	ad->ad_amperage = amperage_max / 100000;
 
@@ -751,18 +770,19 @@ static void chg_work_adapter_details(struct chg_drv *chg_drv,
 	union gbms_ce_adapter_details ad = { };
 
 	if (wlc_online)
-		info_wlc_state(&ad, chg_drv->wlc_psy);
+		(void)info_wlc_state(&ad, chg_drv->wlc_psy);
 	if (usb_online)
-		info_usb_state(&ad, chg_drv->usb_psy, chg_drv->tcpm_psy);
+		(void)info_usb_state(&ad, chg_drv->usb_psy, chg_drv->tcpm_psy);
 
 	/* google battery needs adapter details for stats */
 	if (ad.v != chg_drv->adapter_details.v) {
 		int rc;
 
 		rc = GPSY_SET_PROP(chg_drv->bat_psy,
-				   POWER_SUPPLY_PROP_ADAPTER_DETAILS, ad.v);
+				   POWER_SUPPLY_PROP_ADAPTER_DETAILS,
+				   (int)ad.v);
 		if (rc < 0)
-			pr_info("MSC_CHG cannot set adapter details (%d)\n");
+			pr_err("MSC_CHG no adapter details (%d)\n", rc);
 		else
 			chg_drv->adapter_details.v = ad.v;
 	}
