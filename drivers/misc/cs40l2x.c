@@ -92,6 +92,7 @@ struct cs40l2x_private {
 	unsigned int wseq_length;
 	unsigned int event_control;
 	unsigned int hw_err_mask;
+	unsigned int hw_err_count[CS40L2X_NUM_HW_ERRS];
 	unsigned int peak_gpio1_enable;
 	unsigned int gpio_mask;
 	int vpp_measured;
@@ -155,6 +156,10 @@ static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 			const void *val, size_t val_len, size_t limit);
 static int cs40l2x_ack_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 			unsigned int val);
+
+static int cs40l2x_hw_err_rls(struct cs40l2x_private *cs40l2x,
+			unsigned int irq_mask);
+static int cs40l2x_hw_err_chk(struct cs40l2x_private *cs40l2x);
 
 static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x);
 
@@ -3612,6 +3617,76 @@ static ssize_t cs40l2x_num_a2h_levels_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", num_a2h_levels);
 }
 
+static ssize_t cs40l2x_hw_err_count_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	ssize_t len = 0;
+	int ret, i;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL
+			|| cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++)
+		len += snprintf(buf + len, PAGE_SIZE - len, "%u %s error(s)\n",
+				cs40l2x->hw_err_count[i],
+				cs40l2x_hw_errs[i].err_name);
+
+	ret = len;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_hw_err_count_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret, i;
+	unsigned int val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL
+			|| cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++) {
+		if (cs40l2x->hw_err_count[i] > CS40L2X_HW_ERR_COUNT_MAX) {
+			ret = cs40l2x_hw_err_rls(cs40l2x,
+					cs40l2x_hw_errs[i].irq_mask);
+			if (ret)
+				goto err_mutex;
+		}
+
+		cs40l2x->hw_err_count[i] = 0;
+	}
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
 static ssize_t cs40l2x_hw_reset_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -3856,6 +3931,8 @@ static DEVICE_ATTR(exc_enable, 0660, cs40l2x_exc_enable_show,
 static DEVICE_ATTR(a2h_level, 0660, cs40l2x_a2h_level_show,
 		cs40l2x_a2h_level_store);
 static DEVICE_ATTR(num_a2h_levels, 0660, cs40l2x_num_a2h_levels_show, NULL);
+static DEVICE_ATTR(hw_err_count, 0660, cs40l2x_hw_err_count_show,
+		cs40l2x_hw_err_count_store);
 static DEVICE_ATTR(hw_reset, 0660, cs40l2x_hw_reset_show,
 		cs40l2x_hw_reset_store);
 static DEVICE_ATTR(wt_file, 0660, cs40l2x_wt_file_show, cs40l2x_wt_file_store);
@@ -3911,6 +3988,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_exc_enable.attr,
 	&dev_attr_a2h_level.attr,
 	&dev_attr_num_a2h_levels.attr,
+	&dev_attr_hw_err_count.attr,
 	&dev_attr_hw_reset.attr,
 	&dev_attr_wt_file.attr,
 	&dev_attr_wt_date.attr,
@@ -4452,6 +4530,13 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		}
 		break;
 	}
+
+	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++)
+		if (cs40l2x->hw_err_count[i] > CS40L2X_HW_ERR_COUNT_MAX)
+			dev_warn(dev, "Pending %s error\n",
+					cs40l2x_hw_errs[i].err_name);
+		else
+			cs40l2x->hw_err_count[i] = 0;
 
 	if (cs40l2x->pdata.auto_recovery) {
 		ret = cs40l2x_check_recovery(cs40l2x);
@@ -5119,8 +5204,6 @@ static int cs40l2x_hw_err_rls(struct cs40l2x_private *cs40l2x,
 		return -EINVAL;
 	}
 
-	dev_crit(dev, "Encountered %s error\n", cs40l2x_hw_errs[i].err_name);
-
 	if (cs40l2x_hw_errs[i].bst_cycle) {
 		ret = regmap_update_bits(regmap, CS40L2X_PWR_CTRL2,
 				CS40L2X_BST_EN_MASK,
@@ -5129,12 +5212,6 @@ static int cs40l2x_hw_err_rls(struct cs40l2x_private *cs40l2x,
 			dev_err(dev, "Failed to disable boost converter\n");
 			return ret;
 		}
-	}
-
-	ret = regmap_write(regmap, CS40L2X_IRQ2_STATUS1, irq_mask);
-	if (ret) {
-		dev_err(dev, "Failed to acknowledge hardware error\n");
-		return ret;
 	}
 
 	ret = regmap_write(regmap, CS40L2X_PROTECT_REL_ERR_IGN, 0);
@@ -5166,27 +5243,48 @@ static int cs40l2x_hw_err_rls(struct cs40l2x_private *cs40l2x,
 		}
 	}
 
+	dev_info(dev, "Released %s error\n", cs40l2x_hw_errs[i].err_name);
+
 	return 0;
 }
 
 static int cs40l2x_hw_err_chk(struct cs40l2x_private *cs40l2x)
 {
-	int ret, i;
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
 	unsigned int val;
+	int ret, i;
 
-	ret = regmap_read(cs40l2x->regmap, CS40L2X_IRQ2_STATUS1, &val);
+	ret = regmap_read(regmap, CS40L2X_IRQ2_STATUS1, &val);
 	if (ret) {
-		dev_err(cs40l2x->dev, "Failed to read hardware error status\n");
+		dev_err(dev, "Failed to read hardware error status\n");
 		return ret;
 	}
 
-	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++)
-		if (val & cs40l2x_hw_errs[i].irq_mask) {
-			ret = cs40l2x_hw_err_rls(cs40l2x,
-					cs40l2x_hw_errs[i].irq_mask);
-			if (ret)
-				return ret;
+	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++) {
+		if (!(val & cs40l2x_hw_errs[i].irq_mask))
+			continue;
+
+		dev_crit(dev, "Encountered %s error\n",
+				cs40l2x_hw_errs[i].err_name);
+
+		ret = regmap_write(regmap, CS40L2X_IRQ2_STATUS1,
+				cs40l2x_hw_errs[i].irq_mask);
+		if (ret) {
+			dev_err(dev, "Failed to acknowledge hardware error\n");
+			return ret;
 		}
+
+		if (cs40l2x->hw_err_count[i]++ >= CS40L2X_HW_ERR_COUNT_MAX) {
+			dev_err(dev, "Aborted %s error release\n",
+					cs40l2x_hw_errs[i].err_name);
+			continue;
+		}
+
+		ret = cs40l2x_hw_err_rls(cs40l2x, cs40l2x_hw_errs[i].irq_mask);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
