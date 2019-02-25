@@ -142,7 +142,11 @@ void ipu_free_jqs_memory(struct device *dev, struct ipu_jqs_buffer *buf);
 void ipu_set_device_ops(struct device *dev,
 		const struct paintbox_device_ops *dev_ops);
 
+/* return the group for the device
+ * the function increments the reference on the group
+ */
 struct iommu_group *ipu_get_device_group(struct device *dev);
+
 struct device *ipu_get_iommu_device(struct device *dev);
 struct device *ipu_get_dma_device(struct device *dev);
 struct dentry *ipu_get_debug_root(struct device *dev);

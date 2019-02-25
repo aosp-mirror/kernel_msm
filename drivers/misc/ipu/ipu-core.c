@@ -184,8 +184,14 @@ struct iommu_group *ipu_get_device_group(struct device *dev)
 
 	pb_dev = to_paintbox_device(dev);
 
-	if (pb_dev->bus->group)
+	if (pb_dev->bus->group) {
+		/*
+		 * all uses of the function
+		 * should get the group's kobject
+		 */
+		iommu_group_ref_get(pb_dev->bus->group);
 		return pb_dev->bus->group;
+	}
 
 	group = iommu_group_alloc();
 	if (IS_ERR(group))
