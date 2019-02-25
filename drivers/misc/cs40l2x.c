@@ -91,6 +91,7 @@ struct cs40l2x_private {
 	unsigned int event_control;
 	unsigned int hw_err_mask;
 	unsigned int peak_gpio1_enable;
+	unsigned int gpio_mask;
 	int vpp_measured;
 	int ipp_measured;
 	bool asp_available;
@@ -1028,6 +1029,9 @@ static ssize_t cs40l2x_gpio1_rise_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
+		return -EPERM;
+
 	mutex_lock(&cs40l2x->lock);
 
 	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
@@ -1057,6 +1061,9 @@ static ssize_t cs40l2x_gpio1_rise_index_store(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
 	unsigned int reg, index;
+
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
+		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1101,6 +1108,9 @@ static ssize_t cs40l2x_gpio1_fall_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
+		return -EPERM;
+
 	mutex_lock(&cs40l2x->lock);
 
 	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
@@ -1130,6 +1140,9 @@ static ssize_t cs40l2x_gpio1_fall_index_store(struct device *dev,
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
 	unsigned int reg, index;
+
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
+		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1242,7 +1255,7 @@ static ssize_t cs40l2x_gpio2_rise_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
@@ -1275,7 +1288,7 @@ static ssize_t cs40l2x_gpio2_rise_index_store(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
@@ -1321,7 +1334,7 @@ static ssize_t cs40l2x_gpio2_fall_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
@@ -1354,7 +1367,7 @@ static ssize_t cs40l2x_gpio2_fall_index_store(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
@@ -1400,7 +1413,7 @@ static ssize_t cs40l2x_gpio3_rise_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
@@ -1433,7 +1446,7 @@ static ssize_t cs40l2x_gpio3_rise_index_store(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
@@ -1479,7 +1492,7 @@ static ssize_t cs40l2x_gpio3_fall_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
@@ -1512,7 +1525,7 @@ static ssize_t cs40l2x_gpio3_fall_index_store(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
@@ -1558,7 +1571,7 @@ static ssize_t cs40l2x_gpio4_rise_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
@@ -1591,7 +1604,7 @@ static ssize_t cs40l2x_gpio4_rise_index_store(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
@@ -1637,7 +1650,7 @@ static ssize_t cs40l2x_gpio4_fall_index_show(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
 		return -EPERM;
 
 	mutex_lock(&cs40l2x->lock);
@@ -1670,7 +1683,7 @@ static ssize_t cs40l2x_gpio4_fall_index_store(struct device *dev,
 	int ret;
 	unsigned int reg, index;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25B)
+	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
 		return -EPERM;
 
 	ret = kstrtou32(buf, 10, &index);
@@ -4590,23 +4603,17 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	unsigned int gpio_btndetect = CS40L2X_GPIO_BTNDETECT_GPIO1;
 	unsigned int val;
 	int ret, i;
 
 	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL)
 		return 0;
 
-	if (cs40l2x->devid == CS40L2X_DEVID_L25B)
-		gpio_btndetect |= (CS40L2X_GPIO_BTNDETECT_GPIO2
-				| CS40L2X_GPIO_BTNDETECT_GPIO3
-				| CS40L2X_GPIO_BTNDETECT_GPIO4);
-
 	ret = regmap_write(regmap,
 			cs40l2x_dsp_reg(cs40l2x, "GPIO_BUTTONDETECT",
 					CS40L2X_XM_UNPACKED_TYPE,
 					cs40l2x->fw_desc->id),
-			gpio_btndetect);
+			cs40l2x->gpio_mask);
 	if (ret) {
 		dev_err(dev, "Failed to enable GPIO detection\n");
 		return ret;
@@ -4897,8 +4904,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	}
 
 	if (cs40l2x->pdata.gpio1_rise_index > 0
-			&& cs40l2x->pdata.gpio1_rise_index
-				< cs40l2x->num_waves) {
+			&& cs40l2x->pdata.gpio1_rise_index < cs40l2x->num_waves
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -4910,13 +4917,17 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 				"Failed to write default gpio1_rise_index\n");
 			return ret;
 		}
-	} else if (cs40l2x->pdata.gpio1_rise_index >= cs40l2x->num_waves) {
+	} else if ((cs40l2x->pdata.gpio1_rise_index >= cs40l2x->num_waves
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1)
+			|| (cs40l2x->pdata.gpio1_rise_index > 0
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO1))) {
 		dev_warn(dev, "Ignored default gpio1_rise_index\n");
 	}
 
 	if (cs40l2x->pdata.gpio1_fall_index > 0
-			&& cs40l2x->pdata.gpio1_fall_index
-				< cs40l2x->num_waves) {
+			&& cs40l2x->pdata.gpio1_fall_index < cs40l2x->num_waves
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -4928,7 +4939,11 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 				"Failed to write default gpio1_fall_index\n");
 			return ret;
 		}
-	} else if (cs40l2x->pdata.gpio1_fall_index >= cs40l2x->num_waves) {
+	} else if ((cs40l2x->pdata.gpio1_fall_index >= cs40l2x->num_waves
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1)
+			|| (cs40l2x->pdata.gpio1_fall_index > 0
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO1))) {
 		dev_warn(dev, "Ignored default gpio1_fall_index\n");
 	}
 
@@ -4955,7 +4970,7 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 
 	if (cs40l2x->pdata.gpio2_rise_index > 0
 			&& cs40l2x->pdata.gpio2_rise_index < cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -4968,15 +4983,16 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio2_rise_index >= cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2)
 			|| (cs40l2x->pdata.gpio2_rise_index > 0
-				&& cs40l2x->devid != CS40L2X_DEVID_L25B)) {
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO2))) {
 		dev_warn(dev, "Ignored default gpio2_rise_index\n");
 	}
 
 	if (cs40l2x->pdata.gpio2_fall_index > 0
 			&& cs40l2x->pdata.gpio2_fall_index < cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -4989,15 +5005,16 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio2_fall_index >= cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2)
 			|| (cs40l2x->pdata.gpio2_fall_index > 0
-				&& cs40l2x->devid != CS40L2X_DEVID_L25B)) {
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO2))) {
 		dev_warn(dev, "Ignored default gpio2_fall_index\n");
 	}
 
 	if (cs40l2x->pdata.gpio3_rise_index > 0
 			&& cs40l2x->pdata.gpio3_rise_index < cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -5010,15 +5027,16 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio3_rise_index >= cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3)
 			|| (cs40l2x->pdata.gpio3_rise_index > 0
-				&& cs40l2x->devid != CS40L2X_DEVID_L25B)) {
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO3))) {
 		dev_warn(dev, "Ignored default gpio3_rise_index\n");
 	}
 
 	if (cs40l2x->pdata.gpio3_fall_index > 0
 			&& cs40l2x->pdata.gpio3_fall_index < cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -5031,15 +5049,16 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio3_fall_index >= cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3)
 			|| (cs40l2x->pdata.gpio3_fall_index > 0
-				&& cs40l2x->devid != CS40L2X_DEVID_L25B)) {
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO3))) {
 		dev_warn(dev, "Ignored default gpio3_fall_index\n");
 	}
 
 	if (cs40l2x->pdata.gpio4_rise_index > 0
 			&& cs40l2x->pdata.gpio4_rise_index < cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -5052,15 +5071,16 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio4_rise_index >= cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4)
 			|| (cs40l2x->pdata.gpio4_rise_index > 0
-				&& cs40l2x->devid != CS40L2X_DEVID_L25B)) {
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO4))) {
 		dev_warn(dev, "Ignored default gpio4_rise_index\n");
 	}
 
 	if (cs40l2x->pdata.gpio4_fall_index > 0
 			&& cs40l2x->pdata.gpio4_fall_index < cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B) {
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4) {
 		ret = regmap_write(regmap,
 				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -5073,9 +5093,10 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 			return ret;
 		}
 	} else if ((cs40l2x->pdata.gpio4_fall_index >= cs40l2x->num_waves
-			&& cs40l2x->devid == CS40L2X_DEVID_L25B)
+			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4)
 			|| (cs40l2x->pdata.gpio4_fall_index > 0
-				&& cs40l2x->devid != CS40L2X_DEVID_L25B)) {
+				&& !(cs40l2x->gpio_mask
+					& CS40L2X_GPIO_BTNDETECT_GPIO4))) {
 		dev_warn(dev, "Ignored default gpio4_fall_index\n");
 	}
 
@@ -6173,7 +6194,7 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 	int ret;
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	unsigned int wksrc_en = CS40L2X_WKSRC_EN_SDA | CS40L2X_WKSRC_EN_GPIO1;
+	unsigned int wksrc_en = CS40L2X_WKSRC_EN_SDA;
 
 	/* REFCLK configuration is handled by revision B1 ROM */
 	if (cs40l2x->pdata.refclk_gpio2 &&
@@ -6260,9 +6281,14 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 
 	/* hibernation is supported by revision B1 firmware only */
 	if (cs40l2x->revid == CS40L2X_REVID_B1) {
-		if (cs40l2x->devid == CS40L2X_DEVID_L25B)
-			wksrc_en |= (CS40L2X_WKSRC_EN_GPIO2
-					| CS40L2X_WKSRC_POL_GPIO4);
+		if (cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1)
+			wksrc_en |= CS40L2X_WKSRC_EN_GPIO1;
+
+		if (cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2)
+			wksrc_en |= CS40L2X_WKSRC_EN_GPIO2;
+
+		if (cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4)
+			wksrc_en |= CS40L2X_WKSRC_EN_GPIO4;
 
 		ret = regmap_update_bits(regmap,
 				CS40L2X_WAKESRC_CTL,
@@ -6572,6 +6598,17 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 	ret = of_property_read_u32(np, "cirrus,gpio4-fall-index", &out_val);
 	if (!ret)
 		pdata->gpio4_fall_index = out_val;
+
+	ret = of_property_read_u32(np, "cirrus,gpio-indv-enable", &out_val);
+	if (!ret) {
+		if (out_val > (CS40L2X_GPIO_BTNDETECT_GPIO1
+				| CS40L2X_GPIO_BTNDETECT_GPIO2
+				| CS40L2X_GPIO_BTNDETECT_GPIO3
+				| CS40L2X_GPIO_BTNDETECT_GPIO4))
+			dev_warn(dev, "Ignored default gpio_indv_enable\n");
+		else
+			pdata->gpio_indv_enable = out_val;
+	}
 
 	pdata->hiber_enable = of_property_read_bool(np, "cirrus,hiber-enable");
 
@@ -7138,6 +7175,21 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 
 	if (cs40l2x->event_control != CS40L2X_EVENT_DISABLED)
 		cs40l2x->amp_gnd_stby = pdata->amp_gnd_stby;
+
+	if (!pdata->gpio_indv_enable
+			|| cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG) {
+		cs40l2x->gpio_mask = CS40L2X_GPIO_BTNDETECT_GPIO1;
+
+		if (cs40l2x->devid == CS40L2X_DEVID_L25B)
+			cs40l2x->gpio_mask |= (CS40L2X_GPIO_BTNDETECT_GPIO2
+					| CS40L2X_GPIO_BTNDETECT_GPIO3
+					| CS40L2X_GPIO_BTNDETECT_GPIO4);
+	} else {
+		cs40l2x->gpio_mask = pdata->gpio_indv_enable;
+
+		if (cs40l2x->devid == CS40L2X_DEVID_L25A)
+			cs40l2x->gpio_mask &= ~CS40L2X_GPIO_BTNDETECT_GPIO2;
+	}
 
 	ret = cs40l2x_init(cs40l2x);
 	if (ret)

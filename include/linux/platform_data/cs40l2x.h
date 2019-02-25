@@ -40,6 +40,7 @@ struct cs40l2x_platform_data {
 	unsigned int gpio3_fall_index;
 	unsigned int gpio4_rise_index;
 	unsigned int gpio4_fall_index;
+	unsigned int gpio_indv_enable;
 	bool hiber_enable;
 	unsigned int asp_bclk_freq;
 	bool asp_bclk_inv;
