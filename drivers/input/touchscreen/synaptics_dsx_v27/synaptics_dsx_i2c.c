@@ -383,7 +383,6 @@ static int synaptics_rmi4_i2c_set_page(struct synaptics_rmi4_data *rmi4_data,
 {
 	int retval;
 	unsigned char retry;
-	unsigned char buf[PAGE_SELECT_LEN];
 	unsigned char page;
 	struct i2c_client *i2c = to_i2c_client(rmi4_data->pdev->dev.parent);
 	struct i2c_msg msg[1];
@@ -391,11 +390,11 @@ static int synaptics_rmi4_i2c_set_page(struct synaptics_rmi4_data *rmi4_data,
 	msg[0].addr = hw_if.board_data->i2c_addr;
 	msg[0].flags = 0;
 	msg[0].len = PAGE_SELECT_LEN;
-	msg[0].buf = buf;
+	msg[0].buf = kzalloc(PAGE_SELECT_LEN, GFP_KERNEL);
 
 	page = ((addr >> 8) & MASK_8BIT);
-	buf[0] = MASK_8BIT;
-	buf[1] = page;
+	msg[0].buf[0] = MASK_8BIT;
+	msg[0].buf[1] = page;
 
 	if (page != rmi4_data->current_page) {
 		for (retry = 0; retry < SYN_I2C_RETRY_TIMES; retry++) {
@@ -417,6 +416,7 @@ static int synaptics_rmi4_i2c_set_page(struct synaptics_rmi4_data *rmi4_data,
 	} else {
 		retval = PAGE_SELECT_LEN;
 	}
+	kfree(msg[0].buf);
 
 	return retval;
 }
@@ -426,7 +426,6 @@ static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 {
 	int retval;
 	unsigned char retry;
-	unsigned char buf;
 #ifdef I2C_BURST_LIMIT
 	unsigned int ii;
 	unsigned int rd_msgs = ((length - 1) / I2C_BURST_LIMIT) + 1;
@@ -454,15 +453,14 @@ static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 	msg[0].addr = hw_if.board_data->i2c_addr;
 	msg[0].flags = 0;
 	msg[0].len = 1;
-	msg[0].buf = &buf;
+	msg[0].buf = kzalloc(1, GFP_KERNEL);
 
 #ifdef I2C_BURST_LIMIT
 	for (ii = 0; ii < (rd_msgs - 1); ii++) {
 		msg[ii + 1].addr = hw_if.board_data->i2c_addr;
 		msg[ii + 1].flags = I2C_M_RD;
 		msg[ii + 1].len = I2C_BURST_LIMIT;
-		msg[ii + 1].buf = &data[data_offset];
-		data_offset += I2C_BURST_LIMIT;
+		msg[ii + 1].buf = kzalloc(I2C_BURST_LIMIT, GFP_KERNEL);
 		remaining_length -= I2C_BURST_LIMIT;
 	}
 #endif
@@ -470,9 +468,9 @@ static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 	msg[rd_msgs].addr = hw_if.board_data->i2c_addr;
 	msg[rd_msgs].flags = I2C_M_RD;
 	msg[rd_msgs].len = (unsigned short)remaining_length;
-	msg[rd_msgs].buf = &data[data_offset];
+	msg[rd_msgs].buf = kzalloc(remaining_length, GFP_KERNEL);
 
-	buf = addr & MASK_8BIT;
+	msg[0].buf[0] = addr & MASK_8BIT;
 
 	remaining_msgs = rd_msgs + 1;
 
@@ -521,7 +519,21 @@ static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 
 	retval = length;
 
+#ifdef I2C_BURST_LIMIT
+	for (ii = 0; ii < (rd_msgs - 1); ii++) {
+		memcpy(&data[data_offset], msg[ii + 1].buf, I2C_BURST_LIMIT);
+		data_offset += I2C_BURST_LIMIT;
+	}
+#endif
+	memcpy(&data[data_offset], msg[rd_msgs].buf, remaining_length);
+
 exit:
+#ifdef I2C_BURST_LIMIT
+	for (ii = 0; ii < (rd_msgs - 1); ii++)
+		kfree(msg[ii + 1].buf);
+#endif
+	kfree(msg[0].buf);
+	kfree(msg[rd_msgs].buf);
 	mutex_unlock(&rmi4_data->rmi4_io_ctrl_mutex);
 
 	return retval;
