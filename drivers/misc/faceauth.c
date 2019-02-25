@@ -80,6 +80,16 @@
 /* Citadel */
 #define MAX_CACHE_SIZE 512
 
+struct faceauth_data {
+	bool hypx_enable;
+	uint64_t m0_verbosity_level;
+	struct dentry *debugfs_root;
+	uint16_t session_id;
+	atomic_t in_use;
+	struct miscdevice misc_dev;
+	struct device *device;
+};
+
 static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir);
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
@@ -95,7 +105,7 @@ static int dma_gather_debug_data(void *destination_buffer,
 				 uint32_t buffer_size);
 static void clear_debug_data(void);
 static void move_debug_data_to_tail(void);
-static void enqueue_debug_data(bool el2);
+static void enqueue_debug_data(struct faceauth_data *data, bool el2);
 static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data);
 
 struct {
@@ -110,16 +120,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				   unsigned long arg);
 static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				   unsigned long arg);
-
-struct faceauth_data {
-	bool hypx_enable;
-	uint64_t m0_verbosity_level;
-	struct dentry *debugfs_root;
-	uint16_t session_id;
-	atomic_t in_use;
-	struct miscdevice misc_dev;
-	struct device *device;
-};
 
 /* M0 Verbosity Level Encoding
 
@@ -187,7 +187,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	struct faceauth_data *data = file->private_data;
 	int i;
 #if ENABLE_AIRBRUSH_DEBUG
-	struct faceauth_debug_data debug_step_data = { { 0 } };
+	struct faceauth_debug_data debug_step_data = { 0 };
 #endif
 
 	ioctl_start = jiffies;
@@ -270,7 +270,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 		if (start_step_data.operation == FACEAUTH_OP_ENROLL_COMPLETE) {
 			int16_t *flush_idxs =
-					   start_step_data.cache_flush_indexes;
+				start_step_data.cache_flush_indexes;
 			uint32_t flush_size = start_step_data.cache_flush_size;
 
 			if (flush_size > FACEAUTH_MAX_CACHE_FLUSH_SIZE) {
@@ -292,10 +292,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				}
 			}
 
-			err = dma_xfer_vmalloc(flush_idxs,
-					2 * FACEAUTH_MAX_CACHE_FLUSH_SIZE,
-					CACHE_FLUSH_INDEXES_ADDR,
-					DMA_TO_DEVICE);
+			err = dma_xfer_vmalloc(
+				flush_idxs, 2 * FACEAUTH_MAX_CACHE_FLUSH_SIZE,
+				CACHE_FLUSH_INDEXES_ADDR, DMA_TO_DEVICE);
 			if (err) {
 				pr_err("Error sending flush indexes\n");
 				return err;
@@ -368,7 +367,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 #if ENABLE_AIRBRUSH_DEBUG
 		save_debug_start = jiffies;
-		enqueue_debug_data(false);
+		enqueue_debug_data(data, false);
 		save_debug_end = jiffies;
 #endif
 
@@ -439,7 +438,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			break;
 		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
 			clear_debug_data();
-			enqueue_debug_data(false);
+			enqueue_debug_data(data, false);
 			err = dequeue_debug_data(&debug_step_data);
 			break;
 		default:
@@ -533,7 +532,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 			}
 		}
 
-		err = el2_faceauth_process(&start_step_data);
+		err = el2_faceauth_process(data->device, &start_step_data);
 		if (err)
 			goto exit;
 
@@ -542,7 +541,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		msleep(M0_POLLING_PAUSE);
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
 		for (;;) {
-			err = el2_faceauth_get_process_result(&start_step_data);
+			err = el2_faceauth_get_process_result(data->device,
+							      &start_step_data);
 
 			if (err) {
 				pr_err("Failed to get process results from EL2 %d\n",
@@ -569,7 +569,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		}
 
 		save_debug_start = jiffies;
-		enqueue_debug_data(true);
+		enqueue_debug_data(data, true);
 		save_debug_jiffies = jiffies - save_debug_start;
 
 		if (copy_to_user((void __user *)arg, &start_step_data,
@@ -592,7 +592,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 			err = -EFAULT;
 			goto exit;
 		}
-		err = el2_faceauth_gather_debug_log(&debug_step_data);
+		err = el2_faceauth_gather_debug_log(data->device,
+						    &debug_step_data);
 		break;
 
 	case FACEAUTH_DEV_IOC_DEBUG_DATA:
@@ -619,7 +620,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 			break;
 		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
 			clear_debug_data();
-			enqueue_debug_data(true);
+			enqueue_debug_data(data, true);
 			err = dequeue_debug_data(&debug_step_data);
 			break;
 		default:
@@ -814,7 +815,7 @@ static int dma_gather_debug_log(struct faceauth_debug_data *data)
 	return err;
 }
 
-static void enqueue_debug_data(bool el2)
+static void enqueue_debug_data(struct faceauth_data *data, bool el2)
 {
 	void *bin_addr;
 	int err;
@@ -822,7 +823,8 @@ static void enqueue_debug_data(bool el2)
 	bin_addr = debug_data_queue.data_buffer +
 		   (DEBUG_DATA_BIN_SIZE * debug_data_queue.head_idx);
 	if (el2)
-		err = el2_gather_debug_data(bin_addr, DEBUG_DATA_BIN_SIZE);
+		err = el2_gather_debug_data(data->device, bin_addr,
+					    DEBUG_DATA_BIN_SIZE);
 	else
 		err = dma_gather_debug_data(bin_addr, DEBUG_DATA_BIN_SIZE);
 
@@ -841,8 +843,7 @@ static void enqueue_debug_data(bool el2)
 		debug_data_queue.count++;
 	}
 
-	do_gettimeofday(
-		&(((struct faceauth_debug_entry *)bin_addr)->timestamp));
+	do_gettimeofday(&((struct faceauth_debug_entry *)bin_addr)->timestamp);
 }
 
 static void move_debug_data_to_tail(void)
@@ -916,7 +917,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 		return err;
 	}
 
-	err = dma_xfer_vmalloc(&(debug_entry->ab_state),
+	err = dma_xfer_vmalloc(&debug_entry->ab_state,
 			       internal_state_struct_size,
 			       AB_INTERNAL_STATE_ADDR, DMA_FROM_DEVICE);
 	if (err) {
@@ -970,7 +971,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 		debug_entry->flood.image_size = 0;
 	}
 
-	output_buffers = &(debug_entry->ab_state.output_buffers);
+	output_buffers = &debug_entry->ab_state.output_buffers;
 	buffer_idx = output_buffers->buffer_count - 1;
 	buffer_list_size =
 		output_buffers->buffers[buffer_idx].offset_to_buffer +
