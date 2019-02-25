@@ -215,7 +215,7 @@
 				google,dsi-lp-brightness-threshold = <0>;
 				google,dsi-lp-command = [
 					39 01 00 00 00 00 03 51 00 00 /* turn screen dark */
-					15 01 00 00 14 00 02 53 00    /* HLPM off */
+					15 01 00 00 14 00 02 53 20    /* HLPM off */
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
