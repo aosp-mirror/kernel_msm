@@ -15,3 +15,4 @@
 #include "sm8150-flame-battery.dtsi"
 #include "sm8150-flame-camera-sensor.dtsi"
 #include "sm8150-flame-pac193x.dtsi"
+#include "sm8150-flame-thermal.dtsi"

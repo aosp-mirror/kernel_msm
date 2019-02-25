@@ -138,7 +138,7 @@
 
 	google_charger: google,charger {
 		compatible = "google,charger";
-
+		#cooling-cells = <2>;
 		google,chg-power-supply = "charger";
 		google,bat-power-supply = "battery";
 		google,wlc-power-supply = "wireless";
@@ -151,6 +151,10 @@
 		google,chg-cc-tolerance = <25>;
 
 		google,pps-cc-tolerance-pct = <5>;
+	};
+
+	google_wlc_charger: google,wlc_charger {
+		#cooling-cells = <2>;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {

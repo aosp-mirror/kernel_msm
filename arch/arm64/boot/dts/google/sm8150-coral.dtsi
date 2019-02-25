@@ -16,3 +16,4 @@
 #include "sm8150-coral-camera-sensor.dtsi"
 #include "sm8150-coral-pac193x.dtsi"
 #include "sm8150-coral-usb.dtsi"
+#include "sm8150-coral-thermal.dtsi"
