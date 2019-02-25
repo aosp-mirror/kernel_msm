@@ -171,6 +171,16 @@ void ab_tmu_hw_write(struct ab_tmu_hw *hw, u32 offset, u32 value)
 int ab_tmu_hw_initialize(struct ab_tmu_hw *hw)
 {
 	u32 status;
+	u32 val;
+
+	val = ab_tmu_hw_read(hw, AB_TMU_AVG_CTRL);
+	val |= FIELD_PREP(AB_TMU_AVG_MODE, 0x6);
+	val |= AB_TMU_EN_DEM;
+	ab_tmu_hw_write(hw, AB_TMU_AVG_CTRL, val);
+
+	val = ab_tmu_hw_read(hw, AB_TMU_CONTROL);
+	val |= FIELD_PREP(AB_TMU_BUF_SLOPE_SEL, AB_TMU_BUF_SLOPE_SEL_VAL);
+	ab_tmu_hw_write(hw, AB_TMU_CONTROL, val);
 
 	status = ab_tmu_hw_read(hw, AB_TMU_STATUS);
 	if (!(status & AB_TMU_STATUS_IDLE_FIELD)) {
