@@ -229,6 +229,16 @@ Optional properties:
     value is omitted or exceeds the maximum permitted delay (10 seconds), the
     timeout is effectively disabled.
 
+  - cirrus,amp-gnd-stby : Boolean to specify that the OUT+ and OUT- pins are to
+    remain grounded during the standby state. In this case, the latency of I2C-
+    triggered playback is increased by that of a single I2C write transaction
+    and GPIO-triggered playback is unavailable.
+
+    If this property is omitted or the device's interrupt (/ALERT) pin is not
+    available, the OUT+ and OUT- pins remain high-impedance during the standby
+    state (default case) and neither I2C-triggered nor GPIO-triggered playback
+    are affected.
+
   - cirrus,boost-ctl-millivolt : Maximum target voltage to which the class H
     algorithm may increase the VBST supply, expressed in mV. Valid values range
     from 2550 to 11000 (inclusive) in steps of 50. If this value is specified as
