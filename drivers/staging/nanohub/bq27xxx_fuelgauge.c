@@ -157,6 +157,7 @@ void bq27x00_update(struct Nanohub_FuelGauge_Info *fg_info)
 			fg_info->wakelock_active_time = 20 * 1000000l;
 		} else if (!charger_online && (fg_info->last_capacity > 0) &&
 			   (fg_info->last_capacity < fg_info->cache.capacity)) {
+			pr_err("FG: set last_c %d\n", fg_info->last_capacity);
 			fg_info->cache.capacity = fg_info->last_capacity;
 		}
 	}
@@ -484,7 +485,12 @@ static int bq27x00_battery_get_property(struct power_supply *psy,
 		ret = bq27x00_battery_current(fg_info, val);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		ret = bq27x00_simple_value(fg_info->cache.capacity, val);
+		if (fg_info->last_capacity == 0)
+			ret = bq27x00_simple_value(fg_info->cache.capacity,
+				val);
+		else
+			ret = bq27x00_simple_value(fg_info->last_capacity,
+				val);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
 		ret = bq27x00_battery_capacity_level(fg_info, val);
