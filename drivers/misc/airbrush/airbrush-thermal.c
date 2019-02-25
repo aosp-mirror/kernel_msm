@@ -18,33 +18,6 @@
 #include <linux/gfp.h>
 #include <linux/thermal.h>
 
-struct ab_thermal;
-
-struct ab_thermal_cooling {
-	struct ab_thermal *thermal;
-	struct ab_cooling *cooling;
-	unsigned long state;
-};
-
-static int ab_thermal_cooling_init(struct ab_thermal_cooling *thermal_cooling,
-		struct ab_thermal *thermal, struct device_node *np, char *type,
-		const struct ab_cooling_ops *ops)
-{
-	thermal_cooling->thermal = thermal;
-	thermal_cooling->cooling = ab_cooling_register(np, type, ops,
-			thermal_cooling);
-	if (IS_ERR(thermal_cooling->cooling))
-		return PTR_ERR(thermal_cooling->cooling);
-	thermal_cooling->state = THROTTLE_NONE;
-	return 0;
-}
-
-static void ab_thermal_cooling_exit(struct ab_thermal_cooling *thermal_cooling)
-{
-	if (!IS_ERR_OR_NULL(thermal_cooling->cooling))
-		ab_cooling_unregister(thermal_cooling->cooling);
-}
-
 struct ab_thermal {
 	struct device *dev;
 
@@ -52,11 +25,8 @@ struct ab_thermal {
 	const struct ab_thermal_ops *ops;
 	void *op_data;
 
-	/* Combined from cooling, cooling_internal, and pcie_link_ready */
-	enum throttle_state throttle_state;
-
-	struct ab_thermal_cooling cooling;
-	struct ab_thermal_cooling cooling_internal;
+	enum throttle_state cooling_state;
+	struct ab_cooling *cooling;
 
 	struct mutex pcie_link_lock;
 	bool pcie_link_ready;
@@ -75,56 +45,37 @@ static void ab_thermal_exit(struct ab_thermal *thermal)
 {
 	abc_unregister_pcie_link_blocking_event(
 		&thermal->pcie_link_blocking_nb);
-	ab_thermal_cooling_exit(&thermal->cooling_internal);
-	ab_thermal_cooling_exit(&thermal->cooling);
-}
-
-static enum throttle_state ab_thermal_throttle_state(unsigned long state)
-{
-	switch (state) {
-	case 0:
-		return THROTTLE_NONE;
-	case 1:
-		return THROTTLE_TO_MID;
-	case 2:
-		return THROTTLE_TO_LOW;
-	default:
-		return THROTTLE_TO_MIN;
-	}
-}
-
-static void ab_thermal_state_update_no_pcie_link_lock(
-		struct ab_thermal *thermal)
-{
-	unsigned long state = 0;
-	enum throttle_state throttle_state;
-
-	if (thermal->pcie_link_ready) {
-		state = max(thermal->cooling.state,
-				thermal->cooling_internal.state);
-	}
-	throttle_state = ab_thermal_throttle_state(state);
-	if (throttle_state != thermal->throttle_state) {
-		thermal->throttle_state = throttle_state;
-
-		mutex_lock(&thermal->ops_lock);
-		thermal->ops->throttle_state_updated(throttle_state,
-				thermal->op_data);
-		mutex_unlock(&thermal->ops_lock);
-	}
+	if (!IS_ERR_OR_NULL(thermal->cooling))
+		ab_cooling_unregister(thermal->cooling);
 }
 
 static void ab_thermal_cooling_op_state_updated(
 		const struct ab_cooling *cooling, unsigned long old_state,
 		unsigned long new_state, void *cooling_op_data)
 {
-	struct ab_thermal_cooling *thermal_cooling = cooling_op_data;
-	struct ab_thermal *thermal = thermal_cooling->thermal;
+	struct ab_thermal *thermal = cooling_op_data;
 
-	thermal_cooling->state = new_state;
-
+	switch (new_state) {
+	case 0:
+		thermal->cooling_state = THROTTLE_NONE;
+		break;
+	case 1:
+		thermal->cooling_state = THROTTLE_TO_MID;
+		break;
+	case 2:
+		thermal->cooling_state = THROTTLE_TO_LOW;
+		break;
+	default:
+		thermal->cooling_state = THROTTLE_TO_MIN;
+		break;
+	}
 	mutex_lock(&thermal->pcie_link_lock);
-	ab_thermal_state_update_no_pcie_link_lock(thermal);
+	if (thermal->pcie_link_ready) {
+		mutex_lock(&thermal->ops_lock);
+		thermal->ops->throttle_state_updated(thermal->cooling_state,
+			thermal->op_data);
+		mutex_unlock(&thermal->ops_lock);
+	}
 	mutex_unlock(&thermal->pcie_link_lock);
 }
 
@@ -136,15 +87,24 @@ static void ab_thermal_pcie_link_post_enable(struct ab_thermal *thermal)
 {
 	mutex_lock(&thermal->pcie_link_lock);
 	thermal->pcie_link_ready = true;
-	ab_thermal_state_update_no_pcie_link_lock(thermal);
+
+	mutex_lock(&thermal->ops_lock);
+	thermal->ops->throttle_state_updated(thermal->cooling_state,
+		thermal->op_data);
+	mutex_unlock(&thermal->ops_lock);
+
 	mutex_unlock(&thermal->pcie_link_lock);
 }
 
 static void ab_thermal_pcie_link_pre_disable(struct ab_thermal *thermal)
 {
 	mutex_lock(&thermal->pcie_link_lock);
+
+	mutex_lock(&thermal->ops_lock);
+	thermal->ops->throttle_state_updated(THROTTLE_NONE, thermal->op_data);
+	mutex_unlock(&thermal->ops_lock);
+
 	thermal->pcie_link_ready = false;
-	ab_thermal_state_update_no_pcie_link_lock(thermal);
 	mutex_unlock(&thermal->pcie_link_lock);
 }
 
@@ -177,7 +137,8 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev)
 	mutex_init(&thermal->ops_lock);
 	thermal->ops = &ab_thermal_ops_stub;
 
-	thermal->throttle_state = THROTTLE_NONE;
+	thermal->cooling_state = THROTTLE_NONE;
+	thermal->cooling = NULL;
 
 	mutex_init(&thermal->pcie_link_lock);
 	mutex_lock(&thermal->pcie_link_lock);
@@ -193,21 +154,15 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev)
 		return err;
 	}
 
-	err = ab_thermal_cooling_init(&thermal->cooling, thermal, NULL,
-			AB_CDEV_NAME, &ab_thermal_cooling_ops);
-	if (err) {
-		dev_err(dev, "failed to initialize external cooling\n");
-		return err;
-	}
-
 	cooling_node = of_find_node_by_name(NULL, "abc-cooling");
 	if (!cooling_node)
 		dev_warn(dev, "Cannot find OF node for self cooling device. Cooling cannot trigger by airbrush itself.");
-	err = ab_thermal_cooling_init(&thermal->cooling_internal, thermal,
-			cooling_node, AB_CDEV_INTERNAL_NAME,
-			&ab_thermal_cooling_ops);
-	if (err) {
-		dev_err(dev, "failed to initialize internal cooling\n");
+
+	thermal->cooling = ab_cooling_register(cooling_node,
+			AB_CDEV_NAME, &ab_thermal_cooling_ops, thermal);
+	if (IS_ERR(thermal->cooling)) {
+		err = PTR_ERR(thermal->cooling);
+		ab_thermal_exit(thermal);
 		return err;
 	}
 
