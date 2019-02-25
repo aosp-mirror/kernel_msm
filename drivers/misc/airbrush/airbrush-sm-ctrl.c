@@ -1282,45 +1282,6 @@ void ab_sm_unregister_mfd_ops(void)
 }
 EXPORT_SYMBOL(ab_sm_unregister_mfd_ops);
 
-static void ab_sm_thermal_throttle_state_updated(
-		enum throttle_state throttle_state_id, void *op_data)
-{
-	struct ab_state_context *sc = op_data;
-
-	/* FIXME: Remove this once the following bugs have been fixed
-	 * b/123701562
-	 * b/123664724
-	 * b/123599823
-	 *
-	 * This hack prevents any throttling signal from affecting
-	 * the Airbrush state. This is because the system currently
-	 * throttles the Airbrush even at low temperatures.
-	 */
-	throttle_state_id = 0;
-
-	sc->throttle_state_id = throttle_state_id;
-	dev_info(sc->dev, "Throttle state updated to %lu", throttle_state_id);
-
-	if (!sc->cold_boot)
-		complete_all(&sc->request_state_change_comp);
-}
-
-static const struct ab_thermal_ops ab_sm_thermal_ops = {
-	.throttle_state_updated = ab_sm_thermal_throttle_state_updated,
-};
-
-void ab_sm_register_thermal(struct ab_thermal *thermal)
-{
-	ab_thermal_set_ops(thermal, &ab_sm_thermal_ops, ab_sm_ctx);
-}
-EXPORT_SYMBOL(ab_sm_register_thermal);
-
-void ab_sm_unregister_thermal(struct ab_thermal *thermal)
-{
-	ab_thermal_set_ops(thermal, NULL, NULL);
-}
-EXPORT_SYMBOL(ab_sm_unregister_thermal);
-
 void ab_enable_pgood(struct ab_state_context *ab_ctx)
 {
 	gpiod_set_value_cansleep(ab_ctx->soc_pwrgood, __GPIO_ENABLE);
@@ -1733,6 +1694,33 @@ static const struct file_operations ab_misc_fops = {
 	.unlocked_ioctl = ab_sm_misc_ioctl,
 };
 
+static void ab_sm_thermal_throttle_state_updated(
+		enum throttle_state throttle_state_id, void *op_data)
+{
+	struct ab_state_context *sc = op_data;
+
+	/* FIXME: Remove this once the following bugs have been fixed
+	 * b/123701562
+	 * b/123664724
+	 * b/123599823
+	 *
+	 * This hack prevents any throttling signal from affecting
+	 * the Airbrush state. This is because the system currently
+	 * throttles the Airbrush even at low temperatures.
+	 */
+	throttle_state_id = 0;
+
+	sc->throttle_state_id = throttle_state_id;
+	dev_info(sc->dev, "Throttle state updated to %lu", throttle_state_id);
+
+	if (!sc->cold_boot)
+		complete_all(&sc->request_state_change_comp);
+}
+
+static const struct ab_thermal_ops ab_sm_thermal_ops = {
+	.throttle_state_updated = ab_sm_thermal_throttle_state_updated,
+};
+
 static void ab_sm_state_stats_init(struct ab_state_context *sc)
 {
 	enum stat_state curr_stat_state =
@@ -1872,6 +1860,11 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_register_dram_ops(&dram_ops_stub);
 	ab_sm_register_mfd_ops(&mfd_ops_stub);
 
+	/*
+	 * TODO error handle at airbrush-sm should return non-zero value to
+	 * free this.
+	 */
+	devm_ab_thermal_create(ab_sm_ctx->dev, &ab_sm_thermal_ops, ab_sm_ctx);
 	ab_sm_ctx->throttle_state_id = THROTTLE_NONE;
 
 	ab_sm_ctx->state_change_task =
