@@ -84,9 +84,7 @@ bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 	if (inode1 == inode2)
 		return true;
 
-	/* both do not belong to ice, so we don't care, they are equal
-	 *for us
-	 */
+	/* both do not belong to ice, so we don't care, they are equal for us */
 	if (!fscrypt_should_be_processed_by_ice(inode1) &&
 			!fscrypt_should_be_processed_by_ice(inode2))
 		return true;
@@ -114,7 +112,6 @@ bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 		(memcmp(salt1, salt2,
 			fscrypt_get_ice_encryption_salt_size(inode1)) == 0))
 		return true;
-
 	return false;
 }
 
