@@ -46,6 +46,10 @@
 #define PHASE_SELECT_REG 0x60
 #define PROXAVG_REG 0x63
 #define PROXOFFSET_REG 0x67
+/* TODO: replace this by actual crack threshold
+ * Bug: b/124409695
+ */
+#define CRACK_THRES ~(1<<16)
 
 #define VIO_VOLTAGE_MIN 1800000
 #define VIO_VOLTAGE_MAX 1800000
@@ -127,6 +131,8 @@ struct led_laser_ctrl_t {
 		uint16_t proxoffset[PHASENUM];
 		struct camera_io_master io_master_info;
 		bool is_cci_init;
+		uint16_t calibraion_data[PHASENUM];
+		bool is_crack_detected[LASER_TYPE_MAX];
 	} cap_sense;
 };
 
@@ -193,7 +199,6 @@ static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x53, 0x00},
 	{0x54, 0x00},
 	{0x02, 0x02},
-	{0x03, 0x0F},
 	{0x05, 0x08},
 	{0x06, 0x04},
 	{0x07, 0x80},
@@ -244,6 +249,133 @@ static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 	return rc;
 }
 
+static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
+{
+	int gpio_level, flood_idx, dot_idx;
+	bool is_sw_halt_required;
+
+	flood_idx = 1;
+	dot_idx = 2;
+	gpio_level =
+		gpio_get_value(ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio);
+
+	ctrl->cap_sense.is_crack_detected[LASER_FLOOD] =
+		ctrl->cap_sense.proxavg[flood_idx] < CRACK_THRES ?
+		true : false;
+
+	ctrl->cap_sense.is_crack_detected[LASER_DOT] =
+		ctrl->cap_sense.proxavg[dot_idx] < CRACK_THRES ?
+		true : false;
+
+	is_sw_halt_required =
+		(ctrl->cap_sense.is_crack_detected[LASER_FLOOD] |
+		ctrl->cap_sense.is_crack_detected[LASER_DOT]);
+
+	if (!gpio_level && is_sw_halt_required) {
+		dev_err(ctrl->soc_info.dev,
+			"detected laser lens crack %d:%d(Flood:Dot), "
+			"kill laser now",
+			ctrl->cap_sense.is_crack_detected[LASER_FLOOD],
+			ctrl->cap_sense.is_crack_detected[LASER_DOT]);
+		gpio_set_value(
+			ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio,
+			1);
+	}
+
+	if (gpio_level && !is_sw_halt_required) {
+		dev_info(ctrl->soc_info.dev,
+			"flood and dot crack are solved, release sw halt now");
+		gpio_set_value(
+			ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio,
+			0);
+	}
+}
+
+static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
+{
+	int rc;
+	uint32_t data;
+	uint32_t i, PH_start, PH_end;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings;
+
+	if (ctrl->cap_sense.calibraion_data[1] == 0 ||
+		ctrl->cap_sense.calibraion_data[2] == 0) {
+	/* Disallow laser turning on if ITO-C calibration data is not present */
+		dev_err(ctrl->soc_info.dev,
+			"calibration data is not present, PH1: %d PH2; %d",
+			ctrl->cap_sense.calibraion_data[1],
+			ctrl->cap_sense.calibraion_data[2]);
+		ctrl->cap_sense.is_validated = false;
+		return -EINVAL;
+	}
+	PH_start = 1;
+	PH_end = 2;
+
+	reg_settings.reg_addr = PHASE_SELECT_REG;
+	reg_settings.reg_data = 0x00;
+	reg_settings.delay = 0;
+	write_setting.reg_setting = &reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 10;
+
+	for (i = PH_start; i <= PH_end; i++) {
+		reg_settings.reg_data = i;
+		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
+			&write_setting);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"failed to select PH %d", i);
+			goto out;
+		}
+
+		reg_settings.reg_addr = PROXOFFSET_REG;
+		reg_settings.reg_data =
+			(ctrl->cap_sense.calibraion_data[i] >> 8) & 0x3F;
+		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
+			&write_setting);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"failed to write PH %d MLB", i);
+			goto out;
+		}
+
+		reg_settings.reg_addr = PROXOFFSET_REG+1;
+		reg_settings.reg_data =
+			ctrl->cap_sense.calibraion_data[i] & 0x00FF;
+		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
+			&write_setting);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"failed to write PH %d LSB", i);
+			goto out;
+		}
+
+		camera_io_dev_read(
+			&ctrl->cap_sense.io_master_info,
+			PROXOFFSET_REG,
+			&data,
+			CAMERA_SENSOR_I2C_TYPE_BYTE,
+			CAMERA_SENSOR_I2C_TYPE_WORD);
+
+		ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
+		if (ctrl->cap_sense.proxoffset[i]
+			!= ctrl->cap_sense.calibraion_data[i]) {
+			dev_err(ctrl->soc_info.dev,
+				"read back offset %d mismatch to cali data %d",
+				ctrl->cap_sense.proxoffset[i],
+				ctrl->cap_sense.calibraion_data[i]);
+			return -EINVAL;
+		}
+	}
+
+out:
+	return rc;
+
+}
+
 int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 {
 	int rc, i;
@@ -269,7 +401,16 @@ int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 		dev_err(ctrl->soc_info.dev,
 			"%s: i2c write failed: rc: %d",
 			__func__, rc);
+		return rc;
 	}
+
+	rc = sx9320_manual_compensation(ctrl);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"%s: manual compensation failed: rc: %d",
+			__func__, rc);
+	}
+
 	sx9320_cleanup_nirq(ctrl);
 
 	return rc;
@@ -738,6 +879,9 @@ static void cap_sense_workq_job(struct work_struct *work)
 
 		ctrl->cap_sense.proxavg[i] = data & 0xFFFF;
 
+		if (i == 2)
+			sx9320_crack_detection(ctrl);
+
 		if (read_proxoffset) {
 			camera_io_dev_read(
 				&ctrl->cap_sense.io_master_info,
@@ -846,7 +990,7 @@ static void lm36011_enable_gpio_irq(struct device *dev)
 
 static void lm36011_disable_gpio_irq(struct device *dev)
 {
-	int index;
+	int index, gpio_level;
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 
 	if (ctrl->gpio_count <= 0)
@@ -857,6 +1001,13 @@ static void lm36011_disable_gpio_irq(struct device *dev)
 			dev_warn(dev, "%s no available irq for gpio: %d",
 				__func__, ctrl->silego.gpio_array[index].gpio);
 		} else if (index == SILEGO_SW_HALT) {
+			gpio_level =
+				gpio_get_value(
+					ctrl->silego.gpio_array[index].gpio);
+			if (gpio_level)
+				gpio_set_value(
+					ctrl->silego.gpio_array[index].gpio,
+					0);
 			gpio_free(ctrl->silego.gpio_array[index].gpio);
 		} else
 			free_irq(ctrl->silego.irq[index], dev);
@@ -938,7 +1089,7 @@ static int lm36011_get_gpio_info(struct device *dev)
 
 	if (lm36011_parse_pinctrl(dev) < 0) {
 		dev_err(dev, "failed to init gpio state");
-		return -EFAULT;
+		return -EINVAL;
 	}
 
 	for (index = 0; index < gpio_array_size; index++) {
@@ -1013,7 +1164,7 @@ static int lm36011_parse_dt(struct device *dev)
 	ctrl->cap_sense.sid = value;
 	if (lm36011_get_gpio_info(dev)) {
 		dev_err(dev, "failed to parse gpio and irq info");
-		return -EFAULT;
+		return -ENOENT;
 	}
 
 	if (of_property_read_u32(dev->of_node, "hw-version", &value)) {
@@ -1125,6 +1276,7 @@ static ssize_t led_laser_enable_store(struct device *dev,
 					mutex_unlock(&ctrl->cam_sensor_mutex);
 					return rc;
 				}
+				sx9320_crack_detection(ctrl);
 			}
 			lm36011_enable_gpio_irq(dev);
 		}
@@ -1355,7 +1507,7 @@ static ssize_t cap_sense_write_byte_store(struct device *dev,
 	rc = kstrtouint(buf, 0, &value);
 
 	if (rc < 0)
-		return -EFAULT;
+		return rc;
 	if ((value & 0xFFFF0000) != 0) {
 		dev_err(dev, "value %x out of boundary", value);
 		return -EINVAL;
@@ -1367,11 +1519,31 @@ static ssize_t cap_sense_write_byte_store(struct device *dev,
 	rc = sx9320_write_data(ctrl, addr, data);
 	if (rc < 0) {
 		dev_err(dev, "%s i2c write failed: %d.", __func__, rc);
-		return -EFAULT;
+		return rc;
 	}
 
 	return count;
 }
+
+static ssize_t itoc_cali_data_store_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+	uint32_t value = 0;
+	int rc;
+
+	rc = kstrtouint(buf, 0, &value);
+
+	if (rc < 0)
+		return rc;
+
+	ctrl->cap_sense.calibraion_data[1] = (value >> 16);
+	ctrl->cap_sense.calibraion_data[2] = (value & 0x0000FFFF);
+
+	return count;
+}
+
 
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
@@ -1384,6 +1556,7 @@ static DEVICE_ATTR_RO(is_certified);
 static DEVICE_ATTR_RO(is_cap_sense_validated);
 static DEVICE_ATTR_RO(cap_sense_proxvalue);
 static DEVICE_ATTR_WO(cap_sense_write_byte);
+static DEVICE_ATTR_WO(itoc_cali_data_store);
 
 static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_enable.attr,
@@ -1397,6 +1570,7 @@ static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_is_cap_sense_validated.attr,
 	&dev_attr_cap_sense_proxvalue.attr,
 	&dev_attr_cap_sense_write_byte.attr,
+	&dev_attr_itoc_cali_data_store.attr,
 	NULL
 };
 
@@ -1474,6 +1648,7 @@ static int32_t lm36011_driver_platform_probe(
 {
 	int32_t rc;
 	uint32_t device_id = 0;
+	uint32_t i;
 	struct device *dev_ret;
 	struct led_laser_ctrl_t *ctrl;
 	char *class_name, *device_name;
@@ -1506,6 +1681,10 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->silego.is_csense_halt = false;
 	ctrl->silego.vcsel_fault_count = 0;
 	ctrl->cap_sense.is_validated = false;
+	for (i = 0; i < LASER_TYPE_MAX; i++)
+		ctrl->cap_sense.is_crack_detected[i] = false;
+	for (i = 0; i < PHASENUM; i++)
+		ctrl->cap_sense.calibraion_data[i] = 0;
 
 	ctrl->io_master_info.cci_client = devm_kzalloc(&pdev->dev,
 		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
