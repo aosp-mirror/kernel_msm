@@ -127,12 +127,14 @@ Optional properties:
   - cirrus,gpio1-rise-index : Specifies the wavetable index mapped to GPIO1
     rising edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO1 rising edges are mapped to
-    index 1.
+    index 1. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO1 is enabled.
 
   - cirrus,gpio1-fall-index : Specifies the wavetable index mapped to GPIO1
     falling edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO1 falling edges are mapped to
-    index 2.
+    index 2. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO1 is enabled.
 
   - cirrus,gpio1-fall-timeout : Specifies the number of 48-kHz periods for
     which the device remains in the active state in search of a GPIO1 falling
@@ -142,38 +144,65 @@ Optional properties:
     falling edge is ignored. If this value is omitted or exceeds the maximum
     timeout (8388607) then a default of 240000 is assumed (corresponding to
     240000 / 48000 = 5 seconds). If this value is specified as zero, the timeout
-    is effectively disabled. In the case of the CS40L25B, the timeout specified
-    for GPIO1 applies to GPIO2, GPIO3 and GPIO4.
+    is effectively disabled.
+
+    The timeout specified for GPIO1 applies to any additional GPIO2, GPIO3 or
+    GPIO4 pins enabled by cirrus,gpio-indv-enable.
 
   - cirrus,gpio2-rise-index : Specifies the wavetable index mapped to GPIO2
     rising edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO2 rising edges are mapped to
-    index 1. Available for CS40L25B only.
+    index 1. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO2 is enabled.
 
   - cirrus,gpio2-fall-index : Specifies the wavetable index mapped to GPIO2
     falling edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO2 falling edges are mapped to
-    index 2. Available for CS40L25B only.
+    index 2. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO2 is enabled.
 
   - cirrus,gpio3-rise-index : Specifies the wavetable index mapped to GPIO3
     rising edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO3 rising edges are mapped to
-    index 1. Available for CS40L25B only.
+    index 1. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO3 is enabled.
 
   - cirrus,gpio3-fall-index : Specifies the wavetable index mapped to GPIO3
     falling edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO3 falling edges are mapped to
-    index 2. Available for CS40L25B only.
+    index 2. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO3 is enabled.
 
   - cirrus,gpio4-rise-index : Specifies the wavetable index mapped to GPIO4
     rising edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO4 rising edges are mapped to
-    index 1. Available for CS40L25B only.
+    index 1. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO4 is enabled.
 
   - cirrus,gpio4-fall-index : Specifies the wavetable index mapped to GPIO4
     falling edges. If this value is omitted, specified as zero or exceeds the
     maximum available index in the wavetable, GPIO4 falling edges are mapped to
-    index 2. Available for CS40L25B only.
+    index 2. This value is ignored if cirrus,gpio-indv-enable does not specify
+    that GPIO4 is enabled.
+
+  - cirrus,gpio-indv-enable : Bit mask for enabling any of the GPIO1, GPIO2,
+    GPIO3 or GPIO4 pins individually. Individual pins are enabled by writing
+    the bitwise OR of any of the following:
+
+    0x1 = GPIO1
+    0x2 = GPIO2 (CS40L25B only)
+    0x4 = GPIO3
+    0x8 = GPIO4
+
+    Enabling a pin arms the device to render playback in response to rising or
+    falling edges along that pin. Rising edges along any enabled pin (with the
+    exception of GPIO3) additionally prompt the device to exit hibernation.
+
+    If this value is omitted, a value of 0x1 (GPIO1 only) or 0xF (GPIO1, GPIO2,
+    GPIO3 and GPIO4) is assumed for CS40L25A or CS40L25B, respectively.
+
+    All pins enabled by cirrus,gpio-indv-enable are collectively enabled or
+    disabled as a function of the mode specified by cirrus,gpio1-mode.
 
   - cirrus,gpio1-mode : Specifies the operating mode of the GPIO1 pin, equal to
     one of the following.
@@ -185,9 +214,10 @@ Optional properties:
 
     If this value is omitted or given an invalid value, mode 0 (enabled by
     default) is assumed. Regardless of mode, the GPIO1 pin can be enabled or
-    disabled at will from user space using the gpio1_enable sysfs control. In
-    the case of the CS40L25B, the behavior of GPIO2, GPIO3 and GPIO4 follow that
-    which is specified for GPIO1.
+    disabled at will from user space using the gpio1_enable sysfs control.
+
+    The behavior specified for GPIO1 applies to any additional GPIO2, GPIO3 or
+    GPIO4 pins enabled by cirrus,gpio-indv-enable.
 
   - cirrus,hiber-enable : Boolean for instructing the device to enter and exit
     hibernation mode upon suspend and resume, respectively. Hibernation mode is
