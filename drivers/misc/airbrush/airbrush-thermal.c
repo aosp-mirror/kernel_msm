@@ -14,7 +14,6 @@
 #include "airbrush-thermal.h"
 #include "airbrush-cooling.h"
 
-#include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/gfp.h>
 #include <linux/thermal.h>
@@ -24,8 +23,6 @@ struct ab_thermal;
 struct ab_thermal_cooling {
 	struct ab_thermal *thermal;
 	struct ab_cooling *cooling;
-	struct mutex lock;
-	bool enable;
 	unsigned long state;
 };
 
@@ -38,9 +35,6 @@ static int ab_thermal_cooling_init(struct ab_thermal_cooling *thermal_cooling,
 			thermal_cooling);
 	if (IS_ERR(thermal_cooling->cooling))
 		return PTR_ERR(thermal_cooling->cooling);
-	mutex_init(&thermal_cooling->lock);
-	/* TODO Change to enable by default in product env. */
-	thermal_cooling->enable = false;
 	thermal_cooling->state = THROTTLE_NONE;
 	return 0;
 }
@@ -49,16 +43,6 @@ static void ab_thermal_cooling_exit(struct ab_thermal_cooling *thermal_cooling)
 {
 	if (!IS_ERR_OR_NULL(thermal_cooling->cooling))
 		ab_cooling_unregister(thermal_cooling->cooling);
-}
-
-static void ab_thermal_cooling_state_update(
-		struct ab_thermal_cooling *thermal_cooling,
-		unsigned long *state)
-{
-	mutex_lock(&thermal_cooling->lock);
-	if (thermal_cooling->enable && thermal_cooling->state > *state)
-		*state = thermal_cooling->state;
-	mutex_unlock(&thermal_cooling->lock);
 }
 
 struct ab_thermal {
@@ -77,8 +61,6 @@ struct ab_thermal {
 	struct mutex pcie_link_lock;
 	bool pcie_link_ready;
 	struct notifier_block pcie_link_blocking_nb;
-
-	struct dentry *debugfs_root;
 };
 
 static void ab_thermal_op_stub_throttle_state_updated(
@@ -91,7 +73,6 @@ static const struct ab_thermal_ops ab_thermal_ops_stub = {
 
 static void ab_thermal_exit(struct ab_thermal *thermal)
 {
-	debugfs_remove_recursive(thermal->debugfs_root);
 	abc_unregister_pcie_link_blocking_event(
 		&thermal->pcie_link_blocking_nb);
 	ab_thermal_cooling_exit(&thermal->cooling_internal);
@@ -119,9 +100,8 @@ static void ab_thermal_state_update_no_pcie_link_lock(
 	enum throttle_state throttle_state;
 
 	if (thermal->pcie_link_ready) {
-		ab_thermal_cooling_state_update(&thermal->cooling, &state);
-		ab_thermal_cooling_state_update(&thermal->cooling_internal,
-				&state);
+		state = max(thermal->cooling.state,
+				thermal->cooling_internal.state);
 	}
 	throttle_state = ab_thermal_throttle_state(state);
 	if (throttle_state != thermal->throttle_state) {
@@ -134,21 +114,18 @@ static void ab_thermal_state_update_no_pcie_link_lock(
 	}
 }
 
-static void ab_thermal_state_update(struct ab_thermal *thermal)
-{
-	mutex_lock(&thermal->pcie_link_lock);
-	ab_thermal_state_update_no_pcie_link_lock(thermal);
-	mutex_unlock(&thermal->pcie_link_lock);
-}
-
 static void ab_thermal_cooling_op_state_updated(
 		const struct ab_cooling *cooling, unsigned long old_state,
 		unsigned long new_state, void *cooling_op_data)
 {
 	struct ab_thermal_cooling *thermal_cooling = cooling_op_data;
+	struct ab_thermal *thermal = thermal_cooling->thermal;
 
 	thermal_cooling->state = new_state;
-	ab_thermal_state_update(thermal_cooling->thermal);
+
+	mutex_lock(&thermal->pcie_link_lock);
+	ab_thermal_state_update_no_pcie_link_lock(thermal);
+	mutex_unlock(&thermal->pcie_link_lock);
 }
 
 const static struct ab_cooling_ops ab_thermal_cooling_ops = {
@@ -188,59 +165,6 @@ static int ab_thermal_pcie_link_listener(struct notifier_block *nb,
 	}
 
 	return NOTIFY_DONE;
-}
-
-static int ab_thermal_throttle_get(void *data, u64 *val)
-{
-	struct ab_thermal_cooling *thermal_cooling = data;
-
-	mutex_lock(&thermal_cooling->lock);
-	*val = thermal_cooling->enable;
-	mutex_unlock(&thermal_cooling->lock);
-
-	ab_thermal_state_update(thermal_cooling->thermal);
-	return 0;
-}
-
-static int ab_thermal_throttle_set(void *data, u64 val)
-{
-	struct ab_thermal_cooling *thermal_cooling = data;
-
-	mutex_lock(&thermal_cooling->lock);
-	thermal_cooling->enable = val;
-	mutex_unlock(&thermal_cooling->lock);
-
-	ab_thermal_state_update(thermal_cooling->thermal);
-	return 0;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(ab_thermal_throttle_fops, ab_thermal_throttle_get,
-		ab_thermal_throttle_set, "%llu\n");
-
-static void ab_thermal_create_debugfs(struct ab_thermal *thermal)
-{
-	struct dentry *d;
-
-	thermal->debugfs_root = debugfs_create_dir("airbrush_thermal", NULL);
-	if (!thermal->debugfs_root)
-		goto err_out;
-
-	d = debugfs_create_file("throttle_ext_enable", 0664,
-			thermal->debugfs_root, &thermal->cooling,
-			&ab_thermal_throttle_fops);
-	if (!d)
-		goto err_out;
-
-	d = debugfs_create_file("throttle_int_enable", 0664,
-			thermal->debugfs_root, &thermal->cooling_internal,
-			&ab_thermal_throttle_fops);
-	if (!d)
-		goto err_out;
-
-	return;
-
-err_out:
-	pr_err("Some error occurred, couldn't create debugfs entry for airbrush thermal\n");
 }
 
 static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev)
@@ -286,8 +210,6 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev)
 		dev_err(dev, "failed to initialize internal cooling\n");
 		return err;
 	}
-
-	ab_thermal_create_debugfs(thermal);
 
 	return 0;
 }
