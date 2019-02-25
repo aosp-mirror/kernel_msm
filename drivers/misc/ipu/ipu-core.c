@@ -369,6 +369,36 @@ void ipu_core_notify_firmware_down(struct paintbox_bus *bus)
 	}
 }
 
+void ipu_core_notify_dram_up(struct paintbox_bus *bus)
+{
+	unsigned int i;
+
+	for (i = 0; i < PAINTBOX_DEVICE_TYPE_COUNT; i++) {
+		struct paintbox_device *pb_dev = bus->devices[i];
+
+		if (!pb_dev || !pb_dev->dev_ops ||
+				!pb_dev->dev_ops->dram_up)
+			continue;
+
+		pb_dev->dev_ops->dram_up(&pb_dev->dev);
+	}
+}
+
+void ipu_core_notify_dram_down(struct paintbox_bus *bus)
+{
+	unsigned int i;
+
+	for (i = 0; i < PAINTBOX_DEVICE_TYPE_COUNT; i++) {
+		struct paintbox_device *pb_dev = bus->devices[i];
+
+		if (!pb_dev || !pb_dev->dev_ops ||
+					!pb_dev->dev_ops->dram_down)
+			continue;
+
+		pb_dev->dev_ops->dram_down(&pb_dev->dev);
+	}
+}
+
 static void ipu_bus_recovery_work(struct work_struct *work)
 {
 	struct paintbox_bus *bus = container_of(work, struct paintbox_bus,
@@ -467,6 +497,7 @@ void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz)
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_resume_firmware(bus, ipu_clock_rate_hz);
+	ipu_core_notify_dram_up(bus);
 
 	mutex_unlock(&bus->jqs.lock);
 }
@@ -484,6 +515,7 @@ void ipu_bus_notify_shutdown(struct paintbox_bus *bus)
 {
 	mutex_lock(&bus->jqs.lock);
 
+	ipu_core_notify_dram_down(bus);
 	ipu_core_jqs_disable_firmware_error(bus);
 	ipu_core_jqs_unstage_firmware(bus);
 
