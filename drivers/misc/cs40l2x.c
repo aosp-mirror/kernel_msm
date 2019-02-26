@@ -500,7 +500,8 @@ static unsigned int cs40l2x_dsp_reg(struct cs40l2x_private *cs40l2x,
 	struct cs40l2x_coeff_desc *coeff_desc;
 
 	list_for_each_entry(coeff_desc, &cs40l2x->coeff_desc_head, list) {
-		if (strcmp(coeff_desc->name, coeff_name))
+		if (strncmp(coeff_desc->name, coeff_name,
+				CS40L2X_COEFF_NAME_LEN_MAX))
 			continue;
 		if (coeff_desc->block_type != block_type)
 			continue;
@@ -5033,7 +5034,8 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 				coeff_desc->reg = CS40L2X_DSP1_XMEM_UNPACK24_0
 					+ cs40l2x->algo_info[i].xm_base * 4
 					+ coeff_desc->block_offset * 4;
-				if (!strcmp(coeff_desc->name, "WAVETABLE"))
+				if (!strncmp(coeff_desc->name, "WAVETABLE",
+						CS40L2X_COEFF_NAME_LEN_MAX))
 					cs40l2x->wt_limit_xm =
 						(cs40l2x->algo_info[i].xm_size
 						- coeff_desc->block_offset) * 4;
@@ -5042,7 +5044,8 @@ static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 				coeff_desc->reg = CS40L2X_DSP1_YMEM_UNPACK24_0
 					+ cs40l2x->algo_info[i].ym_base * 4
 					+ coeff_desc->block_offset * 4;
-				if (!strcmp(coeff_desc->name, "WAVETABLEYM"))
+				if (!strncmp(coeff_desc->name, "WAVETABLEYM",
+						CS40L2X_COEFF_NAME_LEN_MAX))
 					cs40l2x->wt_limit_ym =
 						(cs40l2x->algo_info[i].ym_size
 						- coeff_desc->block_offset) * 4;

@@ -805,6 +805,7 @@
 #define CS40L2X_COEFF_OFFSET_SIZE	2
 #define CS40L2X_COEFF_TYPE_SIZE		2
 #define CS40L2X_COEFF_LENGTH_SIZE	4
+#define CS40L2X_COEFF_NAME_LEN_MAX	32
 
 #define CS40L2X_TIMEOUT_MS_MAX		0x02AAAA  /* ~174 sec */
 #define CS40L2X_PR_TIMEOUT_MAX		0x7FFFFF
@@ -1072,7 +1073,7 @@ struct cs40l2x_coeff_desc {
 	unsigned int parent_id;
 	unsigned int block_offset;
 	unsigned int block_type;
-	unsigned char name[32];
+	unsigned char name[CS40L2X_COEFF_NAME_LEN_MAX];
 	unsigned int reg;
 	struct list_head list;
 };
