@@ -173,13 +173,14 @@ int ab_tmu_hw_initialize(struct ab_tmu_hw *hw)
 	u32 status;
 	u32 val;
 
-	val = ab_tmu_hw_read(hw, AB_TMU_AVG_CTRL);
-	val |= FIELD_PREP(AB_TMU_AVG_MODE, 0x6);
-	val |= AB_TMU_EN_DEM;
-	ab_tmu_hw_write(hw, AB_TMU_AVG_CTRL, val);
+	val = ab_tmu_hw_read(hw, AB_TMU_AVG_CONTROL);
+	val |= FIELD_PREP(AB_TMU_AVG_CONTROL_MODE, AB_TMU_AVG_CONTROL_MODE_VAL);
+	val |= AB_TMU_AVG_CONTROL_EN_DEM;
+	ab_tmu_hw_write(hw, AB_TMU_AVG_CONTROL, val);
 
 	val = ab_tmu_hw_read(hw, AB_TMU_CONTROL);
-	val |= FIELD_PREP(AB_TMU_BUF_SLOPE_SEL, AB_TMU_BUF_SLOPE_SEL_VAL);
+	val |= FIELD_PREP(AB_TMU_CONTROL_BUF_SLOPE_SEL,
+			AB_TMU_CONTROL_BUF_SLOPE_SEL_VAL);
 	ab_tmu_hw_write(hw, AB_TMU_CONTROL, val);
 
 	status = ab_tmu_hw_read(hw, AB_TMU_STATUS);
