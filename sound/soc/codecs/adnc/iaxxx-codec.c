@@ -50,6 +50,7 @@
 #define IAXXX_MAX_PORTS		6
 #define IAXXX_MAX_PDM_PORTS	7
 #define IAXXX_MAX_SENSOR	4
+#define IAXXX_PORTD_PORTE_PORT_EN	0x18
 
 static int iaxxx_calc_i2s_div(u32 bits_per_frame, u32 sampling_rate,
 		u32 apll_clk, u32 *period, u32 *div_val, u32 *nr_val);
@@ -276,44 +277,6 @@ enum {
 	I2S_WORD_LEN_20 = 19,	/*Word length of 20 bits per frame*/
 	I2S_WORD_LEN_24 = 23,	/*Word length of 24 bits per frame*/
 	I2S_WORD_LEN_32 = 31,	/*Word length of 32 bits per frame*/
-};
-
-enum {
-    /* Digital PDM Mic In*/
-	PDM_DMIC_IN0 = 0,  /*!< PDM DMIC Input0 */
-	PDM_DMIC_IN1,      /*!< PDM DMIC Input1 */
-	PDM_DMIC_IN2,      /*!< PDM DMIC Input2 */
-	PDM_DMIC_IN3,      /*!< PDM DMIC Input3 */
-	PDM_DMIC_IN4,      /*!< PDM DMIC Input4 */
-	PDM_DMIC_IN5,      /*!< PDM DMIC Input5 */
-	PDM_DMIC_IN6,      /*!< PDM DMIC Input6 */
-	PDM_DMIC_IN7,      /*!< PDM DMIC Input7 */
-
-	/* Digital PDM Spk out */
-	PDM_DMIC_OUT0,     /*!< PDM DMIC Out0 */
-	PDM_DMIC_OUT1,     /*!< PDM DMIC Out1 */
-
-	/* A400-ADCs PDM In */
-	PDM_CDC0_IN0,      /*!< PDM ADC In0 */
-	PDM_CDC1_IN1,      /*!< PDM ADC In1 */
-	PDM_CDC2_IN2,      /*!< PDM ADC In2 */
-	PDM_CDC3_IN3,      /*!< PDM ADC In3 */
-
-	PDM_CDC0_IN4,      /*!< PDM ADC In0 */
-	PDM_CDC1_IN5,      /*!< PDM ADC In1 */
-	PDM_CDC2_IN6,      /*!< PDM ADC In2 */
-	PDM_CDC3_IN7,      /*!< PDM ADC In3 */
-
-	/* A400-DACs PDM Out */
-	PDM_CDC_DAC_OUT0,  /*!< PDM DAC Out0 */
-	PDM_CDC_DAC_OUT1,  /*!< PDM DAC Out1 */
-
-	PDM_DMIC_MONO_IN0, /*!< PDM DMIC MONO Input0 */
-	PDM_DMIC_MONO_IN1, /*!< PDM DMIC MONO Input1 */
-	PDM_DMIC_MONO_IN2, /*!< PDM DMIC MONO Input2 */
-	PDM_DMIC_MONO_IN3, /*!< PDM DMIC MONO Input3 */
-
-	PDM_NUM_IO_MICS
 };
 
 enum {
@@ -639,6 +602,293 @@ static struct iaxxx_pdm_bit_cfg pdm_cfg[IAXXX_PDM_CLK_MAX] = {
 		I2S_WORD_LEN_32  }, /* BIT_CLK_FREQ_12_288M */
 	{ I2S_SRATE_192K, I2S_WORD_PER_FRAME_4,
 		I2S_WORD_LEN_32  }, /* BIT_CLK_FREQ_24_576M */
+};
+
+static const uint32_t iaxxx_pdm_pad_ctrl_clk[4][3] = {
+	/* Address Functional PAD value, Default PAD value */
+	{
+		IAXXX_PAD_CTRL_PORTC_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTC_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_CLK_LOW_PWR
+	},/* PDM_DMIC_PORT_CLK_SRC_PORTC */
+	{
+		IAXXX_PAD_CTRL_CDC_MCLK_ADDR,
+		IAXXX_PAD_CTRL_CDC_MCLK_RESET_VAL,
+		IAXXX_PAD_CTRL_CDC_MCLK_LOW_PWR,
+	},/* PDM_CDC_ADC_CLK_SRC_CDC_MCLK */
+	{
+		IAXXX_PAD_CTRL_PORTB_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTB_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_CLK_LOW_PWR
+	},/* PDM_DMIC_PORT_CLK_SRC_PORTB */
+	{
+		IAXXX_PAD_CTRL_PORTD_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTD_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTD_CLK_LOW_PWR
+	} /* PDM_CDC_ADC_CLK_SRC_PORTD */
+};
+
+static const uint32_t iaxxx_pad_ctrl_data[PDM_NUM_IO_MICS][3] = {
+	/* Address, Functional PAD value, Default PAD value */
+	{
+		IAXXX_PAD_CTRL_PORTC_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTC_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_FS_LOW_PWR
+	},/* PDM_DMIC_IN0 */
+	{
+		IAXXX_PAD_CTRL_PORTC_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTC_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_FS_LOW_PWR
+	},/* PDM_DMIC_IN1 */
+	{
+		IAXXX_PAD_CTRL_PORTC_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTC_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_DI_LOW_PWR
+	},/* PDM_DMIC_IN2 */
+	{
+		IAXXX_PAD_CTRL_PORTC_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTC_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_DI_LOW_PWR
+	},/* PDM_DMIC_IN3 */
+	{
+		IAXXX_PAD_CTRL_PORTB_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTB_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_FS_LOW_PWR
+	},/* PDM_DMIC_IN4 */
+	{
+		IAXXX_PAD_CTRL_PORTB_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTB_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_FS_LOW_PWR
+	},/* PDM_DMIC_IN5 */
+	{
+		IAXXX_PAD_CTRL_PORTB_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTB_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_DI_LOW_PWR
+	},/* PDM_DMIC_IN6 */
+	{
+		IAXXX_PAD_CTRL_PORTB_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTB_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_DI_LOW_PWR
+	},/*PDM_DMIC_IN7 */
+	{
+		IAXXX_PAD_CTRL_PORTC_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTC_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_DO_LOW_PWR
+	},/* PDM_DMIC_OUT0 */
+	{
+		IAXXX_PAD_CTRL_PORTB_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTB_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_DO_LOW_PWR
+	},/* PDM_DMIC_OUT1 */
+	{
+		IAXXX_PAD_CTRL_CDC_PDM0_ADDR,
+		IAXXX_PAD_CTRL_CDC_PDM0_RESET_VAL,
+		IAXXX_PAD_CTRL_CDC_PDM0_LOW_PWR
+	},/* PDM_CDC_IN0 */
+	{
+		IAXXX_PAD_CTRL_CDC_PDM1_ADDR,
+		IAXXX_PAD_CTRL_CDC_PDM1_RESET_VAL,
+		IAXXX_PAD_CTRL_CDC_PDM1_LOW_PWR
+	},/* PDM_CDC_IN1 */
+	{
+		IAXXX_PAD_CTRL_CDC_PDM2_ADDR,
+		IAXXX_PAD_CTRL_CDC_PDM2_RESET_VAL,
+		IAXXX_PAD_CTRL_CDC_PDM2_LOW_PWR
+	},/* PDM_CDC_IN2 */
+	{
+		IAXXX_PAD_CTRL_PORTD_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTD_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTD_DI_LOW_PWR
+	},/* PDM_CDC_IN3 */
+	{
+		IAXXX_PAD_CTRL_CDC_PDM0_ADDR,
+		IAXXX_PAD_CTRL_CDC_PDM0_RESET_VAL,
+		IAXXX_PAD_CTRL_CDC_PDM0_LOW_PWR
+	},/* PDM_CDC_IN4 */
+	{
+		IAXXX_PAD_CTRL_CDC_PDM1_ADDR,
+		IAXXX_PAD_CTRL_CDC_PDM1_RESET_VAL,
+		IAXXX_PAD_CTRL_CDC_PDM1_LOW_PWR
+	},/* PDM_CDC_IN5 */
+	{
+		IAXXX_PAD_CTRL_CDC_PDM2_ADDR,
+		IAXXX_PAD_CTRL_CDC_PDM2_RESET_VAL,
+		IAXXX_PAD_CTRL_CDC_PDM2_LOW_PWR
+	},/* PDM_CDC_IN6 */
+	{
+		IAXXX_PAD_CTRL_PORTD_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTD_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTD_DI_LOW_PWR
+	},/* PDM_CDC_IN7 */
+	{
+		IAXXX_PAD_CTRL_PORTC_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTC_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_DO_LOW_PWR
+	},/* PDM_DAC_OUT0 */
+	{
+		IAXXX_PAD_CTRL_PORTB_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTB_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_DO_LOW_PWR
+	},/* PDM_DAC_OUT1 */
+	{
+		IAXXX_PAD_CTRL_PORTC_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTC_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_FS_LOW_PWR
+	},/* PDM_DMIC_MONO_IN0 */
+	{
+		IAXXX_PAD_CTRL_PORTC_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTC_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_DI_LOW_PWR
+	},/* PDM_DMIC_MONO_IN1 */
+	{
+		IAXXX_PAD_CTRL_PORTB_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTB_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_FS_LOW_PWR
+	},/* PDM_DMIC_MONO_IN2 */
+	{
+		IAXXX_PAD_CTRL_PORTB_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTB_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_DI_LOW_PWR
+	} /* PDM_DMIC_MONO_IN3 */
+};
+
+/* PAD control register address */
+
+static const uint32_t
+	iaxxx_pad_ctrl_clk[IAXXX_MAX_PORTS][3] = {
+/* Address, Functional PAD value, Default PAD value */
+	{
+		IAXXX_PAD_CTRL_PORTA_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTA_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTA_CLK_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTB_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTB_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_CLK_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTC_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTC_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_CLK_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTD_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTD_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTD_CLK_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTE_CLK_ADDR,
+		IAXXX_PAD_CTRL_PORTE_CLK_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTE_CLK_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_COMMB_0_ADDR,
+		IAXXX_PAD_CTRL_COMMB_0_RESET_VAL,
+		IAXXX_PAD_CTRL_COMMB_0_LOW_PWR
+	}
+};
+
+static const uint32_t
+	iaxxx_pad_ctrl_di[IAXXX_MAX_PORTS][3] = {
+	{
+		IAXXX_PAD_CTRL_PORTA_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTA_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTA_DI_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTB_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTB_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_DI_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTC_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTC_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_DI_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTD_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTD_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTD_DI_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTE_DI_ADDR,
+		IAXXX_PAD_CTRL_PORTE_DI_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTE_DI_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_COMMB_2_ADDR,
+		IAXXX_PAD_CTRL_COMMB_2_RESET_VAL,
+		IAXXX_PAD_CTRL_COMMB_2_LOW_PWR
+	}
+};
+
+static const uint32_t
+	iaxxx_pad_ctrl_do[IAXXX_MAX_PORTS][3] = {
+	{
+		IAXXX_PAD_CTRL_PORTA_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTA_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTA_DO_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTB_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTB_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_DO_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTC_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTC_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_DO_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTD_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTD_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTD_DO_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTE_DO_ADDR,
+		IAXXX_PAD_CTRL_PORTE_DO_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTE_DO_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_COMMB_3_ADDR,
+		IAXXX_PAD_CTRL_COMMB_3_RESET_VAL,
+		IAXXX_PAD_CTRL_COMMB_3_LOW_PWR
+	}
+};
+
+static const uint32_t
+	iaxxx_pad_ctrl_fs[IAXXX_MAX_PORTS][3] = {
+	{
+		IAXXX_PAD_CTRL_PORTA_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTA_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTA_FS_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTB_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTB_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTB_FS_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTC_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTC_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTC_FS_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTD_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTD_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTD_FS_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_PORTE_FS_ADDR,
+		IAXXX_PAD_CTRL_PORTE_FS_RESET_VAL,
+		IAXXX_PAD_CTRL_PORTE_FS_LOW_PWR
+	},
+	{
+		IAXXX_PAD_CTRL_COMMB_1_ADDR,
+		IAXXX_PAD_CTRL_COMMB_1_RESET_VAL,
+		IAXXX_PAD_CTRL_COMMB_1_LOW_PWR
+	}
 };
 
 /* This table is two dimension array of CIC decimation and Green box(Half band)
@@ -3785,6 +4035,7 @@ static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
 	u32 status = 0;
+	u32 pad_ctrl_clk_reg, pad_ctrl_clk_val;
 	int ret = 0;
 
 	dev_dbg(codec->dev, "enter %s()\n", __func__);
@@ -3828,6 +4079,11 @@ static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 		return ret;
 	}
 	iaxxx->port_start_en[port] = 0;
+
+	pad_ctrl_clk_reg = iaxxx_pdm_pad_ctrl_clk[port][0];
+	pad_ctrl_clk_val = iaxxx_pdm_pad_ctrl_clk[port][2];
+	snd_soc_write(codec, pad_ctrl_clk_reg, pad_ctrl_clk_val);
+
 	return ret;
 }
 
@@ -4024,12 +4280,14 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 	u32 pdm_bclk = 0;
 	u8 aud_port_clk = 0;
 	u32 cic_hb = 0, hb_dec = 0;
-	u32 io_ctrl_reg, io_ctrl_mask, io_ctrl_val;
+	u32 io_ctrl_reg, io_ctrl_val;
+	u32 pad_ctrl_reg, pad_ctrl_val;
 	u32 io_ctrl_clk_reg, io_ctrl_clk_val;
+	u32 pad_ctrl_clk_reg, pad_ctrl_clk_val;
 	u32 cic_ctrl = 0;
 	u32 cic_rx_rt_ctrl = 0, cic_dec = 0;
 	int ret = -EINVAL;
-	int io_port_mic = dmic;
+	int port_mic = dmic;
 	u32 status = 0;
 	int clk_src = 0;
 	int pdm_mstr = 0;
@@ -4073,6 +4331,10 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 
 	dev_dbg(dev, "clk_port:%d clk_src:%d pdm_mstr=%d\n", clk_port,
 			clk_src, pdm_mstr);
+	pad_ctrl_clk_reg = iaxxx_pdm_pad_ctrl_clk[clk_src][0];
+	pad_ctrl_clk_val = iaxxx_pdm_pad_ctrl_clk[clk_src][1];
+	snd_soc_write(codec, pad_ctrl_clk_reg, pad_ctrl_clk_val);
+
 	io_ctrl_clk_reg = iaxxx_io_ctrl_clk[clk_src][0];
 	io_ctrl_clk_val = iaxxx_io_ctrl_clk[clk_src][pdm_mstr + 1];
 	snd_soc_write(codec, io_ctrl_clk_reg, io_ctrl_clk_val);
@@ -4197,12 +4459,15 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 		snd_soc_update_bits(codec, IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
 			IAXXX_CNR0_CIC_RX_RT_MASK(cic_rx_id), cic_rx_rt_ctrl);
 
-		io_ctrl_reg = iaxxx_io_ctrl_data[io_port_mic][0];
-		io_ctrl_mask = iaxxx_io_ctrl_data[io_port_mic][1];
-		io_ctrl_val = iaxxx_io_ctrl_data[io_port_mic][1];
+		io_ctrl_reg = iaxxx_io_ctrl_data[port_mic][0];
+		io_ctrl_val = iaxxx_io_ctrl_data[port_mic][1];
 
 		snd_soc_write(codec, io_ctrl_reg, io_ctrl_val);
 
+		pad_ctrl_reg = iaxxx_pad_ctrl_data[port_mic][0];
+		pad_ctrl_val = iaxxx_pad_ctrl_data[port_mic][1];
+
+		snd_soc_write(codec, pad_ctrl_reg, pad_ctrl_val);
 		/* Set state bit, Disable the Filter */
 		if ((cic_rx_id & 0x1) != 0) {
 			/* we are in the 'odd' channel : 1/3/5/7 */
@@ -4265,11 +4530,15 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 			IAXXX_CNR0_CIC_CTRL_TX_AC_0_1_MASK |
 			IAXXX_CNR0_CIC_CTRL_TX_POL_0_1_MASK, cic_ctrl);
 
-		io_ctrl_reg = iaxxx_io_ctrl_data[io_port_mic][0];
-		io_ctrl_mask = iaxxx_io_ctrl_data[io_port_mic][1];
-		io_ctrl_val = iaxxx_io_ctrl_data[io_port_mic][1];
+		io_ctrl_reg = iaxxx_io_ctrl_data[port_mic][0];
+		io_ctrl_val = iaxxx_io_ctrl_data[port_mic][1];
 
 		snd_soc_write(codec, io_ctrl_reg, io_ctrl_val);
+
+		pad_ctrl_reg = iaxxx_pad_ctrl_data[port_mic][0];
+		pad_ctrl_val = iaxxx_pad_ctrl_data[port_mic][1];
+
+		snd_soc_write(codec, pad_ctrl_reg, pad_ctrl_val);
 
 		snd_soc_update_bits(codec, cic_rx_addr[cic_rx_id],
 			IAXXX_CNR0_CIC_TX_0_1_CLR_0_MASK, 0);
@@ -4295,6 +4564,7 @@ static int iaxxx_pdm_port_clr(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
 	u32 io_ctrl_reg, io_ctrl_mask;
+	u32 pad_ctrl_reg, pad_ctrl_val;
 	u32 port_type = 0;
 	u32 rx_rt_clr = 0, tx_rt_clr = 0;
 	u32 op_port_mic = 0;
@@ -4407,6 +4677,11 @@ static int iaxxx_pdm_port_clr(struct snd_kcontrol *kcontrol,
 		dev_err(codec->dev, "Update block fail %s()\n", __func__);
 		return ret;
 	}
+
+	pad_ctrl_reg = iaxxx_pad_ctrl_data[port_mic][0];
+	pad_ctrl_val = iaxxx_pad_ctrl_data[port_mic][2];
+
+	snd_soc_write(codec, pad_ctrl_reg, pad_ctrl_val);
 
 	return 0;
 }
@@ -4917,6 +5192,22 @@ static int iaxxx_cdc1_micbias_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static void iaxxx_pcm_pad_ctrl_set(struct snd_soc_codec *codec,
+	uint32_t port, uint32_t pad_val)
+{
+	snd_soc_write(codec, iaxxx_pad_ctrl_clk[port][0],
+			iaxxx_pad_ctrl_clk[port][pad_val]);
+
+	snd_soc_write(codec, iaxxx_pad_ctrl_di[port][0],
+			iaxxx_pad_ctrl_di[port][pad_val]);
+
+	snd_soc_write(codec, iaxxx_pad_ctrl_do[port][0],
+			iaxxx_pad_ctrl_do[port][pad_val]);
+
+	snd_soc_write(codec, iaxxx_pad_ctrl_fs[port][0],
+			iaxxx_pad_ctrl_fs[port][pad_val]);
+}
+
 static int iaxxx_pdm_head_strm_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
@@ -5013,6 +5304,8 @@ static int iaxxx_pcm_port_stop(struct snd_kcontrol *kcontrol,
 		pr_err("Update block fail %s()\n", __func__);
 		return ret;
 	}
+
+	iaxxx_pcm_pad_ctrl_set(codec, port, 2);
 
 	iaxxx->port_pcm_start[port] = 0;
 	return ret;
@@ -5146,6 +5439,8 @@ static int iaxxx_pcm_port_setup(struct snd_kcontrol *kcontrol,
 		dev_err(codec->dev, "unsupported format\n");
 		return -EINVAL;
 	}
+
+	iaxxx_pcm_pad_ctrl_set(codec, port, 1);
 
 	port_di_val = port_di_val | IAXXX_IO_CTRL_DI;
 	port_do_val = port_do_val | IAXXX_IO_CTRL_DO;
@@ -6439,6 +6734,10 @@ static int iaxxx_tdm3_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		return -EINVAL;
 	}
 
+	iaxxx_pcm_pad_ctrl_set(codec, id, 1);
+
+	iaxxx_pcm_pad_ctrl_set(codec, (id + 1), 1);
+
 	/* BCLK IOCTRL Configuration */
 	snd_soc_update_bits(codec, port_clk_addr[id],
 		IAXXX_IO_CTRL_PORTA_CLK_MUX_SEL_MASK |
@@ -6547,9 +6846,10 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		break;
 	}
 
+	iaxxx_pcm_pad_ctrl_set(codec, id, 1);
+
 	port_di_val = port_di_val | IAXXX_IO_CTRL_DI;
 	port_do_val = port_do_val | IAXXX_IO_CTRL_DO;
-
 
 	snd_soc_update_bits(codec, port_clk_addr[id],
 		IAXXX_IO_CTRL_PORTA_CLK_MUX_SEL_MASK |
@@ -6676,9 +6976,9 @@ static int iaxxx_tdm3_hw_params(struct snd_pcm_substream *substream,
 				params_channels(params));
 		return -EINVAL;
 	}
-
+	/* enable PortD and E */
 	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
-		0x18, 0x18); /* enable PortD and E */
+		IAXXX_PORTD_PORTE_PORT_EN, IAXXX_PORTD_PORTE_PORT_EN);
 
 	ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
 				&status, IAXXX_BLOCK_0);
@@ -7010,6 +7310,8 @@ static int iaxxx_tdm3_hw_free(struct snd_pcm_substream *substream,
 	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
 	u32 mask = 0, value = 0;
 	int id = PCM_PORTD;
+	uint32_t status = 0;
+	int ret = 0;
 
 	dev_dbg(codec->dev, "%s\n", __func__);
 
@@ -7044,6 +7346,16 @@ static int iaxxx_tdm3_hw_free(struct snd_pcm_substream *substream,
 			IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
 			IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 			IAXXX_I2S_TRIGGER_HIGH);
+
+		snd_soc_update_bits(codec, IAXXX_SRB_I2S_PORT_PWR_EN_ADDR,
+			(0x1 << (id + 1)), (0 << (id + 1)));
+
+		ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
+				&status, IAXXX_BLOCK_0);
+		if (ret) {
+			pr_err("Update block fail %s()\n", __func__);
+			return ret;
+		}
 	}
 	/* clear cnr0 pcm active reg */
 	snd_soc_update_bits(codec, IAXXX_CNR0_PCM_ACTIVE_ADDR,
@@ -7053,6 +7365,20 @@ static int iaxxx_tdm3_hw_free(struct snd_pcm_substream *substream,
 		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id)) |
 		(IAXXX_CNR0_PCM_DISABLE <<
 		IAXXX_CNR0_PCM_ACTIVE_PCM_ACT_POS(id + 1)));
+
+	snd_soc_update_bits(codec, IAXXX_SRB_PCM_PORT_PWR_EN_ADDR,
+		IAXXX_PORTD_PORTE_PORT_EN, 0x0); /* disable PortD and E */
+
+	ret = iaxxx_send_update_block_request(iaxxx->dev_parent,
+				&status, IAXXX_BLOCK_0);
+	if (ret) {
+		dev_err(codec->dev, "Update block fail %s()\n", __func__);
+		return ret;
+	}
+
+	iaxxx_pcm_pad_ctrl_set(codec, id, 2);
+
+	iaxxx_pcm_pad_ctrl_set(codec, (id + 1), 2);
 
 	return 0;
 }
@@ -7130,6 +7456,8 @@ static int iaxxx_pcm_hw_free(struct snd_pcm_substream *substream,
 		dev_err(codec->dev, "Update block fail %s()\n", __func__);
 		return ret;
 	}
+
+	iaxxx_pcm_pad_ctrl_set(codec, id, 2);
 
 	return 0;
 }

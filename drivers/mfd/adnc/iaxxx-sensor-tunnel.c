@@ -159,6 +159,23 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			dev_err(priv->dev, "Error in setting up PDM route\n");
 			return -EIO;
 		}
+
+		if (port_id == PDM_PORTD) {
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTD_CLK_ADDR,
+					IAXXX_PAD_CTRL_PORTD_CLK_RESET_VAL);
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTD_DI_ADDR,
+					IAXXX_PAD_CTRL_PORTD_DI_RESET_VAL);
+		} else if (port_id == PDM_PORTB) {
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTB_CLK_ADDR,
+					IAXXX_PAD_CTRL_PORTB_CLK_RESET_VAL);
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTB_DI_ADDR,
+					IAXXX_PAD_CTRL_PORTB_DI_RESET_VAL);
+		}
+
 		regmap_update_bits(priv->regmap, IAXXX_CNR0_I2S_ENABLE_ADDR,
 				(0x1 << port_id), IAXXX_CNR0_I2S_ENABLE_LOW);
 		regmap_update_bits(priv->regmap, IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
@@ -454,6 +471,22 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		if (ret) {
 			dev_err(priv->dev, "set proc mem off failed\n");
 			return ret;
+		}
+
+		if (port_id == PDM_PORTD) {
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTD_CLK_ADDR,
+					IAXXX_PAD_CTRL_PORTD_CLK_LOW_PWR);
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTD_DI_ADDR,
+					IAXXX_PAD_CTRL_PORTD_DI_LOW_PWR);
+		} else if (port_id == PDM_PORTB) {
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTB_CLK_ADDR,
+					IAXXX_PAD_CTRL_PORTB_CLK_LOW_PWR);
+			regmap_write(priv->regmap,
+					IAXXX_PAD_CTRL_PORTB_DI_ADDR,
+					IAXXX_PAD_CTRL_PORTB_DI_LOW_PWR);
 		}
 	}
 
