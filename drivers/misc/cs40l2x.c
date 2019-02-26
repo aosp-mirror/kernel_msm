@@ -6427,8 +6427,10 @@ static int cs40l2x_wavetable_sync(struct cs40l2x_private *cs40l2x)
 			cs40l2x->num_waves, cs40l2x->wt_file, cs40l2x->wt_date);
 
 	if ((cp_trigger_index & CS40L2X_INDEX_MASK) >= cs40l2x->num_waves
+			&& cp_trigger_index != CS40L2X_INDEX_QEST
 			&& cp_trigger_index != CS40L2X_INDEX_PEAK
-			&& cp_trigger_index != CS40L2X_INDEX_PBQ)
+			&& cp_trigger_index != CS40L2X_INDEX_PBQ
+			&& cp_trigger_index != CS40L2X_INDEX_DIAG)
 		dev_warn(dev, "Invalid cp_trigger_index\n");
 
 	for (i = 0; i < cs40l2x->pbq_depth; i++) {
