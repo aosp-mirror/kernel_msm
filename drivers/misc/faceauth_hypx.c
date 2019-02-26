@@ -116,7 +116,7 @@ struct faceauth_blob {
 	struct sg_table *sg_table;
 };
 
-static void hypx_free_blob_userbuf(phys_addr_t blob_phy)
+static void hypx_free_blob_userbuf(phys_addr_t blob_phy, bool reassign)
 {
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
@@ -134,12 +134,15 @@ static void hypx_free_blob_userbuf(phys_addr_t blob_phy)
 		phy_addr = (uint64_t)blob->segments[i].addr * PAGE_SIZE;
 		virt_addr = phys_to_virt(phy_addr);
 
-		ret = hyp_assign_phys(phy_addr,
-				      blob->segments[i].pages * PAGE_SIZE,
-				      source_vm, ARRAY_SIZE(source_vm), dest_vm,
-				      dest_perm, ARRAY_SIZE(dest_vm));
-		if (ret)
-			pr_err("hyp_assign_phys returned an error %d\n", ret);
+		if (reassign) {
+			ret = hyp_assign_phys(
+				phy_addr, blob->segments[i].pages * PAGE_SIZE,
+				source_vm, ARRAY_SIZE(source_vm), dest_vm,
+				dest_perm, ARRAY_SIZE(dest_vm));
+			if (ret)
+				pr_err("hyp_assign_phys returned an error %d\n",
+				       ret);
+		}
 
 		kfree(virt_addr);
 	}
@@ -281,8 +284,7 @@ static phys_addr_t hypx_create_blob_userbuf(struct device *dev,
 	return virt_to_phys(blob);
 
 exit:
-	hypx_free_blob_userbuf(virt_to_phys(blob));
-
+	hypx_free_blob_userbuf(virt_to_phys(blob), true);
 	return 0;
 }
 
@@ -412,7 +414,8 @@ static dma_addr_t hypx_create_blob(struct device *dev,
 static void hypx_free_blob(struct device *dev, struct faceauth_blob *blob)
 {
 	if (blob->buffer)
-		return hypx_free_blob_userbuf(virt_to_phys(blob->hypx_blob));
+		return hypx_free_blob_userbuf(virt_to_phys(blob->hypx_blob),
+					      true);
 	else
 		return hypx_free_blob_dmabuf(dev, blob);
 }
@@ -600,9 +603,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 		hypx_free_blob(dev, &image_dot_left);
 	}
 err4:
-
 	free_page((unsigned long)hypx_data);
-
 	return ret;
 }
 
@@ -643,6 +644,7 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 				  struct faceauth_debug_data *data)
 {
 	int ret = 0;
+	bool need_reassign = true;
 	struct scm_desc desc = { 0 };
 	struct hypx_fa_process_results *hypx_data;
 
@@ -678,9 +680,10 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 		pr_err("Failed hypx_copy_from_blob_userbuf %d\n", ret);
 		goto exit1;
 	}
+	need_reassign = false;
 
 exit1:
-	hypx_free_blob_userbuf(hypx_data->debug_buffer);
+	hypx_free_blob_userbuf(hypx_data->debug_buffer, need_reassign);
 exit2:
 	free_page((unsigned long)hypx_data);
 	return ret;
@@ -696,6 +699,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	struct faceauth_buffer_list *output_buffers;
 	int buffer_idx;
 	int buffer_list_size;
+	bool need_reassign = true;
 	struct hypx_fa_debug_data *hypx_data;
 	struct scm_desc desc = { 0 };
 
@@ -807,6 +811,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 			pr_err("Error saving flood image\n");
 			goto exit;
 		}
+		need_reassign = false;
 	} else {
 		debug_entry->left_dot.offset_to_image = 0;
 		debug_entry->left_dot.image_size = 0;
@@ -834,6 +839,9 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		hypx_data->buffer_list_size = buffer_list_size;
 		hypx_data->buffer_base = output_buffers->buffer_base;
 
+		if (!hypx_data->output_buffers)
+			goto exit;
+
 		dma_sync_single_for_device(dev, virt_to_phys(hypx_data),
 					   PAGE_SIZE, DMA_BIDIRECTIONAL);
 
@@ -850,17 +858,17 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 
 		output_buffers->buffer_base = current_offset;
 		current_offset += buffer_list_size;
-		hypx_free_blob_userbuf(hypx_data->output_buffers);
+		hypx_free_blob_userbuf(hypx_data->output_buffers, false);
 	}
 
 exit:
-	hypx_free_blob_userbuf(hypx_data->ab_state);
+	hypx_free_blob_userbuf(hypx_data->ab_state, false);
 exit3:
-	hypx_free_blob_userbuf(hypx_data->image_flood);
+	hypx_free_blob_userbuf(hypx_data->image_flood, need_reassign);
 exit2:
-	hypx_free_blob_userbuf(hypx_data->image_right);
+	hypx_free_blob_userbuf(hypx_data->image_right, need_reassign);
 exit1:
-	hypx_free_blob_userbuf(hypx_data->image_left);
+	hypx_free_blob_userbuf(hypx_data->image_left, need_reassign);
 
 	free_page((unsigned long)hypx_data);
 	return err;

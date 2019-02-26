@@ -114,7 +114,7 @@ struct {
 	int count;
 	char *data_buffer;
 } debug_data_queue;
-#endif // #if ENABLE_AIRBRUSH_DEBUG
+#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 
 static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				   unsigned long arg);
@@ -411,7 +411,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		err = dma_gather_debug_log(&debug_step_data);
 #else
 		err = -EOPNOTSUPP;
-#endif // #if ENABLE_AIRBRUSH_DEBUG
+#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 		break;
 	case FACEAUTH_DEV_IOC_DEBUG_DATA:
 #if ENABLE_AIRBRUSH_DEBUG
@@ -447,7 +447,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		}
 #else
 		err = -EOPNOTSUPP;
-#endif // #if ENABLE_AIRBRUSH_DEBUG
+#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 		break;
 	default:
 		err = -EOPNOTSUPP;
@@ -477,11 +477,13 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	int polling_interval = M0_POLLING_INTERVAL;
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_init_data init_step_data = { 0 };
-	struct faceauth_debug_data debug_step_data;
 	unsigned long stop, ioctl_start, save_debug_jiffies;
 	unsigned long save_debug_start = 0;
 	bool send_images_data;
 	struct faceauth_data *data = file->private_data;
+#if ENABLE_AIRBRUSH_DEBUG
+	struct faceauth_debug_data debug_step_data;
+#endif
 
 	ioctl_start = jiffies;
 
@@ -567,11 +569,11 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 						   polling_interval >> 1 :
 						   1;
 		}
-
+#if ENABLE_AIRBRUSH_DEBUG
 		save_debug_start = jiffies;
 		enqueue_debug_data(data, true);
 		save_debug_jiffies = jiffies - save_debug_start;
-
+#endif
 		if (copy_to_user((void __user *)arg, &start_step_data,
 				 sizeof(start_step_data))) {
 			err = -EFAULT;
@@ -586,6 +588,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		el2_faceauth_cleanup(data->device);
 		break;
 	case FACEAUTH_DEV_IOC_DEBUG:
+#if ENABLE_AIRBRUSH_DEBUG
 		pr_info("el2: faceauth debug log IOCTL\n");
 		if (copy_from_user(&debug_step_data, (const void __user *)arg,
 				   sizeof(debug_step_data))) {
@@ -594,9 +597,13 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		}
 		err = el2_faceauth_gather_debug_log(data->device,
 						    &debug_step_data);
+#else
+		err = -EOPNOTSUPP;
+#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 		break;
 
 	case FACEAUTH_DEV_IOC_DEBUG_DATA:
+#if ENABLE_AIRBRUSH_DEBUG
 		pr_info("el2: faceauth debug data IOCTL\n");
 
 		if (copy_from_user(&debug_step_data, (const void __user *)arg,
@@ -627,6 +634,9 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 			err = -EINVAL;
 			break;
 		}
+#else
+		err = -EOPNOTSUPP;
+#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 		break;
 	default:
 		err = -EOPNOTSUPP;
@@ -992,7 +1002,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 
 	return err;
 }
-#endif // #if ENABLE_AIRBRUSH_DEBUG
+#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 
 /*
  * Local function to write a QW from user space memory to Airbrush via
