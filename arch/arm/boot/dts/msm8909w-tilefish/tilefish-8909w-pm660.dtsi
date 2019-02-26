@@ -32,7 +32,7 @@
 	/delete-node/ qcom,battery-data;
 	qrd_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <60>;
-		#include "temp-fg-gen3-batterydata-apack-300mah.dtsi"
+		#include "tilefish-fg-gen3-batterydata-apack-300mah.dtsi"
 	};
 };
 

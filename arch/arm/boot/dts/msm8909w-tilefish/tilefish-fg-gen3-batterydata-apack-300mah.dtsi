@@ -1,0 +1,72 @@
+
+qcom,3851521_compal_daw5_300mah_averaged_masterslave_feb22nd2019 {
+	qcom, = <24>;
+	/* #3851521_Compal_DAW5_300mAh_averaged_MasterSlave_Feb22nd2019*/
+	qcom,max-voltage-uv = <4350000>;
+	qcom,fg-cc-cv-threshold-mv = <4340>;
+	qcom,fastchg-current-ma = <300>;
+	qcom,nom-batt-capacity-mah = <300>;
+	qcom,batt-id-kohm = <60>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "daw5_300mah_feb22nd2019";
+	qcom,checksum = <0x49E0>;
+	qcom,gui-version = "PM660GUI - 0.0.0.45";
+	qcom,fg-profile-data = [
+		 1B 23 13 0D
+		 4F 12 81 04
+		 F0 1C E9 FA
+		 AD 05 97 02
+		 55 19 55 1B
+		 4E 34 DA 42
+		 A2 00 00 00
+		 1B 00 00 00
+		 00 00 88 CD
+		 47 8B 2A CA
+		 32 00 08 00
+		 AF EA C9 F5
+		 8E 06 28 01
+		 B4 0D C5 04
+		 EA 06 0D 42
+		 12 06 09 20
+		 27 00 14 00
+		 6C 1F FD 05
+		 1E 0A 2B FD
+		 CA 1C D3 02
+		 32 0C 11 12
+		 A7 18 BA 23
+		 F6 4D 18 5B
+		 68 00 00 00
+		 0E 00 00 00
+		 00 00 20 CC
+		 64 BD 93 CA
+		 2C 00 00 00
+		 C6 00 C9 F5
+		 2C E4 8D DA
+		 5F CA 1C 02
+		 0C 03 16 1A
+		 AE 33 CC FF
+		 07 10 00 00
+		 30 01 99 45
+		 2C 00 40 00
+		 D7 06 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};
