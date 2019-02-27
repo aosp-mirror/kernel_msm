@@ -18,6 +18,20 @@
 #include <linux/gfp.h>
 #include <linux/thermal.h>
 
+static enum throttle_state to_throttle_state(unsigned long state)
+{
+	switch (state) {
+	case 0:
+		return THROTTLE_NONE;
+	case 1:
+		return THROTTLE_TO_MID;
+	case 2:
+		return THROTTLE_TO_LOW;
+	default:
+		return THROTTLE_TO_MIN;
+	}
+}
+
 struct ab_thermal {
 	struct device *dev;
 
@@ -40,20 +54,7 @@ static void ab_thermal_cooling_op_state_updated(
 	struct ab_thermal *thermal = cooling_op_data;
 	enum throttle_state state;
 
-	switch (new_state) {
-	case 0:
-		state = THROTTLE_NONE;
-		break;
-	case 1:
-		state = THROTTLE_TO_MID;
-		break;
-	case 2:
-		state = THROTTLE_TO_LOW;
-		break;
-	default:
-		state = THROTTLE_TO_MIN;
-		break;
-	}
+	state = to_throttle_state(new_state);
 	thermal->ops.throttle_state_updated(state, thermal->op_data);
 }
 
