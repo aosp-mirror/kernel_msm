@@ -13,8 +13,12 @@
  */
 #include "airbrush-cooling.h"
 
+#include <linux/debugfs.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
+
+static struct dentry *ab_cooling_droot;
 
 struct ab_cooling {
 	struct thermal_cooling_device *cdev;
@@ -22,8 +26,17 @@ struct ab_cooling {
 	struct ab_cooling_ops ops;
 	void *op_data;
 
-	unsigned long cur_state;
+	struct mutex lock;
+	bool enable;
+	unsigned long state;
+
+	struct dentry *droot;
 };
+
+static unsigned long ab_cooling_get_state_nolock(struct ab_cooling *cooling)
+{
+	return cooling->enable ? cooling->state : 0;
+}
 
 static int ab_cooling_op_get_max_state(struct thermal_cooling_device *cdev,
 		unsigned long *state)
@@ -37,7 +50,9 @@ static int ab_cooling_op_get_cur_state(struct thermal_cooling_device *cdev,
 {
 	struct ab_cooling *cooling = cdev->devdata;
 
-	*state = cooling->cur_state;
+	mutex_lock(&cooling->lock);
+	*state = ab_cooling_get_state_nolock(cooling);
+	mutex_unlock(&cooling->lock);
 	return 0;
 }
 
@@ -45,14 +60,17 @@ static int ab_cooling_op_set_cur_state(struct thermal_cooling_device *cdev,
 		unsigned long state)
 {
 	struct ab_cooling *cooling = cdev->devdata;
-	unsigned long old_state = cooling->cur_state;
+	unsigned long old_state, new_state;
 
-	if (old_state == state)
-		return 0;
-
-	cooling->cur_state = state;
-	cooling->ops.state_updated(cooling, old_state, state,
-		cooling->op_data);
+	mutex_lock(&cooling->lock);
+	old_state = ab_cooling_get_state_nolock(cooling);
+	cooling->state = state;
+	new_state = ab_cooling_get_state_nolock(cooling);
+	if (new_state != old_state) {
+		cooling->ops.state_updated(cooling, old_state, state,
+				cooling->op_data);
+	}
+	mutex_unlock(&cooling->lock);
 	return 0;
 }
 
@@ -62,20 +80,89 @@ static const struct thermal_cooling_device_ops ab_cooling_ops = {
 	.set_cur_state = ab_cooling_op_set_cur_state,
 };
 
+static int ab_cooling_enable_get(void *data, u64 *val)
+{
+	struct ab_cooling *cooling = data;
+
+	mutex_lock(&cooling->lock);
+	*val = cooling->enable;
+	mutex_unlock(&cooling->lock);
+	return 0;
+}
+
+static int ab_cooling_enable_set(void *data, u64 val)
+{
+	struct ab_cooling *cooling = data;
+	unsigned long old_state, new_state;
+
+	mutex_lock(&cooling->lock);
+	old_state = ab_cooling_get_state_nolock(cooling);
+	cooling->enable = val;
+	new_state = ab_cooling_get_state_nolock(cooling);
+	if (new_state != old_state) {
+		cooling->ops.state_updated(cooling, old_state, new_state,
+				cooling->op_data);
+	}
+	mutex_unlock(&cooling->lock);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_ab_cooling_enable, ab_cooling_enable_get,
+		ab_cooling_enable_set, "%llu\n");
+
+static void ab_cooling_create_debugfs(struct ab_cooling *cooling)
+{
+	struct dentry *d;
+
+	if (!ab_cooling_droot) {
+		ab_cooling_droot = debugfs_create_dir("airbrush_cooling", NULL);
+		if (!ab_cooling_droot)
+			ab_cooling_droot = ERR_PTR(-ENOENT);
+	}
+
+	if (IS_ERR(ab_cooling_droot))
+		goto err_out;
+
+	cooling->droot = debugfs_create_dir(cooling->cdev->type,
+			ab_cooling_droot);
+	if (!cooling->droot)
+		goto err_out;
+
+	d = debugfs_create_file("enable", 0666, cooling->droot, cooling,
+			&fops_ab_cooling_enable);
+	if (!d)
+		goto err_out;
+
+	return;
+
+err_out:
+	dev_warn(&cooling->cdev->device,
+			"Some error occurred while creating debugfs entry for airbrush cooling %s",
+			cooling->cdev->type);
+}
+
+static void ab_cooling_remove_debugfs(struct ab_cooling *cooling)
+{
+	debugfs_remove_recursive(cooling->droot);
+}
+
 struct ab_cooling *ab_cooling_register(struct device_node *np, char *type,
 		const struct ab_cooling_ops *ops, void *op_data)
 {
 	struct ab_cooling *cooling;
 	int err;
 
-	cooling = kmalloc(sizeof(struct ab_cooling), GFP_KERNEL);
+	cooling = kzalloc(sizeof(struct ab_cooling), GFP_KERNEL);
 	if (!cooling)
 		return ERR_PTR(-ENOMEM);
 
 	cooling->ops = *ops;
 	cooling->op_data = op_data;
 
-	cooling->cur_state = 0;
+	mutex_init(&cooling->lock);
+	/* TODO enable by default for release */
+	cooling->enable = false;
+	cooling->state = 0;
 	cooling->cdev = thermal_of_cooling_device_register(np, type,
 			cooling, &ab_cooling_ops);
 	if (IS_ERR(cooling->cdev)) {
@@ -84,11 +171,13 @@ struct ab_cooling *ab_cooling_register(struct device_node *np, char *type,
 		return ERR_PTR(err);
 	}
 
+	ab_cooling_create_debugfs(cooling);
 	return cooling;
 }
 
 void ab_cooling_unregister(struct ab_cooling *cooling)
 {
+	ab_cooling_remove_debugfs(cooling);
 	thermal_cooling_device_unregister(cooling->cdev);
 	kfree(cooling);
 }
