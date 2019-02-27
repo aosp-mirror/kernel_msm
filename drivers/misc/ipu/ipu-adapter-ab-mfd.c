@@ -606,12 +606,8 @@ void ipu_adapter_ipu_pre_rate_change(
 	if (ipu_clock_rate_is_active(clk_data->new_rate))
 		return;
 
+	ipu_bus_notify_suspend(bus);
 	dev_data->ipu_clock_rate_hz = clk_data->new_rate;
-
-	/* If the old rate was already inactive no further processing is needed
-	 */
-	if (ipu_clock_rate_changed_to_inactive(clk_data))
-		ipu_bus_notify_suspend(bus);
 }
 
 void ipu_adapter_ipu_post_rate_change(
@@ -631,9 +627,7 @@ void ipu_adapter_ipu_post_rate_change(
 		return;
 
 	dev_data->ipu_clock_rate_hz = clk_data->new_rate;
-
-	if (ipu_adapter_is_ready(dev_data))
-		ipu_bus_notify_ready(bus, dev_data->ipu_clock_rate_hz);
+	ipu_bus_notify_ready(bus, dev_data->ipu_clock_rate_hz);
 }
 
 void ipu_adapter_ipu_abort_rate_change(
@@ -648,13 +642,14 @@ void ipu_adapter_ipu_abort_rate_change(
 
 	/* Treat this as a clock going down
 	 */
-	dev_data->ipu_clock_rate_hz = 0;
+	dev_data->ipu_clock_rate_hz = clk_data->old_rate;
 	ipu_bus_notify_suspend(bus);
 }
 
 void ipu_adapter_dram_pre_rate_change(
 		struct ipu_adapter_ab_mfd_data *dev_data,
-		struct ab_clk_notifier_data *clk_data)
+		struct ab_clk_notifier_data *clk_data,
+		bool pre_data_loss)
 {
 	struct paintbox_bus *bus = dev_data->bus;
 
@@ -668,12 +663,15 @@ void ipu_adapter_dram_pre_rate_change(
 	if (clk_data->new_rate)
 		return;
 
-	/* If the old rate was already inactive no further processing is needed
-	 */
-	if (!ipu_clock_rate_changed_to_inactive(clk_data)) {
+	if (pre_data_loss) {
+		dev_dbg(dev_data->dev, "%s: DRAM down, no retention", __func__);
 		ipu_bus_notify_shutdown(bus);
-		atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
+	} else {
+		dev_dbg(dev_data->dev, "%s: DRAM down, self refresh", __func__);
+		ipu_bus_notify_suspend(bus);
 	}
+
+	atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
 }
 
 void ipu_adapter_dram_post_rate_change(
@@ -715,8 +713,8 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 				 "DRAM data will be lost; please free ringbuffer\n");
 			/* TODO(b/128524484) additional work on client side */
 		}
-
-		ipu_adapter_dram_pre_rate_change(dev_data, clk_data);
+		ipu_adapter_dram_pre_rate_change(dev_data, clk_data,
+				!!(action & AB_DRAM_DATA_PRE_OFF));
 		return NOTIFY_OK;
 	}
 
@@ -811,7 +809,7 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 	if ((action & ABC_PCIE_LINK_PRE_DISABLE) &&
 			ipu_adapter_link_is_ready(dev_data)) {
 		dev_dbg(dev_data->dev, "%s: PCIe link going down\n", __func__);
-		ipu_bus_notify_shutdown(bus);
+		ipu_bus_notify_suspend(bus);
 		atomic_andnot(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
 		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
 		ipu_adapter_ab_mfd_suspend_shared_memory(dev_data);

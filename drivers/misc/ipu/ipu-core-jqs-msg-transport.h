@@ -107,6 +107,8 @@ void ipu_core_jqs_msg_transport_process_queues(struct paintbox_bus *bus,
 int ipu_core_jqs_msg_transport_alloc_kernel_queue(struct paintbox_bus *bus);
 void ipu_core_jqs_msg_transport_free_kernel_queue(struct paintbox_bus *bus,
 		int queue_err);
+void ipu_core_jqs_msg_transport_complete_kernel_queue(struct paintbox_bus *bus,
+		int queue_err);
 
 /* Called in an interrupt context */
 irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus);

@@ -335,10 +335,10 @@ static int ipu_core_jqs_fw_state_set(void *data, u64 val)
 	while (val < bus->jqs.status) {
 		switch (bus->jqs.status) {
 		case JQS_FW_STATUS_RUNNING:
-			ipu_core_jqs_disable_firmware_normal(bus);
+			ipu_core_jqs_disable_firmware_requested(bus);
 			break;
 		case JQS_FW_STATUS_STAGED:
-			ipu_core_jqs_unstage_firmware(bus);
+			ipu_core_jqs_unstage_firmware_requested(bus);
 			break;
 		case JQS_FW_STATUS_REQUESTED:
 			ipu_core_jqs_unload_firmware(bus);

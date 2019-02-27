@@ -21,19 +21,27 @@
 
 /* The caller to these functions must hold bus->jqs.lock */
 int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus);
-void ipu_core_jqs_disable_firmware_normal(struct paintbox_bus *bus);
-void ipu_core_jqs_disable_firmware_error(struct paintbox_bus *bus);
+void ipu_core_jqs_disable_firmware_requested(struct paintbox_bus *bus);
+void ipu_core_jqs_disable_firmware_suspended(struct paintbox_bus *bus);
+void ipu_core_jqs_disable_firmware_fatal_error(struct paintbox_bus *bus);
+
 int ipu_core_jqs_load_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus);
 int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus);
-void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus);
+void ipu_core_jqs_unstage_firmware_requested(struct paintbox_bus *bus);
+void ipu_core_jqs_unstage_firmware_fatal_error(struct paintbox_bus *bus);
+
 void ipu_core_jqs_resume_firmware(struct paintbox_bus *bus,
 		uint64_t ipu_clock_rate_hz);
+void ipu_core_jqs_suspend_firmware(struct paintbox_bus *bus);
+void ipu_core_jqs_shutdown_firmware(struct paintbox_bus *bus);
 
 /* The caller to these functions must hold bus->jqs.lock */
 int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,
 		uint32_t clock_rate_hz);
 int ipu_core_jqs_send_set_log_info(struct paintbox_bus *bus);
+int ipu_core_jqs_send_shutdown_mode(struct paintbox_bus *bus,
+		enum jqs_shutdown_mode shutdown_mode);
 
 int ipu_core_jqs_init(struct paintbox_bus *bus);
 void ipu_core_jqs_remove(struct paintbox_bus *bus);

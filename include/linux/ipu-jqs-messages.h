@@ -53,6 +53,10 @@ enum jqs_message_type {
 	JQS_MESSAGE_TYPE_REGISTER_BUFFERS   = 0x8000100d,
 	/* JqsMessageUnregisterBuffers  ->  JqsMessageAck */
 	JQS_MESSAGE_TYPE_UNREGISTER_BUFFERS = 0x8000100e,
+	/* JqsMessageShutdownMode ->   JqsMessageAck and setting
+	 * JQS_SYS_GPR_SHUTDOWN
+	 */
+	JQS_MESSAGE_TYPE_SHUTDOWN_MODE = 0x8000100f,
 
 	/* Jqs -> Host messages */
 	JQS_MESSAGE_TYPE_ACK                = 0x80002001,
@@ -70,6 +74,22 @@ enum jqs_log_level {
 	JQS_LOG_LEVEL_WARNING,
 	JQS_LOG_LEVEL_INFO,
 };
+
+enum jqs_shutdown_mode {
+	JQS_SHUTDOWN_MODE_NONE,
+	JQS_SHUTDOWN_MODE_FOR_RESUME,
+	JQS_SHUTDOWN_MODE_HARD
+};
+
+enum jqs_boot_mode {
+	JQS_BOOT_MODE_COLD = 0x0,
+	JQS_BOOT_MODE_WARM = 0x1
+};
+
+#define SYS_JQS_GPR_TRANSPORT SYS_JQS_GPR_0
+#define SYS_JQS_GPR_BOOT_MODE SYS_JQS_GPR_1
+#define JQS_SYS_GPR_SHUTDOWN JQS_SYS_GPR_1
+#define JQS_SHUTDOWN_COMPLETE 0x1
 
 #define JQS_LOG_SINK_NONE    (0x0)
 #define JQS_LOG_SINK_UART    (0x1 << 0)
@@ -103,6 +123,11 @@ struct jqs_message_open_session {
 struct jqs_message_close_session {
 	struct jqs_message header;
 	uint32_t session_id;
+};
+
+struct jqs_message_shutdown_mode {
+	struct jqs_message header;
+	enum jqs_shutdown_mode shutdown_mode;
 };
 
 struct jqs_message_alloc_queue {
@@ -242,6 +267,6 @@ struct jqs_message_ipu_reg_values {
 	struct jqs_message header;
 	uint32_t num_regs;
 	struct jqs_ipu_reg_value regs[MAX_REG_ACCESS];
-} ;
+};
 
 #endif /* __IPU_JQS_MESSAGES_H__ */

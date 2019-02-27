@@ -564,6 +564,41 @@ void ipu_core_jqs_msg_transport_free_kernel_queue(struct paintbox_bus *bus,
 			JQS_TRANSPORT_KERNEL_QUEUE_ID, queue_err);
 }
 
+void ipu_core_jqs_msg_transport_complete_queue(struct paintbox_bus *bus,
+		uint32_t q_id, int queue_err)
+{
+	struct paintbox_jqs_msg_transport *trans;
+	struct host_jqs_queue *host_q;
+	struct host_jqs_queue_waiter *waiter;
+
+	mutex_lock(&bus->transport_lock);
+
+	if (!bus->jqs_msg_transport) {
+		mutex_unlock(&bus->transport_lock);
+		return;
+	}
+
+	trans = bus->jqs_msg_transport;
+
+	host_q = &trans->queues[q_id];
+	waiter = &host_q->waiter;
+
+	if (waiter->enabled) {
+		/* Release the waiting thread, the queue is disappearing */
+		waiter->ret = queue_err;
+		complete(&waiter->completion);
+	}
+
+	mutex_unlock(&bus->transport_lock);
+}
+
+void ipu_core_jqs_msg_transport_complete_kernel_queue(struct paintbox_bus *bus,
+		int queue_err)
+{
+	ipu_core_jqs_msg_transport_complete_queue(bus,
+			JQS_TRANSPORT_KERNEL_QUEUE_ID, queue_err);
+}
+
 ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		uint32_t q_id, void __user *buf, size_t size)
 {

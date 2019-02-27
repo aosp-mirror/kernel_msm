@@ -412,9 +412,11 @@ void ipu_request_reset(struct device *dev)
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 	struct paintbox_bus *bus = pb_dev->bus;
 
+	dev_err(bus->parent_dev, "%s: Reset requested\n", __func__);
+
 	mutex_lock(&bus->jqs.lock);
 
-	ipu_core_jqs_disable_firmware_error(bus);
+	ipu_core_jqs_disable_firmware_fatal_error(bus);
 
 	mutex_unlock(&bus->jqs.lock);
 }
@@ -494,6 +496,8 @@ void ipu_bus_notify_fatal_error(struct paintbox_bus *bus)
 
 void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz)
 {
+	dev_dbg(bus->parent_dev, "%s: Start the JQS firmware\n", __func__);
+
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_resume_firmware(bus, ipu_clock_rate_hz);
@@ -504,20 +508,23 @@ void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz)
 
 void ipu_bus_notify_suspend(struct paintbox_bus *bus)
 {
+	dev_dbg(bus->parent_dev, "%s: Suspend the JQS firmware\n", __func__);
+
 	mutex_lock(&bus->jqs.lock);
 
-	ipu_core_jqs_disable_firmware_error(bus);
+	ipu_core_jqs_suspend_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);
 }
 
 void ipu_bus_notify_shutdown(struct paintbox_bus *bus)
 {
+	dev_dbg(bus->parent_dev, "%s: Shutdown the JQS firmware\n", __func__);
+
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_notify_dram_down(bus);
-	ipu_core_jqs_disable_firmware_error(bus);
-	ipu_core_jqs_unstage_firmware(bus);
+	ipu_core_jqs_shutdown_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);
 }
