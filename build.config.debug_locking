@@ -1,3 +1,7 @@
+KERNEL_DIR=private/msm-google
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
+POST_DEFCONFIG_CMDS="check_defconfig && update_debug_config"
+
 function update_debug_config() {
     ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
          -e CONFIG_DEBUG_RT_MUTEXES \
@@ -10,24 +14,3 @@ function update_debug_config() {
     (cd ${OUT_DIR} && \
      make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
 }
-
-ARCH=arm64
-BRANCH=android-msm-wahoo-4.4
-CROSS_COMPILE=aarch64-linux-android-
-CROSS_COMPILE_ARM32=arm-linux-androideabi-
-DEFCONFIG=wahoo_defconfig
-EXTRA_CMDS=''
-KERNEL_DIR=private/msm-google
-POST_DEFCONFIG_CMDS="update_debug_config"
-LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
-LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
-LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
-DTC_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/dtc
-LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
-FILES="
-arch/arm64/boot/dtbo.img
-arch/arm64/boot/Image.gz-dtb
-vmlinux
-System.map
-"
-IN_KERNEL_MODULES=1
