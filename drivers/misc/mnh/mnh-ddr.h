@@ -64,8 +64,8 @@ int mnh_ddr_platform_init(struct device *dev);
 int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n);
 int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n);
 int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n);
-int mnh_ddr_clr_int_status(struct device *dev);
-u64 mnh_ddr_int_status(struct device *dev);
+int mnh_ddr_clr_int_status(void);
+u64 mnh_ddr_int_status(void);
 u32 mnh_ddr_mbist(struct device *dev, enum mnh_ddr_bist_type bist_type);
 
 #endif /* __MNH_DDR_H__ */
