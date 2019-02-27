@@ -1613,6 +1613,7 @@ static ssize_t p9221_store_data(struct device *dev,
 	int i = 0;
 	int ret = 0;
 	char *data;
+	char *tmp_buf;
 
 	if (!charger->count || (charger->addr > (0xFFFF - charger->count)))
 		return -EINVAL;
@@ -1620,7 +1621,8 @@ static ssize_t p9221_store_data(struct device *dev,
 	if (!charger->online)
 		return -ENODEV;
 
-	data = kmalloc(strlen(buf) + 1, GFP_KERNEL);
+	tmp_buf = kmalloc(strlen(buf) + 1, GFP_KERNEL);
+	data = tmp_buf;
 	if (!data)
 		return -ENOMEM;
 
@@ -1645,7 +1647,7 @@ static ssize_t p9221_store_data(struct device *dev,
 	ret = count;
 
 out:
-	kfree(data);
+	kfree(tmp_buf);
 	return ret;
 }
 
