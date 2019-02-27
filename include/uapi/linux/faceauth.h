@@ -37,8 +37,13 @@
 #define FACEAUTH_BUFFER_TAG_LENGTH 16
 #define FACEAUTH_BUFFER_LIST_LENGTH 16
 
+/* faceauth features */
+#define DISABLE_GAZE (1ULL << 0)
+#define DISABLE_MULTI_ANGLE_ENROLLMENT (1ULL << 1)
+#define SECURE_CAMERA_DATA (1ULL << 2)
+
 struct faceauth_init_data {
-  __u64 features;
+	__u64 features;
 } __attribute__((packed));
 
 #define FACEAUTH_MAX_CACHE_FLUSH_SIZE 20
