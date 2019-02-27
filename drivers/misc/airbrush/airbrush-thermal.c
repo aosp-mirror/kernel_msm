@@ -32,55 +32,123 @@ static enum throttle_state to_throttle_state(unsigned long state)
 	}
 }
 
+struct ab_thermal_cooling {
+	struct ab_thermal *thermal;
+	unsigned long state;
+	struct ab_cooling *cooling;
+};
+
 struct ab_thermal {
 	struct device *dev;
 
 	struct ab_thermal_ops ops;
 	void *op_data;
 
-	struct ab_cooling *cooling;
+	struct mutex throttle_state_lock;
+	/* Combined from cooling_external and cooling_internal */
+	enum throttle_state throttle_state;
+
+	struct ab_thermal_cooling cooling_external;
+	struct ab_thermal_cooling cooling_internal;
 };
+
+static void ab_thermal_exit_cooling(struct ab_thermal_cooling *thermal_cooling)
+{
+	if (!IS_ERR_OR_NULL(thermal_cooling->cooling))
+		ab_cooling_unregister(thermal_cooling->cooling);
+}
 
 static void ab_thermal_exit(struct ab_thermal *thermal)
 {
-	if (!IS_ERR_OR_NULL(thermal->cooling))
-		ab_cooling_unregister(thermal->cooling);
+	ab_thermal_exit_cooling(&thermal->cooling_internal);
+	ab_thermal_exit_cooling(&thermal->cooling_external);
 }
 
 static void ab_thermal_cooling_op_state_updated(
 		const struct ab_cooling *cooling, unsigned long old_state,
 		unsigned long new_state, void *cooling_op_data)
 {
-	struct ab_thermal *thermal = cooling_op_data;
-	enum throttle_state state;
+	struct ab_thermal_cooling *thermal_cooling = cooling_op_data;
+	struct ab_thermal *thermal = thermal_cooling->thermal;
+	unsigned long cooling_state = 0;
+	enum throttle_state throttle_state;
 
-	state = to_throttle_state(new_state);
-	thermal->ops.throttle_state_updated(state, thermal->op_data);
+	mutex_lock(&thermal->throttle_state_lock);
+
+	/* Make sure that other cooling state would not be updated */
+	thermal_cooling->state = new_state;
+
+	cooling_state = max(cooling_state, thermal->cooling_external.state);
+	cooling_state = max(cooling_state, thermal->cooling_internal.state);
+	throttle_state = to_throttle_state(cooling_state);
+
+	if (throttle_state != thermal->throttle_state) {
+		thermal->throttle_state = throttle_state;
+		thermal->ops.throttle_state_updated(throttle_state,
+				thermal->op_data);
+	}
+	mutex_unlock(&thermal->throttle_state_lock);
 }
 
 const static struct ab_cooling_ops ab_thermal_cooling_ops = {
 	.state_updated = ab_thermal_cooling_op_state_updated,
 };
 
+static struct ab_cooling *ab_thermal_cooling_register(
+		struct ab_thermal *thermal,
+		struct ab_thermal_cooling *thermal_cooling,
+		const char *cooling_node_name, char *type)
+{
+	struct device_node *cooling_node = NULL;
+
+	if (cooling_node_name) {
+		cooling_node = of_find_node_by_name(NULL, cooling_node_name);
+		if (!cooling_node) {
+			dev_warn(thermal->dev, "failed to find OF node for cooling device \"%s\".",
+					cooling_node_name);
+		}
+	}
+	return ab_cooling_register(cooling_node, type, &ab_thermal_cooling_ops,
+			thermal_cooling);
+}
+
+static int ab_thermal_init_cooling(struct ab_thermal_cooling *thermal_cooling,
+		struct ab_thermal *thermal, const char *cooling_node_name,
+		char *type)
+{
+	thermal_cooling->thermal = thermal;
+	thermal_cooling->state = 0;
+	thermal_cooling->cooling = ab_thermal_cooling_register(thermal,
+			thermal_cooling, cooling_node_name, type);
+	if (IS_ERR(thermal_cooling->cooling))
+		return PTR_ERR(thermal_cooling->cooling);
+	return 0;
+}
+
 static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev,
 		const struct ab_thermal_ops *ops, void *op_data)
 {
 	int err;
-	struct device_node *cooling_node;
 
 	thermal->dev = dev;
 	thermal->ops = *ops;
 	thermal->op_data = op_data;
-	thermal->cooling = NULL;
 
-	cooling_node = of_find_node_by_name(NULL, "abc-cooling");
-	if (!cooling_node)
-		dev_warn(dev, "Cannot find OF node for self cooling device. Cooling cannot trigger by airbrush itself.");
+	mutex_init(&thermal->throttle_state_lock);
+	thermal->throttle_state = THROTTLE_NONE;
 
-	thermal->cooling = ab_cooling_register(cooling_node,
-			AB_CDEV_NAME, &ab_thermal_cooling_ops, thermal);
-	if (IS_ERR(thermal->cooling)) {
-		err = PTR_ERR(thermal->cooling);
+	err = ab_thermal_init_cooling(&thermal->cooling_external, thermal,
+			AB_OF_CDEV_NAME, AB_CDEV_NAME);
+	if (err) {
+		dev_err(dev, "failed to initialize external cooling\n");
+		ab_thermal_exit(thermal);
+		return err;
+	}
+
+	err = ab_thermal_init_cooling(&thermal->cooling_internal, thermal,
+			AB_OF_CDEV_INTERNAL_NAME, AB_CDEV_INTERNAL_NAME);
+	if (err) {
+		dev_err(dev, "failed to initialize internal cooling\n");
 		ab_thermal_exit(thermal);
 		return err;
 	}
