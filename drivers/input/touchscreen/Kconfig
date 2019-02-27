@@ -1057,14 +1057,14 @@ config TOUCHSCREEN_PCAP
 	  module will be called pcap_ts.
 
 
-config TOUCHSCREEN_RM_TS_UB128BLX01
+config TOUCHSCREEN_RM_TS_U128BLX01
 	select TOUCHSCREEN_RM_TS
 	depends on I2C
 	depends on GPIOLIB || COMPILE_TEST
-	tristate "Raydium I2C Touchscreen UB128BLX01"
+	tristate "Raydium I2C Touchscreen U128BLX01"
 	help
 	  Say Y here if you have Raydium series I2C touchscreen,
-	  such as UB128BLX01, connected to your system.
+	  such as U128BLX01, connected to your system.
 
 	  If unsure, say N.
 

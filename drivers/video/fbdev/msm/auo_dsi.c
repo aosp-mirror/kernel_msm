@@ -118,6 +118,12 @@ int dsi_auo_read_id_code(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (g_auo_pre_init != AUO_PANEL_PRE_INIT) {
 		g_auo_pre_init = AUO_PANEL_PRE_INIT;
+
+		/* For AUO 390p: H120BLX01.0 controller
+		*  Supported command read id_code
+		*/
+
+#ifndef CONFIG_TOUCHSCREEN_RM_TS_U128BLX01
 		mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL,
 				ctrl->read_back_param, 1);
 		pr_err("%s: read_back_param[0] = 0x%02x\n", __func__,
@@ -128,6 +134,12 @@ int dsi_auo_read_id_code(struct mdss_dsi_ctrl_pdata *ctrl)
 				ctrl->id3_code[0]);
 		/* switch back to original page */
 		mdss_dsi_switch_page(ctrl, 0x00);
+#else
+		/* For AUO 416p: U128BLX controller
+		 * Not supported read id_code, initialize to 0
+		 */
+		ctrl->id3_code[0] = 0;
+#endif
 	}
 	return 0;
 }
@@ -187,9 +199,9 @@ void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	struct dsi_panel_cmds *hbm_on_cmds = NULL;
 
-	pr_err("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
 	/* U128BLX only has one hbm modes */
-#ifndef TARGET_HAVE_AUO_CONTROLLER_U128BLX
+#ifndef CONFIG_TOUCHSCREEN_RM_TS_U128BLX01
+	pr_err("%s: id3_code[0] = 0x%02x\n", __func__, ctrl->id3_code[0]);
 	switch (ctrl->id3_code[0]) {
 	case 0x01:
 		hbm_on_cmds = &ctrl->hbm0_on_cmds;
@@ -227,13 +239,15 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	struct dsi_panel_cmds *hbm_off_cmds = NULL;
 
-	pr_err("%s: read_back_param[0] = 0x%02x\n", __func__,
-			ctrl->read_back_param[0]);
-
 	/* write back to HBM off command flow */
 	hbm_off_cmds = &ctrl->hbm_off_cmds;
-	hbm_off_cmds->cmds[12].payload[1] = ctrl->read_back_param[0];
 
+	/* For AUO 390p: H120BLX01.0: need to read_back_param */
+#ifndef CONFIG_TOUCHSCREEN_RM_TS_U128BLX01
+	pr_err("%s: read_back_param[0] = 0x%02x\n", __func__,
+			ctrl->read_back_param[0]);
+	hbm_off_cmds->cmds[12].payload[1] = ctrl->read_back_param[0];
+#endif
 	if (hbm_off_cmds->cmd_cnt) {
 		mdss_dsi_cmds_send(ctrl, hbm_off_cmds, CMD_REQ_COMMIT);
 		pr_err("%s: boost off!\n", __func__);
