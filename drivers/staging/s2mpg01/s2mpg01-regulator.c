@@ -227,8 +227,8 @@ static struct regulator_init_data
 			.name = S2MPG01_REGLTR_NAME_SMPS1,
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
-			.min_uV = 700000,
-			.max_uV = 800000,
+			.min_uV = 550000,
+			.max_uV = 1000000,
 		},
 	},
 	[S2MPG01_ID_SMPS2] = {
@@ -272,8 +272,8 @@ static struct regulator_init_data
 			.name = S2MPG01_REGLTR_NAME_LDO3,
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
-			.min_uV = 700000,
-			.max_uV = 800000,
+			.min_uV = 650000,
+			.max_uV = 1000000,
 		},
 	},
 	[S2MPG01_ID_LDO4] = {
