@@ -26,11 +26,14 @@
 #include <misc/faceauth_hypx.h>
 
 #include <linux/mfd/abc-pcie.h>
+#include <linux/mfd/abc-pcie-notifier.h>
 
 #include <linux/miscdevice.h>
+#include <linux/rwsem.h>
 #include <linux/time.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <linux/workqueue.h>
 
 #include <abc-pcie-dma.h>
 #include "../mfd/abc-pcie-dma.h"
@@ -74,9 +77,14 @@ struct faceauth_data {
 	 * returns an error
 	 */
 	uint32_t session_counter;
+	bool can_transfer; /* Guarded by rwsem */
+	uint64_t retry_count;
 	atomic_t in_use;
+	struct rw_semaphore rwsem;
 	struct miscdevice misc_dev;
 	struct device *device;
+	struct delayed_work listener_init;
+	struct notifier_block pcie_link_blocking_nb;
 };
 
 static int dma_xfer(void *buf, int size, const int remote_addr,
@@ -188,6 +196,13 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 #endif
 
 	ioctl_start = jiffies;
+
+	down_read(&data->rwsem);
+	if (!data->can_transfer) {
+		err = -EIO;
+		pr_info("Cannot do transfer due to link down\n");
+		goto exit;
+	}
 
 	switch (cmd) {
 	case FACEAUTH_DEV_IOC_INIT:
@@ -469,6 +484,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	}
 
 exit:
+	up_read(&data->rwsem);
 	save_debug_jiffies = save_debug_end - save_debug_start;
 
 	if (save_debug_jiffies > 0) {
@@ -515,6 +531,13 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 #endif
 
 	ioctl_start = jiffies;
+
+	down_read(&data->rwsem);
+	if (!data->can_transfer) {
+		err = -EIO;
+		pr_info("Cannot do transfer due to link down\n");
+		goto exit;
+	}
 
 	switch (cmd) {
 	case FACEAUTH_DEV_IOC_INIT:
@@ -673,6 +696,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	}
 
 exit:
+	up_read(&data->rwsem);
 	if (save_debug_jiffies > 0) {
 		pr_info("Faceauth action took %dus, debug data save took %dus\n",
 			jiffies_to_usecs(jiffies - ioctl_start -
@@ -1102,6 +1126,76 @@ static int faceauth_m0_verbosity_get(void *ptr, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_m0_verbosity, faceauth_m0_verbosity_get,
 			 faceauth_m0_verbosity_set, "0x%016llx\n");
 
+static void faceauth_link_listener_init(struct work_struct *work)
+{
+	struct faceauth_data *data =
+		container_of(work, struct faceauth_data, listener_init.work);
+	int err;
+
+	err = abc_register_pcie_link_blocking_event(
+		&data->pcie_link_blocking_nb);
+
+	/* TODO: Use retry count to dynamiclly adjust retry timeout */
+	if (err == -EAGAIN) {
+		if (data->retry_count % 50 == 0)
+			pr_info("Retry faceauth link init later.\n");
+		data->retry_count++;
+		schedule_delayed_work(&data->listener_init,
+				      msecs_to_jiffies(1000));
+	} else if (err)
+		pr_err("CANNOT init link listened event in faceauth driver, err code %d\n",
+		       err);
+	else
+		pr_info("Successfully register link listener for faceauth driver");
+	return;
+}
+
+static int faceauth_pcie_blocking_listener(struct notifier_block *nb,
+					   unsigned long action, void *data)
+{
+	struct faceauth_data *dev_data =
+		container_of(nb, struct faceauth_data, pcie_link_blocking_nb);
+
+	if (action & ABC_PCIE_LINK_ENTER_EL2) {
+		down_read(&dev_data->rwsem);
+		if (!dev_data->can_transfer)
+			pr_err("ERROR: Wrong state, receive ENTER_EL2 while link down");
+		up_read(&dev_data->rwsem);
+		return NOTIFY_OK;
+	}
+
+	if (action & ABC_PCIE_LINK_EXIT_EL2) {
+		down_read(&dev_data->rwsem);
+		if (!dev_data->can_transfer)
+			pr_err("ERROR: Wrong state, receive EXIT_EL2 while link down");
+		up_read(&dev_data->rwsem);
+		return NOTIFY_OK;
+	}
+
+	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
+		/* Use the writer lock to prevent any incoming reader */
+		down_write(&dev_data->rwsem);
+		dev_data->can_transfer = false;
+		pr_info("All ongoing ioctls are finished, confirm disable");
+		up_write(&dev_data->rwsem);
+		return NOTIFY_OK;
+	}
+
+	if (action & ABC_PCIE_LINK_POST_ENABLE) {
+		/*
+		 * Under this scenerio, this is actually a reader
+		 * There's no need to block any other reader since
+		 * they'll bail out when they got the value.
+		 */
+		down_read(&dev_data->rwsem);
+		dev_data->can_transfer = true;
+		up_read(&dev_data->rwsem);
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int faceauth_probe(struct platform_device *pdev)
 {
 	int err;
@@ -1116,11 +1210,20 @@ static int faceauth_probe(struct platform_device *pdev)
 	if (!data)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, data);
-	data->device = &pdev->dev;
 
+	init_rwsem(&data->rwsem);
+	data->device = &pdev->dev;
+	data->can_transfer = true;
+	data->retry_count = 0;
 	data->misc_dev.minor = MISC_DYNAMIC_MINOR,
 	data->misc_dev.name = "faceauth",
-	data->misc_dev.fops = &faceauth_dev_operations,
+	data->misc_dev.fops = &faceauth_dev_operations;
+	data->pcie_link_blocking_nb.notifier_call =
+		faceauth_pcie_blocking_listener;
+
+	INIT_DELAYED_WORK(&data->listener_init, faceauth_link_listener_init);
+
+	schedule_delayed_work(&data->listener_init, msecs_to_jiffies(1000));
 
 	err = misc_register(&data->misc_dev);
 	if (err)
@@ -1174,6 +1277,7 @@ exit2:
 	misc_deregister(&data->misc_dev);
 
 exit1:
+	abc_unregister_pcie_link_blocking_event(&data->pcie_link_blocking_nb);
 	return err;
 }
 
@@ -1181,6 +1285,7 @@ static int faceauth_remove(struct platform_device *pdev)
 {
 	struct faceauth_data *data = platform_get_drvdata(pdev);
 
+	abc_unregister_pcie_link_blocking_event(&data->pcie_link_blocking_nb);
 	misc_deregister(&data->misc_dev);
 	debugfs_remove_recursive(data->debugfs_root);
 
