@@ -1752,6 +1752,16 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		ret = ab_sm_exit_el2(sc);
 		break;
 
+	case AB_SM_GET_EL2_MODE:
+		mutex_lock(&sc->state_transitioning_lock);
+		if (copy_to_user((void __user *)arg,
+				&sc->el2_mode, sizeof(sc->el2_mode))) {
+			mutex_unlock(&sc->state_transitioning_lock);
+			return -EFAULT;
+		}
+		mutex_unlock(&sc->state_transitioning_lock);
+		break;
+
 	default:
 		dev_err(sc->dev,
 			"%s: Unknown ioctl cmd 0x%X\n", __func__, cmd);
