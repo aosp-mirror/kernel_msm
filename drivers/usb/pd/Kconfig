@@ -35,4 +35,12 @@ config QPNP_USB_PDPHY
 	  which communicates over the SPMI bus. The is used to handle
 	  the PHY layer communication of the Power Delivery stack.
 
+config LOGBUFFER
+        tristate "debugfs logbuffer"
+        help
+          Say Y here to enable logbuffer.
+          This option enables a module that exposes an API to maintain driver
+          specific logs in an exclusive ring buffer and exposes it through
+          debugfs.
+
 endmenu
