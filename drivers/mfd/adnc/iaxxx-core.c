@@ -1176,6 +1176,31 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 
 	dev_info(dev, "%s: done\n", __func__);
 	iaxxx_work(priv, runtime_work);
+
+	rc = iaxxx_set_proc_pwr_ctrl(priv, IAXXX_SSP_ID,
+				PROC_STALL);
+	if (rc) {
+		dev_err(dev,
+		"proc_pwr_ctrl stall fail :%d\n", rc);
+		goto exit_fw_fail;
+	}
+	msleep(20);
+	rc = iaxxx_boot_core(priv, IAXXX_SSP_ID);
+	if (rc) {
+		dev_err(dev,
+		"boot_core (%d) fail :%d\n", IAXXX_SSP_ID, rc);
+		goto exit_fw_fail;
+	}
+	msleep(20);
+	rc = iaxxx_set_proc_pwr_ctrl(priv, IAXXX_SSP_ID,
+				PROC_RUNNING);
+	if (rc) {
+		dev_err(dev,
+		"proc_pwr_ctrl running fail :%d\n", rc);
+		goto exit_fw_fail;
+	}
+	msleep(20);
+
 	regmap_read(priv->regmap, IAXXX_AO_EFUSE_BOOT_ADDR, &efuse_trim_value);
 	if (!efuse_trim_value) {
 		dev_err(dev, "efuse_trim_value programmed by host\n");
