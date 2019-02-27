@@ -75,6 +75,7 @@ struct hypx_fa_process {
 	uint64_t image_dot_right; /* PHY addr */
 	uint64_t image_flood; /* PHY addr */
 	uint64_t calibration; /* PHY addr */
+	int16_t  cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];
 
 	uint32_t operation;
 	uint32_t profile_id;
@@ -87,7 +88,7 @@ struct hypx_fa_process {
 
 struct hypx_fa_process_results {
 	uint32_t result;
-	uint32_t bin_result;
+	uint32_t angles;
 	uint32_t fw_version;
 	int32_t error_code;
 	uint64_t debug_buffer; /* PHY addr*/
@@ -591,6 +592,12 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 		}
 	}
 
+	if (data->operation == COMMAND_ENROLL_COMPLETE) {
+		memcpy(hypx_data->cache_flush_indexes,
+		       data->cache_flush_indexes,
+		       sizeof(data->cache_flush_indexes));
+	}
+
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				   DMA_TO_DEVICE);
 
@@ -604,10 +611,9 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_PROCESS & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
 
-	if (data->calibration || data->calibration_fd)
-		hypx_free_blob(dev, &calibration);
-
 	if (pass_images_to_el2) {
+		if (data->calibration || data->calibration_fd)
+			hypx_free_blob(dev, &calibration);
 	err1:
 		hypx_free_blob(dev, &image_flood);
 	err2:
@@ -648,7 +654,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 				DMA_FROM_DEVICE);
 
 	data->result = hypx_data->result;
-	data->bin_bitmap = hypx_data->bin_result;
+	data->angles = hypx_data->angles;
 	data->fw_version = hypx_data->fw_version;
 	data->error_code = hypx_data->error_code;
 

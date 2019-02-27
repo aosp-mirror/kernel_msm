@@ -87,6 +87,7 @@ struct faceauth_data {
 	struct notifier_block pcie_link_blocking_nb;
 };
 
+static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size);
 static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir);
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
@@ -182,7 +183,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	uint32_t ab_result;
 	uint32_t angles;
 	uint32_t dma_read_value;
-	int i;
 	uint32_t fw_execution_status;
 	struct faceauth_data *data = file->private_data;
 #if ENABLE_LATENCY_MEASUREMENT
@@ -312,35 +312,18 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		}
 
 		if (start_step_data.operation == COMMAND_ENROLL_COMPLETE) {
-			int16_t *flush_idxs =
-				start_step_data.cache_flush_indexes;
-			uint32_t flush_size = start_step_data.cache_flush_size;
-
-			if (flush_size > FACEAUTH_MAX_CACHE_FLUSH_SIZE) {
-				pr_err("Wrong cache flush size\n");
-				err = -EINVAL;
+			err = process_cache_flush_idxs(
+					start_step_data.cache_flush_indexes,
+					start_step_data.cache_flush_size);
+			if (err)
 				goto exit;
-			}
-
-			if (flush_size < FACEAUTH_MAX_CACHE_FLUSH_SIZE) {
-				flush_idxs[flush_size] = -1;
-			}
-
-			for (i = 0; i < flush_size; ++i) {
-				if (flush_idxs[i] < 0 ||
-				    flush_idxs[i] >= MAX_CACHE_SIZE) {
-					pr_err("Wrong cache flush index\n");
-					err = -EINVAL;
-					goto exit;
-				}
-			}
-
 			err = dma_xfer_vmalloc(
-				flush_idxs, 2 * FACEAUTH_MAX_CACHE_FLUSH_SIZE,
+				start_step_data.cache_flush_indexes,
+				sizeof(start_step_data.cache_flush_indexes),
 				CACHE_FLUSH_INDEXES_ADDR, DMA_TO_DEVICE);
 			if (err) {
 				pr_err("Error sending flush indexes\n");
-				return err;
+				goto exit;
 			}
 		}
 
@@ -586,6 +569,12 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 			}
 		}
 
+		err = process_cache_flush_idxs(
+					start_step_data.cache_flush_indexes,
+					start_step_data.cache_flush_size);
+		if (err)
+			goto exit;
+
 		err = el2_faceauth_process(data->device, &start_step_data);
 		if (err)
 			goto exit;
@@ -735,6 +724,29 @@ static const struct file_operations faceauth_dev_operations = {
 	.open = faceauth_open,
 	.release = faceauth_release,
 };
+
+static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size)
+{
+	int i;
+
+	if (flush_size > FACEAUTH_MAX_CACHE_FLUSH_SIZE) {
+		pr_err("Wrong cache flush size\n");
+		return -EINVAL;
+	}
+
+	if (flush_size < FACEAUTH_MAX_CACHE_FLUSH_SIZE) {
+		flush_idxs[flush_size] = -1;
+	}
+
+	for (i = 0; i < flush_size; ++i) {
+		if (flush_idxs[i] < 0 || flush_idxs[i] >= MAX_CACHE_SIZE) {
+			pr_err("Wrong cache flush index\n");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
 
 /**
  * Local function to transfer data between user space memory and Airbrush via
