@@ -37,4 +37,12 @@ config USB_OVERHEAT_MITIGATION
 	help
 	  Say Y here to enable Google USB overheat mitigation
 
+config GOOGLE_LOGBUFFER
+	tristate "debugfs logbuffer"
+	help
+	  Say Y here to enable logbuffer.
+	  This option enables a module that exposes an API to maintain driver
+	  specific logs in an exclusive ring buffer and exposes it through
+	  debugfs.
+
 endif	# GOOGLE_BMS
