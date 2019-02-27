@@ -171,7 +171,7 @@ static u32 mnh_ddr_sanity_check(void)
 }
 
 /* read entire int_status */
-u64 mnh_ddr_int_status(struct device *dev)
+u64 mnh_ddr_int_status(void)
 {
 	u64 int_stat = ((u64)MNH_DDR_CTL_IN(228) << 32) | MNH_DDR_CTL_IN(227);
 	return int_stat;
@@ -179,16 +179,16 @@ u64 mnh_ddr_int_status(struct device *dev)
 EXPORT_SYMBOL(mnh_ddr_int_status);
 
 /* clear entire int_status */
-int mnh_ddr_clr_int_status(struct device *dev)
+int mnh_ddr_clr_int_status(void)
 {
 	u64 stat = 0;
 
 	MNH_DDR_CTL_OUT(230, 0x0F);
 	MNH_DDR_CTL_OUT(229, 0xFFFFFFFF);
-	stat = mnh_ddr_int_status(dev);
+	stat = mnh_ddr_int_status();
 	if (stat) {
-		dev_err(dev, "%s: int stat not all clear: %llx\n", __func__,
-			stat);
+		pr_err("%s: int stat not all clear: %llx\n",
+			__func__, stat);
 		return -EIO;
 	}
 	return 0;
@@ -219,7 +219,7 @@ static u32 mnh_ddr_int_status_bit(u8 sbit)
 }
 
 /* clear single bit in int_status */
-static int mnh_ddr_clr_int_status_bit(struct device *dev, u8 sbit)
+static int mnh_ddr_clr_int_status_bit(u8 sbit)
 {
 	const u32 max_int_status_bit = 35;
 	const u32 first_upper_bit = 32;
@@ -233,17 +233,17 @@ static int mnh_ddr_clr_int_status_bit(struct device *dev, u8 sbit)
 		MNH_DDR_CTL_OUT(229, 1 << sbit);
 
 	if (mnh_ddr_int_status_bit(sbit)) {
-		dev_err(dev, "%s: bit %d is still set.\n", __func__, sbit);
+		pr_err("%s: bit %d is still set.\n", __func__, sbit);
 		return -EIO;
 	}
 	return 0;
 }
 
-static int mnh_ddr_send_lp_cmd(struct device *dev, u8 cmd)
+static int mnh_ddr_send_lp_cmd(u8 cmd)
 {
 	u32 timeout = 100000;
 
-	dev_dbg(dev, "%s sending cmd: 0x%x\n", __func__, cmd);
+	pr_debug("%s sending cmd: 0x%x\n", __func__, cmd);
 	MNH_DDR_CTL_OUTf(112, LP_CMD, cmd);
 
 	while (!mnh_ddr_int_status_bit(LP_CMD_SBIT) && --timeout)
@@ -252,7 +252,7 @@ static int mnh_ddr_send_lp_cmd(struct device *dev, u8 cmd)
 	if (!mnh_ddr_int_status_bit(LP_CMD_SBIT))
 		return -ETIMEDOUT;
 
-	return mnh_ddr_clr_int_status_bit(dev, LP_CMD_SBIT);
+	return mnh_ddr_clr_int_status_bit(LP_CMD_SBIT);
 }
 
 static void mnh_ddr_enable_lp(void)
@@ -263,13 +263,13 @@ static void mnh_ddr_enable_lp(void)
 	MNH_DDR_CTL_OUTf(122, LP_AUTO_EXIT_EN, 0xF);
 }
 
-static void mnh_ddr_disable_lp(struct device *dev)
+static void mnh_ddr_disable_lp(void)
 {
 	MNH_DDR_CTL_OUTf(124, LP_AUTO_SR_MC_GATE_IDLE, 0x00);
 	MNH_DDR_CTL_OUTf(122, LP_AUTO_MEM_GATE_EN, 0x0);
 	MNH_DDR_CTL_OUTf(122, LP_AUTO_ENTRY_EN, 0x0);
 	MNH_DDR_CTL_OUTf(122, LP_AUTO_EXIT_EN, 0x0);
-	mnh_ddr_send_lp_cmd(dev, LP_CMD_EXIT_LP);
+	mnh_ddr_send_lp_cmd(LP_CMD_EXIT_LP);
 }
 
 static void mnh_ddr_init_internal_state(const struct mnh_ddr_reg_config *cfg)
@@ -360,7 +360,7 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 	if (WARN_ON(!_state))
 		return -ENOMEM;
 
-	mnh_ddr_disable_lp(dev);
+	mnh_ddr_disable_lp();
 
 	dev_dbg(dev, "%s: tref 0x%04x 0x%04x 0x%04x 0x%04x\n",
 		__func__, MNH_DDR_CTL_INf(56, TREF_F0),
@@ -384,7 +384,7 @@ int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n)
 	SAVE_CURRENT_FSP();
 	mnh_ddr_pull_config();
 
-	mnh_ddr_send_lp_cmd(dev, LP_CMD_DSRPD);
+	mnh_ddr_send_lp_cmd(LP_CMD_DSRPD);
 	dev_dbg(dev, "%s LP_STATE is 0x%x", __func__,
 		MNH_DDR_CTL_INf(121, LP_STATE));
 
@@ -470,15 +470,15 @@ int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n)
 
 	if (!mnh_ddr_int_status_bit(INIT_DONE_SBIT)) {
 		dev_err(dev, "%s time out on init done %llx.\n",
-			__func__, mnh_ddr_int_status(dev));
+			__func__, mnh_ddr_int_status());
 		return -ETIMEDOUT;
 	}
 
 	/* need to clear PWRUP_SREFRESH_EXIT to clear interrupt status bit 0 */
 	MNH_DDR_CTL_OUTf(81, PWRUP_SREFRESH_EXIT, 0);
 	dev_dbg(dev, "%s got init done %llx.\n", __func__,
-		mnh_ddr_int_status(dev));
-	mnh_ddr_clr_int_status(dev);
+		mnh_ddr_int_status());
+	mnh_ddr_clr_int_status();
 	mnh_lpddr_freq_change(SAVED_FSP());
 
 	dev_dbg(dev, "%s: tref 0x%04x 0x%04x 0x%04x 0x%04x\n",
@@ -564,9 +564,9 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 	}
 
 	dev_dbg(dev, "%s got init done %llx.\n", __func__,
-		 mnh_ddr_int_status(dev));
+		 mnh_ddr_int_status());
 
-	mnh_ddr_clr_int_status(dev);
+	mnh_ddr_clr_int_status();
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F0_0, 1);
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F1_0, 1);
 	MNH_DDR_CTL_OUTf(165, MR_FSP_DATA_VALID_F2_0, 1);
@@ -606,7 +606,7 @@ u32 mnh_ddr_mbist(struct device *dev, enum mnh_ddr_bist_type bist_type)
 		return 0;
 	}
 
-	mnh_ddr_disable_lp(dev);
+	mnh_ddr_disable_lp();
 
 	old_in_order_accept = MNH_DDR_CTL_INf(223, IN_ORDER_ACCEPT);
 	MNH_DDR_CTL_OUTf(223, IN_ORDER_ACCEPT, 1);
@@ -636,14 +636,14 @@ u32 mnh_ddr_mbist(struct device *dev, enum mnh_ddr_bist_type bist_type)
 
 	if (!mnh_ddr_int_status_bit(BIST_SBIT)) {
 		dev_err(dev, "%s: BIST timedout: %llx\n",
-			__func__, mnh_ddr_int_status(dev));
+			__func__, mnh_ddr_int_status());
 	} else {
 		result = MNH_DDR_CTL_INf(171, BIST_RESULT);
 		dev_info(dev, "%s: result 0x%02x\n", __func__, result);
 	}
 
 	MNH_DDR_CTL_OUTf(171, BIST_GO, 0);
-	mnh_ddr_clr_int_status(dev);
+	mnh_ddr_clr_int_status();
 
 	MNH_DDR_CTL_OUTf(223, IN_ORDER_ACCEPT,
 		old_in_order_accept);

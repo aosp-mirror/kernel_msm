@@ -596,7 +596,7 @@ int mnh_lpddr_freq_change(int index)
 	if (SCU_INxf(LPDDR4_FSP_SETTING, index, FSP_SYS200_MODE))
 		mnh_lpddr_sys200_mode(true);
 
-	mnh_ddr_clr_int_status(mnh_clk->dev);
+	mnh_ddr_clr_int_status();
 
 	return 0;
 }
