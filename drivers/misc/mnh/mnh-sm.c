@@ -191,9 +191,6 @@ struct mnh_sm_device {
 	/* state of the ddr channel */
 	enum mnh_ddr_status ddr_status;
 
-	/* mnh-ddr data */
-	struct mnh_ddr_data mnh_ddr_data;
-
 	/* pin used for ddr pad isolation */
 	struct gpio_desc *ddr_pad_iso_n_pin;
 
@@ -1376,9 +1373,8 @@ static ssize_t ddr_mbist_store(struct device *dev,
 		return -EINVAL;
 
 	mnh_pwr_set_state(MNH_PWR_S0);
-	mnh_ddr_po_init(&mnh_sm_dev->mnh_ddr_data,
-			mnh_sm_dev->ddr_pad_iso_n_pin);
-	mnh_ddr_mbist(&mnh_sm_dev->mnh_ddr_data, val);
+	mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_ddr_mbist(dev, val);
 	mnh_pwr_set_state(MNH_PWR_S4);
 
 	return count;
@@ -1488,8 +1484,7 @@ static int mnh_sm_config_ddr(void)
 	int ret;
 
 	/* Initialize DDR */
-	ret = mnh_ddr_po_init(&mnh_sm_dev->mnh_ddr_data,
-			      mnh_sm_dev->ddr_pad_iso_n_pin);
+	ret = mnh_ddr_po_init(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
 	if (ret) {
 		dev_err(mnh_sm_dev->dev, "%s: ddr training failed (%d)\n",
 			__func__, ret);
@@ -1503,8 +1498,7 @@ static int mnh_sm_config_ddr(void)
 static int mnh_sm_resume_ddr(void)
 {
 	/* deassert pad isolation, take ddr out of self-refresh mode */
-	mnh_ddr_resume(&mnh_sm_dev->mnh_ddr_data,
-		       mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_ddr_resume(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
 	mnh_sm_dev->ddr_status = MNH_DDR_ACTIVE;
 	return 0;
 }
@@ -1512,8 +1506,7 @@ static int mnh_sm_resume_ddr(void)
 static int mnh_sm_suspend_ddr(void)
 {
 	/* put ddr into self-refresh mode, assert pad isolation */
-	mnh_ddr_suspend(&mnh_sm_dev->mnh_ddr_data,
-			mnh_sm_dev->ddr_pad_iso_n_pin);
+	mnh_ddr_suspend(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
 	mnh_sm_dev->ddr_status = MNH_DDR_SELF_REFRESH;
 	return 0;
 }
@@ -2426,7 +2419,7 @@ static int mnh_sm_probe(struct platform_device *pdev)
 	}
 
 	/* initialize mnh-ddr driver */
-	error = mnh_ddr_platform_init(pdev, &mnh_sm_dev->mnh_ddr_data);
+	error = mnh_ddr_platform_init(dev);
 	if (error) {
 		dev_err(dev, "failed to initialize mnh-ddr (%d)\n", error);
 		goto fail_probe_2;
