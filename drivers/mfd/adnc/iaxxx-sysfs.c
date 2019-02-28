@@ -335,35 +335,6 @@ static ssize_t iaxxx_set_spi_speed(struct device *dev,
 }
 static DEVICE_ATTR(set_spi_speed, 0200, NULL, iaxxx_set_spi_speed);
 
-/*
- * iaxxx_set_speed_spi2
- */
-static ssize_t iaxxx_set_speed_spi2(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int val, rc;
-
-	if (!buf)
-		return -EINVAL;
-	if (kstrtoint(buf, 0, &val))
-		return -EINVAL;
-
-	mutex_lock(&priv->test_mutex);
-
-	/* Write speed for SPI2 interface */
-	rc = iaxxx_set_spi2_master_speed(dev, val);
-
-	mutex_unlock(&priv->test_mutex);
-
-	if (rc)
-		dev_info(dev, "%s() Fail\n", __func__);
-	else
-		dev_info(dev, "%s() Success\n", __func__);
-	return count;
-}
-static DEVICE_ATTR(set_speed_spi2, 0200, NULL, iaxxx_set_speed_spi2);
-
 static ssize_t iaxxx_max_spi_speed_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -682,7 +653,6 @@ static struct attribute *iaxxx_attrs[] = {
 	&dev_attr_pm_set_optimal_power_mode_host0.attr,
 	&dev_attr_pm_set_optimal_power_mode_host1.attr,
 	&dev_attr_set_spi_speed.attr,
-	&dev_attr_set_speed_spi2.attr,
 	&dev_attr_max_spi_speed.attr,
 	&dev_attr_chip_reset.attr,
 	&dev_attr_isr_disable.attr,

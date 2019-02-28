@@ -379,30 +379,6 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
 	return rc;
 }
 
-/*
- * iaxxx_set_speed_spi2
- */
-int iaxxx_set_spi2_master_speed(struct device *dev, int spi_speed)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	int rc, status;
-
-	/* Write speed for SPI2 interface */
-	rc = regmap_write(priv->regmap,
-			IAXXX_PWR_MGMT_MAX_SPI2_MASTER_SPEED_REQ_ADDR,
-			spi_speed);
-
-	if (rc) {
-		dev_info(dev, "%s() Fail rc = %d\n", __func__, rc);
-		return rc;
-	}
-
-	rc = iaxxx_send_update_block_request(dev, &status,
-			IAXXX_BLOCK_0);
-
-	return rc;
-}
-
 int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 {
 	int rc;
@@ -564,21 +540,21 @@ static uint32_t proc_id_to_proc_state_mask(
 	switch (proc_id) {
 	case IAXXX_SSP_ID:
 		proc_mask =
-		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_SSP_MASK;
+		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_PROC_2_MASK;
 		stall_mask =
-		IAXXX_SRB_PROC_PWR_CTRL_STALL_SSP_MASK;
+		IAXXX_SRB_PROC_PWR_CTRL_STALL_PROC_2_MASK;
 	break;
 	case IAXXX_HMD_ID:
 		proc_mask =
-		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_HMD_MASK;
+		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_PROC_4_MASK;
 		stall_mask =
-		IAXXX_SRB_PROC_PWR_CTRL_STALL_HMD_MASK;
+		IAXXX_SRB_PROC_PWR_CTRL_STALL_PROC_4_MASK;
 		break;
 	case IAXXX_DMX_ID:
 		proc_mask =
-		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_DMX_MASK;
+		IAXXX_SRB_PROC_PWR_CTRL_PWR_ON_PROC_5_MASK;
 		stall_mask =
-		IAXXX_SRB_PROC_PWR_CTRL_STALL_DMX_MASK;
+		IAXXX_SRB_PROC_PWR_CTRL_STALL_PROC_5_MASK;
 		break;
 	default:
 		return -EINVAL;
@@ -705,21 +681,21 @@ static uint32_t proc_id_to_mem_state_mask(
 	switch (proc_id) {
 	case IAXXX_SSP_ID:
 		proc_mask =
-		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_SSP_MASK;
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_PROC_2_MASK;
 		mem_retn_mask =
-		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_SSP_MASK;
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_PROC_2_MASK;
 	break;
 	case IAXXX_HMD_ID:
 		proc_mask =
-		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_HMD_MASK;
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_PROC_4_MASK;
 		mem_retn_mask =
-		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_HMD_MASK;
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_PROC_4_MASK;
 		break;
 	case IAXXX_DMX_ID:
 		proc_mask =
-		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_DMX_MASK;
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_PWR_ON_PROC_5_MASK;
 		mem_retn_mask =
-		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_DMX_MASK;
+		IAXXX_SRB_DED_MEM_PWR_CTRL_MEM_RETN_PROC_5_MASK;
 		break;
 	default:
 		return -EINVAL;
@@ -795,15 +771,15 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv,
 	switch (proc_id) {
 	case IAXXX_SSP_ID:
 		proc_mask =
-		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_SSP_MASK;
+		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_PROC_2_MASK;
 		break;
 	case IAXXX_HMD_ID:
 		proc_mask =
-		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_HMD_MASK;
+		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_PROC_4_MASK;
 		break;
 	case IAXXX_DMX_ID:
 		proc_mask =
-		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_DMX_MASK;
+		IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_PROC_5_MASK;
 		break;
 	default:
 		return -EINVAL;
