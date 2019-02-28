@@ -26,6 +26,9 @@
 #include <soc/qcom/scm.h>
 #include <soc/qcom/secure_buffer.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/faceauth.h>
+
 #define HYPX_SMC_ID(func) (0x43DEAD00 | func)
 #define HYPX_SMC_FUNC_CHECK_PIL_COMPLETION HYPX_SMC_ID(0x1)
 #define HYPX_SMC_FUNC_INIT HYPX_SMC_ID(0x2)
@@ -467,6 +470,7 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 	int source_vm[] = { VMID_HLOS };
 	int dest_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 	int dest_perm[] = { PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE };
+	unsigned long save_trace;
 
 	hypx_data = (void *)get_zeroed_page(0);
 	hypx_data->verbosity_level = verbosity_level;
@@ -489,12 +493,15 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 
 	desc.args[0] = virt_to_phys(hypx_data);
 	desc.arginfo = SCM_ARGS(1);
-
+	save_trace = jiffies;
 	ret = scm_call2(HYPX_SMC_FUNC_INIT, &desc);
+	trace_faceauth_el2_duration(HYPX_SMC_FUNC_INIT & 0xFF,
+				    jiffies_to_usecs(jiffies - save_trace));
 	if (ret) {
 		pr_err("Failed scm_call %d\n", ret);
 		goto exit;
 	}
+
 
 exit:
 	free_page((unsigned long)hypx_data);
@@ -508,12 +515,15 @@ int el2_faceauth_cleanup(struct device *dev)
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
 	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
+	unsigned long save_trace;
 
 	desc.arginfo = SCM_ARGS(0);
-
+	save_trace = jiffies;
 	ret = scm_call2(HYPX_SMC_FUNC_CLEANUP, &desc);
 	if (ret)
 		pr_err("Failed scm_call %d\n", ret);
+	trace_faceauth_el2_duration(HYPX_SMC_FUNC_CLEANUP & 0xFF,
+				    jiffies_to_usecs(jiffies - save_trace));
 
 	ret = hyp_assign_phys(bounce_buff_bus_addr, PAGE_SIZE, source_vm,
 			      ARRAY_SIZE(source_vm), dest_vm, dest_perm,
@@ -533,6 +543,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 	int ret = 0;
 	struct scm_desc desc = { 0 };
 	bool pass_images_to_el2;
+	unsigned long save_trace = 0;
 	struct hypx_fa_process *hypx_data;
 	struct faceauth_blob image_dot_left = { 0 }, image_dot_right = { 0 },
 			     image_flood = { 0 }, calibration = { 0 };
@@ -585,11 +596,13 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 
 	desc.args[0] = virt_to_phys(hypx_data);
 	desc.arginfo = SCM_ARGS(1);
-
+	save_trace = jiffies;
 	ret = scm_call2(HYPX_SMC_FUNC_PROCESS, &desc);
-	if (ret) {
+	if (ret)
 		pr_err("Failed scm_call %d\n", ret);
-	}
+
+	trace_faceauth_el2_duration(HYPX_SMC_FUNC_PROCESS & 0xFF,
+				    jiffies_to_usecs(jiffies - save_trace));
 
 	if (data->calibration || data->calibration_fd)
 		hypx_free_blob(dev, &calibration);
@@ -611,6 +624,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 				    struct faceauth_start_data *data)
 {
 	int ret = 0;
+	unsigned long save_trace;
 	struct scm_desc desc = { 0 };
 	struct hypx_fa_process_results *hypx_data;
 
@@ -621,12 +635,15 @@ int el2_faceauth_get_process_result(struct device *dev,
 
 	desc.arginfo = SCM_ARGS(1);
 	desc.args[0] = virt_to_phys(hypx_data);
-
+	save_trace = jiffies;
 	ret = scm_call2(HYPX_SMC_FUNC_CHECK_PROCESS_RESULT, &desc);
+	trace_faceauth_el2_duration(HYPX_SMC_FUNC_CHECK_PROCESS_RESULT & 0xFF,
+				    jiffies_to_usecs(jiffies - save_trace));
 	if (ret) {
 		pr_err("Failed scm_call %d\n", ret);
 		goto exit;
 	}
+
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				DMA_FROM_DEVICE);
 
