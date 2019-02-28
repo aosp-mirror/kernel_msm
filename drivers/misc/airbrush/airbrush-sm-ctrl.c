@@ -1544,16 +1544,13 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		break;
 
 	case AB_SM_SET_TPU_FREQUENCY:
-		clk_frequency = (u32)arg;
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		ret = clk_set_frequency(sc, &(sc->blocks[BLK_TPU]),
-			sc->blocks[BLK_TPU].current_state, clk_frequency, on);
-		sc->blocks[BLK_TPU].current_state->clk_frequency =
-			clk_frequency;
-		sc->blocks[BLK_TPU].current_state->clk_status = on;
+		ret = sc->clk_ops->tpu_set_rate_direct(sc, arg);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
+		if (ret == arg)
+			ret = 0;
 		break;
 
 	case AB_SM_SET_DDR_FREQUENCY:
@@ -1563,16 +1560,13 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		break;
 
 	case AB_SM_SET_AON_FREQUENCY:
-		clk_frequency = (u32)arg;
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		ret = clk_set_frequency(sc, &(sc->blocks[BLK_AON]),
-			sc->blocks[BLK_AON].current_state, clk_frequency, on);
-		sc->blocks[BLK_AON].current_state->clk_frequency =
-			clk_frequency;
-		sc->blocks[BLK_AON].current_state->clk_status = on;
+		ret = sc->clk_ops->aon_set_rate_direct(sc, arg);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
+		if (ret == arg)
+			ret = 0;
 		break;
 
 	case AB_SM_SET_IPU_STATE:

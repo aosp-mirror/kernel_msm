@@ -21,6 +21,16 @@
 #define GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU	0x1024202c
 #define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
 
+#define AB_SM_19_2_MHZ		19200000
+#define AB_SM_789_6_MHZ		789600000
+#define AB_SM_921_6_MHZ		921600000
+#define AON_CLK_RATE_REG		0x10B10100
+#define AON_CLK_RATE_19_2_MHZ	0xA0F00500
+#define AON_CLK_RATE_921_6_MHZ	0xA0F00510
+#define TPU_CLK_RATE_REG		0x10040120
+#define TPU_CLK_RATE_19_2_MHZ	0xA1490202
+#define TPU_CLK_RATE_789_6_MHZ	0xA1490212
+
 static struct ab_sm_clk_ops clk_ops;
 static int ab_clk_pcie_link_listener(struct notifier_block *nb,
 		unsigned long action, void *data)
@@ -451,6 +461,43 @@ static int64_t ab_clk_tpu_set_rate_handler(void *ctx,
 	return ret;
 }
 
+/*
+ * NOTE: This method does not result in clk notifications for
+ * mfd child drivers
+ */
+static int64_t ab_clk_tpu_set_rate_direct_handler(void *ctx,
+		u64 new_rate)
+{
+	int64_t ret;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	mutex_lock(&clk_ctx->pcie_link_lock);
+	if (clk_ctx->pcie_link_ready) {
+		switch (new_rate) {
+		case AB_SM_19_2_MHZ:
+			ABC_WRITE(TPU_CLK_RATE_REG, TPU_CLK_RATE_19_2_MHZ);
+			ret = AB_SM_19_2_MHZ;
+			break;
+		case AB_SM_789_6_MHZ:
+			ABC_WRITE(TPU_CLK_RATE_REG, TPU_CLK_RATE_789_6_MHZ);
+			ret = AB_SM_789_6_MHZ;
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+		}
+
+	} else {
+		dev_err(clk_ctx->dev,
+				"%s: pcie link down during clk request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&clk_ctx->pcie_link_lock);
+
+	return ret;
+}
+
 /* Caller must hold clk_ctx->pcie_link_lock */
 static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		u64 old_rate, u64 new_rate)
@@ -506,6 +553,43 @@ static int64_t ab_clk_aon_set_rate_handler(void *ctx,
 	return ret;
 }
 
+/*
+ * NOTE: This method does not result in clk notifications for
+ * mfd child drivers
+ */
+static int64_t ab_clk_aon_set_rate_direct_handler(void *ctx,
+		u64 new_rate)
+{
+	int64_t ret;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	mutex_lock(&clk_ctx->pcie_link_lock);
+	if (clk_ctx->pcie_link_ready) {
+		switch (new_rate) {
+		case AB_SM_19_2_MHZ:
+			ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_19_2_MHZ);
+			ret = AB_SM_19_2_MHZ;
+			break;
+		case AB_SM_921_6_MHZ:
+			ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_921_6_MHZ);
+			ret = AB_SM_921_6_MHZ;
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+		}
+
+	} else {
+		dev_err(clk_ctx->dev,
+				"%s: pcie link down during clk request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&clk_ctx->pcie_link_lock);
+
+	return ret;
+}
+
 static struct ab_sm_clk_ops clk_ops = {
 	.ipu_pll_enable = &ab_clk_ipu_pll_enable_handler,
 	.ipu_pll_disable = &ab_clk_ipu_pll_disable_handler,
@@ -518,8 +602,10 @@ static struct ab_sm_clk_ops clk_ops = {
 	.tpu_gate = &ab_clk_tpu_gate_handler,
 	.tpu_ungate = &ab_clk_tpu_ungate_handler,
 	.tpu_set_rate = &ab_clk_tpu_set_rate_handler,
+	.tpu_set_rate_direct = &ab_clk_tpu_set_rate_direct_handler,
 
 	.aon_set_rate = &ab_clk_aon_set_rate_handler,
+	.aon_set_rate_direct = &ab_clk_aon_set_rate_direct_handler,
 };
 
 static int ab_clk_probe(struct platform_device *pdev)
