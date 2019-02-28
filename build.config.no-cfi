@@ -1,6 +1,7 @@
 KERNEL_DIR=private/msm-google
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.common.clang
 POST_DEFCONFIG_CMDS="check_defconfig && update_nocfi_config"
+
 function update_nocfi_config() {
   # Disable clang-specific options
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
