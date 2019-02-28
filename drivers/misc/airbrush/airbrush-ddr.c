@@ -29,6 +29,9 @@
  */
 static uint32_t (*ddr_otp_rd)(uint32_t);
 
+/* forward declarations */
+static int ddr_enable_power_features(void);
+
 static const struct ddr_train_save_restore_t *
 			get_train_save_restore_regs(unsigned int idx)
 {
@@ -1437,12 +1440,7 @@ static void ddr_axi_enable_after_all_training(void)
 	ddr_reg_clr(DPHY2_MDLL_CON0, CLKM_CG_EN_SW);
 
 	/* Enable all power saving features */
-	ddr_reg_set(DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_set(DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_set(DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_clr_set(DREX_MEMCONTROL, DPWRDN_TYPE_MSK,
-			DPWRDN_TYPE(FORCED_PRECHARGE_PD) | DPWRDN_EN);
-	ddr_reg_set(DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_enable_power_features();
 
 	/* enable refresh and axi access controls */
 	ddr_reg_set(DREX_MEMCONTROL, PB_REF_EN | DBI_EN);
@@ -2078,7 +2076,7 @@ static int ddr_enable_power_features(void)
 	 *       0B: Disable codes 001 and 010 in MR4 OP[2:0]
 	 *       1B: Enable all codes in MR4 OP[2:0]
 	 */
-	ddr_reg_wr(DREX_DIRECTCMD, MRW13_DEFAULT);
+	ddr_reg_wr(DREX_DIRECTCMD, MRW13_FAST_RESP_DIS);
 
 	/* Set the all-bank and per-bank auto refresh timings */
 	ddr_reg_wr(DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
@@ -2289,6 +2287,13 @@ static int32_t ab_ddr_suspend(void *ctx)
 		 * initialization (during suspend -> resume) in BootROM
 		 */
 		ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
+
+		/* Set MR13 VRCG to default (Normal operation) for power saving
+		 * VRCG (VREF Current Generator) OP[3]
+		 *       0B: Normal Operation (default)
+		 *       1B: VREF Fast Response (high current) mode 3
+		 */
+		ddr_reg_wr(DREX_DIRECTCMD, MRW13_FAST_RESP_DIS);
 
 		/* As we are going to suspend state, keep the DRAM in
 		 * Power Down Entry Mode.

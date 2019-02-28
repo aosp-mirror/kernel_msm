@@ -105,11 +105,14 @@
 #define MR13_RRO_DISABLE		(0x0 << 4)
 #define MR13_RRO_EN_2x_4x		(0x1 << 4)
 #ifdef CONFIG_AB_DDR_MR13_RRO_ENABLE
-#define MRW13_DEFAULT_OP		(MR13_VRCG_NORMAL | MR13_RRO_EN_2x_4x)
+#define MRW13_DEFAULT_OP	(MR13_VRCG_FAST_RESP | MR13_RRO_EN_2x_4x)
+#define MRW13_FAST_RESP_DIS_OP	(MR13_VRCG_NORMAL | MR13_RRO_EN_2x_4x)
 #else
-#define MRW13_DEFAULT_OP		(MR13_VRCG_NORMAL)
+#define MRW13_DEFAULT_OP		(MR13_VRCG_FAST_RESP)
+#define MRW13_FAST_RESP_DIS_OP		(MR13_VRCG_NORMAL)
 #endif
 #define MRW13_DEFAULT			(MRW(13, MRW13_DEFAULT_OP))
+#define MRW13_FAST_RESP_DIS		(MRW(13, MRW13_FAST_RESP_DIS_OP))
 
 #define DREX_PRECHCONFIG0		0x10580014
 #define PORT_POLICY_MSK			(0xf << 16)
@@ -1328,8 +1331,8 @@ int32_t ab_ddr_selfrefresh_exit(void *ctx);
 int ab_ddr_eye_margin(void *ctx, unsigned int data);
 int ab_ddr_eye_margin_plot(void *ctx);
 int ab_ddr_read_write_test(void *ctx, unsigned int read_write);
+void ab_ddr_ppc_ctrl(void *ctx, int ppc_start);
 int ab_ddr_ppc_set_event(void *ctx, unsigned int counter_idx,
 			 unsigned int event);
-void ab_ddr_ppc_ctrl(void *ctx, int ppc_start);
 
 #endif /* _AIRBRUSH_DDR_INTERNAL_H_ */
