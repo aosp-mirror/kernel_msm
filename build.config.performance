@@ -1,10 +1,7 @@
-PERF_CONFIG=y
 KERNEL_DIR=private/msm-google
-UNSTRIPPED_MODULES="
-wlan.ko
-"
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.common.clang
 POST_DEFCONFIG_CMDS="check_defconfig && update_perf_config"
+
 function update_perf_config() {
   # Disable debug options
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
