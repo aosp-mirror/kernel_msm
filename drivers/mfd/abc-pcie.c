@@ -1569,6 +1569,7 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 	u32 dma_rd_stat;
 	u32 dma_wr_stat;
 	struct abc_pcie_dma_irq_data *dma_irq_data = ptr;
+	irq_dma_cb_t dma_cb;
 
 	spin_lock(&abc_dev->fsys_reg_lock);
 
@@ -1596,22 +1597,6 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 		__iowmb();
 		writel_relaxed((0x1 << dma_chan) | (0x1 << (dma_chan + 16)),
 				abc_dev->pcie_config + DMA_READ_INT_CLEAR_OFF);
-
-		spin_lock(&abc_dev->dma_callback_lock);
-		if (dma_rd_stat & (1 << dma_chan)) {
-			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan,
-						DMA_TO_DEVICE, DMA_DONE);
-		}
-
-		if (dma_rd_stat & (1 << (dma_chan + 16))) {
-			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan,
-						DMA_TO_DEVICE, DMA_ABORT);
-		}
-
-		spin_unlock(&abc_dev->dma_callback_lock);
-
 	} else if (dma_irq_data->dma_type == ABC_PCIE_DMA_WRITE) {
 
 		/* DMA Write Callback Implementation */
@@ -1626,21 +1611,6 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 		__iowmb();
 		writel_relaxed((0x1 << dma_chan) | (0x1 << (dma_chan + 16)),
 				abc_dev->pcie_config + DMA_WRITE_INT_CLEAR_OFF);
-
-		spin_lock(&abc_dev->dma_callback_lock);
-		if (dma_wr_stat & (1 << dma_chan)) {
-			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan,
-						DMA_FROM_DEVICE, DMA_DONE);
-		}
-
-		if (dma_wr_stat & (1 << (dma_chan + 16))) {
-			if (abc_dev->dma_cb[dma_chan] != NULL)
-				abc_dev->dma_cb[dma_chan](dma_chan,
-						DMA_FROM_DEVICE, DMA_ABORT);
-		}
-
-		spin_unlock(&abc_dev->dma_callback_lock);
 	}
 
 	__iowmb();
@@ -1648,6 +1618,29 @@ static irqreturn_t abc_pcie_dma_irq_handler(int irq, void *ptr)
 		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
 
 	spin_unlock(&abc_dev->fsys_reg_lock);
+
+	spin_lock(&abc_dev->dma_callback_lock);
+	dma_chan = dma_irq_data->dma_channel;
+	dma_cb = abc_dev->dma_cb[dma_chan];
+	if (!dma_cb)
+		goto unlock;
+
+	if (dma_irq_data->dma_type == ABC_PCIE_DMA_READ) {
+		if (dma_rd_stat & (1 << dma_chan))
+			dma_cb(dma_chan, DMA_TO_DEVICE, DMA_DONE);
+
+		if (dma_rd_stat & (1 << (dma_chan + 16)))
+			dma_cb(dma_chan, DMA_TO_DEVICE, DMA_ABORT);
+	} else if (dma_irq_data->dma_type == ABC_PCIE_DMA_WRITE) {
+		if (dma_wr_stat & (1 << dma_chan))
+			dma_cb(dma_chan, DMA_FROM_DEVICE, DMA_DONE);
+
+		if (dma_wr_stat & (1 << (dma_chan + 16)))
+			dma_cb(dma_chan, DMA_FROM_DEVICE, DMA_ABORT);
+	}
+
+unlock:
+	spin_unlock(&abc_dev->dma_callback_lock);
 
 	return IRQ_HANDLED;
 }
