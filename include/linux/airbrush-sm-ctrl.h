@@ -321,22 +321,6 @@ struct ab_sm_pmu_ops {
 	int (*pmu_tpu_resume)(void *ctx);
 };
 
-static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
-static int pmu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
-static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
-static int pmu_ipu_resume_stub(void *ctx)     { return -ENODEV; }
-static int pmu_tpu_resume_stub(void *ctx)     { return -ENODEV; }
-
-static struct ab_sm_pmu_ops pmu_ops_stub = {
-	.ctx = NULL,
-
-	.pmu_ipu_sleep = &pmu_ipu_sleep_stub,
-	.pmu_tpu_sleep = &pmu_tpu_sleep_stub,
-	.pmu_deep_sleep = &pmu_deep_sleep_stub,
-	.pmu_ipu_resume = &pmu_ipu_resume_stub,
-	.pmu_tpu_resume = &pmu_tpu_resume_stub,
-};
-
 struct ab_sm_clk_ops {
 	void *ctx;
 
@@ -362,70 +346,6 @@ struct ab_sm_clk_ops {
 	int (*restore_mainclk_freq)(void *ctx);
 };
 
-static void ab_clk_init_stub(void *ctx)   { return; }
-
-static int ipu_pll_enable_stub(void *ctx)   { return -ENODEV; }
-static int ipu_pll_disable_stub(void *ctx)   { return -ENODEV; }
-static int ipu_gate_stub(void *ctx)   { return -ENODEV; }
-static int ipu_ungate_stub(void *ctx) { return -ENODEV; }
-static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
-{
-	return 0;
-}
-
-static int tpu_pll_enable_stub(void *ctx)   { return -ENODEV; }
-static int tpu_pll_disable_stub(void *ctx)   { return -ENODEV; }
-static int tpu_gate_stub(void *ctx)   { return -ENODEV; }
-static int tpu_ungate_stub(void *ctx) { return -ENODEV; }
-static int64_t tpu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
-{
-	return 0;
-}
-
-static int64_t tpu_set_rate_direct_stub(void *ctx, u64 new_rate)
-{
-	return 0;
-}
-
-
-static int64_t aon_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
-{
-	return 0;
-}
-
-static int64_t aon_set_rate_direct_stub(void *ctx, u64 new_rate)
-{
-	return 0;
-}
-
-static int reduce_mainclk_freq_stub(void *ctx) { return -ENODEV; }
-static int restore_mainclk_freq_stub(void *ctx) { return -ENODEV; }
-
-static struct ab_sm_clk_ops clk_ops_stub = {
-	.ctx = NULL,
-
-	.init = &ab_clk_init_stub,
-
-	.ipu_pll_enable = &ipu_pll_enable_stub,
-	.ipu_pll_disable = &ipu_pll_disable_stub,
-	.ipu_gate = &ipu_gate_stub,
-	.ipu_ungate = &ipu_ungate_stub,
-	.ipu_set_rate = &ipu_set_rate_stub,
-
-	.tpu_pll_enable = &tpu_pll_enable_stub,
-	.tpu_pll_disable = &tpu_pll_disable_stub,
-	.tpu_gate = &tpu_gate_stub,
-	.tpu_ungate = &tpu_ungate_stub,
-	.tpu_set_rate = &tpu_set_rate_stub,
-	.tpu_set_rate_direct = &tpu_set_rate_direct_stub,
-
-	.aon_set_rate = &aon_set_rate_stub,
-	.aon_set_rate_direct = &aon_set_rate_direct_stub,
-
-	.reduce_mainclk_freq = &reduce_mainclk_freq_stub,
-	.restore_mainclk_freq = &restore_mainclk_freq_stub,
-};
-
 struct ab_sm_dram_ops {
 	void *ctx;
 
@@ -444,45 +364,6 @@ struct ab_sm_dram_ops {
 	int (*ppc_set_event)(void *ctx,
 			     unsigned int counter_idx, unsigned int event);
 	void (*ppc_ctrl)(void *ctx, int is_start);
-};
-
-static int ddr_setup_stub(void *ctx, void *ab_state_ctx)
-		{ return -ENODEV; }
-static int ddr_wait_for_init_stub(void *ctx) { return -ENODEV; }
-static int ddr_init_stub(void *ctx) { return -ENODEV; }
-static int ddr_get_freq_stub(void *ctx, u64 *val) { return -ENODEV; }
-static int ddr_set_freq_stub(void *ctx, u64 val) { return -ENODEV; }
-static int ddr_suspend_stub(void *ctx) { return -ENODEV; }
-static int ddr_resume_stub(void *ctx) { return -ENODEV; }
-static int ddr_sref_enter_stub(void *ctx) { return -ENODEV; }
-static int ddr_sref_exit_stub(void *ctx) { return -ENODEV; }
-static int ddr_read_write_test_stub(void *ctx, unsigned int read_write)
-		{ return -ENODEV; }
-static int ddr_eye_margin_stub(void *ctx, unsigned int test_data)
-		{ return -ENODEV; }
-static int ddr_eye_margin_plot_stub(void *ctx)
-		{ return -ENODEV; }
-static int ddr_ppc_set_event_stub(void *ctx, unsigned int counter_idx,
-				  unsigned int event) { return -ENODEV; }
-static void ddr_ppc_ctrl_stub(void *ctx, int is_start) { return; }
-
-static struct ab_sm_dram_ops __maybe_unused dram_ops_stub = {
-	.ctx = NULL,
-
-	.setup = &ddr_setup_stub,
-	.wait_for_init = &ddr_wait_for_init_stub,
-	.init = &ddr_init_stub,
-	.get_freq = &ddr_get_freq_stub,
-	.set_freq = &ddr_set_freq_stub,
-	.suspend = &ddr_suspend_stub,
-	.resume = &ddr_resume_stub,
-	.sref_enter = &ddr_sref_enter_stub,
-	.sref_exit = &ddr_sref_exit_stub,
-	.rw_test = &ddr_read_write_test_stub,
-	.eye_margin = &ddr_eye_margin_stub,
-	.eye_margin_plot = &ddr_eye_margin_plot_stub,
-	.ppc_set_event = &ddr_ppc_set_event_stub,
-	.ppc_ctrl = &ddr_ppc_ctrl_stub,
 };
 
 struct ab_sm_mfd_ops {
@@ -505,39 +386,6 @@ struct ab_sm_mfd_ops {
 	 */
 	void (*set_el2_dma_mode)(void *ctx, bool allow_el1_dma);
 	bool (*get_el2_dma_mode)(void *ctx);
-};
-
-static int enter_el2_stub(void *ctx) { return -ENODEV; }
-static int exit_el2_stub(void *ctx)  { return -ENODEV; }
-static int get_chip_id_stub(void *ctx, enum ab_chip_id *val)
-{
-	return -ENODEV;
-}
-
-static int ab_ready_stub(void *ctx)  { return -ENODEV; }
-static int pcie_pre_disable_stub(void *ctx)  { return -ENODEV; }
-static int pcie_linkdown_stub(void *ctx)  { return -ENODEV; }
-static void pcie_set_dma_mode_stub(void *ctx, bool allow_el1_dma)  { }
-static bool pcie_get_dma_mode_stub(void *ctx)  { return false; }
-
-static struct ab_sm_mfd_ops mfd_ops_stub = {
-	.ctx = NULL,
-
-	.enter_el2 = &enter_el2_stub,
-	.exit_el2 = &exit_el2_stub,
-	.get_chip_id = &get_chip_id_stub,
-	.ab_ready = &ab_ready_stub,
-	.pcie_pre_disable = &pcie_pre_disable_stub,
-	.pcie_linkdown = &pcie_linkdown_stub,
-
-	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
-	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
-	 * EL2 contexts.  This should be removed once EL2 based software is
-	 * ready for use.
-	 */
-	.set_el2_dma_mode = &pcie_set_dma_mode_stub,
-	.get_el2_dma_mode = &pcie_get_dma_mode_stub,
 };
 
 struct ab_change_req {
