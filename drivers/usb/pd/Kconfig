@@ -22,6 +22,7 @@ config USB_PD_ENGINE
 	tristate "USB Power Delivery Engine based on Type-C Port Manager"
 	select EXTCON
 	depends on TYPEC_TCPM
+	depends on GOOGLE_LOGBUFFER
 	select USB_PD
 	help
 	  Say Y here to enable Type-C Port Manager as PD protocol
