@@ -1735,6 +1735,7 @@ static void max1720x_set_serial_number(struct max1720x_chip *chip)
 {
 	u16 data0 = 0, data1 = 0, data2 = 0;
 	int date, count = 0, shift, err = 0;
+	char cell_vendor;
 
 	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NMANFCTRNAME0, &data0);
 	if (data0 == 0x5357) /* "SW": SWD */
@@ -1782,9 +1783,10 @@ static void max1720x_set_serial_number(struct max1720x_chip *chip)
 		 "%c%c", data0 >> 8, data0 & 0xFF);
 
 	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D1, &data0);
+	cell_vendor = (shift == 8) ? (data0 >> 8) : (data0 & 0xFF);
 	count += scnprintf(chip->serial_number + count,
-		 sizeof(chip->serial_number) - count,
-		 "%c", data0 >> 8);
+			   sizeof(chip->serial_number) - count,
+			   "%c", cell_vendor);
 
 	(void) REGMAP_READ(chip->regmap_nvram, MAX1720X_NUSER1D0, &data0);
 	if (shift == 8) {
