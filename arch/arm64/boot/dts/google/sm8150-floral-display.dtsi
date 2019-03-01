@@ -85,11 +85,11 @@
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[00 13 05 04 1F 1E 05 05 03 02 04 00 12 14];
+				[00 14 05 05 1F 1F 05 05 03 02 04 00 12 15];
 		};
 		timing@1 {
 			qcom,mdss-dsi-panel-phy-timings =
-				[00 13 05 04 1F 1E 05 05 03 02 04 00 12 14];
+				[00 14 05 05 1F 1F 05 05 03 02 04 00 12 15];
 		};
 	};
 };
