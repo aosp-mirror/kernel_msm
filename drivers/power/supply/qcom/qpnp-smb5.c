@@ -237,7 +237,8 @@ struct smb5 {
 	struct smb_dt_props	dt;
 };
 
-static int __debug_mask;
+/* All flags turned on */
+static int __debug_mask = -1;
 
 static ssize_t pd_disabled_show(struct device *dev, struct device_attribute
 				*attr, char *buf)
@@ -3517,10 +3518,17 @@ static int smb5_probe(struct platform_device *pdev)
 	else
 		return -EPROBE_DEFER;
 
+	chg->log = debugfs_logbuffer_register("smblib");
+	if (IS_ERR_OR_NULL(chg->log)) {
+		pr_err("failed to obtain logbuffer instance rc:%ld",
+		       PTR_ERR(chg->log));
+		return PTR_ERR(chg->log);
+	}
+
 	rc = smblib_init(chg);
 	if (rc < 0) {
 		pr_err("Smblib_init failed rc=%d\n", rc);
-		return rc;
+		goto unregister_buffer;
 	}
 
 	/* set driver data before resources request it */
@@ -3669,6 +3677,8 @@ free_irq:
 cleanup:
 	smblib_deinit(chg);
 	platform_set_drvdata(pdev, NULL);
+unregister_buffer:
+	debugfs_logbuffer_unregister(chg->log);
 
 	return rc;
 }
@@ -3686,7 +3696,7 @@ static int smb5_remove(struct platform_device *pdev)
 	smblib_deinit(chg);
 	sysfs_remove_groups(&chg->dev->kobj, smb5_groups);
 	platform_set_drvdata(pdev, NULL);
-
+	debugfs_logbuffer_unregister(chg->log);
 	return 0;
 }
 
