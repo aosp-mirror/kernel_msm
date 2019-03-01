@@ -4958,7 +4958,7 @@ static int iaxxx_pdm_head_strm_put(struct snd_kcontrol *kcontrol,
 
 	/* CIC filter config */
 	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_RX_HOS_ADDR,
-		value, value);
+		IAXXX_CNR0_CIC_RX_HOS_WMASK_VAL, value);
 
 	return 0;
 }
