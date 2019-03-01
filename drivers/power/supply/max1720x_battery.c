@@ -2918,16 +2918,8 @@ static int max1720x_decode_sn(char *serial_number,
 			   data[9] >> 8);
 
 	if (shift == 8) {
-		if (data[10] >> 8 == 0xb1) {
-			count += scnprintf(serial_number + count, max - count,
-					   "B1");
-		} else if (data[10] >> 8 == 0xc1) {
-			count += scnprintf(serial_number + count, max - count,
-					   "C1");
-		} else {
-			count += scnprintf(serial_number + count, max - count,
-					   "??");
-		}
+		count += scnprintf(serial_number + count, max - count, "%02X",
+				   data[10] >> 8);
 	} else {
 		count += scnprintf(serial_number + count, max - count, "%c%c",
 				   data[10] >> 8, data[10] & 0xFF);
