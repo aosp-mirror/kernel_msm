@@ -20,8 +20,9 @@
 #include <linux/genalloc.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/scatterlist.h>
+#include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 #include <uapi/ab-dram.h>
 
@@ -408,6 +409,15 @@ dma_addr_t ab_dram_get_dma_buf_paddr(struct dma_buf *dmabuf)
 	return buffer->ab_paddr;
 }
 EXPORT_SYMBOL(ab_dram_get_dma_buf_paddr);
+
+bool is_ab_dram_dma_buf(struct dma_buf *dmabuf)
+{
+	if (!dmabuf)
+		return false;
+
+	return (strcmp(KBUILD_MODNAME, dmabuf->exp_name) == 0);
+}
+EXPORT_SYMBOL(is_ab_dram_dma_buf);
 
 static int ab_dram_allocate_memory_fd_legacy(struct ab_dram_session *session,
 		size_t len)
