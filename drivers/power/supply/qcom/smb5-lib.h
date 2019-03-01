@@ -22,6 +22,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/extcon.h>
 #include "storm-watch.h"
+#include "../google/logbuffer.h"
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -548,6 +549,9 @@ struct smb_charger {
 	bool moisture_detection_enabled;
 
 	struct regulator *ext_vbus;
+
+	/* logging */
+	struct logbuffer *log;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
