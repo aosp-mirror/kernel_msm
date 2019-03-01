@@ -14,7 +14,6 @@ function compression_tool_and_files() {
         arch/arm64/boot/Image.lz4-dtb
         vmlinux
         System.map
-        compile.json
         .config
         "
     elif [ "$method" == "gz" ]; then
