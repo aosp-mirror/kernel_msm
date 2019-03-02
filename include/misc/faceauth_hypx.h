@@ -17,7 +17,6 @@
 #define _FACEAUTH_HYPX_H
 
 #include <linux/faceauth.h>
-#include <linux/faceauth_shared.h>
 #include <linux/device.h>
 
 int el2_faceauth_wait_pil_dma_over(void);
