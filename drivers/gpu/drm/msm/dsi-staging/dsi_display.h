@@ -153,8 +153,8 @@ struct dsi_display_ext_bridge {
  * @sw_te_using_wd:   Is software te enabled
  * @display_lock:     Mutex for dsi_display interface.
  * @disp_te_gpio:     GPIO for panel TE interrupt.
- * @is_te_irq_enabled:bool to specify whether TE interrupt is enabled.
- * @esd_te_gate:      completion gate to signal TE interrupt.
+ * @te_listeners:     List of listeners registered for TE callbacks.
+ * @te_lock:          Lock protecting te_listeners list.
  * @ctrl_count:       Number of DSI interfaces required by panel.
  * @ctrl:             Controller information for DSI display.
  * @panel:            Handle to DSI panel.
@@ -203,8 +203,8 @@ struct dsi_display {
 	bool sw_te_using_wd;
 	struct mutex display_lock;
 	int disp_te_gpio;
-	bool is_te_irq_enabled;
-	struct completion esd_te_gate;
+	struct list_head te_listeners;
+	spinlock_t te_lock;
 
 	u32 ctrl_count;
 	struct dsi_display_ctrl ctrl[MAX_DSI_CTRLS_PER_DISPLAY];
@@ -277,6 +277,48 @@ struct dsi_display {
 
 	u32 te_source;
 };
+
+/**
+ * struct dsi_display_te_listener - data for TE listener
+ * @head:    List node pointer.
+ * @handler: TE callback function, called in atomic context.
+ * @data:    Private data that is not modified by add/remove API
+ */
+struct dsi_display_te_listener {
+	struct list_head head;
+	void (*handler)(struct dsi_display_te_listener *);
+	void *data;
+};
+
+/**
+ * dsi_display_add_te_listener - adds a new listener for TE events
+ * @display: Handle to display
+ * @tl:      TE listener struct
+ *
+ * Adds a new TE listener and enables TE irq if there are no other listeners.
+ * Upon TE interrupt, the handler passed in will be called back in atomic
+ * context.
+ *
+ * Note: caller is responsible for lifetime of @tl which should be available
+ * until dsi_display_remove_te_listener() is called.
+ *
+ * Returns: 0 on success, otherwise errno on failure
+ */
+int dsi_display_add_te_listener(struct dsi_display *display,
+				struct dsi_display_te_listener *tl);
+
+/**
+ * dsi_display_add_te_listener - removes listener for TE events
+ * @display: Handle to display
+ * @tl:      TE listener struct
+ *
+ * Removes TE listener and disables TE irq if there are no other listeners.
+ *
+ * Returns: 0 on success, otherwise errno on failure
+ */
+int dsi_display_remove_te_listener(struct dsi_display *display,
+				   struct dsi_display_te_listener *tl);
+
 
 int dsi_display_dev_probe(struct platform_device *pdev);
 int dsi_display_dev_remove(struct platform_device *pdev);
