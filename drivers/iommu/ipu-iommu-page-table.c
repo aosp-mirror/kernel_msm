@@ -65,6 +65,21 @@ struct ipu_iommu_page_table {
 	void *dma_dev;
 	struct bar_mapping mapping;
 	bool ab_dram_up;
+
+	/* implements delay write for map/map_sg:
+	 * don't write as long as the memory write are adjacent.
+	 * when the first write is received set the ab_backup_needed flag
+	 * for every write after that
+	 * if start address (both physical and virtual) are adjacent
+	 * just increase the counter otherwise write prev buffer and
+	 * start a new one.
+	 * when the operation finishes write the remaining buffer.
+	 */
+	bool ab_backup_needed;
+	dma_addr_t ab_backup_dest_addr;
+	void *ab_backup_source_addr;
+	size_t ab_backup_size;
+
 };
 
 #define ARM_LPAE_MAX_ADDR_BITS		48
@@ -242,6 +257,12 @@ struct ipu_iommu_page_table {
 #define pfn_to_iopte(pfn, d)					\
 	(((pfn) << (d)->pg_shift) & ((1ULL << ARM_LPAE_MAX_ADDR_BITS) - 1))
 
+static inline struct arm_lpae_io_pgtable *
+	ipu_iommu_pgtable_to_arm_data(struct ipu_iommu_page_table *pg_table)
+{
+	return io_pgtable_ops_to_data(pg_table->pgtbl_ops);
+}
+
 /*
  * We'll use some ignored bits in table entries to keep track of the number
  * of page mappings beneath the table.  The maximum number of entries
@@ -348,15 +369,81 @@ static int ipu_iommu_page_table_update_ab(
 	return err;
 }
 
-/* update a single page on airbrush */
+static inline bool ipu_iommu_next_is_backup(
+	struct ipu_iommu_page_table *pg_table,
+	dma_addr_t addr,
+	arm_lpae_iopte *ptep)
+{
+	return pg_table->ab_backup_source_addr +
+		pg_table->ab_backup_size == ptep &&
+		pg_table->ab_backup_dest_addr +
+		pg_table->ab_backup_size == addr;
+}
+
+static int __ipu_iommu_page_table_send_updates_to_mem(
+	struct ipu_iommu_page_table *pg_table,
+	struct io_pgtable_cfg *cfg)
+{
+	if (!pg_table->ab_backup_needed)
+		return 0;
+	pg_table->ab_backup_needed = false;
+	return ipu_iommu_page_table_update_ab(
+		pg_table, cfg,
+		pg_table->ab_backup_dest_addr,
+		pg_table->ab_backup_source_addr,
+		pg_table->ab_backup_size);
+
+	return 0;
+}
+
+/* update a single page on airbrush
+ * function logic implements delay writes and will
+ * try to update all a adjacent memory segemnts
+ * push_update - don't try to delay writes and push
+ *    write to memory right away.
+ */
 static int ipu_iommu_page_table_update_ab_page(
 	struct ipu_iommu_page_table *pg_table,
 	struct io_pgtable_cfg *cfg,
 	dma_addr_t addr,
-	arm_lpae_iopte pte)
+	arm_lpae_iopte *ptep,
+	bool push_update)
 {
-	return ipu_iommu_page_table_update_ab(
-		pg_table, cfg, addr, &pte, sizeof(pte));
+	int err = 0;
+
+	if (push_update)
+		return ipu_iommu_page_table_update_ab(
+				pg_table, cfg,
+				addr,
+				ptep,
+				sizeof(*ptep));
+
+	/* check if we already started a delay block
+	 * if we did check if the current block is adjacent
+	 * if so just update the size
+	 * otherwise write the prev block
+	 */
+	if (pg_table->ab_backup_needed) {
+		if (ipu_iommu_next_is_backup(pg_table,
+				addr, ptep)) {
+			pg_table->ab_backup_size += sizeof(*ptep);
+		} else {
+			err = ipu_iommu_page_table_update_ab(
+				pg_table, cfg,
+				pg_table->ab_backup_dest_addr,
+				pg_table->ab_backup_source_addr,
+				pg_table->ab_backup_size);
+			pg_table->ab_backup_needed = false;
+		}
+	}
+	/* start a new delay block */
+	if (!pg_table->ab_backup_needed) {
+		pg_table->ab_backup_needed = true;
+		pg_table->ab_backup_size = sizeof(*ptep);
+		pg_table->ab_backup_source_addr = ptep;
+		pg_table->ab_backup_dest_addr = addr;
+	}
+	return err;
 }
 
 /* set airbrush memory to 0 */
@@ -470,11 +557,12 @@ static void __ipu_iommu_pgtbl_set_pte(struct ipu_iommu_page_table *pg_table,
 	struct io_pgtable_cfg *cfg,
 	dma_addr_t addr,
 	arm_lpae_iopte *ptep,
-	arm_lpae_iopte pte)
+	arm_lpae_iopte pte,
+	bool push_update)
 {
 	*ptep = pte;
 	ipu_iommu_page_table_update_ab_page(pg_table,
-		cfg, addr, pte);
+		cfg, addr, ptep, push_update);
 }
 
 static void __ipu_iommu_pgtbl_init_pte(struct ipu_iommu_page_table *pg_table,
@@ -497,7 +585,9 @@ static void __ipu_iommu_pgtbl_init_pte(struct ipu_iommu_page_table *pg_table,
 	pte |= ARM_LPAE_PTE_AF | ARM_LPAE_PTE_SH_OS;
 	pte |= pfn_to_iopte(paddr >> data->pg_shift, data);
 
-	__ipu_iommu_pgtbl_set_pte(pg_table, &data->iop.cfg, addr, ptep, pte);
+	__ipu_iommu_pgtbl_set_pte(pg_table,
+		&data->iop.cfg, addr, ptep, pte,
+		false /* push_update */);
 }
 
 static int ipu_iommu_pgtbl_init_pte(struct ipu_iommu_page_table *pg_table,
@@ -551,7 +641,7 @@ static arm_lpae_iopte ipu_iommu_pgtbl_install_table(
 
 	/* update airbrush memeory */
 	ipu_iommu_page_table_update_ab_page(pg_table,
-		cfg, addr, new);
+		cfg, addr, ptep, true /* push */);
 	return old;
 }
 
@@ -565,12 +655,6 @@ struct map_state {
 };
 /* map state optimization works at level 3 (the 2nd-to-last level) */
 #define MAP_STATE_LVL 3
-
-static inline struct arm_lpae_io_pgtable *
-	ipu_iommu_pgtable_to_arm_data(struct ipu_iommu_page_table *pg_table)
-{
-	return io_pgtable_ops_to_data(pg_table->pgtbl_ops);
-}
 
 static int __ipu_iommu_pgtable_map(struct ipu_iommu_page_table *pg_table,
 	unsigned long iova,
@@ -755,12 +839,14 @@ int ipu_iommu_pgtable_map(struct io_pgtable_ops *ops, unsigned long iova,
 	prot = ipu_iommu_pgtbl_prot_to_pte(data, iommu_prot);
 	ret = __ipu_iommu_pgtable_map(pg_table, iova, paddr,
 		size, prot, lvl, &pg_table->shadow_table, NULL);
+
+	__ipu_iommu_page_table_send_updates_to_mem(pg_table,
+		&data->iop.cfg);
 	/*
 	 * Synchronise all PTE updates for the new mapping before there's
 	 * a chance for anything to kick off a table walk for the new iova.
 	 */
 	wmb();
-
 	return ret;
 }
 
@@ -823,6 +909,9 @@ static int ipu_iommu_pgtable_map_sg(
 			size -= pgsize;
 		}
 	}
+
+	__ipu_iommu_page_table_send_updates_to_mem(pg_table,
+		cfg);
 
 	return mapped;
 
@@ -995,7 +1084,7 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 				shadow_ptep->ab_dram_dma_buf) +
 			(sizeof(arm_lpae_iopte) * diff),
 			ptep,
-			0);
+			0, true /* push_update */);
 		if (shadow_ptep->next_lvl)
 			memset(shadow_ptep->next_lvl + diff, 0,
 				sizeof(*shadow_ptep));
@@ -1041,7 +1130,7 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 					shadow_ptep->ab_dram_dma_buf) +
 				(sizeof(arm_lpae_iopte) * diff),
 				ptep,
-				0);
+				0, true /* push_update */);
 			memset(shadow_ptep->next_lvl + diff, 0,
 				sizeof(*shadow_ptep));
 
