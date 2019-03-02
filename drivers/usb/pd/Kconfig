@@ -21,6 +21,7 @@ config USB_PD_POLICY
 config USB_PD_ENGINE
 	tristate "USB Power Delivery Engine based on Type-C Port Manager"
 	depends on EXTCON
+	depends on LOGBUFFER
 	select TYPEC_TCPM
 	select USB_PD
 	help
