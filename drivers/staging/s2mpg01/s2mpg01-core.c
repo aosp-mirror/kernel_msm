@@ -146,7 +146,7 @@ int s2mpg01_read_byte(struct s2mpg01_core *ddata, u8 addr, u8 *data)
 			addr, ret, retry_cnt);
 	} while (++retry_cnt < S2MPG01_I2C_RETRY_COUNT);
 
-	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+	dev_err(ddata->dev, "%s: failed with %d retries\n",
 		__func__, S2MPG01_I2C_RETRY_COUNT);
 
 	return -EIO;
@@ -171,7 +171,7 @@ int s2mpg01_read_bytes(struct s2mpg01_core *ddata, u8 addr, u8 *data,
 			__func__, count, addr, ret, retry_cnt);
 	} while (++retry_cnt < S2MPG01_I2C_RETRY_COUNT);
 
-	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+	dev_err(ddata->dev, "%s: failed with %d retries\n",
 		__func__, S2MPG01_I2C_RETRY_COUNT);
 
 	return -EIO;
@@ -196,7 +196,7 @@ int s2mpg01_write_byte(struct s2mpg01_core *ddata, u8 addr, u8 data)
 			addr, ret, retry_cnt);
 	} while (++retry_cnt < S2MPG01_I2C_RETRY_COUNT);
 
-	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+	dev_err(ddata->dev, "%s: failed with %d retries\n",
 		__func__, S2MPG01_I2C_RETRY_COUNT);
 
 	return -EIO;
@@ -222,7 +222,7 @@ int s2mpg01_write_bytes(struct s2mpg01_core *ddata, u8 addr, u8 *data,
 			count, addr, ret, retry_cnt);
 	} while (++retry_cnt < S2MPG01_I2C_RETRY_COUNT);
 
-	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+	dev_err(ddata->dev, "%s: failed with %d retries\n",
 		__func__, S2MPG01_I2C_RETRY_COUNT);
 
 	return -EIO;
@@ -248,7 +248,7 @@ int s2mpg01_update_bits(struct s2mpg01_core *ddata, u8 addr,
 			addr, ret, retry_cnt);
 	} while (++retry_cnt < S2MPG01_I2C_RETRY_COUNT);
 
-	dev_err(ddata->dev, "%s: failed with %d retries, power cycling device\n",
+	dev_err(ddata->dev, "%s: failed with %d retries\n",
 		__func__, S2MPG01_I2C_RETRY_COUNT);
 
 	return -EIO;
@@ -383,8 +383,8 @@ static void s2mpg01_print_status(struct s2mpg01_core *ddata)
 
 	ret = s2mpg01_read_bytes(ddata, S2MPG01_REG_STATUS1, status, 3);
 	if (!ret)
-		dev_err(dev, "%s: Status: 0x%02x, 0x%02x, 0x%02x\n", __func__,
-			status[0], status[1], status[2]);
+		dev_info(dev, "%s: Status: 0x%02x, 0x%02x, 0x%02x\n", __func__,
+			 status[0], status[1], status[2]);
 }
 
 static void s2mpg01_notify_fail_all(void)
