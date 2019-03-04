@@ -2054,6 +2054,67 @@ int32_t ab_ddr_train_gpio(void *ctx)
 	return DDR_SUCCESS;
 }
 
+/* Caller must hold ddr_ctx->ddr_lock */
+static int32_t __ab_ddr_train_all(struct ab_ddr_context *ddr_ctx)
+{
+	int idx = 0;
+
+	/* Clear the previous trainings done for all Non-1866MHz frequencies */
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1600] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1200] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_933] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_800] = 0;
+
+	for (idx = AB_DRAM_FREQ_MHZ_1600; idx <= AB_DRAM_FREQ_MHZ_800; idx++) {
+		if (ddr_set_mif_freq(ddr_ctx, idx)) {
+			pr_err("train-all: freq idx %d train fail\n", idx);
+			goto ddr_train_all_fail;
+		}
+	}
+
+	/* revert back the ddr frequency to 1866MHz */
+	if (ddr_set_mif_freq(ddr_ctx, AB_DRAM_FREQ_MHZ_1866)) {
+		pr_err("train-all: revert back to 1866MHz fail\n");
+		goto ddr_train_all_fail;
+	}
+
+	return DDR_SUCCESS;
+
+ddr_train_all_fail:
+	pr_err("ddr_train_all: Error!! ddr all frequency training failed\n");
+	return DDR_FAIL;
+}
+
+static int32_t ab_ddr_train_all(void *ctx)
+{
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	int ret;
+
+	if (!ddr_ctx->is_setup_done) {
+		pr_err("error: ddr setup is not called\n");
+		return -EAGAIN;
+	}
+
+	/* Allow retrain only in 1866MHz frequency */
+	if (ddr_ctx->cur_freq != AB_DRAM_FREQ_MHZ_1866) {
+		pr_err("ddr train-all only supported during 1866MHz freq\n");
+		return -EINVAL;
+	}
+
+	/* Perform train-all only during the ddr ON and SLEEP states */
+	if ((ddr_ctx->ddr_state != DDR_ON) &&
+	    (ddr_ctx->ddr_state != DDR_SLEEP)) {
+		pr_err("ddr train-all: Invalid ddr state for retrain\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&ddr_ctx->ddr_lock);
+	ret = __ab_ddr_train_all(ddr_ctx);
+	mutex_unlock(&ddr_ctx->ddr_lock);
+
+	return ret;
+}
+
 /* Perform ddr re-training */
 int32_t ab_ddr_train_sysreg(void *ctx)
 {
@@ -2831,6 +2892,7 @@ static struct ab_sm_dram_ops dram_ops = {
 	.setup = &ab_ddr_setup,
 	.wait_for_m0_ddr_init = &ab_ddr_wait_for_m0_ddr_init,
 	.init = &ab_ddr_init,
+	.train_all = &ab_ddr_train_all,
 	.get_freq = &ab_ddr_get_freq,
 	.set_freq = &ab_ddr_set_freq,
 	.suspend = &ab_ddr_suspend,

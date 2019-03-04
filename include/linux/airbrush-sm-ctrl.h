@@ -324,6 +324,7 @@ struct ab_sm_dram_ops {
 	int (*setup)(void *ctx, void *ab_state_ctx);
 	int (*wait_for_m0_ddr_init)(void *ctx);
 	int (*init)(void *ctx);
+	int (*train_all)(void *ctx);
 	int (*get_freq)(void *ctx, u64 *val);
 	int (*set_freq)(void *ctx, u64 val);
 	int (*suspend)(void *ctx);
