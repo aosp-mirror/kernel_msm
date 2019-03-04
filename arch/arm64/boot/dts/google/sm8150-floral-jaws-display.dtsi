@@ -18,11 +18,24 @@
 
 &sde_dsi {
 	vci-supply = <&pm8150l_l9>;
+	lab-supply = <&ab_vreg>;
 
 	qcom,dsi-display-list = <&dsi_s6e3ha8_cmd_display
 				 &dsi_s6e3hc2_cmd_display
 				 &dsi_nt37280_cmd_display
 				 &dsi_sim_vid_display>;
+};
+
+&pm8150a_amoled {
+	status = "ok";
+};
+
+&ab_vreg {
+	qcom,aod-ab-pd-control;
+};
+
+&ibb_vreg {
+	qcom,aod-ibb-pd-control;
 };
 
 &soc {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,10 +10,18 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-floral-common.dtsi"
-#include "sm8150-coral-audio.dtsi"
-#include "sm8150-coral-display.dtsi"
-#include "sm8150-coral-camera-sensor.dtsi"
-#include "sm8150-coral-pac193x.dtsi"
-#include "sm8150-coral-thermal.dtsi"
-#include "sm8150-coral-usb.dtsi"
+&sde_dsi {
+	lab-supply = <&ab_vreg>;
+};
+
+&pm8150a_amoled {
+	status = "ok";
+};
+
+&ab_vreg {
+	qcom,aod-ab-pd-control;
+};
+
+&ibb_vreg {
+	qcom,aod-ibb-pd-control;
+};
