@@ -770,8 +770,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	if (sc->el2_mode) {
 		dev_err(sc->dev, "Cannot change state while in EL2 mode\n");
-		complete_all(&sc->transition_comp);
-		complete_all(&sc->notify_comp);
 		return -ENODEV;
 	}
 
@@ -781,8 +779,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	if (prev_state == to_chip_substate_id) {
 		dev_dbg(sc->dev, "Ignore state change, already at destination\n");
-		complete_all(&sc->transition_comp);
-		complete_all(&sc->notify_comp);
 		return 0;
 	}
 
@@ -986,9 +982,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			"on" : "off",
 		sc->blocks[BLK_AON].current_state->clk_frequency);
 
-	complete_all(&sc->transition_comp);
-	complete_all(&sc->notify_comp);
-
 	return 0;
 
 cleanup_state:
@@ -1008,8 +1001,6 @@ cleanup_state:
 
 	dev_err(sc->dev, "AB state reverted to %d\n",
 		sc->curr_chip_substate_id);
-	complete_all(&sc->transition_comp);
-	complete_all(&sc->notify_comp);
 	return ret;
 }
 
@@ -1040,6 +1031,9 @@ static int state_change_task(void *ctx)
 		mutex_lock(&sc->state_transitioning_lock);
 		sc->change_ret = ab_sm_update_chip_state(sc);
 		mutex_unlock(&sc->state_transitioning_lock);
+
+		complete_all(&sc->transition_comp);
+		complete_all(&sc->notify_comp);
 	}
 
 	return 0;
@@ -1078,7 +1072,9 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 		ret = -EAGAIN;
 	} else {
 		/* completion finished before timeout */
+		mutex_lock(&sc->state_transitioning_lock);
 		ret = sc->change_ret;
+		mutex_unlock(&sc->state_transitioning_lock);
 	}
 
 	return ret;
@@ -1346,6 +1342,9 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	sc->dest_chip_substate_id = CHIP_STATE_6_0;
 	sc->change_ret = ab_sm_update_chip_state(sc);
 	mutex_unlock(&sc->state_transitioning_lock);
+
+	complete_all(&sc->transition_comp);
+	complete_all(&sc->notify_comp);
 }
 
 static int ab_regulator_listener(struct notifier_block *nb,
