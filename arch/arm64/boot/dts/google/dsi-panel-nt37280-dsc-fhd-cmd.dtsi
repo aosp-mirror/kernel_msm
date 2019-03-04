@@ -149,7 +149,7 @@
 
 				qcom,mdss-dsi-lp1-command = [
 					15 01 00 00 00 00 02 FF 10
-					05 01 00 00 00 00 01 22
+					05 01 00 00 00 00 03 51 00 00
 					05 01 00 00 32 00 01 39	   /* AOD on */
 				];
 				qcom,mdss-dsi-nolp-command = [
@@ -285,7 +285,7 @@
 
 				qcom,mdss-dsi-lp1-command = [
 					15 01 00 00 00 00 02 FF 10
-					05 01 00 00 00 00 01 22
+					05 01 00 00 00 00 03 51 00 00
 					05 01 00 00 32 00 01 39	   /* AOD on */
 				];
 				qcom,mdss-dsi-nolp-command = [
@@ -317,42 +317,29 @@
 				google,dsi-lp-brightness-threshold = <0>;
 				google,dsi-lp-command = [
 					15 01 00 00 00 00 02 FF 10
-					05 01 00 00 00 00 01 22
+					05 01 00 00 00 00 03 51 00 00
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 
 			lp-mode@1 {
-				label = "dim";
-
-				google,dsi-lp-brightness-threshold = <5>;
-				google,dsi-lp-command = [
-					15 01 00 00 00 00 02 FF 10
-					39 01 00 00 00 00 03 51 02 00
-					05 01 00 00 00 00 01 13
-				];
-				google,dsi-lp-command-state = "dsi_lp_mode";
-			};
-			lp-mode@2 {
 				label = "low";
 
 				google,dsi-lp-brightness-threshold = <20>;
 				google,dsi-lp-command = [
 					15 01 00 00 00 00 02 FF 10
-					39 01 00 00 00 00 03 51 06 80
-					05 01 00 00 00 00 01 13
+					39 01 00 00 00 00 03 51 06 FF
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 
-			lp-mode@3 {
+			lp-mode@2 {
 				label = "high";
 
 				google,dsi-lp-brightness-threshold = <255>;
 				google,dsi-lp-command = [
 					15 01 00 00 00 00 02 FF 10
 					39 01 00 00 00 00 03 51 0F FF
-					05 01 00 00 00 00 01 13
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
