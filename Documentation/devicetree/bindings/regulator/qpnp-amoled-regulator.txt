@@ -61,6 +61,22 @@ Subnode common properties for OLEDB and AB/IBB regulator devices.
 		    controlled by SWIRE signal. When this is specified, output
 		    voltage of the regulator is not controlled by SW.
 
+AB regulator specific properties are below:
+
+- qcom,aod-ab-pd-control:
+	Usage:      optional
+	Value type: <empty>
+	Definition: A boolean property to specify that the pull down control
+		    for AB needs to be configured during AOD mode.
+
+IBB regulator specific properties are below:
+
+- qcom,aod-ibb-pd-control:
+	Usage:      optional
+	Value type: <empty>
+	Definition: A boolean property to specify that the pull down control
+		    for IBB needs to be during AOD mode.
+
 Example:
 
 pm8150a_amoled: oledb@e000 {
