@@ -613,17 +613,35 @@ static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
 	uint32_t reg_val;
 	unsigned long timeout;
 
-	poll_multiplier = ddr_otp_rd(o_SECURE_JTAG2) + 1;
+	/* Reading the register before calculating the timeout makes sure the
+	 * previous write request to DREX or DPHY (for example training or
+	 * mdll lock request) is completed.
+	 * As ddr_reg_rd() translates to pcie_config_read() (which is a
+	 * non-posted pcie transaction), the previous pcie_config_write() has
+	 * to be completed (which is posted pcie transaction) before completing
+	 * the current read request.
+	 */
+	reg_val = ddr_reg_rd(reg);
 
+	poll_multiplier = ddr_otp_rd(o_SECURE_JTAG2) + 1;
 	timeout = jiffies +
 		  usecs_to_jiffies(poll->usec_timeout * poll_multiplier);
 
-	reg_val = ddr_reg_rd(reg);
 	while (((reg_val & poll->mask) != poll->val) &&
 			time_before(jiffies, timeout)) {
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
 		reg_val = ddr_reg_rd(reg);
 	}
+
+	/* There is a chance that the above loop can exit because of the current
+	 * task is scheduled out for more than the "timeout" jiffies. In this
+	 * case the reg_val can contain the old value.
+	 *
+	 * If the poll condition doesn't meet, then read the register one more
+	 * time which will handle the above scenario.
+	 */
+	if ((reg_val & poll->mask) != poll->val)
+		reg_val = ddr_reg_rd(reg);
 
 	if ((reg_val & poll->mask) != poll->val) {
 		pr_err("ddr status poll failed for idx: 0x%x\n", poll_idx);
