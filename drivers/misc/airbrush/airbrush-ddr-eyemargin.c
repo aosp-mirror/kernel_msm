@@ -169,9 +169,9 @@ void ab_ddr_eye_margin_plot_read(struct ab_ddr_context *ddr_ctx)
 	ktime_t (*eye_time)[MAX_RW_OFFSETS];
 	int vrefIdx, offsetIdx, maxOffset;
 
-	read_eye = &ddr_ctx->read_eye[0];
-	eye_time = &ddr_ctx->read_eye_time[0];
-	maxOffset = ddr_ctx->num_samples_read;
+	read_eye = &ddr_ctx->eye_data->read_eye[0];
+	eye_time = &ddr_ctx->eye_data->read_eye_time[0];
+	maxOffset = ddr_ctx->eye_data->num_samples_read;
 
 	/* plot the pass fail information for each vref & delay offset */
 	for (vrefIdx = VREF_FROM; vrefIdx < PHY_VREF_LEVELS;
@@ -198,9 +198,9 @@ void ab_ddr_eye_margin_plot_write(struct ab_ddr_context *ddr_ctx)
 	ktime_t (*eye_time)[MAX_RW_OFFSETS];
 	int vrefIdx, offsetIdx, maxOffset;
 
-	write_eye = &ddr_ctx->write_eye[0];
-	eye_time = &ddr_ctx->write_eye_time[0];
-	maxOffset = ddr_ctx->num_samples_write;
+	write_eye = &ddr_ctx->eye_data->write_eye[0];
+	eye_time = &ddr_ctx->eye_data->write_eye_time[0];
+	maxOffset = ddr_ctx->eye_data->num_samples_write;
 
 	/* plot the pass fail information for each vref & delay offset */
 	for (vrefIdx = VREF_FROM; vrefIdx < DRAM_VREF_LEVELS;
@@ -229,7 +229,7 @@ static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 	int offsetIdx, result_idx;
 	char (*read_eye)[MAX_RW_OFFSETS];
 
-	read_eye = &ddr_ctx->read_eye[0];
+	read_eye = &ddr_ctx->eye_data->read_eye[0];
 	maxOffset = samples;
 
 	for (vrefIdx = VREF_FROM; vrefIdx < PHY_VREF_LEVELS;
@@ -248,7 +248,7 @@ static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 			else
 				read_eye[vrefIdx][result_idx] = '.';
 
-			ddr_ctx->read_eye_time[vrefIdx][result_idx] =
+			ddr_ctx->eye_data->read_eye_time[vrefIdx][result_idx] =
 				ktime_sub(ddr_ctx->et_read, ddr_ctx->st_read);
 
 			if (offsetIdx == 0)
@@ -257,7 +257,7 @@ static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 			result_idx++;
 		}
 
-		ddr_ctx->num_samples_read = result_idx;
+		ddr_ctx->eye_data->num_samples_read = result_idx;
 		read_eye[vrefIdx][result_idx] = '\0';
 	}
 
@@ -272,7 +272,7 @@ static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 	int offsetIdx, result_idx;
 	char (*write_eye)[MAX_RW_OFFSETS];
 
-	write_eye = &ddr_ctx->write_eye[0];
+	write_eye = &ddr_ctx->eye_data->write_eye[0];
 	maxOffset = samples;
 
 	for (vrefIdx = VREF_FROM; vrefIdx < DRAM_VREF_LEVELS;
@@ -291,7 +291,7 @@ static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 			else
 				write_eye[vrefIdx][result_idx] = '.';
 
-			ddr_ctx->write_eye_time[vrefIdx][result_idx] =
+			ddr_ctx->eye_data->write_eye_time[vrefIdx][result_idx] =
 				ktime_sub(ddr_ctx->et_read, ddr_ctx->st_read);
 
 			if (offsetIdx == 0)
@@ -300,7 +300,7 @@ static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 			result_idx++;
 		}
 
-		ddr_ctx->num_samples_write = result_idx;
+		ddr_ctx->eye_data->num_samples_write = result_idx;
 		write_eye[vrefIdx][result_idx] = '\0';
 	}
 
@@ -316,7 +316,13 @@ int ab_ddr_eye_margin_plot(void *ctx)
 		return -EAGAIN;
 	}
 
-	if (!(ddr_ctx->num_samples_write && ddr_ctx->num_samples_read)) {
+	if (!ddr_ctx->eye_data) {
+		pr_err("ddr eye margin: initial memory alloc failed\n");
+		return -ENOMEM;
+	}
+
+	if (!(ddr_ctx->eye_data->num_samples_write &&
+	      ddr_ctx->eye_data->num_samples_read)) {
 		pr_err("ddr eye margin: error!! measure the eye before plot\n");
 		return DDR_FAIL;
 	}
@@ -346,6 +352,11 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 		pr_err("ddr_eye_margin: Invalid ddr state: %d\n",
 			ddr_ctx->ddr_state);
 		return DDR_FAIL;
+	}
+
+	if (!ddr_ctx->eye_data) {
+		pr_err("ddr eye margin: initial memory alloc failed\n");
+		return -ENOMEM;
 	}
 
 	ddr_eye_print_termination_info();

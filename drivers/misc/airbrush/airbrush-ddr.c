@@ -2663,6 +2663,10 @@ static int ab_ddr_probe(struct platform_device *pdev)
 	if (ddr_ctx == NULL)
 		return -ENOMEM;
 
+	ddr_ctx->eye_data = vmalloc(sizeof(struct ddr_eyemargin_data));
+	if (ddr_ctx->eye_data == NULL)
+		pr_err("ab_ddr: memory alloc for eyemargin data failed\n");
+
 	/* initialize ddr state to off */
 	ddr_ctx->ddr_state = DDR_OFF;
 

@@ -1206,6 +1206,20 @@ struct ddr_ppc_overflow_info {
 	uint32_t overflow_count_cnt[PPC_COUNTER_MAX];
 };
 
+struct ddr_eyemargin_data {
+	/* time taken by memtester for r/w eyemargin test at each offset */
+	ktime_t read_eye_time[PHY_VREF_LEVELS][MAX_RW_OFFSETS];
+	ktime_t write_eye_time[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
+
+	/* memtester result for r/w eyemargin test for each offset */
+	char read_eye[PHY_VREF_LEVELS][MAX_RW_OFFSETS];
+	char write_eye[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
+
+	/* Number of offset samples used to plot eyemargin diagram */
+	unsigned int num_samples_read;
+	unsigned int num_samples_write;
+};
+
 struct ab_ddr_context {
 	struct device *dev;
 	unsigned int is_setup_done;
@@ -1236,13 +1250,7 @@ struct ab_ddr_context {
 	ktime_t st_read, et_read;
 	ktime_t st_write, et_write;
 
-	/* eye margin data */
-	ktime_t read_eye_time[PHY_VREF_LEVELS][MAX_RW_OFFSETS];
-	ktime_t write_eye_time[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
-	char read_eye[PHY_VREF_LEVELS][MAX_RW_OFFSETS];
-	char write_eye[DRAM_VREF_LEVELS][MAX_RW_OFFSETS];
-	unsigned int num_samples_read;
-	unsigned int num_samples_write;
+	struct ddr_eyemargin_data *eye_data;
 
 	int ddr_ppc_events[PPC_COUNTER_MAX];
 	struct ddr_ppc_overflow_info ddr_ppc_info;
