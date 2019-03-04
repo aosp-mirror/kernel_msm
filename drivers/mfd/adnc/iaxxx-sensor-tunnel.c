@@ -140,7 +140,7 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 	}
 
 	if (enable) { /* Set up the route */
-		ret = iaxxx_set_proc_mem_on_off_ctrl(priv, enable);
+		ret = iaxxx_power_up_core_mem(priv, IAXXX_SSP_ID);
 		if (ret) {
 			dev_err(priv->dev, "set proc mem on failed\n");
 			return ret;
@@ -467,11 +467,6 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			dev_err(priv->dev, "Error in tearing VYSNC Sensor  route\n");
 			return -EIO;
 		}
-		ret = iaxxx_set_proc_mem_on_off_ctrl(priv, enable);
-		if (ret) {
-			dev_err(priv->dev, "set proc mem off failed\n");
-			return ret;
-		}
 
 		if (port_id == PDM_PORTD) {
 			regmap_write(priv->regmap,
@@ -487,6 +482,12 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			regmap_write(priv->regmap,
 					IAXXX_PAD_CTRL_PORTB_DI_ADDR,
 					IAXXX_PAD_CTRL_PORTB_DI_LOW_PWR);
+		}
+
+		ret = iaxxx_power_down_core_mem(priv, IAXXX_SSP_ID);
+		if (ret) {
+			dev_err(priv->dev, "set proc mem off failed\n");
+			return ret;
 		}
 	}
 

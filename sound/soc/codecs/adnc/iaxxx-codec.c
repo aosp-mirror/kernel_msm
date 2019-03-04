@@ -101,7 +101,7 @@ struct iaxxx_codec_priv {
 	bool port_pcm_setup[IAXXX_MAX_PORTS];
 	bool plugin_blk_en[32];
 	bool stream_en[32];
-	bool core_boot_status[IAXXX_PROC_ID_NUM];
+	u32 core_boot_status[IAXXX_PROC_ID_NUM];
 	bool sensor_en[IAXXX_MAX_SENSOR];
 	u32 op_channels_active;
 	/* pdm mic enable flags*/
@@ -2079,6 +2079,15 @@ static const struct soc_enum iaxxx_route_status_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(iaxxx_route_status_texts),
 			iaxxx_route_status_texts);
 
+static const char * const iaxxx_core_mem_ctrl_texts[] = {
+	"None", "CoreMemOff", "CoreMemOn",
+	"CoreOffMemRetnOn", "CoreOnMemOutOffRetn"
+};
+
+static const struct soc_enum iaxxx_core_mem_ctrl_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(iaxxx_core_mem_ctrl_texts),
+					iaxxx_core_mem_ctrl_texts);
+
 static int iaxxx_get_pdm_bclk(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
@@ -2231,13 +2240,43 @@ static int iaxxx_put_core_boot_##proc_name( \
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev); \
 	u32 value = ucontrol->value.enumerated.item[0]; \
 	int ret = 0; \
-	dev_dbg(dev, "enter %s connection\n", __func__); \
+	dev_dbg(codec->dev, \
+		"enter %s connection val: %u core_mask: %u\n", \
+		__func__, value, core_mask); \
 	if (iaxxx->core_boot_status[core_mask] == value) \
 		return ret; \
-	ret = iaxxx_set_proc_mem_on_off_ctrl(priv, value); \
-	if (ret) { \
-		dev_err(dev, "set proc mem on off failed\n"); \
-		return ret; \
+	if (value == 2) { \
+		ret = iaxxx_power_up_core_mem(priv, core_mask); \
+		if (ret) { \
+			dev_err(priv->dev, \
+				"%s() Failed core(%d) & mem power up\n", \
+				__func__, core_mask); \
+			return ret; \
+		} \
+	} else if (value == 1) { \
+		ret = iaxxx_power_down_core_mem(priv, core_mask); \
+		if (ret) { \
+			dev_err(priv->dev, \
+				"%s() Failed core(%d) & mem power down\n", \
+				__func__, core_mask); \
+			return ret; \
+		} \
+	} else if (value == 3) { \
+		ret = iaxxx_power_down_core_mem_in_retn(priv, core_mask); \
+		if (ret) { \
+			dev_err(priv->dev, \
+				"%s() Failed core(%d) off & mem in retn\n", \
+				__func__, core_mask); \
+			return ret; \
+		} \
+	} else if (value == 4) { \
+		ret = iaxxx_power_up_core_mem_on(priv, core_mask); \
+		if (ret) { \
+			dev_err(priv->dev, \
+				"%s() Failed core(%d) on mem out off retn\n", \
+				__func__, core_mask); \
+			return ret; \
+		} \
 	} \
 	iaxxx->core_boot_status[core_mask] = value; \
 	return ret; \
@@ -5880,13 +5919,13 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	SOC_SINGLE_BOOL_EXT("Update Block2 Req", 0,
 		iaxxx_get_update_block2, iaxxx_put_update_block2),
 
-	SOC_SINGLE_BOOL_EXT("SSP Core Boot", 0,
+	SOC_ENUM_EXT("SSP Core Boot", iaxxx_core_mem_ctrl_enum,
 		       iaxxx_get_core_boot_ssp,
 		       iaxxx_put_core_boot_ssp),
-	SOC_SINGLE_BOOL_EXT("DMX Core Boot", 0,
+	SOC_ENUM_EXT("DMX Core Boot", iaxxx_core_mem_ctrl_enum,
 		       iaxxx_get_core_boot_dmx,
 		       iaxxx_put_core_boot_dmx),
-	SOC_SINGLE_BOOL_EXT("HMD Core Boot", 0,
+	SOC_ENUM_EXT("HMD Core Boot", iaxxx_core_mem_ctrl_enum,
 		       iaxxx_get_core_boot_hmd,
 		       iaxxx_put_core_boot_hmd),
 
