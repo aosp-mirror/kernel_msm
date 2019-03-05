@@ -47,36 +47,30 @@ static struct ab_state_context *ab_sm_ctx;
  * Index 1 - B0 clk frequencies
  */
 static u64 blk_ipu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_0_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_0_1] = { 50000000,  50000000  },
-	[BLOCK_STATE_0_2] = { 220000000, 271800000 },
-	[BLOCK_STATE_0_3] = { 330000000, 408000000 },
-	[BLOCK_STATE_0_4] = { 440000000, 543600000 },
-	[BLOCK_STATE_0_5] = { 549600000, 680000000 },
-	[BLOCK_STATE_0_6] = { 609600000, 849600000 },
-	[BLOCK_STATE_1_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_1_1] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_1_2] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_2_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_3_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_300] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_301] = { 50000000,  50000000  },
+	[BLOCK_STATE_302] = { 220000000, 271800000 },
+	[BLOCK_STATE_303] = { 330000000, 408000000 },
+	[BLOCK_STATE_304] = { 440000000, 543600000 },
+	[BLOCK_STATE_305] = { 549600000, 680000000 },
+	[BLOCK_STATE_200] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_100] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_0]   = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 };
 
 /* Index 0 - A0 clk frequencies
  * Index 1 - B0 clk frequencies
  */
 static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_0_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_0_1] = { 50000000,  50000000   },
-	[BLOCK_STATE_0_2] = { 306400000, 316000000  },
-	[BLOCK_STATE_0_3] = { 459600000, 474000000  },
-	[BLOCK_STATE_0_4] = { 612800000, 632000000  },
-	[BLOCK_STATE_0_5] = { 765600000, 789600000  },
-	[BLOCK_STATE_0_6] = { 961600000, 1000000000 },
-	[BLOCK_STATE_1_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_1_1] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_1_2] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_2_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_3_0] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_300] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_301] = { 50000000,  50000000   },
+	[BLOCK_STATE_302] = { 306400000, 316000000  },
+	[BLOCK_STATE_303] = { 459600000, 474000000  },
+	[BLOCK_STATE_304] = { 612800000, 632000000  },
+	[BLOCK_STATE_305] = { 765600000, 789600000  },
+	[BLOCK_STATE_200] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_100] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	[BLOCK_STATE_0]   = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 };
 
 #define BLK_(num, state, sub, pmu, rail, v, clk, freq, pwr, used, tiles, dr) \
@@ -96,84 +90,76 @@ static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
 	}
 
 static struct block_property ipu_property_table[] = {
-	BLK_(0_0, Normal, Ready,      0,  on,  0_75, on,  0, 14, 0,  0, 0),
-	BLK_(0_1, Normal, AonCompute, 0,  on,  0_75, on,  0, 2,  2,  0, 0),
-	BLK_(0_2, Normal, MinCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_3, Normal, LowCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_4, Normal, MidCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_5, Normal, MaxCompute, 0,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(0_6, Boost,  MaxCompute, 0,  on,  0_85, on,  0, 14, 14, 0, 0),
-	BLK_(1_0, Normal, PowerGated, 1,  on,  0_75, off, 0, 0,  0,  0, 0),
-	BLK_(1_1, Boost,  PowerGated, 1,  on,  0_85, off, 0, 0,  0,  0, 0),
-	BLK_(1_2, Normal, Sleep,      1,  on,  0_75, off, 0, 0,  0,  0, 0),
-	BLK_(2_0, Disabled, DeepSleep, 2, off, 0_0,  off, 0, 0,  0,  0, 0),
-	BLK_(3_0, Disabled, NoRail,    3, off, 0_0,  off, 0, 0,  0,  0, 0),
+	BLK_(0,   Disabled,  NoRail,    0, off, 0_0, off, 0, 0,  0,  0, 0),
+	BLK_(100, DeepSleep, DeepSleep, 1, off, 0_0, off, 0, 0,  0,  0, 0),
+	BLK_(200, Sleep,  Sleep,      2,  on,  0_75, off, 0, 0,  0,  0, 0),
+	BLK_(300, Normal, Ready,      3,  on,  0_75, on,  0, 14, 0,  0, 0),
+	BLK_(301, Normal, AonCompute, 3,  on,  0_75, on,  0, 2,  2,  0, 0),
+	BLK_(302, Normal, MinCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(303, Normal, LowCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(304, Normal, MidCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(305, Normal, MaxCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
 };
 
 static struct block_property tpu_property_table[] = {
-	BLK_(0_0, Normal, Ready,      0,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_1, Normal, AonCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_2, Normal, MinCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_3, Normal, LowCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_4, Normal, MidCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_5, Normal, MaxCompute, 0,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(0_6, Boost,  MaxCompute, 0,  on,  0_85, on,  0, 0, 0, 16, 0),
-	BLK_(1_0, Normal, PowerGated, 1,  on,  0_75, off, 0, 0, 0, 0,  0),
-	BLK_(1_1, Boost,  PowerGated, 1,  on,  0_85, off, 0, 0, 0, 0,  0),
-	BLK_(1_2, Normal, Sleep,      1,  on,  0_75, off, 0, 0, 0, 0,  0),
-	BLK_(2_0, Disabled, DeepSleep, 2, off, 0_0,  off, 0, 0, 0, 0,  0),
-	BLK_(3_0, Disabled, NoRail,    3, off, 0_0,  off, 0, 0, 0, 0,  0),
+	BLK_(0,   Disabled,  NoRail,    0, off, 0_0, off, 0, 0, 0, 0,  0),
+	BLK_(100, DeepSleep, DeepSleep, 1, off, 0_0, off, 0, 0, 0, 0,  0),
+	BLK_(200, Sleep,  Sleep,      2,  on,  0_75, off, 0, 0, 0, 0,  0),
+	BLK_(300, Normal, Ready,      3,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(301, Normal, AonCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(302, Normal, MinCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(303, Normal, LowCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(304, Normal, MidCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(305, Normal, MaxCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
 };
 
 static struct block_property dram_property_table[] = {
-	BLK_(0_0, PowerUp,   Standby,  0, on, 0_60, off, 1867, 0, 0, 0, 3733),
-	BLK_(0_1, PowerUp,   AonTran,  0, on, 0_60, on,  934,  0, 0, 0, 1867),
-	BLK_(0_2, PowerUp, HalfMidTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
-	BLK_(0_3, PowerUp, HalfMaxTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
-	BLK_(0_4, PowerUp,   LowTran,   0, on, 0_60, on, 1200, 0, 0, 0, 2400),
-	BLK_(0_5, PowerUp,   MidTran,   0, on, 0_60, on, 1600, 0, 0, 0, 3200),
-	BLK_(0_6, PowerUp,   MaxTran,   0, on, 0_60, on, 1867, 0, 0, 0, 3733),
-	BLK_(1_0, PowerDown, ClockOff, 0, on, 0_60, off, 1867, 0, 0, 0, 3733),
-	BLK_(1_1, PowerDown, ClockOn,   0, on, 0_60, on, 1867, 0, 0, 0, 3733),
-	BLK_(2_0, Retention, SelfRef,   0, off, 0_0, off, 0,   0, 0, 0, 0),
-	BLK_(2_1, Retention, Suspend,   0, off, 0_0, off, 0,   0, 0, 0, 0),
-	BLK_(3_0, Disabled,  NoRail,    0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(0, Disabled,    NoRail,    0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(100, Retention, Suspend,   0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(101, Retention, SelfRef,   0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(300, PowerUp,   AonTran,  0, on, 0_60, on,  934,  0, 0, 0, 1867),
+	BLK_(301, PowerUp, HalfMidTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
+	BLK_(302, PowerUp, HalfMaxTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
+	BLK_(303, PowerUp,   LowTran,   0, on, 0_60, on, 1200, 0, 0, 0, 2400),
+	BLK_(304, PowerUp,   MidTran,   0, on, 0_60, on, 1600, 0, 0, 0, 3200),
+	BLK_(305, PowerUp,   MaxTran,   0, on, 0_60, on, 1867, 0, 0, 0, 3733),
 };
 
 static struct block_property mif_property_table[] = {
-	BLK_(0_0, Normal,   Ready,       0, on, 0_85, off, 933, 0, 0, 0, 0),
-	BLK_(0_1, Normal,   AonTran,     0, on, 0_85, on,  233, 0, 0, 0, 0),
-	BLK_(0_2, Normal,   HalfMidTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
-	BLK_(0_3, Normal,   HalfMaxTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
-	BLK_(0_4, Normal,   LowTran,     0, on, 0_85, on,  300, 0, 0, 0, 0),
-	BLK_(0_5, Normal,   MidTran,     0, on, 0_85, on,  400, 0, 0, 0, 0),
-	BLK_(0_6, Normal,   MaxTran,     0, on, 0_85, on,  467, 0, 0, 0, 0),
-	BLK_(3_0, Disabled, NoRail,      0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(0,   Disabled, NoRail,      0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(100, Retention, Standby,    0, on, 0_85, off, 0,   0, 0, 0, 0),
+	BLK_(300, Normal,   AonTran,     0, on, 0_85, on,  233, 0, 0, 0, 0),
+	BLK_(301, Normal,   HalfMidTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
+	BLK_(302, Normal,   HalfMaxTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
+	BLK_(303, Normal,   LowTran,     0, on, 0_85, on,  300, 0, 0, 0, 0),
+	BLK_(304, Normal,   MidTran,     0, on, 0_85, on,  400, 0, 0, 0, 0),
+	BLK_(305, Normal,   MaxTran,     0, on, 0_85, on,  467, 0, 0, 0, 0),
 };
 
 static struct block_property fsys_property_table[] = {
-	BLK_(0_0, ElectricalIdle, L0s, 0, on,  0_85, off, 4000,  0, 0, 0, 3),
+	BLK_(0, Disabled,         L3,  0, off, 0_0,  off, 0,     0, 0, 0, 0),
+	BLK_(100, DeepSleep,      L2,  0, on,  0_85, on,  0,     0, 0, 0, 0),
+	BLK_(200, ElectricalIdle, L1,  0, on,  0_85, on,  4000,  0, 0, 0, 0),
+	BLK_(201, ElectricalIdle, L1.1, 0, on, 0_85, on,  0,     0, 0, 0, 0),
+	BLK_(202, ElectricalIdle, L1.2, 0, on, 0_85, on,  0,     0, 0, 0, 0),
 	/* GEN1L0 */
-	BLK_(0_1, PowerUp,        L0,  0, on,  0_85, on,  1250,  0, 0, 0, 1),
+	BLK_(301, Normal,        L0,  0, on,  0_85, on,  1250,  0, 0, 0, 1),
 	/* GEN2L0 */
-	BLK_(0_2, PowerUp,        L0,  0, on,  0_85, on,  2500,  0, 0, 0, 2),
+	BLK_(302, Normal,        L0,  0, on,  0_85, on,  2500,  0, 0, 0, 2),
 	/* GEN3L0 */
-	BLK_(0_3, PowerUp,        L0,  0, on,  0_85, on,  4000,  0, 0, 0, 3),
+	BLK_(303, Normal,        L0,  0, on,  0_85, on,  4000,  0, 0, 0, 3),
 	/* GEN3L1.2 */
-	BLK_(0_4, PowerUp,        L1.2, 0, on, 0_85, on,  4000,  0, 0, 0, 3),
-	BLK_(1_0, ElectricalIdle, L1,  0, on,  0_85, on,  4000,  0, 0, 0, 0),
-	BLK_(1_1, ElectricalIdle, L1.1, 0, on, 0_85, on,  0,     0, 0, 0, 0),
-	BLK_(1_2, ElectricalIdle, L1.2, 0, on, 0_85, on,  0,     0, 0, 0, 0),
-	BLK_(2_0, Hibernate,      L2,  0, on,  0_85, on,  0,     0, 0, 0, 0),
-	BLK_(3_0, Disabled,       L3,  0, off, 0_0,  off, 0,     0, 0, 0, 0),
+	BLK_(304, Normal,        L1.1, 0, on, 0_85, on,  4000,  0, 0, 0, 3),
 };
 
-/* TODO: (b/124472417) set clock rate to 933.12*/
 static struct block_property aon_property_table[] = {
-	BLK_(0_0, PowerUp,  WFI,     0, on,  0_85, off, 921.6, 0, 0, 0, 0),
-	BLK_(0_1, PowerUp,  Boot,    0, on,  0_85, on,  19.2,  0, 0, 0, 0),
-	BLK_(0_2, PowerUp,  Compute, 0, on,  0_85, on,  921.6, 0, 0, 0, 0),
-	BLK_(3_0, Disabled, NoRail,  0, off, 0_0,  off, 19.2,  0, 0, 0, 0),
+	BLK_(0, Disabled, NoRail,  0, off, 0_0,  off, 0,     0, 0, 0, 0),
+	BLK_(300, Normal,  Min,    0, on,  0_85, on,  19.2,  0, 0, 0, 0),
+/* TODO: (b/124208417) set clock rate to 93.312 */
+	BLK_(301, Normal,  Low,    0, on,  0_85, on,  921.6, 0, 0, 0, 0),
+	BLK_(302, Normal,  Mid,    0, on,  0_85, on,  921.6, 0, 0, 0, 0),
+/* TODO: (b/124472417) set clock rate to 933.12 */
+	BLK_(303, Normal,  Max,    0, on,  0_85, on,  921.6, 0, 0, 0, 0),
 };
 
 #define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon) \
@@ -189,34 +175,43 @@ static struct block_property aon_property_table[] = {
 
 static struct chip_to_block_map chip_state_map[] = {
 	/*                     CS   IPU  TPU DRAM  MIF FSYS  AON */
-	CHIP_TO_BLOCK_MAP_INIT(0_0, 0_0, 0_0, 0_0, 0_0, 0_0, 0_1),
-	CHIP_TO_BLOCK_MAP_INIT(0_1, 0_1, 0_1, 0_1, 0_1, 0_1, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_2, 0_2, 0_2, 0_3, 0_3, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_3, 0_3, 0_3, 0_4, 0_4, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_4, 0_4, 0_4, 0_5, 0_5, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_5, 0_5, 0_2, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_6, 0_2, 0_5, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_7, 0_5, 0_3, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_8, 0_3, 0_5, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(0_9, 0_5, 0_5, 0_6, 0_6, 0_4, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(1_0, 0_0, 1_0, 0_0, 0_0, 0_0, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(1_1, 0_1, 1_0, 0_1, 0_1, 0_1, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(1_2, 0_2, 1_0, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(1_3, 0_3, 1_0, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(1_4, 0_4, 1_0, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(1_5, 0_5, 1_0, 0_6, 0_6, 0_4, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(1_6, 0_6, 1_1, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(2_0, 1_0, 0_0, 0_0, 0_0, 0_0, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(2_1, 1_0, 0_1, 0_6, 0_1, 0_1, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(2_2, 1_0, 0_2, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(2_3, 1_0, 0_3, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(2_4, 1_0, 0_4, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(2_5, 1_0, 0_5, 0_6, 0_6, 0_4, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(2_6, 1_1, 0_6, 0_6, 0_6, 0_3, 0_2),
-	CHIP_TO_BLOCK_MAP_INIT(3_0, 1_2, 1_2, 2_0, 0_0, 1_2, 0_1),
-	CHIP_TO_BLOCK_MAP_INIT(4_0, 2_0, 2_0, 2_0, 0_0, 1_2, 0_1),
-	CHIP_TO_BLOCK_MAP_INIT(5_0, 3_0, 3_0, 2_1, 3_0, 3_0, 3_0),
-	CHIP_TO_BLOCK_MAP_INIT(6_0, 3_0, 3_0, 3_0, 3_0, 3_0, 3_0),
+	/* Off */
+	CHIP_TO_BLOCK_MAP_INIT(0,    0,   0,   0,   0,   0,   0),
+	/* Suspend */
+	CHIP_TO_BLOCK_MAP_INIT(100,  0,   0,  100,  0,   0,   0),
+	/* Deep Sleep */
+	CHIP_TO_BLOCK_MAP_INIT(200, 100, 100, 101, 100, 202, 300),
+	/* Sleep */
+	CHIP_TO_BLOCK_MAP_INIT(300, 200, 200, 101, 100, 202, 300),
+
+	/* Active */
+	CHIP_TO_BLOCK_MAP_INIT(400, 300, 300, 300, 300, 304, 302),
+	CHIP_TO_BLOCK_MAP_INIT(401, 301, 301, 300, 300, 304, 302),
+	CHIP_TO_BLOCK_MAP_INIT(402, 302, 302, 302, 302, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(403, 303, 303, 303, 303, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(404, 304, 304, 304, 304, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(405, 305, 302, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(406, 302, 305, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(407, 305, 303, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(408, 303, 305, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(409, 305, 305, 305, 305, 304, 303),
+
+
+	/* IPU Only */
+	CHIP_TO_BLOCK_MAP_INIT(500, 300, 200, 300, 300, 304, 302),
+	CHIP_TO_BLOCK_MAP_INIT(501, 301, 200, 300, 300, 304, 302),
+	CHIP_TO_BLOCK_MAP_INIT(502, 302, 200, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(503, 303, 200, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(504, 304, 200, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(505, 305, 200, 305, 305, 304, 303),
+
+	/* TPU Only */
+	CHIP_TO_BLOCK_MAP_INIT(600, 200, 300, 300, 300, 304, 302),
+	CHIP_TO_BLOCK_MAP_INIT(601, 200, 301, 300, 300, 304, 302),
+	CHIP_TO_BLOCK_MAP_INIT(602, 200, 302, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(603, 200, 303, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(604, 200, 304, 305, 305, 304, 303),
+	CHIP_TO_BLOCK_MAP_INIT(605, 200, 305, 305, 305, 304, 303),
 };
 
 static int ab_update_block_prop_table(struct new_block_props *props,
