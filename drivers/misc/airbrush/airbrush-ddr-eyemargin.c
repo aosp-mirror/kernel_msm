@@ -243,8 +243,7 @@ static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 							offsetIdx++) {
 			ddrphy_set_read_offset(offsetIdx);
 
-			if (!ab_ddr_read_write_test(ddr_ctx->ab_state_ctx,
-						    eye_data))
+			if (!ab_ddr_read_write_test(ddr_ctx, eye_data))
 				read_eye[vrefIdx][result_idx] = 'o';
 			else
 				read_eye[vrefIdx][result_idx] = '.';
@@ -287,8 +286,7 @@ static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 							offsetIdx++) {
 			ddrphy_set_write_offset(offsetIdx);
 
-			if (!ab_ddr_read_write_test(ddr_ctx->ab_state_ctx,
-						    eye_data))
+			if (!ab_ddr_read_write_test(ddr_ctx, eye_data))
 				write_eye[vrefIdx][result_idx] = 'o';
 			else
 				write_eye[vrefIdx][result_idx] = '.';
