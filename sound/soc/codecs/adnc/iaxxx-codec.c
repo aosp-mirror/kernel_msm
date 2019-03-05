@@ -6574,7 +6574,6 @@ static int iaxxx_pcm_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	return 0;
 }
 
-
 static int iaxxx_set_i2s_cfg(struct snd_soc_dai *dai, u32 sampling_rate,
 						bool is_pseudo, int id)
 {
@@ -7389,6 +7388,13 @@ static int iaxxx_codec_probe(struct snd_soc_codec *codec)
 	return 0;
 }
 
+static int iaxxx_codec_set_sysclk(struct snd_soc_codec *codec,
+				int clk_id, int source, unsigned int freq,
+				int dir)
+{
+	return 0;
+}
+
 static int iaxxx_codec_remove(struct snd_soc_codec *codec)
 {
 	dev_dbg(codec->dev, "%s\n", __func__);
@@ -7402,6 +7408,7 @@ static struct regmap *iaxxx_get_regmap(struct device *dev)
 
 static struct snd_soc_codec_driver soc_codec_iaxxx = {
 	.probe = iaxxx_codec_probe,
+	.set_sysclk = iaxxx_codec_set_sysclk,
 	.remove = iaxxx_codec_remove,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0))
 	.get_regmap = iaxxx_get_regmap,
