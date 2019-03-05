@@ -39,6 +39,7 @@ struct st21nfc_platform_data {
 	unsigned int reset_gpio;
 #ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
 	unsigned int clkreq_gpio;
+	uint8_t pinctrl_en;
 #endif
 	unsigned int polarity_mode;
 };

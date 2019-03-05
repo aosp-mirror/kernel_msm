@@ -64,6 +64,7 @@ struct st21nfc_platform {
 	unsigned int ena_gpio;
 #ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
 	unsigned int clkreq_gpio;
+	uint8_t pinctrl_en;
 #endif
 	unsigned int polarity_mode;
 };
@@ -559,6 +560,11 @@ static int nfc_parse_dt(struct device *dev, struct st21nfc_platform_data *pdata)
 	if ((!gpio_is_valid(pdata->clkreq_gpio))) {
 		pr_err("[dsc]%s: [OPTIONAL] fail to get clkreq_gpio\n", __func__);
 	}
+	pdata->pinctrl_en = 1;
+	if (!of_property_read_bool(np,"st,clk_pinctrl")) {
+		pr_info("[dsc]%d:[OPTIONAL] clk_pinctrl not set\n",__func__);
+		pdata->pinctrl_en = 0;
+	}
 #endif
 
 	pdata->polarity_mode = IRQF_TRIGGER_RISING;
@@ -632,6 +638,7 @@ static int st21nfc_probe(struct i2c_client *client,
 	st21nfc_dev->platform_data.irq_gpio = platform_data->irq_gpio;
 #ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
 	st21nfc_dev->platform_data.clkreq_gpio = platform_data->clkreq_gpio;
+	st21nfc_dev->platform_data.pinctrl_en = platform_data->pinctrl_en;
 #endif
 	st21nfc_dev->platform_data.ena_gpio = platform_data->ena_gpio;
 	st21nfc_dev->platform_data.reset_gpio = platform_data->reset_gpio;
@@ -719,6 +726,9 @@ static int st21nfc_probe(struct i2c_client *client,
 	st21nfc_disable_irq(st21nfc_dev);
 
 #ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
+	/* check if clock pinctrl already enabled */
+	if (platform_data->pinctrl_en != 0)
+		st21nfc_dev->clk_run = true;
 	ret = st_clock_select(st21nfc_dev);
 	if (ret < 0) {
 		pr_err("%s : st_clock_select failed\n", __FILE__);
