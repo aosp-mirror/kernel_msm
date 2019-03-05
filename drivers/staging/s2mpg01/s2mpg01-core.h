@@ -155,6 +155,8 @@
 #define S2MPG01_INT_LDO3_DVS_END	30
 #define S2MPG01_INT_SMPS1_DVS_END	31
 
+#define S2MPG01_INT_4_RSVD_BITS		0x3F
+
 /* regulator names */
 #define S2MPG01_REGLTR_NAME_SMPS1 "s2mpg01_smps1"
 #define S2MPG01_REGLTR_NAME_SMPS2 "s2mpg01_smps2"

@@ -52,6 +52,8 @@ static void s2mpg01_print_status(struct s2mpg01_core *ddata);
 static int s2mpg01_core_fixup(struct s2mpg01_core *ddata);
 static void s2mpg01_mask_interrupts_all(struct s2mpg01_core *ddata);
 static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata);
+static void s2mpg01_mask_boost_mode_interrupts(struct s2mpg01_core *ddata);
+static void s2mpg01_unmask_boost_mode_interrupts(struct s2mpg01_core *ddata);
 
 static const struct mfd_cell s2mpg01_devs[] = {
 	{
@@ -343,14 +345,24 @@ static int __s2mpg01_set_boost_mode(struct s2mpg01_core *ddata, bool enable)
 
 int s2mpg01_enable_boost(struct s2mpg01_core *ddata)
 {
+	int ret;
+
 	dev_dbg(ddata->dev, "%s: Enabling boost mode\n", __func__);
-	return __s2mpg01_set_boost_mode(ddata, true);
+	s2mpg01_unmask_boost_mode_interrupts(ddata);
+	ret = __s2mpg01_set_boost_mode(ddata, true);
+
+	return ret;
 }
 
 int s2mpg01_disable_boost(struct s2mpg01_core *ddata)
 {
+	int ret;
+
 	dev_dbg(ddata->dev, "%s: Disabling boost mode\n", __func__);
-	return __s2mpg01_set_boost_mode(ddata, false);
+	ret = __s2mpg01_set_boost_mode(ddata, false);
+	s2mpg01_mask_boost_mode_interrupts(ddata);
+
+	return ret;
 }
 
 #define NOTIFY(id, event) s2mpg01_regulator_notify(id, event)
@@ -596,6 +608,13 @@ static irqreturn_t s2mpg01_resetb_irq_handler(int irq, void *cookie)
 		/* read chip status */
 		s2mpg01_print_status(ddata);
 		s2mpg01_core_fixup(ddata);
+		s2mpg01_unmask_interrupts_all(ddata);
+		/*
+		 * Voltage changes at normal mode could also trigger
+		 * boost mode interrupts. Mask the 2 boost mode interrupts
+		 * in normal mode to avoid confusion.
+		 */
+		s2mpg01_mask_boost_mode_interrupts(ddata);
 		complete(&ddata->init_complete);
 	} else {
 		dev_err(ddata->dev, "%s: device reset\n", __func__);
@@ -689,7 +708,18 @@ static void s2mpg01_unmask_interrupts_all(struct s2mpg01_core *ddata)
 	s2mpg01_write_byte(ddata, S2MPG01_REG_INT1M, 0x00);
 	s2mpg01_write_byte(ddata, S2MPG01_REG_INT2M, 0x00);
 	s2mpg01_write_byte(ddata, S2MPG01_REG_INT3M, 0x00);
-	s2mpg01_write_byte(ddata, S2MPG01_REG_INT4M, 0x3F);
+	s2mpg01_write_byte(ddata, S2MPG01_REG_INT4M, S2MPG01_INT_4_RSVD_BITS);
+}
+
+static void s2mpg01_mask_boost_mode_interrupts(struct s2mpg01_core *ddata)
+{
+	s2mpg01_write_byte(ddata, S2MPG01_REG_INT4M, 0xFF);
+}
+
+static void s2mpg01_unmask_boost_mode_interrupts(struct s2mpg01_core *ddata)
+{
+	/* unmask INT4M[7:6] except for the reserved bits */
+	s2mpg01_write_byte(ddata, S2MPG01_REG_INT4M, S2MPG01_INT_4_RSVD_BITS);
 }
 
 static int s2mpg01_probe(struct i2c_client *client,
@@ -820,6 +850,13 @@ static int s2mpg01_probe(struct i2c_client *client,
 	/* enable all interrupts */
 	s2mpg01_clear_interrupts(ddata);
 	s2mpg01_unmask_interrupts_all(ddata);
+
+	/*
+	 * Voltage changes at normal mode could also trigger
+	 * boost mode interrupts. Mask the 2 boost mode interrupts
+	 * in normal mode to avoid confusion.
+	 */
+	s2mpg01_mask_boost_mode_interrupts(ddata);
 
 	ret = devm_request_threaded_irq(dev, pdata->intb_irq, NULL,
 					s2mpg01_intb_irq_handler,
