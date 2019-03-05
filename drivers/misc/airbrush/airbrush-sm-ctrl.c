@@ -45,32 +45,34 @@ static struct ab_state_context *ab_sm_ctx;
 
 /* Index 0 - A0 clk frequencies
  * Index 1 - B0 clk frequencies
+ * Note: The block order here must match the ipu_property_table block order
  */
-static u64 blk_ipu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_300] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_301] = { 50000000,  50000000  },
-	[BLOCK_STATE_302] = { 220000000, 271800000 },
-	[BLOCK_STATE_303] = { 330000000, 408000000 },
-	[BLOCK_STATE_304] = { 440000000, 543600000 },
-	[BLOCK_STATE_305] = { 549600000, 680000000 },
-	[BLOCK_STATE_200] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_100] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_0]   = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+static const u64 blk_ipu_clk_tbl[][2] = {
+	/* BLOCK_STATE_0   */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_100 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_200 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_300 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_301 */ { 50000000,  50000000  },
+	/* BLOCK_STATE_302 */ { 220000000, 271800000 },
+	/* BLOCK_STATE_303 */ { 330000000, 408000000 },
+	/* BLOCK_STATE_304 */ { 440000000, 543600000 },
+	/* BLOCK_STATE_305 */ { 549600000, 680000000 },
 };
 
 /* Index 0 - A0 clk frequencies
  * Index 1 - B0 clk frequencies
+ * Note: The block order here must match the tpu_property_table block order
  */
-static u64 blk_tpu_clk_tbl[NUM_BLOCK_STATES][2] = {
-	[BLOCK_STATE_300] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_301] = { 50000000,  50000000   },
-	[BLOCK_STATE_302] = { 306400000, 316000000  },
-	[BLOCK_STATE_303] = { 459600000, 474000000  },
-	[BLOCK_STATE_304] = { 612800000, 632000000  },
-	[BLOCK_STATE_305] = { 765600000, 789600000  },
-	[BLOCK_STATE_200] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_100] = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	[BLOCK_STATE_0]   = { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+static const u64 blk_tpu_clk_tbl[][2] = {
+	/* BLOCK_STATE_0   */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_100 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_200 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_300 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_301 */ { 50000000,  50000000   },
+	/* BLOCK_STATE_302 */ { 306400000, 316000000  },
+	/* BLOCK_STATE_303 */ { 459600000, 474000000  },
+	/* BLOCK_STATE_304 */ { 612800000, 632000000  },
+	/* BLOCK_STATE_305 */ { 765600000, 789600000  },
 };
 
 #define BLK_(num, state, sub, pmu, rail, v, clk, freq, pwr, used, tiles, dr) \
@@ -524,7 +526,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* PMU settings - Deep Sleep */
 	if (desired_state->pmu == PMU_STATE_DEEP_SLEEP &&
-			last_state->pmu < PMU_STATE_DEEP_SLEEP &&
+			last_state->pmu != PMU_STATE_DEEP_SLEEP &&
 			blk->name == BLK_TPU) {
 		if (pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
@@ -1091,26 +1093,123 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 	return ret;
 }
 
-int ab_sm_set_state(struct ab_state_context *sc, u32 dest_chip_substate_id)
+/* TODO (b/127500645): Remove once old mappings are completely deprecated */
+int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
+{
+	static const u32 remap_table[61] = {
+		[0]  = CHIP_STATE_400,
+		[1]  = CHIP_STATE_401,
+		[2]  = CHIP_STATE_402,
+		[3]  = CHIP_STATE_403,
+		[4]  = CHIP_STATE_404,
+		[5]  = CHIP_STATE_405,
+		[6]  = CHIP_STATE_406,
+		[7]  = CHIP_STATE_407,
+		[8]  = CHIP_STATE_408,
+		[9]  = CHIP_STATE_409,
+		[10] = CHIP_STATE_500,
+		[11] = CHIP_STATE_501,
+		[12] = CHIP_STATE_502,
+		[13] = CHIP_STATE_503,
+		[14] = CHIP_STATE_504,
+		[15] = CHIP_STATE_505,
+		[20] = CHIP_STATE_600,
+		[21] = CHIP_STATE_601,
+		[22] = CHIP_STATE_602,
+		[23] = CHIP_STATE_603,
+		[24] = CHIP_STATE_604,
+		[25] = CHIP_STATE_605,
+		[27] = CHIP_STATE_705,
+		[28] = CHIP_STATE_700,
+		[30] = CHIP_STATE_300,
+		[40] = CHIP_STATE_200,
+		[50] = CHIP_STATE_100,
+		[60] = CHIP_STATE_0,
+	};
+
+	if (old_mapping >= ARRAY_SIZE(remap_table))
+		return -EINVAL;
+
+	*new_mapping = remap_table[old_mapping];
+
+	/* Checking case where input was eg. 34
+	 * Only valid output of 0 is input of 60
+	 */
+	if (*new_mapping == 0 && old_mapping != 60)
+		return -EINVAL;
+
+	return 0;
+
+}
+
+int ab_sm_unmap_state(u32 new_mapping, u32 *old_mapping)
+{
+	switch (new_mapping) {
+	case CHIP_STATE_0:
+		*old_mapping = 60;
+		break;
+	case CHIP_STATE_100:
+		*old_mapping = 50;
+		break;
+	case CHIP_STATE_200:
+		*old_mapping = 40;
+		break;
+	case CHIP_STATE_300:
+		*old_mapping = 30;
+		break;
+	case CHIP_STATE_400 ... CHIP_STATE_409:
+		*old_mapping = (new_mapping - 400);
+		break;
+	case CHIP_STATE_500 ... CHIP_STATE_505:
+		*old_mapping = (new_mapping - 490);
+		break;
+	case CHIP_STATE_600 ... CHIP_STATE_605:
+		*old_mapping = (new_mapping - 580);
+		break;
+	default:
+		pr_err("couldn't unmap %d\n", new_mapping);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+int ab_sm_set_state(struct ab_state_context *sc,
+		u32 dest_chip_substate_id, bool mapped)
 {
 	int ret;
+	u32 mapped_val;
 
 	mutex_lock(&sc->set_state_lock);
-	ret = _ab_sm_set_state(sc, dest_chip_substate_id);
+	if (!mapped) {
+		ret = ab_sm_map_state(dest_chip_substate_id, &mapped_val);
+		if (ret) {
+			mutex_unlock(&sc->set_state_lock);
+			return ret;
+		}
+	} else {
+		mapped_val = dest_chip_substate_id;
+	}
+
+	ret = _ab_sm_set_state(sc, mapped_val);
 	mutex_unlock(&sc->set_state_lock);
 
 	return ret;
 }
 EXPORT_SYMBOL(ab_sm_set_state);
 
-enum chip_state ab_sm_get_state(struct ab_state_context *sc)
+u32 ab_sm_get_state(struct ab_state_context *sc, bool mapped)
 {
-	enum chip_state ret;
+	u32 state;
 
 	mutex_lock(&sc->state_transitioning_lock);
-	ret = sc->curr_chip_substate_id;
+	if (!mapped)
+		ab_sm_unmap_state(sc->curr_chip_substate_id, &state);
+	else
+		state = sc->curr_chip_substate_id;
+
 	mutex_unlock(&sc->state_transitioning_lock);
-	return ret;
+	return state;
 }
 EXPORT_SYMBOL(ab_sm_get_state);
 
@@ -1187,13 +1286,14 @@ static void set_ipu_tpu_clk_freq_table(struct ab_state_context *sc,
 
 	while (blk_idx < sc->blocks[BLK_IPU].nr_block_states) {
 		prop = &sc->blocks[BLK_IPU].block_property_table[blk_idx];
-		prop->clk_frequency = blk_ipu_clk_tbl[prop->id][chip_id];
+		prop->clk_frequency = blk_ipu_clk_tbl[blk_idx][chip_id];
 		blk_idx++;
 	}
+
 	blk_idx = 0;
 	while (blk_idx < sc->blocks[BLK_TPU].nr_block_states) {
 		prop = &sc->blocks[BLK_TPU].block_property_table[blk_idx];
-		prop->clk_frequency = blk_tpu_clk_tbl[prop->id][chip_id];
+		prop->clk_frequency = blk_tpu_clk_tbl[blk_idx][chip_id];
 		blk_idx++;
 	}
 }
@@ -1397,10 +1497,11 @@ static int ab_regulator_listener(struct notifier_block *nb,
 }
 
 static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
-		unsigned long arg)
+		unsigned long arg, bool mapped)
 {
 	int ret;
 	int chip_state;
+	u32 unmapped_val;
 	struct ab_state_context *sc;
 
 	mutex_lock(&sess->sc->async_fifo_lock);
@@ -1411,10 +1512,21 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 		mutex_unlock(&sc->async_fifo_lock);
 		if (sess->first_entry) {
 			sess->first_entry = false;
-			if (copy_to_user((void __user *)arg,
+			if (!mapped) {
+				ret = ab_sm_unmap_state(
+						sc->curr_chip_substate_id,
+						&unmapped_val);
+				if (ret)
+					return ret;
+				if (copy_to_user((void __user *)arg,
+						&unmapped_val,
+						sizeof(unmapped_val)))
+					return -EFAULT;
+			} else if (copy_to_user((void __user *)arg,
 					&sc->curr_chip_substate_id,
-					sizeof(chip_state)))
+					sizeof(sc->curr_chip_substate_id))) {
 				return -EFAULT;
+			}
 
 			reinit_completion(&sc->notify_comp);
 			return 0;
@@ -1437,10 +1549,23 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 	}
 
 	kfifo_out(sc->async_entries, &chip_state, sizeof(chip_state));
-	if (copy_to_user((void __user *)arg,
-			&chip_state, sizeof(chip_state))) {
-		mutex_unlock(&sc->async_fifo_lock);
-		return -EFAULT;
+
+	if (!mapped) {
+		ret = ab_sm_unmap_state(chip_state, &unmapped_val);
+		if (ret)
+			return ret;
+
+		if (copy_to_user((void __user *)arg,
+					&unmapped_val, sizeof(unmapped_val))) {
+			mutex_unlock(&sc->async_fifo_lock);
+			return -EFAULT;
+		}
+	} else {
+		if (copy_to_user((void __user *)arg,
+					&chip_state, sizeof(chip_state))) {
+			mutex_unlock(&sc->async_fifo_lock);
+			return -EFAULT;
+		}
 	}
 
 	sess->first_entry = false;
@@ -1719,9 +1844,10 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		unsigned long arg)
 {
-	long ret;
+	long ret = 0;
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
+	int state;
 
 	ret = ab_sm_misc_ioctl_debug(fp, cmd, arg);
 	if (ret != -EINVAL)
@@ -1730,7 +1856,7 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 	switch (cmd) {
 	case AB_SM_ASYNC_NOTIFY:
 		if (!atomic_cmpxchg(&sc->async_in_use, 0, 1)) {
-			ret = ab_sm_async_notify(sess, arg);
+			ret = ab_sm_async_notify(sess, arg, false);
 			atomic_set(&sc->async_in_use, 0);
 		} else {
 			dev_warn(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
@@ -1739,14 +1865,13 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		break;
 
 	case AB_SM_SET_STATE:
-		ret = ab_sm_set_state(sc, (u32)arg);
+		ret = ab_sm_set_state(sc, arg, false);
 		break;
 
 	case AB_SM_GET_STATE:
-		ret = ab_sm_get_state(sess->sc);
-		if (copy_to_user((void __user *)arg, &ret, sizeof(int)))
+		state = ab_sm_get_state(sess->sc, false);
+		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
 			return -EFAULT;
-		ret = 0;
 		break;
 
 	case AB_SM_ENTER_EL2:

@@ -26,7 +26,7 @@ static int chip_state_set(void *data, u64 val)
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 	int ret;
 
-	ret = ab_sm_set_state(sc, val);
+	ret = ab_sm_set_state(sc, val, false);
 	if (ret < 0)
 		dev_err(sc->dev, "%s: State change failed, ret %d\n",
 				__func__, ret);
@@ -36,8 +36,11 @@ static int chip_state_set(void *data, u64 val)
 
 static int chip_state_get(void *sc, u64 *val)
 {
-	*val = ab_sm_get_state((struct ab_state_context *)sc);
-	return 0;
+	int ret;
+
+	*val = ab_sm_get_state((struct ab_state_context *)sc, false);
+
+	return ret;
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_chip_state, chip_state_get,

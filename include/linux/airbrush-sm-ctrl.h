@@ -140,7 +140,6 @@ enum block_state {
 	BLOCK_STATE_303,
 	BLOCK_STATE_304,
 	BLOCK_STATE_305,
-	NUM_BLOCK_STATES,
 };
 
 enum stat_state {
@@ -703,8 +702,11 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev);
 void ab_sm_exit(struct platform_device *pdev);
 int ab_sm_register_callback(struct ab_state_context *sc,
 				ab_sm_callback_t cb, void *cookie);
-int ab_sm_set_state(struct ab_state_context *sc, u32 to_chip_substate_id);
-enum chip_state ab_sm_get_state(struct ab_state_context *sc);
+int ab_sm_set_state(struct ab_state_context *sc,
+	u32 to_chip_substate_id, bool mapped);
+u32 ab_sm_get_state(struct ab_state_context *sc, bool mapped);
+int ab_sm_map_state(u32 old_mapping, u32 *new_mapping);
+int ab_sm_unmap_state(u32 new_mapping, u32 *old_mapping);
 
 int ab_bootsequence(struct ab_state_context *ab_ctx);
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);

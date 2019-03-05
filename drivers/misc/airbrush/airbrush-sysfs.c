@@ -19,10 +19,13 @@ static ssize_t chip_state_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
+	u32 val;
 	struct ab_state_context *sc =
 		(struct ab_state_context *)dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", ab_sm_get_state(sc));
+	val = ab_sm_get_state((struct ab_state_context *)sc, false);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", val);
 }
 
 static ssize_t chip_state_store(struct device *dev,
@@ -40,7 +43,7 @@ static ssize_t chip_state_store(struct device *dev,
 		return -EIO;
 	}
 
-	ret = ab_sm_set_state(sc, val);
+	ret = ab_sm_set_state(sc, val, false);
 	if (ret < 0) {
 		dev_err(sc->dev, "%s: State change failed, ret %d\n",
 				__func__, ret);
