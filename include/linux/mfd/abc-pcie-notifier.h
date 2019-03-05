@@ -26,20 +26,39 @@
  *
  * PCIE_LINK_POST_ENABLE - called when PCIe link is enabled; also
  *     called after PCIe is unmapped from EL2 and back to EL1 control.
+ *     This indicates that PCIe is now available.
+ *     This also indicates a PCIE_LINK_ERROR condition is naturally
+ *     cleared, if it occurred.
  *
  * PCIE_LINK_PRE_DISABLE - called when PCIe link will disable; also
  *     called before PCIe will be unmapped from EL1 and entering EL2.
+ *     This indicates that PCIe is still available, but will become
+ *     unavailable.
+ *     As a temporary measure, this may also be called together with
+ *     PCIE_LINK_ERROR during the driver conversion.
+ *     TODO(b/124536826): separate PCIE_LINK_ERROR from this.
  *
  * PCIE_LINK_ENTER_EL2 - called before PCIe will be unmapped from EL1
  *     and entering EL2.
  *
- *  PCIE_LINK_EXIT_EL2 - called after PCIe is unmapped from EL2 and
+ * PCIE_LINK_EXIT_EL2 - called after PCIe is unmapped from EL2 and
  *     back to EL1 control.
+ *
+ * PCIE_LINK_ERROR - called when an unexpected link error occurs.
+ *     This indicates that PCIe is currently _unavailable_.
+ *     Upon receiving this event, subscribers should reset their
+ *     software states as needed, but should not access registers over
+ *     PCIe.
+ *     Examples are PCIe link down or regulator fatal errors.
+ *     As a temporary measure, this is called together with
+ *     PCIE_LINK_PRE_DISABLE during the driver conversion.
+ *     TODO(b/124536826): separate this from PCIE_LINK_PRE_DISABLE.
  */
 #define ABC_PCIE_LINK_POST_ENABLE	BIT(0)
 #define ABC_PCIE_LINK_PRE_DISABLE	BIT(1)
 #define ABC_PCIE_LINK_ENTER_EL2		BIT(2)
 #define ABC_PCIE_LINK_EXIT_EL2		BIT(3)
+#define ABC_PCIE_LINK_ERROR			BIT(4)
 
 int abc_register_pcie_link_blocking_event(struct notifier_block *nb);
 int abc_unregister_pcie_link_blocking_event(struct notifier_block *nb);
