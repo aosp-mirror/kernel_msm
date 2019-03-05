@@ -160,7 +160,7 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 		break;
 	case DRAM:
 		sc->ldo2_state = false;
-		if (to_block_substate_id == BLOCK_STATE_3_0) {
+		if (to_block_substate_id == BLOCK_STATE_0) {
 			sc->ldo1_state = false;
 			sc->smps3_state = false;
 		}

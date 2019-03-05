@@ -122,7 +122,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		return ret;
 	}
 
-	if (ab_ctx->curr_chip_substate_id == CHIP_STATE_5_0)
+	if (ab_ctx->curr_chip_substate_id == CHIP_STATE_100)
 		ab_gpio_enable_ddr_sr(ab_ctx);
 
 	if (ab_ctx->alternate_boot)

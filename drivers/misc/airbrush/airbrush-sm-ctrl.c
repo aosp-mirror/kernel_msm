@@ -37,7 +37,7 @@
 
 #define AB_MAX_TRANSITION_TIME_MS	10000
 #define AB_KFIFO_ENTRY_SIZE	32
-#define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 10)
+#define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 100)
 
 static struct ab_state_context *ab_sm_ctx;
 
@@ -550,22 +550,22 @@ static bool is_valid_transition(u32 curr_chip_substate_id,
 				u32 to_chip_substate_id)
 {
 	switch (curr_chip_substate_id) {
-	case CHIP_STATE_4_0:
-		if (to_chip_substate_id == CHIP_STATE_3_0)
+	case CHIP_STATE_200:
+		if (to_chip_substate_id == CHIP_STATE_300)
 			return false;
 		break;
-	case CHIP_STATE_5_0:
-		if (to_chip_substate_id == CHIP_STATE_4_0)
+	case CHIP_STATE_100:
+		if (to_chip_substate_id == CHIP_STATE_200)
 			return false;
-		if (to_chip_substate_id == CHIP_STATE_3_0)
+		if (to_chip_substate_id == CHIP_STATE_300)
 			return false;
 		break;
-	case CHIP_STATE_6_0:
-		if (to_chip_substate_id == CHIP_STATE_5_0)
+	case CHIP_STATE_0:
+		if (to_chip_substate_id == CHIP_STATE_100)
 			return false;
-		if (to_chip_substate_id == CHIP_STATE_4_0)
+		if (to_chip_substate_id == CHIP_STATE_200)
 			return false;
-		if (to_chip_substate_id == CHIP_STATE_3_0)
+		if (to_chip_substate_id == CHIP_STATE_300)
 			return false;
 		break;
 	}
@@ -591,11 +591,13 @@ static int disable_ref_clk(struct device *dev)
 		CHIP_STATE_ ## cs3, \
 	}
 
+#define THROTTLER_MAP_PAD(x) THROTTLER_MAP_INIT(x, x, x, x)
+
 static const u32 chip_substate_throttler_map
 		[][AIRBRUSH_COOLING_STATE_MAX + 1] = {
-	THROTTLER_MAP_INIT(0_9, 0_4, 0_3, 0_2),
-	THROTTLER_MAP_INIT(1_6, 1_4, 1_3, 1_2),
-	THROTTLER_MAP_INIT(2_6, 2_4, 2_3, 2_2),
+	[4] = THROTTLER_MAP_INIT(409, 404, 403, 402),
+	[5] = THROTTLER_MAP_INIT(505, 504, 503, 502),
+	[6] = THROTTLER_MAP_INIT(605, 604, 603, 602),
 };
 
 static u32 ab_sm_throttled_chip_substate_id(
@@ -604,7 +606,7 @@ static u32 ab_sm_throttled_chip_substate_id(
 	u32 substate_category;
 	u32 throttler_substate_id;
 
-	if (chip_substate_id >= CHIP_STATE_3_0)
+	if (chip_substate_id <= CHIP_STATE_300)
 		return chip_substate_id;
 
 	substate_category = to_chip_substate_category(chip_substate_id);
@@ -616,18 +618,17 @@ static u32 ab_sm_throttled_chip_substate_id(
 const enum stat_state ab_chip_state_to_stat_state(
 		enum chip_state id)
 {
-	if ((id >= CHIP_STATE_0_0)
-			&& (id < CHIP_STATE_3_0)) {
+	if (id >= CHIP_STATE_400)
 		return STAT_STATE_ACTIVE;
-	}
+
 	switch (id) {
-	case CHIP_STATE_3_0:
+	case CHIP_STATE_300:
 		return STAT_STATE_SLEEP;
-	case CHIP_STATE_4_0:
+	case CHIP_STATE_200:
 		return STAT_STATE_DEEP_SLEEP;
-	case CHIP_STATE_5_0:
+	case CHIP_STATE_100:
 		return STAT_STATE_SUSPEND;
-	case CHIP_STATE_6_0:
+	case CHIP_STATE_0:
 		return STAT_STATE_OFF;
 	default:
 		/* should never hit this code path */
@@ -730,12 +731,12 @@ static struct chip_to_block_map *ab_sm_get_block_map(
 }
 
 /* Attempt to get airbrush into a known state
- * Ignore errors and set to CHIP_STATE_6_0 (off)
+ * Ignore errors and set to CHIP_STATE_0 (off)
  * Caller must hold sc->state_transitioning_lock
  */
 static void ab_cleanup_state(struct ab_state_context *sc)
 {
-	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_6_0);
+	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_0);
 
 	dev_err(sc->dev, "Cleaning AB state\n");
 	blk_set_state(sc, &(sc->blocks[BLK_IPU]), map->ipu_block_state_id);
@@ -765,7 +766,7 @@ static void ab_cleanup_state(struct ab_state_context *sc)
 	ab_pmic_off(sc);
 	dev_err(sc->dev, "AB PMIC off\n");
 
-	sc->curr_chip_substate_id = CHIP_STATE_6_0;
+	sc->curr_chip_substate_id = CHIP_STATE_0;
 }
 
 static int ab_sm_update_chip_state(struct ab_state_context *sc)
@@ -808,9 +809,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	sc->curr_chip_substate_id = to_chip_substate_id;
 	ab_sm_start_ts(sc, AB_SM_TS_FULL);
 
-	if ((prev_state == CHIP_STATE_6_0 ||
-			prev_state == CHIP_STATE_5_0) &&
-			to_chip_substate_id < CHIP_STATE_3_0) {
+	if ((prev_state == CHIP_STATE_0 ||
+			prev_state == CHIP_STATE_100) &&
+			to_chip_substate_id >= CHIP_STATE_400) {
 		ab_sm_start_ts(sc, AB_SM_TS_BOOT_SEQ);
 		ret = ab_bootsequence(sc);
 		ab_sm_record_ts(sc, AB_SM_TS_BOOT_SEQ);
@@ -822,8 +823,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		/* If we are going to a partially active state, first place
 		 * IPU, TPU, and DRAM into fully active states
 		 */
-		if (to_chip_substate_id > CHIP_STATE_1_0) {
-			active_map = ab_sm_get_block_map(sc, CHIP_STATE_0_1);
+		if (to_chip_substate_id >= CHIP_STATE_500) {
+			active_map = ab_sm_get_block_map(sc, CHIP_STATE_400);
 			if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 					active_map->ipu_block_state_id)) {
 				ret = -EINVAL;
@@ -847,9 +848,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		}
 	}
 
-	if ((prev_state == CHIP_STATE_4_0 ||
-			prev_state == CHIP_STATE_3_0) &&
-			to_chip_substate_id < CHIP_STATE_3_0) {
+	if ((prev_state == CHIP_STATE_200 ||
+			prev_state == CHIP_STATE_300) &&
+			to_chip_substate_id >= CHIP_STATE_400) {
 		ab_sm_start_ts(sc, AB_SM_TS_PMIC_ON);
 		ret = ab_pmic_on(sc);
 		ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON);
@@ -864,7 +865,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			dest_map->ipu_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for IPU\n");
-		if (to_chip_substate_id != CHIP_STATE_6_0)
+		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_IPU);
@@ -874,7 +875,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			dest_map->tpu_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for TPU\n");
-		if (to_chip_substate_id != CHIP_STATE_6_0)
+		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_TPU);
@@ -884,7 +885,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			dest_map->dram_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for DRAM\n");
-		if (to_chip_substate_id != CHIP_STATE_6_0)
+		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_DRAM);
@@ -894,7 +895,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			dest_map->mif_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for MIF\n");
-		if (to_chip_substate_id != CHIP_STATE_6_0)
+		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_MIF);
@@ -905,7 +906,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			dest_map->fsys_block_state_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for FSYS\n");
-		if (to_chip_substate_id != CHIP_STATE_6_0)
+		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_FSYS);
@@ -914,14 +915,14 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
 			dest_map->aon_block_state_id)) {
 		ret = -EINVAL;
-		if (to_chip_substate_id != CHIP_STATE_6_0)
+		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
 	ab_sm_record_ts(sc, AB_SM_TS_AON);
 
-	if (((to_chip_substate_id == CHIP_STATE_5_0) ||
-			(to_chip_substate_id == CHIP_STATE_6_0)) &&
-			(prev_state < CHIP_STATE_5_0)) {
+	if (((to_chip_substate_id == CHIP_STATE_100) ||
+			(to_chip_substate_id == CHIP_STATE_0)) &&
+			(prev_state >= CHIP_STATE_200)) {
 		mutex_lock(&sc->mfd_lock);
 		ret = sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
@@ -931,7 +932,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 					  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
 		if (ret) {
 			dev_err(sc->dev, "PCIe failed to disable link\n");
-			if (to_chip_substate_id != CHIP_STATE_6_0)
+			if (to_chip_substate_id != CHIP_STATE_0)
 				goto cleanup_state;
 		}
 
@@ -945,7 +946,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	ab_pmic_off(sc);
 	ab_sm_record_ts(sc, AB_SM_TS_PMIC_OFF);
 
-	if (to_chip_substate_id == CHIP_STATE_5_0) {
+	if (to_chip_substate_id == CHIP_STATE_100) {
 		ab_gpio_disable_ddr_iso(sc);
 		ab_gpio_disable_ddr_sr(sc);
 	}
@@ -1342,7 +1343,7 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	enum chip_state prev_state = sc->curr_chip_substate_id;
 
 	mutex_lock(&sc->state_transitioning_lock);
-	if (prev_state == CHIP_STATE_6_0) {
+	if (prev_state == CHIP_STATE_0) {
 		/* No need to emergency shutdown if already powered off */
 		dev_info(sc->dev, "already shutdown; skip emergency shutdown work\n");
 		mutex_unlock(&sc->state_transitioning_lock);
@@ -1908,8 +1909,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	/* intitialize the default chip state */
 	ab_sm_ctx->chip_state_table = chip_state_map;
 	ab_sm_ctx->nr_chip_states = ARRAY_SIZE(chip_state_map);
-	ab_sm_ctx->dest_chip_substate_id = CHIP_STATE_6_0;
-	ab_sm_ctx->curr_chip_substate_id = CHIP_STATE_6_0;
+	ab_sm_ctx->dest_chip_substate_id = CHIP_STATE_0;
+	ab_sm_ctx->curr_chip_substate_id = CHIP_STATE_0;
 
 	mutex_init(&ab_sm_ctx->set_state_lock);
 	mutex_init(&ab_sm_ctx->state_transitioning_lock);
