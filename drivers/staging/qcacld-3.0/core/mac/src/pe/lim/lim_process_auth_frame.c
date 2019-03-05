@@ -1159,6 +1159,11 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 	auth_alg = *(uint16_t *) body_ptr;
 	pe_debug("auth_alg %d ", auth_alg);
 
+	if (frame_len < 2) {
+		pe_err("invalid frame len: %d", frame_len);
+		return;
+	}
+
 	/* Restore default failure timeout */
 	if (QDF_P2P_CLIENT_MODE == pe_session->pePersona &&
 			pe_session->defaultAuthFailureTimeout) {
@@ -1202,6 +1207,11 @@ lim_process_auth_frame(tpAniSirGlobal mac_ctx, uint8_t *rx_pkt_info,
 			lim_send_deauth_mgmt_frame(mac_ctx,
 					eSIR_MAC_MIC_FAILURE_REASON,
 					mac_hdr->sa, pe_session, false);
+			goto free;
+		}
+
+		if (frame_len < 4) {
+			pe_err("invalid frame len: %d", frame_len);
 			goto free;
 		}
 		/* Extract key ID from IV (most 2 bits of 4th byte of IV) */
