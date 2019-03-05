@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1395,6 +1395,8 @@ int ipa3_reset_rt(enum ipa_ip_type ip)
 	struct ipa3_rt_entry *rule;
 	struct ipa3_rt_entry *rule_next;
 	struct ipa3_rt_tbl_set *rset;
+	struct ipa3_hdr_entry *hdr_entry;
+	struct ipa3_hdr_proc_ctx_entry *hdr_proc_entry;
 	u32 apps_start_idx;
 	int id;
 
@@ -1438,6 +1440,27 @@ int ipa3_reset_rt(enum ipa_ip_type ip)
 				continue;
 
 			list_del(&rule->link);
+			if (rule->hdr) {
+				hdr_entry = ipa3_id_find(
+						rule->rule.hdr_hdl);
+				if (!hdr_entry ||
+					hdr_entry->cookie != IPA_HDR_COOKIE) {
+					IPAERR_RL(
+						"Header already deleted\n");
+						return -EINVAL;
+				}
+			} else if (rule->proc_ctx) {
+				hdr_proc_entry =
+					ipa3_id_find(
+					rule->rule.hdr_proc_ctx_hdl);
+				if (!hdr_proc_entry ||
+					hdr_proc_entry->cookie !=
+						IPA_PROC_HDR_COOKIE) {
+					IPAERR_RL(
+					"Proc entry already deleted\n");
+					return -EINVAL;
+				}
+			}
 			tbl->rule_cnt--;
 			if (rule->hdr)
 				__ipa3_release_hdr(rule->hdr->id);
