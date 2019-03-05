@@ -255,6 +255,7 @@ enum max1720x_nvram {
 	MAX1720X_NRSENSE = 0xCF,	/* value of sense resistor */
 	MAX1720X_NUSER1D0 = 0xD0,	/* SNUM */
 	MAX1720X_NUSER1D1 = 0xD1,	/* SNUM */
+	MAX1720X_NAGEFCCFG = 0xD2,
 	MAX1720X_NUSER1D4 = 0xD4,	/* URST */
 	MAX1720X_NMANFCTRDATE = 0xD6,	/* SNUM */
 	MAX1720X_NFIRSTUSED = 0xD7,	/* CCLC */
@@ -2766,6 +2767,10 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 		ret = max17x0x_nvram_recall(chip);
 		if (ret == 0)
 			chip->needs_reset = true;
+
+		if (max17xxx_gauge_type == MAX1720X_GAUGE_TYPE)
+			REGMAP_WRITE(chip->regmap_nvram,
+				     MAX1720X_NAGEFCCFG, 0);
 	}
 
 	ret = max17x0x_fixups(chip);
