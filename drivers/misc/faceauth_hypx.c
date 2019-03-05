@@ -75,7 +75,7 @@ struct hypx_fa_process {
 	uint64_t image_dot_right; /* PHY addr */
 	uint64_t image_flood; /* PHY addr */
 	uint64_t calibration; /* PHY addr */
-	int16_t  cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];
+	int16_t cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];
 
 	uint32_t operation;
 	uint32_t profile_id;
@@ -154,7 +154,7 @@ static void hypx_free_blob_userbuf(phys_addr_t blob_phy, bool reassign)
 	free_page((unsigned long)blob);
 }
 
-static int hypx_copy_from_blob_userbuf(void __user *buffer,
+static int hypx_copy_from_blob_userbuf(struct device *dev, void __user *buffer,
 				       phys_addr_t blob_phy, size_t size,
 				       bool copy_user)
 {
@@ -183,6 +183,11 @@ static int hypx_copy_from_blob_userbuf(void __user *buffer,
 				       blob->segments[i].pages * PAGE_SIZE,
 				       source_vm, ARRAY_SIZE(source_vm),
 				       dest_vm, dest_perm, ARRAY_SIZE(dest_vm));
+
+		dma_sync_single_for_cpu(dev, phy_addr,
+					blob->segments[i].pages * PAGE_SIZE,
+					DMA_FROM_DEVICE);
+
 		if (lret) {
 			ret = lret;
 			pr_err("hyp_assign_phys returned an error %d\n", ret);
@@ -503,7 +508,6 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		goto exit;
 	}
 
-
 exit:
 	free_page((unsigned long)hypx_data);
 	return ret;
@@ -637,7 +641,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 	hypx_data = (void *)get_zeroed_page(0);
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
-				   DMA_FROM_DEVICE);
+				   DMA_TO_DEVICE);
 
 	desc.arginfo = SCM_ARGS(1);
 	desc.args[0] = virt_to_phys(hypx_data);
@@ -673,8 +677,9 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 
 	hypx_data = (void *)get_zeroed_page(0);
 
-	hypx_data->debug_buffer = hypx_create_blob_userbuf(
-		dev, data->debug_buffer, data->debug_buffer_size);
+	hypx_data->debug_buffer =
+		hypx_create_blob_userbuf(dev, data->debug_buffer,
+					 data->debug_buffer_size);
 	hypx_data->debug_buffer_size = data->debug_buffer_size;
 
 	if (!hypx_data->debug_buffer) {
@@ -683,7 +688,7 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
-				   DMA_BIDIRECTIONAL);
+				   DMA_TO_DEVICE);
 
 	desc.arginfo = SCM_ARGS(1);
 	desc.args[0] = virt_to_phys(hypx_data);
@@ -696,7 +701,7 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				DMA_FROM_DEVICE);
 
-	ret = hypx_copy_from_blob_userbuf(data->debug_buffer,
+	ret = hypx_copy_from_blob_userbuf(dev, data->debug_buffer,
 					  hypx_data->debug_buffer,
 					  data->debug_buffer_size, true);
 	if (ret) {
@@ -765,7 +770,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		goto exit;
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
-				   DMA_BIDIRECTIONAL);
+				   DMA_TO_DEVICE);
 
 	desc.args[0] = virt_to_phys(hypx_data);
 	desc.arginfo = SCM_ARGS(1);
@@ -778,7 +783,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				DMA_FROM_DEVICE);
 
-	err = hypx_copy_from_blob_userbuf(&(debug_entry->ab_state),
+	err = hypx_copy_from_blob_userbuf(dev, &(debug_entry->ab_state),
 					  hypx_data->ab_state,
 					  hypx_data->internal_state_struct_size,
 					  false);
@@ -794,7 +799,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
 	    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
 		err = hypx_copy_from_blob_userbuf(
-			(uint8_t *)debug_entry + current_offset,
+			dev, (uint8_t *)debug_entry + current_offset,
 			hypx_data->image_left, hypx_data->image_left_size,
 			false);
 
@@ -809,7 +814,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		}
 
 		err = hypx_copy_from_blob_userbuf(
-			(uint8_t *)debug_entry + current_offset,
+			dev, (uint8_t *)debug_entry + current_offset,
 			hypx_data->image_right, hypx_data->image_right_size,
 			false);
 
@@ -822,7 +827,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 			goto exit;
 		}
 		err = hypx_copy_from_blob_userbuf(
-			(uint8_t *)debug_entry + current_offset,
+			dev, (uint8_t *)debug_entry + current_offset,
 			hypx_data->image_flood, hypx_data->image_flood_size,
 			false);
 
@@ -866,7 +871,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 			goto exit;
 
 		dma_sync_single_for_device(dev, virt_to_phys(hypx_data),
-					   PAGE_SIZE, DMA_BIDIRECTIONAL);
+					   PAGE_SIZE, DMA_TO_DEVICE);
 
 		err = scm_call2(HYPX_SMC_FUNC_GET_DEBUG_BUFFER, &desc);
 		if (err)
@@ -876,7 +881,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 					DMA_FROM_DEVICE);
 
 		err = hypx_copy_from_blob_userbuf(
-			(uint8_t *)debug_entry + current_offset,
+			dev, (uint8_t *)debug_entry + current_offset,
 			hypx_data->output_buffers, buffer_list_size, false);
 
 		output_buffers->buffer_base = current_offset;
