@@ -1792,17 +1792,6 @@ static void ab_sm_thermal_throttle_state_updated(
 {
 	struct ab_state_context *sc = op_data;
 
-	/* FIXME: Remove this once the following bugs have been fixed
-	 * b/123701562
-	 * b/123664724
-	 * b/123599823
-	 *
-	 * This hack prevents any throttling signal from affecting
-	 * the Airbrush state. This is because the system currently
-	 * throttles the Airbrush even at low temperatures.
-	 */
-	throttle_state_id = 0;
-
 	sc->throttle_state_id = throttle_state_id;
 	dev_info(sc->dev, "Throttle state updated to %lu", throttle_state_id);
 
