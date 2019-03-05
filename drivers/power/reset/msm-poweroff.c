@@ -114,6 +114,10 @@ struct reset_attribute {
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);
 
+static bool scandump_test;
+module_param(scandump_test, bool, 0644);
+MODULE_PARM_DESC(scandump_test, "Set 1 to enable scandump test");
+
 static bool warm_reset;
 module_param(warm_reset, bool, 0644);
 MODULE_PARM_DESC(warm_reset, "Set 1 to override default cold-reset");
@@ -452,6 +456,9 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 
 	msm_restart_prepare(cmd);
 
+	if (in_panic && scandump_test)
+		goto enable_sdi_reset;
+
 #ifdef CONFIG_QCOM_DLOAD_MODE
 	/*
 	 * Trigger a watchdog bite here and if this fails,
@@ -463,6 +470,7 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 #endif
 
 	scm_disable_sdi();
+enable_sdi_reset:
 	halt_spmi_pmic_arbiter();
 	deassert_ps_hold();
 
