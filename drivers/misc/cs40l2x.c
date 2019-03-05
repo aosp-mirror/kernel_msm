@@ -5934,6 +5934,7 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 		}
 
 		switch (block_type) {
+		case CS40L2X_WMDR_NAME_TYPE:
 		case CS40L2X_WMDR_INFO_TYPE:
 			reg = 0;
 			dblk_index = NULL;
@@ -5947,10 +5948,6 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 			memcpy(wt_date, &fw->data[pos + 6],
 					CS40L2X_WT_FILE_DATE_LEN_MAX - 6);
 			wt_date[CS40L2X_WT_FILE_DATE_LEN_MAX - 6] = '\0';
-			break;
-		case CS40L2X_WMDR_NAME_TYPE:
-			reg = 0;
-			dblk_index = NULL;
 			break;
 		case CS40L2X_XM_UNPACKED_TYPE:
 			reg = CS40L2X_DSP1_XMEM_UNPACK24_0 + block_offset
