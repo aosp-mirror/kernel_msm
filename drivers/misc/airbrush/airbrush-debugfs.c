@@ -367,8 +367,7 @@ static int ab_debugfs_ddr_test(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 
-	sc->dram_ops->rw_test(sc->dram_ops->ctx, (unsigned int)val);
-	return 0;
+	return sc->dram_ops->rw_test(sc->dram_ops->ctx, (unsigned int)val);
 }
 DEFINE_SIMPLE_ATTRIBUTE(ab_ddr_test_fops, NULL, ab_debugfs_ddr_test, "%lli\n");
 
