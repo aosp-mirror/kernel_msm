@@ -228,7 +228,7 @@ static struct regulator_init_data
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
 			.min_uV = 550000,
-			.max_uV = 1000000,
+			.max_uV = 800000,
 		},
 	},
 	[S2MPG01_ID_SMPS2] = {
@@ -237,7 +237,7 @@ static struct regulator_init_data
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
 			.min_uV = 800000,
-			.max_uV = 900000,
+			.max_uV = 950000,
 		},
 	},
 	[S2MPG01_ID_SMPS3] = {
@@ -272,8 +272,8 @@ static struct regulator_init_data
 			.name = S2MPG01_REGLTR_NAME_LDO3,
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
-			.min_uV = 650000,
-			.max_uV = 1000000,
+			.min_uV = 700000,
+			.max_uV = 800000,
 		},
 	},
 	[S2MPG01_ID_LDO4] = {
@@ -282,7 +282,7 @@ static struct regulator_init_data
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
 			.min_uV = 800000,
-			.max_uV = 900000,
+			.max_uV = 950000,
 		},
 	},
 	[S2MPG01_ID_LDO5] = {
@@ -300,7 +300,7 @@ static struct regulator_init_data
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
 			.min_uV = 800000,
-			.max_uV = 900000,
+			.max_uV = 950000,
 		},
 	},
 	[S2MPG01_ID_BOOST_LDO3] = {
