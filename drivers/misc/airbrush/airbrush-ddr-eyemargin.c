@@ -86,6 +86,8 @@ static void ddrphy_set_write_offset(int offset_phy)
 void ddr_eye_print_termination_info(void)
 {
 	unsigned int zq_con0, zq_con3, zq_con6;
+	unsigned int dphy_mdll_con0, dphy_mdll_con1;
+	unsigned int dphy2_mdll_con0, dphy2_mdll_con1;
 
 	zq_con0 = ddr_reg_rd(DPHY_ZQ_CON0);
 	zq_con3 = ddr_reg_rd(DPHY_ZQ_CON3);
@@ -160,6 +162,25 @@ void ddr_eye_print_termination_info(void)
 	pr_info("DRAM ODT[MR11] and Drive-Strength[MR3] details:\n");
 	pr_info("----------------------------------------------------------\n");
 	pr_info("MR11: 0x%x, MR3: 0x%x\n", 0x24, 0xf1);
+	pr_info("----------------------------------------------------------\n");
+
+	dphy_mdll_con0  = ddr_reg_rd(DPHY_MDLL_CON0);
+	dphy_mdll_con1  = ddr_reg_rd(DPHY_MDLL_CON1);
+	dphy2_mdll_con0 = ddr_reg_rd(DPHY2_MDLL_CON0);
+	dphy2_mdll_con1 = ddr_reg_rd(DPHY2_MDLL_CON1);
+
+	pr_info("----------------------------------------------------------\n");
+	pr_info("DPHY_MDLL_CONx: [0x%x, 0x%x]\n",
+		dphy_mdll_con0, dphy_mdll_con1);
+	pr_info("ctrl_lock_value[9:0]: 0x%x, ctrl_locked: [%d]\n",
+		(dphy_mdll_con1 >> 8) & 0x3ff,
+		(dphy_mdll_con1 >> 18) & 0x1);
+
+	pr_info("DPHY2_MDLL_CONx: [0x%x, 0x%x]\n",
+		dphy2_mdll_con0, dphy2_mdll_con1);
+	pr_info("ctrl_lock_value[9:0]: 0x%x, ctrl_locked: [%d]\n",
+		(dphy2_mdll_con1 >> 8) & 0x3ff,
+		(dphy2_mdll_con1 >> 18) & 0x1);
 	pr_info("----------------------------------------------------------\n");
 }
 
