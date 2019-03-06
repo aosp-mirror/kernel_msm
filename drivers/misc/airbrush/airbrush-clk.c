@@ -684,7 +684,28 @@ static int ab_clk_restore_mainclk_freq(void *ctx)
 	return ret;
 }
 
+#define SHARED_DIV_AON_PLL_REG				0x10B11810
+#define SHARED_DIV_AON_PLL_DIVRATIO_MASK	0xF
+#define SHARED_DIV_AON_PLL_DIVRATIO_2		0x1
+
+static void ab_clk_init(void *ctx)
+{
+	u32 val;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	dev_dbg(clk_ctx->dev, "AB clock init\n");
+
+	/* Set SHARED_DIV_AON_PLL to PLL_AON / 2 (nominally 466MHz)
+	 */
+	ABC_READ(SHARED_DIV_AON_PLL_REG, &val);
+	val &= ~SHARED_DIV_AON_PLL_DIVRATIO_MASK;
+	val |= SHARED_DIV_AON_PLL_DIVRATIO_2;
+	ABC_WRITE(SHARED_DIV_AON_PLL_REG, val);
+}
+
 static struct ab_sm_clk_ops clk_ops = {
+	.init = ab_clk_init,
+
 	.ipu_pll_enable = &ab_clk_ipu_pll_enable_handler,
 	.ipu_pll_disable = &ab_clk_ipu_pll_disable_handler,
 	.ipu_gate = &ab_clk_ipu_gate_handler,

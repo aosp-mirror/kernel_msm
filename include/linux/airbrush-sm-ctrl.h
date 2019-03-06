@@ -332,6 +332,8 @@ static struct ab_sm_pmu_ops pmu_ops_stub = {
 struct ab_sm_clk_ops {
 	void *ctx;
 
+	void (*init)(void *ctx);
+
 	int (*ipu_pll_enable)(void *ctx);
 	int (*ipu_pll_disable)(void *ctx);
 	int (*ipu_gate)(void *ctx);
@@ -351,6 +353,8 @@ struct ab_sm_clk_ops {
 	int (*reduce_mainclk_freq)(void *ctx);
 	int (*restore_mainclk_freq)(void *ctx);
 };
+
+static void ab_clk_init_stub(void *ctx)   { return; }
 
 static int ipu_pll_enable_stub(void *ctx)   { return -ENODEV; }
 static int ipu_pll_disable_stub(void *ctx)   { return -ENODEV; }
@@ -391,6 +395,8 @@ static int restore_mainclk_freq_stub(void *ctx) { return -ENODEV; }
 
 static struct ab_sm_clk_ops clk_ops_stub = {
 	.ctx = NULL,
+
+	.init = &ab_clk_init_stub,
 
 	.ipu_pll_enable = &ipu_pll_enable_stub,
 	.ipu_pll_disable = &ipu_pll_disable_stub,

@@ -324,6 +324,9 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 	ABC_WRITE(SYSREG_AON_SPI0_AHB_ENABLE, 0x0);
 	ABC_WRITE(SYSREG_AON_SPI0_AHB_ENABLE, 0x1);
 
+	/* Set clocks to usable states */
+	ab_ctx->clk_ops->init(ab_ctx->clk_ops->ctx);
+
 	/* Setup the function pointer to read DDR OTPs */
 	ret = ab_ctx->dram_ops->setup(ab_ctx->dram_ops->ctx, ab_ctx);
 	if (ret) {
