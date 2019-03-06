@@ -405,6 +405,16 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
+	/* Switch to shared_div_aon_pll to prevent rail droop if transitioning
+	 * during a workload (see b/126274013)
+	 */
+	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->shared_div_aon_pll);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"tpu_switch_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
 	/* Switch to osc_clk during rate change so that
 	 * change doesn't propagate to children
 	 */
@@ -429,6 +439,13 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	if (ret) {
 		dev_err(clk_ctx->dev,
 			"tpu_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
+	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->tpu_pll_div);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"tpu_switch_mux: set_parent failed(err %d)\n", ret);
 		goto error_abort;
 	}
 
