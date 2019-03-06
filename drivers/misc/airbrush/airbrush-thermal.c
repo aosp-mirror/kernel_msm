@@ -45,12 +45,20 @@ struct ab_thermal {
 	void *op_data;
 
 	struct mutex throttle_state_lock;
+	bool throttle_ready;
 	/* Combined from cooling_external and cooling_internal */
-	enum throttle_state throttle_state;
+	enum throttle_state raw_throttle_state;
 
 	struct ab_thermal_cooling cooling_external;
 	struct ab_thermal_cooling cooling_internal;
 };
+
+static enum throttle_state ab_thermal_get_throttle_state(
+		struct ab_thermal *thermal)
+{
+	return thermal->throttle_ready ? thermal->raw_throttle_state :
+			THROTTLE_NONE;
+}
 
 static void ab_thermal_exit_cooling(struct ab_thermal_cooling *thermal_cooling)
 {
@@ -71,7 +79,7 @@ static void ab_thermal_cooling_op_state_updated(
 	struct ab_thermal_cooling *thermal_cooling = cooling_op_data;
 	struct ab_thermal *thermal = thermal_cooling->thermal;
 	unsigned long cooling_state = 0;
-	enum throttle_state throttle_state;
+	enum throttle_state old_throttle_state, new_throttle_state;
 
 	mutex_lock(&thermal->throttle_state_lock);
 
@@ -80,11 +88,12 @@ static void ab_thermal_cooling_op_state_updated(
 
 	cooling_state = max(cooling_state, thermal->cooling_external.state);
 	cooling_state = max(cooling_state, thermal->cooling_internal.state);
-	throttle_state = to_throttle_state(cooling_state);
 
-	if (throttle_state != thermal->throttle_state) {
-		thermal->throttle_state = throttle_state;
-		thermal->ops.throttle_state_updated(throttle_state,
+	old_throttle_state = ab_thermal_get_throttle_state(thermal);
+	thermal->raw_throttle_state = to_throttle_state(cooling_state);
+	new_throttle_state = ab_thermal_get_throttle_state(thermal);
+	if (old_throttle_state != new_throttle_state) {
+		thermal->ops.throttle_state_updated(new_throttle_state,
 				thermal->op_data);
 	}
 	mutex_unlock(&thermal->throttle_state_lock);
@@ -135,7 +144,8 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev,
 	thermal->op_data = op_data;
 
 	mutex_init(&thermal->throttle_state_lock);
-	thermal->throttle_state = THROTTLE_NONE;
+	thermal->throttle_ready = false;
+	thermal->raw_throttle_state = THROTTLE_NONE;
 
 	/*
 	 * TODO(b/128559698): Enable external cooling device once stabilized
@@ -204,4 +214,35 @@ void devm_ab_thermal_destroy(struct ab_thermal *thermal)
 {
 	devres_release(thermal->dev, devm_ab_thermal_release,
 			devm_ab_thermal_match, thermal);
+}
+
+static void ab_thermal_set_throttle_ready(struct ab_thermal *thermal,
+		bool throttle_ready)
+{
+	enum throttle_state old_throttle_state, new_throttle_state;
+
+	if (IS_ERR_OR_NULL(thermal)) {
+		dev_warn_once(thermal->dev, "Thermal not initialized properly.");
+		return;
+	}
+
+	mutex_lock(&thermal->throttle_state_lock);
+	old_throttle_state = ab_thermal_get_throttle_state(thermal);
+	thermal->throttle_ready = throttle_ready;
+	new_throttle_state = ab_thermal_get_throttle_state(thermal);
+	if (old_throttle_state != new_throttle_state) {
+		thermal->ops.throttle_state_updated(new_throttle_state,
+				thermal->op_data);
+	}
+	mutex_unlock(&thermal->throttle_state_lock);
+}
+
+void ab_thermal_enable(struct ab_thermal *thermal)
+{
+	ab_thermal_set_throttle_ready(thermal, true);
+}
+
+void ab_thermal_disable(struct ab_thermal *thermal)
+{
+	ab_thermal_set_throttle_ready(thermal, false);
 }

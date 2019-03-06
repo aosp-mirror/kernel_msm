@@ -34,4 +34,7 @@ struct ab_thermal *devm_ab_thermal_create(struct device *dev,
 		const struct ab_thermal_ops *ops, void *op_data);
 void devm_ab_thermal_destroy(struct ab_thermal *thermal);
 
+void ab_thermal_enable(struct ab_thermal *thermal);
+void ab_thermal_disable(struct ab_thermal *thermal);
+
 #endif /* _AIRBRUSH_THERMAL_H */
