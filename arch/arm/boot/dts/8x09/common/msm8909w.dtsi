@@ -30,88 +30,36 @@
 		};
 	};
 };
-
 &soc {
+	qcom,msm-cpufreq {
+		/delete-property/ qcom,cpufreq-table;
+		qcom,cpufreq-table =
+			<  800000 >,
+			< 1094400 >;
+	};
+	/delete-node/ qcom,cpubw;
+	cpubw: qcom,cpubw {
+		compatible = "qcom,devbw";
+		governor = "cpufreq";
+		qcom,src-dst-ports = <1 512>;
+		qcom,active-only;
+		qcom,bw-tbl =
+			< 1464 /* 192 MHz */>,
+			< 2929 /* 384 MHz */>;
+	};
 	/delete-node/ devfreq-cpufreq;
 	devfreq-cpufreq {
 		cpubw-cpufreq {
 			target-dev = <&cpubw>;
 			cpu-to-dev-map =
-				<  800000  2929>,
-				< 1094400  2929>,
-				< 1267200  2929>;
+				<  800000  1464>,
+				< 1094400  2929>;
 		};
 	};
 };
 
 &thermal_zones {
 	/delete-node/ case-therm-step;
-#if 0	
-	case-therm-step {
-		polling-delay-passive = <5000>;
-		polling-delay = <0>;
-		thermal-sensors = <&pm660_adc_tm 0x51>;
-		thermal-governor = "step_wise";
-		trips {
-			cpu_freq_trip: cpu-freq-trip {
-				temperature = <38000>;
-				hysteresis = <0>;
-				type = "passive";
-			};
-			modem_mon_trip0: modem-mon-trip0 {
-				temperature = <45000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-			modem_mon_trip1: modem-mon-trip1 {
-				temperature = <55000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-			cpu1_hotplug_trip: cpu1-hotplug-trip {
-				temperature = <38000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-		};
-		cooling-maps {
-			cpu0_cdev {
-				trip = <&cpu_freq_trip>;
-				cooling-device =
-					<&CPU0 THERMAL_NO_LIMIT 2>;
-			};
-			cpu1_cdev {
-				trip = <&cpu_freq_trip>;
-				cooling-device =
-					<&CPU1 THERMAL_NO_LIMIT 2>;
-			};
-			cpu2_cdev {
-				trip = <&cpu_freq_trip>;
-				cooling-device =
-					<&CPU2 THERMAL_NO_LIMIT 2>;
-			};
-			cpu3_cdev {
-				trip = <&cpu_freq_trip>;
-				cooling-device =
-					<&CPU3 THERMAL_NO_LIMIT 2>;
-			};
-			modem_lvl1 {
-				trip = <&modem_mon_trip0>;
-				cooling-device = <&modem_pa 2 2>;
-			};
-			modem_lvl2 {
-				trip = <&modem_mon_trip1>;
-				cooling-device = <&modem_pa 3 3>;
-			};
-			hotplug_cpu1_cdev {
-				trip = <&cpu1_hotplug_trip>;
-				cooling-device =
-					<&CPU1 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
-			};
-		};
-	};
-#endif
 };
 
 
