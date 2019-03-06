@@ -2337,6 +2337,21 @@ int32_t ab_ddr_selfrefresh_exit(void *ctx)
 		return DDR_FAIL;
 	}
 
+	/* Disable power features for DLL locking */
+	ddr_reg_clr(DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_clr(DPHY_LP_CON0, MDLL_CG_EN);
+	ddr_reg_clr(DPHY2_LP_CON0, MDLL_CG_EN);
+
+	if (ddr_enable_dll()) {
+		pr_err("%s: enable dll failed.\n", __func__);
+		return DDR_FAIL;
+	}
+
+	/* Enable power features after DLL locking */
+	ddr_reg_set(DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_set(DPHY_LP_CON0, MDLL_CG_EN);
+	ddr_reg_set(DPHY2_LP_CON0, MDLL_CG_EN);
+
 	/* Self-refresh exit sequence */
 	if (ddr_exit_self_refresh_mode()) {
 		pr_err("%s: self-refresh exit failed\n", __func__);
