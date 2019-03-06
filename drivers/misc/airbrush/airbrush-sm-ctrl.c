@@ -1379,9 +1379,6 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	 */
 	complete_all(&sc->notify_comp);
 	mutex_unlock(&sc->state_transitioning_lock);
-
-	complete_all(&sc->transition_comp);
-	complete_all(&sc->notify_comp);
 }
 
 static int ab_regulator_listener(struct notifier_block *nb,
