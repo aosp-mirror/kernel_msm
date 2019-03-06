@@ -281,6 +281,7 @@ struct dsi_panel {
  * struct dsi_panel_funcs - functions that handle panel switch operations
  *
  * @pre_disable: called before panel is about to be disabled
+ * @post_enable: called on panel post enable
  * @mode_switch: called when a mode switch is happening
  * @pre_kickoff: called just before frame kickoff
  * @idle: called when updates haven't been received for a while (idle)
@@ -290,6 +291,7 @@ struct dsi_panel {
  */
 struct dsi_panel_funcs {
 	int (*pre_disable)(struct dsi_panel *);
+	int (*post_enable)(struct dsi_panel *);
 	int (*mode_switch)(struct dsi_panel *);
 	int (*pre_kickoff)(struct dsi_panel *);
 	int (*idle)(struct dsi_panel *);
@@ -434,6 +436,7 @@ bool dsi_panel_get_hbm(struct dsi_panel *panel);
 
 int dsi_panel_switch_init(struct dsi_panel *panel);
 void dsi_panel_switch_destroy(struct dsi_panel *panel);
+void dsi_panel_switch_put_mode(struct dsi_display_mode *mode);
 
 int dsi_panel_idle(struct dsi_panel *panel);
 int dsi_panel_wakeup(struct dsi_panel *panel);

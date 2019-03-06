@@ -3883,6 +3883,9 @@ void dsi_panel_put_mode(struct dsi_display_mode *mode)
 
 	if (!mode->priv_info)
 		return;
+
+	dsi_panel_switch_put_mode(mode);
+
 	for (i = 0; i < DSI_CMD_SET_MAX; i++)
 		dsi_panel_destroy_cmd_packets(&mode->priv_info->cmd_sets[i]);
 
@@ -4656,6 +4659,9 @@ int dsi_panel_post_enable(struct dsi_panel *panel)
 		pr_err("invalid params\n");
 		return -EINVAL;
 	}
+
+	if (panel->funcs && panel->funcs->post_enable)
+		return panel->funcs->post_enable(panel);
 
 	mutex_lock(&panel->panel_lock);
 
