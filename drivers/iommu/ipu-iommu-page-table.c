@@ -488,7 +488,8 @@ static struct ipu_iommu_page_table_shadow_entry
 	__ipu_iommu_pgtable_alloc_pages(
 	struct ipu_iommu_page_table *pg_table,
 	size_t size, gfp_t gfp,
-	struct io_pgtable_cfg *cfg, void *cookie, bool alloc_shadow)
+	struct io_pgtable_cfg *cfg, void *cookie, bool alloc_shadow,
+	bool reset_ab_mem)
 {
 	struct device *dev = cfg->iommu_dev;
 	struct ipu_iommu_page_table_shadow_entry res;
@@ -519,7 +520,7 @@ static struct ipu_iommu_page_table_shadow_entry
 		goto free_shadow;
 	}
 	/* reset shadow memory */
-	if (ipu_iommu_page_table_reset_ab_mem(pg_table,
+	if (reset_ab_mem && ipu_iommu_page_table_reset_ab_mem(pg_table,
 		cfg, res.ab_dram_dma_buf, 0, size)){
 		dev_err(dev, "%s Error resetting airbrush memory\n", __func__);
 		goto free_ab_dram;
@@ -641,7 +642,7 @@ static arm_lpae_iopte ipu_iommu_pgtbl_install_table(
 
 	/* update airbrush memeory */
 	ipu_iommu_page_table_update_ab_page(pg_table,
-		cfg, addr, ptep, true /* push */);
+		cfg, addr, ptep, false /* push */);
 	return old;
 }
 
@@ -709,7 +710,8 @@ static int __ipu_iommu_pgtable_map(struct ipu_iommu_page_table *pg_table,
 			tblsz,
 			GFP_KERNEL,
 			cfg, cookie,
-			lvl < ARM_LPAE_MAX_LEVELS - 2);
+			lvl < ARM_LPAE_MAX_LEVELS - 2,
+			true /* reset ab mem */);
 
 		if (!nshadow.page_table_entry)
 			return -ENOMEM;
@@ -850,6 +852,137 @@ int ipu_iommu_pgtable_map(struct io_pgtable_ops *ops, unsigned long iova,
 	return ret;
 }
 
+/* return the lvl1 pointer for the given address
+ * updated the lvl counter by the given count
+ * if next level doesn't exist - allocate
+ */
+static int ipu_iommu_return_lvl1(struct ipu_iommu_page_table *pg_table,
+	struct arm_lpae_io_pgtable *data, unsigned long iova, size_t tblsz,
+	void *cookie, struct io_pgtable_cfg *cfg, int count,
+	struct ipu_iommu_page_table_shadow_entry **res)
+{
+	struct ipu_iommu_page_table_shadow_entry *shadow_entry =
+		&pg_table->shadow_table;
+	int lvl = ARM_LPAE_START_LVL(data);
+	int diff = ARM_LPAE_LVL_IDX(iova, lvl, data);
+	arm_lpae_iopte *ptep =
+		shadow_entry->page_table_entry + diff;
+
+	if (!(*ptep)) {
+		struct ipu_iommu_page_table_shadow_entry nshadow;
+
+		nshadow = __ipu_iommu_pgtable_alloc_pages(pg_table,
+			tblsz, GFP_KERNEL, cfg, cookie,
+			true /*need shadow entry */,
+			true /* reset ab mem */);
+		if (!nshadow.page_table_entry)
+			return -ENOMEM;
+		ipu_iommu_pgtbl_install_table(pg_table,
+			ab_dram_get_dma_buf_paddr(nshadow.ab_dram_dma_buf),
+			ptep, 0, cfg, 0,
+			ab_dram_get_dma_buf_paddr(shadow_entry->ab_dram_dma_buf)
+			+ diff * sizeof(arm_lpae_iopte));
+
+		*(shadow_entry->next_lvl + diff) = nshadow;
+	}
+	iopte_tblcnt_add(ptep, count);
+	*res = shadow_entry->next_lvl + diff;
+	return 0;
+}
+
+static int ipu_iommu_pgtable_bw_map(
+	struct ipu_iommu_page_table *pg_table,
+	struct arm_lpae_io_pgtable *data,
+	arm_lpae_iopte prot,
+	unsigned long iova, phys_addr_t paddr,
+	size_t size, size_t *ret_size)
+{
+	struct io_pgtable_cfg *cfg = &data->iop.cfg;
+	void *cookie = data->iop.cookie;
+	size_t tblsz = ARM_LPAE_GRANULE(data);
+	int blocks_needed;
+	struct ipu_iommu_page_table_shadow_entry nshadow;
+	u64 blk;
+	int err = 0;
+	struct ipu_iommu_page_table_shadow_entry *shadow_entry;
+	struct ipu_iommu_page_table_shadow_entry *nshadow_entry;
+	int lvl = ARM_LPAE_START_LVL(data) + 1;
+	int diff;
+	arm_lpae_iopte *ptep;
+	dma_addr_t ab_addr, ab_src_addr;
+
+
+	dev_dbg(cfg->iommu_dev,
+		"%s called for sz 0x%llx, phy addr 0x%llx, iova 0x%llx",
+		__func__, size, paddr, iova);
+	*ret_size = 0;
+	size = min_t(unsigned long, size + iova,
+		(iova + SZ_1G) & ~(SZ_1G - 1)) - iova;
+	blocks_needed = size / SZ_2M;
+	size = blocks_needed * SZ_2M;
+
+	err = ipu_iommu_return_lvl1(pg_table, data, iova, tblsz,
+		cookie, cfg, 1,	&shadow_entry);
+	if (err) {
+		dev_err(cfg->iommu_dev,
+			"%s error (%d) locating level 1 entry", __func__,
+			err);
+		return err;
+	}
+
+	nshadow = __ipu_iommu_pgtable_alloc_pages(pg_table,
+		tblsz * blocks_needed, GFP_KERNEL, cfg, cookie,
+		false /*last lvl does need shadow entry */,
+		false /* reset ab mem */);
+	if (!nshadow.page_table_entry)
+		return -ENOMEM;
+
+	ab_addr = ab_dram_get_dma_buf_paddr(nshadow.ab_dram_dma_buf);
+	diff = ARM_LPAE_LVL_IDX(iova, lvl, data);
+	ptep = shadow_entry->page_table_entry + diff;
+	ab_src_addr = ab_dram_get_dma_buf_paddr(
+		shadow_entry->ab_dram_dma_buf) +
+		diff * sizeof(arm_lpae_iopte);
+	nshadow_entry = (shadow_entry->next_lvl + diff);
+
+	/* install lvl page entries */
+	for (blk = 0; blk < blocks_needed; ++blk) {
+		ipu_iommu_pgtbl_install_table(pg_table,
+			ab_addr, ptep, 0, cfg,
+			SZ_4K / sizeof(arm_lpae_iopte) /* ref count */,
+			ab_src_addr);
+
+		/* update pointer to the new lvl 2 pointer */
+		nshadow_entry->next_lvl = NULL;
+		nshadow_entry->page_table_entry =
+			(void *)nshadow.page_table_entry
+			+ tblsz * blk;
+		nshadow_entry->ab_dram_dma_buf = (blk == 0 ?
+			nshadow.ab_dram_dma_buf : NULL);
+
+		ab_addr += tblsz;
+		ab_src_addr += sizeof(arm_lpae_iopte);
+		++ptep;
+		++nshadow_entry;
+	}
+
+	lvl++;
+	ab_addr = ab_dram_get_dma_buf_paddr(nshadow.ab_dram_dma_buf);
+	ptep = nshadow.page_table_entry;
+	while (*ret_size < size) {
+		ipu_iommu_pgtbl_init_pte(
+			pg_table, data, paddr, prot, lvl,
+			ptep, NULL,
+			ab_addr);
+
+		paddr += SZ_4K;
+		(*ret_size) += SZ_4K;
+		ab_addr += sizeof(arm_lpae_iopte);
+		++ptep;
+	}
+
+	return err;
+}
 
 static int ipu_iommu_pgtable_map_sg(
 	struct io_pgtable_ops *ops, unsigned long iova,
@@ -895,11 +1028,18 @@ static int ipu_iommu_pgtable_map_sg(
 		while (size) {
 			size_t pgsize = iommu_pgsize(
 				cfg->pgsize_bitmap, iova | phys, size);
-
-			ret = __ipu_iommu_pgtable_map(pg_table, iova, phys,
-				pgsize, prot, lvl,
-				&pg_table->shadow_table,
-				NULL);
+			/* see if we can allocate full 2 mb blocks */
+			if (pgsize == SZ_4K && size >= SZ_2M &&
+					!(iova & (SZ_2M - 1)))
+				ret = ipu_iommu_pgtable_bw_map(pg_table,
+						data, prot, iova, phys, size,
+						&pgsize);
+			else
+				ret = __ipu_iommu_pgtable_map(
+					pg_table, iova, phys,
+					pgsize, prot, lvl,
+					&pg_table->shadow_table,
+					NULL);
 			if (ret)
 				goto out_err;
 
@@ -922,13 +1062,15 @@ out_err:
 }
 
 static void __ipu_iommu_free_pgtable(struct ipu_iommu_page_table *pg_table,
-	int lvl, struct ipu_iommu_page_table_shadow_entry *shadow_ptep)
+	int lvl, struct ipu_iommu_page_table_shadow_entry *shadow_ptep,
+	int count)
 {
 	struct ipu_iommu_page_table_shadow_entry *curr, *end;
 	struct arm_lpae_io_pgtable *data =
 		ipu_iommu_pgtable_to_arm_data(pg_table);
 	unsigned long table_size;
 	void *cookie = data->iop.cookie;
+	int cnt = 1;
 
 	if (lvl == ARM_LPAE_START_LVL(data))
 		table_size = data->pgd_size;
@@ -943,23 +1085,32 @@ static void __ipu_iommu_free_pgtable(struct ipu_iommu_page_table *pg_table,
 				__func__);
 		}
 		__ipu_iommu_pgtable_free_pages(shadow_ptep,
-			table_size,
+			table_size * count,
 			&data->iop.cfg,
 			cookie);
 		return;
 	}
 
-	curr = shadow_ptep->next_lvl;
+	curr = shadow_ptep->next_lvl - 1;
 	end = (void *)curr + PTE_ARM_TO_IPU * table_size;
 
 	while (curr != end) {
-		struct ipu_iommu_page_table_shadow_entry *shadow_centry = curr;
+		struct ipu_iommu_page_table_shadow_entry *shadow_centry = end;
 
-		curr++;
+		end--;
 		if (shadow_centry->next_lvl == NULL)
 			continue;
+
+		if (shadow_centry->ab_dram_dma_buf == NULL) {
+			++cnt;
+			shadow_centry->page_table_entry = NULL;
+			shadow_centry->next_lvl = NULL;
+			continue;
+		}
+
 		__ipu_iommu_free_pgtable(pg_table,
-			lvl + 1, shadow_centry);
+			lvl + 1, shadow_centry, cnt);
+		cnt = 1;
 	}
 
 	__ipu_iommu_pgtable_free_pages(shadow_ptep,
@@ -969,7 +1120,8 @@ static void __ipu_iommu_free_pgtable(struct ipu_iommu_page_table *pg_table,
 }
 
 static int __ipu_iommu_load_pgtable(struct ipu_iommu_page_table *pg_table,
-	int lvl, struct ipu_iommu_page_table_shadow_entry *shadow_ptep)
+	int lvl, struct ipu_iommu_page_table_shadow_entry *shadow_ptep,
+	int count)
 {
 	struct ipu_iommu_page_table_shadow_entry *curr, *end;
 	int err;
@@ -979,33 +1131,40 @@ static int __ipu_iommu_load_pgtable(struct ipu_iommu_page_table *pg_table,
 	unsigned long table_size;
 	dma_addr_t ab_addr = ab_dram_get_dma_buf_paddr(
 				shadow_ptep->ab_dram_dma_buf);
+	int cnt = 1;
 
 	if (lvl == ARM_LPAE_START_LVL(data))
 		table_size = data->pgd_size;
 	else
 		table_size = ARM_LPAE_GRANULE(data);
 
-		err = ipu_iommu_page_table_update_ab(pg_table,
+	err = ipu_iommu_page_table_update_ab(pg_table,
 		cfg, ab_addr, shadow_ptep->page_table_entry,
-		table_size);
+		table_size * count);
 	if (err)
 		return err;
 
 	if (lvl == ARM_LPAE_MAX_LEVELS - 1)
 		return 0;
 
-	curr = shadow_ptep->next_lvl;
+	curr = shadow_ptep->next_lvl - 1;
 	end = (void *)curr + PTE_ARM_TO_IPU * table_size;
 
 	while (curr != end) {
-		struct ipu_iommu_page_table_shadow_entry *shadow_centry = curr;
+		struct ipu_iommu_page_table_shadow_entry *shadow_centry = end;
 
-		curr++;
+		end--;
 		if (shadow_centry->next_lvl == NULL)
 			continue;
 
+		if (shadow_centry->ab_dram_dma_buf == NULL) {
+			++cnt;
+			continue;
+		}
+
 		err = __ipu_iommu_load_pgtable(pg_table,
-			lvl + 1, shadow_centry);
+			lvl + 1, shadow_centry, cnt);
+		cnt = 1;
 		if (err)
 			return err;
 	}
@@ -1017,7 +1176,7 @@ static void __ipu_iommu_free_pgtable_top(
 	struct arm_lpae_io_pgtable *data)
 {
 	__ipu_iommu_free_pgtable(pg_table,
-		ARM_LPAE_START_LVL(data), &pg_table->shadow_table);
+		ARM_LPAE_START_LVL(data), &pg_table->shadow_table, 1);
 	kfree(data);
 }
 
@@ -1092,9 +1251,45 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 		if (!iopte_leaf(pte, lvl)) {
 			/* Also flush any partial walks */
 			__ipu_iommu_free_pgtable(
-				pg_table, lvl + 1, shadow_nptep);
+				pg_table, lvl + 1, shadow_nptep, 1);
 		}
 		return size;
+	} else if ((lvl == ARM_LPAE_MAX_LEVELS - 2) &&
+		size % SZ_2M == 0) {
+		/* blk free */
+		struct ipu_iommu_page_table_shadow_entry *shadow_tmp;
+		int i, entries, max_entries = size / SZ_2M;
+		dma_addr_t ab_addr;
+
+		if (!iopte_leaf(pte, lvl)) {
+			/* count */
+			for (shadow_tmp = shadow_nptep + 1, entries = 1;
+					entries < max_entries; ++entries)
+				if (shadow_tmp->ab_dram_dma_buf != NULL ||
+					shadow_tmp->page_table_entry ==
+					NULL)
+					break;
+
+			__ipu_iommu_free_pgtable(
+				pg_table, lvl + 1, shadow_nptep, entries);
+		} else
+			entries = max_entries;
+
+		ab_addr = ab_dram_get_dma_buf_paddr(
+					shadow_ptep->ab_dram_dma_buf);
+		for (i = 0; i < entries; ++i) {
+			__ipu_iommu_pgtbl_set_pte(pg_table,
+				&iop->cfg,
+				ab_addr +
+				(sizeof(arm_lpae_iopte) * (i + diff)),
+				ptep + i,
+				0, false /* push_update */);
+		}
+
+		memset(shadow_ptep->next_lvl + diff, 0,
+				sizeof(*shadow_ptep) * entries);
+
+		return entries * SZ_2M;
 	} else if ((lvl == ARM_LPAE_MAX_LEVELS - 2) && !iopte_leaf(pte, lvl)) {
 		/*
 		 * page we want to free is in the next level
@@ -1118,12 +1313,11 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 
 		table += tl_offset;
 
-		memset(table, 0, table_len);
 		iopte_tblcnt_sub(ptep, entries);
 		if (!iopte_tblcnt(*ptep)) {
 			/* no valid mappings left under this table. free it. */
 			__ipu_iommu_free_pgtable(
-				pg_table, lvl + 1, shadow_nptep);
+				pg_table, lvl + 1, shadow_nptep, 1);
 			__ipu_iommu_pgtbl_set_pte(pg_table,
 				&iop->cfg,
 				ab_dram_get_dma_buf_paddr(
@@ -1135,12 +1329,11 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 				sizeof(*shadow_ptep));
 
 		} else {
+			memset(table, 0, table_len);
 			/* reset the airbrush memory */
-			struct io_pgtable_cfg *cfg = &data->iop.cfg;
-
 			if (ipu_iommu_page_table_reset_ab_mem(
 					pg_table,
-					cfg,
+					&data->iop.cfg,
 					shadow_nptep->ab_dram_dma_buf,
 					tl_offset,
 					table_len)) {
@@ -1193,9 +1386,15 @@ static size_t ipu_iommu_pgtable_unmap(struct io_pgtable_ops *ops,
 		remaining = (size - unmapped);
 		size_to_unmap = iommu_pgsize(data->iop.cfg.pgsize_bitmap, iova,
 						remaining);
-		size_to_unmap = size_to_unmap >= SZ_2M ?
-				size_to_unmap :
-				min_t(unsigned long, remaining,
+
+		if (size_to_unmap >= SZ_2M) {
+			size_to_unmap = min_t(unsigned long, remaining,
+					(ALIGN(iova + 1, SZ_1G) - iova));
+			size_to_unmap &= ~(SZ_2M - 1);
+		} else
+			size_to_unmap = size_to_unmap >= SZ_2M ?
+					size_to_unmap :
+					min_t(unsigned long, remaining,
 					(ALIGN(iova + 1, SZ_2M) - iova));
 		ret = __ipu_iommu_pgtable_unmap(pg_table, iova, size_to_unmap,
 			lvl, shadow_table);
@@ -1215,12 +1414,12 @@ static int ipu_iommu_pgtable_iova_to_pte(struct ipu_iommu_page_table *pg_table,
 				arm_lpae_iopte *ptep_ret)
 {
 	struct arm_lpae_io_pgtable *data;
-	struct ipu_iommu_page_table_shadow_entry *shadown_entry;
+	struct ipu_iommu_page_table_shadow_entry *shadow_entry;
 	arm_lpae_iopte pte, *ptep;
 
 	data = ipu_iommu_pgtable_to_arm_data(pg_table);
-	shadown_entry = &pg_table->shadow_table;
-	ptep = shadown_entry->page_table_entry;
+	shadow_entry = &pg_table->shadow_table;
+	ptep = shadow_entry->page_table_entry;
 	*plvl_ret = ARM_LPAE_START_LVL(data);
 	*ptep_ret = 0;
 
@@ -1242,8 +1441,8 @@ static int ipu_iommu_pgtable_iova_to_pte(struct ipu_iommu_page_table *pg_table,
 		if (iopte_leaf(pte, *plvl_ret))
 			goto found_translation;
 
-		shadown_entry = shadown_entry->next_lvl + diff;
-		ptep = shadown_entry->page_table_entry;
+		shadow_entry = shadow_entry->next_lvl + diff;
+		ptep = shadow_entry->page_table_entry;
 		/* Take it to the next level */
 	} while (++(*plvl_ret) < ARM_LPAE_MAX_LEVELS);
 
@@ -1461,7 +1660,8 @@ ipu_iommu_page_table_alloc_pgtable(struct io_pgtable_cfg *cfg, void *cookie,
 	pg_table->shadow_table = __ipu_iommu_pgtable_alloc_pages(
 		pg_table,
 		data->pgd_size,
-		GFP_KERNEL, cfg, cookie, true /*alloc_shadow*/);
+		GFP_KERNEL, cfg, cookie, true /*alloc_shadow*/,
+		true /* reset mem */);
 
 	if (!pg_table->shadow_table.page_table_entry)
 		goto out_free_data;
@@ -1583,7 +1783,7 @@ void ipu_iommu_pgtable_mem_up(struct io_pgtable_ops *ops)
 	pg_table->ab_dram_up = true;
 
 	if (__ipu_iommu_load_pgtable(pg_table,
-			ARM_LPAE_START_LVL(data), &pg_table->shadow_table)) {
+			ARM_LPAE_START_LVL(data), &pg_table->shadow_table, 1)) {
 		dev_err(pg_table->dma_dev, "%s error loading page table\n",
 			__func__);
 		pg_table->ab_dram_up = false;
