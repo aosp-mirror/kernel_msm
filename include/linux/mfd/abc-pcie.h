@@ -317,6 +317,7 @@ void abc_dma_unmap_page(dma_addr_t addr,  size_t size,
 void abc_dma_unmap_single(dma_addr_t addr,  size_t size,
 		enum dma_data_direction dir);
 void abc_pcie_set_linkstate(u32 target_linkstate);
+void abc_set_l1_entry_delay(int delay);
 int abc_set_pcie_link_l1(bool enabled);
 bool abc_pcie_enumerated(void);
 #endif

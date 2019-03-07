@@ -484,7 +484,7 @@ static void abc_l12_timeout_ctrl(bool enable)
 
 }
 
-static void abc_set_l1_entry_delay(enum l1_entry_delay_value delay,
+static void abc_l1_entry_ctrl(enum l1_entry_delay_value delay,
 	bool use_l0s_for_entry)
 {
 	u32 val = readl_relaxed(abc_dev->pcie_config
@@ -502,6 +502,13 @@ static void abc_set_l1_entry_delay(enum l1_entry_delay_value delay,
 	__iowmb();
 	writel_relaxed(val,
 		abc_dev->pcie_config + ACK_F_ASPM_CTRL_OFF);
+}
+
+void abc_set_l1_entry_delay(int delay)
+{
+	delay = min(delay, delay_64us);
+	delay = max(delay_1us, delay);
+	abc_l1_entry_ctrl(delay, false);
 }
 
 static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
@@ -570,7 +577,7 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 		/* Clock Request Enable*/
 		writel_relaxed(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
 		/* 32us delay was selected after testing */
-		abc_set_l1_entry_delay(delay_32us, pmctrl->l0s_en);
+		abc_l1_entry_ctrl(delay_32us, pmctrl->l0s_en);
 	}
 
 	return 0;

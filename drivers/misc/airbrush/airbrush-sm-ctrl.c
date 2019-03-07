@@ -2074,6 +2074,13 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
+	case AB_SM_SET_PCIE_L1SS_DELAY:
+		mutex_lock(&sc->state_transitioning_lock);
+		mutex_lock(&sc->op_lock);
+		abc_set_l1_entry_delay(arg);
+		mutex_unlock(&sc->op_lock);
+		mutex_unlock(&sc->state_transitioning_lock);
+		break;
 	case AB_SM_UPDATE_IPU_STATE_PROPERTIES:
 		if (copy_from_user(&props, (void __user *)arg,
 					sizeof(struct new_block_props))) {
