@@ -12,7 +12,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *  General Public License for more details.
  */
-
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
 #include <linux/mfd/core.h>
@@ -83,7 +82,7 @@ void iaxxx_pm_enable(struct iaxxx_priv *priv)
 	priv->in_resume = 0;
 	ret = pm_runtime_set_active(priv->dev);
 	if (ret < 0)
-		pr_err("pm_runtime_set_active fail %d\n", ret);
+		dev_err(priv->dev, "pm_runtime_set_active fail %d\n", ret);
 	pm_runtime_enable(priv->dev);
 
 	pm_runtime_set_autosuspend_delay(priv->dev, IAXXX_PM_AUTOSUSPEND_DELAY);
@@ -329,6 +328,8 @@ int iaxxx_pm_set_aclk(struct device *dev, int clk_freq)
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int rc, status;
 
+	dev_dbg(dev, "%s() freq:%d\n", __func__, clk_freq);
+
 	rc = regmap_update_bits(priv->regmap,
 			IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR,
 			IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_OUT_FREQ_MASK,
@@ -360,6 +361,8 @@ int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev)
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int rc;
 
+	dev_dbg(dev, "%s()\n", __func__);
+
 	/* Disable both the control interfaces and the chip will go to
 	 * optimal power mode
 	 */
@@ -371,7 +374,7 @@ int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev)
 			0x1 <<
 			IAXXX_SRB_SYS_POWER_CTRL_DISABLE_CTRL_INTERFACE_POS);
 	if (rc) {
-		dev_info(dev, "%s() Fail\n", __func__);
+		dev_err(dev, "%s() Fail\n", __func__);
 		return rc;
 	}
 
@@ -391,6 +394,8 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int rc;
 
+	dev_dbg(dev, "%s()\n", __func__);
+
 	/* Disable both the control interfaces and the chip will go to
 	 * optimal power mode
 	 */
@@ -403,7 +408,7 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
 			0x1 <<
 			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS);
 	else {
-		dev_info(dev, "%s() Fail\n", __func__);
+		dev_err(dev, "%s() Fail\n", __func__);
 		return rc;
 	}
 
@@ -416,6 +421,8 @@ int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 {
 	int rc;
 	uint32_t status;
+
+	dev_dbg(priv->dev, "%s() source:%d\n", __func__, source);
 
 	rc = regmap_update_bits(priv->regmap, IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR,
 			IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_MASK,
@@ -461,6 +468,8 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 {
 	int rc;
 	uint32_t status;
+
+	dev_dbg(priv->dev, "%s() source:%d\n", __func__, source);
 
 	if (source == IAXXX_EXT_OSC) {
 		/* Disable control interface 1 */
@@ -535,6 +544,8 @@ int iaxxx_set_apll_source(struct iaxxx_priv *priv, int source)
 	int rc;
 	u32 efuse_trim_value, status = 0;
 
+	dev_dbg(priv->dev, "%s() source:%d\n", __func__, source);
+
 	rc = regmap_update_bits(priv->regmap, IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR,
 		IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_SRC_MASK,
 		source << IAXXX_PWR_MGMT_SYS_CLK_CTRL_APLL_SRC_POS);
@@ -557,7 +568,7 @@ int iaxxx_set_apll_source(struct iaxxx_priv *priv, int source)
 		rc = iaxxx_send_update_block_request(priv->dev,
 				&status, IAXXX_BLOCK_0);
 	if (rc)
-		pr_err("%s failed to set up apll source err = %0x\n",
+		dev_err(priv->dev, "%s failed to set up apll source err = %0x\n",
 					__func__, rc);
 	return rc;
 
@@ -574,7 +585,7 @@ static int check_stream_active_status(struct iaxxx_priv *priv)
 	rc = regmap_read(priv->regmap,
 			IAXXX_STR_HDR_STR_CNT_ADDR, &strm_cnt);
 	if (rc) {
-		pr_err("%s IAXXX_STR_HDR_STR_CNT read err = %0x\n",
+		dev_err(priv->dev, "%s IAXXX_STR_HDR_STR_CNT read err = %0x\n",
 			__func__, rc);
 		return rc;
 	}
@@ -588,11 +599,11 @@ static int check_stream_active_status(struct iaxxx_priv *priv)
 				IAXXX_STR_GRP_STR_STATUS_REG(strm_id),
 				&strm_status);
 		if (rc) {
-			pr_err("%s STR_GRP_STR_STATUS(%d) read err = %0x\n",
+			dev_err(priv->dev, "%s STR_GRP_STR_STATUS(%d) read err = %0x\n",
 				__func__, strm_id, rc);
 			return rc;
 		} else if (strm_status != IAXXX_STRM_STATUS_INIT) {
-			pr_err("%s strm_id(%d) stream is still active\n",
+			dev_err(priv->dev, "%s strm_id(%d) stream is still active\n",
 				__func__, strm_id);
 			return -EBUSY;
 		}
@@ -622,7 +633,8 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 			/* Check if any active streams are present */
 			rc = check_stream_active_status(priv);
 			if (rc) {
-				pr_err("%s streams are still active rc = %0x\n",
+				dev_err(priv->dev,
+					"%s streams still active rc = %0x\n",
 					__func__, rc);
 				goto exit;
 			}
@@ -639,7 +651,8 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 			/* Check if any active streams are present */
 			rc = check_stream_active_status(priv);
 			if (rc) {
-				pr_err("%s streams are still active rc = %0x\n",
+				dev_err(priv->dev,
+					"%s streams still active rc = %0x\n",
 					__func__, rc);
 				goto exit;
 			}
@@ -655,7 +668,7 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 		proc_pwr_ctrl_val = 0;
 	break;
 	default:
-		pr_err("%s wrong proc state requested (%d)\n",
+		dev_err(priv->dev, "%s wrong proc state requested (%d)\n",
 			__func__, proc_state);
 		goto exit;
 	}
@@ -665,7 +678,8 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 				IAXXX_SRB_PROC_PWR_CTRL_ADDR,
 				proc_pwr_ctrl_mask, proc_pwr_ctrl_val);
 	if (rc) {
-		pr_err("%s SRB_PROC_PWR_CTRL_ADDR write err = %0x\n",
+		dev_err(priv->dev,
+			"%s SRB_PROC_PWR_CTRL_ADDR write err = %0x\n",
 			__func__, rc);
 		goto exit;
 	}
@@ -675,8 +689,9 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK,
 			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK);
 	if (rc) {
-		pr_err("%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
-					__func__, rc);
+		dev_err(priv->dev,
+			"%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
+			__func__, rc);
 		goto exit;
 	}
 
@@ -692,13 +707,17 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 	int rc;
 	uint32_t status;
 
+	dev_dbg(priv->dev, "%s() proc_id:%u mem_state:%u\n", __func__,
+		proc_id, mem_state);
+
 	/* Make sure update block bit is in cleared state */
 	rc = regmap_read(priv->regmap,
 			IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
 			&status);
 	if (status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK) {
 		rc = -EBUSY;
-		pr_err("Update Block bit not cleared, rc = %d\n", rc);
+		dev_err(priv->dev, "Update Block bit not cleared, rc = %d\n",
+				rc);
 		goto exit;
 	}
 
@@ -707,7 +726,8 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 			/* Check if any active streams are present */
 			rc = check_stream_active_status(priv);
 			if (rc) {
-				pr_err("%s streams are still active rc = %0x\n",
+				dev_err(priv->dev,
+					"%s stream still active rc = %0x\n",
 					__func__, rc);
 				goto exit;
 			}
@@ -732,7 +752,7 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 		mem_pwr_ctrl_val = 0;
 	break;
 	default:
-		pr_err("%s wrong mem_state state requested (%d)\n",
+		dev_err(priv->dev, "%s wrong mem_state state requested (%d)\n",
 			__func__, mem_state);
 		goto exit;
 	}
@@ -742,7 +762,7 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 				IAXXX_SRB_DED_MEM_PWR_CTRL_ADDR,
 				mem_pwr_ctrl_mask, mem_pwr_ctrl_val);
 	if (rc) {
-		pr_err("%s SRB_DED_MEM_PWR_CTRL write err = %0x\n",
+		dev_err(priv->dev, "%s SRB_DED_MEM_PWR_CTRL write err = %0x\n",
 			__func__, rc);
 		goto exit;
 	}
@@ -752,7 +772,8 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 				IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK,
 				IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK);
 	if (rc)
-		pr_err("%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
+		dev_err(priv->dev,
+			"%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
 			__func__, rc);
 
 exit:
@@ -765,11 +786,14 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv)
 	int rc;
 	uint32_t status;
 
+	dev_dbg(priv->dev, "%s()\n", __func__);
+
 	/* Make sure update block bit is in cleared state */
 	rc = iaxxx_poll_update_block_req_bit_clr(priv);
 	if (rc) {
-		pr_err("Don't do Update Block in progress, rc = %d\n",
-			rc);
+		dev_err(priv->dev,
+			"%s() Don't do Update Block in progress, rc = %d\n",
+			__func__, rc);
 		goto exit;
 	}
 
@@ -779,7 +803,7 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv)
 			IAXXX_SRB_PROC_HWSLEEP_CTRL_WMASK_VAL,
 			IAXXX_SRB_PROC_HWSLEEP_CTRL_HWSLEEP_PROC_3_MASK);
 	if (rc) {
-		pr_err("%s SRB_PROC_HWSLEEP_CTRL write err = %0x\n",
+		dev_err(priv->dev, "%s SRB_PROC_HWSLEEP_CTRL write err = %0x\n",
 			__func__, rc);
 		goto exit;
 	}
@@ -789,7 +813,7 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv)
 			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_HWSLEEP_REQ_MASK,
 			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_HWSLEEP_REQ_MASK);
 	if (rc) {
-		pr_err("%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
+		dev_err(priv->dev, "%s SRB_SYS_POWER_CTRL_ADDR write err = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -797,7 +821,7 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv)
 	rc = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
 	if (rc)
-		pr_err("Update blk failed %s()\n", __func__);
+		dev_err(priv->dev, "Update blk failed %s()\n", __func__);
 
 exit:
 	return rc;
@@ -814,25 +838,25 @@ static int iaxxx_get_proc_pwr_status(struct iaxxx_priv *priv,
 	rc = regmap_read(priv->regmap, IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
 		&proc_pwr_status);
 	if (rc) {
-		pr_err("%s SRB_PROC_ACTIVE_STATUS_ADDR read err = %0x\n",
+		dev_err(priv->dev, "%s SRB_PROC_ACTIVE_STATUS_ADDR read err = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
 	*pwr_status = proc_pwr_status &
 			IAXXX_GET_PROC_PWR_STATUS_MASK(proc_id);
-	pr_info("%s() SRB_PROC_ACTIVE_STATUS_ADDR: %u pwr_status: 0x%08x\n",
+	dev_info(priv->dev, "%s() SRB_PROC_ACTIVE_STATUS_ADDR: %u pwr_status: 0x%08x\n",
 				__func__, proc_pwr_status, *pwr_status);
 
 	rc = regmap_read(priv->regmap, IAXXX_SRB_DED_MEM_PWR_STATUS_ADDR,
 		&mem_pwr_status);
 	if (rc) {
-		pr_err("%s SRB_DED_MEM_PWR_STATUS_ADDR read err = %0x\n",
+		dev_err(priv->dev, "%s SRB_DED_MEM_PWR_STATUS_ADDR read err = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
 	*mem_status = mem_pwr_status &
 			IAXXX_GET_PER_PROC_MEM_PWR_STATUS_MASK(proc_id);
-	pr_info("%s() SRB_DED_MEM_PWR_STATUS_ADDR: %u mem_status: 0x%08x\n",
+	dev_info(priv->dev, "%s() SRB_DED_MEM_PWR_STATUS_ADDR: %u mem_status: 0x%08x\n",
 				__func__, mem_pwr_status, *mem_status);
 
 exit:
@@ -853,7 +877,7 @@ static int check_proc_power_status(struct iaxxx_priv *priv,
 		if (!rc && pwr_status == 0)
 			break;
 		if (rc || retry_count <= 0) {
-			pr_err("%s timedout in processor power down\n",
+			dev_err(priv->dev, "%s timedout in processor power down\n",
 				__func__);
 			return -ETIMEDOUT;
 		}
@@ -870,23 +894,25 @@ int iaxxx_power_up_core_mem(
 	uint32_t status;
 	int rc;
 
+	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
+
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_STALL_ENABLE);
 	if (rc) {
-		pr_err("%s proc power ctrl PROC_STALL_ENABLE failed = %0x\n",
+		dev_err(priv->dev, "%s proc power ctrl PROC_STALL_ENABLE failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_UP);
 	if (rc) {
-		pr_err("%s proc power ctrl PROC_PWR_UP failed = %0x\n",
+		dev_err(priv->dev, "%s proc power ctrl PROC_PWR_UP failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
 
 	rc = iaxxx_set_mem_pwr_ctrl(priv, proc_id, MEM_PWR_UP);
 	if (rc) {
-		pr_err("%s mem power ctrl MEM_PWR_UP failed = %0x\n",
+		dev_err(priv->dev, "%s mem power ctrl MEM_PWR_UP failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -894,21 +920,21 @@ int iaxxx_power_up_core_mem(
 	rc = iaxxx_send_update_block_request(priv->dev,
 				&status, IAXXX_BLOCK_0);
 	if (rc) {
-		pr_err("Update blk failed before download %s(): %d\n",
+		dev_err(priv->dev, "Update blk failed before download %s(): %d\n",
 				__func__, status);
 		goto exit;
 	}
 
 	rc = iaxxx_boot_core(priv, proc_id);
 	if (rc) {
-		pr_err("boot_core (%d) fail :%d\n", proc_id, rc);
+		dev_err(priv->dev, "boot_core (%d) fail :%d\n", proc_id, rc);
 		goto exit;
 	}
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id,
 				PROC_STALL_DISABLE);
 	if (rc) {
-		pr_err("%s proc power ctrl PROC_STALL_DIS failed = %0x\n",
+		dev_err(priv->dev, "%s proc power ctrl PROC_STALL_DIS failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -916,9 +942,8 @@ int iaxxx_power_up_core_mem(
 	rc = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
 	if (rc)
-		pr_err("Update blk failed after download %s(): %d\n",
+		dev_err(priv->dev, "Update blk failed after download %s(): %d\n",
 				__func__, status);
-
 exit:
 	return rc;
 }
@@ -929,9 +954,11 @@ int iaxxx_power_down_core_mem(
 	uint32_t status;
 	int rc = 0;
 
+	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
+
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
 	if (rc) {
-		pr_err("%s proc power ctrl PROC_PWR_DOWN failed = %0x\n",
+		dev_err(priv->dev, "%s proc power ctrl PROC_PWR_DOWN failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -940,7 +967,7 @@ int iaxxx_power_down_core_mem(
 		rc = iaxxx_send_update_block_request(priv->dev,
 					&status, IAXXX_BLOCK_0);
 		if (rc) {
-			pr_err(
+			dev_err(priv->dev,
 			"Update blk failed after proc pwr down %s(): %d\n",
 			__func__, status);
 			goto exit;
@@ -948,7 +975,7 @@ int iaxxx_power_down_core_mem(
 
 		rc = check_proc_power_status(priv, proc_id);
 		if (rc) {
-			pr_err("%s check_proc_power_status failed = %0x\n",
+			dev_err(priv->dev, "%s check_proc_power_status failed = %0x\n",
 						__func__, rc);
 			goto exit;
 		}
@@ -956,7 +983,7 @@ int iaxxx_power_down_core_mem(
 
 	rc = iaxxx_set_mem_pwr_ctrl(priv, proc_id, MEM_PWR_DOWN);
 	if (rc) {
-		pr_err("%s mem power ctrl MEM_PWR_DOWN failed = %0x\n",
+		dev_err(priv->dev, "%s mem power ctrl MEM_PWR_DOWN failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -964,7 +991,7 @@ int iaxxx_power_down_core_mem(
 	rc = iaxxx_send_update_block_request(priv->dev,
 				&status, IAXXX_BLOCK_0);
 	if (rc)
-		pr_err("Update blk failed after mem pwr down%s(): %d\n",
+		dev_err(priv->dev, "Update blk failed after mem pwr down%s(): %d\n",
 				__func__, status);
 
 exit:
@@ -977,16 +1004,17 @@ int iaxxx_power_up_core_mem_on(
 	uint32_t status;
 	int rc = 0;
 
+	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
 	rc = iaxxx_set_mem_pwr_ctrl(priv, proc_id, MEM_RETN_OFF);
 	if (rc) {
-		pr_err("%s mem power ctrl MEM_RETN_OFF failed = %0x\n",
+		dev_err(priv->dev, "%s mem power ctrl MEM_RETN_OFF failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_UP);
 	if (rc) {
-		pr_err("%s proc power ctrl PROC_PWR_UP failed = %0x\n",
+		dev_err(priv->dev, "%s proc power ctrl PROC_PWR_UP failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -994,7 +1022,7 @@ int iaxxx_power_up_core_mem_on(
 	rc = iaxxx_send_update_block_request(priv->dev,
 				&status, IAXXX_BLOCK_0);
 	if (rc)
-		pr_err("Update blk failed after proc pwr up %s(): %d\n",
+		dev_err(priv->dev, "Update blk failed after proc pwr up %s(): %d\n",
 				__func__, status);
 
 exit:
@@ -1007,9 +1035,11 @@ int iaxxx_power_down_core_mem_in_retn(
 	uint32_t status;
 	int rc;
 
+	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
+
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
 	if (rc) {
-		pr_err("%s proc power ctrl PROC_PWR_DOWN failed = %0x\n",
+		dev_err(priv->dev, "%s proc power ctrl PROC_PWR_DOWN failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -1018,7 +1048,7 @@ int iaxxx_power_down_core_mem_in_retn(
 		rc = iaxxx_send_update_block_request(priv->dev,
 					&status, IAXXX_BLOCK_0);
 		if (rc) {
-			pr_err(
+			dev_err(priv->dev,
 			"Update blk failed after proc pwr down %s(): %d\n",
 			__func__, status);
 			goto exit;
@@ -1026,7 +1056,7 @@ int iaxxx_power_down_core_mem_in_retn(
 
 		rc = check_proc_power_status(priv, proc_id);
 		if (rc) {
-			pr_err("%s check_proc_power_status failed = %0x\n",
+			dev_err(priv->dev, "%s check_proc_power_status failed = %0x\n",
 						__func__, rc);
 			goto exit;
 		}
@@ -1034,7 +1064,7 @@ int iaxxx_power_down_core_mem_in_retn(
 
 	rc = iaxxx_set_mem_pwr_ctrl(priv, proc_id, MEM_RETN_ON);
 	if (rc) {
-		pr_err("%s mem power ctrl MEM_RETN_ON failed = %0x\n",
+		dev_err(priv->dev, "%s mem power ctrl MEM_RETN_ON failed = %0x\n",
 					__func__, rc);
 		goto exit;
 	}
@@ -1042,7 +1072,7 @@ int iaxxx_power_down_core_mem_in_retn(
 	rc = iaxxx_send_update_block_request(priv->dev,
 				&status, IAXXX_BLOCK_0);
 	if (rc)
-		pr_err("Update blk failed after mem retn ON %s(): %d\n",
+		dev_err(priv->dev, "Update blk failed after mem retn ON %s(): %d\n",
 				__func__, status);
 
 exit:
@@ -1067,6 +1097,8 @@ int iaxxx_get_max_spi_speed(struct device *dev, uint32_t *max_spi_speed)
 		"%s() Fail to read PWR_MGMT_MAX_SPI_SPEED_ADDR rc = %d\n",
 								__func__, rc);
 	}
+
+	dev_dbg(priv->dev, "%s() speed:%u\n", __func__, *max_spi_speed);
 
 	return rc;
 }
@@ -1134,6 +1166,8 @@ EXPORT_SYMBOL(iaxxx_core_get_pwr_stats);
 int iaxxx_set_osc_trim_period(struct iaxxx_priv *priv, int period)
 {
 	int rc;
+
+	dev_dbg(priv->dev, "%s() period:%d\n", __func__, period);
 
 	rc = regmap_update_bits(priv->regmap,
 		IAXXX_SRB_SYS_POWER_CTRL_ADDR,

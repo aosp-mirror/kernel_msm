@@ -1489,7 +1489,7 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 	struct iaxxx_pkg_data *pkg_data;
 	int rc = -EINVAL;
 
-	dev_info(dev, "%s()\n", __func__);
+	dev_info(dev, "%s() pkg_id:%u\n", __func__, pkg_id);
 
 	if (!pkg_name) {
 		dev_err(dev, "%s() Package name is NULL\n", __func__);
