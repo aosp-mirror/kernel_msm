@@ -11,6 +11,45 @@
  */
 
 &soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		/delete-node/ synaptics@20;
+
+		focaltech@38 {
+			compatible = "focaltech,fts";
+			reg = <0x38>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <98 0x2002>;
+			vdd-supply = <&pm660_l18>;
+			vcc_i2c-supply = <&pm660_l13>;
+			focaltech,name = "fts";
+			focaltech,family-id = <0x0e>;
+			focaltech,reset-gpio = <&msm_gpio 16 0x00>;
+			focaltech,irq-gpio =<&msm_gpio 98 0x00>;
+
+			/* pins used by touchscreen */
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_release";
+			pinctrl-0 = <&ts_int_active &ts_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+			pinctrl-2 = <&ts_release>;
+			focaltech,display-coords = <0 0 400 400>; //for android wear
+			focaltech,panel-coords = <0 0 400 400>;
+			focaltech,button-map= <70 150 907>;
+			focaltech,no-force-update;
+			focaltech,i2c-pull-up;
+			focaltech,group-id = <1>;
+			focaltech,hard-reset-delay-ms = <20>;
+			focaltech,soft-reset-delay-ms = <300>;
+			focaltech,num-max-touches = <2>;
+			focaltech,fw-name = "CEI_FNW1_3207_V0x02_20160115_app.i";
+			focaltech,fw-delay-aa-ms = <50>;
+			focaltech,fw-delay-55-ms = <30>;
+			focaltech,fw-upgrade-id1 = <0x79>;
+			focaltech,fw-upgrade-id2 = <0x03>;
+			focaltech,fw-delay-readid-ms = <10>;
+			focaltech,fw-delay-era-flsh-ms = <2000>;
+		};
+	};
+
 	gpio_keys {
 		label = "gpio-keys";
 		/delete-node/ camera_focus;
