@@ -16,6 +16,17 @@
 	/delete-node/ qcom,mdss_dsi_auo_390p_cmd;
 };
 
+&soc {
+	dsi_pm660_panel_pwr_supply {
+		qcom,panel-supply-entry@0 {
+			/delete-property/ qcom,supply-min-voltage;
+			/delete-property/ qcom,supply-max-voltage;
+			qcom,supply-min-voltage = <3300000>;
+			qcom,supply-max-voltage = <3300000>;
+		};
+	};
+};
+
 &dsi_auo_x120_amoled_cmd {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,panel-supply-entries = <&dsi_pm660_panel_pwr_supply>;
