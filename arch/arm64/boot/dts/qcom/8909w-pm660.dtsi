@@ -77,6 +77,10 @@
 		/delete-property/ cdc-vdd-pa-supply;
 		/delete-property/ cdc-vdd-mic-bias-supply;
 	};
+
+	dsi_pm660_panel_pwr_supply {
+		/delete-node/ qcom,panel-supply-entry@2;
+	};
 };
 
 &msm_gpio {
@@ -196,9 +200,13 @@
 	vddio-supply = <&pm660_l12>; /*1.8V*/
 	qcom,mdss_dsi_ctrl0@1ac8000 {
 		bklt-supply = <&bob_vreg>;
-		vdd-supply = <&pm660_l18>; /*1.8*/
+		vdd-supply = <&bob_vreg>; /*1.8*/
 		vddio-supply = <&pm660_l11>;
 	};
+};
+
+&mdss_dsi {
+		/delete-property/ bklt-supply;
 };
 
 &mdss_dsi0_pll {
