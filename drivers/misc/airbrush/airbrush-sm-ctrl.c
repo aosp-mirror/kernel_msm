@@ -306,8 +306,8 @@ static struct block_property fsys_property_table[] = {
 	BLK_(302, Normal,        L0,  0, on,  0_85, on,  2500,  0, 0, 0, 2),
 	/* GEN3L0 */
 	BLK_(303, Normal,        L0,  0, on,  0_85, on,  4000,  0, 0, 0, 3),
-	/* GEN3L1.2 */
-	BLK_(304, Normal,        L1.2, 0, on, 0_85, on,  4000,  0, 0, 0, 3),
+	/* GEN3L1.1 */
+	BLK_(304, Normal,        L1.1, 0, on, 0_85, on,  4000,  0, 0, 0, 3),
 };
 
 static struct block_property aon_property_table[] = {
