@@ -91,6 +91,23 @@
 					type = "hot";
 				};
 			};
+			cooling-maps {
+				map4 {
+					trip = <&airbrush_ipu0_trip4>;
+					cooling-device =
+						<&abc_cooling_internal 1 1>;
+				};
+				map5 {
+					trip = <&airbrush_ipu0_trip5>;
+					cooling-device =
+						<&abc_cooling_internal 2 2>;
+				};
+				map6 {
+					trip = <&airbrush_ipu0_trip6>;
+					cooling-device =
+						<&abc_cooling_internal 3 3>;
+				};
+			};
 		};
 
 		airbrush-ipu1 {
@@ -118,6 +135,23 @@
 					temperature = <90000>;
 					hysteresis = <1000>;
 					type = "hot";
+				};
+			};
+			cooling-maps {
+				map4 {
+					trip = <&airbrush_ipu1_trip4>;
+					cooling-device =
+						<&abc_cooling_internal 1 1>;
+				};
+				map5 {
+					trip = <&airbrush_ipu1_trip5>;
+					cooling-device =
+						<&abc_cooling_internal 2 2>;
+				};
+				map6 {
+					trip = <&airbrush_ipu1_trip6>;
+					cooling-device =
+						<&abc_cooling_internal 3 3>;
 				};
 			};
 		};
@@ -149,6 +183,23 @@
 					type = "hot";
 				};
 			};
+			cooling-maps {
+				map4 {
+					trip = <&airbrush_ipu2_trip4>;
+					cooling-device =
+						<&abc_cooling_internal 1 1>;
+				};
+				map5 {
+					trip = <&airbrush_ipu2_trip5>;
+					cooling-device =
+						<&abc_cooling_internal 2 2>;
+				};
+				map6 {
+					trip = <&airbrush_ipu2_trip6>;
+					cooling-device =
+						<&abc_cooling_internal 3 3>;
+				};
+			};
 		};
 
 		airbrush-ipu3 {
@@ -176,6 +227,23 @@
 					temperature = <90000>;
 					hysteresis = <1000>;
 					type = "hot";
+				};
+			};
+			cooling-maps {
+				map4 {
+					trip = <&airbrush_ipu3_trip4>;
+					cooling-device =
+						<&abc_cooling_internal 1 1>;
+				};
+				map5 {
+					trip = <&airbrush_ipu3_trip5>;
+					cooling-device =
+						<&abc_cooling_internal 2 2>;
+				};
+				map6 {
+					trip = <&airbrush_ipu3_trip6>;
+					cooling-device =
+						<&abc_cooling_internal 3 3>;
 				};
 			};
 		};
@@ -207,6 +275,23 @@
 					type = "hot";
 				};
 			};
+			cooling-maps {
+				map4 {
+					trip = <&airbrush_tpu0_trip4>;
+					cooling-device =
+						<&abc_cooling_internal 1 1>;
+				};
+				map5 {
+					trip = <&airbrush_tpu0_trip5>;
+					cooling-device =
+						<&abc_cooling_internal 2 2>;
+				};
+				map6 {
+					trip = <&airbrush_tpu0_trip6>;
+					cooling-device =
+						<&abc_cooling_internal 3 3>;
+				};
+			};
 		};
 
 		airbrush-tpu1 {
@@ -234,6 +319,23 @@
 					temperature = <90000>;
 					hysteresis = <1000>;
 					type = "hot";
+				};
+			};
+			cooling-maps {
+				map4 {
+					trip = <&airbrush_tpu1_trip4>;
+					cooling-device =
+						<&abc_cooling_internal 1 1>;
+				};
+				map5 {
+					trip = <&airbrush_tpu1_trip5>;
+					cooling-device =
+						<&abc_cooling_internal 2 2>;
+				};
+				map6 {
+					trip = <&airbrush_tpu1_trip6>;
+					cooling-device =
+						<&abc_cooling_internal 3 3>;
 				};
 			};
 		};
