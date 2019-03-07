@@ -17,9 +17,9 @@
 #include <linux/ab-dram.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
-#include <linux/genalloc.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
+#include <linux/ll-pool.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -39,7 +39,7 @@ struct ab_dram_data {
 	struct miscdevice dev;
 	struct dentry *debug_root;
 	struct mutex lock;
-	struct gen_pool *pool;
+	struct ll_pool *pool;
 	int session_count;
 };
 
@@ -79,55 +79,30 @@ static int ab_dram_alloc(struct ab_dram_data *dev_data,
 		struct ab_dram_buffer *buffer, size_t len)
 {
 	struct sg_table *table;
-	unsigned long paddr;
-	int ret;
 
-	table = kmalloc(sizeof(*table), GFP_KERNEL);
-	if (!table)
-		return -ENOMEM;
+	table = ll_pool_alloc(dev_data->pool, len, true);
+	if (IS_ERR(table))
+		return PTR_ERR(table);
 
-	ret = sg_alloc_table(table, 1, GFP_KERNEL);
-	if (ret) {
-		kfree(table);
-		return ret;
-	}
+	buffer->ab_paddr = sg_dma_address(table->sgl);
+	buffer->size = sg_dma_len(table->sgl);
 
-	paddr = gen_pool_alloc(dev_data->pool, len);
-	if (!paddr) {
-		pr_err("Fail to allocate genpool\n");
-		goto err;
-	}
-	buffer->ab_paddr = paddr;
 	buffer->sg_table = table;
 
-	sg_dma_address(table->sgl) = paddr;
-	sg_dma_len(table->sgl) = len;
-	table->sgl->length = len;
-
 	return 0;
-err:
-	sg_free_table(table);
-	kfree(table);
-	return -ENOMEM;
 }
 
 static void ab_dram_free(struct ab_dram_buffer *buffer)
 {
 	struct ab_dram_data *dev_data = internal_data;
-	struct sg_table *table = buffer->sg_table;
-	struct scatterlist *sg = table->sgl;
-	int i;
+	struct sg_table *table;
 
 	if (!buffer)
 		return;
 
-	for_each_sg(table->sgl, sg, table->nents, i) {
-		gen_pool_free(dev_data->pool, sg_dma_address(sg),
-				sg_dma_len(sg));
-	}
+	table = buffer->sg_table;
+	ll_pool_free(dev_data->pool, table);
 
-	sg_free_table(table);
-	kfree(table);
 	buffer->sg_table = NULL;
 }
 
@@ -542,20 +517,20 @@ static int ab_dram_device_create(void)
 	}
 
 	mutex_init(&dev_data->lock);
-	dev_data->pool = gen_pool_create(PAGE_SHIFT, -1);
-	if (!dev_data->pool) {
-		ret = -ENOMEM;
-		misc_deregister(&dev_data->dev);
-		goto err_init;
+	dev_data->pool = ll_pool_create(AIRBRUSH_DRAM_START_PADDR,
+			AIRBRUSH_DRAM_SIZE);
+	if (IS_ERR(dev_data->pool)) {
+		pr_err("%s: err creating remote buddy pool\n", __func__);
+		ret = PTR_ERR(dev_data->pool);
+		goto unregister_misc;
 	}
-
-	ret = gen_pool_add(dev_data->pool, AIRBRUSH_DRAM_START_PADDR,
-			AIRBRUSH_DRAM_SIZE, -1);
 
 	internal_data = dev_data;
 	initialized = true;
-	return ret;
+	return 0;
 
+unregister_misc:
+	misc_deregister(&dev_data->dev);
 err_init:
 	kfree(dev_data);
 	return ret;
@@ -565,6 +540,7 @@ static void __exit ab_dram_exit(void)
 {
 	misc_deregister(&internal_data->dev);
 	initialized = false;
+	ll_pool_destroy(internal_data->pool);
 	mutex_destroy(&internal_data->lock);
 	kfree(internal_data);
 }
