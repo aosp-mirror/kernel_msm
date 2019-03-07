@@ -4,6 +4,7 @@
 #
 
 obj-$(CONFIG_AIRBRUSH_SM)	+= airbrush/
+obj-$(CONFIG_LL_ALLOCATOR)	+= ll-pool.o
 obj-$(CONFIG_AIRBRUSH_DRAM)	+= ab-dram.o
 obj-$(CONFIG_FACEAUTH)		+= faceauth.o faceauth_hypx.o
 obj-$(CONFIG_IBM_ASM)		+= ibmasm/

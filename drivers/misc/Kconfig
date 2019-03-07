@@ -574,9 +574,13 @@ config CS40L2X_HAPTIC
 
 	  To compile this driver as a module, choose M here.
 
+config LL_ALLOCATOR
+	bool "Linked list based allocator for Airbrush DRAM"
+
 config AIRBRUSH_DRAM
 	bool "Airbrush DRAM Manager"
 	default "n"
+	select LL_ALLOCATOR
 	---help---
 	  This option enables the Airbrush DRAM manager
 
