@@ -31,11 +31,16 @@
 #include <linux/delay.h>
 #include <linux/hrtimer.h>
 #include <linux/of_device.h>
-#include <linux/leds.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/cs40l2x.h>
 
 #include "cs40l2x.h"
+
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+#include "../staging/android/timed_output.h"
+#else
+#include <linux/leds.h>
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 
 struct cs40l2x_private {
 	struct device *dev;
@@ -97,7 +102,13 @@ struct cs40l2x_private {
 	bool comp_enable;
 	bool comp_enable_redc;
 	bool comp_enable_f0;
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+	struct timed_output_dev timed_dev;
+	struct hrtimer vibe_timer;
+	int vibe_timeout;
+#else
 	struct led_classdev led_dev;
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 };
 
 static const char * const cs40l2x_supplies[] = {
@@ -160,7 +171,13 @@ static const struct cs40l2x_fw_desc *cs40l2x_firmware_match(
 
 static struct cs40l2x_private *cs40l2x_get_private(struct device *dev)
 {
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+	/* timed output device does not register under a parent device */
+	return container_of(dev_get_drvdata(dev),
+			struct cs40l2x_private, timed_dev);
+#else
 	return dev_get_drvdata(dev);
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 }
 
 static ssize_t cs40l2x_cp_trigger_index_show(struct device *dev,
@@ -361,6 +378,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 		} else if (strnchr(pbq_seg, CS40L2X_PBQ_SEG_LEN_MAX, '!')) {
 			val = 0;
 			num_empty = 0;
+
 			pbq_seg_tok = strsep(&pbq_seg, "!");
 
 			while (pbq_seg_tok) {
@@ -381,6 +399,7 @@ static ssize_t cs40l2x_cp_trigger_queue_store(struct device *dev,
 
 				pbq_seg_tok = strsep(&pbq_seg, "!");
 			}
+
 			/* number of empty tokens reveals specifier type */
 			switch (num_empty) {
 			case 1:	/* outer loop: "n!" or "!n" */
@@ -1918,17 +1937,15 @@ static ssize_t cs40l2x_redc_stored_store(struct device *dev,
 	}
 
 	ret = regmap_write(cs40l2x->regmap, reg, val);
-	if (ret) {
-		pr_err("Failed to store ReDC\n");
+	if (ret)
 		goto err_mutex;
-	}
 
 	ret = count;
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
 
-	return count;
+	return ret;
 }
 
 static ssize_t cs40l2x_q_measured_show(struct device *dev,
@@ -3611,6 +3628,13 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 	case CS40L2X_INDEX_PEAK:
 	case CS40L2X_INDEX_DIAG:
 		pm_stay_awake(dev);
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+		hrtimer_start(&cs40l2x->vibe_timer,
+				ktime_set(cs40l2x->vibe_timeout / 1000,
+						(cs40l2x->vibe_timeout % 1000)
+						* 1000000),
+				HRTIMER_MODE_REL);
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 		break;
 	}
 
@@ -3708,8 +3732,9 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 	case CS40L2X_INDEX_PBQ:
 		cs40l2x->pbq_cp_dig_scale = CS40L2X_DIG_SCALE_RESET;
+
 		ret = cs40l2x_cp_dig_scale_get(cs40l2x,
-					       &cs40l2x->pbq_cp_dig_scale);
+				&cs40l2x->pbq_cp_dig_scale);
 		if (ret) {
 			dev_err(dev, "Failed to read digital scale\n");
 			goto err_mutex;
@@ -3717,9 +3742,11 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 		cs40l2x->pbq_index = 0;
 		cs40l2x->pbq_remain = cs40l2x->pbq_repeat;
+
 		for (i = 0; i < cs40l2x->pbq_depth; i++)
 			cs40l2x->pbq_pairs[i].remain =
 					cs40l2x->pbq_pairs[i].repeat;
+
 		ret = cs40l2x_pbq_pair_launch(cs40l2x);
 		if (ret)
 			dev_err(dev, "Failed to launch playback queue\n");
@@ -3907,6 +3934,73 @@ err_skip:
 	mutex_unlock(&cs40l2x->lock);
 }
 
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+/* vibration callback for timed output device */
+static void cs40l2x_vibe_enable(struct timed_output_dev *sdev, int timeout)
+{
+	struct cs40l2x_private *cs40l2x =
+		container_of(sdev, struct cs40l2x_private, timed_dev);
+
+	if (timeout > 0) {
+		cs40l2x->vibe_timeout = timeout;
+		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_start_work);
+	} else {
+		hrtimer_cancel(&cs40l2x->vibe_timer);
+		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_stop_work);
+	}
+}
+
+static int cs40l2x_vibe_get_time(struct timed_output_dev *sdev)
+{
+	struct cs40l2x_private *cs40l2x =
+		container_of(sdev, struct cs40l2x_private, timed_dev);
+	int ret = 0;
+
+	if (hrtimer_active(&cs40l2x->vibe_timer))
+		ret = ktime_to_ms(hrtimer_get_remaining(&cs40l2x->vibe_timer));
+
+	return ret;
+}
+
+static enum hrtimer_restart cs40l2x_vibe_timer(struct hrtimer *timer)
+{
+	struct cs40l2x_private *cs40l2x =
+		container_of(timer, struct cs40l2x_private, vibe_timer);
+
+	queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_stop_work);
+
+	return HRTIMER_NORESTART;
+}
+
+static void cs40l2x_create_timed_output(struct cs40l2x_private *cs40l2x)
+{
+	int ret;
+	struct timed_output_dev *timed_dev = &cs40l2x->timed_dev;
+	struct hrtimer *vibe_timer = &cs40l2x->vibe_timer;
+	struct device *dev = cs40l2x->dev;
+
+	timed_dev->name = CS40L2X_DEVICE_NAME;
+	timed_dev->enable = cs40l2x_vibe_enable;
+	timed_dev->get_time = cs40l2x_vibe_get_time;
+
+	ret = timed_output_dev_register(timed_dev);
+	if (ret) {
+		dev_err(dev, "Failed to register timed output device: %d\n",
+			ret);
+		return;
+	}
+
+	hrtimer_init(vibe_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	vibe_timer->function = cs40l2x_vibe_timer;
+
+	ret = sysfs_create_group(&cs40l2x->timed_dev.dev->kobj,
+			&cs40l2x_dev_attr_group);
+	if (ret) {
+		dev_err(dev, "Failed to create sysfs group: %d\n", ret);
+		return;
+	}
+}
+#else
 /* vibration callback for LED device */
 static void cs40l2x_vibe_brightness_set(struct led_classdev *led_cdev,
 		enum led_brightness brightness)
@@ -3920,10 +4014,13 @@ static void cs40l2x_vibe_brightness_set(struct led_classdev *led_cdev,
 		return;
 	}
 
-	if (brightness == LED_OFF)
+	switch (brightness) {
+	case LED_OFF:
 		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_stop_work);
-	else
+		break;
+	default:
 		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_start_work);
+	}
 }
 
 static void cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
@@ -3950,6 +4047,7 @@ static void cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
 		return;
 	}
 }
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 
 static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
 {
@@ -6752,7 +6850,11 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 			cs40l2x->fw_desc->fw_file, dev, GFP_KERNEL, cs40l2x,
 			cs40l2x_firmware_load);
 
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+	cs40l2x_create_timed_output(cs40l2x);
+#else
 	cs40l2x_create_led(cs40l2x);
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 
 	return 0;
 err:
@@ -6772,10 +6874,19 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 		devm_free_irq(&i2c_client->dev, i2c_client->irq, cs40l2x);
 
 	if (cs40l2x->vibe_init_success) {
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+		hrtimer_cancel(&cs40l2x->vibe_timer);
+
+		timed_output_dev_unregister(&cs40l2x->timed_dev);
+
+		sysfs_remove_group(&cs40l2x->timed_dev.dev->kobj,
+				&cs40l2x_dev_attr_group);
+#else
 		led_classdev_unregister(&cs40l2x->led_dev);
 
 		sysfs_remove_group(&cs40l2x->dev->kobj,
 				&cs40l2x_dev_attr_group);
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 
 		hrtimer_cancel(&cs40l2x->pbq_timer);
 		hrtimer_cancel(&cs40l2x->asp_timer);
