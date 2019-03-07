@@ -3578,6 +3578,12 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	}
 
 	vbus_rising = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
+
+	/* Trace vbus IRQ for debugging weak charger of PMIC
+	 * Bug: 127227916
+	 */
+	pr_info("smblib_usb_plugin_locked, IRQ status: 0x%x, vbus_rising: %d\n",
+			stat, vbus_rising);
 	smblib_set_opt_freq_buck(chg, vbus_rising ? chg->chg_freq.freq_5V :
 						chg->chg_freq.freq_removal);
 
