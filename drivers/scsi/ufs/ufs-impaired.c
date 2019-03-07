@@ -253,6 +253,8 @@ impaired_show_enabled(struct kobject *obj, struct attribute *attr, char *buf)
 	return snprintf(buf, PAGE_SIZE, "%d\n", hba->impaired.enabled);
 }
 
+static int __impaired_thread_fn(void *param);
+
 static ssize_t
 impaired_store_enabled(struct kobject *obj, struct attribute *attr, char *buf,
 		size_t count)
@@ -262,6 +264,12 @@ impaired_store_enabled(struct kobject *obj, struct attribute *attr, char *buf,
 
 	if (kstrtol(buf, 0, &value))
 		return -EINVAL;
+
+	mutex_lock(&hba->impaired_thread_mutex);
+	if (value && !hba->impaired_thread)
+		hba->impaired_thread =
+			kthread_run(__impaired_thread_fn, hba, "impaired");
+	mutex_unlock(&hba->impaired_thread_mutex);
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	hba->impaired.enabled = (value) ? 1 : 0;
@@ -580,7 +588,6 @@ void __set_delay_in_lrb(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 
 	/* Return if delay is not needed */
 	if (!hba->impaired.enabled ||
-			hba->impaired_should_stop ||
 			!rq ||
 			(rq->cmd_flags & REQ_PREFLUSH) ||
 			req_op(rq) == REQ_OP_FLUSH ||
@@ -706,7 +713,6 @@ static void __update_statistics(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
  * __impaired_thread_fn - kernel thread to complete requests
  * @param: kthread parameter (hba)
  */
-
 static int __impaired_thread_fn(void *param)
 {
 	struct ufs_hba *hba = param;
@@ -715,7 +721,7 @@ static int __impaired_thread_fn(void *param)
 	s64 delay_us;
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
-	while (!kthread_should_stop() && !hba->impaired_should_stop) {
+	while (!kthread_should_stop()) {
 		if (list_empty(&hba->impaired_list_head)) {
 			/* Go to sleep if the list is empty */
 			spin_unlock_irqrestore(hba->host->host_lock, flags);
@@ -800,9 +806,8 @@ void ufs_impaired_init(struct ufs_hba *hba)
 	/* Initialize impaired list */
 	INIT_LIST_HEAD(&hba->impaired_list_head);
 
-	/* Create a kernel thread */
-	hba->impaired_thread =
-		kthread_run(__impaired_thread_fn, hba, "impaired");
+	/* Initialize a mutext to protect thread creation */
+	mutex_init(&hba->impaired_thread_mutex);
 }
 
 /**
@@ -811,12 +816,15 @@ void ufs_impaired_init(struct ufs_hba *hba)
  */
 void ufs_impaired_exit(struct ufs_hba *hba)
 {
-	/* Wake up impaired_thread to let suicide */
-	hba->impaired_should_stop = true;
-	wake_up_process(hba->impaired_thread);
+	mutex_lock(&hba->impaired_thread_mutex);
+	if (!hba->impaired_thread) {
+		mutex_unlock(&hba->impaired_thread_mutex);
+		return;
+	}
+	mutex_unlock(&hba->impaired_thread_mutex);
 
-	/* Wait until all pending I/Os are completed */
-	while (!list_empty(&hba->impaired_list_head))
-		usleep_range(1000, 1100);
+	/* Wake up impaired_thread to let suicide */
+	wake_up_process(hba->impaired_thread);
+	kthread_stop(hba->impaired_thread);
 }
 
