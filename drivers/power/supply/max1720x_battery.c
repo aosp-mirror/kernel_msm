@@ -2878,6 +2878,7 @@ static int max1720x_decode_sn(char *serial_number,
 			      const u16 *data)
 {
 	int tmp, count = 0, shift;
+	char cell_vendor;
 
 	if (data[0] == 0x5357) /* "SW": SWD */
 		shift = 0;
@@ -2914,8 +2915,9 @@ static int max1720x_decode_sn(char *serial_number,
 			   tmp >> 8,
 			   tmp & 0xFF);
 
+	cell_vendor = (shift == 8) ? (data[9] >> 8) : (data[9] & 0xFF);
 	count += scnprintf(serial_number + count, max - count, "%c",
-			   data[9] >> 8);
+			   cell_vendor);
 
 	if (shift == 8) {
 		count += scnprintf(serial_number + count, max - count, "%02X",
