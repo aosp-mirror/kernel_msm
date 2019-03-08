@@ -254,6 +254,10 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 	int gpio_level, flood_idx, dot_idx;
 	bool is_sw_halt_required;
 
+	if (ctrl->cap_sense.calibraion_data[1] == 0 ||
+		ctrl->cap_sense.calibraion_data[2] == 0)
+		return;
+
 	flood_idx = 1;
 	dot_idx = 2;
 	gpio_level =
@@ -293,7 +297,7 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 
 static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 {
-	int rc;
+	int rc = 0;
 	uint32_t data;
 	uint32_t i, PH_start, PH_end;
 	struct cam_sensor_i2c_reg_setting write_setting;
@@ -301,13 +305,11 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 
 	if (ctrl->cap_sense.calibraion_data[1] == 0 ||
 		ctrl->cap_sense.calibraion_data[2] == 0) {
-	/* Disallow laser turning on if ITO-C calibration data is not present */
-		dev_err(ctrl->soc_info.dev,
+		dev_info(ctrl->soc_info.dev,
 			"calibration data is not present, PH1: %d PH2; %d",
 			ctrl->cap_sense.calibraion_data[1],
 			ctrl->cap_sense.calibraion_data[2]);
-		ctrl->cap_sense.is_validated = false;
-		return -EINVAL;
+		goto out;
 	}
 	PH_start = 1;
 	PH_end = 2;
