@@ -53,6 +53,44 @@ static ssize_t chip_state_store(struct device *dev,
 	return count;
 }
 
+static ssize_t mapped_chip_state_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	u32 val;
+	struct ab_state_context *sc =
+		(struct ab_state_context *)dev_get_drvdata(dev);
+
+	val = ab_sm_get_state((struct ab_state_context *)sc, true);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", val);
+}
+
+static ssize_t mapped_chip_state_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t count)
+{
+	int ret;
+	int val;
+	struct ab_state_context *sc =
+		(struct ab_state_context *)dev_get_drvdata(dev);
+
+	if (kstrtoint(buf, 10, &val) < 0) {
+		dev_err(sc->dev, "Bad input format\n");
+		return -EIO;
+	}
+
+	ret = ab_sm_set_state(sc, val, true);
+	if (ret < 0) {
+		dev_err(sc->dev, "%s: State change failed, ret %d\n",
+				__func__, ret);
+		return ret;
+	}
+
+	return count;
+}
+
 static ssize_t version_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
@@ -144,6 +182,7 @@ static ssize_t error_event_show(struct device *dev,
 
 static struct device_attribute ab_sm_attrs[] = {
 	__ATTR_RW(chip_state),
+	__ATTR_RW(mapped_chip_state),
 	__ATTR_RO(version),
 	__ATTR_RO(state_stats),
 	__ATTR_RO(error_event),

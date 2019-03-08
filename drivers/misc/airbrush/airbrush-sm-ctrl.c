@@ -1119,8 +1119,6 @@ int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
 		[23] = CHIP_STATE_603,
 		[24] = CHIP_STATE_604,
 		[25] = CHIP_STATE_605,
-		[27] = CHIP_STATE_705,
-		[28] = CHIP_STATE_700,
 		[30] = CHIP_STATE_300,
 		[40] = CHIP_STATE_200,
 		[50] = CHIP_STATE_100,
@@ -1844,7 +1842,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		unsigned long arg)
 {
-	long ret = 0;
+	long ret;
 	struct ab_sm_misc_session *sess = fp->private_data;
 	struct ab_state_context *sc = sess->sc;
 	int state;
@@ -1872,6 +1870,28 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		state = ab_sm_get_state(sess->sc, false);
 		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
 			return -EFAULT;
+		ret = 0;
+		break;
+
+	case AB_SM_MAPPED_ASYNC_NOTIFY:
+		if (!atomic_cmpxchg(&sc->async_in_use, 0, 1)) {
+			ret = ab_sm_async_notify(sess, arg, true);
+			atomic_set(&sc->async_in_use, 0);
+		} else {
+			dev_warn(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
+			ret = -EBUSY;
+		}
+		break;
+
+	case AB_SM_MAPPED_SET_STATE:
+		ret = ab_sm_set_state(sc, arg, true);
+		break;
+
+	case AB_SM_MAPPED_GET_STATE:
+		state = ab_sm_get_state(sess->sc, true);
+		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
+			return -EFAULT;
+		ret = 0;
 		break;
 
 	case AB_SM_ENTER_EL2:

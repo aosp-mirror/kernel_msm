@@ -36,15 +36,35 @@ static int chip_state_set(void *data, u64 val)
 
 static int chip_state_get(void *sc, u64 *val)
 {
-	int ret;
-
 	*val = ab_sm_get_state((struct ab_state_context *)sc, false);
 
-	return ret;
+	return 0;
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_chip_state, chip_state_get,
 		chip_state_set, "%llu\n");
+
+static int mapped_chip_state_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+	int ret;
+
+	ret = ab_sm_set_state(sc, val, true);
+	if (ret < 0)
+		dev_err(sc->dev, "%s: State change failed, ret %d\n",
+				__func__, ret);
+
+	return ret;
+}
+
+static int mapped_chip_state_get(void *sc, u64 *val)
+{
+	*val = ab_sm_get_state((struct ab_state_context *)sc, true);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_mapped_chip_state, mapped_chip_state_get,
+		mapped_chip_state_set, "%llu\n");
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
 static int time_stamps_set(void *data, u64 val)
@@ -690,6 +710,9 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 				&fops_chip_state);
 	if (!d)
 		goto err_out;
+
+	d = debugfs_create_file("mapped_chip_state", 0666, d_chip, sc,
+				&fops_mapped_chip_state);
 
 	d = debugfs_create_file("smps2_delay", 0664, d_chip, sc,
 			&fops_smps2_delay);
