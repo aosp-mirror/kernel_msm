@@ -172,7 +172,7 @@ static const struct gasket_mappable_region cm_mappable_regions[1] = {
 /* Gasket interrupt data, not really used since we manage our own IRQs */
 static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_INTS];
 
-/* Airbrush-specific DRAM buffers plus PCIe DMA engine data transfers */
+/* Describes an Airbrush DRAM buffer mapped to TPU */
 struct abc_buffer {
 	refcount_t refcount;
 	uint32_t map_flags;
@@ -331,17 +331,73 @@ static void abc_put_buffer(struct abc_buffer *abc_buffer)
 	mutex_unlock(&oscar_dev->abc_buffers_lock);
 }
 
+/*
+ * Add a dma_buf fd to our list of Airbrush "buffers".
+ * Caller must hold abc_buffers_lock.
+ */
+static struct abc_buffer *abc_add_fd_locked(struct oscar_dev *oscar_dev, int fd)
+{
+	struct dma_buf *abc_dma_buf;
+	struct dma_buf_attachment *dma_buf_attachment;
+	struct abc_buffer *abc_buffer;
+	struct abc_buffer *temp_abc_buf;
+	int ret;
+
+	/* Grab a ref to the dma_buf for so long as it's in our list. */
+	abc_dma_buf = dma_buf_get(fd);
+	if (IS_ERR(abc_dma_buf))
+		return (struct abc_buffer *)abc_dma_buf;
+
+	if (!is_ab_dram_dma_buf(abc_dma_buf)) {
+		ret = -EINVAL;
+		goto put_fd;
+	}
+
+	dma_buf_attachment =
+		dma_buf_attach(abc_dma_buf, oscar_dev->gasket_dev->dev);
+	if (IS_ERR(dma_buf_attachment)) {
+		ret = PTR_ERR(dma_buf_attachment);
+		goto put_fd;
+	}
+
+	abc_buffer = kzalloc(sizeof(struct abc_buffer), GFP_KERNEL);
+	if (!abc_buffer) {
+		ret = -ENOMEM;
+		goto detach_buf;
+	}
+
+	abc_buffer->dma_buf = abc_dma_buf;
+	abc_buffer->dma_buf_attachment = dma_buf_attachment;
+	abc_buffer->oscar_dev = oscar_dev;
+	INIT_LIST_HEAD(&abc_buffer->abc_buffers_list);
+	/* Add one extra ref, will drop the extra when marked for release */
+	refcount_set(&abc_buffer->refcount, 2);
+	mutex_init(&abc_buffer->mapping_lock);
+
+	temp_abc_buf = abc_get_buffer_locked(oscar_dev, fd);
+	if (WARN_ON(temp_abc_buf)) {
+		abc_put_buffer_locked(temp_abc_buf);
+		kfree(abc_buffer);
+		ret = -EBUSY;
+		goto detach_buf;
+	}
+
+	list_add_tail(&abc_buffer->abc_buffers_list, &oscar_dev->abc_buffers);
+	return abc_buffer;
+
+detach_buf:
+	dma_buf_detach(abc_dma_buf, dma_buf_attachment);
+put_fd:
+	dma_buf_put(abc_dma_buf);
+	return ERR_PTR(ret);
+}
+
 static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
 				  struct oscar_abdram_alloc_ioctl __user *argp)
 {
 	struct oscar_abdram_alloc_ioctl ibuf;
 	struct dma_buf *abc_dma_buf;
-	struct dma_buf *temp_dma_buf;
-	struct dma_buf_attachment *dma_buf_attachment;
-	struct abc_buffer *abc_buffer;
-	struct abc_buffer *temp_abc_buf;
 	int fd;
-	int ret;
 
 	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
 		return -EFAULT;
@@ -350,73 +406,21 @@ static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
 	if (IS_ERR(abc_dma_buf))
 		return PTR_ERR(abc_dma_buf);
 
-	dma_buf_attachment =
-		dma_buf_attach(abc_dma_buf, oscar_dev->gasket_dev->dev);
-	if (IS_ERR(dma_buf_attachment)) {
-		ret = PTR_ERR(dma_buf_attachment);
-		goto free_buf;
-	}
-
 	fd = dma_buf_fd(abc_dma_buf, O_CLOEXEC);
-	if (fd < 0) {
-		ret = fd;
-		goto detach_buf;
-	}
+	if (fd < 0)
+		ab_dram_free_dma_buf_kernel(abc_dma_buf);
 
-	/* grab our own ref to the dma_buf for so long as we use it */
-	temp_dma_buf = dma_buf_get(fd);
-	if (IS_ERR(temp_dma_buf)) {
-		ret = PTR_ERR(temp_dma_buf);
-		goto detach_buf;
-	}
-
-	abc_buffer = kzalloc(sizeof(struct abc_buffer), GFP_KERNEL);
-	if (!abc_buffer) {
-		ret = -ENOMEM;
-		goto detach_buf;
-	}
-	abc_buffer->dma_buf = abc_dma_buf;
-	abc_buffer->dma_buf_attachment = dma_buf_attachment;
-	abc_buffer->oscar_dev = oscar_dev;
-	INIT_LIST_HEAD(&abc_buffer->abc_buffers_list);
-	refcount_set(&abc_buffer->refcount, 1);
-	mutex_init(&abc_buffer->mapping_lock);
-
-	mutex_lock(&oscar_dev->abc_buffers_lock);
-	temp_abc_buf = abc_get_buffer_locked(oscar_dev, fd);
-	if (WARN_ON(temp_abc_buf)) {
-		abc_put_buffer_locked(temp_abc_buf);
-		mutex_unlock(&oscar_dev->abc_buffers_lock);
-		kfree(abc_buffer);
-		ret = -EBUSY;
-		goto detach_buf;
-	}
-
-	list_add_tail(&abc_buffer->abc_buffers_list, &oscar_dev->abc_buffers);
-	mutex_unlock(&oscar_dev->abc_buffers_lock);
 	return fd;
-
-detach_buf:
-	dma_buf_detach(abc_dma_buf, dma_buf_attachment);
-free_buf:
-	ab_dram_free_dma_buf_kernel(abc_dma_buf);
-	return ret;
 }
 
-static int oscar_abc_sync_buffer(struct oscar_dev *oscar_dev,
-				 struct oscar_abdram_sync_ioctl __user *argp)
+static int oscar_abc_sync_buffer(struct oscar_abdram_sync_ioctl __user *argp)
 {
 	struct oscar_abdram_sync_ioctl ibuf;
-	struct abc_buffer *abc_buffer;
 	struct abc_pcie_dma_desc abc_dma_desc;
-	int ret;
 
 	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
 		return -EFAULT;
 
-	abc_buffer = abc_get_buffer(oscar_dev, ibuf.fd);
-	if (!abc_buffer)
-		return -EINVAL;
 	abc_dma_desc.local_buf_type = DMA_BUFFER_USER;
 	abc_dma_desc.local_buf = (void *)ibuf.host_address;
 	abc_dma_desc.remote_buf_type = DMA_BUFFER_DMA_BUF;
@@ -425,10 +429,7 @@ static int oscar_abc_sync_buffer(struct oscar_dev *oscar_dev,
 	abc_dma_desc.dir = ibuf.cmd == OSCAR_SYNC_FROM_BUFFER ?
 		DMA_FROM_DEVICE : DMA_TO_DEVICE;
 	abc_dma_desc.size = ibuf.len;
-	ret = abc_pcie_issue_dma_xfer(&abc_dma_desc);
-
-	abc_put_buffer(abc_buffer);
-	return ret;
+	return abc_pcie_issue_dma_xfer(&abc_dma_desc);
 }
 
 static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
@@ -449,8 +450,19 @@ static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 		return -EFAULT;
 
 	fd = ibuf.fd;
-	abc_buffer = abc_get_buffer(oscar_dev, fd);
+	mutex_lock(&oscar_dev->abc_buffers_lock);
+	abc_buffer = abc_get_buffer_locked(oscar_dev, fd);
+
+	/*
+	 * If this fd isn't already in our list of tracked ab-dram buffer fds,
+	 * add it now.
+	 */
 	if (!abc_buffer)
+		abc_buffer = abc_add_fd_locked(oscar_dev, fd);
+
+	mutex_unlock(&oscar_dev->abc_buffers_lock);
+
+	if (IS_ERR_OR_NULL(abc_buffer))
 		return -EINVAL;
 
 	mutex_lock(&abc_buffer->mapping_lock);
@@ -522,6 +534,29 @@ static void oscar_abc_mark_buffer_for_release(struct abc_buffer *abc_buffer)
 	abc_put_buffer_locked(abc_buffer);
 }
 
+/* Deallocate an AB-DRAM buffer that hasn't been mapped to TPU. */
+static int oscar_abc_dealloc_unmapped_dram(int dma_buf_fd)
+{
+	struct dma_buf *abc_dma_buf;
+	int ret;
+
+	abc_dma_buf = dma_buf_get(dma_buf_fd);
+	if (IS_ERR(abc_dma_buf))
+		return PTR_ERR(abc_dma_buf);
+
+	if (!is_ab_dram_dma_buf(abc_dma_buf)) {
+		ret = -EINVAL;
+		goto put_fd;
+	}
+
+	ab_dram_free_dma_buf_kernel(abc_dma_buf);
+	ret = 0;
+
+put_fd:
+	dma_buf_put(abc_dma_buf);
+	return ret;
+}
+
 static int oscar_abc_dealloc_buffer(struct oscar_dev *oscar_dev, int dma_buf_fd)
 {
 	struct abc_buffer *abc_buffer;
@@ -530,7 +565,7 @@ static int oscar_abc_dealloc_buffer(struct oscar_dev *oscar_dev, int dma_buf_fd)
 	abc_buffer = abc_get_buffer_locked(oscar_dev, dma_buf_fd);
 	if (!abc_buffer) {
 		mutex_unlock(&oscar_dev->abc_buffers_lock);
-		return -EINVAL;
+		return oscar_abc_dealloc_unmapped_dram(dma_buf_fd);
 	}
 	abc_put_buffer_locked(abc_buffer);
 	oscar_abc_mark_buffer_for_release(abc_buffer);
@@ -940,7 +975,7 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 		return oscar_abc_alloc_buffer(oscar_dev, abdram_alloc);
 	case OSCAR_IOCTL_ABC_SYNC_BUFFER:
 		abdram_sync = (struct oscar_abdram_sync_ioctl *)argp;
-		return oscar_abc_sync_buffer(oscar_dev, abdram_sync);
+		return oscar_abc_sync_buffer(abdram_sync);
 	case OSCAR_IOCTL_ABC_MAP_BUFFER:
 		abdram_map = (struct oscar_abdram_map_ioctl *)argp;
 		return oscar_abc_map_buffer(oscar_dev, abdram_map);
