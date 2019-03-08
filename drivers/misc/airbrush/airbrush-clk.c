@@ -22,6 +22,7 @@
 #define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
 
 #define AB_SM_19_2_MHZ		19200000
+#define AB_SM_466_MHZ		466000000
 #define AB_SM_789_6_MHZ		789600000
 #define AB_SM_921_6_MHZ		921600000
 #define AON_CLK_RATE_REG		0x10B10100
@@ -30,6 +31,9 @@
 #define TPU_CLK_RATE_REG		0x10040120
 #define TPU_CLK_RATE_19_2_MHZ	0xA1490202
 #define TPU_CLK_RATE_789_6_MHZ	0xA1490212
+
+static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx);
+static void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx);
 
 static struct ab_sm_clk_ops clk_ops;
 static int ab_clk_pcie_link_listener(struct notifier_block *nb,
@@ -524,6 +528,10 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 	dev_dbg(clk_ctx->dev,
 		"%s: set AON clock rate to %llu\n", __func__, new_rate);
 
+	if (old_rate == AB_SM_466_MHZ &&
+			new_rate != AB_SM_466_MHZ)
+		__ab_clk_restore_mainclk_freq(clk_ctx);
+
 	if (new_rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
@@ -542,6 +550,9 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 			"aon_pll_mux: set_parent failed(err %d)\n", ret);
 		goto error_abort;
 	}
+
+	if (new_rate == AB_SM_466_MHZ)
+		__ab_clk_reduce_mainclk_freq(clk_ctx);
 
 	return new_rate;
 
@@ -614,7 +625,7 @@ static int64_t ab_clk_aon_set_rate_direct_handler(void *ctx,
 #define CLK_CON_DIV_DIV4_PLLCLK_CORE 0x10f11804
 #define CLK_CON_DIV_PLL_AON_CLK 0x10b1180c
 
-void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx)
+static void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx)
 {
 	dev_dbg(ctx->dev, "Reduce PLL_AON_CLK 2x\n");
 
@@ -649,7 +660,7 @@ static int ab_clk_reduce_mainclk_freq(void *ctx)
 	return ret;
 }
 
-void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
+static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
 {
 	dev_dbg(ctx->dev, "Restore PLL_AON_CLK\n");
 
