@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,14 +9,5 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-&pm660_pon {
-	qcom,pon_2 {
-		linux,code = <266>;
-	};
-};
 
-&mdss_dsi{
-	qcom,mdss_dsi_ctrl0@1ac8000 {
-		/delete-property/ vdd-supply;
-	};
-};
+#include "triton-msm8909-mdss.dtsi"

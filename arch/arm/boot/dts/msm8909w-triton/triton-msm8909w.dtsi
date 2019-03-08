@@ -42,3 +42,10 @@
 &thermal_zones {
 	/delete-node/ case-therm-step;
 };
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_auo_h120_amoled_cmd>;
+
+	//qcom,platform-enable-gpio = <&msm_gpio 59 0>;
+	/delete-property/ qcom,platform-bklight-en-gpio;
+};

@@ -424,7 +424,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return rc;
 	}
 
-	pr_debug("%s: enable = %d\n", __func__, enable);
+	pr_info("%s: enable = %d\n", __func__, enable);
 
 	if (enable) {
 		rc = mdss_dsi_request_gpios(ctrl_pdata);

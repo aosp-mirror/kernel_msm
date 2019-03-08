@@ -10,6 +10,8 @@
  * GNU General Public License for more details.
  */
 
+#include "triton-msm8909.dtsi"
+
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
 		/delete-node/ synaptics@20;
