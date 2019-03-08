@@ -32,7 +32,6 @@
 #include <linux/pci.h>
 #include <linux/airbrush-sm-ctrl.h>
 #include <linux/clk.h>
-#include <linux/msm_pcie.h>
 
 #include "airbrush-ddr.h"
 #include "airbrush-pmic-ctrl.h"
@@ -271,6 +270,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 				pbus = pbus->self->bus;
 			}
 			ab_ctx->pcie_dev = pdev;
+			ab_sm_setup_pcie_event(ab_ctx);
 		}
 		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 

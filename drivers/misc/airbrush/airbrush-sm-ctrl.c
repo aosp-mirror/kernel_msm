@@ -20,7 +20,6 @@
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/mfd/abc-pcie.h>
-#include <linux/msm_pcie.h>
 #include <uapi/ab-sm.h>
 #include <uapi/linux/sched/types.h>
 
@@ -728,11 +727,8 @@ static struct chip_to_block_map *ab_sm_get_block_map(
 	return map;
 }
 
-/* Attempt to get airbrush into a known state
- * Ignore errors and set to CHIP_STATE_0 (off)
- * Caller must hold sc->state_transitioning_lock
- */
-static void ab_cleanup_state(struct ab_state_context *sc)
+static void __ab_cleanup_state(struct ab_state_context *sc,
+			       bool is_linkdown_event)
 {
 	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_0);
 
@@ -746,14 +742,25 @@ static void ab_cleanup_state(struct ab_state_context *sc)
 
 	dev_err(sc->dev, "AB block states cleaned\n");
 
-	mutex_lock(&sc->mfd_lock);
-	sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
-	mutex_unlock(&sc->mfd_lock);
+	if (!is_linkdown_event) {
+		/* broadcast normal disable */
+		mutex_lock(&sc->mfd_lock);
+		sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
+	}
 
 	msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0,
 		  sc->pcie_dev, NULL,
 		  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
 	dev_err(sc->dev, "AB PCIE suspended\n");
+
+	if (is_linkdown_event) {
+		/* broadcast linkdown event */
+		mutex_lock(&sc->mfd_lock);
+		/* TODO(b/124536826): switch to linkdown handler */
+		sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
+	}
 
 	ab_disable_pgood(sc);
 	msm_pcie_assert_perst(1);
@@ -765,6 +772,24 @@ static void ab_cleanup_state(struct ab_state_context *sc)
 	dev_err(sc->dev, "AB PMIC off\n");
 
 	sc->curr_chip_substate_id = CHIP_STATE_0;
+}
+
+/* Attempt to shutdown Airbrush and notify a PCIe linkdown
+ * event to client drivers.
+ * Caller must hold sc->state_transitioning_lock.
+ */
+static void ab_cleanup_state_linkdown(struct ab_state_context *sc)
+{
+	__ab_cleanup_state(sc, /*is_linkdown_event=*/true);
+}
+
+/* Attempt to get airbrush into a known state
+ * Ignore errors and set to CHIP_STATE_0 (off)
+ * Caller must hold sc->state_transitioning_lock
+ */
+static void ab_cleanup_state(struct ab_state_context *sc)
+{
+	__ab_cleanup_state(sc, /*is_linkdown_event=*/false);
 }
 
 static int ab_sm_update_chip_state(struct ab_state_context *sc)
@@ -1466,7 +1491,7 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	/* Force reset el2_mode (b/122619299#comment10) */
 	sc->el2_mode = false;
 
-	ab_cleanup_state(sc);
+	ab_cleanup_state_linkdown(sc);
 
 	/* record state change */
 	ab_sm_record_state_change(prev_state, sc->curr_chip_substate_id, sc);
@@ -1488,15 +1513,54 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	mutex_unlock(&sc->state_transitioning_lock);
 }
 
-static int ab_regulator_listener(struct notifier_block *nb,
-				 unsigned long event, void *cookie)
+#if IS_ENABLED(CONFIG_PCI_MSM)
+static void ab_sm_pcie_linkdown_cb(struct msm_pcie_notify *notify)
+{
+	struct ab_state_context *sc = notify->data;
+
+	switch (notify->event) {
+	case MSM_PCIE_EVENT_LINKDOWN:
+		dev_err(sc->dev, "received PCIe linkdown event\n");
+		schedule_work(&sc->shutdown_work);
+		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+		break;
+	default:
+		dev_warn(sc->dev,
+			 "%s: received invalid pcie event (%d)\n",
+			 __func__, notify->event);
+		break;
+	}
+}
+
+int ab_sm_setup_pcie_event(struct ab_state_context *sc)
+{
+	int ret;
+
+	sc->pcie_link_event.events = MSM_PCIE_EVENT_LINKDOWN;
+	sc->pcie_link_event.user = sc->pcie_dev;
+	sc->pcie_link_event.callback = ab_sm_pcie_linkdown_cb;
+	sc->pcie_link_event.notify.data = sc;
+
+	ret = msm_pcie_register_event(&sc->pcie_link_event);
+	if (ret) {
+		dev_err(sc->dev,
+			"msm_pcie_register_event failed (%d)\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_PCI_MSM */
+
+static int ab_sm_regulator_listener(struct notifier_block *nb,
+				    unsigned long event, void *cookie)
 {
 	struct ab_state_context *sc =
 			container_of(nb,
 				     struct ab_state_context,
 				     regulator_nb);
 
-	dev_dbg(sc->dev, "received event 0x%lx\n", event);
+	dev_dbg(sc->dev, "received regulator event 0x%lx\n", event);
 
 	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(sc->dev, "received regulator failure 0x%lx\n", event);
@@ -2105,7 +2169,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	INIT_WORK(&ab_sm_ctx->shutdown_work, ab_sm_shutdown_work);
 	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
 
-	ab_sm_ctx->regulator_nb.notifier_call = ab_regulator_listener;
+	ab_sm_setup_pcie_event(ab_sm_ctx);
+	ab_sm_ctx->regulator_nb.notifier_call = ab_sm_regulator_listener;
 
 	ab_sm_ctx->smps2_delay = SMPS2_DEFAULT_DELAY;
 	ab_sm_ctx->ldo4_delay = LDO4_DEFAULT_DELAY;

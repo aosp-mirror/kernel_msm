@@ -25,6 +25,9 @@
 #include <linux/mfd/abc-pcie.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
+#if IS_ENABLED(CONFIG_PCI_MSM)
+#include <linux/msm_pcie.h>
+#endif
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
@@ -637,6 +640,10 @@ struct ab_state_context {
 	u64 ldo5_delay;
 	u64 s60_delay;
 
+#if IS_ENABLED(CONFIG_PCI_MSM)
+	struct msm_pcie_register_event pcie_link_event;
+#endif
+
 	struct notifier_block regulator_nb; /* single notifier */
 	struct work_struct shutdown_work; /* emergency shutdown work */
 
@@ -688,6 +695,19 @@ struct ab_sm_misc_session {
 	bool first_entry;
 	struct kfifo async_entries;
 };
+
+#if IS_ENABLED(CONFIG_PCI_MSM)
+/*
+ *  Set up listener to pcie linkdown event.
+ *  Call only once after enumeration is done.
+ */
+int ab_sm_setup_pcie_event(struct ab_state_context *sc);
+#else
+static inline int ab_sm_setup_pcie_event(struct ab_state_context *sc)
+{
+	return 0;
+}
+#endif /* CONFIG_PCI_MSM */
 
 /*
  *  void ab_sm_register_blk_callback
