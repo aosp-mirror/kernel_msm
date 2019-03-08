@@ -70,6 +70,15 @@ struct faceauth_start_data {
 	__u32 angles;
 	__s32 error_code; /* ab-faceauth error code */
 	__u32 fw_version; /* ab-faceauth firmware version */
+
+	__u8  __user *citadel_token;
+	__u32 citadel_token_size;
+
+	__u32 citadel_lockout_event;
+	__u32 citadel_input;
+	__u32 citadel_output1;
+	__u32 citadel_output2;
+
 } __attribute__((packed));
 
 /* This struct contains a user supplied buffer that is written by kernel */

@@ -189,6 +189,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	uint32_t angles;
 	uint32_t dma_read_value;
 	uint32_t fw_execution_status;
+	uint32_t temp_data;
 	struct faceauth_data *data = file->private_data;
 #if ENABLE_LATENCY_MEASUREMENT
 	unsigned long faceauth_cntx_start, faceauth_cntx_complete,
@@ -354,6 +355,28 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
+		if (start_step_data.operation == COMMAND_ENROLL_COMPLETE ||
+		    start_step_data.operation == COMMAND_SET_FEATURE ||
+		    start_step_data.operation == COMMAND_CLR_FEATURE ||
+		    start_step_data.operation == COMMAND_RESET_LOCKOUT) {
+			if (start_step_data.citadel_token_size) {
+				err = dma_xfer(start_step_data.citadel_token,
+				start_step_data.citadel_token_size,
+				CITADEL_WRITE_TOKEN_ADDR, DMA_TO_DEVICE);
+				if (err) {
+					pr_err("Error sending token data\n");
+					goto exit;
+				}
+			}
+		}
+
+		err = aon_config_write(CITADEL_INPUT_DATA_ADDR, 4,
+				       start_step_data.citadel_input);
+		if (err) {
+			pr_err("Error sending citadel input data\n");
+			goto exit;
+		}
+
 		/* Set input flag */
 		ab_input = ((++data->session_id & 0xFFFF) << 16) |
 			   ((start_step_data.profile_id & 0xFF) << 8) |
@@ -434,12 +457,34 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		save_debug_end = jiffies;
 #endif
 
+		start_step_data.result = ab_result;
+		err = aon_config_read(CITADEL_OUTPUT_DATA1_ADDR, 4, &temp_data);
+		if (err) {
+			pr_err("Error reading Citadel Output Data 1\n");
+			goto exit;
+		}
+		start_step_data.citadel_output1 = temp_data;
+
+		err = aon_config_read(CITADEL_OUTPUT_DATA2_ADDR, 4, &temp_data);
+		if (err) {
+			pr_err("Error reading Citadel Output Data 2\n");
+			goto exit;
+		}
+		start_step_data.citadel_output2 = temp_data;
+
+		err = aon_config_read(CITADEL_LOCKOUT_EVENT_ADDR, 4,
+				      &temp_data);
+		if (err) {
+			pr_err("Error reading Citadel Lockout Event\n");
+			goto exit;
+		}
+		start_step_data.citadel_lockout_event = temp_data;
+
 		err = aon_config_read(ANGLE_RESULT_FLAG_ADDR, 4, &angles);
 		if (err) {
 			pr_err("Error reading angle result flag\n");
 			goto exit;
 		}
-		start_step_data.result = ab_result;
 		start_step_data.angles = angles;
 
 		dma_read_dw(INTERNAL_STATE_ADDR +
