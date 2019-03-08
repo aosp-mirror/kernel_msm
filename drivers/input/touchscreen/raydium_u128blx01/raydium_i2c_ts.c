@@ -163,7 +163,7 @@ static char *g_rad_fw_image, *g_rad_init_image;
 static char *g_rad_boot_image, *g_rad_para_image;
 static char *g_rad_testfw_image, *g_rad_testpara_image;
 static bool g_receive_fw;
-volatile unsigned char g_u8_unlockflag;
+unsigned char g_u8_resetflag;
 char gc_test_flag;
 static int fw_type, fwindex, rad_fw_length;
 static int rad_init_length, rad_boot_length, rad_testfw_length;
@@ -187,7 +187,7 @@ raydium_variable_init(void)
 	g_ul_addr = RAYDIUM_CHECK_I2C_CMD;
 	g_ui_length = 1;
 	g_receive_fw = 0;
-	g_u8_unlockflag = false;
+	g_u8_resetflag = false;
 	gc_test_flag = 0;
 	g_rad_fw_image = NULL;
 	g_rad_init_image = NULL;
@@ -1159,7 +1159,7 @@ raydium_do_software_reset(struct i2c_client *client)
 	dev_info(&ts->client->dev,
 		  "[touch]ready to software reset => enable INT\n");
 	//raydium_irq_control(ts, ENABLE);
-
+	g_u8_resetflag = true;
 	/*SW reset */
 	memset(buf, 0, sizeof(buf));
 	buf[0] = 0x01;
@@ -1946,6 +1946,7 @@ raydium_fw_upgrade(struct i2c_client *client,
 			goto exit_upgrade;
 
 		dev_info(&ts->client->dev, "[touch]Raydium HW reset\n");
+		g_u8_resetflag = true;
 		gpio_direction_output(ts->rst, 1);
 		gpio_direction_output(ts->rst, 0);
 		msleep(RAYDIUM_RESET_INTERVAL_MSEC);
@@ -2817,6 +2818,7 @@ raydium_hw_reset_fun(struct i2c_client *client)
 
 	/*HW reset */
 	dev_info(&ts->client->dev, "[touch]Raydium HW reset\n");
+	g_u8_resetflag = true;
 	gpio_direction_output(ts->rst, 1);
 	gpio_direction_output(ts->rst, 0);
 	msleep(RAYDIUM_RESET_INTERVAL_MSEC);
@@ -2849,6 +2851,7 @@ raydium_hw_reset_show(struct device *dev,
 
 	/*HW reset */
 	dev_info(&ts->client->dev, "[touch]Raydium HW reset\n");
+	g_u8_resetflag = true;
 	gpio_direction_output(ts->rst, 1);
 	gpio_direction_output(ts->rst, 0);
 	msleep(RAYDIUM_RESET_INTERVAL_MSEC);
@@ -2889,7 +2892,7 @@ raydium_reset_control_store(struct device *dev,
 		return ret;
 
 	u8_i2c_mode = PDA2_MODE;
-
+	g_u8_resetflag = true;
 	if (u8_high) {
 		raydium_irq_control(ts, ENABLE);
 		dev_info(&ts->client->dev,
@@ -3098,6 +3101,7 @@ raydium_touch_lock_store(struct device *dev,
 					dev_err(&ts->client->dev,
 					"[touch]reset gpio request failed");
 				}
+				g_u8_resetflag = true;
 				gpio_direction_output(ts->rst, 1);
 				gpio_direction_output(ts->rst, 0);
 				msleep(RAYDIUM_RESET_INTERVAL_MSEC);	//5ms
@@ -3105,7 +3109,6 @@ raydium_touch_lock_store(struct device *dev,
 				msleep(RAYDIUM_RESET_DELAY_MSEC);	//100ms
 				u8_i2c_mode = PDA2_MODE;
 				gpio_free(ts->rst);
-				g_u8_unlockflag = true;
 			}
 			mutex_unlock(&ts->lock);
 			raydium_irq_control(ts, ENABLE);
@@ -4027,15 +4030,26 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 	int ret = 0;
 	unsigned char u8_points_amount;
 	static unsigned char u8_seq_no;
+	unsigned char retry;
+
+	retry = SYN_I2C_RETRY_TIMES * 5;
 
 	mutex_lock(&data->lock);
-	ret = raydium_i2c_pda2_set_page(data->client, RAYDIUM_PDA2_PAGE_0);
-	if (ret < 0) {
+	while (retry != 0) {
+		ret = raydium_i2c_pda2_set_page(data->client,
+			RAYDIUM_PDA2_PAGE_0);
+		if (ret < 0) {
+			msleep(20);
+			retry--;
+		} else
+			break;
+	}
+	if (retry == 0) {
 		dev_err(&data->client->dev,
-		"[touch]%s: failed to set page for reading point report: %d\n",
-		__func__, ret);
-		mutex_unlock(&data->lock);
-		return ret;
+			"[touch]%s: failed to set page, display reset\n",
+			__func__);
+
+		goto reset_error;
 	}
 
 	memset(buf, 0, MAX_REPORT_PACKAGE_SIZE);
@@ -4052,18 +4066,26 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 		goto exit_error;
 	}
 	if (tp_status[POS_FW_STATE] != 0xAA) {
+		if (g_u8_resetflag == true) {
+			dev_err(&data->client->dev,
+			"%s -> abnormal irq, hw reset.\n", __func__);
+			ret = -1;
+			g_u8_resetflag = false;
+			goto exit_error;
+		}
 		dev_err(&data->client->dev,
-		 "%s -> abnormal irq, display reset.\n", __func__);
-		goto exit_error;
+			"%s -> abnormal irq, display reset, FW STATE = 0x%x\n",
+			 __func__, tp_status[POS_FW_STATE]);
+		ret = -1;
+		goto reset_error;
 	}
-
+	g_u8_resetflag = false;
 	/* inform IC to prepare next report */
 	if (u8_seq_no == tp_status[POS_SEQ]) {
 		dev_err(&data->client->dev,
 				"%s -> report not updated.\n", __func__);
 		goto exit_error;
 	}
-	g_u8_unlockflag = false;
 	u8_points_amount = tp_status[POS_PT_AMOUNT];
 
 	if (u8_points_amount > MAX_TOUCH_NUM)
@@ -4099,7 +4121,11 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 
 exit_error:
 	mutex_unlock(&data->lock);
+	return ret;
 
+reset_error:
+	mutex_unlock(&data->lock);
+	raydium_hw_reset_fun(data->client);
 	return ret;
 }
 
@@ -4112,113 +4138,115 @@ raydium_work_handler (struct work_struct *work)
 	int ret = 0;
 	unsigned char tp_status[MAX_TCH_STATUS_PACKAGE_SIZE];
 	unsigned char buf[MAX_REPORT_PACKAGE_SIZE];
+
 #ifdef GESTURE_EN
 	int i = 0;
 #endif
+	if ((raydium_ts->blank == FB_BLANK_VSYNC_SUSPEND
+		|| raydium_ts->blank == FB_BLANK_POWERDOWN)
+		   && (g_u8_resetflag == false))  {
+		input_mt_slot(raydium_ts->input_dev, 0);
+		input_mt_report_slot_state(
+				raydium_ts->input_dev, MT_TOOL_FINGER,
+						    1);
+		input_report_abs(raydium_ts->input_dev,
+					ABS_MT_POSITION_X, 100);
+		input_report_abs(raydium_ts->input_dev,
+					ABS_MT_POSITION_Y, 100);
+		input_sync(raydium_ts->input_dev);
+		usleep(1000);
+		input_mt_slot(raydium_ts->input_dev, 0);
+		input_mt_report_slot_state(raydium_ts->input_dev,
+					MT_TOOL_FINGER, 0);
+		input_mt_report_pointer_emulation(
+					raydium_ts->input_dev, false);
+		input_sync(raydium_ts->input_dev);
+		g_uc_gesture_status = RAYDIUM_GESTURE_DISABLE;
+		pr_info("[touch]display wake up\n");
 
-	if (u8_i2c_mode == PDA2_MODE) {
-		ret = raydium_read_touchdata(raydium_ts, tp_status, buf);
-		if (ret < 0) {
-			dev_info(&raydium_ts->client->dev,
-			"[touch]raydium_read_touchdata error, ret:%d\n",
-			ret);
+		if (u8_i2c_mode == PDA2_MODE)
+			raydium_read_touchdata(raydium_ts, tp_status, buf);
+	} else {
+		if (u8_i2c_mode == PDA2_MODE) {
+			ret = raydium_read_touchdata(
+				raydium_ts, tp_status, buf);
+			if (ret < 0) {
+				dev_info(&raydium_ts->client->dev,
+				"[touch]raydium_read_touchdata error, ret:%d\n",
+				ret);
+				return;
+			}
 		}
-	}
 
 #ifdef GESTURE_EN
-	/*when display on can use palm to suspend */
-	if (raydium_ts->blank == FB_BLANK_UNBLANK) {
-		if (tp_status[POS_GESTURE_STATUS] == RAYDIUM_PALM_MODE_ENABLE) {
-			if (raydium_ts->is_palm == 0) {
-				/* release all touches */
-				for (i = 0; i <
-				raydium_ts->pdata->num_max_touches; i++) {
-					input_mt_slot(raydium_ts->input_dev,
-							i);
-					input_mt_report_slot_state(
-						raydium_ts->input_dev,
-						MT_TOOL_FINGER, false);
+		/*when display on can use palm to suspend */
+		if (raydium_ts->blank == FB_BLANK_UNBLANK) {
+			if (tp_status[POS_GESTURE_STATUS] ==
+				RAYDIUM_PALM_MODE_ENABLE) {
+				if (raydium_ts->is_palm == 0) {
+					/* release all touches */
+					for (i = 0; i < raydium_ts->pdata->
+						num_max_touches; i++) {
+						input_mt_slot(
+							raydium_ts->input_dev,
+								i);
+						input_mt_report_slot_state(
+							raydium_ts->input_dev,
+							MT_TOOL_FINGER, false);
+					}
+
+					input_mt_report_pointer_emulation(
+							raydium_ts->input_dev,
+									false);
+					input_report_key(raydium_ts->input_dev,
+					KEY_SLEEP, true);
+					/*press sleep key */
+					input_sync(raydium_ts->input_dev);
+
+					pr_info("[touch]palm_status = %d.\n",
+						tp_status[POS_GESTURE_STATUS]);
+					g_uc_pre_palm_status =
+						RAYDIUM_PALM_MODE_ENABLE;
+					raydium_ts->is_palm = 1;
+					/*goto exit; */
 				}
-
-				input_mt_report_pointer_emulation(
-						raydium_ts->input_dev,
-								   false);
+			} else if ((tp_status[POS_GESTURE_STATUS] ==
+						RAYDIUM_PALM_MODE_DISABLE)
+				   && (raydium_ts->is_palm == 1)) {
+				pr_info("[touch]leave palm mode.\n");
 				input_report_key(raydium_ts->input_dev,
-				KEY_SLEEP, true);
-				/*press sleep key */
+				KEY_SLEEP, false);	/*release sleep key */
 				input_sync(raydium_ts->input_dev);
-
-				pr_info("[touch]palm_status = %d.\n",
-					tp_status[POS_GESTURE_STATUS]);
 				g_uc_pre_palm_status =
-					RAYDIUM_PALM_MODE_ENABLE;
-				raydium_ts->is_palm = 1;
-				/*goto exit; */
-			}
-		} else if ((tp_status[POS_GESTURE_STATUS] ==
-					RAYDIUM_PALM_MODE_DISABLE)
-			   && (raydium_ts->is_palm == 1)) {
-			pr_info("[touch]leave palm mode.\n");
-			input_report_key(raydium_ts->input_dev,
-			KEY_SLEEP, false);	/*release sleep key */
-			input_sync(raydium_ts->input_dev);
-			g_uc_pre_palm_status = RAYDIUM_PALM_MODE_DISABLE;
-			raydium_ts->is_palm = 0;
+					RAYDIUM_PALM_MODE_DISABLE;
+				raydium_ts->is_palm = 0;
 
-		}
-	} else if (raydium_ts->blank == FB_BLANK_VSYNC_SUSPEND
+			}
+		} else if (raydium_ts->blank == FB_BLANK_VSYNC_SUSPEND
 		   || raydium_ts->blank == FB_BLANK_POWERDOWN) {
-		if (g_u8_unlockflag == true) {
-			if (tp_status[0] == RAYDIUM_WAKE_UP) {
-				input_mt_slot(raydium_ts->input_dev, 0);
-				input_mt_report_slot_state(
-						raydium_ts->input_dev,
-							    MT_TOOL_FINGER, 1);
-				input_report_abs(raydium_ts->input_dev,
-						ABS_MT_POSITION_X,
-						  100);
-				input_report_abs(raydium_ts->input_dev,
-						ABS_MT_POSITION_Y,
-						  100);
-				input_sync(raydium_ts->input_dev);
-				usleep(1000);
-				input_mt_slot(raydium_ts->input_dev, 0);
-				input_mt_report_slot_state(
-						raydium_ts->input_dev,
-							    MT_TOOL_FINGER, 0);
-				input_mt_report_pointer_emulation(
-						raydium_ts->input_dev,
-								   false);
-				input_sync(raydium_ts->input_dev);
-				g_uc_gesture_status = RAYDIUM_GESTURE_DISABLE;
-				pr_info(
-				"[touch]display wake up with unlockflag\n");
-			} else
-				pr_info(
-					"[touch]filter wrong interrupt\n");
-		} else {
 			input_mt_slot(raydium_ts->input_dev, 0);
 			input_mt_report_slot_state(
 					raydium_ts->input_dev, MT_TOOL_FINGER,
-						    1);
+								1);
 			input_report_abs(raydium_ts->input_dev,
-					ABS_MT_POSITION_X, 100);
+						ABS_MT_POSITION_X, 100);
 			input_report_abs(raydium_ts->input_dev,
-					ABS_MT_POSITION_Y, 100);
+						ABS_MT_POSITION_Y, 100);
 			input_sync(raydium_ts->input_dev);
 			usleep(1000);
 			input_mt_slot(raydium_ts->input_dev, 0);
 			input_mt_report_slot_state(raydium_ts->input_dev,
-					MT_TOOL_FINGER, 0);
+						MT_TOOL_FINGER, 0);
 			input_mt_report_pointer_emulation(
-					raydium_ts->input_dev, false);
+						raydium_ts->input_dev, false);
 			input_sync(raydium_ts->input_dev);
 			g_uc_gesture_status = RAYDIUM_GESTURE_DISABLE;
 			pr_info("[touch]display wake up\n");
 		}
 	}
-}
 #endif
+}
+
 /*The raydium device will signal the host about TRIGGER_FALLING.
  *Processed when the interrupt is asserted.
  */
@@ -4243,7 +4271,7 @@ raydium_ts_interrupt(int irq, void *dev_id)
 				pr_err("[touch]queue_work fail.\n");
 			} else {
 				if (raydium_ts->blank == FB_BLANK_POWERDOWN) {
-					if (g_u8_unlockflag != true) {
+					if (g_u8_resetflag != true) {
 						disable_irq_nosync(
 							raydium_ts->irq);
 						raydium_ts->irq_enabled =
@@ -4493,7 +4521,7 @@ raydium_ts_do_resume(struct raydium_ts_data *ts)
 #endif
 
 	ts->is_suspend = 0;
-	g_u8_unlockflag = false;
+	g_u8_resetflag = false;
 }
 
 static int
@@ -4548,6 +4576,7 @@ raydium_ts_open(struct input_dev *input_dev)
 			if (ret < 0)
 				dev_err(&ts->client->dev,
 					"[touch]reset gpio request failed");
+			g_u8_resetflag = true;
 			gpio_direction_output(ts->rst, 1);
 			gpio_direction_output(ts->rst, 0);
 			msleep(RAYDIUM_RESET_INTERVAL_MSEC);	/*5ms */
@@ -4555,7 +4584,6 @@ raydium_ts_open(struct input_dev *input_dev)
 			msleep(RAYDIUM_RESET_DELAY_MSEC);	/*100ms */
 			u8_i2c_mode = PDA2_MODE;
 			gpio_free(ts->rst);
-			g_u8_unlockflag = true;
 		}
 		mutex_unlock(&ts->lock);
 		raydium_irq_control(ts, ENABLE);

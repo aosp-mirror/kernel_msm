@@ -21,7 +21,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x0006
+#define RAYDIUM_VER     0x0008
 
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
@@ -69,7 +69,6 @@
 
 #define RAYDIUM_PALM_MODE_DISABLE    0x00
 #define RAYDIUM_PALM_MODE_ENABLE     0x01
-#define RAYDIUM_WAKE_UP              0x02
 
 #define RAYDIUM_TEST_FW	0x80
 #define RAYDIUM_TEST_PARA	0x40
