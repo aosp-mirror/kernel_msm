@@ -107,6 +107,6 @@ obj-$(CONFIG_TOUCHSCREEN_GT9XX_v28)		+= gt9xx_v2.8/
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= hxchipset/
 obj-$(CONFIG_TOUCHSCREEN_EKTF3XXX_CHIPSET) += ektf3xxx/
 
-obj-$(CONFIG_TOUCHSCREEN_RM_TS_U128BLX01)	+= raydium_ub128blx01/raydium_i2c_ts.o
+obj-$(CONFIG_TOUCHSCREEN_RM_TS_U128BLX01)	+= raydium_u128blx01/raydium_i2c_ts.o
 obj-$(CONFIG_TOUCHSCREEN_RM_TS_RAY_390P)	+= raydium_390p/raydium_i2c_ts.o
 
