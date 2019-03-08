@@ -89,15 +89,21 @@ By default, all access to the upper, lower and work directories is the
 recorded mounter's MAC and DAC credentials.  The incoming accesses are
 checked against the caller's credentials.
 
-If the principles of least privilege are applied, the mounter's
-credentials might not overlap the credentials of the caller's when
-accessing the overlayfs filesystem.  For example, a file that a lower
-DAC privileged caller can execute, is MAC denied to the generally
-higher DAC privileged mounter, to prevent an attack vector.  One
-option is to turn off override_creds in the mount options; all
-subsequent operations after mount on the filesystem will be only the
-caller's credentials.  This option default is set in the CONFIG
-OVERLAY_FS_OVERRIDE_CREDS or in the module option override_creds.
+In the case where caller MAC or DAC credentials do not overlap, a
+use case available in older versions of the driver, the
+override_creds mount flag can be turned off and help when the use
+pattern has caller with legitimate credentials where the mounter
+does not.  Several unintended side effects will occur though.  The
+caller without certain key capabilities or lower privilege will not
+always be able to delete files or directories, create nodes, or
+search some restricted directories.  The ability to search and read
+a directory entry is spotty as a result of the cache mechanism not
+retesting the credentials because of the assumption, a privileged
+caller can fill cache, then a lower privilege can read the directory
+cache.  The uneven security model where cache, upperdir and workdir
+are opened at privilege, but accessed without creating a form of
+privilege escalation, should only be used with strict understanding
+of the side effects and of the security policies.
 
 whiteouts and opaque directories
 --------------------------------

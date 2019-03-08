@@ -293,12 +293,6 @@ static bool ovl_is_opaquedir(struct dentry *dentry)
 	return false;
 }
 
-static bool __read_mostly ovl_default_override_creds =
-	IS_ENABLED(CONFIG_OVERLAY_FS_OVERRIDE_CREDS);
-module_param_named(override_creds, ovl_default_override_creds, bool, 0644);
-MODULE_PARM_DESC(ovl_default_override_creds,
-		 "Use mounter's credentials for accesses");
-
 static void ovl_dentry_release(struct dentry *dentry)
 {
 	struct ovl_entry *oe = dentry->d_fsdata;
@@ -641,8 +635,7 @@ static void ovl_put_super(struct super_block *sb)
 	kfree(ufs->config.lowerdir);
 	kfree(ufs->config.upperdir);
 	kfree(ufs->config.workdir);
-	if (ufs->creator_cred)
-		put_cred(ufs->creator_cred);
+	put_cred(ufs->creator_cred);
 	kfree(ufs);
 }
 
@@ -672,6 +665,11 @@ static int ovl_statfs(struct dentry *dentry, struct kstatfs *buf)
 	return err;
 }
 
+static bool __read_mostly ovl_override_creds_def = true;
+module_param_named(override_creds, ovl_override_creds_def, bool, 0644);
+MODULE_PARM_DESC(ovl_override_creds_def,
+		 "Use mounter's credentials for accesses");
+
 /**
  * ovl_show_options
  *
@@ -690,8 +688,9 @@ static int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	}
 	if (ufs->config.default_permissions)
 		seq_puts(m, ",default_permissions");
-	seq_show_option(m, "override_creds",
-			ufs->config.override_creds ? "on" : "off");
+	if (ufs->config.override_creds != ovl_override_creds_def)
+		seq_show_option(m, "override_creds",
+				ufs->config.override_creds ? "on" : "off");
 	return 0;
 }
 
@@ -760,7 +759,7 @@ static int ovl_parse_opt(char *opt, struct ovl_config *config)
 {
 	char *p;
 
-	config->override_creds = ovl_default_override_creds;
+	config->override_creds = ovl_override_creds_def;
 	while ((p = ovl_next_opt(&opt)) != NULL) {
 		int token;
 		substring_t args[MAX_OPT_ARGS];
@@ -1384,7 +1383,6 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	ovl_copyattr(realinode, d_inode(root_dentry));
 
 	sb->s_root = root_dentry;
-
 	return 0;
 
 out_free_oe:
