@@ -102,6 +102,8 @@ static int dma_xfer(void *buf, int size, const int remote_addr,
 		    enum dma_data_direction dir);
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 			    enum dma_data_direction dir);
+static int dma_xfer_dmabuf(int fd, int size, const int remote_addr,
+			   enum dma_data_direction dir);
 static int dma_send_fw(struct device *device, const char *path,
 		       const int remote_addr);
 static int dma_read_dw(const int remote_addr, int *val);
@@ -279,13 +281,23 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 					pr_err("Error sending calibration data\n");
 					goto exit;
 				}
+			} else if (start_step_data.calibration_fd) {
+				pr_info("Send calibration data from ION\n");
+				err = dma_xfer_dmabuf(
+					start_step_data.calibration_fd,
+					start_step_data.calibration_size,
+					CALIBRATION_ADDR, DMA_TO_DEVICE);
+				if (err) {
+					pr_err("Error sending calibration data from ION\n");
+					goto exit;
+				}
 			}
 		}
 
 		if (start_step_data.operation == FACEAUTH_OP_ENROLL_COMPLETE) {
 			err = process_cache_flush_idxs(
-					start_step_data.cache_flush_indexes,
-					start_step_data.cache_flush_size);
+				start_step_data.cache_flush_indexes,
+				start_step_data.cache_flush_size);
 			if (err)
 				goto exit;
 			err = dma_xfer_vmalloc(
@@ -540,8 +552,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		}
 
 		err = process_cache_flush_idxs(
-					start_step_data.cache_flush_indexes,
-					start_step_data.cache_flush_size);
+			start_step_data.cache_flush_indexes,
+			start_step_data.cache_flush_size);
 		if (err)
 			goto exit;
 
@@ -769,6 +781,31 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 }
 
 /**
+ * Local function to transfer data between user space memory and Airbrush via
+ * PCIE using ION handler
+ * @param[in] fd Fd of user space dma buffer
+ * @param[in] size Size of buffer
+ * @param[in] remote_addr Address of Airbrush memory
+ * @param[in] dir Direction of data transfer
+ * @return Status, zero if succeed, non-zero if fail
+ */
+static int dma_xfer_dmabuf(int fd, int size, const int remote_addr,
+			   enum dma_data_direction dir)
+{
+	struct abc_pcie_dma_desc dma_desc;
+
+	/* Transfer workload to target memory in Airbrush */
+	memset(&dma_desc, 0, sizeof(dma_desc));
+	dma_desc.local_dma_buf_fd = fd;
+	dma_desc.local_buf_type = DMA_BUFFER_DMA_BUF;
+	dma_desc.remote_buf = remote_addr;
+	dma_desc.remote_buf_type = DMA_BUFFER_USER;
+	dma_desc.size = size;
+	dma_desc.dir = dir;
+	return abc_pcie_issue_dma_xfer(&dma_desc);
+}
+
+/**
  * Local function to send firmware to Airbrush memory via PCIE
  * @param[in] path Firmware
  * @param[in] remote_addr Address of Airbrush memory
@@ -820,29 +857,62 @@ static int dma_send_images(struct faceauth_start_data *data)
 {
 	int err = 0;
 
-	pr_info("Send left dot image\n");
-	err = dma_xfer(data->image_dot_left, data->image_dot_left_size,
-		       DOT_IMAGE_LEFT_ADDR, DMA_TO_DEVICE);
-	if (err) {
-		pr_err("Error sending left dot image\n");
-		return err;
+	if (!data->image_dot_left_fd) {
+		pr_info("Send left dot image\n");
+		err = dma_xfer(data->image_dot_left, data->image_dot_left_size,
+			       DOT_IMAGE_LEFT_ADDR, DMA_TO_DEVICE);
+		if (err) {
+			pr_err("Error sending left dot image\n");
+			return err;
+		}
+	} else {
+		pr_info("Send left dot image from ION\n");
+		err = dma_xfer_dmabuf(data->image_dot_left_fd,
+				      data->image_dot_left_size,
+				      DOT_IMAGE_LEFT_ADDR, DMA_TO_DEVICE);
+		if (err) {
+			pr_err("Error sending left dot image from ION\n");
+			return err;
+		}
 	}
-
-	pr_info("Send right dot image\n");
-	err = dma_xfer(data->image_dot_right, data->image_dot_right_size,
-		       DOT_IMAGE_RIGHT_ADDR, DMA_TO_DEVICE);
-	if (err) {
-		pr_err("Error sending right dot image\n");
-		return err;
+	if (!data->image_dot_right_fd) {
+		pr_info("Send right dot image\n");
+		err = dma_xfer(data->image_dot_right,
+			       data->image_dot_right_size, DOT_IMAGE_RIGHT_ADDR,
+			       DMA_TO_DEVICE);
+		if (err) {
+			pr_err("Error sending right dot image\n");
+			return err;
+		}
+	} else {
+		pr_info("Send right dot image from ION\n");
+		err = dma_xfer_dmabuf(data->image_dot_right_fd,
+				      data->image_dot_right_size,
+				      DOT_IMAGE_RIGHT_ADDR, DMA_TO_DEVICE);
+		if (err) {
+			pr_err("Error sending right dot image from ION\n");
+			return err;
+		}
 	}
 
 	/* This is data to feed individual TPU stages */
-	pr_info("Send flood image\n");
-	err = dma_xfer(data->image_flood, data->image_flood_size,
-		       FLOOD_IMAGE_ADDR, DMA_TO_DEVICE);
-	if (err) {
-		pr_err("Error sending flood image\n");
-		return err;
+	if (!data->image_flood_fd) {
+		pr_info("Send flood image\n");
+		err = dma_xfer(data->image_flood, data->image_flood_size,
+			       FLOOD_IMAGE_ADDR, DMA_TO_DEVICE);
+		if (err) {
+			pr_err("Error sending flood image\n");
+			return err;
+		}
+	} else {
+		pr_info("Send flood image from ION\n");
+		err = dma_xfer_dmabuf(data->image_flood_fd,
+				      data->image_flood_size, FLOOD_IMAGE_ADDR,
+				      DMA_TO_DEVICE);
+		if (err) {
+			pr_err("Error sending flood image from ION\n");
+			return err;
+		}
 	}
 
 	return err;
