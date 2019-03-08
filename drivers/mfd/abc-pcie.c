@@ -62,10 +62,6 @@ static const struct mfd_cell abc_mfd_of_nommu_devs[] = {
 		.of_compatible = "abc,airbrush-tmu",
 	},
 	{
-		.name = "ab-thermal",
-		.of_compatible = "abc,airbrush-thermal",
-	},
-	{
 		.name = "airbrush-ddr",
 		.of_compatible = "abc,airbrush-ddr",
 	},
