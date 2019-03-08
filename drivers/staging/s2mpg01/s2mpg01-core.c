@@ -75,16 +75,19 @@ static const struct regmap_config s2mpg01_regmap_config = {
 	.val_bits = 8,
 };
 
-int s2mpg01_toggle_pon(struct s2mpg01_core *ddata)
+void s2mpg01_toggle_pon_oneway(struct s2mpg01_core *ddata, bool turn_on)
 {
 	unsigned long timeout;
 
-	dev_info(ddata->dev, "%s: toggling PON\n", __func__);
+	dev_info(ddata->dev, "%s: setting PON to %d\n", __func__, turn_on);
+
+	if (!turn_on) {
+		gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
+		return;
+	}
 
 	reinit_completion(&ddata->init_complete);
 
-	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 0);
-	usleep_range(20, 25);
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
 
 	/* wait for chip to come out of reset, signaled by resetb interrupt */
@@ -94,8 +97,13 @@ int s2mpg01_toggle_pon(struct s2mpg01_core *ddata)
 		dev_err(ddata->dev,
 			"%s: timeout waiting for device to return from reset\n",
 			__func__);
+}
 
-	return 0;
+void s2mpg01_toggle_pon(struct s2mpg01_core *ddata)
+{
+	s2mpg01_toggle_pon_oneway(ddata, /*turn_on=*/false);
+	msleep(20);
+	s2mpg01_toggle_pon_oneway(ddata, /*turn_on=*/true);
 }
 EXPORT_SYMBOL_GPL(s2mpg01_toggle_pon);
 

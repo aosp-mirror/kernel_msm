@@ -226,7 +226,8 @@ int s2mpg01_read_byte(struct s2mpg01_core *ddata, u8 addr, u8 *data);
 int s2mpg01_write_byte(struct s2mpg01_core *ddata, u8 addr, u8 data);
 int s2mpg01_update_bits(struct s2mpg01_core *ddata, u8 addr, unsigned int mask,
 			u8 data);
-int s2mpg01_toggle_pon(struct s2mpg01_core *ddata);
+void s2mpg01_toggle_pon_oneway(struct s2mpg01_core *ddata, bool turn_on);
+void s2mpg01_toggle_pon(struct s2mpg01_core *ddata);
 int s2mpg01_dump_regs(struct s2mpg01_core *ddata);
 int s2mpg01_read_adc_chan(struct s2mpg01_core *ddata, int chan_num,
 			  u8 *chan_data);

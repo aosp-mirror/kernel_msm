@@ -617,6 +617,21 @@ static ssize_t toggle_pon_show(struct device *dev,
 }
 DEVICE_ATTR_RO(toggle_pon);
 
+static ssize_t toggle_pon_oneway_show(struct device *dev,
+				      struct device_attribute *mattr,
+				      char *data)
+{
+	struct s2mpg01_core *ddata = dev_get_drvdata(dev);
+	static bool is_on = true;
+
+	s2mpg01_toggle_pon_oneway(ddata, !is_on);
+
+	is_on = !is_on;
+
+	return scnprintf(data, PAGE_SIZE, "set pon to %d\n", is_on);
+}
+DEVICE_ATTR_RO(toggle_pon_oneway);
+
 static ssize_t reg_addr_show(struct device *dev,
 			     struct device_attribute *attr,
 			     char *buf)
@@ -711,6 +726,7 @@ static struct attribute *s2mpg01_attrs[] = {
 	&dev_attr_boost_mode.attr,
 	&dev_attr_dump_regs.attr,
 	&dev_attr_toggle_pon.attr,
+	&dev_attr_toggle_pon_oneway.attr,
 	&dev_attr_reg_addr.attr,
 	&dev_attr_reg_data.attr,
 	NULL
