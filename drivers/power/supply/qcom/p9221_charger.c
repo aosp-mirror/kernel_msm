@@ -1788,6 +1788,10 @@ static ssize_t p9221_force_epp(struct device *dev,
 		return ret;
 
 	charger->fake_force_epp = (val != 0);
+
+	if (charger->pdata->slct_gpio >= 0)
+		gpio_set_value(charger->pdata->slct_gpio,
+			       charger->fake_force_epp ? 1 : 0);
 	return count;
 }
 
@@ -2210,6 +2214,15 @@ static int p9221_parse_dt(struct device *dev,
 	else
 		dev_info(dev, "enable gpio:%d", pdata->qien_gpio);
 
+	/* WLC_BPP_EPP_SLCT */
+	ret = of_get_named_gpio(node, "idt,gpio_slct", 0);
+	pdata->slct_gpio = ret;
+	if (ret < 0)
+		dev_warn(dev, "unable to read idt,gpio_slct from dt: %d\n",
+			 ret);
+	else
+		dev_info(dev, "WLC_BPP_EPP_SLCT gpio:%d", pdata->qien_gpio);
+
 	/* Main IRQ */
 	ret = of_get_named_gpio(node, "idt,irq_gpio", 0);
 	if (ret < 0) {
@@ -2382,6 +2395,9 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->enabled = true;
 	if (charger->pdata->qien_gpio >= 0)
 		gpio_direction_output(charger->pdata->qien_gpio, 0);
+
+	if (charger->pdata->slct_gpio >= 0)
+		gpio_direction_output(charger->pdata->slct_gpio, 0);
 
 	/* Default to R5+ */
 	charger->cust_id = 5;
