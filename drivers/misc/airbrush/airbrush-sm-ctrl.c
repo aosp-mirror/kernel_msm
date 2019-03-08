@@ -127,8 +127,8 @@ static struct block_property tpu_property_table[] = {
 
 static struct block_property dram_property_table[] = {
 	BLK_(0_0, PowerUp,   Standby,  0, on, 0_60, off, 1867, 0, 0, 0, 3733),
-	BLK_(0_1, PowerUp,   AonTran,  0, on, 0_60, on,  800,  0, 0, 0, 1600),
-	BLK_(0_2, PowerUp, HalfMidTran, 0, on, 0_60, on, 800,  0, 0, 0, 1600),
+	BLK_(0_1, PowerUp,   AonTran,  0, on, 0_60, on,  934,  0, 0, 0, 1867),
+	BLK_(0_2, PowerUp, HalfMidTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
 	BLK_(0_3, PowerUp, HalfMaxTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
 	BLK_(0_4, PowerUp,   LowTran,   0, on, 0_60, on, 1200, 0, 0, 0, 2400),
 	BLK_(0_5, PowerUp,   MidTran,   0, on, 0_60, on, 1600, 0, 0, 0, 3200),
@@ -142,8 +142,8 @@ static struct block_property dram_property_table[] = {
 
 static struct block_property mif_property_table[] = {
 	BLK_(0_0, Normal,   Ready,       0, on, 0_85, off, 933, 0, 0, 0, 0),
-	BLK_(0_1, Normal,   AonTran,     0, on, 0_85, on,  200, 0, 0, 0, 0),
-	BLK_(0_2, Normal,   HalfMidTran, 0, on, 0_85, on,  200, 0, 0, 0, 0),
+	BLK_(0_1, Normal,   AonTran,     0, on, 0_85, on,  233, 0, 0, 0, 0),
+	BLK_(0_2, Normal,   HalfMidTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
 	BLK_(0_3, Normal,   HalfMaxTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
 	BLK_(0_4, Normal,   LowTran,     0, on, 0_85, on,  300, 0, 0, 0, 0),
 	BLK_(0_5, Normal,   MidTran,     0, on, 0_85, on,  400, 0, 0, 0, 0),
