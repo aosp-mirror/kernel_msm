@@ -54,8 +54,8 @@
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <4>;
 		cirrus,boost-ipk-milliamp = <4500>;
-		cirrus,boost-ctl-millivolt = <9000>; /* 9V */
-		cirrus,boost-ovp-millivolt = <10000>; /* 10V */
+		cirrus,boost-ctl-millivolt = <10000>; /* 10V */
+		cirrus,boost-ovp-millivolt = <11000>; /* 11V */
 		cirrus,f0-default = <2514000>; /* 153 Hz */
 		cirrus,f0-min = <2293760>; /* 140 Hz */
 		cirrus,f0-max = <2703360>; /* 165 Hz */
