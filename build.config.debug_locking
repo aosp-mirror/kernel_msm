@@ -10,6 +10,7 @@ function update_debug_config() {
          -e CONFIG_DEBUG_MUTEXES \
          -e CONFIG_DEBUG_PREEMPT \
          -e CONFIG_DEBUG_ATOMIC_SLEEP \
+         -e CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE \
          -d CONFIG_KERNEL_LZ4
     (cd ${OUT_DIR} && \
      make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
