@@ -922,6 +922,11 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	dev_err(sc->dev, "AB block states cleaned\n");
 
 	if (!is_linkdown_event) {
+		/*
+		 * Disable thermal before all pcie subscribers getting
+		 * disabled.
+		 */
+		ab_thermal_disable(sc->thermal);
 		/* broadcast normal disable */
 		mutex_lock(&sc->mfd_lock);
 		sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
@@ -934,6 +939,11 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	dev_err(sc->dev, "AB PCIE suspended\n");
 
 	if (is_linkdown_event) {
+		/*
+		 * Disable thermal before all pcie subscribers getting
+		 * disabled.
+		 */
+		ab_thermal_disable(sc->thermal);
 		/* broadcast linkdown event */
 		mutex_lock(&sc->mfd_lock);
 		sc->mfd_ops->pcie_linkdown(sc->mfd_ops->ctx);
@@ -1144,6 +1154,12 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if (((to_chip_substate_id == CHIP_STATE_100) ||
 			(to_chip_substate_id == CHIP_STATE_0)) &&
 			(prev_state >= CHIP_STATE_200)) {
+		/*
+		 * Disable thermal before all pcie subscribers getting
+		 * disabled.
+		 */
+		ab_thermal_disable(sc->thermal);
+
 		mutex_lock(&sc->mfd_lock);
 		ret = sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
@@ -1881,9 +1897,21 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	mutex_lock(&sc->state_transitioning_lock);
 	mutex_lock(&sc->mfd_lock);
 	if (!sc->el2_mode) {
+		/*
+		 * Disable thermal before all pcie subscribers getting
+		 * disabled.
+		 */
+		ab_thermal_disable(sc->thermal);
 		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
-		if (!ret)
+		if (!ret) {
 			sc->el2_mode = true;
+		} else {
+			/*
+			 * Recover thermal since PCIe link is still up
+			 * after enter_el2() failed.
+			 */
+			ab_thermal_enable(sc->thermal);
+		}
 	} else {
 		ret = -EINVAL;
 		dev_warn(sc->dev, "Already in el2 mode\n");
@@ -1902,8 +1930,14 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 	mutex_lock(&sc->mfd_lock);
 	if (sc->el2_mode) {
 		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
-		if (!ret)
+		if (!ret) {
 			sc->el2_mode = false;
+			/*
+			 * Enable thermal after all pcie subscribers getting
+			 * enabled.
+			 */
+			ab_thermal_enable(sc->thermal);
+		}
 	} else {
 		ret = -EINVAL;
 		dev_warn(sc->dev, "Not in el2 mode\n");
@@ -2347,11 +2381,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_register_dram_ops(&dram_ops_stub);
 	ab_sm_register_mfd_ops(&mfd_ops_stub);
 
-	/*
-	 * TODO error handle at airbrush-sm should return non-zero value to
-	 * free this.
-	 */
-	devm_ab_thermal_create(ab_sm_ctx->dev, &ab_sm_thermal_ops, ab_sm_ctx);
+	ab_sm_ctx->thermal = devm_ab_thermal_create(ab_sm_ctx->dev,
+			&ab_sm_thermal_ops, ab_sm_ctx);
+	if (IS_ERR(ab_sm_ctx->thermal))
+		dev_warn(dev, "Failed to initialize thermal\n");
 	ab_sm_ctx->throttle_state_id = THROTTLE_NONE;
 
 	ab_sm_ctx->state_change_task =

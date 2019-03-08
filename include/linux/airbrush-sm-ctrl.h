@@ -388,6 +388,8 @@ struct ab_sm_mfd_ops {
 	bool (*get_el2_dma_mode)(void *ctx);
 };
 
+struct ab_thermal;
+
 struct ab_change_req {
 	u32 new_state;
 	int *ret_code;
@@ -527,6 +529,8 @@ struct ab_state_context {
 	 */
 	struct mutex		mfd_lock;
 	struct ab_sm_mfd_ops	*mfd_ops;
+
+	struct ab_thermal *thermal;
 
 	bool force_el2;
 	bool el2_mode; /* Guarded by state_transitioning_lock */

@@ -37,6 +37,7 @@
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-regs.h"
 #include "airbrush-spi.h"
+#include "airbrush-thermal.h"
 
 #define REG_SRAM_ADDR	0x10b30374
 #define REG_DDR_INIT	0x10b30378
@@ -349,6 +350,12 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	if (IS_HOST_DDR_INIT())
 		ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_INIT);
+
+	/*
+	 * Enable thermal after boot sequence finished successfully. Do not
+	 * let thermal throttle intefere the bootsequence.
+	 */
+	ab_thermal_enable(ab_ctx->thermal);
 
 	return 0;
 }
