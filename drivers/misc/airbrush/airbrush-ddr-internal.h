@@ -159,8 +159,26 @@
 #define DREX_TIMINGARE			0x10580030
 #define T_REFI(x)			(((x) & 0xffff) << 0)
 #define T_REFIPB(x)			(((x) & 0xffff) << 16)
-#define T_REFI_DEFAULT			T_REFI(0x49)
-#define T_REFIPB_DEFAULT		T_REFIPB(0x9)
+#define TIMINGARE(refi, refipb)		(T_REFI(refi) | T_REFIPB(refipb))
+#define T_REFI_1x			(0x49)
+#define T_REFIPB_1x			(0x9)
+#define T_REFI_0_50x			(0x25)
+#define T_REFIPB_0_50x			(0x4)
+#define T_REFI_0_25x			(0x12)
+#define T_REFIPB_0_25x			(0x2)
+#ifdef CONFIG_AB_DDR_MR13_RRO_ENABLE
+#define T_REFI_4x			(0x12c)
+#define T_REFIPB_4x			(0x25)
+#define T_REFI_2x			(0x96)
+#define T_REFIPB_2x			(0x13)
+#else
+#define T_REFI_4x			T_REFI_1x
+#define T_REFIPB_4x			T_REFIPB_1x
+#define T_REFI_2x			T_REFI_1x
+#define T_REFIPB_2x			T_REFIPB_1x
+#endif
+#define T_REFI_DEFAULT			T_REFI_1x
+#define T_REFIPB_DEFAULT		T_REFIPB_1x
 
 #define DREX_TIMINGROW0			0x10580034
 #define t_ras(x)			(((x) & 0x3f) << 0)
@@ -913,9 +931,15 @@
 #define VREF_STEP			0x1
 #define VREF_PRBS_TIMEOUT_USEC		10000
 
-#define MAX_RW_OFFSETS		(512)
-#define MR_READ_DELAY_USEC	(100)
+#define MAX_RW_OFFSETS			(512)
+#define MR_READ_DELAY_USEC		(100)
 #define DDR_HW_P_W_TRAIN_INTERVAL_MSEC	(32)
+
+/*
+ * Polling interval for refresh rate control;
+ * may be decreased pending HW data.
+ */
+#define DDR_REFCTRL_POLL_TIME_MSEC      (2000)
 
 enum ddr_freq_index {
 	f_DPHY_DVFS_CON,
@@ -1127,6 +1151,18 @@ enum ddr_restore_mode_t {
 	AB_RESTORE_DVFS,
 };
 
+enum ddr_ref_rate_t {
+	RR_LT = 0,
+	RR_4x,
+	RR_2x,
+	RR_1x,
+	RR_0_5x,
+	RR_0_25x,
+	RR_0_25xd,
+	RR_HT,
+	RR_MAX
+};
+
 enum vref_operation_t {
 	VREF_READ = 0,
 	VREF_WRITE
@@ -1259,6 +1295,11 @@ struct airbrush_ddr_mrw_set_t {
 	unsigned int mr8;
 };
 
+struct ddr_refresh_info_t {
+	unsigned int t_refi;
+	unsigned int t_refipb;
+};
+
 struct ddr_reg_poll_t {
 	uint32_t mask;
 	uint32_t val;
@@ -1330,6 +1371,11 @@ struct ab_ddr_context {
 	uint32_t drex_activate_axi_ready_cache;
 
 	int32_t poll_multiplier;
+
+	/* ddr refresh rate control work queue */
+	struct delayed_work ddr_ref_control_work;
+	struct ddr_refresh_info_t ref_info;
+	unsigned int ref_rate;
 
 #ifdef CONFIG_AB_DDR_RW_TEST
 	/* read/write test data */

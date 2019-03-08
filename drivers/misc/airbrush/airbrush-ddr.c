@@ -49,6 +49,7 @@ static uint32_t (*ddr_otp_rd)(uint32_t);
 
 /* forward declarations */
 static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx);
+static void ddr_refresh_control_wkqueue(struct work_struct *);
 
 static const struct ddr_train_save_restore_t *
 			get_train_save_restore_regs(unsigned int idx)
@@ -1174,6 +1175,8 @@ static int ddr_enable_dll(struct ab_ddr_context *ddr_ctx)
 static void ddr_set_drex_timing_parameters(struct ab_ddr_context *ddr_ctx,
 		enum ddr_freq_t freq)
 {
+	struct ddr_refresh_info_t *ref_info = &ddr_ctx->ref_info;
+
 	ddr_reg_clr_set(ddr_ctx, DREX_PRECHCONFIG0,
 			TP_EN_MSK | PORT_POLICY_MSK,
 			PORT_POLICY(PORT_POLICY_OPEN_PAGE));
@@ -1196,7 +1199,8 @@ static void ddr_set_drex_timing_parameters(struct ab_ddr_context *ddr_ctx,
 			ddr_freq_param(freq, f_DREX_TIMINGPOWER));
 
 	/* Set the all-bank and per-bank auto refresh timings */
-	ddr_reg_wr(ddr_ctx, DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGARE,
+		   TIMINGARE(ref_info->t_refi, ref_info->t_refipb));
 
 	ddr_reg_wr_otp(ddr_ctx, DREX_ETCTIMING, o_Reserved_DDR_INIT_7);
 	ddr_reg_wr_otp(ddr_ctx, DREX_RDFETCH0, o_Reserved_DDR_INIT_8);
@@ -2232,6 +2236,8 @@ int32_t ab_ddr_train_sysreg(void *ctx)
 
 static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 {
+	struct ddr_refresh_info_t *ref_info = &ddr_ctx->ref_info;
+
 	/* Block AXI Before entering self-refresh */
 	if (ddr_block_axi_transactions(ddr_ctx))
 		return -ETIMEDOUT;
@@ -2263,7 +2269,8 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, MRW13_FAST_RESP_DIS);
 
 	/* Set the all-bank and per-bank auto refresh timings */
-	ddr_reg_wr(ddr_ctx, DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGARE,
+		   TIMINGARE(ref_info->t_refi, ref_info->t_refipb));
 
 	/* Enabling DDR Power features */
 	ddr_reg_set(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
@@ -2788,6 +2795,13 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		extra_post_notify_flag = AB_DRAM_DATA_POST_OFF;
 	}
 
+	/*
+	 * DDR state will not be ON if block_state_id < 300. Make sure to
+	 * cancel already scheduled work before DDR operations.
+	 */
+	if (block_state_id < BLOCK_STATE_300)
+		cancel_delayed_work_sync(&ddr_ctx->ddr_ref_control_work);
+
 	mutex_lock(&ddr_ctx->ddr_lock);
 	old_rate = prop_from->clk_frequency;
 	new_rate = prop_to->clk_frequency;
@@ -2803,6 +2817,9 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_ON;
+
+		schedule_delayed_work(&ddr_ctx->ddr_ref_control_work,
+				msecs_to_jiffies(DDR_REFCTRL_POLL_TIME_MSEC));
 		break;
 
 	case BLOCK_STATE_101:
@@ -3059,6 +3076,61 @@ static struct ab_sm_dram_ops dram_ops = {
 	.ppc_ctrl = &ab_ddr_ppc_ctrl,
 };
 
+static void ddr_refresh_control_wkqueue(struct work_struct *refresh_ctrl_wq)
+{
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)dram_ops.ctx;
+	uint32_t mr4_reg, rr;
+	const struct ddr_refresh_info_t *r_rate;
+	static const struct ddr_refresh_info_t refresh_info[RR_MAX] = {
+		[RR_4x]     = { T_REFI_4x,    T_REFIPB_4x    },
+		[RR_2x]     = { T_REFI_2x,    T_REFIPB_2x    },
+		[RR_1x]     = { T_REFI_1x,    T_REFIPB_1x    },
+		[RR_0_5x]   = { T_REFI_0_50x, T_REFIPB_0_50x },
+		[RR_0_25x]  = { T_REFI_0_25x, T_REFIPB_0_25x },
+		[RR_0_25xd] = { T_REFI_0_25x, T_REFIPB_0_25x },
+	};
+
+	mutex_lock(&ddr_ctx->ddr_lock);
+
+	/* Refresh rate control is only required during ddr ON state */
+	if (ddr_ctx->ddr_state != DDR_ON)  {
+		WARN(1, "refresh control work while not in DDR_ON");
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return;
+	}
+
+	/* Read MR4 register to get the refresh rate to be
+	 * applied at the DREX controller side.
+	 */
+	mr4_reg = ddr_read_mr_reg(ddr_ctx, 4);
+
+	/* Refresh Rate OP[2:0] */
+	rr = mr4_reg & 0x7;
+	if (rr == ddr_ctx->ref_rate)
+		goto mr_poll_thread_sleep;
+
+	if ((rr < RR_4x) || (rr > RR_0_25xd))
+		goto mr_poll_thread_sleep;
+
+	pr_info("Refresh Rate: current: %d, prev: %d\n",
+			rr, ddr_ctx->ref_rate);
+
+	r_rate = &refresh_info[rr];
+
+	/* Set the all-bank and per-bank auto refresh timings */
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGARE,
+			TIMINGARE(r_rate->t_refi, r_rate->t_refipb));
+
+	ddr_ctx->ref_info.t_refipb = r_rate->t_refipb;
+	ddr_ctx->ref_info.t_refi = r_rate->t_refi;
+	ddr_ctx->ref_rate = rr;
+
+mr_poll_thread_sleep:
+	mutex_unlock(&ddr_ctx->ddr_lock);
+	schedule_delayed_work(&ddr_ctx->ddr_ref_control_work,
+				msecs_to_jiffies(DDR_REFCTRL_POLL_TIME_MSEC));
+}
+
 static int ab_ddr_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -3077,11 +3149,20 @@ static int ab_ddr_probe(struct platform_device *pdev)
 	/* initialize ddr state to off */
 	ddr_ctx->ddr_state = DDR_OFF;
 
+	/* Set the default refresh rate to 1x (RR_1x) */
+	ddr_ctx->ref_rate = RR_1x;
+	ddr_ctx->ref_info.t_refipb = T_REFIPB_1x;
+	ddr_ctx->ref_info.t_refi = T_REFI_1x;
+
 	ddr_ctx->dev = dev;
 	ab_ddr_clear_cache(ddr_ctx);
 	ddr_ctx->poll_multiplier = -1;
 
 	mutex_init(&ddr_ctx->ddr_lock);
+
+	/* Create Work Queue for DDR Refresh Control */
+	INIT_DELAYED_WORK(&ddr_ctx->ddr_ref_control_work,
+			  ddr_refresh_control_wkqueue);
 
 	dram_ops.ctx = ddr_ctx;
 	ab_sm_register_dram_ops(&dram_ops);
@@ -3094,7 +3175,12 @@ static int ab_ddr_probe(struct platform_device *pdev)
 
 static int ab_ddr_remove(struct platform_device *pdev)
 {
+	struct ab_ddr_context *ddr_ctx;
+
+	ddr_ctx = (struct ab_ddr_context *)dram_ops.ctx;
+	cancel_delayed_work_sync(&ddr_ctx->ddr_ref_control_work);
 	ab_sm_unregister_dram_ops();
+
 	return 0;
 }
 
