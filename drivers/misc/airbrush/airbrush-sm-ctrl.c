@@ -214,6 +214,14 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(603, 200, 303, 305, 305, 304, 303),
 	CHIP_TO_BLOCK_MAP_INIT(604, 200, 304, 305, 305, 304, 303),
 	CHIP_TO_BLOCK_MAP_INIT(605, 200, 305, 305, 305, 304, 303),
+
+	/* TPU Only - No DRAM */
+	CHIP_TO_BLOCK_MAP_INIT(700, 200, 300, 101, 100, 304, 300),
+	CHIP_TO_BLOCK_MAP_INIT(701, 200, 301, 101, 100, 304, 301),
+	CHIP_TO_BLOCK_MAP_INIT(702, 200, 302, 101, 100, 304, 301),
+	CHIP_TO_BLOCK_MAP_INIT(703, 200, 303, 101, 100, 304, 301),
+	CHIP_TO_BLOCK_MAP_INIT(704, 200, 304, 101, 100, 304, 301),
+	CHIP_TO_BLOCK_MAP_INIT(705, 200, 305, 101, 100, 304, 301),
 };
 
 static int ab_update_block_prop_table(struct new_block_props *props,
@@ -600,6 +608,7 @@ static const u32 chip_substate_throttler_map
 	[4] = THROTTLER_MAP_INIT(409, 404, 403, 402),
 	[5] = THROTTLER_MAP_INIT(505, 504, 503, 502),
 	[6] = THROTTLER_MAP_INIT(605, 604, 603, 602),
+	[7] = THROTTLER_MAP_INIT(705, 704, 703, 702),
 };
 
 static u32 ab_sm_throttled_chip_substate_id(
@@ -1096,7 +1105,7 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 /* TODO (b/127500645): Remove once old mappings are completely deprecated */
 int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
 {
-	static const u32 remap_table[61] = {
+	static const u32 remap_table[76] = {
 		[0]  = CHIP_STATE_400,
 		[1]  = CHIP_STATE_401,
 		[2]  = CHIP_STATE_402,
@@ -1123,6 +1132,12 @@ int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
 		[40] = CHIP_STATE_200,
 		[50] = CHIP_STATE_100,
 		[60] = CHIP_STATE_0,
+		[70] = CHIP_STATE_700,
+		[71] = CHIP_STATE_701,
+		[72] = CHIP_STATE_702,
+		[73] = CHIP_STATE_703,
+		[74] = CHIP_STATE_704,
+		[75] = CHIP_STATE_705,
 	};
 
 	if (old_mapping >= ARRAY_SIZE(remap_table))
@@ -1163,6 +1178,9 @@ int ab_sm_unmap_state(u32 new_mapping, u32 *old_mapping)
 		break;
 	case CHIP_STATE_600 ... CHIP_STATE_605:
 		*old_mapping = (new_mapping - 580);
+		break;
+	case CHIP_STATE_700 ... CHIP_STATE_705:
+		*old_mapping = (new_mapping - 630);
 		break;
 	default:
 		pr_err("couldn't unmap %d\n", new_mapping);
