@@ -757,8 +757,7 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	if (is_linkdown_event) {
 		/* broadcast linkdown event */
 		mutex_lock(&sc->mfd_lock);
-		/* TODO(b/124536826): switch to linkdown handler */
-		sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
+		sc->mfd_ops->pcie_linkdown(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
 	}
 

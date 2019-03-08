@@ -1824,11 +1824,36 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_NOT_ACTIVE)
 		return 0;
 
+	/* Broadcast this event to subscribers */
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
+
+	abc_pcie_disable_irqs(abc_dev->pdev);
+	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
+	return 0;
+}
+
+static int abc_pcie_linkdown_handler(void *ctx)
+{
+	struct device *dev = (struct device *)ctx;
+
+	dev_dbg(dev,
+		"%s: PCIe link unexpectedly went down\n",
+		__func__);
+
+	/* TODO(b/120753172): clean up atomics usage */
+	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_NOT_ACTIVE)
+		return 0;
+
 	abc_pcie_disable_irqs(abc_dev->pdev);
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
 
-	/* Broadcast this event to subscribers */
-	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
+	/*
+	 * TODO(b/124536826): drop ABC_PCIE_LINK_PRE_DISABLE once all drivers
+	 * catch up.
+	 */
+	dev_warn(dev, "Broadcast link error notification\n");
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE |
+				      ABC_PCIE_LINK_ERROR);
 	return 0;
 }
 
@@ -1840,6 +1865,7 @@ static struct ab_sm_mfd_ops mfd_ops = {
 	.get_chip_id = &abc_pcie_get_chip_id_handler,
 	.ab_ready = &abc_pcie_ab_ready_handler,
 	.pcie_pre_disable = &abc_pcie_pre_disable_handler,
+	.pcie_linkdown = &abc_pcie_linkdown_handler,
 };
 
 static void abc_pcie_enable_irqs(struct pci_dev *pdev)
