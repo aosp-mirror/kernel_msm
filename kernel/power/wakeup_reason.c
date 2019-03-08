@@ -31,7 +31,8 @@
 
 #define MAX_WAKEUP_REASON_IRQS 32
 static bool suspend_abort;
-static char abort_reason[MAX_SUSPEND_ABORT_LEN];
+static bool bad_wake;
+static char abort_or_bad_wake_reason[MAX_SUSPEND_ABORT_LEN];
 
 static struct wakeup_irq_node *base_irq_nodes;
 static struct wakeup_irq_node *cur_irq_tree;
@@ -160,20 +161,26 @@ static void print_wakeup_sources(void)
 {
 	struct wakeup_irq_node *n;
 	const struct list_head *wakeups;
+	int wakeup_source_count = 0;
 
 	if (suspend_abort) {
-		pr_info("Abort: %s", abort_reason);
+		pr_info("Abort: %s\n", abort_or_bad_wake_reason);
 		return;
 	}
 
 	wakeups = get_wakeup_reasons_nosync();
 	list_for_each_entry(n, wakeups, next) {
+		wakeup_source_count++;
 		if (n->desc && n->desc->action && n->desc->action->name)
 			pr_info("Resume caused by IRQ %d, %s\n", n->irq,
 				n->desc->action->name);
 		else
 			pr_info("Resume caused by IRQ %d\n", n->irq);
 	}
+
+	if (wakeup_source_count == 0 && bad_wake)
+		pr_info("Resume possibly caused by %s\n",
+			abort_or_bad_wake_reason);
 }
 
 static bool walk_irq_node_tree(struct wakeup_irq_node *root,
@@ -220,13 +227,13 @@ static bool print_leaf_node(struct wakeup_irq_node *n, void *_p)
 	if (!n->child) {
 		if (n->desc && n->desc->action && n->desc->action->name)
 			b->buf_offset +=
-				snprintf(b->buf + b->buf_offset,
+				scnprintf(b->buf + b->buf_offset,
 					PAGE_SIZE - b->buf_offset,
 					"%d %s\n",
 					n->irq, n->desc->action->name);
 		else
 			b->buf_offset +=
-				snprintf(b->buf + b->buf_offset,
+				scnprintf(b->buf + b->buf_offset,
 					PAGE_SIZE - b->buf_offset,
 					"%d\n",
 					n->irq);
@@ -247,10 +254,16 @@ static ssize_t last_resume_reason_show(struct kobject *kobj,
 
 	spin_lock_irqsave(&resume_reason_lock, flags);
 	if (suspend_abort)
-		b.buf_offset = snprintf(buf, PAGE_SIZE, "Abort: %s",
-					abort_reason);
+		b.buf_offset = scnprintf(buf, PAGE_SIZE, "Abort: %s",
+					 abort_or_bad_wake_reason);
 	else
 		walk_irq_node_tree(base_irq_nodes, print_leaf_node, &b);
+
+	/* If no abort or normal wake reason captured, check for bad wakes */
+	if (b.buf_offset == 0 && bad_wake)
+		b.buf_offset = scnprintf(buf, PAGE_SIZE, "-1 %s",
+					 abort_or_bad_wake_reason);
+
 	spin_unlock_irqrestore(&resume_reason_lock, flags);
 
 	return b.buf_offset;
@@ -434,7 +447,7 @@ void log_suspend_abort_reason(const char *fmt, ...)
 
 	spin_lock_irqsave(&resume_reason_lock, flags);
 
-	//Suspend abort reason has already been logged.
+	/* Suspend abort reason has already been logged. */
 	if (suspend_abort) {
 		spin_unlock_irqrestore(&resume_reason_lock, flags);
 		return;
@@ -442,7 +455,35 @@ void log_suspend_abort_reason(const char *fmt, ...)
 
 	suspend_abort = true;
 	va_start(args, fmt);
-	vsnprintf(abort_reason, MAX_SUSPEND_ABORT_LEN, fmt, args);
+	vsnprintf(abort_or_bad_wake_reason, MAX_SUSPEND_ABORT_LEN, fmt, args);
+	va_end(args);
+
+	spin_unlock_irqrestore(&resume_reason_lock, flags);
+}
+
+/*
+ * Logs a possible wakeup reason that would be missed by normal wakeup
+ * logging, such as an unmapped HW IRQ, an IRQ configured with both
+ * IRQF_NO_SUSPEND and enable_irq_wake(), etc
+ * The reason is not logged if a suspend abort has already been captured,
+ * since those occur earlier in the suspend/resume flow.
+ */
+void log_bad_wake_reason(const char *fmt, ...)
+{
+	va_list args;
+	unsigned long flags;
+
+	spin_lock_irqsave(&resume_reason_lock, flags);
+
+	/* A suspend abort or bad wake reason has already been logged */
+	if (suspend_abort || bad_wake) {
+		spin_unlock_irqrestore(&resume_reason_lock, flags);
+		return;
+	}
+
+	bad_wake = true;
+	va_start(args, fmt);
+	vsnprintf(abort_or_bad_wake_reason, MAX_SUSPEND_ABORT_LEN, fmt, args);
 	va_end(args);
 
 	spin_unlock_irqrestore(&resume_reason_lock, flags);
@@ -535,6 +576,7 @@ void clear_wakeup_reasons(void)
 	cur_irq_tree_depth = 0;
 	INIT_LIST_HEAD(&wakeup_irqs);
 	suspend_abort = false;
+	bad_wake = false;
 
 	spin_unlock_irqrestore(&resume_reason_lock, flags);
 }
@@ -548,6 +590,7 @@ static int wakeup_reason_pm_event(struct notifier_block *notifier,
 	case PM_SUSPEND_PREPARE:
 		spin_lock_irqsave(&resume_reason_lock, flags);
 		suspend_abort = false;
+		bad_wake = false;
 		spin_unlock_irqrestore(&resume_reason_lock, flags);
 		/* monotonic time since boot */
 		last_monotime = ktime_get();
