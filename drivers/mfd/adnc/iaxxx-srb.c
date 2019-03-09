@@ -38,8 +38,8 @@
  */
 #define UPDATE_BLOCK_FAIL_RETRIES 200
 
-#define IAXXX_UPDATE_BLOCK_NO_WAIT    (true)
-#define IAXXX_UPDATE_BLOCK_WITH_WAIT  (false)
+#define IAXXX_UPDATE_BLOCK_WITH_FIXED_WAIT	(true)
+#define IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT	(false)
 
 #define IAXXX_UPDATE_BLOCK_NO_PM      (true)
 #define IAXXX_UPDATE_BLOCK_WITH_PM    (false)
@@ -188,7 +188,9 @@ out:
  * @block_id : block id of the processor
  * @host_id  : id of the Host
  * @no_pm    : if main regmap or no_pm regmap
- * @no_wait  : if wait needed after update block
+ * @fixed_wait: if true use fixed time to wait after update block otherwise
+ *              use regular wait logic.
+ * @wait_time_in_ms: wait time to use if fixed_wait is true.
  * @status   : pointer for the returned system status
  *
  * Core lock must be held by the caller.
@@ -201,7 +203,8 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		int  block_id,
 		int  host_id,
 		bool no_pm,
-		bool no_wait,
+		bool fixed_wait,
+		uint32_t wait_time_in_ms,
 		uint32_t *status)
 {
 	int rc;
@@ -257,7 +260,7 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	 * for no error.
 	 *
 	 */
-	if (no_wait) {
+	if (fixed_wait) {
 		result_bits_mask	= 0;
 		reserved_bits_mask	= 0;
 	} else if (priv->is_application_mode)
@@ -279,9 +282,11 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		goto out;
 	}
 
-	/* If no wait is needed after update block just return */
-	if (no_wait)
+	/* If fixed wait is needed after update block wait and return */
+	if (fixed_wait) {
+		msleep(wait_time_in_ms);
 		goto out;
+	}
 
 	/*
 	 * Note that in application mode, events can be used instead of polling.
@@ -493,7 +498,7 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 	/* Wait for the request to complete */
 	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
 			IAXXX_HOST_0, no_pm,
-			IAXXX_UPDATE_BLOCK_WITH_WAIT, &status);
+			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, &status);
 	if (rc) {
 		dev_err(dev, "CHECKSUM_REQUEST failed, rc = %d\n", rc);
 		goto out;
@@ -575,8 +580,8 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 		return -EINVAL;
 
 	rc = iaxxx_update_block_request(priv, id,
-			IAXXX_HOST_0, no_pm, IAXXX_UPDATE_BLOCK_WITH_WAIT,
-			status);
+			IAXXX_HOST_0, no_pm,
+			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, status);
 
 	rc = iaxxx_check_update_block_err(dev, rc, status);
 
@@ -585,7 +590,8 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 EXPORT_SYMBOL(iaxxx_send_update_block_request);
 
 /**
- * iaxxx_update_block_no_wait - sends Update Block Request and no wait
+ * iaxxx_update_block_fixed_wait - sends Update Block Request and waits for
+ * fixed amount of time specified as parameter.
  *
  * @priv   : iaxxx private data
  * @status : pointer for the returned system status
@@ -596,7 +602,8 @@ EXPORT_SYMBOL(iaxxx_send_update_block_request);
  * wait for the result after that. one use case is to disable control interface.
  */
 
-int iaxxx_send_update_block_no_wait(struct device *dev, int host_id)
+int iaxxx_send_update_block_fixed_wait(struct device *dev, int host_id,
+		uint32_t wait_time_in_ms)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = 0;
@@ -606,13 +613,15 @@ int iaxxx_send_update_block_no_wait(struct device *dev, int host_id)
 
 	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
 			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
-			IAXXX_UPDATE_BLOCK_NO_WAIT, &status);
+			IAXXX_UPDATE_BLOCK_WITH_FIXED_WAIT, wait_time_in_ms,
+			&status);
 
 	return rc;
 }
-EXPORT_SYMBOL(iaxxx_send_update_block_no_wait);
+EXPORT_SYMBOL(iaxxx_send_update_block_fixed_wait);
 
-int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id)
+int iaxxx_send_update_block_fixed_wait_no_pm(struct device *dev, int host_id,
+		uint32_t wait_time_in_ms)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = 0;
@@ -622,11 +631,12 @@ int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id)
 
 	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
 			host_id, IAXXX_UPDATE_BLOCK_NO_PM,
-			IAXXX_UPDATE_BLOCK_NO_WAIT, &status);
+			IAXXX_UPDATE_BLOCK_WITH_FIXED_WAIT, wait_time_in_ms,
+			&status);
 
 	return rc;
 }
-EXPORT_SYMBOL(iaxxx_send_update_block_no_wait_no_pm);
+EXPORT_SYMBOL(iaxxx_send_update_block_fixed_wait_no_pm);
 
 int iaxxx_send_update_block_hostid(struct device *dev,
 		int host_id, int block_id)
@@ -639,7 +649,7 @@ int iaxxx_send_update_block_hostid(struct device *dev,
 
 	rc = iaxxx_update_block_request(priv, block_id,
 			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
-			IAXXX_UPDATE_BLOCK_WITH_WAIT, &status);
+			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, &status);
 
 	rc = iaxxx_check_update_block_err(dev, rc, &status);
 	return rc;

@@ -30,6 +30,7 @@
 #include <linux/mfd/adnc/iaxxx-module.h>
 #include "iaxxx-btp.h"
 #include "iaxxx.h"
+#include "iaxxx-plugin-common.h"
 
 #define IAXXX_PWR_DWN_VAL 0x01C00050
 #define IAXXX_PWR_ON_VAL 0x845
@@ -240,8 +241,8 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 	 * to achieve optimal or sleep mode.
 	 */
 	/* SLEEP MODE: If plugin count is zero and route is inactive */
-	if (list_empty_careful(&priv->iaxxx_state->plugin_head_list)
-						&& !priv->route_status) {
+	if (iaxxx_core_plg_list_empty(priv) &&
+			!iaxxx_core_get_route_status(priv)) {
 		/* Enable external clock */
 		if (priv->iaxxx_mclk_cb)
 			priv->iaxxx_mclk_cb(priv, 1);
@@ -273,8 +274,8 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 			dev_err(priv->dev, "%s() Fail\n", __func__);
 			return rc;
 		}
-		iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_0);
-		msleep(20);
+		iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
+							IAXXX_HOST_0, 20);
 
 		/* Disable external clock */
 		if (priv->iaxxx_mclk_cb)
@@ -298,8 +299,8 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 			return rc;
 		}
 
-		iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_0);
-		msleep(20);
+		iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
+							IAXXX_HOST_0, 20);
 
 		priv->iaxxx_state->power_state = IAXXX_OPTIMAL_MODE;
 		dev_info(priv->dev, "%s() chip put into optimal power mode\n",
@@ -378,9 +379,7 @@ int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev)
 		return rc;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_0);
-
-	msleep(20);
+	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_0, 20);
 	priv->iaxxx_state->power_state = IAXXX_OPTIMAL_MODE;
 	return rc;
 }
@@ -412,8 +411,7 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
 		return rc;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_1);
-	msleep(20);
+	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_1, 20);
 	return rc;
 }
 
@@ -434,15 +432,14 @@ int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 			IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK);
 
 	if (!rc)
-		rc = iaxxx_send_update_block_no_wait_no_pm(priv->dev,
-				IAXXX_HOST_0);
+		rc = iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
+							IAXXX_HOST_0, 20);
 
 	if (rc) {
 		dev_err(priv->dev, "%s failed error code = %d\n", __func__, rc);
 		return rc;
 	}
 
-	msleep(20);
 	rc = regmap_read(priv->regmap,
 				IAXXX_SRB_SYS_BLK_UPDATE_ADDR, &status);
 	if (rc) {
@@ -485,9 +482,8 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 			return rc;
 		}
 
-		iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_1);
-
-		msleep(20);
+		iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
+							IAXXX_HOST_1, 20);
 	}
 
 	rc = regmap_update_bits(priv->regmap_no_pm,
@@ -511,13 +507,13 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 		return rc;
 	}
 
-	rc = iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_0);
+	rc = iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
+							IAXXX_HOST_0, 20);
 	if (rc) {
 		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
 		return rc;
 	}
 
-	msleep(20);
 	rc = regmap_read(priv->regmap_no_pm,
 				IAXXX_SRB_SYS_BLK_UPDATE_ADDR, &status);
 	if (rc) {
@@ -1165,8 +1161,10 @@ EXPORT_SYMBOL(iaxxx_core_get_pwr_stats);
  */
 int iaxxx_set_osc_trim_period(struct iaxxx_priv *priv, int period)
 {
-	int rc;
+	int rc = 0;
 
+	if (period == priv->int_osc_trim_period)
+		goto exit;
 	dev_dbg(priv->dev, "%s() period:%d\n", __func__, period);
 
 	rc = regmap_update_bits(priv->regmap,
@@ -1179,14 +1177,15 @@ int iaxxx_set_osc_trim_period(struct iaxxx_priv *priv, int period)
 	if (rc) {
 		dev_err(priv->dev, "%s Failed to set Osc Trim period\n",
 				__func__);
-		return rc;
+		goto exit;
 	}
 
-	rc = iaxxx_send_update_block_no_wait(priv->dev, IAXXX_HOST_0);
+	rc = iaxxx_send_update_block_fixed_wait(priv->dev, IAXXX_HOST_0, 20);
 
 	if (rc)
 		dev_err(priv->dev, "Update block failed in %s\n", __func__);
 
-	msleep(20);
+	priv->int_osc_trim_period = period;
+exit:
 	return rc;
 }

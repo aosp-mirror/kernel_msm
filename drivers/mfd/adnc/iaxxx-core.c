@@ -194,6 +194,14 @@ err_regmap:
 	return rc;
 }
 
+/* Clear system state */
+static void clear_system_state(struct iaxxx_priv *priv)
+{
+	iaxxx_clr_pkg_plg_list(priv);
+	priv->iaxxx_state->power_state = IAXXX_NOCHANGE;
+	memset(&priv->iaxxx_state->err, 0, sizeof(struct iaxxx_block_err));
+}
+
 static int iaxxx_fw_recovery_regmap_init(struct iaxxx_priv *priv)
 {
 	int rc;
@@ -215,16 +223,11 @@ static int iaxxx_fw_recovery_regmap_init(struct iaxxx_priv *priv)
 		regcache_cache_bypass(priv->regmap_no_pm, true);
 	}
 
-	iaxxx_clr_pkg_plg_list(priv);
-
 	/* Clear system state */
-	memset(priv->iaxxx_state, 0, sizeof(struct iaxxx_system_state));
-
-	INIT_LIST_HEAD(&priv->iaxxx_state->plugin_head_list);
-	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
+	clear_system_state(priv);
 
 	/* Reset route status */
-	priv->route_status = 0;
+	iaxxx_core_set_route_status(priv, false);
 	priv->is_application_mode = true;
 	dev_info(priv->dev, "%s: Recovery done\n", __func__);
 
@@ -1197,9 +1200,8 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 		goto exit_fw_fail;
 	}
 
-	iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_1);
+	iaxxx_send_update_block_fixed_wait_no_pm(priv->dev, IAXXX_HOST_1, 20);
 
-	msleep(20);
 	/* switch to internal oscillator if dt entry
 	 * is selected for internal oscillator mode
 	 * during bootup or recovery.
@@ -1644,6 +1646,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->event_queue_lock);
 	mutex_init(&priv->plugin_lock);
 	mutex_init(&priv->module_lock);
+	mutex_init(&priv->sensor_tunnel_dev_lock);
 	mutex_init(&priv->crashdump_lock);
 	mutex_init(&priv->pm_mutex);
 	mutex_init(&priv->proc_on_off_lock);
@@ -1670,11 +1673,12 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 
 	INIT_LIST_HEAD(&priv->iaxxx_state->plugin_head_list);
 	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
+	mutex_init(&priv->iaxxx_state->plg_pkg_list_lock);
 
 	/* Initialize regmap for SBL */
 	rc = iaxxx_regmap_init(priv);
 	if (rc)
-		return rc;
+		goto err_regdump_init;
 
 	/* Initialize the register dump */
 	rc = iaxxx_regdump_init(priv);
@@ -1753,8 +1757,10 @@ err_regdump_init:
 	mutex_destroy(&priv->event_queue_lock);
 	mutex_destroy(&priv->plugin_lock);
 	mutex_destroy(&priv->module_lock);
+	mutex_destroy(&priv->sensor_tunnel_dev_lock);
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
+	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
 	mutex_destroy(&priv->proc_on_off_lock);
 	mutex_destroy(&priv->btp_lock);
 	mutex_destroy(&priv->debug_mutex);
@@ -1792,8 +1798,10 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	mutex_destroy(&priv->event_queue_lock);
 	mutex_destroy(&priv->plugin_lock);
 	mutex_destroy(&priv->module_lock);
+	mutex_destroy(&priv->sensor_tunnel_dev_lock);
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
+	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
 	mutex_destroy(&priv->proc_on_off_lock);
 	mutex_destroy(&priv->btp_lock);
 	mutex_destroy(&priv->debug_mutex);
@@ -1826,4 +1834,5 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 		regmap_exit(priv->regmap_no_pm);
 		priv->regmap_no_pm = NULL;
 	}
+
 }

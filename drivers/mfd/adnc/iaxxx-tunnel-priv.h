@@ -71,6 +71,9 @@ struct iaxxx_tunnel_data {
 	struct device *dev; /* mfd device */
 	struct iaxxx_priv *priv;
 
+	/* Tunnel device locks */
+	struct mutex tunnel_dev_lock;
+
 	struct iaxxx_cdev tunnel_cdev;
 	struct iaxxx_cdev tunnel_sensor_cdev;
 
@@ -78,6 +81,7 @@ struct iaxxx_tunnel_data {
 
 	struct list_head list;
 	struct list_head src_list;
+	spinlock_t src_list_lock;
 	spinlock_t lock;
 
 	unsigned long flags;
@@ -137,6 +141,7 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 int iaxxx_tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 			uint32_t mode, uint32_t encode);
 int iaxxx_tunnel_read(struct file *filp, char __user *buf, size_t count);
+
 
 #ifdef CONFIG_MFD_IAXXX_SENSOR_TUNNEL
 int iaxxx_sensor_tunnel_init(struct iaxxx_priv *priv);

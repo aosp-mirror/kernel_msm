@@ -191,6 +191,7 @@ struct iaxxx_block_err {
 };
 
 struct iaxxx_system_state {
+	struct mutex plg_pkg_list_lock;
 	struct list_head plugin_head_list;
 	struct list_head pkg_head_list;
 	enum iaxxx_power_state power_state;
@@ -273,6 +274,9 @@ struct iaxxx_priv {
 	/* Processor on and off lock */
 	struct mutex proc_on_off_lock;
 
+	/* Sensor tunnel device locks */
+	struct mutex sensor_tunnel_dev_lock;
+
 	/* Event work queue */
 	struct mutex event_work_lock;
 	struct mutex event_queue_lock;
@@ -334,7 +338,7 @@ struct iaxxx_priv {
 	bool sensor_en[IAXXX_SENSR_ID_MASK + 1];
 	uint32_t crash_count;
 	bool cm4_crashed;
-	bool route_status;
+	atomic_t route_status;
 	struct iaxxx_crashlog *crashlog;
 	struct mutex crashdump_lock;
 
@@ -371,6 +375,19 @@ static inline bool find_host_id(struct iaxxx_priv *priv, uint32_t inst_id)
 	return (inst_id >= priv->plugin_inst_count)?IAXXX_HOST_1:IAXXX_HOST_0;
 }
 
+static inline bool iaxxx_core_get_route_status(struct iaxxx_priv *priv)
+{
+	return atomic_read(&priv->route_status);
+}
+
+static inline void iaxxx_core_set_route_status(struct iaxxx_priv *priv,
+		bool route_status)
+{
+	/* Set the route status only if FW is in normal mode */
+	if (test_bit(IAXXX_FLG_FW_READY, &priv->flags))
+		atomic_set(&priv->route_status, route_status);
+}
+
 int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id);
 int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
@@ -387,8 +404,10 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
 int iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
 		uint32_t reg, uint32_t match, uint32_t *status);
-int iaxxx_send_update_block_no_wait(struct device *dev, int host_id);
-int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id);
+int iaxxx_send_update_block_fixed_wait(struct device *dev, int host_id,
+		uint32_t wait_time_in_ms);
+int iaxxx_send_update_block_fixed_wait_no_pm(struct device *dev, int host_id,
+		uint32_t wait_time_in_ms);
 int iaxxx_send_update_block_hostid(struct device *dev,
 		int host_id, int block_id);
 int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv);

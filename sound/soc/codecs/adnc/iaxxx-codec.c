@@ -2312,7 +2312,8 @@ static int iaxxx_put_route_status(struct snd_kcontrol *kcontrol,
 		if (ret)
 			dev_err(dev, "not able to Propagate route status\n");
 	}
-	priv->route_status = ucontrol->value.enumerated.item[0];
+
+	iaxxx_core_set_route_status(priv, ucontrol->value.enumerated.item[0]);
 
 	return ret;
 }
@@ -2324,7 +2325,7 @@ static int iaxxx_get_route_status(struct snd_kcontrol *kcontrol,
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev);
 	struct iaxxx_priv *priv = to_iaxxx_priv(iaxxx->dev_parent);
 
-	ucontrol->value.enumerated.item[0] = priv->route_status;
+	ucontrol->value.enumerated.item[0] = iaxxx_core_get_route_status(priv);
 	return 0;
 
 }

@@ -136,8 +136,6 @@ int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
 		return ret;
 
 	dev_dbg(dev, "%s()\n", __func__);
-	/* protect this sensor operation */
-	mutex_lock(&priv->module_lock);
 	/* Set enable bit in sensor inst enable header */
 	ret = regmap_update_bits(priv->regmap,
 		IAXXX_SENSOR_HDR_SENSOR_ENABLE_ADDR,
@@ -151,7 +149,6 @@ int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
 	priv->sensor_en[inst_id] = is_enable;
 
 core_change_sensor_state_err:
-	mutex_unlock(&priv->module_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_change_state);
@@ -179,8 +176,6 @@ int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
 		return ret;
 
 	inst_id &= IAXXX_SENSR_ID_MASK;
-	/* protect this sensor operation */
-	mutex_lock(&priv->module_lock);
 
 	ret = regmap_write(priv->regmap,
 			IAXXX_SENSOR_GRP_PARAM_ID_REG(inst_id), param_id);
@@ -211,7 +206,6 @@ int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
 	}
 
 sensor_set_param_inst_err:
-	mutex_unlock(&priv->module_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_set_param_by_inst);
@@ -240,8 +234,6 @@ int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
 
 	inst_id &= IAXXX_SENSR_ID_MASK;
 	dev_dbg(dev, "%s()\n", __func__);
-	/* protect this sensor operation */
-	mutex_lock(&priv->module_lock);
 
 	ret = regmap_write(priv->regmap,
 			IAXXX_SENSOR_GRP_PARAM_ID_REG(inst_id), param_id);
@@ -272,7 +264,6 @@ int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
 	}
 
 sensor_get_param_inst_err:
-	mutex_unlock(&priv->module_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_get_param_by_inst);
@@ -552,9 +543,6 @@ int iaxxx_core_script_load(struct device *dev, const char *script_name,
 	dev_dbg(dev, "%s() Download Script %s\n",
 				__func__, script_name);
 
-	/* protect this plugin operation */
-	mutex_lock(&priv->module_lock);
-
 	rc = request_firmware(&fw, script_name, priv->dev);
 	if (rc || !fw) {
 		dev_err(dev,
@@ -571,7 +559,6 @@ int iaxxx_core_script_load(struct device *dev, const char *script_name,
 	dev_info(dev, "%s() script load success\n", __func__);
 out:
 	release_firmware(fw);
-	mutex_unlock(&priv->module_lock);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_core_script_load);
@@ -592,9 +579,6 @@ int iaxxx_core_script_unload(struct device *dev, uint32_t script_id)
 	int rc = -EINVAL;
 
 	dev_dbg(dev, "%s()\n", __func__);
-
-	/* protect this module operation */
-	mutex_lock(&priv->module_lock);
 
 	value = IAXXX_SCRIPT_MGMT_SCRIPT_REQ_UNLOAD_MASK |
 		(IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_MASK &
@@ -625,7 +609,6 @@ int iaxxx_core_script_unload(struct device *dev, uint32_t script_id)
 	}
 	dev_info(dev, "%s() script unload success\n", __func__);
 out:
-	mutex_unlock(&priv->module_lock);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_core_script_unload);
@@ -646,9 +629,6 @@ int iaxxx_core_script_trigger(struct device *dev, uint32_t script_id)
 	int rc = -EINVAL;
 
 	dev_dbg(dev, "%s()\n", __func__);
-
-	/* protect this module operation */
-	mutex_lock(&priv->module_lock);
 
 	value = IAXXX_SCRIPT_MGMT_SCRIPT_REQ_EXECUTE_MASK |
 		(IAXXX_SCRIPT_MGMT_SCRIPT_REQ_SCRIPT_ID_MASK &
@@ -679,7 +659,6 @@ int iaxxx_core_script_trigger(struct device *dev, uint32_t script_id)
 	}
 	dev_info(dev, "%s() script execute success\n", __func__);
 out:
-	mutex_unlock(&priv->module_lock);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_core_script_trigger);

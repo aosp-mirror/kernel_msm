@@ -282,8 +282,10 @@ EXPORT_SYMBOL(iaxxx_core_plg_is_valid_cfg_size);
 struct iaxxx_plugin_data *iaxxx_core_plugin_exist(struct iaxxx_priv *priv,
 							uint32_t inst_id)
 {
-	struct iaxxx_plugin_data *plugin_data;
+	struct iaxxx_plugin_data *plugin_data = NULL;
 	struct list_head *node, *tmp;
+
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
 
 	if (!list_empty_careful(&priv->iaxxx_state->plugin_head_list)) {
 		list_for_each_safe(node, tmp,
@@ -292,10 +294,14 @@ struct iaxxx_plugin_data *iaxxx_core_plugin_exist(struct iaxxx_priv *priv,
 					struct iaxxx_plugin_data,
 					plugin_node);
 			if (plugin_data->inst_id == inst_id)
-				return plugin_data;
+				goto exit;
+			else
+				plugin_data = NULL;
 		}
 	}
-	return NULL;
+exit:
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
+	return plugin_data;
 }
 EXPORT_SYMBOL(iaxxx_core_plugin_exist);
 
@@ -310,8 +316,10 @@ EXPORT_SYMBOL(iaxxx_core_plugin_exist);
 struct iaxxx_pkg_data *iaxxx_core_pkg_exist(struct iaxxx_priv *priv,
 						uint32_t pkg_id)
 {
-	struct iaxxx_pkg_data *pkg_data;
+	struct iaxxx_pkg_data *pkg_data = NULL;
 	struct list_head *node, *tmp;
+
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
 
 	if (!list_empty_careful(&priv->iaxxx_state->pkg_head_list)) {
 		list_for_each_safe(node, tmp,
@@ -319,13 +327,37 @@ struct iaxxx_pkg_data *iaxxx_core_pkg_exist(struct iaxxx_priv *priv,
 			pkg_data = list_entry(node,
 				struct iaxxx_pkg_data, pkg_node);
 			if (pkg_data->pkg_id == pkg_id)
-				return pkg_data;
+				goto exit;
+			else
+				pkg_data = NULL;
 		}
 	}
-	return NULL;
+
+exit:
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
+	return pkg_data;
 }
 EXPORT_SYMBOL(iaxxx_core_pkg_exist);
 
+/*****************************************************************************
+ * iaxxx_core_plg_list_empty()
+ * @brief check if plugin list is empty
+ *
+ * @priv  Pointer to iaxxx privata data structure
+ * @ret true if plugin list is empty false otherwise.
+ ****************************************************************************/
+bool iaxxx_core_plg_list_empty(struct iaxxx_priv *priv)
+{
+	bool list_empty;
+
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
+	list_empty = list_empty_careful(&priv->iaxxx_state->plugin_head_list);
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
+
+	return list_empty;
+
+}
+EXPORT_SYMBOL(iaxxx_core_plg_list_empty);
 
 /*****************************************************************************
  * iaxxx_clr_pkg_plg_list()
@@ -341,6 +373,8 @@ int iaxxx_clr_pkg_plg_list(struct iaxxx_priv *priv)
 	struct iaxxx_plugin_data *plugin_data;
 	struct list_head *node, *tmp;
 
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
+
 	list_for_each_safe(node, tmp, &priv->iaxxx_state->plugin_head_list) {
 		plugin_data = list_entry(node, struct iaxxx_plugin_data,
 							plugin_node);
@@ -353,9 +387,49 @@ int iaxxx_clr_pkg_plg_list(struct iaxxx_priv *priv)
 		list_del(&pkg_data->pkg_node);
 		kfree(pkg_data);
 	}
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
+
 	return 0;
 }
 EXPORT_SYMBOL(iaxxx_clr_pkg_plg_list);
+
+static void iaxxx_add_plugin_to_list(struct iaxxx_priv *priv,
+		struct iaxxx_plugin_data *plugin_data)
+{
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
+	list_add_tail(&plugin_data->plugin_node,
+		&priv->iaxxx_state->plugin_head_list);
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
+}
+
+static void iaxxx_del_plugin_from_list(struct iaxxx_priv *priv,
+		uint32_t inst_id)
+{
+	struct iaxxx_plugin_data *plugin_data;
+	struct list_head *node, *tmp;
+
+	/* Search and delete the node with mutex protection
+	 * to avoid the case where plugin could be cleared
+	 * simultaneously (ex: by crash recovery)
+	 */
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
+	if (!list_empty_careful(&priv->iaxxx_state->plugin_head_list)) {
+		list_for_each_safe(node, tmp,
+		    &priv->iaxxx_state->plugin_head_list) {
+			plugin_data = list_entry(node,
+					struct iaxxx_plugin_data,
+					plugin_node);
+			if (plugin_data->inst_id == inst_id) {
+				list_del(&plugin_data->plugin_node);
+				kfree(plugin_data);
+				goto exit;
+			}
+		}
+	}
+exit:
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
+}
+
 /*****************************************************************************
  * iaxxx_core_create_plg_common()
  * @brief Create plugin instance
@@ -485,8 +559,8 @@ static int iaxxx_core_create_plg_common(
 	plugin_data->plugin_state = IAXXX_PLUGIN_LOADED;
 	plugin_data->inst_id = inst_id;
 	plugin_data->proc_id = proc_id;
-	list_add_tail(&plugin_data->plugin_node,
-				&priv->iaxxx_state->plugin_head_list);
+
+	iaxxx_add_plugin_to_list(priv, plugin_data);
 
 core_create_plugin_err:
 	mutex_unlock(&priv->plugin_lock);
@@ -646,8 +720,7 @@ int iaxxx_core_destroy_plg(struct device *dev, uint32_t inst_id,
 	}
 
 	/* Remove plugin node from list */
-	list_del(&plugin_data->plugin_node);
-	kfree(plugin_data);
+	iaxxx_del_plugin_from_list(priv, inst_id);
 
 core_destroy_plg_err:
 	mutex_unlock(&priv->plugin_lock);

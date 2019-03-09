@@ -73,8 +73,10 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid scrip parameter received\n");
 			return -EINVAL;
 		}
+		mutex_lock(&priv->module_lock);
 		ret = iaxxx_core_script_load(module_dev_priv->parent,
 				script_info.script_name, script_info.script_id);
+		mutex_unlock(&priv->module_lock);
 		break;
 	case SCRIPT_UNLOAD:
 		if (copy_from_user(&script_id, (void __user *)arg,
@@ -86,8 +88,10 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid scrip parameter received\n");
 			return -EINVAL;
 		}
+		mutex_lock(&priv->module_lock);
 		ret = iaxxx_core_script_unload(
 				module_dev_priv->parent, script_id);
+		mutex_unlock(&priv->module_lock);
 		break;
 	case SCRIPT_TRIGGER:
 		if (copy_from_user(&script_id, (void __user *)arg,
@@ -99,8 +103,10 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid scrip parameter received\n");
 			return -EINVAL;
 		}
+		mutex_lock(&priv->module_lock);
 		ret = iaxxx_core_script_trigger(
 				module_dev_priv->parent, script_id);
+		mutex_unlock(&priv->module_lock);
 		break;
 	case MODULE_SENSOR_ENABLE:
 		if (copy_from_user(&sensor_info, (void __user *)arg,
@@ -115,9 +121,11 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid scrip parameter received\n");
 			return -EINVAL;
 		}
+		mutex_lock(&priv->module_lock);
 		ret = iaxxx_core_sensor_change_state(
 				module_dev_priv->parent,
 				sensor_info.inst_id, 1, sensor_info.block_id);
+		mutex_unlock(&priv->module_lock);
 		break;
 	case MODULE_SENSOR_DISABLE:
 		if (copy_from_user(&sensor_info, (void __user *)arg,
@@ -132,9 +140,11 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid sensor parameter received\n");
 			return -EINVAL;
 		}
+		mutex_lock(&priv->module_lock);
 		ret = iaxxx_core_sensor_change_state(
 				module_dev_priv->parent,
 				sensor_info.inst_id, 0, sensor_info.block_id);
+		mutex_unlock(&priv->module_lock);
 		break;
 	case MODULE_SENSOR_SET_PARAM:
 		if (copy_from_user(&param_info, (void __user *)arg,
@@ -151,10 +161,12 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid sensor parameter received\n");
 			return -EINVAL;
 		}
+		mutex_lock(&priv->module_lock);
 		ret = iaxxx_core_sensor_set_param_by_inst(
 				module_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
 				param_info.param_val, param_info.block_id);
+		mutex_unlock(&priv->module_lock);
 		if (ret) {
 			pr_err("%s() Sensor set param fail\n", __func__);
 			pr_err("Param info inst 0x%x p_id 0x%x p_val 0x%x\n",
@@ -176,10 +188,12 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			pr_err("invalid sensor parameter received\n");
 			return -EINVAL;
 		}
+		mutex_lock(&priv->module_lock);
 		ret = iaxxx_core_sensor_get_param_by_inst(
 				module_dev_priv->parent,
 				param_info.inst_id, param_info.param_id,
 				&param_info.param_val, param_info.block_id);
+		mutex_unlock(&priv->module_lock);
 		if (ret) {
 			pr_err("%s() Sensor get param fail\n", __func__);
 			pr_err("Param info inst 0x%x p_id 0x%x\n",
@@ -220,12 +234,14 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 					sizeof(pwr_stats_count)))
 			return -EFAULT;
 
+		mutex_lock(&priv->module_lock);
 		/* Get Power Statistics */
 		if (iaxxx_core_get_pwr_stats(module_dev_priv->parent,
 					&pwr_stats_count) <= 0) {
 			pr_err("Error in reading power statistics\n");
 			return -EINVAL;
 		}
+		mutex_unlock(&priv->module_lock);
 
 		if (copy_to_user((void __user *)arg, &pwr_stats_count,
 					sizeof(pwr_stats_count)))
@@ -240,17 +256,16 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (osc_trim_period.period < 0)
 			return -EINVAL;
 
-		if (osc_trim_period.period != priv->int_osc_trim_period) {
-			ret = iaxxx_set_osc_trim_period(priv,
-					osc_trim_period.period);
-			if (ret) {
-				pr_err("%s() Failed to set Osc trim period\n",
-						__func__);
-				return ret;
-			}
-
-			priv->int_osc_trim_period = osc_trim_period.period;
+		mutex_lock(&priv->module_lock);
+		ret = iaxxx_set_osc_trim_period(priv,
+				osc_trim_period.period);
+		mutex_unlock(&priv->module_lock);
+		if (ret) {
+			pr_err("%s() Failed to set Osc trim period\n",
+				__func__);
+			return ret;
 		}
+
 		break;
 
 	default:

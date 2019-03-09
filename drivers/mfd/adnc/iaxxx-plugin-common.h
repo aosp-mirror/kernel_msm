@@ -53,13 +53,12 @@ int iaxxx_core_set_param_blk_with_ack_common(
 					uint32_t  *response_data_buf,
 					const uint32_t response_data_sz,
 					const uint32_t max_no_retries);
-
 struct iaxxx_plugin_data *iaxxx_core_plugin_exist(
-				struct iaxxx_priv *priv,
-				uint32_t inst_id);
+		struct iaxxx_priv *priv,
+		uint32_t inst_id);
 
-struct iaxxx_pkg_data *iaxxx_core_pkg_exist(
-				struct iaxxx_priv *priv,
-				uint32_t pkg_id);
+struct iaxxx_pkg_data *iaxxx_core_pkg_exist(struct iaxxx_priv *priv,
+		uint32_t pkg_id);
 
+bool iaxxx_core_plg_list_empty(struct iaxxx_priv *priv);
 #endif /*__IAXXX_PLUGIN_COMMON_H__ */

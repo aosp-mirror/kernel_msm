@@ -157,7 +157,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error in setting up PDM route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 
 		if (port_id == PDM_PORTD) {
@@ -212,7 +213,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error in setting up PDM route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_HOS_ADDR,
 				(0x1 << pdmi_port[port_id]),
@@ -314,7 +316,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error in setting up PDM route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 
 		regmap_update_bits(priv->regmap,
@@ -368,7 +371,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error in setting up PDM route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 		/* Setup VSYNC Sensor route */
 		regmap_update_bits(priv->regmap,
@@ -379,8 +383,9 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		ret = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
 		if (ret) {
-			dev_err(priv->dev, "Error in setting up VYSNC Sensor  route\n");
-			return -EIO;
+			dev_err(priv->dev, "Error in setting up VSYNC Sensor  route\n");
+			ret = -EIO;
+			goto exit;
 		}
 
 	} else {
@@ -394,7 +399,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error in setting up PDM route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 		regmap_update_bits(priv->regmap, IAXXX_STR_HDR_STR_EN_ADDR,
 				(0x1 << strm_id), 0x0);
@@ -402,7 +408,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error in setting up PDM  route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 		if (port_id == PDM_PORTD) {
 			pr_info("%s disable port D\n", __func__);
@@ -438,7 +445,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error tearing up PDM  route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 		regmap_update_bits(priv->regmap, IAXXX_AO_CLK_CFG_ADDR,
 				(1 << port_id), 0x0);
@@ -453,7 +461,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_BLOCK_0);
 		if (ret) {
 			dev_err(priv->dev, "Error tearing up PDM  route\n");
-			return -EIO;
+			ret = -EIO;
+			goto exit;
 		}
 
 		regmap_update_bits(priv->regmap,
@@ -464,8 +473,9 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		ret = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
 		if (ret) {
-			dev_err(priv->dev, "Error in tearing VYSNC Sensor  route\n");
-			return -EIO;
+			dev_err(priv->dev, "Error in tearing VSYNC Sensor  route\n");
+			ret = -EIO;
+			goto exit;
 		}
 
 		if (port_id == PDM_PORTD) {
@@ -491,7 +501,8 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		}
 	}
 
-	return 0;
+exit:
+	return ret;
 }
 
 static int sensor_tunnel_open(struct inode *inode, struct file *filp)
@@ -571,7 +582,9 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 	switch (cmd) {
 
 	case FLICKER_ROUTE_SETUP:
+		mutex_lock(&priv->sensor_tunnel_dev_lock);
 		ret = sensor_tunnel_route_setup(priv, true);
+		mutex_unlock(&priv->sensor_tunnel_dev_lock);
 		if (ret) {
 			pr_err("Unable to setup sensor route\n");
 			return -EIO;
@@ -600,7 +613,9 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case FLICKER_ROUTE_TERMINATE:
+		mutex_lock(&priv->sensor_tunnel_dev_lock);
 		ret = sensor_tunnel_route_setup(priv, false);
+		mutex_unlock(&priv->sensor_tunnel_dev_lock);
 		if (ret) {
 			pr_err("Unable to setup sensor route\n");
 			return -EIO;

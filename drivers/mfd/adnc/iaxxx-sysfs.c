@@ -149,6 +149,7 @@ static ssize_t iaxxx_plugin_version_show(struct device *dev,
 		dev_err(dev, "%s() Device's priv data is NULL\n", __func__);
 		return -EINVAL;
 	}
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
 
 	list_for_each_safe(node, tmp, &priv->iaxxx_state->plugin_head_list) {
 		plugin_data = list_entry(node, struct iaxxx_plugin_data,
@@ -158,12 +159,16 @@ static ssize_t iaxxx_plugin_version_show(struct device *dev,
 		if (rc) {
 			dev_err(dev, "%s() Plugin version read fail\n",
 								__func__);
-			return -EIO;
+			buf_len = 0;
+			goto exit;
 		}
 		buf_len += scnprintf(buf + buf_len, PAGE_SIZE,
 			"plugin-%d:proc-id-%d\t%s\n", plugin_data->inst_id,
 						plugin_data->proc_id, verbuf);
 	}
+
+exit:
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
 	return buf_len;
 }
 static DEVICE_ATTR(plugin_version, 0400, iaxxx_plugin_version_show, NULL);
@@ -187,6 +192,7 @@ static ssize_t iaxxx_package_version_show(struct device *dev,
 		return -EINVAL;
 	}
 
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
 	list_for_each_safe(node, tmp, &priv->iaxxx_state->plugin_head_list) {
 		plugin_data = list_entry(node, struct iaxxx_plugin_data,
 								plugin_node);
@@ -195,11 +201,14 @@ static ssize_t iaxxx_package_version_show(struct device *dev,
 		if (rc) {
 			dev_err(dev, "%s() Package version read fail\n",
 								__func__);
-			return -EIO;
+			buf_len = 0;
+			goto exit;
 		}
 		buf_len += scnprintf(buf + buf_len, PAGE_SIZE,
 			"package-%d:\t%s\n", plugin_data->inst_id, verbuf);
 	}
+exit:
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
 	return buf_len;
 }
 static DEVICE_ATTR(package_version, 0400, iaxxx_package_version_show, NULL);
@@ -450,9 +459,7 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host0(struct device *dev,
 		return count;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_0);
-
-	msleep(20);
+	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_0, 20);
 	dev_info(dev, "%s() Success\n", __func__);
 	mutex_unlock(&priv->test_mutex);
 	return count;
@@ -488,8 +495,7 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host1(struct device *dev,
 		return count;
 	}
 
-	iaxxx_send_update_block_no_wait(dev, IAXXX_HOST_1);
-	msleep(20);
+	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_1, 20);
 	dev_info(dev, "%s() Success\n", __func__);
 	mutex_unlock(&priv->test_mutex);
 	return count;

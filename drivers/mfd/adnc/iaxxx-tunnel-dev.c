@@ -215,6 +215,138 @@ static int circ_to_user(struct iaxxx_circ_buf *circ, char __user *buf,
 	return 0;
 }
 
+
+/* Tunnel end-point source list functions */
+
+/* Add end-point node to source list */
+static void iaxxx_tunnel_src_list_add_endpoint(
+		struct iaxxx_tunnel_data *t_intf_priv,
+		struct iaxxx_tunnel_ep *tnl_src_node)
+{
+	spin_lock(&t_intf_priv->src_list_lock);
+	list_add_tail(&tnl_src_node->src_head_list,
+			&t_intf_priv->src_list);
+	spin_unlock(&t_intf_priv->src_list_lock);
+}
+
+/* Delete given end-point from source list */
+static void iaxxx_tunnel_src_list_del_endpoint(
+		struct iaxxx_tunnel_data *t_intf_priv,
+		int ep_id)
+{
+	struct list_head *position, *tmp;
+	struct iaxxx_tunnel_ep *tnl_src_node;
+
+	spin_lock(&t_intf_priv->src_list_lock);
+	list_for_each_safe(position,
+			tmp, &t_intf_priv->src_list) {
+		tnl_src_node = list_entry(position,
+				struct iaxxx_tunnel_ep, src_head_list);
+		/* map and remove the src node from list */
+		if (tnl_src_node->tnl_ep.tunlEP == ep_id) {
+			list_del(position);
+			kfree(tnl_src_node);
+			goto exit;
+		}
+	}
+exit:
+	spin_unlock(&t_intf_priv->src_list_lock);
+}
+
+/* Find a end-point id in source list based on parameters given
+ * If not return the (greatest ep-id in list + 1)
+ */
+static int iaxxx_tunnel_src_list_find_endpoint(
+		struct iaxxx_tunnel_data *t_intf_priv,
+		int src, uint32_t mode, uint32_t encode,
+		bool *ep_exists)
+{
+	int id = 0;
+	struct iaxxx_tunnel_ep *tnl_src_node;
+	struct list_head *pos, *tmp;
+
+	*ep_exists = false;
+
+	spin_lock(&t_intf_priv->src_list_lock);
+	if (!list_empty_careful(&t_intf_priv->src_list)) {
+		list_for_each_safe(pos, tmp, &t_intf_priv->src_list) {
+			tnl_src_node = list_entry(pos,
+				struct iaxxx_tunnel_ep, src_head_list);
+			if (tnl_src_node->tnl_ep.tunlSrc == src &&
+				tnl_src_node->tnl_ep.tunlEncode == encode &&
+				tnl_src_node->tnl_ep.tunlMode == mode) {
+				*ep_exists = true;
+				id = tnl_src_node->tnl_ep.tunlEP;
+				goto exit;
+			}
+			/* update id if the current end point id is
+			 * greter than previous id.
+			 */
+			if (tnl_src_node->tnl_ep.tunlEP > id)
+				id = tnl_src_node->tnl_ep.tunlEP;
+		}
+		/* Add one to id.
+		 * This is will be the next max best id to assign
+		 */
+		id += 1;
+	} else
+		id = -EINVAL;
+exit:
+	spin_unlock(&t_intf_priv->src_list_lock);
+	return id;
+}
+
+/* Find a end-point node in source list for end-point id given */
+static bool iaxxx_tunnel_src_list_find_endpoint_node(
+		struct iaxxx_tunnel_data *t_intf_priv,
+		int ep_id,
+		struct iaxxx_tunnel_ep *ret_tnl_src_node)
+{
+	struct iaxxx_tunnel_ep *tnl_src_node;
+	struct list_head *pos, *tmp;
+	bool result = false;
+
+	spin_lock(&t_intf_priv->src_list_lock);
+	list_for_each_safe(pos, tmp, &t_intf_priv->src_list) {
+		tnl_src_node = list_entry(pos, struct iaxxx_tunnel_ep,
+				src_head_list);
+
+		if (tnl_src_node->tnl_ep.tunlEP == ep_id) {
+			*ret_tnl_src_node =  *tnl_src_node;
+			result = true;
+			goto exit;
+		}
+	}
+exit:
+	spin_unlock(&t_intf_priv->src_list_lock);
+	return result;
+
+}
+
+/* Return all endpoint nodes as array */
+static int iaxxx_tunnel_src_list_get_all_endpoint_nodes(
+		struct iaxxx_tunnel_data *t_intf_priv,
+		struct iaxxx_tunnel_ep ret_tnl_src_node[],
+		int max_ret_entries)
+{
+	struct iaxxx_tunnel_ep *tnl_src_node;
+	struct list_head *pos, *tmp;
+	int index = 0;
+
+	spin_lock(&t_intf_priv->src_list_lock);
+	list_for_each_safe(pos, tmp, &t_intf_priv->src_list) {
+		tnl_src_node = list_entry(pos, struct iaxxx_tunnel_ep,
+				src_head_list);
+		ret_tnl_src_node[index++] =  *tnl_src_node;
+		if (max_ret_entries == index)
+			goto exit;
+	}
+exit:
+	spin_unlock(&t_intf_priv->src_list_lock);
+	return index;
+
+}
+
 /*
  * Parse packet header and return tunnel ID and data len
  */
@@ -316,9 +448,8 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 {
 	struct iaxxx_priv * const priv =
 			(struct iaxxx_priv *)t_intf_priv->priv;
-	struct iaxxx_tunnel_ep *tnl_src_node = NULL;
+	struct iaxxx_tunnel_ep tnl_src_node;
 	int	changes = (*old ^ new) & ((1 << TNLMAX) - 1);
-	struct list_head *position, *tmp;
 	int id;
 	int pos;
 	int tnl_count = 0;
@@ -328,36 +459,30 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 		pos = (1 << id);
 
 		if (new & pos) {
-			list_for_each_safe(position, tmp,
-						&t_intf_priv->src_list) {
-				tnl_src_node = list_entry(position,
-					struct iaxxx_tunnel_ep, src_head_list);
-
-				if (tnl_src_node->tnl_ep.tunlEP == id) {
-					pr_notice(
-					"setup tnl%d, src%x, mode%s, enc%s\n",
+			if (iaxxx_tunnel_src_list_find_endpoint_node(
+				t_intf_priv, id, &tnl_src_node)) {
+				pr_notice("setup tnl%d, src%x, mode%s, enc%s\n",
 					id,
-					tnl_src_node->tnl_ep.tunlSrc & 0xffff,
-					(tnl_src_node->tnl_ep.tunlMode
+					tnl_src_node.tnl_ep.tunlSrc & 0xffff,
+					(tnl_src_node.tnl_ep.tunlMode
 					== TNL_SYNC_MODE) ? "SYNC" : "ASYNC",
-					(tnl_src_node->tnl_ep.tunlEncode
+					(tnl_src_node.tnl_ep.tunlEncode
 					== TNL_ENC_AFLOAT) ? "AFLOAT" :
-					(tnl_src_node->tnl_ep.tunlEncode
+					(tnl_src_node.tnl_ep.tunlEncode
 					== TNL_ENC_Q15) ? "Q15" : "Other");
 
-					if (iaxxx_tunnel_setup_hw(priv,
-					tnl_src_node->tnl_ep.tunlEP,
-					tnl_src_node->tnl_ep.tunlSrc & 0xffff,
-					tnl_src_node->tnl_ep.tunlMode,
-					tnl_src_node->tnl_ep.tunlEncode)) {
-						pr_err("%s: iaxxx_tunnel_setup_hw failed\n",
-							__func__);
-						return;
-					}
-					/* Init sequence no */
-					t_intf_priv->tunnel_seq_no[id] = 0;
-					t_intf_priv->tunnels_active_count++;
+				if (iaxxx_tunnel_setup_hw(priv,
+					tnl_src_node.tnl_ep.tunlEP,
+					tnl_src_node.tnl_ep.tunlSrc & 0xffff,
+					tnl_src_node.tnl_ep.tunlMode,
+					tnl_src_node.tnl_ep.tunlEncode)) {
+					pr_err("%s: tunnel_setup_hw failed\n",
+						__func__);
+				return;
 				}
+				/* Init sequence no */
+				t_intf_priv->tunnel_seq_no[id] = 0;
+				t_intf_priv->tunnels_active_count++;
 			}
 
 			if (!t_intf_priv->event_registered) {
@@ -365,7 +490,7 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 					IAXXX_SYSID_TUNNEL_EVENT, 0,
 					IAXXX_SYSID_HOST, 0,
 					IAXXX_TUNNEL_THRESHOLD)) {
-					t_intf_priv->event_registered =  true;
+					t_intf_priv->event_registered = true;
 				} else {
 					pr_err("tnl events subscribe failed");
 					return;
@@ -381,19 +506,10 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 			else
 				pr_err("decrementing tunnel active count exceeded\n");
 
-			list_for_each_safe(position,
-					tmp, &t_intf_priv->src_list) {
-				tnl_src_node =
-				list_entry(position,
-				struct iaxxx_tunnel_ep, src_head_list);
-				/* map and remove the src node from list */
-				if (tnl_src_node->tnl_ep.tunlEP == id) {
-					list_del(position);
-					kfree(tnl_src_node);
-					atomic_set(
-					&t_intf_priv->src_enable_id[id], 0);
-				}
-			}
+			iaxxx_tunnel_src_list_del_endpoint(t_intf_priv, id);
+
+			atomic_set(&t_intf_priv->src_enable_id[id], 0);
+
 			while (tnl_count < TNLMAX) {
 				if (atomic_read(
 				&t_intf_priv->src_enable_id[tnl_count]) == 1)
@@ -581,34 +697,18 @@ static int tunneling_detach_client(struct iaxxx_tunnel_data *tunnel_data,
 static int tunnel_find_id(struct iaxxx_tunnel_data *t_intf_priv,
 			int src, uint32_t mode, uint32_t encode, int set)
 {
-	struct iaxxx_tunnel_ep *tnl_src_node;
-	struct list_head *pos, *tmp;
 	int id = 0;
 	int unused_id = 0;
+	bool ep_exists;
 
-	if (!list_empty_careful(&t_intf_priv->src_list)) {
-		list_for_each_safe(pos, tmp, &t_intf_priv->src_list) {
-			tnl_src_node = list_entry(pos,
-				struct iaxxx_tunnel_ep, src_head_list);
-			if (tnl_src_node->tnl_ep.tunlSrc == src &&
-				tnl_src_node->tnl_ep.tunlEncode == encode &&
-				tnl_src_node->tnl_ep.tunlMode == mode) {
-				pr_debug("%s: id exist: %d\n",
-					__func__, tnl_src_node->tnl_ep.tunlEP);
-				return tnl_src_node->tnl_ep.tunlEP;
-			}
-			/* update id if the current end point id is
-			 * greter than previous id.
-			 */
-			if (tnl_src_node->tnl_ep.tunlEP > id)
-				id = tnl_src_node->tnl_ep.tunlEP;
-		}
-		/* Add one to id.
-		 * This is will be the next max best id to assign
-		 */
-		id += 1;
-	} else
+	id = iaxxx_tunnel_src_list_find_endpoint(t_intf_priv, src, mode,
+			encode, &ep_exists);
+
+	if (id < 0)
 		return 0;
+
+	if (ep_exists)
+		return id;
 
 	if (!set)
 		return -ENOENT;
@@ -775,9 +875,13 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 	int rc = 0;
 
 	pr_debug("%s(): src 0x%x\n", __func__, src);
+
+	mutex_lock(&t_intf_priv->tunnel_dev_lock);
 	id = tunnel_find_id(t_intf_priv, src, mode, encode, true);
-	if (id < 0)
-		return -EINVAL;
+	if (id < 0) {
+		rc = -EINVAL;
+		goto exit;
+	}
 
 	pr_debug("%s id found %d already there :%d\n",
 		__func__, id, atomic_read(&t_intf_priv->src_enable_id[id]));
@@ -785,15 +889,18 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 		/* Allocate tunnel endpoint list for the tunneling */
 		tnl_src_node =
 		kzalloc(sizeof(struct iaxxx_tunnel_ep), GFP_KERNEL);
-		if (!tnl_src_node)
-			return -ENOMEM;
+		if (!tnl_src_node) {
+			rc = -ENOMEM;
+			goto exit;
+		}
 		tnl_src_node->tnl_ep.tunlEP = id;
 		tnl_src_node->tnl_ep.tunlSrc = src;
 		tnl_src_node->tnl_ep.tunlMode = mode;
 		tnl_src_node->tnl_ep.tunlEncode = encode;
+
 		/* Add tunnel endpoint to tunnel src list */
-		list_add_tail(&tnl_src_node->src_head_list,
-				&t_intf_priv->src_list);
+		iaxxx_tunnel_src_list_add_endpoint(t_intf_priv, tnl_src_node);
+
 		atomic_set(&t_intf_priv->src_enable_id[id], 1);
 	}
 
@@ -812,6 +919,8 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 	pr_debug("%s: tid: %x src: %x client flag: %lx global flag: %lx\n",
 		__func__, id, src, client->tid_flag, t_intf_priv->flags);
 
+exit:
+	mutex_unlock(&t_intf_priv->tunnel_dev_lock);
 	return rc;
 }
 
@@ -826,13 +935,19 @@ int iaxxx_tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 	int id;
 	int rc = 0;
 
+	mutex_lock(&t_intf_priv->tunnel_dev_lock);
+
 	id = tunnel_find_id(t_intf_priv, src, mode, encode, false);
-	if (id < 0)
-		return -EINVAL;
+	if (id < 0) {
+		rc = -EINVAL;
+		goto exit;
+	}
 
 	if (!test_and_clear_bit(id, &client->tid_flag) ||
-		!atomic_read(&t_intf_priv->tunnel_ref_cnt[id]))
-		return -EINVAL;
+		!atomic_read(&t_intf_priv->tunnel_ref_cnt[id])) {
+		rc = -EINVAL;
+		goto exit;
+	}
 
 	if (atomic_dec_return(&t_intf_priv->tunnel_ref_cnt[id]) == 0) {
 		clear_bit(id, &t_intf_priv->flags);
@@ -843,6 +958,8 @@ int iaxxx_tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 	pr_debug("%s: tid: %x src: %x client flag: %lx global flag: %lx\n",
 		__func__, id, src, client->tid_flag, t_intf_priv->flags);
 
+exit:
+	mutex_unlock(&t_intf_priv->tunnel_dev_lock);
 	return rc;
 }
 
@@ -1105,9 +1222,10 @@ static ssize_t iaxxx_tunnel_status_show(struct device *dev,
 {
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	struct iaxxx_tunnel_data *t_intf_priv;
+	struct iaxxx_tunnel_ep arr_tnl_src_node[TNLMAX];
 	struct iaxxx_tunnel_ep *tnl_src_node;
-	struct list_head *pos, *tmp;
 	int index;
+	int no_tunnel_ep, i;
 
 	if (!priv)
 		return -EINVAL;
@@ -1117,14 +1235,17 @@ static ssize_t iaxxx_tunnel_status_show(struct device *dev,
 	if (!t_intf_priv)
 		return -EINVAL;
 
+	no_tunnel_ep = iaxxx_tunnel_src_list_get_all_endpoint_nodes(t_intf_priv,
+			arr_tnl_src_node, TNLMAX);
+
 	scnprintf(buf, PAGE_SIZE,
 	"Tunnel ID\tSRC\tEnable\tMode\tEncode\tNum of Clients\tNo Packets\tError Packets\n");
-	list_for_each_safe(pos, tmp, &t_intf_priv->src_list) {
+
+	for (i = 0; i < no_tunnel_ep ; i++) {
 		int enable = true;
 
+		tnl_src_node = &arr_tnl_src_node[i];
 		index = strnlen(buf, PAGE_SIZE);
-		tnl_src_node = list_entry(pos,
-				struct iaxxx_tunnel_ep, src_head_list);
 		scnprintf(&buf[index], PAGE_SIZE - index,
 		"    %02d    \t%04x\t%d\t%s\t%s\t\t%d\t%lu\t\t%d\n",
 		tnl_src_node->tnl_ep.tunlEP,
@@ -1247,9 +1368,10 @@ static ssize_t iaxxx_tunnel_seqno_errcnt_show(struct device *dev,
 {
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	struct iaxxx_tunnel_data *t_intf_priv;
+	struct iaxxx_tunnel_ep arr_tnl_src_node[TNLMAX];
 	struct iaxxx_tunnel_ep *tnl_src_node;
-	struct list_head *pos, *tmp;
 	int index;
+	int no_tunnel_ep, i;
 	uint64_t sum = 0;
 
 	if (!priv)
@@ -1260,12 +1382,14 @@ static ssize_t iaxxx_tunnel_seqno_errcnt_show(struct device *dev,
 	if (!t_intf_priv)
 		return -EINVAL;
 
+	no_tunnel_ep = iaxxx_tunnel_src_list_get_all_endpoint_nodes(
+			t_intf_priv, arr_tnl_src_node, TNLMAX);
+
 	scnprintf(buf, PAGE_SIZE,
 		"Tunnel ID\tTunnel Src ID\tSeqno Error Count\n");
-	list_for_each_safe(pos, tmp, &t_intf_priv->src_list) {
+	for (i = 0; i < no_tunnel_ep ; i++) {
 		index = strnlen(buf, PAGE_SIZE);
-		tnl_src_node = list_entry(pos,
-			struct iaxxx_tunnel_ep, src_head_list);
+		tnl_src_node = &arr_tnl_src_node[i];
 		scnprintf(&buf[index], PAGE_SIZE - index,
 		"    %02d    \t%04x\t\t\t%d\n",
 		tnl_src_node->tnl_ep.tunlEP,
@@ -1453,6 +1577,8 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 	t_intf_priv->event_registered = false;
 	t_intf_priv->dev = dev;
 
+	mutex_init(&t_intf_priv->tunnel_dev_lock);
+
 	if (iaxxx_prod_buf) {
 		/* If reserved memory exists, use it */
 		t_intf_priv->stream_circ.buf = phys_to_virt(iaxxx_prod_buf);
@@ -1477,6 +1603,7 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 	/* Initialize client structure */
 	INIT_LIST_HEAD(&t_intf_priv->list);
 	spin_lock_init(&t_intf_priv->lock);
+	spin_lock_init(&t_intf_priv->src_list_lock);
 
 #ifdef CONFIG_MFD_IAXXX_SENSOR_TUNNEL
 	iaxxx_sensor_tunnel_init(priv);
@@ -1560,6 +1687,7 @@ static int iaxxx_tunnel_dev_remove(struct platform_device *pdev)
 	sysfs_remove_group(&priv->dev->kobj, &iaxxx_attr_group);
 	kthread_stop(t_intf_priv->producer_thread);
 	kthread_stop(t_intf_priv->consumer_thread);
+	mutex_destroy(&t_intf_priv->tunnel_dev_lock);
 	kfree(t_intf_priv);
 	return 0;
 }
