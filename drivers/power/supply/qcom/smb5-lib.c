@@ -4598,6 +4598,11 @@ int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 		return -EINVAL;
 	}
 
+	if (!chg->cc_toggle_enable) {
+		dev_info(chg->dev, "Typec cc will be forced disabling\n");
+		power_role = TYPEC_DISABLE_CMD_BIT;
+	}
+
 	rc = smblib_masked_write(chg, TYPE_C_MODE_CFG_REG,
 				TYPEC_POWER_ROLE_CMD_MASK | TYPEC_TRY_MODE_MASK,
 				power_role);
@@ -4616,6 +4621,10 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 {
 	int rc = -EINVAL;
 
+	if (!chg->cc_toggle_enable && val->intval > 0) {
+		dev_info(chg->dev, "not allow to change typec role now\n");
+		return 0;
+	}
 	/* Check if power role switch is disabled */
 	lock_votable(chg->disable_power_role_switch);
 	if (!get_effective_result_locked(chg->disable_power_role_switch))
