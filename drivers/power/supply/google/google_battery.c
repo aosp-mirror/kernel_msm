@@ -715,7 +715,7 @@ static int batt_chg_stats_cstr(char *buff, int size,
 
 		len += snprintf(&buff[len], size - len, "\n%d%c ",
 			ce_data->tier_stats[i].voltage_tier_idx,
-			(verbose) ? ":" : ",");
+			(verbose) ? ':' : ',');
 
 		len += snprintf(&buff[len], size - len,
 			"%d.%d,%d,%d, %d,%d,%d, %d,%d,%d, %d,%d,%d, %d,%d,%d",
@@ -1609,10 +1609,6 @@ static ssize_t batt_show_chg_details(struct device *dev,
 	len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
 				   &batt_drv->ce_data, true);
 
-	len += snprintf(&buf[len], PAGE_SIZE - len,
-				"batt_drv->ce_qual.first_update = %d %x %X\n",
-				batt_drv->ce_qual.first_update,
-				0xffab, 0xffab);
 	if (batt_drv->ce_qual.first_update)
 		len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
 					   &batt_drv->ce_qual, true);
@@ -1779,6 +1775,9 @@ static int gbatt_get_property(struct power_supply *psy,
 	pm_runtime_put_sync(batt_drv->device);
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
+		val->intval = batt_drv->ce_data.adapter_details.v;
+	break;
 
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
 		mutex_lock(&batt_drv->cc_data.lock);
