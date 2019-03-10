@@ -124,7 +124,7 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 };
 
 static int ddr_setup_stub(void *ctx, void *ab_state_ctx) { return -ENODEV; }
-static int ddr_wait_for_init_stub(void *ctx) { return -ENODEV; }
+static int ddr_wait_for_m0_ddr_init_stub(void *ctx) { return -ENODEV; }
 static int ddr_init_stub(void *ctx) { return -ENODEV; }
 static int ddr_get_freq_stub(void *ctx, u64 *val) { return -ENODEV; }
 static int ddr_set_freq_stub(void *ctx, u64 val) { return -ENODEV; }
@@ -152,7 +152,7 @@ static struct ab_sm_dram_ops dram_ops_stub = {
 	.ctx = NULL,
 
 	.setup = &ddr_setup_stub,
-	.wait_for_init = &ddr_wait_for_init_stub,
+	.wait_for_m0_ddr_init = &ddr_wait_for_m0_ddr_init_stub,
 	.init = &ddr_init_stub,
 	.get_freq = &ddr_get_freq_stub,
 	.set_freq = &ddr_set_freq_stub,

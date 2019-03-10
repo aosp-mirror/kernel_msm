@@ -347,17 +347,16 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	/* Wait till the ddr init & training is completed in case of ddr
 	 * initialization is done by BootROM
 	 */
-	if (ab_ctx->dram_ops->wait_for_init(ab_ctx->dram_ops->ctx)) {
-		pm_relax(ab_ctx->dev);
-		return -EIO;
+	if (IS_M0_DDR_INIT()) {
+		if (ab_ctx->dram_ops->wait_for_m0_ddr_init(
+					ab_ctx->dram_ops->ctx)) {
+			pm_relax(ab_ctx->dev);
+			return -EIO;
+		}
 	}
 
-	/* In case the M0_DDR_INIT (Renamed HOST_DDR_INIT) is 1,
-	 * perform the DDR Initialization here.
-	 */
 	ab_sm_start_ts(ab_ctx, AB_SM_TS_DDR_INIT);
-	if (IS_HOST_DDR_INIT())
-		ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
+	ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_INIT);
 
 	/*

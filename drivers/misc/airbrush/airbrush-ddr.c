@@ -2144,7 +2144,7 @@ static int ddr_enable_power_features(void)
 }
 
 /* Caller must hold ddr_ctx->ddr_lock */
-static int __ab_ddr_wait_for_ddr_init(struct ab_ddr_context *ddr_ctx)
+static int __ab_ddr_wait_for_m0_ddr_init(struct ab_ddr_context *ddr_ctx)
 {
 	unsigned long timeout;
 
@@ -2160,36 +2160,10 @@ static int __ab_ddr_wait_for_ddr_init(struct ab_ddr_context *ddr_ctx)
 		return -EIO;
 	}
 
-	/* enable the ddr power features */
-	if (ddr_enable_power_features())
-		return -ETIMEDOUT;
-
-	/* In A0 BootROM Auto Refresh setting is missing. To fix this issue,
-	 * set the Auto-Refresh enable immediately after DDR init.
-	 */
-	if (ab_get_chip_id(ddr_ctx->ab_state_ctx) == CHIP_ID_A0)
-		ddr_reg_set(DREX_CONCONTROL, AREF_EN);
-
-	/* DDR training is completed as part of bootrom code execution.
-	 * Copy the training results to the local array for future use.
-	 */
-	ddr_ctx->ddr_train_sram_location = ddr_reg_rd(SYSREG_REG_TRN_ADDR);
-	ddr_copy_train_results_from_sram(ddr_ctx);
-
-	/* Try to use latest training results from M0 resume sequence */
-	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1866] = 1;
-	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1600] = 0;
-	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1200] = 0;
-	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_933] = 0;
-	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_800] = 0;
-
-	/* set 1866MHz ddr clock during airbrush normal and resume boot */
-	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
-
 	return 0;
 }
 
-int ab_ddr_wait_for_ddr_init(void *ctx)
+int ab_ddr_wait_for_m0_ddr_init(void *ctx)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 	int ret;
@@ -2199,12 +2173,8 @@ int ab_ddr_wait_for_ddr_init(void *ctx)
 		return -EAGAIN;
 	}
 
-	/* wait is only required when M0 performs ddr init */
-	if (IS_HOST_DDR_INIT() || (ddr_ctx->ddr_state == DDR_SUSPEND))
-		return 0;
-
 	mutex_lock(&ddr_ctx->ddr_lock);
-	ret = __ab_ddr_wait_for_ddr_init(ddr_ctx);
+	ret = __ab_ddr_wait_for_m0_ddr_init(ddr_ctx);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
 	return ret;
@@ -2215,10 +2185,6 @@ static int32_t __ab_ddr_resume(void *ctx)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 	struct ab_state_context *sc = ddr_ctx->ab_state_ctx;
-
-	/* Wait till the ddr init & training is completed */
-	if (__ab_ddr_wait_for_ddr_init(ddr_ctx))
-		goto ddr_resume_fail;
 
 	if (IS_DDR_OTP_FLASHED() && (ab_get_chip_id(sc) == CHIP_ID_A0) &&
 	    IS_M0_DDR_INIT() && !sc->alternate_boot) {
@@ -2766,18 +2732,64 @@ static int32_t ab_ddr_init(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	/* set 1866MHz ddr clock during airbrush normal and resume boot */
 	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
 
-	ret = ab_ddr_init_internal_isolation(ddr_ctx);
-	if (ret)
-		pr_err("%s: error!! ddr initialization failed\n", __func__);
+	if (IS_M0_DDR_INIT()) {
+		/* Perform the post ddr init sequences which are only applicable
+		 * when ddr init is done by M0 bootrom.
+		 */
+
+		/* enable the ddr power features */
+		ret = ddr_enable_power_features();
+		if (ret) {
+			pr_err("ddr_init: error!! enabling power features failed\n");
+			goto ddr_init_done;
+		}
+
+		/* In A0 BootROM Auto Refresh setting is missing.
+		 * To fix this issue, set the Auto-Refresh enable from HOST
+		 * immediately after M0 DDR init.
+		 */
+		if (ab_get_chip_id(ddr_ctx->ab_state_ctx) == CHIP_ID_A0)
+			ddr_reg_set(DREX_CONCONTROL, AREF_EN);
+
+		/* DDR training is completed as part of bootrom code execution.
+		 * Copy the training results to the local array for future use.
+		 */
+		ddr_ctx->ddr_train_sram_location =
+				ddr_reg_rd(SYSREG_REG_TRN_ADDR);
+		ddr_copy_train_results_from_sram(ddr_ctx);
+	} else {
+		/* HOST should perform DDR init and train sequences */
+		ret = ab_ddr_init_internal_isolation(ddr_ctx);
+		if (ret) {
+			pr_err("ddr_init: error!! ddr initialization failed\n");
+			goto ddr_init_done;
+		}
+	}
+
+	/* Clear all training results except for AB_DRAM_FREQ_MHZ_1866.
+	 * AB_DRAM_FREQ_MHZ_1866 frequency is trained as part of the above
+	 * init sequence. As all other frequencies training is dependent on
+	 * AB_DRAM_FREQ_MHZ_1866 train results, we are clearing the train
+	 * complete flags for all other frequencies. This will allow the other
+	 * frequencies to be re-trained during the ddr frequency switch.
+	 */
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1866] = 1;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1600] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_1200] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_933] = 0;
+	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_800] = 0;
 
 	/* Read the DDR_SR */
 	ddr_sr = GPIO_DDR_SR();
 
-	if (!ddr_sr && !ret)
+	if (!ddr_sr)
 		ddr_sanity_test(ctx, DDR_BOOT_TEST_READ_WRITE);
 
+ddr_init_done:
 	mutex_unlock(&ddr_ctx->ddr_lock);
 	return ret;
 }
@@ -2817,7 +2829,7 @@ static struct ab_sm_dram_ops dram_ops = {
 	.ctx = NULL,
 
 	.setup = &ab_ddr_setup,
-	.wait_for_init = &ab_ddr_wait_for_ddr_init,
+	.wait_for_m0_ddr_init = &ab_ddr_wait_for_m0_ddr_init,
 	.init = &ab_ddr_init,
 	.get_freq = &ab_ddr_get_freq,
 	.set_freq = &ab_ddr_set_freq,
