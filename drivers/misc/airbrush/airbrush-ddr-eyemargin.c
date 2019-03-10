@@ -388,8 +388,7 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 	 * Read the information while DDR is in self-refresh mode.
 	 */
 	ddr_enter_self_refresh_mode();
-	ddr_reg_wr(DREX_DIRECTCMD, MRR(14));
-	write_vref = ddr_read_mr_status() & 0x3f;
+	write_vref = ddr_read_mr_reg(14) & 0x3f;
 	ddr_exit_self_refresh_mode();
 
 	ddr_eye_print_termination_info();

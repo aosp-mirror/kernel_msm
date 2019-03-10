@@ -1304,8 +1304,15 @@ static inline void ddr_mem_wr(uint32_t addr, uint32_t data)
 	WARN_ON(memory_config_write(addr, 0x4, data));
 }
 
-static inline int ddr_read_mr_status(void)
+static inline int ddr_read_mr_reg(uint32_t mr_num)
 {
+	ddr_reg_wr(DREX_DIRECTCMD, MRR(mr_num));
+
+	/* Read the DREX_DIRECTCMD back to make sure the previous write is
+	 * reflected before continuing.
+	 */
+	ddr_reg_rd(DREX_DIRECTCMD);
+
 	/* This function is called after the MR read command is sent to the
 	 * DRAM device. As the response from DRAM device may take some time,
 	 * please wait for "MR_READ_DELAY_USEC" time before continuing to
