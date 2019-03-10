@@ -387,9 +387,7 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 	/* Read the MR14 register to get the VREF(DQ) information.
 	 * Read the information while DDR is in self-refresh mode.
 	 */
-	ddr_enter_self_refresh_mode();
 	write_vref = ddr_read_mr_reg(14) & 0x3f;
-	ddr_exit_self_refresh_mode();
 
 	ddr_eye_print_termination_info();
 
