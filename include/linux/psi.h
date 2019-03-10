@@ -5,6 +5,7 @@
 #include <linux/psi_types.h>
 #include <linux/sched.h>
 #include <linux/poll.h>
+#include <linux/cgroup-defs.h>
 
 struct seq_file;
 struct css_set;
@@ -30,9 +31,9 @@ void cgroup_move_task(struct task_struct *p, struct css_set *to);
 
 struct psi_trigger *psi_trigger_create(struct psi_group *group,
 			char *buf, size_t nbytes, enum psi_res res);
-void psi_trigger_destroy(struct psi_trigger *t);
+void psi_trigger_replace(void **trigger_ptr, struct psi_trigger *t);
 
-unsigned int psi_trigger_poll(struct psi_trigger *t, struct file *file,
+unsigned int psi_trigger_poll(void **trigger_ptr, struct file *file,
 			poll_table *wait);
 #endif
 

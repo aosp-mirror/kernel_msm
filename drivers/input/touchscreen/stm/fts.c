@@ -34,6 +34,8 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/string.h>
+#include <linux/ctype.h>
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
@@ -95,7 +97,6 @@
 #define TYPE_B_PROTOCOL
 #endif
 
-
 extern SysInfo systemInfo;
 extern TestToDo tests;
 #ifdef GESTURE_MODE
@@ -105,9 +106,9 @@ extern struct mutex gestureMask_mutex;
 char fts_ts_phys[64];	/* /< buffer which store the input device name
 			  *	assigned by the kernel */
 
-static u32 typeOfComand[CMD_STR_LEN] = { 0 };	/* /< buffer used to store the
-						  * command sent from the MP
-						  * device file node */
+static u8 typeOfCommand[CMD_STR_LEN];	/* /< buffer used to store the
+					 * command sent from the MP
+					 * device file node */
 static int numberParameters;	/* /< number of parameter passed through the MP
 				  * device file node */
 #ifdef USE_ONE_FILE_NODE
@@ -214,7 +215,7 @@ static ssize_t fts_fwupdate_store(struct device *dev,
 				const char *buf, size_t count)
 {
 	int ret, mode[2];
-	char path[100];
+	char path[100 + 1]; /* extra byte to hold '\0'*/
 	struct fts_ts_info *info = dev_get_drvdata(dev);
 
 	/* default(if not specified by user) set force = 0 and keep_cx to 1 */
@@ -1475,36 +1476,102 @@ static ssize_t stm_fts_cmd_store(struct device *dev,
 				struct device_attribute *attr, const char *buf,
 				size_t count)
 {
-	int n;
-	char *p = (char *)buf;
+	u8 result, n = 0;
 	struct fts_ts_info *info = dev_get_drvdata(dev);
+	char *p, *temp_buf, *token;
+	ssize_t buf_len;
+	ssize_t retval = count;
 
-	memset(typeOfComand, 0, CMD_STR_LEN * sizeof(u32));
-
-	pr_info("%s:\n", __func__);
+	if (!count) {
+		pr_err("%s: Invalid input buffer length!\n", __func__);
+		retval = -EINVAL;
+		goto out;
+	}
 
 	if (!info) {
 		pr_err("%s: Unable to access driver data\n", __func__);
-		return  -EINVAL;
+		retval = -EINVAL;
+		goto out;
 	}
 
 	if (!mutex_trylock(&info->diag_cmd_lock)) {
 		pr_err("%s: Blocking concurrent access\n", __func__);
-		return -EBUSY;
+		retval = -EBUSY;
+		goto out;
 	}
 
-	for (n = 0; n < (count + 1) / 3; n++) {
-		sscanf(p, "%02X ", &typeOfComand[n]);
-		p += 3;
-		pr_info("typeOfComand[%d] = %02X\n", n, typeOfComand[n]);
+	memset(typeOfCommand, 0, sizeof(typeOfCommand));
+
+	buf_len = strlen(buf) + 1;
+	temp_buf = kmalloc(buf_len, GFP_KERNEL);
+	if (!temp_buf) {
+		pr_err("%s: memory allocation failed for length(%zu)!",
+			__func__, buf_len);
+		retval = -ENOMEM;
+		goto unlock;
+	}
+
+	strlcpy(temp_buf, buf, buf_len);
+	p = temp_buf;
+
+	/* Parse the input string to retrieve 2 hex-digit width cmds/args
+	 * separated by one or more spaces.
+	 * Any input not equal to 2 hex-digit width are ignored.
+	 * A single 2 hex-digit width  command w/ or w/o space is allowed.
+	 * Inputs not in the valid hex range are also ignored.
+	 * In case of encountering any of the above failure, the entire input
+	 * buffer is discarded.
+	 */
+	while (p && (n < CMD_STR_LEN)) {
+
+		while (isspace(*p)) {
+			p++;
+		}
+
+		token = strsep(&p, " ");
+
+		if (!token || *token == '\0') {
+			break;
+		}
+
+		if (strlen(token) != 2 ) {
+			pr_debug("%s: bad len. len=%zu\n",
+				 __func__, strlen(token));
+			n = 0;
+			break;
+		}
+
+		if (kstrtou8(token, 16, &result)) {
+			/* Conversion failed due to bad input.
+			* Discard the entire buffer.
+			*/
+			pr_debug("%s: bad input\n", __func__);
+			n = 0;
+			break;
+		}
+
+		/* found a valid cmd/args */
+		typeOfCommand[n] = result;
+		pr_debug("%s: typeOfCommand[%d]=%02X\n",
+			__func__, n, typeOfCommand[n]);
+
+		n++;
+	}
+
+	if (n == 0) {
+		pr_err("%s: Found invalid cmd/arg\n", __func__);
+		retval = -EINVAL;
 	}
 
 	numberParameters = n;
-	pr_info("Number of Parameters = %d\n", numberParameters);
+	pr_info("%s: Number of Parameters = %d\n", __func__, numberParameters);
 
+	kfree(temp_buf);
+
+unlock:
 	mutex_unlock(&info->diag_cmd_lock);
-
-	return count;
+out:
+	return retval;
 }
 
 static ssize_t stm_fts_cmd_show(struct device *dev,
@@ -1549,7 +1616,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 			goto END;
 		}
 
-		switch (typeOfComand[0]) {
+		switch (typeOfCommand[0]) {
 		/*ITO TEST*/
 		case 0x01:
 			res = production_test_ito(LIMITS_FILE, &tests);
@@ -1582,7 +1649,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		case 0x13:
 			if (numberParameters > 1) {
 				pr_info("Get 1 MS Frame\n");
-				setScanMode(SCAN_MODE_LOCKED, typeOfComand[1]);
+				setScanMode(SCAN_MODE_LOCKED, typeOfCommand[1]);
 				mdelay(WAIT_FOR_FRESH_FRAMES);
 				setScanMode(SCAN_MODE_ACTIVE, 0x00);
 				mdelay(WAIT_AFTER_SENSEOFF);
@@ -1630,7 +1697,7 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 		case 0x15:
 			if (numberParameters > 1) {
 				pr_info("Get 1 SS Frame\n");
-				setScanMode(SCAN_MODE_LOCKED, typeOfComand[1]);
+				setScanMode(SCAN_MODE_LOCKED, typeOfCommand[1]);
 				mdelay(WAIT_FOR_FRESH_FRAMES);
 				setScanMode(SCAN_MODE_ACTIVE, 0x00);
 				mdelay(WAIT_AFTER_SENSEOFF);
@@ -1807,18 +1874,19 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 
 		case 0xF0:
 		case 0xF1:	/* TOUCH ENABLE/DISABLE */
-			doClean = (int)(typeOfComand[0] & 0x01);
+			doClean = (int)(typeOfCommand[0] & 0x01);
 			res = cleanUp(doClean);
 			break;
 
 		default:
-			pr_err("COMMAND NOT VALID!! Insert a proper value ...\n");
+			pr_err("CMD(%02X) NOT VALID!! Insert a proper value\n",
+				typeOfCommand[0]);
 			res = ERROR_OP_NOT_ALLOW;
 			break;
 		}
 
 		doClean = fts_mode_handler(info, 1);
-		if (typeOfComand[0] != 0xF0)
+		if (typeOfCommand[0] != 0xF0)
 			doClean |= fts_enableInterrupt();
 		if (doClean < 0)
 			pr_err("%s: ERROR %08X\n", __func__,
@@ -1837,7 +1905,7 @@ END:
 
 	if (res >= OK) {
 		/*all the other cases are already fine printing only the res.*/
-		switch (typeOfComand[0]) {
+		switch (typeOfCommand[0]) {
 		case 0x13:
 		case 0x17:
 #ifdef RAW_DATA_FORMAT_DEC
