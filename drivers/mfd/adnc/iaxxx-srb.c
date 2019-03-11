@@ -658,10 +658,11 @@ EXPORT_SYMBOL(iaxxx_send_update_block_hostid);
 
 int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv)
 {
-	int rc;
+	int rc = 0;
 	uint32_t status;
 	uint32_t retry_count = 10;
 
+	mutex_lock(&priv->update_block_lock);
 	/* Make sure update block bit is in cleared state */
 	do {
 		rc = regmap_read(priv->regmap,
@@ -670,7 +671,7 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv)
 		if (rc) {
 			pr_err("Failed to read SRB_SYS_BLK_UPDATE_ADDR, rc = %d\n",
 				rc);
-			return rc;
+			goto update_block_clr_check_err;
 		}
 		if (status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK)
 			usleep_range(1000, 1005);
@@ -679,9 +680,11 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv)
 	} while (retry_count--);
 	if (status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK) {
 		pr_err("Update Block bit not cleared, rc = %d\n", rc);
-		return -EBUSY;
+		rc = -EBUSY;
 	}
-	return 0;
+update_block_clr_check_err:
+	mutex_unlock(&priv->update_block_lock);
+	return rc;
 }
 EXPORT_SYMBOL(iaxxx_poll_update_block_req_bit_clr);
 

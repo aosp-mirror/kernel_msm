@@ -470,20 +470,13 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 
 	if (source == IAXXX_EXT_OSC) {
 		/* Disable control interface 1 */
-		rc = regmap_update_bits(priv->regmap_no_pm,
-			IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
-			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
-			(1 <<
-			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS));
-
+		rc = iaxxx_pm_set_optimal_power_mode_host1(priv->dev);
 		if (rc) {
 			dev_err(priv->dev,
-			"%s() disabling controle interface 1 Fail\n", __func__);
+				"%s() disabling controle interface 1 Fail\n",
+				__func__);
 			return rc;
 		}
-
-		iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
-							IAXXX_HOST_1, 20);
 	}
 
 	rc = regmap_update_bits(priv->regmap_no_pm,
@@ -618,8 +611,9 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 	/* Make sure update block bit is in cleared state */
 	rc = iaxxx_poll_update_block_req_bit_clr(priv);
 	if (rc) {
-		pr_err("Don't do Update Block in progress, rc = %d\n",
-			rc);
+		dev_err(priv->dev,
+			"%s() Don't do Update Block in progress, rc = %d\n",
+			__func__, rc);
 		goto exit;
 	}
 
@@ -701,19 +695,16 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 	uint32_t mem_pwr_ctrl_val = 0;
 	uint32_t mem_pwr_ctrl_mask = 0;
 	int rc;
-	uint32_t status;
 
 	dev_dbg(priv->dev, "%s() proc_id:%u mem_state:%u\n", __func__,
 		proc_id, mem_state);
 
 	/* Make sure update block bit is in cleared state */
-	rc = regmap_read(priv->regmap,
-			IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
-			&status);
-	if (status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK) {
-		rc = -EBUSY;
-		dev_err(priv->dev, "Update Block bit not cleared, rc = %d\n",
-				rc);
+	rc = iaxxx_poll_update_block_req_bit_clr(priv);
+	if (rc) {
+		dev_err(priv->dev,
+			"%s() Don't do Update Block in progress, rc = %d\n",
+			__func__, rc);
 		goto exit;
 	}
 
@@ -834,26 +825,30 @@ static int iaxxx_get_proc_pwr_status(struct iaxxx_priv *priv,
 	rc = regmap_read(priv->regmap, IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
 		&proc_pwr_status);
 	if (rc) {
-		dev_err(priv->dev, "%s SRB_PROC_ACTIVE_STATUS_ADDR read err = %0x\n",
-					__func__, rc);
+		dev_err(priv->dev,
+			"%s SRB_PROC_ACTIVE_STATUS_ADDR read err = %0x\n",
+			__func__, rc);
 		goto exit;
 	}
 	*pwr_status = proc_pwr_status &
 			IAXXX_GET_PROC_PWR_STATUS_MASK(proc_id);
-	dev_info(priv->dev, "%s() SRB_PROC_ACTIVE_STATUS_ADDR: %u pwr_status: 0x%08x\n",
-				__func__, proc_pwr_status, *pwr_status);
+	dev_info(priv->dev,
+		"%s() SRB_PROC_ACTIVE_STATUS_ADDR: %u pwr_status: 0x%08x\n",
+		__func__, proc_pwr_status, *pwr_status);
 
 	rc = regmap_read(priv->regmap, IAXXX_SRB_DED_MEM_PWR_STATUS_ADDR,
 		&mem_pwr_status);
 	if (rc) {
-		dev_err(priv->dev, "%s SRB_DED_MEM_PWR_STATUS_ADDR read err = %0x\n",
-					__func__, rc);
+		dev_err(priv->dev,
+			"%s SRB_DED_MEM_PWR_STATUS_ADDR read err = %0x\n",
+			__func__, rc);
 		goto exit;
 	}
 	*mem_status = mem_pwr_status &
 			IAXXX_GET_PER_PROC_MEM_PWR_STATUS_MASK(proc_id);
-	dev_info(priv->dev, "%s() SRB_DED_MEM_PWR_STATUS_ADDR: %u mem_status: 0x%08x\n",
-				__func__, mem_pwr_status, *mem_status);
+	dev_info(priv->dev,
+		"%s() SRB_DED_MEM_PWR_STATUS_ADDR: %u mem_status: 0x%08x\n",
+		__func__, mem_pwr_status, *mem_status);
 
 exit:
 	return rc;

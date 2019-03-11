@@ -1188,19 +1188,12 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	}
 
 	/* Disable control interface 1 */
-	rc = regmap_update_bits(priv->regmap,
-		IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
-		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
-		(1 <<
-		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS));
-
+	rc =  iaxxx_pm_set_optimal_power_mode_host1(dev);
 	if (rc) {
 		dev_err(priv->dev,
 		"%s() disabling controle interface 1 Fail\n", __func__);
 		goto exit_fw_fail;
 	}
-
-	iaxxx_send_update_block_fixed_wait_no_pm(priv->dev, IAXXX_HOST_1, 20);
 
 	/* switch to internal oscillator if dt entry
 	 * is selected for internal oscillator mode
