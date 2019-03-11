@@ -419,7 +419,8 @@ int gpio_event_matrix_func(struct gpio_event_input_devs *input_devs,
 			free_irq(gpio_to_irq(mi->input_gpios[i]), kp);
 
 	hrtimer_cancel(&kp->timer);
-	wakeup_source_trash(&kp->wake_src);
+	wakeup_source_remove(&kp->wake_src);
+	__pm_relax(&kp->wake_src);
 	for (i = mi->noutputs - 1; i >= 0; i--) {
 err_gpio_direction_input_failed:
 		gpio_free(mi->input_gpios[i]);

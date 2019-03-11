@@ -4963,7 +4963,8 @@ ProbeErrorExit_5:
 
 ProbeErrorExit_4:
 	destroy_workqueue(info->fwu_workqueue);
-	wakeup_source_trash(&info->wakeup_source);
+	wakeup_source_remove(&info->wakeup_source);
+	__pm_relax(&info->wakeup_source);
 
 ProbeErrorExit_3:
 	if (info->ts_pinctrl) {
@@ -5056,7 +5057,8 @@ static int fts_remove(struct i2c_client *client)
 	/* Remove the work thread */
 	destroy_workqueue(info->event_wq);
 	/* wake_lock_destroy(&info->wakelock); */
-	wakeup_source_trash(&info->wakeup_source);
+	wakeup_source_remove(&info->wakeup_source);
+	__pm_relax(&info->wakeup_source);
 	destroy_workqueue(info->fwu_workqueue);
 
 	if (info->ts_pinctrl) {

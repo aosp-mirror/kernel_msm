@@ -169,7 +169,8 @@ int ipa_rm_inactivity_timer_destroy(enum ipa_rm_resource_name resource_name)
 
 	cancel_delayed_work_sync(&ipa_rm_it_handles[resource_name].work);
 	pwlock = &(ipa_rm_it_handles[resource_name].w_lock);
-	wakeup_source_trash(pwlock);
+	wakeup_source_remove(pwlock);
+	__pm_relax(pwlock);
 
 	memset(&ipa_rm_it_handles[resource_name], 0,
 	       sizeof(struct ipa_rm_it_private));

@@ -4090,10 +4090,14 @@ static int google_battery_remove(struct platform_device *pdev)
 
 		gbms_free_chg_profile(&batt_drv->chg_profile);
 
-		wakeup_source_trash(&batt_drv->msc_ws);
-		wakeup_source_trash(&batt_drv->batt_ws);
-		wakeup_source_trash(&batt_drv->taper_ws);
-		wakeup_source_trash(&batt_drv->poll_ws);
+		wakeup_source_remove(&batt_drv->msc_ws);
+		__pm_relax(&batt_drv->msc_ws);
+		wakeup_source_remove(&batt_drv->batt_ws);
+		__pm_relax(&batt_drv->batt_ws);
+		wakeup_source_remove(&batt_drv->taper_ws);
+		__pm_relax(&batt_drv->taper_ws);
+		wakeup_source_remove(&batt_drv->poll_ws);
+		__pm_relax(&batt_drv->poll_ws);
 
 		if (batt_drv->ssoc_log)
 			debugfs_logbuffer_unregister(batt_drv->ssoc_log);

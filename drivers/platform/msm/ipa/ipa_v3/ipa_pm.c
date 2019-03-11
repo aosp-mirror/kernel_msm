@@ -825,7 +825,8 @@ int ipa_pm_deregister(u32 hdl)
 		if (ipa_pm_ctx->clients_by_pipe[i] == ipa_pm_ctx->clients[hdl])
 			ipa_pm_ctx->clients_by_pipe[i] = NULL;
 	}
-	wakeup_source_trash(&client->wlock);
+	wakeup_source_remove(&client->wlock);
+	__pm_relax(&client->wlock);
 	kfree(client);
 	ipa_pm_ctx->clients[hdl] = NULL;
 

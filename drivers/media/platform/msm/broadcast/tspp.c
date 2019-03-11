@@ -3192,7 +3192,8 @@ static int msm_tspp_remove(struct platform_device *pdev)
 	if (device->tsif_bus_client)
 		msm_bus_scale_unregister_client(device->tsif_bus_client);
 
-	wakeup_source_trash(&device->ws);
+	wakeup_source_remove(&device->ws);
+	__pm_relax(&device->ws);
 	if (device->req_irqs)
 		msm_tspp_free_irqs(device);
 

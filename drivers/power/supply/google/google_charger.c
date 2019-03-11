@@ -2817,7 +2817,8 @@ static int google_charger_remove(struct platform_device *pdev)
 		if (chg_drv->tcpm_psy)
 			power_supply_put(chg_drv->tcpm_psy);
 
-		wakeup_source_trash(&chg_drv->chg_ws);
+		wakeup_source_remove(&chg_drv->chg_ws);
+		__pm_relax(&chg_drv->chg_ws);
 
 		alarm_try_to_cancel(&chg_drv->chg_wakeup_alarm);
 

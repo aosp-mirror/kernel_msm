@@ -529,7 +529,8 @@ static int ovh_remove(struct platform_device *pdev)
 	if (ovh_info) {
 		power_supply_unreg_notifier(&ovh_info->psy_nb);
 		sysfs_remove_group(&ovh_info->dev->kobj, &ovh_attr_group);
-		wakeup_source_trash(&ovh_info->overheat_ws);
+		wakeup_source_remove(&ovh_info->overheat_ws);
+		__pm_relax(&ovh_info->overheat_ws);
 	}
 	return 0;
 }

@@ -2819,7 +2819,8 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	struct uart_driver *drv =
 			(struct uart_driver *)port->uport.private_data;
 
-	wakeup_source_trash(&port->geni_wake);
+	wakeup_source_remove(&port->geni_wake);
+	__pm_relax(&port->geni_wake);
 	uart_remove_one_port(drv, &port->uport);
 	if (port->rx_dma) {
 		dma_free_coherent(port->wrapper_dev, DMA_RX_BUF_SIZE,

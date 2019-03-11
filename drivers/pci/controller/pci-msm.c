@@ -5188,7 +5188,8 @@ static void msm_pcie_irq_deinit(struct msm_pcie_dev_t *dev)
 {
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
 
-	wakeup_source_trash(&dev->ws);
+	wakeup_source_remove(&dev->ws);
+	__pm_relax(&dev->ws);
 
 	if (dev->wake_n)
 		disable_irq(dev->wake_n);

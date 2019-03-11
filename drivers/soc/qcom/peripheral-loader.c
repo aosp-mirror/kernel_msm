@@ -1589,7 +1589,8 @@ void pil_desc_release(struct pil_desc *desc)
 	if (priv) {
 		ida_simple_remove(&pil_ida, priv->id);
 		flush_delayed_work(&priv->proxy);
-		wakeup_source_trash(&priv->ws);
+		wakeup_source_remove(&priv->ws);
+		__pm_relax(&priv->ws);
 	}
 	desc->priv = NULL;
 	kfree(priv);
