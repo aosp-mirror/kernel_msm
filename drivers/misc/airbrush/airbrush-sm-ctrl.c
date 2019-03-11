@@ -62,8 +62,6 @@ static void ab_clk_init_stub(void *ctx)   { return; }
 
 static int ipu_pll_enable_stub(void *ctx)   { return -ENODEV; }
 static int ipu_pll_disable_stub(void *ctx)   { return -ENODEV; }
-static int ipu_gate_stub(void *ctx)   { return -ENODEV; }
-static int ipu_ungate_stub(void *ctx) { return -ENODEV; }
 static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return 0;
@@ -71,8 +69,6 @@ static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 
 static int tpu_pll_enable_stub(void *ctx)   { return -ENODEV; }
 static int tpu_pll_disable_stub(void *ctx)   { return -ENODEV; }
-static int tpu_gate_stub(void *ctx)   { return -ENODEV; }
-static int tpu_ungate_stub(void *ctx) { return -ENODEV; }
 static int64_t tpu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return 0;
@@ -104,14 +100,10 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 
 	.ipu_pll_enable = &ipu_pll_enable_stub,
 	.ipu_pll_disable = &ipu_pll_disable_stub,
-	.ipu_gate = &ipu_gate_stub,
-	.ipu_ungate = &ipu_ungate_stub,
 	.ipu_set_rate = &ipu_set_rate_stub,
 
 	.tpu_pll_enable = &tpu_pll_enable_stub,
 	.tpu_pll_disable = &tpu_pll_disable_stub,
-	.tpu_gate = &tpu_gate_stub,
-	.tpu_ungate = &tpu_ungate_stub,
 	.tpu_set_rate = &tpu_set_rate_stub,
 	.tpu_set_rate_direct = &tpu_set_rate_direct_stub,
 
@@ -468,22 +460,6 @@ void ab_sm_register_blk_callback(enum block_name name,
 	ab_sm_ctx->blocks[name].data = data;
 }
 
-static void ipu_clock_resync(struct ab_state_context *sc)
-{
-	struct ab_sm_clk_ops *clk = sc->clk_ops;
-
-	clk->ipu_ungate(clk->ctx);
-	clk->ipu_gate(clk->ctx);
-}
-
-static void tpu_clock_resync(struct ab_state_context *sc)
-{
-	struct ab_sm_clk_ops *clk = sc->clk_ops;
-
-	clk->tpu_ungate(clk->ctx);
-	clk->tpu_gate(clk->ctx);
-}
-
 /* Caller must hold sc->op_lock */
 int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 struct block_property *last_state,
@@ -606,7 +582,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
-			ipu_clock_resync(sc);
 			ab_sm_record_ts(sc, AB_SM_TS_IPU_PMU_RES);
 		}
 		if (blk->name == BLK_TPU) {
@@ -615,7 +590,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
-			tpu_clock_resync(sc);
 			ab_sm_record_ts(sc, AB_SM_TS_TPU_PMU_RES);
 		}
 	}
@@ -732,8 +706,6 @@ static int disable_ref_clk(struct device *dev)
 		CHIP_STATE_ ## cs2, \
 		CHIP_STATE_ ## cs3, \
 	}
-
-#define THROTTLER_MAP_PAD(x) THROTTLER_MAP_INIT(x, x, x, x)
 
 static const u32 chip_substate_throttler_map
 		[][AIRBRUSH_COOLING_STATE_MAX + 1] = {
