@@ -775,10 +775,11 @@ static ssize_t regdump_write(struct file *filp, const char __user *buf,
 		return -EINVAL;
 	kbuf = kzalloc(count, GFP_KERNEL);
 	if (!kbuf)
-		return -EFAULT;
+		return -ENOMEM;
 	err = copy_from_user(kbuf, buf, count);
 	if (err) {
 		dev_err(iaxxx->dev, "%s() Copy error\n", __func__);
+		kfree(kbuf);
 		return -EINVAL;
 	}
 	if (!strncmp(kbuf, "clear", (count - 1))) {
@@ -788,6 +789,8 @@ static ssize_t regdump_write(struct file *filp, const char __user *buf,
 		spin_unlock(&iaxxx->reg_dump->ring_lock);
 	} else
 		dev_err(iaxxx->dev, "%s() Invalid command\n", __func__);
+
+	kfree(kbuf);
 	return count;
 }
 

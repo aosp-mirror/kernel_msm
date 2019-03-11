@@ -941,6 +941,10 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 					__func__, cfg_val);
 		} else {
 			data = kmalloc(cfg_size, GFP_KERNEL);
+			if (!data) {
+				ret = -ENOMEM;
+				goto set_create_cfg_err;
+			}
 			iaxxx_copy_le32_to_cpu(data, fw->data, cfg_size);
 		}
 
@@ -984,7 +988,6 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 			else {
 				ret = priv->raw_write(dev, &reg_addr, data,
 							cfg_size);
-				kfree(data);
 			}
 			if (ret) {
 				dev_err(dev, "Blk write failed %s()\n",
@@ -998,8 +1001,10 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 	} else {
 		if (file[0] == IAXXX_INVALID_FILE)
 			reg_val = (uint32_t)cfg_val;
-		else
+		else {
+			reg_val = 0;
 			iaxxx_copy_le32_to_cpu(&reg_val, fw->data, cfg_size);
+		}
 		pr_debug("%s() reg_val 0x%x\n", __func__, reg_val);
 
 		ret = regmap_write(priv->regmap,
@@ -1012,6 +1017,7 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 	}
 
 set_create_cfg_err:
+	kfree(data);
 	if (fw)
 		release_firmware(fw);
 	mutex_unlock(&priv->plugin_lock);
@@ -1341,9 +1347,13 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 					__func__, file_section.start_address);
 			buf_data = kcalloc(file_section.length,
 					sizeof(uint32_t), GFP_KERNEL);
+			if (!buf_data)
+				return -ENOMEM;
 			if (((data - fw->data) + (file_section.length
-				* sizeof(uint32_t))) > fw->size)
+				* sizeof(uint32_t))) > fw->size) {
+				kfree(buf_data);
 				return -EINVAL;
+			}
 			iaxxx_copy_le32_to_cpu(buf_data, data,
 					file_section.length * sizeof(uint32_t));
 			word_data = (uint32_t *)buf_data;
@@ -1352,6 +1362,7 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			rc = iaxxx_download_section(priv, data, &file_section);
 			data += file_section_bytes;
 			kfree(buf_data);
+			buf_data = NULL;
 		}
 	}
 	/* If the last section length is 0, then verify the checksum */
@@ -1373,8 +1384,13 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 				- bin_info.bss_start_addr) >> 2;
 		buf_data = kcalloc(file_section.length, sizeof(uint32_t),
 								GFP_KERNEL);
+		if (!buf_data)
+			return -ENOMEM;
+
 		rc = iaxxx_download_section(priv, buf_data, &file_section);
+
 		kfree(buf_data);
+		buf_data = NULL;
 	}
 	/* Write to Package Management ARB */
 	rc = write_pkg_info(false, priv, pkg_id, bin_info, &pkg);

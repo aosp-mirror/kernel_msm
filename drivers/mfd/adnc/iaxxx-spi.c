@@ -206,7 +206,7 @@ static int iaxxx_spi_write_common(void *context,
 	pr_debug("%s() Register address %x\n", __func__, reg_addr);
 
 	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_KERNEL);
-	if (padding == NULL)
+	if (!padding)
 		return -ENOMEM;
 
 	if (data_in_be32_fmt)
@@ -479,7 +479,7 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	/* Create buffer to store read data */
 	val_len = len - IAXXX_REG_LEN_WITH_PADDING;
 	val = kzalloc(len, GFP_DMA | GFP_KERNEL);
-	if (val == NULL) {
+	if (!val) {
 		pr_err("%s() failed to allocate memory\n", __func__);
 		rc = -ENOMEM;
 		goto mem_alloc_fail;
@@ -972,14 +972,11 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	rc = iaxxx_spi_populate_dt_data(node, &tmp);
 	if (rc < 0) {
 		dev_err(dev, "Failed to read spi_app_speed, rc = %d\n", rc);
-		return rc;
+		goto probe_failed;
 	}
 	spi_priv->priv.spi_app_speed = tmp;
 
-
-
 	return rc;
-
 probe_failed:
 	devm_kfree(&spi->dev, spi_priv->priv.crashlog);
 crash_mem_failed:

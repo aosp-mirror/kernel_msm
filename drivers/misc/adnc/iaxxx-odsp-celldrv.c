@@ -371,19 +371,22 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			param_blk_info.id,
 			get_param_blk_buf,
 			param_blk_info.param_size);
+		if (ret) {
+			pr_err("%s() Get param blk fail\n", __func__);
+			goto get_param_blk_err;
+		}
 
 		if (copy_to_user((void __user *) param_blk_info.param_blk,
 				get_param_blk_buf,
 				param_blk_info.param_size*sizeof(uint32_t))) {
 			pr_err("%s() copy to user fail\n", __func__);
-			return -EFAULT;
+			ret = -EFAULT;
 		}
-
+get_param_blk_err:
 		kfree(get_param_blk_buf);
-		if (ret) {
-			pr_err("%s() Get param blk fail\n", __func__);
+		get_param_blk_buf = NULL;
+		if (ret)
 			return ret;
-		}
 		break;
 
 	case ODSP_PLG_SET_CUSTOM_CFG:
@@ -456,6 +459,10 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		get_param_blk_buf = kzalloc(
 				param_blk_with_ack.response_buf_size *
 				sizeof(uint32_t), GFP_KERNEL);
+		if (!get_param_blk_buf) {
+			ret = -ENOMEM;
+			goto set_param_blk_err;
+		}
 
 		ret = iaxxx_core_set_param_blk_with_ack(
 			odsp_dev_priv->parent,
@@ -467,22 +474,26 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			get_param_blk_buf,
 			param_blk_with_ack.response_buf_size,
 			param_blk_with_ack.max_retries);
-
+		if (ret) {
+			pr_err("%s() Set param blk with ack fail\n", __func__);
+			goto err;
+		}
 		if (copy_to_user((void __user *)
 				param_blk_with_ack.response_buffer,
 				get_param_blk_buf,
 				param_blk_with_ack.response_buf_size*
 				sizeof(uint32_t))) {
 			pr_err("%s() copy to user fail\n", __func__);
-			return -EFAULT;
+			ret = -EFAULT;
 		}
-
-		kfree(blk_buff);
+err:
 		kfree(get_param_blk_buf);
-		if (ret) {
-			pr_err("%s() Set param blk with ack fail\n", __func__);
+		get_param_blk_buf = NULL;
+set_param_blk_err:
+		kfree(blk_buff);
+		blk_buff = NULL;
+		if (ret)
 			return ret;
-		}
 		break;
 
 	case ODSP_PLG_SET_CREATE_CFG:
