@@ -33,6 +33,7 @@
 #include "google_bms.h"
 #include "google_psy.h"
 #include "qmath.h"
+#include "logbuffer.h"
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -65,6 +66,8 @@ enum batt_rl_status {
 	BATT_RL_STATUS_RECHARGE = 1,
 };
 
+#define SSOC_STATE_BUF_SZ 128
+
 struct batt_ssoc_state {
 	/* output of gauge data filter */
 	qnum_t ssoc_gdf;
@@ -78,6 +81,9 @@ struct batt_ssoc_state {
 	/* recharge logic */
 	int rl_soc_threshold;
 	enum batt_rl_status rl_status;
+
+	/* buff */
+	char ssoc_state_cstr[SSOC_STATE_BUF_SZ];
 };
 
 struct gbatt_ccbin_data {
@@ -147,6 +153,9 @@ struct batt_drv {
 	struct mutex stats_lock;
 	struct gbms_charging_event ce_data;
 	struct gbms_charging_event ce_qual;
+
+	/* logging */
+	struct logbuffer *log;
 };
 
 static int psy_changed(struct notifier_block *nb,
@@ -309,21 +318,29 @@ static int ssoc_get_capacity(struct batt_ssoc_state *ssoc)
 
 /* ------------------------------------------------------------------------- */
 
-void dump_ssoc_state(struct batt_ssoc_state *ssoc_state)
+void dump_ssoc_state(struct batt_ssoc_state *ssoc_state, struct logbuffer *log)
 {
 	char buff[UICURVE_BUF_SZ] = { 0 };
 
-	ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve);
-	pr_info("SSOC: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d ct=%d curve:%s rls=%d\n",
-		ssoc_get_capacity(ssoc_state),
-		qnum_toint(ssoc_state->ssoc_gdf),
-		qnum_fracdgt(ssoc_state->ssoc_gdf),
-		qnum_toint(ssoc_state->ssoc_uic),
-		qnum_fracdgt(ssoc_state->ssoc_uic),
-		qnum_toint(ssoc_state->ssoc_rl),
-		qnum_fracdgt(ssoc_state->ssoc_rl),
-		ssoc_state->ssoc_curve_type, buff,
-		ssoc_state->rl_status);
+	snprintf(ssoc_state->ssoc_state_cstr,
+		 sizeof(ssoc_state->ssoc_state_cstr),
+		 "SSOC: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d ct=%d curve:%s rls=%d",
+		 ssoc_get_capacity(ssoc_state),
+		 qnum_toint(ssoc_state->ssoc_gdf),
+		 qnum_fracdgt(ssoc_state->ssoc_gdf),
+		 qnum_toint(ssoc_state->ssoc_uic),
+		 qnum_fracdgt(ssoc_state->ssoc_uic),
+		 qnum_toint(ssoc_state->ssoc_rl),
+		 qnum_fracdgt(ssoc_state->ssoc_rl),
+		 ssoc_state->ssoc_curve_type,
+		 ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve),
+		 ssoc_state->rl_status);
+
+	if (log) {
+		logbuffer_log(log, "%s", ssoc_state->ssoc_state_cstr);
+	} else {
+		pr_info("%s\n", ssoc_state->ssoc_state_cstr);
+	}
 }
 
 /* ------------------------------------------------------------------------- */
@@ -399,7 +416,7 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
  * NOTE: call holding chg_lock
  * @pre rl_status != BATT_RL_STATUS_NONE
  */
-static void batt_rl_enter(struct batt_ssoc_state *ssoc_state,
+static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 			  enum batt_rl_status rl_status)
 {
 	const int rl_current = ssoc_state->rl_status;
@@ -410,7 +427,7 @@ static void batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 	 * BATT_RL_STATUS_RECHARGE
 	 */
 	if (rl_current == rl_status || rl_current == BATT_RL_STATUS_DISCHARGE)
-		return;
+		return false;
 
 	pr_info("rl_enter: status:%d->%d", rl_current, rl_status);
 
@@ -426,8 +443,7 @@ static void batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 
 	ssoc_state->rl_status = rl_status;
 
-	/* TODO: should I trigger a ps change? */
-	dump_ssoc_state(ssoc_state);
+	return true;
 }
 
 /* NOTE: might need to use SOC from bootloader as starting point to avoid UI
@@ -459,7 +475,6 @@ static int ssoc_init(struct batt_ssoc_state *ssoc_state,
 
 	}
 
-	dump_ssoc_state(ssoc_state);
 	return 0;
 }
 
@@ -1120,9 +1135,8 @@ static int msc_logic(struct batt_drv *batt_drv)
 		batt_chg_stats_stop(batt_drv);
 
 		batt_reset_chg_drv_state(batt_drv);
-		ssoc_change_curve(&batt_drv->ssoc_state,
-						SSOC_UIC_TYPE_DSG);
-		dump_ssoc_state(&batt_drv->ssoc_state);
+		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
+		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
 		batt_rl_reset(batt_drv);
 
 		batt_drv->buck_enabled = false;
@@ -1138,23 +1152,42 @@ static int msc_logic(struct batt_drv *batt_drv)
 	 */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
 		/* enter RL on charger FULL */
-		batt_rl_enter(&batt_drv->ssoc_state, BATT_RL_STATUS_DISCHARGE);
+		bool changed;
+
+		/* enter RL on charger FULL */
+		changed = batt_rl_enter(&batt_drv->ssoc_state,
+						BATT_RL_STATUS_DISCHARGE);
+		if (changed) {
+			dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+			/* TODO: should I trigger a ps change? */
+		}
 	} else if (batt_drv->batt_full) {
+		bool changed;
 
 		batt_chg_stats_stop(batt_drv);
 
 		/* enter RL because battery is FULL, NO op if in DISCHARGE */
-		batt_rl_enter(&batt_drv->ssoc_state, BATT_RL_STATUS_RECHARGE);
+		changed = batt_rl_enter(&batt_drv->ssoc_state,
+						BATT_RL_STATUS_RECHARGE);
+		if (changed) {
+			dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+			 /* TODO: should I trigger a ps change? */
+		}
+
 	} else if (!batt_drv->buck_enabled) {
 		batt_chg_stats_start(batt_drv);
 
 		/* TODO: enter with dsg_curve when ssoc over the spoof point? */
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
-		dump_ssoc_state(&batt_drv->ssoc_state);
+		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
 
 		batt_drv->buck_enabled = true;
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
+	} else {
+		/* TODO: enter with dsg_curve when ssoc over the spoof point? */
+		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
+		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
 	}
 
 	err = msc_logic_internal(batt_drv);
@@ -1716,7 +1749,7 @@ reschedule:
 	mutex_unlock(&batt_drv->chg_lock);
 
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
-	dump_ssoc_state(ssoc_state);
+	dump_ssoc_state(ssoc_state, batt_drv->log);
 
 	if (update_interval) {
 		pr_debug("rerun battery work in %d ms\n", update_interval);
@@ -2060,6 +2093,8 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		goto retry_init_work;
 
+	dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+
 	ret = batt_init_chg_profile(batt_drv);
 	if (ret == -EPROBE_DEFER)
 		goto retry_init_work;
@@ -2087,6 +2122,7 @@ static void google_battery_init_work(struct work_struct *work)
 	batt_drv->fake_capacity = -EINVAL;
 
 	(void)batt_init_fs(batt_drv);
+
 	pr_info("init_work done\n");
 
 	ret = of_property_read_u32(batt_drv->device->of_node,
@@ -2155,6 +2191,15 @@ static int google_battery_probe(struct platform_device *pdev)
 		ret = PTR_ERR(batt_drv->psy);
 		dev_err(batt_drv->device,
 			"Couldn't register as power supply, ret=%d\n", ret);
+		/* TODO: fail with -ENODEV */
+	}
+
+	batt_drv->log = debugfs_logbuffer_register("ssoc");
+	if (IS_ERR(batt_drv->log)) {
+		ret = PTR_ERR(batt_drv->log);
+		dev_err(batt_drv->device,
+			"failed to obtain logbuffer instance, ret=%d\n", ret);
+		batt_drv->log = NULL;
 	}
 
 	/* give time to fg driver to start */
@@ -2175,6 +2220,9 @@ static int google_battery_remove(struct platform_device *pdev)
 		gbms_free_chg_profile(&batt_drv->chg_profile);
 
 		wakeup_source_trash(&batt_drv->batt_ws);
+
+		if (batt_drv->log)
+			debugfs_logbuffer_unregister(batt_drv->log);
 	}
 
 	return 0;
