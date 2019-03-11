@@ -172,6 +172,7 @@ static int psy_changed(struct notifier_block *nb,
 
 /* ------------------------------------------------------------------------- */
 
+#define SSOC_FULL 100
 #define UICURVE_BUF_SZ	(UICURVE_MAX * 15 + 1)
 
 enum ssoc_uic_type {
@@ -182,7 +183,7 @@ enum ssoc_uic_type {
 
 const qnum_t ssoc_point_true = qnum_rconst(15);
 const qnum_t ssoc_point_spoof = qnum_rconst(95);
-const qnum_t ssoc_point_full = qnum_rconst(100);
+const qnum_t ssoc_point_full = qnum_rconst(SSOC_FULL);
 
 static struct ssoc_uicurve chg_curve[UICURVE_MAX] = {
 	{ ssoc_point_true, ssoc_point_true },
@@ -1685,19 +1686,22 @@ static void google_battery_work(struct work_struct *work)
 	if (fg_status < 0)
 		goto reschedule;
 
-	/* fuel gauge triggered recharge logic. */
-	batt_drv->batt_full = (fg_status == POWER_SUPPLY_STATUS_FULL);
-
 	mutex_lock(&batt_drv->batt_lock);
 	ret = ssoc_work(ssoc_state, fg_psy);
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
 	} else {
+		int ssoc;
+
 		/* handle charge/recharge */
 		batt_rl_update_status(batt_drv);
 
-		if (prev_ssoc != ssoc_get_capacity(ssoc_state))
+		ssoc = ssoc_get_capacity(ssoc_state);
+		if (prev_ssoc != ssoc)
 			power_supply_changed(batt_drv->psy);
+
+		/* fuel gauge triggered recharge logic. */
+		batt_drv->batt_full = (ssoc == SSOC_FULL);
 	}
 
 	/* TODO: poll other data here if needed */
