@@ -56,9 +56,6 @@ static ssize_t show_time_in_state(struct cpufreq_policy *policy, char *buf)
 	ssize_t len = 0;
 	int i;
 
-	if (policy->fast_switch_enabled)
-		return 0;
-
 	cpufreq_stats_update(stats);
 	for (i = 0; i < stats->state_num; i++) {
 		len += sprintf(buf + len, "%u %llu\n", stats->freq_table[i],
@@ -82,9 +79,6 @@ static ssize_t show_trans_table(struct cpufreq_policy *policy, char *buf)
 	struct cpufreq_stats *stats = policy->stats;
 	ssize_t len = 0;
 	int i, j;
-
-	if (policy->fast_switch_enabled)
-		return 0;
 
 	len += snprintf(buf + len, PAGE_SIZE - len, "   From  :    To\n");
 	len += snprintf(buf + len, PAGE_SIZE - len, "         : ");
