@@ -970,11 +970,12 @@
 
 #define CS40L2X_DEVICE_NAME		"vibrator"
 
-#define CS40L2X_NUM_FW_FAMS		4
+#define CS40L2X_NUM_FW_FAMS		5
 #define CS40L2X_FW_ID_ORIG		0x1400A7
 #define CS40L2X_FW_ID_B1ROM		0x1400BA
 #define CS40L2X_FW_ID_REMAP		0x1400C3
 #define CS40L2X_FW_ID_CAL		0x1400C6
+#define CS40L2X_FW_ID_CLAB		0x1400CB
 
 #define CS40L2X_PDATA_PRESENT		0x80000000
 #define CS40L2X_PDATA_MASK		~CS40L2X_PDATA_PRESENT
@@ -1043,10 +1044,17 @@
 #define CS40L2X_ALGO_ID_PRE		0x000109
 #define CS40L2X_ALGO_ID_A2H		0x000110
 #define CS40L2X_ALGO_ID_QEST		0x000112
+#define CS40L2X_ALGO_ID_CLAB		0x000117
 
 #define CS40L2X_MAX_A2H_LEVELS		10
 
 #define CS40L2X_DSP_CACHE_MAX		64
+
+#define CS40L2X_CLAB_ENABLED		1
+#define CS40L2X_CLAB_DISABLED		0
+
+#define CS40L2X_IMON_OFFS_CALC_ENABLED	1
+#define CS40L2X_IMON_OFFS_CALC_DISABLED	0
 
 bool cs40l2x_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l2x_precious_reg(struct device *dev, unsigned int reg);

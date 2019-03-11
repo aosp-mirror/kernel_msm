@@ -3836,6 +3836,104 @@ err_mutex:
 	return ret;
 }
 
+static int cs40l2x_imon_offs_sync(struct cs40l2x_private *cs40l2x)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	unsigned int reg_calc_enable = cs40l2x_dsp_reg(cs40l2x,
+			"IMON_OFFSET_CALC_ENABLE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	unsigned int val_calc_enable = CS40L2X_IMON_OFFS_CALC_DISABLED;
+	unsigned int reg, val;
+	int ret;
+
+	if (!reg_calc_enable)
+		return 0;
+
+	reg = cs40l2x_dsp_reg(cs40l2x, "CLAB_ENABLED",
+			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_CLAB);
+	if (reg) {
+		ret = regmap_read(regmap, reg, &val);
+		if (ret)
+			return ret;
+
+		if (val == CS40L2X_CLAB_ENABLED)
+			val_calc_enable = CS40L2X_IMON_OFFS_CALC_ENABLED;
+	}
+
+	return regmap_write(regmap, reg_calc_enable, val_calc_enable);
+}
+
+static ssize_t cs40l2x_clab_enable_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int reg, val;
+
+	mutex_lock(&cs40l2x->lock);
+
+	reg = cs40l2x_dsp_reg(cs40l2x, "CLAB_ENABLED",
+			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_CLAB);
+	if (!reg) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_read(cs40l2x->regmap, reg, &val);
+	if (ret)
+		goto err_mutex;
+
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", val);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
+static ssize_t cs40l2x_clab_enable_store(struct device *dev,
+			struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+	int ret;
+	unsigned int reg, val;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	mutex_lock(&cs40l2x->lock);
+
+	reg = cs40l2x_dsp_reg(cs40l2x, "CLAB_ENABLED",
+			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_CLAB);
+	if (!reg) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	ret = regmap_write(cs40l2x->regmap, reg,
+			val ? CS40L2X_CLAB_ENABLED : CS40L2X_CLAB_DISABLED);
+	if (ret)
+		goto err_mutex;
+
+	ret = cs40l2x_dsp_cache(cs40l2x, reg,
+			val ? CS40L2X_CLAB_ENABLED : CS40L2X_CLAB_DISABLED);
+	if (ret)
+		goto err_mutex;
+
+	ret = cs40l2x_imon_offs_sync(cs40l2x);
+	if (ret)
+		goto err_mutex;
+
+	ret = count;
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
+
+	return ret;
+}
+
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
@@ -3938,6 +4036,8 @@ static DEVICE_ATTR(hw_reset, 0660, cs40l2x_hw_reset_show,
 		cs40l2x_hw_reset_store);
 static DEVICE_ATTR(wt_file, 0660, cs40l2x_wt_file_show, cs40l2x_wt_file_store);
 static DEVICE_ATTR(wt_date, 0660, cs40l2x_wt_date_show, NULL);
+static DEVICE_ATTR(clab_enable, 0660, cs40l2x_clab_enable_show,
+		cs40l2x_clab_enable_store);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -3993,6 +4093,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_hw_reset.attr,
 	&dev_attr_wt_file.attr,
 	&dev_attr_wt_date.attr,
+	&dev_attr_clab_enable.attr,
 	NULL,
 };
 
@@ -5559,6 +5660,10 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (ret)
 		return ret;
 
+	ret = cs40l2x_imon_offs_sync(cs40l2x);
+	if (ret)
+		return ret;
+
 	switch (cs40l2x->fw_desc->id) {
 	case CS40L2X_FW_ID_ORIG:
 		ret = regmap_write(regmap,
@@ -6727,52 +6832,53 @@ static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
 		return ret;
 	}
 
-	if (boost_ctl) {
+	if (boost_ctl)
 		boost_ctl &= CS40L2X_PDATA_MASK;
+	else
+		boost_ctl = 11000;
 
-		switch (boost_ctl) {
-		case 0:
-			bst_ctl_scaled = boost_ctl;
-			break;
-		case 2550 ... 11000:
-			bst_ctl_scaled = ((boost_ctl - 2550) / 50) + 1;
-			break;
-		default:
-			dev_err(dev, "Invalid VBST limit: %d mV\n", boost_ctl);
-			return -EINVAL;
-		}
+	switch (boost_ctl) {
+	case 0:
+		bst_ctl_scaled = boost_ctl;
+		break;
+	case 2550 ... 11000:
+		bst_ctl_scaled = ((boost_ctl - 2550) / 50) + 1;
+		break;
+	default:
+		dev_err(dev, "Invalid VBST limit: %d mV\n", boost_ctl);
+		return -EINVAL;
+	}
 
-		ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL1,
-				CS40L2X_BST_CTL_MASK,
-				bst_ctl_scaled << CS40L2X_BST_CTL_SHIFT);
-		if (ret) {
-			dev_err(dev, "Failed to write VBST limit\n");
-			return ret;
-		}
+	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL1,
+			CS40L2X_BST_CTL_MASK,
+			bst_ctl_scaled << CS40L2X_BST_CTL_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write VBST limit\n");
+		return ret;
+	}
 
-		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_BSTCVRT_VCTRL1,
-				bst_ctl_scaled << CS40L2X_BST_CTL_SHIFT);
-		if (ret) {
-			dev_err(dev, "Failed to sequence VBST limit\n");
-			return ret;
-		}
+	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_BSTCVRT_VCTRL1,
+			bst_ctl_scaled << CS40L2X_BST_CTL_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to sequence VBST limit\n");
+		return ret;
+	}
 
-		ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL2,
-				CS40L2X_BST_CTL_LIM_EN_MASK,
-				1 << CS40L2X_BST_CTL_LIM_EN_SHIFT);
-		if (ret) {
-			dev_err(dev, "Failed to configure VBST control\n");
-			return ret;
-		}
+	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL2,
+			CS40L2X_BST_CTL_LIM_EN_MASK,
+			1 << CS40L2X_BST_CTL_LIM_EN_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to configure VBST control\n");
+		return ret;
+	}
 
-		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_BSTCVRT_VCTRL2,
-				(1 << CS40L2X_BST_CTL_LIM_EN_SHIFT) |
-				(CS40L2X_BST_CTL_SEL_CLASSH
-					<< CS40L2X_BST_CTL_SEL_SHIFT));
-		if (ret) {
-			dev_err(dev, "Failed to sequence VBST control\n");
-			return ret;
-		}
+	ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_BSTCVRT_VCTRL2,
+			(1 << CS40L2X_BST_CTL_LIM_EN_SHIFT) |
+			(CS40L2X_BST_CTL_SEL_CLASSH
+				<< CS40L2X_BST_CTL_SEL_SHIFT));
+	if (ret) {
+		dev_err(dev, "Failed to sequence VBST control\n");
+		return ret;
 	}
 
 	switch (boost_ovp) {

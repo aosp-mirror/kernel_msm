@@ -976,6 +976,11 @@ static const char * const cs40l2x_coeff_files_cal[] = {
 	"cs40l25a_cal.bin",
 };
 
+static const char * const cs40l2x_coeff_files_clab[] = {
+	CS40L2X_WT_FILE_NAME_DEFAULT,
+	"cs40l25a_clab.bin",
+};
+
 const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
 	{
 		.id = CS40L2X_FW_ID_ORIG,
@@ -1008,6 +1013,14 @@ const struct cs40l2x_fw_desc cs40l2x_fw_fam[CS40L2X_NUM_FW_FAMS] = {
 		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_cal),
 		.coeff_files = cs40l2x_coeff_files_cal,
 		.fw_file = "cs40l25a_cal.wmfw",
+	},
+	{
+		.id = CS40L2X_FW_ID_CLAB,
+		.min_rev = 0x080100,
+		.halo_state_run = 203,
+		.num_coeff_files = ARRAY_SIZE(cs40l2x_coeff_files_clab),
+		.coeff_files = cs40l2x_coeff_files_clab,
+		.fw_file = "cs40l25a_clab.wmfw",
 	},
 };
 
