@@ -1964,7 +1964,6 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	struct device_node *np = dev->of_node;
 	int error;
 	int ret;
-	u32 boot_time_block_state;
 
 	ab_sm_ctx = devm_kzalloc(dev, sizeof(struct ab_state_context),
 							GFP_KERNEL);
@@ -2020,39 +2019,33 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 		dev_dbg(dev, "alternate-boot property not found\n");
 
 	/* Intialize the default state of each block for state manager */
-	boot_time_block_state = ARRAY_SIZE(ipu_property_table)-1;
 	ab_sm_ctx->blocks[BLK_IPU] = (struct block){BLK_IPU,
-			&ipu_property_table[boot_time_block_state],
+			&ipu_property_table[0],
 			ipu_property_table,
 			ARRAY_SIZE(ipu_property_table), NULL, NULL};
 
-	boot_time_block_state = ARRAY_SIZE(tpu_property_table)-1;
 	ab_sm_ctx->blocks[BLK_TPU] = (struct block){BLK_TPU,
-			&tpu_property_table[boot_time_block_state],
+			&tpu_property_table[0],
 			tpu_property_table,
 			ARRAY_SIZE(tpu_property_table), NULL, NULL};
 
-	boot_time_block_state = ARRAY_SIZE(dram_property_table)-1;
 	ab_sm_ctx->blocks[DRAM] = (struct block){DRAM,
-			&dram_property_table[boot_time_block_state],
+			&dram_property_table[0],
 			dram_property_table,
 			ARRAY_SIZE(dram_property_table), NULL, NULL};
 
-	boot_time_block_state = ARRAY_SIZE(mif_property_table)-1;
 	ab_sm_ctx->blocks[BLK_MIF] = (struct block){BLK_MIF,
-			&mif_property_table[boot_time_block_state],
+			&mif_property_table[0],
 			mif_property_table,
 			ARRAY_SIZE(mif_property_table), NULL, NULL};
 
-	boot_time_block_state = ARRAY_SIZE(fsys_property_table)-1;
 	ab_sm_ctx->blocks[BLK_FSYS] = (struct block){BLK_FSYS,
-			&fsys_property_table[boot_time_block_state],
+			&fsys_property_table[0],
 			fsys_property_table,
 			ARRAY_SIZE(fsys_property_table), NULL, NULL};
 
-	boot_time_block_state = ARRAY_SIZE(aon_property_table)-1;
 	ab_sm_ctx->blocks[BLK_AON] = (struct block){BLK_AON,
-			&aon_property_table[boot_time_block_state],
+			&aon_property_table[0],
 			aon_property_table,
 			ARRAY_SIZE(aon_property_table), NULL, NULL};
 
