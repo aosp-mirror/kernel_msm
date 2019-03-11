@@ -170,15 +170,6 @@ int smblib_get_charge_param(struct smb_charger *chg,
 	int rc = 0;
 	u8 val_raw;
 
-	/******************************************************************
-	 * USB-2PIN: Set usb input current limit to 500ma to avoid incorrect
-	 * state of USB charger
-	 *****************************************************************/
-	if (!strcmp(param->name, "usb input current limit")) {
-		pr_info("smblib_set_charge_param: set usb input current to 500mA\n");
-		*val_u = 500000;
-	}
-
 	rc = smblib_read(chg, param->reg, &val_raw);
 	if (rc < 0) {
 		smblib_err(chg, "%s: Couldn't read from 0x%04x rc=%d\n",
@@ -371,6 +362,15 @@ int smblib_set_charge_param(struct smb_charger *chg,
 {
 	int rc = 0;
 	u8 val_raw;
+
+	/******************************************************************
+	 * USB-2PIN: Set usb input current limit to 500ma to avoid incorrect
+	 * state of USB charger
+	 *****************************************************************/
+	if (!strcmp(param->name, "usb input current limit")) {
+		pr_info("smblib_set_charge_param: set usb input current to 500mA\n");
+		val_u = 500000;
+	}
 
 	if (param->set_proc) {
 		rc = param->set_proc(param, val_u, &val_raw);
