@@ -6051,15 +6051,15 @@ static int cs40l2x_coeff_file_parse(struct cs40l2x_private *cs40l2x,
 		if (!strncmp(cs40l2x->wt_file,
 				CS40L2X_WT_FILE_NAME_MISSING,
 				CS40L2X_WT_FILE_NAME_LEN_MAX))
-			strncpy(cs40l2x->wt_file,
+			strlcpy(cs40l2x->wt_file,
 					CS40L2X_WT_FILE_NAME_DEFAULT,
 					CS40L2X_WT_FILE_NAME_LEN_MAX);
 
 		if (*wt_date != '\0')
-			strncpy(cs40l2x->wt_date, wt_date,
+			strlcpy(cs40l2x->wt_date, wt_date,
 					CS40L2X_WT_FILE_DATE_LEN_MAX);
 		else
-			strncpy(cs40l2x->wt_date,
+			strlcpy(cs40l2x->wt_date,
 					CS40L2X_WT_FILE_DATE_MISSING,
 					CS40L2X_WT_FILE_DATE_LEN_MAX);
 	}
@@ -6466,7 +6466,7 @@ static int cs40l2x_wavetable_swap(struct cs40l2x_private *cs40l2x,
 	if (ret1)
 		return ret1;
 
-	strncpy(cs40l2x->wt_file, wt_file, CS40L2X_WT_FILE_NAME_LEN_MAX);
+	strlcpy(cs40l2x->wt_file, wt_file, CS40L2X_WT_FILE_NAME_LEN_MAX);
 
 	ret1 = regmap_write(regmap,
 			cs40l2x_dsp_reg(cs40l2x, "NUMBEROFWAVES",
@@ -7974,10 +7974,10 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	cs40l2x->comp_enable_redc = !pdata->redc_comp_disable;
 	cs40l2x->comp_enable_f0 = true;
 
-	strncpy(cs40l2x->wt_file,
+	strlcpy(cs40l2x->wt_file,
 			CS40L2X_WT_FILE_NAME_MISSING,
 			CS40L2X_WT_FILE_NAME_LEN_MAX);
-	strncpy(cs40l2x->wt_date,
+	strlcpy(cs40l2x->wt_date,
 			CS40L2X_WT_FILE_DATE_MISSING,
 			CS40L2X_WT_FILE_DATE_LEN_MAX);
 
