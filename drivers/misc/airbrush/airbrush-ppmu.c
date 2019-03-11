@@ -235,7 +235,7 @@ int ppmu_irq_handler(unsigned int irq, struct airbrush_ppmu *ppmu)
 	struct airbrush_ppmu_state *ppmu_state = ppmu->state;
 
 	regvalue = ppmu_read(base + PPMU25_FLAG);
-	pr_err("flag: %x\n", regvalue);
+	pr_info("flag: %x\n", regvalue);
 	ppmu_write(regvalue, base + PPMU25_FLAG);
 
 	/* This is to handle interrupt due to CCNT overflow.*/
@@ -499,7 +499,7 @@ static ssize_t ppmu_stop_store(struct device *child,
 {
 	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
 
-	dev_err(child, "PPMU stop= %s\n", buf);
+	dev_info(child, "PPMU stop= %s\n", buf);
 	ppmu_stop(ppmu);
 
 	return count;
@@ -568,7 +568,7 @@ static int airbrush_ppmu_probe(struct platform_device *pdev)
 	if (sysfs_create_group(&pdev->dev.kobj, &ppmu_attrs_grp))
 		dev_err(&pdev->dev, "Sysfs Attribute Creation failed for PPMU\n");
 	else
-		dev_err(&pdev->dev, "Sysfs attribute created for PPMU\n");
+		dev_dbg(&pdev->dev, "Sysfs attribute created for PPMU\n");
 
 	return 0;
 }
