@@ -21,12 +21,6 @@
 #include <linux/time.h>
 
 /* Keep it in sync with faceauth firmware */
-#define FACEAUTH_OP_ERASE 0
-#define FACEAUTH_OP_ENROLL 1
-#define FACEAUTH_OP_VALIDATE 2
-#define FACEAUTH_OP_ENROLL_COMPLETE 3
-
-/* Keep it in sync with faceauth firmware */
 #define FACEAUTH_RESULT_SUCCESS 0
 #define FACEAUTH_RESULT_FAILURE 1
 

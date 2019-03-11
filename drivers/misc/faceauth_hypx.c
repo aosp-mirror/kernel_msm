@@ -558,8 +558,8 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 	struct faceauth_blob image_dot_left = { 0 }, image_dot_right = { 0 },
 			     image_flood = { 0 }, calibration = { 0 };
 
-	pass_images_to_el2 = data->operation == FACEAUTH_OP_ENROLL ||
-			     data->operation == FACEAUTH_OP_VALIDATE;
+	pass_images_to_el2 = data->operation == COMMAND_ENROLL ||
+			     data->operation == COMMAND_VALIDATE;
 
 	hypx_data = (void *)get_zeroed_page(0);
 
@@ -601,7 +601,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 		}
 	}
 
-	if (data->operation == FACEAUTH_OP_ENROLL_COMPLETE) {
+	if (data->operation == COMMAND_ENROLL_COMPLETE) {
 		memcpy(hypx_data->cache_flush_indexes,
 		       data->cache_flush_indexes,
 		       sizeof(data->cache_flush_indexes));
@@ -800,8 +800,8 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	current_offset = offsetof(struct faceauth_debug_entry, ab_state) +
 			 hypx_data->internal_state_struct_size;
 
-	if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
-	    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
+	if (debug_entry->ab_state.command == COMMAND_ENROLL ||
+	    debug_entry->ab_state.command == COMMAND_VALIDATE) {
 		err = hypx_copy_from_blob_userbuf(
 			dev, (uint8_t *)debug_entry + current_offset,
 			hypx_data->image_left, hypx_data->image_left_size,
@@ -854,7 +854,16 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	}
 
 	output_buffers = &(debug_entry->ab_state.output_buffers);
+	if (!output_buffers) {
+		err = -EMSGSIZE;
+		pr_err("No output buffer\n");
+		goto exit;
+	}
 	buffer_idx = output_buffers->buffer_count - 1;
+	if (buffer_idx < 0) {
+		pr_err("No available buffer");
+		goto exit;
+	}
 	buffer_list_size =
 		output_buffers->buffers[buffer_idx].offset_to_buffer +
 		output_buffers->buffers[buffer_idx].size;

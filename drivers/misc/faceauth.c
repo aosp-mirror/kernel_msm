@@ -15,13 +15,13 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/init.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
-#include <linux/module.h>
 #include <linux/faceauth.h>
 #include <linux/faceauth_shared.h>
 #include <linux/firmware.h>
+#include <linux/init.h>
+#include <linux/module.h>
 #include <misc/faceauth_hypx.h>
 
 #include <linux/mfd/abc-pcie.h>
@@ -30,35 +30,20 @@
 #include <linux/miscdevice.h>
 #include <linux/rwsem.h>
 #include <linux/time.h>
+#include <linux/uaccess.h>
 #include <linux/uio.h>
 #include <linux/workqueue.h>
 
 #include <abc-pcie-dma.h>
+#include <faceauth_addresses.h>
 #include "../mfd/abc-pcie-dma.h"
-
-/* ABC AON config regisetr offsets */
-#define SYSREG_AON 0x30000
-#define SYSREG_REG_GP_INT0 (SYSREG_AON + 0x37C)
-#define SYSREG_AON_IPU_REG29 (SYSREG_AON + 0x438)
-#define AB_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C4)
-#define ANGLE_RESULT_FLAG_ADDR (SYSREG_AON + 0x3C8)
-#define INPUT_FLAG_ADDR (SYSREG_AON + 0x3CC)
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000
-#define M0_VERBOSITY_LEVEL_FLAG_ADDR 0x21fffff0
-#define FEATURES_FLAG_ADDR 0x21fffff8
-#define CACHE_FLUSH_INDEXES_ADDR 0x22700000
-#define DOT_IMAGE_LEFT_ADDR 0x22800000
-#define DOT_IMAGE_RIGHT_ADDR 0x22900000
-#define FLOOD_IMAGE_ADDR 0x23000000
-#define CALIBRATION_ADDR 0x22C00000
-#define CALIBRATION_SIZE 0x2000
+#define CALIBRATION_SIZE 0x400
 
-#define AB_INTERNAL_STATE_ADDR 0x23e00000
-
-#define DEBUG_PRINT_ADDR 0x23f00000
-#define DEBUG_PRINT_SIZE 0x00100000
+/* This is to enable latency measurement */
+#define ENABLE_LATENCY_MEASUREMENT (1)
 
 /* This is to be enabled for dog food only */
 #define ENABLE_AIRBRUSH_DEBUG (1)
@@ -69,24 +54,31 @@
 #endif
 
 /* ABC FW and workload path */
-#define M0_FIRMWARE_PATH "m0_workload.fw"
+#define M0_FIRMWARE_PATH "faceauth.fw"
 
 /* Timeout */
 #define FACEAUTH_TIMEOUT 3000
-#define M0_POLLING_PAUSE 100
-#define M0_POLLING_INTERVAL 12
-
-#define INPUT_IMAGE_WIDTH 480
-#define INPUT_IMAGE_HEIGHT 640
+#define M0_POLLING_PAUSE 80
+#define M0_POLLING_INTERVAL 6
+/* Expected latency for FW to switch to faceauth (in us)*/
+#define CONTEXT_SWITCH_TO_FACEAUTH_US 6000
+/* Timeout for context switch (in ms) */
+#define CONTEXT_SWITCH_TIMEOUT 40
 
 /* Citadel */
 #define MAX_CACHE_SIZE 512
 
 struct faceauth_data {
 	bool hypx_enable;
+	/* This is to dynamically set the level of debugging in faceauth fw */
 	uint64_t m0_verbosity_level;
 	struct dentry *debugfs_root;
 	uint16_t session_id;
+	/* This counter holds the number of interaction between driver and
+	 * firmware, using which, faceauth firmware detects a missed command and
+	 * returns an error
+	 */
+	uint32_t session_counter;
 	bool can_transfer; /* Guarded by rwsem */
 	uint64_t retry_count;
 	atomic_t in_use;
@@ -133,40 +125,41 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 
 /* M0 Verbosity Level Encoding
 
-64 bits wide allocated as follows:
-	Bit  0   Errors
-	Bits 1-3 Performance
-	Bits 4-7 Scheduler
-	Bits 8-11 IPU
-	Bits 12-15 TPU
-	Bits 16-19 Post Process
-	Bits 20-63 Reserved
+   64 bits wide allocated as follows:
+   Bit  0   Errors
+   Bits 1-3 Performance
+   Bits 4-7 Scheduler
+   Bits 8-11 IPU
+   Bits 12-15 TPU
+   Bits 16-19 Post Process
+   Bits 20-63 Reserved
 
-In these slots, the debug levels are specified as follows:
-	Level 0: 0b0000
-	Level 1: 0b1000
-	Level 2: 0b0100
-	Level 3: 0b0010
-	Level 4: 0b0001
+   In these slots, the debug levels are specified as follows:
+   Level 0: 0b0000
+   Level 1: 0b1000
+   Level 2: 0b0100
+   Level 3: 0b0010
+   Level 4: 0b0001
 
-Level 0 means errors only. The other levels yield increasingly more information.
+   Level 0 means errors only. The other levels yield increasingly more
+   information.
 
-To set all these levels, you must write the number in either
-unsigned hexadecimal format or unisigned decimal format
-to a certain file: /d/faceauth/m0_verbosity_level
-If using hexadecimal, you need to put "0x" in front.
-For example:
-either
-adb shell "echo 0x108248 > /d/faceauth/m0_verbosity_level"
-or
-adb shell "echo 1081928 > /d/faceauth/m0_verbosity_level"
-will result in the following settings:
-	general errors level 0 (meaning ON)
-	performance level 2
-	scheduler level 3
-	IPU level 1
-	TPU level 0
-	post process level 4
+   To set all these levels, you must write the number in either
+   unsigned hexadecimal format or unisigned decimal format
+   to a certain file: /d/faceauth/m0_verbosity_level
+   If using hexadecimal, you need to put "0x" in front.
+   For example:
+   either
+   adb shell "echo 0x108248 > /d/faceauth/m0_verbosity_level"
+   or
+   adb shell "echo 1081928 > /d/faceauth/m0_verbosity_level"
+   will result in the following settings:
+   general errors level 0 (meaning ON)
+   performance level 2
+   scheduler level 3
+   IPU level 1
+   TPU level 0
+   post process level 4
 */
 
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
@@ -194,7 +187,13 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	uint32_t ab_result;
 	uint32_t angles;
 	uint32_t dma_read_value;
+	uint32_t fw_execution_status;
 	struct faceauth_data *data = file->private_data;
+#if ENABLE_LATENCY_MEASUREMENT
+	unsigned long faceauth_cntx_start, faceauth_cntx_complete,
+		faceauth_img_transfer_start, faceauth_img_transfer_complete,
+		faceauth_process_start, faceauth_process_complete;
+#endif
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data = { 0 };
 #endif
@@ -225,10 +224,45 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			goto exit;
 		}
 
-		pio_write_qw(M0_VERBOSITY_LEVEL_FLAG_ADDR,
+		pio_write_qw(DYNAMIC_VERBOSITY_RAM_ADDR,
 			     data->m0_verbosity_level);
-		pio_write_qw(FEATURES_FLAG_ADDR, init_step_data.features);
+		pio_write_qw(DISABLE_FEATURES_ADDR, init_step_data.features);
 
+		data->session_counter = 0x0;
+		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_NONE);
+		aon_config_write(SYSREG_AON_IPU_REG29, 4, M0_FIRMWARE_ADDR);
+		aon_config_write(SYSREG_REG_GP_INT0, 4, 1);
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_cntx_start = jiffies;
+#endif
+		/* Expected fw context switch latency < 6us, timeout after
+		 * 40ms
+		 * Expected latency is probably less than 6ms, if FW load is in
+		 * critical path, we can reduce this latency
+		 */
+		stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT);
+		usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
+			     CONTEXT_SWITCH_TO_FACEAUTH_US + 1);
+
+		for (;;) {
+			err = aon_config_read(ACK_TO_HOST_ADDR, 4,
+					      &fw_execution_status);
+			if (err) {
+				pr_err("Error reading completion flag\n");
+				goto exit;
+			}
+			if (fw_execution_status == STATUS_READY)
+				break;
+			if (time_before(stop, jiffies)) {
+				pr_err("Faceauth FW context switch timeout!\n");
+				err = -ETIME;
+				goto exit;
+			}
+			usleep_range(100, 1000);
+		}
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_cntx_complete = jiffies;
+#endif
 		break;
 	case FACEAUTH_DEV_IOC_START:
 		pr_info("faceauth start IOCTL\n");
@@ -242,8 +276,8 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		start_step_data.result = 0;
 		start_step_data.error_code = 0;
 
-		if (start_step_data.operation == FACEAUTH_OP_ENROLL ||
-		    start_step_data.operation == FACEAUTH_OP_VALIDATE) {
+		if (start_step_data.operation == COMMAND_ENROLL ||
+		    start_step_data.operation == COMMAND_VALIDATE) {
 			if (!start_step_data.image_dot_left_size) {
 				err = -EINVAL;
 				goto exit;
@@ -266,19 +300,25 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 
 			pr_info("Send images\n");
+#if ENABLE_LATENCY_MEASUREMENT
+			faceauth_img_transfer_start = jiffies;
+#endif
 			err = dma_send_images(&start_step_data);
 			if (err) {
 				pr_err("Error in sending workload\n");
 				goto exit;
 			}
-
+#if ENABLE_LATENCY_MEASUREMENT
+			faceauth_img_transfer_complete = jiffies;
+#endif
 			if (start_step_data.calibration) {
 				pr_info("Send calibration data\n");
 				err = dma_xfer(start_step_data.calibration,
 					       start_step_data.calibration_size,
-					       CALIBRATION_ADDR, DMA_TO_DEVICE);
+					       CALIBRATION_DATA_ADDR,
+					       DMA_TO_DEVICE);
 				if (err) {
-					pr_err("Error sending calibration data\n");
+					pr_err("Error sending calibration\n");
 					goto exit;
 				}
 			} else if (start_step_data.calibration_fd) {
@@ -286,7 +326,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				err = dma_xfer_dmabuf(
 					start_step_data.calibration_fd,
 					start_step_data.calibration_size,
-					CALIBRATION_ADDR, DMA_TO_DEVICE);
+					CALIBRATION_DATA_ADDR, DMA_TO_DEVICE);
 				if (err) {
 					pr_err("Error sending calibration data from ION\n");
 					goto exit;
@@ -294,7 +334,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
-		if (start_step_data.operation == FACEAUTH_OP_ENROLL_COMPLETE) {
+		if (start_step_data.operation == COMMAND_ENROLL_COMPLETE) {
 			err = process_cache_flush_idxs(
 				start_step_data.cache_flush_indexes,
 				start_step_data.cache_flush_size);
@@ -310,50 +350,30 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
-		/* Set M0 firmware address */
-		pr_info("Set M0 firmware addr = 0x%08x\n", M0_FIRMWARE_ADDR);
-		err = aon_config_write(SYSREG_AON_IPU_REG29, 4,
-				       M0_FIRMWARE_ADDR);
-		if (err) {
-			pr_err("Error setting faceauth FW address\n");
-			goto exit;
-		}
-
 		/* Set input flag */
 		ab_input = ((++data->session_id & 0xFFFF) << 16) |
 			   ((start_step_data.profile_id & 0xFF) << 8) |
 			   ((start_step_data.operation & 0xFF));
 		pr_info("Set faceauth input flag = 0x%08x\n", ab_input);
+		pr_info("Command counter %d\n", data->session_counter + 1);
 		err = aon_config_write(INPUT_FLAG_ADDR, 4, ab_input);
 		if (err) {
 			pr_err("Error setting faceauth FW address\n");
 			goto exit;
 		}
-
-		/* Reset completion flag */
-		pr_info("Clearing completion flag at 0x%08x\n",
-			AB_RESULT_FLAG_ADDR);
-		err = aon_config_write(AB_RESULT_FLAG_ADDR, 4, 0);
-		if (err) {
-			pr_err("Error clearing completion flag\n");
-			goto exit;
-		}
-
-		/* Trigger M0 Interrupt */
-		pr_info("Interrupting M0\n");
-		err = aon_config_write(SYSREG_REG_GP_INT0, 4, 1);
-		if (err) {
-			pr_err("Error interrupting AB\n");
-			goto exit;
-		}
-
-		/* Check completion flag */
+		aon_config_write(RESULT_FLAG_ADDR, 4, 0);
+		aon_config_write(INPUT_COUNTER_ADDR, 4,
+				 data->session_counter++);
+		aon_config_write(INPUT_COMMAND_ADDR, 4,
+				 start_step_data.operation);
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_process_start = jiffies;
+#endif
 		pr_info("Waiting for completion.\n");
 		msleep(M0_POLLING_PAUSE);
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
 		for (;;) {
-			err = aon_config_read(AB_RESULT_FLAG_ADDR, 4,
-					      &ab_result);
+			err = aon_config_read(RESULT_FLAG_ADDR, 4, &ab_result);
 			if (err) {
 				pr_err("Error reading completion flag\n");
 				goto exit;
@@ -361,6 +381,34 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 			if (ab_result != WORKLOAD_STATUS_NO_STATUS) {
 				pr_info("Faceauth workflow completes.\n");
+#if ENABLE_LATENCY_MEASUREMENT
+				pr_info("Faceauth latency report\n");
+				pr_info("Faceauth to reach img took %d ms\n",
+					jiffies_to_usecs(
+						faceauth_img_transfer_start -
+						ioctl_start) /
+						1000);
+				pr_info("Faceauth image transfer took %d ms\n",
+					jiffies_to_usecs(
+						faceauth_img_transfer_complete -
+						faceauth_img_transfer_start) /
+						1000);
+				pr_info("Faceauth firmware process took %d ms\n"
+						, jiffies_to_usecs(
+						faceauth_process_complete -
+						faceauth_process_start) /
+						1000);
+				pr_info("Faceauth start to took completion flag %d ms\n",
+						jiffies_to_usecs(
+						faceauth_process_complete -
+						ioctl_start) /
+						1000);
+				pr_info("Faceauth end-to-end took %d ms\n",
+					jiffies_to_usecs(jiffies -
+							 ioctl_start) /
+						1000);
+#endif
+
 				break;
 			}
 			if (time_before(stop, jiffies)) {
@@ -373,7 +421,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 						   polling_interval >> 1 :
 						   1;
 		}
-
+#if ENABLE_LATENCY_MEASUREMENT
+		faceauth_process_complete = jiffies;
+#endif
 #if ENABLE_AIRBRUSH_DEBUG
 		save_debug_start = jiffies;
 		enqueue_debug_data(data, false);
@@ -388,13 +438,15 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		start_step_data.result = ab_result;
 		start_step_data.angles = angles;
 
-		dma_read_dw(AB_INTERNAL_STATE_ADDR +
+		dma_read_dw(INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,
 					     error_code),
 			    &dma_read_value);
 		start_step_data.error_code = dma_read_value;
 
-		dma_read_dw(AB_INTERNAL_STATE_ADDR +
+		pr_err("Faceauth error code 0x%08x\n",
+		       start_step_data.error_code);
+		dma_read_dw(INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,
 					     faceauth_version),
 			    &dma_read_value);
@@ -406,6 +458,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		goto exit;
 		break;
 	case FACEAUTH_DEV_IOC_CLEANUP:
+		aon_config_write(INPUT_COUNTER_ADDR, 4,
+				 data->session_counter++);
+		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_EXIT);
 		/* TODO cleanup Airbrush DRAM */
 		pr_info("faceauth cleanup IOCTL\n");
 		break;
@@ -468,7 +523,7 @@ exit:
 	save_debug_jiffies = save_debug_end - save_debug_start;
 
 	if (save_debug_jiffies > 0) {
-		pr_info("Faceauth action took %dus, debug data save took %dus\n",
+		pr_info("Faceauth action took %dus, debug save took %dus\n",
 			jiffies_to_usecs(jiffies - ioctl_start -
 					 save_debug_jiffies),
 			jiffies_to_usecs(save_debug_jiffies));
@@ -476,7 +531,6 @@ exit:
 		pr_info("Faceauth action took %dus\n",
 			jiffies_to_usecs(jiffies - ioctl_start));
 	}
-
 	return err;
 }
 
@@ -534,8 +588,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		}
 
 		send_images_data =
-			start_step_data.operation == FACEAUTH_OP_ENROLL ||
-			start_step_data.operation == FACEAUTH_OP_VALIDATE;
+			start_step_data.operation == COMMAND_ENROLL ||
+			start_step_data.operation == COMMAND_VALIDATE;
 		if (send_images_data) {
 			if (!start_step_data.image_dot_left_size) {
 				err = -EINVAL;
@@ -570,7 +624,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 							      &start_step_data);
 
 			if (err) {
-				pr_err("Failed to get process results from EL2 %d\n",
+				pr_err("Failed to get results from EL2 %d\n",
 				       err);
 				goto exit;
 			}
@@ -860,7 +914,7 @@ static int dma_send_images(struct faceauth_start_data *data)
 	if (!data->image_dot_left_fd) {
 		pr_info("Send left dot image\n");
 		err = dma_xfer(data->image_dot_left, data->image_dot_left_size,
-			       DOT_IMAGE_LEFT_ADDR, DMA_TO_DEVICE);
+			       DOT_LEFT_IMAGE_ADDR, DMA_TO_DEVICE);
 		if (err) {
 			pr_err("Error sending left dot image\n");
 			return err;
@@ -869,7 +923,7 @@ static int dma_send_images(struct faceauth_start_data *data)
 		pr_info("Send left dot image from ION\n");
 		err = dma_xfer_dmabuf(data->image_dot_left_fd,
 				      data->image_dot_left_size,
-				      DOT_IMAGE_LEFT_ADDR, DMA_TO_DEVICE);
+				      DOT_LEFT_IMAGE_ADDR, DMA_TO_DEVICE);
 		if (err) {
 			pr_err("Error sending left dot image from ION\n");
 			return err;
@@ -878,7 +932,7 @@ static int dma_send_images(struct faceauth_start_data *data)
 	if (!data->image_dot_right_fd) {
 		pr_info("Send right dot image\n");
 		err = dma_xfer(data->image_dot_right,
-			       data->image_dot_right_size, DOT_IMAGE_RIGHT_ADDR,
+			       data->image_dot_right_size, DOT_RIGHT_IMAGE_ADDR,
 			       DMA_TO_DEVICE);
 		if (err) {
 			pr_err("Error sending right dot image\n");
@@ -888,7 +942,7 @@ static int dma_send_images(struct faceauth_start_data *data)
 		pr_info("Send right dot image from ION\n");
 		err = dma_xfer_dmabuf(data->image_dot_right_fd,
 				      data->image_dot_right_size,
-				      DOT_IMAGE_RIGHT_ADDR, DMA_TO_DEVICE);
+				      DOT_RIGHT_IMAGE_ADDR, DMA_TO_DEVICE);
 		if (err) {
 			pr_err("Error sending right dot image from ION\n");
 			return err;
@@ -924,8 +978,8 @@ static int dma_gather_debug_log(struct faceauth_debug_data *data)
 	int err = 0;
 
 	err = dma_xfer((void *)data->debug_buffer,
-		       min((uint32_t)DEBUG_PRINT_SIZE, data->debug_buffer_size),
-		       DEBUG_PRINT_ADDR, DMA_FROM_DEVICE);
+		       min((uint32_t)PRINTF_LOG_SIZE, data->debug_buffer_size),
+		       PRINTF_LOG_ADDR, DMA_FROM_DEVICE);
 
 	return err;
 }
@@ -1017,7 +1071,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 	int buffer_idx;
 	int buffer_list_size;
 
-	dma_read_dw(AB_INTERNAL_STATE_ADDR +
+	dma_read_dw(INTERNAL_STATE_ADDR +
 			    offsetof(struct faceauth_airbrush_state,
 				     internal_state_size),
 		    &internal_state_struct_size);
@@ -1033,18 +1087,18 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 	}
 
 	err = dma_xfer_vmalloc(&debug_entry->ab_state,
-			       internal_state_struct_size,
-			       AB_INTERNAL_STATE_ADDR, DMA_FROM_DEVICE);
+			       internal_state_struct_size, INTERNAL_STATE_ADDR,
+			       DMA_FROM_DEVICE);
 	if (err) {
 		pr_err("failed to gather debug data, err %d\n", err);
 		return err;
 	}
 
-	if (debug_entry->ab_state.command == FACEAUTH_OP_ENROLL ||
-	    debug_entry->ab_state.command == FACEAUTH_OP_VALIDATE) {
+	if (debug_entry->ab_state.command == COMMAND_ENROLL ||
+	    debug_entry->ab_state.command == COMMAND_VALIDATE) {
 		err = dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
 				       (INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT),
-				       DOT_IMAGE_LEFT_ADDR, DMA_FROM_DEVICE);
+				       DOT_LEFT_IMAGE_ADDR, DMA_FROM_DEVICE);
 		debug_entry->left_dot.offset_to_image = current_offset;
 		debug_entry->left_dot.image_size =
 			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
@@ -1056,7 +1110,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 
 		err = dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
 				       INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT,
-				       DOT_IMAGE_RIGHT_ADDR, DMA_FROM_DEVICE);
+				       DOT_RIGHT_IMAGE_ADDR, DMA_FROM_DEVICE);
 		debug_entry->right_dot.offset_to_image = current_offset;
 		debug_entry->right_dot.image_size =
 			INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
@@ -1087,7 +1141,14 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 	}
 
 	output_buffers = &debug_entry->ab_state.output_buffers;
+	if (!output_buffers) {
+		err = -EMSGSIZE;
+		return err;
+	}
 	buffer_idx = output_buffers->buffer_count - 1;
+	if (buffer_idx < 0) {
+		return err;
+	}
 	buffer_list_size =
 		output_buffers->buffers[buffer_idx].offset_to_buffer +
 		output_buffers->buffers[buffer_idx].size;
