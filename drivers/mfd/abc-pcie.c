@@ -764,7 +764,7 @@ int set_inbound_iatu(struct inb_region ir)
 
 		if (rdata & IATU_ENABLE)
 			break;
-		msleep(IATU_WAIT_TIME_IN_MSEC);
+		mdelay(IATU_WAIT_TIME_IN_MSEC);
 	}
 
 	if (!(rdata & IATU_ENABLE)) {
@@ -825,7 +825,7 @@ static int disable_inbound_iatu_region(u32 region)
 
 		if (!(rdata & IATU_ENABLE))
 			break;
-		msleep(IATU_WAIT_TIME_IN_MSEC);
+		mdelay(IATU_WAIT_TIME_IN_MSEC);
 	}
 
 	if (rdata & IATU_ENABLE) {
