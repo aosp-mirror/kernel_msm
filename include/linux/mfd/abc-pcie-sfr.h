@@ -49,8 +49,8 @@
 #define IATU_REGION_OFFSET				0x200
 #define IATU_ENABLE					(0x1 << 31)
 /* Parameters for the waiting for iATU enabled routine */
-#define IATU_ENABLE_DISABLE_RETRIES			(5)
-#define IATU_WAIT_TIME_IN_MSEC				(9)
+#define IATU_ENABLE_DISABLE_RETRIES			(15)
+#define IATU_WAIT_TIME_IN_MSEC				(3)
 
 /* Inbound IATU lower target address must be aligned to a
  * CX_ATU_MIN_REGION_SIZE kB boundary (in address match mode); and to the
