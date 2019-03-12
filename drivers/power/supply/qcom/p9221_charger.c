@@ -187,9 +187,13 @@ static int p9221_cook_reg(struct p9221_charger_data *charger, u16 reg,
 	/* The following are 12-bit ADC raw values */
 	case P9221R5_VOUT_ADC_REG:
 	case P9221R5_IOUT_ADC_REG:
-	case P9221R5_DIE_TEMP_ADC_REG:
 	case P9221R5_EXT_TEMP_REG:
 		*val = raw_data & 0xFFF;
+		break;
+
+	/* the formula to translate it into milli-degreeC  */
+	case P9221R5_DIE_TEMP_ADC_REG:
+		*val = (raw_data * 10 / 107 - 247) * 10;
 		break;
 
 	/* The following are in 0.1 mill- and need to go to micro- */
