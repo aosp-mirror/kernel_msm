@@ -352,6 +352,11 @@ static dma_addr_t hypx_create_blob_dmabuf(struct device *dev,
 			page_to_phys(sg_page(sg)) / PAGE_SIZE;
 		WARN_ON(sg->length % PAGE_SIZE);
 		blob->hypx_blob->segments[i].pages = sg->length / PAGE_SIZE;
+		dma_sync_single_for_device(
+			dev,
+			(uint64_t)blob->hypx_blob->segments[i].addr * PAGE_SIZE,
+			blob->hypx_blob->segments[i].pages * PAGE_SIZE,
+			DMA_TO_DEVICE);
 	}
 
 	/*
@@ -677,9 +682,8 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 
 	hypx_data = (void *)get_zeroed_page(0);
 
-	hypx_data->debug_buffer =
-		hypx_create_blob_userbuf(dev, data->debug_buffer,
-					 data->debug_buffer_size);
+	hypx_data->debug_buffer = hypx_create_blob_userbuf(
+		dev, data->debug_buffer, data->debug_buffer_size);
 	hypx_data->debug_buffer_size = data->debug_buffer_size;
 
 	if (!hypx_data->debug_buffer) {
