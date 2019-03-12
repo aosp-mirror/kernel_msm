@@ -5503,6 +5503,26 @@ static void msm_pcie_config_l0s_enable_all(struct msm_pcie_dev_t *dev)
 		pci_walk_bus(dev->dev->bus, msm_pcie_config_l0s_enable, dev);
 }
 
+void msm_pcie_set_l1ss_state(struct pci_dev *dev,
+	enum msm_pcie_pm_l1ss l1ss)
+{
+	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(dev->bus);
+	bool set_l11 = l1ss >= MSM_PCIE_PM_L1SS_L11;
+	bool set_l12 = l1ss >= MSM_PCIE_PM_L1SS_L12;
+	bool enable = set_l11 || set_l12;
+
+	msm_pcie_config_l1ss_disable_all(pcie_dev, pcie_dev->dev->bus);
+	if (!enable)
+		return;
+
+	pcie_dev->l1_1_pcipm_supported = set_l11;
+	pcie_dev->l1_2_pcipm_supported = set_l12;
+	pcie_dev->l1_1_aspm_supported = set_l11;
+	pcie_dev->l1_2_aspm_supported = set_l12;
+
+	msm_pcie_config_l1ss_enable_all(pcie_dev);
+}
+
 static void msm_pcie_config_l1(struct msm_pcie_dev_t *dev,
 				struct pci_dev *pdev, bool enable)
 {

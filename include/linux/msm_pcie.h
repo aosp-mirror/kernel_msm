@@ -30,6 +30,12 @@ enum msm_pcie_pm_opt {
 	MSM_PCIE_ENABLE_PC,
 };
 
+enum msm_pcie_pm_l1ss {
+	MSM_PCIE_PM_L1SS_DISABLE,
+	MSM_PCIE_PM_L1SS_L11,
+	MSM_PCIE_PM_L1SS_L12,
+};
+
 enum msm_pcie_event {
 	MSM_PCIE_EVENT_INVALID = 0,
 	MSM_PCIE_EVENT_LINKDOWN = 0x1,
@@ -74,6 +80,14 @@ static inline int msm_msi_init(struct device *dev)
 #endif
 
 #ifdef CONFIG_PCI_MSM
+/**
+ * msm_pcie_set_l1ss_state - configure active l1ss
+ * @dev: pci device structure
+ * @l1ss - the l1ss to enable - lower power sub states will be disabled
+ */
+void msm_pcie_set_l1ss_state(struct pci_dev *dev,
+	enum msm_pcie_pm_l1ss l1ss);
+
 /**
  * msm_pcie_pm_control - control the power state of a PCIe link.
  * @pm_opt:	power management operation
@@ -175,6 +189,11 @@ int msm_pcie_debug_info(struct pci_dev *dev, u32 option, u32 base,
 			u32 offset, u32 mask, u32 value);
 
 #else /* !CONFIG_PCI_MSM */
+void msm_pcie_set_l1ss_state(struct pci_dev *dev,
+	enum msm_pcie_pm_l1ss l1ss)
+{
+}
+
 static inline int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr,
 			void *user, void *data, u32 options)
 {
