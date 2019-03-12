@@ -78,8 +78,12 @@
 	};
 };
 
-&mdss_dsi{
+&mdss_dsi {
 	qcom,mdss_dsi_ctrl0@1ac8000 {
-		/delete-property/ vdd-supply;
+		/delete-property/ bklt-supply;
 	};
+};
+
+&soc {
+	/delete-node/ bob_vreg;
 };

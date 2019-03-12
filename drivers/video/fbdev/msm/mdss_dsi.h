@@ -434,6 +434,7 @@ struct mdss_dsi_ctrl_pdata {
 	int disp_te_gpio;
 	int rst_gpio;
 	int disp_en_gpio;
+	int disp_avdden_gpio;
 	int bklt_en_gpio;
 	int vdd_ext_gpio;
 	int mode_gpio;
@@ -703,6 +704,8 @@ void mdss_dsi_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct dsi_panel_cmds *pcmds, u32 flags);
 int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char page,
 		char addr, void (*fxn)(int), char *rbuf, int len);
+
+void mdss_dsi_buck_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable);
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {

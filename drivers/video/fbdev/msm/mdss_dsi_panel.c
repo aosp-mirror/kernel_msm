@@ -253,6 +253,7 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 							bool enable)
 {
+	struct mdss_panel_info *pinfo = NULL;
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 
 	if (pdata == NULL) {
@@ -260,10 +261,12 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 		return;
 	}
 
+	pinfo = &pdata->panel_info;
+
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 						panel_data);
 
-	pr_info("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
+	pr_err("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
 
 	if (ctrl->idle == enable)
 		return;
@@ -276,7 +279,15 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 			ctrl->idle = true;
 			pr_debug("Idle on\n");
 		}
+
+		if (pinfo->buck_boost_disable) {
+			mdss_dsi_buck_boost_enable(ctrl, 0);
+		}
 	} else {
+		if (pinfo->buck_boost_disable) {
+			mdss_dsi_buck_boost_enable(ctrl, 1);
+		}
+
 		if (ctrl->idle_off_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds,
 					CMD_REQ_COMMIT);
@@ -373,6 +384,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return -EINVAL;
 	}
 
+	pr_err("%s: reset\n", __func__);
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
@@ -2184,6 +2196,15 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->lp_off_cmds,
 			"qcom,mdss-dsi-lp-mode-off", NULL);
+
+	pinfo->pwr_off_disable = of_property_read_bool(np,
+		"qcom,mdss-dsi-power-off-disable");
+
+	pinfo->tear_disable = of_property_read_bool(np,
+		"qcom,mdss-dsi-tear-disable");
+
+	pinfo->buck_boost_disable = of_property_read_bool(np,
+		"qcom,mdss-dsi-buck-boost-disable");
 
 	return 0;
 }

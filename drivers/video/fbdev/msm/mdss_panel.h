@@ -774,6 +774,10 @@ struct mdss_panel_info {
 
 	/* HDR properties of display panel*/
 	struct mdss_panel_hdr_properties hdr_properties;
+
+	bool tear_disable;
+	bool pwr_off_disable;
+	bool buck_boost_disable;
 };
 
 struct mdss_panel_timing {
