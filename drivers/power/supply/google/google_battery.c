@@ -1865,6 +1865,17 @@ static int gbatt_get_property(struct power_supply *psy,
 		val->intval = 0;
 		break;
 
+	case POWER_SUPPLY_PROP_STATUS:
+		if (batt_drv->ssoc_state.rl_status != BATT_RL_STATUS_NONE) {
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+		} else if (batt_drv->fg_psy) {
+			err = power_supply_get_property(batt_drv->fg_psy,
+								psp, val);
+		} else {
+			err = -EINVAL;
+		}
+		break;
+
 	case POWER_SUPPLY_PROP_RECHARGE_SOC:
 		val->intval = ssoc_state->rl_soc_threshold;
 		break;
