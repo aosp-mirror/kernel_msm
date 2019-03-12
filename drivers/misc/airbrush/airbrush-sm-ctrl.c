@@ -1723,6 +1723,7 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 	return ret;
 }
 
+#ifdef CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS
 static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		unsigned long arg)
 {
@@ -1914,6 +1915,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 
 	return ret;
 }
+#endif /* CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS */
 
 static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		unsigned long arg)
@@ -1923,9 +1925,11 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 	struct ab_state_context *sc = sess->sc;
 	int state;
 
+#ifdef CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS
 	ret = ab_sm_misc_ioctl_debug(fp, cmd, arg);
 	if (ret != -EINVAL)
 		return ret;
+#endif /* CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS */
 
 	switch (cmd) {
 	case AB_SM_ASYNC_NOTIFY:

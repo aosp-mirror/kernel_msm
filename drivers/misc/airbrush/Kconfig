@@ -26,4 +26,11 @@ config AIRBRUSH_SM_PROFILE
 	---help---
 	  This option enables profiling support for airbrush state manager.
 
+config AIRBRUSH_SM_DEBUG_IOCTLS
+	depends on AIRBRUSH_SM
+	bool "Debug ioctls for Airbrush State Manager"
+	default "y"
+	---help---
+	  This option enables debug ioctls for airbrush state manager.
+
 endmenu
