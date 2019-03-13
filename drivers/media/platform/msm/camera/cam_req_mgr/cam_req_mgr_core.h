@@ -334,8 +334,9 @@ struct cam_req_mgr_core_link {
 	spinlock_t                           link_state_spin_lock;
 	uint32_t                             subscribe_event;
 	uint32_t                             trigger_mask;
-	struct cam_req_mgr_core_link        *sync_link;
-	bool                                 sync_link_sof_skip;
+	struct cam_req_mgr_core_link        *sync_links[MAX_LINKS_PER_SESSION];
+	int32_t                              sync_links_num;
+	int32_t                              sync_link_sof_skip_cnt;
 	int32_t                              open_req_cnt;
 	uint32_t                             last_flush_id;
 	atomic_t                             is_used;
@@ -478,4 +479,3 @@ int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control);
 int cam_req_mgr_tag_laser(struct cam_req_mgr_message *msg);
 
 #endif
-
