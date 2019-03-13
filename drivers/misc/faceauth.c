@@ -87,6 +87,7 @@ struct faceauth_data {
 	struct device *device;
 	struct delayed_work listener_init;
 	struct notifier_block pcie_link_blocking_nb;
+	bool is_secure_camera;
 };
 
 static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size);
@@ -216,6 +217,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			err = -EFAULT;
 			goto exit;
 		}
+
+		data->is_secure_camera =
+			init_step_data.features & SECURE_CAMERA_DATA;
 
 		err = dma_send_fw(data->device, M0_FIRMWARE_PATH,
 				  M0_FIRMWARE_ADDR);
@@ -393,13 +397,13 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 						faceauth_img_transfer_complete -
 						faceauth_img_transfer_start) /
 						1000);
-				pr_info("Faceauth firmware process took %d ms\n"
-						, jiffies_to_usecs(
+				pr_info("Faceauth firmware process took %d ms\n",
+					jiffies_to_usecs(
 						faceauth_process_complete -
 						faceauth_process_start) /
 						1000);
 				pr_info("Faceauth start to took completion flag %d ms\n",
-						jiffies_to_usecs(
+					jiffies_to_usecs(
 						faceauth_process_complete -
 						ioctl_start) /
 						1000);
@@ -462,6 +466,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				 data->session_counter++);
 		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_EXIT);
 		/* TODO cleanup Airbrush DRAM */
+		data->is_secure_camera = false;
 		pr_info("faceauth cleanup IOCTL\n");
 		break;
 	case FACEAUTH_DEV_IOC_DEBUG:
@@ -572,6 +577,9 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		if (err < 0)
 			goto exit;
 
+		data->is_secure_camera =
+			init_step_data.features & SECURE_CAMERA_DATA;
+
 		err = el2_faceauth_init(data->device, &init_step_data,
 					data->m0_verbosity_level);
 		if (err < 0)
@@ -611,7 +619,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		if (err)
 			goto exit;
 
-		err = el2_faceauth_process(data->device, &start_step_data);
+		err = el2_faceauth_process(data->device, &start_step_data,
+					   data->is_secure_camera);
 		if (err)
 			goto exit;
 
@@ -663,6 +672,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 		/* TODO cleanup Airbrush DRAM */
 		pr_info("el2: faceauth cleanup IOCTL\n");
 		el2_faceauth_cleanup(data->device);
+		data->is_secure_camera = false;
 		break;
 	case FACEAUTH_DEV_IOC_DEBUG:
 #if ENABLE_AIRBRUSH_DEBUG

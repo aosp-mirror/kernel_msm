@@ -23,7 +23,8 @@
 int el2_faceauth_wait_pil_dma_over(void);
 int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		      uint64_t verbosity_level);
-int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data);
+int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
+			 bool is_secure_camera);
 int el2_faceauth_get_process_result(struct device *dev,
 				    struct faceauth_start_data *data);
 int el2_faceauth_cleanup(struct device *dev);

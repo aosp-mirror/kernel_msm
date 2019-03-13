@@ -84,6 +84,8 @@ struct hypx_fa_process {
 	uint32_t image_dot_right_size;
 	uint32_t image_flood_size;
 	uint32_t calibration_size;
+
+	uint32_t is_secure_camera;
 } __packed;
 
 struct hypx_fa_process_results {
@@ -118,6 +120,7 @@ struct faceauth_blob {
 	struct dma_buf *dma_buf;
 	struct dma_buf_attachment *attach;
 	struct sg_table *sg_table;
+	bool is_secure_camera;
 };
 
 static void hypx_free_blob_userbuf(phys_addr_t blob_phy, bool reassign)
@@ -301,7 +304,8 @@ exit:
 static dma_addr_t hypx_create_blob_dmabuf(struct device *dev,
 					  struct faceauth_blob *blob,
 					  int dmabuf_fd,
-					  enum dma_data_direction dir)
+					  enum dma_data_direction dir,
+					  bool is_secure_camera)
 {
 	struct scatterlist *sg;
 	int i, ret = 0;
@@ -311,6 +315,7 @@ static dma_addr_t hypx_create_blob_dmabuf(struct device *dev,
 	int dest_perm[] = { PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE };
 
 	blob->direction = dir;
+	blob->is_secure_camera = is_secure_camera;
 
 	blob->dma_buf = dma_buf_get(dmabuf_fd);
 	if (IS_ERR(blob->dma_buf)) {
@@ -359,16 +364,18 @@ static dma_addr_t hypx_create_blob_dmabuf(struct device *dev,
 			DMA_TO_DEVICE);
 	}
 
-	/*
-	 * In the future this hyp_assign call will be invoked for
-	 * Camera buffers by camera stack itself.
-	 * We will need to assign only calibration/debug buffers.
-	 */
-	ret = hyp_assign_table(blob->sg_table, source_vm, ARRAY_SIZE(source_vm),
-			       dest_vm, dest_perm, ARRAY_SIZE(dest_vm));
-	if (ret) {
-		pr_err("hyp_assign_table error: %d\n", ret);
-		goto err5;
+	if (!is_secure_camera) {
+		/*
+		 * We need to re-assign only buffers that come from HLOS.
+		 * Secure camera buffers are already assigned to EXT_DSP(RO)
+		 */
+		ret = hyp_assign_table(blob->sg_table, source_vm,
+				       ARRAY_SIZE(source_vm), dest_vm,
+				       dest_perm, ARRAY_SIZE(dest_vm));
+		if (ret) {
+			pr_err("hyp_assign_table error: %d\n", ret);
+			goto err5;
+		}
 	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(blob->hypx_blob),
@@ -396,10 +403,13 @@ static void hypx_free_blob_dmabuf(struct device *dev,
 	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 	int ret = 0;
 
-	ret = hyp_assign_table(blob->sg_table, source_vm, ARRAY_SIZE(source_vm),
-			       dest_vm, dest_perm, ARRAY_SIZE(dest_vm));
-	if (ret)
-		pr_err("hyp_assign_table error: %d\n", ret);
+	if (!blob->is_secure_camera) {
+		ret = hyp_assign_table(blob->sg_table, source_vm,
+				       ARRAY_SIZE(source_vm), dest_vm,
+				       dest_perm, ARRAY_SIZE(dest_vm));
+		if (ret)
+			pr_err("hyp_assign_table error: %d\n", ret);
+	}
 
 	dma_buf_unmap_attachment(blob->attach, blob->sg_table, blob->direction);
 	dma_buf_detach(blob->dma_buf, blob->attach);
@@ -410,18 +420,24 @@ static void hypx_free_blob_dmabuf(struct device *dev,
 static dma_addr_t hypx_create_blob(struct device *dev,
 				   struct faceauth_blob *blob,
 				   void __user *buffer, int dma_fd, size_t size,
-				   enum dma_data_direction dir)
+				   enum dma_data_direction dir,
+				   bool is_secure_camera)
 {
 	dma_addr_t hypx_blob_dma_addr;
 
 	if (buffer) {
+		if (is_secure_camera) {
+			pr_err("Secure camera does not provide data as user buffer\n");
+			return 0;
+		}
 		blob->buffer = buffer;
 		hypx_blob_dma_addr =
 			hypx_create_blob_userbuf(dev, buffer, size);
 		blob->hypx_blob = phys_to_virt(hypx_blob_dma_addr);
 		return hypx_blob_dma_addr;
 	} else {
-		return hypx_create_blob_dmabuf(dev, blob, dma_fd, dir);
+		return hypx_create_blob_dmabuf(dev, blob, dma_fd, dir,
+					       is_secure_camera);
 	}
 }
 
@@ -548,7 +564,8 @@ int el2_faceauth_cleanup(struct device *dev)
 	return ret;
 }
 
-int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
+int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
+			 bool is_secure_camera)
 {
 	int ret = 0;
 	struct scm_desc desc = { 0 };
@@ -563,13 +580,14 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 
 	hypx_data = (void *)get_zeroed_page(0);
 
+	hypx_data->is_secure_camera = is_secure_camera;
 	hypx_data->operation = data->operation;
 	hypx_data->profile_id = data->profile_id;
 	if (pass_images_to_el2) {
 		hypx_data->image_dot_left = hypx_create_blob(
 			dev, &image_dot_left, data->image_dot_left,
 			data->image_dot_left_fd, data->image_dot_left_size,
-			DMA_TO_DEVICE);
+			DMA_TO_DEVICE, is_secure_camera);
 		hypx_data->image_dot_left_size = data->image_dot_left_size;
 		if (!hypx_data->image_dot_left)
 			goto err4;
@@ -577,7 +595,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 		hypx_data->image_dot_right = hypx_create_blob(
 			dev, &image_dot_right, data->image_dot_right,
 			data->image_dot_right_fd, data->image_dot_right_size,
-			DMA_TO_DEVICE);
+			DMA_TO_DEVICE, is_secure_camera);
 		hypx_data->image_dot_right_size = data->image_dot_right_size;
 		if (!hypx_data->image_dot_right)
 			goto err3;
@@ -585,7 +603,8 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 		hypx_data->image_flood =
 			hypx_create_blob(dev, &image_flood, data->image_flood,
 					 data->image_flood_fd,
-					 data->image_flood_size, DMA_TO_DEVICE);
+					 data->image_flood_size, DMA_TO_DEVICE,
+					 is_secure_camera);
 		hypx_data->image_flood_size = data->image_flood_size;
 		if (!hypx_data->image_flood)
 			goto err2;
@@ -594,7 +613,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data)
 			hypx_data->calibration = hypx_create_blob(
 				dev, &calibration, data->calibration,
 				data->calibration_fd, data->calibration_size,
-				DMA_TO_DEVICE);
+				DMA_TO_DEVICE, false);
 			hypx_data->calibration_size = data->calibration_size;
 			if (!hypx_data->calibration)
 				goto err1;
