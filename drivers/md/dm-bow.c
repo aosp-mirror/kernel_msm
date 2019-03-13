@@ -49,6 +49,7 @@ struct bow_range {
 	struct rb_node		node;
 	sector_t		sector;
 	enum {
+		INVALID,	/* Type not set */
 		SECTOR0,	/* First sector - holds log record */
 		SECTOR0_CURRENT,/* Live contents of sector0 */
 		UNCHANGED,	/* Original contents */
@@ -57,9 +58,11 @@ struct bow_range {
 		BACKUP,		/* Range is being used as a backup */
 		TOP,		/* Final range - sector is size of device */
 	} type;
+	struct list_head	trimmed_list; /* list of TRIMMED ranges */
 };
 
 static const char * const readable_type[] = {
+	"Invalid",
 	"Sector0",
 	"Sector0_current",
 	"Unchanged",
@@ -87,6 +90,7 @@ struct bow_context {
 	atomic_t state; /* One of the enum state values above */
 	u64 trims_total;
 	struct log_sector *log_sector;
+	struct list_head trimmed_list;
 };
 
 sector_t range_top(struct bow_range *br)
@@ -163,7 +167,7 @@ void add_before(struct rb_root *ranges, struct bow_range *new_br,
  * and type specific fields populated.
  * If bi_iter runs off the end of the range, bi_iter is truncated accordingly
  */
-static int split_range(struct rb_root *ranges, struct bow_range **br,
+static int split_range(struct bow_context *bc, struct bow_range **br,
 		       struct bvec_iter *bi_iter)
 {
 	struct bow_range *new_br;
@@ -181,7 +185,10 @@ static int split_range(struct rb_root *ranges, struct bow_range **br,
 			return -ENOMEM;
 
 		*leading_br = **br;
-		add_before(ranges, leading_br, *br);
+		if (leading_br->type == TRIMMED)
+			list_add(&leading_br->trimmed_list, &bc->trimmed_list);
+
+		add_before(&bc->ranges, leading_br, *br);
 		(*br)->sector = bi_iter->bi_sector;
 	}
 
@@ -198,7 +205,7 @@ static int split_range(struct rb_root *ranges, struct bow_range **br,
 
 	new_br->sector = (*br)->sector;
 	(*br)->sector = bvec_top(bi_iter);
-	add_before(ranges, new_br, *br);
+	add_before(&bc->ranges, new_br, *br);
 	*br = new_br;
 
 	return 0;
@@ -216,20 +223,28 @@ static void set_type(struct bow_context *bc, struct bow_range **br, int type)
 	struct bow_range *next = container_of(rb_next(&(*br)->node),
 						      struct bow_range, node);
 
-	if ((*br)->type == TRIMMED)
+	if ((*br)->type == TRIMMED) {
 		bc->trims_total -= range_size(*br);
+		list_del(&(*br)->trimmed_list);
+	}
 
-	if (type == TRIMMED)
+	if (type == TRIMMED) {
 		bc->trims_total += range_size(*br);
+		list_add(&(*br)->trimmed_list, &bc->trimmed_list);
+	}
 
 	(*br)->type = type;
 
 	if (next->type == type) {
+		if (type == TRIMMED)
+			list_del(&next->trimmed_list);
 		rb_erase(&next->node, &bc->ranges);
 		kfree(next);
 	}
 
 	if (prev->type == type) {
+		if (type == TRIMMED)
+			list_del(&(*br)->trimmed_list);
 		rb_erase(&(*br)->node, &bc->ranges);
 		kfree(*br);
 	}
@@ -237,19 +252,15 @@ static void set_type(struct bow_context *bc, struct bow_range **br, int type)
 	*br = NULL;
 }
 
-static struct bow_range *find_free_range(struct rb_root *ranges)
+static struct bow_range *find_free_range(struct bow_context *bc)
 {
-	struct rb_node *i;
-
-	for (i = rb_first(ranges); i; i = rb_next(i)) {
-		struct bow_range *br = container_of(i, struct bow_range, node);
-
-		if (br->type == TRIMMED)
-			return br;
+	if (list_empty(&bc->trimmed_list)) {
+		DMERR("Unable to find free space to back up to");
+		return NULL;
 	}
 
-	DMERR("Unable to find free space to back up to");
-	return NULL;
+	return list_first_entry(&bc->trimmed_list, struct bow_range,
+				trimmed_list);
 }
 
 static sector_t sector_to_page(struct bow_context const *bc, sector_t sector)
@@ -330,13 +341,13 @@ static int backup_log_sector(struct bow_context *bc)
 		return -EIO;
 	}
 
-	free_br = find_free_range(&bc->ranges);
+	free_br = find_free_range(bc);
 	/* No space left - return this error to userspace */
 	if (!free_br)
 		return -ENOSPC;
 	bi_iter.bi_sector = free_br->sector;
 	bi_iter.bi_size = bc->block_size;
-	ret = split_range(&bc->ranges, &free_br, &bi_iter);
+	ret = split_range(bc, &free_br, &bi_iter);
 	if (ret)
 		return ret;
 	if (bi_iter.bi_size != bc->block_size) {
@@ -413,7 +424,7 @@ static int prepare_log(struct bow_context *bc)
 	}
 	bi_iter.bi_sector = 0;
 	bi_iter.bi_size = bc->block_size;
-	ret = split_range(&bc->ranges, &first_br, &bi_iter);
+	ret = split_range(bc, &first_br, &bi_iter);
 	if (ret)
 		return ret;
 	first_br->type = SECTOR0;
@@ -423,12 +434,12 @@ static int prepare_log(struct bow_context *bc)
 	}
 
 	/* Find free sector for active sector0 reads/writes */
-	free_br = find_free_range(&bc->ranges);
+	free_br = find_free_range(bc);
 	if (!free_br)
 		return -ENOSPC;
 	bi_iter.bi_sector = free_br->sector;
 	bi_iter.bi_size = bc->block_size;
-	ret = split_range(&bc->ranges, &free_br, &bi_iter);
+	ret = split_range(bc, &free_br, &bi_iter);
 	if (ret)
 		return ret;
 	free_br->type = SECTOR0_CURRENT;
@@ -441,12 +452,12 @@ static int prepare_log(struct bow_context *bc)
 	bc->log_sector->sector0 = free_br->sector;
 
 	/* Find free sector to back up original sector zero */
-	free_br = find_free_range(&bc->ranges);
+	free_br = find_free_range(bc);
 	if (!free_br)
 		return -ENOSPC;
 	bi_iter.bi_sector = free_br->sector;
 	bi_iter.bi_size = bc->block_size;
-	ret = split_range(&bc->ranges, &free_br, &bi_iter);
+	ret = split_range(bc, &free_br, &bi_iter);
 	if (ret)
 		return ret;
 
@@ -673,6 +684,8 @@ static int dm_bow_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad;
 	}
 
+	INIT_LIST_HEAD(&bc->trimmed_list);
+
 	br = kzalloc(sizeof(*br), GFP_KERNEL);
 	if (!br) {
 		ti->error = "Cannot allocate ranges";
@@ -723,14 +736,14 @@ static int prepare_unchanged_range(struct bow_context *bc, struct bow_range *br,
 	sector_t sector0;
 
 	/* Find a free range */
-	backup_br = find_free_range(&bc->ranges);
+	backup_br = find_free_range(bc);
 	if (!backup_br)
 		return -ENOSPC;
 
 	/* Carve out a backup range. This may be smaller than the br given */
 	backup_bi.bi_sector = backup_br->sector;
 	backup_bi.bi_size = min(range_size(backup_br), bi_iter->bi_size);
-	ret = split_range(&bc->ranges, &backup_br, &backup_bi);
+	ret = split_range(bc, &backup_br, &backup_bi);
 	if (ret)
 		return ret;
 
@@ -739,7 +752,7 @@ static int prepare_unchanged_range(struct bow_context *bc, struct bow_range *br,
 	 * br since the backup br is smaller than the source range and iterator
 	 */
 	bi_iter->bi_size = backup_bi.bi_size;
-	ret = split_range(&bc->ranges, &br, bi_iter);
+	ret = split_range(bc, &br, bi_iter);
 	if (ret)
 		return ret;
 	if (range_size(br) != range_size(backup_br)) {
@@ -765,6 +778,8 @@ static int prepare_unchanged_range(struct bow_context *bc, struct bow_range *br,
 	 */
 	original_type = br->type;
 	sector0 = backup_br->sector;
+	if (backup_br->type == TRIMMED)
+		list_del(&backup_br->trimmed_list);
 	backup_br->type = br->type == SECTOR0_CURRENT ? SECTOR0_CURRENT
 						      : BACKUP;
 	br->type = CHANGED;
@@ -793,7 +808,7 @@ static int prepare_free_range(struct bow_context *bc, struct bow_range *br,
 {
 	int ret;
 
-	ret = split_range(&bc->ranges, &br, bi_iter);
+	ret = split_range(bc, &br, bi_iter);
 	if (ret)
 		return ret;
 	set_type(bc, &br, CHANGED);
@@ -935,7 +950,7 @@ static int add_trim(struct bow_context *bc, struct bio *bio)
 
 		switch (br->type) {
 		case UNCHANGED:
-			if (!split_range(&bc->ranges, &br, &bi_iter))
+			if (!split_range(bc, &br, &bi_iter))
 				set_type(bc, &br, TRIMMED);
 			break;
 
@@ -977,7 +992,7 @@ static int remove_trim(struct bow_context *bc, struct bio *bio)
 			break;
 
 		case TRIMMED:
-			if (!split_range(&bc->ranges, &br, &bi_iter))
+			if (!split_range(bc, &br, &bi_iter))
 				set_type(bc, &br, UNCHANGED);
 			break;
 
@@ -1049,10 +1064,22 @@ static void dm_bow_tablestatus(struct dm_target *ti, char *result,
 	char *end = result + maxlen;
 	struct bow_context *bc = ti->private;
 	struct rb_node *i;
+	int trimmed_list_length = 0;
+	int trimmed_range_count = 0;
+	struct bow_range *br;
 
 	if (maxlen == 0)
 		return;
 	result[0] = 0;
+
+	list_for_each_entry(br, &bc->trimmed_list, trimmed_list)
+		if (br->type == TRIMMED) {
+			++trimmed_list_length;
+		} else {
+			scnprintf(result, end - result,
+				  "ERROR: non-trimmed entry in trimmed_list");
+			return;
+		}
 
 	if (!rb_first(&bc->ranges)) {
 		scnprintf(result, end - result, "ERROR: Empty ranges");
@@ -1078,8 +1105,10 @@ static void dm_bow_tablestatus(struct dm_target *ti, char *result,
 		if (result >= end)
 			return;
 
-		switch (br->type) {
-		case TOP:
+		if (br->type == TRIMMED)
+			++trimmed_range_count;
+
+		if (br->type == TOP) {
 			if (br->sector != ti->len) {
 				scnprintf(result, end - result,
 					 "\nERROR: Top sector is incorrect");
@@ -1089,15 +1118,13 @@ static void dm_bow_tablestatus(struct dm_target *ti, char *result,
 				scnprintf(result, end - result,
 					  "\nERROR: Top sector is not last");
 			}
-			return;
 
-		default:
 			break;
 		}
 
 		if (!rb_next(i)) {
 			scnprintf(result, end - result,
-				  "\nLast range not of type TOP");
+				  "\nERROR: Last range not of type TOP");
 			return;
 		}
 
@@ -1107,6 +1134,10 @@ static void dm_bow_tablestatus(struct dm_target *ti, char *result,
 			return;
 		}
 	}
+
+	if (trimmed_range_count != trimmed_list_length)
+		scnprintf(result, end - result,
+			  "\nERROR: not all trimmed ranges in trimmed list");
 }
 
 static void dm_bow_status(struct dm_target *ti, status_type_t type,
