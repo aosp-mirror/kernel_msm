@@ -68,6 +68,11 @@
 #define PD_SNK_MIN_MV			5000
 #define PD_SNK_MAX_MA			3000
 
+#define FCC_OF_CDEV_NAME "google,charger"
+#define FCC_CDEV_NAME "fcc"
+#define WLC_OF_CDEV_NAME "google,wlc_charger"
+#define WLC_CDEV_NAME "dc_icl"
+
 enum tcpm_psy_online_states {
 	TCPM_PSY_OFFLINE = 0,
 	TCPM_PSY_FIXED_ONLINE,
@@ -1822,6 +1827,7 @@ static const struct thermal_cooling_device_ops chg_dc_icl_tcd_ops = {
 int chg_thermal_device_init(struct chg_drv *chg_drv)
 {
 	int rc;
+	struct device_node *cooling_node = NULL;
 
 	rc = chg_tdev_init(&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_FCC],
 				"google,thermal-mitigation", chg_drv);
@@ -1829,7 +1835,15 @@ int chg_thermal_device_init(struct chg_drv *chg_drv)
 		struct chg_thermal_device *fcc =
 			&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_FCC];
 
-		fcc->tcd = thermal_cooling_device_register("fcc",
+		cooling_node = of_find_node_by_name(NULL, FCC_OF_CDEV_NAME);
+		if (!cooling_node) {
+			pr_err("No %s OF node for cooling device\n",
+				FCC_OF_CDEV_NAME);
+		}
+
+		fcc->tcd = thermal_of_cooling_device_register(
+						cooling_node,
+						FCC_CDEV_NAME,
 						fcc,
 						&chg_fcc_tcd_ops);
 		if (!fcc->tcd) {
@@ -1843,8 +1857,16 @@ int chg_thermal_device_init(struct chg_drv *chg_drv)
 	if (rc == 0) {
 		struct chg_thermal_device *dc_icl =
 			&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_DC_IN];
+		cooling_node = NULL;
+		cooling_node = of_find_node_by_name(NULL, WLC_OF_CDEV_NAME);
+		if (!cooling_node) {
+			pr_err("No %s OF node for cooling device\n",
+				WLC_OF_CDEV_NAME);
+		}
 
-		dc_icl->tcd = thermal_cooling_device_register("dc_icl",
+		dc_icl->tcd = thermal_of_cooling_device_register(
+						cooling_node,
+						WLC_CDEV_NAME,
 						dc_icl,
 						&chg_dc_icl_tcd_ops);
 		if (!dc_icl->tcd)
