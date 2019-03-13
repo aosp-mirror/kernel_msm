@@ -1164,6 +1164,10 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 		goto error;
 	}
 
+	pr_debug("cmd tx type=%02x cmd=%02x len=%d last=%d\n", msg->type,
+		 msg->tx_len ? *((u8 *)msg->tx_buf) : 0, msg->tx_len,
+		 (msg->flags & MIPI_DSI_MSG_LASTCOMMAND) != 0);
+
 	if ((msg->flags & MIPI_DSI_MSG_LASTCOMMAND))
 		buffer[3] |= BIT(7);//set the last cmd bit in header.
 
