@@ -108,7 +108,8 @@ static int dma_gather_debug_data(void *destination_buffer,
 				 uint32_t buffer_size);
 static void clear_debug_data(void);
 static void move_debug_data_to_tail(void);
-static void enqueue_debug_data(struct faceauth_data *data, bool el2);
+static void enqueue_debug_data(struct faceauth_data *data, uint32_t ab_result,
+			       bool el2);
 static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data);
 
 struct {
@@ -268,6 +269,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 		start_step_data.result = 0;
 		start_step_data.error_code = 0;
+		start_step_data.ab_exception_number = 0;
 
 		if (start_step_data.operation == COMMAND_ENROLL ||
 		    start_step_data.operation == COMMAND_VALIDATE) {
@@ -387,7 +389,26 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 			if (time_before(stop, jiffies)) {
 				pr_err("Faceauth workflow timeout!\n");
-				err = -ETIME;
+
+				err = aon_config_read(
+					AB_EXCEPTION_NUM_ADDR, 4,
+					&start_step_data.ab_exception_number);
+				if (err) {
+					pr_err("Error reading AB fault address.\n");
+					err = -ETIME;
+				} else if (start_step_data.ab_exception_number
+					    != 0) {
+					pr_err("Error, AB exception.\n");
+					err = -EREMOTEIO;
+				} else {
+					err = -ETIME;
+				}
+
+#if ENABLE_AIRBRUSH_DEBUG
+				enqueue_debug_data(data,
+						   WORKLOAD_STATUS_NO_STATUS,
+						   false);
+#endif
 				goto exit;
 			}
 			usleep_range(polling_interval, polling_interval + 1);
@@ -396,7 +417,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 						   1;
 		}
 #if ENABLE_AIRBRUSH_DEBUG
-		enqueue_debug_data(data, false);
+		enqueue_debug_data(data, ab_result, false);
 #endif
 
 		start_step_data.result = ab_result;
@@ -499,7 +520,8 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				goto exit;
 			}
 			clear_debug_data();
-			enqueue_debug_data(data, false);
+			enqueue_debug_data(data, WORKLOAD_STATUS_NO_STATUS,
+					   false);
 			err = dequeue_debug_data(&debug_step_data);
 			break;
 		default:
@@ -623,7 +645,15 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				break;
 			}
 			if (time_before(stop, jiffies)) {
-				err = -ETIME;
+				if (start_step_data.ab_exception_number)
+					err = -EREMOTEIO;
+				else
+					err = -ETIME;
+#if ENABLE_AIRBRUSH_DEBUG
+				enqueue_debug_data(data,
+						   WORKLOAD_STATUS_NO_STATUS,
+						   true);
+#endif
 				goto exit;
 			}
 
@@ -633,7 +663,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 						   1;
 		}
 #if ENABLE_AIRBRUSH_DEBUG
-		enqueue_debug_data(data, true);
+		enqueue_debug_data(data, start_step_data.result, true);
 #endif
 		if (copy_to_user((void __user *)arg, &start_step_data,
 				 sizeof(start_step_data))) {
@@ -693,7 +723,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				goto exit;
 			}
 			clear_debug_data();
-			enqueue_debug_data(data, true);
+			enqueue_debug_data(data, WORKLOAD_STATUS_NO_STATUS,
+					   true);
 			err = dequeue_debug_data(&debug_step_data);
 			break;
 		default:
@@ -967,10 +998,12 @@ static int dma_gather_debug_log(struct faceauth_debug_data *data)
 	return err;
 }
 
-static void enqueue_debug_data(struct faceauth_data *data, bool el2)
+static void enqueue_debug_data(struct faceauth_data *data, uint32_t ab_result,
+			       bool el2)
 {
 	void *bin_addr;
 	int err;
+	struct faceauth_debug_entry *debug_entry;
 
 	bin_addr = debug_data_queue.data_buffer +
 		   (DEBUG_DATA_BIN_SIZE * debug_data_queue.head_idx);
@@ -995,7 +1028,9 @@ static void enqueue_debug_data(struct faceauth_data *data, bool el2)
 		debug_data_queue.count++;
 	}
 
-	do_gettimeofday(&((struct faceauth_debug_entry *)bin_addr)->timestamp);
+	debug_entry = bin_addr;
+	debug_entry->status = ab_result;
+	do_gettimeofday(&(debug_entry->timestamp));
 }
 
 static void move_debug_data_to_tail(void)
@@ -1053,6 +1088,9 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 	struct faceauth_buffer_list *output_buffers;
 	int buffer_idx;
 	int buffer_list_size;
+	uint32_t ab_exception_num;
+	uint32_t ab_fault_address;
+	uint32_t ab_link_reg;
 
 	dma_read_dw(INTERNAL_STATE_ADDR +
 			    offsetof(struct faceauth_airbrush_state,
@@ -1068,6 +1106,27 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 		pr_err("");
 		return err;
 	}
+
+	err = aon_config_read(AB_EXCEPTION_NUM_ADDR, 4, &ab_exception_num);
+	if (err) {
+		pr_err("Error reading AB exception num address.\n");
+		return err;
+	}
+	debug_entry->ab_exception_number = ab_exception_num;
+
+	err = aon_config_read(AB_FAULT_ADDR, 4, &ab_fault_address);
+	if (err) {
+		pr_err("Error reading AB fault address.\n");
+		return err;
+	}
+	debug_entry->fault_address = ab_fault_address;
+
+	err = aon_config_read(AB_LINK_REG, 4, &ab_link_reg);
+	if (err) {
+		pr_err("Error reading AB link register address.\n");
+		return err;
+	}
+	debug_entry->ab_link_reg = ab_link_reg;
 
 	err = dma_xfer_vmalloc(&debug_entry->ab_state,
 			       internal_state_struct_size, INTERNAL_STATE_ADDR,
@@ -1114,6 +1173,17 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 			pr_err("Error saving flood image\n");
 			return err;
 		}
+
+		err = dma_xfer_vmalloc((uint8_t *)debug_entry + current_offset,
+				       CALIBRATION_DATA_SIZE,
+				       CALIBRATION_DATA_ADDR, DMA_FROM_DEVICE);
+		debug_entry->calibration.offset_to_image = current_offset;
+		debug_entry->calibration.image_size = CALIBRATION_DATA_ADDR;
+		current_offset += CALIBRATION_DATA_ADDR;
+		if (err) {
+			pr_err("Error saving calibration data\n");
+			return err;
+		}
 	} else {
 		debug_entry->left_dot.offset_to_image = 0;
 		debug_entry->left_dot.image_size = 0;
@@ -1121,6 +1191,8 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 		debug_entry->right_dot.image_size = 0;
 		debug_entry->flood.offset_to_image = 0;
 		debug_entry->flood.image_size = 0;
+		debug_entry->calibration.offset_to_image = 0;
+		debug_entry->calibration.image_size = 0;
 	}
 
 	output_buffers = &debug_entry->ab_state.output_buffers;

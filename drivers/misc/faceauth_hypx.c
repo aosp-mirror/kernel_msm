@@ -45,6 +45,7 @@
 #define PIL_DMA_TIMEOUT 3000
 #define INPUT_IMAGE_WIDTH 480
 #define INPUT_IMAGE_HEIGHT 640
+#define CALIBRATION_SIZE 1024
 #define DEBUG_DATA_BIN_SIZE (2 * 1024 * 1024)
 #define CONTEXT_SWITCH_TIMEOUT_MS 40
 /* different from EL1 since it'll take longer in each assess */
@@ -118,6 +119,7 @@ struct hypx_fa_process_results {
 	uint32_t citadel_lockout_event;
 	uint32_t citadel_output1;
 	uint32_t citadel_output2;
+	uint32_t exception_number;
 } __packed;
 
 struct hypx_fa_debug_data {
@@ -134,6 +136,11 @@ struct hypx_fa_debug_data {
 	uint32_t internal_state_struct_size;
 	uint32_t buffer_list_size;
 	uint32_t buffer_base;
+	uint32_t exception_number;
+	uint32_t fault_address;
+	uint32_t ab_link_reg;
+	uint32_t calibration_size;
+	uint64_t calibration_buffer;
 } __packed;
 
 struct faceauth_blob {
@@ -920,6 +927,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 	data->citadel_output2 = hypx_data->citadel_output2;
 	data->fw_version = hypx_data->fw_version;
 	data->error_code = hypx_data->error_code;
+	data->ab_exception_number = hypx_data->exception_number;
 
 exit:
 	if (hypx_data)
@@ -1051,6 +1059,13 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		dev, debug_entry, hypx_data->image_flood_size);
 	if (!hypx_data->image_flood)
 		goto exit3;
+
+	hypx_data->calibration_size = CALIBRATION_SIZE;
+	hypx_data->calibration_buffer = hypx_create_blob_userbuf(
+		dev, debug_entry, hypx_data->calibration_size);
+	if (!hypx_data->calibration_buffer)
+		goto exit3;
+
 	/*
 	 * NOT sure the exact size, using a more than necessary size
 	 */
@@ -1089,6 +1104,10 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		       err);
 		goto exit4;
 	}
+
+	debug_entry->ab_exception_number = hypx_data->exception_number;
+	debug_entry->fault_address = hypx_data->fault_address;
+	debug_entry->ab_link_reg = hypx_data->ab_link_reg;
 
 	current_offset = offsetof(struct faceauth_debug_entry, ab_state) +
 			 hypx_data->internal_state_struct_size;
@@ -1136,6 +1155,15 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 			pr_err("Error saving flood image\n");
 			goto exit4;
 		}
+
+		debug_entry->calibration.offset_to_image = current_offset;
+		debug_entry->calibration.image_size = CALIBRATION_SIZE;
+		current_offset += CALIBRATION_SIZE;
+		if (err) {
+			pr_err("Error saving flood image\n");
+			goto exit4;
+		}
+
 		need_reassign = false;
 	} else {
 		debug_entry->left_dot.offset_to_image = 0;
@@ -1144,6 +1172,8 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		debug_entry->right_dot.image_size = 0;
 		debug_entry->flood.offset_to_image = 0;
 		debug_entry->flood.image_size = 0;
+		debug_entry->calibration.offset_to_image = 0;
+		debug_entry->calibration.image_size = 0;
 	}
 
 	output_buffers = &(debug_entry->ab_state.output_buffers);

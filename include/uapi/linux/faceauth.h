@@ -69,6 +69,7 @@ struct faceauth_start_data {
 	__u32 bin_bitmap;
 	__u32 angles;
 	__s32 error_code; /* ab-faceauth error code */
+	__u32 ab_exception_number;
 	__u32 fw_version; /* ab-faceauth firmware version */
 
 	__u8  __user *citadel_token;
@@ -166,9 +167,14 @@ struct faceauth_debug_image {
 
 struct faceauth_debug_entry {
 	struct timeval timestamp;
+	uint32_t status;
+	uint32_t ab_exception_number;
+	uint32_t fault_address;
+	uint32_t ab_link_reg;
 	struct faceauth_debug_image left_dot;
 	struct faceauth_debug_image right_dot;
 	struct faceauth_debug_image flood;
+	struct faceauth_debug_image calibration;
 	struct faceauth_airbrush_state ab_state;
 } __attribute__((packed));
 
