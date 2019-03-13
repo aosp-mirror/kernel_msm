@@ -12,11 +12,11 @@
 
 qcom,palladium_1500mah_averaged_masterslave_nov28th2017 {
 	/* #Palladium_1500mAh_averaged_MasterSlave_Nov28th2017*/
-	qcom,max-voltage-uv = <4200000>;
-	qcom,fg-cc-cv-threshold-mv = <4180>;
-	qcom,fastchg-current-ma = <1500>;
-	qcom,batt-id-kohm = <75>;
-	qcom,battery-beta = <3435>;
+	qcom,max-voltage-uv = <4350000>;
+	qcom,fg-cc-cv-threshold-mv = <4200>;
+	qcom,fastchg-current-ma = <300>;
+	qcom,batt-id-kohm = <60>;
+	qcom,battery-beta = <4250>;
 	qcom,battery-type = "palladium_1500mah_averaged_masterslave_nov28th2017";
 	qcom,checksum = <0x1C13>;
 	qcom,gui-version = "PM660GUI - 0.0.0.45";

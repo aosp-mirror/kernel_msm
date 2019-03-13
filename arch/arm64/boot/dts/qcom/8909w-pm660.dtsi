@@ -386,6 +386,7 @@
 		qcom,fg-esr-timer-asleep = <224 256>;
 		qcom,fg-esr-timer-charging = <0 96>;
 		qcom,cycle-counter-en;
+		qcom,fg-chg-term-current = <20>;
 		qcom,hold-soc-while-full;
 		qcom,fg-auto-recharge-soc;
 		qcom,fg-recharge-soc-thr = <98>;
@@ -542,7 +543,7 @@
 	qcom,pbs-client = <&pm660_pbs>;
 };
 
-/ {
+/{
 	/delete-node/ qcom,battery-data;
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
