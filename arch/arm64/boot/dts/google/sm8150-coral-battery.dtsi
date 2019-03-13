@@ -36,7 +36,7 @@
 		0xDC 0x34C9	/* nDelayCfg */
 	>;
 
-	/* maxim,n_regval_1720x_ver = <0xd4>; */
+	maxim,n_regval_1720x_ver = /bits/ 8 <0xd4 0x01>;
 	maxim,n_regval_1720x =  /bits/ 16 <
 		0x9C 0x0380	/* nIChgTerm Register */
 		0x9D 0x0EB4	/* nFilterCfg Register */
