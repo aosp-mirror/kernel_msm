@@ -16,6 +16,8 @@
 
 #define AIRBRUSH_COOLING_STATE_MAX 3
 
+#include <linux/types.h>
+
 struct ab_cooling;
 struct device_node;
 
@@ -26,7 +28,8 @@ struct ab_cooling_ops {
 };
 
 struct ab_cooling *ab_cooling_register(struct device_node *np, char *type,
-		const struct ab_cooling_ops *ops, void *cooling_op_data);
+		const struct ab_cooling_ops *ops, void *cooling_op_data,
+		bool enable);
 void ab_cooling_unregister(struct ab_cooling *cooling);
 
 #endif // _AIRBRUSH_COOLING_H

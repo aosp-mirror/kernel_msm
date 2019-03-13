@@ -147,7 +147,7 @@ static void ab_cooling_remove_debugfs(struct ab_cooling *cooling)
 }
 
 struct ab_cooling *ab_cooling_register(struct device_node *np, char *type,
-		const struct ab_cooling_ops *ops, void *op_data)
+		const struct ab_cooling_ops *ops, void *op_data, bool enable)
 {
 	struct ab_cooling *cooling;
 	int err;
@@ -160,8 +160,7 @@ struct ab_cooling *ab_cooling_register(struct device_node *np, char *type,
 	cooling->op_data = op_data;
 
 	mutex_init(&cooling->lock);
-	/* TODO enable by default for release */
-	cooling->enable = false;
+	cooling->enable = enable;
 	cooling->state = 0;
 	cooling->cdev = thermal_of_cooling_device_register(np, type,
 			cooling, &ab_cooling_ops);

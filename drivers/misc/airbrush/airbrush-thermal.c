@@ -97,7 +97,7 @@ const static struct ab_cooling_ops ab_thermal_cooling_ops = {
 static struct ab_cooling *ab_thermal_cooling_register(
 		struct ab_thermal *thermal,
 		struct ab_thermal_cooling *thermal_cooling,
-		const char *cooling_node_name, char *type)
+		const char *cooling_node_name, char *type, bool enable)
 {
 	struct device_node *cooling_node = NULL;
 
@@ -109,17 +109,17 @@ static struct ab_cooling *ab_thermal_cooling_register(
 		}
 	}
 	return ab_cooling_register(cooling_node, type, &ab_thermal_cooling_ops,
-			thermal_cooling);
+			thermal_cooling, enable);
 }
 
 static int ab_thermal_init_cooling(struct ab_thermal_cooling *thermal_cooling,
 		struct ab_thermal *thermal, const char *cooling_node_name,
-		char *type)
+		char *type, bool enable)
 {
 	thermal_cooling->thermal = thermal;
 	thermal_cooling->state = 0;
 	thermal_cooling->cooling = ab_thermal_cooling_register(thermal,
-			thermal_cooling, cooling_node_name, type);
+			thermal_cooling, cooling_node_name, type, enable);
 	if (IS_ERR(thermal_cooling->cooling))
 		return PTR_ERR(thermal_cooling->cooling);
 	return 0;
@@ -137,16 +137,24 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev,
 	mutex_init(&thermal->throttle_state_lock);
 	thermal->throttle_state = THROTTLE_NONE;
 
+	/*
+	 * TODO(b/128559698): Enable external cooling device once stabilized
+	 * by changing the last parameter to true.
+	 */
 	err = ab_thermal_init_cooling(&thermal->cooling_external, thermal,
-			AB_OF_CDEV_NAME, AB_CDEV_NAME);
+			AB_OF_CDEV_NAME, AB_CDEV_NAME, false);
 	if (err) {
 		dev_err(dev, "failed to initialize external cooling\n");
 		ab_thermal_exit(thermal);
 		return err;
 	}
 
+	/*
+	 * TODO(b/128559698): Enable internal cooling device once stabilized
+	 * by changing the last parameter to true.
+	 */
 	err = ab_thermal_init_cooling(&thermal->cooling_internal, thermal,
-			AB_OF_CDEV_INTERNAL_NAME, AB_CDEV_INTERNAL_NAME);
+			AB_OF_CDEV_INTERNAL_NAME, AB_CDEV_INTERNAL_NAME, false);
 	if (err) {
 		dev_err(dev, "failed to initialize internal cooling\n");
 		ab_thermal_exit(thermal);
