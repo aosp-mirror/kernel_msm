@@ -2490,6 +2490,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)data;
 	unsigned long old_rate;
 	unsigned long new_rate;
+	unsigned long extra_pre_notify_flag = 0;
+	unsigned long extra_post_notify_flag = 0;
 
 	if (!ddr_ctx->is_setup_done) {
 		pr_err("set_state: Error!! ddr setup is not called\n");
@@ -2499,9 +2501,19 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	if (!prop_from || !prop_to)
 		return -EINVAL;
 
+	/*
+	 * If DRAM is going to enter block_state_0 (power off), data will
+	 * be lost.  Notify subscribers in advance both pre-rate and post-rate.
+	 */
+	if (block_state_id == BLOCK_STATE_0) {
+		extra_pre_notify_flag = AB_DRAM_DATA_PRE_OFF;
+		extra_post_notify_flag = AB_DRAM_DATA_POST_OFF;
+	}
+
 	old_rate = prop_from->clk_frequency;
 	new_rate = prop_to->clk_frequency;
-	ab_sm_clk_notify(AB_DRAM_PRE_RATE_CHANGE, old_rate, new_rate);
+	ab_sm_clk_notify(AB_DRAM_PRE_RATE_CHANGE | extra_pre_notify_flag,
+			 old_rate, new_rate);
 
 	switch (block_state_id) {
 	case BLOCK_STATE_300 ... BLOCK_STATE_305:
@@ -2560,7 +2572,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	if (ddr_ctx->ddr_state == DDR_ON)
 		ab_ddr_set_freq(ddr_ctx, prop_to->clk_frequency);
 
-	ab_sm_clk_notify(AB_DRAM_POST_RATE_CHANGE, old_rate, new_rate);
+	ab_sm_clk_notify(AB_DRAM_POST_RATE_CHANGE | extra_post_notify_flag,
+			 old_rate, new_rate);
 
 	/* Based on the state, call the corresponding DDR functionality */
 	return 0;

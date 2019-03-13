@@ -708,6 +708,30 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 				     struct ipu_adapter_ab_mfd_data,
 				     clk_change_nb);
 
+	if (action & AB_DRAM_PRE_RATE_CHANGE) {
+
+		if (action & AB_DRAM_DATA_PRE_OFF) {
+			dev_warn(dev_data->dev,
+				 "DRAM data will be lost; please free ringbuffer\n");
+			/* TODO(b/128524484) additional work on client side */
+		}
+
+		ipu_adapter_dram_pre_rate_change(dev_data, clk_data);
+		return NOTIFY_OK;
+	}
+
+	if (action & AB_DRAM_POST_RATE_CHANGE) {
+
+		if (action & AB_DRAM_DATA_POST_OFF) {
+			dev_warn(dev_data->dev,
+				 "DRAM data is lost; suggest double check whether ringbuffer has been freed\n");
+			/* TODO(b/128524484) only if necessary */
+		}
+
+		ipu_adapter_dram_post_rate_change(dev_data, clk_data);
+		return NOTIFY_OK;
+	}
+
 	switch (action) {
 	case AB_IPU_PRE_RATE_CHANGE:
 		ipu_adapter_ipu_pre_rate_change(dev_data, clk_data);
@@ -717,12 +741,6 @@ static int ipu_adapter_ab_sm_clk_listener(struct notifier_block *nb,
 		break;
 	case AB_IPU_ABORT_RATE_CHANGE:
 		ipu_adapter_ipu_abort_rate_change(dev_data, clk_data);
-		break;
-	case AB_DRAM_PRE_RATE_CHANGE:
-		ipu_adapter_dram_pre_rate_change(dev_data, clk_data);
-		break;
-	case AB_DRAM_POST_RATE_CHANGE:
-		ipu_adapter_dram_post_rate_change(dev_data, clk_data);
 		break;
 	default:
 		return NOTIFY_DONE;  /* Don't care */

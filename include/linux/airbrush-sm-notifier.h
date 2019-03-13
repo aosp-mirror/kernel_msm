@@ -19,7 +19,10 @@
 #include <linux/bitops.h>
 #include <linux/notifier.h>
 
-/* Notifier types for Airbrush clock rate changes */
+/*
+ * Notifier types for Airbrush clock rate changes.
+ * These types can be OR'ed together when being notified.
+ */
 #define AB_IPU_PRE_RATE_CHANGE		BIT(0)
 #define AB_IPU_POST_RATE_CHANGE		BIT(1)
 #define AB_IPU_ABORT_RATE_CHANGE	BIT(2)
@@ -29,6 +32,8 @@
 #define AB_DRAM_PRE_RATE_CHANGE		BIT(6)
 #define AB_DRAM_POST_RATE_CHANGE	BIT(7)
 #define AB_DRAM_ABORT_RATE_CHANGE	BIT(8)
+#define AB_DRAM_DATA_PRE_OFF		BIT(9)  /* data will be lost */
+#define AB_DRAM_DATA_POST_OFF		BIT(10) /* data is considered lost */
 
 /**
  * struct ab_clk_notifier_data - rate data to pass to the notifier callback
