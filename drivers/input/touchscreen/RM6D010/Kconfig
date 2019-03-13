@@ -1,0 +1,16 @@
+#
+# RM6D010 Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_RM6D010
+	bool "RM6D010 Touchscreen"
+	depends on I2C
+	default n
+	help
+		Say Y here if you have RM6D010 touch panel.
+		If unsure, say N.
+
+config TOUCHSCREEN_RM6D010_DIRECTORY
+	string "RM6D010 ts directory name"
+	default "RM6D010_touch"
+	depends on TOUCHSCREEN_RM6D010
