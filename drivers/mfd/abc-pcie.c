@@ -1709,12 +1709,12 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
 
-	/* TODO(b/120753172): clean up atomics usage */
-	if (atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE) {
-		dev_err(dev,
-			"PCIe link is not enabled; should not enter EL2\n");
+	/*
+	 * If PCIe link is not enabled, this handler should not have been
+	 * called.
+	 */
+	if (WARN_ON(atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE))
 		return -EINVAL;
-	}
 
 	dev_info(dev, "Broadcast Enter EL2 notification\n");
 
@@ -1741,12 +1741,12 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
 
-	/* TODO(b/120753172): clean up atomics usage */
-	if (atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE) {
-		dev_err(dev,
-			"PCIe link is already disabled; was PCIe link unexpectedly down during EL2?\n");
+	/*
+	 * If PCIe link is not enabled, this handler should not have been
+	 * called.
+	 */
+	if (WARN_ON(atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE))
 		return -EINVAL;
-	}
 
 	dev_info(dev, "Broadcast Exit EL2 notification\n");
 
@@ -1800,12 +1800,18 @@ static int abc_pcie_ab_ready_handler(void *ctx)
 		"%s: ab_ready is high; PCIe link is enabled by host\n",
 		__func__);
 
-	/* TODO(b/120753172): clean up atomics usage */
-	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_ACTIVE)
+	/*
+	 * Set link_state to active.
+	 * If PCIe link is already enabled, there is no need to broadcast a
+	 * POST_ENABLE event.  This situation can be valid because it may
+	 * happen during PCIe enmueration.
+	 */
+	if (atomic_cmpxchg(&abc_dev->link_state,
+			   ABC_PCIE_LINK_NOT_ACTIVE,
+			   ABC_PCIE_LINK_ACTIVE) == ABC_PCIE_LINK_ACTIVE)
 		return 0;
 
 	abc_pcie_enable_irqs(abc_dev->pdev);
-	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
 
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
@@ -1820,15 +1826,28 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 		"%s: PCIe link will be disabled by host\n",
 		__func__);
 
-	/* TODO(b/120753172): clean up atomics usage */
-	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_NOT_ACTIVE)
+	/*
+	 * If PCIe link is already disabled, there is no need to broadcast a
+	 * PRE_DISABLE event.  This situation is not supposed to happen.
+	 */
+	if (WARN_ON(atomic_read(&abc_dev->link_state) ==
+					ABC_PCIE_LINK_NOT_ACTIVE))
 		return 0;
 
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
 
 	abc_pcie_disable_irqs(abc_dev->pdev);
-	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
+
+	/*
+	 * Set link_state to inactive.
+	 * If link_state is already inactive, it's likely a programming bug.
+	 */
+	WARN_ON(atomic_cmpxchg(&abc_dev->link_state,
+			       ABC_PCIE_LINK_ACTIVE,
+			       ABC_PCIE_LINK_NOT_ACTIVE) ==
+					ABC_PCIE_LINK_NOT_ACTIVE);
+
 	return 0;
 }
 
@@ -1840,12 +1859,20 @@ static int abc_pcie_linkdown_handler(void *ctx)
 		"%s: PCIe link unexpectedly went down\n",
 		__func__);
 
-	/* TODO(b/120753172): clean up atomics usage */
-	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_NOT_ACTIVE)
+	/*
+	 * Unlike abc_pcie_pre_disable_handler, here link_state is set to
+	 * inactive as soon as possible before notifying subscribers.
+	 *
+	 * If PCIe link is already disabled, there is no need to broadcast a
+	 * LINK_ERROR event.  This situation is not supposed to happen, though.
+	 */
+	if (WARN_ON(atomic_cmpxchg(&abc_dev->link_state,
+				  ABC_PCIE_LINK_ACTIVE,
+				  ABC_PCIE_LINK_NOT_ACTIVE) ==
+					ABC_PCIE_LINK_NOT_ACTIVE))
 		return 0;
 
 	abc_pcie_disable_irqs(abc_dev->pdev);
-	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
 
 	/*
 	 * TODO(b/124536826): drop ABC_PCIE_LINK_PRE_DISABLE once all drivers
