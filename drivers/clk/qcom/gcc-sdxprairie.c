@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -179,6 +179,7 @@ static struct clk_alpha_pll_postdiv gpll0_out_even = {
 	.post_div_table = post_div_table_lucid_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_lucid_even),
 	.width = 4,
+	.type = LUCID_PLL,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "gpll0_out_even",
 		.parent_names = (const char *[]){ "gpll0" },
@@ -217,6 +218,7 @@ static struct clk_alpha_pll_postdiv gpll4_out_even = {
 	.post_div_table = post_div_table_lucid_even,
 	.num_post_div = ARRAY_SIZE(post_div_table_lucid_even),
 	.width = 4,
+	.type = LUCID_PLL,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "gpll4_out_even",
 		.parent_names = (const char *[]){ "gpll4" },
@@ -548,9 +550,6 @@ static struct clk_rcg2 gcc_blsp1_uart4_apps_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_cpuss_ahb_clk_src[] = {
 	F(19200000, P_BI_TCXO, 1, 0, 0),
-	F(50000000, P_GPLL0_OUT_EVEN, 6, 0, 0),
-	F(100000000, P_GPLL0_OUT_MAIN, 6, 0, 0),
-	F(133333333, P_GPLL0_OUT_MAIN, 4.5, 0, 0),
 	{ }
 };
 
@@ -568,10 +567,7 @@ static struct clk_rcg2 gcc_cpuss_ahb_clk_src = {
 		.vdd_class = &vdd_cx_ao,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_MIN] = 19200000,
-			[VDD_LOWER] = 50000000,
-			[VDD_NOMINAL] = 100000000,
-			[VDD_HIGH] = 133333333},
+			[VDD_MIN] = 19200000},
 	},
 };
 
