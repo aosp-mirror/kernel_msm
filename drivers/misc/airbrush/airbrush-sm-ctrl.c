@@ -835,7 +835,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			prev_state == CHIP_STATE_100) &&
 			to_chip_substate_id >= CHIP_STATE_400) {
 		ab_sm_start_ts(sc, AB_SM_TS_BOOT_SEQ);
-		ret = ab_bootsequence(sc);
+		ret = ab_bootsequence(sc, prev_state);
 		ab_sm_record_ts(sc, AB_SM_TS_BOOT_SEQ);
 		if (ret) {
 			dev_err(sc->dev, "ab_bootsequence failed (%d)\n", ret);

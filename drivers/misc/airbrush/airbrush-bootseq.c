@@ -78,7 +78,7 @@ void parse_fw(uint32_t *image_dw_buf, const unsigned char *image_buf,
 }
 
 /* Caller must hold ab_ctx->state_lock */
-int ab_bootsequence(struct ab_state_context *ab_ctx)
+int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 {
 	/* Number of attempts to flash SRAM bootcode when CRC error happens */
 	int num_attempts = 1;
@@ -121,7 +121,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx)
 		return ret;
 	}
 
-	if (ab_ctx->curr_chip_substate_id == CHIP_STATE_100)
+	if (prev_state == CHIP_STATE_100)
 		ab_gpio_enable_ddr_sr(ab_ctx);
 
 	if (ab_ctx->alternate_boot)
