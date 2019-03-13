@@ -16,6 +16,13 @@
 #ifndef __FACEAUTH_SHARED_H__
 #define __FACEAUTH_SHARED_H__
 
+/* bug: 123535349 */
+#define DISABLE_GAZE                            (1ULL << 0) //bit 0
+#define DISABLE_MULTI_ANGLE_ENROLLMENT          (1ULL << 1) //bit 1
+#define SECURE_CAMERA_DATA                      (1ULL << 2) //bit 2
+/* Keep temporary feature bits in the top part of the field */
+#define DISABLE_SKIN_CLASSIFIER                 (1ULL << 63) //bit 63
+
 /*  The error codes are broken up into functional groups with space reserve for
  *  future error codes. The divisions are as follows:
  *  0     - success
@@ -60,10 +67,14 @@
 #define ERROR_DEPTHID_BUFFER_SIZE_MISMATCH -72
 #define ERROR_GAZENET_BUFFER_SIZE_MISMATCH -73
 #define ERROR_SKIN_BUFFER_SIZE_MISMATCH -74
+#define ERROR_MAX_THRESHOLD_FACES -75
+/* TODO (masterwilliams) b/126613551 */
+#define ERROR_INSUFFICIENT_ALLOCATOR_MEMORY -76
 
 #define ERROR_FW_DRIVER_SYNC_ERROR -84
+
 /* Any change to the WorkloadStatus should also be accompanied by a change to
- * WORKLOAD_STATUS_STRINGS below.
+ * WORKLOAD_STATUS_STRINGS in defines.h.
  */
 typedef enum _workload_status {
 	WORKLOAD_STATUS_NO_STATUS = 0,
@@ -72,10 +83,6 @@ typedef enum _workload_status {
 	WORKLOAD_STATUS_HARD_REJECT,
 	/* Reject (post)FSSD code when no face is found */
 	WORKLOAD_STATUS_REJECT_NO_FACE,
-	/* Reject (post)FSSD code when multiple faces are found */
-	WORKLOAD_STATUS_REJECT_MULTIPLE_FACE,
-	/* Reject (post)FSSD code when number of faces is more than capacity */
-	WORKLOAD_STATUS_REJECT_MAX_FACE_CAPACITY,
 	/* Reject Gazenet for no camera attention, optionally can be ignored */
 	WORKLOAD_STATUS_REJECT_NO_ATTENTION,
 	/* Reject Skin TODO (masterwilliams) b/126249618 - deprecate value */
@@ -118,15 +125,6 @@ typedef enum _faceauth_input_commands {
 	COMMAND_INTMAX =
 		0xffffffff /* used to extend enum size to 4 bytes */
 } FaceAuthInputCommands;
-
-#define EMBEDDING_CMD_STRINGS { \
-	"COMMAND_NONE",\
-	"COMMAND_ENROLL",\
-	"COMMAND_ENROLL_COMPLETE",\
-	"COMMAND_ERASE",\
-	"COMMAND_VALIDATE",\
-	"COMMAND_EXIT",\
-}
 
 typedef enum _faceauth_ack_messages {
 	STATUS_NONE = 0,
