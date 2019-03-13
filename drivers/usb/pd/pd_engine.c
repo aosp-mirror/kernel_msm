@@ -1020,7 +1020,12 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 		}
 	}
 
-	if (port_is_source(pd) && cc_is_sink(cc))
+	/*
+	 * Setting POWER_ROLE will cause CC to Open in the first place.
+	 * Skip the setting if unnecessary
+	 */
+	if ((port_is_source(pd) && cc_is_sink(cc)) ||
+	    (port_is_sink(pd) && cc_is_source(cc)))
 		goto unlock;
 
 	ret = power_supply_set_property(pd->usb_psy,
