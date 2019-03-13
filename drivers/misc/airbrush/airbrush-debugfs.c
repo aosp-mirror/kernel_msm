@@ -271,7 +271,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_id, id_get, NULL, "%llu\n");
 static int vrail_status_get(void *blk_passed, u64 *val)
 {
 	struct block *blk = (struct block *)blk_passed;
-	*val = blk->current_state->voltage_rail_status;
+	*val = blk->current_state->rail_en;
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(fops_vrail_status,
@@ -489,23 +489,23 @@ static ssize_t ab_debugfs_read_prop_table(struct file *file, char __user *ubuf,
 
 	/* Keep legend in sync with struct block_property. */
 	pos += scnprintf(buf + pos, PAGE_SIZE - pos,
-			"{id, state_name, substate_name, pmu, voltage_rail_status, logic_voltage, clk_status, clk_frequency, num_powered_cores, num_computing_cores, num_powered_tiles, data_rate}\n");
+			"{id, state_name, substate_name, pmu, rail_en, logic_voltage, clk_status, clk_frequency, num_powered_cores, num_computing_cores, num_powered_tiles, data_rate}\n");
 
 	for (i = 0; i < blk->nr_block_states; i++) {
 		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
 			"{%d, %s, %s, %d, %d, %d, %d, %llu, %u, %u, %u, %u}\n",
-			blk->block_property_table[i].id,
-			blk->block_property_table[i].state_name,
-			blk->block_property_table[i].substate_name,
-			blk->block_property_table[i].pmu,
-			blk->block_property_table[i].voltage_rail_status,
-			blk->block_property_table[i].logic_voltage,
-			blk->block_property_table[i].clk_status,
-			blk->block_property_table[i].clk_frequency,
-			blk->block_property_table[i].num_powered_cores,
-			blk->block_property_table[i].num_computing_cores,
-			blk->block_property_table[i].num_powered_tiles,
-			blk->block_property_table[i].data_rate);
+			blk->prop_table[i].id,
+			blk->prop_table[i].state_name,
+			blk->prop_table[i].substate_name,
+			blk->prop_table[i].pmu,
+			blk->prop_table[i].rail_en,
+			blk->prop_table[i].logic_voltage,
+			blk->prop_table[i].clk_status,
+			blk->prop_table[i].clk_frequency,
+			blk->prop_table[i].num_powered_cores,
+			blk->prop_table[i].num_computing_cores,
+			blk->prop_table[i].num_powered_tiles,
+			blk->prop_table[i].data_rate);
 	}
 
 	ret = simple_read_from_buffer(ubuf, len, ppos, buf, pos);
@@ -577,7 +577,7 @@ void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_file("voltage_rail_status", 0444, parent_dir,
+	d = debugfs_create_file("rail_en", 0444, parent_dir,
 			       blk, &fops_vrail_status);
 	if (!d)
 		goto err_out;

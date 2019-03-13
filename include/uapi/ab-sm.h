@@ -258,7 +258,7 @@ enum uapi_logic_voltage {
 struct uapi_block_properties {
 	enum uapi_block_state id;
 	enum uapi_pmu_state pmu;
-	enum uapi_state voltage_rail_status;
+	enum uapi_state rail_en;
 	enum uapi_logic_voltage logic_voltage;
 	enum uapi_state clk_status;
 	__u64 clk_frequency;

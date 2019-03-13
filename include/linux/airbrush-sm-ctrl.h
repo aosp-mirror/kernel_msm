@@ -186,7 +186,7 @@ struct block_property {
 	char *state_name;
 	char *substate_name;
 	enum pmu_states pmu;
-	enum states voltage_rail_status;
+	enum states rail_en;
 	enum logic_voltage logic_voltage;
 	enum states clk_status;
 	u64 clk_frequency;
@@ -207,13 +207,13 @@ typedef int (*ab_sm_set_block_state_t)(
  * @name: name of the block
  * @current_id: id of current state of the block
  * @current_state_category: category of the current state belongs.
- * @block_property_table: table containing details of all the states of the
+ * @prop_table: table containing details of all the states
  * @nr_block_states: number of possible states for this block
  */
 struct block {
 	enum block_name name;
 	struct block_property *current_state;
-	struct block_property *block_property_table;
+	struct block_property *prop_table;
 	u32 nr_block_states;
 	ab_sm_set_block_state_t set_state;
 	void *data; /*IP specific data*/

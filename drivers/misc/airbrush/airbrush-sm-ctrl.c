@@ -427,8 +427,8 @@ static int ab_update_block_prop_table(struct new_block_props *props,
 
 		prop_table[i].pmu =
 			(int)props->table[i].pmu;
-		prop_table[i].voltage_rail_status =
-			(int)props->table[i].voltage_rail_status;
+		prop_table[i].rail_en =
+			(int)props->table[i].rail_en;
 		prop_table[i].logic_voltage =
 			(int)props->table[i].logic_voltage;
 		prop_table[i].clk_status =
@@ -455,8 +455,8 @@ struct block_property *get_desired_state(struct block *blk,
 	int i;
 
 	for (i = 0; i < (blk->nr_block_states); i++) {
-		if (blk->block_property_table[i].id == to_block_state_id)
-			return &(blk->block_property_table[i]);
+		if (blk->prop_table[i].id == to_block_state_id)
+			return &(blk->prop_table[i]);
 	}
 	return NULL;
 }
@@ -573,7 +573,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	enum block_state to_block_state_id)
 {
 	struct ab_sm_pmu_ops *pmu;
-	bool power_increasing;
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
 	struct block_property *last_state = blk->current_state;
@@ -586,16 +585,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	/* Mark block as new state early in case rollback is needed */
 	blk->current_state = desired_state;
-
-	power_increasing = (last_state->logic_voltage
-				< desired_state->logic_voltage);
-
-	/* Regulator Settings */
-	if (!power_increasing) {
-		if (desired_state->voltage_rail_status == off)
-			ab_blk_pw_rails_disable(sc, blk->name,
-			to_block_state_id);
-	}
 
 	/* Raise boost voltage if necessary before frequency change */
 	if (blk->name == BLK_IPU || blk->name == BLK_TPU) {
@@ -884,6 +873,39 @@ static struct chip_to_block_map *ab_sm_get_block_map(
 	return map;
 }
 
+/* Set the enable/disable flag for each pmic rail.
+ * Only sets the flags, does not turn rails on or off
+ */
+static void ab_prep_pmic_settings(struct ab_state_context *sc,
+	struct chip_to_block_map *dest_map)
+{
+	struct block_property *state;
+
+	state = get_desired_state(&sc->blocks[BLK_IPU],
+			dest_map->ipu_block_state_id);
+	ab_mark_pmic_rail(sc, BLK_IPU, state->rail_en, state->id);
+
+	state = get_desired_state(&sc->blocks[BLK_TPU],
+			dest_map->tpu_block_state_id);
+	ab_mark_pmic_rail(sc, BLK_TPU, state->rail_en, state->id);
+
+	state = get_desired_state(&sc->blocks[DRAM],
+			dest_map->dram_block_state_id);
+	ab_mark_pmic_rail(sc, DRAM, state->rail_en, state->id);
+
+	state = get_desired_state(&sc->blocks[BLK_MIF],
+			dest_map->mif_block_state_id);
+	ab_mark_pmic_rail(sc, BLK_MIF, state->rail_en, state->id);
+
+	state = get_desired_state(&sc->blocks[BLK_FSYS],
+			dest_map->fsys_block_state_id);
+	ab_mark_pmic_rail(sc, BLK_FSYS, state->rail_en, state->id);
+
+	state = get_desired_state(&sc->blocks[BLK_AON],
+			dest_map->aon_block_state_id);
+	ab_mark_pmic_rail(sc, BLK_AON, state->rail_en, state->id);
+}
+
 static void __ab_cleanup_state(struct ab_state_context *sc,
 			       bool is_linkdown_event)
 {
@@ -991,6 +1013,18 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if ((prev_state == CHIP_STATE_0 ||
 			prev_state == CHIP_STATE_100) &&
 			to_chip_substate_id >= CHIP_STATE_400) {
+
+		/* Mark all PMIC rails to be enabled before calling
+		 * ab_bootsequence, since ab_bootsequence will call
+		 * ab_pmic_on
+		 */
+		if (to_chip_substate_id >= CHIP_STATE_500) {
+			active_map = ab_sm_get_block_map(sc, CHIP_STATE_400);
+			ab_prep_pmic_settings(sc, active_map);
+		} else {
+			ab_prep_pmic_settings(sc, dest_map);
+		}
+
 		ab_sm_start_ts(sc, AB_SM_TS_BOOT_SEQ);
 		ret = ab_bootsequence(sc, prev_state);
 		ab_sm_record_ts(sc, AB_SM_TS_BOOT_SEQ);
@@ -1003,7 +1037,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		 * IPU, TPU, and DRAM into fully active states
 		 */
 		if (to_chip_substate_id >= CHIP_STATE_500) {
-			active_map = ab_sm_get_block_map(sc, CHIP_STATE_400);
 			if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 					active_map->ipu_block_state_id)) {
 				ret = -EINVAL;
@@ -1026,6 +1059,11 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			}
 		}
 	}
+
+	/* Mark which PMIC rails will be enabled/disabled
+	 * for destination state
+	 */
+	ab_prep_pmic_settings(sc, dest_map);
 
 	if ((prev_state == CHIP_STATE_200 ||
 			prev_state == CHIP_STATE_300) &&
@@ -1477,14 +1515,14 @@ static void set_ipu_tpu_clk_freq_table(struct ab_state_context *sc,
 	}
 
 	while (blk_idx < sc->blocks[BLK_IPU].nr_block_states) {
-		prop = &sc->blocks[BLK_IPU].block_property_table[blk_idx];
+		prop = &sc->blocks[BLK_IPU].prop_table[blk_idx];
 		prop->clk_frequency = blk_ipu_clk_tbl[blk_idx][chip_id];
 		blk_idx++;
 	}
 
 	blk_idx = 0;
 	while (blk_idx < sc->blocks[BLK_TPU].nr_block_states) {
-		prop = &sc->blocks[BLK_TPU].block_property_table[blk_idx];
+		prop = &sc->blocks[BLK_TPU].prop_table[blk_idx];
 		prop->clk_frequency = blk_tpu_clk_tbl[blk_idx][chip_id];
 		blk_idx++;
 	}

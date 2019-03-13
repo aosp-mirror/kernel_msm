@@ -40,130 +40,40 @@ void ab_pmic_disable_boost(struct ab_state_context *sc)
 	}
 }
 
-int ab_blk_pw_rails_enable(struct ab_state_context *sc,
+int ab_mark_pmic_rail(struct ab_state_context *sc,
 			   enum block_name blk_name,
+			   bool enable,
 			   enum block_state to_block_substate_id)
 {
 	dev_dbg(sc->dev,
-			"enabling rails for block %u block substate id %u\n",
-			blk_name, to_block_substate_id);
+			"marking rails %d for block %u substate id %u\n",
+			enable, blk_name, to_block_substate_id);
 
 	switch (blk_name) {
 	case BLK_IPU:
 	case BLK_TPU:
-		if (!regulator_is_enabled(sc->smps2))
-			if (regulator_enable(sc->smps2))
-				goto fail_regulator_enable;
-		sc->smps2_state = true;
-		if (!regulator_is_enabled(sc->ldo4))
-			if (regulator_enable(sc->ldo4))
-				goto fail_regulator_enable;
-		sc->ldo4_state = true;
-		if (!regulator_is_enabled(sc->ldo5))
-			if (regulator_enable(sc->ldo5))
-				goto fail_regulator_enable;
-		sc->ldo5_state = true;
-		if (!regulator_is_enabled(sc->smps1))
-			if (regulator_enable(sc->smps1))
-				goto fail_regulator_enable;
-		sc->smps1_state = true;
-		if (!regulator_is_enabled(sc->ldo3))
-			if (regulator_enable(sc->ldo3))
-				goto fail_regulator_enable;
-		sc->ldo3_state = true;
-		if (!regulator_is_enabled(sc->ldo2))
-			if (regulator_enable(sc->ldo2))
-				goto fail_regulator_enable;
-		sc->ldo2_state = true;
+		sc->smps1_state = enable;
+		sc->ldo3_state = enable;
 		break;
 	case BLK_AON:
-		if (!regulator_is_enabled(sc->smps2))
-			if (regulator_enable(sc->smps2))
-				goto fail_regulator_enable;
-		sc->smps2_state = true;
-		if (!regulator_is_enabled(sc->ldo4))
-			if (regulator_enable(sc->ldo4))
-				goto fail_regulator_enable;
-		sc->ldo4_state = true;
-		if (!regulator_is_enabled(sc->ldo5))
-			if (regulator_enable(sc->ldo5))
-				goto fail_regulator_enable;
-		sc->ldo5_state = true;
+		sc->smps2_state = enable;
+		sc->ldo4_state = enable;
+		sc->ldo5_state = enable;
 		break;
 	case DRAM:
-		if (!regulator_is_enabled(sc->ldo2))
-			if (regulator_enable(sc->ldo2))
-				goto fail_regulator_enable;
-		sc->ldo2_state = true;
-		break;
-	case BLK_MIF:
-		break;
-	case BLK_FSYS:
-		break;
-	default:
-		return -EINVAL;
-	}
-	return 0;
-
-fail_regulator_enable:
-	if (regulator_is_enabled(sc->ldo3)) {
-		regulator_disable(sc->ldo3);
-		sc->ldo3_state = false;
-	}
-	if (regulator_is_enabled(sc->smps1)) {
-		regulator_disable(sc->smps1);
-		sc->smps1_state = false;
-	}
-	if (regulator_is_enabled(sc->ldo5)) {
-		regulator_disable(sc->ldo5);
-		sc->ldo5_state = false;
-	}
-	if (regulator_is_enabled(sc->ldo4)) {
-		regulator_disable(sc->ldo4);
-		sc->ldo4_state = false;
-	}
-	if (regulator_is_enabled(sc->smps3)) {
-		regulator_disable(sc->smps3);
-		sc->smps3_state = false;
-	}
-	if (regulator_is_enabled(sc->ldo1)) {
-		regulator_disable(sc->ldo1);
-		sc->ldo1_state = false;
-	}
-	if (regulator_is_enabled(sc->smps2)) {
-		regulator_disable(sc->smps2);
-		sc->smps2_state = false;
-	}
-	dev_err(sc->dev, "PMIC power up failure\n");
-
-	return -ENODEV;
-}
-
-int ab_blk_pw_rails_disable(struct ab_state_context *sc,
-			   enum block_name blk_name,
-			   enum block_state to_block_substate_id)
-{
-	dev_dbg(sc->dev,
-			"disabling rails for block %u block substate id %u\n",
-			blk_name, to_block_substate_id);
-
-	switch (blk_name) {
-	case BLK_IPU:
-	case BLK_TPU:
-		sc->ldo3_state = false;
-		sc->smps1_state = false;
-		break;
-	case BLK_AON:
-		sc->ldo5_state = false;
-		sc->ldo4_state = false;
-		sc->smps2_state = false;
-		break;
-	case DRAM:
-		sc->ldo2_state = false;
-		if (to_block_substate_id == BLOCK_STATE_0) {
-			sc->ldo1_state = false;
-			sc->smps3_state = false;
+		sc->ldo2_state = enable;
+		if (enable) {
+			if (to_block_substate_id != BLOCK_STATE_0) {
+				sc->ldo1_state = true;
+				sc->smps3_state = true;
+			}
+		} else {
+			if (to_block_substate_id == BLOCK_STATE_0) {
+				sc->ldo1_state = false;
+				sc->smps3_state = false;
+			}
 		}
+
 		break;
 	case BLK_MIF:
 	case BLK_FSYS:
@@ -171,7 +81,6 @@ int ab_blk_pw_rails_disable(struct ab_state_context *sc,
 	default:
 		return -EINVAL;
 	}
-
 	return 0;
 }
 
@@ -182,6 +91,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	dev_dbg(sc->dev, "Turning OFF PMIC rails\n");
 
 	if (!sc->ldo2_state && regulator_is_enabled(sc->ldo2)) {
+		dev_dbg(sc->dev, "Disable ldo2\n");
 		ret1 = regulator_disable(sc->ldo2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -190,6 +100,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->ldo3_state && regulator_is_enabled(sc->ldo3)) {
+		dev_dbg(sc->dev, "Disable ldo3\n");
 		ret1 = regulator_disable(sc->ldo3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -199,6 +110,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->smps1_state && regulator_is_enabled(sc->smps1)) {
+		dev_dbg(sc->dev, "Disable smps1\n");
 		ret1 = regulator_disable(sc->smps1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -207,6 +119,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->ldo5_state && regulator_is_enabled(sc->ldo5)) {
+		dev_dbg(sc->dev, "Disable ldo5\n");
 		ret1 = regulator_disable(sc->ldo5);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -219,6 +132,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->ldo4_state && regulator_is_enabled(sc->ldo4)) {
+		dev_dbg(sc->dev, "Disable ldo4\n");
 		ret1 = regulator_disable(sc->ldo4);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -230,6 +144,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->smps3_state && regulator_is_enabled(sc->smps3)) {
+		dev_dbg(sc->dev, "Disable smps3\n");
 		ret1 = regulator_disable(sc->smps3);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -238,6 +153,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->ldo1_state && regulator_is_enabled(sc->ldo1)) {
+		dev_dbg(sc->dev, "Disable ldo1\n");
 		ret1 = regulator_disable(sc->ldo1);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -246,6 +162,7 @@ int ab_pmic_off(struct ab_state_context *sc)
 	}
 
 	if (!sc->smps2_state && regulator_is_enabled(sc->smps2)) {
+		dev_dbg(sc->dev, "Disable smps2\n");
 		ret1 = regulator_disable(sc->smps2);
 		if (ret1 < 0)
 			dev_err(sc->dev,
@@ -272,47 +189,55 @@ int ab_pmic_off(struct ab_state_context *sc)
 
 int ab_pmic_on(struct ab_state_context *sc)
 {
-	dev_dbg(sc->dev, "setting rails to on\n");
+	dev_dbg(sc->dev, "Turning ON PMIC rails\n");
 
-	if (!regulator_is_enabled(sc->smps2))
+	if (sc->smps2_state && !regulator_is_enabled(sc->smps2)) {
+		dev_dbg(sc->dev, "Enable smps2\n");
 		if (regulator_enable(sc->smps2))
 			goto fail_regulator_enable;
-	sc->smps2_state = true;
+	}
 
-	if (!regulator_is_enabled(sc->ldo1))
+	if (sc->ldo1_state && !regulator_is_enabled(sc->ldo1)) {
+		dev_dbg(sc->dev, "Enable ldo1\n");
 		if (regulator_enable(sc->ldo1))
 			goto fail_regulator_enable;
-	sc->ldo1_state = true;
+	}
 
-	if (!regulator_is_enabled(sc->smps3))
+	if (sc->smps3 && !regulator_is_enabled(sc->smps3)) {
+		dev_dbg(sc->dev, "Enable smps3\n");
 		if (regulator_enable(sc->smps3))
 			goto fail_regulator_enable;
-	sc->smps3_state = true;
+	}
 
-	if (!regulator_is_enabled(sc->ldo4))
+	if (sc->ldo4_state && !regulator_is_enabled(sc->ldo4)) {
+		dev_dbg(sc->dev, "Enable ldo4\n");
 		if (regulator_enable(sc->ldo4))
 			goto fail_regulator_enable;
-	sc->ldo4_state = true;
+	}
 
-	if (!regulator_is_enabled(sc->ldo5))
+	if (sc->ldo5_state && !regulator_is_enabled(sc->ldo5)) {
+		dev_dbg(sc->dev, "Enable ldo5\n");
 		if (regulator_enable(sc->ldo5))
 			goto fail_regulator_enable;
-	sc->ldo5_state = true;
+	}
 
-	if (!regulator_is_enabled(sc->smps1))
+	if (sc->smps1_state && !regulator_is_enabled(sc->smps1)) {
+		dev_dbg(sc->dev, "Enable smps1\n");
 		if (regulator_enable(sc->smps1))
 			goto fail_regulator_enable;
-	sc->smps1_state = true;
+	}
 
-	if (!regulator_is_enabled(sc->ldo3))
+	if (sc->ldo3_state && !regulator_is_enabled(sc->ldo3)) {
+		dev_dbg(sc->dev, "Enable ldo3\n");
 		if (regulator_enable(sc->ldo3))
 			goto fail_regulator_enable;
-	sc->ldo3_state = true;
+	}
 
-	if (!regulator_is_enabled(sc->ldo2))
+	if (sc->ldo2_state && !regulator_is_enabled(sc->ldo2)) {
+		dev_dbg(sc->dev, "Enable ldo2\n");
 		if (regulator_enable(sc->ldo2))
 			goto fail_regulator_enable;
-	sc->ldo2_state = true;
+	}
 
 	return 0;
 

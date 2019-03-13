@@ -23,7 +23,7 @@ information about the respective block:
 "substate_name"
 	name of the current substate.
 
-"voltage_rail_status"
+"rail_en"
 	current status of the voltage_rail
 
 "logic_voltage"
