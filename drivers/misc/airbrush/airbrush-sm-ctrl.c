@@ -2395,7 +2395,6 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	INIT_WORK(&ab_sm_ctx->shutdown_work, ab_sm_shutdown_work);
 	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
 
-	ab_sm_setup_pcie_event(ab_sm_ctx);
 	ab_sm_ctx->regulator_nb.notifier_call = ab_sm_regulator_listener;
 
 	ab_sm_ctx->smps2_delay = SMPS2_DEFAULT_DELAY;
