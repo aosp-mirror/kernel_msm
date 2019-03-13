@@ -140,10 +140,11 @@ enum oscar_bar_regs {
 /* SC_RUNCTRL register mask for trigger field */
 #define MASK_SC_RUNCTRL_TRIGGER (0x3)
 
-/* For now map the entire BAR into user space. (This helps debugging when
- * running test vectors from user land)
- * In production driver we want to exclude the kernel HIB.
- */
+/* Central PMU register defines used here. */
+#define CENTRAL_PMU_BASE	(AON_AXI2APB + 0xA0000) /* 0xBA0000 */
+#define TPU_POWER_CTL_OVERRIDE_0	(CENTRAL_PMU_BASE + 0x2500)
+#define TPU_POWER_CTL_OVERRIDE_ENABLE	(1 << 0)
+#define TILE_ISOLATION_EN		(0x1ffff << 2)
 
 /* Configuration for page table. */
 static struct gasket_page_table_config oscar_page_table_configs[NUM_NODES] = {
@@ -796,6 +797,40 @@ static int oscar_device_cleanup(struct gasket_dev *gasket_dev)
 	return oscar_enter_reset(gasket_dev);
 }
 
+/*
+ * Avoid TPU memory corruption problems at power up by temporarily ungating
+ * TPU FRC_CLK and then re-gating.
+ */
+static void tpu_frc_clk_ungate_gate(void)
+{
+	uint32_t reg;
+
+	abc_pcie_config_read(TPU_POWER_CTL_OVERRIDE_0, 4, &reg);
+	/*
+	 * Assert iolation for each tile (TILE_ISOLATION_EN), leave
+	 * FRC_CLKGATE_EN set.
+	 */
+	reg &= ~(TILE_ISOLATION_EN);
+	abc_pcie_config_write(TPU_POWER_CTL_OVERRIDE_0, 4, reg);
+	/*
+	 * Set OVERRIDE_ENABLE, which overrides the internal clock gate enable
+	 * signal and drives it to FRC_CLKGATE_EN (which is enabled).  This
+	 * allows some registers that come up in an unknown state to be flushed
+	 * and prevents them from corrupting memory retention registers.
+	 */
+	abc_pcie_config_read(TPU_POWER_CTL_OVERRIDE_0, 4, &reg);
+	reg |= TPU_POWER_CTL_OVERRIDE_ENABLE;
+	abc_pcie_config_write(TPU_POWER_CTL_OVERRIDE_0, 4, reg);
+	udelay(1);
+	/*
+	 * Clear OVERRIDE_ENABLE, which stops overriding the clock gate enable,
+	 * thereby disabling the clock again.
+	 */
+	abc_pcie_config_read(TPU_POWER_CTL_OVERRIDE_0, 4, &reg);
+	reg &= ~(TPU_POWER_CTL_OVERRIDE_ENABLE);
+	abc_pcie_config_write(TPU_POWER_CTL_OVERRIDE_0, 4, reg);
+}
+
 /* Quits GCB reset state. */
 static int oscar_quit_reset(struct gasket_dev *gasket_dev)
 {
@@ -879,6 +914,12 @@ static int oscar_quit_reset(struct gasket_dev *gasket_dev)
 	 */
 	gasket_dev_write_64(gasket_dev, 1, OSCAR_BAR_INDEX,
 			    OSCAR_BAR_REG_AON_CLOCK_ENABLE);
+
+	/*
+	 * 8a. Temporarily ungate FRC_CLK to force consistent memory retention
+	 * registers state.
+	 */
+	tpu_frc_clk_ungate_gate();
 
 	/* 9. Disable Clamp. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
