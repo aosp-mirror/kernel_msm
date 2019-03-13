@@ -664,14 +664,14 @@ static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
 {
 	dev_dbg(ctx->dev, "Restore PLL_AON_CLK\n");
 
-	/* Undo 2x multiply */
+	/* Restore default divider settings to undo 2x multiply */
 	ABC_WRITE(CLK_CON_DIV_DIV2_PLLCLK_MIF, 0x1);
-	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x2);
-	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x2);
-	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_FSYS, 0x2);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x3);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x3);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_FSYS, 0x3);
 	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_CORE, 0x1);
 
-	/* Undo /2 */
+	/* Restore default divider setting to undo 2x divide */
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
 }
 
