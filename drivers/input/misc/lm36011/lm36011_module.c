@@ -41,6 +41,10 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
+#define PHASE0 0
+#define PHASE1 1
+#define PHASE2 2
+#define PHASE3 3
 #define PHASENUM 4
 
 #define MAX_RETRY_COUNT 3
@@ -48,10 +52,12 @@
 #define PHASE_SELECT_REG 0x60
 #define PROXAVG_REG 0x63
 #define PROXOFFSET_REG 0x67
-/* TODO: replace this by actual crack threshold
- * Bug: b/124409695
- */
-#define CRACK_THRES ~(1<<16)
+
+/* crack unit in aF */
+#define DUMMY_CRACK_THRES 0x7FFFFFFF
+#define CRACK_THRES_EVT1 0x3D090
+#define CRACK_THRES_FLOOD_EVT1_1 0xF4240
+#define CRACK_THRES_DOT_EVT1_1 0xF4240
 
 #define VIO_VOLTAGE_MIN 1800000
 #define VIO_VOLTAGE_MAX 1800000
@@ -138,13 +144,21 @@ struct led_laser_ctrl_t {
 		uint16_t proxoffset[PHASENUM];
 		struct camera_io_master io_master_info;
 		bool is_cci_init;
-		uint16_t calibraion_data[PHASENUM];
+		uint16_t calibration_data[PHASENUM];
+		int32_t cap_slope[PHASENUM];
+		int32_t cap_bias[PHASENUM];
+		int32_t cap_raw[PHASENUM];
+		int32_t cap_corrected[PHASENUM];
 		bool is_crack_detected[LASER_TYPE_MAX];
 	} cap_sense;
 };
 
 static bool read_proxoffset;
+static bool crack_log_en;
+static bool crack_detection_en;
 module_param(read_proxoffset, bool, 0644);
+module_param(crack_log_en, bool, 0644);
+module_param(crack_detection_en, bool, 0644);
 
 static const struct reg_setting silego_reg_settings_ver1[] = {
 	{0xc0, 0x09}, {0xc1, 0xf9}, {0xc2, 0x09}, {0xc3, 0xf9}, {0xcb, 0x93},
@@ -222,6 +236,30 @@ static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x00, 0x08},
 };
 
+static void convert_proxvalue_to_aF(struct led_laser_ctrl_t *ctrl)
+{
+	int i;
+
+	for (i = PHASE1; i <= PHASE2; i++) {
+		ctrl->cap_sense.cap_raw[i] =
+			((((ctrl->cap_sense.proxoffset[i] >> 7) & 0x007F)
+			* 2123) +
+			((ctrl->cap_sense.proxoffset[i] & 0x007F) * 50))
+			* 1000 + ctrl->cap_sense.proxavg[i] * 147;
+	}
+}
+
+static void itoc_temperature_correction(struct led_laser_ctrl_t *ctrl)
+{
+	int i;
+	int32_t temp_mC = ctrl->cap_sense.proxavg[PHASE3] * 1000 / 57;
+
+	for (i = PHASE1; i <= PHASE2; i++)
+		ctrl->cap_sense.cap_corrected[i] =
+			ctrl->cap_sense.cap_raw[i] -
+			(temp_mC * ctrl->cap_sense.cap_slope[i] / 1000);
+}
+
 static int sx9320_write_data(
 	struct led_laser_ctrl_t *ctrl,
 	uint32_t addr,
@@ -267,24 +305,39 @@ static int sx9320_cleanup_nirq(struct led_laser_ctrl_t *ctrl)
 
 static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 {
-	int gpio_level, flood_idx, dot_idx;
+	int gpio_level, flood_thres, dot_thres;
 	bool is_sw_halt_required;
 
-	if (ctrl->cap_sense.calibraion_data[1] == 0 ||
-		ctrl->cap_sense.calibraion_data[2] == 0)
+	if (ctrl->cap_sense.calibration_data[PHASE1] == 0 ||
+		ctrl->cap_sense.calibration_data[PHASE2] == 0 ||
+		ctrl->cap_sense.cap_bias[PHASE1] == 0 ||
+		ctrl->cap_sense.cap_bias[PHASE2] == 0 ||
+		ctrl->cap_sense.cap_slope[PHASE1] == 0 ||
+		ctrl->cap_sense.cap_slope[PHASE2] == 0)
 		return;
 
-	flood_idx = 1;
-	dot_idx = 2;
+	convert_proxvalue_to_aF(ctrl);
+	itoc_temperature_correction(ctrl);
 	gpio_level =
 		gpio_get_value(ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio);
 
+	if (crack_detection_en) {
+		flood_thres = (ctrl->hw_version == BUILD_EVT1_1) ?
+			CRACK_THRES_FLOOD_EVT1_1 : CRACK_THRES_EVT1;
+		dot_thres = (ctrl->hw_version == BUILD_EVT1_1) ?
+			CRACK_THRES_DOT_EVT1_1 : DUMMY_CRACK_THRES;
+	} else {
+		flood_thres = DUMMY_CRACK_THRES;
+		dot_thres = DUMMY_CRACK_THRES;
+	}
 	ctrl->cap_sense.is_crack_detected[LASER_FLOOD] =
-		ctrl->cap_sense.proxavg[flood_idx] < CRACK_THRES ?
+		((ctrl->cap_sense.cap_bias[PHASE1] -
+		ctrl->cap_sense.cap_corrected[PHASE1]) > flood_thres) ?
 		true : false;
 
 	ctrl->cap_sense.is_crack_detected[LASER_DOT] =
-		ctrl->cap_sense.proxavg[dot_idx] < CRACK_THRES ?
+		((ctrl->cap_sense.cap_bias[PHASE2] -
+		ctrl->cap_sense.cap_corrected[PHASE2]) > dot_thres) ?
 		true : false;
 
 	is_sw_halt_required =
@@ -309,26 +362,43 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 			ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio,
 			0);
 	}
+
+	if (crack_log_en) {
+		dev_info(ctrl->soc_info.dev,
+			"flood C_raw %d aF C_corrected: %d aF "
+			"Cap_bias: %d aF temp: %d mC is crack: %d",
+			ctrl->cap_sense.cap_raw[PHASE1],
+			ctrl->cap_sense.cap_corrected[PHASE1],
+			ctrl->cap_sense.cap_bias[PHASE1],
+			ctrl->cap_sense.proxavg[PHASE3] * 1000 / 57,
+			ctrl->cap_sense.is_crack_detected[LASER_FLOOD]);
+		dev_info(ctrl->soc_info.dev,
+			"dot C_raw %d aF C_corrected: %d aF "
+			"Cap_bias: %d aF temp: %d mC is crack: %d",
+			ctrl->cap_sense.cap_raw[PHASE2],
+			ctrl->cap_sense.cap_corrected[PHASE2],
+			ctrl->cap_sense.cap_bias[PHASE2],
+			ctrl->cap_sense.proxavg[PHASE3] * 1000 / 57,
+			ctrl->cap_sense.is_crack_detected[LASER_DOT]);
+	}
 }
 
 static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 {
 	int rc = 0, retry_cnt;
 	uint32_t data;
-	uint32_t i, PH_start, PH_end;
+	uint32_t i;
 	struct cam_sensor_i2c_reg_setting write_setting;
 	struct cam_sensor_i2c_reg_array reg_settings;
 
-	if (ctrl->cap_sense.calibraion_data[1] == 0 ||
-		ctrl->cap_sense.calibraion_data[2] == 0) {
+	if (ctrl->cap_sense.calibration_data[1] == 0 ||
+		ctrl->cap_sense.calibration_data[2] == 0) {
 		dev_info(ctrl->soc_info.dev,
 			"calibration data is not present, PH1: %d PH2; %d",
-			ctrl->cap_sense.calibraion_data[1],
-			ctrl->cap_sense.calibraion_data[2]);
+			ctrl->cap_sense.calibration_data[1],
+			ctrl->cap_sense.calibration_data[2]);
 		goto out;
 	}
-	PH_start = 1;
-	PH_end = 2;
 
 	reg_settings.reg_addr = PHASE_SELECT_REG;
 	reg_settings.reg_data = 0x00;
@@ -339,7 +409,7 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 	write_setting.size = 1;
 	write_setting.delay = 10;
 
-	for (i = PH_start; i <= PH_end; i++) {
+	for (i = PHASE1; i <= PHASE2; i++) {
 		reg_settings.reg_data = i;
 		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
 			&write_setting);
@@ -351,7 +421,7 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 
 		reg_settings.reg_addr = PROXOFFSET_REG;
 		reg_settings.reg_data =
-			(ctrl->cap_sense.calibraion_data[i] >> 8) & 0x3F;
+			(ctrl->cap_sense.calibration_data[i] >> 8) & 0x3F;
 		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
 			&write_setting);
 		if (rc < 0) {
@@ -362,7 +432,7 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 
 		reg_settings.reg_addr = PROXOFFSET_REG+1;
 		reg_settings.reg_data =
-			ctrl->cap_sense.calibraion_data[i] & 0x00FF;
+			ctrl->cap_sense.calibration_data[i] & 0x00FF;
 		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
 			&write_setting);
 		if (rc < 0) {
@@ -382,7 +452,7 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 
 			ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
 			if (ctrl->cap_sense.proxoffset[i]
-				== ctrl->cap_sense.calibraion_data[i]) {
+				== ctrl->cap_sense.calibration_data[i]) {
 				break;
 			}
 			retry_cnt++;
@@ -392,8 +462,9 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 			dev_err(ctrl->soc_info.dev,
 				"read back offset %d mismatch to cali data %d",
 				ctrl->cap_sense.proxoffset[i],
-				ctrl->cap_sense.calibraion_data[i]);
+				ctrl->cap_sense.calibration_data[i]);
 		}
+
 	}
 
 out:
@@ -927,7 +998,7 @@ static void cap_sense_workq_job(struct work_struct *work)
 
 		ctrl->cap_sense.proxavg[i] = data & 0xFFFF;
 
-		if (i == 2)
+		if (i == PHASE2)
 			sx9320_crack_detection(ctrl);
 
 		if (read_proxoffset) {
@@ -1527,12 +1598,12 @@ static ssize_t cap_sense_proxvalue_show(struct device *dev,
 
 	rc = scnprintf(buf, PAGE_SIZE,
 		"proxoffset PH1: %d, PH2: %d, PH3: %d\nproxavg PH1: %d, PH2: %d, PH3: %d\n",
-			ctrl->cap_sense.proxoffset[1],
-			ctrl->cap_sense.proxoffset[2],
-			ctrl->cap_sense.proxoffset[3],
-			ctrl->cap_sense.proxavg[1],
-			ctrl->cap_sense.proxavg[2],
-			ctrl->cap_sense.proxavg[3]);
+			ctrl->cap_sense.proxoffset[PHASE1],
+			ctrl->cap_sense.proxoffset[PHASE2],
+			ctrl->cap_sense.proxoffset[PHASE3],
+			ctrl->cap_sense.proxavg[PHASE1],
+			ctrl->cap_sense.proxavg[PHASE2],
+			ctrl->cap_sense.proxavg[PHASE3]);
 
 	return rc;
 }
@@ -1579,15 +1650,60 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 {
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
 	uint32_t value = 0;
+	int32_t temp_value;
 	int rc;
+	char op;
 
-	rc = kstrtouint(buf, 0, &value);
-
-	if (rc < 0)
-		return rc;
-
-	ctrl->cap_sense.calibraion_data[1] = (value >> 16);
-	ctrl->cap_sense.calibraion_data[2] = (value & 0x0000FFFF);
+	op = buf[0];
+	switch (op) {
+	case 'a':
+		rc = kstrtouint((buf+1), 0, &value);
+		if (rc < 0)
+			return rc;
+		ctrl->cap_sense.calibration_data[PHASE1] = (value >> 16);
+		ctrl->cap_sense.calibration_data[PHASE2] =
+			(value & 0x0000FFFF);
+		dev_info(dev,
+			"updated ITO-C calibration data, flood: %d dot: %d",
+			ctrl->cap_sense.calibration_data[PHASE1],
+			ctrl->cap_sense.calibration_data[PHASE2]);
+		break;
+	case 'b':
+		rc = kstrtoint((buf+1), 0, &temp_value);
+		if (rc < 0)
+			return rc;
+		ctrl->cap_sense.cap_bias[PHASE1] = temp_value;
+		dev_info(dev, "updated flood bias: %d",
+			ctrl->cap_sense.cap_bias[PHASE1]);
+		break;
+	case 'c':
+		rc = kstrtoint((buf+1), 0, &temp_value);
+		if (rc < 0)
+			return rc;
+		ctrl->cap_sense.cap_slope[PHASE1] = temp_value;
+		dev_info(dev, "updated flood slope: %d",
+			ctrl->cap_sense.cap_slope[PHASE1]);
+		break;
+	case 'd':
+		rc = kstrtoint((buf+1), 0, &temp_value);
+		if (rc < 0)
+			return rc;
+		ctrl->cap_sense.cap_bias[PHASE2] = temp_value;
+		dev_info(dev, "updated dot bias: %d",
+			ctrl->cap_sense.cap_bias[PHASE2]);
+		break;
+	case 'e':
+		rc = kstrtoint((buf+1), 0, &temp_value);
+		if (rc < 0)
+			return rc;
+		ctrl->cap_sense.cap_slope[PHASE2] = temp_value;
+		dev_info(dev, "updated dot slope: %d",
+			ctrl->cap_sense.cap_slope[PHASE2]);
+		break;
+	default:
+		dev_err(dev, "unsupported operation");
+		break;
+	}
 
 	return count;
 }
@@ -1731,8 +1847,13 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->cap_sense.is_validated = false;
 	for (i = 0; i < LASER_TYPE_MAX; i++)
 		ctrl->cap_sense.is_crack_detected[i] = false;
-	for (i = 0; i < PHASENUM; i++)
-		ctrl->cap_sense.calibraion_data[i] = 0;
+	for (i = 0; i < PHASENUM; i++) {
+		ctrl->cap_sense.calibration_data[i] = 0;
+		ctrl->cap_sense.cap_bias[i] = 0;
+		ctrl->cap_sense.cap_slope[i] = 0;
+		ctrl->cap_sense.cap_raw[i] = 0;
+		ctrl->cap_sense.cap_corrected[i] = 0;
+	}
 
 	ctrl->io_master_info.cci_client = devm_kzalloc(&pdev->dev,
 		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
