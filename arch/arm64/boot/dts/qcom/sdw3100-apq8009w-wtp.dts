@@ -258,6 +258,7 @@
 &bg_cdc {
 	status = "ok";
 	vdd-spkr-supply = <&pm660_l11>;
+	/delete-property/ qcom,bg-speaker-connected;
 };
 
 &blsp1_uart1 {
