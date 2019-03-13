@@ -642,10 +642,12 @@ void sde_connector_helper_bridge_post_enable(struct drm_connector *connector)
 	 * So delay backlight update to these panels until the
 	 * first frame commit is received from the HW.
 	 */
-	if (bl_config->bl_update == BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
-		sde_encoder_wait_for_event(c_conn->encoder,
-				MSM_ENC_TX_COMPLETE);
-	bl_config->allow_bl_update = true;
+	if (!bl_config->allow_bl_update) {
+		if (bl_config->bl_update == BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
+			sde_encoder_wait_for_event(c_conn->encoder,
+						   MSM_ENC_TX_COMPLETE);
+		bl_config->allow_bl_update = true;
+	}
 
 	if (bl_config->bl_device)
 		backlight_update_status(bl_config->bl_device);
