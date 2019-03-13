@@ -608,7 +608,7 @@
 
 		removed_regions: removed_regions@86200000 {
 			no-map;
-			reg = <0x0 0x86200000 0x0 0x2200000>;
+			reg = <0x0 0x86200000 0x0 0x5500000>;
 		};
 
 		pil_camera_mem: camera_region@8b700000 {
