@@ -1156,7 +1156,7 @@ static int oscar_abc_pcie_link_change_listener(
 	struct oscar_dev *oscar_dev =
 		container_of(nb, struct oscar_dev, pcie_link_change_nb);
 
-	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
+	if (action & (ABC_PCIE_LINK_PRE_DISABLE | ABC_PCIE_LINK_ERROR)) {
 		mutex_lock(&oscar_dev->dev_avail_lock);
 		oscar_dev->pcie_lockout = true; /* PCIe link unavailable */
 		mutex_unlock(&oscar_dev->dev_avail_lock);
