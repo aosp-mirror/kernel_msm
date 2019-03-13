@@ -18,6 +18,7 @@
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
@@ -39,6 +40,7 @@ struct ipu_adapter_shared_buffer {
 	bool mapped_to_bar;
 	/* data in this struct only valid if mapped_to_bar is true */
 	struct bar_mapping mapping;
+	struct list_head sbuf_entry;
 };
 
 struct ipu_adapter_jqs_buffer {
@@ -59,6 +61,7 @@ struct ipu_adapter_ab_mfd_data {
 	 * dma device can be set to our own device and use SWIOTLB to map
 	 * buffers.
 	 */
+	struct list_head sbuf_list;
 	struct device *dma_dev;
 	struct platform_device *pdev;
 	struct paintbox_pdata pdata;
@@ -233,6 +236,10 @@ static struct ipu_shared_buffer *ipu_adapter_ab_mfd_alloc_shared_memory(
 	if (ret < 0)
 		goto err_exit_free_dma_buffer;
 
+	mutex_lock(&dev_data->sync_lock);
+	list_add_tail(&sbuf->sbuf_entry, &dev_data->sbuf_list);
+	mutex_unlock(&dev_data->sync_lock);
+
 	return &sbuf->base;
 
 err_exit_free_dma_buffer:
@@ -264,6 +271,51 @@ void ipu_adapter_ab_mfd_free_shared_memory(struct device *dev,
 		dma_free_coherent(dev_data->dma_dev, shared_buffer_base->size,
 				shared_buffer_base->host_vaddr,
 				shared_buffer_base->host_dma_addr);
+
+	mutex_lock(&dev_data->sync_lock);
+	list_del(&sbuf->sbuf_entry);
+	mutex_unlock(&dev_data->sync_lock);
+}
+
+void ipu_adapter_ab_mfd_suspend_shared_memory(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	struct ipu_adapter_shared_buffer *sbuf, *sbuf_next;
+
+	mutex_lock(&dev_data->sync_lock);
+
+	list_for_each_entry_safe(sbuf, sbuf_next, &dev_data->sbuf_list,
+			sbuf_entry) {
+		if (sbuf->mapped_to_bar)
+			ipu_adapter_ab_mfd_unmap_from_bar(dev_data->dev, sbuf);
+	}
+
+	mutex_unlock(&dev_data->sync_lock);
+}
+
+void ipu_adapter_ab_mfd_resume_shared_memory(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	struct ipu_adapter_shared_buffer *sbuf, *sbuf_next;
+
+	mutex_lock(&dev_data->sync_lock);
+
+	list_for_each_entry_safe(sbuf, sbuf_next, &dev_data->sbuf_list,
+			sbuf_entry)
+		ipu_adapter_ab_mfd_map_to_bar(dev_data->dev, sbuf);
+
+	mutex_unlock(&dev_data->sync_lock);
+}
+
+void ipu_adapter_ab_mfd_free_all_shared_memory(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	struct ipu_adapter_shared_buffer *sbuf, *sbuf_next;
+
+	list_for_each_entry_safe(sbuf, sbuf_next, &dev_data->sbuf_list,
+			sbuf_entry)
+		ipu_adapter_ab_mfd_free_shared_memory(dev_data->dev,
+				&sbuf->base);
 }
 
 /* TODO(b/117619644): profile PIO vs DMA transfer speed to find the correct
@@ -732,6 +784,7 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 			!ipu_adapter_link_is_ready(dev_data)) {
 		dev_dbg(dev_data->dev, "%s: PCIe link available\n", __func__);
 		ipu_adapter_ab_mfd_enable_interrupts(dev_data);
+		ipu_adapter_ab_mfd_resume_shared_memory(dev_data);
 		atomic_or(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
 		ipu_bus_notify_ready(bus, dev_data->ipu_clock_rate_hz);
 		return NOTIFY_OK;
@@ -743,6 +796,7 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 		ipu_bus_notify_shutdown(bus);
 		atomic_andnot(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
 		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
+		ipu_adapter_ab_mfd_suspend_shared_memory(dev_data);
 		return NOTIFY_OK;
 	}
 
@@ -877,6 +931,8 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 
 	mutex_init(&dev_data->sync_lock);
 
+	INIT_LIST_HEAD(&dev_data->sbuf_list);
+
 	/* TODO(b/115431813):  This can be removed once the DMA interface
 	 * clean up is done.
 	 */
@@ -990,6 +1046,7 @@ static int ipu_adapter_ab_mfd_remove(struct platform_device *pdev)
 				&dev_data->pcie_link_blocking_nb);
 	ab_sm_unregister_clk_event(&dev_data->clk_change_nb);
 	ipu_bus_deinitialize(dev_data->bus);
+	ipu_adapter_ab_mfd_free_all_shared_memory(dev_data);
 	dev_data->bus = NULL;
 	atomic_notifier_chain_unregister(dev_data->low_priority_irq_nh,
 			&dev_data->low_priority_irq_nb);
