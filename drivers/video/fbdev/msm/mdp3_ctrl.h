@@ -66,6 +66,10 @@ struct mdp3_session_data {
 	struct kthread_worker worker;
 	struct task_struct *thread;
 
+	struct kthread_work retire_work;
+	struct kthread_worker retire_worker;
+	struct task_struct *retire_thread;
+
 	atomic_t dma_done_cnt;
 	int histo_status;
 	struct mutex histo_lock;
@@ -89,7 +93,6 @@ struct mdp3_session_data {
 	/* For retire fence */
 	struct mdss_timeline *vsync_timeline;
 	int retire_cnt;
-	struct work_struct retire_work;
 };
 
 void mdp3_bufq_deinit(struct mdp3_buffer_queue *bufq, int client);
