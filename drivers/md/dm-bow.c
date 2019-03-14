@@ -1004,6 +1004,11 @@ static int dm_bow_map(struct dm_target *ti, struct bio *bio)
 	int ret = DM_MAPIO_REMAPPED;
 	struct bow_context *bc = ti->private;
 
+	if (bio_data_dir(bio) == READ && bio->bi_iter.bi_sector != 0) {
+		bio->bi_bdev = bc->dev->bdev;
+		return DM_MAPIO_REMAPPED;
+	}
+
 	if (likely(bc->state.counter == COMMITTED)) {
 		bio->bi_bdev = bc->dev->bdev;
 		return DM_MAPIO_REMAPPED;
