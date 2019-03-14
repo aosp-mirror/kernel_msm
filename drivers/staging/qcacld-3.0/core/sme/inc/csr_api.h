@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -546,6 +546,8 @@ typedef enum {
 	eCSR_ROAM_ABORT,
 	eCSR_ROAM_NAPI_OFF,
 	eCSR_ROAM_SAE_COMPUTE,
+	/* LFR3 Roam sync complete */
+	eCSR_ROAM_SYNCH_COMPLETE,
 } eRoamCmdStatus;
 
 /* comment inside indicates what roaming callback gets */
