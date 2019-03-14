@@ -57,6 +57,8 @@
 static void update_sw_icl_max(struct smb_charger *chg, int pst);
 static int smblib_get_prop_typec_mode(struct smb_charger *chg);
 
+#define LPD_VOTER  "LPD_VOTER"
+
 int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				       const union power_supply_propval *val);
 
@@ -6184,7 +6186,6 @@ irqreturn_t usb_source_change_irq_handler(int irq, void *data)
 enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 						ktime_t time)
 {
-	union power_supply_propval pval;
 	struct smb_charger *chg = container_of(alarm, struct smb_charger,
 							lpd_recheck_timer);
 	int rc;
@@ -6195,11 +6196,10 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 		goto disable;
 
 	if (chg->lpd_reason == LPD_MOISTURE_DETECTED) {
-		pval.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
-		rc = smblib_set_prop_typec_power_role(chg, &pval);
+		rc = vote(chg->disable_power_role_switch, LPD_VOTER, false, 0);
 		if (rc < 0) {
-			smblib_err(chg, "Couldn't write 0x%02x to TYPE_C_INTRPT_ENB_SOFTWARE_CTRL rc=%d\n",
-				pval.intval, rc);
+			smblib_err(chg,
+				   "Could not enable drp toggling %d\n", rc);
 			goto exit;
 		}
 		chg->moisture_present = false;
@@ -6249,14 +6249,14 @@ int enable_moisture_detection(struct smb_charger *chg, bool enable)
 		goto exit;
 	}
 
-	chg->moisture_detection_enabled = enable;
-
-	if (!chg->moisture_detection_enabled) {
-		union power_supply_propval pval;
-
-		pval.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
-		if (smblib_set_prop_typec_power_role(chg, &pval) < 0)
-			smblib_err(chg, "Couldn't enable DRP\n");
+	if (!enable) {
+		rc = vote(chg->disable_power_role_switch, LPD_VOTER, false, 0);
+		if (rc < 0) {
+			smblib_err(chg,
+				   "%s: Could not enable drp toggling %d\n",
+				   __func__, rc);
+			goto exit;
+		}
 
 		chg->lpd_stage = LPD_STAGE_NONE;
 		chg->lpd_reason = LPD_NONE;
@@ -6274,7 +6274,6 @@ exit:
 #define RSBU_K_300K_UV	3000000
 static bool smblib_src_lpd(struct smb_charger *chg)
 {
-	union power_supply_propval pval;
 	bool lpd_flag = false;
 	u8 stat;
 	int rc;
@@ -6308,11 +6307,13 @@ static bool smblib_src_lpd(struct smb_charger *chg)
 
 	if (lpd_flag) {
 		chg->lpd_stage = LPD_STAGE_COMMIT;
-		pval.intval = POWER_SUPPLY_TYPEC_PR_SINK;
-		rc = smblib_set_prop_typec_power_role(chg, &pval);
-		if (rc < 0)
-			smblib_err(chg, "Couldn't write 0x%02x to TYPE_C_INTRPT_ENB_SOFTWARE_CTRL rc=%d\n",
-				pval.intval, rc);
+		rc = vote(chg->disable_power_role_switch, LPD_VOTER, true, 0);
+		if (rc < 0) {
+			smblib_err(chg,
+				   "%s: Could not disable drp toggling %d\n",
+				   __func__, rc);
+		}
+
 		chg->lpd_reason = LPD_MOISTURE_DETECTED;
 		chg->moisture_present =  true;
 		vote(chg->usb_icl_votable, LPD_VOTER, true, 0);
@@ -8291,19 +8292,18 @@ static void smblib_lpd_ra_open_work(struct work_struct *work)
 	}
 
 	if (rsbux_low) {
-		/* Moisture detected, enable sink only mode */
-		pval.intval = POWER_SUPPLY_TYPEC_PR_SINK;
-		rc = smblib_set_prop_typec_power_role(chg, &pval);
+		/* Moisture detected, enable hi-z */
+		rc = vote(chg->disable_power_role_switch, LPD_VOTER, true, 0);
 		if (rc < 0) {
-			smblib_err(chg, "Couldn't set typec sink only rc=%d\n",
-				rc);
+			smblib_err(chg,
+				   "%s: Could not enable drp toggling %d\n",
+				   __func__, rc);
 			goto unlock;
 		}
 
 		chg->lpd_reason = LPD_MOISTURE_DETECTED;
 		chg->moisture_present =  true;
 		vote(chg->usb_icl_votable, LPD_VOTER, true, 0);
-
 	} else {
 		/* Floating cable, disable water detection irq temporarily */
 		rc = smblib_masked_write(chg, TYPE_C_INTERRUPT_EN_CFG_2_REG,
@@ -8315,14 +8315,13 @@ static void smblib_lpd_ra_open_work(struct work_struct *work)
 		}
 
 		/* restore DRP mode */
-		pval.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
-		rc = smblib_set_prop_typec_power_role(chg, &pval);
+		rc = vote(chg->disable_power_role_switch, LPD_VOTER, false, 0);
 		if (rc < 0) {
-			smblib_err(chg, "Couldn't write 0x%02x to TYPE_C_INTRPT_ENB_SOFTWARE_CTRL rc=%d\n",
-				pval.intval, rc);
+			smblib_err(chg,
+				   "%s: Could not enable drp toggling %d\n",
+				   __func__, rc);
 			goto unlock;
 		}
-
 		chg->lpd_reason = LPD_FLOATING_CABLE;
 	}
 
