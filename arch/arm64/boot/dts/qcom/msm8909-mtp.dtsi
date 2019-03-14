@@ -116,11 +116,11 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&gpio_key_active>;
 
-		camera_focus {
-			label = "camera_focus";
+		stem1 {
+			label = "stem1";
 			gpios = <&msm_gpio 91 0x1>;
 			linux,input-type = <1>;
-			linux,code = <0x210>;
+			linux,code = <750>;
 			debounce-interval = <15>;
 			linux,can-disable;
 			gpio-key,wakeup;
@@ -136,11 +136,11 @@
 			gpio-key,wakeup;
 		};
 
-		vol_up {
-			label = "volume_up";
+		stem2 {
+			label = "stem2";
 			gpios = <&msm_gpio 90 0x1>;
 			linux,input-type = <1>;
-			linux,code = <115>;
+			linux,code = <751>;
 			debounce-interval = <15>;
 			linux,can-disable;
 			gpio-key,wakeup;
