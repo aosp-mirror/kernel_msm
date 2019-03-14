@@ -6442,7 +6442,8 @@ static int cs40l2x_wavetable_swap(struct cs40l2x_private *cs40l2x,
 	const struct firmware *fw;
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	int ret1, ret2;
+	unsigned int val;
+	int ret1, ret2, i;
 
 	ret1 = cs40l2x_hiber_cmd_send(cs40l2x, CS40L2X_POWERCONTROL_FRC_STDBY);
 	if (ret1) {
@@ -6486,7 +6487,22 @@ err_wakeup:
 		return ret2;
 	}
 
-	return ret1;
+	for (i = 0; i < CS40L2X_ACK_TIMEOUT_COUNT; i++) {
+		usleep_range(10000, 10100);
+
+		ret2 = regmap_read(regmap, CS40L2X_MBOX_TRIGGERINDEX, &val);
+		if (ret2) {
+			dev_err(dev, "Failed to read dummy trigger\n");
+			return ret2;
+		}
+
+		if (val == CS40L2X_MBOX_TRIGGERRESET)
+			return ret1;
+	}
+
+	dev_err(dev, "Failed to acknowledge dummy trigger\n");
+
+	return -ETIME;
 }
 
 static int cs40l2x_wavetable_sync(struct cs40l2x_private *cs40l2x)
