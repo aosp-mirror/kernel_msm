@@ -121,7 +121,7 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
-				"ipu_pll_mux: set_parent failed(err %d)\n",
+				"ipu_pll_mux: set_parent failed(err %lld)\n",
 				ret);
 			goto error_abort;
 		}
@@ -137,7 +137,7 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->osc_clk);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"ipu_pll_mux: set_parent failed(err %d)\n", ret);
+			"ipu_pll_mux: set_parent failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
@@ -147,14 +147,14 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ret = clk_set_rate(clk_ctx->ipu_pll, new_rate);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"ipu_pll: set_rate failed(err %d)\n", ret);
+			"ipu_pll: set_rate failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
 	ret = clk_set_parent(clk_ctx->ipu_pll_mux, clk_ctx->ipu_pll);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"ipu_pll_mux: set_parent failed(err %d)\n", ret);
+			"ipu_pll_mux: set_parent failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
@@ -250,7 +250,7 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
-				"tpu_pll_mux: set_parent failed(err %d)\n",
+				"tpu_pll_mux: set_parent failed(err %lld)\n",
 				ret);
 			goto error_abort;
 		}
@@ -266,7 +266,7 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->shared_div_aon_pll);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"tpu_switch_mux: set_parent failed(err %d)\n", ret);
+			"tpu_switch_mux: set_parent failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
@@ -276,7 +276,7 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->osc_clk);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"tpu_pll_mux: set_parent failed(err %d)\n", ret);
+			"tpu_pll_mux: set_parent failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
@@ -286,21 +286,21 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ret = clk_set_rate(clk_ctx->tpu_pll, new_rate);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"tpu_pll: set_rate failed(err %d)\n", ret);
+			"tpu_pll: set_rate failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
 	ret = clk_set_parent(clk_ctx->tpu_pll_mux, clk_ctx->tpu_pll);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"tpu_pll_mux: set_parent failed(err %d)\n", ret);
+			"tpu_pll_mux: set_parent failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
 	clk_set_parent(clk_ctx->tpu_switch_mux, clk_ctx->tpu_pll_div);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"tpu_switch_mux: set_parent failed(err %d)\n", ret);
+			"tpu_switch_mux: set_parent failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 
@@ -387,7 +387,7 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
 		if (ret) {
 			dev_err(clk_ctx->dev,
-				"aon_pll_mux: set_parent failed(err %d)\n",
+				"aon_pll_mux: set_parent failed(err %lld)\n",
 				ret);
 			goto error_abort;
 		}
@@ -398,7 +398,7 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->aon_pll);
 	if (ret) {
 		dev_err(clk_ctx->dev,
-			"aon_pll_mux: set_parent failed(err %d)\n", ret);
+			"aon_pll_mux: set_parent failed(err %lld)\n", ret);
 		goto error_abort;
 	}
 

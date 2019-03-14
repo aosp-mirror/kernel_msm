@@ -5,7 +5,7 @@
  *	Shaik Ameer Basha <shaik.ameer@samsung.com>
  *	Raman Kumar Banka <raman.k2@samsung.com>
  *
- * Airbrush State Manager Control driver..
+ * Airbrush State Manager Control driver.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1428,17 +1428,6 @@ u32 ab_sm_get_state(struct ab_state_context *sc, bool mapped)
 	return state;
 }
 EXPORT_SYMBOL(ab_sm_get_state);
-
-int ab_sm_register_callback(struct ab_state_context *sc,
-				ab_sm_callback_t cb, void *cookie)
-{
-	/* Update the context structure with the event callback information */
-	sc->cb_event = cb;
-	sc->cb_cookie = cookie;
-
-	return 0;
-}
-EXPORT_SYMBOL(ab_sm_register_callback);
 
 /**
  * ab_sm_clk_notify - call Airbrush clk notifier chain

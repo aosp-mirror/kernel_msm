@@ -71,7 +71,7 @@ static int __ab_pmu_ipu_sleep(struct ab_pmu_context *pmu_ctx)
 
 	if (timeout == 0) {
 		dev_err(pmu_ctx->dev, "Timeout waiting for IPU down status\n");
-		return -E_STATUS_TIMEOUT;
+		return -EBUSY;
 	}
 
 	return 0;
@@ -120,7 +120,7 @@ static int __ab_pmu_tpu_sleep(struct ab_pmu_context *pmu_ctx)
 
 	if (timeout == 0) {
 		dev_err(pmu_ctx->dev, "Timeout waiting for TPU down status\n");
-		return -E_STATUS_TIMEOUT;
+		return -EBUSY;
 	}
 
 	return 0;
@@ -176,7 +176,7 @@ static int __ab_pmu_deep_sleep_handler(struct ab_pmu_context *pmu_ctx)
 
 	if (timeout == 0) {
 		dev_err(pmu_ctx->dev, "Timeout setting IPU/TPU to sleep before deep sleep\n");
-		return -E_STATUS_TIMEOUT;
+		return -EBUSY;
 	}
 
 	/* PMU_CONTROL[2:2] DEEP_SLEEP */
@@ -192,7 +192,7 @@ static int __ab_pmu_deep_sleep_handler(struct ab_pmu_context *pmu_ctx)
 
 	if (timeout == 0) {
 		dev_err(pmu_ctx->dev, "Timeout waiting for deep_sleep set status\n");
-		return -E_STATUS_TIMEOUT;
+		return -EBUSY;
 	}
 
 	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
@@ -270,7 +270,7 @@ static int __ab_pmu_ipu_resume_handler(struct ab_pmu_context *pmu_ctx)
 
 	if (timeout == 0) {
 		dev_err(pmu_ctx->dev, "Timeout waiting for IPU up status\n");
-		return -E_STATUS_TIMEOUT;
+		return -EBUSY;
 	}
 
 	abc_ipu_apb_clk_fix();
@@ -316,7 +316,7 @@ static int __ab_pmu_tpu_resume_handler(struct ab_pmu_context *pmu_ctx)
 
 	if (timeout == 0) {
 		dev_err(pmu_ctx->dev, "Timeout waiting for TPU up status\n");
-		return -E_STATUS_TIMEOUT;
+		return -EBUSY;
 	}
 
 	abc_tpu_apb_clk_fix();

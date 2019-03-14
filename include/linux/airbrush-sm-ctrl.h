@@ -67,14 +67,14 @@ enum states {
  * all reads are currently happening through PCIe
  */
 #define ABC_READ(addr, to_addr) \
-	abc_pcie_config_read(addr & 0xffffff, 0x0, to_addr)
+	abc_pcie_config_read((addr) & 0xffffff, 0x0, (to_addr))
 
 /*
  * Write value to an ABC register address, addr
  * All writes are currently happening through PCIe
  */
 #define ABC_WRITE(addr, value) \
-	abc_pcie_config_write(addr & 0xffffff, 0x0, value)
+	abc_pcie_config_write((addr) & 0xffffff, 0x0, (value))
 
 /*Should be in ascending order (for comparisons)*/
 enum logic_voltage {
@@ -205,10 +205,11 @@ typedef int (*ab_sm_set_block_state_t)(
  * struct block - stores the information about a SOC block
  *
  * @name: name of the block
- * @current_id: id of current state of the block
- * @current_state_category: category of the current state belongs.
+ * @current_state: current poperties of the block
  * @prop_table: table containing details of all the states
  * @nr_block_states: number of possible states for this block
+ * @set_state: callback function for the block
+ * @data: callback data
  */
 struct block {
 	enum block_name name;
@@ -227,32 +228,6 @@ struct chip_to_block_map {
 	enum block_state mif_block_state_id;
 	enum block_state fsys_block_state_id;
 	enum block_state aon_block_state_id;
-};
-
-enum ab_error_codes {
-	E_INVALID_CHIP_STATE, /* Chip state entered is invalid*/
-	E_INVALID_BLOCK_STATE, /* Block state is invalid*/
-	E_STATE_CHANGE, /*Chip State change failed*/
-	E_STATUS_TIMEOUT, /* Timeout happened while checking status */
-	E_IPU_BLOCK_OFF, /* IPU block is already off */
-	E_IPU_BLOCK_ON, /* IPU block is already on */
-	E_TPU_BLOCK_OFF, /* TPU block is already off */
-	E_TPU_BLOCK_ON, /* TPU block is already on */
-	E_IPU_CORES_ALREADY_OFF, /* All the IPU cores are already off */
-	E_IPU_CORES_ALREADY_ON, /* All the IPU cores are on */
-	E_TPU_TILES_ALREADY_OFF, /* TPU block is already on */
-	E_TPU_TILES_ALREADY_ON, /* TPU block is already on */
-	E_IPU_CORES_OFF, /* An error occurred in turning off IPU cores */
-	E_IPU_CORES_ON, /* An error occurred in turning on IPU cores */
-	E_TPU_TILES_OFF, /* An error occurred in turning off TPU tiles */
-	E_TPU_TILES_ON, /* An error occurred in turning on TPU tiles */
-};
-
-enum ab_sm_event {
-	AB_SM_EV_THERMAL_MONITOR,	/* Thermal event */
-	AB_SM_EV_DEVICE_ERROR,		/* Other device fail */
-	AB_SM_EV_LINK_ERROR,		/* ... */
-	// ...
 };
 
 enum ab_sm_time_stamps {
@@ -308,8 +283,6 @@ struct ab_sm_state_stat {
 	ktime_t last_entry;
 	ktime_t last_exit;
 };
-
-typedef int (*ab_sm_callback_t)(enum ab_sm_event, uintptr_t data, void *cookie);
 
 struct ab_sm_pmu_ops {
 	void *ctx;
@@ -405,19 +378,6 @@ struct ab_asv_info {
 
 /**
  * struct ab_state_context - stores the context of airbrush soc
- *
- * @pdev: pointer to the platform device managing this context
- * @dev: pointer to the device managing this context
- * @sw_state_id: id of the current software state
- * @sw_state_name: name of the current software state
- * @chip_substate_id: id of the current chip substate
- * @chip_substate_name: name of the current chip substate
- * @chip_state_table: Table which contains information about all chip states
- * @nr_chip_states: Number of possible chip states
- * @d_entry: debugfs entry directory
- * @set_state_lock: locks calls to _ab_sm_set_state
- * @state_transitioning_lock: locks dest_chip_substate_id and
- *		curr_chip_substate_id during a transition
  */
 struct ab_state_context {
 	struct platform_device *pdev;
@@ -459,11 +419,6 @@ struct ab_state_context {
 
 	/* Check for alternate boot */
 	int alternate_boot;
-
-	/* Event callback registered by the SM */
-	ab_sm_callback_t cb_event;
-	/* Private data sent by SM while registering event callback */
-	void *cb_cookie;
 
 	struct ab_asv_info asv_info;
 
@@ -578,26 +533,31 @@ void ab_sm_register_blk_callback(enum block_name name,
 
 void ab_sm_register_pmu_ops(struct ab_sm_pmu_ops *ops);
 void ab_sm_unregister_pmu_ops(void);
+
 void ab_sm_register_clk_ops(struct ab_sm_clk_ops *ops);
 void ab_sm_unregister_clk_ops(void);
+
 void ab_sm_register_dram_ops(struct ab_sm_dram_ops *ops);
 void ab_sm_unregister_dram_ops(void);
+
 void ab_sm_register_mfd_ops(struct ab_sm_mfd_ops *ops);
 void ab_sm_unregister_mfd_ops(void);
 
 struct ab_state_context *ab_sm_init(struct platform_device *pdev);
 void ab_sm_exit(struct platform_device *pdev);
-int ab_sm_register_callback(struct ab_state_context *sc,
-				ab_sm_callback_t cb, void *cookie);
+
 int ab_sm_set_state(struct ab_state_context *sc,
 	u32 to_chip_substate_id, bool mapped);
 u32 ab_sm_get_state(struct ab_state_context *sc, bool mapped);
+
 int ab_sm_map_state(u32 old_mapping, u32 *new_mapping);
 int ab_sm_unmap_state(u32 new_mapping, u32 *old_mapping);
 
 int ab_bootsequence(struct ab_state_context *ab_ctx,
 		enum chip_state prev_state);
+
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);
+
 const enum stat_state ab_chip_state_to_stat_state(enum chip_state id);
 
 int ab_sm_enter_el2(struct ab_state_context *sc);
@@ -605,12 +565,15 @@ int ab_sm_exit_el2(struct ab_state_context *sc);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);
+
 void ab_gpio_enable_ddr_sr(struct ab_state_context *ab_ctx);
 void ab_gpio_disable_ddr_sr(struct ab_state_context *ab_ctx);
 int  ab_gpio_get_ddr_sr(struct ab_state_context *ab_ctx);
+
 void ab_gpio_enable_ddr_iso(struct ab_state_context *ab_ctx);
 void ab_gpio_disable_ddr_iso(struct ab_state_context *ab_ctx);
 int  ab_gpio_get_ddr_iso(struct ab_state_context *ab_ctx);
+
 void ab_gpio_enable_fw_patch(struct ab_state_context *ab_ctx);
 void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx);
 
