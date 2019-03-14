@@ -100,6 +100,8 @@ static void ipu_resource_remove_stps_from_session(struct paintbox_data *pb,
 		session->stp_id_mask &= ~(1 << stp->stp_id);
 
 		pb->stp.available_stp_mask |= 1ULL << stp->stp_id;
+
+		dev_dbg(pb->dev, "stp%u release\n", stp->stp_id);
 	}
 }
 
@@ -333,6 +335,11 @@ int ipu_resource_session_release(struct paintbox_data *pb,
 		struct paintbox_session *session)
 {
 	int ret;
+
+	if (!session->stp_id_mask &&
+			!session->lbp_id_mask &&
+			!session->dma_channel_id_mask)
+		return 0;
 
 	ret = ipu_resource_send_release(pb, session);
 
