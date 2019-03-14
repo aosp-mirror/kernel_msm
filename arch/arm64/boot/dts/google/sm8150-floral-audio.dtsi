@@ -251,7 +251,8 @@
 
 		adnc,pwr-vld-gpio = <&tlmm 151 0>;
 		adnc,spi-app-speed = <9600000>;
-
+		/* Ext Oscillator: 0 , Int Oscillator: 1 */
+		adnc,oscillator-mode = <1>;
 		/* no of output channels to mute and unmute */
 		adnc,op-ch-active = <0xF>;
 		/* pcm port format configuration
