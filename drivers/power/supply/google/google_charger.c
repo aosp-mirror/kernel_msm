@@ -114,6 +114,9 @@ struct chg_thermal_device {
 	int current_level;
 };
 
+/* re-evaluate FCC when switching power supplies */
+static int chg_therm_update_fcc(struct chg_drv *chg_drv);
+
 struct chg_drv {
 	struct device *device;
 	struct power_supply *chg_psy;
@@ -132,6 +135,7 @@ struct chg_drv {
 
 	/* */
 	struct chg_thermal_device thermal_devices[CHG_TERMAL_DEVICES_COUNT];
+	bool therm_wlc_override_fcc;
 
 	/* */
 	u32 cv_update_interval;
@@ -166,6 +170,13 @@ struct chg_drv {
 	unsigned int pps_cc_tolerance_pct;
 };
 
+
+static void reschedule_chg_work(struct delayed_work *chg_work)
+{
+	cancel_delayed_work_sync(chg_work);
+	schedule_delayed_work(chg_work, 0);
+}
+
 static int psy_changed(struct notifier_block *nb,
 		       unsigned long action, void *data)
 {
@@ -185,8 +196,7 @@ static int psy_changed(struct notifier_block *nb,
 	     !strcmp(psy->desc->name, chg_drv->tcpm_psy_name) ||
 	     (chg_drv->wlc_psy_name &&
 	      !strcmp(psy->desc->name, chg_drv->wlc_psy_name)))) {
-		cancel_delayed_work(&chg_drv->chg_work);
-		schedule_delayed_work(&chg_drv->chg_work, 0);
+		reschedule_chg_work(&chg_drv->chg_work);
 	}
 	return NOTIFY_OK;
 }
@@ -856,6 +866,9 @@ static void chg_work(struct work_struct *work)
 	} else if (chg_drv->stop_charging) {
 	/* might be disabled later due to is_charging_enabled */
 		pr_info("MSC_CHG power source detected, enabling charging\n");
+		if (chg_drv->therm_wlc_override_fcc)
+			chg_therm_update_fcc(chg_drv);
+
 		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, false, 0);
 		chg_drv->stop_charging = false;
 	}
@@ -1733,9 +1746,36 @@ static int chg_get_cur_charge_cntl_limit(struct thermal_cooling_device *tcd,
 	return 0;
 }
 
-static int
-chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
-			      unsigned long lvl)
+/* Wireless and wired limits are linked when therm_wlc_override_fcc is true.
+ * This means that charging from WLC (wlc_psy is ONLINE) will disable the
+ * the thermal vote on MSC_FCC (b/128350180)
+ */
+static int chg_therm_update_fcc(struct chg_drv *chg_drv)
+{
+	struct chg_thermal_device *tdev =
+			&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_FCC];
+	int ret, wlc_online = 0, fcc = -1;
+
+	if (chg_drv->wlc_psy && chg_drv->therm_wlc_override_fcc)
+		wlc_online = GPSY_GET_PROP(chg_drv->wlc_psy,
+					POWER_SUPPLY_PROP_ONLINE);
+
+	if (wlc_online <= 0 && tdev->current_level > 0)
+		fcc = tdev->thermal_mitigation[tdev->current_level];
+
+	ret = vote(chg_drv->msc_fcc_votable,
+			THERMAL_DAEMON_VOTER,
+			(fcc != -1),
+			fcc);
+
+	pr_info("MSC_THERM_FCC lvl=%d fcc=%d wlc=%d (%d)\n",
+				tdev->current_level, fcc, wlc_online, ret);
+
+	return ret;
+}
+
+static int chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
+					 unsigned long lvl)
 {
 	int ret = 0;
 	struct chg_thermal_device *tdev =
@@ -1752,24 +1792,22 @@ chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
 					THERMAL_DAEMON_VOTER, true, 0);
 
 	vote(chg_drv->msc_chg_disable_votable, THERMAL_DAEMON_VOTER, false, 0);
-	if (lvl == 0)
-		return vote(chg_drv->msc_fcc_votable,
-					THERMAL_DAEMON_VOTER, false, 0);
 
-	vote(chg_drv->msc_fcc_votable, THERMAL_DAEMON_VOTER, true,
-			tdev->thermal_mitigation[tdev->current_level]);
+	ret = chg_therm_update_fcc(chg_drv);
 
+	/* force to apply immediately */
+	reschedule_chg_work(&chg_drv->chg_work);
 	return ret;
 }
 
-static int
-chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
-				unsigned long lvl)
+static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
+					   unsigned long lvl)
 {
 	struct chg_thermal_device *tdev =
 			(struct chg_thermal_device *)tcd->devdata;
 	struct chg_drv *chg_drv = tdev->chg_drv;
 	union power_supply_propval pval;
+	int dc_icl = -1, ret;
 
 	if (lvl < 0 || tdev->thermal_levels <= 0 || lvl > tdev->thermal_levels)
 		return -EINVAL;
@@ -1803,14 +1841,18 @@ chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 	if (!chg_drv->dc_icl_votable)
 		return 0;
 
-	if (tdev->current_level == 0) {
-		vote(chg_drv->dc_icl_votable,
-				THERMAL_DAEMON_VOTER, false, 0);
-	} else {
-		vote(chg_drv->dc_icl_votable,
-				THERMAL_DAEMON_VOTER, true,
-				tdev->thermal_mitigation[tdev->current_level]);
-	}
+	if (tdev->current_level != 0)
+		dc_icl = tdev->thermal_mitigation[tdev->current_level];
+
+	ret = vote(chg_drv->dc_icl_votable, THERMAL_DAEMON_VOTER,
+			(dc_icl != -1),
+			dc_icl);
+
+	pr_info("MSC_THERM_DC lvl=%d dc_icl=%d (%d)\n", lvl, dc_icl, ret);
+
+	/* make sure that fcc is reset to max when charging from WLC*/
+	if (ret ==0)
+		(void)chg_therm_update_fcc(chg_drv);
 
 	return 0;
 }
@@ -1910,6 +1952,12 @@ int chg_thermal_device_init(struct chg_drv *chg_drv)
 		if (!dc_icl->tcd)
 			goto error_exit;
 	}
+
+	chg_drv->therm_wlc_override_fcc =
+		of_property_read_bool(chg_drv->device->of_node,
+					"google,therm-wlc-overrides-fcc");
+	if (chg_drv->therm_wlc_override_fcc)
+		pr_info("WLC overrides FCC\n");
 
 	return 0;
 
