@@ -90,6 +90,11 @@ static int64_t aon_set_rate_direct_stub(void *ctx, u64 new_rate)
 	return 0;
 }
 
+static int64_t aon_set_rate_opt_stub(void *ctx, u64 old_rate, u64 new_rate)
+{
+	return 0;
+}
+
 static int reduce_mainclk_freq_stub(void *ctx) { return -ENODEV; }
 static int restore_mainclk_freq_stub(void *ctx) { return -ENODEV; }
 
@@ -109,6 +114,7 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 
 	.aon_set_rate = &aon_set_rate_stub,
 	.aon_set_rate_direct = &aon_set_rate_direct_stub,
+	.aon_set_rate_opt = &aon_set_rate_opt_stub,
 
 	.reduce_mainclk_freq = &reduce_mainclk_freq_stub,
 	.restore_mainclk_freq = &restore_mainclk_freq_stub,
@@ -528,7 +534,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			break;
 		}
 
-		ret_freq = clk->aon_set_rate(clk->ctx, old_freq, new_freq);
+		ret_freq = clk->aon_set_rate_opt(clk->ctx, old_freq, new_freq);
 		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set aon freq to %lld but got %lld",
 					new_freq, ret_freq);

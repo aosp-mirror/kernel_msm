@@ -21,12 +21,11 @@
 #define GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU	0x1024202c
 #define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
 
-#define AB_SM_19_2_MHZ		19200000
 #define AB_SM_466_MHZ		466000000
 #define AB_SM_789_6_MHZ		789600000
 #define AB_SM_921_6_MHZ		921600000
 #define AON_CLK_RATE_REG		0x10B10100
-#define AON_CLK_RATE_19_2_MHZ	0xA0F00500
+#define AON_CLK_RATE_19_2_MHZ	0x20F00500
 #define AON_CLK_RATE_921_6_MHZ	0xA0F00510
 #define TPU_CLK_RATE_REG		0x10040120
 #define TPU_CLK_RATE_19_2_MHZ	0xA1490202
@@ -347,9 +346,9 @@ static int64_t ab_clk_tpu_set_rate_direct_handler(void *ctx,
 	mutex_lock(&clk_ctx->pcie_link_lock);
 	if (clk_ctx->pcie_link_ready) {
 		switch (new_rate) {
-		case AB_SM_19_2_MHZ:
+		case AB_SM_OSC_RATE:
 			ABC_WRITE(TPU_CLK_RATE_REG, TPU_CLK_RATE_19_2_MHZ);
-			ret = AB_SM_19_2_MHZ;
+			ret = AB_SM_OSC_RATE;
 			break;
 		case AB_SM_789_6_MHZ:
 			ABC_WRITE(TPU_CLK_RATE_REG, TPU_CLK_RATE_789_6_MHZ);
@@ -446,9 +445,9 @@ static int64_t ab_clk_aon_set_rate_direct_handler(void *ctx,
 	mutex_lock(&clk_ctx->pcie_link_lock);
 	if (clk_ctx->pcie_link_ready) {
 		switch (new_rate) {
-		case AB_SM_19_2_MHZ:
+		case AB_SM_OSC_RATE:
 			ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_19_2_MHZ);
-			ret = AB_SM_19_2_MHZ;
+			ret = AB_SM_OSC_RATE;
 			break;
 		case AB_SM_921_6_MHZ:
 			ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_921_6_MHZ);
@@ -459,6 +458,77 @@ static int64_t ab_clk_aon_set_rate_direct_handler(void *ctx,
 			break;
 		}
 
+	} else {
+		dev_err(clk_ctx->dev,
+				"%s: pcie link down during clk request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&clk_ctx->pcie_link_lock);
+
+	return ret;
+}
+
+/* Caller must hold clk_ctx->pcie_link_lock
+ * This method handles the clock rate changes
+ * for AON PLL
+ */
+static int64_t __ab_clk_aon_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
+		u64 old_rate, u64 new_rate)
+{
+	int64_t ret = 0;
+
+	dev_dbg(clk_ctx->dev,
+		"%s: set AON clock rate to %llu\n", __func__, new_rate);
+
+	if (new_rate != AB_SM_OSC_RATE &&
+			new_rate != AB_SM_466_MHZ &&
+			new_rate != AB_SM_921_6_MHZ)
+		dev_warn(clk_ctx->dev,
+			"Invalid AON clock rate requested, using %d instead\n",
+			AB_SM_921_6_MHZ);
+
+	if (old_rate == AB_SM_466_MHZ &&
+			new_rate != AB_SM_466_MHZ)
+		__ab_clk_restore_mainclk_freq(clk_ctx);
+
+	if (new_rate == AB_SM_OSC_RATE) {
+		ret |= ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_19_2_MHZ);
+		if (ret) {
+			dev_err(clk_ctx->dev,
+				"aon_pll_mux: set_parent failed(err %d)\n",
+				ret);
+			goto error_abort;
+		}
+
+		return new_rate;
+	}
+
+	ret |= ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_921_6_MHZ);
+	if (ret) {
+		dev_err(clk_ctx->dev,
+			"aon_pll_mux: set_parent failed(err %d)\n", ret);
+		goto error_abort;
+	}
+
+	if (new_rate == AB_SM_466_MHZ)
+		__ab_clk_reduce_mainclk_freq(clk_ctx);
+
+	return new_rate;
+
+error_abort:
+	return ret;
+}
+static int64_t ab_clk_aon_set_rate_opt_handler(void *ctx,
+		u64 old_rate, u64 new_rate)
+{
+	int64_t ret;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	mutex_lock(&clk_ctx->pcie_link_lock);
+	if (clk_ctx->pcie_link_ready) {
+		ret = __ab_clk_aon_set_rate_opt_handler(clk_ctx,
+				old_rate, new_rate);
 	} else {
 		dev_err(clk_ctx->dev,
 				"%s: pcie link down during clk request\n",
@@ -580,6 +650,7 @@ static struct ab_sm_clk_ops clk_ops = {
 
 	.aon_set_rate = &ab_clk_aon_set_rate_handler,
 	.aon_set_rate_direct = &ab_clk_aon_set_rate_direct_handler,
+	.aon_set_rate_opt = &ab_clk_aon_set_rate_opt_handler,
 
 	.reduce_mainclk_freq = &ab_clk_reduce_mainclk_freq,
 	.restore_mainclk_freq = &ab_clk_restore_mainclk_freq,
