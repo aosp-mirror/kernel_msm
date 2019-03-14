@@ -163,6 +163,19 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 	}
 chip_woken_up:
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
+		/* switch to internal oscillator if dt entry
+		 * is selected for internal oscillator mode.
+		 */
+		if (priv->oscillator_mode) {
+			/* Switch to internal oscillator */
+			rc = iaxxx_set_mpll_source_no_pm(priv, IAXXX_INT_OSC);
+			if (rc) {
+				dev_err(priv->dev,
+				"%s() Failed to set MPLL Clk Src to internal\n",
+								__func__);
+				return rc;
+			}
+		}
 		priv->iaxxx_state->power_state = IAXXX_NORMAL_MODE;
 		dev_info(priv->dev, "%s set to normal power mode done\n",
 			__func__);
@@ -200,13 +213,20 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 		if (priv->iaxxx_mclk_cb)
 			priv->iaxxx_mclk_cb(priv, 1);
 
-		/* Switch to external oscillator */
-		rc = iaxxx_set_mpll_source_no_pm(priv, IAXXX_EXT_OSC);
-		if (rc) {
-			dev_err(priv->dev,
-			"%s() Failed to set MPLL Clk Src to external\n",
-							__func__);
-			return rc;
+		/* switch to external oscillator if dt entry
+		 * is selected for internal oscillator mode.
+		 * so that on wakeup we switch back to internal
+		 * oscillator mode.
+		 */
+		if (priv->oscillator_mode) {
+			/* Switch to external oscillator */
+			rc = iaxxx_set_mpll_source_no_pm(priv, IAXXX_EXT_OSC);
+			if (rc) {
+				dev_err(priv->dev,
+				"%s() Failed to set MPLL Clk Src to external\n",
+								__func__);
+				return rc;
+			}
 		}
 
 		/* Issue sleep power mode command */
@@ -412,22 +432,24 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 {
 	int rc;
 
-	/* Disable control interface 1 */
-	rc = regmap_update_bits(priv->regmap_no_pm,
-		IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
-		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
-		(1 <<
-		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS));
+	if (source == IAXXX_EXT_OSC) {
+		/* Disable control interface 1 */
+		rc = regmap_update_bits(priv->regmap_no_pm,
+			IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
+			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
+			(1 <<
+			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS));
 
-	if (rc) {
-		dev_err(priv->dev,
+		if (rc) {
+			dev_err(priv->dev,
 			"%s() disabling controle interface 1 Fail\n", __func__);
 			return rc;
+		}
+
+		iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_1);
+
+		msleep(20);
 	}
-
-	iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_1);
-
-	msleep(20);
 
 	rc = regmap_update_bits(priv->regmap_no_pm,
 		IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR,
@@ -548,11 +570,10 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 	int rc;
 
 	/* Make sure update block bit is in cleared state */
-	rc = iaxxx_regmap_wait_match(priv, priv->regmap,
-			IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
-			IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK);
+	rc = iaxxx_poll_update_block_req_bit_clr(priv);
 	if (rc) {
-		pr_err("Update Block bit not cleared, rc = %d\n", rc);
+		pr_err("Don't do Update Block in progress, rc = %d\n",
+			rc);
 		goto exit;
 	}
 
@@ -725,11 +746,10 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv,
 	}
 
 	/* Make sure update block bit is in cleared state */
-	rc = iaxxx_regmap_wait_match(priv, priv->regmap,
-			IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
-			IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	rc = iaxxx_poll_update_block_req_bit_clr(priv);
 	if (rc) {
-		pr_err("Update Block bit not cleared, rc = %d\n", rc);
+		pr_err("Don't do Update Block in progress, rc = %d\n",
+			rc);
 		goto exit;
 	}
 

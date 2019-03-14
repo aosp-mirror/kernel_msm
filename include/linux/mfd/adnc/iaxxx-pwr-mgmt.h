@@ -16,6 +16,12 @@
 #ifndef _IAXXX_PWR_MGMT_H
 #define _IAXXX_PWR_MGMT_H
 
+enum iaxxx_pll_source {
+	IAXXX_SRC_SYSCLK = 0,
+	IAXXX_INT_OSC = 9,
+	IAXXX_EXT_OSC = 11,
+};
+
 enum {
 	PROC_OFF, /*!< Processor Off      */
 	PROC_RUNNING, /*!< Processor Running  */

@@ -316,6 +316,7 @@ struct iaxxx_priv {
 
 	void *dfs_node;
 
+	uint32_t oscillator_mode;
 	/* Notifiers */
 	struct srcu_notifier_head core_notifier_list;
 	struct notifier_block notifier_core;
@@ -378,6 +379,7 @@ int iaxxx_send_update_block_no_wait(struct device *dev, int host_id);
 int iaxxx_send_update_block_no_wait_no_pm(struct device *dev, int host_id);
 int iaxxx_send_update_block_hostid(struct device *dev,
 		int host_id, int block_id);
+int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv);
 int iaxxx_get_firmware_version(struct device *dev, char *ver, uint32_t len);
 int iaxxx_get_application_ver_num(struct device *dev, uint32_t *app_ver_num);
 int iaxxx_get_rom_ver_num(struct device *dev, uint32_t *rom_ver_num);

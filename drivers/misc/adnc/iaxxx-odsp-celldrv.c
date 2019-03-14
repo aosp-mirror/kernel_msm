@@ -70,7 +70,6 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_plugin_status_data plugin_status_data;
 	struct iaxxx_plugin_endpoint_status_info plugin_ep_status_info;
 	struct iaxxx_plugin_endpoint_status_data plugin_ep_status_data;
-	struct iaxxx_pll_clk_data pll_clk_data;
 
 	uint32_t *get_param_blk_buf = NULL;
 	void __user *blk_buff = NULL;
@@ -662,17 +661,6 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 					event_info.dst_id);
 		if (ret) {
 			pr_err("%s() Event unsubscribe fail\n", __func__);
-			return ret;
-		}
-		break;
-
-	case ODSP_SET_MPLL_SRC:
-		if  (copy_from_user(&pll_clk_data, (void __user *)arg,
-					sizeof(struct iaxxx_pll_clk_data)))
-			return -EFAULT;
-		ret = iaxxx_set_mpll_source(priv, pll_clk_data.clk_src);
-		if (ret) {
-			pr_err("%s() Failed to set MPLL Clk Src\n", __func__);
 			return ret;
 		}
 		break;

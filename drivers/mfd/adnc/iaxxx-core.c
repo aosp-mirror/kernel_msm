@@ -62,9 +62,6 @@
 #define IAXXX_FW_RETRY_COUNT		2
 #define IAXXX_BYTES_IN_A_WORD		4
 
-#define IAXXX_BYPASS_ON_VAL 0x00C199BB
-#define IAXXX_BYPASS_OFF_VAL 0x0C099BB
-
 #define iaxxx_ptr2priv(ptr, item) container_of(ptr, struct iaxxx_priv, item)
 
 struct iaxxx_port_clk_settings clk;
@@ -520,6 +517,7 @@ static int iaxxx_populate_dt_pdata(struct iaxxx_priv *priv)
 {
 	int rc;
 	struct device *dev = priv->dev;
+	u32 tmp;
 
 	dev_dbg(dev, "%s()\n", __func__);
 
@@ -533,6 +531,15 @@ static int iaxxx_populate_dt_pdata(struct iaxxx_priv *priv)
 		dev_err(dev, "Failed to read GPIO data, rc = %d\n", rc);
 		return rc;
 	}
+
+	rc = of_property_read_u32(dev->of_node, "adnc,oscillator-mode", &tmp);
+	if (rc < 0) {
+		dev_err(dev,
+			"no adnc,oscillator-mode in DT node: %d\n", rc);
+		/* set to default ext oscillator */
+		tmp = 0;
+	}
+	priv->oscillator_mode = tmp;
 
 	rc = iaxxx_populate_ext_clock_pdata(priv);
 	return rc;
@@ -1172,6 +1179,36 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 		dev_err(dev, "%s: failed to subscribe for crash event\n",
 				__func__);
 		goto exit_fw_fail;
+	}
+
+	/* Disable control interface 1 */
+	rc = regmap_update_bits(priv->regmap,
+		IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
+		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
+		(1 <<
+		IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_POS));
+
+	if (rc) {
+		dev_err(priv->dev,
+		"%s() disabling controle interface 1 Fail\n", __func__);
+		goto exit_fw_fail;
+	}
+
+	iaxxx_send_update_block_no_wait_no_pm(priv->dev, IAXXX_HOST_1);
+
+	msleep(20);
+	/* switch to internal oscillator if dt entry
+	 * is selected for internal oscillator mode
+	 * during bootup or recovery.
+	 */
+	if (priv->oscillator_mode) {
+		rc = iaxxx_set_mpll_source(priv, IAXXX_INT_OSC);
+		if (rc) {
+			dev_err(dev,
+			"%s: failed to switch to internal oscillator mode\n",
+			__func__);
+			goto exit_fw_fail;
+		}
 	}
 
 	dev_info(dev, "%s: done\n", __func__);

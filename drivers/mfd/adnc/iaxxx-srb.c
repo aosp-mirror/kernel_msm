@@ -649,6 +649,35 @@ int iaxxx_send_update_block_hostid(struct device *dev,
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_hostid);
 
+int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv)
+{
+	int rc;
+	uint32_t status;
+	uint32_t retry_count = 10;
+
+	/* Make sure update block bit is in cleared state */
+	do {
+		rc = regmap_read(priv->regmap,
+				IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
+				&status);
+		if (rc) {
+			pr_err("Failed to read SRB_SYS_BLK_UPDATE_ADDR, rc = %d\n",
+				rc);
+			return rc;
+		}
+		if (status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK)
+			usleep_range(1000, 1005);
+		else
+			break;
+	} while (retry_count--);
+	if (status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK) {
+		pr_err("Update Block bit not cleared, rc = %d\n", rc);
+		return -EBUSY;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(iaxxx_poll_update_block_req_bit_clr);
+
 int iaxxx_get_firmware_version(struct device *dev, char *ver, uint32_t len)
 {
 	return iaxxx_get_version_str(to_iaxxx_priv(dev),
