@@ -8587,6 +8587,7 @@ int smblib_init(struct smb_charger *chg)
 	mutex_init(&chg->dpdm_lock);
 	mutex_init(&chg->dc_reset_lock);
 	spin_lock_init(&chg->typec_pr_lock);
+	spin_lock_init(&chg->moisture_detection_enable);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->pl_update_work, pl_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
