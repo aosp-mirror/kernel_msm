@@ -280,7 +280,6 @@ static int copy_data(struct bow_context const *bc,
 		read = dm_bufio_read(bc->bufio, page, &read_buffer);
 		if (IS_ERR(read)) {
 			DMERR("Cannot read page %lu", page);
-			dm_bufio_release(read_buffer);
 			return PTR_ERR(read);
 		}
 
@@ -292,7 +291,6 @@ static int copy_data(struct bow_context const *bc,
 				     &write_buffer);
 		if (IS_ERR(write)) {
 			DMERR("Cannot write sector");
-			dm_bufio_release(write_buffer);
 			dm_bufio_release(read_buffer);
 			return PTR_ERR(write);
 		}
