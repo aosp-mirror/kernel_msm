@@ -616,7 +616,7 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 		if (soc_in < 0 || cc_in < 0) {
 			pr_info("MSC_STAT cannot read soc_in=%d or cc_in=%d\n",
 				soc_in, cc_in);
-			return;
+			goto exit_done;
 		}
 
 		tier->temp_in = temp;
@@ -672,6 +672,7 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 
 	batt_drv->ce_data.last_update = now;
 
+exit_done:
 	mutex_unlock(&batt_drv->stats_lock);
 }
 
