@@ -173,6 +173,7 @@
 		google,cv-tier-switch-cnt = <3>;
 		/* experimental */
 		google,cv-otv-margin = <0>;
+		#thermal-sensor-cells = <0>;
 	};
 
 	google_charger: google,charger {
