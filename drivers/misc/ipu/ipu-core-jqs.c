@@ -566,8 +566,6 @@ static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus,
 	dev_dbg(bus->parent_dev, "%s: disabling firmware, reason %d\n",
 			__func__, reason_code);
 
-	bus->jqs.clock_rate_hz = 0;
-
 	ipu_core_jqs_msg_transport_complete_kernel_queue(bus, reason_code);
 	ipu_core_jqs_power_disable(bus);
 
