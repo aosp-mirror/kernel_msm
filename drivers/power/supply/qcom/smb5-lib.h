@@ -373,7 +373,6 @@ struct smb_charger {
 	/* locks */
 	struct mutex		smb_lock;
 	struct mutex		ps_change_lock;
-	spinlock_t		disable_pr_switch_lock;
 	struct mutex		moisture_detection_enable;
 	struct mutex		dr_lock;
 

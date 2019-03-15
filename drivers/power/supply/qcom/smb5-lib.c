@@ -4069,18 +4069,17 @@ int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 	const union power_supply_propval *val)
 {
-	unsigned long flags;
+	int rc = -EINVAL;
 
 	/* Check if power role switch is disabled */
-	spin_lock_irqsave(&chg->disable_pr_switch_lock, flags);
-	if (!get_effective_result_locked(chg->disable_power_role_switch)) {
-		spin_unlock_irqrestore(&chg->disable_pr_switch_lock, flags);
-		return __smblib_set_prop_typec_power_role(chg, val);
-	}
-	spin_unlock_irqrestore(&chg->disable_pr_switch_lock, flags);
+	lock_votable(chg->disable_power_role_switch);
+	if (!get_effective_result_locked(chg->disable_power_role_switch))
+		rc = __smblib_set_prop_typec_power_role(chg, val);
+	else
+		smblib_err(chg, "Power role switch is disabled\n");
 
-	smblib_err(chg, "Power role switch is disabled\n");
-	return -EINVAL;
+	unlock_votable(chg->disable_power_role_switch);
+	return rc;
 }
 
 int smblib_set_prop_typec_select_rp(struct smb_charger *chg,
@@ -6945,7 +6944,6 @@ int smblib_init(struct smb_charger *chg)
 	int rc = 0;
 
 	mutex_init(&chg->smb_lock);
-	spin_lock_init(&chg->disable_pr_switch_lock);
 	mutex_init(&chg->moisture_detection_enable);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->pl_update_work, pl_update_work);
