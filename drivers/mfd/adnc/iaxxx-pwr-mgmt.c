@@ -405,6 +405,7 @@ int iaxxx_set_spi2_master_speed(struct device *dev, int spi_speed)
 int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 {
 	int rc;
+	uint32_t status;
 
 	rc = regmap_update_bits(priv->regmap, IAXXX_PWR_MGMT_SYS_CLK_CTRL_ADDR,
 			IAXXX_PWR_MGMT_SYS_CLK_CTRL_MPLL_SRC_MASK,
@@ -425,12 +426,31 @@ int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 	}
 
 	msleep(20);
+	rc = regmap_read(priv->regmap,
+				IAXXX_SRB_SYS_BLK_UPDATE_ADDR, &status);
+	if (rc) {
+		dev_err(priv->dev, "%s failed update block status read = %d\n",
+				__func__, rc);
+		return rc;
+	}
+	dev_err(priv->dev, "%s update block status = 0x%x\n",
+			__func__, status);
+	WARN_ON(status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	if (((status & IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK) != 0xFF) &&
+		((status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK) != 0x00)) {
+		dev_err(priv->dev,
+		"%s update block for MPLL switch not successful = 0x%x\n",
+				__func__, status);
+		/* clear stale errors */
+		regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR, 0);
+	}
 	return rc;
 }
 
 int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 {
 	int rc;
+	uint32_t status;
 
 	if (source == IAXXX_EXT_OSC) {
 		/* Disable control interface 1 */
@@ -479,6 +499,24 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 	}
 
 	msleep(20);
+	rc = regmap_read(priv->regmap_no_pm,
+				IAXXX_SRB_SYS_BLK_UPDATE_ADDR, &status);
+	if (rc) {
+		dev_err(priv->dev, "%s failed update block status read = %d\n",
+				__func__, rc);
+		return rc;
+	}
+	dev_err(priv->dev, "%s update block status = 0x%x\n",
+			__func__, status);
+	WARN_ON(status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
+	if (((status & IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK) != 0xFF) &&
+		((status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK) != 0x00)) {
+		dev_err(priv->dev,
+		"%s update block for MPLL switch failed = 0x%x\n",
+				__func__, status);
+		/* clear stale errors */
+		regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR, 0);
+	}
 	return rc;
 }
 

@@ -62,9 +62,8 @@
  */
 int
 iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
-		uint32_t reg, uint32_t match)
+		uint32_t reg, uint32_t match, uint32_t *status)
 {
-	uint32_t req;
 	int rc, retries;
 	const int max_retries = UPDATE_BLOCK_FAIL_RETRIES;
 	struct device *dev = priv->dev;
@@ -77,7 +76,7 @@ iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
 			usleep_range(IAXXX_READ_DELAY,
 				IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
 
-		rc = regmap_read(regmap, reg, &req);
+		rc = regmap_read(regmap, reg, status);
 		if (rc) {
 			/* We should not return here until we are done
 			 * with our retries
@@ -89,8 +88,19 @@ iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
 		}
 
 		/* Read value matches */
-		if (req == match)
+		if (*status == match)
 			return 0;
+		else if (!(*status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK) &&
+			(*status & IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK) &&
+			(*status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK)) {
+			/*
+			 * If the BLOCK_UPDATE_RESULT is non-zero, then some
+			 * update failed. The caller(s) will need to determine
+			 * how to handle the failure.
+			 */
+			dev_err(dev, "%s status 0x%x\n", __func__, *status);
+			return -ENXIO;
+		}
 
 		if (priv->bus == IAXXX_SPI) {
 			if (priv->is_application_mode)
@@ -99,12 +109,8 @@ iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
 				msleep(20);
 		}
 	}
-
+	rc = -ETIMEDOUT;
 	dev_err(dev, "%s:Update block timed out\n", __func__);
-
-	/* regmap functions return -EIO when access is denied */
-	if (rc != -EIO)
-		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR);
 
 	return rc;
 }
@@ -260,6 +266,8 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		reserved_bits_mask =
 				IAXXX_SRB_SYS_BLK_UPDATE_RESERVED_BITS_MASK;
 
+	/* clear all stale errors */
+	rc = regmap_write(regmap, sys_blk_update_addr, 0);
 	/* Set the UPDATE_BLOCK_REQUEST bit and some reserved bits
 	 * in the SRB_UPDATE_CTRL register
 	 */
@@ -285,35 +293,15 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	 * and reserved bits to match the value written
 	 */
 	rc = iaxxx_regmap_wait_match(priv, regmap, sys_blk_update_addr,
-			reserved_bits_mask | result_bits_mask);
+			reserved_bits_mask | result_bits_mask, status);
 	if (rc) {
 		dev_err(dev, "Update Block Failed, rc = %d\n", rc);
-		goto out;
-	}
-
-	/* Give some time to device before read */
-	usleep_range(IAXXX_READ_DELAY,
-			IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
-
-	/* Read SYSTEM_STATUS to check for any errors */
-	rc = regmap_read(regmap, sys_blk_update_addr, status);
-	if (rc) {
-		dev_err(dev, "Failed to read SYSTEM_STATUS, rc = %d\n", rc);
 		goto out;
 	}
 
 	/* Clear reserved bits set earlier in update block status */
 	if (reserved_bits_mask)
 		*status &= (~reserved_bits_mask);
-
-	/*
-	 * If the BLOCK_UPDATE_RESULT is non-zero, then some update failed. The
-	 * caller(s) will need to determine how to handle the failure.
-	 */
-	if (*status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK) {
-		dev_err(dev, "%s status 0x%x\n", __func__, *status);
-		rc = -ENXIO;
-	}
 
 out:
 	mutex_unlock(&priv->update_block_lock);
@@ -323,6 +311,30 @@ out:
 			dev_err(dev, "Read error register failed %d\n", ret);
 	}
 
+	return rc;
+}
+
+static int iaxxx_check_update_block_err(struct device *dev, int rc,
+	uint32_t *status)
+{
+	uint32_t err = 0;
+
+	if (rc == -ETIMEDOUT) {
+		dev_err(dev, "%s:Update block timed out\n", __func__);
+	} else if (rc == -ENXIO) {
+		err = *status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK;
+		if (err == SYSRC_FAIL)
+			dev_err(dev, "FW SYSRC_FAIL:0x%x\n", *status);
+		else if (err == SYSRC_ERR_MEM)
+			dev_err(dev, "FW NOMEM err:0x%x\n", *status);
+		else if (err) {
+			dev_err(dev, "FW general err:0x%x\n", *status);
+			return -EINVAL;
+		}
+	} else
+		return rc;
+
+	iaxxx_fw_crash(dev, IAXXX_FW_CRASH_UPDATE_BLOCK_REQ);
 	return rc;
 }
 
@@ -551,7 +563,6 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = 0;
-	uint32_t err = 0;
 
 	/* no_pm is forced when booting is not complete */
 	bool no_pm = !iaxxx_is_firmware_ready(priv) ?
@@ -567,22 +578,7 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			IAXXX_HOST_0, no_pm, IAXXX_UPDATE_BLOCK_WITH_WAIT,
 			status);
 
-	if (rc == -ETIMEDOUT) {
-		dev_err(dev, "%s:Update block timed out\n", __func__);
-	} else if (rc == -ENXIO) {
-		err = *status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK;
-		if (err == SYSRC_FAIL)
-			dev_err(dev, "FW SYSRC_FAIL:0x%x\n", *status);
-		else if (err == SYSRC_ERR_MEM)
-			dev_err(dev, "FW NOMEM err:0x%x\n", *status);
-		else if (err) {
-			dev_err(dev, "FW general err:0x%x\n", *status);
-			return -EINVAL;
-		}
-	} else
-		return rc;
-
-	iaxxx_fw_crash(dev, IAXXX_FW_CRASH_UPDATE_BLOCK_REQ);
+	rc = iaxxx_check_update_block_err(dev, rc, status);
 
 	return rc;
 }
@@ -645,6 +641,7 @@ int iaxxx_send_update_block_hostid(struct device *dev,
 			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
 			IAXXX_UPDATE_BLOCK_WITH_WAIT, &status);
 
+	rc = iaxxx_check_update_block_err(dev, rc, &status);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_hostid);
