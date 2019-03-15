@@ -79,7 +79,7 @@ struct bias_config {
 #define CHGR_BATTERY_CHARGER_STATUS_MASK	GENMASK(2, 0)
 
 #define CHGR_FLOAT_VOLTAGE_BASE		3600000
-#define CHGR_FLOAT_VOLTAGE_LEVEL	50000
+#define CHGR_CHARGE_CURRENT_STEP	50000
 
 enum sm8150_chg_status {
 	SM8150_INHIBIT_CHARGE	= 0,
@@ -552,11 +552,12 @@ int sm8150_rerun_aicl(const struct bms_dev *bms)
 		return rc;
 	}
 
+	pr_info("Re-running AICL (susp=%d)\n",
+		(stat & USBIN_SUSPEND_STS_BIT) !=0 );
+
 	/* USB is suspended so skip re-running AICL */
 	if (stat & USBIN_SUSPEND_STS_BIT)
-		return rc;
-
-	pr_info("Re-running AICL\n");
+		return -EINVAL;
 
 	rc = sm8150_masked_write(bms->pmic_regmap, AICL_CMD_REG,
 					RERUN_AICL_BIT, RERUN_AICL_BIT);
@@ -737,10 +738,8 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		 */
 		rc = sm8150_read(bms->pmic_regmap,
 				CHGR_FAST_CHARGE_CURRENT_SETTING, &val, 1);
-		if (!rc) {
-			pr_info("CHGR_CURRENT_SETTING: %d\n", val);
-			pval->intval = val * CHGR_FLOAT_VOLTAGE_LEVEL;
-		}
+		if (!rc)
+			pval->intval = val * CHGR_CHARGE_CURRENT_STEP;
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
 		/*CHGR_FLOAT_VOLTAGE_SETTING  0x1070
@@ -749,10 +748,8 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		 */
 		rc = sm8150_read(bms->pmic_regmap, CHGR_FLOAT_VOLTAGE_SETTING,
 				&val, 1);
-		if (!rc) {
-			pr_info("FLOAT_VOLTAGE_SETTING: %d\n", val);
+		if (!rc)
 			pval->intval = val * 10000 + CHGR_FLOAT_VOLTAGE_BASE;
-		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
 		rc = sm8150_get_chg_chgr_state(bms, &chg_state);
@@ -766,7 +763,6 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		rc = sm8150_read(bms->pmic_regmap,
 				CHGR_BATTERY_CHARGER_STATUS_1_REG, &val, 1);
 		if (!rc) {
-			pr_info("CHARGER_STATUS_1: 0x%x\n", val);
 			val = val & CHGR_BATTERY_CHARGER_STATUS_MASK;
 			pval->intval = (val == SM8150_TERMINATE_CHARGE);
 		}
@@ -780,7 +776,6 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		rc = sm8150_is_limited(bms);
 		if (rc < 0)
 			break;
-		pr_info("AICL : %d\n", rc);
 		pval->intval = (rc > 0);
 		break;
 
@@ -798,10 +793,8 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		 */
 		rc = sm8150_read(bms->pmic_regmap, CHGR_FLOAT_VOLTAGE_NOW,
 				&val, 1);
-		if (!rc) {
-			pr_info("FLOAT_VOLTAGE_NOW : %d\n", val);
+		if (!rc)
 			pval->intval = val * 10000 + CHGR_FLOAT_VOLTAGE_BASE;
-		}
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		rc = sm8150_get_battery_voltage(bms, &ivalue);
@@ -811,11 +804,9 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED:
 		rc = sm8150_read(bms->pmic_regmap,
 				CHGR_BATTERY_CHARGER_STATUS_2_REG, &val, 1);
-		if (!rc) {
-			pr_info("CHARGER_STATUS_2: 0x%x\n", val);
+		if (!rc)
 			pval->intval = (val & CHG_ERR_STATUS_SFT_EXPIRE) ?
 					1 : 0;
-		}
 		break;
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		pval->intval = bms->fcc_stepper_enable;
@@ -859,17 +850,17 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 		 * Fast Charge Current = DATA x 50mA
 		 */
 		ivalue = pval->intval;
-		if (ivalue < CHGR_FLOAT_VOLTAGE_LEVEL) {
+		if (ivalue < CHGR_CHARGE_CURRENT_STEP) {
 			val = 0;
 		} else {
-			val = ivalue / CHGR_FLOAT_VOLTAGE_LEVEL;
+			val = ivalue / CHGR_CHARGE_CURRENT_STEP;
 		}
+
 		rc = sm8150_write(bms->pmic_regmap,
-				CHGR_FAST_CHARGE_CURRENT_SETTING, &val, 1);
-		if (rc < 0)
-			pr_err("Couldn't set CHARGE_CURRENT rc=%d\n", rc);
-		pr_info("CHARGE_CURRENT_NOW : ivalue=%d, val=%d\n",
-								ivalue, val);
+					CHGR_FAST_CHARGE_CURRENT_SETTING,
+					&val, 1);
+		pr_info("CONSTANT_CHARGE_CURRENT_MAX : ivalue=%d, val=%d (%d)\n",
+							ivalue, val, rc);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
@@ -878,16 +869,17 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 		 * Float voltage setting = 3.6V + (DATA x 10mV)
 		 */
 		ivalue = pval->intval;
-		if (ivalue < CHGR_FLOAT_VOLTAGE_BASE){
+		if (ivalue < CHGR_FLOAT_VOLTAGE_BASE) {
 			val = 0;
 		} else {
 			val = (ivalue - CHGR_FLOAT_VOLTAGE_BASE) / 10000;
 		}
-		rc = sm8150_write(bms->pmic_regmap, CHGR_FLOAT_VOLTAGE_SETTING,
-				&val, 1);
-		if (rc < 0)
-			pr_err("Couldn't set FLOAT_VOLTAGE rc=%d\n", rc);
-		pr_info("FLOAT_VOLTAGE_NOW : ivalue=%d, val=%d\n", ivalue, val);
+
+		rc = sm8150_write(bms->pmic_regmap,
+					CHGR_FLOAT_VOLTAGE_SETTING,
+					&val, 1);
+		pr_info("CONSTANT_CHARGE_VOLTAGE_MAX : ivalue=%d, val=%d (%d)\n",
+							ivalue, val, rc);
 		break;
 	case POWER_SUPPLY_PROP_TAPER_CONTROL:
 		bms->taper_control = pval->intval;
@@ -896,11 +888,11 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 		val = (pval->intval) ? 0 : CHARGING_ENABLE_CMD_BIT;
 		rc = sm8150_write(bms->pmic_regmap, CHGR_CHARGING_ENABLE_CMD,
 				&val, 1);
-		if (rc < 0)
-			pr_err("Couldn't set CHARGING_ENABLE rc=%d\n", rc);
+		pr_info("CHARGE_DISABLE : val=%d (%d)\n",
+						pval->intval != 0, rc);
 		break;
 	case POWER_SUPPLY_PROP_RERUN_AICL:
-		rc = sm8150_rerun_aicl(bms);
+		(void)sm8150_rerun_aicl(bms);
 		break;
 	default:
 		pr_err("setting unsupported property: %d\n", psp);
