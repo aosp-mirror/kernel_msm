@@ -202,7 +202,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	ioctl_start = jiffies;
 
 	down_read(&data->rwsem);
-	if (!data->can_transfer) {
+	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
 		err = -EIO;
 		pr_info("Cannot do transfer due to link down\n");
 		goto exit;
@@ -506,6 +506,11 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			err = dequeue_debug_data(&debug_step_data);
 			break;
 		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
+			if (!data->can_transfer) {
+				pr_info("Cannot do transfer due to link down\n");
+				err = -EIO;
+				goto exit;
+			}
 			clear_debug_data();
 			enqueue_debug_data(data, false);
 			err = dequeue_debug_data(&debug_step_data);
@@ -557,7 +562,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 	ioctl_start = jiffies;
 
 	down_read(&data->rwsem);
-	if (!data->can_transfer) {
+	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
 		err = -EIO;
 		pr_info("Cannot do transfer due to link down\n");
 		goto exit;
@@ -713,6 +718,11 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 			err = dequeue_debug_data(&debug_step_data);
 			break;
 		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
+			if (!data->can_transfer) {
+				pr_info("Cannot do transfer due to link down\n");
+				err = -EIO;
+				goto exit;
+			}
 			clear_debug_data();
 			enqueue_debug_data(data, true);
 			err = dequeue_debug_data(&debug_step_data);
