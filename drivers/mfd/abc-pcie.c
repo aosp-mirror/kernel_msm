@@ -2214,14 +2214,6 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 		goto err_alloc_abc_dev;
 	}
 
-	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
-	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
-	 * EL2 contexts.  This should be removed once EL2 based software is
-	 * ready for use.
-	 */
-	abc->allow_el1_dma = true;
-
 	abc_dev->pdev = pdev;
 	abc_dev->dev  = dev;
 	abc->abc_dev = abc_dev;
