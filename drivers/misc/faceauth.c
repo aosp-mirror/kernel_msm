@@ -72,7 +72,9 @@ struct faceauth_data {
 	bool hypx_enable;
 	/* This is to dynamically set the level of debugging in faceauth fw */
 	uint64_t m0_verbosity_level;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 	struct dentry *debugfs_root;
+#endif
 	uint16_t session_id;
 	/* This counter holds the number of interaction between driver and
 	 * firmware, using which, faceauth firmware detects a missed command and
@@ -1269,40 +1271,6 @@ static int pio_write_qw(const int remote_addr, const uint64_t val)
 	return 0;
 }
 
-static int faceauth_hypx_enable_set(void *ptr, u64 val)
-{
-	struct faceauth_data *data = ptr;
-	data->hypx_enable = !!val;
-	return 0;
-}
-
-static int faceauth_hypx_enable_get(void *ptr, u64 *val)
-{
-	struct faceauth_data *data = ptr;
-	*val = data->hypx_enable;
-	return 0;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, faceauth_hypx_enable_get,
-			 faceauth_hypx_enable_set, "%llu\n");
-
-static int faceauth_m0_verbosity_set(void *ptr, u64 val)
-{
-	struct faceauth_data *data = ptr;
-	data->m0_verbosity_level = val;
-	return 0;
-}
-
-static int faceauth_m0_verbosity_get(void *ptr, u64 *val)
-{
-	struct faceauth_data *data = ptr;
-	*val = data->m0_verbosity_level;
-	return 0;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(fops_m0_verbosity, faceauth_m0_verbosity_get,
-			 faceauth_m0_verbosity_set, "0x%016llx\n");
-
 static void faceauth_link_listener_init(struct work_struct *work)
 {
 	struct faceauth_data *data =
@@ -1373,12 +1341,109 @@ static int faceauth_pcie_blocking_listener(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+
+static int faceauth_hypx_enable_set(void *ptr, u64 val)
+{
+	struct faceauth_data *data = ptr;
+
+	data->hypx_enable = !!val;
+	return 0;
+}
+
+static int faceauth_hypx_enable_get(void *ptr, u64 *val)
+{
+	struct faceauth_data *data = ptr;
+
+	*val = data->hypx_enable;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, faceauth_hypx_enable_get,
+			 faceauth_hypx_enable_set, "%llu\n");
+
+static int faceauth_m0_verbosity_set(void *ptr, u64 val)
+{
+	struct faceauth_data *data = ptr;
+
+	data->m0_verbosity_level = val;
+	return 0;
+}
+
+static int faceauth_m0_verbosity_get(void *ptr, u64 *val)
+{
+	struct faceauth_data *data = ptr;
+
+	*val = data->m0_verbosity_level;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_m0_verbosity, faceauth_m0_verbosity_get,
+			 faceauth_m0_verbosity_set, "0x%016llx\n");
+
+static void faceauth_debugfs_init(struct faceauth_data *data)
+{
+	struct dentry *debugfs_root;
+	struct dentry *hypx, *m0_verbosity_level;
+	int err = 0;
+
+	debugfs_root = debugfs_create_dir("faceauth", NULL);
+	if (IS_ERR_OR_NULL(debugfs_root)) {
+		pr_err("Failed to create faceauth debugfs");
+		err = -EIO;
+		goto exit;
+	}
+	data->debugfs_root = debugfs_root;
+
+	hypx = debugfs_create_file("hypx_enable", 0660, debugfs_root, data,
+				   &fops_hypx_enable);
+	if (!hypx) {
+		err = -EIO;
+		goto exit;
+	}
+
+	m0_verbosity_level =
+		debugfs_create_file("m0_verbosity_level", 0660, debugfs_root,
+				    data, &fops_m0_verbosity);
+	if (!m0_verbosity_level) {
+		err = -EIO;
+		goto exit;
+	}
+
+	return;
+
+exit:
+	debugfs_remove_recursive(debugfs_root);
+	data->debugfs_root = NULL;
+
+	pr_err("faceauth debugfs initialization failed: %d\n", err);
+}
+
+static void faceauth_debugfs_remove(struct faceauth_data *data)
+{
+	if (!data->debugfs_root)
+		return;
+
+	debugfs_remove_recursive(data->debugfs_root);
+}
+
+#else /* CONFIG_DEBUG_FS */
+
+static void faceauth_debugfs_init(struct faceauth_data *data)
+{
+}
+
+static void faceauth_debugfs_remove(struct faceauth_data *data)
+{
+}
+
+#endif /* CONFIG_DEBUG_FS */
+
 static int faceauth_probe(struct platform_device *pdev)
 {
 	int err;
-	struct dentry *hypx, *m0_verbosity_level;
 	struct faceauth_data *data;
-	struct dentry *debugfs_root;
+
 #if ENABLE_AIRBRUSH_DEBUG
 	int i;
 #endif
@@ -1389,6 +1454,7 @@ static int faceauth_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, data);
 
 	init_rwsem(&data->rwsem);
+	data->hypx_enable = true;
 	data->device = &pdev->dev;
 	data->can_transfer = true;
 	data->retry_count = 0;
@@ -1406,28 +1472,7 @@ static int faceauth_probe(struct platform_device *pdev)
 	if (err)
 		goto exit1;
 
-	debugfs_root = debugfs_create_dir("faceauth", NULL);
-	if (IS_ERR_OR_NULL(debugfs_root)) {
-		pr_err("Failed to create faceauth debugfs");
-		err = -EIO;
-		goto exit2;
-	}
-	data->debugfs_root = debugfs_root;
-
-	hypx = debugfs_create_file("hypx_enable", 0660, debugfs_root, data,
-				   &fops_hypx_enable);
-	if (!hypx) {
-		err = -EIO;
-		goto exit3;
-	}
-
-	m0_verbosity_level =
-		debugfs_create_file("m0_verbosity_level", 0660, debugfs_root,
-				    data, &fops_m0_verbosity);
-	if (!m0_verbosity_level) {
-		err = -EIO;
-		goto exit3;
-	}
+	faceauth_debugfs_init(data);
 
 	el2_faceauth_probe(data->device);
 
@@ -1450,9 +1495,7 @@ static int faceauth_probe(struct platform_device *pdev)
 	return 0;
 
 exit3:
-	debugfs_remove_recursive(debugfs_root);
-
-exit2:
+	faceauth_debugfs_remove(data);
 	misc_deregister(&data->misc_dev);
 
 exit1:
@@ -1467,7 +1510,7 @@ static int faceauth_remove(struct platform_device *pdev)
 	el2_faceauth_remove(data->device);
 	abc_unregister_pcie_link_blocking_event(&data->pcie_link_blocking_nb);
 	misc_deregister(&data->misc_dev);
-	debugfs_remove_recursive(data->debugfs_root);
+	faceauth_debugfs_remove(data);
 
 #if ENABLE_AIRBRUSH_DEBUG
 	clear_debug_data();
