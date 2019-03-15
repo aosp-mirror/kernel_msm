@@ -1330,7 +1330,8 @@ static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	struct power_supply *chg_psy = chg_drv->chg_psy;
 
 	/* when set cc_tolerance needs to be applied to everything */
-	cc_max = (cc_max / 1000) * (1000 - chg_drv->chg_cc_tolerance);
+	if (chg_drv->chg_cc_tolerance)
+		cc_max = (cc_max / 1000) * (1000 - chg_drv->chg_cc_tolerance);
 
 	if (chg_drv->fv_uv != fv_uv || chg_drv->cc_max != cc_max) {
 
@@ -1536,12 +1537,13 @@ static int msc_update_charger_cb(struct votable *votable,
 
 	rc = chg_update_charger(chg_drv, fv_uv, cc_max);
 	if (rc < 0) {
-		pr_info("MSC_CHG update error=%d rerun in %d ms\n",
-			rc, update_interval);
+		pr_info("MSC_CHG fv_uv=%d, cc_max=%d, update error=%d rerun in %d ms\n",
+			fv_uv, cc_max, rc, update_interval);
 		schedule_delayed_work(&chg_drv->chg_work,
 			msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
 	} else {
-		pr_info("MSC_CHG rerun in %d ms\n", update_interval);
+		pr_info("MSC_CHG fv_uv=%d, cc_max=%d, rerun in %d ms\n",
+			fv_uv, cc_max, update_interval);
 		schedule_delayed_work(&chg_drv->chg_work,
 			msecs_to_jiffies(update_interval));
 	}
@@ -1574,28 +1576,56 @@ static int msc_chg_disable_cb(struct votable *votable, void *data,
 	return 0;
 }
 
+static int chg_disable_std_votables(struct chg_drv *chg_drv)
+{
+	struct votable *qc_votable;
+
+	qc_votable = find_votable("FV");
+	if (!qc_votable)
+		return -EPROBE_DEFER;
+
+	vote(qc_votable, MSC_CHG_VOTER, true, -1);
+
+	qc_votable = find_votable("FCC");
+	if (!qc_votable)
+		return -EPROBE_DEFER;
+
+	vote(qc_votable, MSC_CHG_VOTER, true, -1);
+
+	return 0;
+}
+
 static int chg_create_votables(struct chg_drv *chg_drv)
 {
 	int ret;
 
-	chg_drv->msc_fv_votable = create_votable(VOTABLE_MSC_FV,
-			VOTE_MIN, NULL, chg_drv);
+	chg_drv->msc_fv_votable =
+		create_votable(VOTABLE_MSC_FV,
+			VOTE_MIN,
+			NULL,
+			chg_drv);
 	if (IS_ERR(chg_drv->msc_fv_votable)) {
 		ret = PTR_ERR(chg_drv->msc_fv_votable);
 		chg_drv->msc_fv_votable = NULL;
 		goto error_exit;
 	}
 
-	chg_drv->msc_fcc_votable = create_votable(VOTABLE_MSC_FCC,
-			VOTE_MIN, NULL, chg_drv);
+	chg_drv->msc_fcc_votable =
+		create_votable(VOTABLE_MSC_FCC,
+			VOTE_MIN,
+			NULL,
+			chg_drv);
 	if (IS_ERR(chg_drv->msc_fcc_votable)) {
 		ret = PTR_ERR(chg_drv->msc_fcc_votable);
 		chg_drv->msc_fcc_votable = NULL;
 		goto error_exit;
 	}
 
-	chg_drv->msc_interval_votable = create_votable(VOTABLE_MSC_INTERVAL,
-			VOTE_MIN, msc_update_charger_cb, chg_drv);
+	chg_drv->msc_interval_votable =
+		create_votable(VOTABLE_MSC_INTERVAL,
+			VOTE_MIN,
+			msc_update_charger_cb,
+			chg_drv);
 	if (IS_ERR(chg_drv->msc_interval_votable)) {
 		ret = PTR_ERR(chg_drv->msc_interval_votable);
 		chg_drv->msc_interval_votable = NULL;
@@ -1887,6 +1917,11 @@ static void google_charger_init_work(struct work_struct *work)
 			goto retry_init_work;
 		}
 	}
+
+	/* disable QC votables */
+	ret = chg_disable_std_votables(chg_drv);
+	if (ret == -EPROBE_DEFER)
+		goto retry_init_work;
 
 	chg_drv->chg_psy = chg_psy;
 	chg_drv->wlc_psy = wlc_psy;
