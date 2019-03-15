@@ -48,9 +48,13 @@ enum {
 };
 
 struct iaxxx_pwr_stats {
-	uint32_t mpll_cumulative_cnts[NUM_MPLL_CLK_FREQ];
-	uint32_t apll_cumulative_cnts[NUM_APLL_CLK_FREQ];
-};
+	uint64_t mpll_cumulative_cnts[NUM_MPLL_CLK_FREQ];
+	uint64_t apll_cumulative_cnts[NUM_APLL_CLK_FREQ];
+	uint64_t mpllCumulativeDur[NUM_MPLL_CLK_FREQ];
+	uint64_t mpllTimeStamp[NUM_MPLL_CLK_FREQ];
+	uint64_t sleepModeTimeStamp;
+	uint64_t sleepModeCumulativeDur;
+} __attribute__((__packed__));
 
 struct iaxxx_osc_trim_period {
 	int period;

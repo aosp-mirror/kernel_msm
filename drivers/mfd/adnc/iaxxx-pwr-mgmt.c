@@ -153,6 +153,8 @@ int iaxxx_pm_put_autosuspend(struct device *dev)
 int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 {
 	int rc, reg_val;
+	unsigned long ts_now;
+	unsigned int ts_diff;
 
 	/* Enable external clock */
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
@@ -197,6 +199,11 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 	}
 chip_woken_up:
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
+
+		ts_now = jiffies;
+		ts_diff = ts_now - priv->iaxxx_state->sleep_ts;
+		ts_diff = jiffies_to_msecs(ts_diff);
+
 		/* switch to internal oscillator if dt entry
 		 * is selected for internal oscillator mode.
 		 */
@@ -210,6 +217,18 @@ chip_woken_up:
 				return rc;
 			}
 		}
+
+		/* program SRB */
+		rc = regmap_write(priv->regmap_no_pm,
+				IAXXX_SRB_SYSTEM_SLEEP_DURATION_ADDR, ts_diff);
+
+		if (!rc)
+			rc = iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
+							IAXXX_HOST_0, 10);
+		if (rc)
+			dev_err(priv->dev, "%s failed to program sleep time\n",
+				__func__);
+
 		priv->iaxxx_state->power_state = IAXXX_NORMAL_MODE;
 		dev_info(priv->dev, "%s set to normal power mode done\n",
 			__func__);
@@ -276,6 +295,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 		}
 		iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
 							IAXXX_HOST_0, 20);
+		priv->iaxxx_state->sleep_ts = jiffies;
 
 		/* Disable external clock */
 		if (priv->iaxxx_mclk_cb)
