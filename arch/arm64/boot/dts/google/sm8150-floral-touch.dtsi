@@ -63,15 +63,21 @@
 		// Override table format:
 		// panel number, extinfo index, mask, value, firmware index
 		st,extinfo_override_table = <1  1 0xF0 0x00 2>,
-					    <1  1 0xF0 0x10 2>;
+					    <1  1 0xF0 0x10 2>,
+					    <1  1 0xFC 0x24 3>,
+					    <1  1 0xFC 0x28 4>;
 
 		st,firmware_names = "ftm5_fw_c2.ftb",
 				    "ftm5_fw_f2.ftb",
-				    "ftm5_fw_f2_p2.ftb";
+				    "ftm5_fw_f2_p2.ftb",
+				    "ftm5_fw_f2_evt1.ftb",
+				    "ftm5_fw_f2_evt2.ftb";
 		st,limits_names = "stm_fts_production_limits_c2.csv",
 				  "stm_fts_production_limits_f2.csv",
-				  "stm_fts_production_limits_f2_p2.csv";
-		st,sensor_inverted = <0>, <1>, <1>;
+				  "stm_fts_production_limits_f2_p2.csv",
+				  "stm_fts_production_limits_f2_evt1.csv",
+				  "stm_fts_production_limits_f2_evt2.csv";
+		st,sensor_inverted = <0>, <1>, <1>, <1>, <1>;
 	};
 };
 
