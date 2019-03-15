@@ -42,6 +42,8 @@ struct panel_switch_data {
 	struct task_struct *thread;
 
 	const struct dsi_display_mode *display_mode;
+	wait_queue_head_t switch_wq;
+	bool switch_pending;
 	int switch_te_listen_count;
 
 	atomic_t te_counter;
@@ -87,6 +89,11 @@ static void panel_perform_switch(struct panel_switch_data *pdata,
 	rc = dsi_panel_cmd_set_transfer(panel, cmd);
 	if (rc)
 		pr_warn("failed to send TIMING switch cmd, rc=%d\n", rc);
+
+	if (pdata->switch_pending) {
+		pdata->switch_pending = false;
+		wake_up_all(&pdata->switch_wq);
+	}
 
 	SDE_ATRACE_END(__func__);
 }
@@ -187,6 +194,7 @@ static void panel_queue_switch(struct panel_switch_data *pdata,
 
 	mutex_lock(&pdata->panel->panel_lock);
 	pdata->display_mode = new_mode;
+	pdata->switch_pending = true;
 	mutex_unlock(&pdata->panel->panel_lock);
 
 	kthread_queue_work(&pdata->worker, &pdata->switch_work);
@@ -202,6 +210,18 @@ static int panel_switch(struct dsi_panel *panel)
 	SDE_ATRACE_BEGIN(__func__);
 	panel_queue_switch(pdata, panel->cur_mode);
 	SDE_ATRACE_END(__func__);
+
+	return 0;
+}
+
+static int panel_pre_kickoff(struct dsi_panel *panel)
+{
+	struct panel_switch_data *pdata = panel->private_data;
+	const unsigned long timeout = msecs_to_jiffies(TE_TIMEOUT_MS);
+
+	if (!wait_event_timeout(pdata->switch_wq,
+				!pdata->switch_pending, timeout))
+		pr_warn("Timed out waiting for panel switch\n");
 
 	return 0;
 }
@@ -278,6 +298,7 @@ static const struct file_operations panel_switch_fops = {
 static const struct dsi_panel_funcs panel_funcs = {
 	.mode_switch = panel_switch,
 	.pre_disable = panel_pre_disable,
+	.pre_kickoff = panel_pre_kickoff,
 };
 
 int dsi_panel_switch_init(struct dsi_panel *panel)
@@ -308,6 +329,7 @@ int dsi_panel_switch_init(struct dsi_panel *panel)
 
 	sched_setscheduler(pdata->thread, SCHED_FIFO, &param);
 	init_completion(&pdata->te_completion);
+	init_waitqueue_head(&pdata->switch_wq);
 	atomic_set(&pdata->te_counter, 0);
 
 	panel->private_data = pdata;
