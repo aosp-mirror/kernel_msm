@@ -1065,16 +1065,12 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 */
 	ab_prep_pmic_settings(sc, dest_map);
 
-	if ((prev_state == CHIP_STATE_200 ||
-			prev_state == CHIP_STATE_300) &&
-			to_chip_substate_id >= CHIP_STATE_400) {
-		ab_sm_start_ts(sc, AB_SM_TS_PMIC_ON);
-		ret = ab_pmic_on(sc);
-		ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON);
-		if (ret) {
-			dev_err(sc->dev, "ab_pmic_on failed (%d)\n", ret);
-			return ret;
-		}
+	ab_sm_start_ts(sc, AB_SM_TS_PMIC_ON);
+	ret = ab_pmic_on(sc);
+	ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON);
+	if (ret) {
+		dev_err(sc->dev, "ab_pmic_on failed (%d)\n", ret);
+		return ret;
 	}
 
 	if (to_chip_substate_id >= CHIP_STATE_400) {
