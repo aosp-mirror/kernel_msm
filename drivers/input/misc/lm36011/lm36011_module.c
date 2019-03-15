@@ -62,6 +62,11 @@
 #define PMIC_BUCK2_VOlTAGE_MIN 4100000
 #define PMIC_BUCK2_VOlTAGE_MAX 4100000
 
+#define BUILD_DEV 0
+#define BUILD_PROTO 1
+#define BUILD_EVT1_0 2
+#define BUILD_EVT1_1 3
+
 enum SILEGO_GPIO {
 	IR_VCSEL_FAULT,
 	IR_VCSEL_TEST,
@@ -140,15 +145,24 @@ static bool read_proxoffset;
 module_param(read_proxoffset, bool, 0644);
 
 static const struct reg_setting silego_reg_settings_ver1[] = {
-	{0xc0, 0x09}, {0xc1, 0x5b}, {0xc2, 0x09}, {0xc3, 0x5b}, {0xcb, 0x93},
+	{0xc0, 0x09}, {0xc1, 0xf9}, {0xc2, 0x09}, {0xc3, 0xf9}, {0xcb, 0x93},
 	{0xcc, 0x81}, {0xcd, 0x93}, {0xce, 0x83}, {0x92, 0x00}, {0x93, 0x00}
 };
 
 static const struct reg_setting silego_reg_settings_ver2[] = {
-	{0xc0, 0x09}, {0xc1, 0x5b}, {0xc2, 0x09}, {0xc3, 0x5b}, {0xcb, 0x00},
+	{0xc0, 0x09}, {0xc1, 0xf9}, {0xc2, 0x09}, {0xc3, 0xf9}, {0xcb, 0x00},
 	{0xcc, 0x9a}, {0xcd, 0x13}, {0xce, 0x9b}, {0x92, 0x00}, {0x93, 0x00},
 	{0xa0, 0x0e}, {0xa2, 0x0e}, {0x80, 0xb0}, {0x81, 0x24}, {0x82, 0x3c},
 	{0x83, 0x2c}, {0x84, 0x58}, {0x85, 0x80}, {0x86, 0x40}, {0x87, 0x40},
+	{0x88, 0x3e}, {0x89, 0x60}, {0x8a, 0x40}, {0x8b, 0x30}, {0x8c, 0x7c},
+	{0x8d, 0x24}, {0x8e, 0xa0}, {0x8f, 0xc0}, {0x90, 0x40}, {0x91, 0xa0},
+};
+
+static const struct reg_setting silego_reg_settings_ver3[] = {
+	{0xc0, 0x01}, {0xc1, 0xbb}, {0xc2, 0x01}, {0xc3, 0xbb}, {0xcb, 0x93},
+	{0xcc, 0x9a}, {0xcd, 0x00}, {0xce, 0x9b}, {0x92, 0x00}, {0x93, 0x00},
+	{0xa0, 0x12}, {0xa2, 0x12}, {0x80, 0xb0}, {0x81, 0x24}, {0x82, 0x58},
+	{0x83, 0x2c}, {0x84, 0x68}, {0x85, 0x80}, {0x86, 0x40}, {0x87, 0x40},
 	{0x88, 0x3e}, {0x89, 0x60}, {0x8a, 0x40}, {0x8b, 0x30}, {0x8c, 0x7c},
 	{0x8d, 0x24}, {0x8e, 0xa0}, {0x8f, 0xc0}, {0x90, 0x40}, {0x91, 0xa0},
 };
@@ -418,15 +432,16 @@ int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 	return rc;
 }
 
-static int silego_correct_setting(struct led_laser_ctrl_t *ctrl)
+static int silego_override_setting(
+	struct led_laser_ctrl_t *ctrl, uint32_t addr, uint32_t data)
 {
 	int rc;
-	uint32_t data;
+	uint32_t check_value;
 	struct cam_sensor_i2c_reg_setting write_setting;
 	struct cam_sensor_i2c_reg_array reg_settings;
 
-	reg_settings.reg_addr = 0xcd;
-	reg_settings.reg_data = 0x93;
+	reg_settings.reg_addr = addr;
+	reg_settings.reg_data = data;
 	reg_settings.delay = 0;
 	write_setting.reg_setting = &reg_settings;
 	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
@@ -445,7 +460,7 @@ static int silego_correct_setting(struct led_laser_ctrl_t *ctrl)
 	rc = camera_io_dev_read(
 		&ctrl->io_master_info,
 		reg_settings.reg_addr,
-		&data,
+		&check_value,
 		CAMERA_SENSOR_I2C_TYPE_BYTE,
 		CAMERA_SENSOR_I2C_TYPE_BYTE);
 	if (rc < 0) {
@@ -455,10 +470,10 @@ static int silego_correct_setting(struct led_laser_ctrl_t *ctrl)
 		return rc;
 	}
 
-	if (data != 0x93) {
+	if (check_value != data) {
 		dev_err(ctrl->soc_info.dev,
-			"%s: failed, expected 0x93, got: 0x%x: rc: %d",
-			__func__, rc, data);
+			"%s: failed, expected 0x%x, got: 0x%x: rc: %d",
+			__func__, data, check_value, rc);
 		return -EINVAL;
 	}
 	return rc;
@@ -488,11 +503,22 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 		return rc;
 	}
 
-	reg_map = ctrl->hw_version >= 2 ?
-		silego_reg_settings_ver2 : silego_reg_settings_ver1;
-	settings_size = ctrl->hw_version >= 2 ?
-		ARRAY_SIZE(silego_reg_settings_ver2) :
-		ARRAY_SIZE(silego_reg_settings_ver1);
+	switch (ctrl->hw_version) {
+	case BUILD_PROTO:
+	case BUILD_DEV:
+		reg_map = silego_reg_settings_ver1;
+		settings_size = ARRAY_SIZE(silego_reg_settings_ver1);
+		break;
+	case BUILD_EVT1_0:
+		reg_map = silego_reg_settings_ver2;
+		settings_size = ARRAY_SIZE(silego_reg_settings_ver2);
+		break;
+	case BUILD_EVT1_1:
+	default:
+		reg_map = silego_reg_settings_ver3;
+		settings_size = ARRAY_SIZE(silego_reg_settings_ver3);
+		break;
+	}
 
 	for (i = 0; i < settings_size; i++) {
 		rc = camera_io_dev_read(
@@ -506,11 +532,22 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 				__func__, reg_map[i].addr);
 			goto out;
 		}
-		/* Some of Silego part isn't store final version value. Need to
-		   overwrite to correct value to provide proper functionality.
-		*/
-		if (reg_map[i].addr == 0xcd && data == 0xb3) {
-			rc = silego_correct_setting(ctrl);
+
+		if (ctrl->hw_version == BUILD_PROTO &&
+			reg_map[i].addr == 0xcd && data == 0xb3) {
+			/* Some of Silego part isn't store final version value.
+			 *  Need to overwrite to correct value to provide
+			 *  proper functionality.
+			 */
+			rc = silego_override_setting(ctrl,
+				reg_map[i].addr, reg_map[i].data);
+			if (rc < 0)
+				goto out;
+		} else if (ctrl->hw_version < BUILD_EVT1_1 &&
+			(reg_map[i].addr == 0xc1 || reg_map[i].addr == 0xc3)) {
+			/* Update pulse width limitation to 3 ms */
+			rc = silego_override_setting(ctrl,
+				reg_map[i].addr, reg_map[i].data);
 			if (rc < 0)
 				goto out;
 		} else if (data != reg_map[i].data) {
