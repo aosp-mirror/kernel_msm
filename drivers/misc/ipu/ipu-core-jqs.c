@@ -223,8 +223,7 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 }
 
 /* The caller to this function must hold bus->jqs.lock */
-static void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus,
-		int reason_code)
+void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
 {
 	if (bus->jqs.status != JQS_FW_STATUS_STAGED)
 		return;
@@ -236,30 +235,8 @@ static void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus,
 
 	dev_dbg(bus->parent_dev, "%s: unstaging firmware\n", __func__);
 
-	/* Free the kernel queue, this will unblock any thread waiting on a
-	 * kernel queue message.
-	 */
-	ipu_core_jqs_msg_transport_free_kernel_queue(bus, reason_code);
-
-	/* Notify paintbox devices that the firmware is down.  The IPU client
-	 * will free any application queues and unblock any waiting threads.
-	 */
-	ipu_core_notify_firmware_down(bus);
-
-	ipu_core_jqs_msg_transport_shutdown(bus);
-
 	ipu_core_free_shared_memory(bus, bus->jqs.fw_shared_buffer);
 	bus->jqs.status = JQS_FW_STATUS_REQUESTED;
-}
-
-void ipu_core_jqs_unstage_firmware_requested(struct paintbox_bus *bus)
-{
-	ipu_core_jqs_unstage_firmware(bus, -ECONNABORTED);
-}
-
-void ipu_core_jqs_unstage_firmware_fatal_error(struct paintbox_bus *bus)
-{
-	ipu_core_jqs_unstage_firmware(bus, -ECONNRESET);
 }
 
 static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
@@ -489,7 +466,7 @@ int ipu_core_jqs_enable_firmware(struct paintbox_bus *bus)
 	return 0;
 
 unstage_firmware:
-	ipu_core_jqs_unstage_firmware_fatal_error(bus);
+	ipu_core_jqs_unstage_firmware(bus);
 unload_firmware:
 	ipu_core_jqs_unload_firmware(bus);
 
@@ -547,12 +524,11 @@ void ipu_core_jqs_shutdown_firmware(struct paintbox_bus *bus)
 		ipu_core_jqs_send_shutdown_mode(bus, JQS_SHUTDOWN_MODE_HARD);
 
 	ipu_core_jqs_disable_firmware_fatal_error(bus);
-	ipu_core_jqs_unstage_firmware_fatal_error(bus);
+	ipu_core_jqs_unstage_firmware(bus);
 }
 
 /* The caller to this function must hold bus->jqs.lock */
-static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus,
-		int reason_code)
+static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus)
 {
 	if ((bus->jqs.status != JQS_FW_STATUS_RUNNING) &&
 			(bus->jqs.status != JQS_FW_STATUS_SUSPENDED))
@@ -563,10 +539,8 @@ static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus,
 		return;
 #endif
 
-	dev_dbg(bus->parent_dev, "%s: disabling firmware, reason %d\n",
-			__func__, reason_code);
+	dev_dbg(bus->parent_dev, "%s: disabling firmware\n", __func__);
 
-	ipu_core_jqs_msg_transport_complete_kernel_queue(bus, reason_code);
 	ipu_core_jqs_power_disable(bus);
 
 	atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
@@ -575,20 +549,38 @@ static void ipu_core_jqs_disable_firmware(struct paintbox_bus *bus,
 
 void ipu_core_jqs_disable_firmware_requested(struct paintbox_bus *bus)
 {
+	/* Notify paintbox devices that the firmware is down.  The IPU client
+	 * will free any application queues and unblock any waiting threads.
+	 */
+	ipu_core_notify_firmware_down(bus);
+
 	/* Firmware disable requests initiated by the AP are reported as aborts
 	 * on any queue that is still active when the disable request is made.
 	 */
-	ipu_core_jqs_disable_firmware(bus, -ECONNABORTED);
+	ipu_core_jqs_msg_transport_free_kernel_queue(bus, -ECONNABORTED);
+	ipu_core_jqs_msg_transport_shutdown(bus);
+	ipu_core_jqs_disable_firmware(bus);
 }
 
 void ipu_core_jqs_disable_firmware_suspended(struct paintbox_bus *bus)
 {
-	ipu_core_jqs_disable_firmware(bus, -ENETRESET);
+	ipu_core_jqs_msg_transport_complete_kernel_queue(bus, -ENETRESET);
+	ipu_core_jqs_disable_firmware(bus);
 }
 
 void ipu_core_jqs_disable_firmware_fatal_error(struct paintbox_bus *bus)
 {
-	ipu_core_jqs_disable_firmware(bus, -ECONNRESET);
+	/* Notify paintbox devices that the firmware is down.  The IPU client
+	 * will free any application queues and unblock any waiting threads.
+	 */
+	ipu_core_notify_firmware_down(bus);
+
+	/* Firmware disable requests initiated by fatal errors are reported
+	 * as hard resets.
+	 */
+	ipu_core_jqs_msg_transport_free_kernel_queue(bus, -ECONNRESET);
+	ipu_core_jqs_msg_transport_shutdown(bus);
+	ipu_core_jqs_disable_firmware(bus);
 }
 
 /* Called for runtime pm and for device pm */
@@ -761,7 +753,7 @@ void ipu_core_jqs_remove(struct paintbox_bus *bus)
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_disable_firmware_requested(bus);
-	ipu_core_jqs_unstage_firmware_requested(bus);
+	ipu_core_jqs_unstage_firmware(bus);
 	ipu_core_jqs_unload_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);

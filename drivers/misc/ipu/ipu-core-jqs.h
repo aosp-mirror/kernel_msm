@@ -28,8 +28,7 @@ void ipu_core_jqs_disable_firmware_fatal_error(struct paintbox_bus *bus);
 int ipu_core_jqs_load_firmware(struct paintbox_bus *bus);
 void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus);
 int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus);
-void ipu_core_jqs_unstage_firmware_requested(struct paintbox_bus *bus);
-void ipu_core_jqs_unstage_firmware_fatal_error(struct paintbox_bus *bus);
+void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus);
 
 void ipu_core_jqs_resume_firmware(struct paintbox_bus *bus,
 		uint64_t ipu_clock_rate_hz);
