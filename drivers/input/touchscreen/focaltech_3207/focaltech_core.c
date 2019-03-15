@@ -2557,7 +2557,7 @@ static struct i2c_driver fts_ts_driver = {
 	.probe = fts_ts_probe,
 	.remove = fts_ts_remove,
 	.driver = {
-		.name = "fts_ts",
+		.name = "ft_3207",
 		.owner = THIS_MODULE,
 		.of_match_table = fts_match_table,
 #ifdef CONFIG_PM
