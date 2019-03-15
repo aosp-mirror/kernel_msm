@@ -30,6 +30,7 @@
 #include <linux/power_supply.h>
 #include <linux/pm_wakeup.h>
 #include <linux/pmic-voter.h>
+#include <linux/thermal.h>
 #include "google_bms.h"
 #include "google_psy.h"
 #include "qmath.h"
@@ -157,7 +158,24 @@ struct batt_drv {
 
 	/* logging */
 	struct logbuffer *log;
+
+	/* thermal */
+	struct thermal_zone_device *tz_dev;
 };
+
+static int google_battery_tz_get_cycle_count(void *data, int *cycle_count)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+	struct power_supply *fg_psy = batt_drv->fg_psy;
+
+	if (!cycle_count) {
+		pr_err("Cycle Count NULL");
+		return -EINVAL;
+	}
+
+	*cycle_count = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CYCLE_COUNT);
+	return 0;
+}
 
 static int psy_changed(struct notifier_block *nb,
 		       unsigned long action, void *data)
@@ -2181,6 +2199,10 @@ retry_init_work:
 			      msecs_to_jiffies(BATT_DELAY_INIT_MS));
 }
 
+static struct thermal_zone_of_device_ops google_battery_tz_ops = {
+	.get_temp = google_battery_tz_get_cycle_count,
+};
+
 static int google_battery_probe(struct platform_device *pdev)
 {
 	const char *fg_psy_name, *psy_name = NULL;
@@ -2243,6 +2265,16 @@ static int google_battery_probe(struct platform_device *pdev)
 		batt_drv->log = NULL;
 	}
 
+	batt_drv->tz_dev = thermal_zone_of_sensor_register(batt_drv->device,
+				0, batt_drv, &google_battery_tz_ops);
+	if (IS_ERR(batt_drv->tz_dev)) {
+		pr_err("battery tz register failed. err:%ld\n",
+			PTR_ERR(batt_drv->tz_dev));
+		ret = PTR_ERR(batt_drv->tz_dev);
+		batt_drv->tz_dev = NULL;
+	} else {
+		thermal_zone_device_update(batt_drv->tz_dev, THERMAL_DEVICE_UP);
+	}
 	/* give time to fg driver to start */
 	schedule_delayed_work(&batt_drv->init_work,
 					msecs_to_jiffies(BATT_DELAY_INIT_MS));
@@ -2264,6 +2296,9 @@ static int google_battery_remove(struct platform_device *pdev)
 
 		if (batt_drv->log)
 			debugfs_logbuffer_unregister(batt_drv->log);
+		if (batt_drv->tz_dev)
+			thermal_zone_of_sensor_unregister(batt_drv->device,
+					batt_drv->tz_dev);
 	}
 
 	return 0;
