@@ -680,14 +680,17 @@ static int batt_chg_stats_cstr(char *buff, int size,
 				bool verbose)
 {
 	int i, j, len = 0;
-	const char *adapter_name =
-		gbms_chg_ev_adapter_s(ce_data->adapter_details.ad_type);
 
-	if (verbose)
-		len += snprintf(&buff[len], size - len, "A: ");
+	if (verbose) {
+		const char *adapter_name =
+			gbms_chg_ev_adapter_s(ce_data->adapter_details.ad_type);
 
-	len += snprintf(&buff[len], size - len, "%s,%d,%d",
-				adapter_name,
+		len += snprintf(&buff[len], size - len, "A: %s,",
+			adapter_name);
+	}
+
+	len += snprintf(&buff[len], size - len, "%d,%d,%d",
+				ce_data->adapter_details.ad_type,
 				ce_data->adapter_details.ad_voltage * 100,
 				ce_data->adapter_details.ad_amperage * 100);
 
