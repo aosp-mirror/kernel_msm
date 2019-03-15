@@ -723,4 +723,9 @@ void ab_sm_remove_sysfs(struct ab_state_context *sc);
 void ab_lvcc_init(struct ab_asv_info *info);
 void set_asv_version(struct ab_asv_info *info, int asv_version);
 int ab_lvcc(struct ab_state_context *sc, int chip_state);
+
+u32 get_ipu_ro(void);
+u32 get_tpu_ro(void);
+int chip_info_open(struct inode *inode, struct  file *file);
+
 #endif /* _AIRBRUSH_SM_CTRL_H */

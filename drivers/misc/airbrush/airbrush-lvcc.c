@@ -96,7 +96,7 @@ static u32 tpu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
 		706250},
 };
 
-static u32 get_ipu_ro(void)
+u32 get_ipu_ro(void)
 {
 	u32 addr = ABC_BASE_OTP_WRAPPER + IPU_RO_ADDR;
 	u32 val;
@@ -120,7 +120,7 @@ static u32 get_ipu_volt(struct ab_asv_info *info)
 	return IPU_SIGNOFF_VOLTAGE;
 }
 
-static u32 get_tpu_ro(void)
+u32 get_tpu_ro(void)
 {
 	u32 addr = ABC_BASE_OTP_WRAPPER + TPU_RO_ADDR;
 	u32 val;

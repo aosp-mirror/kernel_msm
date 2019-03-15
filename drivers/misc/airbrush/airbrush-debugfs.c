@@ -311,6 +311,11 @@ static int data_rate_get(void *blk_passed, u64 *val)
 }
 DEFINE_DEBUGFS_ATTRIBUTE(fops_data_rate, data_rate_get, NULL, "%llu\n");
 
+static const struct file_operations chip_info_fops = {
+	.open = chip_info_open,
+	.read = seq_read,
+};
+
 static int ab_debugfs_m0_intr(void *data, u64 val)
 {
 	ab_interrupt_M0(0);
@@ -683,6 +688,11 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("ddr_ppc_ctrl", 0200, sc->d_entry, sc,
 				&ab_ddr_ppc_ctrl_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("chip_info", 0444, sc->d_entry, NULL,
+				&chip_info_fops);
 	if (!d)
 		goto err_out;
 

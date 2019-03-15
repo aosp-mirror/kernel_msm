@@ -16,7 +16,8 @@ airbrush-y +=	\
 		airbrush-cooling.o \
 		airbrush-thermal.o \
 		airbrush-sysfs.o \
-		airbrush-lvcc.o
+		airbrush-lvcc.o \
+		airbrush-chip-info.o
 
 airbrush-$(CONFIG_AIRBRUSH_SM_DEBUGFS)	+= airbrush-debugfs.o
 airbrush-$(CONFIG_AB_DDR_RW_TEST)	+= airbrush-ddr-test.o
