@@ -4188,7 +4188,7 @@ static int ufshcd_wait_for_dev_cmd(struct ufs_hba *hba,
 		ufshcd_outstanding_req_clear(hba, lrbp->task_tag);
 	}
 
-	if (err)
+	if (err && err != -EAGAIN)
 		ufsdbg_set_err_state(hba);
 
 	return err;
@@ -4249,6 +4249,7 @@ static int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
 	int tag;
 	struct completion wait;
 	unsigned long flags;
+	bool has_read_lock = false;
 
 	/*
 	 * May get invoked from shutdown and IOCTL contexts.
@@ -4256,8 +4257,10 @@ static int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
 	 * In error recovery context, it may come with lock acquired.
 	 */
 
-	if (!ufshcd_is_shutdown_ongoing(hba) && !ufshcd_eh_in_progress(hba))
+	if (!ufshcd_is_shutdown_ongoing(hba) && !ufshcd_eh_in_progress(hba)) {
 		down_read(&hba->lock);
+		has_read_lock = true;
+	}
 
 	/*
 	 * Get free slot, sleep if slots are unavailable.
@@ -4291,7 +4294,7 @@ static int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
 out_put_tag:
 	ufshcd_put_dev_cmd_tag(hba, tag);
 	wake_up(&hba->dev_cmd.tag_wq);
-	if (!ufshcd_is_shutdown_ongoing(hba) && !ufshcd_eh_in_progress(hba))
+	if (has_read_lock)
 		up_read(&hba->lock);
 	return err;
 }
@@ -5168,9 +5171,9 @@ int ufshcd_dme_set_attr(struct ufs_hba *hba, u32 attr_sel,
 	} while (ret && peer && --retries);
 
 	if (ret)
-		dev_err(hba->dev, "%s: attr-id 0x%x val 0x%x failed %d retries\n",
+		dev_err(hba->dev, "%s: attr-id 0x%x val 0x%x failed %d retries, err %d\n",
 			set, UIC_GET_ATTR_ID(attr_sel), mib_val,
-			UFS_UIC_COMMAND_RETRIES - retries);
+			UFS_UIC_COMMAND_RETRIES - retries, ret);
 
 	return ret;
 }
@@ -5629,6 +5632,7 @@ int ufshcd_change_power_mode(struct ufs_hba *hba,
 			     struct ufs_pa_layer_attr *pwr_mode)
 {
 	int ret = 0;
+	u32 peer_rx_hs_adapt_initial_cap;
 
 	/* if already configured to the requested pwr_mode */
 	if (!hba->restore_needed &&
@@ -5679,12 +5683,23 @@ int ufshcd_change_power_mode(struct ufs_hba *hba,
 						pwr_mode->hs_rate);
 
 	if (pwr_mode->gear_tx == UFS_HS_G4) {
+		ret = ufshcd_dme_peer_get(hba,
+				 UIC_ARG_MIB_SEL(RX_HS_ADAPT_INITIAL_CAPABILITY,
+					UIC_ARG_MPHY_RX_GEN_SEL_INDEX(0)),
+				    &peer_rx_hs_adapt_initial_cap);
+		if (ret) {
+			dev_err(hba->dev,
+				"%s: RX_HS_ADAPT_INITIAL_CAP get failed %d\n",
+				__func__, ret);
+			peer_rx_hs_adapt_initial_cap =
+						PA_PEERRXHSADAPTINITIAL_Default;
+		}
 		ret = ufshcd_dme_set(hba, UIC_ARG_MIB(PA_PEERRXHSADAPTINITIAL),
-				     PA_PEERRXHSADAPTINITIAL_Default);
+				     peer_rx_hs_adapt_initial_cap);
 		/* INITIAL ADAPT */
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXHSADAPTTYPE),
 			       PA_INITIAL_ADAPT);
-	} else {
+	} else if (hba->ufs_version >= UFSHCI_VERSION_30) {
 		/* NO ADAPT */
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXHSADAPTTYPE), PA_NO_ADAPT);
 	}
@@ -7899,7 +7914,10 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	 * To avoid these unnecessary/illegal step we skip to the last error
 	 * handling stage: reset and restore.
 	 */
-	if (lrbp->lun == UFS_UPIU_UFS_DEVICE_WLUN)
+	if ((lrbp->lun == UFS_UPIU_UFS_DEVICE_WLUN) ||
+	    (lrbp->lun == UFS_UPIU_REPORT_LUNS_WLUN) ||
+	    (lrbp->lun == UFS_UPIU_BOOT_WLUN) ||
+	    (lrbp->lun == UFS_UPIU_RPMB_WLUN))
 		return ufshcd_eh_host_reset_handler(cmd);
 
 	ufshcd_hold_all(hba);
@@ -8963,7 +8981,7 @@ static int ufshcd_get_dev_ref_clk_gating_wait(struct ufs_hba *hba,
 
 static int ufs_read_device_desc_data(struct ufs_hba *hba)
 {
-	int err;
+	int err = 0;
 	u8 desc_buf[hba->desc_size.dev_desc];
 
 	err = ufshcd_read_device_desc(hba, desc_buf, hba->desc_size.dev_desc);
@@ -9518,7 +9536,7 @@ static int ufshcd_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 		switch (ioctl_data->idn) {
 		case QUERY_ATTR_IDN_BOOT_LU_EN:
 			index = 0;
-			if (att > QUERY_ATTR_IDN_BOOT_LU_EN_MAX) {
+			if (!att || att > QUERY_ATTR_IDN_BOOT_LU_EN_MAX) {
 				dev_err(hba->dev,
 					"%s: Illegal ufs query ioctl data, opcode 0x%x, idn 0x%x, att 0x%x\n",
 					__func__, ioctl_data->opcode,

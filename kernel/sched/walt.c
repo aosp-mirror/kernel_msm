@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -421,7 +421,6 @@ void clear_walt_request(int cpu)
 	struct rq *rq = cpu_rq(cpu);
 	unsigned long flags;
 
-	clear_boost_kick(cpu);
 	clear_reserved(cpu);
 	if (rq->push_task) {
 		struct task_struct *push_task = NULL;
@@ -3130,7 +3129,7 @@ static void walt_update_coloc_boost_load(void)
 	struct sched_cluster *cluster;
 
 	if (!sysctl_sched_little_cluster_coloc_fmin_khz ||
-			sysctl_sched_boost == CONSERVATIVE_BOOST)
+			sched_boost() == CONSERVATIVE_BOOST)
 		return;
 
 	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
@@ -3178,13 +3177,19 @@ void walt_irq_work(struct irq_work *irq_work)
 	u64 wc;
 	bool is_migration = false;
 	u64 total_grp_load = 0;
+	int level = 0;
 
 	/* Am I the window rollover work or the migration work? */
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
 
-	for_each_cpu(cpu, cpu_possible_mask)
-		raw_spin_lock(&cpu_rq(cpu)->lock);
+	for_each_cpu(cpu, cpu_possible_mask) {
+		if (level == 0)
+			raw_spin_lock(&cpu_rq(cpu)->lock);
+		else
+			raw_spin_lock_nested(&cpu_rq(cpu)->lock, level);
+		level++;
+	}
 
 	wc = sched_ktime_clock();
 	walt_load_reported_window = atomic64_read(&walt_irq_work_lastq_ws);

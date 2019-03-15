@@ -1300,8 +1300,7 @@ int abc_pcie_unmap_iatu(struct device *dev, struct device *owner,
 		return -EINVAL;
 	}
 
-	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_ACTIVE)
-		disable_inbound_iatu_region(iatu_id);
+	(void)disable_inbound_iatu_region(iatu_id);
 
 	ret = free_bar_range(dev, iatu->bar, iatu->size, iatu->bar_offset);
 	if (ret < 0) {

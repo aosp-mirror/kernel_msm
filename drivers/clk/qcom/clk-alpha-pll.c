@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015, 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -158,7 +158,7 @@
 #define LUCID_PLL_STANDBY		0x0
 #define LUCID_PLL_RUN			0x1
 #define LUCID_PLL_OUT_MASK		0x7
-#define LUCID_PCAL_DONE			BIT(26)
+#define LUCID_PCAL_DONE			BIT(27)
 #define LUCID_PLL_RATE_MARGIN		500
 #define LUCID_PLL_ACK_LATCH		BIT(29)
 #define LUCID_PLL_UPDATE		BIT(22)
@@ -569,10 +569,7 @@ clk_alpha_pll_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
 		}
 	}
 
-	ctl >>= PLL_POST_DIV_SHIFT;
-	ctl &= PLL_POST_DIV_MASK;
-
-	return alpha_pll_calc_rate(pll, prate, l, a) >> fls(ctl);
+	return alpha_pll_calc_rate(pll, prate, l, a);
 }
 
 static int clk_alpha_pll_dynamic_update(struct clk_alpha_pll *pll)
@@ -660,6 +657,7 @@ static int clk_alpha_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 			     a & ALPHA_16BIT_MASK);
 	} else {
 		a <<= (ALPHA_REG_BITWIDTH - ALPHA_BITWIDTH);
+		regmap_write(pll->clkr.regmap, off + PLL_ALPHA_VAL, a);
 		regmap_write(pll->clkr.regmap, off + PLL_ALPHA_VAL_U, a >> 32);
 	}
 
@@ -1568,6 +1566,34 @@ static int clk_alpha_pll_slew_update(struct clk_alpha_pll *pll)
 
 static int clk_alpha_pll_calibrate(struct clk_hw *hw);
 
+static unsigned long
+clk_alpha_pll_slew_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
+{
+	struct clk_alpha_pll *pll = to_clk_alpha_pll(hw);
+	u64 a = 0;
+	u32 l, low, high, ctl, off = pll->offset;
+
+	regmap_read(pll->clkr.regmap, off + PLL_L_VAL, &l);
+
+	regmap_read(pll->clkr.regmap, off + PLL_USER_CTL, &ctl);
+	if (ctl & PLL_ALPHA_EN) {
+		regmap_read(pll->clkr.regmap, off + PLL_ALPHA_VAL, &low);
+		if (pll->flags & SUPPORTS_16BIT_ALPHA) {
+			a = low & ALPHA_16BIT_MASK;
+		} else {
+			regmap_read(pll->clkr.regmap, off + PLL_ALPHA_VAL_U,
+						&high);
+			a = (u64)high << 32 | low;
+			a >>= ALPHA_REG_BITWIDTH - ALPHA_BITWIDTH;
+		}
+	}
+
+	ctl >>= PLL_POST_DIV_SHIFT;
+	ctl &= PLL_POST_DIV_MASK;
+
+	return alpha_pll_calc_rate(pll, parent_rate, l, a) >> fls(ctl);
+}
+
 static int clk_alpha_pll_slew_set_rate(struct clk_hw *hw, unsigned long rate,
 			unsigned long parent_rate)
 {
@@ -1741,7 +1767,7 @@ static int clk_alpha_pll_slew_enable(struct clk_hw *hw)
 const struct clk_ops clk_alpha_pll_slew_ops = {
 	.enable = clk_alpha_pll_slew_enable,
 	.disable = clk_alpha_pll_disable,
-	.recalc_rate = clk_alpha_pll_recalc_rate,
+	.recalc_rate = clk_alpha_pll_slew_recalc_rate,
 	.round_rate = clk_alpha_pll_round_rate,
 	.set_rate = clk_alpha_pll_slew_set_rate,
 	.list_registers = clk_alpha_pll_list_registers,
@@ -2527,8 +2553,7 @@ static int alpha_pll_lucid_prepare(struct clk_hw *hw)
 		return 0;
 
 	/* Return early if calibration is not needed. */
-	ret = regmap_read(pll->clkr.regmap, pll->offset + LUCID_PLL_OFF_STATUS,
-		      &regval);
+	ret = regmap_read(pll->clkr.regmap, pll->offset, &regval);
 	if (regval & LUCID_PCAL_DONE)
 		return ret;
 
@@ -2600,12 +2625,18 @@ static int alpha_pll_lucid_set_rate(struct clk_hw *hw, unsigned long rate,
 	if (ret)
 		return ret;
 
-	/* Wait for 2 reference cycles before checking the ACK bit. */
-	udelay(1);
-	regmap_read(pll->clkr.regmap, pll->offset + PLL_MODE, &regval);
-	if (!(regval & LUCID_PLL_ACK_LATCH)) {
-		WARN(1, "PLL latch failed. Output may be unstable!\n");
-		return -EINVAL;
+	/*
+	 * When PLL_HW_UPDATE_LOGIC_BYPASS bit is not set then waiting for
+	 * pll_ack_latch to return to zero can be bypassed.
+	 */
+	if (!(pll->flags & SUPPORTS_NO_PLL_LATCH)) {
+		/* Wait for 2 reference cycles before checking the ACK bit. */
+		udelay(1);
+		regmap_read(pll->clkr.regmap, pll->offset + PLL_MODE, &regval);
+		if (!(regval & LUCID_PLL_ACK_LATCH)) {
+			WARN(1, "PLL latch failed. Output may be unstable!\n");
+			return -EINVAL;
+		}
 	}
 
 	/* Return the latch input to 0 */

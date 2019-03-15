@@ -78,6 +78,7 @@
 
 #define IPA_DEFAULT_SYS_YELLOW_WM 32
 #define IPA_REPL_XFER_THRESH 20
+#define IPA_REPL_XFER_MAX 36
 
 #define IPA_TX_SEND_COMPL_NOP_DELAY_NS (2 * 1000 * 1000)
 
@@ -774,7 +775,8 @@ static int ipa3_rx_switch_to_intr_mode(struct ipa3_sys_context *sys)
 	ipa3_dec_release_wakelock();
 	ret = gsi_config_channel_mode(sys->ep->gsi_chan_hdl,
 		GSI_CHAN_MODE_CALLBACK);
-	if (ret != GSI_STATUS_SUCCESS) {
+	if ((ret != GSI_STATUS_SUCCESS) &&
+		!atomic_read(&sys->curr_polling_state)) {
 		if (ret == -GSI_STATUS_PENDING_IRQ) {
 			ipa3_inc_acquire_wakelock();
 			atomic_set(&sys->curr_polling_state, 1);
@@ -1674,6 +1676,8 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	}
 
 	if (dst_ep_idx != -1) {
+		int skb_idx;
+
 		/* SW data path */
 		data_idx = 0;
 		if (sys->policy == IPA_POLICY_NOINTR_MODE) {
@@ -1705,6 +1709,8 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 			desc[data_idx].dma_address_valid = true;
 			desc[data_idx].dma_address = meta->dma_address;
 		}
+
+		skb_idx = data_idx;
 		data_idx++;
 
 		for (f = 0; f < num_frags; f++) {
@@ -1715,10 +1721,11 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 		}
 		/* don't free skb till frag mappings are released */
 		if (num_frags) {
-			desc[data_idx + f - 1].callback = desc[2].callback;
-			desc[data_idx + f - 1].user1 = desc[2].user1;
-			desc[data_idx + f - 1].user2 = desc[2].user2;
-			desc[data_idx - 1].callback = NULL;
+			desc[data_idx + f - 1].callback =
+				desc[skb_idx].callback;
+			desc[data_idx + f - 1].user1 = desc[skb_idx].user1;
+			desc[data_idx + f - 1].user2 = desc[skb_idx].user2;
+			desc[skb_idx].callback = NULL;
 		}
 
 		if (ipa3_send(sys, num_frags + data_idx, desc, true)) {
@@ -2053,7 +2060,7 @@ static void ipa3_replenish_rx_cache(struct ipa3_sys_context *sys)
 	int ret;
 	int idx = 0;
 	int rx_len_cached = 0;
-	struct gsi_xfer_elem gsi_xfer_elem_array[IPA_REPL_XFER_THRESH];
+	struct gsi_xfer_elem gsi_xfer_elem_array[IPA_REPL_XFER_MAX];
 	gfp_t flag = GFP_NOWAIT | __GFP_NOWARN;
 
 	rx_len_cached = sys->len;
@@ -2097,15 +2104,13 @@ static void ipa3_replenish_rx_cache(struct ipa3_sys_context *sys)
 		idx++;
 		rx_len_cached++;
 		/*
-		 * gsi_xfer_elem_buffer has a size of IPA_REPL_XFER_THRESH.
+		 * gsi_xfer_elem_buffer has a size of IPA_REPL_XFER_MAX.
 		 * If this size is reached we need to queue the xfers.
 		 */
-		if (idx == IPA_REPL_XFER_THRESH) {
+		if (idx == IPA_REPL_XFER_MAX) {
 			ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
-				gsi_xfer_elem_array, true);
-			if (ret == GSI_STATUS_SUCCESS) {
-				sys->len = rx_len_cached;
-			} else {
+				gsi_xfer_elem_array, false);
+			if (ret != GSI_STATUS_SUCCESS) {
 				/* we don't expect this will happen */
 				IPAERR("failed to provide buffer: %d\n", ret);
 				WARN_ON(1);
@@ -2125,16 +2130,15 @@ fail_kmem_cache_alloc:
 		queue_delayed_work(sys->wq, &sys->replenish_rx_work,
 				msecs_to_jiffies(1));
 done:
-	if (idx) {
-		ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
-			gsi_xfer_elem_array, true);
-		if (ret == GSI_STATUS_SUCCESS) {
-			sys->len = rx_len_cached;
-		} else {
-			/* we don't expect this will happen */
-			IPAERR("failed to provide buffer: %d\n", ret);
-			WARN_ON(1);
-		}
+	/* only ring doorbell once here */
+	ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
+		gsi_xfer_elem_array, true);
+	if (ret == GSI_STATUS_SUCCESS) {
+		sys->len = rx_len_cached;
+	} else {
+		/* we don't expect this will happen */
+		IPAERR("failed to provide buffer: %d\n", ret);
+		WARN_ON(1);
 	}
 }
 
@@ -2145,7 +2149,7 @@ static void ipa3_replenish_rx_cache_recycle(struct ipa3_sys_context *sys)
 	int ret;
 	int idx = 0;
 	int rx_len_cached = 0;
-	struct gsi_xfer_elem gsi_xfer_elem_array[IPA_REPL_XFER_THRESH];
+	struct gsi_xfer_elem gsi_xfer_elem_array[IPA_REPL_XFER_MAX];
 	gfp_t flag = GFP_NOWAIT | __GFP_NOWARN;
 
 	/* start replenish only when buffers go lower than the threshold */
@@ -2207,15 +2211,13 @@ static void ipa3_replenish_rx_cache_recycle(struct ipa3_sys_context *sys)
 		idx++;
 		rx_len_cached++;
 		/*
-		* gsi_xfer_elem_buffer has a size of IPA_REPL_XFER_THRESH.
+		* gsi_xfer_elem_buffer has a size of IPA_REPL_XFER_MAX.
 		* If this size is reached we need to queue the xfers.
 		*/
-		if (idx == IPA_REPL_XFER_THRESH) {
+		if (idx == IPA_REPL_XFER_MAX) {
 			ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
-				gsi_xfer_elem_array, true);
-			if (ret == GSI_STATUS_SUCCESS) {
-				sys->len = rx_len_cached;
-			} else {
+				gsi_xfer_elem_array, false);
+			if (ret != GSI_STATUS_SUCCESS) {
 				/* we don't expect this will happen */
 				IPAERR("failed to provide buffer: %d\n", ret);
 				WARN_ON(1);
@@ -2235,16 +2237,15 @@ fail_kmem_cache_alloc:
 		queue_delayed_work(sys->wq, &sys->replenish_rx_work,
 		msecs_to_jiffies(1));
 done:
-	if (idx) {
-		ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
-			gsi_xfer_elem_array, true);
-		if (ret == GSI_STATUS_SUCCESS) {
-			sys->len = rx_len_cached;
-		} else {
-			/* we don't expect this will happen */
-			IPAERR("failed to provide buffer: %d\n", ret);
-			WARN_ON(1);
-		}
+	/* only ring doorbell once here */
+	ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
+		gsi_xfer_elem_array, true);
+	if (ret == GSI_STATUS_SUCCESS) {
+		sys->len = rx_len_cached;
+	} else {
+		/* we don't expect this will happen */
+		IPAERR("failed to provide buffer: %d\n", ret);
+		WARN_ON(1);
 	}
 }
 
@@ -2270,7 +2271,7 @@ static void ipa3_fast_replenish_rx_cache(struct ipa3_sys_context *sys)
 	struct ipa3_rx_pkt_wrapper *rx_pkt;
 	int ret;
 	int rx_len_cached = 0;
-	struct gsi_xfer_elem gsi_xfer_elem_array[IPA_REPL_XFER_THRESH];
+	struct gsi_xfer_elem gsi_xfer_elem_array[IPA_REPL_XFER_MAX];
 	u32 curr;
 	int idx = 0;
 
@@ -2300,15 +2301,10 @@ static void ipa3_fast_replenish_rx_cache(struct ipa3_sys_context *sys)
 		 * gsi_xfer_elem_buffer has a size of IPA_REPL_XFER_THRESH.
 		 * If this size is reached we need to queue the xfers.
 		 */
-		if (idx == IPA_REPL_XFER_THRESH) {
+		if (idx == IPA_REPL_XFER_MAX) {
 			ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
-				gsi_xfer_elem_array, true);
-			if (ret == GSI_STATUS_SUCCESS) {
-				/* ensure write is done before setting head */
-				mb();
-				atomic_set(&sys->repl->head_idx, curr);
-				sys->len = rx_len_cached;
-			} else {
+				gsi_xfer_elem_array, false);
+			if (ret != GSI_STATUS_SUCCESS) {
 				/* we don't expect this will happen */
 				IPAERR("failed to provide buffer: %d\n", ret);
 				WARN_ON(1);
@@ -2317,21 +2313,20 @@ static void ipa3_fast_replenish_rx_cache(struct ipa3_sys_context *sys)
 			idx = 0;
 		}
 	}
-	/* There can still be something left which has not been xfer yet */
-	if (idx) {
-		ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
-				gsi_xfer_elem_array, true);
-		if (ret == GSI_STATUS_SUCCESS) {
-			/* ensure write is done before setting head index */
-			mb();
-			atomic_set(&sys->repl->head_idx, curr);
-			sys->len = rx_len_cached;
-		} else {
-			/* we don't expect this will happen */
-			IPAERR("failed to provide buffer: %d\n", ret);
-			WARN_ON(1);
-		}
+	/* only ring doorbell once here */
+	ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
+			gsi_xfer_elem_array, true);
+	if (ret == GSI_STATUS_SUCCESS) {
+		/* ensure write is done before setting head index */
+		mb();
+		atomic_set(&sys->repl->head_idx, curr);
+		sys->len = rx_len_cached;
+	} else {
+		/* we don't expect this will happen */
+		IPAERR("failed to provide buffer: %d\n", ret);
+		WARN_ON(1);
 	}
+
 	spin_unlock_bh(&sys->spinlock);
 
 	__trigger_repl_work(sys);
@@ -2850,8 +2845,7 @@ static int ipa3_wan_rx_pyld_hdlr(struct sk_buff *skb,
 
 		IPA_STATS_INC_CNT(ipa3_ctx->stats.rx_pkts);
 		if (status.endp_dest_idx >= ipa3_ctx->ipa_num_pipes ||
-			status.endp_src_idx >= ipa3_ctx->ipa_num_pipes ||
-			status.pkt_len > IPA_GENERIC_AGGR_BYTE_LIMIT * 1024) {
+			status.endp_src_idx >= ipa3_ctx->ipa_num_pipes) {
 			IPAERR("status fields invalid\n");
 			WARN_ON(1);
 			goto bail;
@@ -3080,6 +3074,10 @@ static void ipa3_wq_rx_common(struct ipa3_sys_context *sys,
 	struct ipa3_sys_context *coal_sys;
 	int ipa_ep_idx;
 
+	if (!notify) {
+		IPAERR_RL("gsi_chan_xfer_notify is null\n");
+		return;
+	}
 	rx_skb = handle_skb_completion(notify, true);
 
 	if (rx_skb) {

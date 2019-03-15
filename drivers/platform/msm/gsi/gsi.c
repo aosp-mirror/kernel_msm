@@ -2323,7 +2323,13 @@ int gsi_alloc_channel(struct gsi_chan_props *props, unsigned long dev_hdl,
 		return -GSI_STATUS_NODEV;
 	}
 	memset(ctx, 0, sizeof(*ctx));
-	user_data_size = props->ring_len / props->re_size;
+
+	/* For IPA offloaded WDI channels not required user_data pointer */
+	if (props->prot != GSI_CHAN_PROT_WDI2 &&
+		props->prot != GSI_CHAN_PROT_WDI3)
+		user_data_size = props->ring_len / props->re_size;
+	else
+		user_data_size = props->re_size;
 	/*
 	 * GCI channels might have OOO event completions up to GSI_VEID_MAX.
 	 * user_data needs to be large enough to accommodate those.
@@ -3433,7 +3439,7 @@ int gsi_queue_xfer(unsigned long chan_hdl, uint16_t num_xfers,
 		return -GSI_STATUS_NODEV;
 	}
 
-	if (chan_hdl >= gsi_ctx->max_ch || !num_xfers || !xfer) {
+	if (chan_hdl >= gsi_ctx->max_ch || (num_xfers && !xfer)) {
 		GSIERR("bad params chan_hdl=%lu num_xfers=%u xfer=%pK\n",
 				chan_hdl, num_xfers, xfer);
 		return -GSI_STATUS_INVALID_PARAMS;
@@ -3453,6 +3459,11 @@ int gsi_queue_xfer(unsigned long chan_hdl, uint16_t num_xfers,
 		slock = &ctx->ring.slock;
 
 	spin_lock_irqsave(slock, flags);
+
+	/* allow only ring doorbell */
+	if (!num_xfers)
+		goto ring_doorbell;
+
 	/*
 	 * for GCI channels the responsibility is on the caller to make sure
 	 * there is enough room in the TRE.
@@ -3488,11 +3499,12 @@ int gsi_queue_xfer(unsigned long chan_hdl, uint16_t num_xfers,
 
 	ctx->stats.queued += num_xfers;
 
-	/* ensure TRE is set before ringing doorbell */
-	wmb();
-
-	if (ring_db)
+ring_doorbell:
+	if (ring_db) {
+		/* ensure TRE is set before ringing doorbell */
+		wmb();
 		gsi_ring_chan_doorbell(ctx);
+	}
 
 	spin_unlock_irqrestore(slock, flags);
 
@@ -3622,6 +3634,7 @@ int gsi_config_channel_mode(unsigned long chan_hdl, enum gsi_chan_mode mode)
 	struct gsi_chan_ctx *ctx;
 	enum gsi_chan_mode curr;
 	unsigned long flags;
+	enum gsi_chan_mode chan_mode;
 
 	if (!gsi_ctx) {
 		pr_err("%s:%d gsi context not allocated\n", __func__, __LINE__);
@@ -3693,13 +3706,20 @@ int gsi_config_channel_mode(unsigned long chan_hdl, enum gsi_chan_mode mode)
 					GSI_EE_n_CNTXT_SRC_IEOB_IRQ_CLR_OFFS(
 							gsi_ctx->per.ee));
 				spin_unlock_irqrestore(&gsi_ctx->slock, flags);
-				spin_lock_irqsave(&ctx->ring.slock, flags);
-				atomic_set(
-					&ctx->poll_mode, GSI_CHAN_MODE_POLL);
+				spin_lock_irqsave(&ctx->evtr->ring.slock,
+									flags);
+				chan_mode = atomic_xchg(&ctx->poll_mode,
+						GSI_CHAN_MODE_POLL);
 				spin_unlock_irqrestore(
-					&ctx->ring.slock, flags);
+					&ctx->evtr->ring.slock, flags);
 				ctx->stats.poll_pending_irq++;
-				return -GSI_STATUS_PENDING_IRQ;
+				GSIDBG("In IEOB WA pnd cnt = %d prvmode = %d\n",
+						ctx->stats.poll_pending_irq,
+						chan_mode);
+				if (chan_mode == GSI_CHAN_MODE_POLL)
+					return GSI_STATUS_SUCCESS;
+				else
+					return -GSI_STATUS_PENDING_IRQ;
 			}
 		}
 		ctx->stats.poll_to_callback++;

@@ -168,6 +168,7 @@ enum sde_enc_rc_states {
  * @enc_spin_lock:	Virtual-Encoder-Wide Spin Lock for IRQ purposes
  * @bus_scaling_client:	Client handle to the bus scaling interface
  * @te_source:		vsync source pin information
+ * @ops:		Encoder ops from init function
  * @num_phys_encs:	Actual number of physical encoders contained.
  * @phys_encs:		Container of physical encoders managed.
  * @cur_master:		Pointer to the current master in this mode. Optimization
@@ -230,6 +231,8 @@ struct sde_encoder_virt {
 
 	uint32_t display_num_of_h_tiles;
 	uint32_t te_source;
+
+	struct sde_encoder_ops ops;
 
 	unsigned int num_phys_encs;
 	struct sde_encoder_phys *phys_encs[MAX_PHYS_ENCODERS_PER_VIRTUAL];
@@ -2689,6 +2692,7 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	struct sde_connector *sde_conn = NULL;
 	struct sde_rm_hw_iter dsc_iter, pp_iter;
 	struct sde_rm_hw_request request_hw;
+	bool is_cmd_mode = false;
 	int i = 0, ret;
 
 	if (!drm_enc) {
@@ -2707,6 +2711,8 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	priv = drm_enc->dev->dev_private;
 	sde_kms = to_sde_kms(priv->kms);
 	connector_list = &sde_kms->dev->mode_config.connector_list;
+	is_cmd_mode = sde_enc->disp_info.capabilities &
+					MSM_DISPLAY_CAP_CMD_MODE;
 
 	SDE_EVT32(DRMID(drm_enc));
 
@@ -2747,7 +2753,9 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	}
 
 	/* release resources before seamless mode change */
-	if (msm_is_mode_seamless_dms(adj_mode)) {
+	if (msm_is_mode_seamless_dms(adj_mode) ||
+			(msm_is_mode_seamless_dyn_clk(adj_mode) &&
+			 is_cmd_mode)) {
 		SDE_ATRACE_BEGIN("pre_modeset");
 		/* restore resource state before releasing them */
 		ret = sde_encoder_resource_control(drm_enc,
@@ -2812,7 +2820,7 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 		struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
 
 		if (phys) {
-			if (!sde_enc->hw_pp[i]) {
+			if (!sde_enc->hw_pp[i] && sde_enc->topology.num_intf) {
 				SDE_ERROR_ENC(sde_enc,
 				    "invalid pingpong block for the encoder\n");
 				return;
@@ -2825,7 +2833,9 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	}
 
 	/* update resources after seamless mode change */
-	if (msm_is_mode_seamless_dms(adj_mode)) {
+	if (msm_is_mode_seamless_dms(adj_mode) ||
+			(msm_is_mode_seamless_dyn_clk(adj_mode) &&
+			is_cmd_mode)) {
 		SDE_ATRACE_BEGIN("post_modeset");
 		sde_encoder_resource_control(&sde_enc->base,
 						SDE_ENC_RC_EVENT_POST_MODESET);
@@ -3113,7 +3123,8 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 	}
 
 	/* register input handler if not already registered */
-	if (sde_enc->input_handler && !msm_is_mode_seamless_dms(cur_mode)) {
+	if (sde_enc->input_handler && !msm_is_mode_seamless_dms(cur_mode) &&
+			!msm_is_mode_seamless_dyn_clk(cur_mode)) {
 		ret = _sde_encoder_input_handler_register(
 				sde_enc->input_handler);
 		if (ret)
@@ -3160,7 +3171,8 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 			 * already. Invoke restore to reconfigure the
 			 * new mode.
 			 */
-			if (msm_is_mode_seamless_dms(cur_mode) &&
+			if ((msm_is_mode_seamless_dms(cur_mode) ||
+				msm_is_mode_seamless_dyn_clk(cur_mode)) &&
 					phys->ops.restore)
 				phys->ops.restore(phys);
 			else if (phys->ops.enable)
@@ -3173,7 +3185,8 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 						sde_enc->misr_frame_count);
 	}
 
-	if (msm_is_mode_seamless_dms(cur_mode) &&
+	if ((msm_is_mode_seamless_dms(cur_mode) ||
+			msm_is_mode_seamless_dyn_clk(cur_mode)) &&
 			sde_enc->cur_master->ops.restore)
 		sde_enc->cur_master->ops.restore(sde_enc->cur_master);
 	else if (sde_enc->cur_master->ops.enable)
@@ -5131,6 +5144,23 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 		SDE_DEBUG("h_tile_instance %d = %d, split_role %d\n",
 				i, controller_id, phys_params.split_role);
 
+		if (sde_enc->ops.phys_init) {
+			struct sde_encoder_phys *enc;
+
+			enc = sde_enc->ops.phys_init(intf_type,
+					controller_id,
+					&phys_params);
+			if (enc) {
+				sde_enc->phys_encs[sde_enc->num_phys_encs] =
+					enc;
+				++sde_enc->num_phys_encs;
+			} else
+				SDE_ERROR_ENC(sde_enc,
+						"failed to add phys encs\n");
+
+			continue;
+		}
+
 		if (intf_type == INTF_WB) {
 			phys_params.intf_idx = INTF_MAX;
 			phys_params.wb_idx = sde_encoder_get_wb(
@@ -5196,9 +5226,10 @@ static const struct drm_encoder_funcs sde_encoder_funcs = {
 		.early_unregister = sde_encoder_early_unregister,
 };
 
-struct drm_encoder *sde_encoder_init(
+struct drm_encoder *sde_encoder_init_with_ops(
 		struct drm_device *dev,
-		struct msm_display_info *disp_info)
+		struct msm_display_info *disp_info,
+		const struct sde_encoder_ops *ops)
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct sde_kms *sde_kms = to_sde_kms(priv->kms);
@@ -5213,6 +5244,9 @@ struct drm_encoder *sde_encoder_init(
 		ret = -ENOMEM;
 		goto fail;
 	}
+
+	if (ops)
+		sde_enc->ops = *ops;
 
 	mutex_init(&sde_enc->enc_lock);
 	ret = sde_encoder_setup_display(sde_enc, sde_kms, disp_info,
@@ -5274,6 +5308,13 @@ fail:
 		sde_encoder_destroy(drm_enc);
 
 	return ERR_PTR(ret);
+}
+
+struct drm_encoder *sde_encoder_init(
+		struct drm_device *dev,
+		struct msm_display_info *disp_info)
+{
+	return sde_encoder_init_with_ops(dev, disp_info, NULL);
 }
 
 int sde_encoder_wait_for_event(struct drm_encoder *drm_enc,

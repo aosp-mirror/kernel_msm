@@ -38,6 +38,12 @@
 			qcom,ion-heap-type = "SYSTEM_SECURE";
 		};
 
+		qcom,ion-heap@10 { /* SECURE DISPLAY HEAP */
+			reg = <10>;
+			memory-region = <&secure_display_memory>;
+			qcom,ion-heap-type = "HYP_CMA";
+		};
+
 		qcom,ion-heap@14 { /* SECURE CARVEOUT HEAP */
 			reg = <14>;
 			qcom,ion-heap-type = "SECURE_CARVEOUT";
@@ -45,6 +51,12 @@
 				memory-region = <&cdsp_sec_mem>;
 				token = <0x20000000>;
 			};
+		};
+
+		qcom,ion-heap@22 { /* ADSP HEAP */
+			reg = <22>;
+			memory-region = <&sdsp_mem>;
+			qcom,ion-heap-type = "DMA";
 		};
 	};
 };

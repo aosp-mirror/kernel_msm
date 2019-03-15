@@ -39,6 +39,7 @@ struct sugov_policy {
 
 	raw_spinlock_t update_lock;  /* For shared policies */
 	u64 last_freq_update_time;
+	s64 freq_update_delay_ns;
 	u64 last_ws;
 	u64 curr_cycles;
 	u64 last_cyc_update_time;
@@ -124,6 +125,11 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 		sg_policy->next_freq = UINT_MAX;
 		return true;
 	}
+	/* No need to recalculate next freq for min_rate_limit_us
+	 * at least. However we might still decide to further rate
+	 * limit once frequency change direction is decided, according
+	 * to the separate rate limits.
+	 */
 
 	/* No need to recalculate next freq for min_rate_limit_us
 	 * at least. However we might still decide to further rate

@@ -2924,6 +2924,8 @@ static int __do_proc_doulongvec_minmax(void *data, struct ctl_table *table, int 
 			bool neg;
 
 			left -= proc_skip_spaces(&p);
+			if (!left)
+				break;
 
 			err = proc_get_long(&p, &left, &val, &neg,
 					     proc_wspace_sep,
@@ -3327,7 +3329,11 @@ static int do_proc_douintvec_capacity_conv(bool *negp, unsigned long *lvalp,
 					   int *valp, int write, void *data)
 {
 	if (write) {
-		if (*negp || *lvalp == 0)
+		/*
+		 * The sched_upmigrate/sched_downmigrate tunables are
+		 * accepted in percentage. Limit them to 100.
+		 */
+		if (*negp || *lvalp == 0 || *lvalp > 100)
 			return -EINVAL;
 		*valp = SCHED_FIXEDPOINT_SCALE * 100 / *lvalp;
 	} else {

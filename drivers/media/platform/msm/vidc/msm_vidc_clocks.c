@@ -57,7 +57,7 @@ static inline unsigned long int get_ubwc_compression_ratio(
 	struct ubwc_cr_stats_info_type ubwc_stats_info)
 {
 	unsigned long int sum = 0, weighted_sum = 0;
-	unsigned long int compression_ratio = 1 << 16;
+	unsigned long int compression_ratio = 0;
 
 	weighted_sum =
 		32  * ubwc_stats_info.cr_stats_info0 +
@@ -1386,7 +1386,7 @@ decision_done:
 static inline int msm_vidc_power_save_mode_enable(struct msm_vidc_inst *inst,
 	bool enable)
 {
-	u32 rc = 0, mbs_per_frame;
+	u32 rc = 0, mbs_per_frame, mbs_per_sec;
 	u32 prop_id = 0;
 	void *pdata = NULL;
 	struct hfi_device *hdev = NULL;
@@ -1401,8 +1401,10 @@ static inline int msm_vidc_power_save_mode_enable(struct msm_vidc_inst *inst,
 		return 0;
 	}
 	mbs_per_frame = msm_vidc_get_mbs_per_frame(inst);
+	mbs_per_sec = mbs_per_frame * msm_vidc_get_fps(inst);
+
 	if (mbs_per_frame > inst->core->resources.max_hq_mbs_per_frame ||
-		msm_vidc_get_fps(inst) > inst->core->resources.max_hq_fps) {
+		mbs_per_sec > inst->core->resources.max_hq_mbs_per_sec) {
 		enable = true;
 	}
 	/* Power saving always disabled for CQ RC mode. */

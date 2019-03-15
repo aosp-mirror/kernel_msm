@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
+#include <linux/pwm.h>
 #include <video/mipi_display.h>
 #include <video/display_timing.h>
 
@@ -3284,12 +3285,9 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 			pr_err("failed to parse qsync features, rc=%d\n", rc);
 	}
 
-	if (panel->panel_mode == DSI_OP_VIDEO_MODE) {
-		rc = dsi_panel_parse_dyn_clk_caps(panel);
-		if (rc)
-			pr_err("failed to parse dynamic clk config, rc=%d\n",
-					rc);
-	}
+	rc = dsi_panel_parse_dyn_clk_caps(panel);
+	if (rc)
+		pr_err("failed to parse dynamic clk config, rc=%d\n", rc);
 
 	rc = dsi_panel_parse_phy_props(panel);
 	if (rc) {
@@ -3948,6 +3946,9 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 			goto parse_fail;
 		}
 
+		if (panel->panel_mode == DSI_OP_VIDEO_MODE)
+			mode->priv_info->mdp_transfer_time_us = 0;
+
 		rc = dsi_panel_parse_dsc_params(mode, utils);
 		if (rc) {
 			pr_err("failed to parse dsc params, rc=%d\n", rc);
@@ -3999,6 +4000,7 @@ int dsi_panel_get_host_cfg_for_mode(struct dsi_panel *panel,
 				    struct dsi_host_config *config)
 {
 	int rc = 0;
+	struct dsi_dyn_clk_caps *dyn_clk_caps = &panel->dyn_clk_caps;
 
 	if (!panel || !mode || !config) {
 		pr_err("invalid params\n");
@@ -4026,7 +4028,11 @@ int dsi_panel_get_host_cfg_for_mode(struct dsi_panel *panel,
 	config->video_timing.dsc_enabled = mode->priv_info->dsc_enabled;
 	config->video_timing.dsc = &mode->priv_info->dsc;
 
-	config->bit_clk_rate_hz_override = mode->timing.clk_rate_hz;
+	if (dyn_clk_caps->dyn_clk_support)
+		config->bit_clk_rate_hz_override = mode->timing.clk_rate_hz;
+	else
+		config->bit_clk_rate_hz_override = mode->priv_info->clk_rate_hz;
+
 	config->esc_clk_rate_hz = 19200000;
 	mutex_unlock(&panel->panel_lock);
 	return rc;

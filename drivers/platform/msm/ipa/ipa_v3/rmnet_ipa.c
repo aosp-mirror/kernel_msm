@@ -165,6 +165,7 @@ struct rmnet_ipa3_context {
 	struct ipa_tether_device_info
 		tether_device
 		[IPACM_MAX_CLIENT_DEVICE_TYPES];
+	bool dl_csum_offload_enabled;
 };
 
 static struct rmnet_ipa3_context *rmnet_ipa3_ctx;
@@ -198,21 +199,22 @@ static int ipa3_setup_a7_qmap_hdr(void)
 
 	strlcpy(hdr_entry->name, IPA_A7_QMAP_HDR_NAME,
 				IPA_RESOURCE_NAME_MAX);
-	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5) {
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5 &&
+		rmnet_ipa3_ctx->dl_csum_offload_enabled) {
 		hdr_entry->hdr_len = IPA_DL_CHECKSUM_LENGTH; /* 8 bytes */
 		/* new DL QMAP header format */
-		hdr->hdr[0].hdr[0] = 0x40;
-		hdr->hdr[0].hdr[1] = 0;
-		hdr->hdr[0].hdr[2] = 0;
-		hdr->hdr[0].hdr[3] = 0;
-		hdr->hdr[0].hdr[4] = 0x4;
+		hdr_entry->hdr[0] = 0x40;
+		hdr_entry->hdr[1] = 0;
+		hdr_entry->hdr[2] = 0;
+		hdr_entry->hdr[3] = 0;
+		hdr_entry->hdr[4] = 0x4;
 		/*
 		 * Need to set csum required/valid bit on which will be replaced
 		 * by HW if checksum is incorrect after validation
 		 */
-		hdr->hdr[0].hdr[5] = 0x80;
-		hdr->hdr[0].hdr[6] = 0;
-		hdr->hdr[0].hdr[7] = 0;
+		hdr_entry->hdr[5] = 0x80;
+		hdr_entry->hdr[6] = 0;
+		hdr_entry->hdr[7] = 0;
 	} else
 		hdr_entry->hdr_len = IPA_QMAP_HEADER_LENGTH; /* 4 bytes */
 
@@ -334,8 +336,27 @@ static int ipa3_add_qmap_hdr(uint32_t mux_id, uint32_t *hdr_hdl)
 	 strlcpy(hdr_entry->name, hdr_name,
 				IPA_RESOURCE_NAME_MAX);
 
-	hdr_entry->hdr_len = IPA_QMAP_HEADER_LENGTH; /* 4 bytes */
-	hdr_entry->hdr[1] = (uint8_t) mux_id;
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5 &&
+		rmnet_ipa3_ctx->dl_csum_offload_enabled) {
+		hdr_entry->hdr_len = IPA_DL_CHECKSUM_LENGTH; /* 8 bytes */
+		/* new DL QMAP header format */
+		hdr_entry->hdr[0] = 0x40;
+		hdr_entry->hdr[1] = (uint8_t) mux_id;
+		hdr_entry->hdr[2] = 0;
+		hdr_entry->hdr[3] = 0;
+		hdr_entry->hdr[4] = 0x4;
+		/*
+		 * Need to set csum required/valid bit on which will be replaced
+		 * by HW if checksum is incorrect after validation
+		 */
+		hdr_entry->hdr[5] = 0x80;
+		hdr_entry->hdr[6] = 0;
+		hdr_entry->hdr[7] = 0;
+	} else {
+		hdr_entry->hdr_len = IPA_QMAP_HEADER_LENGTH; /* 4 bytes */
+		hdr_entry->hdr[1] = (uint8_t) mux_id;
+	}
+
 	IPAWANDBG("header (%s) with mux-id: (%d)\n",
 		hdr_name,
 		hdr_entry->hdr[1]);
@@ -454,11 +475,18 @@ static void ipa3_del_dflt_wan_rt_tables(void)
 
 static void ipa3_copy_qmi_flt_rule_ex(
 	struct ipa_ioc_ext_intf_prop *q6_ul_flt_rule_ptr,
-	struct ipa_filter_spec_ex_type_v01 *flt_spec_ptr)
+	void *flt_spec_ptr_void)
 {
 	int j;
+	struct ipa_filter_spec_ex_type_v01 *flt_spec_ptr;
 	struct ipa_ipfltr_range_eq_16 *q6_ul_filter_nat_ptr;
 	struct ipa_ipfltr_range_eq_16_type_v01 *filter_spec_nat_ptr;
+
+	/*
+	 * pure_ack and tos has the same size and type and we will treat tos
+	 * field as pure_ack in ipa4.5 version
+	 */
+	flt_spec_ptr = (struct ipa_filter_spec_ex_type_v01 *) flt_spec_ptr_void;
 
 	q6_ul_flt_rule_ptr->ip = flt_spec_ptr->ip_type;
 	q6_ul_flt_rule_ptr->action = flt_spec_ptr->filter_action;
@@ -571,7 +599,6 @@ static void ipa3_copy_qmi_flt_rule_ex(
 		flt_spec_ptr->filter_rule.ipv4_frag_eq_present;
 }
 
-
 int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 		*rule_req)
 {
@@ -579,14 +606,25 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 
 	/* prevent multi-threads accessing rmnet_ipa3_ctx->num_q6_rules */
 	mutex_lock(&rmnet_ipa3_ctx->add_mux_channel_lock);
-	if (rule_req->filter_spec_ex_list_valid == true) {
+	if (rule_req->filter_spec_ex_list_valid == true &&
+		rule_req->filter_spec_ex2_list_valid == false) {
 		rmnet_ipa3_ctx->num_q6_rules =
 			rule_req->filter_spec_ex_list_len;
-		IPAWANDBG("Received (%d) install_flt_req\n",
+		IPAWANDBG("Received (%d) install_flt_req_ex_list\n",
+			rmnet_ipa3_ctx->num_q6_rules);
+	} else if (rule_req->filter_spec_ex2_list_valid == true &&
+		rule_req->filter_spec_ex_list_valid == false) {
+		rmnet_ipa3_ctx->num_q6_rules =
+			rule_req->filter_spec_ex2_list_len;
+		IPAWANDBG("Received (%d) install_flt_req_ex2_list\n",
 			rmnet_ipa3_ctx->num_q6_rules);
 	} else {
 		rmnet_ipa3_ctx->num_q6_rules = 0;
-		IPAWANERR("got no UL rules from modem\n");
+		if (rule_req->filter_spec_ex2_list_valid == true)
+			IPAWANERR(
+			"both ex and ex2 flt rules are set to valid\n");
+		else
+			IPAWANERR("got no UL rules from modem\n");
 		mutex_unlock(
 			&rmnet_ipa3_ctx->add_mux_channel_lock);
 		return -EINVAL;
@@ -602,8 +640,14 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 				rmnet_ipa3_ctx->num_q6_rules);
 			goto failure;
 		}
-		ipa3_copy_qmi_flt_rule_ex(&ipa3_qmi_ctx->q6_ul_filter_rule[i],
-			&rule_req->filter_spec_ex_list[i]);
+		if (rule_req->filter_spec_ex_list_valid == true)
+			ipa3_copy_qmi_flt_rule_ex(
+				&ipa3_qmi_ctx->q6_ul_filter_rule[i],
+				&rule_req->filter_spec_ex_list[i]);
+		else if (rule_req->filter_spec_ex2_list_valid == true)
+			ipa3_copy_qmi_flt_rule_ex(
+				&ipa3_qmi_ctx->q6_ul_filter_rule[i],
+				&rule_req->filter_spec_ex2_list[i]);
 	}
 
 	if (rule_req->xlat_filter_indices_list_valid) {
@@ -1357,10 +1401,14 @@ static int handle3_ingress_format(struct net_device *dev,
 	}
 
 	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5 &&
-		(in->u.data) & RMNET_IOCTL_INGRESS_FORMAT_CHECKSUM)
+		(in->u.data) & RMNET_IOCTL_INGRESS_FORMAT_CHECKSUM) {
 		ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 8;
-	else
+		rmnet_ipa3_ctx->dl_csum_offload_enabled = true;
+	} else {
 		ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 4;
+		rmnet_ipa3_ctx->dl_csum_offload_enabled = false;
+	}
+
 	ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_ofst_metadata_valid = 1;
 	ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_ofst_metadata = 1;
 	ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_ofst_pkt_size_valid = 1;
@@ -1398,7 +1446,19 @@ static int handle3_ingress_format(struct net_device *dev,
 	   &rmnet_ipa3_ctx->ipa3_to_apps_hdl);
 
 	mutex_unlock(&rmnet_ipa3_ctx->pipe_handle_guard);
+	if (ret)
+		goto end;
 
+	/* construct default WAN RT tbl for IPACM */
+	ret = ipa3_setup_a7_qmap_hdr();
+	if (ret)
+		goto end;
+
+	ret = ipa3_setup_dflt_wan_rt_tables();
+	if (ret)
+		ipa3_del_a7_qmap_hdr();
+
+end:
 	if (ret)
 		IPAWANERR("failed to configure ingress\n");
 
@@ -2491,16 +2551,6 @@ static int ipa3_wwan_probe(struct platform_device *pdev)
 		/* LE platform not loads uC */
 		ipa3_qmi_service_init(QMI_IPA_PLATFORM_TYPE_LE_V01);
 
-	/* construct default WAN RT tbl for IPACM */
-	if (wan_cons_ep != IPA_EP_NOT_ALLOCATED) {
-		ret = ipa3_setup_a7_qmap_hdr();
-		if (ret)
-			goto setup_a7_qmap_hdr_err;
-		ret = ipa3_setup_dflt_wan_rt_tables();
-		if (ret)
-			goto setup_dflt_wan_rt_tables_err;
-	}
-
 	if (!atomic_read(&rmnet_ipa3_ctx->is_ssr)) {
 		/* Start transport-driver fd ioctl for ipacm for first init */
 		ret = ipa3_wan_ioctl_init();
@@ -2615,12 +2665,6 @@ q6_init_err:
 alloc_netdev_err:
 	ipa3_wan_ioctl_deinit();
 wan_ioctl_init_err:
-	if (wan_cons_ep != IPA_EP_NOT_ALLOCATED)
-		ipa3_del_dflt_wan_rt_tables();
-setup_dflt_wan_rt_tables_err:
-	if (wan_cons_ep != IPA_EP_NOT_ALLOCATED)
-		ipa3_del_a7_qmap_hdr();
-setup_a7_qmap_hdr_err:
 	ipa3_qmi_service_exit();
 	atomic_set(&rmnet_ipa3_ctx->is_ssr, 0);
 	return ret;
@@ -2667,6 +2711,8 @@ static int ipa3_wwan_remove(struct platform_device *pdev)
 	if (ipa3_qmi_ctx->modem_cfg_emb_pipe_flt == false)
 		ipa3_wwan_del_ul_flt_rule_to_ipa();
 	ipa3_cleanup_deregister_intf();
+	/* reset dl_csum_offload_enabled */
+	rmnet_ipa3_ctx->dl_csum_offload_enabled = false;
 	atomic_set(&rmnet_ipa3_ctx->is_initialized, 0);
 	IPAWANINFO("rmnet_ipa completed deinitialization\n");
 	return 0;
@@ -2855,6 +2901,10 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 		if (atomic_read(&rmnet_ipa3_ctx->is_ssr) &&
 			ipa3_ctx->ipa_hw_type < IPA_HW_v4_0)
 			ipa3_q6_post_shutdown_cleanup();
+
+		if (ipa3_ctx->ipa_endp_delay_wa)
+			ipa3_client_prod_post_shutdown_cleanup();
+
 		IPAWANINFO("IPA AFTER_SHUTDOWN handling is complete\n");
 		break;
 	case SUBSYS_BEFORE_POWERUP:
@@ -3452,6 +3502,7 @@ static int rmnet_ipa3_query_tethering_stats_hw(
 {
 	int rc = 0;
 	struct ipa_quota_stats_all *con_stats;
+	struct ipa_quota_stats  *client;
 
 	/* qet HW-stats */
 	rc = ipa_get_teth_stats();
@@ -3530,6 +3581,24 @@ static int rmnet_ipa3_query_tethering_stats_hw(
 	data->ipv6_tx_bytes =
 		con_stats->client[IPA_CLIENT_Q6_WAN_CONS].num_ipv6_bytes;
 
+	/* usb UL stats on cv2 */
+	client = &con_stats->client[IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS];
+	IPAWANDBG("usb (cv2): v4_tx_p(%d) b(%lld) v6_tx_p(%d) b(%lld)\n",
+		client->num_ipv4_pkts,
+		client->num_ipv4_bytes,
+		client->num_ipv6_pkts,
+		client->num_ipv6_bytes);
+
+	/* update cv2 USB UL stats */
+	data->ipv4_tx_packets +=
+		client->num_ipv4_pkts;
+	data->ipv6_tx_packets +=
+		client->num_ipv6_pkts;
+	data->ipv4_tx_bytes +=
+		client->num_ipv4_bytes;
+	data->ipv6_tx_bytes +=
+		client->num_ipv6_bytes;
+
 	/* query WLAN UL stats */
 	memset(con_stats, 0, sizeof(struct ipa_quota_stats_all));
 	rc = ipa_query_teth_stats(IPA_CLIENT_WLAN1_PROD, con_stats, reset);
@@ -3554,6 +3623,24 @@ static int rmnet_ipa3_query_tethering_stats_hw(
 		con_stats->client[IPA_CLIENT_Q6_WAN_CONS].num_ipv4_bytes;
 	data->ipv6_tx_bytes +=
 		con_stats->client[IPA_CLIENT_Q6_WAN_CONS].num_ipv6_bytes;
+
+	/* wlan UL stats on cv2 */
+	IPAWANDBG("wlan (cv2): v4_tx_p(%d) b(%lld) v6_tx_p(%d) b(%lld)\n",
+	con_stats->client[IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS].num_ipv4_pkts,
+	con_stats->client[IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS].num_ipv4_bytes,
+	con_stats->client[IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS].num_ipv6_pkts,
+	con_stats->client[IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS].num_ipv6_bytes);
+
+	/* update cv2 wlan UL stats */
+	client = &con_stats->client[IPA_CLIENT_Q6_LTE_WIFI_AGGR_CONS];
+	data->ipv4_tx_packets +=
+		client->num_ipv4_pkts;
+	data->ipv6_tx_packets +=
+		client->num_ipv6_pkts;
+	data->ipv4_tx_bytes +=
+		client->num_ipv4_bytes;
+	data->ipv6_tx_bytes +=
+		client->num_ipv6_bytes;
 
 	IPAWANDBG("v4_tx_p(%lu) v6_tx_p(%lu) v4_tx_b(%lu) v6_tx_b(%lu)\n",
 		(unsigned long int) data->ipv4_tx_packets,

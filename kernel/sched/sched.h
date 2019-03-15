@@ -20,6 +20,7 @@
 #include <linux/sched/task_stack.h>
 #include <linux/sched/cputime.h>
 #include <linux/sched/init.h>
+#include <linux/sched/smt.h>
 
 #include <linux/u64_stats_sync.h>
 #include <linux/kernel_stat.h>
@@ -349,8 +350,9 @@ struct cfs_bandwidth {
 	u64 quota, runtime;
 	s64 hierarchical_quota;
 	u64 runtime_expires;
+	int expires_seq;
 
-	int idle, period_active;
+	short idle, period_active;
 	struct hrtimer period_timer, slack_timer;
 	struct list_head throttled_cfs_rq;
 
@@ -560,6 +562,7 @@ struct cfs_rq {
 
 #ifdef CONFIG_CFS_BANDWIDTH
 	int runtime_enabled;
+	int expires_seq;
 	u64 runtime_expires;
 	s64 runtime_remaining;
 
@@ -963,9 +966,6 @@ static inline int cpu_of(struct rq *rq)
 
 
 #ifdef CONFIG_SCHED_SMT
-
-extern struct static_key_false sched_smt_present;
-
 extern void __update_idle_core(struct rq *rq);
 
 static inline void update_idle_core(struct rq *rq)
@@ -2525,7 +2525,6 @@ enum sched_boost_policy {
 #define FULL_THROTTLE_BOOST 1
 #define CONSERVATIVE_BOOST 2
 #define RESTRAINED_BOOST 3
-
 /*
  * Returns the rq capacity of any rq in a group. This does not play
  * well with groups where rq capacity can change independently.
@@ -2826,10 +2825,20 @@ static inline int same_freq_domain(int src_cpu, int dst_cpu)
 	return cpumask_test_cpu(dst_cpu, &rq->freq_domain_cpumask);
 }
 
-#define	BOOST_KICK	0
 #define	CPU_RESERVED	1
 
-extern int sched_boost(void);
+extern enum sched_boost_policy boost_policy;
+static inline enum sched_boost_policy sched_boost_policy(void)
+{
+	return boost_policy;
+}
+
+extern unsigned int sched_boost_type;
+static inline int sched_boost(void)
+{
+	return sched_boost_type;
+}
+
 extern int preferred_cluster(struct sched_cluster *cluster,
 						struct task_struct *p);
 extern struct sched_cluster *rq_cluster(struct rq *rq);
@@ -2906,8 +2915,6 @@ extern unsigned long thermal_cap(int cpu);
 
 extern void clear_walt_request(int cpu);
 
-extern int got_boost_kick(void);
-extern void clear_boost_kick(int cpu);
 extern enum sched_boost_policy sched_boost_policy(void);
 extern void sched_boost_parse_dt(void);
 extern void clear_ed_task(struct task_struct *p, struct rq *rq);
@@ -2939,7 +2946,7 @@ static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 		 * Filter out tasks less than min task util threshold
 		 * under conservative boost.
 		 */
-		if (sysctl_sched_boost == CONSERVATIVE_BOOST &&
+		if (sched_boost() == CONSERVATIVE_BOOST &&
 				task_util(p) <=
 				sysctl_sched_min_task_util_for_boost)
 			policy = SCHED_BOOST_NONE;
@@ -3072,13 +3079,6 @@ static inline int is_reserved(int cpu)
 {
 	return 0;
 }
-
-static inline int got_boost_kick(void)
-{
-	return 0;
-}
-
-static inline void clear_boost_kick(int cpu) { }
 
 static inline enum sched_boost_policy sched_boost_policy(void)
 {

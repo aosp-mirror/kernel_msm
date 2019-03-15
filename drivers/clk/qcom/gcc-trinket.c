@@ -34,6 +34,10 @@
 #include "vdd-level-trinket.h"
 
 #define GCC_VIDEO_MISC		0x80258
+#define GCC_CAMSS_MCLK0_CFG_RCGR	0x51004
+#define GCC_CAMSS_MCLK1_CFG_RCGR	0x51020
+#define GCC_CAMSS_MCLK2_CFG_RCGR	0x5103c
+#define GCC_CAMSS_MCLK3_CFG_RCGR	0x51058
 
 #define F(f, s, h, m, n) { (f), (s), (2 * (h) - 1), (m), (n) }
 
@@ -401,17 +405,28 @@ static struct clk_fixed_factor gpll6_out_main = {
 	},
 };
 
-static struct clk_alpha_pll gpll7_out_main = {
+static struct clk_alpha_pll gpll7_out_early = {
 	.offset = 0x7000,
 	.clkr = {
 		.enable_reg = 0x79000,
 		.enable_mask = BIT(7),
 		.hw.init = &(struct clk_init_data){
-			.name = "gpll7_out_main",
+			.name = "gpll7_out_early",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_ops,
 		},
+	},
+};
+
+static struct clk_fixed_factor gpll7_out_main = {
+	.mult = 1,
+	.div = 2,
+	.hw.init = &(struct clk_init_data){
+		.name = "gpll7_out_main",
+		.parent_names = (const char *[]){ "gpll7_out_early" },
+		.num_parents = 1,
+		.ops = &clk_fixed_factor_ops,
 	},
 };
 
@@ -522,10 +537,9 @@ static struct clk_rcg2 gcc_camss_cci_clk_src = {
 
 static const struct freq_tbl ftbl_gcc_camss_cpp_clk_src[] = {
 	F(120000000, P_GPLL8_OUT_MAIN, 4, 0, 0),
-	F(256000000, P_GPLL6_OUT_EARLY, 3, 0, 0),
-	F(384000000, P_GPLL6_OUT_EARLY, 2, 0, 0),
+	F(240000000, P_GPLL8_OUT_MAIN, 2, 0, 0),
+	F(320000000, P_GPLL8_OUT_MAIN, 1.5, 0, 0),
 	F(480000000, P_GPLL8_OUT_MAIN, 1, 0, 0),
-	F(533000000, P_GPLL3_OUT_EARLY, 2, 0, 0),
 	F(576000000, P_GPLL9_OUT_MAIN, 1, 0, 0),
 	{ }
 };
@@ -546,10 +560,9 @@ static struct clk_rcg2 gcc_camss_cpp_clk_src = {
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
 			[VDD_LOWER] = 120000000,
-			[VDD_LOW] = 256000000,
-			[VDD_LOW_L1] = 384000000,
+			[VDD_LOW] = 240000000,
+			[VDD_LOW_L1] = 320000000,
 			[VDD_NOMINAL] = 480000000,
-			[VDD_NOMINAL_L1] = 533000000,
 			[VDD_HIGH] = 576000000},
 	},
 };
@@ -827,7 +840,9 @@ static struct clk_rcg2 gcc_camss_jpeg_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gcc_camss_mclk0_clk_src[] = {
-	F(64000000, P_GPLL9_OUT_MAIN, 9, 0, 0),
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(24000000, P_GPLL9_OUT_MAIN, 1, 1, 24),
+	F(64000000, P_GPLL9_OUT_MAIN, 1, 1, 9),
 	{ }
 };
 
@@ -2948,7 +2963,7 @@ static struct clk_branch gcc_disp_gpll0_div_clk_src = {
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_disp_gpll0_div_clk_src",
 			.parent_names = (const char *[]){
-				"gpll0_out_early",
+				"gpll0_out_main",
 			},
 			.num_parents = 1,
 			.ops = &clk_branch2_ops,
@@ -3668,7 +3683,7 @@ static struct clk_branch gcc_sdcc1_apps_clk = {
 				"gcc_sdcc1_apps_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_ENABLE_HAND_OFF,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -3731,6 +3746,7 @@ static struct clk_branch gcc_sys_noc_compute_sf_axi_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_sys_noc_compute_sf_axi_clk",
+			.flags = CLK_IS_CRITICAL,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -4177,12 +4193,33 @@ static struct clk_branch gcc_wcss_vs_clk = {
 	},
 };
 
+/* Measure-only clock for ddrss_gcc_debug_clk. */
+static struct clk_dummy measure_only_mccc_clk = {
+	.rrate = 1000,
+	.hw.init = &(struct clk_init_data){
+		.name = "measure_only_mccc_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
+/* Measure-only clock for gcc_ipa_2x_clk. */
+static struct clk_dummy measure_only_ipa_2x_clk = {
+	.rrate = 1000,
+	.hw.init = &(struct clk_init_data){
+		.name = "measure_only_ipa_2x_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
 struct clk_hw *gcc_trinket_hws[] = {
 	[GPLL0_OUT_AUX2] = &gpll0_out_aux2.hw,
 	[GPLL0_OUT_MAIN] = &gpll0_out_main.hw,
 	[GPLL6_OUT_MAIN] = &gpll6_out_main.hw,
+	[GPLL7_OUT_MAIN] = &gpll7_out_main.hw,
 	[GPLL8_OUT_MAIN] = &gpll8_out_main.hw,
 	[GPLL9_OUT_MAIN] = &gpll9_out_main.hw,
+	[MEASURE_ONLY_MMCC_CLK] = &measure_only_mccc_clk.hw,
+	[MEASURE_ONLY_IPA_2X_CLK] = &measure_only_ipa_2x_clk.hw,
 };
 
 static struct clk_regmap *gcc_trinket_clocks[] = {
@@ -4393,7 +4430,7 @@ static struct clk_regmap *gcc_trinket_clocks[] = {
 	[GPLL4_OUT_MAIN] = &gpll4_out_main.clkr,
 	[GPLL5_OUT_MAIN] = &gpll5_out_main.clkr,
 	[GPLL6_OUT_EARLY] = &gpll6_out_early.clkr,
-	[GPLL7_OUT_MAIN] = &gpll7_out_main.clkr,
+	[GPLL7_OUT_EARLY] = &gpll7_out_early.clkr,
 	[GPLL8_OUT_EARLY] = &gpll8_out_early.clkr,
 	[GPLL9_OUT_EARLY] = &gpll9_out_early.clkr,
 	[GCC_USB3_PRIM_CLKREF_CLK] = &gcc_usb3_prim_clkref_clk.clkr,
@@ -4486,6 +4523,15 @@ static int gcc_trinket_probe(struct platform_device *pdev)
 	 * MISC registers.
 	 */
 	regmap_update_bits(regmap, GCC_VIDEO_MISC, 0x1, 0x1);
+
+	/*
+	 * Enable DUAL_EDGE mode for MCLK RCGs
+	 * This is requierd to enable MND divider mode
+	 */
+	regmap_update_bits(regmap, GCC_CAMSS_MCLK0_CFG_RCGR, 0x3000, 0x2000);
+	regmap_update_bits(regmap, GCC_CAMSS_MCLK1_CFG_RCGR, 0x3000, 0x2000);
+	regmap_update_bits(regmap, GCC_CAMSS_MCLK2_CFG_RCGR, 0x3000, 0x2000);
+	regmap_update_bits(regmap, GCC_CAMSS_MCLK3_CFG_RCGR, 0x3000, 0x2000);
 
 	ret = qcom_cc_really_probe(pdev, &gcc_trinket_desc, regmap);
 	if (ret) {
