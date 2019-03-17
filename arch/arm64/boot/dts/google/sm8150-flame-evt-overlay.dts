@@ -13,7 +13,7 @@
 /dts-v1/;
 /plugin/;
 
-#include "sm8150-flame.dtsi"
+#include "sm8150-flame-evt.dtsi"
 
 / {
 	model = "Google Inc. MSM sm8150 Flame EVT1.0";

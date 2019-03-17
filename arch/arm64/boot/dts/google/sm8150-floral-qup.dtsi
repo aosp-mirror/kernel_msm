@@ -12,17 +12,24 @@
 #include <dt-bindings/clock/qcom,gcc-sm8150.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
-// flame/coral battery i2c
+/* p9221, and battery on pre-EVT1.1 */
 &qupv3_se0_i2c {
+	status = "ok";
 	qcom,clk-freq-out = <400000>;
 };
 
-// flame/coral pac193x i2c
+/* battery i2c */
+&qupv3_se7_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+};
+
+/* flame/coral pac193x i2c */
 &qupv3_se9_i2c {
 	qcom,clk-freq-out = <400000>;
 };
 
-// Touch wants se4 pins active even in suspend.
+/* Touch wants se4 pins active even in suspend. */
 &qupv3_se4_spi {
 	pinctrl-1 = <&qupv3_se4_spi_active>;
 };
@@ -39,7 +46,7 @@
 	};
 };
 
-// Audio wants se11 pins active even in suspend.
+/* Audio wants se11 pins active even in suspend. */
 &qupv3_se11_spi {
 	pinctrl-1 = <&qupv3_se11_spi_active>;
 };
@@ -52,7 +59,7 @@
 	status = "ok";
 };
 
-// Haptics/batt i2c
+/* Haptics/batt i2c */
 &qupv3_se15_i2c {
 	qcom,clk-freq-out = <1000000>;
 };

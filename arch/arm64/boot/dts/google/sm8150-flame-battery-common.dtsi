@@ -1,0 +1,65 @@
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "sm8150-floral-battery.dtsi"
+#include "sm8150-floral-wcharger.dtsi"
+
+&google_battery {
+	google,chg-battery-default-capacity = <2800>;
+};
+
+&max1720x_fg {
+	google,cap-tsettle = <3>;
+	google,cap-filt-length = <12>;
+
+	maxim,n_regval_1730x_ver_por = /bits/ 8 <0xcc 0x01>;
+	maxim,n_regval_1730x_ver = /bits/ 8 <0xcc 0x00>;
+	maxim,n_regval_1730x =  /bits/ 16 <
+		0xD1 0x4BF6	/* nTPrtTh1 */
+		0xD2 0x782a	/* nTPrtTh3 */
+		0xD6 0x4029	/* nProtMiscTh */
+		0xDC 0x34C9	/* nDelayCfg */
+	>;
+
+	maxim,n_regval_1720x_ver_por = /bits/ 8 <0xd4 0x01>;
+	maxim,n_regval_1720x_ver = /bits/ 8 <0xd4 0x01>;
+	maxim,n_regval_1720x =  /bits/ 16 <
+		0x9C 0x0300	/* nIChgTerm Register */
+		0x9D 0x0EB4	/* nFilterCfg Register */
+		0x9F 0x2606	/* nLearnCfg Register */
+		0xB0 0x7217	/* nConfig Register */
+		0xB3 0x0B00	/* nDesignCap Register */
+		0xB5 0x9C01     /* nPackCfg Register */
+		0xB7 0x33C1	/* nConvgCfg Register */
+		0xB8 0xCDF0	/* nNVCfg0 Register */
+		0xB9 0xB00E	/* nNVCfg1 Register */
+		0xBA 0xFF0A	/* nNVCfg2 Register */
+		0xC0 0xFF00	/* nVAlrtTh Register */
+		0xC1 0x7F80	/* nTAlrtTh Register */
+		0xC2 0xFF00	/* nSAlrtTh Register */
+		0xC6 0x5A05	/* nFullSOCThr Register */
+		0xD5 0x2D7D	/* nRFastVShdn Register */
+	>;
+};
+
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <550>;
+		google,end-mitigation-temp = <450>;
+	};
+};
+
+&p9221 {
+	q_value = <47>;
+	fod = [AB 29 8F 2E 99 1B 9D 13 AA E9 B9 BE 12 02 9A 12];
+	fod_epp = [B1 28 90 40 87 53 90 32 96 1B 9C 02 17 12 88 53];
+};

@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,61 +12,15 @@
 
 &qupv3_se0_i2c {
 	status = "ok";
-	max1720x_fg: max1720x@36 { };
-
 	p9221: p9221@61 { };
+};
+
+&qupv3_se7_i2c {
+	status = "ok";
+	max1720x_fg: max1720x@36 { };
 };
 
 #include "sm8150-floral-battery.dtsi"
 #include "sm8150-floral-wcharger.dtsi"
 
-&google_battery {
-	google,chg-battery-default-capacity = <3712>;
-};
 
-&max1720x_fg {
-	google,cap-tsettle = <24>;
-	google,cap-filt-length = <12>;
-
-	maxim,n_regval_1730x_ver_por = /bits/ 8 <0xcc 0x01>;
-	maxim,n_regval_1730x_ver = /bits/ 8 <0xcc 0x00>;
-	maxim,n_regval_1730x =  /bits/ 16 <
-		0xD1 0x4BF6	/* nTPrtTh1 */
-		0xD2 0x782a	/* nTPrtTh3 */
-		0xD6 0x4029	/* nProtMiscTh */
-		0xDC 0x34C9	/* nDelayCfg */
-	>;
-
-	maxim,n_regval_1720x_ver_por = /bits/ 8 <0xd4 0x01>;
-	maxim,n_regval_1720x_ver = /bits/ 8 <0xd4 0x01>;
-	maxim,n_regval_1720x =  /bits/ 16 <
-		0x9C 0x0380	/* nIChgTerm Register */
-		0x9D 0x0EB4	/* nFilterCfg Register */
-		0x9F 0x2606	/* nLearnCfg Register */
-		0xB0 0x7217	/* nConfig Register */
-		0xB3 0x0E80	/* nDesignCap Register */
-		0xB5 0x9C01	/* nPackCfg Register */
-		0xB7 0x33C1	/* nConvgCfg Register */
-		0xB8 0xCDF0	/* nNVCfg0 Register */
-		0xB9 0xB00E	/* nNVCfg1 Register */
-		0xBA 0xFF0A	/* nNVCfg2 Register */
-		0xC0 0xFF00	/* nVAlrtTh Register */
-		0xC1 0x7F80	/* nTAlrtTh Register */
-		0xC2 0xFF00	/* nSAlrtTh Register */
-		0xC6 0x5A05	/* nFullSOCThr Register */
-		0xD5 0x307D	/* nRFastVShdn Register */
-	>;
-};
-
-&soc {
-	google,overheat_mitigation {
-		google,begin-mitigation-temp = <500>;
-		google,end-mitigation-temp = <400>;
-	};
-};
-
-&p9221 {
-	q_value = <59>;
-	fod = [B2 23 8D 2D 90 29 BF CD B4 C2 A6 2C 0D 12 9A 12];
-	fod_epp = [B0 24 90 40 88 50 88 53 90 4A 9E D6 12 12 9A 12];
-};

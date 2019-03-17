@@ -10,10 +10,5 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-floral-common.dtsi"
-#include "sm8150-coral-audio.dtsi"
+#include "sm8150-coral-common.dtsi"
 #include "sm8150-coral-battery.dtsi"
-#include "sm8150-coral-camera-sensor.dtsi"
-#include "sm8150-coral-pac193x.dtsi"
-#include "sm8150-coral-usb.dtsi"
-#include "sm8150-coral-thermal.dtsi"

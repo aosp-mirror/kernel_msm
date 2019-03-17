@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-flame.dtsi"
+#include "sm8150-flame-evt.dtsi"
 #include "sm8150-flame-audio-proto.dtsi"
 #include "sm8150-flame-proto-display.dtsi"
 #include "sm8150-flame-camera-sensor-proto.dtsi"

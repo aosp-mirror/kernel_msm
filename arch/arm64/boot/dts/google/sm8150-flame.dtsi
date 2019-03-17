@@ -9,10 +9,5 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
-#include "sm8150-floral-common.dtsi"
-#include "sm8150-flame-audio.dtsi"
+#include "sm8150-flame-common.dtsi"
 #include "sm8150-flame-battery.dtsi"
-#include "sm8150-flame-camera-sensor.dtsi"
-#include "sm8150-flame-pac193x.dtsi"
-#include "sm8150-flame-thermal.dtsi"

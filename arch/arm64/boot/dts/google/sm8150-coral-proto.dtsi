@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include "sm8150-coral.dtsi"
+#include "sm8150-coral-evt.dtsi"
 #include "sm8150-coral-audio-proto.dtsi"
 #include "sm8150-coral-proto-display.dtsi"
 #include "sm8150-coral-camera-sensor-proto.dtsi"
