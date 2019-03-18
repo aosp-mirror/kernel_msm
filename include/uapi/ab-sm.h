@@ -35,6 +35,10 @@
  * Parameter int:
  *	Pass new state value to set
  * On success will return 0, otherwise will return error < 0.
+ * Note: State changes are not allowed after calling AB_SM_ENTER_EL2
+ *     until subsequently calling AB_SM_EXIT EL2.
+ *     All calls to AB_SM_SET_STATE will fail with -ENODEV
+ *     during that time.
  */
 #define AB_SM_SET_STATE		_IOW(AB_SM_IOCTL_MAGIC, 1, int)
 
@@ -183,6 +187,10 @@
  * Parameter int:
  *	Pass mapped state value to set
  * On success will return 0, otherwise will return error < 0.
+ * Note: State changes are not allowed after calling AB_SM_ENTER_EL2
+ *     until subsequently calling AB_SM_EXIT EL2.
+ *     All calls to AB_SM_SET_STATE will fail with -ENODEV
+ *     during that time.
  */
 #define AB_SM_MAPPED_SET_STATE		_IOW(AB_SM_IOCTL_MAGIC, 22, int)
 
