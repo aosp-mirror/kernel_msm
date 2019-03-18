@@ -127,7 +127,7 @@ static ssize_t state_stats_show(struct device *dev,
 		(struct ab_state_context *)dev_get_drvdata(dev);
 
 	pos += scnprintf(buf + pos, PAGE_SIZE - pos,
-			"Airbrush Subsystem Power Stats\n");
+			"Pixel Visual Core Subsystem Power Stats\n");
 
 	mutex_lock(&sc->state_transitioning_lock);
 
