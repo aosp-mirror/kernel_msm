@@ -849,14 +849,13 @@ static int store_enable(struct device *pdev, struct device_attribute *attr,
 	struct bgrsb_priv *dev = dev_get_drvdata(pdev);
 	char *arr = kstrdup(buff, GFP_KERNEL);
 
-	if (!arr)
-		goto err_ret;
+	if (dev->is_cnfgrd == false || !arr)
+		return -ENOMEDIUM;
 
 	rc = split_bg_work(dev, arr);
 	if (rc != 0)
 		pr_err("Not able to process request\n");
 
-err_ret:
 	return count;
 }
 
