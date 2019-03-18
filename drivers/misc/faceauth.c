@@ -22,6 +22,7 @@
 #include <linux/firmware.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <misc/faceauth_addresses.h>
 #include <misc/faceauth_hypx.h>
 
 #include <linux/mfd/abc-pcie.h>
@@ -35,7 +36,6 @@
 #include <linux/workqueue.h>
 
 #include <abc-pcie-dma.h>
-#include <faceauth_addresses.h>
 #include "../mfd/abc-pcie-dma.h"
 
 /* ABC FW and workload binary offsets */
@@ -1430,6 +1430,8 @@ static int faceauth_probe(struct platform_device *pdev)
 		goto exit3;
 	}
 
+	el2_faceauth_probe(data->device);
+
 #if ENABLE_AIRBRUSH_DEBUG
 	clear_debug_data();
 	debug_data_queue.data_buffer =
@@ -1463,6 +1465,7 @@ static int faceauth_remove(struct platform_device *pdev)
 {
 	struct faceauth_data *data = platform_get_drvdata(pdev);
 
+	el2_faceauth_remove(data->device);
 	abc_unregister_pcie_link_blocking_event(&data->pcie_link_blocking_nb);
 	misc_deregister(&data->misc_dev);
 	debugfs_remove_recursive(data->debugfs_root);

@@ -20,6 +20,8 @@
 #include <linux/faceauth_shared.h>
 #include <linux/device.h>
 
+int el2_faceauth_probe(struct device *dev);
+int el2_faceauth_remove(struct device *dev);
 int el2_faceauth_wait_pil_dma_over(void);
 int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		      uint64_t verbosity_level);

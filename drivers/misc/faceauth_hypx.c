@@ -38,6 +38,8 @@
 #define HYPX_SMC_FUNC_GET_DEBUG_RESULT HYPX_SMC_ID(0x6)
 #define HYPX_SMC_FUNC_GET_DEBUG_DATA HYPX_SMC_ID(0x7)
 #define HYPX_SMC_FUNC_GET_DEBUG_BUFFER HYPX_SMC_ID(0x8)
+#define HYPX_SMC_FUNC_DRIVER_PROBE (0x9)
+#define HYPX_SMC_FUNC_DRIVER_REMOVE (0xa)
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
@@ -456,6 +458,130 @@ static void hypx_free_blob(struct device *dev, struct faceauth_blob *blob,
 		return hypx_free_blob_dmabuf(dev, blob, need_reassign);
 }
 
+static int allocate_bounce_buffer(struct device *dev, void **vaddr,
+				  dma_addr_t *paddr)
+{
+	int ret = 0;
+	int source_vm[] = { VMID_HLOS };
+	int dest_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int dest_perm[] = { PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE };
+	void *buffer_addr;
+	dma_addr_t buffer_paddr;
+
+	*vaddr = NULL;
+	*paddr = 0;
+
+	buffer_addr =
+		dma_alloc_coherent(dev, PAGE_SIZE, &buffer_paddr, GFP_KERNEL);
+	if (!buffer_addr) {
+		ret = -ENOMEM;
+		goto exit2;
+	}
+
+	ret = hyp_assign_phys(buffer_paddr, PAGE_SIZE, source_vm,
+			      ARRAY_SIZE(source_vm), dest_vm, dest_perm,
+			      ARRAY_SIZE(dest_vm));
+	if (ret) {
+		pr_err("hyp_assign_phys returned an error %d\n", ret);
+		goto exit1;
+	}
+
+	*vaddr = buffer_addr;
+	*paddr = buffer_paddr;
+	return ret;
+
+exit1:
+	dma_free_coherent(dev, PAGE_SIZE, buffer_addr, buffer_paddr);
+exit2:
+	return ret;
+}
+
+static int deallocate_bounce_buffer(struct device *dev, void **vaddr,
+				    dma_addr_t *paddr)
+{
+	int ret = 0;
+	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int dest_vm[] = { VMID_HLOS };
+	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
+
+	if (*vaddr == NULL || *paddr == 0)
+		return -EINVAL;
+
+	ret = hyp_assign_phys(*paddr, PAGE_SIZE, source_vm,
+			      ARRAY_SIZE(source_vm), dest_vm, dest_perm,
+			      ARRAY_SIZE(dest_vm));
+	if (ret) {
+		pr_err("hyp_assign_phys returned an error %d\n", ret);
+		return ret;
+	}
+
+	dma_free_coherent(dev, PAGE_SIZE, *vaddr, *paddr);
+	*vaddr = NULL;
+	*paddr = 0;
+
+	return ret;
+}
+
+static void *bounce_buff;
+static dma_addr_t bounce_buff_bus_addr;
+bool permanent_bounce_buffer;
+
+int el2_faceauth_probe(struct device *dev)
+{
+	int ret = 0;
+	struct scm_desc desc = { 0 };
+	void *buffer_vaddr;
+	dma_addr_t buffer_paddr;
+
+	ret = allocate_bounce_buffer(dev, &buffer_vaddr, &buffer_paddr);
+	if (ret) {
+		pr_err("allocate_bounce_buffer returned an error %d\n", ret);
+		goto exit2;
+	}
+
+	desc.arginfo = SCM_ARGS(2);
+	desc.args[0] = (phys_addr_t)buffer_paddr;
+	desc.args[1] = PAGE_SIZE;
+	ret = scm_call2(HYPX_SMC_FUNC_DRIVER_PROBE, &desc);
+	if (ret) {
+		pr_err("HypX driver probe failed. scm_call %d\n", ret);
+		goto exit1;
+	}
+
+	bounce_buff = buffer_vaddr;
+	bounce_buff_bus_addr = buffer_paddr;
+	permanent_bounce_buffer = true;
+	return 0;
+
+exit1:
+	ret = deallocate_bounce_buffer(dev, &buffer_vaddr, &buffer_paddr);
+	if (ret)
+		pr_err("deallocate_bounce_buffer returned an error %d\n", ret);
+exit2:
+	return ret;
+}
+
+int el2_faceauth_remove(struct device *dev)
+{
+	int ret = 0;
+	struct scm_desc desc = { 0 };
+
+	/* TODO(jaldhalemi): remove this check once HypX is updated */
+	if (permanent_bounce_buffer) {
+		desc.arginfo = SCM_ARGS(0);
+		ret = scm_call2(HYPX_SMC_FUNC_DRIVER_REMOVE, &desc);
+		if (ret)
+			pr_err("HypX driver remove failed. scm_call %d\n", ret);
+
+		ret = deallocate_bounce_buffer(dev, &bounce_buff,
+					       &bounce_buff_bus_addr);
+		if (ret)
+			pr_err("deallocate_bounce_buffer returned an error %d\n",
+			       ret);
+	}
+	return ret;
+}
+
 int el2_faceauth_wait_pil_dma_over(void)
 {
 	struct scm_desc check_dma_desc = { 0 };
@@ -491,34 +617,34 @@ int el2_faceauth_wait_pil_dma_over(void)
 	} while (true);
 }
 
-static void *bounce_buff;
-static dma_addr_t bounce_buff_bus_addr;
-
 int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		      uint64_t verbosity_level)
 {
 	int ret = 0;
 	struct scm_desc desc = { 0 };
 	struct hypx_fa_init *hypx_data;
-	int source_vm[] = { VMID_HLOS };
-	int dest_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
-	int dest_perm[] = { PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE };
 	unsigned long save_trace;
 
 	hypx_data = (void *)get_zeroed_page(0);
+	if (!hypx_data) {
+		ret = -ENOMEM;
+		goto exit2;
+	}
+
 	hypx_data->verbosity_level = verbosity_level;
 	hypx_data->features = data->features;
 
-	bounce_buff = dma_alloc_coherent(dev, PAGE_SIZE, &bounce_buff_bus_addr,
-					 GFP_KERNEL);
-	hypx_data->bounce_buff = bounce_buff_bus_addr;
+	/* TODO(jaldhalemi): remove this code once HypX is updated */
+	if (!permanent_bounce_buffer) {
+		ret = allocate_bounce_buffer(dev, &bounce_buff,
+					     &bounce_buff_bus_addr);
+		if (ret) {
+			pr_err("allocate_bounce_buffer returned an error %d\n",
+			       ret);
+			goto exit1;
+		}
 
-	ret = hyp_assign_phys(bounce_buff_bus_addr, PAGE_SIZE, source_vm,
-			      ARRAY_SIZE(source_vm), dest_vm, dest_perm,
-			      ARRAY_SIZE(dest_vm));
-	if (ret) {
-		pr_err("hyp_assign_phys returned an error %d\n", ret);
-		goto exit;
+		hypx_data->bounce_buff = bounce_buff_bus_addr;
 	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
@@ -532,11 +658,12 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 				    jiffies_to_usecs(jiffies - save_trace));
 	if (ret) {
 		pr_err("Failed scm_call %d\n", ret);
-		goto exit;
+		goto exit1;
 	}
 
-exit:
+exit1:
 	free_page((unsigned long)hypx_data);
+exit2:
 	return ret;
 }
 
@@ -544,9 +671,6 @@ int el2_faceauth_cleanup(struct device *dev)
 {
 	int ret = 0;
 	struct scm_desc desc = { 0 };
-	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
-	int dest_vm[] = { VMID_HLOS };
-	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 	unsigned long save_trace;
 
 	desc.arginfo = SCM_ARGS(0);
@@ -557,15 +681,14 @@ int el2_faceauth_cleanup(struct device *dev)
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_CLEANUP & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
 
-	ret = hyp_assign_phys(bounce_buff_bus_addr, PAGE_SIZE, source_vm,
-			      ARRAY_SIZE(source_vm), dest_vm, dest_perm,
-			      ARRAY_SIZE(dest_vm));
-	if (ret)
-		pr_err("hyp_assign_phys returned an error %d\n", ret);
-
-	dma_free_coherent(dev, PAGE_SIZE, bounce_buff, bounce_buff_bus_addr);
-	bounce_buff = NULL;
-	bounce_buff_bus_addr = 0;
+	/* TODO(jaldhalemi): remove this code once HypX is updated */
+	if (!permanent_bounce_buffer) {
+		ret = deallocate_bounce_buffer(dev, &bounce_buff,
+					       &bounce_buff_bus_addr);
+		if (ret)
+			pr_err("deallocate_bounce_buffer returned an error %d\n",
+			       ret);
+	}
 
 	return ret;
 }
