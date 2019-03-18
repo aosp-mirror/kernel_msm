@@ -43,6 +43,8 @@
 
 #define PHASENUM 4
 
+#define MAX_RETRY_COUNT 3
+
 #define PHASE_SELECT_REG 0x60
 #define PROXAVG_REG 0x63
 #define PROXOFFSET_REG 0x67
@@ -311,7 +313,7 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 
 static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 {
-	int rc = 0;
+	int rc = 0, retry_cnt;
 	uint32_t data;
 	uint32_t i, PH_start, PH_end;
 	struct cam_sensor_i2c_reg_setting write_setting;
@@ -369,21 +371,28 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 			goto out;
 		}
 
-		camera_io_dev_read(
-			&ctrl->cap_sense.io_master_info,
-			PROXOFFSET_REG,
-			&data,
-			CAMERA_SENSOR_I2C_TYPE_BYTE,
-			CAMERA_SENSOR_I2C_TYPE_WORD);
+		retry_cnt = 0;
+		while (retry_cnt < MAX_RETRY_COUNT) {
+			camera_io_dev_read(
+				&ctrl->cap_sense.io_master_info,
+				PROXOFFSET_REG,
+				&data,
+				CAMERA_SENSOR_I2C_TYPE_BYTE,
+				CAMERA_SENSOR_I2C_TYPE_WORD);
 
-		ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
-		if (ctrl->cap_sense.proxoffset[i]
-			!= ctrl->cap_sense.calibraion_data[i]) {
+			ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
+			if (ctrl->cap_sense.proxoffset[i]
+				== ctrl->cap_sense.calibraion_data[i]) {
+				break;
+			}
+			retry_cnt++;
+		}
+
+		if (retry_cnt == MAX_RETRY_COUNT) {
 			dev_err(ctrl->soc_info.dev,
 				"read back offset %d mismatch to cali data %d",
 				ctrl->cap_sense.proxoffset[i],
 				ctrl->cap_sense.calibraion_data[i]);
-			return -EINVAL;
 		}
 	}
 
