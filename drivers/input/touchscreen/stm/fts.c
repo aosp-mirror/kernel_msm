@@ -1599,7 +1599,7 @@ static int touchsim_stop(struct fts_touchsim *touchsim)
 }
 
 /** sysfs file node to handle the touch simulation test request.
-  *  "cat touchsim_test" shows if the test is running
+  *  "cat touchsim" shows if the test is running
   *  Possible outputs:
   *  1 = test running.
   *  0 = test not running.
@@ -1615,7 +1615,7 @@ static ssize_t fts_touch_simulation_show(struct device *dev,
 }
 
 /** sysfs file node to handle the touch simulation test request.
-  * "echo <cmd> > touchsim_test"  to execute a command
+  * "echo <cmd> > touchsim"  to execute a command
   *  Possible commands (cmd):
   *  1 = start the test if not already running.
   *  0 = stop the test if its running.
