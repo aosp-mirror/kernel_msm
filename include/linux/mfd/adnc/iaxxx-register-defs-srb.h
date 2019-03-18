@@ -2029,14 +2029,22 @@
 
 /*** SRB_SYSTEM_SLEEP_DURATION (0x580000ec) ***/
 /*
- * This register is for setting the duration (in ms) during
- * which System was in Sleep mode.
+ * Duration (in ms) during which System was in Sleep mode.
  */
 #define IAXXX_SRB_SYSTEM_SLEEP_DURATION_ADDR (0x580000ec)
 #define IAXXX_SRB_SYSTEM_SLEEP_DURATION_MASK_VAL 0xffffffff
 #define IAXXX_SRB_SYSTEM_SLEEP_DURATION_RMASK_VAL 0xffffffff
 #define IAXXX_SRB_SYSTEM_SLEEP_DURATION_WMASK_VAL 0xffffffff
 #define IAXXX_SRB_SYSTEM_SLEEP_DURATION_RESET_VAL 0x00000000
+
+/*
+ * This duration will be set by HOST after wake up. HOST should set this
+ * duration before any power mode change takes place.
+ */
+#define IAXXX_SRB_SYSTEM_SLEEP_DURATION_REG_MASK 0xffffffff
+#define IAXXX_SRB_SYSTEM_SLEEP_DURATION_REG_RESET_VAL 0x0
+#define IAXXX_SRB_SYSTEM_SLEEP_DURATION_REG_POS 0
+#define IAXXX_SRB_SYSTEM_SLEEP_DURATION_REG_SIZE 32
 
 /*** SRB_SYS_RESERVED_17 (0x580000f0) ***/
 /*
