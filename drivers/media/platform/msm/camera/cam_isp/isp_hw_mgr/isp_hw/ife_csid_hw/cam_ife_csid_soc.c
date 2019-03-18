@@ -142,7 +142,7 @@ int cam_ife_csid_enable_soc_resources(
 	}
 
 	rc = cam_soc_util_enable_platform_resource(soc_info, true,
-		clk_lvl, true);
+		clk_lvl, false);
 	if (rc) {
 		CAM_ERR(CAM_ISP, "enable platform failed");
 		goto stop_cpas;

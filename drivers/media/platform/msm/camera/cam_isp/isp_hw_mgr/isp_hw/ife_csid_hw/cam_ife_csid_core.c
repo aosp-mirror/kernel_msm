@@ -2675,10 +2675,18 @@ static int cam_ife_csid_init_hw(void *hw_priv,
 	rc = cam_ife_csid_reset_retain_sw_reg(csid_hw);
 	if (rc < 0) {
 		CAM_ERR(CAM_ISP, "CSID: Failed in SW reset");
+		cam_ife_csid_disable_hw(csid_hw);
+		goto end;
 	}
 
-	if (rc)
-		cam_ife_csid_disable_hw(csid_hw);
+	if (csid_hw->hw_info->open_count == 1) {
+		rc  = cam_soc_util_irq_enable(&csid_hw->hw_info->soc_info);
+		if (rc < 0) {
+			CAM_ERR(CAM_ISP, "CSID: %d IRQ enable failed",
+				csid_hw->hw_intf->hw_idx);
+			cam_ife_csid_disable_hw(csid_hw);
+		}
+	}
 end:
 	mutex_unlock(&csid_hw->hw_info->hw_mutex);
 	return rc;
