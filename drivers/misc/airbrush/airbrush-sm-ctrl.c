@@ -1060,13 +1060,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 				dev_err(sc->dev, "blk_set_state failed for TPU\n");
 				goto cleanup_state;
 			}
-
-			if (blk_set_state(sc, &(sc->blocks[DRAM]),
-					active_map->dram_block_state_id)) {
-				ret = -EINVAL;
-				dev_err(sc->dev, "blk_set_state failed for DRAM\n");
-				goto cleanup_state;
-			}
 		}
 	}
 
