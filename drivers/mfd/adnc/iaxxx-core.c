@@ -1188,7 +1188,7 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	}
 
 	/* Disable control interface 1 */
-	rc =  iaxxx_pm_set_optimal_power_mode_host1(dev);
+	rc =  iaxxx_pm_set_optimal_power_mode_host1(dev, false);
 	if (rc) {
 		dev_err(priv->dev,
 		"%s() disabling controle interface 1 Fail\n", __func__);

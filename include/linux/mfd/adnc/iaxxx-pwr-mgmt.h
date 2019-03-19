@@ -44,7 +44,7 @@ int iaxxx_pm_put_sync_suspend(struct device *dev);
 void iaxxx_pm_enable(struct iaxxx_priv *priv);
 int iaxxx_pm_set_aclk(struct device *dev, int clk_freq);
 int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev);
-int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev);
+int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev, bool no_pm);
 int iaxxx_set_spi2_master_speed(struct device *dev, int spi_speed);
 int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source);
 int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source);

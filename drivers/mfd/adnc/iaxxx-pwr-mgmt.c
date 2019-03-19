@@ -408,7 +408,7 @@ int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev)
  * iaxxx_pm_set_optimal_power_mode (host1)
  * Need to do wake up to come out
  */
-int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
+int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev, bool no_pm)
 {
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int rc;
@@ -418,10 +418,12 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
 	/* Disable both the control interfaces and the chip will go to
 	 * optimal power mode
 	 */
-	rc = regmap_write(priv->regmap, IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_1_ADDR,
-	    priv->spi_app_speed);
+	rc = regmap_write(no_pm ? priv->regmap_no_pm : priv->regmap,
+			IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_1_ADDR,
+			priv->spi_app_speed);
 	if (!rc)
-		rc = regmap_update_bits(priv->regmap,
+		rc = regmap_update_bits(no_pm ?
+			priv->regmap_no_pm : priv->regmap,
 			IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
 			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
 			0x1 <<
@@ -431,7 +433,10 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev)
 		return rc;
 	}
 
-	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_1, 20);
+	if (no_pm)
+		iaxxx_send_update_block_fixed_wait_no_pm(dev, IAXXX_HOST_1, 20);
+	else
+		iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_1, 20);
 	return rc;
 }
 
@@ -490,7 +495,7 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 
 	if (source == IAXXX_EXT_OSC) {
 		/* Disable control interface 1 */
-		rc = iaxxx_pm_set_optimal_power_mode_host1(priv->dev);
+		rc = iaxxx_pm_set_optimal_power_mode_host1(priv->dev, true);
 		if (rc) {
 			dev_err(priv->dev,
 				"%s() disabling controle interface 1 Fail\n",

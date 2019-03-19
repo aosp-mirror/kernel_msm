@@ -488,7 +488,7 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host1(struct device *dev,
 	/* Disable both the control interfaces and the chip will go to
 	 * optimal power mode
 	 */
-	rc = iaxxx_pm_set_optimal_power_mode_host1(dev);
+	rc = iaxxx_pm_set_optimal_power_mode_host1(dev, false);
 
 	if (rc) {
 		dev_info(dev, "%s() Fail\n", __func__);
