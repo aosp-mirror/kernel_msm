@@ -55,9 +55,9 @@
 
 /* crack unit in aF */
 #define DUMMY_CRACK_THRES 0x7FFFFFFF
-#define CRACK_THRES_EVT1 0x3D090
+#define CRACK_THRES_EVT1 (250 * 1000) // in aF
 #define CRACK_THRES_FLOOD_EVT1_1 0xF4240
-#define CRACK_THRES_DOT_EVT1_1 0xF4240
+#define CRACK_THRES_DOT (1000 * 1000) // in aF
 
 #define VIO_VOLTAGE_MIN 1800000
 #define VIO_VOLTAGE_MAX 1800000
@@ -324,8 +324,7 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 	if (crack_detection_en) {
 		flood_thres = (ctrl->hw_version == BUILD_EVT1_1) ?
 			CRACK_THRES_FLOOD_EVT1_1 : CRACK_THRES_EVT1;
-		dot_thres = (ctrl->hw_version == BUILD_EVT1_1) ?
-			CRACK_THRES_DOT_EVT1_1 : DUMMY_CRACK_THRES;
+		dot_thres = CRACK_THRES_DOT;
 	} else {
 		flood_thres = DUMMY_CRACK_THRES;
 		dot_thres = DUMMY_CRACK_THRES;
