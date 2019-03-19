@@ -57,6 +57,8 @@ enum jqs_message_type {
 	 * JQS_SYS_GPR_SHUTDOWN
 	 */
 	JQS_MESSAGE_TYPE_SHUTDOWN_MODE = 0x8000100f,
+	/* JqsMessageIommuActivate ->   JqsMessageAck */
+	JQS_MESSAGE_TYPE_IOMMU_ACTIVATE		= 0x80001010,
 
 	/* Jqs -> Host messages */
 	JQS_MESSAGE_TYPE_ACK                = 0x80002001,
@@ -128,6 +130,12 @@ struct jqs_message_close_session {
 struct jqs_message_shutdown_mode {
 	struct jqs_message header;
 	enum jqs_shutdown_mode shutdown_mode;
+};
+
+struct jqs_message_iommu_activate {
+	struct jqs_message header;
+	uint32_t activate;
+	uint64_t page_table_addr;
 };
 
 struct jqs_message_alloc_queue {
