@@ -303,7 +303,7 @@ static int ipu_core_jqs_fw_state_set(void *data, u64 val)
 	struct paintbox_bus *bus = data;
 	int ret = 0;
 
-	if (val > JQS_FW_STATUS_RUNNING) {
+	if (val > JQS_FW_STATUS_SUSPENDED) {
 		dev_err(bus->parent_dev, "%s: invalid value, val = %llu",
 				__func__, val);
 		return -EINVAL;
@@ -327,6 +327,9 @@ static int ipu_core_jqs_fw_state_set(void *data, u64 val)
 			ret = ipu_core_jqs_enable_firmware(bus);
 			break;
 		case JQS_FW_STATUS_RUNNING:
+			ipu_core_jqs_suspend_firmware(bus);
+			break;
+		case JQS_FW_STATUS_SUSPENDED:
 			break;
 		}
 	}
@@ -334,6 +337,9 @@ static int ipu_core_jqs_fw_state_set(void *data, u64 val)
 	/* Check if a lower readiness state was requested. */
 	while (val < bus->jqs.status) {
 		switch (bus->jqs.status) {
+		case JQS_FW_STATUS_SUSPENDED:
+			ipu_core_jqs_enable_firmware(bus);
+			break;
 		case JQS_FW_STATUS_RUNNING:
 			ipu_core_jqs_disable_firmware_requested(bus);
 			break;
