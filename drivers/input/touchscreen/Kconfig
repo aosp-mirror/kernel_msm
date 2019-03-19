@@ -1218,8 +1218,21 @@ config TOUCHSCREEN_COLIBRI_VF50
 	  To compile this driver as a module, choose M here: the
 	  module will be called colibri_vf50_ts.
 
+config TOUCHSCREEN_FT3207
+  tristate "FocalTech FT3207 touchscreen"
+	depends on I2C
+	help
+	Say Y here if you have a ft3207 touchscreen.
+	Ft3207 controllers are multi touch controllers which can
+	report 5 touches at a time.
+
+	If unsure, say N.
+
+	To compile this driver as a module, choose M here: the
+	module will be called fts_ts.
+
 config TOUCHSCREEN_FT3267
-  tristate "FocalTech touchscreens"
+  tristate "FocalTech FT3267 touchscreen"
   depends on I2C
   help
   Say Y here if you have a ft3267 touchscreen.

@@ -296,6 +296,68 @@ int fts_read_reg(struct i2c_client *client, u8 addr, u8 *val)
 	return fts_i2c_read(client, &addr, 1, val, 1);
 }
 
+/*******************************************************************************
+*  Name: checkTPSource
+*  Brief:
+*  Input:
+*  Output:
+*  Return:
+*******************************************************************************/
+#define FTS_ALL_PACKET_LENGTH                256
+static int checkTPSource(struct fts_ts_data *data)
+{
+	struct i2c_client *client = data->client;
+	unsigned char cmd[6] = {0};
+	u8 tmpBuf[FTS_ALL_PACKET_LENGTH] = {0};
+	int err = 0;
+
+	//first, let touch ic enter read mode
+	cmd[0] = 0x55;
+	cmd[1] = 0xAA;
+	err = fts_i2c_write(client, cmd, 2);
+	if (err < 0)
+		dev_err(&client->dev, "TP vendor id read failed 1 \n");
+	msleep(2);
+	fts_reset_chip();
+	err = fts_i2c_write(client, cmd, 2);
+	if (err < 0)
+		dev_err(&client->dev, "TP vendor id read failed 2 \n");
+	msleep(2);
+
+	//start to read touch F/W's TP vendor ID
+	cmd[0] = 0x02;
+	cmd[1] = 0xFD;
+	cmd[2] = (u8)((7 * FTS_ALL_PACKET_LENGTH)>>8);
+	cmd[3] = (u8)(7 * FTS_ALL_PACKET_LENGTH);
+	cmd[4] = (u8)((FTS_ALL_PACKET_LENGTH-1)>>8);
+	cmd[5] = (u8)(FTS_ALL_PACKET_LENGTH-1);
+	err = fts_i2c_read(client, cmd, 6, tmpBuf, FTS_ALL_PACKET_LENGTH);
+	if (err < 0)
+		dev_err(&client->dev, "TP vendor id read failed 3 \n");
+
+	msleep(2);
+
+	//lock flash cptm
+	cmd[0] = 0x0A;
+	cmd[1] = 0xF5;
+	err = fts_i2c_write(client, cmd, 2);
+	if (err < 0)
+		dev_err(&client->dev, "TP vendor id read failed 4 \n");
+
+	msleep(100);
+
+	fts_reset_chip();
+	msleep(300);
+
+	data->tp_vendor_id = tmpBuf[0xB4];
+
+	//read TP vendor ID form Project UC81
+	//fts_read_reg(client, 0xA8, tmpBuf);
+	//dev_err(&client->dev, "TP vid 0x%x \n", tmpBuf[0]);
+
+	return err;
+}
+
 #ifdef CONFIG_TOUCHSCREEN_FTS_PSENSOR
 /*******************************************************************************
 *  Name: fts_psensor_enable
@@ -2126,6 +2188,11 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	dev_info(&client->dev, "Device ID = 0x%x\n", reg_value);
 
+	if ((pdata->family_id != reg_value) && (!pdata->ignore_id_check)) {
+		dev_err(&client->dev, "%s:Unsupported controller\n", __func__);
+		//goto free_gpio;
+	}
+
 	data->family_id = pdata->family_id;
 
 	fts_i2c_client = client;
@@ -2244,6 +2311,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		goto free_debug_dir;
 	}
 
+	/* get TP Source ID number*/
+	err = checkTPSource(data);
+
 	/*get some register information */
 	reg_addr = FTS_REG_POINT_RATE;
 	fts_i2c_read(client, &reg_addr, 1, &reg_value, 1);
@@ -2262,7 +2332,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	fts_update_fw_ver(data);
 	fts_update_fw_vendor_id(data);
 
-	printk(KERN_INFO "[fts] The touch F/W has problem fw_vendor_id : %x \n", data->fw_vendor_id);
+	printk(KERN_INFO "[fts] The touch F/W has problem fw_vendor_id : %x , tp_vendor_id : %x\n",
+		data->fw_vendor_id,data->tp_vendor_id);
+	//checking bootloader TP vendor id and FW venfor id is same or not.
 
 	FTS_STORE_TS_INFO(data->ts_info, data->family_id, data->pdata->name,
 			data->pdata->num_max_touches, data->pdata->group_id,
@@ -2292,18 +2364,18 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 #endif
 
 	#ifdef FTS_AUTO_UPGRADE
-	if(data->fw_vendor_id >= 0)  {
+	if(data->tp_vendor_id >= 0)  {
 		printk(KERN_INFO "[fts] Enter CTP Auto Upgrade \n");
 		if(data->fw_ver[0] == 0) //recovery
 			printk(KERN_INFO "[fts] FW ver is 0x00, Enter Recovery mode \n");
 
-		err = fts_ctpm_auto_upgrade_for_cci(client, data->fw_vendor_id, false);
+		err = fts_ctpm_auto_upgrade_for_cci(client, data->tp_vendor_id, false);
 		if(err == 0) {
 			fts_update_fw_ver(data);
 			fts_update_fw_vendor_id(data);
 		}
 	} else {
-		printk(KERN_ERR "[fts] fw_vendor_id is woring : %d  \n", data->fw_vendor_id );
+		printk(KERN_ERR "[fts] tp_vendor_id is woring : %d  \n", data->tp_vendor_id );
 	}
 	#endif 
 
@@ -2485,7 +2557,7 @@ static struct i2c_driver fts_ts_driver = {
 	.probe = fts_ts_probe,
 	.remove = fts_ts_remove,
 	.driver = {
-		.name = "ft_3267",
+		.name = "ft_3207",
 		.owner = THIS_MODULE,
 		.of_match_table = fts_match_table,
 #ifdef CONFIG_PM
