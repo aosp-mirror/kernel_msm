@@ -34,8 +34,16 @@
 		i < panel->num_timing_nodes; i++, mode++)
 
 
+struct panel_switch_funcs {
+	struct panel_switch_data *(*create)(struct dsi_panel *panel);
+	void (*destroy)(struct panel_switch_data *pdata);
+	void (*perform_switch)(struct panel_switch_data *pdata,
+			       const struct dsi_display_mode *mode);
+};
+
 struct panel_switch_data {
 	struct dsi_panel *panel;
+	struct dentry *debug_root;
 
 	struct kthread_work switch_work;
 	struct kthread_worker worker;
@@ -49,6 +57,8 @@ struct panel_switch_data {
 	atomic_t te_counter;
 	struct dsi_display_te_listener te_listener;
 	struct completion te_completion;
+
+	const struct panel_switch_funcs *funcs;
 };
 
 static inline
@@ -75,20 +85,26 @@ static void panel_handle_te(struct dsi_display_te_listener *tl)
 	}
 }
 
-static void panel_perform_switch(struct panel_switch_data *pdata,
-				 const struct dsi_display_mode *mode)
+static void panel_switch_cmd_set_transfer(struct panel_switch_data *pdata,
+					  const struct dsi_display_mode *mode)
 {
 	struct dsi_panel *panel = pdata->panel;
 	struct dsi_panel_cmd_set *cmd;
 	int rc;
-
-	SDE_ATRACE_BEGIN(__func__);
 
 	cmd = &mode->priv_info->cmd_sets[DSI_CMD_SET_TIMING_SWITCH];
 
 	rc = dsi_panel_cmd_set_transfer(panel, cmd);
 	if (rc)
 		pr_warn("failed to send TIMING switch cmd, rc=%d\n", rc);
+}
+
+static void panel_switch_to_mode(struct panel_switch_data *pdata,
+				 const struct dsi_display_mode *mode)
+{
+	SDE_ATRACE_BEGIN(__func__);
+	if (pdata->funcs && pdata->funcs->perform_switch)
+		pdata->funcs->perform_switch(pdata, mode);
 
 	if (pdata->switch_pending) {
 		pdata->switch_pending = false;
@@ -138,7 +154,7 @@ static void panel_switch_worker(struct kthread_work *work)
 	}
 
 	/* switch is shadowed by vsync so this can be done ahead of TE */
-	panel_perform_switch(pdata, mode);
+	panel_switch_to_mode(pdata, mode);
 	mutex_unlock(&panel->panel_lock);
 
 	if (te_listen_cnt) {
@@ -301,21 +317,17 @@ static const struct dsi_panel_funcs panel_funcs = {
 	.pre_kickoff = panel_pre_kickoff,
 };
 
-int dsi_panel_switch_init(struct dsi_panel *panel)
+static int panel_switch_data_init(struct dsi_panel *panel,
+				  struct panel_switch_data *pdata)
 {
-	struct panel_switch_data *pdata;
 	struct sched_param param = {
 		.sched_priority = 16,
 	};
-	struct dsi_display *display;
+	const struct dsi_display *display;
 
 	display = dsi_panel_to_display(panel);
-	if (!display)
+	if (unlikely(!display))
 		return -ENOENT;
-
-	pdata = devm_kzalloc(panel->parent, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata)
-		return -ENOMEM;
 
 	kthread_init_work(&pdata->switch_work, panel_switch_worker);
 	kthread_init_worker(&pdata->worker);
@@ -335,12 +347,64 @@ int dsi_panel_switch_init(struct dsi_panel *panel)
 	panel->private_data = pdata;
 	panel->funcs = &panel_funcs;
 
-	debugfs_create_file("switch_mode", 0600, display->root, pdata,
+	pdata->debug_root = debugfs_create_dir("switch", display->root);
+	debugfs_create_file("mode", 0600, pdata->debug_root, pdata,
 			    &panel_switch_fops);
-	debugfs_create_u32("switch_te_listen_count", 0600, display->root,
+	debugfs_create_u32("te_listen_count", 0600, pdata->debug_root,
 			    &pdata->switch_te_listen_count);
-	debugfs_create_atomic_t("switch_te_counter", 0600, display->root,
+	debugfs_create_atomic_t("te_counter", 0600, pdata->debug_root,
 				&pdata->te_counter);
+
+	return 0;
+}
+
+static void panel_switch_data_deinit(struct panel_switch_data *pdata)
+{
+	kthread_flush_worker(&pdata->worker);
+	kthread_stop(pdata->thread);
+}
+
+static void panel_switch_data_destroy(struct panel_switch_data *pdata)
+{
+	panel_switch_data_deinit(pdata);
+	if (pdata->panel && pdata->panel->parent)
+		devm_kfree(pdata->panel->parent, pdata);
+}
+
+static struct panel_switch_data *panel_switch_create(struct dsi_panel *panel)
+{
+	struct panel_switch_data *pdata;
+	int rc;
+
+	pdata = devm_kzalloc(panel->parent, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return ERR_PTR(-ENOMEM);
+
+	rc = panel_switch_data_init(panel, pdata);
+	if (rc)
+		return ERR_PTR(rc);
+
+	return pdata;
+}
+
+const struct panel_switch_funcs panel_switch_default_funcs = {
+	.create = panel_switch_create,
+	.destroy = panel_switch_data_destroy,
+	.perform_switch = panel_switch_cmd_set_transfer,
+};
+
+int dsi_panel_switch_init(struct dsi_panel *panel)
+{
+	struct panel_switch_data *pdata = NULL;
+	const struct panel_switch_funcs *funcs = &panel_switch_default_funcs;
+
+	if (funcs->create)
+		pdata = funcs->create(panel);
+
+	if (IS_ERR_OR_NULL(pdata))
+		return -ENOENT;
+
+	pdata->funcs = funcs;
 
 	return 0;
 }
@@ -353,12 +417,6 @@ void dsi_panel_switch_destroy(struct dsi_panel *panel)
 {
 	struct panel_switch_data *pdata = panel->private_data;
 
-	if (!pdata)
-		return;
-
-	kthread_flush_worker(&pdata->worker);
-	kthread_stop(pdata->thread);
-	if (pdata->panel && pdata->panel->parent)
-		devm_kfree(pdata->panel->parent, pdata);
+	if (pdata && pdata->funcs && pdata->funcs->destroy)
+		pdata->funcs->destroy(pdata);
 }
-
