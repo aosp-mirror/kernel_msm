@@ -457,7 +457,7 @@ int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 			IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK);
 
 	if (!rc)
-		rc = iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
+		rc = iaxxx_send_update_block_fixed_wait(priv->dev,
 							IAXXX_HOST_0, 20);
 
 	if (rc) {

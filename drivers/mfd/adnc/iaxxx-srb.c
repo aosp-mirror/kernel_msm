@@ -250,7 +250,13 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	}
 
 	/* To protect concurrent update blocks requests*/
-	mutex_lock(&priv->update_block_lock);
+
+	/* Update block is not taken for no_pm calls because
+	 * those can trigger PM wakeup which will try to do
+	 * some fw-setup which will need the update block.
+	 */
+	if (!no_pm)
+		mutex_lock(&priv->update_block_lock);
 
 	/* Based on app-mode or sbl-mode choose what response to
 	 * expect for update block status
@@ -309,7 +315,11 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		*status &= (~reserved_bits_mask);
 
 out:
-	mutex_unlock(&priv->update_block_lock);
+	/* We should not acquire lock during pm operations
+	 * otherwise it leads to dead lock
+	 */
+	if (!no_pm)
+		mutex_unlock(&priv->update_block_lock);
 	if (rc) {
 		ret = iaxxx_read_error_register(priv, regmap);
 		if (ret)
