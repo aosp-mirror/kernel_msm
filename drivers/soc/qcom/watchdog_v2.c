@@ -55,6 +55,8 @@
 #define SCM_SVC_SEC_WDOG_DIS	0x7
 #define MAX_CPU_CTX_SIZE	2048
 
+#define WDOG_BITE_OFFSET_IN_SECONDS 3
+
 static struct msm_watchdog_data *wdog_data;
 
 static int cpu_idle_pc_state[NR_CPUS];
@@ -529,6 +531,9 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	struct msm_watchdog_data *wdog_dd = (struct msm_watchdog_data *)dev_id;
 	unsigned long nanosec_rem;
 	unsigned long long t = sched_clock();
+	struct task_struct *wdog_task;
+	int cpu;
+	struct cpumask *bark_affinity;
 
 	nanosec_rem = do_div(t, 1000000000);
 	dev_info(wdog_dd->dev, "Watchdog bark! Now = %lu.%06lu\n",
@@ -539,6 +544,50 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 			(unsigned long) wdog_dd->last_pet, nanosec_rem / 1000);
 	if (wdog_dd->do_ipi_ping)
 		dump_cpu_alive_mask(wdog_dd);
+
+	/* Print pet, bark and bite expire times */
+	dev_info(wdog_dd->dev, "Pet: %dms, Bark: %dms, Bite: %dms\n",
+			wdog_dd->pet_time, wdog_dd->bark_time,
+			wdog_dd->bark_time + WDOG_BITE_OFFSET_IN_SECONDS*1000);
+
+	/* Check if pet task is running */
+	wdog_task = wdog_dd->watchdog_task;
+	if (wdog_task) {
+		if (wdog_task->on_cpu) {
+			dev_info(wdog_dd->dev, "Pet task is running on CPU%d\n",
+					task_cpu(wdog_task));
+			for_each_cpu(cpu, cpu_present_mask) {
+				if (wdog_dd->ping_start[cpu] != 0 &&
+						wdog_dd->ping_end[cpu] == 0) {
+					dev_info(wdog_dd->dev, "CPU%d did not "
+							"respond to IPI ping\n",
+							cpu);
+					break;
+				}
+			}
+		} else if (wdog_task->state == TASK_RUNNING) {
+			dev_info(wdog_dd->dev, "Pet task is waiting on CPU%d\n",
+					task_cpu(wdog_task));
+		} else if (wdog_dd->timer_expired) {
+			dev_info(wdog_dd->dev,
+				"Pet timer expired but pet task not queued\n");
+		} else {
+			dev_info(wdog_dd->dev,
+				"Pet timer not expired, queued on CPU%d\n",
+				wdog_dd->pet_timer.flags & TIMER_CPUMASK);
+		}
+	}
+
+	/* Print current jiffies and pet timer expiring jiffies */
+	dev_info(wdog_dd->dev, "Current jiffies:  %lu\n", jiffies);
+	dev_info(wdog_dd->dev, "Pet timer expire: %lu\n",
+			wdog_dd->pet_timer.expires);
+
+	/* Print watchdog bark IRQ affinity mask */
+	bark_affinity = irq_get_affinity_mask(wdog_dd->bark_irq);
+	dev_info(wdog_dd->dev, "Watchdog bark IRQ %d CPU affinity: %*pbl\n",
+			irq, cpumask_pr_args(bark_affinity));
+
 	msm_trigger_wdog_bite();
 	panic("Failed to cause a watchdog bite! - Falling back to kernel panic!");
 	return IRQ_HANDLED;
@@ -741,7 +790,8 @@ static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 	configure_bark_dump(wdog_dd);
 	timeout = (wdog_dd->bark_time * WDT_HZ)/1000;
 	__raw_writel(timeout, wdog_dd->base + WDT0_BARK_TIME);
-	__raw_writel(timeout + 3*WDT_HZ, wdog_dd->base + WDT0_BITE_TIME);
+	__raw_writel(timeout + WDOG_BITE_OFFSET_IN_SECONDS*WDT_HZ,
+			wdog_dd->base + WDT0_BITE_TIME);
 
 	wdog_dd->panic_blk.notifier_call = panic_wdog_handler;
 	atomic_notifier_chain_register(&panic_notifier_list,
