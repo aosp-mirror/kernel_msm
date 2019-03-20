@@ -254,6 +254,7 @@
 		torch-source = <&pm8150l_torch0 &pm8150l_torch1>;
 		switch-source = <&pm8150l_switch2>;
 		status = "ok";
+		thermal-mitigation = <1500 1000 750 500>;
 	};
 
 	led_flash_rear_aux: qcom,camera-flash@1 {
@@ -264,6 +265,7 @@
 		torch-source = <&pm8150l_torch0 &pm8150l_torch1>;
 		switch-source = <&pm8150l_switch2>;
 		status = "ok";
+		thermal-mitigation = <1500 1000 750 500>;
 	};
 };
 

@@ -514,6 +514,14 @@
 				type = "passive";
 			};
 		};
+		cooling-maps {
+			led_flash {
+				trip = <&active_config0>;
+				cooling-device =
+					<&camera_flash THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+		};
 	};
 
 };
