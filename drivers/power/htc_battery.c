@@ -896,9 +896,11 @@ static int htc_battery_probe_process(void)
 		htc_batt_info.rep.batt_id = BATT_ID_UNKNOWN;
 	} else {
 		if (!strncmp(ret.strval,
-			     LOADING_BATT_TYPE, sizeof(LOADING_BATT_TYPE)))
-			return -EPROBE_DEFER;
-		else if ((!strncmp(ret.strval,
+			     LOADING_BATT_TYPE, sizeof(LOADING_BATT_TYPE))) {
+			BATT_ERR(
+			    "Unable to read battery-type, profile loading\n");
+			htc_batt_info.rep.batt_id = BATT_ID_UNKNOWN;
+		} else if ((!strncmp(ret.strval,
 				   WALLEYE_BATT_ID_1,
 				   sizeof(WALLEYE_BATT_ID_1))) ||
 			 (!strncmp(ret.strval,
