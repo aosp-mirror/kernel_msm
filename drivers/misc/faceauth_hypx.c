@@ -88,6 +88,9 @@ struct hypx_fa_process {
 	uint32_t calibration_size;
 
 	uint32_t is_secure_camera;
+	uint32_t citadel_input;
+	uint64_t citadel_token; /* PHY addr */
+	uint32_t citadel_token_size;
 } __packed;
 
 struct hypx_fa_process_results {
@@ -97,6 +100,9 @@ struct hypx_fa_process_results {
 	int32_t error_code;
 	uint64_t debug_buffer; /* PHY addr*/
 	uint32_t debug_buffer_size;
+	uint32_t citadel_lockout_event;
+	uint32_t citadel_output1;
+	uint32_t citadel_output2;
 } __packed;
 
 struct hypx_fa_debug_data {
@@ -712,6 +718,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	hypx_data->is_secure_camera = is_secure_camera;
 	hypx_data->operation = data->operation;
 	hypx_data->profile_id = data->profile_id;
+	hypx_data->citadel_input = data->citadel_input;
 	if (pass_images_to_el2) {
 		hypx_data->image_dot_left = hypx_create_blob(
 			dev, &image_dot_left, data->image_dot_left,
@@ -749,6 +756,19 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 		}
 	}
 
+	hypx_data->citadel_token_size = 0;
+	if (data->citadel_token_size && (
+	    data->operation == COMMAND_ENROLL_COMPLETE ||
+	    data->operation == COMMAND_SET_FEATURE ||
+	    data->operation == COMMAND_CLR_FEATURE ||
+	    data->operation == COMMAND_RESET_LOCKOUT)) {
+		hypx_data->citadel_token = hypx_create_blob_userbuf(
+			dev, data->citadel_token, data->citadel_token_size);
+		hypx_data->citadel_token_size = data->citadel_token_size;
+		if (!hypx_data->citadel_token)
+			goto err0;
+	}
+
 	if (data->operation == COMMAND_ENROLL_COMPLETE) {
 		memcpy(hypx_data->cache_flush_indexes,
 		       data->cache_flush_indexes,
@@ -768,6 +788,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_PROCESS & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
 
+err0:
 	if (pass_images_to_el2) {
 		if (data->calibration || data->calibration_fd)
 			hypx_free_blob(dev, &calibration, false);
@@ -812,6 +833,9 @@ int el2_faceauth_get_process_result(struct device *dev,
 
 	data->result = hypx_data->result;
 	data->angles = hypx_data->angles;
+	data->citadel_lockout_event = hypx_data->citadel_lockout_event;
+	data->citadel_output1 = hypx_data->citadel_output1;
+	data->citadel_output2 = hypx_data->citadel_output2;
 	data->fw_version = hypx_data->fw_version;
 	data->error_code = hypx_data->error_code;
 

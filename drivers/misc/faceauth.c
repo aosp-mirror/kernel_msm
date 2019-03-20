@@ -355,18 +355,17 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
-		if (start_step_data.operation == COMMAND_ENROLL_COMPLETE ||
+		if (start_step_data.citadel_token_size && (
+		    start_step_data.operation == COMMAND_ENROLL_COMPLETE ||
 		    start_step_data.operation == COMMAND_SET_FEATURE ||
 		    start_step_data.operation == COMMAND_CLR_FEATURE ||
-		    start_step_data.operation == COMMAND_RESET_LOCKOUT) {
-			if (start_step_data.citadel_token_size) {
-				err = dma_xfer(start_step_data.citadel_token,
-				start_step_data.citadel_token_size,
-				CITADEL_WRITE_TOKEN_ADDR, DMA_TO_DEVICE);
-				if (err) {
-					pr_err("Error sending token data\n");
-					goto exit;
-				}
+		    start_step_data.operation == COMMAND_RESET_LOCKOUT)) {
+			err = dma_xfer(start_step_data.citadel_token,
+			start_step_data.citadel_token_size,
+			CITADEL_WRITE_TOKEN_ADDR, DMA_TO_DEVICE);
+			if (err) {
+				pr_err("Error sending token data\n");
+				goto exit;
 			}
 		}
 
