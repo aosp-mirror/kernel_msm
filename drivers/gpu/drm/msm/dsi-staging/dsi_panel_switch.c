@@ -600,6 +600,7 @@ struct s6e3hc2_switch_data {
 	struct panel_switch_data base;
 
 	bool gamma_ready;
+	struct kthread_work gamma_work;
 };
 
 const struct s6e3hc2_gamma_info {
@@ -890,6 +891,22 @@ abort:
 	return rc;
 }
 
+static void s6e3hc2_gamma_work(struct kthread_work *work)
+{
+	struct s6e3hc2_switch_data *sdata;
+	struct dsi_panel *panel;
+
+	sdata = container_of(work, struct s6e3hc2_switch_data, gamma_work);
+	panel = sdata->base.panel;
+
+	if (!panel)
+		return;
+
+	mutex_lock(&panel->panel_lock);
+	s6e3hc2_gamma_read_tables(&sdata->base);
+	mutex_unlock(&panel->panel_lock);
+}
+
 static void s6e3hc2_gamma_print(struct seq_file *seq,
 				const struct dsi_display_mode *mode)
 {
@@ -994,6 +1011,7 @@ static struct panel_switch_data *s6e3hc2_switch_create(struct dsi_panel *panel)
 	if (rc)
 		return ERR_PTR(rc);
 
+	kthread_init_work(&sdata->gamma_work, s6e3hc2_gamma_work);
 	debugfs_create_file("gamma", 0600, sdata->base.debug_root,
 			    &sdata->base, &s6e3hc2_read_gamma_fops);
 
@@ -1032,13 +1050,18 @@ static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 
 static int s6e3hc2_post_enable(struct panel_switch_data *pdata)
 {
-	int rc;
+	struct s6e3hc2_switch_data *sdata;
 
-	mutex_lock(&pdata->panel->panel_lock);
-	rc = s6e3hc2_gamma_read_tables(pdata);
-	mutex_unlock(&pdata->panel->panel_lock);
+	if (unlikely(!pdata || !pdata->panel))
+		return -ENOENT;
 
-	return rc;
+	sdata = container_of(pdata, struct s6e3hc2_switch_data, base);
+
+	kthread_flush_work(&sdata->gamma_work);
+	if (!sdata->gamma_ready)
+		kthread_queue_work(&pdata->worker, &sdata->gamma_work);
+
+	return 0;
 }
 
 const struct panel_switch_funcs s6e3hc2_switch_funcs = {
