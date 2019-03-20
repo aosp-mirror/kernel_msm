@@ -200,6 +200,34 @@
 	};
 };
 
+&i2c_5 {
+		status = "okay";
+		raydium@39 {
+		compatible = "raydium,raydium-ts";
+		reg = <0x39>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <98 0x2>;
+		vdd-supply = <&pm660_l18>;
+		vcc-i2c-supply = <&pm660_l13>;
+		raydium,name = "raydium_ts";
+		raydium,irq-gpio = <&msm_gpio 98 0x02>;/**/
+		raydium,reset-gpio = <&msm_gpio 16 0x00>;/**/
+		raydium,display-coords = <0 0 480 480>;/**/
+		raydium,hard-reset-delay-ms = <500>;
+		raydium,soft-reset-delay-ms = <200>;
+		raydium,num-max-touches = <2>;
+
+		pinctrl-names = "pmx_ts_active",
+				"pmx_ts_suspend",
+				"pmx_ts_release";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+		};
+//		/delete-node/ it7260@46;
+		/delete-node/ synaptics@20;
+};
+
 &spi_0 {
 	status = "disabled";
 };
