@@ -260,16 +260,39 @@ static int info_usb_state(union gbms_ce_adapter_details *ad,
 		voltage_max / 1000,
 		amperage_max / 1000);
 
+	ad->ad_voltage = (voltage_max < 0) ? voltage_max
+					   : voltage_max / 100000;
+	ad->ad_amperage = (amperage_max < 0) ? amperage_max
+					     : amperage_max / 100000;
+
 	if (voltage_max < 0 || amperage_max < 0) {
 		ad->ad_type = CHG_EV_ADAPTER_TYPE_UNKNOWN;
-		ad->ad_voltage = voltage_max;
-		ad->ad_amperage = amperage_max;
 		return -EINVAL;
 	}
 
-	ad->ad_type = CHG_EV_ADAPTER_TYPE_USB; /* TODO: b/127334513 */
-	ad->ad_voltage = voltage_max / 100000;
-	ad->ad_amperage = amperage_max / 100000;
+	switch (usb_type) {
+	case POWER_SUPPLY_TYPE_USB:
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_SDP;
+		break;
+	case POWER_SUPPLY_TYPE_USB_CDP:
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_CDP;
+		break;
+	case POWER_SUPPLY_TYPE_USB_DCP:
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_DCP;
+		break;
+	case POWER_SUPPLY_TYPE_USB_PD:
+		if (tcpm_psy && usbc_type == POWER_SUPPLY_USB_TYPE_PD_PPS)
+			ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_PD_PPS;
+		else
+			ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_PD;
+		break;
+	case POWER_SUPPLY_TYPE_USB_FLOAT:
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_FLOAT;
+		break;
+	default:
+		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB;
+		break;
+	}
 
 	return 0;
 }
