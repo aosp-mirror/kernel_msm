@@ -212,6 +212,22 @@ static int32_t cam_get_source_node_info(
 				i, soc_private->torch_max_current[i]);
 		}
 	}
+	if (of_get_property(of_node, "thermal-mitigation", &count)) {
+		count /= sizeof(uint32_t);
+		if (count != CAM_FLASH_THERMAL_MITIGATION_LEVEL) {
+			CAM_WARN(CAM_FLASH,
+				"thermal-mitigation level not matched:%d",
+				count);
+		}
+		rc = of_property_read_u32_array(of_node,
+			"thermal-mitigation",
+			fctrl->thermal_mitigation, count);
+		if (rc < 0) {
+			CAM_WARN(CAM_FLASH,
+				"thermal-mitigation prop unavailable: %d", rc);
+			rc = 0;
+		}
+	}
 
 	return rc;
 }

@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/leds-qpnp-flash.h>
+#include <linux/thermal.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
@@ -46,6 +47,8 @@
 #define CAM_FLASH_PACKET_OPCODE_INIT                 0
 #define CAM_FLASH_PACKET_OPCODE_SET_OPS              1
 #define CAM_FLASH_PACKET_OPCODE_NON_REALTIME_SET_OPS 2
+#define CAM_FLASH_THERMAL_INITIAL_LEVEL              0
+#define CAM_FLASH_THERMAL_MITIGATION_LEVEL           3
 
 struct cam_flash_ctrl;
 
@@ -210,6 +213,11 @@ struct cam_flash_ctrl {
 	struct camera_io_master             io_master_info;
 	struct i2c_data_settings            i2c_data;
 	uint32_t                            last_flush_req;
+	/* Thermal settings */
+	struct thermal_cooling_device       *cdev;
+	int                                 thermal_current_level;
+	int             thermal_mitigation[CAM_FLASH_THERMAL_MITIGATION_LEVEL];
+	struct delayed_work                 init_work;
 };
 
 int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg);

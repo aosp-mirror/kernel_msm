@@ -240,10 +240,91 @@ static const struct of_device_id cam_flash_dt_match[] = {
 	{}
 };
 
+static int cam_flash_get_min_current_limit(struct thermal_cooling_device *cdev,
+					 unsigned long *min_level)
+{
+	*min_level = CAM_FLASH_THERMAL_MITIGATION_LEVEL;
+	return 0;
+}
+
+static int cam_flash_get_max_current_limit(struct thermal_cooling_device *cdev,
+					 unsigned long *max_level)
+{
+	*max_level = CAM_FLASH_THERMAL_MITIGATION_LEVEL;
+	return 0;
+}
+
+static int cam_flash_get_cur_current_limit(struct thermal_cooling_device *cdev,
+					 unsigned long *current_level)
+{
+	struct cam_flash_ctrl *fctrl = (struct cam_flash_ctrl *)cdev->devdata;
+
+	*current_level = fctrl->thermal_current_level;
+	return 0;
+}
+
+static int cam_flash_set_cur_current_limit(struct thermal_cooling_device *cdev,
+					 unsigned long current_limit)
+{
+	struct cam_flash_ctrl *fctrl = (struct cam_flash_ctrl *)cdev->devdata;
+
+	if (current_limit < 0 ||
+		current_limit > CAM_FLASH_THERMAL_MITIGATION_LEVEL)
+		return -EINVAL;
+	fctrl->thermal_current_level = current_limit;
+	return 0;
+}
+
+static const struct thermal_cooling_device_ops cam_flash_cooling_ops = {
+	.get_min_state = cam_flash_get_min_current_limit,
+	.get_max_state = cam_flash_get_max_current_limit,
+	.get_cur_state = cam_flash_get_cur_current_limit,
+	.set_cur_state = cam_flash_set_cur_current_limit,
+};
+
+static void cam_flash_cooling_device_init(struct work_struct *work)
+{
+	struct cam_flash_ctrl *fctrl = container_of(work, struct cam_flash_ctrl,
+					       init_work.work);
+	struct cam_flash_private_soc *soc_private = NULL;
+	struct device_node *cooling_node = NULL;
+	struct thermal_cooling_device *cdev;
+
+	/* Validate input parameters */
+	if (!fctrl) {
+		CAM_ERR(CAM_FLASH, "failed: invalid params fctrl %pK",
+			fctrl);
+		return;
+	}
+	soc_private = fctrl->soc_info.soc_private;
+	cooling_node = of_find_node_by_name(NULL, "camera_flash");
+	cdev = thermal_zone_get_cdev_by_name("bcl_camera_flash");
+	if (!cooling_node) {
+		CAM_ERR(CAM_FLASH, "failed: camera_flash node not found");
+		return;
+	}
+	if (IS_ERR(cdev)) {
+		fctrl->cdev = thermal_of_cooling_device_register(
+				cooling_node, "bcl_camera_flash", fctrl,
+				&cam_flash_cooling_ops);
+		if (!fctrl->cdev) {
+			pr_err("error registering cam flash cooling device\n");
+			thermal_cooling_device_unregister(fctrl->cdev);
+			return;
+		}
+
+		fctrl->thermal_current_level = CAM_FLASH_THERMAL_INITIAL_LEVEL;
+		return;
+	}
+
+	return;
+
+}
+
 static long cam_flash_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
 {
-	int rc = 0;
+	int rc = 0, i;
 	struct cam_flash_ctrl *fctrl = NULL;
 	struct cam_flash_private_soc *soc_private = NULL;
 
@@ -251,6 +332,18 @@ static long cam_flash_subdev_ioctl(struct v4l2_subdev *sd,
 
 	fctrl = v4l2_get_subdevdata(sd);
 	soc_private = fctrl->soc_info.soc_private;
+
+	// apply cooling settings
+	if ((fctrl->cdev && !IS_ERR(fctrl->cdev)) &&
+	    ((fctrl->thermal_mitigation[fctrl->thermal_current_level] > 0) &&
+	     (fctrl->thermal_mitigation[fctrl->thermal_current_level] !=
+	      soc_private->flash_max_current[0]))) {
+		for (i = 0; i < CAM_FLASH_MAX_LED_TRIGGERS; i++) {
+			soc_private->flash_max_current[i] =
+				fctrl->thermal_mitigation[
+				fctrl->thermal_current_level];
+		}
+	}
 
 	switch (cmd) {
 	case VIDIOC_CAM_CONTROL: {
@@ -327,6 +420,8 @@ static int cam_flash_platform_remove(struct platform_device *pdev)
 	cam_unregister_subdev(&(fctrl->v4l2_dev_str));
 	platform_set_drvdata(pdev, NULL);
 	v4l2_set_subdevdata(&fctrl->v4l2_dev_str.sd, NULL);
+	if (fctrl->cdev)
+		thermal_cooling_device_unregister(fctrl->cdev);
 	kfree(fctrl);
 
 	return 0;
@@ -499,6 +594,11 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 	mutex_init(&(fctrl->flash_mutex));
 
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;
+
+	INIT_DELAYED_WORK(&fctrl->init_work, cam_flash_cooling_device_init);
+	schedule_delayed_work(&fctrl->init_work,
+		msecs_to_jiffies(1000));
+
 	CAM_DBG(CAM_FLASH, "Probe success");
 	return rc;
 
