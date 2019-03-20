@@ -231,7 +231,7 @@ static struct smb_irq_info sm8150_bms_irqs[] = {
 	},
 	[BAT_LOW_IRQ] = {
 		.name		= "bat-low",
-		.handler	= batt_psy_changed_irq_handler,
+		.handler	= sm8150_batt_psy_changed_irq_handler,
 	},
 	[BAT_THERM_OR_ID_MISSING_IRQ] = {
 		.name		= "bat-therm-or-id-missing",
