@@ -17,6 +17,10 @@
 	google,chg-battery-default-capacity = <2800>;
 };
 
+&google_charger {
+	google,fcc-max-ua = <2800000>;
+};
+
 &max1720x_fg {
 	google,cap-tsettle = <3>;
 	google,cap-filt-length = <12>;
