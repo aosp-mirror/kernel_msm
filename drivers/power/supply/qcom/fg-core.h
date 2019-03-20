@@ -349,6 +349,7 @@ struct fg_dt_props {
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
 	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
 	u8	batt_therm_coeffs[BATT_THERM_NUM_COEFFS];
+	int	twm_soc_value;
 };
 
 /* parameters from battery profile */
@@ -494,7 +495,6 @@ struct fg_chip {
 	int			charge_type;
 	int			online_status;
 	int			last_soc;
-	int			twm_soc_value;
 	int			last_batt_temp;
 	int			health;
 	int			maint_soc;

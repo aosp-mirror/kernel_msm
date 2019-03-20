@@ -155,11 +155,13 @@
 #define RECHARGE_VBATT_THR_v2_OFFSET	1
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
+
+ /* JEITA battery model data and trigger values */
 #define DEFAULT_COLD_FV			4200
 #define DEFAULT_COLD_CC			100
 #define DEFAULT_HOT_FV			4305
 #define DEFAULT_HOT_CC			100
-#define DEFAULT_TWM_SOC_VALUE	6
+#define DEFAULT_TWM_SOC_VALUE	3
 
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
@@ -894,6 +896,7 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 	int rc;
 	bool usb_online;
 	int twm_ibat;
+	int twm_soc_value = chip->dt.twm_soc_value;
 
 	rc = fg_get_msoc_raw(chip, msoc);
 	if (rc < 0)
@@ -914,7 +917,7 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 				FULL_SOC_RAW - 2) + 1;
 
 	chip->last_soc = *msoc;
-	if (chip->last_soc <= chip->twm_soc_value) {
+	if (chip->last_soc <= twm_soc_value) {
 		fg_get_usb_online(chip, &usb_online);
 		fg_get_battery_current(chip, &twm_ibat);
 		if (usb_online || twm_ibat < 0)
@@ -922,7 +925,9 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 		else
 			*msoc = 0;
 	} else
-		*msoc = DIV_ROUND_CLOSEST((*msoc - chip->twm_soc_value) * FULL_CAPACITY, (FULL_CAPACITY - chip->twm_soc_value));
+		*msoc = DIV_ROUND_CLOSEST(
+				(*msoc - twm_soc_value) * FULL_CAPACITY,
+				(FULL_CAPACITY - twm_soc_value));
 
 	return 0;
 }
@@ -5763,6 +5768,13 @@ static int fg_parse_dt(struct fg_chip *chip)
 	chip->dt.disable_fg_twm = of_property_read_bool(node,
 					"qcom,fg-disable-in-twm");
 
+	rc = of_property_read_u32(node, "qcom,twm-soc-value", &temp);
+	if (rc < 0) {
+		chip->dt.twm_soc_value = DEFAULT_TWM_SOC_VALUE;
+	} else {
+		chip->dt.twm_soc_value = temp;
+	}
+
 	return 0;
 }
 
@@ -6019,7 +6031,6 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	chip->twm_soc_value = DEFAULT_TWM_SOC_VALUE;
 	chip->fg_can_restart_flag = 1;
 
 	rc = fg_get_battery_voltage(chip, &volt_uv);
