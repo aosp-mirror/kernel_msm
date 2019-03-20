@@ -34,6 +34,16 @@
 	google,usb-port-tz-name = "usbc-therm-monitor";
 	qcom,dc-icl-ua = <1100000>;
 	qcom,fv-max-uv = <4400000>;
+
+	qcom,chgr@1000 {
+		/delete-property/ interrupts;
+		/delete-property/ interrupt-names;
+	};
+
+	qcom,batif@1200 {
+		/delete-property/ interrupts;
+		/delete-property/ interrupt-names;
+	};
 };
 
 &pm8150b_gpios {
@@ -99,6 +109,33 @@
 		google_bms: google,bms {
 			compatible = "google,sm8150_bms";
 			google,psy-name = "charger";
+
+			sm8150_bms,chgr@1000 {
+				reg = <0x1000 0x100>;
+				interrupts =
+					<0x2 0x10 0x0 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x10 0x1 IRQ_TYPE_EDGE_RISING>;
+				interrupt-names =
+					"chgr-error",
+					"chg-state-change";
+			};
+
+			sm8150_bms,batif@1200 {
+				reg = <0x1200 0x100>;
+				interrupts =
+					<0x2 0x12 0x0 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x12 0x2 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x3 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x4 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x5 IRQ_TYPE_EDGE_BOTH>;
+				interrupt-names =
+						"bat-temp",
+						"bat-ov",
+						"bat-low",
+						"bat-therm-or-id-missing",
+						"bat-terminal-missing";
+			};
+
 		};
 	};
 };
