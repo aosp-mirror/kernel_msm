@@ -1004,6 +1004,53 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	return 0;
 }
 
+static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv,
+		struct iaxxx_crashlog_header *crashlog_header)
+{
+	int i;
+	int j = 0;
+	int ret;
+	uint32_t debuglog_reg_phyaddr =
+			iaxxx_conv_virtual_to_physical_register_address(
+				priv,
+				IAXXX_DEBUG_BLOCK_0_DEBUGLOG_ADDR_ADDR);
+	uint32_t crashlog_reg_phyaddr =
+			iaxxx_conv_virtual_to_physical_register_address(
+				priv,
+				IAXXX_DEBUG_BLOCK_0_CRASHLOG_ADDR_ADDR);
+
+	/* Reading the debug log address and size */
+	for (i = IAXXX_DBGLOG_CM4; i <= IAXXX_DBGLOG_DMX; i++) {
+		crashlog_header[i].log_type = i;
+		ret = priv->bulk_read(priv->dev,
+			debuglog_reg_phyaddr + i * 8,
+			&crashlog_header[i].log_addr, 2);
+		if (ret != 2) {
+			dev_err(priv->dev, "Log %d address @%x fail %d\n", i,
+					debuglog_reg_phyaddr, ret);
+			crashlog_header[i].log_addr = 0;
+			crashlog_header[i].log_size = 0;
+		}
+	}
+	/* Reading the crash log address and size */
+	for (i = IAXXX_CRASHLOG_CM4; i <= IAXXX_CRASHLOG_DMX; i++) {
+		crashlog_header[i].log_type = i;
+		ret = priv->bulk_read(priv->dev,
+			crashlog_reg_phyaddr + j * 8,
+			&crashlog_header[i].log_addr, 2);
+		j++;
+		if (ret != 2) {
+			dev_err(priv->dev, "Log %d address fail %d\n", i, ret);
+			crashlog_header[i].log_addr = 0;
+			crashlog_header[i].log_size = 0;
+		}
+	}
+	for (i = 0; i < IAXXX_MAX_LOG; i++)
+		dev_info(priv->dev, "addr 0x%x size 0x%x\n",
+				crashlog_header[i].log_addr,
+				crashlog_header[i].log_size);
+}
+
 static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 {
 	uint32_t buf_size;
@@ -1012,6 +1059,10 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 	uint32_t log_addr;
 	uint32_t log_size;
 	int ret;
+	struct iaxxx_crashlog_header crashlog_header[IAXXX_MAX_LOG];
+
+	/* Always read debug/crash log address before dumping */
+	iaxxx_crashlog_header_read(priv, crashlog_header);
 
 	/* If memory already allocated */
 	kfree(priv->crashlog->log_buffer);
@@ -1019,7 +1070,7 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 	/* Calculate total crash log dump size */
 	buf_size = sizeof(struct iaxxx_crashlog_header) * IAXXX_MAX_LOG;
 	for (i = 0; i < IAXXX_MAX_LOG; i++)
-		buf_size += priv->crashlog->header[i].log_size;
+		buf_size += crashlog_header[i].log_size;
 	priv->crashlog->log_buffer_size = buf_size;
 	/* Allocate the memory */
 	priv->crashlog->log_buffer = kzalloc(buf_size, GFP_KERNEL);
@@ -1030,11 +1081,11 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 	for (i = 0; i < IAXXX_MAX_LOG; i++) {
 		/* Copy header information */
 		memcpy(priv->crashlog->log_buffer + data_written,
-				&priv->crashlog->header[i],
+				&crashlog_header[i],
 				sizeof(struct iaxxx_crashlog_header));
 		data_written += sizeof(struct iaxxx_crashlog_header);
-		log_addr = priv->crashlog->header[i].log_addr;
-		log_size = priv->crashlog->header[i].log_size;
+		log_addr = crashlog_header[i].log_addr;
+		log_size = crashlog_header[i].log_size;
 		/* If size of the log is 0 */
 		if (!log_size)
 			continue;
@@ -1053,42 +1104,6 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 	return 0;
 }
 
-static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv)
-{
-	int i;
-	int j = 0;
-	int ret;
-
-	/* Reading the debug log address and size */
-	for (i = 0; i < IAXXX_MAX_LOG / 2 ; i++) {
-		priv->crashlog->header[i].log_type = i;
-		ret = regmap_bulk_read(priv->regmap,
-			IAXXX_DEBUG_BLOCK_0_DEBUGLOG_ADDR_ADDR + i * 8,
-			&priv->crashlog->header[i].log_addr, 2);
-		if (ret) {
-			dev_err(priv->dev, "Log %d address fail %d\n", i, ret);
-			priv->crashlog->header[i].log_addr = 0;
-			priv->crashlog->header[i].log_size = 0;
-		}
-	}
-	/* Reading the crash log address and size */
-	for (i = IAXXX_CRASHLOG_CM4; i < IAXXX_MAX_LOG; i++) {
-		priv->crashlog->header[i].log_type = i;
-		ret = regmap_bulk_read(priv->regmap,
-			IAXXX_DEBUG_BLOCK_0_CRASHLOG_ADDR_ADDR + j * 8,
-			&priv->crashlog->header[i].log_addr, 2);
-		j++;
-		if (ret) {
-			dev_err(priv->dev, "Log %d address fail %d\n", i, ret);
-			priv->crashlog->header[i].log_addr = 0;
-			priv->crashlog->header[i].log_size = 0;
-		}
-	}
-	for (i = 0; i < IAXXX_MAX_LOG; i++)
-		dev_dbg(priv->dev, "addr 0x%x size 0x%x\n",
-				priv->crashlog->header[i].log_addr,
-				priv->crashlog->header[i].log_size);
-}
 
 /**
  * iaxxx_fw_update_work - worker thread to download firmware.
@@ -1147,8 +1162,6 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 
 	set_bit(IAXXX_FLG_FW_READY, &priv->flags);
 	priv->iaxxx_state->power_state = IAXXX_NORMAL_MODE;
-
-	iaxxx_crashlog_header_read(priv);
 
 	iaxxx_fw_notifier_call(dev, IAXXX_EV_APP_MODE, NULL);
 

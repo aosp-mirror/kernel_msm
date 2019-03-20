@@ -214,8 +214,6 @@ struct iaxxx_crashlog_header {
 };
 
 struct iaxxx_crashlog {
-	struct iaxxx_crashlog_header header[IAXXX_MAX_LOG];
-	struct iaxxx_crashlog_header cm4header;
 	char *log_buffer;
 	uint32_t log_buffer_size;
 	uint32_t logs_read;

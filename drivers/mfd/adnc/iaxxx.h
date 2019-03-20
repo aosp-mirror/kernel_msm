@@ -195,4 +195,8 @@ int iaxxx_reset_to_sbl(struct iaxxx_priv *priv);
 uint32_t iaxxx_conv_physical_to_virtual_register_address(
 		struct iaxxx_priv *priv,
 		const uint32_t phy_addr);
+uint32_t iaxxx_conv_virtual_to_physical_register_address(
+		struct iaxxx_priv *priv,
+		const uint32_t virt_addr);
+
 #endif /* __MFD_IAXXX_H__ */

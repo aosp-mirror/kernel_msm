@@ -720,6 +720,33 @@ uint32_t iaxxx_conv_physical_to_virtual_register_address(
 }
 
 /**
+ * iaxxx_conv_virtual_to_physical_register_address
+ *   - Converts register virtual address to its physical address
+ *
+ * @priv: iaxxx private data
+ * @phy_addr: register virtual address
+ *
+ *
+ *
+ */
+uint32_t iaxxx_conv_virtual_to_physical_register_address(
+		struct iaxxx_priv *priv,
+		const uint32_t virt_addr)
+{
+	/* Get ARB block index to get the physical address
+	 * it is mapped to
+	 */
+	int blk_index = IAXXX_INDEX_FROM_VIRTUAL(virt_addr);
+	uint32_t virt_base_addr = IAXXX_VIRTUAL_BASE_ADDR(blk_index);
+
+	/* Return the physical address from the RBDT +
+	 * offset of the virtual address from its base
+	 */
+	return priv->sys_rbdt[RBDT_N_ADDR(blk_index)] +
+			(virt_addr-virt_base_addr);
+}
+
+/**
  * iaxxx_update_rbdt - updates the cached copy of the RBDT
  *
  * @priv: iaxxx private data
