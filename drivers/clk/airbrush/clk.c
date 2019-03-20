@@ -22,24 +22,6 @@
 
 static LIST_HEAD(clock_reg_cache_list);
 
-void airbrush_clk_save(void __iomem *base,
-				    struct airbrush_clk_reg_dump *rd,
-				    unsigned int num_regs)
-{
-	for (; num_regs > 0; --num_regs, ++rd)
-		if (airbrush_clk_readl(base + rd->offset, &rd->value))
-			return;
-}
-
-void airbrush_clk_restore(void __iomem *base,
-				      const struct airbrush_clk_reg_dump *rd,
-				      unsigned int num_regs)
-{
-	for (; num_regs > 0; --num_regs, ++rd)
-		if (airbrush_clk_writel(rd->value, base + rd->offset))
-			return;
-}
-
 struct airbrush_clk_reg_dump *airbrush_clk_alloc_reg_dump(
 						const unsigned long *rdump,
 						unsigned long nr_rdump)
@@ -275,59 +257,9 @@ void airbrush_clk_of_register_fixed_ext(struct airbrush_clk_provider *ctx,
 	__airbrush_clk_register_fixed_rate(ctx, fixed_rate_clk, nr_fixed_rate_clk);
 }
 
-#ifdef CONFIG_PM_SLEEP
-static int airbrush_clk_suspend(void)
-{
-	struct airbrush_clock_reg_cache *reg_cache;
-
-	list_for_each_entry(reg_cache, &clock_reg_cache_list, node)
-		airbrush_clk_save(reg_cache->reg_base, reg_cache->rdump,
-				reg_cache->rd_num);
-	return 0;
-}
-
-static void airbrush_clk_resume(void)
-{
-	struct airbrush_clock_reg_cache *reg_cache;
-
-	list_for_each_entry(reg_cache, &clock_reg_cache_list, node)
-		airbrush_clk_restore(reg_cache->reg_base, reg_cache->rdump,
-				reg_cache->rd_num);
-}
-
-static struct syscore_ops airbrush_clk_syscore_ops = {
-	.suspend = airbrush_clk_suspend,
-	.resume = airbrush_clk_resume,
-};
-
-static void airbrush_clk_sleep_init(void __iomem *reg_base,
-		const unsigned long *rdump,
-		unsigned long nr_rdump)
-{
-	struct airbrush_clock_reg_cache *reg_cache;
-
-	reg_cache = kzalloc(sizeof(struct airbrush_clock_reg_cache),
-			GFP_KERNEL);
-	if (!reg_cache)
-		panic("could not allocate register reg_cache.\n");
-	reg_cache->rdump = airbrush_clk_alloc_reg_dump(rdump, nr_rdump);
-
-	if (!reg_cache->rdump)
-		panic("could not allocate register dump storage.\n");
-
-	if (list_empty(&clock_reg_cache_list))
-		register_syscore_ops(&airbrush_clk_syscore_ops);
-
-	reg_cache->reg_base = reg_base;
-	reg_cache->rd_num = nr_rdump;
-	list_add_tail(&reg_cache->node, &clock_reg_cache_list);
-}
-
-#else
 static void airbrush_clk_sleep_init(void __iomem *reg_base,
 		const unsigned long *rdump,
 		unsigned long nr_rdump) {}
-#endif
 
 /*
  * Common function which registers plls, muxes, dividers and gates
