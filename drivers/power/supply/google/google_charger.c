@@ -51,6 +51,7 @@
 #define DRV_DEFAULTCC_UPDATE_INTERVAL	30000
 #define DRV_DEFAULTCV_UPDATE_INTERVAL	2000
 
+#define DEFAULT_VOTER			"DEFAULT_VOTER"
 #define THERMAL_DAEMON_VOTER		"THERMAL_DAEMON_VOTER"
 #define USER_VOTER			"USER_VOTER"	/* same as QCOM */
 #define MSC_CHG_VOTER			"msc_chg"
@@ -145,6 +146,8 @@ struct chg_drv {
 	struct votable	*dc_suspend_votable;
 	struct votable	*dc_icl_votable;
 
+	int batt_profile_fcc_ua;
+	int batt_profile_fv_uv;
 	int fv_uv;		/* newgen */
 	int cc_max;		/* newgen */
 	int chg_cc_tolerance;
@@ -1017,6 +1020,16 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	else if (chg_drv->pps_cc_tolerance_pct > PPS_CC_TOLERANCE_PCT_MAX)
 		chg_drv->pps_cc_tolerance_pct = PPS_CC_TOLERANCE_PCT_MAX;
 
+	ret = of_property_read_u32(node, "google,fcc-max-ua",
+				   &chg_drv->batt_profile_fcc_ua);
+	if (ret < 0)
+		chg_drv->batt_profile_fcc_ua = -EINVAL;
+
+	ret = of_property_read_u32(node, "google,fv-max-uv",
+				   &chg_drv->batt_profile_fv_uv);
+	if (ret < 0)
+		chg_drv->batt_profile_fv_uv = -EINVAL;
+
 	pr_info("charging profile in the battery\n");
 
 	return 0;
@@ -1365,14 +1378,12 @@ static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 
 		rc = chg_set_charger(chg_psy, fv_uv, cc_max);
 		if (rc == 0) {
-			chg_drv->cc_max = cc_max;
-			chg_drv->fv_uv = fv_uv;
-
 			pr_info("MSC_CHG fv_uv=%d->%d cc_max=%d->%d rc=%d\n",
 				chg_drv->fv_uv, fv_uv,
 				chg_drv->cc_max, cc_max,
 				rc);
-
+			chg_drv->cc_max = cc_max;
+			chg_drv->fv_uv = fv_uv;
 		}
 	}
 
@@ -1679,6 +1690,10 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 	 * "qcom-battery" class so it might not need too straightforward to
 	 * remove all dependencies.
 	 */
+	vote(chg_drv->msc_fv_votable, DEFAULT_VOTER,
+	     chg_drv->batt_profile_fv_uv > 0, chg_drv->batt_profile_fv_uv);
+	vote(chg_drv->msc_fcc_votable, DEFAULT_VOTER,
+	     chg_drv->batt_profile_fcc_ua > 0, chg_drv->batt_profile_fcc_ua);
 
 	vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, true, 0);
 	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, 0);
