@@ -39,6 +39,15 @@
 }
 
 static struct device_attribute power_supply_attrs[];
+static struct delayed_work healthd_init_delaywork;
+static bool healthd_init_done;
+#define WAIT_HEALTHD_INIT_DELAY	25000	//Delay 25s
+
+static void healthd_init_delay_work(struct work_struct *work)
+{
+	pr_info("healthd_init_delay_work done.\n");
+	healthd_init_done = 1;
+}
 
 static ssize_t power_supply_show_property(struct device *dev,
 					  struct device_attribute *attr,
@@ -87,9 +96,29 @@ static ssize_t power_supply_show_property(struct device *dev,
 	struct power_supply *psy = dev_get_drvdata(dev);
 	const ptrdiff_t off = attr - power_supply_attrs;
 	union power_supply_propval value;
+	bool usb_fake_online = 0;
 
 	if (off == POWER_SUPPLY_PROP_TYPE) {
-		value.intval = psy->desc->type;
+		if (!strcmp(psy->desc->name, "usb")) {
+			value.intval = 0;
+			ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
+			if (ret < 0) {
+				if (ret == -ENODATA)
+					dev_dbg(dev, "driver has no data for `%s' property\n", attr->attr.name);
+				else if (ret != -ENODEV)
+					dev_err(dev, "driver failed to report `%s' property: %zd\n", attr->attr.name, ret);
+			} else {
+				usb_fake_online = value.intval;
+			}
+
+			//When healthd initialize, return type "USB" for usb power supply
+			if (!healthd_init_done)
+				value.intval = POWER_SUPPLY_TYPE_USB;
+			else
+				value.intval = psy->desc->type;
+			pr_info("[power_supply_sysfs] usb_online: %d, usb_type: %s\n", usb_fake_online, type_text[value.intval]);
+		} else
+			value.intval = psy->desc->type;
 	} else {
 		ret = power_supply_get_property(psy, off, &value);
 
@@ -394,6 +423,10 @@ static const struct attribute_group *power_supply_attr_groups[] = {
 void power_supply_init_attrs(struct device_type *dev_type)
 {
 	int i;
+
+	healthd_init_done = 0;
+	INIT_DEFERRABLE_WORK(&healthd_init_delaywork, healthd_init_delay_work);
+	schedule_delayed_work(&healthd_init_delaywork, msecs_to_jiffies(WAIT_HEALTHD_INIT_DELAY));
 
 	dev_type->groups = power_supply_attr_groups;
 
