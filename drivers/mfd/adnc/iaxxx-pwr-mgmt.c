@@ -908,9 +908,16 @@ int iaxxx_power_up_core_mem(
 	struct iaxxx_priv *priv, uint32_t proc_id)
 {
 	uint32_t status;
-	int rc;
+	int rc = 0;
 
 	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
+
+	mutex_lock(&priv->proc_on_off_lock);
+
+	/* Add processor usage count for SSP only */
+	if ((proc_id == IAXXX_SSP_ID) &&
+		atomic_inc_return(&priv->proc_on_off_ref_cnt) != 1)
+		goto exit;
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_STALL_ENABLE);
 	if (rc) {
@@ -961,6 +968,7 @@ int iaxxx_power_up_core_mem(
 		dev_err(priv->dev, "Update blk failed after download %s(): %d\n",
 				__func__, status);
 exit:
+	mutex_unlock(&priv->proc_on_off_lock);
 	return rc;
 }
 
@@ -971,6 +979,13 @@ int iaxxx_power_down_core_mem(
 	int rc = 0;
 
 	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
+
+	mutex_lock(&priv->proc_on_off_lock);
+
+	/* Check processor usage count for SSP before turning off */
+	if ((proc_id == IAXXX_SSP_ID) &&
+		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0)
+		goto exit;
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
 	if (rc) {
@@ -1011,6 +1026,7 @@ int iaxxx_power_down_core_mem(
 				__func__, status);
 
 exit:
+	mutex_unlock(&priv->proc_on_off_lock);
 	return rc;
 }
 
@@ -1021,6 +1037,14 @@ int iaxxx_power_up_core_mem_on(
 	int rc = 0;
 
 	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
+
+	mutex_lock(&priv->proc_on_off_lock);
+
+	/* Add processor usage count for SSP only */
+	if ((proc_id == IAXXX_SSP_ID) &&
+		atomic_inc_return(&priv->proc_on_off_ref_cnt) != 1)
+		goto exit;
+
 	rc = iaxxx_set_mem_pwr_ctrl(priv, proc_id, MEM_RETN_OFF);
 	if (rc) {
 		dev_err(priv->dev, "%s mem power ctrl MEM_RETN_OFF failed = %0x\n",
@@ -1042,6 +1066,7 @@ int iaxxx_power_up_core_mem_on(
 				__func__, status);
 
 exit:
+	mutex_unlock(&priv->proc_on_off_lock);
 	return rc;
 }
 
@@ -1049,9 +1074,16 @@ int iaxxx_power_down_core_mem_in_retn(
 	struct iaxxx_priv *priv, uint32_t proc_id)
 {
 	uint32_t status;
-	int rc;
+	int rc = 0;
 
 	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
+
+	mutex_lock(&priv->proc_on_off_lock);
+
+	/* Check processor usage count for SSP before turning off */
+	if ((proc_id == IAXXX_SSP_ID) &&
+		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0)
+		goto exit;
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
 	if (rc) {
@@ -1092,6 +1124,7 @@ int iaxxx_power_down_core_mem_in_retn(
 				__func__, status);
 
 exit:
+	mutex_unlock(&priv->proc_on_off_lock);
 	return rc;
 }
 
