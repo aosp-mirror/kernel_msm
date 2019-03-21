@@ -1981,41 +1981,13 @@ static int iaxxx_put_core_boot_##proc_name( \
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev); \
 	u32 value = ucontrol->value.enumerated.item[0]; \
 	int ret = 0; \
-	dev_dbg(codec->dev, "enter %s connection\n", __func__); \
+	dev_dbg(dev, "enter %s connection\n", __func__); \
 	if (iaxxx->core_boot_status[core_mask] == value) \
 		return ret; \
-	if (value) { \
-		ret = iaxxx_set_proc_pwr_ctrl(priv, core_mask, \
-					PROC_STALL); \
-		if (ret) { \
-			dev_err(dev, \
-			"proc_pwr_ctrl stall fail :%d\n", ret); \
-			return ret; \
-		} \
-		ret = iaxxx_boot_core(priv, core_mask); \
-		if (ret) { \
-			dev_err(dev, \
-			"boot_core (%d) fail :%d\n", core_mask, ret); \
-			return ret; \
-		} \
-		ret = iaxxx_set_proc_pwr_ctrl(priv, core_mask, \
-					PROC_RUNNING); \
-		if (ret) \
-			dev_err(dev, \
-			"proc_pwr_ctrl running fail :%d\n", ret); \
-	} else { \
-		ret = iaxxx_set_mem_pwr_ctrl(priv, core_mask, MEM_OFF); \
-		if (ret) { \
-			dev_err(dev, \
-			"mem_pwr_ctrl off fail :%d\n", ret); \
-			return ret; \
-		} \
-		ret = iaxxx_set_proc_pwr_ctrl(priv, core_mask, PROC_OFF); \
-		if (ret) { \
-			dev_err(dev, \
-			"proc_pwr_ctrl off fail :%d\n", ret); \
-			return ret; \
-		} \
+	ret = iaxxx_set_proc_mem_on_off_ctrl(priv, value); \
+	if (ret) { \
+		dev_err(dev, "set proc mem on off failed\n"); \
+		return ret; \
 	} \
 	iaxxx->core_boot_status[core_mask] = value; \
 	return ret; \

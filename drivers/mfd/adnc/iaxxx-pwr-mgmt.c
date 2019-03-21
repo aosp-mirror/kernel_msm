@@ -598,7 +598,7 @@ static uint32_t proc_id_to_proc_state_mask(
 	return proc_pwr_ctrl_val;
 }
 
-int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
+static int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 			uint32_t proc_id, uint32_t proc_state)
 {
 	uint32_t proc_pwr_ctrl_val = 0;
@@ -738,7 +738,7 @@ static uint32_t proc_id_to_mem_state_mask(
 	return mem_pwr_ctrl_val;
 }
 
-int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
+static int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 			uint32_t proc_id, uint32_t mem_state)
 {
 	uint32_t mem_pwr_ctrl_val = 0;
@@ -836,6 +836,52 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv,
 exit:
 	return rc;
 
+}
+
+int iaxxx_set_proc_mem_on_off_ctrl(struct iaxxx_priv *priv,
+				uint32_t value)
+{
+	int ret = 0;
+
+	mutex_lock(&priv->proc_on_off_lock);
+	if (value &&
+		(atomic_inc_return(&priv->proc_on_off_ref_cnt) == 1)) {
+		ret = iaxxx_set_proc_pwr_ctrl(priv, IAXXX_SSP_ID,
+					PROC_STALL);
+		if (ret) {
+			dev_err(priv->dev,
+			"proc_pwr_ctrl stall fail :%d\n", ret);
+			goto proc_mem_on_off_err;
+		}
+		ret = iaxxx_boot_core(priv, IAXXX_SSP_ID);
+		if (ret) {
+			dev_err(priv->dev,
+			"boot_core (%d) fail :%d\n", IAXXX_SSP_ID, ret);
+			goto proc_mem_on_off_err;
+		}
+		ret = iaxxx_set_proc_pwr_ctrl(priv, IAXXX_SSP_ID,
+					PROC_RUNNING);
+		if (ret)
+			dev_err(priv->dev,
+			"proc_pwr_ctrl running fail :%d\n", ret);
+	} else if (!value &&
+		(atomic_dec_return(&priv->proc_on_off_ref_cnt) == 0)) {
+		ret = iaxxx_set_mem_pwr_ctrl(priv, IAXXX_SSP_ID, MEM_OFF);
+		if (ret) {
+			dev_err(priv->dev,
+			"mem_pwr_ctrl off fail :%d\n", ret);
+			goto proc_mem_on_off_err;
+		}
+		ret = iaxxx_set_proc_pwr_ctrl(priv, IAXXX_SSP_ID, PROC_OFF);
+		if (ret) {
+			dev_err(priv->dev,
+			"proc_pwr_ctrl off fail :%d\n", ret);
+			goto proc_mem_on_off_err;
+		}
+	}
+proc_mem_on_off_err:
+	mutex_unlock(&priv->proc_on_off_lock);
+	return ret;
 }
 
 /*

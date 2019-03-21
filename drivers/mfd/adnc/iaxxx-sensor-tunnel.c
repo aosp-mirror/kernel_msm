@@ -38,6 +38,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-sensor-header.h>
 #include <linux/mfd/adnc/iaxxx-tunnel-intf.h>
 #include <linux/mfd/adnc/iaxxx-sensor-tunnel.h>
+#include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include <linux/uaccess.h>
 #include "iaxxx.h"
 #include "iaxxx-cdev.h"
@@ -76,6 +77,11 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 	if (priv == NULL)
 		return -EINVAL;
 	if (enable) { /* Set up the route */
+		ret = iaxxx_set_proc_mem_on_off_ctrl(priv, enable);
+		if (ret) {
+			dev_err(priv->dev, "set proc mem on failed\n");
+			return ret;
+		}
 		regmap_update_bits(priv->regmap, IAXXX_GPIO_SWPORTB_DDR_ADDR,
 				IAXXX_GPIO_SWPORTB_DDR_COMMF_2_MASK,
 				(0x1 << IAXXX_GPIO_SWPORTB_DDR_COMMF_2_POS));
@@ -299,6 +305,11 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		if (ret) {
 			dev_err(priv->dev, "Error in tearing VYSNC Sensor  route\n");
 			return -EIO;
+		}
+		ret = iaxxx_set_proc_mem_on_off_ctrl(priv, enable);
+		if (ret) {
+			dev_err(priv->dev, "set proc mem off failed\n");
+			return ret;
 		}
 	}
 

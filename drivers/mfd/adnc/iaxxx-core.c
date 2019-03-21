@@ -1286,6 +1286,8 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	priv->event_queue->r_index = -1;
 	mutex_unlock(&priv->event_queue_lock);
 
+	atomic_set(&priv->proc_on_off_ref_cnt, 0);
+
 	if (priv->cm4_crashed) {
 		dev_info(priv->dev, "CM4 Core crashed\n");
 		priv->cm4_crashed = false;
@@ -1648,6 +1650,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->module_lock);
 	mutex_init(&priv->crashdump_lock);
 	mutex_init(&priv->pm_mutex);
+	mutex_init(&priv->proc_on_off_lock);
 	mutex_init(&priv->debug_mutex);
 
 	iaxxx_init_kthread_worker(&priv->worker);
@@ -1752,6 +1755,7 @@ err_regdump_init:
 	mutex_destroy(&priv->module_lock);
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
+	mutex_destroy(&priv->proc_on_off_lock);
 	mutex_destroy(&priv->debug_mutex);
 err_power_init:
 	return rc;
@@ -1789,6 +1793,7 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	mutex_destroy(&priv->module_lock);
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
+	mutex_destroy(&priv->proc_on_off_lock);
 	mutex_destroy(&priv->debug_mutex);
 
 	iaxxx_remove_sysfs(priv);

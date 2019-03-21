@@ -268,6 +268,9 @@ struct iaxxx_priv {
 	/* Register module locks */
 	struct mutex module_lock;
 
+	/* Processor on and off lock */
+	struct mutex proc_on_off_lock;
+
 	/* Event work queue */
 	struct mutex event_work_lock;
 	struct mutex event_queue_lock;
@@ -322,6 +325,7 @@ struct iaxxx_priv {
 	/* iaxxx core flags for atomic bit field operations */
 	unsigned long flags;
 
+	atomic_t proc_on_off_ref_cnt;
 	/* Synchronize suspend/resume on this */
 	struct iaxxx_system_state *iaxxx_state;
 	bool sensor_en[IAXXX_SENSR_ID_MASK + 1];
