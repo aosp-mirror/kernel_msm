@@ -14,7 +14,7 @@
 	mb-therm-adc {
 		trips {
 			shutdown-config {
-				temperature = <60000>;
+				temperature = <62000>;
 				hysteresis = <1000>;
 				type = "critical";
 			};
