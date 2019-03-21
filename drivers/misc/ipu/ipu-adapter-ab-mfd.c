@@ -540,8 +540,7 @@ static int ipu_adapter_ab_mfd_atomic_sync32_shared_memory(struct device *dev,
 			__iowmb();
 			writel_relaxed(wr_val, io_vaddr);
 		} else {
-			*buffer_vaddr = readl_relaxed(io_vaddr);
-			__iormb();
+			*buffer_vaddr = readl(io_vaddr);
 		}
 	} else {
 		ipu_adapter_ab_mfd_sync_dma(dev, sbuf, offset,
