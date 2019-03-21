@@ -22,8 +22,8 @@
 #define ASV_TABLE_VERSION_SHIFT 17
 #define DVFS_DONE BIT(16)
 #define MIN_ASV_VERSION 0
-#define MAX_ASV_VERSION 0
-#define NUM_GROUPS 9
+#define MAX_ASV_VERSION 2
+#define NUM_GROUPS 16
 
 #define IPU_RO_ADDR 0x3010
 #define IPU_RO_MASK 0xFFFF
@@ -38,23 +38,47 @@
 #define REGULATOR_STEP 6250
 
 static u32 ipu_ro_table[MAX_ASV_VERSION + 1][NUM_GROUPS + 1] = {
-	{ 6420, 6584, 6821, 7057, 7293,
-	  7529, 7765, 8002, 8238, 8420 },
+	[0] = { 6420, 6584, 6821, 7057, 7293,
+		7529, 7765, 8002, 8238, 8420,
+		   0,    0,    0,    0,    0,
+		   0,    0 },
+	[2] = { 6451, 6540, 6659, 6780, 6900,
+		7020, 7142, 7260, 7383, 7504,
+		7625, 7748, 7867, 7988, 8109,
+		8230, 8532 },
 };
 
 static u32 ipu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
-	{ 775000, 768750, 756250, 743750, 731250,
-	  712500, 700000, 687500, 675000 },
+	[0] = { 775000, 768750, 756250, 743750, 731250,
+		712500, 700000, 687500, 675000, 0,
+		0,      0,      0,      0,      0,
+		0 },
+	[2] = { 781250, 775000, 768750, 762500, 756250,
+		750000, 743750, 737500, 731250, 725000,
+		712500, 706250, 700000, 693750, 687500,
+		681250},
 };
 
 static u32 tpu_ro_table[MAX_ASV_VERSION + 1][NUM_GROUPS + 1] = {
-	{ 5130, 5255, 5434, 5614, 5794,
-	  5973, 6152, 6331, 6512, 6772 },
+	[0] = { 5130, 5255, 5434, 5614, 5794,
+		5973, 6152, 6331, 6512, 6772,
+		   0,    0,    0,    0,    0,
+		   0,    0 },
+	[2] = { 5062, 5150, 5250, 5350, 5450,
+		5551, 5650, 5750, 5851, 5950,
+		6051, 6150, 6250, 6350, 6450,
+		6550, 6772 },
 };
 
 static u32 tpu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
-	{ 793750, 781250, 768750, 756250, 743750,
-	  731250, 712500, 700000, 687500 },
+	[0] = { 793750, 781250, 768750, 756250, 743750,
+		731250, 712500, 700000, 687500, 0,
+		0,      0,      0,      0,	0,
+		0 },
+	[2] = { 806250, 800000, 793750, 787500, 781250,
+		775000, 768750, 762500, 756250, 750000,
+		743750, 737500, 731250, 725000, 712500,
+		706250},
 };
 
 static u32 get_ipu_ro(void)
@@ -157,8 +181,11 @@ int ab_lvcc(struct ab_state_context *sc, int chip_state)
 	else
 		smps_volt = max(info->ipu_volt, info->tpu_volt);
 
-	dev_info(sc->dev, "ipu_volt:%d, tpu_volt:%d, final:%d\n",
-			info->ipu_volt, info->tpu_volt, smps_volt);
+	dev_info(sc->dev, "asv_ver:%d, ipu_ro:%d ipu_uv:%d, tpu_ro:%d tpu_uv:%d, final_uv:%d\n",
+			info->asv_version,
+			get_ipu_ro(), info->ipu_volt,
+			get_tpu_ro(), info->tpu_volt,
+			smps_volt);
 	return regulator_set_voltage(sc->smps1, smps_volt,
 				smps_volt + REGULATOR_STEP);
 }
