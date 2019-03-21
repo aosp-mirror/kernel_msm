@@ -1,4 +1,4 @@
-/*
+  /*
  * JQS management support for the Paintbox programmable IPU
  *
  * Copyright (C) 2018 Google, Inc.
@@ -679,8 +679,10 @@ static int ipu_core_jqs_stop(struct device *dev)
 
 	mutex_lock(&bus->jqs.lock);
 
+	if (bus->jqs.runtime_requested)
+		ipu_core_jqs_disable_firmware_requested(bus);
+
 	bus->jqs.runtime_requested = false;
-	ipu_core_jqs_disable_firmware_requested(bus);
 
 	mutex_unlock(&bus->jqs.lock);
 
