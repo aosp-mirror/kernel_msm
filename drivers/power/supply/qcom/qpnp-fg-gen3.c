@@ -156,6 +156,13 @@
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
 
+ /* JEITA battery model data and trigger values */
+#define DEFAULT_COLD_FV			4200
+#define DEFAULT_COLD_CC			100
+#define DEFAULT_HOT_FV			4305
+#define DEFAULT_HOT_CC			100
+#define DEFAULT_TWM_SOC_VALUE	3
+
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
 static int fg_decode_value_16b(struct fg_sram_param *sp,
@@ -170,6 +177,7 @@ static void fg_encode_current(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val_ma, u8 *buf);
 static void fg_encode_default(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val, u8 *buf);
+static int __fg_restart(struct fg_chip *chip);
 
 static struct fg_irq_info fg_irqs[FG_IRQ_MAX];
 
@@ -655,6 +663,86 @@ static int fg_get_jeita_threshold(struct fg_chip *chip,
 	return 0;
 }
 
+#define JEITA_DYNAMIC_HOT_THRES			350
+#define JEITA_DYNAMIC_COLD_THRES			250
+#define CHGR_FLOAT_VOLTAGE_CFG_REG		0x1070
+#define CHGR_FAST_CHARGE_CURRENT_CFG_REG	0x1061
+#define CHGR_JEITA_EN_CFG					0x1090
+#define CHGR_JEITA_FVCOMP_CFG_REG			0x1091
+#define CHGR_JEITA_CCCOMP_CFG_REG			0x1092
+#define FV_STEP							75
+#define CC_STEP							25
+//JEITA FV = Float Voltage - (DATA x 7.5mV)
+static void fg_set_fv_compensation(struct fg_chip *chip, int vfloat_comp)
+{
+	u8 stat = 0, delta = 0;
+	int rc = 0, vfloat = 0;
+
+	rc = fg_read(chip, CHGR_FLOAT_VOLTAGE_CFG_REG, &stat, 1);
+	if (rc < 0) {
+		pr_err("failed to read FLOAT_VOLTAGE_CFG_REG\n");
+		return;
+	}
+
+	// float voltage unit is 0.1 mV
+	vfloat = 34875 + stat * FV_STEP;
+	pr_info("vfloat_cfg: 0x%x (%d mv), vfloat_comp: %d\n", stat, vfloat, vfloat_comp);
+
+	vfloat_comp = vfloat_comp * 10;
+	if (vfloat - vfloat_comp >= 0) {
+		delta = (vfloat - vfloat_comp) / FV_STEP;
+		if (((vfloat - vfloat_comp) % FV_STEP) != 0)
+			delta++;
+		pr_debug("delta = %d, fv_comp_formula: %d - %d = %d\n", delta, vfloat, vfloat_comp, vfloat - vfloat_comp);
+
+		rc = fg_write(chip, CHGR_JEITA_FVCOMP_CFG_REG, &delta, 1);
+		if (rc < 0)
+			pr_err("Couldn't write CHGR_JEITA_FVCOMP_CFG_REG\n");
+	}
+}
+
+//JEITA CC = Fast Charge Current - DATA x 25mA
+static void fg_set_cc_compensation(struct fg_chip *chip, int current_comp)
+{
+	u8 stat = 0, delta = 0;
+	int rc = 0, fast_curret = 0;
+
+	rc = fg_read(chip, CHGR_FAST_CHARGE_CURRENT_CFG_REG, &stat, 1);
+	if (rc < 0) {
+		pr_err("failed to read FAST_CHARGE_CURRENT_CFG_REG\n");
+		return;
+	}
+
+	// fast current comp ( mA)
+	fast_curret = stat * CC_STEP;
+	pr_info("fast_current_cfg: 0x%x (%d mA), current_comp: %d mA\n", stat, fast_curret, current_comp);
+
+	if (fast_curret - current_comp >= 0) {
+		delta = (fast_curret - current_comp) / (CC_STEP);
+		if (((fast_curret - current_comp) % CC_STEP) != 0)
+			delta++;
+		pr_debug("delta = %d, cc_comp_formula: %d - %d = %d\n", delta, fast_curret, current_comp, fast_curret - current_comp);
+
+		rc = fg_write(chip, CHGR_JEITA_CCCOMP_CFG_REG, &delta, 1);
+		if (rc < 0)
+			pr_err("Couldn't write CHGR_JEITA_CCCOMP_CFG_REG\n");
+	}
+}
+
+static void fg_set_jeita_fv_cc_compensation(struct fg_chip *chip, int temp)
+{
+	pr_debug("smblib_set_jeita_fv_cc: temp = %d, model = %d\n", temp,  chip->dt.jeita_dynamic_model);
+	if ((temp > JEITA_DYNAMIC_HOT_THRES) && (chip->dt.jeita_dynamic_model == MODEL_COLD)) {
+		chip->dt.jeita_dynamic_model = MODEL_HOT;
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_hot_fv_cc[JEITA_CC]);
+	} else if ((temp < JEITA_DYNAMIC_COLD_THRES) && (chip->dt.jeita_dynamic_model == MODEL_HOT)) {
+		chip->dt.jeita_dynamic_model = MODEL_COLD;
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_CC]);
+	}
+}
+
 #define BATT_TEMP_NUMR		1
 #define BATT_TEMP_DENR		1
 static int fg_get_battery_temp(struct fg_chip *chip, int *val)
@@ -676,6 +764,11 @@ static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 	/* Value is in Kelvin; Convert it to deciDegC */
 	temp = (temp - 273) * 10;
 	*val = temp;
+
+	//check the jeita model or not
+	if (chip->dt.jeita_dynamic_model != MODEL_DISABLE)
+		fg_set_jeita_fv_cc_compensation(chip, temp);
+
 	return 0;
 }
 
@@ -781,11 +874,29 @@ static int fg_get_msoc_raw(struct fg_chip *chip, int *val)
 	return 0;
 }
 
+static int fg_get_usb_online(struct fg_chip *chip, bool *usb_online)
+{
+	ssize_t ret = 0;
+	struct power_supply *psy = power_supply_get_by_name("usb");
+	union power_supply_propval value;
+
+	value.intval = 0;
+	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
+	if (ret < 0)
+		pr_err("driver failed to report USB property\n");
+	*usb_online = value.intval;
+
+	return ret;
+}
+
 #define FULL_CAPACITY	100
 #define FULL_SOC_RAW	255
 static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 {
 	int rc;
+	bool usb_online;
+	int twm_ibat;
+	int twm_soc_value = chip->dt.twm_soc_value;
 
 	rc = fg_get_msoc_raw(chip, msoc);
 	if (rc < 0)
@@ -804,6 +915,20 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 	else
 		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
 				FULL_SOC_RAW - 2) + 1;
+
+	chip->last_soc = *msoc;
+	if (chip->last_soc <= twm_soc_value) {
+		fg_get_usb_online(chip, &usb_online);
+		fg_get_battery_current(chip, &twm_ibat);
+		if (usb_online || twm_ibat < 0)
+			*msoc = 1;
+		else
+			*msoc = 0;
+	} else
+		*msoc = DIV_ROUND_CLOSEST(
+				(*msoc - twm_soc_value) * FULL_CAPACITY,
+				(FULL_CAPACITY - twm_soc_value));
+
 	return 0;
 }
 
@@ -905,7 +1030,7 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 		return 0;
 	}
 
-	if (chip->fg_restarting) {
+	if (chip->fg_restarting || !chip->fg_can_restart_flag) {
 		*val = chip->last_soc;
 		return 0;
 	}
@@ -1034,7 +1159,8 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 	if (rc < 0) {
 		pr_err("battery type unavailable, rc:%d\n", rc);
 		return rc;
-	}
+	} else
+		pr_info("profile name: %s\n", chip->bp.batt_type_str);
 
 	rc = of_property_read_u32(profile_node, "qcom,max-voltage-uv",
 			&chip->bp.float_volt_uv);
@@ -2773,6 +2899,14 @@ static const char *fg_get_cycle_count(struct fg_chip *chip)
 	return buf;
 }
 
+static void fg_restart_work(struct work_struct *work)
+{
+	struct fg_chip *chip = container_of(work, struct fg_chip,
+					    fg_restart_work.work);
+
+	chip->fg_can_restart_flag = 1;
+}
+
 #define ESR_SW_FCC_UA				100000	/* 100mA */
 #define ESR_EXTRACTION_ENABLE_MASK		BIT(0)
 static void fg_esr_sw_work(struct work_struct *work)
@@ -2915,6 +3049,9 @@ static void status_change_work(struct work_struct *work)
 			struct fg_chip, status_change_work);
 	union power_supply_propval prop = {0, };
 	int rc, batt_temp;
+	int msoc;
+	bool usb_online;
+	static bool fg_restart_once;
 
 	if (!batt_psy_initialized(chip)) {
 		fg_dbg(chip, FG_STATUS, "Charger not available?!\n");
@@ -2938,6 +3075,20 @@ static void status_change_work(struct work_struct *work)
 	}
 
 	chip->charge_status = prop.intval;
+	fg_get_prop_capacity(chip, &msoc);
+	fg_get_usb_online(chip, &usb_online);
+	if (!usb_online && fg_restart_once)
+		fg_restart_once = 0;
+
+	if (chip->charge_status == POWER_SUPPLY_STATUS_FULL && msoc < 99 && !fg_restart_once) {
+		if (chip->fg_can_restart_flag) {
+			fg_restart_once = 1;
+			chip->fg_can_restart_flag = 0;
+			schedule_delayed_work(&chip->fg_restart_work, msecs_to_jiffies(3000));
+			__fg_restart(chip);
+		}
+	}
+
 	rc = power_supply_get_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_CHARGE_TYPE, &prop);
 	if (rc < 0) {
@@ -3308,6 +3459,13 @@ done:
 
 	if (chip->profile_load_status == PROFILE_LOADED)
 		chip->profile_loaded = true;
+
+	if (chip->dt.jeita_en) {
+		//wait fcc applied, then set jeita
+		fg_set_fv_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_FV]);
+		fg_set_cc_compensation(chip, chip->dt.jeita_soft_cold_fv_cc[JEITA_CC]);
+		chip->dt.jeita_dynamic_model = MODEL_COLD;
+	}
 
 	fg_dbg(chip, FG_STATUS, "profile loaded successfully");
 out:
@@ -4481,6 +4639,14 @@ static int fg_hw_init(struct fg_chip *chip)
 		return rc;
 	}
 
+	if (chip->dt.jeita_en)
+		val = 0x1f;
+	else
+		val = 0;
+	rc = fg_write(chip, CHGR_JEITA_EN_CFG, &val, 1);
+	if (rc < 0)
+		pr_err("Error in writing CHGR_JEITA_EN_CFG\n");
+
 	if (chip->pmic_rev_id->pmic_subtype == PMI8998_SUBTYPE) {
 		chip->esr_timer_charging_default[TIMER_RETRY] =
 			DEFAULT_ESR_CHG_TIMER_RETRY;
@@ -4907,7 +5073,7 @@ static struct fg_irq_info fg_irqs[FG_IRQ_MAX] = {
 	[MSOC_DELTA_IRQ] = {
 		.name		= "msoc-delta",
 		.handler	= fg_delta_msoc_irq_handler,
-		.wakeable	= true,
+		.wakeable	= false,
 	},
 	[BSOC_DELTA_IRQ] = {
 		.name		= "bsoc-delta",
@@ -5148,8 +5314,8 @@ static int fg_parse_ki_coefficients(struct fg_chip *chip)
 #define DEFAULT_RECHARGE_SOC_THR	95
 #define DEFAULT_BATT_TEMP_COLD		0
 #define DEFAULT_BATT_TEMP_COOL		5
-#define DEFAULT_BATT_TEMP_WARM		45
-#define DEFAULT_BATT_TEMP_HOT		50
+#define DEFAULT_BATT_TEMP_WARM		55
+#define DEFAULT_BATT_TEMP_HOT		60
 #define DEFAULT_CL_START_SOC		15
 #define DEFAULT_CL_MIN_TEMP_DECIDEGC	150
 #define DEFAULT_CL_MAX_TEMP_DECIDEGC	500
@@ -5450,6 +5616,34 @@ static int fg_parse_dt(struct fg_chip *chip)
 	else
 		chip->dt.jeita_hyst_temp = temp;
 
+	rc = of_property_read_u32(node, "qcom,fg-jeita-en", &temp);
+	if (rc < 0)
+		chip->dt.jeita_en = 0;
+	else
+		chip->dt.jeita_en = temp;
+
+	chip->dt.jeita_soft_hot_fv_cc[JEITA_FV] = DEFAULT_HOT_FV;
+	chip->dt.jeita_soft_hot_fv_cc[JEITA_CC] = DEFAULT_HOT_CC;
+	chip->dt.jeita_soft_cold_fv_cc[JEITA_FV] = DEFAULT_COLD_FV;
+	chip->dt.jeita_soft_cold_fv_cc[JEITA_CC] = DEFAULT_COLD_CC;
+	if (of_property_count_elems_of_size(node, "qcom,fg-jeita-soft-hot-fv-cc",
+		sizeof(u32)) == JEITA_FV_CC_COUNT) {
+		rc = of_property_read_u32_array(node,
+				"qcom,fg-jeita-soft-hot-fv-cc",
+				chip->dt.jeita_soft_hot_fv_cc, JEITA_FV_CC_COUNT);
+		if (rc < 0)
+			pr_err("Error reading fg-jeita-soft-hot-fv-cc, use default value\n");
+	}
+
+	if (of_property_count_elems_of_size(node, "qcom,fg-jeita-soft-cold-fv-cc",
+		sizeof(u32)) == JEITA_FV_CC_COUNT) {
+		rc = of_property_read_u32_array(node,
+				"qcom,fg-jeita-soft-cold-fv-cc",
+				chip->dt.jeita_soft_cold_fv_cc, JEITA_FV_CC_COUNT);
+		if (rc < 0)
+			pr_err("Error reading fg-jeita-soft-cold-fv-cc, use default value\n");
+	}
+
 	rc = of_property_read_u32(node, "qcom,fg-batt-temp-delta", &temp);
 	if (rc < 0)
 		chip->dt.batt_temp_delta = -EINVAL;
@@ -5573,6 +5767,13 @@ static int fg_parse_dt(struct fg_chip *chip)
 					"qcom,fg-disable-esr-pull-dn");
 	chip->dt.disable_fg_twm = of_property_read_bool(node,
 					"qcom,fg-disable-in-twm");
+
+	rc = of_property_read_u32(node, "qcom,twm-soc-value", &temp);
+	if (rc < 0) {
+		chip->dt.twm_soc_value = DEFAULT_TWM_SOC_VALUE;
+	} else {
+		chip->dt.twm_soc_value = temp;
+	}
 
 	return 0;
 }
@@ -5743,6 +5944,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->esr_sw_work, fg_esr_sw_work);
 	INIT_DELAYED_WORK(&chip->ttf_work, ttf_work);
 	INIT_DELAYED_WORK(&chip->sram_dump_work, sram_dump_work);
+	INIT_DELAYED_WORK(&chip->fg_restart_work, fg_restart_work);
 	INIT_WORK(&chip->esr_filter_work, esr_filter_work);
 	alarm_init(&chip->esr_filter_alarm, ALARM_BOOTTIME,
 			fg_esr_filter_alarm_cb);
@@ -5829,6 +6031,8 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+	chip->fg_can_restart_flag = 1;
+
 	rc = fg_get_battery_voltage(chip, &volt_uv);
 	if (!rc)
 		rc = fg_get_prop_capacity(chip, &msoc);
@@ -5855,6 +6059,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 
 	device_init_wakeup(chip->dev, true);
 	schedule_delayed_work(&chip->profile_load_work, 0);
+	chip->dt.jeita_dynamic_model = MODEL_DISABLE;
 
 	pr_debug("FG GEN3 driver probed successfully\n");
 	return 0;
