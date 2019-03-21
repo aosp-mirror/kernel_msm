@@ -113,17 +113,18 @@ void gasket_page_table_unmap(struct gasket_page_table *page_table,
 			     ulong dev_addr, uint num_pages);
 
 /*
- * Unmap ALL host pages from device memory.
- * @page_table: Gasket page table pointer.
- */
-void gasket_page_table_unmap_all(struct gasket_page_table *page_table);
-
-/*
  * Unmap all host pages from device memory and reset the table to fully simple
  * addressing.
  * @page_table: Gasket page table pointer.
+ * @update_subtables: if true, clear extended level-1 subtable entries for
+ *                    unmapped pages;
+ *                    if false, leave subtables untouched, because these are
+ *                    about to be garbage collected as part of a full device
+ *                    reset at close (and on-device subtables may not be
+ *                    available).
  */
-void gasket_page_table_reset(struct gasket_page_table *page_table);
+void gasket_page_table_reset(struct gasket_page_table *page_table,
+			     bool update_subtables);
 
 /*
  * Reclaims unused page table memory.

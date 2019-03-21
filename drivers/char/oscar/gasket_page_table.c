@@ -670,6 +670,23 @@ static void gasket_release_entry(struct gasket_page_table *pg_tbl,
 }
 
 /*
+ * Release host state for a range of subtable entries.  This is actually only
+ * called to release every entry in the subtable, but is called from functions
+ * that operate on subranges, which potentially could be specified in the
+ * future.  We do not currently do that.
+ * The page table mutex must be held by the caller.
+ */
+static void gasket_release_subtable(struct gasket_page_table *pg_tbl,
+				    struct gasket_page_table_entry *subtable,
+				    uint slot_idx, uint len)
+{
+	int i;
+
+	for (i = slot_idx; i < slot_idx + len; i++)
+		gasket_release_entry(pg_tbl, &subtable[i]);
+}
+
+/*
  * Unmap and release mapped pages.
  * The page table mutex must be held by the caller.
  */
@@ -788,16 +805,32 @@ static void finish_subtable(struct gasket_page_table *pg_tbl,
 	writeq(pte->dma_addr | GASKET_VALID_SLOT_FLAG, slot);
 }
 
+/* Update extended subtable on unmap. */
+static void gasket_unmap_update_subtable(struct gasket_page_table *pg_tbl,
+					 struct gasket_page_table_entry *pte,
+					 uint slot_idx, uint len)
+{
+	u64 __iomem *slot_base;
+
+	slot_base = get_subtable(pg_tbl, pte);
+	if (!IS_ERR_OR_NULL(slot_base)) {
+		gasket_perform_unmapping(pg_tbl,
+					 pte->sublevel + slot_idx,
+					 slot_base + slot_idx, len, 0);
+		put_subtable(pg_tbl, pte, slot_idx, len);
+	}
+}
+
 /*
  * Unmap and release buffers to extended addresses.
  * The page table mutex must be held by the caller.
  */
 static void gasket_unmap_extended_pages(struct gasket_page_table *pg_tbl,
-					ulong dev_addr, uint num_pages)
+					ulong dev_addr, uint num_pages,
+					bool update_subtables)
 {
 	uint slot_idx, remain, len;
 	struct gasket_page_table_entry *pte;
-	u64 __iomem *slot_base;
 
 	remain = num_pages;
 	slot_idx = gasket_extended_lvl1_page_idx(pg_tbl, dev_addr);
@@ -805,18 +838,15 @@ static void gasket_unmap_extended_pages(struct gasket_page_table *pg_tbl,
 	      gasket_extended_lvl0_page_idx(pg_tbl, dev_addr);
 
 	while (remain > 0) {
-		/* TODO: Add check to ensure pte remains valid? */
 		len = min(remain, GASKET_PAGES_PER_SUBTABLE - slot_idx);
 
 		if (GET(FLAGS_STATUS, pte->flags) == PTE_INUSE) {
-			slot_base = get_subtable(pg_tbl, pte);
-			if (!IS_ERR_OR_NULL(slot_base)) {
-				gasket_perform_unmapping(
-						 pg_tbl,
-						 pte->sublevel + slot_idx,
-						 slot_base + slot_idx, len, 0);
-				put_subtable(pg_tbl, pte, slot_idx, len);
-			}
+			if (update_subtables)
+				gasket_unmap_update_subtable(pg_tbl, pte,
+							     slot_idx, len);
+			else
+				gasket_release_subtable(pg_tbl, pte->sublevel,
+							slot_idx, len);
 		}
 
 		remain -= len;
@@ -964,7 +994,7 @@ static void gasket_page_table_unmap_nolock(struct gasket_page_table *pg_tbl,
 	if (gasket_addr_is_simple(pg_tbl, dev_addr))
 		gasket_unmap_simple_pages(pg_tbl, dev_addr, num_pages);
 	else
-		gasket_unmap_extended_pages(pg_tbl, dev_addr, num_pages);
+		gasket_unmap_extended_pages(pg_tbl, dev_addr, num_pages, true);
 }
 
 /*
@@ -1294,7 +1324,9 @@ void gasket_page_table_unmap(struct gasket_page_table *pg_tbl, ulong dev_addr,
 }
 EXPORT_SYMBOL(gasket_page_table_unmap);
 
-static void gasket_page_table_unmap_all_nolock(struct gasket_page_table *pg_tbl)
+static void
+gasket_page_table_unmap_all_nolock(struct gasket_page_table *pg_tbl,
+				   bool update_subtables)
 {
 	gasket_unmap_simple_pages(pg_tbl,
 				  gasket_components_to_dev_address(pg_tbl, 1, 0,
@@ -1304,17 +1336,9 @@ static void gasket_page_table_unmap_all_nolock(struct gasket_page_table *pg_tbl)
 				    gasket_components_to_dev_address(pg_tbl, 0,
 								     0, 0),
 				    pg_tbl->num_extended_entries *
-				    GASKET_PAGES_PER_SUBTABLE);
+				    GASKET_PAGES_PER_SUBTABLE,
+				    update_subtables);
 }
-
-/* See gasket_page_table.h for description. */
-void gasket_page_table_unmap_all(struct gasket_page_table *pg_tbl)
-{
-	mutex_lock(&pg_tbl->mutex);
-	gasket_page_table_unmap_all_nolock(pg_tbl);
-	mutex_unlock(&pg_tbl->mutex);
-}
-EXPORT_SYMBOL(gasket_page_table_unmap_all);
 
 /*
  * Device unreachable, cleanup local state without touching chip.
@@ -1323,7 +1347,7 @@ EXPORT_SYMBOL(gasket_page_table_unmap_all);
 static void gasket_page_table_reset_local(struct gasket_page_table *pg_tbl)
 {
 	struct gasket_page_table_entry *ptes = pg_tbl->entries;
-	uint i, j;
+	uint i;
 
 	/* Release the simple entries. */
 	for (i = 0; i < pg_tbl->num_simple_entries; i++)
@@ -1337,8 +1361,8 @@ static void gasket_page_table_reset_local(struct gasket_page_table *pg_tbl)
 		if (GET(FLAGS_STATUS, ptes[i].flags) == PTE_FREE)
 			continue;
 
-		for (j = 0; j < GASKET_PAGES_PER_SUBTABLE; j++)
-			gasket_release_entry(pg_tbl, &ptes[i].sublevel[j]);
+		gasket_release_subtable(pg_tbl, ptes[i].sublevel, 0,
+					GASKET_PAGES_PER_SUBTABLE);
 
 		if (GET(FLAGS_DEV_SUBTABLE, ptes[i].flags))
 			continue;
@@ -1352,7 +1376,8 @@ static void gasket_page_table_reset_local(struct gasket_page_table *pg_tbl)
 }
 
 /* See gasket_page_table.h for description. */
-void gasket_page_table_reset(struct gasket_page_table *pg_tbl)
+void gasket_page_table_reset(struct gasket_page_table *pg_tbl,
+			     bool update_subtables)
 {
 	mutex_lock(&pg_tbl->mutex);
 	gasket_update_hw_status(pg_tbl->gasket_dev);
@@ -1360,7 +1385,7 @@ void gasket_page_table_reset(struct gasket_page_table *pg_tbl)
 	if (pg_tbl->gasket_dev->status == GASKET_STATUS_DEAD) {
 		gasket_page_table_reset_local(pg_tbl);
 	} else {
-		gasket_page_table_unmap_all_nolock(pg_tbl);
+		gasket_page_table_unmap_all_nolock(pg_tbl, update_subtables);
 		writeq(pg_tbl->config.total_entries,
 		       pg_tbl->extended_offset_reg);
 	}

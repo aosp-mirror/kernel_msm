@@ -641,7 +641,8 @@ void gasket_disable_device(struct gasket_dev *gasket_dev)
 
 	for (i = 0; i < driver_desc->num_page_tables; ++i) {
 		if (gasket_dev->page_table[i]) {
-			gasket_page_table_reset(gasket_dev->page_table[i]);
+			gasket_page_table_reset(gasket_dev->page_table[i],
+						false);
 			gasket_page_table_cleanup(gasket_dev->page_table[i]);
 		}
 	}
@@ -1274,7 +1275,7 @@ static void gasket_release_reset_device(struct gasket_dev *gasket_dev)
 	}
 
 	for (i = 0; i < driver_desc->num_page_tables; ++i) {
-		gasket_page_table_reset(gasket_dev->page_table[i]);
+		gasket_page_table_reset(gasket_dev->page_table[i], false);
 		gasket_page_table_garbage_collect(gasket_dev->page_table[i]);
 		gasket_free_coherent_memory_all(gasket_dev, i);
 	}
@@ -1414,7 +1415,7 @@ int gasket_enable_device(struct gasket_dev *gasket_dev)
 		 * Make sure that the page table is clear and set to simple
 		 * addresses.
 		 */
-		gasket_page_table_reset(gasket_dev->page_table[tbl_idx]);
+		gasket_page_table_reset(gasket_dev->page_table[tbl_idx], true);
 	}
 
 	/*
@@ -1719,7 +1720,7 @@ int gasket_reset_nolock(struct gasket_dev *gasket_dev)
 
 	/* Reinitialize the page tables and interrupt framework. */
 	for (i = 0; i < driver_desc->num_page_tables; ++i)
-		gasket_page_table_reset(gasket_dev->page_table[i]);
+		gasket_page_table_reset(gasket_dev->page_table[i], true);
 
 	ret = gasket_interrupt_reinit(gasket_dev);
 	if (ret) {
