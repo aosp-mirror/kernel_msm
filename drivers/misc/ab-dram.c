@@ -60,7 +60,10 @@ struct ab_dram_dma_buf_attachment {
  * struct ab_dram_buffer - metadata for a particular buffer
  * @dev_data:		back pointer to the ab_dram_data
  * @size:		size of the buffer
- * @ab_paddr:		physical address in Airbrush memory space
+ * @contiguous:		Whether the buffer is contiguous
+ * @ab_paddr:		physical address in Airbrush memory space, it stores
+ * 			the paddr for first segment for non-contiguous
+ * 			allocation
  * @lock:		Lock used for buffer access synchronization
  * @sg_table:		the sg table for the buffer
  * @attachments:	list of dma_buf attachments for the buffer
@@ -69,6 +72,7 @@ struct ab_dram_buffer {
 	struct ab_dram_data *dev_data;
 	struct ab_dram_session *session;
 	size_t size;
+	bool contiguous;
 	dma_addr_t ab_paddr;
 	struct mutex lock;
 	struct sg_table *sg_table;
@@ -76,17 +80,15 @@ struct ab_dram_buffer {
 };
 
 static int ab_dram_alloc(struct ab_dram_data *dev_data,
-		struct ab_dram_buffer *buffer, size_t len)
+		struct ab_dram_buffer *buffer, size_t len, bool contiguous)
 {
 	struct sg_table *table;
 
-	table = ll_pool_alloc(dev_data->pool, len, true);
+	table = ll_pool_alloc(dev_data->pool, len, contiguous);
 	if (IS_ERR(table))
 		return PTR_ERR(table);
 
 	buffer->ab_paddr = sg_dma_address(table->sgl);
-	buffer->size = sg_dma_len(table->sgl);
-
 	buffer->sg_table = table;
 
 	return 0;
@@ -148,7 +150,7 @@ static void ab_dram_session_put(struct ab_dram_session *session)
 
 static struct ab_dram_buffer *ab_dram_buffer_create(
 		struct ab_dram_data *dev_data, struct ab_dram_session *session,
-		size_t len)
+		size_t len, bool contiguous)
 {
 	struct ab_dram_buffer *buffer;
 	int ret;
@@ -160,12 +162,13 @@ static struct ab_dram_buffer *ab_dram_buffer_create(
 	buffer->dev_data = dev_data;
 	buffer->session = session;
 	buffer->size = len;
+	buffer->contiguous = contiguous;
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
 
 	mutex_lock(&dev_data->lock);
 
-	ret = ab_dram_alloc(dev_data, buffer, len);
+	ret = ab_dram_alloc(dev_data, buffer, len, contiguous);
 	if (ret)
 		goto err_exit;
 
@@ -318,7 +321,7 @@ static const struct dma_buf_ops dma_buf_ops = {
 };
 
 static struct dma_buf *ab_dram_alloc_dma_buf(struct ab_dram_session *session,
-		size_t len)
+		size_t len, bool contiguous)
 {
 	struct ab_dram_data *abd_data = internal_data;
 	struct ab_dram_buffer *buffer;
@@ -329,7 +332,7 @@ static struct dma_buf *ab_dram_alloc_dma_buf(struct ab_dram_session *session,
 	if (!len)
 		return ERR_PTR(-EINVAL);
 
-	buffer = ab_dram_buffer_create(abd_data, session, len);
+	buffer = ab_dram_buffer_create(abd_data, session, len, contiguous);
 
 	if (!buffer)
 		return ERR_PTR(-ENODEV);
@@ -357,7 +360,7 @@ struct dma_buf *ab_dram_alloc_dma_buf_kernel(size_t len)
 		return ERR_PTR(-ENOENT);
 
 	/* Session field set to NULL since kernel has no session */
-	return ab_dram_alloc_dma_buf(NULL, len);
+	return ab_dram_alloc_dma_buf(NULL, len, true /* contiguous */);
 }
 EXPORT_SYMBOL(ab_dram_alloc_dma_buf_kernel);
 
@@ -394,13 +397,13 @@ bool is_ab_dram_dma_buf(struct dma_buf *dmabuf)
 }
 EXPORT_SYMBOL(is_ab_dram_dma_buf);
 
-static int ab_dram_allocate_memory_fd_legacy(struct ab_dram_session *session,
-		size_t len)
+static int ab_dram_allocate_memory_fd_internal(struct ab_dram_session *session,
+		size_t len, bool contiguous)
 {
 	int fd;
 	struct dma_buf *dmabuf;
 
-	dmabuf = ab_dram_alloc_dma_buf(session, len);
+	dmabuf = ab_dram_alloc_dma_buf(session, len, contiguous);
 	if (IS_ERR(dmabuf))
 		return PTR_ERR(dmabuf);
 
@@ -421,7 +424,8 @@ static int ab_dram_allocate_memory_fd(struct ab_dram_session *session,
 	if (copy_from_user(&req, user_req, sizeof(req)))
 		return -EFAULT;
 
-	return ab_dram_allocate_memory_fd_legacy(session, req.size);
+	return ab_dram_allocate_memory_fd_internal(session, req.size,
+			req.flag == ABD_ALLOC_CONTIGUOUS ? true : false);
 }
 
 static int ab_dram_open(struct inode *ip, struct file *fp)
@@ -476,7 +480,8 @@ static long ab_dram_ioctl(struct file *filp, unsigned int cmd,
 
 	switch (cmd) {
 	case AB_DRAM_ALLOCATE_MEMORY_LEGACY:
-		ret = ab_dram_allocate_memory_fd_legacy(session, (size_t)arg);
+		ret = ab_dram_allocate_memory_fd_internal(session, (size_t)arg,
+				true);
 		break;
 	case AB_DRAM_ALLOCATE_MEMORY:
 		ret = ab_dram_allocate_memory_fd(session, arg);
