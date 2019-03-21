@@ -512,28 +512,28 @@ static void mnh_ddr_clear_lpc_status(void)
 #define MR_TABLE_LEN 5
 const u8 mrw_fsps[MNH_DDR_NUM_FSPS][MR_TABLE_LEN][2] = {
 	{
-		{  1, 0x04 },
+		{  1, 0x06 },
 		{  2, 0x00 },
 		{  3, 0x31 },
 		{ 11, 0x00 },
 		{ 22, 0x00 }
 	},
 	{
-		{  1, 0x04 },
+		{  1, 0x06 },
 		{  2, 0x00 },
 		{  3, 0x31 },
 		{ 11, 0x00 },
 		{ 22, 0x00 },
 	},
 	{
-		{  1, 0x24 },
+		{  1, 0x26 },
 		{  2, 0x12 },
 		{  3, 0x31 },
 		{ 11, 0x00 },
 		{ 22, 0x00 },
 	},
 	{
-		{  1, 0x44 },
+		{  1, 0x46 },
 		{  2, 0x24 },
 		{  3, 0x31 },
 		{ 11, 0x00 },
