@@ -33,6 +33,7 @@
 	qcom,hvdcp-disable;
 	google,usb-port-tz-name = "usbc-therm-monitor";
 	qcom,dc-icl-ua = <1100000>;
+	qcom,fv-max-uv = <4400000>;
 };
 
 &pm8150b_gpios {

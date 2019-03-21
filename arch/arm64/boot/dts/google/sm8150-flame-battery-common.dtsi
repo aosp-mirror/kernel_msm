@@ -17,6 +17,10 @@
 	google,chg-battery-default-capacity = <2800>;
 };
 
+&pm8150b_charger {
+	qcom,fcc-max-ua = <2800000>;
+};
+
 &google_charger {
 	google,fcc-max-ua = <2800000>;
 };
