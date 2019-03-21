@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -116,7 +116,7 @@ int32_t cam_csiphy_update_secure_info(
 	uint32_t clock_lane, adj_lane_mask, temp;
 	int32_t offset;
 
-	if (csiphy_dev->acquire_count >=
+	if (csiphy_dev->acquire_count >
 		CSIPHY_MAX_INSTANCES) {
 		CAM_ERR(CAM_CSIPHY, "Invalid acquire count");
 		return -EINVAL;
@@ -129,11 +129,7 @@ int32_t cam_csiphy_update_secure_info(
 		return -EINVAL;
 	}
 
-	if (cam_cmd_csiphy_info->combo_mode)
-		clock_lane =
-			csiphy_dev->ctrl_reg->csiphy_reg.csiphy_2ph_combo_ck_ln;
-	else
-		clock_lane =
+	clock_lane =
 			csiphy_dev->ctrl_reg->csiphy_reg.csiphy_2ph_clock_lane;
 
 	adj_lane_mask = cam_cmd_csiphy_info->lane_mask & LANE_MASK_2PH &
@@ -144,6 +140,10 @@ int32_t cam_csiphy_update_secure_info(
 
 	if (cam_cmd_csiphy_info->csiphy_3phase)
 		adj_lane_mask = cam_cmd_csiphy_info->lane_mask & LANE_MASK_3PH;
+
+	if (cam_cmd_csiphy_info->combo_mode &&
+		!cam_cmd_csiphy_info->csiphy_3phase)
+		adj_lane_mask = 0x4;
 
 	csiphy_dev->csiphy_info.secure_mode[offset] = 1;
 
@@ -835,7 +835,8 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 			goto release_mutex;
 		}
 
-		if (csiphy_dev->csiphy_state == CAM_CSIPHY_START) {
+		if (csiphy_dev->start_dev_count >=
+			csiphy_dev->acquire_count) {
 			csiphy_dev->start_dev_count++;
 			goto release_mutex;
 		}
@@ -844,6 +845,23 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 			config.dev_handle);
 		if (offset < 0 || offset >= CSIPHY_MAX_INSTANCES) {
 			CAM_ERR(CAM_CSIPHY, "Invalid offset");
+			goto release_mutex;
+		}
+
+		if (csiphy_dev->csiphy_state == CAM_CSIPHY_START) {
+			if (csiphy_dev->csiphy_info.secure_mode[offset] == 1) {
+				rc = cam_csiphy_notify_secure_mode(
+					csiphy_dev,
+					CAM_SECURE_MODE_SECURE, offset);
+			}
+			if (rc < 0) {
+				csiphy_dev->csiphy_info.secure_mode[offset] =
+					CAM_SECURE_MODE_NON_SECURE;
+				cam_cpas_stop(csiphy_dev->cpas_handle);
+				goto release_mutex;
+			}
+
+			csiphy_dev->start_dev_count++;
 			goto release_mutex;
 		}
 
@@ -874,15 +892,28 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		rc = cam_csiphy_enable_hw(csiphy_dev);
 		if (rc != 0) {
 			CAM_ERR(CAM_CSIPHY, "cam_csiphy_enable_hw failed");
+			if (csiphy_dev->csiphy_info.secure_mode[offset] == 1) {
+				cam_csiphy_notify_secure_mode(csiphy_dev,
+					CAM_SECURE_MODE_NON_SECURE, offset);
+				csiphy_dev->csiphy_info.secure_mode[offset] =
+					CAM_SECURE_MODE_NON_SECURE;
+			}
 			cam_cpas_stop(csiphy_dev->cpas_handle);
 			goto release_mutex;
 		}
+
 		rc = cam_csiphy_config_dev(csiphy_dev);
 		if (csiphy_dump == 1)
 			cam_csiphy_mem_dmp(&csiphy_dev->soc_info);
 
 		if (rc < 0) {
 			CAM_ERR(CAM_CSIPHY, "cam_csiphy_config_dev failed");
+			if (csiphy_dev->csiphy_info.secure_mode[offset] == 1) {
+				cam_csiphy_notify_secure_mode(csiphy_dev,
+					CAM_SECURE_MODE_NON_SECURE, offset);
+				csiphy_dev->csiphy_info.secure_mode[offset] =
+					CAM_SECURE_MODE_NON_SECURE;
+			}
 			cam_csiphy_disable_hw(csiphy_dev);
 			cam_cpas_stop(csiphy_dev->cpas_handle);
 			goto release_mutex;
