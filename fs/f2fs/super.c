@@ -586,7 +586,7 @@ static int parse_options(struct super_block *sb, char *options)
 		case Opt_io_size_bits:
 			if (args->from && match_int(args, &arg))
 				return -EINVAL;
-			if (arg > __ilog2_u32(BIO_MAX_PAGES)) {
+			if (arg <= 0 || arg > __ilog2_u32(BIO_MAX_PAGES)) {
 				f2fs_msg(sb, KERN_WARNING,
 					"Not support %d, larger than %d",
 					1 << arg, BIO_MAX_PAGES);
@@ -821,6 +821,8 @@ static int parse_options(struct super_block *sb, char *options)
 	}
 
 	if (test_opt(sbi, INLINE_XATTR_SIZE)) {
+		int min_size, max_size;
+
 		if (!f2fs_sb_has_extra_attr(sbi) ||
 			!f2fs_sb_has_flexible_inline_xattr(sbi)) {
 			f2fs_msg(sb, KERN_ERR,
@@ -834,14 +836,15 @@ static int parse_options(struct super_block *sb, char *options)
 					"set with inline_xattr option");
 			return -EINVAL;
 		}
-		if (!F2FS_OPTION(sbi).inline_xattr_size ||
-			F2FS_OPTION(sbi).inline_xattr_size >
-				DEF_ADDRS_PER_INODE -
-				F2FS_TOTAL_EXTRA_ATTR_SIZE / sizeof(__le32) -
-				DEF_INLINE_RESERVED_SIZE -
-				MIN_INLINE_DENTRY_SIZE / sizeof(__le32)) {
+
+		min_size = sizeof(struct f2fs_xattr_header) / sizeof(__le32);
+		max_size = MAX_INLINE_XATTR_SIZE;
+
+		if (F2FS_OPTION(sbi).inline_xattr_size < min_size ||
+				F2FS_OPTION(sbi).inline_xattr_size > max_size) {
 			f2fs_msg(sb, KERN_ERR,
-					"inline xattr size is out of range");
+				"inline xattr size is out of range: %d ~ %d",
+				min_size, max_size);
 			return -EINVAL;
 		}
 	}
@@ -3080,10 +3083,11 @@ static int f2fs_fill_super(struct super_block *sb, void *data, int silent)
 	struct f2fs_super_block *raw_super;
 	struct inode *root;
 	int err;
-	bool retry = true, need_fsck = false;
+	bool skip_recovery = false, need_fsck = false;
 	char *options = NULL;
 	int recovery, i, valid_super_block;
 	struct curseg_info *seg_i;
+	int retry_cnt = 1;
 
 try_onemore:
 	err = -EINVAL;
@@ -3155,7 +3159,6 @@ try_onemore:
 	sb->s_maxbytes = sbi->max_file_blocks <<
 				le32_to_cpu(raw_super->log_blocksize);
 	sb->s_max_links = F2FS_LINK_MAX;
-	get_random_bytes(&sbi->s_next_generation, sizeof(u32));
 
 #ifdef CONFIG_QUOTA
 	sb->dq_op = &f2fs_quota_operations;
@@ -3371,7 +3374,7 @@ try_onemore:
 		goto free_meta;
 
 	if (unlikely(is_set_ckpt_flags(sbi, CP_DISABLED_FLAG)))
-		goto skip_recovery;
+		goto reset_checkpoint;
 
 	/* recover fsynced data */
 	if (!test_opt(sbi, DISABLE_ROLL_FORWARD)) {
@@ -3388,11 +3391,13 @@ try_onemore:
 		if (need_fsck)
 			set_sbi_flag(sbi, SBI_NEED_FSCK);
 
-		if (!retry)
-			goto skip_recovery;
+		if (skip_recovery)
+			goto reset_checkpoint;
 
 		err = f2fs_recover_fsync_data(sbi, false);
 		if (err < 0) {
+			if (err != -ENOMEM)
+				skip_recovery = true;
 			need_fsck = true;
 			f2fs_msg(sb, KERN_ERR,
 				"Cannot recover all fsync data errno=%d", err);
@@ -3408,7 +3413,7 @@ try_onemore:
 			goto free_meta;
 		}
 	}
-skip_recovery:
+reset_checkpoint:
 	/* f2fs_recover_fsync_data() cleared this already */
 	clear_sbi_flag(sbi, SBI_POR_DOING);
 
@@ -3454,7 +3459,7 @@ skip_recovery:
 sync_free_meta:
 	/* safe to flush all the data */
 	sync_filesystem(sbi->sb);
-	retry = false;
+	retry_cnt = 0;
 
 free_meta:
 #ifdef CONFIG_QUOTA
@@ -3514,8 +3519,8 @@ free_sbi:
 	kvfree(sbi);
 
 	/* give only one another chance */
-	if (retry) {
-		retry = false;
+	if (retry_cnt > 0 && skip_recovery) {
+		retry_cnt--;
 		shrink_dcache_sb(sb);
 		goto try_onemore;
 	}
