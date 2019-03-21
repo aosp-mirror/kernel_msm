@@ -779,6 +779,20 @@ static void ddr_deassert_phy_reset_while_phy_is_gated(
 	ddr_reg_set(ddr_ctx, PHY1_RST_CTRL_REG, RST_N | DIV_RST_N);
 }
 
+static void ddr_enable_hw_periodic_training(struct ab_ddr_context *ddr_ctx)
+{
+	ddr_reg_wr(ddr_ctx, DREX_HWP_TRAIN_PERIOD0,
+		   T_PTRAIN_PERIOD(DDR_HW_P_W_TRAIN_INTERVAL_MSEC));
+	ddr_reg_set(ddr_ctx, DREX_HWPR_TRAIN_CONFIG0, PERIODIC_WRITE_CHIP0);
+	ddr_reg_set(ddr_ctx, DREX_HWPR_TRAIN_CONTROL0, HW_PERIODIC_TRAIN_EN);
+}
+
+static void ddr_disable_hw_periodic_training(struct ab_ddr_context *ddr_ctx)
+{
+	ddr_reg_clr(ddr_ctx, DREX_HWPR_TRAIN_CONTROL0, HW_PERIODIC_TRAIN_EN);
+	ddr_reg_clr(ddr_ctx, DREX_HWPR_TRAIN_CONFIG0, PERIODIC_WRITE_CHIP0);
+}
+
 static int ddr_block_axi_transactions(struct ab_ddr_context *ddr_ctx)
 {
 	unsigned long timeout;
@@ -842,6 +856,9 @@ static void ddr_initialize_phy(struct ab_ddr_context *ddr_ctx,
 	ddr_reg_wr_otp(ddr_ctx, DPHY2_LP_CON0, o_DPHY_LP_CON0_2);
 	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
 	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_2);
+
+	/* Disable Periodic Write Training */
+	ddr_disable_hw_periodic_training(ddr_ctx);
 
 	/* Disable power features till ddr training completes */
 	ddr_reg_clr(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
@@ -1512,6 +1529,9 @@ static void ddr_axi_enable_after_all_training(struct ab_ddr_context *ddr_ctx)
 
 	/* Enable all power saving features */
 	ddr_enable_power_features(ddr_ctx);
+
+	/* Enable Periodic Write Training */
+	ddr_enable_hw_periodic_training(ddr_ctx);
 
 	/* enable refresh and axi access controls */
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN | DBI_EN);
@@ -2268,6 +2288,9 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
 	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
+	/* Enable Periodic Write Training */
+	ddr_enable_hw_periodic_training(ddr_ctx);
+
 	ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 
 	return 0;
@@ -2564,6 +2587,9 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
 	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
+	/* Enable Periodic Write Training */
+	ddr_enable_hw_periodic_training(ddr_ctx);
+
 	/* Allow AXI after exiting from self-refresh */
 	ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 
@@ -2596,6 +2622,9 @@ static int32_t __ab_ddr_selfrefresh_enter(void *ctx)
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
 	ddr_sanity_test(ddr_ctx, DDR_BOOT_TEST_WRITE);
+
+	/* Disable Periodic Write Training */
+	ddr_disable_hw_periodic_training(ddr_ctx);
 
 	/* Block AXI Before entering self-refresh */
 	if (ddr_block_axi_transactions(ddr_ctx))
