@@ -822,65 +822,6 @@ int set_inbound_iatu(struct inb_region ir)
 	return ret;
 }
 
-static int disable_inbound_iatu_region(u32 region)
-{
-	unsigned long flags;
-	u32 val;
-	u32 set_val;
-	u32 iatu_offset = (region * IATU_REGION_OFFSET);
-	u32 rdata;
-	int retries, ret = 0;
-
-	if (region >= NUM_IATU_REGIONS) {
-		pr_err("%s: Invalid iATU region: %d\n", __func__, region);
-		return -EINVAL;
-	}
-
-	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
-
-	/* Set SYSREG_FSYS DBI_OVERRIDE for iATU access mode */
-	val = readl(
-			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
-
-	set_val = val & ~(DBI_OVERRIDE_MASK);
-	set_val |= DBI_OVERRIDE_IATU;
-
-	__iowmb();
-	writel_relaxed(set_val,
-		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
-
-	__iowmb();
-	/* Enable region */
-	writel_relaxed(0x0, abc_dev->pcie_config + iatu_offset +
-			PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND);
-
-	/* Make sure ATU disable takes effect before any subsequent
-	 * transactions. Currently the exact time is not specified in the
-	 * user manual. So, following the synopsys designware driver.
-	 */
-	for (retries = 0; retries < IATU_ENABLE_DISABLE_RETRIES; retries++) {
-		rdata = readl(abc_dev->pcie_config + iatu_offset +
-				PF0_ATU_CAP_IATU_REGION_CTRL_2_OFF_INBOUND);
-
-		if (!(rdata & IATU_ENABLE))
-			break;
-		mdelay(IATU_WAIT_TIME_IN_MSEC);
-	}
-
-	if (rdata & IATU_ENABLE) {
-		pr_err("%s: IATU disable timedout!!\n", __func__);
-		ret = -ETIMEDOUT;
-	}
-
-	__iowmb();
-	writel_relaxed(val,
-			abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
-
-	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
-
-	return ret;
-}
-
 int set_outbound_iatu(struct outb_region outreg)
 {
 	unsigned long flags;
@@ -1278,9 +1219,6 @@ int abc_pcie_unmap_iatu(struct device *dev, struct device *owner,
 				__func__);
 		return -EINVAL;
 	}
-
-	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_ACTIVE)
-		disable_inbound_iatu_region(iatu_id);
 
 	ret = free_bar_range(dev, iatu->bar, iatu->size, iatu->bar_offset);
 	if (ret < 0) {
