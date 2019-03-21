@@ -549,6 +549,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 	}
 
 	chg->dcp_icl_ua = chip->dt.usb_icl_ua;
+	chg->dc_icl_ua = chip->dt.dc_icl_ua;
 
 	chg->suspend_input_on_debug_batt = of_property_read_bool(node,
 					"qcom,suspend-input-on-debug-batt");
@@ -2387,17 +2388,15 @@ static int smb5_configure_mitigation(struct smb_charger *chg)
 static int smb5_init_dc_peripheral(struct smb_charger *chg)
 {
 	int rc = 0;
+	const int dc_icl_ua = (chg->dc_icl_ua < 0) ? 1000000
+						   : chg->dc_icl_ua;
 
 	/* PMI632 does not have DC peripheral */
 	if (chg->smb_version == PMI632_SUBTYPE)
 		return 0;
 
-	/* set DC icl_max 1A */
-	rc = smblib_set_charge_param(chg, &chg->param.dc_icl, 1000000);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't set dc_icl rc=%d\n", rc);
-		return rc;
-	}
+	/* 1000 mA or the value specified in device tree */
+	vote(chg->dc_icl_votable, DEFAULT_VOTER, true, dc_icl_ua);
 
 	/* Disable DC Input missing poller function */
 	rc = smblib_masked_write(chg, DCIN_LOAD_CFG_REG,
@@ -2589,13 +2588,6 @@ static int smb5_init_hw(struct smb5 *chip)
 	vote(chg->usb_icl_votable, HW_LIMIT_VOTER,
 			chg->hw_max_icl_ua > 0, chg->hw_max_icl_ua);
 
-	/* set DC icl_max 1A */
-	if (chip->dt.dc_icl_ua < 0)
-		vote(chg->dc_icl_votable, DEFAULT_VOTER, true, 1000000);
-	else
-		vote(chg->dc_icl_votable, DEFAULT_VOTER,
-		     true, chip->dt.dc_icl_ua);
-			 
 	/* Initialize DC peripheral configurations */
 	rc = smb5_init_dc_peripheral(chg);
 	if (rc < 0)
