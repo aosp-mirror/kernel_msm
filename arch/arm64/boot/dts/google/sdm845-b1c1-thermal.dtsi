@@ -358,7 +358,7 @@
 				type = "passive";
 			};
 			shutdown-config {
-				temperature = <57000>;
+				temperature = <59000>;
 				hysteresis = <1000>;
 				type = "critical";
 			};

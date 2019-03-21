@@ -47,7 +47,7 @@
 	quiet-therm-adc {
 		trips {
 			shutdown-config {
-				temperature = <62000>;
+				temperature = <64000>;
 				hysteresis = <1000>;
 				type = "critical";
 			};
