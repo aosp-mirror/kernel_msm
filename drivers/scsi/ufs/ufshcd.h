@@ -432,7 +432,6 @@ struct ufs_clk_gating {
 	struct device_attribute enable_attr;
 	bool is_enabled;
 	int active_reqs;
-	struct workqueue_struct *ungating_workq;
 };
 
 /* Hibern8 state  */
@@ -519,7 +518,7 @@ struct ufs_init_prefetch {
 	u32 icc_level;
 };
 
-#define UIC_ERR_REG_HIST_LENGTH 20
+#define UIC_ERR_REG_HIST_LENGTH 8
 /**
  * struct ufs_uic_err_reg_hist - keeps history of uic errors
  * @pos: index to indicate cyclic buffer position
@@ -550,8 +549,6 @@ struct debugfs_files {
 	u32 dme_local_attr_id;
 	u32 dme_peer_attr_id;
 	struct dentry *reset_controller;
-	struct dentry *err_state;
-	bool err_occurred;
 #ifdef CONFIG_UFS_FAULT_INJECTION
 	struct dentry *err_inj_scenario;
 	struct dentry *err_inj_stats;
@@ -640,27 +637,6 @@ struct ufs_stats {
 		 UFSHCD_DBG_PRINT_HOST_REGS_EN | UFSHCD_DBG_PRINT_TRS_EN | \
 		 UFSHCD_DBG_PRINT_TMRS_EN | UFSHCD_DBG_PRINT_PWR_EN |	   \
 		 UFSHCD_DBG_PRINT_HOST_STATE_EN)
-
-struct ufshcd_cmd_log_entry {
-	char *str;	/* context like "send", "complete" */
-	char *cmd_type;	/* "scsi", "query", "nop", "dme" */
-	u8 lun;
-	u8 cmd_id;
-	sector_t lba;
-	int transfer_len;
-	u8 idn;		/* used only for query idn */
-	u32 doorbell;
-	u32 outstanding_reqs;
-	u32 seq_num;
-	unsigned int tag;
-	ktime_t tstamp;
-};
-
-struct ufshcd_cmd_log {
-	struct ufshcd_cmd_log_entry *entries;
-	int pos;
-	u32 seq_num;
-};
 
 /**
  * struct ufs_hba - per adapter private structure
@@ -841,7 +817,6 @@ struct ufs_hba {
 	u32 saved_uic_err;
 	u32 saved_ce_err;
 	bool silence_err_logs;
-	bool force_host_reset;
 
 	/* Device management request data */
 	struct ufs_dev_cmd dev_cmd;
@@ -864,8 +839,6 @@ struct ufs_hba {
 	/* Number of requests aborts */
 	int req_abort_count;
 
-	u32 security_in;
-
 	/* Number of lanes available (1 or 2) for Rx/Tx */
 	u32 lanes_per_direction;
 
@@ -877,7 +850,6 @@ struct ufs_hba {
 
 	struct ufs_clk_gating clk_gating;
 	struct ufs_hibern8_on_idle hibern8_on_idle;
-	struct ufshcd_cmd_log cmd_log;
 
 	/* Control to enable/disable host capabilities */
 	u32 caps;
@@ -918,9 +890,7 @@ struct ufs_hba {
 	enum bkops_status urgent_bkops_lvl;
 	bool is_urgent_bkops_lvl_checked;
 
-	/* sync b/w diff contexts */
-	struct rw_semaphore lock;
-	unsigned long shutdown_in_prog;
+	struct rw_semaphore clk_scaling_lock;
 	struct rw_semaphore query_lock;
 
 	/* If set, don't gate device ref_clk during clock gating */
@@ -928,16 +898,6 @@ struct ufs_hba {
 
 	int scsi_block_reqs_cnt;
 };
-
-static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
-{
-	set_bit(0, &hba->shutdown_in_prog);
-}
-
-static inline bool ufshcd_is_shutdown_ongoing(struct ufs_hba *hba)
-{
-	return !!(test_bit(0, &hba->shutdown_in_prog));
-}
 
 /* Returns true if clocks can be gated. Otherwise false */
 static inline bool ufshcd_is_clkgating_allowed(struct ufs_hba *hba)

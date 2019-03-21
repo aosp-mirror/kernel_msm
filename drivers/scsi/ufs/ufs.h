@@ -489,9 +489,6 @@ struct ufs_dev_info {
 	bool f_power_on_wp_en;
 	/* Keeps information if any of the LU is power on write protected */
 	bool is_lu_power_on_wp;
-	unsigned int pre_eol_info;
-	unsigned int lifetime_a;
-	unsigned int lifetime_b;
 };
 
 #endif /* End of Header */

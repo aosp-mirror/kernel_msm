@@ -1410,10 +1410,8 @@ static ssize_t ufsdbg_reset_controller_write(struct file *filp,
 	struct ufs_hba *hba = filp->f_mapping->host->i_private;
 	unsigned long flags;
 
-	pm_runtime_get_sync(hba->dev);
-	ufshcd_hold(hba, false);
-
 	spin_lock_irqsave(hba->host->host_lock, flags);
+
 	/*
 	 * simulating a dummy error in order to "convince"
 	 * eh_work to actually reset the controller
@@ -1421,12 +1419,8 @@ static ssize_t ufsdbg_reset_controller_write(struct file *filp,
 	hba->saved_err |= INT_FATAL_ERRORS;
 	hba->silence_err_logs = true;
 	schedule_work(&hba->eh_work);
+
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
-
-	flush_work(&hba->eh_work);
-
-	ufshcd_release(hba, false);
-	pm_runtime_put_sync(hba->dev);
 
 	return cnt;
 }
@@ -1437,41 +1431,6 @@ static const struct file_operations ufsdbg_reset_controller = {
 	.write		= ufsdbg_reset_controller_write,
 	.release        = single_release,
 };
-
-static int ufsdbg_clear_err_state(void *data, u64 val)
-{
-	struct ufs_hba *hba = data;
-
-	if (!hba)
-		return -EINVAL;
-
-	/* clear the error state on any write attempt */
-	hba->debugfs_files.err_occurred = false;
-
-	return 0;
-}
-
-static int ufsdbg_read_err_state(void *data, u64 *val)
-{
-	struct ufs_hba *hba = data;
-
-	if (!hba)
-		return -EINVAL;
-
-	*val = hba->debugfs_files.err_occurred ? 1 : 0;
-
-	return 0;
-}
-
-void ufsdbg_set_err_state(struct ufs_hba *hba)
-{
-	hba->debugfs_files.err_occurred = true;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(ufsdbg_err_state,
-			ufsdbg_read_err_state,
-			ufsdbg_clear_err_state,
-			"%llu\n");
 
 void ufsdbg_add_debugfs(struct ufs_hba *hba)
 {
@@ -1631,16 +1590,6 @@ void ufsdbg_add_debugfs(struct ufs_hba *hba)
 		dev_err(hba->dev,
 			"%s: failed create reset_controller debugfs entry",
 				__func__);
-		goto err;
-	}
-
-	hba->debugfs_files.err_state =
-		debugfs_create_file("err_state", S_IRUSR | S_IWUSR,
-			hba->debugfs_files.debugfs_root, hba,
-			&ufsdbg_err_state);
-	if (!hba->debugfs_files.err_state) {
-		dev_err(hba->dev,
-		     "%s: failed create err_state debugfs entry", __func__);
 		goto err;
 	}
 
