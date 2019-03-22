@@ -41,6 +41,11 @@
 #define IR_ENABLE_MODE 0x05
 #define DEVICE_ID 0x01
 
+/*
+ * PHASE 1 : Dot ITO-C
+ * PHASE 2 : Flood ITO-C
+ * PHASE 3 : Cap sense IC temperature
+ */
 #define PHASE0 0
 #define PHASE1 1
 #define PHASE2 2
@@ -53,10 +58,12 @@
 #define PROXAVG_REG 0x63
 #define PROXOFFSET_REG 0x67
 
+#define NUM_SKIP_SAMPLE 5
+
 /* crack unit in aF */
 #define DUMMY_CRACK_THRES 0x7FFFFFFF
 #define CRACK_THRES_EVT1 (250 * 1000) // in aF
-#define CRACK_THRES_FLOOD_EVT1_1 0xF4240
+#define CRACK_THRES_FLOOD_EVT1_1 (1000 * 1000) // in aF
 #define CRACK_THRES_DOT (1000 * 1000) // in aF
 
 #define VIO_VOLTAGE_MIN 1800000
@@ -150,6 +157,7 @@ struct led_laser_ctrl_t {
 		int32_t cap_raw[PHASENUM];
 		int32_t cap_corrected[PHASENUM];
 		bool is_crack_detected[LASER_TYPE_MAX];
+		uint16_t sample_count;
 	} cap_sense;
 };
 
@@ -330,13 +338,13 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 		dot_thres = DUMMY_CRACK_THRES;
 	}
 	ctrl->cap_sense.is_crack_detected[LASER_FLOOD] =
-		((ctrl->cap_sense.cap_bias[PHASE1] -
-		ctrl->cap_sense.cap_corrected[PHASE1]) > flood_thres) ?
+		((ctrl->cap_sense.cap_bias[PHASE2] -
+		ctrl->cap_sense.cap_corrected[PHASE2]) > flood_thres) ?
 		true : false;
 
 	ctrl->cap_sense.is_crack_detected[LASER_DOT] =
-		((ctrl->cap_sense.cap_bias[PHASE2] -
-		ctrl->cap_sense.cap_corrected[PHASE2]) > dot_thres) ?
+		((ctrl->cap_sense.cap_bias[PHASE1] -
+		ctrl->cap_sense.cap_corrected[PHASE1]) > dot_thres) ?
 		true : false;
 
 	is_sw_halt_required =
@@ -366,17 +374,17 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 		dev_info(ctrl->soc_info.dev,
 			"flood C_raw %d aF C_corrected: %d aF "
 			"Cap_bias: %d aF temp: %d mC is crack: %d",
-			ctrl->cap_sense.cap_raw[PHASE1],
-			ctrl->cap_sense.cap_corrected[PHASE1],
-			ctrl->cap_sense.cap_bias[PHASE1],
+			ctrl->cap_sense.cap_raw[PHASE2],
+			ctrl->cap_sense.cap_corrected[PHASE2],
+			ctrl->cap_sense.cap_bias[PHASE2],
 			ctrl->cap_sense.proxavg[PHASE3] * 1000 / 57,
 			ctrl->cap_sense.is_crack_detected[LASER_FLOOD]);
 		dev_info(ctrl->soc_info.dev,
 			"dot C_raw %d aF C_corrected: %d aF "
 			"Cap_bias: %d aF temp: %d mC is crack: %d",
-			ctrl->cap_sense.cap_raw[PHASE2],
-			ctrl->cap_sense.cap_corrected[PHASE2],
-			ctrl->cap_sense.cap_bias[PHASE2],
+			ctrl->cap_sense.cap_raw[PHASE1],
+			ctrl->cap_sense.cap_corrected[PHASE1],
+			ctrl->cap_sense.cap_bias[PHASE1],
 			ctrl->cap_sense.proxavg[PHASE3] * 1000 / 57,
 			ctrl->cap_sense.is_crack_detected[LASER_DOT]);
 	}
@@ -449,9 +457,8 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 				CAMERA_SENSOR_I2C_TYPE_BYTE,
 				CAMERA_SENSOR_I2C_TYPE_WORD);
 
-			ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
-			if (ctrl->cap_sense.proxoffset[i]
-				== ctrl->cap_sense.calibration_data[i]) {
+			data &= 0x3FFF;
+			if (data == ctrl->cap_sense.calibration_data[i]) {
 				break;
 			}
 			retry_cnt++;
@@ -460,7 +467,7 @@ static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
 		if (retry_cnt == MAX_RETRY_COUNT) {
 			dev_err(ctrl->soc_info.dev,
 				"read back offset %d mismatch to cali data %d",
-				ctrl->cap_sense.proxoffset[i],
+				data,
 				ctrl->cap_sense.calibration_data[i]);
 		}
 
@@ -985,36 +992,52 @@ static void cap_sense_workq_job(struct work_struct *work)
 	for (i = 1; i < PHASENUM; i++) {
 		reg_settings.reg_data = i;
 
-		camera_io_dev_write(&ctrl->cap_sense.io_master_info,
+		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
 			&write_setting);
 
-		camera_io_dev_read(
+		if (rc < 0)
+			dev_err(ctrl->soc_info.dev,
+				"failed to select PH %d", i);
+
+		rc = camera_io_dev_read(
 			&ctrl->cap_sense.io_master_info,
 			PROXAVG_REG,
 			&data,
 			CAMERA_SENSOR_I2C_TYPE_BYTE,
 			CAMERA_SENSOR_I2C_TYPE_WORD);
 
+		if (rc < 0)
+			dev_err(ctrl->soc_info.dev,
+				"failed to read prxavg from PH %d", i);
+
 		ctrl->cap_sense.proxavg[i] = data & 0xFFFF;
 
-		if (i == PHASE2)
-			sx9320_crack_detection(ctrl);
+		rc = camera_io_dev_read(
+			&ctrl->cap_sense.io_master_info,
+			PROXOFFSET_REG,
+			&data,
+			CAMERA_SENSOR_I2C_TYPE_BYTE,
+			CAMERA_SENSOR_I2C_TYPE_WORD);
+
+		if (rc < 0)
+			dev_err(ctrl->soc_info.dev,
+				"failed to read prxoffset from PH %d", i);
+
+		ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
 
 		if (read_proxoffset) {
-			camera_io_dev_read(
-				&ctrl->cap_sense.io_master_info,
-				PROXOFFSET_REG,
-				&data,
-				CAMERA_SENSOR_I2C_TYPE_BYTE,
-				CAMERA_SENSOR_I2C_TYPE_WORD);
-
-			ctrl->cap_sense.proxoffset[i] = data & 0x3FFF;
 			dev_info(ctrl->soc_info.dev, "proxoffset PH%d: %d",
 					i, ctrl->cap_sense.proxoffset[i]);
 			dev_info(ctrl->soc_info.dev, "proxavg PH%d: %d",
 					i, ctrl->cap_sense.proxavg[i]);
 		}
 	}
+
+	if (ctrl->cap_sense.sample_count < NUM_SKIP_SAMPLE) {
+		ctrl->cap_sense.sample_count++;
+		return;
+	}
+	sx9320_crack_detection(ctrl);
 }
 
 static int lm36011_set_up_silego_irq(
@@ -1394,7 +1417,12 @@ static ssize_t led_laser_enable_store(struct device *dev,
 					mutex_unlock(&ctrl->cam_sensor_mutex);
 					return rc;
 				}
-				sx9320_crack_detection(ctrl);
+				/* avoid false crack detected when device first
+				 * time booting up
+				 */
+				if (ctrl->cap_sense.proxoffset[PHASE1] != 0 &&
+					ctrl->cap_sense.proxavg[PHASE1] != 0)
+					sx9320_crack_detection(ctrl);
 			}
 			lm36011_enable_gpio_irq(dev);
 		}
@@ -1408,8 +1436,10 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		if (rc == 0)
 			dev_info(dev, "Laser enabled");
 	} else {
-		if (ctrl->type == LASER_FLOOD)
+		if (ctrl->type == LASER_FLOOD) {
 			lm36011_disable_gpio_irq(dev);
+			ctrl->cap_sense.sample_count = 0;
+		}
 		rc = lm36011_power_down(ctrl);
 		if (rc == 0)
 			dev_info(dev, "Laser disabled");
@@ -1663,7 +1693,7 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 		ctrl->cap_sense.calibration_data[PHASE2] =
 			(value & 0x0000FFFF);
 		dev_info(dev,
-			"updated ITO-C calibration data, flood: %d dot: %d",
+			"updated ITO-C calibration data, dot: %d flood: %d",
 			ctrl->cap_sense.calibration_data[PHASE1],
 			ctrl->cap_sense.calibration_data[PHASE2]);
 		break;
@@ -1672,7 +1702,7 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 		if (rc < 0)
 			return rc;
 		ctrl->cap_sense.cap_bias[PHASE1] = temp_value;
-		dev_info(dev, "updated flood bias: %d",
+		dev_info(dev, "updated dot bias: %d",
 			ctrl->cap_sense.cap_bias[PHASE1]);
 		break;
 	case 'c':
@@ -1680,7 +1710,7 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 		if (rc < 0)
 			return rc;
 		ctrl->cap_sense.cap_slope[PHASE1] = temp_value;
-		dev_info(dev, "updated flood slope: %d",
+		dev_info(dev, "updated dot slope: %d",
 			ctrl->cap_sense.cap_slope[PHASE1]);
 		break;
 	case 'd':
@@ -1688,7 +1718,7 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 		if (rc < 0)
 			return rc;
 		ctrl->cap_sense.cap_bias[PHASE2] = temp_value;
-		dev_info(dev, "updated dot bias: %d",
+		dev_info(dev, "updated flood bias: %d",
 			ctrl->cap_sense.cap_bias[PHASE2]);
 		break;
 	case 'e':
@@ -1696,7 +1726,7 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 		if (rc < 0)
 			return rc;
 		ctrl->cap_sense.cap_slope[PHASE2] = temp_value;
-		dev_info(dev, "updated dot slope: %d",
+		dev_info(dev, "updated flood slope: %d",
 			ctrl->cap_sense.cap_slope[PHASE2]);
 		break;
 	default:
@@ -1844,6 +1874,7 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->silego.is_csense_halt = false;
 	ctrl->silego.vcsel_fault_count = 0;
 	ctrl->cap_sense.is_validated = false;
+	ctrl->cap_sense.sample_count = 0;
 	for (i = 0; i < LASER_TYPE_MAX; i++)
 		ctrl->cap_sense.is_crack_detected[i] = false;
 	for (i = 0; i < PHASENUM; i++) {
