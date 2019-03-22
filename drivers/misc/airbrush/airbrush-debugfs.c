@@ -762,7 +762,7 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_file("asv_version", 0222, d_chip, NULL,
+	d = debugfs_create_file("asv_version", 0222, d_chip, sc,
 				&fops_asv_version_override);
 	if (!d)
 		goto err_out;
