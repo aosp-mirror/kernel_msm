@@ -1769,9 +1769,6 @@ static void batt_ce_store_data(struct regmap *map,
 static void batt_ce_stop_estimation(struct gbatt_capacity_estimation *cap_esti,
 				   int reason)
 {
-	if (cap_esti->estimate_state == ESTIMATE_PENDING)
-		cancel_delayed_work_sync(&cap_esti->settle_timer);
-
 	cap_esti->estimate_state = reason;
 	batt_ce_dump_data(cap_esti);
 
@@ -1788,8 +1785,9 @@ static void batt_ce_capacityfiltered_work(struct work_struct *work)
 	int settle_cc = 0, settle_vfsoc = 0;
 	int delta_cc = 0, delta_vfsoc = 0;
 	int cc_sum = 0, vfsoc_sum = 0;
-	u16 data;
+	bool notify = false;
 	int rc = 0;
+	u16 data;
 
 	mutex_lock(&cap_esti->batt_ce_lock);
 	if (!cap_esti->cable_in ||
@@ -1838,23 +1836,33 @@ static void batt_ce_capacityfiltered_work(struct work_struct *work)
 
 		cap_esti->delta_cc_sum = cc_sum;
 		cap_esti->delta_vfsoc_sum = vfsoc_sum;
-
 		batt_ce_store_data(chip->regmap_nvram, &chip->cap_estimate);
 
-		/* force to update uevent to framework side. */
-		power_supply_changed(chip->psy);
+		notify = true;
 	}
 
 done:
 	batt_ce_stop_estimation(cap_esti, ESTIMATE_DONE);
 exit:
 	mutex_unlock(&cap_esti->batt_ce_lock);
+
+	/* force to update uevent to framework side. */
+	if (notify)
+		power_supply_changed(chip->psy);
+
 }
 
-static int batt_ce_start(struct gbatt_capacity_estimation *cap_esti)
+/* batt_ce_init(): estimate_state = ESTIMATE_NONE
+ * batt_ce_start(): estimate_state = ESTIMATE_NONE -> ESTIMATE_PENDING
+ * batt_ce_capacityfiltered_work(): ESTIMATE_PENDING->ESTIMATE_DONE
+ */
+
+static int batt_ce_start(struct gbatt_capacity_estimation *cap_esti,
+			 int cap_tsettle_ms)
 {
 	mutex_lock(&cap_esti->batt_ce_lock);
 
+	/* Still has cable and estimate is not pending or cancelled */
 	if (!cap_esti->cable_in || cap_esti->estimate_state != ESTIMATE_NONE)
 		goto done;
 
@@ -1862,7 +1870,7 @@ static int batt_ce_start(struct gbatt_capacity_estimation *cap_esti)
 	cap_esti->estimate_state = ESTIMATE_PENDING;
 	batt_ce_dump_data(cap_esti);
 	schedule_delayed_work(&cap_esti->settle_timer,
-		msecs_to_jiffies(cap_esti->cap_tsettle));
+		msecs_to_jiffies(cap_tsettle_ms));
 
 done:
 	mutex_unlock(&cap_esti->batt_ce_lock);
@@ -1874,9 +1882,6 @@ static int batt_ce_init(struct gbatt_capacity_estimation *cap_esti,
 {
 	int rc;
 	u16 vfsoc = 0;
-
-	if (cap_esti->cable_in)
-		return 0;
 
 	rc = max1720x_update_battery_qh_based_capacity(chip);
 	if (rc < 0)
@@ -1922,7 +1927,8 @@ static int max1720x_get_property(struct power_supply *psy,
 
 		/* Capacity estimation must run only once */
 		if (val->intval == POWER_SUPPLY_STATUS_FULL)
-			batt_ce_start(&chip->cap_estimate);
+			batt_ce_start(&chip->cap_estimate,
+				      chip->cap_estimate.cap_tsettle);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = max1720x_get_battery_health(chip);
@@ -2064,7 +2070,7 @@ static int max1720x_set_property(struct power_supply *psy,
 {
 	struct max1720x_chip *chip = (struct max1720x_chip *)
 					power_supply_get_drvdata(psy);
-	struct gbatt_capacity_estimation *cap_esti = &chip->cap_estimate;
+	struct gbatt_capacity_estimation *ce = &chip->cap_estimate;
 	int rc = 0;
 
 	pm_runtime_get_sync(chip->dev);
@@ -2079,23 +2085,28 @@ static int max1720x_set_property(struct power_supply *psy,
 		rc = max17x0x_cycle_count_store(chip, val->strval);
 		break;
 	case POWER_SUPPLY_PROP_BATT_CE_CTRL:
-		mutex_lock(&cap_esti->batt_ce_lock);
+		mutex_lock(&ce->batt_ce_lock);
 		if (val->intval) {
 
-			rc = batt_ce_init(cap_esti, chip);
+			if (!ce->cable_in) {
+				rc = batt_ce_init(ce, chip);
 
-			cap_esti->cable_in = (rc == 0);
-			if (cap_esti->cable_in)
-				batt_ce_dump_data(cap_esti);
+				ce->cable_in = (rc == 0);
+				if (ce->cable_in)
+					batt_ce_dump_data(ce);
+			}
 
-		} else if (cap_esti->cable_in) {
-			batt_ce_dump_data(cap_esti);
+		} else if (ce->cable_in) {
+			batt_ce_dump_data(ce);
+
+			if (ce->estimate_state == ESTIMATE_PENDING)
+				cancel_delayed_work_sync(&ce->settle_timer);
 
 			/* race with batt_ce_capacityfiltered_work() */
-			batt_ce_stop_estimation(cap_esti, ESTIMATE_NONE);
-			cap_esti->cable_in = false;
+			batt_ce_stop_estimation(ce, ESTIMATE_NONE);
+			ce->cable_in = false;
 		}
-		mutex_unlock(&cap_esti->batt_ce_lock);
+		mutex_unlock(&ce->batt_ce_lock);
 		break;
 	default:
 		return -EINVAL;
@@ -2862,6 +2873,15 @@ static int debug_fg_reset(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(debug_fg_reset_fops, NULL, debug_fg_reset, "%llu\n");
 
+static int debug_ce_start(void *data, u64 val)
+{
+	struct max1720x_chip *chip = (struct max1720x_chip *)data;
+	batt_ce_start(&chip->cap_estimate, val);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_ce_start_fops, NULL, debug_ce_start, "%llu\n");
+
 
 #define BATTERY_DEBUG_ATTRIBUTE(name, fn_read, fn_write) \
 static const struct file_operations name = {	\
@@ -2909,6 +2929,8 @@ static int init_debugfs(struct max1720x_chip *chip)
 				   chip, &debug_nvram_por_fops);
 		debugfs_create_file("fg_reset", 0400, de,
 				   chip, &debug_fg_reset_fops);
+		debugfs_create_file("ce_start", 0400, de,
+				   chip, &debug_ce_start_fops);
 	}
 #endif
 	return 0;
