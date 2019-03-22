@@ -611,7 +611,10 @@ static int iaxxx_next_event_request(struct device *dev,
 	}
 
 	/* Wait for the request to complete */
-	rc = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
+	rc = iaxxx_send_update_block_request_with_options(
+			dev, IAXXX_BLOCK_0, IAXXX_HOST_0, regmap, 0,
+			UPDATE_BLOCK_NO_OPTIONS,
+			&status);
 	if (rc) {
 		dev_err(dev, "EVT_NEXT_REQ failed, rc = %d\n", rc);
 
@@ -688,10 +691,16 @@ static void iaxxx_get_event_work(struct work_struct *work)
 	}
 
 retry_reading_count_reg:
-	/* Get current regmap based on boot status */
-	regmap = iaxxx_get_current_regmap(priv);
+	/*
+	 * Since this ISR can happen anytime,
+	 * choose which regmap to use to read the event
+	 * based on boot state.
+	 */
+	regmap = !iaxxx_is_firmware_ready(priv) ? priv->regmap_no_pm :
+			priv->regmap;
+
 	/* Any events in the event queue? */
-	rc = regmap_read(priv->regmap_no_pm,
+	rc = regmap_read(regmap,
 			IAXXX_EVT_MGMT_EVT_COUNT_ADDR, &count);
 	if (rc) {
 		dev_err(priv->dev,

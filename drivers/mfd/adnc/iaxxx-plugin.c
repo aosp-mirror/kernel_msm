@@ -1050,11 +1050,12 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 		ret = regmap_read(priv->regmap,
 		IAXXX_PLUGIN_HDR_PARAM_BLK_ADDR_BLOCK_ADDR(block_id, host_id),
 		&reg_addr);
-		if (ret) {
+		if (ret || !reg_addr) {
 			dev_err(dev, "read failed %s()\n", __func__);
 			goto set_create_cfg_err;
 		}
-		pr_debug("%s() Configuration address %x\n", __func__, reg_addr);
+		dev_dbg(dev, "%s() Configuration address %x\n", __func__,
+			reg_addr);
 
 		if (file[0] == IAXXX_INVALID_FILE)
 			ret = iaxxx_btp_write(priv, reg_addr, &cfg_val,
@@ -1451,7 +1452,7 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 				phy_size_range1 / sizeof(uint32_t);
 
 			rc = iaxxx_download_section(priv, data, &file_section,
-						    true);
+					priv->regmap, true);
 
 			/* If address has hole write data after the hole */
 			if (phy_size_range2 != 0 && phy_addr_range2 != 0) {
@@ -1460,7 +1461,7 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 					phy_size_range2 / sizeof(uint32_t);
 				rc = iaxxx_download_section(priv,
 					data + phy_size_range1, &file_section,
-					true);
+					priv->regmap, true);
 			}
 
 			data += file_section_bytes;
@@ -1491,7 +1492,7 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			return -ENOMEM;
 
 		rc = iaxxx_download_section(priv, buf_data, &file_section,
-					    true);
+				priv->regmap, true);
 		kfree(buf_data);
 		buf_data = NULL;
 	}

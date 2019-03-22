@@ -2240,6 +2240,8 @@ static int iaxxx_put_core_boot_##proc_name( \
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev); \
 	u32 value = ucontrol->value.enumerated.item[0]; \
 	int ret = 0; \
+	if (!iaxxx_is_firmware_ready(priv))	\
+		return ret;			\
 	dev_dbg(codec->dev, \
 		"enter %s connection val: %u core_mask: %u\n", \
 		__func__, value, core_mask); \

@@ -1369,6 +1369,8 @@ int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons)
 	if (test_and_set_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
 		return -EBUSY;
 
+	clear_bit(IAXXX_FLG_FW_READY, &priv->flags);
+
 	priv->fw_crash_reasons = reasons;
 	iaxxx_work(priv, runtime_work);
 	return 0;

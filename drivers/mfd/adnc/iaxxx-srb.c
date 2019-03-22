@@ -60,9 +60,9 @@
  *
  * Returns 0 on success or -ETIMEDOUT if the bits didn't clear.
  */
-int
-iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
-		uint32_t reg, uint32_t match, uint32_t *status)
+static int iaxxx_regmap_wait_match(struct iaxxx_priv *priv,
+				struct regmap *regmap, uint32_t reg,
+				uint32_t match, uint32_t *status)
 {
 	int rc, retries;
 	const int max_retries = UPDATE_BLOCK_FAIL_RETRIES;
@@ -181,6 +181,43 @@ out:
 	return rc;
 }
 
+
+static int iaxxx_update_block_status_check_after_wait(struct device *dev,
+						struct regmap *regmap)
+{
+	int rc = 0;
+	uint32_t status;
+
+	rc = regmap_read(regmap,
+			IAXXX_SRB_SYS_BLK_UPDATE_ADDR, &status);
+	if (rc) {
+		dev_err(dev, "%s failed update block status read = %d\n",
+			__func__, rc);
+		goto update_block_check_err;
+	}
+	dev_dbg(dev, "%s update block status = 0x%x\n",
+		__func__, status);
+	/* Update Block Req bit not cleared is not expected */
+	if (status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK) {
+		dev_err(dev,
+			"%s Critical error looks like fw in bad shape = 0x%x\n",
+			__func__, status);
+		rc = -EINVAL;
+		goto update_block_check_err;
+	}
+
+	if (((status & IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK) != 0xFF) &&
+		((status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK) != 0x00)) {
+		dev_err(dev, "%s update block failed with error= 0x%x\n",
+			__func__, status);
+		/* clear stale errors */
+		regmap_write(regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR, 0);
+	}
+
+update_block_check_err:
+	return rc;
+}
+
 /**
  * iaxxx_update_block_request - sends Update Block Request & waits for response
  *
@@ -191,6 +228,7 @@ out:
  * @fixed_wait: if true use fixed time to wait after update block otherwise
  *              use regular wait logic.
  * @wait_time_in_ms: wait time to use if fixed_wait is true.
+ * @options  : options
  * @status   : pointer for the returned system status
  *
  * Core lock must be held by the caller.
@@ -202,15 +240,14 @@ out:
 static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		int  block_id,
 		int  host_id,
-		bool no_pm,
-		bool fixed_wait,
+		struct regmap *regmap,
 		uint32_t wait_time_in_ms,
+		enum update_block_options_t options,
 		uint32_t *status)
 {
 	int rc;
 	int ret;
 	struct device *dev = priv->dev;
-	struct regmap *regmap;
 	uint32_t sys_blk_update_addr;
 	uint32_t reserved_bits_mask = 0;
 	uint32_t result_bits_mask = 0;
@@ -219,9 +256,6 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		return -EINVAL;
 
 	dev_dbg(dev, "%s() block_id:%d\n", __func__, block_id);
-
-	/* Choose regmap based on no_pm flag */
-	regmap = (no_pm) ? priv->regmap_no_pm : priv->regmap;
 
 	/* Choose update block register address based on block id
 	 * and host_id
@@ -249,13 +283,12 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		return -EINVAL;
 	}
 
-	/* To protect concurrent update blocks requests*/
-
-	/* Update block is not taken for no_pm calls because
-	 * those can trigger PM wakeup which will try to do
-	 * some fw-setup which will need the update block.
+	/* To protect concurrent update blocks requests.
+	 *
+	 * If the option to not use update block locking
+	 * don't lock the mutex.
 	 */
-	if (!no_pm)
+	if (!(options & UPDATE_BLOCK_NO_LOCK_OPTION))
 		mutex_lock(&priv->update_block_lock);
 
 	/* Based on app-mode or sbl-mode choose what response to
@@ -266,7 +299,7 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	 * for no error.
 	 *
 	 */
-	if (fixed_wait) {
+	if (options & UPDATE_BLOCK_FIXED_WAIT_OPTION) {
 		result_bits_mask	= 0;
 		reserved_bits_mask	= 0;
 	} else if (priv->is_application_mode)
@@ -289,8 +322,17 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 	}
 
 	/* If fixed wait is needed after update block wait and return */
-	if (fixed_wait) {
+	if (options & UPDATE_BLOCK_FIXED_WAIT_OPTION) {
 		msleep(wait_time_in_ms);
+
+		/* If the option to check for SRB status after fixed
+		 * wait is enabled, then check the status and
+		 * return.
+		 */
+		if (options &
+			UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION)
+			rc = iaxxx_update_block_status_check_after_wait(dev,
+									regmap);
 		goto out;
 	}
 
@@ -318,7 +360,7 @@ out:
 	/* We should not acquire lock during pm operations
 	 * otherwise it leads to dead lock
 	 */
-	if (!no_pm)
+	if (!(options & UPDATE_BLOCK_NO_LOCK_OPTION))
 		mutex_unlock(&priv->update_block_lock);
 	if (rc) {
 		ret = iaxxx_read_error_register(priv, regmap);
@@ -442,21 +484,14 @@ int iaxxx_calibrate_oscillator_request(struct iaxxx_priv *priv, uint32_t delay)
  * Checksum
  *===========================================================================
  */
-
 int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
-			uint32_t length, uint32_t *sum1, uint32_t *sum2)
+			uint32_t length, uint32_t *sum1, uint32_t *sum2,
+			struct regmap *regmap)
 {
 	int rc;
 	uint32_t status;
 	uint32_t request = 0;
 	struct device *dev = priv->dev;
-	/* Get current regmap based on boot status */
-	struct regmap *regmap = iaxxx_get_current_regmap(priv);
-
-	/* no_pm is forced when booting is not complete */
-	bool no_pm = !iaxxx_is_firmware_ready(priv) ?
-			IAXXX_UPDATE_BLOCK_NO_PM :
-			IAXXX_UPDATE_BLOCK_WITH_PM;
 
 	if (!sum1 || !sum2)
 		return -EINVAL;
@@ -507,8 +542,8 @@ int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
 
 	/* Wait for the request to complete */
 	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
-			IAXXX_HOST_0, no_pm,
-			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, &status);
+			IAXXX_HOST_0, regmap, 0,
+			UPDATE_BLOCK_NO_OPTIONS, &status);
 	if (rc) {
 		dev_err(dev, "CHECKSUM_REQUEST failed, rc = %d\n", rc);
 		goto out;
@@ -579,19 +614,13 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = 0;
 
-	/* no_pm is forced when booting is not complete */
-	bool no_pm = !iaxxx_is_firmware_ready(priv) ?
-			IAXXX_UPDATE_BLOCK_NO_PM :
-			IAXXX_UPDATE_BLOCK_WITH_PM;
-
-	/* WARN_ON(!mutex_is_locked(&priv->srb_lock)); */
-
 	if (!priv)
 		return -EINVAL;
 
 	rc = iaxxx_update_block_request(priv, id,
-			IAXXX_HOST_0, no_pm,
-			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, status);
+			IAXXX_HOST_0, priv->regmap,
+			0, UPDATE_BLOCK_NO_OPTIONS,
+			status);
 
 	rc = iaxxx_check_update_block_err_and_recover(dev, rc, *status);
 
@@ -600,53 +629,54 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 EXPORT_SYMBOL(iaxxx_send_update_block_request);
 
 /**
- * iaxxx_update_block_fixed_wait - sends Update Block Request and waits for
- * fixed amount of time specified as parameter.
+ * iaxxx_send_update_block_request_with_options -
+ * sends update Block Request to the device based on options.
  *
- * @priv   : iaxxx private data
- * @status : pointer for the returned system status
+ * @dev    : MFD core device pointer
+ * @block_id : Block ID/ Proc ID
+ * @host_id : Host ID
+ * @regmap  : regmap to use
+ * @wait_time_in_ms: wait time to use if fixed_wait flag is set
+ * @options : options:
+ *            UPDATE_BLOCK_FIXED_WAIT_OPTION - This option enables fixed wait
+ *            time specified by wait_time_in_ms parameter. This delay would
+ *            execute instead of polling for status after sending update block
+ *            to firmware.
  *
- * Core lock must be held by the caller.
+ *            UPDATE_BLOCK_NO_LOCK_OPTION - This option disables mutex lock
+ *            during whole update block operation. This option is used
+ *            from power management context which can trigger another
+ *            update block.
  *
- * This is intend to be used for triggering a block update request. there is no
- * wait for the result after that. one use case is to disable control interface.
+ *            UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION - This option
+ *            is used in combination with UPDATE_BLOCK_FIXED_WAIT_OPTION to
+ *            do a status check after update block and fixed wait.
+ *
+ * @status: status returned on error.
+ *
  */
-
-int iaxxx_send_update_block_fixed_wait(struct device *dev, int host_id,
-		uint32_t wait_time_in_ms)
+int iaxxx_send_update_block_request_with_options(struct device *dev,
+					int block_id,
+					int host_id,
+					struct regmap *regmap,
+					uint32_t wait_time_in_ms,
+					enum update_block_options_t options,
+					uint32_t *status)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 	int rc = 0;
-	uint32_t status;
 
-	dev_dbg(dev, "%s()\n", __func__);
+	if (!priv)
+		return -EINVAL;
 
-	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
-			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
-			IAXXX_UPDATE_BLOCK_WITH_FIXED_WAIT, wait_time_in_ms,
-			&status);
+	rc = iaxxx_update_block_request(priv, block_id, host_id, regmap,
+					wait_time_in_ms, options, status);
 
-	return rc;
-}
-EXPORT_SYMBOL(iaxxx_send_update_block_fixed_wait);
-
-int iaxxx_send_update_block_fixed_wait_no_pm(struct device *dev, int host_id,
-		uint32_t wait_time_in_ms)
-{
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int rc = 0;
-	uint32_t status;
-
-	dev_dbg(dev, "%s()\n", __func__);
-
-	rc = iaxxx_update_block_request(priv, IAXXX_BLOCK_0,
-			host_id, IAXXX_UPDATE_BLOCK_NO_PM,
-			IAXXX_UPDATE_BLOCK_WITH_FIXED_WAIT, wait_time_in_ms,
-			&status);
+	rc = iaxxx_check_update_block_err_and_recover(dev, rc, *status);
 
 	return rc;
 }
-EXPORT_SYMBOL(iaxxx_send_update_block_fixed_wait_no_pm);
+EXPORT_SYMBOL(iaxxx_send_update_block_request_with_options);
 
 int iaxxx_send_update_block_hostid(struct device *dev,
 		int host_id, int block_id)
@@ -658,8 +688,10 @@ int iaxxx_send_update_block_hostid(struct device *dev,
 	dev_dbg(dev, "%s()\n", __func__);
 
 	rc = iaxxx_update_block_request(priv, block_id,
-			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
-			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, &status);
+					host_id, priv->regmap,
+					0,
+					UPDATE_BLOCK_NO_OPTIONS,
+					&status);
 
 	rc = iaxxx_check_update_block_err_and_recover(dev, rc, status);
 	return rc;

@@ -366,6 +366,13 @@ struct iaxxx_priv {
 	struct mutex btp_lock;
 };
 
+enum update_block_options_t	{
+	UPDATE_BLOCK_NO_OPTIONS = 0x0,
+	UPDATE_BLOCK_FIXED_WAIT_OPTION = 0x1,
+	UPDATE_BLOCK_NO_LOCK_OPTION = 0x2,
+	UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION = 0x4,
+};
+
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)
 {
 	return dev ? dev_get_drvdata(dev) : NULL;
@@ -389,6 +396,11 @@ static inline void iaxxx_core_set_route_status(struct iaxxx_priv *priv,
 		atomic_set(&priv->route_status, route_status);
 }
 
+static inline bool iaxxx_is_firmware_ready(struct iaxxx_priv *priv)
+{
+	return test_bit(IAXXX_FLG_FW_READY, &priv->flags);
+}
+
 int iaxxx_core_sensor_change_state(struct device *dev, uint32_t inst_id,
 			uint8_t is_enable, uint8_t block_id);
 int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
@@ -403,15 +415,16 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 			uint32_t block_id);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
-int iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,
-		uint32_t reg, uint32_t match, uint32_t *status);
-int iaxxx_send_update_block_fixed_wait(struct device *dev, int host_id,
-		uint32_t wait_time_in_ms);
-int iaxxx_send_update_block_fixed_wait_no_pm(struct device *dev, int host_id,
-		uint32_t wait_time_in_ms);
 int iaxxx_send_update_block_hostid(struct device *dev,
-		int host_id, int block_id);
+			int host_id, int block_id);
 int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv);
+int iaxxx_send_update_block_request_with_options(struct device *dev,
+			int block_id,
+			int host_id,
+			struct regmap *regmap,
+			uint32_t wait_time_in_ms,
+			enum update_block_options_t options,
+			uint32_t *status);
 int iaxxx_get_firmware_version(struct device *dev, char *ver, uint32_t len);
 int iaxxx_get_application_ver_num(struct device *dev, uint32_t *app_ver_num);
 int iaxxx_get_rom_ver_num(struct device *dev, uint32_t *rom_ver_num);

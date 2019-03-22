@@ -155,6 +155,7 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 	int rc, reg_val;
 	unsigned long ts_now;
 	unsigned int ts_diff;
+	uint32_t status;
 
 	/* Enable external clock */
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
@@ -221,10 +222,21 @@ chip_woken_up:
 		/* program SRB */
 		rc = regmap_write(priv->regmap_no_pm,
 				IAXXX_SRB_SYSTEM_SLEEP_DURATION_ADDR, ts_diff);
+		if (!rc) {
+			/* Update block lock is not taken for no_pm calls
+			 * because those can trigger PM wakeup which will
+			 * try to do some fw-setup which will need the
+			 * update block.
+			 */
+			rc = iaxxx_send_update_block_request_with_options(
+					priv->dev, IAXXX_BLOCK_0,
+					IAXXX_HOST_0, priv->regmap_no_pm,
+					10,
+					UPDATE_BLOCK_FIXED_WAIT_OPTION |
+					UPDATE_BLOCK_NO_LOCK_OPTION,
+					&status);
+		}
 
-		if (!rc)
-			rc = iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
-							IAXXX_HOST_0, 10);
 		if (rc)
 			dev_err(priv->dev, "%s failed to program sleep time\n",
 				__func__);
@@ -241,6 +253,7 @@ chip_woken_up:
 int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 {
 	int rc;
+	uint32_t status;
 
 	/* set up the SPI speed thats expected when the system is wake up
 	 * Set the SPI Speed to maximum so system will be awake with max
@@ -293,8 +306,20 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 			dev_err(priv->dev, "%s() Fail\n", __func__);
 			return rc;
 		}
-		iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
-							IAXXX_HOST_0, 20);
+
+		/* Update block lock is not taken for no_pm calls
+		 * because those can trigger PM wakeup which will
+		 * try to do some fw-setup which will need the
+		 * update block.
+		 */
+		rc = iaxxx_send_update_block_request_with_options(
+				priv->dev, IAXXX_BLOCK_0,
+				IAXXX_HOST_0, priv->regmap_no_pm,
+				20,
+				UPDATE_BLOCK_FIXED_WAIT_OPTION |
+				UPDATE_BLOCK_NO_LOCK_OPTION,
+				&status);
+
 		priv->iaxxx_state->sleep_ts = jiffies;
 
 		/* Disable external clock */
@@ -319,8 +344,18 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 			return rc;
 		}
 
-		iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
-							IAXXX_HOST_0, 20);
+		/* Update block lock is not taken for no_pm calls
+		 * because those can trigger PM wakeup which will
+		 * try to do some fw-setup which will need the
+		 * update block.
+		 */
+		rc = iaxxx_send_update_block_request_with_options(
+				priv->dev, IAXXX_BLOCK_0,
+				IAXXX_HOST_0, priv->regmap_no_pm,
+				20,
+				UPDATE_BLOCK_FIXED_WAIT_OPTION |
+				UPDATE_BLOCK_NO_LOCK_OPTION,
+				&status);
 
 		priv->iaxxx_state->power_state = IAXXX_OPTIMAL_MODE;
 		dev_info(priv->dev, "%s() chip put into optimal power mode\n",
@@ -381,6 +416,7 @@ int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev)
 {
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int rc;
+	uint32_t status;
 
 	dev_dbg(dev, "%s()\n", __func__);
 
@@ -399,7 +435,12 @@ int iaxxx_pm_set_optimal_power_mode_host0(struct device *dev)
 		return rc;
 	}
 
-	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_0, 20);
+	rc = iaxxx_send_update_block_request_with_options(
+			priv->dev, IAXXX_BLOCK_0,
+			IAXXX_HOST_0, priv->regmap,
+			20,
+			UPDATE_BLOCK_FIXED_WAIT_OPTION,
+			&status);
 	priv->iaxxx_state->power_state = IAXXX_OPTIMAL_MODE;
 	return rc;
 }
@@ -412,18 +453,25 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev, bool no_pm)
 {
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int rc;
+	uint32_t status;
+
+	/* Choose the regmap based on which context this function is
+	 * being executed. If it is executed from Power management
+	 * context, then no_pm regmap should be forced so
+	 * no further SPI wakeups are possible.
+	 */
+	struct regmap *regmap = no_pm ? priv->regmap_no_pm : priv->regmap;
 
 	dev_dbg(dev, "%s()\n", __func__);
 
 	/* Disable both the control interfaces and the chip will go to
 	 * optimal power mode
 	 */
-	rc = regmap_write(no_pm ? priv->regmap_no_pm : priv->regmap,
+	rc = regmap_write(regmap,
 			IAXXX_PWR_MGMT_MAX_SPI_SPEED_REQ_1_ADDR,
 			priv->spi_app_speed);
 	if (!rc)
-		rc = regmap_update_bits(no_pm ?
-			priv->regmap_no_pm : priv->regmap,
+		rc = regmap_update_bits(regmap,
 			IAXXX_SRB_SYS_POWER_CTRL_1_ADDR,
 			IAXXX_SRB_SYS_POWER_CTRL_1_DISABLE_CTRL_INTERFACE_MASK,
 			0x1 <<
@@ -433,10 +481,28 @@ int iaxxx_pm_set_optimal_power_mode_host1(struct device *dev, bool no_pm)
 		return rc;
 	}
 
-	if (no_pm)
-		iaxxx_send_update_block_fixed_wait_no_pm(dev, IAXXX_HOST_1, 20);
-	else
-		iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_1, 20);
+	if (no_pm) {
+		/* Update block lock is not taken for no_pm calls
+		 * because those can trigger PM wakeup which will
+		 * try to do some fw-setup which will need the
+		 * update block.
+		 */
+		rc = iaxxx_send_update_block_request_with_options(
+				priv->dev, IAXXX_BLOCK_0,
+				IAXXX_HOST_1, regmap,
+				20,
+				UPDATE_BLOCK_FIXED_WAIT_OPTION |
+				UPDATE_BLOCK_NO_LOCK_OPTION,
+				&status);
+	} else {
+		rc = iaxxx_send_update_block_request_with_options(
+				priv->dev,  IAXXX_BLOCK_0,
+				IAXXX_HOST_1, regmap,
+				20,
+				UPDATE_BLOCK_FIXED_WAIT_OPTION,
+				&status);
+	}
+
 	return rc;
 }
 
@@ -456,33 +522,20 @@ int iaxxx_set_mpll_source(struct iaxxx_priv *priv, int source)
 			IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK,
 			IAXXX_SRB_SYS_POWER_CTRL_CONFIG_MPLL_MASK);
 
-	if (!rc)
-		rc = iaxxx_send_update_block_fixed_wait(priv->dev,
-							IAXXX_HOST_0, 20);
-
+	if (!rc) {
+		rc = iaxxx_send_update_block_request_with_options(
+			priv->dev, IAXXX_BLOCK_0,
+			IAXXX_HOST_0, priv->regmap,
+			20,
+			UPDATE_BLOCK_FIXED_WAIT_OPTION |
+			UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION,
+			&status);
+	}
 	if (rc) {
 		dev_err(priv->dev, "%s failed error code = %d\n", __func__, rc);
 		return rc;
 	}
 
-	rc = regmap_read(priv->regmap,
-				IAXXX_SRB_SYS_BLK_UPDATE_ADDR, &status);
-	if (rc) {
-		dev_err(priv->dev, "%s failed update block status read = %d\n",
-				__func__, rc);
-		return rc;
-	}
-	dev_err(priv->dev, "%s update block status = 0x%x\n",
-			__func__, status);
-	WARN_ON(status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
-	if (((status & IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK) != 0xFF) &&
-		((status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK) != 0x00)) {
-		dev_err(priv->dev,
-		"%s update block for MPLL switch not successful = 0x%x\n",
-				__func__, status);
-		/* clear stale errors */
-		regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR, 0);
-	}
 	return rc;
 }
 
@@ -525,31 +578,24 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source)
 		return rc;
 	}
 
-	rc = iaxxx_send_update_block_fixed_wait_no_pm(priv->dev,
-							IAXXX_HOST_0, 20);
+	/* Update block lock is not taken for no_pm calls
+	 * because those can trigger PM wakeup which will
+	 * try to do some fw-setup which will need the
+	 * update block.
+	 */
+	rc = iaxxx_send_update_block_request_with_options(
+		priv->dev, IAXXX_BLOCK_0,
+		IAXXX_HOST_0, priv->regmap_no_pm,
+		20,
+		UPDATE_BLOCK_FIXED_WAIT_OPTION |
+		UPDATE_BLOCK_NO_LOCK_OPTION |
+		UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION,
+		&status);
 	if (rc) {
 		dev_err(priv->dev, "%s() Fail err = %d\n", __func__, rc);
 		return rc;
 	}
 
-	rc = regmap_read(priv->regmap_no_pm,
-				IAXXX_SRB_SYS_BLK_UPDATE_ADDR, &status);
-	if (rc) {
-		dev_err(priv->dev, "%s failed update block status read = %d\n",
-				__func__, rc);
-		return rc;
-	}
-	dev_err(priv->dev, "%s update block status = 0x%x\n",
-			__func__, status);
-	WARN_ON(status & IAXXX_SRB_SYS_BLK_UPDATE_REQ_MASK);
-	if (((status & IAXXX_SRB_SYS_BLK_UPDATE_RES_MASK) != 0xFF) &&
-		((status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK) != 0x00)) {
-		dev_err(priv->dev,
-		"%s update block for MPLL switch failed = 0x%x\n",
-				__func__, status);
-		/* clear stale errors */
-		regmap_write(priv->regmap, IAXXX_SRB_SYS_BLK_UPDATE_ADDR, 0);
-	}
 	return rc;
 }
 
@@ -1215,6 +1261,7 @@ EXPORT_SYMBOL(iaxxx_core_get_pwr_stats);
 int iaxxx_set_osc_trim_period(struct iaxxx_priv *priv, int period)
 {
 	int rc = 0;
+	uint32_t status;
 
 	if (period == priv->int_osc_trim_period)
 		goto exit;
@@ -1233,7 +1280,12 @@ int iaxxx_set_osc_trim_period(struct iaxxx_priv *priv, int period)
 		goto exit;
 	}
 
-	rc = iaxxx_send_update_block_fixed_wait(priv->dev, IAXXX_HOST_0, 20);
+	rc = iaxxx_send_update_block_request_with_options(
+			priv->dev, IAXXX_BLOCK_0,
+			IAXXX_HOST_0, priv->regmap,
+			20,
+			UPDATE_BLOCK_FIXED_WAIT_OPTION,
+			&status);
 
 	if (rc)
 		dev_err(priv->dev, "Update block failed in %s\n", __func__);

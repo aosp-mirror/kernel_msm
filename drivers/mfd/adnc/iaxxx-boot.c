@@ -70,10 +70,12 @@ void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes)
  * @data    : the section data to be downloaded
  * @chunk_size: max chunk size downloaded
  * @section : pointer to the section data (section address, length, etc).
+ * @regmap : regmap to use
  */
 static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 			const uint8_t *data, uint32_t chunk_size,
 			const struct firmware_section_header *section,
+			struct regmap *regmap,
 			bool btp)
 {
 	int rc, i = 0;
@@ -81,9 +83,6 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 	int rem_bytes = section->length % (chunk_size);
 	int temp_len = section->length / (chunk_size);
 	int chunk_word_size = chunk_size * 4;
-	/* Get current regmap based on boot status */
-	struct regmap *regmap = iaxxx_get_current_regmap(priv);
-
 
 	dev_err(dev, "Writing section at 0x%.08X, %d words(s)\n",
 				section->start_address, section->length);
@@ -139,13 +138,17 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 
 /**
  * iaxxx_download_section - downloads a firmware text or data section
+ * This version of the function used no_pm regmap and it is intended
+ * for usage during booting firmware.
  *
  * @priv    : iaxxx private data
  * @data    : the section data to be downloaded
  * @section : pointer to the section data (section address, length, etc).
+ * @regmap  : regmap to use
  */
 int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				const struct firmware_section_header *section,
+				struct regmap *regmap,
 				bool btp)
 {
 	int rc = 0;
@@ -154,7 +157,7 @@ int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				? IAXXX_CHUNK_SIZE/64 : IAXXX_CHUNK_SIZE;
 
 	rc = iaxxx_download_section_chunks(priv, data,
-					iaxxx_chunk_size, section, btp);
+					iaxxx_chunk_size, section, regmap, btp);
 	if (rc == -ENOMEM) {
 		iaxxx_chunk_size = (priv->bus == IAXXX_I2C)
 					? IAXXX_REDUCED_CHUNK_SIZE / 64 :
@@ -162,7 +165,8 @@ int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 		dev_err(dev,
 			"retry section download with reduced chunk size\n");
 		rc = iaxxx_download_section_chunks(priv, data,
-					iaxxx_chunk_size, section, btp);
+						iaxxx_chunk_size, section,
+						regmap, btp);
 		if (rc == -ENOMEM) {
 			dev_err(dev,
 				"%s: failed: %d, with reduced chunk size: %d",
@@ -260,8 +264,13 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 			CALC_FLETCHER16(file_section.start_address, sum1, sum2);
 
 			do {
-				rc = iaxxx_download_section(priv, data,
-							&file_section, false);
+				/* Use no_pm regmap since this is during booting
+				 * and access to default regmap is disallowed
+				 */
+				rc = iaxxx_download_section(
+						priv, data, &file_section,
+						priv->regmap_no_pm, false);
+
 			} while (rc && ++retries < max_retries);
 
 			if (rc) {
@@ -269,10 +278,15 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 				goto out;
 			}
 
-			/* Include checksum for this section */
+			/* Include checksum for this section
+			 * Use no_pm regmap for this because this is called
+			 * during booting and there is no access to default
+			 * regmap.
+			 */
 			rc = iaxxx_checksum_request(priv,
 					file_section.start_address,
-					file_section.length, &sum1, &sum2);
+					file_section.length, &sum1, &sum2,
+					priv->regmap_no_pm);
 			if (rc) {
 				dev_err(dev, "Checksum request error\n");
 				goto out;
@@ -356,7 +370,9 @@ static int iaxxx_download_per_core_fw(struct iaxxx_priv *priv,
 
 			do {
 				rc = iaxxx_download_section(priv, data,
-							&file_section, false);
+							&file_section,
+							priv->regmap,
+							false);
 			} while (rc && ++retries < max_retries);
 
 			if (rc) {
@@ -367,7 +383,7 @@ static int iaxxx_download_per_core_fw(struct iaxxx_priv *priv,
 			/* Include checksum for this section */
 			rc = iaxxx_checksum_request(priv,
 				file_section.start_address, file_section.length,
-				&devicesum1, &devicesum2);
+				&devicesum1, &devicesum2, priv->regmap);
 			if (rc) {
 				dev_err(dev, "Checksum request error\n");
 				goto out;

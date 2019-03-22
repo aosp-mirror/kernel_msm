@@ -440,6 +440,7 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host0(struct device *dev,
 {
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int val, rc;
+	uint32_t status;
 
 	if (!buf)
 		return -EINVAL;
@@ -459,7 +460,12 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host0(struct device *dev,
 		return count;
 	}
 
-	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_0, 20);
+	rc = iaxxx_send_update_block_request_with_options(
+			priv->dev, IAXXX_BLOCK_0,
+			IAXXX_HOST_0, priv->regmap,
+			20,
+			UPDATE_BLOCK_FIXED_WAIT_OPTION,
+			&status);
 	dev_info(dev, "%s() Success\n", __func__);
 	mutex_unlock(&priv->test_mutex);
 	return count;
@@ -476,6 +482,7 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host1(struct device *dev,
 {
 	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
 	int val, rc;
+	uint32_t status;
 
 	if (!buf)
 		return -EINVAL;
@@ -495,7 +502,13 @@ static ssize_t iaxxx_sysfs_pm_set_optimal_power_mode_host1(struct device *dev,
 		return count;
 	}
 
-	iaxxx_send_update_block_fixed_wait(dev, IAXXX_HOST_1, 20);
+	rc = iaxxx_send_update_block_request_with_options(
+			priv->dev, IAXXX_BLOCK_0,
+			IAXXX_HOST_1, priv->regmap,
+			20,
+			UPDATE_BLOCK_FIXED_WAIT_OPTION,
+			&status);
+
 	dev_info(dev, "%s() Success\n", __func__);
 	mutex_unlock(&priv->test_mutex);
 	return count;

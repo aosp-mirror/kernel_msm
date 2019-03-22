@@ -136,21 +136,6 @@ struct iaxxx_raw_bus_ops {
 };
 
 
-static inline bool iaxxx_is_firmware_ready(struct iaxxx_priv *priv)
-{
-	return test_bit(IAXXX_FLG_FW_READY, &priv->flags);
-}
-
-/* If the firmware is not booted yet, use the no_pm regmap
- * to read the events, otherwise use default regmap.
- */
-static inline struct regmap *iaxxx_get_current_regmap(
-		struct iaxxx_priv *priv)
-{
-	return !iaxxx_is_firmware_ready(priv) ?
-			priv->regmap_no_pm : priv->regmap;
-}
-
 int iaxxx_device_reset(struct iaxxx_priv *priv);
 int iaxxx_device_init(struct iaxxx_priv *priv);
 void iaxxx_device_exit(struct iaxxx_priv *priv);
@@ -172,7 +157,8 @@ int iaxxx_calibrate_oscillator_request(struct iaxxx_priv *priv, uint32_t delay);
 
 /* Checksum */
 int iaxxx_checksum_request(struct iaxxx_priv *priv, uint32_t address,
-			uint32_t length, uint32_t *sum1, uint32_t *sum2);
+			uint32_t length, uint32_t *sum1, uint32_t *sum2,
+			struct regmap *regmap);
 
 /* Event manager */
 int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt);
@@ -186,7 +172,8 @@ int iaxxx_verify_fw_header(struct device *dev,
 			struct firmware_file_header *header);
 int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				const struct firmware_section_header *section,
-				bool btp);
+				struct regmap *regmap, bool btp);
+
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes);
 int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons);
 int iaxxx_get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,

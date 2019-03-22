@@ -493,7 +493,7 @@ static int iaxxx_download_script(struct iaxxx_priv *priv,
 	/* Include checksum for this section */
 	rc = iaxxx_checksum_request(priv,
 				script_addr, (script_size >> 2),
-				&finalsum1, &finalsum2);
+				&finalsum1, &finalsum2, priv->regmap);
 	if (rc) {
 		dev_err(dev, "%s() script Checksum request error: %d\n",
 			__func__, rc);
