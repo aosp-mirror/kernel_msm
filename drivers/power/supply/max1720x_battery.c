@@ -3170,15 +3170,25 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 
 	dev_info(chip->dev, "RSense value %d micro Ohm\n", chip->RSense * 10);
 
-	max17x0x_reg_read(chip->regmap, MAX17X0X_TAG_cnfg, &chip->RConfig);
-	dev_info(chip->dev, "Config: 0x%04x\n", chip->RConfig);
+	ret = max17x0x_reg_read(chip->regmap, MAX17X0X_TAG_cnfg,
+				&chip->RConfig);
+	if (ret)
+		return -EPROBE_DEFER;
+	else
+		dev_info(chip->dev, "Config: 0x%04x\n", chip->RConfig);
 
-	(void) REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, &data);
-	dev_info(chip->dev, "IChgTerm: %d\n",
-		 reg_to_micro_amp(data, chip->RSense));
-	(void) REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, &data);
-	dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
-		 reg_to_vempty(data), reg_to_vrecovery(data));
+	ret = REGMAP_READ(chip->regmap, MAX1720X_ICHGTERM, &data);
+	if (ret)
+		return -EPROBE_DEFER;
+	else
+		dev_info(chip->dev, "IChgTerm: %d\n",
+			 reg_to_micro_amp(data, chip->RSense));
+	ret = REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, &data);
+	if (ret)
+		return -EPROBE_DEFER;
+	else
+		dev_info(chip->dev, "VEmpty: VE=%dmV VR=%dmV\n",
+			 reg_to_vempty(data), reg_to_vrecovery(data));
 
 	/* Capacity data is stored as complement so it will not be zero. Using
 	 * zero case to detect new un-primed pack
