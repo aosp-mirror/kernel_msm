@@ -19,6 +19,7 @@
 /* Modem smem driver version */
 #define MODEM_SMEM_VERSION	0x0
 #define MODEM_FTM_MAGIC		0x6846544D
+#define MODEM_DSDS_MAGIC	0x44534453
 
 /* Modem smem channel */
 #define SMEM_ID_VENDOR0		134
@@ -34,7 +35,8 @@ struct modem_smem_type {
 	uint32_t	ftm_magic;
 	uint32_t	efs_magic;
 	uint32_t	modem_flag;
-	uint32_t	reserved_3[6];
+	uint32_t	dsds_magic;
+	uint32_t	reserved_3[5];
 };
 
 #define modem_smem_addr(smem, field) \

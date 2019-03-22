@@ -84,7 +84,8 @@ static ssize_t modem_smem_show(struct device *d,
 			"subtype:0x%x\n"
 			"platform:0x%x\n"
 			"efs_magic:0x%x\n"
-			"ftm_magic:0x%x\n",
+			"ftm_magic:0x%x\n"
+			"dsds_magic:0x%x\n",
 			modem_smem->version,
 			modem_smem->modem_flag,
 			modem_smem->major_id,
@@ -92,7 +93,8 @@ static ssize_t modem_smem_show(struct device *d,
 			modem_smem->subtype,
 			modem_smem->platform,
 			modem_smem->efs_magic,
-			modem_smem->ftm_magic);
+			modem_smem->ftm_magic,
+			modem_smem->dsds_magic);
 }
 
 static ssize_t modem_smem_store(struct device *d,
@@ -144,6 +146,8 @@ static int modem_smem_probe(struct platform_device *pdev)
 	int len = 0;
 	u8 buff[8 + 1];
 	u32 val = 0;
+	char *prop = NULL;
+	int prop_size;
 
 	pr_debug("[SMEM] %s: Enter probe\n", __func__);
 
@@ -222,6 +226,15 @@ static int modem_smem_probe(struct platform_device *pdev)
 	if (is_factory_bootmode()) {
 		modem_smem_set_u32(modem_smem, ftm_magic, MODEM_FTM_MAGIC);
 		dev_info(dev, "Set FTM mode due to %s\n", bootmode);
+	}
+
+	if (dtnp) {
+		prop = (char *) of_get_property(dtnp, "dsds", &prop_size);
+		if (prop && !strncmp(prop, "1", sizeof("1"))) {
+			modem_smem_set_u32(modem_smem, dsds_magic,
+					MODEM_DSDS_MAGIC);
+			dev_info(dev, "Set DSDS mode\n");
+		}
 	}
 
 	/* Create sysfs */
