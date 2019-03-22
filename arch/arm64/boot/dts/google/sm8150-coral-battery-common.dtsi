@@ -38,11 +38,12 @@
 	>;
 
 	maxim,n_regval_1720x_ver_por = /bits/ 8 <0xd4 0x01>;
-	maxim,n_regval_1720x_ver = /bits/ 8 <0xd4 0x01>;
+	maxim,n_regval_1720x_ver = /bits/ 8 <0xd4 0x02>;
 	maxim,n_regval_1720x =  /bits/ 16 <
 		0x9C 0x0380	/* nIChgTerm Register */
 		0x9D 0x0EB4	/* nFilterCfg Register */
 		0x9F 0x2606	/* nLearnCfg Register */
+		0xA7 0x255E	/* nTempCo Register */
 		0xB0 0x7217	/* nConfig Register */
 		0xB3 0x0E80	/* nDesignCap Register */
 		0xB5 0x9C01	/* nPackCfg Register */
