@@ -25,10 +25,15 @@
 	qcom,ep-latency = <1>;
 };
 
-&mhi_0 { /* of_node of abc pcie */
-	airbrush_tmu: airbrush_tmu {
-		compatible = "abc,airbrush-tmu";
-		#thermal-sensor-cells = <1>;
+&pcie_rc1 {
+	abc_pcie: google,abc-pcie {
+		reg = <0 0 0 0 0 >;
+		pci-ids = "1ae0:abcd";
+
+		airbrush_tmu: airbrush_tmu {
+			compatible = "abc,airbrush-tmu";
+			#thermal-sensor-cells = <1>;
+		};
 	};
 };
 
