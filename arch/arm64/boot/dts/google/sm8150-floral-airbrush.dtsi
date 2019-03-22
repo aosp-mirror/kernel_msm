@@ -245,41 +245,6 @@
 			status = "okay";
 		};
 
-		clock_core: clock-controller@41F10000 {
-			compatible = "diablo,abc-clock-core";
-			reg = <0x41F10000 0x10000>;
-			#clock-cells = <1>;
-			clocks = <&fin_pll_ab>,
-				<&clock_aon DOUT_AON_PLL_AON_CLK>;
-			clock-names = "fin_pll",
-				"dout_aon_pll_aon_clk";
-			status = "okay";
-		};
-
-		clock_fsys: clock-controller@41710000 {
-			compatible = "diablo,abc-clock-fsys";
-			reg = <0x41710000 0x10000>;
-			#clock-cells = <1>;
-			clocks = <&fin_pll_ab>,
-				<&clock_aon DOUT_AON_PLL_AON_CLK>;
-			clock-names = "fin_pll",
-				"dout_aon_pll_aon_clk";
-			status = "okay";
-		};
-
-		clock_mif: clock-controller@41510000 {
-			compatible = "diablo,abc-clock-mif";
-			reg = <0x41510000 0x10000>;
-			#clock-cells = <1>;
-			clocks = <&fin_pll_ab>,
-				<&clock_aon DOUT_AON_PLL_AON_CLK>,
-				<&clock_aon DOUT_AON_SHARED_DIV_MIF>;
-			clock-names = "fin_pll",
-				"dout_aon_pll_aon_clk",
-				"dout_aon_shared_div_mif";
-			status = "okay";
-		};
-
 		clock_ipu: clock-controller@41240000 {
 			compatible = "diablo,abc-clock-ipu";
 			reg = <0x41240000 0x10000>;
