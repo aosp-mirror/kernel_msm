@@ -33,7 +33,7 @@
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
 #define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
 #define P9221_VRECT_TIMEOUT_MS		(2 * 1000)
-#define P9221_NOTIFIER_DELAY_MS		80
+#define P9221_NOTIFIER_DELAY_MS		100
 #define P9221R5_ILIM_MAX_UA		(1600 * 1000)
 #define P9221R5_OVER_CHECK_NUM		3
 
@@ -1225,12 +1225,12 @@ static void p9221_notifier_work(struct work_struct *work)
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, notifier_work.work);
 	bool relax = true;
+	int ret;
 
 	dev_info(&charger->client->dev, "Notifier work: on:%d dc:%d det:%d\n",
 		 charger->online, charger->check_dc, charger->check_det);
 
 	if (charger->pdata->q_value != -1) {
-		int ret;
 
 		ret = p9221_reg_write_8(charger,
 					P9221R5_EPP_Q_FACTOR_REG,
@@ -1239,6 +1239,17 @@ static void p9221_notifier_work(struct work_struct *work)
 			dev_err(&charger->client->dev,
 				"cannot write Q=%d (%d)\n",
 				 charger->pdata->q_value, ret);
+	}
+
+	if (charger->pdata->epp_rp_value != -1) {
+
+		ret = p9221_reg_write_8(charger,
+					P9221R5_EPP_REQ_NEGOTIATED_POWER_REG,
+					charger->pdata->epp_rp_value);
+		if (ret < 0)
+			dev_err(&charger->client->dev,
+				"cannot write to EPP_NEG_POWER=%d (%d)\n",
+				 charger->pdata->epp_rp_value, ret);
 	}
 
 	if (charger->check_det)
@@ -2316,6 +2327,15 @@ static int p9221_parse_dt(struct device *dev,
 		pdata->q_value = data;
 		dev_info(dev, "dt q_value:%d\n", pdata->q_value);
 	}
+
+	ret = of_property_read_u32(node, "google,epp_rp_value", &data);
+	if (ret < 0) {
+		pdata->epp_rp_value = -1;
+	} else {
+		pdata->epp_rp_value = data;
+		dev_info(dev, "dt epp_rp_value: %d\n", pdata->epp_rp_value);
+	}
+
 
 	return 0;
 }

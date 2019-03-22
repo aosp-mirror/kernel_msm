@@ -220,6 +220,7 @@ struct p9221_charger_platform_data {
 	int				fod_num;
 	int				fod_epp_num;
 	int 				q_value;
+	int				epp_rp_value;
 };
 
 struct p9221_charger_data {
