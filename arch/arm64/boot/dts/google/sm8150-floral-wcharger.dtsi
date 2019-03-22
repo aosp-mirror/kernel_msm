@@ -70,4 +70,5 @@
 	idt,irq_det_gpio = <&tlmm 150 0x00>;
 	idt,gpio_qien = <&pm8150b_gpios 12 GPIO_ACTIVE_LOW>;
 	idt,gpio_slct = <&tlmm 149 0x00>;
+	google,epp_rp_value = <0x16>;
 };
