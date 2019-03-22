@@ -6468,35 +6468,27 @@ static const char * const dr_mode_text[] = {
 static int smblib_force_dr_mode(struct smb_charger *chg, int mode)
 {
 	int rc = 0;
+	union power_supply_propval val;
 
 	switch (mode) {
 	case TYPEC_PORT_SNK:
-		rc = smblib_masked_write(chg, TYPE_C_MODE_CFG_REG,
-			TYPEC_POWER_ROLE_CMD_MASK, EN_SNK_ONLY_BIT);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't enable snk, rc=%d\n", rc);
-			return rc;
-		}
+		val.intval = POWER_SUPPLY_TYPEC_PR_SINK;
 		break;
 	case TYPEC_PORT_SRC:
-		rc = smblib_masked_write(chg, TYPE_C_MODE_CFG_REG,
-			TYPEC_POWER_ROLE_CMD_MASK, EN_SRC_ONLY_BIT);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't enable src, rc=%d\n", rc);
-			return rc;
-		}
+		val.intval = POWER_SUPPLY_TYPEC_PR_SOURCE;
 		break;
 	case TYPEC_PORT_DRP:
-		rc = smblib_masked_write(chg, TYPE_C_MODE_CFG_REG,
-			TYPEC_POWER_ROLE_CMD_MASK, 0);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't enable DRP, rc=%d\n", rc);
-			return rc;
-		}
+		val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
 		break;
 	default:
 		smblib_err(chg, "Power role %d not supported\n", mode);
 		return -EINVAL;
+	}
+
+	rc = smblib_set_prop_typec_power_role(chg, &val);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set power role, rc=%d\n", rc);
+		return rc;
 	}
 
 	chg->dr_mode = mode;
