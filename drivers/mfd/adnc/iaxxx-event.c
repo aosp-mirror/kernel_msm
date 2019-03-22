@@ -134,36 +134,37 @@ int iaxxx_core_evt_subscribe(struct device *dev, uint16_t src_id,
 	 * Update all event subscription registers
 	 * Event ID, IDS of source and destination, destination opaque
 	 */
+	mutex_lock(&priv->event_lock);
 	ret = regmap_write(priv->regmap, IAXXX_EVT_MGMT_EVT_ID_ADDR, event_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
-		return ret;
+		goto evt_err;
 	}
 	sys_id = ((dst_id << 16) | src_id);
 	ret = regmap_write(priv->regmap, IAXXX_EVT_MGMT_EVT_SUB_ADDR, sys_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
-		return ret;
+		goto evt_err;
 	}
 	ret = regmap_write(priv->regmap, IAXXX_EVT_MGMT_EVT_SUB_DST_OPAQUE_ADDR,
 			dst_opaque);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
-		return ret;
+		goto evt_err;
 	}
 	ret = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR,
 		(1 << IAXXX_EVT_MGMT_EVT_SUB_REQ_POS),
 		IAXXX_EVT_MGMT_EVT_SUB_REQ_MASK);
 	if (ret) {
 		dev_err(dev, "Update bit failed %s()\n", __func__);
-		return ret;
+		goto evt_err;
 	}
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
-	if (ret) {
-		dev_err(dev, "Update blk failed %s()\n", __func__);
-		return ret;
-	}
-	return 0;
+	if (ret)
+		dev_err(dev, "AKR Update blk failed %s()\n", __func__);
+evt_err:
+	mutex_unlock(&priv->event_lock);
+	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_evt_subscribe);
 
@@ -199,30 +200,32 @@ int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,
 	 * Event ID, Subsystem IDS of source and destination, destination
 	 *  opaque
 	 */
+	mutex_lock(&priv->event_lock);
 	ret = regmap_write(priv->regmap, IAXXX_EVT_MGMT_EVT_ID_ADDR, event_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
-		return ret;
+		goto err;
 	}
 	sys_id = ((dst_id << 16) | src_id);
 	ret = regmap_write(priv->regmap, IAXXX_EVT_MGMT_EVT_SUB_ADDR, sys_id);
 	if (ret) {
 		dev_err(dev, "write failed %s()\n", __func__);
-		return ret;
+		goto err;
 	}
 	ret = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR,
 		(1 << IAXXX_EVT_MGMT_EVT_UNSUB_REQ_POS),
 		IAXXX_EVT_MGMT_EVT_UNSUB_REQ_MASK);
 	if (ret) {
 		dev_err(dev, "Update bit failed %s()\n", __func__);
-		return ret;
+		goto err;
 	}
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
-	if (ret) {
-		dev_err(dev, "Update blk failed %s()\n", __func__);
-		return ret;
-	}
-	return 0;
+	if (ret)
+		dev_err(dev, "AKR Update blk failed %s()\n", __func__);
+
+err:
+	mutex_unlock(&priv->event_lock);
+	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_evt_unsubscribe);
 
@@ -247,6 +250,8 @@ int iaxxx_core_evt_read_subscription(struct device *dev,
 	uint32_t value = 0;
 	uint32_t status;
 
+	mutex_lock(&priv->event_lock);
+
 	/* 1. Set the SUB_READ_REQ bit in EVT register to read subscription. */
 	ret = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR,
 				IAXXX_EVT_MGMT_EVT_SUB_READ_REQ_MASK,
@@ -254,7 +259,7 @@ int iaxxx_core_evt_read_subscription(struct device *dev,
 	if (ret) {
 		dev_err(dev,
 	"Setting the SUB_RET_REQ bit in EVT register failed %s()\n", __func__);
-		return ret;
+		goto reg_err;
 	}
 
 	/*
@@ -267,7 +272,7 @@ int iaxxx_core_evt_read_subscription(struct device *dev,
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
 	if (ret) {
 		dev_err(dev, "Update blk failed %s()\n", __func__);
-		return ret;
+		goto reg_err;
 	}
 
 	/*
@@ -279,7 +284,7 @@ int iaxxx_core_evt_read_subscription(struct device *dev,
 	if (ret) {
 		dev_err(dev,
 			"Failed to read IAXXX_EVT_MGMT_EVT_DST_OPAQUE_ADDR\n");
-		return ret;
+		goto reg_err;
 	}
 	*dst_opaque = value;
 
@@ -287,7 +292,7 @@ int iaxxx_core_evt_read_subscription(struct device *dev,
 				IAXXX_EVT_MGMT_EVT_ID_ADDR, &value);
 	if (ret) {
 		dev_err(dev, "Failed to read IAXXX_EVT_MGMT_EVT_ID_ADDR\n");
-		return ret;
+		goto reg_err;
 	}
 	*evt_id = (uint16_t)value;
 
@@ -295,13 +300,15 @@ int iaxxx_core_evt_read_subscription(struct device *dev,
 				IAXXX_EVT_MGMT_EVT_SUB_ADDR, &value);
 	if (ret) {
 		dev_err(dev, "Failed to read IAXXX_EVT_MGMT_EVT_SUB_ADDR\n");
-		return ret;
+		goto reg_err;
 	}
 	*src_id = (uint16_t)((value & IAXXX_EVT_MGMT_EVT_SUB_SRC_ID_MASK)
 					>> IAXXX_EVT_MGMT_EVT_SUB_SRC_ID_POS);
 	*dst_id = (uint16_t)((value & IAXXX_EVT_MGMT_EVT_SUB_DST_ID_MASK)
 					>> IAXXX_EVT_MGMT_EVT_SUB_DST_ID_POS);
 
+reg_err:
+	mutex_unlock(&priv->event_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_evt_read_subscription);
@@ -327,10 +334,11 @@ int iaxxx_core_evt_retrieve_notification(struct device *dev,
 						uint32_t *dst_opaque)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int ret;
+	int ret = 0;
 	uint32_t value = 0;
 	uint32_t status;
 
+	mutex_lock(&priv->event_lock);
 	/*
 	 * 1. Read the number of pending events N from the EVENT_COUNT register
 	 *    Repeat the following steps N times(exit if N = 0)
@@ -338,14 +346,14 @@ int iaxxx_core_evt_retrieve_notification(struct device *dev,
 	ret = regmap_read(priv->regmap, IAXXX_EVT_MGMT_EVT_COUNT_ADDR, &value);
 	if (ret) {
 		dev_err(dev, "Getting number of event notifications failed\n");
-		return ret;
+		goto reg_err;
 	}
 	if (value == 0) {
 		*src_id      = (uint16_t)IAXXX_SYSID_INVALID;
 		*evt_id      = 0;
 		*src_opaque  = 0;
 		*dst_opaque  = 0;
-		return 0;
+		goto reg_err;
 	}
 
 	/*
@@ -357,7 +365,7 @@ int iaxxx_core_evt_retrieve_notification(struct device *dev,
 	if (ret) {
 		dev_err(dev,
 			"Writing request to retrieve notification failed\n");
-		return ret;
+		goto reg_err;
 	}
 
 	/*
@@ -373,7 +381,7 @@ int iaxxx_core_evt_retrieve_notification(struct device *dev,
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
 	if (ret) {
 		dev_err(dev, "%s() Update blk failed\n", __func__);
-		return ret;
+		goto reg_err;
 	}
 
 	/*
@@ -384,7 +392,7 @@ int iaxxx_core_evt_retrieve_notification(struct device *dev,
 				IAXXX_EVT_MGMT_EVT_SRC_INFO_ADDR, &value);
 	if (ret) {
 		dev_err(dev, "Getting source information failed\n");
-		return ret;
+		goto reg_err;
 	}
 
 	*src_id = (uint16_t)((value & IAXXX_EVT_MGMT_EVT_SRC_INFO_SYS_ID_MASK)
@@ -396,7 +404,7 @@ int iaxxx_core_evt_retrieve_notification(struct device *dev,
 				IAXXX_EVT_MGMT_EVT_SRC_OPAQUE_ADDR, &value);
 	if (ret) {
 		dev_err(dev, "Getting source opaque failed\n");
-		return ret;
+		goto reg_err;
 	}
 	*src_opaque = value;
 
@@ -404,10 +412,12 @@ int iaxxx_core_evt_retrieve_notification(struct device *dev,
 				IAXXX_EVT_MGMT_EVT_DST_OPAQUE_ADDR, &value);
 	if (ret) {
 		dev_err(dev, "Getting destination opaque failed\n");
-		return ret;
+		goto reg_err;
 	}
 	*dst_opaque = value;
 
+reg_err:
+	mutex_unlock(&priv->event_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_evt_retrieve_notification);
@@ -425,6 +435,7 @@ int iaxxx_core_evt_reset_read_index(struct device *dev)
 	int ret;
 	uint32_t status;
 
+	mutex_lock(&priv->event_lock);
 	/* Set the RESET_RD_IDX  bit to read subscription */
 	ret = regmap_update_bits(priv->regmap, IAXXX_EVT_MGMT_EVT_ADDR,
 				IAXXX_EVT_MGMT_EVT_RESET_RD_IDX_MASK,
@@ -433,15 +444,15 @@ int iaxxx_core_evt_reset_read_index(struct device *dev)
 		dev_err(dev,
 		"%s() Setting the RESET_RD_IDX bit in EVT register failed\n",
 								__func__);
-		return ret;
+		goto reg_err;
 	}
 
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
-	if (ret) {
+	if (ret)
 		dev_err(dev, "%s() Update blk failed\n", __func__);
-		return ret;
-	}
 
+reg_err:
+	mutex_unlock(&priv->event_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_evt_reset_read_index);
@@ -477,6 +488,7 @@ int iaxxx_core_evt_trigger(struct device *dev,
 		return ret;
 	}
 
+	mutex_lock(&priv->event_lock);
 	/*
 	 * 1. Set the System ID(src Id and evt Id) in the field of
 	 *    EVT_SRC_INFO register.
@@ -487,7 +499,7 @@ int iaxxx_core_evt_trigger(struct device *dev,
 	if (ret) {
 		dev_err(dev, "Writing source information failed %s()\n",
 								__func__);
-		return ret;
+		goto reg_err;
 	}
 
 	/*
@@ -498,7 +510,7 @@ int iaxxx_core_evt_trigger(struct device *dev,
 			IAXXX_EVT_MGMT_EVT_SRC_OPAQUE_ADDR, src_opaque);
 	if (ret) {
 		dev_err(dev, "Writing source opaque failed %s()\n", __func__);
-		return ret;
+		goto reg_err;
 	}
 
 	/* 3. Set the TRIG_REQ bit (and only it) in EVT register. */
@@ -509,7 +521,7 @@ int iaxxx_core_evt_trigger(struct device *dev,
 		dev_err(dev,
 		    "Setting the TRIG_REQ bit in EVT register failed %s()\n",
 		    __func__);
-		return ret;
+		goto reg_err;
 	}
 
 	/*
@@ -523,11 +535,12 @@ int iaxxx_core_evt_trigger(struct device *dev,
 	 */
 
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
-	if (ret) {
+	if (ret)
 		dev_err(dev, "Update blk failed %s()\n", __func__);
-		return ret;
-	}
-	return 0;
+
+reg_err:
+	mutex_unlock(&priv->event_lock);
+	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_evt_trigger);
 
@@ -584,7 +597,9 @@ static int iaxxx_next_event_request(struct device *dev,
 {
 	int rc;
 	uint32_t status, data[3];
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
+	mutex_lock(&priv->event_lock);
 	/* Set the next event notification request */
 	rc = regmap_update_bits(regmap,
 			IAXXX_EVT_MGMT_EVT_NEXT_REQ_ADDR,
@@ -633,6 +648,7 @@ static int iaxxx_next_event_request(struct device *dev,
 	ev->dst_opaque = data[2];
 
 out:
+	mutex_unlock(&priv->event_lock);
 	return rc;
 }
 

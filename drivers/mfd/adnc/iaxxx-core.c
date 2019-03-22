@@ -1642,6 +1642,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->sensor_tunnel_dev_lock);
 	mutex_init(&priv->crashdump_lock);
 	mutex_init(&priv->pm_mutex);
+	mutex_init(&priv->event_lock);
 	mutex_init(&priv->proc_on_off_lock);
 	mutex_init(&priv->btp_lock);
 	mutex_init(&priv->debug_mutex);
@@ -1754,6 +1755,7 @@ err_regdump_init:
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
 	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
+	mutex_destroy(&priv->event_lock);
 	mutex_destroy(&priv->proc_on_off_lock);
 	mutex_destroy(&priv->btp_lock);
 	mutex_destroy(&priv->debug_mutex);
@@ -1795,6 +1797,7 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
 	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
+	mutex_destroy(&priv->event_lock);
 	mutex_destroy(&priv->proc_on_off_lock);
 	mutex_destroy(&priv->btp_lock);
 	mutex_destroy(&priv->debug_mutex);
