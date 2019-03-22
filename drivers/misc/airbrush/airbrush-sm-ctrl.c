@@ -1963,7 +1963,9 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	case AB_SM_SET_AON_FREQUENCY:
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		ret = sc->clk_ops->aon_set_rate_direct(sc->clk_ops->ctx, arg);
+		ret = sc->clk_ops->aon_set_rate_opt(sc->clk_ops->ctx,
+			sc->blocks[BLK_AON].current_state->clk_frequency,
+			arg);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
 		if (ret == arg)
