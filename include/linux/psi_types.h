@@ -132,16 +132,16 @@ struct psi_group {
 	/* Per-cpu task state & time tracking */
 	struct psi_group_cpu __percpu *pcpu;
 
-	/* Total stall times observed */
-	u64 total[NR_PSI_AGGREGATORS][NR_PSI_STATES - 1];
-
-	/* Aggregator work control */
-	struct delayed_work avgs_work;
-
 	/* Running pressure averages */
 	u64 avg_total[NR_PSI_STATES - 1];
 	u64 avg_last_update;
 	u64 avg_next_update;
+
+	/* Aggregator work control */
+	struct delayed_work avgs_work;
+
+	/* Total stall times and sampled pressure averages */
+	u64 total[NR_PSI_AGGREGATORS][NR_PSI_STATES - 1];
 	unsigned long avg[NR_PSI_STATES - 1][3];
 
 	/* Monitor work control */
@@ -155,7 +155,7 @@ struct psi_group {
 	/* Configured polling triggers */
 	struct list_head triggers;
 	u32 nr_triggers[NR_PSI_STATES - 1];
-	u32 trigger_states;
+	u32 poll_states;
 	u64 poll_min_period;
 
 	/* Total stall times at the start of monitor activation */
