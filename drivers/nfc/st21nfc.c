@@ -317,8 +317,6 @@ static long st21nfc_dev_ioctl(struct file *filp, unsigned int cmd,
 
 	int ret = 0;
 
-	pr_info("%s cmd=%d", __func__, cmd);
-
 	switch (cmd) {
 
 	case ST21NFC_SET_POLARITY_RISING:
