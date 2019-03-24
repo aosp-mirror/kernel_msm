@@ -69,6 +69,7 @@ struct cs40l2x_private {
 	int a2h_level;
 	bool vibe_init_success;
 	bool vibe_mode;
+	bool vibe_state;
 	struct gpio_desc *reset_gpio;
 	struct cs40l2x_platform_data pdata;
 	unsigned int num_algos;
@@ -3999,6 +4000,22 @@ static struct attribute_group cs40l2x_dev_attr_group = {
 	.attrs = cs40l2x_dev_attrs,
 };
 
+static void cs40l2x_wl_apply(struct cs40l2x_private *cs40l2x)
+{
+	struct device *dev = cs40l2x->dev;
+
+	pm_stay_awake(dev);
+	dev_dbg(dev, "Applied suspend blocker\n");
+}
+
+static void cs40l2x_wl_relax(struct cs40l2x_private *cs40l2x)
+{
+	struct device *dev = cs40l2x->dev;
+
+	pm_relax(dev);
+	dev_dbg(dev, "Relaxed suspend blocker\n");
+}
+
 static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 {
 	struct cs40l2x_private *cs40l2x =
@@ -4012,6 +4029,10 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 		return;
 
 	mutex_lock(&cs40l2x->lock);
+
+	if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_HAPTIC
+			&& cs40l2x->asp_enable == CS40L2X_ASP_DISABLED)
+		goto err_mutex;
 
 	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "STATUS",
 			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_VIBE), &val);
@@ -4040,6 +4061,8 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 		}
 
 		cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_AUDIO;
+		if (cs40l2x->vibe_state != CS40L2X_VIBE_STATE_RUNNING)
+			cs40l2x_wl_apply(cs40l2x);
 	} else if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO
 			&& cs40l2x->asp_enable == CS40L2X_ASP_ENABLED) {
 		/* resume audio mode */
@@ -4077,6 +4100,8 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 		}
 
 		cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_HAPTIC;
+		if (cs40l2x->vibe_state != CS40L2X_VIBE_STATE_RUNNING)
+			cs40l2x_wl_relax(cs40l2x);
 	}
 
 err_mutex:
@@ -4119,20 +4144,43 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
 
-	cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
-	cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
-
 	hrtimer_cancel(&cs40l2x->pbq_timer);
 
-	ret = cs40l2x_stop_playback(cs40l2x);
-	if (ret)
-		return ret;
+	switch (cs40l2x->pbq_state) {
+	case CS40L2X_PBQ_STATE_SILENT:
+	case CS40L2X_PBQ_STATE_IDLE:
+		ret = cs40l2x_cp_dig_scale_set(cs40l2x,
+				cs40l2x->pbq_cp_dig_scale);
+		if (ret)
+			return ret;
 
-	ret = cs40l2x_cp_dig_scale_set(cs40l2x, cs40l2x->pbq_cp_dig_scale);
-	if (ret)
-		return ret;
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
+			cs40l2x_wl_relax(cs40l2x);
+		break;
+	case CS40L2X_PBQ_STATE_PLAYING:
+		ret = cs40l2x_stop_playback(cs40l2x);
+		if (ret)
+			return ret;
 
-	pm_relax(cs40l2x->dev);
+		ret = cs40l2x_cp_dig_scale_set(cs40l2x,
+				cs40l2x->pbq_cp_dig_scale);
+		if (ret)
+			return ret;
+
+		if (cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED)
+			break;
+
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
+			cs40l2x_wl_relax(cs40l2x);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
+	cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
 
 	return 0;
 }
@@ -4156,6 +4204,7 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 				break;
 			case 0:
 				/* queue is finished */
+				cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
 				return cs40l2x_pbq_cancel(cs40l2x);
 			default:
 				/* loop once more */
@@ -4246,12 +4295,7 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 
 	switch (cs40l2x->pbq_state) {
 	case CS40L2X_PBQ_STATE_IDLE:
-		/* queue may have been canceled */
-		if (!cs40l2x->amp_gnd_stby)
-			goto err_mutex;
-
-		/* leave amplifier alone if ASP playback is in flight */
-		if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO)
+		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
 			goto err_mutex;
 
 		ret = regmap_read(regmap,
@@ -4264,15 +4308,24 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 			goto err_mutex;
 		}
 
-		/* leave amplifier alone if playback has already restarted */
 		if (val != CS40L2X_STATUS_IDLE)
 			goto err_mutex;
 
-		ret = regmap_write(regmap, CS40L2X_SPK_FORCE_TST_1,
-				CS40L2X_FORCE_SPK_GND);
-		if (ret)
-			dev_err(dev, "Failed to ground amplifier outputs\n");
+		if (cs40l2x->amp_gnd_stby) {
+			ret = regmap_write(regmap,
+					CS40L2X_SPK_FORCE_TST_1,
+					CS40L2X_FORCE_SPK_GND);
+			if (ret) {
+				dev_err(dev,
+					"Failed to ground amplifier outputs\n");
+				goto err_mutex;
+			}
+		}
 
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+
+		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
+			cs40l2x_wl_relax(cs40l2x);
 		goto err_mutex;
 
 	case CS40L2X_PBQ_STATE_PLAYING:
@@ -4523,12 +4576,8 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		goto err_mutex;
 
 	case CS40L2X_INDEX_PBQ:
-		ret = cs40l2x_pbq_cancel(cs40l2x);
-		if (ret) {
-			dev_err(dev, "Failed to cancel playback queue\n");
-			goto err_mutex;
-		}
-		break;
+		dev_err(dev, "Ignored attempt to interrupt playback queue\n");
+		goto err_mutex;
 	}
 
 	for (i = 0; i < CS40L2X_NUM_HW_ERRS; i++)
@@ -4555,22 +4604,37 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 	}
 
 	switch (cs40l2x->cp_trailer_index) {
-	case CS40L2X_INDEX_PBQ:
-		pm_stay_awake(dev);
-		break;
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
 	case CS40L2X_INDEX_QEST:
 	case CS40L2X_INDEX_PEAK:
 	case CS40L2X_INDEX_DIAG:
-		pm_stay_awake(dev);
 #ifdef CONFIG_ANDROID_TIMED_OUTPUT
 		hrtimer_start(&cs40l2x->vibe_timer,
 				ktime_set(cs40l2x->vibe_timeout / 1000,
 						(cs40l2x->vibe_timeout % 1000)
 						* 1000000),
 				HRTIMER_MODE_REL);
+		/* intentionally fall through */
+
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
+	case CS40L2X_INDEX_PBQ:
+		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO
+				&& cs40l2x->vibe_state
+					!= CS40L2X_VIBE_STATE_RUNNING)
+			cs40l2x_wl_apply(cs40l2x);
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_RUNNING;
+		break;
+
+	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
+		if (!(cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED))
+			break;
+
+		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO
+				&& cs40l2x->vibe_state
+					!= CS40L2X_VIBE_STATE_RUNNING)
+			cs40l2x_wl_apply(cs40l2x);
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_RUNNING;
 		break;
 	}
 
@@ -4783,32 +4847,6 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 
 	mutex_lock(&cs40l2x->lock);
 
-	/* handle effects that straddle a firmware swap */
-	switch (cs40l2x->fw_desc->id) {
-	case CS40L2X_FW_ID_ORIG:
-		break;
-	case CS40L2X_FW_ID_CAL:
-		switch (cs40l2x->cp_trailer_index) {
-		case CS40L2X_INDEX_VIBE:
-		case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
-		case CS40L2X_INDEX_PEAK:
-			pm_relax(dev);
-			/* intentionally fall through */
-
-		case CS40L2X_INDEX_PBQ:
-		case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
-			goto err_skip;
-		}
-		break;
-	default:
-		switch (cs40l2x->cp_trailer_index) {
-		case CS40L2X_INDEX_QEST:
-		case CS40L2X_INDEX_DIAG:
-			pm_relax(dev);
-			goto err_skip;
-		}
-	}
-
 	switch (cs40l2x->cp_trailer_index) {
 	case CS40L2X_INDEX_PEAK:
 		ret = cs40l2x_peak_capture(cs40l2x);
@@ -4829,7 +4867,13 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		ret = cs40l2x_stop_playback(cs40l2x);
 		if (ret)
 			dev_err(dev, "Failed to stop playback\n");
-		pm_relax(dev);
+
+		if (cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED)
+			break;
+
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
+			cs40l2x_wl_relax(cs40l2x);
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
@@ -4858,7 +4902,9 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		ret = cs40l2x_dig_scale_set(cs40l2x, cs40l2x->diag_dig_scale);
 		if (ret)
 			dev_err(dev, "Failed to restore digital scale\n");
-		pm_relax(dev);
+
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_wl_relax(cs40l2x);
 		break;
 
 	case CS40L2X_INDEX_IDLE:
@@ -4868,7 +4914,6 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		dev_err(dev, "Invalid wavetable index\n");
 	}
 
-err_skip:
 	cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
 
 	mutex_unlock(&cs40l2x->lock);
@@ -6293,7 +6338,8 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 	struct device *dev = cs40l2x->dev;
 	int ret, i;
 
-	if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_HAPTIC)
+	if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO
+			|| cs40l2x->vibe_state == CS40L2X_VIBE_STATE_RUNNING)
 		return -EPERM;
 
 	switch (cs40l2x->fw_desc->id) {
@@ -6321,12 +6367,6 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 		break;
 
 	case CS40L2X_FW_ID_CAL:
-		ret = cs40l2x_diag_enable(cs40l2x, 0);
-		if (ret) {
-			dev_err(dev, "Failed to disable diagnostics tone\n");
-			return ret;
-		}
-
 		ret = cs40l2x_ack_write(cs40l2x,
 				cs40l2x_dsp_reg(cs40l2x, "SHUTDOWNREQUEST",
 						CS40L2X_XM_UNPACKED_TYPE,
@@ -6339,24 +6379,6 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 		break;
 
 	default:
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "EVENTCONTROL",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id),
-				CS40L2X_EVENT_DISABLED);
-		if (ret) {
-			dev_err(dev, "Failed to disable event controls\n");
-			return ret;
-		}
-
-		ret = (cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE) ?
-				cs40l2x_pbq_cancel(cs40l2x) :
-				cs40l2x_stop_playback(cs40l2x);
-		if (ret) {
-			dev_err(dev, "Failed to stop playback\n");
-			return ret;
-		}
-
 		ret = cs40l2x_hiber_cmd_send(cs40l2x,
 				CS40L2X_POWERCONTROL_FRC_STDBY);
 		if (ret) {
