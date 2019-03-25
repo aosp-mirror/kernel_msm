@@ -42,9 +42,6 @@
 #define M0_FIRMWARE_ADDR 0x20000000
 #define CALIBRATION_SIZE 0x400
 
-/* This is to enable latency measurement */
-#define ENABLE_LATENCY_MEASUREMENT (1)
-
 /* This is to be enabled for dog food only */
 #define ENABLE_AIRBRUSH_DEBUG (1)
 
@@ -56,14 +53,15 @@
 /* ABC FW and workload path */
 #define M0_FIRMWARE_PATH "faceauth.fw"
 
-/* Timeout */
-#define FACEAUTH_TIMEOUT 3000
-#define M0_POLLING_PAUSE 80
-#define M0_POLLING_INTERVAL 6
+/* Timeout in ms */
+#define FACEAUTH_TIMEOUT_MS 3000
+#define M0_POLLING_PAUSE_MS 80
+/* Polling interval in us */
+#define M0_POLLING_INTERVAL_US 6000
 /* Expected latency for FW to switch to faceauth (in us)*/
 #define CONTEXT_SWITCH_TO_FACEAUTH_US 6000
 /* Timeout for context switch (in ms) */
-#define CONTEXT_SWITCH_TIMEOUT 40
+#define CONTEXT_SWITCH_TIMEOUT_MS 40
 
 /* Citadel */
 #define MAX_CACHE_SIZE 512
@@ -168,24 +166,24 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
 {
+	long ioctl_ret;
 	struct faceauth_data *data = file->private_data;
 
 	if (data->hypx_enable)
-		return faceauth_dev_ioctl_el2(file, cmd, arg);
+		ioctl_ret = faceauth_dev_ioctl_el2(file, cmd, arg);
 	else
-		return faceauth_dev_ioctl_el1(file, cmd, arg);
+		ioctl_ret = faceauth_dev_ioctl_el1(file, cmd, arg);
+	return ioctl_ret;
 }
 
 static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				   unsigned long arg)
 {
 	int err = 0;
-	int polling_interval = M0_POLLING_INTERVAL;
+	int polling_interval = M0_POLLING_INTERVAL_US;
 	struct faceauth_init_data init_step_data = { 0 };
 	struct faceauth_start_data start_step_data = { 0 };
-	unsigned long stop, ioctl_start, save_debug_jiffies;
-	unsigned long save_debug_start = 0;
-	unsigned long save_debug_end = 0;
+	unsigned long stop;
 	uint32_t ab_input;
 	uint32_t ab_result;
 	uint32_t angles;
@@ -193,16 +191,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 	uint32_t fw_execution_status;
 	uint32_t temp_data;
 	struct faceauth_data *data = file->private_data;
-#if ENABLE_LATENCY_MEASUREMENT
-	unsigned long faceauth_cntx_start, faceauth_cntx_complete,
-		faceauth_img_transfer_start, faceauth_img_transfer_complete,
-		faceauth_process_start, faceauth_process_complete;
-#endif
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data = { 0 };
 #endif
-
-	ioctl_start = jiffies;
 
 	down_read(&data->rwsem);
 	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
@@ -239,15 +230,13 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_NONE);
 		aon_config_write(SYSREG_AON_IPU_REG29, 4, M0_FIRMWARE_ADDR);
 		aon_config_write(SYSREG_REG_GP_INT0, 4, 1);
-#if ENABLE_LATENCY_MEASUREMENT
-		faceauth_cntx_start = jiffies;
-#endif
+
 		/* Expected fw context switch latency < 6us, timeout after
 		 * 40ms
 		 * Expected latency is probably less than 6ms, if FW load is in
 		 * critical path, we can reduce this latency
 		 */
-		stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT);
+		stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT_MS);
 		usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
 			     CONTEXT_SWITCH_TO_FACEAUTH_US + 1);
 
@@ -267,9 +256,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 			usleep_range(100, 1000);
 		}
-#if ENABLE_LATENCY_MEASUREMENT
-		faceauth_cntx_complete = jiffies;
-#endif
 		break;
 	case FACEAUTH_DEV_IOC_START:
 		pr_info("faceauth start IOCTL\n");
@@ -304,18 +290,11 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				goto exit;
 			}
 
-			pr_info("Send images\n");
-#if ENABLE_LATENCY_MEASUREMENT
-			faceauth_img_transfer_start = jiffies;
-#endif
 			err = dma_send_images(&start_step_data);
 			if (err) {
 				pr_err("Error in sending workload\n");
 				goto exit;
 			}
-#if ENABLE_LATENCY_MEASUREMENT
-			faceauth_img_transfer_complete = jiffies;
-#endif
 			if (start_step_data.calibration) {
 				pr_info("Send calibration data\n");
 				err = dma_xfer(start_step_data.calibration,
@@ -381,7 +360,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			   ((start_step_data.profile_id & 0xFF) << 8) |
 			   ((start_step_data.operation & 0xFF));
 		pr_info("Set faceauth input flag = 0x%08x\n", ab_input);
-		pr_info("Command counter %d\n", data->session_counter + 1);
 		err = aon_config_write(INPUT_FLAG_ADDR, 4, ab_input);
 		if (err) {
 			pr_err("Error setting faceauth FW address\n");
@@ -392,12 +370,9 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				 data->session_counter++);
 		aon_config_write(INPUT_COMMAND_ADDR, 4,
 				 start_step_data.operation);
-#if ENABLE_LATENCY_MEASUREMENT
-		faceauth_process_start = jiffies;
-#endif
 		pr_info("Waiting for completion.\n");
-		msleep(M0_POLLING_PAUSE);
-		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
+		msleep(M0_POLLING_PAUSE_MS);
+		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT_MS);
 		for (;;) {
 			err = aon_config_read(RESULT_FLAG_ADDR, 4, &ab_result);
 			if (err) {
@@ -407,33 +382,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 			if (ab_result != WORKLOAD_STATUS_NO_STATUS) {
 				pr_info("Faceauth workflow completes.\n");
-#if ENABLE_LATENCY_MEASUREMENT
-				pr_info("Faceauth latency report\n");
-				pr_info("Faceauth to reach img took %d ms\n",
-					jiffies_to_usecs(
-						faceauth_img_transfer_start -
-						ioctl_start) /
-						1000);
-				pr_info("Faceauth image transfer took %d ms\n",
-					jiffies_to_usecs(
-						faceauth_img_transfer_complete -
-						faceauth_img_transfer_start) /
-						1000);
-				pr_info("Faceauth firmware process took %d ms\n",
-					jiffies_to_usecs(
-						faceauth_process_complete -
-						faceauth_process_start) /
-						1000);
-				pr_info("Faceauth start to took completion flag %d ms\n",
-					jiffies_to_usecs(
-						faceauth_process_complete -
-						ioctl_start) /
-						1000);
-				pr_info("Faceauth end-to-end took %d ms\n",
-					jiffies_to_usecs(jiffies -
-							 ioctl_start) /
-						1000);
-#endif
 
 				break;
 			}
@@ -442,18 +390,13 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				err = -ETIME;
 				goto exit;
 			}
-			msleep(polling_interval);
+			usleep_range(polling_interval, polling_interval + 1);
 			polling_interval = polling_interval > 1 ?
 						   polling_interval >> 1 :
 						   1;
 		}
-#if ENABLE_LATENCY_MEASUREMENT
-		faceauth_process_complete = jiffies;
-#endif
 #if ENABLE_AIRBRUSH_DEBUG
-		save_debug_start = jiffies;
 		enqueue_debug_data(data, false);
-		save_debug_end = jiffies;
 #endif
 
 		start_step_data.result = ab_result;
@@ -492,7 +435,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			    &dma_read_value);
 		start_step_data.error_code = dma_read_value;
 
-		pr_err("Faceauth error code 0x%08x\n",
+		pr_info("Faceauth error code 0x%08x\n",
 		       start_step_data.error_code);
 		dma_read_dw(INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,
@@ -574,17 +517,6 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 
 exit:
 	up_read(&data->rwsem);
-	save_debug_jiffies = save_debug_end - save_debug_start;
-
-	if (save_debug_jiffies > 0) {
-		pr_info("Faceauth action took %dus, debug save took %dus\n",
-			jiffies_to_usecs(jiffies - ioctl_start -
-					 save_debug_jiffies),
-			jiffies_to_usecs(save_debug_jiffies));
-	} else {
-		pr_info("Faceauth action took %dus\n",
-			jiffies_to_usecs(jiffies - ioctl_start));
-	}
 	return err;
 }
 
@@ -592,18 +524,15 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				   unsigned long arg)
 {
 	int err = 0;
-	int polling_interval = M0_POLLING_INTERVAL;
+	int polling_interval = M0_POLLING_INTERVAL_US;
 	struct faceauth_start_data start_step_data = { 0 };
 	struct faceauth_init_data init_step_data = { 0 };
-	unsigned long stop, ioctl_start, save_debug_jiffies;
-	unsigned long save_debug_start = 0;
+	unsigned long stop;
 	bool send_images_data;
 	struct faceauth_data *data = file->private_data;
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data;
 #endif
-
-	ioctl_start = jiffies;
 
 	down_read(&data->rwsem);
 	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
@@ -633,7 +562,6 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 					data->m0_verbosity_level);
 		if (err < 0)
 			goto exit;
-
 		break;
 	case FACEAUTH_DEV_IOC_START:
 		pr_info("el2: faceauth start IOCTL\n");
@@ -675,8 +603,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
-		msleep(M0_POLLING_PAUSE);
-		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT);
+		msleep(M0_POLLING_PAUSE_MS);
+		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT_MS);
 		for (;;) {
 			err = el2_faceauth_get_process_result(data->device,
 							      &start_step_data);
@@ -699,22 +627,19 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				goto exit;
 			}
 
-			msleep(polling_interval);
+			usleep_range(polling_interval, polling_interval + 1);
 			polling_interval = polling_interval > 1 ?
 						   polling_interval >> 1 :
 						   1;
 		}
 #if ENABLE_AIRBRUSH_DEBUG
-		save_debug_start = jiffies;
 		enqueue_debug_data(data, true);
-		save_debug_jiffies = jiffies - save_debug_start;
 #endif
 		if (copy_to_user((void __user *)arg, &start_step_data,
 				 sizeof(start_step_data))) {
 			err = -EFAULT;
 			goto exit;
 		}
-
 		break;
 	case FACEAUTH_DEV_IOC_CLEANUP:
 		/* In case of EL2 cleanup happens in PIL callback */
@@ -786,15 +711,6 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 
 exit:
 	up_read(&data->rwsem);
-	if (save_debug_jiffies > 0) {
-		pr_info("Faceauth action took %dus, debug data save took %dus\n",
-			jiffies_to_usecs(jiffies - ioctl_start -
-					 save_debug_jiffies),
-			jiffies_to_usecs(save_debug_jiffies));
-	} else {
-		pr_info("Faceauth action took %dus\n",
-			jiffies_to_usecs(jiffies - ioctl_start));
-	}
 	return err;
 }
 

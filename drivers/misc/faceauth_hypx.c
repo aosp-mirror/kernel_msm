@@ -610,7 +610,7 @@ int el2_faceauth_wait_pil_dma_over(void)
 			return 0;
 		} else if (ret == 2) {
 			/* DMA is still running */
-			msleep(1);
+			usleep_range(1000, 2000);
 		} else {
 			/* EL2 call failed */
 			return -EFAULT;
