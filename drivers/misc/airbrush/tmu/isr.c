@@ -50,6 +50,8 @@ static void ab_tmu_isr_work(struct work_struct *work)
 		if (!sensor_irq[i])
 			continue;
 		ab_tmu_sensor_update(data->sensor[i]);
+		dev_dbg(isr->dev, "interrupt for sensor %d triggered: %x",
+				i, sensor_irq[i]);
 	}
 }
 
