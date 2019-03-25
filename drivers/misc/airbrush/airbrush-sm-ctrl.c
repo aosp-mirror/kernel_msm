@@ -43,6 +43,9 @@ static struct ab_state_context *ab_sm_ctx;
 
 #define MAX_AON_FREQ 934000000
 
+#define SMPS1_MIN_VOLTAGE 550000
+#define SMPS1_NOMINAL_VOLTAGE 750000
+
 static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
@@ -1042,6 +1045,21 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 */
 	ab_prep_pmic_settings(sc, dest_map);
 
+	/* If it could be at Sleep, increase voltage if necessary
+	 * (context: b/129285814)
+	 */
+	if (prev_state <= CHIP_STATE_300) {
+		dev_info(sc->dev, "increase SMPS1 voltage back to nominal\n");
+		ret = regulator_set_voltage(sc->smps1, SMPS1_NOMINAL_VOLTAGE,
+				SMPS1_NOMINAL_VOLTAGE + REGULATOR_STEP);
+		if (ret) {
+			dev_err(sc->dev,
+					"failed to set to min SMPS1 voltage (%d)\n",
+					ret);
+			return ret;
+		}
+	}
+
 	ab_sm_start_ts(sc, AB_SM_TS_PMIC_ON);
 	ret = ab_pmic_on(sc);
 	ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON);
@@ -1150,6 +1168,21 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	ab_sm_start_ts(sc, AB_SM_TS_PMIC_OFF);
 	ab_pmic_off(sc);
 	ab_sm_record_ts(sc, AB_SM_TS_PMIC_OFF);
+
+	/* If going to Sleep, decrease voltage to save power
+	 * (context: b/129285814)
+	 */
+	if (to_chip_substate_id == CHIP_STATE_300) {
+		dev_info(sc->dev, "Decrease SMPS1 voltage to min\n");
+		ret = regulator_set_voltage(sc->smps1, SMPS1_MIN_VOLTAGE,
+				SMPS1_MIN_VOLTAGE + REGULATOR_STEP);
+		if (ret) {
+			dev_err(sc->dev,
+					"failed to set to min SMPS1 voltage (%d)\n",
+					ret);
+			return ret;
+		}
+	}
 
 	if (to_chip_substate_id == CHIP_STATE_100) {
 		ab_gpio_disable_ddr_iso(sc);

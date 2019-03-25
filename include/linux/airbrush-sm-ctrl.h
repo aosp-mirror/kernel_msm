@@ -45,6 +45,8 @@
 
 #define AB_SM_OSC_RATE 19200000
 
+#define REGULATOR_STEP 6250
+
 #define AB_SM_STATE_IN_RANGE(chip_state, state_range) \
 	((chip_state / 100) == (state_range / 100))
 

@@ -35,8 +35,6 @@
 #define TPU_RO_SHIFT 16
 #define TPU_SIGNOFF_VOLTAGE 750000
 
-#define REGULATOR_STEP 6250
-
 static u32 ipu_ro_table[MAX_ASV_VERSION + 1][NUM_GROUPS + 1] = {
 	[0] = { 6420, 6584, 6821, 7057, 7293,
 		7529, 7765, 8002, 8238, 8420,
