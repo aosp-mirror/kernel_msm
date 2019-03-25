@@ -2856,7 +2856,7 @@ static int fwu_get_tp_vendor_v7(void)
 		return -EINVAL;
 	}
 
-	retval = fwu_wait_for_idle(ENABLE_WAIT_MS, false);
+	retval = fwu_wait_for_idle(ENABLE_WAIT_MS, true);
 	if (retval < 0)
 		return retval;
 
@@ -3111,7 +3111,7 @@ static int fwu_enter_flash_prog(void)
 	if (retval < 0)
 		return retval;
 
-	retval = fwu_wait_for_idle(ENABLE_WAIT_MS, false);
+	retval = fwu_wait_for_idle(ENABLE_WAIT_MS, true);
 	if (retval < 0)
 		return retval;
 
@@ -5817,6 +5817,14 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 	}
 
 	fwu->rmi4_data = rmi4_data;
+
+	retval = rmi4_data->irq_enable(rmi4_data, false, false);
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to disable interrupt\n",
+				__func__);
+		goto exit;
+	}
 
 	retval = synaptics_rmi4_reg_read(rmi4_data,
 			PDT_PROPS,
