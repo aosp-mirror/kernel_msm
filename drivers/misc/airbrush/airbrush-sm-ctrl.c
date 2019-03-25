@@ -316,8 +316,7 @@ static struct block_property fsys_property_table[] = {
 static struct block_property aon_property_table[] = {
 	BLK_(0, Disabled, NoRail,  0, off, 0_0,  off, 0,     0, 0, 0, 0),
 	BLK_(300, Normal,  Min,    0, on,  0_85, on,  19.2,  0, 0, 0, 0),
-/* TODO: (b/124208417) set clock rate to 93.312 */
-	BLK_(301, Normal,  Low,    0, on,  0_85, on,  466,   0, 0, 0, 0),
+	BLK_(301, Normal,  Low,    0, on,  0_85, on,  93.312,   0, 0, 0, 0),
 	BLK_(302, Normal,  Mid,    0, on,  0_85, on,  466,   0, 0, 0, 0),
 	BLK_(303, Normal,  Max,    0, on,  0_85, on,  933.12, 0, 0, 0, 0),
 };

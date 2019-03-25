@@ -21,6 +21,7 @@
 #define GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU	0x1024202c
 #define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
 
+#define AB_SM_93_312_MHZ	93312000
 #define AB_SM_466_MHZ		466000000
 #define AB_SM_789_6_MHZ		789600000
 #define AB_SM_933_12_MHZ	933120000
@@ -31,8 +32,10 @@
 #define TPU_CLK_RATE_19_2_MHZ	0xA1490202
 #define TPU_CLK_RATE_789_6_MHZ	0xA1490212
 
-static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx);
-static void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx);
+static void __ab_aon_clk_div_2(struct ab_clk_context *ctx);
+static void __ab_aon_clk_div_2_restore(struct ab_clk_context *ctx);
+static void __ab_aon_clk_div_10(struct ab_clk_context *ctx);
+static void __ab_aon_clk_div_10_restore(struct ab_clk_context *ctx);
 
 static struct ab_sm_clk_ops clk_ops;
 static int ab_clk_pcie_link_listener(struct notifier_block *nb,
@@ -381,7 +384,11 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	if (old_rate == AB_SM_466_MHZ &&
 			new_rate != AB_SM_466_MHZ)
-		__ab_clk_restore_mainclk_freq(clk_ctx);
+		__ab_aon_clk_div_2_restore(clk_ctx);
+
+	if (old_rate == AB_SM_93_312_MHZ &&
+			new_rate != AB_SM_93_312_MHZ)
+		__ab_aon_clk_div_10_restore(clk_ctx);
 
 	if (new_rate == AB_SM_OSC_RATE) {
 		ret = clk_set_parent(clk_ctx->aon_pll_mux, clk_ctx->osc_clk);
@@ -403,7 +410,10 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 	}
 
 	if (new_rate == AB_SM_466_MHZ)
-		__ab_clk_reduce_mainclk_freq(clk_ctx);
+		__ab_aon_clk_div_2(clk_ctx);
+
+	if (new_rate == AB_SM_93_312_MHZ)
+		__ab_aon_clk_div_10(clk_ctx);
 
 	return new_rate;
 
@@ -482,6 +492,7 @@ static int64_t __ab_clk_aon_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
 		"%s: set AON clock rate to %llu\n", __func__, new_rate);
 
 	if (new_rate != AB_SM_OSC_RATE &&
+			new_rate != AB_SM_93_312_MHZ &&
 			new_rate != AB_SM_466_MHZ &&
 			new_rate != AB_SM_933_12_MHZ)
 		dev_warn(clk_ctx->dev,
@@ -490,7 +501,11 @@ static int64_t __ab_clk_aon_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
 
 	if (old_rate == AB_SM_466_MHZ &&
 			new_rate != AB_SM_466_MHZ)
-		__ab_clk_restore_mainclk_freq(clk_ctx);
+		__ab_aon_clk_div_2_restore(clk_ctx);
+
+	if (old_rate == AB_SM_93_312_MHZ &&
+			new_rate != AB_SM_93_312_MHZ)
+		__ab_aon_clk_div_10_restore(clk_ctx);
 
 	if (new_rate == AB_SM_OSC_RATE) {
 		ret |= ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_19_2_MHZ);
@@ -512,7 +527,10 @@ static int64_t __ab_clk_aon_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
 	}
 
 	if (new_rate == AB_SM_466_MHZ)
-		__ab_clk_reduce_mainclk_freq(clk_ctx);
+		__ab_aon_clk_div_2(clk_ctx);
+
+	if (new_rate == AB_SM_93_312_MHZ)
+		__ab_aon_clk_div_10(clk_ctx);
 
 	return new_rate;
 
@@ -547,7 +565,8 @@ static int64_t ab_clk_aon_set_rate_opt_handler(void *ctx,
 #define CLK_CON_DIV_DIV4_PLLCLK_CORE 0x10f11804
 #define CLK_CON_DIV_PLL_AON_CLK 0x10b1180c
 
-static void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx)
+/* Only Bus clock are reduced by 2x */
+static void __ab_aon_clk_div_2(struct ab_clk_context *ctx)
 {
 	dev_dbg(ctx->dev, "Reduce PLL_AON_CLK 2x\n");
 
@@ -562,7 +581,7 @@ static void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx)
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x1);
 }
 
-static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
+static void __ab_aon_clk_div_2_restore(struct ab_clk_context *ctx)
 {
 	dev_dbg(ctx->dev, "Restore PLL_AON_CLK\n");
 
@@ -577,8 +596,38 @@ static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
 }
 
+/* All clocks derived from PLL_AON_CLK gets reduced by 5x
+ * PLL_AON_CLK itself is reduced by 10x
+ */
+static void __ab_aon_clk_div_10(struct ab_clk_context *ctx)
+{
+	dev_dbg(ctx->dev, "Reduce PLL_AON_CLK 10x\n");
 
+	/* Increase sub clocks to partially compensate /10 */
+	ABC_WRITE(CLK_CON_DIV_DIV2_PLLCLK_MIF, 0x0);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_FSYS, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_CORE, 0x0);
 
+	/* Divide PLL_AON_CLK by 10 */
+	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x9);
+}
+
+static void __ab_aon_clk_div_10_restore(struct ab_clk_context *ctx)
+{
+	dev_dbg(ctx->dev, "Restore PLL_AON_CLK\n");
+
+	/* Restore default divider settings to undo 10x multiply */
+	ABC_WRITE(CLK_CON_DIV_DIV2_PLLCLK_MIF, 0x1);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x3);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x3);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_FSYS, 0x3);
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_CORE, 0x1);
+
+	/* Restore default divider setting to undo 10x divide */
+	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
+}
 
 #define SHARED_DIV_AON_PLL_REG				0x10B11810
 #define SHARED_DIV_AON_PLL_DIVRATIO_MASK	0xF
