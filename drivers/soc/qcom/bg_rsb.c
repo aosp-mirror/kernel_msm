@@ -22,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <soc/qcom/glink.h>
 #include <linux/input.h>
+#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
