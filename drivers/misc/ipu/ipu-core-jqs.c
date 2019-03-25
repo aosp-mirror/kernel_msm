@@ -323,9 +323,9 @@ static void ipu_core_jqs_power_disable(struct paintbox_bus *bus)
 
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
 
-	/* Turn on isolation for I/O block */
-	ipu_core_writel(bus, IO_ISO_ON_VAL_MASK, IPU_CSR_AON_OFFSET +
-			IO_ISO_ON);
+	/* Note that due to a bug in silicon isolation for I/O block needs to be
+	 * left off. b/124389401
+	 */
 
 	/* Turn off clocks to I/O block */
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
@@ -343,10 +343,9 @@ static void ipu_core_jqs_power_disable(struct paintbox_bus *bus)
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET +
 			IPU_IO_SWITCHED_CLK_EN);
 
-	/* Power off I/O block */
-	ipu_core_writeq(bus, IO_POWER_ON_N_PRE_MASK |
-			IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
-			IO_POWER_ON_N);
+	/* Note that due to a bug in silicon the I/O block power needs to be
+	 * left on.  b/124389401
+	 */
 }
 
 /* The caller to this function must hold bus->jqs.lock */

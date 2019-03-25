@@ -486,6 +486,8 @@ static int ipu_client_probe(struct device *dev)
 		return ret;
 	}
 
+	device_init_wakeup(pb->dev, true);
+
 	ret = dev_pm_qos_add_request(dev, &pb->pm_qos,
 			DEV_PM_QOS_RESUME_LATENCY, JQS_STARTUP_LATENCY_US);
 	if (ret < 0) {
