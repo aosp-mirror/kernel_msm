@@ -1695,21 +1695,33 @@ static irqreturn_t abc_pcie_irq_handler(int irq, void *ptr)
 			abc_dev->sys_cb[irq](irq, abc_dev->sys_cb_data[irq]);
 		}
 	} else if (irq == ABC_MSI_AON_INTNC) {
+		/*
+		 * SYSREG_FSYS's DBI_OVERRIDE register would change the access
+		 * mode to override the address of MSI_CAP_OFF_10H_REG. So this
+		 * lock is required to prevent the access for DBI_OVERRIDE and
+		 * access MSI_CAP_OFF_10H_REG safely.
+		 */
+		spin_lock(&abc_dev->fsys_reg_lock);
 		/* Mask 31st MSI during Interrupt handling period */
 		msi_cap_val = readl(
 				abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
 		__iowmb();
 		writel_relaxed((msi_cap_val | MSI_CAP_MASK_31),
 			abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
+		spin_unlock(&abc_dev->fsys_reg_lock);
 
 		/* Check the sysreg status register and do the callback */
 		intnc_val = readl(
 			abc_dev->fsys_config + SYSREG_FSYS_INTERRUPT);
 		atomic_notifier_call_chain(&abc_dev->intnc_notifier,
 					   irq, (void *)(u64)intnc_val);
+
+		/* Prevent the access for SYSREG_FSYS's DBI_OVERRIDE. */
+		spin_lock(&abc_dev->fsys_reg_lock);
 		__iowmb();
 		writel_relaxed(msi_cap_val,
 			abc_dev->pcie_config + MSI_CAP_OFF_10H_REG);
+		spin_unlock(&abc_dev->fsys_reg_lock);
 	}
 	spin_unlock(&abc_dev->lock);
 	return IRQ_HANDLED;
