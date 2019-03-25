@@ -562,26 +562,6 @@ static void __ab_clk_reduce_mainclk_freq(struct ab_clk_context *ctx)
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x1);
 }
 
-static int ab_clk_reduce_mainclk_freq(void *ctx)
-{
-	int ret;
-	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
-
-	mutex_lock(&clk_ctx->pcie_link_lock);
-	if (clk_ctx->pcie_link_ready) {
-		__ab_clk_reduce_mainclk_freq(clk_ctx);
-		ret = 0;
-	} else {
-		dev_err(clk_ctx->dev,
-				"%s: pcie link down during clk request\n",
-				__func__);
-		ret = -ENODEV;
-	}
-	mutex_unlock(&clk_ctx->pcie_link_lock);
-
-	return ret;
-}
-
 static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
 {
 	dev_dbg(ctx->dev, "Restore PLL_AON_CLK\n");
@@ -597,25 +577,8 @@ static void __ab_clk_restore_mainclk_freq(struct ab_clk_context *ctx)
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
 }
 
-static int ab_clk_restore_mainclk_freq(void *ctx)
-{
-	int ret;
-	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
 
-	mutex_lock(&clk_ctx->pcie_link_lock);
-	if (clk_ctx->pcie_link_ready) {
-		__ab_clk_restore_mainclk_freq(clk_ctx);
-		ret = 0;
-	} else {
-		dev_err(clk_ctx->dev,
-				"%s: pcie link down during clk request\n",
-				__func__);
-		ret = -ENODEV;
-	}
-	mutex_unlock(&clk_ctx->pcie_link_lock);
 
-	return ret;
-}
 
 #define SHARED_DIV_AON_PLL_REG				0x10B11810
 #define SHARED_DIV_AON_PLL_DIVRATIO_MASK	0xF
@@ -651,9 +614,6 @@ static struct ab_sm_clk_ops clk_ops = {
 	.aon_set_rate = &ab_clk_aon_set_rate_handler,
 	.aon_set_rate_direct = &ab_clk_aon_set_rate_direct_handler,
 	.aon_set_rate_opt = &ab_clk_aon_set_rate_opt_handler,
-
-	.reduce_mainclk_freq = &ab_clk_reduce_mainclk_freq,
-	.restore_mainclk_freq = &ab_clk_restore_mainclk_freq,
 };
 
 static int ab_clk_probe(struct platform_device *pdev)

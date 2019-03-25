@@ -314,9 +314,6 @@ struct ab_sm_clk_ops {
 	int64_t (*aon_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
 	int64_t (*aon_set_rate_direct)(void *ctx, u64 new_rate);
 	int64_t (*aon_set_rate_opt)(void *ctx, u64 old_rate, u64 new_rate);
-
-	int (*reduce_mainclk_freq)(void *ctx);
-	int (*restore_mainclk_freq)(void *ctx);
 };
 
 struct ab_sm_dram_ops {
