@@ -23,10 +23,10 @@
 
 #define AB_SM_466_MHZ		466000000
 #define AB_SM_789_6_MHZ		789600000
-#define AB_SM_921_6_MHZ		921600000
+#define AB_SM_933_12_MHZ	933120000
 #define AON_CLK_RATE_REG		0x10B10100
-#define AON_CLK_RATE_19_2_MHZ	0x20F00500
-#define AON_CLK_RATE_921_6_MHZ	0xA0F00510
+#define AON_CLK_RATE_19_2_MHZ	0x20F30500
+#define AON_CLK_RATE_933_12_MHZ	0xA0F30510
 #define TPU_CLK_RATE_REG		0x10040120
 #define TPU_CLK_RATE_19_2_MHZ	0xA1490202
 #define TPU_CLK_RATE_789_6_MHZ	0xA1490212
@@ -449,9 +449,9 @@ static int64_t ab_clk_aon_set_rate_direct_handler(void *ctx,
 			ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_19_2_MHZ);
 			ret = AB_SM_OSC_RATE;
 			break;
-		case AB_SM_921_6_MHZ:
-			ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_921_6_MHZ);
-			ret = AB_SM_921_6_MHZ;
+		case AB_SM_933_12_MHZ:
+			ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_933_12_MHZ);
+			ret = AB_SM_933_12_MHZ;
 			break;
 		default:
 			ret = -EINVAL;
@@ -483,10 +483,10 @@ static int64_t __ab_clk_aon_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
 
 	if (new_rate != AB_SM_OSC_RATE &&
 			new_rate != AB_SM_466_MHZ &&
-			new_rate != AB_SM_921_6_MHZ)
+			new_rate != AB_SM_933_12_MHZ)
 		dev_warn(clk_ctx->dev,
 			"Invalid AON clock rate requested, using %d instead\n",
-			AB_SM_921_6_MHZ);
+			AB_SM_933_12_MHZ);
 
 	if (old_rate == AB_SM_466_MHZ &&
 			new_rate != AB_SM_466_MHZ)
@@ -504,7 +504,7 @@ static int64_t __ab_clk_aon_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
 		return new_rate;
 	}
 
-	ret |= ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_921_6_MHZ);
+	ret |= ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_933_12_MHZ);
 	if (ret) {
 		dev_err(clk_ctx->dev,
 			"aon_pll_mux: set_parent failed(err %d)\n", ret);

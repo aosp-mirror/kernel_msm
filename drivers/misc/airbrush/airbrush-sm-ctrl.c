@@ -312,8 +312,7 @@ static struct block_property aon_property_table[] = {
 /* TODO: (b/124208417) set clock rate to 93.312 */
 	BLK_(301, Normal,  Low,    0, on,  0_85, on,  466,   0, 0, 0, 0),
 	BLK_(302, Normal,  Mid,    0, on,  0_85, on,  466,   0, 0, 0, 0),
-/* TODO: (b/124472417) set clock rate to 933.12 */
-	BLK_(303, Normal,  Max,    0, on,  0_85, on,  921.6, 0, 0, 0, 0),
+	BLK_(303, Normal,  Max,    0, on,  0_85, on,  933.12, 0, 0, 0, 0),
 };
 
 #define CHIP_TO_BLOCK_MAP_INIT(cs, ipu, tpu, dram, mif, fsys, aon) \
