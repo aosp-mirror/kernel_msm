@@ -32,6 +32,7 @@
 #include <linux/pci.h>
 #include <linux/airbrush-sm-ctrl.h>
 #include <linux/clk.h>
+#include <linux/pm_wakeup.h>
 
 #include "airbrush-ddr.h"
 #include "airbrush-pmic-ctrl.h"
@@ -254,6 +255,9 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_ALT_BOOT);
 
+	/* System must not suspend while PCIe is enabled */
+	pm_stay_awake(ab_ctx->dev);
+
 	if (ab_ctx->cold_boot) {
 		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 		if (msm_pcie_enumerate(1)) {
@@ -311,6 +315,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
 		dev_err(&plat_dev->dev,
 			"ab_ready is not high after fw load\n");
+		pm_relax(ab_ctx->dev);
 		return -EIO;
 	}
 
@@ -334,14 +339,17 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	ret = ab_ctx->dram_ops->setup(ab_ctx->dram_ops->ctx, ab_ctx);
 	if (ret) {
 		dev_err(ab_ctx->dev, "ddr setup failed\n");
+		pm_relax(ab_ctx->dev);
 		return ret;
 	}
 
 	/* Wait till the ddr init & training is completed in case of ddr
 	 * initialization is done by BootROM
 	 */
-	if (ab_ctx->dram_ops->wait_for_init(ab_ctx->dram_ops->ctx))
+	if (ab_ctx->dram_ops->wait_for_init(ab_ctx->dram_ops->ctx)) {
+		pm_relax(ab_ctx->dev);
 		return -EIO;
+	}
 
 	/* In case the M0_DDR_INIT (Renamed HOST_DDR_INIT) is 1,
 	 * perform the DDR Initialization here.

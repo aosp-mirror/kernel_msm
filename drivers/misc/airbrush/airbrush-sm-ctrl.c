@@ -20,6 +20,7 @@
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/mfd/abc-pcie.h>
+#include <linux/pm_wakeup.h>
 #include <uapi/ab-sm.h>
 #include <uapi/linux/sched/types.h>
 
@@ -928,6 +929,7 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 		mutex_unlock(&sc->mfd_lock);
 	}
 
+	pm_relax(sc->dev);
 	ab_disable_pgood(sc);
 	msm_pcie_assert_perst(1);
 	ab_gpio_disable_fw_patch(sc);
@@ -1144,6 +1146,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 				goto cleanup_state;
 		}
 
+		pm_relax(sc->dev);
 		ab_disable_pgood(sc);
 		msm_pcie_assert_perst(1);
 		ab_gpio_disable_fw_patch(sc);
@@ -2383,6 +2386,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_ctx->ldo4_delay = LDO4_DEFAULT_DELAY;
 	ab_sm_ctx->ldo5_delay = LDO5_LDO4_SMPS2_DEFAULT_DELAY;
 	ab_sm_ctx->s60_delay = S60_DEFAULT_DELAY;
+
+	/* initialize device wakeup source */
+	device_init_wakeup(ab_sm_ctx->dev, true);
+
 	return ab_sm_ctx;
 
 fail_fw_patch_en:
