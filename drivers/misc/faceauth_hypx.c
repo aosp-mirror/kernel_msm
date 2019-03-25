@@ -726,7 +726,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 			DMA_TO_DEVICE, is_secure_camera);
 		hypx_data->image_dot_left_size = data->image_dot_left_size;
 		if (!hypx_data->image_dot_left)
-			goto err4;
+			goto err;
 
 		hypx_data->image_dot_right = hypx_create_blob(
 			dev, &image_dot_right, data->image_dot_right,
@@ -734,7 +734,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 			DMA_TO_DEVICE, is_secure_camera);
 		hypx_data->image_dot_right_size = data->image_dot_right_size;
 		if (!hypx_data->image_dot_right)
-			goto err3;
+			goto err;
 
 		hypx_data->image_flood =
 			hypx_create_blob(dev, &image_flood, data->image_flood,
@@ -743,30 +743,29 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 					 is_secure_camera);
 		hypx_data->image_flood_size = data->image_flood_size;
 		if (!hypx_data->image_flood)
-			goto err2;
+			goto err;
 
-		if (data->calibration || data->calibration_fd) {
-			hypx_data->calibration = hypx_create_blob(
-				dev, &calibration, data->calibration,
-				data->calibration_fd, data->calibration_size,
-				DMA_TO_DEVICE, false);
-			hypx_data->calibration_size = data->calibration_size;
-			if (!hypx_data->calibration)
-				goto err1;
-		}
+		hypx_data->calibration =
+			hypx_create_blob(dev, &calibration, data->calibration,
+					 data->calibration_fd,
+					 data->calibration_size, DMA_TO_DEVICE,
+					 false);
+		hypx_data->calibration_size = data->calibration_size;
+		if (!hypx_data->calibration)
+			goto err;
 	}
 
 	hypx_data->citadel_token_size = 0;
-	if (data->citadel_token_size && (
-	    data->operation == COMMAND_ENROLL_COMPLETE ||
-	    data->operation == COMMAND_SET_FEATURE ||
-	    data->operation == COMMAND_CLR_FEATURE ||
-	    data->operation == COMMAND_RESET_LOCKOUT)) {
+	if (data->citadel_token_size &&
+	    (data->operation == COMMAND_ENROLL_COMPLETE ||
+	     data->operation == COMMAND_SET_FEATURE ||
+	     data->operation == COMMAND_CLR_FEATURE ||
+	     data->operation == COMMAND_RESET_LOCKOUT)) {
 		hypx_data->citadel_token = hypx_create_blob_userbuf(
 			dev, data->citadel_token, data->citadel_token_size);
 		hypx_data->citadel_token_size = data->citadel_token_size;
 		if (!hypx_data->citadel_token)
-			goto err0;
+			goto err;
 	}
 
 	if (data->operation == COMMAND_ENROLL_COMPLETE) {
@@ -788,18 +787,16 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_PROCESS & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
 
-err0:
-	if (pass_images_to_el2) {
-		if (data->calibration || data->calibration_fd)
-			hypx_free_blob(dev, &calibration, false);
-	err1:
+err:
+	if (hypx_data->calibration)
+		hypx_free_blob(dev, &calibration, false);
+	if (hypx_data->image_flood)
 		hypx_free_blob(dev, &image_flood, false);
-	err2:
+	if (hypx_data->image_dot_right)
 		hypx_free_blob(dev, &image_dot_right, false);
-	err3:
+	if (hypx_data->image_dot_left)
 		hypx_free_blob(dev, &image_dot_left, false);
-	}
-err4:
+
 	free_page((unsigned long)hypx_data);
 	return ret;
 }

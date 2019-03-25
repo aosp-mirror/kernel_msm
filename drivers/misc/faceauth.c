@@ -297,13 +297,11 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				err = -EINVAL;
 				goto exit;
 			}
-			if (start_step_data.calibration) {
-				if (!start_step_data.calibration_size ||
-				    start_step_data.calibration_size >
-					    CALIBRATION_SIZE) {
-					err = -EINVAL;
-					goto exit;
-				}
+			if (!start_step_data.calibration_size ||
+			    start_step_data.calibration_size >
+				    CALIBRATION_SIZE) {
+				err = -EINVAL;
+				goto exit;
 			}
 
 			pr_info("Send images\n");
