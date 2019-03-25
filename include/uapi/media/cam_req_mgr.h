@@ -44,6 +44,7 @@
 #define V4L_EVENT_CAM_REQ_MGR_SOF            0
 #define V4L_EVENT_CAM_REQ_MGR_ERROR          1
 #define V4L_EVENT_CAM_REQ_MGR_SOF_BOOT_TS    2
+#define V4L_EVENT_CAM_REQ_MGR_VSYNC_TS       3
 
 /* SOF Event status */
 #define CAM_REQ_MGR_SOF_EVENT_SUCCESS           0

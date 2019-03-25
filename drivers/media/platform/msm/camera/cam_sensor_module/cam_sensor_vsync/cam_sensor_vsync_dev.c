@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <media/cam_req_mgr.h>
+#include "cam_req_mgr_dev.h"
 #include "cam_debug_util.h"
 #include "cam_sensor_vsync.h"
 #include "cam_sensor_core.h"
@@ -35,13 +36,15 @@
 struct vsync_ctx_type {
 	struct qmi_handle qmi;
 	struct workqueue_struct *work_queue;
+	struct list_head pending_reqs;
+	struct mutex  list_lock;
 	struct dentry *de_dir;
 	struct dentry *de_data;
 };
 
 struct cam_vsync_work_payload {
 	struct vsync_ctx_type *ctx;
-	struct cam_sensor_vsync_packet packet;
+	struct cam_req_mgr_message req_msg;
 	struct work_struct work;
 };
 
@@ -168,16 +171,111 @@ static struct qmi_elem_info cam_vsync_resp_msg_v01_ei[] = {
 	{}
 };
 
+/** Indication Message; Report containing one or more Sensor-generated events */
+struct sns_client_report_ind_msg_v01 {
+	/* Mandatory */
+	uint64_t client_id;
+	/**<   Client ID identifies the client connection.  */
+
+	/* Mandatory */
+	uint32_t payload_len; /**< Must be set to # of elements in payload */
+	uint8_t payload[SNS_CLIENT_REPORT_LEN_MAX_V01];
+};
+
+/** Indication Message; Report containing one or more Sensor-generated events */
+struct sns_client_jumbo_report_ind_msg_v01 {
+	/* Mandatory */
+	uint64_t client_id;
+	/**<   Client ID identifies the client connection.  */
+
+	/* Mandatory */
+	uint32_t payload_len; /**< Must be set to # of elements in payload */
+	uint8_t payload[SNS_CLIENT_JUMBO_REPORT_LEN_MAX_V01];
+};
+
+static struct qmi_elem_info sns_client_report_ind_msg_v01_ei[] = {
+	{
+		.data_type	= QMI_UNSIGNED_8_BYTE,
+		.elem_len	= 1,
+		.elem_size	= sizeof(uint64_t),
+		.is_array	= NO_ARRAY,
+		.tlv_type	= CAM_VSYNC_IND1_TLV_TYPE,
+		.offset		= offsetof(struct sns_client_report_ind_msg_v01,
+						client_id),
+	},
+	{
+		.data_type	= QMI_DATA_LEN,
+		.elem_len	= 1,
+		.elem_size	= sizeof(uint32_t),
+		.is_array	= NO_ARRAY,
+		.tlv_type	= CAM_VSYNC_IND2_TLV_TYPE,
+		.offset		= offsetof(struct sns_client_report_ind_msg_v01,
+					   payload_len),
+	},
+	{
+		.data_type	= QMI_UNSIGNED_1_BYTE,
+		.elem_len	= SNS_CLIENT_REPORT_LEN_MAX_V01,
+		.elem_size	= sizeof(uint8_t),
+		.is_array	= STATIC_ARRAY,
+		.tlv_type	= CAM_VSYNC_IND2_TLV_TYPE,
+		.offset		= offsetof(struct sns_client_report_ind_msg_v01,
+					   payload),
+	},
+	{
+		.data_type  = QMI_EOTI,
+		.is_array   = NO_ARRAY,
+		.tlv_type   = QMI_COMMON_TLV_TYPE,
+	}
+};
 
 static struct vsync_ctx_type cam_vsync_ctx;
 static void cam_vsync_qmi_work(struct work_struct *work);
+
+static int cam_send_request_qmi(
+	struct qmi_handle *qmi,
+	struct cam_vsync_req_msg_v01 *req,
+	struct cam_vsync_resp_msg_v01 *resp)
+{
+	int ret = 0;
+	struct qmi_txn txn;
+
+	ret = qmi_txn_init(qmi, &txn, cam_vsync_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		CAM_ERR(CAM_SENSOR, "%s:qmi_txn_init failed. %d", ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(qmi, NULL, &txn,
+				CAM_VSYNC_REQ_MSG_ID_V01,
+				sizeof(struct cam_vsync_req_msg_v01),
+				cam_vsync_req_msg_v01_ei,
+				req);
+	if (ret < 0) {
+		CAM_ERR(CAM_SENSOR, "%s:qmi_send_request failed. %d", ret);
+		qmi_txn_cancel(&txn);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, 5 * HZ);
+	if (ret < 0) {
+		CAM_ERR(CAM_SENSOR, "%s:qmi_txn_wait failed. %d", ret);
+		goto out;
+	}
+
+	CAM_DBG(CAM_SENSOR, "Received Resp result = %d, err = %d",
+		resp->resp.result,
+		resp->resp.error);
+	ret = resp->resp.result;
+
+out:
+	return ret;
+}
 
 static int cam_send_vsync_packet_qmi(struct qmi_handle *qmi,
 			struct cam_sensor_vsync_packet *packet)
 {
 	struct cam_vsync_resp_msg_v01 *resp;
 	struct cam_vsync_req_msg_v01 *req;
-	struct qmi_txn txn;
 	int ret = 0;
 
 	if (!packet) {
@@ -204,36 +302,23 @@ static int cam_send_vsync_packet_qmi(struct qmi_handle *qmi,
 	req->use_jumbo_report_valid = false;
 
 	CAM_DBG(CAM_SENSOR,
-			"Notify camera:%d, counter:%d, timestamp:%lld",
-			packet->sensor_id,
-			packet->counter,
+			"Notify camera:%d, frame_id:%d, timestamp:%lld",
+			packet->cam_id,
+			packet->frame_id,
 			packet->timestamp);
 
-	ret = qmi_txn_init(qmi, &txn, cam_vsync_resp_msg_v01_ei, resp);
-	if (ret < 0) {
-		CAM_ERR(CAM_SENSOR, "%s:qmi_txn_init failed. %d", ret);
+	ret = cam_send_request_qmi(qmi, req, resp);
+	if (ret < 0)
 		goto out;
-	}
 
-	ret = qmi_send_request(qmi, NULL, &txn,
-				CAM_VSYNC_REQ_MSG_ID_V01,
-				sizeof(struct cam_vsync_req_msg_v01),
-				cam_vsync_req_msg_v01_ei,
-				req);
-	if (ret < 0) {
-		CAM_ERR(CAM_SENSOR, "%s:qmi_send_request failed. %d", ret);
-		qmi_txn_cancel(&txn);
-		goto out;
+	if (packet->frame_id <= 1) {
+		CAM_DBG(CAM_SENSOR, "Send vsync config request!");
+		cam_vsync_make_config_request(packet->cam_id,
+			req->data,
+			&req->data_len);
+		req->use_jumbo_report_valid = false;
+		ret = cam_send_request_qmi(qmi, req, resp);
 	}
-
-	ret = qmi_txn_wait(&txn, 5 * HZ);
-	if (ret < 0) {
-		CAM_ERR(CAM_SENSOR, "%s:qmi_txn_wait failed. %d", ret);
-		goto out;
-	}
-	CAM_DBG(CAM_SENSOR, "Received Resp result = %d, err = %d",
-		resp->resp.result,
-		resp->resp.error);
 
 out:
 	kfree(resp);
@@ -242,28 +327,38 @@ out:
 	return ret;
 }
 
-int cam_notify_vsync_qmi(struct cam_req_mgr_message *msg)
+static int cam_vsync_add_pending_req(struct cam_req_mgr_message *msg)
 {
-	struct cam_vsync_work_payload *payload;
-	bool work_status;
-	int i, rc = 0;
-	struct cam_req_mgr_core_link    *link = NULL;
+	struct cam_sensor_vsync_req *vsync_req;
+	struct vsync_ctx_type *ctx = &cam_vsync_ctx;
+
+	vsync_req = kzalloc(sizeof(struct cam_sensor_vsync_req), GFP_ATOMIC);
+	if (!vsync_req)
+		return -EINVAL;
+	memcpy(&vsync_req->req_message, msg, sizeof(*msg));
+	mutex_lock(&ctx->list_lock);
+	list_add(&vsync_req->list, &ctx->pending_reqs);
+	mutex_unlock(&ctx->list_lock);
+
+	return 0;
+}
+
+static int cam_vsync_get_cam_id(int32_t link_hdl, uint32_t *cam_id)
+{
+	struct cam_req_mgr_core_link *link;
 	struct cam_req_mgr_connected_device *dev = NULL;
 	struct cam_sensor_ctrl_t *s_ctrl = NULL;
 	uint32_t sensor_id = 0;
-
-	if (!msg) {
-		CAM_ERR(CAM_CRM, "msg is NULL");
-		return -EINVAL;
-	}
+	int i, rc = 0;
 
 	link = (struct cam_req_mgr_core_link *)
-		cam_get_device_priv(msg->u.frame_msg.link_hdl);
+		cam_get_device_priv(link_hdl);
 	if (!link) {
-		CAM_DBG(CAM_CRM, "link ptr NULL %x",
-			msg->u.frame_msg.link_hdl);
+		CAM_DBG(CAM_SENSOR, "link ptr NULL %x",
+			link_hdl);
 		return -EINVAL;
 	}
+
 	for (i = 0; i < link->num_devs; i++) {
 		dev = &link->l_dev[i];
 		if (!dev)
@@ -280,19 +375,33 @@ int cam_notify_vsync_qmi(struct cam_req_mgr_message *msg)
 		/* Kernel    REAR_WIDE REAR_TELE FRONT_CAM */
 		/* Userspace REAR_WIDE FRONT_CAM REAR_TELE */
 		sensor_id = s_ctrl->soc_info.index;
-		switch (s_ctrl->soc_info.index) {
+		switch (sensor_id) {
 		case 0:
-			sensor_id = 0;
+			*cam_id = 0;
 			break;
 		case 1:
-			sensor_id = 2;
+			*cam_id = 2;
 			break;
 		case 2:
-			sensor_id = 1;
+			*cam_id = 1;
 			break;
 		default:
 			break;
 		}
+	}
+
+	return rc;
+}
+
+int cam_notify_vsync_qmi(struct cam_req_mgr_message *msg)
+{
+	struct cam_vsync_work_payload *payload;
+	bool work_status;
+	int rc = 0;
+
+	if (!msg) {
+		CAM_ERR(CAM_CRM, "msg is NULL");
+		return -EINVAL;
 	}
 
 	payload = kzalloc(sizeof(struct cam_vsync_work_payload), GFP_ATOMIC);
@@ -300,18 +409,14 @@ int cam_notify_vsync_qmi(struct cam_req_mgr_message *msg)
 		rc = -ENOMEM;
 	} else {
 		payload->ctx = &cam_vsync_ctx;
-		if (!msg->u.frame_msg.sof_status) {
-			payload->packet.sensor_id = sensor_id;
-			payload->packet.counter = msg->u.frame_msg.frame_id;
-			payload->packet.timestamp = msg->u.frame_msg.timestamp;
-		}
-
+		memcpy(&payload->req_msg, msg, sizeof(*msg));
 		INIT_WORK((struct work_struct *)&payload->work,
 			cam_vsync_qmi_work);
 		work_status = queue_work(cam_vsync_ctx.work_queue,
 				&payload->work);
 		if (work_status == false) {
 			CAM_ERR(CAM_SENSOR, "Failed to queue work");
+			kfree(payload);
 			rc = -EINVAL;
 		}
 	}
@@ -324,17 +429,56 @@ static void cam_vsync_qmi_work(struct work_struct *work)
 	struct cam_vsync_work_payload *payload;
 	struct vsync_ctx_type *ctx;
 	struct qmi_handle *qmi;
+	struct cam_req_mgr_message *msg;
+	struct cam_sensor_vsync_packet packet;
+	uint32_t cam_id;
+	int rc;
 
-	if (!work)
+	if (!work) {
+		CAM_ERR(CAM_SENSOR, "Null work\n");
 		return;
+	}
 
 	payload = container_of(work, struct cam_vsync_work_payload, work);
-	ctx = payload->ctx;
-	if (ctx) {
-		qmi = &ctx->qmi;
-		if (qmi)
-			cam_send_vsync_packet_qmi(qmi, &payload->packet);
+	if (!payload) {
+		CAM_ERR(CAM_SENSOR, "Null payload\n");
+		return;
 	}
+
+	ctx = payload->ctx;
+	if (!ctx) {
+		CAM_ERR(CAM_SENSOR, "Null ctx\n");
+		goto out;
+	}
+	qmi = &ctx->qmi;
+	msg = &payload->req_msg;
+	if (!msg) {
+		CAM_ERR(CAM_SENSOR, "Null msg\n");
+		goto out;
+	}
+
+	rc = cam_vsync_get_cam_id(msg->u.frame_msg.link_hdl, &cam_id);
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR, "Can't get camera id\n");
+		goto out;
+	}
+
+	rc = cam_vsync_add_pending_req(msg);
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR, "Can't add pending req\n");
+		goto out;
+	}
+
+	if (!msg->u.frame_msg.sof_status) {
+		packet.cam_id = cam_id;
+		packet.frame_id = msg->u.frame_msg.frame_id;
+		packet.timestamp = msg->u.frame_msg.timestamp;
+
+		rc = cam_send_vsync_packet_qmi(qmi, &packet);
+		if (rc < 0)
+			CAM_ERR(CAM_SENSOR, "Failed to send vsync. %d\n", rc);
+	}
+out:
 	/* Free the payload packet after use */
 	kfree(payload);
 }
@@ -352,12 +496,86 @@ static int cam_vsync_write(void *data, u64 val)
 	struct cam_sensor_vsync_packet packet;
 	int ret;
 
-	packet.sensor_id = 0;
-	packet.counter = 0;
+	packet.cam_id = 0;
+	packet.frame_id = 0;
 	packet.timestamp = val;
 	ret = cam_send_vsync_packet_qmi(qmi, &packet);
 
 	return ret;
+}
+
+static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
+			 struct qmi_txn *txn, const void *data)
+{
+	const struct sns_client_report_ind_msg_v01 *ind_msg = data;
+	struct cam_sensor_vsync_result result;
+	struct vsync_ctx_type *ctx = &cam_vsync_ctx;
+	struct cam_sensor_vsync_req *vsync_req = NULL;
+	struct cam_sensor_vsync_req *vsync_req_temp = NULL;
+	struct cam_req_mgr_frame_msg *frame_msg = NULL;
+	uint32_t cam_id;
+	int rc;
+
+	if (!ind_msg)
+		return;
+
+	rc = cam_vsync_parse_ind_message(
+				(uint8_t *)ind_msg->payload,
+				ind_msg->payload_len,
+				&result);
+
+	if (rc < 0) {
+		CAM_ERR(CAM_SENSOR,
+				"failed to parse QMI indication\n");
+		return;
+	}
+
+	CAM_DBG(CAM_SENSOR, "cam_id=%d, frame_id=%d, sof=%lld, vsync =%lld",
+			result.cam_id,
+			result.frame_id,
+			result.timestamp_sof,
+			result.timestamp_vsync);
+
+	list_for_each_entry_safe(vsync_req, vsync_req_temp,
+			&ctx->pending_reqs, list) {
+		frame_msg = &vsync_req->req_message.u.frame_msg;
+		/* check if it is a stale link or old req*/
+		if (!cam_get_device_priv(frame_msg->link_hdl) ||
+			result.timestamp_sof - frame_msg->timestamp > 4) {
+			/* remove from list */
+			mutex_lock(&ctx->list_lock);
+			list_del_init(&vsync_req->list);
+			mutex_unlock(&ctx->list_lock);
+			/* free memory */
+			kfree(vsync_req);
+			continue;
+		}
+		rc = cam_vsync_get_cam_id(frame_msg->link_hdl, &cam_id);
+		CAM_DBG(CAM_SENSOR,
+			"pending req cam_id=%d, frame_id=%d, sof=%lld",
+			cam_id,
+			frame_msg->frame_id,
+			frame_msg->timestamp);
+		if (rc == 0 &&
+			cam_id == result.cam_id &&
+			frame_msg->frame_id == result.frame_id &&
+			frame_msg->timestamp == result.timestamp_sof) {
+			/* Update with Vsync timestamp */
+			frame_msg->timestamp == result.timestamp_vsync;
+			if (cam_req_mgr_notify_message(&vsync_req->req_message,
+				V4L_EVENT_CAM_REQ_MGR_VSYNC_TS,
+				V4L_EVENT_CAM_REQ_MGR_EVENT))
+				CAM_ERR(CAM_SENSOR,
+					"Error in notifying the vsync time for req id:%lld",
+					frame_msg->request_id);
+			/* remove from list */
+			mutex_lock(&ctx->list_lock);
+			list_del_init(&vsync_req->list);
+			mutex_unlock(&ctx->list_lock);
+			/* free memory */
+			kfree(vsync_req);
+		}
+	}
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(cam_vsync_qmi_fops,
@@ -365,6 +583,17 @@ DEFINE_SIMPLE_ATTRIBUTE(cam_vsync_qmi_fops,
 	cam_vsync_write, "%16llu");
 
 static struct dentry *cam_vsync_debug_dir;
+
+static struct qmi_msg_handler cam_vsync_handlers[] = {
+	{
+		.type = QMI_INDICATION,
+		.msg_id = CAM_VSYNC_REPORT_IND_V01,
+		.ei = sns_client_report_ind_msg_v01_ei,
+		.decoded_size = sizeof(struct sns_client_report_ind_msg_v01),
+		.fn = vsync_event_cb
+	},
+	{}
+};
 
 static int cam_vsync_probe(struct platform_device *pdev)
 {
@@ -375,7 +604,7 @@ static int cam_vsync_probe(struct platform_device *pdev)
 
 	ret = qmi_handle_init(&ctx->qmi, CAM_VSYNC_REQ_MAX_MSG_LEN_V01,
 				NULL,
-				NULL);
+				cam_vsync_handlers);
 	if (ret < 0)
 		return ret;
 
@@ -403,6 +632,8 @@ static int cam_vsync_probe(struct platform_device *pdev)
 		goto err_remove_de_dir;
 	}
 
+	INIT_LIST_HEAD(&ctx->pending_reqs);
+	mutex_init(&ctx->list_lock);
 	platform_set_drvdata(pdev, ctx);
 
 	return 0;
@@ -418,11 +649,23 @@ err_release_qmi_handle:
 static int cam_vsync_remove(struct platform_device *pdev)
 {
 	struct vsync_ctx_type *ctx = platform_get_drvdata(pdev);
+	struct cam_sensor_vsync_req *vsync_req = NULL;
+	struct cam_sensor_vsync_req *vsync_req_temp = NULL;
 
 	debugfs_remove(ctx->de_data);
 	debugfs_remove(ctx->de_dir);
 
 	qmi_handle_release(&ctx->qmi);
+	mutex_lock(&ctx->list_lock);
+	list_for_each_entry_safe(vsync_req, vsync_req_temp,
+			&ctx->pending_reqs, list) {
+		/* remove from list */
+		list_del_init(&vsync_req->list);
+		/* free memory */
+		kfree(vsync_req);
+	}
+	mutex_unlock(&ctx->list_lock);
+	mutex_destroy(&ctx->list_lock);
 
 	return 0;
 }

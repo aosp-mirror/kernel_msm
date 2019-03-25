@@ -29,12 +29,29 @@
 #define CAM_VSYNC_MAX_NAME_SIZE_V01      255
 
 #define CAM_VSYNC_REQ_MSG_ID_V01         0x20
+#define CAM_VSYNC_RESP_MSG_ID_V01        0x20
 #define CAM_VSYNC_REQ_MAX_MSG_LEN_V01    520
 
 /**   QMI Service ID for this Sensors Service  */
 #define SNS_CLIENT_SVC_ID_V01               400
 #define SNS_CLIENT_SVC_V01_IDL_MAJOR_VERS   0x01
 #define CAM_VSYNC_INFLIGHT_WORKS            5
+
+#define CAM_VSYNC_GET_SUPPORTED_MSGS_REQ_V01  0x1E
+#define CAM_VSYNC_GET_SUPPORTED_MSGS_RESP_V01 0x1E
+#define CAM_VSYNC_REPORT_IND_V01              0x21
+#define CAM_VSYNC_JUMBO_REPORT_IND_V01        0x22
+
+/**   Maximum size of a report indication message  */
+#define SNS_CLIENT_REPORT_LEN_MAX_V01       1000
+/**   Maximum size of a jumbo report indication message  */
+#define SNS_CLIENT_JUMBO_REPORT_LEN_MAX_V01  62000
+#define CAM_VSYNC_IND1_TLV_TYPE              0x1
+#define CAM_VSYNC_IND2_TLV_TYPE              0x2
+#define CAM_VSYNC_SUID_PB_LENGTH             18
+
+#define CAM_VSYNC_SUID_LOW     0x444ba5dd07802b6d
+#define CAM_VSYNC_SUID_HIGH    0x00ef87ba3007249d
 
 /* Enum definitions */
 
@@ -52,6 +69,8 @@ enum sns_std_client_processor {
 
 enum sns_client_msgid {
 	SNS_CLIENT_MSGID_SNS_CLIENT_DISABLE_REQ = 10,
+	SNS_STD_SENSOR_MSGID_SNS_STD_ON_CHANGE_CONFIG  = 514,
+	SNS_STD_SENSOR_MSGID_SNS_STD_SENSOR_EVENT = 1025,
 	SNS_CAMERA_VSYNC_MSGID_INTERRUPT_INFO   = 1041
 };
 
@@ -87,13 +106,32 @@ struct sns_client_request_msg {
 };
 
 struct cam_sensor_vsync_packet {
-	uint64_t sensor_id;
-	uint64_t counter;
+	uint64_t cam_id;
+	uint64_t frame_id;
 	uint64_t timestamp;
+};
+
+struct cam_sensor_vsync_result {
+	uint64_t cam_id;
+	uint64_t frame_id;
+	uint64_t timestamp_sof;
+	uint64_t timestamp_vsync;
+};
+
+struct cam_sensor_vsync_req {
+	uint32_t                     state;
+	struct list_head             list;
+	struct cam_req_mgr_message   req_message;
 };
 
 void cam_vsync_make_sensor_request(struct cam_sensor_vsync_packet *packet,
 					uint8_t *data, uint32_t *data_len);
+
+void cam_vsync_make_config_request(uint64_t sensor_id,
+	uint8_t *data, uint32_t *data_len);
+
+int cam_vsync_parse_ind_message(uint8_t *data, uint32_t data_len,
+	struct cam_sensor_vsync_result *result);
 
 int cam_notify_vsync_qmi(struct cam_req_mgr_message *msg);
 
