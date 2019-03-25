@@ -1447,6 +1447,10 @@ int check_TP_ID(char *buf, ssize_t buf_len, u8 tp_id) {
 		buf_len += snprintf(buf + buf_len,
 			STR_SIZE, "TP is FZW7 TRULY\n");
 		break;
+	case TP_ID_S2:
+		buf_len += snprintf(buf + buf_len,
+			STR_SIZE, "TP is FZW7 Tianma\n");
+		break;
 	default:
 		buf_len += snprintf(buf + buf_len,
 			STR_SIZE, "TP isn't correct\n");

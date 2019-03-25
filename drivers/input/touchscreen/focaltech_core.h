@@ -172,6 +172,7 @@
 #define TP_ID_T	0x98
 #define TP_ID_S	0x99
 #define TP_ID_S_TRULY	0x9A
+#define TP_ID_S2	0x9D
 
 #define TP_INI_FILE_T "FT3X67_CEI_FZW6_TULIP_0x98_V03_OnlyTest_20180521.ini"
 #define TP_INI_FILE_S "FT3X67_CEI_FZW7_SAKURA_0x99_V04_OnlyTest_20180530.ini"

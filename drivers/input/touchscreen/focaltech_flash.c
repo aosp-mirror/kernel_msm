@@ -111,6 +111,10 @@ static unsigned char CTPM_FW_TP_ID_S_TRULY[] = {
 #include "FTS_FW/MOBVOI_TIC3_FT3267_JINLONG_Ver0x_20180321_app.i"
 };
 
+static unsigned char CTPM_FW_TP_ID_S2[] = {
+#include "FTS_FW/CEI_Sakura_FZW7_3267_0x9D_V0x01_20190221_app.i"
+};
+
 struct fts_Upgrade_Info fts_updateinfo[] = {
 	{0x33, FTS_MAX_POINTS_2, AUTO_CLB_NONEED, 10, 10, 0x79, 0x1c, 10, 2000},	/*,"FT3267"*/
 	{0x55, FTS_MAX_POINTS_5, AUTO_CLB_NEED, 50, 30, 0x79, 0x03, 10, 2000},	/*,"FT5x06"*/
@@ -3637,6 +3641,10 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id,
 	case TP_ID_S_TRULY:
 		CTPM_FW = CTPM_FW_TP_ID_S_TRULY;
 		fw_size = sizeof(CTPM_FW_TP_ID_S_TRULY);
+		break;
+	case TP_ID_S2:
+		CTPM_FW = CTPM_FW_TP_ID_S2;
+		fw_size = sizeof(CTPM_FW_TP_ID_S2);
 		break;
 	default:
 		pr_err("[fts] TP ID 0x%x isn't correct\n", tp_id);
