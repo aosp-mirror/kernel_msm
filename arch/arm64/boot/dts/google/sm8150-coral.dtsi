@@ -12,3 +12,4 @@
 
 #include "sm8150-coral-common.dtsi"
 #include "sm8150-coral-battery.dtsi"
+#include "sm8150-coral-pac193x.dtsi"

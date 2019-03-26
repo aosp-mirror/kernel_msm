@@ -13,5 +13,6 @@
 #include "sm8150-coral-camera-sensor-evt.dtsi"
 #include "sm8150-coral-battery-evt.dtsi"
 #include "sm8150-coral-display-evt.dtsi"
+#include "sm8150-coral-pac193x-evt.dtsi"
 #include "sm8150-floral-qup-evt.dtsi"
 
