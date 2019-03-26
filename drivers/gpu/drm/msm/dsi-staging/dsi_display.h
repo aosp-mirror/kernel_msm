@@ -740,4 +740,11 @@ int dsi_display_cont_splash_config(void *display);
 int dsi_display_get_panel_vfp(void *display,
 	int h_active, int v_active);
 
+/**
+ * dsi_display_set_idle_hint - gives hint to display whether display is idle
+ * @display: Pointer to private display handle
+ * @is_idle: true if display is idle, false otherwise
+ */
+void dsi_display_set_idle_hint(void *display, bool is_idle);
+
 #endif /* _DSI_DISPLAY_H_ */

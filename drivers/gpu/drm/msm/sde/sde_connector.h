@@ -301,6 +301,13 @@ struct sde_connector_ops {
 	 * Returns: v_front_porch on success error-code on failure
 	 */
 	int (*get_panel_vfp)(void *display, int h_active, int v_active);
+
+	/**
+	 * set_idle_hint - gives hint to display whether display is idle
+	 * @display: Pointer to private display handle
+	 * @is_idle: true if display is idle, false otherwise
+	 */
+	void (*set_idle_hint)(void *display, bool is_idle);
 };
 
 /**
@@ -875,6 +882,14 @@ void sde_connector_helper_bridge_post_enable(struct drm_connector *connector);
  */
 int sde_connector_get_panel_vfp(struct drm_connector *connector,
 	struct drm_display_mode *mode);
+
+/**
+ * sde_connector_set_idle_hint - helper to give idle hint to connector
+ * @connector: pointer to drm connector
+ * @is_idle: true on idle, false on wake up from idle
+ */
+void sde_connector_set_idle_hint(struct drm_connector *connector, bool is_idle);
+
 /**
  * sde_connector_esd_status - helper function to check te status
  * @connector: Pointer to DRM connector object

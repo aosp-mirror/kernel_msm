@@ -1402,6 +1402,18 @@ int sde_connector_get_panel_vfp(struct drm_connector *connector,
 	return vfp;
 }
 
+void sde_connector_set_idle_hint(struct drm_connector *connector, bool is_idle)
+{
+	struct sde_connector *c_conn;
+
+	if (unlikely(!connector))
+		return;
+
+	c_conn = to_sde_connector(connector);
+	if (c_conn->ops.set_idle_hint)
+		c_conn->ops.set_idle_hint(c_conn->display, is_idle);
+}
+
 static int _sde_debugfs_conn_cmd_tx_open(struct inode *inode, struct file *file)
 {
 	/* non-seekable */

@@ -6159,6 +6159,19 @@ int dsi_display_get_panel_vfp(void *dsi_display,
 	return rc;
 }
 
+void dsi_display_set_idle_hint(void *dsi_display, bool is_idle)
+{
+	const struct dsi_display *display = dsi_display;
+
+	if (unlikely(!display))
+		return;
+
+	if (is_idle)
+		dsi_panel_idle(display->panel);
+	else
+		dsi_panel_wakeup(display->panel);
+}
+
 int dsi_display_find_mode(struct dsi_display *display,
 		const struct dsi_display_mode *cmp,
 		struct dsi_display_mode **out_mode)

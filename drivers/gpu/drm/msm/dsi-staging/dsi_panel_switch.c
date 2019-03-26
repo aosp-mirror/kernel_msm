@@ -50,6 +50,7 @@ struct panel_switch_data {
 	struct task_struct *thread;
 
 	const struct dsi_display_mode *display_mode;
+	const struct dsi_display_mode *idle_mode;
 	wait_queue_head_t switch_wq;
 	bool switch_pending;
 	int switch_te_listen_count;
@@ -65,6 +66,18 @@ static inline
 struct dsi_display *dsi_panel_to_display(const struct dsi_panel *panel)
 {
 	return dev_get_drvdata(panel->parent);
+}
+
+static inline bool is_display_mode_same(const struct dsi_display_mode *m1,
+					const struct dsi_display_mode *m2)
+{
+	return m1 && m2 && m1->timing.refresh_rate == m2->timing.refresh_rate;
+}
+
+static inline void sde_atrace_mode_fps(const struct panel_switch_data *pdata,
+				       const struct dsi_display_mode *mode)
+{
+	sde_atrace('C', pdata->thread, "FPS", mode->timing.refresh_rate);
 }
 
 static void panel_handle_te(struct dsi_display_te_listener *tl)
@@ -167,7 +180,7 @@ static void panel_switch_worker(struct kthread_work *work)
 				jiffies_to_usecs(timeout - rc));
 	}
 
-	SDE_ATRACE_INT("FPS", mode->timing.refresh_rate);
+	sde_atrace_mode_fps(pdata, mode);
 	SDE_ATRACE_END(__func__);
 
 	/*
@@ -186,18 +199,61 @@ static void panel_switch_worker(struct kthread_work *work)
 	}
 }
 
-static const struct dsi_display_mode *
-panel_get_display_mode(const struct dsi_panel *panel, u32 refresh_rate)
+static bool dsi_mode_matches_cmdline(const struct dsi_display_mode *dm,
+				     const struct drm_cmdline_mode *cm)
 {
+
+	if (!cm->refresh_specified && !cm->specified)
+		return false;
+	if (cm->refresh_specified && cm->refresh != dm->timing.refresh_rate)
+		return false;
+	if (cm->specified && (cm->xres != dm->timing.h_active ||
+			      cm->yres != dm->timing.v_active))
+		return false;
+	return true;
+}
+
+static const struct dsi_display_mode *
+display_mode_from_cmdline(const struct dsi_panel *panel,
+			  const char *modestr)
+{
+	const struct dsi_display *display;
 	const struct dsi_display_mode *mode;
+	struct drm_cmdline_mode cm = {0};
 	int i;
 
+	display = dsi_panel_to_display(panel);
+	if (!display)
+		return ERR_PTR(-ENODEV);
+
+	if (!drm_mode_parse_command_line_for_connector(modestr,
+						       display->drm_conn,
+						       &cm))
+		return ERR_PTR(-EINVAL);
+
 	for_each_display_mode(i, mode, panel) {
-		if (refresh_rate == mode->timing.refresh_rate)
+		if (dsi_mode_matches_cmdline(mode, &cm))
 			return mode;
 	}
 
 	return NULL;
+}
+
+static const struct dsi_display_mode *
+display_mode_from_user(const struct dsi_panel *panel,
+		       const char __user *user_buf, size_t user_len)
+{
+	char modestr[40];
+	size_t len = min(user_len, sizeof(modestr) - 1);
+	int rc;
+
+	rc = copy_from_user(modestr, user_buf, len);
+	if (rc)
+		return ERR_PTR(-EFAULT);
+
+	modestr[len] = '\0';
+
+	return display_mode_from_cmdline(panel, strim(modestr));
 }
 
 static void panel_queue_switch(struct panel_switch_data *pdata,
@@ -251,6 +307,56 @@ static int panel_pre_disable(struct dsi_panel *panel)
 	return 0;
 }
 
+static int panel_idle(struct dsi_panel *panel)
+{
+	struct panel_switch_data *pdata = panel->private_data;
+	const struct dsi_display_mode *idle_mode;
+
+	if (unlikely(!pdata))
+		return -EINVAL;
+
+	kthread_flush_work(&pdata->switch_work);
+
+	mutex_lock(&panel->panel_lock);
+	idle_mode = pdata->idle_mode;
+	if (idle_mode && !is_display_mode_same(idle_mode, panel->cur_mode)) {
+		/*
+		 * clocks are going to be turned off right after this call, so
+		 * switch needs to happen synchronously
+		 */
+		panel_switch_to_mode(pdata, idle_mode);
+		pdata->display_mode = idle_mode;
+
+		sde_atrace_mode_fps(pdata, idle_mode);
+	}
+	mutex_unlock(&panel->panel_lock);
+
+	SDE_ATRACE_INT("display_idle", 1);
+
+	return 0;
+}
+
+static int panel_wakeup(struct dsi_panel *panel)
+{
+	struct panel_switch_data *pdata = panel->private_data;
+	const struct dsi_display_mode *mode = NULL;
+
+	if (unlikely(!pdata))
+		return -EINVAL;
+
+	mutex_lock(&panel->panel_lock);
+	if (!is_display_mode_same(pdata->display_mode, panel->cur_mode))
+		mode = panel->cur_mode;
+	mutex_unlock(&panel->panel_lock);
+
+	if (mode)
+		panel_queue_switch(pdata, mode);
+
+	SDE_ATRACE_INT("display_idle", 0);
+
+	return 0;
+}
+
 static ssize_t debugfs_panel_switch_mode_write(struct file *file,
 					       const char __user *user_buf,
 					       size_t user_len,
@@ -259,19 +365,15 @@ static ssize_t debugfs_panel_switch_mode_write(struct file *file,
 	struct seq_file *seq = file->private_data;
 	struct panel_switch_data *pdata = seq->private;
 	const struct dsi_display_mode *mode;
-	u32 refresh_rate;
-	int rc;
 
 	if (!pdata->panel || !dsi_panel_initialized(pdata->panel))
-		return -EINVAL;
+		return -ENOENT;
 
-	rc = kstrtou32_from_user(user_buf, user_len, 0, &refresh_rate);
-	if (rc)
-		return rc;
-
-	mode = panel_get_display_mode(pdata->panel, refresh_rate);
-	if (!mode)
-		return -EINVAL;
+	mode = display_mode_from_user(pdata->panel, user_buf, user_len);
+	if (IS_ERR(mode))
+		return PTR_ERR(mode);
+	else if (!mode)
+		return -ENOENT;
 
 	panel_queue_switch(pdata, mode);
 
@@ -282,18 +384,19 @@ static int debugfs_panel_switch_mode_read(struct seq_file *seq, void *data)
 {
 	struct panel_switch_data *pdata = seq->private;
 	const struct dsi_display_mode *mode;
-	u32 refresh_rate = 0;
 
 	if (unlikely(!pdata->panel))
 		return -ENOENT;
 
 	mutex_lock(&pdata->panel->panel_lock);
-	mode = pdata->panel->cur_mode;
-	if (likely(mode))
-		refresh_rate = mode->timing.refresh_rate;
+	mode = pdata->display_mode;
 	mutex_unlock(&pdata->panel->panel_lock);
 
-	seq_printf(seq, "%d\n", refresh_rate);
+	if (mode)
+		seq_printf(seq, "%dx%d@%d\n", mode->timing.h_active,
+			   mode->timing.v_active, mode->timing.refresh_rate);
+	else
+		seq_puts(seq, "unknown");
 
 	return 0;
 }
@@ -311,10 +414,85 @@ static const struct file_operations panel_switch_fops = {
 	.release = single_release,
 };
 
+static ssize_t sysfs_idle_mode_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	const struct dsi_display *display;
+	struct panel_switch_data *pdata;
+	const struct dsi_display_mode *mode = NULL;
+	ssize_t rc;
+
+	display = dev_get_drvdata(dev);
+	if (unlikely(!display || !display->panel ||
+		     !display->panel->private_data))
+		return -EINVAL;
+
+	pdata = display->panel->private_data;
+
+	mutex_lock(&pdata->panel->panel_lock);
+	mode = pdata->idle_mode;
+	mutex_unlock(&pdata->panel->panel_lock);
+
+	if (mode)
+		rc = snprintf(buf, PAGE_SIZE, "%dx%d@%d\n",
+			      mode->timing.h_active, mode->timing.v_active,
+			      mode->timing.refresh_rate);
+	else
+		rc = snprintf(buf, PAGE_SIZE, "none\n");
+
+	return rc;
+}
+static ssize_t sysfs_idle_mode_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	const struct dsi_display *display;
+	struct panel_switch_data *pdata;
+	const struct dsi_display_mode *mode = NULL;
+
+	display = dev_get_drvdata(dev);
+	if (unlikely(!display || !display->panel ||
+		     !display->panel->private_data))
+		return -EINVAL;
+
+	pdata = display->panel->private_data;
+	if (count > 1) {
+		char *modestr = kstrndup(buf, count, GFP_KERNEL);
+
+		/* remove any trailing lf at end of sysfs input */
+		mode = display_mode_from_cmdline(display->panel,
+						 strim(modestr));
+		kfree(modestr);
+
+		if (IS_ERR(mode))
+			return PTR_ERR(mode);
+	}
+	mutex_lock(&display->panel->panel_lock);
+	pdata->idle_mode = mode;
+	mutex_unlock(&display->panel->panel_lock);
+
+	return count;
+}
+
+static DEVICE_ATTR(idle_mode, 0644,
+		   sysfs_idle_mode_show,
+		   sysfs_idle_mode_store);
+
+static struct attribute *panel_switch_sysfs_attrs[] = {
+	&dev_attr_idle_mode.attr,
+	NULL,
+};
+
+static struct attribute_group panel_switch_sysfs_attrs_group = {
+	.attrs = panel_switch_sysfs_attrs,
+};
+
 static const struct dsi_panel_funcs panel_funcs = {
 	.mode_switch = panel_switch,
 	.pre_disable = panel_pre_disable,
 	.pre_kickoff = panel_pre_kickoff,
+	.idle        = panel_idle,
+	.wakeup      = panel_wakeup,
 };
 
 static int panel_switch_data_init(struct dsi_panel *panel,
@@ -355,6 +533,9 @@ static int panel_switch_data_init(struct dsi_panel *panel,
 	debugfs_create_atomic_t("te_counter", 0600, pdata->debug_root,
 				&pdata->te_counter);
 
+	sysfs_create_group(&panel->parent->kobj,
+			   &panel_switch_sysfs_attrs_group);
+
 	return 0;
 }
 
@@ -362,6 +543,8 @@ static void panel_switch_data_deinit(struct panel_switch_data *pdata)
 {
 	kthread_flush_worker(&pdata->worker);
 	kthread_stop(pdata->thread);
+	sysfs_remove_group(&pdata->panel->parent->kobj,
+			   &panel_switch_sysfs_attrs_group);
 }
 
 static void panel_switch_data_destroy(struct panel_switch_data *pdata)

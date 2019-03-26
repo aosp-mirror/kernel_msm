@@ -2232,6 +2232,20 @@ void sde_encoder_control_idle_pc(struct drm_encoder *drm_enc, bool enable)
 	SDE_EVT32(sde_enc->idle_pc_enabled);
 }
 
+static void sde_encoder_idle_hint(const struct drm_encoder *drm_enc,
+				  bool is_idle)
+{
+	const struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
+
+	SDE_ATRACE_BEGIN(__func__);
+	if (sde_enc->cur_master) {
+		struct drm_connector *conn = sde_enc->cur_master->connector;
+
+		sde_connector_set_idle_hint(conn, is_idle);
+	}
+	SDE_ATRACE_END(__func__);
+}
+
 static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 		u32 sw_event)
 {
@@ -2316,6 +2330,8 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 				mutex_unlock(&sde_enc->rc_lock);
 				return ret;
 			}
+
+			sde_encoder_idle_hint(drm_enc, false);
 
 			_sde_encoder_resource_control_rsc_update(drm_enc, true);
 		}
@@ -2586,6 +2602,8 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 		if (is_vid_mode) {
 			_sde_encoder_irq_control(drm_enc, false);
 		} else {
+			sde_encoder_idle_hint(drm_enc, true);
+
 			/* disable all the clks and resources */
 			_sde_encoder_resource_control_rsc_update(drm_enc,
 								false);
@@ -2645,6 +2663,8 @@ static int sde_encoder_resource_control(struct drm_encoder *drm_enc,
 				mutex_unlock(&sde_enc->rc_lock);
 				return ret;
 			}
+
+			sde_encoder_idle_hint(drm_enc, false);
 
 			_sde_encoder_resource_control_rsc_update(drm_enc, true);
 

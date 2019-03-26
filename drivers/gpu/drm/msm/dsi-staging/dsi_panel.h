@@ -283,6 +283,8 @@ struct dsi_panel {
  * @pre_disable: called before panel is about to be disabled
  * @mode_switch: called when a mode switch is happening
  * @pre_kickoff: called just before frame kickoff
+ * @idle: called when updates haven't been received for a while (idle)
+ * @wakeup: called when coming out of idle state
  *
  * Note: none of these functions should be called while holding panel_lock
  */
@@ -290,6 +292,8 @@ struct dsi_panel_funcs {
 	int (*pre_disable)(struct dsi_panel *);
 	int (*mode_switch)(struct dsi_panel *);
 	int (*pre_kickoff)(struct dsi_panel *);
+	int (*idle)(struct dsi_panel *);
+	int (*wakeup)(struct dsi_panel *);
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
@@ -430,5 +434,8 @@ bool dsi_panel_get_hbm(struct dsi_panel *panel);
 
 int dsi_panel_switch_init(struct dsi_panel *panel);
 void dsi_panel_switch_destroy(struct dsi_panel *panel);
+
+int dsi_panel_idle(struct dsi_panel *panel);
+int dsi_panel_wakeup(struct dsi_panel *panel);
 
 #endif /* _DSI_PANEL_H_ */
