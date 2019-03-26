@@ -696,7 +696,7 @@ static int chg_work_gen_state(union gbms_charger_state *chg_state,
 	vchrg = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	chg_type = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
 	chg_status = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
-	if (vchrg == -EINVAL || chg_type == -EINVAL || chg_status == -EINVAL) {
+	if (vchrg < 0 || chg_type < 0 || chg_status < 0) {
 		pr_err("MSC_CHG error vchrg=%d chg_type=%d chg_status=%d\n",
 			vchrg, chg_type, chg_status);
 		return -EINVAL;
@@ -877,7 +877,7 @@ static void chg_work(struct work_struct *work)
 	chg_work_adapter_details(chg_drv, usb_online, wlc_online);
 
 	soc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
-	if (soc == -EINVAL)
+	if (soc < 0)
 		goto error_rerun;
 
 	/* this force drain: we might decide to run from power instead.
@@ -1494,7 +1494,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	ibatt = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
 	vbatt = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 
-	if (ibatt == -EINVAL || vbatt == -EINVAL) {
+	if (ibatt < 0 || vbatt < 0) {
 		pr_err("Failed to get ibatt and vbatt\n");
 		return -EIO;
 	}

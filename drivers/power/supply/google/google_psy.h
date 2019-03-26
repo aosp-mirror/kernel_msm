@@ -58,7 +58,7 @@ static inline int gpsy_get_prop(struct power_supply *psy,
 	if (ret < 0) {
 		pr_err("failed to get %s from '%s', ret=%d\n",
 		       prop_name, psy->desc->name, ret);
-		return -EINVAL;
+		return ret;
 	}
 
 	pr_debug("get %s for '%s' => %d\n",
@@ -79,7 +79,7 @@ static inline int64_t gpsy_get_int64_prop(struct power_supply *psy,
 	if (ret < 0) {
 		pr_err("failed to get %s from '%s', ret=%d\n",
 		       prop_name, psy->desc->name, ret);
-		return -EINVAL;
+		return ret;
 	}
 
 	pr_debug("get %s for '%s' => %d\n",

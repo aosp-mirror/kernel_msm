@@ -841,7 +841,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	bool sw_jeita;
 
 	temp = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP);
-	if (temp == -EINVAL)
+	if (temp < 0)
 		return -EIO;
 
 	sw_jeita = msc_logic_soft_jeita(batt_drv, temp);
@@ -850,7 +850,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 
 	ibatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
 	vbatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
-	if (ibatt == -EINVAL || vbatt == -EINVAL)
+	if (ibatt < 0 || vbatt < 0)
 		return -EIO;
 
 	/* invalid or 0 vchg disable IDROP compensation in FAST */
@@ -1273,7 +1273,7 @@ static int batt_init_chg_profile(struct batt_drv *batt_drv)
 		if (present) {
 			fc = GPSY_GET_PROP(fg_psy,
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN);
-			if (fc == -EINVAL)
+			if (fc == -EAGAIN)
 				return -EPROBE_DEFER;
 
 			pr_info("successfully read charging profile:\n");
