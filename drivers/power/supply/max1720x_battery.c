@@ -1728,10 +1728,13 @@ static void batt_ce_dump_data(const struct gbatt_capacity_estimation *cap_esti)
 	pr_info("cable: %d\n", cap_esti->cable_in);
 }
 
-static void batt_ce_load_data(struct regmap *map,
+static int batt_ce_load_data(struct regmap *map,
 			      struct gbatt_capacity_estimation *cap_esti)
 {
 	u16 data;
+
+	if (max17xxx_gauge_type == -1)
+		return -EINVAL;
 
 	cap_esti->estimate_state = ESTIMATE_NONE;
 	if (batt_ce_regmap_read(map, CE_DELTA_CC_SUM_REG, &data) == 0)
@@ -1748,6 +1751,8 @@ static void batt_ce_load_data(struct regmap *map,
 		cap_esti->cap_filter_count = data;
 	else
 		cap_esti->cap_filter_count = 0;
+
+	return 0;
 }
 
 /* call holding &cap_esti->batt_ce_lock */
@@ -1997,8 +2002,9 @@ static int max1720x_get_property(struct power_supply *psy,
 			val->intval = 0;
 		} else {
 			err = REGMAP_READ(map, MAX1720X_STATUS, &data);
+			/* BST is 0 when the battery is present */
 			val->intval = (((u16) data) & MAX1720X_STATUS_BST)
-						? 0 : 1;
+							? 0 : 1;
 		}
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
@@ -3499,6 +3505,9 @@ no_history:
 
 static int max1720x_init_history(struct max1720x_chip *chip, int gauge_type)
 {
+	if (gauge_type == -1)
+		return -EINVAL;
+
 	if (gauge_type == MAX1730X_GAUGE_TYPE) {
 		chip->nb_history_pages = MAX1730X_N_OF_HISTORY_PAGES;
 		chip->history_page_size = MAX1730X_HISTORY_PAGE_SIZE;
@@ -3508,6 +3517,7 @@ static int max1720x_init_history(struct max1720x_chip *chip, int gauge_type)
 		chip->history_page_size = MAX1720X_HISTORY_PAGE_SIZE;
 		chip->nb_history_flag_reg = MAX1720X_N_OF_HISTORY_FLAGS_REG;
 	}
+
 	return 0;
 }
 
@@ -3524,13 +3534,14 @@ static void max1720x_init_work(struct work_struct *work)
 				msecs_to_jiffies(MAX1720X_DELAY_INIT_MS));
 			return;
 		}
+
+
 	}
 
 	chip->prev_charge_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	chip->fake_capacity = -EINVAL;
 	chip->resume_complete = true;
 	chip->init_complete = true;
-
 	init_debugfs(chip);
 
 	/* Handle any IRQ that might have been set before init */
@@ -3541,8 +3552,9 @@ static void max1720x_init_work(struct work_struct *work)
 		(void)max1720x_init_history_device(chip);
 
 	mutex_init(&chip->cap_estimate.batt_ce_lock);
-	batt_ce_load_data(chip->regmap_nvram, &chip->cap_estimate);
-	batt_ce_dump_data(&chip->cap_estimate);
+	ret = batt_ce_load_data(chip->regmap_nvram, &chip->cap_estimate);
+	if (ret == 0)
+		batt_ce_dump_data(&chip->cap_estimate);
 }
 
 static int max1720x_probe(struct i2c_client *client,
@@ -3586,6 +3598,7 @@ static int max1720x_probe(struct i2c_client *client,
 		max17xxx_gauge_type = MAX1720X_GAUGE_TYPE;
 	}
 
+	/* gauge not present default to 17201 */
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE)
 		chip->regmap_nvram =
 		    devm_regmap_init_i2c(chip->secondary,

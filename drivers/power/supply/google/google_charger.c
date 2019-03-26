@@ -150,6 +150,7 @@ struct chg_drv {
 	struct votable	*dc_suspend_votable;
 	struct votable	*dc_icl_votable;
 
+	bool batt_present;
 	int batt_profile_fcc_ua;
 	int batt_profile_fv_uv;
 	int fv_uv;		/* newgen */
@@ -846,7 +847,21 @@ static void chg_work(struct work_struct *work)
 	int rc = 0;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
+
 	pr_debug("battery charging work item\n");
+
+	if (!chg_drv->batt_present) {
+		/* -EGAIN = NOT ready, <0 don't know yet */
+		rc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_PRESENT);
+		if (rc < 0)
+			goto error_rerun;
+
+		chg_drv->batt_present = (rc > 0);
+		if (!chg_drv->batt_present)
+			goto exit_chg_work;
+
+		pr_info("MSC_CHG battery present\n");
+	}
 
 	/* cause msc_update_charger_cb to ignore updates */
 	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
@@ -875,7 +890,7 @@ static void chg_work(struct work_struct *work)
 		chg_drv->stop_charging = false;
 	}
 
-	/* update adapter details */
+	/* route adapter details to battery for accounting */
 	chg_work_adapter_details(chg_drv, usb_online, wlc_online);
 
 	soc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);

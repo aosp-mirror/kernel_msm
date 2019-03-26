@@ -39,11 +39,11 @@
 #include <linux/debugfs.h>
 #endif
 
-#define BATT_DELAY_INIT_MS 250
+#define BATT_DELAY_INIT_MS 		250
+#define BATT_WORK_ERROR_RETRY_MS	1000
 
-#define DEFAULT_BATT_UPDATE_INTERVAL	30000
-#define BATT_WORK_ERROR_RETRY_MS		1000
-
+#define DEFAULT_BATT_FAKE_CAPACITY		50
+#define DEFAULT_BATT_UPDATE_INTERVAL		30000
 #define DEFAULT_BATT_DRV_RL_SOC_THRESHOLD	97
 
 #define MSC_ERROR_UPDATE_INTERVAL		5000
@@ -108,6 +108,7 @@ struct batt_drv {
 	/* TODO: b/111407333, will likely need to adjust SOC% on wakeup */
 	bool init_complete;
 	bool resume_complete;
+	bool batt_present;
 
 	struct mutex batt_lock;
 	struct mutex chg_lock;
@@ -1270,23 +1271,24 @@ static int batt_init_chg_profile(struct batt_drv *batt_drv)
 	 * charging altogether.
 	 */
 	if (batt_drv->battery_capacity == 0) {
-		u32 fc = 0, present;
+		u32 fc = 0;
 		struct power_supply *fg_psy = batt_drv->fg_psy;
 
-		present = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
-		if (present) {
+		if (batt_drv->batt_present) {
 			fc = GPSY_GET_PROP(fg_psy,
 					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN);
 			if (fc == -EAGAIN)
 				return -EPROBE_DEFER;
+			if (fc > 0) {
+				pr_info("successfully read charging profile:\n");
+				/* convert uA to mAh*/
+				batt_drv->battery_capacity = fc / 1000;
+			}
 
-			pr_info("successfully read charging profile:\n");
+		}
 
-			/* convert uA to mAh*/
-			batt_drv->battery_capacity = fc / 1000;
-		} else {
-			struct device_node *node =
-					batt_drv->device->of_node;
+		if (batt_drv->battery_capacity == 0) {
+			struct device_node *node = batt_drv->device->of_node;
 
 			ret = of_property_read_u32(node,
 					"google,chg-battery-default-capacity",
@@ -2096,7 +2098,17 @@ static void google_battery_init_work(struct work_struct *work)
 	 *	batt_drv->ccbin_psy = batt_drv->fg_psy;
 	 */
 
-	/* recharge logic, almost full */
+	if (!batt_drv->batt_present) {
+		ret = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
+		if (ret == -EAGAIN)
+			goto retry_init_work;
+
+		batt_drv->batt_present = (ret > 0);
+		if (!batt_drv->batt_present)
+			pr_warn("battery not present (ret=%d)\n", ret);
+	}
+
+	/* recharge logic, ssoc_init needs the recharge threshold */
 	ret = of_property_read_u32(batt_drv->device->of_node,
 			"google,recharge-soc-threshold",
 			&batt_drv->ssoc_state.rl_soc_threshold);
@@ -2105,7 +2117,7 @@ static void google_battery_init_work(struct work_struct *work)
 				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
 
 	ret = ssoc_init(&batt_drv->ssoc_state, fg_psy);
-	if (ret < 0)
+	if (ret < 0 && batt_drv->batt_present)
 		goto retry_init_work;
 
 	dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
@@ -2134,7 +2146,8 @@ static void google_battery_init_work(struct work_struct *work)
 		pr_err("cannot restore bin count ret=%d\n", ret);
 	mutex_unlock(&batt_drv->cc_data.lock);
 
-	batt_drv->fake_capacity = -EINVAL;
+	batt_drv->fake_capacity = (batt_drv->batt_present) ? -EINVAL
+						: DEFAULT_BATT_FAKE_CAPACITY;
 
 	(void)batt_init_fs(batt_drv);
 
