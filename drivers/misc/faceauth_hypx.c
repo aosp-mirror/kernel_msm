@@ -54,6 +54,17 @@
 
 #define ERR_FW_READY 3
 
+/* Error code for EL2 error */
+#define ERR_SUCCESS 0
+#define ERR_PIL_COMPLETE 1
+#define ERR_PIL_INCOMPLETE 2
+#define ERR_FW_READY 3
+#define ERR_SECURE_CAM 5
+#define ERR_DMA 6
+#define ERR_LOCK 7
+#define ERR_NOBUFFER 8
+#define ERR_NON_SECURE_MODE 9
+
 struct hypx_mem_segment {
 	/* address of the segment begin */
 	uint32_t addr;
@@ -136,7 +147,21 @@ struct faceauth_blob {
 	struct sg_table *sg_table;
 	bool is_secure_camera;
 };
-
+static void parse_el2_return(int code)
+{
+	if (code == ERR_SECURE_CAM)
+		pr_err("EL2: Insecure path detected");
+	else if (code == ERR_DMA)
+		pr_err("EL2: DMA transfter failed");
+	else if (code == ERR_LOCK)
+		pr_err("EL2: Region lock failed");
+	else if (code == ERR_NOBUFFER)
+		pr_err("EL2: No buffer for alloc/dealloc");
+	else if (code == ERR_NON_SECURE_MODE)
+		pr_err("EL2: Not in secure mode");
+	else
+		pr_err("EL2: Not defined return code: %d", code);
+}
 static void hypx_free_blob_userbuf(phys_addr_t blob_phy, bool reassign)
 {
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
@@ -611,10 +636,10 @@ int el2_faceauth_wait_pil_dma_over(void)
 			return ret;
 
 		ret = check_dma_desc.ret[0];
-		if (ret == 1) {
+		if (ret == ERR_PIL_COMPLETE) {
 			/* DMA completed successfully */
 			return 0;
-		} else if (ret == 2) {
+		} else if (ret == ERR_PIL_INCOMPLETE) {
 			/* DMA is still running */
 			usleep_range(1000, 2000);
 		} else {
@@ -674,6 +699,9 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		pr_err("Failed scm_call %d\n", ret);
 		goto exit1;
 	}
+	ret = desc.ret[0];
+	if (ret)
+		parse_el2_return(ret);
 
 	stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT_MS);
 	usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
@@ -719,6 +747,9 @@ int el2_faceauth_cleanup(struct device *dev)
 		pr_err("Failed scm_call %d\n", ret);
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_CLEANUP & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
+	ret = desc.ret[0];
+	if (ret)
+		parse_el2_return(ret);
 
 	/* TODO(jaldhalemi): remove this code once HypX is updated */
 	if (!permanent_bounce_buffer) {
@@ -822,6 +853,10 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	if (ret)
 		pr_err("Failed scm_call %d\n", ret);
 
+	ret = desc.ret[0];
+	if (ret)
+		parse_el2_return(ret);
+
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_PROCESS & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
 
@@ -866,6 +901,12 @@ int el2_faceauth_get_process_result(struct device *dev,
 				    jiffies_to_usecs(jiffies - save_trace));
 	if (ret) {
 		pr_err("Failed scm_call %d\n", ret);
+		goto exit;
+	}
+
+	ret = desc.ret[0];
+	if (ret) {
+		parse_el2_return(ret);
 		goto exit;
 	}
 
@@ -928,6 +969,13 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 		pr_err("Failed scm_call %d\n", ret);
 		goto exit1;
 	}
+
+	ret = desc.ret[0];
+	if (ret) {
+		parse_el2_return(ret);
+		goto exit1;
+	}
+
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				DMA_FROM_DEVICE);
 
@@ -962,6 +1010,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	struct faceauth_buffer_list *output_buffers;
 	int buffer_idx;
 	int buffer_list_size;
+	uint64_t ret;
 	bool need_reassign = true;
 	struct hypx_fa_debug_data *hypx_data;
 	struct scm_desc desc = { 0 };
@@ -1021,6 +1070,13 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		pr_err("Failed scm_call %d\n", err);
 		goto exit4;
 	}
+
+	ret = desc.ret[0];
+	if (ret) {
+		parse_el2_return(ret);
+		goto exit4;
+	}
+
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				DMA_FROM_DEVICE);
 
@@ -1126,6 +1182,12 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		err = scm_call2(HYPX_SMC_FUNC_GET_DEBUG_BUFFER, &desc);
 		if (err)
 			pr_err("Failed scm_call %d\n", err);
+
+		ret = desc.ret[0];
+		if (ret) {
+			parse_el2_return(ret);
+			goto exit4;
+		}
 
 		dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 					DMA_FROM_DEVICE);
