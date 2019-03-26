@@ -9,6 +9,14 @@
  */
  #include <dt-bindings/thermal/thermal.h>
 
+/*
+ * The 7-th trip point (trip7) of each airbruhs-* thermal zone would trigger
+ * the TH_TRIP and Airbrush PMIC interrupt for emergency shutdown.  Set to 130C
+ * to protect Airbrush die from damaged.  Airbrush DDR needs to be under 85C
+ * for working properly, so the limit should be set to trigger thermal
+ * throttling instead.
+ */
+
 &soc {
 	thermal-zones {
 		airbrush-tmu {
@@ -39,9 +47,9 @@
 					hysteresis = <1000>;
 					type = "passive";
 				};
-				airbrush_tmu_trip7: trip7 {
-					temperature = <90000>;
-					hysteresis = <1000>;
+				trip7 {
+					temperature = <130000>;
+					hysteresis = <0>;
 					type = "hot";
 				};
 			};
@@ -85,9 +93,9 @@
 					hysteresis = <1000>;
 					type = "passive";
 				};
-				airbrush_ipu0_trip7: trip7 {
-					temperature = <90000>;
-					hysteresis = <1000>;
+				trip7 {
+					temperature = <130000>;
+					hysteresis = <0>;
 					type = "hot";
 				};
 			};
@@ -131,9 +139,9 @@
 					hysteresis = <1000>;
 					type = "passive";
 				};
-				airbrush_ipu1_trip7: trip7 {
-					temperature = <90000>;
-					hysteresis = <1000>;
+				trip7 {
+					temperature = <130000>;
+					hysteresis = <0>;
 					type = "hot";
 				};
 			};
@@ -177,9 +185,9 @@
 					hysteresis = <1000>;
 					type = "passive";
 				};
-				airbrush_ipu2_trip7: trip7 {
-					temperature = <90000>;
-					hysteresis = <1000>;
+				trip7 {
+					temperature = <130000>;
+					hysteresis = <0>;
 					type = "hot";
 				};
 			};
@@ -223,9 +231,9 @@
 					hysteresis = <1000>;
 					type = "passive";
 				};
-				airbrush_ipu3_trip7: trip7 {
-					temperature = <90000>;
-					hysteresis = <1000>;
+				trip7 {
+					temperature = <130000>;
+					hysteresis = <0>;
 					type = "hot";
 				};
 			};
@@ -269,9 +277,9 @@
 					hysteresis = <1000>;
 					type = "passive";
 				};
-				airbrush_tpu0_trip7: trip7 {
-					temperature = <90000>;
-					hysteresis = <1000>;
+				trip7 {
+					temperature = <130000>;
+					hysteresis = <0>;
 					type = "hot";
 				};
 			};
@@ -315,9 +323,9 @@
 					hysteresis = <1000>;
 					type = "passive";
 				};
-				airbrush_tpu1_trip7: trip7 {
-					temperature = <90000>;
-					hysteresis = <1000>;
+				trip7 {
+					temperature = <130000>;
+					hysteresis = <0>;
 					type = "hot";
 				};
 			};
