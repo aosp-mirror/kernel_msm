@@ -714,6 +714,11 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 			     data->operation == COMMAND_VALIDATE;
 
 	hypx_data = (void *)get_zeroed_page(0);
+	if (!hypx_data) {
+		ret = -ENOMEM;
+		pr_err("Cannot allocate memory for hypx_data\n");
+		goto err;
+	}
 
 	hypx_data->is_secure_camera = is_secure_camera;
 	hypx_data->operation = data->operation;
@@ -797,7 +802,8 @@ err:
 	if (hypx_data->image_dot_left)
 		hypx_free_blob(dev, &image_dot_left, false);
 
-	free_page((unsigned long)hypx_data);
+	if (hypx_data)
+		free_page((unsigned long)hypx_data);
 	return ret;
 }
 
@@ -810,6 +816,11 @@ int el2_faceauth_get_process_result(struct device *dev,
 	struct hypx_fa_process_results *hypx_data;
 
 	hypx_data = (void *)get_zeroed_page(0);
+	if (!hypx_data) {
+		ret = -ENOMEM;
+		pr_err("Cannot allocate memory for hypx_data\n");
+		goto exit;
+	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				   DMA_TO_DEVICE);
@@ -837,7 +848,8 @@ int el2_faceauth_get_process_result(struct device *dev,
 	data->error_code = hypx_data->error_code;
 
 exit:
-	free_page((unsigned long)hypx_data);
+	if (hypx_data)
+		free_page((unsigned long)hypx_data);
 	return ret;
 }
 
@@ -852,6 +864,11 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 	bool is_ion_buffer = (data->buffer_fd > 0);
 
 	hypx_data = (void *)get_zeroed_page(0);
+	if (!hypx_data) {
+		ret = -ENOMEM;
+		pr_err("Cannot allocate memory for hypx_data\n");
+		goto exit2;
+	}
 
 	if (data->buffer_fd)
 		hypx_data->debug_buffer = hypx_create_blob_dmabuf(
@@ -897,7 +914,8 @@ exit1:
 	else
 		hypx_free_blob_userbuf(hypx_data->debug_buffer, need_reassign);
 exit2:
-	free_page((unsigned long)hypx_data);
+	if (hypx_data)
+		free_page((unsigned long)hypx_data);
 	return ret;
 }
 
@@ -916,6 +934,12 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	struct scm_desc desc = { 0 };
 
 	hypx_data = (void *)get_zeroed_page(0);
+	if (!hypx_data) {
+		err = -ENOMEM;
+		pr_err("Cannot allocate memory for hypx_data\n");
+		goto exit0;
+	}
+
 	hypx_data->offset_int_state =
 		offsetof(struct faceauth_airbrush_state, internal_state_size);
 	hypx_data->offset_ab_state =
@@ -951,7 +975,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	hypx_data->ab_state = hypx_create_blob_userbuf(
 		dev, debug_entry, hypx_data->image_flood_size);
 	if (!hypx_data->ab_state)
-		goto exit;
+		goto exit4;
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				   DMA_TO_DEVICE);
@@ -962,7 +986,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	err = scm_call2(HYPX_SMC_FUNC_GET_DEBUG_DATA, &desc);
 	if (err) {
 		pr_err("Failed scm_call %d\n", err);
-		goto exit;
+		goto exit4;
 	}
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				DMA_FROM_DEVICE);
@@ -974,7 +998,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (err) {
 		pr_err("Failed hypx_copy_from_blob_userbuf internal_state %d\n",
 		       err);
-		goto exit;
+		goto exit4;
 	}
 
 	current_offset = offsetof(struct faceauth_debug_entry, ab_state) +
@@ -994,7 +1018,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 
 		if (err) {
 			pr_err("Error saving left dot image\n");
-			goto exit;
+			goto exit4;
 		}
 
 		err = hypx_copy_from_blob_userbuf(
@@ -1008,7 +1032,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
 		if (err) {
 			pr_err("Error saving right dot image\n");
-			goto exit;
+			goto exit4;
 		}
 		err = hypx_copy_from_blob_userbuf(
 			dev, (uint8_t *)debug_entry + current_offset,
@@ -1021,7 +1045,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
 		if (err) {
 			pr_err("Error saving flood image\n");
-			goto exit;
+			goto exit4;
 		}
 		need_reassign = false;
 	} else {
@@ -1037,12 +1061,12 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (!output_buffers) {
 		err = -EMSGSIZE;
 		pr_err("No output buffer\n");
-		goto exit;
+		goto exit4;
 	}
 	buffer_idx = output_buffers->buffer_count - 1;
 	if (buffer_idx < 0) {
 		pr_err("No available buffer");
-		goto exit;
+		goto exit4;
 	}
 	buffer_list_size =
 		output_buffers->buffers[buffer_idx].offset_to_buffer +
@@ -1051,7 +1075,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (buffer_list_size + current_offset > DEBUG_DATA_BIN_SIZE) {
 		err = -EMSGSIZE;
 		pr_err("Wrong output buffer size\n");
-		goto exit;
+		goto exit4;
 	}
 
 	if (output_buffers->buffer_base != 0 && buffer_list_size > 0) {
@@ -1061,7 +1085,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		hypx_data->buffer_base = output_buffers->buffer_base;
 
 		if (!hypx_data->output_buffers)
-			goto exit;
+			goto exit4;
 
 		dma_sync_single_for_device(dev, virt_to_phys(hypx_data),
 					   PAGE_SIZE, DMA_TO_DEVICE);
@@ -1083,7 +1107,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		hypx_free_blob_userbuf(hypx_data->output_buffers, false);
 	}
 
-exit:
+exit4:
 	hypx_free_blob_userbuf(hypx_data->ab_state, false);
 exit3:
 	hypx_free_blob_userbuf(hypx_data->image_flood, need_reassign);
@@ -1092,6 +1116,8 @@ exit2:
 exit1:
 	hypx_free_blob_userbuf(hypx_data->image_left, need_reassign);
 
-	free_page((unsigned long)hypx_data);
+exit0:
+	if (hypx_data)
+		free_page((unsigned long)hypx_data);
 	return err;
 }
