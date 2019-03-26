@@ -283,6 +283,10 @@ int ipu_power_enable_cores_ioctl(struct paintbox_data *pb,
 		return -EFAULT;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	/* The maximum number of cores is equal to the number of STPs. */
 	max_core = pb->stp.num_stps;
@@ -378,6 +382,10 @@ int ipu_power_disable_cores_ioctl(struct paintbox_data *pb,
 		return -EFAULT;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	masked_stp_disable = session->stp_id_mask & req.stp_mask;
 	if (masked_stp_disable & 0x1) {

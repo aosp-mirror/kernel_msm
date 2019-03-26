@@ -116,6 +116,10 @@ static int ipu_debug_stats_show(struct seq_file *s, void *unused)
 		return -ENOMEM;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	if (!debug->stats_dump) {
 		mutex_unlock(&pb->lock);
@@ -173,6 +177,10 @@ static int ipu_debug_regs_show(struct seq_file *s, void *unused)
 		return -ENOMEM;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	if (debug->resource_id >= 0)
 		ret = scnprintf(buf, len, "%s%u:\n", debug->name,
@@ -287,6 +295,10 @@ static int ipu_debug_reg_entry_set(void *data, u64 val)
 	int ret;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
@@ -311,6 +323,10 @@ static int ipu_debug_reg_entry_get(void *data, u64 *val)
 	int ret;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
@@ -420,6 +436,10 @@ static int ipu_debug_reg_dump_show(struct seq_file *s, void *unused)
 		return -ENOMEM;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_jqs_get(pb);
 	if (ret < 0) {

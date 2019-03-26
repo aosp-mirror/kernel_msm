@@ -426,11 +426,7 @@ void ipu_request_reset(struct device *dev)
 
 	dev_err(bus->parent_dev, "%s: Reset requested\n", __func__);
 
-	mutex_lock(&bus->jqs.lock);
-
-	ipu_core_jqs_disable_firmware_fatal_error(bus);
-
-	mutex_unlock(&bus->jqs.lock);
+	ipu_bus_notify_fatal_error(bus);
 }
 
 int ipu_bus_initialize(struct device *parent_dev,
@@ -498,11 +494,9 @@ void ipu_bus_deinitialize(struct paintbox_bus *bus)
 	kfree(bus);
 }
 
-/* This function can be called in an atomic context */
 void ipu_bus_notify_fatal_error(struct paintbox_bus *bus)
 {
 	atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
-
 	queue_work(system_wq, &bus->recovery_work);
 }
 

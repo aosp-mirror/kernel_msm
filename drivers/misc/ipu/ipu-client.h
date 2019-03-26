@@ -53,6 +53,8 @@
 
 struct paintbox_data;
 
+#define PAINTBOX_RESET_REQUESTED  (1 << 0)
+
 /* Data structure for all information related to a paintbox session.  A session
  * will be allocated on open() and deleted on release().
  */
@@ -293,6 +295,7 @@ struct paintbox_buffer {
 };
 
 struct paintbox_data {
+	atomic_t reset_requested;
 	struct mutex lock;
 	struct miscdevice misc_device;
 	struct dev_pm_qos_request pm_qos;
@@ -332,11 +335,17 @@ struct paintbox_data {
 #endif
 };
 
+static inline bool ipu_reset_is_requested(struct paintbox_data *pb)
+{
+	return !!(atomic_read(&pb->reset_requested) & PAINTBOX_RESET_REQUESTED);
+}
+
 int ipu_jqs_send_sync_message(struct paintbox_data *pb,
 		const struct jqs_message *req);
 
 /* Caller must hold pb->lock for this group of functions */
 int ipu_jqs_get(struct paintbox_data *pb);
 int ipu_jqs_put(struct paintbox_data *pb);
+void ipu_client_request_reset(struct paintbox_data *pb);
 
 #endif /* __IPU_CLIENT_H__ */

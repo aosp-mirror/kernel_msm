@@ -338,6 +338,11 @@ int ipu_buffer_dma_buf_bulk_register_ioctl(struct paintbox_data *pb,
 	}
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		kfree(req_bufs);
+		return -ECONNRESET;
+	}
 
 	for (i = 0; i < req.num_buffers; i++) {
 		ret = ipu_buffer_dma_buf_process_registration(pb, session,
@@ -415,6 +420,11 @@ int ipu_buffer_dma_buf_bulk_unregister_ioctl(struct paintbox_data *pb,
 	}
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		kfree(buf_ids);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_buffer_send_jqs_buffers_unregister(pb, session,
 			req.num_buffers, buf_ids);

@@ -72,7 +72,7 @@ static int ipu_resource_send_release(struct paintbox_data *pb,
 
 	dev_dbg(pb->dev,
 			"%s: session id %u stp mask: 0x%08x lbp mask: 0x%08x dma mask: 0x%08x\n",
-			__func__,req.session_id, req.stp_id_mask,
+			__func__, req.session_id, req.stp_id_mask,
 			req.lbp_id_mask, req.dma_channel_id_mask);
 
 	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&req);
@@ -362,7 +362,7 @@ int ipu_resource_session_release(struct paintbox_data *pb,
 	 * need to be reset.
 	 */
 	if (ret < 0)
-		ipu_request_reset(pb->dev);
+		ipu_client_request_reset(pb);
 
 	return ret;
 }
@@ -388,6 +388,10 @@ int ipu_resource_allocate_ioctl(struct paintbox_data *pb,
 	timeout_remaining_ns = req.timeout_ns;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	/* Remove resources already held by the session from the request. */
 	ipu_resource_remove_held_resources(pb, session, &req);
@@ -436,6 +440,10 @@ int ipu_resource_allocate_ioctl(struct paintbox_data *pb,
 				(&session->bulk_alloc_completion);
 			if (ret) {
 				mutex_lock(&pb->lock);
+				if (ipu_reset_is_requested(pb)) {
+					mutex_unlock(&pb->lock);
+					return -ECONNRESET;
+				}
 				goto err_exit;
 			}
 			time_remaining = LONG_MAX;
@@ -449,7 +457,12 @@ int ipu_resource_allocate_ioctl(struct paintbox_data *pb,
 				timeout_remaining_ns =
 					jiffies_to_nsecs(time_remaining);
 		}
+
 		mutex_lock(&pb->lock);
+		if (ipu_reset_is_requested(pb)) {
+			mutex_unlock(&pb->lock);
+			return -ECONNRESET;
+		}
 	} while (time_remaining > 0);
 
 	if (time_remaining == 0 && !available) {
@@ -478,7 +491,7 @@ int ipu_resource_allocate_ioctl(struct paintbox_data *pb,
 		 * up the allocated resources and request a reset.
 		 */
 		ipu_resource_release_internal(pb, session);
-		ipu_request_reset(pb->dev);
+		ipu_client_request_reset(pb);
 	}
 
 	mutex_unlock(&pb->lock);
@@ -497,6 +510,10 @@ int ipu_resource_release_ioctl(struct paintbox_data *pb,
 	int ret;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_resource_session_release(pb, session);
 	if (ret < 0) {

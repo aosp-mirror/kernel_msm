@@ -224,6 +224,12 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 	fp->private_data = session;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		kfree(fp->private_data);
+		fp->private_data = NULL;
+		return -ECONNRESET;
+	}
 
 	list_add_tail(&session->session_entry, &pb->session_list);
 
@@ -396,19 +402,10 @@ static void ipu_client_get_capabilities(struct paintbox_data *pb)
 static void ipu_client_firmware_down(struct device *dev)
 {
 	struct paintbox_data *pb = dev_get_drvdata(dev);
-	struct paintbox_session *session, *session_next;
 
 	dev_dbg(pb->dev, "JQS firmware is going down\n");
 
-	/* Walk the session list and notify the sessions that the JQS is down.
-	 */
-	mutex_lock(&pb->lock);
-
-	list_for_each_entry_safe(session, session_next, &pb->session_list,
-			session_entry)
-		ipu_queue_session_release(pb, session);
-
-	mutex_unlock(&pb->lock);
+	atomic_andnot(PAINTBOX_RESET_REQUESTED, &pb->reset_requested);
 }
 
 static void ipu_client_firmware_suspended(struct device *dev)
@@ -502,6 +499,13 @@ static int ipu_client_probe(struct device *dev)
 	pm_runtime_enable(pb->dev);
 
 	return 0;
+}
+
+/* Caller must hold pb->lock */
+void ipu_client_request_reset(struct paintbox_data *pb)
+{
+	atomic_or(PAINTBOX_RESET_REQUESTED, &pb->reset_requested);
+	ipu_request_reset(pb->dev);
 }
 
 static int ipu_client_remove(struct device *dev)

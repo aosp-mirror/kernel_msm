@@ -179,6 +179,10 @@ static ssize_t ipu_queue_read(struct file *fp, char __user *buf, size_t size,
 	struct paintbox_data *pb = cmd_queue->pb;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	if (cmd_queue->session == NULL) {
 		int ret = cmd_queue->err;
@@ -200,6 +204,10 @@ static ssize_t ipu_queue_write(struct file *fp, const char __user *buf,
 	struct paintbox_data *pb = cmd_queue->pb;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	if (cmd_queue->session == NULL) {
 		int ret = cmd_queue->err;
@@ -231,6 +239,11 @@ int ipu_queue_allocate_ioctl(struct paintbox_data *pb,
 		return -ENOMEM;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		kfree(cmd_queue);
+		return -ECONNRESET;
+	}
 
 	/* call down the the transport layer to create the queue */
 	ret = ipu_alloc_queue(pb->dev);

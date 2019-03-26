@@ -315,6 +315,10 @@ int ipu_stp_debug_read_registers(struct seq_file *s, void *data)
 	int ret;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
@@ -382,6 +386,10 @@ static int ipu_stp_debug_register_set(void *data, u64 val)
 	int ret;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_jqs_get(pb);
 	if (ret < 0) {
@@ -407,6 +415,10 @@ static int ipu_stp_debug_register_get(void *data, u64 *val)
 	int ret;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ret = ipu_jqs_get(pb);
 	if (ret < 0) {

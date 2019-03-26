@@ -59,6 +59,10 @@ static int ipu_aon_debug_read_registers(struct seq_file *s, void *data)
 	unsigned int i;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	for (i = 0; i < IO_AON_NUM_REGS; i++) {
 		unsigned int offset;
@@ -84,6 +88,10 @@ static int ipu_aon_debug_register_set(void *data, u64 val)
 	struct paintbox_data *pb = reg->pb;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	ipu_writeq(pb->dev, val, reg->offset);
 
@@ -98,6 +106,10 @@ static int ipu_aon_debug_register_get(void *data, u64 *val)
 	struct paintbox_data *pb = reg->pb;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	*val = ipu_readq(pb->dev, reg->offset);
 
@@ -111,6 +123,10 @@ static int ipu_aon_debug_min_core_enable_set(void *data, u64 val)
 	struct paintbox_data *pb = data;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	/* The maximum number of cores is equal to the number of STPs. */
 	if (val > pb->stp.num_stps)
@@ -133,6 +149,10 @@ static int ipu_aon_debug_min_core_enable_get(void *data, u64 *val)
 	struct paintbox_data *pb = data;
 
 	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
 
 	*val = pb->power.min_active_core_count;
 

@@ -1,4 +1,4 @@
-  /*
+/*
  * JQS management support for the Paintbox programmable IPU
  *
  * Copyright (C) 2018 Google, Inc.
@@ -640,8 +640,8 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 	 * is running when DPM calls power off then we will treat it like a
 	 * fatal JQS error on the resume and invoke the recovery path.
 	 */
-	if ((bus->jqs.status == JQS_FW_STATUS_RUNNING) ||
-			(bus->jqs.status == JQS_FW_STATUS_SUSPENDED)) {
+	if (WARN_ON((bus->jqs.status == JQS_FW_STATUS_RUNNING) ||
+			(bus->jqs.status == JQS_FW_STATUS_SUSPENDED))) {
 		bus->jqs.pm_recovery_requested = true;
 		ipu_core_jqs_power_disable(bus);
 	}
