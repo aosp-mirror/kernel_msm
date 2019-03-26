@@ -88,7 +88,8 @@ void __iomem *get_tpu_virt(void)
 bool abc_pcie_enumerated(void)
 {
 	if (!abc_dev || !abc_dev->pcie_config ||
-			!atomic_read(&abc_dev->link_state))
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
 		return false;
 	return true;
 }
@@ -102,8 +103,9 @@ int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 #endif
 
 	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config ||
-			!atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	if (((TPU_START) <= offset) && (offset < (IPU_START))) {
 		offset -= TPU_START;
@@ -150,8 +152,9 @@ int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 #endif
 
 	if (!abc_dev || !abc_dev->pcie_config || !abc_dev->fsys_config ||
-			!atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	if (((TPU_START) <= offset) && (offset < (IPU_START))) {
 		offset -= TPU_START;
@@ -195,8 +198,9 @@ int aon_config_read(u32 offset, u32 len, u32 *data)
 	void __iomem *base_offset;
 
 	if (!abc_dev || !abc_dev->aon_config ||
-			!atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	base_offset = abc_dev->aon_config + offset;
 	*data = readl(base_offset);
@@ -208,8 +212,9 @@ int aon_config_write(u32 offset, u32 len, u32 data)
 	void __iomem *base_offset;
 
 	if (!abc_dev || !abc_dev->aon_config ||
-			!atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	base_offset = abc_dev->aon_config + offset;
 	__iowmb();
@@ -221,8 +226,10 @@ int ipu_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->ipu_config || !atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+	if (!abc_dev || !abc_dev->ipu_config ||
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	base_offset = abc_dev->ipu_config + offset;
 	*data = readl(base_offset);
@@ -233,8 +240,10 @@ int ipu_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->ipu_config || !atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+	if (!abc_dev || !abc_dev->ipu_config ||
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	base_offset = abc_dev->ipu_config + offset;
 	__iowmb();
@@ -246,8 +255,10 @@ int tpu_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->tpu_config || !atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+	if (!abc_dev || !abc_dev->tpu_config ||
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	base_offset = abc_dev->tpu_config + offset;
 	*data = readl(base_offset);
@@ -258,8 +269,10 @@ int tpu_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
 
-	if (!abc_dev->tpu_config || !atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+	if (!abc_dev || !abc_dev->tpu_config ||
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	base_offset = abc_dev->tpu_config + offset;
 	__iowmb();
@@ -279,8 +292,9 @@ int memory_config_read(u32 offset, u32 len, u32 *data)
 	int ret = 0;
 
 	if (!abc_dev || !abc_dev->memory_config ||
-			!atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	region_offset = offset & ~(ABC_MEMORY_REGION_MASK);
 
@@ -341,8 +355,9 @@ int memory_config_write(u32 offset, u32 len, u32 data)
 	int ret = 0;
 
 	if (!abc_dev || !abc_dev->memory_config ||
-			!atomic_read(&abc_dev->link_state))
-		return -EFAULT;
+			atomic_read(&abc_dev->link_state) !=
+			(ABC_PCIE_LINK_ACTIVE | ABC_PCIE_SMMU_ATTACHED))
+		return -ENOTCONN;
 
 	region_offset = offset & ~(ABC_MEMORY_REGION_MASK);
 
@@ -964,11 +979,15 @@ static int abc_pcie_smmu_attach(struct device *dev)
 	/* mahdih: investigate why this was not needed in binder */
 	dma_set_mask(dev, DMA_BIT_MASK(64));
 
+	atomic_fetch_or(ABC_PCIE_SMMU_ATTACHED,
+			&abc_dev->link_state);
 	return 0;
 }
 
 static void abc_pcie_smmu_detach(struct device *dev)
 {
+	atomic_fetch_and(~ABC_PCIE_SMMU_ATTACH_STATE_MASK,
+			&abc_dev->link_state);
 	arm_iommu_detach_device(dev);
 }
 
@@ -1030,10 +1049,16 @@ static void abc_pcie_smmu_remove(struct device *dev,
 #else
 static inline int abc_pcie_smmu_attach(struct device *dev)
 {
+	atomic_fetch_or(ABC_PCIE_SMMU_ATTACHED,
+			&abc_dev->link_state);
 	return 0;
 }
 
-static inline void abc_pcie_smmu_detach(struct device *dev) { }
+static inline void abc_pcie_smmu_detach(struct device *dev)
+{
+	atomic_fetch_and(~ABC_PCIE_SMMU_ATTACH_STATE_MASK,
+			&abc_dev->link_state);
+}
 
 static inline int abc_pcie_smmu_setup(struct device *dev)
 {
@@ -1279,7 +1304,8 @@ int abc_pcie_unmap_iatu(struct device *dev, struct device *owner,
 		return -EINVAL;
 	}
 
-	if (atomic_read(&abc_dev->link_state) == ABC_PCIE_LINK_ACTIVE)
+	if (atomic_read(&abc_dev->link_state) == (ABC_PCIE_LINK_ACTIVE |
+				ABC_PCIE_SMMU_ATTACHED))
 		disable_inbound_iatu_region(iatu_id);
 
 	ret = free_bar_range(dev, iatu->bar, iatu->size, iatu->bar_offset);
@@ -1775,7 +1801,8 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	 * If PCIe link is not enabled, this handler should not have been
 	 * called.
 	 */
-	if (WARN_ON(atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE))
+	if (WARN_ON(!(atomic_read(&abc_dev->link_state) &
+					ABC_PCIE_LINK_STATE_MASK)))
 		return -EINVAL;
 
 	dev_info(dev, "Broadcast Enter EL2 notification\n");
@@ -1820,8 +1847,9 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	 * If PCIe link is not enabled, this handler should not have been
 	 * called.
 	 */
-	if (WARN_ON(atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE))
-		return -EINVAL;
+	if (WARN_ON(!(atomic_read(&abc_dev->link_state) &
+					ABC_PCIE_LINK_STATE_MASK)))
+		return -ENOTCONN;
 
 	dev_info(dev, "%s: testing pcie read\n", __func__);
 	ret = abc_pcie_config_read(ABC_BASE_OTP_WRAPPER & 0xffffff,
@@ -1907,9 +1935,8 @@ static int abc_pcie_ab_ready_handler(void *ctx)
 	 * POST_ENABLE event.  This situation can be valid because it may
 	 * happen during PCIe enmueration.
 	 */
-	if (atomic_cmpxchg(&abc_dev->link_state,
-			   ABC_PCIE_LINK_NOT_ACTIVE,
-			   ABC_PCIE_LINK_ACTIVE) == ABC_PCIE_LINK_ACTIVE)
+	if (atomic_fetch_or(ABC_PCIE_LINK_STATE_MASK, &abc_dev->link_state) &
+			ABC_PCIE_LINK_STATE_MASK)
 		return 0;
 
 	abc_pcie_enable_irqs(abc_dev->pdev);
@@ -1931,8 +1958,8 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 	 * If PCIe link is already disabled, there is no need to broadcast a
 	 * PRE_DISABLE event.  This situation is not supposed to happen.
 	 */
-	if (WARN_ON(atomic_read(&abc_dev->link_state) ==
-					ABC_PCIE_LINK_NOT_ACTIVE))
+	if (WARN_ON(!(atomic_read(&abc_dev->link_state) &
+					ABC_PCIE_LINK_STATE_MASK)))
 		return 0;
 
 	/* Broadcast this event to subscribers */
@@ -1944,10 +1971,9 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 	 * Set link_state to inactive.
 	 * If link_state is already inactive, it's likely a programming bug.
 	 */
-	WARN_ON(atomic_cmpxchg(&abc_dev->link_state,
-			       ABC_PCIE_LINK_ACTIVE,
-			       ABC_PCIE_LINK_NOT_ACTIVE) ==
-					ABC_PCIE_LINK_NOT_ACTIVE);
+	WARN_ON(!(atomic_fetch_and(~ABC_PCIE_LINK_STATE_MASK,
+					&abc_dev->link_state) &
+				ABC_PCIE_LINK_STATE_MASK));
 
 	return 0;
 }
@@ -1967,10 +1993,9 @@ static int abc_pcie_linkdown_handler(void *ctx)
 	 * If PCIe link is already disabled, there is no need to broadcast a
 	 * LINK_ERROR event.  This situation is not supposed to happen, though.
 	 */
-	if (WARN_ON(atomic_cmpxchg(&abc_dev->link_state,
-				  ABC_PCIE_LINK_ACTIVE,
-				  ABC_PCIE_LINK_NOT_ACTIVE) ==
-					ABC_PCIE_LINK_NOT_ACTIVE))
+	if (WARN_ON(!(atomic_fetch_and(~ABC_PCIE_LINK_STATE_MASK,
+						&abc_dev->link_state) &
+					ABC_PCIE_LINK_STATE_MASK)))
 		return 0;
 
 	abc_pcie_disable_irqs(abc_dev->pdev);
@@ -2451,7 +2476,8 @@ exit_loop:
 #endif
 	pci_set_drvdata(pdev, abc);
 
-	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE);
+	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_ACTIVE |
+			ABC_PCIE_SMMU_ATTACHED);
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&abc_dev->pcie_link_subscribers);
 
