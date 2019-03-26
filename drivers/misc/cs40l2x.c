@@ -156,7 +156,7 @@ static const unsigned int cs40l2x_event_masks[] = {
 static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 			const void *val, size_t val_len, size_t limit);
 static int cs40l2x_ack_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
-			unsigned int val);
+			unsigned int write_val, unsigned int reset_val);
 
 static int cs40l2x_hw_err_rls(struct cs40l2x_private *cs40l2x,
 			unsigned int irq_mask);
@@ -4362,8 +4362,9 @@ static int cs40l2x_pbq_pair_launch(struct cs40l2x_private *cs40l2x)
 					return ret;
 			}
 
-			ret = regmap_write(cs40l2x->regmap,
-					CS40L2X_MBOX_TRIGGERINDEX, tag);
+			ret = cs40l2x_ack_write(cs40l2x,
+					CS40L2X_MBOX_TRIGGERINDEX, tag,
+					CS40L2X_MBOX_TRIGGERRESET);
 			if (ret)
 				return ret;
 
@@ -4774,12 +4775,10 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 			goto err_mutex;
 		}
 
-		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGER_MS,
-				CS40L2X_INDEX_VIBE);
-		if (ret) {
-			dev_err(dev, "Failed to start playback\n");
+		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGER_MS,
+				CS40L2X_INDEX_VIBE, CS40L2X_MBOX_TRIGGERRESET);
+		if (ret)
 			goto err_mutex;
-		}
 
 		msleep(CS40L2X_PEAK_DELAY_MS);
 
@@ -4824,17 +4823,15 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
-		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGER_MS,
-				cs40l2x->cp_trailer_index & CS40L2X_INDEX_MASK);
-		if (ret)
-			dev_err(dev, "Failed to start playback\n");
+		cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGER_MS,
+				cs40l2x->cp_trailer_index & CS40L2X_INDEX_MASK,
+				CS40L2X_MBOX_TRIGGERRESET);
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
-		ret = regmap_write(regmap, CS40L2X_MBOX_TRIGGERINDEX,
-				cs40l2x->cp_trailer_index);
-		if (ret)
-			dev_err(dev, "Failed to start playback\n");
+		cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGERINDEX,
+				cs40l2x->cp_trailer_index,
+				CS40L2X_MBOX_TRIGGERRESET);
 		break;
 
 	case CS40L2X_INDEX_PBQ:
@@ -5950,25 +5947,34 @@ static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 }
 
 static int cs40l2x_ack_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
-			unsigned int val)
+			unsigned int write_val, unsigned int reset_val)
 {
-	unsigned int ack_val;
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	unsigned int val;
 	int ret, i;
 
-	ret = regmap_write(cs40l2x->regmap, reg, val);
-	if (ret)
+	ret = regmap_write(regmap, reg, write_val);
+	if (ret) {
+		dev_err(dev, "Failed to write register 0x%08X: %d\n", reg, ret);
 		return ret;
+	}
 
 	for (i = 0; i < CS40L2X_ACK_TIMEOUT_COUNT; i++) {
-		usleep_range(10000, 10100);
+		usleep_range(1000, 1100);
 
-		ret = regmap_read(cs40l2x->regmap, reg, &ack_val);
-		if (ret)
+		ret = regmap_read(regmap, reg, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read register 0x%08X: %d\n",
+					reg, ret);
 			return ret;
+		}
 
-		if (!ack_val)
+		if (val == reset_val)
 			return 0;
 	}
+
+	dev_err(dev, "Timed out with register 0x%08X = 0x%08X\n", reg, val);
 
 	return -ETIME;
 }
@@ -6475,12 +6481,9 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 		ret = cs40l2x_ack_write(cs40l2x,
 				cs40l2x_dsp_reg(cs40l2x, "SHUTDOWNREQUEST",
 						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id),
-				1);
-		if (ret) {
-			dev_err(dev, "Failed to administer shutdown request\n");
+						cs40l2x->fw_desc->id), 1, 0);
+		if (ret)
 			return ret;
-		}
 		break;
 
 	default:
@@ -6569,8 +6572,7 @@ static int cs40l2x_wavetable_swap(struct cs40l2x_private *cs40l2x,
 	const struct firmware *fw;
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	unsigned int val;
-	int ret1, ret2, i;
+	int ret1, ret2;
 
 	ret1 = cs40l2x_hiber_cmd_send(cs40l2x, CS40L2X_POWERCONTROL_FRC_STDBY);
 	if (ret1) {
@@ -6607,29 +6609,12 @@ err_wakeup:
 		return ret2;
 	}
 
-	ret2 = regmap_write(regmap, CS40L2X_MBOX_TRIGGERINDEX,
-			CS40L2X_INDEX_CONT_MIN);
-	if (ret2) {
-		dev_err(dev, "Failed to issue dummy trigger\n");
+	ret2 = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGERINDEX,
+			CS40L2X_INDEX_CONT_MIN, CS40L2X_MBOX_TRIGGERRESET);
+	if (ret2)
 		return ret2;
-	}
 
-	for (i = 0; i < CS40L2X_ACK_TIMEOUT_COUNT; i++) {
-		usleep_range(10000, 10100);
-
-		ret2 = regmap_read(regmap, CS40L2X_MBOX_TRIGGERINDEX, &val);
-		if (ret2) {
-			dev_err(dev, "Failed to read dummy trigger\n");
-			return ret2;
-		}
-
-		if (val == CS40L2X_MBOX_TRIGGERRESET)
-			return ret1;
-	}
-
-	dev_err(dev, "Failed to acknowledge dummy trigger\n");
-
-	return -ETIME;
+	return ret1;
 }
 
 static int cs40l2x_wavetable_sync(struct cs40l2x_private *cs40l2x)
@@ -7705,11 +7690,9 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 		return -ETIME;
 	}
 
-	ret = cs40l2x_ack_write(cs40l2x, CS40L2X_BASIC_SHUTDOWNREQUEST, 1);
-	if (ret) {
-		dev_err(dev, "Failed to administer shutdown request\n");
+	ret = cs40l2x_ack_write(cs40l2x, CS40L2X_BASIC_SHUTDOWNREQUEST, 1, 0);
+	if (ret)
 		return ret;
-	}
 
 	ret = regmap_read(regmap, CS40L2X_BASIC_STATEMACHINE, &val);
 	if (ret) {
