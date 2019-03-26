@@ -15,8 +15,8 @@
  *
  */
 
-/* #define DEBUG */
-/* #define VERBOSE_DEBUG */
+#define DEBUG
+#define VERBOSE_DEBUG
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -41,6 +41,9 @@
 
 #include <linux/configfs.h>
 #include <linux/usb/composite.h>
+
+#undef pr_debug
+#define pr_debug pr_info
 
 #define MAX_INST_NAME_LEN        40
 #define BULK_BUFFER_SIZE    16384
@@ -303,6 +306,9 @@ static struct usb_request *req_get(struct acc_dev *dev, struct list_head *head)
 		req = 0;
 	} else {
 		req = list_first_entry(head, struct usb_request, list);
+		pr_debug("%s: req=0x%p\n(head=0x%p, prev=0x%p, next=0x%p)\n",
+			 __func__, req, &req->list, req->list.prev,
+			 req->list.next);
 		list_del(&req->list);
 	}
 	spin_unlock_irqrestore(&dev->lock, flags);
@@ -324,6 +330,8 @@ static void acc_complete_in(struct usb_ep *ep, struct usb_request *req)
 	}
 
 	req_put(dev, &dev->tx_idle, req);
+	pr_debug("%s: put req=0x%p\n(head=0x%p, prev=0x%p, next=0x%p) to tx_idle\n",
+		 __func__, req, &req->list, req->list.prev, req->list.next);
 
 	wake_up(&dev->write_wq);
 }
@@ -592,6 +600,9 @@ static int create_bulk_endpoints(struct acc_dev *dev,
 			goto fail;
 		req->complete = acc_complete_in;
 		req_put(dev, &dev->tx_idle, req);
+		DBG(cdev,
+		    "%s: put req=0x%p\n(head=0x%p, prev=0x%p, next=0x%p) to tx_idle\n",
+		    __func__, req, &req->list, req->list.prev, req->list.next);
 	}
 	for (i = 0; i < RX_REQ_MAX; i++) {
 		req = acc_request_new(dev->ep_out, BULK_BUFFER_SIZE);
@@ -605,8 +616,17 @@ static int create_bulk_endpoints(struct acc_dev *dev,
 
 fail:
 	pr_err("acc_bind() could not allocate requests\n");
-	while ((req = req_get(dev, &dev->tx_idle)))
+	DBG(cdev, "%s: start freeing tx_idle\n", __func__);
+	i = 0;
+	while ((req = req_get(dev, &dev->tx_idle))) {
+		i++;
+		DBG(cdev,
+		    "%s: count=%d, req=0x%p\n(head=0x%p, prev=0x%p, next=0x%p)\n",
+		    __func__, i, req, &req->list, req->list.prev,
+		    req->list.next);
 		acc_request_free(req, dev->ep_in);
+	}
+	DBG(cdev, "%s: freeing tx_idle finished\n", __func__);
 	for (i = 0; i < RX_REQ_MAX; i++) {
 		acc_request_free(dev->rx_req[i], dev->ep_out);
 		dev->rx_req[i] = NULL;
@@ -721,6 +741,9 @@ static ssize_t acc_write(struct file *fp, const char __user *buf,
 		req = 0;
 		ret = wait_event_interruptible(dev->write_wq,
 			((req = req_get(dev, &dev->tx_idle)) || !dev->online));
+		pr_debug("%s: get req=0x%p\n(head=0x%p, prev=0x%p, next=0x%p) from tx_idle\n",
+			 __func__, req, &req->list, req->list.prev,
+			 req->list.next);
 		if (!req) {
 			r = ret;
 			break;
@@ -757,8 +780,12 @@ static ssize_t acc_write(struct file *fp, const char __user *buf,
 		req = 0;
 	}
 
-	if (req)
+	if (req) {
 		req_put(dev, &dev->tx_idle, req);
+		pr_debug("%s: put req=0x%p\n(head=0x%p, prev=0x%p, next=0x%p) to tx_idle\n",
+			 __func__, req, &req->list, req->list.prev,
+			 req->list.next);
+	}
 
 	pr_debug("acc_write returning %zd\n", r);
 	return r;
@@ -1105,8 +1132,16 @@ acc_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	wake_up(&dev->read_wq);		/* unblock reads on closure */
 	wake_up(&dev->write_wq);	/* likewise for writes */
 
-	while ((req = req_get(dev, &dev->tx_idle)))
+	pr_debug("%s: start freeing tx_idle\n", __func__);
+	i = 0;
+	while ((req = req_get(dev, &dev->tx_idle))) {
+		i++;
+		pr_debug("%s: count=%d, req=0x%p\n(head=0x%p, prev=0x%p, next=0x%p)\n",
+			 __func__, i, req, &req->list, req->list.prev,
+			 req->list.next);
 		acc_request_free(req, dev->ep_in);
+	}
+	pr_debug("%s: freeing tx_idle finished\n", __func__);
 	for (i = 0; i < RX_REQ_MAX; i++) {
 		acc_request_free(dev->rx_req[i], dev->ep_out);
 		dev->rx_req[i] = NULL;
