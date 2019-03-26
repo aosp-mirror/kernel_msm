@@ -13,4 +13,5 @@
 #include "sm8150-flame-common.dtsi"
 #include "sm8150-flame-camera-sensor-evt.dtsi"
 #include "sm8150-flame-battery-evt.dtsi"
+#include "sm8150-flame-pac193x-evt.dtsi"
 #include "sm8150-floral-qup-evt.dtsi"

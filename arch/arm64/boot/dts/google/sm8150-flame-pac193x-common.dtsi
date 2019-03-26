@@ -1,0 +1,30 @@
+&flame_pac {
+	compatible = "microchip,pac1934";
+	reg = <0x10>;
+	samp-rate = <8>;
+	status = "okay";
+
+	ch5: channel@0 {
+	     uohms-shunt-res = <10000>;
+	     rail-name = "PPVAR_VPH_PWR_OLED";
+	     subsys-name = "display";
+	     channel_enabled;
+	};
+
+	ch6: channel@1 {
+	     uohms-shunt-res = <10000>;
+	     rail-name = "PPVAR_VPH_PWR_ABH";
+	     subsys-name = "airbrush";
+	     channel_enabled;
+	};
+
+	ch7: channel@2 {
+	     uohms-shunt-res = <100000>;
+	     rail-name = "NC";
+	};
+
+	ch8: channel@3 {
+	     uohms-shunt-res = <10000>;
+	     rail-name = "NC";
+	};
+};
