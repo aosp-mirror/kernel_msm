@@ -13,16 +13,16 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/ipu-core.h>
+#include <linux/ab-dram.h>
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
 #include <linux/idr.h>
-#include <linux/kernel.h>
+#include <linux/ipu-core.h>
 #include <linux/ipu-jqs-messages.h>
+#include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-
 #include <uapi/ipu.h>
 
 #include "ipu-buffer.h"
@@ -131,10 +131,14 @@ static int ipu_buffer_map_iommu(struct paintbox_data *pb,
 	struct scatterlist *s;
 	int i;
 
-	for_each_sg(buffer->sg_table->sgl, s,
-			buffer->sg_table->nents, i)
-		s->page_link = (unsigned long)phys_to_page(
-			s->dma_address);
+	/* ab dram doesn't populate the page_link which is required
+	 * for the kernel iommu logic
+	 */
+	if (is_ab_dram_dma_buf(buffer->dma_buf))
+		for_each_sg(buffer->sg_table->sgl, s,
+				buffer->sg_table->nents, i)
+			s->page_link = (unsigned long)phys_to_page(
+				s->dma_address);
 
 	ret = dma_map_sg_attrs(pb->dev, buffer->sg_table->sgl,
 				buffer->sg_table->nents, buffer->dir,
@@ -243,13 +247,29 @@ static void ipu_buffer_unmap_and_release_buffer(struct paintbox_data *pb,
 		struct paintbox_buffer *buffer)
 {
 	/* Unmap the buffer from the IOMMU. */
-	if (iommu_present(&ipu_bus_type))
+	if (iommu_present(&ipu_bus_type) && is_ab_dram_dma_buf(buffer->dma_buf))
 		ipu_buffer_unmap_iommu(pb, session, buffer);
 
 	ipu_buffer_unmap_dma_buf(pb, session, buffer);
 	ipu_buffer_release_buffer(session, buffer);
 }
 
+static void ipu_buffer_consolidate_mmu_sg_list(struct paintbox_buffer *buffer)
+{
+	int i;
+	size_t total_size = 0;
+	struct scatterlist *s;
+
+	for_each_sg(buffer->sg_table->sgl, s,
+			buffer->sg_table->nents, i) {
+		total_size += s->dma_length;
+		if (i > 0) {
+			s->dma_length = 0;
+			s->dma_address = 0;
+		}
+	}
+	buffer->sg_table->sgl->dma_length = total_size;
+}
 /* The caller to this function must hold pb->lock */
 static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
 		struct paintbox_session *session,
@@ -276,9 +296,16 @@ static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
 	 * space.
 	 */
 	if (iommu_present(&ipu_bus_type)) {
-		ret = ipu_buffer_map_iommu(pb, session, buffer);
-		if (ret < 0)
-			goto unmap_dma_buf;
+		/*
+		 * iommu mapping is not needed for ion. the ion infrastructure
+		 * calls map_dma_buf internally.
+		 */
+		if (is_ab_dram_dma_buf(buffer->dma_buf)) {
+			ret = ipu_buffer_map_iommu(pb, session, buffer);
+			if (ret < 0)
+				goto unmap_dma_buf;
+		}
+		ipu_buffer_consolidate_mmu_sg_list(buffer);
 	} else {
 		if (buffer->sg_table->nents > 1) {
 			dev_err(pb->dev, "%s: dma_buf is non-contiguous when iommu is not present",
