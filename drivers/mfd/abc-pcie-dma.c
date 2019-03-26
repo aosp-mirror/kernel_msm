@@ -42,41 +42,13 @@ static DEFINE_MUTEX(dma_mutex);
 static DECLARE_COMPLETION(dma_done);
 static enum abc_dma_trans_status dma_status;
 
-#ifdef BENCHMARK_ENABLE
-static uint64_t ll_dma_start_time_zero;
-static uint64_t ll_dma_start_time[DMA_MAX_CHAN];
-static uint64_t ll_dma_size[DMA_MAX_CHAN];
-#endif
-
 /* TODO: extend to include multiple concurrent dma channels */
 static int dma_callback(uint8_t chan, enum dma_data_direction dir,
 			enum abc_dma_trans_status status)
 {
-#ifdef BENCHMARK_ENABLE
-	uint64_t callback_time_ns;
-	uint64_t dma_time_ns, dma_time_zero_ns;
-	uint64_t rate, rate_zero;
-
-	callback_time_ns = ktime_to_ns(ktime_get());
-	dma_time_ns = callback_time_ns - ll_dma_start_time[chan];
-	dma_time_zero_ns = callback_time_ns - ll_dma_start_time_zero;
-	rate = (ll_dma_size[chan] * NSEC_PER_SEC) / dma_time_ns
-		/ 1024 / 1024;
-	rate_zero = (ll_dma_size[chan] * NSEC_PER_SEC)
-		/ dma_time_zero_ns / 1024 / 1024;
-	dev_info(&abc_dma.pdev->dev,
-		 "%s DMA_PERF: ch:%d, dir:%s, time: %llu, size: %llu, rate(MB/s) %llu\n",
-		 __func__, chan, (dir == DMA_TO_DEVICE)?"RD(AP2EP)":"WR(EP2AP)",
-		 dma_time_ns, ll_dma_size[chan], rate);
-	dev_info(&abc_dma.pdev->dev,
-		 "%s DMA_PERF_zero: ch:%d, dir:%s, time: %llu, size: %llu, rate(MB/s) %llu\n",
-		 __func__, chan, (dir == DMA_TO_DEVICE)?"RD(AP2EP)":"WR(EP2AP)",
-		 dma_time_zero_ns, ll_dma_size[chan], rate_zero);
-#else
 	dev_dbg(&abc_dma.pdev->dev,
 		"%s: DMA callback DIR(%d), status(%d)\n",
 		__func__, (int)dir, (int)chan);
-#endif
 	dma_status = status;
 	complete(&dma_done);
 	return 0;
@@ -600,59 +572,6 @@ int abc_pcie_user_local_buf_sg_destroy(struct abc_pcie_sg_entry **sg,
 	return 0;
 }
 
-int abc_pcie_sg_verify(struct abc_pcie_sg_entry *sg, size_t size,
-		       struct abc_pcie_sg_list *sgl)
-{
-	int i;
-	size_t len = size / sizeof(struct abc_pcie_sg_entry);
-
-	/* At least one entry plus null terminator required */
-	if (len < 2) {
-		dev_err(&abc_dma.pdev->dev,
-			"Invalid SG list length %zu\n", len);
-		return -EINVAL;
-	}
-	if (sg == NULL) {
-		dev_err(&abc_dma.pdev->dev, "No SG list\n");
-		return -EINVAL;
-	}
-	for (i = 0; i < len - 1; i++) {
-		if (sg[i].paddr == 0) {
-			dev_err(&abc_dma.pdev->dev,
-				"Early list end\n");
-			return -EINVAL;
-		}
-		if (sg[i].size == 0) {
-			dev_err(&abc_dma.pdev->dev,
-				"Invalid entry size\n");
-			return -EINVAL;
-		}
-	}
-	/* Verify terminator */
-	if (sg[i].paddr != 0) {
-		dev_err(&abc_dma.pdev->dev,
-			"Missing list terminator\n");
-		return -EINVAL;
-	}
-	return 0;
-}
-
-/**
- * Free memory allocation for linked list
- */
-int abc_pcie_ll_destroy(struct abc_pcie_dma_ll *ll)
-{
-	int i = 0;
-
-	while (i <= ll->size) {
-		abc_free_coherent(
-			DMA_LL_LENGTH * sizeof(struct abc_pcie_dma_ll_element),
-			ll->ll_element[i], ll->dma[i]);
-		i++;
-	}
-	return 0;
-}
-
 int abc_pcie_ll_count_dma_element(struct abc_pcie_sg_entry *src_sg,
 			    struct abc_pcie_sg_entry *dst_sg)
 {
@@ -841,9 +760,6 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 		return -EINVAL;
 	}
 
-#ifdef BENCHMARK_ENABLE
-	ll_dma_start_time_zero = ktime_to_ns(ktime_get());
-#endif
 	dev_dbg(&abc_dma.pdev->dev,
 		"%s: local_buf_type=%d, local_buf=%pK, size=%u\n",
 		__func__, dma_desc->local_buf_type, dma_desc->local_buf,
@@ -945,10 +861,6 @@ int abc_pcie_issue_dma_xfer_vmalloc(struct abc_pcie_dma_desc *dma_desc)
 			dma_blk.src_addr, dma_blk.src_u_addr,
 			dma_blk.dst_addr, dma_blk.dst_u_addr,
 			dma_blk.len);
-#ifdef BENCHMARK_ENABLE
-		ll_dma_size[dma_chan] = dma_blk.len;
-		ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
-#endif
 		mutex_lock(&dma_mutex);
 		reinit_completion(&dma_done);
 		dma_sblk_start(dma_chan, dma_desc->dir, &dma_blk);
@@ -1026,9 +938,6 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 		return -EINVAL;
 	}
 
-#ifdef BENCHMARK_ENABLE
-	ll_dma_start_time_zero = ktime_to_ns(ktime_get());
-#endif
 	dev_dbg(&abc_dma.pdev->dev,
 		"%s: local_buf_type=%d, local_buf=%pK, size=%u\n",
 		__func__, dma_desc->local_buf_type, dma_desc->local_buf,
@@ -1148,10 +1057,6 @@ int abc_pcie_issue_dma_xfer(struct abc_pcie_dma_desc *dma_desc)
 			dma_blk.src_addr, dma_blk.src_u_addr,
 			dma_blk.dst_addr, dma_blk.dst_u_addr,
 			dma_blk.len);
-#ifdef BENCHMARK_ENABLE
-		ll_dma_size[dma_chan] = dma_blk.len;
-		ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
-#endif
 		mutex_lock(&dma_mutex);
 		reinit_completion(&dma_done);
 		dma_sblk_start(dma_chan, dma_desc->dir, &dma_blk);
@@ -1282,10 +1187,6 @@ int abc_pcie_setup_mblk_xfer(struct abc_pcie_sg_entry *src_sg,
 			    dst_sg, &mblk_xfer_desc, ll_num_entries);
 	if (err)
 		goto unregister_dma_callback;
-#ifdef BENCHMARK_ENABLE
-	ll_dma_size[dma_chan] = dma_desc->size;
-	ll_dma_start_time[dma_chan] = ktime_to_ns(ktime_get());
-#endif
 	reinit_completion(&dma_done);
 
 	err = dma_mblk_start(dma_chan, dir, mblk_xfer_desc.dma_paddr);
