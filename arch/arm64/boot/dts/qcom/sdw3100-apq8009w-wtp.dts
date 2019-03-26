@@ -228,6 +228,62 @@
 		/delete-node/ synaptics@20;
 };
 
+&pm660_haptics {
+	qcom,actuator-type = "lra";
+	qcom,vmax-mv = <2680>;
+	qcom,ilim-ma = <100>;
+	qcom,play-rate-us = <6250>;
+	qcom,lra-auto-resonance-mode = "qwd";
+	qcom,lra-resonance-sig-shape = "sine";
+	qcom,lra-allow-variable-play-rate;
+	wf_0 {
+		/* CLICK */
+		qcom,effect-id = <0>;
+		qcom,wf-vmax-mv = <2680>;
+		qcom,wf-pattern = [7e 7e 7e 7e];
+		qcom,wf-brake-pattern = [02 01 01 01];
+		qcom,wf-play-rate-us = <6250>;
+	};
+	wf_1 {
+		/* DOUBLE CLICK */
+		qcom,effect-id = <1>;
+		qcom,wf-vmax-mv = <2680>;
+		qcom,wf-pattern = [7e 7e 7e 02 02 02 02 02];
+		qcom,wf-repeat-count = <1>;
+		qcom,wf-s-repeat-count = <2>;
+		qcom,wf-play-rate-us = <6250>;
+	};
+	wf_2 {
+		/* TICK */
+		qcom,effect-id = <2>;
+		qcom,wf-vmax-mv = <2680>;
+		qcom,wf-pattern = [7e 7e];
+		qcom,wf-brake-pattern = [02 01 01 01];
+		qcom,wf-play-rate-us = <6250>;
+	};
+	wf_3 {
+		/* THUD */
+		qcom,effect-id = <3>;
+		qcom,wf-vmax-mv = <2680>;
+		qcom,wf-pattern = [7e 7e 7e];
+		qcom,wf-play-rate-us = <6250>;
+	};
+	wf_4 {
+		/* POP */
+		qcom,effect-id = <4>;
+		qcom,wf-vmax-mv = <2680>;
+		qcom,wf-pattern = [7e 7e];
+		qcom,wf-play-rate-us = <6250>;
+	};
+	wf_5 {
+		/* HEAVY CLICK */
+		qcom,effect-id = <5>;
+		qcom,wf-vmax-mv = <2680>;
+		qcom,wf-pattern = [7e 7e 7e];
+		qcom,wf-play-rate-us = <6250>;
+	};
+};
+
 &spi_0 {
 	status = "disabled";
 };
