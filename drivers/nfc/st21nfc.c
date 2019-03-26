@@ -217,6 +217,9 @@ static ssize_t st21nfc_dev_read(struct file *filp, char __user *buf,
 						       st21nfc_device);
 	int ret;
 
+	if (count == 0)
+		return 0;
+
 	if (count > MAX_BUFFER_SIZE)
 		count = MAX_BUFFER_SIZE;
 
