@@ -68,6 +68,14 @@ struct iaxxx_sensor_param {
 	uint8_t block_id;
 };
 
+struct iaxxx_sensor_param_blk {
+	uint32_t inst_id;
+	uint32_t blk_size;
+	uint64_t blk_data;
+	uint32_t param_blk_id;
+	uint8_t block_id;
+};
+
 struct iaxxx_script_info {
 	char script_name[MAX_FILE_CHAR_SIZE];
 	uint32_t script_id;
@@ -81,6 +89,7 @@ struct iaxxx_script_info {
 #define MODULE_SENSOR_DISABLE _IO(IAXXX_IOCTL_MAGIC, 0x52)
 #define MODULE_SENSOR_SET_PARAM _IO(IAXXX_IOCTL_MAGIC, 0x53)
 #define MODULE_SENSOR_GET_PARAM _IO(IAXXX_IOCTL_MAGIC, 0x54)
+#define MODULE_SENSOR_WRITE_PARAM_BLK _IO(IAXXX_IOCTL_MAGIC, 0x55)
 
 #define SCRIPT_LOAD _IO(IAXXX_IOCTL_MAGIC, 0x61)
 #define SCRIPT_UNLOAD _IO(IAXXX_IOCTL_MAGIC, 0x62)

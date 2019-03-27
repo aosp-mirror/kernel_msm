@@ -276,6 +276,122 @@ sensor_get_param_inst_err:
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_get_param_by_inst);
 
+/*****************************************************************************
+ * iaxxx_core_sensor_write_param_blk_by_inst()
+ * @brief Writes data to sensor param block
+ *
+ * @inst_id		Sensor Instance Id
+ * @param_blk_id	param block ID
+ * @blk_data		pointer to data buffer
+ * @blk_size		pointer to size of data buffer passed
+ * @block_id		Update block id
+ *
+ * @ret 0 on success, -EINVAL in case of error
+ ****************************************************************************/
+int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
+				uint32_t inst_id, uint32_t param_blk_id,
+				const void *ptr_blk, uint32_t blk_size,
+				uint32_t block_id)
+{
+	int ret = -EINVAL;
+	uint32_t status = 0;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t reg_val = 0;
+	uint32_t blk_addr;
+
+	if (!priv)
+		return ret;
+
+	dev_dbg(dev, "%s() inst_id:%d, param_blk_id:%d, blk_size:%d\n",
+		__func__, inst_id, param_blk_id, blk_size);
+
+	inst_id &= IAXXX_SENSR_ID_MASK;
+	/* protect this sensor operation */
+	mutex_lock(&priv->module_lock);
+
+	/* The block size is divided by 4 here because this function gets it
+	 * as block size in bytes but firmware expects in 32bit words.
+	 */
+	reg_val = (((blk_size / 4) <<
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_POS) &
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_MASK);
+	reg_val |= ((inst_id <<
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_INSTANCE_ID_POS) &
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_INSTANCE_ID_MASK);
+	reg_val |= IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_SET_BLK_REQ_MASK;
+	ret = regmap_write(priv->regmap,
+			IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_ADDR, reg_val);
+	if (ret) {
+		dev_err(dev, "write SENSOR_HDR_PARAM_BLK_CTRL failed %s()\n",
+			__func__);
+		goto sensor_write_param_blk_err;
+	}
+
+	ret = regmap_write(priv->regmap,
+			IAXXX_SENSOR_HDR_PARAM_BLK_ID_ADDR, param_blk_id);
+	if (ret) {
+		dev_err(dev, "write SENSOR_HDR_PARAM_BLK_ID_ADDR failed %s()\n",
+			__func__);
+		goto sensor_write_param_blk_err;
+	}
+
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret) {
+		dev_err(dev, "Update blk failed %s()\n", __func__);
+		goto sensor_write_param_blk_err;
+	}
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_SENSOR_HDR_PARAM_BLK_ADDR_ADDR, &blk_addr);
+	if (ret) {
+		dev_err(dev, "%s() blk addr req read failed: %d\n",
+			__func__, ret);
+		goto sensor_write_param_blk_err;
+	}
+
+	if (!priv->raw_write) {
+		dev_err(dev, "Raw blk write not supported\n");
+		goto sensor_write_param_blk_err;
+	}
+
+	ret = priv->raw_write(dev, &blk_addr, ptr_blk, blk_size);
+	if (ret) {
+		dev_err(dev, "%s() write ptr_blk, failed\n",
+			__func__);
+		goto sensor_write_param_blk_err;
+	}
+
+	/* Write the param block done */
+	/* The block size is divided by 4 here because this function gets it
+	 * as block size in bytes but firmware expects in 32bit words.
+	 */
+	reg_val = (((blk_size / 4) <<
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_POS) &
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_MASK);
+	reg_val |= ((inst_id <<
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_INSTANCE_ID_POS) &
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_INSTANCE_ID_MASK);
+	reg_val |= IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_SET_BLK_DONE_MASK;
+	ret = regmap_write(priv->regmap,
+			IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_ADDR, reg_val);
+	if (ret) {
+		dev_err(dev, "write SENSOR_HDR_PARAM_BLK_CTRL failed %s()\n",
+			__func__);
+		goto sensor_write_param_blk_err;
+	}
+
+	ret = iaxxx_send_update_block_request(dev, &status, block_id);
+	if (ret) {
+		dev_err(dev, "Update blk failed %s()\n", __func__);
+		goto sensor_write_param_blk_err;
+	}
+
+sensor_write_param_blk_err:
+	mutex_unlock(&priv->module_lock);
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_write_param_blk_by_inst);
+
 static int iaxxx_download_script(struct iaxxx_priv *priv,
 				const struct firmware *fw, uint16_t script_id)
 {

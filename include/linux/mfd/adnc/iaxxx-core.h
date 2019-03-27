@@ -373,6 +373,10 @@ int iaxxx_core_sensor_get_param_by_inst(struct device *dev, uint32_t inst_id,
 int iaxxx_core_sensor_set_param_by_inst(struct device *dev, uint32_t inst_id,
 			uint32_t param_id,
 			uint32_t param_val, uint32_t block_id);
+int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
+			uint32_t inst_id, uint32_t param_blk_id,
+			const void *ptr_blk, uint32_t blk_size,
+			uint32_t block_id);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
 int iaxxx_regmap_wait_match(struct iaxxx_priv *priv, struct regmap *regmap,

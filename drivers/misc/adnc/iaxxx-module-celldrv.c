@@ -39,9 +39,11 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_sensor_info sensor_info;
 	struct iaxxx_script_info script_info;
 	struct iaxxx_sensor_param param_info;
+	struct iaxxx_sensor_param_blk param_blk_info;
 	struct iaxxx_pwr_stats pwr_stats_count;
 	struct iaxxx_osc_trim_period osc_trim_period;
 	uint16_t script_id;
+	void __user *blk_buff = NULL;
 	int ret = -EINVAL;
 
 	pr_debug("%s() cmd %d\n", __func__, cmd);
@@ -189,6 +191,29 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 				 sizeof(param_info)))
 			return -EFAULT;
 
+		break;
+	case MODULE_SENSOR_WRITE_PARAM_BLK:
+		if (copy_from_user(&param_blk_info, (void __user *)arg,
+				sizeof(struct iaxxx_sensor_param_blk)))
+			return -EFAULT;
+		if (param_blk_info.blk_size > 0) {
+			blk_buff = (void __user *)
+					(uintptr_t)param_blk_info.blk_data;
+			blk_buff = memdup_user(blk_buff,
+					param_blk_info.blk_size);
+			if (IS_ERR(blk_buff)) {
+				ret = PTR_ERR(blk_buff);
+				pr_err("%s memdup failed %d\n", __func__, ret);
+				return ret;
+			}
+			ret = iaxxx_core_sensor_write_param_blk_by_inst(
+					module_dev_priv->parent,
+					param_blk_info.inst_id,
+					param_blk_info.param_blk_id,
+					blk_buff, param_blk_info.blk_size,
+					param_blk_info.block_id);
+			kfree(blk_buff);
+		}
 		break;
 	case IAXXX_POWER_STATS_COUNT:
 		if (copy_from_user(&pwr_stats_count, (void __user *)arg,
