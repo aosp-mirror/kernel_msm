@@ -3305,10 +3305,6 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		pr_err("failed to parse power config, rc=%d\n", rc);
 
-	rc = dsi_panel_parse_gpios(panel);
-	if (rc)
-		pr_err("failed to parse panel gpios, rc=%d\n", rc);
-
 	rc = dsi_panel_bl_parse_config(parent, &panel->bl_config);
 	if (rc)
 		pr_err("failed to parse backlight config, rc=%d\n", rc);
