@@ -20,6 +20,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/extcon.h>
 #include "storm-watch.h"
+#include "../../../usb/pd/logbuffer.h"
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -389,6 +390,9 @@ struct smb_charger {
 	struct thermal_zone_device *usb_port_tz;
 
 	int			die_health;
+
+	/* logging */
+	struct logbuffer *log;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);

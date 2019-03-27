@@ -2508,6 +2508,13 @@ static int smb2_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	chg->log = debugfs_logbuffer_register("smblib");
+	if (!chg->log) {
+		pr_err("failed to obtain logbuffer instance rc:%ld",
+		       PTR_ERR(chg->log));
+		return PTR_ERR(chg->log);
+	}
+
 	rc = smb2_parse_dt(chip);
 	if (rc < 0) {
 		pr_err("Couldn't parse device tree rc=%d\n", rc);
@@ -2663,6 +2670,7 @@ cleanup:
 		devm_regulator_unregister(chg->dev, chg->vbus_vreg->rdev);
 
 	smblib_deinit(chg);
+	debugfs_logbuffer_unregister(chg->log);
 
 	platform_set_drvdata(pdev, NULL);
 	return rc;

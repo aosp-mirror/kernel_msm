@@ -81,6 +81,7 @@ config SMB1351_USB_CHARGER
 config QPNP_SMB2
 	tristate "SMB2 Battery Charger"
 	depends on MFD_SPMI_PMIC
+	depends on LOGBUFFER
 	help
 	  Say Y to enables support for the SMB2 charging peripheral.
 	  The QPNP SMB2 charger driver supports the charger peripheral

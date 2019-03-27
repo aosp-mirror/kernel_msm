@@ -1127,9 +1127,9 @@ struct ufs_hba {
 	struct kobject *impaired_kobj;
 	struct ufs_impaired_storage impaired;
 	struct task_struct *impaired_thread;
+	struct mutex impaired_thread_mutex;
 	struct list_head impaired_list_head;
 	unsigned long delayed_reqs;
-	bool impaired_should_stop;
 #endif
 };
 
