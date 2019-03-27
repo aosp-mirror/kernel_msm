@@ -1,0 +1,50 @@
+function gen_headers() {
+    # install headers for android headers parser
+    (
+        cd ${OUT_DIR}
+        make O=${OUT_DIR} headers_install
+    )
+}
+
+function tar_modules() {
+    # tar up modules
+    (
+        set +x
+        echo " Archiving kernel module files"
+        MODULES=$(find ${MODULES_STAGING_DIR} -type f -name "*.ko")
+        if [ -n "${MODULES}" ]; then
+          mkdir -p ${DIST_DIR}
+          rm -f ${DIST_DIR}/kernel-modules.tar.gz
+          for FILE in ${MODULES}; do
+            echo "  ${FILE##*/}"
+            tar -rf ${DIST_DIR}/kernel-modules.tar -C ${FILE%/*} ${FILE##*/}
+          done
+          gzip -9 ${DIST_DIR}/kernel-modules.tar
+        fi
+        set -x
+    )
+}
+
+ARCH=arm
+BRANCH=android-msm-longcheer-4.9
+CROSS_COMPILE=arm-linux-androidkernel-
+CROSS_COMPILE_USER=arm-linux-androideabi-
+DEFCONFIG=coralia-perf_defconfig
+EXTRA_CMDS=''
+PREBUILT_KERNEL_REPO=device/longcheer/coralia-kernel
+KERNEL_BUILD_BRANCH=kernel-p-dev-msm-coralia-4.9
+KERNEL_DIR=private/msm-longcheer-cw
+AUDIO_MODULE_DIR=private/msm-longcheer-cw/techpack/audio
+WLAN_MODULE_DIR=private/msm-longcheer-cw-modules/wlan
+POST_DEFCONFIG_CMDS="check_defconfig;gen_headers"
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
+FILES="
+arch/arm/boot/zImage-dtb
+vmlinux
+System.map
+"
+IN_KERNEL_MODULES=1
+EXT_MODULES="
+private/msm-longcheer-cw-modules/wlan
+"
+EXTRA_CMDS="tar_modules"
