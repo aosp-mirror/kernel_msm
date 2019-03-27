@@ -40,6 +40,7 @@
 #define HYPX_SMC_FUNC_GET_DEBUG_BUFFER HYPX_SMC_ID(0x8)
 #define HYPX_SMC_FUNC_DRIVER_PROBE (0x9)
 #define HYPX_SMC_FUNC_DRIVER_REMOVE (0xa)
+#define HYPX_SMC_FUNC_CHECK_FW_STATUS HYPX_SMC_ID(0xb)
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
@@ -47,6 +48,11 @@
 #define INPUT_IMAGE_WIDTH 480
 #define INPUT_IMAGE_HEIGHT 640
 #define DEBUG_DATA_BIN_SIZE (2 * 1024 * 1024)
+#define CONTEXT_SWITCH_TIMEOUT_MS 40
+/* different from EL1 since it'll take longer in each assess */
+#define CONTEXT_SWITCH_TO_FACEAUTH_US 600
+
+#define ERR_FW_READY 3
 
 struct hypx_mem_segment {
 	/* address of the segment begin */
@@ -627,9 +633,11 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		      uint64_t verbosity_level)
 {
 	int ret = 0;
+	int status_ret = 0;
 	struct scm_desc desc = { 0 };
 	struct hypx_fa_init *hypx_data;
 	unsigned long save_trace;
+	unsigned long stop;
 
 	hypx_data = (void *)get_zeroed_page(0);
 	if (!hypx_data) {
@@ -665,6 +673,31 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 	if (ret) {
 		pr_err("Failed scm_call %d\n", ret);
 		goto exit1;
+	}
+
+	stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT_MS);
+	usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
+			     CONTEXT_SWITCH_TO_FACEAUTH_US + 1);
+
+	for (;;) {
+
+		desc.arginfo = SCM_ARGS(0);
+		ret = scm_call2(HYPX_SMC_FUNC_CHECK_FW_STATUS, &desc);
+		if (ret) {
+			pr_err("Failed scm_call %d\n", ret);
+			goto exit1;
+		}
+
+		status_ret = desc.ret[0];
+		if(status_ret == ERR_FW_READY)
+			break;
+
+		if (time_before(stop, jiffies)) {
+			pr_err("el2: Faceauth FW context switch timeout!\n");
+			ret = -ETIME;
+			goto exit1;
+		}
+		usleep_range(100, 1000);
 	}
 
 exit1:
