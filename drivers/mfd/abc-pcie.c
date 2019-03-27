@@ -501,7 +501,7 @@ void abc_pcie_set_linkspeed(u32 target_linkspeed)
 }
 
 /* Caller must hold abc_dev->fsys_reg_lock */
-static void abc_l12_timeout_ctrl(bool enable)
+static void abc_l1ss_timeout_ctrl(bool enable)
 {
 	u32 val;
 
@@ -588,6 +588,9 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
 
+	if (pmctrl->l1_en)
+		abc_l1ss_timeout_ctrl(false);
+
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
 #if IS_ENABLED(CONFIG_PCI_MSM)
@@ -603,7 +606,6 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 
 	/* LTR Enable */
 	if (pmctrl->aspm_L12) {
-		abc_l12_timeout_ctrl(false);
 		val = readl(
 			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
 		val |= LTR_ENABLE;
@@ -2569,7 +2571,7 @@ exit_loop:
 
 	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
-	abc_l12_timeout_ctrl(false);
+	abc_l1ss_timeout_ctrl(false);
 	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
 	return 0;
