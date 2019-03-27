@@ -722,16 +722,14 @@ static ssize_t mm_stat_show(struct device *dev,
 	max_used = atomic_long_read(&zram->stats.max_used_pages);
 
 	ret = scnprintf(buf, PAGE_SIZE,
-			"%8llu %8llu %8llu %8lu %8ld %8llu %8lu %8llu %8llu\n",
+			"%8llu %8llu %8llu %8lu %8ld %8llu %8lu\n",
 			orig_size << PAGE_SHIFT,
 			(u64)atomic64_read(&zram->stats.compr_data_size),
 			mem_used << PAGE_SHIFT,
 			zram->limit_pages << PAGE_SHIFT,
 			max_used << PAGE_SHIFT,
 			(u64)atomic64_read(&zram->stats.same_pages),
-			pool_stats.pages_compacted,
-			zram_dedup_dup_size(zram),
-			zram_dedup_meta_size(zram));
+			pool_stats.pages_compacted);
 	up_read(&zram->init_lock);
 
 	return ret;
@@ -772,34 +770,26 @@ static struct zram_entry *zram_entry_alloc(struct zram *zram,
 					   unsigned int len, gfp_t flags)
 {
 	struct zram_entry *entry;
-	unsigned long handle;
 
 	entry = kzalloc(sizeof(*entry),
 			flags & ~(__GFP_HIGHMEM|__GFP_MOVABLE|__GFP_CMA));
 	if (!entry)
 		return NULL;
 
-	handle = zs_malloc(zram->mem_pool, len, flags);
-	if (!handle) {
+	entry->handle = zs_malloc(zram->mem_pool, len, flags);
+	if (!entry->handle) {
 		kfree(entry);
 		return NULL;
 	}
 
-	zram_dedup_init_entry(zram, entry, handle, len);
-	atomic64_add(sizeof(*entry), &zram->stats.meta_data_size);
-
 	return entry;
 }
 
-void zram_entry_free(struct zram *zram, struct zram_entry *entry)
+static inline void zram_entry_free(struct zram *zram,
+				   struct zram_entry *entry)
 {
-	if (!zram_dedup_put_entry(zram, entry))
-		return;
-
 	zs_free(zram->mem_pool, entry->handle);
 	kfree(entry);
-
-	atomic64_sub(sizeof(*entry), &zram->stats.meta_data_size);
 }
 
 static void zram_meta_free(struct zram *zram, u64 disksize)
@@ -812,7 +802,6 @@ static void zram_meta_free(struct zram *zram, u64 disksize)
 		zram_free_page(zram, index);
 
 	zs_destroy_pool(zram->mem_pool);
-	zram_dedup_fini(zram);
 	vfree(zram->table);
 }
 
@@ -828,12 +817,6 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	zram->mem_pool = zs_create_pool(zram->disk->disk_name);
 	if (!zram->mem_pool) {
 		vfree(zram->table);
-		return false;
-	}
-
-	if (zram_dedup_init(zram, num_pages)) {
-		vfree(zram->table);
-		zs_destroy_pool(zram->mem_pool);
 		return false;
 	}
 
@@ -989,7 +972,6 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	void *src, *dst, *mem;
 	struct zcomp_strm *zstrm;
 	struct page *page = bvec->bv_page;
-	u32 checksum;
 	unsigned long element = 0;
 	enum zram_pageflags flags = 0;
 	bool allow_wb = true;
@@ -1003,12 +985,6 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 		goto out;
 	}
 	kunmap_atomic(mem);
-
-	entry = zram_dedup_find(zram, page, &checksum);
-	if (entry) {
-		comp_len = entry->len;
-		goto out;
-	}
 
 compress_again:
 	zstrm = zcomp_stream_get(zram->comp);
@@ -1091,7 +1067,6 @@ compress_again:
 	zcomp_stream_put(zram->comp);
 	zs_unmap_object(zram->mem_pool, entry->handle);
 	atomic64_add(comp_len, &zram->stats.compr_data_size);
-	zram_dedup_insert(zram, entry, checksum);
 out:
 	/*
 	 * Free memory associated with this sector
