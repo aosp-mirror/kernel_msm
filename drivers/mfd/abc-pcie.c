@@ -1773,6 +1773,12 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	 * software is ready for use.
 	 */
 	if (!abc->allow_el1_dma) {
+		dev_info(dev, "%s: disabling irq and detaching SMMU\n",
+			 __func__);
+
+		/* Disable PCIe interrupts during EL2 */
+		abc_pcie_disable_irqs(abc_dev->pdev);
+
 		/* Detach the PCIe EP device to the ARM sMMU */
 		abc_pcie_smmu_detach((struct device *)ctx);
 	}
@@ -1803,10 +1809,19 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	if (!abc->allow_el1_dma) {
 		int ret;
 
+		dev_info(dev, "%s: attaching SMMU and enabling irq\n",
+			 __func__);
+
 		/* Re-attach the PCIe EP device to the ARM sMMU */
 		ret = abc_pcie_smmu_attach((struct device *)ctx);
-		if (ret < 0)
+		if (ret < 0) {
+			dev_err(dev, "%s: failed to attach SMMU: %d\n",
+				__func__, ret);
 			return ret;
+		}
+
+		/* Enable PCIe interrupts on EL2 exit */
+		abc_pcie_enable_irqs(abc_dev->pdev);
 	}
 
 	/* Broadcast this event to subscribers */
