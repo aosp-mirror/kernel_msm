@@ -3568,7 +3568,7 @@ static ssize_t cgroup_cpu_pressure_write(struct kernfs_open_file *of,
 }
 
 static unsigned int cgroup_pressure_poll(struct kernfs_open_file *of,
-					  poll_table *pt)
+					 poll_table *pt)
 {
 	return psi_trigger_poll(&of->priv, of->file, pt);
 }

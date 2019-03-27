@@ -130,7 +130,6 @@
 #include "../workqueue_internal.h"
 #include <linux/sched/loadavg.h>
 #include <linux/seq_file.h>
-#include <linux/eventfd.h>
 #include <linux/proc_fs.h>
 #include <linux/seqlock.h>
 #include <linux/uaccess.h>
@@ -159,7 +158,7 @@ static int __init setup_psi(char *str)
 __setup("psi=", setup_psi);
 
 /* Running averages - we need to be higher-res than loadavg */
-#define PSI_FREQ	(2*HZ+1UL)	/* 2 sec intervals */
+#define PSI_FREQ	(2*HZ+1)	/* 2 sec intervals */
 #define EXP_10s		1677		/* 1/exp(2s/10s) as fixed-point */
 #define EXP_60s		1981		/* 1/exp(2s/60s) */
 #define EXP_300s	2034		/* 1/exp(2s/300s) */
@@ -187,14 +186,14 @@ static void group_init(struct psi_group *group)
 	for_each_possible_cpu(cpu)
 		seqcount_init(&per_cpu_ptr(group->pcpu, cpu)->seq);
 	group->avg_next_update = sched_clock() + psi_period;
-	atomic_set(&group->poll_scheduled, 0);
 	INIT_DELAYED_WORK(&group->avgs_work, psi_avgs_work);
 	mutex_init(&group->avgs_lock);
 	/* Init trigger-related members */
+	atomic_set(&group->poll_scheduled, 0);
 	mutex_init(&group->trigger_lock);
 	INIT_LIST_HEAD(&group->triggers);
 	memset(group->nr_triggers, 0, sizeof(group->nr_triggers));
-	group->trigger_states = 0;
+	group->poll_states = 0;
 	group->poll_min_period = U32_MAX;
 	memset(group->polling_total, 0, sizeof(group->polling_total));
 	group->polling_next_update = ULLONG_MAX;
@@ -407,6 +406,41 @@ static u64 update_averages(struct psi_group *group, u64 now)
 	return avg_next_update;
 }
 
+static void psi_avgs_work(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct psi_group *group;
+	u32 changed_states;
+	bool nonidle;
+	u64 now;
+
+	dwork = to_delayed_work(work);
+	group = container_of(dwork, struct psi_group, avgs_work);
+
+	mutex_lock(&group->avgs_lock);
+
+	now = sched_clock();
+
+	collect_percpu_times(group, PSI_AVGS, &changed_states);
+	nonidle = changed_states & (1 << PSI_NONIDLE);
+	/*
+	 * If there is task activity, periodically fold the per-cpu
+	 * times and feed samples into the running averages. If things
+	 * are idle and there is no data to process, stop the clock.
+	 * Once restarted, we'll catch up the running averages in one
+	 * go - see calc_avgs() and missed_periods.
+	 */
+	if (now >= group->avg_next_update)
+		group->avg_next_update = update_averages(group, now);
+
+	if (nonidle) {
+		schedule_delayed_work(dwork, nsecs_to_jiffies(
+				group->avg_next_update - now) + 1);
+	}
+
+	mutex_unlock(&group->avgs_lock);
+}
+
 /* Trigger tracking window manupulations */
 static void window_reset(struct psi_window *win, u64 now, u64 value,
 			 u64 prev_growth)
@@ -512,41 +546,6 @@ static u64 update_triggers(struct psi_group *group, u64 now)
 	return now + group->poll_min_period;
 }
 
-static void psi_avgs_work(struct work_struct *work)
-{
-	struct delayed_work *dwork;
-	struct psi_group *group;
-	u32 changed_states;
-	bool nonidle;
-	u64 now;
-
-	dwork = to_delayed_work(work);
-	group = container_of(dwork, struct psi_group, avgs_work);
-
-	mutex_lock(&group->avgs_lock);
-
-	now = sched_clock();
-
-	collect_percpu_times(group, PSI_AVGS, &changed_states);
-	nonidle = changed_states & (1 << PSI_NONIDLE);
-	/*
-	 * If there is task activity, periodically fold the per-cpu
-	 * times and feed samples into the running averages. If things
-	 * are idle and there is no data to process, stop the clock.
-	 * Once restarted, we'll catch up the running averages in one
-	 * go - see calc_avgs() and missed_periods.
-	 */
-	if (nonidle) {
-		if (now >= group->avg_next_update)
-			group->avg_next_update = update_averages(group, now);
-
-		schedule_delayed_work(dwork, nsecs_to_jiffies(
-				group->avg_next_update - now) + 1);
-	}
-
-	mutex_unlock(&group->avgs_lock);
-}
-
 /*
  * Schedule polling if it's not already scheduled. It's safe to call even from
  * hotpath because even though kthread_queue_delayed_work takes worker->lock
@@ -594,7 +593,7 @@ static void psi_poll_work(struct kthread_work *work)
 
 	collect_percpu_times(group, PSI_POLL, &changed_states);
 
-	if (changed_states & group->trigger_states) {
+	if (changed_states & group->poll_states) {
 		/* Initialize trigger windows when entering polling mode */
 		if (now > group->polling_until)
 			init_triggers(group, now);
@@ -780,12 +779,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 	while ((group = iterate_groups(task, &iter))) {
 		u32 state_mask = psi_group_change(group, cpu, clear, set);
 
-		/*
-		 * poll_scheduled flag changes at the max rate of once per min
-		 * polling period (50ms), so should not invalidate cache too
-		 * often.
-		 */
-		if (state_mask & group->trigger_states)
+		if (state_mask & group->poll_states)
 			psi_schedule_poll_work(group, 1);
 
 		if (wake_clock && !delayed_work_pending(&group->avgs_work))
@@ -889,7 +883,7 @@ void psi_cgroup_free(struct cgroup *cgroup)
 	cancel_delayed_work_sync(&cgroup->psi.avgs_work);
 	free_percpu(cgroup->psi.pcpu);
 	/* All triggers must be removed by now */
-	WARN_ONCE(cgroup->psi.trigger_states, "psi: trigger leak\n");
+	WARN_ONCE(cgroup->psi.poll_states, "psi: trigger leak\n");
 }
 
 /**
@@ -945,14 +939,17 @@ void cgroup_move_task(struct task_struct *task, struct css_set *to)
 int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 {
 	int full;
+	u64 now;
 
 	if (static_branch_likely(&psi_disabled))
 		return -EOPNOTSUPP;
 
 	/* Update averages before reporting them */
 	mutex_lock(&group->avgs_lock);
+	now = sched_clock();
 	collect_percpu_times(group, PSI_AVGS, NULL);
-	update_averages(group, sched_clock());
+	if (now >= group->avg_next_update)
+		group->avg_next_update = update_averages(group, now);
 	mutex_unlock(&group->avgs_lock);
 
 	for (full = 0; full < 2 - (res == PSI_CPU); full++) {
@@ -1074,7 +1071,7 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group,
 	group->poll_min_period = min(group->poll_min_period,
 		div_u64(t->win.size, UPDATES_PER_WINDOW));
 	group->nr_triggers[t->state]++;
-	group->trigger_states |= (1 << t->state);
+	group->poll_states |= (1 << t->state);
 
 	mutex_unlock(&group->trigger_lock);
 
@@ -1105,14 +1102,14 @@ static void psi_trigger_destroy(struct kref *ref)
 		list_del(&t->node);
 		group->nr_triggers[t->state]--;
 		if (!group->nr_triggers[t->state])
-			group->trigger_states &= ~(1 << t->state);
+			group->poll_states &= ~(1 << t->state);
 		/* reset min update period for the remaining triggers */
 		list_for_each_entry(tmp, &group->triggers, node)
 			period = min(period, div_u64(tmp->win.size,
 					UPDATES_PER_WINDOW));
 		group->poll_min_period = period;
 		/* Destroy poll_kworker when the last trigger is destroyed */
-		if (group->trigger_states == 0) {
+		if (group->poll_states == 0) {
 			group->polling_until = 0;
 			kworker_to_destroy = rcu_dereference_protected(
 					group->poll_kworker,
