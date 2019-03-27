@@ -42,8 +42,6 @@
 #define HYPX_SMC_FUNC_DRIVER_REMOVE (0xa)
 #define HYPX_SMC_FUNC_CHECK_FW_STATUS HYPX_SMC_ID(0xb)
 
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-
 #define PIL_DMA_TIMEOUT 3000
 #define INPUT_IMAGE_WIDTH 480
 #define INPUT_IMAGE_HEIGHT 640
@@ -216,8 +214,8 @@ static int hypx_copy_from_blob_userbuf(struct device *dev, void __user *buffer,
 
 		if (!blob->segments[i].addr)
 			break;
-		tocopy = MIN(buffer_iter_remaining,
-			     blob->segments[i].pages * PAGE_SIZE);
+		tocopy = min(buffer_iter_remaining,
+			     (uint64_t)blob->segments[i].pages * PAGE_SIZE);
 		phy_addr = (uint64_t)blob->segments[i].addr * PAGE_SIZE;
 		virt_addr = phys_to_virt(phy_addr);
 
@@ -263,7 +261,6 @@ static phys_addr_t hypx_create_blob_userbuf(struct device *dev,
 	struct hypx_blob *blob;
 	struct hypx_mem_segment *segments_iter;
 	int i;
-	uint64_t page_order;
 
 	/* note that allocated page is not reclaimable */
 	blob = (void *)get_zeroed_page(0);
@@ -272,26 +269,29 @@ static phys_addr_t hypx_create_blob_userbuf(struct device *dev,
 		goto exit;
 	}
 	WARN_ON(virt_to_phys(blob) % PAGE_SIZE);
-	page_order = MIN(MAX_ORDER - 1, roundup_pow_of_two(size));
 	buffer_iter = buffer;
 	buffer_iter_remaining = size;
 	segments_iter = blob->segments;
 
 	for (i = 0; i < HYPX_MEMSEGS_NUM; i++) {
+		uint64_t page_order =
+			min(MAX_ORDER - 1,
+			    order_base_2(buffer_iter_remaining / PAGE_SIZE));
 		uint64_t size = (1ULL << page_order) * PAGE_SIZE;
-		void *out_buffer = kmalloc(size, 0);
-		uint64_t tocopy = MIN(buffer_iter_remaining, size);
+		uint64_t tocopy = min(buffer_iter_remaining, size);
 
 		int ret = 0;
+		void *out_buffer;
 		int source_vm[] = { VMID_HLOS };
 		int dest_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
 		int dest_perm[] = { PERM_READ | PERM_WRITE,
 				    PERM_READ | PERM_WRITE };
 
 		if (tocopy == 0) {
-			kfree(out_buffer);
 			break;
 		}
+
+		out_buffer = kmalloc(size, 0);
 
 		while (!out_buffer) {
 			if (page_order == 0) {
@@ -301,7 +301,7 @@ static phys_addr_t hypx_create_blob_userbuf(struct device *dev,
 			page_order--;
 			size = (1ULL << page_order) * PAGE_SIZE;
 			out_buffer = kmalloc(size, 0);
-			tocopy = MIN(buffer_iter_remaining, size);
+			tocopy = min(buffer_iter_remaining, size);
 		}
 
 		copy_from_user(out_buffer, buffer_iter, tocopy);
