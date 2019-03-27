@@ -25,7 +25,7 @@
 	qcom,fg-force-load-profile;
 	qcom,fg-recharge-soc-thr = <99>;
 	qcom,fg-cutoff-current = <40>;
-	qcom,fg-cutoff-voltage = <3000>;
+	qcom,fg-cutoff-voltage = <3200>;
 };
 
 / {
