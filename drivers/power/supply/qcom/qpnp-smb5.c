@@ -3205,8 +3205,11 @@ static int smb5_request_interrupt(struct smb5 *chip,
 
 	smb5_irqs[irq_index].irq = irq;
 	smb5_irqs[irq_index].irq_data = irq_data;
-	if (smb5_irqs[irq_index].wake)
+	if (smb5_irqs[irq_index].wake) {
+		if (irq_index == USBIN_ICL_CHANGE_IRQ)
+			chg->usb_icl_change_irq_enabled = true;
 		enable_irq_wake(irq);
+	}
 
 	return rc;
 }
@@ -3228,8 +3231,6 @@ static int smb5_request_interrupts(struct smb5 *chip)
 				return rc;
 		}
 	}
-	if (chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq)
-		chg->usb_icl_change_irq_enabled = true;
 
 	/*
 	 * WDOG_SNARL_IRQ is required for SW Thermal Regulation WA. In case

@@ -766,8 +766,8 @@ int smblib_set_usb_suspend(struct smb_charger *chg, bool suspend)
 
 	if (!suspend && irq) {
 		if (!chg->usb_icl_change_irq_enabled) {
-			enable_irq(irq);
 			chg->usb_icl_change_irq_enabled = true;
+			enable_irq(irq);
 		}
 	}
 
