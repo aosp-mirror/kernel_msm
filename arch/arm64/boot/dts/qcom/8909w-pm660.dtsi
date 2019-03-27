@@ -389,6 +389,8 @@
 		qcom,fg-chg-term-current = <20>;
 		qcom,hold-soc-while-full;
 		qcom,fg-auto-recharge-soc;
+		qcom,fg-jeita-thresholds = <0 15 45 50>;
+		qcom,battery-thermal-coefficients = [d2 50 ff];
 		qcom,fg-recharge-soc-thr = <98>;
 		status = "okay";
 
