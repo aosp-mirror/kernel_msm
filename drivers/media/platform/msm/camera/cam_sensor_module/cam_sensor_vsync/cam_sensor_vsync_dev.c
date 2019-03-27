@@ -540,41 +540,42 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 			&ctx->pending_reqs, list) {
 		frame_msg = &vsync_req->req_message.u.frame_msg;
 		/* check if it is a stale link or old req*/
-		if (!cam_get_device_priv(frame_msg->link_hdl) ||
-			result.timestamp_sof - frame_msg->timestamp > 4) {
-			/* remove from list */
-			mutex_lock(&ctx->list_lock);
-			list_del_init(&vsync_req->list);
-			mutex_unlock(&ctx->list_lock);
-			/* free memory */
-			kfree(vsync_req);
-			continue;
-		}
+		if (!cam_get_device_priv(frame_msg->link_hdl))
+			goto free_n_go;
 		rc = cam_vsync_get_cam_id(frame_msg->link_hdl, &cam_id);
+		/* remove if cam_id is invalid */
+		if (rc < 0)
+			goto free_n_go;
+
 		CAM_DBG(CAM_SENSOR,
 			"pending req cam_id=%d, frame_id=%d, sof=%lld",
 			cam_id,
 			frame_msg->frame_id,
 			frame_msg->timestamp);
-		if (rc == 0 &&
-			cam_id == result.cam_id &&
-			frame_msg->frame_id == result.frame_id &&
-			frame_msg->timestamp == result.timestamp_sof) {
-			/* Update with Vsync timestamp */
-			frame_msg->timestamp == result.timestamp_vsync;
-			if (cam_req_mgr_notify_message(&vsync_req->req_message,
+		/* remove if request is too old */
+		if (cam_id == result.cam_id &&
+			result.frame_id - frame_msg->frame_id > 4)
+			goto free_n_go;
+		/* Check cam_id, frame_id, timestamp_sof match */
+		if (cam_id != result.cam_id ||
+			frame_msg->frame_id != result.frame_id ||
+			frame_msg->timestamp != result.timestamp_sof)
+			continue;
+		/* Update with Vsync timestamp with the match*/
+		frame_msg->timestamp == result.timestamp_vsync;
+		if (cam_req_mgr_notify_message(&vsync_req->req_message,
 				V4L_EVENT_CAM_REQ_MGR_VSYNC_TS,
 				V4L_EVENT_CAM_REQ_MGR_EVENT))
-				CAM_ERR(CAM_SENSOR,
-					"Error in notifying the vsync time for req id:%lld",
-					frame_msg->request_id);
+			CAM_ERR(CAM_SENSOR,
+				"Error in notifying the vsync time for req id:%lld",
+				frame_msg->request_id);
+free_n_go:
 			/* remove from list */
 			mutex_lock(&ctx->list_lock);
 			list_del_init(&vsync_req->list);
 			mutex_unlock(&ctx->list_lock);
 			/* free memory */
 			kfree(vsync_req);
-		}
 	}
 }
 
