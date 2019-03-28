@@ -2309,7 +2309,7 @@ static int p9221_parse_dt(struct device *dev,
 		}
 	}
 
-	ret = of_property_read_u32(node, "q_value", &data);
+	ret = of_property_read_u32(node, "google,q_value", &data);
 	if (ret < 0) {
 		pdata->q_value = -1;
 	} else {
