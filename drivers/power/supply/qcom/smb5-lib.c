@@ -5292,8 +5292,19 @@ int enable_moisture_detection(struct smb_charger *chg, bool enable)
 		rc = vote(chg->disable_power_role_switch, LPD_VOTER, false, 0);
 		if (rc < 0) {
 			smblib_err(chg,
-				   "%s: Could not enable drp toggling %d\n",
-				   __func__, rc);
+				   "Could not enable drp toggling %d\n", rc);
+			goto exit;
+		}
+
+		/*
+		 * Possible that the LPD_VOTER was initially false which implies
+		 * the callback does not execute.
+		 * Rerun electtion to make sure that DRP_TOGGLING is enabled
+		 * if none of the voters have voted for true.
+		 */
+		rc = rerun_election(chg->disable_power_role_switch);
+		if (rc < 0) {
+			smblib_err(chg, "rerun election failed %d\n", rc);
 			goto exit;
 		}
 
@@ -6655,13 +6666,15 @@ static void smblib_lpd_ra_open_work(struct work_struct *work)
 		}
 
 		/* restore DRP mode */
-		rc = vote(chg->disable_power_role_switch, LPD_VOTER, false, 0);
+		pval.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
+		rc = smblib_set_prop_typec_power_role(chg, &pval);
 		if (rc < 0) {
 			smblib_err(chg,
-				   "%s: Could not enable drp toggling %d\n",
-				   __func__, rc);
+				   "Couldn't set typec source only mode rc=%d\n",
+				   rc);
 			goto out;
 		}
+
 		chg->lpd_reason = LPD_FLOATING_CABLE;
 	}
 
