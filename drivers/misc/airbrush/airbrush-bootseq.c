@@ -123,6 +123,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		return ret;
 	}
 
+	/* M0 samples DDR_SR for its ddr_train sequence */
 	if (prev_state == CHIP_STATE_100)
 		ab_gpio_enable_ddr_sr(ab_ctx);
 

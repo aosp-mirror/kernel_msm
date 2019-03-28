@@ -2310,7 +2310,6 @@ static int32_t ab_ddr_suspend(void *ctx)
 	PMU_CONTROL_PHY_RET_ON();
 
 	/* Enable GPIOs to inform DDR is in suspend mode */
-	ab_gpio_enable_ddr_sr(sc);
 	ab_gpio_enable_ddr_iso(sc);
 
 	/* Airbrush will resume with 1866MHz */

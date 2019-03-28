@@ -1164,6 +1164,15 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		disable_ref_clk(sc->dev);
 	}
 
+	if (to_chip_substate_id == CHIP_STATE_100) {
+		/* Disabling DDRCKE_ISO is a workaround to prevent
+		 * back drive during suspend.
+		 * This operation should be moved to after DDR resume for
+		 * HW >= EVT1.1.
+		 */
+		ab_gpio_disable_ddr_iso(sc);
+	}
+
 	ab_sm_start_ts(sc, AB_SM_TS_PMIC_OFF);
 	ab_pmic_off(sc);
 	ab_sm_record_ts(sc, AB_SM_TS_PMIC_OFF);
@@ -1181,11 +1190,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 					ret);
 			return ret;
 		}
-	}
-
-	if (to_chip_substate_id == CHIP_STATE_100) {
-		ab_gpio_disable_ddr_iso(sc);
-		ab_gpio_disable_ddr_sr(sc);
 	}
 
 	ab_sm_record_ts(sc, AB_SM_TS_FULL);
