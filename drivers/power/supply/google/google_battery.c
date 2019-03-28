@@ -1924,7 +1924,11 @@ static int gbatt_get_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_STATUS_FULL;
 		} else if (batt_drv->fg_psy) {
 			err = power_supply_get_property(batt_drv->fg_psy,
-								psp, val);
+							psp,
+							val);
+			/* force DISCHARGING status when not connected */
+			if (err == 0 && !batt_drv->buck_enabled)
+				val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 		} else {
 			err = -EINVAL;
 		}
