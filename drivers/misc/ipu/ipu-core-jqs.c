@@ -289,6 +289,8 @@ static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 	ipu_core_writel(bus, IPU_IO_SWITCHED_CLK_EN_VAL_MASK,
 			IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
 
+	ipu_bus_frc_clock_ungate(bus);
+
 	/* Turn off isolation for I/O block */
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IO_ISO_ON);
 

@@ -212,6 +212,18 @@ void ipu_set_device_ops(struct device *dev,
 	pb_dev->dev_ops = dev_ops;
 }
 
+void ipu_frc_ipu_clock_ungate(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_bus_frc_clock_ungate(bus);
+
+	mutex_unlock(&bus->jqs.lock);
+}
+
 bool ipu_is_jqs_ready(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);

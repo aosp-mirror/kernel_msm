@@ -66,6 +66,7 @@ struct paintbox_bus_ops {
 	void (*free_jqs_memory)(struct device *dev, struct ipu_jqs_buffer *buf);
 	struct device *(*get_dma_device)(struct device *dev);
 	bool (*is_ready)(struct device *dev);
+	void (*frc_clock_ungate)(struct device *dev);
 };
 
 /* The following group of functions can be called in an atomic context */

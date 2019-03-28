@@ -144,6 +144,8 @@ void ipu_free_jqs_memory(struct device *dev, struct ipu_jqs_buffer *buf);
 void ipu_set_device_ops(struct device *dev,
 		const struct paintbox_device_ops *dev_ops);
 
+void ipu_frc_ipu_clock_ungate(struct device *dev);
+
 /* return the group for the device
  * the function increments the reference on the group
  */

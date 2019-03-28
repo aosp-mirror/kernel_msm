@@ -14,6 +14,7 @@
  */
 
 #include <linux/ab-dram.h>
+#include <linux/mfd/abc-pcie.h>
 #include <linux/mfd/abc-pcie-dma.h>
 #include <linux/airbrush-sm-notifier.h>
 #include <linux/completion.h>
@@ -151,6 +152,36 @@ static uint64_t ipu_adapter_ab_mfd_readq(struct device *dev,
 	high = ipu_adapter_ab_mfd_readl(dev, offset + sizeof(uint32_t));
 
 	return (((uint64_t)high) << 32) | low;
+}
+
+#define CENTRAL_PMU_BASE		(AON_AXI2APB + 0xA0000) /* 0xBA0000 */
+#define PMU_IPU_POWER_CTL_OVERRIDE0	(CENTRAL_PMU_BASE + 0x2400)
+#define PMU_IPU_CORE_ISO_EN		(0x7FFF << 2)
+#define PMU_IPU_OVERRIDE_EN		(0x1 << 0)
+
+static void ipu_adapter_frc_clock_ungate(struct device *dev)
+{
+	uint32_t val;
+
+	abc_pcie_config_read(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
+			&val);
+	val &= ~(PMU_IPU_CORE_ISO_EN);
+	abc_pcie_config_write(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
+			val);
+
+	abc_pcie_config_read(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
+			&val);
+	val |= PMU_IPU_OVERRIDE_EN;
+	abc_pcie_config_write(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
+			val);
+
+	udelay(1);
+
+	abc_pcie_config_read(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
+			&val);
+	val &= ~(PMU_IPU_OVERRIDE_EN);
+	abc_pcie_config_write(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
+			val);
 }
 
 static int ipu_adapter_ab_mfd_map_to_bar(struct device *dev,
@@ -839,6 +870,7 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->alloc_jqs_memory = &ipu_adapter_ab_mfd_alloc_jqs_memory;
 	ops->free_jqs_memory = &ipu_adapter_ab_mfd_free_jqs_memory;
 	ops->is_ready = &ipu_adapter_ab_mfd_is_ready;
+	ops->frc_clock_ungate = &ipu_adapter_frc_clock_ungate;
 }
 
 static int ipu_adapter_ab_mfd_register_low_priority_irq(

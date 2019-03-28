@@ -268,6 +268,12 @@ static inline void ipu_core_free_jqs_memory(struct paintbox_bus *bus,
 	bus->ops->free_jqs_memory(bus->parent_dev, buf);
 }
 
+/* The caller to this function must hold bus->jqs.lock */
+static inline void ipu_bus_frc_clock_ungate(struct paintbox_bus *bus)
+{
+	bus->ops->frc_clock_ungate(bus->parent_dev);
+}
+
 void ipu_core_notify_firmware_up(struct paintbox_bus *bus);
 void ipu_core_notify_firmware_suspended(struct paintbox_bus *bus);
 void ipu_core_notify_firmware_down(struct paintbox_bus *bus);

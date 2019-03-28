@@ -174,6 +174,8 @@ void ipu_power_enable_cores(struct paintbox_data *pb,
 		ipu_writel(pb->dev, new_core_pairs, IPU_CSR_AON_OFFSET +
 				IPU_CORE_PAIRS_EN);
 
+		ipu_frc_ipu_clock_ungate(pb->dev);
+
 		/* Disable core isolation for the requested core */
 		ipu_writel(pb->dev, new_core_mask_n,
 				IPU_CSR_AON_OFFSET + CORE_ISO_ON);
