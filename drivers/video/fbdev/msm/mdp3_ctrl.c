@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3101,6 +3101,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 		goto init_done;
 	}
 
+	mfd->skip_koff_wait = true;
 	mdp3_session->dma->output_config.out_sel = intf_type;
 	mdp3_session->mfd = mfd;
 	mdp3_session->panel = dev_get_platdata(&mfd->pdev->dev);
