@@ -638,11 +638,10 @@ static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	unsigned int val;
 	unsigned int user_ctrl_reg = cs40l2x_dsp_reg(cs40l2x,
 			"USER_CONTROL_IPDATA",
 			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	int ret, i;
+	int ret;
 
 	if (!user_ctrl_reg)
 		return -EPERM;
@@ -653,59 +652,19 @@ static int cs40l2x_user_ctrl_exec(struct cs40l2x_private *cs40l2x,
 		return ret;
 	}
 
-	ret = regmap_write(regmap, CS40L2X_MBOX_USER_CONTROL, user_ctrl_cmd);
-	if (ret) {
-		dev_err(dev, "Failed to write user-control command\n");
+	ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_USER_CONTROL,
+			user_ctrl_cmd, CS40L2X_USER_CTRL_SUCCESS);
+	if (ret)
 		return ret;
-	}
-
-	for (i = 0; i < CS40L2X_UCTRL_TIMEOUT_COUNT; i++) {
-		ret = regmap_read(regmap, CS40L2X_MBOX_USER_CONTROL, &val);
-		if (ret) {
-			dev_err(dev, "Failed to read user-control command\n");
-			return ret;
-		}
-
-		if (val != user_ctrl_cmd)
-			break;
-
-		usleep_range(1000, 1100);
-	}
-
-	if (i == CS40L2X_UCTRL_TIMEOUT_COUNT) {
-		dev_err(dev, "Timed out waiting for user-control response\n");
-		return -ETIME;
-	}
-
-	switch (val) {
-	case CS40L2X_USER_CTRL_SUCCESS:
-		break;
-	case CS40L2X_USER_CTRL_ERR_MIN ... CS40L2X_USER_CTRL_ERR_MAX:
-		dev_err(dev, "Unexpected user-control response: %d\n",
-				val - (CS40L2X_USER_CTRL_ERR_MAX + 1));
-		return -EIO;
-	default:
-		dev_err(dev, "Unrecognized user-control response: 0x%06X\n",
-				val);
-		return -EINVAL;
-	}
 
 	if (!user_ctrl_resp)
 		return 0;
 
-	ret = regmap_read(regmap,
+	return regmap_read(regmap,
 			cs40l2x_dsp_reg(cs40l2x, "USER_CONTROL_RESPONSE",
 					CS40L2X_XM_UNPACKED_TYPE,
 					cs40l2x->fw_desc->id),
-			&val);
-	if (ret) {
-		dev_err(dev, "Failed to read user-control response\n");
-		return ret;
-	}
-
-	*user_ctrl_resp = val;
-
-	return 0;
+			user_ctrl_resp);
 }
 
 static ssize_t cs40l2x_cp_trigger_duration_show(struct device *dev,
@@ -800,10 +759,18 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 
 	switch (hiber_cmd) {
 	case CS40L2X_POWERCONTROL_NONE:
+	case CS40L2X_POWERCONTROL_FRC_STDBY:
+		return cs40l2x_ack_write(cs40l2x,
+				CS40L2X_MBOX_POWERCONTROL, hiber_cmd,
+				CS40L2X_POWERCONTROL_NONE);
+
 	case CS40L2X_POWERCONTROL_HIBERNATE:
+		/*
+		 * control port is unavailable immediately after
+		 * this write, so don't poll for acknowledgment
+		 */
 		return regmap_write(cs40l2x->regmap,
-				CS40L2X_MBOX_POWERCONTROL,
-				hiber_cmd);
+				CS40L2X_MBOX_POWERCONTROL, hiber_cmd);
 
 	case CS40L2X_POWERCONTROL_WAKEUP:
 		for (i = 0; i < CS40L2X_WAKEUP_RETRIES; i++) {
@@ -835,27 +802,6 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 
 			if (val != CS40L2X_POWERSTATE_HIBERNATE)
 				return 0;
-		}
-		return -ETIME;
-
-	case CS40L2X_POWERCONTROL_FRC_STDBY:
-		ret = regmap_write(cs40l2x->regmap,
-				CS40L2X_MBOX_POWERCONTROL,
-				hiber_cmd);
-		if (ret)
-			return ret;
-
-		for (i = 0; i < CS40L2X_WAKEUP_RETRIES; i++) {
-			ret = regmap_read(cs40l2x->regmap,
-					CS40L2X_MBOX_POWERCONTROL,
-					&val);
-			if (ret)
-				return ret;
-
-			if (val == CS40L2X_POWERCONTROL_NONE)
-				return 0;
-
-			usleep_range(1000, 1100);
 		}
 		return -ETIME;
 
@@ -3299,7 +3245,10 @@ static int cs40l2x_refclk_switch(struct cs40l2x_private *cs40l2x,
 			((refclk_sel << CS40L2X_PLL_REFCLK_SEL_SHIFT)
 				& CS40L2X_PLL_REFCLK_SEL_MASK);
 
-	ret = cs40l2x_hiber_cmd_send(cs40l2x, CS40L2X_POWERCONTROL_FRC_STDBY);
+	ret = cs40l2x_ack_write(cs40l2x,
+			CS40L2X_MBOX_POWERCONTROL,
+			CS40L2X_POWERCONTROL_FRC_STDBY,
+			CS40L2X_POWERCONTROL_NONE);
 	if (ret)
 		return ret;
 
@@ -3311,8 +3260,10 @@ static int cs40l2x_refclk_switch(struct cs40l2x_private *cs40l2x,
 	if (ret)
 		return ret;
 
-	return regmap_write(cs40l2x->regmap, CS40L2X_MBOX_POWERCONTROL,
-			CS40L2X_POWERCONTROL_WAKEUP);
+	return cs40l2x_ack_write(cs40l2x,
+			CS40L2X_MBOX_POWERCONTROL,
+			CS40L2X_POWERCONTROL_WAKEUP,
+			CS40L2X_POWERCONTROL_NONE);
 }
 
 static int cs40l2x_asp_switch(struct cs40l2x_private *cs40l2x, bool enable)
@@ -4486,6 +4437,11 @@ static int cs40l2x_diag_enable(struct cs40l2x_private *cs40l2x,
 
 	switch (cs40l2x->fw_desc->id) {
 	case CS40L2X_FW_ID_ORIG:
+		/*
+		 * STIMULUS_MODE is not automatically returned to a reset
+		 * value as with other mailbox registers, therefore it is
+		 * written without polling for subsequent acknowledgment
+		 */
 		return regmap_write(regmap, CS40L2X_MBOX_STIMULUS_MODE, val);
 	case CS40L2X_FW_ID_CAL:
 		return regmap_write(regmap,
@@ -6487,12 +6443,12 @@ static int cs40l2x_firmware_swap(struct cs40l2x_private *cs40l2x,
 		break;
 
 	default:
-		ret = cs40l2x_hiber_cmd_send(cs40l2x,
-				CS40L2X_POWERCONTROL_FRC_STDBY);
-		if (ret) {
-			dev_err(dev, "Failed to force standby\n");
+		ret = cs40l2x_ack_write(cs40l2x,
+				CS40L2X_MBOX_POWERCONTROL,
+				CS40L2X_POWERCONTROL_FRC_STDBY,
+				CS40L2X_POWERCONTROL_NONE);
+		if (ret)
 			return ret;
-		}
 	}
 
 	ret = regmap_update_bits(regmap, CS40L2X_DSP1_CCM_CORE_CTRL,
@@ -6574,11 +6530,12 @@ static int cs40l2x_wavetable_swap(struct cs40l2x_private *cs40l2x,
 	struct device *dev = cs40l2x->dev;
 	int ret1, ret2;
 
-	ret1 = cs40l2x_hiber_cmd_send(cs40l2x, CS40L2X_POWERCONTROL_FRC_STDBY);
-	if (ret1) {
-		dev_err(dev, "Failed to force standby\n");
+	ret1 = cs40l2x_ack_write(cs40l2x,
+			CS40L2X_MBOX_POWERCONTROL,
+			CS40L2X_POWERCONTROL_FRC_STDBY,
+			CS40L2X_POWERCONTROL_NONE);
+	if (ret1)
 		return ret1;
-	}
 
 	ret1 = request_firmware(&fw, wt_file, dev);
 	if (ret1) {
@@ -6603,11 +6560,12 @@ static int cs40l2x_wavetable_swap(struct cs40l2x_private *cs40l2x,
 	}
 
 err_wakeup:
-	ret2 = cs40l2x_hiber_cmd_send(cs40l2x, CS40L2X_POWERCONTROL_WAKEUP);
-	if (ret2) {
-		dev_err(dev, "Failed to wake device\n");
+	ret2 = cs40l2x_ack_write(cs40l2x,
+			CS40L2X_MBOX_POWERCONTROL,
+			CS40L2X_POWERCONTROL_WAKEUP,
+			CS40L2X_POWERCONTROL_NONE);
+	if (ret2)
 		return ret2;
-	}
 
 	ret2 = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGERINDEX,
 			CS40L2X_INDEX_CONT_MIN, CS40L2X_MBOX_TRIGGERRESET);
@@ -7999,6 +7957,11 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 			goto err_mutex;
 		}
 
+		/*
+		 * polling for acknowledgment as with other mailbox registers
+		 * is unnecessary in this case and adds latency, so only send
+		 * the wake-up command to complete the notification sequence
+		 */
 		ret = regmap_write(regmap, CS40L2X_MBOX_POWERCONTROL,
 				CS40L2X_POWERCONTROL_WAKEUP);
 		if (ret) {
