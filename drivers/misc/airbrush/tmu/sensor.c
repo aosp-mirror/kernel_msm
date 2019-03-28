@@ -24,6 +24,8 @@
 
 #define MCELSIUS	1000
 
+#define AB_TMU_SENSOR_TRIP_NUM 8
+
 static const u16 no_trimming_error1[] = {287, 286, 287, 287, 286, 286, 286};
 static const u16 no_trimming_error2[] = {346, 346, 347, 347, 347, 346, 346};
 
@@ -31,6 +33,8 @@ struct ab_tmu_sensor {
 	struct device *dev;
 	struct ab_tmu_hw *hw;
 	int id;
+	int of_trip_temp[AB_TMU_SENSOR_TRIP_NUM];
+	int of_trip_hyst[AB_TMU_SENSOR_TRIP_NUM];
 	struct ab_tmu_trim trim;
 	struct thermal_zone_device *tzd;
 };
@@ -170,9 +174,18 @@ static int ab_tmu_sensor_op_set_trip_temp(void *data, int trip, int temp)
 	bool pcie_link_ready;
 	int temp_cel, hyst, hyst_cel, ret;
 
+	if (trip < 0 || trip >= AB_TMU_SENSOR_TRIP_NUM)
+		return -EINVAL;
+
 	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
 	if (pcie_link_ready) {
-		temp_cel = temp / MCELSIUS;
+		if (temp != 0) {
+			temp_cel = temp / MCELSIUS;
+		} else {
+			temp_cel = sensor->of_trip_temp[trip] / MCELSIUS;
+			tzd->ops->set_trip_hyst(tzd, trip,
+					sensor->of_trip_hyst[trip]);
+		}
 		tzd->ops->get_trip_hyst(tzd, trip, &hyst);
 		hyst_cel = hyst / MCELSIUS;
 		ab_tmu_sensor_set_thresholds(sensor, trip, temp_cel, hyst_cel);
@@ -192,6 +205,9 @@ static int ab_tmu_sensor_op_get_trip_temp(void *data, int trip, int *temp)
 	bool pcie_link_ready;
 	u32 thd_rise;
 	int ret;
+
+	if (trip < 0 || trip >= AB_TMU_SENSOR_TRIP_NUM)
+		return -EINVAL;
 
 	pcie_link_ready = ab_tmu_hw_pcie_link_lock(hw);
 	if (pcie_link_ready) {
@@ -270,7 +286,6 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 {
 	struct thermal_zone_device *tz = sensor->tzd;
 	const struct thermal_trip *trips;
-	int temp, hyst;
 	int i, ntrips;
 
 	trips = of_thermal_get_trip_points(tz);
@@ -280,14 +295,17 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 	}
 
 	ntrips = of_thermal_get_ntrips(tz);
-	if (ntrips < 0) {
-		dev_warn(sensor->dev, "Failed to get ntrip from OF");
+	if (ntrips != AB_TMU_SENSOR_TRIP_NUM) {
+		dev_warn(sensor->dev, "ntrip count mismatch to sensor trip num: %d",
+				ntrips);
 		return;
 	}
-	for (i = 0; i < ntrips; i++) {
-		temp = trips[i].temperature / MCELSIUS;
-		hyst = trips[i].hysteresis / MCELSIUS;
-		ab_tmu_sensor_set_thresholds(sensor, i, temp, hyst);
+	for (i = 0; i < AB_TMU_SENSOR_TRIP_NUM; i++) {
+		sensor->of_trip_temp[i] = trips[i].temperature;
+		sensor->of_trip_hyst[i] = trips[i].hysteresis;
+		ab_tmu_sensor_set_thresholds(sensor, i,
+				sensor->of_trip_temp[i] / MCELSIUS,
+				sensor->of_trip_hyst[i] / MCELSIUS);
 	}
 }
 
