@@ -109,15 +109,22 @@ int max77826_update_reg(struct i2c_client *i2c, u8 reg, u8 val, u8 mask)
 {
 	struct max77826_dev *max77826 = i2c_get_clientdata(i2c);
 	int ret;
+	u8 old_val, new_val;
 
 	mutex_lock(&max77826->io_lock);
 	ret = i2c_smbus_read_byte_data(i2c, reg);
-	if (ret >= 0) {
-		u8 old_val = ret & 0xff;
-		u8 new_val = (val & mask) | (old_val & (~mask));
-
-		ret = i2c_smbus_write_byte_data(i2c, reg, new_val);
+	if (ret < 0) {
+		mutex_unlock(&max77826->io_lock);
+		pr_err("%s: i2c read error=%d\n", __func__, ret);
+		return ret;
 	}
+
+	old_val = ret & 0xff;
+	new_val = (val & mask) | (old_val & (~mask));
+
+	ret = i2c_smbus_write_byte_data(i2c, reg, new_val);
+	if (ret < 0)
+		pr_err("%s: i2c write error=%d\n", __func__, ret);
 	mutex_unlock(&max77826->io_lock);
 	return ret;
 }
