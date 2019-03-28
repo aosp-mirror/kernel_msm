@@ -118,6 +118,11 @@ static int iaxxx_btp_write_words(struct iaxxx_priv *priv, uint32_t phy_addr,
 	uint32_t btp_size;
 	uint32_t btp_addr, mac_addr;
 
+	/* Due to FW limitation, use only HOST0's BTP addresses
+	 * and MAC window to write data.
+	 */
+	host_id = 0;
+
 	ret = iaxxx_get_btp_size_addr(priv, proc_id, type, host_id,
 			&btp_size, &btp_addr);
 	if (ret) {
@@ -191,6 +196,12 @@ static int iaxxx_btp_read_words(struct iaxxx_priv *priv, uint32_t phy_addr,
 	int ret;
 	uint32_t btp_size;
 	uint32_t btp_addr, mac_addr;
+
+
+	/* Due to FW limitation, use only HOST0's BTP addresses
+	 * and MAC window to read data.
+	 */
+	host_id = 0;
 
 	ret = iaxxx_get_btp_size_addr(priv, proc_id, type, host_id,
 			&btp_size, &btp_addr);
