@@ -3096,19 +3096,38 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
 	if (ret < 0)
 		return -EPROBE_DEFER;
+	force_recall = (data & MAX1720X_STATUS_POR) != 0;
+	if (force_recall)
+		dev_err(chip->dev, "Recall: POR\n");
 
+	/* TODO: disable with maxim,fix-ignore-zero-rsense */
 	chip->RSense = max1720x_read_rsense(chip);
-	if (chip->RSense == 0)
-		dev_err(chip->dev, "RSense value 0 micro Ohm\n");
+	if (chip->RSense == 0) {
+		dev_err(chip->dev, "Recall: RSense value 0 micro Ohm\n");
+		force_recall |= true;
+	}
 
 	/* read por version from dt (new function) */
 	ret = max17x0x_read_dt_version_por(chip->dev->of_node, &vreg, &vpor);
 	if (ret == 0) {
 		ret = REGMAP_READ(chip->regmap_nvram, vreg, &tmp);
-		force_recall = ((ret == 0) && (vpor == (tmp & 0x00ff)));
+		if ((ret == 0) && (vpor == (tmp & 0x00ff))) {
+			dev_err(chip->dev, "Recall: POR version %d\n", vpor);
+			force_recall = true;
+		}
 	}
 
-	if (data & MAX1720X_STATUS_POR || chip->RSense == 0 || force_recall) {
+	/* b/129384855 fix mismatch between pack INI file and overrides */
+	if (of_property_read_bool(chip->dev->of_node, "maxim,fix-vempty")) {
+		ret = REGMAP_READ(chip->regmap, MAX1720X_VEMPTY, &data);
+		if ((ret == 0) && (reg_to_vrecovery(data) == 0)) {
+			dev_err(chip->dev, "Recall: zero vrecovery\n");
+			force_recall = true;
+		}
+	}
+
+	if (force_recall) {
+		/* debug only */
 		ret = max17x0x_nvram_cache_init(&chip->nRAM_por,
 							max17xxx_gauge_type);
 		if (ret == 0)
@@ -3124,6 +3143,7 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 		if (ret == 0)
 			chip->needs_reset = true;
 
+		/* TODO: enable with maxim,fix-nagefccfg */
 		if (max17xxx_gauge_type == MAX1720X_GAUGE_TYPE)
 			REGMAP_WRITE(chip->regmap_nvram,
 				     MAX1720X_NAGEFCCFG, 0);
