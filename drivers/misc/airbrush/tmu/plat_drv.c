@@ -36,6 +36,8 @@ static void airbrush_tmu_pcie_link_post_enable(struct ab_tmu_hw *hw,
 		ab_tmu_sensor_save_threshold(tmu_data->sensor[i]);
 	}
 	ab_tmu_hw_control(hw, true);
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
+		ab_tmu_sensor_update(tmu_data->sensor[i]);
 };
 
 static void airbrush_tmu_pcie_link_pre_disable(struct ab_tmu_hw *hw,
