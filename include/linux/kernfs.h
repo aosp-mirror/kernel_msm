@@ -240,7 +240,7 @@ struct kernfs_ops {
 			 loff_t off);
 
 	unsigned int (*poll)(struct kernfs_open_file *of,
-			 struct poll_table_struct *pt);
+			     struct poll_table_struct *pt);
 
 	int (*mmap)(struct kernfs_open_file *of, struct vm_area_struct *vma);
 
@@ -330,7 +330,7 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 		     const char *new_name, const void *new_ns);
 int kernfs_setattr(struct kernfs_node *kn, const struct iattr *iattr);
 unsigned int kernfs_generic_poll(struct kernfs_open_file *of,
-			     struct poll_table_struct *pt);
+				 struct poll_table_struct *pt);
 void kernfs_notify(struct kernfs_node *kn);
 
 const void *kernfs_super_ns(struct super_block *sb);
