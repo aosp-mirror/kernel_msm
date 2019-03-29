@@ -14,3 +14,12 @@
 #include "sm8150-coral-audio-proto.dtsi"
 #include "sm8150-coral-proto-display.dtsi"
 #include "sm8150-coral-camera-sensor-proto.dtsi"
+
+&soc {
+	abc-sm {
+		/* In case "alternate-boot" is set, user can boot ABC
+		 * in alternate boot mode using SPI.
+		 */
+		alternate-boot = <1>;
+	};
+};

@@ -2314,11 +2314,14 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	}
 
 	/* Get the alternate-boot property from dt node. This property
-	 * allows secondary boot via SPI.
+	 * allows secondary boot via SPI. If the alternate-boot property
+	 * is no found, set ab_sm_ctx->alternate_boot = 0 by default.
 	 */
 	if (of_property_read_u32(np, "alternate-boot",
-			&ab_sm_ctx->alternate_boot))
-		dev_dbg(dev, "alternate-boot property not found\n");
+			&ab_sm_ctx->alternate_boot)) {
+		ab_sm_ctx->alternate_boot = 0;
+		dev_dbg(dev, "alternate-boot property not found. Setting b_sm_ctx->alternate_boot = 0 (default)\n");
+	}
 
 	/* Intialize the default state of each block for state manager */
 	ab_sm_ctx->blocks[BLK_IPU] = (struct block){BLK_IPU,
