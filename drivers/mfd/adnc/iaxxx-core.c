@@ -48,6 +48,7 @@
 #include "iaxxx-debug.h"
 #include "iaxxx-cdev.h"
 #include "iaxxx-build-info.h"
+#include "iaxxx-btp.h"
 
 
 #define IAXXX_RESET_RETRIES		5		/* retry attempts */
@@ -108,6 +109,7 @@ enum {
 	E_IAXXX_REGMAP_ERROR = -1,
 	E_IAXXX_BOOTUP_ERROR = -2,
 	E_IAXXX_RESET_SYNC_ERROR = -3,
+	E_IAXXX_BTP_ERROR = -4,
 };
 
 /*===========================================================================
@@ -649,8 +651,9 @@ int iaxxx_get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
 
 	/* Read the FW string from address read above */
 	while (len > 0) {
-		rc = priv->bulk_read(dev, addr + i, &verbuf[i], 1);
-		if (rc != 1) {
+		rc = iaxxx_btp_read(priv, addr + i, &verbuf[i], 1,
+				IAXXX_HOST_0);
+		if (rc < 0) {
 			dev_err(dev, "String Read fail addr 0x%x:%d\n",
 				addr + i, rc);
 			return -EIO;
@@ -1674,6 +1677,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->crashdump_lock);
 	mutex_init(&priv->pm_mutex);
 	mutex_init(&priv->proc_on_off_lock);
+	mutex_init(&priv->btp_lock);
 	mutex_init(&priv->debug_mutex);
 
 	iaxxx_init_kthread_worker(&priv->worker);
@@ -1782,6 +1786,7 @@ err_regdump_init:
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
 	mutex_destroy(&priv->proc_on_off_lock);
+	mutex_destroy(&priv->btp_lock);
 	mutex_destroy(&priv->debug_mutex);
 err_power_init:
 	return rc;
@@ -1820,6 +1825,7 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	mutex_destroy(&priv->crashdump_lock);
 	mutex_destroy(&priv->pm_mutex);
 	mutex_destroy(&priv->proc_on_off_lock);
+	mutex_destroy(&priv->btp_lock);
 	mutex_destroy(&priv->debug_mutex);
 
 	iaxxx_remove_sysfs(priv);

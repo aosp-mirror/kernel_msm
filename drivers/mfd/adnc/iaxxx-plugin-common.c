@@ -23,6 +23,7 @@
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include "iaxxx.h"
 #include "iaxxx-plugin-common.h"
+#include "iaxxx-btp.h"
 
 /* Set Param Block Common code without mutex protection
  * to be shared by code using plugin mutex
@@ -112,15 +113,11 @@ int iaxxx_core_set_param_blk_common(
 		goto set_param_blk_err;
 	}
 
-	if (priv->raw_write) {
-		ret = priv->raw_write(dev, &reg_addr, ptr_blk,
-				blk_size);
-		if (ret) {
-			dev_err(dev, "Raw blk write failed %s()\n", __func__);
-			goto set_param_blk_err;
-		}
-	} else {
-		dev_err(dev, "Raw blk write not supported  %s()\n", __func__);
+	ret = iaxxx_btp_write(priv, reg_addr, ptr_blk,
+			blk_size / sizeof(uint32_t), host_id);
+
+	if (ret) {
+		dev_err(dev, "Raw blk write failed %s()\n", __func__);
 		goto set_param_blk_err;
 	}
 
@@ -260,11 +257,11 @@ int iaxxx_core_get_param_blk_common(
 	}
 
 	/* read the block from the address */
-	ret = priv->bulk_read(priv->dev,
+	ret = iaxxx_btp_read(priv,
 		read_val, getparam_block_data,
-		getparam_block_size_in_words);
+		getparam_block_size_in_words, host_id);
 
-	if (ret != getparam_block_size_in_words) {
+	if (ret < 0) {
 		dev_err(dev, "getparamblk read failed %s()\n", __func__);
 		goto iaxxx_core_get_param_error;
 	}

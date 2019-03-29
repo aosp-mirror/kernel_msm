@@ -238,9 +238,8 @@ struct iaxxx_priv {
 	int (*regmap_init_bus)(struct iaxxx_priv *priv);
 	int (*bulk_read)(struct device *dev, uint32_t address,
 				void *buf, size_t len);
-	int (*raw_write)(void *context,
-			const void *reg,
-			 const void *val, size_t val_len);
+	int (*raw_write)(void *context,	uint32_t reg,
+			const void *val, size_t val_len);
 
 	uint32_t sys_rbdt[2*IAXXX_RBDT_NUM_ENTRIES];
 
@@ -355,6 +354,8 @@ struct iaxxx_priv {
 	/* Power transition Statistcis */
 	struct iaxxx_pwr_stats *pwr_stats;
 	int int_osc_trim_period;
+
+	struct mutex btp_lock;
 };
 
 static inline struct iaxxx_priv *to_iaxxx_priv(struct device *dev)

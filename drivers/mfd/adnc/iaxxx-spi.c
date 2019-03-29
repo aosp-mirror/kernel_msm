@@ -330,42 +330,6 @@ static int iaxxx_spi_raw_write(void *context,
 	return rc;
 }
 
-/* This function checks for FW ROM range section overlap
- * case before starting burst writes. if range check falls into
- * any ROM address range then driver will split and send the data
- * other wise it sends data in one shot.
- *
- */
-static int iaxxx_spi_raw_write_with_rom_range_check(
-		void *context, const void *reg,
-		const void *val, size_t val_len)
-{
-	int rc = 0;
-	uint32_t phy_size_range1;
-	uint32_t phy_addr_range2, phy_size_range2;
-	uint32_t phy_addr_range1 = (*(uint32_t *)reg);
-
-	rom_phy_address_range_check_and_update(&phy_addr_range1,
-		val_len, &phy_size_range1, &phy_addr_range2,
-		&phy_size_range2);
-
-	pr_info(
-		"%s() addr1: 0x%x, size: %d addr2: 0x%x, size2: %d\n",
-		__func__, phy_addr_range1, phy_size_range1,
-		phy_addr_range2, phy_size_range2);
-
-	rc = iaxxx_spi_raw_write(context, phy_addr_range1,
-			val, phy_size_range1);
-	if (rc)
-		return rc;
-
-	if (phy_size_range2 != 0 && phy_addr_range2 != 0)
-		rc = iaxxx_spi_raw_write(context, phy_addr_range2,
-			val+phy_size_range1, phy_size_range2);
-
-	return rc;
-}
-
 /* This is the common function used by all public spi read functions.
  * This function assumes that the register address in BE32 format.
  * The data read in the buffer will be in BE32 format. It will be up to
@@ -957,7 +921,7 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	spi_priv->priv.dev = dev;
 	spi_priv->priv.regmap_init_bus = iaxxx_spi_regmap_init;
 	spi_priv->priv.bulk_read = iaxxx_spi_bulk_read;
-	spi_priv->priv.raw_write = iaxxx_spi_raw_write_with_rom_range_check;
+	spi_priv->priv.raw_write = iaxxx_spi_raw_write;
 	spi_priv->priv.bus = IAXXX_SPI;
 
 	spi_set_drvdata(spi, spi_priv);

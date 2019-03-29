@@ -20,6 +20,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
 #include "iaxxx.h"
+#include "iaxxx-btp.h"
 #include <linux/mfd/adnc/iaxxx-core.h>
 
 #define IAXXX_CHUNK_SIZE 32768
@@ -72,7 +73,8 @@ void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes)
  */
 static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 			const uint8_t *data, uint32_t chunk_size,
-			const struct firmware_section_header *section)
+			const struct firmware_section_header *section,
+			bool btp)
 {
 	int rc, i = 0;
 	struct device *dev = priv->dev;
@@ -88,9 +90,20 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 
 	/* Write the section data directly to the device memory */
 	for (i = 0; i < temp_len; i++) {
-		rc = regmap_bulk_write(regmap,
-			(section->start_address + ((i * chunk_word_size))),
-			data + (i * chunk_word_size), chunk_size);
+		/* If BTP is enabled use btp_write instead of direct
+		 * write to memory. And assume HOST0 always.
+		 */
+		if (btp)
+			rc = iaxxx_btp_write(priv,
+				(section->start_address +
+				((i * chunk_word_size))),
+				data + (i * chunk_word_size), chunk_size,
+				IAXXX_HOST_0);
+		else
+			rc = regmap_bulk_write(regmap,
+				(section->start_address +
+				((i * chunk_word_size))),
+				data + (i * chunk_word_size), chunk_size);
 		if (rc) {
 			dev_err(dev,
 				"%s: regmap bulk write section chunk failed, rc=%d\n",
@@ -99,9 +112,20 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
 		}
 	}
 	if (rem_bytes) {
-		rc = regmap_bulk_write(regmap,
-			(section->start_address + ((i * chunk_word_size))),
-			data + (i * chunk_word_size), rem_bytes);
+		/* If BTP is enabled use btp_write instead of direct
+		 * write to memory. And assume HOST0 always.
+		 */
+		if (btp)
+			rc = iaxxx_btp_write(priv,
+				(section->start_address +
+				((i * chunk_word_size))),
+				data + (i * chunk_word_size), rem_bytes,
+				IAXXX_HOST_0);
+		else
+			rc = regmap_bulk_write(regmap,
+				(section->start_address +
+				((i * chunk_word_size))),
+				data + (i * chunk_word_size), rem_bytes);
 		if (rc) {
 			dev_err(dev,
 				"%s: regmap bulk write rem_bytes failed, rc=%d\n",
@@ -121,7 +145,8 @@ static int iaxxx_download_section_chunks(struct iaxxx_priv *priv,
  * @section : pointer to the section data (section address, length, etc).
  */
 int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
-				const struct firmware_section_header *section)
+				const struct firmware_section_header *section,
+				bool btp)
 {
 	int rc = 0;
 	struct device *dev = priv->dev;
@@ -129,7 +154,7 @@ int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				? IAXXX_CHUNK_SIZE/64 : IAXXX_CHUNK_SIZE;
 
 	rc = iaxxx_download_section_chunks(priv, data,
-						iaxxx_chunk_size, section);
+					iaxxx_chunk_size, section, btp);
 	if (rc == -ENOMEM) {
 		iaxxx_chunk_size = (priv->bus == IAXXX_I2C)
 					? IAXXX_REDUCED_CHUNK_SIZE / 64 :
@@ -137,7 +162,7 @@ int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 		dev_err(dev,
 			"retry section download with reduced chunk size\n");
 		rc = iaxxx_download_section_chunks(priv, data,
-						iaxxx_chunk_size, section);
+					iaxxx_chunk_size, section, btp);
 		if (rc == -ENOMEM) {
 			dev_err(dev,
 				"%s: failed: %d, with reduced chunk size: %d",
@@ -236,7 +261,7 @@ iaxxx_download_firmware(struct iaxxx_priv *priv, const struct firmware *fw)
 
 			do {
 				rc = iaxxx_download_section(priv, data,
-								&file_section);
+							&file_section, false);
 			} while (rc && ++retries < max_retries);
 
 			if (rc) {
@@ -331,7 +356,7 @@ static int iaxxx_download_per_core_fw(struct iaxxx_priv *priv,
 
 			do {
 				rc = iaxxx_download_section(priv, data,
-								&file_section);
+							&file_section, false);
 			} while (rc && ++retries < max_retries);
 
 			if (rc) {

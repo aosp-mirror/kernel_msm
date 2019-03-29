@@ -6,6 +6,7 @@ obj-$(CONFIG_MFD_IAXXX)		+= iaxxx-regmap.o iaxxx-evnt-mgr.o iaxxx-pwr-mgmt.o ia8
 obj-$(CONFIG_MFD_IAXXX)		+= iaxxx-dbgfs.o
 obj-$(CONFIG_MFD_IAXXX)		+= iaxxx-tunnel.o iaxxx-tunnel-dev.o
 obj-$(CONFIG_MFD_IAXXX)		+= iaxxx-debug.o iaxxx-cdev.o iaxxx-debug-logging.o iaxxx-sysfs.o
+obj-$(CONFIG_MFD_IAXXX)		+= iaxxx-btp.o
 obj-$(CONFIG_MFD_IAXXX_SENSOR_TUNNEL)		+= iaxxx-sensor-tunnel.o
 obj-$(CONFIG_MFD_IAXXX_I2C)	+= iaxxx-i2c.o
 obj-$(CONFIG_MFD_IAXXX_SPI)	+= iaxxx-spi.o

@@ -23,6 +23,7 @@
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include "iaxxx.h"
 #include "iaxxx-plugin-common.h"
+#include "iaxxx-btp.h"
 
 #define IAXXX_BITS_SWAP	32
 #define IAXXX_BLK_HEADER_SIZE 4
@@ -981,21 +982,18 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 		}
 		pr_debug("%s() Configuration address %x\n", __func__, reg_addr);
 
-		if (priv->raw_write) {
-			if (file[0] == IAXXX_INVALID_FILE)
-				ret = priv->raw_write(dev, &reg_addr, &cfg_val,
-							sizeof(cfg_val));
-			else {
-				ret = priv->raw_write(dev, &reg_addr, data,
-							cfg_size);
-			}
-			if (ret) {
-				dev_err(dev, "Blk write failed %s()\n",
-						__func__);
-				goto set_create_cfg_err;
-			}
-		} else {
-			dev_err(dev, "Raw blk write failed %s()\n", __func__);
+		if (file[0] == IAXXX_INVALID_FILE)
+			ret = iaxxx_btp_write(priv, reg_addr, &cfg_val,
+						sizeof(cfg_val) /
+						sizeof(uint32_t), host_id);
+		else {
+			ret = iaxxx_btp_write(priv, reg_addr, data,
+						cfg_size / sizeof(uint32_t),
+						host_id);
+		}
+		if (ret) {
+			dev_err(dev, "Blk write failed %s()\n",
+					__func__);
 			goto set_create_cfg_err;
 		}
 	} else {
@@ -1359,7 +1357,8 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			word_data = (uint32_t *)buf_data;
 			for (j = 0 ; j < file_section.length; j++)
 				CALC_FLETCHER16(word_data[j], sum1, sum2);
-			rc = iaxxx_download_section(priv, data, &file_section);
+			rc = iaxxx_download_section(priv, data, &file_section,
+						    true);
 			data += file_section_bytes;
 			kfree(buf_data);
 			buf_data = NULL;
@@ -1387,8 +1386,8 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 		if (!buf_data)
 			return -ENOMEM;
 
-		rc = iaxxx_download_section(priv, buf_data, &file_section);
-
+		rc = iaxxx_download_section(priv, buf_data, &file_section,
+					    true);
 		kfree(buf_data);
 		buf_data = NULL;
 	}

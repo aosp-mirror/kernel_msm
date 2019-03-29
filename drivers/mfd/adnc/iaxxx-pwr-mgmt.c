@@ -29,6 +29,7 @@
 #include <linux/mfd/adnc/iaxxx-stream-registers.h>
 #include <linux/mfd/adnc/iaxxx-odsp.h>
 #include <linux/mfd/adnc/iaxxx-module.h>
+#include "iaxxx-btp.h"
 #include "iaxxx.h"
 
 #define IAXXX_PWR_DWN_VAL 0x01C00050
@@ -945,9 +946,10 @@ int iaxxx_core_get_pwr_stats(struct device *dev,
 		goto exit;
 	}
 
-	ret = priv->bulk_read(priv->dev,
-		pwr_stats_addr, pwr_stats, pwr_stats_size);
-	if (ret != pwr_stats_size) {
+	ret = iaxxx_btp_read(priv,
+		pwr_stats_addr, pwr_stats,
+		pwr_stats_size / sizeof(uint32_t), IAXXX_HOST_0);
+	if (ret < 0) {
 		dev_err(priv->dev, "Not able to read pwr stats %d\n",
 				ret);
 		goto exit;

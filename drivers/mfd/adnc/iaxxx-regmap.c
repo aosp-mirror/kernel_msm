@@ -42,6 +42,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-script-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pwr-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-bulk-transfer.h>
 #include "iaxxx.h"
 #include <linux/mfd/adnc/iaxxx-core.h>
 
@@ -66,6 +67,7 @@
 #define IAXXX_BLOCK_PACKAGE				4
 #define IAXXX_BLOCK_PLUGIN				5
 #define IAXXX_BLOCK_DBGLOG				0xa
+#define IAXXX_BLOCK_BTP 				0xb
 #define IAXXX_BLOCK_SENSOR				0xd
 #define IAXXX_BLOCK_POWER				0xe
 #define IAXXX_BLOCK_EVENT				0xf
@@ -120,6 +122,7 @@
 #define IAXXX_REG_SENSOR_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_SENSOR)
 #define IAXXX_REG_SCRIPT_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_SCRIPT)
 #define IAXXX_REG_POWER_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_POWER)
+#define IAXXX_REG_BTP_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_BTP)
 
 
 /* Returns true if register is in the supported physical address range */
@@ -372,6 +375,11 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 			IAXXX_DEBUG_BLOCK_2_CRASHLOG_SIZE_ADDR)
 		return true;
 
+	/* BTP registers */
+	if (reg >=  IAXXX_BULK_TRANSFER_BULK_TRANSFER_SIZE_ADDR &&
+		reg <= IAXXX_BULK_TRANSFER_BULK_TRANSFER_D_ADDR_BLOCK_2_ADDR)
+		return true;
+
 	return false;
 }
 
@@ -500,6 +508,18 @@ static const struct regmap_range_cfg iaxxx_ranges[] = {
 	{
 		.name = "Power",
 		.range_min = IAXXX_REG_POWER_BASE,
+		.selector_reg = SRB_BLOCK_SELECT_REG,
+		.selector_mask = SRB_BLOCK_SELECT_MASK,
+		.selector_shift = SRB_BLOCK_SELECT_SHIFT,
+	},
+	{
+		/*
+		 * Btp stands for bulk transfer protocol. This protocol is being
+		 * used to avoid ROM hole related issues. Memory read and write
+		 * will happen through these registers
+		 */
+		.name = "Btp",
+		.range_min = IAXXX_REG_BTP_BASE,
 		.selector_reg = SRB_BLOCK_SELECT_REG,
 		.selector_mask = SRB_BLOCK_SELECT_MASK,
 		.selector_shift = SRB_BLOCK_SELECT_SHIFT,

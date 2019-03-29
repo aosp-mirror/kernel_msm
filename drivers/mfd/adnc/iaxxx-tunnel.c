@@ -28,6 +28,7 @@
 
 #include "iaxxx.h"
 #include "iaxxx-tunnel-priv.h"
+#include "iaxxx-btp.h"
 #define ia_profiling(x) getnstimeofday(x)
 
 #define TUNNEL_REG_READ_SIZE	4
@@ -266,9 +267,10 @@ int iaxxx_tunnel_read_hw(struct iaxxx_priv *priv, void *readbuff,
 
 		dev_dbg(dev, "words_read: %u\n", words_read);
 		/* Perform a bulk read from chip over control interface */
-		rc = priv->bulk_read(priv->dev,
-		(buff_param.buff_addr + (buff_param.buff_head * sizeof(u32))),
-			readbuff, words_read);
+		rc = iaxxx_btp_read(priv,
+			(buff_param.buff_addr +
+			 (buff_param.buff_head * sizeof(uint32_t))),
+			readbuff, words_read, IAXXX_HOST_0);
 		if (rc < 0) {
 			dev_err(dev, "reading the frame data failed: %d\n", rc);
 			return rc;

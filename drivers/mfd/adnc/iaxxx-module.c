@@ -23,6 +23,7 @@
 #include <linux/mfd/adnc/iaxxx-sensor-registers.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include "iaxxx.h"
+#include "iaxxx-btp.h"
 
 
 /*****************************************************************************
@@ -354,7 +355,7 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 		goto sensor_write_param_blk_err;
 	}
 
-	ret = priv->raw_write(dev, &blk_addr, ptr_blk, blk_size);
+	ret = priv->raw_write(dev, blk_addr, ptr_blk, blk_size);
 	if (ret) {
 		dev_err(dev, "%s() write ptr_blk, failed\n",
 			__func__);
@@ -495,8 +496,8 @@ static int iaxxx_download_script(struct iaxxx_priv *priv,
 		__func__, script_addr);
 
 	/* Write Package Binary information */
-	rc = regmap_bulk_write(priv->regmap, script_addr,
-				(uint32_t *)buf_data, script_size >> 2);
+	rc = iaxxx_btp_write(priv, script_addr,
+			(uint32_t *)buf_data, script_size >> 2, IAXXX_HOST_0);
 	if (rc) {
 		dev_err(dev, "%s() script download failed addr: 0x%08x\n",
 			__func__, script_addr);

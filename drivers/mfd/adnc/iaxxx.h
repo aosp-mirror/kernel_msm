@@ -185,7 +185,8 @@ void register_transac_log(struct device *dev, uint32_t reg, uint32_t val,
 int iaxxx_verify_fw_header(struct device *dev,
 			struct firmware_file_header *header);
 int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
-				const struct firmware_section_header *section);
+				const struct firmware_section_header *section,
+				bool btp);
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes);
 int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons);
 int iaxxx_get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
