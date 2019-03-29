@@ -2164,15 +2164,18 @@ static void max17x0x_fg_reset(struct max1720x_chip *chip)
 			msleep(MAX17X0X_TPOR_MS);
 
 			err = REGMAP_READ(chip->regmap, rset->map16[0], &cfg2);
-			done = (err == 0) && !(cfg2 & rset->map[1]);
+			done = (err == 0) && !(cfg2 & rset->map16[1]);
 			if (done) {
-				msleep(rset->map[2]);
+				msleep(rset->map16[2]);
 				break;
 			}
 		}
 
 		if (!done)
 			dev_err(chip->dev, "FG_RESET error rst not clearing\n");
+		else
+			dev_info(chip->dev, "FG_RESET cleared in %dms\n",
+				loops * MAX17X0X_TPOR_MS + rset->map16[2]);
 
 	}
 
