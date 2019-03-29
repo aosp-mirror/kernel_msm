@@ -30,9 +30,12 @@
 
 #define IS_WITHIN_ROM_ADDRESS_RANGE(addr, start, size) \
 	(((addr) >= (start)) && ((addr) < ((start) + (size))))
+
+#define IS_PHY_START_ADDR_IN_ROM_ADDRESS_RANGE(addr, start) \
+	(((addr) <= (start)) && ((addr + MAX_ADDR_ROM_SIZE) > start))
 /******************* ROM START ADDR END *******************/
 
-bool rom_phy_address_range_check(uint32_t phy_addr,
+void rom_phy_address_range_check_and_update(uint32_t *phy_addr,
 		uint32_t in_bytes, uint32_t *phy_size1,
 		uint32_t *phy_addr2, uint32_t *phy_size2);
 

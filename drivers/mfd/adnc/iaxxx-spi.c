@@ -345,17 +345,23 @@ static int iaxxx_spi_raw_write_with_rom_range_check(
 	uint32_t phy_addr_range2, phy_size_range2;
 	uint32_t phy_addr_range1 = (*(uint32_t *)reg);
 
-	if (rom_phy_address_range_check(phy_addr_range1, val_len,
-	&phy_size_range1, &phy_addr_range2, &phy_size_range2)) {
-		rc = iaxxx_spi_raw_write(context, phy_addr_range1,
+	rom_phy_address_range_check_and_update(&phy_addr_range1,
+		val_len, &phy_size_range1, &phy_addr_range2,
+		&phy_size_range2);
+
+	pr_info(
+		"%s() addr1: 0x%x, size: %d addr2: 0x%x, size2: %d\n",
+		__func__, phy_addr_range1, phy_size_range1,
+		phy_addr_range2, phy_size_range2);
+
+	rc = iaxxx_spi_raw_write(context, phy_addr_range1,
 			val, phy_size_range1);
-		if (rc)
-			return rc;
+	if (rc)
+		return rc;
+
+	if (phy_size_range2 != 0 && phy_addr_range2 != 0)
 		rc = iaxxx_spi_raw_write(context, phy_addr_range2,
 			val+phy_size_range1, phy_size_range2);
-	} else
-		rc = iaxxx_spi_raw_write(context, phy_addr_range1,
-			val, phy_size_range1);
 
 	return rc;
 }

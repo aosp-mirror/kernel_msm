@@ -14,7 +14,7 @@
  */
 #include "ia8508a-memory-map.h"
 
-bool rom_phy_address_range_check(uint32_t phy_addr,
+void rom_phy_address_range_check_and_update(uint32_t *phy_addr,
 		uint32_t in_bytes, uint32_t *phy_size1,
 		uint32_t *phy_addr2, uint32_t *phy_size2)
 {
@@ -24,17 +24,27 @@ bool rom_phy_address_range_check(uint32_t phy_addr,
 
 	for (i = 0; i < count; i++) {
 		if (IS_WITHIN_ROM_ADDRESS_RANGE(
-			rom_addr[i], phy_addr, in_bytes)) {
-			phy_size = (rom_addr[i] - phy_addr);
+			rom_addr[i], *phy_addr, in_bytes)) {
+			phy_size = (rom_addr[i] - *phy_addr);
 			break;
 		}
 	}
 	*phy_size1 = phy_size;
 
 	if (phy_size != in_bytes) {
-		*phy_addr2 = phy_addr + phy_size + MAX_ADDR_ROM_SIZE;
+		*phy_addr2 = *phy_addr + phy_size + MAX_ADDR_ROM_SIZE;
 		*phy_size2 = in_bytes - phy_size;
-		return true;
+		return;
 	}
-	return false;
+	for (i = 0; i < count; i++) {
+		if (IS_PHY_START_ADDR_IN_ROM_ADDRESS_RANGE(
+			rom_addr[i], *phy_addr)) {
+			phy_size = (*phy_addr - rom_addr[i]);
+			*phy_addr = rom_addr[i] + MAX_ADDR_ROM_SIZE + phy_size;
+			break;
+		}
+	}
+	*phy_size2 = 0;
+	*phy_addr2 = 0;
+	return;
 }
