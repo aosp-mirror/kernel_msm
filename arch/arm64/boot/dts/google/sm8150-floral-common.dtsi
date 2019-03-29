@@ -105,6 +105,27 @@
 		memory-region = <&debug_info>;
 	};
 
+	ramoops {
+		compatible = "ramoops";
+		memory-region = <&ramoops_mem>;
+		alt-memory-region = <&alt_ramoops_mem>;
+		record-size = <0x20000>;
+		console-size = <0x100000>;
+		pmsg-size = <0x80000>;
+	};
+
+	access_ramoops@0 {
+		compatible = "access_ramoops";
+		label = "metadata";
+		memory-region = <&ramoops_meta_mem>;
+	};
+
+	access_ramoops@1 {
+		compatible = "access_ramoops";
+		label = "ramoops";
+		memory-region = <&alt_ramoops_mem>;
+	};
+
 	keydebug {
 		compatible = "keydebug";
 		key_down_delay = <7000>;
