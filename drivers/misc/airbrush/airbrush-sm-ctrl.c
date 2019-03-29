@@ -1893,24 +1893,32 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 {
 	int ret;
 
+	/*
+	 * Disable thermal before all pcie subscribers getting
+	 * disabled.
+	 */
+	ab_thermal_disable(sc->thermal);
+
+	/*
+	 * Disable thermal may cause a state change. Wait for state change
+	 * to be applied if needed.
+	 */
+	reinit_completion(&sc->transition_comp);
+	complete_all(&sc->request_state_change_comp);
+	ret = wait_for_completion_timeout(&sc->transition_comp,
+			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
+	if (ret == 0) {
+		dev_warn(sc->dev, "State change timed out\n");
+		ab_thermal_enable(sc->thermal);
+		return -ETIMEDOUT;
+	}
+
 	mutex_lock(&sc->state_transitioning_lock);
 	mutex_lock(&sc->mfd_lock);
 	if (!sc->el2_mode) {
-		/*
-		 * Disable thermal before all pcie subscribers getting
-		 * disabled.
-		 */
-		ab_thermal_disable(sc->thermal);
 		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
-		if (!ret) {
+		if (!ret)
 			sc->el2_mode = true;
-		} else {
-			/*
-			 * Recover thermal since PCIe link is still up
-			 * after enter_el2() failed.
-			 */
-			ab_thermal_enable(sc->thermal);
-		}
 	} else {
 		ret = -EINVAL;
 		dev_warn(sc->dev, "Already in el2 mode\n");
@@ -1918,6 +1926,8 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	mutex_unlock(&sc->mfd_lock);
 	mutex_unlock(&sc->state_transitioning_lock);
 
+	if (ret)
+		ab_thermal_enable(sc->thermal);
 	return ret;
 }
 
