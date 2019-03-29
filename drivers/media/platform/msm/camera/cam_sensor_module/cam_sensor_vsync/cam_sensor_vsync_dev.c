@@ -40,6 +40,7 @@ struct vsync_ctx_type {
 	struct mutex  list_lock;
 	struct dentry *de_dir;
 	struct dentry *de_data;
+	int64_t timeout_cnt;
 };
 
 struct cam_vsync_work_payload {
@@ -262,9 +263,11 @@ static int cam_send_request_qmi(
 		goto out;
 	}
 
-	CAM_DBG(CAM_SENSOR, "Received Resp result = %d, err = %d",
-		resp->resp.result,
-		resp->resp.error);
+	if (resp->resp.result || resp->resp.error)
+		CAM_DBG(CAM_SENSOR, "Received Resp result %d, err %d",
+			resp->resp.result,
+			resp->resp.error);
+
 	ret = resp->resp.result;
 
 out:
@@ -302,7 +305,7 @@ static int cam_send_vsync_packet_qmi(struct qmi_handle *qmi,
 	req->use_jumbo_report_valid = false;
 
 	CAM_DBG(CAM_SENSOR,
-			"Notify camera:%d, frame_id:%d, timestamp:%lld",
+			"Notify camera %d, frame_id %d, timestamp %lld",
 			packet->cam_id,
 			packet->frame_id,
 			packet->timestamp);
@@ -530,7 +533,7 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 		return;
 	}
 
-	CAM_DBG(CAM_SENSOR, "cam_id=%d, frame_id=%d, sof=%lld, vsync =%lld",
+	CAM_DBG(CAM_SENSOR, "cam_id %d, frame_id %d, sof %lld, vsync %lld",
 			result.cam_id,
 			result.frame_id,
 			result.timestamp_sof,
@@ -548,21 +551,30 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 			goto free_n_go;
 
 		CAM_DBG(CAM_SENSOR,
-			"pending req cam_id=%d, frame_id=%d, sof=%lld",
+			"pending req cam_id %d, frame_id %d, sof %lld",
 			cam_id,
 			frame_msg->frame_id,
 			frame_msg->timestamp);
 		/* remove if request is too old */
 		if (cam_id == result.cam_id &&
-			result.frame_id - frame_msg->frame_id > 4)
+			result.frame_id - frame_msg->frame_id > 4) {
+			ctx->timeout_cnt = ctx->timeout_cnt + 1;
+			CAM_DBG(CAM_SENSOR,
+				"req cam_id %d, frame_id %d timeout %d for vsync.",
+			cam_id,
+			frame_msg->frame_id,
+			ctx->timeout_cnt);
 			goto free_n_go;
+		}
+
 		/* Check cam_id, frame_id, timestamp_sof match */
 		if (cam_id != result.cam_id ||
 			frame_msg->frame_id != result.frame_id ||
 			frame_msg->timestamp != result.timestamp_sof)
 			continue;
 		/* Update with Vsync timestamp with the match*/
-		frame_msg->timestamp == result.timestamp_vsync;
+		vsync_req->req_message.u.frame_msg.timestamp
+				= result.timestamp_vsync;
 		if (cam_req_mgr_notify_message(&vsync_req->req_message,
 				V4L_EVENT_CAM_REQ_MGR_VSYNC_TS,
 				V4L_EVENT_CAM_REQ_MGR_EVENT))
@@ -633,6 +645,7 @@ static int cam_vsync_probe(struct platform_device *pdev)
 		goto err_remove_de_dir;
 	}
 
+	ctx->timeout_cnt = 0;
 	INIT_LIST_HEAD(&ctx->pending_reqs);
 	mutex_init(&ctx->list_lock);
 	platform_set_drvdata(pdev, ctx);
