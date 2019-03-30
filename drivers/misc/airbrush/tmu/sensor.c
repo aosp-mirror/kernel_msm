@@ -312,10 +312,15 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 void ab_tmu_sensor_update(struct ab_tmu_sensor *sensor)
 {
 	struct thermal_zone_device *tzd = sensor->tzd;
-	int i, temp;
-	char *envp[2];
 
 	thermal_zone_device_update(tzd, THERMAL_EVENT_UNSPECIFIED);
+}
+
+void ab_tmu_sensor_notify(struct ab_tmu_sensor *sensor)
+{
+	struct thermal_zone_device *tzd = sensor->tzd;
+	int i, temp;
+	char *envp[2];
 
 	mutex_lock(&tzd->lock);
 	/* Find the level for which trip happened */

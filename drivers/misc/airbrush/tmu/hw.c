@@ -36,6 +36,8 @@ static void ab_tmu_hw_pcie_link_post_enable(struct ab_tmu_hw *hw)
 	if (hw->events && hw->events->pcie_link_post_enable)
 		hw->events->pcie_link_post_enable(hw, hw->events_data);
 	mutex_unlock(&hw->pcie_link_lock);
+	if (hw->events && hw->events->post_enable)
+		hw->events->post_enable(hw, hw->events_data);
 }
 
 static void ab_tmu_hw_pcie_link_pre_disable(struct ab_tmu_hw *hw)

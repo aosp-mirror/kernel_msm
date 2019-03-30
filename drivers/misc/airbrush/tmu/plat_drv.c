@@ -44,9 +44,19 @@ static void airbrush_tmu_pcie_link_pre_disable(struct ab_tmu_hw *hw,
 	ab_tmu_hw_control(hw, false);
 };
 
+static void airbrush_tmu_post_enable(struct ab_tmu_hw *hw, void *data)
+{
+	struct ab_tmu_drvdata *tmu_data = data;
+	int i;
+
+	for (i = 0; i < AB_TMU_NUM_ALL_PROBE; i++)
+		ab_tmu_sensor_update(tmu_data->sensor[i]);
+}
+
 static const struct ab_tmu_hw_events airbrush_tmu_events = {
 	.pcie_link_post_enable = airbrush_tmu_pcie_link_post_enable,
 	.pcie_link_pre_disable = airbrush_tmu_pcie_link_pre_disable,
+	.post_enable = airbrush_tmu_post_enable,
 };
 
 static const struct of_device_id airbrush_tmu_match[] = {

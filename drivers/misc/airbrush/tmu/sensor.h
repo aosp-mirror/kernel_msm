@@ -28,6 +28,7 @@ struct ab_tmu_sensor *devm_ab_tmu_sensor_create(struct device *dev,
 void ab_tmu_sensor_load_trim_info(struct ab_tmu_sensor *sensor);
 void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor);
 void ab_tmu_sensor_update(struct ab_tmu_sensor *sensor);
+void ab_tmu_sensor_notify(struct ab_tmu_sensor *sensor);
 
 int ab_tmu_sensor_raw_to_cel(const struct ab_tmu_sensor *sensor, u16 raw);
 

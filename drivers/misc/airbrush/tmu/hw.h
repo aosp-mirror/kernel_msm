@@ -27,6 +27,7 @@ void devm_ab_tmu_hw_destroy(struct ab_tmu_hw *hw);
 struct ab_tmu_hw_events {
 	void (*pcie_link_post_enable)(struct ab_tmu_hw *hw, void *data);
 	void (*pcie_link_pre_disable)(struct ab_tmu_hw *hw, void *data);
+	void (*post_enable)(struct ab_tmu_hw *hw, void *data);
 };
 
 void ab_tmu_hw_register_events(struct ab_tmu_hw *hw,
