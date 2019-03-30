@@ -955,7 +955,7 @@ static int abc_pcie_smmu_attach(struct device *dev)
 		return -EINVAL;
 
 	ret = arm_iommu_attach_device(dev, abc->iommu_mapping);
-	if (ret < 0) {
+	if (ret) {
 		dev_err(dev, "%s: failed to attach device to IOMMU, ret%d\n",
 				__func__, ret);
 		return ret;
@@ -1009,7 +1009,7 @@ static int abc_pcie_smmu_setup(struct device *dev, struct abc_pcie_devdata *abc)
 	}
 
 	ret = abc_pcie_smmu_attach(dev);
-	if (ret < 0)
+	if (ret)
 		goto release_mapping;
 
 	return 0;
@@ -1769,6 +1769,8 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
 
+	dev_info(dev, "%s: enter\n", __func__);
+
 	/*
 	 * If PCIe link is not enabled, this handler should not have been
 	 * called.
@@ -1789,15 +1791,18 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	 * software is ready for use.
 	 */
 	if (!abc->allow_el1_dma) {
-		dev_info(dev, "%s: disabling irq and detaching SMMU\n",
-			 __func__);
+		dev_info(dev, "%s: disabling irq\n", __func__);
 
 		/* Disable PCIe interrupts during EL2 */
 		abc_pcie_disable_irqs(abc_dev->pdev);
 
+		dev_info(dev, "%s: detaching SMMU\n", __func__);
+
 		/* Detach the PCIe EP device to the ARM sMMU */
 		abc_pcie_smmu_detach((struct device *)ctx);
 	}
+
+	dev_info(dev, "%s: done\n", __func__);
 
 	return 0;
 }
@@ -1806,6 +1811,10 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 {
 	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
+	uint32_t test_read_data = 0;
+	int ret;
+
+	dev_info(dev, "%s: enter\n", __func__);
 
 	/*
 	 * If PCIe link is not enabled, this handler should not have been
@@ -1814,7 +1823,21 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	if (WARN_ON(atomic_read(&abc_dev->link_state) != ABC_PCIE_LINK_ACTIVE))
 		return -EINVAL;
 
-	dev_info(dev, "Broadcast Exit EL2 notification\n");
+	dev_info(dev, "%s: testing pcie read\n", __func__);
+	ret = abc_pcie_config_read(ABC_BASE_OTP_WRAPPER & 0xffffff,
+					   0x0, &test_read_data);
+	if (ret) {
+		/*
+		 * Note: if it were an smmu issue, this error log
+		 * may not have a chance to print.
+		 */
+		dev_err(dev, "%s: failed to read 0x%08x, ret = %d\n",
+			__func__, ABC_BASE_OTP_WRAPPER, ret);
+	} else {
+		dev_info(dev, "%s: test read [0x%08x] = 0x%08x\n",
+			 __func__, ABC_BASE_OTP_WRAPPER, test_read_data);
+	}
+
 
 	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
 	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
@@ -1823,26 +1846,29 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	 * software is ready for use.
 	 */
 	if (!abc->allow_el1_dma) {
-		int ret;
-
-		dev_info(dev, "%s: attaching SMMU and enabling irq\n",
-			 __func__);
+		dev_info(dev, "%s: attaching SMMU\n", __func__);
 
 		/* Re-attach the PCIe EP device to the ARM sMMU */
 		ret = abc_pcie_smmu_attach((struct device *)ctx);
-		if (ret < 0) {
+		if (ret) {
 			dev_err(dev, "%s: failed to attach SMMU: %d\n",
 				__func__, ret);
 			return ret;
 		}
 
+		dev_info(dev, "%s: enabling irq\n", __func__);
+
 		/* Enable PCIe interrupts on EL2 exit */
 		abc_pcie_enable_irqs(abc_dev->pdev);
 	}
 
+	dev_info(dev, "Broadcast Exit EL2 notification\n");
+
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE |
 					ABC_PCIE_LINK_EXIT_EL2);
+
+	dev_info(dev, "%s: done\n", __func__);
 
 	return 0;
 }
