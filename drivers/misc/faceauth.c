@@ -35,7 +35,7 @@
 #include <linux/uio.h>
 #include <linux/workqueue.h>
 
-#include <abc-pcie-dma.h>
+#include <linux/dma/abc-pcie-dma.h>
 #include <linux/mfd/abc-pcie-dma.h>
 
 /* ABC FW and workload binary offsets */

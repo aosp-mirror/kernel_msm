@@ -12,7 +12,7 @@
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
-#include <uapi/abc-pcie-dma.h>
+#include <linux/dma/abc-pcie-dma.h>
 #include <linux/mfd/abc-pcie-dma.h>
 
 /**

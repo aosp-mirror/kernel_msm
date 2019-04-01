@@ -26,7 +26,7 @@
 #include <linux/types.h>
 #include <linux/version.h>
 #include <linux/mfd/abc-pcie.h>
-#include <uapi/abc-pcie-dma.h>
+#include <linux/dma/abc-pcie-dma.h>
 #include <linux/mfd/abc-pcie-dma.h>
 #include "abc-pcie-private.h"
 
