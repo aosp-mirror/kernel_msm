@@ -176,10 +176,6 @@ static struct gasket_interrupt_desc oscar_interrupts[OSCAR_N_INTS];
 /* Describes an Airbrush DRAM buffer mapped to TPU */
 struct abc_buffer {
 	refcount_t refcount;
-	/* TODO: remove following 3 fields when runtime updated */
-	uint32_t map_flags;
-	uint32_t page_table_index;
-	uint64_t device_address; /* last TPU VA mapped */
 	struct list_head abc_buffers_list; /* protected by abc_buffers_lock */
 	struct oscar_dev *oscar_dev;
 	struct dma_buf *dma_buf;
@@ -426,8 +422,6 @@ static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 	}
 
 	dev_addr = ibuf.device_address;
-	abc_buffer->page_table_index = ibuf.page_table_index;
-	abc_buffer->device_address = dev_addr;
 
 	for (i = 0, sg = abc_buffer->sg_table->sgl;
 	     i < abc_buffer->sg_table->nents; i++, sg = sg_next(sg)) {
@@ -445,7 +439,6 @@ static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 			gasket_dev->page_table[ibuf.page_table_index],
 			dma_addr, dev_addr, len / PAGE_SIZE,
 			DMA_TO_DEVICE << 1, false, true);
-
 		if (ret)
 			goto unmap_sg;
 
@@ -471,7 +464,6 @@ unmap_sg:
 		dma_buf_unmap_attachment(abc_buffer->dma_buf_attachment,
 					 abc_buffer->sg_table, DMA_TO_DEVICE);
 		abc_buffer->sg_table = NULL;
-		abc_buffer->device_address = 0;
 	}
 unlock_put_buffer:
 	mutex_unlock(&abc_buffer->mapping_lock);
@@ -479,53 +471,14 @@ unlock_put_buffer:
 	return ret;
 }
 
-/* Caller must hold abc_buffer->mapping_lock; we release it here. */
-static void
-abc_unmap_abdram_common(struct abc_buffer *abc_buffer, uint32_t pgtbl_index,
-			uint64_t device_address)
-{
-	struct gasket_dev *gasket_dev = abc_buffer->oscar_dev->gasket_dev;
-	struct scatterlist *sg;
-	uint len;
-	int i;
-
-	if (WARN_ON(!abc_buffer->sg_table))
-		return;
-
-	for (i = 0, sg = abc_buffer->sg_table->sgl;
-	     i < abc_buffer->sg_table->nents; i++, sg = sg_next(sg)) {
-		len = sg_dma_len(sg);
-		gasket_page_table_unmap(gasket_dev->page_table[pgtbl_index],
-					device_address, len / PAGE_SIZE);
-		device_address += len;
-	}
-	mutex_unlock(&abc_buffer->mapping_lock);
-	abc_put_buffer(abc_buffer); /* drop reference for the mapping */
-}
-
-/* TODO: remove when runtime updated */
-static int oscar_abc_unmap_buffer_compat(
-	struct oscar_dev *oscar_dev, int dma_buf_fd)
-{
-	struct abc_buffer *abc_buffer;
-
-	abc_buffer = abc_get_buffer(oscar_dev, dma_buf_fd);
-	if (!abc_buffer)
-		return -EINVAL;
-
-	mutex_lock(&abc_buffer->mapping_lock);
-	abc_unmap_abdram_common(abc_buffer, abc_buffer->page_table_index,
-				abc_buffer->device_address);
-	abc_put_buffer(abc_buffer);
-	return 0;
-}
-
 static int
 oscar_abc_unmap_abdram(struct oscar_dev *oscar_dev,
 		       struct oscar_abdram_map_ioctl __user *argp)
 {
+	struct gasket_dev *gasket_dev = oscar_dev->gasket_dev;
 	struct abc_buffer *abc_buffer;
 	struct oscar_abdram_map_ioctl ibuf;
+	size_t len;
 
 	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
 		return -EFAULT;
@@ -538,8 +491,19 @@ oscar_abc_unmap_abdram(struct oscar_dev *oscar_dev,
 		return -EINVAL;
 
 	mutex_lock(&abc_buffer->mapping_lock);
-	abc_unmap_abdram_common(abc_buffer, ibuf.page_table_index,
-				ibuf.device_address);
+	if (!WARN_ON(!abc_buffer->sg_table)) {
+		len = sg_dma_len(abc_buffer->sg_table->sgl);
+		gasket_page_table_unmap(
+			gasket_dev->page_table[ibuf.page_table_index],
+			ibuf.device_address, len / PAGE_SIZE);
+		/*
+		 * Drop reference for the mapping, warn and recover if
+		 * unbalanced.
+		 */
+		if (WARN_ON(refcount_dec_and_test(&abc_buffer->refcount)))
+			refcount_set(&abc_buffer->refcount, 1);
+	}
+	mutex_unlock(&abc_buffer->mapping_lock);
 	abc_put_buffer(abc_buffer);
 	return 0;
 }
@@ -952,11 +916,9 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 		return -EPERM;
 
 	switch (cmd) {
-	case OSCAR_IOCTL_ABC_MAP_BUFFER:
+	case OSCAR_IOCTL_ABC_MAP_ABDRAM:
 		abdram_map = (struct oscar_abdram_map_ioctl *)argp;
 		return oscar_abc_map_buffer(oscar_dev, abdram_map);
-	case OSCAR_IOCTL_ABC_UNMAP_BUFFER:
-		return oscar_abc_unmap_buffer_compat(oscar_dev, (int)argp);
 	case OSCAR_IOCTL_ABC_UNMAP_ABDRAM:
 		abdram_map = (struct oscar_abdram_map_ioctl *)argp;
 		return oscar_abc_unmap_abdram(oscar_dev, abdram_map);
