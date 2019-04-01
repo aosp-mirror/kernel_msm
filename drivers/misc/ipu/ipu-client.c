@@ -27,7 +27,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#include <uapi/ipu.h>
+#include <uapi/linux/ipu.h>
 
 #include "ipu-aon-debug.h"
 #include "ipu-apb-debug.h"

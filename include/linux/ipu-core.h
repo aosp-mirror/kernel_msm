@@ -28,7 +28,7 @@
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
 
-#include <uapi/ipu.h>
+#include <uapi/linux/ipu.h>
 
 struct paintbox_pdata {
 	unsigned long page_size_bitmap;

@@ -27,8 +27,7 @@
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>
 
-#include <uapi/ipu.h>
-#include <uapi/paintbox.h>
+#include <uapi/linux/ipu.h>
 
 #include "ipu-regs.h"
 

@@ -25,7 +25,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
-#include <uapi/ipu.h>
+#include <uapi/linux/ipu.h>
 
 #include "ipu-client.h"
 #include "ipu-power.h"

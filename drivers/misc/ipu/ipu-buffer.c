@@ -23,7 +23,8 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include <uapi/ipu.h>
+
+#include <uapi/linux/ipu.h>
 
 #include "ipu-buffer.h"
 #include "ipu-client.h"
