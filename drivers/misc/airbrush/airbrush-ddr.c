@@ -2653,8 +2653,11 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	mutex_lock(&ddr_ctx->ddr_lock);
 	old_rate = prop_from->clk_frequency;
 	new_rate = prop_to->clk_frequency;
-	ab_sm_clk_notify(AB_DRAM_PRE_RATE_CHANGE | extra_pre_notify_flag,
-			 old_rate, new_rate);
+
+	if (old_rate != new_rate)
+		ab_sm_clk_notify(
+			AB_DRAM_PRE_RATE_CHANGE | extra_pre_notify_flag,
+			old_rate, new_rate);
 
 	switch (block_state_id) {
 	case BLOCK_STATE_300 ... BLOCK_STATE_305:
@@ -2710,13 +2713,16 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	if (ret)
 		goto set_state_fail;
 
-	ab_sm_clk_notify(AB_DRAM_POST_RATE_CHANGE | extra_post_notify_flag,
+	if (old_rate != new_rate)
+		ab_sm_clk_notify(
+			AB_DRAM_POST_RATE_CHANGE | extra_post_notify_flag,
 			 old_rate, new_rate);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 	return 0;
 
 set_state_fail:
-	ab_sm_clk_notify(AB_DRAM_ABORT_RATE_CHANGE, old_rate, new_rate);
+	if (old_rate != new_rate)
+		ab_sm_clk_notify(AB_DRAM_ABORT_RATE_CHANGE, old_rate, new_rate);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 	return -EINVAL;
 }
