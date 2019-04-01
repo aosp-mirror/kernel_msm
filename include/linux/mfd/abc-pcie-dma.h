@@ -129,8 +129,13 @@ struct abc_buf_desc {
 	};
 	struct abc_pcie_sg_list *sgl;
 	struct abc_pcie_sg_entry *sge;
-	struct dma_element_t *sblk_xfer_desc;
-	struct abc_pcie_dma_mblk_desc *mblk_xfer_desc;
+};
+
+struct abc_pcie_dma_mblk_desc {
+	size_t size;
+	dma_addr_t dma_paddr;
+	struct dma_buf *ab_dram_dma_buf;
+	struct bar_mapping mapping;
 };
 
 struct abc_dma_xfer;
@@ -162,6 +167,8 @@ struct abc_dma_xfer {
 	struct list_head list_transfers; /* Has session transfers */
 	struct list_head list_pending; /* Has overall pending transfers */
 
+	struct dma_element_t *sblk_desc;
+	struct abc_pcie_dma_mblk_desc *mblk_desc;
 	struct abc_dma_wait_info *wait_info;
 };
 
