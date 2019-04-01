@@ -1336,18 +1336,20 @@ static int dma_alloc_xfer_from_kernel_desc(
 	xfer->dir = desc->dir;
 	xfer->size = desc->size;
 
-	xfer->local_buf.offset = desc->local_dma_buf_off;
 	xfer->local_buf.buf_type = desc->local_buf_kind;
 	switch (desc->local_buf_kind) {
 	case DMA_BUFFER_KIND_USER:
 	case DMA_BUFFER_KIND_VMALLOC:
 		xfer->local_buf.local_addr = desc->local_buf;
+		xfer->local_buf.offset = 0;
 		break;
 	case DMA_BUFFER_KIND_DMA_BUF:
 		xfer->local_buf.fd = desc->local_dma_buf_fd;
+		xfer->local_buf.offset = desc->local_dma_buf_off;
 		break;
 	case DMA_BUFFER_KIND_CMA:
 		xfer->local_buf.local_addr = desc->local_buf;
+		xfer->local_buf.offset = 0;
 		break;
 	default:
 		dev_err(&abc_dma.pdev->dev,
@@ -1356,14 +1358,15 @@ static int dma_alloc_xfer_from_kernel_desc(
 		goto free_xfer;
 	}
 
-	xfer->remote_buf.offset = desc->remote_dma_buf_off;
 	xfer->remote_buf.buf_type = desc->remote_buf_kind;
 	switch (desc->remote_buf_kind) {
 	case DMA_BUFFER_KIND_USER:
 		xfer->remote_buf.remote_addr = desc->remote_buf;
+		xfer->remote_buf.offset = 0;
 		break;
 	case DMA_BUFFER_KIND_DMA_BUF:
 		xfer->remote_buf.fd = desc->remote_dma_buf_fd;
+		xfer->remote_buf.offset = desc->remote_dma_buf_off;
 		break;
 	default:
 		dev_err(&abc_dma.pdev->dev,
