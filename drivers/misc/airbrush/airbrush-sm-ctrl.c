@@ -21,7 +21,7 @@
 #include <linux/kthread.h>
 #include <linux/mfd/abc-pcie.h>
 #include <linux/pm_wakeup.h>
-#include <uapi/ab-sm.h>
+#include <uapi/linux/ab-sm.h>
 #include <uapi/linux/sched/types.h>
 
 #include "airbrush-cooling.h"
