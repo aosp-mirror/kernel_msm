@@ -373,7 +373,7 @@ static int info_wlc_state(union gbms_ce_adapter_details *ad,
 	return 0;
 }
 
-
+/* NOTE: do not call this directly */
 static int chg_set_charger(struct power_supply *chg_psy, int fv_uv, int cc_max)
 {
 	int rc;
@@ -822,25 +822,32 @@ static int chg_work_batt_roundtrip(const union gbms_charger_state *chg_state,
 	int rc;
 
 	rc = GPSY_SET_INT64_PROP(bat_psy,
-			POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
-			chg_state->v);
+				 POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
+				 chg_state->v);
 	if (rc < 0) {
 		pr_err("MSC_CHG error cannot set CHARGE_CHARGER_STATE rc=%d\n",
 		       rc);
 		return -EINVAL;
 	}
 
+	/* battery can return negative values for cc_max and fv_uv. */
 	*cc_max = GPSY_GET_INT_PROP(bat_psy,
 				    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 				    &rc);
-	if (rc < 0)
+	if (rc < 0) {
+		pr_err("MSC_CHG error reading cc_max (%d)\n", rc);
 		return -EIO;
+	}
+
+	/* ASSERT: (chg_state.f.flags&GBMS_CS_FLAG_DONE) && cc_max == 0 */
 
 	*fv_uv = GPSY_GET_INT_PROP(bat_psy,
 				   POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
 				   &rc);
-	if (rc < 0)
+	if (rc < 0) {
+		pr_err("MSC_CHG error reading fv_uv (%d)\n", rc);
 		return -EIO;
+	}
 
 	return 0;
 }
@@ -883,6 +890,7 @@ static void chg_work_adapter_details(union gbms_ce_adapter_details *ad,
 		(void)info_usb_state(ad, chg_drv->usb_psy, chg_drv->tcpm_psy);
 }
 
+/* not executed when battery is NOT present */
 static int chg_work_roundtrip(struct chg_drv *chg_drv)
 {
 	int fv_uv = -1, cc_max = -1, update_interval, rc;
@@ -901,10 +909,14 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 	if (rc < 0)
 		return rc;
 
-	/* sanity/termination/tolerance */
-	if (fv_uv == -1)
+	/* on fv_uv < 0 (eg JEITA tripped) in the middle of charging keep
+	 * charging voltage steady. fv_uv will get the max value (if set in
+	 * device tree) if routtrip return a negative value on connect.
+	 * Sanity check on current make sure that cc_max doesn't jump to max.
+	 */
+	if (fv_uv < 0)
 		fv_uv = chg_drv->fv_uv;
-	if  (cc_max == -1)
+	if  (cc_max < 0)
 		cc_max = chg_drv->cc_max;
 
 	/* NOTE: battery has already voted on these with MSC_LOGIC */
@@ -913,7 +925,11 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER,
 			(chg_drv->user_cc_max == -1) && (cc_max >= 0), cc_max);
 
-	/* update_interval==0 means stop charging */
+	/* NOTE: could use fv_uv<0 to enable/disable a safe charge voltage
+	 * NOTE: could use cc_max<0 to enable/disable a safe charge current
+	 */
+
+	/* update_interval<=0 means stop charging */
 	update_interval = chg_work_next_interval(chg_drv, &chg_state);
 	if (update_interval == 0)
 		return 0;
@@ -936,6 +952,7 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 	return update_interval;
 }
 
+/* No op on battery not present */
 static void chg_work(struct work_struct *work)
 {
 	struct chg_drv *chg_drv =
@@ -1138,13 +1155,18 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	else if (chg_drv->pps_cc_tolerance_pct > PPS_CC_TOLERANCE_PCT_MAX)
 		chg_drv->pps_cc_tolerance_pct = PPS_CC_TOLERANCE_PCT_MAX;
 
-	/* max/default charging voltage and current */
+	/* max charging current. This will be programmed to the charger when
+	 * there is no charge table.
+	 */
 	ret = of_property_read_u32(node, "google,fcc-max-ua", &temp);
 	if (ret < 0)
 		chg_drv->batt_profile_fcc_ua = -EINVAL;
 	else
 		chg_drv->batt_profile_fcc_ua = temp;
 
+	/* max and default charging voltage: this is what will be programmed to
+	 * the charger when fv_uv is invalid.
+	 */
 	ret = of_property_read_u32(node, "google,fv-max-uv", &temp);
 	if (ret < 0)
 		chg_drv->batt_profile_fv_uv = -EINVAL;
@@ -1255,7 +1277,7 @@ static int chg_vote_input_suspend(struct chg_drv *chg_drv,
 	if (chg_find_votables(chg_drv) < 0)
 		return -EINVAL;
 
-	rc = vote(chg_drv->usb_icl_votable, USER_VOTER, suspend, 0);
+	rc = vote(chg_drv->usb_icl_votable, voter, suspend, 0);
 	if (rc < 0) {
 		dev_err(chg_drv->device, "Couldn't vote to %s USB rc=%d\n",
 			suspend ? "suspend" : "resume", rc);
@@ -1598,6 +1620,7 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 		debugfs_create_file("pps_cc_tolerance", 0600, de,
 				   chg_drv, &debug_pps_cc_tolerance_fops);
 
+
 		if (chg_drv->enable_user_fcc_fv) {
 			debugfs_create_file("fv_uv", 0644, de,
 					   chg_drv, &fv_uv_fops);
@@ -1698,15 +1721,23 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 {
 	struct pd_pps_data *pps = &chg_drv->pps_data;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
+	const uint8_t flags = chg_drv->pps_data.chg_flags;
 	int ret = 0, ibatt, vbatt, ioerr;
 	unsigned long exp_mw;
-	uint8_t flags = chg_drv->pps_data.chg_flags;
 
 	/* TODO: Now we only need to adjust the pps in CC state.
 	 * Consider CV state in the future.
 	 */
-	if (!(flags & GBMS_CS_FLAG_CC))
+	if (!(flags & GBMS_CS_FLAG_CC)) {
+		logbuffer_log(pps->log, "flags=%x", flags);
 		return 0;
+	}
+
+	/* TODO: policy for negative/invalid targets? */
+	if (cc_max <= 0) {
+		logbuffer_log(pps->log, "cc_max=%d", cc_max);
+		return 0;
+	}
 
 	ibatt = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW,
 					   &ioerr);
@@ -1716,9 +1747,6 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 		logbuffer_log(pps->log,"Failed to get ibatt and vbatt");
 		return -EIO;
 	}
-
-	if (vbatt < 0 || cc_max < 0)
-		return 0;
 
 	/* TODO: should we compensate for the round down here? */
 	exp_mw = (unsigned long)vbatt * (unsigned long)cc_max * 1.1 /
@@ -1786,10 +1814,18 @@ static int msc_update_charger_cb(struct votable *votable,
 	if (update_interval <= 0)
 		goto msc_done;
 
-	/* a negative value will skip the update and reschedule. PPS might
-	 * drop */
+	/* = fv_uv will be at last charger tier in RL, last tier before JEITA
+	 *   when JEITA hits, the default (max) value when temperature fall
+	 *   outside JEITA limits on connect or negative when a value is not
+	 *   specified in device tree. Setting max on JEITA violation is not
+	 *   a problem because HW wil set the charge current to 0, the charger
+	 *   driver does sanity checking as well (but we should not rely on it)
+	 * = cc_max should not be negative here and is 0 on RL and on JEITA.
+	 */
 	fv_uv = get_effective_result_locked(chg_drv->msc_fv_votable);
 	cc_max = get_effective_result_locked(chg_drv->msc_fcc_votable);
+
+	/* invalid values will cause the adapter to exit PPS */
 	if (cc_max < 0 || fv_uv < 0) {
 		update_interval = CHG_WORK_ERROR_RETRY_MS;
 		goto msc_reschedule;
@@ -1799,6 +1835,9 @@ static int msc_update_charger_cb(struct votable *votable,
 		int pps_update_interval = update_interval;
 		struct pd_pps_data *pps = &chg_drv->pps_data;
 
+		/* need to update (ping) the adapter even when the policy
+		 * return an error or the adapter will revert back to PD.
+		 */
 		rc = pps_policy(chg_drv, fv_uv, cc_max);
 		if (rc == -ECANCELED)
 			goto msc_done;
@@ -2383,8 +2422,8 @@ static int google_charger_probe(struct platform_device *pdev)
 			return -ENOMEM;
 	}
 
-	/* user fcc, fv uv will be bound by battery charge profile, override
-	 * setting google,battery-roundtrip = 0 in device tree.
+	/* user fcc, fv uv are bound by battery votes.
+	 * set google,disable_votes in battery node to disable battery votes.
 	 */
 	chg_drv->enable_user_fcc_fv =
 		of_property_read_bool(pdev->dev.of_node,

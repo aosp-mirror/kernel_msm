@@ -55,9 +55,12 @@
 #define DEFAULT_CHG_STATS_MIN_DELTA_SOC		15
 
 /* Voters */
-#define MSC_LOGIC_VOTER		"msc_logic"
+#define MSC_LOGIC_VOTER	"msc_logic"
+#define SW_JEITA_VOTER	"sw_jeita"
+#define RL_STATE_VOTER	"rl_state"
 
 #define UICURVE_MAX	3
+
 
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
 #error "GBMS_CCBIN_BUCKET_COUNT needs to be a value from 1-100"
@@ -1027,11 +1030,12 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 }
 
 /* software JEITA, disable charging when outside the charge table.
+ * NOTE: ->jeita_stop_charging is either -1 (init or disable) or 0
  * TODO: need to be able to disable (leave to HW)
  */
-static bool msc_logic_soft_jeita(struct batt_drv *batt_drv, int temp)
+static bool msc_logic_soft_jeita(const struct batt_drv *batt_drv, int temp)
 {
-	struct gbms_chg_profile *profile = &batt_drv->chg_profile;
+	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 
 	if (temp < profile->temp_limits[0] ||
 	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
@@ -1041,18 +1045,12 @@ static bool msc_logic_soft_jeita(struct batt_drv *batt_drv, int temp)
 		} else if (batt_drv->jeita_stop_charging == 0) {
 			pr_info("MSC_JEITA temp=%d off limits, disabling charging\n",
 				temp);
-			batt_reset_chg_drv_state(batt_drv);
 		}
 
-		return 1;
+		return true;
 	}
 
-	if (batt_drv->jeita_stop_charging) {
-		pr_info("MSC_JEITA temp=%d ok, enabling charging\n", temp);
-		batt_drv->jeita_stop_charging = false;
-	}
-
-	return 0;
+	return false;
 }
 
 /* TODO: only change batt_drv->checked_ov_cnt, an */
@@ -1224,13 +1222,22 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	const time_t now = get_boot_sec();
 	time_t elap = now - batt_drv->ce_data.last_update;
 
-	temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP,&ioerr);
+	temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP, &ioerr);
 	if (ioerr < 0)
 		return -EIO;
 
+	/* driver state is (was) reset when we hit the SW jeita limit */
 	sw_jeita = msc_logic_soft_jeita(batt_drv, temp);
-	if (sw_jeita)
+	if (sw_jeita) {
+		/* reset batt_drv->jeita_stop_charging to -1 */
+		if (batt_drv->jeita_stop_charging == 0)
+			batt_reset_chg_drv_state(batt_drv);
+
 		return 0;
+	} else if (batt_drv->jeita_stop_charging) {
+		pr_info("MSC_JEITA temp=%d ok, enabling charging\n", temp);
+		batt_drv->jeita_stop_charging = 0;
+	}
 
 	ibatt = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW,
 					  &ioerr);
@@ -1473,20 +1480,23 @@ static int msc_logic(struct batt_drv *batt_drv)
 	}
 
 	err = msc_logic_internal(batt_drv);
-	if (err == 0) {
-		pr_info("MSC_DOUT fv_uv=%d cc_max=%d update_interval=%d\n",
-			batt_drv->fv_uv,
-			batt_drv->cc_max,
-			batt_drv->msc_update_interval);
-	} else {
+	if (err < 0) {
 		/* NOTE: google charger will poll again. */
 		batt_drv->msc_update_interval = -1;
+
 		pr_err("MSC_DOUT ERROR=%d fv_uv=%d cc_max=%d update_interval=%d\n",
 			err, batt_drv->fv_uv, batt_drv->cc_max,
 			batt_drv->msc_update_interval);
+
+		goto msc_logic_exit;
 	}
 
 msc_logic_done:
+	/* set ->cc_max = 0 on RL and SW_JEITA */
+	if ((batt_drv->ssoc_state.rl_status == BATT_RL_STATUS_DISCHARGE) ||
+	    batt_drv->jeita_stop_charging)
+		batt_drv->cc_max = 0;
+
 	pr_info("%s fv_uv=%d cc_max=%d update_interval=%d\n",
 		(batt_drv->disable_votes) ? "MSC_DOUT" : "MSC_VOTE",
 		batt_drv->fv_uv,
@@ -1512,12 +1522,28 @@ msc_logic_done:
 		vote(batt_drv->fv_votable, MSC_LOGIC_VOTER,
 			!batt_drv->disable_votes && (batt_drv->fv_uv != -1),
 			batt_drv->fv_uv);
+
 	if (!batt_drv->fcc_votable)
 		batt_drv->fcc_votable = find_votable(VOTABLE_MSC_FCC);
-	if (batt_drv->fcc_votable)
+	if (batt_drv->fcc_votable) {
+		enum batt_rl_status rl_status = batt_drv->ssoc_state.rl_status;
+
+		/* while in RL => ->cc_max != -1 && ->fv_uv != -1 */
+		vote(batt_drv->fcc_votable, RL_STATE_VOTER,
+			!batt_drv->disable_votes &&
+			(rl_status == BATT_RL_STATUS_DISCHARGE),
+			0);
+
+		/* jeita_stop_charging != 0 => ->fv_uv = -1 && cc_max == -1 */
+		vote(batt_drv->fcc_votable, SW_JEITA_VOTER,
+			!batt_drv->disable_votes &&
+			(batt_drv->jeita_stop_charging != 0),
+			0);
+
 		vote(batt_drv->fcc_votable, MSC_LOGIC_VOTER,
 			!batt_drv->disable_votes && (batt_drv->cc_max != -1),
 			batt_drv->cc_max);
+	}
 
 	if (!batt_drv->msc_interval_votable)
 		batt_drv->msc_interval_votable =
@@ -1801,6 +1827,13 @@ static int debug_set_ssoc_rls(void *data, u64 val)
 
 	mutex_lock(&batt_drv->chg_lock);
 	batt_drv->ssoc_state.rl_status = val;
+	if (!batt_drv->fcc_votable)
+		batt_drv->fcc_votable = find_votable(VOTABLE_MSC_FCC);
+	if (batt_drv->fcc_votable)
+		vote(batt_drv->fcc_votable, RL_STATE_VOTER,
+			batt_drv->ssoc_state.rl_status ==
+						BATT_RL_STATUS_DISCHARGE,
+			0);
 	mutex_unlock(&batt_drv->chg_lock);
 
 	return 0;
@@ -1983,7 +2016,6 @@ static ssize_t batt_show_chg_details(struct device *dev,
 
 static const DEVICE_ATTR(charge_details, 0444, batt_show_chg_details,
 					       NULL);
-
 
 static int batt_init_fs(struct batt_drv *batt_drv)
 {
@@ -2233,12 +2265,7 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 		mutex_lock(&batt_drv->chg_lock);
-		if (batt_drv->jeita_stop_charging ||
-		    ssoc_state->rl_status == BATT_RL_STATUS_DISCHARGE) {
-			val->intval = 0;
-		} else {
-			val->intval = batt_drv->cc_max;
-		}
+		val->intval = batt_drv->cc_max;
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
@@ -2366,7 +2393,6 @@ static int gbatt_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE:
 		mutex_lock(&batt_drv->chg_lock);
 		batt_drv->chg_state.v = val->int64val;
-
 		ret = msc_logic(batt_drv);
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
