@@ -1,3 +1,4 @@
+DEFCONFIG=bonito_defconfig
 KERNEL_DIR=private/msm-google
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.common.clang
 PRE_DEFCONFIG_CMDS="pre_defconfig"

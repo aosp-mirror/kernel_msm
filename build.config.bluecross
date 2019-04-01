@@ -1,0 +1,7 @@
+DEFCONFIG=b1c1_defconfig
+KERNEL_DIR=private/msm-google
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common.clang
+POST_DEFCONFIG_CMDS="check_defconfig"
+UNSTRIPPED_MODULES="
+wlan.ko
+"
