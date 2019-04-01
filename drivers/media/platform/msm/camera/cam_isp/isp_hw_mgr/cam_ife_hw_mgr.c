@@ -1260,8 +1260,11 @@ static int cam_ife_mgr_acquire_cid_res(
 	csid_acquire.res_id =  path_res_id;
 	CAM_DBG(CAM_ISP, "path_res_id %d", path_res_id);
 
-	if (in_port->num_out_res)
+	if (in_port->num_out_res) {
 		out_port = &(in_port->data[0]);
+		CAM_DBG(CAM_ISP, "Secure Mode: %d",
+			out_port->secure_mode);
+	}
 
 	/* Try acquiring CID resource from previously acquired HW */
 	list_for_each_entry(cid_res_iterator, &ife_ctx->res_list_ife_cid,
@@ -1271,10 +1274,15 @@ static int cam_ife_mgr_acquire_cid_res(
 			if (!cid_res_iterator->hw_res[i])
 				continue;
 
-			if (cid_res_iterator->is_secure == 1 ||
+			if (in_port->num_out_res &&
+				((cid_res_iterator->is_secure == 1 &&
+				out_port->secure_mode == 0) ||
 				(cid_res_iterator->is_secure == 0 &&
-				in_port->num_out_res &&
-				out_port->secure_mode == 1))
+				out_port->secure_mode == 1)))
+				continue;
+
+			if (!in_port->num_out_res &&
+				cid_res_iterator->is_secure == 1)
 				continue;
 
 			hw_intf = cid_res_iterator->hw_res[i]->hw_intf;
