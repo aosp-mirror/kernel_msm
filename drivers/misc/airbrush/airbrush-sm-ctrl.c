@@ -483,7 +483,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	switch (blk->name) {
 	case BLK_IPU:
 		ab_sm_start_ts(sc, AB_SM_TS_IPU_CLK);
-		if (clk_status == off || old_freq == new_freq) {
+		if (old_freq == new_freq) {
 			ab_sm_record_ts(sc, AB_SM_TS_IPU_CLK);
 			break;
 		}
@@ -506,7 +506,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 
 	case BLK_TPU:
 		ab_sm_start_ts(sc, AB_SM_TS_TPU_CLK);
-		if (clk_status == off || old_freq == new_freq) {
+		if (old_freq == new_freq) {
 			ab_sm_record_ts(sc, AB_SM_TS_TPU_CLK);
 			break;
 		}
