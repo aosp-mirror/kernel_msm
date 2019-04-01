@@ -290,7 +290,153 @@
 #define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_REG_POS 0
 #define IAXXX_PWR_MGMT_PWR_MGMT_STATS_SIZE_REG_SIZE 32
 
+/*** PWR_MGMT_EFUSE_BOOT_0 (0x0e000030) ***/
+/*
+ * The EFUSE_BOOT0 register mirrors the contents of the eFuse byte0 - byte3
+ * which is programmed during the manufacturing test process. These are
+ * mirrored during Power Manager Initialization.
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_ADDR (0x0e000030)
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_MASK_VAL 0xffffffff
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_RMASK_VAL 0xffffffff
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_WMASK_VAL 0x00000000
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_RESET_VAL 0x00000000
+
+/*
+ * Package configuration information. Value of EFUSE[0][3:0]
+ * It gives 16 different package options for the die. Current associations:
+ *  0x0: eS904
+ *  0x8: eS954
+ *  0x9: eS964
+ *  Other: To be determined
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_PKG_CFG_MASK 0x0000000f
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_PKG_CFG_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_PKG_CFG_POS 0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_PKG_CFG_SIZE 4
+
+/*
+ * ROM revision number. Value of EFUSE[0][7:4]
+ * Revision code read from address in the instruction ROM at reset.
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_ROM_REV_MASK 0x000000f0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_ROM_REV_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_ROM_REV_POS 4
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_ROM_REV_SIZE 4
+
+/*
+ * Layout revision number. Value of EFUSE[1][3:0]
+ * Die layout revision, incremented for each mask update after initial
+ * tapeout. Not incremented for ROM metal changes. Incremented for metal
+ * changes to non-ROM parts of the die.
+ *   0x0: First revision.
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_MASK 0x00000f00
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_POS 8
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_SIZE 4
+
+/*
+ * Manufacturing information. Value of
+ * {EFUSE[3][7:0],EFUSE[2][7:0],EFUSE[1][7:4]}
+ * [15:12] (EFUSE[1][7:4]):
+ *   0: Normal SBL boot (check all four interfaces)
+ *   1: Check I2C0
+ *   2: Check SPI1
+ *   4: Check UART0
+ *   8: Check SLIMbus
+ *   F: Check all (same as 0)
+ * [16] (EFUSE[2][0]):
+ *   0: HMD HiFi 3 enabled
+ *   1: HMD HiFi 3 disabled
+ * [17] (EFUSE[2][1]):
+ *   0: Int OSC TRIM not programmed
+ *   1: Int OSC TRIM programmed
+ * [18] (EFUSE[2][2]):
+ *   0: JTAG Enabled
+ *   1: JTAG Disabled
+ * [19] (EFUSE[2][3]):
+ *   RESERVED
+ * [20] (EFUSE[2][4]):
+ *   0: CM4 enabled
+ *   1: CM4 disabled
+ * [21] (EFUSE[2][5]):
+ *   0: HMD enabled
+ *   1: HMD disabled
+ * [22] (EFUSE[2][6]):
+ *   0: DMX enabled
+ *   1: DMX disabled
+ * [24:23] (EFUSE[3][0], EFUSE[2][7]):
+ *   0: Dont boot from flash
+ *   1: Boot from external flash
+ *   2: Invalid
+ *   3: Dont boot from flash
+ * [31:25] (EFUSE[3][7:1]):
+ *   Oscillator calibration
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_MFG_MASK 0xfffff000
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_MFG_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_MFG_POS 12
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_0_MFG_SIZE 20
+
+/*** PWR_MGMT_EFUSE_BOOT_1 (0x0e000034) ***/
+/*
+ * The EFUSE_BOOT1 register mirrors the contents of the eFuse byte4 - byte5
+ * which is programmed during the manufacturing test process. These are
+ * mirrored during Power Manager Initialization.
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_ADDR (0x0e000034)
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_MASK_VAL 0x0000778f
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_RMASK_VAL 0x0000778f
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_WMASK_VAL 0x00000000
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_RESET_VAL 0x00000000
+
+/*
+ * LDO BG trim value, value to be copied to PWRC:BG.TRIM[3:0] register field
+ * if eFuse LDO_BG_PG is set to 1
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_DATA_MASK 0x0000000f
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_DATA_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_DATA_POS 0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_DATA_SIZE 4
+
+/*
+ * LDO Bandgap trim programming status:
+ *   0: LDO_BG_TRIM_DATA, LDO_0_TRIM_DATA, and LDO_1_TRIM_DATA fields are not
+ * valid, no further action to be taken
+ *   1: LDO_BG_TRIM_DATA is valid and Software should copy it to the register
+ * PWRC:AUD_BG[8:5].P4REF_TRIM[3:0];
+ * LDO_0_TRIM_DATA is valid and Software should copy it to the register
+ * PWRC:LDO_0[3:1].VOLTAGE_CALIBRATION[2:0];
+ * LDO_1_TRIM_DATA is valid and Software should copy it to the register
+ * PWRC:LDO_1[3:1].VOLTAGE_CALIBRATION[2:0].
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_MASK 0x00000080
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_POS 7
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_SIZE 1
+
+/*
+ * LDO 0 trim value, value to be copied to
+ * PWRC:LDO_0[3:1].VOLTAGE_CALIBRATION[2:0] register
+ * if eFuse LDO_BG_PG is set to 1.
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_0_TRIM_DATA_MASK 0x00000700
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_0_TRIM_DATA_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_0_TRIM_DATA_POS 8
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_0_TRIM_DATA_SIZE 3
+
+/*
+ * LDO 1 trim value, value to be copied to
+ * PWRC:LDO_1[3:1].VOLTAGE_CALIBRATION[2:0] register
+ * if eFuse LDO_BG_PG is set to 1.
+ */
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_MASK 0x00007000
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_RESET_VAL 0x0
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_POS 12
+#define IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_SIZE 3
+
 /* Number of registers in the module */
-#define IAXXX_PWR_MGMT_REG_NUM 12
+#define IAXXX_PWR_MGMT_REG_NUM 14
 
 #endif /* __IAXXX_REGISTER_DEFS_PWR_MGMT_H__ */
