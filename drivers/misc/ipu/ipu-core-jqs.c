@@ -263,12 +263,17 @@ static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 	ipu_core_writel(bus, (uint32_t)boot_ab_paddr, IPU_CSR_AON_OFFSET +
 			JQS_BOOT_ADDR);
 
-	/* Pre-power the I/O block and then enable power */
-	ipu_core_writeq(bus, IO_POWER_ON_N_MAIN_MASK, IPU_CSR_AON_OFFSET +
-			IO_POWER_ON_N);
-	ipu_core_writeq(bus, 0, IPU_CSR_AON_OFFSET + IO_POWER_ON_N);
+	/* If the I/O block is already powered then skip the pre-power, power
+	 * on sequence.
+	 */
+	if (ipu_core_readq(bus, IPU_CSR_AON_OFFSET + IO_POWER_ON_N) != 0) {
+		/* Pre-power the I/O block and then enable power */
+		ipu_core_writeq(bus, IO_POWER_ON_N_MAIN_MASK,
+				IPU_CSR_AON_OFFSET + IO_POWER_ON_N);
+		ipu_core_writeq(bus, 0, IPU_CSR_AON_OFFSET + IO_POWER_ON_N);
 
-	udelay(IO_POWER_RAMP_TIME);
+		udelay(IO_POWER_RAMP_TIME);
+	}
 
 	/* We need to run the clock to the I/O block while it is being powered
 	 * on briefly so that all the synchronizers clock through their data and
@@ -325,9 +330,9 @@ static void ipu_core_jqs_power_disable(struct paintbox_bus *bus)
 
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + JQS_CONTROL);
 
-	/* Note that due to a bug in silicon isolation for I/O block needs to be
-	 * left off. b/124389401
-	 */
+	/* Turn on isolation for I/O block */
+	ipu_core_writel(bus, IO_ISO_ON_VAL_MASK, IPU_CSR_AON_OFFSET +
+		IO_ISO_ON);
 
 	/* Turn off clocks to I/O block */
 	ipu_core_writel(bus, 0, IPU_CSR_AON_OFFSET + IPU_IO_SWITCHED_CLK_EN);
