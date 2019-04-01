@@ -4376,7 +4376,6 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 		}
 
 		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
-
 		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
 			cs40l2x_wl_relax(cs40l2x);
 		goto err_mutex;
@@ -4702,7 +4701,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				CS40L2X_FORCE_SPK_FREE);
 		if (ret) {
 			dev_err(dev, "Failed to free amplifier outputs\n");
-			goto err_mutex;
+			goto err_relax;
 		}
 	}
 
@@ -4718,7 +4717,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				&cs40l2x->peak_gpio1_enable);
 		if (ret) {
 			dev_err(dev, "Failed to read GPIO1 configuration\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = regmap_write(regmap,
@@ -4728,13 +4727,13 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				CS40L2X_GPIO1_DISABLED);
 		if (ret) {
 			dev_err(dev, "Failed to disable GPIO1\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGER_MS,
 				CS40L2X_INDEX_VIBE, CS40L2X_MBOX_TRIGGERRESET);
 		if (ret)
-			goto err_mutex;
+			break;
 
 		msleep(CS40L2X_PEAK_DELAY_MS);
 
@@ -4745,7 +4744,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				CS40L2X_VMON_NEGFS);
 		if (ret) {
 			dev_err(dev, "Failed to reset maximum VMON\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = regmap_write(regmap,
@@ -4755,7 +4754,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				CS40L2X_VMON_POSFS);
 		if (ret) {
 			dev_err(dev, "Failed to reset minimum VMON\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = regmap_write(regmap,
@@ -4765,7 +4764,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				CS40L2X_IMON_NEGFS);
 		if (ret) {
 			dev_err(dev, "Failed to reset maximum IMON\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = regmap_write(regmap,
@@ -4779,13 +4778,13 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 
 	case CS40L2X_INDEX_VIBE:
 	case CS40L2X_INDEX_CONT_MIN ... CS40L2X_INDEX_CONT_MAX:
-		cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGER_MS,
+		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGER_MS,
 				cs40l2x->cp_trailer_index & CS40L2X_INDEX_MASK,
 				CS40L2X_MBOX_TRIGGERRESET);
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
-		cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGERINDEX,
+		ret = cs40l2x_ack_write(cs40l2x, CS40L2X_MBOX_TRIGGERINDEX,
 				cs40l2x->cp_trailer_index,
 				CS40L2X_MBOX_TRIGGERRESET);
 		break;
@@ -4797,7 +4796,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				&cs40l2x->pbq_cp_dig_scale);
 		if (ret) {
 			dev_err(dev, "Failed to read digital scale\n");
-			goto err_mutex;
+			break;
 		}
 
 		cs40l2x->pbq_index = 0;
@@ -4819,13 +4818,13 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		ret = cs40l2x_dig_scale_get(cs40l2x, &cs40l2x->diag_dig_scale);
 		if (ret) {
 			dev_err(dev, "Failed to read digital scale\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = cs40l2x_dig_scale_set(cs40l2x, 0);
 		if (ret) {
 			dev_err(dev, "Failed to reset digital scale\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = regmap_write(regmap,
@@ -4835,13 +4834,13 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				0);
 		if (ret) {
 			dev_err(dev, "Failed to disable closed-loop mode\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = cs40l2x_diag_enable(cs40l2x, CS40L2X_F0_TRACKING_DIAG);
 		if (ret) {
 			dev_err(dev, "Failed to enable diagnostics tone\n");
-			goto err_mutex;
+			break;
 		}
 
 		msleep(CS40L2X_DIAG_STATE_DELAY_MS);
@@ -4853,7 +4852,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				1);
 		if (ret) {
 			dev_err(dev, "Failed to enable closed-loop mode\n");
-			goto err_mutex;
+			break;
 		}
 
 		cs40l2x->diag_state = CS40L2X_DIAG_STATE_RUN1;
@@ -4865,26 +4864,37 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		ret = cs40l2x_dig_scale_get(cs40l2x, &cs40l2x->diag_dig_scale);
 		if (ret) {
 			dev_err(dev, "Failed to read digital scale\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = cs40l2x_dig_scale_set(cs40l2x, 0);
 		if (ret) {
 			dev_err(dev, "Failed to reset digital scale\n");
-			goto err_mutex;
+			break;
 		}
 
 		ret = cs40l2x_diag_enable(cs40l2x, CS40L2X_F0_TRACKING_QEST);
 		if (ret) {
 			dev_err(dev, "Failed to enable diagnostics tone\n");
-			goto err_mutex;
+			break;
 		}
 
 		cs40l2x->diag_state = CS40L2X_DIAG_STATE_RUN2;
 		break;
 
 	default:
+		ret = -EINVAL;
 		dev_err(dev, "Invalid wavetable index\n");
+	}
+
+err_relax:
+	if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
+		goto err_mutex;
+
+	if (ret) {
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
+			cs40l2x_wl_relax(cs40l2x);
 	}
 
 err_mutex:
@@ -4925,6 +4935,9 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		if (cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED)
 			break;
 
+		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
+			break;
+
 		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
 		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
 			cs40l2x_wl_relax(cs40l2x);
@@ -4956,6 +4969,9 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		ret = cs40l2x_dig_scale_set(cs40l2x, cs40l2x->diag_dig_scale);
 		if (ret)
 			dev_err(dev, "Failed to restore digital scale\n");
+
+		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
+			break;
 
 		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
 		cs40l2x_wl_relax(cs40l2x);
