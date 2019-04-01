@@ -828,8 +828,8 @@ static int iaxxx_irq_init(struct iaxxx_priv *priv)
 		return -ENXIO;
 
 	rc = request_threaded_irq(gpio_to_irq(priv->event_gpio), NULL,
-		iaxxx_event_isr, IRQF_TRIGGER_RISING | IRQF_ONESHOT |
-		IRQF_NO_SUSPEND, "iaxxx-event-irq", priv);
+		iaxxx_event_isr, IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+		"iaxxx-event-irq", priv);
 	if (rc)
 		return rc;
 	rc = enable_irq_wake(gpio_to_irq(priv->event_gpio));
