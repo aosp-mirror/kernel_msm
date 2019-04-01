@@ -215,10 +215,6 @@ struct oscar_dev {
 };
 
 
-/* Act as if only GCB is instantiated. */
-static int bypass_top_level;
-module_param(bypass_top_level, int, 0644);
-
 static bool check_dev_avail(struct oscar_dev *oscar_dev)
 {
 	bool ret;
@@ -381,49 +377,6 @@ put_fd:
 	return ERR_PTR(ret);
 }
 
-static int oscar_abc_alloc_buffer(struct oscar_dev *oscar_dev,
-				  struct oscar_abdram_alloc_ioctl __user *argp)
-{
-	struct oscar_abdram_alloc_ioctl ibuf;
-	struct dma_buf *abc_dma_buf;
-	int fd;
-
-	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
-		return -EFAULT;
-
-	abc_dma_buf = ab_dram_alloc_dma_buf_kernel((size_t)ibuf.size);
-	if (IS_ERR(abc_dma_buf))
-		return PTR_ERR(abc_dma_buf);
-
-	fd = dma_buf_fd(abc_dma_buf, O_CLOEXEC);
-	if (fd < 0)
-		ab_dram_free_dma_buf_kernel(abc_dma_buf);
-
-	return fd;
-}
-
-static int oscar_abc_sync_buffer(struct oscar_abdram_sync_ioctl __user *argp)
-{
-	struct oscar_abdram_sync_ioctl ibuf;
-	struct abc_pcie_kernel_dma_desc desc;
-	int ret;
-
-	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
-		return -EFAULT;
-
-	desc.local_buf_kind = DMA_BUFFER_KIND_USER;
-	desc.local_buf = (void *)ibuf.host_address;
-	desc.remote_buf_kind = DMA_BUFFER_KIND_DMA_BUF;
-	desc.remote_dma_buf_fd = ibuf.fd;
-	desc.remote_dma_buf_off = 0;
-	desc.size = ibuf.len;
-	desc.dir = ibuf.cmd == OSCAR_SYNC_FROM_BUFFER ?
-		DMA_FROM_DEVICE : DMA_TO_DEVICE;
-	ret = abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
-
-	return ret;
-}
-
 static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 				struct oscar_abdram_map_ioctl __user *argp)
 {
@@ -559,45 +512,6 @@ oscar_abc_unmap_abdram(struct oscar_dev *oscar_dev,
 	return 0;
 }
 
-/* Deallocate an AB-DRAM buffer that hasn't been mapped to TPU. */
-static int oscar_abc_dealloc_unmapped_dram(int dma_buf_fd)
-{
-	struct dma_buf *abc_dma_buf;
-	int ret;
-
-	abc_dma_buf = dma_buf_get(dma_buf_fd);
-	if (IS_ERR(abc_dma_buf))
-		return PTR_ERR(abc_dma_buf);
-
-	if (!is_ab_dram_dma_buf(abc_dma_buf)) {
-		ret = -EINVAL;
-		goto put_fd;
-	}
-
-	ab_dram_free_dma_buf_kernel(abc_dma_buf);
-	ret = 0;
-
-put_fd:
-	dma_buf_put(abc_dma_buf);
-	return ret;
-}
-
-static int oscar_abc_dealloc_buffer(struct oscar_dev *oscar_dev, int dma_buf_fd)
-{
-	struct abc_buffer *abc_buffer;
-
-	mutex_lock(&oscar_dev->abc_buffers_lock);
-	abc_buffer = abc_get_buffer_locked(oscar_dev, dma_buf_fd);
-	if (!abc_buffer) {
-		mutex_unlock(&oscar_dev->abc_buffers_lock);
-		return oscar_abc_dealloc_unmapped_dram(dma_buf_fd);
-	}
-	mutex_lock(&abc_buffer->mapping_lock);
-	oscar_abc_release_buffer(abc_buffer);
-	mutex_unlock(&oscar_dev->abc_buffers_lock);
-	return 0;
-}
-
 static void *oscar_abc_subtable_alloc(struct gasket_dev *gasket_dev,
 				      struct gasket_dev_subtable *devsubtable)
 {
@@ -724,9 +638,6 @@ static int oscar_enter_reset(struct gasket_dev *gasket_dev)
 		oscar_abc_release_buffer(abc_buffer);
 	}
 	mutex_unlock(&oscar_dev->abc_buffers_lock);
-
-	if (bypass_top_level)
-		return 0;
 
 	if (!check_dev_avail(oscar_dev))
 		return -EIO;
@@ -861,9 +772,6 @@ static int oscar_quit_reset(struct gasket_dev *gasket_dev)
 {
 	uint64_t reg;
 
-	if (bypass_top_level)
-		return 0;
-
 	/* 1. Enable logic shutdown. */
 	/* 1a. Disable first pass switches, wait until ack matches. */
 	gasket_dev_write_64(gasket_dev, 0, OSCAR_BAR_INDEX,
@@ -990,30 +898,10 @@ static int oscar_reset(struct gasket_dev *gasket_dev)
 {
 	int ret = 0;
 
-	if (bypass_top_level)
-		return 0;
-
 	ret = oscar_enter_reset(gasket_dev);
 	if (ret < 0)
 		return ret;
 	return oscar_quit_reset(gasket_dev);
-}
-
-/* Gate or un-gate Oscar clock. */
-static long oscar_clock_gating(struct gasket_dev *gasket_dev,
-			       struct oscar_gate_clock_ioctl __user *argp)
-{
-	struct oscar_gate_clock_ioctl ibuf;
-
-	if (bypass_top_level)
-		return 0;
-
-	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
-		return -EFAULT;
-
-	dev_dbg(gasket_dev->dev, "%s %llu\n", __func__, ibuf.enable);
-	/* TODO: implement or remove this ioctl */
-	return 0;
 }
 
 static uint oscar_ioctl_check_permissions(struct file *filp, uint cmd)
@@ -1026,29 +914,17 @@ static long oscar_ioctl(struct file *filp, uint cmd, void __user *argp)
 	struct gasket_dev *gasket_dev = filp->private_data;
 	struct oscar_dev *oscar_dev =
 		platform_get_drvdata(gasket_dev->platform_dev);
-	struct oscar_abdram_alloc_ioctl __user *abdram_alloc;
-	struct oscar_abdram_sync_ioctl __user *abdram_sync;
 	struct oscar_abdram_map_ioctl __user *abdram_map;
 
 	if (!oscar_ioctl_check_permissions(filp, cmd))
 		return -EPERM;
 
 	switch (cmd) {
-	case OSCAR_IOCTL_GATE_CLOCK:
-		return oscar_clock_gating(gasket_dev, argp);
-	case OSCAR_IOCTL_ABC_ALLOC_BUFFER:
-		abdram_alloc = (struct oscar_abdram_alloc_ioctl *)argp;
-		return oscar_abc_alloc_buffer(oscar_dev, abdram_alloc);
-	case OSCAR_IOCTL_ABC_SYNC_BUFFER:
-		abdram_sync = (struct oscar_abdram_sync_ioctl *)argp;
-		return oscar_abc_sync_buffer(abdram_sync);
 	case OSCAR_IOCTL_ABC_MAP_BUFFER:
 		abdram_map = (struct oscar_abdram_map_ioctl *)argp;
 		return oscar_abc_map_buffer(oscar_dev, abdram_map);
 	case OSCAR_IOCTL_ABC_UNMAP_BUFFER:
 		return oscar_abc_unmap_buffer_compat(oscar_dev, (int)argp);
-	case OSCAR_IOCTL_ABC_DEALLOC_BUFFER:
-		return oscar_abc_dealloc_buffer(oscar_dev, (int)argp);
 	case OSCAR_IOCTL_ABC_UNMAP_ABDRAM:
 		abdram_map = (struct oscar_abdram_map_ioctl *)argp;
 		return oscar_abc_unmap_abdram(oscar_dev, abdram_map);
