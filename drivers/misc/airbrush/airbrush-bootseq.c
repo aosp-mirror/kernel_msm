@@ -356,7 +356,12 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	}
 
 	ab_sm_start_ts(ab_ctx, AB_SM_TS_DDR_INIT);
-	ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
+	ret = ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
+	if (ret) {
+		dev_err(ab_ctx->dev, "ddr init failed\n");
+		pm_relax(ab_ctx->dev);
+		return ret;
+	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_INIT);
 
 	/*
