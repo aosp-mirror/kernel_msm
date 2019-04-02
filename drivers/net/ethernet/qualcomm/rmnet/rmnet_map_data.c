@@ -324,7 +324,7 @@ struct sk_buff *rmnet_map_deaggregate(struct sk_buff *skb,
 {
 	struct rmnet_map_header *maph;
 	struct sk_buff *skbn;
-	unsigned char *data = rmnet_map_data_ptr(skb);
+	unsigned char *data = rmnet_map_data_ptr(skb), *next_hdr = NULL;
 	u32 packet_len;
 
 	if (skb->len == 0)
@@ -336,8 +336,12 @@ struct sk_buff *rmnet_map_deaggregate(struct sk_buff *skb,
 	if (port->data_format & RMNET_FLAGS_INGRESS_MAP_CKSUMV4)
 		packet_len += sizeof(struct rmnet_map_dl_csum_trailer);
 	else if (port->data_format & RMNET_FLAGS_INGRESS_MAP_CKSUMV5) {
-		if (!maph->cd_bit)
+		if (!maph->cd_bit) {
 			packet_len += sizeof(struct rmnet_map_v5_csum_header);
+
+			/* Coalescing headers require MAPv5 */
+			next_hdr = data + sizeof(*maph);
+		}
 	}
 
 	if (((int)skb->len - (int)packet_len) < 0)
@@ -346,6 +350,11 @@ struct sk_buff *rmnet_map_deaggregate(struct sk_buff *skb,
 	/* Some hardware can send us empty frames. Catch them */
 	if (ntohs(maph->pkt_len) == 0)
 		return NULL;
+
+	if (next_hdr &&
+	    ((struct rmnet_map_v5_coal_header *)next_hdr)->header_type ==
+	     RMNET_MAP_HEADER_TYPE_COALESCING)
+		return skb;
 
 	if (skb_is_nonlinear(skb)) {
 		skb_frag_t *frag0 = skb_shinfo(skb)->frags;
@@ -1000,7 +1009,8 @@ static int rmnet_map_data_check_coal_header(struct sk_buff *skb,
 
 /* Process a QMAPv5 packet header */
 int rmnet_map_process_next_hdr_packet(struct sk_buff *skb,
-				      struct sk_buff_head *list)
+				      struct sk_buff_head *list,
+				      u16 len)
 {
 	struct rmnet_priv *priv = netdev_priv(skb->dev);
 	u64 nlo_err_mask;
@@ -1027,6 +1037,11 @@ int rmnet_map_process_next_hdr_packet(struct sk_buff *skb,
 		pskb_pull(skb,
 			  (sizeof(struct rmnet_map_header) +
 			   sizeof(struct rmnet_map_v5_csum_header)));
+
+		/* Remove padding only for csum offload packets.
+		 * Coalesced packets should never have padding.
+		 */
+		pskb_trim(skb, len);
 		__skb_queue_tail(list, skb);
 		break;
 	default:
@@ -1121,7 +1136,7 @@ new_packet:
 		 * sparse, don't aggregate. We will need to tune this later
 		 */
 		diff = timespec_sub(port->agg_last, last);
-		size = port->egress_agg_size - skb->len;
+		size = port->egress_agg_params.agg_size - skb->len;
 
 		if (diff.tv_sec > 0 || diff.tv_nsec > rmnet_agg_bypass_time ||
 		    size <= 0) {
@@ -1148,9 +1163,10 @@ new_packet:
 		goto schedule;
 	}
 	diff = timespec_sub(port->agg_last, port->agg_time);
+	size = port->egress_agg_params.agg_size - port->agg_skb->len;
 
-	if (skb->len > (port->egress_agg_size - port->agg_skb->len) ||
-	    port->agg_count >= port->egress_agg_count ||
+	if (skb->len > size ||
+	    port->agg_count >= port->egress_agg_params.agg_count ||
 	    diff.tv_sec > 0 || diff.tv_nsec > rmnet_agg_time_limit) {
 		agg_skb = port->agg_skb;
 		agg_count = port->agg_count;
@@ -1172,7 +1188,8 @@ new_packet:
 schedule:
 	if (port->agg_state != -EINPROGRESS) {
 		port->agg_state = -EINPROGRESS;
-		hrtimer_start(&port->hrtimer, ns_to_ktime(3000000),
+		hrtimer_start(&port->hrtimer,
+			      ns_to_ktime(port->egress_agg_params.agg_time),
 			      HRTIMER_MODE_REL);
 	}
 	spin_unlock_irqrestore(&port->agg_lock, flags);
@@ -1182,8 +1199,9 @@ void rmnet_map_tx_aggregate_init(struct rmnet_port *port)
 {
 	hrtimer_init(&port->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	port->hrtimer.function = rmnet_map_flush_tx_packet_queue;
-	port->egress_agg_size = 8192;
-	port->egress_agg_count = 20;
+	port->egress_agg_params.agg_size = 8192;
+	port->egress_agg_params.agg_count = 20;
+	port->egress_agg_params.agg_time = 3000000;
 	spin_lock_init(&port->agg_lock);
 
 	INIT_WORK(&port->agg_wq, rmnet_map_flush_tx_packet_work);

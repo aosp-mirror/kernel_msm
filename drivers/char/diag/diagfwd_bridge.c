@@ -18,24 +18,14 @@
 #include <linux/workqueue.h>
 #include <linux/ratelimit.h>
 #include <linux/platform_device.h>
-#ifdef USB_QCOM_DIAG_BRIDGE
-#include <linux/smux.h>
-#endif
 #include "diag_mux.h"
 #include "diagfwd_bridge.h"
-#ifdef USB_QCOM_DIAG_BRIDGE
+#ifdef CONFIG_USB_QCOM_DIAG_BRIDGE
 #include "diagfwd_hsic.h"
-#include "diagfwd_smux.h"
 #endif
 #include "diagfwd_mhi.h"
 #include "diag_dci.h"
 #include "diag_ipc_logging.h"
-
-#ifdef CONFIG_MHI_BUS
-#define diag_mdm_init		diag_mhi_init
-#else
-#define diag_mdm_init		diag_hsic_init
-#endif
 
 #define BRIDGE_TO_MUX(x)	(x + DIAG_MUX_BRIDGE_BASE)
 
@@ -48,18 +38,6 @@ struct diagfwd_bridge_info bridge_info[NUM_REMOTE_DEV] = {
 		.ctxt = 0,
 		.dev_ops = NULL,
 		.dci_read_ptr = NULL,
-		.dci_read_buf = NULL,
-		.dci_read_len = 0,
-		.dci_wq = NULL,
-	},
-	{
-		.id = DIAGFWD_SMUX,
-		.type = DIAG_DATA_TYPE,
-		.name = "SMUX",
-		.inited = 0,
-		.ctxt = 0,
-		.dci_read_ptr = NULL,
-		.dev_ops = NULL,
 		.dci_read_buf = NULL,
 		.dci_read_len = 0,
 		.dci_wq = NULL,
@@ -251,33 +229,6 @@ int diag_remote_dev_write_done(int id, unsigned char *buf, int len, int ctxt)
 		err = diag_dci_write_done_bridge(id, buf, len);
 	}
 	return err;
-}
-
-int diagfwd_bridge_init(void)
-{
-	int err = 0;
-
-	err = diag_mdm_init();
-	if (err)
-		goto fail;
-	#ifdef USB_QCOM_DIAG_BRIDGE
-	err = diag_smux_init();
-	if (err)
-		goto fail;
-	#endif
-	return 0;
-
-fail:
-	pr_err("diag: Unable to initialze diagfwd bridge, err: %d\n", err);
-	return err;
-}
-
-void diagfwd_bridge_exit(void)
-{
-	#ifdef USB_QCOM_DIAG_BRIDGE
-	diag_hsic_exit();
-	diag_smux_exit();
-	#endif
 }
 
 int diagfwd_bridge_close(int id)

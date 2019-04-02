@@ -248,11 +248,13 @@ __rmnet_map_ingress_handler(struct sk_buff *skb,
 	if (qmap->next_hdr &&
 	    (port->data_format & (RMNET_FLAGS_INGRESS_COALESCE |
 				  RMNET_FLAGS_INGRESS_MAP_CKSUMV5))) {
-		if (rmnet_map_process_next_hdr_packet(skb, &list))
+		if (rmnet_map_process_next_hdr_packet(skb, &list, len))
 			goto free_skb;
 	} else {
 		/* We only have the main QMAP header to worry about */
 		pskb_pull(skb, sizeof(*qmap));
+
+		rmnet_set_skb_proto(skb);
 
 		if (port->data_format & RMNET_FLAGS_INGRESS_MAP_CKSUMV4) {
 			if (!rmnet_map_checksum_downlink_packet(skb, len + pad))
@@ -316,10 +318,15 @@ rmnet_map_ingress_handler(struct sk_buff *skb,
 		struct sk_buff *skb_frag = skb_shinfo(skb)->frag_list;
 
 		skb_shinfo(skb)->frag_list = NULL;
-		while ((skbn = rmnet_map_deaggregate(skb, port)) != NULL)
+		while ((skbn = rmnet_map_deaggregate(skb, port)) != NULL) {
 			__rmnet_map_ingress_handler(skbn, port);
 
+			if (skbn == skb)
+				goto next_skb;
+		}
+
 		consume_skb(skb);
+next_skb:
 		skb = skb_frag;
 	}
 }

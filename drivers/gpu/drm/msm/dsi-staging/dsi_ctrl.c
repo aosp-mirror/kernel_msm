@@ -1540,7 +1540,7 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 	pr_debug("response type %d\n", cmd);
 	switch (cmd) {
 	case MIPI_DSI_RX_ACKNOWLEDGE_AND_ERROR_REPORT:
-		pr_err("Rx ACK_ERROR\n");
+		pr_err("Rx ACK_ERROR 0x%x\n", cmd);
 		rc = 0;
 		break;
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_1BYTE:
@@ -1556,7 +1556,7 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		rc = dsi_parse_long_read_resp(msg, &buff[header_offset]);
 		break;
 	default:
-		pr_warn("Invalid response\n");
+		pr_warn("Invalid response: 0x%x\n", cmd);
 		rc = 0;
 	}
 

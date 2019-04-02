@@ -677,12 +677,6 @@ static int qpnp_amoled_hw_init(struct qpnp_amoled *chip)
 	return 0;
 }
 
-static void get_bool_prop_dt(struct device_node *node, const char *prop_name,
-				bool *val)
-{
-	*val = of_property_read_bool(node, prop_name);
-}
-
 static int qpnp_amoled_parse_dt(struct qpnp_amoled *chip)
 {
 	struct device_node *temp, *node = chip->dev->of_node;
@@ -708,24 +702,24 @@ static int qpnp_amoled_parse_dt(struct qpnp_amoled *chip)
 		case OLEDB_PERIPH_TYPE:
 			chip->oledb_base = base;
 			chip->oledb.vreg.node = temp;
-			get_bool_prop_dt(temp, "qcom,swire-control",
-					&chip->oledb.swire_control);
+			chip->oledb.swire_control = of_property_read_bool(temp,
+							"qcom,swire-control");
 			break;
 		case AB_PERIPH_TYPE:
 			chip->ab_base = base;
 			chip->ab.vreg.node = temp;
-			get_bool_prop_dt(temp, "qcom,swire-control",
-					&chip->ab.swire_control);
-			get_bool_prop_dt(temp, "qcom,aod-ab-pd-control",
-					&chip->ab.pd_control);
+			chip->ab.swire_control = of_property_read_bool(temp,
+							"qcom,swire-control");
+			chip->ab.pd_control = of_property_read_bool(temp,
+							"qcom,aod-pd-control");
 			break;
 		case IBB_PERIPH_TYPE:
 			chip->ibb_base = base;
 			chip->ibb.vreg.node = temp;
-			get_bool_prop_dt(temp, "qcom,swire-control",
-					&chip->ibb.swire_control);
-			get_bool_prop_dt(temp, "qcom,aod-ibb-pd-control",
-					&chip->ibb.pd_control);
+			chip->ibb.swire_control = of_property_read_bool(temp,
+							"qcom,swire-control");
+			chip->ibb.pd_control = of_property_read_bool(temp,
+							"qcom,aod-pd-control");
 			break;
 		default:
 			pr_err("Unknown peripheral type 0x%x\n", val);
@@ -823,13 +817,14 @@ static int __init qpnp_amoled_regulator_init(void)
 {
 	return platform_driver_register(&qpnp_amoled_regulator_driver);
 }
-arch_initcall(qpnp_amoled_regulator_init);
 
 static void __exit qpnp_amoled_regulator_exit(void)
 {
 	platform_driver_unregister(&qpnp_amoled_regulator_driver);
 }
-module_exit(qpnp_amoled_regulator_exit);
 
 MODULE_DESCRIPTION("QPNP AMOLED regulator driver");
 MODULE_LICENSE("GPL v2");
+
+arch_initcall(qpnp_amoled_regulator_init);
+module_exit(qpnp_amoled_regulator_exit);

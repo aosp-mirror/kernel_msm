@@ -444,6 +444,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(chip_version),
 	POWER_SUPPLY_ATTR(therm_icl_limit),
 	POWER_SUPPLY_ATTR(dc_reset),
+	POWER_SUPPLY_ATTR(scale_mode_en),
 	/* Capacity Estimation */
 	POWER_SUPPLY_ATTR(delta_cc_sum),
 	POWER_SUPPLY_ATTR(delta_vfsoc_sum),

@@ -31,11 +31,11 @@
 };
 
 &ab_vreg {
-	qcom,aod-ab-pd-control;
+	qcom,aod-pd-control;
 };
 
 &ibb_vreg {
-	qcom,aod-ibb-pd-control;
+	qcom,aod-pd-control;
 };
 
 &soc {
