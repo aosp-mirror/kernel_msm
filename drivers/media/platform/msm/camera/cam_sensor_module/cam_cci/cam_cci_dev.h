@@ -45,7 +45,12 @@
 #define CYCLES_PER_MICRO_SEC_DEFAULT 4915
 #define CCI_MAX_DELAY 1000000
 
+#ifdef CONFIG_BOARD_B1C1
+#define CCI_TIMEOUT msecs_to_jiffies(50)
+#else
+/* pa/1230314 msm: camera: b4s4: update CCI time-out period */
 #define CCI_TIMEOUT msecs_to_jiffies(200)
+#endif
 
 #define NUM_MASTERS 2
 #define NUM_QUEUES 2
