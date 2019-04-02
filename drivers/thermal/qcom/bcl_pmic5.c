@@ -15,7 +15,6 @@
 
 #include <linux/module.h>
 #include <linux/interrupt.h>
-#include <linux/workqueue.h>
 #include <linux/kernel.h>
 #include <linux/regmap.h>
 #include <linux/io.h>
@@ -28,6 +27,7 @@
 #include <linux/thermal.h>
 
 #include "../thermal_core.h"
+#include "qti_virtual_sensor.h"
 
 #define BCL_DRIVER_NAME       "bcl_pmic5"
 #define BCL_MONITOR_EN        0x46
@@ -90,9 +90,13 @@ struct bcl_peripheral_data {
 };
 
 struct bcl_device {
+	struct device			*device;
 	struct regmap			*regmap;
 	uint16_t			fg_bcl_addr;
 	struct bcl_peripheral_data	param[BCL_TYPE_MAX];
+	struct thermal_zone_device
+			*virtual_tz_dev[THERMAL_MAX_VIRT_SENSORS];
+	int				num_count;
 };
 
 static struct bcl_device *bcl_devices[MAX_PERPH_COUNT];
@@ -357,7 +361,7 @@ static irqreturn_t bcl_handle_irq(int irq, void *data)
 	struct bcl_peripheral_data *perph_data =
 		(struct bcl_peripheral_data *)data;
 	unsigned int irq_status = 0;
-	int ret;
+	int ret, i;
 	bool notify = false;
 	struct bcl_device *bcl_perph;
 
@@ -385,6 +389,9 @@ static irqreturn_t bcl_handle_irq(int irq, void *data)
 		       (bcl_perph->param[BCL_VBAT_LVL0].tz_dev)) {
 			of_thermal_handle_trip(
 				bcl_perph->param[BCL_VBAT_LVL0].tz_dev);
+			for (i = 0; i < bcl_perph->num_count; i++)
+				of_thermal_handle_trip(
+					bcl_perph->virtual_tz_dev[i]);
 			notify = true;
 		}
 		if ((irq_status & BCL_IRQ_IBAT_L0) &&
@@ -464,6 +471,108 @@ static irqreturn_t bcl_handle_irq(int irq, void *data)
 exit_intr:
 	mutex_unlock(&perph_data->state_trans_lock);
 	return IRQ_HANDLED;
+}
+
+static int bcl_parse_devicetree_virtual_data(struct bcl_device *bcl_perph)
+{
+	struct device_node *bcl_virtual_parent, *child;
+	const char *dt_sensor_names[THERMAL_MAX_VIRT_SENSORS];
+	struct thermal_zone_device *tzd;
+	struct virtual_sensor_data virtual_sensor = {0};
+	int rc = 0, i, count = 0;
+
+	if (!bcl_perph)
+		return -EINVAL;
+
+	bcl_perph->num_count = 0;
+	bcl_virtual_parent = of_find_node_by_name(NULL, "bcl-virtual-sensor");
+	if (!bcl_virtual_parent) {
+		pr_err("No BCL Virtual sensor defined\n");
+		return -EINVAL;
+	}
+
+	for_each_available_child_of_node(bcl_virtual_parent, child) {
+		strlcpy(virtual_sensor.virt_zone_name, child->name,
+			THERMAL_NAME_LENGTH);
+		virtual_sensor.logic = VIRT_COUNT_THRESHOLD;
+		virtual_sensor.avg_offset = 0;
+		virtual_sensor.avg_denominator = 1;
+		rc = of_property_read_u32(child, "num_sensors",
+					&(virtual_sensor.num_sensors));
+		if (rc < 0) {
+			pr_err("Cannot read virtual sensor number\n");
+			goto free_child;
+		}
+		virtual_sensor.coefficient_ct = virtual_sensor.num_sensors;
+		rc = of_property_read_u32_array(child, "coefficients",
+						virtual_sensor.coefficients,
+						virtual_sensor.num_sensors);
+		if (rc < 0) {
+			pr_err("Cannot read virtual sensor coefficients\n");
+			goto free_child;
+		}
+		rc = of_property_read_string_array(child, "sensor-names",
+					dt_sensor_names,
+					virtual_sensor.num_sensors);
+		if (rc < 0) {
+			pr_err("Cannot read virtual sensor names\n");
+			goto free_child;
+		}
+		for (i = 0; i < virtual_sensor.num_sensors; i++) {
+			tzd = thermal_zone_get_zone_by_name(
+					dt_sensor_names[i]);
+			if (IS_ERR(tzd)) {
+				pr_err("Thermal zone not available yet\n");
+				rc = -EPROBE_DEFER;
+				goto free_child;
+			}
+		}
+		for (i = 0; i < virtual_sensor.num_sensors; i++) {
+			virtual_sensor.sensor_names[i] =
+					devm_kzalloc(bcl_perph->device,
+						     THERMAL_NAME_LENGTH,
+						     GFP_KERNEL);
+			if (!virtual_sensor.sensor_names[i]) {
+				pr_err("Cannot alloc sensor names:%d\n", i);
+				rc = -ENOMEM;
+				goto free_devm;
+			}
+			strlcpy(virtual_sensor.sensor_names[i],
+				dt_sensor_names[i], THERMAL_NAME_LENGTH);
+		}
+		bcl_perph->virtual_tz_dev[count] =
+				devm_thermal_of_virtual_sensor_register(
+						bcl_perph->device,
+						&virtual_sensor);
+		if (IS_ERR(bcl_perph->virtual_tz_dev[count])) {
+			dev_err(bcl_perph->device,
+				"Couldn't register virtual sensor\n");
+			rc = -EINVAL;
+			goto free_devm;
+		}
+		thermal_zone_device_update(
+				bcl_perph->virtual_tz_dev[count],
+				THERMAL_DEVICE_UP);
+		count += 1;
+		if (count > THERMAL_MAX_VIRT_SENSORS) {
+			pr_err("Reached maximum number of virtual sensors");
+			rc = -EINVAL;
+			goto free_devm;
+		}
+		bcl_perph->num_count = count;
+	}
+
+free_devm:
+	for (i = 0; i < virtual_sensor.num_sensors; i++) {
+		if (virtual_sensor.sensor_names[i])
+			devm_kfree(bcl_perph->device,
+				   virtual_sensor.sensor_names[i]);
+	}
+
+free_child:
+	of_node_put(child);
+	of_node_put(bcl_virtual_parent);
+	return rc;
 }
 
 static int bcl_get_devicetree_data(struct platform_device *pdev,
@@ -623,6 +732,11 @@ static int bcl_remove(struct platform_device *pdev)
 		thermal_zone_of_sensor_unregister(&pdev->dev,
 				bcl_perph->param[i].tz_dev);
 	}
+	for (i = 0; i < bcl_perph->num_count; i++) {
+		if (bcl_perph->virtual_tz_dev[i])
+			thermal_zone_of_sensor_unregister(&pdev->dev,
+					bcl_perph->virtual_tz_dev[i]);
+	}
 
 	return 0;
 }
@@ -630,6 +744,7 @@ static int bcl_remove(struct platform_device *pdev)
 static int bcl_probe(struct platform_device *pdev)
 {
 	struct bcl_device *bcl_perph = NULL;
+	int rc = 0;
 
 	if (bcl_device_ct >= MAX_PERPH_COUNT) {
 		dev_err(&pdev->dev, "Max bcl peripheral supported already.\n");
@@ -640,6 +755,12 @@ static int bcl_probe(struct platform_device *pdev)
 	if (!bcl_devices[bcl_device_ct])
 		return -ENOMEM;
 	bcl_perph = bcl_devices[bcl_device_ct];
+	bcl_perph->device = &pdev->dev;
+	if (bcl_device_ct == 0) {
+		rc = bcl_parse_devicetree_virtual_data(bcl_perph);
+		if (rc < 0)
+			return rc;
+	}
 
 	bcl_perph->regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!bcl_perph->regmap) {
