@@ -868,6 +868,8 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 				    jiffies_to_usecs(jiffies - save_trace));
 
 err:
+	if (hypx_data->citadel_token)
+		hypx_free_blob_userbuf(hypx_data->citadel_token, false);
 	if (hypx_data->calibration)
 		hypx_free_blob(dev, &calibration, false);
 	if (hypx_data->image_flood)
