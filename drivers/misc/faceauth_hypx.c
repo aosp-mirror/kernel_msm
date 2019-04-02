@@ -1029,7 +1029,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (!hypx_data) {
 		err = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
-		goto exit0;
+		goto exit_hypx_data;
 	}
 
 	hypx_data->offset_int_state =
@@ -1048,25 +1048,25 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	hypx_data->image_left = hypx_create_blob_userbuf(
 		dev, debug_entry, hypx_data->image_left_size);
 	if (!hypx_data->image_left)
-		goto exit1;
+		goto exit;
 
 	hypx_data->image_right_size = INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
 	hypx_data->image_right = hypx_create_blob_userbuf(
 		dev, debug_entry, hypx_data->image_right_size);
 	if (!hypx_data->image_right)
-		goto exit2;
+		goto exit;
 
 	hypx_data->image_flood_size = INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
 	hypx_data->image_flood = hypx_create_blob_userbuf(
 		dev, debug_entry, hypx_data->image_flood_size);
 	if (!hypx_data->image_flood)
-		goto exit3;
+		goto exit;
 
 	hypx_data->calibration_size = CALIBRATION_SIZE;
 	hypx_data->calibration_buffer = hypx_create_blob_userbuf(
 		dev, debug_entry, hypx_data->calibration_size);
 	if (!hypx_data->calibration_buffer)
-		goto exit3;
+		goto exit;
 
 	/*
 	 * NOT sure the exact size, using a more than necessary size
@@ -1074,7 +1074,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	hypx_data->ab_state = hypx_create_blob_userbuf(
 		dev, debug_entry, hypx_data->image_flood_size);
 	if (!hypx_data->ab_state)
-		goto exit4;
+		goto exit;
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				   DMA_TO_DEVICE);
@@ -1085,13 +1085,13 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	err = scm_call2(HYPX_SMC_FUNC_GET_DEBUG_DATA, &desc);
 	if (err) {
 		pr_err("Failed scm_call %d\n", err);
-		goto exit4;
+		goto exit;
 	}
 
 	ret = desc.ret[0];
 	if (ret) {
 		parse_el2_return(ret);
-		goto exit4;
+		goto exit;
 	}
 
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
@@ -1104,7 +1104,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (err) {
 		pr_err("Failed hypx_copy_from_blob_userbuf internal_state %d\n",
 		       err);
-		goto exit4;
+		goto exit;
 	}
 
 	debug_entry->ab_exception_number = hypx_data->exception_number;
@@ -1128,7 +1128,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 
 		if (err) {
 			pr_err("Error saving left dot image\n");
-			goto exit4;
+			goto exit;
 		}
 
 		err = hypx_copy_from_blob_userbuf(
@@ -1142,7 +1142,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
 		if (err) {
 			pr_err("Error saving right dot image\n");
-			goto exit4;
+			goto exit;
 		}
 		err = hypx_copy_from_blob_userbuf(
 			dev, (uint8_t *)debug_entry + current_offset,
@@ -1155,15 +1155,19 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		current_offset += INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT;
 		if (err) {
 			pr_err("Error saving flood image\n");
-			goto exit4;
+			goto exit;
 		}
 
+		err = hypx_copy_from_blob_userbuf(
+			dev, (uint8_t *)debug_entry + current_offset,
+			hypx_data->calibration_buffer,
+			hypx_data->calibration_size, false, false);
 		debug_entry->calibration.offset_to_image = current_offset;
 		debug_entry->calibration.image_size = CALIBRATION_SIZE;
 		current_offset += CALIBRATION_SIZE;
 		if (err) {
-			pr_err("Error saving flood image\n");
-			goto exit4;
+			pr_err("Error saving calibration buffer\n");
+			goto exit;
 		}
 
 		need_reassign = false;
@@ -1182,12 +1186,12 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (!output_buffers) {
 		err = -EMSGSIZE;
 		pr_err("No output buffer\n");
-		goto exit4;
+		goto exit;
 	}
 	buffer_idx = output_buffers->buffer_count - 1;
 	if (buffer_idx < 0) {
 		pr_err("No available buffer");
-		goto exit4;
+		goto exit;
 	}
 	buffer_list_size =
 		output_buffers->buffers[buffer_idx].offset_to_buffer +
@@ -1196,7 +1200,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	if (buffer_list_size + current_offset > DEBUG_DATA_BIN_SIZE) {
 		err = -EMSGSIZE;
 		pr_err("Wrong output buffer size\n");
-		goto exit4;
+		goto exit;
 	}
 
 	if (output_buffers->buffer_base != 0 && buffer_list_size > 0) {
@@ -1206,7 +1210,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		hypx_data->buffer_base = output_buffers->buffer_base;
 
 		if (!hypx_data->output_buffers)
-			goto exit4;
+			goto exit;
 
 		dma_sync_single_for_device(dev, virt_to_phys(hypx_data),
 					   PAGE_SIZE, DMA_TO_DEVICE);
@@ -1218,7 +1222,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		ret = desc.ret[0];
 		if (ret) {
 			parse_el2_return(ret);
-			goto exit4;
+			goto exit;
 		}
 
 		dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
@@ -1234,16 +1238,20 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		hypx_free_blob_userbuf(hypx_data->output_buffers, false);
 	}
 
-exit4:
-	hypx_free_blob_userbuf(hypx_data->ab_state, false);
-exit3:
-	hypx_free_blob_userbuf(hypx_data->image_flood, need_reassign);
-exit2:
-	hypx_free_blob_userbuf(hypx_data->image_right, need_reassign);
-exit1:
-	hypx_free_blob_userbuf(hypx_data->image_left, need_reassign);
+exit:
+	if (hypx_data->ab_state)
+		hypx_free_blob_userbuf(hypx_data->ab_state, false);
+	if (hypx_data->calibration_buffer)
+		hypx_free_blob_userbuf(hypx_data->calibration_buffer,
+				need_reassign);
+	if (hypx_data->image_flood)
+		hypx_free_blob_userbuf(hypx_data->image_flood, need_reassign);
+	if (hypx_data->image_right)
+		hypx_free_blob_userbuf(hypx_data->image_right, need_reassign);
+	if (hypx_data->image_left)
+		hypx_free_blob_userbuf(hypx_data->image_left, need_reassign);
 
-exit0:
+exit_hypx_data:
 	if (hypx_data)
 		free_page((unsigned long)hypx_data);
 	return err;
