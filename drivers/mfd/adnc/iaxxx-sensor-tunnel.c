@@ -49,17 +49,73 @@
 #define K8_10MS	0x140
 #define RATE_8K	0x0
 #define REDBOX_2_1	0x2
+#define ASRC_ENABLE	0x0
 #define RETRY_COUNT	5
-#define I2S3_HL_DEVIDER_CLK_PERIOD	0x16
+#define I2S3_HL_DEVIDER_CLK_PERIOD	0x12
 #define I2S3_NR_DIVIDER_VALUE	0x3000001
 #define I2S3_CLK_CFG_VALUE		0x1017F6
 #define I2S3_CLK_CTRL_VALUE		0x103
 #define I2S3_FS_ALIGN_VALUE		0x0
-#define PORTD_IOCTRL_CFG_VALUE	0x2005
 #define CNR0_CIC_RX_2_3_VALUE	0x3c0000
 #define CNR0_HB_CIC_RX_3_POS	7
+#define CNR0_CIC_RX_6_7_VALUE	0x5c0000
+#define CNR0_HB_CIC_RX_7_POS	15
 #define BUSY_SLEEP_RANGE	2000
 #define BUSY_SLEEP_RANGE_MAX	2005
+
+#define IAXXX_IO_CTRL_PORT_CLK_ADDR(port_id) \
+	(IAXXX_IO_CTRL_PORTA_CLK_ADDR + port_id * 0x10)
+
+static unsigned int io_ctrl_cfg_value[] = {
+	0,	/* PORTA_IOCTRL_CFG_VALUE */
+	0x205,	/* PORTB_IOCTRL_CFG_VALUE */
+	0,	/* PORTC_IOCTRL_CFG_VALUE */
+	0x2005,	/* PORTD_IOCTRL_CFG_VALUE */
+	0,	/* PORTE_IOCTRL_CFG_VALUE */
+	0,	/* Dummy */
+	0,	/* CDC_IOCTRL_CFG_VALUE */
+};
+
+enum {
+	PDMI_CDC_PDM0 = 0,
+	PDMI_CDC_PDM1,
+	PDMI_CDC_PDM2,
+	PDMI_PORTD_DI,
+	PDMI_PORTC_FS,
+	PDMI_PORTC_DI,
+	PDMI_PORTB_FS,
+	PDMI_PORTB_DI,
+};
+
+static unsigned int pdmi_port[] = {
+	0,		/* PORTA */
+	PDMI_PORTB_DI,	/* PORTB */
+	0,		/* PORTC */
+	PDMI_PORTD_DI,	/* PORTD */
+	0,		/* PORTE */
+	0,		/* dummy */
+	0,		/* CDC */
+};
+
+static const u32 dmic_busy_addr[] = {
+	0,
+	IAXXX_CNR0_DMIC1_ENABLE_BUSY_ADDR,
+	IAXXX_CNR0_DMIC0_ENABLE_BUSY_ADDR,
+	IAXXX_CNR0_CDC1_ENABLE_BUSY_ADDR,
+	0,
+	0,
+	IAXXX_CNR0_CDC0_ENABLE_BUSY_ADDR,
+};
+
+static const u32 dmic_enable_addr[] = {
+	0,
+	IAXXX_CNR0_DMIC1_ENABLE_ADDR,
+	IAXXX_CNR0_DMIC0_ENABLE_ADDR,
+	IAXXX_CNR0_CDC1_ENABLE_ADDR,
+	0,
+	0,
+	IAXXX_CNR0_CDC0_ENABLE_ADDR,
+};
 
 /*
  *[TODO]This is a first drop for testing flicker sensor.
@@ -72,10 +128,17 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 	int ret = 0;
 	u32 status;
 	int try = RETRY_COUNT;
-	unsigned int port_id = PDM_PORTD, strm_id = 0x7, chn_id = 0xF;
+	unsigned int port_id, strm_id = 0x7, chn_id = 0xF;
 
 	if (priv == NULL)
 		return -EINVAL;
+
+	port_id = priv->sensor_port;
+	if (port_id != PDM_PORTB && port_id != PDM_PORTD) {
+		pr_err("%s Invalid sensor port %d\n", __func__, port_id);
+		return -EINVAL;
+	}
+
 	if (enable) { /* Set up the route */
 		ret = iaxxx_set_proc_mem_on_off_ctrl(priv, enable);
 		if (ret) {
@@ -97,7 +160,7 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			return -EIO;
 		}
 		regmap_update_bits(priv->regmap, IAXXX_CNR0_I2S_ENABLE_ADDR,
-				(0x1 << PDM_PORTD), IAXXX_CNR0_I2S_ENABLE_LOW);
+				(0x1 << port_id), IAXXX_CNR0_I2S_ENABLE_LOW);
 		regmap_update_bits(priv->regmap, IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
 				IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 				IAXXX_I2S_TRIGGER_HIGH);
@@ -116,18 +179,18 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		regmap_write(priv->regmap, IAXXX_I2S_I2S_FS_ALIGN_ADDR(port_id),
 				I2S3_FS_ALIGN_VALUE);
 		regmap_update_bits(priv->regmap, IAXXX_AO_CLK_CFG_ADDR,
-				IAXXX_AO_CLK_CFG_PORTD_CLK_OE_MASK,
-				(1 << IAXXX_AO_CLK_CFG_PORTD_CLK_OE_POS));
+				(1 << port_id), (1 << port_id));
 		regmap_update_bits(priv->regmap, IAXXX_CNR0_I2S_ENABLE_ADDR,
-				(0x1 << PDM_PORTD), (0x1 << PDM_PORTD));
+				(0x1 << port_id), (0x1 << port_id));
 		regmap_update_bits(priv->regmap, IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
 				IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 				IAXXX_I2S_TRIGGER_HIGH);
-		regmap_write(priv->regmap, IAXXX_IO_CTRL_PORTD_CLK_ADDR,
-				PORTD_IOCTRL_CFG_VALUE);
+		regmap_write(priv->regmap, IAXXX_IO_CTRL_PORT_CLK_ADDR(port_id),
+				io_ctrl_cfg_value[port_id]);
 		regmap_update_bits(priv->regmap,
 				IAXXX_SRB_PDMI_PORT_PWR_EN_ADDR,
-				(0x1 << PDM_PORTD), (0x1 << PDM_PORTD));
+				(0x1 << pdmi_port[port_id]),
+				(0x1 << pdmi_port[port_id]));
 		ret = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
 		if (ret) {
@@ -135,46 +198,99 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			return -EIO;
 		}
 		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_HOS_ADDR,
-				(0x1 << PDM_PORTD), (0x1 << PDM_PORTD));
+				(0x1 << pdmi_port[port_id]),
+				(0x1 << pdmi_port[port_id]));
 		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_ADTL_CTRL_ADDR,
-				IAXXX_CIC_ADTL_RX_MASK(port_id), 0);
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_2_3_ADDR,
+				IAXXX_CIC_ADTL_RX_MASK(pdmi_port[port_id]), 0);
+		if (port_id == PDM_PORTD) {
+			/* PORTD_DI: PDMI3 */
+			pr_info("%s enable port D\n", __func__);
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_2_3_ADDR,
 				IAXXX_CNR0_CIC_RX_2_3_CLR_3_MASK,
 				(1 << IAXXX_CNR0_CIC_RX_2_3_CLR_3_POS));
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_2_3_ADDR,
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_2_3_ADDR,
 				IAXXX_CNR0_CIC_RX_2_3_M_3_MASK,
 				CNR0_CIC_RX_2_3_VALUE);
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_CTRL_ADDR,
-				(0x1 << port_id), (0x1 << port_id));
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_HB_ADDR,
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_CTRL_ADDR,
+				(0x1 << pdmi_port[port_id]),
+				(0x1 << pdmi_port[port_id]));
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_HB_ADDR,
 				IAXXX_CNR0_CIC_HB_CIC_RX_MASK(port_id),
 				0x1 << CNR0_HB_CIC_RX_3_POS);
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
 				IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_3_MASK,
 				(0x1 <<
 				IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_3_POS));
-		regmap_update_bits(priv->regmap, IAXXX_IO_CTRL_PORTD_DI_ADDR,
+			regmap_update_bits(priv->regmap,
+				IAXXX_IO_CTRL_PORTD_DI_ADDR,
 				IAXXX_IO_CTRL_PORTD_DI_CDC_ADC_3_AND_SEL_MASK,
 				(0x1 <<
 				IAXXX_IO_CTRL_PORTD_DI_CDC_ADC_3_AND_SEL_POS));
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_2_3_ADDR,
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_2_3_ADDR,
 				IAXXX_CNR0_CIC_RX_2_3_CLR_3_MASK,
 				(0 << IAXXX_CNR0_CIC_RX_2_3_CLR_3_POS));
+		} else if (port_id == PDM_PORTB) {
+			/* PORTB_DI: PDMI7 */
+			pr_info("%s enable port B PDMI7\n", __func__);
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_6_7_ADDR,
+				IAXXX_CNR0_CIC_RX_6_7_CLR_7_MASK,
+				(1 << IAXXX_CNR0_CIC_RX_6_7_CLR_7_POS));
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_6_7_ADDR,
+				IAXXX_CNR0_CIC_RX_6_7_M_7_MASK,
+				CNR0_CIC_RX_6_7_VALUE);
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_CTRL_ADDR,
+				(0x1 << pdmi_port[port_id]),
+				(0x1 << pdmi_port[port_id]));
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_HB_ADDR,
+				IAXXX_CNR0_CIC_HB_CIC_RX_MASK(
+					pdmi_port[port_id]),
+				0x1 << CNR0_HB_CIC_RX_7_POS);
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_S_7_MASK,
+				(0x1 <<
+				IAXXX_CNR0_CIC_RX_RT_CTRL_S_7_POS));
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_7_MASK,
+				(0x1 <<
+				IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_7_POS));
+			regmap_update_bits(priv->regmap,
+				IAXXX_IO_CTRL_PORTB_DI_ADDR,
+				IAXXX_IO_CTRL_PORTB_DI_PDM1_DI1_AND_SEL_MASK,
+				(0x1 <<
+				IAXXX_IO_CTRL_PORTB_DI_PDM1_DI1_AND_SEL_POS));
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_6_7_ADDR,
+				IAXXX_CNR0_CIC_RX_6_7_CLR_7_MASK,
+				(0 << IAXXX_CNR0_CIC_RX_6_7_CLR_7_POS));
+		}
 
 		do {
 			usleep_range(BUSY_SLEEP_RANGE, BUSY_SLEEP_RANGE_MAX);
 			regmap_read(priv->regmap,
-				IAXXX_CNR0_CDC1_ENABLE_BUSY_ADDR, &status);
+				dmic_busy_addr[port_id], &status);
 		} while (status && (try-- != 0));
 
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CDC1_ENABLE_ADDR,
-				(0x1 << PDM_PORTD), (0x1 << PDM_PORTD));
+		regmap_update_bits(priv->regmap, dmic_enable_addr[port_id],
+				(0x1 << pdmi_port[port_id]),
+				(0x1 << pdmi_port[port_id]));
 
 		try = RETRY_COUNT;
 		do {
 			usleep_range(BUSY_SLEEP_RANGE, BUSY_SLEEP_RANGE_MAX);
 			regmap_read(priv->regmap,
-				IAXXX_CNR0_CDC1_ENABLE_BUSY_ADDR, &status);
+				dmic_busy_addr[port_id], &status);
 		} while (status && (try-- != 0));
 
 		ret = iaxxx_send_update_block_request(priv->dev, &status,
@@ -187,7 +303,7 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		regmap_update_bits(priv->regmap,
 				IAXXX_STR_GRP_STR_CTRL_REG(strm_id),
 				IAXXX_STR_GRP_STR_CTRL_ASRC_MODE_MASK,
-				REDBOX_2_1 <<
+				ASRC_ENABLE <<
 				IAXXX_STR_GRP_STR_CTRL_ASRC_MODE_POS);
 		regmap_update_bits(priv->regmap,
 				IAXXX_STR_GRP_STR_SYNC_REG(strm_id),
@@ -208,11 +324,19 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 				IAXXX_STR_GRP_STR_FORMAT_SAMPLE_RATE_MASK,
 				RATE_8K  <<
 				IAXXX_STR_GRP_STR_FORMAT_SAMPLE_RATE_POS);
-		regmap_update_bits(priv->regmap,
-				IAXXX_STR_GRP_STR_PORT_REG(strm_id),
-				IAXXX_STR_GRP_STR_PORT_PORT_MASK,
-				IAXXX_SYSID_PDMI3 <<
-				IAXXX_STR_GRP_STR_PORT_PORT_POS);
+		if (port_id == PDM_PORTD) {
+			regmap_update_bits(priv->regmap,
+					IAXXX_STR_GRP_STR_PORT_REG(strm_id),
+					IAXXX_STR_GRP_STR_PORT_PORT_MASK,
+					IAXXX_SYSID_PDMI3 <<
+					IAXXX_STR_GRP_STR_PORT_PORT_POS);
+		} else if (port_id == PDM_PORTB) {
+			regmap_update_bits(priv->regmap,
+					IAXXX_STR_GRP_STR_PORT_REG(strm_id),
+					IAXXX_STR_GRP_STR_PORT_PORT_MASK,
+					IAXXX_SYSID_PDMI7 <<
+					IAXXX_STR_GRP_STR_PORT_PORT_POS);
+		}
 		regmap_update_bits(priv->regmap,
 				IAXXX_STR_GRP_STR_PORT_REG(strm_id),
 				IAXXX_STR_GRP_STR_PORT_PORT_ENCODING_MASK,
@@ -263,15 +387,36 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			dev_err(priv->dev, "Error in setting up PDM  route\n");
 			return -EIO;
 		}
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_2_3_ADDR,
+		if (port_id == PDM_PORTD) {
+			pr_info("%s disable port D\n", __func__);
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_2_3_ADDR,
 				IAXXX_CNR0_CIC_RX_2_3_CLR_3_MASK,
 				0x1 << IAXXX_CNR0_CIC_RX_2_3_CLR_3_POS);
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
 				IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_3_MASK,
 				(0x0 <<
 				 IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_3_POS));
-		regmap_update_bits(priv->regmap, IAXXX_CNR0_CDC1_ENABLE_ADDR,
-				(0x1 << PDM_PORTD), 0x0);
+		} else if (port_id == PDM_PORTB) {
+			pr_info("%s disable port B PDMI7\n", __func__);
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_6_7_ADDR,
+				IAXXX_CNR0_CIC_RX_6_7_CLR_7_MASK,
+				0x1 << IAXXX_CNR0_CIC_RX_6_7_CLR_7_POS);
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_7_MASK,
+				(0x0 <<
+				 IAXXX_CNR0_CIC_RX_RT_CTRL_CLK_EN_7_POS));
+			regmap_update_bits(priv->regmap,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_ADDR,
+				IAXXX_CNR0_CIC_RX_RT_CTRL_S_7_MASK,
+				(0x0 <<
+				IAXXX_CNR0_CIC_RX_RT_CTRL_S_7_POS));
+		}
+		regmap_update_bits(priv->regmap, dmic_enable_addr[port_id],
+				(0x1 << pdmi_port[port_id]), 0x0);
 		ret = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
 		if (ret) {
@@ -279,10 +424,9 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			return -EIO;
 		}
 		regmap_update_bits(priv->regmap, IAXXX_AO_CLK_CFG_ADDR,
-				IAXXX_AO_CLK_CFG_PORTD_CLK_OE_MASK,
-				(0x0 << IAXXX_AO_CLK_CFG_PORTD_CLK_OE_POS));
+				(1 << port_id), 0x0);
 		regmap_update_bits(priv->regmap, IAXXX_CNR0_I2S_ENABLE_ADDR,
-				(0x1 << PDM_PORTD), IAXXX_CNR0_I2S_ENABLE_LOW);
+				(0x1 << port_id), IAXXX_CNR0_I2S_ENABLE_LOW);
 		regmap_update_bits(priv->regmap, IAXXX_I2S_I2S_TRIGGER_GEN_ADDR,
 				IAXXX_I2S_I2S_TRIGGER_GEN_WMASK_VAL,
 				IAXXX_I2S_TRIGGER_HIGH);

@@ -258,6 +258,9 @@ struct iaxxx_priv {
 	struct clk *ext_clk;
 	int (*iaxxx_mclk_cb)(struct iaxxx_priv *, bool);
 
+	/* Sensor port ID */
+	u32 sensor_port;
+
 	/* Update block lock */
 	struct mutex update_block_lock;
 

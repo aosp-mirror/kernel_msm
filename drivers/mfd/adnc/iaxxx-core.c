@@ -346,6 +346,34 @@ static int iaxxx_populate_dt_gpios(struct iaxxx_priv *priv)
 }
 
 /**
+ * iaxxx_populate_dt_sensor_port - populates sensor port index from device tree
+ *
+ * Returns 0 on success, <0 on failure.
+ */
+static int iaxxx_populate_dt_sensor_port(struct iaxxx_priv *priv)
+{
+	struct device *dev = priv->dev;
+	struct device_node *np = dev->of_node;
+	int rc = 0;
+
+	if (np == NULL) {
+		dev_err(dev, "Invalid of node\n");
+		rc = -EINVAL;
+		return rc;
+	}
+
+	rc = of_property_read_u32(np, "adnc,sensor-port", &priv->sensor_port);
+	if (rc < 0) {
+		dev_err(dev, "Failed to read sensor-port, rc = %d\n", rc);
+		priv->sensor_port = PDM_PORTB;
+		return rc;
+	}
+	dev_info(dev, "sensor-port: %d\n", priv->sensor_port);
+
+	return rc;
+}
+
+/**
  * iaxxx_populate_dt_regulator - populates regulator data from device tree
  *
  * Returns 0 on success, <0 on failure.
@@ -544,6 +572,10 @@ static int iaxxx_populate_dt_pdata(struct iaxxx_priv *priv)
 		tmp = 0;
 	}
 	priv->oscillator_mode = tmp;
+
+	rc = iaxxx_populate_dt_sensor_port(priv);
+	if (rc)
+		dev_warn(dev, "Failed to read sensor port, rc = %d\n", rc);
 
 	rc = iaxxx_populate_ext_clock_pdata(priv);
 	return rc;
