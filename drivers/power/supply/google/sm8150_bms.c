@@ -1079,6 +1079,7 @@ static int bms_probe(struct platform_device *pdev)
 		pr_info("kalloc error\n");
 		return -ENOMEM;
 	}
+
 	bms->dev = &pdev->dev;
 	bms->batt_id_ohms = -EINVAL;
 	bms->pmic_regmap = dev_get_regmap(bms->dev->parent, NULL);
@@ -1096,7 +1097,7 @@ static int bms_probe(struct platform_device *pdev)
 
 	/* Register the power supply */
 	bms_psy_cfg.drv_data = bms;
-	bms_psy_cfg.of_node = NULL;
+	bms_psy_cfg.of_node = bms->dev->of_node;
 	bms_psy_cfg.supplied_to = NULL;
 	bms_psy_cfg.num_supplicants = 0;
 	bms->psy = devm_power_supply_register(bms->dev, &sm8150_psy_desc,
@@ -1120,6 +1121,7 @@ static int bms_probe(struct platform_device *pdev)
 	}
 
 	pr_info("BMS driver probed successfully\n");
+
 	return 0;
 exit:
 	return rc;

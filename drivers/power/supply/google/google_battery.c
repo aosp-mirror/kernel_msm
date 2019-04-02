@@ -2218,6 +2218,7 @@ static int google_battery_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, batt_drv);
 
 	psy_cfg.drv_data = batt_drv;
+	psy_cfg.of_node = pdev->dev.of_node;
 
 	batt_drv->psy = devm_power_supply_register(batt_drv->device,
 						   &gbatt_psy_desc, &psy_cfg);
@@ -2226,6 +2227,8 @@ static int google_battery_probe(struct platform_device *pdev)
 		dev_err(batt_drv->device,
 			"Couldn't register as power supply, ret=%d\n", ret);
 		/* TODO: fail with -ENODEV */
+		if (ret == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
 	}
 
 	batt_drv->log = debugfs_logbuffer_register("ssoc");

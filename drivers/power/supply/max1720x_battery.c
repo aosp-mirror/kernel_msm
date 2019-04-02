@@ -3645,6 +3645,7 @@ static int max1720x_probe(struct i2c_client *client,
 		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
 
 	psy_cfg.drv_data = chip;
+	psy_cfg.of_node = chip->dev->of_node;
 	chip->psy = devm_power_supply_register(dev,
 					       &max1720x_psy_desc, &psy_cfg);
 	if (IS_ERR(chip->psy)) {
