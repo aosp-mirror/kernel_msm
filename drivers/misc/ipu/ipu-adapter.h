@@ -88,4 +88,6 @@ int ipu_bus_initialize(struct device *parent_dev,
 		struct paintbox_bus **bus);
 void ipu_bus_deinitialize(struct paintbox_bus *bus);
 
+struct paintbox_bus *ipu_bus_from_device(struct device *parent_dev);
+
 #endif /* __IPU_ADAPTER_H__ */

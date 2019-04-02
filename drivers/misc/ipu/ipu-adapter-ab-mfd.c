@@ -880,6 +880,13 @@ static void ipu_adapter_ab_mfd_set_bus_ops(struct paintbox_bus_ops *ops)
 	ops->frc_clock_ungate = &ipu_adapter_frc_clock_ungate;
 }
 
+struct paintbox_bus *ipu_bus_from_device(struct device *parent_dev)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(parent_dev);
+
+	return dev_data->bus;
+}
+
 static int ipu_adapter_ab_mfd_register_low_priority_irq(
 		struct ipu_adapter_ab_mfd_data *dev_data)
 {

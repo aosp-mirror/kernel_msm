@@ -19,6 +19,7 @@
 #include <linux/types.h>
 
 #define JQS_MAX_MESSAGE_SIZE 1024
+#define JQS_MESSAGE_VERSION 100
 
 enum jqs_message_type {
 	/* Jqs <-> Host messages */

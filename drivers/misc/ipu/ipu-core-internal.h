@@ -110,6 +110,11 @@ struct paintbox_jqs {
 	uint32_t uart_baud;
 	uint64_t clock_rate_hz;
 
+	bool valid_versions;
+	uint32_t build_number;
+	uint32_t message_version;
+	uint32_t command_version;
+
 	/* runtime_requested ensures the firmware is only enabled after clock
 	 * rate changes indicate the hardware is ready and theruntime has
 	 * requested the jqs started

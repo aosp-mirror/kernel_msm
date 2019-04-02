@@ -21,7 +21,7 @@
 #include <linux/types.h>
 #include <linux/workqueue.h>
 
-#include "ipu-core-internal.h"
+#include "ipu-adapter.h"
 #include "ipu-core-jqs.h"
 #include "ipu-core-jqs-msg-transport.h"
 #include "ipu-core-jqs-preamble.h"
@@ -52,6 +52,73 @@
 
 /* Delay for system to stabilize before sending real traffic */
 #define CORE_SYSTEM_STABLIZE_TIME 100 /* us */
+
+
+static ssize_t jqs_build_number_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct paintbox_bus *bus = ipu_bus_from_device(dev);
+
+	if (bus->jqs.valid_versions)
+		return scnprintf(buf, PAGE_SIZE, "%u\n", bus->jqs.build_number);
+	else
+		return scnprintf(buf, PAGE_SIZE, "NA\n");
+}
+
+static ssize_t jqs_message_version_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct paintbox_bus *bus = ipu_bus_from_device(dev);
+
+	if (bus->jqs.valid_versions)
+		return scnprintf(buf, PAGE_SIZE, "%u\n",
+				bus->jqs.message_version);
+	else
+		return scnprintf(buf, PAGE_SIZE, "NA\n");
+}
+static ssize_t jqs_command_version_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct paintbox_bus *bus = ipu_bus_from_device(dev);
+
+	if (bus->jqs.valid_versions)
+		return scnprintf(buf, PAGE_SIZE, "%u\n",
+				bus->jqs.command_version);
+	else
+		return scnprintf(buf, PAGE_SIZE, "NA\n");
+}
+
+static struct device_attribute jqs_attrs[] = {
+	__ATTR_RO(jqs_build_number),
+	__ATTR_RO(jqs_message_version),
+	__ATTR_RO(jqs_command_version),
+};
+
+static int ipu_core_jqs_create_sysfs(struct device *dev)
+{
+	int i;
+	int ret;
+
+	for (i = 0; i < ARRAY_SIZE(jqs_attrs); i++) {
+		ret = device_create_file(dev, &jqs_attrs[i]);
+
+		if (WARN_ON(ret))
+			return ret;
+	}
+
+	return 0;
+}
+
+static void ipu_core_jqs_remove_sysfs(struct device *dev)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(jqs_attrs); i++)
+		device_remove_file(dev, &jqs_attrs[i]);
+}
 
 static inline bool ipu_core_jqs_is_clock_ready(struct paintbox_bus *bus)
 {
@@ -155,6 +222,7 @@ void ipu_core_jqs_unload_firmware(struct paintbox_bus *bus)
 		bus->jqs.fw = NULL;
 	}
 
+	bus->jqs.valid_versions = false;
 	bus->jqs.status = JQS_FW_STATUS_INIT;
 }
 
@@ -187,11 +255,35 @@ int ipu_core_jqs_stage_firmware(struct paintbox_bus *bus)
 		return -EINVAL;
 	}
 
-	dev_dbg(bus->parent_dev,
-			"%s: size %u fw_base_address 0x%08x FW and working set size %u prefill transport offset bytes %u\n",
-			__func__, preamble.size, preamble.fw_base_address,
-			preamble.fw_and_working_set_bytes,
-			preamble.prefill_transport_offset_bytes);
+	if (sizeof(preamble) == preamble.size) {
+		if (preamble.message_version != JQS_MESSAGE_VERSION) {
+			dev_err(bus->parent_dev,
+				"%s: invalid message version in JQS firmware preamble\n",
+				__func__);
+			return -EINVAL;
+		}
+
+		bus->jqs.valid_versions = true;
+		bus->jqs.build_number = preamble.build_number;
+		bus->jqs.message_version = preamble.message_version;
+		bus->jqs.command_version = preamble.command_version;
+
+		dev_dbg(bus->parent_dev,
+				"%s: size %u fw_base_address 0x%08x FW and working set size %u prefill transport offset bytes %u message version %u command version %u\n",
+				__func__, preamble.size,
+				preamble.fw_base_address,
+				preamble.fw_and_working_set_bytes,
+				preamble.prefill_transport_offset_bytes,
+				preamble.message_version,
+				preamble.command_version);
+	} else {
+		dev_dbg(bus->parent_dev,
+				"%s: size %u fw_base_address 0x%08x FW and working set size %u prefill transport offset bytes %u\n",
+				__func__, preamble.size,
+				preamble.fw_base_address,
+				preamble.fw_and_working_set_bytes,
+				preamble.prefill_transport_offset_bytes);
+	}
 
 	/* TODO(b/115524239):  It would be good to have some sort of bounds
 	 * checking to make sure that the firmware could not allocate an
@@ -761,6 +853,14 @@ int ipu_core_jqs_init(struct paintbox_bus *bus)
 	bus->jqs.status_min = JQS_FW_STATUS_INIT;
 #endif
 
+	ret = ipu_core_jqs_create_sysfs(bus->parent_dev);
+	if (ret < 0) {
+		dev_err(bus->parent_dev,
+				"%s: unable to create sysfs files for IPU JQS, ret %d\n",
+				__func__, ret);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -775,6 +875,8 @@ void ipu_core_jqs_remove(struct paintbox_bus *bus)
 	ipu_core_jqs_unload_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);
+
+	ipu_core_jqs_remove_sysfs(bus->parent_dev);
 
 	ret = pm_genpd_remove(&bus->gpd);
 	if (ret < 0)

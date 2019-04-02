@@ -27,6 +27,11 @@ struct jqs_firmware_preamble {
 	uint32_t fw_base_address;
 	uint32_t fw_and_working_set_bytes;
 	uint32_t prefill_transport_offset_bytes;
+	uint32_t stack_start_offset_bytes;
+	uint32_t stack_size_bytes;
+	uint32_t build_number;
+	uint32_t message_version;
+	uint32_t command_version;
 };
 
 #endif /* __IPU_CORE_JQS_PREAMBLE_H__ */
