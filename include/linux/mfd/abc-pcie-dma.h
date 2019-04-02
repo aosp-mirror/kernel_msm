@@ -85,19 +85,10 @@ struct abc_pcie_kernel_dma_desc {
 	enum dma_data_direction dir; /* direction of the DMA transfer */
 };
 
-/**
- * Structure of scatter gather list entry
- */
-struct abc_pcie_sg_entry {
-	phys_addr_t paddr; /* Physical address */
-	size_t size;       /* size of entry */
-};
-
 struct abc_pcie_sg_list {
 	struct page **mypage;
 	struct scatterlist *sc_list;
 	int n_num;
-	int length;
 	enum dma_data_direction dir;
 	struct dma_buf *dma_buf;
 	struct dma_buf_attachment *attach;
@@ -128,7 +119,6 @@ struct abc_buf_desc {
 		int64_t remote_addr;
 	};
 	struct abc_pcie_sg_list *sgl;
-	struct abc_pcie_sg_entry *sge;
 };
 
 struct abc_pcie_dma_mblk_desc {

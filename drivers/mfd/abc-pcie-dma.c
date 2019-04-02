@@ -55,8 +55,7 @@ static struct abc_pcie_dma_session global_session;
 static struct kmem_cache *waiter_cache;
 
 static void abc_pcie_exec_dma_xfer(struct abc_dma_xfer *xfer);
-int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl,
-					struct abc_pcie_sg_entry *sg);
+int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl);
 
 /* TODO: extend to include multiple concurrent dma channels */
 static int dma_callback(uint8_t chan, enum dma_data_direction dir,
@@ -161,113 +160,22 @@ static int abc_pcie_dma_alloc_ab_dram(size_t size,
 int abc_pcie_local_cma_build(enum dma_data_direction dir,
 				size_t size, struct abc_buf_desc *buf_desc)
 {
-	size_t maxsg;
-	struct abc_pcie_sg_entry *local_sg;
-	phys_addr_t local_buf = (phys_addr_t)buf_desc->local_addr;
 	struct abc_pcie_sg_list *sgl = buf_desc->sgl;
 
-	sgl->dir = dir;
-	buf_desc->sge = NULL;
-
-	/*
-	 * Allocate enough for one entry per sc_list entry, plus end of list.
-	 */
-	maxsg = 1 + 1;
-	local_sg = vmalloc(maxsg * sizeof(struct abc_pcie_sg_entry));
-	if (!local_sg) {
-		dev_err(&abc_dma.pdev->dev,
-			"%s: failed to allocate local buffer\n", __func__);
+	sgl->sc_list = kcalloc(1, sizeof(struct scatterlist), GFP_KERNEL);
+	if (!sgl->sc_list)
 		return -ENOMEM;
-	}
 
-	local_sg[0].paddr = local_buf;
-	local_sg[0].size = size;
+	sg_init_table(sgl->sc_list, 1);
+	sg_set_page(sgl->sc_list, (struct page *)buf_desc->local_addr, size,
+			/*offset=*/0);
+	sg_dma_address(sgl->sc_list) = (dma_addr_t)buf_desc->local_addr;
+#ifdef CONFIG_NEED_SG_DMA_LENGTH
+	sg_dma_len(sgl->sc_list) = size;
+#endif
+	sgl->n_num = 1;
 
-	/* List terminator */
-	local_sg[1].paddr = 0;
-	local_sg[1].size = 0;
-
-	buf_desc->sge = local_sg;
-
-	sgl->length = 2;
 	return 0;
-}
-
-/**
- * Convert Linux scatterlist to array of entries used by PCIe EP DMA engine
- * @param[in]  sc_list   Scatter gather list for DMA buffer
- * @param[in]  count     Number of entries in scatterlist
- * @param[in]  off       Offset within scatterlist to begin building entries.
- * @param[in]  size      Size, in bytes, of transfer.
- * @param[out] sg        Array generated dma addresses and length.
- * @param[in]  maxsg     Allocated max array number of the sg
- * @return a count of sg entries used on success
- *         -EINVAL if exceeding maxsg
- */
-static int scatterlist_to_abc_sg(struct scatterlist *sc_list, int count,
-				 uint64_t off, uint64_t size,
-				 struct abc_pcie_sg_entry *sg, size_t maxsg)
-{
-	struct scatterlist *in_sg;
-	int i, u;
-	uint64_t sc_size = 0;
-	uint64_t off_rem = off;		/* remaining offset */
-	uint64_t size_rem = size;	/* remaining size */
-
-	i = 0;	/* iterator of *sc_list */
-	u = 0;	/* iterator of *sg */
-
-	for (i = 0, in_sg = sc_list; i < count; i++, in_sg = sg_next(in_sg)) {
-		if (off_rem < sg_dma_len(in_sg))
-			break;
-
-		off_rem -= sg_dma_len(in_sg);
-		sc_size += sg_dma_len(in_sg);
-	}
-
-	for (; size_rem && (i < count); i++, in_sg = sg_next(in_sg)) {
-		/* Last entry is reserved for the NULL terminator */
-		if (u >= (maxsg - 1)) {
-			dev_err(&abc_dma.pdev->dev,
-				"maxsg exceeded\n");
-			return -EINVAL;
-		}
-		sg[u].paddr = sg_dma_address(in_sg) + off_rem;
-		sg[u].size = min(sg_dma_len(in_sg) - off_rem, size_rem);
-		dev_dbg(&abc_dma.pdev->dev,
-			"sg[%d] : Address %pa , length %zu\n",
-			u, &sg[u].paddr, sg[u].size);
-		off_rem = 0;
-		size_rem -= sg[u].size;
-		sc_size += sg_dma_len(in_sg);
-		if ((u > 0) && (sg[u-1].paddr + sg[u-1].size ==
-			sg[u].paddr)) {
-			sg[u-1].size = sg[u-1].size
-				+ sg[u].size;
-			sg[u].size = 0;
-		} else {
-			u++;
-		}
-	}
-
-	if (size_rem) {
-		dev_err(&abc_dma.pdev->dev,
-			"%s: transfer oob: off %lu, size %lu, sc list size %lu\n",
-			__func__, off, size, sc_size);
-		return -EINVAL;
-	}
-
-	/*
-	 * Zero out the list terminator entry.
-	 * abc dma engine looks at sg.paddr=0 for end of chain
-	 */
-	memset(&sg[u], 0, sizeof(sg[0]));
-	u++; /* Count of entries includes list terminator entry */
-
-	dev_dbg(&abc_dma.pdev->dev,
-		"SGL with %d/%d entries\n", u, i);
-
-	return u;
 }
 
 /**
@@ -331,14 +239,10 @@ int abc_pcie_sg_retrieve_from_dma_buf(enum dma_data_direction dir,
 					struct abc_buf_desc *buf_desc)
 {
 	int ret;
-	size_t maxsg;
-	struct abc_pcie_sg_entry *sg;
 	int fd = buf_desc->fd;
-	uint64_t off = buf_desc->offset;
 	struct abc_pcie_sg_list *sgl = buf_desc->sgl;
 
 	sgl->dir = dir;
-	buf_desc->sge = NULL;
 
 	/* Retrieve sg_table from dma_buf framework */
 	ret = abc_pcie_sg_import_dma_buf(fd, sgl);
@@ -349,45 +253,16 @@ int abc_pcie_sg_retrieve_from_dma_buf(enum dma_data_direction dir,
 	sgl->sc_list = sgl->sg_table->sgl;
 	sgl->n_num = sgl->sg_table->nents;
 
-	/*
-	 * Allocate enough for one entry per sc_list entry, plus end of list.
-	 */
-	maxsg = sgl->n_num + 1;
-	sg = vmalloc(maxsg * sizeof(struct abc_pcie_sg_entry));
-	if (!sg) {
-		abc_pcie_sg_release_from_dma_buf(sgl, NULL);
-		return -ENOMEM;
-	}
-	buf_desc->sge = sg;
-
-	dev_dbg(&abc_dma.pdev->dev,
-		"Enter %s: n_num:%d maxsg:%zu\n", __func__, sgl->n_num, maxsg);
-
-	/* Convert sc_list to a Synopsys compatible linked-list */
-	sgl->length = scatterlist_to_abc_sg(sgl->sc_list, sgl->n_num, off, size,
-					    sg, maxsg);
-	if (sgl->length < 0) {
-		ret = sgl->length;
-		abc_pcie_sg_release_from_dma_buf(sgl, sg);
-		buf_desc->sge = NULL;
-		return ret;
-	}
-
 	return 0;
 }
 
-int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl,
-					struct abc_pcie_sg_entry *sg)
+int abc_pcie_sg_release_from_dma_buf(struct abc_pcie_sg_list *sgl)
 {
 	dma_buf_unmap_attachment(sgl->attach, sgl->sg_table, sgl->dir);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
-	sgl->length = 0;
 	dma_buf_detach(sgl->dma_buf, sgl->attach);
 	dma_buf_put(sgl->dma_buf);
-	if (sg)
-		vfree(sg);
-
 	return 0;
 }
 
@@ -427,26 +302,13 @@ static int abc_pcie_vmalloc_buf_sg_build(enum dma_data_direction dir,
 					size_t size,
 					struct abc_buf_desc *buf_desc)
 {
-	int i, u, fp_offset, count;
+	int i, fp_offset, count;
 	int n_num, p_num;
 	int first_page, last_page;
-	size_t maxsg;
-	struct abc_pcie_sg_entry *sg;
 	void *dmadest = buf_desc->local_addr;
 	struct abc_pcie_sg_list *sgl = buf_desc->sgl;
 
 	sgl->dir = dir;
-	buf_desc->sge = NULL;
-
-	/*
-	 * Allocate enough for one entry per page, perhaps needing 1 more due
-	 * to crossing a page boundary, plus end of list.
-	 */
-	maxsg = (size / PAGE_SIZE) + 3;
-	sg = vmalloc(maxsg * sizeof(struct abc_pcie_sg_entry));
-	if (!sg)
-		return -ENOMEM;
-	buf_desc->sge = sg;
 
 	/* page num calculation */
 	first_page = ((dma_addr_t) dmadest & PAGE_MASK) >> PAGE_SHIFT;
@@ -454,10 +316,6 @@ static int abc_pcie_vmalloc_buf_sg_build(enum dma_data_direction dir,
 		>> PAGE_SHIFT;
 	fp_offset = (dma_addr_t) dmadest & ~PAGE_MASK;
 	p_num = last_page - first_page + 1;
-
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s:p_num:%d, maxsg:%zu\n",
-		__func__, p_num, maxsg);
 
 	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
 	if (!sgl->mypage)
@@ -473,62 +331,47 @@ static int abc_pcie_vmalloc_buf_sg_build(enum dma_data_direction dir,
 			"%s: fail to get user_pages\n", __func__);
 		goto release_page;
 	}
-	if (n_num < maxsg) {
-		sg_init_table(sgl->sc_list, n_num);
-		if (n_num == 1) {
-			sg_set_page(sgl->sc_list, *(sgl->mypage),
-				size, fp_offset);
-		} else {
-			sg_set_page(sgl->sc_list, *(sgl->mypage),
+
+	sg_init_table(sgl->sc_list, n_num);
+	if (n_num == 1) {
+		sg_set_page(sgl->sc_list, *(sgl->mypage), size, fp_offset);
+	} else {
+		sg_set_page(sgl->sc_list, *(sgl->mypage),
 				PAGE_SIZE - fp_offset, fp_offset);
-			for (i = 1; i < n_num - 1; i++) {
-				sg_set_page(sgl->sc_list + i,
-					    *(sgl->mypage + i), PAGE_SIZE, 0);
-			}
-			sg_set_page(sgl->sc_list + n_num - 1,
-				    *(sgl->mypage + n_num - 1),
-				    size - (PAGE_SIZE - fp_offset)
-				    - ((n_num - 2) * PAGE_SIZE), 0);
-		}
-		count = dma_map_sg_attrs(abc_dma.dma_dev,
-				   sgl->sc_list, n_num, sgl->dir,
-				   DMA_ATTR_SKIP_CPU_SYNC);
-		if (count <= 0) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: failed to map scatterlist region (%d) n_num(%d)\n",
-			       __func__, count, n_num);
-			goto release_page;
+
+		for (i = 1; i < n_num - 1; i++) {
+			sg_set_page(sgl->sc_list + i, *(sgl->mypage + i),
+					PAGE_SIZE, 0);
 		}
 
-		u = scatterlist_to_abc_sg(sgl->sc_list, count, /*off=*/0, size,
-					  sg, maxsg);
-		if (u < 0)
-			goto unmap_sg;
-	} else {
+		sg_set_page(sgl->sc_list + n_num - 1,
+				*(sgl->mypage + n_num - 1),
+				size - (PAGE_SIZE - fp_offset)
+					- ((n_num - 2) * PAGE_SIZE), 0);
+	}
+
+	count = dma_map_sg_attrs(abc_dma.dma_dev, sgl->sc_list, n_num, sgl->dir,
+				   DMA_ATTR_SKIP_CPU_SYNC);
+	if (count <= 0) {
 		dev_err(&abc_dma.pdev->dev,
-			"%s: maxsg exceeded\n", __func__);
+			"%s: failed to map scatterlist region (%d) n_num(%d)\n",
+		       __func__, count, n_num);
 		goto release_page;
 	}
+
 	sgl->n_num = n_num;
-	sgl->length = u;
 
 	return 0;
 
-unmap_sg:
-	dma_unmap_sg_attrs(abc_dma.dma_dev, sgl->sc_list, n_num, sgl->dir,
-				DMA_ATTR_SKIP_CPU_SYNC);
 release_page:
 	for (i = 0; i < n_num; i++)
 		put_page(*(sgl->mypage + i));
 free_sg:
-	vfree(sg);
-	buf_desc->sge = NULL;
 	kfree(sgl->mypage);
 	sgl->mypage = NULL;
 	kfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
-	sgl->length = 0;
 
 	return -EINVAL;
 }
@@ -545,26 +388,13 @@ int abc_pcie_user_local_buf_sg_build(enum dma_data_direction dir,
 					size_t size,
 					struct abc_buf_desc *buf_desc)
 {
-	int i, u, fp_offset, count;
+	int i, fp_offset, count;
 	int n_num, p_num;
 	int first_page, last_page;
-	size_t maxsg;
-	struct abc_pcie_sg_entry *sg;
 	void *dmadest = buf_desc->local_addr;
 	struct abc_pcie_sg_list *sgl = buf_desc->sgl;
 
 	sgl->dir = dir;
-	buf_desc->sge = NULL;
-
-	/*
-	 * Allocate enough for one entry per page, perhaps needing 1 more due
-	 * to crossing a page boundary, plus end of list.
-	 */
-	maxsg = (size / PAGE_SIZE) + 3;
-	sg = vmalloc(maxsg * sizeof(struct abc_pcie_sg_entry));
-	if (!sg)
-		return -ENOMEM;
-	buf_desc->sge = sg;
 
 	/* page num calculation */
 	first_page = ((unsigned long) dmadest & PAGE_MASK) >> PAGE_SHIFT;
@@ -573,26 +403,16 @@ int abc_pcie_user_local_buf_sg_build(enum dma_data_direction dir,
 	fp_offset = (unsigned long) dmadest & ~PAGE_MASK;
 	p_num = last_page - first_page + 1;
 
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s:p_num:%d, maxsg:%zu\n",
-		__func__, p_num, maxsg);
-
 	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
 	if (!sgl->mypage) {
-		vfree(sg);
-		buf_desc->sge = NULL;
 		sgl->n_num = 0;
-		sgl->length = 0;
 		return -EINVAL;
 	}
 	sgl->sc_list = kcalloc(p_num, sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list) {
-		vfree(sg);
-		buf_desc->sge = NULL;
 		kfree(sgl->mypage);
 		sgl->mypage = NULL;
 		sgl->n_num = 0;
-		sgl->length = 0;
 		return -EINVAL;
 	}
 
@@ -607,76 +427,55 @@ int abc_pcie_user_local_buf_sg_build(enum dma_data_direction dir,
 			"%s: fail to get user_pages\n", __func__);
 		goto release_page;
 	}
-	if (n_num < maxsg) {
-		sg_init_table(sgl->sc_list, n_num);
-		if (n_num == 1) {
-			sg_set_page(sgl->sc_list, *(sgl->mypage),
-				size, fp_offset);
-		} else {
-			sg_set_page(sgl->sc_list, *(sgl->mypage),
-				PAGE_SIZE - fp_offset, fp_offset);
-			for (i = 1; i < n_num-1; i++) {
-				sg_set_page(sgl->sc_list + i,
-					    *(sgl->mypage + i), PAGE_SIZE, 0);
-			}
-			sg_set_page(sgl->sc_list + n_num-1,
-				    *(sgl->mypage + n_num-1),
-				    size - (PAGE_SIZE - fp_offset)
-				    - ((n_num-2)*PAGE_SIZE), 0);
-		}
-		count = dma_map_sg_attrs(abc_dma.dma_dev,
-				   sgl->sc_list, n_num, sgl->dir,
-				   DMA_ATTR_SKIP_CPU_SYNC);
-		if (count <= 0) {
-			dev_err(&abc_dma.pdev->dev,
-				"%s: failed to map scatterlist region (%d) n_num(%d)\n",
-			       __func__, count, n_num);
-			goto release_page;
-		}
 
-		u = scatterlist_to_abc_sg(sgl->sc_list, count, /*off=*/0, size,
-					  sg, maxsg);
-		if (u < 0)
-			goto unmap_sg;
+	sg_init_table(sgl->sc_list, n_num);
+	if (n_num == 1) {
+		sg_set_page(sgl->sc_list, *(sgl->mypage), size, fp_offset);
 	} else {
+		sg_set_page(sgl->sc_list, *(sgl->mypage), PAGE_SIZE - fp_offset,
+				fp_offset);
+		for (i = 1; i < n_num-1; i++) {
+			sg_set_page(sgl->sc_list + i, *(sgl->mypage + i),
+					PAGE_SIZE, 0);
+		}
+		sg_set_page(sgl->sc_list + n_num-1, *(sgl->mypage + n_num-1),
+				size - (PAGE_SIZE - fp_offset)
+					- ((n_num-2)*PAGE_SIZE), 0);
+	}
+
+	count = dma_map_sg_attrs(abc_dma.dma_dev, sgl->sc_list, n_num, sgl->dir,
+				   DMA_ATTR_SKIP_CPU_SYNC);
+	if (count <= 0) {
 		dev_err(&abc_dma.pdev->dev,
-			"%s: maxsg exceeded\n", __func__);
+			"%s: failed to map scatterlist region (%d) n_num(%d)\n",
+		       __func__, count, n_num);
 		goto release_page;
 	}
+
 	sgl->n_num = n_num;
-	sgl->length = u;
 
 	return 0;
 
-unmap_sg:
-	dma_unmap_sg_attrs(abc_dma.dma_dev, sgl->sc_list, n_num, sgl->dir,
-				DMA_ATTR_SKIP_CPU_SYNC);
 release_page:
 	for (i = 0; i < n_num; i++)
 		put_page(*(sgl->mypage + i));
 
-	vfree(sg);
-	buf_desc->sge = NULL;
 	kfree(sgl->mypage);
 	sgl->mypage = NULL;
 	kfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
-	sgl->length = 0;
 
 	return -EINVAL;
 }
 
 /**
  * API to release scatter gather list for a user local buffer
- * @param[in] **sg pointer to pointer to sg entry allocated during
- *		abc_pcie_user_local_buf_sg_build
  * @param[in] *sgl pointer to the scatter gather list that was built during
  *		abc_pcie_user_local_buf_sg_build
  * @return 0 for SUCCESS
  */
-int abc_pcie_user_local_buf_sg_destroy(struct abc_pcie_sg_entry **sg,
-				       struct abc_pcie_sg_list *sgl)
+int abc_pcie_user_local_buf_sg_destroy(struct abc_pcie_sg_list *sgl)
 {
 	int i;
 	struct page *page;
@@ -690,126 +489,12 @@ int abc_pcie_user_local_buf_sg_destroy(struct abc_pcie_sg_entry **sg,
 			SetPageDirty(page);
 		put_page(page);
 	}
-	vfree((*sg));
-	*sg = NULL;
 	kfree(sgl->mypage);
 	sgl->mypage = NULL;
 	kfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
 
-	return 0;
-}
-
-int abc_pcie_ll_count_dma_element(struct abc_pcie_sg_entry *src_sg,
-			    struct abc_pcie_sg_entry *dst_sg)
-{
-	int entries = 0;
-	int dst_size_left = dst_sg->size;
-	int src_size_left = src_sg->size;
-
-	while ((src_sg->paddr != 0x0) && (dst_sg->paddr != 0x0)) {
-		if (dst_size_left == src_size_left) {
-			src_sg++;
-			dst_sg++;
-			src_size_left = src_sg->size;
-			dst_size_left = dst_sg->size;
-		} else if (src_size_left > dst_size_left) {
-			src_size_left -= dst_size_left;
-			dst_sg++;
-			dst_size_left = dst_sg->size;
-		} else {
-			dst_size_left -= src_size_left;
-			src_sg++;
-			src_size_left = src_sg->size;
-
-		}
-		entries++;
-	}
-	return entries;
-}
-
-static void abc_pcie_dma_update_ll_element(struct abc_pcie_sg_entry *sg_src,
-	struct abc_pcie_sg_entry *sg_dst, int size,
-	struct abc_pcie_dma_ll_element *ll_element)
-{
-	ll_element->size = size;
-	ll_element->sar_low = LOWER(sg_src->paddr);
-	ll_element->sar_high = UPPER(sg_src->paddr);
-	ll_element->dar_low = LOWER(sg_dst->paddr);
-	ll_element->dar_high = UPPER(sg_dst->paddr);
-}
-
-/**
- * API to generate a linked list for DMA transfers from
- * source and destination scatterlists.
- * @src_sg[in] Scatterlist of the source buffer
- * @dst_sg[in] Scatterlist of the destination buffer
- * @mblk_desc[in] pre allocated bar buffer
- * @ll_num_entries [in] - the number of entries in the link list
- */
-static int abc_pcie_dma_ll_setup(struct abc_pcie_sg_entry *src_sg,
-			    struct abc_pcie_sg_entry *dst_sg,
-			    struct abc_pcie_dma_mblk_desc *mblk_desc,
-			    int ll_num_entries)
-{
-	struct abc_pcie_dma_ll_element ll_element;
-	struct abc_pcie_sg_entry sg_dst, sg_src;
-	int i, s;
-	void *base_addr;
-
-	base_addr = mblk_desc->mapping.bar_vaddr;
-	ll_element.header = LL_DATA_ELEMENT;
-	i = 0; /* source buffer scatterlist index */
-	s = 0; /* destination buffer scatterlist index */
-	sg_dst = dst_sg[0];
-	sg_src = src_sg[0];
-	/* last element has a unique header */
-	for (; ll_num_entries > 1 &&
-			(sg_src.paddr != 0x0) &&
-			(sg_dst.paddr != 0x0); --ll_num_entries) {
-		if (sg_src.size == sg_dst.size) {
-			abc_pcie_dma_update_ll_element(&sg_src,
-				&sg_dst, sg_src.size, &ll_element);
-			i++;
-			s++;
-			sg_src = src_sg[i];
-			sg_dst = dst_sg[s];
-		} else if (sg_src.size > sg_dst.size) {
-			abc_pcie_dma_update_ll_element(&sg_src,
-				&sg_dst, sg_dst.size, &ll_element);
-			sg_src.paddr = sg_src.paddr + sg_dst.size;
-			sg_src.size = sg_src.size - sg_dst.size;
-			s++;
-			sg_dst = dst_sg[s];
-		} else {
-			abc_pcie_dma_update_ll_element(&sg_src,
-				&sg_dst, sg_src.size, &ll_element);
-			sg_dst.paddr = sg_dst.paddr + sg_src.size;
-			sg_dst.size = sg_dst.size - sg_src.size;
-			i++;
-			sg_src = src_sg[i];
-		}
-
-		if (ll_num_entries == 2)
-			ll_element.header = LL_IRQ_DATA_ELEMENT;
-
-		memcpy_toio((void *)base_addr, &ll_element, sizeof(ll_element));
-		base_addr += sizeof(ll_element);
-	}
-
-	// we didn't reach the end of the linked list - error in the count
-	if ((sg_src.paddr != 0x0 && sg_dst.paddr != 0) || ll_num_entries > 1) {
-		dev_err(&abc_dma.pdev->dev,
-				"%s: did not reach the end of the Scatterlists\n",
-				__func__);
-		return -EINVAL;
-	}
-	/* last element */
-	ll_element.header = LL_LAST_LINK_ELEMENT;
-	ll_element.sar_low = LOWER(mblk_desc->dma_paddr);
-	ll_element.sar_high = UPPER(mblk_desc->dma_paddr);
-	memcpy_toio((void *)base_addr, &ll_element, sizeof(ll_element));
 	return 0;
 }
 
@@ -824,35 +509,21 @@ int abc_pcie_user_remote_buf_sg_build(enum dma_data_direction dir,
 					size_t size,
 					struct abc_buf_desc *buf_desc)
 {
-	size_t maxsg;
-	struct abc_pcie_sg_entry *local_sg;
-	__u64 remote_buf = buf_desc->remote_addr;
 	struct abc_pcie_sg_list *sgl = buf_desc->sgl;
 
-	sgl->dir = dir;
-	buf_desc->sge = NULL;
-
-	/*
-	 * Allocate enough for one entry per sc_list entry, plus end of list.
-	 */
-	maxsg = 1 + 1;
-	local_sg = vmalloc(maxsg * sizeof(struct abc_pcie_sg_entry));
-	if (!local_sg) {
-		dev_err(&abc_dma.pdev->dev,
-			"%s: failed to allocate remote buffer\n", __func__);
+	sgl->sc_list = kcalloc(1, sizeof(struct scatterlist), GFP_KERNEL);
+	if (!sgl->sc_list)
 		return -ENOMEM;
-	}
 
-	local_sg[0].paddr = (phys_addr_t)remote_buf;
-	local_sg[0].size = size;
+	sg_init_table(sgl->sc_list, 1);
+	sg_set_page(sgl->sc_list, (struct page *)buf_desc->remote_addr, size,
+			/*offset=*/0);
+	sg_dma_address(sgl->sc_list) = buf_desc->remote_addr;
+#ifdef CONFIG_NEED_SG_DMA_LENGTH
+	sg_dma_len(sgl->sc_list) = size;
+#endif
+	sgl->n_num = 1;
 
-	/* List terminator */
-	local_sg[1].paddr = 0;
-	local_sg[1].size = 0;
-
-	buf_desc->sge = local_sg;
-
-	sgl->length = 2;
 	return 0;
 }
 
@@ -862,10 +533,9 @@ int abc_pcie_user_remote_buf_sg_build(enum dma_data_direction dir,
  *		abc_pcie_user_remote_buf_sg_build
  * @return 0 for SUCCESS
  */
-int abc_pcie_user_remote_buf_sg_destroy(struct abc_pcie_sg_entry **sg)
+int abc_pcie_user_remote_buf_sg_destroy(struct abc_pcie_sg_list *sgl)
 {
-	vfree((*sg));
-	*sg = NULL;
+	kfree(sgl->sc_list);
 
 	return 0;
 }
@@ -873,7 +543,6 @@ int abc_pcie_user_remote_buf_sg_destroy(struct abc_pcie_sg_entry **sg)
 int abc_pcie_clean_dma_local_buffers(struct abc_dma_xfer *xfer)
 {
 	struct abc_pcie_sg_list *sgl;
-	struct abc_pcie_sg_entry *sge;
 	struct abc_pcie_dma_mblk_desc *mblk_desc = xfer->mblk_desc;
 	struct dma_element_t *sblk_desc = xfer->sblk_desc;
 
@@ -894,18 +563,17 @@ int abc_pcie_clean_dma_local_buffers(struct abc_dma_xfer *xfer)
 
 
 	sgl = xfer->local_buf.sgl;
-	sge = xfer->local_buf.sge;
 
 	switch ((xfer->local_buf).buf_type) {
 	case DMA_BUFFER_KIND_USER:
 	case DMA_BUFFER_KIND_VMALLOC:
-		abc_pcie_user_local_buf_sg_destroy(&sge, sgl);
+		abc_pcie_user_local_buf_sg_destroy(sgl);
 		break;
 	case DMA_BUFFER_KIND_DMA_BUF:
-		abc_pcie_sg_release_from_dma_buf(sgl, sge);
+		abc_pcie_sg_release_from_dma_buf(sgl);
 		break;
 	case DMA_BUFFER_KIND_CMA:
-		vfree(sge);
+		kfree(sgl->sc_list);
 		break;
 	default:
 		break;
@@ -914,7 +582,6 @@ int abc_pcie_clean_dma_local_buffers(struct abc_dma_xfer *xfer)
 	kfree(sgl);
 
 	xfer->local_buf.sgl = NULL;
-	xfer->local_buf.sge = NULL;
 
 	return 0;
 }
@@ -922,18 +589,16 @@ int abc_pcie_clean_dma_local_buffers(struct abc_dma_xfer *xfer)
 int abc_pcie_clean_dma_remote_buffers(struct abc_dma_xfer *xfer)
 {
 	struct abc_pcie_sg_list *sgl;
-	struct abc_pcie_sg_entry *sge;
 
 
 	sgl = xfer->remote_buf.sgl;
-	sge = xfer->remote_buf.sge;
 
 	switch ((xfer->remote_buf).buf_type) {
 	case DMA_BUFFER_KIND_USER:
-		abc_pcie_user_remote_buf_sg_destroy(&sge);
+		abc_pcie_user_remote_buf_sg_destroy(sgl);
 		break;
 	case DMA_BUFFER_KIND_DMA_BUF:
-		abc_pcie_sg_release_from_dma_buf(sgl, sge);
+		abc_pcie_sg_release_from_dma_buf(sgl);
 		break;
 	default:
 		break;
@@ -942,7 +607,6 @@ int abc_pcie_clean_dma_remote_buffers(struct abc_dma_xfer *xfer)
 	kfree(sgl);
 
 	xfer->remote_buf.sgl = NULL;
-	xfer->remote_buf.sge = NULL;
 
 	return 0;
 }
@@ -1162,42 +826,179 @@ int abc_pcie_wait_dma_xfer(struct abc_dma_xfer *xfer, int timeout, int *error,
 }
 EXPORT_SYMBOL(abc_pcie_wait_dma_xfer);
 
+static void add_entry(void *base_vaddr, size_t index, uint32_t header,
+			uint64_t src_addr, uint64_t dst_addr, size_t size)
+{
+	struct abc_pcie_dma_ll_element entry;
+
+	dev_dbg(&abc_dma.pdev->dev,
+		"[%zu]: hdr=%08x src=%016lx dst=%016lx len=%zu\n",
+		index, header, src_addr, dst_addr, size);
+
+	entry.header = header;
+	entry.size = size;
+	entry.sar_low = LOWER(src_addr);
+	entry.sar_high = UPPER(src_addr);
+	entry.dar_low = LOWER(dst_addr);
+	entry.dar_high = UPPER(dst_addr);
+	memcpy_toio(base_vaddr + sizeof(entry) * index, &entry, sizeof(entry));
+}
+
+static void add_data_entry(void *base_vaddr, size_t index, uint64_t src_addr,
+				uint64_t dst_addr, size_t size, size_t rem,
+				bool last)
+{
+	if (index >= rem)
+		return;
+
+	add_entry(base_vaddr, index,
+			last ? LL_IRQ_DATA_ELEMENT : LL_DATA_ELEMENT, src_addr,
+			dst_addr, size);
+}
+
+static void add_link_entry(void *base_vaddr, size_t index, size_t rem)
+{
+	if (index >= rem)
+		return;
+
+	add_entry(base_vaddr, index, LL_LAST_LINK_ELEMENT, 0, 0, 0);
+}
+
+static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
+					struct abc_buf_desc *dst_buf,
+					size_t xfer_size,
+					void *base_vaddr,
+					int *num_entries)
+{
+	size_t size_rem = xfer_size;
+	size_t entry_index = 0;
+	uint32_t entry_size = 0;
+	uint64_t entry_src_addr;	/* valid when entry_size > 0 */
+	uint64_t entry_dst_addr;	/* valid when entry_size > 0 */
+	size_t entries_rem = *num_entries;
+	int src_sge_rem = src_buf->sgl->n_num;
+	size_t src_off = src_buf->offset;
+	struct scatterlist *src_sge = src_buf->sgl->sc_list;
+	size_t src_addr;		/* local to primary loop */
+	int dst_sge_rem = dst_buf->sgl->n_num;
+	size_t dst_off = dst_buf->offset;
+	struct scatterlist *dst_sge = dst_buf->sgl->sc_list;
+	size_t dst_addr;		/* local to primary loop */
+	size_t size;			/* local to primary loop */
+
+	/* seek to source offset */
+	while ((src_sge_rem > 0) && (src_off > sg_dma_len(src_sge))) {
+		src_off -= sg_dma_len(src_sge);
+		src_sge = sg_next(src_sge);
+		src_sge_rem--;
+	}
+
+	/* seek to destination offset */
+	while ((dst_sge_rem > 0) && (dst_off > sg_dma_len(dst_sge))) {
+		dst_off -= sg_dma_len(dst_sge);
+		dst_sge = sg_next(dst_sge);
+		dst_sge_rem--;
+	}
+
+	while ((src_sge_rem > 0) && (dst_sge_rem > 0) && (size_rem > 0)) {
+		size = sg_dma_len(src_sge) - src_off;
+		size = min(size, sg_dma_len(dst_sge) - dst_off);
+		size = min(size, size_rem);
+
+		src_addr = sg_dma_address(src_sge) + src_off;
+		dst_addr = sg_dma_address(dst_sge) + dst_off;
+
+		if ((entry_size > 0) &&
+			(src_addr == (entry_src_addr + entry_size)) &&
+			(dst_addr == (entry_dst_addr + entry_size))) {
+			entry_size += size;
+		} else {
+			if (entry_size > 0) {
+				add_data_entry(base_vaddr, entry_index,
+						entry_src_addr,	entry_dst_addr,
+						entry_size, entries_rem,
+						/*last=*/false);
+				entry_index++;
+			}
+
+			entry_size = size;
+			entry_src_addr = src_addr;
+			entry_dst_addr = dst_addr;
+		}
+
+		size_rem -= size;
+
+		src_off += size;
+		if (src_off == sg_dma_len(src_sge)) {
+			src_sge = sg_next(src_sge);
+			src_sge_rem--;
+			src_off = 0;
+		}
+
+		dst_off += size;
+		if (dst_off == sg_dma_len(dst_sge)) {
+			dst_sge = sg_next(dst_sge);
+			dst_sge_rem--;
+			dst_off = 0;
+		}
+	}
+
+	if (size_rem) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s: transfer oob: src off %zu, dst off %zu, size %zu\n",
+			__func__, src_buf->offset, dst_buf->offset, xfer_size);
+		return -EINVAL;
+	}
+
+	add_data_entry(base_vaddr, entry_index, entry_src_addr,
+			entry_dst_addr, entry_size, entries_rem, /*last=*/true);
+	entry_index++;
+	add_link_entry(base_vaddr, entry_index, entries_rem);
+	entry_index++;
+
+	dev_dbg(&abc_dma.pdev->dev, "%zu entries\n", entry_index);
+
+	*num_entries = entry_index;
+
+	return 0;
+}
+
+static struct abc_buf_desc *pick_src_buf(struct abc_dma_xfer *xfer)
+{
+	if (xfer->dir == DMA_TO_DEVICE)
+		return &xfer->local_buf;
+	else
+		return &xfer->remote_buf;
+}
+
+static struct abc_buf_desc *pick_dst_buf(struct abc_dma_xfer *xfer)
+{
+	if (xfer->dir == DMA_TO_DEVICE)
+		return &xfer->remote_buf;
+	else
+		return &xfer->local_buf;
+}
+
 static int abc_pcie_setup_sblk_xfer(struct abc_dma_xfer *xfer)
 {
-	int err = 0;
+	struct abc_buf_desc *src_buf = pick_src_buf(xfer);
+	struct abc_buf_desc *dst_buf = pick_dst_buf(xfer);
 	struct dma_element_t *dma_blk;
-	struct abc_pcie_sg_entry *local_sg_entries = xfer->local_buf.sge;
-	struct abc_pcie_sg_entry *remote_sg_entries = xfer->remote_buf.sge;
 
 	xfer->transfer_method = DMA_TRANSFER_USING_SBLOCK;
 
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s: SBLK transfer: local (%pa/%zu) remote (%pa/%zu)\n",
-		__func__, &local_sg_entries[0].paddr,
-		local_sg_entries[0].size, &remote_sg_entries[0].paddr,
-		remote_sg_entries[0].size);
-
 	dma_blk = kzalloc(sizeof(struct dma_element_t), GFP_KERNEL);
-	if (!dma_blk) {
-		err = -ENOMEM;
-		return err;
-	}
+	if (!dma_blk)
+		return -ENOMEM;
 
-	dma_blk->src_addr = (xfer->dir == DMA_TO_DEVICE) ?
-		LOWER((uint64_t)local_sg_entries[0].paddr) :
-		LOWER((uint64_t)remote_sg_entries[0].paddr);
-	dma_blk->src_u_addr = (xfer->dir == DMA_TO_DEVICE) ?
-		UPPER((uint64_t)local_sg_entries[0].paddr) :
-		UPPER((uint64_t)remote_sg_entries[0].paddr);
-	dma_blk->dst_addr = (xfer->dir == DMA_TO_DEVICE) ?
-		LOWER((uint64_t)remote_sg_entries[0].paddr) :
-		LOWER((uint64_t)local_sg_entries[0].paddr);
-	dma_blk->dst_u_addr = (xfer->dir == DMA_TO_DEVICE) ?
-		UPPER((uint64_t)remote_sg_entries[0].paddr) :
-		UPPER((uint64_t)local_sg_entries[0].paddr);
-	dma_blk->len = local_sg_entries[0].size; /* TODO: fix this */
+	dma_blk->src_addr = LOWER(sg_dma_address(src_buf->sgl->sc_list));
+	dma_blk->src_u_addr = UPPER(sg_dma_address(src_buf->sgl->sc_list));
+	dma_blk->dst_addr = LOWER(sg_dma_address(dst_buf->sgl->sc_list));
+	dma_blk->dst_u_addr = UPPER(sg_dma_address(dst_buf->sgl->sc_list));
+	dma_blk->len = xfer->size;
 
 	xfer->sblk_desc = dma_blk;
+
 	return 0;
 }
 
@@ -1206,15 +1007,12 @@ static int abc_pcie_setup_sblk_xfer(struct abc_dma_xfer *xfer)
  * to endpoint via single block DMA transfer.
  * @xfer[in] xfer to be operated on.
  */
-static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer)
+static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 {
 	int dma_chan;
 	size_t ll_size;
-	int ll_num_entries;
 	struct abc_pcie_dma_mblk_desc *mblk_desc;
 	int err = 0;
-	struct abc_pcie_sg_entry *src_sg; /* Scatterlist of the src buffer */
-	struct abc_pcie_sg_entry *dst_sg; /* Scatterlist of the dst buffer */
 
 	xfer->transfer_method = DMA_TRANSFER_USING_MBLOCK;
 
@@ -1222,10 +1020,6 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer)
 		"%s: MBLK transfer (dir=%s)\n",
 		__func__,
 		(xfer->dir == DMA_TO_DEVICE) ? "AP2EP" : "EP2AP");
-	src_sg = (xfer->dir == DMA_TO_DEVICE) ? xfer->local_buf.sge :
-						xfer->remote_buf.sge;
-	dst_sg = (xfer->dir == DMA_TO_DEVICE) ? xfer->remote_buf.sge :
-						xfer->local_buf.sge;
 
 	mblk_desc = kzalloc(sizeof(struct abc_pcie_dma_mblk_desc), GFP_KERNEL);
 	if (!mblk_desc)
@@ -1233,17 +1027,7 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer)
 
 	xfer->mblk_desc = mblk_desc;
 
-	/* add one since we have an end of list marker in the end */
-	ll_num_entries =
-		abc_pcie_ll_count_dma_element(src_sg, dst_sg) + 1;
-	if (ll_num_entries == 1) {
-		dev_err(&abc_dma.pdev->dev,
-			"%s: Error with received scatter lists\n",
-			__func__);
-		err = -ENOMEM;
-		goto release_mblk;
-	}
-	ll_size = ll_num_entries * sizeof(struct abc_pcie_dma_ll_element);
+	ll_size = num_entries * sizeof(struct abc_pcie_dma_ll_element);
 
 	err = abc_pcie_dma_alloc_ab_dram(ll_size, mblk_desc);
 	if (err) {
@@ -1274,19 +1058,16 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer)
 			goto unlock_unmap_buf;
 	}
 
-	err = abc_pcie_dma_ll_setup(src_sg, dst_sg, mblk_desc,
-					ll_num_entries);
+	err = abc_pcie_build_transfer_list(
+			pick_src_buf(xfer), pick_dst_buf(xfer), xfer->size,
+			mblk_desc->mapping.bar_vaddr, &num_entries);
 
 	abc_pcie_unmap_bar_region(abc_dma.dma_dev,
 			&abc_dma.pdev->dev /* owner */,
 			&mblk_desc->mapping);
 
-	if (err) {
-		dev_err(&abc_dma.pdev->dev,
-			"%s: ll_setup failed ch%d error: %d\n",
-			__func__, dma_chan, err);
+	if (err)
 		goto unlock_unmap_buf;
-	}
 
 	mutex_unlock(&dma_mutex);
 
@@ -1382,9 +1163,8 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 				struct abc_pcie_kernel_dma_desc *desc,
 				struct abc_dma_xfer **new_xfer)
 {
+	int num_entries = 0;
 	struct abc_dma_xfer *xfer;
-	uint32_t local_sg_size;
-	uint32_t remote_sg_size;
 	struct abc_buf_desc *lbuf;
 	struct abc_buf_desc *rbuf;
 	int err = 0;
@@ -1451,8 +1231,7 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 	rbuf->sgl = kzalloc(sizeof(struct abc_pcie_sg_list), GFP_KERNEL);
 	if (!rbuf->sgl) {
 		err = -ENOMEM;
-		abc_pcie_clean_dma_local_buffers(xfer);
-		goto clean_transfer;
+		goto clean_local_buffer;
 	}
 
 	switch (rbuf->buf_type) {
@@ -1475,25 +1254,19 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 	}
 	if (err < 0) {
 		kfree(rbuf->sgl);
-		abc_pcie_clean_dma_local_buffers(xfer);
-		goto clean_transfer;
+		goto clean_local_buffer;
 	}
 
-	/* check the size of the scatterlist */
-	local_sg_size = (lbuf->sgl)->length;
-	remote_sg_size = (rbuf->sgl)->length;
-	dev_dbg(&abc_dma.pdev->dev,
-		"%s: Scatterlists with (%d/%d) local/remote entries\n",
-		__func__, local_sg_size, remote_sg_size);
+	err = abc_pcie_build_transfer_list(
+			pick_src_buf(xfer), pick_dst_buf(xfer), xfer->size,
+			/*base_vaddr=*/NULL, &num_entries);
+	if (err)
+		goto clean_buffers;
 
-	/* Based on the scatterlists determine if sblk or mblk transfer */
-	/* Single block transfer */
-	if (remote_sg_size <= 2 && local_sg_size <= 2)
+	if (num_entries == 2)
 		err = abc_pcie_setup_sblk_xfer(xfer);
-
-	else /* Multi block transfer */
-		err = abc_pcie_setup_mblk_xfer(xfer);
-
+	else
+		err = abc_pcie_setup_mblk_xfer(xfer, num_entries);
 	if (err)
 		goto clean_buffers;
 
@@ -1510,8 +1283,9 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 
 	/* In case of error clear & free xfer */
 clean_buffers:
-	abc_pcie_clean_dma_local_buffers(xfer);
 	abc_pcie_clean_dma_remote_buffers(xfer);
+clean_local_buffer:
+	abc_pcie_clean_dma_local_buffers(xfer);
 clean_transfer:
 	kfree(xfer);
 	*new_xfer = NULL;
