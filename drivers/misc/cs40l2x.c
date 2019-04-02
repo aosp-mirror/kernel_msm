@@ -4948,12 +4948,6 @@ static void cs40l2x_vibe_brightness_set(struct led_classdev *led_cdev,
 	struct cs40l2x_private *cs40l2x =
 		container_of(led_cdev, struct cs40l2x_private, led_dev);
 
-	if (!cs40l2x->vibe_workqueue || !cs40l2x->vibe_init_success) {
-		dev_err(cs40l2x->dev,
-			"Failed to set vibe when it's not ready\n");
-		return;
-	}
-
 	switch (brightness) {
 	case LED_OFF:
 		queue_work(cs40l2x->vibe_workqueue, &cs40l2x->vibe_stop_work);
@@ -4994,6 +4988,12 @@ static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
 	struct hrtimer *pbq_timer = &cs40l2x->pbq_timer;
 	struct hrtimer *asp_timer = &cs40l2x->asp_timer;
 	int ret;
+
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+	cs40l2x_create_timed_output(cs40l2x);
+#else
+	cs40l2x_create_led(cs40l2x);
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 
 	cs40l2x->vibe_workqueue =
 		alloc_ordered_workqueue("vibe_workqueue", WQ_HIGHPRI);
@@ -8061,12 +8061,6 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 			cs40l2x->fw_desc->fw_file, dev, GFP_KERNEL, cs40l2x,
 			cs40l2x_firmware_load);
-
-#ifdef CONFIG_ANDROID_TIMED_OUTPUT
-	cs40l2x_create_timed_output(cs40l2x);
-#else
-	cs40l2x_create_led(cs40l2x);
-#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 
 	return 0;
 err:
