@@ -59,6 +59,9 @@ SoCs:
 - QCS403
   compatible = "qcom,qcs403"
 
+- QCS401
+  compatible = "qcom,qcs401"
+
 - SDXPRAIRIE
   compatible = "qcom,sdxprairie"
 
@@ -67,6 +70,15 @@ SoCs:
 
 - TRINKET
   compatible = "qcom,trinket"
+
+- ATOLL
+  compatible = "qcom,atoll"
+
+- QCS610
+  compatible = "qcom,qcs610"
+
+- QCS410
+  compatible = "qcom,qcs410"
 
 Generic board variants:
 
@@ -182,6 +194,7 @@ compatible = "qcom,sa6155p-adp-air"
 compatible = "qcom,qcs405-rumi"
 compatible = "qcom,qcs405-iot"
 compatible = "qcom,qcs403-iot"
+compatible = "qcom,qcs401-iot"
 compatible = "qcom,sa8155-adp-star"
 compatible = "qcom,sa8155p-adp-star"
 compatible = "qcom,adp-star"
@@ -205,3 +218,6 @@ compatible = "qcom,sdmmagpiep-qrd"
 compatible = "qcom,trinket-rumi"
 compatible = "qcom,trinket-idp"
 compatible = "qcom,trinket-qrd"
+compatible = "qcom,atoll-rumi"
+compatible = "qcom,qcs610-iot"
+compatible = "qcom,qcs410-iot"

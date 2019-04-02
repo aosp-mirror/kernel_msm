@@ -19,7 +19,8 @@ dtb-$(CONFIG_ARCH_QCS405) += qcs405-rumi.dtb \
 		qcs405-iot-sku9.dtb \
 		qcs405-iot-sku10.dtb \
 		qcs405-iot-sku11.dtb \
-		qcs405-iot-sku12.dtb
+		qcs405-iot-sku12.dtb \
+		qcs401-iot-sku1.dtb
 else
 dtb-$(CONFIG_ARCH_QCS405) += qcs403-iot-sku1.dtb \
 			qcs403-iot-sku2.dtb \
@@ -102,12 +103,13 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 		sdmshrike-cdp-overlay.dtbo \
 		sdmshrike-mtp-overlay.dtbo
 
-sdmshrike-cdp-overlay.dtbo-base := sdmshrike.dtb
-sdmshrike-mtp-overlay.dtbo-base := sdmshrike.dtb
+sdmshrike-cdp-overlay.dtbo-base := sdmshrike.dtb sdmshrike-v2.dtb
+sdmshrike-mtp-overlay.dtbo-base := sdmshrike.dtb sdmshrike-v2.dtb
 else
 dtb-$(CONFIG_ARCH_SDMSHRIKE)	+= sdmshrike-rumi.dtb \
 	sdmshrike-mtp.dtb \
-	sdmshrike-cdp.dtb
+	sdmshrike-cdp.dtb \
+	sdmshrike-v2-mtp.dtb
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
@@ -126,7 +128,9 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 		sa6155-adp-air-overlay.dtbo \
 		sa6155p-adp-air-overlay.dtbo \
 		sa6155p-v2-adp-star-overlay.dtbo \
-		sa6155p-v2-adp-air-overlay.dtbo
+		sa6155p-v2-adp-air-overlay.dtbo \
+		qcs610-iot-overlay.dtbo \
+		qcs410-iot-overlay.dtbo
 
 sm6150-rumi-overlay.dtbo-base := sm6150.dtb
 sm6150-qrd-overlay.dtbo-base := sm6150.dtb
@@ -143,6 +147,8 @@ sa6155p-v2-adp-star-overlay.dtbo-base := sa6155p.dtb
 sa6155-adp-air-overlay.dtbo-base := sa6155.dtb
 sa6155p-adp-air-overlay.dtbo-base := sa6155p.dtb
 sa6155p-v2-adp-air-overlay.dtbo-base := sa6155p.dtb
+qcs610-iot-overlay.dtbo-base := qcs610.dtb
+qcs410-iot-overlay.dtbo-base := qcs410.dtb
 else
 dtb-$(CONFIG_ARCH_SM6150)	+= sm6150-rumi.dtb \
 	sm6150-qrd.dtb \
@@ -158,7 +164,9 @@ dtb-$(CONFIG_ARCH_SM6150)	+= sm6150-rumi.dtb \
 	sa6155-adp-air.dtb \
 	sa6155p-adp-air.dtb \
 	sa6155p-v2-adp-star.dtb \
-	sa6155p-v2-adp-air.dtb
+	sa6155p-v2-adp-air.dtb \
+	qcs610-iot.dtb \
+	qcs410-iot.dtb
 
 endif
 
@@ -220,6 +228,15 @@ dtb-$(CONFIG_ARCH_TRINKET)	+= trinket-rumi.dtb \
 	trinket-external-codec-idp.dtb \
 	trinket-usbc-external-codec-idp.dtb \
 	trinket-usbc-idp.dtb
+endif
+
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+	dtbo-$(CONFIG_ARCH_ATOLL) += \
+		atoll-rumi-overlay.dtbo\
+
+atoll-rumi-overlay.dtbo-base := atoll.dtb
+else
+dtb-$(CONFIG_ARCH_ATOLL)	+= atoll-rumi.dtb
 endif
 
 dtb-$(CONFIG_ARCH_SDXPRAIRIE) += sdxprairie-rumi.dtb \
