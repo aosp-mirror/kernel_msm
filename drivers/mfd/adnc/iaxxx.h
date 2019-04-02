@@ -23,7 +23,7 @@ struct iaxxx_event;
 struct iaxxx_evt_queue;
 #define IAXXX_READ	0
 #define IAXXX_WRITE	1
-#define IAXXX_BUF_MAX_LEN	2048
+#define IAXXX_BUF_MAX_LEN	16384
 #define IAXXX_CM4_CTRL_MGR_SRC_ID 0x2610
 #define IAXXX_CRASH_EVENT_ID 2
 #define IAXXX_BOOT_COMPLETE_EVENT_ID 0

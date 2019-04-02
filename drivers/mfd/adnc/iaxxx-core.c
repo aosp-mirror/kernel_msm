@@ -857,10 +857,11 @@ static int iaxxx_regdump_init(struct iaxxx_priv *priv)
 	if (!priv->reg_dump)
 		return -ENOMEM;
 
-	priv->reg_dump->log = kzalloc(sizeof(struct iaxxx_register_log)
-			* IAXXX_BUF_MAX_LEN, GFP_KERNEL);
+	priv->reg_dump->log = vzalloc(sizeof(struct iaxxx_register_log) *
+					IAXXX_BUF_MAX_LEN);
 	if (!priv->reg_dump->log) {
 		kfree(priv->reg_dump);
+		priv->reg_dump = NULL;
 		return -ENOMEM;
 	}
 
@@ -870,8 +871,10 @@ static int iaxxx_regdump_init(struct iaxxx_priv *priv)
 
 void iaxxx_regdump_exit(struct iaxxx_priv *priv)
 {
-	kfree(priv->reg_dump->log);
+	vfree(priv->reg_dump->log);
+	priv->reg_dump->log = NULL;
 	kfree(priv->reg_dump);
+	priv->reg_dump = NULL;
 }
 
 static int iaxxx_reset_check_sbl_mode(struct iaxxx_priv *priv)
