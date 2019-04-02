@@ -5905,7 +5905,8 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 static int cs40l2x_raw_write(struct cs40l2x_private *cs40l2x, unsigned int reg,
 			const void *val, size_t val_len, size_t limit)
 {
-	int ret = 0, i;
+	int ret = 0;
+	int i;
 
 	/* split "val" into smaller writes not to exceed "limit" in length */
 	for (i = 0; i < val_len; i += limit) {
