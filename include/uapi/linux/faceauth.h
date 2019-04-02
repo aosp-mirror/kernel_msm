@@ -66,7 +66,7 @@ struct faceauth_start_data {
 
 	/* Output parameters */
 	__u8 result; /* result code from AB */
-	__u32 bin_bitmap;
+	__u32 lockout_event;
 	__u32 angles;
 	__s32 error_code; /* ab-faceauth error code */
 	__u32 ab_exception_number;
@@ -75,8 +75,8 @@ struct faceauth_start_data {
 	__u8  __user *citadel_token;
 	__u32 citadel_token_size;
 
-	__u32 citadel_lockout_event;
 	__u32 citadel_input;
+	__u32 citadel_input2;
 	__u32 citadel_output1;
 	__u32 citadel_output2;
 

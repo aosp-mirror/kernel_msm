@@ -107,6 +107,7 @@ struct hypx_fa_process {
 	uint32_t citadel_input;
 	uint64_t citadel_token; /* PHY addr */
 	uint32_t citadel_token_size;
+	uint32_t citadel_input2;
 } __packed;
 
 struct hypx_fa_process_results {
@@ -120,6 +121,8 @@ struct hypx_fa_process_results {
 	uint32_t citadel_output1;
 	uint32_t citadel_output2;
 	uint32_t exception_number;
+	uint32_t citadel_token_size;
+	uint64_t citadel_token; /* PHY addr */
 } __packed;
 
 struct hypx_fa_debug_data {
@@ -795,6 +798,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	hypx_data->operation = data->operation;
 	hypx_data->profile_id = data->profile_id;
 	hypx_data->citadel_input = data->citadel_input;
+	hypx_data->citadel_input2 = data->citadel_input2;
 	if (pass_images_to_el2) {
 		hypx_data->image_dot_left = hypx_create_blob(
 			dev, &image_dot_left, data->image_dot_left,
@@ -868,6 +872,8 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 				    jiffies_to_usecs(jiffies - save_trace));
 
 err:
+	if (hypx_data->citadel_token)
+		hypx_free_blob_userbuf(hypx_data->citadel_token, true);
 	if (hypx_data->calibration)
 		hypx_free_blob(dev, &calibration, false);
 	if (hypx_data->image_flood)
@@ -887,6 +893,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 {
 	int ret = 0;
 	unsigned long save_trace;
+	bool need_reassign = true;
 	struct scm_desc desc = { 0 };
 	struct hypx_fa_process_results *hypx_data;
 
@@ -895,6 +902,15 @@ int el2_faceauth_get_process_result(struct device *dev,
 		ret = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
 		goto exit;
+	}
+
+	hypx_data->citadel_token_size = 0;
+	if (data->citadel_token_size && data->operation == COMMAND_VALIDATE) {
+		hypx_data->citadel_token = hypx_create_blob_userbuf(
+			dev, data->citadel_token, data->citadel_token_size);
+		hypx_data->citadel_token_size = data->citadel_token_size;
+		if (!hypx_data->citadel_token)
+			goto exit;
 	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
@@ -922,14 +938,28 @@ int el2_faceauth_get_process_result(struct device *dev,
 
 	data->result = hypx_data->result;
 	data->angles = hypx_data->angles;
-	data->citadel_lockout_event = hypx_data->citadel_lockout_event;
+	data->lockout_event = hypx_data->citadel_lockout_event;
 	data->citadel_output1 = hypx_data->citadel_output1;
 	data->citadel_output2 = hypx_data->citadel_output2;
 	data->fw_version = hypx_data->fw_version;
 	data->error_code = hypx_data->error_code;
 	data->ab_exception_number = hypx_data->exception_number;
 
+	if (hypx_data->citadel_token) {
+		ret = hypx_copy_from_blob_userbuf(dev, data->citadel_token,
+						  hypx_data->citadel_token,
+						  data->citadel_token_size,
+						  true, false);
+		if (ret) {
+			pr_err("Failed hypx_copy_from_blob_userbuf %d\n", ret);
+			goto exit;
+		}
+	}
+	need_reassign = false;
+
 exit:
+	if (hypx_data->citadel_token)
+		hypx_free_blob_userbuf(hypx_data->citadel_token, need_reassign);
 	if (hypx_data)
 		free_page((unsigned long)hypx_data);
 	return ret;

@@ -441,7 +441,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			pr_err("Error reading Citadel Lockout Event\n");
 			goto exit;
 		}
-		start_step_data.citadel_lockout_event = temp_data;
+		start_step_data.lockout_event = temp_data;
 
 		err = aon_config_read(ANGLE_RESULT_FLAG_ADDR, 4, &angles);
 		if (err) {
