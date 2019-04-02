@@ -864,6 +864,38 @@ static void add_link_entry(void *base_vaddr, size_t index, size_t rem)
 	add_entry(base_vaddr, index, LL_LAST_LINK_ELEMENT, 0, 0, 0);
 }
 
+static size_t max_entry_size = UINT_MAX;
+
+static ssize_t max_entry_size_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n", max_entry_size);
+}
+
+static ssize_t max_entry_size_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	int err;
+	unsigned long size;
+
+	err = kstrtoul(buf, 0, &size);
+	if (err)
+		return err;
+
+	if ((size == 0) || (size > UINT_MAX))
+		return -EINVAL;
+
+	max_entry_size = size;
+
+	return count;
+}
+
+
+static DEVICE_ATTR(max_entry_size, 0664, max_entry_size_show,
+			max_entry_size_store);
+
 static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 					struct abc_buf_desc *dst_buf,
 					size_t xfer_size,
@@ -903,14 +935,17 @@ static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 	while ((src_sge_rem > 0) && (dst_sge_rem > 0) && (size_rem > 0)) {
 		size = sg_dma_len(src_sge) - src_off;
 		size = min(size, sg_dma_len(dst_sge) - dst_off);
+		size = min(size, max_entry_size);
 		size = min(size, size_rem);
 
 		src_addr = sg_dma_address(src_sge) + src_off;
 		dst_addr = sg_dma_address(dst_sge) + dst_off;
 
 		if ((entry_size > 0) &&
+			(entry_size < max_entry_size) &&
 			(src_addr == (entry_src_addr + entry_size)) &&
 			(dst_addr == (entry_dst_addr + entry_size))) {
+			size = min(size, max_entry_size - entry_size);
 			entry_size += size;
 		} else {
 			if (entry_size > 0) {
@@ -1500,6 +1535,11 @@ void abc_pcie_dma_close_session(struct abc_pcie_dma_session *session)
 	}
 }
 
+static const struct attribute *abc_pcie_dma_attrs[] = {
+	&dev_attr_max_entry_size.attr,
+	NULL,
+};
+
 /**
  * Closes and destroys a session.
  * @session[in] Existing session.
@@ -1512,6 +1552,12 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 	int i;
 
 	abc_dma.pdev = pdev;
+
+	err = sysfs_create_files(&pdev->dev.kobj, abc_pcie_dma_attrs);
+	if (err) {
+		dev_err(&abc_dma.pdev->dev, "failed to create sysfs entries\n");
+		return err;
+	}
 
 	/* Depending on the IOMMU configuration the board the IPU may need
 	 * to use MFD parent's device for mapping DMA buffers.  Otherwise, the
@@ -1575,6 +1621,7 @@ int abc_pcie_dma_drv_remove(struct platform_device *pdev)
 	remove_abc_pcie_dma_uapi(&abc_dma.uapi);
 	abc_pcie_dma_close_session(&global_session);
 	kmem_cache_destroy(waiter_cache);
+	sysfs_remove_files(&pdev->dev.kobj, abc_pcie_dma_attrs);
 
 	/* TODO(alexperez): remove elements! */
 	list_del(&pending_to_dev_q);
