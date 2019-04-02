@@ -687,7 +687,7 @@ static int pps_update_adapter(struct chg_drv *chg_drv,
 static int chg_work_gen_state(union gbms_charger_state *chg_state,
 			       struct power_supply *chg_psy)
 {
-	int vchrg, chg_type, chg_status;
+	int vchrg, chg_type, chg_status, ioerr;
 
 	/* TODO: if (chg_drv->chg_mode == CHG_DRV_MODE_NOIRDROP) vchrg = 0; */
 	/* Battery needs to know charger voltage and state to run the irdrop
@@ -695,8 +695,9 @@ static int chg_work_gen_state(union gbms_charger_state *chg_state,
 	 */
 	vchrg = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	chg_type = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_TYPE);
-	chg_status = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
-	if (vchrg < 0 || chg_type < 0 || chg_status < 0) {
+	chg_status = GPSY_GET_INT_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS,
+						&ioerr);
+	if (vchrg < 0 || chg_type < 0 || ioerr < 0) {
 		pr_err("MSC_CHG error vchrg=%d chg_type=%d chg_status=%d\n",
 			vchrg, chg_type, chg_status);
 		return -EINVAL;
@@ -751,7 +752,8 @@ static int chg_work_roundtrip(const union gbms_charger_state *chg_state,
 	int rc;
 
 	rc = GPSY_SET_INT64_PROP(bat_psy,
-		POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE, chg_state->v);
+			POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
+			chg_state->v);
 	if (rc < 0) {
 		pr_err("MSC_CHG error cannot set CHARGE_CHARGER_STATE rc=%d\n",
 		       rc);
@@ -760,9 +762,9 @@ static int chg_work_roundtrip(const union gbms_charger_state *chg_state,
 
 	/* NOTE: also in the votables */
 	*cc_max = GPSY_GET_PROP(bat_psy,
-		POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT);
+			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT);
 	*fv_uv = GPSY_GET_PROP(bat_psy,
-		POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE);
+			POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE);
 
 	/* ASSERT: (chg_state.f.flags&GBMS_CS_FLAG_DONE) && cc_max == 0 */
 
@@ -1481,7 +1483,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 {
 	struct pd_pps_data *pps = &chg_drv->pps_data;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
-	int ret = 0, ibatt, vbatt;
+	int ret = 0, ibatt, vbatt, ioerr;
 	unsigned long exp_mw;
 	uint8_t flags = chg_drv->pps_data.chg_flags;
 
@@ -1491,10 +1493,11 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	if (!(flags & GBMS_CS_FLAG_CC))
 		return 0;
 
-	ibatt = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
+	ibatt = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW,
+					   &ioerr);
 	vbatt = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 
-	if (ibatt < 0 || vbatt < 0) {
+	if (ioerr < 0 || vbatt < 0) {
 		pr_err("Failed to get ibatt and vbatt\n");
 		return -EIO;
 	}

@@ -836,21 +836,25 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	struct power_supply *fg_psy = batt_drv->fg_psy;
 	struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	int vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv, temp_idx;
-	int temp, ibatt, vbatt, vchrg, chg_type;
+	int temp, ibatt, vbatt, vchrg, chg_type, ioerr;
 	int update_interval = MSC_DEFAULT_UPDATE_INTERVAL;
 	bool sw_jeita;
 
-	temp = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP);
-	if (temp < 0)
+	temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP,&ioerr);
+	if (ioerr < 0)
 		return -EIO;
 
 	sw_jeita = msc_logic_soft_jeita(batt_drv, temp);
 	if (sw_jeita)
 		return 0;
 
-	ibatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
+	ibatt = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_CURRENT_NOW,
+					  &ioerr);
+	if (ioerr < 0)
+		return -EIO;
+
 	vbatt = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
-	if (ibatt < 0 || vbatt < 0)
+	if (vbatt < 0)
 		return -EIO;
 
 	/* invalid or 0 vchg disable IDROP compensation in FAST */
@@ -1729,8 +1733,8 @@ static void google_battery_work(struct work_struct *work)
 	__pm_stay_awake(&batt_drv->batt_ws);
 
 	mutex_lock(&batt_drv->chg_lock);
-	fg_status = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS);
-	if (fg_status < 0)
+	fg_status = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS, &ret);
+	if (ret < 0)
 		goto reschedule;
 
 	mutex_lock(&batt_drv->batt_lock);
