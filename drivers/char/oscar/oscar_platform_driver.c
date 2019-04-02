@@ -383,9 +383,12 @@ static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 	struct gasket_dev *gasket_dev = oscar_dev->gasket_dev;
 	struct oscar_abdram_map_ioctl ibuf;
 	struct abc_buffer *abc_buffer;
-	dma_addr_t abdram_dma_addr;
+	struct scatterlist *sg;
+	u64 dev_addr;
+	dma_addr_t dma_addr;
 	int fd;
-	size_t len;
+	uint len;
+	int i, j;
 	int ret;
 
 	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
@@ -422,31 +425,53 @@ static int oscar_abc_map_buffer(struct oscar_dev *oscar_dev,
 		}
 	}
 
-	abdram_dma_addr = sg_dma_address(abc_buffer->sg_table->sgl);
-	len = sg_dma_len(abc_buffer->sg_table->sgl);
+	dev_addr = ibuf.device_address;
+	abc_buffer->page_table_index = ibuf.page_table_index;
+	abc_buffer->device_address = dev_addr;
 
-	if (gasket_page_table_are_addrs_bad(
+	for (i = 0, sg = abc_buffer->sg_table->sgl;
+	     i < abc_buffer->sg_table->nents; i++, sg = sg_next(sg)) {
+		dma_addr = sg_dma_address(sg);
+		len = sg_dma_len(sg);
+
+		if (gasket_page_table_are_addrs_bad(
 			    gasket_dev->page_table[ibuf.page_table_index],
-			    abdram_dma_addr, ibuf.device_address, len)) {
-		ret = -EINVAL;
-		goto unmap_sg;
+			    dma_addr, dev_addr, len)) {
+			ret = -EINVAL;
+			goto unmap_sg;
+		}
+
+		ret = gasket_page_table_map(
+			gasket_dev->page_table[ibuf.page_table_index],
+			dma_addr, dev_addr, len / PAGE_SIZE,
+			DMA_TO_DEVICE << 1, false, true);
+
+		if (ret)
+			goto unmap_sg;
+
+		dev_addr += len;
 	}
 
-	abc_buffer->page_table_index = ibuf.page_table_index;
-	abc_buffer->device_address = ibuf.device_address;
-	ret = gasket_page_table_map(
-		    gasket_dev->page_table[ibuf.page_table_index],
-		    abdram_dma_addr, abc_buffer->device_address,
-		    len / PAGE_SIZE, DMA_TO_DEVICE << 1, false, true);
-
-	if (!ret)
-		refcount_inc(&abc_buffer->refcount);
+	refcount_inc(&abc_buffer->refcount);
 
 unmap_sg:
 	if (ret) {
+		dev_addr = ibuf.device_address;
+
+		for (j = 0, sg = abc_buffer->sg_table->sgl; j < i;
+		     j++, sg = sg_next(sg)) {
+			len = sg_dma_len(sg);
+
+			gasket_page_table_unmap(
+				gasket_dev->page_table[ibuf.page_table_index],
+				dev_addr, len / PAGE_SIZE);
+
+			dev_addr += len;
+		}
 		dma_buf_unmap_attachment(abc_buffer->dma_buf_attachment,
 					 abc_buffer->sg_table, DMA_TO_DEVICE);
 		abc_buffer->sg_table = NULL;
+		abc_buffer->device_address = 0;
 	}
 unlock_put_buffer:
 	mutex_unlock(&abc_buffer->mapping_lock);
@@ -460,13 +485,20 @@ abc_unmap_abdram_common(struct abc_buffer *abc_buffer, uint32_t pgtbl_index,
 			uint64_t device_address)
 {
 	struct gasket_dev *gasket_dev = abc_buffer->oscar_dev->gasket_dev;
-	size_t len;
+	struct scatterlist *sg;
+	uint len;
+	int i;
 
 	if (WARN_ON(!abc_buffer->sg_table))
 		return;
-	len = sg_dma_len(abc_buffer->sg_table->sgl);
-	gasket_page_table_unmap(gasket_dev->page_table[pgtbl_index],
-				device_address, len / PAGE_SIZE);
+
+	for (i = 0, sg = abc_buffer->sg_table->sgl;
+	     i < abc_buffer->sg_table->nents; i++, sg = sg_next(sg)) {
+		len = sg_dma_len(sg);
+		gasket_page_table_unmap(gasket_dev->page_table[pgtbl_index],
+					device_address, len / PAGE_SIZE);
+		device_address += len;
+	}
 	mutex_unlock(&abc_buffer->mapping_lock);
 	abc_put_buffer(abc_buffer); /* drop reference for the mapping */
 }
