@@ -246,6 +246,8 @@ enum ab_sm_time_stamps {
 	/*PMIC*/
 	AB_SM_TS_PMIC_ON,
 	AB_SM_TS_PMIC_OFF,
+	AB_SM_SMPS1_MIN,
+	AB_SM_SMPS1_NOMINAL,
 
 	/*Bootsequence*/
 	AB_SM_TS_BOOT_SEQ,

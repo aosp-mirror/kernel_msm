@@ -817,6 +817,8 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"AON state change",
 		"PMIC on",
 		"PMIC off",
+		"SMPS1 min",
+		"SMPS1 nominal",
 		"boot sequence",
 		"IPU PMU resume",
 		"TPU PMU resume",
@@ -1063,6 +1065,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	/* If it could be at Sleep, increase voltage if necessary
 	 * (context: b/129285814)
 	 */
+	ab_sm_start_ts(sc, AB_SM_SMPS1_NOMINAL);
 	if (prev_state <= CHIP_STATE_300) {
 		dev_info(sc->dev, "increase SMPS1 voltage back to nominal\n");
 		ret = regulator_set_voltage(sc->smps1, SMPS1_NOMINAL_VOLTAGE,
@@ -1074,6 +1077,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			return ret;
 		}
 	}
+	ab_sm_record_ts(sc, AB_SM_SMPS1_NOMINAL);
 
 	ab_sm_start_ts(sc, AB_SM_TS_PMIC_ON);
 	ret = ab_pmic_on(sc);
@@ -1190,6 +1194,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	/* If going to Sleep, decrease voltage to save power
 	 * (context: b/129285814)
 	 */
+	ab_sm_start_ts(sc, AB_SM_SMPS1_MIN);
 	if (to_chip_substate_id == CHIP_STATE_300) {
 		dev_info(sc->dev, "Decrease SMPS1 voltage to min\n");
 		ret = regulator_set_voltage(sc->smps1, SMPS1_MIN_VOLTAGE,
@@ -1201,6 +1206,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			return ret;
 		}
 	}
+	ab_sm_record_ts(sc, AB_SM_SMPS1_MIN);
 
 	ab_sm_record_ts(sc, AB_SM_TS_FULL);
 
