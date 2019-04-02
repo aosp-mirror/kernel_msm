@@ -4663,8 +4663,6 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				cs40l2x->cp_trailer_index & CS40L2X_INDEX_MASK);
 		if (ret)
 			dev_err(dev, "Failed to start playback\n");
-
-		cs40l2x->led_dev.brightness = LED_FULL;
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
@@ -4672,8 +4670,6 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				cs40l2x->cp_trailer_index);
 		if (ret)
 			dev_err(dev, "Failed to start playback\n");
-
-		cs40l2x->led_dev.brightness = LED_FULL;
 		break;
 
 	case CS40L2X_INDEX_PBQ:
@@ -4743,7 +4739,6 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 		}
 
 		cs40l2x->diag_state = CS40L2X_DIAG_STATE_RUN1;
-		cs40l2x->led_dev.brightness = LED_FULL;
 		break;
 
 	case CS40L2X_INDEX_QEST:
@@ -4875,7 +4870,6 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 
 err_skip:
 	cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
-	cs40l2x->led_dev.brightness = LED_OFF;
 
 	mutex_unlock(&cs40l2x->lock);
 }
