@@ -512,13 +512,13 @@ static int pd_regulator_update(struct usbpd *pd, bool external_reg, bool on)
 		if (ret) {
 			logbuffer_log(pd->log,
 				      "update_vbus_locked: unable to turn on %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
+				      , external_reg ? "external" : "pmic"
 				      , ret);
 			return ret;
 		} else {
 			logbuffer_log(pd->log,
 				      "update_vbus_locked: turned on %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
+				      , external_reg ? "external" : "pmic"
 				      , ret);
 		}
 	} else {
@@ -527,13 +527,13 @@ static int pd_regulator_update(struct usbpd *pd, bool external_reg, bool on)
 		if (ret) {
 			logbuffer_log(pd->log,
 				      "update_vbus_locked: unable to turn off %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
+				      , external_reg ? "external" : "pmic"
 				      , ret);
 			return ret;
 		} else {
 			logbuffer_log(pd->log,
 				      "update_vbus_locked: turned off %s vbus ret = %d"
-				      , pd->external_vbus ? "external" : "pmic"
+				      , external_reg ? "external" : "pmic"
 				      , ret);
 		}
 	}
@@ -866,7 +866,7 @@ static void psy_changed_handler(struct work_struct *work)
 	parse_cc_status(typec_mode, typec_cc_orientation, &cc1, &cc2);
 
 	logbuffer_log(pd->log,
-		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s], pd_capable [%s], external_vbus [%s]",
+		      "type [%s], pe_start [%s], vbus_present [%s], mode [%s], orientation [%s], cc1 [%s], cc2 [%s], external_vbus_update [%s], wireless_online [%s]",
 		      get_psy_type_name(psy_type),
 		      pe_start ? "Y" : "N",
 		      vbus_present ? "Y" : "N",
