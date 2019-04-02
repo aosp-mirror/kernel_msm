@@ -24,7 +24,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
-#include <uapi/ab-dram.h>
+#include <uapi/linux/ab-dram.h>
 
 /* TODO(b/116617722): Add carveout support */
 #define AIRBRUSH_DRAM_START_PADDR 0x24000000
