@@ -12081,6 +12081,11 @@ static void wlan_hdd_check_11gmode(u8 *pIe, u8* require_ht, u8* require_vht,
 {
     u8 i, num_rates = pIe[0];
 
+    if (num_rates > SIR_MAC_RATESET_EID_MAX) {
+        hddLog(VOS_TRACE_LEVEL_ERROR, "Invalid supported rates %d", num_rates);
+        return;
+    }
+
     pIe += 1;
     for ( i = 0; i < num_rates; i++)
     {
