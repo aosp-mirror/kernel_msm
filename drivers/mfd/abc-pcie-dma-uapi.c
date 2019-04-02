@@ -170,23 +170,42 @@ static int abc_pcie_dma_user_xfer_start(struct device *dev,
 	int err = 0;
 	struct abc_dma_xfer *xfer = NULL;
 	struct abc_pcie_dma_desc_start desc;
+	struct abc_pcie_dma *abc_dma = (session->uapi)->abc_dma;
 
 	dev_dbg(dev, "%s: Received IOCTL for start request\n", __func__);
 	if (copy_from_user(&desc, (void __user *)arg, sizeof(desc))) {
 		dev_err(dev, "%s: failed to copy from user space\n", __func__);
 		return -EFAULT;
 	}
+	down_read(&abc_dma->state_transition_rwsem);
+	if (!abc_dma->pcie_link_up || (abc_dma->dram_state != AB_DMA_DRAM_UP)) {
+		up_read(&abc_dma->state_transition_rwsem);
+		dev_err(dev,
+			"DMA is not active: pcie_link:%s dram_state:%s\n",
+			abc_dma->pcie_link_up ? "Up" : "Down",
+			dram_state_str(abc_dma->dram_state));
+		return -EREMOTEIO;
+	}
 
 	mutex_lock(&session->lock);
 	xfer = abc_pcie_dma_find_xfer(session, desc.id);
 	if (!xfer) {
-		err = -EINVAL;
+		mutex_unlock(&session->lock);
+		up_read(&abc_dma->state_transition_rwsem);
 		dev_err(dev, "%s: Could not find xfer id:%0llu\n", __func__,
+			desc.id);
+		return -EINVAL;
+	}
+
+	if (xfer->poisoned) {
+		err = -EREMOTEIO;
+		dev_err(dev, "Transfer (id:%0llu) has been poisoned.%\n",
 			desc.id);
 	} else {
 		err = abc_pcie_start_dma_xfer_locked(xfer, &desc.start_id);
 	}
 	mutex_unlock(&session->lock);
+	up_read(&abc_dma->state_transition_rwsem);
 
 	if (err)
 		return err;
@@ -206,7 +225,6 @@ static int abc_pcie_dma_user_xfer_wait(struct device *dev,
 	int err = 0;
 	struct abc_pcie_dma_desc_wait wait_desc;
 	struct abc_dma_wait_info *wait_info;
-
 
 	dev_dbg(dev, "%s: Received IOCTL for wait request\n", __func__);
 	if (copy_from_user(&wait_desc, (void __user *)arg, sizeof(wait_desc))) {
@@ -236,9 +254,10 @@ static int abc_pcie_dma_user_xfer_clean(struct device *dev,
 	int err = 0;
 	uint64_t id = (uint64_t)arg;
 	struct abc_dma_xfer *xfer = NULL;
+	struct abc_pcie_dma *abc_dma = (session->uapi)->abc_dma;
 
 	dev_dbg(dev, "%s: Received IOCTL for clean request\n", __func__);
-
+	down_read(&abc_dma->state_transition_rwsem);
 	mutex_lock(&session->lock);
 	xfer = abc_pcie_dma_find_xfer(session, id);
 	if (!xfer) {
@@ -249,7 +268,7 @@ static int abc_pcie_dma_user_xfer_clean(struct device *dev,
 		abc_pcie_clean_dma_xfer_locked(xfer);
 	}
 	mutex_unlock(&session->lock);
-
+	up_read(&abc_dma->state_transition_rwsem);
 	return err;
 }
 
@@ -270,7 +289,6 @@ int abc_pcie_dma_open(struct inode *inode, struct file *filp)
 	err = abc_pcie_dma_open_session(session);
 	if (err)
 		return err;
-	session->uapi = uapi;
 	filp->private_data = session;
 	return 0;
 }

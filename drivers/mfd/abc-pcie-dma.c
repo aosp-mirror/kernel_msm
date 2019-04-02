@@ -37,7 +37,6 @@
 #define DMA_CHANS_PER_READ_XFER 3
 #define DMA_CHANS_PER_WRITE_XFER 1
 
-/* TODO(alexperez): Remove this, when we get async mods. */
 static struct abc_pcie_dma abc_dma;
 
 static DEFINE_SPINLOCK(dma_spinlock);
@@ -120,6 +119,183 @@ static int dma_callback(uint8_t chan, enum dma_data_direction dir,
 		abc_pcie_exec_dma_xfer(xfer);
 	spin_unlock(&dma_spinlock);
 	return 0;
+}
+
+static void poison_all_transfers(void)
+{
+	struct abc_dma_xfer *xfer;
+	struct abc_pcie_dma_session *session;
+
+	list_for_each_entry(session, &abc_dma.sessions, list_session) {
+		list_for_each_entry(xfer, &session->transfers,
+					list_transfers) {
+			xfer->poisoned = true;
+		}
+	}
+}
+
+/**
+ * handle_pending_q_stop:
+ *  Returns head of pending_q or null
+ *  Must be protected by dma_spinlock before calling.
+ */
+static struct abc_dma_xfer *handle_pending_q_stop(struct list_head *pending_q,
+						bool wait_active_transfer)
+{
+	struct abc_dma_xfer *xfer, *nxt_xfer, *first_xfer;
+	struct abc_dma_wait_info *wait_info;
+
+	first_xfer = NULL;
+
+	list_for_each_entry_safe(xfer, nxt_xfer, pending_q, list_pending) {
+		if (!first_xfer) {
+			first_xfer = xfer;
+			if (wait_active_transfer)
+				continue;
+		}
+		xfer->pending = false;
+		list_del(&xfer->list_pending);
+		wait_info = xfer->wait_info;
+		wait_info->error = -ECANCELED;
+		complete_all(&wait_info->done);
+	}
+
+	return first_xfer;
+}
+
+static void wait_transfer_on_state_transition(
+					struct abc_pcie_dma_session *session,
+					struct abc_dma_wait_info *wait_info)
+{
+	int error;
+	uint32_t start_id;
+
+	mutex_lock(&session->lock);
+	wait_info->active_waiters++;
+	mutex_unlock(&session->lock);
+	abc_pcie_dma_do_wait(session, wait_info, -1, &error, &start_id);
+}
+
+/**
+ * handle_dma_state_transition:
+ *  This function is assumed to be called *only* when there is
+ *  a transition change.
+ *  This function sets the new dma_state.
+ */
+static void handle_dma_state_transition(bool pcie_link_up,
+					enum abc_dma_dram_state_e dram_state,
+					bool wait_active_transfer)
+{
+	unsigned long flags;
+	struct abc_dma_xfer *first_from_dev, *first_to_dev;
+
+	if (pcie_link_up && (dram_state == AB_DMA_DRAM_UP))
+		goto set_dma_state;
+
+	spin_lock_irqsave(&dma_spinlock, flags);
+	/* Clear all pending queues except for first element */
+	first_to_dev = handle_pending_q_stop(&pending_to_dev_q,
+						wait_active_transfer);
+
+	first_from_dev = handle_pending_q_stop(&pending_from_dev_q,
+						wait_active_transfer);
+
+	spin_unlock_irqrestore(&dma_spinlock, flags);
+
+	if (dram_state == AB_DMA_DRAM_DOWN)
+		poison_all_transfers();
+
+
+	if (wait_active_transfer && first_to_dev)
+		wait_transfer_on_state_transition(first_to_dev->session,
+						first_to_dev->wait_info);
+
+	if (wait_active_transfer && first_from_dev)
+		wait_transfer_on_state_transition(first_from_dev->session,
+						first_from_dev->wait_info);
+
+set_dma_state:
+	abc_dma.pcie_link_up = pcie_link_up;
+	abc_dma.dram_state = dram_state;
+
+	dev_dbg(&abc_dma.pdev->dev,
+		"pcie_link:%s dram_state:%s\n",
+		abc_dma.pcie_link_up ? "Up" : "Down",
+		dram_state_str(abc_dma.dram_state));
+}
+
+static int dma_pcie_blocking_listener(struct notifier_block *nb,
+					unsigned long action,
+					void *data)
+{
+	bool pcie_link_up = abc_dma.pcie_link_up;
+	enum abc_dma_dram_state_e dram_state;
+	bool wait_active_transfer = false;
+
+	down_write(&abc_dma.state_transition_rwsem);
+	dram_state = abc_dma.dram_state;
+	/* Find the hardware state */
+	if (action & ABC_PCIE_LINK_ERROR) {
+		pcie_link_up = false;
+		dram_state = AB_DMA_DRAM_DOWN;
+	} else if (action & ABC_PCIE_LINK_ENTER_EL2 ||
+			action & ABC_PCIE_LINK_PRE_DISABLE) {
+		wait_active_transfer = true;
+		pcie_link_up = false;
+	} else if (action & ABC_PCIE_LINK_EXIT_EL2 ||
+			action & ABC_PCIE_LINK_POST_ENABLE) {
+		pcie_link_up = true;
+	}
+
+	if ((pcie_link_up != abc_dma.pcie_link_up) ||
+		(dram_state != abc_dma.dram_state))
+		handle_dma_state_transition(pcie_link_up, dram_state,
+						wait_active_transfer);
+	up_write(&abc_dma.state_transition_rwsem);
+	return NOTIFY_OK;
+}
+
+static int dma_dram_blocking_listener(struct notifier_block *nb,
+					unsigned long action,
+					void *data)
+{
+	struct ab_clk_notifier_data *clk_data =
+					(struct ab_clk_notifier_data *)data;
+	bool pcie_link_up = abc_dma.pcie_link_up;
+	enum abc_dma_dram_state_e dram_state = abc_dma.dram_state;
+	bool wait_active_transfer = false;
+
+	down_write(&abc_dma.state_transition_rwsem);
+	if (action & AB_DRAM_ABORT_RATE_CHANGE) {
+		/* Note that dram_abort is considered fatal an the system
+		 * will be brought down.
+		 */
+		pcie_link_up = false;
+		dram_state = AB_DMA_DRAM_DOWN;
+	} else if (action & AB_DRAM_DATA_PRE_OFF) {
+		dram_state = AB_DMA_DRAM_DOWN;
+		wait_active_transfer = true;
+	} else if (action & AB_DRAM_PRE_RATE_CHANGE &&
+			clk_data->new_rate == 0) {
+		wait_active_transfer = true;
+		dram_state = AB_DMA_DRAM_SUSPEND;
+	} else if (action & AB_DRAM_POST_RATE_CHANGE &&
+		clk_data->new_rate > 0) {
+		dram_state = AB_DMA_DRAM_UP;
+	} else if (action & AB_DRAM_PRE_RATE_CHANGE &&
+			clk_data->new_rate > 0 && clk_data->old_rate > 0) {
+			dev_warn(&abc_dma.pdev->dev,
+				"Unsupported clk rate change\n");
+		up_write(&abc_dma.state_transition_rwsem);
+		return NOTIFY_DONE;
+	}
+
+	if ((pcie_link_up != abc_dma.pcie_link_up) ||
+		(dram_state != abc_dma.dram_state))
+		handle_dma_state_transition(pcie_link_up, dram_state,
+						wait_active_transfer);
+	up_write(&abc_dma.state_transition_rwsem);
+	return NOTIFY_OK;
 }
 
 /**
@@ -708,9 +884,13 @@ void abc_pcie_clean_dma_xfer(struct abc_dma_xfer *xfer)
 {
 	struct abc_pcie_dma_session *session = xfer->session;
 
+	down_read(&abc_dma.state_transition_rwsem);
+
 	mutex_lock(&session->lock);
 	abc_pcie_clean_dma_xfer_locked(xfer);
 	mutex_unlock(&session->lock);
+
+	up_read(&abc_dma.state_transition_rwsem);
 }
 EXPORT_SYMBOL(abc_pcie_clean_dma_xfer);
 
@@ -749,6 +929,7 @@ int abc_pcie_dma_get_user_wait(uint64_t id,
 			__func__, id);
 		goto release_lock;
 	}
+
 	if (xfer->wait_info == NULL) {
 		err = -EINVAL;
 		dev_err(&abc_dma.pdev->dev, "%s: Wait info struct is NULL!\n",
@@ -1351,9 +1532,18 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 	if (!session)
 		return -EINVAL;
 
+	down_read(&abc_dma.state_transition_rwsem);
+
+	if (!abc_dma.pcie_link_up || (abc_dma.dram_state != AB_DMA_DRAM_UP)) {
+		up_read(&abc_dma.state_transition_rwsem);
+		return -EREMOTEIO;
+	}
+
 	err = dma_alloc_xfer_from_kernel_desc(desc, &xfer);
-	if (err)
+	if (err) {
+		up_read(&abc_dma.state_transition_rwsem);
 		return err;
+	}
 
 	dev_dbg(&abc_dma.pdev->dev, "%s: xfer_id:%0llu", __func__,
 		session->next_xfer_id);
@@ -1366,6 +1556,7 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 	if (xfer->size == 0) {
 		dev_err(&abc_dma.pdev->dev, "%s: Invalid transfer size: 0\n",
 				__func__);
+		up_read(&abc_dma.state_transition_rwsem);
 		return -EINVAL;
 	}
 
@@ -1375,8 +1566,10 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 
 	/* Create scatterlist of local buffer */
 	lbuf->sgl = kzalloc(sizeof(struct abc_pcie_sg_list), GFP_KERNEL);
-	if (!lbuf->sgl)
+	if (!lbuf->sgl) {
+		up_read(&abc_dma.state_transition_rwsem);
 		return -ENOMEM;
+	}
 
 	switch (lbuf->buf_type) {
 	case DMA_BUFFER_KIND_USER:
@@ -1456,6 +1649,8 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 	xfer->id = session->next_xfer_id;
 	session->next_xfer_id++;
 	mutex_unlock(&session->lock);
+	up_read(&abc_dma.state_transition_rwsem);
+
 	dev_dbg(&abc_dma.pdev->dev, "%s: created xfer: id:%0llu\n",
 		__func__, xfer->id);
 	return 0;
@@ -1468,6 +1663,7 @@ clean_local_buffer:
 clean_transfer:
 	kfree(xfer);
 	*new_xfer = NULL;
+	up_read(&abc_dma.state_transition_rwsem);
 	return err;
 }
 EXPORT_SYMBOL(abc_pcie_create_dma_xfer);
@@ -1623,9 +1819,22 @@ int abc_pcie_start_dma_xfer(struct abc_dma_xfer *xfer, uint32_t *start_id)
 {
 	int err;
 
+	down_read(&abc_dma.state_transition_rwsem);
+	if (!abc_dma.pcie_link_up || (abc_dma.dram_state != AB_DMA_DRAM_UP) ||
+		xfer->poisoned) {
+		up_read(&abc_dma.state_transition_rwsem);
+		dev_err(&abc_dma.pdev->dev,
+			"Cannot process: pcie_link:%s dram_state:%s poisoned:%0d\n",
+			abc_dma.pcie_link_up ? "Up" : "Down",
+			dram_state_str(abc_dma.dram_state), xfer->poisoned);
+		return -EREMOTEIO;
+	}
+
 	mutex_lock(&(xfer->session)->lock);
 	err = abc_pcie_start_dma_xfer_locked(xfer, start_id);
 	mutex_unlock(&(xfer->session)->lock);
+
+	up_read(&abc_dma.state_transition_rwsem);
 	return err;
 }
 EXPORT_SYMBOL(abc_pcie_start_dma_xfer);
@@ -1682,6 +1891,10 @@ int abc_pcie_dma_open_session(struct abc_pcie_dma_session *session)
 	INIT_LIST_HEAD(&session->transfers);
 	mutex_init(&session->lock);
 	session->waiter_cache = waiter_cache;
+	session->uapi = &abc_dma.uapi;
+	down_write(&abc_dma.state_transition_rwsem);
+	list_add_tail(&session->list_session, &abc_dma.sessions);
+	up_write(&abc_dma.state_transition_rwsem);
 	return 0;
 }
 
@@ -1698,6 +1911,9 @@ void abc_pcie_dma_close_session(struct abc_pcie_dma_session *session)
 		list_transfers) {
 		abc_pcie_clean_dma_xfer(xfer);
 	}
+	down_write(&abc_dma.state_transition_rwsem);
+	list_del(&session->list_session);
+	up_write(&abc_dma.state_transition_rwsem);
 }
 
 static const struct attribute *abc_pcie_dma_attrs[] = {
@@ -1719,6 +1935,8 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 	int i;
 
 	abc_dma.pdev = pdev;
+	abc_dma.pcie_link_up = true;
+	abc_dma.dram_state = AB_DMA_DRAM_DOWN;
 
 	err = sysfs_create_files(&pdev->dev.kobj, abc_pcie_dma_attrs);
 	if (err) {
@@ -1740,6 +1958,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 		abc_dma.dma_dev = &pdev->dev;
 	}
 	abc_dma.uapi.mdev.parent = &pdev->dev;
+	abc_dma.uapi.abc_dma = &abc_dma;
 	err = init_abc_pcie_dma_uapi(&abc_dma.uapi);
 	if (err)
 		goto remove_sysfs;
@@ -1751,6 +1970,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 		goto remove_uapi;
 	}
 
+	INIT_LIST_HEAD(&abc_dma.sessions);
 	INIT_LIST_HEAD(&pending_to_dev_q);
 	INIT_LIST_HEAD(&pending_from_dev_q);
 
@@ -1766,6 +1986,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 		}
 	}
 
+	init_rwsem(&abc_dma.state_transition_rwsem);
 	/* Initialize Global Session */
 	err = abc_pcie_dma_open_session(&global_session);
 	if (err)
@@ -1782,10 +2003,26 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 
 	global_session.waiter_cache = waiter_cache;
 
+	/* Prepare DRAM and PCIE notifiers */
+	abc_dma.pcie_nb.notifier_call = dma_pcie_blocking_listener;
+	abc_dma.dram_nb.notifier_call = dma_dram_blocking_listener;
+	err = abc_register_pcie_link_blocking_event(&abc_dma.pcie_nb);
+
+	if (err)
+		goto close_dma_session;
+
+	err = ab_sm_register_clk_event(&abc_dma.dram_nb);
+	if (err) {
+		abc_unregister_pcie_link_blocking_event(&abc_dma.pcie_nb);
+		goto close_dma_session;
+	}
+
 	return 0;
 
 close_dma_session:
 	abc_pcie_dma_close_session(&global_session);
+	abc_dma.pcie_nb.notifier_call = NULL;
+	abc_dma.dram_nb.notifier_call = NULL;
 
 restore_callback:
 	for (i = dma_chan - 1; i >= 0; i--)
@@ -1813,9 +2050,13 @@ int abc_pcie_dma_drv_remove(struct platform_device *pdev)
 	abc_pcie_put_inbound_iatu(abc_dma.dma_dev,
 		&abc_dma.pdev->dev /* owner */, abc_dma.iatu);
 
-	/* TODO(alexperez): remove elements! */
+	/* Elements for each session are removed upon close */
 	list_del(&pending_to_dev_q);
 	list_del(&pending_from_dev_q);
+
+	abc_unregister_pcie_link_blocking_event(&abc_dma.pcie_nb);
+	ab_sm_unregister_clk_event(&abc_dma.dram_nb);
+
 	return 0;
 }
 

@@ -22,8 +22,20 @@
 #define LL_LINK_ELEMENT         0x5
 #define LL_LAST_LINK_ELEMENT    0x7
 
+enum abc_dma_dram_state_e {
+	AB_DMA_DRAM_DOWN = 0,
+	AB_DMA_DRAM_SUSPEND, /* DRAM in self-refresh mode */
+	AB_DMA_DRAM_UP
+};
+
+#define dram_state_str(state) ((state) ? \
+			((state & 0x2) ? "UP" : "SUSPEND") : "DOWN")
+
+struct abc_pcie_dma;
+
 struct abc_pcie_dma_uapi {
 	struct miscdevice mdev;
+	struct abc_pcie_dma *abc_dma;
 };
 
 struct abc_pcie_dma_session {
@@ -32,12 +44,19 @@ struct abc_pcie_dma_session {
 	struct mutex lock;
 	struct abc_pcie_dma_uapi *uapi;
 	struct kmem_cache *waiter_cache;
+	struct list_head list_session;
 };
 
 struct abc_pcie_dma {
 	struct platform_device *pdev;
 	struct device *dma_dev;
 	struct abc_pcie_dma_uapi uapi;
+	bool pcie_link_up;
+	enum abc_dma_dram_state_e dram_state;
+	struct notifier_block pcie_nb;
+	struct notifier_block dram_nb;
+	struct rw_semaphore state_transition_rwsem;
+	struct list_head sessions; /* List of all sessions */
 	int iatu;
 	struct mutex iatu_mutex;
 };
@@ -155,6 +174,7 @@ struct abc_dma_xfer {
 	bool pending; /* True if xfer in pending queue */
 	bool synced; /* True if cpu synced */
 	int error;
+	bool poisoned; /* True if poisoned */
 
 	struct abc_pcie_dma_session *session; /* This transfer's session */
 	struct list_head list_transfers; /* Has session transfers */
