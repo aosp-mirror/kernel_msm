@@ -3240,11 +3240,6 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 		ret = max17x0x_nvram_recall(chip);
 		if (ret == 0)
 			chip->needs_reset = true;
-
-		/* TODO: enable with maxim,fix-nagefccfg */
-		if (max17xxx_gauge_type == MAX1720X_GAUGE_TYPE)
-			REGMAP_WRITE(chip->regmap_nvram,
-				     MAX1720X_NAGEFCCFG, 0);
 	}
 
 	ret = max17x0x_fixups(chip);
