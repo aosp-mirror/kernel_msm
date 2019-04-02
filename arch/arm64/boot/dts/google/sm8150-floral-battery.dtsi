@@ -144,6 +144,7 @@
 	google_battery: google,battery {
 		compatible = "google,battery";
 		google,fg-psy-name = "maxfg";
+		power-supplies = <&max1720x_fg>, <&google_bms>;
 
 		/* chg-battery-capacity = <0> -> read FULL_DESIGN from FG */
 		google,chg-battery-capacity = <0>;
