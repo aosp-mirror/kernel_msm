@@ -21,6 +21,7 @@
 #include <linux/kthread.h>
 #include <linux/mfd/abc-pcie.h>
 #include <linux/pm_wakeup.h>
+#include <soc/qcom/subsystem_notif.h>
 #include <uapi/linux/ab-sm.h>
 #include <uapi/linux/sched/types.h>
 
@@ -981,7 +982,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	ab_sm_zero_ts(sc);
 
-	if (sc->el2_mode) {
+	if (sc->el2_mode || sc->el2_in_secure_context) {
 		dev_err(sc->dev, "Cannot change state while in EL2 mode\n");
 		return -ENODEV;
 	}
@@ -1895,6 +1896,7 @@ static int ab_sm_misc_release(struct inode *ip, struct file *fp)
 int ab_sm_enter_el2(struct ab_state_context *sc)
 {
 	int ret = 0;
+	bool thermal_disabled = false;
 
 	mutex_lock(&sc->state_transitioning_lock);
 	if (sc->throttle_state_id == THROTTLE_NOCOMPUTE) {
@@ -1905,10 +1907,11 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 		 * state change to be applied is what we are waiting for.
 		 */
 		ab_thermal_disable(sc->thermal);
+		thermal_disabled = true;
 	}
 	mutex_unlock(&sc->state_transitioning_lock);
 	if (ret < 0)
-		return ret;
+		goto exit;
 
 	/*
 	 * Disable thermal may cause a state change. Wait for state change
@@ -1920,24 +1923,36 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
 	if (ret == 0) {
 		dev_warn(sc->dev, "State change timed out\n");
-		ab_thermal_enable(sc->thermal);
-		return -ETIMEDOUT;
+		ret = -ETIMEDOUT;
+		goto exit;
 	}
 
 	mutex_lock(&sc->state_transitioning_lock);
-	mutex_lock(&sc->mfd_lock);
+
+	/* Ensure PCIe is accessible */
+	if (sc->el2_in_secure_context) {
+		dev_warn(sc->dev,
+			 "Can't enter EL2 while PCIe is mapped to the secure context\n");
+		mutex_unlock(&sc->state_transitioning_lock);
+		ret = -EINVAL;
+		goto exit;
+	}
+
 	if (!sc->el2_mode) {
+		mutex_lock(&sc->mfd_lock);
 		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
+
 		if (!ret)
 			sc->el2_mode = true;
 	} else {
 		ret = -EINVAL;
 		dev_warn(sc->dev, "Already in el2 mode\n");
 	}
-	mutex_unlock(&sc->mfd_lock);
 	mutex_unlock(&sc->state_transitioning_lock);
 
-	if (ret)
+exit:
+	if (ret && thermal_disabled)
 		ab_thermal_enable(sc->thermal);
 	return ret;
 }
@@ -1947,9 +1962,20 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 	int ret;
 
 	mutex_lock(&sc->state_transitioning_lock);
-	mutex_lock(&sc->mfd_lock);
+
+	/* Ensure PCIe is accessible */
+	if (sc->el2_in_secure_context) {
+		dev_warn(sc->dev,
+			 "Can't exit EL2 while PCIe is mapped to the secure context\n");
+		mutex_unlock(&sc->state_transitioning_lock);
+		return -EINVAL;
+	}
+
 	if (sc->el2_mode) {
+		mutex_lock(&sc->mfd_lock);
 		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
+		mutex_unlock(&sc->mfd_lock);
+
 		if (!ret) {
 			sc->el2_mode = false;
 			/*
@@ -1962,7 +1988,6 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 		ret = -EINVAL;
 		dev_warn(sc->dev, "Not in el2 mode\n");
 	}
-	mutex_unlock(&sc->mfd_lock);
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	return ret;
@@ -2287,6 +2312,64 @@ static void ab_sm_state_stats_init(struct ab_state_context *sc)
 	sc->state_stats[curr_stat_state].last_entry = ktime_get_boottime();
 }
 
+static int ab_sm_el2_notification_listener(struct notifier_block *nb,
+					   unsigned long code, void *data)
+{
+	struct ab_state_context *sc =
+		container_of(nb, struct ab_state_context, el2_notif_nb);
+
+	switch (code) {
+	case SUBSYS_BEFORE_POWERUP:
+		/* PCIe is getting mapped to the secure context */
+		mutex_lock(&sc->state_transitioning_lock);
+		sc->el2_in_secure_context = true;
+		mutex_unlock(&sc->state_transitioning_lock);
+		return NOTIFY_OK;
+
+	case SUBSYS_AFTER_SHUTDOWN:
+	case SUBSYS_POWERUP_FAILURE:
+		/* PCIe got mapped back to EL1 context */
+		mutex_lock(&sc->state_transitioning_lock);
+		sc->el2_in_secure_context = false;
+		mutex_unlock(&sc->state_transitioning_lock);
+		return NOTIFY_OK;
+
+	default:
+		return NOTIFY_DONE;
+	}
+}
+
+static void ab_sm_el2_notif_init(struct work_struct *work)
+{
+	struct ab_state_context *sc = container_of(
+		work, struct ab_state_context, el2_notif_init.work);
+	void *notifier_handler;
+
+	mutex_lock(&sc->el2_notif_init_lock);
+
+	/* setup callback for EL2 context change */
+	sc->el2_notif_nb.notifier_call = ab_sm_el2_notification_listener;
+	notifier_handler =
+		subsys_notif_register_notifier("faceauth", &sc->el2_notif_nb);
+
+	/* retry if registration has failed */
+	if (IS_ERR(notifier_handler)) {
+		if (!sc->sm_exiting) {
+			dev_info(sc->dev,
+				 "Retry EL2 callback registration later\n");
+			schedule_delayed_work(&sc->el2_notif_init,
+					      msecs_to_jiffies(500));
+		} else
+			dev_info(sc->dev,
+				 "SM exiting. EL2 registartion not needed\n");
+	} else {
+		sc->el2_notif_handle = notifier_handler;
+		dev_info(sc->dev, "Successfully registered EL2 notification\n");
+	}
+
+	mutex_unlock(&sc->el2_notif_init_lock);
+}
+
 struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2438,6 +2521,10 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	/* initialize device wakeup source */
 	device_init_wakeup(ab_sm_ctx->dev, true);
 
+	/* schedule the EL2 notification registration worker */
+	INIT_DELAYED_WORK(&ab_sm_ctx->el2_notif_init, ab_sm_el2_notif_init);
+	schedule_delayed_work(&ab_sm_ctx->el2_notif_init, 0);
+
 	return ab_sm_ctx;
 
 fail_fw_patch_en:
@@ -2454,10 +2541,18 @@ EXPORT_SYMBOL(ab_sm_init);
 
 void ab_sm_exit(struct platform_device *pdev)
 {
+	mutex_lock(&ab_sm_ctx->el2_notif_init_lock);
+	ab_sm_ctx->sm_exiting = true;
+	mutex_unlock(&ab_sm_ctx->el2_notif_init_lock);
+
+	cancel_delayed_work_sync(&ab_sm_ctx->el2_notif_init);
 	kthread_stop(ab_sm_ctx->state_change_task);
 	complete_all(&ab_sm_ctx->request_state_change_comp);
 	complete_all(&ab_sm_ctx->transition_comp);
 	complete_all(&ab_sm_ctx->notify_comp);
 	ab_sm_remove_sysfs(ab_sm_ctx);
 	ab_sm_remove_debugfs(ab_sm_ctx);
+	if (ab_sm_ctx->el2_notif_handle)
+		subsys_notif_unregister_notifier(ab_sm_ctx->el2_notif_handle,
+						 &ab_sm_ctx->el2_notif_nb);
 }

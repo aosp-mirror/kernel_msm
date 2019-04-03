@@ -453,6 +453,19 @@ struct ab_state_context {
 	struct msm_pcie_register_event pcie_link_event;
 #endif
 
+	/* EL2 notification structs */
+	/* NOTE: el2_in_secure_context represents the true state of the EL2
+	 * secure mode. When el2_in_secure_context is true, the PCIe link is
+	 * mapped to the secure world and EL1 (the kernel) is not allowed
+	 * to interact with it.
+	 */
+	bool el2_in_secure_context; /* GUARDED_BY state_transitioning_lock */
+	struct delayed_work el2_notif_init;
+	struct notifier_block el2_notif_nb;
+	void *el2_notif_handle;
+	struct mutex el2_notif_init_lock;
+	bool sm_exiting; /* GUARDED_BY el2_notif_init_lock */
+
 	struct notifier_block regulator_nb; /* single notifier */
 	struct work_struct shutdown_work; /* emergency shutdown work */
 
