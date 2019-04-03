@@ -29,7 +29,7 @@ ARCH=arm
 BRANCH=android-msm-longcheer-4.9
 CROSS_COMPILE=arm-linux-androidkernel-
 CROSS_COMPILE_USER=arm-linux-androideabi-
-DEFCONFIG=coralia-perf_defconfig
+DEFCONFIG=msm8909w-perf_defconfig
 EXTRA_CMDS=''
 PREBUILT_KERNEL_REPO=device/longcheer/coralia-kernel
 KERNEL_BUILD_BRANCH=kernel-p-dev-msm-coralia-4.9
@@ -46,5 +46,6 @@ System.map
 IN_KERNEL_MODULES=1
 EXT_MODULES="
 private/msm-longcheer-cw-modules/wlan
+private/msm-longcheer-cw-extra/drivers/tp
 "
 EXTRA_CMDS="tar_modules"
