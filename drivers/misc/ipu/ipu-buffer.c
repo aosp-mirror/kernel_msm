@@ -242,13 +242,18 @@ static int ipu_buffer_send_jqs_buffers_unregister(struct paintbox_data *pb,
 	return ipu_jqs_send_sync_message(pb, (const struct jqs_message *)&msg);
 }
 
+static bool ipu_buffer_iommu_active(struct paintbox_data *pb)
+{
+	return iommu_present(&ipu_bus_type) && ipu_is_iommu_active(pb->dev);
+}
+
 /* The caller to this function must hold pb->lock */
 static void ipu_buffer_unmap_and_release_buffer(struct paintbox_data *pb,
 		struct paintbox_session *session,
 		struct paintbox_buffer *buffer)
 {
 	/* Unmap the buffer from the IOMMU. */
-	if (iommu_present(&ipu_bus_type) && is_ab_dram_dma_buf(buffer->dma_buf))
+	if (ipu_buffer_iommu_active(pb) && is_ab_dram_dma_buf(buffer->dma_buf))
 		ipu_buffer_unmap_iommu(pb, session, buffer);
 
 	ipu_buffer_unmap_dma_buf(pb, session, buffer);
@@ -296,7 +301,7 @@ static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
 	/* If the IOMMU is enabled then map the buffer into the IOMMU IOVA
 	 * space.
 	 */
-	if (iommu_present(&ipu_bus_type)) {
+	if (ipu_buffer_iommu_active(pb)) {
 		/*
 		 * iommu mapping is not needed for ion. the ion infrastructure
 		 * calls map_dma_buf internally.

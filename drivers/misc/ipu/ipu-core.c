@@ -117,6 +117,14 @@ struct device *ipu_get_iommu_device(struct device *dev)
 	return &bus->devices[PAINTBOX_DEVICE_TYPE_IOMMU]->dev;
 }
 
+struct device *ipu_get_ipu_device(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	return &bus->devices[PAINTBOX_DEVICE_TYPE_IPU]->dev;
+}
+
 struct device *ipu_get_dma_device(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
@@ -232,6 +240,21 @@ bool ipu_is_jqs_ready(struct device *dev)
 	return ipu_core_jqs_is_ready(bus);
 }
 
+bool ipu_is_iommu_active(struct device *dev)
+{
+	struct paintbox_pdata *pdata;
+	struct device *iommu_dev = ipu_get_iommu_device(dev);
+
+	if (iommu_dev == NULL)
+		return false;
+
+	pdata = iommu_dev->platform_data;
+	if (pdata == NULL)
+		return false;
+
+	return pdata->iommu_active;
+}
+
 static void ipu_bus_device_release(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
@@ -304,7 +327,10 @@ int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 	if (type == PAINTBOX_DEVICE_TYPE_IPU) {
 		arch_setup_dma_ops(&pb_dev->dev, pdata->dma_base,
 			pdata->dma_size,
-			(struct iommu_ops *)ipu_bus_type.iommu_ops,
+			/* ipu ioomu ops will be registered when it
+			 * is activated
+			 */
+			NULL,
 			false /* coherent */);
 	} else {
 		arch_teardown_dma_ops(&pb_dev->dev);

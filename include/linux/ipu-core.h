@@ -37,6 +37,7 @@ struct paintbox_pdata {
 	uint64_t dma_base;
 	uint64_t dma_size;
 	struct ipu_capabilities_rsp capabilities;
+	bool iommu_active;
 };
 
 /* Upcall interface between the common paintbox bus layer and the paintbox
@@ -152,11 +153,14 @@ void ipu_frc_ipu_clock_ungate(struct device *dev);
 struct iommu_group *ipu_get_device_group(struct device *dev);
 
 struct device *ipu_get_iommu_device(struct device *dev);
+struct device *ipu_get_ipu_device(struct device *dev);
 struct device *ipu_get_dma_device(struct device *dev);
 struct dentry *ipu_get_debug_root(struct device *dev);
 
 /* Returns true if the JQS is ready, false if it is not. */
 bool ipu_is_jqs_ready(struct device *dev);
+
+bool ipu_is_iommu_active(struct device *dev);
 
 /* Called by the client to request a JQS reset after a catastrophic error is
  * detected.

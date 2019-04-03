@@ -23,12 +23,14 @@
 #include <linux/ipu-core.h>
 #include <linux/ipu-jqs-messages.h>
 #include <linux/slab.h>
-#include <linux/spinlock.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 
 #include "io-pgtable.h"
 #include "ipu-iommu-page-table.h"
 #include "../drivers/misc/ipu/ipu-regs-v2-generated.h"
+
+static DEFINE_MUTEX(iommu_activate_mutex);
 
 struct ipu_iommu_data {
 	struct device *dev;
@@ -46,7 +48,10 @@ struct ipu_domain {
 	struct io_pgtable_ops	*pgtbl_ops;
 };
 
-struct io_pgtable_ops	*ipu_iommu_pgtbl_ops;
+static struct ipu_iommu_internal_data {
+	struct io_pgtable_ops	*ipu_iommu_pgtbl_ops;
+	bool iommu_active;
+} iommu_internal_data;
 
 #define MMU_FLUSH_DELAY 10 /* us */
 #define MMU_FLUSH_MAX_ATTEMPTS 60
@@ -183,6 +188,29 @@ static void ipu_iommu_firmware_down(struct device *dev)
 	dev_dbg(dev, "%s JQS firmware is going down\n", __func__);
 }
 
+static bool ipu_iommu_process_activation(struct device *dev)
+{
+	struct paintbox_pdata *pdata = dev->platform_data;
+	struct device *ipu_dev = ipu_get_ipu_device(dev);
+
+	arch_teardown_dma_ops(ipu_dev);
+	mutex_lock(&iommu_activate_mutex);
+	if (iommu_internal_data.iommu_active)
+		arch_setup_dma_ops(ipu_dev, pdata->dma_base,
+			pdata->dma_size,
+			(struct iommu_ops *)ipu_bus_type.iommu_ops,
+			false /* coherent */);
+	else
+		arch_setup_dma_ops(ipu_dev, pdata->dma_base,
+			pdata->dma_size,
+			NULL,
+			false /* coherent */);
+
+	pdata->iommu_active = iommu_internal_data.iommu_active;
+	mutex_unlock(&iommu_activate_mutex);
+	return pdata->iommu_active;
+}
+
 static void ipu_iommu_firmware_up(struct device *dev)
 {
 	struct device *iommu_dev = ipu_get_iommu_device(dev);
@@ -193,6 +221,10 @@ static void ipu_iommu_firmware_up(struct device *dev)
 		dev_err(dev, "%s iommu device was not found\n", __func__);
 		return;
 	}
+
+	/* check that the iommu was activated by user */
+	if (!ipu_iommu_process_activation(iommu_dev))
+		return;
 
 	iommu = dev_get_drvdata(iommu_dev);
 	iommu->iommu_up = true;
@@ -441,8 +473,8 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 
 	iommu_data = dev_get_drvdata(iommu_dev);
 
-	if (ipu_iommu_pgtbl_ops) {
-		pb_domain->pgtbl_ops = ipu_iommu_pgtbl_ops;
+	if (iommu_internal_data.ipu_iommu_pgtbl_ops) {
+		pb_domain->pgtbl_ops = iommu_internal_data.ipu_iommu_pgtbl_ops;
 		ipu_iommu_pgtable_update_device(
 				pb_domain->pgtbl_ops, iommu_dev, iommu_data);
 		dev_dbg(dev, "%s loading existing page table\n", __func__);
@@ -464,7 +496,7 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 			return -ENOMEM;
 		}
 		map_start = true;
-		ipu_iommu_pgtbl_ops = pb_domain->pgtbl_ops;
+		iommu_internal_data.ipu_iommu_pgtbl_ops = pb_domain->pgtbl_ops;
 		dev_dbg(dev, "%s created new page table\n", __func__);
 	}
 
@@ -626,6 +658,33 @@ static struct iommu_ops ipu_iommu_ops = {
 	.device_group		= ipu_iommu_device_group,
 };
 
+static ssize_t iommu_active_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+		iommu_internal_data.iommu_active);
+}
+
+static ssize_t iommu_active_store(struct device *dev,
+			    struct device_attribute *attr,
+			    const char *buf, size_t size)
+{
+	unsigned int val;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	mutex_lock(&iommu_activate_mutex);
+	iommu_internal_data.iommu_active = !!val;
+	mutex_unlock(&iommu_activate_mutex);
+
+	return size;
+}
+
+static struct device_attribute iommu_active_attr = __ATTR_RW(iommu_active);
 
 static const struct paintbox_device_ops ipu_iommu_dev_ops = {
 	.firmware_up = ipu_iommu_firmware_up,
@@ -660,6 +719,11 @@ static int ipu_iommu_probe(struct device *dev)
 	}
 
 	dev_dbg(dev, "%s\n", __func__);
+	ret = device_create_file(dev, &iommu_active_attr);
+	if (ret) {
+		dev_err(dev, "failed to create sysfs\n");
+		goto free_jqs_res;
+	}
 
 	ipu_iommu_reset_jqs_reg_msg(iommu_data);
 	dev_set_drvdata(dev, iommu_data);
@@ -680,13 +744,13 @@ static int ipu_iommu_probe(struct device *dev)
 	return 0;
 
 free_jqs_res:
-	kfree(iommu_data->jqs_rsp);
+	devm_kfree(dev, iommu_data->jqs_rsp);
 
 free_jqs_msg:
-	kfree(iommu_data->jqs_msg);
+	devm_kfree(dev, iommu_data->jqs_msg);
 
 free_iommu_data:
-	kfree(iommu_data);
+	devm_kfree(dev, iommu_data);
 
 	return ret;
 }
@@ -698,6 +762,8 @@ static int ipu_iommu_remove(struct device *dev)
 	ipu_iommu_send_jqs_iommu_activation_msg(iommu_data,
 		false /* activate */, 0 /* page table addr */);
 	dev_dbg(dev, "%s\n", __func__);
+	device_remove_file(dev, &iommu_active_attr);
+
 	return 0;
 }
 
