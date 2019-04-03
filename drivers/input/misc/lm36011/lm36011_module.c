@@ -165,7 +165,7 @@ struct led_laser_ctrl_t {
 
 static bool read_proxoffset;
 static bool crack_log_en;
-static bool crack_detection_en;
+static bool crack_detection_en = true;
 module_param(read_proxoffset, bool, 0644);
 module_param(crack_log_en, bool, 0644);
 module_param(crack_detection_en, bool, 0644);
