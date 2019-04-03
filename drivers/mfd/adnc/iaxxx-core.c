@@ -1181,12 +1181,21 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 		goto exit_fw_fail;
 	}
 
-	/* Subscribing for FW crash event */
+	/* Subscribing for FW crash event for HOST_0 (AP) */
 	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
 			IAXXX_CRASH_EVENT_ID, IAXXX_SYSID_HOST, 0);
 	if (rc) {
 		dev_err(dev, "%s: failed to subscribe for crash event\n",
 				__func__);
+		goto exit_fw_fail;
+	}
+
+	/* Subscribing for FW crash event for HOST_1 */
+	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
+				IAXXX_CRASH_EVENT_ID, IAXXX_SYSID_HOST_1, 0);
+	if (rc) {
+		dev_err(dev, "%s: failed to subscribe for crash event HOST_1\n",
+			__func__);
 		goto exit_fw_fail;
 	}
 
