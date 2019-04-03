@@ -1894,13 +1894,21 @@ static int ab_sm_misc_release(struct inode *ip, struct file *fp)
 
 int ab_sm_enter_el2(struct ab_state_context *sc)
 {
-	int ret;
+	int ret = 0;
 
-	/*
-	 * Disable thermal before all pcie subscribers getting
-	 * disabled.
-	 */
-	ab_thermal_disable(sc->thermal);
+	mutex_lock(&sc->state_transitioning_lock);
+	if (sc->throttle_state_id == THROTTLE_NOCOMPUTE) {
+		ret = -EBUSY;
+	} else {
+		/*
+		 * Disable thermal in state transitioning lock to make sure the
+		 * state change to be applied is what we are waiting for.
+		 */
+		ab_thermal_disable(sc->thermal);
+	}
+	mutex_unlock(&sc->state_transitioning_lock);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * Disable thermal may cause a state change. Wait for state change

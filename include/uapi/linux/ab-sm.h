@@ -49,7 +49,11 @@
  */
 #define AB_SM_GET_STATE		_IOR(AB_SM_IOCTL_MAGIC, 2, int *)
 
-/* On success will return 0, otherwise will return error < 0. */
+/*
+ * On success will return 0, otherwise will return error < 0.
+ * -ETIMEDOUT: state change for thermal disabling timed out.
+ * -EBUSY: already throttled to suspend due to system overheated.
+ */
 #define AB_SM_ENTER_EL2		_IO(AB_SM_IOCTL_MAGIC, 3)
 
 /* On success will return 0, otherwise will return error < 0. */
