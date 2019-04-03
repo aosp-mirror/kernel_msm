@@ -76,6 +76,10 @@ static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return 0;
 }
+static int64_t ipu_set_rate_opt_stub(void *ctx, u64 old_rate, u64 new_rate)
+{
+	return 0;
+}
 
 static int tpu_pll_enable_stub(void *ctx)   { return -ENODEV; }
 static int tpu_pll_disable_stub(void *ctx)   { return -ENODEV; }
@@ -113,6 +117,7 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 	.ipu_pll_enable = &ipu_pll_enable_stub,
 	.ipu_pll_disable = &ipu_pll_disable_stub,
 	.ipu_set_rate = &ipu_set_rate_stub,
+	.ipu_set_rate_opt = &ipu_set_rate_opt_stub,
 
 	.tpu_pll_enable = &tpu_pll_enable_stub,
 	.tpu_pll_disable = &tpu_pll_disable_stub,
@@ -488,13 +493,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			break;
 		}
 
-		if (last_state->clk_status == off && clk_status == on) {
-			ret = clk->ipu_pll_enable(clk->ctx);
-			if (ret)
-				return ret;
-		}
-
-		ret_freq = clk->ipu_set_rate(clk->ctx, old_freq, new_freq);
+		ret_freq = clk->ipu_set_rate_opt(clk->ctx, old_freq, new_freq);
 		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set ipu freq to %lld but got %lld",
 					new_freq, ret_freq);

@@ -307,6 +307,7 @@ struct ab_sm_clk_ops {
 	int (*ipu_pll_enable)(void *ctx);
 	int (*ipu_pll_disable)(void *ctx);
 	int64_t (*ipu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
+	int64_t (*ipu_set_rate_opt)(void *ctx, u64 old_rate, u64 new_rate);
 
 	int (*tpu_pll_enable)(void *ctx);
 	int (*tpu_pll_disable)(void *ctx);
