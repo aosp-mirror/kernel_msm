@@ -155,6 +155,7 @@ struct faceauth_blob {
 	struct sg_table *sg_table;
 	bool is_secure_camera;
 };
+
 static void parse_el2_return(int code)
 {
 	if (code == ERR_SECURE_CAM)
@@ -170,6 +171,7 @@ static void parse_el2_return(int code)
 	else
 		pr_err("EL2: Not defined return code: %d", code);
 }
+
 static void hypx_free_blob_userbuf(phys_addr_t blob_phy, bool reassign)
 {
 	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
@@ -715,10 +717,9 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 
 	stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT_MS);
 	usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
-			     CONTEXT_SWITCH_TO_FACEAUTH_US + 1);
+		     CONTEXT_SWITCH_TO_FACEAUTH_US + 1);
 
 	for (;;) {
-
 		desc.arginfo = SCM_ARGS(0);
 		ret = scm_call2(HYPX_SMC_FUNC_CHECK_FW_STATUS, &desc);
 		if (ret) {
@@ -727,7 +728,7 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		}
 
 		status_ret = desc.ret[0];
-		if(status_ret == ERR_FW_READY)
+		if (status_ret == ERR_FW_READY)
 			break;
 
 		if (time_before(stop, jiffies)) {
@@ -1271,7 +1272,7 @@ exit:
 		hypx_free_blob_userbuf(hypx_data->ab_state, false);
 	if (hypx_data->calibration_buffer)
 		hypx_free_blob_userbuf(hypx_data->calibration_buffer,
-				need_reassign);
+				       need_reassign);
 	if (hypx_data->image_flood)
 		hypx_free_blob_userbuf(hypx_data->image_flood, need_reassign);
 	if (hypx_data->image_right)

@@ -72,7 +72,7 @@ struct faceauth_start_data {
 	__u32 ab_exception_number;
 	__u32 fw_version; /* ab-faceauth firmware version */
 
-	__u8  __user *citadel_token;
+	__u8 __user *citadel_token;
 	__u32 citadel_token_size;
 
 	__u32 citadel_input;

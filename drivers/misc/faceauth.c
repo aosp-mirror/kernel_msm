@@ -336,14 +336,14 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 			}
 		}
 
-		if (start_step_data.citadel_token_size && (
-		    start_step_data.operation == COMMAND_ENROLL_COMPLETE ||
-		    start_step_data.operation == COMMAND_SET_FEATURE ||
-		    start_step_data.operation == COMMAND_CLR_FEATURE ||
-		    start_step_data.operation == COMMAND_RESET_LOCKOUT)) {
+		if (start_step_data.citadel_token_size &&
+		    (start_step_data.operation == COMMAND_ENROLL_COMPLETE ||
+		     start_step_data.operation == COMMAND_SET_FEATURE ||
+		     start_step_data.operation == COMMAND_CLR_FEATURE ||
+		     start_step_data.operation == COMMAND_RESET_LOCKOUT)) {
 			err = dma_xfer(start_step_data.citadel_token,
-			start_step_data.citadel_token_size,
-			CITADEL_WRITE_TOKEN_ADDR, DMA_TO_DEVICE);
+				       start_step_data.citadel_token_size,
+				       CITADEL_WRITE_TOKEN_ADDR, DMA_TO_DEVICE);
 			if (err) {
 				pr_err("Error sending token data\n");
 				goto exit;
@@ -405,9 +405,8 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				}
 
 #if ENABLE_AIRBRUSH_DEBUG
-				enqueue_debug_data(data,
-						   WORKLOAD_STATUS_NO_STATUS,
-						   false);
+				enqueue_debug_data(
+					data, WORKLOAD_STATUS_NO_STATUS, false);
 #endif
 				goto exit;
 			}
@@ -457,7 +456,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 		start_step_data.error_code = dma_read_value;
 
 		pr_info("Faceauth error code 0x%08x\n",
-		       start_step_data.error_code);
+			start_step_data.error_code);
 		dma_read_dw(INTERNAL_STATE_ADDR +
 				    offsetof(struct faceauth_airbrush_state,
 					     faceauth_version),
@@ -650,9 +649,8 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				else
 					err = -ETIME;
 #if ENABLE_AIRBRUSH_DEBUG
-				enqueue_debug_data(data,
-						   WORKLOAD_STATUS_NO_STATUS,
-						   true);
+				enqueue_debug_data(
+					data, WORKLOAD_STATUS_NO_STATUS, true);
 #endif
 				goto exit;
 			}
