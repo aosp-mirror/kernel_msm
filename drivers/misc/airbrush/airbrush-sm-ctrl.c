@@ -897,6 +897,7 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 			       bool is_linkdown_event)
 {
 	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_0);
+	int ret;
 
 	/*
 	 * Mark PMIC rails to be disabled so that regulator_enable() and
@@ -952,6 +953,14 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 
 	ab_pmic_off(sc);
 	dev_err(sc->dev, "AB PMIC off\n");
+
+	dev_err(sc->dev, "reset SMPS1 voltage back to nominal in case it was changed\n");
+	ret = regulator_set_voltage(sc->smps1, SMPS1_NOMINAL_VOLTAGE,
+			SMPS1_NOMINAL_VOLTAGE + REGULATOR_STEP);
+	if (ret)
+		dev_err(sc->dev,
+			"failed to reset to nominal SMPS1 voltage (%d)\n",
+			ret);
 
 	sc->curr_chip_substate_id = CHIP_STATE_0;
 }
@@ -1034,7 +1043,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ab_sm_record_ts(sc, AB_SM_TS_BOOT_SEQ);
 		if (ret) {
 			dev_err(sc->dev, "ab_bootsequence failed (%d)\n", ret);
-			return ret;
+			goto cleanup_state;
 		}
 
 		/* If we are going to a partially active state, first place
@@ -1072,9 +1081,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 				SMPS1_NOMINAL_VOLTAGE + REGULATOR_STEP);
 		if (ret) {
 			dev_err(sc->dev,
-					"failed to set to min SMPS1 voltage (%d)\n",
+					"failed to set to nominal SMPS1 voltage (%d)\n",
 					ret);
-			return ret;
+			goto cleanup_state;
 		}
 	}
 	ab_sm_record_ts(sc, AB_SM_SMPS1_NOMINAL);
@@ -1091,7 +1100,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ret = ab_lvcc(sc, to_chip_substate_id);
 		if (ret) {
 			dev_err(sc->dev, "ab_lvcc failed (%d)\n", ret);
-			return ret;
+			goto cleanup_state;
 		}
 	}
 
@@ -1203,7 +1212,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			dev_err(sc->dev,
 					"failed to set to min SMPS1 voltage (%d)\n",
 					ret);
-			return ret;
+			goto cleanup_state;
 		}
 	}
 	ab_sm_record_ts(sc, AB_SM_SMPS1_MIN);
