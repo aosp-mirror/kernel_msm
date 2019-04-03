@@ -493,7 +493,9 @@ static void cam_ois_read_work(struct work_struct *work)
 	uint8_t buf[8] = { 0 };
 	int32_t rc = 0;
 	int16_t shift_x, shift_y;
+#ifdef CONFIG_BOARD_BONITO
 	uint16_t raw_x, raw_y, raw_z;
+#endif
 	struct timespec ts;
 	int64_t time_readout;
 	struct cam_ois_timer_t *ois_timer_in;
@@ -522,7 +524,7 @@ static void cam_ois_read_work(struct work_struct *work)
 		if (rc != 0)
 			CAM_ERR(CAM_OIS, "OIS shift data enqueue failed");
 	}
-
+#ifdef CONFIG_BOARD_BONITO
 	if (ois_timer.ois_factory_read & (1 << 0)) {
 		rc = camera_io_dev_read_seq(
 			&ois_timer_in->o_ctrl->io_master_info, 0xE003,
@@ -554,6 +556,7 @@ static void cam_ois_read_work(struct work_struct *work)
 				raw_x, raw_y, raw_z);
 		}
 	}
+#endif
 }
 
 /**
@@ -969,6 +972,7 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 				"Fail deleting Mode data: rc: %d", rc);
 		break;
 	case CAM_OIS_PACKET_OPCODE_SHIFT_READER_START:
+#ifdef CONFIG_BOARD_BONITO
 		offset = (uint32_t *)&csl_packet->payload;
 		offset += (csl_packet->cmd_buf_offset / sizeof(uint32_t));
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
@@ -985,6 +989,7 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		}
 		cmd_buf += cmd_desc->offset / sizeof(uint32_t);
 		ois_timer.ois_factory_read = *(uint8_t *)cmd_buf;
+#endif
 		rc = cam_ois_start_shift_reader(o_ctrl);
 		break;
 	case CAM_OIS_PACKET_OPCODE_SHIFT_READER_STOP:

@@ -128,7 +128,9 @@ struct cam_ois_timer_t {
 	enum cam_ois_timer_state_t ois_timer_state;
 	struct cam_ois_ctrl_t *o_ctrl;
 	int i2c_fail_count;
+#ifdef CONFIG_BOARD_BONITO
 	uint8_t ois_factory_read;
+#endif
 };
 
 /**
