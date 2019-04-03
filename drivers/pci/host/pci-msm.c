@@ -589,6 +589,7 @@ struct msm_pcie_dev_t {
 	bool				clk_power_manage_en;
 	bool				 aux_clk_sync;
 	bool				aer_enable;
+	bool			   	eq_en;
 	uint32_t			smmu_sid_base;
 	uint32_t			target_link_speed;
 	uint32_t			   n_fts;
@@ -3758,6 +3759,13 @@ static void msm_pcie_release_resources(struct msm_pcie_dev_t *dev)
 	dev->tcsr = NULL;
 }
 
+void msm_pcie_eq_ctrl(u32 rc_idx, bool eq_en)
+{
+	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
+	dev->eq_en = eq_en;
+}
+EXPORT_SYMBOL(msm_pcie_eq_ctrl);
+
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 {
 	int ret = 0;
@@ -3928,11 +3936,17 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 	msm_pcie_write_mask(dev->dm_core +
 		PCIE_GEN3_RELATED, BIT(0), 0);
 
-	/* Disable equalization for airbrush gen3 */
-#if IS_ENABLED(CONFIG_MFD_ABC_PCIE)
-	msm_pcie_write_reg_field(dev->dm_core,
-		PCIE_GEN3_RELATED, BIT(16), 1);
-#endif
+	if (dev->eq_en) {
+		PCIE_INFO(dev, "PCIe: RC%d: enable equalization\n",
+			  dev->rc_idx);
+		msm_pcie_write_reg_field(dev->dm_core,
+			PCIE_GEN3_RELATED, BIT(16), 0);
+	} else {
+		PCIE_INFO(dev, "PCIe: RC%d: disable equalization\n",
+			  dev->rc_idx);
+		msm_pcie_write_reg_field(dev->dm_core,
+			PCIE_GEN3_RELATED, BIT(16), 1);
+	}
 
 	/* configure PCIe preset */
 	msm_pcie_write_reg_field(dev->dm_core,
@@ -6018,6 +6032,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	msm_pcie_dev[rc_idx].aer_enable = true;
 	if (msm_pcie_invert_aer_support)
 		msm_pcie_dev[rc_idx].aer_enable = false;
+	msm_pcie_dev[rc_idx].eq_en = true;
 	msm_pcie_dev[rc_idx].power_on = false;
 	msm_pcie_dev[rc_idx].use_msi = false;
 	msm_pcie_dev[rc_idx].use_pinctrl = false;

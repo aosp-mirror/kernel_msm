@@ -140,6 +140,19 @@ int msm_pcie_assert_perst(u32 rc_idx);
 int msm_pcie_deassert_perst(u32 rc_idx);
 
 /**
+ * msm_pcie_eq_ctrl - controls PCIe link equalization
+ * @rc_idx:	RC that Endpoints connect to.
+ * @enable:	equalization should be enabled or disabled
+ *
+ * This function gives PCIe endpoint device drivers the control to enable
+ * or disable link equalization.
+ *
+ * Note that this function only sets the eq_en flag, equalization configuration
+ * is done by msm_pcie_enable() function after PCIe clock is enabled.
+ */
+void msm_pcie_eq_ctrl(u32 rc_idx, bool eq_en);
+
+/**
  * msm_pcie_enumerate - enumerate Endpoints.
  * @rc_idx:	RC that Endpoints connect to.
  *
@@ -213,6 +226,10 @@ static inline int msm_pcie_deregister_event(struct msm_pcie_register_event *reg)
 static inline int msm_pcie_recover_config(struct pci_dev *dev)
 {
 	return -ENODEV;
+}
+
+static inline void msm_pcie_eq_ctrl(u32 rc_idx, bool eq_en)
+{
 }
 
 static inline int msm_pcie_enumerate(u32 rc_idx)
