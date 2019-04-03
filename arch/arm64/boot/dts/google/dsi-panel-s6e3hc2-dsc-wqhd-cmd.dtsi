@@ -88,9 +88,6 @@
 					15 01 00 00 00 00 02 68 21
 					15 01 00 00 00 00 02 69 01
 
-					/* Enable 5% Zonal Attenuation */
-					15 01 00 00 00 00 02 8B 11
-
 					39 01 00 00 00 00 03 F0 A5 A5
 					39 01 00 00 00 00 03 F1 A5 A5
 					39 01 00 00 00 00 03 FC A5 A5
@@ -108,24 +105,12 @@
 					15 01 00 00 00 00 02 53 20 /* write ctl 60hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
-				qcom,mdss-dsi-lp1-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 51 00 00
-					15 01 00 00 00 00 02 8B 00 /* ZA off */
-					39 01 00 00 00 00 03 F0 A5 A5
-				];
-
 				qcom,mdss-dsi-nolp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A
 					15 01 00 00 00 00 02 53 00 /* HLPM OFF */
 					39 01 00 00 00 00 03 B0 A8 B1
 					15 01 00 00 14 00 02 B1 01
 					15 01 00 00 00 00 02 53 20 /* write ctl 60 hz */
-
-					/* Enable 5% Zonal Attenuation */
-					39 01 00 00 00 00 03 51 00 00
-					15 01 00 00 00 00 02 8B 11
-
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 
@@ -180,9 +165,6 @@
 					15 01 00 00 00 00 02 68 21
 					15 01 00 00 00 00 02 69 01
 
-					/* Enable 5% Zonal Attenuation */
-					15 01 00 00 00 00 02 8B 11
-
 					39 01 00 00 00 00 03 F0 A5 A5
 					39 01 00 00 00 00 03 F1 A5 A5
 					39 01 00 00 00 00 03 FC A5 A5
@@ -200,24 +182,12 @@
 					15 01 00 00 00 00 02 53 30 /* write ctl 90hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
-				qcom,mdss-dsi-lp1-command = [
-					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 51 00 00
-					15 01 00 00 00 00 02 8B 00 /* ZA off */
-					39 01 00 00 00 00 03 F0 A5 A5
-				];
-
 				qcom,mdss-dsi-nolp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A
 					15 01 00 00 00 00 02 53 00 /* HLPM OFF */
 					39 01 00 00 00 00 03 B0 A8 B1
 					15 01 00 00 14 00 02 B1 01
 					15 01 00 00 00 00 02 53 30 /* write ctl 90 hz */
-
-					/* Enable 5% Zonal Attenuation */
-					39 01 00 00 00 00 03 51 00 00
-					15 01 00 00 00 00 02 8B 11
-
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 
