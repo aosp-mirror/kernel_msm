@@ -1267,6 +1267,7 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_DELTA_CC_SUM,
 	POWER_SUPPLY_PROP_DELTA_VFSOC_SUM,
+	POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE,
 };
 
 /* storage for cycle count --------------------------------------------------*/
@@ -2061,6 +2062,16 @@ static int max1720x_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_DELTA_VFSOC_SUM:
 		val->intval = chip->cap_estimate.delta_vfsoc_sum;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE:
+		if ((chip->cap_estimate.cap_filter_count > 0) &&
+			(chip->cap_estimate.delta_vfsoc_sum > 0))
+			val->intval = (chip->cap_estimate.delta_cc_sum * 100) /
+					chip->cap_estimate.delta_vfsoc_sum;
+		else {
+			val->intval = 0;
+			return -ENODATA;
+		}
 		break;
 	default:
 		return -EINVAL;

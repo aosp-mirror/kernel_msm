@@ -1813,6 +1813,7 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_SOH,
+	POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE,
 };
 
 static int gbatt_get_property(struct power_supply *psy,
@@ -1946,6 +1947,11 @@ static int gbatt_get_property(struct power_supply *psy,
 		val->intval = batt_drv->soh;
 		break;
 
+	case POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE:
+		if (!batt_drv->fg_psy)
+			return -EINVAL;
+		err = power_supply_get_property(batt_drv->fg_psy, psp, val);
+		break;
 	/* TODO: "charger" will expose this but I'd rather use an API from
 	 * google_bms.h. Right now route it to fg_psy: just make sure that
 	 * fg_psy doesn't look it up in google_battery
