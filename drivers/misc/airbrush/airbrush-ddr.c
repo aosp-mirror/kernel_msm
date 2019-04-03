@@ -2670,7 +2670,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	case BLOCK_STATE_101:
 		/* ddr sleep/deep-sleep functionality */
 		if (ddr_ctx->ddr_state != DDR_ON)
-			goto set_state_fail;
+			goto set_state_complete;
 
 		ret |= __ab_ddr_selfrefresh_enter(ddr_ctx);
 
@@ -2682,7 +2682,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		/* ddr suspend functionality */
 		if ((ddr_ctx->ddr_state == DDR_SUSPEND) ||
 			(ddr_ctx->ddr_state == DDR_OFF))
-			goto set_state_fail;
+			goto set_state_complete;
 
 		ret |= __ab_ddr_suspend(ddr_ctx);
 
@@ -2710,6 +2710,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 	if (ret)
 		goto set_state_fail;
 
+set_state_complete:
 	ab_sm_clk_notify(AB_DRAM_POST_RATE_CHANGE | extra_post_notify_flag,
 			 old_rate, new_rate);
 	mutex_unlock(&ddr_ctx->ddr_lock);
