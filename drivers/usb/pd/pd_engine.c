@@ -746,7 +746,8 @@ clear:
 }
 
 #define PDO_FIXED_FLAGS \
-	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
+	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_SUSPEND \
+	 | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 
 static void update_src_caps(struct work_struct *work)
 {
