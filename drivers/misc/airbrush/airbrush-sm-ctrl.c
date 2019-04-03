@@ -892,6 +892,12 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 {
 	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_0);
 
+	/*
+	 * Mark PMIC rails to be disabled so that regulator_enable() and
+	 * regualtor_disable() calls are balanced.
+	 */
+	ab_prep_pmic_settings(sc, map);
+
 	dev_err(sc->dev, "Cleaning AB state\n");
 	blk_set_state(sc, &(sc->blocks[BLK_IPU]), map->ipu_block_state_id);
 	blk_set_state(sc, &(sc->blocks[BLK_TPU]), map->tpu_block_state_id);
