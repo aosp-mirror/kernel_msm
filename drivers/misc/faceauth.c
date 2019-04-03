@@ -1179,7 +1179,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 				       CALIBRATION_DATA_ADDR, DMA_FROM_DEVICE);
 		debug_entry->calibration.offset_to_image = current_offset;
 		debug_entry->calibration.image_size = CALIBRATION_DATA_ADDR;
-		current_offset += CALIBRATION_DATA_ADDR;
+		current_offset += CALIBRATION_DATA_SIZE;
 		if (err) {
 			pr_err("Error saving calibration data\n");
 			return err;
@@ -1198,6 +1198,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 	output_buffers = &debug_entry->ab_state.output_buffers;
 	if (!output_buffers) {
 		err = -EMSGSIZE;
+		pr_info("output buffers null");
 		return err;
 	}
 	buffer_idx = output_buffers->buffer_count - 1;
@@ -1210,6 +1211,8 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 
 	if (buffer_list_size + current_offset > DEBUG_DATA_BIN_SIZE) {
 		err = -EMSGSIZE;
+		pr_info("exceeded max buffer size %d, permitted %d\n",
+			buffer_list_size + current_offset, DEBUG_DATA_BIN_SIZE);
 		return err;
 	}
 
