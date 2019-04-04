@@ -1283,7 +1283,7 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	priv->event_queue->r_index = -1;
 	mutex_unlock(&priv->event_queue_lock);
 
-	atomic_set(&priv->proc_on_off_ref_cnt, 0);
+	atomic_set(&priv->proc_on_off_ref_cnt, 1);
 
 	if (priv->cm4_crashed) {
 		dev_info(priv->dev, "CM4 Core crashed\n");
@@ -1682,6 +1682,8 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	INIT_LIST_HEAD(&priv->iaxxx_state->plugin_head_list);
 	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
 	mutex_init(&priv->iaxxx_state->plg_pkg_list_lock);
+
+	atomic_set(&priv->proc_on_off_ref_cnt, 1);
 
 	/* Initialize regmap for SBL */
 	rc = iaxxx_regmap_init(priv);
