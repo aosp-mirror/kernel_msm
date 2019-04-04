@@ -107,6 +107,17 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 
 		ab_disable_pgood(ab_ctx);
 		msm_pcie_assert_perst(1);
+
+		/* Disable PCIe equalization only for Airbrush A0 parts.
+		 * Use alternate_boot property to decide if Airbrush part is A0
+		 * or B0 -
+		 *   alternate_boot == 1 => A0 => PCIe EQ disable
+		 *   alternate_boot == 0 => B0 => PCIe EQ enable
+		 */
+		if (ab_ctx->alternate_boot)
+			msm_pcie_eq_ctrl(1, /*enable=*/false);
+		else
+			msm_pcie_eq_ctrl(1, /*enable=*/true);
 	}
 
 	ret = ab_pmic_on(ab_ctx);
