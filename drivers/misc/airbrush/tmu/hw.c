@@ -29,6 +29,13 @@ struct ab_tmu_hw {
 	struct notifier_block pcie_link_blocking_nb;
 };
 
+static void ab_tmu_hw_pcie_link_error(struct ab_tmu_hw *hw)
+{
+	mutex_lock(&hw->pcie_link_lock);
+	hw->pcie_link_ready = false;
+	mutex_unlock(&hw->pcie_link_lock);
+}
+
 static void ab_tmu_hw_pcie_link_post_enable(struct ab_tmu_hw *hw)
 {
 	mutex_lock(&hw->pcie_link_lock);
@@ -54,6 +61,11 @@ static int ab_tmu_hw_pcie_link_listener(struct notifier_block *nb,
 {
 	struct ab_tmu_hw *hw = container_of(nb,
 			struct ab_tmu_hw, pcie_link_blocking_nb);
+
+	if (action & ABC_PCIE_LINK_ERROR) {
+		ab_tmu_hw_pcie_link_error(hw);
+		return NOTIFY_OK;
+	}
 
 	if (action & ABC_PCIE_LINK_POST_ENABLE) {
 		ab_tmu_hw_pcie_link_post_enable(hw);
