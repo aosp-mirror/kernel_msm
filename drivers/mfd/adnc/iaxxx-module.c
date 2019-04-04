@@ -350,15 +350,10 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 		goto sensor_write_param_blk_err;
 	}
 
-	if (!priv->raw_write) {
-		dev_err(dev, "Raw blk write not supported\n");
-		goto sensor_write_param_blk_err;
-	}
-
-	ret = priv->raw_write(dev, blk_addr, ptr_blk, blk_size);
+	ret = iaxxx_btp_write(priv, blk_addr, ptr_blk,
+			blk_size / sizeof(uint32_t), IAXXX_HOST_0);
 	if (ret) {
-		dev_err(dev, "%s() write ptr_blk, failed\n",
-			__func__);
+		dev_err(dev, "%s() btp write failed\n", __func__);
 		goto sensor_write_param_blk_err;
 	}
 
