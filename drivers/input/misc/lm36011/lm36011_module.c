@@ -39,6 +39,7 @@
 
 #define IR_STANDBY_MODE 0x04
 #define IR_ENABLE_MODE 0x05
+#define IR_DISABLE_MODE 0x00
 #define DEVICE_ID 0x01
 
 /*
@@ -848,6 +849,8 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 {
 	int rc = 0, is_error;
 
+	lm36011_write_data(ctrl, ENABLE_REG, IR_DISABLE_MODE);
+
 	if (ctrl->is_cci_init) {
 		is_error = camera_io_release(&(ctrl->io_master_info));
 		if (is_error < 0) {
@@ -1391,6 +1394,7 @@ static ssize_t led_laser_enable_store(struct device *dev,
 
 	if (!ctrl->is_certified) {
 		dev_err(dev, "Cannot enable laser due to uncertified");
+		lm36011_write_data(ctrl, ENABLE_REG, IR_DISABLE_MODE);
 		return -EINVAL;
 	}
 
