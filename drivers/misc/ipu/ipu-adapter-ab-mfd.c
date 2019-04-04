@@ -1044,11 +1044,13 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev,
 			"failed to subscribe to PCIe blocking link event, ret %d\n",
 			ret);
-		goto err_deinitialize_bus;
+		goto err_unregister_sm_notifer;
 	}
 
 	return 0;
 
+err_unregister_sm_notifer:
+	ab_sm_unregister_clk_event(&dev_data->clk_change_nb);
 err_deinitialize_bus:
 	ipu_bus_deinitialize(dev_data->bus);
 	atomic_notifier_chain_unregister(dev_data->low_priority_irq_nh,
