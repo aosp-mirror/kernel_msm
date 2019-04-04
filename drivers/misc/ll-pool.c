@@ -31,14 +31,12 @@
 /**
  * ll_allocation: struct holding allocation information
  *
- * @contiguous: whether this allocation is contiguous
  * @nblks: number of blocks in this allocation
  * @size: total size allocated
  * @block_list: list of blocks that is allocated for this allocation
  * @table: scatter gather table for this allocation
  */
 struct ll_allocation {
-	bool contiguous;
 	size_t nblks;
 	size_t size;
 	struct list_head block_list;
@@ -61,7 +59,7 @@ static void ll_free_blk(struct ll_pool *pool,
 
 	fl_head = &pool->free_list_head;
 
-	list_del_init(&blk->ll_head);
+	list_del(&blk->ll_head);
 
 	/* Free list empty: add blk in */
 	if (list_empty(fl_head)) {
@@ -148,9 +146,6 @@ static void ll_free_allocation(struct ll_pool *pool,
 {
 	struct ll_mem_blk *blk, *blk_next;
 
-	if (!allocation)
-		return;
-
 	/* For each allocation block, free and merge */
 	list_for_each_entry_safe(blk, blk_next, &allocation->block_list,
 			ll_head)
@@ -174,7 +169,6 @@ static struct ll_allocation *ll_alloc_contiguous(
 	if (!allocation)
 		return ERR_PTR(-ENOMEM);
 
-	allocation->contiguous = true;
 	allocation->nblks = 1;
 	allocation->size = len;
 	INIT_LIST_HEAD(&allocation->block_list);
@@ -190,9 +184,11 @@ static struct ll_allocation *ll_alloc_contiguous(
 		} else {
 			new_blk = kmem_cache_alloc(pool->mem_block_slab,
 					GFP_KERNEL);
+			if (!new_blk)
+				return ERR_PTR(-ENOMEM);
+
 			new_blk->size = len;
 			new_blk->offset = blk->offset;
-			INIT_LIST_HEAD(&new_blk->ll_head);
 
 			list_add_tail(&new_blk->ll_head,
 					&allocation->block_list);
@@ -226,7 +222,6 @@ static struct ll_allocation *ll_alloc_noncontiguous(
 	if (!allocation)
 		return ERR_PTR(-ENOMEM);
 
-	allocation->contiguous = false;
 	allocation->nblks = 0;
 	allocation->size = len;
 	INIT_LIST_HEAD(&allocation->block_list);
@@ -234,13 +229,16 @@ static struct ll_allocation *ll_alloc_noncontiguous(
 	list_for_each_entry_safe(blk, blk_next, &pool->free_list_head,
 			ll_head) {
 		if (blk->size <= len) {
-			list_del_init(&blk->ll_head);
+			list_del(&blk->ll_head);
 			list_add_tail(&blk->ll_head, &allocation->block_list);
 			len -= blk->size;
 			allocation->nblks++;
 		} else {
 			new_blk = kmem_cache_alloc(pool->mem_block_slab,
 					GFP_KERNEL);
+			if (!new_blk)
+				return ERR_PTR(-ENOMEM);
+
 			new_blk->size = len;
 			new_blk->offset = blk->offset;
 			INIT_LIST_HEAD(&new_blk->ll_head);
@@ -278,9 +276,6 @@ static int ll_build_sgtable(struct ll_pool *pool,
 	struct sg_table *table;
 	int ret;
 
-	if (unlikely(!allocation))
-		return -EINVAL;
-
 	if (unlikely(allocation->nblks == 0))
 		return -EINVAL;
 
@@ -292,11 +287,6 @@ static int ll_build_sgtable(struct ll_pool *pool,
 	sg = table->sgl;
 	list_for_each_entry_safe(blk, blk_next, &allocation->block_list,
 			ll_head) {
-		if (!sg) {
-			sg_free_table(table);
-			return -EINVAL;
-		}
-
 		sg_dma_address(sg) = pool->base_addr + blk->offset;
 		sg_dma_len(sg) = blk->size;
 		sg->length = blk->size;
@@ -397,7 +387,7 @@ struct ll_pool *ll_pool_create(phys_addr_t base, size_t size)
 
 	/* Creating slab for mem block object */
 	pool->mem_block_slab = kmem_cache_create("ll_mem_block",
-			sizeof(struct ll_mem_blk), SZ_8,
+			sizeof(struct ll_mem_blk), 0,
 			/* flag */ 0, /* ctor */ NULL);
 	if (!pool->mem_block_slab) {
 		pr_err("%s: creating mem block slab failed\n", __func__);
@@ -407,7 +397,7 @@ struct ll_pool *ll_pool_create(phys_addr_t base, size_t size)
 
 	/* Creating slab for allocation object */
 	pool->allocation_slab = kmem_cache_create("ll_allocation",
-			sizeof(struct ll_allocation), SZ_8,
+			sizeof(struct ll_allocation), 0,
 			/* flag */ 0, /* ctor */ NULL);
 	if (!pool->allocation_slab) {
 		pr_err("%s: creating allocation object slab failed\n",
@@ -427,8 +417,6 @@ struct ll_pool *ll_pool_create(phys_addr_t base, size_t size)
 
 	blk->offset = 0;
 	blk->size = size;
-
-	INIT_LIST_HEAD(&blk->ll_head);
 
 	list_add_tail(&blk->ll_head, &pool->free_list_head);
 
