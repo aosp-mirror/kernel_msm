@@ -51,7 +51,14 @@ static int ab_clk_pcie_link_listener(struct notifier_block *nb,
 		return NOTIFY_OK;
 	}
 
-	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
+	/*
+	 * Handling ABC_PCIE_LINK_ERROR is the same with handling
+	 * ABC_PCIE_LINK_PRE_DISABLE at this moment.
+	 *
+	 * If the handling is changed to access registers in the future,
+	 * handling of the 2 flags need to be split.
+	 */
+	if (action & (ABC_PCIE_LINK_PRE_DISABLE | ABC_PCIE_LINK_ERROR)) {
 		mutex_lock(&clk_ctx->pcie_link_lock);
 		clk_ctx->pcie_link_ready = false;
 		mutex_unlock(&clk_ctx->pcie_link_lock);
