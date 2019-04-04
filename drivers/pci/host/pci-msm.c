@@ -3951,8 +3951,13 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 	/* configure PCIe preset */
 	msm_pcie_write_reg_field(dev->dm_core,
 		PCIE_GEN3_MISC_CONTROL, BIT(0), 1);
+
+	/* USP lane0 and lane1 tx_preset = 4
+	 * DSP lane0 and lane1 tx_preset = 7
+	 */
 	msm_pcie_write_reg(dev->dm_core,
-		PCIE_GEN3_SPCIE_CAP, 0x77777777);
+		PCIE_GEN3_SPCIE_CAP, 0x74777477);
+
 	msm_pcie_write_reg_field(dev->dm_core,
 		PCIE_GEN3_MISC_CONTROL, BIT(0), 0);
 
