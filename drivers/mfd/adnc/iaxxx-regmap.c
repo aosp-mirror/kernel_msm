@@ -249,8 +249,12 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 		return true;
 	}
 
-	/* All SRB Registers */
-	if (reg >= IAXXX_SRB_BASE && reg < (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
+	/* All SRB Registers except SRB Block Selct Register.
+	 * SRB Block Select register is excluded because FW does
+	 * not require Page Select to be able to read/write
+	 */
+	if ((reg != SRB_BLOCK_SELECT_REG) && reg >= IAXXX_SRB_BASE &&
+		reg < (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
 		return true;
 
 	/* All Power Management Registers */
@@ -387,8 +391,12 @@ static bool iaxxx_application_volatile_reg_no_pm
 		(struct device *dev, unsigned int reg)
 {
 
-	/* All SRB Registers */
-	if (reg >= IAXXX_SRB_BASE && reg < (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
+	/* All SRB Registers except SRB Block Selct Register.
+	 * SRB Block Select register is excluded because FW does
+	 * not require Page Select to be able to read/write
+	 */
+	if ((reg != SRB_BLOCK_SELECT_REG) && reg >= IAXXX_SRB_BASE &&
+		reg < (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
 		return true;
 
 	/* All Power Management Registers */
