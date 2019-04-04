@@ -260,6 +260,32 @@ static int ab_sm_allow_el1_dma_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(ab_sm_allow_el1_dma_fops, ab_sm_allow_el1_dma_get,
 		ab_sm_allow_el1_dma_set, "%llu\n");
 
+/*
+ * This is added for testing error handling case when pcie link init
+ * is skipped.
+ */
+static int ab_sm_skip_pcie_link_init_set(void *data, u64 val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	sc->debug_skip_pcie_link_init = !!val;
+
+	return 0;
+}
+
+static int ab_sm_skip_pcie_link_init_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = (struct ab_state_context *)data;
+
+	*val = sc->debug_skip_pcie_link_init;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(ab_sm_skip_pcie_link_init_fops,
+			 ab_sm_skip_pcie_link_init_get,
+			 ab_sm_skip_pcie_link_init_set, "%llu\n");
+
 static int id_get(void *blk_passed, u64 *val)
 {
 	struct block *blk = (struct block *)blk_passed;
@@ -776,6 +802,11 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	 */
 	d = debugfs_create_file("allow_el1_dma", 0666, sc->d_entry, sc,
 				&ab_sm_allow_el1_dma_fops);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("skip_pcie_link_init", 0660, d_chip, sc,
+				&ab_sm_skip_pcie_link_init_fops);
 	if (!d)
 		goto err_out;
 

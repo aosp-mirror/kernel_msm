@@ -298,17 +298,27 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 			ab_ctx->alternate_boot = 0;
 	} else {
 		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+
+		if (ab_ctx->debug_skip_pcie_link_init) {
+			dev_warn(ab_ctx->dev,
+				 "Skip PCIe link resume for testing\n");
+			ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+			return -ENODEV;
+		}
+
 		ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
 			ab_ctx->pcie_dev, NULL,
 			MSM_PCIE_CONFIG_NO_CFG_RESTORE);
 		if (ret) {
 			dev_err(ab_ctx->dev, "PCIe failed to enable link\n");
+			ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 			return ret;
 		}
 
 		ret = msm_pcie_recover_config(ab_ctx->pcie_dev);
 		if (ret) {
 			dev_err(ab_ctx->dev, "PCIe failed to recover config\n");
+			ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 			return ret;
 		}
 		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);

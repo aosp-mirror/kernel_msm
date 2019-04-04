@@ -423,6 +423,9 @@ struct ab_state_context {
 	/* Check for alternate boot */
 	int alternate_boot;
 
+	/* if set, skip pcie resume operation for debugging purpose */
+	bool debug_skip_pcie_link_init;
+
 	struct ab_asv_info asv_info;
 
 	/* regulator descriptors */
