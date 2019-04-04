@@ -785,6 +785,16 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 				     pcie_link_blocking_nb);
 	struct paintbox_bus *bus = dev_data->bus;
 
+	if ((action & ABC_PCIE_LINK_ERROR) &&
+			ipu_adapter_link_is_ready(dev_data)) {
+		dev_err(dev_data->dev, "%s: PCIe link error\n", __func__);
+		atomic_andnot(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
+		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
+		ipu_adapter_ab_mfd_suspend_shared_memory(dev_data);
+		ipu_bus_notify_shutdown(bus);
+		return NOTIFY_OK;
+	}
+
 	if ((action & ABC_PCIE_LINK_POST_ENABLE) &&
 			!ipu_adapter_link_is_ready(dev_data)) {
 		dev_dbg(dev_data->dev, "%s: PCIe link available\n", __func__);
