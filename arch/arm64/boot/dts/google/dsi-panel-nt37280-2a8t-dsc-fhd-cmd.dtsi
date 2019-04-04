@@ -11,7 +11,7 @@
  */
 
 &mdss_mdp {
-	dsi_nt37280_dsc_fhd_cmd: qcom,mdss_dsi_nt37280 {
+	dsi_nt37280_2a8t_dsc_fhd_cmd: qcom,mdss_dsi_nt37280_2a8t {
 		compatible = "google,dsi_binned_lp";
 
 		qcom,mdss-dsi-panel-name = "nt37280 amoled 5.68 cmd mode panel";
@@ -43,7 +43,7 @@
 		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
 
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <0x001>;
+		qcom,mdss-dsi-bl-min-level = <0x012>;
 		qcom,mdss-dsi-bl-max-level = <0xFEF>;
 
 		qcom,mdss-dsi-reset-sequence = <1 5>, <0 1>, <1 10>;

@@ -58,7 +58,10 @@
 		st,regulator_avdd = "avdd";
 
 		st,panel_map = <&dsi_s6e3hc2_dsc_wqhd_cmd 0>,
-			       <&dsi_nt37280_dsc_fhd_cmd 1>;
+			       <&dsi_nt37280_dsc_fhd_cmd 1>,
+			       <&dsi_nt37280_2a8t_dsc_fhd_cmd 1>,
+			       <&dsi_nt37280_2b8t_dsc_fhd_cmd 1>,
+			       <&dsi_nt37280_7t_dsc_fhd_cmd 1>;
 
 		// Override table format:
 		// panel number, extinfo index, mask, value, firmware index
