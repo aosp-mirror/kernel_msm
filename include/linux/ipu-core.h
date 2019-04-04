@@ -30,6 +30,8 @@
 
 #include <uapi/linux/ipu.h>
 
+#define IPU_IOMMU_IDENTITY_MAP_SIZE	SZ_1G
+
 struct paintbox_pdata {
 	unsigned long page_size_bitmap;
 	unsigned int input_address_size;

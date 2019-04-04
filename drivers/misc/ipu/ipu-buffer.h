@@ -21,7 +21,8 @@
 #include "ipu-client.h"
 
 int ipu_buffer_dma_buf_bulk_register_ioctl(struct paintbox_data *pb,
-		struct paintbox_session *session, unsigned long arg);
+		struct paintbox_session *session, unsigned long arg,
+		bool b32_address);
 
 int ipu_buffer_dma_buf_bulk_unregister_ioctl(struct paintbox_data *pb,
 		struct paintbox_session *session, unsigned long arg);

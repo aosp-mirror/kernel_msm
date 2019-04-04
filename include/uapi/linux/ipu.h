@@ -90,7 +90,9 @@ struct ipu_dma_buf_bulk_unregister_req {
 #define IPU_POWER_DISABLE_CORES _IOW('i', 6, \
 		struct ipu_power_core_disable_request)
 
-/* On success the return value will be zero and the buffer_id field will be set
+/* Supports both AB Dram and ION buffers, buffers can be non-contiguous if IOMMU
+ * is active. IPU DMA operations using ION buffers will be across the PCIe bus.
+ * On success the return value will be zero and the buffer_id field will be set
  * to the buffer id for the buffer.  On error the return value will be set to -1
  * and errno will be set.
  */
@@ -103,5 +105,13 @@ struct ipu_dma_buf_bulk_unregister_req {
  */
 #define IPU_BULK_UNREGISTER_DMA_BUF _IOW('i', 8, \
 		struct ipu_dma_buf_bulk_unregister_req)
+
+/* Only supports ab dram input buffer. buffer must be contiguous in memory.
+ * On success the return value will be zero and the buffer_id field will be set
+ * to the buffer id for the buffer.  On error the return value will be set to -1
+ * and errno will be set.
+ */
+#define IPU_BULK_REGISTER_32B_ADDRESS_DMA_BUF _IOWR('i', 9, \
+		struct ipu_dma_buf_bulk_register_req)
 
 #endif /* __UAPI_IPU_H__ */

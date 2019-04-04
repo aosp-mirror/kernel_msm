@@ -247,13 +247,24 @@ static bool ipu_buffer_iommu_active(struct paintbox_data *pb)
 	return iommu_present(&ipu_bus_type) && ipu_is_iommu_active(pb->dev);
 }
 
+static bool ipu_buffer_is_32b_buffer(struct paintbox_buffer *buffer)
+{
+	/* all 32 bit buffers use ab physical addresses and will be < 1GB
+	 * address range which is identity mapped
+	 */
+	return sg_dma_address(buffer->sg_table->sgl) <
+		IPU_IOMMU_IDENTITY_MAP_SIZE;
+}
+
 /* The caller to this function must hold pb->lock */
 static void ipu_buffer_unmap_and_release_buffer(struct paintbox_data *pb,
 		struct paintbox_session *session,
 		struct paintbox_buffer *buffer)
 {
 	/* Unmap the buffer from the IOMMU. */
-	if (ipu_buffer_iommu_active(pb) && is_ab_dram_dma_buf(buffer->dma_buf))
+	if (ipu_buffer_iommu_active(pb) &&
+			is_ab_dram_dma_buf(buffer->dma_buf) &&
+			!ipu_buffer_is_32b_buffer(buffer))
 		ipu_buffer_unmap_iommu(pb, session, buffer);
 
 	ipu_buffer_unmap_dma_buf(pb, session, buffer);
@@ -276,10 +287,41 @@ static void ipu_buffer_consolidate_mmu_sg_list(struct paintbox_buffer *buffer)
 	}
 	buffer->sg_table->sgl->dma_length = total_size;
 }
+
+static bool ipu_buffer_check_valid_32b_buffer(struct paintbox_data *pb,
+	struct paintbox_buffer *buffer)
+{
+	/* we are using the fact that we identity map the first
+	 * IPU_IOMMU_IDENTITY_MAP_SIZE of memory and that ab_dram
+	 * buffers are contiguous and just don't map the 32 bit address
+	 * buffers.
+	 */
+	unsigned long buff_end_address;
+
+	if (!is_ab_dram_dma_buf(buffer->dma_buf)) {
+		dev_err(pb->dev,
+			"32 bit address is only supported for AB Dram buffers");
+		return false;
+	}
+	if (buffer->sg_table->nents > 1) {
+		dev_err(pb->dev,
+			"32 bit address doesn't support non-contiguous buffers");
+		return false;
+	}
+	buff_end_address = sg_dma_address(buffer->sg_table->sgl) +
+		sg_dma_len(buffer->sg_table->sgl);
+	if (buff_end_address > IPU_IOMMU_IDENTITY_MAP_SIZE) {
+		dev_err(pb->dev,
+			"32 bit address out of supported range");
+		return false;
+	}
+	return true;
+}
 /* The caller to this function must hold pb->lock */
 static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
 		struct paintbox_session *session,
-		struct ipu_dma_buf_register_entry *entry)
+		struct ipu_dma_buf_register_entry *entry,
+		bool b32_address)
 {
 	struct paintbox_buffer *buffer;
 	int ret;
@@ -298,10 +340,12 @@ static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
 	if (ret < 0)
 		goto release_buffer;
 
-	/* If the IOMMU is enabled then map the buffer into the IOMMU IOVA
-	 * space.
-	 */
-	if (ipu_buffer_iommu_active(pb)) {
+	if (b32_address) {
+		if (!ipu_buffer_check_valid_32b_buffer(pb, buffer)) {
+			ret = -EINVAL;
+			goto unmap_dma_buf;
+		}
+	} else if (ipu_buffer_iommu_active(pb)) {
 		/*
 		 * iommu mapping is not needed for ion. the ion infrastructure
 		 * calls map_dma_buf internally.
@@ -333,7 +377,8 @@ release_buffer:
 }
 
 int ipu_buffer_dma_buf_bulk_register_ioctl(struct paintbox_data *pb,
-		struct paintbox_session *session, unsigned long arg)
+		struct paintbox_session *session, unsigned long arg,
+		bool b32_address)
 {
 	struct ipu_dma_buf_bulk_register_req __user *user_req;
 	struct ipu_dma_buf_bulk_register_req req;
@@ -379,7 +424,7 @@ int ipu_buffer_dma_buf_bulk_register_ioctl(struct paintbox_data *pb,
 
 	for (i = 0; i < req.num_buffers; i++) {
 		ret = ipu_buffer_dma_buf_process_registration(pb, session,
-				&req_bufs[i]);
+				&req_bufs[i], b32_address);
 		if (ret != 0)
 			break;
 

@@ -366,11 +366,16 @@ static long ipu_client_ioctl(struct file *fp, unsigned int cmd,
 		ret = ipu_power_disable_cores_ioctl(pb, session, arg);
 		break;
 	case IPU_BULK_REGISTER_DMA_BUF:
-		ret = ipu_buffer_dma_buf_bulk_register_ioctl(pb, session, arg);
+		ret = ipu_buffer_dma_buf_bulk_register_ioctl(pb, session, arg,
+			false /* 32 bit address range */);
 		break;
 	case IPU_BULK_UNREGISTER_DMA_BUF:
 		ret = ipu_buffer_dma_buf_bulk_unregister_ioctl(pb, session,
 				arg);
+		break;
+	case IPU_BULK_REGISTER_32B_ADDRESS_DMA_BUF:
+		ret = ipu_buffer_dma_buf_bulk_register_ioctl(pb, session, arg,
+			true /* 32 bit address range */);
 		break;
 	default:
 		dev_err(pb->dev, "%s: unknown ioctl 0x%0x\n", __func__, cmd);

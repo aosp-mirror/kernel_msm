@@ -513,7 +513,7 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 	 * TODO(b/123649740)
 	 */
 	if (map_start && ipu_iommu_map(domain, 0 /*iova*/,
-		0 /*paddr*/, SZ_1G, 0xd7)) {
+		0 /*paddr*/, IPU_IOMMU_IDENTITY_MAP_SIZE, 0xd7)) {
 		dev_err(dev, "%s failed to identity map first Gb\n", __func__);
 		return -ENOMEM;
 	}
