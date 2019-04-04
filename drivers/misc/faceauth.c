@@ -35,8 +35,8 @@
 #include <linux/uio.h>
 #include <linux/workqueue.h>
 
-#include <linux/dma/abc-pcie-dma.h>
 #include <linux/mfd/abc-pcie-dma.h>
+#include <uapi/linux/abc-pcie-dma.h>
 
 /* ABC FW and workload binary offsets */
 #define M0_FIRMWARE_ADDR 0x20000000

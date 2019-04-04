@@ -39,8 +39,8 @@
 /* for abc ioctls, move later */
 #include <linux/dma-buf.h>
 #include <linux/ab-dram.h>
-#include <linux/dma/abc-pcie-dma.h>
 #include <linux/mfd/abc-pcie-dma.h>
+#include <uapi/linux/abc-pcie-dma.h>
 
 #define DRIVER_NAME "abc-pcie-tpu"
 #define DRIVER_VERSION "0.3"
