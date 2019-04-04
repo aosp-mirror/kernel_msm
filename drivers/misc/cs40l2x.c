@@ -1020,31 +1020,69 @@ err_mutex:
 	return ret;
 }
 
+static int cs40l2x_gpio_edge_index_get(struct cs40l2x_private *cs40l2x,
+			unsigned int *index,
+			unsigned int gpio_offs, bool gpio_rise)
+{
+	bool gpio_pol = cs40l2x->pdata.gpio_indv_pol & (1 << (gpio_offs >> 2));
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x,
+			gpio_pol ^ gpio_rise ? "INDEXBUTTONPRESS" :
+				"INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+
+	if (!reg)
+		return -EPERM;
+	reg += gpio_offs;
+
+	if (!(cs40l2x->gpio_mask & (1 << (gpio_offs >> 2))))
+		return -EPERM;
+
+	return regmap_read(cs40l2x->regmap, reg, index);
+}
+
+static int cs40l2x_gpio_edge_index_set(struct cs40l2x_private *cs40l2x,
+			unsigned int index,
+			unsigned int gpio_offs, bool gpio_rise)
+{
+	bool gpio_pol = cs40l2x->pdata.gpio_indv_pol & (1 << (gpio_offs >> 2));
+	unsigned int reg = cs40l2x_dsp_reg(cs40l2x,
+			gpio_pol ^ gpio_rise ? "INDEXBUTTONPRESS" :
+				"INDEXBUTTONRELEASE",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	int ret;
+
+	if (!reg)
+		return -EPERM;
+	reg += gpio_offs;
+
+	if (!(cs40l2x->gpio_mask & (1 << (gpio_offs >> 2))))
+		return -EPERM;
+
+	if (index > (cs40l2x->num_waves - 1))
+		return -EINVAL;
+
+	ret = regmap_write(cs40l2x->regmap, reg, index);
+	if (ret)
+		return ret;
+
+	return cs40l2x_dsp_cache(cs40l2x, reg, index);
+}
+
 static ssize_t cs40l2x_gpio1_rise_index_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS1, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONPRESS1, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1058,10 +1096,7 @@ static ssize_t cs40l2x_gpio1_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1069,25 +1104,8 @@ static ssize_t cs40l2x_gpio1_rise_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS1, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONPRESS1, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONPRESS1, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
@@ -1104,26 +1122,16 @@ static ssize_t cs40l2x_gpio1_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE1, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONRELEASE1, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1137,10 +1145,7 @@ static ssize_t cs40l2x_gpio1_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1148,25 +1153,8 @@ static ssize_t cs40l2x_gpio1_fall_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE1, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONRELEASE1, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONRELEASE1, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
@@ -1251,26 +1239,16 @@ static ssize_t cs40l2x_gpio2_rise_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS2, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONPRESS2, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1284,10 +1262,7 @@ static ssize_t cs40l2x_gpio2_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1295,25 +1270,8 @@ static ssize_t cs40l2x_gpio2_rise_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS2, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONPRESS2, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONPRESS2, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
@@ -1330,26 +1288,16 @@ static ssize_t cs40l2x_gpio2_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE2, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONRELEASE2, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1363,10 +1311,7 @@ static ssize_t cs40l2x_gpio2_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1374,25 +1319,8 @@ static ssize_t cs40l2x_gpio2_fall_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE2, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONRELEASE2, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONRELEASE2, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
@@ -1409,26 +1337,16 @@ static ssize_t cs40l2x_gpio3_rise_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS3, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONPRESS3, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1442,10 +1360,7 @@ static ssize_t cs40l2x_gpio3_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1453,25 +1368,8 @@ static ssize_t cs40l2x_gpio3_rise_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS3, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONPRESS3, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONPRESS3, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
@@ -1488,26 +1386,16 @@ static ssize_t cs40l2x_gpio3_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE3, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONRELEASE3, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1521,10 +1409,7 @@ static ssize_t cs40l2x_gpio3_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1532,25 +1417,8 @@ static ssize_t cs40l2x_gpio3_fall_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE3, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONRELEASE3, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONRELEASE3, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
@@ -1567,26 +1435,16 @@ static ssize_t cs40l2x_gpio4_rise_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS4, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONPRESS4, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1600,10 +1458,7 @@ static ssize_t cs40l2x_gpio4_rise_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1611,25 +1466,8 @@ static ssize_t cs40l2x_gpio4_rise_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONPRESS4, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONPRESS4, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONPRESS4, CS40L2X_GPIO_RISE);
 	if (ret)
 		goto err_mutex;
 
@@ -1646,26 +1484,16 @@ static ssize_t cs40l2x_gpio4_fall_index_show(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
-		return -EPERM;
+	unsigned int index;
 
 	mutex_lock(&cs40l2x->lock);
 
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_read(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE4, &index);
+	ret = cs40l2x_gpio_edge_index_get(cs40l2x, &index,
+			CS40L2X_INDEXBUTTONRELEASE4, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", index);
+	ret = snprintf(buf, PAGE_SIZE, "%u\n", index);
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
@@ -1679,10 +1507,7 @@ static ssize_t cs40l2x_gpio4_fall_index_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	int ret;
-	unsigned int reg, index;
-
-	if (!(cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4))
-		return -EPERM;
+	unsigned int index;
 
 	ret = kstrtou32(buf, 10, &index);
 	if (ret)
@@ -1690,25 +1515,8 @@ static ssize_t cs40l2x_gpio4_fall_index_store(struct device *dev,
 
 	mutex_lock(&cs40l2x->lock);
 
-	if (index > (cs40l2x->num_waves - 1)) {
-		ret = -EINVAL;
-		goto err_mutex;
-	}
-
-	reg = cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
-	if (!reg) {
-		ret = -EPERM;
-		goto err_mutex;
-	}
-
-	ret = regmap_write(cs40l2x->regmap,
-			reg + CS40L2X_INDEXBUTTONRELEASE4, index);
-	if (ret)
-		goto err_mutex;
-
-	ret = cs40l2x_dsp_cache(cs40l2x,
-			reg + CS40L2X_INDEXBUTTONRELEASE4, index);
+	ret = cs40l2x_gpio_edge_index_set(cs40l2x, index,
+			CS40L2X_INDEXBUTTONRELEASE4, CS40L2X_GPIO_FALL);
 	if (ret)
 		goto err_mutex;
 
@@ -2496,6 +2304,7 @@ static int cs40l2x_gpio_edge_dig_scale_get(struct cs40l2x_private *cs40l2x,
 			unsigned int *dig_scale,
 			unsigned int gpio_offs, bool gpio_rise)
 {
+	bool gpio_pol = cs40l2x->pdata.gpio_indv_pol & (1 << (gpio_offs >> 2));
 	unsigned int val;
 	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GPIO_GAIN",
 			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
@@ -2512,10 +2321,12 @@ static int cs40l2x_gpio_edge_dig_scale_get(struct cs40l2x_private *cs40l2x,
 	if (ret)
 		return ret;
 
-	*dig_scale = (val & (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_MASK :
-			CS40L2X_GPIO_GAIN_FALL_MASK))
-				>> (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_SHIFT :
-						CS40L2X_GPIO_GAIN_FALL_SHIFT);
+	*dig_scale = (val & (gpio_pol ^ gpio_rise ?
+			CS40L2X_GPIO_GAIN_RISE_MASK :
+			CS40L2X_GPIO_GAIN_FALL_MASK)) >>
+				(gpio_pol ^ gpio_rise ?
+					CS40L2X_GPIO_GAIN_RISE_SHIFT :
+					CS40L2X_GPIO_GAIN_FALL_SHIFT);
 
 	return 0;
 }
@@ -2524,6 +2335,7 @@ static int cs40l2x_gpio_edge_dig_scale_set(struct cs40l2x_private *cs40l2x,
 			unsigned int dig_scale,
 			unsigned int gpio_offs, bool gpio_rise)
 {
+	bool gpio_pol = cs40l2x->pdata.gpio_indv_pol & (1 << (gpio_offs >> 2));
 	unsigned int val;
 	unsigned int reg = cs40l2x_dsp_reg(cs40l2x, "GPIO_GAIN",
 			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
@@ -2544,13 +2356,16 @@ static int cs40l2x_gpio_edge_dig_scale_set(struct cs40l2x_private *cs40l2x,
 	if (ret)
 		return ret;
 
-	val &= ~(gpio_rise ? CS40L2X_GPIO_GAIN_RISE_MASK :
+	val &= ~(gpio_pol ^ gpio_rise ?
+			CS40L2X_GPIO_GAIN_RISE_MASK :
 			CS40L2X_GPIO_GAIN_FALL_MASK);
 
-	val |= (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_MASK :
-			CS40L2X_GPIO_GAIN_FALL_MASK) & (dig_scale
-				<< (gpio_rise ? CS40L2X_GPIO_GAIN_RISE_SHIFT :
-						CS40L2X_GPIO_GAIN_FALL_SHIFT));
+	val |= (gpio_pol ^ gpio_rise ?
+			CS40L2X_GPIO_GAIN_RISE_MASK :
+			CS40L2X_GPIO_GAIN_FALL_MASK) &
+				(dig_scale << (gpio_pol ^ gpio_rise ?
+					CS40L2X_GPIO_GAIN_RISE_SHIFT :
+					CS40L2X_GPIO_GAIN_FALL_SHIFT));
 
 	ret = regmap_write(cs40l2x->regmap, reg, val);
 	if (ret)
@@ -5403,6 +5218,8 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
+	unsigned int gpio_pol = cs40l2x_dsp_reg(cs40l2x, "GPIO_POL",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
 	unsigned int val;
 	int ret, i;
 
@@ -5417,6 +5234,18 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 	if (ret) {
 		dev_err(dev, "Failed to enable GPIO detection\n");
 		return ret;
+	}
+
+	if (gpio_pol) {
+		ret = regmap_write(regmap, gpio_pol,
+				cs40l2x->pdata.gpio_indv_pol);
+		if (ret) {
+			dev_err(dev, "Failed to configure GPIO polarity\n");
+			return ret;
+		}
+	} else if (cs40l2x->pdata.gpio_indv_pol) {
+		dev_err(dev, "Active-low GPIO not supported\n");
+		return -EPERM;
 	}
 
 	if (cs40l2x->pdata.gpio1_mode != CS40L2X_GPIO1_MODE_DEF_ON) {
@@ -5699,12 +5528,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio1_rise_index > 0
 			&& cs40l2x->pdata.gpio1_rise_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONPRESS1,
-				cs40l2x->pdata.gpio1_rise_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio1_rise_index,
+				CS40L2X_INDEXBUTTONPRESS1, CS40L2X_GPIO_RISE);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio1_rise_index\n");
@@ -5721,12 +5547,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio1_fall_index > 0
 			&& cs40l2x->pdata.gpio1_fall_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONRELEASE1,
-				cs40l2x->pdata.gpio1_fall_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio1_fall_index,
+				CS40L2X_INDEXBUTTONRELEASE1, CS40L2X_GPIO_FALL);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio1_fall_index\n");
@@ -5764,12 +5587,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio2_rise_index > 0
 			&& cs40l2x->pdata.gpio2_rise_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONPRESS2,
-				cs40l2x->pdata.gpio2_rise_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio2_rise_index,
+				CS40L2X_INDEXBUTTONPRESS2, CS40L2X_GPIO_RISE);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio2_rise_index\n");
@@ -5786,12 +5606,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio2_fall_index > 0
 			&& cs40l2x->pdata.gpio2_fall_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONRELEASE2,
-				cs40l2x->pdata.gpio2_fall_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio2_fall_index,
+				CS40L2X_INDEXBUTTONRELEASE2, CS40L2X_GPIO_FALL);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio2_fall_index\n");
@@ -5808,12 +5625,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio3_rise_index > 0
 			&& cs40l2x->pdata.gpio3_rise_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONPRESS3,
-				cs40l2x->pdata.gpio3_rise_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio3_rise_index,
+				CS40L2X_INDEXBUTTONPRESS3, CS40L2X_GPIO_RISE);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio3_rise_index\n");
@@ -5830,12 +5644,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio3_fall_index > 0
 			&& cs40l2x->pdata.gpio3_fall_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO3) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONRELEASE3,
-				cs40l2x->pdata.gpio3_fall_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio3_fall_index,
+				CS40L2X_INDEXBUTTONRELEASE3, CS40L2X_GPIO_FALL);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio3_fall_index\n");
@@ -5852,12 +5663,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio4_rise_index > 0
 			&& cs40l2x->pdata.gpio4_rise_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONPRESS4,
-				cs40l2x->pdata.gpio4_rise_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio4_rise_index,
+				CS40L2X_INDEXBUTTONPRESS4, CS40L2X_GPIO_RISE);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio4_rise_index\n");
@@ -5874,12 +5682,9 @@ static int cs40l2x_dsp_post_config(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->pdata.gpio4_fall_index > 0
 			&& cs40l2x->pdata.gpio4_fall_index < cs40l2x->num_waves
 			&& cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4) {
-		ret = regmap_write(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ CS40L2X_INDEXBUTTONRELEASE4,
-				cs40l2x->pdata.gpio4_fall_index);
+		ret = cs40l2x_gpio_edge_index_set(cs40l2x,
+				cs40l2x->pdata.gpio4_fall_index,
+				CS40L2X_INDEXBUTTONRELEASE4, CS40L2X_GPIO_FALL);
 		if (ret) {
 			dev_err(dev,
 				"Failed to write default gpio4_fall_index\n");
@@ -6654,23 +6459,15 @@ static int cs40l2x_wavetable_sync(struct cs40l2x_private *cs40l2x)
 		if (!(cs40l2x->gpio_mask & (1 << i)))
 			continue;
 
-		ret = regmap_read(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONPRESS",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ (i << 2),
-				&val);
+		ret = cs40l2x_gpio_edge_index_get(cs40l2x,
+				&val, i << 2, CS40L2X_GPIO_RISE);
 		if (ret)
 			return ret;
 		if (val >= cs40l2x->num_waves)
 			dev_warn(dev, "Invalid gpio%d_rise_index\n", i + 1);
 
-		ret = regmap_read(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "INDEXBUTTONRELEASE",
-						CS40L2X_XM_UNPACKED_TYPE,
-						cs40l2x->fw_desc->id)
-						+ (i << 2),
-				&val);
+		ret = cs40l2x_gpio_edge_index_get(cs40l2x,
+				&val, i << 2, CS40L2X_GPIO_FALL);
 		if (ret)
 			return ret;
 		if (val >= cs40l2x->num_waves)
@@ -7169,6 +6966,8 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int wksrc_en = CS40L2X_WKSRC_EN_SDA;
+	unsigned int wksrc_pol = CS40L2X_WKSRC_POL_SDA;
+	unsigned int wksrc_ctl;
 
 	/* REFCLK configuration is handled by revision B1 ROM */
 	if (cs40l2x->pdata.refclk_gpio2 &&
@@ -7255,30 +7054,36 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 
 	/* hibernation is supported by revision B1 firmware only */
 	if (cs40l2x->revid == CS40L2X_REVID_B1) {
+		/* enables */
 		if (cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO1)
 			wksrc_en |= CS40L2X_WKSRC_EN_GPIO1;
-
 		if (cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO2)
 			wksrc_en |= CS40L2X_WKSRC_EN_GPIO2;
-
 		if (cs40l2x->gpio_mask & CS40L2X_GPIO_BTNDETECT_GPIO4)
 			wksrc_en |= CS40L2X_WKSRC_EN_GPIO4;
 
-		ret = regmap_update_bits(regmap,
-				CS40L2X_WAKESRC_CTL,
-				CS40L2X_WKSRC_EN_MASK,
-				wksrc_en << CS40L2X_WKSRC_EN_SHIFT);
+		/* polarities */
+		if (cs40l2x->pdata.gpio_indv_pol & CS40L2X_GPIO_BTNDETECT_GPIO1)
+			wksrc_pol |= CS40L2X_WKSRC_POL_GPIO1;
+		if (cs40l2x->pdata.gpio_indv_pol & CS40L2X_GPIO_BTNDETECT_GPIO2)
+			wksrc_pol |= CS40L2X_WKSRC_POL_GPIO2;
+		if (cs40l2x->pdata.gpio_indv_pol & CS40L2X_GPIO_BTNDETECT_GPIO4)
+			wksrc_pol |= CS40L2X_WKSRC_POL_GPIO4;
+
+		wksrc_ctl = ((wksrc_en << CS40L2X_WKSRC_EN_SHIFT)
+				& CS40L2X_WKSRC_EN_MASK)
+				| ((wksrc_pol << CS40L2X_WKSRC_POL_SHIFT)
+					& CS40L2X_WKSRC_POL_MASK);
+
+		ret = regmap_write(regmap,
+				CS40L2X_WAKESRC_CTL, wksrc_ctl);
 		if (ret) {
 			dev_err(dev, "Failed to enable wake sources\n");
 			return ret;
 		}
 
-		ret = cs40l2x_wseq_add_reg(cs40l2x, CS40L2X_WAKESRC_CTL,
-				((wksrc_en << CS40L2X_WKSRC_EN_SHIFT)
-					& CS40L2X_WKSRC_EN_MASK) |
-						((CS40L2X_WKSRC_POL_SDA
-						<< CS40L2X_WKSRC_POL_SHIFT)
-						& CS40L2X_WKSRC_POL_MASK));
+		ret = cs40l2x_wseq_add_reg(cs40l2x,
+				CS40L2X_WAKESRC_CTL, wksrc_ctl);
 		if (ret) {
 			dev_err(dev, "Failed to sequence wake sources\n");
 			return ret;
@@ -7582,6 +7387,17 @@ static int cs40l2x_handle_of_data(struct i2c_client *i2c_client,
 			dev_warn(dev, "Ignored default gpio_indv_enable\n");
 		else
 			pdata->gpio_indv_enable = out_val;
+	}
+
+	ret = of_property_read_u32(np, "cirrus,gpio-indv-pol", &out_val);
+	if (!ret) {
+		if (out_val > (CS40L2X_GPIO_BTNDETECT_GPIO1
+				| CS40L2X_GPIO_BTNDETECT_GPIO2
+				| CS40L2X_GPIO_BTNDETECT_GPIO3
+				| CS40L2X_GPIO_BTNDETECT_GPIO4))
+			dev_warn(dev, "Ignored default gpio_indv_pol\n");
+		else
+			pdata->gpio_indv_pol = out_val;
 	}
 
 	pdata->hiber_enable = of_property_read_bool(np, "cirrus,hiber-enable");
