@@ -927,9 +927,7 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 		mutex_unlock(&sc->mfd_lock);
 	}
 
-	msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0,
-		  sc->pcie_dev, NULL,
-		  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+	ab_sm_disable_pcie(sc);
 	dev_err(sc->dev, "AB PCIE suspended\n");
 
 	if (is_linkdown_event) {
@@ -1171,11 +1169,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ret = sc->mfd_ops->pcie_pre_disable(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
 
-		ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0,
-					  sc->pcie_dev, NULL,
-					  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+		ret = ab_sm_disable_pcie(sc);
 		if (ret) {
-			dev_err(sc->dev, "PCIe failed to disable link\n");
 			if (to_chip_substate_id != CHIP_STATE_0)
 				goto cleanup_state;
 		}
@@ -1692,6 +1687,90 @@ void ab_gpio_enable_fw_patch(struct ab_state_context *ab_ctx)
 void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx)
 {
 	gpiod_set_value_cansleep(ab_ctx->fw_patch_en, __GPIO_DISABLE);
+}
+
+/*
+ * Calls host platform dependent APIs to enumerate PCIe bus.
+ *
+ * Returns 0 on success, and ab_ctx->pcie_dev is assigned a pointer to
+ *         a pci device.
+ * Returns non-zero on error.
+ */
+int ab_sm_enumerate_pcie(struct ab_state_context *ab_ctx)
+{
+	int ret;
+	struct pci_bus *pbus = NULL;
+	struct pci_dev *pdev = NULL;
+
+	ret = msm_pcie_enumerate(1);
+	if (ret) {
+		dev_err(ab_ctx->dev, "PCIe enumeration failed (%d)\n", ret);
+		return ret;
+	}
+
+	pbus = pci_find_bus(1, 1);
+	if (!pbus) {
+		dev_err(ab_ctx->dev, "Cannot locate PCIe bus\n");
+		return -ENODEV;
+	}
+
+	pdev = pbus->self;
+	while (!pci_is_root_bus(pbus)) {
+		pdev = pbus->self;
+		pbus = pbus->self->bus;
+	}
+	ab_ctx->pcie_dev = pdev;
+	ab_sm_setup_pcie_event(ab_ctx);
+
+	return 0;
+}
+
+/*
+ * Calls host platform dependent APIs to resume PCIe link after PCIe
+ * has been enumerated once.
+ *
+ * Returns 0 on success, non-zero on error.
+ */
+int ab_sm_enable_pcie(struct ab_state_context *ab_ctx)
+{
+	int ret;
+
+	ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
+				  ab_ctx->pcie_dev, NULL,
+				  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+	if (ret) {
+		dev_err(ab_ctx->dev, "PCIe failed to enable link (%d)\n", ret);
+		return ret;
+	}
+
+	ret = msm_pcie_recover_config(ab_ctx->pcie_dev);
+	if (ret) {
+		dev_err(ab_ctx->dev, "PCIe failed to recover config (%d)\n",
+			ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Calls host platform dependent APIs to suspend PCIe link.
+ *
+ * Returns 0 on success, non-zero on error.
+ */
+int ab_sm_disable_pcie(struct ab_state_context *ab_ctx)
+{
+	int ret;
+
+	ret = msm_pcie_pm_control(MSM_PCIE_SUSPEND, 0,
+				  ab_ctx->pcie_dev, NULL,
+				  MSM_PCIE_CONFIG_NO_CFG_RESTORE);
+	if (ret) {
+		dev_err(ab_ctx->dev, "PCIe failed to disable link\n");
+		return ret;
+	}
+
+	return 0;
 }
 
 static void ab_sm_shutdown_work(struct work_struct *data)

@@ -91,8 +91,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	uint32_t *image_dw_buf;
 	int image_size_dw;
 	int fw_status;
-	struct pci_bus *pbus = 0;
-	struct pci_dev *pdev = 0;
 	int ret;
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
@@ -272,24 +270,12 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 
 	if (ab_ctx->cold_boot) {
 		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
-		if (msm_pcie_enumerate(1)) {
-			dev_err(ab_ctx->dev, "PCIe enumeration failed\n");
-			return -EIO;
-		}
+		ret = ab_sm_enumerate_pcie(ab_ctx);
+		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+		if (ret)
+			return ret;
 
 		ab_ctx->cold_boot = false;
-
-		pbus = pci_find_bus(1, 1);
-		if (pbus) {
-			pdev = pbus->self;
-			while (!pci_is_root_bus(pbus)) {
-				pdev = pbus->self;
-				pbus = pbus->self->bus;
-			}
-			ab_ctx->pcie_dev = pdev;
-			ab_sm_setup_pcie_event(ab_ctx);
-		}
-		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 
 		ab_lvcc_init(&ab_ctx->asv_info);
 
@@ -306,22 +292,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 			return -ENODEV;
 		}
 
-		ret = msm_pcie_pm_control(MSM_PCIE_RESUME, 0,
-			ab_ctx->pcie_dev, NULL,
-			MSM_PCIE_CONFIG_NO_CFG_RESTORE);
-		if (ret) {
-			dev_err(ab_ctx->dev, "PCIe failed to enable link\n");
-			ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
-			return ret;
-		}
-
-		ret = msm_pcie_recover_config(ab_ctx->pcie_dev);
-		if (ret) {
-			dev_err(ab_ctx->dev, "PCIe failed to recover config\n");
-			ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
-			return ret;
-		}
+		ret = ab_sm_enable_pcie(ab_ctx);
 		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+		if (ret)
+			return ret;
 	}
 
 	/* Wait for AB_READY = 1,

@@ -596,6 +596,10 @@ int  ab_gpio_get_ddr_iso(struct ab_state_context *ab_ctx);
 void ab_gpio_enable_fw_patch(struct ab_state_context *ab_ctx);
 void ab_gpio_disable_fw_patch(struct ab_state_context *ab_ctx);
 
+int ab_sm_enumerate_pcie(struct ab_state_context *ab_ctx);
+int ab_sm_enable_pcie(struct ab_state_context *ab_ctx);
+int ab_sm_disable_pcie(struct ab_state_context *ab_ctx);
+
 void ab_clkout_sel(struct ab_state_context *sc, unsigned int clkout_idx);
 void ab_clkout_blksel(struct ab_state_context *sc, unsigned int blk_idx);
 void ab_clkout_clksel(struct ab_state_context *sc, unsigned int clk_idx);
