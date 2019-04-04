@@ -983,7 +983,7 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 
 	dev_data->dev = &pdev->dev;
 	dev_data->pdev = pdev;
-	dev_data->pio_threshold = 1024;
+	dev_data->pio_threshold = SZ_32K;
 
 	ipu_adapter_ab_mfd_set_platform_data(pdev, &dev_data->pdata);
 	ipu_adapter_ab_mfd_set_bus_ops(&dev_data->ops);
