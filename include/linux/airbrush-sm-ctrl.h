@@ -312,6 +312,7 @@ struct ab_sm_clk_ops {
 	int (*tpu_pll_enable)(void *ctx);
 	int (*tpu_pll_disable)(void *ctx);
 	int64_t (*tpu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
+	int64_t (*tpu_set_rate_opt)(void *ctx, u64 old_rate, u64 new_rate);
 	int64_t (*tpu_set_rate_direct)(void *ctx, u64 new_rate);
 
 	/* TODO (b/128940576): Remove aon_set_rate once we see that

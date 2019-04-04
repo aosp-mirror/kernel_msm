@@ -87,6 +87,10 @@ static int64_t tpu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return 0;
 }
+static int64_t tpu_set_rate_opt_stub(void *ctx, u64 old_rate, u64 new_rate)
+{
+	return 0;
+}
 
 static int64_t tpu_set_rate_direct_stub(void *ctx, u64 new_rate)
 {
@@ -122,6 +126,7 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 	.tpu_pll_enable = &tpu_pll_enable_stub,
 	.tpu_pll_disable = &tpu_pll_disable_stub,
 	.tpu_set_rate = &tpu_set_rate_stub,
+	.tpu_set_rate_opt = &tpu_set_rate_opt_stub,
 	.tpu_set_rate_direct = &tpu_set_rate_direct_stub,
 
 	.aon_set_rate = &aon_set_rate_stub,
@@ -510,13 +515,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			break;
 		}
 
-		if (last_state->clk_status == off && clk_status == on) {
-			ret = clk->tpu_pll_enable(clk->ctx);
-			if (ret)
-				return ret;
-		}
-
-		ret_freq = clk->tpu_set_rate(clk->ctx, old_freq, new_freq);
+		ret_freq = clk->tpu_set_rate_opt(clk->ctx, old_freq, new_freq);
 		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set tpu freq to %lld but got %lld",
 					new_freq, ret_freq);

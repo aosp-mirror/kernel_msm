@@ -255,6 +255,158 @@ static int64_t ab_clk_ipu_set_rate_opt_handler(void *ctx,
 
 	return ret;
 }
+
+#define PLL_LOCKTIME_PLL_TPU		0x00040000
+#define PLL_CON0_PLL_TPU			0x00040120
+#define CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1		0x00041000
+#define MUX_SHARED_DIV_AON_PLL		0x00000000
+#define MUX_TPU_PLL_DIV_CLK_1		0x00000001
+#define PLL_TPU_MUX_SEL_MASK		0x00000010
+#define PLL_TPU_LOCK_FAIL_MASK		0x08000000
+#define PLL_TPU_STABLE_MASK			0x20000000
+#define PLL_TPU_USE_LOCK_FAIL_MASK	0x40000000
+#define PLL_TPU_ENABLE_MASK			0x80000000
+#define PLL_TPU_LOCK_FAILURES \
+	(PLL_TPU_LOCK_FAIL_MASK | PLL_TPU_USE_LOCK_FAIL_MASK)
+
+#define PLL_TPU_50MHZ_RATE		50000000
+#define PLL_TPU_316MHZ_RATE		316000000
+#define PLL_TPU_474MHZ_RATE		474000000
+#define PLL_TPU_632MHZ_RATE		632000000
+#define PLL_TPU_790MHZ_RATE		789600000
+
+#define PLL_TPU_PMS_MASK		0x03FF3F07
+#define PLL_TPU_50MHZ_PMS		0x01F40306
+#define PLL_TPU_316MHZ_PMS		0x018B0303
+#define PLL_TPU_474MHZ_PMS		0x018B0203
+#define PLL_TPU_632MHZ_PMS		0x018B0302
+#define PLL_TPU_790MHZ_PMS		0x01490202
+static uint32_t get_tpu_pms_val(struct ab_clk_context *clk_ctx,
+		uint32_t last_val, u64 new_rate)
+{
+	switch (new_rate) {
+	case PLL_TPU_50MHZ_RATE:
+		return (last_val & ~PLL_TPU_PMS_MASK) | PLL_TPU_50MHZ_PMS;
+	case PLL_TPU_316MHZ_RATE:
+		return (last_val & ~PLL_TPU_PMS_MASK) | PLL_TPU_316MHZ_PMS;
+	case PLL_TPU_474MHZ_RATE:
+		return (last_val & ~PLL_TPU_PMS_MASK) | PLL_TPU_474MHZ_PMS;
+	case PLL_TPU_632MHZ_RATE:
+		return (last_val & ~PLL_TPU_PMS_MASK) | PLL_TPU_632MHZ_PMS;
+	case PLL_TPU_790MHZ_RATE:
+		return (last_val & ~PLL_TPU_PMS_MASK) | PLL_TPU_790MHZ_PMS;
+	default:
+		dev_err(clk_ctx->dev, "Bad clock rate, using %lu\n",
+				PLL_TPU_790MHZ_RATE);
+		return (last_val & ~PLL_TPU_PMS_MASK) | PLL_TPU_790MHZ_PMS;
+	}
+}
+
+/* Caller must hold clk_ctx->pcie_link_lock */
+static int64_t __ab_clk_tpu_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
+		u64 old_rate, u64 new_rate)
+{
+	uint32_t val, timeout;
+	uint32_t last_val; /* Caches PLL_CON0_PLL_TPU register state */
+
+	dev_dbg(clk_ctx->dev,
+		"%s: set TPU clock rate to %llu\n", __func__, new_rate);
+
+	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
+
+	/* Get current state of main TPU clk register */
+	ABC_READ(PLL_CON0_PLL_TPU, &last_val);
+
+	if (new_rate == AB_SM_OSC_RATE) {
+		/* Set pll_tpu clock source to OSCCLK_AON */
+		val = last_val & ~PLL_TPU_MUX_SEL_MASK;
+		ABC_WRITE(PLL_CON0_PLL_TPU, val);
+		last_val = val;
+
+		ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE,
+				old_rate, new_rate);
+		return new_rate;
+	}
+
+	/* Switch mux parent to SHARED_DIV_AON_PLL to prevent droop */
+	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1, MUX_SHARED_DIV_AON_PLL);
+
+	/* Set pll_ipu clock source to OSCCLK_AON so that intermediate
+	 * changes don't propagate to children
+	 */
+	val = last_val & ~PLL_TPU_MUX_SEL_MASK;
+	if (val != last_val) {
+		ABC_WRITE(PLL_CON0_PLL_TPU, val);
+		last_val = val;
+	}
+
+	/* Disable pll_tpu */
+	val = last_val & ~PLL_TPU_ENABLE_MASK;
+	if (val != last_val) {
+		ABC_WRITE(PLL_CON0_PLL_TPU, val);
+		last_val = val;
+	}
+
+	ABC_WRITE(PLL_LOCKTIME_PLL_TPU, AB_PLL_LOCKTIME);
+
+	/* Update pll_tpu pms values */
+	val = get_tpu_pms_val(clk_ctx, last_val, new_rate);
+	ABC_WRITE(PLL_CON0_PLL_TPU, val);
+	last_val = val;
+
+	/* Enable pll_tpu */
+	val = last_val | PLL_TPU_ENABLE_MASK;
+	ABC_WRITE(PLL_CON0_PLL_TPU, val);
+	last_val = val;
+
+	/* Wait for pll_tpu pll lock*/
+	timeout = AB_PLL_LOCK_TIMEOUT;
+	do {
+		ABC_READ(PLL_CON0_PLL_TPU, &val);
+	} while (!(val & PLL_TPU_STABLE_MASK) &&
+			 !(val & PLL_TPU_LOCK_FAILURES) &&
+			 --timeout);
+
+	if (val & (PLL_TPU_LOCK_FAILURES)) {
+		dev_err(clk_ctx->dev, "tpu_pll lock failure\n");
+		ab_sm_clk_notify(AB_TPU_ABORT_RATE_CHANGE, old_rate, new_rate);
+		return -ETIME;
+	}
+
+	/* Switch back to ipu_pll as parent */
+	val = last_val | PLL_TPU_MUX_SEL_MASK;
+	ABC_WRITE(PLL_CON0_PLL_TPU, val);
+	last_val = val;
+
+	/* Switch mux parent back to TPU_PLL_DIV_CLK_1 */
+	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1, MUX_TPU_PLL_DIV_CLK_1);
+
+	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
+	return new_rate;
+}
+
+static int64_t ab_clk_tpu_set_rate_opt_handler(void *ctx,
+		u64 old_rate, u64 new_rate)
+{
+	int64_t ret;
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	mutex_lock(&clk_ctx->pcie_link_lock);
+	if (clk_ctx->pcie_link_ready) {
+		ret = __ab_clk_tpu_set_rate_opt_handler(clk_ctx,
+				old_rate, new_rate);
+	} else {
+		dev_err(clk_ctx->dev,
+				"%s: pcie link down during clk request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&clk_ctx->pcie_link_lock);
+
+	return ret;
+}
+
+
 /* Caller must hold clk_ctx->pcie_link_lock */
 static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		u64 old_rate, u64 new_rate)
@@ -806,6 +958,7 @@ static struct ab_sm_clk_ops clk_ops = {
 	.tpu_pll_disable = &ab_clk_tpu_pll_disable_handler,
 	.tpu_set_rate = &ab_clk_tpu_set_rate_handler,
 	.tpu_set_rate_direct = &ab_clk_tpu_set_rate_direct_handler,
+	.tpu_set_rate_opt = &ab_clk_tpu_set_rate_opt_handler,
 
 	.aon_set_rate = &ab_clk_aon_set_rate_handler,
 	.aon_set_rate_direct = &ab_clk_aon_set_rate_direct_handler,
