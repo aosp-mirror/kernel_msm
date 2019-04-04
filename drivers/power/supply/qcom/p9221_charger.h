@@ -214,6 +214,7 @@ struct p9221_charger_platform_data {
 	int				irq_det_int;
 	int				qien_gpio;
 	int				slct_gpio;
+	int				slct_value;
 	int				max_vout_mv;
 	u8				fod[P9221R5_NUM_FOD];
 	u8				fod_epp[P9221R5_NUM_FOD];
