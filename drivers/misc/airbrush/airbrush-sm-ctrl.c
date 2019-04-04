@@ -1036,6 +1036,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			ab_prep_pmic_settings(sc, dest_map);
 		}
 
+		/* System must not suspend while PCIe is enabled */
+		pm_stay_awake(sc->dev);
+
 		ab_sm_start_ts(sc, AB_SM_TS_BOOT_SEQ);
 		ret = ab_bootsequence(sc, prev_state);
 		ab_sm_record_ts(sc, AB_SM_TS_BOOT_SEQ);

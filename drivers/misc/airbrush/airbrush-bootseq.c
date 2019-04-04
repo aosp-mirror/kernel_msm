@@ -32,7 +32,6 @@
 #include <linux/pci.h>
 #include <linux/airbrush-sm-ctrl.h>
 #include <linux/clk.h>
-#include <linux/pm_wakeup.h>
 
 #include "airbrush-ddr.h"
 #include "airbrush-pmic-ctrl.h"
@@ -265,9 +264,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_ALT_BOOT);
 
-	/* System must not suspend while PCIe is enabled */
-	pm_stay_awake(ab_ctx->dev);
-
 	if (ab_ctx->cold_boot) {
 		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
 		ret = ab_sm_enumerate_pcie(ab_ctx);
@@ -311,7 +307,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
 		dev_err(&plat_dev->dev,
 			"ab_ready is not high after fw load\n");
-		pm_relax(ab_ctx->dev);
 		return -EIO;
 	}
 
@@ -335,7 +330,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	ret = ab_ctx->dram_ops->setup(ab_ctx->dram_ops->ctx, ab_ctx);
 	if (ret) {
 		dev_err(ab_ctx->dev, "ddr setup failed\n");
-		pm_relax(ab_ctx->dev);
 		return ret;
 	}
 
@@ -344,17 +338,14 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	 */
 	if (IS_M0_DDR_INIT()) {
 		if (ab_ctx->dram_ops->wait_for_m0_ddr_init(
-					ab_ctx->dram_ops->ctx)) {
-			pm_relax(ab_ctx->dev);
+					ab_ctx->dram_ops->ctx))
 			return -EIO;
-		}
 	}
 
 	ab_sm_start_ts(ab_ctx, AB_SM_TS_DDR_INIT);
 	ret = ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
 	if (ret) {
 		dev_err(ab_ctx->dev, "ddr init failed\n");
-		pm_relax(ab_ctx->dev);
 		return ret;
 	}
 	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_INIT);
