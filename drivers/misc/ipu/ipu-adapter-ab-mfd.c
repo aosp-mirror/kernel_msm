@@ -69,6 +69,7 @@ struct ipu_adapter_ab_mfd_data {
 	struct paintbox_bus_ops ops;
 	struct completion dma_completion;
 	struct mutex sync_lock;
+	size_t pio_threshold;
 
 	struct notifier_block low_priority_irq_nb;
 	struct atomic_notifier_head *low_priority_irq_nh;
@@ -354,11 +355,6 @@ void ipu_adapter_ab_mfd_free_all_shared_memory(
 				&sbuf->base);
 }
 
-/* TODO(b/117619644): profile PIO vs DMA transfer speed to find the correct
- * threshold value.
- */
-#define MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE 1024
-
 static void ipu_adapter_ab_mfd_sync_dma(struct device *dev,
 		struct ipu_adapter_shared_buffer *shared_buffer,
 		uint32_t offset, size_t size,
@@ -394,6 +390,40 @@ static void ipu_adapter_ab_mfd_sync_pio(struct device *dev,
 		memcpy_fromio(buffer_vaddr, io_vaddr, size);
 }
 
+static ssize_t pio_threshold_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", dev_data->pio_threshold);
+}
+
+static ssize_t pio_threshold_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	int err;
+	unsigned long size;
+	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+
+	err = kstrtoul(buf, 0, &size);
+	if (err)
+		return err;
+
+	if (size == 0)
+		return -EINVAL;
+
+	mutex_lock(&dev_data->sync_lock);
+	dev_data->pio_threshold = size;
+	mutex_unlock(&dev_data->sync_lock);
+
+	return count;
+}
+
+static DEVICE_ATTR(pio_threshold, 0664, pio_threshold_show,
+			pio_threshold_store);
+
 void ipu_adapter_ab_mfd_sync_shared_memory(struct device *dev,
 		struct ipu_shared_buffer *shared_buffer_base, uint32_t offset,
 		size_t size, enum dma_data_direction direction)
@@ -405,7 +435,7 @@ void ipu_adapter_ab_mfd_sync_shared_memory(struct device *dev,
 
 	mutex_lock(&dev_data->sync_lock);
 
-	if (size <= MAX_PB_AB_MFD_SYNC_PIO_ACCESS_BYTE &&
+	if (size <= dev_data->pio_threshold &&
 			shared_buffer->mapped_to_bar)
 		ipu_adapter_ab_mfd_sync_pio(dev, shared_buffer, offset,
 				size, direction);
@@ -935,6 +965,11 @@ static int ipu_adapter_ab_mfd_register_low_priority_irq(
 	return 0;
 }
 
+const struct attribute *ipu_adapter_ab_mfd_attrs[] = {
+	&dev_attr_pio_threshold.attr,
+	NULL,
+};
+
 static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 {
 	struct ipu_adapter_ab_mfd_data *dev_data;
@@ -948,6 +983,7 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 
 	dev_data->dev = &pdev->dev;
 	dev_data->pdev = pdev;
+	dev_data->pio_threshold = 1024;
 
 	ipu_adapter_ab_mfd_set_platform_data(pdev, &dev_data->pdata);
 	ipu_adapter_ab_mfd_set_bus_ops(&dev_data->ops);
@@ -1047,8 +1083,18 @@ static int ipu_adapter_ab_mfd_probe(struct platform_device *pdev)
 		goto err_unregister_sm_notifer;
 	}
 
+	ret = sysfs_create_files(&pdev->dev.kobj, ipu_adapter_ab_mfd_attrs);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to create sysfs entries, ret %d\n",
+			ret);
+		goto err_unregister_pcie_notifer;
+	}
+
 	return 0;
 
+err_unregister_pcie_notifer:
+	abc_unregister_pcie_link_blocking_event(
+			&dev_data->pcie_link_blocking_nb);
 err_unregister_sm_notifer:
 	ab_sm_unregister_clk_event(&dev_data->clk_change_nb);
 err_deinitialize_bus:
@@ -1064,6 +1110,7 @@ static int ipu_adapter_ab_mfd_remove(struct platform_device *pdev)
 	struct ipu_adapter_ab_mfd_data *dev_data =
 			platform_get_drvdata(pdev);
 
+	sysfs_remove_files(&pdev->dev.kobj, ipu_adapter_ab_mfd_attrs);
 	abc_unregister_pcie_link_blocking_event(
 				&dev_data->pcie_link_blocking_nb);
 	ab_sm_unregister_clk_event(&dev_data->clk_change_nb);
