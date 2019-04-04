@@ -811,28 +811,15 @@ static int chg_work_next_interval(const struct chg_drv *chg_drv,
 	return update_interval;
 }
 
-static void chg_work_adapter_details(struct chg_drv *chg_drv,
-				     int usb_online, int wlc_online)
+static void chg_work_adapter_details(union gbms_ce_adapter_details *ad,
+				     int usb_online, int wlc_online,
+				     struct chg_drv *chg_drv)
 {
-	union gbms_ce_adapter_details ad = { };
-
+	/* print adapter details, route after at the end */
 	if (wlc_online)
-		(void)info_wlc_state(&ad, chg_drv->wlc_psy);
+		(void)info_wlc_state(ad, chg_drv->wlc_psy);
 	if (usb_online)
-		(void)info_usb_state(&ad, chg_drv->usb_psy, chg_drv->tcpm_psy);
-
-	/* google battery needs adapter details for stats */
-	if (ad.v != chg_drv->adapter_details.v) {
-		int rc;
-
-		rc = GPSY_SET_PROP(chg_drv->bat_psy,
-				   POWER_SUPPLY_PROP_ADAPTER_DETAILS,
-				   (int)ad.v);
-		if (rc < 0)
-			pr_err("MSC_CHG no adapter details (%d)\n", rc);
-		else
-			chg_drv->adapter_details.v = ad.v;
-	}
+		(void)info_usb_state(ad, chg_drv->usb_psy, chg_drv->tcpm_psy);
 }
 
 static void chg_work(struct work_struct *work)
@@ -844,6 +831,7 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
 	struct power_supply *chg_psy = chg_drv->chg_psy;
+	union gbms_ce_adapter_details ad = { .v = 0 };
 	int usb_online, wlc_online = 0;
 	int update_interval = 0, soc, disable_charging;
 	int disable_pwrsrc;
@@ -896,8 +884,7 @@ static void chg_work(struct work_struct *work)
 		chg_drv->stop_charging = false;
 	}
 
-	/* route adapter details to battery for accounting */
-	chg_work_adapter_details(chg_drv, usb_online, wlc_online);
+	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
 
 	soc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
 	if (soc < 0) {
@@ -1014,6 +1001,21 @@ error_rerun:
 			      msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
 
 exit_chg_work:
+	/* Route adapter details after the roundtrip since google_battery
+	 * might overwrite the value when it starts a new cycle.
+	 */
+	if (ad.v != chg_drv->adapter_details.v) {
+		int rc;
+
+		rc = GPSY_SET_PROP(chg_drv->bat_psy,
+				   POWER_SUPPLY_PROP_ADAPTER_DETAILS,
+				   (int)ad.v);
+		if (rc < 0)
+			pr_err("MSC_CHG no adapter details (%d)\n", rc);
+		else
+			chg_drv->adapter_details.v = ad.v;
+	}
+
 	__pm_relax(&chg_drv->chg_ws);
 }
 

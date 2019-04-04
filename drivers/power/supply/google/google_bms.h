@@ -113,8 +113,10 @@ union gbms_ce_adapter_details {
 struct gbms_ce_stats {
 	uint16_t 	voltage_in;
 	uint16_t	ssoc_in;
+	uint16_t	cc_in;
 	uint16_t 	voltage_out;
 	uint16_t 	ssoc_out;
+	uint16_t	cc_out;
 };
 
 struct gbms_ce_tier_stats {

@@ -50,6 +50,10 @@
 #define MSC_ERROR_UPDATE_INTERVAL		5000
 #define MSC_DEFAULT_UPDATE_INTERVAL		30000
 
+/* qual time is 15 minutes of charge or 15% increase in SOC */
+#define CHG_STATS_MIN_QUAL_TIME		(15 * 60)
+#define CHG_STATS_MIN_DELTA_SOC		15
+
 #define UICURVE_MAX	3
 
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
@@ -152,6 +156,7 @@ struct batt_drv {
 	struct votable	*fv_votable;
 
 	/* stats */
+	int msc_state;
 	struct mutex stats_lock;
 	struct gbms_charging_event ce_data;
 	struct gbms_charging_event ce_qual;
@@ -541,38 +546,39 @@ static void batt_chg_stats_init(struct gbms_charging_event *ce_data)
 {
 	int i;
 
-	memset(&ce_data->charging_stats, 0, sizeof(ce_data->charging_stats));
+	memset(ce_data, 0, sizeof(*ce_data));
+
 	ce_data->charging_stats.voltage_in = -1;
 	ce_data->charging_stats.ssoc_in = -1;
 	ce_data->charging_stats.voltage_out = -1;
 	ce_data->charging_stats.ssoc_out = -1;
 
-	memset(&ce_data->tier_stats, 0, sizeof(ce_data->tier_stats));
 	for (i = 0; i < GBMS_STATS_TIER_COUNT ; i++) {
 		ce_data->tier_stats[i].voltage_tier_idx = i;
 		ce_data->tier_stats[i].soc_in = -1;
 	}
 
-	ce_data->first_update = 0;
-	ce_data->last_update = 0;
 }
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
 {
 	struct gbms_charging_event *ce_data = &batt_drv->ce_data;
 	const time_t now = get_boot_sec();
-	int tmp;
-
-	pr_info("MSC_STAT start data collection\n");
+	int vin, cc_in;
 
 	mutex_lock(&batt_drv->stats_lock);
 
 	batt_chg_stats_init(ce_data);
 
-	tmp = GPSY_GET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
-	ce_data->charging_stats.voltage_in = (tmp < 0) ? -1 : tmp / 1000;
+	vin = GPSY_GET_PROP(batt_drv->fg_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	ce_data->charging_stats.voltage_in = (vin < 0) ? -1 : vin / 1000;
 	ce_data->charging_stats.ssoc_in =
 				ssoc_get_capacity(&batt_drv->ssoc_state);
+	cc_in = GPSY_GET_PROP(batt_drv->fg_psy,
+				POWER_SUPPLY_PROP_CHARGE_COUNTER);
+	ce_data->charging_stats.cc_in = (cc_in < 0) ? -1 : cc_in / 1000;
+
 	ce_data->charging_stats.ssoc_out = -1;
 	ce_data->charging_stats.voltage_out = -1;
 
@@ -585,60 +591,30 @@ static void batt_chg_stats_start(struct batt_drv *batt_drv)
 /* call holding stats_lock */
 static bool batt_chg_stats_qual(const struct gbms_charging_event *ce_data)
 {
-	/* TODO: find criteria */
-	return true;
+	const long elap = ce_data->last_update - ce_data->first_update;
+	const long ssoc_delta = ce_data->charging_stats.ssoc_out -
+				ce_data->charging_stats.ssoc_in;
+
+	return elap >= CHG_STATS_MIN_QUAL_TIME ||
+	       ssoc_delta >= CHG_STATS_MIN_DELTA_SOC;
 }
 
-/* Only the qualified copy gets the timestamp and the exit voltage
- * call holding stats_lock
- */
-static void batt_chg_stats_pub(struct batt_drv *batt_drv,
-			       const struct gbms_charging_event *ce_data)
-{
-	pr_info("MSC_STAT %s charge data\n", (ce_data)?"publish":"erase");
-
-	if (ce_data) {
-		const int voltage_out = GPSY_GET_PROP(batt_drv->fg_psy,
-						POWER_SUPPLY_PROP_VOLTAGE_NOW);
-
-		memcpy(&batt_drv->ce_qual, ce_data, sizeof(batt_drv->ce_qual));
-
-		batt_drv->ce_qual.charging_stats.voltage_out =
-				(voltage_out < 0) ? -1 : voltage_out / 1000;
-		batt_drv->ce_qual.charging_stats.ssoc_out =
-				ssoc_get_capacity(&batt_drv->ssoc_state);
-
-		batt_drv->ce_qual.last_update = get_boot_sec();
-	} else {
-		memset(&batt_drv->ce_qual, 0, sizeof(batt_drv->ce_qual));
-		batt_chg_stats_init(&batt_drv->ce_qual);
-	}
-}
-
-static void batt_chg_stats_stop(struct batt_drv *batt_drv)
-{
-	struct gbms_charging_event *ce_data = &batt_drv->ce_data;
-
-	pr_info("MSC_STAT stop data collection\n");
-
-	mutex_lock(&batt_drv->stats_lock);
-
-	if (batt_chg_stats_qual(ce_data))
-		batt_chg_stats_pub(batt_drv, ce_data);
-
-	mutex_unlock(&batt_drv->stats_lock);
-}
-
+/* call holding the log */
 static void batt_chg_stats_update(struct batt_drv *batt_drv,
-					int msc_state, int ibatt_ma, int temp)
+				  int msc_state, int vbatt_idx,
+				  int ibatt_ma, int temp)
 {
 	const time_t now = get_boot_sec();
 	const time_t elap = now - batt_drv->ce_data.last_update;
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 	struct gbms_ce_tier_stats *tier =
-			&batt_drv->ce_data.tier_stats[batt_drv->vbatt_idx];
+				&batt_drv->ce_data.tier_stats[vbatt_idx];
 
-	mutex_lock(&batt_drv->stats_lock);
+	if (msc_state == -1 || vbatt_idx == -1) {
+		pr_err("MSC_STAT error msc_state=%d, vbatt_idx=%d\n",
+				msc_state, vbatt_idx);
+		return;
+	}
 
 	if (tier->soc_in == -1) {
 		int soc_in, cc_in;
@@ -650,7 +626,7 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 		if (soc_in < 0 || cc_in < 0) {
 			pr_info("MSC_STAT cannot read soc_in=%d or cc_in=%d\n",
 				soc_in, cc_in);
-			goto exit_done;
+			return;
 		}
 
 		tier->temp_in = temp;
@@ -690,31 +666,84 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 			tier->icl_min = icl_settled;
 		if (icl_settled > tier->icl_max)
 			tier->icl_max = icl_settled;
+
+		/* averages: temp < 100. icl_settled < 3000, sum(ibatt)
+		 * is bound to battery capacity, elap in seconds, sums
+		 * are stored in an s64. For icl_settled I need a tier
+		 * to last for more than ~97M years.
+		 */
+		tier->msc_cnt[batt_drv->msc_state] += 1;
+		tier->msc_elap[batt_drv->msc_state] += elap;
+		tier->icl_sum += icl_settled * elap;
+		tier->temp_sum += temp * elap;
+		tier->ibatt_sum += ibatt_ma * elap;
 	}
 
 	tier->sample_count += 1;
-	tier->msc_cnt[msc_state] += 1;
-	tier->msc_elap[msc_state] += elap;
-
-	/* averages: temp < 100. icl_settled < 3000, sum(ibatt) is bound to
-	 * battery capacity, elap in seconds, sums are stored in an s64.
-	 * For icl_settled I need a tier to last more than ~97M years.
-	 */
-	tier->icl_sum += icl_settled * elap;
-	tier->temp_sum += temp * elap;
-	tier->ibatt_sum += ibatt_ma * elap;
-
+	/* nex update will book to msc_state */
+	batt_drv->msc_state = msc_state;
 	batt_drv->ce_data.last_update = now;
-
-exit_done:
-	mutex_unlock(&batt_drv->stats_lock);
 }
+
+/* Only the qualified copy gets the timestamp and the exit voltage.
+ */
+static void batt_chg_stats_pub(struct batt_drv *batt_drv,
+			       char *reason,
+			       bool force)
+{
+	bool publish;
+	const int vout = GPSY_GET_PROP(batt_drv->fg_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	const int cc_out = GPSY_GET_PROP(batt_drv->fg_psy,
+				POWER_SUPPLY_PROP_CHARGE_COUNTER);
+
+	mutex_lock(&batt_drv->stats_lock);
+
+	/* book last period to the current tier */
+	if (batt_drv->msc_state != -1 && batt_drv->vbatt_idx != -1)
+		batt_chg_stats_update(batt_drv, batt_drv->msc_state,
+				      batt_drv->vbatt_idx, 0, 0);
+
+	/* record the closing in data (and qual) */
+	batt_drv->ce_data.charging_stats.voltage_out =
+				(vout < 0) ? -1 : vout / 1000;
+	batt_drv->ce_data.charging_stats.ssoc_out =
+				ssoc_get_capacity(&batt_drv->ssoc_state);
+	batt_drv->ce_data.charging_stats.cc_out =
+				(cc_out < 0) ? -1 : cc_out / 1000;
+
+	/* TODO: add a field to ce_data to qual weird charge sessions */
+	publish = force || batt_chg_stats_qual(&batt_drv->ce_data);
+	if (publish) {
+		struct gbms_charging_event *ce_qual = &batt_drv->ce_qual;
+
+		memcpy(ce_qual, &batt_drv->ce_data, sizeof(*ce_qual));
+
+		pr_info("MSC_STAT %s: elap=%ld ssoc=%d->%d v=%d->%d c=%d->%d\n",
+			reason,
+			ce_qual->last_update - ce_qual->first_update,
+			ce_qual->charging_stats.ssoc_in,
+			ce_qual->charging_stats.ssoc_out,
+			ce_qual->charging_stats.voltage_in,
+			ce_qual->charging_stats.voltage_out,
+			ce_qual->charging_stats.cc_in,
+			ce_qual->charging_stats.cc_out);
+	}
+
+	mutex_unlock(&batt_drv->stats_lock);
+
+	if (publish)
+		power_supply_changed(batt_drv->psy);
+}
+
 
 static int batt_chg_stats_cstr(char *buff, int size,
 				const struct gbms_charging_event *ce_data,
 				bool verbose)
 {
 	int i, j, len = 0;
+	static char *codes[] = { "n", "s", "d", "l", "v", "vo", "p", "f", "t",
+				"dl", "st", "r", "w", "rs", "n", "ny" };
 
 	if (verbose) {
 		const char *adapter_name =
@@ -729,27 +758,30 @@ static int batt_chg_stats_cstr(char *buff, int size,
 				ce_data->adapter_details.ad_voltage * 100,
 				ce_data->adapter_details.ad_amperage * 100);
 
-	len += snprintf(&buff[len], size - len, "%s%d,%d,%d,%d",
+	len += snprintf(&buff[len], size - len, "%s%hu,%hu, %hu,%hu",
 				(verbose) ?  "\nS: " : ", ",
 				ce_data->charging_stats.ssoc_in,
 				ce_data->charging_stats.voltage_in,
-				(int)ce_data->charging_stats.ssoc_out,
-				(int)ce_data->charging_stats.voltage_out);
+				ce_data->charging_stats.ssoc_out,
+				ce_data->charging_stats.voltage_out);
 
-	if (verbose)
+
+	if (verbose) {
+		len += snprintf(&buff[len], size - len, " %hu,%hu",
+				ce_data->charging_stats.cc_in,
+				ce_data->charging_stats.cc_out);
+
 		len += snprintf(&buff[len], size - len, " %ld,%ld",
 				ce_data->first_update,
 				ce_data->last_update);
+	}
 
 	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
 		const long elap = ce_data->tier_stats[i].time_fast +
 				  ce_data->tier_stats[i].time_taper +
 				  ce_data->tier_stats[i].time_other;
-		const int temp_avg = ce_data->tier_stats[i].temp_sum / elap;
-		const int ibatt_avg = ce_data->tier_stats[i].ibatt_sum / elap;
-		const int icl_avg = ce_data->tier_stats[i].icl_sum / elap;
 
-		if (ce_data->tier_stats[i].soc_in == -1)
+		if (!elap)
 			continue;
 
 		len += snprintf(&buff[len], size - len, "\n%d%c ",
@@ -757,7 +789,7 @@ static int batt_chg_stats_cstr(char *buff, int size,
 			(verbose) ? ':' : ',');
 
 		len += snprintf(&buff[len], size - len,
-			"%d.%d,%d,%d, %d,%d,%d, %d,%d,%d, %d,%d,%d, %d,%d,%d",
+			"%d.%d,%d,%d, %d,%d,%d, %d,%ld,%d, %d,%ld,%d, %d,%ld,%d",
 				ce_data->tier_stats[i].soc_in >> 8,
 				ce_data->tier_stats[i].soc_in & 0xff,
 				ce_data->tier_stats[i].cc_in,
@@ -766,35 +798,33 @@ static int batt_chg_stats_cstr(char *buff, int size,
 				ce_data->tier_stats[i].time_taper,
 				ce_data->tier_stats[i].time_other,
 				ce_data->tier_stats[i].temp_min,
-				temp_avg,
+				ce_data->tier_stats[i].temp_sum / elap,
 				ce_data->tier_stats[i].temp_max,
 				ce_data->tier_stats[i].ibatt_min,
-				ibatt_avg,
+				ce_data->tier_stats[i].ibatt_sum / elap,
 				ce_data->tier_stats[i].ibatt_max,
 				ce_data->tier_stats[i].icl_min,
-				icl_avg,
+				ce_data->tier_stats[i].icl_sum / elap,
 				ce_data->tier_stats[i].icl_max);
 
 		if (!verbose)
 			continue;
 
 		/* time spent in every multi step charging state */
-		len += snprintf(&buff[len], size - len, "\n%d:\t%ld",
-				ce_data->tier_stats[i].voltage_tier_idx,
-				ce_data->tier_stats[i].msc_elap[0]);
+		len += snprintf(&buff[len], size - len, "\n%d:",
+				ce_data->tier_stats[i].voltage_tier_idx);
 
-		for (j = 1; j < MSC_STATES_COUNT; j++)
-			len += snprintf(&buff[len], size - len, ",%ld",
-				ce_data->tier_stats[i].msc_elap[j]);
+		for (j = 0; j < MSC_STATES_COUNT; j++)
+			len += snprintf(&buff[len], size - len, " %s=%d",
+				codes[j], ce_data->tier_stats[i].msc_elap[j]);
 
 		/* count spent in each step charging state */
-		len += snprintf(&buff[len], size - len, "\n%d:\t%d",
-				ce_data->tier_stats[i].voltage_tier_idx,
-				ce_data->tier_stats[i].msc_cnt[0]);
+		len += snprintf(&buff[len], size - len, "\n%d:",
+				ce_data->tier_stats[i].voltage_tier_idx);
 
-		for (j = 1; j < MSC_STATES_COUNT; j++)
-			len += snprintf(&buff[len], size - len, ",%d",
-				ce_data->tier_stats[i].msc_cnt[j]);
+		for (j = 0; j < MSC_STATES_COUNT; j++)
+			len += snprintf(&buff[len], size - len, " %s=%d",
+				codes[j], ce_data->tier_stats[i].msc_cnt[j]);
 	}
 
 	len += snprintf(&buff[len], size - len, "\n");
@@ -818,6 +848,8 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 	batt_drv->checked_cv_cnt = 0;
 	batt_drv->checked_ov_cnt = 0;
 	batt_drv->checked_tier_switch_cnt = 0;
+	/* stats */
+	batt_drv->msc_state = -1;
 }
 
 /* software JEITA, disable charging when outside the charge table.
@@ -1106,16 +1138,27 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		batt_drv->checked_ov_cnt = 0;
 	}
 
+	/* book elapsed time to previous tier */
+	if (vbatt_idx != -1 && vbatt_idx < GBMS_STATS_TIER_COUNT) {
+		int tier_idx = batt_drv->vbatt_idx;
+
+		if (tier_idx == -1)
+			tier_idx = vbatt_idx;
+
+		mutex_lock(&batt_drv->stats_lock);
+		batt_chg_stats_update(batt_drv, msc_state,
+				      tier_idx, ibatt / 1000, temp);
+		mutex_unlock(&batt_drv->stats_lock);
+	}
+
+
 	batt_drv->vbatt_idx = vbatt_idx;
 	batt_drv->temp_idx = temp_idx;
 	batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx);
 	batt_drv->fv_uv = fv_uv;
+
 	/* next update */
 	batt_drv->msc_update_interval = update_interval;
-
-	/* Enter on first valid vbat_idx */
-	if (vbatt_idx != -1 && vbatt_idx < GBMS_STATS_TIER_COUNT)
-		batt_chg_stats_update(batt_drv, msc_state, ibatt / 1000, temp);
 
 	pr_info("MSC_DATA cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
 		batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
@@ -1156,7 +1199,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 		if (batt_drv->buck_enabled == 0)
 			goto msc_logic_exit;
 
-		batt_chg_stats_stop(batt_drv);
+		batt_chg_stats_pub(batt_drv, "disconnect", false);
 
 		batt_reset_chg_drv_state(batt_drv);
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
@@ -1195,13 +1238,12 @@ static int msc_logic(struct batt_drv *batt_drv)
 	} else if (batt_drv->batt_full) {
 		bool changed;
 
-		batt_chg_stats_stop(batt_drv);
-
 		/* enter RL because battery is FULL, NO op if in DISCHARGE */
 		changed = batt_rl_enter(&batt_drv->ssoc_state,
 						BATT_RL_STATUS_RECHARGE);
 		if (changed) {
 			dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+			batt_chg_stats_pub(batt_drv, "100%", false);
 			 /* TODO: should I trigger a ps change? */
 		}
 
@@ -1592,16 +1634,15 @@ static ssize_t batt_ctl_chg_stats_actual(struct device *dev,
 	if (count < 1)
 		return -ENODATA;
 
-	mutex_lock(&batt_drv->stats_lock);
 	switch (buf[0]) {
 	case 'p': /* publish data to qual */
-		batt_chg_stats_pub(batt_drv, &batt_drv->ce_data);
+	case 'P': /* force publish data to qual */
+		batt_chg_stats_pub(batt_drv, "debug cmd", buf[0] == 'P');
 		break;
 	default:
 		count = -EINVAL;
 		break;
 	}
-	mutex_unlock(&batt_drv->stats_lock);
 
 	return count;
 }
@@ -1639,7 +1680,7 @@ static ssize_t batt_ctl_chg_stats(struct device *dev,
 	mutex_lock(&batt_drv->stats_lock);
 	switch (buf[0]) {
 	case '0': /* invalidate current qual */
-		batt_chg_stats_pub(batt_drv, NULL);
+		batt_chg_stats_init(&batt_drv->ce_qual);
 		break;
 	}
 	mutex_unlock(&batt_drv->stats_lock);
@@ -1653,13 +1694,15 @@ static ssize_t batt_show_chg_stats(struct device *dev,
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv =(struct batt_drv *)
 					power_supply_get_drvdata(psy);
-	int len;
-
-	if (batt_drv->ce_qual.first_update == 0)
-		return -ENODATA;
+	int len = -ENODATA;
 
 	mutex_lock(&batt_drv->stats_lock);
-	len = batt_chg_stats_cstr(buf, PAGE_SIZE, &batt_drv->ce_qual, false);
+
+	if (batt_drv->ce_qual.first_update != 0)
+		len = batt_chg_stats_cstr(buf,
+					  PAGE_SIZE,
+					  &batt_drv->ce_qual, false);
+
 	mutex_unlock(&batt_drv->stats_lock);
 
 	return len;
@@ -1684,6 +1727,7 @@ static ssize_t batt_show_chg_details(struct device *dev,
 	if (batt_drv->ce_qual.first_update)
 		len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
 					   &batt_drv->ce_qual, true);
+
 	mutex_unlock(&batt_drv->stats_lock);
 
 	return len;
@@ -1852,7 +1896,9 @@ static int gbatt_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
+		mutex_lock(&batt_drv->stats_lock);
 		val->intval = batt_drv->ce_data.adapter_details.v;
+		mutex_unlock(&batt_drv->stats_lock);
 	break;
 
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
