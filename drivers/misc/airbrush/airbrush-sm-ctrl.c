@@ -303,7 +303,7 @@ static struct block_property fsys_property_table[] = {
 	BLK_(100, DeepSleep,      L2,  0, on,  0_85, on,  0,     0, 0, 0, 0),
 	BLK_(200, ElectricalIdle, L1,  0, on,  0_85, on,  4000,  0, 0, 0, 0),
 	BLK_(201, ElectricalIdle, L1.1, 0, on, 0_85, on,  0,     0, 0, 0, 0),
-	BLK_(202, ElectricalIdle, L1.2, 0, on, 0_85, on,  0,     0, 0, 0, 0),
+	BLK_(202, ElectricalIdle, L1.1, 0, on, 0_85, on,  0,     0, 0, 0, 0),
 	/* GEN1L0 */
 	BLK_(301, Normal,        L0,  0, on,  0_85, on,  1250,  0, 0, 0, 1),
 	/* GEN2L0 */
