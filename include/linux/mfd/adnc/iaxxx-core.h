@@ -286,6 +286,7 @@ struct iaxxx_priv {
 
 	wait_queue_head_t boot_wq;
 	wait_queue_head_t wakeup_wq;
+	wait_queue_head_t irq_wake;
 
 	void *tunnel_data;
 	/* Event Manager */
@@ -341,6 +342,7 @@ struct iaxxx_priv {
 	int try_count;
 	bool in_suspend;
 	bool in_resume;
+	bool pm_resume;
 	struct mutex pm_mutex;
 
 	/* Debug flags */

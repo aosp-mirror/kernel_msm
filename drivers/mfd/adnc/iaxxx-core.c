@@ -61,6 +61,8 @@
 /* 2 retries if failed */
 #define IAXXX_FW_RETRY_COUNT		2
 #define IAXXX_BYTES_IN_A_WORD		4
+#define WAKEUP_TIMEOUT			5000
+#define IRQ_WAIT_TIMEOUT		3000
 
 #define iaxxx_ptr2priv(ptr, item) container_of(ptr, struct iaxxx_priv, item)
 
@@ -758,6 +760,18 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 		return IRQ_HANDLED;
 
 	dev_info(priv->dev, "%s: IRQ %d\n", __func__, irq);
+
+	pm_wakeup_event(priv->dev, WAKEUP_TIMEOUT);
+
+	if (!priv->pm_resume) {
+		rc = wait_event_timeout(priv->irq_wake,
+			priv->pm_resume, msecs_to_jiffies(IRQ_WAIT_TIMEOUT));
+		if (rc && !priv->pm_resume) {
+			dev_err(priv->dev,
+				"IRQ wait resume timeout!, rc = %d\n", rc);
+			goto out;
+		}
+	}
 
 	if (!priv->boot_completed) {
 		is_startup = !test_and_set_bit(IAXXX_FLG_STARTUP,
@@ -1519,14 +1533,23 @@ int iaxxx_core_resume_rt(struct device *dev)
 int iaxxx_core_dev_suspend(struct device *dev)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	int ret = 0;
+
 
 	iaxxx_flush_kthread_worker(&priv->worker);
+	ret = iaxxx_core_suspend_rt(dev);
+	priv->pm_resume = false;
 
-	return iaxxx_core_suspend_rt(dev);
+	return ret;
 }
 
 int iaxxx_core_dev_resume(struct device *dev)
 {
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+
+	priv->pm_resume = true;
+	wake_up(&priv->irq_wake);
+
 	return iaxxx_core_resume_rt(dev);
 }
 
@@ -1656,6 +1679,9 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	iaxxx_init_kthread_worker(&priv->worker);
 	init_waitqueue_head(&priv->boot_wq);
 	init_waitqueue_head(&priv->wakeup_wq);
+	init_waitqueue_head(&priv->irq_wake);
+	priv->pm_resume = true;
+
 	priv->thread = kthread_run(kthread_worker_fn, &priv->worker,
 				   "iaxxx-core");
 	if (IS_ERR(priv->thread)) {
