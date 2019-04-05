@@ -1311,15 +1311,6 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	regmap_read(priv->regmap, IAXXX_AO_OSC_CTRL_ADDR, &efuse_trim_value);
 	dev_err(dev, "IAXXX_AO_OSC_CTRL_ADDR: 0x%x\n", efuse_trim_value);
 #ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
-	/* Subscribing for FW wakeup event */
-	rc = iaxxx_core_evt_subscribe(dev, IAXXX_CM4_CTRL_MGR_SRC_ID,
-			IAXXX_HOST0_WAKEUP_EVENT_ID, IAXXX_SYSID_HOST, 0);
-	if (rc) {
-		dev_err(dev,
-			"%s: failed to subscribe for wakeup event\n",
-			__func__);
-		goto exit_fw_fail;
-	}
 	iaxxx_pm_enable(priv);
 #endif
 
@@ -1849,7 +1840,6 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 
 	iaxxx_init_kthread_worker(&priv->worker);
 	init_waitqueue_head(&priv->boot_wq);
-	init_waitqueue_head(&priv->wakeup_wq);
 	init_waitqueue_head(&priv->irq_wake);
 	atomic_set(&priv->pm_resume, IAXXX_DEV_RESUME);
 	wakeup_source_init(&priv->ws, "iaxxx-spi");

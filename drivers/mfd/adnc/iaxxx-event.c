@@ -708,14 +708,6 @@ retry_reading_count_reg:
 
 	if (count > 0) {
 		dev_dbg(priv->dev, "%s: %d event(s) avail\n", __func__, count);
-		if (!test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
-						&priv->flags)) {
-			/* On any event always assume chip is awake */
-			wake_up(&priv->wakeup_wq);
-			dev_dbg(priv->dev,
-			"%s: FW is expected to be in wakeup state\n", __func__);
-		}
-
 		complete_all(&priv->cmem_done);
 	} else {
 		/* Read SYSTEM_STATUS to ensure that device is in App Mode */

@@ -76,6 +76,9 @@
 	(IAXXX_SRB_DED_MEM_PWR_STATUS_PROC_0_MEM_RETN_MASK << \
 	proc_id)
 
+#define IAXXX_WAKEUP_MAX_WAIT_TIME_IN_MS	100
+#define IAXXX_WAKEUP_WAIT_TIME_IN_MS		20
+
 void iaxxx_pm_enable(struct iaxxx_priv *priv)
 {
 #ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
@@ -158,6 +161,8 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 	unsigned long ts_now;
 	unsigned int ts_diff;
 	uint32_t status;
+	int i, wakeup_wait_count = IAXXX_WAKEUP_MAX_WAIT_TIME_IN_MS /
+			IAXXX_WAKEUP_WAIT_TIME_IN_MS;
 
 	/* Enable external clock */
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
@@ -165,40 +170,39 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 			priv->iaxxx_mclk_cb(priv, 1);
 	}
 
+	/* If the chip is already woken up, skip wakeup*/
+
 	if (!test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
 						&priv->flags)) {
-		rc = regmap_read(priv->regmap_no_pm,
-				IAXXX_SRB_SYS_STATUS_ADDR, &reg_val);
-
-		rc = wait_event_timeout(priv->wakeup_wq,
-				test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
-						&priv->flags), HZ / 10);
-		if (!test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
-						&priv->flags) && rc == 0)
-			dev_err(priv->dev,
-			"Timeout for wakeup event rc :%d wake flag :%d\n",
-				rc, test_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
-				&priv->flags));
-		else
-			goto chip_woken_up;
-
-		rc = regmap_read(priv->regmap_no_pm,
-				IAXXX_SRB_SYS_STATUS_ADDR, &reg_val);
-
-		/* if read failed or SYS mode is not in APP mode,
-		 * flag error
+		/* Do the Read to Toggle SPI CS line to wakeup
+		 * the chip
 		 */
-		reg_val &= IAXXX_SRB_SYS_STATUS_MODE_MASK;
-		dev_dbg(priv->dev,
-			"%s chip wake up reg_val%d\n", __func__, reg_val);
-		if (rc || (reg_val != SYSTEM_STATUS_MODE_APPS)) {
-			dev_err(priv->dev,
-				"%s chip wake up failed %d rc %d\n",
-				__func__, reg_val, rc);
-			goto chip_recovery;
+		rc = regmap_read(priv->regmap_no_pm,
+				IAXXX_SRB_SYS_STATUS_ADDR, &reg_val);
+
+		for (i = 0; i < wakeup_wait_count; i++) {
+			msleep(IAXXX_WAKEUP_WAIT_TIME_IN_MS);
+
+			rc = regmap_read(priv->regmap_no_pm,
+					IAXXX_SRB_SYS_STATUS_ADDR, &reg_val);
+
+			/* if read failed or SYS mode is not in APP mode,
+			 * flag error
+			 */
+			reg_val &= IAXXX_SRB_SYS_STATUS_MODE_MASK;
+			dev_dbg(priv->dev,
+				"%s chip wake up reg_val%d\n", __func__,
+				reg_val);
+			if (!rc && (reg_val == SYSTEM_STATUS_MODE_APPS)) {
+				test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+						&priv->flags);
+				goto chip_woken_up;
+			}
 		}
-		test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
-								&priv->flags);
+		dev_err(priv->dev,
+			"%s chip wake up failed %d rc %d\n",
+			__func__, reg_val, rc);
+		goto chip_recovery;
 	}
 chip_woken_up:
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
