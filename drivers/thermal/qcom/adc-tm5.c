@@ -929,7 +929,7 @@ fail:
 			 * the appropriate trips.
 			 */
 			pr_debug("notifying of_thermal\n");
-			of_thermal_handle_trip(chip->sensor[i].tzd);
+			of_thermal_handle_trip_temp(chip->sensor[i].tzd, temp);
 		} else {
 			if (lower_set) {
 				ret = adc_tm5_reg_update(chip,
