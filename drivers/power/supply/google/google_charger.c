@@ -219,6 +219,9 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 {
 	union gbms_charger_state chg_state = { .v = 0 };
 
+	/* no power supply */
+	chg_drv->stop_charging = true;
+
 	/* reset retail state */
 	chg_drv->disable_charging = 0;
 	chg_drv->disable_pwrsrc = 0;
@@ -242,15 +245,15 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
 
 	/* normal when disconnected */
-	chg_drv->stop_charging = true;
 	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, true, 0);
 	/* when/if enabled */
 	GPSY_SET_PROP(chg_drv->chg_psy,
-		      POWER_SUPPLY_PROP_TAPER_CONTROL,
-		      POWER_SUPPLY_TAPER_CONTROL_OFF);
+			POWER_SUPPLY_PROP_TAPER_CONTROL,
+			POWER_SUPPLY_TAPER_CONTROL_OFF);
 	/* make sure the battery knows that it's disconnected */
 	GPSY_SET_INT64_PROP(chg_drv->bat_psy,
-		POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE, chg_state.v);
+			POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
+			chg_state.v);
 }
 
 static int info_usb_state(union gbms_ce_adapter_details *ad,
@@ -876,8 +879,11 @@ static void chg_work(struct work_struct *work)
 						usb_online, wlc_online);
 		goto error_rerun;
 	} else if (!usb_online && !wlc_online) {
-		pr_info("MSC_CHG no power source detected, disabling charging\n");
-		reset_chg_drv_state(chg_drv);
+
+		if (!chg_drv->stop_charging) {
+			pr_info("MSC_CHG no power source detected, disabling charging\n");
+			reset_chg_drv_state(chg_drv);
+		}
 
 		goto exit_chg_work;
 	} else if (chg_drv->stop_charging) {
@@ -1785,10 +1791,6 @@ static int chg_therm_update_fcc(struct chg_drv *chg_drv)
 			THERMAL_DAEMON_VOTER,
 			(fcc != -1),
 			fcc);
-
-	pr_info("MSC_THERM_FCC lvl=%d fcc=%d wlc=%d (%d)\n",
-				tdev->current_level, fcc, wlc_online, ret);
-
 	return ret;
 }
 
@@ -1799,6 +1801,7 @@ static int chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
 	struct chg_thermal_device *tdev =
 		(struct chg_thermal_device *)tcd->devdata;
 	struct chg_drv *chg_drv = tdev->chg_drv;
+	const bool changed = (tdev->current_level != lvl);
 
 	if (lvl < 0 || tdev->thermal_levels <= 0 || lvl > tdev->thermal_levels)
 		return -EINVAL;
@@ -1812,6 +1815,10 @@ static int chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
 	vote(chg_drv->msc_chg_disable_votable, THERMAL_DAEMON_VOTER, false, 0);
 
 	ret = chg_therm_update_fcc(chg_drv);
+	if (ret < 0 || changed)
+		pr_info("MSC_THERM_FCC lvl=%d (%d)\n",
+				tdev->current_level,
+				ret);
 
 	/* force to apply immediately */
 	reschedule_chg_work(&chg_drv->chg_work);
@@ -1823,6 +1830,7 @@ static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 {
 	struct chg_thermal_device *tdev =
 			(struct chg_thermal_device *)tcd->devdata;
+	const bool changed = (tdev->current_level != lvl);
 	struct chg_drv *chg_drv = tdev->chg_drv;
 	union power_supply_propval pval;
 	int dc_icl = -1, ret;
@@ -1866,7 +1874,9 @@ static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 			(dc_icl != -1),
 			dc_icl);
 
-	pr_info("MSC_THERM_DC lvl=%d dc_icl=%d (%d)\n", lvl, dc_icl, ret);
+	if (ret < 0 || changed)
+		pr_info("MSC_THERM_DC lvl=%d dc_icl=%d (%d)\n",
+			lvl, dc_icl, ret);
 
 	/* make sure that fcc is reset to max when charging from WLC*/
 	if (ret ==0)
