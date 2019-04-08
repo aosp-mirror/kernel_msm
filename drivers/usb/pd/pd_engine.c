@@ -133,6 +133,8 @@ struct usbpd {
 
 	/* logging client */
 	struct logbuffer *log;
+
+	bool pd_disabled;
 };
 
 static u8 always_enable_data;
@@ -1223,6 +1225,9 @@ static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
 
+	if (pd->pd_disabled)
+		return -EINVAL;
+
 	if (pd->pdphy_open == on) {
 		logbuffer_log(pd->log, "pd_phy already %s",
 			      on ? "open" : "closed");
@@ -1382,6 +1387,9 @@ static int tcpm_pd_transmit(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 {
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	struct pd_transmit_work *pd_tx_work;
+
+	if (pd->pd_disabled)
+		return -EINVAL;
 
 	switch (type) {
 	case TCPC_TX_HARD_RESET:
@@ -1754,6 +1762,11 @@ static void pd_phy_shutdown(struct usbpd *pd)
 
 	flush_delayed_work(&pd->ext_vbus_work);
 	mutex_lock(&pd->lock);
+
+	/* disable PD and reset port */
+	pd->pd_disabled = true;
+	tcpm_port_reset(pd->tcpm_port);
+
 	if (regulator_is_enabled(pd->vbus)) {
 		rc = regulator_disable(pd->vbus);
 		if (rc < 0) {
@@ -2078,6 +2091,8 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	INIT_DELAYED_WORK(&pd->ext_vbus_work, update_external_vbus);
 	INIT_WORK(&pd->update_pdo_work, update_src_caps);
+
+	pd->pd_disabled = false;
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
