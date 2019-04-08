@@ -5214,11 +5214,19 @@ static const struct reg_sequence cs40l2x_irq2_masks[] = {
 	{CS40L2X_IRQ2_MASK4,		0xFEFFFFFF},
 };
 
+static const struct reg_sequence cs40l2x_amp_gnd_setup[] = {
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
+	{CS40L2X_SPK_FORCE_TST_1,	CS40L2X_FORCE_SPK_GND},
+};
+
 static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
 	unsigned int gpio_pol = cs40l2x_dsp_reg(cs40l2x, "GPIO_POL",
+			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
+	unsigned int spk_auto = cs40l2x_dsp_reg(cs40l2x, "SPK_FORCE_TST_1_AUTO",
 			CS40L2X_XM_UNPACKED_TYPE, cs40l2x->fw_desc->id);
 	unsigned int val;
 	int ret, i;
@@ -5256,6 +5264,37 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 				CS40L2X_GPIO1_DISABLED);
 		if (ret) {
 			dev_err(dev, "Failed to pre-configure GPIO1\n");
+			return ret;
+		}
+	}
+
+	if (spk_auto) {
+		ret = regmap_write(regmap, spk_auto,
+				cs40l2x->pdata.amp_gnd_stby ?
+					CS40L2X_FORCE_SPK_GND :
+					CS40L2X_FORCE_SPK_FREE);
+		if (ret) {
+			dev_err(dev, "Failed to configure amplifier clamp\n");
+			return ret;
+		}
+	} else if (cs40l2x->event_control != CS40L2X_EVENT_DISABLED) {
+		cs40l2x->amp_gnd_stby = cs40l2x->pdata.amp_gnd_stby;
+	}
+
+	if (cs40l2x->amp_gnd_stby) {
+		dev_warn(dev, "Enabling legacy amplifier clamp (no GPIO)\n");
+
+		ret = regmap_multi_reg_write(regmap, cs40l2x_amp_gnd_setup,
+				ARRAY_SIZE(cs40l2x_amp_gnd_setup));
+		if (ret) {
+			dev_err(dev, "Failed to ground amplifier outputs\n");
+			return ret;
+		}
+
+		ret = cs40l2x_wseq_add_seq(cs40l2x, cs40l2x_amp_gnd_setup,
+				ARRAY_SIZE(cs40l2x_amp_gnd_setup));
+		if (ret) {
+			dev_err(dev, "Failed to sequence amplifier outputs\n");
 			return ret;
 		}
 	}
@@ -6954,12 +6993,6 @@ static const struct reg_sequence cs40l2x_pcm_routing[] = {
 	{CS40L2X_DSP1_RX4_SRC,		CS40L2X_DSP1_RXn_SRC_VPMON},
 };
 
-static const struct reg_sequence cs40l2x_amp_gnd_setup[] = {
-	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
-	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
-	{CS40L2X_SPK_FORCE_TST_1,	CS40L2X_FORCE_SPK_GND},
-};
-
 static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
@@ -7105,22 +7138,6 @@ static int cs40l2x_init(struct cs40l2x_private *cs40l2x)
 		ret = cs40l2x_asp_config(cs40l2x);
 		if (ret)
 			return ret;
-	}
-
-	if (cs40l2x->amp_gnd_stby) {
-		ret = regmap_multi_reg_write(regmap, cs40l2x_amp_gnd_setup,
-				ARRAY_SIZE(cs40l2x_amp_gnd_setup));
-		if (ret) {
-			dev_err(dev, "Failed to ground amplifier outputs\n");
-			return ret;
-		}
-
-		ret = cs40l2x_wseq_add_seq(cs40l2x, cs40l2x_amp_gnd_setup,
-				ARRAY_SIZE(cs40l2x_amp_gnd_setup));
-		if (ret) {
-			dev_err(dev, "Failed to sequence amplifier outputs\n");
-			return ret;
-		}
 	}
 
 	return cs40l2x_brownout_config(cs40l2x);
@@ -8017,9 +8034,6 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 	} else {
 		cs40l2x->event_control = CS40L2X_EVENT_DISABLED;
 	}
-
-	if (cs40l2x->event_control != CS40L2X_EVENT_DISABLED)
-		cs40l2x->amp_gnd_stby = pdata->amp_gnd_stby;
 
 	if (!pdata->gpio_indv_enable
 			|| cs40l2x->fw_desc->id == CS40L2X_FW_ID_ORIG) {
