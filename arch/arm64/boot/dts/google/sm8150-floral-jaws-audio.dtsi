@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <dt-bindings/mfd/iaxxx.h>
 
 &cs35l36_reset_top {
 	mux {
@@ -87,6 +88,9 @@
 
 		adnc,pwr-vld-gpio = <&tlmm 151 0>;
 		adnc,spi-app-speed = <9600000>;
+
+		/* The PDM port used by FlickerSensor */
+		adnc,sensor-port = <IAXXX_PDM_PORT_D>;
 
 		/* no of output channels to mute and unmute */
 		adnc,op-ch-active = <0xF>;

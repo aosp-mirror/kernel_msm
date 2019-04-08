@@ -14,3 +14,8 @@
 &snd_8150 {
 	qcom,model = "sm8150-iaxxx-c2proto-snd-card";
 };
+
+&iaxxxspi1 {
+	/* The PDM port used by FlickerSensor */
+	adnc,sensor-port = <IAXXX_PDM_PORT_D>;
+};
