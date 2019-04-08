@@ -38,8 +38,8 @@
 #define HYPX_SMC_FUNC_GET_DEBUG_RESULT HYPX_SMC_ID(0x6)
 #define HYPX_SMC_FUNC_GET_DEBUG_DATA HYPX_SMC_ID(0x7)
 #define HYPX_SMC_FUNC_GET_DEBUG_BUFFER HYPX_SMC_ID(0x8)
-#define HYPX_SMC_FUNC_DRIVER_PROBE (0x9)
-#define HYPX_SMC_FUNC_DRIVER_REMOVE (0xa)
+#define HYPX_SMC_FUNC_DRIVER_PROBE HYPX_SMC_ID(0x9)
+#define HYPX_SMC_FUNC_DRIVER_REMOVE HYPX_SMC_ID(0xa)
 #define HYPX_SMC_FUNC_CHECK_FW_STATUS HYPX_SMC_ID(0xb)
 
 #define PIL_DMA_TIMEOUT 3000
@@ -612,7 +612,6 @@ static int deallocate_bounce_buffer(struct device *dev, void **vaddr,
 
 static void *bounce_buff;
 static dma_addr_t bounce_buff_bus_addr;
-bool permanent_bounce_buffer;
 
 int el2_faceauth_probe(struct device *dev)
 {
@@ -638,7 +637,6 @@ int el2_faceauth_probe(struct device *dev)
 
 	bounce_buff = buffer_vaddr;
 	bounce_buff_bus_addr = buffer_paddr;
-	permanent_bounce_buffer = true;
 	return 0;
 
 exit1:
@@ -654,19 +652,16 @@ int el2_faceauth_remove(struct device *dev)
 	int ret = 0;
 	struct scm_desc desc = { 0 };
 
-	/* TODO(jaldhalemi): remove this check once HypX is updated */
-	if (permanent_bounce_buffer) {
-		desc.arginfo = SCM_ARGS(0);
-		ret = scm_call2(HYPX_SMC_FUNC_DRIVER_REMOVE, &desc);
-		if (ret)
-			pr_err("HypX driver remove failed. scm_call %d\n", ret);
+	desc.arginfo = SCM_ARGS(0);
+	ret = scm_call2(HYPX_SMC_FUNC_DRIVER_REMOVE, &desc);
+	if (ret)
+		pr_err("HypX driver remove failed. scm_call %d\n", ret);
 
-		ret = deallocate_bounce_buffer(dev, &bounce_buff,
-					       &bounce_buff_bus_addr);
-		if (ret)
-			pr_err("deallocate_bounce_buffer returned an error %d\n",
-			       ret);
-	}
+	ret = deallocate_bounce_buffer(dev, &bounce_buff,
+				       &bounce_buff_bus_addr);
+	if (ret)
+		pr_err("deallocate_bounce_buffer returned an error %d\n", ret);
+
 	return ret;
 }
 
@@ -723,19 +718,6 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 
 	hypx_data->verbosity_level = verbosity_level;
 	hypx_data->features = data->features;
-
-	/* TODO(jaldhalemi): remove this code once HypX is updated */
-	if (!permanent_bounce_buffer) {
-		ret = allocate_bounce_buffer(dev, &bounce_buff,
-					     &bounce_buff_bus_addr);
-		if (ret) {
-			pr_err("allocate_bounce_buffer returned an error %d\n",
-			       ret);
-			goto exit1;
-		}
-
-		hypx_data->bounce_buff = bounce_buff_bus_addr;
-	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
 				   DMA_TO_DEVICE);
@@ -800,15 +782,6 @@ int el2_faceauth_cleanup(struct device *dev)
 	ret = desc.ret[0];
 	if (ret)
 		parse_el2_return(ret);
-
-	/* TODO(jaldhalemi): remove this code once HypX is updated */
-	if (!permanent_bounce_buffer) {
-		ret = deallocate_bounce_buffer(dev, &bounce_buff,
-					       &bounce_buff_bus_addr);
-		if (ret)
-			pr_err("deallocate_bounce_buffer returned an error %d\n",
-			       ret);
-	}
 
 	return ret;
 }
