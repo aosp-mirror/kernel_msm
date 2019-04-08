@@ -295,6 +295,10 @@ Optional properties:
     state (default case) and neither I2C-triggered nor GPIO-triggered playback
     are affected.
 
+    Starting with firmware revision 8.7.0, OUT+ and OUT- pin state control is
+    deferred to the DSP such that neither I2C-triggered nor GPIO-triggered
+    playback are affected even if cirrus,amp-gnd-stby is specified.
+
   - cirrus,boost-ctl-millivolt : Maximum target voltage to which the class H
     algorithm may increase the VBST supply, expressed in mV. Valid values range
     from 2550 to 11000 (inclusive) in steps of 50. If this value is specified as
