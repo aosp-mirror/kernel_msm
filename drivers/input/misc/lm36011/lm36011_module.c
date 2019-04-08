@@ -239,6 +239,7 @@ static const struct reg_setting cap_sense_init_reg_settings[] = {
 	{0x53, 0x00},
 	{0x54, 0x00},
 	{0x02, 0x02},
+	{0x03, 0x0F},
 	{0x05, 0x08},
 	{0x06, 0x04},
 	{0x07, 0x80},
@@ -406,94 +407,6 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 	}
 }
 
-static int sx9320_manual_compensation(struct led_laser_ctrl_t *ctrl)
-{
-	int rc = 0, retry_cnt;
-	uint32_t data;
-	uint32_t i;
-	struct cam_sensor_i2c_reg_setting write_setting;
-	struct cam_sensor_i2c_reg_array reg_settings;
-
-	if (ctrl->cap_sense.calibration_data[1] == 0 ||
-		ctrl->cap_sense.calibration_data[2] == 0) {
-		dev_info(ctrl->soc_info.dev,
-			"calibration data is not present, PH1: %d PH2; %d",
-			ctrl->cap_sense.calibration_data[1],
-			ctrl->cap_sense.calibration_data[2]);
-		goto out;
-	}
-
-	reg_settings.reg_addr = PHASE_SELECT_REG;
-	reg_settings.reg_data = 0x00;
-	reg_settings.delay = 0;
-	write_setting.reg_setting = &reg_settings;
-	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
-	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
-	write_setting.size = 1;
-	write_setting.delay = 10;
-
-	for (i = PHASE1; i <= PHASE2; i++) {
-		reg_settings.reg_data = i;
-		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
-			&write_setting);
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"failed to select PH %d", i);
-			goto out;
-		}
-
-		reg_settings.reg_addr = PROXOFFSET_REG;
-		reg_settings.reg_data =
-			(ctrl->cap_sense.calibration_data[i] >> 8) & 0x3F;
-		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
-			&write_setting);
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"failed to write PH %d MLB", i);
-			goto out;
-		}
-
-		reg_settings.reg_addr = PROXOFFSET_REG+1;
-		reg_settings.reg_data =
-			ctrl->cap_sense.calibration_data[i] & 0x00FF;
-		rc = camera_io_dev_write(&ctrl->cap_sense.io_master_info,
-			&write_setting);
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"failed to write PH %d LSB", i);
-			goto out;
-		}
-
-		retry_cnt = 0;
-		while (retry_cnt < MAX_RETRY_COUNT) {
-			camera_io_dev_read(
-				&ctrl->cap_sense.io_master_info,
-				PROXOFFSET_REG,
-				&data,
-				CAMERA_SENSOR_I2C_TYPE_BYTE,
-				CAMERA_SENSOR_I2C_TYPE_WORD);
-
-			data &= 0x3FFF;
-			if (data == ctrl->cap_sense.calibration_data[i]) {
-				break;
-			}
-			retry_cnt++;
-		}
-
-		if (retry_cnt == MAX_RETRY_COUNT) {
-			dev_err(ctrl->soc_info.dev,
-				"read back offset %d mismatch to cali data %d",
-				data,
-				ctrl->cap_sense.calibration_data[i]);
-		}
-
-	}
-
-out:
-	return rc;
-
-}
-
 int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 {
 	int rc, i;
@@ -520,13 +433,6 @@ int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 			"%s: i2c write failed: rc: %d",
 			__func__, rc);
 		return rc;
-	}
-
-	rc = sx9320_manual_compensation(ctrl);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"%s: manual compensation failed: rc: %d",
-			__func__, rc);
 	}
 
 	sx9320_cleanup_nirq(ctrl);
