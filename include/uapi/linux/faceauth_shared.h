@@ -17,11 +17,13 @@
 #define __FACEAUTH_SHARED_H__
 
 /* bug: 123535349 */
-#define DISABLE_GAZE                            (1ULL << 0) //bit 0
-#define DISABLE_MULTI_ANGLE_ENROLLMENT          (1ULL << 1) //bit 1
-#define SECURE_CAMERA_DATA                      (1ULL << 2) //bit 2
+#define DISABLE_GAZE (1ULL << 0) //bit 0
+#define DISABLE_MULTI_ANGLE_ENROLLMENT (1ULL << 1) //bit 1
+#define SECURE_CAMERA_DATA (1ULL << 2) //bit 2
 /* Keep temporary feature bits in the top part of the field */
-#define DISABLE_SKIN_CLASSIFIER                 (1ULL << 63) //bit 63
+#define ENABLE_RECTIFY_FLOOD (1ULL << 61) //bit 61
+#define ENABLE_DEPTH_PIPELINE (1ULL << 62) //bit 62
+#define DISABLE_SKIN_CLASSIFIER (1ULL << 63) //bit 63
 
 /*  The error codes are broken up into functional groups with space reserve for
  *  future error codes. The divisions are as follows:
@@ -123,8 +125,7 @@ typedef enum _workload_status {
 		0xffffffff /* used to extend enum size to 4 bytes */
 } WorkloadStatus;
 
-/* The set of commands accepted by faceauth FW
- */
+/* The set of commands accepted by faceauth FW */
 typedef enum _faceauth_input_commands {
 	COMMAND_NONE = 0,
 	COMMAND_ENROLL,
@@ -138,31 +139,47 @@ typedef enum _faceauth_input_commands {
 	COMMAND_SET_FEATURE,
 	COMMAND_CLR_FEATURE,
 	COMMAND_RESET_LOCKOUT,
-	COMMAND_INTMAX =
-		0xffffffff /* used to extend enum size to 4 bytes */
+	COMMAND_INTMAX = 0xffffffff /* used to extend enum size to 4 bytes */
 } FaceAuthInputCommands;
-
-#define EMBEDDING_CMD_STRINGS { \
-	"COMMAND_NONE",\
-	"COMMAND_ENROLL",\
-	"COMMAND_ENROLL_COMPLETE",\
-	"COMMAND_ERASE",\
-	"COMMAND_VALIDATE",\
-	"COMMAND_EXIT",\
-	"COMMAND_GET_CHALLENGE",\
-	"COMMAND_REVOKE_CHALLENGE",\
-	"COMMAND_GET_USER_INFO",\
-	"COMMAND_SET_FEATURE",\
-	"COMMAND_CLR_FEATURE",\
-	"COMMAND_RESET_LOCKOUT",\
-}
 
 typedef enum _faceauth_ack_messages {
 	STATUS_NONE = 0,
 	STATUS_READY,
 	STATUS_BUSY,
-	STATUS_INTMAX =
-		0xffffffff /* used to extend enum size to 4 bytes */
+	STATUS_INTMAX = 0xffffffff /* used to extend enum size to 4 bytes */
 } FaceAckMessages;
+
+/* Definitions needed to interpret debug data */
+
+struct Coordinate {
+	int32_t x; /* fixed point 16.16 */
+	int32_t y; /* fixed point 16.16 */
+} __attribute__((packed));
+
+enum FaceLandmarks {
+	LEFT_EYE = 0,
+	RIGHT_EYE,
+	NOSE_TIP,
+	MOUTH_CENTER,
+	LEFT_EAR_TRAGION,
+	RIGHT_EAR_TRAGION,
+	NUM_FACE_LANDMARKS,
+	FACE_LANDMARK_INTMAX =
+		0xffffffff /* used to extend enum size to 4 bytes */
+};
+
+struct Face {
+	/* In whole pixels */
+	int32_t x1;
+	int32_t y1;
+	int32_t x2;
+	int32_t y2;
+	/* Fixed point 16.16 */
+	struct Coordinate landmark[NUM_FACE_LANDMARKS];
+	uint32_t confidence;
+	int32_t pan_angle;
+	int32_t tilt_angle;
+	int32_t roll_angle;
+} __attribute__((packed));
 
 #endif /* __FACEAUTH_SHARED_H__ */
