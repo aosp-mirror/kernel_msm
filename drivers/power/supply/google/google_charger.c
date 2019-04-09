@@ -2001,7 +2001,8 @@ static void google_charger_init_work(struct work_struct *work)
 {
 	struct chg_drv *chg_drv = container_of(work, struct chg_drv,
 					       init_work.work);
-	struct power_supply *chg_psy, *usb_psy, *wlc_psy = NULL, *bat_psy;
+	struct power_supply *chg_psy = NULL, *usb_psy = NULL;
+	struct power_supply *wlc_psy = NULL, *bat_psy = NULL;
 	struct power_supply *tcpm_psy = NULL;
 	int ret = 0;
 
@@ -2016,15 +2017,12 @@ static void google_charger_init_work(struct work_struct *work)
 	if (!bat_psy) {
 		pr_info("failed to get \"%s\" power supply, retrying...\n",
 			chg_drv->bat_psy_name);
-		power_supply_put(chg_psy);
 		goto retry_init_work;
 	}
 
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy) {
 		pr_info("failed to get \"usb\" power supply, retrying...\n");
-		power_supply_put(chg_psy);
-		power_supply_put(bat_psy);
 		goto retry_init_work;
 	}
 
@@ -2033,9 +2031,6 @@ static void google_charger_init_work(struct work_struct *work)
 		if (!wlc_psy) {
 			pr_info("failed to get \"%s\" power supply, retrying...\n",
 				chg_drv->wlc_psy_name);
-			power_supply_put(chg_psy);
-			power_supply_put(bat_psy);
-			power_supply_put(usb_psy);
 			goto retry_init_work;
 		}
 	}
@@ -2045,11 +2040,6 @@ static void google_charger_init_work(struct work_struct *work)
 		if (!tcpm_psy) {
 			pr_info("failed to get \"%s\" power supply, retrying...\n",
 				chg_drv->tcpm_psy_name);
-			power_supply_put(chg_psy);
-			power_supply_put(bat_psy);
-			power_supply_put(usb_psy);
-			if (wlc_psy)
-				power_supply_put(wlc_psy);
 			goto retry_init_work;
 		}
 	}
@@ -2087,6 +2077,16 @@ static void google_charger_init_work(struct work_struct *work)
 	return;
 
 retry_init_work:
+	if (chg_psy)
+		power_supply_put(chg_psy);
+	if (bat_psy)
+		power_supply_put(bat_psy);
+	if (usb_psy)
+		power_supply_put(usb_psy);
+	if (wlc_psy)
+		power_supply_put(wlc_psy);
+	if (tcpm_psy)
+		power_supply_put(tcpm_psy);
 	schedule_delayed_work(&chg_drv->init_work,
 			      msecs_to_jiffies(CHG_DELAY_INIT_MS));
 }
