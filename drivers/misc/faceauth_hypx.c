@@ -343,7 +343,7 @@ static void hypx_create_blob_userbuf(struct device *dev,
 		if (!tocopy)
 			break;
 
-		out_buffer = kmalloc(size, 0);
+		out_buffer = kmalloc(size, __GFP_NOWARN);
 
 		while (!out_buffer) {
 			if (page_order == 0) {
@@ -352,7 +352,7 @@ static void hypx_create_blob_userbuf(struct device *dev,
 			}
 			page_order--;
 			size = (1ULL << page_order) * PAGE_SIZE;
-			out_buffer = kmalloc(size, 0);
+			out_buffer = kmalloc(size, __GFP_NOWARN);
 			tocopy = min(buffer_iter_remaining, size);
 		}
 
