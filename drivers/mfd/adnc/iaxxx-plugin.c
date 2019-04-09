@@ -21,8 +21,8 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pkg-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
+#include <linux/mfd/adnc/iaxxx-plugin-common.h>
 #include "iaxxx.h"
-#include "iaxxx-plugin-common.h"
 #include "iaxxx-btp.h"
 #include "ia8508a-memory-map.h"
 

@@ -1470,6 +1470,37 @@ int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons)
 	return 0;
 }
 
+int iaxxx_fw_reset(struct iaxxx_priv *priv)
+{
+
+	if (test_and_set_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
+		return -EBUSY;
+
+#ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
+	/* Disable runtime pm*/
+	if (pm_runtime_enabled(priv->dev))
+		pm_runtime_disable(priv->dev);
+#endif
+
+	clear_bit(IAXXX_FLG_FW_READY, &priv->flags);
+	/* Clear event queue */
+	if (gpio_is_valid(priv->event_gpio) && priv->is_irq_enabled) {
+		disable_irq(gpio_to_irq(priv->event_gpio));
+		priv->is_irq_enabled = false;
+	}
+
+	iaxxx_fw_notifier_call(priv->dev, IAXXX_EV_FW_RESET, NULL);
+	mutex_lock(&priv->event_queue_lock);
+	priv->event_queue->w_index = -1;
+	priv->event_queue->r_index = -1;
+	mutex_unlock(&priv->event_queue_lock);
+	atomic_set(&priv->proc_on_off_ref_cnt, 1);
+	iaxxx_reset_check_sbl_mode(priv);
+	regcache_cache_bypass(priv->regmap, true);
+	iaxxx_work(priv, fw_update_work);
+	return 0;
+}
+
 /*
  * iaxxx_abort_fw_recovery - abort current FW loading works
  *
@@ -1825,6 +1856,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
 
 	atomic_set(&priv->proc_on_off_ref_cnt, 1);
+	atomic_set(&priv->fli_route_status, 0);
 
 	/* Initialize regmap for SBL */
 	rc = iaxxx_regmap_init(priv);

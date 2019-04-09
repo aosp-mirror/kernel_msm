@@ -21,8 +21,8 @@
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
+#include <linux/mfd/adnc/iaxxx-plugin-common.h>
 #include "iaxxx.h"
-#include "iaxxx-plugin-common.h"
 #include "iaxxx-btp.h"
 
 /* Set Param Block Common code without mutex protection

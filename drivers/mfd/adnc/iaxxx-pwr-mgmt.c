@@ -28,9 +28,9 @@
 #include <linux/mfd/adnc/iaxxx-stream-registers.h>
 #include <linux/mfd/adnc/iaxxx-odsp.h>
 #include <linux/mfd/adnc/iaxxx-module.h>
+#include <linux/mfd/adnc/iaxxx-plugin-common.h>
 #include "iaxxx-btp.h"
 #include "iaxxx.h"
-#include "iaxxx-plugin-common.h"
 
 #define IAXXX_PROC_STATUS_MASK	0x34
 

@@ -20,6 +20,12 @@
 #define IAXXX_MAX_PLUGIN_ENDPOINTS       (16)
 #define IAXXX_MAX_VER_STR_SIZE           (20)
 
+enum {
+	IAXXX_FW_CRASH,
+	IAXXX_FW_IDLE,
+	IAXXX_FW_ACTIVE
+};
+
 struct iaxxx_plugin_info {
 	uint32_t plg_idx;
 	uint32_t pkg_id;
@@ -220,4 +226,7 @@ struct iaxxx_sys_versions {
 #define ODSP_GET_PROC_EXECUTION_STATUS _IO(IAXXX_IOCTL_MAGIC, 0x2E)
 #define ODSP_GET_SYS_VERSIONS _IO(IAXXX_IOCTL_MAGIC, 0x2F)
 #define ODSP_GET_SYS_DEVICE_ID _IO(IAXXX_IOCTL_MAGIC, 0x30)
+#define ODSP_GET_SYS_MODE _IO(IAXXX_IOCTL_MAGIC, 0x31)
+#define ODSP_GET_FW_STATUS _IO(IAXXX_IOCTL_MAGIC, 0x32)
+#define ODSP_RESET_FW _IO(IAXXX_IOCTL_MAGIC, 0x33)
 #endif

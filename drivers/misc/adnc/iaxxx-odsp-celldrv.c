@@ -28,6 +28,7 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/mfd/adnc/iaxxx-plugin-common.h>
 #include "iaxxx-odsp-celldrv.h"
 
 static struct odsp_cell_params odsp_cell_priv;
@@ -1000,6 +1001,34 @@ set_param_blk_err:
 		break;
 	}
 
+	case ODSP_GET_FW_STATUS: {
+
+		uint32_t fw_status;
+
+		if (test_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
+			fw_status = IAXXX_FW_CRASH;
+		else if (!iaxxx_core_plg_list_empty(priv) ||
+			iaxxx_core_get_route_status(priv) ||
+			atomic_read(&priv->fli_route_status))
+			fw_status = IAXXX_FW_ACTIVE;
+		else
+			fw_status = IAXXX_FW_IDLE;
+
+		if (copy_to_user((void __user *)arg, &fw_status,
+				sizeof(fw_status)))
+			ret = -EFAULT;
+
+		break;
+	}
+
+	case ODSP_RESET_FW: {
+		ret = iaxxx_fw_reset(priv);
+		if (ret) {
+			pr_err("%s() iaxxx_reset_fw() failed\n", __func__);
+			return ret;
+		}
+		break;
+	}
 	default:
 		break;
 	}

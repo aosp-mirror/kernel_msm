@@ -7816,6 +7816,7 @@ static int iaxxx_codec_notify(struct notifier_block *nb,
 
 	switch (action) {
 	case IAXXX_EV_CRASH:
+	case IAXXX_EV_FW_RESET:
 		iaxxx_reset_codec_params(iaxxx);
 		break;
 	}

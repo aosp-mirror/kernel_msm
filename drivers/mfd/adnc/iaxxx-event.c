@@ -160,7 +160,7 @@ int iaxxx_core_evt_subscribe(struct device *dev, uint16_t src_id,
 	}
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
 	if (ret)
-		dev_err(dev, "AKR Update blk failed %s()\n", __func__);
+		dev_err(dev, "Update blk failed %s()\n", __func__);
 evt_err:
 	mutex_unlock(&priv->event_lock);
 	return ret;
@@ -220,7 +220,7 @@ int iaxxx_core_evt_unsubscribe(struct device *dev, uint16_t src_id,
 	}
 	ret = iaxxx_send_update_block_request(dev, &status, IAXXX_BLOCK_0);
 	if (ret)
-		dev_err(dev, "AKR Update blk failed %s()\n", __func__);
+		dev_err(dev, "Update blk failed %s()\n", __func__);
 
 err:
 	mutex_unlock(&priv->event_lock);

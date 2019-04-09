@@ -25,6 +25,7 @@
 #include "iaxxx.h"
 #include "iaxxx-btp.h"
 
+#define IAXXX_MODULE_WORD_SIZE_SHIFT	(2)
 
 /*****************************************************************************
  * iaxxx_core_sensor_is_valid_script_id()
@@ -115,6 +116,47 @@ bool iaxxx_core_sensor_is_valid_param_val(uint32_t param_val)
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_param_val);
+
+
+/*****************************************************************************
+ * iaxxx_core_sensor_is_valid_param_blk_id()
+ * @brief validate the sensor param blk id
+ *
+ * @id	Sensor param blk id
+ * @ret	true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_sensor_is_valid_param_blk_id(uint32_t param_id)
+{
+	bool ret = true;
+
+	if (param_id > (IAXXX_SENSOR_HDR_PARAM_BLK_ID_REG_MASK >>
+		IAXXX_SENSOR_HDR_PARAM_BLK_ID_REG_POS)) {
+		pr_err("%s Invalid param block id %d\n", __func__, param_id);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_param_blk_id);
+
+/*****************************************************************************
+ * iaxxx_core_sensor_is_valid_param_blk_size()
+ * @brief validate the sensor param blk size
+ *
+ * @id	Sensor param blk size
+ * @ret	true on success, false in case of error
+ ****************************************************************************/
+bool iaxxx_core_sensor_is_valid_param_blk_size(uint32_t param_size)
+{
+	bool ret = true;
+
+	if (param_size > (IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_MASK >>
+		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_POS)) {
+		pr_err("%s Invalid param blk size %d\n", __func__, param_size);
+		ret = false;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_sensor_is_valid_param_blk_size);
 
 /*****************************************************************************
  * iaxxx_core_change_sensor_state()
@@ -304,7 +346,7 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 	/* The block size is divided by 4 here because this function gets it
 	 * as block size in bytes but firmware expects in 32bit words.
 	 */
-	reg_val = (((blk_size / 4) <<
+	reg_val = (((blk_size >> IAXXX_MODULE_WORD_SIZE_SHIFT) <<
 		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_POS) &
 		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_MASK);
 	reg_val |= ((inst_id <<
@@ -343,8 +385,9 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 
 	ret = iaxxx_btp_write(priv, blk_addr, ptr_blk,
 			blk_size / sizeof(uint32_t), IAXXX_HOST_0);
+
 	if (ret) {
-		dev_err(dev, "%s() btp write failed\n", __func__);
+		dev_err(dev, "%s() Raw blk write failed\n", __func__);
 		goto sensor_write_param_blk_err;
 	}
 
@@ -352,7 +395,7 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 	/* The block size is divided by 4 here because this function gets it
 	 * as block size in bytes but firmware expects in 32bit words.
 	 */
-	reg_val = (((blk_size / 4) <<
+	reg_val = (((blk_size >> IAXXX_MODULE_WORD_SIZE_SHIFT) <<
 		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_POS) &
 		IAXXX_SENSOR_HDR_PARAM_BLK_CTRL_BLK_SIZE_MASK);
 	reg_val |= ((inst_id <<

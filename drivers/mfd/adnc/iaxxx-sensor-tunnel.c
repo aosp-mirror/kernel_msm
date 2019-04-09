@@ -539,6 +539,7 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 			(struct iaxxx_priv *)t_intf_priv->priv;
 	struct tunlMsg msg;
 	int ret = 0;
+	uint32_t status;
 
 	if (!priv) {
 		pr_err("Unable to fetch tunnel private data\n");
@@ -582,12 +583,17 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 	switch (cmd) {
 
 	case FLICKER_ROUTE_SETUP:
-		mutex_lock(&priv->sensor_tunnel_dev_lock);
-		ret = sensor_tunnel_route_setup(priv, true);
-		mutex_unlock(&priv->sensor_tunnel_dev_lock);
-		if (ret) {
-			pr_err("Unable to setup sensor route\n");
-			return -EIO;
+		status = atomic_add_unless(&priv->fli_route_status, 1, 1);
+
+		if (status) {
+			mutex_lock(&priv->sensor_tunnel_dev_lock);
+			ret = sensor_tunnel_route_setup(priv, true);
+			mutex_unlock(&priv->sensor_tunnel_dev_lock);
+
+			if (ret) {
+				pr_err("Unable to setup sensor route\n");
+				return -EIO;
+			}
 		}
 		break;
 
@@ -613,12 +619,16 @@ static long sensor_tunnel_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case FLICKER_ROUTE_TERMINATE:
-		mutex_lock(&priv->sensor_tunnel_dev_lock);
-		ret = sensor_tunnel_route_setup(priv, false);
-		mutex_unlock(&priv->sensor_tunnel_dev_lock);
-		if (ret) {
-			pr_err("Unable to setup sensor route\n");
-			return -EIO;
+		status = atomic_add_unless(&priv->fli_route_status, -1, 0);
+
+		if (status) {
+			mutex_lock(&priv->sensor_tunnel_dev_lock);
+			ret = sensor_tunnel_route_setup(priv, false);
+			mutex_unlock(&priv->sensor_tunnel_dev_lock);
+			if (ret) {
+				pr_err("Unable to setup sensor route\n");
+				return -EIO;
+			}
 		}
 		break;
 

@@ -123,6 +123,7 @@ enum iaxxx_events {
 	IAXXX_EV_STARTUP,		/* First ready system startup */
 	IAXXX_EV_RECOVERY,		/* Recovery complete after fw crash */
 	IAXXX_EV_CRASH,			/* Notify for FW crash */
+	IAXXX_EV_FW_RESET,		/* FW reset forcefully*/
 	IAXXX_EV_ROUTE_ACTIVE,		/* Audio routing path is done */
 	IAXXX_EV_PACKAGE,		/* Loaded plugin */
 };
@@ -334,6 +335,7 @@ struct iaxxx_priv {
 	unsigned long flags;
 
 	atomic_t proc_on_off_ref_cnt;
+	atomic_t fli_route_status;
 	/* Synchronize suspend/resume on this */
 	struct iaxxx_system_state *iaxxx_state;
 	bool sensor_en[IAXXX_SENSR_ID_MASK + 1];
@@ -584,6 +586,8 @@ bool iaxxx_core_sensor_is_valid_inst_id(uint32_t inst_id);
 bool iaxxx_core_sensor_is_valid_block_id(uint32_t block_id);
 bool iaxxx_core_sensor_is_valid_param_id(uint32_t param_id);
 bool iaxxx_core_sensor_is_valid_param_val(uint32_t param_val);
+bool iaxxx_core_sensor_is_valid_param_blk_id(uint32_t param_id);
+bool iaxxx_core_sensor_is_valid_param_blk_size(uint32_t param_size);
 int iaxxx_set_plugin_log_mode(struct device *dev,
 				bool mode, uint32_t inst_id, uint8_t block_id);
 int iaxxx_get_plugin_log_mode(struct device *dev,
@@ -596,5 +600,6 @@ int iaxxx_core_get_pwr_stats(struct device *dev,
 			struct iaxxx_pwr_stats *pwr_stats);
 /* Boots up the core based on proc id mask */
 int iaxxx_boot_core(struct iaxxx_priv *priv, u32 proc_id_mask);
+int iaxxx_fw_reset(struct iaxxx_priv *priv);
 
 #endif /*__IAXXX_CORE_H__ */

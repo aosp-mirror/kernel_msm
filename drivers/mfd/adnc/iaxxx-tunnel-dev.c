@@ -1553,6 +1553,7 @@ static int iaxxx_notifier_cb(struct notifier_block *nb,
 		break;
 
 	case IAXXX_EV_CRASH:
+	case IAXXX_EV_FW_RESET:
 		set_bit(IAXXX_TFLG_FW_CRASH, &priv->tunnel_state);
 		iaxxx_tunnel_stop(priv);
 		break;

@@ -210,6 +210,20 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (copy_from_user(&param_blk_info, (void __user *)arg,
 				sizeof(struct iaxxx_sensor_param_blk)))
 			return -EFAULT;
+
+		/* validate the sensor parameters */
+		if (!(iaxxx_core_sensor_is_valid_inst_id(
+				param_blk_info.inst_id) &&
+			iaxxx_core_sensor_is_valid_block_id(
+				param_blk_info.block_id) &&
+			iaxxx_core_sensor_is_valid_param_blk_id(
+				param_blk_info.param_blk_id) &&
+			iaxxx_core_sensor_is_valid_param_blk_size(
+				param_blk_info.blk_size))) {
+			pr_err("invalid sensor parameter received\n");
+			return -EINVAL;
+		}
+
 		if (param_blk_info.blk_size > 0) {
 			blk_buff = (void __user *)
 					(uintptr_t)param_blk_info.blk_data;
@@ -227,6 +241,9 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 					blk_buff, param_blk_info.blk_size,
 					param_blk_info.block_id);
 			kfree(blk_buff);
+		} else {
+			pr_err("invalid block-size received\n");
+			return -EINVAL;
 		}
 		break;
 	case IAXXX_POWER_STATS_COUNT:
