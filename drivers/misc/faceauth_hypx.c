@@ -315,7 +315,7 @@ static void hypx_create_blob_userbuf(struct device *dev,
 	blob = (void *)get_zeroed_page(0);
 	if (!blob) {
 		pr_err("Cannot allocate memory for hypx segments blob\n");
-		goto exit;
+		goto exit1;
 	}
 	WARN_ON(virt_to_phys(blob) % PAGE_SIZE);
 	data->hypx_blob = blob;
@@ -348,7 +348,7 @@ static void hypx_create_blob_userbuf(struct device *dev,
 		while (!out_buffer) {
 			if (page_order == 0) {
 				pr_err("Cannot allocate memory for copying data for hypx");
-				goto exit;
+				goto exit2;
 			}
 			page_order--;
 			size = (1ULL << page_order) * PAGE_SIZE;
@@ -384,7 +384,7 @@ static void hypx_create_blob_userbuf(struct device *dev,
 	if (buffer_iter_remaining) {
 		pr_err("Memory allocator is fragmented so we were not able to fit %d into segments header\n",
 		       size);
-		goto exit;
+		goto exit2;
 	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(blob), PAGE_SIZE,
@@ -392,8 +392,9 @@ static void hypx_create_blob_userbuf(struct device *dev,
 
 	return;
 
-exit:
+exit2:
 	hypx_free_blob_userbuf(data);
+exit1:
 	return;
 }
 
@@ -805,7 +806,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	if (!hypx_data) {
 		ret = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
-		goto err;
+		goto err1;
 	}
 
 	hypx_data->is_secure_camera = is_secure_camera;
@@ -819,7 +820,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 				 data->image_dot_left_size, DMA_TO_DEVICE,
 				 is_secure_camera);
 		if (!image_dot_left.hypx_blob)
-			goto err;
+			goto err2;
 		hypx_data->image_dot_left =
 			virt_to_phys(image_dot_left.hypx_blob);
 		hypx_data->image_dot_left_size = data->image_dot_left_size;
@@ -829,7 +830,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 				 data->image_dot_right_size, DMA_TO_DEVICE,
 				 is_secure_camera);
 		if (!image_dot_right.hypx_blob)
-			goto err;
+			goto err2;
 		hypx_data->image_dot_right =
 			virt_to_phys(image_dot_right.hypx_blob);
 		hypx_data->image_dot_right_size = data->image_dot_right_size;
@@ -838,7 +839,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 				 data->image_flood_fd, data->image_flood_size,
 				 DMA_TO_DEVICE, is_secure_camera);
 		if (!image_flood.hypx_blob)
-			goto err;
+			goto err2;
 		hypx_data->image_flood = virt_to_phys(image_flood.hypx_blob);
 		hypx_data->image_flood_size = data->image_flood_size;
 
@@ -846,7 +847,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 				 data->calibration_fd, data->calibration_size,
 				 DMA_TO_DEVICE, false);
 		if (!calibration.hypx_blob)
-			goto err;
+			goto err2;
 		hypx_data->calibration = virt_to_phys(calibration.hypx_blob);
 		hypx_data->calibration_size = data->calibration_size;
 	}
@@ -861,7 +862,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 					 data->citadel_token,
 					 data->citadel_token_size);
 		if (!citadel_token.hypx_blob)
-			goto err;
+			goto err2;
 		hypx_data->citadel_token =
 			virt_to_phys(citadel_token.hypx_blob);
 		hypx_data->citadel_token_size = data->citadel_token_size;
@@ -890,7 +891,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_PROCESS & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
 
-err:
+err2:
 	if (hypx_data->citadel_token)
 		hypx_free_blob_userbuf(&citadel_token);
 	if (hypx_data->calibration)
@@ -902,8 +903,9 @@ err:
 	if (hypx_data->image_dot_left)
 		hypx_free_blob(dev, &image_dot_left);
 
-	if (hypx_data)
-		free_page((unsigned long)hypx_data);
+	free_page((unsigned long)hypx_data);
+
+err1:
 	return ret;
 }
 
@@ -920,7 +922,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 	if (!hypx_data) {
 		ret = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
-		goto exit;
+		goto exit1;
 	}
 
 	hypx_data->citadel_token_size = 0;
@@ -929,7 +931,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 					 data->citadel_token,
 					 data->citadel_token_size);
 		if (!citadel_token.hypx_blob)
-			goto exit;
+			goto exit2;
 
 		hypx_data->citadel_token =
 			virt_to_phys(citadel_token.hypx_blob);
@@ -947,13 +949,13 @@ int el2_faceauth_get_process_result(struct device *dev,
 				    jiffies_to_usecs(jiffies - save_trace));
 	if (ret) {
 		pr_err("Failed scm_call %d\n", ret);
-		goto exit;
+		goto exit2;
 	}
 
 	ret = desc.ret[0];
 	if (ret) {
 		parse_el2_return(ret);
-		goto exit;
+		goto exit2;
 	}
 
 	dma_sync_single_for_cpu(dev, virt_to_phys(hypx_data), PAGE_SIZE,
@@ -975,15 +977,16 @@ int el2_faceauth_get_process_result(struct device *dev,
 						  true);
 		if (ret) {
 			pr_err("Failed hypx_copy_from_blob_userbuf %d\n", ret);
-			goto exit;
+			goto exit2;
 		}
 	}
 
-exit:
+exit2:
 	if (hypx_data->citadel_token)
 		hypx_free_blob_userbuf(&citadel_token);
-	if (hypx_data)
-		free_page((unsigned long)hypx_data);
+	free_page((unsigned long)hypx_data);
+
+exit1:
 	return ret;
 }
 
@@ -999,7 +1002,7 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 	if (!hypx_data) {
 		ret = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
-		goto exit2;
+		goto exit3;
 	}
 
 	if (data->buffer_fd)
@@ -1048,8 +1051,8 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 exit1:
 	hypx_free_blob(dev, &debug_buf);
 exit2:
-	if (hypx_data)
-		free_page((unsigned long)hypx_data);
+	free_page((unsigned long)hypx_data);
+exit3:
 	return ret;
 }
 
@@ -1294,8 +1297,8 @@ exit:
 	if (hypx_data->image_left)
 		hypx_free_blob_userbuf(&image_dot_left);
 
+	free_page((unsigned long)hypx_data);
+
 exit_hypx_data:
-	if (hypx_data)
-		free_page((unsigned long)hypx_data);
 	return err;
 }
