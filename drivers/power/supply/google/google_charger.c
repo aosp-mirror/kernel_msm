@@ -900,8 +900,11 @@ static void chg_work(struct work_struct *work)
 	chg_work_adapter_details(chg_drv, usb_online, wlc_online);
 
 	soc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
-	if (soc < 0)
+	if (soc < 0) {
+		pr_err("MSC_CHG cannot get capacity\n");
+		rc = soc;
 		goto error_rerun;
+	}
 
 	/* this force drain: we might decide to run from power instead.
 	 * Enable/disable charging comes only from is_charging_disabled
