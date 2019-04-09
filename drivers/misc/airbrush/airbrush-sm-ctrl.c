@@ -52,6 +52,8 @@ static struct ab_state_context *ab_sm_ctx;
 #define SMPS1_MIN_VOLTAGE 550000
 #define SMPS1_NOMINAL_VOLTAGE 750000
 
+#define AB_THROTTLE_TIMEOUT_MS	500
+
 static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
@@ -2095,6 +2097,97 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 	return ret;
 }
 
+/* Caller must hold sc->throttle_ready_lock */
+static inline void __complete_throttle_nocompute_ready(
+		struct ab_state_context *sc)
+{
+	/* Allow thermal throttling to continue */
+	sc->throttle_nocomp_waiting = false;
+	reinit_completion(&sc->throttle_nocompute_event);
+	complete_all(&sc->throttle_nocompute_ready);
+}
+
+static void __throttle_nocompute_notify(struct ab_state_context *sc)
+{
+	unsigned long ret;
+
+	mutex_lock(&sc->throttle_ready_lock);
+	sc->req_thermal_listeners = sc->curr_thermal_listeners;
+
+	/* If there is a userspace listener, notify them of pending change */
+	if (sc->req_thermal_listeners > 0) {
+		sc->throttle_nocomp_waiting = true;
+		reinit_completion(&sc->throttle_nocompute_ready);
+		sc->curr_thermal_listeners = 0;
+		complete_all(&sc->throttle_nocompute_event);
+
+		mutex_unlock(&sc->throttle_ready_lock);
+
+		/* Wait for all listeners to be ready */
+		ret = wait_for_completion_timeout(&sc->throttle_nocompute_ready,
+				msecs_to_jiffies(AB_THROTTLE_TIMEOUT_MS));
+		if (!ret) {
+			dev_warn(sc->dev,
+				"Timeout while waiting for userspace to be ready for nocompute\n");
+			/* In case of timeout, reset things */
+			mutex_lock(&sc->throttle_ready_lock);
+			if (sc->throttle_nocomp_waiting)
+				__complete_throttle_nocompute_ready(sc);
+			mutex_unlock(&sc->throttle_ready_lock);
+		}
+	} else {
+		mutex_unlock(&sc->throttle_ready_lock);
+	}
+}
+
+static void __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
+{
+	int ret;
+
+	mutex_lock(&sc->throttle_ready_lock);
+	sc->curr_thermal_listeners++;
+	if (sc->throttle_nocomp_waiting) {
+		if (sc->curr_thermal_listeners >= sc->req_thermal_listeners) {
+			__complete_throttle_nocompute_ready(sc);
+			mutex_unlock(&sc->throttle_ready_lock);
+		} else {
+			/* Ensure all listeners get the chance to wake up from
+			 * throttle_nocompute_event before listening for the
+			 * next event
+			 */
+			mutex_unlock(&sc->throttle_ready_lock);
+			ret = wait_for_completion_timeout(
+				&sc->throttle_nocompute_ready,
+				msecs_to_jiffies(AB_THROTTLE_TIMEOUT_MS));
+			/* In case of timeout, reset things */
+			if (!ret) {
+				mutex_lock(&sc->throttle_ready_lock);
+				if (sc->throttle_nocomp_waiting)
+					__complete_throttle_nocompute_ready(sc);
+				mutex_unlock(&sc->throttle_ready_lock);
+			}
+
+		}
+	} else {
+		mutex_unlock(&sc->throttle_ready_lock);
+	}
+
+	/* Wait for next throttle to no compute event */
+	ret = wait_for_completion_interruptible(&sc->throttle_nocompute_event);
+	if (ret == -ERESTARTSYS) {
+		mutex_lock(&sc->throttle_ready_lock);
+		if (sc->throttle_nocomp_waiting) {
+			sc->req_thermal_listeners--;
+			if (sc->curr_thermal_listeners >=
+					sc->req_thermal_listeners)
+				__complete_throttle_nocompute_ready(sc);
+		} else {
+			sc->curr_thermal_listeners--;
+		}
+		mutex_unlock(&sc->throttle_ready_lock);
+	}
+}
+
 #ifdef CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS
 static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		unsigned long arg)
@@ -2373,6 +2466,11 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
+	case AB_SM_THROTTLE_NOCOMPUTE_NOTIFY:
+		__throttle_nocompute_wait_for_user(sc);
+		ret = 0;
+		break;
+
 	default:
 		dev_err(sc->dev,
 			"%s: Unknown ioctl cmd 0x%X\n", __func__, cmd);
@@ -2393,6 +2491,13 @@ static void ab_sm_thermal_throttle_state_updated(
 		enum throttle_state throttle_state_id, void *op_data)
 {
 	struct ab_state_context *sc = op_data;
+
+	/* In THROTTLE_NOCOMPUTE case, give userspace a
+	 * chance to react to AB resource being removed
+	 */
+	if (throttle_state_id == THROTTLE_NOCOMPUTE &&
+			sc->throttle_state_id != THROTTLE_NOCOMPUTE)
+		__throttle_nocompute_notify(sc);
 
 	sc->throttle_state_id = throttle_state_id;
 	dev_info(sc->dev, "Throttle state updated to %lu", throttle_state_id);
@@ -2603,6 +2708,12 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	if (IS_ERR(ab_sm_ctx->thermal))
 		dev_warn(dev, "Failed to initialize thermal\n");
 	ab_sm_ctx->throttle_state_id = THROTTLE_NONE;
+
+	init_completion(&ab_sm_ctx->throttle_nocompute_event);
+	init_completion(&ab_sm_ctx->throttle_nocompute_ready);
+	ab_sm_ctx->curr_thermal_listeners = 0;
+	mutex_init(&ab_sm_ctx->throttle_ready_lock);
+	ab_sm_ctx->throttle_nocomp_waiting = false;
 
 	ab_sm_ctx->state_change_task =
 		kthread_run(&state_change_task, ab_sm_ctx, "ab-sm");

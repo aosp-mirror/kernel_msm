@@ -212,6 +212,15 @@
  */
 #define AB_SM_SET_PCIE_L1SS_DELAY  _IOW(AB_SM_IOCTL_MAGIC, 24, int)
 
+/*
+ * Call will block until there is a throttle to no-compute
+ * event. On return, caller is expected to prepare for
+ * a no-compute scenario, and then call back into this ioctl.
+ * The throttle event will wait until all listeners
+ * call back into this ioctl, or a timeout occurs.
+ */
+#define AB_SM_THROTTLE_NOCOMPUTE_NOTIFY	_IO(AB_SM_IOCTL_MAGIC, 25)
+
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0
 #define AB_CHIP_ID_B0		1

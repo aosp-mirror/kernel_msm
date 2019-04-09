@@ -508,6 +508,31 @@ struct ab_state_context {
 
 	struct ab_thermal *thermal;
 
+	/* Fired when a throttle to nocompute event
+	 * is about to occur
+	 */
+	struct completion throttle_nocompute_event;
+	/* Fired when all listeners are ready to continue
+	 * with the throttle to nocompute event
+	 */
+	struct completion throttle_nocompute_ready;
+	/* Number of listeners who must be ready for the
+	 * nocompute event to continue
+	 * Guarded by throttle_ready_lock
+	 */
+	u32 req_thermal_listeners;
+	/* Current number of listeners waiting/ready for
+	 * a nocompute event.
+	 * Guarded by throttle_ready_lock
+	 */
+	u32 curr_thermal_listeners;
+	struct mutex throttle_ready_lock;
+	/* True when we are waiting for listeners to be
+	 * ready for nocompute event
+	 * Guarded by throttle_ready_lock
+	 */
+	bool throttle_nocomp_waiting;
+
 	bool force_el2;
 	bool el2_mode; /* Guarded by state_transitioning_lock */
 
