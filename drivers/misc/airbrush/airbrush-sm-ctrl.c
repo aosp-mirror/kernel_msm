@@ -72,45 +72,17 @@ static struct ab_sm_pmu_ops pmu_ops_stub = {
 
 static void ab_clk_init_stub(void *ctx)   { return; }
 
-static int ipu_pll_enable_stub(void *ctx)   { return -ENODEV; }
-static int ipu_pll_disable_stub(void *ctx)   { return -ENODEV; }
 static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return 0;
 }
-static int64_t ipu_set_rate_opt_stub(void *ctx, u64 old_rate, u64 new_rate)
-{
-	return 0;
-}
 
-static int tpu_pll_enable_stub(void *ctx)   { return -ENODEV; }
-static int tpu_pll_disable_stub(void *ctx)   { return -ENODEV; }
 static int64_t tpu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return 0;
 }
-static int64_t tpu_set_rate_opt_stub(void *ctx, u64 old_rate, u64 new_rate)
-{
-	return 0;
-}
-
-static int64_t tpu_set_rate_direct_stub(void *ctx, u64 new_rate)
-{
-	return 0;
-}
-
 
 static int64_t aon_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
-{
-	return 0;
-}
-
-static int64_t aon_set_rate_direct_stub(void *ctx, u64 new_rate)
-{
-	return 0;
-}
-
-static int64_t aon_set_rate_opt_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return 0;
 }
@@ -120,20 +92,9 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 
 	.init = &ab_clk_init_stub,
 
-	.ipu_pll_enable = &ipu_pll_enable_stub,
-	.ipu_pll_disable = &ipu_pll_disable_stub,
 	.ipu_set_rate = &ipu_set_rate_stub,
-	.ipu_set_rate_opt = &ipu_set_rate_opt_stub,
-
-	.tpu_pll_enable = &tpu_pll_enable_stub,
-	.tpu_pll_disable = &tpu_pll_disable_stub,
 	.tpu_set_rate = &tpu_set_rate_stub,
-	.tpu_set_rate_opt = &tpu_set_rate_opt_stub,
-	.tpu_set_rate_direct = &tpu_set_rate_direct_stub,
-
 	.aon_set_rate = &aon_set_rate_stub,
-	.aon_set_rate_direct = &aon_set_rate_direct_stub,
-	.aon_set_rate_opt = &aon_set_rate_opt_stub,
 };
 
 static int ddr_setup_stub(void *ctx, void *ab_state_ctx) { return -ENODEV; }
@@ -500,7 +461,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			break;
 		}
 
-		ret_freq = clk->ipu_set_rate_opt(clk->ctx, old_freq, new_freq);
+		ret_freq = clk->ipu_set_rate(clk->ctx, old_freq, new_freq);
 		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set ipu freq to %lld but got %lld",
 					new_freq, ret_freq);
@@ -517,7 +478,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			break;
 		}
 
-		ret_freq = clk->tpu_set_rate_opt(clk->ctx, old_freq, new_freq);
+		ret_freq = clk->tpu_set_rate(clk->ctx, old_freq, new_freq);
 		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set tpu freq to %lld but got %lld",
 					new_freq, ret_freq);
@@ -538,7 +499,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			break;
 		}
 
-		ret_freq = clk->aon_set_rate_opt(clk->ctx, old_freq, new_freq);
+		ret_freq = clk->aon_set_rate(clk->ctx, old_freq, new_freq);
 		if (ret_freq != new_freq) {
 			dev_err(sc->dev, "Tried to set aon freq to %lld but got %lld",
 					new_freq, ret_freq);
@@ -2254,7 +2215,9 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	case AB_SM_SET_TPU_FREQUENCY:
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		ret = sc->clk_ops->tpu_set_rate_direct(sc->clk_ops->ctx, arg);
+		ret = sc->clk_ops->tpu_set_rate(sc->clk_ops->ctx,
+			sc->blocks[BLK_TPU].current_state->clk_frequency,
+			arg);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
 		if (ret == arg)
@@ -2270,7 +2233,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	case AB_SM_SET_AON_FREQUENCY:
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		ret = sc->clk_ops->aon_set_rate_opt(sc->clk_ops->ctx,
+		ret = sc->clk_ops->aon_set_rate(sc->clk_ops->ctx,
 			sc->blocks[BLK_AON].current_state->clk_frequency,
 			arg);
 		mutex_unlock(&sc->op_lock);
