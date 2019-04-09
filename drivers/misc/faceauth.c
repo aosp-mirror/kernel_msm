@@ -1307,6 +1307,16 @@ static int faceauth_pcie_blocking_listener(struct notifier_block *nb,
 		return NOTIFY_OK;
 	}
 
+	if (action & ABC_PCIE_LINK_ERROR) {
+		/*
+		 * Take a reader lock and update the flag as soon as possible.
+		 */
+		down_read(&dev_data->rwsem);
+		dev_data->can_transfer = false;
+		up_read(&dev_data->rwsem);
+		return NOTIFY_OK;
+	}
+
 	if (action & ABC_PCIE_LINK_PRE_DISABLE) {
 		/* Use the writer lock to prevent any incoming reader */
 		down_write(&dev_data->rwsem);
