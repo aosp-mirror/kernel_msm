@@ -618,7 +618,7 @@ void ipu_adapter_ipu_pre_rate_change(
 	if (ipu_clock_rate_is_active(clk_data->new_rate))
 		return;
 
-	ipu_bus_notify_suspend(bus);
+	ipu_bus_notify_suspend_jqs(bus);
 	dev_data->ipu_clock_rate_hz = clk_data->new_rate;
 }
 
@@ -655,7 +655,7 @@ void ipu_adapter_ipu_abort_rate_change(
 	/* Treat this as a clock going down
 	 */
 	dev_data->ipu_clock_rate_hz = clk_data->old_rate;
-	ipu_bus_notify_suspend(bus);
+	ipu_bus_notify_suspend_jqs(bus);
 }
 
 void ipu_adapter_dram_pre_rate_change(
@@ -669,21 +669,20 @@ void ipu_adapter_dram_pre_rate_change(
 			"%s: DRAM rate will change from %lu Hz to %lu Hz",
 			__func__, clk_data->old_rate, clk_data->new_rate);
 
-	/* If the new rate is active the post rate change will handle
-	 * any adapter changes or bus notifications
-	 */
-	if (clk_data->new_rate)
-		return;
-
 	if (pre_data_loss) {
 		dev_dbg(dev_data->dev, "%s: DRAM down, no retention", __func__);
 		ipu_bus_notify_shutdown(bus);
-	} else {
-		dev_dbg(dev_data->dev, "%s: DRAM down, self refresh", __func__);
-		ipu_bus_notify_suspend(bus);
-	}
+		atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
+	} else if (clk_data->new_rate != clk_data->old_rate) {
+		if (!clk_data->new_rate) {
+			dev_dbg(dev_data->dev, "%s: DRAM down, self refresh",
+					__func__);
+			ipu_bus_notify_suspend_jqs(bus);
+		}
 
-	atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
+		ipu_bus_notify_suspend_dram(bus);
+		atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
+	}
 }
 
 void ipu_adapter_dram_post_rate_change(
@@ -838,7 +837,8 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 	if ((action & ABC_PCIE_LINK_PRE_DISABLE) &&
 			ipu_adapter_link_is_ready(dev_data)) {
 		dev_dbg(dev_data->dev, "%s: PCIe link going down\n", __func__);
-		ipu_bus_notify_suspend(bus);
+		ipu_bus_notify_suspend_jqs(bus);
+		ipu_bus_notify_suspend_dram(bus);
 		atomic_andnot(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
 		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
 		ipu_adapter_ab_mfd_suspend_shared_memory(dev_data);

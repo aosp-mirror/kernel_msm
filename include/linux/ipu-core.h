@@ -51,6 +51,7 @@ struct paintbox_device_ops {
 	void (*firmware_down)(struct device *dev);
 	void (*dram_up)(struct device *dev);
 	void (*dram_down)(struct device *dev);
+	void (*dram_suspended)(struct device *dev);
 };
 
 struct ipu_shared_buffer {

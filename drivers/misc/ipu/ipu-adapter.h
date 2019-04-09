@@ -76,7 +76,8 @@ void ipu_bus_notify_fatal_error(struct paintbox_bus *bus);
  * notifier.
  */
 void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz);
-void ipu_bus_notify_suspend(struct paintbox_bus *bus);
+void ipu_bus_notify_suspend_jqs(struct paintbox_bus *bus);
+void ipu_bus_notify_suspend_dram(struct paintbox_bus *bus);
 void ipu_bus_notify_shutdown(struct paintbox_bus *bus);
 
 int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,

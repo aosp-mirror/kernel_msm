@@ -385,7 +385,7 @@ void ipu_core_notify_firmware_suspended(struct paintbox_bus *bus)
 		struct paintbox_device *pb_dev = bus->devices[i];
 
 		if (!pb_dev || !pb_dev->dev_ops ||
-				!pb_dev->dev_ops->firmware_up)
+				!pb_dev->dev_ops->firmware_suspended)
 			continue;
 
 		pb_dev->dev_ops->firmware_suspended(&pb_dev->dev);
@@ -434,6 +434,21 @@ void ipu_core_notify_dram_down(struct paintbox_bus *bus)
 			continue;
 
 		pb_dev->dev_ops->dram_down(&pb_dev->dev);
+	}
+}
+
+void ipu_core_notify_dram_suspended(struct paintbox_bus *bus)
+{
+	unsigned int i;
+
+	for (i = 0; i < PAINTBOX_DEVICE_TYPE_COUNT; i++) {
+		struct paintbox_device *pb_dev = bus->devices[i];
+
+		if (!pb_dev || !pb_dev->dev_ops ||
+					!pb_dev->dev_ops->dram_suspended)
+			continue;
+
+		pb_dev->dev_ops->dram_suspended(&pb_dev->dev);
 	}
 }
 
@@ -538,13 +553,24 @@ void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz)
 	mutex_unlock(&bus->jqs.lock);
 }
 
-void ipu_bus_notify_suspend(struct paintbox_bus *bus)
+void ipu_bus_notify_suspend_jqs(struct paintbox_bus *bus)
 {
 	dev_dbg(bus->parent_dev, "%s: Suspend the JQS firmware\n", __func__);
 
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_suspend_firmware(bus);
+
+	mutex_unlock(&bus->jqs.lock);
+}
+
+void ipu_bus_notify_suspend_dram(struct paintbox_bus *bus)
+{
+	dev_dbg(bus->parent_dev, "%s: Suspend the DRAM\n", __func__);
+
+	mutex_lock(&bus->jqs.lock);
+
+	ipu_core_notify_dram_suspended(bus);
 
 	mutex_unlock(&bus->jqs.lock);
 }
