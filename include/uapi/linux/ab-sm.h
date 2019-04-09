@@ -60,6 +60,7 @@
 #define AB_SM_EXIT_EL2		_IO(AB_SM_IOCTL_MAGIC, 4)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
@@ -67,6 +68,7 @@
 #define AB_SM_SET_IPU_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 5, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
@@ -74,6 +76,7 @@
 #define AB_SM_SET_TPU_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 6, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
@@ -81,6 +84,7 @@
 #define AB_SM_SET_DDR_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 7, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
@@ -88,6 +92,7 @@
 #define AB_SM_SET_PCIE_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 8, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new frequency value to set
  * On success will return 0, otherwise will return error < 0.
@@ -95,6 +100,7 @@
 #define AB_SM_SET_AON_FREQUENCY	_IOW(AB_SM_IOCTL_MAGIC, 9, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new low power state value to set
  * On success will return 0, otherwise will return error < 0.
@@ -102,6 +108,7 @@
 #define AB_SM_SET_IPU_STATE	_IOW(AB_SM_IOCTL_MAGIC, 10, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new low power state value to set
  * On success will return 0, otherwise will return error < 0.
@@ -109,6 +116,7 @@
 #define AB_SM_SET_TPU_STATE	_IOW(AB_SM_IOCTL_MAGIC, 11, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new low power state value to set
  * On success will return 0, otherwise will return error < 0.
@@ -116,6 +124,7 @@
 #define AB_SM_SET_DDR_STATE	_IOW(AB_SM_IOCTL_MAGIC, 12, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new low power state value to set
  * On success will return 0, otherwise will return error < 0.
@@ -123,6 +132,7 @@
 #define AB_SM_SET_PCIE_STATE	_IOW(AB_SM_IOCTL_MAGIC, 13, int)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter struct new_block_props *:
  *	Pass new ipu state properties
  * On success will return 0, otherwise will return error < 0.
@@ -131,6 +141,7 @@
 		struct new_block_props *)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter struct new_block_props *:
  *	Pass new tpu state properties
  * On success will return 0, otherwise will return error < 0.
@@ -139,6 +150,7 @@
 		struct new_block_props *)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter struct new_block_props *:
  *	Pass new dram state properties
  * On success will return 0, otherwise will return error < 0.
@@ -147,6 +159,7 @@
 		struct new_block_props *)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter struct new_block_props *:
  *	Pass new mif state properties
  * On success will return 0, otherwise will return error < 0.
@@ -155,6 +168,7 @@
 		struct new_block_props *)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter struct new_block_props *:
  *	Pass new fsys state properties
  * On success will return 0, otherwise will return error < 0.
@@ -163,6 +177,7 @@
 		struct new_block_props *)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter struct new_block_props *:
  *	Pass new aon state properties
  * On success will return 0, otherwise will return error < 0.
@@ -206,6 +221,7 @@
 #define AB_SM_MAPPED_GET_STATE		_IOR(AB_SM_IOCTL_MAGIC, 23, int *)
 
 /*
+ * WARNING: Debug only, will be removed in production
  * Parameter int:
  *	Pass new L1ss entry delay to set
  * On success will return 0, otherwise will return error < 0.
@@ -220,6 +236,30 @@
  * call back into this ioctl, or a timeout occurs.
  */
 #define AB_SM_THROTTLE_NOCOMPUTE_NOTIFY	_IO(AB_SM_IOCTL_MAGIC, 25)
+
+/*
+ * WARNING: Debug only, will be removed in production
+ * Parameter int:
+ *  Pass new throttle level to set
+ *  THROTTLE_NONE	= 0
+ *  THROTTLE_TO_MID	= 1
+ *  THROTTLE_TO_LOW	= 2
+ *  THROTTLE_TO_MIN = 3
+ *  THROTTLE_NOCOMPUTE = 4
+ *
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_SET_THROTTLE_LEVEL		_IOW(AB_SM_IOCTL_MAGIC, 26, int)
+
+/*
+ * WARNING: Debug only, will be removed in production
+ * Parameter int:
+ *  Pass 0 to disable all throttling
+ *  Pass 1 to enable all throttling
+ *
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_ENABLE_THERMAL			_IOW(AB_SM_IOCTL_MAGIC, 27, int)
 
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0

@@ -2223,6 +2223,9 @@ static void __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
 	}
 }
 
+static void ab_sm_thermal_throttle_state_updated(
+		enum throttle_state throttle_state_id, void *op_data);
+
 #ifdef CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS
 static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		unsigned long arg)
@@ -2416,6 +2419,19 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		ret = ab_update_block_prop_table(&props, BLK_AON, sc);
 		dev_warn(sc->dev,
 			"AON property table has been changed! Airbrush may behave unexpectedly.\n");
+		break;
+
+	case AB_SM_SET_THROTTLE_LEVEL:
+		ab_sm_thermal_throttle_state_updated(arg, sc);
+		ret = 0;
+		break;
+
+	case AB_SM_ENABLE_THERMAL:
+		if (arg)
+			ab_thermal_enable(sc->thermal);
+		else
+			ab_thermal_disable(sc->thermal);
+		ret = 0;
 		break;
 
 	default:
