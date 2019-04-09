@@ -157,6 +157,7 @@ struct led_laser_ctrl_t {
 		int32_t cap_bias[PHASENUM];
 		int32_t cap_raw[PHASENUM];
 		int32_t cap_corrected[PHASENUM];
+		uint32_t max_supported_temp[PHASENUM];
 		bool is_crack_detected[LASER_TYPE_MAX];
 		uint16_t sample_count;
 	} cap_sense;
@@ -262,11 +263,25 @@ static void itoc_temperature_correction(struct led_laser_ctrl_t *ctrl)
 {
 	int i;
 	int32_t temp_mC = ctrl->cap_sense.proxavg[PHASE3] * 1000 / 57;
+	int32_t max_temp = min(ctrl->cap_sense.max_supported_temp[PHASE1],
+		ctrl->cap_sense.max_supported_temp[PHASE2]) & 0x7FFFFFFF;
+	uint32_t temp_coe;
 
-	for (i = PHASE1; i <= PHASE2; i++)
+	if (temp_mC >= max_temp || temp_mC < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"temperature %d over threshold (0~%d), kill laser",
+			temp_mC, max_temp);
+		ctrl->cap_sense.cap_corrected[PHASE1] = 0;
+		ctrl->cap_sense.cap_corrected[PHASE2] = 0;
+		return;
+	}
+
+	for (i = PHASE1; i <= PHASE2; i++) {
+		temp_coe = temp_mC * ctrl->cap_sense.cap_slope[i];
 		ctrl->cap_sense.cap_corrected[i] =
 			ctrl->cap_sense.cap_raw[i] -
-			(temp_mC * ctrl->cap_sense.cap_slope[i] / 1000);
+			(temp_coe / 1000);
+	}
 }
 
 static int sx9320_write_data(
@@ -1716,6 +1731,14 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 		ctrl->cap_sense.cap_slope[PHASE1] = temp_value;
 		dev_info(dev, "updated dot slope: %d",
 			ctrl->cap_sense.cap_slope[PHASE1]);
+		if (ctrl->cap_sense.cap_slope[PHASE1] > 0) {
+			ctrl->cap_sense.max_supported_temp[PHASE1] =
+				((0xFFFFFFFF) /
+				ctrl->cap_sense.cap_slope[PHASE1]);
+			dev_info(dev,
+				"max supported temperature for dot: %d mC",
+				ctrl->cap_sense.max_supported_temp[PHASE1]);
+		}
 		break;
 	case 'd':
 		rc = kstrtoint((buf+1), 0, &temp_value);
@@ -1732,6 +1755,14 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 		ctrl->cap_sense.cap_slope[PHASE2] = temp_value;
 		dev_info(dev, "updated flood slope: %d",
 			ctrl->cap_sense.cap_slope[PHASE2]);
+		if (ctrl->cap_sense.cap_slope[PHASE2] > 0) {
+			ctrl->cap_sense.max_supported_temp[PHASE2] =
+				((0xFFFFFFFF) /
+				ctrl->cap_sense.cap_slope[PHASE2]);
+			dev_info(dev,
+				"max supported temperature for flood: %d mC",
+				ctrl->cap_sense.max_supported_temp[PHASE2]);
+		}
 		break;
 	default:
 		dev_err(dev, "unsupported operation");
@@ -1887,6 +1918,7 @@ static int32_t lm36011_driver_platform_probe(
 		ctrl->cap_sense.cap_slope[i] = 0;
 		ctrl->cap_sense.cap_raw[i] = 0;
 		ctrl->cap_sense.cap_corrected[i] = 0;
+		ctrl->cap_sense.max_supported_temp[i] = 0;
 	}
 
 	ctrl->io_master_info.cci_client = devm_kzalloc(&pdev->dev,
