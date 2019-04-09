@@ -866,7 +866,8 @@ static void psy_changed_handler(struct work_struct *work)
 	/* Dont proceed as pmi might still be evaluating connections */
 	if (!pe_start && !pd->pd_capable &&
 			  psy_type == POWER_SUPPLY_TYPE_UNKNOWN &&
-			  typec_mode != POWER_SUPPLY_TYPEC_NONE) {
+			  typec_mode != POWER_SUPPLY_TYPEC_NONE &&
+			  typec_mode != POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER) {
 		logbuffer_log(pd->log,
 			      "Skipping update as PE_START not set yet");
 		goto unlock;
