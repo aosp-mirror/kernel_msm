@@ -3459,6 +3459,9 @@ static int smblib_get_prop_ufp_mode(struct smb_charger *chg)
 		return POWER_SUPPLY_TYPEC_SOURCE_DEFAULT;
 	case SNK_RP_1P5_BIT:
 		return POWER_SUPPLY_TYPEC_SOURCE_MEDIUM;
+	case SNK_RP_1P5_DAM_BIT:
+		chg->dam_detected = true;
+		return POWER_SUPPLY_TYPEC_SOURCE_DEFAULT;
 	case SNK_RP_3P0_BIT:
 		return POWER_SUPPLY_TYPEC_SOURCE_HIGH;
 	case SNK_RP_SHORT_BIT:
@@ -3904,6 +3907,14 @@ static int smblib_handle_usb_current(struct smb_charger *chg,
 {
 	int rc = 0, rp_ua, typec_mode;
 	union power_supply_propval val = {0, };
+
+	/* If DAM cable is detected limit current to 500mA */
+	if (chg->dam_detected) {
+		rc = set_sdp_current(chg, USBIN_500MA);
+		if (rc < 0)
+			smblib_err(chg,"Couldn't set SDP ICL rc=%d\n", rc);
+		return rc;
+	}
 
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
 		if (usb_current == -ETIMEDOUT) {
@@ -5565,6 +5576,7 @@ static void typec_src_removal(struct smb_charger *chg)
 		smblib_notify_device_mode(chg, false);
 
 	chg->typec_legacy = false;
+	chg->dam_detected = false;
 }
 
 static void typec_mode_unattached(struct smb_charger *chg)
