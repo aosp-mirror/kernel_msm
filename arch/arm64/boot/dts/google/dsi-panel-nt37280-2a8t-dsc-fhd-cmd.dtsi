@@ -150,7 +150,7 @@
 
 				qcom,mdss-dsi-lp1-command = [
 					15 01 00 00 00 00 02 FF 10
-					05 01 00 00 00 00 03 51 00 00
+					39 01 00 00 00 00 03 51 00 00
 					05 01 00 00 32 00 01 39	   /* AOD on */
 				];
 				qcom,mdss-dsi-nolp-command = [
@@ -287,7 +287,7 @@
 
 				qcom,mdss-dsi-lp1-command = [
 					15 01 00 00 00 00 02 FF 10
-					05 01 00 00 00 00 03 51 00 00
+					39 01 00 00 00 00 03 51 00 00
 					05 01 00 00 32 00 01 39	   /* AOD on */
 				];
 				qcom,mdss-dsi-nolp-command = [

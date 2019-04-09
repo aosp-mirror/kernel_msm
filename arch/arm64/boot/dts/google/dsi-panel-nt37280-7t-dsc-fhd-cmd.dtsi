@@ -130,14 +130,14 @@
 				qcom,mdss-dsi-timing-switch-command = [
 					15 01 00 00 00 00 02 FF 10
 					15 00 00 00 00 00 02 BB 10 /* 60hz */
-					15 01 00 00 00 00 01 2C 00
 					15 00 00 00 00 00 02 26 01
+					05 01 00 00 00 00 01 2C
 				];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-lp1-command = [
 					15 01 00 00 00 00 02 FF 10
-					05 01 00 00 00 00 03 51 00 00
+					39 01 00 00 00 00 03 51 00 00
 					05 01 00 00 32 00 01 39	   /* AOD on */
 				];
 				qcom,mdss-dsi-nolp-command = [
@@ -240,14 +240,14 @@
 				qcom,mdss-dsi-timing-switch-command = [
 					15 01 00 00 00 00 02 FF 10
 					15 00 00 00 00 00 02 BB 90 /* 90hz */
-					15 01 00 00 00 00 01 2C 00
 					15 00 00 00 00 00 02 26 02
+					05 01 00 00 00 00 01 2C
 				];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-lp1-command = [
 					15 01 00 00 00 00 02 FF 10
-					05 01 00 00 00 00 03 51 00 00
+					39 01 00 00 00 00 03 51 00 00
 					05 01 00 00 32 00 01 39	   /* AOD on */
 				];
 				qcom,mdss-dsi-nolp-command = [
