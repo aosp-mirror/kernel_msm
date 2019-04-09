@@ -861,6 +861,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	hypx_data->citadel_token_size = 0;
 	if (data->citadel_token_size &&
 	    (data->operation == COMMAND_ENROLL_COMPLETE ||
+	     data->operation == COMMAND_VALIDATE ||
 	     data->operation == COMMAND_SET_FEATURE ||
 	     data->operation == COMMAND_CLR_FEATURE ||
 	     data->operation == COMMAND_RESET_LOCKOUT)) {
