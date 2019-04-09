@@ -2003,6 +2003,9 @@ static void max1720x_init_work(struct work_struct *work)
 	}
 
 	(void)max1720x_init_history(chip);
+
+	if (chip->psy)
+		power_supply_changed(chip->psy);
 }
 
 static int max1720x_probe(struct i2c_client *client,
