@@ -34,9 +34,6 @@
  *     called before PCIe will be unmapped from EL1 and entering EL2.
  *     This indicates that PCIe is still available, but will become
  *     unavailable.
- *     As a temporary measure, this may also be called together with
- *     PCIE_LINK_ERROR during the driver conversion.
- *     TODO(b/124536826): separate PCIE_LINK_ERROR from this.
  *
  * PCIE_LINK_ENTER_EL2 - called before PCIe will be unmapped from EL1
  *     and entering EL2.
@@ -49,10 +46,8 @@
  *     Upon receiving this event, subscribers should reset their
  *     software states as needed, but should not access registers over
  *     PCIe.
- *     Examples are PCIe link down or regulator fatal errors.
- *     As a temporary measure, this is called together with
- *     PCIE_LINK_PRE_DISABLE during the driver conversion.
- *     TODO(b/124536826): separate this from PCIE_LINK_PRE_DISABLE.
+ *     Examples of situations when this will be broadcast are PCIe link
+ *     down or regulator fatal errors.
  */
 #define ABC_PCIE_LINK_POST_ENABLE	BIT(0)
 #define ABC_PCIE_LINK_PRE_DISABLE	BIT(1)

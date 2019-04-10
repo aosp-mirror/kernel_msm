@@ -2000,13 +2000,8 @@ static int abc_pcie_linkdown_handler(void *ctx)
 
 	abc_pcie_disable_irqs(abc_dev->pdev);
 
-	/*
-	 * TODO(b/124536826): drop ABC_PCIE_LINK_PRE_DISABLE once all drivers
-	 * catch up.
-	 */
 	dev_warn(dev, "Broadcast link error notification\n");
-	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE |
-				      ABC_PCIE_LINK_ERROR);
+	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_ERROR);
 	return 0;
 }
 
