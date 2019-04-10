@@ -298,8 +298,12 @@ Optional properties:
     measured VBST level.
 
   - cirrus,fw-id-remap : Alternative firmware build ID (silicon revision B1
-    only). If this value is omitted, an ID of 0x1400C3 (standard issue firmware)
-    is assumed.
+    only), equal to one of the following.
+
+    0x1400C3: cs40l25a.wmfw
+    0x1400CB: cs40l25a_clab.wmfw
+
+    If this value is omitted, an ID of 0x1400C3 is assumed.
 
   - cirrus,auto-recovery : Boolean for enabling auto-recovery mode, wherein the
     driver checks for inadvertent device reset prior to administering I2C-
