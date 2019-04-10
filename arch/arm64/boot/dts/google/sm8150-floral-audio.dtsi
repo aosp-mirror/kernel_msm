@@ -203,6 +203,8 @@
 	};
 
 	qcom,msm-dai-tdm-quat-rx {
+		qcom,msm-cpudai-tdm-group-num-ports = <1>;
+		qcom,msm-cpudai-tdm-group-port-id = <36912>;
 		qcom,msm-cpudai-tdm-clk-rate = <12288000>;
 		qcom,msm-cpudai-tdm-sync-mode = <0>;
 		qcom,msm-cpudai-tdm-invert-sync = <0>;
