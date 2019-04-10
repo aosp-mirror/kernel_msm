@@ -1223,6 +1223,16 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		chg->die_health = val->intval;
 		power_supply_changed(chg->batt_psy);
 		break;
+	case POWER_SUPPLY_PROP_CALIBRATE:
+		pr_err("batt power supply prop set voltage mode.\n");
+		rc = smblib_masked_write(chg, FG_UPDATE_CFG_2_SEL_REG,
+				SOC_LT_CHG_RECHARGE_THRESH_SEL_BIT |
+				VBT_LT_CHG_RECHARGE_THRESH_SEL_BIT,
+				SOC_LT_CHG_RECHARGE_THRESH_SEL_BIT);
+		if (rc < 0)
+			dev_err(chg->dev, "Couldn't configure FG_UPDATE_CFG2_SEL_REG rc=%d\n",
+				rc);
+		break;
 	default:
 		rc = -EINVAL;
 	}
@@ -1245,6 +1255,7 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
+	case POWER_SUPPLY_PROP_CALIBRATE:
 		return 1;
 	default:
 		break;

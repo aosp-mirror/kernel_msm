@@ -160,6 +160,8 @@
 #define DEFAULT_HOT_FV			4305
 #define DEFAULT_HOT_CC			100
 #define DEFAULT_TWM_SOC_VALUE	14
+#define DEFAULT_RECHARGE_VOLT_MV	4270
+#define DEFAULT_RECHARGE_COUNT	10
 
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
@@ -176,6 +178,9 @@ static void fg_encode_current(struct fg_sram_param *sp,
 static void fg_encode_default(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val, u8 *buf);
 static int __fg_restart(struct fg_chip *chip);
+static int fg_set_recharge_voltage(struct fg_chip *chip, int voltage_mv);
+static int fg_adjust_recharge_voltage(struct fg_chip *chip);
+
 
 static struct fg_irq_info fg_irqs[FG_IRQ_MAX];
 
@@ -900,6 +905,46 @@ static int fg_get_usb_online(struct fg_chip *chip, bool *usb_online)
 	return ret;
 }
 
+static void fg_recharge_mode_detection(struct fg_chip *chip)
+{
+	int rc;
+	int ibat;
+	static int auto_recharger_counter;
+	union power_supply_propval pval = {0, };
+
+	if (chip->charge_status == POWER_SUPPLY_STATUS_FULL &&
+			auto_recharger_counter < DEFAULT_RECHARGE_COUNT) {
+		fg_get_battery_current(chip, &ibat);
+		if (ibat > 0)
+			auto_recharger_counter = DEFAULT_RECHARGE_COUNT + 1;
+		else
+			auto_recharger_counter++;
+
+		if (auto_recharger_counter == DEFAULT_RECHARGE_COUNT &&
+			ibat < 1) {
+			chip->dt.auto_recharge_soc = 0;
+			chip->dt.recharge_volt_thr_mv =
+						DEFAULT_RECHARGE_VOLT_MV;
+
+			pval.intval = 0;
+			rc = power_supply_set_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_CALIBRATE,	&pval);
+
+			rc = fg_set_recharge_voltage(chip,
+				chip->dt.recharge_volt_thr_mv);
+			if (rc < 0) {
+				pr_err("Error in setting recharge_voltage, rc=%d\n",
+					rc);
+			}
+
+			rc = fg_adjust_recharge_voltage(chip);
+			if (rc < 0)
+				pr_err("Error in adjusting recharge_voltage, rc=%d\n",
+					rc);
+		}
+	}
+}
+
 #define FULL_CAPACITY	100
 #define FULL_SOC_RAW	255
 static int fg_get_msoc(struct fg_chip *chip, int *msoc)
@@ -1054,6 +1099,8 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 		*val = EMPTY_SOC;
 		return 0;
 	}
+
+	fg_recharge_mode_detection(chip);
 
 	if (chip->charge_full) {
 		*val = FULL_CAPACITY;
@@ -5354,7 +5401,6 @@ static void fg_get_ibatt_sensing_cfg(long phase_id, u32 *temp)
 
 #define DEFAULT_CUTOFF_VOLT_MV		3200
 #define DEFAULT_EMPTY_VOLT_MV		2850
-#define DEFAULT_RECHARGE_VOLT_MV	4250
 #define DEFAULT_CHG_TERM_CURR_MA	100
 #define DEFAULT_CHG_TERM_BASE_CURR_MA	75
 #define DEFAULT_SYS_TERM_CURR_MA	-125
