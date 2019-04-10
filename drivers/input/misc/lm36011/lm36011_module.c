@@ -354,12 +354,12 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 		dot_thres = DUMMY_CRACK_THRES;
 	}
 	ctrl->cap_sense.is_crack_detected[LASER_FLOOD] =
-		((ctrl->cap_sense.cap_bias[PHASE2] -
+		(abs(ctrl->cap_sense.cap_bias[PHASE2] -
 		ctrl->cap_sense.cap_corrected[PHASE2]) > flood_thres) ?
 		true : false;
 
 	ctrl->cap_sense.is_crack_detected[LASER_DOT] =
-		((ctrl->cap_sense.cap_bias[PHASE1] -
+		(abs(ctrl->cap_sense.cap_bias[PHASE1] -
 		ctrl->cap_sense.cap_corrected[PHASE1]) > dot_thres) ?
 		true : false;
 
