@@ -5027,7 +5027,7 @@ static enum hrtimer_restart cs40l2x_vibe_timer(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
-static void cs40l2x_create_timed_output(struct cs40l2x_private *cs40l2x)
+static int cs40l2x_create_timed_output(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
 	struct timed_output_dev *timed_dev = &cs40l2x->timed_dev;
@@ -5042,7 +5042,7 @@ static void cs40l2x_create_timed_output(struct cs40l2x_private *cs40l2x)
 	if (ret) {
 		dev_err(dev, "Failed to register timed output device: %d\n",
 			ret);
-		return;
+		return ret;
 	}
 
 	hrtimer_init(vibe_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -5052,8 +5052,10 @@ static void cs40l2x_create_timed_output(struct cs40l2x_private *cs40l2x)
 			&cs40l2x_dev_attr_group);
 	if (ret) {
 		dev_err(dev, "Failed to create sysfs group: %d\n", ret);
-		return;
+		return ret;
 	}
+
+	return 0;
 }
 #else
 /* vibration callback for LED device */
@@ -5072,7 +5074,7 @@ static void cs40l2x_vibe_brightness_set(struct led_classdev *led_cdev,
 	}
 }
 
-static void cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
+static int cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
 {
 	int ret;
 	struct led_classdev *led_dev = &cs40l2x->led_dev;
@@ -5087,65 +5089,18 @@ static void cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
 	ret = led_classdev_register(dev, led_dev);
 	if (ret) {
 		dev_err(dev, "Failed to register LED device: %d\n", ret);
-		return;
+		return ret;
 	}
 
 	ret = sysfs_create_group(&cs40l2x->dev->kobj, &cs40l2x_dev_attr_group);
 	if (ret) {
 		dev_err(dev, "Failed to create sysfs group: %d\n", ret);
-		return;
+		return ret;
 	}
+
+	return 0;
 }
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
-
-static void cs40l2x_vibe_init(struct cs40l2x_private *cs40l2x)
-{
-	struct hrtimer *pbq_timer = &cs40l2x->pbq_timer;
-	struct hrtimer *asp_timer = &cs40l2x->asp_timer;
-	int ret;
-
-#ifdef CONFIG_ANDROID_TIMED_OUTPUT
-	cs40l2x_create_timed_output(cs40l2x);
-#else
-	cs40l2x_create_led(cs40l2x);
-#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
-
-	cs40l2x->vibe_workqueue =
-		alloc_ordered_workqueue("vibe_workqueue", WQ_HIGHPRI);
-	if (!cs40l2x->vibe_workqueue) {
-		dev_err(cs40l2x->dev, "Failed to allocate workqueue\n");
-		return;
-	}
-
-	INIT_WORK(&cs40l2x->vibe_start_work, cs40l2x_vibe_start_worker);
-	INIT_WORK(&cs40l2x->vibe_pbq_work, cs40l2x_vibe_pbq_worker);
-	INIT_WORK(&cs40l2x->vibe_stop_work, cs40l2x_vibe_stop_worker);
-	INIT_WORK(&cs40l2x->vibe_mode_work, cs40l2x_vibe_mode_worker);
-
-	hrtimer_init(pbq_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	pbq_timer->function = cs40l2x_pbq_timer;
-
-	hrtimer_init(asp_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	asp_timer->function = cs40l2x_asp_timer;
-
-	ret = device_init_wakeup(cs40l2x->dev, true);
-	if (ret) {
-		dev_err(cs40l2x->dev, "Failed to initialize wakeup source\n");
-		return;
-	}
-
-	cs40l2x->vibe_init_success = true;
-
-	dev_info(cs40l2x->dev, "Firmware revision %d.%d.%d\n",
-			(cs40l2x->algo_info[0].rev & 0xFF0000) >> 16,
-			(cs40l2x->algo_info[0].rev & 0xFF00) >> 8,
-			cs40l2x->algo_info[0].rev & 0xFF);
-
-	dev_info(cs40l2x->dev,
-			"Max. wavetable size: %d bytes (XM), %d bytes (YM)\n",
-			cs40l2x->wt_limit_xm / 4 * 3,
-			cs40l2x->wt_limit_ym / 4 * 3);
-}
 
 static int cs40l2x_coeff_init(struct cs40l2x_private *cs40l2x)
 {
@@ -6209,21 +6164,40 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 
 	mutex_unlock(&cs40l2x->lock);
 
-	if (num_coeff_files == cs40l2x->fw_desc->num_coeff_files) {
-		ret = cs40l2x_dsp_pre_config(cs40l2x);
-		if (ret)
-			return;
+	if (num_coeff_files != cs40l2x->fw_desc->num_coeff_files)
+		return;
 
-		ret = cs40l2x_dsp_start(cs40l2x);
-		if (ret)
-			return;
+	ret = cs40l2x_dsp_pre_config(cs40l2x);
+	if (ret)
+		return;
 
-		ret = cs40l2x_dsp_post_config(cs40l2x);
-		if (ret)
-			return;
+	ret = cs40l2x_dsp_start(cs40l2x);
+	if (ret)
+		return;
 
-		cs40l2x_vibe_init(cs40l2x);
-	}
+	ret = cs40l2x_dsp_post_config(cs40l2x);
+	if (ret)
+		return;
+
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+	ret = cs40l2x_create_timed_output(cs40l2x);
+#else
+	ret = cs40l2x_create_led(cs40l2x);
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
+	if (ret)
+		return;
+
+	cs40l2x->vibe_init_success = true;
+
+	dev_info(cs40l2x->dev, "Firmware revision %d.%d.%d\n",
+			(cs40l2x->algo_info[0].rev & 0xFF0000) >> 16,
+			(cs40l2x->algo_info[0].rev & 0xFF00) >> 8,
+			cs40l2x->algo_info[0].rev & 0xFF);
+
+	dev_info(cs40l2x->dev,
+			"Max. wavetable size: %d bytes (XM), %d bytes (YM)\n",
+			cs40l2x->wt_limit_xm / 4 * 3,
+			cs40l2x->wt_limit_ym / 4 * 3);
 }
 
 static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
@@ -8028,6 +8002,30 @@ static int cs40l2x_i2c_probe(struct i2c_client *i2c_client,
 
 	mutex_init(&cs40l2x->lock);
 
+	hrtimer_init(&cs40l2x->pbq_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	cs40l2x->pbq_timer.function = cs40l2x_pbq_timer;
+
+	hrtimer_init(&cs40l2x->asp_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	cs40l2x->asp_timer.function = cs40l2x_asp_timer;
+
+	cs40l2x->vibe_workqueue =
+		alloc_ordered_workqueue("vibe_workqueue", WQ_HIGHPRI);
+	if (!cs40l2x->vibe_workqueue) {
+		dev_err(dev, "Failed to allocate workqueue\n");
+		return -ENOMEM;
+	}
+
+	INIT_WORK(&cs40l2x->vibe_start_work, cs40l2x_vibe_start_worker);
+	INIT_WORK(&cs40l2x->vibe_pbq_work, cs40l2x_vibe_pbq_worker);
+	INIT_WORK(&cs40l2x->vibe_stop_work, cs40l2x_vibe_stop_worker);
+	INIT_WORK(&cs40l2x->vibe_mode_work, cs40l2x_vibe_mode_worker);
+
+	ret = device_init_wakeup(cs40l2x->dev, true);
+	if (ret) {
+		dev_err(dev, "Failed to initialize wakeup source\n");
+		return ret;
+	}
+
 	INIT_LIST_HEAD(&cs40l2x->coeff_desc_head);
 
 	cs40l2x->regmap = devm_regmap_init_i2c(i2c_client, &cs40l2x_regmap);
@@ -8200,19 +8198,21 @@ static int cs40l2x_i2c_remove(struct i2c_client *i2c_client)
 		sysfs_remove_group(&cs40l2x->dev->kobj,
 				&cs40l2x_dev_attr_group);
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
+	}
 
-		hrtimer_cancel(&cs40l2x->pbq_timer);
-		hrtimer_cancel(&cs40l2x->asp_timer);
+	hrtimer_cancel(&cs40l2x->pbq_timer);
+	hrtimer_cancel(&cs40l2x->asp_timer);
 
+	if (cs40l2x->vibe_workqueue) {
 		cancel_work_sync(&cs40l2x->vibe_start_work);
 		cancel_work_sync(&cs40l2x->vibe_pbq_work);
 		cancel_work_sync(&cs40l2x->vibe_stop_work);
 		cancel_work_sync(&cs40l2x->vibe_mode_work);
 
 		destroy_workqueue(cs40l2x->vibe_workqueue);
-
-		device_init_wakeup(cs40l2x->dev, false);
 	}
+
+	device_init_wakeup(cs40l2x->dev, false);
 
 	gpiod_set_value_cansleep(cs40l2x->reset_gpio, 0);
 
