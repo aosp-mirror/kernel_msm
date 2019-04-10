@@ -53,9 +53,8 @@
 			15 01 00 00 00 00 02 51 FF
 			15 01 00 00 00 00 02 63 FF
 			05 01 00 00 32 00 02 11 00
-		];
-		qcom,mdss-dsi-post-panel-on-command = [
-			05 01 00 00 00 00 02 29 00
+			15 01 00 00 00 00 02 51 00
+			05 01 00 00 1E 00 02 29 00
 		];
 		qcom,mdss-dsi-off-command = [
 			05 01 00 00 00 00 02 28 00
@@ -76,7 +75,7 @@
 			29 01 00 00 00 00 05 30 00 00 01 9F
 			29 01 00 00 00 00 05 31 00 1E 01 BD
 			05 01 00 00 00 00 02 12 00
-			];
+		];
 
 		qcom,mdss-dsi-hbm0-on-command = [
 			15 01 00 00 00 00 02 FE 00
@@ -103,7 +102,7 @@
 		qcom,ulps-enabled;
 		qcom,mdss-dsi-panel-timings = [
 			4E 0E 08 00 2E 30 0E 12 0A 03 04 00
-			];
+		];
 		qcom,mdss-dsi-t-clk-post = <0x05>;
 		qcom,mdss-dsi-t-clk-pre = <0x12>;
 		qcom,mdss-dsi-bl-min-level = <1>;
