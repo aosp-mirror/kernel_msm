@@ -53,9 +53,7 @@ static inline int gpsy_get_prop(struct power_supply *psy,
 	union power_supply_propval val;
 	int ret = 0;
 
-	if (!psy)
-		return -EINVAL;
-	ret = power_supply_get_property(psy, psp, &val);
+	ret = (psy) ? power_supply_get_property(psy, psp, &val) : -EINVAL;
 	if (err)
 		*err = ret;
 	if (ret < 0) {
