@@ -2305,8 +2305,10 @@ static int32_t ab_ddr_resume(void *ctx)
 /* Caller must hold ddr_ctx->ddr_lock */
 static int32_t __ab_ddr_suspend(void *ctx)
 {
+	int ret;
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 	struct ab_state_context *sc = ddr_ctx->ab_state_ctx;
+	int prev_ldo2_state = 0;
 
 	if (ddr_ctx->ddr_state == DDR_ON) {
 		ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
@@ -2358,6 +2360,21 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 */
 		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
 
+		/* get the current LDO2 state (VDDQ rail) */
+		prev_ldo2_state = regulator_is_enabled(sc->ldo2);
+
+		/* If LDO2 was not enabled, momentarily enable LDO2 rail for
+		 * configuring MR Registers.
+		 */
+		if (!prev_ldo2_state) {
+			ret = regulator_enable(sc->ldo2);
+			if (ret) {
+				dev_err(sc->dev,
+					"failed to enable LDO2 (%d)\n", ret);
+				goto ddr_suspend_fail;
+			}
+		}
+
 		/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not
 		 * update the MR registers specific to 1866MHz. As the ddr
 		 * initialization happens at 1866MHz, make sure the MR registers
@@ -2366,6 +2383,16 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 * initialization (during suspend -> resume) in BootROM
 		 */
 		ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
+
+		/* Disable LDO2 if the previous LDO2 state was disabled */
+		if (!prev_ldo2_state) {
+			ret = regulator_disable(sc->ldo2);
+			if (ret) {
+				dev_err(sc->dev,
+					"failed to disable LDO2 (%d)\n", ret);
+				goto ddr_suspend_fail;
+			}
+		}
 
 		/* Set MR13 VRCG to default (Normal operation) for power saving
 		 * VRCG (VREF Current Generator) OP[3]
