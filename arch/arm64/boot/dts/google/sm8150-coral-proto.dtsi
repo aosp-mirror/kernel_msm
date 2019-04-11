@@ -14,3 +14,5 @@
 #include "sm8150-coral-audio-proto.dtsi"
 #include "sm8150-coral-proto-display.dtsi"
 #include "sm8150-coral-camera-sensor-proto.dtsi"
+#include "sm8150-floral-nfc-proto.dtsi"
+

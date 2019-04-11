@@ -14,6 +14,7 @@
 #include "sm8150-coral-battery-evt.dtsi"
 #include "sm8150-coral-display-evt.dtsi"
 #include "sm8150-coral-pac193x-evt.dtsi"
+#include "sm8150-floral-nfc-evt.dtsi"
 #include "sm8150-floral-qup-evt.dtsi"
 
 /* For proto and EVT1.0: enable backdrive WR */
