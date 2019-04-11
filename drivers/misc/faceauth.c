@@ -37,6 +37,8 @@
 #include <linux/mfd/abc-pcie-dma.h>
 #include <uapi/linux/abc-pcie-dma.h>
 
+#include <trace/events/systrace.h>
+
 /* This is to be enabled for dog food only */
 #define ENABLE_AIRBRUSH_DEBUG 1
 
@@ -134,6 +136,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	unsigned long stop;
 	bool send_images_data;
 	struct faceauth_data *data = file->private_data;
+	bool need_trace_end = false;
 #if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data;
 #endif
@@ -200,15 +203,22 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		if (err)
 			goto exit;
 
-		err = el2_faceauth_process(data->device, &start_step_data,
-					   data->is_secure_camera);
+		ATRACE_BLOCK("el2_faceauth_process", {
+			err = el2_faceauth_process(
+				data->device, &start_step_data,
+				data->is_secure_camera);
+		});
 		if (err)
 			goto exit;
 
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
-		msleep(M0_POLLING_PAUSE_MS);
+		ATRACE_BLOCK("M0_POLLING_PAUSE_MS", {
+			msleep(M0_POLLING_PAUSE_MS);
+		});
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT_MS);
+		need_trace_end = true;
+		ATRACE_BEGIN("get_faceauth_process_result");
 		for (;;) {
 			err = el2_faceauth_get_process_result(data->device,
 							      &start_step_data);
@@ -243,6 +253,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 						   polling_interval >> 1 :
 						   1;
 		}
+		ATRACE_END();
+		ATRACE_BEGIN("copy_faceauth_result_to_user");
 #if ENABLE_AIRBRUSH_DEBUG
 		enqueue_debug_data(data, start_step_data.result);
 #endif
@@ -251,6 +263,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			err = -EFAULT;
 			goto exit;
 		}
+		ATRACE_END();
+		need_trace_end = false;
 		break;
 	case FACEAUTH_DEV_IOC_CLEANUP:
 		/* In case of EL2 cleanup happens in PIL callback */
@@ -267,8 +281,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			err = -EFAULT;
 			goto exit;
 		}
-		err = el2_faceauth_gather_debug_log(data->device,
-						    &debug_step_data);
+		ATRACE_BLOCK("el2_faceauth_gather_debug_log", {
+			err = el2_faceauth_gather_debug_log(
+				data->device, &debug_step_data);
+		});
 #else
 		err = -EOPNOTSUPP;
 #endif /* #if ENABLE_AIRBRUSH_DEBUG */
@@ -321,6 +337,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	}
 
 exit:
+	if (need_trace_end)
+		ATRACE_END();
 	up_read(&data->rwsem);
 	return err;
 }
