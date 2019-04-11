@@ -1164,8 +1164,8 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 	 */
 	mutex_lock(&dma_mutex);
 
-	/* TODO(alexperez): Use a reserved iATU */
-	err = abc_pcie_map_bar_region(abc_dma.dma_dev,
+	mblk_desc->mapping.iatu = abc_dma.iatu;
+	err = abc_pcie_map_iatu(abc_dma.dma_dev,
 			&abc_dma.pdev->dev /* owner */, BAR_2,
 			mblk_desc->size, mblk_desc->dma_paddr,
 			&mblk_desc->mapping);
@@ -1181,7 +1181,7 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 			pick_src_buf(xfer), pick_dst_buf(xfer), xfer->size,
 			mblk_desc, &num_entries);
 
-	abc_pcie_unmap_bar_region(abc_dma.dma_dev,
+	abc_pcie_unmap_iatu(abc_dma.dma_dev,
 			&abc_dma.pdev->dev /* owner */,
 			&mblk_desc->mapping);
 
@@ -1682,6 +1682,13 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 	if (err)
 		goto remove_sysfs;
 
+	abc_dma.iatu = abc_pcie_get_inbound_iatu(abc_dma.dma_dev,
+		&abc_dma.pdev->dev /* owner */);
+	if (abc_dma.iatu < 0) {
+		err = abc_dma.iatu;
+		goto remove_uapi;
+	}
+
 	INIT_LIST_HEAD(&pending_to_dev_q);
 	INIT_LIST_HEAD(&pending_from_dev_q);
 
@@ -1720,6 +1727,10 @@ restore_callback:
 	for (i = dma_chan - 1; i >= 0; i--)
 		abc_reg_dma_irq_callback(NULL, i);
 
+	abc_pcie_put_inbound_iatu(abc_dma.dma_dev,
+		&abc_dma.pdev->dev /* owner */, abc_dma.iatu);
+
+remove_uapi:
 	remove_abc_pcie_dma_uapi(&abc_dma.uapi);
 
 remove_sysfs:
@@ -1734,6 +1745,9 @@ int abc_pcie_dma_drv_remove(struct platform_device *pdev)
 	abc_pcie_dma_close_session(&global_session);
 	kmem_cache_destroy(waiter_cache);
 	sysfs_remove_files(&pdev->dev.kobj, abc_pcie_dma_attrs);
+
+	abc_pcie_put_inbound_iatu(abc_dma.dma_dev,
+		&abc_dma.pdev->dev /* owner */, abc_dma.iatu);
 
 	/* TODO(alexperez): remove elements! */
 	list_del(&pending_to_dev_q);
