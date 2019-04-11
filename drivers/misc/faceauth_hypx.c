@@ -187,7 +187,7 @@ static void parse_el2_return(int code)
 
 static void hypx_free_blob_userbuf(struct faceauth_data *data)
 {
-	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int source_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
 	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 	struct hypx_blob *blob = data->hypx_blob;
@@ -230,7 +230,7 @@ static int hypx_copy_from_blob_userbuf(struct device *dev,
 				       void __user *buffer, size_t size,
 				       bool copy_user)
 {
-	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int source_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
 	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 	struct hypx_blob *blob = data->hypx_blob;
@@ -336,7 +336,7 @@ static void hypx_create_blob_userbuf(struct device *dev,
 		int ret = 0;
 		void *out_buffer;
 		int source_vm[] = { VMID_HLOS };
-		int dest_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+		int dest_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 		int dest_perm[] = { PERM_READ | PERM_WRITE,
 				    PERM_READ | PERM_WRITE };
 
@@ -408,7 +408,7 @@ static void hypx_create_blob_dmabuf(struct device *dev,
 	int i, ret = 0;
 
 	int source_vm[] = { VMID_HLOS };
-	int dest_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int dest_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 	int dest_perm[] = { PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE };
 
 	/* If we deal with secure camera buffer then no assignment to DSP
@@ -508,7 +508,7 @@ err1:
 static void hypx_free_blob_dmabuf(struct device *dev,
 				  struct faceauth_data *data)
 {
-	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int source_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
 	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 	int ret = 0;
@@ -558,7 +558,7 @@ static int allocate_bounce_buffer(struct device *dev, void **vaddr,
 {
 	int ret = 0;
 	int source_vm[] = { VMID_HLOS };
-	int dest_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int dest_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 	int dest_perm[] = { PERM_READ | PERM_WRITE, PERM_READ | PERM_WRITE };
 	void *buffer_addr;
 	dma_addr_t buffer_paddr;
@@ -595,7 +595,7 @@ static int deallocate_bounce_buffer(struct device *dev, void **vaddr,
 				    dma_addr_t *paddr)
 {
 	int ret = 0;
-	int source_vm[] = { VMID_EXT_DSP, VMID_HLOS_FREE };
+	int source_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 	int dest_vm[] = { VMID_HLOS };
 	int dest_perm[] = { PERM_READ | PERM_WRITE | PERM_EXEC };
 
