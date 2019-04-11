@@ -56,6 +56,7 @@
 #define USER_VOTER			"USER_VOTER"	/* same as QCOM */
 #define MSC_CHG_VOTER			"msc_chg"
 #define CHG_PPS_VOTER			"pps_chg"
+#define MSC_USER_VOTER			"msc_user"
 #define MSC_USER_CHG_LEVEL_VOTER	"msc_user_chg_level"
 
 #define PD_T_PPS_TIMEOUT		9000	/* Maximum of 10 seconds */
@@ -157,24 +158,30 @@ struct chg_drv {
 	struct votable	*dc_icl_votable;
 
 	bool batt_present;
-	int batt_profile_fcc_ua;
-	int batt_profile_fv_uv;
-	int fv_uv;		/* newgen */
-	int cc_max;		/* newgen */
+	int batt_profile_fcc_ua;	/* max/default fcc */
+	int batt_profile_fv_uv;		/* max/default fv_uv */
+	int fv_uv;
+	int cc_max;
 	int chg_cc_tolerance;
-	int chg_mode;		/* debug */
-	bool stop_charging;	/* no power source */
+	int chg_mode;			/* debug */
+	bool stop_charging;		/* no power source */
 
 	/* retail */
-	int disable_charging;	/* from retail */
-	int disable_pwrsrc;	/* from retail */
-	bool lowerdb_reached;	/* user charge level */
-	int charge_stop_level;	/* user charge level */
-	int charge_start_level;	/* user charge level */
+	int disable_charging;		/* from retail */
+	int disable_pwrsrc;		/* from retail */
+	bool lowerdb_reached;		/* user charge level */
+	int charge_stop_level;		/* user charge level */
+	int charge_start_level;		/* user charge level */
 
 	/* pps charging */
 	struct pd_pps_data pps_data;
 	unsigned int pps_cc_tolerance_pct;
+
+	/* override voltage and current */
+	bool enable_user_fcc_fv;
+	int user_fv_uv;
+	int user_cc_max;
+	int user_interval;
 };
 
 static void reschedule_chg_work(struct chg_drv *chg_drv)
@@ -393,18 +400,25 @@ static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	int rc = 0;
 	struct power_supply *chg_psy = chg_drv->chg_psy;
 
-	/* when set cc_tolerance needs to be applied to everything */
-	if (chg_drv->chg_cc_tolerance && cc_max > 0)
-		cc_max = (cc_max / 1000) * (1000 - chg_drv->chg_cc_tolerance);
-
 	if (chg_drv->fv_uv != fv_uv || chg_drv->cc_max != cc_max) {
+		int fcc = cc_max;
 
-		rc = chg_set_charger(chg_psy, fv_uv, cc_max);
+		/* when set cc_tolerance needs to be applied to everything */
+		if (chg_drv->chg_cc_tolerance)
+			fcc = (cc_max / 1000) *
+			      (1000 - chg_drv->chg_cc_tolerance);
+
+		/* TODO:
+		 *   when cc_max < chg_drv->cc_max, set current, voltage
+		 *   when cc_max > chg_drv->cc_max, set voltage, current
+		 */
+		rc = chg_set_charger(chg_psy, fv_uv, fcc);
 		if (rc == 0) {
 			pr_info("MSC_CHG fv_uv=%d->%d cc_max=%d->%d rc=%d\n",
 				chg_drv->fv_uv, fv_uv,
 				chg_drv->cc_max, cc_max,
 				rc);
+
 			chg_drv->cc_max = cc_max;
 			chg_drv->fv_uv = fv_uv;
 		}
@@ -816,23 +830,17 @@ static int chg_work_batt_roundtrip(const union gbms_charger_state *chg_state,
 		return -EINVAL;
 	}
 
-	/* NOTE: also in the votables */
-	*cc_max = GPSY_GET_PROP(bat_psy,
-			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT);
-	*fv_uv = GPSY_GET_PROP(bat_psy,
-			POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE);
+	*cc_max = GPSY_GET_INT_PROP(bat_psy,
+				    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
+				    &rc);
+	if (rc < 0)
+		return -EIO;
 
-	/* ASSERT: (chg_state.f.flags&GBMS_CS_FLAG_DONE) && cc_max == 0 */
-
-	/* EOC/recharge threshold */
-	if (*cc_max == 0)
-		return 0;
-
-	if (*fv_uv < 0 || *cc_max < 0) {
-		pr_err("MSC_CHG error on fv_uv=%d cc_max=%d\n",
-		       *fv_uv, *cc_max);
-		return -EINVAL;
-	}
+	*fv_uv = GPSY_GET_INT_PROP(bat_psy,
+				   POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
+				   &rc);
+	if (rc < 0)
+		return -EIO;
 
 	return 0;
 }
@@ -877,9 +885,8 @@ static void chg_work_adapter_details(union gbms_ce_adapter_details *ad,
 
 static int chg_work_roundtrip(struct chg_drv *chg_drv)
 {
-	int fv_uv, cc_max, update_interval, rc;
+	int fv_uv = -1, cc_max = -1, update_interval, rc;
 	union gbms_charger_state chg_state = { .v = 0 };
-	struct power_supply *bat_psy = chg_drv->bat_psy;
 
 	rc = chg_work_read_state(&chg_state, chg_drv->chg_psy);
 	if (rc < 0)
@@ -888,7 +895,9 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 	if (chg_drv->chg_mode == CHG_DRV_MODE_NOIRDROP)
 		chg_state.f.vchrg = 0;
 
-	rc = chg_work_batt_roundtrip(&chg_state, bat_psy, &fv_uv, &cc_max);
+	/* might return negative values in fv_uv and cc_max */
+	rc = chg_work_batt_roundtrip(&chg_state, chg_drv->bat_psy,
+				     &fv_uv, &cc_max);
 	if (rc < 0)
 		return rc;
 
@@ -896,11 +905,13 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 	if (fv_uv == -1)
 		fv_uv = chg_drv->fv_uv;
 	if  (cc_max == -1)
-		cc_max = 0;
+		cc_max = chg_drv->cc_max;
 
-	/* NOTE: battery has already voted on these */
-	vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, true, fv_uv);
-	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, cc_max);
+	/* NOTE: battery has already voted on these with MSC_LOGIC */
+	vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER,
+			(chg_drv->user_fv_uv == -1) && (fv_uv > 0), fv_uv);
+	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER,
+			(chg_drv->user_cc_max == -1) && (cc_max >= 0), cc_max);
 
 	/* update_interval==0 means stop charging */
 	update_interval = chg_work_next_interval(chg_drv, &chg_state);
@@ -1127,6 +1138,7 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	else if (chg_drv->pps_cc_tolerance_pct > PPS_CC_TOLERANCE_PCT_MAX)
 		chg_drv->pps_cc_tolerance_pct = PPS_CC_TOLERANCE_PCT_MAX;
 
+	/* max/default charging voltage and current */
 	ret = of_property_read_u32(node, "google,fcc-max-ua", &temp);
 	if (ret < 0)
 		chg_drv->batt_profile_fcc_ua = -EINVAL;
@@ -1449,6 +1461,99 @@ DEFINE_SIMPLE_ATTRIBUTE(debug_pps_cc_tolerance_fops,
 					debug_get_pps_cc_tolerance,
 					debug_set_pps_cc_tolerance, "%u\n");
 
+static int chg_get_fv_uv(void *data, u64 *val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	*val = chg_drv->user_fv_uv;
+	return 0;
+}
+
+static int chg_set_fv_uv(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	if ((((int)val < -1)) || ((chg_drv->batt_profile_fv_uv > 0) &&
+			   (val > chg_drv->batt_profile_fv_uv)))
+		return -ERANGE;
+	if (chg_drv->user_fv_uv == val)
+		return 0;
+
+	vote(chg_drv->msc_fv_votable, MSC_USER_VOTER, (val > 0), val);
+	chg_drv->user_fv_uv = val;
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fv_uv_fops, chg_get_fv_uv,
+				     chg_set_fv_uv, "%d\n");
+
+static int chg_get_cc_max(void *data, u64 *val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	*val = chg_drv->user_cc_max;
+	return 0;
+}
+
+static int chg_set_cc_max(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	if ((((int)val < -1)) || ((chg_drv->batt_profile_fcc_ua > 0) &&
+			   (val > chg_drv->batt_profile_fcc_ua)))
+		return -ERANGE;
+	if (chg_drv->user_cc_max == val)
+		return 0;
+
+	vote(chg_drv->msc_fcc_votable, MSC_USER_VOTER, (val >= 0), val);
+	chg_drv->user_cc_max = val;
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(cc_max_fops, chg_get_cc_max,
+				     chg_set_cc_max, "%d\n");
+
+
+static int chg_get_interval(void *data, u64 *val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	*val = chg_drv->user_interval;
+	return 0;
+}
+
+static int chg_set_interval(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	if (chg_drv->user_interval == val)
+		return 0;
+
+	vote(chg_drv->msc_interval_votable, MSC_USER_VOTER, (val >= 0), val);
+	chg_drv->user_interval = val;
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(chg_interval_fops,
+				chg_get_interval,
+				chg_set_interval, "%d\n");
+
+
+static int chg_reschedule_work(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	reschedule_chg_work(chg_drv);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(chg_reschedule_work_fops,
+					NULL, chg_reschedule_work, "%d\n");
+
+
 
 
 #endif
@@ -1483,6 +1588,8 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 				   chg_drv, &chg_cs_fops);
 		debugfs_create_file("update_interval", 0644, de,
 				   chg_drv, &chg_ui_fops);
+		debugfs_create_file("force_reschedule", 0600, de,
+				chg_drv, &chg_reschedule_work_fops);
 
 		debugfs_create_file("pps_out_uv", 0600, de,
 				   chg_drv, &debug_pps_out_uv_fops);
@@ -1490,6 +1597,15 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 				   chg_drv, &debug_pps_op_ua_fops);
 		debugfs_create_file("pps_cc_tolerance", 0600, de,
 				   chg_drv, &debug_pps_cc_tolerance_fops);
+
+		if (chg_drv->enable_user_fcc_fv) {
+			debugfs_create_file("fv_uv", 0644, de,
+					   chg_drv, &fv_uv_fops);
+			debugfs_create_file("cc_max", 0644, de,
+					   chg_drv, &cc_max_fops);
+			debugfs_create_file("interval", 0644, de,
+					   chg_drv, &chg_interval_fops);
+		}
 	}
 #endif
 
@@ -1659,7 +1775,7 @@ static int msc_update_charger_cb(struct votable *votable,
 				 void *data, int interval,
 				 const char *client)
 {
-	int rc, update_interval, fv_uv, cc_max;
+	int rc = -EINVAL, update_interval, fv_uv, cc_max;
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 	int success;
 
@@ -1667,11 +1783,17 @@ static int msc_update_charger_cb(struct votable *votable,
 
 	update_interval =
 		get_effective_result_locked(chg_drv->msc_interval_votable);
-	if (update_interval == 0)
+	if (update_interval <= 0)
 		goto msc_done;
 
+	/* a negative value will skip the update and reschedule. PPS might
+	 * drop */
 	fv_uv = get_effective_result_locked(chg_drv->msc_fv_votable);
 	cc_max = get_effective_result_locked(chg_drv->msc_fcc_votable);
+	if (cc_max < 0 || fv_uv < 0) {
+		update_interval = CHG_WORK_ERROR_RETRY_MS;
+		goto msc_reschedule;
+	}
 
 	if (chg_drv->pps_data.pps_avail && chg_drv->pps_data.pps_active) {
 		int pps_update_interval = update_interval;
@@ -1695,6 +1817,7 @@ static int msc_update_charger_cb(struct votable *votable,
 	if (rc < 0)
 		update_interval = CHG_WORK_ERROR_RETRY_MS;
 
+msc_reschedule:
 	success = schedule_delayed_work(&chg_drv->chg_work,
 					msecs_to_jiffies(update_interval));
 
@@ -2168,6 +2291,10 @@ static void google_charger_init_work(struct work_struct *work)
 	chg_drv->charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
 	chg_drv->charge_start_level = DEFAULT_CHARGE_START_LEVEL;
 
+	/* reset override charging parameters */
+	chg_drv->user_fv_uv = -1;
+	chg_drv->user_cc_max = -1;
+
 	chg_drv->psy_nb.notifier_call = chg_psy_changed;
 	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
 	if (ret < 0)
@@ -2255,6 +2382,15 @@ static int google_charger_probe(struct platform_device *pdev)
 		if (!chg_drv->tcpm_psy_name)
 			return -ENOMEM;
 	}
+
+	/* user fcc, fv uv will be bound by battery charge profile, override
+	 * setting google,battery-roundtrip = 0 in device tree.
+	 */
+	chg_drv->enable_user_fcc_fv =
+		of_property_read_bool(pdev->dev.of_node,
+				      "google,enable-user-fcc-fv");
+	if (chg_drv->enable_user_fcc_fv)
+		pr_info("User can override FCC and FV\n");
 
 	/* NOTE: newgen charging is configured in google_battery */
 	ret = chg_init_chg_profile(chg_drv);

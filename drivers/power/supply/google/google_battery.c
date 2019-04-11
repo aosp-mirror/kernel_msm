@@ -54,6 +54,9 @@
 #define DEFAULT_CHG_STATS_MIN_QUAL_TIME		(15 * 60)
 #define DEFAULT_CHG_STATS_MIN_DELTA_SOC		15
 
+/* Voters */
+#define MSC_LOGIC_VOTER		"msc_logic"
+
 #define UICURVE_MAX	3
 
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
@@ -176,6 +179,7 @@ struct batt_drv {
 	int cc_max;
 	int msc_update_interval;
 
+	bool disable_votes;
 	struct votable	*msc_interval_votable;
 	struct votable	*fcc_votable;
 	struct votable	*fv_votable;
@@ -1377,7 +1381,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	/* next update */
 	batt_drv->msc_update_interval = update_interval;
 
-	pr_info("MSC_DATA cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
+	pr_info("MSC_LOGIC cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
 		batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
 		batt_drv->temp_idx, temp_idx, batt_drv->vbatt_idx,
 		vbatt_idx, batt_drv->fv_uv, fv_uv,
@@ -1385,8 +1389,6 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 
 	return 0;
 }
-
-#define MSC_LOGIC_VOTER "msc_logic"
 
 /* called holding chg_lock */
 static int msc_logic(struct batt_drv *batt_drv)
@@ -1485,18 +1487,36 @@ static int msc_logic(struct batt_drv *batt_drv)
 	}
 
 msc_logic_done:
-	/* NOTE: google_charger has voted(0) on msc_interval_votable */
+	pr_info("%s fv_uv=%d cc_max=%d update_interval=%d\n",
+		(batt_drv->disable_votes) ? "MSC_DOUT" : "MSC_VOTE",
+		batt_drv->fv_uv,
+		batt_drv->cc_max,
+		batt_drv->msc_update_interval);
+
+	 /* google_charger has voted(<=0) on msc_interval_votable and the
+	  * votes on fcc and fv_uv will not be applied until google_charger
+	  * votes a non-zero value.
+	  *
+	  * SW_JEITA: ->jeita_stop_charging != 0
+	  * . ->msc_update_interval = -1 , fv_uv = -1 and ->cc_max = 0
+	  * . vote(0) on ->fcc_votable with SW_JEITA_VOTER
+	  * BATT_RL: rl_status == BATT_RL_STATUS_DISCHARGE
+	  * . ->msc_update_interval = -1 , fv_uv = -1 and ->cc_max = 0
+	  * . vote(0) on ->fcc_votable with SW_JEITA_VOTER
+	  *
+	  * Votes for MSC_LOGIC_VOTER will be all disabled.
+	  */
 	if (!batt_drv->fv_votable)
 		batt_drv->fv_votable = find_votable(VOTABLE_MSC_FV);
 	if (batt_drv->fv_votable)
 		vote(batt_drv->fv_votable, MSC_LOGIC_VOTER,
-			batt_drv->fv_uv != -1,
+			!batt_drv->disable_votes && (batt_drv->fv_uv != -1),
 			batt_drv->fv_uv);
 	if (!batt_drv->fcc_votable)
 		batt_drv->fcc_votable = find_votable(VOTABLE_MSC_FCC);
 	if (batt_drv->fcc_votable)
 		vote(batt_drv->fcc_votable, MSC_LOGIC_VOTER,
-			batt_drv->cc_max != -1,
+			!batt_drv->disable_votes && (batt_drv->cc_max != -1),
 			batt_drv->cc_max);
 
 	if (!batt_drv->msc_interval_votable)
@@ -1504,8 +1524,9 @@ msc_logic_done:
 			find_votable(VOTABLE_MSC_INTERVAL);
 	if (batt_drv->msc_interval_votable)
 		vote(batt_drv->msc_interval_votable, MSC_LOGIC_VOTER,
-			 batt_drv->msc_update_interval != -1,
-			 batt_drv->msc_update_interval);
+			!batt_drv->disable_votes &&
+			(batt_drv->msc_update_interval != -1),
+			batt_drv->msc_update_interval);
 msc_logic_exit:
 
 	if (changed) {
@@ -2519,7 +2540,6 @@ static void google_battery_init_work(struct work_struct *work)
 
 	(void)batt_init_fs(batt_drv);
 
-	pr_info("init_work done\n");
 
 	batt_res_load_data(&batt_drv->res_state, batt_drv->fg_psy);
 
@@ -2542,6 +2562,15 @@ static void google_battery_init_work(struct work_struct *work)
 				   &batt_drv->batt_update_interval);
 	if (ret < 0)
 		batt_drv->batt_update_interval = DEFAULT_BATT_UPDATE_INTERVAL;
+
+	/* override setting google,battery-roundtrip = 0 in device tree */
+	batt_drv->disable_votes =
+		of_property_read_bool(batt_drv->device->of_node,
+				"google,disable-votes");
+	if (batt_drv->disable_votes)
+		pr_info("battery votes disabled\n");
+
+	pr_info("init_work done\n");
 
 	batt_drv->init_complete = true;
 	batt_drv->resume_complete = true;
