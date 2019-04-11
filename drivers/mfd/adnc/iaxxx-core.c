@@ -63,7 +63,6 @@
 #define IAXXX_FW_RETRY_COUNT		2
 #define IAXXX_BYTES_IN_A_WORD		4
 #define WAKEUP_TIMEOUT			5000
-#define IRQ_WAIT_TIMEOUT		3000
 
 #define iaxxx_ptr2priv(ptr, item) container_of(ptr, struct iaxxx_priv, item)
 
@@ -782,14 +781,8 @@ int iaxxx_reset_to_sbl(struct iaxxx_priv *priv)
 static irqreturn_t iaxxx_event_isr(int irq, void *data)
 {
 	int rc;
-	uint32_t count;
-	int retry_cnt = 5;
-	uint32_t status;
-	int mode;
-	bool handled = false;
 	bool is_startup;
 	struct iaxxx_priv *priv = (struct iaxxx_priv *)data;
-	struct regmap *regmap;
 
 	/* If ISR is disabled, return as handled */
 	if (priv->debug_isr_disable)
@@ -799,17 +792,6 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 
 	pm_wakeup_event(priv->dev, WAKEUP_TIMEOUT);
 
-	if (!atomic_read(&priv->pm_resume)) {
-		rc = wait_event_timeout(priv->irq_wake,
-			atomic_read(&priv->pm_resume),
-			msecs_to_jiffies(IRQ_WAIT_TIMEOUT));
-		if (rc && !atomic_read(&priv->pm_resume)) {
-			dev_err(priv->dev,
-				"IRQ wait resume timeout!, rc = %d\n", rc);
-			goto out;
-		}
-	}
-
 	if (!priv->boot_completed) {
 		is_startup = !test_and_set_bit(IAXXX_FLG_STARTUP,
 						&priv->flags);
@@ -818,54 +800,9 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 		if (rc)
 			goto out;
 	}
-retry_reading_count_reg:
-	/* Get current regmap based on boot status */
-	regmap = iaxxx_get_current_regmap(priv);
-	/* Any events in the event queue? */
-	rc = regmap_read(priv->regmap_no_pm,
-			IAXXX_EVT_MGMT_EVT_COUNT_ADDR, &count);
-	if (rc) {
-		dev_err(priv->dev,
-			"Failed to read EVENT_COUNT, rc = %d\n", rc);
-		/* Read should not fail recover the chip */
-		count = 0;
-	}
-
-	if (count > 0 && priv->event_workq) {
-		dev_dbg(priv->dev, "%s: %d event(s) avail\n", __func__, count);
-		if (!test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
-						&priv->flags)) {
-			/* On any event always assume chip is awake */
-			wake_up(&priv->wakeup_wq);
-			dev_dbg(priv->dev,
-			"%s: FW is expected to be in wakeup state\n", __func__);
-		}
-		queue_work(priv->event_workq, &priv->event_work_struct);
-		handled = true;
-	} else {
-		/* Read SYSTEM_STATUS to ensure that device is in App Mode */
-		rc = regmap_read(regmap,
-					IAXXX_SRB_SYS_STATUS_ADDR, &status);
-		if (rc)
-			dev_err(priv->dev,
-				"Failed to read SYSTEM_STATUS, rc = %d\n", rc);
-
-		mode = status & IAXXX_SRB_SYS_STATUS_MODE_MASK;
-		if (mode != SYSTEM_STATUS_MODE_APPS) {
-			dev_err(priv->dev,
-				"Not in app mode CM4 might crashed, mode = %d\n",
-				mode);
-			priv->cm4_crashed = true;
-			queue_work(priv->event_workq, &priv->event_work_struct);
-			return IRQ_HANDLED;
-		} else if (mode == SYSTEM_STATUS_MODE_APPS && retry_cnt--) {
-			goto retry_reading_count_reg;
-		}
-	}
-
-	complete_all(&priv->cmem_done);
+	queue_work(priv->event_workq, &priv->event_work_struct);
 out:
-	return handled ? IRQ_HANDLED : IRQ_NONE;
+	return IRQ_HANDLED;
 }
 
 /**
@@ -1572,7 +1509,6 @@ int iaxxx_core_resume_rt(struct device *dev)
 int iaxxx_core_dev_suspend(struct device *dev)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-
 
 	iaxxx_flush_kthread_worker(&priv->worker);
 	atomic_set(&priv->pm_resume, 0);

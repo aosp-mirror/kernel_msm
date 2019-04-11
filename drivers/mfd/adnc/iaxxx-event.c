@@ -26,6 +26,7 @@
 
 #define BIT_FNAME(N, T)  N ## _ ## T
 #define GET_BITS(R, N)	(((R) & BIT_FNAME(N, MASK)) >> BIT_FNAME(N, POS))
+#define IRQ_WAIT_TIMEOUT		3000
 
 /*****************************************************************************
  * iaxxx_core_evt_is_valid_src_id()
@@ -654,9 +655,64 @@ static void iaxxx_get_event_work(struct work_struct *work)
 	struct iaxxx_priv *priv = container_of(work, struct iaxxx_priv,
 							event_work_struct);
 	struct device *dev = priv->dev;
+	struct regmap *regmap;
+	int retry_cnt = 5;
+	uint32_t status;
+	int mode;
 
+	if (!atomic_read(&priv->pm_resume)) {
+		rc = wait_event_timeout(priv->irq_wake,
+		atomic_read(&priv->pm_resume),
+		msecs_to_jiffies(IRQ_WAIT_TIMEOUT));
+		if (!rc && !atomic_read(&priv->pm_resume)) {
+			dev_err(priv->dev,
+			"Wait resume timeout!, rc = %d\n", rc);
+			return;
+		}
+	}
+
+retry_reading_count_reg:
 	/* Get current regmap based on boot status */
-	struct regmap *regmap = iaxxx_get_current_regmap(priv);
+	regmap = iaxxx_get_current_regmap(priv);
+	/* Any events in the event queue? */
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_EVT_MGMT_EVT_COUNT_ADDR, &count);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read EVENT_COUNT, rc = %d\n", rc);
+		/* Read should not fail recover the chip */
+		count = 0;
+	}
+
+	if (count > 0) {
+		dev_dbg(priv->dev, "%s: %d event(s) avail\n", __func__, count);
+		if (!test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
+						&priv->flags)) {
+			/* On any event always assume chip is awake */
+			wake_up(&priv->wakeup_wq);
+			dev_dbg(priv->dev,
+			"%s: FW is expected to be in wakeup state\n", __func__);
+		}
+
+		complete_all(&priv->cmem_done);
+	} else {
+		/* Read SYSTEM_STATUS to ensure that device is in App Mode */
+		rc = regmap_read(regmap,
+					IAXXX_SRB_SYS_STATUS_ADDR, &status);
+
+		mode = status & IAXXX_SRB_SYS_STATUS_MODE_MASK;
+		if (rc || (mode != SYSTEM_STATUS_MODE_APPS)) {
+			dev_err(priv->dev,
+				"Not in app mode CM4 might crashed, mode = %d"
+				" rc = %d\n", mode, rc);
+			priv->cm4_crashed = true;
+		} else if (mode == SYSTEM_STATUS_MODE_APPS && retry_cnt--) {
+			goto retry_reading_count_reg;
+		} else {
+			complete_all(&priv->cmem_done);
+			return;
+		}
+	}
 
 	mutex_lock(&priv->event_work_lock);
 
