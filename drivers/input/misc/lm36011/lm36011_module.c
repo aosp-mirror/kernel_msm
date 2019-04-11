@@ -84,6 +84,7 @@
 #define BUILD_PROTO 1
 #define BUILD_EVT1_0 2
 #define BUILD_EVT1_1 3
+#define BUILD_DVT 4
 
 enum SILEGO_GPIO {
 	IR_VCSEL_FAULT,
@@ -725,23 +726,28 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->is_power_up = true;
 	}
 
-	if (!ctrl->cap_sense.is_power_up) {
-		rc = regulator_set_voltage(ctrl->cap_sense.vdd,
-			SX9320_VDD_VOlTAGE_MIN, SX9320_VDD_VOlTAGE_MAX);
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"set cap sense vdd voltage failed: %d", rc);
-			return rc;
+	if (ctrl->hw_version < BUILD_DVT) {
+		if (!ctrl->cap_sense.is_power_up) {
+			rc = regulator_set_voltage(ctrl->cap_sense.vdd,
+				SX9320_VDD_VOlTAGE_MIN,
+				SX9320_VDD_VOlTAGE_MAX);
+			if (rc < 0) {
+				dev_err(ctrl->soc_info.dev,
+					"set cap sense vdd voltage failed: %d",
+					rc);
+				return rc;
+			}
+			rc = regulator_enable(ctrl->cap_sense.vdd);
+			if (rc < 0) {
+				dev_err(ctrl->soc_info.dev,
+					"cap sense regulator_enable"
+					" failed: rc: %d", rc);
+				return rc;
+			}
+			ctrl->cap_sense.is_power_up = true;
 		}
-		rc = regulator_enable(ctrl->cap_sense.vdd);
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"cap sense regulator_enable failed: rc: %d",
-				rc);
-			return rc;
-		}
-		ctrl->cap_sense.is_power_up = true;
 	}
+
 
 	if (!ctrl->silego.is_power_up) {
 		rc = regulator_set_voltage(ctrl->silego.vdd,
@@ -770,16 +776,19 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->is_cci_init = true;
 	}
 
-	if (!ctrl->cap_sense.is_cci_init) {
-		rc = camera_io_init(&(ctrl->cap_sense.io_master_info));
-		if (rc < 0) {
-			dev_err(ctrl->soc_info.dev,
-				"cam io init for cap sense failed: rc: %d",
-				rc);
-			return rc;
+	if (ctrl->hw_version < BUILD_DVT) {
+		if (!ctrl->cap_sense.is_cci_init) {
+			rc = camera_io_init(&(ctrl->cap_sense.io_master_info));
+			if (rc < 0) {
+				dev_err(ctrl->soc_info.dev,
+					"cam io init for cap sense failed:"
+					" rc: %d", rc);
+				return rc;
+			}
+			ctrl->cap_sense.is_cci_init = true;
 		}
-		ctrl->cap_sense.is_cci_init = true;
 	}
+
 
 	/* Silego i2c need at least 3 ms after power up */
 	usleep_range(3000, 6000);
@@ -839,15 +848,20 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 			ctrl->is_cci_init = false;
 	}
 
-	if (ctrl->cap_sense.is_cci_init) {
-		is_error = camera_io_release(&(ctrl->cap_sense.io_master_info));
-		if (is_error < 0) {
-			rc = is_error;
-			dev_err(ctrl->soc_info.dev,
-				"laser cci_release failed: rc: %d", rc);
-		} else
-			ctrl->cap_sense.is_cci_init = false;
+	if (ctrl->hw_version < BUILD_DVT) {
+		if (ctrl->cap_sense.is_cci_init) {
+			is_error = camera_io_release(
+				&(ctrl->cap_sense.io_master_info));
+			if (is_error < 0) {
+				rc = is_error;
+				dev_err(ctrl->soc_info.dev,
+					"laser cci_release failed: rc: %d",
+					rc);
+			} else
+				ctrl->cap_sense.is_cci_init = false;
+		}
 	}
+
 
 	if (ctrl->silego.is_power_up) {
 		is_error = regulator_disable(ctrl->silego.vdd);
@@ -859,15 +873,17 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 			ctrl->silego.is_power_up = false;
 	}
 
-	if (ctrl->cap_sense.is_power_up) {
-		is_error = regulator_disable(ctrl->cap_sense.vdd);
-		if (is_error < 0) {
-			rc = is_error;
-			dev_err(ctrl->soc_info.dev,
-				"cap sense regulator_disable failed: rc: %d",
-				rc);
-		} else
-			ctrl->cap_sense.is_power_up = false;
+	if (ctrl->hw_version < BUILD_DVT) {
+		if (ctrl->cap_sense.is_power_up) {
+			is_error = regulator_disable(ctrl->cap_sense.vdd);
+			if (is_error < 0) {
+				rc = is_error;
+				dev_err(ctrl->soc_info.dev,
+					"cap sense regulator_disable failed:"
+					" rc: %d", rc);
+			} else
+				ctrl->cap_sense.is_power_up = false;
+		}
 	}
 
 	if (ctrl->is_power_up) {
@@ -1178,7 +1194,7 @@ static int lm36011_get_gpio_info(struct device *dev)
 
 	ctrl->cap_sense.gpio_array = devm_kzalloc(dev,
 		sizeof(struct gpio)*CAP_SENSE_GPIO_MAX, GFP_KERNEL);
-	if (!ctrl->silego.gpio_array) {
+	if (!ctrl->cap_sense.gpio_array) {
 		dev_err(dev, "no memory for cap sense gpio");
 		return -ENOMEM;
 	}
@@ -1221,13 +1237,6 @@ static int lm36011_parse_dt(struct device *dev)
 		return -ENOENT;
 	}
 
-	ctrl->cap_sense.vdd = devm_regulator_get(dev, "sx9320_vdd");
-	if (IS_ERR(ctrl->cap_sense.vdd)) {
-		ctrl->cap_sense.vdd = NULL;
-		dev_err(dev, "unable to get cap sense vdd");
-		return -ENOENT;
-	}
-
 	ctrl->buck1 = devm_regulator_get(dev, "pmic_buck1");
 	if (IS_ERR(ctrl->buck1)) {
 		ctrl->buck1 = NULL;
@@ -1248,11 +1257,6 @@ static int lm36011_parse_dt(struct device *dev)
 	}
 	ctrl->type = value;
 
-	if (of_property_read_u32(dev->of_node, "sx9320_sid", &value)) {
-		dev_err(dev, "cap sense slave address not specified in dt");
-		return -ENOENT;
-	}
-	ctrl->cap_sense.sid = value;
 	if (lm36011_get_gpio_info(dev)) {
 		dev_err(dev, "failed to parse gpio and irq info");
 		return -ENOENT;
@@ -1261,8 +1265,26 @@ static int lm36011_parse_dt(struct device *dev)
 	if (of_property_read_u32(dev->of_node, "hw-version", &value)) {
 		dev_warn(dev, "hw version not specified in dt");
 		ctrl->hw_version = 0;
-	} else
+	} else {
 		ctrl->hw_version = value;
+		dev_info(dev, "hw version: %d", ctrl->hw_version);
+	}
+
+	if (ctrl->hw_version < BUILD_DVT) {
+		ctrl->cap_sense.vdd = devm_regulator_get(dev, "sx9320_vdd");
+		if (IS_ERR(ctrl->cap_sense.vdd)) {
+			ctrl->cap_sense.vdd = NULL;
+			dev_err(dev, "unable to get cap sense vdd");
+			return -ENOENT;
+		}
+
+		if (of_property_read_u32(dev->of_node, "sx9320_sid", &value)) {
+			dev_err(dev,
+				"cap sense slave address not specified in dt");
+			return -ENOENT;
+		}
+		ctrl->cap_sense.sid = value;
+	}
 
 	return 0;
 }
@@ -1296,15 +1318,18 @@ static int32_t lm36011_update_i2c_info(struct device *dev)
 	ctrl->io_master_info.cci_client->id_map = 0;
 	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_MODE;
 
-	/* Fill up cap sense io info */
-	ctrl->cap_sense.io_master_info.cci_client->cci_device = value;
-	ctrl->cap_sense.io_master_info.cci_client->retries = 3;
-	ctrl->cap_sense.io_master_info.cci_client->id_map = 0;
-	ctrl->cap_sense.io_master_info.cci_client->i2c_freq_mode =
-		I2C_FAST_MODE;
-	ctrl->cap_sense.io_master_info.cci_client->sid = ctrl->cap_sense.sid;
-	ctrl->cap_sense.io_master_info.cci_client->cci_i2c_master = 0;
-	ctrl->cap_sense.io_master_info.master_type = CCI_MASTER;
+	if (ctrl->hw_version < BUILD_DVT) {
+		/* Fill up cap sense io info */
+		ctrl->cap_sense.io_master_info.cci_client->cci_device = value;
+		ctrl->cap_sense.io_master_info.cci_client->retries = 3;
+		ctrl->cap_sense.io_master_info.cci_client->id_map = 0;
+		ctrl->cap_sense.io_master_info.cci_client->i2c_freq_mode =
+			I2C_FAST_MODE;
+		ctrl->cap_sense.io_master_info.cci_client->sid =
+			ctrl->cap_sense.sid;
+		ctrl->cap_sense.io_master_info.cci_client->cci_i2c_master = 0;
+		ctrl->cap_sense.io_master_info.master_type = CCI_MASTER;
+	}
 
 	return 0;
 }
@@ -1332,10 +1357,13 @@ static ssize_t led_laser_enable_store(struct device *dev,
 	int rc;
 	bool value;
 
-	if (!ctrl->silego.is_validated || !ctrl->cap_sense.is_validated) {
-		dev_err(dev, "Safety ic not valid, silego:cap sense (%d, %d)",
-			ctrl->silego.is_validated,
-			ctrl->cap_sense.is_validated);
+	if (!ctrl->silego.is_validated) {
+		dev_err(dev, "Silego is invalid");
+		return -EINVAL;
+	}
+
+	if (ctrl->hw_version < BUILD_DVT && !ctrl->cap_sense.is_validated) {
+		dev_err(dev, "Cap sense is invalid");
 		return -EINVAL;
 	}
 
@@ -1360,7 +1388,8 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		/* Prepare safety ic IRQ */
 		mutex_lock(&lm36011_mutex);
 		if (ctrl->type == safety_ic_owner) {
-			if (ctrl->hw_version >= 2) {
+			if (ctrl->hw_version >= BUILD_EVT1_0 &&
+				ctrl->hw_version < BUILD_DVT) {
 				ctrl->cap_sense.sample_count = 0;
 				rc = sx9320_init_setting(ctrl);
 				if (rc < 0) {
@@ -1387,7 +1416,7 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		mutex_unlock(&lm36011_mutex);
 
 		/* Clean up IRQ for PROTO and DEV device */
-		if (ctrl->hw_version < 2)
+		if (ctrl->hw_version < BUILD_EVT1_0)
 			sx9320_cleanup_nirq(ctrl);
 
 		rc = lm36011_write_data(ctrl,
@@ -1930,21 +1959,26 @@ static int32_t lm36011_driver_platform_probe(
 	if (rc)
 		goto error_destroy_class;
 
-	INIT_WORK(&ctrl->work, cap_sense_workq_job);
-	device_name =
-		(ctrl->type == LASER_FLOOD ? "flood_workq" : "dot_workq");
-	ctrl->work_queue = create_workqueue(device_name);
+	if (ctrl->hw_version < BUILD_DVT) {
+		INIT_WORK(&ctrl->work, cap_sense_workq_job);
+		device_name =
+			(ctrl->type == LASER_FLOOD ?
+			"flood_workq" : "dot_workq");
+		ctrl->work_queue = create_workqueue(device_name);
+	}
 
 	/* Read device id */
 	lm36011_power_up(ctrl);
 
-	rc = sx9320_cleanup_nirq(ctrl);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"clean up cap sense irq failed: rc: %d", rc);
-		ctrl->cap_sense.is_validated = false;
-	} else
-		ctrl->cap_sense.is_validated = true;
+	if (ctrl->hw_version < BUILD_DVT) {
+		rc = sx9320_cleanup_nirq(ctrl);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"clean up cap sense irq failed: rc: %d", rc);
+			ctrl->cap_sense.is_validated = false;
+		} else
+			ctrl->cap_sense.is_validated = true;
+	}
 
 	rc = lm36011_read_data(ctrl,
 		DEVICE_ID_REG, &device_id);
@@ -1968,6 +2002,10 @@ static int32_t lm36011_driver_platform_probe(
 	return rc;
 
 error_destroy_device:
+	if (ctrl->hw_version < BUILD_DVT) {
+		flush_workqueue(ctrl->work_queue);
+		destroy_workqueue(ctrl->work_queue);
+	}
 	device_destroy(ctrl->cl, ctrl->dev);
 error_destroy_class:
 	class_destroy(ctrl->cl);
