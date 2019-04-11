@@ -18,20 +18,27 @@
 	qcom,clk-freq-out = <400000>;
 };
 
+/* Touch wants se4 pins active even in suspend. */
+&qupv3_se4_spi {
+	pinctrl-1 = <&qupv3_se4_spi_active>;
+};
+
+
 /* battery i2c */
 &qupv3_se7_i2c {
 	status = "ok";
 	qcom,clk-freq-out = <400000>;
 };
 
+/* ese spi */
+&qupv3_se8_spi {
+	status = "ok";
+	qcom,disable-dma;
+};
+
 /* flame/coral pac193x i2c */
 &qupv3_se9_i2c {
 	qcom,clk-freq-out = <400000>;
-};
-
-/* Touch wants se4 pins active even in suspend. */
-&qupv3_se4_spi {
-	pinctrl-1 = <&qupv3_se4_spi_active>;
 };
 
 &qupv3_se10_spi_active {

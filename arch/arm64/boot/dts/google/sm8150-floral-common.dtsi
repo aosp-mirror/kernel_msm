@@ -21,6 +21,7 @@
 #include "sm8150-floral-camera-pmic.dtsi"
 #include "sm8150-floral-citadel.dtsi"
 #include "sm8150-floral-display.dtsi"
+#include "sm8150-floral-ese.dtsi"
 #include "sm8150-floral-haptics.dtsi"
 #include "sm8150-floral-memory.dtsi"
 #include "sm8150-floral-nfc.dtsi"
