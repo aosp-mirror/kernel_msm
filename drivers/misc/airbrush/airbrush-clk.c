@@ -17,6 +17,7 @@
 #include <linux/mfd/abc-pcie.h>
 
 #include "airbrush-clk.h"
+#include "airbrush-regs.h"
 
 #define GAT_CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU	0x1024202c
 #define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
@@ -801,11 +802,12 @@ static int64_t __ab_clk_aon_set_rate_opt_handler(struct ab_clk_context *clk_ctx,
 			new_rate != AB_SM_466_MHZ)
 		__ab_aon_clk_div_2_restore(clk_ctx);
 
-	if (old_rate == AB_SM_93_312_MHZ &&
-			new_rate != AB_SM_93_312_MHZ)
+	if (old_rate <= AB_SM_93_312_MHZ &&
+			new_rate > AB_SM_93_312_MHZ)
 		__ab_aon_clk_div_10_restore(clk_ctx);
 
 	if (new_rate == AB_SM_OSC_RATE) {
+		__ab_aon_clk_div_10(clk_ctx);
 		ret |= ABC_WRITE(AON_CLK_RATE_REG, AON_CLK_RATE_19_2_MHZ);
 		if (ret) {
 			dev_err(clk_ctx->dev,
@@ -910,6 +912,8 @@ static void __ab_aon_clk_div_10(struct ab_clk_context *ctx)
 
 	/* Divide PLL_AON_CLK by 10 */
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x9);
+	/* Divide DIV4_PLLCLK (AON_PCLK) by 4 */
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK, 0xF);
 }
 
 static void __ab_aon_clk_div_10_restore(struct ab_clk_context *ctx)
@@ -925,6 +929,9 @@ static void __ab_aon_clk_div_10_restore(struct ab_clk_context *ctx)
 
 	/* Restore default divider setting to undo 10x divide */
 	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
+	/* Restore DIV4_PLLCLK (AON_PCLK) to undo 4x divide */
+	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK, 0x3);
+
 }
 
 #define SHARED_DIV_AON_PLL_REG				0x10B11810
