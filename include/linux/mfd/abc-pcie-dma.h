@@ -124,6 +124,9 @@ struct abc_pcie_dma_mblk_desc {
 	dma_addr_t dma_paddr;
 	struct dma_buf *ab_dram_dma_buf;
 	struct bar_mapping mapping;
+	int num_dma_channels;
+	int entries_per_channel[ABC_DMA_MAX_CHAN];
+	int channel_mask;
 };
 
 struct abc_dma_xfer;

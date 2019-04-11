@@ -34,6 +34,8 @@
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 /* TODO(isca): b/120289070 */
 #define DMA_CHAN	1
+#define DMA_CHANS_PER_READ_XFER 3
+#define DMA_CHANS_PER_WRITE_XFER 1
 
 /* TODO(alexperez): Remove this, when we get async mods. */
 static struct abc_pcie_dma abc_dma;
@@ -83,7 +85,21 @@ static int dma_callback(uint8_t chan, enum dma_data_direction dir,
 	}
 
 	wait_info = xfer->wait_info;
-	wait_info->error = (status == DMA_ABORT) ? -EIO : 0;
+	if (status == DMA_ABORT)
+		wait_info->error = -EIO;
+
+	if (xfer->transfer_method == DMA_TRANSFER_USING_MBLOCK) {
+		if (WARN_ON(!(xfer->mblk_desc->channel_mask & 1 << chan))) {
+			dev_err(&abc_dma.pdev->dev,
+				"%s: Got interrupt on an unexpected channel!\n",
+				__func__);
+		}
+		xfer->mblk_desc->channel_mask &= ~(1 << chan);
+		if (xfer->mblk_desc->channel_mask) {
+			spin_unlock(&dma_spinlock);
+			return 0;
+		}
+	}
 
 	complete_all(&wait_info->done);
 
@@ -141,7 +157,7 @@ static int abc_pcie_dma_alloc_ab_dram(size_t size,
 	if (IS_ERR(ab_dram_dmabuf))
 		return PTR_ERR(ab_dram_dmabuf);
 
-	memset(mblk_desc, 0, sizeof(*mblk_desc));
+	memset(&mblk_desc->mapping, 0, sizeof(mblk_desc->mapping));
 	mblk_desc->ab_dram_dma_buf = ab_dram_dmabuf;
 
 	mblk_desc->size = size;
@@ -555,7 +571,7 @@ int abc_pcie_clean_dma_local_buffers(struct abc_dma_xfer *xfer)
 		ab_dram_free_dma_buf_kernel(mblk_desc->ab_dram_dma_buf);
 		kfree(mblk_desc);
 		xfer->mblk_desc = NULL;
-	} else if(xfer->transfer_method == DMA_TRANSFER_USING_SBLOCK &&
+	} else if (xfer->transfer_method == DMA_TRANSFER_USING_SBLOCK &&
 		sblk_desc) {
 		kfree(sblk_desc);
 		xfer->sblk_desc = NULL;
@@ -656,7 +672,7 @@ void abc_pcie_clean_dma_xfer_locked(struct abc_dma_xfer *xfer)
 	if (wait_info != NULL) {
 		wait_info->xfer = NULL;
 		/* Handle the case where there are no waiters */
-		if(!wait_info->active_waiters) {
+		if (!wait_info->active_waiters) {
 			kmem_cache_free((xfer->session)->waiter_cache,
 					wait_info);
 			xfer->wait_info = NULL;
@@ -692,6 +708,7 @@ void abc_pcie_clean_dma_xfer_locked(struct abc_dma_xfer *xfer)
 void abc_pcie_clean_dma_xfer(struct abc_dma_xfer *xfer)
 {
 	struct abc_pcie_dma_session *session = xfer->session;
+
 	mutex_lock(&session->lock);
 	abc_pcie_clean_dma_xfer_locked(xfer);
 	mutex_unlock(&session->lock);
@@ -789,7 +806,7 @@ int abc_pcie_dma_do_wait(struct abc_pcie_dma_session *session,
 		dev_dbg(&abc_dma.pdev->dev, "%s: DMA Timed Out (%d)\n",
 			__func__, err);
 
-	} else if(remaining < 0) {
+	} else if (remaining < 0) {
 		err = -ERESTARTSYS;
 		dev_dbg(&abc_dma.pdev->dev, "%s: DMA Restart (%d)\n",
 			__func__, err);
@@ -841,6 +858,7 @@ static void add_entry(void *base_vaddr, size_t index, uint32_t header,
 	entry.sar_high = UPPER(src_addr);
 	entry.dar_low = LOWER(dst_addr);
 	entry.dar_high = UPPER(dst_addr);
+
 	memcpy_toio(base_vaddr + sizeof(entry) * index, &entry, sizeof(entry));
 }
 
@@ -915,14 +933,14 @@ static void seek_scatterlist(struct scatterlist **sc_list, int *count,
 }
 
 static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
-					struct abc_buf_desc *dst_buf,
-					size_t xfer_size,
-					void *base_vaddr,
-					int *num_entries)
+				struct abc_buf_desc *dst_buf,
+				size_t xfer_size,
+				struct abc_pcie_dma_mblk_desc *mblk_desc,
+				int *num_entries /*in-out*/)
 {
 	size_t size_rem = xfer_size;
 	size_t entry_index = 0;
-	uint32_t entry_size = 0;
+	uint32_t entry_size = 0, channel_entry_index = 0;
 	uint64_t entry_src_addr;	/* valid when entry_size > 0 */
 	uint64_t entry_dst_addr;	/* valid when entry_size > 0 */
 	size_t entries_rem = *num_entries;
@@ -935,6 +953,19 @@ static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 	struct scatterlist *dst_sge = dst_buf->sgl->sc_list;
 	size_t dst_addr;		/* local to primary loop */
 	size_t size;			/* local to primary loop */
+	int num_dma_channels;
+	int entries_per_channel;
+	void *base_vaddr;
+
+	if (mblk_desc) {
+		num_dma_channels = mblk_desc->num_dma_channels;
+		entries_per_channel = mblk_desc->entries_per_channel[0];
+		base_vaddr = mblk_desc->mapping.bar_vaddr;
+	} else {
+		num_dma_channels = 1;
+		entries_per_channel = INT_MAX;
+		base_vaddr = NULL;
+	}
 
 	seek_scatterlist(&src_sge, &src_sge_rem, &src_off);
 	seek_scatterlist(&dst_sge, &dst_sge_rem, &dst_off);
@@ -956,10 +987,12 @@ static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 			entry_size += size;
 		} else {
 			if (entry_size > 0) {
+				channel_entry_index++;
 				add_data_entry(base_vaddr, entry_index,
-						entry_src_addr,	entry_dst_addr,
-						entry_size, entries_rem,
-						/*last=*/false);
+					entry_src_addr, entry_dst_addr,
+					entry_size, entries_rem,
+					/*last=*/ channel_entry_index ==
+					entries_per_channel);
 				entry_index++;
 			}
 
@@ -968,6 +1001,18 @@ static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 			entry_dst_addr = dst_addr;
 		}
 
+		if (channel_entry_index == entries_per_channel) {
+			add_link_entry(base_vaddr, entry_index, entries_rem);
+			entry_index++;
+			channel_entry_index = 0;
+			num_dma_channels--;
+			entries_per_channel = (entries_rem - entry_index - 1)
+				/ num_dma_channels;
+			mblk_desc->entries_per_channel[
+				mblk_desc->num_dma_channels -
+				num_dma_channels] =
+				entries_per_channel;
+		}
 		size_rem -= size;
 
 		src_off += size;
@@ -997,6 +1042,12 @@ static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 	entry_index++;
 	add_link_entry(base_vaddr, entry_index, entries_rem);
 	entry_index++;
+
+	if (entries_rem && WARN_ON(entries_rem != entry_index)) {
+		dev_err(&abc_dma.pdev->dev,
+			"%s unexpected number of entries: entries %zu, expected %zu\n",
+			__func__, entry_index, entries_rem);
+	}
 
 	dev_dbg(&abc_dma.pdev->dev, "%zu entries\n", entry_index);
 
@@ -1079,6 +1130,22 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 
 	xfer->mblk_desc = mblk_desc;
 
+	num_entries--;
+
+	mblk_desc->num_dma_channels = xfer->dir == DMA_TO_DEVICE ?
+		DMA_CHANS_PER_READ_XFER : DMA_CHANS_PER_WRITE_XFER;
+
+	mblk_desc->num_dma_channels = min(mblk_desc->num_dma_channels,
+		num_entries);
+
+	/* entries per channel not including list end entry */
+	mblk_desc->entries_per_channel[0] =
+		(num_entries + mblk_desc->num_dma_channels - 1)
+		/ mblk_desc->num_dma_channels;
+
+	/* number of total entries including list end entries */
+	num_entries = num_entries + mblk_desc->num_dma_channels;
+
 	ll_size = num_entries * sizeof(struct abc_pcie_dma_ll_element);
 
 	err = abc_pcie_dma_alloc_ab_dram(ll_size, mblk_desc);
@@ -1112,7 +1179,7 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 
 	err = abc_pcie_build_transfer_list(
 			pick_src_buf(xfer), pick_dst_buf(xfer), xfer->size,
-			mblk_desc->mapping.bar_vaddr, &num_entries);
+			mblk_desc, &num_entries);
 
 	abc_pcie_unmap_bar_region(abc_dma.dma_dev,
 			&abc_dma.pdev->dev /* owner */,
@@ -1308,10 +1375,10 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 		kfree(rbuf->sgl);
 		goto clean_local_buffer;
 	}
-
+	/* count the number of expected entries */
 	err = abc_pcie_build_transfer_list(
 			pick_src_buf(xfer), pick_dst_buf(xfer), xfer->size,
-			/*base_vaddr=*/NULL, &num_entries);
+			/*mblk_desc=*/NULL, &num_entries);
 	if (err)
 		goto clean_buffers;
 
@@ -1372,9 +1439,28 @@ static void abc_pcie_exec_dma_xfer(struct abc_dma_xfer *xfer)
 	if (xfer->transfer_method == DMA_TRANSFER_USING_SBLOCK)
 		err = dma_sblk_start(dma_chan, xfer->dir, xfer->sblk_desc);
 
-	else /* Multi block transfer */
+	else { /* Multi block transfer */
+		phys_addr_t mblk_addr[ABC_DMA_MAX_CHAN];
+		int c, total_entries = 0;
+
+		xfer->mblk_desc->channel_mask = 0;
+		WARN_ON(dma_chan + xfer->mblk_desc->num_dma_channels >
+			ABC_DMA_MAX_CHAN);
+
+		for (c = 0; c < xfer->mblk_desc->num_dma_channels; ++c) {
+			xfer->mblk_desc->channel_mask |= (1 << (c + DMA_CHAN));
+			mblk_addr[c] = xfer->mblk_desc->dma_paddr +
+				total_entries *
+				sizeof(struct abc_pcie_dma_ll_element);
+			total_entries +=
+				xfer->mblk_desc->entries_per_channel[c] + 1;
+		}
+
 		err = dma_mblk_start(dma_chan, xfer->dir,
-					&xfer->mblk_desc->dma_paddr, 1);
+			    mblk_addr, xfer->mblk_desc->num_dma_channels);
+		if (err)
+			xfer->mblk_desc->channel_mask = 0;
+	}
 
 	if (!err)
 		return;
@@ -1476,6 +1562,7 @@ int abc_pcie_start_dma_xfer_locked(struct abc_dma_xfer *xfer,
 int abc_pcie_start_dma_xfer(struct abc_dma_xfer *xfer, uint32_t *start_id)
 {
 	int err;
+
 	mutex_lock(&(xfer->session)->lock);
 	err = abc_pcie_start_dma_xfer_locked(xfer, start_id);
 	mutex_unlock(&(xfer->session)->lock);
@@ -1546,6 +1633,7 @@ int abc_pcie_dma_open_session(struct abc_pcie_dma_session *session)
 void abc_pcie_dma_close_session(struct abc_pcie_dma_session *session)
 {
 	struct abc_dma_xfer *xfer, *nxt_xfer;
+
 	list_for_each_entry_safe(xfer, nxt_xfer, &session->transfers,
 		list_transfers) {
 		abc_pcie_clean_dma_xfer(xfer);
@@ -1597,7 +1685,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&pending_to_dev_q);
 	INIT_LIST_HEAD(&pending_from_dev_q);
 
-	for (dma_chan=0; dma_chan < ABC_DMA_MAX_CHAN; dma_chan++) {
+	for (dma_chan = 0; dma_chan < ABC_DMA_MAX_CHAN; dma_chan++) {
 		err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
 		if (err) {
 			dev_err(&abc_dma.pdev->dev,
@@ -1626,7 +1714,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 restore_callback:
 	/* Restore state of callback array if there is an error registering */
 	if (err) {
-		for (i=dma_chan; i >= 0; i--)
+		for (i = dma_chan; i >= 0; i--)
 			abc_reg_dma_irq_callback(NULL, i);
 	}
 
