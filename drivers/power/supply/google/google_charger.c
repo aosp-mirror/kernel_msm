@@ -134,7 +134,9 @@ struct chg_drv {
 	struct notifier_block psy_nb;
 	struct delayed_work init_work;
 	struct delayed_work chg_work;
+	struct work_struct chg_psy_work;
 	struct wakeup_source chg_ws;
+
 
 	/* */
 	struct chg_thermal_device thermal_devices[CHG_TERMAL_DEVICES_COUNT];
@@ -174,14 +176,21 @@ struct chg_drv {
 	unsigned int pps_cc_tolerance_pct;
 };
 
-
-static void reschedule_chg_work(struct delayed_work *chg_work)
+static void reschedule_chg_work(struct chg_drv *chg_drv)
 {
-	cancel_delayed_work_sync(chg_work);
-	schedule_delayed_work(chg_work, 0);
+	cancel_delayed_work_sync(&chg_drv->chg_work);
+	schedule_delayed_work(&chg_drv->chg_work, 0);
 }
 
-static int psy_changed(struct notifier_block *nb,
+static void chg_psy_work(struct work_struct *work)
+{
+	struct chg_drv *chg_drv =
+		container_of(work, struct chg_drv, chg_psy_work);
+	reschedule_chg_work(chg_drv);
+}
+
+/* cannot block: run in atomic context when called from chg_psy_changed() */
+static int chg_psy_changed(struct notifier_block *nb,
 		       unsigned long action, void *data)
 {
 	struct power_supply *psy = data;
@@ -200,7 +209,7 @@ static int psy_changed(struct notifier_block *nb,
 	     !strcmp(psy->desc->name, chg_drv->tcpm_psy_name) ||
 	     (chg_drv->wlc_psy_name &&
 	      !strcmp(psy->desc->name, chg_drv->wlc_psy_name)))) {
-		reschedule_chg_work(&chg_drv->chg_work);
+		schedule_work(&chg_drv->chg_psy_work);
 	}
 	return NOTIFY_OK;
 }
@@ -218,6 +227,7 @@ static char *psy_usbc_type_str[] = {
 	"PD", "PD_DRP", "PD_PPS", "BrickID"
 };
 
+/* NOTE: doesn't reset chg_drv->adapter_details.v = 0 see chg_work() */
 static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 {
 	union gbms_charger_state chg_state = { .v = 0 };
@@ -757,10 +767,9 @@ static int chg_work_read_state(union gbms_charger_state *chg_state,
 	return 0;
 }
 
-/* 0 stop charging, <0 error, positive keep going */
-static int chg_work_roundtrip(const union gbms_charger_state *chg_state,
-			      struct power_supply *bat_psy,
-			      int *fv_uv, int *cc_max)
+static int chg_work_batt_roundtrip(const union gbms_charger_state *chg_state,
+				   struct power_supply *bat_psy,
+				   int *fv_uv, int *cc_max)
 {
 	int rc;
 
@@ -794,6 +803,7 @@ static int chg_work_roundtrip(const union gbms_charger_state *chg_state,
 	return 0;
 }
 
+/* 0 stop charging, <0 error, positive keep going */
 static int chg_work_next_interval(const struct chg_drv *chg_drv,
 				  union gbms_charger_state *chg_state)
 {
@@ -831,20 +841,69 @@ static void chg_work_adapter_details(union gbms_ce_adapter_details *ad,
 		(void)info_usb_state(ad, chg_drv->usb_psy, chg_drv->tcpm_psy);
 }
 
+static int chg_work_roundtrip(struct chg_drv *chg_drv)
+{
+	int fv_uv, cc_max, update_interval, rc;
+	union gbms_charger_state chg_state = { .v = 0 };
+	struct power_supply *bat_psy = chg_drv->bat_psy;
+
+	rc = chg_work_read_state(&chg_state, chg_drv->chg_psy);
+	if (rc < 0)
+		return rc;
+
+	if (chg_drv->chg_mode == CHG_DRV_MODE_NOIRDROP)
+		chg_state.f.vchrg = 0;
+
+	rc = chg_work_batt_roundtrip(&chg_state, bat_psy, &fv_uv, &cc_max);
+	if (rc < 0)
+		return rc;
+
+	/* sanity/termination/tolerance */
+	if (fv_uv == -1)
+		fv_uv = chg_drv->fv_uv;
+	if  (cc_max == -1)
+		cc_max = 0;
+
+	/* NOTE: battery has already voted on these */
+	vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, true, fv_uv);
+	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, cc_max);
+
+	/* update_interval==0 means stop charging */
+	update_interval = chg_work_next_interval(chg_drv, &chg_state);
+	if (update_interval == 0)
+		return 0;
+
+	if (chg_drv->tcpm_psy) {
+		int pps_ui;
+
+		pps_ui = pps_work(&chg_drv->pps_data, chg_drv->tcpm_psy);
+		if (pps_ui < 0)
+			pps_ui = MSEC_PER_SEC;
+
+		chg_drv->pps_data.chg_flags = chg_state.f.flags;
+
+		vote(chg_drv->msc_interval_votable,
+			CHG_PPS_VOTER,
+			(pps_ui != 0),
+			pps_ui);
+	}
+
+	return update_interval;
+}
+
 static void chg_work(struct work_struct *work)
 {
 	struct chg_drv *chg_drv =
 		container_of(work, struct chg_drv, chg_work.work);
 	struct power_supply *usb_psy = chg_drv->usb_psy;
-	struct power_supply *tcpm_psy = chg_drv->tcpm_psy;
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
 	struct power_supply *chg_psy = chg_drv->chg_psy;
 	union gbms_ce_adapter_details ad = { .v = 0 };
+	int soc, disable_charging, disable_pwrsrc;
 	int usb_online, wlc_online = 0;
-	int update_interval = 0, soc, disable_charging;
-	int disable_pwrsrc;
-	int rc = 0;
+	int update_interval = 0;
+	int success, rc = 0;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
 
@@ -854,7 +913,7 @@ static void chg_work(struct work_struct *work)
 		/* -EGAIN = NOT ready, <0 don't know yet */
 		rc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_PRESENT);
 		if (rc < 0)
-			goto error_rerun;
+			goto rerun_error;
 
 		chg_drv->batt_present = (rc > 0);
 		if (!chg_drv->batt_present)
@@ -870,49 +929,62 @@ static void chg_work(struct work_struct *work)
 	if (wlc_psy)
 		wlc_online = GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
 
-	/* If no power source, stop charging immediately and exit */
 	if (usb_online  < 0 || wlc_online < 0) {
 		pr_err("MSC_CHG error reading usb=%d wlc=%d\n",
 						usb_online, wlc_online);
-		goto error_rerun;
+		goto rerun_error;
 	} else if (!usb_online && !wlc_online) {
-
+		/* If no power source, stop charging */
 		if (!chg_drv->stop_charging) {
-			pr_info("MSC_CHG no power source detected, disabling charging\n");
+			pr_info("MSC_CHG no power source, disabling charging\n");
 			reset_chg_drv_state(chg_drv);
 		}
 
 		goto exit_chg_work;
 	} else if (chg_drv->stop_charging) {
-	/* might be disabled later due to is_charging_enabled */
-		pr_info("MSC_CHG power source detected, enabling charging\n");
+		/* If power source, enable charging and set ILIM,ICHG later
+		 * if disabled.
+		 */
+		pr_info("MSC_CHG power source usb=%d wlc=%d, enabling charging\n",
+			usb_online, wlc_online);
+
 		if (chg_drv->therm_wlc_override_fcc)
 			chg_therm_update_fcc(chg_drv);
 
+		/* TODO: re-able at after roundrip */
 		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, false, 0);
 		chg_drv->stop_charging = false;
 	}
 
+	/* determine adapter, next float voltage, cc_max and update_interval
+	 * so that adapter, ->fv_uv and ->cc_max are always correct
+	 */
 	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
+	update_interval = chg_work_roundtrip(chg_drv);
+	if (update_interval < 0)
+		goto rerun_error;
+	if (update_interval == 0)
+		goto exit_chg_work;
 
-	soc = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY);
-	if (soc < 0) {
+	soc = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY, &rc);
+	if (rc < 0) {
 		pr_err("MSC_CHG cannot get capacity\n");
-		rc = soc;
-		goto error_rerun;
+		goto rerun_error;
 	}
 
 	/* this force drain: we might decide to run from power instead.
 	 * Enable/disable charging comes only from is_charging_disabled
-	 * */
+	 */
 	disable_charging = chg_work_is_charging_disabled(chg_drv, soc);
 	if (disable_charging && soc > chg_drv->charge_stop_level)
 		disable_pwrsrc = 1;
 	else
 		disable_pwrsrc = 0;
 
+	/* TODO: re-enable charging only after setting the charger */
 	if (disable_charging != chg_drv->disable_charging) {
 		pr_info("MSC_CHG set disable_charging(%d)", disable_charging);
+
 		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER,
 				disable_charging != 0, 0);
 		vote(chg_drv->msc_fcc_votable,
@@ -920,6 +992,7 @@ static void chg_work(struct work_struct *work)
 	}
 	chg_drv->disable_charging = disable_charging;
 
+	/* TODO: re-enable input only after setting the charger */
 	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
 		pr_info("MSC_CHG set disable_pwrsrc(%d)", disable_pwrsrc);
 		GPSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND,
@@ -927,91 +1000,37 @@ static void chg_work(struct work_struct *work)
 	}
 	chg_drv->disable_pwrsrc = disable_pwrsrc;
 
-	/* NOTE: I think we just need disable charging here */
-	if (chg_drv->disable_charging || chg_drv->disable_pwrsrc) {
+	if (chg_drv->disable_charging || chg_drv->disable_pwrsrc)
+		update_interval = 0;
 
-		/* update_interval = 0, will prevent updates */
-		rc = chg_set_charger(chg_psy, chg_drv->fv_uv, 0);
-		if (rc != 0)
-			goto error_rerun;
+	if (update_interval != 0) {
+		/* voter callback will reschedule at correct interval */
+		vote(chg_drv->msc_interval_votable,
+		     MSC_CHG_VOTER, true,
+		     update_interval);
 
-		/* NOTE: next power suply event will restart polling. No
-		 * need to reset the state, next cycle will do that.
-		 * NOTE: might still need/want to roundtrip to the battery
-		 */
-	} else {
-		int fv_uv, cc_max;
-		union gbms_charger_state chg_state = { .v = 0 };
-
-		rc = chg_work_read_state(&chg_state, chg_psy);
-		if (rc < 0)
-			goto error_rerun;
-
-		if (chg_drv->chg_mode == CHG_DRV_MODE_NOIRDROP)
-			chg_state.f.vchrg = 0;
-
-		rc = chg_work_roundtrip(&chg_state, bat_psy, &fv_uv, &cc_max);
-		if (rc < 0)
-			goto error_rerun;
-
-		/* sanity/termination/tolerance */
-		if (fv_uv == -1)
-			fv_uv = chg_drv->fv_uv;
-		if  (cc_max == -1)
-			cc_max = 0;
-
-		/* NOTE: battery has already voted on these */
-		vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, true, fv_uv);
-		vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, cc_max);
-
-		/* zero update_interval means stop charging */
-		update_interval = chg_work_next_interval(chg_drv, &chg_state);
-		if (update_interval) {
-
-			if (tcpm_psy) {
-				int pps_ui;
-
-				pps_ui = pps_work(&chg_drv->pps_data,
-						  chg_drv->tcpm_psy);
-				if (pps_ui < 0)
-					pps_ui = MSEC_PER_SEC;
-
-				chg_drv->pps_data.chg_flags = chg_state.f.flags;
-
-				vote(chg_drv->msc_interval_votable,
-					CHG_PPS_VOTER,
-					(pps_ui != 0),
-					pps_ui);
-			}
-
-			/* update_interval is nonzero: so the callback
-			 * msc_update_charger_cb() will write to charger,
-			 * update PPS adapter and reschedule with the min
-			 * interval voted to msc_interval_votable
-			 */
-			vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER,
-				true, update_interval);
-		} else {
-			pr_info("MSC_CHG stop battery charging work\n");
-			rc = chg_set_charger(chg_psy, chg_drv->fv_uv, 0);
-			if (rc != 0)
-				goto error_rerun;
-
-			reset_chg_drv_state(chg_drv);
-		}
+		goto exit_chg_work;
 	}
 
-	goto exit_chg_work;
+	/* here on disable_charging or disable_pwrsrc */
+	rc = chg_set_charger(chg_psy, chg_drv->fv_uv, 0);
+	if (rc == 0)
+		goto exit_chg_work;
 
-error_rerun:
-	pr_err("MSC_CHG error %d occurred, rerun in %d ms\n",
-	       rc, CHG_WORK_ERROR_RETRY_MS);
-	schedule_delayed_work(&chg_drv->chg_work,
-			      msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
+rerun_error:
+	success = schedule_delayed_work(&chg_drv->chg_work,
+					CHG_WORK_ERROR_RETRY_MS);
+
+	/* no need to reschedule the pending after an error */
+	pr_err("MSC_CHG error rerun=%d in %d ms (%d)\n",
+		success, update_interval, rc);
 
 exit_chg_work:
 	/* Route adapter details after the roundtrip since google_battery
 	 * might overwrite the value when it starts a new cycle.
+	 * NOTE: reset_chg_drv_state() must not set chg_drv->adapter_details.v
+	 * to zero. Fix the odd dependency when handling failure in setting
+	 * POWER_SUPPLY_PROP_ADAPTER_DETAILS.
 	 */
 	if (ad.v != chg_drv->adapter_details.v) {
 		int rc;
@@ -1019,6 +1038,8 @@ exit_chg_work:
 		rc = GPSY_SET_PROP(chg_drv->bat_psy,
 				   POWER_SUPPLY_PROP_ADAPTER_DETAILS,
 				   (int)ad.v);
+
+		/* TODO: handle failure rescheduling chg_work */
 		if (rc < 0)
 			pr_err("MSC_CHG no adapter details (%d)\n", rc);
 		else
@@ -1417,7 +1438,7 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 
 static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 {
-	int rc;
+	int rc = 0;
 	struct power_supply *chg_psy = chg_drv->chg_psy;
 
 	/* when set cc_tolerance needs to be applied to everything */
@@ -1605,11 +1626,13 @@ static int msc_update_charger_cb(struct votable *votable,
 {
 	int rc, update_interval, fv_uv, cc_max;
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	int success;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
+
 	update_interval =
 		get_effective_result_locked(chg_drv->msc_interval_votable);
-	if (!update_interval)
+	if (update_interval == 0)
 		goto msc_done;
 
 	fv_uv = get_effective_result_locked(chg_drv->msc_fv_votable);
@@ -1624,7 +1647,6 @@ static int msc_update_charger_cb(struct votable *votable,
 			goto msc_done;
 
 		rc = pps_update_adapter(chg_drv, pps->out_uv, pps->op_ua);
-
 		if (rc >= 0)
 			pps_update_interval = rc;
 		else if (rc == -EAGAIN)
@@ -1635,17 +1657,14 @@ static int msc_update_charger_cb(struct votable *votable,
 	}
 
 	rc = chg_update_charger(chg_drv, fv_uv, cc_max);
-	if (rc < 0) {
-		pr_info("MSC_CHG fv_uv=%d, cc_max=%d, update error=%d rerun in %d ms\n",
-			fv_uv, cc_max, rc, update_interval);
-		schedule_delayed_work(&chg_drv->chg_work,
-			msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
-	} else {
-		pr_info("MSC_CHG fv_uv=%d, cc_max=%d, rerun in %d ms\n",
-			fv_uv, cc_max, update_interval);
-		schedule_delayed_work(&chg_drv->chg_work,
-			msecs_to_jiffies(update_interval));
-	}
+	if (rc < 0)
+		update_interval = CHG_WORK_ERROR_RETRY_MS;
+
+	success = schedule_delayed_work(&chg_drv->chg_work,
+					msecs_to_jiffies(update_interval));
+
+	pr_info("MSC_CHG fv_uv=%d, cc_max=%d, rerun=%d in %d ms (%d)\n",
+		fv_uv, cc_max, success, update_interval, rc);
 
 msc_done:
 	__pm_relax(&chg_drv->chg_ws);
@@ -1844,7 +1863,7 @@ static int chg_set_fcc_charge_cntl_limit(struct thermal_cooling_device *tcd,
 				ret);
 
 	/* force to apply immediately */
-	reschedule_chg_work(&chg_drv->chg_work);
+	reschedule_chg_work(chg_drv);
 	return ret;
 }
 
@@ -2087,7 +2106,7 @@ static void google_charger_init_work(struct work_struct *work)
 
 	reset_chg_drv_state(chg_drv);
 
-	chg_drv->psy_nb.notifier_call = psy_changed;
+	chg_drv->psy_nb.notifier_call = chg_psy_changed;
 	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
 	if (ret < 0)
 		pr_err("Cannot register power supply notifer, ret=%d\n", ret);
@@ -2189,6 +2208,7 @@ static int google_charger_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&chg_drv->init_work, google_charger_init_work);
 	INIT_DELAYED_WORK(&chg_drv->chg_work, chg_work);
+	INIT_WORK(&chg_drv->chg_psy_work, chg_psy_work);
 	platform_set_drvdata(pdev, chg_drv);
 
 	/* votables and chg_work need a wakeup source */
