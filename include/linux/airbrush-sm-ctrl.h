@@ -435,6 +435,9 @@ struct ab_state_context {
 	 */
 	int alternate_boot;
 
+	/* Check for OTP bypass */
+	int otp_bypass;
+
 	/* if set, skip pcie resume operation for debugging purpose */
 	bool debug_skip_pcie_link_init;
 

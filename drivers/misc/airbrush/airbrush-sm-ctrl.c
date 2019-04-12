@@ -2637,14 +2637,19 @@ int ab_sm_init(struct platform_device *pdev)
 		goto fail_ab_ready;
 	}
 
-	/* Get the alternate-boot property from dt node. This property
-	 * allows secondary boot via SPI. If the alternate-boot property
-	 * is no found, set ab_sm_ctx->alternate_boot = 0 by default.
+	if (of_property_read_u32(np, "otp-bypass", &ab_sm_ctx->otp_bypass)) {
+		ab_sm_ctx->otp_bypass = 0;
+		dev_dbg(dev,
+			"otp-bypass property not found. Setting ab_sm_ctx->otp_bypass = 0 (default)\n");
+	}
+
+	/* Force alternate boot everytime Airbrush is powered up
+	 * Required to bypass the loading of PCIe config from OTP (b/130528130)
 	 */
-	if (of_property_read_u32(np, "alternate-boot",
-			&ab_sm_ctx->alternate_boot)) {
-		ab_sm_ctx->alternate_boot = 0;
-		dev_dbg(dev, "alternate-boot property not found. Setting b_sm_ctx->alternate_boot = 0 (default)\n");
+	if (ab_sm_ctx->otp_bypass) {
+		ab_sm_ctx->alternate_boot = 1;
+		dev_warn(dev,
+			 "OTP bypass needed. Override alternate_boot = 1\n");
 	}
 
 	/* Intialize the default state of each block for state manager */

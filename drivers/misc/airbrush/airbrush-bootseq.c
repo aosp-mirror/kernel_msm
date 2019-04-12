@@ -39,6 +39,7 @@
 #include "airbrush-spi.h"
 #include "airbrush-thermal.h"
 
+#define REG_AON_PCI_OTP	0x10b3000c
 #define REG_SRAM_ADDR	0x10b30374
 #define REG_DDR_INIT	0x10b30378
 #define REG_UPL_CMPL	0x10b30384
@@ -47,7 +48,9 @@
 #define RAM_CRC_VAL	0x10b30398
 #define GPB0_DRV	0x10b4006c
 
-#define SRAM_BL_ADDR	0x20000
+#define ROM_BL_ADDR	0
+#define SRAM_PCI_OTP	0x20414
+#define SRAM_PCI_BAR	(SRAM_PCI_OTP + 4*253)
 
 #define SOC_PWRGOOD_WAIT_TIMEOUT	msecs_to_jiffies(100)
 #define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100)
@@ -86,13 +89,10 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	int crc_ok = 1;
 	unsigned int data;
 	struct airbrush_spi_packet spi_packet;
-	const struct firmware *fw_entry;
-	uint32_t *image_dw_buf;
-	int image_size_dw;
-	int fw_status;
 	int ret;
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
+	uint32_t dummy[3] = { 0 };
 
 	if (!ab_ctx)
 		return -EINVAL;
@@ -148,20 +148,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 
 	ab_sm_start_ts(AB_SM_TS_ALT_BOOT);
 	if (ab_ctx->alternate_boot) {
-		fw_status =
-			request_firmware(&fw_entry,
-				M0_FIRMWARE_PATH, ab_ctx->dev);
-		if (fw_status != 0) {
-			dev_info(ab_ctx->dev,
-				 "Airbrush Firmware Not Found: %d, %d",
-				 fw_status, __LINE__);
-			return -EIO;
-		}
-		image_size_dw = fw_entry->size / 4;
-		image_dw_buf = vmalloc(image_size_dw *
-				sizeof(uint32_t));
-		parse_fw(image_dw_buf, fw_entry->data, image_size_dw);
-		release_firmware(fw_entry);
+		dev_info(ab_ctx->dev, "alternate boot\n");
 
 		/* Wait for AB_READY = 1,
 		 * this ensures the SPI FSM is initialized to flash the
@@ -182,21 +169,36 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		while (num_attempts) {
 			/* [TBD] Reset CRC Register via SPI-FSM */
 
-			/* [TBD] Enable CRC */
+			/* PCIe PHY OTP patch count  */
+			spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
+			spi_packet.granularity = FOUR_BYTE;
+			spi_packet.base_address = SRAM_PCI_OTP;
+			spi_packet.data_length = 1;
+			spi_packet.data = dummy;
 
-			/* Initiate FW patch upload via SPI-FSM */
+			if (airbrush_spi_run_cmd(&spi_packet))
+				return -EIO;
+
+			/* BAR0, 2, and 4 sizes  */
 			spi_packet.command = AB_SPI_CMD_FSM_BURST_WRITE;
 			spi_packet.granularity = FOUR_BYTE;
-			spi_packet.base_address = SRAM_BL_ADDR;
-			spi_packet.data_length = image_size_dw;
-			spi_packet.data = image_dw_buf;
+			spi_packet.base_address = SRAM_PCI_BAR;
+			spi_packet.data_length = 3;
+			spi_packet.data = dummy;
 
-			if (airbrush_spi_run_cmd(&spi_packet)) {
-				vfree(image_dw_buf);
+			if (airbrush_spi_run_cmd(&spi_packet))
 				return -EIO;
-			}
 
-			/* [TBD] Read CRC Register via SPI-FSM */
+			/* Stop OTP read of PCIe configuration  */
+			dummy[0] = 2;
+			spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
+			spi_packet.granularity = FOUR_BYTE;
+			spi_packet.base_address = REG_AON_PCI_OTP;
+			spi_packet.data_length = 1;
+			spi_packet.data = dummy;
+
+			if (airbrush_spi_run_cmd(&spi_packet))
+				return -EIO;
 
 			/* if CRC is OK, break the loop */
 			if (crc_ok)
@@ -205,24 +207,20 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 			/* Decrement the number of attempts and retry */
 			num_attempts--;
 
-			if (!num_attempts) {
-				vfree(image_dw_buf);
+			if (!num_attempts)
 				return -EIO;
-			}
 		}
 
 		/* set REG_SRAM_ADDR=SRAM_BL_ADDR via SPI-FSM */
-		data = SRAM_BL_ADDR;
+		data = ROM_BL_ADDR;
 		spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
 		spi_packet.granularity = FOUR_BYTE;
 		spi_packet.base_address = REG_SRAM_ADDR;
 		spi_packet.data_length = 1;
 		spi_packet.data = &data;
 
-		if (airbrush_spi_run_cmd(&spi_packet)) {
-			vfree(image_dw_buf);
+		if (airbrush_spi_run_cmd(&spi_packet))
 			return -EIO;
-		}
 
 		/* set REG_UPL_CMPL=1  via SPI-FSM */
 		data = 0x1; // used to write REG_UPL_CMPL = 0x1
@@ -232,10 +230,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		spi_packet.data_length = 1;
 		spi_packet.data = &data;
 
-		if (airbrush_spi_run_cmd(&spi_packet)) {
-			vfree(image_dw_buf);
+		if (airbrush_spi_run_cmd(&spi_packet))
 			return -EIO;
-		}
 
 		/* Read the REG_UPL_COMPL register to make sure the
 		 * AB_READY is deasserted by the Airbrush.
@@ -249,12 +245,8 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		spi_packet.data_length = 1;
 		spi_packet.data = NULL;
 
-		if (airbrush_spi_run_cmd(&spi_packet)) {
-			vfree(image_dw_buf);
+		if (airbrush_spi_run_cmd(&spi_packet))
 			return -EIO;
-		}
-
-		vfree(image_dw_buf);
 	}
 	ab_sm_record_ts(AB_SM_TS_ALT_BOOT);
 
