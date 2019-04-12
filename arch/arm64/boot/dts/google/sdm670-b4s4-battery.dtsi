@@ -8,6 +8,9 @@
 
 &pm660_fg {
 	qcom,battery-thermal-coefficients = [d8 50 ff];
+	qcom,cl-start-capacity = <50>;
+	qcom,cl-max-increment = <5>;
+	qcom,cl-max-decrement = <20>;
 	/delete-property/ qcom,hold-soc-while-full;
 	qcom,fg-cutoff-voltage = <3300>;
 	qcom,fg-empty-voltage = <2600>;
