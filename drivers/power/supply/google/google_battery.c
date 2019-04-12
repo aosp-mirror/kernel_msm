@@ -562,13 +562,15 @@ static void batt_chg_stats_init(struct gbms_charging_event *ce_data)
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
 {
+	union gbms_ce_adapter_details ad;
 	struct gbms_charging_event *ce_data = &batt_drv->ce_data;
 	const time_t now = get_boot_sec();
 	int vin, cc_in;
 
 	mutex_lock(&batt_drv->stats_lock);
-
+	ad.v = batt_drv->ce_data.adapter_details.v;
 	batt_chg_stats_init(ce_data);
+	batt_drv->ce_data.adapter_details.v = ad.v;
 
 	vin = GPSY_GET_PROP(batt_drv->fg_psy,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW);
@@ -1896,9 +1898,7 @@ static int gbatt_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
-		mutex_lock(&batt_drv->stats_lock);
 		val->intval = batt_drv->ce_data.adapter_details.v;
-		mutex_unlock(&batt_drv->stats_lock);
 	break;
 
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
@@ -2059,7 +2059,9 @@ static int gbatt_set_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
+		mutex_lock(&batt_drv->stats_lock);
 		batt_drv->ce_data.adapter_details.v = val->intval;
+		mutex_unlock(&batt_drv->stats_lock);
 	break;
 
 	/* NG Charging, where it all begins */
