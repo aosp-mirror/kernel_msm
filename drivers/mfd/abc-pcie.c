@@ -2002,6 +2002,12 @@ static int abc_pcie_linkdown_handler(void *ctx)
 
 	dev_warn(dev, "Broadcast link error notification\n");
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_ERROR);
+
+	/* If linkdown happens during EL2 mode, make sure to re-attach SMMU. */
+	if (!(atomic_read(&abc_dev->link_state) &
+			  ABC_PCIE_SMMU_ATTACH_STATE_MASK))
+		abc_pcie_smmu_attach(dev);
+
 	return 0;
 }
 
