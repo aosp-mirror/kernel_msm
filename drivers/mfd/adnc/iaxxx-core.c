@@ -21,6 +21,7 @@
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/version.h>
 #include <linux/circ_buf.h>
 #include <linux/clk.h>
@@ -909,15 +910,15 @@ static int iaxxx_regdump_init(struct iaxxx_priv *priv)
 	dev_dbg(priv->dev, "%s()", __func__);
 
 	priv->dump_log = true;
-	priv->reg_dump = kzalloc(sizeof(struct iaxxx_reg_dump_priv),
-			GFP_KERNEL);
+	priv->reg_dump = kvmalloc(sizeof(struct iaxxx_reg_dump_priv),
+					__GFP_ZERO);
 	if (!priv->reg_dump)
 		return -ENOMEM;
 
-	priv->reg_dump->log = vzalloc(sizeof(struct iaxxx_register_log) *
-					IAXXX_BUF_MAX_LEN);
+	priv->reg_dump->log = kvmalloc(sizeof(struct iaxxx_register_log) *
+					IAXXX_BUF_MAX_LEN, __GFP_ZERO);
 	if (!priv->reg_dump->log) {
-		kfree(priv->reg_dump);
+		kvfree(priv->reg_dump);
 		priv->reg_dump = NULL;
 		return -ENOMEM;
 	}
@@ -928,9 +929,9 @@ static int iaxxx_regdump_init(struct iaxxx_priv *priv)
 
 void iaxxx_regdump_exit(struct iaxxx_priv *priv)
 {
-	vfree(priv->reg_dump->log);
+	kvfree(priv->reg_dump->log);
 	priv->reg_dump->log = NULL;
-	kfree(priv->reg_dump);
+	kvfree(priv->reg_dump);
 	priv->reg_dump = NULL;
 }
 
@@ -1118,7 +1119,7 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 	iaxxx_crashlog_header_read(priv, crashlog_header);
 
 	/* If memory already allocated */
-	kfree(priv->crashlog->log_buffer);
+	kvfree(priv->crashlog->log_buffer);
 	priv->crashlog->log_buffer = NULL;
 	/* Calculate total crash log dump size */
 	buf_size = sizeof(struct iaxxx_crashlog_header) * IAXXX_MAX_LOG;
@@ -1126,7 +1127,7 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 		buf_size += crashlog_header[i].log_size;
 	priv->crashlog->log_buffer_size = buf_size;
 	/* Allocate the memory */
-	priv->crashlog->log_buffer = kzalloc(buf_size, GFP_KERNEL);
+	priv->crashlog->log_buffer = kvmalloc(buf_size, __GFP_ZERO);
 	if (!priv->crashlog->log_buffer)
 		return -ENOMEM;
 

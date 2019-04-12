@@ -14,7 +14,7 @@
  */
 #define pr_fmt(fmt) "iaxxx : %s:%d, " fmt "\n", __func__, __LINE__
 
-#include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/tty.h>
 #include <linux/kthread.h>
 #include <linux/delay.h>
@@ -245,7 +245,7 @@ static void iaxxx_tunnel_src_list_del_endpoint(
 		/* map and remove the src node from list */
 		if (tnl_src_node->tnl_ep.tunlEP == ep_id) {
 			list_del(position);
-			kfree(tnl_src_node);
+			kvfree(tnl_src_node);
 			goto exit;
 		}
 	}
@@ -659,7 +659,7 @@ static int producer_thread(void *arg)
 static int tunneling_attach_client(struct iaxxx_tunnel_data *tunnel_data,
 			struct iaxxx_tunnel_client *client)
 {
-	client->user_circ.buf = kmalloc(UBUFF_SIZE, GFP_KERNEL);
+	client->user_circ.buf = kvmalloc(UBUFF_SIZE, 0);
 	if (!client->user_circ.buf)
 		return -ENOMEM;
 
@@ -688,7 +688,7 @@ static int tunneling_detach_client(struct iaxxx_tunnel_data *tunnel_data,
 	spin_unlock(&tunnel_data->lock);
 	synchronize_rcu();
 
-	kfree(client->user_circ.buf);
+	kvfree(client->user_circ.buf);
 
 	return 0;
 }
@@ -890,7 +890,7 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 	if (atomic_read(&t_intf_priv->src_enable_id[id]) == 0) {
 		/* Allocate tunnel endpoint list for the tunneling */
 		tnl_src_node =
-		kzalloc(sizeof(struct iaxxx_tunnel_ep), GFP_KERNEL);
+		kvmalloc(sizeof(struct iaxxx_tunnel_ep), __GFP_ZERO);
 		if (!tnl_src_node) {
 			rc = -ENOMEM;
 			goto exit;
@@ -1024,14 +1024,14 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 	if (!iaxxx_is_firmware_ready(priv))
 		return -EIO;
 
-	client = kzalloc(sizeof(struct iaxxx_tunnel_client),
-				GFP_KERNEL | __GFP_NOWARN);
+	client = kvmalloc(sizeof(struct iaxxx_tunnel_client),
+				__GFP_ZERO | __GFP_NOWARN);
 	if (!client)
 		return -ENOMEM;
 
 	rc = tunneling_attach_client(t_intf_priv, client);
 	if (rc) {
-		kfree(client);
+		kvfree(client);
 		return rc;
 	}
 
@@ -1179,7 +1179,7 @@ int iaxxx_tunnel_release_common(struct inode *inode, struct file *filp, int id)
 	/* ignore threadfn return value */
 	pr_debug("stopping stream kthread");
 
-	kfree(client);
+	kvfree(client);
 	filp->private_data = NULL;
 
 error:
@@ -1670,7 +1670,7 @@ error_producer_thread:
 error_cdev:
 error_circ_buf:
 	if (err && t_intf_priv)
-		kfree(t_intf_priv);
+		kvfree(t_intf_priv);
 
 	return err;
 }
@@ -1697,7 +1697,7 @@ static int iaxxx_tunnel_dev_remove(struct platform_device *pdev)
 	kthread_stop(t_intf_priv->producer_thread);
 	kthread_stop(t_intf_priv->consumer_thread);
 	mutex_destroy(&t_intf_priv->tunnel_dev_lock);
-	kfree(t_intf_priv);
+	kvfree(t_intf_priv);
 	return 0;
 }
 

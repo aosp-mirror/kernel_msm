@@ -15,7 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/regmap.h>
 #include <linux/firmware.h>
-#include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
@@ -399,13 +399,13 @@ int iaxxx_clr_pkg_plg_list(struct iaxxx_priv *priv)
 		plugin_data = list_entry(node, struct iaxxx_plugin_data,
 							plugin_node);
 		list_del(&plugin_data->plugin_node);
-		kfree(plugin_data);
+		kvfree(plugin_data);
 	}
 
 	list_for_each_safe(node, tmp, &priv->iaxxx_state->pkg_head_list) {
 		pkg_data = list_entry(node, struct iaxxx_pkg_data, pkg_node);
 		list_del(&pkg_data->pkg_node);
-		kfree(pkg_data);
+		kvfree(pkg_data);
 	}
 	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
 
@@ -441,7 +441,7 @@ static void iaxxx_del_plugin_from_list(struct iaxxx_priv *priv,
 					plugin_node);
 			if (plugin_data->inst_id == inst_id) {
 				list_del(&plugin_data->plugin_node);
-				kfree(plugin_data);
+				kvfree(plugin_data);
 				goto exit;
 			}
 		}
@@ -571,7 +571,7 @@ static int iaxxx_core_create_plg_common(
 	}
 
 	/* Insert plugin node to the list */
-	plugin_data = kzalloc(sizeof(*plugin_data), GFP_KERNEL);
+	plugin_data = kvmalloc(sizeof(*plugin_data), __GFP_ZERO);
 	if (!plugin_data) {
 		ret = -ENOMEM;
 		goto core_create_plugin_err;
@@ -1035,7 +1035,7 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 			dev_dbg(dev, "%s() cfg_val 0x%llx\n",
 					__func__, cfg_val);
 		} else {
-			data = kmalloc(cfg_size, GFP_KERNEL);
+			data = kvmalloc(cfg_size, 0);
 			if (!data) {
 				ret = -ENOMEM;
 				goto set_create_cfg_err;
@@ -1110,7 +1110,7 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 	}
 
 set_create_cfg_err:
-	kfree(data);
+	kvfree(data);
 	if (fw)
 		release_firmware(fw);
 	mutex_unlock(&priv->plugin_lock);
@@ -1187,7 +1187,7 @@ int iaxxx_core_set_param_blk_from_file(
 			ret = -EINVAL;
 			goto iaxxx_core_set_param_blk_from_file_err;
 		}
-		data = kmalloc(fw->size, GFP_KERNEL);
+		data = kvmalloc(fw->size, 0);
 		if (!data)
 			goto iaxxx_core_set_param_blk_from_file_err;
 		iaxxx_copy_le32_to_cpu(data, fw->data, fw->size);
@@ -1197,7 +1197,7 @@ int iaxxx_core_set_param_blk_from_file(
 	}
 
 iaxxx_core_set_param_blk_from_file_err:
-	kfree(data);
+	kvfree(data);
 	if (fw)
 		release_firmware(fw);
 	mutex_unlock(&priv->plugin_lock);
@@ -1440,13 +1440,13 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 					text_phy_addr, data_phy_addr, bin_info);
 			dev_dbg(dev, "%s() Physical address %x\n",
 					__func__, file_section.start_address);
-			buf_data = kcalloc(file_section.length,
-					sizeof(uint32_t), GFP_KERNEL);
+			buf_data = kvmalloc(file_section.length *
+						sizeof(uint32_t), __GFP_ZERO);
 			if (!buf_data)
 				return -ENOMEM;
 			if (((data - fw->data) + (file_section.length
 				* sizeof(uint32_t))) > fw->size) {
-				kfree(buf_data);
+				kvfree(buf_data);
 				return -EINVAL;
 			}
 			iaxxx_copy_le32_to_cpu(buf_data, data,
@@ -1485,7 +1485,7 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			}
 
 			data += file_section_bytes;
-			kfree(buf_data);
+			kvfree(buf_data);
 			buf_data = NULL;
 		}
 	}
@@ -1506,14 +1506,14 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			(bin_info.bss_start_addr - bin_info.ro_data_start_addr);
 		file_section.length = (bin_info.bss_end_addr
 				- bin_info.bss_start_addr) >> 2;
-		buf_data = kcalloc(file_section.length, sizeof(uint32_t),
-								GFP_KERNEL);
+		buf_data = kvmalloc(file_section.length *
+					sizeof(uint32_t), __GFP_ZERO);
 		if (!buf_data)
 			return -ENOMEM;
 
 		rc = iaxxx_download_section(priv, buf_data, &file_section,
 				priv->regmap, true);
-		kfree(buf_data);
+		kvfree(buf_data);
 		buf_data = NULL;
 	}
 	/* Write to Package Management ARB */
@@ -1619,7 +1619,7 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 	}
 
 	/* Insert package node to the list */
-	pkg_data = kzalloc(sizeof(*pkg_data), GFP_KERNEL);
+	pkg_data = kvmalloc(sizeof(*pkg_data), __GFP_ZERO);
 	if (!pkg_data) {
 		rc = -ENOMEM;
 		goto out;
@@ -1676,7 +1676,7 @@ int iaxxx_package_unload(struct device *dev,
 	dev_info(dev, "%s() pkg_id:0x%x proc_id:%u\n", __func__,
 							pkg_id, proc_id);
 	list_del(&pkg_data->pkg_node);
-	kfree(pkg_data);
+	kvfree(pkg_data);
 
 out:
 	mutex_unlock(&priv->plugin_lock);

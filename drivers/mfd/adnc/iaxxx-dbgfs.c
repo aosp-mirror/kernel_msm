@@ -19,11 +19,14 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 #include <linux/regmap.h>
+#include <linux/regmap.h>
+#include <linux/mfd/adnc/iaxxx-core.h>
 #include "iaxxx-dbgfs.h"
 
 #define ADDR_LEN	 9	/* 4 byte address + 1 space character */
@@ -128,16 +131,16 @@ static int iaxxx_dfs_open(struct iaxxx_dbgfs_data *node_data, struct file *file)
 	}
 
 	/* Per file "transaction" data */
-	trans = kzalloc(sizeof(*trans), GFP_KERNEL);
+	trans = kvmalloc(sizeof(*trans), __GFP_ZERO);
 
 	if (!trans)
 		return -ENOMEM;
 
 	/* Allocate log buffer */
-	log = kzalloc(logbufsize, GFP_KERNEL);
+	log = kvmalloc(logbufsize, __GFP_ZERO);
 
 	if (!log) {
-		kfree(trans);
+		kvfree(trans);
 		pr_err("Unable to allocate memory for log buffer\n");
 		return -ENOMEM;
 	}
@@ -187,8 +190,8 @@ static int iaxxx_dfs_close(struct inode *inode, struct file *file)
 
 	if (trans && trans->log) {
 		file->private_data = NULL;
-		kfree(trans->log);
-		kfree(trans);
+		kvfree(trans->log);
+		kvfree(trans);
 	}
 
 	return 0;
@@ -399,7 +402,7 @@ static ssize_t iaxxx_dfs_reg_write(struct file *file, const char __user *buf,
 	char *kbuf;
 
 	/* Make a copy of the user data */
-	kbuf = kmalloc(count + 1, GFP_KERNEL);
+	kbuf = kvmalloc(count + 1, 0);
 	if (!kbuf)
 		return -ENOMEM;
 
@@ -454,7 +457,7 @@ free_values:
 	kfree(values);
 
 free_kbuf:
-	kfree(kbuf);
+	kvfree(kbuf);
 	return ret;
 }
 
@@ -599,7 +602,7 @@ int iaxxx_dfs_add_regmap(struct device *dev,
 		return -ENOENT;
 
 	/* Allocate transaction data for the controller */
-	node_data = kzalloc(sizeof(*node_data), GFP_KERNEL);
+	node_data = kvmalloc(sizeof(*node_data), __GFP_ZERO);
 	if (!node_data)
 		return -ENOMEM;
 
@@ -649,7 +652,7 @@ int iaxxx_dfs_add_regmap(struct device *dev,
 err_remove_fs:
 	debugfs_remove_recursive(dir);
 err_create_dir_failed:
-	kfree(node_data);
+	kvfree(node_data);
 	return -ENOMEM;
 }
 
@@ -675,7 +678,7 @@ int iaxxx_dfs_del_regmap(struct device *dev, struct regmap *map)
 		if (node_data->map == map) {
 			debugfs_remove_recursive(node_data->dir);
 			list_del(pos);
-			kfree(node_data);
+			kvfree(node_data);
 			rc = 0;
 			goto done;
 		}
@@ -697,7 +700,7 @@ static void iaxxx_dfs_delete_all(struct list_head *head)
 
 		node_data = list_entry(pos, struct iaxxx_dbgfs_data, node);
 		list_del(pos);
-		kfree(node_data);
+		kvfree(node_data);
 	}
 }
 

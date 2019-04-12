@@ -24,7 +24,7 @@
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
-#include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 
 #include "iaxxx-module-celldrv.h"
@@ -339,8 +339,8 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 		return -ENOBUFS;
 	}
 
-	module_dev_priv = devm_kzalloc(dev, sizeof(struct module_device_priv),
-					GFP_KERNEL);
+	module_dev_priv = kvmalloc(sizeof(struct module_device_priv),
+					__GFP_ZERO);
 	if (!module_dev_priv) {
 		ret = -ENOMEM;
 		goto out_err;
@@ -375,7 +375,7 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 err_device_create:
 	cdev_del(&module_dev_priv->cdev);
 free_module:
-	devm_kfree(dev, module_dev_priv);
+	kvfree(module_dev_priv);
 out_err:
 	dev_err(dev, "cdev setup failure: no cdevs available!\n");
 
@@ -390,7 +390,7 @@ static int iaxxx_module_dev_remove(struct platform_device *pdev)
 	device_destroy(module_cell_priv.cdev_class, module_dev_priv->dev_num);
 	cdev_del(&module_dev_priv->cdev);
 
-	devm_kfree(dev, module_dev_priv);
+	kvfree(module_dev_priv);
 
 	return 0;
 }

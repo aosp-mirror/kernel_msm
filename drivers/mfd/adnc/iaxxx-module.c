@@ -15,7 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/regmap.h>
 #include <linux/firmware.h>
-#include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-sensor-header.h>
@@ -454,7 +454,7 @@ static int iaxxx_download_script(struct iaxxx_priv *priv,
 	}
 	script_size = fw->size - sizeof(uint32_t);
 
-	buf_data = kzalloc(fw->size, GFP_KERNEL);
+	buf_data = kvmalloc(fw->size, __GFP_ZERO);
 	if (!buf_data)
 		return -ENOMEM;
 
@@ -556,7 +556,7 @@ static int iaxxx_download_script(struct iaxxx_priv *priv,
 
 	dev_dbg(dev, "%s() script download successful", __func__);
 out:
-	kfree(buf_data);
+	kvfree(buf_data);
 	return rc;
 }
 

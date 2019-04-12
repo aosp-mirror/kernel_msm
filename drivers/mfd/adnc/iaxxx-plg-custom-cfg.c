@@ -16,7 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/regmap.h>
 #include <linux/firmware.h>
-#include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/delay.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
@@ -122,9 +122,8 @@ static int parse_config_filedata_send_as_chunks(
 	uint32_t  chunk_data_free = 0;
 	uint32_t  chunk_data_used = 0;
 
-	chunk_data_buffer = kzalloc(CHUNK_SIZE_IN_WORDS*sizeof(uint32_t),
-			GFP_KERNEL);
-
+	chunk_data_buffer = kvmalloc(CHUNK_SIZE_IN_WORDS *
+					sizeof(uint32_t), __GFP_ZERO);
 	if (!chunk_data_buffer)
 		return -ENOMEM;
 
@@ -205,7 +204,7 @@ static int parse_config_filedata_send_as_chunks(
 	}
 
 parse_config_filedata_error:
-	kfree(chunk_data_buffer);
+	kvfree(chunk_data_buffer);
 	return ret;
 }
 

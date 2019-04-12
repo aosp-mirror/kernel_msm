@@ -205,7 +205,8 @@ static int iaxxx_spi_write_common(void *context,
 
 	pr_debug("%s() Register address %x\n", __func__, reg_addr);
 
-	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING), GFP_KERNEL);
+	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING),
+				GFP_DMA | GFP_KERNEL);
 	if (!padding)
 		return -ENOMEM;
 
@@ -964,7 +965,7 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 	if (spi_priv) {
 		iaxxx_device_exit(&spi_priv->priv);
 		devm_kfree(&spi->dev, spi_priv->priv.iaxxx_state);
-		kfree(spi_priv->priv.crashlog->log_buffer);
+		kvfree(spi_priv->priv.crashlog->log_buffer);
 		devm_kfree(&spi->dev, spi_priv->priv.crashlog);
 		devm_kfree(&spi->dev, spi_priv);
 	}

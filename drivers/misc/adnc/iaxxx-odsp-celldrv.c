@@ -27,6 +27,7 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/mfd/adnc/iaxxx-plugin-common.h>
 #include "iaxxx-odsp-celldrv.h"
@@ -362,8 +363,8 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		}
 
-		get_param_blk_buf = kzalloc(param_blk_info.param_size*
-				sizeof(uint32_t), GFP_KERNEL);
+		get_param_blk_buf = kvmalloc(param_blk_info.param_size *
+						sizeof(uint32_t), __GFP_ZERO);
 		if (!get_param_blk_buf)
 			return -ENOMEM;
 
@@ -384,7 +385,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			ret = -EFAULT;
 		}
 get_param_blk_err:
-		kfree(get_param_blk_buf);
+		kvfree(get_param_blk_buf);
 		get_param_blk_buf = NULL;
 		if (ret)
 			return ret;
@@ -457,9 +458,9 @@ get_param_blk_err:
 			return ret;
 		}
 
-		get_param_blk_buf = kzalloc(
-				param_blk_with_ack.response_buf_size *
-				sizeof(uint32_t), GFP_KERNEL);
+		get_param_blk_buf = kvmalloc(
+					param_blk_with_ack.response_buf_size *
+					sizeof(uint32_t), __GFP_ZERO);
 		if (!get_param_blk_buf) {
 			ret = -ENOMEM;
 			goto set_param_blk_err;
@@ -488,7 +489,7 @@ get_param_blk_err:
 			ret = -EFAULT;
 		}
 err:
-		kfree(get_param_blk_buf);
+		kvfree(get_param_blk_buf);
 		get_param_blk_buf = NULL;
 set_param_blk_err:
 		kfree(blk_buff);
@@ -1084,7 +1085,7 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 		return -ENOBUFS;
 	}
 
-	odsp_dev_priv = kzalloc(sizeof(*odsp_dev_priv), GFP_KERNEL);
+	odsp_dev_priv = kvmalloc(sizeof(*odsp_dev_priv), __GFP_ZERO);
 	if (!odsp_dev_priv) {
 		ret = -ENOMEM;
 		goto out_err;
@@ -1120,7 +1121,7 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 err_device_create:
 	cdev_del(&odsp_dev_priv->cdev);
 free_odsp:
-	kfree(odsp_dev_priv);
+	kvfree(odsp_dev_priv);
 out_err:
 	dev_err(dev, "cdev setup failure: no cdevs available!\n");
 
@@ -1135,7 +1136,7 @@ static int iaxxx_odsp_dev_remove(struct platform_device *pdev)
 	device_destroy(odsp_cell_priv.cdev_class, odsp_dev_priv->dev_num);
 	cdev_del(&odsp_dev_priv->cdev);
 
-	kfree(odsp_dev_priv);
+	kvfree(odsp_dev_priv);
 
 	return 0;
 }

@@ -15,7 +15,7 @@
 
 #include <linux/kernel.h>
 #include <linux/regmap.h>
-#include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
@@ -789,7 +789,7 @@ int iaxxx_event_init(struct iaxxx_priv *priv)
 {
 	int rc;
 
-	priv->event_queue = kmalloc(sizeof(struct iaxxx_evt_queue), GFP_KERNEL);
+	priv->event_queue = kvmalloc(sizeof(struct iaxxx_evt_queue), 0);
 	if (!priv->event_queue)
 		return -ENOMEM;
 	priv->event_queue->r_index = -1;
@@ -800,7 +800,7 @@ int iaxxx_event_init(struct iaxxx_priv *priv)
 		pr_err("%s: failed to register event workq\n",
 				__func__);
 		rc = -ENOMEM;
-		kfree(priv->event_queue);
+		kvfree(priv->event_queue);
 		return rc;
 	}
 	/* Set the work queue function as iaxxx_get_event_work() */
@@ -815,7 +815,7 @@ int iaxxx_event_init(struct iaxxx_priv *priv)
  */
 void iaxxx_event_exit(struct iaxxx_priv *priv)
 {
-	kfree(priv->event_queue);
+	kvfree(priv->event_queue);
 	destroy_workqueue(priv->event_workq);
 	priv->event_workq = NULL;
 }
