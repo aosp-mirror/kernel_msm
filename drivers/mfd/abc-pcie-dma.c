@@ -931,6 +931,67 @@ static void seek_scatterlist(struct scatterlist **sc_list, int *count,
 	*offset = off_rem;
 }
 
+static int num_dma_channels_read = DMA_CHANS_PER_READ_XFER;
+static int num_dma_channels_write = DMA_CHANS_PER_WRITE_XFER;
+
+static ssize_t num_dma_read_channels_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n", num_dma_channels_read);
+}
+
+static ssize_t num_dma_read_channels_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	int err;
+	unsigned long channels;
+
+	err = kstrtoul(buf, 0, &channels);
+	if (err)
+		return err;
+
+	if ((channels == 0) || (channels > ABC_DMA_MAX_CHAN))
+		return -EINVAL;
+
+	num_dma_channels_read = channels;
+	return count;
+}
+
+
+static DEVICE_ATTR(num_dma_read_channels, 0664, num_dma_read_channels_show,
+			num_dma_read_channels_store);
+
+static ssize_t num_dma_write_channels_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n", num_dma_channels_write);
+}
+
+static ssize_t num_dma_write_channels_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	int err;
+	unsigned long channels;
+
+	err = kstrtoul(buf, 0, &channels);
+	if (err)
+		return err;
+
+	if ((channels == 0) || (channels > ABC_DMA_MAX_CHAN))
+		return -EINVAL;
+
+	num_dma_channels_write = channels;
+	return count;
+}
+
+
+static DEVICE_ATTR(num_dma_write_channels, 0664, num_dma_write_channels_show,
+			num_dma_write_channels_store);
+
 static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 				struct abc_buf_desc *dst_buf,
 				size_t xfer_size,
@@ -1132,7 +1193,7 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 	num_entries--;
 
 	mblk_desc->num_dma_channels = xfer->dir == DMA_TO_DEVICE ?
-		DMA_CHANS_PER_READ_XFER : DMA_CHANS_PER_WRITE_XFER;
+		num_dma_channels_read : num_dma_channels_write;
 
 	mblk_desc->num_dma_channels = min(mblk_desc->num_dma_channels,
 		num_entries);
@@ -1641,6 +1702,8 @@ void abc_pcie_dma_close_session(struct abc_pcie_dma_session *session)
 
 static const struct attribute *abc_pcie_dma_attrs[] = {
 	&dev_attr_max_entry_size.attr,
+	&dev_attr_num_dma_read_channels.attr,
+	&dev_attr_num_dma_write_channels.attr,
 	NULL,
 };
 
