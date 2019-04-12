@@ -402,41 +402,43 @@ static int ssoc_work(struct batt_ssoc_state *ssoc_state,
 	return 0;
 }
 
-/* change the current UI curve.
- * - no op when type doesn't change
+/* change the current UI curve. Called on connect and disconnect to adjust the
+ * UI curve. no op when type is the same as ssoc_curve_type.
  */
 void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
 		       enum ssoc_uic_type type)
 {
-	qnum_t ssoc_gdf = ssoc_state->ssoc_gdf;
-	qnum_t ssoc_rl = ssoc_state->ssoc_rl;
+	qnum_t ssoc_level = ssoc_get_capacity_raw(ssoc_state);
 	struct ssoc_uicurve *new_curve;
 
 	if (ssoc_state->ssoc_curve_type == type)
 		return;
 
-	/* force dsg when showing 100% (includes recharge logic) */
-	if (ssoc_rl >= ssoc_point_full)
+	/* force dsg curve when showing 100% (includes recharge logic) */
+	if (ssoc_level >= ssoc_point_full)
 		type = SSOC_UIC_TYPE_DSG;
 
 	new_curve = (type == SSOC_UIC_TYPE_DSG) ? dsg_curve : chg_curve;
 	ssoc_uicurve_dup(ssoc_state->ssoc_curve, new_curve);
 	ssoc_state->ssoc_curve_type = type;
 
-	/* no splice in RL: ssoc_rl=100% and ssoc_gdf>=spoof */
+	/* no splice in RL: ssoc_rl=100% and ssoc_batt>=spoof */
 	if (ssoc_state->rl_status != BATT_RL_STATUS_NONE
-	    || ssoc_rl >= ssoc_point_full)
+	    || ssoc_level >= ssoc_point_full)
 		return;
 
 	/* splice at (->ssoc_gdf,->ssoc_rl) because past spoof */
-	ssoc_uicurve_splice(ssoc_state->ssoc_curve, ssoc_gdf, ssoc_rl);
+	ssoc_uicurve_splice(ssoc_state->ssoc_curve,
+			    ssoc_state->ssoc_gdf,
+			    ssoc_level);
 }
 
 /* ------------------------------------------------------------------------- */
 
 /* enter recharge logic in BATT_RL_STATUS_DISCHARGE on charger_DONE,
  * enter BATT_RL_STATUS_RECHARGE on Fuel Gauge FULL
- * NOTE: batt_rl_update_status() doesn't call this
+ * NOTE: batt_rl_update_status() doesn't call this, it flip from DISCHARGE
+ * to recharge on its own.
  * NOTE: call holding chg_lock
  * @pre rl_status != BATT_RL_STATUS_NONE
  */
@@ -445,26 +447,23 @@ static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 {
 	const int rl_current = ssoc_state->rl_status;
 
-	/* NOTE: enter RL when current state is BATT_RL_STATUS_DISCHARGE is a
-	 * NO_OP because batt_rl_update_status is the only one that takes
-	 * care of flipping between BATT_RL_STATUS_DISCHARGE and
-	 * BATT_RL_STATUS_RECHARGE
+	/* NOTE: NO_OP when RL=DISCHARGE since batt_rl_update_status() flip
+	 * between BATT_RL_STATUS_DISCHARGE and BATT_RL_STATUS_RECHARGE
+	 * directly.
 	 */
 	if (rl_current == rl_status || rl_current == BATT_RL_STATUS_DISCHARGE)
 		return false;
 
-	pr_info("rl_enter: status:%d->%d", rl_current, rl_status);
-
 	/* NOTE: rl_status transition from *->DISCHARGE on charger FULL (during
 	 * charge or at the end of recharge) and transition from
-	 * NONE->RECHARGE when battery is full before charger is.
+	 * NONE->RECHARGE when battery is full (SOC==100%) before charger is.
 	 */
+	if (rl_status == BATT_RL_STATUS_DISCHARGE) {
+		ssoc_uicurve_dup(ssoc_state->ssoc_curve, dsg_curve);
+		ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_DSG;
+	}
 
-	/* recharge logic always work with a discharge curve */
-	ssoc_uicurve_dup(ssoc_state->ssoc_curve, dsg_curve);
-	ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_DSG;
 	ssoc_update(ssoc_state, ssoc_state->ssoc_gdf);
-
 	ssoc_state->rl_status = rl_status;
 
 	return true;
@@ -1177,6 +1176,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 static int msc_logic(struct batt_drv *batt_drv)
 {
 	int err = 0;
+	bool changed = false;
 	union gbms_charger_state *chg_state = &batt_drv->chg_state;
 
 	if (!batt_drv->chg_profile.cccm_limits)
@@ -1192,20 +1192,17 @@ static int msc_logic(struct batt_drv *batt_drv)
 		chg_state->f.vchrg,
 		chg_state->f.icl);
 
-	/* disconnect: change the curve UNLESS already in discharge curve.
-	 * NOTE: rechage logic always run on a discharge curve
-	 */
-
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
+	/* here on: disconnect */
 
 		if (batt_drv->buck_enabled == 0)
 			goto msc_logic_exit;
 
 		batt_chg_stats_pub(batt_drv, "disconnect", false);
 
-		batt_reset_chg_drv_state(batt_drv);
+		/* change curve before changing the state */
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
-		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+		batt_reset_chg_drv_state(batt_drv);
 		batt_rl_reset(batt_drv);
 
 		err = GPSY_SET_PROP(batt_drv->fg_psy,
@@ -1215,47 +1212,17 @@ static int msc_logic(struct batt_drv *batt_drv)
 			pr_err("Cannot set the BATT_CE_CTRL.\n");
 
 		batt_drv->buck_enabled = 0;
-		if (batt_drv->psy)
-			power_supply_changed(batt_drv->psy);
+		changed = true;
 
 		goto msc_logic_done;
 	}
 
-	/* connect: enter recharge logic (force discharge curve) when FULL or
-	 * DONE, set the charge curve (splice it) if not already running the
-	 * charge curve.
-	 */
+	/* here when connected to power supply */
+	if (!batt_drv->buck_enabled) {
 
-	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
-		/* enter RL on charger FULL */
-		bool changed;
-
-		/* enter RL on charger FULL */
-		changed = batt_rl_enter(&batt_drv->ssoc_state,
-						BATT_RL_STATUS_DISCHARGE);
-		if (changed) {
-			dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
-			/* TODO: should I trigger a ps change? */
-		}
-	} else if (batt_drv->batt_full) {
-		bool changed;
-
-		/* enter RL because battery is FULL, NO op if in DISCHARGE */
-		changed = batt_rl_enter(&batt_drv->ssoc_state,
-						BATT_RL_STATUS_RECHARGE);
-		if (changed) {
-			dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
-			batt_chg_stats_pub(batt_drv, "100%", false);
-			 /* TODO: should I trigger a ps change? */
-		}
-
-	} else if (!batt_drv->buck_enabled) {
-		batt_chg_stats_start(batt_drv);
-
-		/* TODO: enter with dsg_curve when ssoc over the spoof point? */
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
-		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
 
+		batt_chg_stats_start(batt_drv);
 		err = GPSY_SET_PROP(batt_drv->fg_psy,
 				    POWER_SUPPLY_PROP_BATT_CE_CTRL,
 				    true);
@@ -1263,25 +1230,40 @@ static int msc_logic(struct batt_drv *batt_drv)
 			pr_err("Cannot set the BATT_CE_CTRL.\n");
 
 		batt_drv->buck_enabled = 1;
-		if (batt_drv->psy)
-			power_supply_changed(batt_drv->psy);
+		changed = true;
+	}
+
+	/* enter RL in DISCHARGE on charger DONE and enter RL in RECHARGE on
+	 * battery FULL (i.e. SSOC==100%). charger DONE forces the discharge
+	 * curve while RECHARGE will not modify the current curve.
+	 */
+	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
+		changed = batt_rl_enter(&batt_drv->ssoc_state,
+						BATT_RL_STATUS_DISCHARGE);
+	} else if (batt_drv->batt_full) {
+		changed = batt_rl_enter(&batt_drv->ssoc_state,
+						BATT_RL_STATUS_RECHARGE);
+		if (changed)
+			batt_chg_stats_pub(batt_drv, "100%", false);
+
 	}
 
 	err = msc_logic_internal(batt_drv);
 	if (err == 0) {
-		pr_info("MSC_OUT fv_uv=%d cc_max=%d update_interval=%d\n",
+		pr_info("MSC_DOUT fv_uv=%d cc_max=%d update_interval=%d\n",
 			batt_drv->fv_uv,
 			batt_drv->cc_max,
 			batt_drv->msc_update_interval);
 	} else {
 		/* NOTE: google charger will poll again. */
 		batt_drv->msc_update_interval = -1;
-		pr_err("MSC_OUT ERROR=%d fv_uv=%d cc_max=%d update_interval=%d\n",
+		pr_err("MSC_DOUT ERROR=%d fv_uv=%d cc_max=%d update_interval=%d\n",
 			err, batt_drv->fv_uv, batt_drv->cc_max,
 			batt_drv->msc_update_interval);
 	}
 
 msc_logic_done:
+	/* NOTE: google_charger has voted(0) on msc_interval_votable */
 	if (!batt_drv->fv_votable)
 		batt_drv->fv_votable = find_votable(VOTABLE_MSC_FV);
 	if (batt_drv->fv_votable)
@@ -1295,7 +1277,6 @@ msc_logic_done:
 			batt_drv->cc_max != -1,
 			batt_drv->cc_max);
 
-	/* NOTE: might trigger google charger */
 	if (!batt_drv->msc_interval_votable)
 		batt_drv->msc_interval_votable =
 			find_votable(VOTABLE_MSC_INTERVAL);
@@ -1303,8 +1284,14 @@ msc_logic_done:
 		vote(batt_drv->msc_interval_votable, MSC_LOGIC_VOTER,
 			 batt_drv->msc_update_interval != -1,
 			 batt_drv->msc_update_interval);
-
 msc_logic_exit:
+
+	if (changed) {
+		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+		if (batt_drv->psy)
+			power_supply_changed(batt_drv->psy);
+	}
+
 	__pm_relax(&batt_drv->batt_ws);
 	return err;
 }
