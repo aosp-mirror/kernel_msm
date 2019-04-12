@@ -12,8 +12,6 @@
 
 #include <linux/mfd/abc-pcie.h>
 
-#define ABC_DMA_MAX_CHAN 8
-
 /**
  * Multi-block transfer configuration
  */

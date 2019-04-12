@@ -39,6 +39,7 @@
 
 #define MAX_MINOR_COUNT  1
 #define FSYS_MINOR_NUMBER 2
+#define ABC_DMA_MAX_CHAN 8
 
 /* Interrupt (MSI) from ABC to AP */
 enum abc_msi_msg_t {
@@ -276,7 +277,7 @@ struct abc_pcie_pm_ctrl {
 int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 		   struct dma_element_t *blk);
 int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
-			    phys_addr_t start_addr);
+			    phys_addr_t *start_addr, int num_channels);
 
 #define ABC_PCIE_CONFIG_READ        _IOW('P', 0x1, struct config_read)
 #define ABC_PCIE_CONFIG_WRITE       _IOW('P', 0x2, struct config_write)

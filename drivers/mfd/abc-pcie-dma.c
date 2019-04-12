@@ -1374,7 +1374,7 @@ static void abc_pcie_exec_dma_xfer(struct abc_dma_xfer *xfer)
 
 	else /* Multi block transfer */
 		err = dma_mblk_start(dma_chan, xfer->dir,
-					xfer->mblk_desc->dma_paddr);
+					&xfer->mblk_desc->dma_paddr, 1);
 
 	if (!err)
 		return;

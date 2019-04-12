@@ -1459,66 +1459,98 @@ void abc_free_coherent(size_t size, void *cpu_addr, dma_addr_t dma_addr)
 /**
  *  dma_mblk_start
  *    Perform a link-list multi-block DMA Access.
- *    IMPORTANT: DMA driver assumes that this function will always return
+ *	  Consecutive channels will be used.
+ *	IMPORTANT: DMA driver assumes that this function will always return
  *               zero.
  *               If this is no longer the case abc-pcie-dma.c::dma_callback()
  *               must be modified.
  */
 int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
-			    phys_addr_t start_addr)
+			    phys_addr_t *start_addr, int num_channels)
 {
 	u32 dma_offset;
 	u32 val;
 	u32 set_val;
-	u32 list_addr_l = LOWER((uint64_t)start_addr);
-	u32 list_addr_u = UPPER((uint64_t)start_addr);
 	unsigned long flags;
+	int i;
 
-	if (!(dir == DMA_FROM_DEVICE || dir == DMA_TO_DEVICE))
+	if (!(dir == DMA_FROM_DEVICE || dir == DMA_TO_DEVICE) ||
+			(num_channels + chan >= ABC_DMA_MAX_CHAN))
 		return -EINVAL;
 
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* Set SYSREG_FSYS DBI_OVERRIDE for DMA access mode */
-	val = readl(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	val = readl_relaxed(abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
+	__iormb(val);
+
 	set_val = val & ~(DBI_OVERRIDE_MASK);
 	set_val |= DBI_OVERRIDE_DMA;
 	__iowmb();
+
 	writel_relaxed(set_val,
 		abc_dev->fsys_config + SYSREG_FSYS_DBI_OVERRIDE);
-	if (dir == DMA_FROM_DEVICE) {
-		pr_debug("DMA MBLK WRITE[EP2AP]: CH%d\n", chan);
-		dma_offset = chan * DMA_WRITE_OFFSET;
+	__iowmb();
 
-		__iowmb();
+	if (dir == DMA_FROM_DEVICE) {
 		writel_relaxed(DMA_ENABLE,
 			abc_dev->pcie_config + DMA_WRITE_ENGINE);
+		__iowmb();
+
 		writel_relaxed(DMA_MASK, abc_dev->pcie_config +
 			DMA_WRITE_INTERRUPT_MASK);
-		writel_relaxed(0x04000308, abc_dev->pcie_config + dma_offset +
-			DMA_WRITE_CHANNEL_CONTROL_1);
-		writel_relaxed(list_addr_l, abc_dev->pcie_config + dma_offset +
-			DMA_LLP_LOW_OFF_WRCH);
-		writel_relaxed(list_addr_u, abc_dev->pcie_config + dma_offset +
-			DMA_LLP_HIGH_OFF_WRCH);
-		writel_relaxed(chan, abc_dev->pcie_config + DMA_WRITE_DOORBELL);
-	} else {
-		pr_debug("DMA MBLK READ[AP2EP]: CH%d\n", chan);
-		dma_offset = chan * DMA_READ_OFFSET;
+
+		for (i = 0; i < num_channels; ++i) {
+			u32 list_addr_l = LOWER((uint64_t)start_addr[i]);
+			u32 list_addr_u = UPPER((uint64_t)start_addr[i]);
+
+			pr_debug("DMA MBLK WRITE[EP2AP]: CH%d\n",
+				i + chan);
+			dma_offset = (i + chan) * DMA_WRITE_OFFSET;
+
+			writel_relaxed(0x04000308, abc_dev->pcie_config +
+				dma_offset + DMA_WRITE_CHANNEL_CONTROL_1);
+			writel_relaxed(list_addr_l, abc_dev->pcie_config +
+				dma_offset + DMA_LLP_LOW_OFF_WRCH);
+			writel_relaxed(list_addr_u, abc_dev->pcie_config +
+				dma_offset + DMA_LLP_HIGH_OFF_WRCH);
+		}
 
 		__iowmb();
+
+		for (i = 0; i < num_channels; ++i)
+			writel_relaxed(i + chan,
+				abc_dev->pcie_config + DMA_WRITE_DOORBELL);
+
+	} else {
 		writel_relaxed(DMA_ENABLE,
 			abc_dev->pcie_config + DMA_READ_ENGINE);
+		__iowmb();
+
 		writel_relaxed(DMA_MASK, abc_dev->pcie_config +
-			DMA_READ_INTERRUPT_MASK);
-		writel_relaxed(0x04000308, abc_dev->pcie_config + dma_offset +
-			DMA_READ_CHANNEL_CONTROL_1);
-		writel_relaxed(list_addr_l, abc_dev->pcie_config + dma_offset +
-			DMA_LLP_LOW_OFF_RDCH);
-		writel_relaxed(list_addr_u, abc_dev->pcie_config + dma_offset +
-			DMA_LLP_HIGH_OFF_RDCH);
-		writel_relaxed(chan,
-			abc_dev->pcie_config + DMA_READ_DOORBELL);
+		DMA_READ_INTERRUPT_MASK);
+
+		for (i = 0; i < num_channels; ++i) {
+			u32 list_addr_l = LOWER((uint64_t)start_addr[i]);
+			u32 list_addr_u = UPPER((uint64_t)start_addr[i]);
+
+			pr_debug("DMA MBLK READ[AP2EP]: CH%d\n",
+				i + chan);
+			dma_offset = (i + chan) * DMA_READ_OFFSET;
+
+			writel_relaxed(0x04000308, abc_dev->pcie_config +
+				dma_offset + DMA_READ_CHANNEL_CONTROL_1);
+			writel_relaxed(list_addr_l, abc_dev->pcie_config +
+				dma_offset + DMA_LLP_LOW_OFF_RDCH);
+			writel_relaxed(list_addr_u, abc_dev->pcie_config +
+				dma_offset + DMA_LLP_HIGH_OFF_RDCH);
+		}
+
+		__iowmb();
+
+		for (i = 0; i < num_channels; ++i)
+			writel_relaxed(i + chan,
+				abc_dev->pcie_config + DMA_READ_DOORBELL);
 	}
 
 	__iowmb();
