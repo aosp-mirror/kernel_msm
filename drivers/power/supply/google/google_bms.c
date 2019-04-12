@@ -344,10 +344,13 @@ uint8_t gbms_gen_chg_flags(int chg_status, int chg_type)
 {
 	uint8_t flags = 0;
 
-	if (chg_status != POWER_SUPPLY_STATUS_DISCHARGING)
+	if (chg_status != POWER_SUPPLY_STATUS_DISCHARGING) {
 		flags |= GBMS_CS_FLAG_BUCK_EN;
-	if (chg_status == POWER_SUPPLY_STATUS_FULL)
-		flags |= GBMS_CS_FLAG_DONE;
+
+		/* FULL makes sense only when charging is enabled */
+		if (chg_status == POWER_SUPPLY_STATUS_FULL)
+			flags |= GBMS_CS_FLAG_DONE;
+	}
 	if (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST)
 		flags |= GBMS_CS_FLAG_CC;
 	if (chg_type == POWER_SUPPLY_CHARGE_TYPE_TAPER)
