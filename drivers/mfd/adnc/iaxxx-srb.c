@@ -319,21 +319,21 @@ out:
 	return rc;
 }
 
-static int iaxxx_check_update_block_err(struct device *dev, int rc,
-	uint32_t *status)
+static int iaxxx_check_update_block_err_and_recover(struct device *dev,
+						int rc, uint32_t status)
 {
 	uint32_t err = 0;
 
 	if (rc == -ETIMEDOUT) {
 		dev_err(dev, "%s:Update block timed out\n", __func__);
 	} else if (rc == -ENXIO) {
-		err = *status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK;
+		err = status & IAXXX_SRB_SYS_BLK_UPDATE_ERR_CODE_MASK;
 		if (err == SYSRC_FAIL)
-			dev_err(dev, "FW SYSRC_FAIL:0x%x\n", *status);
+			dev_err(dev, "FW SYSRC_FAIL:0x%x\n", status);
 		else if (err == SYSRC_ERR_MEM)
-			dev_err(dev, "FW NOMEM err:0x%x\n", *status);
+			dev_err(dev, "FW NOMEM err:0x%x\n", status);
 		else if (err) {
-			dev_err(dev, "FW general err:0x%x\n", *status);
+			dev_err(dev, "FW general err:0x%x\n", status);
 			return -EINVAL;
 		}
 	} else
@@ -583,7 +583,7 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			IAXXX_HOST_0, no_pm,
 			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, status);
 
-	rc = iaxxx_check_update_block_err(dev, rc, status);
+	rc = iaxxx_check_update_block_err_and_recover(dev, rc, *status);
 
 	return rc;
 }
@@ -651,7 +651,7 @@ int iaxxx_send_update_block_hostid(struct device *dev,
 			host_id, IAXXX_UPDATE_BLOCK_WITH_PM,
 			IAXXX_UPDATE_BLOCK_WITH_NORMAL_WAIT, 0, &status);
 
-	rc = iaxxx_check_update_block_err(dev, rc, &status);
+	rc = iaxxx_check_update_block_err_and_recover(dev, rc, status);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_hostid);
