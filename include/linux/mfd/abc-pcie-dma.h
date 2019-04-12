@@ -39,6 +39,7 @@ struct abc_pcie_dma {
 	struct device *dma_dev;
 	struct abc_pcie_dma_uapi uapi;
 	int iatu;
+	struct mutex iatu_mutex;
 };
 
 /***

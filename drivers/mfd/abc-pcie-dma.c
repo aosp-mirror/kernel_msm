@@ -40,7 +40,6 @@
 /* TODO(alexperez): Remove this, when we get async mods. */
 static struct abc_pcie_dma abc_dma;
 
-static DEFINE_MUTEX(dma_mutex);
 static DEFINE_SPINLOCK(dma_spinlock);
 
 /* pending_[\w\_]+_q: List of all pending transactions (all sessions).
@@ -1162,7 +1161,7 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 	 * DMA engine as the DMA engine is only protected by
 	 * dma_spinlock.
 	 */
-	mutex_lock(&dma_mutex);
+	mutex_lock(&abc_dma.iatu_mutex);
 
 	mblk_desc->mapping.iatu = abc_dma.iatu;
 	err = abc_pcie_map_iatu(abc_dma.dma_dev,
@@ -1188,13 +1187,13 @@ static int abc_pcie_setup_mblk_xfer(struct abc_dma_xfer *xfer, int num_entries)
 	if (err)
 		goto unlock_unmap_buf;
 
-	mutex_unlock(&dma_mutex);
+	mutex_unlock(&abc_dma.iatu_mutex);
 
 	return 0;
 
 unlock_unmap_buf:
 	ab_dram_free_dma_buf_kernel(mblk_desc->ab_dram_dma_buf);
-	mutex_unlock(&dma_mutex);
+	mutex_unlock(&abc_dma.iatu_mutex);
 release_mblk:
 	kfree(mblk_desc);
 	xfer->mblk_desc = NULL;
@@ -1691,6 +1690,8 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&pending_to_dev_q);
 	INIT_LIST_HEAD(&pending_from_dev_q);
+
+	mutex_init(&abc_dma.iatu_mutex);
 
 	for (dma_chan = 0; dma_chan < ABC_DMA_MAX_CHAN; dma_chan++) {
 		err = abc_reg_dma_irq_callback(&dma_callback, dma_chan);
