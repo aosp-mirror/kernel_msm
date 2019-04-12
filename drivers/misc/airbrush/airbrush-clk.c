@@ -546,8 +546,6 @@ static int ab_clk_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct device *dev = &pdev->dev;
-	struct device_node *child;
-	struct device_node *ab_clk_nd;
 	struct ab_clk_context *clk_ctx;
 
 	clk_ctx = devm_kzalloc(dev, sizeof(struct ab_clk_context), GFP_KERNEL);
@@ -555,77 +553,6 @@ static int ab_clk_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	clk_ctx->dev = dev;
-
-	ab_clk_nd = of_find_node_by_name(dev->of_node, "abc-clk");
-	if (!ab_clk_nd)
-		return -ENODEV;
-
-	/* Registering CMUs to Common Clock Framework.
-	 * Parse through the ab device node and scan for cmu nodes.
-	 * once found, register the same with the common clock framework
-	 */
-	for_each_child_of_node(ab_clk_nd, child) {
-		if (of_device_is_compatible(child,
-					"diablo,abc-clock-aon")) {
-			abc_clk_aon_init(child);
-		} else if (of_device_is_compatible(child,
-					"diablo,abc-clock-ipu")) {
-			abc_clk_ipu_init(child);
-		} else if (of_device_is_compatible(child,
-					"diablo,abc-clock-tpu")) {
-			abc_clk_tpu_init(child);
-		} else {
-			dev_err(clk_ctx->dev,
-				"incompatible child node (%s)\n", child->name);
-		}
-	}
-
-	clk_ctx->ipu_pll =
-		of_clk_get_by_name(ab_clk_nd, "ipu_pll");
-	clk_ctx->ipu_pll_mux =
-		of_clk_get_by_name(ab_clk_nd, "ipu_pll_mux");
-	clk_ctx->ipu_pll_div =
-		of_clk_get_by_name(ab_clk_nd, "ipu_pll_div");
-	clk_ctx->ipu_switch_mux =
-		of_clk_get_by_name(ab_clk_nd, "ipu_switch_mux");
-
-	clk_ctx->tpu_pll =
-		of_clk_get_by_name(ab_clk_nd, "tpu_pll");
-	clk_ctx->tpu_pll_mux =
-		of_clk_get_by_name(ab_clk_nd, "tpu_pll_mux");
-	clk_ctx->tpu_pll_div =
-		of_clk_get_by_name(ab_clk_nd, "tpu_pll_div");
-	clk_ctx->tpu_switch_mux =
-		of_clk_get_by_name(ab_clk_nd, "tpu_switch_mux");
-
-	clk_ctx->osc_clk =
-		of_clk_get_by_name(ab_clk_nd, "osc_clk");
-	clk_ctx->shared_div_aon_pll =
-		of_clk_get_by_name(ab_clk_nd, "shared_div_aon_pll");
-	clk_ctx->aon_pll =
-		of_clk_get_by_name(ab_clk_nd, "aon_pll");
-	clk_ctx->aon_pll_mux =
-		of_clk_get_by_name(ab_clk_nd, "aon_pll_mux");
-
-	if (IS_ERR(clk_ctx->ipu_pll) ||
-			IS_ERR(clk_ctx->ipu_pll_mux) ||
-			IS_ERR(clk_ctx->ipu_pll_div) ||
-			IS_ERR(clk_ctx->ipu_switch_mux) ||
-			IS_ERR(clk_ctx->tpu_pll) ||
-			IS_ERR(clk_ctx->tpu_pll_mux) ||
-			IS_ERR(clk_ctx->tpu_pll_div) ||
-			IS_ERR(clk_ctx->tpu_switch_mux) ||
-			IS_ERR(clk_ctx->osc_clk) ||
-			IS_ERR(clk_ctx->shared_div_aon_pll) ||
-			IS_ERR(clk_ctx->aon_pll) ||
-			IS_ERR(clk_ctx->aon_pll_mux)) {
-		dev_err(clk_ctx->dev, "could not register all clocks\n");
-
-		// TODO: unregister clocks?
-		return -ENODEV;
-	}
-
-	platform_set_drvdata(pdev, clk_ctx);
 
 	mutex_init(&clk_ctx->pcie_link_lock);
 	clk_ctx->pcie_link_ready = true;
@@ -648,37 +575,7 @@ static int ab_clk_probe(struct platform_device *pdev)
 
 static int ab_clk_remove(struct platform_device *pdev)
 {
-	struct ab_clk_context *clk_ctx = platform_get_drvdata(pdev);
-
 	ab_sm_unregister_clk_ops();
-
-	// TODO: unregister clocks?
-	if (clk_ctx->ipu_pll)
-		clk_put(clk_ctx->ipu_pll);
-	if (clk_ctx->ipu_pll_mux)
-		clk_put(clk_ctx->ipu_pll_mux);
-	if (clk_ctx->ipu_pll_div)
-		clk_put(clk_ctx->ipu_pll_div);
-	if (clk_ctx->ipu_switch_mux)
-		clk_put(clk_ctx->ipu_switch_mux);
-
-	if (clk_ctx->tpu_pll)
-		clk_put(clk_ctx->tpu_pll);
-	if (clk_ctx->tpu_pll_mux)
-		clk_put(clk_ctx->tpu_pll_mux);
-	if (clk_ctx->tpu_pll_div)
-		clk_put(clk_ctx->tpu_pll_div);
-	if (clk_ctx->tpu_switch_mux)
-		clk_put(clk_ctx->tpu_switch_mux);
-
-	if (clk_ctx->osc_clk)
-		clk_put(clk_ctx->osc_clk);
-	if (clk_ctx->shared_div_aon_pll)
-		clk_put(clk_ctx->shared_div_aon_pll);
-	if (clk_ctx->aon_pll)
-		clk_put(clk_ctx->aon_pll);
-	if (clk_ctx->aon_pll_mux)
-		clk_put(clk_ctx->aon_pll_mux);
 
 	return 0;
 }
