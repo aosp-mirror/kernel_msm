@@ -594,6 +594,11 @@ static void handle_thermal_trip(struct thermal_zone_device *tz,
 	struct __thermal_zone *data = tz->devdata;
 	struct list_head *head;
 
+	// skip to update sensor temperature if emul temp set
+	if (IS_ENABLED(CONFIG_THERMAL_EMULATION) && tz->emul_temperature) {
+		return;
+	}
+
 	head = &data->senps->first_tz;
 	list_for_each_entry(data, head, list) {
 		zone = data->tzd;
