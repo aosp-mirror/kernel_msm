@@ -1789,9 +1789,17 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 			container_of(data,
 				     struct ab_state_context,
 				     shutdown_work);
-	enum chip_state prev_state = sc->curr_chip_substate_id;
+	enum chip_state prev_state;
+
+	/*
+	 * When this work is scheduled, cleanup should have been marked
+	 * as in progress, otherwise it indicates a programming error.
+	 */
+	WARN_ON(atomic_read(&sc->is_cleanup_in_progress) ==
+		AB_SM_CLEANUP_NOT_IN_PROGRESS);
 
 	mutex_lock(&sc->state_transitioning_lock);
+	prev_state = sc->curr_chip_substate_id;
 	if (prev_state == CHIP_STATE_0) {
 		/* No need to emergency shutdown if already powered off */
 		dev_info(sc->dev, "already shutdown; skip emergency shutdown work\n");
@@ -1824,6 +1832,12 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	 */
 	complete_all(&sc->notify_comp);
 	mutex_unlock(&sc->state_transitioning_lock);
+
+	/* This work is responsible for marking cleanup as completed. */
+	WARN_ON(atomic_cmpxchg(&sc->is_cleanup_in_progress,
+			       AB_SM_CLEANUP_IN_PROGRESS,
+			       AB_SM_CLEANUP_NOT_IN_PROGRESS) ==
+			       AB_SM_CLEANUP_NOT_IN_PROGRESS);
 }
 
 #if IS_ENABLED(CONFIG_PCI_MSM)
@@ -1834,6 +1848,16 @@ static void ab_sm_pcie_linkdown_cb(struct msm_pcie_notify *notify)
 	switch (notify->event) {
 	case MSM_PCIE_EVENT_LINKDOWN:
 		dev_err(sc->dev, "received PCIe linkdown event\n");
+		if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
+				   AB_SM_CLEANUP_NOT_IN_PROGRESS,
+				   AB_SM_CLEANUP_IN_PROGRESS) ==
+				   AB_SM_CLEANUP_IN_PROGRESS) {
+			dev_warn(sc->dev,
+				 "%s: cleanup in progress; don't schedule work\n",
+				 __func__);
+			break;
+		}
+		dev_info(sc->dev, "%s: schedule a shutdown work\n", __func__);
 		schedule_work(&sc->shutdown_work);
 		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
 		break;
@@ -1877,11 +1901,22 @@ static int ab_sm_regulator_listener(struct notifier_block *nb,
 
 	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(sc->dev, "received regulator failure 0x%lx\n", event);
+		if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
+				   AB_SM_CLEANUP_NOT_IN_PROGRESS,
+				   AB_SM_CLEANUP_IN_PROGRESS) ==
+				   AB_SM_CLEANUP_IN_PROGRESS) {
+			dev_warn(sc->dev,
+				 "%s: cleanup in progress; don't schedule work\n",
+				 __func__);
+			return NOTIFY_DONE; /* Don't care */
+		}
+		dev_info(sc->dev, "%s: schedule a shutdown work\n", __func__);
 		schedule_work(&sc->shutdown_work);
 		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+		return NOTIFY_OK;
 	}
 
-	return 0;
+	return NOTIFY_DONE; /* Don't care */
 }
 
 static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
@@ -2721,6 +2756,8 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	ab_sm_create_debugfs(ab_sm_ctx);
 	ab_sm_create_sysfs(ab_sm_ctx);
 
+	atomic_set(&ab_sm_ctx->is_cleanup_in_progress,
+		   AB_SM_CLEANUP_NOT_IN_PROGRESS);
 	INIT_WORK(&ab_sm_ctx->shutdown_work, ab_sm_shutdown_work);
 	BLOCKING_INIT_NOTIFIER_HEAD(&ab_sm_ctx->clk_subscribers);
 

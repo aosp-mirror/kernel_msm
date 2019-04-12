@@ -473,6 +473,9 @@ struct ab_state_context {
 	struct mutex el2_notif_init_lock;
 	bool sm_exiting; /* GUARDED_BY el2_notif_init_lock */
 
+#define AB_SM_CLEANUP_NOT_IN_PROGRESS 0
+#define AB_SM_CLEANUP_IN_PROGRESS 1
+	atomic_t is_cleanup_in_progress;
 	struct notifier_block regulator_nb; /* single notifier */
 	struct work_struct shutdown_work; /* emergency shutdown work */
 
