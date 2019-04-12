@@ -2669,8 +2669,17 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 	case BLOCK_STATE_101:
 		/* ddr sleep/deep-sleep functionality */
-		if (ddr_ctx->ddr_state != DDR_ON)
+
+		/* Allow all the state transitions where DDR state is in
+		 * Self-refresh mode.
+		 */
+		if (ddr_ctx->ddr_state == DDR_SLEEP)
 			goto set_state_complete;
+
+		if (ddr_ctx->ddr_state == DDR_SUSPEND) {
+			if (__ab_ddr_resume(ddr_ctx))
+				goto set_state_fail;
+		}
 
 		ret |= __ab_ddr_selfrefresh_enter(ddr_ctx);
 
