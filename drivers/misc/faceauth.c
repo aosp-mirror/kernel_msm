@@ -396,8 +396,8 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				if (err) {
 					pr_err("Error reading AB fault address.\n");
 					err = -ETIME;
-				} else if (start_step_data.ab_exception_number
-					    != 0) {
+				} else if (
+				start_step_data.ab_exception_number != 0) {
 					pr_err("Error, AB exception.\n");
 					err = -EREMOTEIO;
 				} else {
@@ -1539,12 +1539,23 @@ static int __init faceauth_init(void)
 	if (IS_ERR(faceauth_pdev))
 		return PTR_ERR(faceauth_pdev);
 	arch_setup_dma_ops(&faceauth_pdev->dev, 0, U64_MAX, NULL, false);
+	ret = dma_coerce_mask_and_coherent(&faceauth_pdev->dev,
+					   DMA_BIT_MASK(47));
+	if (ret) {
+		pr_err("Can't set DMA mask for faceauth device: %d\n", ret);
+		goto error;
+	}
 
 	ret = platform_driver_register(&faceauth_driver);
-	if (ret)
-		platform_device_unregister(faceauth_pdev);
+	if (ret) {
+		pr_err("Can't register Faceauth driver: %d\n", ret);
+		goto error;
+	}
 
 	return 0;
+error:
+	platform_device_unregister(faceauth_pdev);
+	return ret;
 }
 module_init(faceauth_init);
 

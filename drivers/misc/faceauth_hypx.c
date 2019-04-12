@@ -432,6 +432,9 @@ static void hypx_create_blob_dmabuf(struct device *dev,
 		goto err2;
 	}
 
+	if (is_secure_camera)
+		data->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
+
 	/* map to get the sg_table */
 	data->sg_table = dma_buf_map_attachment(data->attach, dir);
 	if (IS_ERR(data->sg_table)) {
@@ -439,8 +442,9 @@ static void hypx_create_blob_dmabuf(struct device *dev,
 		goto err3;
 	}
 
-	dma_sync_sg_for_device(dev, data->sg_table->sgl, data->sg_table->nents,
-			       DMA_TO_DEVICE);
+	if (!is_secure_camera)
+		dma_sync_sg_for_device(dev, data->sg_table->sgl,
+				       data->sg_table->nents, DMA_TO_DEVICE);
 
 	/* struct hypx_blob struct have to be page aligned as we remap
 	 * it to EL2 memory
@@ -460,11 +464,13 @@ static void hypx_create_blob_dmabuf(struct device *dev,
 			page_to_phys(sg_page(sg)) / PAGE_SIZE;
 		WARN_ON(sg->length % PAGE_SIZE);
 		data->hypx_blob->segments[i].pages = sg->length / PAGE_SIZE;
-		dma_sync_single_for_device(
-			dev,
-			(uint64_t)data->hypx_blob->segments[i].addr * PAGE_SIZE,
-			data->hypx_blob->segments[i].pages * PAGE_SIZE,
-			DMA_TO_DEVICE);
+		if (!is_secure_camera)
+			dma_sync_single_for_device(
+				dev,
+				(uint64_t)data->hypx_blob->segments[i].addr *
+					PAGE_SIZE,
+				data->hypx_blob->segments[i].pages * PAGE_SIZE,
+				DMA_TO_DEVICE);
 	}
 
 	if (perform_assignment_to_dsp) {
