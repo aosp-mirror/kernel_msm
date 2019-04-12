@@ -8618,6 +8618,13 @@ eHalStatus csrScanSavePreferredNetworkFound(tpAniSirGlobal pMac,
           (SIR_MAC_HDR_LEN_3A + SIR_MAC_B_PR_SSID_OFFSET);
    }
 
+   if (uLen > (UINT_MAX - sizeof(tCsrScanResult))) {
+       smsLog(pMac, LOGE,
+              FL("Incorrect len: %d, may leads to int overflow, uLen %d"),
+              pPrefNetworkFoundInd->frameLength, uLen);
+       vos_mem_free(pParsedFrame);
+       return eHAL_STATUS_FAILURE;
+   }
    pScanResult = vos_mem_malloc(sizeof(tCsrScanResult) + uLen);
    if ( NULL == pScanResult )
    {
