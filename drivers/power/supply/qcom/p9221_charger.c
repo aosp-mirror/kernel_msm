@@ -574,6 +574,8 @@ struct p9221_prop_reg_map_entry p9221_prop_reg_map[] = {
 	{POWER_SUPPLY_PROP_TEMP,	P9221R5_DIE_TEMP_ADC_REG,	1, 0},
 	{POWER_SUPPLY_PROP_CAPACITY,	0,				1, 1},
 	{POWER_SUPPLY_PROP_ONLINE,	0,				1, 1},
+	{POWER_SUPPLY_PROP_OPERATING_FREQ,
+					P9221R5_OP_FREQ_REG,		1, 0},
 };
 
 static struct p9221_prop_reg_map_entry *p9221_get_map_entry(
@@ -2357,6 +2359,7 @@ static enum power_supply_property p9221_props[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_OPERATING_FREQ,
 };
 
 static const struct power_supply_desc p9221_psy_desc = {
