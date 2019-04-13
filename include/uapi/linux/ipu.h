@@ -16,47 +16,47 @@
 #ifndef __UAPI_IPU_H__
 #define __UAPI_IPU_H__
 
-#include <linux/compiler.h>
 #include <linux/dma-direction.h>
 #include <linux/ioctl.h>
+#include <linux/types.h>
 
 #define PAINTBOX_SESSION_ID_MAX 32
 
 struct ipu_capabilities_rsp {
-	uint32_t version_major;
-	uint32_t version_minor;
-	uint32_t version_build;
-	uint32_t hardware_id;
-	uint32_t num_stps;
-	uint32_t num_interrupts;
-	uint32_t num_lbps;
-	uint32_t num_dma_channels;
+	__u32 version_major;
+	__u32 version_minor;
+	__u32 version_build;
+	__u32 hardware_id;
+	__u32 num_stps;
+	__u32 num_interrupts;
+	__u32 num_lbps;
+	__u32 num_dma_channels;
 	bool is_simulator;
 	bool is_fpga;
 	bool iommu_enabled;
 };
 
 struct ipu_resource_allocate_request {
-	uint64_t stp_mask;
-	uint64_t lbp_mask;
-	uint64_t dma_channel_mask;
-	uint64_t timeout_ns;
+	__u64 stp_mask;
+	__u64 lbp_mask;
+	__u64 dma_channel_mask;
+	__u64 timeout_ns;
 };
 
 struct ipu_dma_buf_register_entry {
 	int dma_buf_fd; /* Input Parameter */
 	enum dma_data_direction dir; /* Input Parameter */
-	uint32_t buffer_id; /* Output Parameter */
+	__u32 buffer_id; /* Output Parameter */
 };
 
 struct ipu_power_core_enable_request {
-	uint64_t stp_mask;
-	uint64_t lbp_mask;
+	__u64 stp_mask;
+	__u64 lbp_mask;
 };
 
 struct ipu_power_core_disable_request {
-	uint64_t stp_mask;
-	uint64_t lbp_mask;
+	__u64 stp_mask;
+	__u64 lbp_mask;
 };
 
 struct ipu_dma_buf_bulk_register_req {
@@ -66,7 +66,7 @@ struct ipu_dma_buf_bulk_register_req {
 
 struct ipu_dma_buf_bulk_unregister_req {
 	unsigned int num_buffers;
-	uint32_t __user *buf_ids;
+	__u32 __user *buf_ids;
 };
 
 /* On success will return 0, otherwise will return -1 with errno set. */

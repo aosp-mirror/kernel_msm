@@ -25,11 +25,11 @@ enum ab_dram_alloc_flag {
 };
 
 struct ab_dram_alloc_request {
-	size_t size;
+	__kernel_size_t size;
 	enum ab_dram_alloc_flag flag;
 };
 
-#define AB_DRAM_ALLOCATE_MEMORY_LEGACY	_IOW('a', 1, size_t)
+#define AB_DRAM_ALLOCATE_MEMORY_LEGACY	_IOW('a', 1, __kernel_size_t)
 #define AB_DRAM_ALLOCATE_MEMORY		_IOW('a', 2, \
 		struct ab_dram_alloc_request)
 

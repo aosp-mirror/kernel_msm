@@ -10,7 +10,6 @@
 #ifndef _UAPI__ABC_PCIE_DMA_H
 #define _UAPI__ABC_PCIE_DMA_H
 
-#include <linux/compiler.h>
 #include <linux/dma-direction.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
@@ -28,7 +27,7 @@ struct abc_pcie_dma_desc_legacy {
 		void __user *local_buf; /* local buffer address */
 		int local_dma_buf_fd; /* local DMA buffer file descriptor */
 	};
-	uint32_t local_buf_size; /* local buffer size */
+	__u32 local_buf_size; /* local buffer size */
 
 	/* TODO(alexperez):  Remove support for specifying an arbitrary AB
 	 * physical address once bringup is done. b/113105230
@@ -37,11 +36,11 @@ struct abc_pcie_dma_desc_legacy {
 	 */
 	enum dma_buf_type remote_buf_type;
 	union {
-		uint64_t remote_buf; /* remote buffer address */
+		__u64 remote_buf; /* remote buffer address */
 		int remote_dma_buf_fd; /* remote DMA buffer file descriptor */
 	};
 	enum dma_data_direction dir; /* direction of the DMA transfer */
-	uint8_t chan; /* dma channel to be used */
+	__u8 chan; /* dma channel to be used */
 };
 
 struct abc_pcie_dma_desc {
@@ -50,34 +49,34 @@ struct abc_pcie_dma_desc {
 		void __user *local_buf; /* local buffer address */
 		int local_dma_buf_fd; /* local DMA buffer file descriptor */
 	};
-	uint64_t local_dma_buf_off; /* offset within dma buf to xfer from/to */
+	__u64 local_dma_buf_off; /* offset within dma buf to xfer from/to */
 
 	enum dma_buf_type remote_buf_type;
 	union {
-		uint64_t remote_buf; /* remote buffer virtual address */
+		__u64 remote_buf; /* remote buffer virtual address */
 		int remote_dma_buf_fd; /* remote DMA buffer file descriptor */
 	};
-	uint64_t remote_dma_buf_off; /* offset within dma buf to xfer from/to */
+	__u64 remote_dma_buf_off; /* offset within dma buf to xfer from/to */
 
-	uint64_t size; /* number of bytes to transfer */
+	__u64 size; /* number of bytes to transfer */
 	enum dma_data_direction dir; /* direction of the DMA transfer */
 };
 
 struct abc_pcie_dma_desc_async {
 	struct abc_pcie_dma_desc dma_desc;
-	uint64_t id; /* Transaction id after returning from create ioctl */
+	__u64 id; /* Transaction id after returning from create ioctl */
 };
 
 struct abc_pcie_dma_desc_start {
-	uint64_t id;
-	uint32_t start_id; /* ID of start if multiply re-started (out) */
+	__u64 id;
+	__u32 start_id; /* ID of start if multiply re-started (out) */
 };
 
 struct abc_pcie_dma_desc_wait {
-	uint64_t id;
+	__u64 id;
 	int timeout; /* In usecs, 0:zero wait, < 0: infinite */
 	int error; /* Error code if transfer state is error (out) */
-	uint32_t start_id; /* ID of start if multiply re-started (out) */
+	__u32 start_id; /* ID of start if multiply re-started (out) */
 };
 
 #define ABC_PCIE_DMA_IOC_POST_DMA_XFER_LEGACY				\
@@ -96,7 +95,7 @@ struct abc_pcie_dma_desc_wait {
 	_IOWR(ABC_PCIE_DMA_IOC_MAGIC, 5, struct abc_pcie_dma_desc_wait)
 
 #define ABC_PCIE_DMA_IOC_POST_DMA_XFER_CLEAN				\
-	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 6, uint64_t)
+	_IOW(ABC_PCIE_DMA_IOC_MAGIC, 6, __u64)
 
 
 #endif /* _UAPI__ABC_PCIE_DMA_H */
