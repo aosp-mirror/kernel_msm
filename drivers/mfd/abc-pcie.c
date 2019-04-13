@@ -2032,7 +2032,9 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 
 static int abc_pcie_linkdown_handler(void *ctx)
 {
+	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
+	int ret;
 
 	dev_dbg(dev,
 		"%s: PCIe link unexpectedly went down\n",
@@ -2050,15 +2052,26 @@ static int abc_pcie_linkdown_handler(void *ctx)
 					ABC_PCIE_LINK_STATE_MASK)))
 		return 0;
 
-	abc_pcie_disable_irqs(abc_dev->pdev);
-
 	dev_warn(dev, "Broadcast link error notification\n");
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_ERROR);
 
-	/* If linkdown happens during EL2 mode, make sure to re-attach SMMU. */
-	if (!(atomic_read(&abc_dev->link_state) &
-			  ABC_PCIE_SMMU_ATTACH_STATE_MASK))
-		abc_pcie_smmu_attach(dev);
+	/*
+	 * If linkdown happens during EL2 mode, make sure to re-attach SMMU
+	 * and skip disabling irqs.
+	 * If linkdown happens during EL1 mode, disable irqs.
+	 */
+	if (!abc->allow_el1_dma && !(atomic_read(&abc_dev->link_state) &
+			  ABC_PCIE_SMMU_ATTACH_STATE_MASK)) {
+		dev_info(dev, "linkdown during EL2 mode; re-attach smmu\n");
+		ret = abc_pcie_smmu_attach(dev);
+		if (ret) {
+			dev_err(dev, "failed to attach SMMU: %d\n", ret);
+			return ret;
+		}
+	} else {
+		dev_info(dev, "linkdown while EL1 has access; disable irq\n");
+		abc_pcie_disable_irqs(abc_dev->pdev);
+	}
 
 	return 0;
 }
