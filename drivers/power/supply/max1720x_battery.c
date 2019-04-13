@@ -34,6 +34,7 @@
 #include <linux/module.h>
 #include <linux/seq_file.h> /* seq_read, seq_lseek, single_release */
 #include <google/google_bms.h>
+#include <google/logbuffer.h>
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -499,7 +500,7 @@ struct max1720x_chip {
 
 	/* Capacity Estimation */
 	struct gbatt_capacity_estimation cap_estimate;
-
+	struct logbuffer *ce_log;
 };
 
 #define MAX1720_EMPTY_VOLTAGE(profile, temp, cycle) \
@@ -1720,15 +1721,23 @@ static int batt_ce_regmap_write(struct regmap *map, u32 reg, u16 data)
 	return err;
 }
 
-static void batt_ce_dump_data(const struct gbatt_capacity_estimation *cap_esti)
+static void batt_ce_dump_data(const struct gbatt_capacity_estimation *cap_esti,
+			      struct logbuffer *log)
 {
-	pr_info("cap_filter_count: %d\n", cap_esti->cap_filter_count);
-	pr_info("delta_cc_sum: %d\n", cap_esti->delta_cc_sum);
-	pr_info("delta_vfsoc_sum: %d\n", cap_esti->delta_vfsoc_sum);
-	pr_info("start_cc_: %d\n", cap_esti->start_cc);
-	pr_info("start_vfsoc: %d\n", cap_esti->start_vfsoc);
-	pr_info("state: %d\n", cap_esti->estimate_state);
-	pr_info("cable: %d\n", cap_esti->cable_in);
+	logbuffer_log(log, "cap_filter_count: %d"
+			    " start_cc: %d"
+			    " start_vfsoc: %d"
+			    " delta_cc_sum: %d"
+			    " delta_vfsoc_sum: %d"
+			    " state: %d"
+			    " cable: %d\n",
+			    cap_esti->cap_filter_count,
+			    cap_esti->start_cc,
+			    cap_esti->start_vfsoc,
+			    cap_esti->delta_cc_sum,
+			    cap_esti->delta_vfsoc_sum,
+			    cap_esti->estimate_state,
+			    cap_esti->cable_in);
 }
 
 static int batt_ce_load_data(struct regmap *map,
@@ -1778,10 +1787,14 @@ static void batt_ce_stop_estimation(struct gbatt_capacity_estimation *cap_esti,
 				   int reason)
 {
 	cap_esti->estimate_state = reason;
-	batt_ce_dump_data(cap_esti);
-
 	cap_esti->start_vfsoc = 0;
 	cap_esti->start_cc = 0;
+}
+
+static int batt_ce_full_estimate(struct gbatt_capacity_estimation *ce)
+{
+	return (ce->cap_filter_count > 0) && (ce->delta_vfsoc_sum > 0) ?
+		ce->delta_cc_sum / ce->delta_vfsoc_sum : -1;
 }
 
 /* Measure the deltaCC, deltaVFSOC and CapacityFiltered */
@@ -1793,38 +1806,34 @@ static void batt_ce_capacityfiltered_work(struct work_struct *work)
 	int settle_cc = 0, settle_vfsoc = 0;
 	int delta_cc = 0, delta_vfsoc = 0;
 	int cc_sum = 0, vfsoc_sum = 0;
-	bool notify = false;
+	bool valid_estimate = false;
 	int rc = 0;
 	u16 data;
 
 	mutex_lock(&cap_esti->batt_ce_lock);
+
+	/* race with disconnect */
 	if (!cap_esti->cable_in ||
 	    cap_esti->estimate_state != ESTIMATE_PENDING) {
-		pr_info("Ignore estimation: cable_in=%d, state=%d\n",
-			cap_esti->cable_in, cap_esti->estimate_state);
 		goto exit;
 	}
 
 	rc = max1720x_update_battery_qh_based_capacity(chip);
 	if (rc < 0)
-		goto done;
+		goto ioerr;
 
 	settle_cc = reg_to_micro_amp_h(chip->current_capacity, chip->RSense);
 
 	data = max1720x_get_battery_vfsoc(chip);
 	if (data < 0)
-		goto done;
+		goto ioerr;
 
 	settle_vfsoc = data;
 	settle_cc = settle_cc / 1000;
 	delta_cc = settle_cc - cap_esti->start_cc;
 	delta_vfsoc = settle_vfsoc - cap_esti->start_vfsoc;
 
-	pr_info("settle[cc=%d, vfsoc=%d], delta[cc=%d,vfsoc=%d]\n",
-		settle_cc, settle_vfsoc, delta_cc, delta_vfsoc);
-
 	if ((delta_cc > 0) && (delta_vfsoc > 0)) {
-		int new_cap = 0;
 
 		cc_sum = delta_cc + cap_esti->delta_cc_sum;
 		vfsoc_sum = delta_vfsoc + cap_esti->delta_vfsoc_sum;
@@ -1836,28 +1845,30 @@ static void batt_ce_capacityfiltered_work(struct work_struct *work)
 			vfsoc_sum -= cap_esti->delta_vfsoc_sum/filter_divisor;
 		}
 
-		new_cap = (cc_sum * 100) / vfsoc_sum;
 		cap_esti->cap_filter_count++;
-
-		pr_info("CapacityFiltered[%d]: %d\n",
-				cap_esti->cap_filter_count, new_cap);
-
 		cap_esti->delta_cc_sum = cc_sum;
 		cap_esti->delta_vfsoc_sum = vfsoc_sum;
 		batt_ce_store_data(chip->regmap_nvram, &chip->cap_estimate);
 
-		notify = true;
+		valid_estimate = true;
 	}
 
-done:
+ioerr:
 	batt_ce_stop_estimation(cap_esti, ESTIMATE_DONE);
+
 exit:
+	logbuffer_log(chip->ce_log,
+		"valid=%d settle[cc=%d, vfsoc=%d], delta[cc=%d,vfsoc=%d] ce[%d]=%d\n",
+		valid_estimate,
+		settle_cc, settle_vfsoc, delta_cc, delta_vfsoc,
+		cap_esti->cap_filter_count,
+		batt_ce_full_estimate(cap_esti));
+
 	mutex_unlock(&cap_esti->batt_ce_lock);
 
 	/* force to update uevent to framework side. */
-	if (notify)
+	if (valid_estimate)
 		power_supply_changed(chip->psy);
-
 }
 
 /* batt_ce_init(): estimate_state = ESTIMATE_NONE
@@ -1876,7 +1887,6 @@ static int batt_ce_start(struct gbatt_capacity_estimation *cap_esti,
 
 	pr_info("EOC: Start the settle timer\n");
 	cap_esti->estimate_state = ESTIMATE_PENDING;
-	batt_ce_dump_data(cap_esti);
 	schedule_delayed_work(&cap_esti->settle_timer,
 		msecs_to_jiffies(cap_tsettle_ms));
 
@@ -1933,7 +1943,9 @@ static int max1720x_get_property(struct power_supply *psy,
 		if (val->intval < 0)
 			return val->intval;
 
-		/* Capacity estimation must run only once */
+		/* Capacity estimation must run only once.
+		 * NOTE: this is a getter with a side effect
+		 */
 		if (val->intval == POWER_SUPPLY_STATUS_FULL)
 			batt_ce_start(&chip->cap_estimate,
 				      chip->cap_estimate.cap_tsettle);
@@ -2066,11 +2078,8 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = chip->cap_estimate.delta_vfsoc_sum;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE:
-		if ((chip->cap_estimate.cap_filter_count > 0) &&
-			(chip->cap_estimate.delta_vfsoc_sum > 0))
-			val->intval = (chip->cap_estimate.delta_cc_sum * 100) /
-					chip->cap_estimate.delta_vfsoc_sum;
-		else {
+		val->intval = batt_ce_full_estimate(&chip->cap_estimate);
+		if (val->intval < 0) {
 			val->intval = 0;
 			return -ENODATA;
 		}
@@ -2109,20 +2118,15 @@ static int max1720x_set_property(struct power_supply *psy,
 
 			if (!ce->cable_in) {
 				rc = batt_ce_init(ce, chip);
-
 				ce->cable_in = (rc == 0);
-				if (ce->cable_in)
-					batt_ce_dump_data(ce);
 			}
 
 		} else if (ce->cable_in) {
-			batt_ce_dump_data(ce);
-
 			if (ce->estimate_state == ESTIMATE_PENDING)
 				cancel_delayed_work_sync(&ce->settle_timer);
-
 			/* race with batt_ce_capacityfiltered_work() */
 			batt_ce_stop_estimation(ce, ESTIMATE_NONE);
+			batt_ce_dump_data(ce, chip->ce_log);
 			ce->cable_in = false;
 		}
 		mutex_unlock(&ce->batt_ce_lock);
@@ -3567,7 +3571,7 @@ static void max1720x_init_work(struct work_struct *work)
 	mutex_init(&chip->cap_estimate.batt_ce_lock);
 	ret = batt_ce_load_data(chip->regmap_nvram, &chip->cap_estimate);
 	if (ret == 0)
-		batt_ce_dump_data(&chip->cap_estimate);
+		batt_ce_dump_data(&chip->cap_estimate, chip->ce_log);
 }
 
 static int max1720x_probe(struct i2c_client *client,
@@ -3662,6 +3666,13 @@ static int max1720x_probe(struct i2c_client *client,
 		goto psy_unregister;
 	}
 
+	chip->ce_log = debugfs_logbuffer_register("batt_ce");
+	if (IS_ERR(chip->ce_log)) {
+		ret = PTR_ERR(chip->ce_log);
+		dev_err(dev, "failed to obtain logbuffer, ret=%d\n", ret);
+		chip->ce_log = NULL;
+	}
+
 	/* NOTE: set to AvSOC and filter on google battery side */
 	chip->reg_prop_capacity_raw =  MAX1720X_REPSOC;
 	max17x0x_set_serial_number(chip);
@@ -3686,6 +3697,10 @@ static int max1720x_remove(struct i2c_client *client)
 {
 	struct max1720x_chip *chip = i2c_get_clientdata(client);
 
+	if (chip->ce_log) {
+		debugfs_logbuffer_unregister(chip->ce_log);
+		chip->ce_log = NULL;
+	}
 	max1720x_cleanup_history(chip);
 	cancel_delayed_work(&chip->init_work);
 	iio_channel_release(chip->iio_ch);
