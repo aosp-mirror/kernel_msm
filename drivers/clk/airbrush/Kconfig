@@ -1,5 +1,5 @@
 config COMMON_CLK_AIRBRUSH
 	bool
-	default y
+	default n
 	---help---
 	airbrush common clock driver selection
