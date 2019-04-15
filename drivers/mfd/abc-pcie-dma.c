@@ -896,6 +896,24 @@ static ssize_t max_entry_size_store(struct device *dev,
 static DEVICE_ATTR(max_entry_size, 0664, max_entry_size_show,
 			max_entry_size_store);
 
+static void seek_scatterlist(struct scatterlist **sc_list, int *count,
+				size_t *offset)
+{
+	int sge_rem = *count;
+	uint64_t off_rem = *offset;
+	struct scatterlist *sge = *sc_list;
+
+	while ((sge_rem > 0) && (off_rem > sg_dma_len(sge))) {
+		off_rem -= sg_dma_len(sge);
+		sge = sg_next(sge);
+		sge_rem--;
+	}
+
+	*sc_list = sge;
+	*count = sge_rem;
+	*offset = off_rem;
+}
+
 static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 					struct abc_buf_desc *dst_buf,
 					size_t xfer_size,
@@ -918,19 +936,8 @@ static int abc_pcie_build_transfer_list(struct abc_buf_desc *src_buf,
 	size_t dst_addr;		/* local to primary loop */
 	size_t size;			/* local to primary loop */
 
-	/* seek to source offset */
-	while ((src_sge_rem > 0) && (src_off > sg_dma_len(src_sge))) {
-		src_off -= sg_dma_len(src_sge);
-		src_sge = sg_next(src_sge);
-		src_sge_rem--;
-	}
-
-	/* seek to destination offset */
-	while ((dst_sge_rem > 0) && (dst_off > sg_dma_len(dst_sge))) {
-		dst_off -= sg_dma_len(dst_sge);
-		dst_sge = sg_next(dst_sge);
-		dst_sge_rem--;
-	}
+	seek_scatterlist(&src_sge, &src_sge_rem, &src_off);
+	seek_scatterlist(&dst_sge, &dst_sge_rem, &dst_off);
 
 	while ((src_sge_rem > 0) && (dst_sge_rem > 0) && (size_rem > 0)) {
 		size = sg_dma_len(src_sge) - src_off;
@@ -1017,8 +1024,18 @@ static struct abc_buf_desc *pick_dst_buf(struct abc_dma_xfer *xfer)
 static int abc_pcie_setup_sblk_xfer(struct abc_dma_xfer *xfer)
 {
 	struct abc_buf_desc *src_buf = pick_src_buf(xfer);
+	int src_sge_rem = src_buf->sgl->n_num;
+	size_t src_off = src_buf->offset;
+	struct scatterlist *src_sge = src_buf->sgl->sc_list;
 	struct abc_buf_desc *dst_buf = pick_dst_buf(xfer);
+	int dst_sge_rem = dst_buf->sgl->n_num;
+	size_t dst_off = dst_buf->offset;
+	struct scatterlist *dst_sge = dst_buf->sgl->sc_list;
 	struct dma_element_t *dma_blk;
+
+	/* offset and bound are checked by abc_pcie_build_transfer_list */
+	seek_scatterlist(&src_sge, &src_sge_rem, &src_off);
+	seek_scatterlist(&dst_sge, &dst_sge_rem, &dst_off);
 
 	xfer->transfer_method = DMA_TRANSFER_USING_SBLOCK;
 
@@ -1026,10 +1043,10 @@ static int abc_pcie_setup_sblk_xfer(struct abc_dma_xfer *xfer)
 	if (!dma_blk)
 		return -ENOMEM;
 
-	dma_blk->src_addr = LOWER(sg_dma_address(src_buf->sgl->sc_list));
-	dma_blk->src_u_addr = UPPER(sg_dma_address(src_buf->sgl->sc_list));
-	dma_blk->dst_addr = LOWER(sg_dma_address(dst_buf->sgl->sc_list));
-	dma_blk->dst_u_addr = UPPER(sg_dma_address(dst_buf->sgl->sc_list));
+	dma_blk->src_addr = LOWER(sg_dma_address(src_sge) + src_off);
+	dma_blk->src_u_addr = UPPER(sg_dma_address(src_sge) + src_off);
+	dma_blk->dst_addr = LOWER(sg_dma_address(dst_sge) + dst_off);
+	dma_blk->dst_u_addr = UPPER(sg_dma_address(dst_sge) + dst_off);
 	dma_blk->len = xfer->size;
 
 	xfer->sblk_desc = dma_blk;
