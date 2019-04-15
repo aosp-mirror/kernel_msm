@@ -27,6 +27,6 @@ void ipu_iommu_pgtable_update_device(struct io_pgtable_ops *ops,
 
 /* notify the page table if the memory is active or not */
 void ipu_iommu_pgtable_mem_up(struct io_pgtable_ops *ops);
-void ipu_iommu_pgtable_mem_down(struct io_pgtable_ops *ops);
+void ipu_iommu_pgtable_mem_down(struct io_pgtable_ops *ops, bool suspend);
 
 #endif /* __IPU_IOMMU_PAGE_TABLE__ */

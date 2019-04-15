@@ -242,30 +242,47 @@ static void ipu_iommu_firmware_up(struct device *dev)
 	dev_dbg(dev, "%s iommu was loaded\n", __func__);
 }
 
+static void ipu_iommu_dram_going_down(struct iommu_domain *domain,
+	bool suspend)
+{
+	struct ipu_domain *pb_domain = to_ipu_domain(domain);
+	struct io_pgtable_ops *ops = pb_domain->pgtbl_ops;
+	struct ipu_iommu_data *iommu_data;
+
+	iommu_data = pb_domain->iommu_data;
+
+	if (iommu_data)
+		iommu_data->iommu_up = false;
+
+	if (ops) {
+		mutex_lock(&pb_domain->pgtbl_mutex);
+		ipu_iommu_pgtable_mem_down(ops, suspend);
+		mutex_unlock(&pb_domain->pgtbl_mutex);
+	}
+}
+
+static void ipu_iommu_dram_suspended(struct device *dev)
+{
+	struct iommu_domain *domain =
+		iommu_get_domain_for_dev(dev);
+
+	if (domain == NULL)
+		return;
+
+	ipu_iommu_dram_going_down(domain, true /* suspend */);
+}
+
 static void ipu_iommu_dram_down(struct device *dev)
 {
 	struct iommu_domain *domain =
 		iommu_get_domain_for_dev(dev);
-	struct ipu_domain *pb_domain;
-	struct ipu_iommu_data *iommu_data;
-	struct io_pgtable_ops *ops;
 
-	if (domain == NULL) {
-		dev_err(dev, "%s domain not initialized", __func__);
+	if (domain == NULL)
 		return;
-	}
-	pb_domain = to_ipu_domain(domain);
-	iommu_data = pb_domain->iommu_data;
-	ops = pb_domain->pgtbl_ops;
 
-	if (iommu_data)
-		iommu_data->iommu_up = false;
+	ipu_iommu_dram_going_down(domain, false /* suspend */);
+
 	ipu_iommu_shutdown_mmu(domain, dev);
-	if (ops) {
-		mutex_lock(&pb_domain->pgtbl_mutex);
-		ipu_iommu_pgtable_mem_down(ops);
-		mutex_unlock(&pb_domain->pgtbl_mutex);
-	}
 }
 
 static void ipu_iommu_tlb_sync(void *priv)
@@ -464,46 +481,46 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 		return -ENODEV;
 
 	mutex_lock(&pb_domain->init_mutex);
-	if (dev->archdata.iommu) {
-		mutex_unlock(&pb_domain->init_mutex);
-		dev_dbg(dev, "%s dev (%s) already attached to an IOMMU\n",
-			__func__, dev_name(dev));
-		return 0;
-	}
+	if (!dev->archdata.iommu) {
 
-	iommu_data = dev_get_drvdata(iommu_dev);
+		iommu_data = dev_get_drvdata(iommu_dev);
 
-	if (iommu_internal_data.ipu_iommu_pgtbl_ops) {
-		pb_domain->pgtbl_ops = iommu_internal_data.ipu_iommu_pgtbl_ops;
-		ipu_iommu_pgtable_update_device(
-				pb_domain->pgtbl_ops, iommu_dev, iommu_data);
-		dev_dbg(dev, "%s loading existing page table\n", __func__);
-	} else {
-		pdata = iommu_dev->platform_data;
-		pgtbl_cfg = (struct io_pgtable_cfg) {
-			.pgsize_bitmap	= pdata->page_size_bitmap,
-			.ias		= pdata->input_address_size,
-			.oas		= pdata->output_address_size,
-			.tlb		= &ipu_iommu_gather_ops,
-			.iommu_dev	= iommu_dev,
-			.quirks = IO_PGTABLE_QUIRK_ARM_NS,
-		};
+		if (iommu_internal_data.ipu_iommu_pgtbl_ops) {
+			pb_domain->pgtbl_ops =
+				iommu_internal_data.ipu_iommu_pgtbl_ops;
+			ipu_iommu_pgtable_update_device(
+					pb_domain->pgtbl_ops, iommu_dev,
+					iommu_data);
+			dev_dbg(dev, "loading existing page table\n");
+		} else {
+			pdata = iommu_dev->platform_data;
+			pgtbl_cfg = (struct io_pgtable_cfg) {
+				.pgsize_bitmap	= pdata->page_size_bitmap,
+				.ias		= pdata->input_address_size,
+				.oas		= pdata->output_address_size,
+				.tlb		= &ipu_iommu_gather_ops,
+				.iommu_dev	= iommu_dev,
+				.quirks = IO_PGTABLE_QUIRK_ARM_NS,
+			};
 
-		pb_domain->pgtbl_ops = ipu_iommu_page_table_alloc_ops(
-			&pgtbl_cfg,	iommu_data);
-		if (pb_domain->pgtbl_ops == NULL) {
-			mutex_unlock(&pb_domain->init_mutex);
-			return -ENOMEM;
+			pb_domain->pgtbl_ops = ipu_iommu_page_table_alloc_ops(
+				&pgtbl_cfg, iommu_data);
+			if (pb_domain->pgtbl_ops == NULL) {
+				mutex_unlock(&pb_domain->init_mutex);
+				return -ENOMEM;
+			}
+			map_start = true;
+			iommu_internal_data.ipu_iommu_pgtbl_ops =
+				pb_domain->pgtbl_ops;
+			dev_dbg(dev, "%s created new page table\n", __func__);
 		}
-		map_start = true;
-		iommu_internal_data.ipu_iommu_pgtbl_ops = pb_domain->pgtbl_ops;
-		dev_dbg(dev, "%s created new page table\n", __func__);
-	}
 
-	pb_domain->iommu_data = iommu_data;
-	dev->archdata.iommu = pb_domain;
-	iommu_data->page_table_base_address = ipu_iommu_pg_table_get_dma_address
-		(pb_domain->pgtbl_ops);
+		pb_domain->iommu_data = iommu_data;
+		dev->archdata.iommu = pb_domain;
+		iommu_data->page_table_base_address =
+			ipu_iommu_pg_table_get_dma_address(
+				pb_domain->pgtbl_ops);
+	}
 
 	mutex_lock(&pb_domain->pgtbl_mutex);
 	ipu_iommu_pgtable_mem_up(pb_domain->pgtbl_ops);
@@ -526,10 +543,9 @@ static void ipu_iommu_dram_up(struct device *dev)
 	struct iommu_domain *domain =
 		iommu_get_domain_for_dev(dev);
 
-	if (domain == NULL) {
-		dev_err(dev, "%s domain no initialized", __func__);
+	if (domain == NULL)
 		return;
-	}
+
 	ipu_iommu_create_page_table(
 		domain, dev);
 }
@@ -692,6 +708,7 @@ static const struct paintbox_device_ops ipu_iommu_dev_ops = {
 	.firmware_suspended = ipu_iommu_firmware_suspended,
 	.dram_up = ipu_iommu_dram_up,
 	.dram_down = ipu_iommu_dram_down,
+	.dram_suspended = ipu_iommu_dram_suspended,
 };
 
 static int ipu_iommu_probe(struct device *dev)

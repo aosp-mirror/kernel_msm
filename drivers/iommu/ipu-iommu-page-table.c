@@ -65,6 +65,7 @@ struct ipu_iommu_page_table {
 	void *dma_dev;
 	struct bar_mapping mapping;
 	bool ab_dram_up;
+	bool ab_dram_suspended;
 
 	/* implements delay write for map/map_sg:
 	 * don't write as long as the memory write are adjacent.
@@ -829,6 +830,7 @@ int ipu_iommu_pgtable_map(struct io_pgtable_ops *ops, unsigned long iova,
 	pg_table = io_pgtable_ops_to_ipu_page_table(ops);
 	data = ipu_iommu_pgtable_to_arm_data(pg_table);
 	lvl = ARM_LPAE_START_LVL(data);
+	pg_table->ab_dram_suspended = false;
 
 	/* If no access, then nothing to do */
 	if (!(iommu_prot & (IOMMU_READ | IOMMU_WRITE)))
@@ -1011,6 +1013,7 @@ static int ipu_iommu_pgtable_map_sg(
 	cfg = &data->iop.cfg;
 	prot = ipu_iommu_pgtbl_prot_to_pte(data, iommu_prot);
 	min_pagesz = 1 << __ffs(cfg->pgsize_bitmap);
+	pg_table->ab_dram_suspended = false;
 
 	for_each_sg(sg, s, nents, i) {
 		phys_addr_t phys = page_to_phys(sg_page(s)) + s->offset;
@@ -1376,6 +1379,7 @@ static size_t ipu_iommu_pgtable_unmap(struct io_pgtable_ops *ops,
 	unmapped = 0;
 	lvl = ARM_LPAE_START_LVL(data);
 	shadow_table = &pg_table->shadow_table;
+	pg_table->ab_dram_suspended = false;
 
 	if (WARN_ON(iova >= (1ULL << data->iop.cfg.ias)))
 		return 0;
@@ -1782,18 +1786,21 @@ void ipu_iommu_pgtable_mem_up(struct io_pgtable_ops *ops)
 	data = ipu_iommu_pgtable_to_arm_data(pg_table);
 	pg_table->ab_dram_up = true;
 
-	if (__ipu_iommu_load_pgtable(pg_table,
+	if (!pg_table->ab_dram_suspended && __ipu_iommu_load_pgtable(pg_table,
 			ARM_LPAE_START_LVL(data), &pg_table->shadow_table, 1)) {
 		dev_err(pg_table->dma_dev, "%s error loading page table\n",
 			__func__);
 		pg_table->ab_dram_up = false;
 	}
+	pg_table->ab_dram_suspended = false;
 }
-void ipu_iommu_pgtable_mem_down(struct io_pgtable_ops *ops)
+void ipu_iommu_pgtable_mem_down(struct io_pgtable_ops *ops, bool suspend)
 {
 	struct ipu_iommu_page_table *pg_table;
 
 	pg_table = io_pgtable_ops_to_ipu_page_table(ops);
+	if (pg_table->ab_dram_up || pg_table->ab_dram_suspended)
+		pg_table->ab_dram_suspended = suspend;
 	pg_table->ab_dram_up = false;
 }
 
@@ -1885,6 +1892,6 @@ void ipu_iommu_pgtable_update_device(struct io_pgtable_ops *ops,
 }
 /* no need to take any action */
 void ipu_iommu_pgtable_mem_up(struct io_pgtable_ops *ops) {}
-void ipu_iommu_pgtable_mem_down(struct io_pgtable_ops *ops) {}
+void ipu_iommu_pgtable_mem_down(struct io_pgtable_ops *ops, bool suspend) {}
 
 #endif /* IS_ENABLED(CONFIG_IPU_IOMMU_PAGE_TABLE_ON_AB) */
