@@ -332,7 +332,8 @@ void ipu_core_jqs_unstage_firmware(struct paintbox_bus *bus)
 }
 
 static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
-		dma_addr_t boot_ab_paddr, dma_addr_t smem_ab_paddr)
+		dma_addr_t boot_ab_paddr, dma_addr_t smem_ab_paddr,
+		bool jqs_cold_boot)
 {
 	/* If the PCIe link is down then we are not ready */
 	if (!ipu_core_is_ready(bus)) {
@@ -396,6 +397,10 @@ static int ipu_core_jqs_power_enable(struct paintbox_bus *bus,
 
 	ipu_core_writel(bus, (uint32_t)smem_ab_paddr, IPU_CSR_JQS_OFFSET +
 			SYS_JQS_GPR_TRANSPORT);
+
+	ipu_core_writel(bus, jqs_cold_boot ?
+			JQS_BOOT_MODE_COLD : JQS_BOOT_MODE_WARM,
+			IPU_CSR_JQS_OFFSET + SYS_JQS_GPR_BOOT_MODE);
 
 	/* Enable the JQS */
 	ipu_core_writel(bus, JQS_CONTROL_CORE_FETCH_EN_MASK,
@@ -461,9 +466,12 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus,
 	}
 
 	if (cold_boot) {
-		/* For cold boots all msg transports need to be allocated
-		 * and initialized. The JQS is notified it must initialize
-		 * everything.
+		/* For warm boots, the msg transports have already been
+		 * allocated and initialized. The JQS just needs to be
+		 * notified that the DRAM memory is valid. Cold boots
+		 * required that msg transports need to be allocated
+		 * and initialized. The JQS is also notified it must
+		 * initialize everything.
 		 */
 		ret = ipu_core_jqs_msg_transport_init(bus);
 		if (ret < 0)
@@ -472,21 +480,12 @@ static int ipu_core_jqs_start_firmware(struct paintbox_bus *bus,
 		ret = ipu_core_jqs_msg_transport_alloc_kernel_queue(bus);
 		if (ret < 0)
 			goto err_shutdown_transport;
-
-		ipu_core_writel(bus, JQS_BOOT_MODE_COLD, IPU_CSR_JQS_OFFSET +
-				SYS_JQS_GPR_BOOT_MODE);
-	} else {
-		/* For warm boots, the msg transports have already been
-		 * allocated and initialized. The JQS just needs to be
-		 * notified that the DRAM memory is valid.
-		 */
-		ipu_core_writel(bus, JQS_BOOT_MODE_WARM, IPU_CSR_JQS_OFFSET +
-				SYS_JQS_GPR_BOOT_MODE);
 	}
 
 	ret = ipu_core_jqs_power_enable(bus,
 			bus->jqs.fw_shared_buffer->jqs_paddr,
-			bus->jqs_msg_transport->shared_buf->jqs_paddr);
+			bus->jqs_msg_transport->shared_buf->jqs_paddr,
+			cold_boot);
 	if (ret < 0)
 		goto err_free_kernel_queue;
 
