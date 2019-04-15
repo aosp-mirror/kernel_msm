@@ -10,6 +10,7 @@
 #ifndef _UAPI__ABC_PCIE_DMA_H
 #define _UAPI__ABC_PCIE_DMA_H
 
+#include <linux/compiler.h>
 #include <linux/dma-direction.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
