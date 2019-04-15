@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,7 +24,7 @@
 #include "cam_trace.h"
 #include "cam_debug_util.h"
 
-static const char isp_dev_name[] = "isp";
+static const char isp_dev_name[] = "cam-isp";
 
 #define INC_STATE_MONITOR_HEAD(head) \
 	(atomic64_add_return(1, head) % \
