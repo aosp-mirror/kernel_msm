@@ -237,7 +237,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		mutex_lock(&priv->module_lock);
 		/* Get Power Statistics */
 		if (iaxxx_core_get_pwr_stats(module_dev_priv->parent,
-					&pwr_stats_count) <= 0) {
+					&pwr_stats_count) < 0) {
 			pr_err("Error in reading power statistics\n");
 			return -EINVAL;
 		}
