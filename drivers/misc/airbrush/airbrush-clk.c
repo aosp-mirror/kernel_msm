@@ -286,15 +286,9 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	/* Set pll_ipu clock source to OSCCLK_AON so that intermediate
 	 * changes don't propagate to children
+	 * Disable pll_tpu
 	 */
-	val = last_val & ~PLL_TPU_MUX_SEL_MASK;
-	if (val != last_val) {
-		ABC_WRITE(PLL_CON0_PLL_TPU, val);
-		last_val = val;
-	}
-
-	/* Disable pll_tpu */
-	val = last_val & ~PLL_TPU_ENABLE_MASK;
+	val = last_val & ~(PLL_TPU_MUX_SEL_MASK | PLL_TPU_ENABLE_MASK);
 	if (val != last_val) {
 		ABC_WRITE(PLL_CON0_PLL_TPU, val);
 		last_val = val;
