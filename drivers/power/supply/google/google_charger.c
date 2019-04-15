@@ -29,7 +29,7 @@
 #include <linux/usb/tcpm.h>
 #include "google_bms.h"
 #include "google_psy.h"
-
+#include "logbuffer.h"
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -95,6 +95,9 @@ struct pd_pps_data {
 	int max_ua;
 	int out_uv;
 	int op_ua;
+
+	/* logging client */
+	struct logbuffer *log;
 };
 
 struct chg_drv;
@@ -450,12 +453,13 @@ static bool pps_is_avail(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 		return false;
 
 	/* TODO: lower the loglevel after the development stage */
-	pr_info("max_v %d, min_v %d, max_c %d, out_v %d, op_c %d\n",
-		pps->max_uv,
-		pps->min_uv,
-		pps->max_ua,
-		pps->out_uv,
-		pps->op_ua);
+	logbuffer_log(pps->log,
+		      "max_v %d, min_v %d, max_c %d, out_v %d, op_c %d",
+		      pps->max_uv,
+		      pps->min_uv,
+		      pps->max_ua,
+		      pps->out_uv,
+		      pps->op_ua);
 
 	/* FIXME: set interval to PD_T_PPS_TIMEOUT here may cause
 	 * timeout
@@ -474,7 +478,7 @@ static int pps_ping(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 	if (rc == 0)
 		pps->pd_online = TCPM_PSY_PROG_ONLINE;
 	else if (rc != -EAGAIN && rc != -EOPNOTSUPP)
-		pr_err("failed to set ONLINE, ret = %d\n", rc);
+		logbuffer_log(pps->log,"failed to set ONLINE, ret = %d", rc);
 
 	return rc;
 }
@@ -510,8 +514,6 @@ static int pps_update_capability(struct power_supply *tcpm_psy, u32 pps_cap)
 	ret = tcpm_update_sink_capabilities(port, pdo,
 					    sizeof(pdo) / sizeof(pdo[0]),
 					    OP_SNK_MW);
-	if (ret < 0)
-		pr_err("Failed to update sink caps, ret %d\n", ret);
 
 	return ret;
 }
@@ -542,7 +544,8 @@ static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 			pps->last_update = get_boot_sec();
 			rc = pps_get_src_cap(pps, tcpm_psy);
 			if (rc < 0)
-				pr_err("Cannot get partner src caps\n");
+				logbuffer_log(pps->log,
+					      "Cannot get partner src caps");
 		}
 
 		return PD_T_PPS_TIMEOUT;
@@ -583,15 +586,17 @@ static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 				   TCPM_PSY_PROG_ONLINE);
 		if (rc == -EAGAIN) {
 			/* TODO: lower the loglevel */
-			pr_err("not in SNK_READY, rerun\n");
+			logbuffer_log(pps->log,"not in SNK_READY, rerun");
 			return -EAGAIN;
 		}
 
 		if (rc == -EOPNOTSUPP) {
 			/* pps_update_interval==0 disable the vote */
-			pr_err("PPS not supported\n");
+			logbuffer_log(pps->log,"PPS not supported");
 		} else if (rc != 0) {
-			pr_err("failed to set PROP_ONLINE, rc = %d\n", rc);
+			logbuffer_log(pps->log,
+				      "failed to set PROP_ONLINE, rc = %d",
+				      rc);
 		} else {
 			pps_update_interval = PD_T_PPS_TIMEOUT;
 			pps->pd_online = TCPM_PSY_PROG_ONLINE;
@@ -625,7 +630,7 @@ static int pps_update_adapter(struct chg_drv *chg_drv,
 		return -EIO;
 
 	/* TODO: lower the loglevel after the development stage */
-	pr_info("out_v %d, op_c %d, pend_v %d, pend_c %d\n",
+	logbuffer_log(pps->log,"out_v %d, op_c %d, pend_v %d, pend_c %d",
 		pps->out_uv, pps->op_ua, pending_uv, pending_ua);
 
 	if (pending_uv < 0)
@@ -647,7 +652,9 @@ static int pps_update_adapter(struct chg_drv *chg_drv,
 			pps->last_update = get_boot_sec();
 			return PD_T_PPS_TIMEOUT;
 		} else if (ret != -EAGAIN && ret != -EOPNOTSUPP) {
-			pr_err("failed to set VOLTAGE_NOW, ret = %d\n", ret);
+			logbuffer_log(pps->log,
+				      "failed to set VOLTAGE_NOW, ret = %d",
+				      ret);
 		}
 	} else if (pps->op_ua != pending_ua) {
 		ret = GPSY_SET_PROP(tcpm_psy,
@@ -659,7 +666,9 @@ static int pps_update_adapter(struct chg_drv *chg_drv,
 			pps->last_update = get_boot_sec();
 			return PD_T_PPS_TIMEOUT;
 		} else if (ret != -EAGAIN && ret != -EOPNOTSUPP) {
-			pr_err("failed to set CURRENT_NOW, ret = %d\n", ret);
+			logbuffer_log(pps->log,
+				      "failed to set CURRENT_NOW, ret = %d",
+				      ret);
 		}
 	} else if (interval < PD_T_PPS_DEADLINE_S) {
 		int pps_update_interval;
@@ -682,7 +691,7 @@ static int pps_update_adapter(struct chg_drv *chg_drv,
 	if (ret == -EOPNOTSUPP) {
 		pps->pd_online = TCPM_PSY_FIXED_ONLINE;
 		pps->keep_alive_cnt = 0;
-		pr_err("PPS deactivated while updating\n");
+		logbuffer_log(pps->log,"PPS deactivated while updating");
 	}
 
 	return ret;
@@ -1487,12 +1496,20 @@ static int pps_switch_profile(struct chg_drv *chg_drv, bool more_pwr)
 					   PD_SNK_MAX_MV,
 					   PD_SNK_MAX_MA);
 			ret = pps_update_capability(chg_drv->tcpm_psy, pdo);
+			if (ret < 0)
+				logbuffer_log(pps->log,
+					"Failed to update sink caps, ret %d",
+					ret);
 			break;
 		} else if (!more_pwr && max_mw >= current_mw &&
 			   max_ma > current_ma) {
 			/* TODO: tune the max_mv */
 			pdo = PDO_PPS_APDO(PD_SNK_MIN_MV, 6000, PD_SNK_MAX_MA);
 			ret = pps_update_capability(chg_drv->tcpm_psy, pdo);
+			if (ret < 0)
+				logbuffer_log(pps->log,
+					"Failed to update sink caps, ret %d",
+					ret);
 			break;
 		}
 	}
@@ -1524,7 +1541,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	vbatt = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 
 	if (ioerr < 0 || vbatt < 0) {
-		pr_err("Failed to get ibatt and vbatt\n");
+		logbuffer_log(pps->log,"Failed to get ibatt and vbatt");
 		return -EIO;
 	}
 
@@ -1535,7 +1552,8 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	exp_mw = (unsigned long)vbatt * (unsigned long)cc_max * 1.1 /
 		 1000000000;
 
-	pr_info("ibatt %d, vbatt %d, vbatt*cc_max*1.1 %lu mw, adapter %ld, keep_alive_cnt %d\n",
+	logbuffer_log(pps->log,
+		"ibatt %d, vbatt %d, vbatt*cc_max*1.1 %lu mw, adapter %ld, keep_alive_cnt %d",
 		ibatt, vbatt, exp_mw,
 		(long)pps->out_uv * (long)pps->op_ua / 1000000000,
 		pps->keep_alive_cnt);
@@ -2187,6 +2205,14 @@ static int google_charger_probe(struct platform_device *pdev)
 	if (!chg_drv->dc_icl_votable)
 		pr_err("Failed to find dc_icl_votable\n");
 
+	chg_drv->pps_data.log = debugfs_logbuffer_register("pps");
+	if (IS_ERR(chg_drv->pps_data.log)) {
+		ret = PTR_ERR(chg_drv->pps_data.log);
+		dev_err(chg_drv->device,
+			"failed to obtain logbuffer instance, ret=%d\n", ret);
+		chg_drv->pps_data.log = NULL;
+	}
+
 	schedule_delayed_work(&chg_drv->init_work,
 			      msecs_to_jiffies(CHG_DELAY_INIT_MS));
 
@@ -2220,6 +2246,9 @@ static int google_charger_remove(struct platform_device *pdev)
 			power_supply_put(chg_drv->tcpm_psy);
 
 		wakeup_source_trash(&chg_drv->chg_ws);
+
+		if (chg_drv->pps_data.log)
+			debugfs_logbuffer_unregister(chg_drv->pps_data.log);
 	}
 
 	return 0;
