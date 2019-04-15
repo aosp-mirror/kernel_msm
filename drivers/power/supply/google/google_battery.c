@@ -177,8 +177,11 @@ static int google_battery_tz_get_cycle_count(void *data, int *cycle_count)
 		pr_err("Cycle Count NULL");
 		return -EINVAL;
 	}
-
-	*cycle_count = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CYCLE_COUNT);
+	if (!fg_psy)
+		*cycle_count = 0;
+	else
+		*cycle_count = GPSY_GET_PROP(fg_psy,
+					     POWER_SUPPLY_PROP_CYCLE_COUNT);
 	return 0;
 }
 
