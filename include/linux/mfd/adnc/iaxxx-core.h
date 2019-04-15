@@ -344,7 +344,7 @@ struct iaxxx_priv {
 	int try_count;
 	bool in_suspend;
 	bool in_resume;
-	bool pm_resume;
+	atomic_t pm_resume;
 	struct mutex pm_mutex;
 
 	/* Debug flags */

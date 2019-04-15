@@ -783,6 +783,7 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 {
 	int rc;
 	uint32_t count;
+	int retry_cnt = 5;
 	uint32_t status;
 	int mode;
 	bool handled = false;
@@ -798,10 +799,11 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 
 	pm_wakeup_event(priv->dev, WAKEUP_TIMEOUT);
 
-	if (!priv->pm_resume) {
+	if (!atomic_read(&priv->pm_resume)) {
 		rc = wait_event_timeout(priv->irq_wake,
-			priv->pm_resume, msecs_to_jiffies(IRQ_WAIT_TIMEOUT));
-		if (rc && !priv->pm_resume) {
+			atomic_read(&priv->pm_resume),
+			msecs_to_jiffies(IRQ_WAIT_TIMEOUT));
+		if (rc && !atomic_read(&priv->pm_resume)) {
 			dev_err(priv->dev,
 				"IRQ wait resume timeout!, rc = %d\n", rc);
 			goto out;
@@ -816,7 +818,7 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 		if (rc)
 			goto out;
 	}
-
+retry_reading_count_reg:
 	/* Get current regmap based on boot status */
 	regmap = iaxxx_get_current_regmap(priv);
 	/* Any events in the event queue? */
@@ -856,6 +858,8 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 			priv->cm4_crashed = true;
 			queue_work(priv->event_workq, &priv->event_work_struct);
 			return IRQ_HANDLED;
+		} else if (mode == SYSTEM_STATUS_MODE_APPS && retry_cnt--) {
+			goto retry_reading_count_reg;
 		}
 	}
 
@@ -1568,24 +1572,22 @@ int iaxxx_core_resume_rt(struct device *dev)
 int iaxxx_core_dev_suspend(struct device *dev)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
-	int ret = 0;
 
 
 	iaxxx_flush_kthread_worker(&priv->worker);
-	ret = iaxxx_core_suspend_rt(dev);
-	priv->pm_resume = false;
+	atomic_set(&priv->pm_resume, 0);
 
-	return ret;
+	return 0;
 }
 
 int iaxxx_core_dev_resume(struct device *dev)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
-	priv->pm_resume = true;
+	atomic_set(&priv->pm_resume, 1);
 	wake_up(&priv->irq_wake);
 
-	return iaxxx_core_resume_rt(dev);
+	return 0;
 }
 
 
@@ -1716,7 +1718,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	init_waitqueue_head(&priv->boot_wq);
 	init_waitqueue_head(&priv->wakeup_wq);
 	init_waitqueue_head(&priv->irq_wake);
-	priv->pm_resume = true;
+	atomic_set(&priv->pm_resume, 1);
 
 	priv->thread = kthread_run(kthread_worker_fn, &priv->worker,
 				   "iaxxx-core");
