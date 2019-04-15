@@ -11,7 +11,6 @@
  */
 
 #include <dt-bindings/interrupt-controller/irq.h>
-#include <dt-bindings/clock/abc-clk.h>
 #include <dt-bindings/gpio/gpio.h>
 
 #include "sm8150-floral-airbrush-trip-points.dtsi"
@@ -151,12 +150,6 @@
 
 &soc {
 
-	fin_pll_ab: xxti_ab {
-		compatible = "fixed-clock";
-		clock-output-names = "fin_pll_ab";
-		clock-frequency = <19200000>;
-		#clock-cells = <0>;
-	};
 	ppmu_pcie_m: ppmu_pcie_m@41fa0000 {
 		compatible = "abc,airbrush-ppmu-v2";
 		reg = <0x0 0x41fa0000 0x0 0x300>;
@@ -205,72 +198,6 @@
 		 * updated in the OTP memory of ABC
 		 */
 		ddr-otp-flashed = <0>;
-	};
-
-	abc-clk {
-		clocks = <&fin_pll_ab>,
-			<&clock_ipu FOUT_PLL_IPU>,
-			<&clock_ipu MOUT_IPU_PLL_IPU>,
-			<&clock_ipu DOUT_IPU_IPU_PLL_CLK_DIV_1>,
-			<&clock_ipu MOUT_IPU_AONCLK_PLLCLK1>,
-			<&clock_ipu CLK_BLK_IPU_UID_IPU_IPCLKPORT_CLK_IPU>,
-			<&clock_aon DOUT_AON_SHARED_DIV_AON_PLL>,
-			<&clock_tpu FOUT_PLL_TPU>,
-			<&clock_tpu MOUT_TPU_PLL_TPU>,
-			<&clock_tpu DOUT_TPU_TPU_PLL_DIV_CLK_1>,
-			<&clock_tpu MOUT_TPU_AONCLK_PLLCLK>,
-			<&clock_tpu CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU>,
-			<&clock_aon FOUT_PLL_AON>,
-			<&clock_aon MOUT_AON_PLL_AON>;
-		clock-names =	"osc_clk",
-				"ipu_pll",
-				"ipu_pll_mux",
-				"ipu_pll_div",
-				"ipu_switch_mux",
-				"ipu_gate_clk",
-				"shared_div_aon_pll",
-				"tpu_pll",
-				"tpu_pll_mux",
-				"tpu_pll_div",
-				"tpu_switch_mux",
-				"tpu_gate_clk",
-				"aon_pll",
-				"aon_pll_mux";
-
-		clock_aon: clock-controller@41B10000 {
-			compatible = "diablo,abc-clock-aon";
-			reg = <0x41B10000 0x10000>;
-			#clock-cells = <1>;
-			clocks = <&fin_pll_ab>;
-			clock-names = "fin_pll_ab";
-			status = "okay";
-		};
-
-		clock_ipu: clock-controller@41240000 {
-			compatible = "diablo,abc-clock-ipu";
-			reg = <0x41240000 0x10000>;
-			#clock-cells = <1>;
-			clocks = <&fin_pll_ab>,
-				<&clock_aon DOUT_AON_PLL_AON_CLK>,
-				<&clock_aon DOUT_AON_SHARED_DIV_AON_PLL>;
-			clock-names = "fin_pll",
-				"dout_aon_pll_aon_clk",
-				"dout_aon_shared_div_aon_pll";
-			status = "okay";
-		};
-
-		clock_tpu: clock-controller@41040000 {
-			compatible = "diablo,abc-clock-tpu";
-			reg = <0x41040000 0x10000>;
-			#clock-cells = <1>;
-			clocks = <&fin_pll_ab>,
-				<&clock_aon DOUT_AON_PLL_AON_CLK>,
-			<&clock_aon DOUT_AON_SHARED_DIV_AON_PLL>;
-			clock-names = "fin_pll",
-				"dout_aon_pll_aon_clk",
-			"dout_aon_shared_div_aon_pll";
-			status = "okay";
-		};
 	};
 
 	abc_cooling: abc-cooling {
