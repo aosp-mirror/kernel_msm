@@ -39,6 +39,12 @@
 
 #include "abc-pcie-private.h"
 
+/* We must hold the fsys_reg_lock spinlock while accessing DBI registers and
+ * SYSREG_FSYS_DBI_OVERRIDE. If SYSREG_FSYS_DBI_OVERRIDE is modified, we must
+ * hold the spinlock until SYSREG_FSYS_DBI_OVERRIDE is set back to its original
+ * value.
+ */
+
 #define UPPER(address) ((unsigned int)((address & 0xFFFFFFFF00000000) >> 32))
 #define LOWER(address) ((unsigned int)(address & 0x00000000FFFFFFFF))
 
@@ -97,6 +103,9 @@ bool abc_pcie_enumerated(void)
 int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 {
 	void __iomem *base_offset;
+	unsigned long flags;
+	bool is_dbi_register = ((DBI_START) <= offset) &&
+				(offset < (FSYS_NIC_GPV));
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 	struct inb_region   ir;
 	u32 region_offset;
@@ -120,7 +129,7 @@ int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 	} else if (((FSYS_START) <= offset) && (offset < (DBI_START))) {
 		base_offset = abc_dev->fsys_config +
 				(offset - FSYS_START);
-	} else if (((DBI_START) <= offset) && (offset < (FSYS_NIC_GPV))) {
+	} else if (is_dbi_register) {
 		base_offset = abc_dev->pcie_config +
 				(offset - DBI_START);
 	} else if (((AON_AXI2APB) <= offset) && (offset < (AON_NIC_GPV))) {
@@ -139,13 +148,23 @@ int abc_pcie_config_read(u32 offset, u32 len, u32 *data)
 		base_offset = abc_dev->sfr_misc_config + region_offset;
 #endif
 	}
+
+	if (is_dbi_register)
+		/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
+		spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 	*data = readl(base_offset);
+	if (is_dbi_register)
+		spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 	return 0;
 }
 
 int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 {
 	void __iomem *base_offset;
+	unsigned long flags;
+	bool is_dbi_register = ((DBI_START) <= offset) &&
+				(offset < (FSYS_NIC_GPV));
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 	struct inb_region   ir;
 	u32 region_offset;
@@ -169,7 +188,7 @@ int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 	} else if (((FSYS_START) <= offset) && (offset < (DBI_START))) {
 		base_offset = abc_dev->fsys_config +
 				(offset - FSYS_START);
-	} else if (((DBI_START) <= offset) && (offset < (FSYS_NIC_GPV))) {
+	} else if (is_dbi_register) {
 		base_offset = abc_dev->pcie_config +
 				(offset - DBI_START);
 	} else if (((AON_AXI2APB) <= offset) && (offset < (AON_NIC_GPV))) {
@@ -188,8 +207,15 @@ int abc_pcie_config_write(u32 offset, u32 len, u32 data)
 		base_offset = abc_dev->sfr_misc_config + region_offset;
 #endif
 	}
+
 	__iowmb();
+	if (is_dbi_register)
+		/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
+		spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 	writel_relaxed(data, base_offset);
+	if (is_dbi_register)
+		spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 	return 0;
 }
 
@@ -474,6 +500,7 @@ void abc_pcie_set_linkspeed(u32 target_linkspeed)
 			  0x0, val);
 }
 
+/* Caller must hold abc_dev->fsys_reg_lock */
 static void abc_l12_timeout_ctrl(bool enable)
 {
 	u32 val;
@@ -495,7 +522,13 @@ static void abc_l12_timeout_ctrl(bool enable)
 static void abc_l1_entry_ctrl(enum l1_entry_delay_value delay,
 	bool use_l0s_for_entry)
 {
-	u32 val = readl(abc_dev->pcie_config
+	u32 val;
+	unsigned long flags;
+
+	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
+
+	val = readl(abc_dev->pcie_config
 				+ ACK_F_ASPM_CTRL_OFF);
 	val &= ~ACK_F_ASPM_CTRL_OFF_L1_DELAY_MASK;
 	val |= ((delay << ACK_F_ASPM_CTRL_OFF_L1_DELAY_POS)
@@ -509,6 +542,8 @@ static void abc_l1_entry_ctrl(enum l1_entry_delay_value delay,
 	__iowmb();
 	writel_relaxed(val,
 		abc_dev->pcie_config + ACK_F_ASPM_CTRL_OFF);
+
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 }
 
 void abc_set_l1_entry_delay(int delay)
@@ -523,9 +558,13 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	u32 aspm_l11_l12;
 	u32 l1_l0s_enable;
 	u32 val;
+	unsigned long flags;
 
 	if (pmctrl == NULL)
 		return -EINVAL;
+
+	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	aspm_l11_l12 = readl(abc_dev->pcie_config
 				+ L1SUB_CONTROL1_REG);
@@ -549,6 +588,8 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
 
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 #if IS_ENABLED(CONFIG_PCI_MSM)
 	/* set rc l1ss state to match ep's */
 	msm_pcie_set_l1ss_state(abc_dev->pdev,
@@ -556,6 +597,9 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 		pmctrl->aspm_L11 ? MSM_PCIE_PM_L1SS_L11 :
 		MSM_PCIE_PM_L1SS_DISABLE);
 #endif
+
+	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* LTR Enable */
 	if (pmctrl->aspm_L12) {
@@ -575,6 +619,8 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 		writel_relaxed(val,
 			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
 	}
+
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
 	if (pmctrl->l1_en) {
 		/* Clock Request Enable*/
@@ -689,6 +735,10 @@ int abc_set_aspm_state(bool state)
 {
 	u32 aspm_sts;
 	u32 aspm_l1_sub_states;
+	unsigned long flags;
+
+	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	if (state) {
 		/* Enabling ASPM L0s, L1 support [1:0] = 0x3 */
@@ -725,6 +775,8 @@ int abc_set_aspm_state(bool state)
 		writel_relaxed(aspm_l1_sub_states, abc_dev->pcie_config +
 		       L1SUB_CONTROL1_REG);
 	}
+
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
 	return 0;
 }
@@ -2327,6 +2379,7 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	struct abc_pcie_devdata *abc;
 	struct resource *res;
 	struct pci_bus_region region;
+	unsigned long flags;
 
 	if (pci_is_bridge(pdev))
 		return -ENODEV;
@@ -2505,7 +2558,11 @@ exit_loop:
 	mfd_ops.ctx = dev;
 	ab_sm_register_mfd_ops(&mfd_ops);
 
+	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
+	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 	abc_l12_timeout_ctrl(false);
+	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
+
 	return 0;
 
 err_ipu_tpu_init:
