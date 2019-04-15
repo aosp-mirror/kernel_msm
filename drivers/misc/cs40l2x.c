@@ -6161,22 +6161,20 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 	if (!ret)
 		num_coeff_files = ++(cs40l2x->num_coeff_files);
 
-	mutex_unlock(&cs40l2x->lock);
-
 	if (num_coeff_files != cs40l2x->fw_desc->num_coeff_files)
-		return;
+		goto err_mutex;
 
 	ret = cs40l2x_dsp_pre_config(cs40l2x);
 	if (ret)
-		return;
+		goto err_mutex;
 
 	ret = cs40l2x_dsp_start(cs40l2x);
 	if (ret)
-		return;
+		goto err_mutex;
 
 	ret = cs40l2x_dsp_post_config(cs40l2x);
 	if (ret)
-		return;
+		goto err_mutex;
 
 #ifdef CONFIG_ANDROID_TIMED_OUTPUT
 	ret = cs40l2x_create_timed_output(cs40l2x);
@@ -6184,7 +6182,7 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 	ret = cs40l2x_create_led(cs40l2x);
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 	if (ret)
-		return;
+		goto err_mutex;
 
 	cs40l2x->vibe_init_success = true;
 
@@ -6197,6 +6195,9 @@ static void cs40l2x_coeff_file_load(const struct firmware *fw, void *context)
 			"Max. wavetable size: %d bytes (XM), %d bytes (YM)\n",
 			cs40l2x->wt_limit_xm / 4 * 3,
 			cs40l2x->wt_limit_ym / 4 * 3);
+
+err_mutex:
+	mutex_unlock(&cs40l2x->lock);
 }
 
 static int cs40l2x_algo_parse(struct cs40l2x_private *cs40l2x,
@@ -7879,9 +7880,6 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 	int event_count = 0;
 	int ret, i;
 	irqreturn_t ret_irq = IRQ_NONE;
-
-	if (!cs40l2x->vibe_init_success)
-		return ret_irq;
 
 	mutex_lock(&cs40l2x->lock);
 
