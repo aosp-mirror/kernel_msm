@@ -98,20 +98,40 @@
 /*******************************************************************************
 * Static variables
 *******************************************************************************/
-static unsigned char CTPM_FW_TP_ID_0[] = {
+static unsigned char CTPM_FW_TP_ID_82[] = {
 	#include "FTS_FW/CEI_DBW2_3207_0x82_app.i"
 };
 
-static unsigned char CTPM_FW_TP_ID_1[] = {
+static unsigned char CTPM_FW_TP_ID_83[] = {
 	#include "FTS_FW/CEI_DBW2_3207_0x83_app.i"
 };
 
-static unsigned char CTPM_FW_TP_ID_2[] = {
+static unsigned char CTPM_FW_TP_ID_84[] = {
 	#include "FTS_FW/CEI_DBW2_3207_0x84_app.i"
 };
 
-static unsigned char CTPM_FW_TP_ID_3[] = {
+static unsigned char CTPM_FW_TP_ID_85[] = {
 	#include "FTS_FW/CEI_DBW2_3207_0x85_app.i"
+};
+
+static unsigned char CTPM_FW_TP_ID_81[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x81_app.i"
+};
+
+static unsigned char CTPM_FW_TP_ID_86[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x86_app.i"
+};
+
+static unsigned char CTPM_FW_TP_ID_88[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x88_app.i"
+};
+
+static unsigned char CTPM_FW_TP_ID_89[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x89_app.i"
+};
+
+static unsigned char CTPM_FW_TP_ID_8A[] = {
+	#include "FTS_FW/CEI_DLW2_3207_0x8A_app.i"
 };
 
 struct fts_Upgrade_Info fts_updateinfo[] =
@@ -3231,21 +3251,41 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id, boo
 	int i_ret;
 
 	switch(tp_id){
-		case TP_ID_0:
-			CTPM_FW = CTPM_FW_TP_ID_0;
-			fw_size = sizeof(CTPM_FW_TP_ID_0);
+		case TP_ID_82:
+			CTPM_FW = CTPM_FW_TP_ID_82;
+			fw_size = sizeof(CTPM_FW_TP_ID_82);
 			break;
-		case TP_ID_1:
-			CTPM_FW = CTPM_FW_TP_ID_1;
-			fw_size = sizeof(CTPM_FW_TP_ID_1);
+		case TP_ID_83:
+			CTPM_FW = CTPM_FW_TP_ID_83;
+			fw_size = sizeof(CTPM_FW_TP_ID_83);
 			break;
-		case TP_ID_2:
-			CTPM_FW = CTPM_FW_TP_ID_2;
-			fw_size = sizeof(CTPM_FW_TP_ID_2);
+		case TP_ID_84:
+			CTPM_FW = CTPM_FW_TP_ID_84;
+			fw_size = sizeof(CTPM_FW_TP_ID_84);
 			break;
-		case TP_ID_3:
-			CTPM_FW = CTPM_FW_TP_ID_3;
-			fw_size = sizeof(CTPM_FW_TP_ID_3);
+		case TP_ID_85:
+			CTPM_FW = CTPM_FW_TP_ID_85;
+			fw_size = sizeof(CTPM_FW_TP_ID_85);
+			break;
+		case TP_ID_81:
+			CTPM_FW = CTPM_FW_TP_ID_81;
+			fw_size = sizeof(CTPM_FW_TP_ID_81);
+			break;
+		case TP_ID_86:
+			CTPM_FW = CTPM_FW_TP_ID_86;
+			fw_size = sizeof(CTPM_FW_TP_ID_86);
+			break;
+		case TP_ID_88:
+			CTPM_FW = CTPM_FW_TP_ID_88;
+			fw_size = sizeof(CTPM_FW_TP_ID_88);
+			break;
+		case TP_ID_89:
+			CTPM_FW = CTPM_FW_TP_ID_89;
+			fw_size = sizeof(CTPM_FW_TP_ID_89);
+			break;
+		case TP_ID_8A:
+			CTPM_FW = CTPM_FW_TP_ID_8A;
+			fw_size = sizeof(CTPM_FW_TP_ID_8A);
 			break;
 		default:
 			FTS_DBG("[FTS] TP ID 0x%x isn't correct\n",tp_id);
