@@ -1236,7 +1236,7 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 static int pio_write_qw(const int remote_addr, const uint64_t val)
 {
 	// This has to be performed as two separate 32 bit writes because
-	// Lassen's driver has a bug. See drivers/mfd/abc_pcie.c line 368
+	// Vendor's driver has a bug. See drivers/mfd/abc_pcie.c line 368
 	uint32_t lower = (uint32_t)val;
 	uint32_t upper = (uint32_t)(val >> 32);
 

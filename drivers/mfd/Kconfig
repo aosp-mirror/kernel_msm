@@ -1838,10 +1838,10 @@ config  MFD_ABC_PCIE
 	 as MFD devices.
 
 config MULTIPLE_BAR_MAP_FOR_ABC_SFR
-	bool "Specific to Lassen PCIe platform"
+	bool "Specific to vendor PCIe platform"
 	depends on MFD_ABC_PCIE
 	help
-	 Needed for LASSEN PCIe host setup.
+	 Needed for vendor PCIe host setup.
 
 endmenu
 endif
