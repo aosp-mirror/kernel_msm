@@ -16,6 +16,7 @@
 #ifndef __UAPI_IPU_H__
 #define __UAPI_IPU_H__
 
+#include <linux/compiler.h>
 #include <linux/dma-direction.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
