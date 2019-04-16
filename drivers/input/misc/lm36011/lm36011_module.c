@@ -166,6 +166,12 @@ struct led_laser_ctrl_t {
 static bool read_proxoffset;
 static bool crack_log_en;
 static bool crack_detection_en = true;
+static enum LASER_TYPE safety_ic_owner = LASER_TYPE_MAX;
+/*
+ * a global mutex is needed since there have two
+ * available lm36011 ic on board
+ */
+static DEFINE_MUTEX(lm36011_mutex);
 module_param(read_proxoffset, bool, 0644);
 module_param(crack_log_en, bool, 0644);
 module_param(crack_detection_en, bool, 0644);
@@ -636,6 +642,42 @@ static int lm36011_write_data(
 	return rc;
 }
 
+static int lm36011_init_pinctrl(struct device *dev)
+{
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	ctrl->pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR_OR_NULL(ctrl->pinctrl)) {
+		dev_err(dev, "getting pinctrl handle failed");
+		return -EINVAL;
+	}
+
+	ctrl->gpio_active_state =
+		pinctrl_lookup_state(ctrl->pinctrl,
+				"lm36011_active");
+	if (IS_ERR_OR_NULL(ctrl->gpio_active_state)) {
+		dev_err(dev,
+			"failed to get the gpio active state pinctrl handle");
+		goto pinctrl_err;
+	}
+
+	ctrl->gpio_suspend_state =
+		pinctrl_lookup_state(ctrl->pinctrl,
+				"lm36011_suspend");
+	if (IS_ERR_OR_NULL(ctrl->gpio_suspend_state)) {
+		dev_err(dev,
+			"failed to get the gpio suspend state pinctrl handle");
+		goto pinctrl_err;
+	}
+
+	return 0;
+
+pinctrl_err:
+	devm_pinctrl_put(ctrl->pinctrl);
+	ctrl->pinctrl = NULL;
+	return -EINVAL;
+}
+
 static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 {
 	int rc;
@@ -754,14 +796,31 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	}
 	ctrl->silego.is_validated = true;
 
-	if (ctrl->type == LASER_FLOOD &&
-		!IS_ERR_OR_NULL(ctrl->gpio_active_state)) {
+	/* set safety ic owner to this driver, if safety ic has no onwer
+	 * also init pinctrl for safety ic
+	 */
+	mutex_lock(&lm36011_mutex);
+	if (safety_ic_owner == LASER_TYPE_MAX) {
+		safety_ic_owner = ctrl->type;
+		rc = lm36011_init_pinctrl(ctrl->soc_info.dev);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"failed to init pin ctrl");
+			safety_ic_owner = LASER_TYPE_MAX;
+			mutex_unlock(&lm36011_mutex);
+			return rc;
+		}
 		rc = pinctrl_select_state(ctrl->pinctrl,
 			ctrl->gpio_active_state);
-		if (rc < 0)
+		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev,
 				"failed to set pin ctrl to active");
+			devm_pinctrl_put(ctrl->pinctrl);
+			ctrl->pinctrl = NULL;
+			safety_ic_owner = LASER_TYPE_MAX;
+		}
 	}
+	mutex_unlock(&lm36011_mutex);
 
 	return rc;
 }
@@ -827,14 +886,20 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 			ctrl->is_power_up = false;
 	}
 
-	if (ctrl->type == LASER_FLOOD &&
-		!IS_ERR_OR_NULL(ctrl->gpio_suspend_state)) {
+	/* set pinctrl to suspend if safety onwer going to disable */
+	mutex_lock(&lm36011_mutex);
+	if (safety_ic_owner == ctrl->type &&
+		!IS_ERR_OR_NULL(ctrl->pinctrl)) {
 		rc = pinctrl_select_state(ctrl->pinctrl,
 			ctrl->gpio_suspend_state);
+		devm_pinctrl_put(ctrl->pinctrl);
+		ctrl->pinctrl = NULL;
+		safety_ic_owner = LASER_TYPE_MAX;
 		if (rc < 0)
 			dev_err(ctrl->soc_info.dev,
 				"failed to set pin ctrl to suspend");
 	}
+	mutex_unlock(&lm36011_mutex);
 
 	return rc;
 }
@@ -1087,40 +1152,6 @@ static void lm36011_disable_gpio_irq(struct device *dev)
 	}
 }
 
-static int lm36011_parse_pinctrl(struct device *dev)
-{
-	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
-
-	if (ctrl->type == LASER_DOT)
-		return 0;
-
-	ctrl->pinctrl = devm_pinctrl_get(dev);
-	if (IS_ERR_OR_NULL(ctrl->pinctrl)) {
-		dev_err(dev, "getting pinctrl handle failed");
-		return -EINVAL;
-	}
-
-	ctrl->gpio_active_state =
-		pinctrl_lookup_state(ctrl->pinctrl,
-				"lm36011_active");
-	if (IS_ERR_OR_NULL(ctrl->gpio_active_state)) {
-		dev_err(dev,
-			"failed to get the gpio active state pinctrl handle");
-		return -EINVAL;
-	}
-
-	ctrl->gpio_suspend_state =
-		pinctrl_lookup_state(ctrl->pinctrl,
-				"lm36011_suspend");
-	if (IS_ERR_OR_NULL(ctrl->gpio_suspend_state)) {
-		dev_err(dev,
-			"failed to get the gpio suspend state pinctrl handle");
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static int lm36011_get_gpio_info(struct device *dev)
 {
 	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
@@ -1150,11 +1181,6 @@ static int lm36011_get_gpio_info(struct device *dev)
 	if (!ctrl->silego.gpio_array) {
 		dev_err(dev, "no memory for cap sense gpio");
 		return -ENOMEM;
-	}
-
-	if (lm36011_parse_pinctrl(dev) < 0) {
-		dev_err(dev, "failed to init gpio state");
-		return -EINVAL;
 	}
 
 	for (index = 0; index < gpio_array_size; index++) {
@@ -1332,12 +1358,15 @@ static ssize_t led_laser_enable_store(struct device *dev,
 			return rc;
 		}
 		/* Prepare safety ic IRQ */
-		if (ctrl->type == LASER_FLOOD) {
+		mutex_lock(&lm36011_mutex);
+		if (ctrl->type == safety_ic_owner) {
 			if (ctrl->hw_version >= 2) {
+				ctrl->cap_sense.sample_count = 0;
 				rc = sx9320_init_setting(ctrl);
 				if (rc < 0) {
 					dev_err(ctrl->soc_info.dev,
 						"initialize cap sense failed");
+					mutex_unlock(&lm36011_mutex);
 					lm36011_power_down(ctrl);
 					mutex_unlock(&ctrl->cam_sensor_mutex);
 					return rc;
@@ -1350,7 +1379,11 @@ static ssize_t led_laser_enable_store(struct device *dev,
 					sx9320_crack_detection(ctrl);
 			}
 			lm36011_enable_gpio_irq(dev);
+			dev_info(ctrl->soc_info.dev,
+				"enable safety ic funciton, safety_ic_owner %d",
+				safety_ic_owner);
 		}
+		mutex_unlock(&lm36011_mutex);
 
 		/* Clean up IRQ for PROTO and DEV device */
 		if (ctrl->hw_version < 2)
@@ -1361,10 +1394,14 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		if (rc == 0)
 			dev_info(dev, "Laser enabled");
 	} else {
-		if (ctrl->type == LASER_FLOOD) {
+		mutex_lock(&lm36011_mutex);
+		if (ctrl->type == safety_ic_owner) {
 			lm36011_disable_gpio_irq(dev);
-			ctrl->cap_sense.sample_count = 0;
+			dev_info(ctrl->soc_info.dev,
+				"disable safety ic function, safety_ic_owner: %d",
+				safety_ic_owner);
 		}
+		mutex_unlock(&lm36011_mutex);
 		rc = lm36011_power_down(ctrl);
 		if (rc == 0)
 			dev_info(dev, "Laser disabled");
@@ -1816,6 +1853,7 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->silego.vcsel_fault_count = 0;
 	ctrl->cap_sense.is_validated = false;
 	ctrl->cap_sense.sample_count = 0;
+
 	for (i = 0; i < LASER_TYPE_MAX; i++)
 		ctrl->cap_sense.is_crack_detected[i] = false;
 	for (i = 0; i < PHASENUM; i++) {
