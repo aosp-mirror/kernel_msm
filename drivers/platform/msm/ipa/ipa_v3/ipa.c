@@ -2690,15 +2690,9 @@ void ipa3_q6_pre_shutdown_cleanup(void)
 		ipa3_q6_pipe_delay(false);
 		ipa3_set_reset_client_prod_pipe_delay(true,
 			IPA_CLIENT_USB_PROD);
-		if (ipa3_ctx->ipa_config_is_mhi)
-			ipa3_set_reset_client_prod_pipe_delay(true,
-				IPA_CLIENT_MHI_PROD);
 	} else {
 		ipa3_start_stop_client_prod_gsi_chnl(IPA_CLIENT_USB_PROD,
 						false);
-		if (ipa3_ctx->ipa_config_is_mhi)
-			ipa3_start_stop_client_prod_gsi_chnl(
-					IPA_CLIENT_MHI_PROD, false);
 	}
 
 	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
@@ -2762,6 +2756,27 @@ void ipa3_q6_post_shutdown_cleanup(void)
 	IPADBG_LOW("Exit with success\n");
 }
 
+/**
+ * ipa3_q6_pre_powerup_cleanup() - A cleanup routine for pheripheral
+ * configuration in IPA HW. This is performed in case of SSR.
+ *
+ * This is a mandatory procedure, in case one of the steps fails, the
+ * AP needs to restart.
+ */
+void ipa3_q6_pre_powerup_cleanup(void)
+{
+	IPADBG_LOW("ENTER\n");
+
+	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+
+	if (ipa3_ctx->ipa_config_is_mhi)
+		ipa3_set_reset_client_prod_pipe_delay(true,
+			IPA_CLIENT_MHI_PROD);
+
+	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
+	IPADBG_LOW("Exit with success\n");
+}
+
 /*
  * ipa3_client_prod_post_shutdown_cleanup () - As part of this function
  * set end point delay client producer pipes and starting corresponding
@@ -2777,12 +2792,6 @@ void ipa3_client_prod_post_shutdown_cleanup(void)
 	ipa3_set_reset_client_prod_pipe_delay(true,
 				IPA_CLIENT_USB_PROD);
 	ipa3_start_stop_client_prod_gsi_chnl(IPA_CLIENT_USB_PROD, true);
-
-	if (ipa3_ctx->ipa_config_is_mhi) {
-		ipa3_set_reset_client_prod_pipe_delay(true,
-						IPA_CLIENT_MHI_PROD);
-		ipa3_start_stop_client_prod_gsi_chnl(IPA_CLIENT_MHI_PROD, true);
-	}
 
 	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 	IPADBG_LOW("Exit with success\n");
@@ -3781,6 +3790,9 @@ void ipa3_disable_clks(void)
 	IPADBG("disabling IPA clocks and bus voting\n");
 
 	ipa3_ctx->ctrl->ipa3_disable_clks();
+
+	if (ipa3_ctx->use_ipa_pm)
+		ipa_pm_set_clock_index(0);
 
 	if (msm_bus_scale_client_update_request(ipa3_ctx->ipa_bus_hdl, 0))
 		WARN(1, "bus scaling failed");
@@ -7319,6 +7331,10 @@ int ipa3_get_smmu_params(struct ipa_smmu_in_params *in,
 			is_smmu_enable =
 				!(ipa3_ctx->s1_bypass_arr[IPA_SMMU_CB_UC] |
 				ipa3_ctx->s1_bypass_arr[IPA_SMMU_CB_WLAN]);
+		break;
+	case IPA_SMMU_AP_CLIENT:
+		is_smmu_enable =
+			!(ipa3_ctx->s1_bypass_arr[IPA_SMMU_CB_AP]);
 		break;
 	default:
 		is_smmu_enable = 0;

@@ -83,6 +83,8 @@
 #define CUTOFF_CURR_OFFSET		0
 #define CUTOFF_VOLT_WORD		20
 #define CUTOFF_VOLT_OFFSET		0
+#define KI_COEFF_CUTOFF_WORD		21
+#define KI_COEFF_CUTOFF_OFFSET		0
 #define SYS_TERM_CURR_WORD		22
 #define SYS_TERM_CURR_OFFSET		0
 #define VBATT_FULL_WORD			23
@@ -238,6 +240,7 @@ struct fg_dt_props {
 	int	ki_coeff_low_chg;
 	int	ki_coeff_med_chg;
 	int	ki_coeff_hi_chg;
+	int	ki_coeff_cutoff_gain;
 	int	ki_coeff_full_soc_dischg[2];
 	int	ki_coeff_soc[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_low_dischg[KI_COEFF_SOC_LEVELS];
@@ -386,6 +389,8 @@ static struct fg_sram_param pm8150b_v1_sram_params[] = {
 		1, 1000, 15625, 0, fg_encode_default, NULL),
 	PARAM(DELTA_ESR_THR, DELTA_ESR_THR_WORD, DELTA_ESR_THR_OFFSET, 2, 1000,
 		61036, 0, fg_encode_default, NULL),
+	PARAM(KI_COEFF_CUTOFF, KI_COEFF_CUTOFF_WORD, KI_COEFF_CUTOFF_OFFSET,
+		1, 1000, 61035, 0, fg_encode_default, NULL),
 	PARAM(KI_COEFF_FULL_SOC, KI_COEFF_FULL_SOC_NORM_WORD,
 		KI_COEFF_FULL_SOC_NORM_OFFSET, 1, 1000, 61035, 0,
 		fg_encode_default, NULL),
@@ -482,6 +487,8 @@ static struct fg_sram_param pm8150b_v2_sram_params[] = {
 		1, 1000, 15625, 0, fg_encode_default, NULL),
 	PARAM(DELTA_ESR_THR, DELTA_ESR_THR_WORD, DELTA_ESR_THR_OFFSET, 2, 1000,
 		61036, 0, fg_encode_default, NULL),
+	PARAM(KI_COEFF_CUTOFF, KI_COEFF_CUTOFF_WORD, KI_COEFF_CUTOFF_OFFSET,
+		1, 1000, 61035, 0, fg_encode_default, NULL),
 	PARAM(KI_COEFF_FULL_SOC, KI_COEFF_FULL_SOC_NORM_WORD,
 		KI_COEFF_FULL_SOC_NORM_OFFSET, 1, 1000, 61035, 0,
 		fg_encode_default, NULL),
@@ -791,10 +798,21 @@ static int fg_gen4_get_cell_impedance(struct fg_gen4_chip *chip, int *val)
 {
 	struct fg_dev *fg = &chip->fg;
 	int rc, esr_uohms, temp, vbat_term_mv, v_delta, rprot_uohms = 0;
+	int rslow_uohms;
 
-	rc = fg_get_battery_resistance(fg, &esr_uohms);
-	if (rc < 0)
+	rc = fg_get_sram_prop(fg, FG_SRAM_ESR_ACT, &esr_uohms);
+	if (rc < 0) {
+		pr_err("failed to get ESR_ACT, rc=%d\n", rc);
 		return rc;
+	}
+
+	rc = fg_get_sram_prop(fg, FG_SRAM_RSLOW, &rslow_uohms);
+	if (rc < 0) {
+		pr_err("failed to get Rslow, rc=%d\n", rc);
+		return rc;
+	}
+
+	esr_uohms += rslow_uohms;
 
 	if (!chip->dt.five_pin_battery)
 		goto out;
@@ -1024,6 +1042,11 @@ static int fg_gen4_get_ttf_param(void *data, enum ttf_param param, int *val)
 	case TTF_VBAT:
 		rc = fg_get_battery_voltage(fg, val);
 		break;
+	case TTF_OCV:
+		rc = fg_get_sram_prop(fg, FG_SRAM_OCV, val);
+		if (rc < 0)
+			pr_err("Failed to get battery OCV, rc=%d\n", rc);
+		break;
 	case TTF_IBAT:
 		rc = fg_get_battery_current(fg, val);
 		break;
@@ -1057,6 +1080,8 @@ static int fg_gen4_get_ttf_param(void *data, enum ttf_param param, int *val)
 			*val = TTF_MODE_QNOVO;
 		else if (chip->ttf->step_chg_cfg_valid)
 			*val = TTF_MODE_V_STEP_CHG;
+		else if (chip->ttf->ocv_step_chg_cfg_valid)
+			*val = TTF_MODE_OCV_STEP_CHG;
 		else
 			*val = TTF_MODE_NORMAL;
 		break;
@@ -1649,6 +1674,12 @@ static int fg_gen4_get_batt_profile(struct fg_dev *fg)
 
 		chip->ttf->step_chg_num_params = tuple_len;
 		chip->ttf->step_chg_cfg_valid = true;
+		if (of_property_read_bool(profile_node,
+					   "qcom,ocv-based-step-chg")) {
+			chip->ttf->step_chg_cfg_valid = false;
+			chip->ttf->ocv_step_chg_cfg_valid = true;
+		}
+
 		mutex_unlock(&chip->ttf->lock);
 
 		if (chip->ttf->step_chg_cfg_valid) {
@@ -4906,6 +4937,21 @@ static int fg_gen4_hw_init(struct fg_gen4_chip *chip)
 		}
 	}
 
+	if (chip->dt.ki_coeff_cutoff_gain != -EINVAL) {
+		fg_encode(fg->sp, FG_SRAM_KI_COEFF_CUTOFF,
+			  chip->dt.ki_coeff_cutoff_gain, &val);
+		rc = fg_sram_write(fg,
+			fg->sp[FG_SRAM_KI_COEFF_CUTOFF].addr_word,
+			fg->sp[FG_SRAM_KI_COEFF_CUTOFF].addr_byte, &val,
+			fg->sp[FG_SRAM_KI_COEFF_CUTOFF].len,
+			FG_IMA_DEFAULT);
+		if (rc < 0) {
+			pr_err("Error in writing ki_coeff_cutoff_gain, rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
 	rc = fg_gen4_esr_calib_config(chip);
 	if (rc < 0)
 		return rc;
@@ -4993,6 +5039,10 @@ static int fg_parse_ki_coefficients(struct fg_dev *fg)
 	chip->dt.ki_coeff_hi_chg = -EINVAL;
 	of_property_read_u32(node, "qcom,ki-coeff-hi-chg",
 		&chip->dt.ki_coeff_hi_chg);
+
+	chip->dt.ki_coeff_cutoff_gain = -EINVAL;
+	of_property_read_u32(node, "qcom,ki-coeff-cutoff",
+		&chip->dt.ki_coeff_cutoff_gain);
 
 	if (!of_find_property(node, "qcom,ki-coeff-soc-dischg", NULL) ||
 		(!of_find_property(node, "qcom,ki-coeff-low-dischg", NULL) &&

@@ -2588,6 +2588,7 @@ int ipa3_tag_process(struct ipa3_desc *desc, int num_descs,
 void ipa3_q6_pre_shutdown_cleanup(void);
 void ipa3_q6_post_shutdown_cleanup(void);
 void ipa3_update_ssr_state(bool is_ssr);
+void ipa3_q6_pre_powerup_cleanup(void);
 int ipa3_init_q6_smem(void);
 
 int ipa3_mhi_handle_ipa_config_req(struct ipa_config_req_msg_v01 *config_req);
@@ -2799,6 +2800,8 @@ int ipa_mpm_mhip_xdci_pipe_disable(enum ipa_usb_teth_prot xdci_teth_prot);
 int ipa_mpm_notify_wan_state(void);
 int ipa_mpm_mhip_ul_data_stop(enum ipa_usb_teth_prot xdci_teth_prot);
 int ipa3_is_mhip_offload_enabled(void);
+int ipa_mpm_reset_dma_mode(enum ipa_client_type src_pipe,
+	enum ipa_client_type dst_pipe);
 #else
 static inline int ipa_mpm_mhip_xdci_pipe_enable(
 	enum ipa_usb_teth_prot prot)
@@ -2823,6 +2826,12 @@ static inline int ipa3_is_mhip_offload_enabled(void)
 {
 	return 0;
 }
+static inline int ipa_mpm_reset_dma_mode(enum ipa_client_type src_pipe,
+	enum ipa_client_type dst_pipe)
+{
+	return 0;
+}
+
 #endif /* CONFIG_IPA3_MHI_PRIME_MANAGER */
 
 #endif /* _IPA3_I_H_ */

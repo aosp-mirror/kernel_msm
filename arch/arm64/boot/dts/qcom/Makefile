@@ -101,15 +101,18 @@ dtb-$(CONFIG_QTI_GVM) += sa8155-vm.dtb \
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SDMSHRIKE) += \
 		sdmshrike-cdp-overlay.dtbo \
-		sdmshrike-mtp-overlay.dtbo
+		sdmshrike-mtp-overlay.dtbo \
+		sa8195p-adp-star-overlay.dtbo
 
 sdmshrike-cdp-overlay.dtbo-base := sdmshrike.dtb sdmshrike-v2.dtb
 sdmshrike-mtp-overlay.dtbo-base := sdmshrike.dtb sdmshrike-v2.dtb
+sa8195p-adp-star-overlay.dtbo-base := sa8195p.dtb
 else
 dtb-$(CONFIG_ARCH_SDMSHRIKE)	+= sdmshrike-rumi.dtb \
 	sdmshrike-mtp.dtb \
 	sdmshrike-cdp.dtb \
-	sdmshrike-v2-mtp.dtb
+	sdmshrike-v2-mtp.dtb \
+	sa8195p-adp-star.dtb
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
@@ -147,8 +150,8 @@ sa6155p-v2-adp-star-overlay.dtbo-base := sa6155p.dtb
 sa6155-adp-air-overlay.dtbo-base := sa6155.dtb
 sa6155p-adp-air-overlay.dtbo-base := sa6155p.dtb
 sa6155p-v2-adp-air-overlay.dtbo-base := sa6155p.dtb
-qcs610-iot-overlay.dtbo-base := qcs610.dtb
-qcs410-iot-overlay.dtbo-base := qcs410.dtb
+qcs610-iot-overlay.dtbo-base := sm6150.dtb
+qcs410-iot-overlay.dtbo-base := sm6150.dtb
 else
 dtb-$(CONFIG_ARCH_SM6150)	+= sm6150-rumi.dtb \
 	sm6150-qrd.dtb \

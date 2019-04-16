@@ -70,12 +70,17 @@ static DEFINE_SPINLOCK(pci_link_down_lock);
 #define QCA6390_CE_COMMON_REG_BASE		0xA18000
 
 #define QCA6390_CE_SRC_RING_BASE_LSB_OFFSET	0x0
+#define QCA6390_CE_SRC_RING_BASE_MSB_OFFSET	0x4
+#define QCA6390_CE_SRC_RING_ID_OFFSET		0x8
 #define QCA6390_CE_SRC_RING_MISC_OFFSET		0x10
 #define QCA6390_CE_SRC_CTRL_OFFSET		0x58
+#define QCA6390_CE_SRC_R0_CE_CH_SRC_IS_OFFSET	0x5C
 #define QCA6390_CE_SRC_RING_HP_OFFSET		0x400
 #define QCA6390_CE_SRC_RING_TP_OFFSET		0x404
 
 #define QCA6390_CE_DEST_RING_BASE_LSB_OFFSET	0x0
+#define QCA6390_CE_DEST_RING_BASE_MSB_OFFSET	0x4
+#define QCA6390_CE_DEST_RING_ID_OFFSET		0x8
 #define QCA6390_CE_DEST_RING_MISC_OFFSET	0x10
 #define QCA6390_CE_DEST_CTRL_OFFSET		0xB0
 #define QCA6390_CE_CH_DST_IS_OFFSET		0xB4
@@ -84,6 +89,8 @@ static DEFINE_SPINLOCK(pci_link_down_lock);
 #define QCA6390_CE_DEST_RING_TP_OFFSET		0x404
 
 #define QCA6390_CE_STATUS_RING_BASE_LSB_OFFSET	0x58
+#define QCA6390_CE_STATUS_RING_BASE_MSB_OFFSET	0x5C
+#define QCA6390_CE_STATUS_RING_ID_OFFSET	0x60
 #define QCA6390_CE_STATUS_RING_MISC_OFFSET	0x68
 #define QCA6390_CE_STATUS_RING_HP_OFFSET	0x408
 #define QCA6390_CE_STATUS_RING_TP_OFFSET	0x40C
@@ -112,8 +119,11 @@ static DEFINE_SPINLOCK(pci_link_down_lock);
 
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", QCA6390_CE_SRC_RING_BASE_LSB_OFFSET },
+	{ "SRC_RING_BASE_MSB", QCA6390_CE_SRC_RING_BASE_MSB_OFFSET },
+	{ "SRC_RING_ID", QCA6390_CE_SRC_RING_ID_OFFSET },
 	{ "SRC_RING_MISC", QCA6390_CE_SRC_RING_MISC_OFFSET },
 	{ "SRC_CTRL", QCA6390_CE_SRC_CTRL_OFFSET },
+	{ "SRC_R0_CE_CH_SRC_IS", QCA6390_CE_SRC_R0_CE_CH_SRC_IS_OFFSET },
 	{ "SRC_RING_HP", QCA6390_CE_SRC_RING_HP_OFFSET },
 	{ "SRC_RING_TP", QCA6390_CE_SRC_RING_TP_OFFSET },
 	{ NULL },
@@ -121,6 +131,8 @@ static struct cnss_pci_reg ce_src[] = {
 
 static struct cnss_pci_reg ce_dst[] = {
 	{ "DEST_RING_BASE_LSB", QCA6390_CE_DEST_RING_BASE_LSB_OFFSET },
+	{ "DEST_RING_BASE_MSB", QCA6390_CE_DEST_RING_BASE_MSB_OFFSET },
+	{ "DEST_RING_ID", QCA6390_CE_DEST_RING_ID_OFFSET },
 	{ "DEST_RING_MISC", QCA6390_CE_DEST_RING_MISC_OFFSET },
 	{ "DEST_CTRL", QCA6390_CE_DEST_CTRL_OFFSET },
 	{ "CE_CH_DST_IS", QCA6390_CE_CH_DST_IS_OFFSET },
@@ -128,6 +140,8 @@ static struct cnss_pci_reg ce_dst[] = {
 	{ "DEST_RING_HP", QCA6390_CE_DEST_RING_HP_OFFSET },
 	{ "DEST_RING_TP", QCA6390_CE_DEST_RING_TP_OFFSET },
 	{ "STATUS_RING_BASE_LSB", QCA6390_CE_STATUS_RING_BASE_LSB_OFFSET },
+	{ "STATUS_RING_BASE_MSB", QCA6390_CE_STATUS_RING_BASE_MSB_OFFSET },
+	{ "STATUS_RING_ID", QCA6390_CE_STATUS_RING_ID_OFFSET },
 	{ "STATUS_RING_MISC", QCA6390_CE_STATUS_RING_MISC_OFFSET },
 	{ "STATUS_RING_HP", QCA6390_CE_STATUS_RING_HP_OFFSET },
 	{ "STATUS_RING_TP", QCA6390_CE_STATUS_RING_TP_OFFSET },
@@ -686,7 +700,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 
 	ret = cnss_pci_start_mhi(pci_priv);
 	if (ret) {
-		cnss_pr_err("Failed to start MHI, err = %d\n", ret);
+		cnss_fatal_err("Failed to start MHI, err = %d\n", ret);
 		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout)
 			mod_timer(&plat_priv->fw_boot_timer,
@@ -822,6 +836,7 @@ int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 		ret = cnss_qca6290_powerup(pci_priv);
 		break;
 	default:
@@ -848,6 +863,7 @@ int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 		ret = cnss_qca6290_shutdown(pci_priv);
 		break;
 	default:
@@ -900,6 +916,7 @@ int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 		ret = cnss_qca6290_ramdump(pci_priv);
 		break;
 	default:
@@ -1843,7 +1860,7 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_TRIGGER_RDDM);
 	if (ret) {
-		cnss_pr_err("Failed to trigger RDDM, err = %d\n", ret);
+		cnss_fatal_err("Failed to trigger RDDM, err = %d\n", ret);
 		cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 				       CNSS_REASON_DEFAULT);
 		return ret;
@@ -2318,7 +2335,8 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	ret = mhi_download_rddm_img(pci_priv->mhi_ctrl, in_panic);
 	if (ret) {
-		cnss_pr_err("Failed to download RDDM image, err = %d\n", ret);
+		cnss_fatal_err("Failed to download RDDM image, err = %d\n",
+			       ret);
 		cnss_pci_dump_registers(pci_priv);
 		return;
 	}
@@ -2554,7 +2572,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->runtime_put = cnss_mhi_pm_runtime_put_noidle;
 
 	mhi_ctrl->rddm_size = pci_priv->plat_priv->ramdump_info_v2.ramdump_size;
-	mhi_ctrl->sbl_size = SZ_512K;
+	if (pci_priv->device_id == QCN7605_DEVICE_ID)
+		mhi_ctrl->sbl_size = SZ_256K;
+	else
+		mhi_ctrl->sbl_size = SZ_512K;
+
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
 
@@ -3008,6 +3030,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 		setup_timer(&pci_priv->dev_rddm_timer,
 			    cnss_dev_rddm_timeout_hdlr,
 			    (unsigned long)pci_priv);
@@ -3090,6 +3113,7 @@ static const struct pci_device_id cnss_pci_id_table[] = {
 	{ QCA6174_VENDOR_ID, QCA6174_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6290_VENDOR_ID, QCA6290_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6390_VENDOR_ID, QCA6390_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
+	{ QCN7605_VENDOR_ID, QCN7605_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID},
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, cnss_pci_id_table);
