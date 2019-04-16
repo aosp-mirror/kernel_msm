@@ -334,6 +334,16 @@
 				cooling-device =
 					<&CPU5 10 10>;
 			};
+			soc_cpu6 {
+				trip = <&soc_trip>;
+				cooling-device =
+					<&CPU6 10 10>;
+			};
+			soc_cpu7 {
+				trip = <&soc_trip>;
+				cooling-device =
+					<&CPU7 10 10>;
+			};
 		};
 	};
 
