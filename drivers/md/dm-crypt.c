@@ -1858,7 +1858,6 @@ static int crypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 
 			else if (!strcasecmp(opt_string, "submit_from_crypt_cpus"))
 				set_bit(DM_CRYPT_NO_OFFLOAD, &cc->flags);
-
 			else if (!strcasecmp(opt_string,
 				"allow_encrypt_override"))
 				set_bit(DM_CRYPT_ENCRYPT_OVERRIDE, &cc->flags);
