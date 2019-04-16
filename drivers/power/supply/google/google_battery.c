@@ -208,6 +208,8 @@ static int psy_changed(struct notifier_block *nb,
 
 /* ------------------------------------------------------------------------- */
 
+#define SSOC_TRUE 15
+#define SSOC_SPOOF 95
 #define SSOC_FULL 100
 #define UICURVE_BUF_SZ	(UICURVE_MAX * 15 + 1)
 
@@ -217,8 +219,8 @@ enum ssoc_uic_type {
 	SSOC_UIC_TYPE_CHG  = 1,
 };
 
-const qnum_t ssoc_point_true = qnum_rconst(15);
-const qnum_t ssoc_point_spoof = qnum_rconst(95);
+const qnum_t ssoc_point_true = qnum_rconst(SSOC_TRUE);
+const qnum_t ssoc_point_spoof = qnum_rconst(SSOC_SPOOF);
 const qnum_t ssoc_point_full = qnum_rconst(SSOC_FULL);
 
 static struct ssoc_uicurve chg_curve[UICURVE_MAX] = {
@@ -405,8 +407,8 @@ static int ssoc_work(struct batt_ssoc_state *ssoc_state,
 	return 0;
 }
 
-/* change the current UI curve. Called on connect and disconnect to adjust the
- * UI curve. no op when type is the same as ssoc_curve_type.
+/* Called on connect and disconnect to adjust the UI curve. no op when type is
+ * the same as ssoc_curve_type and when in recharge logic.
  */
 void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
 		       enum ssoc_uic_type type)
@@ -425,7 +427,7 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
 	ssoc_uicurve_dup(ssoc_state->ssoc_curve, new_curve);
 	ssoc_state->ssoc_curve_type = type;
 
-	/* no splice in RL: ssoc_rl=100% and ssoc_batt>=spoof */
+	/* this really means do not splice the (DSG) curve on disconnect */
 	if (ssoc_state->rl_status != BATT_RL_STATUS_NONE
 	    || ssoc_level >= ssoc_point_full)
 		return;
@@ -481,20 +483,23 @@ static int ssoc_init(struct batt_ssoc_state *ssoc_state,
 {
 	int ret, capacity;
 
-	/* ssoc_work needs this, charge curve to start with... */
+	/* ssoc_work() needs a curve: start with the charge curve to prevent
+	 * SSOC% from increasing after a reboot. Curve type must be NONE until
+	 * battery knows the charger BUCK_EN state.
+	 */
 	ssoc_uicurve_dup(ssoc_state->ssoc_curve, chg_curve);
+	ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_NONE;
 
 	ret = ssoc_work(ssoc_state, fg_psy);
 	if (ret < 0)
 		return -EIO;
 
 	capacity = ssoc_get_capacity(ssoc_state);
-	if (capacity >= ssoc_state->rl_soc_threshold) {
-	/* Recharge logic with discharge curve */
-		batt_rl_enter(ssoc_state, BATT_RL_STATUS_DISCHARGE);
-	} else {
-	/* charge curve in the default case */
-		ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_NONE;
+	if (capacity >= SSOC_FULL) {
+		/* consistent behavior when booting without adapter */
+		ssoc_uicurve_dup(ssoc_state->ssoc_curve, dsg_curve);
+	} else if (capacity < SSOC_SPOOF) {
+		/* mark the initial point if under spoof */
 		ssoc_uicurve_splice(ssoc_state->ssoc_curve,
 						ssoc_state->ssoc_gdf,
 						ssoc_state->ssoc_rl);
@@ -2174,7 +2179,6 @@ static void google_battery_init_work(struct work_struct *work)
 			pr_warn("battery not present (ret=%d)\n", ret);
 	}
 
-	/* recharge logic, ssoc_init needs the recharge threshold */
 	ret = of_property_read_u32(batt_drv->device->of_node,
 			"google,recharge-soc-threshold",
 			&batt_drv->ssoc_state.rl_soc_threshold);
