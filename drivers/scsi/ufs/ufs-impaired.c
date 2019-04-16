@@ -1,7 +1,7 @@
 /*
  * UFS impaired storage emulation.
  *
- * Copyright (C) 2018, Google, Inc.
+ * Copyright (C) 2019, Google, LLC.
  *
  * Authors:
  *	Hyojun Kim <hyojun@google.com>
@@ -207,60 +207,37 @@ static int impaired_latency_large_write[] = {
  *  Impaired storage sysfs entries
  */
 struct impaired_attr {
-	struct attribute attr;
-
-	ssize_t (*show)(struct kobject *kobj, struct attribute *attr,
-			char *buf);
-
-	ssize_t (*store)(struct kobject *kobj, struct attribute *attr,
-			 char *buf, size_t count);
+	struct device_attribute attr;
 };
 
 struct impaired_delay_attr {
-	struct attribute attr;
-
-	ssize_t (*show)(struct kobject *kobj, struct attribute *attr,
-			char *buf);
-
-	ssize_t (*store)(struct kobject *kobj, struct attribute *attr,
-			 char *buf, size_t count);
+	struct device_attribute attr;
 	enum ufs_impaired_optype optype;
 	enum ufs_impaired_delaytype delaytype;
 	u32 maximum;
 };
 
 struct impaired_stat_attr {
-	struct attribute attr;
-
-	ssize_t (*show)(struct kobject *kobj, struct attribute *attr,
-			char *buf);
-
-	ssize_t (*store)(struct kobject *kobj, struct attribute *attr,
-			 char *buf, size_t count);
+	struct device_attribute attr;
 	enum ufs_impaired_optype optype;
 	enum ufs_impaired_stattype stattype;
 };
 
-static inline struct ufs_hba *__get_hba_from_kobj(struct kobject *obj)
-{
-	struct device *dev = container_of(obj->parent, struct device, kobj);
-	return dev_get_drvdata(dev);
-}
-
 static ssize_t
-impaired_show_enabled(struct kobject *obj, struct attribute *attr, char *buf)
+impaired_show_enabled(struct device *dev, struct device_attribute *_attr,
+		char *buf)
 {
-	struct ufs_hba *hba = __get_hba_from_kobj(obj);
+	struct ufs_hba *hba = dev_get_drvdata(dev);
 	return snprintf(buf, PAGE_SIZE, "%d\n", hba->impaired.enabled);
 }
 
 static int __impaired_thread_fn(void *param);
 
 static ssize_t
-impaired_store_enabled(struct kobject *obj, struct attribute *attr, char *buf,
-		size_t count)
+impaired_store_enabled(struct device *dev, struct device_attribute *_attr,
+		const char *buf, size_t count)
 {
-	struct ufs_hba *hba = __get_hba_from_kobj(obj);
+	struct ufs_hba *hba = dev_get_drvdata(dev);
 	unsigned long flags, value;
 
 	if (kstrtol(buf, 0, &value))
@@ -280,9 +257,10 @@ impaired_store_enabled(struct kobject *obj, struct attribute *attr, char *buf,
 }
 
 static ssize_t
-impaired_show_delay(struct kobject *obj, struct attribute *_attr, char *buf)
+impaired_show_delay(struct device *dev, struct device_attribute *_attr,
+		char *buf)
 {
-	struct ufs_hba *hba = __get_hba_from_kobj(obj);
+	struct ufs_hba *hba = dev_get_drvdata(dev);
 	struct impaired_delay_attr *attr = (struct impaired_delay_attr *)_attr;
 	u32 value = hba->impaired.io[attr->optype].delay[attr->delaytype];
 
@@ -296,10 +274,10 @@ impaired_show_delay(struct kobject *obj, struct attribute *_attr, char *buf)
 }
 
 static ssize_t
-impaired_store_delay(struct kobject *obj, struct attribute *_attr, char *buf,
-		size_t count)
+impaired_store_delay(struct device *dev, struct device_attribute *_attr,
+		const char *buf, size_t count)
 {
-	struct ufs_hba *hba = __get_hba_from_kobj(obj);
+	struct ufs_hba *hba = dev_get_drvdata(dev);
 	struct impaired_delay_attr *attr = (struct impaired_delay_attr *)_attr;
 	unsigned long flags, value;
 
@@ -330,9 +308,10 @@ impaired_store_delay(struct kobject *obj, struct attribute *_attr, char *buf,
 }
 
 static ssize_t
-impaired_show_stat(struct kobject *obj, struct attribute *_attr, char *buf)
+impaired_show_stat(struct device *dev, struct device_attribute *_attr,
+		char *buf)
 {
-	struct ufs_hba *hba = __get_hba_from_kobj(obj);
+	struct ufs_hba *hba = dev_get_drvdata(dev);
 	struct impaired_stat_attr *attr = (struct impaired_stat_attr *)_attr;
 
 	return snprintf(buf, PAGE_SIZE, "%lld\n",
@@ -340,10 +319,10 @@ impaired_show_stat(struct kobject *obj, struct attribute *_attr, char *buf)
 }
 
 static ssize_t
-impaired_store_stat(struct kobject *obj, struct attribute *_attr, char *buf,
-		size_t count)
+impaired_store_stat(struct device *dev, struct device_attribute *_attr,
+		const char *buf, size_t count)
 {
-	struct ufs_hba *hba = __get_hba_from_kobj(obj);
+	struct ufs_hba *hba = dev_get_drvdata(dev);
 	struct impaired_stat_attr *attr = (struct impaired_stat_attr *)_attr;
 	unsigned long flags;
 
@@ -357,184 +336,121 @@ impaired_store_stat(struct kobject *obj, struct attribute *_attr, char *buf,
 
 #define IMPAIRED_ATTR_RW(_name) 					\
 	static struct impaired_attr impaired_##_name = {		\
-		.attr = {.name = __stringify(_name),			\
-			 .mode = 0644 },				\
-		.show = impaired_show_##_name, 				\
-		.store = impaired_store_##_name,			\
+		.attr = __ATTR(_name, 0644, impaired_show_##_name, 	\
+				impaired_store_##_name),		\
 	}
 
-#define IMPAIRED_DELAY_ATTR(_name, _op, _delay, _maximum)		\
+#define IMPAIRED_DELAY_ATTR(_name, _delay, _maximum)			\
 	static struct impaired_delay_attr 				\
-	impaired_##_name = { 						\
-		.attr = {.name = __stringify(_name),			\
-			 .mode = 0644 },				\
-		.show = impaired_show_delay, 				\
-		.store = impaired_store_delay,				\
-		.optype = _op,						\
+	impaired_read_##_name = { 					\
+		.attr = __ATTR(read_##_name, 0644, impaired_show_delay,	\
+				impaired_store_delay),			\
+		.optype = UFS_IMPAIRED_OPTYPE_READ,			\
+		.delaytype = _delay,					\
+		.maximum = _maximum,					\
+	};								\
+	static struct impaired_delay_attr 				\
+	impaired_write_##_name = { 					\
+		.attr = __ATTR(write_##_name, 0644, impaired_show_delay,\
+				impaired_store_delay),			\
+		.optype = UFS_IMPAIRED_OPTYPE_WRITE,			\
 		.delaytype = _delay,					\
 		.maximum = _maximum,					\
 	}
 
-#define IMPAIRED_STAT_ATTR(_name, _op, _stat)				\
+#define IMPAIRED_STAT_ATTR(_name, _stat)				\
 	static struct impaired_stat_attr 				\
-	impaired_##_name = { 						\
-		.attr = {.name = __stringify(_name),			\
-			 .mode = 0644 },				\
-		.show = impaired_show_stat, 				\
-		.store = impaired_store_stat,				\
-		.optype = _op,						\
+	impaired_read_##_name = { 					\
+		.attr = __ATTR(read_##_name, 0644, impaired_show_stat,	\
+				impaired_store_stat),			\
+		.optype = UFS_IMPAIRED_OPTYPE_READ,			\
+		.stattype = _stat,					\
+	};								\
+	static struct impaired_stat_attr 				\
+	impaired_write_##_name = { 					\
+		.attr = __ATTR(write_##_name, 0644, impaired_show_stat,	\
+				impaired_store_stat),			\
+		.optype = UFS_IMPAIRED_OPTYPE_WRITE,			\
 		.stattype = _stat,					\
 	}
 
-/* sysfs impaired: root */
+/* Basic control */
 IMPAIRED_ATTR_RW(enabled);
 
 #ifdef CONFIG_SCSI_UFS_IMPAIRED_FRAGFTL
-IMPAIRED_DELAY_ATTR(read_model, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_DELAYTYPE_MODEL, 1);
+IMPAIRED_DELAY_ATTR(model, UFS_IMPAIRED_DELAYTYPE_MODEL, 1);
 #endif
-IMPAIRED_DELAY_ATTR(read_delay_us, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_DELAYTYPE_US, 1000000);
-IMPAIRED_DELAY_ATTR(read_delay_percent, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_DELAYTYPE_PERCENT, 100000);
 
-#ifdef CONFIG_SCSI_UFS_IMPAIRED_FRAGFTL
-IMPAIRED_DELAY_ATTR(write_model, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_DELAYTYPE_MODEL, 1);
-#endif
-IMPAIRED_DELAY_ATTR(write_delay_us, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_DELAYTYPE_US, 1000000);
-IMPAIRED_DELAY_ATTR(write_delay_percent, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_DELAYTYPE_PERCENT, 100000);
+IMPAIRED_DELAY_ATTR(delay_us, UFS_IMPAIRED_DELAYTYPE_US, 1000000);
+IMPAIRED_DELAY_ATTR(delay_percent, UFS_IMPAIRED_DELAYTYPE_PERCENT, 100000);
 
-/* sysfs impaired/advanced_control */
-IMPAIRED_DELAY_ATTR(read_max_delayed_us, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_DELAYTYPE_MAX, 2000000);
-IMPAIRED_DELAY_ATTR(read_skip_delay_cnt, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_DELAYTYPE_SKIP, 2000000);
+/* Advanced_control */
+IMPAIRED_DELAY_ATTR(max_delayed_us, UFS_IMPAIRED_DELAYTYPE_MAX, 2000000);
+IMPAIRED_DELAY_ATTR(skip_delay_cnt, UFS_IMPAIRED_DELAYTYPE_SKIP, 2000000);
 
-IMPAIRED_DELAY_ATTR(write_max_delayed_us, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_DELAYTYPE_MAX, 2000000);
-IMPAIRED_DELAY_ATTR(write_skip_delay_cnt, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_DELAYTYPE_SKIP, 2000000);
+/* Statistics */
+IMPAIRED_STAT_ATTR(total_cnt, UFS_IMPAIRED_STATTYPE_TOTAL_CNT);
+IMPAIRED_STAT_ATTR(total_original_us, UFS_IMPAIRED_STATTYPE_TOTAL_ORIGINAL_US);
+IMPAIRED_STAT_ATTR(total_delayed_us, UFS_IMPAIRED_STATTYPE_TOTAL_DELAYED_US);
 
-/* sysfs impaired/stat */
-IMPAIRED_STAT_ATTR(total_read_cnt, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_STATTYPE_TOTAL_CNT);
-IMPAIRED_STAT_ATTR(total_read_original_us, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_STATTYPE_TOTAL_ORIGINAL_US);
-IMPAIRED_STAT_ATTR(total_read_delayed_us, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_STATTYPE_TOTAL_DELAYED_US);
-
-IMPAIRED_STAT_ATTR(total_write_cnt, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_STATTYPE_TOTAL_CNT);
-IMPAIRED_STAT_ATTR(total_write_original_us, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_STATTYPE_TOTAL_ORIGINAL_US);
-IMPAIRED_STAT_ATTR(total_write_delayed_us, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_STATTYPE_TOTAL_DELAYED_US);
-
-/* sysfs impaired/delay_stat */
-IMPAIRED_STAT_ATTR(max_read_delay_us, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_STATTYPE_MAX_DELAY);
-IMPAIRED_STAT_ATTR(max_read_delay_error_us, UFS_IMPAIRED_OPTYPE_READ, \
-		UFS_IMPAIRED_STATTYPE_MAX_ERROR);
-IMPAIRED_STAT_ATTR(total_read_delay_error_us, UFS_IMPAIRED_OPTYPE_READ, \
+/* Delay related statistics */
+IMPAIRED_STAT_ATTR(max_delay_us, UFS_IMPAIRED_STATTYPE_MAX_DELAY);
+IMPAIRED_STAT_ATTR(max_delay_error_us, UFS_IMPAIRED_STATTYPE_MAX_ERROR);
+IMPAIRED_STAT_ATTR(total_delay_error_us, \
 		UFS_IMPAIRED_STATTYPE_TOTAL_DELAY_ERROR);
 
-IMPAIRED_STAT_ATTR(max_write_delay_us, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_STATTYPE_MAX_DELAY);
-IMPAIRED_STAT_ATTR(max_write_delay_error_us, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_STATTYPE_MAX_ERROR);
-IMPAIRED_STAT_ATTR(total_write_delay_error_us, UFS_IMPAIRED_OPTYPE_WRITE, \
-		UFS_IMPAIRED_STATTYPE_TOTAL_DELAY_ERROR);
-
-static struct attribute *impaired_attrs[] = {
+static struct attribute *impaired_sysfs_attrs[] = {
 	/* Basic delay control */
-	&impaired_enabled.attr,
+	&impaired_enabled.attr.attr,
 
 #ifdef CONFIG_SCSI_UFS_IMPAIRED_FRAGFTL
-	&impaired_read_model.attr,
+	&impaired_read_model.attr.attr,
 #endif
-	&impaired_read_delay_us.attr,
-	&impaired_read_delay_percent.attr,
+	&impaired_read_delay_us.attr.attr,
+	&impaired_read_delay_percent.attr.attr,
 
 #ifdef CONFIG_SCSI_UFS_IMPAIRED_FRAGFTL
-	&impaired_write_model.attr,
+	&impaired_write_model.attr.attr,
 #endif
-	&impaired_write_delay_us.attr,
-	&impaired_write_delay_percent.attr,
-	NULL
-};
+	&impaired_write_delay_us.attr.attr,
+	&impaired_write_delay_percent.attr.attr,
 
-const struct attribute_group impaired_group = {
-	.attrs = impaired_attrs,
-};
+	/* Advanced control */
+	&impaired_read_max_delayed_us.attr.attr,
+	&impaired_read_skip_delay_cnt.attr.attr,
 
-static struct attribute *impaired_advanced_attrs[] = {
-	/* Advanced delay control */
-	&impaired_read_max_delayed_us.attr,
-	&impaired_read_skip_delay_cnt.attr,
+	&impaired_write_max_delayed_us.attr.attr,
+	&impaired_write_skip_delay_cnt.attr.attr,
 
-	&impaired_write_max_delayed_us.attr,
-	&impaired_write_skip_delay_cnt.attr,
-	NULL
-};
-
-const struct attribute_group impaired_advanced_group = {
-	.name = "advanced_control",
-	.attrs = impaired_advanced_attrs,
-};
-
-static struct attribute *impaired_stat_attrs[] = {
 	/* Statistics */
-	&impaired_total_read_cnt.attr,
-	&impaired_total_read_original_us.attr,
-	&impaired_total_read_delayed_us.attr,
+	&impaired_read_total_cnt.attr.attr,
+	&impaired_read_total_original_us.attr.attr,
+	&impaired_read_total_delayed_us.attr.attr,
 
-	&impaired_total_write_cnt.attr,
-	&impaired_total_write_original_us.attr,
-	&impaired_total_write_delayed_us.attr,
-	NULL
-};
+	&impaired_write_total_cnt.attr.attr,
+	&impaired_write_total_original_us.attr.attr,
+	&impaired_write_total_delayed_us.attr.attr,
 
-const struct attribute_group impaired_stat_group = {
-	.name = "stat",
-	.attrs = impaired_stat_attrs,
-};
-
-static struct attribute *impaired_delay_stat_attrs[] = {
 	/* Delay related statistics */
-	&impaired_max_read_delay_us.attr,
-	&impaired_max_read_delay_error_us.attr,
-	&impaired_total_read_delay_error_us.attr,
+	&impaired_read_max_delay_us.attr.attr,
+	&impaired_read_max_delay_error_us.attr.attr,
+	&impaired_read_total_delay_error_us.attr.attr,
 
-	&impaired_max_write_delay_us.attr,
-	&impaired_max_write_delay_error_us.attr,
-	&impaired_total_write_delay_error_us.attr,
+	&impaired_write_max_delay_us.attr.attr,
+	&impaired_write_max_delay_error_us.attr.attr,
+	&impaired_write_total_delay_error_us.attr.attr,
+
 	NULL
 };
 
-const struct attribute_group impaired_delay_stat_group = {
-	.name = "delay_stat",
-	.attrs = impaired_delay_stat_attrs,
-};
-
-const struct attribute_group *impaired_sysfs_groups[] = {
-	&impaired_group,
-	&impaired_advanced_group,
-	&impaired_stat_group,
-	&impaired_delay_stat_group,
-	NULL
+static const struct attribute_group impaired_sysfs_group = {
+	.name = "impaired",
+	.attrs = impaired_sysfs_attrs,
 };
 
 void ufs_impaired_init_sysfs(struct ufs_hba *hba)
 {
-	hba->impaired_kobj = kobject_create_and_add("impaired",
-			&hba->dev->kobj);
-	if (!hba->impaired_kobj)
-		dev_err(hba->dev, "Failed to create impaired storage sysfs folder\n");
-
-	if (sysfs_create_groups(hba->impaired_kobj, impaired_sysfs_groups))
+	if (sysfs_create_group(&hba->dev->kobj, &impaired_sysfs_group))
 		dev_err(hba->dev, "Failed to create impaired storage sysfs group\n");
 }
 

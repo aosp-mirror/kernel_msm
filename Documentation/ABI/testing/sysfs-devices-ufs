@@ -137,7 +137,7 @@ Description:
 		For instance, when 200 is set, all write requests will be delayed
 		by 200 microseconds. The default value is 0, which means no delay.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/advanced_control/read_max_delayed_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_max_delayed_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -146,7 +146,7 @@ Description:
 		be bigger than 1ms.
 		Default value is 0, which means no limitation.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/advanced_control/read_skip_delay_cnt
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_skip_delay_cnt
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -154,7 +154,7 @@ Description:
 		When the default 0 is set, all read requests are delayed.
 		When 1 is written, every other read request is delayed.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/advanced_control/write_max_delayed_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_max_delayed_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -163,7 +163,7 @@ Description:
 		be bigger than 1ms.
 		Default value is 0, which means no limitation.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/advanced_control/write_skip_delay_cnt
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_skip_delay_cnt
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -171,7 +171,7 @@ Description:
 		When the default 0 is set, all write requests are delayed.
 		When 1 is written, every other write request is delayed.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/stat/total_read_cnt
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_total_cnt
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -179,7 +179,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/stat/total_read_original_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_total_original_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -188,7 +188,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/stat/total_read_delayed_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_total_delayed_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -197,7 +197,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/stat/total_write_cnt
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_total_cnt
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -205,7 +205,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/stat/total_write_original_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_total_original_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -214,7 +214,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/stat/total_write_delayed_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_total_delayed_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -223,7 +223,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/delay_stat/max_read_delay_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_max_delay_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -232,7 +232,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/delay_stat/max_read_delay_error_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_max_delay_error_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -242,7 +242,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/delay_stat/total_read_delay_error_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/read_total_delay_error_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -252,7 +252,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/delay_stat/max_write_delay_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_max_delay_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -261,7 +261,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/delay_stat/max_write_delay_error_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_max_delay_error_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
@@ -271,7 +271,7 @@ Description:
 		Can be reset together with all other statistics entries when
 		any value is written to.
 
-What:		/sys/devices/platform/soc/<....>ufshc/impaired/delay_stat/total_write_delay_error_us
+What:		/sys/devices/platform/soc/<....>ufshc/impaired/write_total_delay_error_us
 Date:		December, 2018
 Contact:	"Hyojun Kim" <hyojun@google.com>
 Description:
