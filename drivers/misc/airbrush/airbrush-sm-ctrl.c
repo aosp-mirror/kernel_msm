@@ -452,9 +452,9 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 
 	switch (blk->name) {
 	case BLK_IPU:
-		ab_sm_start_ts(sc, AB_SM_TS_IPU_CLK);
+		ab_sm_start_ts(AB_SM_TS_IPU_CLK);
 		if (old_freq == new_freq) {
-			ab_sm_record_ts(sc, AB_SM_TS_IPU_CLK);
+			ab_sm_record_ts(AB_SM_TS_IPU_CLK);
 			break;
 		}
 
@@ -465,13 +465,13 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			return -ENODEV;
 		}
 
-		ab_sm_record_ts(sc, AB_SM_TS_IPU_CLK);
+		ab_sm_record_ts(AB_SM_TS_IPU_CLK);
 		break;
 
 	case BLK_TPU:
-		ab_sm_start_ts(sc, AB_SM_TS_TPU_CLK);
+		ab_sm_start_ts(AB_SM_TS_TPU_CLK);
 		if (old_freq == new_freq) {
-			ab_sm_record_ts(sc, AB_SM_TS_TPU_CLK);
+			ab_sm_record_ts(AB_SM_TS_TPU_CLK);
 			break;
 		}
 
@@ -482,7 +482,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			return -ENODEV;
 		}
 
-		ab_sm_record_ts(sc, AB_SM_TS_TPU_CLK);
+		ab_sm_record_ts(AB_SM_TS_TPU_CLK);
 		break;
 
 	case BLK_MIF:
@@ -490,9 +490,9 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 	case BLK_FSYS:
 		break;
 	case BLK_AON:
-		ab_sm_start_ts(sc, AB_SM_TS_AON_CLK);
+		ab_sm_start_ts(AB_SM_TS_AON_CLK);
 		if (clk_status == off || old_freq == new_freq) {
-			ab_sm_record_ts(sc, AB_SM_TS_AON_CLK);
+			ab_sm_record_ts(AB_SM_TS_AON_CLK);
 			break;
 		}
 
@@ -503,7 +503,7 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			return -ENODEV;
 		}
 
-		ab_sm_record_ts(sc, AB_SM_TS_AON_CLK);
+		ab_sm_record_ts(AB_SM_TS_AON_CLK);
 		break;
 	case DRAM:
 		break;
@@ -545,20 +545,20 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	if (desired_state->pmu == PMU_STATE_ON &&
 			last_state->pmu != PMU_STATE_ON) {
 		if (blk->name == BLK_IPU) {
-			ab_sm_start_ts(sc, AB_SM_TS_IPU_PMU_RES);
+			ab_sm_start_ts(AB_SM_TS_IPU_PMU_RES);
 			if (pmu->pmu_ipu_resume(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
-			ab_sm_record_ts(sc, AB_SM_TS_IPU_PMU_RES);
+			ab_sm_record_ts(AB_SM_TS_IPU_PMU_RES);
 		}
 		if (blk->name == BLK_TPU) {
-			ab_sm_start_ts(sc, AB_SM_TS_TPU_PMU_RES);
+			ab_sm_start_ts(AB_SM_TS_TPU_PMU_RES);
 			if (pmu->pmu_tpu_resume(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
-			ab_sm_record_ts(sc, AB_SM_TS_TPU_PMU_RES);
+			ab_sm_record_ts(AB_SM_TS_TPU_PMU_RES);
 		}
 	}
 
@@ -571,39 +571,39 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	/* Block specific hooks */
 	if (blk->set_state) {
 		if (blk->name == DRAM)
-			ab_sm_start_ts(sc, AB_SM_TS_DDR_CB);
+			ab_sm_start_ts(AB_SM_TS_DDR_CB);
 		if (blk->name == BLK_FSYS)
-			ab_sm_start_ts(sc, AB_SM_TS_PCIE_CB);
+			ab_sm_start_ts(AB_SM_TS_PCIE_CB);
 
 		blk->set_state(last_state, desired_state,
 				   to_block_state_id, blk->data);
 
 		if (blk->name == DRAM)
-			ab_sm_record_ts(sc, AB_SM_TS_DDR_CB);
+			ab_sm_record_ts(AB_SM_TS_DDR_CB);
 		if (blk->name == BLK_FSYS)
-			ab_sm_record_ts(sc, AB_SM_TS_PCIE_CB);
+			ab_sm_record_ts(AB_SM_TS_PCIE_CB);
 	}
 
 	/* PMU settings - Sleep */
 	if (desired_state->pmu == PMU_STATE_SLEEP &&
 			last_state->pmu == PMU_STATE_ON) {
-		ab_sm_start_ts(sc, AB_SM_TS_TPU_PMU_SLEEP);
+		ab_sm_start_ts(AB_SM_TS_TPU_PMU_SLEEP);
 		if (blk->name == BLK_TPU) {
 			if (pmu->pmu_tpu_sleep(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
 		}
-		ab_sm_record_ts(sc, AB_SM_TS_TPU_PMU_SLEEP);
+		ab_sm_record_ts(AB_SM_TS_TPU_PMU_SLEEP);
 
-		ab_sm_start_ts(sc, AB_SM_TS_IPU_PMU_SLEEP);
+		ab_sm_start_ts(AB_SM_TS_IPU_PMU_SLEEP);
 		if (blk->name == BLK_IPU) {
 			if (pmu->pmu_ipu_sleep(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
 			}
 		}
-		ab_sm_record_ts(sc, AB_SM_TS_IPU_PMU_SLEEP);
+		ab_sm_record_ts(AB_SM_TS_IPU_PMU_SLEEP);
 	}
 
 	/* PMU settings - Deep Sleep */
@@ -745,15 +745,18 @@ static void ab_sm_record_state_change(enum chip_state prev_state,
 }
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
-void ab_sm_start_ts(struct ab_state_context *sc, int ts)
+void ab_sm_start_ts(int ts)
 {
-	sc->state_trans_ts[ts] = ktime_get_ns();
+	ab_sm_ctx->state_trans_ts[ts] = ktime_get_ns();
 }
+EXPORT_SYMBOL(ab_sm_start_ts);
 
-void ab_sm_record_ts(struct ab_state_context *sc, int ts)
+void ab_sm_record_ts(int ts)
 {
-	sc->state_trans_ts[ts] = ktime_get_ns() - sc->state_trans_ts[ts];
+	ab_sm_ctx->state_trans_ts[ts] =
+		ktime_get_ns() - ab_sm_ctx->state_trans_ts[ts];
 }
+EXPORT_SYMBOL(ab_sm_record_ts);
 
 void ab_sm_zero_ts(struct ab_state_context *sc)
 {
@@ -766,36 +769,43 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 	int nr_ts = NUM_AB_SM_TS;
 
 	static const char *ts_names[NUM_AB_SM_TS] = {
+		"    boot sequence",
+		"        alternate boot",
+		"        PCIe Enumeration",
+		"        DDR init",
+		"    PMIC on",
+		"    LVCC",
+		"    IPU state change",
+		"        IPU PMU resume",
+		"        IPU clock settings",
+		"            IPU pre rate change notify",
+		"            IPU post rate change notify",
+		"            IPU clock lock",
+		"        IPU PMU sleep",
+		"    TPU state change",
+		"        TPU PMU resume",
+		"        TPU clock settings",
+		"            TPU pre rate change notify",
+		"            TPU post rate change notify",
+		"            TPU clock lock",
+		"        TPU PMU sleep",
+		"        PMU deep sleep",
+		"    DDR state change",
+		"        DDR callback",
+		"    MIF state change",
+		"    FSYS state change",
+		"        PCIe callback",
+		"            PCIe set linkspeed",
+		"            PCIe set linkstate",
+		"    AON state change",
+		"        AON clock settings",
+		"    PMIC off",
 		"full state change",
-		"IPU state change",
-		"TPU state change",
-		"DDR state change",
-		"MIF state change",
-		"FSYS state change",
-		"AON state change",
-		"PMIC on",
-		"PMIC off",
-		"SMPS1 min",
-		"SMPS1 nominal",
-		"boot sequence",
-		"IPU PMU resume",
-		"TPU PMU resume",
-		"IPU PMU sleep",
-		"TPU PMU sleep",
-		"PMU deep sleep",
-		"IPU clock settings",
-		"TPU clock settings",
-		"AON clock settings",
-		"PCIe callback",
-		"DDR callback",
-		"PCIe Enumeration",
-		"DDR init",
-		"alternate boot",
 	};
 
 	if (sc->ts_enabled) {
 		for (i = 0; i < nr_ts; i++) {
-			dev_dbg(sc->dev, "latency for %s: %llu ns\n",
+			dev_warn(sc->dev, "latency for %s: %llu ns\n",
 					ts_names[i], sc->state_trans_ts[i]);
 		}
 	}
@@ -968,7 +978,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	dev_info(sc->dev, "AB state changing to %d\n", to_chip_substate_id);
 	/* Mark as new state early in case rollback is needed */
 	sc->curr_chip_substate_id = to_chip_substate_id;
-	ab_sm_start_ts(sc, AB_SM_TS_FULL);
+	ab_sm_start_ts(AB_SM_TS_FULL);
 
 	if ((prev_state == CHIP_STATE_0 ||
 			prev_state == CHIP_STATE_100) &&
@@ -988,9 +998,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		/* System must not suspend while PCIe is enabled */
 		pm_stay_awake(sc->dev);
 
-		ab_sm_start_ts(sc, AB_SM_TS_BOOT_SEQ);
+		ab_sm_start_ts(AB_SM_TS_BOOT_SEQ);
 		ret = ab_bootsequence(sc, prev_state);
-		ab_sm_record_ts(sc, AB_SM_TS_BOOT_SEQ);
+		ab_sm_record_ts(AB_SM_TS_BOOT_SEQ);
 		if (ret) {
 			dev_err(sc->dev, "ab_bootsequence failed (%d)\n", ret);
 			goto cleanup_state;
@@ -1028,14 +1038,15 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 */
 	ab_prep_pmic_settings(sc, dest_map);
 
-	ab_sm_start_ts(sc, AB_SM_TS_PMIC_ON);
+	ab_sm_start_ts(AB_SM_TS_PMIC_ON);
 	ret = ab_pmic_on(sc);
-	ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON);
+	ab_sm_record_ts(AB_SM_TS_PMIC_ON);
 	if (ret) {
 		dev_err(sc->dev, "ab_pmic_on failed (%d)\n", ret);
 		return ret;
 	}
 
+	ab_sm_start_ts(AB_SM_TS_LVCC);
 	if (to_chip_substate_id >= CHIP_STATE_400) {
 		ret = ab_lvcc(sc, to_chip_substate_id);
 		if (ret) {
@@ -1043,8 +1054,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 			goto cleanup_state;
 		}
 	}
+	ab_sm_record_ts(AB_SM_TS_LVCC);
 
-	ab_sm_start_ts(sc, AB_SM_TS_IPU);
+	ab_sm_start_ts(AB_SM_TS_IPU);
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
 			dest_map->ipu_block_state_id)) {
 		ret = -EINVAL;
@@ -1052,9 +1064,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
-	ab_sm_record_ts(sc, AB_SM_TS_IPU);
+	ab_sm_record_ts(AB_SM_TS_IPU);
 
-	ab_sm_start_ts(sc, AB_SM_TS_TPU);
+	ab_sm_start_ts(AB_SM_TS_TPU);
 	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
 			dest_map->tpu_block_state_id)) {
 		ret = -EINVAL;
@@ -1062,9 +1074,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
-	ab_sm_record_ts(sc, AB_SM_TS_TPU);
+	ab_sm_record_ts(AB_SM_TS_TPU);
 
-	ab_sm_start_ts(sc, AB_SM_TS_DRAM);
+	ab_sm_start_ts(AB_SM_TS_DRAM);
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
 			dest_map->dram_block_state_id)) {
 		ret = -EINVAL;
@@ -1072,9 +1084,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
-	ab_sm_record_ts(sc, AB_SM_TS_DRAM);
+	ab_sm_record_ts(AB_SM_TS_DRAM);
 
-	ab_sm_start_ts(sc, AB_SM_TS_MIF);
+	ab_sm_start_ts(AB_SM_TS_MIF);
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
 			dest_map->mif_block_state_id)) {
 		ret = -EINVAL;
@@ -1082,10 +1094,10 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
-	ab_sm_record_ts(sc, AB_SM_TS_MIF);
+	ab_sm_record_ts(AB_SM_TS_MIF);
 
 
-	ab_sm_start_ts(sc, AB_SM_TS_FSYS);
+	ab_sm_start_ts(AB_SM_TS_FSYS);
 	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
 			dest_map->fsys_block_state_id)) {
 		ret = -EINVAL;
@@ -1093,16 +1105,16 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
-	ab_sm_record_ts(sc, AB_SM_TS_FSYS);
+	ab_sm_record_ts(AB_SM_TS_FSYS);
 
-	ab_sm_start_ts(sc, AB_SM_TS_AON);
+	ab_sm_start_ts(AB_SM_TS_AON);
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
 			dest_map->aon_block_state_id)) {
 		ret = -EINVAL;
 		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
 	}
-	ab_sm_record_ts(sc, AB_SM_TS_AON);
+	ab_sm_record_ts(AB_SM_TS_AON);
 
 	if (((to_chip_substate_id == CHIP_STATE_100) ||
 			(to_chip_substate_id == CHIP_STATE_0)) &&
@@ -1133,11 +1145,11 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		ab_gpio_disable_ddr_iso(sc);
 	}
 
-	ab_sm_start_ts(sc, AB_SM_TS_PMIC_OFF);
+	ab_sm_start_ts(AB_SM_TS_PMIC_OFF);
 	ab_pmic_off(sc);
-	ab_sm_record_ts(sc, AB_SM_TS_PMIC_OFF);
+	ab_sm_record_ts(AB_SM_TS_PMIC_OFF);
 
-	ab_sm_record_ts(sc, AB_SM_TS_FULL);
+	ab_sm_record_ts(AB_SM_TS_FULL);
 
 	/* record state change */
 	ab_sm_record_state_change(prev_state, sc->curr_chip_substate_id, sc);

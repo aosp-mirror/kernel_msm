@@ -714,8 +714,12 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 	target_linkspeed = target_property->data_rate;
 
 	/* change to the requested speed and state */
+	ab_sm_start_ts(AB_SM_TS_PCIE_SET_LINKSPEED);
 	abc_pcie_set_linkspeed(target_linkspeed);
+	ab_sm_record_ts(AB_SM_TS_PCIE_SET_LINKSPEED);
+	ab_sm_start_ts(AB_SM_TS_PCIE_SET_LINKSTATE);
 	abc_pcie_set_linkstate(target_linkstate);
+	ab_sm_record_ts(AB_SM_TS_PCIE_SET_LINKSTATE);
 
 	current_linkspeed = abc_pcie_get_linkspeed();
 	current_linkstate = abc_pcie_get_linkstate();

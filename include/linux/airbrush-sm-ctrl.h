@@ -234,44 +234,55 @@ struct chip_to_block_map {
 };
 
 enum ab_sm_time_stamps {
-	/*SM functions*/
-	AB_SM_TS_FULL,
-	AB_SM_TS_IPU,
-	AB_SM_TS_TPU,
-	AB_SM_TS_DRAM,
-	AB_SM_TS_MIF,
-	AB_SM_TS_FSYS,
-	AB_SM_TS_AON,
-
-	/*PMIC*/
-	AB_SM_TS_PMIC_ON,
-	AB_SM_TS_PMIC_OFF,
-	AB_SM_SMPS1_MIN,
-	AB_SM_SMPS1_NOMINAL,
-
-	/*Bootsequence*/
+	/* Bootsequence */
 	AB_SM_TS_BOOT_SEQ,
+	AB_SM_TS_ALT_BOOT,
+	AB_SM_TS_PCIE_ENUM,
+	AB_SM_TS_DDR_INIT,
 
-	/*PMU*/
+	/* PMIC On */
+	AB_SM_TS_PMIC_ON,
+	AB_SM_TS_LVCC,
+
+	/*IPU blk_set_state*/
+	AB_SM_TS_IPU,
 	AB_SM_TS_IPU_PMU_RES,
-	AB_SM_TS_TPU_PMU_RES,
+	AB_SM_TS_IPU_CLK,
+	AB_SM_TS_IPU_PRE_RC_NOTIFY,
+	AB_SM_TS_IPU_POST_RC_NOTIFY,
+	AB_SM_TS_IPU_CLK_LOCK,
 	AB_SM_TS_IPU_PMU_SLEEP,
+
+	/* TPU blk_set_state */
+	AB_SM_TS_TPU,
+	AB_SM_TS_TPU_PMU_RES,
+	AB_SM_TS_TPU_CLK,
+	AB_SM_TS_TPU_PRE_RC_NOTIFY,
+	AB_SM_TS_TPU_POST_RC_NOTIFY,
+	AB_SM_TS_TPU_CLK_LOCK,
 	AB_SM_TS_TPU_PMU_SLEEP,
 	AB_SM_TS_PMU_DEEP_SLEEP,
 
-	/*Clock*/
-	AB_SM_TS_IPU_CLK,
-	AB_SM_TS_TPU_CLK,
-	AB_SM_TS_AON_CLK,
-
-	/*Callbacks*/
-	AB_SM_TS_PCIE_CB,
+	/* DRAM blk_set_state */
+	AB_SM_TS_DRAM,
 	AB_SM_TS_DDR_CB,
 
-	/*Others*/
-	AB_SM_TS_PCIE_ENUM,
-	AB_SM_TS_DDR_INIT,
-	AB_SM_TS_ALT_BOOT,
+	AB_SM_TS_MIF,
+
+	/* FSYS blk_set_state */
+	AB_SM_TS_FSYS,
+	AB_SM_TS_PCIE_CB,
+	AB_SM_TS_PCIE_SET_LINKSPEED,
+	AB_SM_TS_PCIE_SET_LINKSTATE,
+
+	/* AON blk_set_state */
+	AB_SM_TS_AON,
+	AB_SM_TS_AON_CLK,
+
+	/* PMIC Off*/
+	AB_SM_TS_PMIC_OFF,
+
+	AB_SM_TS_FULL,
 
 	NUM_AB_SM_TS,
 };
@@ -632,13 +643,13 @@ static inline void ab_sm_remove_debugfs(struct ab_state_context *sc) {}
 #endif
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
-void ab_sm_start_ts(struct ab_state_context *sc, int ts);
-void ab_sm_record_ts(struct ab_state_context *sc, int ts);
+void ab_sm_start_ts(int ts);
+void ab_sm_record_ts(int ts);
 void ab_sm_zero_ts(struct ab_state_context *sc);
 void ab_sm_print_ts(struct ab_state_context *sc);
 #else
-static inline void ab_sm_start_ts(struct ab_state_context *sc, int ts) {}
-static inline void ab_sm_record_ts(struct ab_state_context *sc, int ts) {}
+static inline void ab_sm_start_ts(int ts) {}
+static inline void ab_sm_record_ts(int ts) {}
 static inline void ab_sm_zero_ts(struct ab_state_context *sc) {}
 static inline void ab_sm_print_ts(struct ab_state_context *sc) {}
 #endif

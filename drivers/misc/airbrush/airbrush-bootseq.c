@@ -148,7 +148,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		return -EIO;
 	}
 
-	ab_sm_start_ts(ab_ctx, AB_SM_TS_ALT_BOOT);
+	ab_sm_start_ts(AB_SM_TS_ALT_BOOT);
 	if (ab_ctx->alternate_boot) {
 		fw_status =
 			request_firmware(&fw_entry,
@@ -258,12 +258,12 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 
 		vfree(image_dw_buf);
 	}
-	ab_sm_record_ts(ab_ctx, AB_SM_TS_ALT_BOOT);
+	ab_sm_record_ts(AB_SM_TS_ALT_BOOT);
 
 	if (ab_ctx->cold_boot) {
-		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+		ab_sm_start_ts(AB_SM_TS_PCIE_ENUM);
 		ret = ab_sm_enumerate_pcie(ab_ctx);
-		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+		ab_sm_record_ts(AB_SM_TS_PCIE_ENUM);
 		if (ret)
 			return ret;
 
@@ -275,17 +275,17 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
 			ab_ctx->alternate_boot = 0;
 	} else {
-		ab_sm_start_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+		ab_sm_start_ts(AB_SM_TS_PCIE_ENUM);
 
 		if (ab_ctx->debug_skip_pcie_link_init) {
 			dev_warn(ab_ctx->dev,
 				 "Skip PCIe link resume for testing\n");
-			ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+			ab_sm_record_ts(AB_SM_TS_PCIE_ENUM);
 			return -ENODEV;
 		}
 
 		ret = ab_sm_enable_pcie(ab_ctx);
-		ab_sm_record_ts(ab_ctx, AB_SM_TS_PCIE_ENUM);
+		ab_sm_record_ts(AB_SM_TS_PCIE_ENUM);
 		if (ret)
 			return ret;
 	}
@@ -338,13 +338,13 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 			return -EIO;
 	}
 
-	ab_sm_start_ts(ab_ctx, AB_SM_TS_DDR_INIT);
+	ab_sm_start_ts(AB_SM_TS_DDR_INIT);
 	ret = ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
 	if (ret) {
 		dev_err(ab_ctx->dev, "ddr init failed\n");
 		return ret;
 	}
-	ab_sm_record_ts(ab_ctx, AB_SM_TS_DDR_INIT);
+	ab_sm_record_ts(AB_SM_TS_DDR_INIT);
 
 	/*
 	 * Enable thermal after boot sequence finished successfully. Do not

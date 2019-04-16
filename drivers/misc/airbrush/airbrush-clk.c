@@ -127,7 +127,9 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	dev_dbg(clk_ctx->dev,
 		"%s: set IPU clock rate to %llu\n", __func__, new_rate);
 
+	ab_sm_start_ts(AB_SM_TS_IPU_PRE_RC_NOTIFY);
 	ab_sm_clk_notify(AB_IPU_PRE_RATE_CHANGE, old_rate, new_rate);
+	ab_sm_record_ts(AB_SM_TS_IPU_PRE_RC_NOTIFY);
 
 	/* Get current state of main IPU clk register */
 	ABC_READ(PLL_CON0_PLL_IPU, &last_val);
@@ -166,12 +168,14 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	last_val = val;
 
 	/* Wait for pll_ipu pll lock*/
+	ab_sm_start_ts(AB_SM_TS_IPU_CLK_LOCK);
 	timeout = AB_PLL_LOCK_TIMEOUT;
 	do {
 		ABC_READ(PLL_CON0_PLL_IPU, &val);
 	} while (!(val & PLL_IPU_STABLE_MASK) &&
 			 !(val & PLL_IPU_LOCK_FAILURES) &&
 			 --timeout);
+	ab_sm_record_ts(AB_SM_TS_IPU_CLK_LOCK);
 
 	if (val & (PLL_IPU_LOCK_FAILURES)) {
 		dev_err(clk_ctx->dev, "ipu_pll lock failure\n");
@@ -184,7 +188,9 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ABC_WRITE(PLL_CON0_PLL_IPU, val);
 	last_val = val;
 
+	ab_sm_start_ts(AB_SM_TS_IPU_POST_RC_NOTIFY);
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
+	ab_sm_record_ts(AB_SM_TS_IPU_POST_RC_NOTIFY);
 	return new_rate;
 }
 
@@ -265,7 +271,9 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	dev_dbg(clk_ctx->dev,
 		"%s: set TPU clock rate to %llu\n", __func__, new_rate);
 
+	ab_sm_start_ts(AB_SM_TS_TPU_PRE_RC_NOTIFY);
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
+	ab_sm_record_ts(AB_SM_TS_TPU_PRE_RC_NOTIFY);
 
 	/* Get current state of main TPU clk register */
 	ABC_READ(PLL_CON0_PLL_TPU, &last_val);
@@ -307,12 +315,14 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	last_val = val;
 
 	/* Wait for pll_tpu pll lock*/
+	ab_sm_start_ts(AB_SM_TS_TPU_CLK_LOCK);
 	timeout = AB_PLL_LOCK_TIMEOUT;
 	do {
 		ABC_READ(PLL_CON0_PLL_TPU, &val);
 	} while (!(val & PLL_TPU_STABLE_MASK) &&
 			 !(val & PLL_TPU_LOCK_FAILURES) &&
 			 --timeout);
+	ab_sm_record_ts(AB_SM_TS_TPU_CLK_LOCK);
 
 	if (val & (PLL_TPU_LOCK_FAILURES)) {
 		dev_err(clk_ctx->dev, "tpu_pll lock failure\n");
@@ -328,7 +338,9 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	/* Switch mux parent back to TPU_PLL_DIV_CLK_1 */
 	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1, MUX_TPU_PLL_DIV_CLK_1);
 
+	ab_sm_start_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
+	ab_sm_record_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
 	return new_rate;
 }
 
