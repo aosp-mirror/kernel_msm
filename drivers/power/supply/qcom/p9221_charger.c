@@ -29,6 +29,7 @@
 #include <linux/pmic-voter.h>
 #include <linux/alarmtimer.h>
 #include "p9221_charger.h"
+#include "../google/logbuffer.h"
 
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
 #define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
@@ -677,6 +678,7 @@ static void p9221_vote_defaults(struct p9221_charger_data *charger)
 static void p9221_set_offline(struct p9221_charger_data *charger)
 {
 	dev_info(&charger->client->dev, "Set offline\n");
+	logbuffer_log(charger->log, "offline\n");
 
 	charger->online = false;
 
@@ -710,6 +712,9 @@ static void p9221_vrect_timer_handler(unsigned long data)
 
 	dev_info(&charger->client->dev,
 		 "timeout waiting for VRECT, online=%d\n", charger->online);
+	logbuffer_log(charger->log,
+		"vrect: timeout online=%d", charger->online);
+
 	pm_relax(charger->dev);
 }
 
@@ -720,6 +725,8 @@ static void p9221_dcin_work(struct work_struct *work)
 
 	dev_info(&charger->client->dev,
 		 "timeout waiting for dc-in, online=%d\n", charger->online);
+	logbuffer_log(charger->log,
+		      "dc_in: timeout online=%d", charger->online);
 
 	if (charger->online)
 		p9221_set_offline(charger);
@@ -1146,6 +1153,17 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 
 	dev_info(&charger->client->dev, "dc status is %d\n", prop.intval);
 
+	if (charger->log) {
+		u32 vout_uv;
+
+		ret = p9221_reg_read_cooked(charger, P9221R5_VOUT_REG,
+					    &vout_uv);
+		logbuffer_log(charger->log,
+			      "check_dc: online=%d present=%d VOUT=%uuV (%d)",
+			      charger->online, prop.intval != 0,
+			      (ret == 0) ? vout_uv : 0, ret);
+	}
+
 	/*
 	 * We now have confirmation from DC_IN, kill the timer, charger->online
 	 * will be set by this function.
@@ -1212,9 +1230,22 @@ static void p9221_notifier_work(struct work_struct *work)
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, notifier_work.work);
 	bool relax = true;
+	int ret;
 
 	dev_info(&charger->client->dev, "Notifier work: on:%d dc:%d det:%d\n",
 		 charger->online, charger->check_dc, charger->check_det);
+
+	if (charger->log) {
+		u32 vrect_uv;
+
+		ret = p9221_reg_read_cooked(charger, P9221R5_VRECT_REG,
+					    &vrect_uv);
+		logbuffer_log(charger->log,
+			      "notifier: on:%d dc:%d det:%d VRECT=%uuV (%d)",
+			      charger->online,
+			      charger->check_dc, charger->check_det,
+			      (ret == 0) ? vrect_uv : 0, ret);
+	}
 
 	if (charger->check_det)
 		relax = p9221_notifier_check_det(charger);
@@ -2027,6 +2058,9 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 	}
 
 	dev_info(&charger->client->dev, "INT: %04x\n", irq_src);
+	logbuffer_log(charger->log, "INT=%04x on:%d",
+		      irq_src, charger->online);
+
 	if (!irq_src)
 		goto out;
 
@@ -2060,6 +2094,8 @@ out:
 static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 {
 	struct p9221_charger_data *charger = irq_data;
+
+	logbuffer_log(charger->log, "irq_det: online=%d", charger->online);
 
 	/* If we are already online, just ignore the interrupt. */
 	if (charger->online)
@@ -2350,6 +2386,14 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	charger->log = debugfs_logbuffer_register("wireless");
+	if (IS_ERR(charger->log)) {
+		ret = PTR_ERR(charger->log);
+		dev_err(charger->dev,
+			"failed to obtain logbuffer instance, ret=%d\n", ret);
+		charger->log = NULL;
+	}
+
 	dev_info(&client->dev, "P9221 Charger Driver Loaded\n");
 
 	if (chip_id == P9221_CHIP_ID) {
@@ -2374,6 +2418,8 @@ static int p9221_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&charger->notifier_work);
 	power_supply_unreg_notifier(&charger->nb);
 	mutex_destroy(&charger->io_lock);
+	if (charger->log)
+		debugfs_logbuffer_unregister(charger->log);
 	return 0;
 }
 

@@ -237,6 +237,7 @@ struct p9221_charger_data {
 	struct alarm			icl_ramp_alarm;
 	struct timer_list		vrect_timer;
 	struct bin_attribute		bin;
+	struct logbuffer		*log;
 	int				online;
 	bool				enabled;
 	u16				addr;
