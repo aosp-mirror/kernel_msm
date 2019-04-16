@@ -22,13 +22,7 @@
 
 static int airbrush_sm_probe(struct platform_device *pdev)
 {
-	/* DIABLO specific code */
-	/* call the ab_sm_init() to further parse the airbrush dt node
-	 * for registering the CMU, GPIO devices...
-	 */
-	ab_sm_init(pdev);
-
-	return 0;
+	return ab_sm_init(pdev);
 }
 
 static int airbrush_sm_remove(struct platform_device *pdev)

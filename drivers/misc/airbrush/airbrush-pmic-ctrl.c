@@ -288,6 +288,7 @@ static int ab_register_notifier(struct ab_state_context *sc)
 	return 0;
 }
 
+/* Called during sm driver probe. */
 int ab_get_pmic_resources(struct ab_state_context *sc)
 {
 	struct device *dev = sc->dev;
@@ -296,9 +297,10 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		sc->soc_pwrgood =
 			devm_gpiod_get(dev, "soc-pwrgood", GPIOD_OUT_LOW);
 		if (IS_ERR(sc->soc_pwrgood)) {
-			dev_err(dev, "Could not get pmic_soc_pwrgood gpio (%ld)\n",
-					PTR_ERR(sc->soc_pwrgood));
-			goto fail;
+			dev_warn(dev,
+				 "Could not get pmic_soc_pwrgood gpio (%ld), PMIC driver may not be probed yet\n",
+				 PTR_ERR(sc->soc_pwrgood));
+			return PTR_ERR(sc->soc_pwrgood);
 		}
 	}
 
@@ -308,7 +310,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->ddr_sr)) {
 			dev_err(dev, "Could not get pmic_ddr_sr gpio (%ld)\n",
 					PTR_ERR(sc->ddr_sr));
-			goto fail;
+			return PTR_ERR(sc->ddr_sr);
 		}
 	}
 
@@ -318,7 +320,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->ddr_iso)) {
 			dev_err(dev, "Could not get pmic_ddr_iso gpio (%ld)\n",
 					PTR_ERR(sc->ddr_iso));
-			goto fail;
+			return PTR_ERR(sc->ddr_iso);
 		}
 	}
 
@@ -327,7 +329,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->smps1)) {
 			dev_err(dev, "failed to get s2mpg01_smps1 supply (%ld)\n",
 					PTR_ERR(sc->smps1));
-			goto fail;
+			return PTR_ERR(sc->smps1);
 		}
 	}
 
@@ -336,7 +338,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->smps2)) {
 			dev_err(dev, "failed to get s2mpg01_smps2 supply (%ld)\n",
 					PTR_ERR(sc->smps2));
-			goto fail;
+			return PTR_ERR(sc->smps2);
 		}
 	}
 
@@ -345,7 +347,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->smps3)) {
 			dev_err(dev, "failed to get s2mpg01_smps3 supply (%ld)\n",
 					PTR_ERR(sc->smps3));
-			goto fail;
+			return PTR_ERR(sc->smps3);
 		}
 	}
 
@@ -354,7 +356,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->ldo1)) {
 			dev_err(dev, "failed to get s2mpg01_ldo1 supply (%ld)\n",
 					PTR_ERR(sc->ldo1));
-			goto fail;
+			return PTR_ERR(sc->ldo1);
 		}
 	}
 
@@ -363,7 +365,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->ldo2)) {
 			dev_err(dev, "failed to get s2mpg01_ldo2 supply (%ld)\n",
 					PTR_ERR(sc->ldo2));
-			goto fail;
+			return PTR_ERR(sc->ldo2);
 		}
 	}
 
@@ -372,7 +374,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->ldo3)) {
 			dev_err(dev, "failed to get s2mpg01_ldo3 supply (%ld)\n",
 					PTR_ERR(sc->ldo3));
-			goto fail;
+			return PTR_ERR(sc->ldo3);
 		}
 	}
 
@@ -381,7 +383,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->ldo4)) {
 			dev_err(dev, "failed to get s2mpg01_ldo4 supply (%ld)\n",
 					PTR_ERR(sc->ldo4));
-			goto fail;
+			return PTR_ERR(sc->ldo4);
 		}
 	}
 
@@ -390,7 +392,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->ldo5)) {
 			dev_err(dev, "failed to get s2mpg01_ldo5 supply (%ld)\n",
 					PTR_ERR(sc->ldo5));
-			goto fail;
+			return PTR_ERR(sc->ldo5);
 		}
 	}
 
@@ -400,7 +402,7 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->boost_smps1)) {
 			dev_err(dev, "failed to get s2mpg01_boost_smps1 supply (%ld)\n",
 					PTR_ERR(sc->boost_smps1));
-			goto fail;
+			return PTR_ERR(sc->boost_smps1);
 		}
 	}
 
@@ -410,16 +412,9 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 		if (IS_ERR(sc->boost_ldo3)) {
 			dev_err(dev, "failed to get s2mpg01_boost_ldo3 supply (%ld)\n",
 					PTR_ERR(sc->boost_ldo3));
-			goto fail;
+			return PTR_ERR(sc->boost_ldo3);
 		}
 	}
 
-	if (ab_register_notifier(sc))
-		goto fail;
-
-	return 0;
-
-fail:
-	return -ENODEV;
+	return ab_register_notifier(sc);
 }
-

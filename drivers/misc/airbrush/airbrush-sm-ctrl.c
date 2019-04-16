@@ -2591,7 +2591,7 @@ static void ab_sm_el2_notif_init(struct work_struct *work)
 	mutex_unlock(&sc->el2_notif_init_lock);
 }
 
-struct ab_state_context *ab_sm_init(struct platform_device *pdev)
+int ab_sm_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
@@ -2616,6 +2616,15 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 		dev_err(ab_sm_ctx->dev,
 			"Failed to register misc device node (ret = %d)", ret);
 		goto fail_misc_reg;
+	}
+
+	ret = ab_get_pmic_resources(ab_sm_ctx);
+	if (ret) {
+		if (ret != -EPROBE_DEFER)
+			dev_err(ab_sm_ctx->dev,
+				"Failed to get PMIC resources (ret = %d)",
+				ret);
+		goto fail_pmic_resources;
 	}
 
 	/* Get the gpio_desc for all the gpios used */
@@ -2754,17 +2763,19 @@ struct ab_state_context *ab_sm_init(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&ab_sm_ctx->el2_notif_init, ab_sm_el2_notif_init);
 	schedule_delayed_work(&ab_sm_ctx->el2_notif_init, 0);
 
-	return ab_sm_ctx;
+	dev_info(ab_sm_ctx->dev, "%s: done\n", __func__);
+
+	return 0;
 
 fail_fw_patch_en:
 fail_ab_ready:
-fail_misc_reg:
+fail_pmic_resources:
 	misc_deregister(&ab_sm_ctx->misc_dev);
+fail_misc_reg:
 	devm_kfree(dev, (void *)ab_sm_ctx);
 	ab_sm_ctx = NULL;
-
 fail_mem_alloc:
-	return NULL;
+	return ret;
 }
 EXPORT_SYMBOL(ab_sm_init);
 

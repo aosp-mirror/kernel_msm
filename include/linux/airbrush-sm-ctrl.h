@@ -578,7 +578,7 @@ void ab_sm_unregister_dram_ops(void);
 void ab_sm_register_mfd_ops(struct ab_sm_mfd_ops *ops);
 void ab_sm_unregister_mfd_ops(void);
 
-struct ab_state_context *ab_sm_init(struct platform_device *pdev);
+int ab_sm_init(struct platform_device *pdev);
 void ab_sm_exit(struct platform_device *pdev);
 
 int ab_sm_set_state(struct ab_state_context *sc,

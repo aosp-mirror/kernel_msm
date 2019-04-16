@@ -98,10 +98,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		return -EINVAL;
 
 	if (ab_ctx->cold_boot) {
-		ret = ab_get_pmic_resources(ab_ctx);
-		if (ret)
-			return ret;
-
 		ab_disable_pgood(ab_ctx);
 		msm_pcie_assert_perst(1);
 
