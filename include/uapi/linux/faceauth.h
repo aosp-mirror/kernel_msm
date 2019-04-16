@@ -51,18 +51,13 @@ struct faceauth_start_data {
 	__u64 image_flood_fd;
 	__u64 calibration_fd;
 
+	__u32 image_dot_left_size;
+	__u32 image_dot_right_size;
+	__u32 image_flood_size;
+	__u32 calibration_size;
+
 	__s16 cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];
 	__u32 cache_flush_size;
-
-	/* TODO(b/123892068): remove these user-buffer fields */
-	__u8 __user *image_dot_left;
-	__u32 image_dot_left_size;
-	__u8 __user *image_dot_right;
-	__u32 image_dot_right_size;
-	__u8 __user *image_flood;
-	__u32 image_flood_size;
-	void __user *calibration;
-	__u32 calibration_size;
 
 	/* Output parameters */
 	__u8 result; /* result code from AB */

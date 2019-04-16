@@ -297,17 +297,7 @@ static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
 				pr_err("Error in sending workload\n");
 				goto exit;
 			}
-			if (start_step_data.calibration) {
-				pr_info("Send calibration data\n");
-				err = dma_xfer(start_step_data.calibration,
-					       start_step_data.calibration_size,
-					       CALIBRATION_DATA_ADDR,
-					       DMA_TO_DEVICE);
-				if (err) {
-					pr_err("Error sending calibration\n");
-					goto exit;
-				}
-			} else if (start_step_data.calibration_fd) {
+			if (start_step_data.calibration_fd) {
 				pr_info("Send calibration data from ION\n");
 				err = dma_xfer_dmabuf(
 					start_step_data.calibration_fd,
@@ -923,62 +913,30 @@ static int dma_send_images(struct faceauth_start_data *data)
 {
 	int err = 0;
 
-	if (!data->image_dot_left_fd) {
-		pr_info("Send left dot image\n");
-		err = dma_xfer(data->image_dot_left, data->image_dot_left_size,
-			       DOT_LEFT_IMAGE_ADDR, DMA_TO_DEVICE);
-		if (err) {
-			pr_err("Error sending left dot image\n");
-			return err;
-		}
-	} else {
-		pr_info("Send left dot image from ION\n");
-		err = dma_xfer_dmabuf(data->image_dot_left_fd,
-				      data->image_dot_left_size,
-				      DOT_LEFT_IMAGE_ADDR, DMA_TO_DEVICE);
-		if (err) {
-			pr_err("Error sending left dot image from ION\n");
-			return err;
-		}
-	}
-	if (!data->image_dot_right_fd) {
-		pr_info("Send right dot image\n");
-		err = dma_xfer(data->image_dot_right,
-			       data->image_dot_right_size, DOT_RIGHT_IMAGE_ADDR,
-			       DMA_TO_DEVICE);
-		if (err) {
-			pr_err("Error sending right dot image\n");
-			return err;
-		}
-	} else {
-		pr_info("Send right dot image from ION\n");
-		err = dma_xfer_dmabuf(data->image_dot_right_fd,
-				      data->image_dot_right_size,
-				      DOT_RIGHT_IMAGE_ADDR, DMA_TO_DEVICE);
-		if (err) {
-			pr_err("Error sending right dot image from ION\n");
-			return err;
-		}
+	pr_info("Send left dot image from ION\n");
+	err = dma_xfer_dmabuf(data->image_dot_left_fd,
+			      data->image_dot_left_size, DOT_LEFT_IMAGE_ADDR,
+			      DMA_TO_DEVICE);
+	if (err) {
+		pr_err("Error sending left dot image from ION\n");
+		return err;
 	}
 
-	/* This is data to feed individual TPU stages */
-	if (!data->image_flood_fd) {
-		pr_info("Send flood image\n");
-		err = dma_xfer(data->image_flood, data->image_flood_size,
-			       FLOOD_IMAGE_ADDR, DMA_TO_DEVICE);
-		if (err) {
-			pr_err("Error sending flood image\n");
-			return err;
-		}
-	} else {
-		pr_info("Send flood image from ION\n");
-		err = dma_xfer_dmabuf(data->image_flood_fd,
-				      data->image_flood_size, FLOOD_IMAGE_ADDR,
-				      DMA_TO_DEVICE);
-		if (err) {
-			pr_err("Error sending flood image from ION\n");
-			return err;
-		}
+	pr_info("Send right dot image from ION\n");
+	err = dma_xfer_dmabuf(data->image_dot_right_fd,
+			      data->image_dot_right_size, DOT_RIGHT_IMAGE_ADDR,
+			      DMA_TO_DEVICE);
+	if (err) {
+		pr_err("Error sending right dot image from ION\n");
+		return err;
+	}
+
+	pr_info("Send flood image from ION\n");
+	err = dma_xfer_dmabuf(data->image_flood_fd, data->image_flood_size,
+			      FLOOD_IMAGE_ADDR, DMA_TO_DEVICE);
+	if (err) {
+		pr_err("Error sending flood image from ION\n");
+		return err;
 	}
 
 	return err;

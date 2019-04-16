@@ -529,22 +529,6 @@ static void hypx_free_blob_dmabuf(struct device *dev,
 	data->hypx_blob = NULL;
 }
 
-static void hypx_create_blob(struct device *dev, struct faceauth_data *data,
-			     void __user *buffer, int dma_fd, size_t size,
-			     enum dma_data_direction dir, bool is_secure_camera)
-{
-	if (buffer) {
-		if (is_secure_camera) {
-			pr_err("Secure camera data requires ION buffer\n");
-			return;
-		}
-		hypx_create_blob_userbuf(dev, data, buffer, size);
-	} else {
-		hypx_create_blob_dmabuf(dev, data, dma_fd, dir,
-					is_secure_camera);
-	}
-}
-
 static void hypx_free_blob(struct device *dev, struct faceauth_data *data)
 {
 	if (data->dma_buf)
@@ -821,37 +805,33 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	hypx_data->citadel_input = data->citadel_input;
 	hypx_data->citadel_input2 = data->citadel_input2;
 	if (pass_images_to_el2) {
-		hypx_create_blob(dev, &image_dot_left, data->image_dot_left,
-				 data->image_dot_left_fd,
-				 data->image_dot_left_size, DMA_TO_DEVICE,
-				 is_secure_camera);
+		hypx_create_blob_dmabuf(dev, &image_dot_left,
+					data->image_dot_left_fd, DMA_TO_DEVICE,
+					is_secure_camera);
 		if (!image_dot_left.hypx_blob)
 			goto err2;
 		hypx_data->image_dot_left =
 			virt_to_phys(image_dot_left.hypx_blob);
 		hypx_data->image_dot_left_size = data->image_dot_left_size;
 
-		hypx_create_blob(dev, &image_dot_right, data->image_dot_right,
-				 data->image_dot_right_fd,
-				 data->image_dot_right_size, DMA_TO_DEVICE,
-				 is_secure_camera);
+		hypx_create_blob_dmabuf(dev, &image_dot_right,
+					data->image_dot_right_fd, DMA_TO_DEVICE,
+					is_secure_camera);
 		if (!image_dot_right.hypx_blob)
 			goto err2;
 		hypx_data->image_dot_right =
 			virt_to_phys(image_dot_right.hypx_blob);
 		hypx_data->image_dot_right_size = data->image_dot_right_size;
 
-		hypx_create_blob(dev, &image_flood, data->image_flood,
-				 data->image_flood_fd, data->image_flood_size,
-				 DMA_TO_DEVICE, is_secure_camera);
+		hypx_create_blob_dmabuf(dev, &image_flood, data->image_flood_fd,
+					DMA_TO_DEVICE, is_secure_camera);
 		if (!image_flood.hypx_blob)
 			goto err2;
 		hypx_data->image_flood = virt_to_phys(image_flood.hypx_blob);
 		hypx_data->image_flood_size = data->image_flood_size;
 
-		hypx_create_blob(dev, &calibration, data->calibration,
-				 data->calibration_fd, data->calibration_size,
-				 DMA_TO_DEVICE, false);
+		hypx_create_blob_dmabuf(dev, &calibration, data->calibration_fd,
+					DMA_TO_DEVICE, false);
 		if (!calibration.hypx_blob)
 			goto err2;
 		hypx_data->calibration = virt_to_phys(calibration.hypx_blob);
@@ -902,13 +882,13 @@ err2:
 	if (hypx_data->citadel_token)
 		hypx_free_blob_userbuf(&citadel_token);
 	if (hypx_data->calibration)
-		hypx_free_blob(dev, &calibration);
+		hypx_free_blob_dmabuf(dev, &calibration);
 	if (hypx_data->image_flood)
-		hypx_free_blob(dev, &image_flood);
+		hypx_free_blob_dmabuf(dev, &image_flood);
 	if (hypx_data->image_dot_right)
-		hypx_free_blob(dev, &image_dot_right);
+		hypx_free_blob_dmabuf(dev, &image_dot_right);
 	if (hypx_data->image_dot_left)
-		hypx_free_blob(dev, &image_dot_left);
+		hypx_free_blob_dmabuf(dev, &image_dot_left);
 
 	free_page((unsigned long)hypx_data);
 
