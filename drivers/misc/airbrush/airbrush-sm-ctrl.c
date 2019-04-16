@@ -49,9 +49,6 @@ static struct ab_state_context *ab_sm_ctx;
 
 #define MAX_AON_FREQ 934000000
 
-#define SMPS1_MIN_VOLTAGE 550000
-#define SMPS1_NOMINAL_VOLTAGE 750000
-
 #define AB_THROTTLE_TIMEOUT_MS	500
 
 static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
@@ -858,7 +855,6 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 			       bool is_linkdown_event)
 {
 	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_0);
-	int ret;
 
 	/*
 	 * Mark PMIC rails to be disabled so that regulator_enable() and
@@ -912,14 +908,6 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 
 	ab_pmic_off(sc);
 	dev_err(sc->dev, "AB PMIC off\n");
-
-	dev_err(sc->dev, "reset SMPS1 voltage back to nominal in case it was changed\n");
-	ret = regulator_set_voltage(sc->smps1, SMPS1_NOMINAL_VOLTAGE,
-			SMPS1_NOMINAL_VOLTAGE + REGULATOR_STEP);
-	if (ret)
-		dev_err(sc->dev,
-			"failed to reset to nominal SMPS1 voltage (%d)\n",
-			ret);
 
 	sc->curr_chip_substate_id = CHIP_STATE_0;
 }
@@ -1040,23 +1028,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 */
 	ab_prep_pmic_settings(sc, dest_map);
 
-	/* If it could be at Sleep, increase voltage if necessary
-	 * (context: b/129285814)
-	 */
-	ab_sm_start_ts(sc, AB_SM_SMPS1_NOMINAL);
-	if (prev_state <= CHIP_STATE_300) {
-		dev_info(sc->dev, "increase SMPS1 voltage back to nominal\n");
-		ret = regulator_set_voltage(sc->smps1, SMPS1_NOMINAL_VOLTAGE,
-				SMPS1_NOMINAL_VOLTAGE + REGULATOR_STEP);
-		if (ret) {
-			dev_err(sc->dev,
-					"failed to set to nominal SMPS1 voltage (%d)\n",
-					ret);
-			goto cleanup_state;
-		}
-	}
-	ab_sm_record_ts(sc, AB_SM_SMPS1_NOMINAL);
-
 	ab_sm_start_ts(sc, AB_SM_TS_PMIC_ON);
 	ret = ab_pmic_on(sc);
 	ab_sm_record_ts(sc, AB_SM_TS_PMIC_ON);
@@ -1165,23 +1136,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	ab_sm_start_ts(sc, AB_SM_TS_PMIC_OFF);
 	ab_pmic_off(sc);
 	ab_sm_record_ts(sc, AB_SM_TS_PMIC_OFF);
-
-	/* If going to Sleep, decrease voltage to save power
-	 * (context: b/129285814)
-	 */
-	ab_sm_start_ts(sc, AB_SM_SMPS1_MIN);
-	if (to_chip_substate_id == CHIP_STATE_300) {
-		dev_info(sc->dev, "Decrease SMPS1 voltage to min\n");
-		ret = regulator_set_voltage(sc->smps1, SMPS1_MIN_VOLTAGE,
-				SMPS1_MIN_VOLTAGE + REGULATOR_STEP);
-		if (ret) {
-			dev_err(sc->dev,
-					"failed to set to min SMPS1 voltage (%d)\n",
-					ret);
-			goto cleanup_state;
-		}
-	}
-	ab_sm_record_ts(sc, AB_SM_SMPS1_MIN);
 
 	ab_sm_record_ts(sc, AB_SM_TS_FULL);
 
