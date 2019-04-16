@@ -1,7 +1,7 @@
 /*
  * UFS impaired storage emulation.
  *
- * Copyright (C) 2018, Google, Inc.
+ * Copyright (C) 2019, Google, LLC.
  *
  * Authors:
  *	Hyojun Kim <hyojun@google.com>
