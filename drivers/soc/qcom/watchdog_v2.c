@@ -56,6 +56,7 @@
 #define MAX_CPU_CTX_SIZE	2048
 
 #define WDOG_BITE_OFFSET_IN_SECONDS 3
+#define WDOG_CONSOLE_OFFSET_IN_SECONDS 10
 
 static struct msm_watchdog_data *wdog_data;
 
@@ -790,6 +791,16 @@ static int init_watchdog_sysfs(struct msm_watchdog_data *wdog_dd)
 	return error;
 }
 
+static bool console_enabled;
+
+static int __init setup_console_enabled(char *unused)
+{
+	console_enabled = true;
+
+	return 1;
+}
+__setup("androidboot.console=", setup_console_enabled);
+
 static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 {
 	unsigned long delay_time;
@@ -833,6 +844,11 @@ static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 	wdog_dd->min_slack_ns = ULLONG_MAX;
 	configure_scandump(wdog_dd);
 	configure_bark_dump(wdog_dd);
+	if (console_enabled) {
+		dev_info(wdog_dd->dev, "Console enabled, extend "
+				"bark/bite times by 10 seconds\n");
+		wdog_dd->bark_time += WDOG_CONSOLE_OFFSET_IN_SECONDS*1000;
+	}
 	timeout = (wdog_dd->bark_time * WDT_HZ)/1000;
 	__raw_writel(timeout, wdog_dd->base + WDT0_BARK_TIME);
 	__raw_writel(timeout + WDOG_BITE_OFFSET_IN_SECONDS*WDT_HZ,
