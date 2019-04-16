@@ -31,7 +31,7 @@
 #define AIRBRUSH_DRAM_SIZE (448UL << 20)
 
 #define MAX_ABD_SESSION 100
-#define MAX_ALLOC_REF_PER_SESSION 1000
+#define MAX_ALLOC_REF_PER_SESSION 2000
 
 static bool initialized;
 
@@ -109,7 +109,7 @@ static void ab_dram_free(struct ab_dram_buffer *buffer)
 }
 
 /* Increment session allocation count
- * Returning 0 on success, -EACCES on failure
+ * Returning 0 on success, -EDQUOT on failure
  */
 static __must_check int ab_dram_session_get(struct ab_dram_session *session)
 {
@@ -122,7 +122,7 @@ static __must_check int ab_dram_session_get(struct ab_dram_session *session)
 	mutex_lock(&session->lock);
 
 	if (session->alloc_count >= MAX_ALLOC_REF_PER_SESSION)
-		ret = -EACCES;
+		ret = -EDQUOT;
 	else
 		session->alloc_count++;
 
@@ -440,7 +440,7 @@ static int ab_dram_open(struct inode *ip, struct file *fp)
 	if (internal_data->session_count >= MAX_ABD_SESSION) {
 		mutex_unlock(&internal_data->lock);
 		kfree(session);
-		return -EACCES;
+		return -EMFILE;
 	}
 	internal_data->session_count++;
 	mutex_unlock(&internal_data->lock);
