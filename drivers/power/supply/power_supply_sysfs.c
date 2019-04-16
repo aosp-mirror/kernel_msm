@@ -446,6 +446,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(dc_reset),
 	POWER_SUPPLY_ATTR(scale_mode_en),
 	POWER_SUPPLY_ATTR(operating_freq),
+	POWER_SUPPLY_ATTR(voltage_max_limit),
 	/* Capacity Estimation */
 	POWER_SUPPLY_ATTR(delta_cc_sum),
 	POWER_SUPPLY_ATTR(delta_vfsoc_sum),
