@@ -165,12 +165,8 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev,
 		return err;
 	}
 
-	/*
-	 * TODO(b/128559698): Enable internal cooling device once stabilized
-	 * by changing the last parameter to true.
-	 */
 	err = ab_thermal_init_cooling(&thermal->cooling_internal, thermal,
-			AB_OF_CDEV_INTERNAL_NAME, AB_CDEV_INTERNAL_NAME, false);
+			AB_OF_CDEV_INTERNAL_NAME, AB_CDEV_INTERNAL_NAME, true);
 	if (err) {
 		dev_err(dev, "failed to initialize internal cooling\n");
 		ab_thermal_exit(thermal);
