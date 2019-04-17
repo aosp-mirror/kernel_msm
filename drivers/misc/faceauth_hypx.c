@@ -199,11 +199,13 @@ static void hypx_free_blob_userbuf(struct faceauth_data *data)
 		uint64_t phy_addr;
 		void *virt_addr;
 		int ret = 0;
+		int order = 0;
 
 		if (!blob->segments[i].addr)
 			break;
 		phy_addr = (uint64_t)blob->segments[i].addr * PAGE_SIZE;
 		virt_addr = phys_to_virt(phy_addr);
+		order = order_base_2(blob->segments[i].pages);
 
 		if (data->need_reassign_to_hlos) {
 			ret = hyp_assign_phys(
@@ -215,7 +217,7 @@ static void hypx_free_blob_userbuf(struct faceauth_data *data)
 				       ret);
 		}
 
-		kfree(virt_addr);
+		free_pages((unsigned long)virt_addr, order);
 	}
 
 	free_page((unsigned long)blob);
@@ -243,6 +245,7 @@ static int hypx_copy_from_blob_userbuf(struct device *dev,
 	/* We expect that the buffer data comes from Airbrush and thus it
 	 * assigned to EXT_DSP
 	 */
+
 	WARN_ON(!data->need_reassign_to_hlos);
 
 	for (i = 0; i < HYPX_MEMSEGS_NUM; i++) {
@@ -327,14 +330,14 @@ static void hypx_create_blob_userbuf(struct device *dev,
 	data->need_reassign_to_hlos = true;
 
 	for (i = 0; i < HYPX_MEMSEGS_NUM; i++) {
-		uint64_t page_order =
+		int page_order =
 			min(MAX_ORDER - 1,
 			    order_base_2(buffer_iter_remaining / PAGE_SIZE));
 		uint64_t size = (1ULL << page_order) * PAGE_SIZE;
 		uint64_t tocopy = min(buffer_iter_remaining, size);
 
 		int ret = 0;
-		void *out_buffer;
+		void *out_buffer = NULL;
 		int source_vm[] = { VMID_HLOS };
 		int dest_vm[] = { VMID_CP_DSP_EXT, VMID_HLOS_FREE };
 		int dest_perm[] = { PERM_READ | PERM_WRITE,
@@ -343,21 +346,24 @@ static void hypx_create_blob_userbuf(struct device *dev,
 		if (!tocopy)
 			break;
 
-		out_buffer = kmalloc(size, __GFP_NOWARN);
-
 		while (!out_buffer) {
-			if (page_order == 0) {
+			if (page_order < 0) {
 				pr_err("Cannot allocate memory for copying data for hypx");
 				goto exit2;
 			}
-			page_order--;
+
+			out_buffer = (void *)__get_free_pages(
+				GFP_KERNEL | __GFP_NOWARN | __GFP_COMP,
+				page_order);
 			size = (1ULL << page_order) * PAGE_SIZE;
-			out_buffer = kmalloc(size, __GFP_NOWARN);
 			tocopy = min(buffer_iter_remaining, size);
+			if (!out_buffer)
+				page_order--;
 		}
 
 		if (buffer)
 			copy_from_user(out_buffer, buffer_iter, tocopy);
+
 		dma_sync_single_for_device(dev, virt_to_phys(out_buffer), size,
 					   DMA_TO_DEVICE);
 
@@ -996,7 +1002,7 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 		hypx_create_blob_dmabuf(dev, &debug_buf, data->buffer_fd,
 					DMA_TO_DEVICE, false);
 	else
-		hypx_create_blob_userbuf(dev, &debug_buf, data->debug_buffer,
+		hypx_create_blob_userbuf(dev, &debug_buf, NULL,
 					 data->debug_buffer_size);
 
 	if (!debug_buf.hypx_blob) {
