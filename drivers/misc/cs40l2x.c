@@ -5218,6 +5218,15 @@ static const struct reg_sequence cs40l2x_amp_gnd_setup[] = {
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
 	{CS40L2X_SPK_FORCE_TST_1,	CS40L2X_FORCE_SPK_GND},
+	/* leave test key unlocked to minimize overhead during playback */
+};
+
+static const struct reg_sequence cs40l2x_amp_free_setup[] = {
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
+	{CS40L2X_SPK_FORCE_TST_1,	CS40L2X_FORCE_SPK_FREE},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE1},
+	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_RELOCK_CODE2},
 };
 
 static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
@@ -5232,7 +5241,8 @@ static int cs40l2x_dsp_pre_config(struct cs40l2x_private *cs40l2x)
 	int ret, i;
 
 	if (cs40l2x->fw_desc->id == CS40L2X_FW_ID_CAL)
-		return 0;
+		return regmap_multi_reg_write(regmap, cs40l2x_amp_free_setup,
+				ARRAY_SIZE(cs40l2x_amp_free_setup));
 
 	ret = regmap_write(regmap,
 			cs40l2x_dsp_reg(cs40l2x, "GPIO_BUTTONDETECT",
