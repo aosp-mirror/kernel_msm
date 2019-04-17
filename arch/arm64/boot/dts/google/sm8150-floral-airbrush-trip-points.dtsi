@@ -8,6 +8,8 @@
  *
  */
 
+#include <dt-bindings/thermal/airbrush_tmu.h>
+
 /*
  * The 7-th trip point (trip7) of each airbruhs-* thermal zone would trigger
  * the TH_TRIP and Airbrush PMIC interrupt for emergency shutdown.  Set to 130C
@@ -27,7 +29,8 @@
 			 */
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
-			thermal-sensors = <&airbrush_tmu 0>;
+			thermal-sensors =
+				<&airbrush_tmu AB_TMU_TEMP_PROBE_MAIN>;
 
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
@@ -74,7 +77,8 @@
 		airbrush-ipu0 {
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
-			thermal-sensors = <&airbrush_tmu 1>;
+			thermal-sensors =
+				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU0>;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu0_trip4: trip4 {
@@ -120,7 +124,8 @@
 		airbrush-ipu1 {
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
-			thermal-sensors = <&airbrush_tmu 2>;
+			thermal-sensors =
+				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU1>;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu1_trip4: trip4 {
@@ -166,7 +171,8 @@
 		airbrush-ipu2 {
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
-			thermal-sensors = <&airbrush_tmu 3>;
+			thermal-sensors =
+				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU2>;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu2_trip4: trip4 {
@@ -212,7 +218,8 @@
 		airbrush-ipu3 {
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
-			thermal-sensors = <&airbrush_tmu 4>;
+			thermal-sensors =
+				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU_TPU>;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu3_trip4: trip4 {
@@ -258,7 +265,8 @@
 		airbrush-tpu0 {
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
-			thermal-sensors = <&airbrush_tmu 5>;
+			thermal-sensors =
+				<&airbrush_tmu AB_TMU_TEMP_PROBE_TPU0>;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_tpu0_trip4: trip4 {
@@ -304,7 +312,8 @@
 		airbrush-tpu1 {
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
-			thermal-sensors = <&airbrush_tmu 6>;
+			thermal-sensors =
+				<&airbrush_tmu AB_TMU_TEMP_PROBE_TPU1>;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_tpu1_trip4: trip4 {
