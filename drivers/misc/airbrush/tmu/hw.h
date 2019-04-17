@@ -18,6 +18,8 @@
 #include <linux/bitops.h>
 #include <linux/types.h>
 
+#include <dt-bindings/thermal/airbrush_tmu.h>
+
 struct ab_tmu_hw;
 struct device;
 
@@ -145,13 +147,6 @@ u32 ab_tmu_hw_read_current_temp(struct ab_tmu_hw *hw, int id);
 #define AB_TMU_ONE_POINT_TRIMMING	1
 #define AB_TMU_TWO_POINT_TRIMMING	2
 
-#define AB_TMU_TEMP_PROBE_MAIN		0
-#define AB_TMU_TEMP_PROBE_IPU0		1
-#define AB_TMU_TEMP_PROBE_IPU1		2
-#define AB_TMU_TEMP_PROBE_IPU2		3
-#define AB_TMU_TEMP_PROBE_IPU_TPU	4
-#define AB_TMU_TEMP_PROBE_TPU0		5
-#define AB_TMU_TEMP_PROBE_TPU1		6
 #define AB_TMU_NUM_REMOTE_PROBE		0x6
 #define AB_TMU_NUM_ALL_PROBE		7
 #define AB_TMU_TEMP_SHIFT		9
