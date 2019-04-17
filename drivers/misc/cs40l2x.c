@@ -5084,7 +5084,6 @@ static int cs40l2x_create_led(struct cs40l2x_private *cs40l2x)
 	led_dev->max_brightness = LED_FULL;
 	led_dev->brightness_set = cs40l2x_vibe_brightness_set;
 	led_dev->default_trigger = "transient";
-	led_dev->flags = LED_BRIGHTNESS_FAST;
 
 	ret = led_classdev_register(dev, led_dev);
 	if (ret) {
