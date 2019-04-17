@@ -21,7 +21,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x0008
+#define RAYDIUM_VER     0x000F
 
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
@@ -29,7 +29,7 @@
 #define RAYDIUM_POWERON_DELAY_USEC    500
 #define RAYDIUM_RESET_INTERVAL_MSEC   5
 #define RAYDIUM_RESET_RESTORE_USEC    200
-#define RAYDIUM_RESET_DELAY_MSEC      100
+#define RAYDIUM_RESET_DELAY_MSEC      50
 
 /* I2C bus slave address(ID) */
 #define RAYDIUM_I2C_EID    (0x5A)
@@ -38,7 +38,7 @@
 /* I2C R/W configuration literal */
 #define RAYDIUM_I2C_WRITE       I2C_SMBUS_WRITE
 #define RAYDIUM_I2C_READ        I2C_SMBUS_READ
-#define SYN_I2C_RETRY_TIMES     10
+#define SYN_I2C_RETRY_TIMES     2
 #define MAX_WRITE_PACKET_SIZE   64
 #define MAX_READ_PACKET_SIZE    64
 
