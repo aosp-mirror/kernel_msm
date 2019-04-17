@@ -232,6 +232,15 @@ raydium_gpio_configure(struct raydium_ts_data *data, bool on)
 				goto err_irq_gpio_dir;
 			}
 		}
+
+		if (gpio_is_valid(data->pdata->reset_gpio)) {
+			err = gpio_direction_output(data->pdata->reset_gpio, 1);
+			if (err) {
+				dev_err(&data->client->dev,
+					"[touch]set_direction for rst gpio failed\n");
+				goto err_irq_gpio_dir;
+			}
+		}
 		return 0;
 	}
 	if (gpio_is_valid(data->pdata->irq_gpio))
@@ -1947,16 +1956,16 @@ raydium_fw_upgrade(struct i2c_client *client,
 
 		dev_info(&ts->client->dev, "[touch]Raydium HW reset\n");
 		g_u8_resetflag = true;
-		gpio_direction_output(ts->rst, 1);
-		gpio_direction_output(ts->rst, 0);
+		gpio_set_value(ts->rst, 1);
+		gpio_set_value(ts->rst, 0);
 		msleep(RAYDIUM_RESET_INTERVAL_MSEC);
-		gpio_direction_output(ts->rst, 1);
+		gpio_set_value(ts->rst, 1);
 		//msleep(500);
 
 		/* wait FW ready */
 		//raydium_irq_control(ts, ENABLE);
 		dev_info(&ts->client->dev, "[touch]Raydium wait FW ready\n");
-		msleep(50);
+		msleep(RAYDIUM_RESET_DELAY_MSEC);
 
 		u8_i2c_mode = PDA2_MODE;
 
@@ -2818,20 +2827,22 @@ raydium_hw_reset_fun(struct i2c_client *client)
 
 	/*HW reset */
 	dev_info(&ts->client->dev, "[touch]Raydium HW reset\n");
-	g_u8_resetflag = true;
-	gpio_direction_output(ts->rst, 1);
-	gpio_direction_output(ts->rst, 0);
-	msleep(RAYDIUM_RESET_INTERVAL_MSEC);
-	gpio_direction_output(ts->rst, 1);
 
+	mutex_lock(&ts->lock);
+	g_u8_resetflag = true;
+	gpio_set_value(ts->rst, 1);
+	gpio_set_value(ts->rst, 0);
+	msleep(RAYDIUM_RESET_INTERVAL_MSEC);
+	gpio_set_value(ts->rst, 1);
+	/* wait FW ready */
+	dev_info(&ts->client->dev, "[touch]Raydium wait FW ready\n");
 	u8_i2c_mode = PDA2_MODE;
+	mutex_unlock(&ts->lock);
 
 	ret = wait_irq_state(client, 1000, 2000);
 	g_uc_raydium_flag &= ~RAYDIUM_ENGINEER_MODE;
-	if (ret != ERROR) {
-		msleep(500);
-		raydium_irq_control(ts, ENABLE);
-	}
+	raydium_irq_control(ts, ENABLE);
+
 	dev_info(&ts->client->dev, "[touch]Raydium HW reset : %d\n", ret);
 	return ret;
 }
@@ -2852,19 +2863,17 @@ raydium_hw_reset_show(struct device *dev,
 	/*HW reset */
 	dev_info(&ts->client->dev, "[touch]Raydium HW reset\n");
 	g_u8_resetflag = true;
-	gpio_direction_output(ts->rst, 1);
-	gpio_direction_output(ts->rst, 0);
+	gpio_set_value(ts->rst, 1);
+	gpio_set_value(ts->rst, 0);
 	msleep(RAYDIUM_RESET_INTERVAL_MSEC);
-	gpio_direction_output(ts->rst, 1);
-
+	gpio_set_value(ts->rst, 1);
+	/* wait FW ready */
+	dev_info(&ts->client->dev, "[touch]Raydium wait FW ready\n");
 	u8_i2c_mode = PDA2_MODE;
 
 	ret = wait_irq_state(client, 1000, 2000);
 	g_uc_raydium_flag &= ~RAYDIUM_ENGINEER_MODE;
-	if (ret != ERROR) {
-		msleep(500);
-		raydium_irq_control(ts, ENABLE);
-	}
+	raydium_irq_control(ts, ENABLE);
 
 	snprintf(buf, ATR_MAX_SIZE, "Raydium HW Reset : %d\n", ret);
 	dev_info(&ts->client->dev, "%s\n", buf);
@@ -2894,17 +2903,15 @@ raydium_reset_control_store(struct device *dev,
 	u8_i2c_mode = PDA2_MODE;
 	g_u8_resetflag = true;
 	if (u8_high) {
-		raydium_irq_control(ts, ENABLE);
 		dev_info(&ts->client->dev,
 			  "[touch]Raydium %s set reset gpio to high!!\n",
 			  __func__);
-		gpio_direction_output(ts->rst, 1);
+		gpio_set_value(ts->rst, 1);
 	} else {
-		raydium_irq_control(ts, DISABLE);
 		dev_info(&ts->client->dev,
 			  "[touch]Raydium %s set reset gpio to low!!\n",
 			  __func__);
-		gpio_direction_output(ts->rst, 0);
+		gpio_set_value(ts->rst, 0);
 	}
 
 	return count;
@@ -3094,22 +3101,14 @@ raydium_touch_lock_store(struct device *dev,
 			}
 			udelay(RAYDIUM_POWERON_DELAY_USEC);	//500us
 			mutex_lock(&ts->lock);
-			if (gpio_is_valid(ts->rst)) {
-				ret = gpio_request(ts->rst,
-						"raydium_reset_gpio");
-				if (ret < 0) {
-					dev_err(&ts->client->dev,
-					"[touch]reset gpio request failed");
-				}
-				g_u8_resetflag = true;
-				gpio_direction_output(ts->rst, 1);
-				gpio_direction_output(ts->rst, 0);
-				msleep(RAYDIUM_RESET_INTERVAL_MSEC);	//5ms
-				gpio_direction_output(ts->rst, 1);
-				msleep(RAYDIUM_RESET_DELAY_MSEC);	//100ms
-				u8_i2c_mode = PDA2_MODE;
-				gpio_free(ts->rst);
-			}
+			g_u8_resetflag = true;
+			gpio_set_value(ts->rst, 1);
+			gpio_set_value(ts->rst, 0);
+			msleep(RAYDIUM_RESET_INTERVAL_MSEC);	//5ms
+			gpio_set_value(ts->rst, 1);
+			msleep(RAYDIUM_RESET_DELAY_MSEC);	//100ms
+			u8_i2c_mode = PDA2_MODE;
+
 			mutex_unlock(&ts->lock);
 			raydium_irq_control(ts, ENABLE);
 			ts->is_sleep = 0;
@@ -4032,14 +4031,14 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 	static unsigned char u8_seq_no;
 	unsigned char retry;
 
-	retry = SYN_I2C_RETRY_TIMES * 5;
+	retry = 3;
 
 	mutex_lock(&data->lock);
 	while (retry != 0) {
 		ret = raydium_i2c_pda2_set_page(data->client,
 			RAYDIUM_PDA2_PAGE_0);
 		if (ret < 0) {
-			msleep(20);
+			msleep(250);
 			retry--;
 		} else
 			break;
@@ -4068,13 +4067,13 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 	if (tp_status[POS_FW_STATE] != 0xAA) {
 		if (g_u8_resetflag == true) {
 			dev_err(&data->client->dev,
-			"%s -> abnormal irq, hw reset.\n", __func__);
+			"[touch]%s -> abnormal irq, hw reset.\n", __func__);
 			ret = -1;
 			g_u8_resetflag = false;
 			goto exit_error;
 		}
 		dev_err(&data->client->dev,
-			"%s -> abnormal irq, display reset, FW STATE = 0x%x\n",
+			"[touch]%s -> abnormal irq, display reset, FW STATE = 0x%x\n",
 			 __func__, tp_status[POS_FW_STATE]);
 		ret = -1;
 		goto reset_error;
@@ -4083,7 +4082,7 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 	/* inform IC to prepare next report */
 	if (u8_seq_no == tp_status[POS_SEQ]) {
 		dev_err(&data->client->dev,
-				"%s -> report not updated.\n", __func__);
+				"[touch]%s -> report not updated.\n", __func__);
 		goto exit_error;
 	}
 	u8_points_amount = tp_status[POS_PT_AMOUNT];
@@ -4130,7 +4129,7 @@ reset_error:
 }
 
 static void
-raydium_work_handler (struct work_struct *work)
+raydium_work_handler(struct work_struct *work)
 {
 
 	struct raydium_ts_data *raydium_ts =
@@ -4162,7 +4161,7 @@ raydium_work_handler (struct work_struct *work)
 					raydium_ts->input_dev, false);
 		input_sync(raydium_ts->input_dev);
 		g_uc_gesture_status = RAYDIUM_GESTURE_DISABLE;
-		pr_info("[touch]display wake up\n");
+		pr_info("[touch]display wake up with reset flag false\n");
 
 		if (u8_i2c_mode == PDA2_MODE)
 			raydium_read_touchdata(raydium_ts, tp_status, buf);
@@ -4270,14 +4269,7 @@ raydium_ts_interrupt(int irq, void *dev_id)
 				/*queue_work fail */
 				pr_err("[touch]queue_work fail.\n");
 			} else {
-				if (raydium_ts->blank == FB_BLANK_POWERDOWN) {
-					if (g_u8_resetflag != true) {
-						disable_irq_nosync(
-							raydium_ts->irq);
-						raydium_ts->irq_enabled =
-							false;
-					}
-				} else {
+				if (raydium_ts->blank != FB_BLANK_POWERDOWN) {
 					/* Clear interrupts */
 					mutex_lock(&raydium_ts->lock);
 					if (raydium_i2c_pda2_set_page
@@ -4521,7 +4513,6 @@ raydium_ts_do_resume(struct raydium_ts_data *ts)
 #endif
 
 	ts->is_suspend = 0;
-	g_u8_resetflag = false;
 }
 
 static int
@@ -4571,20 +4562,13 @@ raydium_ts_open(struct input_dev *input_dev)
 		udelay(RAYDIUM_POWERON_DELAY_USEC);	/*500us */
 
 		mutex_lock(&ts->lock);
-		if (gpio_is_valid(ts->rst)) {
-			ret = gpio_request(ts->rst, "raydium_reset_gpio");
-			if (ret < 0)
-				dev_err(&ts->client->dev,
-					"[touch]reset gpio request failed");
-			g_u8_resetflag = true;
-			gpio_direction_output(ts->rst, 1);
-			gpio_direction_output(ts->rst, 0);
-			msleep(RAYDIUM_RESET_INTERVAL_MSEC);	/*5ms */
-			gpio_direction_output(ts->rst, 1);
-			msleep(RAYDIUM_RESET_DELAY_MSEC);	/*100ms */
-			u8_i2c_mode = PDA2_MODE;
-			gpio_free(ts->rst);
-		}
+		g_u8_resetflag = true;
+		gpio_set_value(ts->rst, 1);
+		gpio_set_value(ts->rst, 0);
+		msleep(RAYDIUM_RESET_INTERVAL_MSEC);	/*5ms */
+		gpio_set_value(ts->rst, 1);
+		msleep(RAYDIUM_RESET_DELAY_MSEC);	/*100ms */
+		u8_i2c_mode = PDA2_MODE;
 		mutex_unlock(&ts->lock);
 		raydium_irq_control(ts, ENABLE);
 		ts->is_sleep = 0;
