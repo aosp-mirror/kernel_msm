@@ -358,7 +358,7 @@ int ipu_power_enable_cores_ioctl(struct paintbox_data *pb,
 	highest_core_id = (highest_stp_id > highest_lbp_id) ? highest_stp_id :
 		highest_lbp_id;
 
-	ipu_power_enable_cores(pb, highest_core_id);
+	ipu_power_enable_cores(pb, (highest_core_id + 1) & ~1);
 
 exit:
 	mutex_unlock(&pb->lock);
