@@ -2221,7 +2221,10 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	case AB_SM_SET_DDR_STATE:
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		if (arg == 0) {
+		if (sc->curr_chip_substate_id < CHIP_STATE_200) {
+			/* PCIe link is down. Return error code. */
+			ret = -ENODEV;
+		} else if (arg == 0) {
 			sc->dram_ops->sref_enter(sc->dram_ops->ctx);
 			ret = regulator_disable(sc->ldo2);
 			/* divide pll_aon_clk by 4*/
@@ -2247,26 +2250,31 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 	case AB_SM_SET_PCIE_STATE:
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		switch (arg) {
-		case 0:
-			aspm_val = ASPM_L12;
-			break;
-		case 1:
-			aspm_val = ASPM_L11;
-			break;
-		case 2:
-			aspm_val = ASPM_L10;
-			break;
-		case 3:
-			aspm_val = ASPM_L0s;
-			break;
-		default:
-			aspm_val = NOASPM;
-			break;
+		if (sc->curr_chip_substate_id < CHIP_STATE_200) {
+			/* PCIe link is down. Return error code. */
+			ret = -ENODEV;
+		} else {
+			switch (arg) {
+			case 0:
+				aspm_val = ASPM_L12;
+				break;
+			case 1:
+				aspm_val = ASPM_L11;
+				break;
+			case 2:
+				aspm_val = ASPM_L10;
+				break;
+			case 3:
+				aspm_val = ASPM_L0s;
+				break;
+			default:
+				aspm_val = NOASPM;
+				break;
+			}
+			/* TODO(b/123695099): do this via ops struct */
+			ret = 0;
+			abc_pcie_set_linkstate(aspm_val);
 		}
-		/* TODO(b/123695099): do this via ops struct */
-		ret = 0;
-		abc_pcie_set_linkstate(aspm_val);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
 		break;
