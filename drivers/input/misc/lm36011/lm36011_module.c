@@ -9,6 +9,7 @@
  */
 
 #include "cam_sensor_dev.h"
+#include "cam_req_mgr_dev.h"
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
@@ -27,6 +28,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <media/cam_sensor.h>
+#include <media/cam_req_mgr.h>
 
 #define LM36011_DEV_NAME "lm36011"
 
@@ -383,6 +385,7 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 		gpio_set_value(
 			ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio,
 			1);
+		cam_req_mgr_update_safety_ic_status(LENS_CRACK);
 	}
 
 	if (gpio_level && !is_sw_halt_required) {
@@ -391,6 +394,7 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 		gpio_set_value(
 			ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio,
 			0);
+		cam_req_mgr_update_safety_ic_status(NO_ERROR);
 	}
 
 	if (crack_log_en) {
@@ -915,6 +919,8 @@ static irqreturn_t silego_ir_vcsel_fault_handler(int irq, void *dev_id)
 	dev_err(dev, "Silego under fault condition, irq: %d", irq);
 	ctrl = dev_get_drvdata(dev);
 	ctrl->silego.is_vcsel_fault = true;
+	if (!ctrl->cap_sense.is_crack_detected[ctrl->type])
+		cam_req_mgr_update_safety_ic_status(LASER_OPERATION_FAULT);
 
 	return IRQ_HANDLED;
 }
@@ -1378,6 +1384,7 @@ static ssize_t led_laser_enable_store(struct device *dev,
 					ctrl->cap_sense.proxavg[PHASE1] != 0)
 					sx9320_crack_detection(ctrl);
 			}
+			cam_req_mgr_update_safety_ic_status(NO_ERROR);
 			lm36011_enable_gpio_irq(dev);
 			dev_info(ctrl->soc_info.dev,
 				"enable safety ic funciton, safety_ic_owner %d",
@@ -1397,6 +1404,7 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		mutex_lock(&lm36011_mutex);
 		if (ctrl->type == safety_ic_owner) {
 			lm36011_disable_gpio_irq(dev);
+			cam_req_mgr_update_safety_ic_status(NO_ERROR);
 			dev_info(ctrl->soc_info.dev,
 				"disable safety ic function, safety_ic_owner: %d",
 				safety_ic_owner);
