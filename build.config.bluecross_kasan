@@ -7,6 +7,7 @@ function update_kasan_config() {
     ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
          -e CONFIG_KASAN \
          -e CONFIG_KASAN_INLINE \
+         -e CONFIG_KASAN_PANIC_ON_WARN \
          -e CONFIG_TEST_KASAN \
          -e CONFIG_KCOV \
          -e CONFIG_SLUB \
