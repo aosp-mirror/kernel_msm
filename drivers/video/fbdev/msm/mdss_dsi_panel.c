@@ -269,6 +269,13 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	if (ctrl->idle == enable)
 		return;
 
+#ifdef TARGET_HAVE_AUO_HBM_MODE
+	/* Call HBM off to before panel off incase idle (0->1) */
+	if (ctrl->idle == false && enable){
+		dsi_auo_set_boost_mode(ctrl,0);
+	}
+#endif
+
 	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
@@ -1033,7 +1040,10 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 				panel_data);
 
 	pr_err("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
-
+#ifdef TARGET_HAVE_AUO_HBM_MODE
+	/* Call HBM off to before panel off */
+	dsi_auo_set_boost_mode(ctrl,0);
+#endif
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;

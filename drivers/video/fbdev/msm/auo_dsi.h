@@ -46,5 +46,7 @@ extern void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl);
 extern void mdss_dsi_buck_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl,
 		int enable);
 
+extern int dsi_auo_set_boost_mode(struct mdss_dsi_ctrl_pdata*, int);
+
 #endif /*AUO_DSI_H */
 

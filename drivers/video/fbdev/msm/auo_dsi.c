@@ -55,6 +55,9 @@
 #define AUO_PARSE_DT_SUCCESS 0
 #define AUO_PANEL_PRE_INIT 1
 
+/* Protects access For both FB device node and mdss_dsi driver */
+static DEFINE_MUTEX(boost_mode_lock);
+
 static int auo_dsi_boost_mode  = AUO_PANEL_UNINITILIZE;
 static int g_auo_pre_init = AUO_PANEL_UNINITILIZE;
 
@@ -95,24 +98,30 @@ ssize_t mdss_fb_set_boost_mode(struct device *dev,
 
 	if (mfd->panel_info->type !=  MIPI_CMD_PANEL) {
 		pr_err("support for command mode panel only\n");
-	} else {
-		if (boost_mode != 0) {
-			if (!auo_dsi_boost_mode) {
-				mdss_dsi_brightness_boost_on(ctrl);
-				auo_dsi_boost_mode = 1;
-			}
-		} else {
-			if (auo_dsi_boost_mode) {
-				mdss_dsi_brightness_boost_off(ctrl);
-				auo_dsi_boost_mode = 0;
-			}
-		}
-	}
+	} else
+		dsi_auo_set_boost_mode(ctrl,boost_mode);
 
 	return count;
 }
 
-
+/* Enable/disable boost mode of AUO panel */
+int dsi_auo_set_boost_mode(struct mdss_dsi_ctrl_pdata *ctrl, int boost_mode)
+{
+	mutex_lock(&boost_mode_lock);
+	if (boost_mode != 0) {
+		if (!auo_dsi_boost_mode) {
+			mdss_dsi_brightness_boost_on(ctrl);
+			auo_dsi_boost_mode = 1;
+		}
+	} else {
+		if (auo_dsi_boost_mode) {
+			mdss_dsi_brightness_boost_off(ctrl);
+			auo_dsi_boost_mode = 0;
+		}
+	}
+	mutex_unlock(&boost_mode_lock);
+	return 0;
+}
 
 int dsi_auo_read_id_code(struct mdss_dsi_ctrl_pdata *ctrl)
 {
