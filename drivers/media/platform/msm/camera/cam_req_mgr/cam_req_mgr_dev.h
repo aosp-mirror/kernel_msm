@@ -26,6 +26,7 @@
  * @cam_lock: per file handle lock
  * @cam_eventq: event queue
  * @cam_eventq_lock: lock for event queue
+ * @safety_ic_status: update from laser driver
  */
 struct cam_req_mgr_device {
 	struct video_device *video;
@@ -38,6 +39,7 @@ struct cam_req_mgr_device {
 	struct mutex cam_lock;
 	struct v4l2_fh  *cam_eventq;
 	spinlock_t cam_eventq_lock;
+	enum safety_ic_error_type safety_ic_status;
 };
 
 #define CAM_REQ_MGR_GET_PAYLOAD_PTR(ev, type)        \
@@ -46,5 +48,8 @@ struct cam_req_mgr_device {
 int cam_req_mgr_notify_message(struct cam_req_mgr_message *msg,
 	uint32_t id,
 	uint32_t type);
+
+void cam_req_mgr_update_safety_ic_status(
+	enum safety_ic_error_type status);
 
 #endif /* _CAM_REQ_MGR_DEV_H_ */

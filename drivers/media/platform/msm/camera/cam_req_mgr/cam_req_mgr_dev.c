@@ -531,7 +531,16 @@ int cam_req_mgr_notify_message(struct cam_req_mgr_message *msg,
 			msg->u.frame_msg.timestamp);
 	}
 
-	cam_req_mgr_tag_laser(msg);
+	if (g_dev.safety_ic_status != NO_ERROR) {
+		msg->u.frame_msg.laser_tag = LASER_TAG_NONE;
+		CAM_DBG(CAM_CRM,
+			"request id %lld frame number %lld report laser error %d",
+			msg->u.frame_msg.request_id,
+			msg->u.frame_msg.frame_id,
+			g_dev.safety_ic_status);
+	} else
+		cam_req_mgr_tag_laser(msg);
+	msg->u.frame_msg.safety_ic_status = g_dev.safety_ic_status;
 	event.id = id;
 	event.type = type;
 	ev_header = CAM_REQ_MGR_GET_PAYLOAD_PTR(event,
@@ -621,6 +630,18 @@ int cam_unregister_subdev(struct cam_subdev *csd)
 }
 EXPORT_SYMBOL(cam_unregister_subdev);
 
+void cam_req_mgr_update_safety_ic_status(
+	enum safety_ic_error_type status)
+{
+	if (g_dev.safety_ic_status != status) {
+		CAM_INFO(CAM_CRM,
+			"change laser status from %d to %d",
+			g_dev.safety_ic_status, status);
+		g_dev.safety_ic_status = status;
+	}
+}
+EXPORT_SYMBOL(cam_req_mgr_update_safety_ic_status);
+
 static int cam_req_mgr_remove(struct platform_device *pdev)
 {
 	cam_req_mgr_core_device_deinit();
@@ -670,6 +691,7 @@ static int cam_req_mgr_probe(struct platform_device *pdev)
 	}
 
 	g_dev.state = true;
+	g_dev.safety_ic_status = NO_ERROR;
 
 	if (g_cam_req_mgr_timer_cachep == NULL) {
 		g_cam_req_mgr_timer_cachep = kmem_cache_create("crm_timer",
