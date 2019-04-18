@@ -50,9 +50,6 @@
 #define DEBUG_DATA_NUM_BINS (5)
 #endif
 
-/* ABC FW and workload path */
-#define M0_FIRMWARE_PATH "faceauth.fw"
-
 /* Timeout in ms */
 #define FACEAUTH_TIMEOUT_MS 3000
 #define M0_POLLING_PAUSE_MS 80
@@ -67,7 +64,6 @@
 #define MAX_CACHE_SIZE 512
 
 struct faceauth_data {
-	bool hypx_enable;
 	/* This is to dynamically set the level of debugging in faceauth fw */
 	uint64_t m0_verbosity_level;
 #if IS_ENABLED(CONFIG_DEBUG_FS)
@@ -91,19 +87,10 @@ struct faceauth_data {
 };
 
 static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size);
-static int dma_xfer(void *buf, int size, const int remote_addr,
-		    enum dma_data_direction dir);
 static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 			    enum dma_data_direction dir);
-static int dma_xfer_dmabuf(int fd, int size, const int remote_addr,
-			   enum dma_data_direction dir);
-static int dma_send_fw(struct device *device, const char *path,
-		       const int remote_addr);
 static int dma_read_dw(const int remote_addr, int *val);
-static int dma_send_images(struct faceauth_start_data *data);
-static int pio_write_qw(const int remote_addr, const uint64_t val);
 #if ENABLE_AIRBRUSH_DEBUG
-static int dma_gather_debug_log(struct faceauth_debug_data *data);
 static int dma_gather_debug_data(void *destination_buffer,
 				 uint32_t buffer_size);
 static void clear_debug_data(void);
@@ -120,8 +107,6 @@ struct {
 } debug_data_queue;
 #endif /* #if ENABLE_AIRBRUSH_DEBUG */
 
-static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
-				   unsigned long arg);
 static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 				   unsigned long arg);
 
@@ -167,368 +152,7 @@ static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
 {
-	long ioctl_ret;
-	struct faceauth_data *data = file->private_data;
-
-	if (data->hypx_enable)
-		ioctl_ret = faceauth_dev_ioctl_el2(file, cmd, arg);
-	else
-		ioctl_ret = faceauth_dev_ioctl_el1(file, cmd, arg);
-	return ioctl_ret;
-}
-
-static long faceauth_dev_ioctl_el1(struct file *file, unsigned int cmd,
-				   unsigned long arg)
-{
-	int err = 0;
-	int polling_interval = M0_POLLING_INTERVAL_US;
-	struct faceauth_init_data init_step_data = { 0 };
-	struct faceauth_start_data start_step_data = { 0 };
-	unsigned long stop;
-	uint32_t ab_input;
-	uint32_t ab_result;
-	uint32_t angles;
-	uint32_t dma_read_value;
-	uint32_t fw_execution_status;
-	uint32_t temp_data;
-	struct faceauth_data *data = file->private_data;
-#if ENABLE_AIRBRUSH_DEBUG
-	struct faceauth_debug_data debug_step_data = { 0 };
-#endif
-
-	down_read(&data->rwsem);
-	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
-		err = -EIO;
-		pr_info("Cannot do transfer due to link down\n");
-		goto exit;
-	}
-
-	switch (cmd) {
-	case FACEAUTH_DEV_IOC_INIT:
-		pr_info("faceauth init IOCTL\n");
-
-		if (copy_from_user(&init_step_data, (const void __user *)arg,
-				   sizeof(init_step_data))) {
-			err = -EFAULT;
-			goto exit;
-		}
-
-		data->is_secure_camera =
-			init_step_data.features & SECURE_CAMERA_DATA;
-
-		err = dma_send_fw(data->device, M0_FIRMWARE_PATH,
-				  M0_FIRMWARE_ADDR);
-		if (err) {
-			pr_err("Error during M0 firmware transfer: %d\n", err);
-			goto exit;
-		}
-
-		pio_write_qw(DYNAMIC_VERBOSITY_RAM_ADDR,
-			     data->m0_verbosity_level);
-		pio_write_qw(DISABLE_FEATURES_ADDR, init_step_data.features);
-
-		data->session_counter = 0x0;
-		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_NONE);
-		aon_config_write(SYSREG_AON_IPU_REG29, 4, M0_FIRMWARE_ADDR);
-		aon_config_write(SYSREG_REG_GP_INT0, 4, 1);
-
-		/* Expected fw context switch latency < 6us, timeout after
-		 * 40ms
-		 * Expected latency is probably less than 6ms, if FW load is in
-		 * critical path, we can reduce this latency
-		 */
-		stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT_MS);
-		usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
-			     CONTEXT_SWITCH_TO_FACEAUTH_US + 1);
-
-		for (;;) {
-			err = aon_config_read(ACK_TO_HOST_ADDR, 4,
-					      &fw_execution_status);
-			if (err) {
-				pr_err("Error reading completion flag\n");
-				goto exit;
-			}
-			if (fw_execution_status == STATUS_READY)
-				break;
-			if (time_before(stop, jiffies)) {
-				pr_err("Faceauth FW context switch timeout!\n");
-				err = -ETIME;
-				goto exit;
-			}
-			usleep_range(100, 1000);
-		}
-		break;
-	case FACEAUTH_DEV_IOC_START:
-		pr_info("faceauth start IOCTL\n");
-
-		if (copy_from_user(&start_step_data, (const void __user *)arg,
-				   sizeof(start_step_data))) {
-			err = -EFAULT;
-			goto exit;
-		}
-
-		start_step_data.result = 0;
-		start_step_data.error_code = 0;
-		start_step_data.ab_exception_number = 0;
-
-		if (start_step_data.operation == COMMAND_ENROLL ||
-		    start_step_data.operation == COMMAND_VALIDATE) {
-			if (!start_step_data.image_dot_left_size) {
-				err = -EINVAL;
-				goto exit;
-			}
-			if (!start_step_data.image_dot_right_size) {
-				err = -EINVAL;
-				goto exit;
-			}
-			if (!start_step_data.image_flood_size) {
-				err = -EINVAL;
-				goto exit;
-			}
-			if (!start_step_data.calibration_size ||
-			    start_step_data.calibration_size >
-				    CALIBRATION_SIZE) {
-				err = -EINVAL;
-				goto exit;
-			}
-
-			err = dma_send_images(&start_step_data);
-			if (err) {
-				pr_err("Error in sending workload\n");
-				goto exit;
-			}
-			if (start_step_data.calibration_fd) {
-				pr_info("Send calibration data from ION\n");
-				err = dma_xfer_dmabuf(
-					start_step_data.calibration_fd,
-					start_step_data.calibration_size,
-					CALIBRATION_DATA_ADDR, DMA_TO_DEVICE);
-				if (err) {
-					pr_err("Error sending calibration data from ION\n");
-					goto exit;
-				}
-			}
-		}
-
-		if (start_step_data.operation == COMMAND_ENROLL_COMPLETE) {
-			err = process_cache_flush_idxs(
-				start_step_data.cache_flush_indexes,
-				start_step_data.cache_flush_size);
-			if (err)
-				goto exit;
-			err = dma_xfer_vmalloc(
-				start_step_data.cache_flush_indexes,
-				sizeof(start_step_data.cache_flush_indexes),
-				CACHE_FLUSH_INDEXES_ADDR, DMA_TO_DEVICE);
-			if (err) {
-				pr_err("Error sending flush indexes\n");
-				goto exit;
-			}
-		}
-
-		if (start_step_data.citadel_token_size &&
-		    (start_step_data.operation == COMMAND_ENROLL_COMPLETE ||
-		     start_step_data.operation == COMMAND_SET_FEATURE ||
-		     start_step_data.operation == COMMAND_CLR_FEATURE ||
-		     start_step_data.operation == COMMAND_RESET_LOCKOUT)) {
-			err = dma_xfer(start_step_data.citadel_token,
-				       start_step_data.citadel_token_size,
-				       CITADEL_WRITE_TOKEN_ADDR, DMA_TO_DEVICE);
-			if (err) {
-				pr_err("Error sending token data\n");
-				goto exit;
-			}
-		}
-
-		err = aon_config_write(CITADEL_INPUT_DATA_ADDR, 4,
-				       start_step_data.citadel_input);
-		if (err) {
-			pr_err("Error sending citadel input data\n");
-			goto exit;
-		}
-
-		/* Set input flag */
-		ab_input = ((++data->session_id & 0xFFFF) << 16) |
-			   ((start_step_data.profile_id & 0xFF) << 8) |
-			   ((start_step_data.operation & 0xFF));
-		pr_info("Set faceauth input flag = 0x%08x\n", ab_input);
-		err = aon_config_write(INPUT_FLAG_ADDR, 4, ab_input);
-		if (err) {
-			pr_err("Error setting faceauth FW address\n");
-			goto exit;
-		}
-		aon_config_write(RESULT_FLAG_ADDR, 4, 0);
-		aon_config_write(INPUT_COUNTER_ADDR, 4,
-				 data->session_counter++);
-		aon_config_write(INPUT_COMMAND_ADDR, 4,
-				 start_step_data.operation);
-		pr_info("Waiting for completion.\n");
-		msleep(M0_POLLING_PAUSE_MS);
-		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT_MS);
-		for (;;) {
-			err = aon_config_read(RESULT_FLAG_ADDR, 4, &ab_result);
-			if (err) {
-				pr_err("Error reading completion flag\n");
-				goto exit;
-			}
-
-			if (ab_result != WORKLOAD_STATUS_NO_STATUS) {
-				pr_info("Faceauth workflow completes.\n");
-
-				break;
-			}
-			if (time_before(stop, jiffies)) {
-				pr_err("Faceauth workflow timeout!\n");
-
-				err = aon_config_read(
-					AB_EXCEPTION_NUM_ADDR, 4,
-					&start_step_data.ab_exception_number);
-				if (err) {
-					pr_err("Error reading AB fault address.\n");
-					err = -ETIME;
-				} else if (
-				start_step_data.ab_exception_number != 0) {
-					pr_err("Error, AB exception.\n");
-					err = -EREMOTEIO;
-				} else {
-					err = -ETIME;
-				}
-
-#if ENABLE_AIRBRUSH_DEBUG
-				enqueue_debug_data(
-					data, WORKLOAD_STATUS_NO_STATUS, false);
-#endif
-				goto exit;
-			}
-			usleep_range(polling_interval, polling_interval + 1);
-			polling_interval = polling_interval > 1 ?
-						   polling_interval >> 1 :
-						   1;
-		}
-#if ENABLE_AIRBRUSH_DEBUG
-		enqueue_debug_data(data, ab_result, false);
-#endif
-
-		start_step_data.result = ab_result;
-		err = aon_config_read(CITADEL_OUTPUT_DATA1_ADDR, 4, &temp_data);
-		if (err) {
-			pr_err("Error reading Citadel Output Data 1\n");
-			goto exit;
-		}
-		start_step_data.citadel_output1 = temp_data;
-
-		err = aon_config_read(CITADEL_OUTPUT_DATA2_ADDR, 4, &temp_data);
-		if (err) {
-			pr_err("Error reading Citadel Output Data 2\n");
-			goto exit;
-		}
-		start_step_data.citadel_output2 = temp_data;
-
-		err = aon_config_read(CITADEL_LOCKOUT_EVENT_ADDR, 4,
-				      &temp_data);
-		if (err) {
-			pr_err("Error reading Citadel Lockout Event\n");
-			goto exit;
-		}
-		start_step_data.lockout_event = temp_data;
-
-		err = aon_config_read(ANGLE_RESULT_FLAG_ADDR, 4, &angles);
-		if (err) {
-			pr_err("Error reading angle result flag\n");
-			goto exit;
-		}
-		start_step_data.angles = angles;
-
-		dma_read_dw(INTERNAL_STATE_ADDR +
-				    offsetof(struct faceauth_airbrush_state,
-					     error_code),
-			    &dma_read_value);
-		start_step_data.error_code = dma_read_value;
-
-		pr_info("Faceauth error code 0x%08x\n",
-			start_step_data.error_code);
-		dma_read_dw(INTERNAL_STATE_ADDR +
-				    offsetof(struct faceauth_airbrush_state,
-					     faceauth_version),
-			    &dma_read_value);
-		start_step_data.fw_version = dma_read_value;
-
-		if (copy_to_user((void __user *)arg, &start_step_data,
-				 sizeof(start_step_data)))
-			err = -EFAULT;
-		goto exit;
-		break;
-	case FACEAUTH_DEV_IOC_CLEANUP:
-		aon_config_write(INPUT_COUNTER_ADDR, 4,
-				 data->session_counter++);
-		aon_config_write(INPUT_COMMAND_ADDR, 4, COMMAND_EXIT);
-		/* TODO cleanup Airbrush DRAM */
-		data->is_secure_camera = false;
-		pr_info("faceauth cleanup IOCTL\n");
-		break;
-	case FACEAUTH_DEV_IOC_DEBUG:
-#if ENABLE_AIRBRUSH_DEBUG
-		pr_info("faceauth debug log IOCTL\n");
-		if (copy_from_user(&debug_step_data, (const void __user *)arg,
-				   sizeof(debug_step_data))) {
-			err = -EFAULT;
-			goto exit;
-		}
-		err = dma_gather_debug_log(&debug_step_data);
-#else
-		err = -EOPNOTSUPP;
-#endif /* #if ENABLE_AIRBRUSH_DEBUG */
-		break;
-	case FACEAUTH_DEV_IOC_DEBUG_DATA:
-#if ENABLE_AIRBRUSH_DEBUG
-		pr_info("faceauth debug data IOCTL\n");
-
-		if (copy_from_user(&debug_step_data, (const void __user *)arg,
-				   sizeof(debug_step_data))) {
-			err = -EFAULT;
-			goto exit;
-		}
-
-		if (debug_step_data.debug_buffer_size < DEBUG_DATA_BIN_SIZE) {
-			err = -EINVAL;
-			goto exit;
-		}
-
-		switch (debug_step_data.flags) {
-		case FACEAUTH_GET_DEBUG_DATA_FROM_FIFO:
-			err = dequeue_debug_data(&debug_step_data);
-			break;
-		case FACEAUTH_GET_DEBUG_DATA_MOST_RECENT:
-			move_debug_data_to_tail();
-			err = dequeue_debug_data(&debug_step_data);
-			break;
-		case FACEAUTH_GET_DEBUG_DATA_FROM_AB_DRAM:
-			if (!data->can_transfer) {
-				pr_info("Cannot do transfer due to link down\n");
-				err = -EIO;
-				goto exit;
-			}
-			clear_debug_data();
-			enqueue_debug_data(data, WORKLOAD_STATUS_NO_STATUS,
-					   false);
-			err = dequeue_debug_data(&debug_step_data);
-			break;
-		default:
-			err = -EINVAL;
-			break;
-		}
-#else
-		err = -EOPNOTSUPP;
-#endif /* #if ENABLE_AIRBRUSH_DEBUG */
-		break;
-	default:
-		err = -EOPNOTSUPP;
-		goto exit;
-	}
-
-exit:
-	up_read(&data->rwsem);
-	return err;
+	return faceauth_dev_ioctl_el2(file, cmd, arg);
 }
 
 static long faceauth_dev_ioctl_el2(struct file *file, unsigned int cmd,
@@ -784,31 +408,6 @@ static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size)
 }
 
 /**
- * Local function to transfer data between user space memory and Airbrush via
- * PCIE
- * @param[in] buf Address of user space buffer
- * @param[in] size Size of buffer
- * @param[in] remote_addr Address of Airbrush memory
- * @param[in] dir Direction of data transfer
- * @return Status, zero if succeed, non-zero if fail
- */
-static int dma_xfer(void *buf, int size, const int remote_addr,
-		    enum dma_data_direction dir)
-{
-	struct abc_pcie_kernel_dma_desc desc;
-
-	/* Transfer workload to target memory in Airbrush */
-	memset((void *)&desc, 0, sizeof(desc));
-	desc.local_buf = buf;
-	desc.local_buf_kind = DMA_BUFFER_KIND_USER;
-	desc.remote_buf = remote_addr;
-	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
-	desc.dir = dir;
-	desc.size = size;
-	return abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
-}
-
-/**
  * Local function to transfer data between kernel vmalloc memory and Airbrush
  * via PCIE
  * @param[in] buf Address of kernel vmalloc memory buffer
@@ -834,58 +433,6 @@ static int dma_xfer_vmalloc(void *buf, int size, const int remote_addr,
 }
 
 /**
- * Local function to transfer data between user space memory and Airbrush via
- * PCIE using ION handler
- * @param[in] fd Fd of user space dma buffer
- * @param[in] size Size of buffer
- * @param[in] remote_addr Address of Airbrush memory
- * @param[in] dir Direction of data transfer
- * @return Status, zero if succeed, non-zero if fail
- */
-static int dma_xfer_dmabuf(int fd, int size, const int remote_addr,
-			   enum dma_data_direction dir)
-{
-	struct abc_pcie_kernel_dma_desc desc;
-	int err = 0;
-
-	/* Transfer workload to target memory in Airbrush */
-	memset((void *)&desc, 0, sizeof(desc));
-	desc.local_dma_buf_fd = fd;
-	desc.local_dma_buf_off = 0;
-	desc.local_buf_kind = DMA_BUFFER_KIND_DMA_BUF;
-	desc.remote_buf = remote_addr;
-	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
-	desc.size = size;
-	desc.dir = dir;
-	err = abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
-	return err;
-}
-
-/**
- * Local function to send firmware to Airbrush memory via PCIE
- * @param[in] path Firmware
- * @param[in] remote_addr Address of Airbrush memory
- * @return Status, zero if succeed, non-zero if fail
- */
-static int dma_send_fw(struct device *device, const char *path,
-		       const int remote_addr)
-{
-	int err;
-	const struct firmware *fw_entry;
-
-	err = request_firmware(&fw_entry, path, device);
-	if (err)
-		return err;
-
-	err = dma_xfer_vmalloc((void *)fw_entry->data, fw_entry->size,
-			       remote_addr, DMA_TO_DEVICE);
-	if (err)
-		pr_err("Error from abc_pcie_issue_dma_xfer: %d\n", err);
-	release_firmware(fw_entry);
-	return err;
-}
-
-/**
  * Local function to read one DW to Airbrush memory via PCIE
  * @param[in] file File struct of this module
  * @param[in] remote_addr Address of Airbrush memory
@@ -904,56 +451,7 @@ static int dma_read_dw(const int remote_addr, int *val)
 	return 0;
 }
 
-/**
- * Local function to send FaceAuth input data to Airbrush memory via PCIE
- * @param[in] data Data structure copied from user space
- * @return Status, zero if succeed, non-zero if fail
- */
-static int dma_send_images(struct faceauth_start_data *data)
-{
-	int err = 0;
-
-	pr_info("Send left dot image from ION\n");
-	err = dma_xfer_dmabuf(data->image_dot_left_fd,
-			      data->image_dot_left_size, DOT_LEFT_IMAGE_ADDR,
-			      DMA_TO_DEVICE);
-	if (err) {
-		pr_err("Error sending left dot image from ION\n");
-		return err;
-	}
-
-	pr_info("Send right dot image from ION\n");
-	err = dma_xfer_dmabuf(data->image_dot_right_fd,
-			      data->image_dot_right_size, DOT_RIGHT_IMAGE_ADDR,
-			      DMA_TO_DEVICE);
-	if (err) {
-		pr_err("Error sending right dot image from ION\n");
-		return err;
-	}
-
-	pr_info("Send flood image from ION\n");
-	err = dma_xfer_dmabuf(data->image_flood_fd, data->image_flood_size,
-			      FLOOD_IMAGE_ADDR, DMA_TO_DEVICE);
-	if (err) {
-		pr_err("Error sending flood image from ION\n");
-		return err;
-	}
-
-	return err;
-}
-
 #if ENABLE_AIRBRUSH_DEBUG
-static int dma_gather_debug_log(struct faceauth_debug_data *data)
-{
-	int err = 0;
-
-	err = dma_xfer((void *)data->debug_buffer,
-		       min((uint32_t)PRINTF_LOG_SIZE, data->debug_buffer_size),
-		       PRINTF_LOG_ADDR, DMA_FROM_DEVICE);
-
-	return err;
-}
-
 static void enqueue_debug_data(struct faceauth_data *data, uint32_t ab_result,
 			       bool el2)
 {
@@ -1184,41 +682,6 @@ static int dma_gather_debug_data(void *destination_buffer, uint32_t buffer_size)
 }
 #endif /* #if ENABLE_AIRBRUSH_DEBUG */
 
-/*
- * Local function to write a QW from user space memory to Airbrush via
- * PCIE by PIO.
- * @param[in] remote Airbrush physical address
- * @param[in] QW data (64 bits) to write
- * @return Status, zero if succeed, non-zero if fail
- */
-static int pio_write_qw(const int remote_addr, const uint64_t val)
-{
-	// This has to be performed as two separate 32 bit writes because
-	// Vendor's driver has a bug. See drivers/mfd/abc_pcie.c line 368
-	uint32_t lower = (uint32_t)val;
-	uint32_t upper = (uint32_t)(val >> 32);
-
-	int err = 0;
-
-	err = memory_config_write(remote_addr, 4, lower);
-
-	if (err) {
-		pr_err("Error in writing data to Airbrush at address 0x%08x\n",
-		       remote_addr);
-		return err;
-	}
-
-	err = memory_config_write(remote_addr + 4, 4, upper);
-
-	if (err) {
-		pr_err("Error in writing data to Airbrush at address 0x%08x\n",
-		       remote_addr);
-		return err;
-	}
-
-	return 0;
-}
-
 static void faceauth_link_listener_init(struct work_struct *work)
 {
 	struct faceauth_data *data =
@@ -1301,25 +764,6 @@ static int faceauth_pcie_blocking_listener(struct notifier_block *nb,
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 
-static int faceauth_hypx_enable_set(void *ptr, u64 val)
-{
-	struct faceauth_data *data = ptr;
-
-	data->hypx_enable = !!val;
-	return 0;
-}
-
-static int faceauth_hypx_enable_get(void *ptr, u64 *val)
-{
-	struct faceauth_data *data = ptr;
-
-	*val = data->hypx_enable;
-	return 0;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(fops_hypx_enable, faceauth_hypx_enable_get,
-			 faceauth_hypx_enable_set, "%llu\n");
-
 static int faceauth_m0_verbosity_set(void *ptr, u64 val)
 {
 	struct faceauth_data *data = ptr;
@@ -1342,7 +786,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_m0_verbosity, faceauth_m0_verbosity_get,
 static void faceauth_debugfs_init(struct faceauth_data *data)
 {
 	struct dentry *debugfs_root;
-	struct dentry *hypx, *m0_verbosity_level;
+	struct dentry *m0_verbosity_level;
 	int err = 0;
 
 	debugfs_root = debugfs_create_dir("faceauth", NULL);
@@ -1352,13 +796,6 @@ static void faceauth_debugfs_init(struct faceauth_data *data)
 		goto exit;
 	}
 	data->debugfs_root = debugfs_root;
-
-	hypx = debugfs_create_file("hypx_enable", 0660, debugfs_root, data,
-				   &fops_hypx_enable);
-	if (!hypx) {
-		err = -EIO;
-		goto exit;
-	}
 
 	m0_verbosity_level =
 		debugfs_create_file("m0_verbosity_level", 0660, debugfs_root,
@@ -1412,7 +849,6 @@ static int faceauth_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, data);
 
 	init_rwsem(&data->rwsem);
-	data->hypx_enable = true;
 	data->device = &pdev->dev;
 	data->can_transfer = true;
 	data->retry_count = 0;
