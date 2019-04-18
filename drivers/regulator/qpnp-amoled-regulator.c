@@ -225,7 +225,7 @@ static int qpnp_ab_pd_control(struct qpnp_amoled *chip, bool en)
 	return qpnp_amoled_write(chip, AB_LDO_PD_CTL(chip), &val, 1);
 }
 
-#define AB_VREG_OK_POLL_TRIES		50
+#define AB_VREG_OK_POLL_TRIES		150
 #define AB_VREG_OK_POLL_TIME_US		2000
 #define AB_VREG_OK_POLL_HIGH_TRIES	8
 #define AB_VREG_OK_POLL_HIGH_TIME_US	10000
