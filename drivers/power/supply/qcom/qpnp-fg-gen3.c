@@ -159,7 +159,7 @@
 #define DEFAULT_COLD_CC			100
 #define DEFAULT_HOT_FV			4305
 #define DEFAULT_HOT_CC			100
-#define DEFAULT_TWM_SOC_VALUE		6
+#define DEFAULT_TWM_SOC_VALUE	3
 
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
@@ -576,6 +576,12 @@ static int fg_get_sram_prop(struct fg_chip *chip, enum fg_sram_param_id id,
 		temp |= buf[i] << (8 * i);
 
 	*val = fg_decode(chip->sp, id, temp);
+	return 0;
+}
+
+static int fg_get_twm_soc(struct fg_chip *chip, int *val)
+{
+	*val = chip->twm_soc_value;
 	return 0;
 }
 
@@ -2208,6 +2214,16 @@ static int fg_set_constant_chg_voltage(struct fg_chip *chip, int volt_uv)
 	return 0;
 }
 
+static int fg_set_twm_soc(struct fg_chip *chip, int twm_soc)
+{
+	if (twm_soc <= 0 || twm_soc > chip->last_soc) {
+		pr_err("Invalid twm soc %d\n", twm_soc);
+		return -EINVAL;
+	}
+
+	chip->twm_soc_value = twm_soc;
+	return 0;
+}
 
 static int fg_set_recharge_soc(struct fg_chip *chip, int recharge_soc)
 {
@@ -4131,7 +4147,8 @@ static int fg_psy_get_property(struct power_supply *psy,
 		rc = fg_get_prop_capacity(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_RAW:
-		rc = fg_get_msoc_raw(chip, &pval->intval);
+		//rc = fg_get_msoc_raw(chip, &pval->intval);
+		rc = fg_get_twm_soc(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		if (chip->battery_missing)
@@ -4328,6 +4345,9 @@ static int fg_psy_set_property(struct power_supply *psy,
 			pr_err("Error in writing jeita_hot, rc=%d\n", rc);
 			return rc;
 		}
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_RAW:
+		rc = fg_set_twm_soc(chip, pval->intval);
 		break;
 	default:
 		break;
