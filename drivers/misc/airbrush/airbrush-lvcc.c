@@ -153,6 +153,8 @@ static void update_asv_voltage(struct ab_asv_info *info)
 		info->ipu_volt = get_ipu_volt(info);
 		info->tpu_volt = get_tpu_volt(info);
 	}
+
+	info->last_volt = 0;
 }
 
 void ab_lvcc_init(struct ab_asv_info *info)
@@ -169,6 +171,7 @@ void set_asv_version(struct ab_asv_info *info, int asv_version)
 
 int ab_lvcc(struct ab_state_context *sc, int chip_state)
 {
+	int ret;
 	int smps_volt;
 	struct ab_asv_info *info = &sc->asv_info;
 
@@ -179,11 +182,18 @@ int ab_lvcc(struct ab_state_context *sc, int chip_state)
 	else
 		smps_volt = max(info->ipu_volt, info->tpu_volt);
 
+	if (smps_volt == info->last_volt)
+		return 0;
+
 	dev_info(sc->dev, "asv_ver:%d, ipu_ro:%d ipu_uv:%d, tpu_ro:%d tpu_uv:%d, final_uv:%d\n",
 			info->asv_version,
 			get_ipu_ro(), info->ipu_volt,
 			get_tpu_ro(), info->tpu_volt,
 			smps_volt);
-	return regulator_set_voltage(sc->smps1, smps_volt,
+	ret = regulator_set_voltage(sc->smps1, smps_volt,
 				smps_volt + REGULATOR_STEP);
+	if (!ret)
+		info->last_volt = smps_volt;
+
+	return ret;
 }

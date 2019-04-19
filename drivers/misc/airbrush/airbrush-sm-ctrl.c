@@ -1825,6 +1825,7 @@ static int ab_sm_regulator_listener(struct notifier_block *nb,
 				 __func__);
 			return NOTIFY_DONE; /* Don't care */
 		}
+		sc->asv_info.last_volt = 0;
 		dev_info(sc->dev, "%s: schedule a shutdown work\n", __func__);
 		schedule_work(&sc->shutdown_work);
 		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
