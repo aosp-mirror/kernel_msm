@@ -53,7 +53,7 @@ struct abc_pcie_dma {
 	struct abc_pcie_dma_uapi uapi;
 	bool pcie_link_up;
 	enum abc_dma_dram_state_e dram_state;
-	struct notifier_block pcie_nb;
+	struct abc_pcie_dma_ops pcie_notify_ops;
 	struct notifier_block dram_nb;
 	struct rw_semaphore state_transition_rwsem;
 	struct list_head sessions; /* List of all sessions */

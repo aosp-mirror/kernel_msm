@@ -1904,8 +1904,12 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE |
 					ABC_PCIE_LINK_ENTER_EL2);
 
-	dev_info(dev, "%s: disabling irq\n", __func__);
+	dev_info(dev, "%s: disabling dma\n", __func__);
+	/* Call PCIe DMA ops after notifying other clients */
+	if (abc_dev->dma_device_ops)
+		abc_dev->dma_device_ops->pre_disable();
 
+	dev_info(dev, "%s: disabling irq\n", __func__);
 	/* Disable PCIe interrupts during EL2 */
 	abc_pcie_disable_irqs(abc_dev->pdev);
 
@@ -1950,7 +1954,6 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 			 __func__, ABC_BASE_OTP_WRAPPER, test_read_data);
 	}
 
-
 	dev_info(dev, "%s: attaching SMMU\n", __func__);
 
 	/* Re-attach the PCIe EP device to the ARM sMMU */
@@ -1965,6 +1968,11 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 
 	/* Enable PCIe interrupts on EL2 exit */
 	abc_pcie_enable_irqs(abc_dev->pdev);
+
+	dev_info(dev, "%s: re-enabling dma\n", __func__);
+	/* Call PCIe DMA ops before notifying other clients */
+	if (abc_dev->dma_device_ops)
+		abc_dev->dma_device_ops->post_enable();
 
 	dev_info(dev, "Broadcast Exit EL2 notification\n");
 
@@ -1998,6 +2006,10 @@ static int abc_pcie_ab_ready_handler(void *ctx)
 
 	abc_pcie_enable_irqs(abc_dev->pdev);
 
+	/* Call PCIe DMA ops before notifying other clients */
+	if (abc_dev->dma_device_ops)
+		abc_dev->dma_device_ops->post_enable();
+
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_POST_ENABLE);
 	return 0;
@@ -2022,6 +2034,10 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 	/* Broadcast this event to subscribers */
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE);
 
+	/* Call PCIe DMA ops after notifying other clients */
+	if (abc_dev->dma_device_ops)
+		abc_dev->dma_device_ops->pre_disable();
+
 	abc_pcie_disable_irqs(abc_dev->pdev);
 
 	/*
@@ -2038,7 +2054,7 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 static int abc_pcie_linkdown_handler(void *ctx)
 {
 	struct device *dev = (struct device *)ctx;
-	int ret;
+	int ret = 0;
 
 	dev_dbg(dev,
 		"%s: PCIe link unexpectedly went down\n",
@@ -2068,16 +2084,21 @@ static int abc_pcie_linkdown_handler(void *ctx)
 			  ABC_PCIE_SMMU_ATTACH_STATE_MASK)) {
 		dev_info(dev, "linkdown during EL2 mode; re-attach smmu\n");
 		ret = abc_pcie_smmu_attach(dev);
-		if (ret) {
+		if (ret)
 			dev_err(dev, "failed to attach SMMU: %d\n", ret);
-			return ret;
-		}
+
+		dev_info(dev, "handle linkdown event in dma driver\n");
+		if (abc_dev->dma_device_ops)
+			abc_dev->dma_device_ops->link_error();
 	} else {
+		if (abc_dev->dma_device_ops)
+			abc_dev->dma_device_ops->link_error();
+
 		dev_info(dev, "linkdown while EL1 has access; disable irq\n");
 		abc_pcie_disable_irqs(abc_dev->pdev);
 	}
 
-	return 0;
+	return ret;
 }
 
 static struct ab_sm_mfd_ops mfd_ops = {
@@ -2381,6 +2402,16 @@ static int abc_pcie_init_child_devices(struct pci_dev *pdev)
 #endif
 
 	return 0;
+}
+
+void ab_pcie_register_dma_device_ops(struct abc_pcie_dma_ops *dma_device_ops)
+{
+	abc_dev->dma_device_ops = dma_device_ops;
+}
+
+void ab_pcie_unregister_dma_device_ops(void)
+{
+	abc_dev->dma_device_ops = NULL;
 }
 
 static int abc_pcie_probe(struct pci_dev *pdev,

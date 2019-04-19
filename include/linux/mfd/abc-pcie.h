@@ -144,6 +144,12 @@ typedef int (*irq_cb_t)(uint32_t irq, void *data);
 typedef int (*irq_dma_cb_t)(uint8_t chan, enum dma_data_direction dir,
 				enum abc_dma_trans_status status);
 
+struct abc_pcie_dma_ops {
+	void (*pre_disable)(void);
+	void (*post_enable)(void);
+	void (*link_error)(void);
+};
+
 struct abc_device {
 	int gpio;
 	struct device	*dev;
@@ -175,6 +181,9 @@ struct abc_device {
 	spinlock_t fsys_reg_lock;
 	spinlock_t dma_callback_lock;
 	struct blocking_notifier_head pcie_link_subscribers;
+
+	/* Referece to abc_pcie_dma_ops registered by DMA driver */
+	struct abc_pcie_dma_ops *dma_device_ops;
 };
 
 enum {
@@ -236,6 +245,9 @@ int abc_pcie_map_bar_region(struct device *dev, struct device *owner,
 		struct bar_mapping *mapping);
 int abc_pcie_unmap_bar_region(struct device *dev, struct device *owner,
 		struct bar_mapping *mapping);
+
+void ab_pcie_register_dma_device_ops(struct abc_pcie_dma_ops *dma_device_ops);
+void ab_pcie_unregister_dma_device_ops(void);
 
 struct config_write {
 	u32 offset;

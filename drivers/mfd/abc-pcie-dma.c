@@ -181,6 +181,7 @@ static void wait_transfer_on_state_transition(
  *  This function is assumed to be called *only* when there is
  *  a transition change.
  *  This function sets the new dma_state.
+ *  Caller must hold a semaphore.
  */
 static void handle_dma_state_transition(bool pcie_link_up,
 					enum abc_dma_dram_state_e dram_state,
@@ -224,35 +225,46 @@ set_dma_state:
 		dram_state_str(abc_dma.dram_state));
 }
 
-static int dma_pcie_blocking_listener(struct notifier_block *nb,
-					unsigned long action,
-					void *data)
+static void dma_pcie_link_ops_pre_disable(void)
 {
-	bool pcie_link_up = abc_dma.pcie_link_up;
-	enum abc_dma_dram_state_e dram_state;
-	bool wait_active_transfer = false;
+	dev_dbg(&abc_dma.pdev->dev, "Begin pre_disable sequence\n");
 
 	down_write(&abc_dma.state_transition_rwsem);
-	dram_state = abc_dma.dram_state;
-	/* Find the hardware state */
-	if (action & ABC_PCIE_LINK_ERROR) {
-		pcie_link_up = false;
-		dram_state = AB_DMA_DRAM_DOWN;
-	} else if (action & ABC_PCIE_LINK_ENTER_EL2 ||
-			action & ABC_PCIE_LINK_PRE_DISABLE) {
-		wait_active_transfer = true;
-		pcie_link_up = false;
-	} else if (action & ABC_PCIE_LINK_EXIT_EL2 ||
-			action & ABC_PCIE_LINK_POST_ENABLE) {
-		pcie_link_up = true;
-	}
-
-	if ((pcie_link_up != abc_dma.pcie_link_up) ||
-		(dram_state != abc_dma.dram_state))
-		handle_dma_state_transition(pcie_link_up, dram_state,
-						wait_active_transfer);
+	if (abc_dma.pcie_link_up)
+		handle_dma_state_transition(/*pcie_link_up=*/false,
+					    abc_dma.dram_state,
+					    /*wait_active_transfer=*/true);
 	up_write(&abc_dma.state_transition_rwsem);
-	return NOTIFY_OK;
+
+	dev_dbg(&abc_dma.pdev->dev, "Done pre_disable sequence\n");
+}
+
+static void dma_pcie_link_ops_post_enable(void)
+{
+	dev_dbg(&abc_dma.pdev->dev, "Begin post_enable sequence\n");
+
+	down_write(&abc_dma.state_transition_rwsem);
+	if (!abc_dma.pcie_link_up)
+		handle_dma_state_transition(/*pcie_link_up=*/true,
+					    abc_dma.dram_state,
+					    /*wait_active_transfer=*/false);
+	up_write(&abc_dma.state_transition_rwsem);
+
+	dev_dbg(&abc_dma.pdev->dev, "Done post_enable sequence\n");
+}
+
+static void dma_pcie_link_ops_link_error(void)
+{
+	dev_warn(&abc_dma.pdev->dev, "Begin link_error sequence\n");
+
+	down_write(&abc_dma.state_transition_rwsem);
+	if (abc_dma.pcie_link_up || (abc_dma.dram_state != AB_DMA_DRAM_DOWN))
+		handle_dma_state_transition(/*pcie_link_up=*/false,
+					    /*dram_state=*/AB_DMA_DRAM_DOWN,
+					    /*wait_active_transfer=*/false);
+	up_write(&abc_dma.state_transition_rwsem);
+
+	dev_warn(&abc_dma.pdev->dev, "Done link_error sequence\n");
 }
 
 static int dma_dram_blocking_listener(struct notifier_block *nb,
@@ -2004,24 +2016,21 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 	global_session.waiter_cache = waiter_cache;
 
 	/* Prepare DRAM and PCIE notifiers */
-	abc_dma.pcie_nb.notifier_call = dma_pcie_blocking_listener;
 	abc_dma.dram_nb.notifier_call = dma_dram_blocking_listener;
-	err = abc_register_pcie_link_blocking_event(&abc_dma.pcie_nb);
-
+	err = ab_sm_register_clk_event(&abc_dma.dram_nb);
 	if (err)
 		goto close_dma_session;
 
-	err = ab_sm_register_clk_event(&abc_dma.dram_nb);
-	if (err) {
-		abc_unregister_pcie_link_blocking_event(&abc_dma.pcie_nb);
-		goto close_dma_session;
-	}
+	/* Register PCIe notify ops */
+	abc_dma.pcie_notify_ops.pre_disable = dma_pcie_link_ops_pre_disable;
+	abc_dma.pcie_notify_ops.post_enable = dma_pcie_link_ops_post_enable;
+	abc_dma.pcie_notify_ops.link_error = dma_pcie_link_ops_link_error;
+	ab_pcie_register_dma_device_ops(&abc_dma.pcie_notify_ops);
 
 	return 0;
 
 close_dma_session:
 	abc_pcie_dma_close_session(&global_session);
-	abc_dma.pcie_nb.notifier_call = NULL;
 	abc_dma.dram_nb.notifier_call = NULL;
 
 restore_callback:
@@ -2054,7 +2063,7 @@ int abc_pcie_dma_drv_remove(struct platform_device *pdev)
 	list_del(&pending_to_dev_q);
 	list_del(&pending_from_dev_q);
 
-	abc_unregister_pcie_link_blocking_event(&abc_dma.pcie_nb);
+	ab_pcie_unregister_dma_device_ops();
 	ab_sm_unregister_clk_event(&abc_dma.dram_nb);
 
 	return 0;
