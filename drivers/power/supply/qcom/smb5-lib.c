@@ -3044,7 +3044,14 @@ int smblib_set_prop_voltage_wls_output(struct smb_charger *chg,
 
 int smblib_set_prop_dc_reset(struct smb_charger *chg)
 {
-	int rc;
+	int rc = -EAGAIN;
+
+	mutex_lock(&chg->dc_reset_lock);
+
+	if (chg->dc_reset) {
+		smblib_dbg(chg, PR_MISC, "DC reset skipped\n");
+		goto exit;
+	}
 
 	rc = vote(chg->dc_suspend_votable, VOUT_VOTER, true, 0);
 	if (rc < 0) {
@@ -3090,7 +3097,9 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 	}
 
 	smblib_dbg(chg, PR_MISC, "Wireless charger removal detection successful\n");
+	chg->dc_reset = true;
 exit:
+	mutex_unlock(&chg->dc_reset_lock);
 	return rc;
 }
 
@@ -5837,6 +5846,10 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 	vbus_present = input_present & INPUT_PRESENT_USB;
 
 	if (dcin_present) {
+		mutex_lock(&chg->dc_reset_lock);
+		chg->dc_reset = false;
+		mutex_unlock(&chg->dc_reset_lock);
+
 		if (!vbus_present && chg->sec_cp_present) {
 			pval.intval = wireless_vout;
 			rc = smblib_set_prop_voltage_wls_output(chg, &pval);
@@ -5851,16 +5864,20 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 				dev_err(chg->dev, "Couldn't enable secondary chargers  rc=%d\n",
 					rc);
 		}
-	} else if (chg->cp_reason == POWER_SUPPLY_CP_WIRELESS) {
-		sec_charger = chg->sec_pl_present ?
-					POWER_SUPPLY_CHARGER_SEC_PL :
-					POWER_SUPPLY_CHARGER_SEC_NONE;
-		rc = smblib_select_sec_charger(chg, sec_charger,
-					POWER_SUPPLY_CP_NONE, false);
-		if (rc < 0)
-			dev_err(chg->dev,
-				"Couldn't disable secondary charger rc=%d\n",
-						rc);
+	} else {
+		smblib_set_prop_dc_reset(chg);
+
+		if (chg->cp_reason == POWER_SUPPLY_CP_WIRELESS) {
+			sec_charger = chg->sec_pl_present ?
+						POWER_SUPPLY_CHARGER_SEC_PL :
+						POWER_SUPPLY_CHARGER_SEC_NONE;
+			rc = smblib_select_sec_charger(chg, sec_charger,
+						POWER_SUPPLY_CP_NONE, false);
+			if (rc < 0)
+				dev_err(chg->dev,
+					"Couldn't disable secondary charger rc=%d\n",
+					rc);
+		}
 	}
 
 	power_supply_changed(chg->dc_psy);
@@ -6962,6 +6979,7 @@ int smblib_init(struct smb_charger *chg)
 
 	mutex_init(&chg->smb_lock);
 	mutex_init(&chg->moisture_detection_enable);
+	mutex_init(&chg->dc_reset_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->pl_update_work, pl_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
