@@ -2158,11 +2158,9 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		clk_frequency = (u32)arg;
 		mutex_lock(&sc->state_transitioning_lock);
 		mutex_lock(&sc->op_lock);
-		ret = clk_set_frequency(sc, &(sc->blocks[BLK_IPU]),
-			sc->blocks[BLK_IPU].current_state, clk_frequency, on);
-		sc->blocks[BLK_IPU].current_state->clk_frequency =
-			clk_frequency;
-		sc->blocks[BLK_IPU].current_state->clk_status = on;
+		ret = sc->clk_ops->ipu_set_rate(sc->clk_ops->ctx,
+			sc->blocks[BLK_IPU].current_state->clk_frequency,
+			arg);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
 		break;
