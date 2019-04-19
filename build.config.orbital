@@ -36,6 +36,7 @@ KERNEL_BUILD_BRANCH=kernel-p-dev-msm-orbital-4.9
 KERNEL_DIR=private/msm-longcheer-cw
 AUDIO_MODULE_DIR=private/msm-longcheer-cw/techpack/audio
 WLAN_MODULE_DIR=private/msm-longcheer-cw-modules/wlan
+DRIVERS_MODULE_DIR=private/msm-longcheer-cw-extra/drivers
 POST_DEFCONFIG_CMDS="check_defconfig;gen_headers"
 LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
 FILES="
