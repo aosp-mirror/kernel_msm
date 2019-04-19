@@ -96,6 +96,11 @@ ssize_t mdss_fb_set_boost_mode(struct device *dev,
 		return rc;
 	}
 
+	if (!mdss_fb_is_power_on_interactive(mfd)) {
+		pr_err("only normal mode can be the entry to HBM\n");
+		return -EINVAL;
+	}
+
 	if (mfd->panel_info->type !=  MIPI_CMD_PANEL) {
 		pr_err("support for command mode panel only\n");
 	} else
