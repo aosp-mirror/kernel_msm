@@ -5101,6 +5101,9 @@ static void update_sw_icl_max(struct smb_charger *chg, int pst)
 		rp_ua = get_rp_based_dcp_current(chg, typec_mode);
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, rp_ua);
 		return;
+	} else if (typec_mode != POWER_SUPPLY_TYPEC_SOURCE_DEFAULT) {
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, 0);
+		return;
 	}
 
 	/* rp-std or legacy, USB BC 1.2 */
@@ -5132,13 +5135,11 @@ static void update_sw_icl_max(struct smb_charger *chg, int pst)
 		 * limit ICL to 100mA, the USB driver will enumerate to check
 		 * if this is a SDP and appropriately set the current
 		 */
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-					SDP_100_MA);
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_100_MA);
 		break;
 	case POWER_SUPPLY_TYPE_UNKNOWN:
 	default:
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-					SDP_100_MA);
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, 0);
 		break;
 	}
 }
@@ -5505,7 +5506,7 @@ static void typec_src_removal(struct smb_charger *chg)
 
 	/* reset input current limit voters */
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-			is_flash_active(chg) ? SDP_CURRENT_UA : SDP_100_MA);
+			is_flash_active(chg) ? SDP_CURRENT_UA : 0);
 	vote(chg->usb_icl_votable, PD_VOTER, false, 0);
 	vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
 	vote(chg->usb_icl_votable, DCP_VOTER, false, 0);
