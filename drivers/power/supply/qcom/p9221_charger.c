@@ -32,7 +32,7 @@
 #include "../google/logbuffer.h"
 
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
-#define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
+#define P9221_DCIN_TIMEOUT_MS		(1 * 1000)
 #define P9221_VRECT_TIMEOUT_MS		(2 * 1000)
 #define P9221_NOTIFIER_DELAY_MS		100
 #define P9221R5_ILIM_MAX_UA		(1600 * 1000)
@@ -731,20 +731,33 @@ static void p9221_vrect_timer_handler(unsigned long data)
 
 static void p9221_dcin_work(struct work_struct *work)
 {
+	int res;
+	u16 status_reg = 0;
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, dcin_work.work);
 
-	dev_info(&charger->client->dev,
-		 "timeout waiting for dc-in, online=%d\n", charger->online);
-	logbuffer_log(charger->log,
-		      "dc_in: timeout online=%d", charger->online);
+	res = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+	if (res != 0) {
+		dev_info(&charger->client->dev,
+			"timeout waiting for dc-in, online=%d\n",
+			charger->online);
+		logbuffer_log(charger->log,
+			"dc_in: timeout online=%d", charger->online);
 
-	if (charger->online)
-		p9221_set_offline(charger);
+		if (charger->online)
+			p9221_set_offline(charger);
 
-	power_supply_changed(charger->wc_psy);
+		power_supply_changed(charger->wc_psy);
+		pm_relax(charger->dev);
 
-	pm_relax(charger->dev);
+		return;
+	}
+
+	schedule_delayed_work(&charger->dcin_work,
+			msecs_to_jiffies(P9221_DCIN_TIMEOUT_MS));
+	logbuffer_log(charger->log, "dc_in: check online=%d status=%x",
+			charger->online, status_reg);
+
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -1227,7 +1240,7 @@ bool p9221_notifier_check_det(struct p9221_charger_data *charger)
 	p9221_set_online(charger);
 	power_supply_changed(charger->wc_psy);
 
-	/* Give the dc-in 2 seconds to come up. */
+	/* Check dc-in every seconds as long as we are in field. */
 	dev_info(&charger->client->dev, "start dc-in timer\n");
 	cancel_delayed_work_sync(&charger->dcin_work);
 	schedule_delayed_work(&charger->dcin_work,
