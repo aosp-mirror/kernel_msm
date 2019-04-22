@@ -121,7 +121,7 @@ static uint32_t get_ipu_pms_val(struct ab_clk_context *clk_ctx,
 static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		u64 old_rate, u64 new_rate)
 {
-	uint32_t val, timeout, pms_val;
+	uint32_t val, timeout;
 	uint32_t last_val; /* Caches PLL_CON0_PLL_IPU register state */
 
 	dev_dbg(clk_ctx->dev,
@@ -132,39 +132,16 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ab_sm_record_ts(AB_SM_TS_IPU_PRE_RC_NOTIFY);
 
 	/* Get current state of main IPU clk register */
-	ab_sm_start_ts(AB_SM_TS_IPU_GET_CLK);
 	ABC_READ(PLL_CON0_PLL_IPU, &last_val);
-	ab_sm_record_ts(AB_SM_TS_IPU_GET_CLK);
 
 	if (new_rate == AB_SM_OSC_RATE) {
 		/* Set pll_ipu clock source to OSCCLK_AON */
-		ab_sm_start_ts(AB_SM_TS_IPU_SET_OSCCLK);
 		val = last_val & ~PLL_IPU_MUX_SEL_MASK;
 		ABC_WRITE(PLL_CON0_PLL_IPU, val);
 		last_val = val;
-		ab_sm_start_ts(AB_SM_TS_IPU_SET_OSCCLK);
 
 		ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE,
 				old_rate, new_rate);
-		return new_rate;
-	}
-
-	/* If pms values aren't changing we can immediately switch
-	 * to pll_ipu as parent
-	 */
-	ab_sm_start_ts(AB_SM_TS_IPU_SET_CLKRATE);
-	pms_val = get_ipu_pms_val(clk_ctx, last_val, new_rate);
-	if ((last_val & PLL_IPU_PMS_MASK) == (
-			pms_val & PLL_IPU_PMS_MASK)) {
-		val = last_val & PLL_IPU_MUX_SEL_MASK;
-		ABC_WRITE(PLL_CON0_PLL_IPU, val);
-		last_val = val;
-		ab_sm_record_ts(AB_SM_TS_IPU_SET_CLKRATE);
-
-		ab_sm_start_ts(AB_SM_TS_IPU_POST_RC_NOTIFY);
-		ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE,
-				old_rate, new_rate);
-		ab_sm_record_ts(AB_SM_TS_IPU_POST_RC_NOTIFY);
 		return new_rate;
 	}
 
@@ -189,7 +166,6 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	val = last_val | PLL_IPU_ENABLE_MASK;
 	ABC_WRITE(PLL_CON0_PLL_IPU, val);
 	last_val = val;
-	ab_sm_record_ts(AB_SM_TS_IPU_SET_CLKRATE);
 
 	/* Wait for pll_ipu pll lock*/
 	ab_sm_start_ts(AB_SM_TS_IPU_CLK_LOCK);
@@ -208,12 +184,10 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	}
 
 	/* Switch back to ipu_pll as parent */
-	ab_sm_start_ts(AB_SM_TS_IPU_FINISH_SET_CLKRATE);
 	val = last_val | PLL_IPU_MUX_SEL_MASK;
 	ABC_WRITE(PLL_CON0_PLL_IPU, val);
 	last_val = val;
 
-	ab_sm_record_ts(AB_SM_TS_IPU_FINISH_SET_CLKRATE);
 	ab_sm_start_ts(AB_SM_TS_IPU_POST_RC_NOTIFY);
 	ab_sm_clk_notify(AB_IPU_POST_RATE_CHANGE, old_rate, new_rate);
 	ab_sm_record_ts(AB_SM_TS_IPU_POST_RC_NOTIFY);
@@ -291,7 +265,7 @@ static uint32_t get_tpu_pms_val(struct ab_clk_context *clk_ctx,
 static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		u64 old_rate, u64 new_rate)
 {
-	uint32_t val, timeout, pms_val;
+	uint32_t val, timeout;
 	uint32_t last_val; /* Caches PLL_CON0_PLL_TPU register state */
 
 	dev_dbg(clk_ctx->dev,
@@ -301,51 +275,22 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ab_sm_clk_notify(AB_TPU_PRE_RATE_CHANGE, old_rate, new_rate);
 	ab_sm_record_ts(AB_SM_TS_TPU_PRE_RC_NOTIFY);
 
-	ab_sm_start_ts(AB_SM_TS_TPU_GET_CLK);
 	/* Get current state of main TPU clk register */
 	ABC_READ(PLL_CON0_PLL_TPU, &last_val);
-	ab_sm_record_ts(AB_SM_TS_TPU_GET_CLK);
 
 	if (new_rate == AB_SM_OSC_RATE) {
-		ab_sm_start_ts(AB_SM_TS_TPU_SET_OSCCLK);
 		/* Set pll_tpu clock source to OSCCLK_AON */
 		val = last_val & ~PLL_TPU_MUX_SEL_MASK;
 		ABC_WRITE(PLL_CON0_PLL_TPU, val);
 		last_val = val;
-		ab_sm_record_ts(AB_SM_TS_TPU_SET_OSCCLK);
 
-		ab_sm_start_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
 		ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE,
 				old_rate, new_rate);
-		ab_sm_record_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
 		return new_rate;
 	}
 
-	ab_sm_start_ts(AB_SM_TS_TPU_SET_CLKRATE);
 	/* Switch mux parent to SHARED_DIV_AON_PLL to prevent droop */
 	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1, MUX_SHARED_DIV_AON_PLL);
-
-	/* If pms values aren't changing we can immediately switch
-	 * to pll_tpu as parent
-	 */
-	pms_val = get_tpu_pms_val(clk_ctx, last_val, new_rate);
-	if ((last_val & PLL_TPU_PMS_MASK) == (
-			pms_val & PLL_TPU_PMS_MASK)) {
-		val = last_val & PLL_TPU_MUX_SEL_MASK;
-		ABC_WRITE(PLL_CON0_PLL_TPU, val);
-		last_val = val;
-
-		/* Switch mux parent back to TPU_PLL_DIV_CLK_1 */
-		ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1,
-			MUX_TPU_PLL_DIV_CLK_1);
-		ab_sm_record_ts(AB_SM_TS_TPU_SET_CLKRATE);
-		ab_sm_start_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
-
-		ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE,
-				old_rate, new_rate);
-		ab_sm_record_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
-		return new_rate;
-	}
 
 	/* Set pll_ipu clock source to OSCCLK_AON so that intermediate
 	 * changes don't propagate to children
@@ -368,7 +313,6 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	val = last_val | PLL_TPU_ENABLE_MASK;
 	ABC_WRITE(PLL_CON0_PLL_TPU, val);
 	last_val = val;
-	ab_sm_record_ts(AB_SM_TS_TPU_SET_CLKRATE);
 
 	/* Wait for pll_tpu pll lock*/
 	ab_sm_start_ts(AB_SM_TS_TPU_CLK_LOCK);
@@ -386,7 +330,6 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 		return -ETIME;
 	}
 
-	ab_sm_start_ts(AB_SM_TS_TPU_FINISH_SET_CLKRATE);
 	/* Switch back to ipu_pll as parent */
 	val = last_val | PLL_TPU_MUX_SEL_MASK;
 	ABC_WRITE(PLL_CON0_PLL_TPU, val);
@@ -395,7 +338,6 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	/* Switch mux parent back to TPU_PLL_DIV_CLK_1 */
 	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1, MUX_TPU_PLL_DIV_CLK_1);
 
-	ab_sm_record_ts(AB_SM_TS_TPU_FINISH_SET_CLKRATE);
 	ab_sm_start_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
 	ab_sm_clk_notify(AB_TPU_POST_RATE_CHANGE, old_rate, new_rate);
 	ab_sm_record_ts(AB_SM_TS_TPU_POST_RC_NOTIFY);
