@@ -360,6 +360,9 @@ disp_en_gpio_err:
 	return rc;
 }
 
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+extern unsigned int lcd_reset_high;
+#endif
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
@@ -456,8 +459,12 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			}
 
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+				gpio_set_value((ctrl_pdata->rst_gpio), 1);
+#else
 				gpio_set_value((ctrl_pdata->rst_gpio),
 					pdata->panel_info.rst_seq[i]);
+#endif
 				if (pdata->panel_info.rst_seq[++i])
 					usleep_range((pinfo->rst_seq[i] * 1000),
 					(pinfo->rst_seq[i] * 1000) + 10);
@@ -516,7 +523,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			usleep_range(100, 110);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+		gpio_set_value((ctrl_pdata->rst_gpio), lcd_reset_high);
+#else
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
+#endif
 		gpio_free(ctrl_pdata->rst_gpio);
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);

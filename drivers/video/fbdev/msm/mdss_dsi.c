@@ -363,6 +363,10 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev,
 	return rc;
 }
 
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+unsigned int lcd_reset_high;
+EXPORT_SYMBOL_GPL(lcd_reset_high);
+#endif
 static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
@@ -390,7 +394,9 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			pr_err("%s: unable to set dir for vdd gpio\n",
 					__func__);
 	}
-
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+	if (!lcd_reset_high)
+#endif
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
 
