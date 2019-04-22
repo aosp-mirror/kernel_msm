@@ -100,6 +100,7 @@
 #define PAC193X_REFRESH_V_REG						0x1F
 #define PAC193X_ACC_COUNT_REG						0x02
 #define PAC193X_CTRL_STAT_REGS_ADDR					0x1C
+#define PAC193X_NEG_PWR_REGS_ADDR					0x1D
 #define PAC193X_PID_REG_ADDR						0xFD
 
 #define PAC193X_VPOWER_ACC_0_ADDR					0x03
@@ -1283,17 +1284,46 @@ static int pac193x_send_rfsh(struct pac193x_chip_info *chip_info,
 {
 	/* this function only sends REFRESH or REFRESH_V */
 	int ret;
-	u8 rfsh_option;
+	u8 rfsh_option, reg = 0;
 	/* if refresh_v is not false, send a REFRESH_V instead
 	 * (doesn't reset the accumulators)
 	 */
 	rfsh_option = PAC193X_REFRESH_REG;
 	if (refresh_v)
 		rfsh_option = PAC193X_REFRESH_V_REG;
+
+	/* SW WAR for reducing high supply current
+	 * An anomaly has been noted with this family of devices. When a
+	 * REFRESH command (SEND Byte) is followed directly by another
+	 * REFRESH command (SEND Byte), the internal clock does not stop
+	 * on schedule. This causes higher supply current because the
+	 * device is not fully in SLEEP mode between conversions as it
+	 * should be.
+	 * A workaround for the anomaly is to WRITE to any R/W register
+	 * before and after each REFRESH command. This causes the clock
+	 * to stop between sampling cycles as it should. This workaround
+	 * produces no side effects except for the burden of the extra
+	 * WRITE commands.
+	 */
+	ret = pac193x_i2c_write(chip_info->client, PAC193X_NEG_PWR_REGS_ADDR,
+				1, &reg);
+	if (ret < 0) {
+		pr_err("cannot write to reg:0x%02X\n",
+		       PAC193X_NEG_PWR_REGS_ADDR);
+		return ret;
+	}
 	/* now write a REFRESH or a REFRESH_V command */
 	ret = pac193x_i2c_send_byte(chip_info->client, rfsh_option);
 	if (ret < 0) {
 		pr_err("cannot send byte 0x%02X reg\n", rfsh_option);
+		return ret;
+	}
+	/* SW WAR for reducing high supply current */
+	ret = pac193x_i2c_write(chip_info->client, PAC193X_NEG_PWR_REGS_ADDR,
+				1, &reg);
+	if (ret < 0) {
+		pr_err("cannot write to reg:0x%02X\n",
+		       PAC193X_NEG_PWR_REGS_ADDR);
 		return ret;
 	}
 	/* register data retrieval timestamp */
