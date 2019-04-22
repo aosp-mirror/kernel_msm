@@ -48,12 +48,15 @@ struct faceauth_start_data {
 	/* ION buffer fd */
 	__u64 image_dot_left_fd;
 	__u64 image_dot_right_fd;
+	/* TODO: change uapi for image_flood_fd b/131321019 */
 	__u64 image_flood_fd;
+	__u64 image_flood_right_fd;
 	__u64 calibration_fd;
 
 	__u32 image_dot_left_size;
 	__u32 image_dot_right_size;
 	__u32 image_flood_size;
+	__u32 image_flood_right_size;
 	__u32 calibration_size;
 
 	__s16 cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];

@@ -114,8 +114,10 @@ struct hypx_fa_init {
 struct hypx_fa_process {
 	uint64_t image_dot_left; /* PHY addr */
 	uint64_t image_dot_right; /* PHY addr */
-	uint64_t image_flood; /* PHY addr */
+	uint64_t image_flood_left; /* PHY addr */
+	uint64_t image_flood_right; /* PHY addr */
 	uint64_t calibration; /* PHY addr */
+	uint64_t citadel_token; /* PHY addr */
 	int16_t cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];
 
 	uint32_t operation;
@@ -123,12 +125,12 @@ struct hypx_fa_process {
 
 	uint32_t image_dot_left_size;
 	uint32_t image_dot_right_size;
-	uint32_t image_flood_size;
+	uint32_t image_flood_left_size;
+	uint32_t image_flood_right_size;
 	uint32_t calibration_size;
 
 	uint32_t is_secure_camera;
 	uint32_t citadel_input;
-	uint64_t citadel_token; /* PHY addr */
 	uint32_t citadel_token_size;
 	uint32_t citadel_input2;
 } __packed;
@@ -151,22 +153,24 @@ struct hypx_fa_process_results {
 struct hypx_fa_debug_data {
 	uint64_t image_left;
 	uint64_t image_right;
-	uint64_t image_flood;
+	uint64_t image_flood_left;
+	uint64_t image_flood_right;
 	uint64_t ab_state; /* PHY addr */
 	uint64_t output_buffers;
 	uint32_t offset_int_state;
 	uint32_t offset_ab_state;
 	uint32_t image_left_size;
 	uint32_t image_right_size;
-	uint32_t image_flood_size;
+	uint32_t image_flood_left_size;
+	uint32_t image_flood_right_size;
 	uint32_t internal_state_struct_size;
 	uint32_t buffer_list_size;
 	uint32_t buffer_base;
 	uint32_t exception_number;
 	uint32_t fault_address;
 	uint32_t ab_link_reg;
-	uint32_t calibration_size;
 	uint64_t calibration_buffer;
+	uint32_t calibration_size;
 } __packed;
 
 static void parse_el2_return(int code)
@@ -792,7 +796,8 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	unsigned long save_trace = 0;
 	struct hypx_fa_process *hypx_data;
 	struct faceauth_data image_dot_left = { 0 }, image_dot_right = { 0 },
-			     image_flood = { 0 }, calibration = { 0 },
+			     image_flood_left = { 0 },
+			     image_flood_right = { 0 }, calibration = { 0 },
 			     citadel_token = { 0 };
 
 	pass_images_to_el2 = data->operation == COMMAND_ENROLL ||
@@ -829,12 +834,30 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 			virt_to_phys(image_dot_right.hypx_blob);
 		hypx_data->image_dot_right_size = data->image_dot_right_size;
 
-		hypx_create_blob_dmabuf(dev, &image_flood, data->image_flood_fd,
-					DMA_TO_DEVICE, is_secure_camera);
-		if (!image_flood.hypx_blob)
+		hypx_create_blob_dmabuf(dev, &image_flood_left,
+					data->image_flood_fd, DMA_TO_DEVICE,
+					is_secure_camera);
+		if (!image_flood_left.hypx_blob)
 			goto err2;
-		hypx_data->image_flood = virt_to_phys(image_flood.hypx_blob);
-		hypx_data->image_flood_size = data->image_flood_size;
+		hypx_data->image_flood_left =
+			virt_to_phys(image_flood_left.hypx_blob);
+		hypx_data->image_flood_left_size = data->image_flood_size;
+
+		/* TODO: remove check once it's a required parameter */
+		if (data->image_flood_right_fd) {
+			hypx_create_blob_dmabuf(dev, &image_flood_right,
+						data->image_flood_right_fd,
+						DMA_TO_DEVICE,
+						is_secure_camera);
+			if (!image_flood_right.hypx_blob) {
+				goto err2;
+			} else {
+				hypx_data->image_flood_right = virt_to_phys(
+					image_flood_right.hypx_blob);
+				hypx_data->image_flood_right_size =
+					data->image_flood_right_size;
+			}
+		}
 
 		hypx_create_blob_dmabuf(dev, &calibration, data->calibration_fd,
 					DMA_TO_DEVICE, false);
@@ -889,8 +912,10 @@ err2:
 		hypx_free_blob_userbuf(&citadel_token);
 	if (hypx_data->calibration)
 		hypx_free_blob_dmabuf(dev, &calibration);
-	if (hypx_data->image_flood)
-		hypx_free_blob_dmabuf(dev, &image_flood);
+	if (hypx_data->image_flood_right)
+		hypx_free_blob_dmabuf(dev, &image_flood_right);
+	if (hypx_data->image_flood_left)
+		hypx_free_blob_dmabuf(dev, &image_flood_left);
 	if (hypx_data->image_dot_right)
 		hypx_free_blob_dmabuf(dev, &image_dot_right);
 	if (hypx_data->image_dot_left)
@@ -1069,7 +1094,8 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	struct hypx_fa_debug_data *hypx_data;
 	struct scm_desc desc = { 0 };
 	struct faceauth_data image_dot_left = { 0 }, image_dot_right = { 0 },
-			     image_flood = { 0 }, calibration = { 0 },
+			     image_flood_left = { 0 },
+			     image_flood_right = { 0 }, calibration = { 0 },
 			     ab_state = { 0 }, output_blob = { 0 };
 
 	hypx_data = (void *)get_zeroed_page(0);
@@ -1103,11 +1129,25 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	hypx_data->image_right = virt_to_phys(image_dot_right.hypx_blob);
 	hypx_data->image_right_size = IMAGE_SIZE;
 
-	hypx_create_blob_userbuf(dev, &image_flood, NULL, IMAGE_SIZE);
-	if (!image_flood.hypx_blob)
+	hypx_create_blob_userbuf(dev, &image_flood_left, NULL, IMAGE_SIZE);
+	if (!image_flood_left.hypx_blob)
 		goto exit;
-	hypx_data->image_flood = virt_to_phys(image_flood.hypx_blob);
-	hypx_data->image_flood_size = IMAGE_SIZE;
+	hypx_data->image_flood_left = virt_to_phys(image_flood_left.hypx_blob);
+	hypx_data->image_flood_left_size = IMAGE_SIZE;
+
+	/* Not going to dump it for now */
+	if (0) {
+		hypx_create_blob_userbuf(dev, &image_flood_right, NULL,
+					 IMAGE_SIZE);
+		if (!image_flood_right.hypx_blob)
+			goto exit;
+		hypx_data->image_flood_right =
+			virt_to_phys(image_flood_right.hypx_blob);
+		hypx_data->image_flood_right_size = IMAGE_SIZE;
+	} else {
+		hypx_data->image_flood_right = 0;
+		hypx_data->image_flood_right_size = 0;
+	}
 
 	hypx_create_blob_userbuf(dev, &calibration, NULL, CALIBRATION_SIZE);
 	if (!calibration.hypx_blob)
@@ -1187,9 +1227,9 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 			goto exit;
 		}
 		err = hypx_copy_from_blob_userbuf(
-			dev, &image_flood,
+			dev, &image_flood_left,
 			(uint8_t *)debug_entry + current_offset,
-			hypx_data->image_flood_size, false);
+			hypx_data->image_flood_left_size, false);
 
 		debug_entry->flood.offset_to_image = current_offset;
 		debug_entry->flood.image_size = IMAGE_SIZE;
@@ -1283,8 +1323,10 @@ exit:
 		hypx_free_blob_userbuf(&ab_state);
 	if (hypx_data->calibration_buffer)
 		hypx_free_blob_userbuf(&calibration);
-	if (hypx_data->image_flood)
-		hypx_free_blob_userbuf(&image_flood);
+	if (hypx_data->image_flood_right)
+		hypx_free_blob_userbuf(&image_flood_right);
+	if (hypx_data->image_flood_left)
+		hypx_free_blob_userbuf(&image_flood_left);
 	if (hypx_data->image_right)
 		hypx_free_blob_userbuf(&image_dot_right);
 	if (hypx_data->image_left)
