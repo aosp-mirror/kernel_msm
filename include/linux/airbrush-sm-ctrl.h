@@ -360,15 +360,6 @@ struct ab_sm_mfd_ops {
 	int (*ab_ready)(void *ctx);
 	int (*pcie_pre_disable)(void *ctx);
 	int (*pcie_linkdown)(void *ctx);
-
-	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
-	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
-	 * EL2 contexts.  This should be removed once EL2 based software is
-	 * ready for use.
-	 */
-	void (*set_el2_dma_mode)(void *ctx, bool allow_el1_dma);
-	bool (*get_el2_dma_mode)(void *ctx);
 };
 
 struct ab_thermal;
@@ -549,7 +540,6 @@ struct ab_state_context {
 	 */
 	bool throttle_nocomp_waiting;
 
-	bool force_el2;
 	bool el2_mode; /* Guarded by state_transitioning_lock */
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)

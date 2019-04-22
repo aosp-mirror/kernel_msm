@@ -198,68 +198,6 @@ static int asv_version_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_asv_version_override, NULL,
 		asv_version_set, "%llu\n");
 
-static int ab_sm_force_el2_set(void *data, u64 val)
-{
-	struct ab_state_context *sc = (struct ab_state_context *)data;
-	int ret;
-
-	if (val)
-		ret = ab_sm_enter_el2(sc);
-	else
-		ret = ab_sm_exit_el2(sc);
-
-	if (!ret)
-		sc->force_el2 = !!val;
-
-	return ret;
-}
-
-static int ab_sm_force_el2_get(void *data, u64 *val)
-{
-	struct ab_state_context *sc = (struct ab_state_context *)data;
-
-	*val = (uint64_t)sc->force_el2;
-
-	return 0;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(ab_sm_force_el2_fops, ab_sm_force_el2_get,
-		ab_sm_force_el2_set, "%llu\n");
-
-/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe DMA
- * from EL1 after the enter EL2 ioctl or debugfs file has been invoked.  This is
- * a temporary mechanism to allow testing from EL1 and EL2 contexts.  This
- * should be removed once EL2 based software is ready for use.
- */
-static int ab_sm_allow_el1_dma_set(void *data, u64 val)
-{
-	struct ab_state_context *sc = (struct ab_state_context *)data;
-
-	mutex_lock(&sc->mfd_lock);
-
-	sc->mfd_ops->set_el2_dma_mode(sc->mfd_ops->ctx, !!val);
-
-	mutex_unlock(&sc->mfd_lock);
-
-	return 0;
-}
-
-static int ab_sm_allow_el1_dma_get(void *data, u64 *val)
-{
-	struct ab_state_context *sc = (struct ab_state_context *)data;
-
-	mutex_lock(&sc->mfd_lock);
-
-	*val = sc->mfd_ops->get_el2_dma_mode(sc->mfd_ops->ctx);
-
-	mutex_unlock(&sc->mfd_lock);
-
-	return 0;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(ab_sm_allow_el1_dma_fops, ab_sm_allow_el1_dma_get,
-		ab_sm_allow_el1_dma_set, "%llu\n");
-
 /*
  * This is added for testing error handling case when pcie link init
  * is skipped.
@@ -778,11 +716,6 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 		goto err_out;
 #endif
 
-	d = debugfs_create_file("force_el2", 0666, sc->d_entry, sc,
-				&ab_sm_force_el2_fops);
-	if (!d)
-		goto err_out;
-
 	d = debugfs_create_file("alternate_boot", 0666, d_chip, sc,
 				&fops_alternate_boot);
 	if (!d)
@@ -790,18 +723,6 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d = debugfs_create_file("asv_version", 0222, d_chip, sc,
 				&fops_asv_version_override);
-	if (!d)
-		goto err_out;
-
-
-	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
-	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
-	 * EL2 contexts.  This should be removed once EL2 based software is
-	 * ready for use.
-	 */
-	d = debugfs_create_file("allow_el1_dma", 0666, sc->d_entry, sc,
-				&ab_sm_allow_el1_dma_fops);
 	if (!d)
 		goto err_out;
 

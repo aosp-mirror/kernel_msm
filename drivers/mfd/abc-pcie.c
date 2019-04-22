@@ -1880,7 +1880,6 @@ static int abc_pcie_get_chip_id_handler(void *ctx, enum ab_chip_id *val)
 
 static int abc_pcie_enter_el2_handler(void *ctx)
 {
-	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
 
 	dev_info(dev, "%s: enter\n", __func__);
@@ -1899,23 +1898,15 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 	abc_pcie_link_notify_blocking(ABC_PCIE_LINK_PRE_DISABLE |
 					ABC_PCIE_LINK_ENTER_EL2);
 
-	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
-	 * both EL1 and EL2 based testing.  This should be removed and the sMMU
-	 * detach operation should be done unconditionally once EL2 based
-	 * software is ready for use.
-	 */
-	if (!abc->allow_el1_dma) {
-		dev_info(dev, "%s: disabling irq\n", __func__);
+	dev_info(dev, "%s: disabling irq\n", __func__);
 
-		/* Disable PCIe interrupts during EL2 */
-		abc_pcie_disable_irqs(abc_dev->pdev);
+	/* Disable PCIe interrupts during EL2 */
+	abc_pcie_disable_irqs(abc_dev->pdev);
 
-		dev_info(dev, "%s: detaching SMMU\n", __func__);
+	dev_info(dev, "%s: detaching SMMU\n", __func__);
 
-		/* Detach the PCIe EP device to the ARM sMMU */
-		abc_pcie_smmu_detach((struct device *)ctx);
-	}
+	/* Detach the PCIe EP device to the ARM sMMU */
+	abc_pcie_smmu_detach((struct device *)ctx);
 
 	dev_info(dev, "%s: done\n", __func__);
 
@@ -1924,7 +1915,6 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 
 static int abc_pcie_exit_el2_handler(void *ctx)
 {
-	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
 	uint32_t test_read_data = 0;
 	int ret;
@@ -1955,28 +1945,20 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	}
 
 
-	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after enter EL2 has been invoked.  This is to allow for
-	 * both EL1 and EL2 based testing.  This should be removed and the sMMU
-	 * detach operation should be done unconditionally once EL2 based
-	 * software is ready for use.
-	 */
-	if (!abc->allow_el1_dma) {
-		dev_info(dev, "%s: attaching SMMU\n", __func__);
+	dev_info(dev, "%s: attaching SMMU\n", __func__);
 
-		/* Re-attach the PCIe EP device to the ARM sMMU */
-		ret = abc_pcie_smmu_attach((struct device *)ctx);
-		if (ret) {
-			dev_err(dev, "%s: failed to attach SMMU: %d\n",
-				__func__, ret);
-			return ret;
-		}
-
-		dev_info(dev, "%s: enabling irq\n", __func__);
-
-		/* Enable PCIe interrupts on EL2 exit */
-		abc_pcie_enable_irqs(abc_dev->pdev);
+	/* Re-attach the PCIe EP device to the ARM sMMU */
+	ret = abc_pcie_smmu_attach((struct device *)ctx);
+	if (ret) {
+		dev_err(dev, "%s: failed to attach SMMU: %d\n",
+			__func__, ret);
+		return ret;
 	}
+
+	dev_info(dev, "%s: enabling irq\n", __func__);
+
+	/* Enable PCIe interrupts on EL2 exit */
+	abc_pcie_enable_irqs(abc_dev->pdev);
 
 	dev_info(dev, "Broadcast Exit EL2 notification\n");
 
@@ -1987,25 +1969,6 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	dev_info(dev, "%s: done\n", __func__);
 
 	return 0;
-}
-
-/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe DMA
- * from EL1 after the enter EL2 ioctl or debugfs file has been invoked.  This is
- * a temporary mechanism to allow testing from EL1 and EL2 contexts.  This
- * should be removed once EL2 based software is ready for use.
- */
-static void abc_pci_set_el2_dma_mode(void *ctx, bool allow_el1_dma)
-{
-	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
-
-	abc->allow_el1_dma = allow_el1_dma;
-}
-
-static bool abc_pci_get_el2_dma_mode(void *ctx)
-{
-	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
-
-	return abc->allow_el1_dma;
 }
 
 /* ab_ready also implies that PCIe link is enable */
@@ -2068,7 +2031,6 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 
 static int abc_pcie_linkdown_handler(void *ctx)
 {
-	struct abc_pcie_devdata *abc = dev_get_drvdata((struct device *)ctx);
 	struct device *dev = (struct device *)ctx;
 	int ret;
 
@@ -2096,7 +2058,7 @@ static int abc_pcie_linkdown_handler(void *ctx)
 	 * and skip disabling irqs.
 	 * If linkdown happens during EL1 mode, disable irqs.
 	 */
-	if (!abc->allow_el1_dma && !(atomic_read(&abc_dev->link_state) &
+	if (!(atomic_read(&abc_dev->link_state) &
 			  ABC_PCIE_SMMU_ATTACH_STATE_MASK)) {
 		dev_info(dev, "linkdown during EL2 mode; re-attach smmu\n");
 		ret = abc_pcie_smmu_attach(dev);
@@ -2115,8 +2077,6 @@ static int abc_pcie_linkdown_handler(void *ctx)
 static struct ab_sm_mfd_ops mfd_ops = {
 	.enter_el2 = &abc_pcie_enter_el2_handler,
 	.exit_el2 = &abc_pcie_exit_el2_handler,
-	.set_el2_dma_mode = &abc_pci_set_el2_dma_mode,
-	.get_el2_dma_mode = &abc_pci_get_el2_dma_mode,
 	.get_chip_id = &abc_pcie_get_chip_id_handler,
 	.ab_ready = &abc_pcie_ab_ready_handler,
 	.pcie_pre_disable = &abc_pcie_pre_disable_handler,

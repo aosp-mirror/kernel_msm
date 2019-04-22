@@ -150,8 +150,6 @@ static int get_chip_id_stub(void *ctx, enum ab_chip_id *val)
 static int ab_ready_stub(void *ctx)  { return -ENODEV; }
 static int pcie_pre_disable_stub(void *ctx)  { return -ENODEV; }
 static int pcie_linkdown_stub(void *ctx)  { return -ENODEV; }
-static void pcie_set_dma_mode_stub(void *ctx, bool allow_el1_dma)  { }
-static bool pcie_get_dma_mode_stub(void *ctx)  { return false; }
 
 static struct ab_sm_mfd_ops mfd_ops_stub = {
 	.ctx = NULL,
@@ -162,15 +160,6 @@ static struct ab_sm_mfd_ops mfd_ops_stub = {
 	.ab_ready = &ab_ready_stub,
 	.pcie_pre_disable = &pcie_pre_disable_stub,
 	.pcie_linkdown = &pcie_linkdown_stub,
-
-	/* TODO(b/122614252):  Temporarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
-	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
-	 * EL2 contexts.  This should be removed once EL2 based software is
-	 * ready for use.
-	 */
-	.set_el2_dma_mode = &pcie_set_dma_mode_stub,
-	.get_el2_dma_mode = &pcie_get_dma_mode_stub,
 };
 
 /* Index 0 - A0 clk frequencies

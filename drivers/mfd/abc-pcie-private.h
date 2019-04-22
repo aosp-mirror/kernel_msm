@@ -63,14 +63,6 @@ struct abc_pcie_devdata {
 	struct mutex mutex;
 	struct iatu_bar_mapping iatu_mappings;
 
-	/* TODO(b/122614252):  Tempoarily provide a mechanism to allow for PCIe
-	 * DMA from EL1 after the enter EL2 ioctl or debugfs file has been
-	 * invoked.  This is a temporary mechanism to allow testing from EL1 and
-	 * EL2 contexts.  This should be removed once EL2 based software is
-	 * ready for use.
-	 */
-	bool allow_el1_dma;
-
 	struct abc_pcie_dma_irq_data dma_irq_data_rd[NUM_EP_DMA_CHANNELS];
 	struct abc_pcie_dma_irq_data dma_irq_data_wr[NUM_EP_DMA_CHANNELS];
 };
