@@ -47,7 +47,7 @@
 #include <linux/vmalloc.h>
 
 #include <linux/msm_dma_iommu_mapping.h>
-
+#include "auo_dsi.h"
 #include "mdp3.h"
 #include "mdss_fb.h"
 #include "mdp3_hwio.h"
@@ -1877,7 +1877,7 @@ static int mdp3_panel_register_done(struct mdss_panel_data *pdata)
 			MAX_BPP_SUPPORTED);
 	do_div(ab, 1024);
 	mdp3_res->max_bw = ab+1;
-
+	mdp3_res->panel_data = pdata;
 	/*
 	 * If idle pc feature is not enabled, then get a reference to the
 	 * runtime device which will be released when device is turned off
@@ -2203,6 +2203,11 @@ static ssize_t mdp3_store_twm(struct device *dev,
 	mdp3_res->twm_en = data ? true : false;
 	pr_err("TWM :  %s\n", (mdp3_res->twm_en) ?
 		"ENABLED" : "DISABLED");
+
+	/* Enable boost IC */
+	if (mdp3_res->twm_en && mdp3_res->panel_data) {
+		mdss_dsi_buck_boost_enable(mdp3_res->panel_data, 1);
+	}
 	return len;
 }
 
@@ -2464,6 +2469,7 @@ static int mdp3_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	pdev->id = 0;
+	mdp3_res->panel_data=NULL;
 	mdp3_res->pdev = pdev;
 	mutex_init(&mdp3_res->res_mutex);
 	mutex_init(&mdp3_res->fs_idle_pc_lock);

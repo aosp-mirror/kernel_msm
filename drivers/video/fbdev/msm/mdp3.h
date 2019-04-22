@@ -216,6 +216,7 @@ struct mdp3_hw_resource {
 
 	u8 ppp_formats[BITS_TO_BYTES(MDP_IMGTYPE_LIMIT1)];
 	u8 dma_formats[BITS_TO_BYTES(MDP_IMGTYPE_LIMIT1)];
+	struct mdss_panel_data *panel_data;
 };
 
 struct mdp3_img_data {

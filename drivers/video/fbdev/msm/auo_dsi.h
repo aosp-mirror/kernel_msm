@@ -26,6 +26,8 @@
 #include <linux/kthread.h>
 
 struct mdss_dsi_ctrl_pdata;
+struct mdss_panel_data;
+
 ssize_t mdss_fb_set_boost_mode(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 extern int dsi_auo_read_id_code(struct mdss_dsi_ctrl_pdata *ctrl);
@@ -43,8 +45,7 @@ extern void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl);
 
 extern void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl);
 
-extern void mdss_dsi_buck_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl,
-		int enable);
+extern int mdss_dsi_buck_boost_enable(struct mdss_panel_data*, int);
 
 extern int dsi_auo_set_boost_mode(struct mdss_dsi_ctrl_pdata*, int);
 

@@ -552,10 +552,7 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 			ret = mdss_dsi_panel_power_off(pdata);
 		}
 
-		if (pinfo->buck_boost_disable) {
-			if (gpio_is_valid(ctrl_pdata->disp_avdden_gpio))
-				mdss_dsi_buck_boost_enable(ctrl_pdata, 0);
-		}
+		mdss_dsi_buck_boost_enable(pdata, 0);
 		break;
 	case MDSS_PANEL_POWER_ON:
 		if (mdss_dsi_is_panel_on_ulp(pdata)) {
@@ -575,14 +572,8 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 				}
 			}
 
-			if (pinfo->buck_boost_disable) {
-				if (gpio_is_valid(
-					ctrl_pdata->disp_avdden_gpio)) {
 
-					mdss_dsi_buck_boost_enable(
-						ctrl_pdata, 1);
-				}
-			}
+			mdss_dsi_buck_boost_enable(pdata, 1);
 		}
 		break;
 	case MDSS_PANEL_POWER_LP1:

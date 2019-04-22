@@ -268,16 +268,30 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 	}
 }
 
-void mdss_dsi_buck_boost_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
+/* enable|disable avdden_gpio for boost IC */
+int mdss_dsi_buck_boost_enable (struct mdss_panel_data *pdata, int enable)
 {
-	if (gpio_is_valid(ctrl->disp_avdden_gpio)) {
-		gpio_set_value((ctrl->disp_avdden_gpio), enable);
+	int ret = -EINVAL;
+	struct mdss_panel_info *pinfo = NULL;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 
-		pr_info("%s: AVDDEN (%d)\n", __func__,
-			gpio_get_value(ctrl->disp_avdden_gpio));
-	} else {
-		pr_err("AVDDEN gpio is invalid\n");
+	pinfo = &pdata->panel_info;
+	ctrl = container_of(pdata,
+		struct mdss_dsi_ctrl_pdata, panel_data);
+
+	if (ctrl && pinfo->buck_boost_disable) {
+		pr_err("%s: buck!\n", __func__);
+		if (gpio_is_valid(ctrl->disp_avdden_gpio)) {
+			gpio_set_value((ctrl->disp_avdden_gpio), enable);
+			pr_info("%s: AVDDEN (%d)\n", __func__,
+				gpio_get_value(ctrl->disp_avdden_gpio));
+			ret = 0;
+		} else {
+			pr_err("AVDDEN gpio is invalid\n");
+		}
+
 	}
+	return ret;
 }
 
 #endif /*AUO_DSI_C */

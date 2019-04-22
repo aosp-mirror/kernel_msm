@@ -251,15 +251,12 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 							bool enable)
 {
-	struct mdss_panel_info *pinfo = NULL;
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		return;
 	}
-
-	pinfo = &pdata->panel_info;
 
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 						panel_data);
@@ -285,13 +282,9 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 			pr_debug("Idle on\n");
 		}
 
-		if (pinfo->buck_boost_disable) {
-			mdss_dsi_buck_boost_enable(ctrl, 0);
-		}
+		mdss_dsi_buck_boost_enable(pdata, 0);
 	} else {
-		if (pinfo->buck_boost_disable) {
-			mdss_dsi_buck_boost_enable(ctrl, 1);
-		}
+		mdss_dsi_buck_boost_enable(pdata, 1);
 
 		if (ctrl->idle_off_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds,
