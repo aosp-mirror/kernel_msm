@@ -132,7 +132,10 @@ static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 		pr_err("%s: NULL input pointer(s)\n", __func__);
 		return -EINVAL;
 	}
-	iaxxx_pm_get_sync(&spi->dev);
+	ret = iaxxx_pm_get_sync(&spi->dev);
+	if (ret < 0)
+		return ret;
+
 	cmd = cpu_to_be32(cmd);
 	dev_dbg(&spi->dev, "iaxxx: cmd = 0x%08x\n", cmd);
 
@@ -231,12 +234,16 @@ static int iaxxx_spi_write_common(void *context,
 	t[0].tx_buf = padding;
 	spi_message_add_tail(&t[0], &m);
 
-	if (pm_needed)
-		iaxxx_pm_get_sync(&spi->dev);
+	if (pm_needed) {
+		rc = iaxxx_pm_get_sync(&spi->dev);
+		if (rc < 0)
+			goto pm_sync_err;
+	}
 	rc = spi_sync(spi, &m);
 	if (pm_needed)
 		iaxxx_pm_put_autosuspend(&spi->dev);
 
+pm_sync_err:
 	if (padding != NULL)
 		kfree(padding);
 
@@ -370,8 +377,11 @@ static int iaxxx_spi_read_common(void *context,
 
 	spi_message_init(&m);
 
-	if (pm_needed)
-		iaxxx_pm_get_sync(&spi->dev);
+	if (pm_needed) {
+		rc = iaxxx_pm_get_sync(&spi->dev);
+		if (rc < 0)
+			goto pm_sync_err;
+	}
 	/* Register address */
 	t[0].len = msg_len;
 	t[0].tx_buf = tx_buf;
@@ -380,16 +390,17 @@ static int iaxxx_spi_read_common(void *context,
 
 	rc = spi_sync(spi, &m);
 	if (rc)
-		goto reg_read_err;
+		goto spi_sync_err;
 
 	memcpy(val, rx_buf + IAXXX_REG_LEN_WITH_PADDING, val_len);
-reg_read_err:
+
+spi_sync_err:
+	if (pm_needed)
+		iaxxx_pm_put_autosuspend(&spi->dev);
+pm_sync_err:
 	kfree(rx_buf);
 mem_alloc_fail:
 	kfree(tx_buf);
-
-	if (pm_needed)
-		iaxxx_pm_put_autosuspend(&spi->dev);
 	return rc;
 }
 
@@ -458,7 +469,9 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	/* Fetch the Register address with padding */
 	memcpy(preg_addr, cbuf, IAXXX_REG_LEN_WITH_PADDING);
 
-	iaxxx_pm_get_sync(&spi->dev);
+	rc = iaxxx_pm_get_sync(&spi->dev);
+	if (rc < 0)
+		goto pm_sync_err;
 	/* Add Register address write message */
 	t[0].len = len;
 	t[0].tx_buf = (void *)preg_addr;
@@ -473,10 +486,11 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	memcpy((uint8_t *)(buf + IAXXX_REG_LEN_WITH_PADDING),
 			val + IAXXX_REG_LEN_WITH_PADDING, val_len);
 err:
-	kfree(val);
-mem_alloc_fail:
-	kfree(preg_addr);
 	iaxxx_pm_put_autosuspend(&spi->dev);
+mem_alloc_fail:
+pm_sync_err:
+	kfree(val);
+	kfree(preg_addr);
 	return rc;
 }
 
@@ -496,9 +510,14 @@ static int iaxxx_spi_bus_raw_write(struct iaxxx_priv *priv, const void *buf,
 		return -EINVAL;
 	}
 
-	iaxxx_pm_get_sync(dev);
+
+	rc = iaxxx_pm_get_sync(dev);
+	if (rc < 0)
+		goto pm_sync_err;
+
 	rc =  spi_write(spi, buf, len);
 	iaxxx_pm_put_autosuspend(dev);
+pm_sync_err:
 	return rc;
 }
 

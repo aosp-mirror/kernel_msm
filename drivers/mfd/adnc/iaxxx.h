@@ -99,6 +99,8 @@ enum iaxxx_fw_crash_reasons {
 	IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR = 3,
 	IAXXX_FW_CRASH_UPDATE_BLOCK_REQ = 4,
 	IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF = 5,
+	IAXXX_FW_CRASH_RESUME = 6,
+	IAXXX_FW_CRASH_SUSPEND = 7,
 };
 
 struct iaxxx_register_log {

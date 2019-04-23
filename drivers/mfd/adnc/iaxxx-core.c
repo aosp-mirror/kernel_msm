@@ -154,6 +154,10 @@ static const char *iaxxx_crash_err2str(int error)
 		return "crash when wait clear";
 	case IAXXX_FW_CRASH_UPDATE_BLOCK_REQ:
 		return "crash during update block req";
+	case IAXXX_FW_CRASH_RESUME:
+		return "crash during resume";
+	case IAXXX_FW_CRASH_SUSPEND:
+		return "crash during suspend";
 	default:
 		return "unknown error";
 	}
@@ -1351,8 +1355,11 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 
 #ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
 	/* Disable runtime pm*/
-	if (pm_runtime_enabled(priv->dev))
+	if (pm_runtime_enabled(priv->dev)) {
+		/* Make sure PM usage counter is 0 */
+		pm_runtime_put_noidle(priv->dev);
 		pm_runtime_disable(priv->dev);
+	}
 #endif
 
 	/* Clear event queue */

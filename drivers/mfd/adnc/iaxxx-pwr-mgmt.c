@@ -114,7 +114,7 @@ int iaxxx_pm_get_sync(struct device *dev)
 	if (mutex_trylock(&priv->pm_mutex))
 		ret = pm_runtime_get_sync(dev);
 	if (ret < 0)
-		dev_dbg(dev, "%s() Fail. %d\n", __func__, ret);
+		dev_err(dev, "%s() Fail. %d\n", __func__, ret);
 
 	mutex_unlock(&priv->pm_mutex);
 #endif
@@ -142,7 +142,7 @@ int iaxxx_pm_put_autosuspend(struct device *dev)
 		pm_runtime_mark_last_busy(dev);
 		ret = pm_runtime_put_sync_autosuspend(dev);
 		if (ret && ret != -EBUSY)
-			dev_dbg(dev, "%s(): fail %d\n", __func__, ret);
+			dev_err(dev, "%s(): fail %d\n", __func__, ret);
 		mutex_unlock(&priv->pm_mutex);
 	}
 
@@ -195,7 +195,7 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 			dev_err(priv->dev,
 				"%s chip wake up failed %d rc %d\n",
 				__func__, reg_val, rc);
-			return -EIO;
+			goto chip_recovery;
 		}
 		test_and_set_bit(IAXXX_FLG_CHIP_WAKEUP_HOST0,
 								&priv->flags);
@@ -217,7 +217,7 @@ chip_woken_up:
 				dev_err(priv->dev,
 				"%s() Failed to set MPLL Clk Src to internal\n",
 								__func__);
-				return rc;
+				goto chip_recovery;
 			}
 		}
 
@@ -237,7 +237,8 @@ chip_woken_up:
 					UPDATE_BLOCK_FIXED_WAIT_OPTION |
 					UPDATE_BLOCK_NO_LOCK_OPTION,
 					&status);
-		}
+		} else
+			goto chip_recovery;
 
 		if (rc)
 			dev_err(priv->dev, "%s failed to program sleep time\n",
@@ -250,6 +251,11 @@ chip_woken_up:
 
 	dev_info(priv->dev, "%s() Success\n", __func__);
 	return 0;
+
+chip_recovery:
+	iaxxx_fw_crash(priv->dev, IAXXX_FW_CRASH_RESUME);
+	dev_err(priv->dev, "%s() fail\n", __func__);
+	return -EIO;
 }
 
 int iaxxx_suspend_chip(struct iaxxx_priv *priv)
@@ -269,7 +275,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 	if (rc) {
 		dev_err(priv->dev,
 			"Failed to set Max SPI speed in %s\n", __func__);
-		return rc;
+		goto chip_recovery;
 	}
 
 	/* Read core processor status */
@@ -313,7 +319,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 				dev_err(priv->dev,
 				"%s() Failed to set MPLL Clk Src to external\n",
 								__func__);
-				return rc;
+				goto chip_recovery;
 			}
 		}
 
@@ -326,7 +332,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 
 		if (rc) {
 			dev_err(priv->dev, "%s() Fail\n", __func__);
-			return rc;
+			goto chip_recovery;
 		}
 
 		/* Update block lock is not taken for no_pm calls
@@ -363,7 +369,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 
 		if (rc) {
 			dev_err(priv->dev, "%s() Fail\n", __func__);
-			return rc;
+			goto chip_recovery;
 		}
 
 		/* Update block lock is not taken for no_pm calls
@@ -388,6 +394,11 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 	dev_info(priv->dev, "%s() Success\n", __func__);
 
 	return 0;
+
+chip_recovery:
+	iaxxx_fw_crash(priv->dev, IAXXX_FW_CRASH_SUSPEND);
+	dev_err(priv->dev, "%s() fail\n", __func__);
+	return -EIO;
 }
 
 /*
