@@ -230,36 +230,6 @@ static int ab_pmu_deep_sleep_handler(void *ctx)
 	return ret;
 }
 
-#define CLK_CON_DIV_PLL_AON_CLK 0x10B1180C
-#define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x10041800
-#define CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK 0x10041000
-#define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x10241800
-#define CLK_CON_MUX_MOUT_IPU_AONCLK_PLLCLK 0x10241000
-
-/*
- * Reduce ipu apb clk rate from 933MHz to 233MHz on A0 samples
- * TODO(b/120795157): Remove when A0 is obsolete
- */
-static void abc_ipu_apb_clk_fix(void)
-{
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
-	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x3);
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
-	ABC_WRITE(CLK_CON_MUX_MOUT_IPU_AONCLK_PLLCLK, 0x1);
-}
-
-/*
- * Reduce tpu apb clk rate from 933MHz to 233MHz on A0 samples
- * TODO(b/120795157): Remove when A0 is obsolete
- */
-static void abc_tpu_apb_clk_fix(void)
-{
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
-	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x3);
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
-	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK, 0x1);
-}
-
 /* Caller must hold pmu_ctx->pcie_link_lock */
 static int __ab_pmu_ipu_resume_handler(struct ab_pmu_context *pmu_ctx)
 {
@@ -279,8 +249,6 @@ static int __ab_pmu_ipu_resume_handler(struct ab_pmu_context *pmu_ctx)
 		dev_err(pmu_ctx->dev, "Timeout waiting for IPU up status\n");
 		return -EBUSY;
 	}
-
-	abc_ipu_apb_clk_fix();
 
 	return 0;
 }
@@ -325,8 +293,6 @@ static int __ab_pmu_tpu_resume_handler(struct ab_pmu_context *pmu_ctx)
 		dev_err(pmu_ctx->dev, "Timeout waiting for TPU up status\n");
 		return -EBUSY;
 	}
-
-	abc_tpu_apb_clk_fix();
 
 	return 0;
 }
