@@ -503,10 +503,6 @@
 		thermal-sensors = <&google_battery>;
 	};
 
-	camera_flash: camera_flash {
-		#cooling-cells = <2>;
-	};
-
 	bcl_virtual_sensor: bcl-virtual-sensor {
 	};
 
@@ -519,14 +515,6 @@
 				temperature = <3>;
 				hysteresis = <0>;
 				type = "passive";
-			};
-		};
-		cooling-maps {
-			led_flash {
-				trip = <&active_config0>;
-				cooling-device =
-					<&camera_flash THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
 			};
 		};
 	};

@@ -236,6 +236,9 @@
 		switch-source = <&pm8150l_switch2>;
 		status = "ok";
 		thermal-mitigation = <1500 1000 750 500>;
+		#cooling-cells = <2>;
+		bcl-node-name = "bcl_flash_rear";
+		cooling-name = "cam_flash_rear";
 	};
 
 	led_flash_rear_aux: qcom,camera-flash@1 {
@@ -247,6 +250,17 @@
 		switch-source = <&pm8150l_switch2>;
 		status = "ok";
 		thermal-mitigation = <1500 1000 750 500>;
+		#cooling-cells = <2>;
+		bcl-node-name = "bcl_flash_rear_aux";
+		cooling-name = "cam_flash_rear_aux";
+	};
+
+	cam_flash_rear: cam_flash_rear {
+		#cooling-cells = <2>;
+	};
+
+	cam_flash_rear_aux: cam_flash_rear_aux {
+		#cooling-cells = <2>;
 	};
 };
 

@@ -76,4 +76,22 @@
 			};
 		};
 	};
+
+	bcl-virt-extreme {
+		cooling-maps {
+			led_flash0 {
+				trip = <&active_config0>;
+				cooling-device =
+					<&cam_flash_rear THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+			led_flash1 {
+				trip = <&active_config0>;
+				cooling-device =
+					<&cam_flash_rear_aux
+						THERMAL_MAX_LIMIT
+						THERMAL_MAX_LIMIT>;
+			};
+		};
+	};
 };
