@@ -44,6 +44,11 @@
 #define IAXXX_UPDATE_BLOCK_NO_PM      (true)
 #define IAXXX_UPDATE_BLOCK_WITH_PM    (false)
 
+/* 1ms delay before read */
+#define IAXXX_UPDATE_BLK_READ_DELAY		1000
+#define IAXXX_UPDATE_BLK_READ_DELAY_RANGE	5
+/* 2ms delay before read retry */
+#define IAXXX_UPDATE_BLK_READ_RETRY_DELAY	2000
 
 /**
  * iaxxx_regmap_wait_match - waits for register read value
@@ -68,14 +73,11 @@ static int iaxxx_regmap_wait_match(struct iaxxx_priv *priv,
 	const int max_retries = UPDATE_BLOCK_FAIL_RETRIES;
 	struct device *dev = priv->dev;
 
-	for (retries = 0; retries < max_retries; ++retries) {
-		if (priv->bus == IAXXX_I2C)
-			msleep(200);
-		else
-			/* Give some time to device before read */
-			usleep_range(IAXXX_READ_DELAY,
-				IAXXX_READ_DELAY + IAXXX_READ_DELAY_RANGE);
+	/* 1ms of delay after write is required as per FW */
+	usleep_range(IAXXX_UPDATE_BLK_READ_DELAY, IAXXX_UPDATE_BLK_READ_DELAY +
+		     IAXXX_UPDATE_BLK_READ_DELAY_RANGE);
 
+	for (retries = 0; retries < max_retries; ++retries) {
 		rc = regmap_read(regmap, reg, status);
 		if (rc) {
 			/* We should not return here until we are done
@@ -102,13 +104,15 @@ static int iaxxx_regmap_wait_match(struct iaxxx_priv *priv,
 			return -ENXIO;
 		}
 
-		if (priv->bus == IAXXX_SPI) {
-			if (priv->is_application_mode)
-				usleep_range(10000, 10005);
-			else
-				msleep(20);
-		}
+		/*
+		 * Ideally 1ms of delay before read is enough, but if bit is not
+		 * cleared yet wait for 2ms before retry
+		 */
+		usleep_range(IAXXX_UPDATE_BLK_READ_RETRY_DELAY,
+				IAXXX_UPDATE_BLK_READ_RETRY_DELAY +
+				IAXXX_UPDATE_BLK_READ_DELAY_RANGE);
 	}
+
 	rc = -ETIMEDOUT;
 	dev_err(dev, "%s:Update block timed out\n", __func__);
 
