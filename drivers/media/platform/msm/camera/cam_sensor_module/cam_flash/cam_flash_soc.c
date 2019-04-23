@@ -213,9 +213,9 @@ static int32_t cam_get_source_node_info(
 				i, soc_private->torch_max_current[i]);
 		}
 	}
-	if (of_get_property(of_node, "thermal-mitigation", &count)) {
+	if (of_find_property(of_node, "thermal-mitigation", &count)) {
 		count /= sizeof(uint32_t);
-		if (count != CAM_FLASH_THERMAL_MITIGATION_LEVEL) {
+		if (count != (CAM_FLASH_THERMAL_MITIGATION_LEVEL + 1)) {
 			CAM_WARN(CAM_FLASH,
 				"thermal-mitigation level not matched:%d",
 				count);
