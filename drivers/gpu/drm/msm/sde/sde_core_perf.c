@@ -106,18 +106,26 @@ end:
 	return intf_connected;
 }
 
-static void _sde_core_perf_calc_crtc(struct sde_kms *kms,
-		struct drm_crtc *crtc,
-		struct drm_crtc_state *state,
+static int _sde_core_perf_calc_crtc(const struct sde_kms *kms,
+		const struct drm_crtc *crtc,
+		const struct drm_crtc_state *state,
 		struct sde_core_perf_params *perf)
 {
-	struct sde_crtc_state *sde_cstate;
+	const struct sde_crtc_state *sde_cstate;
 	int i;
 
-	if (!kms || !kms->catalog || !crtc || !state || !perf) {
+	if (unlikely(!kms || !kms->catalog || !crtc || !state || !perf)) {
 		SDE_ERROR("invalid parameters\n");
-		return;
+		return -EINVAL;
 	}
+
+	if (!sde_crtc_is_property_dirty(state, CRTC_PROP_CORE_AB) &&
+	    !sde_crtc_is_property_dirty(state, CRTC_PROP_CORE_IB) &&
+	    !sde_crtc_is_property_dirty(state, CRTC_PROP_DRAM_AB) &&
+	    !sde_crtc_is_property_dirty(state, CRTC_PROP_DRAM_IB) &&
+	    !sde_crtc_is_property_dirty(state, CRTC_PROP_LLCC_AB) &&
+	    !sde_crtc_is_property_dirty(state, CRTC_PROP_LLCC_IB))
+		return 0;
 
 	sde_cstate = to_sde_crtc_state(state);
 	memset(perf, 0, sizeof(struct sde_core_perf_params));
@@ -190,6 +198,8 @@ static void _sde_core_perf_calc_crtc(struct sde_kms *kms,
 			perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_LLCC],
 			perf->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_EBI],
 			perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_EBI]);
+
+	return 1;
 }
 
 int sde_core_perf_crtc_check(struct drm_crtc *crtc,
@@ -202,7 +212,7 @@ int sde_core_perf_crtc_check(struct drm_crtc *crtc,
 	struct sde_crtc_state *sde_cstate;
 	struct drm_crtc *tmp_crtc;
 	struct sde_kms *kms;
-	int i;
+	int i, rc;
 
 	if (!crtc || !state) {
 		SDE_ERROR("invalid crtc\n");
@@ -218,7 +228,9 @@ int sde_core_perf_crtc_check(struct drm_crtc *crtc,
 	sde_cstate = to_sde_crtc_state(state);
 
 	/* obtain new values */
-	_sde_core_perf_calc_crtc(kms, crtc, state, &sde_cstate->new_perf);
+	rc = _sde_core_perf_calc_crtc(kms, crtc, state, &sde_cstate->new_perf);
+	if (rc <= 0)
+		return rc;
 
 	for (i = SDE_POWER_HANDLE_DBUS_ID_MNOC;
 			i < SDE_POWER_HANDLE_DBUS_ID_MAX; i++) {
@@ -613,6 +625,10 @@ void sde_core_perf_crtc_update(struct drm_crtc *crtc,
 		update_bus = ~0;
 		update_clk = 1;
 	}
+
+	if (!update_bus && !update_clk)
+		goto done;
+
 	trace_sde_perf_crtc_update(crtc->base.id,
 		new->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_MNOC],
 		new->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_MNOC],
@@ -649,6 +665,7 @@ void sde_core_perf_crtc_update(struct drm_crtc *crtc,
 		kms->perf.core_clk_rate = clk_rate;
 		SDE_DEBUG("update clk rate = %lld HZ\n", clk_rate);
 	}
+done:
 	mutex_unlock(&sde_core_perf_lock);
 
 }

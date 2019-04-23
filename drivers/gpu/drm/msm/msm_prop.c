@@ -129,8 +129,8 @@ static void _msm_property_set_dirty_no_lock(
 }
 
 bool msm_property_is_dirty(
-		struct msm_property_info *info,
-		struct msm_property_state *property_state,
+		const struct msm_property_info *info,
+		const struct msm_property_state *property_state,
 		uint32_t property_idx)
 {
 	if (!info || !property_state || !property_state->values ||
