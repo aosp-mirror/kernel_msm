@@ -2074,7 +2074,6 @@ static void __throttle_nocompute_notify(struct ab_state_context *sc)
 {
 	unsigned long ret;
 
-	mutex_lock(&sc->throttle_ready_lock);
 	sc->req_thermal_listeners = sc->curr_thermal_listeners;
 
 	/* If there is a userspace listener, notify them of pending change */
@@ -2103,7 +2102,7 @@ static void __throttle_nocompute_notify(struct ab_state_context *sc)
 	}
 }
 
-static void __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
+static int __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
 {
 	int ret;
 
@@ -2137,8 +2136,8 @@ static void __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
 
 	/* Wait for next throttle to no compute event */
 	ret = wait_for_completion_interruptible(&sc->throttle_nocompute_event);
+	mutex_lock(&sc->throttle_ready_lock);
 	if (ret == -ERESTARTSYS) {
-		mutex_lock(&sc->throttle_ready_lock);
 		if (sc->throttle_nocomp_waiting) {
 			sc->req_thermal_listeners--;
 			if (sc->curr_thermal_listeners >=
@@ -2147,8 +2146,12 @@ static void __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
 		} else {
 			sc->curr_thermal_listeners--;
 		}
-		mutex_unlock(&sc->throttle_ready_lock);
 	}
+
+	ret = sc->going_to_comp_ready;
+	mutex_unlock(&sc->throttle_ready_lock);
+
+	return ret;
 }
 
 static void ab_sm_thermal_throttle_state_updated(
@@ -2453,8 +2456,10 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		mutex_unlock(&sc->state_transitioning_lock);
 		break;
 
-	case AB_SM_THROTTLE_NOCOMPUTE_NOTIFY:
-		__throttle_nocompute_wait_for_user(sc);
+	case AB_SM_COMPUTE_READY_NOTIFY:
+		state = __throttle_nocompute_wait_for_user(sc);
+		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
+			return -EFAULT;
 		ret = 0;
 		break;
 
@@ -2483,8 +2488,21 @@ static void ab_sm_thermal_throttle_state_updated(
 	 * chance to react to AB resource being removed
 	 */
 	if (throttle_state_id == THROTTLE_NOCOMPUTE &&
-			sc->throttle_state_id != THROTTLE_NOCOMPUTE)
+			sc->throttle_state_id != THROTTLE_NOCOMPUTE) {
+		mutex_lock(&sc->throttle_ready_lock);
+		sc->going_to_comp_ready = false;
 		__throttle_nocompute_notify(sc);
+	} else if (throttle_state_id != THROTTLE_NOCOMPUTE &&
+			sc->throttle_state_id == THROTTLE_NOCOMPUTE) {
+		/* Update sc->throttle_state_id immediately in case
+		 * userspace attempts to immediately change state while
+		 * we are still in __throttle_nocompute_notify
+		 */
+		mutex_lock(&sc->throttle_ready_lock);
+		sc->going_to_comp_ready = true;
+		sc->throttle_state_id = throttle_state_id;
+		__throttle_nocompute_notify(sc);
+	}
 
 	sc->throttle_state_id = throttle_state_id;
 	dev_info(sc->dev, "Throttle state updated to %lu", throttle_state_id);

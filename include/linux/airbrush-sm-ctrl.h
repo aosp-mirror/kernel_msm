@@ -539,6 +539,10 @@ struct ab_state_context {
 	 * Guarded by throttle_ready_lock
 	 */
 	bool throttle_nocomp_waiting;
+	/* True if we are transitioning to a compute ready situation
+	 * False if we are leaving a compute ready situation
+	 */
+	bool going_to_comp_ready;
 
 	bool el2_mode; /* Guarded by state_transitioning_lock */
 

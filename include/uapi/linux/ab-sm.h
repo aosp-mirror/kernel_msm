@@ -230,12 +230,18 @@
 
 /*
  * Call will block until there is a throttle to no-compute
- * event. On return, caller is expected to prepare for
- * a no-compute scenario, and then call back into this ioctl.
- * The throttle event will wait until all listeners
- * call back into this ioctl, or a timeout occurs.
+ * event.
+ *
+ * Parameter int*:
+ *  On return if parameter is set to 0, caller is expected to
+ *  prepare for a no-compute scenario, and then call back into
+ *  this ioctl. The throttle event will wait until all listeners
+ *  call back into this ioctl, or a timeout occurs.
+ *  On return if parameter is set to 1, the no-compute scenario
+ *  is over and normal operation can continue. Caller is expected to
+ *  call back into this ioctl to signal it has received the message.
  */
-#define AB_SM_THROTTLE_NOCOMPUTE_NOTIFY	_IO(AB_SM_IOCTL_MAGIC, 25)
+#define AB_SM_COMPUTE_READY_NOTIFY	_IOR(AB_SM_IOCTL_MAGIC, 25, int *)
 
 /*
  * WARNING: Debug only, will be removed in production
