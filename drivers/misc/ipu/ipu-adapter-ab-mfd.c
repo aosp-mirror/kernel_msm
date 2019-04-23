@@ -81,12 +81,9 @@ struct ipu_adapter_ab_mfd_data {
 	bool interrupts_enabled;
 };
 
-/* Paintbox IO virtual address space bounds
- * TODO(b/115432213):  These are place holder values.  I need to figure out the
- * correct value for these.  This comes out to 512MB right now.
- */
-#define PAINTBOX_IOVA_START		0x40000000
-#define PAINTBOX_IOVA_SIZE		0x80000000
+/* Paintbox IO virtual address space bounds */
+#define PAINTBOX_IOVA_START		0x100000000
+#define PAINTBOX_IOVA_SIZE		0x400000000
 
 /* TODO(b/115433779):  Figure out if there is a way to get this information from
  * the system.

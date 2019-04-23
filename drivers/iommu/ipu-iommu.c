@@ -360,50 +360,30 @@ static void ipu_iommu_tlb_add_flush(unsigned long iova, size_t size,
 		size_t granule, bool leaf, void *priv)
 {
 	struct ipu_iommu_data *iommu = (struct ipu_iommu_data *)priv;
-	unsigned long offset;
-	int attempts = 0;
-	struct jqs_message_ipu_reg_values *rsp;
 
-	dev_dbg(iommu->dev, "%s:iova 0x%016lx sz %zu leaf %d\n", __func__, iova,
-			size, leaf);
+	dev_dbg(iommu->dev, "%s\n", __func__);
 
-	for (offset = 0; offset < size; offset += PAGE_SIZE) {
-		while (1) {
-			rsp = ipu_iommu_send_jqs_reg_msg(iommu,
-				MMU_FLUSH_FIFO_STATUS, 0, true /*is_read*/);
-			if (IS_ERR(rsp)) {
-				dev_err(iommu->dev,
-					"%s Error (%d) reading status register\n",
-					__func__, (int)rsp);
-				return;
-			}
-			if (!(rsp->regs[0].value &
-				MMU_FLUSH_FIFO_STATUS_FULL_MASK))
-				break;
-			if (++attempts >= MMU_FLUSH_MAX_ATTEMPTS) {
-				dev_err(iommu->dev,
-						"%s: timeout waiting for flush FIFO to clear\n",
-						__func__);
-				/* TODO:  A proper recovery path for a
-				 * flush FIFO timeout should be developed for
-				 * this case.  b/35470877
-				 */
-				return;
-			}
-
-			udelay(MMU_FLUSH_DELAY);
-		}
-		rsp = ipu_iommu_send_jqs_reg_msg(iommu, MMU_FLUSH_ADDRESS,
-			(iova + offset) >> MMU_FLUSH_ADDRESS_RSHIFT,
-			false /*is_read*/);
-		if (IS_ERR(rsp)) {
-			dev_err(iommu->dev,
-				"%s Error (%d) writing to flush address register\n",
-				__func__, (int)rsp);
-			return;
-		}
-	}
-	ipu_iommu_tlb_sync(priv);
+	/* function was left empty intentionally
+	 * logic was moved to JQS
+	 *
+	 * the IOMMU JQS logic:
+	 * the JQS takes care of the IOMMU cache flushing
+	 * 2 types of flush are supported
+	 * - per address flushes - done for smaller buffers
+	 * - full flush - done when a larger memory area should be freed
+	 * when performing a full flush no DMA transfers can occur.
+	 * since the kernel IOMMU can not move forward with allocating
+	 * new buffers before we flush the address range for old ones the
+	 * following logic is implemented when a full flush is needed:
+	 * - if no transfers are active flush and continue, otherwise:
+	 * - all new transfers are stalled
+	 * - everytime a transaction finishes,
+	 *		check if all transfers are finished
+	 *		and if so:
+	 * -  - flush
+	 * -  - after flushing try to start transaction on all channels
+	 * -  - enable new transaction
+	 */
 }
 
 static struct iommu_gather_ops ipu_iommu_gather_ops = {
@@ -752,13 +732,16 @@ static int ipu_iommu_probe(struct device *dev)
 	if (ret < 0) {
 		dev_err(dev, "failed to register iommu with bus\n");
 		dev_set_drvdata(dev, NULL);
-		goto free_jqs_res;
+		goto remove_sysfs;
 	}
 
 	ipu_set_device_ops(dev, &ipu_iommu_dev_ops);
 
 	iommu_data->iommu_up = false;
 	return 0;
+
+remove_sysfs:
+	device_remove_file(dev, &iommu_active_attr);
 
 free_jqs_res:
 	devm_kfree(dev, iommu_data->jqs_rsp);
