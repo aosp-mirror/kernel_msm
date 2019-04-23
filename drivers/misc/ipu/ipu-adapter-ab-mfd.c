@@ -96,6 +96,24 @@ struct ipu_adapter_ab_mfd_data {
 /* Android APs usually use 4K pages.  This may change in future versions. */
 #define IPU_PAGE_SIZE_BITMAP	(SZ_4K | SZ_2M | SZ_1G)
 
+static inline bool ipu_clock_rate_is_active(uint64_t rate)
+{
+	return ((rate > 0) &&
+			(rate != IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND));
+}
+
+static inline bool ipu_adapter_link_is_ready(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	return !!(atomic_read(&dev_data->state) & IPU_ADAPTER_STATE_PCIE_READY);
+}
+
+static inline bool ipu_adapter_dram_is_ready(
+		struct ipu_adapter_ab_mfd_data *dev_data)
+{
+	return !!(atomic_read(&dev_data->state) & IPU_ADAPTER_STATE_DRAM_READY);
+}
+
 static void ipu_adapter_ab_mfd_writel(struct device *dev, uint32_t val,
 		unsigned int offset)
 {
@@ -430,6 +448,11 @@ void ipu_adapter_ab_mfd_sync_shared_memory(struct device *dev,
 			shared_buffer_base, struct ipu_adapter_shared_buffer,
 			base);
 
+	if (!ipu_adapter_dram_is_ready(dev_data)) {
+		dev_err(dev, "Sync failed because DRAM is not ready.\n");
+		return;
+	}
+
 	mutex_lock(&dev_data->sync_lock);
 
 	if (size <= dev_data->pio_threshold &&
@@ -536,6 +559,9 @@ static int ipu_adapter_ab_mfd_atomic_sync32_shared_memory(struct device *dev,
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
 	int wr_val;
 
+	if (!ipu_adapter_dram_is_ready(dev_data))
+		return -ENOLINK;
+
 	if ((uint32_t)buffer_vaddr % sizeof(uint32_t) != 0) {
 		dev_err(dev, "%s: error: unaligned access\n", __func__);
 		return -EINVAL;
@@ -560,31 +586,6 @@ static int ipu_adapter_ab_mfd_atomic_sync32_shared_memory(struct device *dev,
 	return 0;
 }
 
-static inline bool ipu_clock_rate_is_active(uint64_t rate)
-{
-	return ((rate > 0) &&
-			(rate != IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND));
-}
-
-static inline bool ipu_clock_rate_changed_to_inactive(
-		struct ab_clk_notifier_data *clk_data)
-{
-	return ((!ipu_clock_rate_is_active(clk_data->new_rate)) &&
-			(ipu_clock_rate_is_active(clk_data->old_rate)));
-}
-
-static inline bool ipu_adapter_link_is_ready(
-		struct ipu_adapter_ab_mfd_data *dev_data)
-{
-	return !!(atomic_read(&dev_data->state) & IPU_ADAPTER_STATE_PCIE_READY);
-}
-
-static inline bool ipu_adapter_dram_is_ready(
-		struct ipu_adapter_ab_mfd_data *dev_data)
-{
-	return !!(atomic_read(&dev_data->state) & IPU_ADAPTER_STATE_DRAM_READY);
-}
-
 bool ipu_adapter_is_ready(struct ipu_adapter_ab_mfd_data *dev_data)
 {
 	return (ipu_adapter_link_is_ready(dev_data) &&
@@ -597,7 +598,6 @@ bool ipu_adapter_ab_mfd_is_ready(struct device *dev)
 
 	return ipu_adapter_is_ready(dev_data);
 }
-
 
 void ipu_adapter_ipu_pre_rate_change(
 		struct ipu_adapter_ab_mfd_data *dev_data,
