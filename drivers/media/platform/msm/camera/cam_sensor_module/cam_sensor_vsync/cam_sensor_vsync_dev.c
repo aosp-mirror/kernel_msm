@@ -242,7 +242,7 @@ static int cam_send_request_qmi(
 
 	ret = qmi_txn_init(qmi, &txn, cam_vsync_resp_msg_v01_ei, resp);
 	if (ret < 0) {
-		CAM_ERR(CAM_SENSOR, "%s:qmi_txn_init failed. %d", ret);
+		CAM_ERR(CAM_SENSOR, "qmi_txn_init failed. %d", ret);
 		goto out;
 	}
 
@@ -252,14 +252,14 @@ static int cam_send_request_qmi(
 				cam_vsync_req_msg_v01_ei,
 				req);
 	if (ret < 0) {
-		CAM_ERR(CAM_SENSOR, "%s:qmi_send_request failed. %d", ret);
+		CAM_ERR(CAM_SENSOR, "qmi_send_request failed. %d", ret);
 		qmi_txn_cancel(&txn);
 		goto out;
 	}
 
 	ret = qmi_txn_wait(&txn, 5 * HZ);
 	if (ret < 0) {
-		CAM_ERR(CAM_SENSOR, "%s:qmi_txn_wait failed. %d", ret);
+		CAM_ERR(CAM_SENSOR, "qmi_txn_wait failed. %d", ret);
 		goto out;
 	}
 
