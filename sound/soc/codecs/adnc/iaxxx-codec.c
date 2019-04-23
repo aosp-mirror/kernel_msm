@@ -6882,7 +6882,7 @@ static int iaxxx_pcm_hw_params(struct snd_pcm_substream *substream,
 		reg_srdd_val = 1;
 	} else if (iaxxx->pcm_dai_fmt[id] == SND_SOC_DAIFMT_DSP_A) {
 		mode = IAXXX_PCM_CTRL_DEFAULT_DSPFMT;
-		reg_srdd_val = 0;
+		reg_srdd_val = 1;
 	} else if (iaxxx->pcm_port_fmt[id]) {
 		mode = IAXXX_PCM_CTRL_DEFAULT_TDMFMT;
 		reg_srdd_val = 0;
