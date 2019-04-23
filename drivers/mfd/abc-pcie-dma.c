@@ -1680,7 +1680,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 	abc_dma.uapi.mdev.parent = &pdev->dev;
 	err = init_abc_pcie_dma_uapi(&abc_dma.uapi);
 	if (err)
-		return err;
+		goto remove_sysfs;
 
 	INIT_LIST_HEAD(&pending_to_dev_q);
 	INIT_LIST_HEAD(&pending_from_dev_q);
@@ -1691,7 +1691,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 			dev_err(&abc_dma.pdev->dev,
 				"%s: failed to register ch%d dma irq callback: %d\n",
 				__func__, dma_chan, err);
-			break;
+			goto restore_callback;
 		}
 	}
 
@@ -1706,17 +1706,24 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 
 	if (!waiter_cache) {
 		err = -ENOMEM;
-		goto restore_callback;
+		goto close_dma_session;
 	}
 
 	global_session.waiter_cache = waiter_cache;
 
+	return 0;
+
+close_dma_session:
+	abc_pcie_dma_close_session(&global_session);
+
 restore_callback:
-	/* Restore state of callback array if there is an error registering */
-	if (err) {
-		for (i = dma_chan; i >= 0; i--)
-			abc_reg_dma_irq_callback(NULL, i);
-	}
+	for (i = dma_chan - 1; i >= 0; i--)
+		abc_reg_dma_irq_callback(NULL, i);
+
+	remove_abc_pcie_dma_uapi(&abc_dma.uapi);
+
+remove_sysfs:
+	sysfs_remove_files(&pdev->dev.kobj, abc_pcie_dma_attrs);
 
 	return err;
 }
