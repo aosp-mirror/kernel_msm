@@ -1473,6 +1473,9 @@ int ab_sm_unregister_clk_event(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(ab_sm_unregister_clk_event);
 
+/*
+ * set_ipu_tpu_clk_freq_table - Sets index of clk frequency table for A0/B0.
+ */
 static void set_ipu_tpu_clk_freq_table(struct ab_state_context *sc,
 		enum ab_chip_id chip_id)
 {
@@ -2694,7 +2697,10 @@ int ab_sm_init(struct platform_device *pdev)
 	kfifo_alloc(&ab_sm_ctx->state_change_reqs,
 		AB_KFIFO_ENTRY_SIZE * sizeof(struct ab_change_req), GFP_KERNEL);
 
-	ab_sm_ctx->chip_id = CHIP_ID_UNKNOWN;
+	/* Assume chip_id to be B0 by default. */
+	ab_sm_ctx->chip_id = CHIP_ID_B0;
+	set_ipu_tpu_clk_freq_table(ab_sm_ctx, ab_sm_ctx->chip_id);
+
 	ab_sm_ctx->cold_boot = true;
 	ab_sm_ctx->el2_mode = false;
 

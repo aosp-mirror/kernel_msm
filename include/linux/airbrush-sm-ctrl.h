@@ -428,7 +428,11 @@ struct ab_state_context {
 
 	unsigned int ab_ready_irq;	/* ab_ready_gpio irq */
 
-	/* Check for alternate boot */
+	/*
+	 * When alternate_boot == 1, M0 is paused upon power on or resume
+	 * to wait for SPI commands.  The SPI commands are implementation
+	 * specific.
+	 */
 	int alternate_boot;
 
 	/* if set, skip pcie resume operation for debugging purpose */

@@ -2248,7 +2248,7 @@ static int32_t __ab_ddr_resume(void *ctx)
 	struct ab_state_context *sc = ddr_ctx->ab_state_ctx;
 
 	if (IS_DDR_OTP_FLASHED() && (ab_get_chip_id(sc) == CHIP_ID_A0) &&
-	    IS_M0_DDR_INIT() && !sc->alternate_boot) {
+	    IS_M0_DDR_INIT()) {
 
 		/* IMPORTANT:
 		 * ------------------------------------------------------------

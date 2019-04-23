@@ -102,15 +102,13 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		msm_pcie_assert_perst(1);
 
 		/* Disable PCIe equalization only for Airbrush A0 parts.
-		 * Use alternate_boot property to decide if Airbrush part is A0
-		 * or B0 -
-		 *   alternate_boot == 1 => A0 => PCIe EQ disable
-		 *   alternate_boot == 0 => B0 => PCIe EQ enable
+		 *   A0 => PCIe EQ disable
+		 *   B0 => PCIe EQ enable
 		 */
-		if (ab_ctx->alternate_boot)
-			msm_pcie_eq_ctrl(1, /*enable=*/false);
-		else
+		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
 			msm_pcie_eq_ctrl(1, /*enable=*/true);
+		else
+			msm_pcie_eq_ctrl(1, /*enable=*/false);
 	}
 
 	ret = ab_pmic_on(ab_ctx);
@@ -270,10 +268,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		ab_ctx->cold_boot = false;
 
 		ab_lvcc_init(&ab_ctx->asv_info);
-
-		/* Disable patching if ab is B0 */
-		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
-			ab_ctx->alternate_boot = 0;
 	} else {
 		ab_sm_start_ts(AB_SM_TS_PCIE_ENUM);
 
