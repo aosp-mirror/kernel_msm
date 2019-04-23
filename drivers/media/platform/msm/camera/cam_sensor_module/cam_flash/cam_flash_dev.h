@@ -218,6 +218,8 @@ struct cam_flash_ctrl {
 	int                                 thermal_current_level;
 	int             thermal_mitigation[CAM_FLASH_THERMAL_MITIGATION_LEVEL];
 	struct delayed_work                 init_work;
+	char                         cooling_name[THERMAL_NAME_LENGTH];
+	char                         bcl_flash_node[THERMAL_NAME_LENGTH];
 };
 
 int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg);

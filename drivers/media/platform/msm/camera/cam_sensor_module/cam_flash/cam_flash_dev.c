@@ -272,6 +272,8 @@ static int cam_flash_set_cur_current_limit(struct thermal_cooling_device *cdev,
 		current_limit > CAM_FLASH_THERMAL_MITIGATION_LEVEL)
 		return -EINVAL;
 	fctrl->thermal_current_level = current_limit;
+	CAM_DBG(CAM_FLASH, "Camera flash set current:%kp, %d\n", fctrl,
+		current_limit);
 	return 0;
 }
 
@@ -297,24 +299,25 @@ static void cam_flash_cooling_device_init(struct work_struct *work)
 		return;
 	}
 	soc_private = fctrl->soc_info.soc_private;
-	cooling_node = of_find_node_by_name(NULL, "camera_flash");
-	cdev = thermal_zone_get_cdev_by_name("bcl_camera_flash");
+	cooling_node = of_find_node_by_name(NULL, fctrl->cooling_name);
 	if (!cooling_node) {
-		CAM_ERR(CAM_FLASH, "failed: camera_flash node not found");
+		CAM_ERR(CAM_FLASH, "failed: %s node not found",
+			fctrl->cooling_name);
 		return;
 	}
+	cdev = thermal_zone_get_cdev_by_name(fctrl->bcl_flash_node);
 	if (IS_ERR(cdev)) {
 		fctrl->cdev = thermal_of_cooling_device_register(
-				cooling_node, "bcl_camera_flash", fctrl,
+				cooling_node,
+				fctrl->bcl_flash_node, fctrl,
 				&cam_flash_cooling_ops);
 		if (!fctrl->cdev) {
-			pr_err("error registering cam flash cooling device\n");
-			thermal_cooling_device_unregister(fctrl->cdev);
+			CAM_ERR(CAM_FLASH,
+				"error registering cam flash cooling device\n");
 			return;
 		}
-
 		fctrl->thermal_current_level = CAM_FLASH_THERMAL_INITIAL_LEVEL;
-		return;
+
 	}
 
 	return;
