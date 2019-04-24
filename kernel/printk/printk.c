@@ -2337,6 +2337,17 @@ static inline int can_use_console(void)
 	return cpu_online(raw_smp_processor_id()) || have_callable_console();
 }
 
+#define MAX_CONSOLE_UNLOCK_OUTPUT 75
+bool console_enabled;
+
+static int __init setup_console_enabled(char *unused)
+{
+	console_enabled = true;
+
+	return 1;
+}
+__setup("androidboot.console=", setup_console_enabled);
+
 /**
  * console_unlock - unlock the console system
  *
@@ -2359,6 +2370,9 @@ void console_unlock(void)
 	unsigned long flags;
 	bool wake_klogd = false;
 	bool do_cond_resched, retry;
+
+	/* Keep a count of the number of lines flushed in this call */
+	unsigned int count = 0;
 
 	if (console_suspended) {
 		up_console_sem();
@@ -2420,6 +2434,11 @@ skip:
 		if (console_seq == log_next_seq)
 			break;
 
+		/* Limit console output count to workaround watchdog resets */
+		if (unlikely(console_enabled) &&
+				(count >= MAX_CONSOLE_UNLOCK_OUTPUT))
+			break;
+
 		msg = log_from_idx(console_idx);
 		if (suppress_message_printing(msg->level)) {
 			/*
@@ -2458,6 +2477,9 @@ skip:
 		call_console_drivers(ext_text, ext_len, text, len);
 		start_critical_timings();
 
+		/* Increment count after flushing a line of text to console */
+		count++;
+
 		if (console_lock_spinning_disable_and_check()) {
 			printk_safe_exit_irqrestore(flags);
 			goto out;
@@ -2488,6 +2510,12 @@ skip:
 	raw_spin_lock(&logbuf_lock);
 	retry = console_seq != log_next_seq;
 	raw_spin_unlock(&logbuf_lock);
+
+	/* Do not retry if we have already met our console output quota */
+	if (unlikely(console_enabled) && retry &&
+			(count >= MAX_CONSOLE_UNLOCK_OUTPUT))
+		retry = false;
+
 	printk_safe_exit_irqrestore(flags);
 
 	if (retry && console_trylock())

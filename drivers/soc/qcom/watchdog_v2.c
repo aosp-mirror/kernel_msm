@@ -791,15 +791,7 @@ static int init_watchdog_sysfs(struct msm_watchdog_data *wdog_dd)
 	return error;
 }
 
-static bool console_enabled;
-
-static int __init setup_console_enabled(char *unused)
-{
-	console_enabled = true;
-
-	return 1;
-}
-__setup("androidboot.console=", setup_console_enabled);
+extern bool console_enabled;
 
 static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 {
