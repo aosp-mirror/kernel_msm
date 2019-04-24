@@ -519,15 +519,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	/* Mark block as new state early in case rollback is needed */
 	blk->current_state = desired_state;
 
-	/* Raise boost voltage if necessary before frequency change */
-	if (blk->name == BLK_IPU || blk->name == BLK_TPU) {
-		if (last_state->logic_voltage != VOLTAGE_0_85 &&
-			desired_state->logic_voltage == VOLTAGE_0_85) {
-			dev_info(sc->dev, "Enabling boost mode\n");
-			ab_pmic_enable_boost(sc);
-		}
-	}
-
 	mutex_lock(&sc->op_lock);
 	pmu = sc->pmu_ops;
 	/* PMU settings - Resume */
@@ -602,15 +593,6 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		if (pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
-		}
-	}
-
-	/* Disable boost voltage if necessary after frequency change */
-	if (blk->name == BLK_IPU || blk->name == BLK_TPU) {
-		if (last_state->logic_voltage == VOLTAGE_0_85 &&
-			desired_state->logic_voltage != VOLTAGE_0_85) {
-			dev_info(sc->dev, "Disabling boost mode\n");
-			ab_pmic_disable_boost(sc);
 		}
 	}
 

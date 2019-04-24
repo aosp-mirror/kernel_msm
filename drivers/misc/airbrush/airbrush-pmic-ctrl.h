@@ -18,9 +18,6 @@
 #define LDO5_DEFAULT_DELAY	0
 #define S60_DEFAULT_DELAY	0
 
-void ab_pmic_enable_boost(struct ab_state_context *sc);
-void ab_pmic_disable_boost(struct ab_state_context *sc);
-
 int ab_mark_pmic_rail(struct ab_state_context *sc,
 			   enum block_name blk_name,
 			   bool enable,

@@ -443,8 +443,6 @@ struct ab_state_context {
 	struct regulator *ldo3;
 	struct regulator *ldo4;
 	struct regulator *ldo5;
-	struct regulator *boost_smps1;
-	struct regulator *boost_ldo3;
 
 	bool smps1_state;
 	bool smps2_state;

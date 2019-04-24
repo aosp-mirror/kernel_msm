@@ -12,34 +12,6 @@
  */
 #include <linux/airbrush-sm-ctrl.h>
 
-/* Enable boost mode on smps1 and ldo3 */
-void ab_pmic_enable_boost(struct ab_state_context *sc)
-{
-	if (!regulator_is_enabled(sc->boost_smps1) &&
-		!regulator_is_enabled(sc->boost_ldo3)) {
-		regulator_enable(sc->boost_smps1);
-		/*
-		 * Note: once boost mode is enabled, both smps1 and ldo3
-		 * are at boost mode.  Below call is actually no-op.
-		 */
-		regulator_enable(sc->boost_ldo3);
-	}
-}
-
-/* Disable boost mode on smps1 and ldo3 */
-void ab_pmic_disable_boost(struct ab_state_context *sc)
-{
-	if (regulator_is_enabled(sc->boost_ldo3) &&
-		regulator_is_enabled(sc->boost_smps1)) {
-		regulator_disable(sc->boost_ldo3);
-		/*
-		 * Note: once boost mode is disabled, both smps1 and ldo3
-		 * are back to normal mode.  Below call is actually no-op.
-		 */
-		regulator_disable(sc->boost_smps1);
-	}
-}
-
 int ab_mark_pmic_rail(struct ab_state_context *sc,
 			   enum block_name blk_name,
 			   bool enable,
@@ -397,26 +369,6 @@ int ab_get_pmic_resources(struct ab_state_context *sc)
 			dev_err(dev, "failed to get s2mpg01_ldo5 supply (%ld)\n",
 					PTR_ERR(sc->ldo5));
 			return PTR_ERR(sc->ldo5);
-		}
-	}
-
-	if (!sc->boost_smps1) {
-		sc->boost_smps1 =
-			devm_regulator_get(dev, "s2mpg01_boost_smps1");
-		if (IS_ERR(sc->boost_smps1)) {
-			dev_err(dev, "failed to get s2mpg01_boost_smps1 supply (%ld)\n",
-					PTR_ERR(sc->boost_smps1));
-			return PTR_ERR(sc->boost_smps1);
-		}
-	}
-
-	if (!sc->boost_ldo3) {
-		sc->boost_ldo3 =
-			devm_regulator_get(dev, "s2mpg01_boost_ldo3");
-		if (IS_ERR(sc->boost_ldo3)) {
-			dev_err(dev, "failed to get s2mpg01_boost_ldo3 supply (%ld)\n",
-					PTR_ERR(sc->boost_ldo3));
-			return PTR_ERR(sc->boost_ldo3);
 		}
 	}
 
