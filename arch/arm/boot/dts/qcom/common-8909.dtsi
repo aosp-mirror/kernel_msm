@@ -202,7 +202,7 @@
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <97 0x2008>;
 		sensorhub,irq1-gpio   = <&msm_gpio 97 0x2008>;
-		sensorhub,irq2-gpio   = <&msm_gpio 96 0x2008>;
+		/* sensorhub,irq2-gpio   = <&msm_gpio 96 0x2008>; */
 		sensorhub,irq3-gpio   = <&msm_gpio 90 0x2008>;
 		sensorhub,wakeup-gpio = <&msm_gpio 71 0>;
 		sensorhub,spi-cs-gpio = <&msm_gpio 14 0>;

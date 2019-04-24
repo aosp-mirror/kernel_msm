@@ -2061,6 +2061,18 @@ static int nanohub_request_irqs(struct nanohub_data *data)
 		data->irq1 = 0;
 	else
 		disable_irq(data->irq1);
+
+	ret = request_threaded_irq(data->irq3, NULL, nanohub_irq3,
+				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				   "nanohub-irq3", data);
+	if (ret < 0) {
+		data->irq3 = 0;
+		WARN(1, "failed to request optional IRQ %d; err=%d",
+		     data->irq3, ret);
+	} else {
+		disable_irq(data->irq3);
+	}
+
 	if (data->irq2 <= 0 || ret < 0) {
 		data->irq2 = 0;
 		return ret;
@@ -2075,17 +2087,6 @@ static int nanohub_request_irqs(struct nanohub_data *data)
 		     data->irq2, ret);
 	} else {
 		disable_irq(data->irq2);
-	}
-
-	ret = request_threaded_irq(data->irq3, NULL, nanohub_irq3,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				   "nanohub-irq3", data);
-	if (ret < 0) {
-		data->irq3 = 0;
-		WARN(1, "failed to request optional IRQ %d; err=%d",
-		     data->irq3, ret);
-	} else {
-		disable_irq(data->irq3);
 	}
 	/* if 2d request fails, hide this; it is optional IRQ,
 	 * and failure should not interrupt driver init sequence.
