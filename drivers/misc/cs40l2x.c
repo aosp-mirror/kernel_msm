@@ -7618,7 +7618,7 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	struct device *dev = cs40l2x->dev;
-	unsigned int val;
+	unsigned int val, hb_init;
 	int ret, i;
 
 	for (i = 0; i < CS40L2X_BASIC_TIMEOUT_COUNT; i++) {
@@ -7631,11 +7631,35 @@ static int cs40l2x_basic_mode_exit(struct cs40l2x_private *cs40l2x)
 		if (val & CS40L2X_BASIC_BOOT_DONE)
 			break;
 
-		usleep_range(10000, 10100);
+		usleep_range(5000, 5100);
 	}
 
 	if (i == CS40L2X_BASIC_TIMEOUT_COUNT) {
 		dev_err(dev, "Timed out waiting for basic-mode boot\n");
+		return -ETIME;
+	}
+
+	ret = regmap_read(regmap, CS40L2X_BASIC_HALO_HEARTBEAT, &hb_init);
+	if (ret) {
+		dev_err(dev, "Failed to read basic-mode heartbeat\n");
+		return ret;
+	}
+
+	for (i = 0; i < CS40L2X_BASIC_TIMEOUT_COUNT; i++) {
+		usleep_range(5000, 5100);
+
+		ret = regmap_read(regmap, CS40L2X_BASIC_HALO_HEARTBEAT, &val);
+		if (ret) {
+			dev_err(dev, "Failed to read basic-mode heartbeat\n");
+			return ret;
+		}
+
+		if (val > hb_init)
+			break;
+	}
+
+	if (i == CS40L2X_BASIC_TIMEOUT_COUNT) {
+		dev_err(dev, "Timed out waiting for basic-mode heartbeat\n");
 		return -ETIME;
 	}
 
