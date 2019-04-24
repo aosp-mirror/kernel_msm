@@ -1702,6 +1702,8 @@ static int tcpm_set_roles(struct tcpc_dev *dev, bool attached,
 	if (!ret) {
 		pd->cur_pwr_role = role;
 		pd->cur_data_role = data;
+		pd->pdphy_params.power_role = get_pdphy_power_role(role);
+		pd->pdphy_params.data_role = get_pdphy_data_role(data);
 	}
 unlock:
 	mutex_unlock(&pd->lock);
