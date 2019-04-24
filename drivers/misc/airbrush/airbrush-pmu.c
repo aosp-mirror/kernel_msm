@@ -104,6 +104,7 @@ static int ab_pmu_ipu_sleep_handler(void *ctx)
 
 	return ret;
 }
+
 /* Caller must hold pmu_ctx->pcie_link_lock */
 static int __ab_pmu_tpu_sleep(struct ab_pmu_context *pmu_ctx)
 {
@@ -143,6 +144,63 @@ static int ab_pmu_tpu_sleep_handler(void *ctx)
 	mutex_lock(&pmu_ctx->pcie_link_lock);
 	if (pmu_ctx->pcie_link_ready) {
 		ret = __ab_pmu_tpu_sleep(pmu_ctx);
+	} else {
+		dev_err(pmu_ctx->dev,
+				"%s: pcie link down during pmu request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&pmu_ctx->pcie_link_lock);
+
+	return ret;
+}
+
+/* Caller must hold pmu_ctx->pcie_link_lock */
+static int __ab_pmu_ipu_tpu_sleep(struct ab_pmu_context *pmu_ctx)
+{
+	uint32_t val;
+	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
+
+	/* IPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
+	ABC_READ(CMU_IPU_IPU_CONTROLLER_OPTION, &val);
+	val |= (0x1 << 29);
+	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, val);
+
+	/* TPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
+	ABC_READ(CMU_TPU_TPU_CONTROLLER_OPTION, &val);
+	val |= (0x1 << 29);
+	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, val);
+
+	/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
+	/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
+	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
+	val &= ~0x3;
+	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
+
+	do {
+		/* PMU_STATUS[0:0] BLK_IPU_UP_STATUS */
+		/* PMU_STATUS[1:1] BLK_TPU_UP_STATUS */
+		ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
+	} while ((val & 0x3) && --timeout > 0);
+
+	if (timeout == 0) {
+		dev_err(pmu_ctx->dev, "Timeout waiting for IPU/TPU down status\n");
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+static int ab_pmu_ipu_tpu_sleep_handler(void *ctx)
+{
+	int ret;
+	struct ab_pmu_context *pmu_ctx = (struct ab_pmu_context *)ctx;
+
+	dev_dbg(pmu_ctx->dev, "ab tpu entering sleep\n");
+
+	mutex_lock(&pmu_ctx->pcie_link_lock);
+	if (pmu_ctx->pcie_link_ready) {
+		ret = __ab_pmu_ipu_tpu_sleep(pmu_ctx);
 	} else {
 		dev_err(pmu_ctx->dev,
 				"%s: pcie link down during pmu request\n",
@@ -352,12 +410,63 @@ static int ab_pmu_tpu_resume_handler(void *ctx)
 	return ret;
 }
 
+/* Caller must hold pmu_ctx->pcie_link_lock */
+static int __ab_pmu_ipu_tpu_resume_handler(struct ab_pmu_context *pmu_ctx)
+{
+	uint32_t val;
+	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
+
+	/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
+	/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
+	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
+	val |= (0x3 << 0);
+	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
+	do {
+		/* PMU_STATUS[0:0] BLK_IPU_UP_STATUS */
+		/* PMU_STATUS[1:1] BLK_TPU_UP_STATUS */
+		ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
+	} while ((!(val & 0x2) || !(val & 0x1)) && --timeout > 0);
+
+	if (timeout == 0) {
+		dev_err(pmu_ctx->dev, "Timeout waiting for IPU/TPU up status\n");
+		return -EBUSY;
+	}
+
+	abc_ipu_apb_clk_fix();
+	abc_tpu_apb_clk_fix();
+
+	return 0;
+}
+
+static int ab_pmu_ipu_tpu_resume_handler(void *ctx)
+{
+	int ret;
+	struct ab_pmu_context *pmu_ctx = (struct ab_pmu_context *)ctx;
+
+	dev_dbg(pmu_ctx->dev, "ab ipu and tpu resuming\n");
+
+	mutex_lock(&pmu_ctx->pcie_link_lock);
+	if (pmu_ctx->pcie_link_ready) {
+		ret = __ab_pmu_ipu_tpu_resume_handler(pmu_ctx);
+	} else {
+		dev_err(pmu_ctx->dev,
+				"%s: pcie link down during pmu request\n",
+				__func__);
+		ret = -ENODEV;
+	}
+	mutex_unlock(&pmu_ctx->pcie_link_lock);
+
+	return ret;
+}
+
 static struct ab_sm_pmu_ops pmu_ops = {
 	.pmu_ipu_sleep = &ab_pmu_ipu_sleep_handler,
 	.pmu_tpu_sleep = &ab_pmu_tpu_sleep_handler,
+	.pmu_ipu_tpu_sleep = &ab_pmu_ipu_tpu_sleep_handler,
 	.pmu_deep_sleep = &ab_pmu_deep_sleep_handler,
 	.pmu_ipu_resume = &ab_pmu_ipu_resume_handler,
 	.pmu_tpu_resume = &ab_pmu_tpu_resume_handler,
+	.pmu_ipu_tpu_resume = &ab_pmu_ipu_tpu_resume_handler,
 };
 
 static int ab_pmu_probe(struct platform_device *pdev)

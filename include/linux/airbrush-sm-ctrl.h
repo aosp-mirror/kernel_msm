@@ -251,6 +251,11 @@ enum ab_sm_time_stamps {
 	AB_SM_TS_LVCC,
 	AB_SM_TS_AON_DRAM_INIT,
 
+	/* IPU/TPU blk_set_state */
+	AB_SM_TS_IPU_TPU,
+	AB_SM_TS_IPU_TPU_PMU_RES,
+	AB_SM_TS_IPU_TPU_CLK,
+
 	/*IPU blk_set_state*/
 	AB_SM_TS_IPU,
 	AB_SM_TS_IPU_PMU_RES,
@@ -277,6 +282,8 @@ enum ab_sm_time_stamps {
 	AB_SM_TS_TPU_POST_RC_NOTIFY,
 	AB_SM_TS_TPU_PMU_SLEEP,
 	AB_SM_TS_PMU_DEEP_SLEEP,
+
+	AB_SM_TS_IPU_TPU_PMU_SLEEP,
 
 	/* DRAM blk_set_state */
 	AB_SM_TS_DRAM,
@@ -324,9 +331,11 @@ struct ab_sm_pmu_ops {
 
 	int (*pmu_ipu_sleep)(void *ctx);
 	int (*pmu_tpu_sleep)(void *ctx);
+	int (*pmu_ipu_tpu_sleep)(void *ctx);
 	int (*pmu_deep_sleep)(void *ctx);
 	int (*pmu_ipu_resume)(void *ctx);
 	int (*pmu_tpu_resume)(void *ctx);
+	int (*pmu_ipu_tpu_resume)(void *ctx);
 };
 
 struct ab_sm_clk_ops {
@@ -336,6 +345,9 @@ struct ab_sm_clk_ops {
 
 	int64_t (*ipu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
 	int64_t (*tpu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
+	int64_t (*ipu_tpu_set_rate)(void *ctx,
+			u64 old_ipu_rate, u64 new_ipu_rate,
+			u64 old_tpu_rate, u64 new_tpu_rate);
 	int64_t (*aon_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
 };
 

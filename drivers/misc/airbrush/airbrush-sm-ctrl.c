@@ -53,35 +53,45 @@ static struct ab_state_context *ab_sm_ctx;
 
 static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
+static int pmu_ipu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_deep_sleep_stub(void *ctx) { return -ENODEV; }
 static int pmu_ipu_resume_stub(void *ctx)     { return -ENODEV; }
 static int pmu_tpu_resume_stub(void *ctx)     { return -ENODEV; }
+static int pmu_ipu_tpu_resume_stub(void *ctx)     { return -ENODEV; }
 
 static struct ab_sm_pmu_ops pmu_ops_stub = {
 	.ctx = NULL,
 
 	.pmu_ipu_sleep = &pmu_ipu_sleep_stub,
 	.pmu_tpu_sleep = &pmu_tpu_sleep_stub,
+	.pmu_ipu_tpu_sleep = &pmu_ipu_tpu_sleep_stub,
 	.pmu_deep_sleep = &pmu_deep_sleep_stub,
 	.pmu_ipu_resume = &pmu_ipu_resume_stub,
 	.pmu_tpu_resume = &pmu_tpu_resume_stub,
+	.pmu_ipu_tpu_resume = &pmu_ipu_tpu_resume_stub,
 };
 
 static void ab_clk_init_stub(void *ctx)   { return; }
 
 static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
-	return 0;
+	return -ENODEV;
 }
 
 static int64_t tpu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
-	return 0;
+	return -ENODEV;
+}
+static int64_t ipu_tpu_set_rate_stub(void *ctx,
+		u64 old_ipu_rate, u64 new_ipu_rate,
+		u64 old_tpu_rate, u64 new_tpu_rate)
+{
+	return -ENODEV;
 }
 
 static int64_t aon_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
-	return 0;
+	return -ENODEV;
 }
 
 static struct ab_sm_clk_ops clk_ops_stub = {
@@ -91,6 +101,7 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 
 	.ipu_set_rate = &ipu_set_rate_stub,
 	.tpu_set_rate = &tpu_set_rate_stub,
+	.ipu_tpu_set_rate = &ipu_tpu_set_rate_stub,
 	.aon_set_rate = &aon_set_rate_stub,
 };
 
@@ -438,6 +449,66 @@ void ab_sm_register_blk_callback(enum block_name name,
 	ab_sm_ctx->blocks[name].data = data;
 }
 
+int clk_set_ipu_tpu_freq(struct ab_state_context *sc,
+		struct block_property *last_ipu_state,
+		struct block_property *new_ipu_state,
+		struct block_property *last_tpu_state,
+		struct block_property *new_tpu_state)
+{
+	int ret = 0;
+	int64_t ret_freq;
+	u64 old_ipu_freq = last_ipu_state->clk_frequency;
+	u64 new_ipu_freq = new_ipu_state->clk_frequency;
+	u64 old_tpu_freq = last_tpu_state->clk_frequency;
+	u64 new_tpu_freq = new_tpu_state->clk_frequency;
+
+	struct ab_sm_clk_ops *clk = sc->clk_ops;
+
+	if (old_ipu_freq != new_ipu_freq &&
+			old_tpu_freq != new_tpu_freq) {
+		ab_sm_start_ts(AB_SM_TS_IPU_TPU_CLK);
+		ret = clk->ipu_tpu_set_rate(clk->ctx,
+				old_ipu_freq, new_ipu_freq,
+				old_tpu_freq, new_tpu_freq);
+		ab_sm_record_ts(AB_SM_TS_IPU_TPU_CLK);
+		if (ret < 0) {
+			dev_err(sc->dev,
+				"Tried to set ipu freq to %lld and tpu freq to %lld, ret=%d\n",
+				new_ipu_freq, new_tpu_freq, ret);
+			return ret;
+		}
+
+	} else if (old_ipu_freq != new_ipu_freq) {
+		ab_sm_start_ts(AB_SM_TS_IPU_CLK);
+
+		ret_freq = clk->ipu_set_rate(clk->ctx,
+				old_ipu_freq, new_ipu_freq);
+		if (ret_freq != new_ipu_freq) {
+			dev_err(sc->dev, "Tried to set ipu freq to %lld but got %lld",
+					new_ipu_freq, ret_freq);
+			return -ENODEV;
+		}
+
+		ab_sm_record_ts(AB_SM_TS_IPU_CLK);
+
+	} else if (old_tpu_freq != new_tpu_freq) {
+		ab_sm_start_ts(AB_SM_TS_TPU_CLK);
+
+		ret_freq = clk->tpu_set_rate(clk->ctx,
+				old_tpu_freq, new_tpu_freq);
+		if (ret_freq != new_tpu_freq) {
+			dev_err(sc->dev, "Tried to set tpu freq to %lld but got %lld",
+					new_tpu_freq, ret_freq);
+			return -ENODEV;
+		}
+
+		ab_sm_record_ts(AB_SM_TS_TPU_CLK);
+	}
+
+	return 0;
+}
+
+
 /* Caller must hold sc->op_lock */
 int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 			 struct block_property *last_state,
@@ -525,6 +596,11 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	if (last_state->id == desired_state->id)
 		return 0;
 
+	if (blk->name == BLK_IPU)
+		ab_sm_start_ts(AB_SM_TS_IPU);
+	if (blk->name == BLK_TPU)
+		ab_sm_start_ts(AB_SM_TS_TPU);
+
 	/* Mark block as new state early in case rollback is needed */
 	blk->current_state = desired_state;
 
@@ -596,6 +672,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	}
 
 	/* PMU settings - Deep Sleep */
+	ab_sm_start_ts(AB_SM_TS_PMU_DEEP_SLEEP);
 	if (desired_state->pmu == PMU_STATE_DEEP_SLEEP &&
 			last_state->pmu != PMU_STATE_DEEP_SLEEP &&
 			blk->name == BLK_TPU) {
@@ -604,6 +681,134 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 			return -EAGAIN;
 		}
 	}
+	ab_sm_record_ts(AB_SM_TS_PMU_DEEP_SLEEP);
+
+	mutex_unlock(&sc->op_lock);
+
+	if (blk->name == BLK_IPU)
+		ab_sm_record_ts(AB_SM_TS_IPU);
+	if (blk->name == BLK_TPU)
+		ab_sm_record_ts(AB_SM_TS_TPU);
+
+	return 0;
+}
+
+int blk_set_ipu_tpu_states(struct ab_state_context *sc,
+		struct block *ipu_blk, enum block_state to_ipu_state,
+		struct block *tpu_blk, enum block_state to_tpu_state)
+{
+	struct ab_sm_pmu_ops *pmu;
+	struct block_property *next_ipu_state =
+		get_desired_state(ipu_blk, to_ipu_state);
+	struct block_property *last_ipu_state = ipu_blk->current_state;
+	struct block_property *next_tpu_state =
+		get_desired_state(tpu_blk, to_tpu_state);
+	struct block_property *last_tpu_state = tpu_blk->current_state;
+
+	if (!next_ipu_state || !next_tpu_state)
+		return -EINVAL;
+
+	if (last_ipu_state->id == next_ipu_state->id &&
+			last_tpu_state->id == next_tpu_state->id)
+		return 0;
+	else if (last_ipu_state->id == next_ipu_state->id)
+		return blk_set_state(sc, tpu_blk, to_tpu_state);
+	else if (last_tpu_state->id == next_tpu_state->id)
+		return blk_set_state(sc, ipu_blk, to_ipu_state);
+
+	ipu_blk->current_state = next_ipu_state;
+	tpu_blk->current_state = next_tpu_state;
+
+	mutex_lock(&sc->op_lock);
+	pmu = sc->pmu_ops;
+	/* PMU settings - Resume */
+	if (next_ipu_state->pmu == PMU_STATE_ON &&
+			next_tpu_state->pmu == PMU_STATE_ON &&
+			(last_ipu_state->pmu != PMU_STATE_ON ||
+			 last_tpu_state->pmu != PMU_STATE_ON)) {
+		ab_sm_start_ts(AB_SM_TS_IPU_TPU_PMU_RES);
+		if (pmu->pmu_ipu_tpu_resume(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
+		ab_sm_record_ts(AB_SM_TS_IPU_TPU_PMU_RES);
+
+	} else if (next_ipu_state->pmu == PMU_STATE_ON &&
+			last_ipu_state->pmu != PMU_STATE_ON) {
+		ab_sm_start_ts(AB_SM_TS_IPU_PMU_RES);
+		if (pmu->pmu_ipu_resume(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
+		ab_sm_record_ts(AB_SM_TS_IPU_PMU_RES);
+
+	} else if (next_tpu_state->pmu == PMU_STATE_ON &&
+			last_tpu_state->pmu != PMU_STATE_ON) {
+		ab_sm_start_ts(AB_SM_TS_TPU_PMU_RES);
+		if (pmu->pmu_tpu_resume(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
+		ab_sm_record_ts(AB_SM_TS_TPU_PMU_RES);
+	}
+
+	if (clk_set_ipu_tpu_freq(sc,
+			last_ipu_state, next_ipu_state,
+			last_tpu_state, next_tpu_state)) {
+		mutex_unlock(&sc->op_lock);
+		return -EAGAIN;
+	}
+
+	if (ipu_blk->set_state) {
+		ipu_blk->set_state(last_ipu_state, next_ipu_state,
+				to_ipu_state, ipu_blk->data);
+	}
+	if (tpu_blk->set_state) {
+		tpu_blk->set_state(last_tpu_state, next_tpu_state,
+				to_tpu_state, tpu_blk->data);
+	}
+
+	/* PMU settings - Sleep */
+	if (next_ipu_state->pmu == PMU_STATE_SLEEP &&
+			next_tpu_state->pmu == PMU_STATE_SLEEP &&
+			last_ipu_state->pmu == PMU_STATE_ON &&
+			last_tpu_state->pmu == PMU_STATE_ON) {
+		ab_sm_start_ts(AB_SM_TS_IPU_TPU_PMU_SLEEP);
+		if (pmu->pmu_ipu_tpu_sleep(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
+		ab_sm_record_ts(AB_SM_TS_IPU_TPU_PMU_SLEEP);
+
+	} else if (next_ipu_state->pmu == PMU_STATE_SLEEP &&
+			last_ipu_state->pmu == PMU_STATE_ON) {
+		ab_sm_start_ts(AB_SM_TS_IPU_PMU_SLEEP);
+		if (pmu->pmu_ipu_sleep(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
+		ab_sm_record_ts(AB_SM_TS_IPU_PMU_SLEEP);
+
+	} else if (next_tpu_state->pmu == PMU_STATE_SLEEP &&
+			last_tpu_state->pmu == PMU_STATE_ON) {
+		ab_sm_start_ts(AB_SM_TS_TPU_PMU_SLEEP);
+		if (pmu->pmu_tpu_sleep(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
+		ab_sm_record_ts(AB_SM_TS_TPU_PMU_SLEEP);
+	}
+
+	/* PMU settings - Deep Sleep */
+	ab_sm_start_ts(AB_SM_TS_PMU_DEEP_SLEEP);
+	if (next_ipu_state->pmu == PMU_STATE_DEEP_SLEEP &&
+			last_ipu_state->pmu != PMU_STATE_DEEP_SLEEP) {
+		if (pmu->pmu_deep_sleep(pmu->ctx)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
+	}
+	ab_sm_record_ts(AB_SM_TS_PMU_DEEP_SLEEP);
 
 	mutex_unlock(&sc->op_lock);
 
@@ -792,6 +997,9 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"    PMIC on",
 		"    LVCC",
 		"    AON state change for DRAM init",
+		"    IPU/TPU state change",
+		"    IPU/TPU PMU resume",
+		"    IPU/TPU clock settings",
 		"    IPU state change",
 		"        IPU PMU resume",
 		"        IPU clock settings",
@@ -815,6 +1023,7 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"            TPU post rate change notify",
 		"        TPU PMU sleep",
 		"        PMU deep sleep",
+		"    IPU/TPU PMU sleep",
 		"    DDR state change",
 		"        DDR callback",
 		"            DDR set PLL",
@@ -886,8 +1095,9 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	ab_prep_pmic_settings(sc, map);
 
 	dev_err(sc->dev, "Cleaning AB state\n");
-	blk_set_state(sc, &(sc->blocks[BLK_IPU]), map->ipu_block_state_id);
-	blk_set_state(sc, &(sc->blocks[BLK_TPU]), map->tpu_block_state_id);
+	blk_set_ipu_tpu_states(sc,
+			&(sc->blocks[BLK_IPU]), map->ipu_block_state_id,
+			&(sc->blocks[BLK_TPU]), map->tpu_block_state_id);
 	blk_set_state(sc, &(sc->blocks[DRAM]), map->dram_block_state_id);
 	blk_set_state(sc, &(sc->blocks[BLK_MIF]), map->mif_block_state_id);
 	blk_set_state(sc, &(sc->blocks[BLK_FSYS]), map->fsys_block_state_id);
@@ -1025,20 +1235,16 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		 * IPU, TPU, and DRAM into fully active states
 		 */
 		if (to_chip_substate_id >= CHIP_STATE_500) {
-			if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
-					active_map->ipu_block_state_id)) {
-				ret = -EINVAL;
-				dev_err(sc->dev, "blk_set_state failed for IPU\n");
-				goto cleanup_state;
-			}
-
-			if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
+			if (blk_set_ipu_tpu_states(sc,
+					&(sc->blocks[BLK_IPU]),
+					active_map->ipu_block_state_id,
+					&(sc->blocks[BLK_TPU]),
 					active_map->tpu_block_state_id)) {
 				ret = -EINVAL;
-				dev_err(sc->dev, "blk_set_state failed for TPU\n");
+				dev_err(sc->dev, "blk_set_ipu_tpu_state failed\n");
 				goto cleanup_state;
-			}
 
+			}
 			if (blk_set_state(sc, &(sc->blocks[DRAM]),
 					active_map->dram_block_state_id)) {
 				ret = -EINVAL;
@@ -1088,25 +1294,17 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	}
 
-	ab_sm_start_ts(AB_SM_TS_IPU);
-	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
-			dest_map->ipu_block_state_id)) {
+	ab_sm_start_ts(AB_SM_TS_IPU_TPU);
+	if (blk_set_ipu_tpu_states(sc,
+			&(sc->blocks[BLK_IPU]), dest_map->ipu_block_state_id,
+			&(sc->blocks[BLK_TPU]), dest_map->tpu_block_state_id)) {
 		ret = -EINVAL;
-		dev_err(sc->dev, "blk_set_state failed for IPU\n");
+		dev_err(sc->dev, "blk_set_ipu_tpu_state failed\n");
 		if (to_chip_substate_id != CHIP_STATE_0)
 			goto cleanup_state;
-	}
-	ab_sm_record_ts(AB_SM_TS_IPU);
 
-	ab_sm_start_ts(AB_SM_TS_TPU);
-	if (blk_set_state(sc, &(sc->blocks[BLK_TPU]),
-			dest_map->tpu_block_state_id)) {
-		ret = -EINVAL;
-		dev_err(sc->dev, "blk_set_state failed for TPU\n");
-		if (to_chip_substate_id != CHIP_STATE_0)
-			goto cleanup_state;
 	}
-	ab_sm_record_ts(AB_SM_TS_TPU);
+	ab_sm_record_ts(AB_SM_TS_IPU_TPU);
 
 	ab_sm_start_ts(AB_SM_TS_DRAM);
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
