@@ -1246,16 +1246,16 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 				shadow_ptep->ab_dram_dma_buf) +
 			(sizeof(arm_lpae_iopte) * diff),
 			ptep,
-			0, true /* push_update */);
+			0, false /* push_update */);
+
+		if (!iopte_leaf(pte, lvl))
+			__ipu_iommu_free_pgtable(
+				pg_table, lvl + 1, shadow_nptep, 1);
+
 		if (shadow_ptep->next_lvl)
 			memset(shadow_ptep->next_lvl + diff, 0,
 				sizeof(*shadow_ptep));
 
-		if (!iopte_leaf(pte, lvl)) {
-			/* Also flush any partial walks */
-			__ipu_iommu_free_pgtable(
-				pg_table, lvl + 1, shadow_nptep, 1);
-		}
 		return size;
 	} else if ((lvl == ARM_LPAE_MAX_LEVELS - 2) &&
 		size % SZ_2M == 0) {
@@ -1267,7 +1267,8 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 		if (!iopte_leaf(pte, lvl)) {
 			/* count */
 			for (shadow_tmp = shadow_nptep + 1, entries = 1;
-					entries < max_entries; ++entries)
+					entries < max_entries;
+					++entries, ++shadow_tmp)
 				if (shadow_tmp->ab_dram_dma_buf != NULL ||
 					shadow_tmp->page_table_entry ==
 					NULL)
@@ -1327,7 +1328,7 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 					shadow_ptep->ab_dram_dma_buf) +
 				(sizeof(arm_lpae_iopte) * diff),
 				ptep,
-				0, true /* push_update */);
+				0, false /* push_update */);
 			memset(shadow_ptep->next_lvl + diff, 0,
 				sizeof(*shadow_ptep));
 
@@ -1407,8 +1408,11 @@ static size_t ipu_iommu_pgtable_unmap(struct io_pgtable_ops *ops,
 		unmapped += ret;
 		iova += ret;
 	}
-	if (unmapped)
+	if (unmapped) {
+		__ipu_iommu_page_table_send_updates_to_mem(pg_table,
+			&data->iop.cfg);
 		io_pgtable_tlb_flush_all(&data->iop);
+	}
 
 	return unmapped;
 }
