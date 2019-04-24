@@ -10,3 +10,10 @@
  * GNU General Public License for more details.
  */
 #include "sm8150-flame.dtsi"
+
+&soc {
+	abc-sm {
+		/* Set "otp-bypass" due to mixed datecode parts. */
+		otp-bypass = <1>;
+	};
+};
