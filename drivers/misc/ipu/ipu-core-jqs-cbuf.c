@@ -25,6 +25,10 @@ static inline struct jqs_cbuf *get_jqs_buffer(struct host_jqs_cbuf *host_cbuf)
 {
 	uint8_t *host_vaddr;
 
+	if (WARN_ON(!host_cbuf || !host_cbuf->shared_buf_cbuf ||
+			!host_cbuf->shared_buf_cbuf->host_vaddr))
+		return ERR_PTR(-EINVAL);
+
 	host_vaddr = (uint8_t *)host_cbuf->shared_buf_cbuf->host_vaddr;
 	return (struct jqs_cbuf *)&host_vaddr[host_cbuf->cbuf_offset];
 }
@@ -42,6 +46,10 @@ static uint32_t write_bytes_available(struct host_jqs_cbuf *host_cbuf)
 	struct jqs_cbuf *cbuf;
 
 	cbuf = get_jqs_buffer(host_cbuf);
+
+	if (IS_ERR_OR_NULL(cbuf))
+		return 0;
+
 	return cbuf->size - (cbuf->bytes_written - cbuf->bytes_read);
 }
 
@@ -50,6 +58,10 @@ static uint32_t read_bytes_available(struct host_jqs_cbuf *host_cbuf)
 	struct jqs_cbuf *cbuf;
 
 	cbuf = get_jqs_buffer(host_cbuf);
+
+	if (IS_ERR_OR_NULL(cbuf))
+		return 0;
+
 	return cbuf->bytes_written - cbuf->bytes_read;
 }
 
@@ -106,6 +118,9 @@ static void ipu_core_jqs_cbuf_sync_data(struct paintbox_bus *bus,
 {
 	struct jqs_cbuf *cbuf = get_jqs_buffer(host_cbuf);
 	uint32_t idx, idx_last_sync;
+
+	if (IS_ERR_OR_NULL(cbuf))
+		return;
 
 	if (cbuf->bytes_written == host_cbuf->last_sync)
 		return;
@@ -186,6 +201,9 @@ ssize_t ipu_core_jqs_cbuf_write(struct paintbox_bus *bus,
 	uint32_t write_idx, bytes_written, bytes_write1, bytes_write2;
 	int ret;
 
+	if (IS_ERR_OR_NULL(cbuf))
+		return PTR_ERR(cbuf);
+
 	if (bytes_available < size) {
 		ipu_core_jqs_cbuf_sync(bus, host_cbuf, DMA_FROM_DEVICE);
 		bytes_available = write_bytes_available(host_cbuf);
@@ -224,6 +242,9 @@ ssize_t ipu_core_jqs_cbuf_read(struct paintbox_bus *bus,
 	struct jqs_cbuf *cbuf = get_jqs_buffer(host_cbuf);
 	uint32_t read_idx, bytes_read, bytes_read1, bytes_read2;
 	int ret;
+
+	if (IS_ERR_OR_NULL(cbuf))
+		return PTR_ERR(cbuf);
 
 	if (bytes_available < size) {
 		ipu_core_jqs_cbuf_sync(bus, host_cbuf, DMA_FROM_DEVICE);
