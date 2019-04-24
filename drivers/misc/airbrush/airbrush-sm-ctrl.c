@@ -237,7 +237,7 @@ static struct block_property tpu_property_table[] = {
 static struct block_property dram_property_table[] = {
 	BLK_(0, Disabled,    NoRail,    0, off, 0_0, off, 0,   0, 0, 0, 0),
 	BLK_(100, Retention, Suspend,   0, off, 0_0, off, 0,   0, 0, 0, 0),
-	BLK_(101, Retention, SelfRef,   0, off, 0_0, off, 0,   0, 0, 0, 0),
+	BLK_(101, Retention, SelfRef,   0, on, 0_60, off, 0,   0, 0, 0, 0),
 	BLK_(300, PowerUp,   AonTran,  0, on, 0_60, on,  934,  0, 0, 0, 1867),
 	BLK_(301, PowerUp, HalfMidTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
 	BLK_(302, PowerUp, HalfMaxTran, 0, on, 0_60, on, 934,  0, 0, 0, 1867),
@@ -2229,8 +2229,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 			/* PCIe link is down. Return error code. */
 			ret = -ENODEV;
 		} else if (arg == 0) {
-			sc->dram_ops->sref_enter(sc->dram_ops->ctx);
-			ret = regulator_disable(sc->ldo2);
+			ret = sc->dram_ops->sref_enter(sc->dram_ops->ctx);
 			/* divide pll_aon_clk by 4*/
 			/* TODO(b/123695099): do this via ops struct */
 			ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
@@ -2244,8 +2243,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 			/* divide pll_aon_clk by 1*/
 			/* TODO(b/123695099): do this via ops struct */
 			ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
-			ret = regulator_enable(sc->ldo2);
-			sc->dram_ops->sref_exit(sc->dram_ops->ctx);
+			ret = sc->dram_ops->sref_exit(sc->dram_ops->ctx);
 		}
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
