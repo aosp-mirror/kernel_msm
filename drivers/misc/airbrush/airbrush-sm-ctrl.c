@@ -299,9 +299,9 @@ static struct chip_to_block_map chip_state_map[] = {
 	/* Suspend */
 	CHIP_TO_BLOCK_MAP_INIT(100,  0,   0,  100,  0,   0,   0),
 	/* Deep Sleep */
-	CHIP_TO_BLOCK_MAP_INIT(200, 100, 100, 101, 100, 202, 300),
+	CHIP_TO_BLOCK_MAP_INIT(200, 100, 100, 101, 100, 304, 300),
 	/* Sleep */
-	CHIP_TO_BLOCK_MAP_INIT(300, 200, 200, 101, 100, 202, 300),
+	CHIP_TO_BLOCK_MAP_INIT(300, 200, 200, 101, 100, 304, 300),
 
 	/* Active */
 	CHIP_TO_BLOCK_MAP_INIT(400, 300, 300, 305, 300, 304, 302),
@@ -774,6 +774,8 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"    MIF state change",
 		"    FSYS state change",
 		"        PCIe callback",
+		"            PCIe get linkspeed",
+		"            PCIe get linkstate",
 		"            PCIe set linkspeed",
 		"            PCIe set linkstate",
 		"    AON state change",
@@ -1077,12 +1079,18 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 
 	ab_sm_start_ts(AB_SM_TS_FSYS);
-	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-			dest_map->fsys_block_state_id)) {
-		ret = -EINVAL;
-		dev_err(sc->dev, "blk_set_state failed for FSYS\n");
-		if (to_chip_substate_id != CHIP_STATE_0)
-			goto cleanup_state;
+	/* Save time by not updating FSYS block when going to
+	 * SLEEP or DEEP-SLEEP
+	 */
+	if (to_chip_substate_id != CHIP_STATE_200 &&
+			to_chip_substate_id != CHIP_STATE_300) {
+		if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
+					dest_map->fsys_block_state_id)) {
+			ret = -EINVAL;
+			dev_err(sc->dev, "blk_set_state failed for FSYS\n");
+			if (to_chip_substate_id != CHIP_STATE_0)
+				goto cleanup_state;
+		}
 	}
 	ab_sm_record_ts(AB_SM_TS_FSYS);
 

@@ -723,8 +723,12 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 	abc_pcie_set_linkstate(target_linkstate);
 	ab_sm_record_ts(AB_SM_TS_PCIE_SET_LINKSTATE);
 
+	ab_sm_start_ts(AB_SM_TS_PCIE_GET_LINKSPEED);
 	current_linkspeed = abc_pcie_get_linkspeed();
+	ab_sm_record_ts(AB_SM_TS_PCIE_GET_LINKSPEED);
+	ab_sm_start_ts(AB_SM_TS_PCIE_GET_LINKSTATE);
 	current_linkstate = abc_pcie_get_linkstate();
+	ab_sm_record_ts(AB_SM_TS_PCIE_GET_LINKSTATE);
 
 	/* TODO(alexperez) Add retry logic here.
 	 * State change may not happen immediately.
