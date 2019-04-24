@@ -645,6 +645,8 @@ static int producer_thread(void *arg)
 	}
 
 	flags = t_intf_priv->flags;
+	pr_debug("%s: producer thread flags: %lu tunnel_flags : %lu\n",
+		__func__, flags, tunnel_flags);
 	if (flags != tunnel_flags)
 		adjust_tunnels(t_intf_priv, flags, &tunnel_flags);
 
@@ -1448,6 +1450,23 @@ static void iaxxx_tunnel_stop(struct iaxxx_tunnel_data *t_intf_priv)
 	struct iaxxx_circ_buf *circ = &t_intf_priv->stream_circ;
 	int i;
 
+	tunnel_flags = 0;
+	atomic_set(&t_intf_priv->event_occurred, 0);
+	atomic_set(&t_intf_priv->tunnel_evt_cnt, 0);
+	for (i = 0; i < TNLMAX; i++) {
+		t_intf_priv->tunnel_seq_err[i] = 0;
+		t_intf_priv->tunnel_seq_no[i] = 0;
+		t_intf_priv->tunnel_packet_no[i] = 0;
+		atomic_set(&t_intf_priv->tunnel_ref_cnt[i], 0);
+		test_and_clear_bit(i, &t_intf_priv->flags_sync_mode);
+		test_and_clear_bit(i, &t_intf_priv->flags);
+		iaxxx_tunnel_src_list_del_endpoint(t_intf_priv, i);
+		atomic_set(&t_intf_priv->src_enable_id[i], 0);
+	}
+	t_intf_priv->tunnel_total_packet_no = 0;
+	t_intf_priv->tunnel_magic_errcnt = 0;
+	t_intf_priv->tunnels_active_count = 0;
+
 	if (t_intf_priv->producer_thread) {
 		kthread_stop(t_intf_priv->producer_thread);
 		t_intf_priv->producer_thread = NULL;
@@ -1458,22 +1477,11 @@ static void iaxxx_tunnel_stop(struct iaxxx_tunnel_data *t_intf_priv)
 	}
 
 	circ_init(circ);
-	atomic_set(&t_intf_priv->event_occurred, 0);
-	atomic_set(&t_intf_priv->tunnel_evt_cnt, 0);
-	for (i = 0; i < TNLMAX; i++) {
-		t_intf_priv->tunnel_seq_err[i] = 0;
-		t_intf_priv->tunnel_seq_no[i] = 0;
-		t_intf_priv->tunnel_packet_no[i] = 0;
-	}
-	t_intf_priv->tunnel_total_packet_no = 0;
-	t_intf_priv->tunnel_magic_errcnt = 0;
 }
 
 static int iaxxx_tunnel_recovery(struct iaxxx_tunnel_data *t_intf_priv)
 {
 	int err = 0;
-
-	tunnel_flags = 0;
 
 	/* Recovery is to be done  only if recovery event is preceded by
 	 * a crash event. This would prevent multiple calls to recovery
