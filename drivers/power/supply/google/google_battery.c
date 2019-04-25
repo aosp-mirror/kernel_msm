@@ -98,6 +98,29 @@ struct gbatt_ccbin_data {
 	int prev_soc;
 };
 
+#define DEFAULT_RES_TEMP_HIGH	390
+#define DEFAULT_RES_TEMP_LOW	350
+#define DEFAULT_RES_SSOC_THR	75
+#define DEFAULT_RES_FILT_LEN	10
+
+struct batt_res {
+	bool estimate_requested;
+
+	/* samples */
+	int sample_accumulator;
+	int sample_count;
+
+	/* registers */
+	int filter_count;
+	int resistance_avg;
+
+	/* configuration */
+	int estimate_filter;
+	int ssoc_threshold;
+	int res_temp_low;
+	int res_temp_high;
+};
+
 struct batt_drv {
 	struct device *device;
 	struct power_supply *psy;
@@ -166,6 +189,9 @@ struct batt_drv {
 
 	/* thermal */
 	struct thermal_zone_device *tz_dev;
+
+	/* Resistance */
+	struct batt_res res_state;
 };
 
 static int google_battery_tz_get_cycle_count(void *data, int *cycle_count)
@@ -842,6 +868,131 @@ static int batt_chg_stats_cstr(char *buff, int size,
 }
 
 /* ------------------------------------------------------------------------- */
+static void batt_res_dump_logs(struct batt_res *rstate)
+{
+	pr_info("RES: req:%d, sample:%d[%d], filt_cnt:%d, res_avg:%d\n",
+		rstate->estimate_requested, rstate->sample_accumulator,
+		rstate->sample_count, rstate->filter_count,
+		rstate->resistance_avg);
+}
+
+static void batt_res_state_set(struct batt_res *rstate, bool breq)
+{
+	rstate->estimate_requested = breq;
+	rstate->sample_accumulator = 0;
+	rstate->sample_count = 0;
+	batt_res_dump_logs(rstate);
+}
+
+static void batt_res_store_data(struct batt_res *rstate,
+				struct power_supply *fg_psy)
+{
+	int ret = 0;
+	int filter_estimate = 0;
+	int total_estimate = 0;
+	long new_estimate = 0;
+	union power_supply_propval val;
+
+	new_estimate = rstate->sample_accumulator / rstate->sample_count;
+	filter_estimate = rstate->resistance_avg * rstate->filter_count;
+
+	rstate->filter_count++;
+	if (rstate->filter_count > rstate->estimate_filter) {
+		rstate->filter_count = rstate->estimate_filter;
+		filter_estimate -= rstate->resistance_avg;
+	}
+	total_estimate = filter_estimate + new_estimate;
+	rstate->resistance_avg = total_estimate / rstate->filter_count;
+
+	/* Save to NVRam*/
+	val.intval = rstate->resistance_avg;
+	ret = power_supply_set_property(fg_psy,
+					POWER_SUPPLY_PROP_RESISTANCE_AVG,
+					&val);
+	if (ret < 0)
+		pr_err("failed to write resistance_avg\n");
+
+	val.intval = rstate->filter_count;
+	ret = power_supply_set_property(fg_psy,
+					POWER_SUPPLY_PROP_RES_FILTER_COUNT,
+					&val);
+	if (ret < 0)
+		pr_err("failed to write resistenace filt_count\n");
+
+	batt_res_dump_logs(rstate);
+}
+
+static int batt_res_load_data(struct batt_res *rstate,
+			      struct power_supply *fg_psy)
+{
+	union power_supply_propval val;
+	int ret = 0;
+
+	ret = power_supply_get_property(fg_psy,
+					POWER_SUPPLY_PROP_RESISTANCE_AVG,
+					&val);
+	if (ret < 0) {
+		pr_err("failed to get resistance_avg(%d)\n", ret);
+		return ret;
+	}
+	rstate->resistance_avg = val.intval;
+
+	ret = power_supply_get_property(fg_psy,
+					POWER_SUPPLY_PROP_RES_FILTER_COUNT,
+					&val);
+	if (ret < 0) {
+		rstate->resistance_avg = 0;
+		pr_err("failed to get resistance filt_count(%d)\n", ret);
+		return ret;
+	}
+	rstate->filter_count = val.intval;
+
+	batt_res_dump_logs(rstate);
+	return 0;
+}
+
+static void batt_res_work(struct batt_drv *batt_drv)
+{
+	int temp, ret, resistance;
+	struct batt_res *rstate = &batt_drv->res_state;
+	const int ssoc_threshold = rstate->ssoc_threshold;
+	const int res_temp_low = rstate->res_temp_low;
+	const int res_temp_high = rstate->res_temp_high;
+
+	temp = GPSY_GET_INT_PROP(batt_drv->fg_psy,
+				 POWER_SUPPLY_PROP_TEMP, &ret);
+	if (ret < 0 || temp < res_temp_low || temp > res_temp_high) {
+		if (ssoc_get_real(&batt_drv->ssoc_state) > ssoc_threshold) {
+			if (rstate->sample_count > 0) {
+				/* update the filter */
+				batt_res_store_data(&batt_drv->res_state,
+						    batt_drv->fg_psy);
+				batt_res_state_set(rstate, false);
+			}
+		}
+		return;
+	}
+
+	resistance = GPSY_GET_INT_PROP(batt_drv->fg_psy,
+				POWER_SUPPLY_PROP_RESISTANCE, &ret);
+	if (ret < 0)
+		return;
+
+	if (ssoc_get_real(&batt_drv->ssoc_state) < ssoc_threshold) {
+		rstate->sample_accumulator += resistance / 100;
+		rstate->sample_count++;
+		batt_res_dump_logs(rstate);
+	} else {
+		if (rstate->sample_count > 0) {
+			/* update the filter here */
+			batt_res_store_data(&batt_drv->res_state,
+					    batt_drv->fg_psy);
+		}
+		batt_res_state_set(rstate, false);
+	}
+}
+
+/* ------------------------------------------------------------------------- */
 
 /* should not reset rl state */
 static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
@@ -1208,6 +1359,8 @@ static int msc_logic(struct batt_drv *batt_drv)
 
 		batt_chg_stats_pub(batt_drv, "disconnect", false);
 
+		batt_res_state_set(&batt_drv->res_state, false);
+
 		/* change curve before changing the state */
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
 		batt_reset_chg_drv_state(batt_drv);
@@ -1229,6 +1382,9 @@ static int msc_logic(struct batt_drv *batt_drv)
 	if (!batt_drv->buck_enabled) {
 
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
+
+		if (batt_drv->res_state.estimate_filter)
+			batt_res_state_set(&batt_drv->res_state, true);
 
 		batt_chg_stats_start(batt_drv);
 		err = GPSY_SET_PROP(batt_drv->fg_psy,
@@ -1823,6 +1979,10 @@ static void google_battery_work(struct work_struct *work)
 reschedule:
 	mutex_unlock(&batt_drv->chg_lock);
 
+	if (batt_drv->res_state.estimate_requested)
+		batt_res_work(batt_drv);
+
+
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
 	dump_ssoc_state(ssoc_state, batt_drv->log);
 
@@ -1873,6 +2033,7 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_SOH,
 	POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE,
+	POWER_SUPPLY_PROP_RESISTANCE_AVG,
 };
 
 /* . status is DISCHARGING when not connected.
@@ -2043,6 +2204,13 @@ static int gbatt_get_property(struct power_supply *psy,
 		if (!batt_drv->fg_psy)
 			return -EINVAL;
 		err = power_supply_get_property(batt_drv->fg_psy, psp, val);
+		break;
+	case POWER_SUPPLY_PROP_RESISTANCE_AVG:
+		if (batt_drv->res_state.filter_count <
+			batt_drv->res_state.estimate_filter)
+			val->intval = 0;
+		else
+			val->intval = batt_drv->res_state.resistance_avg;
 		break;
 	/* TODO: "charger" will expose this but I'd rather use an API from
 	 * google_bms.h. Right now route it to fg_psy: just make sure that
@@ -2252,6 +2420,8 @@ static void google_battery_init_work(struct work_struct *work)
 
 	pr_info("init_work done\n");
 
+	batt_res_load_data(&batt_drv->res_state, batt_drv->fg_psy);
+
 	ret = of_property_read_u32(batt_drv->device->of_node,
 				   "google,chg-stats-qual-time",
 				   &batt_drv->ce_data.chg_sts_qual_time);
@@ -2349,6 +2519,27 @@ static int google_battery_probe(struct platform_device *pdev)
 			"failed to obtain logbuffer instance, ret=%d\n", ret);
 		batt_drv->log = NULL;
 	}
+
+	/* Resistance Estimation configuration */
+	ret = of_property_read_u32(pdev->dev.of_node, "google,res-temp-hi",
+				   &batt_drv->res_state.res_temp_high);
+	if (ret < 0)
+		batt_drv->res_state.res_temp_high = DEFAULT_RES_TEMP_HIGH;
+
+	ret = of_property_read_u32(pdev->dev.of_node, "google,res-temp-lo",
+				   &batt_drv->res_state.res_temp_low);
+	if (ret < 0)
+		batt_drv->res_state.res_temp_low = DEFAULT_RES_TEMP_LOW;
+
+	ret = of_property_read_u32(pdev->dev.of_node, "google,res-soc-thresh",
+				   &batt_drv->res_state.ssoc_threshold);
+	if (ret < 0)
+		batt_drv->res_state.ssoc_threshold = DEFAULT_RES_SSOC_THR;
+
+	ret = of_property_read_u32(pdev->dev.of_node, "google,res-filt-length",
+				   &batt_drv->res_state.estimate_filter);
+	if (ret < 0)
+		batt_drv->res_state.estimate_filter = DEFAULT_RES_FILT_LEN;
 
 	batt_drv->tz_dev = thermal_zone_of_sensor_register(batt_drv->device,
 				0, batt_drv, &google_battery_tz_ops);

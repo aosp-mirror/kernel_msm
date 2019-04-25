@@ -387,6 +387,7 @@ enum max17x0x_reg_tags {
 	MAX17X0X_TAG_HSTY,
 	MAX17X0X_TAG_BCEA,
 	MAX17X0X_TAG_rset,
+	MAX17X0X_TAG_BRES,
 };
 
 struct max17x0x_reg {
@@ -609,6 +610,8 @@ static const struct max17x0x_reg max1720x[] = {
 	[MAX17X0X_TAG_rset] = { ATOM_INIT_SET16(MAX1720X_CONFIG2,
 					MAX1720X_COMMAND_FUEL_GAUGE_RESET,
 					700)},
+	[MAX17X0X_TAG_BRES] = { ATOM_INIT_SET(MAX1720X_NTTFCFG,
+					      MAX1720X_NUSER1D4) },
 };
 
 /* see b/119416045 for layout */
@@ -635,6 +638,8 @@ static const struct max17x0x_reg max1730x[] = {
 	[MAX17X0X_TAG_rset] = { ATOM_INIT_SET16(MAX1730X_CONFIG2,
 					MAX1730X_COMMAND_FUEL_GAUGE_RESET,
 					700)},
+	[MAX17X0X_TAG_BRES] = { ATOM_INIT_SET(MAX1730X_NMANFCTRNAME1,
+					      MAX1730X_NMANFCTRNAME0) },
 };
 
 struct max17x0x_device_info {
@@ -1269,6 +1274,8 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_DELTA_CC_SUM,
 	POWER_SUPPLY_PROP_DELTA_VFSOC_SUM,
 	POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE,
+	POWER_SUPPLY_PROP_RES_FILTER_COUNT,
+	POWER_SUPPLY_PROP_RESISTANCE_AVG,
 };
 
 /* storage for cycle count --------------------------------------------------*/
@@ -1763,7 +1770,6 @@ static int batt_ce_load_data(struct regmap *map,
 		cap_esti->cap_filter_count = data;
 	else
 		cap_esti->cap_filter_count = 0;
-
 	return 0;
 }
 
@@ -1918,7 +1924,52 @@ static int batt_ce_init(struct gbatt_capacity_estimation *cap_esti,
 }
 
 /* ------------------------------------------------------------------------- */
+#define SEL_RES_AVG		0
+#define SEL_RES_FILTER_COUNT	1
+static int batt_res_registers(struct max1720x_chip *chip, bool bread,
+			      int isel, int *data)
+{
+	int err = -EINVAL;
+	const struct max17x0x_reg *bres;
+	u16 res_filtered, res_filt_count, val;
 
+	bres = max17x0x_find_by_tag(MAX17X0X_TAG_BRES);
+	if (!bres)
+		return err;
+
+	switch (isel) {
+	case SEL_RES_AVG:
+		if (bread) {
+			err = REGMAP_READ(chip->regmap_nvram, bres->map[0],
+					  &res_filtered);
+			if (err)
+				return err;
+
+			*data = res_filtered;
+			return 0;
+		}
+		err = REGMAP_WRITE(chip->regmap_nvram, bres->map[0], *data);
+		break;
+	case SEL_RES_FILTER_COUNT:
+		err = REGMAP_READ(chip->regmap_nvram, bres->map[1], &val);
+		if (err)
+			return err;
+
+		if (bread) {
+			res_filt_count = (val & 0xF000) >> 12;
+			*data = res_filt_count;
+			return 0;
+		}
+		res_filt_count = (val & 0x0FFF) | (*data << 12);
+		err = REGMAP_WRITE(chip->regmap_nvram, bres->map[1],
+				   res_filt_count);
+		break;
+	default:
+		break;
+	}
+
+	return err;
+}
 
 static int max1720x_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
@@ -1929,6 +1980,7 @@ static int max1720x_get_property(struct power_supply *psy,
 	struct regmap *map = chip->regmap;
 	u16 data = 0;
 	int err = 0;
+	int idata;
 
 	pm_runtime_get_sync(chip->dev);
 	if (!chip->init_complete || !chip->resume_complete) {
@@ -2078,11 +2130,19 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = chip->cap_estimate.delta_vfsoc_sum;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE:
-		val->intval = batt_ce_full_estimate(&chip->cap_estimate);
-		if (val->intval < 0) {
-			val->intval = 0;
+		err = batt_ce_full_estimate(&chip->cap_estimate);
+		if (err < 0)
 			return -ENODATA;
-		}
+		val->intval = err;
+		break;
+	case POWER_SUPPLY_PROP_RES_FILTER_COUNT:
+		err = batt_res_registers(chip, true, SEL_RES_FILTER_COUNT,
+					 &idata);
+		val->intval = idata;
+		break;
+	case POWER_SUPPLY_PROP_RESISTANCE_AVG:
+		err = batt_res_registers(chip, true, SEL_RES_AVG, &idata);
+		val->intval = idata;
 		break;
 	default:
 		return -EINVAL;
@@ -2100,6 +2160,7 @@ static int max1720x_set_property(struct power_supply *psy,
 					power_supply_get_drvdata(psy);
 	struct gbatt_capacity_estimation *ce = &chip->cap_estimate;
 	int rc = 0;
+	int idata;
 
 	pm_runtime_get_sync(chip->dev);
 	if (!chip->init_complete || !chip->resume_complete) {
@@ -2131,6 +2192,15 @@ static int max1720x_set_property(struct power_supply *psy,
 		}
 		mutex_unlock(&ce->batt_ce_lock);
 		break;
+	case POWER_SUPPLY_PROP_RES_FILTER_COUNT:
+		idata = val->intval;
+		rc = batt_res_registers(chip, false, SEL_RES_FILTER_COUNT,
+					&idata);
+		break;
+	case POWER_SUPPLY_PROP_RESISTANCE_AVG:
+		idata = val->intval;
+		rc = batt_res_registers(chip, false, SEL_RES_AVG, &idata);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2146,6 +2216,8 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_BATT_CE_CTRL:
+	case POWER_SUPPLY_PROP_RES_FILTER_COUNT:
+	case POWER_SUPPLY_PROP_RESISTANCE_AVG:
 		return 1;
 	default:
 		break;
