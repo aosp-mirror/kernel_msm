@@ -313,8 +313,8 @@ int msm_property_set_dirty(struct msm_property_info *info,
  * Returns: true if dirty, false otherwise
  */
 bool msm_property_is_dirty(
-		const struct msm_property_info *info,
-		const struct msm_property_state *property_state,
+		struct msm_property_info *info,
+		struct msm_property_state *property_state,
 		uint32_t property_idx);
 
 /**

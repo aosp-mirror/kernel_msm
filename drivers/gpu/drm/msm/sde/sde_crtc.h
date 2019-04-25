@@ -739,15 +739,6 @@ void sde_crtc_get_crtc_roi(struct drm_crtc_state *state,
  */
 bool sde_crtc_is_crtc_roi_dirty(struct drm_crtc_state *state);
 
-/**
- * sde_crtc_is_property_dirty - retrieve whether property was updated
- *	Note: Only use during atomic_check since dirty properties may be popped
- * @crtc_state: Pointer to crtc state
- * Return: true if property is dirty, false otherwise
- */
-bool sde_crtc_is_property_dirty(const struct drm_crtc_state *state,
-				uint32_t prop);
-
 /** sde_crt_get_secure_level - retrieve the secure level from the give state
  *	object, this is used to determine the secure state of the crtc
  * @crtc : Pointer to drm crtc structure

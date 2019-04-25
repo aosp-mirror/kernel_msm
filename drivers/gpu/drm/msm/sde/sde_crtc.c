@@ -1110,25 +1110,19 @@ void sde_crtc_get_crtc_roi(struct drm_crtc_state *state,
 	*crtc_roi = &crtc_state->crtc_roi;
 }
 
-bool sde_crtc_is_property_dirty(const struct drm_crtc_state *state,
-				uint32_t prop)
+bool sde_crtc_is_crtc_roi_dirty(struct drm_crtc_state *state)
 {
-	const struct sde_crtc_state *cstate;
-	const struct sde_crtc *sde_crtc;
+	struct sde_crtc_state *cstate;
+	struct sde_crtc *sde_crtc;
 
-	if (unlikely(!state || !state->crtc))
+	if (!state || !state->crtc)
 		return false;
 
 	sde_crtc = to_sde_crtc(state->crtc);
 	cstate = to_sde_crtc_state(state);
 
 	return msm_property_is_dirty(&sde_crtc->property_info,
-				     &cstate->property_state, prop);
-}
-
-bool sde_crtc_is_crtc_roi_dirty(struct drm_crtc_state *state)
-{
-	return sde_crtc_is_property_dirty(state, CRTC_PROP_ROI_V1);
+			&cstate->property_state, CRTC_PROP_ROI_V1);
 }
 
 static int _sde_crtc_set_roi_v1(struct drm_crtc_state *state,
