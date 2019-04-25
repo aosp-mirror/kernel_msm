@@ -2350,16 +2350,6 @@ static int32_t __ab_ddr_suspend(void *ctx)
 	 * set to 1866MHz.
 	 */
 	if (ddr_ctx->cur_freq != AB_DRAM_FREQ_MHZ_1866) {
-		/* MR Register configuration is not allowed when DRAM is in
-		 * Power Down Entry mode. But during self-refresh entry command,
-		 * DREX sends both Self-Refresh and Power Down Entry commands
-		 * to DRAM.
-		 *
-		 * For the above reason, we need to bring the DRAM out of Power
-		 * Down Entry mode.
-		 */
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
-
 		/* get the current LDO2 state (VDDQ rail) */
 		prev_ldo2_state = regulator_is_enabled(sc->ldo2);
 
@@ -2375,6 +2365,16 @@ static int32_t __ab_ddr_suspend(void *ctx)
 			}
 		}
 
+		/* MR Register configuration is not allowed when DRAM is in
+		 * Power Down Entry mode. But during self-refresh entry command,
+		 * DREX sends both Self-Refresh and Power Down Entry commands
+		 * to DRAM.
+		 *
+		 * For the above reason, we need to bring the DRAM out of Power
+		 * Down Entry mode.
+		 */
+		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
+
 		/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not
 		 * update the MR registers specific to 1866MHz. As the ddr
 		 * initialization happens at 1866MHz, make sure the MR registers
@@ -2383,16 +2383,6 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 * initialization (during suspend -> resume) in BootROM
 		 */
 		ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
-
-		/* Disable LDO2 if the previous LDO2 state was disabled */
-		if (!prev_ldo2_state) {
-			ret = regulator_disable(sc->ldo2);
-			if (ret) {
-				dev_err(sc->dev,
-					"failed to disable LDO2 (%d)\n", ret);
-				goto ddr_suspend_fail;
-			}
-		}
 
 		/* Set MR13 VRCG to default (Normal operation) for power saving
 		 * VRCG (VREF Current Generator) OP[3]
@@ -2405,6 +2395,16 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 * Power Down Entry Mode.
 		 */
 		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
+
+		/* Disable LDO2 if the previous LDO2 state was disabled */
+		if (!prev_ldo2_state) {
+			ret = regulator_disable(sc->ldo2);
+			if (ret) {
+				dev_err(sc->dev,
+					"failed to disable LDO2 (%d)\n", ret);
+				goto ddr_suspend_fail;
+			}
+		}
 	}
 
 	/* Move the MIF clock to oscillator and switch off the PLL for
