@@ -21,8 +21,9 @@
 #define ASV_TABLE_VERSION_MASK 0xFE0000
 #define ASV_TABLE_VERSION_SHIFT 17
 #define DVFS_DONE BIT(16)
-#define MIN_ASV_VERSION 0
-#define MAX_ASV_VERSION 1
+#define DEFAULT_ASV_VERSION 0
+#define MIN_ASV_VERSION 1
+#define MAX_ASV_VERSION 2
 #define NUM_GROUPS 16
 
 #define IPU_RO_ADDR 0x3010
@@ -44,6 +45,10 @@ static u32 ipu_ro_table[MAX_ASV_VERSION + 1][NUM_GROUPS + 1] = {
 		7020, 7142, 7260, 7383, 7504,
 		7625, 7748, 7867, 7988, 8109,
 		8230, 8532 },
+	[2] = { 6451, 6540, 6659, 6780, 6900,
+		7020, 7142, 7260, 7383, 7504,
+		7625, 7748, 7867, 7988, 8109,
+		8230, 8532 },
 };
 
 static u32 ipu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
@@ -52,6 +57,10 @@ static u32 ipu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
 		0,      0,      0,      0,      0,
 		0 },
 	[1] = { 781250, 775000, 768750, 762500, 756250,
+		750000, 743750, 737500, 731250, 725000,
+		712500, 706250, 700000, 693750, 687500,
+		681250},
+	[2] = { 781250, 775000, 768750, 762500, 756250,
 		750000, 743750, 737500, 731250, 725000,
 		712500, 706250, 700000, 693750, 687500,
 		681250},
@@ -66,6 +75,10 @@ static u32 tpu_ro_table[MAX_ASV_VERSION + 1][NUM_GROUPS + 1] = {
 		5551, 5650, 5750, 5851, 5950,
 		6051, 6150, 6250, 6350, 6450,
 		6550, 6772 },
+	[2] = { 5062, 5150, 5250, 5350, 5450,
+		5551, 5650, 5750, 5851, 5950,
+		6051, 6150, 6250, 6350, 6450,
+		6550, 6772 },
 };
 
 static u32 tpu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
@@ -74,6 +87,10 @@ static u32 tpu_volt_table[MAX_ASV_VERSION + 1][NUM_GROUPS] = {
 		0,      0,      0,      0,	0,
 		0 },
 	[1] = { 806250, 800000, 793750, 787500, 781250,
+		775000, 768750, 762500, 756250, 750000,
+		743750, 737500, 731250, 725000, 712500,
+		706250},
+	[2] = { 806250, 800000, 793750, 787500, 781250,
 		775000, 768750, 762500, 756250, 750000,
 		743750, 737500, 731250, 725000, 712500,
 		706250},
@@ -92,7 +109,7 @@ static u32 get_ipu_ro(void)
 static u32 get_ipu_volt(struct ab_asv_info *info)
 {
 	u32 i;
-	u32 ipu_ro = get_ipu_ro();
+	u32 ipu_ro = info->ipu_ro;
 	int asv_version = info->asv_version;
 
 	for (i = 0; i < NUM_GROUPS; i++) {
@@ -116,7 +133,7 @@ static u32 get_tpu_ro(void)
 static u32 get_tpu_volt(struct ab_asv_info *info)
 {
 	u32 i;
-	u32 tpu_ro = get_tpu_ro();
+	u32 tpu_ro = info->tpu_ro;
 	int asv_version = info->asv_version;
 
 	for (i = 0; i < NUM_GROUPS; i++) {
@@ -140,9 +157,10 @@ static void find_asv_version(struct ab_asv_info *info)
 		info->asv_version = (val & ASV_TABLE_VERSION_MASK) >>
 			ASV_TABLE_VERSION_SHIFT;
 	else
-		info->asv_version = -1;
+		info->asv_version = DEFAULT_ASV_VERSION;
 }
 
+/* Updates voltage based on asv_version.  Does not read OTP. */
 static void update_asv_voltage(struct ab_asv_info *info)
 {
 	if (info->asv_version < MIN_ASV_VERSION ||
@@ -157,9 +175,12 @@ static void update_asv_voltage(struct ab_asv_info *info)
 	info->last_volt = 0;
 }
 
+/* This function reads OTP.  Caller must make sure link is up. */
 void ab_lvcc_init(struct ab_asv_info *info)
 {
 	find_asv_version(info);
+	info->ipu_ro = get_ipu_ro();
+	info->tpu_ro = get_tpu_ro();
 	update_asv_voltage(info);
 }
 
@@ -177,7 +198,8 @@ int ab_lvcc(struct ab_state_context *sc, int chip_state)
 
 	if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_500))
 		smps_volt = info->ipu_volt;
-	else if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_600))
+	else if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_600) ||
+		 AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_700))
 		smps_volt = info->tpu_volt;
 	else
 		smps_volt = max(info->ipu_volt, info->tpu_volt);
@@ -187,8 +209,8 @@ int ab_lvcc(struct ab_state_context *sc, int chip_state)
 
 	dev_info(sc->dev, "asv_ver:%d, ipu_ro:%d ipu_uv:%d, tpu_ro:%d tpu_uv:%d, final_uv:%d\n",
 			info->asv_version,
-			get_ipu_ro(), info->ipu_volt,
-			get_tpu_ro(), info->tpu_volt,
+			info->ipu_ro, info->ipu_volt,
+			info->tpu_ro, info->tpu_volt,
 			smps_volt);
 	ret = regulator_set_voltage(sc->smps1, smps_volt,
 				smps_volt + REGULATOR_STEP);

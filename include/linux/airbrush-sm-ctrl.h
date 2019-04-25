@@ -377,6 +377,8 @@ struct ab_asv_info {
 	int asv_version;
 	u32 ipu_volt;
 	u32 tpu_volt;
+	u32 ipu_ro;
+	u32 tpu_ro;
 	u32 last_volt;
 };
 

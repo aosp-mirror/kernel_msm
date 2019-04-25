@@ -189,13 +189,22 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_alternate_boot, alternate_boot_get,
 
 static int asv_version_set(void *data, u64 val)
 {
-	struct ab_state_context *sc = (struct ab_state_context *)data;
+	struct ab_state_context *sc = data;
 
 	set_asv_version(&sc->asv_info, val);
 	return 0;
 }
 
-DEFINE_DEBUGFS_ATTRIBUTE(fops_asv_version_override, NULL,
+static int asv_version_get(void *data, u64 *val)
+{
+	struct ab_state_context *sc = data;
+
+	*val = sc->asv_info.asv_version;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_asv_version_override, asv_version_get,
 		asv_version_set, "%llu\n");
 
 /*
@@ -721,7 +730,7 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_file("asv_version", 0222, d_chip, sc,
+	d = debugfs_create_file("asv_version", 0660, d_chip, sc,
 				&fops_asv_version_override);
 	if (!d)
 		goto err_out;
