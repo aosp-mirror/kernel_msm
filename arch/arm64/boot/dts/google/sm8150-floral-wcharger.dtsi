@@ -18,6 +18,8 @@
  *  WLC_BPP_EPP_SLCT        149              output
  */
 
+#include <dt-bindings/wc/p9221-wc.h>
+
 &pm8150b_gpios {
 
 	p9221_int_default:p9221_int_default {
@@ -72,4 +74,5 @@
 	idt,gpio_slct = <&tlmm 149 0x00>;
 	idt,gpio_slct_value = <1>;
 	google,epp_rp_value = <0x16>;
+	google,needs_dcin_reset = <P9221_WC_DC_RESET_MODECHANGED>;
 };
