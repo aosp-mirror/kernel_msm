@@ -359,10 +359,11 @@ static int etb_disable(struct coresight_device *csdev)
 	return 0;
 }
 
-static void *etb_alloc_buffer(struct coresight_device *csdev, int cpu,
-			      void **pages, int nr_pages, bool overwrite)
+static void *etb_alloc_buffer(struct coresight_device *csdev,
+			      struct perf_event *event, void **pages,
+			      int nr_pages, bool overwrite)
 {
-	int node;
+	int node, cpu = event->cpu;
 	struct cs_buffers *buf;
 
 	node = (cpu == -1) ? NUMA_NO_NODE : cpu_to_node(cpu);
