@@ -2046,25 +2046,121 @@
 #define IAXXX_SRB_SYSTEM_SLEEP_DURATION_REG_POS 0
 #define IAXXX_SRB_SYSTEM_SLEEP_DURATION_REG_SIZE 32
 
-/*** SRB_SYS_RESERVED_17 (0x580000f0) ***/
+/*** SRB_PORTB_DR (0x580000f0) ***/
 /*
- * Reserved register space for future use
+ * Virtual PORTB Data Register.
  */
-#define IAXXX_SRB_SYS_RESERVED_17_ADDR (0x580000f0)
-#define IAXXX_SRB_SYS_RESERVED_17_MASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_17_RMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_17_WMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_17_RESET_VAL 0x00000000
+#define IAXXX_SRB_PORTB_DR_ADDR (0x580000f0)
+#define IAXXX_SRB_PORTB_DR_MASK_VAL 0x0003c000
+#define IAXXX_SRB_PORTB_DR_RMASK_VAL 0x0003c000
+#define IAXXX_SRB_PORTB_DR_WMASK_VAL 0x0003c000
+#define IAXXX_SRB_PORTB_DR_RESET_VAL 0x00000000
 
-/*** SRB_SYS_RESERVED_18 (0x580000f4) ***/
+/*
+ * Values written to this register are output on the COMMF_0 pin if the
+ * corresponding data direction bits
+ * are set to Output mode and the corresponding control bit are set to
+ * Software mode. The value read back is
+ * equal to the last value written to the register.
+ */
+#define IAXXX_SRB_PORTB_DR_COMMF_0_MASK 0x00004000
+#define IAXXX_SRB_PORTB_DR_COMMF_0_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DR_COMMF_0_POS 14
+#define IAXXX_SRB_PORTB_DR_COMMF_0_SIZE 1
+
+/*
+ * Values written to this register are output on the COMMF_1 pin if the
+ * corresponding data direction bits
+ * are set to Output mode and the corresponding control bit are set to
+ * Software mode. The value read back is
+ * equal to the last value written to the register.
+ */
+#define IAXXX_SRB_PORTB_DR_COMMF_1_MASK 0x00008000
+#define IAXXX_SRB_PORTB_DR_COMMF_1_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DR_COMMF_1_POS 15
+#define IAXXX_SRB_PORTB_DR_COMMF_1_SIZE 1
+
+/*
+ * Values written to this register are output on the COMMF_2 pin if the
+ * corresponding data direction bits
+ * are set to Output mode and the corresponding control bit are set to
+ * Software mode. The value read back is
+ * equal to the last value written to the register.
+ */
+#define IAXXX_SRB_PORTB_DR_COMMF_2_MASK 0x00010000
+#define IAXXX_SRB_PORTB_DR_COMMF_2_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DR_COMMF_2_POS 16
+#define IAXXX_SRB_PORTB_DR_COMMF_2_SIZE 1
+
+/*
+ * Values written to this register are output on the COMMF_3 pin if the
+ * corresponding data direction bits
+ * are set to Output mode and the corresponding control bit are set to
+ * Software mode. The value read back is
+ * equal to the last value written to the register.
+ */
+#define IAXXX_SRB_PORTB_DR_COMMF_3_MASK 0x00020000
+#define IAXXX_SRB_PORTB_DR_COMMF_3_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DR_COMMF_3_POS 17
+#define IAXXX_SRB_PORTB_DR_COMMF_3_SIZE 1
+
+/*** SRB_PORTB_DDR (0x580000f4) ***/
 /*
  * Reserved register space for future use
  */
-#define IAXXX_SRB_SYS_RESERVED_18_ADDR (0x580000f4)
-#define IAXXX_SRB_SYS_RESERVED_18_MASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_18_RMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_18_WMASK_VAL 0x00000000
-#define IAXXX_SRB_SYS_RESERVED_18_RESET_VAL 0x00000000
+#define IAXXX_SRB_PORTB_DDR_ADDR (0x580000f4)
+#define IAXXX_SRB_PORTB_DDR_MASK_VAL 0x0003c000
+#define IAXXX_SRB_PORTB_DDR_RMASK_VAL 0x0003c000
+#define IAXXX_SRB_PORTB_DDR_WMASK_VAL 0x0003c000
+#define IAXXX_SRB_PORTB_DDR_RESET_VAL 0x00000000
+
+/*
+ * Values written to this register independently control the direction of the
+ * COMMF_0 data bit.
+ * The default direction is Input.
+ * 0:Input (default)
+ * 1:Output
+ */
+#define IAXXX_SRB_PORTB_DDR_COMMF_0_MASK 0x00004000
+#define IAXXX_SRB_PORTB_DDR_COMMF_0_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DDR_COMMF_0_POS 14
+#define IAXXX_SRB_PORTB_DDR_COMMF_0_SIZE 1
+
+/*
+ * Values written to this register independently control the direction of the
+ * COMMF_1 data bit.
+ * The default direction is Input.
+ * 0:Input (default)
+ * 1:Output
+ */
+#define IAXXX_SRB_PORTB_DDR_COMMF_1_MASK 0x00008000
+#define IAXXX_SRB_PORTB_DDR_COMMF_1_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DDR_COMMF_1_POS 15
+#define IAXXX_SRB_PORTB_DDR_COMMF_1_SIZE 1
+
+/*
+ * Values written to this register independently control the direction of the
+ * COMMF_2 data bit.
+ * The default direction is Input.
+ * 0:Input (default)
+ * 1:Output
+ */
+#define IAXXX_SRB_PORTB_DDR_COMMF_2_MASK 0x00010000
+#define IAXXX_SRB_PORTB_DDR_COMMF_2_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DDR_COMMF_2_POS 16
+#define IAXXX_SRB_PORTB_DDR_COMMF_2_SIZE 1
+
+/*
+ * Values written to this register independently control the direction of the
+ * COMMF_3 data bit.
+ * The default direction is Input.
+ * 0:Input (default)
+ * 1:Output
+ */
+#define IAXXX_SRB_PORTB_DDR_COMMF_3_MASK 0x00020000
+#define IAXXX_SRB_PORTB_DDR_COMMF_3_RESET_VAL 0x0
+#define IAXXX_SRB_PORTB_DDR_COMMF_3_POS 17
+#define IAXXX_SRB_PORTB_DDR_COMMF_3_SIZE 1
 
 /*** SRB_HOST_DEFINED_1 (0x580000f8) ***/
 /*
