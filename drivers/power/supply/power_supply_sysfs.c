@@ -221,6 +221,7 @@ static ssize_t power_supply_store_property(struct device *dev,
 	struct power_supply *psy = dev_get_drvdata(dev);
 	const ptrdiff_t off = attr - power_supply_attrs;
 	union power_supply_propval value;
+	const char *strbuf = NULL;
 
 	/* maybe it is a enum property? */
 	switch (off) {
@@ -242,6 +243,10 @@ static ssize_t power_supply_store_property(struct device *dev,
 	case POWER_SUPPLY_PROP_SCOPE:
 		ret = sysfs_match_string(power_supply_scope_text, buf);
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
+		strbuf = buf;
+		ret = 0;
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -260,7 +265,10 @@ static ssize_t power_supply_store_property(struct device *dev,
 		ret = long_val;
 	}
 
-	value.intval = ret;
+	if (strbuf != NULL)
+		value.strval = strbuf;
+	else
+		value.intval = ret;
 
 	ret = power_supply_set_property(psy, off, &value);
 	if (ret < 0)

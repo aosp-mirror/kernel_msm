@@ -40,7 +40,7 @@
 #include <linux/debugfs.h>
 #endif
 
-#define BATT_DELAY_INIT_MS 		250
+#define BATT_DELAY_INIT_MS		250
 #define BATT_WORK_ERROR_RETRY_MS	1000
 
 #define DEFAULT_BATT_FAKE_CAPACITY		50
@@ -2240,7 +2240,7 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 
 	/* compat, for *_CURRENT_LIMITED could return this one:
-	 * 	(batt_drv->chg_state.f.flags & GBMS_CS_FLAG_ILIM)
+	 *	(batt_drv->chg_state.f.flags & GBMS_CS_FLAG_ILIM)
 	 */
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED:
@@ -2364,6 +2364,15 @@ static int gbatt_set_property(struct power_supply *psy,
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
+		if (batt_drv->ccbin_psy) {
+			ret = power_supply_set_property(batt_drv->ccbin_psy,
+				POWER_SUPPLY_PROP_CYCLE_COUNTS, val);
+			if (ret < 0)
+				pr_err("failed to set cycle counts ret=%d\n",
+					ret);
+		}
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -2388,6 +2397,7 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
+	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
 		return 1;
 	default:
 		break;
@@ -2430,9 +2440,10 @@ static void google_battery_init_work(struct work_struct *work)
 	}
 
 	batt_drv->fg_psy = fg_psy;
-	/* uncomment this to enable loading/storing data to maxfg
-	 *	batt_drv->ccbin_psy = batt_drv->fg_psy;
-	 */
+
+	if (of_property_read_bool(batt_drv->device->of_node,
+				  "google,cycle-counts"))
+		batt_drv->ccbin_psy = batt_drv->fg_psy;
 
 	if (!batt_drv->batt_present) {
 		ret = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
