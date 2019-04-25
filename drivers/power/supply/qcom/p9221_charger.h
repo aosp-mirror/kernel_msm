@@ -207,6 +207,14 @@
 						 P9221R5_STAT_OVT | \
 						 P9221R5_STAT_OVC)
 
+/*
+ * P9221R5_SYSTEM_MODE_REG bits.
+ */
+#define P9221R5_MODE_RAMCODE			BIT(6)
+#define P9221R5_MODE_EEPROMCODE			BIT(5)
+#define P9221R5_MODE_EXTENDED			BIT(3)
+#define P9221R5_MODE_WPCMODE			BIT(0)
+
 struct p9221_charger_platform_data {
 	int				irq_gpio;
 	int				irq_int;
@@ -222,6 +230,7 @@ struct p9221_charger_platform_data {
 	int				fod_epp_num;
 	int 				q_value;
 	int				epp_rp_value;
+	int				needs_dcin_reset;
 };
 
 struct p9221_charger_data {

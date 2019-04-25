@@ -13,6 +13,7 @@
  * General Public License for more details.
  */
 
+#include <dt-bindings/wc/p9221-wc.h>
 #include <linux/device.h>
 #include <linux/pm.h>
 #include <linux/gpio.h>
@@ -1003,7 +1004,12 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 	dev_dbg(&charger->client->dev, "Enable interrupts\n");
 
 	mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
-	       P9221_STAT_VRECT | P9221R5_STAT_VOUTCHANGED;
+	       P9221_STAT_VRECT;
+
+	if (charger->pdata->needs_dcin_reset == P9221_WC_DC_RESET_VOUTCHANGED)
+		mask |= P9221R5_STAT_VOUTCHANGED;
+	if (charger->pdata->needs_dcin_reset == P9221_WC_DC_RESET_MODECHANGED)
+		mask |= P9221R5_STAT_MODECHANGED;
 
 	ret = p9221_clear_interrupts(charger, mask);
 	if (ret)
@@ -2092,36 +2098,66 @@ send_eop:
 			"Failed to send EOP %d: %d\n", reason, ret);
 }
 
+static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
+				  u16 irq_src)
+{
+
+	if (charger->pdata->needs_dcin_reset == P9221_WC_DC_RESET_MODECHANGED &&
+	    irq_src & P9221R5_STAT_MODECHANGED) {
+		u8 mode_reg = 0;
+		int res;
+
+		res = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG,
+				       &mode_reg);
+		if (res < 0) {
+			dev_err(&charger->client->dev,
+				"Failed to read P9221_SYSTEM_MODE_REG: %d\n",
+				res);
+			return false;
+		}
+
+		dev_info(&charger->client->dev,
+			 "P9221_SYSTEM_MODE_REG reg: %02x\n", mode_reg);
+		return !(mode_reg & (P9221R5_MODE_EXTENDED |
+				     P9221R5_MODE_WPCMODE));
+	}
+
+	if (charger->pdata->needs_dcin_reset == P9221_WC_DC_RESET_VOUTCHANGED &&
+	    irq_src & P9221R5_STAT_VOUTCHANGED) {
+		u16 status_reg = 0;
+		int res;
+
+		res = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+		if (res < 0) {
+			dev_err(&charger->client->dev,
+				"Failed to read P9221_STATUS_REG: %d\n", res);
+			return false;
+		}
+
+		dev_info(&charger->client->dev,
+			 "P9221_STATUS_REG reg: %04x\n", status_reg);
+		return !(status_reg & P9221_STAT_VOUT);
+	}
+
+	return false;
+}
+
 /* Handler for R5 and R7 chips */
 static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 {
 	int res;
 
-	if (irq_src & P9221R5_STAT_VOUTCHANGED) {
-		u16 status_reg = 0;
+	if (p9221_dc_reset_needed(charger, irq_src)) {
+		union power_supply_propval val = {.intval = 1};
 
-		res = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
-		if (res) {
-			dev_err(&charger->client->dev,
-				"Failed to read P9221_STATUS_REG reg: %d\n",
-				res);
-		} else {
-			union power_supply_propval val;
-
-			dev_info(&charger->client->dev, "status reg: %04x\n",
-				 status_reg);
-			/* Signal DC_RESET when wireless removal is sensed. */
-			if (!(status_reg & P9221_STAT_VOUT)) {
-				val.intval = 1;
-				res = power_supply_set_property(charger->dc_psy,
+		/* Signal DC_RESET when wireless removal is sensed. */
+		res = power_supply_set_property(charger->dc_psy,
 						POWER_SUPPLY_PROP_DC_RESET,
 						&val);
-				if (res < 0)
-					dev_err(&charger->client->dev,
-						"unable to set DC_RESET, ret=%d",
-						res);
-			}
-		}
+		if (res < 0)
+			dev_err(&charger->client->dev,
+				"unable to set DC_RESET, ret=%d",
+				res);
 	}
 
 	if (irq_src & P9221R5_STAT_LIMIT_MASK)
@@ -2393,6 +2429,14 @@ static int p9221_parse_dt(struct device *dev,
 		dev_info(dev, "dt epp_rp_value: %d\n", pdata->epp_rp_value);
 	}
 
+	ret = of_property_read_u32(node, "google,needs_dcin_reset", &data);
+	if (ret < 0) {
+		pdata->needs_dcin_reset = -1;
+	} else {
+		pdata->needs_dcin_reset = data;
+		dev_info(dev, "dt needs_dcin_reset: %d\n",
+			 pdata->needs_dcin_reset);
+	}
 
 	return 0;
 }
