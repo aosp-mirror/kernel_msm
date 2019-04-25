@@ -167,7 +167,6 @@ struct led_laser_ctrl_t {
 
 static bool read_proxoffset;
 static bool crack_log_en;
-static bool crack_detection_en = true;
 static enum LASER_TYPE safety_ic_owner = LASER_TYPE_MAX;
 /*
  * a global mutex is needed since there have two
@@ -176,7 +175,6 @@ static enum LASER_TYPE safety_ic_owner = LASER_TYPE_MAX;
 static DEFINE_MUTEX(lm36011_mutex);
 module_param(read_proxoffset, bool, 0644);
 module_param(crack_log_en, bool, 0644);
-module_param(crack_detection_en, bool, 0644);
 
 static const struct reg_setting silego_reg_settings_ver1[] = {
 	{0xc0, 0x09}, {0xc1, 0xf9}, {0xc2, 0x09}, {0xc3, 0xf9}, {0xcb, 0x93},
@@ -354,14 +352,10 @@ static void sx9320_crack_detection(struct led_laser_ctrl_t *ctrl)
 	gpio_level =
 		gpio_get_value(ctrl->silego.gpio_array[SILEGO_SW_HALT].gpio);
 
-	if (crack_detection_en) {
-		flood_thres = (ctrl->hw_version == BUILD_EVT1_1) ?
-			CRACK_THRES_FLOOD_EVT1_1 : CRACK_THRES_EVT1;
-		dot_thres = CRACK_THRES_DOT;
-	} else {
-		flood_thres = DUMMY_CRACK_THRES;
-		dot_thres = DUMMY_CRACK_THRES;
-	}
+	flood_thres = (ctrl->hw_version == BUILD_EVT1_1) ?
+		CRACK_THRES_FLOOD_EVT1_1 : CRACK_THRES_EVT1;
+	dot_thres = CRACK_THRES_DOT;
+
 	ctrl->cap_sense.is_crack_detected[LASER_FLOOD] =
 		(abs(ctrl->cap_sense.cap_bias[PHASE2] -
 		ctrl->cap_sense.cap_corrected[PHASE2]) > flood_thres) ?
