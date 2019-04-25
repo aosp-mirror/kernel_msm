@@ -177,7 +177,7 @@ int abc_pcie_local_cma_build(enum dma_data_direction dir,
 {
 	struct abc_pcie_sg_list *sgl = buf_desc->sgl;
 
-	sgl->sc_list = kcalloc(1, sizeof(struct scatterlist), GFP_KERNEL);
+	sgl->sc_list = kmalloc(sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list)
 		return -ENOMEM;
 
@@ -332,10 +332,10 @@ static int abc_pcie_vmalloc_buf_sg_build(enum dma_data_direction dir,
 	fp_offset = (dma_addr_t) dmadest & ~PAGE_MASK;
 	p_num = last_page - first_page + 1;
 
-	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
+	sgl->mypage = kvzalloc(p_num * sizeof(struct page *), GFP_KERNEL);
 	if (!sgl->mypage)
 		goto free_sg;
-	sgl->sc_list = kcalloc(p_num, sizeof(struct scatterlist), GFP_KERNEL);
+	sgl->sc_list = kvmalloc(p_num * sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list)
 		goto free_sg;
 
@@ -382,9 +382,9 @@ release_page:
 	for (i = 0; i < n_num; i++)
 		put_page(*(sgl->mypage + i));
 free_sg:
-	kfree(sgl->mypage);
+	kvfree(sgl->mypage);
 	sgl->mypage = NULL;
-	kfree(sgl->sc_list);
+	kvfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
 
@@ -418,14 +418,14 @@ int abc_pcie_user_local_buf_sg_build(enum dma_data_direction dir,
 	fp_offset = (unsigned long) dmadest & ~PAGE_MASK;
 	p_num = last_page - first_page + 1;
 
-	sgl->mypage = kcalloc(p_num, sizeof(struct page *), GFP_KERNEL);
+	sgl->mypage = kvzalloc(p_num * sizeof(struct page *), GFP_KERNEL);
 	if (!sgl->mypage) {
 		sgl->n_num = 0;
 		return -EINVAL;
 	}
-	sgl->sc_list = kcalloc(p_num, sizeof(struct scatterlist), GFP_KERNEL);
+	sgl->sc_list = kvmalloc(p_num * sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list) {
-		kfree(sgl->mypage);
+		kvfree(sgl->mypage);
 		sgl->mypage = NULL;
 		sgl->n_num = 0;
 		return -EINVAL;
@@ -475,9 +475,9 @@ release_page:
 	for (i = 0; i < n_num; i++)
 		put_page(*(sgl->mypage + i));
 
-	kfree(sgl->mypage);
+	kvfree(sgl->mypage);
 	sgl->mypage = NULL;
-	kfree(sgl->sc_list);
+	kvfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
 
@@ -504,9 +504,9 @@ int abc_pcie_user_local_buf_sg_destroy(struct abc_pcie_sg_list *sgl)
 			SetPageDirty(page);
 		put_page(page);
 	}
-	kfree(sgl->mypage);
+	kvfree(sgl->mypage);
 	sgl->mypage = NULL;
-	kfree(sgl->sc_list);
+	kvfree(sgl->sc_list);
 	sgl->sc_list = NULL;
 	sgl->n_num = 0;
 
@@ -526,7 +526,7 @@ int abc_pcie_user_remote_buf_sg_build(enum dma_data_direction dir,
 {
 	struct abc_pcie_sg_list *sgl = buf_desc->sgl;
 
-	sgl->sc_list = kcalloc(1, sizeof(struct scatterlist), GFP_KERNEL);
+	sgl->sc_list = kvmalloc(sizeof(struct scatterlist), GFP_KERNEL);
 	if (!sgl->sc_list)
 		return -ENOMEM;
 
@@ -550,7 +550,7 @@ int abc_pcie_user_remote_buf_sg_build(enum dma_data_direction dir,
  */
 int abc_pcie_user_remote_buf_sg_destroy(struct abc_pcie_sg_list *sgl)
 {
-	kfree(sgl->sc_list);
+	kvfree(sgl->sc_list);
 
 	return 0;
 }
@@ -588,7 +588,7 @@ int abc_pcie_clean_dma_local_buffers(struct abc_dma_xfer *xfer)
 		abc_pcie_sg_release_from_dma_buf(sgl);
 		break;
 	case DMA_BUFFER_KIND_CMA:
-		kfree(sgl->sc_list);
+		kvfree(sgl->sc_list);
 		break;
 	default:
 		break;
