@@ -40,3 +40,6 @@
 &qupv3_se19_2uart {
 	status = "disabled";
 };
+
+/* For Jaws: enable backdrive WR */
+#include "sm8150-floral-airbrush-backdrive-wr.dtsi"

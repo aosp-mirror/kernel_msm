@@ -195,6 +195,7 @@
 		pinctrl-0 = <&ab_ready_default &ab_fw_patch_en_default>;
 
 		/* Set optional properties with default values */
+		ddrcke-iso-clamp-wr = <0>;
 		otp-bypass = <0>;
 	};
 
