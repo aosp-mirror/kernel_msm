@@ -249,6 +249,7 @@ enum ab_sm_time_stamps {
 	/* PMIC On */
 	AB_SM_TS_PMIC_ON,
 	AB_SM_TS_LVCC,
+	AB_SM_TS_AON_DRAM_INIT,
 
 	/*IPU blk_set_state*/
 	AB_SM_TS_IPU,

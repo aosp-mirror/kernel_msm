@@ -790,6 +790,7 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"        DDR init",
 		"    PMIC on",
 		"    LVCC",
+		"    AON state change for DRAM init",
 		"    IPU state change",
 		"        IPU PMU resume",
 		"        IPU clock settings",
@@ -954,6 +955,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	u32 to_chip_substate_id;
 	int ret;
 	struct chip_to_block_map *dest_map;
+	struct chip_to_block_map *last_map;
 	struct chip_to_block_map *active_map;
 	enum chip_state prev_state = sc->curr_chip_substate_id;
 
@@ -974,8 +976,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	dest_map = ab_sm_get_block_map(sc, to_chip_substate_id);
+	last_map = ab_sm_get_block_map(sc, prev_state);
 	if (!is_valid_transition(sc, prev_state, to_chip_substate_id) ||
-			!dest_map) {
+			!dest_map || !last_map) {
 		dev_err(sc->dev,
 			"Entered %s with invalid destination state\n",
 			__func__);
@@ -1064,6 +1067,24 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		}
 	}
 	ab_sm_record_ts(AB_SM_TS_LVCC);
+
+	/* If DRAM is coming out of a low power state, ensure AON
+	 * clock rate is at maximum to speed up initialization
+	 */
+	if (dest_map->dram_block_state_id >= BLOCK_STATE_300 &&
+			last_map->dram_block_state_id < BLOCK_STATE_300) {
+		active_map = ab_sm_get_block_map(sc, CHIP_STATE_409);
+
+		ab_sm_start_ts(AB_SM_TS_AON_DRAM_INIT);
+		if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
+					active_map->aon_block_state_id)) {
+			ret = -EINVAL;
+			if (to_chip_substate_id != CHIP_STATE_0)
+				goto cleanup_state;
+		}
+		ab_sm_record_ts(AB_SM_TS_AON_DRAM_INIT);
+
+	}
 
 	ab_sm_start_ts(AB_SM_TS_IPU);
 	if (blk_set_state(sc, &(sc->blocks[BLK_IPU]),
