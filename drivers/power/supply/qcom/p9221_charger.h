@@ -267,6 +267,7 @@ struct p9221_charger_data {
 	u16				tx_len;
 	bool				tx_done;
 	bool				tx_busy;
+	bool				check_np;
 	bool				check_dc;
 	bool				check_det;
 	int				last_capacity;
@@ -275,6 +276,7 @@ struct p9221_charger_data {
 	u32				icl_ramp_ua;
 	u32				icl_ramp_delay_ms;
 	bool				fake_force_epp;
+	bool				force_bpp;
 	u32				dc_icl_bpp;
 };
 

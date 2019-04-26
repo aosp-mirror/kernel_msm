@@ -44,6 +44,11 @@
 #define OVC_BACKOFF_LIMIT		900000
 #define OVC_BACKOFF_AMOUNT		100000
 
+#define P9221_CHECK_NP_DELAY_MS		50
+#define P9221_NEG_POWER_5W		(5 / 0.5)
+#define P9221_NEG_POWER_10W		(10 / 0.5)
+#define P9221_PTMC_EPP_TX_1912		0x32
+
 static void p9221_icl_ramp_reset(struct p9221_charger_data *charger);
 static void p9221_icl_ramp_start(struct p9221_charger_data *charger);
 
@@ -359,12 +364,12 @@ static bool p9221_is_epp(struct p9221_charger_data *charger)
 
 	if (charger->fake_force_epp > 0)
 		return true;
+	if (charger->force_bpp)
+		return false;
 
 	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
-	if (ret == 0) {
-		dev_info(&charger->client->dev, "System mode reg: %x\n", reg);
+	if (ret == 0)
 		return (reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) > 0;
-	}
 
 	dev_err(&charger->client->dev, "Could not read mode: %d\n",
 		ret);
@@ -693,6 +698,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	logbuffer_log(charger->log, "offline\n");
 
 	charger->online = false;
+	charger->force_bpp = false;
 
 	/* Reset PP buf so we can get a new serial number next time around */
 	charger->pp_buf_valid = false;
@@ -1165,37 +1171,148 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	p9221_write_fod(charger);
 }
 
-/* 2 * P9221_NOTIFIER_DELAY_MS from VRECTON */
-static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
+static int p9221_has_dc_in(struct p9221_charger_data *charger)
 {
-	int ret;
 	union power_supply_propval prop;
-
-	charger->check_dc = false;
+	int ret;
 
 	if (!charger->dc_psy)
-		return;
+		return -EINVAL;
 
 	ret = power_supply_get_property(charger->dc_psy,
 					POWER_SUPPLY_PROP_PRESENT, &prop);
-	if (ret) {
+	if (ret < 0) {
 		dev_err(&charger->client->dev,
 			"Error getting charging status: %d\n", ret);
+		return -EINVAL;
+	}
+
+	return prop.intval != 0;
+}
+
+static int p9221_set_bpp_vout(struct p9221_charger_data *charger)
+{
+	uint8_t val8;
+	int ret, loops;
+	const uint8_t vout_5000mv = 5 * 10; /* in 0.1V units */
+
+	for (loops = 0; loops < 10; loops++) {
+		ret = p9221_reg_write_8(charger,
+					P9221R5_VOUT_SET_REG, vout_5000mv);
+		if (ret < 0) {
+			dev_err(&charger->client->dev,
+				"cannot set VOUT (%d)\n", ret);
+			return ret;
+		}
+
+		ret = p9221_reg_read_8(charger, P9221R5_VOUT_SET_REG, &val8);
+		if (ret < 0) {
+			dev_err(&charger->client->dev,
+				"cannot read VOUT (%d)\n", ret);
+			return ret;
+		}
+
+		if (val8 == vout_5000mv)
+			return 0;
+
+		msleep(10);
+	}
+
+	return -ETIMEDOUT;
+}
+
+/* return <0 on error, 0 on done, 1 on keep trying */
+static int p9221_notifier_check_neg_power(struct p9221_charger_data *charger)
+{
+	u8 np8;
+	int ret;
+	u16 status_reg;
+
+	ret = p9221_reg_read_8(charger, P9221R5_EPP_REQ_NEGOTIATED_POWER_REG,
+			       &np8);
+	if (ret < 0) {
+		dev_err(&charger->client->dev,
+			"cannot read EPP_NEG_POWER (%d)\n", ret);
+		return -EIO;
+	}
+
+	if (np8 >= P9221_NEG_POWER_10W) {
+		u8 mfg8;
+
+		ret = p9221_reg_read_8(charger, P9221R5_EPP_TX_MFG_CODE_REG,
+				       &mfg8);
+		if (ret < 0) {
+			dev_err(&charger->client->dev,
+				"cannot read MFG_CODE (%d)\n", ret);
+			return -EIO;
+		}
+
+
+		/* EPP unless dealing with P9221_PTMC_EPP_TX_1912 */
+		charger->force_bpp = (mfg8 == P9221_PTMC_EPP_TX_1912);
+		dev_info(&charger->client->dev, "np=%x mfg=%x fb=%d\n",
+			 np8, mfg8, charger->force_bpp);
+		goto done;
+	}
+
+	ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+	if (ret) {
+		dev_err(&charger->client->dev,
+			"failed to read P9221_STATUS_REG reg: %d\n",
+			ret);
+		return ret;
+	}
+
+	/* VOUT for standard BPP comes much earlier that VOUT for EPP */
+	if (!(status_reg & P9221_STAT_VOUT))
+		return 1;
+
+	/* normal BPP TX or EPP at less than 10W */
+	charger->force_bpp = true;
+	dev_info(&charger->client->dev,
+			"np=%x normal BPP or EPP less than 10W (%d)\n",
+			np8, ret);
+
+done:
+	if (charger->force_bpp) {
+		ret = p9221_set_bpp_vout(charger);
+		if (ret)
+			dev_err(&charger->client->dev,
+				"cannot change VOUT (%d)\n", ret);
+	}
+
+	return 0;
+}
+
+/* 2 P9221_NOTIFIER_DELAY_MS from VRECTON */
+static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
+{
+	int ret, dc_in;
+
+	charger->check_dc = false;
+
+	if (charger->check_np) {
+
+		ret = p9221_notifier_check_neg_power(charger);
+		if (ret > 0) {
+			ret = schedule_delayed_work(&charger->notifier_work,
+				msecs_to_jiffies(P9221_CHECK_NP_DELAY_MS));
+			if (ret)
+				return;
+
+			dev_err(&charger->client->dev,
+				"cannot reschedule check_np (%d)\n", ret);
+		}
+
+		/* done */
+		charger->check_np = false;
+	}
+
+	dc_in = p9221_has_dc_in(charger);
+	if (dc_in < 0)
 		return;
-	}
 
-	dev_info(&charger->client->dev, "dc status is %d\n", prop.intval);
-
-	if (charger->log) {
-		u32 vout_uv;
-
-		ret = p9221_reg_read_cooked(charger, P9221R5_VOUT_REG,
-					    &vout_uv);
-		logbuffer_log(charger->log,
-			      "check_dc: online=%d present=%d VOUT=%uuV (%d)",
-			      charger->online, prop.intval != 0,
-			      (ret == 0) ? vout_uv : 0, ret);
-	}
+	dev_info(&charger->client->dev, "dc status is %d\n", dc_in);
 
 	/*
 	 * We now have confirmation from DC_IN, kill the timer, charger->online
@@ -1204,10 +1321,21 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	cancel_delayed_work(&charger->dcin_work);
 	del_timer(&charger->vrect_timer);
 
+	if (charger->log) {
+		u32 vout_uv;
+
+		ret = p9221_reg_read_cooked(charger, P9221R5_VOUT_REG,
+					    &vout_uv);
+		logbuffer_log(charger->log,
+			      "check_dc: online=%d present=%d VOUT=%uuV (%d)",
+			      charger->online, dc_in,
+			      (ret == 0) ? vout_uv : 0, ret);
+	}
+
 	/*
 	 * Always write FOD, check dc_icl, send CSP
 	 */
-	if (prop.intval) {
+	if (dc_in) {
 		p9221_set_dc_icl(charger);
 		p9221_write_fod(charger);
 		if (charger->last_capacity > 0)
@@ -1217,17 +1345,17 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	}
 
 	/* We may have already gone online during check_det */
-	if (charger->online == prop.intval)
+	if (charger->online == dc_in)
 		goto out;
 
-	if (prop.intval)
+	if (dc_in)
 		p9221_set_online(charger);
 	else
 		p9221_set_offline(charger);
 
 out:
 	dev_info(&charger->client->dev, "trigger wc changed on:%d in:%d\n",
-		 charger->online, prop.intval);
+		 charger->online, dc_in);
 	power_supply_changed(charger->wc_psy);
 }
 
@@ -1242,7 +1370,10 @@ bool p9221_notifier_check_det(struct p9221_charger_data *charger)
 		goto done;
 
 	dev_info(&charger->client->dev, "detected wlc, trigger wc changed\n");
-	/* send out a FOD but is_epp() is still invalid */
+
+	/* b/130637382 workaround for 2622,2225,2574,1912 */
+	charger->check_np = true;
+	/* will send out a FOD but is_epp() is still invalid */
 	p9221_set_online(charger);
 	power_supply_changed(charger->wc_psy);
 
@@ -1266,20 +1397,10 @@ static void p9221_notifier_work(struct work_struct *work)
 	bool relax = true;
 	int ret;
 
-	dev_info(&charger->client->dev, "Notifier work: on:%d dc:%d det:%d\n",
-		 charger->online, charger->check_dc, charger->check_det);
-
-	if (charger->log) {
-		u32 vrect_uv;
-
-		ret = p9221_reg_read_cooked(charger, P9221R5_VRECT_REG,
-					    &vrect_uv);
-		logbuffer_log(charger->log,
-			      "notifier: on:%d dc:%d det:%d VRECT=%uuV (%d)",
-			      charger->online,
-			      charger->check_dc, charger->check_det,
-			      (ret == 0) ? vrect_uv : 0, ret);
-	}
+	dev_info(&charger->client->dev, "Notifier work: on:%d dc:%d np:%d det:%d\n",
+		 charger->online,
+		 charger->check_dc, charger->check_np,
+		 charger->check_det);
 
 	if (charger->pdata->q_value != -1) {
 
@@ -1301,6 +1422,18 @@ static void p9221_notifier_work(struct work_struct *work)
 			dev_err(&charger->client->dev,
 				"cannot write to EPP_NEG_POWER=%d (%d)\n",
 				 charger->pdata->epp_rp_value, ret);
+	}
+
+	if (charger->log) {
+		u32 vrect_uv;
+
+		ret = p9221_reg_read_cooked(charger, P9221R5_VRECT_REG,
+					    &vrect_uv);
+		logbuffer_log(charger->log,
+			      "notifier: on:%d dc:%d det:%d VRECT=%uuV (%d)",
+			      charger->online,
+			      charger->check_dc, charger->check_det,
+			      (ret == 0) ? vrect_uv : 0, ret);
 	}
 
 	if (charger->check_det)
@@ -2327,9 +2460,8 @@ static int p9221_parse_dt(struct device *dev,
 			pdata->slct_value = (data != 0);
 
 		dev_info(dev, "WLC_BPP_EPP_SLCT gpio:%d value=%d",
-					pdata->qien_gpio, pdata->slct_value);
+					pdata->slct_gpio, pdata->slct_value);
 	}
-
 
 	/* Main IRQ */
 	ret = of_get_named_gpio(node, "idt,irq_gpio", 0);
