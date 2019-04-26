@@ -122,11 +122,7 @@ static void ipu_core_jqs_remove_sysfs(struct device *dev)
 
 static inline bool ipu_core_jqs_is_clock_ready(struct paintbox_bus *bus)
 {
-	bool clock_is_on = bus->jqs.clock_rate_hz > 0;
-	bool clock_rate_ipu_inactive = bus->jqs.clock_rate_hz !=
-			IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND;
-
-	return (clock_is_on && clock_rate_ipu_inactive);
+	return bus->jqs.clock_rate_hz > 0;
 }
 
 int ipu_core_jqs_send_clock_rate(struct paintbox_bus *bus,

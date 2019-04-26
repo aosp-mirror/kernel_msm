@@ -98,8 +98,7 @@ struct ipu_adapter_ab_mfd_data {
 
 static inline bool ipu_clock_rate_is_active(uint64_t rate)
 {
-	return ((rate > 0) &&
-			(rate != IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND));
+	return rate > 0;
 }
 
 static inline bool ipu_adapter_link_is_ready(

@@ -136,7 +136,7 @@ static int64_t __ab_clk_ipu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ABC_READ(PLL_CON0_PLL_IPU, &last_val);
 	ab_sm_record_ts(AB_SM_TS_IPU_GET_CLK);
 
-	if (new_rate == AB_SM_OSC_RATE) {
+	if (new_rate == AB_SM_OSC_RATE || new_rate == 0) {
 		/* Set pll_ipu clock source to OSCCLK_AON */
 		ab_sm_start_ts(AB_SM_TS_IPU_SET_OSCCLK);
 		val = last_val & ~PLL_IPU_MUX_SEL_MASK;
@@ -306,7 +306,7 @@ static int64_t __ab_clk_tpu_set_rate_handler(struct ab_clk_context *clk_ctx,
 	ABC_READ(PLL_CON0_PLL_TPU, &last_val);
 	ab_sm_record_ts(AB_SM_TS_TPU_GET_CLK);
 
-	if (new_rate == AB_SM_OSC_RATE) {
+	if (new_rate == AB_SM_OSC_RATE || new_rate == 0) {
 		ab_sm_start_ts(AB_SM_TS_TPU_SET_OSCCLK);
 		/* Set pll_tpu clock source to OSCCLK_AON */
 		val = last_val & ~PLL_TPU_MUX_SEL_MASK;

@@ -45,6 +45,4 @@ int ipu_core_jqs_send_shutdown_mode(struct paintbox_bus *bus,
 int ipu_core_jqs_init(struct paintbox_bus *bus);
 void ipu_core_jqs_remove(struct paintbox_bus *bus);
 
-#define IPU_CORE_JQS_CLOCK_RATE_SLEEP_OR_SUSPEND 19200000 /* Hz */
-
 #endif /* __IPU_CORE_JQS_H__ */

@@ -167,9 +167,9 @@ static struct ab_sm_mfd_ops mfd_ops_stub = {
  * Note: The block order here must match the ipu_property_table block order
  */
 static const u64 blk_ipu_clk_tbl[][2] = {
-	/* BLOCK_STATE_0   */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	/* BLOCK_STATE_100 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	/* BLOCK_STATE_200 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_0   */ { 0, 0 },
+	/* BLOCK_STATE_100 */ { 0, 0 },
+	/* BLOCK_STATE_200 */ { 0, 0 },
 	/* BLOCK_STATE_300 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 	/* BLOCK_STATE_301 */ { 50000000,  50000000  },
 	/* BLOCK_STATE_302 */ { 220000000, 271800000 },
@@ -183,9 +183,9 @@ static const u64 blk_ipu_clk_tbl[][2] = {
  * Note: The block order here must match the tpu_property_table block order
  */
 static const u64 blk_tpu_clk_tbl[][2] = {
-	/* BLOCK_STATE_0   */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	/* BLOCK_STATE_100 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	/* BLOCK_STATE_200 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
+	/* BLOCK_STATE_0   */ { 0, 0 },
+	/* BLOCK_STATE_100 */ { 0, 0 },
+	/* BLOCK_STATE_200 */ { 0, 0 },
 	/* BLOCK_STATE_300 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
 	/* BLOCK_STATE_301 */ { 50000000,  50000000   },
 	/* BLOCK_STATE_302 */ { 306400000, 316000000  },
