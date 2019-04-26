@@ -1893,8 +1893,10 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 
 	if (!mapped) {
 		ret = ab_sm_unmap_state(chip_state, &unmapped_val);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&sc->async_fifo_lock);
 			return ret;
+		}
 
 		if (copy_to_user((void __user *)arg,
 					&unmapped_val, sizeof(unmapped_val))) {
