@@ -339,6 +339,15 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(703, 200, 303, 101, 100, 304, 301),
 	CHIP_TO_BLOCK_MAP_INIT(704, 200, 305, 101, 100, 304, 301),
 	CHIP_TO_BLOCK_MAP_INIT(705, 200, 305, 101, 100, 303, 301),
+
+	/* IPU Only - Low DRAM */
+	CHIP_TO_BLOCK_MAP_INIT(800, 301, 200, 101, 100, 304, 300),
+	CHIP_TO_BLOCK_MAP_INIT(801, 301, 200, 303, 303, 304, 300),
+	CHIP_TO_BLOCK_MAP_INIT(802, 302, 200, 303, 303, 304, 301),
+	CHIP_TO_BLOCK_MAP_INIT(803, 303, 200, 303, 303, 304, 301),
+	CHIP_TO_BLOCK_MAP_INIT(804, 304, 200, 303, 303, 304, 301),
+	CHIP_TO_BLOCK_MAP_INIT(805, 305, 200, 303, 303, 304, 301),
+
 };
 
 static int ab_update_block_prop_table(struct new_block_props *props,
@@ -601,9 +610,26 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	return 0;
 }
 
-static bool is_valid_transition(u32 curr_chip_substate_id,
-				u32 to_chip_substate_id)
+static struct chip_to_block_map *ab_sm_get_block_map(
+		struct ab_state_context *sc, int state)
 {
+	int i;
+
+	for (i = 0; i < sc->nr_chip_states; i++) {
+		if (sc->chip_state_table[i].chip_substate_id == state)
+			return &(sc->chip_state_table[i]);
+	}
+
+	return NULL;
+}
+
+static bool is_valid_transition(struct ab_state_context *sc,
+		u32 curr_chip_substate_id,
+		u32 to_chip_substate_id)
+{
+	struct chip_to_block_map *curr_map;
+	struct chip_to_block_map *to_map;
+
 	switch (curr_chip_substate_id) {
 	case CHIP_STATE_200:
 		if (to_chip_substate_id == CHIP_STATE_300)
@@ -624,6 +650,23 @@ static bool is_valid_transition(u32 curr_chip_substate_id,
 			return false;
 		break;
 	}
+
+	/* Prevent direct DRAM active -> active clock rate changes.
+	 * DRAM must go through intermediate low power state, i.e:
+	 * 1867MHz -> self-refresh -> 800MHz
+	 * See b/127677742 for more info
+	 */
+	curr_map = ab_sm_get_block_map(sc, curr_chip_substate_id);
+	to_map = ab_sm_get_block_map(sc, to_chip_substate_id);
+	if (curr_map == NULL || to_map == NULL)
+		return false;
+
+	if (curr_map->dram_block_state_id != to_map->dram_block_state_id) {
+		if (curr_map->dram_block_state_id >= BLOCK_STATE_300 &&
+				to_map->dram_block_state_id >= BLOCK_STATE_300)
+			return false;
+	}
+
 	return true;
 }
 
@@ -653,6 +696,7 @@ static const u32 chip_substate_throttler_map
 	[5] = THROTTLER_MAP_INIT(505, 504, 503, 502, 100),
 	[6] = THROTTLER_MAP_INIT(605, 604, 603, 602, 100),
 	[7] = THROTTLER_MAP_INIT(705, 704, 703, 702, 100),
+	[8] = THROTTLER_MAP_INIT(805, 804, 803, 802, 100),
 };
 
 static u32 ab_sm_throttled_chip_substate_id(
@@ -793,22 +837,6 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 }
 #endif
 
-static struct chip_to_block_map *ab_sm_get_block_map(
-		struct ab_state_context *sc, int state)
-{
-	struct chip_to_block_map *map = NULL;
-	int i;
-
-	for (i = 0; i < sc->nr_chip_states; i++) {
-		if (sc->chip_state_table[i].chip_substate_id == state) {
-			map = &(sc->chip_state_table[i]);
-			break;
-		}
-	}
-
-	return map;
-}
-
 /* Set the enable/disable flag for each pmic rail.
  * Only sets the flags, does not turn rails on or off
  */
@@ -946,7 +974,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 
 	dest_map = ab_sm_get_block_map(sc, to_chip_substate_id);
-	if (!is_valid_transition(prev_state, to_chip_substate_id) ||
+	if (!is_valid_transition(sc, prev_state, to_chip_substate_id) ||
 			!dest_map) {
 		dev_err(sc->dev,
 			"Entered %s with invalid destination state\n",
@@ -1243,7 +1271,7 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 	struct chip_to_block_map *map =
 		ab_sm_get_block_map(sc, dest_chip_substate_id);
 
-	if (!is_valid_transition(sc->curr_chip_substate_id,
+	if (!is_valid_transition(sc, sc->curr_chip_substate_id,
 			dest_chip_substate_id) ||
 			!map) {
 		dev_err(sc->dev,
@@ -1279,7 +1307,7 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 /* TODO (b/127500645): Remove once old mappings are completely deprecated */
 int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
 {
-	static const u32 remap_table[76] = {
+	static const u32 remap_table[86] = {
 		[0]  = CHIP_STATE_400,
 		[1]  = CHIP_STATE_401,
 		[2]  = CHIP_STATE_402,
@@ -1312,6 +1340,12 @@ int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
 		[73] = CHIP_STATE_703,
 		[74] = CHIP_STATE_704,
 		[75] = CHIP_STATE_705,
+		[80] = CHIP_STATE_800,
+		[81] = CHIP_STATE_801,
+		[82] = CHIP_STATE_802,
+		[83] = CHIP_STATE_803,
+		[84] = CHIP_STATE_804,
+		[85] = CHIP_STATE_805,
 	};
 
 	if (old_mapping >= ARRAY_SIZE(remap_table))
@@ -1355,6 +1389,9 @@ int ab_sm_unmap_state(u32 new_mapping, u32 *old_mapping)
 		break;
 	case CHIP_STATE_700 ... CHIP_STATE_705:
 		*old_mapping = (new_mapping - 630);
+		break;
+	case CHIP_STATE_800 ... CHIP_STATE_805:
+		*old_mapping = (new_mapping - 720);
 		break;
 	default:
 		pr_err("couldn't unmap %d\n", new_mapping);

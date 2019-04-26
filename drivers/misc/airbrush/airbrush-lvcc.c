@@ -196,7 +196,8 @@ int ab_lvcc(struct ab_state_context *sc, int chip_state)
 	int smps_volt;
 	struct ab_asv_info *info = &sc->asv_info;
 
-	if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_500))
+	if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_500) ||
+			AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_800))
 		smps_volt = info->ipu_volt;
 	else if (AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_600) ||
 		 AB_SM_STATE_IN_RANGE(chip_state, CHIP_STATE_700))
