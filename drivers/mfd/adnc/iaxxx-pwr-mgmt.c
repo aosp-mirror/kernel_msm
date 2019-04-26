@@ -32,6 +32,8 @@
 #include "iaxxx.h"
 #include "iaxxx-plugin-common.h"
 
+#define IAXXX_PROC_STATUS_MASK	0x34
+
 #define IAXXX_PWR_DWN_VAL 0x01C00050
 #define IAXXX_PWR_ON_VAL 0x845
 #define IAXXX_PWR_STATE_RETRY	0x5
@@ -254,6 +256,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 {
 	int rc;
 	uint32_t status;
+	uint32_t proc_status = 0;
 
 	/* set up the SPI speed thats expected when the system is wake up
 	 * Set the SPI Speed to maximum so system will be awake with max
@@ -269,12 +272,31 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 		return rc;
 	}
 
+	/* Read core processor status */
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
+			&proc_status);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read proc status %s\n", __func__);
+		return rc;
+	}
+
+	/* Check if SSP, DMX or HMD processor is active */
+	proc_status = proc_status & IAXXX_PROC_STATUS_MASK;
+	if (proc_status)
+		dev_info(priv->dev, "Proc status 0x%x\n", proc_status);
+
 	/* Note: Control interface of second host should also be disabled
 	 * to achieve optimal or sleep mode.
 	 */
-	/* SLEEP MODE: If plugin count is zero and route is inactive */
+	/*
+	 * SLEEP MODE: If plugin count is zero and route is inactive and
+	 * Processor status for SSP, HMD and DMX is inactive
+	 */
 	if (iaxxx_core_plg_list_empty(priv) &&
-			!iaxxx_core_get_route_status(priv)) {
+			!iaxxx_core_get_route_status(priv) &&
+			!proc_status) {
 		/* Enable external clock */
 		if (priv->iaxxx_mclk_cb)
 			priv->iaxxx_mclk_cb(priv, 1);
