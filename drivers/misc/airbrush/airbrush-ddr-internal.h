@@ -80,6 +80,7 @@
 #define CMD_TYPE_MRW			(0x0 << 24)
 #define CMD_TYPE_NOP			(0x3 << 24)
 #define CMD_TYPE_SREF_ENTR		(0x4 << 24)
+#define CMD_TYPE_REFA			(0x5 << 24)
 #define CMD_TYPE_CKEL			(0x6 << 24)
 #define CMD_TYPE_PD_EXIT		(0x7 << 24)
 #define CMD_TYPE_SREF_EXIT		(0x8 << 24)
@@ -90,6 +91,32 @@
 #define OP2CMD(op)			(((op) & 0xff) << 2)
 #define MRR(mr)				(CMD_TYPE_MRR | MR2CMD(mr))
 #define MRW(mr, op)			(CMD_TYPE_MRW | MR2CMD(mr) | OP2CMD(op))
+
+/* MR1 register configurations */
+#define MRW1_1866			(MRW(1, 0x6e))
+#define MRW1_1600			(MRW(1, 0x5e))
+#define MRW1_1200			(MRW(1, 0x4e))
+#define MRW1_933			(MRW(1, 0x36))
+#define MRW1_800			(MRW(1, 0x26))
+
+/* MR2 register configurations */
+#define MRW2_1866			(MRW(2, 0x36))
+#define MRW2_1600			(MRW(2, 0x2d))
+#define MRW2_1200			(MRW(2, 0x24))
+#define MRW2_933			(MRW(2, 0x1b))
+#define MRW2_800			(MRW(2, 0x12))
+
+/* MR3 register configurations */
+#define MRW3_DEFAULT			(MRW(3, 0xf1))
+
+/* MR11 register configurations */
+#define MRW11_DEFAULT			(MRW(11, 0x24))
+
+/* MR22 register configurations */
+#define MRW22_DEFAULT			(MRW(22, 0x14))
+
+/* MR8 register configurations */
+#define MRR8_READ			(MRR(8))
 
 /* MR13 register configurations */
 #define MR13_VRCG_NORMAL		(0x0 << 3)
@@ -127,6 +154,8 @@
 #define TMGPBR_800			(t_rfcpb0(0x1c) | t_rfcpb1(0x1c))
 
 #define DREX_PWRDNCONFIG		0x10580028
+#define PWRDNCONFIG_DEFAULT		(0xffff00ff)
+
 #define DREX_TIMINGARE			0x10580030
 #define T_REFI(x)			(((x) & 0xffff) << 0)
 #define T_REFIPB(x)			(((x) & 0xffff) << 16)
@@ -203,6 +232,8 @@
 #define DREX_RDFETCH1			0x10580050
 #define DREX_MRSTATUS			0x10580054
 #define DREX_TIMINGSETSW		0x105800e0
+#define TIMING_SET_SW_CON		(0x1 << 0)
+
 #define DREX_TIMINGROW1			0x105800e4
 #define DREX_TIMINGDATA1		0x105800e8
 #define DREX_TIMINGPOWER1		0x105800ec
@@ -291,7 +322,27 @@
 #define CHIP_SIZE_512MB			(0x1 << 0)
 
 #define DPHY_GNR_CON0			0x105b0000
+#define CTRL_UPD_TIME(x)		(((x) & 0x3) << 30)
+#define CTRL_UPD_RANGE(x)		(((x) & 0x3) << 28)
 #define CTRL_DFDQS			(0x1 << 26)
+#define DVFS_GATE_UPD_MODE		(0x1 << 20)
+#define CTRL_DDR_MODE(x)		(((x) & 0x3) << 24)
+#define CTRL_OTF_BL			(0x1 << 14)
+#define CTRL_BSTLEN(x)			(((x) & 0x3f) << 8)
+#define BSTLEN_16			(0x10)
+#define BSTLEN_32			(0x20)
+#define RL_1866				(0x24)
+#define RL_1600				(0x20)
+#define RL_1200				(0x1c)
+#define RL_933				(0x16)
+#define RL_800				(0x10)
+#define GNRCON_INIT			\
+(CTRL_UPD_TIME(0x1) | CTRL_DDR_MODE(3) | CTRL_OTF_BL | CTRL_BSTLEN(BSTLEN_16))
+#define GNRCON_INIT_1866		(GNRCON_INIT | RL_1866)
+#define GNRCON_INIT_1600		(GNRCON_INIT | RL_1600)
+#define GNRCON_INIT_1200		(GNRCON_INIT | RL_1200)
+#define GNRCON_INIT_933			(GNRCON_INIT | RL_933)
+#define GNRCON_INIT_800			(GNRCON_INIT | RL_800)
 
 #define DPHY_CAL_CON0			0x105b0004
 #define WRLVL_MODE			(0x1 << 0)
@@ -320,6 +371,11 @@
 #define CTRL_GATEDURADJ(x)		(((x) & 0xf) << 24)
 #define CTRL_SHGATE			(0x1 << 29)
 #define CTRL_RODT_DISABLE		(0x1 << 30)
+#define CTRL_RPRE_OPT			(0x1 << 31)
+#define CON2_FREQ_HIGH		\
+	(CTRL_GATEDURADJ(4) | CTRL_READDURADJ(7) | CTRL_RPRE_OPT)
+#define CON2_FREQ_LOW		\
+	(CTRL_GATEDURADJ(4) | CTRL_READDURADJ(5))
 
 #define DPHY_CAL_CON3			0x105b0010
 #define PRBS_SW_MODE			(0x1 << 6)
@@ -340,6 +396,7 @@
 #define CTRL_PULLD_DQ			(0x3 << 16)
 
 #define DPHY_GATE_CON0			0x105b001c
+#define GATE_CON0_DEFAULT		(0xf00ffff)
 
 #define DPHY_OFFSETR_CON0		0x105b0020
 #define CTRL_OFFSETR0_MSK		(0x1ff << 0)
@@ -384,6 +441,11 @@
 #define PER_DVFS_TRAIN_DISABLE		(0x1 << 13)
 #define DVFS_CON_MSK			(0xfff << 0)
 #define DVFS_CON(x)		(PER_DVFS_TRAIN_DISABLE | (((x) & 0xfff) << 0))
+#define DVFS_CON_1866			(DVFS_CON(1866))
+#define DVFS_CON_1600			(DVFS_CON(1600))
+#define DVFS_CON_1200			(DVFS_CON(1200))
+#define DVFS_CON_933			(DVFS_CON(933))
+#define DVFS_CON_800			(DVFS_CON(800))
 
 #define DPHY_ZQ_CON0			0x105b03c8
 #define ZQ_MANUAL_STR			(0x1 << 1)
@@ -437,6 +499,7 @@
 #define PRBS_READ_START			(0x1 << 1)
 #define PRBS_WRITE_START		(0x1 << 2)
 #define PRBS_CON0_INIT_PATTERN		(0x5 << 16)
+#define PRBS_CON0_DEFAULT		(0x50000)
 
 #define DPHY_PRBS_CON1			0x105b0688
 #define DPHY_PRBS_CON2			0x105b068c
@@ -845,8 +908,7 @@
 enum ddr_freq_index {
 	f_DPHY_DVFS_CON,
 	f_DPHY_CAL_CON2,
-	f_DPHY_GNR_CON0_NODBI,
-	f_DPHY_GNR_CON0_DBI,
+	f_DPHY_GNR_CON0,
 	f_DREX_TIMINGRFCPB,
 	f_DREX_TIMINGROW,
 	f_DREX_TIMINGDATA,

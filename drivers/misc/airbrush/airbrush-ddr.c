@@ -562,22 +562,15 @@ static const struct ddr_train_save_restore_t *
 static unsigned int ddr_freq_param(enum ddr_freq_t freq, unsigned int index)
 {
 	static const unsigned int ddr_reg_freq[f_reg_max][AB_DRAM_FREQ_MAX] = {
-	    /* f_DPHY_DVFS_CON */
-	    { DVFS_CON(1866), DVFS_CON(1600), DVFS_CON(1200),
-				DVFS_CON(933), DVFS_CON(800)},
-	    /* f_DPHY_CAL_CON2 : TODO(b/122059867) remove all magic numbers */
-	    { 0x84070000, 0x84070000, 0x84070000, 0x04050000, 0x04050000 },
-	    /* f_DPHY_GNR_CON0_NODBI */
-	    { 0x43005024, 0x43005020, 0x4300501c, 0x43005016, 0x43005010 },
-	    /* f_DPHY_GNR_CON0_DBI */
-	    { 0x47106024, 0x47106020, 0x4710601c, 0x47106016, 0x47106010 },
-	    /* f_DREX_TIMINGRFCPB */
+	    { DVFS_CON_1866, DVFS_CON_1600, DVFS_CON_1200, DVFS_CON_933,
+	      DVFS_CON_800 },
+	    { CON2_FREQ_HIGH, CON2_FREQ_HIGH, CON2_FREQ_HIGH, CON2_FREQ_LOW,
+	      CON2_FREQ_LOW},
+	    { GNRCON_INIT_1866, GNRCON_INIT_1600, GNRCON_INIT_1200,
+	      GNRCON_INIT_933, GNRCON_INIT_800 },
 	    { TMGPBR_1866, TMGPBR_1600, TMGPBR_1200, TMGPBR_933, TMGPBR_800 },
-	    /* f_DREX_TIMINGROW */
 	    { TMGROW_1866, TMGROW_1600, TMGROW_1200, TMGROW_933, TMGROW_800 },
-	    /* f_DREX_TIMINGDATA */
 	    { TMGDTA_1866, TMGDTA_1600, TMGDTA_1200, TMGDTA_933, TMGDTA_800 },
-	    /* f_DREX_TIMINGPOWER */
 	    { TMGPWR_1866, TMGPWR_1600, TMGPWR_1200, TMGPWR_933, TMGPWR_800 },
 	};
 
@@ -831,7 +824,7 @@ static void ddr_initialize_phy(struct ab_ddr_context *ddr_ctx,
 	ddr_reg_clr_set(ddr_ctx, DPHY_DVFS_CON, DVFS_CON_MSK,
 			ddr_freq_param(freq, f_DPHY_DVFS_CON));
 	ddr_reg_wr(ddr_ctx, DPHY_GNR_CON0,
-			ddr_freq_param(freq, f_DPHY_GNR_CON0_NODBI));
+			ddr_freq_param(freq, f_DPHY_GNR_CON0));
 	ddr_reg_wr_otp(ddr_ctx, DPHY_CAL_CON0, o_DPHY_CAL_CON0_0);
 	ddr_reg_wr(ddr_ctx, DPHY_CAL_CON2,
 			ddr_freq_param(freq, f_DPHY_CAL_CON2));
@@ -842,7 +835,7 @@ static void ddr_initialize_phy(struct ab_ddr_context *ddr_ctx,
 	ddr_reg_clr_set(ddr_ctx, DPHY2_DVFS_CON, DVFS_CON_MSK,
 			ddr_freq_param(freq, f_DPHY_DVFS_CON));
 	ddr_reg_wr(ddr_ctx, DPHY2_GNR_CON0,
-			ddr_freq_param(freq, f_DPHY_GNR_CON0_NODBI));
+			ddr_freq_param(freq, f_DPHY_GNR_CON0));
 	ddr_reg_wr_otp(ddr_ctx, DPHY2_CAL_CON0, o_DPHY_CAL_CON0_0);
 	ddr_reg_wr(ddr_ctx, DPHY2_CAL_CON2,
 			ddr_freq_param(freq, f_DPHY_CAL_CON2));
@@ -891,7 +884,7 @@ static void ddr_dram_reset_sequence(struct ab_ddr_context *ddr_ctx)
 static void ddr_power_down_exit_sequence(struct ab_ddr_context *ddr_ctx)
 {
 	/* ExitPD start */
-	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_PD_EXIT);
 }
 
 static void ddr_mrw_set_vref_odt_etc(struct ab_ddr_context *ddr_ctx,
@@ -900,16 +893,26 @@ static void ddr_mrw_set_vref_odt_etc(struct ab_ddr_context *ddr_ctx,
 	/* MRW Settings for each frequency supported */
 	static const struct airbrush_ddr_mrw_set_t
 				ab_ddr_mrw_set_table[AB_DRAM_FREQ_MAX] = {
-		[AB_DRAM_FREQ_MHZ_1866] = { 0x5b8, 0x8d8, 0xfc4, 0x10c90,
-					    MRW13_DEFAULT, 0x21850, 0x9010000},
-		[AB_DRAM_FREQ_MHZ_1600] = { 0x578, 0x8b4, 0xfc4, 0x10c90,
-					    MRW13_DEFAULT, 0x21850, 0x9010000},
-		[AB_DRAM_FREQ_MHZ_1200] = { 0x538, 0x890, 0xfc4, 0x10c90,
-					    MRW13_DEFAULT, 0x21850, 0x9010000},
-		[AB_DRAM_FREQ_MHZ_933]  = { 0x4d8, 0x86c, 0xfc4, 0x10c90,
-					    MRW13_DEFAULT, 0x21850, 0x9010000 },
-		[AB_DRAM_FREQ_MHZ_800]  = { 0x498, 0x848, 0xfc4, 0x10c90,
-					    MRW13_DEFAULT, 0x21850, 0x9010000 },
+		[AB_DRAM_FREQ_MHZ_1866] = { MRW1_1866, MRW2_1866,
+					    MRW3_DEFAULT, MRW11_DEFAULT,
+					    MRW13_DEFAULT, MRW22_DEFAULT,
+					    MRR8_READ},
+		[AB_DRAM_FREQ_MHZ_1600] = { MRW1_1600, MRW2_1600,
+					    MRW3_DEFAULT, MRW11_DEFAULT,
+					    MRW13_DEFAULT, MRW22_DEFAULT,
+					    MRR8_READ},
+		[AB_DRAM_FREQ_MHZ_1200] = { MRW1_1200, MRW2_1200,
+					    MRW3_DEFAULT, MRW11_DEFAULT,
+					    MRW13_DEFAULT, MRW22_DEFAULT,
+					    MRR8_READ},
+		[AB_DRAM_FREQ_MHZ_933]  = { MRW1_933, MRW2_933,
+					    MRW3_DEFAULT, MRW11_DEFAULT,
+					    MRW13_DEFAULT, MRW22_DEFAULT,
+					    MRR8_READ },
+		[AB_DRAM_FREQ_MHZ_800]  = { MRW1_800, MRW2_800,
+					    MRW3_DEFAULT, MRW11_DEFAULT,
+					    MRW13_DEFAULT, MRW22_DEFAULT,
+					    MRR8_READ },
 	};
 
 	/* LPDDR4_chip_Init */
@@ -1123,8 +1126,8 @@ static int ddr_io_initialization(struct ab_ddr_context *ddr_ctx,
 
 static int ddr_enable_dll(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr(ddr_ctx, DPHY_GATE_CON0, 0xf00ffff);
-	ddr_reg_wr(ddr_ctx, DPHY2_GATE_CON0, 0xf00ffff);
+	ddr_reg_wr(ddr_ctx, DPHY_GATE_CON0, GATE_CON0_DEFAULT);
+	ddr_reg_wr(ddr_ctx, DPHY2_GATE_CON0, GATE_CON0_DEFAULT);
 
 	ddr_reg_set(ddr_ctx, DPHY_MDLL_CON0, CTRL_DLL_ON);
 	ddr_reg_set(ddr_ctx, DPHY2_MDLL_CON0, CTRL_DLL_ON);
@@ -1158,8 +1161,8 @@ static void ddr_set_drex_timing_parameters(struct ab_ddr_context *ddr_ctx,
 			TP_EN_MSK | PORT_POLICY_MSK,
 			PORT_POLICY(PORT_POLICY_OPEN_PAGE));
 
-	ddr_reg_wr(ddr_ctx, DREX_PWRDNCONFIG, 0xffff00ff);
-	ddr_reg_wr(ddr_ctx, DREX_TIMINGSETSW, 0x1);
+	ddr_reg_wr(ddr_ctx, DREX_PWRDNCONFIG, PWRDNCONFIG_DEFAULT);
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGSETSW, TIMING_SET_SW_CON);
 	ddr_reg_wr(ddr_ctx, DREX_TIMINGRFCPB,
 			ddr_freq_param(freq, f_DREX_TIMINGRFCPB));
 	ddr_reg_wr(ddr_ctx, DREX_TIMINGROW0,
@@ -1216,10 +1219,8 @@ static int ddr_set_drex_address_parameters(struct ab_ddr_context *ddr_ctx,
 	ddr_dram_dctrl_resync(ddr_ctx);
 
 	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_27);
-	ddr_reg_wr(ddr_ctx, DPHY_GNR_CON0,
-			ddr_freq_param(freq, f_DPHY_GNR_CON0_DBI));
-	ddr_reg_wr(ddr_ctx, DPHY2_GNR_CON0,
-			ddr_freq_param(freq, f_DPHY_GNR_CON0_DBI));
+	ddr_reg_set(ddr_ctx, DPHY_GNR_CON0, CTRL_DFDQS | DVFS_GATE_UPD_MODE);
+	ddr_reg_set(ddr_ctx, DPHY2_GNR_CON0, CTRL_DFDQS | DVFS_GATE_UPD_MODE);
 	ddr_dram_dctrl_resync(ddr_ctx);
 
 	/* DRAM Density Setting */
@@ -1446,8 +1447,8 @@ static int ddr_write_dq_calibration(struct ab_ddr_context *ddr_ctx)
 void ddr_prbs_training_init(struct ab_ddr_context *ddr_ctx)
 {
 	/* DDRPHY_SET_PRBS_TRAINING_INIT */
-	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON0, 0x50000);
-	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON0, 0x50000);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON0, PRBS_CON0_DEFAULT);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON0, PRBS_CON0_DEFAULT);
 	ddr_reg_wr_otp(ddr_ctx, DPHY_PRBS_CON1, o_PCIe_reg_address_79);
 	ddr_reg_wr_otp(ddr_ctx, DPHY2_PRBS_CON1, o_PCIe_reg_address_79);
 }
@@ -1524,8 +1525,8 @@ static void ddr_axi_enable_after_all_training(struct ab_ddr_context *ddr_ctx)
 
 int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_15);
-	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_SREF_ENTR);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_CKEL);
 
 	/* poll for self refresh entry */
 	if (ddr_reg_poll(ddr_ctx, DREX_CHIPSTATUS,
@@ -1539,7 +1540,7 @@ int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
 
 int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_22);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_SREF_EXIT);
 
 	/* poll for self refresh exit */
 	if (ddr_reg_poll(ddr_ctx, DREX_CHIPSTATUS, p_DREX_CHIPSTATUS_sr_exit)) {
@@ -1999,7 +2000,7 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
 
 	/* Self-refresh entry sequence */
 	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
@@ -2222,7 +2223,7 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
 
 	/* Self-refresh entry sequence */
 	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
@@ -2262,7 +2263,7 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 	}
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
 
 	/* Enable PB Refresh & Auto Refresh */
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
@@ -2394,7 +2395,7 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 		/* safe to send a manual all bank refresh command */
-		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
+		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
 
 		/* Self-refresh entry sequence */
 		if (ddr_enter_self_refresh_mode(ddr_ctx))
@@ -2444,7 +2445,7 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 * For the above reason, we need to bring the DRAM out of Power
 		 * Down Entry mode.
 		 */
-		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
+		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_PD_EXIT);
 
 		/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not
 		 * update the MR registers specific to 1866MHz. As the ddr
@@ -2465,7 +2466,7 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		/* As we are going to suspend state, keep the DRAM in
 		 * Power Down Entry Mode.
 		 */
-		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
+		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_CKEL);
 
 		/* Disable LDO2 if the previous LDO2 state was disabled */
 		if (!prev_ldo2_state) {
@@ -2558,7 +2559,7 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_FINISH);
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
 
 	/* Enable PB Refresh & Auto Refresh */
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
@@ -2566,7 +2567,7 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* Allow AXI after exiting from self-refresh */
-	ddr_reg_wr(ddr_ctx, DREX_ACTIVATE_AXI_READY, 0x1);
+	ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 
 	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
 
@@ -2608,7 +2609,7 @@ static int32_t __ab_ddr_selfrefresh_enter(void *ctx)
 	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
 
 	/* Self-refresh entry sequence */
 	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
