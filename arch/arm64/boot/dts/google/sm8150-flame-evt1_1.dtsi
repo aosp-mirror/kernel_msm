@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 #include "sm8150-flame.dtsi"
-
+#include "sm8150-flame-pac193x-evt1_1.dtsi"
 &soc {
 	abc-sm {
 		/* Set "otp-bypass" due to mixed datecode parts. */

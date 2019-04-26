@@ -11,4 +11,3 @@
  */
 #include "sm8150-flame-common.dtsi"
 #include "sm8150-flame-battery.dtsi"
-#include "sm8150-flame-pac193x.dtsi"
