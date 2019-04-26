@@ -46,13 +46,6 @@
 	maxim,fix-vempty;
 };
 
-&soc {
-	google,overheat_mitigation {
-		google,begin-mitigation-temp = <550>;
-		google,end-mitigation-temp = <450>;
-	};
-};
-
 &p9221 {
 	google,q_value = <42>;
 	fod = [AB 29 8F 2E 99 1B 9D 13 A5 E9 B9 BE 12 02 9A 12];

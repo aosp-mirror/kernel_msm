@@ -208,6 +208,7 @@
 		google,accessory-monitoring-period = <150>;
 		/* Must maintain < 1/15 duty cycle */
 		google,polling-freq = <3>;
+		#cooling-cells = <2>;
 	};
 };
 

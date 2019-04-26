@@ -21,6 +21,16 @@
 		};
 	};
 
+	usbc-therm-adc {
+		trips {
+			usb-throttling_lv1 {
+				temperature = <50000>;
+				hysteresis = <10000>;
+				type = "passive";
+			};
+		};
+	};
+
 	backup-charge {
 		trips {
 			batt-charging_lv1 {

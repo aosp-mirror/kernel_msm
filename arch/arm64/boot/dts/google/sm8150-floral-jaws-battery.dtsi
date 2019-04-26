@@ -57,11 +57,3 @@
 		0xD5 0x307D /* nRFastVShdn: rFast=93mohm VShdn=2.5V */
 	>;
 };
-
-&soc {
-	google,overheat_mitigation {
-		google,begin-mitigation-temp = <500>;
-		google,end-mitigation-temp = <400>;
-	};
-};
-
