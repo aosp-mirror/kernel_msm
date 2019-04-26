@@ -57,6 +57,8 @@
 #define MDP_PP_AD_BL_LINEAR	0x0
 #define MDP_PP_AD_BL_LINEAR_INV	0x1
 
+#define BOOST_WAITING_MS 200
+
 /**
  * enum mdp_notify_event - Different frame events to indicate frame update state
  *
@@ -376,6 +378,9 @@ struct msm_fb_data_type {
 	bool pending_switch;
 	struct mutex switch_lock;
 	struct input_handler *input_handler;
+
+	struct delayed_work boost_mode_work;
+	int activate_boost;
 };
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)

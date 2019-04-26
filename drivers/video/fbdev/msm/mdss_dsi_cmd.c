@@ -929,12 +929,15 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	struct dsi_panel_cmds *hbm_off_cmds = NULL;
 
-	pr_info("%s: read_back_param[0] = 0x%02x\n", __func__,
-			ctrl->read_back_param[0]);
-
-	//write back to HBM off command flow
 	hbm_off_cmds = &ctrl->hbm_off_cmds;
-	hbm_off_cmds->cmds[12].payload[1] = ctrl->read_back_param[0];
+
+	if (ctrl->hbm1_on_cmds.blen > 0) {
+		pr_info("%s: read_back_param[0] = 0x%02x\n", __func__,
+				ctrl->read_back_param[0]);
+
+		//write back to HBM off command flow
+		hbm_off_cmds->cmds[12].payload[1] = ctrl->read_back_param[0];
+	}
 
 	if (hbm_off_cmds->cmd_cnt) {
 		mdss_dsi_cmds_send(ctrl, hbm_off_cmds, CMD_REQ_COMMIT);

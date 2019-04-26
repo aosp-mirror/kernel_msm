@@ -533,6 +533,35 @@ static void __mdss_fb_idle_notify_work(struct work_struct *work)
 	mfd->idle_state = MDSS_FB_IDLE;
 }
 
+static void __mdss_fb_boost_mode_work(struct work_struct *work)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	struct delayed_work *dw = to_delayed_work(work);
+	struct msm_fb_data_type *mfd = container_of(dw, struct msm_fb_data_type,
+		boost_mode_work);
+
+	pr_info("__mdss_fb_boost_mode_work+\n");
+
+	ctrl = container_of(dev_get_platdata(&mfd->pdev->dev),
+				struct mdss_dsi_ctrl_pdata, panel_data);
+	if (!ctrl) {
+		pr_err("%s: DSI ctrl not available\n", __func__);
+		return;
+	}
+
+	if (!mdss_fb_is_power_on_interactive(mfd)) {
+		pr_err("only normal mode can be the entry to HBM\n");
+		return;
+	}
+
+	if (!mfd->activate_boost) {
+		mdss_dsi_brightness_boost_off(ctrl);
+		g_boost_mode = 0;
+	} else {
+		mdss_dsi_brightness_boost_on(ctrl);
+		g_boost_mode = 1;
+	}
+}
 
 static ssize_t mdss_fb_get_fps_info(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -950,17 +979,15 @@ static ssize_t mdss_fb_set_boost_mode(struct device *dev,
 	if (mfd->panel_info->type !=  MIPI_CMD_PANEL) {
 		pr_err("support for command mode panel only\n");
 	} else {
-		if (boost_mode != 0) {
-			if (!g_boost_mode) {
-				mdss_dsi_brightness_boost_on(ctrl);
-				g_boost_mode = 1;
-			}
-		} else {
-			if (g_boost_mode) {
-				mdss_dsi_brightness_boost_off(ctrl);
-				g_boost_mode = 0;
-			}
-		}
+		if (boost_mode != 0)
+			mfd->activate_boost = 1;
+		else
+			mfd->activate_boost = 0;
+
+		cancel_delayed_work_sync(&mfd->boost_mode_work);
+
+		schedule_delayed_work(&mfd->boost_mode_work,
+			msecs_to_jiffies(BOOST_WAITING_MS));
 	}
 
 	return count;
@@ -1463,6 +1490,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 			pr_err("failed to register input handler\n");
 
 	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
+	INIT_DELAYED_WORK(&mfd->boost_mode_work, __mdss_fb_boost_mode_work);
 
 	return rc;
 }
