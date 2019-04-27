@@ -440,6 +440,9 @@ struct ab_state_context {
 	/* Check for OTP bypass */
 	int otp_bypass;
 
+	/* Apply DDRCKE_ISO workaround if specified. */
+	int ddrcke_iso_clamp_wr;
+
 	/* if set, skip pcie resume operation for debugging purpose */
 	bool debug_skip_pcie_link_init;
 

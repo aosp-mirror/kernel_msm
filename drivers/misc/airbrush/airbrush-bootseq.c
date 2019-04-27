@@ -125,9 +125,18 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		return ret;
 	}
 
-	/* M0 samples DDR_SR for its ddr_train sequence */
-	if (prev_state == CHIP_STATE_100)
+	if (prev_state == CHIP_STATE_100) {
+		/* M0 samples DDR_SR for its ddr_train sequence */
 		ab_gpio_enable_ddr_sr(ab_ctx);
+
+		/*
+		 * DDRCKE_ISO stays on during suspend in production.
+		 * Disable it during resume before asserting pgood
+		 * (b/128545111).
+		 */
+		if (!ab_ctx->ddrcke_iso_clamp_wr)
+			ab_gpio_disable_ddr_iso(ab_ctx);
+	}
 
 	if (ab_ctx->alternate_boot)
 		ab_gpio_enable_fw_patch(ab_ctx);

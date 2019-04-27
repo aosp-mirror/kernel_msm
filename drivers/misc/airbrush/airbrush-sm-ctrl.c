@@ -1176,9 +1176,10 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		/* Disabling DDRCKE_ISO is a workaround to prevent
 		 * back drive during suspend.
 		 * This operation should be moved to after DDR resume for
-		 * HW >= EVT1.1.
+		 * HW >= EVT1.1 (b/128545111).
 		 */
-		ab_gpio_disable_ddr_iso(sc);
+		if (sc->ddrcke_iso_clamp_wr)
+			ab_gpio_disable_ddr_iso(sc);
 	}
 
 	ab_sm_start_ts(AB_SM_TS_PMIC_OFF);
@@ -2692,6 +2693,10 @@ int ab_sm_init(struct platform_device *pdev)
 		error = PTR_ERR(ab_sm_ctx->ab_ready);
 		goto fail_ab_ready;
 	}
+
+	if (of_property_read_u32(np, "ddrcke-iso-clamp-wr",
+				 &ab_sm_ctx->ddrcke_iso_clamp_wr))
+		ab_sm_ctx->ddrcke_iso_clamp_wr = 0;
 
 	if (of_property_read_u32(np, "otp-bypass", &ab_sm_ctx->otp_bypass)) {
 		ab_sm_ctx->otp_bypass = 0;
