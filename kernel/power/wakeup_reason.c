@@ -41,7 +41,7 @@ static LIST_HEAD(wakeup_irqs);
 
 static struct kmem_cache *wakeup_irq_nodes_cache;
 static struct kobject *wakeup_reason;
-static spinlock_t resume_reason_lock;
+static DEFINE_SPINLOCK(resume_reason_lock);
 bool log_wakeups __read_mostly;
 struct completion wakeups_completion;
 
@@ -628,8 +628,6 @@ static struct notifier_block wakeup_reason_pm_notifier_block = {
 
 int __init wakeup_reason_init(void)
 {
-	spin_lock_init(&resume_reason_lock);
-
 	if (register_pm_notifier(&wakeup_reason_pm_notifier_block)) {
 		pr_warning("[%s] failed to register PM notifier\n",
 			__func__);
