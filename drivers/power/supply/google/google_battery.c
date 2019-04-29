@@ -51,8 +51,8 @@
 #define MSC_DEFAULT_UPDATE_INTERVAL		30000
 
 /* qual time is 15 minutes of charge or 15% increase in SOC */
-#define CHG_STATS_MIN_QUAL_TIME		(15 * 60)
-#define CHG_STATS_MIN_DELTA_SOC		15
+#define DEFAULT_CHG_STATS_MIN_QUAL_TIME		(15 * 60)
+#define DEFAULT_CHG_STATS_MIN_DELTA_SOC		15
 
 #define UICURVE_MAX	3
 
@@ -604,8 +604,8 @@ static bool batt_chg_stats_qual(const struct gbms_charging_event *ce_data)
 	const long ssoc_delta = ce_data->charging_stats.ssoc_out -
 				ce_data->charging_stats.ssoc_in;
 
-	return elap >= CHG_STATS_MIN_QUAL_TIME ||
-	       ssoc_delta >= CHG_STATS_MIN_DELTA_SOC;
+	return elap >= ce_data->chg_sts_qual_time ||
+	    ssoc_delta >= ce_data->chg_sts_delta_soc;
 }
 
 /* call holding the log */
@@ -2222,6 +2222,20 @@ static void google_battery_init_work(struct work_struct *work)
 	(void)batt_init_fs(batt_drv);
 
 	pr_info("init_work done\n");
+
+	ret = of_property_read_u32(batt_drv->device->of_node,
+				   "google,chg-stats-qual-time",
+				   &batt_drv->ce_data.chg_sts_qual_time);
+	if (ret < 0)
+		batt_drv->ce_data.chg_sts_qual_time =
+					DEFAULT_CHG_STATS_MIN_QUAL_TIME;
+
+	ret = of_property_read_u32(batt_drv->device->of_node,
+				   "google,chg-stats-delta-soc",
+				   &batt_drv->ce_data.chg_sts_delta_soc);
+	if (ret < 0)
+		batt_drv->ce_data.chg_sts_delta_soc =
+					DEFAULT_CHG_STATS_MIN_DELTA_SOC;
 
 	ret = of_property_read_u32(batt_drv->device->of_node,
 				   "google,update-interval",

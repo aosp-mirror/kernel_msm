@@ -151,6 +151,8 @@ struct gbms_charging_event {
 
 	time_t first_update;
 	time_t last_update;
+	uint32_t chg_sts_qual_time;
+	uint32_t chg_sts_delta_soc;
 };
 
 #define GBMS_CCCM_LIMITS(profile, ti, vi) \
