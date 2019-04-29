@@ -5710,7 +5710,7 @@ static void tx_func(struct kthread_work *work)
 	struct glink_core_xprt_ctx *xprt_ptr = container_of(work,
 			struct glink_core_xprt_ctx, tx_kwork);
 
-	GLINK_PERF("%s: worker starting\n", __func__);
+	GLINK_INFO("%s: worker starting\n", __func__);
 
 	while (1) {
 		prio = xprt_ptr->num_priority - 1;
@@ -5795,7 +5795,7 @@ static void tx_func(struct kthread_work *work)
 		rwref_put(&ch_ptr->ch_state_lhb2);
 	}
 	glink_pm_qos_unvote(xprt_ptr);
-	GLINK_PERF("%s: worker exiting\n", __func__);
+	GLINK_INFO("%s: worker exiting\n", __func__);
 }
 
 static void glink_core_tx_resume(struct glink_transport_if *if_ptr)

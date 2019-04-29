@@ -606,6 +606,7 @@ static void tx_wakeup_worker(struct edge_info *einfo)
 	if (einfo->tx_resume_needed &&
 				glink_bgcom_get_tx_avail(einfo)) {
 		einfo->tx_resume_needed = false;
+		GLINK_INFO("%s: SENIDNG TX_RESUME TO GLINK CORE\n", __func__);
 		einfo->xprt_if.glink_core_if_ptr->tx_resume(
 						&einfo->xprt_if);
 	}
@@ -1310,6 +1311,9 @@ static int tx_data(struct glink_transport_if *if_ptr, uint16_t cmd_id,
 	if (cmd.id == TRACER_PKT_CMD)
 		tracer_pkt_log_event((void *)(pctx->data), GLINK_XPRT_TX);
 
+	GLINK_INFO("%s %s: lcid[%u] riid[%u] cmd %d, size[%d], size_left[%d]\n",
+		  "<BGCOM>", __func__, cmd.lcid, cmd.riid, cmd.id, cmd.size,
+		  cmd.size_left);
 	bgcom_resume(einfo->bgcom_handle);
 	bgcom_ahb_write(einfo->bgcom_handle, (uint32_t)(size_t)dst,
 				ALIGN(tx_size, WORD_SIZE)/WORD_SIZE,
@@ -1381,8 +1385,10 @@ static int tx_short_data(struct glink_transport_if *if_ptr,
 	mutex_lock(&einfo->write_lock);
 	if (glink_bgcom_get_tx_avail(einfo) <= sizeof(cmd)/WORD_SIZE) {
 		einfo->tx_resume_needed = true;
+		send_tx_blocked_signal(einfo);
 		mutex_unlock(&einfo->write_lock);
 		srcu_read_unlock(&einfo->use_ref, rcu_id);
+		GLINK_ERR("%s: No Space in Fifo\n", __func__);
 		return -EAGAIN;
 	}
 	cmd.size = tx_size;
@@ -1391,9 +1397,10 @@ static int tx_short_data(struct glink_transport_if *if_ptr,
 	memcpy(cmd.data, data_start, tx_size);
 	bgcom_resume(einfo->bgcom_handle);
 	glink_bgcom_xprt_tx_cmd_safe(einfo, &cmd, sizeof(cmd));
-	GLINK_DBG("%s %s: lcid[%u] riid[%u] cmd[%d], size[%d], size_left[%d]\n",
-		  "<SPI>", __func__, cmd.lcid, cmd.riid, cmd.id, cmd.size,
-		  cmd.size_left);
+	GLINK_INFO("%s %s: lcid[%u] riid[%u] cmd[%d], size[%d], \
+		size_left[%d]\n",
+		"<SPI>", __func__, cmd.lcid, cmd.riid, cmd.id, cmd.size,
+		cmd.size_left);
 	mutex_unlock(&einfo->write_lock);
 	srcu_read_unlock(&einfo->use_ref, rcu_id);
 	return cmd.size;
