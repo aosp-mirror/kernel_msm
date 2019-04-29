@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #include <linux/debugfs.h>
 #include <linux/ipa_usb.h>
 #include <linux/ipc_logging.h>
+#include <linux/timer.h>
 
 #include "u_ether.h"
 
@@ -275,6 +276,12 @@ struct f_gsi {
 	struct gsi_data_port d_port;
 	struct gsi_ctrl_port c_port;
 	bool rmnet_dtr_status;
+
+	/* To test remote wakeup using debugfs */
+	struct timer_list gsi_rw_timer;
+	u8 debugfs_rw_timer_enable;
+	u16 gsi_rw_timer_interval;
+
 };
 
 static inline struct f_gsi *func_to_gsi(struct usb_function *f)
