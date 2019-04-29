@@ -24,6 +24,7 @@
 #include "iaxxx.h"
 #include "iaxxx-plugin-common.h"
 #include "iaxxx-btp.h"
+#include "ia8508a-memory-map.h"
 
 #define IAXXX_BITS_SWAP	32
 #define IAXXX_BLK_HEADER_SIZE 4
@@ -1252,6 +1253,8 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 	uint32_t data_phy_addr = 0;
 	uint8_t *buf_data;
 	struct pkg_mgmt_info pkg = {0};
+	uint32_t phy_addr_range1, phy_size_range1;
+	uint32_t phy_addr_range2, phy_size_range2;
 
 	dev_dbg(dev, "%s()\n", __func__);
 	/* File header */
@@ -1357,8 +1360,36 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			word_data = (uint32_t *)buf_data;
 			for (j = 0 ; j < file_section.length; j++)
 				CALC_FLETCHER16(word_data[j], sum1, sum2);
+
+			phy_addr_range1 = file_section.start_address;
+
+			rom_phy_address_range_check_and_update(&phy_addr_range1,
+				file_section.length * sizeof(uint32_t),
+				&phy_size_range1, &phy_addr_range2,
+				&phy_size_range2);
+
+			dev_dbg(priv->dev,
+				"%s ## addr1=%x size1=%u addr2=%x size2=%u\n",
+				__func__, phy_addr_range1, phy_size_range1,
+				phy_addr_range2, phy_size_range2);
+
+			file_section.start_address = phy_addr_range1;
+			file_section.length =
+				phy_size_range1 / sizeof(uint32_t);
+
 			rc = iaxxx_download_section(priv, data, &file_section,
 						    true);
+
+			/* If address has hole write data after the hole */
+			if (phy_size_range2 != 0 && phy_addr_range2 != 0) {
+				file_section.start_address = phy_addr_range2;
+				file_section.length =
+					phy_size_range2 / sizeof(uint32_t);
+				rc = iaxxx_download_section(priv,
+					data + phy_size_range1, &file_section,
+					true);
+			}
+
 			data += file_section_bytes;
 			kfree(buf_data);
 			buf_data = NULL;
