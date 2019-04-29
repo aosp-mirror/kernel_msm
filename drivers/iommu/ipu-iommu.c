@@ -680,7 +680,45 @@ static ssize_t iommu_active_store(struct device *dev,
 	return size;
 }
 
-static struct device_attribute iommu_active_attr = __ATTR_RW(iommu_active);
+static ssize_t iommu_pt_status_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return ipu_iommu_pgtable_report_status(PAGE_SIZE, buf);
+}
+
+static struct device_attribute iommu_attr[] = {
+	__ATTR_RW(iommu_active),
+	__ATTR_RO(iommu_pt_status)
+};
+
+static int ipu_iommu_create_sysfs(struct device *dev)
+{
+	int i;
+	int ret;
+
+	for (i = 0; i < ARRAY_SIZE(iommu_attr); i++) {
+		ret = device_create_file(dev, &iommu_attr[i]);
+
+		if (WARN_ON(ret))
+			goto unroll;
+	}
+
+	return 0;
+
+unroll:
+	for (--i; i >= 0; i--)
+		device_remove_file(dev, &iommu_attr[i]);
+	return ret;
+}
+
+static void ipu_iommu_remove_sysfs(struct device *dev)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(iommu_attr); i++)
+		device_remove_file(dev, &iommu_attr[i]);
+}
 
 static const struct paintbox_device_ops ipu_iommu_dev_ops = {
 	.firmware_up = ipu_iommu_firmware_up,
@@ -716,7 +754,7 @@ static int ipu_iommu_probe(struct device *dev)
 	}
 
 	dev_dbg(dev, "%s\n", __func__);
-	ret = device_create_file(dev, &iommu_active_attr);
+	ret = ipu_iommu_create_sysfs(dev);
 	if (ret) {
 		dev_err(dev, "failed to create sysfs\n");
 		goto free_jqs_res;
@@ -741,7 +779,7 @@ static int ipu_iommu_probe(struct device *dev)
 	return 0;
 
 remove_sysfs:
-	device_remove_file(dev, &iommu_active_attr);
+	ipu_iommu_remove_sysfs(dev);
 
 free_jqs_res:
 	devm_kfree(dev, iommu_data->jqs_rsp);
@@ -762,7 +800,7 @@ static int ipu_iommu_remove(struct device *dev)
 	ipu_iommu_send_jqs_iommu_activation_msg(iommu_data,
 		false /* activate */, 0 /* page table addr */);
 	dev_dbg(dev, "%s\n", __func__);
-	device_remove_file(dev, &iommu_active_attr);
+	ipu_iommu_remove_sysfs(dev);
 
 	return 0;
 }

@@ -25,6 +25,11 @@ dma_addr_t ipu_iommu_pg_table_get_dma_address(struct io_pgtable_ops *ops);
 void ipu_iommu_pgtable_update_device(struct io_pgtable_ops *ops,
 		struct device *dev, void *cookie);
 
+/* prints the current page table status to the input buf
+ * return: size used
+ */
+ssize_t ipu_iommu_pgtable_report_status(size_t max_size, char *buf);
+
 /* notify the page table if the memory is active or not */
 void ipu_iommu_pgtable_mem_up(struct io_pgtable_ops *ops);
 void ipu_iommu_pgtable_mem_down(struct io_pgtable_ops *ops, bool suspend);

@@ -48,6 +48,54 @@ struct arm_lpae_io_pgtable {
 
 #if IS_ENABLED(CONFIG_IPU_IOMMU_PAGE_TABLE_ON_AB)
 
+struct ipu_iommu_pt_stat_data {
+	uint64_t total;
+	uint32_t count;
+};
+
+enum {
+	IPU_IOMMU_PT_CNT_ABDRAM_ALLOC,
+	IPU_IOMMU_PT_CNT_LOCAL_ALLOC,
+	IPU_IOMMU_PT_CNT_LVL1_PAGES,
+	IPU_IOMMU_PT_CNT_ACTIVE_MAPPING,
+	IPU_IOMMU_PT_CNT_COUNT
+};
+
+static const char * const ipu_iommu_pt_stat_names[] = {
+	[IPU_IOMMU_PT_CNT_ABDRAM_ALLOC] = "allocated on abdram",
+	[IPU_IOMMU_PT_CNT_LOCAL_ALLOC] = "allocated on host",
+	[IPU_IOMMU_PT_CNT_LVL1_PAGES] = "allocated level 1 entries",
+	[IPU_IOMMU_PT_CNT_ACTIVE_MAPPING] = "active iommu mappings"
+};
+
+static inline void ipu_iommu_add_sample(struct ipu_iommu_pt_stat_data *stat,
+						int64_t sample)
+{
+	stat->total += sample;
+	stat->count++;
+}
+
+struct ipu_iommu_pt_stat_data ipu_iommu_pt_stat[IPU_IOMMU_PT_CNT_COUNT];
+
+#define COLLECT_SAMPLE(stat_type, val) \
+	ipu_iommu_add_sample(&ipu_iommu_pt_stat[stat_type], val)
+
+ssize_t ipu_iommu_pgtable_report_status(size_t max_size, char *buf)
+{
+	ssize_t pos;
+	int i;
+
+	pos = scnprintf(buf, max_size, "iommu status:\n");
+
+	for (i = 0; i < IPU_IOMMU_PT_CNT_COUNT; i++) {
+		pos += scnprintf(buf + pos, max_size - pos, "%s: %#lx (%d)\n",
+			ipu_iommu_pt_stat_names[i], ipu_iommu_pt_stat[i].total,
+			ipu_iommu_pt_stat[i].count);
+	}
+
+	return pos;
+}
+
 struct ipu_iommu_page_table_shadow_entry {
 	/* link to the arm page table */
 	arm_lpae_iopte *page_table_entry;
@@ -527,6 +575,10 @@ static struct ipu_iommu_page_table_shadow_entry
 		goto free_ab_dram;
 	}
 
+	COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_ABDRAM_ALLOC, size);
+	COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_LOCAL_ALLOC,
+		size * (1 + (alloc_shadow ? PTE_ARM_TO_IPU : 0)));
+
 	return res;
 
 free_ab_dram:
@@ -547,10 +599,14 @@ static void __ipu_iommu_pgtable_free_pages(
 	struct io_pgtable_cfg *cfg,
 	void *cookie)
 {
+	COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_LOCAL_ALLOC, -size *
+		(1 + (entry->next_lvl ? PTE_ARM_TO_IPU : 0)));
 	io_pgtable_free_pages_exact(cfg, cookie, entry->page_table_entry, size);
 	entry->page_table_entry = NULL;
 	kfree(entry->next_lvl);
 	entry->next_lvl = NULL;
+	if (entry->ab_dram_dma_buf)
+		COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_ABDRAM_ALLOC, -size);
 	ab_dram_free_dma_buf_kernel(entry->ab_dram_dma_buf);
 	entry->ab_dram_dma_buf = NULL;
 }
@@ -716,6 +772,9 @@ static int __ipu_iommu_pgtable_map(struct ipu_iommu_page_table *pg_table,
 
 		if (!nshadow.page_table_entry)
 			return -ENOMEM;
+
+		if (lvl < ARM_LPAE_MAX_LEVELS - 2)
+			COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_LVL1_PAGES, tblsz);
 
 		/* installing the dma side pointer */
 		pte = ipu_iommu_pgtbl_install_table(pg_table,
@@ -1056,6 +1115,7 @@ static int ipu_iommu_pgtable_map_sg(
 	__ipu_iommu_page_table_send_updates_to_mem(pg_table,
 		cfg);
 
+	COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_ACTIVE_MAPPING, 1);
 	return mapped;
 
 out_err:
@@ -1414,6 +1474,7 @@ static size_t ipu_iommu_pgtable_unmap(struct io_pgtable_ops *ops,
 		io_pgtable_tlb_flush_all(&data->iop);
 	}
 
+	COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_ACTIVE_MAPPING, -1);
 	return unmapped;
 }
 
@@ -1671,6 +1732,8 @@ ipu_iommu_page_table_alloc_pgtable(struct io_pgtable_cfg *cfg, void *cookie,
 		GFP_KERNEL, cfg, cookie, true /*alloc_shadow*/,
 		true /* reset mem */);
 
+	COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_LVL1_PAGES, data->pgd_size);
+
 	if (!pg_table->shadow_table.page_table_entry)
 		goto out_free_data;
 
@@ -1893,6 +1956,10 @@ void ipu_iommu_pgtable_update_device(struct io_pgtable_ops *ops,
 	cfg = &data->iop.cfg;
 	cfg->iommu_dev = dev;
 	data->iop.cookie = cookie;
+}
+ssize_t ipu_iommu_pgtable_report_status(size_t max_size, char *buf)
+{
+	return scnprintf(buf, max_size, "iommu status not supported\n");
 }
 /* no need to take any action */
 void ipu_iommu_pgtable_mem_up(struct io_pgtable_ops *ops) {}
