@@ -176,6 +176,11 @@
 		#thermal-sensor-cells = <0>;
 		google,chg-stats-qual-time = <900>;
 		google,chg-stats-delta-soc = <15>;
+		/* resistance estimation */
+		google,res-temp-hi = <390>;
+		google,res-temp-lo = <350>;
+		google,res-soc-thresh = <75>;
+		google,res-filt-length = <10>;
 	};
 
 	google_charger: google,charger {
