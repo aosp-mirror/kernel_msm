@@ -129,7 +129,8 @@
 	S(PORT_RESET),				\
 	S(PORT_RESET_WAIT_OFF),			\
 						\
-	S(AMS_START)
+	S(AMS_START),				\
+	S(CHUNK_NOT_SUPP)
 
 #define FOREACH_AMS(S)				\
 	S(NONE_AMS),				\
@@ -377,6 +378,7 @@ struct tcpm_port {
 	/* Collision Avoidance and Atomic Message Sequence */
 	enum tcpm_state upcoming_state;
 	enum tcpm_ams ams;
+	enum tcpm_ams next_ams;
 	bool in_ams;
 
 	bool vpd_connected;
@@ -1909,6 +1911,71 @@ static void tcpm_handle_alert(struct tcpm_port *port, const __le32 *payload,
 	}
 }
 
+static void tcpm_pd_handle_state(struct tcpm_port *port,
+				 enum tcpm_state state,
+				 enum tcpm_ams ams,
+				 unsigned int delay_ms)
+{
+	switch (port->state) {
+	case SRC_READY:
+	case SNK_READY:
+		port->ams = ams;
+		tcpm_set_state(port, state, delay_ms);
+		break;
+	/* 8.3.3.4.1.1 and 6.8.1 power transitioning */
+	case SNK_TRANSITION_SINK:
+	case SNK_TRANSITION_SINK_VBUS:
+	case SRC_TRANSITION_SUPPLY:
+		tcpm_set_state(port, HARD_RESET_SEND, 0);
+		break;
+	default:
+		if (!tcpm_ams_interruptible(port)) {
+			tcpm_set_state(port, port->pwr_role == TYPEC_SOURCE ?
+				       SRC_SOFT_RESET_WAIT_SNK_TX :
+				       SNK_SOFT_RESET,
+				       0);
+		} else {
+			/* process the Message 6.8.1 */
+			port->upcoming_state = state;
+			port->next_ams = ams;
+			tcpm_set_state(port, ready_state(port), delay_ms);
+		}
+		break;
+	}
+}
+
+static void tcpm_pd_handle_msg(struct tcpm_port *port,
+			       enum pd_msg_request message,
+			       enum tcpm_ams ams)
+{
+	switch (port->state) {
+	case SRC_READY:
+	case SNK_READY:
+		port->ams = ams;
+		tcpm_queue_message(port, message);
+		break;
+	/* PD 3.0 Spec 8.3.3.4.1.1 and 6.8.1 */
+	case SNK_TRANSITION_SINK:
+	case SNK_TRANSITION_SINK_VBUS:
+	case SRC_TRANSITION_SUPPLY:
+		tcpm_set_state(port, HARD_RESET_SEND, 0);
+		break;
+	default:
+		if (!tcpm_ams_interruptible(port)) {
+			tcpm_set_state(port, port->pwr_role == TYPEC_SOURCE ?
+				       SRC_SOFT_RESET_WAIT_SNK_TX :
+				       SNK_SOFT_RESET,
+				       0);
+		} else {
+			port->next_ams = ams;
+			tcpm_set_state(port, ready_state(port), 0);
+			/* 6.8.1 process the Message */
+			tcpm_queue_message(port, message);
+		}
+		break;
+	}
+}
+
 static void tcpm_pd_data_request(struct tcpm_port *port,
 				 const struct pd_message *msg)
 {
@@ -1919,9 +1986,6 @@ static void tcpm_pd_data_request(struct tcpm_port *port,
 
 	switch (type) {
 	case PD_DATA_SOURCE_CAP:
-		if (port->pwr_role != TYPEC_SINK)
-			break;
-
 		for (i = 0; i < cnt; i++)
 			port->source_caps[i] = le32_to_cpu(msg->payload[i]);
 
@@ -1937,12 +2001,27 @@ static void tcpm_pd_data_request(struct tcpm_port *port,
 		 * to comply with 6.2.1.1.5 of the USB PD 3.0 spec. We don't
 		 * support Rev 1.0 so just do nothing in that scenario.
 		 */
-		if (rev == PD_REV10)
+		if (rev == PD_REV10) {
+			if (port->ams == GET_SOURCE_CAPABILITIES)
+				tcpm_ams_finish(port);
 			break;
+		}
 
 		if (rev < PD_MAX_REV)
 			port->negotiated_rev = rev;
 
+		if (port->pwr_role == TYPEC_SOURCE) {
+			if (port->ams == GET_SOURCE_CAPABILITIES)
+				tcpm_pd_handle_state(port, SRC_READY, NONE_AMS,
+						     0);
+			/* Unexpected Source Capabilities */
+			else
+				tcpm_pd_handle_msg(port,
+					   port->negotiated_rev < PD_REV30 ?
+					   PD_MSG_CTRL_REJECT :
+					   PD_MSG_CTRL_NOT_SUPP,
+					   NONE_AMS);
+		} else if (port->state == SNK_WAIT_CAPABILITIES) {
 		/*
 		 * This message may be received even if VBUS is not
 		 * present. This is quite unexpected; see USB PD
@@ -1956,45 +2035,64 @@ static void tcpm_pd_data_request(struct tcpm_port *port,
 		 * but be prepared to keep waiting for VBUS after it was
 		 * handled.
 		 */
-		tcpm_set_state(port, SNK_NEGOTIATE_CAPABILITIES, 0);
+			port->ams = POWER_NEGOTIATION;
+			tcpm_set_state(port, SNK_NEGOTIATE_CAPABILITIES, 0);
+		} else {
+			if (port->ams == GET_SOURCE_CAPABILITIES)
+				tcpm_ams_finish(port);
+			tcpm_pd_handle_state(port, SNK_NEGOTIATE_CAPABILITIES,
+					     POWER_NEGOTIATION, 0);
+		}
 		break;
 	case PD_DATA_REQUEST:
-		if (port->pwr_role != TYPEC_SOURCE ||
-		    cnt != 1) {
-			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
-			break;
-		}
-
 		/*
 		 * Adjust revision in subsequent message headers, as required,
 		 * to comply with 6.2.1.1.5 of the USB PD 3.0 spec. We don't
 		 * support Rev 1.0 so just reject in that scenario.
 		 */
 		if (rev == PD_REV10) {
-			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
+			tcpm_pd_handle_msg(port,
+					   port->negotiated_rev < PD_REV30 ?
+					   PD_MSG_CTRL_REJECT :
+					   PD_MSG_CTRL_NOT_SUPP,
+					   NONE_AMS);
 			break;
 		}
 
 		if (rev < PD_MAX_REV)
 			port->negotiated_rev = rev;
 
+		if (port->pwr_role != TYPEC_SOURCE || cnt != 1) {
+			tcpm_pd_handle_msg(port,
+					   port->negotiated_rev < PD_REV30 ?
+					   PD_MSG_CTRL_REJECT :
+					   PD_MSG_CTRL_NOT_SUPP,
+					   NONE_AMS);
+			break;
+		}
+
 		port->sink_request = le32_to_cpu(msg->payload[0]);
-		tcpm_set_state(port, SRC_NEGOTIATE_CAPABILITIES, 0);
+		if (port->state == SRC_SEND_CAPABILITIES)
+			tcpm_set_state(port, SRC_NEGOTIATE_CAPABILITIES, 0);
+		else
+			tcpm_pd_handle_state(port, SRC_NEGOTIATE_CAPABILITIES,
+					     POWER_NEGOTIATION, 0);
 		break;
 	case PD_DATA_SINK_CAP:
 		/* We don't do anything with this at the moment... */
 		for (i = 0; i < cnt; i++)
 			port->sink_caps[i] = le32_to_cpu(msg->payload[i]);
 		port->nr_sink_caps = cnt;
+		if (port->ams == GET_SINK_CAPABILITIES)
+			tcpm_pd_handle_state(port, ready_state(port), NONE_AMS,
+					     0);
 		break;
 	case PD_DATA_VENDOR_DEF:
 		tcpm_handle_vdm_request(port, msg->payload, cnt);
 		break;
 	case PD_DATA_BIST:
-		if (port->state == SRC_READY || port->state == SNK_READY) {
-			port->bist_request = le32_to_cpu(msg->payload[0]);
-			tcpm_set_state(port, BIST_RX, 0);
-		}
+		port->bist_request = le32_to_cpu(msg->payload[0]);
+		tcpm_pd_handle_state(port, BIST_RX, BIST, 0);
 		break;
 	case PD_DATA_ALERT:
 		tcpm_handle_alert(port, msg->payload, cnt);
@@ -2002,10 +2100,17 @@ static void tcpm_pd_data_request(struct tcpm_port *port,
 	case PD_DATA_BATT_STATUS:
 	case PD_DATA_GET_COUNTRY_INFO:
 		/* Currently unsupported */
-		tcpm_queue_message(port, PD_MSG_CTRL_NOT_SUPP);
+		tcpm_pd_handle_msg(port, port->negotiated_rev < PD_REV30 ?
+				   PD_MSG_CTRL_REJECT :
+				   PD_MSG_CTRL_NOT_SUPP,
+				   NONE_AMS);
 		break;
 	default:
-		tcpm_log(port, "Unhandled data message type %#x", type);
+		tcpm_pd_handle_msg(port, port->negotiated_rev < PD_REV30 ?
+				   PD_MSG_CTRL_REJECT :
+				   PD_MSG_CTRL_NOT_SUPP,
+				   NONE_AMS);
+		tcpm_log(port, "Unrecognized data message type %#x", type);
 		break;
 	}
 }
@@ -2030,33 +2135,12 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 	case PD_CTRL_PING:
 		break;
 	case PD_CTRL_GET_SOURCE_CAP:
-		switch (port->state) {
-		case SRC_READY:
-		case SNK_READY:
-			tcpm_queue_message(port, PD_MSG_DATA_SOURCE_CAP);
-			break;
-		default:
-			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
-			break;
-		}
+		tcpm_pd_handle_msg(port, PD_MSG_DATA_SOURCE_CAP,
+				   GET_SOURCE_CAPABILITIES);
 		break;
 	case PD_CTRL_GET_SINK_CAP:
-		switch (port->state) {
-		case SRC_READY:
-		case SNK_READY:
-			tcpm_queue_message(port, PD_MSG_DATA_SINK_CAP);
-			break;
-		case SNK_NEGOTIATE_CAPABILITIES:
-			tcpm_set_state(port, SNK_SOFT_RESET, 0);
-			break;
-		case SRC_SEND_CAPABILITIES:
-			tcpm_set_state(port, SRC_SOFT_RESET_WAIT_SNK_TX,
-				       0);
-			break;
-		default:
-			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
-			break;
-		}
+		tcpm_pd_handle_msg(port, PD_MSG_DATA_SINK_CAP,
+					GET_SINK_CAPABILITIES);
 		break;
 	case PD_CTRL_GOTO_MIN:
 		break;
@@ -2090,6 +2174,11 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 			tcpm_set_state(port, VCONN_SWAP_TURN_OFF_VCONN, 0);
 			break;
 		default:
+			tcpm_pd_handle_state(port,
+					     port->pwr_role == TYPEC_SOURCE ?
+					     SRC_SOFT_RESET_WAIT_SNK_TX :
+					     SNK_SOFT_RESET,
+					     NONE_AMS, 0);
 			break;
 		}
 		break;
@@ -2129,6 +2218,11 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 			tcpm_set_state(port, VCONN_SWAP_CANCEL, 0);
 			break;
 		default:
+			tcpm_pd_handle_state(port,
+					     port->pwr_role == TYPEC_SOURCE ?
+					     SRC_SOFT_RESET_WAIT_SNK_TX :
+					     SNK_SOFT_RESET,
+					     NONE_AMS, 0);
 			break;
 		}
 		break;
@@ -2164,57 +2258,47 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 			tcpm_set_state(port, VCONN_SWAP_START, 0);
 			break;
 		default:
+			tcpm_pd_handle_state(port,
+					     port->pwr_role == TYPEC_SOURCE ?
+					     SRC_SOFT_RESET_WAIT_SNK_TX :
+					     SNK_SOFT_RESET,
+					     NONE_AMS, 0);
 			break;
 		}
 		break;
 	case PD_CTRL_SOFT_RESET:
+		port->ams = SOFT_RESET_AMS;
 		tcpm_set_state(port, SOFT_RESET, 0);
 		break;
 	case PD_CTRL_DR_SWAP:
-		if (port->port_type != TYPEC_PORT_DRP) {
-			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
-			break;
-		}
 		/*
 		 * XXX
 		 * 6.3.9: If an alternate mode is active, a request to swap
 		 * alternate modes shall trigger a port reset.
 		 */
-		switch (port->state) {
-		case SRC_READY:
-		case SNK_READY:
-			tcpm_set_state(port, DR_SWAP_ACCEPT, 0);
-			break;
-		default:
-			tcpm_queue_message(port, PD_MSG_CTRL_WAIT);
-			break;
-		}
+		if (port->port_type != TYPEC_PORT_DRP)
+			tcpm_pd_handle_msg(port,
+					   port->negotiated_rev < PD_REV30 ?
+					   PD_MSG_CTRL_REJECT :
+					   PD_MSG_CTRL_NOT_SUPP,
+					   NONE_AMS);
+		else
+			tcpm_pd_handle_state(port, DR_SWAP_ACCEPT,
+					     DATA_ROLE_SWAP, 0);
 		break;
 	case PD_CTRL_PR_SWAP:
-		if (port->port_type != TYPEC_PORT_DRP) {
-			tcpm_queue_message(port, PD_MSG_CTRL_REJECT);
-			break;
-		}
-		switch (port->state) {
-		case SRC_READY:
-		case SNK_READY:
-			tcpm_set_state(port, PR_SWAP_ACCEPT, 0);
-			break;
-		default:
-			tcpm_queue_message(port, PD_MSG_CTRL_WAIT);
-			break;
-		}
+		if (port->port_type != TYPEC_PORT_DRP)
+			tcpm_pd_handle_msg(port,
+					   port->negotiated_rev < PD_REV30 ?
+					   PD_MSG_CTRL_REJECT :
+					   PD_MSG_CTRL_NOT_SUPP,
+					   NONE_AMS);
+		else
+			tcpm_pd_handle_state(port, PR_SWAP_ACCEPT,
+					     POWER_ROLE_SWAP, 0);
 		break;
 	case PD_CTRL_VCONN_SWAP:
-		switch (port->state) {
-		case SRC_READY:
-		case SNK_READY:
-			tcpm_set_state(port, VCONN_SWAP_ACCEPT, 0);
-			break;
-		default:
-			tcpm_queue_message(port, PD_MSG_CTRL_WAIT);
-			break;
-		}
+		tcpm_pd_handle_state(port, VCONN_SWAP_ACCEPT, VCONN_SWAP, 0);
 		break;
 	case PD_CTRL_GET_SOURCE_CAP_EXT:
 	case PD_CTRL_GET_STATUS:
@@ -2222,10 +2306,19 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 	case PD_CTRL_GET_PPS_STATUS:
 	case PD_CTRL_GET_COUNTRY_CODES:
 		/* Currently not supported */
-		tcpm_queue_message(port, PD_MSG_CTRL_NOT_SUPP);
+		tcpm_pd_handle_msg(port,
+				   port->negotiated_rev < PD_REV30 ?
+				   PD_MSG_CTRL_REJECT :
+				   PD_MSG_CTRL_NOT_SUPP,
+				   NONE_AMS);
 		break;
 	default:
-		tcpm_log(port, "Unhandled ctrl message type %#x", type);
+		tcpm_pd_handle_msg(port,
+				   port->negotiated_rev < PD_REV30 ?
+				   PD_MSG_CTRL_REJECT :
+				   PD_MSG_CTRL_NOT_SUPP,
+				   NONE_AMS);
+		tcpm_log(port, "Unrecognized ctrl message type %#x", type);
 		break;
 	}
 }
@@ -2237,11 +2330,14 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 	unsigned int data_size = pd_ext_header_data_size_le(msg->ext_msg.header);
 
 	if (!(msg->ext_msg.header & PD_EXT_HDR_CHUNKED)) {
+		tcpm_pd_handle_msg(port, PD_MSG_CTRL_NOT_SUPP, NONE_AMS);
 		tcpm_log(port, "Unchunked extended messages unsupported");
 		return;
 	}
 
 	if (data_size > PD_EXT_MAX_CHUNK_DATA) {
+		tcpm_pd_handle_state(port, CHUNK_NOT_SUPP, NONE_AMS,
+				     PD_T_CHUNK_NOT_SUPP);
 		tcpm_log(port, "Chunk handling not yet supported");
 		return;
 	}
@@ -2254,16 +2350,19 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 		 */
 		if (msg->ext_msg.data[USB_PD_EXT_SDB_EVENT_FLAGS] &
 		    USB_PD_EXT_SDB_PPS_EVENTS)
-			tcpm_set_state(port, GET_PPS_STATUS_SEND, 0);
+			tcpm_pd_handle_state(port, GET_PPS_STATUS_SEND,
+					     GETTING_SOURCE_SINK_STATUS, 0);
+
 		else
-			tcpm_set_state(port, ready_state(port), 0);
+			tcpm_pd_handle_state(port, ready_state(port), NONE_AMS,
+					     0);
 		break;
 	case PD_EXT_PPS_STATUS:
 		/*
 		 * For now the PPS status message is used to clear events
 		 * and nothing more.
 		 */
-		tcpm_set_state(port, ready_state(port), 0);
+		tcpm_pd_handle_state(port, ready_state(port), NONE_AMS, 0);
 		break;
 	case PD_EXT_SOURCE_CAP_EXT:
 	case PD_EXT_GET_BATT_CAP:
@@ -2277,10 +2376,11 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 	case PD_EXT_FW_UPDATE_RESPONSE:
 	case PD_EXT_COUNTRY_INFO:
 	case PD_EXT_COUNTRY_CODES:
-		tcpm_queue_message(port, PD_MSG_CTRL_NOT_SUPP);
+		tcpm_pd_handle_msg(port, PD_MSG_CTRL_NOT_SUPP, NONE_AMS);
 		break;
 	default:
-		tcpm_log(port, "Unhandled extended message type %#x", type);
+		tcpm_pd_handle_msg(port, PD_MSG_CTRL_NOT_SUPP, NONE_AMS);
+		tcpm_log(port, "Unrecognized extended message type %#x", type);
 		break;
 	}
 }
@@ -2402,6 +2502,7 @@ static bool tcpm_send_queued_message(struct tcpm_port *port)
 					 ret);
 				tcpm_set_state(port, SNK_SOFT_RESET, 0);
 			}
+			tcpm_ams_finish(port);
 			break;
 		case PD_MSG_DATA_SOURCE_CAP:
 			ret = tcpm_pd_send_source_caps(port);
@@ -2411,8 +2512,11 @@ static bool tcpm_send_queued_message(struct tcpm_port *port)
 					 ret);
 				tcpm_set_state(port, SOFT_RESET_SEND, 0);
 			} else if (port->pwr_role == TYPEC_SOURCE) {
+				tcpm_ams_finish(port);
 				tcpm_set_state(port, HARD_RESET_SEND,
 					       PD_T_SENDER_RESPONSE);
+			} else {
+				tcpm_ams_finish(port);
 			}
 			break;
 		default:
@@ -3414,6 +3518,11 @@ static void run_state_machine(struct tcpm_port *port)
 
 		if (port->ams != NONE_AMS)
 			tcpm_ams_finish(port);
+		if (port->next_ams != NONE_AMS) {
+			port->ams = port->next_ams;
+			port->next_ams = NONE_AMS;
+		}
+
 		/*
 		 * If previous AMS is interrupted, switch to the upcoming
 		 * state.
@@ -3669,6 +3778,11 @@ static void run_state_machine(struct tcpm_port *port)
 
 		if (port->ams != NONE_AMS)
 			tcpm_ams_finish(port);
+		if (port->next_ams != NONE_AMS) {
+			port->ams = port->next_ams;
+			port->next_ams = NONE_AMS;
+		}
+
 		/*
 		 * If previous AMS is interrupted, switch to the upcoming
 		 * state.
@@ -3795,6 +3909,7 @@ static void run_state_machine(struct tcpm_port *port)
 		port->message_id = 0;
 		port->rx_msgid = -1;
 		tcpm_pd_send_control(port, PD_CTRL_ACCEPT);
+		tcpm_ams_finish(port);
 		if (port->pwr_role == TYPEC_SOURCE) {
 			port->upcoming_state = SRC_SEND_CAPABILITIES;
 			tcpm_ams_start(port, POWER_NEGOTIATION);
@@ -3831,6 +3946,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case DR_SWAP_SEND_TIMEOUT:
 		tcpm_swap_complete(port, -ETIMEDOUT);
+		tcpm_ams_finish(port);
 		tcpm_set_state(port, ready_state(port), 0);
 		break;
 	case DR_SWAP_CHANGE_DR:
@@ -3843,6 +3959,7 @@ static void run_state_machine(struct tcpm_port *port)
 				       TYPEC_HOST);
 			port->send_discover = true;
 		}
+		tcpm_ams_finish(port);
 		tcpm_set_state(port, ready_state(port), 0);
 		break;
 
@@ -3943,6 +4060,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case VCONN_SWAP_ACCEPT:
 		tcpm_pd_send_control(port, PD_CTRL_ACCEPT);
+		tcpm_ams_finish(port);
 		tcpm_set_state(port, VCONN_SWAP_START, 0);
 		break;
 	case VCONN_SWAP_SEND:
@@ -4041,6 +4159,13 @@ static void run_state_machine(struct tcpm_port *port)
 		upcoming_state = port->upcoming_state;
 		port->upcoming_state = INVALID_STATE;
 		tcpm_set_state(port, upcoming_state, 0);
+		break;
+
+	/* Chunk state */
+	case CHUNK_NOT_SUPP:
+		tcpm_pd_send_control(port, PD_CTRL_NOT_SUPP);
+		tcpm_set_state(port, port->pwr_role == TYPEC_SOURCE ?
+			       SRC_READY : SNK_READY, 0);
 		break;
 	default:
 		WARN(1, "Unexpected port state %d\n", port->state);
@@ -4399,6 +4524,8 @@ static void _tcpm_pd_hard_reset(struct tcpm_port *port)
 	tcpm_log_force(port, "Received hard reset");
 	if (port->ams != NONE_AMS)
 		port->ams = NONE_AMS;
+	if (port->hard_reset_count < PD_N_HARD_RESET_COUNT)
+		port->ams = HARD_RESET;
 	/*
 	 * If we keep receiving hard reset requests, executing the hard reset
 	 * must have failed. Revert to error recovery if that happens.
