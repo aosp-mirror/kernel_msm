@@ -36,7 +36,8 @@ static void diag_mask_update_work_fn(struct work_struct *work)
 	uint8_t peripheral;
 
 	for (peripheral = 0; peripheral <= NUM_PERIPHERALS; peripheral++) {
-		if (!(driver->mask_update & PERIPHERAL_MASK(peripheral)))
+		if (!(driver->mask_update & PERIPHERAL_MASK(peripheral))
+			|| peripheral == PERIPHERAL_WDSP)
 			continue;
 		mutex_lock(&driver->cntl_lock);
 		driver->mask_update ^= PERIPHERAL_MASK(peripheral);
