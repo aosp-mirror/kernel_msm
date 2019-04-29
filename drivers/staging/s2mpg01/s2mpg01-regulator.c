@@ -228,7 +228,7 @@ static struct regulator_init_data
 			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
 					  REGULATOR_CHANGE_STATUS,
 			.min_uV = 550000,
-			.max_uV = 800000,
+			.max_uV = 850000,
 		},
 	},
 	[S2MPG01_ID_SMPS2] = {
