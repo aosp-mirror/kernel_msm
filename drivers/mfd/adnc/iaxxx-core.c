@@ -215,24 +215,16 @@ static void clear_system_state(struct iaxxx_priv *priv)
 
 static int iaxxx_fw_recovery_regmap_init(struct iaxxx_priv *priv)
 {
-	int rc;
+	int rc = 0;
 
-	/* Reinitialize the regmap cache */
-	rc = regmap_reinit_cache(priv->regmap, priv->regmap_config);
+	rc = iaxxx_regmap_drop_regions(priv);
 	if (rc) {
 		dev_err(priv->dev,
-			"regmap cache can not be reinitialized %d\n", rc);
-		regcache_cache_bypass(priv->regmap, true);
+			"%s() Failed to drop regmap regions: %d\n",
+			__func__, rc);
+		goto regmap_recovery_failed;
 	}
-
-	/* Reinitialize the regmap cache for second regmap*/
-	rc = regmap_reinit_cache(priv->regmap_no_pm,
-			priv->regmap_no_pm_config);
-	if (rc) {
-		dev_err(priv->dev,
-		    "regmap-2 cache can not be reinitialized %d\n", rc);
-		regcache_cache_bypass(priv->regmap_no_pm, true);
-	}
+	regcache_cache_bypass(priv->regmap, false);
 
 	/* Clear system state */
 	clear_system_state(priv);
@@ -241,8 +233,8 @@ static int iaxxx_fw_recovery_regmap_init(struct iaxxx_priv *priv)
 	iaxxx_core_set_route_status(priv, false);
 	priv->is_application_mode = true;
 	dev_info(priv->dev, "%s: Recovery done\n", __func__);
-
-	return 0;
+regmap_recovery_failed:
+	return rc;
 }
 
 

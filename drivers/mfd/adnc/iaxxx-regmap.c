@@ -124,40 +124,37 @@
 #define IAXXX_REG_POWER_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_POWER)
 #define IAXXX_REG_BTP_BASE	IAXXX_VIRTUAL_BASE_ADDR(IAXXX_BLOCK_BTP)
 
+static const uint32_t iaxxx_phy_addr_ranges[][2] = {
+	/* Start phy address */  /* End phy address */
+	{IAXXX_SRB_BASE, (IAXXX_SRB_BASE + IAXXX_SRB_SIZE)},
+	{IAXXX_I2S_REGS_ADDR, IAXXX_I2S_REGS_END_ADDR},
+	{IAXXX_AF_WCPT_WALL_CLOCK_RD_0_ADDR,
+			IAXXX_AF_WCPT_WALL_CLOCK_RD_1_ADDR},
+	{IAXXX_AO_REGS_ADDR, IAXXX_AO_REGS_END_ADDR},
+	{IAXXX_CNR0_REGS_ADDR, IAXXX_CNR0_REGS_END_ADDR},
+	{IAXXX_PCM_BASE_ADDR(0), IAXXX_PCM_REGS_END_ADDR(0)},
+	{IAXXX_PCM_BASE_ADDR(1), IAXXX_PCM_REGS_END_ADDR(1)},
+	{IAXXX_PCM_BASE_ADDR(2), IAXXX_PCM_REGS_END_ADDR(2)},
+	{IAXXX_PCM_BASE_ADDR(3), IAXXX_PCM_REGS_END_ADDR(3)},
+	{IAXXX_PCM_BASE_ADDR(4), IAXXX_PCM_REGS_END_ADDR(4)},
+	{IAXXX_PCM_BASE_ADDR(5), IAXXX_PCM_REGS_END_ADDR(5)},
+	{IAXXX_IO_CTRL_REGS_ADDR, IAXXX_IOCTRL_REGS_END_ADDR},
+	{IAXXX_PAD_CTRL_REGS_ADDR, IAXXX_PAD_CTRL_REGS_END_ADDR},
+	{IAXXX_GPIO_REGS_ADDR, IAXXX_GPIO_REGS_END_ADDR},
+};
 
 /* Returns true if register is in the supported physical address range */
 static inline bool iaxxx_is_physical_address(uint32_t reg)
 {
-	if (reg >= IAXXX_SRB_BASE && reg <= (IAXXX_SRB_BASE + IAXXX_SRB_SIZE))
-		return true;
-	if (reg >= IAXXX_I2S_REGS_ADDR && reg < IAXXX_I2S_REGS_END_ADDR)
-		return true;
-	if (reg >= IAXXX_AF_WCPT_WALL_CLOCK_RD_0_ADDR &&
-				reg < IAXXX_AF_WCPT_WALL_CLOCK_RD_1_ADDR)
-		return true;
-	if (reg >= IAXXX_AO_REGS_ADDR && reg < IAXXX_AO_REGS_END_ADDR)
-		return true;
-	if (reg >= IAXXX_CNR0_REGS_ADDR && reg < IAXXX_CNR0_REGS_END_ADDR)
-		return true;
-	if (reg >= IAXXX_PCM_BASE_ADDR(0) && reg < IAXXX_PCM_REGS_END_ADDR(0))
-		return true;
-	if (reg >= IAXXX_PCM_BASE_ADDR(1) && reg < IAXXX_PCM_REGS_END_ADDR(1))
-		return true;
-	if (reg >= IAXXX_PCM_BASE_ADDR(2) && reg < IAXXX_PCM_REGS_END_ADDR(2))
-		return true;
-	if (reg >= IAXXX_PCM_BASE_ADDR(3) && reg < IAXXX_PCM_REGS_END_ADDR(3))
-		return true;
-	if (reg >= IAXXX_PCM_BASE_ADDR(4) && reg < IAXXX_PCM_REGS_END_ADDR(4))
-		return true;
-	if (reg >= IAXXX_PCM_BASE_ADDR(5) && reg < IAXXX_PCM_REGS_END_ADDR(5))
-		return true;
-	if (reg >= IAXXX_IO_CTRL_REGS_ADDR && reg < IAXXX_IOCTRL_REGS_END_ADDR)
-		return true;
-	if (reg >= IAXXX_PAD_CTRL_REGS_ADDR &&
-		reg < IAXXX_PAD_CTRL_REGS_END_ADDR)
-		return true;
-	if (reg >= IAXXX_GPIO_REGS_ADDR && reg < IAXXX_GPIO_REGS_END_ADDR)
-		return true;
+	int i;
+	int phy_addr_size = sizeof(iaxxx_phy_addr_ranges) /
+					sizeof(iaxxx_phy_addr_ranges[0]);
+
+	for (i = 0; i < phy_addr_size; i++) {
+		if (reg >= iaxxx_phy_addr_ranges[i][0] &&
+				reg < iaxxx_phy_addr_ranges[i][1])
+			return true;
+	}
 	return false;
 }
 
@@ -444,6 +441,43 @@ static bool iaxxx_readable_register_no_pm(struct device *dev, unsigned int reg)
 	return false;
 }
 
+int iaxxx_regmap_drop_regions(struct iaxxx_priv *priv)
+{
+	uint32_t start_addr, end_addr;
+	int rc;
+	int i;
+	int phy_addr_size = sizeof(iaxxx_phy_addr_ranges) /
+					sizeof(iaxxx_phy_addr_ranges[0]);
+
+	for (i = 0; i < phy_addr_size; i++) {
+		rc = regcache_drop_region(priv->regmap,
+					iaxxx_phy_addr_ranges[i][0],
+					iaxxx_phy_addr_ranges[i][1]);
+		if (rc != 0) {
+			dev_err(priv->dev,
+				"%s() Failed to drop physical[%d] reg: %d\n",
+				__func__, i, rc);
+			goto drop_regions_exit;
+		}
+	}
+
+	/* regmap cache drop */
+	for (i = 0 ; i < priv->regmap_config->num_ranges; i++) {
+		start_addr = priv->regmap_config->ranges[i].range_min;
+		end_addr = priv->regmap_config->ranges[i].range_min +
+				priv->regmap_config->ranges[i].window_len;
+		rc = regcache_drop_region(priv->regmap, start_addr, end_addr);
+		if (rc != 0) {
+			dev_err(priv->dev,
+				"%s() Failed to drop arb range[%d] reg: %d\n",
+				__func__, i, rc);
+			goto drop_regions_exit;
+		}
+	}
+drop_regions_exit:
+	return rc;
+}
+
 /*
  * Use ranges to define the Application Register Blocks
  * This needs to be populated at boot-time after firmware download.
@@ -561,8 +595,7 @@ static struct regmap_config iaxxx_regmap_no_pm_config = {
 	.reg_format_endian = REGMAP_ENDIAN_BIG,
 	.val_format_endian = REGMAP_ENDIAN_BIG,
 	.volatile_reg = iaxxx_volatile_register,
-	.cache_type = REGCACHE_RBTREE,
-
+	.cache_type = REGCACHE_NONE,
 };
 
 /**

@@ -180,6 +180,7 @@ int iaxxx_get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
 								uint32_t len);
 int iaxxx_abort_fw_recovery(struct iaxxx_priv *priv);
 int iaxxx_reset_to_sbl(struct iaxxx_priv *priv);
+int iaxxx_regmap_drop_regions(struct iaxxx_priv *priv);
 uint32_t iaxxx_conv_physical_to_virtual_register_address(
 		struct iaxxx_priv *priv,
 		const uint32_t phy_addr);
