@@ -224,9 +224,11 @@ static int __exit access_ramoops_remove(struct platform_device *pdev)
 	if (!info->is_mapped)
 		return 0;
 
+	mutex_lock(&info->lock);
 	info->is_mapped = 0;
 	iounmap(info->addr);
 	release_mem_region(info->phys, info->size);
+	mutex_unlock(&info->lock);
 	return 0;
 }
 
