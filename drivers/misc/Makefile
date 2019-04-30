@@ -95,3 +95,5 @@ $(obj)/lkdtm_rodata_objcopy.o: $(obj)/lkdtm_rodata.o FORCE
 subdir-ccflags-y += \
 	-Wno-header-guard \
 	-Wno-ignored-attributes \
+
+obj-$(CONFIG_SYSTRACE) += systrace.o

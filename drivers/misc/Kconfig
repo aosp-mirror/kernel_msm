@@ -860,6 +860,17 @@ config ACCESS_RAMOOPS
 	help
 	  Say 'y' if ramoops is encrypted.
 
+config SYSTRACE
+  def_bool y if TRACING
+  help
+    This module exports ATRACE_XXX APIs at kernel.
+    All tracepoints can be identified and plotted at Chrome tracing UI.
+
+    Use APIs exported by this module to correlate kernel activities
+    to userspace and system events in the timeline.
+
+    If in doubt, say N.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
