@@ -180,6 +180,8 @@
 		google,res-temp-lo = <350>;
 		google,res-soc-thresh = <75>;
 		google,res-filt-length = <10>;
+		/* enable cycle counts */
+		google,cycle-counts;
 	};
 
 	google_charger: google,charger {
