@@ -420,12 +420,7 @@ static unsigned int msm_geni_serial_get_mctrl(struct uart_port *uport)
 	if (!(geni_ios & IO2_DATA_IN))
 		mctrl |= TIOCM_CTS;
 
-	/*
-	 * Workaround faulty msm CTS timing by always
-	 * returning that CTS signal is set, the same as if
-	 * the driver did not support hardware flow control.
-	 */
-	return TIOCM_DSR | TIOCM_CAR | TIOCM_CTS;
+	return mctrl;
 }
 
 static void msm_geni_cons_set_mctrl(struct uart_port *uport,
