@@ -1052,7 +1052,8 @@ int iaxxx_power_down_core_mem(
 
 	/* Check processor usage count for SSP before turning off */
 	if ((proc_id == IAXXX_SSP_ID) &&
-		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0)
+		((atomic_read(&priv->proc_on_off_ref_cnt) == 0) ||
+		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0))
 		goto exit;
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
@@ -1150,7 +1151,8 @@ int iaxxx_power_down_core_mem_in_retn(
 
 	/* Check processor usage count for SSP before turning off */
 	if ((proc_id == IAXXX_SSP_ID) &&
-		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0)
+		((atomic_read(&priv->proc_on_off_ref_cnt) == 0) ||
+		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0))
 		goto exit;
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
