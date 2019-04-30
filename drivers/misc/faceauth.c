@@ -22,7 +22,6 @@
 #include <linux/firmware.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <misc/faceauth_addresses.h>
 #include <misc/faceauth_hypx.h>
 
 #include <linux/mfd/abc-pcie.h>
