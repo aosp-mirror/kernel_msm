@@ -39,13 +39,8 @@
 
 #include <trace/events/systrace.h>
 
-/* This is to be enabled for dog food only */
-#define ENABLE_AIRBRUSH_DEBUG 1
-
-#if ENABLE_AIRBRUSH_DEBUG
 #define DEBUG_DATA_BIN_SIZE (2 * 1024 * 1024)
 #define DEBUG_DATA_NUM_BINS 5
-#endif
 
 /* Timeout in ms */
 #define FACEAUTH_TIMEOUT_MS 3000
@@ -109,10 +104,10 @@ struct faceauth_data {
 	struct delayed_work listener_init;
 	struct notifier_block pcie_link_blocking_nb;
 	bool is_secure_camera;
+	bool debug_enabled;
 };
 
 static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size);
-#if ENABLE_AIRBRUSH_DEBUG
 static void clear_debug_data(void);
 static void move_debug_data_to_tail(void);
 static void enqueue_debug_data(struct faceauth_data *data, uint32_t ab_result);
@@ -124,7 +119,6 @@ struct {
 	int count;
 	char *data_buffer;
 } debug_data_queue;
-#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 
 static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
@@ -137,9 +131,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	bool send_images_data;
 	struct faceauth_data *data = file->private_data;
 	bool need_trace_end = false;
-#if ENABLE_AIRBRUSH_DEBUG
 	struct faceauth_debug_data debug_step_data;
-#endif
 
 	down_read(&data->rwsem);
 	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
@@ -241,10 +233,11 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 					err = -EREMOTEIO;
 				else
 					err = -ETIME;
-#if ENABLE_AIRBRUSH_DEBUG
-				enqueue_debug_data(data,
-						   WORKLOAD_STATUS_NO_STATUS);
-#endif
+
+				if (data->debug_enabled)
+					enqueue_debug_data(
+						data,
+						WORKLOAD_STATUS_NO_STATUS);
 				goto exit;
 			}
 
@@ -255,9 +248,8 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		}
 		ATRACE_END();
 		ATRACE_BEGIN("copy_faceauth_result_to_user");
-#if ENABLE_AIRBRUSH_DEBUG
-		enqueue_debug_data(data, start_step_data.result);
-#endif
+		if (data->debug_enabled)
+			enqueue_debug_data(data, start_step_data.result);
 		if (copy_to_user((void __user *)arg, &start_step_data,
 				 sizeof(start_step_data))) {
 			err = -EFAULT;
@@ -274,7 +266,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		data->is_secure_camera = false;
 		break;
 	case FACEAUTH_DEV_IOC_DEBUG:
-#if ENABLE_AIRBRUSH_DEBUG
+		if (!data->debug_enabled) {
+			err = -EOPNOTSUPP;
+			break;
+		}
 		pr_info("el2: faceauth debug log IOCTL\n");
 		if (copy_from_user(&debug_step_data, (const void __user *)arg,
 				   sizeof(debug_step_data))) {
@@ -285,15 +280,13 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			err = el2_faceauth_gather_debug_log(
 				data->device, &debug_step_data);
 		});
-#else
-		err = -EOPNOTSUPP;
-#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 		break;
-
 	case FACEAUTH_DEV_IOC_DEBUG_DATA:
-#if ENABLE_AIRBRUSH_DEBUG
+		if (!data->debug_enabled) {
+			err = -EOPNOTSUPP;
+			break;
+		}
 		pr_info("el2: faceauth debug data IOCTL\n");
-
 		if (copy_from_user(&debug_step_data, (const void __user *)arg,
 				   sizeof(debug_step_data))) {
 			err = -EFAULT;
@@ -327,9 +320,6 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			err = -EINVAL;
 			break;
 		}
-#else
-		err = -EOPNOTSUPP;
-#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 		break;
 	default:
 		err = -EOPNOTSUPP;
@@ -393,7 +383,6 @@ static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size)
 	return 0;
 }
 
-#if ENABLE_AIRBRUSH_DEBUG
 static void enqueue_debug_data(struct faceauth_data *data, uint32_t ab_result)
 {
 	void *bin_addr;
@@ -470,7 +459,6 @@ static int dequeue_debug_data(struct faceauth_debug_data *debug_step_data)
 
 	return 0;
 }
-#endif /* #if ENABLE_AIRBRUSH_DEBUG */
 
 static void faceauth_link_listener_init(struct work_struct *work)
 {
@@ -573,10 +561,30 @@ static int faceauth_m0_verbosity_get(void *ptr, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_m0_verbosity, faceauth_m0_verbosity_get,
 			 faceauth_m0_verbosity_set, "0x%016llx\n");
 
+static int faceauth_debug_enabled_set(void *ptr, u64 val)
+{
+	struct faceauth_data *data = ptr;
+
+	data->debug_enabled = !!val;
+	return 0;
+}
+
+static int faceauth_debug_enabled_get(void *ptr, u64 *val)
+{
+	struct faceauth_data *data = ptr;
+
+	*val = data->debug_enabled;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_debug_enabled, faceauth_debug_enabled_get,
+			 faceauth_debug_enabled_set, "%llu\n");
+
 static void faceauth_debugfs_init(struct faceauth_data *data)
 {
 	struct dentry *debugfs_root;
 	struct dentry *m0_verbosity_level;
+	struct dentry *debug_enabled;
 	int err = 0;
 
 	debugfs_root = debugfs_create_dir("faceauth", NULL);
@@ -591,6 +599,14 @@ static void faceauth_debugfs_init(struct faceauth_data *data)
 		debugfs_create_file("m0_verbosity_level", 0660, debugfs_root,
 				    data, &fops_m0_verbosity);
 	if (!m0_verbosity_level) {
+		err = -EIO;
+		goto exit;
+	}
+
+	debug_enabled =
+		debugfs_create_file("debug_enabled", 0660, debugfs_root,
+				    data, &fops_debug_enabled);
+	if (!debug_enabled) {
 		err = -EIO;
 		goto exit;
 	}
@@ -628,10 +644,7 @@ static int faceauth_probe(struct platform_device *pdev)
 {
 	int err;
 	struct faceauth_data *data;
-
-#if ENABLE_AIRBRUSH_DEBUG
 	int i;
-#endif
 
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -660,7 +673,6 @@ static int faceauth_probe(struct platform_device *pdev)
 
 	el2_faceauth_probe(data->device);
 
-#if ENABLE_AIRBRUSH_DEBUG
 	clear_debug_data();
 	debug_data_queue.data_buffer =
 		vmalloc(DEBUG_DATA_BIN_SIZE * DEBUG_DATA_NUM_BINS);
@@ -674,8 +686,8 @@ static int faceauth_probe(struct platform_device *pdev)
 		memset(debug_data_queue.data_buffer + (DEBUG_DATA_BIN_SIZE * i),
 		       0, sizeof(struct faceauth_debug_entry));
 	}
-#endif
 
+	data->debug_enabled = true;
 	return 0;
 
 exit3:
@@ -695,12 +707,8 @@ static int faceauth_remove(struct platform_device *pdev)
 	abc_unregister_pcie_link_blocking_event(&data->pcie_link_blocking_nb);
 	misc_deregister(&data->misc_dev);
 	faceauth_debugfs_remove(data);
-
-#if ENABLE_AIRBRUSH_DEBUG
 	clear_debug_data();
 	vfree(debug_data_queue.data_buffer);
-#endif
-
 	return 0;
 }
 
