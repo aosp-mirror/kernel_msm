@@ -308,9 +308,13 @@ void ipu_adapter_ab_mfd_free_shared_memory(struct device *dev,
 			struct ipu_shared_buffer *shared_buffer_base)
 {
 	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
-	struct ipu_adapter_shared_buffer *sbuf = container_of(
-			shared_buffer_base, struct ipu_adapter_shared_buffer,
-			base);
+	struct ipu_adapter_shared_buffer *sbuf;
+
+	if (WARN_ON(!shared_buffer_base))
+		return;
+
+	sbuf = container_of(shared_buffer_base,
+		struct ipu_adapter_shared_buffer, base);
 
 	if (sbuf->mapped_to_bar)
 		ipu_adapter_ab_mfd_unmap_from_bar(dev, sbuf);

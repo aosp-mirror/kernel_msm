@@ -790,7 +790,8 @@ void ipu_core_jqs_resume_firmware(struct paintbox_bus *bus,
 
 	bus->jqs.clock_rate_hz = ipu_clock_rate_hz;
 
-	if (!bus->jqs.runtime_requested || !ipu_core_is_ready(bus))
+	if (!bus->jqs.runtime_requested || !ipu_core_is_ready(bus) ||
+			!ipu_core_jqs_is_clock_ready(bus))
 		return;
 
 	if (ipu_core_jqs_is_ready(bus))
