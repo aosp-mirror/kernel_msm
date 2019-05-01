@@ -87,6 +87,7 @@ struct cs35l41_private {
 	bool i2s_mode;
 	bool swire_mode;
 	bool halo_booted;
+	bool skip_codec_probe;
 	bool bus_spi;
 	bool fast_switch_en;
 	bool force_int;
