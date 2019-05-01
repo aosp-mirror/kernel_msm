@@ -1626,6 +1626,42 @@ int iaxxx_fw_notifier_call(struct device *dev, unsigned long val, void *v)
 	return srcu_notifier_call_chain(&priv->core_notifier_list, val, v);
 }
 
+static void iaxxx_mutex_init(struct iaxxx_priv *priv)
+{
+	/* Init mutexes */
+	mutex_init(&priv->update_block_lock);
+	mutex_init(&priv->event_work_lock);
+	mutex_init(&priv->event_queue_lock);
+	mutex_init(&priv->plugin_lock);
+	mutex_init(&priv->module_lock);
+	mutex_init(&priv->sensor_tunnel_dev_lock);
+	mutex_init(&priv->crashdump_lock);
+	mutex_init(&priv->pm_mutex);
+	mutex_init(&priv->iaxxx_state->plg_pkg_list_lock);
+	mutex_init(&priv->event_lock);
+	mutex_init(&priv->proc_on_off_lock);
+	mutex_init(&priv->btp_lock);
+	mutex_init(&priv->debug_mutex);
+}
+
+static void iaxxx_mutex_destroy(struct iaxxx_priv *priv)
+{
+	/* Destroy mutexes */
+	mutex_destroy(&priv->update_block_lock);
+	mutex_destroy(&priv->event_work_lock);
+	mutex_destroy(&priv->event_queue_lock);
+	mutex_destroy(&priv->plugin_lock);
+	mutex_destroy(&priv->module_lock);
+	mutex_destroy(&priv->sensor_tunnel_dev_lock);
+	mutex_destroy(&priv->crashdump_lock);
+	mutex_destroy(&priv->pm_mutex);
+	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
+	mutex_destroy(&priv->event_lock);
+	mutex_destroy(&priv->proc_on_off_lock);
+	mutex_destroy(&priv->btp_lock);
+	mutex_destroy(&priv->debug_mutex);
+}
+
 /**
  * iaxxx_device_init - called from probe to perform device initialization
  *
@@ -1647,19 +1683,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 		goto err_power_init;
 	}
 
-	/* Init mutexes */
-	mutex_init(&priv->update_block_lock);
-	mutex_init(&priv->event_work_lock);
-	mutex_init(&priv->event_queue_lock);
-	mutex_init(&priv->plugin_lock);
-	mutex_init(&priv->module_lock);
-	mutex_init(&priv->sensor_tunnel_dev_lock);
-	mutex_init(&priv->crashdump_lock);
-	mutex_init(&priv->pm_mutex);
-	mutex_init(&priv->event_lock);
-	mutex_init(&priv->proc_on_off_lock);
-	mutex_init(&priv->btp_lock);
-	mutex_init(&priv->debug_mutex);
+	iaxxx_mutex_init(priv);
 
 	iaxxx_init_kthread_worker(&priv->worker);
 	init_waitqueue_head(&priv->boot_wq);
@@ -1681,7 +1705,6 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 
 	INIT_LIST_HEAD(&priv->iaxxx_state->plugin_head_list);
 	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
-	mutex_init(&priv->iaxxx_state->plg_pkg_list_lock);
 
 	atomic_set(&priv->proc_on_off_ref_cnt, 1);
 
@@ -1762,19 +1785,7 @@ err_regdump_init:
 	if (priv->regmap_no_pm)
 		regmap_exit(priv->regmap_no_pm);
 
-	mutex_destroy(&priv->update_block_lock);
-	mutex_destroy(&priv->event_work_lock);
-	mutex_destroy(&priv->event_queue_lock);
-	mutex_destroy(&priv->plugin_lock);
-	mutex_destroy(&priv->module_lock);
-	mutex_destroy(&priv->sensor_tunnel_dev_lock);
-	mutex_destroy(&priv->crashdump_lock);
-	mutex_destroy(&priv->pm_mutex);
-	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
-	mutex_destroy(&priv->event_lock);
-	mutex_destroy(&priv->proc_on_off_lock);
-	mutex_destroy(&priv->btp_lock);
-	mutex_destroy(&priv->debug_mutex);
+	iaxxx_mutex_destroy(priv);
 err_power_init:
 	return rc;
 }
@@ -1804,19 +1815,7 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	iaxxx_flush_kthread_worker(&priv->worker);
 	kthread_stop(priv->thread);
 
-	mutex_destroy(&priv->update_block_lock);
-	mutex_destroy(&priv->event_work_lock);
-	mutex_destroy(&priv->event_queue_lock);
-	mutex_destroy(&priv->plugin_lock);
-	mutex_destroy(&priv->module_lock);
-	mutex_destroy(&priv->sensor_tunnel_dev_lock);
-	mutex_destroy(&priv->crashdump_lock);
-	mutex_destroy(&priv->pm_mutex);
-	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
-	mutex_destroy(&priv->event_lock);
-	mutex_destroy(&priv->proc_on_off_lock);
-	mutex_destroy(&priv->btp_lock);
-	mutex_destroy(&priv->debug_mutex);
+	iaxxx_mutex_destroy(priv);
 
 	iaxxx_remove_sysfs(priv);
 	iaxxx_regdump_exit(priv);
