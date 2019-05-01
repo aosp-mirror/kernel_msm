@@ -38,6 +38,10 @@ extern const u16 kallsyms_token_index[] __weak;
 
 extern const unsigned long kallsyms_markers[] __weak;
 
+/*
+ * Header structure must be byte-packed, since the table is provided to
+ * bootloader.
+ */
 struct kernel_info {
 	/* For kallsyms */
 	u8 enabled_all;
@@ -70,20 +74,21 @@ struct kernel_info {
 	u64 page_offset;
 	u64 phys_offset;
 	u64 kimage_voffset;
-};
+} __packed;
 
 struct kernel_all_info {
 	u32 magic_number;
 	u32 combined_checksum;
 	struct kernel_info info;
-};
+} __packed;
 
 static void backup_kernel_info(void)
 {
 	struct device_node *np;
 	struct resource res;
-	struct kernel_all_info *all_info;
+	struct kernel_all_info all_info;
 	struct kernel_info *info;
+	void __iomem *info_base;
 	u32 *checksum_info;
 	int num_reg = 0;
 	int ret, index;
@@ -107,22 +112,16 @@ static void backup_kernel_info(void)
 		return;
 	}
 
-	ret = strcmp(res.name, "kinfo");
-	if (ret) {
-		pr_warn("%s: unexpected resource name %s, ret %d\n", __func__,
-				res.name, ret);
+	info_base = ioremap(res.start, resource_size(&res));
+	if (!info_base) {
+		pr_warn("%s: bootloader kernel info offset mapping failed\n",
+				__func__);
 		return;
 	}
 
-	all_info = (struct kernel_all_info *)
-			   ioremap(res.start, resource_size(&res));
-	if (!all_info) {
-		pr_warn("%s: failed to map kernel_all_info\n", __func__);
-		return;
-	}
-
-	memset_io(all_info, 0, resource_size(&res));
-	info = &(all_info->info);
+	memset(&all_info, 0, sizeof(all_info));
+	memset_io(info_base, 0, resource_size(&res));
+	info = &(all_info.info);
 	info->enabled_all = IS_ENABLED(CONFIG_KALLSYMS_ALL);
 	info->enabled_base_relative = IS_ENABLED(CONFIG_KALLSYMS_BASE_RELATIVE);
 	info->enabled_absolute_percpu =
@@ -151,17 +150,15 @@ static void backup_kernel_info(void)
 	info->phys_offset = PHYS_OFFSET;
 	info->kimage_voffset = kimage_voffset;
 
+	checksum_info = (u32 *)info;
 	for (index = 0; index < sizeof(struct kernel_info)/sizeof(u32);
 		index++) {
-		checksum_info = (u32 *)info;
-		all_info->combined_checksum ^= checksum_info[index];
+		all_info.combined_checksum ^= checksum_info[index];
 	}
 
-	all_info->magic_number = BOOT_DEBUG_MAGIC;
-
-	/* Ensure all information written to kernel_info is completed */
-	mb();
-	iounmap(all_info);
+	all_info.magic_number = BOOT_DEBUG_MAGIC;
+	memcpy_toio(info_base, &all_info, sizeof(struct kernel_all_info));
+	iounmap(info_base);
 }
 
 static int __init kdebuginfo_init(void)
