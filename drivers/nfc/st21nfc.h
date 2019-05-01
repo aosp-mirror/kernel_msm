@@ -14,9 +14,11 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
+
+#ifndef __ST21NFC_H
+#define __ST21NFC_H
 
 #define ST21NFC_MAGIC	0xEA
 
@@ -32,14 +34,4 @@
 #define ST21NFC_GET_POLARITY	      _IOR(ST21NFC_MAGIC, 0x07, unsigned int)
 #define ST21NFC_RECOVERY              _IOR(ST21NFC_MAGIC, 0x08, unsigned int)
 
-
-struct st21nfc_platform_data {
-	unsigned int irq_gpio;
-	unsigned int ena_gpio;
-	unsigned int reset_gpio;
-#ifdef CONFIG_NFC_ST21NFC_NO_CRYSTAL
-	unsigned int clkreq_gpio;
-	uint8_t pinctrl_en;
 #endif
-	unsigned int polarity_mode;
-};

@@ -74,12 +74,6 @@ config NFC_ST21NFC
         help
 	  ST Microelectronics ST21NFC Near Field Communication controller support.
 
-config NFC_ST21NFC_NO_CRYSTAL
-        bool "ST Microelectronics ST21NFC NFC Controller Driver, no external crystal"
-        depends on NFC_ST21NFC
-        help
-	  ST Microelectronics ST21NFC Near Field Communication controller support.
-
 config NTAG_NQ
 	tristate "QTI NTAG Driver for NTAG communication"
 	depends on I2C
