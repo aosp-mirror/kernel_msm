@@ -15,6 +15,7 @@
 #include <linux/io.h>
 #include <linux/of_address.h>
 #include <linux/bldr_debug_tools.h>
+#include <linux/utsname.h>
 
 /*
  * These will be re-linked against their real values
@@ -76,6 +77,9 @@ struct kernel_info {
 	u64 phys_offset;
 	u64 swapper_pg_dir;
 	u64 kimage_voffset;
+
+	/* For linux banner */
+	u8 last_uts_release[__NEW_UTS_LEN];
 } __packed;
 
 struct kernel_all_info {
@@ -153,6 +157,8 @@ static void backup_kernel_info(void)
 	info->phys_offset = PHYS_OFFSET;
 	info->swapper_pg_dir = (u64)swapper_pg_dir;
 	info->kimage_voffset = kimage_voffset;
+	strlcpy(info->last_uts_release, init_utsname()->release,
+			sizeof(info->last_uts_release));
 
 	checksum_info = (u32 *)info;
 	for (index = 0; index < sizeof(struct kernel_info)/sizeof(u32);
