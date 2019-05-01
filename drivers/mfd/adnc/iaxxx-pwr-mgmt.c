@@ -724,11 +724,11 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 		}
 		proc_pwr_ctrl_mask = IAXXX_PROC_POWER_UP_DOWN_MASK(proc_id);
 		proc_pwr_ctrl_val = 0;
-	break;
+		break;
 	case PROC_PWR_UP:
 		proc_pwr_ctrl_mask = IAXXX_PROC_POWER_UP_DOWN_MASK(proc_id);
 		proc_pwr_ctrl_val = IAXXX_PROC_POWER_UP_DOWN_MASK(proc_id);
-	break;
+		break;
 	case PROC_STALL_ENABLE:
 		if (proc_id == IAXXX_SSP_ID) {
 			/* Check if any active streams are present */
@@ -744,12 +744,12 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 				IAXXX_PROC_STALL_ENABLE_DISABLE_MASK(proc_id);
 		proc_pwr_ctrl_val =
 				IAXXX_PROC_STALL_ENABLE_DISABLE_MASK(proc_id);
-	break;
+		break;
 	case PROC_STALL_DISABLE:
 		proc_pwr_ctrl_mask =
 				IAXXX_PROC_STALL_ENABLE_DISABLE_MASK(proc_id);
 		proc_pwr_ctrl_val = 0;
-	break;
+		break;
 	default:
 		dev_err(priv->dev, "%s wrong proc state requested (%d)\n",
 			__func__, proc_state);
@@ -818,19 +818,19 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 	case MEM_PWR_DOWN:
 		mem_pwr_ctrl_mask = IAXXX_MEM_POWER_UP_DOWN_MASK(proc_id);
 		mem_pwr_ctrl_val = 0;
-	break;
+		break;
 	case MEM_PWR_UP:
 		mem_pwr_ctrl_mask = IAXXX_MEM_POWER_UP_DOWN_MASK(proc_id);
 		mem_pwr_ctrl_val = IAXXX_MEM_POWER_UP_DOWN_MASK(proc_id);
-	break;
+		break;
 	case MEM_RETN_ON:
 		mem_pwr_ctrl_mask = IAXXX_MEM_RETN_ON_OFF_MASK(proc_id);
 		mem_pwr_ctrl_val = IAXXX_MEM_RETN_ON_OFF_MASK(proc_id);
-	break;
+		break;
 	case MEM_RETN_OFF:
 		mem_pwr_ctrl_mask = IAXXX_MEM_RETN_ON_OFF_MASK(proc_id);
 		mem_pwr_ctrl_val = 0;
-	break;
+		break;
 	default:
 		dev_err(priv->dev, "%s wrong mem_state state requested (%d)\n",
 			__func__, mem_state);
