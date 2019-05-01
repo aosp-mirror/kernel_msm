@@ -2252,15 +2252,10 @@ static int cs35l41_boost_config(struct cs35l41_private *cs35l41,
 	return 0;
 }
 
-static int cs35l41_component_probe(struct snd_soc_component *component)
+static int cs35l41_set_pdata(struct cs35l41_private *cs35l41)
 {
-	struct cs35l41_private *cs35l41 =
-		snd_soc_component_get_drvdata(component);
 	struct classh_cfg *classh = &cs35l41->pdata.classh_config;
-	struct snd_kcontrol_new	*kcontrol;
 	int ret;
-
-	component->regmap = cs35l41->regmap;
 
 	/* Set Platform Data */
 	/* Required */
@@ -2397,26 +2392,45 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 					CS35L41_CH_WKFET_THLD_SHIFT);
 	}
 
-	wm_adsp2_component_probe(&cs35l41->dsp, component);
+	return 0;
+}
 
-	/* Add run-time mixer control for fast use case switch */
-	kcontrol = kzalloc(sizeof(*kcontrol), GFP_KERNEL);
-	if (!kcontrol) {
-		ret = -ENOMEM;
-		goto exit;
+static int cs35l41_component_probe(struct snd_soc_component *component)
+{
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	struct snd_kcontrol_new	*kcontrol;
+	int ret = 0;
+
+	component->regmap = cs35l41->regmap;
+
+	cs35l41_set_pdata(cs35l41);
+
+	/* These should only run once, not every hibernate cycle */
+	if (!(cs35l41->skip_codec_probe)) {
+		wm_adsp2_component_probe(&cs35l41->dsp, component);
+		cs35l41->skip_codec_probe = true;
+
+		/* Add run-time mixer control for fast use case switch */
+		kcontrol = kzalloc(sizeof(*kcontrol), GFP_KERNEL);
+		if (!kcontrol) {
+			ret = -ENOMEM;
+			goto exit;
+		}
+
+		kcontrol->name = "Fast Use Case Delta File";
+		kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+		kcontrol->info = snd_soc_info_enum_double;
+		kcontrol->get = cs35l41_fast_switch_file_get;
+		kcontrol->put = cs35l41_fast_switch_file_put;
+		kcontrol->private_value	=
+				  (unsigned long)&cs35l41->fast_switch_enum;
+		ret = snd_soc_add_component_controls(component, kcontrol, 1);
+		if (ret < 0)
+			dev_err(cs35l41->dev,
+			       "snd_soc_add_codec_controls failed (%d)\n", ret);
+		kfree(kcontrol);
 	}
-
-	kcontrol->name = "Fast Use Case Delta File";
-	kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	kcontrol->info = snd_soc_info_enum_double;
-	kcontrol->get = cs35l41_fast_switch_file_get;
-	kcontrol->put = cs35l41_fast_switch_file_put;
-	kcontrol->private_value	= (unsigned long)&cs35l41->fast_switch_enum;
-	ret = snd_soc_add_component_controls(component, kcontrol, 1);
-	if (ret < 0)
-		dev_err(cs35l41->dev,
-			"snd_soc_add_component_controls failed (%d)\n", ret);
-	kfree(kcontrol);
 exit:
 	return ret;
 }
