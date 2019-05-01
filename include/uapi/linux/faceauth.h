@@ -176,7 +176,8 @@ struct faceauth_debug_entry {
 	uint32_t ab_link_reg;
 	struct faceauth_debug_image left_dot;
 	struct faceauth_debug_image right_dot;
-	struct faceauth_debug_image flood;
+	struct faceauth_debug_image left_flood;
+	struct faceauth_debug_image right_flood;
 	struct faceauth_debug_image calibration;
 	struct faceauth_airbrush_state ab_state;
 } __attribute__((packed));

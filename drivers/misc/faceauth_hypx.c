@@ -1135,19 +1135,13 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 	hypx_data->image_flood_left = virt_to_phys(image_flood_left.hypx_blob);
 	hypx_data->image_flood_left_size = IMAGE_SIZE;
 
-	/* Not going to dump it for now */
-	if (0) {
-		hypx_create_blob_userbuf(dev, &image_flood_right, NULL,
-					 IMAGE_SIZE);
-		if (!image_flood_right.hypx_blob)
-			goto exit;
-		hypx_data->image_flood_right =
-			virt_to_phys(image_flood_right.hypx_blob);
-		hypx_data->image_flood_right_size = IMAGE_SIZE;
-	} else {
-		hypx_data->image_flood_right = 0;
-		hypx_data->image_flood_right_size = 0;
-	}
+	hypx_create_blob_userbuf(dev, &image_flood_right, NULL,
+				 IMAGE_SIZE);
+	if (!image_flood_right.hypx_blob)
+		goto exit;
+	hypx_data->image_flood_right =
+	    virt_to_phys(image_flood_right.hypx_blob);
+	hypx_data->image_flood_right_size = IMAGE_SIZE;
 
 	hypx_create_blob_userbuf(dev, &calibration, NULL, CALIBRATION_SIZE);
 	if (!calibration.hypx_blob)
@@ -1226,16 +1220,30 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 			pr_err("Error saving right dot image\n");
 			goto exit;
 		}
+
 		err = hypx_copy_from_blob_userbuf(
 			dev, &image_flood_left,
 			(uint8_t *)debug_entry + current_offset,
 			hypx_data->image_flood_left_size, false);
 
-		debug_entry->flood.offset_to_image = current_offset;
-		debug_entry->flood.image_size = IMAGE_SIZE;
+		debug_entry->left_flood.offset_to_image = current_offset;
+		debug_entry->left_flood.image_size = IMAGE_SIZE;
 		current_offset += IMAGE_SIZE;
 		if (err) {
-			pr_err("Error saving flood image\n");
+			pr_err("Error saving left flood image\n");
+			goto exit;
+		}
+
+		err = hypx_copy_from_blob_userbuf(
+			dev, &image_flood_right,
+			(uint8_t *)debug_entry + current_offset,
+			hypx_data->image_flood_right_size, false);
+
+		debug_entry->right_flood.offset_to_image = current_offset;
+		debug_entry->right_flood.image_size = IMAGE_SIZE;
+		current_offset += IMAGE_SIZE;
+		if (err) {
+			pr_err("Error saving right flood image\n");
 			goto exit;
 		}
 
@@ -1255,8 +1263,10 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 		debug_entry->left_dot.image_size = 0;
 		debug_entry->right_dot.offset_to_image = 0;
 		debug_entry->right_dot.image_size = 0;
-		debug_entry->flood.offset_to_image = 0;
-		debug_entry->flood.image_size = 0;
+		debug_entry->left_flood.offset_to_image = 0;
+		debug_entry->left_flood.image_size = 0;
+		debug_entry->right_flood.offset_to_image = 0;
+		debug_entry->right_flood.image_size = 0;
 		debug_entry->calibration.offset_to_image = 0;
 		debug_entry->calibration.image_size = 0;
 	}

@@ -188,6 +188,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 				err = -EINVAL;
 				goto exit;
 			}
+			if (!start_step_data.image_flood_right_size) {
+				err = -EINVAL;
+				goto exit;
+			}
 		}
 
 		err = process_cache_flush_idxs(
