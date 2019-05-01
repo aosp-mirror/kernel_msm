@@ -105,10 +105,17 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		 *   A0 => PCIe EQ disable
 		 *   B0 => PCIe EQ enable
 		 */
-		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0)
+		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0) {
 			msm_pcie_eq_ctrl(1, /*enable=*/true);
-		else
+		} else if (ab_get_chip_id(ab_ctx) == CHIP_ID_A0) {
+			dev_err(ab_ctx->dev,
+				"AB version is A0, which is not fully supported\n");
 			msm_pcie_eq_ctrl(1, /*enable=*/false);
+		} else {
+			dev_warn(ab_ctx->dev,
+				"WARNING: AB version is unknown\n");
+			msm_pcie_eq_ctrl(1, /*enable=*/false);
+		}
 	}
 
 	ret = ab_pmic_on(ab_ctx);

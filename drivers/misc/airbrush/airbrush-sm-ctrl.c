@@ -173,38 +173,6 @@ static struct ab_sm_mfd_ops mfd_ops_stub = {
 	.pcie_linkdown = &pcie_linkdown_stub,
 };
 
-/* Index 0 - A0 clk frequencies
- * Index 1 - B0 clk frequencies
- * Note: The block order here must match the ipu_property_table block order
- */
-static const u64 blk_ipu_clk_tbl[][2] = {
-	/* BLOCK_STATE_0   */ { 0, 0 },
-	/* BLOCK_STATE_100 */ { 0, 0 },
-	/* BLOCK_STATE_200 */ { 0, 0 },
-	/* BLOCK_STATE_300 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	/* BLOCK_STATE_301 */ { 50000000,  50000000  },
-	/* BLOCK_STATE_302 */ { 220000000, 271800000 },
-	/* BLOCK_STATE_303 */ { 330000000, 408000000 },
-	/* BLOCK_STATE_304 */ { 440000000, 543600000 },
-	/* BLOCK_STATE_305 */ { 549600000, 680000000 },
-};
-
-/* Index 0 - A0 clk frequencies
- * Index 1 - B0 clk frequencies
- * Note: The block order here must match the tpu_property_table block order
- */
-static const u64 blk_tpu_clk_tbl[][2] = {
-	/* BLOCK_STATE_0   */ { 0, 0 },
-	/* BLOCK_STATE_100 */ { 0, 0 },
-	/* BLOCK_STATE_200 */ { 0, 0 },
-	/* BLOCK_STATE_300 */ { AB_SM_OSC_RATE, AB_SM_OSC_RATE },
-	/* BLOCK_STATE_301 */ { 50000000,  50000000   },
-	/* BLOCK_STATE_302 */ { 306400000, 316000000  },
-	/* BLOCK_STATE_303 */ { 459600000, 474000000  },
-	/* BLOCK_STATE_304 */ { 612800000, 632000000  },
-	/* BLOCK_STATE_305 */ { 765600000, 789600000  },
-};
-
 #define BLK_(num, state, sub, pmu, rail, v, clk, freq, pwr, used, tiles, dr) \
 	{							\
 		BLOCK_STATE_ ## num,	\
@@ -222,27 +190,27 @@ static const u64 blk_tpu_clk_tbl[][2] = {
 	}
 
 static struct block_property ipu_property_table[] = {
-	BLK_(0,   Disabled,  NoRail,    0, off, 0_0, off, 0, 0,  0,  0, 0),
-	BLK_(100, DeepSleep, DeepSleep, 1, off, 0_0, off, 0, 0,  0,  0, 0),
-	BLK_(200, Sleep,  Sleep,      2,  on,  0_75, off, 0, 0,  0,  0, 0),
-	BLK_(300, Normal, Ready,      3,  on,  0_75, on,  0, 14, 0,  0, 0),
-	BLK_(301, Normal, AonCompute, 3,  on,  0_75, on,  0, 2,  2,  0, 0),
-	BLK_(302, Normal, MinCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(303, Normal, LowCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(304, Normal, MidCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
-	BLK_(305, Normal, MaxCompute, 3,  on,  0_75, on,  0, 14, 14, 0, 0),
+	BLK_(0,   Disabled,  NoRail,    0, off, 0_0, off, 0,     0,  0,  0, 0),
+	BLK_(100, DeepSleep, DeepSleep, 1, off, 0_0, off, 0,     0,  0,  0, 0),
+	BLK_(200, Sleep,  Sleep,      2,  on,  0_75, off, 0,     0,  0,  0, 0),
+	BLK_(300, Normal, Ready,      3,  on,  0_75, on,  19.2,  14, 0,  0, 0),
+	BLK_(301, Normal, AonCompute, 3,  on,  0_75, on,  50,    2,  2,  0, 0),
+	BLK_(302, Normal, MinCompute, 3,  on,  0_75, on,  271.8, 14, 14, 0, 0),
+	BLK_(303, Normal, LowCompute, 3,  on,  0_75, on,  408,   14, 14, 0, 0),
+	BLK_(304, Normal, MidCompute, 3,  on,  0_75, on,  543.6, 14, 14, 0, 0),
+	BLK_(305, Normal, MaxCompute, 3,  on,  0_75, on,  680,   14, 14, 0, 0),
 };
 
 static struct block_property tpu_property_table[] = {
-	BLK_(0,   Disabled,  NoRail,    0, off, 0_0, off, 0, 0, 0, 0,  0),
-	BLK_(100, DeepSleep, DeepSleep, 1, off, 0_0, off, 0, 0, 0, 0,  0),
-	BLK_(200, Sleep,  Sleep,      2,  on,  0_75, off, 0, 0, 0, 0,  0),
-	BLK_(300, Normal, Ready,      3,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(301, Normal, AonCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(302, Normal, MinCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(303, Normal, LowCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(304, Normal, MidCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
-	BLK_(305, Normal, MaxCompute, 3,  on,  0_75, on,  0, 0, 0, 16, 0),
+	BLK_(0,   Disabled,  NoRail,    0, off, 0_0, off, 0,     0, 0, 0,  0),
+	BLK_(100, DeepSleep, DeepSleep, 1, off, 0_0, off, 0,     0, 0, 0,  0),
+	BLK_(200, Sleep,  Sleep,      2,  on,  0_75, off, 0,     0, 0, 0,  0),
+	BLK_(300, Normal, Ready,      3,  on,  0_75, on,  19.2,  0, 0, 16, 0),
+	BLK_(301, Normal, AonCompute, 3,  on,  0_75, on,  50,    0, 0, 16, 0),
+	BLK_(302, Normal, MinCompute, 3,  on,  0_75, on,  316,   0, 0, 16, 0),
+	BLK_(303, Normal, LowCompute, 3,  on,  0_75, on,  474,   0, 0, 16, 0),
+	BLK_(304, Normal, MidCompute, 3,  on,  0_75, on,  632,   0, 0, 16, 0),
+	BLK_(305, Normal, MaxCompute, 3,  on,  0_75, on,  789.6, 0, 0, 16, 0),
 };
 
 static struct block_property dram_property_table[] = {
@@ -1713,34 +1681,6 @@ int ab_sm_unregister_clk_event(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(ab_sm_unregister_clk_event);
 
-/*
- * set_ipu_tpu_clk_freq_table - Sets index of clk frequency table for A0/B0.
- */
-static void set_ipu_tpu_clk_freq_table(struct ab_state_context *sc,
-		enum ab_chip_id chip_id)
-{
-	struct block_property *prop;
-	int blk_idx = 0;
-
-	if (chip_id == CHIP_ID_UNKNOWN) {
-		dev_err(sc->dev, "%s called with CHIP_ID_UNKNOWN\n", __func__);
-		return;
-	}
-
-	while (blk_idx < sc->blocks[BLK_IPU].nr_block_states) {
-		prop = &sc->blocks[BLK_IPU].prop_table[blk_idx];
-		prop->clk_frequency = blk_ipu_clk_tbl[blk_idx][chip_id];
-		blk_idx++;
-	}
-
-	blk_idx = 0;
-	while (blk_idx < sc->blocks[BLK_TPU].nr_block_states) {
-		prop = &sc->blocks[BLK_TPU].prop_table[blk_idx];
-		prop->clk_frequency = blk_tpu_clk_tbl[blk_idx][chip_id];
-		blk_idx++;
-	}
-}
-
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 {
 	enum ab_chip_id val;
@@ -1752,12 +1692,10 @@ enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
 		mutex_unlock(&sc->mfd_lock);
 
 		if (ret < 0) {
-			set_ipu_tpu_clk_freq_table(sc, CHIP_ID_UNKNOWN);
 			return CHIP_ID_UNKNOWN;
 		}
 
 		sc->chip_id = val;
-		set_ipu_tpu_clk_freq_table(sc, sc->chip_id);
 	}
 
 	return sc->chip_id;
@@ -2969,9 +2907,10 @@ int ab_sm_init(struct platform_device *pdev)
 	kfifo_alloc(&ab_sm_ctx->state_change_reqs,
 		AB_KFIFO_ENTRY_SIZE * sizeof(struct ab_change_req), GFP_KERNEL);
 
-	/* Assume chip_id to be B0 by default. */
+	/* Assume chip_id to be B0 by default.
+	 * TODO: b/132071956
+	 */
 	ab_sm_ctx->chip_id = CHIP_ID_B0;
-	set_ipu_tpu_clk_freq_table(ab_sm_ctx, ab_sm_ctx->chip_id);
 
 	ab_sm_ctx->cold_boot = true;
 	ab_sm_ctx->el2_mode = false;
