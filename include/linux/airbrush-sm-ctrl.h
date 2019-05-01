@@ -281,6 +281,8 @@ enum ab_sm_time_stamps {
 	/* DRAM blk_set_state */
 	AB_SM_TS_DRAM,
 	AB_SM_TS_DDR_CB,
+	AB_SM_TS_DDR_SET_PLL,
+	AB_SM_TS_DDR_SET_PLL_POLL,
 
 	AB_SM_TS_MIF,
 
@@ -562,6 +564,7 @@ struct ab_state_context {
 	/* time stamps */
 	bool ts_enabled;
 	u64 state_trans_ts[NUM_AB_SM_TS];
+	u64 state_start_ts[NUM_AB_SM_TS];
 #endif
 	int clkout_idx;
 	int clkout_blk_idx;

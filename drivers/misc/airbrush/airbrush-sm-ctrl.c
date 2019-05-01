@@ -762,20 +762,21 @@ static void ab_sm_record_state_change(enum chip_state prev_state,
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
 void ab_sm_start_ts(int ts)
 {
-	ab_sm_ctx->state_trans_ts[ts] = ktime_get_ns();
+	ab_sm_ctx->state_start_ts[ts] = ktime_get_ns();
 }
 EXPORT_SYMBOL(ab_sm_start_ts);
 
 void ab_sm_record_ts(int ts)
 {
-	ab_sm_ctx->state_trans_ts[ts] =
-		ktime_get_ns() - ab_sm_ctx->state_trans_ts[ts];
+	ab_sm_ctx->state_trans_ts[ts] +=
+		ktime_get_ns() - ab_sm_ctx->state_start_ts[ts];
 }
 EXPORT_SYMBOL(ab_sm_record_ts);
 
 void ab_sm_zero_ts(struct ab_state_context *sc)
 {
 	memset(sc->state_trans_ts, 0, sizeof(sc->state_trans_ts));
+	memset(sc->state_trans_ts, 0, sizeof(sc->state_start_ts));
 }
 
 void ab_sm_print_ts(struct ab_state_context *sc)
@@ -816,6 +817,8 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"        PMU deep sleep",
 		"    DDR state change",
 		"        DDR callback",
+		"            DDR set PLL",
+		"            DDR set PLL poll",
 		"    MIF state change",
 		"    FSYS state change",
 		"        PCIe callback",

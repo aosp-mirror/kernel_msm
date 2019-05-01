@@ -722,6 +722,7 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	if (freq >= AB_DRAM_FREQ_MAX)
 		return -EINVAL;
 
+	ab_sm_start_ts(AB_SM_TS_DDR_SET_PLL);
 	/* With the given PMS values ab_ddr_pll_pms_table[freq],
 	 * try to configure the PLL for MIF.
 	 */
@@ -737,10 +738,12 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	ddr_reg_clr_set(PLL_CON0_PLL_PHY_MIF, PLL_PMS_MSK,
 			PLL_PMS(pms->p, pms->m, pms->s) | PLL_ENABLE);
 
+	ab_sm_start_ts(AB_SM_TS_DDR_SET_PLL_POLL);
 	if (ddr_reg_poll(PLL_CON0_PLL_PHY_MIF, p_pll_con0_pll_phy_mif)) {
 		pr_err("%s, mif pll lock failed\n", __func__);
 		return DDR_FAIL;
 	}
+	ab_sm_record_ts(AB_SM_TS_DDR_SET_PLL_POLL);
 
 	ddr_reg_set(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_PLLOUT));
 
@@ -750,6 +753,7 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
 	ddr_reg_clr(DREX_MEMCONTROL, CLK_STOP_EN);
 
+	ab_sm_record_ts(AB_SM_TS_DDR_SET_PLL);
 	return DDR_SUCCESS;
 }
 
