@@ -151,24 +151,6 @@
 			qcom,drive-strength = <2>;
 		};
 	};
-
-	ir_vcsel_test_active: ir_vcsel_test_active {
-		mux {
-			pins = "gpio4";
-			function = "normal";
-			bias-disable;
-			input-enable;
-		};
-	};
-
-	ir_vcsel_test_suspend: ir_vcsel_test_suspend {
-		mux {
-			pins = "gpio4";
-			function = "normal";
-			bias-pull-down;
-			input-enable;
-		};
-	};
 };
 
 &tlmm {
@@ -196,7 +178,7 @@
 		};
 	};
 
-	csense_irq_active: csense_irq_active {
+	temp_sensor_irq_active: temp_sensor_irq_active {
 		mux {
 			pins = "gpio49";
 			function = "gpio";
@@ -208,7 +190,7 @@
 		};
 	};
 
-	csense_irq_suspend: csense_irq_suspend {
+	temp_sensor_irq_suspend: temp_sensor_irq_suspend {
 		mux {
 			pins = "gpio49";
 			function = "gpio";
@@ -275,31 +257,21 @@
 };
 
 &lm36011_flood {
-	sx9320_vdd-supply = <&max77826_ldo11>;
 	pinctrl-names = "lm36011_active", "lm36011_suspend";
-	pinctrl-0 = <&ir_vcsel_fault_active &ir_vcsel_test_active
-			&csense_irq_active>;
-	pinctrl-1 = <&ir_vcsel_fault_suspend &ir_vcsel_test_suspend
-			&csense_irq_suspend>;
+	pinctrl-0 = <&ir_vcsel_fault_active &temp_sensor_irq_active>;
+	pinctrl-1 = <&ir_vcsel_fault_suspend &temp_sensor_irq_suspend>;
 	gpios = <&tlmm 124 0>,
-		<&pm8150l_gpios 4 0>,
-		<&pm8150l_gpios 5 0>,
 		<&tlmm 49 0>;
-	hw-version = <3>;
+	hw-version = <4>;
 };
 
 &lm36011_dot {
-	sx9320_vdd-supply = <&max77826_ldo11>;
 	pinctrl-names = "lm36011_active", "lm36011_suspend";
-	pinctrl-0 = <&ir_vcsel_fault_active &ir_vcsel_test_active
-			&csense_irq_active>;
-	pinctrl-1 = <&ir_vcsel_fault_suspend &ir_vcsel_test_suspend
-			&csense_irq_suspend>;
+	pinctrl-0 = <&ir_vcsel_fault_active &temp_sensor_irq_active>;
+	pinctrl-1 = <&ir_vcsel_fault_suspend &temp_sensor_irq_suspend>;
 	gpios = <&tlmm 124 0>,
-		<&pm8150l_gpios 4 0>,
-		<&pm8150l_gpios 5 0>,
 		<&tlmm 49 0>;
-	hw-version = <3>;
+	hw-version = <4>;
 };
 
 &cam_cci0 {

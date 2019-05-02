@@ -11,10 +11,74 @@
  * GNU General Public License for more details.
  */
 
+&pm8150l_gpios {
+	ir_vcsel_test_active: ir_vcsel_test_active {
+		mux {
+			pins = "gpio4";
+			function = "normal";
+			bias-disable;
+			input-enable;
+		};
+	};
+
+	ir_vcsel_test_suspend: ir_vcsel_test_suspend {
+		mux {
+			pins = "gpio4";
+			function = "normal";
+			bias-pull-down;
+			input-enable;
+		};
+	};
+};
+
+&tlmm {
+	csense_irq_active: csense_irq_active {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			bias-pull-up;
+			input-enable;
+		};
+	};
+
+	csense_irq_suspend: csense_irq_suspend {
+		mux {
+			pins = "gpio49";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio49";
+			bias-pull-down;
+			input-enable;
+		};
+	};
+};
+
 &lm36011_flood {
+	sx9320_vdd-supply = <&max77826_ldo11>;
+	pinctrl-0 = <&ir_vcsel_fault_active &ir_vcsel_test_active
+			&csense_irq_active>;
+	pinctrl-1 = <&ir_vcsel_fault_suspend &ir_vcsel_test_suspend
+			&csense_irq_suspend>;
+	gpios = <&tlmm 124 0>,
+		<&pm8150l_gpios 4 0>,
+		<&pm8150l_gpios 5 0>,
+		<&tlmm 49 0>;
 	hw-version = <2>;
 };
 
 &lm36011_dot {
+	sx9320_vdd-supply = <&max77826_ldo11>;
+	pinctrl-0 = <&ir_vcsel_fault_active &ir_vcsel_test_active
+			&csense_irq_active>;
+	pinctrl-1 = <&ir_vcsel_fault_suspend &ir_vcsel_test_suspend
+			&csense_irq_suspend>;
+	gpios = <&tlmm 124 0>,
+		<&pm8150l_gpios 4 0>,
+		<&pm8150l_gpios 5 0>,
+		<&tlmm 49 0>;
 	hw-version = <2>;
 };

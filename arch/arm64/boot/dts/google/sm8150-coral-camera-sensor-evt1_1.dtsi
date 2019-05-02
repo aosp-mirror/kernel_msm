@@ -67,7 +67,7 @@
 		<&pm8150l_gpios 4 0>,
 		<&pm8150l_gpios 5 0>,
 		<&tlmm 49 0>;
-	hw-version = <2>;
+	hw-version = <3>;
 };
 
 &lm36011_dot {
@@ -80,5 +80,5 @@
 		<&pm8150l_gpios 4 0>,
 		<&pm8150l_gpios 5 0>,
 		<&tlmm 49 0>;
-	hw-version = <2>;
+	hw-version = <3>;
 };

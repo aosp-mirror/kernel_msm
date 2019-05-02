@@ -21,11 +21,13 @@
 		vio-supply = <&max77826_ldo11>;
 		silego_vdd-supply = <&max77826_ldo6>;
 		sx9320_vdd-supply = <&max77826_ldo14>;
+		hdc2010_vdd-supply = <&max77826_ldo11>;
 		pmic_buck1-supply = <&max77826_buck1>;
 		pmic_buck2-supply = <&max77826_buck2>;
 		sx9320_sid = <0x28>;
+		hdc2010_sid = <0x40>;
 		regulator-names = "vio", "silego_vdd", "sx9320_vdd",
-			"pmic_buck1", "pmic_buck2";
+			"hdc2010_vdd", "pmic_buck1", "pmic_buck2";
 		laser-type = <0>;
 		hw-version = <1>;
 		status = "ok";
@@ -39,11 +41,13 @@
 		vio-supply = <&max77826_ldo11>;
 		silego_vdd-supply = <&max77826_ldo6>;
 		sx9320_vdd-supply = <&max77826_ldo14>;
+		hdc2010_vdd-supply = <&max77826_ldo11>;
 		pmic_buck1-supply = <&max77826_buck1>;
 		pmic_buck2-supply = <&max77826_buck2>;
 		sx9320_sid = <0x28>;
+		hdc2010_sid = <0x40>;
 		regulator-names = "vio", "silego_vdd", "sx9320_vdd",
-			"pmic_buck1", "pmic_buck2";
+			"hdc2010_vdd", "pmic_buck1", "pmic_buck2";
 		laser-type = <1>;
 		hw-version = <1>;
 		status = "ok";

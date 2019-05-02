@@ -11,6 +11,7 @@
  */
 
 #include "sm8150-coral.dtsi"
+#include "sm8150-coral-camera-sensor-evt1_1.dtsi"
 
 &soc {
 	abc-sm {

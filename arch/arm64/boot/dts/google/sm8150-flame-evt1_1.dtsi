@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 #include "sm8150-flame.dtsi"
+#include "sm8150-flame-camera-sensor-evt1_1.dtsi"
 #include "sm8150-flame-pac193x-evt1_1.dtsi"
 &soc {
 	abc-sm {
