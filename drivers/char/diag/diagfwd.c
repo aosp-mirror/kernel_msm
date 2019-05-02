@@ -1344,6 +1344,9 @@ static int diagfwd_mux_open(int id, int mode)
 		break;
 	case DIAG_MEMORY_DEVICE_MODE:
 		break;
+	case DIAG_PCIE_MODE:
+		driver->pcie_connected = 1;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1376,6 +1379,9 @@ static int diagfwd_mux_close(int id, int mode)
 		driver->usb_connected = 0;
 		break;
 	case DIAG_MEMORY_DEVICE_MODE:
+		break;
+	case DIAG_PCIE_MODE:
+		driver->pcie_connected = 0;
 		break;
 	default:
 		return -EINVAL;
@@ -1766,7 +1772,6 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 	int peripheral = -1;
 	int type = -1;
 	int num = -1;
-	struct diag_apps_data_t *temp = NULL;
 
 	if (!buf || len < 0)
 		return -EINVAL;
@@ -1785,19 +1790,9 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 			diag_ws_on_copy(DIAG_WS_MUX);
 		} else if (peripheral == APPS_DATA) {
 			spin_lock_irqsave(&driver->diagmem_lock, flags);
-			if (hdlc_data.allocated)
-				temp = &hdlc_data;
-			else if (non_hdlc_data.allocated)
-				temp = &non_hdlc_data;
-			else
-				DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-				"No apps data buffer is allocated to be freed\n");
-			if (temp) {
-				diagmem_free(driver, temp->buf, POOL_TYPE_HDLC);
-				temp->buf = NULL;
-				temp->len = 0;
-				temp->allocated = 0;
-			}
+			diagmem_free(driver, (unsigned char *)buf,
+				     POOL_TYPE_HDLC);
+			buf = NULL;
 			spin_unlock_irqrestore(&driver->diagmem_lock, flags);
 		} else {
 			pr_err_ratelimited("diag: Invalid peripheral %d in %s, type: %d\n",
