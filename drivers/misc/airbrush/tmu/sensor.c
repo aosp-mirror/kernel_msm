@@ -33,6 +33,7 @@ struct ab_tmu_sensor {
 	struct device *dev;
 	struct ab_tmu_hw *hw;
 	int id;
+	bool of_trip_loaded;
 	int of_trip_temp[AB_TMU_SENSOR_TRIP_NUM];
 	int of_trip_hyst[AB_TMU_SENSOR_TRIP_NUM];
 	struct ab_tmu_trim trim;
@@ -282,11 +283,14 @@ void ab_tmu_sensor_load_trim_info(struct ab_tmu_sensor *sensor)
 	trim->error2 = FIELD_GET(AB_TMU_TRIMINFO_ERROR2_FIELD, trim_info);
 }
 
-void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
+static void ab_tmu_sensor_load_of_trip(struct ab_tmu_sensor *sensor)
 {
 	struct thermal_zone_device *tz = sensor->tzd;
 	const struct thermal_trip *trips;
 	int i, ntrips;
+
+	if (sensor->of_trip_loaded)
+		return;
 
 	trips = of_thermal_get_trip_points(tz);
 	if (!trips) {
@@ -303,6 +307,19 @@ void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
 	for (i = 0; i < AB_TMU_SENSOR_TRIP_NUM; i++) {
 		sensor->of_trip_temp[i] = trips[i].temperature;
 		sensor->of_trip_hyst[i] = trips[i].hysteresis;
+	}
+	sensor->of_trip_loaded = true;
+}
+
+void ab_tmu_sensor_save_threshold(struct ab_tmu_sensor *sensor)
+{
+	int i;
+
+	ab_tmu_sensor_load_of_trip(sensor);
+	if (!sensor->of_trip_loaded)
+		return;
+
+	for (i = 0; i < AB_TMU_SENSOR_TRIP_NUM; i++) {
 		ab_tmu_sensor_set_thresholds(sensor, i,
 				sensor->of_trip_temp[i] / MCELSIUS,
 				sensor->of_trip_hyst[i] / MCELSIUS);
