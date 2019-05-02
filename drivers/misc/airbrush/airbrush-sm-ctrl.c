@@ -2347,6 +2347,7 @@ static long ab_sm_misc_ioctl_debug(struct file *fp, unsigned int cmd,
 		abc_set_l1_entry_delay(arg);
 		mutex_unlock(&sc->op_lock);
 		mutex_unlock(&sc->state_transitioning_lock);
+		ret = 0;
 		break;
 	case AB_SM_UPDATE_IPU_STATE_PROPERTIES:
 		if (copy_from_user(&props, (void __user *)arg,
