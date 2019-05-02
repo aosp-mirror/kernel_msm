@@ -1071,11 +1071,10 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 	ab_sm_record_ts(AB_SM_TS_LVCC);
 
-	/* If DRAM is coming out of a low power state, ensure AON
+	/* If DRAM is changing state, ensure AON
 	 * clock rate is at maximum to speed up initialization
 	 */
-	if (dest_map->dram_block_state_id >= BLOCK_STATE_300 &&
-			last_map->dram_block_state_id < BLOCK_STATE_300) {
+	if (dest_map->dram_block_state_id != last_map->dram_block_state_id) {
 		active_map = ab_sm_get_block_map(sc, CHIP_STATE_409);
 
 		ab_sm_start_ts(AB_SM_TS_AON_DRAM_INIT);
