@@ -145,12 +145,12 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			dev_err(priv->dev, "set proc mem on failed\n");
 			return ret;
 		}
-		regmap_update_bits(priv->regmap, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_2_MASK,
-				(0x1 << IAXXX_GPIO_SWPORTB_DDR_COMMF_2_POS));
-		regmap_update_bits(priv->regmap, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_2_MASK,
-				(0x1 << IAXXX_GPIO_SWPORTB_DR_COMMF_2_POS));
+		regmap_update_bits(priv->regmap, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_2_MASK,
+				(0x1 << IAXXX_SRB_PORTB_DDR_COMMF_2_POS));
+		regmap_update_bits(priv->regmap, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_2_MASK,
+				(0x1 << IAXXX_SRB_PORTB_DR_COMMF_2_POS));
 		regmap_update_bits(priv->regmap, IAXXX_SRB_I2S_PORT_PWR_EN_ADDR,
 				(0x1 << port_id), (0x1 << port_id));
 		ret = iaxxx_send_update_block_request(priv->dev, &status,
@@ -389,12 +389,12 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 		}
 
 	} else {
-		regmap_update_bits(priv->regmap, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_2_MASK,
-				(0x0 << IAXXX_GPIO_SWPORTB_DDR_COMMF_2_POS));
-		regmap_update_bits(priv->regmap, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_2_MASK,
-				(0x0 << IAXXX_GPIO_SWPORTB_DR_COMMF_2_POS));
+		regmap_update_bits(priv->regmap, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_2_MASK,
+				(0x0 << IAXXX_SRB_PORTB_DDR_COMMF_2_POS));
+		regmap_update_bits(priv->regmap, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_2_MASK,
+				(0x0 << IAXXX_SRB_PORTB_DR_COMMF_2_POS));
 		ret = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
 		if (ret) {

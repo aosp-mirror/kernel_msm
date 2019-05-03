@@ -5054,21 +5054,21 @@ static int iaxxx_portb_micbias_put(struct snd_kcontrol *kcontrol,
 		snd_soc_write(codec, IAXXX_PAD_CTRL_COMMF_1_ADDR,
 				0x70);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_1_MASK,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_1_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_1_MASK,
+				IAXXX_SRB_PORTB_DR_COMMF_1_MASK);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_1_MASK,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_1_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_1_MASK,
+				IAXXX_SRB_PORTB_DDR_COMMF_1_MASK);
 	} else {
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_1_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DR_COMMF_1_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_1_MASK,
+				0x0 < IAXXX_SRB_PORTB_DR_COMMF_1_POS);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_1_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DDR_COMMF_1_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_1_MASK,
+				0x0 < IAXXX_SRB_PORTB_DDR_COMMF_1_POS);
 	}
 	return 0;
 }
@@ -5104,22 +5104,22 @@ static int iaxxx_portc_micbias_put(struct snd_kcontrol *kcontrol,
 		snd_soc_write(codec, IAXXX_PAD_CTRL_COMMF_0_ADDR,
 				0x70);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_0_MASK,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_0_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_0_MASK,
+				IAXXX_SRB_PORTB_DR_COMMF_0_MASK);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_0_MASK,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_0_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_0_MASK,
+				IAXXX_SRB_PORTB_DDR_COMMF_0_MASK);
 
 	} else {
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_0_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DR_COMMF_0_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_0_MASK,
+				0x0 < IAXXX_SRB_PORTB_DR_COMMF_0_POS);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_0_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DDR_COMMF_0_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_0_MASK,
+				0x0 < IAXXX_SRB_PORTB_DDR_COMMF_0_POS);
 	}
 	return 0;
 }
@@ -5154,21 +5154,21 @@ static int iaxxx_cdc0_micbias_put(struct snd_kcontrol *kcontrol,
 		snd_soc_write(codec, IAXXX_PAD_CTRL_COMMF_3_ADDR,
 				0x70);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_3_MASK,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_3_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_3_MASK,
+				IAXXX_SRB_PORTB_DR_COMMF_3_MASK);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_3_MASK,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_3_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_3_MASK,
+				IAXXX_SRB_PORTB_DDR_COMMF_3_MASK);
 	} else {
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_3_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DR_COMMF_3_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_3_MASK,
+				0x0 < IAXXX_SRB_PORTB_DR_COMMF_3_POS);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_3_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DDR_COMMF_3_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_3_MASK,
+				0x0 < IAXXX_SRB_PORTB_DDR_COMMF_3_POS);
 	}
 	return 0;
 }
@@ -5204,21 +5204,21 @@ static int iaxxx_cdc1_micbias_put(struct snd_kcontrol *kcontrol,
 		snd_soc_write(codec, IAXXX_PAD_CTRL_COMMF_2_ADDR,
 				0x70);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_2_MASK,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_2_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_2_MASK,
+				IAXXX_SRB_PORTB_DR_COMMF_2_MASK);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_2_MASK,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_2_MASK);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_2_MASK,
+				IAXXX_SRB_PORTB_DDR_COMMF_2_MASK);
 	} else {
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DR_ADDR,
-				IAXXX_GPIO_SWPORTB_DR_COMMF_2_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DR_COMMF_2_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DR_ADDR,
+				IAXXX_SRB_PORTB_DR_COMMF_2_MASK,
+				0x0 < IAXXX_SRB_PORTB_DR_COMMF_2_POS);
 
-		snd_soc_update_bits(codec, IAXXX_GPIO_SWPORTB_DDR_ADDR,
-				IAXXX_GPIO_SWPORTB_DDR_COMMF_2_MASK,
-				0x0 < IAXXX_GPIO_SWPORTB_DDR_COMMF_2_POS);
+		snd_soc_update_bits(codec, IAXXX_SRB_PORTB_DDR_ADDR,
+				IAXXX_SRB_PORTB_DDR_COMMF_2_MASK,
+				0x0 < IAXXX_SRB_PORTB_DDR_COMMF_2_POS);
 	}
 	return 0;
 }
