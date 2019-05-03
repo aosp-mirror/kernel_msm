@@ -464,6 +464,14 @@ static void bgrsb_glink_bgdown_work(struct work_struct *work)
 	pr_debug("BG Glink Close connection\n");
 }
 
+static void print_tx_buf(uint8_t *buff, int len)
+{
+	pr_err("ARJUN: len = %d\n", len);
+	pr_err("%x %x %x %x %x %x %x %x\n",
+		buff[0], buff[1], buff[2], buff[3],
+		buff[4], buff[5], buff[6], buff[7]);
+}
+
 static int bgrsb_tx_msg(struct bgrsb_priv *dev, void  *msg, size_t len)
 {
 	int rc = 0;
@@ -485,6 +493,7 @@ static int bgrsb_tx_msg(struct bgrsb_priv *dev, void  *msg, size_t len)
 		goto err_ret;
 	}
 
+	print_tx_buf((uint8_t *)msg, len);
 	rc = glink_tx(dev->handle, (void *)dev, msg,
 					len, GLINK_TX_REQ_INTENT);
 	if (rc) {

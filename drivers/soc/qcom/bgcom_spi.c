@@ -589,6 +589,20 @@ int bgcom_ahb_write(void *handle, uint32_t ahb_start_addr,
 }
 EXPORT_SYMBOL(bgcom_ahb_write);
 
+void print_tx_buf(uint8_t *tx_buf, int txn_len)
+{
+	pr_err("%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x \
+		%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n",
+		tx_buf[0],  tx_buf[1],  tx_buf[2],  tx_buf[3],
+		tx_buf[4],  tx_buf[5],  tx_buf[6],  tx_buf[7],
+		tx_buf[8],  tx_buf[9],  tx_buf[10],  tx_buf[11],
+		tx_buf[12],  tx_buf[13],  tx_buf[14],  tx_buf[15],
+		tx_buf[16],  tx_buf[17],  tx_buf[18],  tx_buf[19],
+		tx_buf[20],  tx_buf[21],  tx_buf[22],  tx_buf[23],
+		tx_buf[24],  tx_buf[25],  tx_buf[26],  tx_buf[27],
+		tx_buf[28],  tx_buf[29],  tx_buf[30],  tx_buf[31], tx_buf[32]);
+}
+
 int bgcom_fifo_write(void *handle, uint32_t num_words,
 	void  *write_buf)
 {
@@ -628,6 +642,11 @@ int bgcom_fifo_write(void *handle, uint32_t num_words,
 	cmnd |= BG_SPI_FIFO_WRITE_CMD;
 	memcpy(tx_buf, &cmnd, sizeof(cmnd));
 	memcpy(tx_buf+sizeof(cmnd), write_buf, size);
+
+	if(*(uint16_t *)write_buf == 0x11) {
+		pr_err("ARJUN : short command received\n");
+		print_tx_buf(tx_buf, txn_len);
+	}
 
 	ret = bgcom_transfer(handle, tx_buf, NULL, txn_len);
 	kfree(tx_buf);
