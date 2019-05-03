@@ -15,7 +15,6 @@
 		compatible = "st,st54j_se";
 		reg = <0>;
 		spi-max-frequency = <8000000>;
-		st,ese_reset_gpio = <&tlmm 16 0x00>;
-		st,nfcc = "2-0008";
+		esereset-gpio = <&tlmm 16 0x00>;
 	};
 };
