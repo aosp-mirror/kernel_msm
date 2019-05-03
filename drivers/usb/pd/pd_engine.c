@@ -178,8 +178,20 @@ static const char * const get_typec_mode_name(
 		return "SOURCE_MEDIUM";
 	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
 		return "SOURCE_HIGH";
+	case POWER_SUPPLY_TYPEC_DAM_DEFAULT:
+		return "DAM_DEFAULT";
+	case POWER_SUPPLY_TYPEC_DAM_MEDIUM:
+		return "DAM_MEDIUM";
+	case POWER_SUPPLY_TYPEC_DAM_HIGH:
+		return "DAM_HIGH";
 	case POWER_SUPPLY_TYPEC_NON_COMPLIANT:
 		return "NON_COMPLIANT";
+	case POWER_SUPPLY_TYPEC_RP_STD_STD:
+		return "RP_STD_STD";
+	case POWER_SUPPLY_TYPEC_RP_MED_MED:
+		return "RP_MED_MED";
+	case POWER_SUPPLY_TYPEC_RP_HIGH_HIGH:
+		return "RP_HIGH_HIGH";
 	case POWER_SUPPLY_TYPEC_SINK:
 		return "SINK";
 	case POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE:
@@ -275,6 +287,15 @@ static void parse_cc_status_none_orientation(
 	case POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER:
 		*cc1 = *cc2 = TYPEC_CC_RA;
 		break;
+	case POWER_SUPPLY_TYPEC_RP_STD_STD:
+		*cc1 = *cc2 = TYPEC_CC_RP_DEF;
+		break;
+	case POWER_SUPPLY_TYPEC_RP_MED_MED:
+		*cc1 = *cc2 = TYPEC_CC_RP_1_5;
+		break;
+	case POWER_SUPPLY_TYPEC_RP_HIGH_HIGH:
+		*cc1 = *cc2 = TYPEC_CC_RP_3_0;
+		break;
 	default:
 		*cc1 = *cc2 = TYPEC_CC_OPEN;
 		break;
@@ -305,6 +326,18 @@ static void parse_cc_status_active_inactive(
 	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
 		*cc_active = TYPEC_CC_RP_3_0;
 		*cc_inactive = TYPEC_CC_OPEN;
+		break;
+	case POWER_SUPPLY_TYPEC_DAM_DEFAULT:
+		*cc_active = TYPEC_CC_RP_3_0;
+		*cc_inactive = TYPEC_CC_RP_1_5;
+		break;
+	case POWER_SUPPLY_TYPEC_DAM_MEDIUM:
+		*cc_active = TYPEC_CC_RP_1_5;
+		*cc_inactive = TYPEC_CC_RP_DEF;
+		break;
+	case POWER_SUPPLY_TYPEC_DAM_HIGH:
+		*cc_active = TYPEC_CC_RP_3_0;
+		*cc_inactive = TYPEC_CC_RP_DEF;
 		break;
 	case POWER_SUPPLY_TYPEC_NON_COMPLIANT:
 		*cc_active = TYPEC_CC_OPEN;
@@ -895,6 +928,12 @@ static void psy_changed_handler(struct work_struct *work)
 			      get_typec_cc_status_name(cc1),
 			      get_typec_cc_status_name(pd->cc2),
 			      get_typec_cc_status_name(cc2));
+
+		/* fake CC for SuzyQ cables */
+		if (typec_mode == POWER_SUPPLY_TYPEC_DAM_MEDIUM)
+			parse_cc_status(POWER_SUPPLY_TYPEC_SOURCE_DEFAULT,
+					typec_cc_orientation, &cc1, &cc2);
+
 		pd->cc1 = cc1;
 		pd->cc2 = cc2;
 		tcpm_cc_change(pd->tcpm_port);
