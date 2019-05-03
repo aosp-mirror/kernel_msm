@@ -72,6 +72,7 @@ static struct ab_sm_pmu_ops pmu_ops_stub = {
 };
 
 static void ab_clk_init_stub(void *ctx)   { return; }
+static void ab_clk_clear_cache_stub(void *ctx, enum block_name name) { }
 
 static int64_t ipu_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
@@ -98,6 +99,7 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 	.ctx = NULL,
 
 	.init = &ab_clk_init_stub,
+	.clear_cache = &ab_clk_clear_cache_stub,
 
 	.ipu_set_rate = &ipu_set_rate_stub,
 	.tpu_set_rate = &tpu_set_rate_stub,
@@ -556,6 +558,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	enum block_state to_block_state_id)
 {
 	struct ab_sm_pmu_ops *pmu;
+	struct ab_sm_clk_ops *clk;
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
 	struct block_property *last_state = blk->current_state;
@@ -576,6 +579,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 	mutex_lock(&sc->op_lock);
 	pmu = sc->pmu_ops;
+	clk = sc->clk_ops;
 	/* PMU settings - Resume */
 	if (desired_state->pmu == PMU_STATE_ON &&
 			last_state->pmu != PMU_STATE_ON) {
@@ -624,6 +628,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 			last_state->pmu == PMU_STATE_ON) {
 		ab_sm_start_ts(AB_SM_TS_TPU_PMU_SLEEP);
 		if (blk->name == BLK_TPU) {
+			clk->clear_cache(clk->ctx, BLK_TPU);
 			if (pmu->pmu_tpu_sleep(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
@@ -633,6 +638,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 		ab_sm_start_ts(AB_SM_TS_IPU_PMU_SLEEP);
 		if (blk->name == BLK_IPU) {
+			clk->clear_cache(clk->ctx, BLK_IPU);
 			if (pmu->pmu_ipu_sleep(pmu->ctx)) {
 				mutex_unlock(&sc->op_lock);
 				return -EAGAIN;
@@ -646,6 +652,8 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	if (desired_state->pmu == PMU_STATE_DEEP_SLEEP &&
 			last_state->pmu != PMU_STATE_DEEP_SLEEP &&
 			blk->name == BLK_TPU) {
+		clk->clear_cache(clk->ctx, BLK_IPU);
+		clk->clear_cache(clk->ctx, BLK_TPU);
 		if (pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
@@ -668,6 +676,7 @@ int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 		struct block *tpu_blk, enum block_state to_tpu_state)
 {
 	struct ab_sm_pmu_ops *pmu;
+	struct ab_sm_clk_ops *clk;
 	struct block_property *next_ipu_state =
 		get_desired_state(ipu_blk, to_ipu_state);
 	struct block_property *last_ipu_state = ipu_blk->current_state;
@@ -691,6 +700,7 @@ int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 
 	mutex_lock(&sc->op_lock);
 	pmu = sc->pmu_ops;
+	clk = sc->clk_ops;
 	/* PMU settings - Resume */
 	if (next_ipu_state->pmu == PMU_STATE_ON &&
 			next_tpu_state->pmu == PMU_STATE_ON &&
@@ -744,6 +754,8 @@ int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 			last_ipu_state->pmu == PMU_STATE_ON &&
 			last_tpu_state->pmu == PMU_STATE_ON) {
 		ab_sm_start_ts(AB_SM_TS_IPU_TPU_PMU_SLEEP);
+		clk->clear_cache(clk->ctx, BLK_IPU);
+		clk->clear_cache(clk->ctx, BLK_TPU);
 		if (pmu->pmu_ipu_tpu_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
@@ -753,6 +765,7 @@ int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 	} else if (next_ipu_state->pmu == PMU_STATE_SLEEP &&
 			last_ipu_state->pmu == PMU_STATE_ON) {
 		ab_sm_start_ts(AB_SM_TS_IPU_PMU_SLEEP);
+		clk->clear_cache(clk->ctx, BLK_IPU);
 		if (pmu->pmu_ipu_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
@@ -762,6 +775,7 @@ int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 	} else if (next_tpu_state->pmu == PMU_STATE_SLEEP &&
 			last_tpu_state->pmu == PMU_STATE_ON) {
 		ab_sm_start_ts(AB_SM_TS_TPU_PMU_SLEEP);
+		clk->clear_cache(clk->ctx, BLK_TPU);
 		if (pmu->pmu_tpu_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;
@@ -773,6 +787,8 @@ int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 	ab_sm_start_ts(AB_SM_TS_PMU_DEEP_SLEEP);
 	if (next_ipu_state->pmu == PMU_STATE_DEEP_SLEEP &&
 			last_ipu_state->pmu != PMU_STATE_DEEP_SLEEP) {
+		clk->clear_cache(clk->ctx, BLK_IPU);
+		clk->clear_cache(clk->ctx, BLK_TPU);
 		if (pmu->pmu_deep_sleep(pmu->ctx)) {
 			mutex_unlock(&sc->op_lock);
 			return -EAGAIN;

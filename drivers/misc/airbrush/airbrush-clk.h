@@ -21,6 +21,9 @@ struct ab_clk_context {
 	struct mutex pcie_link_lock;
 	bool pcie_link_ready; /* Guarded by pcie_link_lock */
 	struct notifier_block pcie_link_blocking_nb;
+
+	uint32_t last_ipu_val;
+	uint32_t last_tpu_val;
 };
 
 #endif //_AIRBRUSH_CLK_H_

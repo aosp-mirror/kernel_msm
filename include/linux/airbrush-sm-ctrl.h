@@ -356,6 +356,7 @@ struct ab_sm_clk_ops {
 	void *ctx;
 
 	void (*init)(void *ctx);
+	void (*clear_cache)(void *ctx, enum block_name name);
 
 	int64_t (*ipu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
 	int64_t (*tpu_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
