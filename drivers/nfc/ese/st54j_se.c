@@ -32,30 +32,17 @@
 #include <linux/compat.h>
 #endif
 
-#define DRIVER_VERSION "1.1.1"
+#define DRIVER_VERSION "1.1.4"
 #define ST54_MAX_BUF 258U
 
 struct st54j_se_dev {
 	struct spi_device	*spi;
 	struct mutex		mutex;
 	struct	miscdevice	device;
-	unsigned int ese_reset_gpio;
+	bool device_open;
+	/* GPIO for SE Reset pin (output) */
+	struct gpio_desc *gpiod_se_reset;
 };
-
-#ifdef CONFIG_COMPAT
-static long st54j_se_compat_ioctl(struct file *filp, unsigned int cmd,
-				  unsigned long arg)
-{
-	long r = 0;
-	struct st54j_se_dev *ese_dev = filp->private_data;
-	mutex_lock(&ese_dev->mutex);
-
-	arg = (compat_u64)arg;
-
-	mutex_unlock(&ese_dev->mutex);
-	return r;
-}
-#endif
 
 static long st54j_se_ioctl(struct file *filp, unsigned int cmd,
 			   unsigned long arg)
@@ -63,26 +50,19 @@ static long st54j_se_ioctl(struct file *filp, unsigned int cmd,
 	int r = 0;
 	struct st54j_se_dev *ese_dev = filp->private_data;
 	mutex_lock(&ese_dev->mutex);
-	dev_info(&ese_dev->spi->dev, "%s: enter, cmd=%d\n", __func__, cmd);
+	dev_dbg(&ese_dev->spi->dev, "%s: enter, cmd=%u\n", __func__, cmd);
 
 	switch (cmd) {
 	case ST54J_SE_RESET:
-		pr_info("%s  Reset Request received\n", __func__);
-		if (ese_dev->ese_reset_gpio != 0) {
-		/* if GPIO was equal to 0 (following power ON),
-		 * first ensure it is high during 20ms */
-			if (gpio_get_value(ese_dev->ese_reset_gpio) == 0) {
-				pr_info("%s detects ese_reset_gpio to low,"\
-					"first force to high for 20ms\n",
-					__func__);
-				gpio_set_value(ese_dev->ese_reset_gpio, 1);
-				msleep(20);
-			}
-			/* pulse low for 20 millisecs */
-			gpio_set_value(ese_dev->ese_reset_gpio, 0);
-			msleep(20);
-			gpio_set_value(ese_dev->ese_reset_gpio, 1);
-			pr_info("%s sent Reset request on eSE\n", __func__);
+		dev_info(&ese_dev->spi->dev, "%s  Reset Request received!!\n",
+			 __func__);
+		if (!IS_ERR(ese_dev->gpiod_se_reset)) {
+			/* pulse low for 5 millisecs */
+			gpiod_set_value(ese_dev->gpiod_se_reset, 0);
+			usleep_range(5000, 5500);
+			gpiod_set_value(ese_dev->gpiod_se_reset, 1);
+			dev_info(&ese_dev->spi->dev,
+				 "%s sent Reset request on eSE\n", __func__);
 		}
 		break;
 	}
@@ -92,19 +72,33 @@ static long st54j_se_ioctl(struct file *filp, unsigned int cmd,
 
 static int st54j_se_open(struct inode *inode, struct file *filp)
 {
-	struct st54j_se_dev *ese_dev =
-		container_of(filp->private_data, struct st54j_se_dev, device);
-	dev_info(&ese_dev->spi->dev, "%s: enter\n", __func__);
-	pr_info("%s : open st54j_se \n", __func__);
-	filp->private_data = ese_dev;
-	dev_dbg(&ese_dev->spi->dev, "%s: opened st54j_se\n", __func__);
-	return 0;
+	int ret = 0;
+	struct st54j_se_dev *ese_dev = container_of(filp->private_data,
+				struct st54j_se_dev, device);
+	mutex_lock(&ese_dev->mutex);
+	if (ese_dev->device_open) {
+		ret = -EBUSY;
+		dev_info(&ese_dev->spi->dev, "%s: device already opened\n",
+			 __func__);
+	} else {
+		ese_dev->device_open = true;
+		filp->private_data = ese_dev;
+		dev_info(&ese_dev->spi->dev, "%s: device_open = %d", __func__,
+			 ese_dev->device_open);
+	}
+	mutex_unlock(&ese_dev->mutex);
+	return ret;
 }
 
 static int st54j_se_release(struct inode *ino, struct file *filp)
 {
 	struct st54j_se_dev *ese_dev = filp->private_data;
-	dev_info(&ese_dev->spi->dev, "%s: done\n", __func__);
+
+	mutex_lock(&ese_dev->mutex);
+	ese_dev->device_open = false;
+	mutex_unlock(&ese_dev->mutex);
+	dev_dbg(&ese_dev->spi->dev, "%s : device_open  = %d\n",
+		 __func__, ese_dev->device_open);
 	return 0;
 }
 
@@ -118,12 +112,12 @@ static ssize_t st54j_se_write(struct file *filp, const char __user *ubuf,
 
 	if (len > INT_MAX)
 		return -EINVAL;
-
+	dev_dbg(&ese_dev->spi->dev, "%s : writing %zu bytes.\n", __func__,
+		bytes);
 	mutex_lock(&ese_dev->mutex);
 	while (bytes > 0) {
 		size_t block = bytes < sizeof(tx_buf) ? bytes : sizeof(tx_buf);
 
-		memset(tx_buf, 0, sizeof(tx_buf));
 		if (copy_from_user(tx_buf, ubuf, block)) {
 			dev_dbg(&ese_dev->spi->dev,
 				"failed to copy from user\n");
@@ -155,6 +149,8 @@ static ssize_t st54j_se_read(struct file *filp, char __user *ubuf, size_t len,
 
 	if (len > INT_MAX)
 		return -EINVAL;
+	dev_dbg(&ese_dev->spi->dev, "%s : reading %zu bytes.\n", __func__,
+		bytes);
 	mutex_lock(&ese_dev->mutex);
 	while (bytes > 0) {
 		size_t block = bytes < sizeof(rx_buf) ? bytes : sizeof(rx_buf);
@@ -162,11 +158,13 @@ static ssize_t st54j_se_read(struct file *filp, char __user *ubuf, size_t len,
 		memset(rx_buf, 0, sizeof(rx_buf));
 		ret = spi_read(ese_dev->spi, rx_buf, block);
 		if (ret < 0) {
-			dev_dbg(&ese_dev->spi->dev, "failed to read from SPI\n");
+			dev_err(&ese_dev->spi->dev,
+				"failed to read from SPI\n");
 			goto err;
 		}
 		if (copy_to_user(ubuf, rx_buf, block)) {
-			dev_dbg(&ese_dev->spi->dev, "failed to copy from user\n");
+			dev_err(&ese_dev->spi->dev,
+				"failed to copy from user\n");
 			goto err;
 		}
 		ubuf += block;
@@ -187,7 +185,7 @@ static const struct file_operations st54j_se_dev_fops = {
 	.release = st54j_se_release,
 	.unlocked_ioctl = st54j_se_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl = st54j_se_compat_ioctl
+	.compat_ioctl = st54j_se_ioctl
 #endif
 };
 
@@ -195,23 +193,23 @@ static int st54j_se_probe(struct spi_device *spi)
 {
 	struct st54j_se_dev *ese_dev;
 	struct spi_geni_qcom_ctrl_data *spi_param;
+	struct device *dev = &spi->dev;
 	struct device_node *np = dev_of_node(&spi->dev);
 	int ret;
 
-	dev_dbg(&spi->dev, "%s entry\n", __func__);
+	dev_dbg(dev, "%s entry\n", __func__);
 
 	if (!np) {
-		dev_err(&spi->dev, "%s: device tree data missing\n", __func__);
+		dev_err(dev, "%s: device tree data missing\n", __func__);
 		return -EINVAL;
 	}
 
-	ese_dev = kzalloc(sizeof(*ese_dev), GFP_KERNEL);
+	ese_dev = devm_kzalloc(dev, sizeof(*ese_dev), GFP_KERNEL);
 	if (ese_dev == NULL)
 		return -ENOMEM;
 
-	spi_param = kzalloc(sizeof(spi_param), GFP_KERNEL);
+	spi_param = devm_kzalloc(dev, sizeof(spi_param), GFP_KERNEL);
 	if (spi_param == NULL) {
-		kfree(ese_dev);
 		return -ENOMEM;
 	}
 
@@ -224,47 +222,27 @@ static int st54j_se_probe(struct spi_device *spi)
 	spi_param->spi_cs_clk_delay = 90;
 	spi->controller_data = spi_param;
 
-	ese_dev->ese_reset_gpio = of_get_named_gpio(np, "st,ese_reset_gpio", 0);
-	if (!gpio_is_valid(ese_dev->ese_reset_gpio)) {
-		pr_err("[dsc]%s: fail to get ese_reset_gpio\n", __func__);
-		return -EINVAL;
-		goto err;
-	}
-	pr_info("[dsc]%s : get ese_reset_gpio[%d]\n", __func__,
-	       ese_dev->ese_reset_gpio);
-
-	ret = gpio_request(ese_dev->ese_reset_gpio, "ese_reset_gpio");
-	if (ret) {
-		pr_err("%s : ese_reset_gpio gpio_request failed\n", __FILE__);
-		ret = -ENODEV;
-		goto err;
-	}
-
-	/* Configure as output, initial low state */
-	ret = gpio_direction_output(ese_dev->ese_reset_gpio, 0);
-	if (ret) {
-		pr_err("%s : ese_reset_gpio gpio_direction_output failed\n",
-		       __FILE__);
-		ret = -ENODEV;
-		goto err_reset_gpio;
+	ese_dev->gpiod_se_reset = devm_gpiod_get(dev, "esereset",
+						 GPIOD_OUT_HIGH);
+	if (IS_ERR(ese_dev->gpiod_se_reset)) {
+		dev_err(dev,
+			"%s : Unable to request esereset %d \n",
+			__func__, IS_ERR(ese_dev->gpiod_se_reset));
+		return -ENODEV;
 	}
 
 	mutex_init(&ese_dev->mutex);
 	ret = misc_register(&ese_dev->device);
 	if (ret) {
-		dev_err(&spi->dev, "%s: misc_register failed\n", __func__);
-		goto err_reset_gpio;
+		dev_err(dev, "%s: misc_register failed\n", __func__);
+		goto err;
 	}
-	dev_info(&spi->dev, "%s: eSE is configured\n", __func__);
+	dev_dbg(dev, "%s: eSE is configured\n", __func__);
 	spi_set_drvdata(spi, ese_dev);
 
 	return 0;
-err_reset_gpio:
-	gpio_free(ese_dev->ese_reset_gpio);
 err:
 	mutex_destroy(&ese_dev->mutex);
-	kfree(spi_param);
-	kfree(ese_dev);
 	return ret;
 }
 
