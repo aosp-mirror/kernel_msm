@@ -63,6 +63,10 @@
 #define IAXXX_FW_RETRY_COUNT		2
 #define IAXXX_BYTES_IN_A_WORD		4
 #define WAKEUP_TIMEOUT			5000
+#define IAXXX_INT_OSC_TRIM_MASK	0x20000
+#define IAXXX_INT_OSC_TRIM_POS	17
+#define IAXXX_INT_OSC_CALIBRATION_MASK	0x7F
+#define IAXXX_INT_OSC_CALIBRATION_POS	25
 
 #define iaxxx_ptr2priv(ptr, item) container_of(ptr, struct iaxxx_priv, item)
 
@@ -620,6 +624,62 @@ err_missing_reset_gpio:
 err_missing_event_gpio:
 	return rc;
 }
+/**
+ * iaxxx_get_efuse_boot_values(): Get the Efuse values.
+ */
+static int iaxxx_get_efuse_boot_values(struct iaxxx_priv *priv)
+{
+	struct device *dev = priv->dev;
+	int rc = 0;
+	uint32_t efuse_boot0_val, efuse_boot1_val;
+
+	rc = regmap_read(priv->regmap, IAXXX_PWR_MGMT_EFUSE_BOOT_0_ADDR,
+			&efuse_boot0_val);
+	if (rc) {
+		dev_err(dev, "%s: failed to read the efuse boot0 val\n",
+			__func__);
+		goto efuse_read_fail;
+	}
+	dev_info(dev, "Efuse Boot0 Val 0x%x\n", efuse_boot0_val);
+	dev_info(dev,
+		"Int OSC TRIM programmed: %d, osc calibration val: 0x%02x",
+		(efuse_boot0_val & IAXXX_INT_OSC_TRIM_MASK)
+		>> IAXXX_INT_OSC_TRIM_POS,
+		(efuse_boot0_val >> IAXXX_INT_OSC_CALIBRATION_POS) &
+			IAXXX_INT_OSC_CALIBRATION_MASK);
+	dev_info(dev, "%s() chip Layout Rev(%s)", __func__,
+		((efuse_boot0_val &
+			IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_MASK)
+		>> IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_POS) ?
+		"B" : "A");
+
+	rc = regmap_read(priv->regmap, IAXXX_PWR_MGMT_EFUSE_BOOT_1_ADDR,
+			&efuse_boot1_val);
+	if (rc) {
+		dev_err(dev, "%s: failed to read the efuse boot1 val\n",
+			__func__);
+		goto efuse_read_fail;
+	}
+	dev_info(dev, "Efuse Boot1 Val 0x%x\n", efuse_boot1_val);
+	dev_info(dev,
+		"LDO_BG_TRIM: %d, LDO_BG_TRIM_DATA val: 0x%02x",
+		((efuse_boot1_val &
+			IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_MASK)
+		>> IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_POS),
+		(efuse_boot1_val &
+			IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_DATA_MASK));
+	dev_info(dev,
+		"LDO_0_TRIM: %d, LDO_1_TRIM: %d",
+		((efuse_boot1_val &
+			IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_0_TRIM_DATA_MASK)
+		>> IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_0_TRIM_DATA_POS),
+		((efuse_boot1_val &
+			IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_MASK)
+		>> IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_POS));
+
+efuse_read_fail:
+	return rc;
+}
 
 static void dump_to_log(struct device *dev,
 		struct iaxxx_reg_dump_priv *reg_dump,
@@ -1171,6 +1231,12 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 			dev_err(priv->dev, "Failed to add cell devices\n");
 			goto exit_fw_fail;
 		}
+	}
+
+	rc = iaxxx_get_efuse_boot_values(priv);
+	if (rc) {
+		dev_err(dev, "%s: failed to read the efuse values\n", __func__);
+		goto exit_fw_fail;
 	}
 
 	rc = regmap_read(priv->regmap, IAXXX_PLUGIN_HDR_COUNT_ADDR,
