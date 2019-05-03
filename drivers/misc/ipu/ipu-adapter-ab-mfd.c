@@ -446,10 +446,15 @@ void ipu_adapter_ab_mfd_sync_shared_memory(struct device *dev,
 		struct ipu_shared_buffer *shared_buffer_base, uint32_t offset,
 		size_t size, enum dma_data_direction direction)
 {
-	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
-	struct ipu_adapter_shared_buffer *shared_buffer = container_of(
-			shared_buffer_base, struct ipu_adapter_shared_buffer,
-			base);
+	struct ipu_adapter_ab_mfd_data *dev_data;
+	struct ipu_adapter_shared_buffer *shared_buffer;
+
+	if (WARN_ON(!shared_buffer_base))
+		return;
+
+	dev_data = dev_get_drvdata(dev);
+	shared_buffer = container_of(shared_buffer_base,
+		struct ipu_adapter_shared_buffer, base);
 
 	if (!ipu_adapter_dram_is_ready(dev_data)) {
 		dev_err(dev, "Sync failed because DRAM is not ready.\n");
@@ -554,13 +559,20 @@ static int ipu_adapter_ab_mfd_atomic_sync32_shared_memory(struct device *dev,
 			struct ipu_shared_buffer *shared_buffer_base,
 			uint32_t offset, enum dma_data_direction direction)
 {
-	struct ipu_adapter_shared_buffer *sbuf = container_of(
-			shared_buffer_base, struct ipu_adapter_shared_buffer,
-			base);
-	void __iomem *io_vaddr = sbuf->mapping.bar_vaddr + offset;
-	uint32_t *buffer_vaddr = sbuf->base.host_vaddr + offset;
-	struct ipu_adapter_ab_mfd_data *dev_data = dev_get_drvdata(dev);
+	struct ipu_adapter_shared_buffer *sbuf;
+	void __iomem *io_vaddr;
+	uint32_t *buffer_vaddr;
+	struct ipu_adapter_ab_mfd_data *dev_data;
 	int wr_val;
+
+	if (WARN_ON(!shared_buffer_base))
+		return -EINVAL;
+
+	sbuf = container_of(shared_buffer_base,
+		struct ipu_adapter_shared_buffer, base);
+	io_vaddr = sbuf->mapping.bar_vaddr + offset;
+	buffer_vaddr = sbuf->base.host_vaddr + offset;
+	dev_data = dev_get_drvdata(dev);
 
 	if (!ipu_adapter_dram_is_ready(dev_data))
 		return -ENOLINK;
@@ -813,6 +825,7 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 				     struct ipu_adapter_ab_mfd_data,
 				     pcie_link_blocking_nb);
 	struct paintbox_bus *bus = dev_data->bus;
+	uint32_t val;
 
 	if ((action & ABC_PCIE_LINK_ERROR) &&
 			ipu_adapter_link_is_ready(dev_data)) {
@@ -827,6 +840,9 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 	if ((action & ABC_PCIE_LINK_POST_ENABLE) &&
 			!ipu_adapter_link_is_ready(dev_data)) {
 		dev_dbg(dev_data->dev, "%s: PCIe link available\n", __func__);
+		/* make sure that there are no hanging interrupts */
+		ipu_config_read(IPU_CSR_JQS_OFFSET + JQS_SYS_DBL,
+			sizeof(uint32_t), &val);
 		ipu_adapter_ab_mfd_enable_interrupts(dev_data);
 		ipu_adapter_ab_mfd_resume_shared_memory(dev_data);
 		atomic_or(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
