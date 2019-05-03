@@ -79,12 +79,17 @@
 		];
 
 		qcom,mdss-dsi-hbm0-on-command = [
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 11 93
 			15 01 00 00 00 00 02 FE 00
 			15 01 00 00 00 00 02 66 02
 		];
 		qcom,mdss-dsi-hbm-off-command = [
 			15 01 00 00 00 00 02 FE 00
-			15 01 00 00 00 00 02 66 00
+			15 01 00 00 28 00 02 66 00
+			15 01 00 00 00 00 02 FE 01
+			15 01 00 00 00 00 02 11 80
+			15 01 00 00 00 00 02 FE 00
 		];
 		qcom,mdss-dsi-h-sync-pulse = <1>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
