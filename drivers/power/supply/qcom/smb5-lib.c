@@ -5601,6 +5601,7 @@ static void typec_src_insertion(struct smb_charger *chg)
 {
 	int rc = 0;
 	u8 stat;
+	const struct apsd_result *apsd = smblib_get_apsd_result(chg);
 
 	if (chg->pr_swap_in_progress)
 		return;
@@ -5619,6 +5620,9 @@ static void typec_src_insertion(struct smb_charger *chg)
 	/* allow apsd proceed to detect QC2/3 */
 	if (!chg->ok_to_pd)
 		smblib_hvdcp_detect_enable(chg, true);
+
+	/* Update SW_ICL_MAX in case it was skipped in cc-state-change IRQ */
+	update_sw_icl_max(chg, apsd->pst);
 }
 
 static void typec_ra_ra_insertion(struct smb_charger *chg)
