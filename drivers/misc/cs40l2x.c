@@ -3575,7 +3575,7 @@ static ssize_t cs40l2x_wt_file_store(struct device *dev,
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
 	char wt_file[CS40L2X_WT_FILE_NAME_LEN_MAX];
-	unsigned int len = count;
+	size_t len = count;
 	int ret;
 
 	if (!len)
@@ -3585,7 +3585,7 @@ static ssize_t cs40l2x_wt_file_store(struct device *dev,
 		len--;
 
 	if (len + 1 > CS40L2X_WT_FILE_NAME_LEN_MAX)
-		return -EINVAL;
+		return -ENAMETOOLONG;
 
 	memcpy(wt_file, buf, len);
 	wt_file[len] = '\0';
