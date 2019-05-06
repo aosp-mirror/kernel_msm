@@ -282,7 +282,7 @@ int gbms_cycle_count_cstr_bc(char *buff, size_t size,
 #define gbms_cycle_count_cstr(buff, size, cc)	\
 	gbms_cycle_count_cstr_bc(buff, size, cc, GBMS_CCBIN_BUCKET_COUNT)
 
-/*  */
+/* Time to full */
 int ttf_soc_cstr(char *buff, int size, const struct ttf_soc_stats *soc_stats,
 		 int start, int end);
 
@@ -293,12 +293,6 @@ int ttf_soc_estimate(time_t *res,
 
 void ttf_soc_init(struct ttf_soc_stats *dst);
 
-/*
-int ttf_tier_cstr(char *buff, int size,
-		  const struct batt_ttf_stats *stats,
-		  int start, int end);
- */
-
 int ttf_tier_cstr(char *buff, int size, struct ttf_tier_stat *t_stat);
 
 int ttf_tier_estimate(time_t *res,
@@ -306,7 +300,6 @@ int ttf_tier_estimate(time_t *res,
 		      int temp_idx, int vbatt_idx,
 		      int capacity, int full_capacity);
 
-/*  */
 int ttf_stats_init(struct batt_ttf_stats *stats,
 		   struct device *device,
 		   int capacity_ma);
@@ -323,5 +316,115 @@ int ttf_stats_sscan(struct batt_ttf_stats *stats,
 
 struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 				     const struct batt_ttf_stats *src);
+
+
+/**
+ * GBMS Storage API
+ * The API provides functions to access to data stored in the persistent and
+ * semi-persistent storage of a device in a cross-platform and
+ * location-independent fashion. Clients in kernel and userspace use this
+ * directly and indirectly to retrieve battery serial number, cell chemistry
+ * type, cycle bin count, battery lifetime history and other battery related
+ * data.
+ */
+
+#define GBMS_STORAGE_ADDR_INVALID	-1
+#define GBMS_STORAGE_INDEX_INVALID	-1
+
+/**
+ * Tags are u32 constants: hardcoding as hex since characters constants of more
+ * than one byte such as 'BGCE' are frown upon.
+ */
+typedef uint32_t gbms_tag_t;
+
+enum gbms_tags {
+	GBMS_TAG_BGCE = 0x42434541,
+	GBMS_TAG_BCNT = 0x42434e54,
+	GBMS_TAG_BRES = 0x42524553,
+	GBMS_TAG_SNUM = 0x534e554d,
+	GBMS_TAG_HIST = 0x48495354,
+	GBMS_TAG_BRID = 0x42524944,
+	GBMS_TAG_DSNM = 0x44534e4d,
+};
+
+/**
+ * struct gbms_storage_desc - callbacks for a GBMS storage provider.
+ *
+ * Fields not used should be initialized with NULL. The provider name and the
+ * iter callback are optional but strongly recommended. The write, fetch, store
+ * and flush callbacks are optional, descriptors with a non NULL write/store
+ * callback should have a non NULL read/fetch callback.
+ *
+ * The iterator callback (iter) is used to list the tags stored in the provider
+ * and can be used to detect duplicates. The list of tags exported from iter
+ * can be expected to be static (i.e. tags can be enumerated once on
+ * registration).
+ *
+ * The read and write callbacks transfer the data associated with a tag. The
+ * calls must return -ENOENT when called with a tag that is not known to the
+ * provider, a negative number on every other error or the number of bytes
+ * read or written to the device. The tag lookup for the read and write
+ * callbacks must be very efficient (i.e. consider implementation that use hash
+ * or switch statements).
+ *
+ * Fetch and store callbacks are used to grant non-mediated access to a range
+ * of consecutive addresses in storage space. The implementation must return a
+ * negative number on error or the number of bytes transferred with the
+ * operation. Support caching of the tag data location requires non NULL fetch
+ * and not NULL info callbacks.
+ *
+ * The read_data and write_data callbacks transfer the data associated with an
+ * enumerator. The calls must return -ENOENT when called with a tag that is not
+ * known to the provider, a negative number on every other error or the number
+ * of bytes read or written to the device during data transfers.
+ *
+ * Clients can only access keys that are available on a device (i.e. clients
+ * cannot create new tags) and the API returns -ENOENT when trying to access a
+ * tag that is not available on a device, -EGAIN while the storage is not fully
+ * initialized.
+ *
+ * @iter: callback, return the tags known from this provider
+ * @info: callback, return address and size for tags (used for caching)
+ * @read: callback, read data from a tag
+ * @write: callback, write data to a tag
+ * @fetch: callback, read up to count data bytes from an address
+ * @store: callback, write up to count data bytes to an address
+ * @flush: callback, request a fush of data to permanent storage
+ * @read_data: callback, read the elements of an enumerations
+ * @write_data: callback, write to the elements of an enumeration
+ */
+struct gbms_storage_desc {
+	int (*iter)(int index, gbms_tag_t *tag, void *ptr);
+	int (*info)(gbms_tag_t tag, size_t *addr, size_t *size, void *ptr);
+	int (*read)(gbms_tag_t tag, void *data, size_t count, void *ptr);
+	int (*write)(gbms_tag_t tag, const void *data, size_t count, void *ptr);
+	int (*fetch)(void *data, size_t addr, size_t count, void *ptr);
+	int (*store)(const void *data, size_t addr, size_t count, void *ptr);
+	int (*flush)(bool force, void *ptr);
+
+	int (*read_data)(gbms_tag_t tag, void *data, size_t count, int idx,
+			 void *ptr);
+	int (*write_data)(gbms_tag_t tag, const void *data, size_t count,
+			  int idx, void *ptr);
+};
+
+int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
+			  void *ptr);
+int gbms_storage_read(gbms_tag_t tag, void *data, size_t count);
+int gbms_storage_write(gbms_tag_t tag, const void *data, size_t count);
+
+int gbms_storage_read_data(gbms_tag_t tag, void *data, size_t count, int idx);
+int gbms_storage_write_data(gbms_tag_t tag, const void *data, size_t count,
+			    int idx);
+int gbms_storage_flush(gbms_tag_t tag);
+int gbms_storage_flush_all(void);
+
+struct gbms_storage_device;
+
+/* standard device implementation that read data from an enumeration */
+struct gbms_storage_device *gbms_storage_create_device(const char *name,
+						       gbms_tag_t tag);
+void gbms_storage_cleanup_device(struct gbms_storage_device *gdev);
+
 
 #endif  /* __GOOGLE_BMS_H_ */
