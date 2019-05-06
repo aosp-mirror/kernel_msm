@@ -153,12 +153,8 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev,
 	thermal->throttle_ready = false;
 	thermal->raw_throttle_state = THROTTLE_NONE;
 
-	/*
-	 * TODO(b/128559698): Enable external cooling device once stabilized
-	 * by changing the last parameter to true.
-	 */
 	err = ab_thermal_init_cooling(&thermal->cooling_external, thermal,
-			AB_OF_CDEV_NAME, AB_CDEV_NAME, false);
+			AB_OF_CDEV_NAME, AB_CDEV_NAME, true);
 	if (err) {
 		dev_err(dev, "failed to initialize external cooling\n");
 		ab_thermal_exit(thermal);
