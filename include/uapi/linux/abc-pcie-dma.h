@@ -11,7 +11,6 @@
 #define _UAPI__ABC_PCIE_DMA_H
 
 #include <linux/compiler.h>
-#include <linux/dma-direction.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
@@ -20,6 +19,12 @@
 enum dma_buf_type {
 	DMA_BUFFER_USER = 0,
 	DMA_BUFFER_DMA_BUF
+};
+
+/* abc_dma_data_direction must match values in <linux/dma-direction.h> */
+enum abc_dma_data_direction {
+	ABC_DMA_TO_DEVICE = 1,
+	ABC_DMA_FROM_DEVICE = 2,
 };
 
 struct abc_pcie_dma_desc_legacy {
@@ -40,7 +45,7 @@ struct abc_pcie_dma_desc_legacy {
 		__u64 remote_buf; /* remote buffer address */
 		int remote_dma_buf_fd; /* remote DMA buffer file descriptor */
 	};
-	enum dma_data_direction dir; /* direction of the DMA transfer */
+	enum abc_dma_data_direction dir; /* direction of the DMA transfer */
 	__u8 chan; /* dma channel to be used */
 };
 
@@ -60,7 +65,7 @@ struct abc_pcie_dma_desc {
 	__u64 remote_dma_buf_off; /* offset within dma buf to xfer from/to */
 
 	__u64 size; /* number of bytes to transfer */
-	enum dma_data_direction dir; /* direction of the DMA transfer */
+	enum abc_dma_data_direction dir; /* direction of the DMA transfer */
 };
 
 struct abc_pcie_dma_desc_async {

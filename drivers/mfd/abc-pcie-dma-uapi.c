@@ -9,6 +9,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/dma-direction.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
@@ -24,7 +25,18 @@ static int abc_pcie_convert_user_to_kernel_desc(struct device *dev,
 					struct abc_pcie_kernel_dma_desc *kdesc)
 {
 	kdesc->size = udesc->size;
-	kdesc->dir = udesc->dir;
+
+	switch (udesc->dir) {
+	case ABC_DMA_TO_DEVICE:
+		kdesc->dir = DMA_TO_DEVICE;
+		break;
+	case ABC_DMA_FROM_DEVICE:
+		kdesc->dir = DMA_FROM_DEVICE;
+		break;
+	default:
+		dev_err(dev, "%s: Invalid direction specification\n", __func__);
+		return -EINVAL;
+	}
 
 	if (udesc->local_buf_type == DMA_BUFFER_USER) {
 		kdesc->local_buf_kind = DMA_BUFFER_KIND_USER;

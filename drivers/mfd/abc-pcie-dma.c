@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-direction.h>
 #include <linux/errno.h>
 #include <linux/iommu.h>
 #include <linux/kernel.h>
