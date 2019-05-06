@@ -25,7 +25,6 @@ static int32_t cam_get_source_node_info(
 	struct device_node *flash_src_node = NULL;
 	struct device_node *torch_src_node = NULL;
 	struct device_node *switch_src_node = NULL;
-	const char *tmp_string = 0;
 
 	soc_private->is_wled_flash =
 		of_property_read_bool(of_node, "wled-flash-support");
@@ -229,20 +228,6 @@ static int32_t cam_get_source_node_info(
 			rc = 0;
 		}
 	}
-	rc = of_property_read_string(of_node, "cooling-name",
-				     &tmp_string);
-	if (rc < 0) {
-		CAM_WARN(CAM_FLASH, "cooling name not found");
-		rc = 0;
-	}
-	strlcpy(fctrl->cooling_name, tmp_string, THERMAL_NAME_LENGTH);
-	rc = of_property_read_string(of_node, "bcl-node-name",
-				     &tmp_string);
-	if (rc < 0) {
-		CAM_WARN(CAM_FLASH, "bcl node not found");
-		rc = 0;
-	}
-	strlcpy(fctrl->bcl_flash_node, tmp_string, THERMAL_NAME_LENGTH);
 
 	return rc;
 }
