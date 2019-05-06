@@ -196,6 +196,7 @@ void dsi_backlight_hbm_dimming_stop(struct dsi_backlight_config *bl)
 {
 	struct dsi_display *display;
 	struct hbm_data *hbm = bl->hbm;
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
 
 	if (!hbm || !hbm->dimming_active)
 		return;
@@ -209,18 +210,21 @@ void dsi_backlight_hbm_dimming_stop(struct dsi_backlight_config *bl)
 		pr_err("hbm: missing CRTC during dimming end.\n");
 	}
 
-	if (hbm->dimming_stop_cmd) {
-		int rc = dsi_panel_cmd_set_transfer(hbm->panel,
-			hbm->dimming_stop_cmd);
+	hbm->dimming_frames_total = 0;
+	hbm->dimming_frames_left = 0;
+	hbm->dimming_active = false;
 
+	if (hbm->dimming_stop_cmd) {
+		int rc = panel->funcs->update_hbm(panel);
+
+		if (rc == -EOPNOTSUPP)
+			rc = dsi_panel_cmd_set_transfer(hbm->panel,
+				hbm->dimming_stop_cmd);
 		if (rc)
 			pr_err("hbm: failed to disable brightness dimming.\n");
 	}
 
-	hbm->dimming_frames_total = 0;
-	hbm->dimming_frames_left = 0;
 	hbm->dimming_stop_cmd = NULL;
-	hbm->dimming_active = false;
 	pr_debug("HBM dimming stopped\n");
 }
 
@@ -341,17 +345,20 @@ static u32 dsi_backlight_calculate_hbm(struct dsi_backlight_config *bl,
 
 	range = hbm->ranges + target_range;
 	if (hbm->cur_range != target_range) {
-		rc = dsi_panel_cmd_set_transfer(panel, &range->entry_cmd);
+		dsi_backlight_hbm_dimming_start(bl, range->num_dimming_frames,
+			&range->dimming_stop_cmd);
+		pr_info("hbm: range %d -> %d\n", hbm->cur_range, target_range);
+		hbm->cur_range = target_range;
+
+		rc = panel->funcs->update_hbm(panel);
+		if (rc == -EOPNOTSUPP)
+			rc = dsi_panel_cmd_set_transfer(panel,
+				&range->entry_cmd);
 		if (rc) {
 			pr_err("Failed to send command for range %d\n",
 				target_range);
 			return bl->bl_actual;
 		}
-
-		dsi_backlight_hbm_dimming_start(bl, range->num_dimming_frames,
-			&range->dimming_stop_cmd);
-		pr_info("hbm: range %d -> %d\n", hbm->cur_range, target_range);
-		hbm->cur_range = target_range;
 	}
 
 	rc = dsi_backlight_lerp(

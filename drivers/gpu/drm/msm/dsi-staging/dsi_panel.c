@@ -4381,23 +4381,26 @@ static int dsi_panel_update_hbm_locked(struct dsi_panel *panel, bool enable)
 		return -EINVAL;
 	}
 
+	panel->hbm_mode = enable;
+	hbm->cur_range = HBM_RANGE_MAX;
+
 	/* When HBM exit is requested, send HBM exit commands
 	 * immediately to avoid conflict with subsequent backlight ops.
 	 */
 	if (!enable) {
-		int rc = dsi_panel_cmd_set_transfer(panel, &hbm->exit_cmd);
-
-		if (rc)
-			pr_err("[%s] failed to send HBM exit cmd, rc=%d\n",
-				panel->name, rc);
+		int rc;
 
 		dsi_backlight_hbm_dimming_start(bl,
 			hbm->exit_num_dimming_frames,
 			&hbm->exit_dimming_stop_cmd);
-	}
 
-	panel->hbm_mode = enable;
-	hbm->cur_range = HBM_RANGE_MAX;
+		rc = panel->funcs->update_hbm(panel);
+		if (rc == -EOPNOTSUPP)
+			rc = dsi_panel_cmd_set_transfer(panel, &hbm->exit_cmd);
+		if (rc)
+			pr_err("[%s] failed to send HBM exit cmd, rc=%d\n",
+				panel->name, rc);
+	}
 
 	return 0;
 }

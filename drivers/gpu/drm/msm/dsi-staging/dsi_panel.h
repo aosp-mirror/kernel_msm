@@ -322,7 +322,11 @@ struct dsi_panel {
  * @idle: called when updates haven't been received for a while (idle)
  * @wakeup: called when coming out of idle state
  *
- * Note: none of these functions should be called while holding panel_lock
+ * Note: none of these functions above should be called while holding panel_lock
+ *
+ * @update_hbm: for certain projects hbm/dimming configuration may need to be
+ * kept in sync depending on current mode. This function should be called with
+ * updated hbm/dimming params
  */
 struct dsi_panel_funcs {
 	int (*pre_disable)(struct dsi_panel *);
@@ -331,6 +335,7 @@ struct dsi_panel_funcs {
 	int (*pre_kickoff)(struct dsi_panel *);
 	int (*idle)(struct dsi_panel *);
 	int (*wakeup)(struct dsi_panel *);
+	int (*update_hbm)(struct dsi_panel *);
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)

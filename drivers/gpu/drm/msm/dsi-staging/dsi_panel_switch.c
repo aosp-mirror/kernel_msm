@@ -44,6 +44,7 @@ struct panel_switch_funcs {
 	void (*perform_switch)(struct panel_switch_data *pdata,
 			       const struct dsi_display_mode *mode);
 	int (*post_enable)(struct panel_switch_data *pdata);
+	int (*support_update_hbm)(struct dsi_panel *);
 };
 
 struct panel_switch_data {
@@ -376,6 +377,19 @@ static int panel_wakeup(struct dsi_panel *panel)
 	return 0;
 }
 
+static int panel_update_hbm(struct dsi_panel *panel)
+{
+	struct panel_switch_data *pdata = panel->private_data;
+
+	if (unlikely(!pdata || !pdata->funcs))
+		return -EINVAL;
+
+	if (!pdata->funcs->support_update_hbm)
+		return -EOPNOTSUPP;
+
+	return pdata->funcs->support_update_hbm(panel);
+}
+
 static ssize_t debugfs_panel_switch_mode_write(struct file *file,
 					       const char __user *user_buf,
 					       size_t user_len,
@@ -513,6 +527,7 @@ static const struct dsi_panel_funcs panel_funcs = {
 	.post_enable = panel_post_enable,
 	.idle        = panel_idle,
 	.wakeup      = panel_wakeup,
+	.update_hbm  = panel_update_hbm,
 };
 
 static int panel_switch_data_init(struct dsi_panel *panel,
@@ -1073,10 +1088,64 @@ static void s6e3hc2_switch_data_destroy(struct panel_switch_data *pdata)
 		devm_kfree(pdata->panel->parent, sdata);
 }
 
+#define S6E3HC2_WRCTRLD_DIMMING_BIT     0x08
+#define S6E3HC2_WRCTRLD_FRAME_RATE_BIT  0x10
+#define S6E3HC2_WRCTRLD_BCTRL_BIT       0x20
+#define S6E3HC2_WRCTRLD_HBM_BIT         0xC0
+
+struct s6e3hc2_wrctrl_data {
+	bool hbm_enable;
+	bool dimming_active;
+	u32 refresh_rate;
+};
+
+static int s6e3hc2_write_ctrld_reg(struct mipi_dsi_device *dsi,
+	const struct s6e3hc2_wrctrl_data *data)
+{
+	u8 wrctrl_reg = S6E3HC2_WRCTRLD_BCTRL_BIT;
+
+	if (data->hbm_enable)
+		wrctrl_reg |= S6E3HC2_WRCTRLD_HBM_BIT;
+
+	if (data->dimming_active)
+		wrctrl_reg |= S6E3HC2_WRCTRLD_DIMMING_BIT;
+
+	if (data->refresh_rate == 90)
+		wrctrl_reg |= S6E3HC2_WRCTRLD_FRAME_RATE_BIT;
+
+	pr_debug("hbm_enable: %d dimming_active: %d refresh_rate: %d hz\n",
+		data->hbm_enable, data->dimming_active, data->refresh_rate);
+
+	return mipi_dsi_dcs_write(dsi, MIPI_DCS_WRITE_CONTROL_DISPLAY,
+		&wrctrl_reg, sizeof(wrctrl_reg));
+}
+
+static int s6e3hc2_switch_mode_update(struct dsi_panel *panel)
+{
+	struct mipi_dsi_device *dsi = &panel->mipi_device;
+	const struct panel_switch_data *pdata = panel->private_data;
+	const struct dsi_display_mode *mode = pdata->display_mode;
+	const struct hbm_data *hbm = panel->bl_config.hbm;
+	struct s6e3hc2_wrctrl_data data = {0};
+
+	if (unlikely(!mode || !hbm))
+		return -EINVAL;
+
+	/* display is expected not to operate in HBM mode for the first bl range
+	 * (cur_range = 0) when panel->hbm_mode is true
+	 */
+	data.hbm_enable = panel->hbm_mode == true && hbm->cur_range != 0;
+	data.dimming_active = panel->bl_config.hbm->dimming_active;
+	data.refresh_rate = mode->timing.refresh_rate;
+
+	return s6e3hc2_write_ctrld_reg(dsi, &data);
+}
+
 static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 				   const struct dsi_display_mode *mode)
 {
-	struct mipi_dsi_device *dsi = &pdata->panel->mipi_device;
+	struct dsi_panel *panel = pdata->panel;
+	struct mipi_dsi_device *dsi = &panel->mipi_device;
 	const u8 unlock_cmd[] = { 0xF0, 0x5A, 0x5A };
 	const u8 lock_cmd[]   = { 0xF0, 0xA5, 0xA5 };
 
@@ -1086,7 +1155,7 @@ static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 	if (DSI_WRITE_CMD_BUF(dsi, unlock_cmd))
 		return;
 
-	panel_switch_cmd_set_transfer(pdata, mode);
+	s6e3hc2_switch_mode_update(panel);
 	s6e3hc2_gamma_update(pdata, mode);
 
 	DSI_WRITE_CMD_BUF(dsi, lock_cmd);
@@ -1109,10 +1178,11 @@ static int s6e3hc2_post_enable(struct panel_switch_data *pdata)
 }
 
 const struct panel_switch_funcs s6e3hc2_switch_funcs = {
-	.create = s6e3hc2_switch_create,
-	.destroy = s6e3hc2_switch_data_destroy,
-	.perform_switch = s6e3hc2_perform_switch,
-	.post_enable = s6e3hc2_post_enable,
+	.create             = s6e3hc2_switch_create,
+	.destroy            = s6e3hc2_switch_data_destroy,
+	.perform_switch     = s6e3hc2_perform_switch,
+	.post_enable        = s6e3hc2_post_enable,
+	.support_update_hbm = s6e3hc2_switch_mode_update,
 };
 
 static const struct of_device_id panel_switch_dt_match[] = {
