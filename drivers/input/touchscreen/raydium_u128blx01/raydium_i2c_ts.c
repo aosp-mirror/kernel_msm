@@ -2555,7 +2555,6 @@ raydium_i2c_pda2_page_store(struct device *dev,
 		goto exit_error;
 	}
 
-	raydium_irq_control(ts, DISABLE);
 	mutex_lock(&ts->lock);
 
 	result = raydium_i2c_pda2_set_page(client, page);
@@ -2568,7 +2567,6 @@ raydium_i2c_pda2_page_store(struct device *dev,
 
 exit_set_error:
 	mutex_unlock(&ts->lock);
-	raydium_irq_control(ts, ENABLE);
 
 exit_error:
 	kfree(free_token);
@@ -2839,7 +2837,7 @@ raydium_hw_reset_fun(struct i2c_client *client)
 	u8_i2c_mode = PDA2_MODE;
 	mutex_unlock(&ts->lock);
 
-	ret = wait_irq_state(client, 1000, 2000);
+	ret = wait_irq_state(client, 300, 2000);
 	g_uc_raydium_flag &= ~RAYDIUM_ENGINEER_MODE;
 	raydium_irq_control(ts, ENABLE);
 
@@ -2862,6 +2860,7 @@ raydium_hw_reset_show(struct device *dev,
 
 	/*HW reset */
 	dev_info(&ts->client->dev, "[touch]Raydium HW reset\n");
+
 	g_u8_resetflag = true;
 	gpio_set_value(ts->rst, 1);
 	gpio_set_value(ts->rst, 0);
@@ -4064,7 +4063,7 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 			 __func__, ret);
 		goto exit_error;
 	}
-	if (tp_status[POS_FW_STATE] != 0xAA) {
+	if (tp_status[POS_FW_STATE] != 0x1A) {
 		if (g_u8_resetflag == true) {
 			dev_err(&data->client->dev,
 			"[touch]%s -> abnormal irq, hw reset.\n", __func__);
@@ -4124,7 +4123,15 @@ exit_error:
 
 reset_error:
 	mutex_unlock(&data->lock);
-	raydium_hw_reset_fun(data->client);
+	retry = 3;
+	while (retry != 0) {
+		ret = raydium_hw_reset_fun(data->client);
+		if (ret < 0) {
+			msleep(100);
+			retry--;
+		} else
+			break;
+	}
 	return ret;
 }
 
@@ -4140,7 +4147,7 @@ raydium_work_handler(struct work_struct *work)
 
 #ifdef GESTURE_EN
 	int i = 0;
-#endif
+
 	if ((raydium_ts->blank == FB_BLANK_VSYNC_SUSPEND
 		|| raydium_ts->blank == FB_BLANK_POWERDOWN)
 		   && (g_u8_resetflag == false))  {
@@ -4177,7 +4184,6 @@ raydium_work_handler(struct work_struct *work)
 			}
 		}
 
-#ifdef GESTURE_EN
 		/*when display on can use palm to suspend */
 		if (raydium_ts->blank == FB_BLANK_UNBLANK) {
 			if (tp_status[POS_GESTURE_STATUS] ==
@@ -4243,6 +4249,18 @@ raydium_work_handler(struct work_struct *work)
 			pr_info("[touch]display wake up\n");
 		}
 	}
+#else
+	if (u8_i2c_mode == PDA2_MODE) {
+		ret = raydium_read_touchdata(
+			raydium_ts, tp_status, buf);
+		if (ret < 0) {
+			dev_info(&raydium_ts->client->dev,
+			"[touch]raydium_read_touchdata error, ret:%d\n",
+			ret);
+			return;
+		}
+	}
+
 #endif
 }
 
