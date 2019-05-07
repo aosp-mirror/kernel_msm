@@ -342,6 +342,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(charge_disable),
 	POWER_SUPPLY_ATTR(in_explicit_contract),
 	POWER_SUPPLY_ATTR(charger_status_fast),
+	POWER_SUPPLY_ATTR(alignment),
 	POWER_SUPPLY_ATTR(batt_ce_ctrl),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),

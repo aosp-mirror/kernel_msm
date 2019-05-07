@@ -34,6 +34,7 @@
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
 #define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
 #define P9221_VRECT_TIMEOUT_MS		(2 * 1000)
+#define P9221_ALIGN_TIMEOUT_MS		100
 #define P9221_NOTIFIER_DELAY_MS		80
 #define P9221R5_ILIM_MAX_UA		(1600 * 1000)
 #define P9221R5_OVER_CHECK_NUM		3
@@ -42,6 +43,9 @@
 #define OVC_THRESHOLD			1400000
 #define OVC_BACKOFF_LIMIT		900000
 #define OVC_BACKOFF_AMOUNT		100000
+
+#define WLC_ALIGNMENT_MAX		100
+#define WLC_MFG_GOOGLE			0x72
 
 static void p9221_icl_ramp_reset(struct p9221_charger_data *charger);
 static void p9221_icl_ramp_start(struct p9221_charger_data *charger);
@@ -687,6 +691,11 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 
 	p9221_abort_transfers(charger);
 	cancel_delayed_work(&charger->dcin_work);
+
+	/* Reset alignment value when charger goes offline */
+	charger->wlc_alignment = -1;
+	cancel_delayed_work(&charger->align_work);
+
 	p9221_icl_ramp_reset(charger);
 	del_timer(&charger->vrect_timer);
 
@@ -734,6 +743,77 @@ static void p9221_dcin_work(struct work_struct *work)
 	power_supply_changed(charger->wc_psy);
 
 	pm_relax(charger->dev);
+}
+
+static void p9221_align_work(struct work_struct *work)
+{
+	int res, align_buckets, i;
+	u16 mfg, status_reg = 0;
+	u32 wlc_freq;
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, align_work.work);
+
+	if (charger->pdata->alignment_freq == NULL)
+		return;
+
+	schedule_delayed_work(&charger->align_work,
+			msecs_to_jiffies(P9221_ALIGN_TIMEOUT_MS));
+
+	res = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+	if (res != 0)
+		return;
+
+	if (!(status_reg & P9221R5_STAT_VRECTON))
+		return;
+
+	if (!(status_reg & P9221R5_STAT_VOUTCHANGED))
+		return;
+
+	if (!p9221_is_epp(charger))
+		return;
+
+	res = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG, &mfg);
+	if (res < 0) {
+		dev_err(&charger->client->dev,
+			"cannot read MFG_CODE (%d)\n", res);
+		return;
+	}
+
+	if (mfg != WLC_MFG_GOOGLE) {
+		logbuffer_log(charger->log,
+			      "align: not google wlc mfg: 0x%x", mfg);
+		return;
+	}
+
+	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
+	if (res != 0) {
+		logbuffer_log(charger->log, "align: failed to read op_freq");
+		return;
+	}
+
+	align_buckets = charger->pdata->nb_alignment_freq - 1;
+
+	charger->wlc_alignment = -1;
+
+	for (i = 0; i < align_buckets; i += 1) {
+		if ((wlc_freq > charger->pdata->alignment_freq[i]) &&
+		    (wlc_freq <= charger->pdata->alignment_freq[i + 1])) {
+			charger->wlc_alignment = (WLC_ALIGNMENT_MAX * i) /
+					(align_buckets - 1);
+			break;
+		}
+	}
+
+	if (i > align_buckets) {
+		logbuffer_log(charger->log, "align: freq out of bounds");
+		return;
+	}
+
+	if (charger->wlc_alignment != charger->wlc_alignment_last) {
+		logbuffer_log(charger->log, "align: alignment is %i. op_freq is %u",
+			     charger->wlc_alignment, wlc_freq);
+		charger->wlc_alignment_last = charger->wlc_alignment;
+	}
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -811,6 +891,9 @@ static int p9221_get_property(struct power_supply *psy,
 
 		/* success */
 		ret = 0;
+		break;
+	case POWER_SUPPLY_PROP_ALIGNMENT:
+		val->intval = charger->wlc_alignment;
 		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
@@ -1130,6 +1213,11 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 
 	/* NOTE: depends on _is_epp() which is not valid until DC_IN */
 	p9221_write_fod(charger);
+
+	/* Reset last alignment value when online */
+	charger->wlc_alignment_last = -1;
+	schedule_delayed_work(&charger->align_work,
+			msecs_to_jiffies(P9221_ALIGN_TIMEOUT_MS));
 }
 
 /* 2 * P9221_NOTIFIER_DELAY_MS from VRECTON */
@@ -2212,6 +2300,36 @@ static int p9221_parse_dt(struct device *dev,
 		}
 	}
 
+	pdata->nb_alignment_freq =
+			of_property_count_elems_of_size(node,
+							"google,alignment_frequencies",
+							sizeof(u32));
+	dev_info(dev, "dt google,alignment_frequencies size = %d\n",
+		 pdata->nb_alignment_freq);
+
+	if (pdata->nb_alignment_freq > 0) {
+		pdata->alignment_freq =
+				devm_kmalloc_array(dev,
+						   pdata->nb_alignment_freq,
+						   sizeof(u32),
+						   GFP_KERNEL);
+		if (!pdata->alignment_freq) {
+			dev_warn(dev,
+				 "dt google,alignment_frequencies array not created");
+		} else {
+			ret = of_property_read_u32_array(node,
+							 "google,alignment_frequencies",
+							 pdata->alignment_freq,
+							 pdata->nb_alignment_freq);
+			if (ret) {
+				dev_warn(dev,
+					 "failed to read google,alignment_frequencies: %d\n",
+					 ret);
+				devm_kfree(dev, pdata->alignment_freq);
+			}
+		}
+	}
+
 	return 0;
 }
 
@@ -2225,6 +2343,7 @@ static enum power_supply_property p9221_props[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_ALIGNMENT,
 };
 
 static const struct power_supply_desc p9221_psy_desc = {
@@ -2288,6 +2407,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
 	INIT_DELAYED_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
+	INIT_DELAYED_WORK(&charger->align_work, p9221_align_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
 		   p9221_icl_ramp_alarm_cb);
 
