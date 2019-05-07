@@ -266,6 +266,7 @@ struct qpnp_adc_tm_sensor {
 	struct list_head		thr_list;
 	bool				high_thr_triggered;
 	bool				low_thr_triggered;
+	int				emul_temperature;
 };
 
 struct qpnp_adc_tm_chip {
@@ -1693,6 +1694,7 @@ static int qpnp_adc_tm_set_trip_temp(void *data, int low_temp, int high_temp)
 	uint16_t reg_high_thr_lsb, reg_high_thr_msb;
 	int rc = 0;
 	uint32_t btm_chan = 0, btm_chan_idx = 0;
+	int emul_temp;
 
 	if (qpnp_adc_tm_is_valid(chip))
 		return -ENODEV;
@@ -1710,6 +1712,13 @@ static int qpnp_adc_tm_set_trip_temp(void *data, int low_temp, int high_temp)
 	if ((high_temp == INT_MAX) && (low_temp == INT_MIN)) {
 		pr_err("No trips to set\n");
 		return -EINVAL;
+	}
+
+	/* Set threshold to extremely value while emul temp set */
+	emul_temp = adc_tm->emul_temperature;
+	if (emul_temp) {
+		high_temp = INT_MAX;
+		low_temp = INT_MIN;
 	}
 
 	pr_debug("requested a high - %d and low - %d\n",
@@ -1831,6 +1840,14 @@ static int qpnp_adc_tm_set_trip_temp(void *data, int low_temp, int high_temp)
 	return 0;
 }
 
+static int qpnp_adc_tm_set_emul_temp(void *data, int emul_temp)
+{
+	struct qpnp_adc_tm_sensor *adc_tm_sensor = data;
+
+	adc_tm_sensor->emul_temperature = emul_temp;
+	return 0;
+}
+
 static void notify_battery_therm(struct qpnp_adc_tm_sensor *adc_tm)
 {
 	struct qpnp_adc_thr_client_info *client_info = NULL;
@@ -1892,6 +1909,13 @@ static int qpnp_adc_read_temp(void *data, int *temp)
 	struct qpnp_adc_tm_chip *chip = adc_tm_sensor->chip;
 	struct qpnp_vadc_result result;
 	int rc = 0;
+	int emul_temp;
+
+	emul_temp = adc_tm_sensor->emul_temperature;
+	if (emul_temp) {
+		*temp = emul_temp;
+		return rc;
+	}
 
 	rc = qpnp_vadc_read(chip->vadc_dev,
 				adc_tm_sensor->vadc_channel_num, &result);
@@ -2754,6 +2778,7 @@ static irqreturn_t qpnp_adc_tm_rc_thr_isr(int irq, void *data)
 static struct thermal_zone_of_device_ops qpnp_adc_tm_thermal_ops = {
 	.get_temp = qpnp_adc_read_temp,
 	.set_trips = qpnp_adc_tm_set_trip_temp,
+	.set_emul_temp = qpnp_adc_tm_set_emul_temp,
 };
 
 int32_t qpnp_adc_tm_channel_measure(struct qpnp_adc_tm_chip *chip,
@@ -3173,6 +3198,7 @@ static int qpnp_adc_tm_probe(struct platform_device *pdev)
 						QPNP_ADC_TM_M0_LOW_THR;
 			chip->sensor[sen_idx].high_thr =
 						QPNP_ADC_TM_M0_HIGH_THR;
+			chip->sensor[sen_idx].emul_temperature = 0;
 			chip->sensor[sen_idx].tz_dev =
 				devm_thermal_zone_of_sensor_register(
 				chip->dev,
