@@ -49,6 +49,8 @@
 		idt,gpio_slct = <&tlmm 37 0x00>;
 		idt,irq_gpio = <&tlmm 124 0x00>;
 		idt,irq_det_gpio = <&tlmm 36 0x00>;
+		google,alignment_frequencies = /bits/ 32 <87000 120000 130000
+							  140000 205000>;
 		status = "ok";
 	};
 };
