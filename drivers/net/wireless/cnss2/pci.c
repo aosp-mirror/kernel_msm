@@ -103,6 +103,14 @@ static DEFINE_SPINLOCK(pci_link_down_lock);
 
 #define QCA6390_CE_REG_INTERVAL			0x2000
 
+#define SHADOW_REG_COUNT			36
+#define QCA6390_PCIE_SHADOW_REG_VALUE_0		0x1E03024
+#define QCA6390_PCIE_SHADOW_REG_VALUE_35	0x1E030B0
+
+#define SHADOW_REG_INTER_COUNT			43
+#define QCA6390_PCIE_SHADOW_REG_INTER_0		0x1E05000
+#define QCA6390_PCIE_SHADOW_REG_HUNG		0x1E050A8
+
 #define QDSS_APB_DEC_CSR_BASE			0x1C01000
 
 #define QDSS_APB_DEC_CSR_ETRIRQCTRL_OFFSET	0x6C
@@ -422,6 +430,11 @@ static int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 {
 	u16 device_id;
 
+	if (pci_priv->pci_link_state == PCI_LINK_DOWN) {
+		cnss_pr_dbg("PCIe link is suspended\n");
+		return -EIO;
+	}
+
 	if (pci_priv->pci_link_down_ind) {
 		cnss_pr_err("PCIe link is down\n");
 		return -EIO;
@@ -580,6 +593,43 @@ int cnss_pci_update_status(struct cnss_pci_data *pci_priv,
 	return 0;
 }
 
+static void cnss_pci_dump_shadow_reg(struct cnss_pci_data *pci_priv)
+{
+	int i, j = 0, array_size = SHADOW_REG_COUNT + SHADOW_REG_INTER_COUNT;
+	gfp_t gfp = GFP_KERNEL;
+	u32 reg_offset;
+
+	if (cnss_pci_check_link_status(pci_priv))
+		return;
+
+	if (in_interrupt() || irqs_disabled())
+		gfp = GFP_ATOMIC;
+
+	if (!pci_priv->debug_reg) {
+		pci_priv->debug_reg = devm_kzalloc(&pci_priv->pci_dev->dev,
+						   sizeof(*pci_priv->debug_reg)
+						   * array_size, gfp);
+		if (!pci_priv->debug_reg)
+			return;
+	}
+
+	cnss_pr_dbg("Start to dump shadow registers\n");
+
+	for (i = 0; i < SHADOW_REG_COUNT; i++, j++) {
+		reg_offset = QCA6390_PCIE_SHADOW_REG_VALUE_0 + i * 4;
+		pci_priv->debug_reg[j].offset = reg_offset;
+		pci_priv->debug_reg[j].val = cnss_pci_reg_read(pci_priv,
+							       reg_offset);
+	}
+
+	for (i = 0; i < SHADOW_REG_INTER_COUNT; i++, j++) {
+		reg_offset = QCA6390_PCIE_SHADOW_REG_INTER_0 + i * 4;
+		pci_priv->debug_reg[j].offset = reg_offset;
+		pci_priv->debug_reg[j].val = cnss_pci_reg_read(pci_priv,
+							       reg_offset);
+	}
+}
+
 #ifdef CONFIG_CNSS2_DEBUG
 static void cnss_pci_collect_dump(struct cnss_pci_data *pci_priv)
 {
@@ -701,6 +751,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	ret = cnss_pci_start_mhi(pci_priv);
 	if (ret) {
 		cnss_fatal_err("Failed to start MHI, err = %d\n", ret);
+		CNSS_ASSERT(0);
 		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout)
 			mod_timer(&plat_priv->fw_boot_timer,
@@ -750,7 +801,8 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
 	cnss_pci_set_auto_suspended(pci_priv, 0);
 
-	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) &&
+	if ((test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state) ||
+	     test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state)) &&
 	    test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state)) {
 		del_timer(&pci_priv->dev_rddm_timer);
 		cnss_pci_collect_dump(pci_priv);
@@ -1858,6 +1910,8 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	if (!plat_priv)
 		return -ENODEV;
 
+	cnss_pci_dump_shadow_reg(pci_priv);
+
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_TRIGGER_RDDM);
 	if (ret) {
 		cnss_fatal_err("Failed to trigger RDDM, err = %d\n", ret);
@@ -2248,10 +2302,13 @@ static void cnss_pci_dump_qdss_reg(struct cnss_pci_data *pci_priv)
 	if (in_interrupt() || irqs_disabled())
 		gfp = GFP_ATOMIC;
 
-	if (!plat_priv->qdss_reg)
+	if (!plat_priv->qdss_reg) {
 		plat_priv->qdss_reg = devm_kzalloc(&pci_priv->pci_dev->dev,
 						   sizeof(*plat_priv->qdss_reg)
 						   * array_size, gfp);
+		if (!plat_priv->qdss_reg)
+			return;
+	}
 
 	for (i = 0; qdss_csr[i].name; i++) {
 		reg_offset = QDSS_APB_DEC_CSR_BASE + qdss_csr[i].offset;
@@ -2330,6 +2387,9 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		cnss_pr_dbg("RAM dump is already collected, skip\n");
 		return;
 	}
+
+	if (cnss_pci_check_link_status(pci_priv))
+		return;
 
 	cnss_pci_dump_qdss_reg(pci_priv);
 

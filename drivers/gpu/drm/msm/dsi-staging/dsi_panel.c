@@ -46,6 +46,7 @@
 #define DEFAULT_PANEL_JITTER_ARRAY_SIZE		2
 #define MAX_PANEL_JITTER		10
 #define DEFAULT_PANEL_PREFILL_LINES	25
+#define TICKS_IN_MICRO_SECOND		1000000
 
 enum dsi_dsc_ratio_type {
 	DSC_8BPC_8BPP,
@@ -2498,12 +2499,15 @@ int dsi_dsc_populate_static_param(struct msm_display_dsc_info *dsc)
 
 
 static int dsi_panel_parse_phy_timing(struct dsi_display_mode *mode,
-				struct dsi_parser_utils *utils)
+		struct dsi_parser_utils *utils, enum dsi_op_mode panel_mode)
 {
 	const char *data;
 	u32 len, i;
 	int rc = 0;
 	struct dsi_display_mode_priv_info *priv_info;
+	u64 h_period, v_period;
+	u32 refresh_rate = TICKS_IN_MICRO_SECOND;
+	struct dsi_mode_info *timing = NULL;
 
 	priv_info = mode->priv_info;
 
@@ -2523,9 +2527,24 @@ static int dsi_panel_parse_phy_timing(struct dsi_display_mode *mode,
 		priv_info->phy_timing_len = len;
 	};
 
-	mode->pixel_clk_khz = (DSI_H_TOTAL_DSC(&mode->timing) *
-			DSI_V_TOTAL(&mode->timing) *
-			mode->timing.refresh_rate) / 1000;
+	timing = &mode->timing;
+	if (!timing) {
+		pr_err("timing is null\n");
+		return -EINVAL;
+	}
+
+	if (panel_mode == DSI_OP_CMD_MODE) {
+		h_period = DSI_H_ACTIVE_DSC(timing);
+		v_period = timing->v_active;
+		do_div(refresh_rate, priv_info->mdp_transfer_time_us);
+	} else {
+		h_period = DSI_H_TOTAL_DSC(timing);
+		v_period = DSI_V_TOTAL(timing);
+		refresh_rate = timing->refresh_rate;
+	}
+
+	mode->pixel_clk_khz = (h_period * v_period * refresh_rate) / 1000;
+
 	return rc;
 }
 
@@ -3242,6 +3261,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 {
 	struct dsi_panel *panel;
 	struct dsi_parser_utils *utils;
+	const char *panel_physical_type;
 	int rc = 0;
 
 	panel = kzalloc(sizeof(*panel), GFP_KERNEL);
@@ -3259,6 +3279,15 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 				"qcom,mdss-dsi-panel-name", NULL);
 	if (!panel->name)
 		panel->name = DSI_PANEL_DEFAULT_LABEL;
+
+	/*
+	 * Set panel type to LCD as default.
+	 */
+	panel->panel_type = DSI_DISPLAY_PANEL_TYPE_LCD;
+	panel_physical_type  = utils->get_property(utils->data,
+				"qcom,mdss-dsi-panel-physical-type", NULL);
+	if (panel_physical_type && !strcmp(panel_physical_type, "oled"))
+		panel->panel_type = DSI_DISPLAY_PANEL_TYPE_OLED;
 
 	rc = dsi_panel_parse_host_config(panel);
 	if (rc) {
@@ -3332,6 +3361,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		pr_debug("failed to parse esd config, rc=%d\n", rc);
 
+	panel->power_mode = SDE_MODE_DPMS_OFF;
 	drm_panel_init(&panel->drm_panel);
 	panel->drm_panel.dev = &panel->mipi_device.dev;
 	panel->mipi_device.dev.of_node = of_node;
@@ -3977,7 +4007,7 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 			pr_err(
 			"failed to parse panel jitter config, rc=%d\n", rc);
 
-		rc = dsi_panel_parse_phy_timing(mode, utils);
+		rc = dsi_panel_parse_phy_timing(mode, utils, panel->panel_mode);
 		if (rc) {
 			pr_err(
 			"failed to parse panel phy timings, rc=%d\n", rc);
@@ -4123,6 +4153,9 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
+	if (!panel->panel_initialized)
+		goto exit;
+
 	if (panel->vr_mode) {
 		rc = dsi_panel_clear_vr_locked(panel);
 		if (rc) {
@@ -4145,6 +4178,7 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP1 cmd, rc=%d\n",
 		       panel->name, rc);
+exit:
 	mutex_unlock(&panel->panel_lock);
 
 	if (!rc)
@@ -4166,6 +4200,9 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 	dsi_backlight_early_dpms(&panel->bl_config, SDE_MODE_DPMS_LP2);
 
 	mutex_lock(&panel->panel_lock);
+
+	if (!panel->panel_initialized)
+		goto exit;
 
 	if (panel->vr_mode) {
 		rc = dsi_panel_clear_vr_locked(panel);
@@ -4189,6 +4226,7 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP2 cmd, rc=%d\n",
 		       panel->name, rc);
+exit:
 	mutex_unlock(&panel->panel_lock);
 
 	if (!rc)
@@ -4210,10 +4248,14 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 	dsi_backlight_early_dpms(&panel->bl_config, SDE_MODE_DPMS_ON);
 
 	mutex_lock(&panel->panel_lock);
+	if (!panel->panel_initialized)
+		goto exit;
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 		       panel->name, rc);
+exit:
 	mutex_unlock(&panel->panel_lock);
 
 	if (!rc)
@@ -4637,11 +4679,11 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	mutex_lock(&panel->panel_lock);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
-	if (rc) {
+	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
 		       panel->name, rc);
-	}
-	panel->panel_initialized = true;
+	else
+		panel->panel_initialized = true;
 	mutex_unlock(&panel->panel_lock);
 
 	if (!rc)
