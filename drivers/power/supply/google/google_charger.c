@@ -426,6 +426,7 @@ static int chg_usb_online(struct power_supply *usb_psy)
 	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
 	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
 	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+	case POWER_SUPPLY_TYPEC_DAM_MEDIUM:
 		usb_online = 1;
 		break;
 	default:
