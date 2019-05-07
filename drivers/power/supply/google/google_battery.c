@@ -1875,6 +1875,46 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE,
 };
 
+/* . status is DISCHARGING when not connected.
+ * . FULL when in recharge logic or GG report full and SSOC is @ 100% (possibly
+ *   just when 100%).
+ * . same as FG state otherwise
+ */
+static int gbatt_get_status(struct batt_drv *batt_drv,
+			    union power_supply_propval *val)
+{
+	int err;
+
+	if (!batt_drv->buck_enabled) {
+		val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		return 0;
+	}
+
+	if (batt_drv->ssoc_state.rl_status != BATT_RL_STATUS_NONE) {
+		val->intval = POWER_SUPPLY_STATUS_FULL;
+		return 0;
+	}
+
+	if (!batt_drv->fg_psy)
+		return -EINVAL;
+
+	err = power_supply_get_property(batt_drv->fg_psy,
+					POWER_SUPPLY_PROP_STATUS,
+					val);
+	if (err != 0)
+		return err;
+
+	if (val->intval == POWER_SUPPLY_STATUS_FULL) {
+		const int ssoc = ssoc_get_capacity(&batt_drv->ssoc_state);
+
+		/* ->buck_enabled = true, device is connected */
+		if (ssoc != SSOC_FULL)
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+	}
+
+	return 0;
+}
+
 static int gbatt_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
@@ -1979,18 +2019,7 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_STATUS:
-		if (batt_drv->ssoc_state.rl_status != BATT_RL_STATUS_NONE) {
-			val->intval = POWER_SUPPLY_STATUS_FULL;
-		} else if (batt_drv->fg_psy) {
-			err = power_supply_get_property(batt_drv->fg_psy,
-							psp,
-							val);
-			/* force DISCHARGING status when not connected */
-			if (err == 0 && !batt_drv->buck_enabled)
-				val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
-		} else {
-			err = -EINVAL;
-		}
+		err = gbatt_get_status(batt_drv, val);
 		break;
 
 	case POWER_SUPPLY_PROP_RECHARGE_SOC:
