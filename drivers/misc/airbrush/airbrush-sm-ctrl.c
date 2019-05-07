@@ -1456,7 +1456,7 @@ static int state_change_task(void *ctx)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)ctx;
 	struct sched_param sp = {
-		.sched_priority = MAX_RT_PRIO - 1,
+		.sched_priority = 1,
 	};
 	int ret = sched_setscheduler(current, SCHED_FIFO, &sp);
 
