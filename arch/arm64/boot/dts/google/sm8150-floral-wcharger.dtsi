@@ -75,4 +75,6 @@
 	idt,gpio_slct_value = <1>;
 	google,epp_rp_value = <0x16>;
 	google,needs_dcin_reset = <P9221_WC_DC_RESET_MODECHANGED>;
+	google,alignment_frequencies = /bits/ 32 <87000 120000 130000
+						  140000 205000>;
 };
