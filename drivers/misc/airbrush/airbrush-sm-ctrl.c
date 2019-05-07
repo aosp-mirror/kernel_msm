@@ -2355,7 +2355,8 @@ static void __throttle_nocompute_notify(struct ab_state_context *sc)
 	}
 }
 
-static int __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
+static int __throttle_nocompute_wait_for_user(struct ab_state_context *sc,
+		int *comp_ready)
 {
 	int ret;
 
@@ -2401,7 +2402,7 @@ static int __throttle_nocompute_wait_for_user(struct ab_state_context *sc)
 		}
 	}
 
-	ret = sc->going_to_comp_ready;
+	*comp_ready = sc->going_to_comp_ready;
 	mutex_unlock(&sc->throttle_ready_lock);
 
 	return ret;
@@ -2709,10 +2710,11 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		break;
 
 	case AB_SM_COMPUTE_READY_NOTIFY:
-		state = __throttle_nocompute_wait_for_user(sc);
+		ret = __throttle_nocompute_wait_for_user(sc, &state);
+		if (ret)
+			return ret;
 		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
 			return -EFAULT;
-		ret = 0;
 		break;
 
 	default:
@@ -2739,24 +2741,26 @@ static void ab_sm_thermal_throttle_state_updated(
 	/* In THROTTLE_NOCOMPUTE case, give userspace a
 	 * chance to react to AB resource being removed
 	 */
+	mutex_lock(&sc->throttle_ready_lock);
 	if (throttle_state_id == THROTTLE_NOCOMPUTE &&
 			sc->throttle_state_id != THROTTLE_NOCOMPUTE) {
-		mutex_lock(&sc->throttle_ready_lock);
 		sc->going_to_comp_ready = false;
 		__throttle_nocompute_notify(sc);
+		sc->throttle_state_id = throttle_state_id;
 	} else if (throttle_state_id != THROTTLE_NOCOMPUTE &&
 			sc->throttle_state_id == THROTTLE_NOCOMPUTE) {
 		/* Update sc->throttle_state_id immediately in case
 		 * userspace attempts to immediately change state while
 		 * we are still in __throttle_nocompute_notify
 		 */
-		mutex_lock(&sc->throttle_ready_lock);
 		sc->going_to_comp_ready = true;
 		sc->throttle_state_id = throttle_state_id;
 		__throttle_nocompute_notify(sc);
+	} else {
+		sc->throttle_state_id = throttle_state_id;
+		mutex_unlock(&sc->throttle_ready_lock);
 	}
 
-	sc->throttle_state_id = throttle_state_id;
 	dev_info(sc->dev, "Throttle state updated to %lu", throttle_state_id);
 
 	if (!sc->cold_boot)
