@@ -62,11 +62,12 @@
 /* 2 retries if failed */
 #define IAXXX_FW_RETRY_COUNT		2
 #define IAXXX_BYTES_IN_A_WORD		4
-#define WAKEUP_TIMEOUT			5000
 #define IAXXX_INT_OSC_TRIM_MASK	0x20000
 #define IAXXX_INT_OSC_TRIM_POS	17
 #define IAXXX_INT_OSC_CALIBRATION_MASK	0x7F
 #define IAXXX_INT_OSC_CALIBRATION_POS	25
+#define WAKEUP_TIMEOUT			5000
+#define SPI_WAIT_TIMEOUT		3000
 
 #define iaxxx_ptr2priv(ptr, item) container_of(ptr, struct iaxxx_priv, item)
 
@@ -113,6 +114,12 @@ enum {
 	E_IAXXX_BOOTUP_ERROR = -2,
 	E_IAXXX_RESET_SYNC_ERROR = -3,
 	E_IAXXX_BTP_ERROR = -4,
+};
+
+enum {
+	IAXXX_DEV_SUSPEND = 0,
+	IAXXX_DEV_RESUME = 1,
+	IAXXX_DEV_SUSPENDING = 2,
 };
 
 /*===========================================================================
@@ -853,8 +860,6 @@ static irqreturn_t iaxxx_event_isr(int irq, void *data)
 
 	dev_info(priv->dev, "%s: IRQ %d\n", __func__, irq);
 
-	pm_wakeup_event(priv->dev, WAKEUP_TIMEOUT);
-
 	if (!priv->boot_completed) {
 		is_startup = !test_and_set_bit(IAXXX_FLG_STARTUP,
 						&priv->flags);
@@ -1176,6 +1181,15 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	int rc;
 	uint32_t efuse_trim_value;
 
+	rc = iaxxx_wait_dev_resume(dev);
+	if (rc) {
+		if (rc == -EAGAIN)
+			iaxxx_work(priv, fw_update_work);
+		else if (rc == -ETIME)
+			dev_err(dev, "%s: wait resume fail\n", __func__);
+		return;
+	}
+
 	clear_bit(IAXXX_FLG_FW_READY, &priv->flags);
 
 	rc = iaxxx_do_fw_update(priv);
@@ -1327,6 +1341,16 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	struct iaxxx_priv *priv = iaxxx_ptr2priv(work, fw_crash_work);
 	int ret;
 	uint32_t core_crashed = 0;
+	struct device *dev = priv->dev;
+
+	ret = iaxxx_wait_dev_resume(dev);
+	if (ret) {
+		if (ret == -EAGAIN)
+			iaxxx_work(priv, fw_crash_work);
+		else if (ret == -ETIME)
+			dev_err(dev, "%s: wait resume fail\n", __func__);
+		return;
+	}
 
 	priv->crash_count++;
 	dev_info(priv->dev, "iaxxx %d time crashed\n",
@@ -1585,8 +1609,9 @@ int iaxxx_core_dev_suspend(struct device *dev)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
+	atomic_set(&priv->pm_resume, IAXXX_DEV_SUSPENDING);
 	iaxxx_flush_kthread_worker(&priv->worker);
-	atomic_set(&priv->pm_resume, 0);
+	atomic_set(&priv->pm_resume, IAXXX_DEV_SUSPEND);
 
 	return 0;
 }
@@ -1595,10 +1620,38 @@ int iaxxx_core_dev_resume(struct device *dev)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
-	atomic_set(&priv->pm_resume, 1);
+	atomic_set(&priv->pm_resume, IAXXX_DEV_RESUME);
 	wake_up(&priv->irq_wake);
 
 	return 0;
+}
+
+int iaxxx_wait_dev_resume(struct device *dev)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	int rc;
+	int ret = 0;
+
+	mutex_lock(&priv->resume_mutex);
+
+	pm_wakeup_event(priv->dev, WAKEUP_TIMEOUT);
+
+	if (atomic_read(&priv->pm_resume) == IAXXX_DEV_SUSPEND) {
+		rc = wait_event_timeout(priv->irq_wake,
+			atomic_read(&priv->pm_resume),
+			msecs_to_jiffies(SPI_WAIT_TIMEOUT));
+
+		if (!rc && !atomic_read(&priv->pm_resume)) {
+			dev_err(priv->dev,
+			"Wait resume timeout!, rc = %d\n", rc);
+			ret = -ETIME;
+		}
+	} else if (atomic_read(&priv->pm_resume) == IAXXX_DEV_SUSPENDING)
+		ret = -EAGAIN;
+
+	mutex_unlock(&priv->resume_mutex);
+
+	return ret;
 }
 
 
@@ -1708,6 +1761,7 @@ static void iaxxx_mutex_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->proc_on_off_lock);
 	mutex_init(&priv->btp_lock);
 	mutex_init(&priv->debug_mutex);
+	mutex_init(&priv->resume_mutex);
 }
 
 static void iaxxx_mutex_destroy(struct iaxxx_priv *priv)
@@ -1726,6 +1780,7 @@ static void iaxxx_mutex_destroy(struct iaxxx_priv *priv)
 	mutex_destroy(&priv->proc_on_off_lock);
 	mutex_destroy(&priv->btp_lock);
 	mutex_destroy(&priv->debug_mutex);
+	mutex_destroy(&priv->resume_mutex);
 }
 
 /**
@@ -1755,7 +1810,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	init_waitqueue_head(&priv->boot_wq);
 	init_waitqueue_head(&priv->wakeup_wq);
 	init_waitqueue_head(&priv->irq_wake);
-	atomic_set(&priv->pm_resume, 1);
+	atomic_set(&priv->pm_resume, IAXXX_DEV_RESUME);
 
 	priv->thread = kthread_run(kthread_worker_fn, &priv->worker,
 				   "iaxxx-core");

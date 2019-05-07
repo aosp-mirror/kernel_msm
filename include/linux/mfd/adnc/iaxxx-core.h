@@ -350,6 +350,7 @@ struct iaxxx_priv {
 	bool in_suspend;
 	bool in_resume;
 	atomic_t pm_resume;
+	struct mutex resume_mutex;
 	struct mutex pm_mutex;
 
 	/* Debug flags */
@@ -533,6 +534,8 @@ int iaxxx_core_resume_rt(struct device *dev);
 int iaxxx_core_suspend_rt(struct device *dev);
 int iaxxx_core_dev_resume(struct device *dev);
 int iaxxx_core_dev_suspend(struct device *dev);
+
+int iaxxx_wait_dev_resume(struct device *dev);
 
 int iaxxx_package_load(struct device *dev, const char *pkg_name,
 			uint32_t pkg_id, uint32_t *proc_id);

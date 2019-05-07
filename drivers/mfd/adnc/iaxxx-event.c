@@ -26,7 +26,6 @@
 
 #define BIT_FNAME(N, T)  N ## _ ## T
 #define GET_BITS(R, N)	(((R) & BIT_FNAME(N, MASK)) >> BIT_FNAME(N, POS))
-#define IRQ_WAIT_TIMEOUT		3000
 
 /*****************************************************************************
  * iaxxx_core_evt_is_valid_src_id()
@@ -679,15 +678,13 @@ static void iaxxx_get_event_work(struct work_struct *work)
 	uint32_t status;
 	int mode;
 
-	if (!atomic_read(&priv->pm_resume)) {
-		rc = wait_event_timeout(priv->irq_wake,
-		atomic_read(&priv->pm_resume),
-		msecs_to_jiffies(IRQ_WAIT_TIMEOUT));
-		if (!rc && !atomic_read(&priv->pm_resume)) {
-			dev_err(priv->dev,
-			"Wait resume timeout!, rc = %d\n", rc);
-			return;
-		}
+	rc = iaxxx_wait_dev_resume(dev);
+	if (rc) {
+		if (rc == -EAGAIN)
+			queue_work(priv->event_workq, &priv->event_work_struct);
+		else if (rc == -ETIME)
+			dev_err(dev, "%s: wait resume fail\n", __func__);
+		return;
 	}
 
 retry_reading_count_reg:
