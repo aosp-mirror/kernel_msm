@@ -40,22 +40,14 @@ static const char * const factory_bootmodes[] = {
 	"ffbm-01"
 };
 
-static void get_bootmode(void)
+static int __init get_bootmode(char *str)
 {
-	unsigned int size;
-	unsigned char *dt_bootmode = NULL;
-	struct device_node *dtnp = NULL;
+	if (str[0] != '\0')
+		strlcpy(bootmode, str, BOOTMODE_LENGTH);
 
-	dtnp = of_find_node_by_path(DEVICE_TREE_CDT_CDB2_PATH);
-	if (!dtnp)
-		pr_err("[SMEM]: Invalid CDT DT node\n");
-	else {
-		dt_bootmode = (unsigned char *)
-				of_get_property(dtnp, "bootmode", &size);
-	}
-	if (dt_bootmode)
-		strlcpy(bootmode, dt_bootmode, BOOTMODE_LENGTH);
+	return 1;
 }
+__setup("androidboot.mode=", get_bootmode);
 
 bool is_charger_bootmode(void)
 {
@@ -69,7 +61,6 @@ static bool is_factory_bootmode(void)
 {
 	int i = 0;
 
-	get_bootmode();
 	for (; i < ARRAY_SIZE(factory_bootmodes); i++)
 		if (!strncmp(factory_bootmodes[i], bootmode, sizeof(bootmode)))
 			return true;
