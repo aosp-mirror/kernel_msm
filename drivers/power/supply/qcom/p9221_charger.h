@@ -231,6 +231,8 @@ struct p9221_charger_platform_data {
 	int 				q_value;
 	int				epp_rp_value;
 	int				needs_dcin_reset;
+	int				nb_alignment_freq;
+	int				*alignment_freq;
 };
 
 struct p9221_charger_data {
@@ -245,6 +247,7 @@ struct p9221_charger_data {
 	struct device			*dev;
 	struct delayed_work		notifier_work;
 	struct delayed_work		dcin_work;
+	struct delayed_work		align_work;
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
 	struct alarm			icl_ramp_alarm;
@@ -278,6 +281,8 @@ struct p9221_charger_data {
 	bool				fake_force_epp;
 	bool				force_bpp;
 	u32				dc_icl_bpp;
+	int				wlc_alignment;
+	int				wlc_alignment_last;
 };
 
 struct p9221_prop_reg_map_entry {
