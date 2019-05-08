@@ -1756,6 +1756,29 @@ static void pd_phy_message_rx(struct usbpd *pd, enum pd_sop_type sop,
 	tcpm_pd_receive(pd->tcpm_port, &msg);
 }
 
+static void set_in_hard_reset_locked(struct tcpc_dev *dev, bool status)
+{
+	union power_supply_propval val = {0};
+	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
+	int ret = 0;
+
+	if (status == pd->in_hard_reset)
+		return;
+
+	val.intval = status ? 1 : 0;
+	ret = power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_IN_HARD_RESET,
+					&val);
+	if (ret < 0) {
+		logbuffer_log(pd->log,
+			      "unable to set hard reset status to %s, ret=%d",
+			      status ? "true" : "false", ret);
+		return;
+	}
+
+	pd->in_hard_reset = status;
+}
+
 static void pd_phy_shutdown(struct usbpd *pd)
 {
 	int rc = 0;
@@ -1763,9 +1786,13 @@ static void pd_phy_shutdown(struct usbpd *pd)
 	flush_delayed_work(&pd->ext_vbus_work);
 	mutex_lock(&pd->lock);
 
-	/* disable PD and reset port */
+	/* silently signal a hard_reset to reset port partner */
+	if (pd->pd_capable && pd->vbus_present) {
+		set_in_hard_reset_locked(&pd->tcpc_dev, true);
+		tcpm_set_current_limit(&pd->tcpc_dev, 0, 5000);
+		tcpm_pd_transmit(&pd->tcpc_dev, TCPC_TX_HARD_RESET, NULL);
+	}
 	pd->pd_disabled = true;
-	tcpm_port_reset(pd->tcpm_port);
 
 	if (regulator_is_enabled(pd->vbus)) {
 		rc = regulator_disable(pd->vbus);
@@ -1794,7 +1821,7 @@ static void pd_phy_shutdown(struct usbpd *pd)
 	}
 	mutex_unlock(&pd->lock);
 
-	logbuffer_log(pd->log, "pd phy shutdown");
+	pr_debug("pd phy shutdown\n");
 }
 
 static void log_rtc(struct tcpc_dev *dev)
@@ -1829,29 +1856,12 @@ static void set_pd_capable(struct tcpc_dev *dev, bool capable)
 
 static void set_in_hard_reset(struct tcpc_dev *dev, bool status)
 {
-	union power_supply_propval val = {0};
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
-	int ret = 0;
 
 	mutex_lock(&pd->lock);
 
-	if (status == pd->in_hard_reset)
-		goto unlock;
+	set_in_hard_reset_locked(dev, status);
 
-	val.intval = status ? 1 : 0;
-	ret = power_supply_set_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_PD_IN_HARD_RESET,
-					&val);
-	if (ret < 0) {
-		logbuffer_log(pd->log,
-			      "unable to set hard reset status to %s, ret=%d",
-			      status ? "true" : "false", ret);
-		goto unlock;
-	}
-
-	pd->in_hard_reset = status;
-
-unlock:
 	mutex_unlock(&pd->lock);
 }
 
