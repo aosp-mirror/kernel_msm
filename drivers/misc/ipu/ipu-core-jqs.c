@@ -753,6 +753,11 @@ static int ipu_core_jqs_start(struct device *dev)
 
 	mutex_lock(&bus->jqs.lock);
 
+	if (WARN_ON(!ipu_core_is_ready(bus) ||
+			!ipu_core_jqs_is_clock_ready(bus))) {
+		mutex_unlock(&bus->jqs.lock);
+		return -ENETDOWN;
+	}
 	bus->jqs.runtime_requested = true;
 	ret = ipu_core_jqs_enable_firmware(bus);
 

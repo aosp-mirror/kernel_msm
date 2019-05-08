@@ -513,6 +513,7 @@ int ipu_core_jqs_msg_transport_alloc_kernel_queue(struct paintbox_bus *bus)
 	mutex_lock(&bus->transport_lock);
 
 	if (!bus->jqs_msg_transport) {
+		mutex_unlock(&bus->transport_lock);
 		dev_err(bus->parent_dev, "%s: JQS is not ready\n", __func__);
 		return -ENETDOWN;
 	}
