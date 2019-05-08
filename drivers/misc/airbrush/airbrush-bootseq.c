@@ -275,7 +275,9 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 
 		ab_ctx->cold_boot = false;
 
+		ab_sm_start_ts(AB_SM_TS_LVCC_INIT);
 		ab_lvcc_init(&ab_ctx->asv_info);
+		ab_sm_record_ts(AB_SM_TS_LVCC_INIT);
 	} else {
 		ab_sm_start_ts(AB_SM_TS_PCIE_ENUM);
 
@@ -308,9 +310,11 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		return -EIO;
 	}
 
+	ab_sm_start_ts(AB_SM_TS_AB_READY_NOTIFY);
 	mutex_lock(&ab_ctx->mfd_lock);
 	ret = ab_ctx->mfd_ops->ab_ready(ab_ctx->mfd_ops->ctx);
 	mutex_unlock(&ab_ctx->mfd_lock);
+	ab_sm_record_ts(AB_SM_TS_AB_READY_NOTIFY);
 
 	/* Enable schmitt trigger mode for SPI clk pad.
 	 * This is to filter out any noise on SPI clk line.
@@ -322,15 +326,17 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	ABC_WRITE(SYSREG_AON_SPI0_AHB_ENABLE, 0x1);
 
 	/* Set clocks to usable states */
+	ab_sm_start_ts(AB_SM_TS_CLK_INIT);
 	ab_ctx->clk_ops->init(ab_ctx->clk_ops->ctx);
+	ab_sm_record_ts(AB_SM_TS_CLK_INIT);
 
+	ab_sm_start_ts(AB_SM_TS_DDR_INIT);
 	/* Setup the function pointer to read DDR OTPs */
 	ret = ab_ctx->dram_ops->setup(ab_ctx->dram_ops->ctx, ab_ctx);
 	if (ret) {
 		dev_err(ab_ctx->dev, "ddr setup failed\n");
 		return ret;
 	}
-
 	/* Wait till the ddr init & training is completed in case of ddr
 	 * initialization is done by BootROM
 	 */
@@ -339,8 +345,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 					ab_ctx->dram_ops->ctx))
 			return -EIO;
 	}
-
-	ab_sm_start_ts(AB_SM_TS_DDR_INIT);
 	ret = ab_ctx->dram_ops->init(ab_ctx->dram_ops->ctx);
 	if (ret) {
 		dev_err(ab_ctx->dev, "ddr init failed\n");

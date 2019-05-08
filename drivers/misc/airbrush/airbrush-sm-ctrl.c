@@ -938,6 +938,11 @@ static void ab_sm_record_state_change(enum chip_state prev_state,
 void ab_sm_start_ts(int ts)
 {
 	ab_sm_ctx->state_start_ts[ts] = ktime_get_ns();
+	if (!ab_sm_ctx->state_first_ts[ts]) {
+		ab_sm_ctx->state_first_ts[ts] =
+			ab_sm_ctx->state_start_ts[ts] -
+			ab_sm_ctx->state_start_ts[AB_SM_TS_FULL];
+	}
 }
 EXPORT_SYMBOL(ab_sm_start_ts);
 
@@ -951,7 +956,8 @@ EXPORT_SYMBOL(ab_sm_record_ts);
 void ab_sm_zero_ts(struct ab_state_context *sc)
 {
 	memset(sc->state_trans_ts, 0, sizeof(sc->state_trans_ts));
-	memset(sc->state_trans_ts, 0, sizeof(sc->state_start_ts));
+	memset(sc->state_start_ts, 0, sizeof(sc->state_start_ts));
+	memset(sc->state_first_ts, 0, sizeof(sc->state_first_ts));
 }
 
 void ab_sm_print_ts(struct ab_state_context *sc)
@@ -960,10 +966,18 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 	int nr_ts = NUM_AB_SM_TS;
 
 	static const char *ts_names[NUM_AB_SM_TS] = {
-		"    boot sequence",
-		"        alternate boot",
+		"    Boot sequence",
+		"        Get resources",
+		"        Alternate boot",
 		"        PCIe Enumeration",
+		"        LVCC Init",
+		"        AB Ready Notify",
+		"        CLK init",
 		"        DDR init",
+		"            DDR setup",
+		"            DDR M0 initialize",
+		"            DDR initialize",
+		"            DDR train",
 		"    PMIC on",
 		"    LVCC",
 		"    AON state change for DRAM init",
@@ -998,6 +1012,7 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"        DDR callback",
 		"            DDR set PLL",
 		"            DDR set PLL poll",
+		"            DDR finish PLL",
 		"    MIF state change",
 		"    FSYS state change",
 		"        PCIe callback",
@@ -1008,13 +1023,15 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"    AON state change",
 		"        AON clock settings",
 		"    PMIC off",
-		"full state change",
+		"Full state change",
 	};
 
 	if (sc->ts_enabled) {
 		for (i = 0; i < nr_ts; i++) {
-			dev_warn(sc->dev, "latency for %s: %llu ns\n",
-					ts_names[i], sc->state_trans_ts[i]);
+			dev_warn(sc->dev, "(start %9lldns) %s: %llu ns\n",
+					sc->state_first_ts[i],
+					ts_names[i],
+					sc->state_trans_ts[i]);
 		}
 	}
 }

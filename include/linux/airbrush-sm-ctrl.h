@@ -242,9 +242,17 @@ struct chip_to_block_map {
 enum ab_sm_time_stamps {
 	/* Bootsequence */
 	AB_SM_TS_BOOT_SEQ,
+	AB_SM_TS_GET_RESOURCES,
 	AB_SM_TS_ALT_BOOT,
 	AB_SM_TS_PCIE_ENUM,
+	AB_SM_TS_LVCC_INIT,
+	AB_SM_TS_AB_READY_NOTIFY,
+	AB_SM_TS_CLK_INIT,
 	AB_SM_TS_DDR_INIT,
+	AB_SM_TS_DDR_SETUP,
+	AB_SM_TS_DDR_M0_INIT_INTERNAL,
+	AB_SM_TS_DDR_INIT_INTERNAL,
+	AB_SM_TS_DDR_TRAIN,
 
 	/* PMIC On */
 	AB_SM_TS_PMIC_ON,
@@ -290,6 +298,7 @@ enum ab_sm_time_stamps {
 	AB_SM_TS_DDR_CB,
 	AB_SM_TS_DDR_SET_PLL,
 	AB_SM_TS_DDR_SET_PLL_POLL,
+	AB_SM_TS_DDR_FINISH_PLL,
 
 	AB_SM_TS_MIF,
 
@@ -577,6 +586,7 @@ struct ab_state_context {
 	bool ts_enabled;
 	u64 state_trans_ts[NUM_AB_SM_TS];
 	u64 state_start_ts[NUM_AB_SM_TS];
+	u64 state_first_ts[NUM_AB_SM_TS];
 #endif
 	int clkout_idx;
 	int clkout_blk_idx;

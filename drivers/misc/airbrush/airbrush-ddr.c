@@ -738,6 +738,7 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	ddr_reg_clr_set(PLL_CON0_PLL_PHY_MIF, PLL_PMS_MSK,
 			PLL_PMS(pms->p, pms->m, pms->s) | PLL_ENABLE);
 
+	ab_sm_record_ts(AB_SM_TS_DDR_SET_PLL);
 	ab_sm_start_ts(AB_SM_TS_DDR_SET_PLL_POLL);
 	if (ddr_reg_poll(PLL_CON0_PLL_PHY_MIF, p_pll_con0_pll_phy_mif)) {
 		pr_err("%s, mif pll lock failed\n", __func__);
@@ -745,6 +746,7 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	}
 	ab_sm_record_ts(AB_SM_TS_DDR_SET_PLL_POLL);
 
+	ab_sm_start_ts(AB_SM_TS_DDR_FINISH_PLL);
 	ddr_reg_set(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_PLLOUT));
 
 	/* Select the mif pll fout from SYSREG_MIF */
@@ -753,7 +755,7 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
 	ddr_reg_clr(DREX_MEMCONTROL, CLK_STOP_EN);
 
-	ab_sm_record_ts(AB_SM_TS_DDR_SET_PLL);
+	ab_sm_record_ts(AB_SM_TS_DDR_FINISH_PLL);
 	return DDR_SUCCESS;
 }
 
@@ -2779,6 +2781,7 @@ static int32_t ab_ddr_setup(void *ctx, void *ab_ctx)
 	if (ddr_ctx->is_setup_done)
 		return DDR_SUCCESS;
 
+	ab_sm_start_ts(AB_SM_TS_DDR_SETUP);
 	/* Incase of OTPs are flashed, get all information from OTPs.
 	 * If ddr OTPs are not flashed, depend on dt properties
 	 */
@@ -2819,6 +2822,7 @@ static int32_t ab_ddr_setup(void *ctx, void *ab_ctx)
 	ddr_ctx->ab_state_ctx = sc;
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
+	ab_sm_record_ts(AB_SM_TS_DDR_SETUP);
 	return DDR_SUCCESS;
 }
 
@@ -2839,17 +2843,16 @@ static int32_t ab_ddr_init(void *ctx)
 	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
 
 	if (IS_M0_DDR_INIT()) {
+		ab_sm_start_ts(AB_SM_TS_DDR_M0_INIT_INTERNAL);
 		/* Perform the post ddr init sequences which are only applicable
 		 * when ddr init is done by M0 bootrom.
 		 */
-
 		/* enable the ddr power features */
 		ret = ddr_enable_power_features();
 		if (ret) {
 			pr_err("ddr_init: error!! enabling power features failed\n");
 			goto ddr_init_done;
 		}
-
 		/* In A0 BootROM Auto Refresh setting is missing.
 		 * To fix this issue, set the Auto-Refresh enable from HOST
 		 * immediately after M0 DDR init.
@@ -2863,9 +2866,12 @@ static int32_t ab_ddr_init(void *ctx)
 		ddr_ctx->ddr_train_sram_location =
 				ddr_reg_rd(SYSREG_REG_TRN_ADDR);
 		ddr_copy_train_results_from_sram(ddr_ctx);
+		ab_sm_record_ts(AB_SM_TS_DDR_M0_INIT_INTERNAL);
 	} else {
+		ab_sm_start_ts(AB_SM_TS_DDR_INIT_INTERNAL);
 		/* HOST should perform DDR init and train sequences */
 		ret = ab_ddr_init_internal_isolation(ddr_ctx);
+		ab_sm_record_ts(AB_SM_TS_DDR_INIT_INTERNAL);
 		if (ret) {
 			pr_err("ddr_init: error!! ddr initialization failed\n");
 			goto ddr_init_done;
@@ -2886,7 +2892,9 @@ static int32_t ab_ddr_init(void *ctx)
 	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_800] = 0;
 
 	/* Train all the ddr frequencies during Airbrush boot */
+	ab_sm_start_ts(AB_SM_TS_DDR_TRAIN);
 	ret = __ab_ddr_train_all(ddr_ctx);
+	ab_sm_record_ts(AB_SM_TS_DDR_TRAIN);
 	if (ret) {
 		pr_err("ddr_init:  error!! ddr train_all failed\n");
 		goto ddr_init_done;
