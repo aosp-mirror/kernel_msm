@@ -933,6 +933,11 @@ bool sde_encoder_in_clone_mode(struct drm_encoder *drm_enc)
 	return false;
 }
 
+static inline bool is_lp_mode(int mode)
+{
+	return mode == SDE_MODE_DPMS_LP1 || mode == SDE_MODE_DPMS_LP2;
+}
+
 static int sde_encoder_virt_atomic_check(
 		struct drm_encoder *drm_enc,
 		struct drm_crtc_state *crtc_state,
@@ -983,6 +988,18 @@ static int sde_encoder_virt_atomic_check(
 			SDE_ERROR_ENC(sde_enc,
 					"mode unsupported, phys idx %d\n", i);
 			break;
+		}
+	}
+
+	if (msm_is_mode_seamless_dms(adj_mode)) {
+		const int prop_lp_mode = sde_connector_get_property(conn_state,
+					CONNECTOR_PROP_LP);
+
+		if (is_lp_mode(sde_conn->lp_mode) || is_lp_mode(prop_lp_mode)) {
+			SDE_ERROR_ENC(sde_enc,
+				"no DMS under LP mode: connector %d, prop %d\n",
+				sde_conn->lp_mode, prop_lp_mode);
+			return -EINVAL;
 		}
 	}
 
