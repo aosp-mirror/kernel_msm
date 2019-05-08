@@ -1228,7 +1228,7 @@ static int p9221_notifier_check_neg_power(struct p9221_charger_data *charger)
 	int ret;
 	u16 status_reg;
 
-	ret = p9221_reg_read_8(charger, P9221R5_EPP_REQ_NEGOTIATED_POWER_REG,
+	ret = p9221_reg_read_8(charger, P9221R5_EPP_CUR_NEGOTIATED_POWER_REG,
 			       &np8);
 	if (ret < 0) {
 		dev_err(&charger->client->dev,
