@@ -80,6 +80,15 @@
 #define IRQ_DISABLE 0x00
 #define TH_MEASURE_TRIGGER 0x01
 
+/* Silego define */
+#define FAULT_FLAG_ADDR 0xF7
+#define NO_FAULT 0xC0
+#define ITOR_OPEN_CIRCUIT 0x2C
+#define DOT_OCP_FAULT 0xD0
+#define FLOOD_OCP_FAULT 0xC4
+#define DOT_ITOR_FAULT 0xD2
+#define FLOOD_ITOR_FAULT 0xC6
+
 #define VIO_VOLTAGE_MIN 1800000
 #define VIO_VOLTAGE_MAX 1800000
 #define SLIEGO_VDD_VOlTAGE_MIN 2800000
@@ -168,6 +177,7 @@ struct led_laser_ctrl_t {
 		struct regulator *vdd;
 		struct gpio *gpio_array;
 		unsigned int irq[MAX_SILEGO_GPIO_SIZE];
+		int32_t fault_flag;
 	} silego;
 	struct {
 		bool is_power_up;
@@ -239,6 +249,15 @@ static const struct reg_setting silego_reg_settings_ver3[] = {
 	{0x83, 0x2c}, {0x84, 0x68}, {0x85, 0x80}, {0x86, 0x40}, {0x87, 0x40},
 	{0x88, 0x3e}, {0x89, 0x60}, {0x8a, 0x40}, {0x8b, 0x30}, {0x8c, 0x7c},
 	{0x8d, 0x24}, {0x8e, 0xa0}, {0x8f, 0xc0}, {0x90, 0x40}, {0x91, 0xa0},
+};
+
+static const struct reg_setting silego_reg_settings_ver4[] = {
+	{0xc0, 0x01}, {0xc1, 0xa6}, {0xc2, 0xe0}, {0xc3, 0xa6}, {0xcb, 0x93},
+	{0xcc, 0x93}, {0xce, 0x93}, {0x92, 0x00}, {0x93, 0x00}, {0xa0, 0x1a},
+	{0xa2, 0x1a}, {0x80, 0xb0}, {0x81, 0x24}, {0x82, 0x58}, {0x83, 0x2c},
+	{0x84, 0x78}, {0x85, 0x2c}, {0x86, 0x40}, {0x87, 0x40}, {0x88, 0x3c},
+	{0x89, 0x60}, {0x8a, 0x00}, {0x8b, 0x30}, {0x8c, 0x78}, {0x8d, 0x24},
+	{0x8e, 0xa0}, {0x8f, 0x80}, {0x90, 0x00},
 };
 
 static const struct reg_setting cap_sense_init_reg_settings[] = {
@@ -609,6 +628,47 @@ int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 	return rc;
 }
 
+static int silego_check_fault_type(struct led_laser_ctrl_t *ctrl)
+{
+	int rc, io_release_rc;
+	uint32_t old_sid, old_cci_master;
+
+	old_sid = ctrl->io_master_info.cci_client->sid;
+	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
+	ctrl->io_master_info.cci_client->sid = 0x08;
+	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
+
+	rc = camera_io_init(&(ctrl->io_master_info));
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev,
+			"cam io init for silego failed: rc: %d", rc);
+		goto out;
+	}
+
+	rc = camera_io_dev_read(
+		&ctrl->io_master_info,
+		FAULT_FLAG_ADDR,
+		&ctrl->silego.fault_flag,
+		CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_BYTE);
+
+	if (rc < 0)
+		dev_err(ctrl->soc_info.dev,
+			"failed to read silego fault flag");
+
+	io_release_rc = camera_io_release(&(ctrl->io_master_info));
+	if (io_release_rc < 0) {
+		dev_err(ctrl->soc_info.dev, "silego cci_release failed");
+		if (!rc)
+			rc = io_release_rc;
+	}
+
+out:
+	ctrl->io_master_info.cci_client->sid = old_sid;
+	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
+	return rc;
+}
+
 static int silego_override_setting(
 	struct led_laser_ctrl_t *ctrl, uint32_t addr, uint32_t data)
 {
@@ -691,9 +751,13 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 		settings_size = ARRAY_SIZE(silego_reg_settings_ver2);
 		break;
 	case BUILD_EVT1_1:
-	default:
 		reg_map = silego_reg_settings_ver3;
 		settings_size = ARRAY_SIZE(silego_reg_settings_ver3);
+		break;
+	case BUILD_DVT:
+	default:
+		reg_map = silego_reg_settings_ver4;
+		settings_size = ARRAY_SIZE(silego_reg_settings_ver4);
 		break;
 	}
 
@@ -2333,6 +2397,7 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->silego.is_validated = false;
 	ctrl->silego.is_vcsel_fault = false;
 	ctrl->silego.is_csense_halt = false;
+	ctrl->silego.fault_flag = 0;
 	ctrl->silego.vcsel_fault_count = 0;
 	ctrl->cap_sense.is_validated = false;
 	ctrl->cap_sense.sample_count = 0;
@@ -2456,6 +2521,27 @@ static int32_t lm36011_driver_platform_probe(
 			_dev_info(ctrl->soc_info.dev,
 				"th sensor verify, config: 0x%x", device_id);
 			ctrl->th_sensor.is_validated = true;
+		}
+
+		/* check Silego initial state */
+		rc = silego_check_fault_type(ctrl);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"check silego state failed");
+			ctrl->silego.is_validated = false;
+		} else {
+			if (ctrl->silego.fault_flag != ITOR_OPEN_CIRCUIT &&
+				ctrl->silego.fault_flag != NO_FAULT &&
+				ctrl->silego.fault_flag != FLOOD_ITOR_FAULT &&
+				ctrl->silego.fault_flag != DOT_ITOR_FAULT) {
+				dev_err(ctrl->soc_info.dev,
+					"Silego not in right state: %x",
+					ctrl->silego.fault_flag);
+				ctrl->silego.is_validated = false;
+			} else
+				dev_info(ctrl->soc_info.dev,
+					"Silego state: 0x%x",
+					ctrl->silego.fault_flag);
 		}
 	}
 
