@@ -2199,6 +2199,7 @@ static const struct power_supply_desc p9221_psy_desc = {
 	.get_property = p9221_get_property,
 	.set_property = p9221_set_property,
 	.property_is_writeable = p9221_prop_is_writeable,
+	.no_thermal = true,
 };
 
 static int p9221_charger_probe(struct i2c_client *client,
