@@ -1263,7 +1263,7 @@ int iaxxx_core_get_pwr_stats(struct device *dev,
 
 	ret = iaxxx_btp_read(priv,
 		pwr_stats_addr, pwr_stats,
-		pwr_stats_size / sizeof(uint32_t), IAXXX_HOST_0);
+		pwr_stats_size, IAXXX_HOST_0);
 	if (ret < 0) {
 		dev_err(priv->dev, "Not able to read pwr stats %d\n",
 				ret);
