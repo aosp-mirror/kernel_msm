@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -927,6 +927,7 @@ A_STATUS process_sw_event(void *pdev, void *data)
 	qdf_mem_copy(sw_event.sw_event,
 				 ((char *)fw_data->data + sizeof(struct ath_pktlog_hdr)),
 				 pl_hdr.size);
+	cds_pkt_stats_to_logger_thread(&pl_hdr, NULL, sw_event.sw_event);
 
 	return A_OK;
 }
