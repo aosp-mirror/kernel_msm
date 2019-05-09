@@ -33,7 +33,6 @@
 	qcom,hvdcp-disable;
 	google,usb-port-tz-name = "usbc-therm-monitor";
 	qcom,dc-icl-ua = <1100000>;
-	qcom,fv-max-uv = <4400000>;
 
 	qcom,chgr@1000 {
 		/delete-property/ interrupts;
