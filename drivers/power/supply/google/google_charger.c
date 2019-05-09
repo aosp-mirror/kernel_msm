@@ -51,7 +51,7 @@
 #define DRV_DEFAULTCC_UPDATE_INTERVAL	30000
 #define DRV_DEFAULTCV_UPDATE_INTERVAL	2000
 
-#define DEFAULT_VOTER			"DEFAULT_VOTER"
+#define MAX_VOTER			"MAX_VOTER"
 #define THERMAL_DAEMON_VOTER		"THERMAL_DAEMON_VOTER"
 #define USER_VOTER			"USER_VOTER"	/* same as QCOM */
 #define MSC_CHG_VOTER			"msc_chg"
@@ -227,11 +227,9 @@ static char *psy_usbc_type_str[] = {
 	"PD", "PD_DRP", "PD_PPS", "BrickID"
 };
 
-/* NOTE: doesn't reset chg_drv->adapter_details.v = 0 see chg_work() */
-static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
+/* called on google_charger_init_work() and on every disconnect */
+static inline void chg_init_state(struct chg_drv *chg_drv)
 {
-	union gbms_charger_state chg_state = { .v = 0 };
-
 	/* no power supply */
 	chg_drv->stop_charging = true;
 
@@ -255,8 +253,17 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->pps_data.nr_src_cap = 0;
 	tcpm_put_partner_src_caps(&chg_drv->pps_data.src_caps);
 	chg_drv->pps_data.src_caps = NULL;
-	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
+}
 
+/* NOTE: doesn't reset chg_drv->adapter_details.v = 0 see chg_work() */
+static inline void chg_reset_state(struct chg_drv *chg_drv)
+{
+	union gbms_charger_state chg_state = { .v = 0 };
+
+	chg_init_state(chg_drv);
+
+	/* TODO: handle interaction with PPS code */
+	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
 	/* normal when disconnected */
 	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, true, 0);
 	/* when/if enabled */
@@ -937,7 +944,7 @@ static void chg_work(struct work_struct *work)
 		/* If no power source, stop charging */
 		if (!chg_drv->stop_charging) {
 			pr_info("MSC_CHG no power source, disabling charging\n");
-			reset_chg_drv_state(chg_drv);
+			chg_reset_state(chg_drv);
 		}
 
 		goto exit_chg_work;
@@ -983,7 +990,8 @@ static void chg_work(struct work_struct *work)
 
 	/* TODO: re-enable charging only after setting the charger */
 	if (disable_charging != chg_drv->disable_charging) {
-		pr_info("MSC_CHG set disable_charging(%d)", disable_charging);
+		pr_info("MSC_CHG disable_charging %d->%d\n",
+			chg_drv->disable_charging, disable_charging);
 
 		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER,
 				disable_charging != 0, 0);
@@ -994,7 +1002,9 @@ static void chg_work(struct work_struct *work)
 
 	/* TODO: re-enable input only after setting the charger */
 	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
-		pr_info("MSC_CHG set disable_pwrsrc(%d)", disable_pwrsrc);
+		pr_info("MSC_CHG disable_pwrsrc %d->%d\n",
+			chg_drv->disable_pwrsrc, disable_pwrsrc);
+
 		GPSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND,
 			     disable_pwrsrc);
 	}
@@ -1028,7 +1038,7 @@ rerun_error:
 exit_chg_work:
 	/* Route adapter details after the roundtrip since google_battery
 	 * might overwrite the value when it starts a new cycle.
-	 * NOTE: reset_chg_drv_state() must not set chg_drv->adapter_details.v
+	 * NOTE: chg_reset_state() must not set chg_drv->adapter_details.v
 	 * to zero. Fix the odd dependency when handling failure in setting
 	 * POWER_SUPPLY_PROP_ADAPTER_DETAILS.
 	 */
@@ -1056,6 +1066,7 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 {
 	struct device *dev = chg_drv->device;
 	struct device_node *node = dev->of_node;
+	u32 temp;
 	int ret;
 
 	/* chg_work will use the minimum between all votess */
@@ -1074,12 +1085,13 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	 *
 	 * this adds a "safety" margin for C rates if the charger doesn't do it.
 	 */
-	ret = of_property_read_u32(node, "google,chg-cc-tolerance",
-				   &chg_drv->chg_cc_tolerance);
+	ret = of_property_read_u32(node, "google,chg-cc-tolerance", &temp);
 	if (ret < 0)
 		chg_drv->chg_cc_tolerance = 0;
-	else if (chg_drv->chg_cc_tolerance > CHG_DRV_CC_HW_TOLERANCE_MAX)
+	else if (temp > CHG_DRV_CC_HW_TOLERANCE_MAX)
 		chg_drv->chg_cc_tolerance = CHG_DRV_CC_HW_TOLERANCE_MAX;
+	else
+		chg_drv->chg_cc_tolerance = temp;
 
 	/* when set will reduce the comparison value for ibatt by
 	 *         cc_max * (100 - pps_cc_tolerance_pct) / 100
@@ -1091,15 +1103,17 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 	else if (chg_drv->pps_cc_tolerance_pct > PPS_CC_TOLERANCE_PCT_MAX)
 		chg_drv->pps_cc_tolerance_pct = PPS_CC_TOLERANCE_PCT_MAX;
 
-	ret = of_property_read_u32(node, "google,fcc-max-ua",
-				   &chg_drv->batt_profile_fcc_ua);
+	ret = of_property_read_u32(node, "google,fcc-max-ua", &temp);
 	if (ret < 0)
 		chg_drv->batt_profile_fcc_ua = -EINVAL;
+	else
+		chg_drv->batt_profile_fcc_ua = temp;
 
-	ret = of_property_read_u32(node, "google,fv-max-uv",
-				   &chg_drv->batt_profile_fv_uv);
+	ret = of_property_read_u32(node, "google,fv-max-uv", &temp);
 	if (ret < 0)
 		chg_drv->batt_profile_fv_uv = -EINVAL;
+	else
+		chg_drv->batt_profile_fv_uv = temp;
 
 	pr_info("charging profile in the battery\n");
 
@@ -1713,6 +1727,14 @@ static int chg_disable_std_votables(struct chg_drv *chg_drv)
 	return 0;
 }
 
+/* TODO: qcom/battery.c mostly handles PL charging: we don't need it.
+ *  In order to remove and keep using QCOM code, create "USB_ICL",
+ *  "PL_DISABLE", "PL_AWAKE" and "PL_ENABLE_INDIRECT" in a new function called
+ *  qcom_batt_init(). Also might need to change the names of our votables for
+ *  FCC, FV to match QCOM.
+ * NOTE: Battery also register "qcom-battery" class so it might not be too
+ * straightforward to remove all dependencies.
+ */
 static int chg_create_votables(struct chg_drv *chg_drv)
 {
 	int ret;
@@ -1761,25 +1783,6 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 		goto error_exit;
 	}
 
-	/* TODO: qcom/battery.c mostly handles PL charging: we don't need it.
-	 * In order to remove and keep using QCOM code, create "USB_ICL",
-	 * "PL_DISABLE", "PL_AWAKE" and "PL_ENABLE_INDIRECT" in a new
-	 * function called qcom_batt_init(), also will need to change the names
-	 * of our votables for FCC, FV to match QCOM. Battery also register
-	 * "qcom-battery" class so it might not need too straightforward to
-	 * remove all dependencies.
-	 */
-	vote(chg_drv->msc_fv_votable, DEFAULT_VOTER,
-	     chg_drv->batt_profile_fv_uv > 0, chg_drv->batt_profile_fv_uv);
-	vote(chg_drv->msc_fcc_votable, DEFAULT_VOTER,
-	     chg_drv->batt_profile_fcc_ua > 0, chg_drv->batt_profile_fcc_ua);
-
-	vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, true, 0);
-	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, true, 0);
-	/* prevent all changes until chg_work run */
-	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
-	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, false, 0);
-
 	return 0;
 
 error_exit:
@@ -1792,6 +1795,19 @@ error_exit:
 	chg_drv->msc_interval_votable = NULL;
 
 	return ret;
+}
+
+static void chg_init_votables(struct chg_drv *chg_drv)
+{
+	/* prevent all changes until the first roundtrip with real state */
+	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
+
+	/* will not be applied until we vote non-zero msc_interval */
+	vote(chg_drv->msc_fv_votable, MAX_VOTER,
+	     chg_drv->batt_profile_fv_uv > 0, chg_drv->batt_profile_fv_uv);
+	vote(chg_drv->msc_fcc_votable, MAX_VOTER,
+	     chg_drv->batt_profile_fcc_ua > 0, chg_drv->batt_profile_fcc_ua);
+
 }
 
 static int chg_get_max_charge_cntl_limit(struct thermal_cooling_device *tcd,
@@ -2101,10 +2117,9 @@ static void google_charger_init_work(struct work_struct *work)
 	if (ret < 0)
 		pr_err("Cannot register thermal devices, ret=%d\n", ret);
 
+	chg_init_state(chg_drv);
 	chg_drv->charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
 	chg_drv->charge_start_level = DEFAULT_CHARGE_START_LEVEL;
-
-	reset_chg_drv_state(chg_drv);
 
 	chg_drv->psy_nb.notifier_call = chg_psy_changed;
 	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
@@ -2218,12 +2233,8 @@ static int google_charger_probe(struct platform_device *pdev)
 	ret = chg_create_votables(chg_drv);
 	if (ret < 0)
 		pr_err("Failed to create votables, ret=%d\n", ret);
-
-	/* will create in chg_create_votables() */
-	if (!chg_drv->dc_icl_votable)
-		chg_drv->dc_icl_votable = find_votable("DC_ICL");
-	if (!chg_drv->dc_icl_votable)
-		pr_err("Failed to find dc_icl_votable\n");
+	else
+		chg_init_votables(chg_drv);
 
 	chg_drv->pps_data.log = debugfs_logbuffer_register("pps");
 	if (IS_ERR(chg_drv->pps_data.log)) {
