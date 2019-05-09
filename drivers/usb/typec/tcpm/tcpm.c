@@ -1529,8 +1529,12 @@ static void tcpm_handle_vdm_request(struct tcpm_port *port,
 		port->vdm_state = VDM_STATE_DONE;
 	}
 
-	if (PD_VDO_SVDM(p0))
+	if (PD_VDO_SVDM(p0)) {
 		rlen = tcpm_pd_svdm(port, payload, cnt, response);
+	} else {
+		if (port->negotiated_rev >= PD_REV30)
+			tcpm_queue_message(port, PD_MSG_CTRL_NOT_SUPP);
+	}
 
 	if (rlen > 0) {
 		tcpm_queue_vdm(port, response[0], &response[1], rlen - 1,
