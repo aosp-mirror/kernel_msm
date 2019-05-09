@@ -2333,7 +2333,12 @@ static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
 			dev_err(&charger->client->dev,
 				"Failed to read P9221_SYSTEM_MODE_REG: %d\n",
 				res);
-			return false;
+			/*
+			 * p9221_reg_read_n returns ENODEV for ENOTCONN as well.
+			 * Signal dc_reset when register read fails with the
+			 * above reasons.
+			 */
+			return res == -ENODEV;
 		}
 
 		dev_info(&charger->client->dev,
@@ -2351,7 +2356,7 @@ static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
 		if (res < 0) {
 			dev_err(&charger->client->dev,
 				"Failed to read P9221_STATUS_REG: %d\n", res);
-			return false;
+			return res == -ENODEV ? true : false;
 		}
 
 		dev_info(&charger->client->dev,
