@@ -141,12 +141,8 @@ int ab_pmic_off(struct ab_state_context *sc)
 				"failed to disable SMPS2, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
 
-		if (sc->alternate_boot) {
-			/* NOTE: delay as part of b/130528130 */
-			usleep_range(20000, 21000);
-		} else if (sc->smps2_delay) {
+		if (sc->smps2_delay)
 			usleep_range(sc->smps2_delay, sc->smps2_delay + 1);
-		}
 	}
 
 	/* NOTE: delay required by b/120785608 */
