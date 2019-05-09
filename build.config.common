@@ -3,8 +3,8 @@ BRANCH=android-msm-pixel-4.9
 CROSS_COMPILE=aarch64-linux-android-
 CROSS_COMPILE_ARM32=arm-linux-androideabi-
 EXTRA_CMDS=''
-CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r349610b/bin/
-LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-r349610b/lib64:$LD_LIBRARY_PATH
+CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r353983c/bin/
+LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-r353983c/lib64:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH
 LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
 LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
