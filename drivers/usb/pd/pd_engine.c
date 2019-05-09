@@ -1839,7 +1839,7 @@ static void set_pd_capable(struct tcpc_dev *dev, bool capable)
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
 
-	if (pd->pd_capable == capable)
+	if (pd->pd_capable == capable && !pd->in_pr_swap)
 		return;
 
 	val.intval = capable ? POWER_SUPPLY_PD_ACTIVE :
