@@ -69,7 +69,7 @@ ssize_t ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
  *
  */
 ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
-		uint32_t q_id, void __user *buf, size_t size);
+		uint32_t q_id, void __user *buf, size_t size, int nonblock);
 
 int ipu_core_jqs_msg_transport_user_set_eventfd(struct paintbox_bus *bus,
 		uint32_t q_id, int eventfd);

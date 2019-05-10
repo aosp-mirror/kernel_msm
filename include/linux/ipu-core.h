@@ -112,7 +112,7 @@ int ipu_user_write(struct device *dev, uint32_t queue_id,
  *
  */
 ssize_t ipu_user_read(struct device *dev, uint32_t q_id, void __user *buf,
-		size_t size);
+		size_t size, int nonblock);
 
 int ipu_user_set_eventfd(struct device *dev, uint32_t queue_id, int eventfd);
 int ipu_user_clear_eventfd(struct device *dev, uint32_t queue_id);

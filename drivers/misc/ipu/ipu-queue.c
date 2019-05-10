@@ -194,7 +194,7 @@ static ssize_t ipu_queue_read(struct file *fp, char __user *buf, size_t size,
 	mutex_unlock(&pb->lock);
 
 	return ipu_user_read(pb->dev, cmd_queue->queue_id,
-			(char __user *)buf, size);
+			(char __user *)buf, size, fp->f_flags & O_NONBLOCK);
 }
 
 static ssize_t ipu_queue_write(struct file *fp, const char __user *buf,

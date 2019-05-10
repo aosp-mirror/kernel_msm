@@ -55,12 +55,12 @@ int ipu_user_write(struct device *dev, uint32_t q_id,
 }
 
 ssize_t ipu_user_read(struct device *dev, uint32_t q_id, void __user *buf,
-		size_t size)
+		size_t size, int nonblock)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 
 	return ipu_core_jqs_msg_transport_user_read(pb_dev->bus, q_id, buf,
-			size);
+			size, nonblock);
 }
 
 int ipu_user_set_eventfd(struct device *dev, uint32_t q_id, int eventfd)

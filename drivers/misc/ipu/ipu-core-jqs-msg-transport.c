@@ -628,7 +628,7 @@ void ipu_core_jqs_msg_transport_complete_kernel_queue(struct paintbox_bus *bus,
 }
 
 ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
-		uint32_t q_id, void __user *buf, size_t size)
+		uint32_t q_id, void __user *buf, size_t size, int nonblock)
 {
 	unsigned long flags;
 	struct paintbox_jqs_msg_transport *trans;
@@ -680,6 +680,9 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 			dev_err(bus->parent_dev,
 					"%s: error reading from JQS circular buffer, ret %zd\n",
 					__func__, ret);
+			break;
+		} else if (nonblock) {
+			ret = -EAGAIN;
 			break;
 		}
 
