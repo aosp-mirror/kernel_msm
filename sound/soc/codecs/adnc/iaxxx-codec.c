@@ -2628,6 +2628,10 @@ IAXXX_STREAM_EN_SET_GET(STREAM15)
 	SOC_ENUM(strm_name" Xfer Mode", stream##_xfer_mode_enum), \
 	SOC_ENUM(strm_name" Low Latency IpStr Id",\
 			stream##_low_latency_ip_str_id_enum), \
+	SOC_SINGLE(strm_name" Phy logical Ch Map", \
+			IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_REG(stream), \
+			0, IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_MASK_VAL, \
+			0), \
 	SOC_SINGLE(strm_name" Enable Status", \
 			IAXXX_STR_HDR_STR_ST_ADDR, stream, 1, 0), \
 	SOC_ENUM(strm_name" Str Status Str State", stream##_str_state_enum), \
