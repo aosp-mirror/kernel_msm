@@ -82,3 +82,13 @@
 		<&tlmm 49 0>;
 	hw-version = <2>;
 };
+
+&cam_cci0 {
+	qcom,cam-sensor@3 {
+		rgltr-min-voltage = <1800000 2900000 1350000 4100000 0>;
+	};
+
+	qcom,cam-sensor@4 {
+		rgltr-min-voltage = <1800000 2900000 1350000 4100000 0>;
+	};
+};
