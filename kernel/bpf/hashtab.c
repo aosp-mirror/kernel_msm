@@ -43,8 +43,13 @@ enum extra_elem_state {
 struct htab_elem {
 	union {
 		struct hlist_node hash_node;
-		struct bpf_htab *htab;
-		struct pcpu_freelist_node fnode;
+		struct {
+			void *padding;
+			union {
+				struct bpf_htab *htab;
+				struct pcpu_freelist_node fnode;
+			};
+		};
 	};
 	union {
 		struct rcu_head rcu;
@@ -116,8 +121,10 @@ skip_percpu_elems:
 	if (err)
 		goto free_elems;
 
-	pcpu_freelist_populate(&htab->freelist, htab->elems, htab->elem_size,
-			       htab->map.max_entries);
+	pcpu_freelist_populate(&htab->freelist,
+			       htab->elems + offsetof(struct htab_elem, fnode),
+			       htab->elem_size, htab->map.max_entries);
+
 	return 0;
 
 free_elems:
@@ -149,6 +156,11 @@ static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 	struct bpf_htab *htab;
 	int err, i;
 	u64 cost;
+
+	BUILD_BUG_ON(offsetof(struct htab_elem, htab) !=
+		     offsetof(struct htab_elem, hash_node.pprev));
+	BUILD_BUG_ON(offsetof(struct htab_elem, fnode.next) !=
+		     offsetof(struct htab_elem, hash_node.pprev));
 
 	if (attr->map_flags & ~HTAB_CREATE_FLAG_MASK)
 		/* reserved bits should not be used */
@@ -431,9 +443,13 @@ static struct htab_elem *alloc_htab_elem(struct bpf_htab *htab, void *key,
 	int err = 0;
 
 	if (prealloc) {
-		l_new = (struct htab_elem *)pcpu_freelist_pop(&htab->freelist);
-		if (!l_new)
+		struct pcpu_freelist_node *l;
+
+		l = pcpu_freelist_pop(&htab->freelist);
+		if (!l)
 			err = -E2BIG;
+		else
+			l_new = container_of(l, struct htab_elem, fnode);
 	} else {
 		if (atomic_inc_return(&htab->count) > htab->map.max_entries) {
 			atomic_dec(&htab->count);
