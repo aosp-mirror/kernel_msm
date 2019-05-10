@@ -71,6 +71,11 @@ ssize_t ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
 ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		uint32_t q_id, void __user *buf, size_t size);
 
+int ipu_core_jqs_msg_transport_user_set_eventfd(struct paintbox_bus *bus,
+		uint32_t q_id, int eventfd);
+int ipu_core_jqs_msg_transport_user_clear_eventfd(struct paintbox_bus *bus,
+		uint32_t q_id);
+
 /* Write a message to JQS and do not wait for a response.
  *
  * Partial writes are not allowed, if there isn't enough room for the entire

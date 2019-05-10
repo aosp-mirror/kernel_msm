@@ -80,6 +80,7 @@ struct host_jqs_queue {
 
 	/* The waiter, if any, on this queue */
 	struct host_jqs_queue_waiter waiter;
+	struct eventfd_ctx *eventfd_ctx;
 };
 
 struct paintbox_jqs_msg_transport {

@@ -221,10 +221,48 @@ static ssize_t ipu_queue_write(struct file *fp, const char __user *buf,
 	return ipu_user_write(pb->dev, cmd_queue->queue_id, buf, size);
 }
 
+static long ipu_queue_ioctl(struct file *fp, unsigned int cmd,
+		unsigned long arg)
+{
+	struct paintbox_cmd_queue *cmd_queue = fp->private_data;
+	struct paintbox_data *pb = cmd_queue->pb;
+	int ret;
+
+	mutex_lock(&pb->lock);
+	if (ipu_reset_is_requested(pb)) {
+		mutex_unlock(&pb->lock);
+		return -ECONNRESET;
+	}
+
+	if (cmd_queue->session == NULL) {
+		int ret = cmd_queue->err;
+
+		mutex_unlock(&pb->lock);
+		return ret;
+	}
+
+	mutex_unlock(&pb->lock);
+
+	switch (cmd) {
+	case IPU_CMD_QUEUE_SET_EVENTFD:
+		ret = ipu_user_set_eventfd(pb->dev, cmd_queue->queue_id, arg);
+		break;
+	case IPU_CMD_QUEUE_CLEAR_EVENTFD:
+		ret = ipu_user_clear_eventfd(pb->dev, cmd_queue->queue_id);
+		break;
+	default:
+		dev_err(pb->dev, "%s: unknown ioctl 0x%0x\n", __func__, cmd);
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
 static const struct file_operations ipu_queue_fops = {
 	.read = ipu_queue_read,
 	.write = ipu_queue_write,
 	.release = ipu_queue_release,
+	.unlocked_ioctl = ipu_queue_ioctl,
 	.flush = ipu_queue_flush,
 };
 

@@ -63,6 +63,21 @@ ssize_t ipu_user_read(struct device *dev, uint32_t q_id, void __user *buf,
 			size);
 }
 
+int ipu_user_set_eventfd(struct device *dev, uint32_t q_id, int eventfd)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+
+	return ipu_core_jqs_msg_transport_user_set_eventfd(pb_dev->bus, q_id,
+			eventfd);
+}
+
+int ipu_user_clear_eventfd(struct device *dev, uint32_t q_id)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+
+	return ipu_core_jqs_msg_transport_user_clear_eventfd(pb_dev->bus, q_id);
+}
+
 int ipu_kernel_write(struct device *dev, const struct jqs_message *msg)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);

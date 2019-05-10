@@ -114,6 +114,9 @@ int ipu_user_write(struct device *dev, uint32_t queue_id,
 ssize_t ipu_user_read(struct device *dev, uint32_t q_id, void __user *buf,
 		size_t size);
 
+int ipu_user_set_eventfd(struct device *dev, uint32_t queue_id, int eventfd);
+int ipu_user_clear_eventfd(struct device *dev, uint32_t queue_id);
+
 /* Write a message to JQS and do not wait for a response.
  *
  * Partial writes are not allowed, if there isn't enough room for the entire

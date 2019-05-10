@@ -14,6 +14,7 @@
  */
 
 #include <linux/err.h>
+#include <linux/eventfd.h>
 #include <linux/ipu-core.h>
 #include <linux/device.h>
 #include <linux/jiffies.h>
@@ -452,6 +453,9 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt_handler(
 			host_q->waiter.ret = 0;
 			complete(&host_q->waiter.completion);
 		}
+
+		if (host_q->eventfd_ctx)
+			eventfd_signal(host_q->eventfd_ctx, 1);
 	}
 
 	spin_unlock(&bus->irq_lock);
@@ -567,6 +571,13 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 		/* Release the waiting thread, the queue is disappearing */
 		waiter->ret = queue_err;
 		complete(&waiter->completion);
+	}
+
+	if (host_q->eventfd_ctx) {
+		/* Wake any waiting threads w/o incrementing response count */
+		eventfd_signal(host_q->eventfd_ctx, 0);
+		eventfd_ctx_put(host_q->eventfd_ctx);
+		host_q->eventfd_ctx = NULL;
 	}
 
 	ipu_core_free_shared_memory(bus, host_q->shared_buf_data);
@@ -749,6 +760,92 @@ ssize_t ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
 	mutex_unlock(&bus->transport_lock);
 
 	return bytes_written;
+}
+
+int ipu_core_jqs_msg_transport_user_set_eventfd(struct paintbox_bus *bus,
+		uint32_t q_id, int eventfd)
+{
+	unsigned long flags;
+	struct eventfd_ctx *eventfd_ctx;
+	struct paintbox_jqs_msg_transport *trans;
+	struct host_jqs_queue *host_q;
+
+	mutex_lock(&bus->transport_lock);
+
+	trans = ipu_core_get_jqs_transport(bus);
+	if (IS_ERR(trans)) {
+		mutex_unlock(&bus->transport_lock);
+		dev_err(bus->parent_dev, "%s: JQS is not ready\n", __func__);
+		return PTR_ERR(trans);
+	}
+
+	if (trans->free_queue_ids & (1 << q_id)) {
+		mutex_unlock(&bus->transport_lock);
+		return -ECONNABORTED;
+	}
+
+	host_q = &trans->queues[q_id];
+
+	if (host_q->eventfd_ctx) {
+		mutex_unlock(&bus->transport_lock);
+		dev_err(bus->parent_dev,
+				"%s: eventfd already set for queue %u\n",
+				__func__, q_id);
+		return -EBUSY;
+	}
+
+	eventfd_ctx = eventfd_ctx_fdget(eventfd);
+	if (IS_ERR(eventfd_ctx)) {
+		mutex_unlock(&bus->transport_lock);
+		dev_err(bus->parent_dev, "%s: failed to get eventfd context\n",
+				__func__);
+		return PTR_ERR(eventfd_ctx);
+	}
+
+	spin_lock_irqsave(&bus->irq_lock, flags);
+	host_q->eventfd_ctx = eventfd_ctx;
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
+
+	mutex_unlock(&bus->transport_lock);
+
+	return 0;
+}
+
+int ipu_core_jqs_msg_transport_user_clear_eventfd(struct paintbox_bus *bus,
+		uint32_t q_id)
+{
+	unsigned long flags;
+	struct eventfd_ctx *eventfd_ctx;
+	struct paintbox_jqs_msg_transport *trans;
+	struct host_jqs_queue *host_q;
+
+	mutex_lock(&bus->transport_lock);
+
+	trans = ipu_core_get_jqs_transport(bus);
+	if (IS_ERR(trans)) {
+		mutex_unlock(&bus->transport_lock);
+		dev_err(bus->parent_dev, "%s: JQS is not ready\n", __func__);
+		return PTR_ERR(trans);
+	}
+
+	if (trans->free_queue_ids & (1 << q_id)) {
+		mutex_unlock(&bus->transport_lock);
+		return -ECONNABORTED;
+	}
+
+	host_q = &trans->queues[q_id];
+	eventfd_ctx = host_q->eventfd_ctx;
+
+	spin_lock_irqsave(&bus->irq_lock, flags);
+	host_q->eventfd_ctx = NULL;
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
+
+	mutex_unlock(&bus->transport_lock);
+
+	if (eventfd_ctx)
+		eventfd_ctx_put(eventfd_ctx);
+
+	return 0;
 }
 
 /* Must be called with bus->transport_lock held. */

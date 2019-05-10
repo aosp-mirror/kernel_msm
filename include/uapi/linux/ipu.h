@@ -115,4 +115,12 @@ struct ipu_dma_buf_bulk_unregister_req {
 #define IPU_BULK_REGISTER_32B_ADDRESS_DMA_BUF _IOWR('i', 9, \
 		struct ipu_dma_buf_bulk_register_req)
 
+/* Associates an eventfd with a command queue allocated using
+ * IPU_ALLOCATE_CMD_QUEUE.
+ * The eventfd is incremented by one for every doorbell interrupt received for
+ * the queue.
+ */
+#define IPU_CMD_QUEUE_SET_EVENTFD _IOW('q', 1, int)
+#define IPU_CMD_QUEUE_CLEAR_EVENTFD _IOW('q', 2, int)
+
 #endif /* __UAPI_IPU_H__ */
