@@ -670,13 +670,6 @@ void thermal_zone_device_update(struct thermal_zone_device *tz,
 	thermal_zone_set_trips(tz);
 
 	tz->notify_event = event;
-	/*
-	 * To prevent cooling_device throttling
-	 * when tz->temperature keep initialized status.
-	 */
-	if (tz->temperature == THERMAL_TEMP_INVALID ||
-		tz->temperature == THERMAL_TEMP_INVALID_LOW)
-		return;
 
 	for (count = 0; count < tz->trips; count++)
 		handle_thermal_trip(tz, count);
