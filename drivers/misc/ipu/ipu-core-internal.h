@@ -153,6 +153,7 @@ struct paintbox_bus {
 	struct dentry *debug_root;
 #endif
 	struct paintbox_jqs_msg_transport *jqs_msg_transport;
+	/* Protects accesses to jqs_msg_transport from interrupt handler */
 	spinlock_t irq_lock;
 	struct work_struct recovery_work;
 	atomic_t state;

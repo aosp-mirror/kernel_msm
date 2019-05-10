@@ -111,6 +111,9 @@ void ipu_core_jqs_msg_transport_complete_kernel_queue(struct paintbox_bus *bus,
 		int queue_err);
 
 /* Called in an interrupt context */
-irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus);
+irqreturn_t ipu_core_jqs_msg_transport_interrupt_handler(
+		struct paintbox_bus *bus);
+irqreturn_t ipu_core_jqs_msg_transport_interrupt_thread(
+		struct paintbox_bus *bus);
 
 #endif  /* __IPU_JQS_MSG_TRANSPORT_H__ */

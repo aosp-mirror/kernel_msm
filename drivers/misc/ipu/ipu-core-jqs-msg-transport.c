@@ -352,6 +352,7 @@ static int ipu_core_jqs_msg_transport_setup_queue(struct paintbox_bus *bus,
 int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 {
 	struct paintbox_jqs_msg_transport *trans;
+	unsigned long flags;
 	int ret;
 
 	trans = kzalloc(sizeof(*trans), GFP_KERNEL);
@@ -369,6 +370,7 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	trans->jqs_shared_state = (struct jqs_msg_transport_shared_state *)
 		trans->shared_buf->host_vaddr;
 	WARN_ON(bus->jqs_msg_transport);
+	spin_lock_irqsave(&bus->irq_lock, flags);
 	bus->jqs_msg_transport = trans;
 
 	/* The free_queue_bits field in the transport structure is set up to
@@ -379,6 +381,7 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	 * indicate data on one of the application queues.
 	 */
 	trans->free_queue_ids = ~(JQS_SYS_DBL_MSI0 | JQS_SYS_DBL_MSI1);
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
 
 	return 0;
 
@@ -390,6 +393,7 @@ free_local_dram:
 
 void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 {
+	unsigned long flags;
 	struct paintbox_jqs_msg_transport *trans;
 
 	mutex_lock(&bus->transport_lock);
@@ -400,37 +404,24 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 	}
 	trans = bus->jqs_msg_transport;
 
+	spin_lock_irqsave(&bus->irq_lock, flags);
+	bus->jqs_msg_transport = NULL;
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
+
 	ipu_core_free_shared_memory(bus, trans->shared_buf);
 
-	kfree(bus->jqs_msg_transport);
-
-	bus->jqs_msg_transport = NULL;
+	kfree(trans);
 
 	mutex_unlock(&bus->transport_lock);
 }
 
-/* Called in a threaded interrupt context, bus->transport_lock must be held. */
-static void ipu_core_jqs_msg_transport_process_app_queue(
-		struct paintbox_bus *bus,
-		struct paintbox_jqs_msg_transport *trans, uint32_t q_id)
-{
-	struct host_jqs_queue *host_q = &trans->queues[q_id];
-
-	/* Make sure data is accessible to the AP*I */
-	ipu_core_jqs_cbuf_sync(bus, &host_q->host_jqs_sys_cbuf,
-			DMA_FROM_DEVICE);
-
-	if (host_q->waiter.enabled) {
-		host_q->waiter.ret = 0;
-		complete(&host_q->waiter.completion);
-	}
-}
-
 /* Called in a threaded interrupt context */
-irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus)
+irqreturn_t ipu_core_jqs_msg_transport_interrupt_handler(
+		struct paintbox_bus *bus)
 {
 	struct paintbox_jqs_msg_transport *trans;
-	uint32_t q_ids;
+	struct host_jqs_queue *host_q;
+	uint32_t q_id, q_ids;
 
 	q_ids = ipu_core_readl(bus, IPU_CSR_JQS_OFFSET + JQS_SYS_DBL);
 #if IS_ENABLED(CONFIG_IPU_DEBUG)
@@ -439,10 +430,42 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus)
 	if (!q_ids)
 		return IRQ_NONE;
 
-	/* Remove JQS_SYS_DBL_MSI1 from the q_ids mask.  This bit is used to
-	 * signal data available in one or more of the application queues.
-	 */
-	q_ids &= ~JQS_SYS_DBL_MSI1;
+	spin_lock(&bus->irq_lock);
+	trans = bus->jqs_msg_transport;
+	if (!trans) {
+		spin_unlock(&bus->irq_lock);
+		return IRQ_HANDLED;
+	}
+
+	for (q_id = JQS_TRANSPORT_FIRST_APP_QUEUE_ID;
+			q_id <= JQS_TRANSPORT_MAX_QUEUE; q_id++) {
+		if ((1 << q_id) > q_ids)
+			break;
+
+		if (!((1 << q_id) & q_ids) ||
+				WARN_ON((1 << q_id) & trans->free_queue_ids))
+			continue;
+
+		host_q = &trans->queues[q_id];
+
+		if (host_q->waiter.enabled) {
+			host_q->waiter.ret = 0;
+			complete(&host_q->waiter.completion);
+		}
+	}
+
+	spin_unlock(&bus->irq_lock);
+
+	if ((1 << JQS_TRANSPORT_KERNEL_QUEUE_ID) & q_ids)
+		return IRQ_WAKE_THREAD;
+	else
+		return IRQ_HANDLED;
+}
+
+irqreturn_t ipu_core_jqs_msg_transport_interrupt_thread(
+		struct paintbox_bus *bus)
+{
+	struct paintbox_jqs_msg_transport *trans;
 
 	mutex_lock(&bus->transport_lock);
 
@@ -452,28 +475,7 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus)
 		return IRQ_HANDLED;
 	}
 
-	while (q_ids) {
-		uint32_t q_id;
-
-		/* Pick out the next q_id to process */
-		q_id = __builtin_ctz(q_ids);
-		q_ids &= ~(1 << q_id);
-
-		if (q_id == JQS_TRANSPORT_KERNEL_QUEUE_ID)
-			ipu_core_jqs_msg_transport_process_kernel_queue(bus,
-					trans);
-		else if (!(trans->free_queue_ids & (1 << q_id)))
-			ipu_core_jqs_msg_transport_process_app_queue(bus,
-					trans, q_id);
-		else {
-			dev_err(bus->parent_dev,
-				"%s: JQS received an interrupt for a free queue\n",
-				__func__);
-			ipu_bus_notify_fatal_error(bus);
-			break;
-		}
-	}
-
+	ipu_core_jqs_msg_transport_process_kernel_queue(bus, trans);
 	mutex_unlock(&bus->transport_lock);
 
 	return IRQ_HANDLED;
@@ -483,6 +485,7 @@ int ipu_core_jqs_msg_transport_alloc_queue(struct paintbox_bus *bus)
 {
 	struct paintbox_jqs_msg_transport *trans;
 	uint32_t q_id;
+	unsigned long flags;
 	int ret;
 
 	mutex_lock(&bus->transport_lock);
@@ -500,13 +503,16 @@ int ipu_core_jqs_msg_transport_alloc_queue(struct paintbox_bus *bus)
 	}
 
 	q_id = __builtin_ctz(trans->free_queue_ids);
-	trans->free_queue_ids &= ~(1 << q_id);
 
 	ret = ipu_core_jqs_msg_transport_setup_queue(bus, trans, q_id);
 	if (ret < 0) {
 		mutex_unlock(&bus->transport_lock);
 		return ret;
 	}
+
+	spin_lock_irqsave(&bus->irq_lock, flags);
+	trans->free_queue_ids &= ~(1 << q_id);
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
 
 	mutex_unlock(&bus->transport_lock);
 
@@ -536,6 +542,7 @@ int ipu_core_jqs_msg_transport_alloc_kernel_queue(struct paintbox_bus *bus)
 void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 		uint32_t q_id, int queue_err)
 {
+	unsigned long flags;
 	struct paintbox_jqs_msg_transport *trans;
 	struct host_jqs_queue *host_q;
 	struct host_jqs_queue_waiter *waiter;
@@ -552,6 +559,10 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 	host_q = &trans->queues[q_id];
 	waiter = &host_q->waiter;
 
+	spin_lock_irqsave(&bus->irq_lock, flags);
+	trans->free_queue_ids |= (1 << q_id);
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
+
 	if (waiter->enabled) {
 		/* Release the waiting thread, the queue is disappearing */
 		waiter->ret = queue_err;
@@ -559,8 +570,6 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 	}
 
 	ipu_core_free_shared_memory(bus, host_q->shared_buf_data);
-
-	trans->free_queue_ids |= (1 << q_id);
 
 	mutex_unlock(&bus->transport_lock);
 }
@@ -610,6 +619,7 @@ void ipu_core_jqs_msg_transport_complete_kernel_queue(struct paintbox_bus *bus,
 ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		uint32_t q_id, void __user *buf, size_t size)
 {
+	unsigned long flags;
 	struct paintbox_jqs_msg_transport *trans;
 	struct host_jqs_queue *host_q;
 	unsigned long timeout_ms = USER_READ_TIMEOUT_MS;
@@ -643,8 +653,10 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	}
 
 	memset(waiter, 0, sizeof(struct host_jqs_queue_waiter));
-	waiter->enabled = true;
 	init_completion(&waiter->completion);
+	spin_lock_irqsave(&bus->irq_lock, flags);
+	waiter->enabled = true;
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
 
 	while (true) {
 		long time_remaining;
@@ -701,6 +713,9 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		reinit_completion(&waiter->completion);
 	}
 
+	spin_lock_irqsave(&bus->irq_lock, flags);
+	waiter->enabled = false;
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
 	memset(waiter, 0, sizeof(struct host_jqs_queue_waiter));
 
 	mutex_unlock(&bus->transport_lock);
