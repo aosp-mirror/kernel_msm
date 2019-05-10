@@ -305,10 +305,9 @@
 /*
  * Package configuration information. Value of EFUSE[0][3:0]
  * It gives 16 different package options for the die. Current associations:
- *  0x0: eS904
- *  0x8: eS954
- *  0x9: eS964
- *  Other: To be determined
+ *  0: Athletico IA8508AB 112-ball BGA package
+ *  1: Athletico IA8508AC 105-ball eWLB package
+ *  2: Athletico IA8508AQ 88-lead QFN package
  */
 #define IAXXX_PWR_MGMT_EFUSE_BOOT_0_PKG_CFG_MASK 0x0000000f
 #define IAXXX_PWR_MGMT_EFUSE_BOOT_0_PKG_CFG_RESET_VAL 0x0

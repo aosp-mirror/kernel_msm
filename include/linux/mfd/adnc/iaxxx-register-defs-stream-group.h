@@ -91,8 +91,9 @@
 #define IAXXX_STR_GRP_STR_CTRL_XFER_MODE_SIZE 3
 
 /*
- * Source Stream ID of Rx stream. Valid only for Tx channel in SSP Low
- * Latency mode
+ * Stream id of associate stream for low latency streams.
+ * Valid only in low latency mode. Value is StreamId of
+ * Rx channel for Tx stream and vice versa.
  */
 #define IAXXX_STR_GRP_STR_CTRL_LOW_LATENCY_SRC_STR_ID_MASK 0x00003e00
 #define IAXXX_STR_GRP_STR_CTRL_LOW_LATENCY_SRC_STR_ID_RESET_VAL 0x0
@@ -440,7 +441,42 @@
 #define IAXXX_STR_GRP_STR_AF_ERR_ACCESS_CNT_REG_POS 0
 #define IAXXX_STR_GRP_STR_AF_ERR_ACCESS_CNT_REG_SIZE 32
 
+/*** STR_GRP_STR_PHY_LOGICAL_CH_MAPPING (0x02000048) ***/
+/*
+ * Shows physical port channel mapping to stream logical channel mapping.
+ * Supported only for Rx channels in low latency mode.
+ */
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_ADDR (0x02000048)
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_MASK_VAL 0x00000fff
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_RMASK_VAL 0x00000fff
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_WMASK_VAL 0x00000fff
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_RESET_VAL 0x00000000
+
+/*
+ * Physical channel id mapped to logical CH0 in stream
+ */
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH0_MASK 0x0000000f
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH0_RESET_VAL 0x0
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH0_POS 0
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH0_SIZE 4
+
+/*
+ * Physical channel id mapped to logical CH1 in stream
+ */
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH1_MASK 0x000000f0
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH1_RESET_VAL 0x0
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH1_POS 4
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH1_SIZE 4
+
+/*
+ * Physical channel id mapped to logical CH2 in stream
+ */
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH2_MASK 0x00000f00
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH2_RESET_VAL 0x0
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH2_POS 8
+#define IAXXX_STR_GRP_STR_PHY_LOGICAL_CH_MAPPING_PHY_CH2_SIZE 4
+
 /* Number of registers in the module */
-#define IAXXX_STR_GRP_REG_NUM 15
+#define IAXXX_STR_GRP_REG_NUM 16
 
 #endif /* __IAXXX_REGISTER_DEFS_STR_GRP_H__ */
