@@ -11,5 +11,6 @@ ccflags-y += -Idrivers/media/platform/msm/camera/cam_sensor_module/cam_cci
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_sensor_module/cam_sensor_utils
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_cpas/include
 ccflags-y += -Idrivers/media/platform/msm/camera/cam_sensor_module/cam_sensor_io
+ccflags-y += -Idrivers/media/platform/msm/camera/cam_core
 
 obj-$(CONFIG_INPUT_LM36011) += lm36011_module.o
