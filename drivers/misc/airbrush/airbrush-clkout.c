@@ -84,7 +84,7 @@ enum ab_clkout_blk_idx {
 #define CLKGATE_EN_COUNTER1			(0x1 << 4)
 
 #define ABC_OSCCLK_FREQ				(19200000)
-#define CLKOUT_SAMPLE_FREQ_MSEC			(2000)
+#define CLKOUT_SAMPLE_FREQ_MSEC			(500)
 
 static inline void clkout_reg_set(uint32_t addr, uint32_t mask)
 {
