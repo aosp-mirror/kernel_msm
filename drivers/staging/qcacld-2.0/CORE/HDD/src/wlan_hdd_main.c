@@ -3612,6 +3612,8 @@ void hdd_indicate_mgmt_frame(tSirSmeMgmtFrameInd *frame_ind)
 	hdd_adapter_t *adapter;
 	v_CONTEXT_t vos_context;
 	int i;
+	struct ieee80211_mgmt *mgmt =
+		(struct ieee80211_mgmt *)frame_ind->frameBuf;
 
 	/* Get the global VOSS context.*/
 	vos_context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
@@ -3625,6 +3627,11 @@ void hdd_indicate_mgmt_frame(tSirSmeMgmtFrameInd *frame_ind)
 
 	if (0 != wlan_hdd_validate_context(hdd_ctx))
 		return;
+
+	if (frame_ind->frame_len < ieee80211_hdrlen(mgmt->frame_control)) {
+		hddLog(LOGE, FL("Invalid frame length"));
+		return;
+	}
 
 	if (HDD_SESSION_ID_ANY == frame_ind->sessionId) {
 		for (i = 0; i < HDD_SESSION_MAX; i++) {
