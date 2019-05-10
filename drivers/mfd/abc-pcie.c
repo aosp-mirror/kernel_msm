@@ -2447,12 +2447,6 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	/* Assigning abc_pcie_devdata as driver data to abc_pcie driver */
 	dev_set_drvdata(&pdev->dev, abc);
 
-	err = abc_pcie_smmu_setup(dev, abc);
-	if (err) {
-		dev_err(dev, "Failed to set up SMMU (%d)\n", err);
-		goto err_smmu_setup;
-	}
-
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Cannot enable PCI device\n");
@@ -2598,6 +2592,10 @@ exit_loop:
 	if (err < 0)
 		goto err_add_mfd_child;
 
+	err = abc_pcie_smmu_setup(dev, abc);
+	if (err < 0)
+		goto err_smmu_setup;
+
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
 		goto err_ipu_tpu_init;
@@ -2616,14 +2614,14 @@ exit_loop:
 err_ipu_tpu_init:
 	mfd_remove_devices(dev);
 err_add_mfd_child:
+	abc_pcie_smmu_remove(dev, abc);
+err_smmu_setup:
 	abc_pcie_irq_free(pdev);
 err_pcie_init:
 	pci_release_regions(pdev);
 err_pci_request_regions:
 	pci_disable_device(pdev);
 err_pci_enable_dev:
-	abc_pcie_smmu_remove(dev, abc);
-err_smmu_setup:
 	kfree(abc_dev);
 err_alloc_abc_dev:
 	kfree(abc);
