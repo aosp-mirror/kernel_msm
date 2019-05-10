@@ -226,14 +226,14 @@ static struct block_property dram_property_table[] = {
 };
 
 static struct block_property mif_property_table[] = {
-	BLK_(0,   Disabled, NoRail,      0, off, 0_0, off, 0,   0, 0, 0, 0),
-	BLK_(100, Retention, Standby,    0, on, 0_85, off, 0,   0, 0, 0, 0),
-	BLK_(300, Normal,   AonTran,     0, on, 0_85, on,  233, 0, 0, 0, 0),
-	BLK_(301, Normal,   HalfMidTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
-	BLK_(302, Normal,   HalfMaxTran, 0, on, 0_85, on,  233, 0, 0, 0, 0),
-	BLK_(303, Normal,   LowTran,     0, on, 0_85, on,  300, 0, 0, 0, 0),
-	BLK_(304, Normal,   MidTran,     0, on, 0_85, on,  400, 0, 0, 0, 0),
-	BLK_(305, Normal,   MaxTran,     0, on, 0_85, on,  467, 0, 0, 0, 0),
+	BLK_(0,   Disabled, NoRail,      0, off, 0_0, off, 0,     0, 0, 0, 0),
+	BLK_(100, Retention, Standby,    0, on, 0_85, off, 0,     0, 0, 0, 0),
+	BLK_(300, Normal,   AonTran,     0, on, 0_85, on,  233,   0, 0, 0, 0),
+	BLK_(301, Normal,   HalfMidTran, 0, on, 0_85, on,  233,   0, 0, 0, 0),
+	BLK_(302, Normal,   HalfMaxTran, 0, on, 0_85, on,  233,   0, 0, 0, 0),
+	BLK_(303, Normal,   LowTran,     0, on, 0_85, on,  300,   0, 0, 0, 0),
+	BLK_(304, Normal,   MidTran,     0, on, 0_85, on,  400,   0, 0, 0, 0),
+	BLK_(305, Normal,   MaxTran,     0, on, 0_85, on,  466.4, 0, 0, 0, 0),
 };
 
 static struct block_property fsys_property_table[] = {
@@ -257,8 +257,8 @@ static struct block_property fsys_property_table[] = {
 static struct block_property aon_property_table[] = {
 	BLK_(0, Disabled, NoRail,  0, off, 0_0,  off, 0,     0, 0, 0, 0),
 	BLK_(300, Normal,  Min,    0, on,  0_85, on,  19.2,  0, 0, 0, 0),
-	BLK_(301, Normal,  Low,    0, on,  0_85, on,  93.312,   0, 0, 0, 0),
-	BLK_(302, Normal,  Mid,    0, on,  0_85, on,  466,   0, 0, 0, 0),
+	BLK_(301, Normal,  Low,    0, on,  0_85, on,  93.312, 0, 0, 0, 0),
+	BLK_(302, Normal,  Mid,    0, on,  0_85, on,  466.56, 0, 0, 0, 0),
 	BLK_(303, Normal,  Max,    0, on,  0_85, on,  933.12, 0, 0, 0, 0),
 };
 

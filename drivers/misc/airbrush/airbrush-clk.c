@@ -23,7 +23,7 @@
 #define GAT_CLK_BLK_TPU_UID_TPU_IPCLKPORT_CLK_TPU	0x10042034
 
 #define AB_SM_93_312_MHZ	93312000
-#define AB_SM_466_MHZ		466000000
+#define AB_SM_466_56_MHZ	466560000
 #define AB_SM_789_6_MHZ		789600000
 #define AB_SM_933_12_MHZ	933120000
 #define AON_CLK_RATE_REG		0x10B10100
@@ -581,14 +581,14 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 
 	if (new_rate != AB_SM_OSC_RATE &&
 			new_rate != AB_SM_93_312_MHZ &&
-			new_rate != AB_SM_466_MHZ &&
+			new_rate != AB_SM_466_56_MHZ &&
 			new_rate != AB_SM_933_12_MHZ)
 		dev_warn(clk_ctx->dev,
 			"Invalid AON clock rate requested, using %d instead\n",
 			AB_SM_933_12_MHZ);
 
-	if (old_rate == AB_SM_466_MHZ &&
-			new_rate != AB_SM_466_MHZ)
+	if (old_rate == AB_SM_466_56_MHZ &&
+			new_rate != AB_SM_466_56_MHZ)
 		__ab_aon_clk_div_2_restore(clk_ctx);
 
 	if (old_rate <= AB_SM_93_312_MHZ &&
@@ -615,7 +615,7 @@ static int64_t __ab_clk_aon_set_rate_handler(struct ab_clk_context *clk_ctx,
 		goto error_abort;
 	}
 
-	if (new_rate == AB_SM_466_MHZ)
+	if (new_rate == AB_SM_466_56_MHZ)
 		__ab_aon_clk_div_2(clk_ctx);
 
 	if (new_rate == AB_SM_93_312_MHZ)
