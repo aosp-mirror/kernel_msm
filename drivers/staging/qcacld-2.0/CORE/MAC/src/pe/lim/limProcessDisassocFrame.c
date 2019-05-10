@@ -78,13 +78,13 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
     tpSirMacMgmtHdr    pHdr;
     tpDphHashNode      pStaDs;
     tLimMlmDisassocInd mlmDisassocInd;
-#ifdef WLAN_FEATURE_11W
+
     tANI_U32            frameLen;
-#endif
     int8_t frame_rssi;
 
     pHdr = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
     pBody = WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
+    frameLen = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
     frame_rssi = (int8_t)WDA_GET_RX_RSSI_NORMALIZED(pRxPacketInfo);
 
     if (limIsGroupAddr(pHdr->sa))
@@ -126,7 +126,6 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
         return;
     }
 
-
 #ifdef WLAN_FEATURE_11W
     /* PMF: If this session is a PMF session, then ensure that this frame was protected */
     if(psessionEntry->limRmfEnabled  && (WDA_GET_RX_DPU_FEEDBACK(pRxPacketInfo) & DPU_FEEDBACK_UNPROTECTED_ERROR))
@@ -134,7 +133,6 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
         PELOGE(limLog(pMac, LOGE, FL("received an unprotected disassoc from AP"));)
         // If the frame received is unprotected, forward it to the supplicant to initiate
         // an SA query
-        frameLen = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
         //send the unprotected frame indication to SME
         limSendSmeUnprotectedMgmtFrameInd( pMac, pHdr->fc.subType,
                                            (tANI_U8*)pHdr, (frameLen + sizeof(tSirMacMgmtHdr)),
@@ -143,6 +141,10 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
     }
 #endif
 
+    if (frameLen < 2) {
+		PELOGE(limLog(pMac, LOGE, FL("frame len less than 2"));)
+		return;
+    }
     // Get reasonCode from Disassociation frame body
     reasonCode = sirReadU16(pBody);
 
