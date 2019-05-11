@@ -20,7 +20,5 @@
 	max1720x_fg: max1720x@36 { };
 };
 
-#include "sm8150-floral-battery.dtsi"
-#include "sm8150-floral-wcharger.dtsi"
-
+#include "sm8150-coral-battery-common.dtsi"
 
