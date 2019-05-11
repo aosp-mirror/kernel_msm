@@ -1041,6 +1041,7 @@ static bool msc_logic_soft_jeita(struct batt_drv *batt_drv, int temp)
 	return 0;
 }
 
+/* TODO: this function is too long and need to be split (b/117897301) */
 static int msc_logic_internal(struct batt_drv *batt_drv)
 {
 	int msc_state = MSC_NONE;
@@ -1130,7 +1131,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 						    vbatt_idx + 1);
 
 		if ((vbatt - vtier) > otv_margin) {
-		/* OVER: vbatt over vtier for more than margin (usually 0) */
+			/* OVER: vbatt over vtier for more than margin */
 			const int cc_max =
 				GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx);
 
@@ -1178,11 +1179,11 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 			 */
 
 		} else if (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST) {
-		/* FAST: usual compensation (vchrg is vqcom)
-		 * NOTE: there is a race in reading from charger and data here
-		 * might not be consistent (b/110318684)
-		 * NOTE: could add PID loop for management of thermals
-		 */
+			/* FAST: usual compensation (vchrg is vqcom)
+			* NOTE: there is a race in reading from charger and
+			* data might not be consistent (b/110318684)
+			* NOTE: could add PID loop for management of thermals
+			*/
 			msc_state = MSC_FAST;
 			if (vchrg && vchrg > vbatt) {
 				fv_uv = gbms_msc_round_fv_uv(profile, vtier,
@@ -1200,12 +1201,26 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 				vtier, vbatt, batt_drv->fv_uv, fv_uv,
 				vchrg, batt_drv->checked_cv_cnt);
 
+		} else if (chg_type == POWER_SUPPLY_CHARGE_TYPE_TRICKLE) {
+			/* Precharge: charging current/voltage are limited in
+			 * hardware, no point in applying irdrop compensation:
+			 * just wait for battery voltgage to raise over the
+			 * precharge to fast charge threshold.
+			 */
+			msc_state = MSC_TYPE;
+			/* no tier switching in trickle */
+			if (batt_drv->checked_cv_cnt == 0)
+				batt_drv->checked_cv_cnt = 1;
+
+			pr_info("MSC_PRE vt=%d vb=%d fv_uv=%d chg_type=%d\n",
+				vtier, vbatt, fv_uv, chg_type);
 		} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
-		/* Not fast or taper: set checked_cv_cnt=0 to make sure we test
-		 * for current and avoid early termination in case of lack of
-		 * headroom (Vfloat ~= Vbatt)
-		 * NOTE: this can cause early switch on low ilim
-		 */
+			/* Not fast, taper or precharge: in *_UNKNOWN and *_NONE
+			* set checked_cv_cnt=0 and check current to avoid early
+			* termination in case of lack of headroom
+			* NOTE: this can cause early switch on low ilim
+			* TODO: check if we are really lacking hedrooom.
+			*/
 			msc_state = MSC_TYPE;
 			update_interval = profile->cv_update_interval;
 			batt_drv->checked_cv_cnt = 0;
@@ -1215,9 +1230,9 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 
 		} else if (batt_drv->checked_cv_cnt +
 			   batt_drv->checked_ov_cnt) {
-		/* TAPER_DLY: countdown to raise fv_uv and/or check
-		 * for tier switch, will keep steady...
-		 */
+			/* TAPER_DLY: countdown to raise fv_uv and/or check
+			 * for tier switch, will keep steady...
+			 */
 			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d\n",
 				vtier, vbatt, fv_uv, profile->cv_range_accuracy,
 				batt_drv->checked_cv_cnt,
@@ -1231,7 +1246,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 				batt_drv->checked_ov_cnt -= 1;
 
 		} else if ((vtier - vbatt) < utv_margin) {
-		/* TAPER_STEADY: close enough to tier, don't need to adjust */
+			/* TAPER_STEADY: close enough to tier */
 
 			msc_state = MSC_STEADY;
 			update_interval = profile->cv_update_interval;
@@ -1240,9 +1255,9 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 				vtier, vbatt, fv_uv,
 				profile->cv_range_accuracy);
 		} else {
-		/* TAPER_RAISE: under tier vlim, raise one click & debounce
-		 * taper (see above handling of "close enough")
-		 */
+			/* TAPER_RAISE: under tier vlim, raise one click &
+			 * debounce taper (see above handling of STEADY)
+			 */
 			msc_state = MSC_RAISE;
 			fv_uv = gbms_msc_round_fv_uv(profile, vtier,
 				fv_uv + profile->fv_uv_resolution);
@@ -1256,14 +1271,14 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		}
 
 		if (batt_drv->checked_cv_cnt > 0) {
-		/* debounce period on tier switch */
+			/* debounce period on tier switch */
 			msc_state = MSC_WAIT;
 			pr_info("MSC_WAIT vt=%d vb=%d fv_uv=%d ibatt=%d cv_cnt=%d ov_cnt=%d\n",
 				vtier, vbatt, fv_uv, ibatt,
 				batt_drv->checked_cv_cnt,
 				batt_drv->checked_ov_cnt);
 		} else if (-ibatt > cc_next_max) {
-		/* current over next tier, reset tier switch count */
+			/* current over next tier, reset tier switch count */
 			msc_state = MSC_RSTC;
 			batt_drv->checked_tier_switch_cnt = 0;
 
@@ -1271,14 +1286,14 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 				vtier, vbatt, fv_uv, ibatt, cc_next_max,
 				batt_drv->checked_tier_switch_cnt);
 		} else if (batt_drv->checked_tier_switch_cnt >= switch_cnt) {
-		/* next tier, fv_uv detemined at MSC_SET */
+			/* next tier, fv_uv detemined at MSC_SET */
 			msc_state = MSC_NEXT;
 			vbatt_idx = batt_drv->vbatt_idx + 1;
 
 			pr_info("MSC_NEXT tier vb=%d ibatt=%d vbatt_idx=%d->%d\n",
 				vbatt, ibatt, batt_drv->vbatt_idx, vbatt_idx);
 		} else {
-		/* current under next tier, increase tier switch count */
+			/* current under next tier, +1 on tier switch count */
 			msc_state = MSC_NYET;
 			batt_drv->checked_tier_switch_cnt++;
 
@@ -1288,8 +1303,6 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		}
 
 	}
-
-	/* update fv or cc will change in last tier... */
 
 	/* need a new fv_uv only on a new voltage tier */
 	if (vbatt_idx != batt_drv->vbatt_idx) {
@@ -1310,7 +1323,6 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 				      tier_idx, ibatt / 1000, temp);
 		mutex_unlock(&batt_drv->stats_lock);
 	}
-
 
 	batt_drv->vbatt_idx = vbatt_idx;
 	batt_drv->temp_idx = temp_idx;
