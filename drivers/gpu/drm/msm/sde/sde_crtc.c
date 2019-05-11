@@ -5302,6 +5302,23 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 	mixer_width = sde_crtc_get_mixer_width(sde_crtc, cstate, mode);
 	mixer_height = sde_crtc_get_mixer_height(sde_crtc, cstate, mode);
 
+	if (cstate->num_ds_enabled) {
+		if (!state->state)
+			goto end;
+
+		drm_atomic_crtc_state_for_each_plane_state(plane,
+							pstate, state) {
+			if ((pstate->crtc_h > mixer_height) ||
+					(pstate->crtc_w > mixer_width)) {
+				SDE_ERROR("plane w/h:%x*%x > mixer w/h:%x*%x\n",
+					pstate->crtc_w, pstate->crtc_h,
+					mixer_width, mixer_height);
+				return -E2BIG;
+				goto end;
+			}
+		}
+	}
+
 	_sde_crtc_setup_is_ppsplit(state);
 	_sde_crtc_setup_lm_bounds(crtc, state);
 
