@@ -18,12 +18,6 @@
 	qcom,clk-freq-out = <400000>;
 };
 
-/* Touch wants se4 pins active even in suspend. */
-&qupv3_se4_spi {
-	pinctrl-1 = <&qupv3_se4_spi_active>;
-};
-
-
 /* battery i2c */
 &qupv3_se7_i2c {
 	status = "ok";
