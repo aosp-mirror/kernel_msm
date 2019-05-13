@@ -132,77 +132,87 @@ static int vd6281_power_up(struct rainbow_ctrl_t *ctrl)
 {
 	int rc;
 
-	rc = regulator_set_voltage(ctrl->buck1,
-		PMIC_BUCK1_VOlTAGE_MIN, PMIC_BUCK1_VOlTAGE_MAX);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"set buck1 voltage failed: %d", rc);
-		return rc;
+	if (!ctrl->is_power_up[REGULATOR_BUCK1]) {
+		rc = regulator_set_voltage(ctrl->buck1,
+			PMIC_BUCK1_VOlTAGE_MIN, PMIC_BUCK1_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set buck1 voltage failed: %d", rc);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->buck1);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"%s buck1 regulator_enable failed: rc: %d",
+				__func__, rc);
+			return rc;
+		}
+		ctrl->is_power_up[REGULATOR_BUCK1] = true;
 	}
-	rc = regulator_enable(ctrl->buck1);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"%s buck1 regulator_enable failed: rc: %d",
-			__func__, rc);
-		return rc;
-	}
-	ctrl->is_power_up[REGULATOR_BUCK1] = true;
 
-	rc = regulator_set_voltage(ctrl->buck2,
-		PMIC_BUCK2_VOlTAGE_MIN, PMIC_BUCK2_VOlTAGE_MAX);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"set buck2 voltage failed: %d", rc);
-		return rc;
+	if (!ctrl->is_power_up[REGULATOR_BUCK2]) {
+		rc = regulator_set_voltage(ctrl->buck2,
+			PMIC_BUCK2_VOlTAGE_MIN, PMIC_BUCK2_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set buck2 voltage failed: %d", rc);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->buck2);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"%s buck2 regulator_enable failed: rc: %d",
+				__func__, rc);
+			return rc;
+		}
+		ctrl->is_power_up[REGULATOR_BUCK2] = true;
 	}
-	rc = regulator_enable(ctrl->buck2);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"%s buck2 regulator_enable failed: rc: %d",
-			__func__, rc);
-		return rc;
-	}
-	ctrl->is_power_up[REGULATOR_BUCK2] = true;
 
-	rc = regulator_set_voltage(ctrl->vdd,
-		VDD_VOlTAGE_MIN, VDD_VOlTAGE_MAX);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"set vdd voltage failed: %d", rc);
-		return rc;
+	if (!ctrl->is_power_up[REGULATOR_VDD]) {
+		rc = regulator_set_voltage(ctrl->vdd,
+			VDD_VOlTAGE_MIN, VDD_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set vdd voltage failed: %d", rc);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->vdd);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"%s vdd regulator_enable failed: rc: %d",
+				__func__, rc);
+			return rc;
+		}
+		ctrl->is_power_up[REGULATOR_VDD] = true;
 	}
-	rc = regulator_enable(ctrl->vdd);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"%s vdd regulator_enable failed: rc: %d",
-			__func__, rc);
-		return rc;
-	}
-	ctrl->is_power_up[REGULATOR_VDD] = true;
 
-	rc = regulator_set_voltage(ctrl->vio,
-		VIO_VOLTAGE_MIN, VIO_VOLTAGE_MAX);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"set vio voltage failed: %d", rc);
-		return rc;
+	if (!ctrl->is_power_up[REGULATOR_VIO]) {
+		rc = regulator_set_voltage(ctrl->vio,
+			VIO_VOLTAGE_MIN, VIO_VOLTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set vio voltage failed: %d", rc);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->vio);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"%s vio regulator_enable failed: rc: %d",
+				__func__, rc);
+			return rc;
+		}
+		ctrl->is_power_up[REGULATOR_VIO] = true;
 	}
-	rc = regulator_enable(ctrl->vio);
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"%s vio regulator_enable failed: rc: %d",
-			__func__, rc);
-		return rc;
-	}
-	ctrl->is_power_up[REGULATOR_VIO] = true;
 
-	rc = camera_io_init(&(ctrl->io_master_info));
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"%s cci_init failed: rc: %d", __func__, rc);
-		return rc;
+	if (!ctrl->is_cci_init) {
+		rc = camera_io_init(&(ctrl->io_master_info));
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"%s cci_init failed: rc: %d", __func__, rc);
+			return rc;
+		}
+		ctrl->is_cci_init = true;
 	}
-	ctrl->is_cci_init = true;
 
 	return rc;
 }
@@ -217,8 +227,10 @@ static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
 			rc = is_error;
 			dev_err(ctrl->soc_info.dev,
 				"%s cci_release failed: rc: %d", __func__, rc);
-		}
+		} else
+			ctrl->is_cci_init = false;
 	}
+
 	if (ctrl->is_power_up[REGULATOR_VDD]) {
 		is_error = regulator_disable(ctrl->vdd);
 		if (is_error < 0) {
@@ -226,8 +238,10 @@ static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
 			dev_err(ctrl->soc_info.dev,
 				"%s vdd regulator_disable failed: rc: %d",
 				__func__, rc);
-		}
+		} else
+			ctrl->is_power_up[REGULATOR_VDD] = false;
 	}
+
 	if (ctrl->is_power_up[REGULATOR_VIO]) {
 		is_error = regulator_disable(ctrl->vio);
 		if (is_error < 0) {
@@ -235,7 +249,8 @@ static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
 			dev_err(ctrl->soc_info.dev,
 				"%s vio regulator_disable failed: rc: %d",
 				__func__, rc);
-		}
+		} else
+			ctrl->is_power_up[REGULATOR_VIO] = false;
 	}
 
 	if (ctrl->is_power_up[REGULATOR_BUCK2]) {
@@ -247,7 +262,8 @@ static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
 			dev_err(ctrl->soc_info.dev,
 				"%s buck2 regulator_disable failed: rc: %d",
 				__func__, rc);
-		}
+		} else
+			ctrl->is_power_up[REGULATOR_BUCK2] = false;
 	}
 
 	if (ctrl->is_power_up[REGULATOR_BUCK1]) {
@@ -257,7 +273,8 @@ static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
 			dev_err(ctrl->soc_info.dev,
 				"%s buck1 regulator_disable failed: rc: %d",
 				__func__, rc);
-		}
+		} else
+			ctrl->is_power_up[REGULATOR_BUCK1] = false;
 	}
 
 	return rc;
