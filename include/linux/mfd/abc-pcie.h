@@ -184,6 +184,12 @@ struct abc_device {
 
 	/* Referece to abc_pcie_dma_ops registered by DMA driver */
 	struct abc_pcie_dma_ops *dma_device_ops;
+
+	u32 link_config_cache;
+	u32 l1sub_reg_cache;
+	u32 link_status_reg_cache;
+	bool ltr_enable;
+	bool clk_req_enable;
 };
 
 enum {
@@ -305,6 +311,8 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 #define ASPM_L12					0x3
 #define NOASPM						0x4
 #define PM_L2						0x5
+
+#define ABC_PCIE_CACHE_UNKNOWN		0xFFFFFFFF
 
 int abc_pcie_config_read(u32 offset, u32 len, u32 *data);
 int abc_pcie_config_write(u32 offset, u32 len, u32 data);

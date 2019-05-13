@@ -553,27 +553,32 @@ void abc_set_l1_entry_delay(int delay)
 	abc_l1_entry_ctrl(delay, false);
 }
 
-static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
+static void abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 {
 	u32 aspm_l11_l12;
 	u32 l1_l0s_enable;
 	u32 val;
 	unsigned long flags;
 
-	if (pmctrl == NULL)
-		return -EINVAL;
-
 	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
-	aspm_l11_l12 = readl(abc_dev->pcie_config
-				+ L1SUB_CONTROL1_REG);
+	if (abc_dev->l1sub_reg_cache == ABC_PCIE_CACHE_UNKNOWN)
+		abc_dev->l1sub_reg_cache =
+			readl_relaxed(abc_dev->pcie_config
+			+ L1SUB_CONTROL1_REG);
+	if (abc_dev->link_status_reg_cache == ABC_PCIE_CACHE_UNKNOWN)
+		abc_dev->link_status_reg_cache =
+			readl_relaxed(abc_dev->pcie_config
+			+ LINK_CONTROL_LINK_STATUS_REG);
+
+	aspm_l11_l12 = abc_dev->l1sub_reg_cache;
+	l1_l0s_enable = abc_dev->link_status_reg_cache;
+
 	aspm_l11_l12 &= ~(0xC);
 	aspm_l11_l12 |= (pmctrl->aspm_L11 << 3);
 	aspm_l11_l12 |= (pmctrl->aspm_L12 << 2);
 
-	l1_l0s_enable = readl(abc_dev->pcie_config
-				+ LINK_CONTROL_LINK_STATUS_REG);
 	l1_l0s_enable &= ~(0x3);
 	l1_l0s_enable |= (pmctrl->l0s_en << 0);
 	l1_l0s_enable |= (pmctrl->l1_en << 1);
@@ -581,12 +586,17 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 	__iowmb();
 
 	/* Enabling ASPM L11 & L12, PCI_PM L11 & L12 */
-	writel_relaxed(aspm_l11_l12,
-		abc_dev->pcie_config + L1SUB_CONTROL1_REG);
+	if (aspm_l11_l12 != abc_dev->l1sub_reg_cache)
+		writel_relaxed(aspm_l11_l12,
+				abc_dev->pcie_config + L1SUB_CONTROL1_REG);
 
 	/* Enabling L1 or L0s or both */
-	writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
+	if (l1_l0s_enable != abc_dev->link_status_reg_cache)
+		writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
+
+	abc_dev->l1sub_reg_cache = aspm_l11_l12;
+	abc_dev->link_status_reg_cache = l1_l0s_enable;
 
 	if (pmctrl->l1_en)
 		abc_l1ss_timeout_ctrl(false);
@@ -595,43 +605,39 @@ static int abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 
 #if IS_ENABLED(CONFIG_PCI_MSM)
 	/* set rc l1ss state to match ep's */
-	msm_pcie_set_l1ss_state(abc_dev->pdev,
-		pmctrl->aspm_L12 ? MSM_PCIE_PM_L1SS_L12 :
-		pmctrl->aspm_L11 ? MSM_PCIE_PM_L1SS_L11 :
-		MSM_PCIE_PM_L1SS_DISABLE);
+	if (aspm_l11_l12 != abc_dev->l1sub_reg_cache)
+		msm_pcie_set_l1ss_state(abc_dev->pdev,
+				pmctrl->aspm_L12 ? MSM_PCIE_PM_L1SS_L12 :
+				pmctrl->aspm_L11 ? MSM_PCIE_PM_L1SS_L11 :
+				MSM_PCIE_PM_L1SS_DISABLE);
 #endif
 
 	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
 
 	/* LTR Enable */
-	if (pmctrl->aspm_L12) {
+	if (pmctrl->aspm_L12 && !abc_dev->ltr_enable) {
 		val = readl(
 			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
 		val |= LTR_ENABLE;
 		__iowmb();
 		writel_relaxed(val,
 			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
-	} else {
-		/* Clearing LTR Enable bit */
-		val = readl(
-			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
-		val &= ~(LTR_ENABLE);
-		__iowmb();
-		writel_relaxed(val,
-			abc_dev->pcie_config + PCIE_CAP_DEV_CTRL_STS2_REG);
+		abc_dev->ltr_enable = true;
 	}
 
-	spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 
-	if (pmctrl->l1_en) {
+	if (pmctrl->l1_en && !abc_dev->clk_req_enable) {
 		/* Clock Request Enable*/
 		writel_relaxed(0x1, abc_dev->fsys_config + CLOCK_REQ_EN);
+		spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 		/* 32us delay was selected after testing */
 		abc_l1_entry_ctrl(delay_32us, pmctrl->l0s_en);
+		abc_dev->clk_req_enable = true;
+	} else {
+		spin_unlock_irqrestore(&abc_dev->fsys_reg_lock, flags);
 	}
 
-	return 0;
 }
 
 void abc_pcie_set_linkstate(u32 target_linkstate)
@@ -645,19 +651,25 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 	smctrl.aspm_L11 = ABC_PCIE_PM_DISABLE;
 	smctrl.aspm_L12 = ABC_PCIE_PM_DISABLE;
 
-	current_linkstate = abc_pcie_get_linkstate();
+	if (abc_dev->link_config_cache == ABC_PCIE_CACHE_UNKNOWN)
+		abc_dev->link_config_cache = abc_pcie_get_linkstate();
+
+	current_linkstate = abc_dev->link_config_cache;
 	if (target_linkstate == current_linkstate)
 		return;
 
-	abc_pcie_config_read(ABC_PCIE_SUB_CTRL_BASE + ABC_READY_ENTR_L23,
-			     0x0, &val);
 
 	switch (target_linkstate) {
 	case PM_L2:
+		abc_pcie_config_read(ABC_PCIE_SUB_CTRL_BASE +
+				ABC_READY_ENTR_L23,
+				0x0, &val);
 		val |= ENTR_L23_EN;
 		abc_pcie_config_write(ABC_PCIE_SUB_CTRL_BASE +
 				      ABC_READY_ENTR_L23,
 				      0x4, val);
+		abc_dev->ltr_enable = false;
+		abc_dev->clk_req_enable = false;
 		return;
 	case ASPM_L12:
 		smctrl.aspm_L12 = ABC_PCIE_PM_ENABLE;
@@ -672,14 +684,15 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 		smctrl.l0s_en = ABC_PCIE_PM_ENABLE;
 		break;
 	case NOASPM:
-	default:
-		val &= ~(ENTR_L23_MASK);
-		abc_pcie_config_write(ABC_PCIE_SUB_CTRL_BASE +
-				      ABC_READY_ENTR_L23,
-				      0x4, val);
 		break;
+	default:
+		dev_err(abc_dev->dev, "Invalid pcie linkstate requested\n");
+		WARN_ON(1);
+		return;
 	}
+
 	abc_set_pcie_pm_ctrl(&smctrl);
+	abc_dev->link_config_cache = target_linkstate;
 }
 
 u32 string_to_integer(char *string)
@@ -704,39 +717,17 @@ int abc_pcie_state_manager(const struct block_property *current_property,
 		const struct block_property *target_property,
 		enum block_state block_substate_id, void *data)
 {
-	u32 target_linkstate;
-	u32 current_linkstate;
-	u32 target_linkspeed;
-	u32 current_linkspeed;
+	u32 target_linkstate =
+		string_to_integer(target_property->substate_name);
 
 	if (!target_property)
 		return -EINVAL;
 
-	target_linkstate = string_to_integer(target_property->substate_name);
-	target_linkspeed = target_property->data_rate;
-
 	/* change to the requested speed and state */
-	ab_sm_start_ts(AB_SM_TS_PCIE_SET_LINKSPEED);
-	abc_pcie_set_linkspeed(target_linkspeed);
-	ab_sm_record_ts(AB_SM_TS_PCIE_SET_LINKSPEED);
 	ab_sm_start_ts(AB_SM_TS_PCIE_SET_LINKSTATE);
 	abc_pcie_set_linkstate(target_linkstate);
 	ab_sm_record_ts(AB_SM_TS_PCIE_SET_LINKSTATE);
 
-	ab_sm_start_ts(AB_SM_TS_PCIE_GET_LINKSPEED);
-	current_linkspeed = abc_pcie_get_linkspeed();
-	ab_sm_record_ts(AB_SM_TS_PCIE_GET_LINKSPEED);
-	ab_sm_start_ts(AB_SM_TS_PCIE_GET_LINKSTATE);
-	current_linkstate = abc_pcie_get_linkstate();
-	ab_sm_record_ts(AB_SM_TS_PCIE_GET_LINKSTATE);
-
-	/* TODO(alexperez) Add retry logic here.
-	 * State change may not happen immediately.
-	 */
-	if (current_linkspeed != target_linkspeed ||
-	    current_linkstate != target_linkstate) {
-		return -EAGAIN;
-	}
 	return 0;
 }
 #endif
@@ -2444,6 +2435,11 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	abc_dev->dev  = dev;
 	abc->abc_dev = abc_dev;
 	atomic_set(&abc_dev->link_state, ABC_PCIE_LINK_NOT_ACTIVE);
+	abc_dev->link_config_cache = ABC_PCIE_CACHE_UNKNOWN;
+	abc_dev->l1sub_reg_cache = ABC_PCIE_CACHE_UNKNOWN;
+	abc_dev->link_status_reg_cache = ABC_PCIE_CACHE_UNKNOWN;
+	abc_dev->ltr_enable = false;
+	abc_dev->clk_req_enable = false;
 	/* Assigning abc_pcie_devdata as driver data to abc_pcie driver */
 	dev_set_drvdata(&pdev->dev, abc);
 
