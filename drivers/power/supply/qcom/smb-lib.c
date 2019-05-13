@@ -1262,8 +1262,12 @@ static int smblib_hvdcp_enable_vote_callback(struct votable *votable,
 	 * This ensures only qc 2.0 detection runs but no vbus
 	 * negotiation happens.
 	 */
+#ifdef QUICK_CHARGING_HVDCP2
 	if (!hvdcp_enable)
 		val = HVDCP_EN_BIT;
+#else
+	val = 0;
+#endif
 
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
 				 HVDCP_EN_BIT | HVDCP_AUTH_ALG_EN_CFG_BIT,
