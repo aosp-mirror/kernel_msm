@@ -41,6 +41,7 @@
 
 #define IR_STANDBY_MODE 0x04
 #define IR_ENABLE_MODE 0x05
+#define IR_TORCH_MODE 0x02
 #define IR_DISABLE_MODE 0x00
 #define DEVICE_ID 0x01
 
@@ -173,6 +174,7 @@ struct led_laser_ctrl_t {
 		bool is_power_up;
 		bool is_vcsel_fault;
 		bool is_csense_halt;
+		bool self_test_result;
 		uint32_t vcsel_fault_count;
 		struct regulator *vdd;
 		struct gpio *gpio_array;
@@ -1807,6 +1809,12 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	if (!ctrl->silego.self_test_result) {
+		dev_err(dev,
+			"Silego self test failed, please re-try by reboot");
+		return -EINVAL;
+	}
+
 	if (ctrl->hw_version < BUILD_DVT && !ctrl->cap_sense.is_validated) {
 		dev_err(dev, "Cap sense is invalid");
 		return -EINVAL;
@@ -2227,6 +2235,7 @@ static ssize_t th_sensor_get_data_once_show(struct device *dev,
 		TH_MEASURE_TRIGGER);
 	if (rc < 0) {
 		dev_err(dev, "i2c write failed: %d", rc);
+		lm36011_power_down(ctrl);
 		goto out;
 	}
 
@@ -2236,6 +2245,7 @@ static ssize_t th_sensor_get_data_once_show(struct device *dev,
 	rc = hdc2010_read_temp_humidity_data(ctrl);
 	if (rc < 0) {
 		dev_err(dev, "i2c write failed: %d", rc);
+		lm36011_power_down(ctrl);
 		goto out;
 	}
 
@@ -2258,6 +2268,98 @@ out:
 	return rc;
 }
 
+static enum silego_self_test_result_type silego_self_test(
+	struct led_laser_ctrl_t *ctrl)
+{
+	int rc, retry;
+	enum silego_self_test_result_type result = SILEGO_TEST_FAILED;
+
+	mutex_lock(&ctrl->cam_sensor_mutex);
+	mutex_lock(&lm36011_mutex);
+	if (safety_ic_owner != LASER_TYPE_MAX) {
+		/* Bypass test when dot or flood power is on */
+		mutex_unlock(&lm36011_mutex);
+		result = SILEGO_TEST_BYPASS;
+		goto out;
+	}
+	mutex_unlock(&lm36011_mutex);
+
+	rc = lm36011_power_up(ctrl);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev, "power up failed: %d", rc);
+		goto out;
+	}
+
+	/* Prepare safety ic IRQ */
+	mutex_lock(&lm36011_mutex);
+	if (ctrl->type == safety_ic_owner) {
+		lm36011_enable_gpio_irq(ctrl->soc_info.dev);
+		dev_info(ctrl->soc_info.dev,
+			"enable safety ic funciton, safety_ic_owner %d",
+			safety_ic_owner);
+	}
+	mutex_unlock(&lm36011_mutex);
+
+	rc = lm36011_write_data(ctrl,
+		ENABLE_REG, IR_STANDBY_MODE);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev, "i2c write failed: %d", rc);
+		goto release_resource;
+	}
+
+	/* Set torch current to 300 mA for flood, 50 mA for Dot */
+	rc = lm36011_write_data(ctrl,
+		LED_TORCH_BRIGHTNESS_REG,
+		ctrl->type == LASER_FLOOD ? 0x65 : 0x10);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev, "i2c write failed: %d", rc);
+		goto release_resource;
+	}
+
+	rc = lm36011_write_data(ctrl,
+		ENABLE_REG, IR_TORCH_MODE);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev, "i2c write failed: %d", rc);
+		goto release_resource;
+	}
+
+	/* wait for torch reach to 5 ms pulse width */
+	usleep_range(5000, 10000);
+
+	for (retry = 0; retry < MAX_RETRY_COUNT; retry++) {
+		if (ctrl->silego.is_vcsel_fault) {
+			result = SILEGO_TEST_PASS;
+			break;
+		}
+		dev_info(ctrl->soc_info.dev,
+			"silego fault doesn't received yet. tried count: %d",
+			retry+1);
+		/* wait 1~3 ms and retry */
+		usleep_range(1000, 3000);
+	}
+
+	if (retry == MAX_RETRY_COUNT)
+		dev_err(ctrl->soc_info.dev,
+			"silego self test failed due to no IRQ received");
+
+release_resource:
+	mutex_lock(&lm36011_mutex);
+	if (ctrl->type == safety_ic_owner) {
+		lm36011_disable_gpio_irq(ctrl->soc_info.dev);
+		dev_info(ctrl->soc_info.dev,
+			"disable safety ic function, safety_ic_owner: %d",
+			safety_ic_owner);
+	}
+	mutex_unlock(&lm36011_mutex);
+
+	rc = lm36011_power_down(ctrl);
+	if (rc < 0)
+		dev_err(ctrl->soc_info.dev, "power up failed: %d", rc);
+
+out:
+	mutex_unlock(&ctrl->cam_sensor_mutex);
+	return result;
+}
 
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
@@ -2340,10 +2442,22 @@ static long lm36011_ioctl(struct file *file, unsigned int cmd,
 {
 	int rc = 0;
 	struct led_laser_ctrl_t *ctrl = file->private_data;
+	enum silego_self_test_result_type silego_self_test_result;
 
 	switch (cmd) {
 	case LM36011_SET_CERTIFICATION_STATUS:
 		ctrl->is_certified = (arg == 1 ? true : false);
+		break;
+	case LM36011_SILEGO_SELF_TEST:
+		silego_self_test_result = silego_self_test(ctrl);
+		dev_info(ctrl->soc_info.dev,
+			"silego self test result: %d",
+			silego_self_test_result);
+		if (silego_self_test_result != SILEGO_TEST_BYPASS)
+			ctrl->silego.self_test_result =
+				(silego_self_test_result == SILEGO_TEST_PASS);
+		rc = copy_to_user((void __user *)arg,
+			&silego_self_test_result, sizeof(int));
 		break;
 	default:
 		dev_err(ctrl->soc_info.dev,
@@ -2399,6 +2513,7 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->silego.is_csense_halt = false;
 	ctrl->silego.fault_flag = 0;
 	ctrl->silego.vcsel_fault_count = 0;
+	ctrl->silego.self_test_result = false;
 	ctrl->cap_sense.is_validated = false;
 	ctrl->cap_sense.sample_count = 0;
 
