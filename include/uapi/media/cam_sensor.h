@@ -24,6 +24,12 @@ enum strobe_type {
 	STROBE_NONE
 };
 
+enum silego_self_test_result_type {
+	SILEGO_TEST_FAILED,
+	SILEGO_TEST_PASS,
+	SILEGO_TEST_BYPASS
+};
+
 struct rainbow_config {
 	enum rainbow_op_type operation;
 	uint32_t             size;
@@ -36,6 +42,9 @@ struct rainbow_config {
 
 #define LM36011_SET_CERTIFICATION_STATUS \
 	_IOWR('R', 1, bool)
+
+#define LM36011_SILEGO_SELF_TEST \
+	_IOWR('R', 1, enum silego_self_test_result_type)
 
 /**
  * struct cam_sensor_query_cap - capabilities info for sensor
