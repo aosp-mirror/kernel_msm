@@ -216,6 +216,15 @@ static void ipu_iommu_firmware_up(struct device *dev)
 	struct device *iommu_dev = ipu_get_iommu_device(dev);
 	struct ipu_iommu_data *iommu;
 	int err;
+	struct iommu_domain *domain =
+		iommu_get_domain_for_dev(dev);
+	struct ipu_domain *pb_domain;
+
+	if (domain == NULL) {
+		dev_err(dev, "%s domain was not found\n", __func__);
+		return;
+	}
+	pb_domain = to_ipu_domain(domain);
 
 	if (!iommu_dev) {
 		dev_err(dev, "%s iommu device was not found\n", __func__);
@@ -228,6 +237,11 @@ static void ipu_iommu_firmware_up(struct device *dev)
 
 	iommu = dev_get_drvdata(iommu_dev);
 	iommu->iommu_up = true;
+
+	mutex_lock(&pb_domain->pgtbl_mutex);
+	ipu_iommu_pgtable_mem_up(pb_domain->pgtbl_ops);
+	mutex_unlock(&pb_domain->pgtbl_mutex);
+
 	err = ipu_iommu_send_jqs_iommu_activation_msg(
 		iommu, true /*activate*/,
 		iommu->page_table_base_address);
@@ -501,10 +515,6 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 			ipu_iommu_pg_table_get_dma_address(
 				pb_domain->pgtbl_ops);
 	}
-
-	mutex_lock(&pb_domain->pgtbl_mutex);
-	ipu_iommu_pgtable_mem_up(pb_domain->pgtbl_ops);
-	mutex_unlock(&pb_domain->pgtbl_mutex);
 	mutex_unlock(&pb_domain->init_mutex);
 	/* identity map first Gb - due to iommu hw bug
 	 * TODO(b/123649740)
