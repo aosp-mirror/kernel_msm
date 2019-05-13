@@ -15,6 +15,7 @@
  */
 #include <asm/barrier.h>
 #include <linux/ab-dram.h>
+#include <linux/mfd/abc-pcie-dma.h>
 #include <linux/atomic.h>
 #include <linux/dma-mapping.h>
 #include <linux/iommu.h>
@@ -384,6 +385,39 @@ static void iopte_tblcnt_add(arm_lpae_iopte *table_ptep, int cnt)
 	iopte_tblcnt_set(table_ptep, current_cnt);
 }
 
+static int ipu_iommu_page_table_dma_transfer(
+		struct ipu_iommu_page_table *pg_table,
+		void *local_buffer, dma_addr_t remote_addr,
+		size_t size)
+{
+	int err;
+	struct abc_pcie_kernel_dma_desc desc;
+
+	memset((void *)&desc, 0, sizeof(desc));
+	desc.local_buf = (void *)dma_map_single(pg_table->dma_dev,
+		local_buffer, size,
+		DMA_TO_DEVICE);
+	if (desc.local_buf == 0)
+		return -ENOMEM;
+
+	desc.local_buf_kind = DMA_BUFFER_KIND_CMA;
+	desc.remote_buf = (uint64_t)remote_addr;
+	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
+	desc.size = size;
+	desc.dir = DMA_TO_DEVICE;
+
+	err = abc_pcie_issue_sessionless_dma_xfer_sync(&desc);
+	if (err)
+		dev_err(pg_table->dma_dev,
+			"Error (%d) transferring page table with PCIe DMA\n",
+			err);
+
+	dma_unmap_single(pg_table->dma_dev, (dma_addr_t)desc.local_buf,
+		size, DMA_TO_DEVICE);
+
+	return err;
+}
+
 /* update memory on airbrush */
 static int ipu_iommu_page_table_update_ab(
 	struct ipu_iommu_page_table *pg_table,
@@ -396,6 +430,13 @@ static int ipu_iommu_page_table_update_ab(
 
 	if (!pg_table->ab_dram_up)
 		return 0;
+
+	/* for larger sizes using DMA transfer saves CPU workload and
+	 * reaches a faster rate
+	 */
+	if (sz >= SZ_32K)
+		return ipu_iommu_page_table_dma_transfer(pg_table,
+			pte, addr, sz);
 
 	err =  abc_pcie_map_iatu(pg_table->dma_dev,
 			pg_table->dma_dev /* owner */, BAR_2,
