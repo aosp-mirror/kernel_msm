@@ -61,4 +61,5 @@ struct iaxxx_pkg_data *iaxxx_core_pkg_exist(struct iaxxx_priv *priv,
 		uint32_t pkg_id);
 
 bool iaxxx_core_plg_list_empty(struct iaxxx_priv *priv);
+bool iaxxx_core_pkg_list_empty(struct iaxxx_priv *priv);
 #endif /*__IAXXX_PLUGIN_COMMON_H__ */

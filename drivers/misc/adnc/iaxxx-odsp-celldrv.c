@@ -1009,7 +1009,8 @@ set_param_blk_err:
 			fw_status = IAXXX_FW_CRASH;
 		else if (!iaxxx_core_plg_list_empty(priv) ||
 			iaxxx_core_get_route_status(priv) ||
-			atomic_read(&priv->fli_route_status))
+			atomic_read(&priv->fli_route_status) ||
+			!iaxxx_core_pkg_list_empty(priv))
 			fw_status = IAXXX_FW_ACTIVE;
 		else
 			fw_status = IAXXX_FW_IDLE;

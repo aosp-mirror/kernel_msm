@@ -360,6 +360,26 @@ bool iaxxx_core_plg_list_empty(struct iaxxx_priv *priv)
 EXPORT_SYMBOL(iaxxx_core_plg_list_empty);
 
 /*****************************************************************************
+ * iaxxx_core_pkg_list_empty()
+ * @brief check if package list is empty
+ *
+ * @priv  Pointer to iaxxx privata data structure
+ * @ret true if package list is empty false otherwise.
+ ****************************************************************************/
+bool iaxxx_core_pkg_list_empty(struct iaxxx_priv *priv)
+{
+	bool list_empty;
+
+	mutex_lock(&priv->iaxxx_state->plg_pkg_list_lock);
+	list_empty = list_empty_careful(&priv->iaxxx_state->pkg_head_list);
+	mutex_unlock(&priv->iaxxx_state->plg_pkg_list_lock);
+
+	return list_empty;
+
+}
+EXPORT_SYMBOL(iaxxx_core_pkg_list_empty);
+
+/*****************************************************************************
  * iaxxx_clr_pkg_plg_list()
  * @brief del, destroy and unload all plugins and packages from list.
  *
