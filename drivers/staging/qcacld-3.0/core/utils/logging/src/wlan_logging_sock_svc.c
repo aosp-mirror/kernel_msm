@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1161,7 +1161,7 @@ void wlan_pkt_stats_to_logger_thread(void *pl_hdr, void *pkt_dump, void *data)
 
 	spin_lock_irqsave(&gwlan_logging.pkt_stats_lock, flags);
 
-	if (!gwlan_logging.pkt_stats_pcur_node || (NULL == pkt_stats_dump)) {
+	if (!gwlan_logging.pkt_stats_pcur_node) {
 		spin_unlock_irqrestore(&gwlan_logging.pkt_stats_lock, flags);
 		return;
 	}
@@ -1194,7 +1194,7 @@ void wlan_pkt_stats_to_logger_thread(void *pl_hdr, void *pkt_dump, void *data)
 				pktlog_hdr->size),
 				data, pktlog_hdr->size);
 
-	if (pkt_stats_dump->type == STOP_MONITOR) {
+	if (pkt_stats_dump && pkt_stats_dump->type == STOP_MONITOR) {
 		wake_up_thread = true;
 		wlan_get_pkt_stats_free_node();
 	}
