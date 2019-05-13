@@ -31,7 +31,7 @@ temperature) and throttle appropriate devices.
 1. thermal sysfs driver interface functions
 
 1.1 thermal zone device interface
-1.1.1 struct thermal_zone_device *thermal_zone_device_register(char *type,
+1.1.1 struct thermal_zone_device *thermal_zone_device_register(const char *type,
 		int trips, int mask, void *devdata,
 		struct thermal_zone_device_ops *ops,
 		const struct thermal_zone_params *tzp,
@@ -160,8 +160,9 @@ temperature) and throttle appropriate devices.
 	drivers for temperature calculations.
 
 1.2 thermal cooling device interface
-1.2.1 struct thermal_cooling_device *thermal_cooling_device_register(char *name,
-		void *devdata, struct thermal_cooling_device_ops *)
+1.2.1 struct thermal_cooling_device *thermal_cooling_device_register(
+		const char *name, void *devdata,
+		struct thermal_cooling_device_ops *ops)
 
     This interface function adds a new thermal cooling device (fan/processor/...)
     to /sys/class/thermal/ folder as cooling_device[0-*]. It tries to bind itself
