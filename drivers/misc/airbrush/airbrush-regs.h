@@ -43,6 +43,9 @@ static inline void WR_REG(uint32_t addr, uint32_t data)
 #define CLK_CON_DIV_DIV4_PLLCLK		0x10b11800
 #define CLK_CON_DIV_PLL_AON_CLK		0x10b1180c
 
+#define ABC_BASE_PCIE_PCS		0x10750000
+#define PCS_OUT_VEC_4			(ABC_BASE_PCIE_PCS + 0x154)
+
 /* --------------------------------------------------
  * 1.7.1.65 AP_HW_OPTION_1
  *    Base Address: 0x10BB_0000

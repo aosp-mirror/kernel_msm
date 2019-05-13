@@ -316,6 +316,11 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	mutex_unlock(&ab_ctx->mfd_lock);
 	ab_sm_record_ts(AB_SM_TS_AB_READY_NOTIFY);
 
+	/* b/129788388: configure PCIe PCS block to disable PLL at the start of
+	 * P1.CPM state
+	 */
+	ABC_WRITE(PCS_OUT_VEC_4, 0x700DD);
+
 	/* Enable schmitt trigger mode for SPI clk pad.
 	 * This is to filter out any noise on SPI clk line.
 	 * Also reset the SPI controller in case it's already
