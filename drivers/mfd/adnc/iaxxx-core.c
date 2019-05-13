@@ -1610,6 +1610,7 @@ int iaxxx_core_dev_suspend(struct device *dev)
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
 	atomic_set(&priv->pm_resume, IAXXX_DEV_SUSPENDING);
+	flush_work(&priv->event_work_struct);
 	iaxxx_flush_kthread_worker(&priv->worker);
 	atomic_set(&priv->pm_resume, IAXXX_DEV_SUSPEND);
 
@@ -1646,8 +1647,12 @@ int iaxxx_wait_dev_resume(struct device *dev)
 			"Wait resume timeout!, rc = %d\n", rc);
 			ret = -ETIME;
 		}
-	} else if (atomic_read(&priv->pm_resume) == IAXXX_DEV_SUSPENDING)
+	} else if (atomic_read(&priv->pm_resume) == IAXXX_DEV_SUSPENDING) {
 		ret = -EAGAIN;
+	} else if (atomic_read(&priv->pm_resume) != IAXXX_DEV_RESUME) {
+		dev_err(dev, "%s: flag value invalid\n", __func__);
+		ret = -EINVAL;
+	}
 
 	mutex_unlock(&priv->resume_mutex);
 
