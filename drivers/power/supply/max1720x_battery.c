@@ -162,6 +162,7 @@ enum max1720x_register {
 	MAX1720X_ODSCTH = 0xF2,
 	MAX1720X_ODSCCFG = 0xF3,
 	MAX1720X_VFOCV = 0xFB,
+	MAX1720X_ALARM = 0xFD,
 	MAX1720X_VFSOC = 0xFF,
 };
 
@@ -879,6 +880,7 @@ bool max1720x_is_reg(struct device *dev, unsigned int reg)
 	case MAX1720X_ODSCCFG:
 	case MAX1720X_VFOCV:
 	case MAX1720X_VFSOC:
+	case MAX1720X_ALARM:
 	case 0x00 ... 0x4F:
 	case 0xB0 ... 0xDF:
 		return true;
@@ -2301,11 +2303,24 @@ static int max1720x_full_reset(struct max1720x_chip *chip)
 	return 0;
 }
 
+#define IRQ_STORM_TRIGGER_SECONDS		60
+#define IRQ_STORM_TRIGGER_MAX_COUNTS		50
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 {
 	struct max1720x_chip *chip = (struct max1720x_chip *)obj;
-	u16 fg_status, fg_status_clr;
-	int err = 0;
+	u16 fg_status, fg_status_clr, fg_alarm = 0;
+	int err = 0, now_time = 0, interval_time, irq_cnt;
+	static int icnt;
+	static int stime;
+	bool storm = false;
+
+	now_time = div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC);
+	if (now_time < IRQ_STORM_TRIGGER_SECONDS) {
+		icnt = 0;
+		stime = now_time;
+	}
+
+	icnt++;
 
 	if (!chip || irq != chip->primary->irq) {
 		WARN_ON_ONCE(1);
@@ -2326,6 +2341,24 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	err = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &fg_status);
 	if (err)
 		return IRQ_NONE;
+
+	interval_time = now_time - stime;
+	if (interval_time  > IRQ_STORM_TRIGGER_SECONDS) {
+		irq_cnt = icnt * 100;
+		irq_cnt /= (interval_time * 100 / IRQ_STORM_TRIGGER_SECONDS);
+		storm = irq_cnt > IRQ_STORM_TRIGGER_MAX_COUNTS;
+		if (storm) {
+			/* IRQ storm */
+			err = REGMAP_READ(chip->regmap, MAX1720X_ALARM,
+					  &fg_alarm);
+			dev_warn(chip->dev,
+				"sts:%04x, alarm:%04x, cnt:%d err=%d\n",
+				fg_status, fg_alarm, icnt, err);
+		} else {
+			icnt = 0;
+			stime = now_time;
+		}
+	}
 
 	if (fg_status == 0) {
 		chip->debug_irq_none_cnt++;
@@ -2408,7 +2441,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 
 	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status_clr);
 
-	if (chip->psy)
+	if (chip->psy && !storm)
 		power_supply_changed(chip->psy);
 
 	/* oneshot w/o filter will unmask on return but gauge will take up
